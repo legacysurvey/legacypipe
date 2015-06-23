@@ -84,7 +84,7 @@ def build_priors(nobj=20,brickname=None,objtype='ELG',ra_range=None,
         #bdratio_range = [0.0,1.0] # bulge-to-disk ratio
 
         # Magnitudes and colors
-        rmag_range = [13.0,15.0]
+        rmag_range = [16.0,19.0]
         gr_range = [-0.3,0.5]
         rz_range = [0.0,1.5]
 
@@ -164,7 +164,7 @@ class simobj_info():
         
         """        
         self.cpimage = ccdinfo['CPIMAGE']
-        self.ccdnum = ccdinfo['CCDNUM']
+        self.cpimage_hdu = ccdinfo['CPIMAGE_HDU']
         self.calname = ccdinfo['CALNAME']
         self.filter = ccdinfo['FILTER']
         self.imfile = os.path.join(fake_decals_dir,'images',self.cpimage)
@@ -181,11 +181,11 @@ class simobj_info():
         
         """
         #log.info('Reading extension {} of image {}'.format(self.ccdnum,self.imfile))
-        image = galsim.fits.read(self.imfile,hdu=self.ccdnum)       # [ADU]
-        invvar = galsim.fits.read(self.ivarfile,hdu=self.ccdnum) # [1/ADU^2]
+        image = galsim.fits.read(self.imfile,hdu=self.cpimage_hdu)       # [ADU]
+        invvar = galsim.fits.read(self.ivarfile,hdu=self.cpimage_hdu) # [1/ADU^2]
         
-        imhdr = galsim.fits.FitsHeader(self.imfile,hdu=self.ccdnum)
-        ivarhdr = galsim.fits.FitsHeader(self.ivarfile,hdu=self.ccdnum)
+        imhdr = galsim.fits.FitsHeader(self.imfile,hdu=self.cpimage_hdu)
+        ivarhdr = galsim.fits.FitsHeader(self.ivarfile,hdu=self.cpimage_hdu)
         
         self.width = image.xmax
         self.height = image.ymax
@@ -240,8 +240,8 @@ def insert_simobj(gsparams=None,priors=None,ccdinfo=None):
     """Simulate objects and place them into individual CCDs.
 
     """
-    stampwidth = 95 # postage stamp width [pixels, roughly 14 arcsec]
-    stampbounds = galsim.BoundsI(0,stampwidth,0,stampwidth)
+    stampwidth = 45 # postage stamp width [pixels, roughly 14 arcsec]
+    stampbounds = galsim.BoundsI(-stampwidth,stampwidth,-stampwidth,stampwidth)
     imagebounds = galsim.BoundsI(0,2046,0,4094)
     
     band = np.array(['g','r','z'])
@@ -261,16 +261,18 @@ def insert_simobj(gsparams=None,priors=None,ccdinfo=None):
         for iobj, objinfo in enumerate(priors):
             pos = wcs.toImage(galsim.CelestialCoord(objinfo['RA']*galsim.degrees,
                 objinfo['DEC']*galsim.degrees))
-            stampbounds1 = stampbounds.shift(galsim.PositionI(int(pos.x/2),int(pos.y/2)))
-
+            stampbounds1 = stampbounds.shift(galsim.PositionI(int(pos.x),int(pos.y)))
+        
             overlap = stampbounds1 & imagebounds
+            #if iobj<5:
+            #    print(iobj, pos, stampbounds1, imagebounds, overlap)
             if (overlap.xmax>=0 and overlap.ymax>=0 and overlap.xmin<=imagebounds.xmax and
                 overlap.ymin<=imagebounds.ymax and overlap.area()>0):
                 onccd.append(iobj)
 
         nobj = len(onccd)
         if nobj>0:
-            log.info('Adding {} objects to CCD {}'.format(nobj,siminfo.ccdnum))
+            log.info('Adding {} objects to CCD {}'.format(nobj,siminfo.cpimage_hdu))
 
             image, invvar, imhdr, ivarhdr = siminfo.getdata()
             initpsf = siminfo.getpsf()
@@ -298,38 +300,44 @@ def insert_simobj(gsparams=None,priors=None,ccdinfo=None):
                                 float(objinfo['DISK_PHI'])*galsim.degrees)
                 obj = galsim.Convolve([obj,localpsf])
             
-                stamp = obj.drawImage(nx=stampwidth,ny=stampwidth,offset=offset,
-                                      wcs=localwcs,method='no_pixel')
-
+                stamp = obj.drawImage(offset=offset,wcs=localwcs,method='no_pixel')
                 stamp.setCenter(xpos,ypos)
+
                 overlap = stamp.bounds & image.bounds
-                stamp = stamp[overlap]
+                if (overlap.xmax>=0 and overlap.ymax>=0 and overlap.xmin<=image.bounds.xmax and
+                    overlap.ymin<=image.bounds.ymax and overlap.area()>0):
+                    print(iobj, pos, stamp.bounds, image.bounds, overlap)
+                    stamp = stamp[overlap]
 
-                # Add Poisson noise
-                varstamp = invvar[overlap].copy()
-                varstamp.invertSelf() # [ADU^2]
-                medvar = np.median(varstamp.array[varstamp.array>0])
-                neg = np.where(varstamp.array<(0.2*medvar))
-                if neg[0].size>0:
-                    varstamp.array[neg] = medvar
-                    
-                stamp *= siminfo.gain # [electrons]
-                varstamp *= siminfo.gain**2
-                varstamp += stamp
+                    # Add Poisson noise
+                    varstamp = invvar[overlap].copy() # [1/ADU^2]
+                    varstamp.invertSelf()             # [ADU^2]
+                    medvar = np.median(varstamp.array[varstamp.array>0])
+                    neg = np.array(np.where(varstamp.array<(0.2*medvar)))
+                    if neg.size>0:
+                        varstamp.array[neg] = medvar
 
-                stamp.addNoise(galsim.VariableGaussianNoise(galsim.BaseDeviate(),varstamp))
-            
-                stamp /= siminfo.gain         # [ADU]
-                varstamp /= siminfo.gain**2   # [ADU^2]
-                varstamp.invertSelf()         # [1/ADU^2]
+                    # Convert to electrons
+                    stamp *= siminfo.gain         # [electron]
+                    varstamp *= (siminfo.gain**2) # [electron^2]
 
-                image[overlap] += stamp
-                invvar[overlap] += varstamp
+                    stamp.addNoise(galsim.VariableGaussianNoise(galsim.BaseDeviate(),varstamp))
+                    varstamp += stamp
+                
+                    stamp /= siminfo.gain          # [ADU]
+                    varstamp /= (siminfo.gain**2)  # [ADU^2]
+                    varstamp.invertSelf()          # [1/ADU^2]
+
+                    image[overlap] += stamp
+                    invvar[overlap] = varstamp
 
             # Write out.
-            log.info('Writing extension {} of image {}'.format(siminfo.ccdnum,siminfo.imfile))
-            fits.update(siminfo.imfile,image.array,ext=siminfo.ccdnum,header=fits.Header(imhdr.items()))
-            fits.update(siminfo.ivarfile,invvar.array,ext=siminfo.ccdnum,header=fits.Header(ivarhdr.items()))
+            log.info('Writing extension {} of image {}'.format(siminfo.cpimage_hdu,
+                                                               siminfo.imfile))
+            fits.update(siminfo.imfile,image.array,ext=siminfo.cpimage_hdu,
+                        header=fits.Header(imhdr.items()))
+            fits.update(siminfo.ivarfile,invvar.array,ext=siminfo.cpimage_hdu,
+                        header=fits.Header(ivarhdr.items()))
 
 def main():
 
@@ -427,7 +435,9 @@ def main():
     gsparams = galsim.GSParams(maximum_fft_size=2L**30L)
     insert_simobj(gsparams=gsparams,priors=priors,ccdinfo=ccdinfo)
 
-#   python projects/desi/runbrick.py --stage image_coadds --no-write --threads 8 --gpsf --radec 242.8470255 11.75 --width 100 --height 100
+# python $TRACTOR_DIR/projects/desi/runbrick.py --stage image_coadds --no-write --threads 8 --gpsf --radec 242.845 11.75 --width 500 --height 500
+# python decals_simulations.py -n 10 --zoom 1750 1850 1750 1850
+
 
 if __name__ == "__main__":
     main()
