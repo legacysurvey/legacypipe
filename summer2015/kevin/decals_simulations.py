@@ -24,7 +24,7 @@ decals_dir = os.getenv('DECALS_DIR')
 fake_decals_dir = os.getenv('FAKE_DECALS_DIR')
 
 logging.basicConfig(format='%(message)s',level=logging.INFO,stream=sys.stdout)
-log = logging.getLogger('decals_makefake')
+log = logging.getLogger('decals_simulations')
 
 def get_brickinfo(brickname=None):
     """Get info on this brick.
@@ -313,9 +313,7 @@ def insert_simobj(gsparams=None,priors=None,ccdinfo=None):
                     varstamp = invvar[overlap].copy() # [1/ADU^2]
                     varstamp.invertSelf()             # [ADU^2]
                     medvar = np.median(varstamp.array[varstamp.array>0])
-                    neg = np.array(np.where(varstamp.array<(0.2*medvar)))
-                    if neg.size>0:
-                        varstamp.array[neg] = medvar
+                    varstamp.array[varstamp.array<(0.2*medvar)] = medvar
 
                     # Convert to electrons
                     stamp *= siminfo.gain         # [electron]
@@ -432,11 +430,11 @@ def main():
         fig.savefig(qafile)
 
     # Copy the files we need.
-#   copyfiles(ccdinfo)
+    copyfiles(ccdinfo)
 
     # Do the simulation!
     gsparams = galsim.GSParams(maximum_fft_size=2L**30L)
-#   insert_simobj(gsparams=gsparams,priors=priors,ccdinfo=ccdinfo)
+    insert_simobj(gsparams=gsparams,priors=priors,ccdinfo=ccdinfo)
 
 # python $TRACTOR_DIR/projects/desi/runbrick.py --stage image_coadds --no-write --threads 8 --gpsf --radec 242.845 11.75 --width 500 --height 500
 # python decals_simulations.py -n 10 --zoom 1750 1850 1750 1850
