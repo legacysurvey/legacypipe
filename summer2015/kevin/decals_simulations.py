@@ -84,7 +84,7 @@ def build_priors(nobj=20,brickname=None,objtype='ELG',ra_range=None,
         #bdratio_range = [0.0,1.0] # bulge-to-disk ratio
 
         # Magnitudes and colors
-        rmag_range = [16.0,19.0]
+        rmag_range = [18.0,24.0]
         gr_range = [-0.3,0.5]
         rz_range = [0.0,1.5]
 
@@ -408,17 +408,20 @@ def main():
         fig = plt.figure()
         ax = fig.gca()
         ax.get_xaxis().get_major_formatter().set_useOffset(False) 
-        ax.plot(priors['RA'],priors['DEC'],'bo',markersize=3)
+        ax.plot(priors['RA'],priors['DEC'],'gs',markersize=3)
         for ii, ccd in enumerate(ccdinfo):
-            width = ccd['WIDTH']*0.262/3600.0
-            height = ccd['HEIGHT']*0.262/3600.0
-            rect = plt.Rectangle((ccd['RA']-width/2,ccd['DEC']-height/2),
-                                 width,height,fill=False,lw=3,color=next(color))
+            dy = ccd['WIDTH']*0.262/3600.0
+            dx = ccd['HEIGHT']*0.262/3600.0
+            rect = plt.Rectangle((ccd['RA']-dx/2,ccd['DEC']-dy/2),
+                                 dx,dy,fill=False,lw=1,color=next(color),
+                                 ls='solid')
             ax.add_patch(rect)
             rect = plt.Rectangle((brickinfo['RA1'],brickinfo['DEC1']),
                                  brickinfo['RA2']-brickinfo['RA1'],
-                         brickinfo['DEC2']-brickinfo['DEC1'],fill=False,lw=3,color='b')
+                         brickinfo['DEC2']-brickinfo['DEC1'],fill=False,lw=3,
+                                 color='b')
         ax.add_patch(rect)
+        #ax.set_xlim(np.array([brickinfo['RA1'][0],brickinfo['RA2'][0]])*[0.9999,1.0001])
         ax.set_xlim(np.array([brickinfo['RA2'][0],brickinfo['RA1'][0]])*[1.0001,0.9999])
         ax.set_ylim(np.array([brickinfo['DEC1'][0],brickinfo['DEC2'][0]])*[0.99,1.01])
         ax.set_xlabel('$RA\ (deg)$',fontsize=18)
@@ -429,11 +432,11 @@ def main():
         fig.savefig(qafile)
 
     # Copy the files we need.
-    copyfiles(ccdinfo)
+#   copyfiles(ccdinfo)
 
     # Do the simulation!
     gsparams = galsim.GSParams(maximum_fft_size=2L**30L)
-    insert_simobj(gsparams=gsparams,priors=priors,ccdinfo=ccdinfo)
+#   insert_simobj(gsparams=gsparams,priors=priors,ccdinfo=ccdinfo)
 
 # python $TRACTOR_DIR/projects/desi/runbrick.py --stage image_coadds --no-write --threads 8 --gpsf --radec 242.845 11.75 --width 500 --height 500
 # python decals_simulations.py -n 10 --zoom 1750 1850 1750 1850
