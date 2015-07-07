@@ -16,7 +16,7 @@ setup_keywords['description'] = 'DECam Legacy Survey data reduction pipeline'
 setup_keywords['author'] = 'DECaLS Collaboration'
 setup_keywords['author_email'] = 'decam-data@desi.lbl.gov'
 setup_keywords['license'] = 'GPLv2'
-setup_keywords['url'] = 'https://github.com/legacysurvey/pipeline'
+setup_keywords['url'] = 'https://github.com/legacysurvey/legacypipe'
 #
 # END OF SETTINGS THAT NEED TO BE CHANGED.
 #
