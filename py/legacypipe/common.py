@@ -1277,6 +1277,12 @@ class Decals(object):
         T.cut(I)
         return T
 
+    def get_image_object(self, t):
+        '''
+        Returns a DecamImage or similar object for one row of the CCDs table.
+        '''
+        return DecamImage(self, t)
+    
     def tims_touching_wcs(self, targetwcs, mp, mock_psf=False,
                           const2psf=True, bands=None):
         '''
@@ -1593,7 +1599,7 @@ class DecamImage(object):
         self.skyfn = os.path.join(calibdir, 'sky', calname + '.fits')
 
     def __str__(self):
-        return self.name
+        return 'DECam ' + self.name
     def __repr__(self):
         return str(self)
 
@@ -2089,7 +2095,7 @@ def run_calibs(X):
 
 
 def read_one_tim((im, targetrd, mock_psf, const2psf)):
-    print 'Reading expnum', im.expnum, 'name', im.extname, 'band', im.band, 'exptime', im.exptime
+    print 'Reading', im
     tim = im.get_tractor_image(radecpoly=targetrd, mock_psf=mock_psf,
                                const2psf=const2psf)
     return tim
