@@ -102,6 +102,7 @@ mp = multiproc()
 ps = PlotSequence('galdet')
 
 allcats = []
+allivs = []
 
 for i in range(100):
 
@@ -121,6 +122,8 @@ for i in range(100):
     R = stage_tims(**kwa)
     kwa.update(R)
     R = stage_srcs(no_sdss=True, **kwa)
+    ### At this point, R['cat'] has sources whose fluxes are based on the
+    ### detection maps
     kwa.update(R)
     R = stage_fitblobs(**kwa)
     kwa.update(R)
@@ -149,7 +152,9 @@ for i in range(100):
         print '  type', type(src), 'flux', src.getBrightness().getFlux(band)
 
     allcats.append(cat)
-    
+
+    iv = kwa['invvars']
+    allivs.append(iv)
     
 plt.clf()
 nsrcs = [len(c) for c in allcats]
@@ -168,6 +173,7 @@ for k,n in types.most_common():
     print k, ':', n
     
 cleancats = [cat for cat in allcats if len(cat) == 1]
+cleanivs  = [iv  for iv,cat in zip(allivs,allcats) if len(cat) == 1]
 
 typemap = { ExpGalaxy: 'E',
             DevGalaxy: 'D',
@@ -186,7 +192,20 @@ for c in cleancats:
     else:
         RE.append(0)
 TT.re = np.array(RE)
-        
+
+# pull out inverse-variances
+fluxiv = []
+for c,iv in zip(cleancats,cleanivs):
+    src = c[0]
+    params = src.getParams()
+    src.setParams(iv)
+    fluxiv.append(src.getBrightness().getFlux(band))
+    src.setParams(params)
+TT.fluxiv = np.array(fluxiv)
+
+print 'Flux S/N:', np.median(TT.flux * np.sqrt(TT.fluxiv))
+print 'Flux S/N:', TT.flux * np.sqrt(TT.fluxiv)
+
 ccmap = dict(E='r', D='b', C='m', P='g')
 
 plt.clf()
