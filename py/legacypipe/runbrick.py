@@ -15,14 +15,11 @@ import fitsio
 
 from astrometry.util.fits import fits_table, merge_tables
 from astrometry.util.plotutils import PlotSequence, dimshow
-from astrometry.util.miscutils import clip_polygon
 from astrometry.util.resample import resample_with_wcs, OverlapError
-from astrometry.libkd.spherematch import match_radec
 from astrometry.util.ttime import Time
 
 from tractor import *
 from tractor.galaxy import *
-from tractor.source_extractor import *
 from tractor.utils import _GaussianPriors
 
 from common import *

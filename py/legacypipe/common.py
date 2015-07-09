@@ -6,30 +6,25 @@ import pylab as plt
 import os
 import tempfile
 
-from distutils.version import StrictVersion
-
 import numpy as np
 
 import fitsio
 
 from scipy.ndimage.filters import gaussian_filter
 from scipy.ndimage.measurements import label, find_objects
-from scipy.ndimage.morphology import binary_dilation, binary_closing, binary_erosion, binary_fill_holes
+from scipy.ndimage.morphology import binary_dilation, binary_fill_holes
 
 from astrometry.util.fits import fits_table, merge_tables
 from astrometry.util.plotutils import dimshow
 from astrometry.util.util import Tan, Sip, anwcs_t
 from astrometry.util.starutil_numpy import degrees_between
 from astrometry.util.miscutils import polygons_intersect, estimate_mode, clip_polygon, clip_wcs
-from astrometry.sdss.fields import read_photoobjs_in_wcs
-from astrometry.sdss import DR9, band_index, AsTransWrapper
 from astrometry.util.resample import resample_with_wcs,OverlapError
 
 from tractor.basics import ConstantSky, NanoMaggies, ConstantFitsWcs, LinearPhotoCal
 from tractor.engine import Image
 from tractor.utils import get_class_from_name
 from tractor.psfex import PsfEx
-from tractor.sdss import get_tractor_sources_dr9
 from tractor.ellipses import *
 from tractor.sfd import *
 
@@ -352,6 +347,10 @@ def segment_and_group_sources(image, T, name=None, ps=None, plots=False):
 
 def get_sdss_sources(bands, targetwcs, photoobjdir=None, local=True,
                      extracols=[], ellipse=None):
+    from astrometry.sdss import DR9, band_index, AsTransWrapper
+    from astrometry.sdss.fields import read_photoobjs_in_wcs
+    from tractor.sdss import get_tractor_sources_dr9
+
     # FIXME?
     margin = 0.
 
@@ -1801,6 +1800,8 @@ class DecamImage(object):
         return fitsio.read_header(self.imgfn, ext=self.hdu)
 
     def read_dq(self, header=False, **kwargs):
+        from distutils.version import StrictVersion
+
         print 'Reading data quality from', self.dqfn, 'hdu', self.hdu
         dq,hdr = self._read_fits(self.dqfn, self.hdu, header=True, **kwargs)
         primhdr = fitsio.read_header(self.dqfn)
