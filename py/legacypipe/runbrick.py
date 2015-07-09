@@ -3040,6 +3040,10 @@ def run_brick(brick, radec=None, pixscale=0.262,
 
      *outdir*: string; base directory for output files; default "."
 
+     *decals*: a "Decals" object (see common.Decals), which is in
+      charge of the list of bricks and CCDs to be handled, and also
+      creates DecamImage objects.
+     
      *decals_dir*: string; default $DECALS_DIR environment variable;
       where to look for files including calibration files, tables of
       CCDs and bricks, image data, etc.
