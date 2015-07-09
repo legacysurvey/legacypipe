@@ -70,6 +70,7 @@ def run_sim(tims, cat, N, mods=None, **kwargs):
 
     allcats = []
     allivs = []
+    allTs = []
     
     for i in range(N):
         np.random.seed(10000 + i)
@@ -103,6 +104,8 @@ def run_sim(tims, cat, N, mods=None, **kwargs):
         iv = kwa['invvars']
         allivs.append(iv)
 
+        allTs.append(kwa['T'])
+        
         bands = kwa['bands']
         
     result.cats = allcats
@@ -122,8 +125,9 @@ def run_sim(tims, cat, N, mods=None, **kwargs):
     fluxes = [[] for b in bands]
     fluxivs = [[] for b in bands]
 
+    TT = []
     
-    for c,iv in zip(allcats, allivs):
+    for c,iv,Ti in zip(allcats, allivs, allTs):
         if len(c) == 1:
             src = c[0]
             T.type.append(typemap[type(src)])
@@ -141,6 +145,8 @@ def run_sim(tims, cat, N, mods=None, **kwargs):
             for band,fiv in zip(bands, fluxivs):
                 fiv.append(src.getBrightness().getFlux(band))
             src.setParams(params)
+
+            TT.append(Ti)
         else:
             if len(c) == 0:
                 T.type.append('-')
@@ -150,7 +156,9 @@ def run_sim(tims, cat, N, mods=None, **kwargs):
                 f.append(0)
                 fiv.append(0)
             T.re.append(0)
-                
+
+            TT.append(fits_table())
+            
 
     for band,f,iv in zip(bands, fluxes, fluxivs):
         T.set('flux_%s' % band, np.array(f))
@@ -158,6 +166,8 @@ def run_sim(tims, cat, N, mods=None, **kwargs):
         
     T.to_np_arrays()
     result.T = T
+
+    result.TT = merge_tables(TT)
     
     return result
 
@@ -199,7 +209,7 @@ ccmap['-'] = '0.5'
 
 namemap = { 'E': 'Exp', 'D': 'deVauc', 'C': 'composite', 'P':'PSF', '+':'>1 src', '-':'No detection' }
 
-for flux in [ 300., 150. ]:
+for flux in [ 300. ]:#, 150. ]:
 
     S = fits_table()
     S.psffwhm = []
@@ -212,8 +222,9 @@ for flux in [ 300., 150. ]:
 
     #for psfsig in [ 1.6, 1.8, 2.0, 2.2, 2.4 ]:
     #for psfsig in [ 1.3, 1.6, 1.9, 2.2, 2.5, 2.8, 3.1, 3.4 ]:
-    for psfsig in [ 1.2, 1.8, 2.4, 3.0, 3.6 ]:
+    #for psfsig in [ 1.2, 1.8, 2.4, 3.0, 3.6 ]:
 
+    for psfsig in [2.0]:
         #psfsig = 2.
         var1 = psfsig**2
         psf = GaussianMixturePSF(1.0, 0., 0., var1, var1, 0.)
@@ -226,25 +237,28 @@ for flux in [ 300., 150. ]:
     
         tr = Tractor([tim], [gal])
         mod = tr.getModelImage(0)
-    
-        res = run_sim([tim], [gal], 25, mods=[mod], 
+
+        N = 500
+        res = run_sim([tim], [gal], N, mods=[mod], 
                       W=W, H=H, ra=ra, dec=dec, mp=mp, bands=[band])
     
         T = res.T
         T.flux = T.flux_r
         T.fluxiv = T.fluxiv_r
-    
+
+        catalog = res.TT
+        
         S.psffwhm.append(psfsig * 2.35 * pixscale)
         for t in sourcetypes:
             S.get('frac_%s' % t).append(
                 100. * np.count_nonzero(T.type == t) / float(len(T)))
     
-        if False:
+        if True:
             plt.clf()
             plt.hist(T.nsrcs, bins=np.arange(max(T.nsrcs)+2)-0.5)
             plt.xlabel('Number of detected sources')
             ps.savefig()
-            
+
             types = Counter(T.type)
             print 'Histogram of returned object types:'
             for k,n in types.most_common():
@@ -252,10 +266,53 @@ for flux in [ 300., 150. ]:
                 
             print 'Flux S/N:', np.median(T.flux * np.sqrt(T.fluxiv))
             print 'Flux S/N:', T.flux * np.sqrt(T.fluxiv)
+
+            plt.subplots_adjust(hspace=0)
+            plt.clf()
+            # dchisq array:
+            # ptsrc, dev, exp, comp  relative to 'none'
+            dchisq = -catalog.dchisq
+            lo,hi = dchisq.min(), dchisq.max()
+            lp,lt = [],[]
+            maxn = 1
+            for i,t in [(0,'P'), (1,'D'), (2,'E'), (3,'C')]:
+                plt.subplot(4,1,i+1)
+                n,b,p = plt.hist(dchisq[:, i], bins=25, range=(lo,hi),
+                                 histtype='step', color=ccmap[t])
+                maxn = max(maxn, max(n))
+                lp.append(p[0])
+                lt.append('Type = ' + t)
+                if i != 3:
+                    plt.xticks([])
+            for i in range(1,5):
+                plt.subplot(4,1,i)
+                plt.ylim(0, maxn*1.1)
+            plt.xlabel('chisq improvement (vs no source)')
+            plt.figlegend(lp, lt, 'upper right')
+            plt.suptitle('Canonical DESI ELG -- Model selection delta-chi-squareds')
+            ps.savefig()
+
+            plt.clf()
+            lp,lt = [],[]
+            d = (hi-lo)*0.05
+            plt.plot([lo-d,hi+d], [lo-d,hi+d], 'k-', alpha=0.5)
+            for i,t in [(0,'P'), (1,'D'), #(2,'E'),
+                        (3,'C')]:
+                p = plt.plot(dchisq[:,2], dchisq[:,i], '.', ms=10, alpha=0.5,
+                             color=ccmap[t])
+                lp.append(p[0])
+                lt.append('Type = ' + t)
+            plt.xlabel('dchisq')
+            plt.legend(lp, lt, loc='upper left')
+            plt.axis([lo-d,hi+d,lo-d,hi+d])
+            plt.title('Canonical DESI ELG -- Model selection delta-chi-squared')
+            plt.xlabel('chisq improvement for EXP model')
+            plt.ylabel('chisq improvement for other models')
+            ps.savefig()
+            
             
             plt.clf()
-            lp = []
-            lt = []
+            lp,lt = [],[]
             maxn = 1
             for t in 'EDCP':
                 I = np.flatnonzero(T.type == t)
