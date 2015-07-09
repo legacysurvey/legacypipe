@@ -412,8 +412,8 @@ def stage_tims(W=3600, H=3600, pixscale=0.262, brickname=None,
         tlast = tnow
 
     # Cut "bands" down to just the bands for which we have images.
-    allbands = [tim.band for tim in tims]
-    bands = [b for b in bands if b in allbands]
+    timbands = [tim.band for tim in tims]
+    bands = [b for b in bands if b in timbands]
     print 'Cut bands to', bands
 
     for band in 'grz':
@@ -1105,6 +1105,7 @@ def stage_fitblobs_finish(
         fitblobs_R=None,
         outdir=None,
         write_metrics=True,
+        allbands = 'ugrizY',
         **kwargs):
 
     # one_blob can reduce the number and change the types of sources!
@@ -1154,11 +1155,11 @@ def stage_fitblobs_finish(
         for srctype in ['ptsrc', 'dev','exp','comp']:
             xcat = Catalog(*[m[srctype] for m in allmods])
             xcat.thawAllRecursive()
-            allbands = 'ugrizY'
             TT,hdr = prepare_fits_catalog(xcat, None, TT, hdr, bands, None,
                                           allbands=allbands, prefix=srctype+'_',
                                           save_invvars=False)
-            TT.set('%s_flags' % srctype, np.array([m['flags'][srctype] for m in allmods]))
+            TT.set('%s_flags' % srctype,
+                   np.array([m['flags'][srctype] for m in allmods]))
         TT.delete_column('ptsrc_shapeExp')
         TT.delete_column('ptsrc_shapeDev')
         TT.delete_column('ptsrc_fracDev')
@@ -2584,8 +2585,6 @@ def stage_writecat(
     TT.brickname = np.array([brickname] * len(TT))
     TT.objid   = np.arange(len(TT)).astype(np.int32)
     
-    allbands = 'ugrizY'
-
     TT.decam_rchi2    = np.zeros((len(TT), len(allbands)), np.float32)
     TT.decam_fracflux = np.zeros((len(TT), len(allbands)), np.float32)
     TT.decam_fracmasked = np.zeros((len(TT), len(allbands)), np.float32)
