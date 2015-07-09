@@ -9,25 +9,16 @@ if __name__ == '__main__':
 import pylab as plt
 import numpy as np
 import sys
-from glob import glob
-import tempfile
 import os
-import time
-import datetime
 
 import fitsio
 
-from scipy.ndimage.filters import gaussian_filter
-from scipy.ndimage.measurements import label, find_objects
-from scipy.ndimage.morphology import binary_dilation, binary_closing, binary_erosion
-
-from astrometry.util.fits import fits_table,merge_tables
+from astrometry.util.fits import fits_table, merge_tables
 from astrometry.util.plotutils import PlotSequence, dimshow
 from astrometry.util.miscutils import clip_polygon
-from astrometry.util.resample import resample_with_wcs,OverlapError
+from astrometry.util.resample import resample_with_wcs, OverlapError
 from astrometry.libkd.spherematch import match_radec
-from astrometry.util.ttime import Time, MemMeas, CpuMeas
-from astrometry.sdss import DR9, band_index, AsTransWrapper
+from astrometry.util.ttime import Time
 
 from tractor import *
 from tractor.galaxy import *
@@ -41,7 +32,6 @@ from runbrick_plots import _plot_mods
 ## GLOBALS!  Oh my!
 nocache = True
 useCeres = True
-unwise_dir = 'unwise-coadds'
 
 # RGB image args used in the tile viewer:
 rgbkwargs = dict(mnmx=(-1,100.), arcsinh=1.)
@@ -2515,6 +2505,7 @@ def stage_wise_forced(
     T=None,
     targetwcs=None,
     brickname=None,
+    unwise_dir='unwise-coadds',
     brick=None,
     outdir=None,
     **kwargs):
@@ -3188,6 +3179,9 @@ def run_brick(brick, radec=None, pixscale=0.262,
 def main():
     import optparse
     import logging
+
+    from astrometry.util.ttime import MemMeas, CpuMeas
+    import datetime
 
     ep = '''
 eg, to run a small field containing a cluster:
