@@ -1075,14 +1075,18 @@ def stage_fitblobs(T=None,
         # blob.  Create a map from old 'blobs+1' to new 'blobs+1'.  +1 so that
         # -1 is a valid index.
         NB = len(blobslices)
-        blobmap = np.zeros(NB+1, int)
-        blobmap[keepblobs] = 1 + np.arange(len(keepblobs))
+        blobmap = np.empty(NB+1, int)
+        blobmap[:] = -1
+        blobmap[keepblobs + 1] = np.arange(len(keepblobs))
         # apply the map!
-        blobs = blobmap[blobs + 1] - 1
+        blobs = blobmap[blobs + 1]
 
         # 'blobslices' and 'blobsrcs' are lists
         blobslices = [blobslices[i] for i in keepblobs]
         blobsrcs   = [blobsrcs  [i] for i in keepblobs]
+
+        # one more place where blob numbers are recorded...
+        T.blob = blobs[T.ity, T.itx]
 
     iter = _blob_iter(blobslices, blobsrcs, blobs, targetwcs, tims,
                       orig_wcsxy0, cat, bands, plots, ps, simul_opt)
@@ -3065,7 +3069,7 @@ def run_brick(brick, radec=None, pixscale=0.262,
     kwargs = {}
 
     forceStages = [s for s in stages]
-    forceStages.extend(stages)
+    forceStages.extend(force)
 
     if forceAll:
         kwargs.update(forceall=True)
