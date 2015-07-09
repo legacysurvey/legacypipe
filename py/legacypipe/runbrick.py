@@ -278,6 +278,7 @@ def compute_coadds(tims, bands, targetwcs, images=None,
     return rtn
 
 def stage_tims(W=3600, H=3600, pixscale=0.262, brickname=None,
+               decals=None,
                ra=None, dec=None,
                plots=False, ps=None, decals_dir=None, 
                target_extent=None, pipe=False, program_name='runbrick.py',
@@ -288,7 +289,9 @@ def stage_tims(W=3600, H=3600, pixscale=0.262, brickname=None,
     # early fail for mysterious "ImportError: c.so.6: cannot open shared object file: No such file or directory"
     from tractor.mix import c_gauss_2d_grid
 
-    decals = Decals(decals_dir)
+    if decals is None:
+        decals = Decals(decals_dir)
+
     if ra is not None:
         # Custom brick; fake 'brick' object
         brick = BrickDuck()
@@ -357,9 +360,9 @@ def stage_tims(W=3600, H=3600, pixscale=0.262, brickname=None,
 
     ims = []
     for t in T:
-        print
-        print 'Image file', t.cpimage, 'hdu', t.cpimage_hdu
-        im = DecamImage(decals, t)
+        #print
+        #print 'Image file', t.cpimage, 'hdu', t.cpimage_hdu
+        im = decals.get_image_object(t)
         ims.append(im)
 
     tnow = Time()
@@ -430,7 +433,7 @@ def stage_tims(W=3600, H=3600, pixscale=0.262, brickname=None,
     rtn = dict()
     for k in keys:
         rtn[k] = locals()[k]
-        print 'Pickling value', k, '=', rtn[k]
+        #print 'Pickling value', k, '=', rtn[k]
     return rtn
 
 def _coadds(tims, bands, targetwcs,
@@ -1098,6 +1101,7 @@ def stage_fitblobs_finish(
         plots=False, plots2=False,
         fitblobs_R=None,
         outdir=None,
+        write_metrics=True,
         **kwargs):
 
     # one_blob can reduce the number and change the types of sources!
@@ -1112,9 +1116,10 @@ def stage_fitblobs_finish(
     #     print
 
     assert(len(R) == len(blobsrcs))
+
     
     ##
-    if True:
+    if write_metrics:
         # Drop blobs that failed.
         good_blobs = np.array([i for i,r in enumerate(R) if r is not None])
         good_blobsrcs = [blobsrcs[i] for i in good_blobs]
@@ -1167,14 +1172,14 @@ def stage_fitblobs_finish(
         TT.dchisq = np.array([m['dchisqs'] for m in allmods])
         if outdir is None:
             outdir = '.'
-        outdir = os.path.join(outdir, 'metrics', brickname[:3])
-        try_makedirs(outdir)
-        fn = os.path.join(outdir, 'all-models-%s.fits' % brickname)
+        metricsdir = os.path.join(outdir, 'metrics', brickname[:3])
+        try_makedirs(metricsdir)
+        fn = os.path.join(metricsdir, 'all-models-%s.fits' % brickname)
         TT.writeto(fn, header=hdr)
         del TT
         print 'Wrote', fn
     
-        fn = os.path.join(outdir, 'performance-%s.pickle' % brickname)
+        fn = os.path.join(metricsdir, 'performance-%s.pickle' % brickname)
         pickle_to_file(allperfs, fn)
         print 'Wrote', fn
 
@@ -1234,18 +1239,16 @@ def stage_fitblobs_finish(
     blobmap[0] = -1
     blobmap[T.blob + 1] = iblob
     newblobs = blobmap[blobs+1]
+
     # write out blob map
-    if outdir is None:
-        outdir = '.'
-    outdir = os.path.join(outdir, 'metrics', brickname[:3])
-    try_makedirs(outdir)
-    fn = os.path.join(outdir, 'blobs-%s.fits.gz' % brickname)
-    fitsio.write(fn, newblobs, header=version_header, clobber=True)
-    print 'Wrote', fn
+    if write_metrics:
+        fn = os.path.join(metricsdir, 'blobs-%s.fits.gz' % brickname)
+        fitsio.write(fn, newblobs, header=version_header, clobber=True)
+        print 'Wrote', fn
+
     del newblobs
     del ublob
     T.blob = iblob.astype(np.int32)
-    
 
     T.decam_flags = flags
     T.fracflux = fracflux
@@ -2555,6 +2558,7 @@ def stage_writecat(
     invvars=None,
     catalogfn=None,
     outdir=None,
+    write_catalog=True,
     **kwargs):
 
     from desi_common import prepare_fits_catalog
@@ -2603,20 +2607,23 @@ def stage_writecat(
 
     TT.rename('oob', 'out_of_bounds')
 
-    # How many apertures?
-    ap = AP.get('apflux_img_%s' % bands[0])
-    #print 'Aperture flux shape:', ap.shape
-    #print 'T:', len(TT)
-    n,A = ap.shape
-    
-    TT.decam_apflux = np.zeros((len(TT), len(allbands), A), np.float32)
-    TT.decam_apflux_ivar = np.zeros((len(TT), len(allbands), A), np.float32)
-    TT.decam_apflux_resid = np.zeros((len(TT), len(allbands), A), np.float32)
-    for iband,band in enumerate(bands):
-        i = allbands.index(band)
-        TT.decam_apflux[:,i,:] = AP.get('apflux_img_%s' % band)
-        TT.decam_apflux_ivar[:,i,:] = AP.get('apflux_img_ivar_%s' % band)
-        TT.decam_apflux_resid[:,i,:] = AP.get('apflux_resid_%s' % band)
+    if AP is not None:
+        # How many apertures?
+        ap = AP.get('apflux_img_%s' % bands[0])
+        #print 'Aperture flux shape:', ap.shape
+        #print 'T:', len(TT)
+        n,A = ap.shape
+        
+        TT.decam_apflux = np.zeros((len(TT), len(allbands), A), np.float32)
+        TT.decam_apflux_ivar = np.zeros((len(TT), len(allbands), A),
+                                        np.float32)
+        TT.decam_apflux_resid = np.zeros((len(TT), len(allbands), A),
+                                         np.float32)
+        for iband,band in enumerate(bands):
+            i = allbands.index(band)
+            TT.decam_apflux[:,i,:] = AP.get('apflux_img_%s' % band)
+            TT.decam_apflux_ivar[:,i,:] = AP.get('apflux_img_ivar_%s' % band)
+            TT.decam_apflux_resid[:,i,:] = AP.get('apflux_resid_%s' % band)
 
     cat.thawAllRecursive()
     hdr = None
@@ -2634,9 +2641,10 @@ def stage_writecat(
     primhdr.add_record(dict(name='ALLBANDS', value=allbands,
                             comment='Band order in array values'))
 
-    for i,ap in enumerate(apertures_arcsec):
-        primhdr.add_record(dict(name='APRAD%i' % i, value=ap,
-                                comment='Aperture radius, in arcsec'))
+    if AP is not None:
+        for i,ap in enumerate(apertures_arcsec):
+            primhdr.add_record(dict(name='APRAD%i' % i, value=ap,
+                                    comment='Aperture radius, in arcsec'))
 
     bits = CP_DQ_BITS.values()
     bits.sort()
@@ -2760,12 +2768,15 @@ def stage_writecat(
         'ra', 'ra_ivar', 'dec', 'dec_ivar',
         'bx', 'by', 'bx0', 'by0',
         'left_blob', 
-        'decam_flux', 'decam_flux_ivar', 'decam_apflux',
-        'decam_apflux_resid', 'decam_apflux_ivar', 'decam_mw_transmission', 'decam_nobs',
+        'decam_flux', 'decam_flux_ivar' ]
+    if AP is not None:
+        cols.extend(['decam_apflux', 'decam_apflux_resid',
+                     'decam_apflux_ivar'])
+    cols.extend(['decam_mw_transmission', 'decam_nobs',
         'decam_rchi2', 'decam_fracflux', 'decam_fracmasked', 'decam_fracin',
         'out_of_bounds',
-        'decam_anymask', 'decam_allmask',
-        ]
+        'decam_anymask', 'decam_allmask'])
+
     if WISE is not None:
         cols.extend([
                 'wise_flux', 'wise_flux_ivar',
@@ -2910,15 +2921,16 @@ def stage_writecat(
                 x = T2.get(c)
                 x[blankout] = 0
 
-    arrays = [T2.get(c) for c in cols]
-    arrays = [np.array(a) if isinstance(a,list) else a
-              for a in arrays]
-    fitsio.write(fn, None, header=primhdr, clobber=True)
-    fitsio.write(fn, arrays, names=cols, header=hdr)
+    if write_catalog:
+        arrays = [T2.get(c) for c in cols]
+        arrays = [np.array(a) if isinstance(a,list) else a
+                  for a in arrays]
+        fitsio.write(fn, None, header=primhdr, clobber=True)
+        fitsio.write(fn, arrays, names=cols, header=hdr)
+        print 'Wrote', fn
 
-
-    print 'Wrote', fn
-
+    return dict(T2=T2)
+    
 
 def stage_redo_apphot(targetwcs=None, bands=None, tims=None, outdir=None,
                        brickname=None, version_header=None,
