@@ -25,8 +25,8 @@ from tractor.basics import ConstantSky, NanoMaggies, ConstantFitsWcs, LinearPhot
 from tractor.engine import Image
 from tractor.utils import get_class_from_name
 from tractor.psfex import PsfEx
-from tractor.ellipses import *
-from tractor.sfd import *
+from tractor.ellipses import EllipseE,EllipseESoft
+from tractor.sfd import SFDMap
 
 # search order: $TMPDIR, $TEMP, $TMP, then /tmp, /var/tmp, /usr/tmp
 tempdir = tempfile.gettempdir()

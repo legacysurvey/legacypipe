@@ -18,12 +18,12 @@ from astrometry.util.plotutils import PlotSequence, dimshow
 from astrometry.util.resample import resample_with_wcs, OverlapError
 from astrometry.util.ttime import Time
 
-from tractor import *
-from tractor.galaxy import *
+from tractor import Tractor, PointSource, Image, ShiftedPsf, NanoMaggies
+from tractor.ellipses import EllipseESoft, EllipseE
+from tractor.galaxy import DevGalaxy, ExpGalaxy, FixedCompositeGalaxy
 from tractor.utils import _GaussianPriors
 
 from common import *
-from runbrick_plots import *
 from runbrick_plots import _plot_mods
 
 ## GLOBALS!  Oh my!
@@ -33,7 +33,6 @@ useCeres = True
 # RGB image args used in the tile viewer:
 rgbkwargs = dict(mnmx=(-1,100.), arcsinh=1.)
 rgbkwargs_resid = dict(mnmx=(-5,5))
-
 
 def runbrick_global_init():
     if nocache:
