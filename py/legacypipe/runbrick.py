@@ -9,25 +9,16 @@ if __name__ == '__main__':
 import pylab as plt
 import numpy as np
 import sys
-from glob import glob
-import tempfile
 import os
-import time
-import datetime
 
 import fitsio
 
-from scipy.ndimage.filters import gaussian_filter
-from scipy.ndimage.measurements import label, find_objects
-from scipy.ndimage.morphology import binary_dilation, binary_closing, binary_erosion
-
-from astrometry.util.fits import fits_table,merge_tables
+from astrometry.util.fits import fits_table, merge_tables
 from astrometry.util.plotutils import PlotSequence, dimshow
 from astrometry.util.miscutils import clip_polygon
-from astrometry.util.resample import resample_with_wcs,OverlapError
+from astrometry.util.resample import resample_with_wcs, OverlapError
 from astrometry.libkd.spherematch import match_radec
-from astrometry.util.ttime import Time, MemMeas, CpuMeas
-from astrometry.sdss import DR9, band_index, AsTransWrapper
+from astrometry.util.ttime import Time
 
 from tractor import *
 from tractor.galaxy import *
@@ -41,7 +32,6 @@ from runbrick_plots import _plot_mods
 ## GLOBALS!  Oh my!
 nocache = True
 useCeres = True
-unwise_dir = 'unwise-coadds'
 
 # RGB image args used in the tile viewer:
 rgbkwargs = dict(mnmx=(-1,100.), arcsinh=1.)
@@ -412,8 +402,8 @@ def stage_tims(W=3600, H=3600, pixscale=0.262, brickname=None,
         tlast = tnow
 
     # Cut "bands" down to just the bands for which we have images.
-    allbands = [tim.band for tim in tims]
-    bands = [b for b in bands if b in allbands]
+    timbands = [tim.band for tim in tims]
+    bands = [b for b in bands if b in timbands]
     print 'Cut bands to', bands
 
     for band in 'grz':
@@ -1054,37 +1044,44 @@ def stage_fitblobs(T=None,
     print '[serial fitblobs]:', tnow-tlast
     tlast = tnow
 
+    keepblobs = None
+
     if blobxy is not None:
-        print 'Blobxy', blobxy
-        bx,by = blobxy
-        # Just set blob0,nblobs and let the code below take care of the rest...
-        blob0 = blobs[by,bx]
-        nblobs = 1
-        print 'Blob:', blob0
+        # blobxy is a list like [(x0,y0), (x1,y1), ...]
+        keepblobs = []
+        for x,y in blobxy:
+            blob = blobs[y,x]
+            if blob >= 0:
+                keepblobs.append(blob)
+        keepblobs = np.unique(keepblobs)
 
     if blob0 is not None or (nblobs is not None and nblobs < len(blobslices)):
         if blob0 is None:
             blob0 = 0
-        print 'Unique blob values:', np.unique(blobs)
-        if blob0 > 0:
-            blobs[blobs < blob0] = -1
-            blobs[blobs >= 0] -= blob0
-            blobslices = blobslices[blob0:]
-            blobsrcs = blobsrcs[blob0:]
-        print 'Unique blob values:', np.unique(blobs)
-        if nblobs is not None:
-            blobs[blobs >= nblobs] = -1
-            blobslices = blobslices[:nblobs]
-            blobsrcs = blobsrcs[:nblobs]
-        iter = _blob_iter(blobslices, blobsrcs, blobs,
-                          targetwcs, tims, orig_wcsxy0, cat, bands, plots, ps,
-                          simul_opt)
-        iter = iterwrapper(iter, len(blobslices))
-    else:
-        iter = _blob_iter(blobslices, blobsrcs, blobs, targetwcs, tims,
-                          orig_wcsxy0, cat, bands, plots, ps, simul_opt)
-        # to allow debugpool to only queue tasks one at a time
-        iter = iterwrapper(iter, len(blobsrcs))
+        keepblobs = np.arange(blob0, blob0+nblobs)
+
+    if keepblobs is not None:
+        # 'blobs' is an image with values -1 for no blob, or the index of the
+        # blob.  Create a map from old 'blobs+1' to new 'blobs+1'.  +1 so that
+        # -1 is a valid index.
+        NB = len(blobslices)
+        blobmap = np.empty(NB+1, int)
+        blobmap[:] = -1
+        blobmap[keepblobs + 1] = np.arange(len(keepblobs))
+        # apply the map!
+        blobs = blobmap[blobs + 1]
+
+        # 'blobslices' and 'blobsrcs' are lists
+        blobslices = [blobslices[i] for i in keepblobs]
+        blobsrcs   = [blobsrcs  [i] for i in keepblobs]
+
+        # one more place where blob numbers are recorded...
+        T.blob = blobs[T.ity, T.itx]
+
+    iter = _blob_iter(blobslices, blobsrcs, blobs, targetwcs, tims,
+                      orig_wcsxy0, cat, bands, plots, ps, simul_opt)
+    # to allow debugpool to only queue tasks one at a time
+    iter = iterwrapper(iter, len(blobsrcs))
     R = mp.map(_bounce_one_blob, iter)
     print '[parallel fitblobs] Fitting sources took:', Time()-tlast
 
@@ -1102,6 +1099,7 @@ def stage_fitblobs_finish(
         fitblobs_R=None,
         outdir=None,
         write_metrics=True,
+        allbands = 'ugrizY',
         **kwargs):
 
     # one_blob can reduce the number and change the types of sources!
@@ -1151,11 +1149,11 @@ def stage_fitblobs_finish(
         for srctype in ['ptsrc', 'dev','exp','comp']:
             xcat = Catalog(*[m[srctype] for m in allmods])
             xcat.thawAllRecursive()
-            allbands = 'ugrizY'
             TT,hdr = prepare_fits_catalog(xcat, None, TT, hdr, bands, None,
                                           allbands=allbands, prefix=srctype+'_',
                                           save_invvars=False)
-            TT.set('%s_flags' % srctype, np.array([m['flags'][srctype] for m in allmods]))
+            TT.set('%s_flags' % srctype,
+                   np.array([m['flags'][srctype] for m in allmods]))
         TT.delete_column('ptsrc_shapeExp')
         TT.delete_column('ptsrc_shapeDev')
         TT.delete_column('ptsrc_fracDev')
@@ -2507,6 +2505,7 @@ def stage_wise_forced(
     T=None,
     targetwcs=None,
     brickname=None,
+    unwise_dir='unwise-coadds',
     brick=None,
     outdir=None,
     **kwargs):
@@ -2581,8 +2580,6 @@ def stage_writecat(
     TT.brickname = np.array([brickname] * len(TT))
     TT.objid   = np.arange(len(TT)).astype(np.int32)
     
-    allbands = 'ugrizY'
-
     TT.decam_rchi2    = np.zeros((len(TT), len(allbands)), np.float32)
     TT.decam_fracflux = np.zeros((len(TT), len(allbands)), np.float32)
     TT.decam_fracmasked = np.zeros((len(TT), len(allbands)), np.float32)
@@ -2983,13 +2980,82 @@ def run_brick(brick, radec=None, pixscale=0.262,
               sdssInit=True,
               gaussPsf=False,
               ceres=True,
-              outdir=None, decals_dir=None, threads=None,
+              outdir=None,
+              decals=None, decals_dir=None, threads=None,
               plots=False, plots2=False,
               plotbase=None, plotnumber=0,
               picklePattern='pickles/runbrick-%(brick)s-%%(stage)s.pickle',
               stages=['writecat'],
               force=[], forceAll=False, writePickles=True):
+    '''
+    Run the full DECaLS data reduction pipeline.
 
+    *brick*: string, brick name such as '2090m065'
+    *radec*: tuple of floats; RA,Dec center of the custom region to run
+
+    If *radec* is given, *brick* can be None.  If *brick* is given,
+    that brick's RA,Dec center will be looked up in the
+    "decals-bricks.fits" file.
+
+    *pixscale*: float, brick pixel scale, in arcsec/pixel.
+    *width*, *height*: integers; brick size in pixels.  3600 pixels
+     (with the default pixel scale of 0.262) leads to a slight overlap
+     between bricks.
+    *zoom*: list of four integers, [xlo,xhi, ylo,yhi] of the brick
+     subimage to run.
+
+    *nblobs*: int; for debugging purposes, only fit the first N blobs.
+    *blob*: int; for debugging purposes, start with this blob index.
+    *blobxy*: list of (x,y) integer tuples; only run the blobs
+      containing these pixels.
+
+    *pv*: boolean; use the Community Pipeline's WCS headers, with astrometric
+     shifts from the zeropoints.fits file, converted from their native
+     PV format into SIP format.
+
+     *pipe*: boolean; "pipeline mode"; avoid computing non-essential
+      things.
+
+    *nsigma*: float; detection threshold in sigmas.
+
+    *simulOpt*: boolean; during fitting, if a blob contains multiple
+     sources, run a step of fitting the sources simultaneously?
+
+     *wise*: boolean; run WISE forced photometry?
+
+     *sdssInit*: boolean; initialize sources from the SDSS catalogs?
+
+     *gaussPsf*: boolean; use a simpler single-component Gaussian PSF model?
+
+     *ceres*: boolean; use Ceres Solver when possible?
+
+     *outdir*: string; base directory for output files; default "."
+
+     *decals*: a "Decals" object (see common.Decals), which is in
+      charge of the list of bricks and CCDs to be handled, and also
+      creates DecamImage objects.
+     
+     *decals_dir*: string; default $DECALS_DIR environment variable;
+      where to look for files including calibration files, tables of
+      CCDs and bricks, image data, etc.
+
+      *threads*: integer; how many CPU cores to use
+
+      *plots*: boolean; make a bunch of plots?
+      *plots2*: boolean; make a bunch more plots?
+      *plotbase*: string, default brick-BRICK, the plot filename prefix.
+      *plotnumber*: integer, default 0, starting number for plot filenames.
+
+      *picklePattern*: string; filename for 'pickle' files
+      *stages*: list of strings; stages (functions stage_*) to run.
+
+      *force*: list of strings; prerequisite stages that will be run
+       even if pickle files exist.
+      *forceAll*: boolean; run all stages, ignoring all pickle files.
+      *writePickles*: boolean; write pickle files after each stage?
+
+    '''
+    
     from astrometry.util.stages import CallGlobalTime, runstage
     from astrometry.util.multiproc import multiproc
 
@@ -2999,7 +3065,7 @@ def run_brick(brick, radec=None, pixscale=0.262,
     kwargs = {}
 
     forceStages = [s for s in stages]
-    forceStages.extend(stages)
+    forceStages.extend(force)
 
     if forceAll:
         kwargs.update(forceall=True)
@@ -3043,6 +3109,7 @@ def run_brick(brick, radec=None, pixscale=0.262,
                   simul_opt=simulOpt, pipe=pipe,
                   no_sdss=not(sdssInit),
                   outdir=outdir, decals_dir=decals_dir,
+                  decals=decals,
                   plots=plots, plots2=plots2,
                   force=forceStages, write=writePickles)
 
@@ -3113,6 +3180,9 @@ def main():
     import optparse
     import logging
 
+    from astrometry.util.ttime import MemMeas, CpuMeas
+    import datetime
+
     ep = '''
 eg, to run a small field containing a cluster:
 \n
@@ -3164,7 +3234,8 @@ python -u projects/desi/runbrick.py --plots --brick 2440p070 --zoom 1900 2400 45
 
     parser.add_option('--nblobs', type=int, help='Debugging: only fit N blobs')
     parser.add_option('--blob', type=int, help='Debugging: start with blob #')
-    parser.add_option('--blobxy', type=int, nargs=2, help='Debugging: run the single blob containing pixel <bx> <by>')
+    parser.add_option('--blobxy', type=int, nargs=2, default=[], action='append',
+                      help='Debugging: run the single blob containing pixel <bx> <by>; this option can be repeated to run multiple blobs.')
 
     parser.add_option('--no-pv', dest='pv', default='True', action='store_false',
                       help='Do not use Community Pipeline WCS with PV distortion terms -- solve using Astrometry.net')
