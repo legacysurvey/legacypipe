@@ -1,4 +1,8 @@
 # Travis-CI.org build script
+
+# container-based infrastructure
+sudo: false
+
 language: c
 compiler:
   - gcc
