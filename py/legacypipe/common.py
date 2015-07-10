@@ -19,7 +19,7 @@ from astrometry.util.fits import fits_table, merge_tables
 from astrometry.util.plotutils import dimshow
 from astrometry.util.util import Tan, Sip, anwcs_t
 from astrometry.util.ttime import CpuMeas, Time
-from astrometry.util.starutil_numpy import degrees_between
+from astrometry.util.starutil_numpy import degrees_between, hmsstring2ra, dmsstring2dec
 from astrometry.util.miscutils import polygons_intersect, estimate_mode, clip_polygon, clip_wcs
 from astrometry.util.resample import resample_with_wcs,OverlapError
 
@@ -1433,19 +1433,14 @@ def exposure_metadata(filenames, hdus=None, trim=None):
                 ('DEC', nan),
                 ('AIRMASS', nan),
                 ('DATE-OBS', ''),
-                ('G-SEEING', nan),
                 ('EXPTIME', nan),
                 ('EXPNUM', 0),
                 ('MJD-OBS', 0),
                 ('PROPID', ''),
-                ('GUIDER', ''),
-                ('OBJECT', ''),
                 ]
     hdrkeys = [('AVSKY', nan),
                ('ARAWGAIN', nan),
                ('FWHM', nan),
-               #('ZNAXIS1',0),
-               #('ZNAXIS2',0),
                ('CRPIX1',nan),
                ('CRPIX2',nan),
                ('CRVAL1',nan),
@@ -1458,7 +1453,7 @@ def exposure_metadata(filenames, hdus=None, trim=None):
                ('CCDNUM',''),
                ]
 
-    otherkeys = [('CPIMAGE',''), ('CPIMAGE_HDU',0),
+    otherkeys = [('IMAGE_FILENAME',''), ('IMAGE_HDU',0),
                  ('HEIGHT',0),('WIDTH',0),
                  ]
 
@@ -1510,8 +1505,8 @@ def exposure_metadata(filenames, hdus=None, trim=None):
             for k,d in hdrkeys:
                 vals[k].append(hdr.get(k, d))
 
-            vals['CPIMAGE'].append(cpfn)
-            vals['CPIMAGE_HDU'].append(hdu)
+            vals['IMAGE_FILENAME'].append(cpfn)
+            vals['IMAGE_HDU'].append(hdu)
             vals['WIDTH'].append(int(W))
             vals['HEIGHT'].append(int(H))
 
@@ -1519,6 +1514,8 @@ def exposure_metadata(filenames, hdus=None, trim=None):
     for k,d in allkeys:
         T.set(k.lower().replace('-','_'), np.array(vals[k]))
     #T.about()
+
+    T.rename('extname', 'ccdname')
 
     T.filter = np.array([s.split()[0] for s in T.filter])
     T.ra_bore  = np.array([hmsstring2ra (s) for s in T.ra ])

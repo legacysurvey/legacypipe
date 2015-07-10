@@ -5,12 +5,13 @@ import numpy as np
 import fitsio
 
 from astrometry.util.fits import fits_table, merge_tables
-from astrometry.util.file import *
-from astrometry.util.ttime import *
-from tractor import *
+from astrometry.util.file import trymakedirs
+from astrometry.util.ttime import Time, MemMeas
 
-from common import *
-from desi_common import *
+from tractor import Tractor
+
+from common import Decals, DecamImage, bricks_touching_wcs, exposure_metadata
+from desi_common import read_fits_catalog
 import tractor
 
 # python projects/desi/forced-photom-decam.py decals/images/decam/CP20140810_g_v2/c4d_140816_032035_ooi_g_v2.fits.fz 43 DR1 f.fits
