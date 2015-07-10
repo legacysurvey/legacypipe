@@ -5,6 +5,7 @@ import pylab as plt
 
 import os
 import tempfile
+import time
 
 import numpy as np
 
@@ -17,12 +18,14 @@ from scipy.ndimage.morphology import binary_dilation, binary_fill_holes
 from astrometry.util.fits import fits_table, merge_tables
 from astrometry.util.plotutils import dimshow
 from astrometry.util.util import Tan, Sip, anwcs_t
+from astrometry.util.ttime import CpuMeas, Time
 from astrometry.util.starutil_numpy import degrees_between
 from astrometry.util.miscutils import polygons_intersect, estimate_mode, clip_polygon, clip_wcs
 from astrometry.util.resample import resample_with_wcs,OverlapError
 
 from tractor.basics import ConstantSky, NanoMaggies, ConstantFitsWcs, LinearPhotoCal
-from tractor.engine import Image
+from tractor.engine import Image, Catalog, Patch
+from tractor.galaxy import enable_galaxy_cache, disable_galaxy_cache
 from tractor.utils import get_class_from_name
 from tractor.psfex import PsfEx
 from tractor.ellipses import EllipseE,EllipseESoft
@@ -50,6 +53,8 @@ class BrickDuck(object):
 
 def get_version_header(program_name, decals_dir):
     from astrometry.util.run_command import run_command
+    import datetime
+
     if program_name is None:
         import sys
         program_name = sys.argv[0]

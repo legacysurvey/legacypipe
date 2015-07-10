@@ -17,10 +17,11 @@ from astrometry.util.fits import fits_table, merge_tables
 from astrometry.util.plotutils import PlotSequence, dimshow
 from astrometry.util.resample import resample_with_wcs, OverlapError
 from astrometry.util.ttime import Time
+from astrometry.util.starutil_numpy import radectoxyz
 
 from tractor import Tractor, PointSource, Image, ShiftedPsf, NanoMaggies
 from tractor.ellipses import EllipseESoft, EllipseE
-from tractor.galaxy import DevGalaxy, ExpGalaxy, FixedCompositeGalaxy
+from tractor.galaxy import DevGalaxy, ExpGalaxy, FixedCompositeGalaxy, disable_galaxy_cache
 from tractor.utils import _GaussianPriors
 
 from common import *
@@ -1261,7 +1262,7 @@ def stage_fitblobs_finish(
     #    print '  ', src
     
     rtn = dict(fitblobs_R = None)
-    for k in ['tractor', 'cat', 'invvars', 'T']:
+    for k in ['tractor', 'cat', 'invvars', 'T', 'allbands']:
         rtn[k] = locals()[k]
     return rtn
                           
@@ -2552,6 +2553,7 @@ def stage_writecat(
     catalogfn=None,
     outdir=None,
     write_catalog=True,
+    allbands=None,
     **kwargs):
 
     from desi_common import prepare_fits_catalog
@@ -3228,7 +3230,7 @@ python -u projects/desi/runbrick.py --plots --brick 2440p070 --zoom 1900 2400 45
 
     parser.add_option('--nblobs', type=int, help='Debugging: only fit N blobs')
     parser.add_option('--blob', type=int, help='Debugging: start with blob #')
-    parser.add_option('--blobxy', type=int, nargs=2, default=[], action='append',
+    parser.add_option('--blobxy', type=int, nargs=2, default=None, action='append',
                       help='Debugging: run the single blob containing pixel <bx> <by>; this option can be repeated to run multiple blobs.')
 
     parser.add_option('--no-pv', dest='pv', default='True', action='store_false',
