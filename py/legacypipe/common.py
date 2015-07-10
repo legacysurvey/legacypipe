@@ -23,7 +23,7 @@ from astrometry.util.starutil_numpy import degrees_between
 from astrometry.util.miscutils import polygons_intersect, estimate_mode, clip_polygon, clip_wcs
 from astrometry.util.resample import resample_with_wcs,OverlapError
 
-from tractor.basics import ConstantSky, NanoMaggies, ConstantFitsWcs, LinearPhotoCal
+from tractor.basics import ConstantSky, NanoMaggies, ConstantFitsWcs, LinearPhotoCal, PointSource, RaDecPos
 from tractor.engine import Image, Catalog, Patch
 from tractor.galaxy import enable_galaxy_cache, disable_galaxy_cache
 from tractor.utils import get_class_from_name
