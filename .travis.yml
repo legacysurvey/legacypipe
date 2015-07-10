@@ -24,14 +24,14 @@ before_script:
     - pkg-config --modversion gsl
     - export SYSTEM_GSL=yes
     - ls /usr/include/wcslib*
-    - if [ ! -d "$HOME/astrometry.net" ]; then git clone https://github.com/dstndstn/astrometry.net.git; fi
-    - (cd astrometry.net && ln -s /usr/include netpbm && make && make py)
-    - ln -s astrometry.net astrometry
-    - if [ ! -d "$HOME/tractor-git" ]; then git clone https://github.com/dstndstn/tractor.git tractor-git; fi
-    - (cd tractor-git && make)
-    - ln -s tractor-git/tractor .
-    - ln -s tractor-git/tractor/utils .
-    - ln -s tractor-git/tractor/wise .
+    - if [ ! -d "$HOME/astrometry.net" ]; then (cd $HOME; git clone https://github.com/dstndstn/astrometry.net.git); fi
+    - (cd $HOME/astrometry.net && ln -s /usr/include netpbm && make && make py)
+    - ln -s $HOME/astrometry.net astrometry
+    - if [ ! -d "$HOME/tractor-git" ]; then (cd $HOME; git clone https://github.com/dstndstn/tractor.git tractor-git); fi
+    - (cd $HOME/tractor-git && make)
+    - ln -s $HOME/tractor-git/tractor/tractor .
+    - ln -s $HOME/tractor-git/tractor/utils .
+    - ln -s $HOME/tractor-git/tractor/wise .
 
 script:
     - pwd
@@ -39,6 +39,7 @@ script:
     - echo $HOME
     - ls $HOME
     - export PYTHONPATH=${PYTHONPATH}:py
+    - ls -l
     - (cd doc && make)
 
 addons:
