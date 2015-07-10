@@ -7,7 +7,7 @@ sudo: required
 
 install:
   - sudo apt-get update -qq
-  - sudo apt-get install -y libnetpbm10 libnetpbm10-dev wcslib-dev libcfitsio3 libcfitsio3-dev python-numpy swig gsl-bin libgsl0-dev
+  - sudo apt-get install -y libnetpbm10 libnetpbm10-dev wcslib-dev libcfitsio3 libcfitsio3-dev python-numpy swig gsl-bin libgsl0-dev python-sphinx sphinx-common
 
 language: c
 compiler:
@@ -20,6 +20,9 @@ before_script:
     - export NETPBM_INC="-I$(pwd)"
     - export WCSLIB_INC="-I/usr/include/wcslib-4.8.3"
     - export WCSLIB_LIB="-lwcs"
+    - pkg-config --exists gsl
+    - pkg-config --modversion gsl
+    - export SYSTEM_GSL=yes
     - ls /usr/include/wcslib*
     - if [ ! -d "$HOME/astrometry.net" ]; then git clone https://github.com/dstndstn/astrometry.net.git; fi
     - (cd astrometry.net && ln -s /usr/include netpbm && make && make py)
