@@ -8,7 +8,24 @@ compiler:
   - gcc
   - clang
 
-script: export NETPBM_INC="-I$(pwd)"; export WCSLIB_INC="-I/usr/include/wcslib-4.8.3"; export WCSLIB_LIB="-lwcs" && git clone https://github.com/dstndstn/astrometry.net.git && (cd astrometry.net && ln -s /usr/include netpbm && make && make py) && git clone https://github.com/dstndstn/tractor.git tractor-git && (cd tractor-git && make) && ln -s astrometry.net astrometry && ln -s tractor-git/tractor . && ln -s tractor-git/tractor/utils . && ln -s tractor-git/tractor/wise . && (cd doc && make)
+#script: export NETPBM_INC="-I$(pwd)"; export WCSLIB_INC="-I/usr/include/wcslib-4.8.3"; export WCSLIB_LIB="-lwcs" && git clone https://github.com/dstndstn/astrometry.net.git && (cd astrometry.net && ln -s /usr/include netpbm && make && make py) && git clone https://github.com/dstndstn/tractor.git tractor-git && (cd tractor-git && make) && ln -s astrometry.net astrometry && ln -s tractor-git/tractor . && ln -s tractor-git/tractor/utils . && ln -s tractor-git/tractor/wise . && (cd doc && make)
+
+before_script:
+    - export NETPBM_INC="-I$(pwd)"
+    - export WCSLIB_INC="-I/usr/include/wcslib-4.8.3"
+    - export WCSLIB_LIB="-lwcs"
+    - ls /usr/include/wcslib*
+    - git clone https://github.com/dstndstn/astrometry.net.git
+    - (cd astrometry.net && ln -s /usr/include netpbm && make && make py)
+    - ln -s astrometry.net astrometry
+    - git clone https://github.com/dstndstn/tractor.git tractor-git
+    - (cd tractor-git && make)
+    - ln -s tractor-git/tractor .
+    - ln -s tractor-git/tractor/utils .
+    - ln -s tractor-git/tractor/wise .
+
+script:
+    - (cd doc && make)
 
 #install:
 #  - sudo apt-get update -qq
