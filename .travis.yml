@@ -16,10 +16,10 @@ before_script:
     - export WCSLIB_INC="-I/usr/include/wcslib-4.8.3"
     - export WCSLIB_LIB="-lwcs"
     - ls /usr/include/wcslib*
-    - git clone https://github.com/dstndstn/astrometry.net.git
+    - if [ ! -d "$HOME/astrometry.net" ]; then git clone https://github.com/dstndstn/astrometry.net.git; fi
     - (cd astrometry.net && ln -s /usr/include netpbm && make && make py)
     - ln -s astrometry.net astrometry
-    - git clone https://github.com/dstndstn/tractor.git tractor-git
+    - if [ ! -d "$HOME/tractor-git" ]; then git clone https://github.com/dstndstn/tractor.git tractor-git; fi
     - (cd tractor-git && make)
     - ln -s tractor-git/tractor .
     - ln -s tractor-git/tractor/utils .
@@ -45,3 +45,7 @@ addons:
     - gsl-bin
     - libgsl10-dev
 
+cache:
+  directories:
+  - $HOME/astrometry.net
+  - $HOME/tractor-git
