@@ -11,6 +11,14 @@ Contents:
 .. toctree::
    :maxdepth: 2
 
+legacypipe module
+-----------------
+
+.. automodule:: legacypipe.runbrick
+   :members:
+
+
+
 Indices and tables
 ==================
 
