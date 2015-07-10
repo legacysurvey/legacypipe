@@ -14,7 +14,7 @@ if __name__ == '__main__':
     parser.add_option('--ccds', help='Set ccds.fits file to load')
 
     parser.add_option('--expnum', type=int, help='Cut to a single exposure')
-    parser.add_option('--extname', help='Cut to a single extension name')
+    parser.add_option('--extname', '--ccdname', help='Cut to a single extension/CCD name')
 
     opt,args = parser.parse_args()
 
@@ -32,7 +32,7 @@ if __name__ == '__main__':
             T.cut(T.expnum == opt.expnum)
             print 'Cut to', len(T), 'with expnum =', opt.expnum
         if opt.extname is not None:
-            T.cut(np.array([(t.strip() == opt.extname) for t in T.extname]))
+            T.cut(np.array([(t.strip() == opt.extname) for t in T.ccdname]))
             print 'Cut to', len(T), 'with extname =', opt.extname
 
         args = range(len(T))

@@ -20,13 +20,22 @@ T = fits_table('/project/projectdirs/cosmo/work/decam/cats/ZeroPoints/ZeroPoints
 T.camera = np.array([cam] * len(T))
 T.expid = np.array(['%08i-%s' % (expnum,extname.strip())
                     for expnum,extname in zip(T.expnum, T.ccdname)])
-T.naxis1 = np.zeros(len(T), np.int16) + 2046
-T.naxis2 = np.zeros(len(T), np.int16) + 4094
+cols = T.columns()
+if not 'naxis1' in cols:
+    T.naxis1 = np.zeros(len(T), np.int16) + 2046
+if not 'naxis2' in cols:
+    T.naxis2 = np.zeros(len(T), np.int16) + 4094
 
 T.filename = np.array(['%s/CP20150407/%s.fz' % (cam, fn) for fn in T.filename])
-#fns = []
-#for fn in T.filename:
-#print 'filename', fn
+
+T.rename('ccdhdunum', 'image_hdu')
+T.rename('filename', 'image_filename')
+T.rename('naxis1', 'width')
+T.rename('naxis2', 'height')
+T.rename('ra',  'ra_bore')
+T.rename('dec', 'dec_bore')
+T.rename('ccdra',  'ra')
+T.rename('ccddec', 'dec')
 
 outfn = 'zp.fits'
 T.writeto(outfn)

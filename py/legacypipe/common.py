@@ -922,13 +922,13 @@ def ccd_map_image(valmap, empty=0.):
         img[y0:y1, x0:x1] = v
     return img
 
-def ccd_map_center(extname):
-    x0,x1,y0,y1 = ccd_map_extent(extname)
+def ccd_map_center(ccdname):
+    x0,x1,y0,y1 = ccd_map_extent(ccdname)
     return (x0+x1)/2., (y0+y1)/2.
 
-def ccd_map_extent(extname, inset=0.):
-    assert(extname.startswith('N') or extname.startswith('S'))
-    num = int(extname[1:])
+def ccd_map_extent(ccdname, inset=0.):
+    assert(ccdname.startswith('N') or ccdname.startswith('S'))
+    num = int(ccdname[1:])
     assert(num >= 1 and num <= 31)
     if num <= 7:
         x0 = 7 - 2*num
@@ -948,7 +948,7 @@ def ccd_map_extent(extname, inset=0.):
     else:
         x0 = 3 - (num - 28)*2
         y0 = 5
-    if extname.startswith('N'):
+    if ccdname.startswith('N'):
         (x0,x1,y0,y1) = (x0, x0+2, -y0-1, -y0)
     else:
         (x0,x1,y0,y1) = (x0, x0+2, y0, y0+1)
@@ -1269,32 +1269,8 @@ class Decals(object):
         print 'Reading CCDs from', fn
         T = fits_table(fn)
         print 'Got', len(T), 'CCDs'
-
-        # Adapt Arjun's zeropoints.fits file format to the old decals-ccds.fits format
-        T.rename('ccdname', 'extname')
-        #T.rename('ccdhdunum', 'cpimage_hdu')
-        #T.rename('filename', 'cpimage')
-        T.rename('ccdhdunum', 'image_hdu')
-        T.rename('filename', 'image_filename')
-
-        cols = T.columns()
-        if 'naxis1' in cols:
-            T.rename('naxis1', 'width')
-        else:
-            T.width = np.empty(len(T), int)
-            T.width[:] = 2046
-        if 'naxis2' in cols:
-            T.rename('naxis2', 'height')
-        else:
-            T.height = np.empty(len(T), int)
-            T.height[:] = 4094
-
-        T.rename('ra',  'ra_bore')
-        T.rename('dec', 'dec_bore')
-        T.rename('ccdra',  'ra')
-        T.rename('ccddec', 'dec')
-
-        T.extname = np.array([s.strip() for s in T.extname])
+        # "N4 " -> "N4"
+        T.ccdname = np.array([s.strip() for s in T.ccdname])
         return T
 
     def ccds_touching_wcs(self, wcs):
@@ -1337,12 +1313,12 @@ class Decals(object):
         tims = mp.map(read_one_tim, args)
         return tims
     
-    def find_ccds(self, expnum=None, extname=None):
+    def find_ccds(self, expnum=None, ccdname=None):
         T = self.get_ccds()
         if expnum is not None:
             T.cut(T.expnum == expnum)
-        if extname is not None:
-            T.cut(T.extname == extname)
+        if ccdname is not None:
+            T.cut(T.ccdname == ccdname)
         return T
 
     def photometric_ccds(self, CCD):
@@ -1378,10 +1354,10 @@ class Decals(object):
         '''
 
         ZP = self._get_zeropoints_table()
-        zp_rowmap = dict([((expnum,extname),i) for i,(expnum,extname) in enumerate(
+        zp_rowmap = dict([((expnum,ccdname),i) for i,(expnum,ccdname) in enumerate(
             zip(ZP.expnum, ZP.ccdname))])
-        I = np.array([zp_rowmap[(expnum,extname)] for expnum,extname in
-                      zip(CCD.expnum, CCD.extname)])
+        I = np.array([zp_rowmap[(expnum,ccdname)] for expnum,ccdname in
+                      zip(CCD.expnum, CCD.ccdname)])
         ZP = ZP[I]
         assert(len(ZP) == len(CCD))
         
@@ -1411,17 +1387,8 @@ class Decals(object):
     def _get_zeropoints_table(self):
         if self.ZP is not None:
             return self.ZP
-        zpfn = os.path.join(self.decals_dir, 'calib', 'decam', 'photom', 'zeropoints.fits')
-        #print 'Reading zeropoints:', zpfn
-        self.ZP = fits_table(zpfn)
-
-        if 'ccdname' in self.ZP.get_columns():
-            # 'N4 ' -> 'N4'
-            self.ZP.ccdname = np.array([s.strip() for s in self.ZP.ccdname])
-
-        # it's a string in some versions...
-        self.ZP.expnum = np.array([int(t) for t in self.ZP.expnum])
-
+        # Hooray, DRY
+        self.ZP = self.get_ccds()
         return self.ZP
 
     def get_zeropoint_row_for(self, im):
@@ -1429,7 +1396,7 @@ class Decals(object):
         I, = np.nonzero(ZP.expnum == im.expnum)
         if len(I) > 1:
             I, = np.nonzero((ZP.expnum == im.expnum) *
-                            (ZP.ccdname == im.extname))
+                            (ZP.ccdname == im.ccdname))
         if len(I) == 0:
             return None
         assert(len(I) == 1)
@@ -1576,9 +1543,9 @@ class DecamImage(object):
     def __init__(self, decals, t):
         self.decals = decals
 
-        imgfn, hdu, band, expnum, extname, exptime = (
+        imgfn, hdu, band, expnum, ccdname, exptime = (
             t.image_filename.strip(), t.image_hdu, t.filter.strip(), t.expnum,
-            t.extname.strip(), t.exptime)
+            t.ccdname.strip(), t.exptime)
 
         if os.path.exists(imgfn):
             self.imgfn = imgfn
@@ -1589,7 +1556,7 @@ class DecamImage(object):
 
         self.hdu   = hdu
         self.expnum = expnum
-        self.extname = extname
+        self.ccdname = ccdname
         self.band  = band
         self.exptime = exptime
 
@@ -1615,8 +1582,8 @@ class DecamImage(object):
         idirname = os.path.basename(os.path.dirname(imgfn))
 
         expstr = '%08i' % expnum
-        self.calname = '%s/%s/decam-%s-%s' % (expstr[:5], expstr, expstr, extname)
-        self.name = '%s-%s' % (expstr, extname)
+        self.calname = '%s/%s/decam-%s-%s' % (expstr[:5], expstr, expstr, ccdname)
+        self.name = '%s-%s' % (expstr, ccdname)
 
         calibdir = self.decals.get_calib_dir()
         self.pvwcsfn = os.path.join(calibdir, 'astrom-pv', self.calname + '.wcs.fits')
@@ -1667,7 +1634,7 @@ class DecamImage(object):
             # aww yeah
             if band == 'r' and (('DES' in self.imgfn) or ('COSMOS' in self.imgfn)):
                 # Northern chips: drop 100 pix off the bottom
-                if 'N' in self.extname:
+                if 'N' in self.ccdname:
                     if y0 < 100:
                         print 'Clipping bottom part of northern DES r-band chip'
                         y0 = 100
@@ -1687,8 +1654,8 @@ class DecamImage(object):
 
         e = imghdr['EXTNAME']
         print 'EXTNAME from image header:', e
-        print 'My EXTNAME:', self.extname
-        assert(e.strip() == self.extname.strip())
+        print 'My ccdname:', self.ccdname
+        assert(e.strip() == self.ccdname.strip())
 
         uq = np.unique(dq)
         bits = reduce(np.bitwise_or, uq)
