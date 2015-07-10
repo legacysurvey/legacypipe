@@ -1,7 +1,8 @@
 # Travis-CI.org build script
 
 # container-based infrastructure
-sudo: false
+# need APT packages to get white-listed first;
+#sudo: false
 
 language: c
 compiler:
