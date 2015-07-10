@@ -1,7 +1,7 @@
 # pipeline
 Our image reduction pipeline, using the Tractor framework
 
-
+[![Build Status](https://travis-ci.org/legacysurvey/legacypipe.svg?branch=master)](https://travis-ci.org/legacysurvey/legacypipe)
 
 Code for the analysis of the DECam Legacy Survey (DECaLS).
 ========================
