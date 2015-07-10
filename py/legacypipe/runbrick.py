@@ -347,8 +347,6 @@ def stage_tims(W=3600, H=3600, pixscale=0.262, brickname=None,
 
     ims = []
     for t in T:
-        #print
-        #print 'Image file', t.cpimage, 'hdu', t.cpimage_hdu
         im = decals.get_image_object(t)
         ims.append(im)
 

@@ -1264,6 +1264,31 @@ class Decals(object):
         print 'Reading CCDs from', fn
         T = fits_table(fn)
         print 'Got', len(T), 'CCDs'
+
+        # Adapt Arjun's zeropoints.fits file format to the old decals-ccds.fits format
+        T.rename('ccdname', 'extname')
+        #T.rename('ccdhdunum', 'cpimage_hdu')
+        #T.rename('filename', 'cpimage')
+        T.rename('ccdhdunum', 'image_hdu')
+        T.rename('filename', 'image_filename')
+
+        cols = T.columns()
+        if 'naxis1' in cols:
+            T.rename('naxis1', 'width')
+        else:
+            T.width = np.empty(len(T), int)
+            T.width[:] = 2046
+        if 'naxis2' in cols:
+            T.rename('naxis2', 'height')
+        else:
+            T.height = np.empty(len(T), int)
+            T.height[:] = 4094
+
+        T.rename('ra',  'ra_bore')
+        T.rename('dec', 'dec_bore')
+        T.rename('ccdra',  'ra')
+        T.rename('ccddec', 'dec')
+
         T.extname = np.array([s.strip() for s in T.extname])
         return T
 
@@ -1296,7 +1321,7 @@ class Decals(object):
         ims = []
         for t in C:
             print
-            print 'Image file', t.cpimage, 'hdu', t.cpimage_hdu
+            print 'Image file', t.image_filename, 'hdu', t.image_hdu
             im = DecamImage(self, t)
             ims.append(im)
         # Read images, clip to ROI
@@ -1461,7 +1486,7 @@ def exposure_metadata(filenames, hdus=None, trim=None):
                ('CCDNUM',''),
                ]
 
-    otherkeys = [('CPIMAGE',''), ('CPIMAGE_HDU',0), ('CALNAME',''), #('CPDATE',0),
+    otherkeys = [('CPIMAGE',''), ('CPIMAGE_HDU',0),
                  ('HEIGHT',0),('WIDTH',0),
                  ]
 
@@ -1517,10 +1542,6 @@ def exposure_metadata(filenames, hdus=None, trim=None):
             vals['CPIMAGE_HDU'].append(hdu)
             vals['WIDTH'].append(int(W))
             vals['HEIGHT'].append(int(H))
-            #vals['CPDATE'].append(cpdateval)
-
-            calname = '%s/%s/decam-%s-%s' % (expstr[:5], expstr, expstr, hdr.get('EXTNAME'))
-            vals['CALNAME'].append(calname)
 
     T = fits_table()
     for k,d in allkeys:
@@ -1550,9 +1571,9 @@ class DecamImage(object):
     def __init__(self, decals, t):
         self.decals = decals
 
-        imgfn, hdu, band, expnum, extname, calname, exptime = (
-            t.cpimage.strip(), t.cpimage_hdu, t.filter.strip(), t.expnum,
-            t.extname.strip(), t.calname.strip(), t.exptime)
+        imgfn, hdu, band, expnum, extname, exptime = (
+            t.image_filename.strip(), t.image_hdu, t.filter.strip(), t.expnum,
+            t.extname.strip(), t.exptime)
 
         if os.path.exists(imgfn):
             self.imgfn = imgfn
@@ -1588,14 +1609,15 @@ class DecamImage(object):
         ibase = ibase.replace('.fits', '')
         idirname = os.path.basename(os.path.dirname(imgfn))
 
-        self.calname = calname
-        self.name = '%08i-%s' % (expnum, extname)
+        expstr = '%08i' % expnum
+        self.calname = '%s/%s/decam-%s-%s' % (expstr[:5], expstr, expstr, extname)
+        self.name = '%s-%s' % (expstr, extname)
 
         calibdir = self.decals.get_calib_dir()
-        self.pvwcsfn = os.path.join(calibdir, 'astrom-pv', calname + '.wcs.fits')
-        self.sefn = os.path.join(calibdir, 'sextractor', calname + '.fits')
-        self.psffn = os.path.join(calibdir, 'psfex', calname + '.fits')
-        self.skyfn = os.path.join(calibdir, 'sky', calname + '.fits')
+        self.pvwcsfn = os.path.join(calibdir, 'astrom-pv', self.calname + '.wcs.fits')
+        self.sefn = os.path.join(calibdir, 'sextractor', self.calname + '.fits')
+        self.psffn = os.path.join(calibdir, 'psfex', self.calname + '.fits')
+        self.skyfn = os.path.join(calibdir, 'sky', self.calname + '.fits')
 
     def __str__(self):
         return 'DECam ' + self.name
