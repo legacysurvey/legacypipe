@@ -1,5 +1,5 @@
 # Travis-CI.org build script
-language: python
+language: c
 compiler:
   - gcc
   - clang
