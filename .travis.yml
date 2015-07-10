@@ -38,7 +38,7 @@ script:
     - ls
     - echo $HOME
     - ls $HOME
-    - export PYTHONPATH=${PYTHONPATH}:py
+    - export PYTHONPATH=${PYTHONPATH}:$(pwd)/py:$(pwd)
     - ls -l
     - (cd doc && make)
 
