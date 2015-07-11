@@ -29,7 +29,7 @@ before_script:
     - ln -s $HOME/astrometry.net astrometry
     - if [ ! -d "$HOME/tractor-git" ]; then (cd $HOME; git clone https://github.com/dstndstn/tractor.git tractor-git); fi
     - (cd $HOME/tractor-git && make)
-    - if [ ! -d "$HOME/fitsio-git"]; then (cd $HOME; git clone https://github.com/esheldon/fitsio.git fitsio-git); fi
+    - if [ ! -d "$HOME/fitsio-git" ]; then (cd $HOME; git clone https://github.com/esheldon/fitsio.git fitsio-git); fi
     - (cd $HOME/fitsio-git && python setup.py install --home $HOME/fitsio)
     - ln -s $HOME/fitsio/lib/python/fitsio .
     - ln -s $HOME/tractor-git/tractor/tractor .
