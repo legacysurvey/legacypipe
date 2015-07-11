@@ -45,6 +45,9 @@ script:
     - ls -l
     - python -c "import sys; print '\n'.join(sys.path)"
     - python -c "import sys; import os; print '\n'.join(['\n'.join(['',p] + os.listdir(p)) for p in sys.path if len(p) and os.path.isdir(p)])"
+    - echo "$PYTHONPATH"
+    - python -c "import sys; import os; for p in sys.path: os.system('ls -l ' + p)"
+    - python -c "import tractor; print tractor.__file__"
     - (cd doc && make)
 
 addons:
