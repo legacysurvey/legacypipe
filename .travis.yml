@@ -44,6 +44,7 @@ script:
     - export PYTHONPATH=${PYTHONPATH}:$(pwd)/py:$(pwd)
     - ls -l
     - python -c "import sys; print '\n'.join(sys.path)"
+    - python -c "import sys; import os; print '\n'.join(['\n'.join(['',p] + os.listdir(p)) for p in sys.path if len(p) and os.path.isdir(p)])"
     - (cd doc && make)
 
 addons:
