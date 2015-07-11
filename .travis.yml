@@ -43,6 +43,7 @@ script:
     - ls $HOME
     - export PYTHONPATH=${PYTHONPATH}:$(pwd)/py:$(pwd)
     - ls -l
+    - python -c "import sys; print '\n'.join(sys.path)"
     - (cd doc && make)
 
 addons:
