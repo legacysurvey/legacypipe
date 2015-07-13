@@ -24,17 +24,17 @@ before_script:
     - pkg-config --modversion gsl
     - export SYSTEM_GSL=yes
     - ls /usr/include/wcslib*
-    - if [ ! -d "$HOME/astrometry.net" ]; then (cd $HOME; git clone https://github.com/dstndstn/astrometry.net.git); fi
-    - (cd $HOME/astrometry.net && ln -s /usr/include netpbm && make && make py)
-    - ln -s $HOME/astrometry.net astrometry
+    - if [ ! -d "$HOME/astrometry.net" ]; then (cd $HOME; git clone https://github.com/dstndstn/astrometry.net.git; ln -sf /usr/include netpbm); fi
+    - (cd $HOME/astrometry.net && make && make py)
     - if [ ! -d "$HOME/tractor-git" ]; then (cd $HOME; git clone https://github.com/dstndstn/tractor.git tractor-git); fi
     - (cd $HOME/tractor-git && make)
     - if [ ! -d "$HOME/fitsio-git" ]; then (cd $HOME; git clone https://github.com/esheldon/fitsio.git fitsio-git); fi
     - (cd $HOME/fitsio-git && python setup.py install --home $HOME/fitsio)
+    - ln -s $HOME/astrometry.net astrometry
     - ln -s $HOME/fitsio/lib/python/fitsio .
-    - ln -s $HOME/tractor-git/tractor/tractor .
-    - ln -s $HOME/tractor-git/tractor/utils .
-    - ln -s $HOME/tractor-git/tractor/wise .
+    - ln -s $HOME/tractor-git/tractor .
+    - ln -s $HOME/tractor-git/utils .
+    - ln -s $HOME/tractor-git/wise .
 
 script:
     - pwd
@@ -42,11 +42,9 @@ script:
     - echo $HOME
     - ls $HOME
     - export PYTHONPATH=${PYTHONPATH}:$(pwd)/py:$(pwd)
+    - echo "$PYTHONPATH"
     - ls -l
     - python -c "import sys; print '\n'.join(sys.path)"
-    - python -c "import sys; import os; print '\n'.join(['\n'.join(['',p] + os.listdir(p)) for p in sys.path if len(p) and os.path.isdir(p)])"
-    - echo "$PYTHONPATH"
-    - python -c "import sys; import os; for p in sys.path: os.system('ls -l ' + p)"
     - python -c "import tractor; print tractor.__file__"
     - (cd doc && make)
 
