@@ -980,7 +980,7 @@ def bricks_touching_wcs(targetwcs, decals=None, B=None, margin=20):
     # margin: How far outside the image to keep objects
     # FIXME -- should be adaptive to object size!
 
-    from astrometry.libkd.spherematch import *
+    from astrometry.libkd.spherematch import match_radec
     if B is None:
         assert(decals is not None)
         B = decals.get_bricks_readonly()
