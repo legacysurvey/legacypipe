@@ -7,17 +7,16 @@ Our image reduction pipeline, using the Tractor framework
 Code for the analysis of the DECam Legacy Survey (DECaLS).
 ========================
 
-runbrick.py -- run the Tractor analysis of one DECaLS brick.
-common.py -- used by runbrick.py and others
-make-exposure-list.py -- to create the decals-ccds.fits metadata summary
-pipebrick.sh -- for running "runbrick.py" in production runs (via qdo)
+- runbrick.py -- run the Tractor analysis of one DECaLS brick.
+- common.py -- used by runbrick.py and others
+- make-exposure-list.py -- to create the decals-ccds.fits metadata summary
+- pipebrick.sh -- for running "runbrick.py" in production runs (via qdo)
+- check-psf.py -- investigating PsfEx fits and MoG fits thereof
+- desi_common.py -- an older set of common routines
+- queue-calib.py -- find & qdo queue bricks & CCDs
+- run-calib.py -- calibrate CCDs
+-- kick-tires.py -- check out Tractor catalogs
 
-check-psf.py -- investigating PsfEx fits and MoG fits thereof
-desi_common.py -- an older set of common routines
-
-run-calib.py / queue-calib.py -- find & qdo queue bricks & CCDs
-
-kick-tires.py -- check out Tractor catalogs
 
 How various files are generated:
 
