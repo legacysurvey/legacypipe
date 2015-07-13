@@ -1,4 +1,12 @@
 # -*- coding: utf-8 -*-
+
+# As per http://blog.rtwilson.com/how-to-make-your-sphinx-documentation-compile-with-readthedocs-when-youre-using-numpy-and-scipy/ :
+import mock
+
+MOCK_MODULES = ['numpy', 'scipy', 'matplotlib', 'matplotlib.pyplot', 'scipy.interpolate', 'scipy.ndimage']
+for mod_name in MOCK_MODULES:
+    sys.modules[mod_name] = mock.Mock()
+
 #
 # legacypipe documentation build configuration file, created by
 # sphinx-quickstart on Fri Jul 10 15:38:03 2015.
