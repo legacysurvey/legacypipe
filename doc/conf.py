@@ -2,7 +2,8 @@
 
 # As per http://blog.rtwilson.com/how-to-make-your-sphinx-documentation-compile-with-readthedocs-when-youre-using-numpy-and-scipy/ :
 import sys, os
-import mock
+
+from mock import Mock
 
 MOCK_MODULES = [
     'fitsio', 'astrometry', 'astrometry.util',
@@ -10,7 +11,7 @@ MOCK_MODULES = [
     'astrometry.util.resample', 'astrometry.util.ttime',
     'astrometry.util.starutil_numpy', 'astrometry.util.miscutils',
     'astrometry.util.util', 'astrometry.util.multiproc',
-    'astrometry.libkd', 
+    'astrometry.libkd',
     'tractor',
     'tractor.ellipses', 'tractor.galaxy', 'tractor.utils', 'tractor.basics',
     'tractor.engine', 'tractor.psfex', 'tractor.sfd',
@@ -22,7 +23,7 @@ MOCK_MODULES = [
     'matplotlib', 'pylab', 'matplotlib.pyplot',
     ]
 for mod_name in MOCK_MODULES:
-    sys.modules[mod_name] = mock.Mock()
+    sys.modules[mod_name] = Mock()
 
 #
 # legacypipe documentation build configuration file, created by
