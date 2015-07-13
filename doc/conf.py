@@ -1,6 +1,7 @@
 # -*- coding: utf-8 -*-
 
 # As per http://blog.rtwilson.com/how-to-make-your-sphinx-documentation-compile-with-readthedocs-when-youre-using-numpy-and-scipy/ :
+import sys, os
 import mock
 
 MOCK_MODULES = ['numpy', 'scipy', 'matplotlib', 'matplotlib.pyplot', 'scipy.interpolate', 'scipy.ndimage']
@@ -18,8 +19,6 @@ for mod_name in MOCK_MODULES:
 #
 # All configuration values have a default; values that are commented out
 # serve to show the default.
-
-import sys, os
 
 # If extensions (or modules to document with autodoc) are in another directory,
 # add these directories to sys.path here. If the directory is relative to the
