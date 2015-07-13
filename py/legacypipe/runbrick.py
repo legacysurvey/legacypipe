@@ -27,6 +27,27 @@ from tractor.utils import _GaussianPriors
 from common import *
 from runbrick_plots import _plot_mods
 
+'''
+Main "pipeline" script for the Dark Energy Camera Legacy Survey.
+
+For calling from other scripts, see:
+- `run_brick`
+
+Or for much more fine-grained control, see the individual stages:
+- `stage_tims`
+- `stage_image_coadds`
+- `stage_srcs`
+- `stage_fitblobs`
+- `stage_fitblobs_finish`
+- `stage_coadds`
+- `stage_wise_forced`
+- `stage_writecat`
+
+To see the code we run on each "blob" of pixels,
+- `_one_blob`
+
+'''
+
 ## GLOBALS!  Oh my!
 nocache = True
 useCeres = True
@@ -2986,6 +3007,16 @@ def run_brick(brick, radec=None, pixscale=0.262,
     '''
     Run the full DECaLS data reduction pipeline.
 
+    The pipeline is built out of "stages" that run in sequence.  By
+    default, this function will cache the result of each stage in a
+    (large) pickle file.  If you re-run, it will read from the
+    prerequisite pickle file rather than re-running the prerequisite
+    stage.  This can field faster debugging times, but you almost
+    certainly want to turn it off (with `writePickles=False,
+    forceAll=True`) in production.
+
+    - `brick`: testing
+    
     *brick*: string, brick name such as '2090m065'
     *radec*: tuple of floats; RA,Dec center of the custom region to run
 
@@ -2995,60 +3026,60 @@ def run_brick(brick, radec=None, pixscale=0.262,
 
     *pixscale*: float, brick pixel scale, in arcsec/pixel.
     *width*, *height*: integers; brick size in pixels.  3600 pixels
-     (with the default pixel scale of 0.262) leads to a slight overlap
-     between bricks.
+    (with the default pixel scale of 0.262) leads to a slight overlap
+    between bricks.
     *zoom*: list of four integers, [xlo,xhi, ylo,yhi] of the brick
-     subimage to run.
+    subimage to run.
 
     *nblobs*: int; for debugging purposes, only fit the first N blobs.
     *blob*: int; for debugging purposes, start with this blob index.
     *blobxy*: list of (x,y) integer tuples; only run the blobs
-      containing these pixels.
+    containing these pixels.
 
     *pv*: boolean; use the Community Pipeline's WCS headers, with astrometric
-     shifts from the zeropoints.fits file, converted from their native
-     PV format into SIP format.
+    shifts from the zeropoints.fits file, converted from their native
+    PV format into SIP format.
 
-     *pipe*: boolean; "pipeline mode"; avoid computing non-essential
-      things.
+    *pipe*: boolean; "pipeline mode"; avoid computing non-essential
+    things.
 
     *nsigma*: float; detection threshold in sigmas.
 
     *simulOpt*: boolean; during fitting, if a blob contains multiple
-     sources, run a step of fitting the sources simultaneously?
+    sources, run a step of fitting the sources simultaneously?
 
-     *wise*: boolean; run WISE forced photometry?
+    *wise*: boolean; run WISE forced photometry?
 
-     *sdssInit*: boolean; initialize sources from the SDSS catalogs?
+    *sdssInit*: boolean; initialize sources from the SDSS catalogs?
 
-     *gaussPsf*: boolean; use a simpler single-component Gaussian PSF model?
+    *gaussPsf*: boolean; use a simpler single-component Gaussian PSF model?
 
-     *ceres*: boolean; use Ceres Solver when possible?
+    *ceres*: boolean; use Ceres Solver when possible?
 
-     *outdir*: string; base directory for output files; default "."
+    *outdir*: string; base directory for output files; default "."
 
-     *decals*: a "Decals" object (see common.Decals), which is in
-      charge of the list of bricks and CCDs to be handled, and also
-      creates DecamImage objects.
+    *decals*: a "Decals" object (see common.Decals), which is in
+    charge of the list of bricks and CCDs to be handled, and also
+    creates DecamImage objects.
      
-     *decals_dir*: string; default $DECALS_DIR environment variable;
-      where to look for files including calibration files, tables of
-      CCDs and bricks, image data, etc.
+    *decals_dir*: string; default $DECALS_DIR environment variable;
+    where to look for files including calibration files, tables of
+    CCDs and bricks, image data, etc.
 
-      *threads*: integer; how many CPU cores to use
+    *threads*: integer; how many CPU cores to use
 
-      *plots*: boolean; make a bunch of plots?
-      *plots2*: boolean; make a bunch more plots?
-      *plotbase*: string, default brick-BRICK, the plot filename prefix.
-      *plotnumber*: integer, default 0, starting number for plot filenames.
+    *plots*: boolean; make a bunch of plots?
+    *plots2*: boolean; make a bunch more plots?
+    *plotbase*: string, default brick-BRICK, the plot filename prefix.
+    *plotnumber*: integer, default 0, starting number for plot filenames.
 
-      *picklePattern*: string; filename for 'pickle' files
-      *stages*: list of strings; stages (functions stage_*) to run.
+    *picklePattern*: string; filename for 'pickle' files
+    *stages*: list of strings; stages (functions stage_*) to run.
 
-      *force*: list of strings; prerequisite stages that will be run
-       even if pickle files exist.
-      *forceAll*: boolean; run all stages, ignoring all pickle files.
-      *writePickles*: boolean; write pickle files after each stage?
+    *force*: list of strings; prerequisite stages that will be run
+    even if pickle files exist.
+    *forceAll*: boolean; run all stages, ignoring all pickle files.
+    *writePickles*: boolean; write pickle files after each stage?
 
     '''
     
