@@ -4,9 +4,21 @@
 import sys, os
 import mock
 
-MOCK_MODULES = ['pylab', 'fitsio', 'astrometry', 'astrometry.util', 'astrometry.util.fits',
-                'astrometry.libkd', 
-                'numpy', 'scipy', 'matplotlib', 'matplotlib.pyplot', 'scipy.interpolate', 'scipy.ndimage']
+MOCK_MODULES = [
+    'fitsio', 'astrometry', 'astrometry.util',
+    'astrometry.util.fits', 'astrometry.util.plotutils',
+    'astrometry.util.resample', 'astrometry.util.ttime',
+    'astrometry.util.starutil_numpy', 'astrometry.util.miscutils',
+    'astrometry.libkd', 
+    'tractor',
+    'tractor.ellipses', 'tractor.galaxy', 'tractor.utils', 'tractor.basics',
+    'tractor.engine', 'tractor.psfex', 'tractor.sfd',
+    'numpy',
+    'scipy',
+    'scipy.interpolate', 'scipy.ndimage', 'scipy.ndimage.filters',
+    'scipy.ndimage.measurements', 'scipy.ndimage.morphology',
+    'matplotlib', 'pylab', 'matplotlib.pyplot',
+    ]
 for mod_name in MOCK_MODULES:
     sys.modules[mod_name] = mock.Mock()
 
