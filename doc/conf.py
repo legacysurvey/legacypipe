@@ -4,7 +4,8 @@
 import sys, os
 import mock
 
-MOCK_MODULES = ['pylab', 'fitsio', 'astrometry', 'numpy', 'scipy', 'matplotlib', 'matplotlib.pyplot', 'scipy.interpolate', 'scipy.ndimage']
+MOCK_MODULES = ['pylab', 'fitsio', 'astrometry', 'astrometry.util', 'astrometry.libkd', 
+                'numpy', 'scipy', 'matplotlib', 'matplotlib.pyplot', 'scipy.interpolate', 'scipy.ndimage']
 for mod_name in MOCK_MODULES:
     sys.modules[mod_name] = mock.Mock()
 
