@@ -5,8 +5,7 @@ import pylab as plt
 
 import os
 import tempfile
-
-from distutils.version import StrictVersion
+import time
 
 import numpy as np
 
@@ -14,24 +13,23 @@ import fitsio
 
 from scipy.ndimage.filters import gaussian_filter
 from scipy.ndimage.measurements import label, find_objects
-from scipy.ndimage.morphology import binary_dilation, binary_closing, binary_erosion, binary_fill_holes
+from scipy.ndimage.morphology import binary_dilation, binary_fill_holes
 
 from astrometry.util.fits import fits_table, merge_tables
 from astrometry.util.plotutils import dimshow
 from astrometry.util.util import Tan, Sip, anwcs_t
-from astrometry.util.starutil_numpy import degrees_between
+from astrometry.util.ttime import CpuMeas, Time
+from astrometry.util.starutil_numpy import degrees_between, hmsstring2ra, dmsstring2dec
 from astrometry.util.miscutils import polygons_intersect, estimate_mode, clip_polygon, clip_wcs
-from astrometry.sdss.fields import read_photoobjs_in_wcs
-from astrometry.sdss import DR9, band_index, AsTransWrapper
 from astrometry.util.resample import resample_with_wcs,OverlapError
 
-from tractor.basics import ConstantSky, NanoMaggies, ConstantFitsWcs, LinearPhotoCal
-from tractor.engine import Image
+from tractor.basics import ConstantSky, NanoMaggies, ConstantFitsWcs, LinearPhotoCal, PointSource, RaDecPos
+from tractor.engine import Image, Catalog, Patch
+from tractor.galaxy import enable_galaxy_cache, disable_galaxy_cache
 from tractor.utils import get_class_from_name
 from tractor.psfex import PsfEx
-from tractor.sdss import get_tractor_sources_dr9
-from tractor.ellipses import *
-from tractor.sfd import *
+from tractor.ellipses import EllipseE,EllipseESoft
+from tractor.sfd import SFDMap
 
 # search order: $TMPDIR, $TEMP, $TMP, then /tmp, /var/tmp, /usr/tmp
 tempdir = tempfile.gettempdir()
@@ -55,6 +53,8 @@ class BrickDuck(object):
 
 def get_version_header(program_name, decals_dir):
     from astrometry.util.run_command import run_command
+    import datetime
+
     if program_name is None:
         import sys
         program_name = sys.argv[0]
@@ -352,6 +352,10 @@ def segment_and_group_sources(image, T, name=None, ps=None, plots=False):
 
 def get_sdss_sources(bands, targetwcs, photoobjdir=None, local=True,
                      extracols=[], ellipse=None):
+    from astrometry.sdss import DR9, band_index, AsTransWrapper
+    from astrometry.sdss.fields import read_photoobjs_in_wcs
+    from tractor.sdss import get_tractor_sources_dr9
+
     # FIXME?
     margin = 0.
 
@@ -918,13 +922,13 @@ def ccd_map_image(valmap, empty=0.):
         img[y0:y1, x0:x1] = v
     return img
 
-def ccd_map_center(extname):
-    x0,x1,y0,y1 = ccd_map_extent(extname)
+def ccd_map_center(ccdname):
+    x0,x1,y0,y1 = ccd_map_extent(ccdname)
     return (x0+x1)/2., (y0+y1)/2.
 
-def ccd_map_extent(extname, inset=0.):
-    assert(extname.startswith('N') or extname.startswith('S'))
-    num = int(extname[1:])
+def ccd_map_extent(ccdname, inset=0.):
+    assert(ccdname.startswith('N') or ccdname.startswith('S'))
+    num = int(ccdname[1:])
     assert(num >= 1 and num <= 31)
     if num <= 7:
         x0 = 7 - 2*num
@@ -944,7 +948,7 @@ def ccd_map_extent(extname, inset=0.):
     else:
         x0 = 3 - (num - 28)*2
         y0 = 5
-    if extname.startswith('N'):
+    if ccdname.startswith('N'):
         (x0,x1,y0,y1) = (x0, x0+2, -y0-1, -y0)
     else:
         (x0,x1,y0,y1) = (x0, x0+2, y0, y0+1)
@@ -976,7 +980,7 @@ def bricks_touching_wcs(targetwcs, decals=None, B=None, margin=20):
     # margin: How far outside the image to keep objects
     # FIXME -- should be adaptive to object size!
 
-    from astrometry.libkd.spherematch import *
+    from astrometry.libkd.spherematch import match_radec
     if B is None:
         assert(decals is not None)
         B = decals.get_bricks_readonly()
@@ -1265,7 +1269,8 @@ class Decals(object):
         print 'Reading CCDs from', fn
         T = fits_table(fn)
         print 'Got', len(T), 'CCDs'
-        T.extname = np.array([s.strip() for s in T.extname])
+        # "N4 " -> "N4"
+        T.ccdname = np.array([s.strip() for s in T.ccdname])
         return T
 
     def ccds_touching_wcs(self, wcs):
@@ -1297,7 +1302,7 @@ class Decals(object):
         ims = []
         for t in C:
             print
-            print 'Image file', t.cpimage, 'hdu', t.cpimage_hdu
+            print 'Image file', t.image_filename, 'hdu', t.image_hdu
             im = DecamImage(self, t)
             ims.append(im)
         # Read images, clip to ROI
@@ -1308,12 +1313,12 @@ class Decals(object):
         tims = mp.map(read_one_tim, args)
         return tims
     
-    def find_ccds(self, expnum=None, extname=None):
+    def find_ccds(self, expnum=None, ccdname=None):
         T = self.get_ccds()
         if expnum is not None:
             T.cut(T.expnum == expnum)
-        if extname is not None:
-            T.cut(T.extname == extname)
+        if ccdname is not None:
+            T.cut(T.ccdname == ccdname)
         return T
 
     def photometric_ccds(self, CCD):
@@ -1349,10 +1354,10 @@ class Decals(object):
         '''
 
         ZP = self._get_zeropoints_table()
-        zp_rowmap = dict([((expnum,extname),i) for i,(expnum,extname) in enumerate(
+        zp_rowmap = dict([((expnum,ccdname),i) for i,(expnum,ccdname) in enumerate(
             zip(ZP.expnum, ZP.ccdname))])
-        I = np.array([zp_rowmap[(expnum,extname)] for expnum,extname in
-                      zip(CCD.expnum, CCD.extname)])
+        I = np.array([zp_rowmap[(expnum,ccdname)] for expnum,ccdname in
+                      zip(CCD.expnum, CCD.ccdname)])
         ZP = ZP[I]
         assert(len(ZP) == len(CCD))
         
@@ -1382,17 +1387,8 @@ class Decals(object):
     def _get_zeropoints_table(self):
         if self.ZP is not None:
             return self.ZP
-        zpfn = os.path.join(self.decals_dir, 'calib', 'decam', 'photom', 'zeropoints.fits')
-        #print 'Reading zeropoints:', zpfn
-        self.ZP = fits_table(zpfn)
-
-        if 'ccdname' in self.ZP.get_columns():
-            # 'N4 ' -> 'N4'
-            self.ZP.ccdname = np.array([s.strip() for s in self.ZP.ccdname])
-
-        # it's a string in some versions...
-        self.ZP.expnum = np.array([int(t) for t in self.ZP.expnum])
-
+        # Hooray, DRY
+        self.ZP = self.get_ccds()
         return self.ZP
 
     def get_zeropoint_row_for(self, im):
@@ -1400,7 +1396,7 @@ class Decals(object):
         I, = np.nonzero(ZP.expnum == im.expnum)
         if len(I) > 1:
             I, = np.nonzero((ZP.expnum == im.expnum) *
-                            (ZP.ccdname == im.extname))
+                            (ZP.ccdname == im.ccdname))
         if len(I) == 0:
             return None
         assert(len(I) == 1)
@@ -1437,19 +1433,14 @@ def exposure_metadata(filenames, hdus=None, trim=None):
                 ('DEC', nan),
                 ('AIRMASS', nan),
                 ('DATE-OBS', ''),
-                ('G-SEEING', nan),
                 ('EXPTIME', nan),
                 ('EXPNUM', 0),
                 ('MJD-OBS', 0),
                 ('PROPID', ''),
-                ('GUIDER', ''),
-                ('OBJECT', ''),
                 ]
     hdrkeys = [('AVSKY', nan),
                ('ARAWGAIN', nan),
                ('FWHM', nan),
-               #('ZNAXIS1',0),
-               #('ZNAXIS2',0),
                ('CRPIX1',nan),
                ('CRPIX2',nan),
                ('CRVAL1',nan),
@@ -1462,7 +1453,7 @@ def exposure_metadata(filenames, hdus=None, trim=None):
                ('CCDNUM',''),
                ]
 
-    otherkeys = [('CPIMAGE',''), ('CPIMAGE_HDU',0), ('CALNAME',''), #('CPDATE',0),
+    otherkeys = [('IMAGE_FILENAME',''), ('IMAGE_HDU',0),
                  ('HEIGHT',0),('WIDTH',0),
                  ]
 
@@ -1514,19 +1505,17 @@ def exposure_metadata(filenames, hdus=None, trim=None):
             for k,d in hdrkeys:
                 vals[k].append(hdr.get(k, d))
 
-            vals['CPIMAGE'].append(cpfn)
-            vals['CPIMAGE_HDU'].append(hdu)
+            vals['IMAGE_FILENAME'].append(cpfn)
+            vals['IMAGE_HDU'].append(hdu)
             vals['WIDTH'].append(int(W))
             vals['HEIGHT'].append(int(H))
-            #vals['CPDATE'].append(cpdateval)
-
-            calname = '%s/%s/decam-%s-%s' % (expstr[:5], expstr, expstr, hdr.get('EXTNAME'))
-            vals['CALNAME'].append(calname)
 
     T = fits_table()
     for k,d in allkeys:
         T.set(k.lower().replace('-','_'), np.array(vals[k]))
     #T.about()
+
+    T.rename('extname', 'ccdname')
 
     T.filter = np.array([s.split()[0] for s in T.filter])
     T.ra_bore  = np.array([hmsstring2ra (s) for s in T.ra ])
@@ -1551,9 +1540,9 @@ class DecamImage(object):
     def __init__(self, decals, t):
         self.decals = decals
 
-        imgfn, hdu, band, expnum, extname, calname, exptime = (
-            t.cpimage.strip(), t.cpimage_hdu, t.filter.strip(), t.expnum,
-            t.extname.strip(), t.calname.strip(), t.exptime)
+        imgfn, hdu, band, expnum, ccdname, exptime = (
+            t.image_filename.strip(), t.image_hdu, t.filter.strip(), t.expnum,
+            t.ccdname.strip(), t.exptime)
 
         if os.path.exists(imgfn):
             self.imgfn = imgfn
@@ -1564,7 +1553,7 @@ class DecamImage(object):
 
         self.hdu   = hdu
         self.expnum = expnum
-        self.extname = extname
+        self.ccdname = ccdname
         self.band  = band
         self.exptime = exptime
 
@@ -1589,14 +1578,15 @@ class DecamImage(object):
         ibase = ibase.replace('.fits', '')
         idirname = os.path.basename(os.path.dirname(imgfn))
 
-        self.calname = calname
-        self.name = '%08i-%s' % (expnum, extname)
+        expstr = '%08i' % expnum
+        self.calname = '%s/%s/decam-%s-%s' % (expstr[:5], expstr, expstr, ccdname)
+        self.name = '%s-%s' % (expstr, ccdname)
 
         calibdir = self.decals.get_calib_dir()
-        self.pvwcsfn = os.path.join(calibdir, 'astrom-pv', calname + '.wcs.fits')
-        self.sefn = os.path.join(calibdir, 'sextractor', calname + '.fits')
-        self.psffn = os.path.join(calibdir, 'psfex', calname + '.fits')
-        self.skyfn = os.path.join(calibdir, 'sky', calname + '.fits')
+        self.pvwcsfn = os.path.join(calibdir, 'astrom-pv', self.calname + '.wcs.fits')
+        self.sefn = os.path.join(calibdir, 'sextractor', self.calname + '.fits')
+        self.psffn = os.path.join(calibdir, 'psfex', self.calname + '.fits')
+        self.skyfn = os.path.join(calibdir, 'sky', self.calname + '.fits')
 
     def __str__(self):
         return 'DECam ' + self.name
@@ -1641,7 +1631,7 @@ class DecamImage(object):
             # aww yeah
             if band == 'r' and (('DES' in self.imgfn) or ('COSMOS' in self.imgfn)):
                 # Northern chips: drop 100 pix off the bottom
-                if 'N' in self.extname:
+                if 'N' in self.ccdname:
                     if y0 < 100:
                         print 'Clipping bottom part of northern DES r-band chip'
                         y0 = 100
@@ -1661,8 +1651,8 @@ class DecamImage(object):
 
         e = imghdr['EXTNAME']
         print 'EXTNAME from image header:', e
-        print 'My EXTNAME:', self.extname
-        assert(e.strip() == self.extname.strip())
+        print 'My ccdname:', self.ccdname
+        assert(e.strip() == self.ccdname.strip())
 
         uq = np.unique(dq)
         bits = reduce(np.bitwise_or, uq)
@@ -1801,6 +1791,8 @@ class DecamImage(object):
         return fitsio.read_header(self.imgfn, ext=self.hdu)
 
     def read_dq(self, header=False, **kwargs):
+        from distutils.version import StrictVersion
+
         print 'Reading data quality from', self.dqfn, 'hdu', self.hdu
         dq,hdr = self._read_fits(self.dqfn, self.hdu, header=True, **kwargs)
         primhdr = fitsio.read_header(self.dqfn)

@@ -1,0 +1,69 @@
+# Travis-CI.org build script
+
+# container-based infrastructure
+#sudo: false
+# need APT packages to get white-listed first;
+sudo: required
+
+install:
+  - sudo apt-get update -qq
+  - sudo apt-get install -y libnetpbm10 libnetpbm10-dev wcslib-dev libcfitsio3 libcfitsio3-dev python-numpy swig gsl-bin libgsl0-dev python-sphinx sphinx-common python-matplotlib python-scipy python-mock
+
+language: c
+compiler:
+  - gcc
+
+#  - clang
+
+#script: export NETPBM_INC="-I$(pwd)"; export WCSLIB_INC="-I/usr/include/wcslib-4.8.3"; export WCSLIB_LIB="-lwcs" && git clone https://github.com/dstndstn/astrometry.net.git && (cd astrometry.net && ln -s /usr/include netpbm && make && make py) && git clone https://github.com/dstndstn/tractor.git tractor-git && (cd tractor-git && make) && ln -s astrometry.net astrometry && ln -s tractor-git/tractor . && ln -s tractor-git/tractor/utils . && ln -s tractor-git/tractor/wise . && (cd doc && make)
+
+before_script:
+    - export NETPBM_INC="-I$(pwd)"
+    - export WCSLIB_INC="-I/usr/include/wcslib-4.8.3"
+    - export WCSLIB_LIB="-lwcs"
+    - pkg-config --exists gsl
+    - pkg-config --modversion gsl
+    - export SYSTEM_GSL=yes
+    - ls /usr/include/wcslib*
+    - if [ ! -d "$HOME/astrometry.net" ]; then (cd $HOME; git clone https://github.com/dstndstn/astrometry.net.git; ln -sf /usr/include netpbm); fi
+    - (cd $HOME/astrometry.net && make && make py)
+    - if [ ! -d "$HOME/tractor-git" ]; then (cd $HOME; git clone https://github.com/dstndstn/tractor.git tractor-git); fi
+    - (cd $HOME/tractor-git && make)
+    - if [ ! -d "$HOME/fitsio-git" ]; then (cd $HOME; git clone https://github.com/esheldon/fitsio.git fitsio-git); fi
+    - (cd $HOME/fitsio-git && python setup.py install --home $HOME/fitsio)
+    - ln -s $HOME/astrometry.net astrometry
+    - ln -s $HOME/fitsio/lib/python/fitsio .
+    - ln -s $HOME/tractor-git/tractor .
+    - ln -s $HOME/tractor-git/utils .
+    - ln -s $HOME/tractor-git/wise .
+
+script:
+    - pwd
+    - ls
+    - echo $HOME
+    - ls $HOME
+    - export PYTHONPATH=${PYTHONPATH}:$(pwd)/py:$(pwd)
+    - echo "$PYTHONPATH"
+    - ls -l
+    - python -c "import sys; print '\n'.join(sys.path)"
+    - python -c "import tractor; print tractor.__file__"
+    - (cd doc && make)
+
+addons:
+  apt:
+    packages:
+    - libnetpbm10
+    - libnetpbm10-dev
+    - wcslib-dev
+    - libcfitsio3
+    - libcfitsio3-dev
+    - python-numpy
+    - swig
+    - gsl-bin
+    - libgsl10-dev
+
+cache:
+  directories:
+  - $HOME/astrometry.net
+  - $HOME/tractor-git
+  - $HOME/fitsio-git

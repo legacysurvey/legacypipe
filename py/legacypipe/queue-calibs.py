@@ -338,15 +338,15 @@ if __name__ == '__main__':
             #trymakedirs(outdir)
             outfn = os.path.join('forced', expstr[:5], expstr,
                                  'decam-%s-%s-forced.fits' %
-                                 (expstr, T.extname[i]))
+                                 (expstr, T.ccdname[i]))
             imgfn = os.path.join(decals.decals_dir, 'images',
-                                 T.cpimage[i].strip())
+                                 T.image_filename[i].strip())
             if (not os.path.exists(imgfn) and 
                 imgfn.endswith('.fz') and
                 os.path.exists(imgfn[:-3])):
                 imgfn = imgfn[:-3]
 
-            f.write('python projects/desi/forced-photom-decam.py %s %i DR1 %s\n' % 
+            f.write('python legacypipe/forced-photom-decam.py %s %i DR1 %s\n' % 
                     (imgfn, T.cpimage_hdu[i], outfn))
 
         f.close()
@@ -359,7 +359,7 @@ if __name__ == '__main__':
         log('Total of', len(allI), 'CCDs')
         for j,i in enumerate(allI):
             exp = T.expnum[i]
-            ext = T.extname[i].strip()
+            ext = T.ccdname[i].strip()
             outfn = 'lsb/lsb-%s-%s.fits' % (exp, ext)
             f.write('python projects/desi/lsb.py --expnum %i --extname %s --out %s -F -n > lsb/lsb-%s-%s.log 2>&1\n' % (exp, ext, outfn, exp, ext))
         f.close()
@@ -387,12 +387,12 @@ if __name__ == '__main__':
             im = DecamImage(decals, T[i])
             if not im.run_calibs(im, None, None, None, just_check=True,
                                  astrom=False):
-                print 'Calibs for', im.expnum, im.extname, im.calname, 'already done'
+                print 'Calibs for', im.expnum, im.ccdname, im.calname, 'already done'
                 continue
 
         if opt.command:
-            f.write('python projects/desi/run-calib.py --expnum %i --extname %s\n' %
-                    (T.expnum[i], T.extname[i]))
+            f.write('python legacypipe/run-calib.py --expnum %i --ccdname %s\n' %
+                    (T.expnum[i], T.ccdname[i]))
         else:
             f.write('%i\n' % T.index[i])
         if opt.check:

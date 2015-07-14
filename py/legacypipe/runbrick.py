@@ -1,3 +1,29 @@
+'''
+Main "pipeline" script for the Dark Energy Camera Legacy Survey (DECaLS)
+data reductions.
+
+For calling from other scripts, see:
+
+- `run_brick`
+
+Or for much more fine-grained control, see the individual stages:
+
+- `stage_tims`
+- `stage_image_coadds`
+- `stage_srcs`
+- `stage_fitblobs`
+- `stage_fitblobs_finish`
+- `stage_coadds`
+- `stage_wise_forced`
+- `stage_writecat`
+
+To see the code we run on each "blob" of pixels,
+
+- `_one_blob`
+
+'''
+
+
 # Cython
 #import pyximport; pyximport.install(pyimport=True)
 
@@ -15,19 +41,18 @@ import fitsio
 
 from astrometry.util.fits import fits_table, merge_tables
 from astrometry.util.plotutils import PlotSequence, dimshow
-from astrometry.util.miscutils import clip_polygon
 from astrometry.util.resample import resample_with_wcs, OverlapError
-from astrometry.libkd.spherematch import match_radec
 from astrometry.util.ttime import Time
+from astrometry.util.starutil_numpy import radectoxyz
 
-from tractor import *
-from tractor.galaxy import *
-from tractor.source_extractor import *
+from tractor import Tractor, PointSource, Image, ShiftedPsf, NanoMaggies
+from tractor.ellipses import EllipseESoft, EllipseE
+from tractor.galaxy import DevGalaxy, ExpGalaxy, FixedCompositeGalaxy, disable_galaxy_cache
 from tractor.utils import _GaussianPriors
 
 from common import *
-from runbrick_plots import *
 from runbrick_plots import _plot_mods
+
 
 ## GLOBALS!  Oh my!
 nocache = True
@@ -36,7 +61,6 @@ useCeres = True
 # RGB image args used in the tile viewer:
 rgbkwargs = dict(mnmx=(-1,100.), arcsinh=1.)
 rgbkwargs_resid = dict(mnmx=(-5,5))
-
 
 def runbrick_global_init():
     if nocache:
@@ -274,6 +298,14 @@ def stage_tims(W=3600, H=3600, pixscale=0.262, brickname=None,
                target_extent=None, pipe=False, program_name='runbrick.py',
                bands='grz', const2psf=True, mp=None,
                mock_psf=False, **kwargs):
+    '''
+    This is the first stage in the pipeline.  It
+    determines which CCD images overlap the brick or region of
+    interest, runs calibrations for those images if necessary, and
+    then reads the images, creating `tractor.Image` ("tractor image"
+    or "tim") objects for them.
+
+    '''
     t0 = tlast = Time()
 
     # early fail for mysterious "ImportError: c.so.6: cannot open shared object file: No such file or directory"
@@ -350,8 +382,6 @@ def stage_tims(W=3600, H=3600, pixscale=0.262, brickname=None,
 
     ims = []
     for t in T:
-        #print
-        #print 'Image file', t.cpimage, 'hdu', t.cpimage_hdu
         im = decals.get_image_object(t)
         ims.append(im)
 
@@ -709,6 +739,14 @@ def stage_image_coadds(targetwcs=None, bands=None, tims=None, outdir=None,
                        brickname=None, version_header=None,
                        plots=False, ps=None,
                        **kwargs):
+    '''
+    Immediately after reading the images, we
+    create coadds of just the image products.  Later, full coadds
+    including the models will be created (in `stage_coadds`).  But
+    it's handy to have the coadds early on, to diagnose problems or
+    just to look at the data.
+    
+    '''
     if outdir is None:
         outdir = '.'
     basedir = os.path.join(outdir, 'coadd', brickname[:3], brickname)
@@ -749,7 +787,18 @@ def stage_srcs(coimgs=None, cons=None,
                mp=None, outdir=None, nsigma=5,
                no_sdss=False,
                **kwargs):
+    '''
+    In this stage we read SDSS catalog objects overlapping
+    our region of interest (if enabled), and also run SED-match
+    detection to find faint objects in the images.  For each object
+    detected, a `tractor` source object is created: a
+    `tractor.PointSource`, `tractor.ExpGalaxy`, `tractor.DevGalaxy`,
+    or `tractor.FixedCompositeGalaxy` object.  In this stage, the
+    sources are also split into "blobs" of overlapping pixels.  Each
+    of these blobs will be processed independently.
 
+    '''
+    
     tlast = Time()
     if not no_sdss:
         # Read SDSS sources
@@ -972,6 +1021,12 @@ def stage_fitblobs(T=None,
                    nblobs=None, blob0=None, blobxy=None,
                    simul_opt=False, mp=None,
                    **kwargs):
+    '''
+    This is where the actual source fitting happens.
+    The `_one_blob` function is called for each "blob" of pixels with
+    the sources contained within that blob.  The results are assembled
+    in the next stage, `stage_fitblobs_finish`.
+    '''
     tlast = Time()
     for tim in tims:
         assert(np.all(np.isfinite(tim.getInvError())))
@@ -1101,7 +1156,11 @@ def stage_fitblobs_finish(
         write_metrics=True,
         allbands = 'ugrizY',
         **kwargs):
-
+    '''
+    This is a "glue" stage to repackage the results from the
+    `stage_fitblobs` stage.
+    '''
+    
     # one_blob can reduce the number and change the types of sources!
     # Reorder the sources here...
     R = fitblobs_R
@@ -1267,7 +1326,7 @@ def stage_fitblobs_finish(
     #    print '  ', src
     
     rtn = dict(fitblobs_R = None)
-    for k in ['tractor', 'cat', 'invvars', 'T']:
+    for k in ['tractor', 'cat', 'invvars', 'T', 'allbands']:
         rtn[k] = locals()[k]
     return rtn
                           
@@ -1352,7 +1411,10 @@ FLAG_CPU_C   = 0x20
 
 def _one_blob((iblob, Isrcs, targetwcs, bx0, by0, blobw, blobh, blobmask, subtimargs,
                srcs, bands, plots, ps, simul_opt)):
-
+    '''
+    Fits sources contained within a "blob" of pixels.
+    '''
+    
     print 'Fitting blob', iblob, ':', len(Isrcs), 'sources, size', blobw, 'x', blobh, len(subtimargs), 'images'
 
     plots2 = False
@@ -2396,6 +2458,12 @@ def stage_coadds(bands=None, version_header=None, targetwcs=None,
                  outdir=None, T=None, cat=None, pixscale=None, plots=False,
                  mp=None,
                  **kwargs):
+    '''
+    After the `stage_fitblobs` fitting stage (and
+    `stage_fitblobs_finish` reformatting stage), we have all the
+    source model fits, and we can create coadds of the images, model,
+    and residuals.  We also perform aperture photometry in this stage.
+    '''
     tlast = Time()
 
     if outdir is None:
@@ -2509,6 +2577,10 @@ def stage_wise_forced(
     brick=None,
     outdir=None,
     **kwargs):
+    '''
+    After the model fits are finished, we can perform forced
+    photometry of the unWISE coadds.
+    '''
     from wise.forcedphot import unwise_forcedphot, unwise_tiles_touching_wcs
 
     roiradec = [brick.ra1, brick.ra2, brick.dec1, brick.dec2]
@@ -2558,8 +2630,13 @@ def stage_writecat(
     catalogfn=None,
     outdir=None,
     write_catalog=True,
+    allbands=None,
     **kwargs):
-
+    '''
+    Final stage in the pipeline: format results for the output
+    catalog.
+    '''
+    
     from desi_common import prepare_fits_catalog
     fs = None
     TT = T.copy()
@@ -2990,69 +3067,90 @@ def run_brick(brick, radec=None, pixscale=0.262,
     '''
     Run the full DECaLS data reduction pipeline.
 
-    *brick*: string, brick name such as '2090m065'
-    *radec*: tuple of floats; RA,Dec center of the custom region to run
+    The pipeline is built out of "stages" that run in sequence.  By
+    default, this function will cache the result of each stage in a
+    (large) pickle file.  If you re-run, it will read from the
+    prerequisite pickle file rather than re-running the prerequisite
+    stage.  This can field faster debugging times, but you almost
+    certainly want to turn it off (with `writePickles=False,
+    forceAll=True`) in production.
 
-    If *radec* is given, *brick* can be None.  If *brick* is given,
+    You must specify the region of sky to work on, via one of:
+
+    - *brick*: string, brick name such as '2090m065'
+    - *radec*: tuple of floats; RA,Dec center of the custom region to run
+
+    If *radec* is given, *brick* should be *None*.  If *brick* is given,
     that brick's RA,Dec center will be looked up in the
     "decals-bricks.fits" file.
 
-    *pixscale*: float, brick pixel scale, in arcsec/pixel.
-    *width*, *height*: integers; brick size in pixels.  3600 pixels
-     (with the default pixel scale of 0.262) leads to a slight overlap
-     between bricks.
-    *zoom*: list of four integers, [xlo,xhi, ylo,yhi] of the brick
-     subimage to run.
+    You can also change the size of the region to reduce:
 
-    *nblobs*: int; for debugging purposes, only fit the first N blobs.
-    *blob*: int; for debugging purposes, start with this blob index.
-    *blobxy*: list of (x,y) integer tuples; only run the blobs
+    - *pixscale*: float, brick pixel scale, in arcsec/pixel.
+    - *width* and *height*: integers; brick size in pixels.  3600 pixels
+      (with the default pixel scale of 0.262) leads to a slight overlap
+      between bricks.
+    - *zoom*: list of four integers, [xlo,xhi, ylo,yhi] of the brick
+      subimage to run.
+
+    If you want to measure only a subset of the astronomical objects,
+    you can use:
+    
+    - *nblobs*: int; for debugging purposes, only fit the first N blobs.
+    - *blob*: int; for debugging purposes, start with this blob index.
+    - *blobxy*: list of (x,y) integer tuples; only run the blobs
       containing these pixels.
 
-    *pv*: boolean; use the Community Pipeline's WCS headers, with astrometric
-     shifts from the zeropoints.fits file, converted from their native
-     PV format into SIP format.
+    Other options:
+      
+    - *pv*: boolean; use the Community Pipeline's WCS headers, with astrometric
+      shifts from the zeropoints.fits file, converted from their native
+      PV format into SIP format.
 
-     *pipe*: boolean; "pipeline mode"; avoid computing non-essential
+    - *pipe*: boolean; "pipeline mode"; avoid computing non-essential
       things.
 
-    *nsigma*: float; detection threshold in sigmas.
+    - *nsigma*: float; detection threshold in sigmas.
 
-    *simulOpt*: boolean; during fitting, if a blob contains multiple
-     sources, run a step of fitting the sources simultaneously?
+    - *simulOpt*: boolean; during fitting, if a blob contains multiple
+      sources, run a step of fitting the sources simultaneously?
 
-     *wise*: boolean; run WISE forced photometry?
+    - *wise*: boolean; run WISE forced photometry?
 
-     *sdssInit*: boolean; initialize sources from the SDSS catalogs?
+    - *sdssInit*: boolean; initialize sources from the SDSS catalogs?
 
-     *gaussPsf*: boolean; use a simpler single-component Gaussian PSF model?
+    - *gaussPsf*: boolean; use a simpler single-component Gaussian PSF model?
 
-     *ceres*: boolean; use Ceres Solver when possible?
+    - *ceres*: boolean; use Ceres Solver when possible?
 
-     *outdir*: string; base directory for output files; default "."
+    - *outdir*: string; base directory for output files; default "."
 
-     *decals*: a "Decals" object (see common.Decals), which is in
+    - *decals*: a "Decals" object (see common.Decals), which is in
       charge of the list of bricks and CCDs to be handled, and also
       creates DecamImage objects.
      
-     *decals_dir*: string; default $DECALS_DIR environment variable;
+    - *decals_dir*: string; default $DECALS_DIR environment variable;
       where to look for files including calibration files, tables of
       CCDs and bricks, image data, etc.
 
-      *threads*: integer; how many CPU cores to use
+    - *threads*: integer; how many CPU cores to use
 
-      *plots*: boolean; make a bunch of plots?
-      *plots2*: boolean; make a bunch more plots?
-      *plotbase*: string, default brick-BRICK, the plot filename prefix.
-      *plotnumber*: integer, default 0, starting number for plot filenames.
+    Plotting options:
+    
+    - *plots*: boolean; make a bunch of plots?
+    - *plots2*: boolean; make a bunch more plots?
+    - *plotbase*: string, default brick-BRICK, the plot filename prefix.
+    - *plotnumber*: integer, default 0, starting number for plot filenames.
 
-      *picklePattern*: string; filename for 'pickle' files
-      *stages*: list of strings; stages (functions stage_*) to run.
+    Options regarding the "stages":
 
-      *force*: list of strings; prerequisite stages that will be run
-       even if pickle files exist.
-      *forceAll*: boolean; run all stages, ignoring all pickle files.
-      *writePickles*: boolean; write pickle files after each stage?
+    - *picklePattern*: string; filename for 'pickle' files
+    - *stages*: list of strings; stages (functions stage_*) to run.
+
+    - *force*: list of strings; prerequisite stages that will be run
+      even if pickle files exist.
+    - *forceAll*: boolean; run all stages, ignoring all pickle files.
+    - *writePickles*: boolean; write pickle files after each stage?
 
     '''
     
@@ -3234,7 +3332,7 @@ python -u projects/desi/runbrick.py --plots --brick 2440p070 --zoom 1900 2400 45
 
     parser.add_option('--nblobs', type=int, help='Debugging: only fit N blobs')
     parser.add_option('--blob', type=int, help='Debugging: start with blob #')
-    parser.add_option('--blobxy', type=int, nargs=2, default=[], action='append',
+    parser.add_option('--blobxy', type=int, nargs=2, default=None, action='append',
                       help='Debugging: run the single blob containing pixel <bx> <by>; this option can be repeated to run multiple blobs.')
 
     parser.add_option('--no-pv', dest='pv', default='True', action='store_false',
