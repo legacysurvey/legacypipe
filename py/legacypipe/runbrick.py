@@ -3031,46 +3031,6 @@ def stage_writecat(
     return dict(T2=T2)
     
 
-def stage_redo_apphot(targetwcs=None, bands=None, tims=None, outdir=None,
-                       brickname=None, version_header=None,
-                       plots=False, ps=None, pixscale=None,
-                       **kwargs):
-    if outdir is None:
-        outdir = '.'
-    basedir = os.path.join(outdir, 'coadd', brickname[:3], brickname)
-    try_makedirs(basedir)
-
-    # read tractor output catalog
-    T = fits_table(os.path.join('dr1d', 'tractor', brickname[:3], 'tractor-%s.fits' % brickname))
-
-    # Apertures, radii in ARCSEC.
-    apertures_arcsec = np.array([0.5, 0.75, 1., 1.5, 2., 3.5, 5., 7.])
-    apertures = apertures_arcsec / pixscale
-
-    # photometer positions from catalog
-    ok,xx,yy = targetwcs.radec2pixelxy(T.ra, T.dec)
-    apxy = np.vstack((xx - 1., yy - 1.)).T
-    del xx,yy
-
-    C = _coadd(tims, bands, targetwcs, apertures=apertures, apxy=apxy)
-
-    T.add_columns_from(C.AP)
-    T.about()
-    
-    plt.clf()
-    plt.plot(T.decam_apflux[:,1], T.apflux_img_g, 'g.')
-    plt.plot(T.decam_apflux[:,2], T.apflux_img_r, 'r.')
-    plt.plot(T.decam_apflux[:,4], T.apflux_img_z, 'm.')
-    plt.xscale('symlog')
-    plt.yscale('symlog')
-    plt.xlabel('Old')
-    plt.ylabel('New')
-    plt.savefig('redo-ap-%s.png' % brickname)
-
-    fn = 'redo-ap-%s.fits' % brickname
-    T.writeto(fn)
-    print 'Wrote', fn
-
 
 def run_brick(brick, radec=None, pixscale=0.262,
               width=3600, height=3600,
@@ -3275,8 +3235,6 @@ def run_brick(brick, radec=None, pixscale=0.262,
         'fitplots': 'fitblobs_finish',
         'psfplots': 'tims',
         'initplots': 'srcs',
-
-        'redo_apphot': 'tims',
         }
 
     if wise:
