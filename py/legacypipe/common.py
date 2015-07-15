@@ -1515,8 +1515,9 @@ def exposure_metadata(filenames, hdus=None, trim=None):
         T.set(k.lower().replace('-','_'), np.array(vals[k]))
     #T.about()
 
-    T.rename('extname', 'ccdname')
-
+    #T.rename('extname', 'ccdname')
+    T.ccdname = np.array([t.strip() for t in T.extname])
+    
     T.filter = np.array([s.split()[0] for s in T.filter])
     T.ra_bore  = np.array([hmsstring2ra (s) for s in T.ra ])
     T.dec_bore = np.array([dmsstring2dec(s) for s in T.dec])
