@@ -32,16 +32,15 @@ from astropy.io import fits
 from astropy.table import Table, vstack
 from PIL import Image, ImageDraw
 
-from projects.desi.runbrick import run_brick
-from projects.desi.common import Decals, wcs_for_brick, ccds_touching_wcs
+from legacypipe.runbrick import run_brick
+from legacypipe.common import Decals, wcs_for_brick, ccds_touching_wcs
 
 # Set up logging and our global directories.
 logging.basicConfig(format='%(message)s',level=logging.INFO,stream=sys.stdout)
-log = logging.getLogger('decals_simulations')
+log = logging.getLogger('decals-sim')
 
 def get_linkfiles():
-    return ['calib','decals-ccds.fits','decals-bricks.fits',
-            'decals-ccds-zeropoints.fits']
+    return ['calib','decals-ccds.fits','decals-bricks.fits']
 
 def get_simdir(brickname=None,objtype=None):
     """Get the simulation directory."""
@@ -111,13 +110,12 @@ def get_ccdinfo(brickwcs=None,decals_dir=None):
     """Get info on this brick and on the CCDs touching it.
 
     """
-    allccdinfo =  fits.getdata(os.path.join(decals_dir,'decals-ccds-zeropoints.fits'))
-
-    # Get all the CCDs that touch this brick
     decals = Decals()
-    these = ccds_touching_wcs(brickwcs,decals.get_ccds())
-    #ccdinfo = decals.ccds_touching_wcs(targetwcs)
-    ccdinfo = allccdinfo[these]
+    ccdinfo = decals.ccds_touching_wcs(brickwcs)
+
+    #allccdinfo =  fits.getdata(os.path.join(decals_dir,'decals-ccds-zeropoints.fits'))
+    #these = ccds_touching_wcs(brickwcs,decals.get_ccds())
+    #ccdinfo = allccdinfo[these]
 
     log.info('Got {} CCDs'.format(len(ccdinfo)))
     return ccdinfo
@@ -210,6 +208,7 @@ def build_simcat(nobj=None,brickname=None,brickwcs=None,objtype=None,
     log.info('Writing {}'.format(outfile))
     if os.path.isfile(outfile):
         os.remove(outfile)
+    print(cat)
     cat.write(outfile)
 
     return cat
@@ -503,8 +502,8 @@ def qaplots(brickinfo,ccdinfo,simcat,decals_sim_dir=None,chunksuffix=None):
     ax.get_xaxis().get_major_formatter().set_useOffset(False) 
     ax.plot(simcat['RA'],simcat['DEC'],'gs',markersize=3)
     for ii, ccd in enumerate(ccdinfo):
-        dy = ccd['WIDTH']*0.262/3600.0
-        dx = ccd['HEIGHT']*0.262/3600.0
+        dy = ccd.width*0.262/3600.0
+        dx = ccd.height*0.262/3600.0
         rect = plt.Rectangle((ccd['RA']-dx/2,ccd['DEC']-dy/2),
                              dx,dy,fill=False,lw=1,color=next(color),
                              ls='solid')
@@ -618,6 +617,8 @@ def main():
                               chunksuffix=chunksuffix)
         if args.no_qaplots is False:
             qaplots(brickinfo,ccdinfo,simcat,decals_sim_dir,chunksuffix=chunksuffix)
+
+        sys.exit(1)
         
         # Copy the CP-processed data we need to DECALS_SIM_DIR.
         copy_cpdata(ccdinfo,decals_dir,decals_sim_dir)
