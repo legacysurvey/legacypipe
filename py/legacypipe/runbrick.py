@@ -313,10 +313,11 @@ def stage_tims(W=3600, H=3600, pixscale=0.262, brickname=None,
       to PsfEx model at the center of the image.  Used in DR1.
 
     - *gaussPsf*: boolean.  Single-component circular Gaussian, with
-       width set from the header FWHM value.  Useful for quick debugging.
+      width set from the header FWHM value.  Useful for quick
+      debugging.
 
     - *pixPsf*: boolean.  Pixelized PsfEx model, evaluated at the
-       image center.  Uses the FFT-based galaxy convolution code.
+      image center.  Uses the FFT-based galaxy convolution code.
 
     '''
     t0 = tlast = Time()
@@ -1410,8 +1411,9 @@ def _bounce_one_blob(X):
         import traceback
         print 'Exception in _one_blob: (iblob = %i)' % (X[0])
         traceback.print_exc()
-        print 'CARRYING ON...'
-        return None
+        #print 'CARRYING ON...'
+        #return None
+        raise
 
 def _clip_model_to_blob(mod, sh, ie):
     '''
