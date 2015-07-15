@@ -27,7 +27,7 @@ To see the code we run on each "blob" of pixels,
 # Cython
 #import pyximport; pyximport.install(pyimport=True)
 
-# python -u projects/desi/runbrick.py -b 2437p082 --zoom 2575 2675 400 500 -P "pickles/zoom2-%(brick)s-%%(stage)s.pickle" > log 2>&1 &
+# python -u legacypipe/runbrick.py -b 2437p082 --zoom 2575 2675 400 500 -P "pickles/zoom2-%(brick)s-%%(stage)s.pickle" > log 2>&1 &
 
 if __name__ == '__main__':
     import matplotlib
@@ -296,14 +296,27 @@ def stage_tims(W=3600, H=3600, pixscale=0.262, brickname=None,
                ra=None, dec=None,
                plots=False, ps=None, decals_dir=None, 
                target_extent=None, pipe=False, program_name='runbrick.py',
-               bands='grz', const2psf=True, mp=None,
-               mock_psf=False, **kwargs):
+               bands='grz',
+               const2psf=True, gaussPsf=False, pixPsf=False,
+               mp=None,
+               **kwargs):
     '''
     This is the first stage in the pipeline.  It
     determines which CCD images overlap the brick or region of
     interest, runs calibrations for those images if necessary, and
     then reads the images, creating `tractor.Image` ("tractor image"
     or "tim") objects for them.
+
+    PSF options:
+
+    - *const2psf*: boolean.  2-component general Gaussian mixture, fit
+      to PsfEx model at the center of the image.  Used in DR1.
+
+    - *gaussPsf*: boolean.  Single-component circular Gaussian, with
+       width set from the header FWHM value.  Useful for quick debugging.
+
+    - *pixPsf*: boolean.  Pixelized PsfEx model, evaluated at the
+       image center.  Uses the FFT-based galaxy convolution code.
 
     '''
     t0 = tlast = Time()
@@ -315,7 +328,7 @@ def stage_tims(W=3600, H=3600, pixscale=0.262, brickname=None,
         decals = Decals(decals_dir)
 
     if ra is not None:
-        # Custom brick; fake 'brick' object
+        # Custom brick; create a fake 'brick' object
         brick = BrickDuck()
         brick.ra  = ra
         brick.dec = dec
@@ -347,14 +360,14 @@ def stage_tims(W=3600, H=3600, pixscale=0.262, brickname=None,
 
 
     version_hdr = get_version_header(program_name, decals.decals_dir)
-    version_hdr.add_record(dict(name='BRICKNAM', value=brickname, comment='DECaLS brick RRRr[pm]DDd'))
-    version_hdr.add_record(dict(name='BRICKID' , value=brickid,   comment='DECaLS brick id'))
-    version_hdr.add_record(dict(name='RAMIN'   , value=brick.ra1, comment='Brick RA min'))
-    version_hdr.add_record(dict(name='RAMAX'   , value=brick.ra2, comment='Brick RA max'))
+    version_hdr.add_record(dict(name='BRICKNAM', value=brickname,  comment='DECaLS brick RRRr[pm]DDd'))
+    version_hdr.add_record(dict(name='BRICKID' , value=brickid,    comment='DECaLS brick id'))
+    version_hdr.add_record(dict(name='RAMIN'   , value=brick.ra1,  comment='Brick RA min'))
+    version_hdr.add_record(dict(name='RAMAX'   , value=brick.ra2,  comment='Brick RA max'))
     version_hdr.add_record(dict(name='DECMIN'  , value=brick.dec1, comment='Brick Dec min'))
     version_hdr.add_record(dict(name='DECMAX'  , value=brick.dec2, comment='Brick Dec max'))
-    version_hdr.add_record(dict(name='BRICKRA' , value=brick.ra,  comment='Brick center'))
-    version_hdr.add_record(dict(name='BRICKDEC', value=brick.dec, comment='Brick center'))
+    version_hdr.add_record(dict(name='BRICKRA' , value=brick.ra,   comment='Brick center'))
+    version_hdr.add_record(dict(name='BRICKDEC', value=brick.dec,  comment='Brick center'))
     print 'Version header:'
     print version_hdr
 
@@ -365,7 +378,6 @@ def stage_tims(W=3600, H=3600, pixscale=0.262, brickname=None,
     if T is None:
         print 'No CCDs touching target WCS'
         sys.exit(0)
-
     print len(T), 'CCDs touching target WCS'
 
     # Sort by band
@@ -391,7 +403,7 @@ def stage_tims(W=3600, H=3600, pixscale=0.262, brickname=None,
 
     # Run calibrations
     kwa = dict()
-    args = [(im, kwa, brick.ra, brick.dec, pixscale, mock_psf)
+    args = [(im, kwa, brick.ra, brick.dec, pixscale, gaussPsf)
             for im in ims]
     mp.map(run_calibs, args)
     tnow = Time()
@@ -399,7 +411,7 @@ def stage_tims(W=3600, H=3600, pixscale=0.262, brickname=None,
     tlast = tnow
 
     # Read images, clip to ROI
-    args = [(im, targetrd, mock_psf, const2psf) for im in ims]
+    args = [(im, targetrd, gaussPsf, const2psf, pixPsf) for im in ims]
     tims = mp.map(read_one_tim, args)
 
     # Cut the table of CCDs to match the 'tims' list
@@ -984,13 +996,24 @@ def set_source_radii(bands, orig_wcsxy0, tims, cat, minsigma, minradius=3):
     for (ox0,oy0),tim in zip(orig_wcsxy0, tims):
         minsig1s[tim.band] = min(minsig1s[tim.band], tim.sig1)
         th,tw = tim.shape
-        #print 'PSF', tim.psf
-        mog = tim.psf.getMixtureOfGaussians(px=ox0+(tw/2), py=oy0+(th/2))
-        profiles.extend([
-            mog.evaluate_grid(0, R, 0, 1, 0., 0.).patch.ravel(),
-            mog.evaluate_grid(-(R-1), 1, 0, 1, 0., 0.).patch.ravel()[-1::-1],
-            mog.evaluate_grid(0, 1, 0, R, 0., 0.).patch.ravel(),
-            mog.evaluate_grid(0, 1, -(R-1), 1, 0., 0.).patch.ravel()[-1::-1]])
+
+        if hasattr(tim.psf, 'getMixtureOfGaussians'):
+            mog = tim.psf.getMixtureOfGaussians(px=ox0+(tw/2), py=oy0+(th/2))
+            profiles.extend([
+                    mog.evaluate_grid(0, R, 0, 1, 0., 0.).patch.ravel(),
+                    mog.evaluate_grid(-(R-1), 1, 0, 1, 0., 0.).patch.ravel()[-1::-1],
+                    mog.evaluate_grid(0, 1, 0, R, 0., 0.).patch.ravel(),
+                    mog.evaluate_grid(0, 1, -(R-1), 1, 0., 0.).patch.ravel()[-1::-1]])
+        else:
+            patch = tim.psf.getPointSourcePatch(px=ox0+(tw/2), py=oy0+(th/2))
+            ph,pw = patch.shape
+            profiles.extend([
+                    patch.patch[ph/2    , pw/2:   ],
+                    patch.patch[ph/2    , pw/2::-1],
+                    patch.patch[ph/2:   , pw/2    ],
+                    patch.patch[ph/2::-1, pw/2    ],
+                    ])
+
     profiles = np.array(profiles)
     print 'profiles', profiles.dtype, profiles.shape
 
@@ -1455,7 +1478,7 @@ def _one_blob((iblob, Isrcs, targetwcs, bx0, by0, blobw, blobh, blobmask, subtim
         # If the subimage (blob) is small enough, instantiate a
         # constant PSF model in the center.
         if sy1-sy0 < 400 and sx1-sx0 < 400:
-            subpsf = psf.mogAt(ox0 + (sx0+sx1)/2., oy0 + (sy0+sy1)/2.)
+            subpsf = psf.constantPsfAt(ox0 + (sx0+sx1)/2., oy0 + (sy0+sy1)/2.)
         else:
             # Otherwise, instantiate a (shifted) spatially-varying
             # PsfEx model.
@@ -3056,6 +3079,7 @@ def run_brick(brick, radec=None, pixscale=0.262,
               wise=True,
               sdssInit=True,
               gaussPsf=False,
+              pixPsf=False,
               ceres=True,
               outdir=None,
               decals=None, decals_dir=None, threads=None,
@@ -3120,6 +3144,8 @@ def run_brick(brick, radec=None, pixscale=0.262,
     - *sdssInit*: boolean; initialize sources from the SDSS catalogs?
 
     - *gaussPsf*: boolean; use a simpler single-component Gaussian PSF model?
+
+    - *pixPsf*: boolean; use the pixelized PsfEx PSF model and FFT convolution?
 
     - *ceres*: boolean; use Ceres Solver when possible?
 
@@ -3203,7 +3229,7 @@ def run_brick(brick, radec=None, pixscale=0.262,
     if plotnumber:
         ps.skipto(plotnumber)
 
-    kwargs.update(ps=ps, nsigma=nsigma, mock_psf=gaussPsf,
+    kwargs.update(ps=ps, nsigma=nsigma, gaussPsf=gaussPsf, pixPsf=pixPsf,
                   simul_opt=simulOpt, pipe=pipe,
                   no_sdss=not(sdssInit),
                   outdir=outdir, decals_dir=decals_dir,
@@ -3361,6 +3387,8 @@ python -u projects/desi/runbrick.py --plots --brick 2440p070 --zoom 1900 2400 45
 
     parser.add_option('--gpsf', action='store_true', default=False,
                       help='Use a fixed single-Gaussian PSF')
+    parser.add_option('--pixpsf', action='store_true', default=False,
+                      help='Use the pixelized PsfEx PSF model, and FFT convolution')
     
     print
     print 'runbrick.py starting at', datetime.datetime.now().isoformat()
@@ -3426,7 +3454,7 @@ python -u projects/desi/runbrick.py --plots --brick 2440p070 --zoom 1900 2400 45
               width=opt.width, height=opt.height, zoom=opt.zoom,
               pv=opt.pv,
               threads=opt.threads, ceres=opt.ceres,
-              gaussPsf=opt.gpsf, simulOpt=opt.simul_opt,
+              gaussPsf=opt.gpsf, pixPsf=opt.pixpsf, simulOpt=opt.simul_opt,
               nblobs=opt.nblobs, blob=opt.blob, blobxy=opt.blobxy,
               pipe=opt.pipe, outdir=opt.outdir, decals_dir=opt.decals_dir,
               plots=opt.plots, plots2=opt.plots2,
