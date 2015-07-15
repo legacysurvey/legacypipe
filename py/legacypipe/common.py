@@ -1288,8 +1288,8 @@ class Decals(object):
         '''
         return DecamImage(self, t)
     
-    def tims_touching_wcs(self, targetwcs, mp, mock_psf=False,
-                          const2psf=True, bands=None):
+    def tims_touching_wcs(self, targetwcs, mp, bands=None,
+                          gaussPsf=False, const2psf=True, pixPsf=False):
         '''
         mp: multiprocessing object
         '''
@@ -1309,7 +1309,7 @@ class Decals(object):
         W,H = targetwcs.get_width(), targetwcs.get_height()
         targetrd = np.array([targetwcs.pixelxy2radec(x,y) for x,y in
                              [(1,1),(W,1),(W,H),(1,H),(1,1)]])
-        args = [(im, targetrd, mock_psf, const2psf) for im in ims]
+        args = [(im, targetrd, gaussPsf, const2psf, pixPsf) for im in ims]
         tims = mp.map(read_one_tim, args)
         return tims
     
@@ -1594,10 +1594,31 @@ class DecamImage(object):
         return str(self)
 
     def get_tractor_image(self, slc=None, radecpoly=None,
-                          mock_psf=False, const2psf=False,
+                          gaussPsf=False, const2psf=False, pixPsf=False,
                           nanomaggies=True, subsky=True, tiny=5):
         '''
-        slc: y,x slices
+        Returns a tractor.Image ("tim") object for this image.
+        
+        Options describing a subimage to return:
+
+        - *slc*: y,x slice objects
+        - *radecpoly*: numpy array, shape (N,2), RA,Dec polygon describing bounding box to select.
+
+        Options determining the PSF model to use:
+
+        - *gaussPsf*: single circular Gaussian PSF based on header FWHM value.
+        - *const2Psf*: 2-component general Gaussian fit to PsfEx model at image center.
+        - *pixPsf*: pixelized PsfEx model at image center.
+
+        Options determining the units of the image:
+
+        - *nanomaggies*: convert the image to be in units of NanoMaggies;
+          *tim.zpscale* contains the scale value the image was divided by.
+
+        - *subsky*: subtract a constant sky value, leaving pixel
+           values distributed around zero.  *tim.midsky* contains the
+           value subtracted.
+
         '''
         band = self.band
         imh,imw = self.get_image_shape()
@@ -1651,7 +1672,7 @@ class DecamImage(object):
 
         e = imghdr['EXTNAME']
         print 'EXTNAME from image header:', e
-        print 'My ccdname:', self.ccdname
+        print '            vs my CCDNAME:', self.ccdname
         assert(e.strip() == self.ccdname.strip())
 
         uq = np.unique(dq)
@@ -1673,17 +1694,15 @@ class DecamImage(object):
         psf_sigma = psf_fwhm / 2.35
         primhdr = self.read_image_primary_header()
 
-        magzp = self.decals.get_zeropoint_for(self)
-        print 'magzp', magzp
-        orig_zpscale = zpscale = NanoMaggies.zeropointToScale(magzp)
-
         sky = self.read_sky_model()
         midsky = sky.getConstant()
-
         if subsky:
             img -= midsky
             sky.subtract(midsky)
 
+        magzp = self.decals.get_zeropoint_for(self)
+        print 'magzp', magzp
+        orig_zpscale = zpscale = NanoMaggies.zeropointToScale(magzp)
         if nanomaggies:
             # Scale images to Nanomaggies
             print 'zpscale', zpscale
@@ -1701,11 +1720,22 @@ class DecamImage(object):
         if x0 or y0:
             twcs.setX0Y0(x0,y0)
 
-        if mock_psf:
+        if gaussPsf:
             from tractor.basics import NCircularGaussianPSF
             psfex = None
             psf = NCircularGaussianPSF([psf_sigma], [1.0])
             print 'WARNING: using mock PSF:', psf
+        elif pixPsf:
+            # constant PixelizedPSF.
+            print 'Reading PsfEx model from', self.psffn
+            from tractor.basics import GaussianMixtureEllipsePSF, PixelizedPSF
+            psfex = PsfEx(self.psffn, imw, imh, ny=13, nx=7,
+                          psfClass=GaussianMixtureEllipsePSF, K=2)
+            # FIXME -- could instantiate in the center of the ROI...
+            psfim = psfex.instantiateAt(imw/2, imh/2)
+            # trim a little
+            psfim = psfim[5:-5, 5:-5]
+            psf = PixelizedPSF(psfim)
         elif const2psf:
             # 2-component constant MoG.
             print 'Reading PsfEx model from', self.psffn
@@ -1716,9 +1746,11 @@ class DecamImage(object):
             psfim = psfex.instantiateAt(imw/2, imh/2)
             # trim a little
             psfim = psfim[5:-5, 5:-5]
+            print 'Fitting PsfEx model as 2-component Gaussian...'
             psf = GaussianMixtureEllipsePSF.fromStamp(psfim, N=2)
         else:
             assert(False)
+        print 'Using PSF model', psf
 
         tim = Image(img, invvar=invvar, wcs=twcs, psf=psf,
                     photocal=LinearPhotoCal(zpscale, band=band),
@@ -1745,10 +1777,9 @@ class DecamImage(object):
             tim.satval -= midsky
         if nanomaggies:
             tim.satval /= zpscale
-
-        mn,mx = tim.zr
         subh,subw = tim.shape
         tim.subwcs = tim.sip_wcs.get_subimage(tim.x0, tim.y0, subw, subh)
+        mn,mx = tim.zr
         tim.ima = dict(interpolation='nearest', origin='lower', cmap='gray',
                        vmin=mn, vmax=mx)
         return tim
@@ -1863,7 +1894,7 @@ class DecamImage(object):
         skyobj = fromfits(hdr, prefix='SKY_')
         return skyobj
 
-    def run_calibs(self, ra, dec, pixscale, mock_psf, W=2048, H=4096,
+    def run_calibs(self, ra, dec, pixscale, gaussPsf, W=2048, H=4096,
                    pvastrom=True, psfex=True, sky=True,
                    se=False,
                    funpack=False, fcopy=False, use_mask=True,
@@ -1879,7 +1910,7 @@ class DecamImage(object):
             print 'exists?', os.path.exists(fn), fn
         self.makedirs()
 
-        if mock_psf:
+        if gaussPsf:
             psfex = False
 
         if psfex and os.path.exists(self.psffn) and (not force):
@@ -2086,9 +2117,9 @@ def run_calibs(X):
     return im.run_calibs(*args, **kwargs)
 
 
-def read_one_tim((im, targetrd, mock_psf, const2psf)):
+def read_one_tim((im, targetrd, gaussPsf, const2psf, pixPsf)):
     print 'Reading', im
-    tim = im.get_tractor_image(radecpoly=targetrd, mock_psf=mock_psf,
-                               const2psf=const2psf)
+    tim = im.get_tractor_image(radecpoly=targetrd, gaussPsf=gaussPsf,
+                               const2psf=const2psf, pixPsf=pixPsf)
     return tim
 
