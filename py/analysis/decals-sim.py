@@ -597,7 +597,8 @@ def main():
     meta = Table()
     meta['BRICKNAME'] = Column([brickname],dtype='S10')
     meta['OBJTYPE'] = Column([objtype],dtype='S10')
-    meta['SEED'] = Column([args.seed],dtype='i4')
+    if args.seed is not None:
+        meta['SEED'] = Column([args.seed],dtype='i4')
     meta['NOBJ'] = Column([args.nobj],dtype='i2')
     meta['CHUNKSIZE'] = Column([args.chunksize],dtype='i2')
     meta['NCHUNK'] = Column([nchunk],dtype='i2')
