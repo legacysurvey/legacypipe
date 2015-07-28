@@ -8,7 +8,7 @@ export MKL_NUM_THREADS=1
 
 #export DECALS_DIR=$SCRATCH/code/tractor/decals-lsb
 
-outdir=$SCRATCH/dr1n
+outdir=$SCRATCH/fft-a
 
 brick="$1"
 
@@ -34,7 +34,7 @@ echo >> $log
 echo -e "\nStarting on ${NERSC_HOST} $(hostname)\n" >> $log
 echo "-----------------------------------------------------------------------------------------" >> $log
 
-python -u legacypipe/runbrick.py --force-all --no-write --brick $brick --outdir $outdir --threads 6 --nsigma 6 --skip --pipe >> $log 2>&1
+python -u legacypipe/runbrick.py --force-all --no-write --brick $brick --outdir $outdir --threads 6 --nsigma 6 --skip --pipe --pixpsf >> $log 2>&1
 
 # Launch from the 'py' directory;
 # qdo launch dr1n 32 --mpack 6 --walltime=48:00:00 --script ../bin/pipebrick.sh --batchqueue regular --verbose
