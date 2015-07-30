@@ -381,17 +381,13 @@ def stage_tims(W=3600, H=3600, pixscale=0.262, brickname=None,
         sys.exit(0)
     print len(T), 'CCDs touching target WCS'
 
-    # Sort by band
+    # Sort images by band
     T.cut(np.hstack([np.flatnonzero(T.filter == band) for band in bands]))
 
     print 'Cutting out non-photometric CCDs...'
-    #I = decals.photometric_ccds(T)
-    if 'dr1' in T.get_columns():
-        I = np.flatnonzero(T.dr1 == 1)
-        print len(I), 'of', len(T), 'CCDs are photometric'
-        T.cut(I)
-    else:
-        print 'WARNING: no "dr1" column in CCDs table; assuming all CCDs are photometric!'
+    I = decals.photometric_ccds(T)
+    print len(I), 'of', len(T), 'CCDs are photometric'
+    T.cut(I)
 
     ims = []
     for t in T:
