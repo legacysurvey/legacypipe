@@ -1580,6 +1580,57 @@ class DecamImage(object):
     def __repr__(self):
         return str(self)
 
+    def get_good_image_slice(self, extent, get_extent=False):
+        '''
+        extent = None or extent = [x0,x1,y0,y1]
+
+        If *get_extent* = True, returns the new [x0,x1,y0,y1] extent.
+
+        Returns a new pair of slices, or *extent* if the whole image is good.
+        '''
+        gx0,gx1,gy0,gy1 = self.get_good_image_subregion()
+        if gx0 is None and gx1 is None and gy0 is None and gy1 is None:
+            return extent
+        if extent is None:
+            imh,imw = self.get_image_shape()
+            extent = (0, imw, 0, imh)
+        x0,x1,y0,y1 = extent
+        if gx0 is not None:
+            x0 = max(x0, gx0)
+        if gy0 is not None:
+            y0 = max(y0, gy0)
+        if gx1 is not None:
+            x1 = min(x1, gx1)
+        if gy1 is not None:
+            y1 = min(y1, gy1)
+        if get_extent:
+            return (x0,x1,y0,y1)
+        return slice(y0,y1), slice(x0,x1)
+
+    def get_good_image_subregion(self):
+        x0,x1,y0,y1 = None,None,None,None
+
+        imh,imw = self.get_image_shape()
+        # Handle 'glowing' edges in DES r-band images
+        # aww yeah
+        if self.band == 'r' and (('DES' in self.imgfn) or ('COSMOS' in self.imgfn)):
+            # Northern chips: drop 100 pix off the bottom
+            if 'N' in self.ccdname:
+                print 'Clipping bottom part of northern DES r-band chip'
+                y0 = 100
+            else:
+                # Southern chips: drop 100 pix off the top
+                print 'Clipping top part of southern DES r-band chip'
+                y1 = imh - 100
+
+        # Clip the bad half of chip S7.
+        # The left half is OK.
+        if self.ccdname == 'S7':
+            print 'Clipping the right half of chip S7'
+            x1 = 1024
+
+        return x0,x1,y0,y1
+
     def get_tractor_image(self, slc=None, radecpoly=None,
                           gaussPsf=False, const2psf=False, pixPsf=False,
                           nanomaggies=True, subsky=True, tiny=5):
@@ -1612,6 +1663,8 @@ class DecamImage(object):
 
         wcs = self.read_pv_wcs()
         x0,y0 = 0,0
+        x1 = x0 + imw
+        y1 = y0 + imh
         if slc is None and radecpoly is not None:
             imgpoly = [(1,1),(1,imh),(imw,imh),(imw,1)]
             ok,tx,ty = wcs.radec2pixelxy(radecpoly[:-1,0], radecpoly[:-1,1])
@@ -1635,31 +1688,24 @@ class DecamImage(object):
             y0,y1 = sy.start, sy.stop
             x0,x1 = sx.start, sx.stop
 
-            # Handle 'glowing' edges in DES r-band images
-            # aww yeah
-            if band == 'r' and (('DES' in self.imgfn) or ('COSMOS' in self.imgfn)):
-                # Northern chips: drop 100 pix off the bottom
-                if 'N' in self.ccdname:
-                    if y0 < 100:
-                        print 'Clipping bottom part of northern DES r-band chip'
-                        y0 = 100
-                else:
-                    # Southern chips: drop 100 pix off the top
-                    if y1 > (imh-100):
-                        print 'Clipping top part of southern DES r-band chip'
-                        y1 = imh-100
-                if y0 >= y1:
-                    return None
+        old_slice = (x0,x1,y0,y1)
 
-            # Clip the bad half of chip S7.
-            # The left half is OK.
-            if self.ccdname == 'S7':
-                if x1 >= 1024:
-                    print 'Clipping the right half of chip S7'
-                    x1 = 1024
-                if x0 >= x1:
-                    return None
+        new_slice = self.get_good_image_slice((x0,x1,y0,y1), get_extent=True)
 
+        cx0,cx1,cy0,cy1 = self.get_good_image_subregion()
+        if cx0 is not None:
+            x0 = max(x0, cx0)
+        if cy0 is not None:
+            y0 = max(y0, cy0)
+        if cx1 is not None:
+            x1 = min(x1, cx1)
+        if cy1 is not None:
+            y1 = min(y1, cy1)
+
+        if (x0,x1,y0,y1) != old_slice:
+            print 'Applying good subregion of CCD: slice is', x0,x1,y0,y1
+            if x0 >= x1 or y0 >= y1:
+                return None
             slc = slice(y0,y1), slice(x0,x1)
 
         print 'Reading image slice:', slc
@@ -2080,8 +2126,24 @@ class DecamImage(object):
     
         if sky:
             print 'Fitting sky for', self
-            img = self.read_image()
-            wt = self.read_invvar()
+
+            slc = self.get_good_image_slice(None)
+            slc = None
+            gx0,gx1,gy0,gy1 = self.get_good_image_subregion()
+            if gx0 is not None or gx1 is not None or gy0 is not None or gy1 is not None:
+                x0,y0 = 0,0
+                y1,x1 = self.get_image_shape()
+                if gx0 is not None:
+                    x0 = gx0
+                if gx1 is not None:
+                    x1 = gx1
+                if gy0 is not None:
+                    y0 = gy0
+                if gy1 is not None:
+                    y1 = gy1
+                slc = slice(y0,y1), slice(x0,x1)
+            img = self.read_image(slice=slc)
+            wt = self.read_invvar(slice=slc)
             img = img[wt > 0]
             try:
                 skyval = estimate_mode(img, raiseOnWarn=True)
