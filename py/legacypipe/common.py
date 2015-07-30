@@ -1341,9 +1341,6 @@ class Decals(object):
         * CCDNUM = 31 (S7) is OK, but only for the region
           [1:1023,1:4094] (mask region [1024:2046,1:4094] in CCD s7)
         '''
-        print 'photometric: CCDS:'
-        CCD.about()
-
         # Here we are assuming that the zeropoints are present in the
         # CCDs file (starting in DR2)
         
@@ -1688,21 +1685,10 @@ class DecamImage(object):
             y0,y1 = sy.start, sy.stop
             x0,x1 = sx.start, sx.stop
 
-        old_slice = (x0,x1,y0,y1)
-
-        new_slice = self.get_good_image_slice((x0,x1,y0,y1), get_extent=True)
-
-        cx0,cx1,cy0,cy1 = self.get_good_image_subregion()
-        if cx0 is not None:
-            x0 = max(x0, cx0)
-        if cy0 is not None:
-            y0 = max(y0, cy0)
-        if cx1 is not None:
-            x1 = min(x1, cx1)
-        if cy1 is not None:
-            y1 = min(y1, cy1)
-
-        if (x0,x1,y0,y1) != old_slice:
+        old_extent = (x0,x1,y0,y1)
+        new_extent = self.get_good_image_slice((x0,x1,y0,y1), get_extent=True)
+        if new_extent != old_extent:
+            x0,x1,y0,y1 = new_extent
             print 'Applying good subregion of CCD: slice is', x0,x1,y0,y1
             if x0 >= x1 or y0 >= y1:
                 return None
@@ -2128,20 +2114,8 @@ class DecamImage(object):
             print 'Fitting sky for', self
 
             slc = self.get_good_image_slice(None)
-            slc = None
-            gx0,gx1,gy0,gy1 = self.get_good_image_subregion()
-            if gx0 is not None or gx1 is not None or gy0 is not None or gy1 is not None:
-                x0,y0 = 0,0
-                y1,x1 = self.get_image_shape()
-                if gx0 is not None:
-                    x0 = gx0
-                if gx1 is not None:
-                    x1 = gx1
-                if gy0 is not None:
-                    y0 = gy0
-                if gy1 is not None:
-                    y1 = gy1
-                slc = slice(y0,y1), slice(x0,x1)
+            print 'Good image slice is', slc
+
             img = self.read_image(slice=slc)
             wt = self.read_invvar(slice=slc)
             img = img[wt > 0]
