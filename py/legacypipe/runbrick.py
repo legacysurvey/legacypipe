@@ -76,8 +76,18 @@ ellipsePriors.add('ee1', 0., ellipticityStd, param=EllipseESoft(1.,0.,0.))
 ellipsePriors.add('ee2', 0., ellipticityStd, param=EllipseESoft(1.,0.,0.))
 
 class EllipseWithPriors(EllipseESoft):
-    # EllipseESoft extends EllipseE extends ParamList, has GaussianPriorsMixin.
-    # GaussianPriorsMixin sets a "gpriors" member variable to a _GaussianPriors
+    '''
+    An ellipse (used to represent galaxy shapes) with Gaussian priors
+    over softened ellipticity parameters.  This class is used during
+    fitting.
+
+    We ALSO place a top-hat prior on log-radius, forcing it to lie
+    within [-5, 5] (= 0.006" to 148" effective radius).
+    '''
+
+    # EllipseESoft extends EllipseE extends ParamList, has
+    # GaussianPriorsMixin.  GaussianPriorsMixin sets a "gpriors"
+    # member variable to a _GaussianPriors
     def __init__(self, *args, **kwargs):
         super(EllipseWithPriors, self).__init__(*args, **kwargs)
         self.gpriors = ellipsePriors
@@ -86,6 +96,14 @@ class EllipseWithPriors(EllipseESoft):
     def fromRAbPhi(r, ba, phi):
         logr, ee1, ee2 = EllipseESoft.rAbPhiToESoft(r, ba, phi)
         return EllipseWithPriors(logr, ee1, ee2)
+
+    def isLegal(self):
+        return -5. < self.logre < +5.
+
+    @staticmethod
+    def getName():
+        return "EllipseWithPriors"
+
 
 # Turn on/off caching for all new Tractor instances.
 def create_tractor(tims, srcs):
@@ -193,7 +211,7 @@ class iterwrapper(object):
             print str(self), 'next()'
             traceback.print_exc()
             raise
-            
+
     def __len__(self):
         return self.n
 
@@ -244,7 +262,7 @@ def compute_coadds(tims, bands, targetwcs, images=None,
         # moo
         cowimgs = []
         wimgs = []
-    
+
     for ib,band in enumerate(bands):
         coimg = np.zeros((H,W), np.float32)
         coimg2 = np.zeros((H,W), np.float32)
@@ -294,7 +312,7 @@ def compute_coadds(tims, bands, targetwcs, images=None,
 def stage_tims(W=3600, H=3600, pixscale=0.262, brickname=None,
                decals=None,
                ra=None, dec=None,
-               plots=False, ps=None, decals_dir=None, 
+               plots=False, ps=None, decals_dir=None,
                target_extent=None, pipe=False, program_name='runbrick.py',
                bands='grz',
                const2psf=True, gaussPsf=False, pixPsf=False,
@@ -341,7 +359,7 @@ def stage_tims(W=3600, H=3600, pixscale=0.262, brickname=None,
         brick.about()
         brickid = brick.brickid
         brickname = brick.brickname
-        
+
     targetwcs = wcs_for_brick(brick, W=W, H=H, pixscale=pixscale)
     if target_extent is not None:
         (x0,x1,y0,y1) = target_extent
@@ -427,7 +445,7 @@ def stage_tims(W=3600, H=3600, pixscale=0.262, brickname=None,
         sys.exit(0)
 
     # _psf_check_plots(tims)
-                    
+
     if not pipe:
         # save resampling params
         tims_compute_resamp(mp, tims, targetwcs)
@@ -475,7 +493,7 @@ def _coadds(tims, bands, targetwcs,
 
     W = targetwcs.get_width()
     H = targetwcs.get_height()
-    
+
     # always, for patching?
     unweighted=True
 
@@ -649,7 +667,7 @@ def _coadds(tims, bands, targetwcs,
             apimgerr = []
             if mods:
                 apres = []
-                
+
             for rad in apertures:
                 aper = photutils.CircularAperture(apxy, rad)
                 p = photutils.aperture_photometry(coimg, aper, error=imsigma)
@@ -754,7 +772,7 @@ def stage_image_coadds(targetwcs=None, bands=None, tims=None, outdir=None,
     including the models will be created (in `stage_coadds`).  But
     it's handy to have the coadds early on, to diagnose problems or
     just to look at the data.
-    
+
     '''
     if outdir is None:
         outdir = '.'
@@ -807,7 +825,7 @@ def stage_srcs(coimgs=None, cons=None,
     of these blobs will be processed independently.
 
     '''
-    
+
     tlast = Time()
     if not no_sdss:
         # Read SDSS sources
@@ -894,7 +912,6 @@ def stage_srcs(coimgs=None, cons=None,
     Tnew,newcat,hot = run_sed_matched_filters(SEDs, bands, detmaps, detivs,
                                               sdss_xy, targetwcs, nsigma=nsigma,
                                               plots=plots, ps=ps, mp=mp)
-                                              
 
     peaksn = Tnew.peaksn
     apsn = Tnew.apsn
@@ -912,7 +929,7 @@ def stage_srcs(coimgs=None, cons=None,
     # new peaks
     peakx = T.tx[Nsdss:]
     peaky = T.ty[Nsdss:]
-    
+
     if pipe:
         del detmaps
         del detivs
@@ -951,7 +968,7 @@ def stage_srcs(coimgs=None, cons=None,
         #                                  np.clip(int(x),0,W-1)]), color='r',
         #              ha='left', va='center')
         # ps.savefig()
- 
+
     # Segment, and record which sources fall into each blob
     blobs,blobsrcs,blobslices = segment_and_group_sources(hot, T, name=brickname,
                                                           ps=ps, plots=plots)
@@ -972,8 +989,8 @@ def stage_srcs(coimgs=None, cons=None,
     tnow = Time()
     print '[serial srcs] Blobs:', tnow-tlast
     tlast = tnow
-    
-    keys = ['T', 
+
+    keys = ['T',
             'blobsrcs', 'blobslices', 'blobs',
             'tractor', 'cat', 'ps']
     if not pipe:
@@ -1031,11 +1048,11 @@ def set_source_radii(bands, orig_wcsxy0, tims, cat, minsigma, minradius=3):
         src.fixedRadius = max(minradius, 1 + ii[-1])
         #print 'Nsigma', nsigmas, 'radius', src.fixedRadius
 
-def stage_fitblobs(T=None, 
+def stage_fitblobs(T=None,
                    blobsrcs=None, blobslices=None, blobs=None,
                    tractor=None, cat=None, targetrd=None, pixscale=None,
                    targetwcs=None,
-                   W=None,H=None, 
+                   W=None,H=None,
                    bands=None, ps=None, tims=None,
                    plots=False, plots2=False,
                    nblobs=None, blob0=None, blobxy=None,
@@ -1162,13 +1179,13 @@ def stage_fitblobs(T=None,
 
     return dict(fitblobs_R=R, tims=tims, ps=ps, blobs=blobs,
                 blobslices=blobslices, blobsrcs=blobsrcs)
-    
+
 def stage_fitblobs_finish(
     brickname=None, version_header=None,
         T=None, blobsrcs=None, blobslices=None, blobs=None,
         tractor=None, cat=None, targetrd=None, pixscale=None,
         targetwcs=None,
-        W=None,H=None, 
+        W=None,H=None,
         bands=None, ps=None, tims=None,
         plots=False, plots2=False,
         fitblobs_R=None,
@@ -1180,7 +1197,7 @@ def stage_fitblobs_finish(
     This is a "glue" stage to repackage the results from the
     `stage_fitblobs` stage.
     '''
-    
+
     # one_blob can reduce the number and change the types of sources!
     # Reorder the sources here...
     R = fitblobs_R
@@ -1194,7 +1211,6 @@ def stage_fitblobs_finish(
 
     assert(len(R) == len(blobsrcs))
 
-    
     ##
     if write_metrics:
         # Drop blobs that failed.
@@ -1204,7 +1220,7 @@ def stage_fitblobs_finish(
         # DEBUGging / metrics for us
         all_models  = [r[8] for r in good_R]
         performance = [r[9] for r in good_R]
-    
+
         allmods  = [None]*len(T)
         allperfs = [None]*len(T)
         for Isrcs,mods,perf in zip(good_blobsrcs,all_models,performance):
@@ -1223,7 +1239,7 @@ def stage_fitblobs_finish(
         allperfs = [allperfs[i] for i in goodI]
         assert(len(TT) == len(allmods))
         assert(len(TT) == len(allperfs))
-        
+
         hdr = fitsio.FITSHDR()
         for srctype in ['ptsrc', 'dev','exp','comp']:
             xcat = Catalog(*[m[srctype] for m in allmods])
@@ -1244,7 +1260,7 @@ def stage_fitblobs_finish(
         TT.delete_column('exp_fracDev')
         TT.delete_column('exp_type')
         TT.delete_column('comp_type')
-    
+
         TT.keepmod = np.array([m['keep'] for m in allmods])
         TT.dchisq = np.array([m['dchisqs'] for m in allmods])
         if outdir is None:
@@ -1255,7 +1271,7 @@ def stage_fitblobs_finish(
         TT.writeto(fn, header=hdr)
         del TT
         print 'Wrote', fn
-    
+
         fn = os.path.join(metricsdir, 'performance-%s.pickle' % brickname)
         pickle_to_file(allperfs, fn)
         print 'Wrote', fn
@@ -1273,7 +1289,7 @@ def stage_fitblobs_finish(
     fracin = np.vstack([r[10] for r in R])
     started_in = np.hstack([r[11] for r in R])
     finished_in = np.hstack([r[12] for r in R])
-    
+
     newcat = []
     for r in R:
         newcat.extend(r[1])
@@ -1281,7 +1297,7 @@ def stage_fitblobs_finish(
 
     del R
     del fitblobs_R
-    
+
     assert(len(T) == len(newcat))
     print 'Old catalog:', len(cat)
     print 'New catalog:', len(newcat)
@@ -1338,18 +1354,18 @@ def stage_fitblobs_finish(
     T.dchisq[T.dchisq == 0.] = 0.
     # Make dchisq relative to the first element ("none" model)
     T.dchisq = T.dchisq[:, 1:] - T.dchisq[:, 0][:,np.newaxis]
-    
+
     invvars = srcivs
 
     #print 'New catalog:'
     #for src in cat:
     #    print '  ', src
-    
+
     rtn = dict(fitblobs_R = None)
     for k in ['tractor', 'cat', 'invvars', 'T', 'allbands']:
         rtn[k] = locals()[k]
     return rtn
-                          
+
 def _blob_iter(blobslices, blobsrcs, blobs,
                targetwcs, tims, orig_wcsxy0, cat, bands, plots, ps, simul_opt):
     for iblob, (bslc,Isrcs) in enumerate(zip(blobslices, blobsrcs)):
@@ -1435,8 +1451,8 @@ def _one_blob((iblob, Isrcs, targetwcs, bx0, by0, blobw, blobh, blobmask, subtim
     '''
     Fits sources contained within a "blob" of pixels.
     '''
-    
-    print 'Fitting blob', iblob, ':', len(Isrcs), 'sources, size', blobw, 'x', blobh, len(subtimargs), 'images'
+
+    print 'Fitting blob', (iblob+1), ':', len(Isrcs), 'sources, size', blobw, 'x', blobh, len(subtimargs), 'images'
 
     plots2 = False
 
@@ -1531,7 +1547,7 @@ def _one_blob((iblob, Isrcs, targetwcs, bx0, by0, blobw, blobh, blobmask, subtim
                 print 'Warning: Optimize_forced_photometry failed:'
                 traceback.print_exc()
                 # carry on
-            
+
         # print 'Band', b, 'took', Time()-tband
     subcat.thawAllRecursive()
 
@@ -1541,7 +1557,7 @@ def _one_blob((iblob, Isrcs, targetwcs, bx0, by0, blobw, blobh, blobmask, subtim
         plotmodnames = []
         plotmods.append(subtr.getModelImages())
         plotmodnames.append('Initial')
-        
+
     # Optimize individual sources in order of flux
     fluxes = []
     for src in subcat:
@@ -1663,7 +1679,7 @@ def _one_blob((iblob, Isrcs, targetwcs, bx0, by0, blobw, blobh, blobmask, subtim
                         ra,dec = tim.subwcs.pixelxy2radec(tx, ty)
                         ok,x,y = targetwcs.radec2pixelxy(ra, dec)
                         plt.plot(x, y, 'm-')
-                        
+
                     for tim in subtims:
                         h,w = tim.shape
                         tx,ty = [0,0,w,w,0], [0,h,h,0,0]
@@ -1677,10 +1693,8 @@ def _one_blob((iblob, Isrcs, targetwcs, bx0, by0, blobw, blobh, blobmask, subtim
                         ra,dec = tim.subwcs.pixelxy2radec(tx, ty)
                         ok,x,y = targetwcs.radec2pixelxy(ra, dec)
                         plt.plot(x, y, 'c-')
-                        
                     ps.savefig()
-                        
-                    
+
             else:
                 srctims = subtims
 
@@ -1787,7 +1801,7 @@ def _one_blob((iblob, Isrcs, targetwcs, bx0, by0, blobw, blobh, blobmask, subtim
             tim.data = img
         del orig_timages
         del initial_models
-        
+
     else:
         # Single source (though this is coded to handle multiple sources)
         # Fit sources one at a time, but don't subtract other models
@@ -1875,7 +1889,7 @@ def _one_blob((iblob, Isrcs, targetwcs, bx0, by0, blobw, blobh, blobmask, subtim
     #   -fit, with Catalog([src])
     #   -subtract final model (from each tim)
     # -Replace original subtim images
-    
+
     # Remember original tim images
     orig_timages = [tim.getImage() for tim in subtims]
     for tim,img in zip(subtims,orig_timages):
@@ -1913,7 +1927,7 @@ def _one_blob((iblob, Isrcs, targetwcs, bx0, by0, blobw, blobh, blobmask, subtim
 
     # For sources, in decreasing order of brightness
     for numi,i in enumerate(Ibright):
-        
+
         src = subcat[i]
         #print 'Model selection for source %i of %i in blob' % (numi, len(Ibright))
 
@@ -1933,6 +1947,7 @@ def _one_blob((iblob, Isrcs, targetwcs, bx0, by0, blobw, blobh, blobmask, subtim
             modelMasks.append(d)
             mod = imods[i]
             if mod is not None:
+                print 'Set modelMask:', mod.patch.shape, 'for', src
                 d[src] = Patch(mod.x0, mod.y0, mod.patch != 0)
 
         #srctractor = BlobTractor(subtims, [src])
@@ -1946,7 +1961,7 @@ def _one_blob((iblob, Isrcs, targetwcs, bx0, by0, blobw, blobh, blobmask, subtim
 
         srccat = srctractor.getCatalog()
         srccat[0] = None
-        
+
         lnp_null = srctractor.getLogProb()
         # print 'Removing the source: dlnp', lnp_null - lnp0
 
@@ -1962,7 +1977,7 @@ def _one_blob((iblob, Isrcs, targetwcs, bx0, by0, blobw, blobh, blobmask, subtim
             ptsrc = src.copy()
             trymodels = [('ptsrc', ptsrc), ('dev', dev), ('exp', exp), ('comp', comp)]
             oldmodel = 'ptsrc'
-            
+
         elif isinstance(src, DevGalaxy):
             dev = src.copy()
             exp = ExpGalaxy(src.getPosition(), src.getBrightness(), src.getShape()).copy()
@@ -1978,7 +1993,7 @@ def _one_blob((iblob, Isrcs, targetwcs, bx0, by0, blobw, blobh, blobmask, subtim
             ptsrc = PointSource(src.getPosition(), src.getBrightness()).copy()
             trymodels = [('ptsrc', ptsrc), ('dev', dev), ('exp', exp), ('comp', comp)]
             oldmodel = 'exp'
-            
+
         elif isinstance(src, FixedCompositeGalaxy):
             frac = src.fracDev.getValue()
             if frac > 0:
@@ -1998,7 +2013,7 @@ def _one_blob((iblob, Isrcs, targetwcs, bx0, by0, blobw, blobh, blobmask, subtim
 
         allflags = {}
         for name,newsrc in trymodels:
-            #print 'Trying model:', name
+            print 'Trying model:', name
             if name == 'comp' and newsrc is None:
                 newsrc = comp = FixedCompositeGalaxy(src.getPosition(), src.getBrightness(),
                                                      0.5, exp.getShape(), dev.getShape()).copy()
@@ -2013,6 +2028,7 @@ def _one_blob((iblob, Isrcs, targetwcs, bx0, by0, blobw, blobh, blobmask, subtim
                 mm.append(d)
                 try:
                     d[newsrc] = mim[src]
+                    print 'Updated modelmask', mim[src].shape, 'for', newsrc
                 except KeyError:
                     pass
             srctractor.setModelMasks(mm)
@@ -2034,8 +2050,9 @@ def _one_blob((iblob, Isrcs, targetwcs, bx0, by0, blobw, blobh, blobmask, subtim
             cpu0 = time.clock()
             p0 = newsrc.getParams()
             for step in range(50):
+                print 'optimizing:', newsrc
                 dlnp,X,alpha = srctractor.optimize(**optargs)
-                #print '  dlnp:', dlnp, 'new src', newsrc
+                print '  dlnp:', dlnp, 'new src', newsrc
                 cpu = time.clock()
                 performance[i].append((name,'A',step,dlnp,alpha,cpu-cpu0))
                 if cpu-cpu0 > max_cpu_per_source:
@@ -2047,7 +2064,7 @@ def _one_blob((iblob, Isrcs, targetwcs, bx0, by0, blobw, blobh, blobmask, subtim
             else:
                 thisflags |= FLAG_STEPS_A
 
-            # print 'New source (after first round optimization):', newsrc
+            print 'New source (after first round optimization):', newsrc
             # lnp = srctractor.getLogProb()
             # print 'Optimized log-prob:', lnp
             # print 'Blob', iblob, 'src', i
@@ -2074,9 +2091,9 @@ def _one_blob((iblob, Isrcs, targetwcs, bx0, by0, blobw, blobh, blobmask, subtim
                 mod = src.getModelPatch(tim)
                 if mod is None:
                     continue
-                #print 'After first-round fit: model is', mod.shape
+                print 'After first-round fit: model is', mod.shape
                 mod = _clip_model_to_blob(mod, tim.shape, tim.getInvError())
-                #print 'Clipped to', mod.shape
+                print 'Clipped to', mod.shape
                 d[newsrc] = Patch(mod.x0, mod.y0, mod.patch != 0)
             srctractor.setModelMasks(mm)
             enable_galaxy_cache()
@@ -2118,10 +2135,10 @@ def _one_blob((iblob, Isrcs, targetwcs, bx0, by0, blobw, blobh, blobmask, subtim
             lnps[name] = lnp
             all_models[i][name] = newsrc.copy()
             allflags[name] = thisflags
-            
+
         # if plots:
         #    _plot_mods(subtims, plotmods, plotmodnames, bands, None, None, bslc, blobw, blobh, ps)
-        
+
         nbands = len(bands)
         nparams = dict(none=0, ptsrc=2, exp=5, dev=5, comp=9)
 
@@ -2140,7 +2157,7 @@ def _one_blob((iblob, Isrcs, targetwcs, bx0, by0, blobw, blobh, blobmask, subtim
                 print srccat[0]
 
                 print 'cat:', srctractor.getCatalog()
-                
+
                 plt.subplot(rows, cols, imod+1)
                 if modname != 'none':
                     modimgs = srctractor.getModelImages()
@@ -2235,7 +2252,7 @@ def _one_blob((iblob, Isrcs, targetwcs, bx0, by0, blobw, blobh, blobmask, subtim
         # Penalized delta chi-squareds
         delta_chisqs.append([-2. * (plnps[k] - plnps[keepmod])
                          for k in ['none', 'ptsrc', 'dev', 'exp', 'comp']])
-                    
+
         # if keepmod != oldmodel:
         #     print 'Switching source!'
         #     print 'Old:', src
@@ -2329,7 +2346,7 @@ def _one_blob((iblob, Isrcs, targetwcs, bx0, by0, blobw, blobh, blobmask, subtim
             subcat.freezeParam(isub)
             continue
         #print 'Params:', src.getParamNames()
-        
+
         if isinstance(src, (DevGalaxy, ExpGalaxy)):
             src.shape = EllipseE.fromEllipseESoft(src.shape)
         elif isinstance(src, FixedCompositeGalaxy):
@@ -2374,7 +2391,7 @@ def _one_blob((iblob, Isrcs, targetwcs, bx0, by0, blobw, blobh, blobmask, subtim
         started_in_blob = [started_in_blob[i] for i in keep]
         subcat = Catalog(*srcs)
         subtr.catalog = subcat
-    
+
     # rchi2 quality-of-fit metric
     rchi2_num    = np.zeros((len(srcs),len(bands)), np.float32)
     rchi2_den    = np.zeros((len(srcs),len(bands)), np.float32)
@@ -2399,7 +2416,7 @@ def _one_blob((iblob, Isrcs, targetwcs, bx0, by0, blobw, blobh, blobmask, subtim
             srcmods = [None for src in srcs]
             counts = np.zeros(len(srcs))
             pcal = tim.getPhotoCal()
-            
+
             for isrc,src in enumerate(srcs):
                 patch = subtr.getModelPatch(tim, src, minsb=tim.modelMinval)
                 if patch is None or patch.patch is None:
@@ -2412,7 +2429,7 @@ def _one_blob((iblob, Isrcs, targetwcs, bx0, by0, blobw, blobh, blobmask, subtim
                 patch.clipTo(W,H)
                 srcmods[isrc] = patch
                 patch.addTo(mod)
-                
+
             for isrc,patch in enumerate(srcmods):
                 if patch is None:
                     continue
@@ -2433,7 +2450,7 @@ def _one_blob((iblob, Isrcs, targetwcs, bx0, by0, blobw, blobh, blobmask, subtim
 
             tim.getSky().addTo(mod)
             chisq = ((tim.getImage() - mod) * tim.getInvError())**2
-            
+
             for isrc,patch in enumerate(srcmods):
                 if patch is None:
                     continue
@@ -2627,7 +2644,7 @@ def stage_coadds(bands=None, version_header=None, targetwcs=None,
                 xx = xx[3:]
                 yy = yy[3:]
                 plt.plot(xx, yy, '-', color=c)
-        
+
         plt.axis(ax)
         ps.savefig()
 
@@ -2679,7 +2696,6 @@ def stage_wise_forced(
 
     W.rename('tile', 'unwise_tile')
     return dict(WISE=W)
-    
 
 '''
 Write catalog output
@@ -2707,7 +2723,7 @@ def stage_writecat(
     Final stage in the pipeline: format results for the output
     catalog.
     '''
-    
+
     from desi_common import prepare_fits_catalog
     fs = None
     TT = T.copy()
@@ -2727,7 +2743,7 @@ def stage_writecat(
     TT.brickid = np.zeros(len(TT), np.int32) + brickid
     TT.brickname = np.array([brickname] * len(TT))
     TT.objid   = np.arange(len(TT)).astype(np.int32)
-    
+
     TT.decam_rchi2    = np.zeros((len(TT), len(allbands)), np.float32)
     TT.decam_fracflux = np.zeros((len(TT), len(allbands)), np.float32)
     TT.decam_fracmasked = np.zeros((len(TT), len(allbands)), np.float32)
@@ -2758,7 +2774,7 @@ def stage_writecat(
         #print 'Aperture flux shape:', ap.shape
         #print 'T:', len(TT)
         n,A = ap.shape
-        
+
         TT.decam_apflux = np.zeros((len(TT), len(allbands), A), np.float32)
         TT.decam_apflux_ivar = np.zeros((len(TT), len(allbands), A),
                                         np.float32)
@@ -2810,10 +2826,10 @@ def stage_writecat(
 
     T2.brick_primary = ((T2.ra  >= brick.ra1 ) * (T2.ra  < brick.ra2) *
                         (T2.dec >= brick.dec1) * (T2.dec < brick.dec2))
-    
+
     T2.ra_ivar  = T2.ra_ivar .astype(np.float32)
     T2.dec_ivar = T2.dec_ivar.astype(np.float32)
-    
+
     # Unpack shape columns
     T2.shapeExp_r  = T2.shapeExp[:,0]
     T2.shapeExp_e1 = T2.shapeExp[:,1]
@@ -2843,11 +2859,11 @@ def stage_writecat(
                           w2=3.339,
                           w3=5.174,
                           w4=6.620)
-    
+
         for band in [1,2,3,4]:
             primhdr.add_record(dict(name='WISEAB%i' % band, value=vega_to_ab['w%i' % band],
                                     comment='WISE Vega to AB conv for band %i' % band))
-    
+
         for band in [1,2,3,4]:
             dm = vega_to_ab['w%i' % band]
             #print 'WISE', band
@@ -2858,7 +2874,7 @@ def stage_writecat(
             f *= fluxfactor
             f = WISE.get('w%i_nanomaggies_ivar' % band)
             f *= (1./fluxfactor**2)
-    
+
         T2.wise_flux = np.vstack([WISE.w1_nanomaggies, WISE.w2_nanomaggies,
                                   WISE.w3_nanomaggies, WISE.w4_nanomaggies]).T
         T2.wise_flux_ivar = np.vstack([WISE.w1_nanomaggies_ivar, WISE.w2_nanomaggies_ivar,
@@ -2867,7 +2883,7 @@ def stage_writecat(
         #                           WISE.w3_pronexp, WISE.w4_pronexp]).T
         T2.wise_nobs = np.vstack([WISE.w1_nexp, WISE.w2_nexp,
                                   WISE.w3_nexp, WISE.w4_nexp]).T
-    
+
         T2.wise_fracflux = np.vstack([WISE.w1_profracflux, WISE.w2_profracflux,
                                       WISE.w3_profracflux, WISE.w4_profracflux]).T
         T2.wise_rchi2 = np.vstack([WISE.w1_prochi2, WISE.w2_prochi2,
@@ -2882,7 +2898,7 @@ def stage_writecat(
         fn = os.path.join(outdir, 'tractor-%s.fits' % brickname)
     dirnm = os.path.dirname(fn)
     try_makedirs(dirnm)
-        
+
     #T2.writeto(fn, header=hdr)
     #print 'Wrote', fn
 
@@ -2893,7 +2909,7 @@ def stage_writecat(
     wisebands = ['WISE W1', 'WISE W2', 'WISE W3', 'WISE W4']
     ebv,ext = sfd.extinction(filts + wisebands, T2.ra, T2.dec, get_ebv=True)
     ext = ext.astype(np.float32)
-    
+
     decam_extinction = ext[:,:len(allbands)]
     wise_extinction = ext[:,len(allbands):]
     T2.ebv = ebv.astype(np.float32)
@@ -2902,8 +2918,8 @@ def stage_writecat(
     if WISE is not None:
         T2.wise_mw_transmission  = 10.**(-wise_extinction  / 2.5)
 
-    # 'tx', 'ty', 
-    # 'sdss_treated_as_pointsource', 
+    # 'tx', 'ty',
+    # 'sdss_treated_as_pointsource',
     # 'decam_flags',
 
     T2.dchisq[T2.dchisq != 0] *= -1.
@@ -2912,7 +2928,7 @@ def stage_writecat(
         'brickid', 'brickname', 'objid', 'brick_primary', 'blob', 'type',
         'ra', 'ra_ivar', 'dec', 'dec_ivar',
         'bx', 'by', 'bx0', 'by0',
-        'left_blob', 
+        'left_blob',
         'decam_flux', 'decam_flux_ivar' ]
     if AP is not None:
         cols.extend(['decam_apflux', 'decam_apflux_resid',
@@ -2985,7 +3001,6 @@ def stage_writecat(
             cols[i] = cc[j]
 
     #T2.writeto(fn, header=hdr, primheader=version_header, columns=cols)
-    
     # 'primheader' is not written in Astrometry.net 0.53; we write ourselves.
 
     # fill in any empty columns (eg, SDSS columns in areas outside the
@@ -3075,8 +3090,6 @@ def stage_writecat(
         print 'Wrote', fn
 
     return dict(T2=T2)
-    
-
 
 def run_brick(brick, radec=None, pixscale=0.262,
               width=3600, height=3600,
@@ -3127,14 +3140,14 @@ def run_brick(brick, radec=None, pixscale=0.262,
 
     If you want to measure only a subset of the astronomical objects,
     you can use:
-    
+
     - *nblobs*: int; for debugging purposes, only fit the first N blobs.
     - *blob*: int; for debugging purposes, start with this blob index.
     - *blobxy*: list of (x,y) integer tuples; only run the blobs
       containing these pixels.
 
     Other options:
-      
+
     - *pv*: boolean; use the Community Pipeline's WCS headers, with astrometric
       shifts from the zeropoints.fits file, converted from their native
       PV format into SIP format.
@@ -3162,7 +3175,7 @@ def run_brick(brick, radec=None, pixscale=0.262,
     - *decals*: a "Decals" object (see common.Decals), which is in
       charge of the list of bricks and CCDs to be handled, and also
       creates DecamImage objects.
-     
+
     - *decals_dir*: string; default $DECALS_DIR environment variable;
       where to look for files including calibration files, tables of
       CCDs and bricks, image data, etc.
@@ -3170,7 +3183,7 @@ def run_brick(brick, radec=None, pixscale=0.262,
     - *threads*: integer; how many CPU cores to use
 
     Plotting options:
-    
+
     - *plots*: boolean; make a bunch of plots?
     - *plots2*: boolean; make a bunch more plots?
     - *plotbase*: string, default brick-BRICK, the plot filename prefix.
@@ -3187,7 +3200,7 @@ def run_brick(brick, radec=None, pixscale=0.262,
     - *writePickles*: boolean; write pickle files after each stage?
 
     '''
-    
+
     from astrometry.util.stages import CallGlobalTime, runstage
     from astrometry.util.multiproc import multiproc
 
@@ -3292,7 +3305,7 @@ def run_brick(brick, radec=None, pixscale=0.262,
         prereqs.update({
                 'writecat': 'coadds',
                 })
-        
+
     initargs.update(W=width, H=height, pixscale=pixscale,
                     target_extent=zoom)
 
@@ -3304,7 +3317,7 @@ def run_brick(brick, radec=None, pixscale=0.262,
 
     print 'All done:', Time()-t0
     mp.report(threads)
-    
+
 
 def main():
     import optparse
@@ -3341,7 +3354,7 @@ python -u projects/desi/runbrick.py --plots --brick 2440p070 --zoom 1900 2400 45
     parser.add_option('-d', '--outdir', help='Set output base directory')
     parser.add_option('--decals-dir', type=str, default=None,
                       help='Overwrite the $DECALS_DIR environment variable')
-    
+
     parser.add_option('--threads', type=int, help='Run multi-threaded')
     parser.add_option('-p', '--plots', dest='plots', action='store_true',
                       help='Per-blob plots?')
@@ -3395,7 +3408,7 @@ python -u projects/desi/runbrick.py --plots --brick 2440p070 --zoom 1900 2400 45
                       help='Use a fixed single-Gaussian PSF')
     parser.add_option('--pixpsf', action='store_true', default=False,
                       help='Use the pixelized PsfEx PSF model, and FFT convolution')
-    
+
     print
     print 'runbrick.py starting at', datetime.datetime.now().isoformat()
     print 'Command-line args:', sys.argv
@@ -3455,7 +3468,7 @@ python -u projects/desi/runbrick.py --plots --brick 2440p070 --zoom 1900 2400 45
         kwa.update(sdssInit=False)
     if opt.no_wise:
         kwa.update(wise=False)
-        
+
     run_brick(opt.brick, radec=opt.radec, pixscale=opt.pixscale,
               width=opt.width, height=opt.height, zoom=opt.zoom,
               pv=opt.pv,
