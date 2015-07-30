@@ -1323,59 +1323,45 @@ class Decals(object):
 
     def photometric_ccds(self, CCD):
         '''
-        Returns an index array for the members of the table "CCD" that are photometric.
+        Returns an index array for the members of the table "CCD" that
+        are photometric.
         '''
         
-        # Using Arjun's zeropoints and recipe: email 2015-02-25
         '''
-        I would suggest using the following algorithm to avoid bad data (in IDL-ese):
-
-        iznp = where(abs(zpz.zpt-zpz.ccdzpt) ge 0.05 $
-          or (zpz.ccdnmatch ge 20 and zpz.ccdphrms gt 0.2) $
-          or (zpz.zpt le z0-0.3 and zpz.zpt ge z0+1.1) $
-          or zpz.ccdnmatch lt 20 $
-          ; or strcompress(zpz.ccdname,/remove_all) eq 'S7' $
-          ,nznp)
-
-        where zpz is a structure containing all the z-band
-        zeropoints. Similarly for the g- and r-band zero points.
-
-        Here the nominal zero points for the three bands are roughly
-        g0 = 26.61 -2.5*alog10(4.)
-        r0 = 26.818 -2.5*alog10(4.)
-        z0 = 26.484 -2.5*alog10(4.)
-
-        Using all the listed above criteria (with the S7 selection
-        commented out) results in red points on the attached plot. The
-        red points are in pretty good agreement with the log notes
-        about poor sky conditions. Setting CCDNMATCH < 20 also catches
-        places where the overlap with PS1 was not good. You will also
-        want to throw out the bad CCD (CCDNAME = S7)
-        '''
-
-        ZP = self._get_zeropoints_table()
-        zp_rowmap = dict([((expnum,ccdname),i) for i,(expnum,ccdname) in enumerate(
-            zip(ZP.expnum, ZP.ccdname))])
-        I = np.array([zp_rowmap[(expnum,ccdname)] for expnum,ccdname in
-                      zip(CCD.expnum, CCD.ccdname)])
-        ZP = ZP[I]
-        assert(len(ZP) == len(CCD))
+        Recipe in [decam-data 1314], 2015-07-15:
         
-        z0 = dict(g = 26.610 - 2.5*np.log10(4.),
-                  r = 26.818 - 2.5*np.log10(4.),
-                  z = 26.464 - 2.5*np.log10(4.),)
-        z0 = np.array([z0[f[0]] for f in ZP.filter])
+        * CCDNMATCH >= 20  (At least 20 stars to determine zero-pt)
+        * abs(ZPT - CCDZPT) < 0.10  (Agreement with full-frame zero-pt)
+        * CCDPHRMS < 0.2  (Uniform photometry across the CCD)
+        * ZPT within 0.50 mag of 25.08 for g-band
+        * ZPT within 0.50 mag of 25.29 for r-band
+        * ZPT within 0.50 mag of 24.92 for z-band
+
+        * DEC > -20 (in DESI footprint) 
+        * CCDNUM = 31 (S7) is OK, but only for the region
+          [1:1023,1:4094] (mask region [1024:2046,1:4094] in CCD s7)
+        '''
+        print 'photometric: CCDS:'
+        CCDS.about()
+
+        # Here we are assuming that the zeropoints are present in the
+        # CCDs file (starting in DR2)
+        
+        z0 = dict(g = 25.08,
+                  r = 25.29,
+                  z = 24.92,)
+        z0 = np.array([z0[f[0]] for f in CCD.filter])
 
         good = np.ones(len(CCD), bool)
         n0 = sum(good)
         for name,crit in [
-            ('zpt - ccdzpt', (np.abs(ZP.zpt - ZP.ccdzpt) >= 0.05)),
-            ('ccdnmatch >= 20 and ccdphrms >= 0.2',
-             ((ZP.ccdnmatch >= 20) * (ZP.ccdphrms >= 0.2))),
-            ('zpt lower than nominal', (ZP.zpt < (z0 - 0.3))),
-            ('zpt higher than nominal', (ZP.zpt > (z0 + 1.1))),
-            ('ccdnmatch < 20', (ZP.ccdnmatch < 20)),
-            ('S7', np.array([s == 'S7' for s in ZP.ccdname])),
+            ('ccdnmatch < 20', (CCD.ccdnmatch < 20)),
+            ('abs(zpt - ccdzpt) > 0.1',
+             (np.abs(CCD.zpt - CCD.ccdzpt) > 0.1)),
+            ('ccdphrms > 0.2 (and ccdnmatch >= 20)',
+             ((CCD.ccdnmatch >= 20) * (CCD.ccdphrms >= 0.2))),
+            ('zpt within 0.5 mag of nominal',
+             (np.abs(CCD.zpt - z0) > 0.5)),
             ]:
             good[crit] = False
             n = sum(good)
@@ -1554,7 +1540,7 @@ class DecamImage(object):
 
         self.hdu   = hdu
         self.expnum = expnum
-        self.ccdname = ccdname
+        self.ccdname = ccdname.strip()
         self.band  = band
         self.exptime = exptime
 
@@ -1664,6 +1650,16 @@ class DecamImage(object):
                         y1 = imh-100
                 if y0 >= y1:
                     return None
+
+            # Clip the bad half of chip S7.
+            # The left half is OK.
+            if self.ccdname == 'S7':
+                if x1 >= 1024:
+                    print 'Clipping the right half of chip S7'
+                    x1 = 1024
+                if x0 >= x1:
+                    return None
+
             slc = slice(y0,y1), slice(x0,x1)
 
         print 'Reading image slice:', slc
