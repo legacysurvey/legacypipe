@@ -1342,7 +1342,7 @@ class Decals(object):
           [1:1023,1:4094] (mask region [1024:2046,1:4094] in CCD s7)
         '''
         print 'photometric: CCDS:'
-        CCDS.about()
+        CCD.about()
 
         # Here we are assuming that the zeropoints are present in the
         # CCDs file (starting in DR2)
