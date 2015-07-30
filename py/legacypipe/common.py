@@ -1731,7 +1731,7 @@ class DecamImage(object):
             # FIXME -- could instantiate in the center of the ROI...
             psfim = psfex.instantiateAt(imw/2, imh/2)
             # trim a little
-            psfim = psfim[5:-5, 5:-5]
+            #psfim = psfim[5:-5, 5:-5]
             psf = PixelizedPSF(psfim)
         elif const2psf:
             # 2-component constant MoG.

@@ -2550,7 +2550,8 @@ def stage_coadds(bands=None, version_header=None, targetwcs=None,
                 apertures=apertures, apxy=apxy,
                 callback=_write_band_images,
                 callback_args=(brickname, version_header, tims, targetwcs, basedir),
-                plots=plots, ps=ps)
+                plots=False, ps=ps)
+    #plots=plots, ps=ps)
 
     for c in ['nobs', 'anymask', 'allmask']:
         T.set(c, C.T.get(c))
@@ -2581,6 +2582,55 @@ def stage_coadds(bands=None, version_header=None, targetwcs=None,
         plt.plot(x1-1, y1-1, 'r.')
         plt.axis(ax)
         ps.savefig()
+
+        plt.clf()
+        dimshow(get_rgb(C.coimgs, bands, **rgbkwargs))
+        ax = plt.axis()
+        ps.savefig()
+
+        for i,(src,x,y,rr,dd) in enumerate(zip(cat, x1, y1, ra, dec)):
+            ee = []
+            ec = []
+            cc = None
+            green = (0.2,1,0.2)
+            if isinstance(src, PointSource):
+                plt.plot(x, y, 'o', mfc=green, mec='k', alpha=0.6)
+            elif isinstance(src, ExpGalaxy):
+                ee = [src.shape]
+                cc = '0.8'
+                ec = [cc]
+            elif isinstance(src, DevGalaxy):
+                ee = [src.shape]
+                cc = green
+                ec = [cc]
+            elif isinstance(src, FixedCompositeGalaxy):
+                ee = [src.shapeExp, src.shapeDev]
+                cc = 'm'
+                ec = ['m', 'c']
+            else:
+                print 'Unknown type:', src
+                continue
+
+            for e,c in zip(ee, ec):
+                G = e.getRaDecBasis()
+                angle = np.linspace(0, 2.*np.pi, 60)
+                xy = np.vstack((np.append([0,0,1], np.sin(angle)),
+                                np.append([0,1,0], np.cos(angle)))).T
+                rd = np.dot(G, xy.T).T
+                r = rr + rd[:,0] * np.cos(np.deg2rad(dd))
+                d = dd + rd[:,1]
+                ok,xx,yy = targetwcs.radec2pixelxy(r, d)
+                x1,x2,x3 = xx[:3]
+                y1,y2,y3 = yy[:3]
+                plt.plot([x3, x1, x2], [y3, y1, y2], '-', color=c)
+                plt.plot(x1, y1, '.', color=cc, ms=3, alpha=0.6)
+                xx = xx[3:]
+                yy = yy[3:]
+                plt.plot(xx, yy, '-', color=c)
+        
+        plt.axis(ax)
+        ps.savefig()
+
 
     tnow = Time()
     print '[serial coadds] Aperture photometry, wrap-up', tnow-tlast

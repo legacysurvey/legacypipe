@@ -29,7 +29,7 @@ import numpy as np
 
 import galsim
 from astropy.io import fits
-from astropy.table import Table, vstack
+from astropy.table import Table, Column, vstack
 from PIL import Image, ImageDraw
 
 from legacypipe.runbrick import run_brick
@@ -46,13 +46,6 @@ def get_simdir(brickname=None,objtype=None):
     """Get the simulation directory."""
 
     # Check for the environment variables we need.
-    tractor_dir = 'TRACTOR_DIR'
-    if tractor_dir not in os.environ:
-        log.error('Missing ${} environment variable'.format(tractor_dir))
-        sys.exit(1)
-    else:
-        tractor_dir = os.getenv('TRACTOR_DIR')
-
     decals_dir = 'DECALS_DIR'
     if decals_dir not in os.environ:
         log.error('Missing ${} environment variable'.format(decals_dir))
@@ -92,7 +85,7 @@ def get_simdir(brickname=None,objtype=None):
             log.info('  {}'.format(os.path.join(simdir,lfile)))
             os.symlink(os.path.join(decals_dir,lfile),os.path.join(simdir,lfile))
     
-    return tractor_dir, decals_dir, simdir
+    return decals_dir, simdir
 
 def get_brickinfo(brickname=None,decals_dir=None):
     """Get info on this brick.
@@ -121,7 +114,7 @@ def get_ccdinfo(brickwcs=None,decals_dir=None):
     return ccdinfo
 
 def build_simcat(nobj=None,brickname=None,brickwcs=None,objtype=None,
-                 raminmax=None,decminmax=None,rmag_range=None,
+                 ra_range=None,dec_range=None,rmag_range=None,
                  decals_sim_dir=None,seed=None,chunksuffix=None):
     """Build the simulated object catalog, which depends on the type of object.
        Will eventually generalize this so that a mixture of object types can be
@@ -131,23 +124,20 @@ def build_simcat(nobj=None,brickname=None,brickwcs=None,objtype=None,
     another.
 
     """
-    from astropy import units as u
-    from astropy.coordinates import SkyCoord
-    from astropy.table import Table, Column
+    from pydl.pydlutils.spheregroup import spheregroup
 
     rand = np.random.RandomState(seed=seed)
-    ra = rand.uniform(raminmax[0],raminmax[1],nobj)
-    dec = rand.uniform(decminmax[0],decminmax[1],nobj)
 
     # Assign central coordinates uniformly but remove simulated sources which
     # are too near to one another.  Iterate until we have the requisite number
     # of objects. -- see the radectest.py function for a failing code
+    ra = rand.uniform(ra_range[0],ra_range[1],nobj)
+    dec = rand.uniform(dec_range[0],dec_range[1],nobj)
+    #gg = spheregroup(ra,dec,10.0/3600.0)
 
     xxyy = brickwcs.radec2pixelxy(ra,dec)
 
     cat = Table()
-    cat['BRICKNAME'] = Column(np.repeat(brickname,nobj),dtype='S10')
-    cat['OBJTYPE'] = Column(np.repeat(objtype,nobj),dtype='S10')
     cat['ID'] = Column(np.arange(nobj,dtype='i4'))
     cat['X'] = Column(xxyy[1][:],dtype='f4')
     cat['Y'] = Column(xxyy[2][:],dtype='f4')
@@ -199,16 +189,12 @@ def build_simcat(nobj=None,brickname=None,brickwcs=None,objtype=None,
     cat['RFLUX'] = Column(rflux,dtype='f4')
     cat['ZFLUX'] = Column(zflux,dtype='f4')
 
-    # Pack in the prior parameter ranges
-    cat['RMAG_RANGE'] = Column(np.repeat([rmag_range],nobj,axis=0),dtype='f4')
-
     # Write out.
     outfile = os.path.join(decals_sim_dir,'simcat-'+brickname+'-'+
                            objtype.lower()+'-'+chunksuffix+'.fits')
     log.info('Writing {}'.format(outfile))
     if os.path.isfile(outfile):
         os.remove(outfile)
-    print(cat)
     cat.write(outfile)
 
     return cat
@@ -221,7 +207,7 @@ def copy_cpdata(ccdinfo=None,decals_dir=None,decals_sim_dir=None):
     """
     from distutils.file_util import copy_file
 
-    allcpimage = ccdinfo['CPIMAGE']
+    allcpimage = ccdinfo.image_filename
     allcpdir = set([cpim.split('/')[1] for cpim in allcpimage])
 
     log.info('Creating image directories...')
@@ -344,30 +330,34 @@ class simobj_info():
         self.PsfEx = PsfEx
         self.GaussianMixtureEllipsePSF = GaussianMixtureEllipsePSF
         self.gsparams = gsparams
-        self.cpimage = ccdinfo['CPIMAGE']
-        self.cpimage_hdu = ccdinfo['CPIMAGE_HDU']
-        self.calname = ccdinfo['CALNAME']
-        self.filter = ccdinfo['FILTER']
-        self.imfile = os.path.join(decals_sim_dir,'images',self.cpimage)
-        self.imfile_root = self.cpimage.replace('decam/','')
+        self.filename = ccdinfo.image_filename
+        self.hdu = ccdinfo.image_hdu
+
+        ccdname = ccdinfo.ccdname
+        expstr = '{:08d}'.format(ccdinfo.expnum)
+        self.calname = '{:s}/{:s}/decam-{:s}-{:s}'.format(expstr[:5],expstr,expstr,ccdname)
+
+        self.filter = ccdinfo.filter
+        self.imfile = os.path.join(decals_sim_dir,'images',self.filename)
+        self.imfile_root = ccdinfo.image_filename.replace('decam/','')
         self.ivarfile = self.imfile.replace('ooi','oow')
         self.wcsfile = os.path.join(decals_sim_dir,'calib','decam',
                                     'astrom-pv',self.calname+'.wcs.fits')
         self.psffile = os.path.join(decals_sim_dir,'calib','decam',
                                     'psfex',self.calname+'.fits')
-        self.magzpt = float(ccdinfo['CCDZPT'] + 2.5*np.log10(ccdinfo['EXPTIME']))
-        self.gain = float(ccdinfo['ARAWGAIN']) # [electron/ADU]
+        self.magzpt = float(ccdinfo.ccdzpt + 2.5*np.log10(ccdinfo.exptime))
+        self.gain = float(ccdinfo.arawgain) # [electron/ADU]
 
     def getdata(self):
         """Read the CCD image and inverse variance data, and the corresponding headers. 
         
         """
         #log.info('Reading extension {} of image {}'.format(self.ccdnum,self.imfile))
-        image = galsim.fits.read(self.imfile,hdu=self.cpimage_hdu)       # [ADU]
-        invvar = galsim.fits.read(self.ivarfile,hdu=self.cpimage_hdu) # [1/ADU^2]
+        image = galsim.fits.read(self.imfile,hdu=self.hdu)       # [ADU]
+        invvar = galsim.fits.read(self.ivarfile,hdu=self.hdu) # [1/ADU^2]
         
-        imhdr = galsim.fits.FitsHeader(self.imfile,hdu=self.cpimage_hdu)
-        ivarhdr = galsim.fits.FitsHeader(self.ivarfile,hdu=self.cpimage_hdu)
+        imhdr = galsim.fits.FitsHeader(self.imfile,hdu=self.hdu)
+        ivarhdr = galsim.fits.FitsHeader(self.ivarfile,hdu=self.hdu)
         
         self.width = image.xmax
         self.height = image.ymax
@@ -414,19 +404,18 @@ class simobj_info():
         flux *= 10**(0.4*(self.magzpt-22.5)) # [ADU]
         return float(flux)
     
-def insert_simobj(simcat,ccdinfo,decals_sim_dir):
+def insert_simobj(objtype,simcat,ccdinfo,decals_sim_dir):
     """Simulate objects and place them into individual CCDs."""
 
     gsparams = galsim.GSParams(maximum_fft_size=2L**30L)
 
-    width = int(ccdinfo['WIDTH'][0])
-    height = int(ccdinfo['HEIGHT'][0])
+    width = int(ccdinfo.width[0])
+    height = int(ccdinfo.height[0])
 
     stampwidth = 45 # postage stamp width [pixels, roughly 14 arcsec]
     stampbounds = galsim.BoundsI(-stampwidth,stampwidth,-stampwidth,stampwidth)
     imagebounds = galsim.BoundsI(0,width,0,height)
 
-    objtype = simcat['OBJTYPE'][0].upper()
     objstamp = build_stamp(objtype)
     
     for ccd in ccdinfo:
@@ -452,7 +441,7 @@ def insert_simobj(simcat,ccdinfo,decals_sim_dir):
 
         nobj = len(onccd)
         if nobj>0:
-            log.info('Adding {} objects to HDU {}'.format(nobj,siminfo.cpimage_hdu))
+            log.info('Adding {} objects to HDU {}'.format(nobj,siminfo.hdu))
 
             image, invvar, imhdr, ivarhdr = siminfo.getdata()
             initpsf = siminfo.getpsf()
@@ -481,19 +470,18 @@ def insert_simobj(simcat,ccdinfo,decals_sim_dir):
                     image[overlap] += stamp
                     invvar[overlap] = varstamp
 
-            log.info('Writing {}[{}]'.format(siminfo.imfile_root,siminfo.cpimage_hdu))
-            fits.update(siminfo.imfile,image.array,ext=siminfo.cpimage_hdu,
+            log.info('Writing {}[{}]'.format(siminfo.imfile_root,siminfo.hdu))
+            fits.update(siminfo.imfile,image.array,ext=siminfo.hdu,
                         header=fits.Header(imhdr.items()))
-            fits.update(siminfo.ivarfile,invvar.array,ext=siminfo.cpimage_hdu,
+            fits.update(siminfo.ivarfile,invvar.array,ext=siminfo.hdu,
                         header=fits.Header(ivarhdr.items()))
 
-def qaplots(brickinfo,ccdinfo,simcat,decals_sim_dir=None,chunksuffix=None):
+def qaplots(objtype,brickinfo,ccdinfo,simcat,decals_sim_dir=None,chunksuffix=None):
     """Build some simple QAplots of the simulation inputs."""
     import matplotlib.pyplot as plt
     import matplotlib.cm as cm
     from matplotlib.patches import Rectangle
 
-    objtype = simcat['OBJTYPE'][0].upper()
     brickname = brickinfo['BRICKNAME'][0]
     color = iter(cm.rainbow(np.linspace(0,1,len(ccdinfo))))
 
@@ -504,7 +492,7 @@ def qaplots(brickinfo,ccdinfo,simcat,decals_sim_dir=None,chunksuffix=None):
     for ii, ccd in enumerate(ccdinfo):
         dy = ccd.width*0.262/3600.0
         dx = ccd.height*0.262/3600.0
-        rect = plt.Rectangle((ccd['RA']-dx/2,ccd['DEC']-dy/2),
+        rect = plt.Rectangle((ccd.ra-dx/2,ccd.dec-dy/2),
                              dx,dy,fill=False,lw=1,color=next(color),
                              ls='solid')
         ax.add_patch(rect)
@@ -577,14 +565,14 @@ def main():
     log.info('Nchunk = {}'.format(nchunk))
 
     # Build the output directory names.
-    tractor_dir, decals_dir, decals_sim_dir = get_simdir(brickname,objtype)
+    decals_dir, decals_sim_dir = get_simdir(brickname,objtype)
 
     # Get the brick info and corresponding WCS object.
     brickinfo, brickwcs = get_brickinfo(brickname,decals_dir)
 
     if args.zoom is None:
-        raminmax = [brickinfo['ra1'],brickinfo['ra2']]
-        decminmax = [brickinfo['dec1'],brickinfo['dec2']]
+        ra_range = [brickinfo['ra1'],brickinfo['ra2']]
+        dec_range = [brickinfo['dec1'],brickinfo['dec2']]
     else:
         pixscale = 0.262/3600.0 # average pixel scale [deg/pixel]
         zoom = args.zoom
@@ -592,18 +580,41 @@ def main():
         dy = zoom[3]-zoom[2]
 
         ra, dec = brickwcs.pixelxy2radec(zoom[0]+dx/2,zoom[2]+dy/2)
-        raminmax = [ra-dx*pixscale/2,ra+dx*pixscale/2]
-        decminmax = [dec-dy*pixscale/2,dec+dy*pixscale/2]
+        ra_range = [ra-dx*pixscale/2,ra+dx*pixscale/2]
+        dec_range = [dec-dy*pixscale/2,dec+dy*pixscale/2]
 
         brickwcs = brickwcs.get_subimage(zoom[0],zoom[2],dx,dy)
 
     # Identify the CCDs in the region of interest.
     ccdinfo = get_ccdinfo(brickwcs,decals_dir)
 
-    log.info('RA range: {:.6f} to {:.6f}'.format(float(raminmax[0]),
-                                                 float(raminmax[1])))
-    log.info('DEC range: {:.6f} to {:.6f}'.format(float(decminmax[0]),
-                                                  float(decminmax[1])))
+    log.info('RA range: {:.6f} to {:.6f}'.format(float(ra_range[0]),
+                                                 float(ra_range[1])))
+    log.info('DEC range: {:.6f} to {:.6f}'.format(float(dec_range[0]),
+                                                  float(dec_range[1])))
+
+    # Pack the input parameters into a meta-data table.
+    meta = Table()
+    meta['BRICKNAME'] = Column([brickname],dtype='S10')
+    meta['OBJTYPE'] = Column([objtype],dtype='S10')
+    if args.seed is not None:
+        meta['SEED'] = Column([args.seed],dtype='i4')
+    meta['NOBJ'] = Column([args.nobj],dtype='i2')
+    meta['CHUNKSIZE'] = Column([args.chunksize],dtype='i2')
+    meta['NCHUNK'] = Column([nchunk],dtype='i2')
+    meta['RA'] = Column([ra_range],dtype='f8')
+    meta['DEC'] = Column([dec_range],dtype='f8')
+    if args.zoom is None:
+        meta['ZOOM'] = Column([0,3600,0,3600],dtype='i4')
+    else:
+        meta['ZOOM'] = Column([args.zoom],dtype='i4')
+    meta['RMAG'] = Column([args.rmag_range],dtype='f4')
+    outfile = os.path.join(decals_sim_dir,'metacat-'+brickname+'-'+
+                           objtype.lower()+'.fits')
+    log.info('Writing {}'.format(outfile))
+    if os.path.isfile(outfile):
+        os.remove(outfile)
+    meta.write(outfile)
 
     # Work in chunks
     for ichunk in range(nchunk):
@@ -611,20 +622,20 @@ def main():
     
         # Build the simulated object catalog and optionally make some QAplots.
         log.info('Building the simulated object catalog')
-        simcat = build_simcat(nchunk,brickname,brickwcs,objtype,raminmax,
-                              decminmax,rmag_range=args.rmag_range,
+        # min(nobj,chunksize) is wrong - fix this
+        simcat = build_simcat(min(nobj,chunksize),brickname,brickwcs,objtype,ra_range,
+                              dec_range,rmag_range=args.rmag_range,
                               decals_sim_dir=decals_sim_dir,seed=args.seed,
                               chunksuffix=chunksuffix)
         if args.no_qaplots is False:
-            qaplots(brickinfo,ccdinfo,simcat,decals_sim_dir,chunksuffix=chunksuffix)
+            qaplots(objtype,brickinfo,ccdinfo,simcat,
+                    decals_sim_dir,chunksuffix=chunksuffix)
 
-        sys.exit(1)
-        
         # Copy the CP-processed data we need to DECALS_SIM_DIR.
         copy_cpdata(ccdinfo,decals_dir,decals_sim_dir)
 
         # Insert the simulated objects
-        insert_simobj(simcat,ccdinfo,decals_sim_dir)
+        insert_simobj(objtype,simcat,ccdinfo,decals_sim_dir)
 
         run_brick(brickname,decals_dir=decals_sim_dir,outdir=decals_sim_dir,
                   threads=args.threads,zoom=args.zoom,wise=False,sdssInit=False,
