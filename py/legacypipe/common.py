@@ -1,3 +1,4 @@
+from __future__ import print_function
 if __name__ == '__main__':
     import matplotlib
     matplotlib.use('Agg')
@@ -63,7 +64,7 @@ def get_version_header(program_name, decals_dir):
     if rtn:
         raise RuntimeError('Failed to get version string (git describe):' + ver + err)
     version = version.strip()
-    print 'Version:', version
+    print('Version:', version)
 
     hdr = fitsio.FITSHDR()
 
@@ -194,7 +195,7 @@ def segment_and_group_sources(image, T, name=None, ps=None, plots=False):
     image = binary_fill_holes(image)
 
     blobs,nblobs = label(image)
-    print 'N detected blobs:', nblobs
+    print('N detected blobs:', nblobs)
     H,W = image.shape
     del image
 
@@ -226,7 +227,7 @@ def segment_and_group_sources(image, T, name=None, ps=None, plots=False):
     for blob in range(1, nblobs+1):
         Isrcs = np.flatnonzero(T.blob == blob)
         if len(Isrcs) == 0:
-            #print 'Blob', blob, 'has no sources'
+            #print('Blob', blob, 'has no sources')
             blobmap[blob] = -1
             dropslices[blob] = blobslices[blob-1]
             continue
@@ -256,16 +257,14 @@ def segment_and_group_sources(image, T, name=None, ps=None, plots=False):
         oblobs = np.unique(blobs[bslc])
         oblobs = oblobs[oblobs != emptyblob]
 
-        ##print 'Adding new blob for source at', (T.itx[i], T.ity[i])
         #print 'This blob overlaps existing blobs:', oblobs
         if len(oblobs) > 1:
-            print 'WARNING: not merging overlapping blobs like maybe we should'
+            print('WARNING: not merging overlapping blobs like maybe we should')
         if len(oblobs):
             blob = oblobs[0]
             #print 'Adding source to existing blob', blob
             blobs[bslc][blobs[bslc] == emptyblob] = blob
             blobindex = blobmap[blob]
-            #print 'blob index', blobindex
             if blobindex == -1:
                 # the overlapping blob was going to be dropped -- restore it.
                 blobindex = len(blobsrcs)
@@ -274,16 +273,11 @@ def segment_and_group_sources(image, T, name=None, ps=None, plots=False):
                 blobsrcs.append(np.array([], np.int64))
             # Expand the existing blob slice to encompass this new source
             oldslc = blobslices[blobindex]
-            #print 'Old slice:', oldslc
-            #print 'New slice:', bslc
             sy,sx = oldslc
             oy0,oy1, ox0,ox1 = sy.start,sy.stop, sx.start,sx.stop
             sy,sx = bslc
             ny0,ny1, nx0,nx1 = sy.start,sy.stop, sx.start,sx.stop
-            #print 'Old y', oy0,oy1, 'x', ox0,ox1
-            #print 'New y', ny0,ny1, 'x', nx0,nx1
             newslc = slice(min(oy0,ny0), max(oy1,ny1)), slice(min(ox0,nx0), max(ox1,nx1))
-            #print 'Updated slice:', newslc
             blobslices[blobindex] = newslc
             # Add this source to the list of source indices for the existing blob.
             blobsrcs[blobindex] = np.append(blobsrcs[blobindex], np.array([i]))
@@ -295,7 +289,7 @@ def segment_and_group_sources(image, T, name=None, ps=None, plots=False):
             blobmap[blob] = len(blobsrcs)
             blobslices.append(bslc)
             blobsrcs.append(np.array([i]))
-    #print 'Added', len(noblobs), 'new fake singleton blobs'
+    #print('Added', len(noblobs), 'new fake singleton blobs')
 
     # Remap the "blobs" image so that empty regions are = -1 and the blob values
     # correspond to their indices in the "blobsrcs" list.
@@ -340,10 +334,10 @@ def segment_and_group_sources(image, T, name=None, ps=None, plots=False):
         for i in Isrcs:
             #assert(blobs[T.ity[i], T.itx[i]] == j)
             if (blobs[T.ity[i], T.itx[i]] != j):
-                print '---------------------------!!!--------------------------'
-                print 'Blob', j, 'sources', Isrcs
-                print 'Source', i, 'coords x,y', T.itx[i], T.ity[i]
-                print 'Expected blob value', j, 'but got', blobs[T.ity[i], T.itx[i]]
+                print('---------------------------!!!--------------------------')
+                print('Blob', j, 'sources', Isrcs)
+                print('Source', i, 'coords x,y', T.itx[i], T.ity[i])
+                print('Expected blob value', j, 'but got', blobs[T.ity[i], T.itx[i]])
 
     T.blob = blobs[T.ity, T.itx]
     assert(len(blobsrcs) == len(blobslices))
@@ -391,25 +385,18 @@ def get_sdss_sources(bands, targetwcs, photoobjdir=None, local=True,
 
     objs = read_photoobjs_in_wcs(targetwcs, margin, sdss=sdss, cols=cols, wfn=wfn)
     if objs is None:
-        print 'No photoObjs in wcs'
+        print('No photoObjs in wcs')
         return None,None
-    print 'Got', len(objs), 'photoObjs'
+    print('Got', len(objs), 'photoObjs')
+    print('Bands', bands, '->', list(bands))
 
     # It can be string-valued
     objs.objid = np.array([int(x) if len(x) else 0 for x in objs.objid])
-
-    # Treat as pointsource...
-    #sband = 'r'
-    #bandnum = 'ugriz'.index(sband)
-    #objs.treated_as_pointsource = treat_as_pointsource(objs, bandnum)
-
-    print 'Bands', bands, '->', list(bands)
-
     srcs = get_tractor_sources_dr9(
         None, None, None, objs=objs, sdss=sdss, bands=list(bands),
         nanomaggies=True, fixedComposites=True, useObjcType=True,
         ellipse=ellipse)
-    print 'Got', len(srcs), 'Tractor sources'
+    print('Created', len(srcs), 'Tractor sources')
 
     # record coordinates in target brick image
     ok,objs.tx,objs.ty = targetwcs.radec2pixelxy(objs.ra, objs.dec)
