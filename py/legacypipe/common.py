@@ -1340,10 +1340,21 @@ class Decals(object):
         * DEC > -20 (in DESI footprint) 
         * CCDNUM = 31 (S7) is OK, but only for the region
           [1:1023,1:4094] (mask region [1024:2046,1:4094] in CCD s7)
-        '''
-        # Here we are assuming that the zeropoints are present in the
-        # CCDs file (starting in DR2)
+
+        Slightly revised by DJS in Re: [decam-data 828] 2015-07-31:
         
+        * CCDNMATCH >= 20 (At least 20 stars to determine zero-pt)
+        * abs(ZPT - CCDZPT) < 0.10  (Loose agreement with full-frame zero-pt)
+        * ZPT within [25.08-0.50, 25.08+0.25] for g-band
+        * ZPT within [25.29-0.50, 25.29+0.25] for r-band
+        * ZPT within [24.92-0.50, 24.92+0.25] for z-band
+        * DEC > -20 (in DESI footprint)
+        * EXPTIME >= 30
+        * CCDNUM = 31 (S7) should mask outside the region [1:1023,1:4094]
+        '''
+
+        # We assume that the zeropoints are present in the
+        # CCDs file (starting in DR2)
         z0 = dict(g = 25.08,
                   r = 25.29,
                   z = 24.92,)
@@ -1351,15 +1362,17 @@ class Decals(object):
 
         good = np.ones(len(CCD), bool)
         n0 = sum(good)
+        # This is our list of cuts to remove non-photometric CCD images
         for name,crit in [
+            ('exptime < 30 s', (CCD.exptime < 30)),
             ('ccdnmatch < 20', (CCD.ccdnmatch < 20)),
             ('abs(zpt - ccdzpt) > 0.1',
              (np.abs(CCD.zpt - CCD.ccdzpt) > 0.1)),
-            ('ccdphrms > 0.2 (and ccdnmatch >= 20)',
-             ((CCD.ccdnmatch >= 20) * (CCD.ccdphrms >= 0.2))),
-            ('zpt within 0.5 mag of nominal',
-             (np.abs(CCD.zpt - z0) > 0.5)),
-            ]:
+            ('zpt < 0.5 mag of nominal',
+             (CCD.zpt < (z0 - 0.5))),
+            ('zpt > 0.25 mag of nominal',
+             (CCD.zpt > (z0 + 0.25))),
+             ]:
             good[crit] = False
             n = sum(good)
             print 'Flagged', n0-n, 'more non-photometric using criterion:', name
