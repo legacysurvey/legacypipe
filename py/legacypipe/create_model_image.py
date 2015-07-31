@@ -1,13 +1,16 @@
+from __future__ import print_function
 import matplotlib
 matplotlib.use('Agg')
 import pylab as plt
 
-from astrometry.util.util import *
-from astrometry.util.fits import *
-from astrometry.util.plotutils import *
+from astrometry.util.util import Sip
+from astrometry.util.fits import merge_tables
+from astrometry.util.plotutils import dimshow
 
-from common import *
-from desi_common import *
+from common import Decals, DecamImage, brick_catalog_for_radec_box, switch_to_soft_ellipses
+from desi_common import read_fits_catalog
+
+from tractor import Tractor, CachingPsfEx, FixedCompositeGalaxy, ExpGalaxy, DevGalaxy
 
 from runbrick import get_sdss_sources
 
@@ -33,11 +36,11 @@ def main():
 
     chips = decals.get_ccds()
     D = np.argsort(np.hypot(chips.ra - ra, chips.dec - dec))
-    print 'Closest chip:', chips[D[0]]
+    print('Closest chip:', chips[D[0]])
     chips = [chips[D[0]]]
 
     im = DecamImage(decals, chips[0])
-    print 'Image:', im
+    print('Image:', im)
 
     targetwcs = Sip(im.wcsfn)
     if roi is not None:
@@ -57,16 +60,16 @@ def main():
         T = brick_catalog_for_radec_box(r0-margin,r1+margin,d0-margin,
                                         d1+margin, decals, catpattern)
 
-    print 'Got', len(T), 'catalog entries within range'
+    print('Got', len(T), 'catalog entries within range')
     cat = read_fits_catalog(T, T._header)
-    print 'Got', len(cat), 'catalog objects'
+    print('Got', len(cat), 'catalog objects')
 
-    print 'Switching ellipse parameterizations'
+    print('Switching ellipse parameterizations')
     switch_to_soft_ellipses(cat)
     keepcat = []
     for src in cat:
         if not np.all(np.isfinite(src.getParams())):
-            print 'Src has infinite params:', src
+            print('Src has infinite params:', src)
             continue
         if isinstance(src, FixedCompositeGalaxy):
             f = src.fracDev.getClippedValue()
@@ -81,13 +84,13 @@ def main():
     if roi is not None:
         slc = slice(y0,y1), slice(x0,x1)
     tim = im.get_tractor_image(slc=slc)
-    print 'Got', tim
+    print('Got', tim)
     tim.psfex.fitSavedData(*tim.psfex.splinedata)
     tim.psfex.radius = 20
     tim.psf = CachingPsfEx.fromPsfEx(tim.psfex)
     
     tractor = Tractor([tim], cat)
-    print 'Created', tractor
+    print('Created', tractor)
 
     mod = tractor.getModelImage(0)
 
@@ -115,10 +118,10 @@ def main():
     import runbrick
     runbrick.photoobjdir = '.'
     scat,T = get_sdss_sources(bands, targetwcs, local=False)
-    print 'Got', len(scat), 'SDSS sources in bounds'
+    print('Got', len(scat), 'SDSS sources in bounds')
     
     stractor = Tractor([tim], scat)
-    print 'Created', stractor
+    print('Created', stractor)
     smod = stractor.getModelImage(0)
 
     plt.clf()
