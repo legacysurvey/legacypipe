@@ -1637,7 +1637,7 @@ class DecamImage(object):
         # The left half is OK.
         if self.ccdname == 'S7':
             print 'Clipping the right half of chip S7'
-            x1 = 1024
+            x1 = 1023
 
         return x0,x1,y0,y1
 
