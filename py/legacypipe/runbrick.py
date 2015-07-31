@@ -104,6 +104,11 @@ class EllipseWithPriors(EllipseESoft):
     def getName():
         return "EllipseWithPriors"
 
+class RunbrickError(RuntimeError):
+    pass
+
+class NothingToDoError(RunbrickError):
+    pass
 
 # Turn on/off caching for all new Tractor instances.
 def create_tractor(tims, srcs):
@@ -355,6 +360,9 @@ def stage_tims(W=3600, H=3600, pixscale=0.262, brickname=None,
         brick.brickname = brickname
     else:
         brick = decals.get_brick_by_name(brickname)
+        if brick is None:
+            raise RunbrickError('No such brick: "%s"' % brickname)
+            
         print 'Chosen brick:'
         brick.about()
         brickid = brick.brickid
@@ -391,12 +399,11 @@ def stage_tims(W=3600, H=3600, pixscale=0.262, brickname=None,
     print version_hdr
 
     pixscale = targetwcs.pixel_scale()
-    print 'pixscale', pixscale
 
     T = decals.ccds_touching_wcs(targetwcs)
     if T is None:
-        print 'No CCDs touching target WCS'
-        sys.exit(0)
+        raise NothingToDoError('No CCDs touching brick')
+
     print len(T), 'CCDs touching target WCS'
 
     # Sort images by band
@@ -441,10 +448,7 @@ def stage_tims(W=3600, H=3600, pixscale=0.262, brickname=None,
     tlast = tnow
 
     if len(tims) == 0:
-        print 'No photometric CCDs overlap.  Quitting.'
-        sys.exit(0)
-
-    # _psf_check_plots(tims)
+        raise NothingToDoError('No photometric CCDs touching brick.')
 
     if not pipe:
         # save resampling params
@@ -3469,18 +3473,30 @@ python -u projects/desi/runbrick.py --plots --brick 2440p070 --zoom 1900 2400 45
     if opt.no_wise:
         kwa.update(wise=False)
 
-    run_brick(opt.brick, radec=opt.radec, pixscale=opt.pixscale,
-              width=opt.width, height=opt.height, zoom=opt.zoom,
-              pv=opt.pv,
-              threads=opt.threads, ceres=opt.ceres,
-              gaussPsf=opt.gpsf, pixPsf=opt.pixpsf, simulOpt=opt.simul_opt,
-              nblobs=opt.nblobs, blob=opt.blob, blobxy=opt.blobxy,
-              pipe=opt.pipe, outdir=opt.outdir, decals_dir=opt.decals_dir,
-              plots=opt.plots, plots2=opt.plots2,
-              plotbase=opt.plot_base, plotnumber=opt.plot_number,
-              force=opt.force, forceAll=opt.forceall,
-              stages=opt.stage, writePickles=opt.write,
-              picklePattern=opt.picklepat, **kwa)
+    try:
+        run_brick(
+            opt.brick, radec=opt.radec, pixscale=opt.pixscale,
+            width=opt.width, height=opt.height, zoom=opt.zoom,
+            pv=opt.pv,
+            threads=opt.threads, ceres=opt.ceres,
+            gaussPsf=opt.gpsf, pixPsf=opt.pixpsf, simulOpt=opt.simul_opt,
+            nblobs=opt.nblobs, blob=opt.blob, blobxy=opt.blobxy,
+            pipe=opt.pipe, outdir=opt.outdir, decals_dir=opt.decals_dir,
+            plots=opt.plots, plots2=opt.plots2,
+            plotbase=opt.plot_base, plotnumber=opt.plot_number,
+            force=opt.force, forceAll=opt.forceall,
+            stages=opt.stage, writePickles=opt.write,
+            picklePattern=opt.picklepat, **kwa)
+    except NothingToDoError as e:
+        print
+        print e.message
+        print
+        return 0
+    except RunbrickError as e:
+        print
+        print e.message
+        print
+        return -1
     return 0
 
 def trace(frame, event, arg):
