@@ -1,12 +1,11 @@
+from __future__ import print_function
 if __name__ == '__main__':
     import matplotlib
     matplotlib.use('Agg')
 import numpy as np
 
-#from runbrick import *
 from common import *
 from tractor import *
-
 
 if __name__ == '__main__':
     import optparse
@@ -23,11 +22,12 @@ if __name__ == '__main__':
     parser.add_option('-H', type=int, default=3600, help='Target image height (default %default)')
 
     if not (('BOSS_PHOTOOBJ' in os.environ) and ('PHOTO_RESOLVE' in os.environ)):
-        print '$BOSS_PHOTOOBJ and $PHOTO_RESOLVE not set -- on NERSC, you can do:'
-        print '  export BOSS_PHOTOOBJ=/project/projectdirs/cosmo/data/sdss/pre13/eboss/photoObj.v5b'
-        print '  export PHOTO_RESOLVE=/project/projectdirs/cosmo/data/sdss/pre13/eboss/resolve/2013-07-29'
-        print 'To read SDSS files from the local filesystem rather than downloading them.'
-        print
+        print('''$BOSS_PHOTOOBJ and $PHOTO_RESOLVE not set -- on NERSC, you can do:
+export BOSS_PHOTOOBJ=/project/projectdirs/cosmo/data/sdss/pre13/eboss/photoObj.v5b
+export PHOTO_RESOLVE=/project/projectdirs/cosmo/data/sdss/pre13/eboss/resolve/2013-07-29
+To read SDSS files from the local filesystem rather than downloading them.
+''')
+
         
     opt,args = parser.parse_args()
     brickid = opt.brick
@@ -43,7 +43,7 @@ if __name__ == '__main__':
 
     decals = Decals()
     brick = decals.get_brick(brickid)
-    print 'Chosen brick:'
+    print('Chosen brick:')
     brick.about()
     targetwcs = wcs_for_brick(brick, W=opt.W, H=opt.H)
     W,H = targetwcs.get_width(), targetwcs.get_height()
@@ -54,7 +54,7 @@ if __name__ == '__main__':
     if opt.sed_matched:
         # Read images
         tims = decals.tims_touching_wcs(targetwcs, mp, mock_psf=True, bands=bands)
-        print 'Rendering detection maps...'
+        print('Rendering detection maps...')
         detmaps, detivs = detection_maps(tims, targetwcs, bands, mp)
 
         SEDs = sed_matched_filters(bands)
@@ -96,5 +96,5 @@ if __name__ == '__main__':
     T2.shapeDev_e2_ivar = T2.shapeExp_ivar[:,2]
     
     T2.writeto(opt.output)
-    print 'Wrote', opt.output
+    print('Wrote', opt.output)
     
