@@ -1,18 +1,21 @@
+from __future__ import print_function
 import sys
 import os
 import numpy as np
 from collections import OrderedDict
 
 from astrometry.util.fits import fits_table
-from astrometry.util.file import *
-from common import * #Decals, wcs_for_brick, ccds_touching_wcs
+from astrometry.util.file import trymakedirs
+from common import Decals, DecamImage
 
-from astrometry.libkd.spherematch import *
+
+from astrometry.libkd.spherematch import match_radec
 
 '''
-This script (with manual editing) can produce lists of CCD indices for calibration:
+This script is used to produce lists of CCDs or bricks, for production
+purposes (building qdo queue, eg).
 
-python projects/desi/queue-calibs.py  | qdo load cal -
+python legacypipe/queue-calibs.py  | qdo load cal -
 
 dr1(d):
 qdo launch bricks 16 --mpack 6 --batchopts "-A desi" --walltime=24:00:00 --script projects/desi/pipebrick.sh --batchqueue regular --verbose
@@ -22,7 +25,6 @@ qdo launch cal 1 --batchopts "-A cosmo -t 1-50" --walltime=24:00:00 --batchqueue
 
 Or
 qdo launch cal 8 --batchopts "-A cosmo -t 1-6" --pack --walltime=30:00 --batchqueue debug --script projects/desi/run-calib.py
-
 
 Or lists of bricks to run in production:
 
@@ -168,7 +170,7 @@ if __name__ == '__main__':
 
         B.cut(np.flatnonzero(np.array([s == nm for s in B.brickname])))
         log('Cut to', len(B), 'bricks')
-        print B.ra, B.dec
+        log(B.ra, B.dec)
         dlo,dhi = -90,90
         rlo,rhi = 0, 360
 
@@ -177,16 +179,6 @@ if __name__ == '__main__':
         # 535 bricks, ~7000 CCDs
         rlo,rhi = 240,245
         dlo,dhi =   5, 12
-
-    elif opt.region == 'dr1a':
-        rlo,rhi = 0, 360
-        dlo,dhi = 30, 40
-    # elif opt.region == 'dr1b':
-    #     rlo,rhi = 0, 360
-    #     dlo,dhi = 25,30
-    # elif opt.region == 'dr1b':
-    #     rlo,rhi = 0, 360
-    #     dlo,dhi = 25,30
 
     elif opt.region == 'des':
         dlo, dhi = -6., 4.
@@ -234,9 +226,11 @@ if __name__ == '__main__':
         dhi = opt.maxdec
 
     if rlo < rhi:
-        B.cut((B.ra >= rlo) * (B.ra <= rhi) * (B.dec >= dlo) * (B.dec <= dhi))
+        B.cut((B.ra >= rlo) * (B.ra <= rhi) *
+              (B.dec >= dlo) * (B.dec <= dhi))
     else: # RA wrap
-        B.cut(np.logical_or(B.ra >= rlo, B.ra <= rhi) * (B.dec >= dlo) * (B.dec <= dhi))
+        B.cut(np.logical_or(B.ra >= rlo, B.ra <= rhi) *
+              (B.dec >= dlo) * (B.dec <= dhi))
     log(len(B), 'bricks in range')
 
     I,J,d = match_radec(B.ra, B.dec, T.ra, T.dec, 0.25)
@@ -285,15 +279,15 @@ if __name__ == '__main__':
         if opt.check:
             fn = 'dr1n/tractor/%s/tractor-%s.fits' % (b.brickname[:3], b.brickname)
             if os.path.exists(fn):
-                print >> sys.stderr, 'Exists:', fn
+                print('Exists:', fn, file=sys.stderr)
                 continue
         if opt.check_coadd:
             fn = 'dr1b/coadd/%s/%s/decals-%s-image.jpg' % (b.brickname[:3], b.brickname, b.brickname)
             if os.path.exists(fn):
-                print >> sys.stderr, 'Exists:', fn
+                print('Exists:', fn, file=sys.stderr)
                 continue
 
-        print b.brickname
+        print(b.brickname)
 
     if not (opt.calibs or opt.forced or opt.lsb):
         sys.exit(0)
@@ -323,13 +317,13 @@ if __name__ == '__main__':
 
     if opt.write_ccds:
         T[allI].writeto(opt.write_ccds)
-        print 'Wrote', opt.write_ccds
+        log('Wrote', opt.write_ccds)
 
     ## Be careful here -- T has been cut; we want to write out T.index.
     ## 'allI' contains indices into T.
 
     if opt.forced:
-        print 'Writing forced-photometry commands to', opt.out
+        log('Writing forced-photometry commands to', opt.out)
         f = open(opt.out,'w')
         log('Total of', len(allI), 'CCDs')
         for j,i in enumerate(allI):
@@ -350,11 +344,11 @@ if __name__ == '__main__':
                     (imgfn, T.cpimage_hdu[i], outfn))
 
         f.close()
-        print 'Wrote', opt.out
+        log('Wrote', opt.out)
         sys.exit(0)
 
     if opt.lsb:
-        print 'Writing LSB commands to', opt.out
+        log('Writing LSB commands to', opt.out)
         f = open(opt.out,'w')
         log('Total of', len(allI), 'CCDs')
         for j,i in enumerate(allI):
@@ -363,31 +357,31 @@ if __name__ == '__main__':
             outfn = 'lsb/lsb-%s-%s.fits' % (exp, ext)
             f.write('python projects/desi/lsb.py --expnum %i --extname %s --out %s -F -n > lsb/lsb-%s-%s.log 2>&1\n' % (exp, ext, outfn, exp, ext))
         f.close()
-        print 'Wrote', opt.out
+        log('Wrote', opt.out)
         sys.exit(0)
         
 
-    print 'Writing calibs to', opt.out
+    log('Writing calibs to', opt.out)
     f = open(opt.out,'w')
     log('Total of', len(allI), 'CCDs')
     for j,i in enumerate(allI):
 
         if opt.delete_sky or opt.delete_pvastrom:
-            print j+1, 'of', len(allI)
+            log(j+1, 'of', len(allI))
             im = DecamImage(decals, T[i])
             if opt.delete_sky and os.path.exists(im.skyfn):
-                print '  deleting:', im.skyfn
+                log('  deleting:', im.skyfn)
                 os.unlink(im.skyfn)
             if opt.delete_pvastrom and os.path.exists(im.pvwcsfn):
-                print '  deleting:', im.pvwcsfn
+                log('  deleting:', im.pvwcsfn)
                 os.unlink(im.pvwcsfn)
 
         if opt.check:
-            print j+1, 'of', len(allI)
+            log(j+1, 'of', len(allI))
             im = DecamImage(decals, T[i])
             if not im.run_calibs(im, None, None, None, just_check=True,
                                  astrom=False):
-                print 'Calibs for', im.expnum, im.ccdname, im.calname, 'already done'
+                log('Calibs for', im.expnum, im.ccdname, im.calname, 'already done')
                 continue
 
         if opt.command:
@@ -398,197 +392,5 @@ if __name__ == '__main__':
         if opt.check:
             f.flush()
     f.close()
-    print 'Wrote', opt.out
-
-    sys.exit(0)
-    
-
-
-    # Various tune-ups and other stuff below here...
-
-    #B.writeto('edrplus-bricks.fits')
-
-    if False:
-        for b in B:
-            #fn = 'tunebrick/coadd/image2-%06i.png' % b.brickid
-            #fn = 'cosmos/coadd/image2-%06i.png' % b.brickid
-            #fn = 'tunebrick/coadd/image2-%06i-g.fits' % b.brickid
-            #if os.path.exists(fn):
-            #    continue
-            print b.brickid
-    
-            wcs = wcs_for_brick(b)
-            for band in 'grz':
-                #fn = 'cosmos/coadd/image2-%06i-%s.fits' % (b.brickid, band)
-                fn = 'tunebrick/coadd/image2-%06i-%s.fits' % (b.brickid, band)
-                if not os.path.exists(fn):
-                    continue
-                for key,val in [('CTYPE1', 'RA---TAN'),
-                                ('CTYPE2', 'DEC--TAN'),
-                                ('CRVAL1', wcs.crval[0]),
-                                ('CRVAL2', wcs.crval[1]),
-                                ('CRPIX1', wcs.crpix[0]),
-                                ('CRPIX2', wcs.crpix[1]),
-                                ('CD1_1', wcs.cd[0]),
-                                ('CD1_2', wcs.cd[1]),
-                                ('CD2_1', wcs.cd[2]),
-                                ('CD2_2', wcs.cd[3]),
-                                ('IMAGEW', wcs.imagew),
-                                ('IMAGEH', wcs.imageh),]:
-                    cmd = 'modhead %s %s %s' % (fn, key, val)
-                    print cmd
-                    os.system(cmd)
-    
-        sys.exit(0)
-
-
-    if False:
-        bricksize = 0.25
-        # how many bricks wide?
-        bw,bh = int(np.ceil((rhi - rlo) / bricksize)), int(np.ceil((dhi - dlo) / bricksize))
-        # how big are the postage stamps?
-        stampsize = 100
-        stampspace = 100
-    
-        html = ('<html><body>' +
-                '<div style="width:%i; height:%i; position:relative">' % (bw*stampspace, bh*stampspace))
-    
-        for b in B:
-
-            fn = 'tunebrick/coadd/image2-%06i.png' % b.brickid
-            if not os.path.exists(fn):
-                continue
-
-            modpngfn = 'tunebrick/coadd/plot-%06i-03.png' % b.brickid
-            modstampfn = 'tunebrick/web/model-%06i-stamp.jpg' % b.brickid
-            png2fn = modpngfn
-            jpg2fn = 'tunebrick/web/model-%06i.jpg' % b.brickid
-            mod = (modpngfn, jpg2fn, modstampfn)
-
-            for pngfn, jpgfn, stampfn in [
-                mod,
-                ('tunebrick/coadd/plot-%06i-00.png' % b.brickid,
-                 'tunebrick/web/image-%06i.jpg' % b.brickid,
-                 'tunebrick/web/image-%06i-stamp.jpg' % b.brickid),
-                ('tunebrick/coadd/image2-%06i.png' % b.brickid,
-                 'tunebrick/web/image2-%06i.jpg' % b.brickid,
-                 'tunebrick/web/image2-%06i-stamp.jpg' % b.brickid),
-                ]:
-                if not os.path.exists(stampfn) and os.path.exists(pngfn):
-                    cmd = 'pngtopnm %s | pnmscale 0.1 | pnmtojpeg -quality 90 > %s' % (pngfn, stampfn)
-                    print cmd
-                    os.system(cmd)
-
-                # 1000 x 1000 image
-                if os.path.exists(pngfn) and not os.path.exists(jpgfn):
-                    cmd = 'pngtopnm %s | pnmtojpeg -quality 90 > %s' % (pngfn, jpgfn)
-                    print cmd
-                    os.system(cmd)
-            # Note evilness: we use the loop variables outside the loop!
-
-
-            bottom = int(stampspace * (b.dec1 - dlo) / bricksize)
-            left   = int(stampspace * (rhi - b.ra1) / bricksize)
-
-            if os.path.exists(modstampfn):
-                mouse = "onmouseenter=\"this.src='%s\';\" onmouseleave=\"this.src='%s';\" " % (modstampfn, stampfn)
-            else:
-                mouse = ''
-            html += ('<a href="%s"><img src="%s" ' % (jpgfn, stampfn) +
-                     mouse +
-                     'style="position:absolute; bottom:%i; left:%i; width=%i; height=%i " /></a>' %
-                     (bottom, left, stampsize, stampsize))
-            html = html.replace('tunebrick/web/', '')
-        html += ('</div>' + 
-                '</body></html>')
-    
-        #fn = 'tunebrick/web/bricks.html'
-        fn = 'bricks2.html'
-        f = open(fn, 'w')
-        f.write(html)
-        f.close()
-        print 'Wrote', fn
-    
-        sys.exit(0)
-        
-    #T.cut(allI)
-    #T.writeto('edr-ccds.fits')
-    sys.exit(0)
-
-    f = open('jobs','w')
-    log('Total of', len(allI), 'CCDs')
-    for i in allI:
-        im = DecamImage(decals, T[i])
-        if not im.run_calibs(im, None, None, None, just_check=True,
-                             psfex=False, psfexfit=False):
-            continue
-        f.write('%i\n' % i)
-        #print i
-    f.close()
-    print 'Wrote "jobs"'
-    sys.exit(0)
-
-    for b in B:
-        #fn = 'pipebrick-cats/tractor-phot-b%06i.fits' % b.brickid
-        #fn = 'pipebrick-plots/brick-%06i-02.png' % b.brickid
-        fn = 'tunebricks-cats/tractor-phot-b%06i.fits' % b.brickid
-        if os.path.exists(fn):
-            print >> sys.stderr, 'exists:', fn
-            continue
-        #print b
-        # Don't try bricks for which the zeropoints are missing.
-        wcs = wcs_for_brick(b)
-        I = ccds_touching_wcs(wcs, T)
-        im = None
-        try:
-            for t in T[I]:
-                im = DecamImage(decals, t)
-                zp = decals.get_zeropoint_for(im)
-        except:
-            print >> sys.stderr, 'Brick', b.brickid, ': Failed to get zeropoint for', im
-            #import traceback
-            #traceback.print_exc()
-            continue
-
-        # Ok
-        print b.brickid
-
-    sys.exit(0)
-
-    #allI = set()
-    allI = OrderedDict()
-    
-    for b in B:
-        wcs = wcs_for_brick(b)
-        I = ccds_touching_wcs(wcs, T)
-        print >> sys.stderr, 'Brick', b, ':', len(I), 'CCDs'
-        #allI.update(I)
-        allI.update([(i,True) for i in I])
-    #print 'Total of', len(allI), 'CCDs touch'
-    #T.cut(np.array(list(allI)))
-
-    print >>sys.stderr, len(B), 'bricks,', len(allI), 'CCDs'
-
-    #for i in list(allI):
-
-    # g,r,z full focal planes, 2014-08-18
-    #I = np.flatnonzero(T.expnum == 349664)
-    #I = np.flatnonzero(T.expnum == 349667)
-    #I = np.flatnonzero(T.expnum == 349589)
-
-    #for im in T.cpimage[:10]:
-    #    print >>sys.stderr, 'im >>%s<<' % im, im.startswith('CP20140818')
-    #I = np.flatnonzero(np.array([im.startswith('CP20140818') for im in T.cpimage]))
-
-    # images touching brick X
-    B = decals.get_bricks()
-    #ii = 380155
-    ii = 377305
-    targetwcs = wcs_for_brick(B[ii])
-    I = ccds_touching_wcs(targetwcs, T)
-    #print len(I), 'CCDs touching'
-
-    print >>sys.stderr, len(I), 'in cut'
-    for i in I:
-        print 'python projects/desi/run-calib.py %i' % i
+    log('Wrote', opt.out)
 
