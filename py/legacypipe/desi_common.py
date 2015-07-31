@@ -1,11 +1,9 @@
-import fitsio
+from __future__ import print_function
+from astrometry.util.util import Tan
+from astrometry.util.fits import fits_table
 
-from astrometry.util.util import *
-from astrometry.util.fits import *
-
-from tractor import *
-from tractor.galaxy import *
-from tractor.ellipses import *
+from tractor import PointSource, ExpGalaxy, DevGalaxy, FixedCompositeGalaxy
+from tractor.ellipses import EllipseESoft, EllipseE
 
 N_subtiles = 4
 unwise_atlas = 'allsky-atlas.fits'
@@ -26,9 +24,6 @@ def typestring(t):
 ellipse_types = dict([(typestring(t), t) for t in
                       [ EllipseESoft, EllipseE,
                         ]])
-#{ 'tractor.ellipses.EllipseESoft': EllipseESoft,
-#  'tractor.ellipses.EllipseE': EllipseE,
-#  }
 
 def get_subtile_wcs(name, x, y):
     '''
@@ -55,9 +50,9 @@ def get_subtile_wcs(name, x, y):
     return subwcs
 
 def unwise_wcs_from_name(name, atlas=unwise_atlas):
-    print 'Reading', atlas
+    print('Reading', atlas)
     T = fits_table(atlas)
-    print 'Read', len(T), 'WISE tiles'
+    print('Read', len(T), 'WISE tiles')
     I = np.flatnonzero(name == T.coadd_id)
     if len(I) != 1:
         raise RuntimeError('Failed to find WISE tile "%s"' % name)
@@ -81,7 +76,7 @@ def source_param_types(src):
                       [flatten_node(c) for c in node[1:]],
                       [node[0]])
     tree = getParamTypeTree(src)
-    print 'Source param types:', tree
+    print('Source param types:', tree)
     types = flatten_node(tree)
     return types
     
@@ -91,6 +86,7 @@ def prepare_fits_catalog(cat, invvars, T, hdr, filts, fs, allbands = 'ugrizY',
     if T is None:
         T = fits_table()
     if hdr is None:
+        import fitsio
         hdr = fitsio.FITSHDR()
 
     hdr.add_record(dict(name='TR_VER', value=1, comment='Tractor output format version'))
@@ -101,7 +97,7 @@ def prepare_fits_catalog(cat, invvars, T, hdr, filts, fs, allbands = 'ugrizY',
         for src in cat:
             if type(src) != t:
                 continue
-            print 'Parameters for', t, src
+            print('Parameters for', t, src)
             sc = src.copy()
             sc.thawAllRecursive()
             for i,nm in enumerate(sc.getParamNames()):
@@ -113,11 +109,9 @@ def prepare_fits_catalog(cat, invvars, T, hdr, filts, fs, allbands = 'ugrizY',
                 hdr.add_record(dict(name='TR_%s_T%i' % (ts, i),
                                     value=t, comment='Tractor param type'))
             break
-    #print 'Header:', hdr
 
     params0 = cat.getParams()
 
-    #print 'cat', len(cat)
     decam_flux = np.zeros((len(cat), len(allbands)), np.float32)
     decam_flux_ivar = np.zeros((len(cat), len(allbands)), np.float32)
 
@@ -194,9 +188,6 @@ def get_tractor_fits_values(T, cat, pat):
     shapeDev = np.zeros((len(T), 3))
     fracDev  = np.zeros(len(T))
 
-    #print 'Cat:', len(cat)
-    #print 'T:', len(T)
-
     for i,src in enumerate(cat):
         if isinstance(src, ExpGalaxy):
             shapeExp[i,:] = src.shape.getAllParams()
@@ -237,26 +228,22 @@ def read_fits_catalog(T, hdr=None, invvars=False, bands='grz',
     ivs = []
     cat = []
     for i,t in enumerate(T):
-
-        #print 't flux', t.decam_flux
-        #print 'ivar', t.decam_flux_ivar
-        #print 'flux', t.decam_flux[ibands]
-        #print 'ivar', t.decam_flux_ivar[ibands]
-
         clazz = rev_typemap[t.type.strip()]
         pos = RaDecPos(t.ra, t.dec)
         assert(np.isfinite(t.ra))
         assert(np.isfinite(t.dec))
-        #br = NanoMaggies(order=bands, **dict([(b,t.get(c)) for b,c in zip(bands,bandcols)]))
 
         shorttype = fits_short_typemap[clazz]
 
         assert(np.all(np.isfinite(t.decam_flux[ibands])))
-        br = NanoMaggies(order=bands, **dict(zip(bands, t.decam_flux[ibands])))
+        br = NanoMaggies(order=bands,
+                         **dict(zip(bands, t.decam_flux[ibands])))
         params = [pos, br]
         if invvars:
-            # ASSUME & hard-code that the position and brightness are the first params
-            ivs.extend([t.ra_ivar, t.dec_ivar] + list(t.decam_flux_ivar[ibands]))
+            # ASSUME & hard-code that the position and brightness are
+            # the first params
+            ivs.extend([t.ra_ivar, t.dec_ivar] +
+                       list(t.decam_flux_ivar[ibands]))
             
         if issubclass(clazz, (DevGalaxy, ExpGalaxy)):
             if ellipseClass is not None:
@@ -313,7 +300,6 @@ def read_fits_catalog(T, hdr=None, invvars=False, bands='grz',
             raise RuntimeError('Unknown class %s' % str(clazz))
 
         src = clazz(*params)
-        #print 'Created source', src
         cat.append(src)
 
     if invvars:
@@ -327,6 +313,6 @@ def read_fits_catalog(T, hdr=None, invvars=False, bands='grz',
 if __name__ == '__main__':
     T=fits_table('3524p000-0-12-n16-sdss-cat.fits')
     cat = read_fits_catalog(T, T.get_header())
-    print 'Read catalog:'
+    print('Read catalog:')
     for src in cat:
-        print ' ', src
+        print(' ', src)
