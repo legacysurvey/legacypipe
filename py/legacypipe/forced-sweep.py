@@ -5,7 +5,7 @@ import numpy as np
 import fitsio
 from glob import glob
 from astrometry.util.fits import fits_table,merge_tables
-from astrometry.util.file import *
+from astrometry.util.file import trymakedirs
 
 if __name__ == '__main__':
 
