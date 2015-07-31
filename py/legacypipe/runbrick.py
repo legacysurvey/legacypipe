@@ -23,6 +23,7 @@ To see the code we run on each "blob" of pixels,
 
 '''
 
+from __future__ import print_function
 
 # Cython
 #import pyximport; pyximport.install(pyimport=True)
@@ -146,9 +147,9 @@ class MyMultiproc(multiproc):
         # Nasty... peek into Time members
         scpu = 0.
         swall = 0.
-        print 'Serial:'
+        print('Serial:')
         for t0,t1 in self.serial:
-            print t1-t0
+            print(t1-t0)
             for m0,m1 in zip(t0.meas, t1.meas):
                 if isinstance(m0, CpuMeas):
                     scpu  += m1.cpu_seconds_since(m0)
@@ -158,9 +159,9 @@ class MyMultiproc(multiproc):
         pworkerwall = 0.
         pwall = 0.
         pcpu = 0.
-        print 'Parallel:'
+        print('Parallel:')
         for t0,t1 in self.parallel:
-            print t1-t0
+            print(t1-t0)
             for m0,m1 in zip(t0.meas, t1.meas):
                 if isinstance(m0, DebugPoolTimestamp):
                     mt0 = m0.t0
@@ -170,23 +171,23 @@ class MyMultiproc(multiproc):
                 elif isinstance(m0, CpuMeas):
                     pwall += m1.wall_seconds_since(m0)
                     pcpu  += m1.cpu_seconds_since(m0)
-        print
-        print 'Total serial CPU   ', scpu
-        print 'Total serial Wall  ', swall
-        print 'Total worker CPU   ', pworkercpu
-        print 'Total worker Wall  ', pworkerwall
-        print 'Total parallel Wall', pwall
-        print 'Total parallel CPU ', pcpu
-        print
+        print()
+        print('Total serial CPU   ', scpu)
+        print('Total serial Wall  ', swall)
+        print('Total worker CPU   ', pworkercpu)
+        print('Total worker Wall  ', pworkerwall)
+        print('Total parallel Wall', pwall)
+        print('Total parallel CPU ', pcpu)
+        print()
         tcpu = scpu + pworkercpu + pcpu
         twall = swall + pwall
         if nthreads is None:
             nthreads = 1
-        print 'Grand total CPU:              %.1f sec' % tcpu
-        print 'Grand total Wall:             %.1f sec' % twall
-        print 'Grand total CPU utilization:  %.2f cores' % (tcpu / twall)
-        print 'Grand total efficiency:       %.1f %%' % (100. * tcpu / (twall * nthreads))
-        print
+        print('Grand total CPU:              %.1f sec' % tcpu)
+        print('Grand total Wall:             %.1f sec' % twall)
+        print('Grand total CPU utilization:  %.2f cores' % (tcpu / twall))
+        print('Grand total efficiency:       %.1f %%' % (100. * tcpu / (twall * nthreads)))
+        print()
 
 def try_makedirs(dirs):
     if not os.path.exists(dirs):
@@ -213,31 +214,12 @@ class iterwrapper(object):
             raise
         except:
             import traceback
-            print str(self), 'next()'
+            print(str(self), 'next()')
             traceback.print_exc()
             raise
 
     def __len__(self):
         return self.n
-
-def _print_struc(X):
-    if X is None:
-        print 'None',
-    elif type(X) in (list,tuple):
-        islist = (type(X) is list)
-        if islist:
-            print '[',
-        else:
-            print '(',
-        for x in X:
-            _print_struc(x)
-            print ',',
-        if islist:
-            print ']',
-        else:
-            print ')',
-    else:
-        print type(X),
 
 def set_globals():
     plt.figure(figsize=(12,9))
@@ -363,7 +345,7 @@ def stage_tims(W=3600, H=3600, pixscale=0.262, brickname=None,
         if brick is None:
             raise RunbrickError('No such brick: "%s"' % brickname)
             
-        print 'Chosen brick:'
+        print('Chosen brick:')
         brick.about()
         brickid = brick.brickid
         brickname = brick.brickname
@@ -382,8 +364,8 @@ def stage_tims(W=3600, H=3600, pixscale=0.262, brickname=None,
         brick.ra2,nil  = targetwcs.pixelxy2radec(1, H/2)
         nil, brick.dec1 = targetwcs.pixelxy2radec(W/2, 1)
         nil, brick.dec2 = targetwcs.pixelxy2radec(W/2, H)
-        print 'RA1,RA2', brick.ra1, brick.ra2
-        print 'Dec1,Dec2', brick.dec1, brick.dec2
+        print('RA1,RA2', brick.ra1, brick.ra2)
+        print('Dec1,Dec2', brick.dec1, brick.dec2)
 
 
     version_hdr = get_version_header(program_name, decals.decals_dir)
@@ -395,8 +377,8 @@ def stage_tims(W=3600, H=3600, pixscale=0.262, brickname=None,
     version_hdr.add_record(dict(name='DECMAX'  , value=brick.dec2, comment='Brick Dec max'))
     version_hdr.add_record(dict(name='BRICKRA' , value=brick.ra,   comment='Brick center'))
     version_hdr.add_record(dict(name='BRICKDEC', value=brick.dec,  comment='Brick center'))
-    print 'Version header:'
-    print version_hdr
+    print('Version header:')
+    print(version_hdr)
 
     pixscale = targetwcs.pixel_scale()
 
@@ -404,14 +386,14 @@ def stage_tims(W=3600, H=3600, pixscale=0.262, brickname=None,
     if T is None:
         raise NothingToDoError('No CCDs touching brick')
 
-    print len(T), 'CCDs touching target WCS'
+    print(len(T), 'CCDs touching target WCS')
 
     # Sort images by band
     T.cut(np.hstack([np.flatnonzero(T.filter == band) for band in bands]))
 
-    print 'Cutting out non-photometric CCDs...'
+    print('Cutting out non-photometric CCDs...')
     I = decals.photometric_ccds(T)
-    print len(I), 'of', len(T), 'CCDs are photometric'
+    print(len(I), 'of', len(T), 'CCDs are photometric')
     T.cut(I)
 
     ims = []
@@ -420,7 +402,7 @@ def stage_tims(W=3600, H=3600, pixscale=0.262, brickname=None,
         ims.append(im)
 
     tnow = Time()
-    print '[serial tims] Finding images touching brick:', tnow-tlast
+    print('[serial tims] Finding images touching brick:', tnow-tlast)
     tlast = tnow
 
     # Run calibrations
@@ -429,7 +411,7 @@ def stage_tims(W=3600, H=3600, pixscale=0.262, brickname=None,
             for im in ims]
     mp.map(run_calibs, args)
     tnow = Time()
-    print '[parallel tims] Calibrations:', tnow-tlast
+    print('[parallel tims] Calibrations:', tnow-tlast)
     tlast = tnow
 
     # Read images, clip to ROI
@@ -444,7 +426,7 @@ def stage_tims(W=3600, H=3600, pixscale=0.262, brickname=None,
     assert(len(T) == len(tims))
 
     tnow = Time()
-    print '[parallel tims] Read', len(T), 'images:', tnow-tlast
+    print('[parallel tims] Read', len(T), 'images:', tnow-tlast)
     tlast = tnow
 
     if len(tims) == 0:
@@ -454,18 +436,18 @@ def stage_tims(W=3600, H=3600, pixscale=0.262, brickname=None,
         # save resampling params
         tims_compute_resamp(mp, tims, targetwcs)
         tnow = Time()
-        print 'Computing resampling:', tnow-tlast
+        print('Computing resampling:', tnow-tlast)
         tlast = tnow
         # Produce per-band coadds, for plots
         coimgs,cons = compute_coadds(tims, bands, targetwcs)
         tnow = Time()
-        print 'Coadds:', tnow-tlast
+        print('Coadds:', tnow-tlast)
         tlast = tnow
 
     # Cut "bands" down to just the bands for which we have images.
     timbands = [tim.band for tim in tims]
     bands = [b for b in bands if b in timbands]
-    print 'Cut bands to', bands
+    print('Cut bands to', bands)
 
     for band in 'grz':
         hasit = band in bands
@@ -484,7 +466,6 @@ def stage_tims(W=3600, H=3600, pixscale=0.262, brickname=None,
     rtn = dict()
     for k in keys:
         rtn[k] = locals()[k]
-        #print 'Pickling value', k, '=', rtn[k]
     return rtn
 
 def _coadds(tims, bands, targetwcs,
@@ -764,7 +745,7 @@ def _write_band_images(band,
         if gzip:
             fn += '.gz'
         fitsio.write(fn, img, clobber=True, header=hdr2)
-        print 'Wrote', fn
+        print('Wrote', fn)
 
 def stage_image_coadds(targetwcs=None, bands=None, tims=None, outdir=None,
                        brickname=None, version_header=None,
@@ -794,7 +775,7 @@ def stage_image_coadds(targetwcs=None, bands=None, tims=None, outdir=None,
         cmd = 'pngtopnm %s | pnmtojpeg -quality 90 > %s' % (tmpfn, jpegfn)
         os.system(cmd)
         os.unlink(tmpfn)
-        print 'Wrote', jpegfn
+        print('Wrote', jpegfn)
 
     return None
 
@@ -839,7 +820,7 @@ def stage_srcs(coimgs=None, cons=None,
         cat,T = get_sdss_sources(bands, targetwcs, extracols=cols,
                                  ellipse=EllipseWithPriors.fromRAbPhi)
         tnow = Time()
-        print '[serial srcs] SDSS sources:', tnow-tlast
+        print('[serial srcs] SDSS sources:', tnow-tlast)
         tlast = tnow
     else:
         cat = []
@@ -857,10 +838,10 @@ def stage_srcs(coimgs=None, cons=None,
     else:
         sdss_xy = None
 
-    print 'Rendering detection maps...'
+    print('Rendering detection maps...')
     detmaps, detivs = detection_maps(tims, targetwcs, bands, mp)
     tnow = Time()
-    print '[parallel srcs] Detmaps:', tnow-tlast
+    print('[parallel srcs] Detmaps:', tnow-tlast)
     tlast = tnow
 
     # Median-smooth detection maps
@@ -868,11 +849,11 @@ def stage_srcs(coimgs=None, cons=None,
     smoos = mp.map(_median_smooth_detmap,
                    [(m,iv,binning) for m,iv in zip(detmaps, detivs)])
     tnow = Time()
-    print '[parallel srcs] Median-filter detmaps:', tnow-tlast
+    print('[parallel srcs] Median-filter detmaps:', tnow-tlast)
     tlast = tnow
 
-    print 'Bands:', bands
-    print 'detmaps:', len(detmaps)
+    print('Bands:', bands)
+    print('detmaps:', len(detmaps))
 
     for i,(detmap,detiv,smoo) in enumerate(zip(detmaps, detivs, smoos)):
         # Subtract binned median image.
@@ -911,7 +892,7 @@ def stage_srcs(coimgs=None, cons=None,
 
 
     # SED-matched detections
-    print 'Running source detection at', nsigma, 'sigma'
+    print('Running source detection at', nsigma, 'sigma')
     SEDs = sed_matched_filters(bands)
     Tnew,newcat,hot = run_sed_matched_filters(SEDs, bands, detmaps, detivs,
                                               sdss_xy, targetwcs, nsigma=nsigma,
@@ -939,7 +920,7 @@ def stage_srcs(coimgs=None, cons=None,
         del detivs
 
     tnow = Time()
-    print '[serial srcs] Peaks:', tnow-tlast
+    print('[serial srcs] Peaks:', tnow-tlast)
     tlast = tnow
 
     if plots:
@@ -979,19 +960,18 @@ def stage_srcs(coimgs=None, cons=None,
     del hot
 
     for i,Isrcs in enumerate(blobsrcs):
-        #print 'Isrcs dtype', Isrcs.dtype
         if not (Isrcs.dtype in [int, np.int64]):
-            print 'Isrcs dtype', Isrcs.dtype
-            print 'i:', i
-            print 'Isrcs:', Isrcs
-            print 'blobslice:', blobslices[i]
+            print('Isrcs dtype', Isrcs.dtype)
+            print('i:', i)
+            print('Isrcs:', Isrcs)
+            print('blobslice:', blobslices[i])
 
     cat.freezeAllParams()
     tractor = Tractor(tims, cat)
     tractor.freezeParam('images')
 
     tnow = Time()
-    print '[serial srcs] Blobs:', tnow-tlast
+    print('[serial srcs] Blobs:', tnow-tlast)
     tlast = tnow
 
     keys = ['T',
@@ -1033,7 +1013,6 @@ def set_source_radii(bands, orig_wcsxy0, tims, cat, minsigma, minradius=3):
                     ])
 
     profiles = np.array(profiles)
-    print 'profiles', profiles.dtype, profiles.shape
 
     minradius = 3
     pro = np.max(profiles, axis=0)
@@ -1050,7 +1029,6 @@ def set_source_radii(bands, orig_wcsxy0, tims, cat, minsigma, minradius=3):
         if len(ii) == 0:
             continue
         src.fixedRadius = max(minradius, 1 + ii[-1])
-        #print 'Nsigma', nsigmas, 'radius', src.fixedRadius
 
 def stage_fitblobs(T=None,
                    blobsrcs=None, blobslices=None, blobs=None,
@@ -1137,7 +1115,7 @@ def stage_fitblobs(T=None,
     T.orig_dec = T.dec.copy()
 
     tnow = Time()
-    print '[serial fitblobs]:', tnow-tlast
+    print('[serial fitblobs]:', tnow-tlast)
     tlast = tnow
 
     keepblobs = None
@@ -1179,7 +1157,7 @@ def stage_fitblobs(T=None,
     # to allow debugpool to only queue tasks one at a time
     iter = iterwrapper(iter, len(blobsrcs))
     R = mp.map(_bounce_one_blob, iter)
-    print '[parallel fitblobs] Fitting sources took:', Time()-tlast
+    print('[parallel fitblobs] Fitting sources took:', Time()-tlast)
 
     return dict(fitblobs_R=R, tims=tims, ps=ps, blobs=blobs,
                 blobslices=blobslices, blobsrcs=blobsrcs)
@@ -1205,17 +1183,8 @@ def stage_fitblobs_finish(
     # one_blob can reduce the number and change the types of sources!
     # Reorder the sources here...
     R = fitblobs_R
-
-    # print 'R:'
-    # for rr in R:
-    #     print
-    #     for r in rr:
-    #         print r
-    #     print
-
     assert(len(R) == len(blobsrcs))
 
-    ##
     if write_metrics:
         # Drop blobs that failed.
         good_blobs = np.array([i for i,r in enumerate(R) if r is not None])
@@ -1274,11 +1243,11 @@ def stage_fitblobs_finish(
         fn = os.path.join(metricsdir, 'all-models-%s.fits' % brickname)
         TT.writeto(fn, header=hdr)
         del TT
-        print 'Wrote', fn
+        print('Wrote', fn)
 
         fn = os.path.join(metricsdir, 'performance-%s.pickle' % brickname)
         pickle_to_file(allperfs, fn)
-        print 'Wrote', fn
+        print('Wrote', fn)
 
     # Drop now-empty blobs.
     R = [r for r in R if r is not None and len(r[0])]
@@ -1303,8 +1272,8 @@ def stage_fitblobs_finish(
     del fitblobs_R
 
     assert(len(T) == len(newcat))
-    print 'Old catalog:', len(cat)
-    print 'New catalog:', len(newcat)
+    print('Old catalog:', len(cat))
+    print('New catalog:', len(newcat))
     cat = Catalog(*newcat)
     tractor.catalog = cat
     assert(cat.numberOfParams() == len(srcivs))
@@ -1341,7 +1310,7 @@ def stage_fitblobs_finish(
     if write_metrics:
         fn = os.path.join(metricsdir, 'blobs-%s.fits.gz' % brickname)
         fitsio.write(fn, newblobs, header=version_header, clobber=True)
-        print 'Wrote', fn
+        print('Wrote', fn)
 
     del newblobs
     del ublob
@@ -1361,10 +1330,6 @@ def stage_fitblobs_finish(
 
     invvars = srcivs
 
-    #print 'New catalog:'
-    #for src in cat:
-    #    print '  ', src
-
     rtn = dict(fitblobs_R = None)
     for k in ['tractor', 'cat', 'invvars', 'T', 'allbands']:
         rtn[k] = locals()[k]
@@ -1382,8 +1347,9 @@ def _blob_iter(blobslices, blobsrcs, blobs,
         bx0,bx1 = sx.start, sx.stop
         blobh,blobw = by1 - by0, bx1 - bx0
 
-        print 'Blob', iblob+1, 'of', len(blobslices), ':',
-        print len(Isrcs), 'sources, size', blobw, 'x', blobh, 'center', (bx0+bx1)/2, (by0+by1)/2
+        print('Blob', iblob+1, 'of', len(blobslices), ':',
+              len(Isrcs), 'sources, size', blobw, 'x', blobh,
+              'center', (bx0+bx1)/2, (by0+by1)/2)
 
         rr,dd = targetwcs.pixelxy2radec([bx0,bx0,bx1,bx1],[by0,by1,by1,by0])
 
@@ -1425,7 +1391,7 @@ def _bounce_one_blob(X):
         return _one_blob(X)
     except:
         import traceback
-        print 'Exception in _one_blob: (iblob = %i)' % (X[0])
+        print('Exception in _one_blob: (iblob = %i)' % (X[0]))
         traceback.print_exc()
         #print 'CARRYING ON...'
         #return None
@@ -1456,7 +1422,8 @@ def _one_blob((iblob, Isrcs, targetwcs, bx0, by0, blobw, blobh, blobmask, subtim
     Fits sources contained within a "blob" of pixels.
     '''
 
-    print 'Fitting blob', (iblob+1), ':', len(Isrcs), 'sources, size', blobw, 'x', blobh, len(subtimargs), 'images'
+    print('Fitting blob', (iblob+1), ':', len(Isrcs), 'sources, size',
+          blobw, 'x', blobh, len(subtimargs), 'images')
 
     plots2 = False
 
@@ -1472,7 +1439,6 @@ def _one_blob((iblob, Isrcs, targetwcs, bx0, by0, blobw, blobh, blobmask, subtim
                                        np.array([src.getPosition().dec for src in srcs]))
     started_in_blob = blobmask[np.clip(np.round(y0-1).astype(int), 0, blobh-1),
                                np.clip(np.round(x0-1).astype(int), 0, blobw-1)]
-    #print 'Sources started in blob: ', started_in_blob
 
     subtims = []
     for (subimg, subie, twcs, subwcs, pcal,
@@ -1484,7 +1450,7 @@ def _one_blob((iblob, Isrcs, targetwcs, bx0, by0, blobw, blobh, blobmask, subtim
         try:
             Yo,Xo,Yi,Xi,rims = resample_with_wcs(subsubwcs, subtarget, [], 2)
         except OverlapError:
-            print 'No overlap'
+            print('No overlap')
             continue
         if len(Yo) == 0:
             continue
@@ -1514,7 +1480,7 @@ def _one_blob((iblob, Isrcs, targetwcs, bx0, by0, blobw, blobh, blobmask, subtim
             try:
                 Yo,Xo,Yi,Xi,rims = resample_with_wcs(subtarget, subsubwcs, [], 2)
             except OverlapError:
-                print 'No overlap'
+                print('No overlap')
                 continue
             subtim.resamp = (Yo, Xo, Yi, Xi)
 
@@ -1537,8 +1503,6 @@ def _one_blob((iblob, Isrcs, targetwcs, bx0, by0, blobw, blobh, blobmask, subtim
             btims.append(tim)
         btr = Tractor(btims, subcat)
         btr.freezeParam('images')
-        # print 'Optimizing band', b, ':', btr
-        # print Time()-tband
         if useCeres:
             btr.optimize_forced_photometry(alphas=alphas, shared_params=False,
                                            use_ceres=True, BW=8, BH=8, wantims=False)
@@ -1548,11 +1512,10 @@ def _one_blob((iblob, Isrcs, targetwcs, bx0, by0, blobw, blobh, blobmask, subtim
                                                wantims=False)
             except:
                 import traceback
-                print 'Warning: Optimize_forced_photometry failed:'
+                print('Warning: Optimize_forced_photometry failed:')
                 traceback.print_exc()
                 # carry on
 
-        # print 'Band', b, 'took', Time()-tband
     subcat.thawAllRecursive()
 
     if plots:
@@ -1601,22 +1564,22 @@ def _one_blob((iblob, Isrcs, targetwcs, bx0, by0, blobw, blobh, blobmask, subtim
                 mod = src.getModelPatch(tim)
                 if mod is not None and mod.patch is not None:
                     if not np.all(np.isfinite(mod.patch)):
-                        print 'Non-finite mod patch'
-                        print 'source:', src
-                        print 'tim:', tim
-                        print 'PSF:', tim.getPsf()
+                        print('Non-finite mod patch')
+                        print('source:', src)
+                        print('tim:', tim)
+                        print('PSF:', tim.getPsf())
                     assert(np.all(np.isfinite(mod.patch)))
                     mod = _clip_model_to_blob(mod, sh, ie)
                     mod.addTo(tim.getImage(), scale=-1)
                 mods.append(mod)
 
             initial_models.append(mods)
-        #print 'Subtracting initial models:', Time()-tt
 
         # For sources, in decreasing order of brightness
         for numi,i in enumerate(Ibright):
             #tsrc = Time()
-            print 'Fitting source', i, '(%i of %i in blob)' % (numi, len(Ibright))
+            print('Fitting source', i, '(%i of %i in blob)' %
+                  (numi, len(Ibright)))
             src = subcat[i]
 
             # Add this source's initial model back in.
@@ -1631,7 +1594,7 @@ def _one_blob((iblob, Isrcs, targetwcs, bx0, by0, blobw, blobh, blobmask, subtim
                 # Make the subimages the same size as the modelMasks.
                 srctims = []
                 modelMasks = []
-                print 'Big blob: trimming:'
+                print('Big blob: trimming:')
                 for tim,imods in zip(subtims, initial_models):
                     mod = imods[i]
                     if mod is None:
@@ -1661,7 +1624,7 @@ def _one_blob((iblob, Isrcs, targetwcs, bx0, by0, blobw, blobh, blobmask, subtim
                     srctim.x0 = x0
                     srctim.y0 = y0
                     srctims.append(srctim)
-                    print '  ', tim.shape, 'to', srctim.shape
+                    print('  ', tim.shape, 'to', srctim.shape)
 
                 if plots:
                     bx1 = bx0 + blobw
@@ -1710,7 +1673,6 @@ def _one_blob((iblob, Isrcs, targetwcs, bx0, by0, blobw, blobh, blobmask, subtim
                     if mod is not None:
                         d[src] = Patch(mod.x0, mod.y0, mod.patch != 0)
 
-            #srctractor = BlobTractor(srctims, [src])
             srctractor = Tractor(srctims, [src])
             srctractor.freezeParams('images')
             srctractor.setModelMasks(modelMasks)
@@ -1735,13 +1697,13 @@ def _one_blob((iblob, Isrcs, targetwcs, bx0, by0, blobw, blobh, blobmask, subtim
             cpu0 = time.clock()
             for step in range(50):
                 dlnp,X,alpha = srctractor.optimize(**optargs)
-                #print 'dlnp:', dlnp, 'src', src
+                #print('dlnp:', dlnp, 'src', src)
 
                 if DEBUG:
                     params.append((srctractor.getLogProb(), srctractor.getParams()))
 
                 if time.clock()-cpu0 > max_cpu_per_source:
-                    print 'Warning: Exceeded maximum CPU time for source'
+                    print('Warning: Exceeded maximum CPU time for source')
                     break
 
                 if dlnp < 0.1:
@@ -1798,8 +1760,8 @@ def _one_blob((iblob, Isrcs, targetwcs, bx0, by0, blobw, blobh, blobmask, subtim
             srctractor.setModelMasks(None)
             disable_galaxy_cache()
 
-            #print 'Fitting source took', Time()-tsrc
-            #print src
+            #print('Fitting source took', Time()-tsrc)
+            #print(src)
 
         for tim,img in zip(subtims, orig_timages):
             tim.data = img
@@ -1825,21 +1787,21 @@ def _one_blob((iblob, Isrcs, targetwcs, bx0, by0, blobw, blobh, blobmask, subtim
 
         for numi,i in enumerate(Ibright):
             #tsrc = Time()
-            #print 'Fitting source', i, '(%i of %i in blob)' % (numi, len(Ibright))
+            #print('Fitting source', i, '(%i of %i in blob)' % (numi, len(Ibright)))
             subcat.freezeAllBut(i)
 
             max_cpu_per_source = 60.
             cpu0 = time.clock()
             for step in range(50):
                 dlnp,X,alpha = subtr.optimize(**optargs)
-                # print 'dlnp:', dlnp
+                # print('dlnp:', dlnp)
                 if time.clock()-cpu0 > max_cpu_per_source:
-                    print 'Warning: Exceeded maximum CPU time for source'
+                    print('Warning: Exceeded maximum CPU time for source')
                     break
                 if dlnp < 0.1:
                     break
-            #print 'Fitting source took', Time()-tsrc
-            # print subcat[i]
+            #print('Fitting source took', Time()-tsrc)
+            # print(subcat[i])
 
         subtr.setModelMasks(None)
         disable_galaxy_cache()
@@ -1852,23 +1814,21 @@ def _one_blob((iblob, Isrcs, targetwcs, bx0, by0, blobw, blobh, blobmask, subtim
         #tfit = Time()
         # Optimize all at once?
         subcat.thawAllParams()
-        #print 'Optimizing:', subtr
+        #print('Optimizing:', subtr)
         # subtr.printThawedParams()
         for step in range(20):
             dlnp,X,alpha = subtr.optimize(**optargs)
-            # print 'dlnp:', dlnp
             if dlnp < 0.1:
                 break
-
-        #print 'Simultaneous fit took:', Time()-tfit
+        #print('Simultaneous fit took:', Time()-tfit)
 
         if plots:
             plotmods.append(subtr.getModelImages())
             plotmodnames.append('All Sources')
 
-
     if plots:
-        _plot_mods(subtims, plotmods, plotmodnames, bands, None, None, bslc, blobw, blobh, ps)
+        _plot_mods(subtims, plotmods, plotmodnames, bands, None, None,
+                   bslc, blobw, blobh, ps)
 
     # FIXME -- for large blobs, fit strata of sources simultaneously?
 
@@ -1911,10 +1871,10 @@ def _one_blob((iblob, Isrcs, targetwcs, bx0, by0, blobw, blobh, blobmask, subtim
             mod = src.getModelPatch(tim)
             if mod is not None and mod.patch is not None:
                 if not np.all(np.isfinite(mod.patch)):
-                    print 'Non-finite mod patch'
-                    print 'source:', src
-                    print 'tim:', tim
-                    print 'PSF:', tim.getPsf()
+                    print('Non-finite mod patch')
+                    print('source:', src)
+                    print('tim:', tim)
+                    print('PSF:', tim.getPsf())
                 assert(np.all(np.isfinite(mod.patch)))
 
                 # Blank out pixels that are outside the blob ROI.
@@ -1923,7 +1883,7 @@ def _one_blob((iblob, Isrcs, targetwcs, bx0, by0, blobw, blobh, blobmask, subtim
             mods.append(mod)
 
         initial_models.append(mods)
-    # print 'Subtracting initial models:', Time()-tt
+    # print('Subtracting initial models:', Time()-tt)
 
     all_models = [{} for i in range(len(Isrcs))]
     performance = [[] for i in range(len(Isrcs))]
@@ -1933,7 +1893,8 @@ def _one_blob((iblob, Isrcs, targetwcs, bx0, by0, blobw, blobh, blobmask, subtim
     for numi,i in enumerate(Ibright):
 
         src = subcat[i]
-        #print 'Model selection for source %i of %i in blob' % (numi, len(Ibright))
+        #print('Model selection for source %i of %i in blob' %
+        # (numi, len(Ibright)))
 
         # if plots:
         #     plotmods = []
@@ -1951,23 +1912,20 @@ def _one_blob((iblob, Isrcs, targetwcs, bx0, by0, blobw, blobh, blobmask, subtim
             modelMasks.append(d)
             mod = imods[i]
             if mod is not None:
-                print 'Set modelMask:', mod.patch.shape, 'for', src
+                print('Set modelMask:', mod.patch.shape, 'for', src)
                 d[src] = Patch(mod.x0, mod.y0, mod.patch != 0)
 
-        #srctractor = BlobTractor(subtims, [src])
         srctractor = Tractor(subtims, [src])
         srctractor.freezeParams('images')
         srctractor.setModelMasks(modelMasks)
         enable_galaxy_cache()
 
         lnp0 = srctractor.getLogProb()
-        # print 'lnp0:', lnp0
 
         srccat = srctractor.getCatalog()
         srccat[0] = None
 
         lnp_null = srctractor.getLogProb()
-        # print 'Removing the source: dlnp', lnp_null - lnp0
 
         lnps = dict(ptsrc=None, dev=None, exp=None, comp=None,
                     none=lnp_null)
@@ -2017,11 +1975,11 @@ def _one_blob((iblob, Isrcs, targetwcs, bx0, by0, blobw, blobh, blobmask, subtim
 
         allflags = {}
         for name,newsrc in trymodels:
-            print 'Trying model:', name
+            print('Trying model:', name)
             if name == 'comp' and newsrc is None:
                 newsrc = comp = FixedCompositeGalaxy(src.getPosition(), src.getBrightness(),
                                                      0.5, exp.getShape(), dev.getShape()).copy()
-            #print 'New source:', newsrc
+            #print('New source:', newsrc)
             srccat[0] = newsrc
 
             # Use the same initial modelMasks as the original source; we'll do a second
@@ -2032,15 +1990,14 @@ def _one_blob((iblob, Isrcs, targetwcs, bx0, by0, blobw, blobh, blobmask, subtim
                 mm.append(d)
                 try:
                     d[newsrc] = mim[src]
-                    print 'Updated modelmask', mim[src].shape, 'for', newsrc
                 except KeyError:
                     pass
             srctractor.setModelMasks(mm)
             enable_galaxy_cache()
 
             #lnp = srctractor.getLogProb()
-            #print 'Initial log-prob:', lnp
-            #print 'vs original src: ', lnp - lnp0
+            #print('Initial log-prob:', lnp)
+            #print('vs original src: ', lnp - lnp0)
 
             if plots and False:
                 # Grid of derivatives.
@@ -2054,13 +2011,13 @@ def _one_blob((iblob, Isrcs, targetwcs, bx0, by0, blobw, blobh, blobmask, subtim
             cpu0 = time.clock()
             p0 = newsrc.getParams()
             for step in range(50):
-                print 'optimizing:', newsrc
+                print('optimizing:', newsrc)
                 dlnp,X,alpha = srctractor.optimize(**optargs)
-                print '  dlnp:', dlnp, 'new src', newsrc
+                print('  dlnp:', dlnp, 'new src', newsrc)
                 cpu = time.clock()
                 performance[i].append((name,'A',step,dlnp,alpha,cpu-cpu0))
                 if cpu-cpu0 > max_cpu_per_source:
-                    print 'Warning: Exceeded maximum CPU time for source'
+                    print('Warning: Exceeded maximum CPU time for source')
                     thisflags |= FLAG_CPU_A
                     break
                 if dlnp < 0.1:
@@ -2068,13 +2025,7 @@ def _one_blob((iblob, Isrcs, targetwcs, bx0, by0, blobw, blobh, blobmask, subtim
             else:
                 thisflags |= FLAG_STEPS_A
 
-            print 'New source (after first round optimization):', newsrc
-            # lnp = srctractor.getLogProb()
-            # print 'Optimized log-prob:', lnp
-            # print 'Blob', iblob, 'src', i
-            # print 'Fit', name, ': cpu time', time.clock() - cpu0, 'in', step, 'steps'
-            # print 'time:', Time()-tt0
-            # print 'src:', newsrc
+            print('New source (after first round optimization):', newsrc)
 
             if plots and False:
                 plt.clf()
@@ -2095,9 +2046,9 @@ def _one_blob((iblob, Isrcs, targetwcs, bx0, by0, blobw, blobh, blobmask, subtim
                 mod = src.getModelPatch(tim)
                 if mod is None:
                     continue
-                print 'After first-round fit: model is', mod.shape
+                print('After first-round fit: model is', mod.shape)
                 mod = _clip_model_to_blob(mod, tim.shape, tim.getInvError())
-                print 'Clipped to', mod.shape
+                print('Clipped to', mod.shape)
                 d[newsrc] = Patch(mod.x0, mod.y0, mod.patch != 0)
             srctractor.setModelMasks(mm)
             enable_galaxy_cache()
@@ -2106,23 +2057,17 @@ def _one_blob((iblob, Isrcs, targetwcs, bx0, by0, blobw, blobh, blobmask, subtim
             cpu0 = time.clock()
             for step in range(50):
                 dlnp,X,alpha = srctractor.optimize(**optargs)
-                #print '  dlnp:', dlnp, 'new src', newsrc
+                #print('  dlnp:', dlnp, 'new src', newsrc)
                 cpu = time.clock()
                 performance[i].append((name,'B',step,dlnp,alpha,cpu-cpu0))
                 if cpu-cpu0 > max_cpu_per_source:
-                    print 'Warning: Exceeded maximum CPU time for source'
+                    print('Warning: Exceeded maximum CPU time for source')
                     thisflags |= FLAG_CPU_B
                     break
                 if dlnp < 0.1:
                     break
             else:
                 thisflags |= FLAG_STEPS_B
-
-            # print 'New source (after optimization):', newsrc
-            # print 'Optimized log-prob:', lnp
-            # print 'vs original src:   ', lnp - lnp0
-            #print 'Refit', name, ': cpu time', time.clock() - cpu0
-            #print 'src:', newsrc
 
             if plots and False:
                 plt.clf()
@@ -2157,10 +2102,8 @@ def _one_blob((iblob, Isrcs, targetwcs, bx0, by0, blobw, blobh, blobmask, subtim
             for imod,modname in enumerate(mods.keys()):
                 srccat[0] = mods[modname]
 
-                print 'Plotting model for blob', iblob, 'source', i, ':', modname
-                print srccat[0]
-
-                print 'cat:', srctractor.getCatalog()
+                print('Plotting model for blob', iblob, 'source', i, ':', modname)
+                print(srccat[0])
 
                 plt.subplot(rows, cols, imod+1)
                 if modname != 'none':
@@ -2220,50 +2163,35 @@ def _one_blob((iblob, Isrcs, targetwcs, bx0, by0, blobw, blobh, blobmask, subtim
             # This is the "fractional" upgrade threshold for ptsrc->dev/exp:
             # 2% of ptsrc vs nothing
             fdlnp = 0.02 * (plnps['ptsrc'] - plnps['none'])
-
-            #print 'dlnp:', dlnp
-            #print 'fractional dlnp:', fdlnp
-            #print 'n sigma:', np.sqrt(2.*(plnps['ptsrc'] - plnps['none']))
             dlnp = max(dlnp, fdlnp)
 
             expdiff = plnps['exp'] - plnps[keepmod]
             devdiff = plnps['dev'] - plnps[keepmod]
             if expdiff > dlnp or devdiff > dlnp:
                 if expdiff > devdiff:
-                    #print 'Upgrading from ptsrc to exp: diff', expdiff
+                    #print('Upgrading from ptsrc to exp: diff', expdiff)
                     keepsrc = exp
                     keepmod = 'exp'
                 else:
-                    #print 'Upgrading from ptsrc to dev: diff', devdiff
+                    #print('Upgrading from ptsrc to dev: diff', devdiff)
                     keepsrc = dev
                     keepmod = 'dev'
 
                 diff = plnps['comp'] - plnps[keepmod]
                 if diff > dlnp:
-                    #print 'Upgrading for dev/exp to composite: diff', diff
+                    #print('Upgrading for dev/exp to composite: diff', diff)
                     keepsrc = comp
                     keepmod = 'comp'
             else:
-                #print 'Keeping ptsrc model:', expdiff, devdiff, '<', devexp_dlnp
+                #print('Keeping ptsrc model:', expdiff, devdiff, '<', devexp_dlnp)
                 pass
         else:
-            #print
-            #print 'Dropping source:', src
-            #srccat[0] = src
-            #srctractor.getLogProb()
+            #print('Dropping source:', src)
             pass
 
         # Penalized delta chi-squareds
         delta_chisqs.append([-2. * (plnps[k] - plnps[keepmod])
                          for k in ['none', 'ptsrc', 'dev', 'exp', 'comp']])
-
-        # if keepmod != oldmodel:
-        #     print 'Switching source!'
-        #     print 'Old:', src
-        #     print 'New:', keepsrc
-        # else:
-        #     print 'Not switching source'
-        #     print 'Old:', src
 
         subcat[i] = keepsrc
         flags[i] = allflags.get(keepmod, 0)
@@ -2284,7 +2212,7 @@ def _one_blob((iblob, Isrcs, targetwcs, bx0, by0, blobw, blobh, blobmask, subtim
     del orig_timages
     del initial_models
 
-    #print 'Blob finished model selection:', Time()-tlast
+    #print('Blob finished model selection:', Time()-tlast)
     #tlast = Time()
 
     if plots:
@@ -2315,7 +2243,7 @@ def _one_blob((iblob, Isrcs, targetwcs, bx0, by0, blobw, blobh, blobmask, subtim
         #tfit = Time()
         # Optimize all at once?
         subcat.thawAllParams()
-        #print 'Optimizing:', subtr
+        #print('Optimizing:', subtr)
         #subtr.printThawedParams()
 
         flags |= FLAG_TRIED_C
@@ -2323,18 +2251,17 @@ def _one_blob((iblob, Isrcs, targetwcs, bx0, by0, blobw, blobh, blobmask, subtim
         cpu0 = time.clock()
         for step in range(50):
             dlnp,X,alpha = subtr.optimize(**optargs)
-            #print 'dlnp:', dlnp
             cpu = time.clock()
             performance[0].append(('All','J',step,dlnp,alpha,cpu-cpu0))
             if cpu-cpu0 > max_cpu:
-                print 'Warning: Exceeded maximum CPU time for source'
+                print('Warning: Exceeded maximum CPU time for source')
                 flags |= FLAG_CPU_C
                 break
             if dlnp < 0.1:
                 break
-        #print 'Simultaneous fit took:', Time()-tfit
+        #print('Simultaneous fit took:', Time()-tfit)
 
-    #print 'Blob finished re-opt:', Time()-tlast
+    #print('Blob finished re-opt:', Time()-tlast)
     #tlast = Time()
 
     # Variances
@@ -2342,22 +2269,17 @@ def _one_blob((iblob, Isrcs, targetwcs, bx0, by0, blobw, blobh, blobmask, subtim
     subcat.thawAllRecursive()
     subcat.freezeAllParams()
     for isub in range(len(srcs)):
-        #print 'Variances for source', isub
         subcat.thawParam(isub)
         src = subcat[isub]
-        #print 'Source', src
         if src is None:
             subcat.freezeParam(isub)
             continue
-        #print 'Params:', src.getParamNames()
 
         if isinstance(src, (DevGalaxy, ExpGalaxy)):
             src.shape = EllipseE.fromEllipseESoft(src.shape)
         elif isinstance(src, FixedCompositeGalaxy):
             src.shapeExp = EllipseE.fromEllipseESoft(src.shapeExp)
             src.shapeDev = EllipseE.fromEllipseESoft(src.shapeDev)
-
-        #print 'Converted ellipse:', src
 
         allderivs = subtr.getDerivs()
         for iparam,derivs in enumerate(allderivs):
@@ -2372,7 +2294,7 @@ def _one_blob((iblob, Isrcs, targetwcs, bx0, by0, blobw, blobh, blobmask, subtim
             srcinvvars[isub].append(dchisq)
         assert(len(srcinvvars[isub]) == subcat[isub].numberOfParams())
         subcat.freezeParam(isub)
-    #print 'Blob variances:', Time()-tlast
+    #print('Blob variances:', Time()-tlast)
     #tlast = Time()
 
     # Check for sources with zero inverse-variance -- I think these
@@ -2380,13 +2302,12 @@ def _one_blob((iblob, Isrcs, targetwcs, bx0, by0, blobw, blobh, blobmask, subtim
     # sources can get scattered outside the blob.
     keep = []
     for i,(src,ivar) in enumerate(zip(srcs, srcinvvars)):
-        #print 'ivar', ivar
         # Arbitrarily look at the first element (RA)?
         if ivar[0] == 0.:
             continue
         keep.append(i)
     if len(keep) < len(srcs):
-        print 'Keeping', len(keep), 'of', len(srcs), 'sources with non-zero ivar'
+        print('Keeping', len(keep), 'of', len(srcs), 'sources with non-zero ivar')
         Isrcs        = [Isrcs[i]        for i in keep]
         srcs         = [srcs[i]         for i in keep]
         srcinvvars   = [srcinvvars[i]   for i in keep]
@@ -2479,13 +2400,11 @@ def _one_blob((iblob, Isrcs, targetwcs, bx0, by0, blobw, blobh, blobmask, subtim
                                        np.array([src.getPosition().dec for src in srcs]))
     finished_in_blob = blobmask[np.clip(np.round(y1-1).astype(int), 0, blobh-1),
                                 np.clip(np.round(x1-1).astype(int), 0, blobw-1)]
-    #print 'Sources finished in blob:', finished_in_blob
-
     assert(len(finished_in_blob) == len(srcs))
     assert(len(finished_in_blob) == len(started_in_blob))
 
-    #print 'Blob finished metrics:', Time()-tlast
-    print 'Blob', iblob+1, 'finished' #:', Time()-tlast
+    #print('Blob finished metrics:', Time()-tlast)
+    print('Blob', iblob+1, 'finished') #:', Time()-tlast
 
     return (Isrcs, srcs, srcinvvars, fracflux, rchi2, delta_chisqs, fracmasked, flags,
             all_models, performance, fracin, started_in_blob, finished_in_blob)
@@ -2531,17 +2450,14 @@ def stage_coadds(bands=None, version_header=None, targetwcs=None,
     ccds.brick_y1 = np.ceil (np.max(y, axis=1)).astype(np.int16)
     ccds.sig1 = np.array([tim.sig1 for tim in tims])
     ccds.writeto(fn)
-    print 'Wrote', fn
-
-    #for tim in tims:
-    #    print 'Tim', tim.name, 'PSF', tim.getPsf()
+    print('Wrote', fn)
 
     tnow = Time()
-    print '[serial coadds]:', tnow-tlast
+    print('[serial coadds]:', tnow-tlast)
     tlast = tnow
     mods = mp.map(_get_mod, [(tim, cat) for tim in tims])
     tnow = Time()
-    print '[parallel coadds] Getting model images:', tnow-tlast
+    print('[parallel coadds] Getting model images:', tnow-tlast)
     tlast = tnow
 
     W = targetwcs.get_width()
@@ -2587,7 +2503,7 @@ def stage_coadds(bands=None, version_header=None, targetwcs=None,
         cmd = ('pngtopnm %s | pnmtojpeg -quality 90 > %s' % (tmpfn, jpegfn))
         os.system(cmd)
         os.unlink(tmpfn)
-        print 'Wrote', jpegfn
+        print('Wrote', jpegfn)
 
     if plots:
         plt.clf()
@@ -2629,7 +2545,7 @@ def stage_coadds(bands=None, version_header=None, targetwcs=None,
                 cc = 'm'
                 ec = ['m', 'c']
             else:
-                print 'Unknown type:', src
+                print('Unknown type:', src)
                 continue
 
             for e,c in zip(ee, ec):
@@ -2654,7 +2570,7 @@ def stage_coadds(bands=None, version_header=None, targetwcs=None,
 
 
     tnow = Time()
-    print '[serial coadds] Aperture photometry, wrap-up', tnow-tlast
+    print('[serial coadds] Aperture photometry, wrap-up', tnow-tlast)
 
     return dict(T=T, AP=C.AP, apertures_pix=apertures,
                 apertures_arcsec=apertures_arcsec)
@@ -2677,7 +2593,7 @@ def stage_wise_forced(
 
     roiradec = [brick.ra1, brick.ra2, brick.dec1, brick.dec2]
     tiles = unwise_tiles_touching_wcs(targetwcs)
-    print 'Cut to', len(tiles), 'unWISE tiles'
+    print('Cut to', len(tiles), 'unWISE tiles')
 
     wcat = []
     for src in cat:
@@ -2690,11 +2606,11 @@ def stage_wise_forced(
                               unwise_dir=unwise_dir, use_ceres=useCeres)
     except:
         import traceback
-        print 'unwise_forcedphot failed:'
+        print('unwise_forcedphot failed:')
         traceback.print_exc()
 
         if useCeres:
-            print 'Trying without Ceres...'
+            print('Trying without Ceres...')
             W = unwise_forcedphot(wcat, tiles, roiradecbox=roiradec,
                                   unwise_dir=unwise_dir, use_ceres=False)
 
@@ -2775,8 +2691,6 @@ def stage_writecat(
     if AP is not None:
         # How many apertures?
         ap = AP.get('apflux_img_%s' % bands[0])
-        #print 'Aperture flux shape:', ap.shape
-        #print 'T:', len(TT)
         n,A = ap.shape
 
         TT.decam_apflux = np.zeros((len(TT), len(allbands), A), np.float32)
@@ -2870,10 +2784,7 @@ def stage_writecat(
 
         for band in [1,2,3,4]:
             dm = vega_to_ab['w%i' % band]
-            #print 'WISE', band
-            #print 'dm', dm
             fluxfactor = 10.** (dm / -2.5)
-            #print 'flux factor', fluxfactor
             f = WISE.get('w%i_nanomaggies' % band)
             f *= fluxfactor
             f = WISE.get('w%i_nanomaggies_ivar' % band)
@@ -2903,28 +2814,18 @@ def stage_writecat(
     dirnm = os.path.dirname(fn)
     try_makedirs(dirnm)
 
-    #T2.writeto(fn, header=hdr)
-    #print 'Wrote', fn
-
-    print 'Reading SFD maps...'
-
+    print('Reading SFD maps...')
     sfd = SFDMap()
     filts = ['%s %s' % ('DES', f) for f in allbands]
     wisebands = ['WISE W1', 'WISE W2', 'WISE W3', 'WISE W4']
     ebv,ext = sfd.extinction(filts + wisebands, T2.ra, T2.dec, get_ebv=True)
     ext = ext.astype(np.float32)
-
     decam_extinction = ext[:,:len(allbands)]
     wise_extinction = ext[:,len(allbands):]
     T2.ebv = ebv.astype(np.float32)
-
     T2.decam_mw_transmission = 10.**(-decam_extinction / 2.5)
     if WISE is not None:
         T2.wise_mw_transmission  = 10.**(-wise_extinction  / 2.5)
-
-    # 'tx', 'ty',
-    # 'sdss_treated_as_pointsource',
-    # 'decam_flags',
 
     T2.dchisq[T2.dchisq != 0] *= -1.
 
@@ -3004,9 +2905,6 @@ def stage_writecat(
             j = cclower.index(c)
             cols[i] = cc[j]
 
-    #T2.writeto(fn, header=hdr, primheader=version_header, columns=cols)
-    # 'primheader' is not written in Astrometry.net 0.53; we write ourselves.
-
     # fill in any empty columns (eg, SDSS columns in areas outside the
     # footprint)
     fitsB = np.uint8
@@ -3062,12 +2960,10 @@ def stage_writecat(
     Tcols = T2.get_columns()
     for c in cols:
         if not c in Tcols:
-            print 'Filling in missing column', c
+            print('Filling in missing column', c)
             if c in coltypes:
-                print '  type', coltypes[c]
                 T2.set(c, np.zeros(len(T2), coltypes[c]))
             if c in arrtypes:
-                print '  array type', arrtypes[c]
                 T2.set(c, np.zeros((len(T2),5), arrtypes[c]))
 
     # Blank out all SDSS fields for sources that have moved too much.
@@ -3077,7 +2973,7 @@ def stage_writecat(
     # 1.5 arcsec
     maxd2 = np.deg2rad(1.5 / 3600.)**2
     blankout = np.flatnonzero((T2.sdss_ra != 0) * (d2 > maxd2))
-    print 'Blanking out', len(blankout), 'SDSS no-longer-matches'
+    print('Blanking out', len(blankout), 'SDSS no-longer-matches')
     if len(blankout):
         Tcols = T2.get_columns()
         for c in Tcols:
@@ -3091,7 +2987,7 @@ def stage_writecat(
                   for a in arrays]
         fitsio.write(fn, None, header=primhdr, clobber=True)
         fitsio.write(fn, arrays, names=cols, header=hdr)
-        print 'Wrote', fn
+        print('Wrote', fn)
 
     return dict(T2=T2)
 
@@ -3220,7 +3116,7 @@ def run_brick(brick, radec=None, pixscale=0.262,
         kwargs.update(forceall=True)
 
     if radec is not None:
-        print 'RA,Dec:', radec
+        print('RA,Dec:', radec)
         assert(len(radec) == 2)
         ra,dec = radec
         try:
@@ -3233,7 +3129,7 @@ def run_brick(brick, radec=None, pixscale=0.262,
         except:
             from astrometry.util.starutil_numpy import dmsstring2dec
             dec = dmsstring2dec(dec)
-        print 'Parsed RA,Dec', ra,dec
+        print('Parsed RA,Dec', ra,dec)
         initargs.update(ra=ra, dec=dec)
         if brick is None:
             brick = ('custom-%06i%s%05i' %
@@ -3319,7 +3215,7 @@ def run_brick(brick, radec=None, pixscale=0.262,
         runstage(stage, picklePattern, stagefunc, prereqs=prereqs,
                  initial_args=initargs, **kwargs)
 
-    print 'All done:', Time()-t0
+    print('All done:', Time()-t0)
     mp.report(threads)
 
 
@@ -3413,10 +3309,10 @@ python -u projects/desi/runbrick.py --plots --brick 2440p070 --zoom 1900 2400 45
     parser.add_option('--pixpsf', action='store_true', default=False,
                       help='Use the pixelized PsfEx PSF model, and FFT convolution')
 
-    print
-    print 'runbrick.py starting at', datetime.datetime.now().isoformat()
-    print 'Command-line args:', sys.argv
-    print
+    print()
+    print('runbrick.py starting at', datetime.datetime.now().isoformat())
+    print('Command-line args:', sys.argv)
+    print()
 
     opt,args = parser.parse_args()
 
@@ -3431,16 +3327,16 @@ python -u projects/desi/runbrick.py --plots --brick 2440p070 --zoom 1900 2400 45
         else:
             fn = os.path.join(outdir, 'tractor', brickname[:3],
                               'tractor-%s.fits' % brickname)
-        print 'Checking for', fn
+        print('Checking for', fn)
         exists = os.path.exists(fn)
         if opt.skip_coadd and exists:
             return 0
         if exists:
             try:
                 T = fits_table(fn)
-                print 'Read', len(T), 'sources from', fn
+                print('Read', len(T), 'sources from', fn)
             except:
-                print 'Failed to read file', fn
+                print('Failed to read file', fn)
                 exists = False
 
         if opt.skip:
@@ -3448,9 +3344,9 @@ python -u projects/desi/runbrick.py --plots --brick 2440p070 --zoom 1900 2400 45
                 return 0
         elif opt.check_done:
             if not exists:
-                print 'Does not exist:', fn
+                print('Does not exist:', fn)
                 return -1
-            print 'Found:', fn
+            print('Found:', fn)
             return 0
 
     if opt.verbose == 0:
@@ -3488,19 +3384,19 @@ python -u projects/desi/runbrick.py --plots --brick 2440p070 --zoom 1900 2400 45
             stages=opt.stage, writePickles=opt.write,
             picklePattern=opt.picklepat, **kwa)
     except NothingToDoError as e:
-        print
-        print e.message
-        print
+        print()
+        print(e.message)
+        print()
         return 0
     except RunbrickError as e:
-        print
-        print e.message
-        print
+        print()
+        print(e.message)
+        print()
         return -1
     return 0
 
 def trace(frame, event, arg):
-    print "%s, %s:%d" % (event, frame.f_code.co_filename, frame.f_lineno)
+    print("%s, %s:%d" % (event, frame.f_code.co_filename, frame.f_lineno))
     return trace
 
 if __name__ == '__main__':
