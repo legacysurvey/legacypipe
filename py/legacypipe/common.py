@@ -257,12 +257,12 @@ def segment_and_group_sources(image, T, name=None, ps=None, plots=False):
         oblobs = np.unique(blobs[bslc])
         oblobs = oblobs[oblobs != emptyblob]
 
-        #print 'This blob overlaps existing blobs:', oblobs
+        #print('This blob overlaps existing blobs:', oblobs)
         if len(oblobs) > 1:
             print('WARNING: not merging overlapping blobs like maybe we should')
         if len(oblobs):
             blob = oblobs[0]
-            #print 'Adding source to existing blob', blob
+            #print('Adding source to existing blob', blob)
             blobs[bslc][blobs[bslc] == emptyblob] = blob
             blobindex = blobmap[blob]
             if blobindex == -1:
@@ -432,7 +432,7 @@ def tim_get_resamp(tim, targetwcs):
     try:
         Yo,Xo,Yi,Xi,nil = resample_with_wcs(targetwcs, tim.subwcs, [], 2)
     except OverlapError:
-        print 'No overlap'
+        print('No overlap')
         return None
     if len(Yo) == 0:
         return None
@@ -484,7 +484,7 @@ def sed_matched_detection(sedname, sed, detmaps, detivs, bands,
         allzero = False
         break
     if allzero:
-        print 'SED', sedname, 'has all zero weight'
+        print('SED', sedname, 'has all zero weight')
         return None,None,None,None,None
 
     sedmap = np.zeros((H,W), np.float32)
@@ -506,7 +506,7 @@ def sed_matched_detection(sedname, sed, detmaps, detivs, bands,
     del sedmap
 
     peaks = (sedsn > nsigma)
-    print 'SED sn:', Time()-t0
+    print('SED sn:', Time()-t0)
     t0 = Time()
 
     def saddle_level(Y):
@@ -539,7 +539,7 @@ def sed_matched_detection(sedname, sed, detmaps, detivs, bands,
     peaks[1:-1, 1:-1] &= (sedsn[1:-1,1:-1] >= sedsn[0:-2,2:  ])
     peaks[1:-1, 1:-1] &= (sedsn[1:-1,1:-1] >= sedsn[2:  ,0:-2])
     peaks[1:-1, 1:-1] &= (sedsn[1:-1,1:-1] >= sedsn[2:  ,2:  ])
-    print 'Peaks:', Time()-t0
+    print('Peaks:', Time()-t0)
     t0 = Time()
 
     if ps is not None:
@@ -693,7 +693,7 @@ def sed_matched_detection(sedname, sed, detmaps, detivs, bands,
             plt.suptitle('peak %.1f vs ap %.1f' % (sedsn[y,x], m))
             ps.savefig()
 
-    print 'New sources:', Time()-t0
+    print('New sources:', Time()-t0)
     t0 = Time()
 
     if ps is not None:
@@ -711,7 +711,6 @@ def sed_matched_detection(sedname, sed, detmaps, detivs, bands,
     # in case a source is (somehow) not in a hotblob?
     hbmap[0] = False
     hotblobs = hbmap[hotblobs]
-    #print 'Hotblobs:', hotblobs.shape, hotblobs.dtype
 
     if ps is not None:
         plt.clf()
@@ -774,7 +773,6 @@ def get_rgb(imgs, bands, mnmx=None, arcsinh=None, scales=None):
     for im,band in zip(imgs, bands):
         plane,scale = scales[band]
         rgb[:,:,plane] = (im / scale).astype(np.float32)
-        #print 'rgb: plane', plane, 'range', rgb[:,:,plane].min(), rgb[:,:,plane].max()
 
     if mnmx is None:
         mn,mx = -3, 10
@@ -824,19 +822,19 @@ def brick_catalog_for_radec_box(ralo, rahi, declo, dechi,
     if bricks is None:
         bricks = decals.get_bricks_readonly()
     I = decals.bricks_touching_radec_box(bricks, ralo, rahi, declo, dechi)
-    print len(I), 'bricks touch RA,Dec box'
+    print(len(I), 'bricks touch RA,Dec box')
     TT = []
     hdr = None
     for i in I:
         brick = bricks[i]
         fn = catpattern % brick.brickid
-        print 'Catalog', fn
+        print('Catalog', fn)
         if not os.path.exists(fn):
-            print 'Warning: catalog does not exist:', fn
+            print('Warning: catalog does not exist:', fn)
             continue
         T = fits_table(fn, header=True)
         if T is None or len(T) == 0:
-            print 'Warning: empty catalog', fn
+            print('Warning: empty catalog', fn)
             continue
         T.cut((T.ra  >= ralo ) * (T.ra  <= rahi) *
               (T.dec >= declo) * (T.dec <= dechi))
@@ -932,14 +930,14 @@ def bricks_touching_wcs(targetwcs, decals=None, B=None, margin=20):
     # DECam hypot(1024,2048)*0.27/3600 + Brick hypot(0.25, 0.25) ~= 0.35 + margin
     I,J,d = match_radec(B.ra, B.dec, ra, dec,
                         radius + np.hypot(0.25,0.25)/2. + 0.05)
-    print len(I), 'bricks nearby'
+    print(len(I), 'bricks nearby')
     keep = []
     for i in I:
         b = B[i]
         brickwcs = wcs_for_brick(b)
         clip = clip_wcs(targetwcs, brickwcs)
         if len(clip) == 0:
-            print 'No overlap with brick', b.brickname
+            print('No overlap with brick', b.brickname)
             continue
         keep.append(i)
     return B[np.array(keep)]
@@ -961,13 +959,9 @@ def ccds_touching_wcs(targetwcs, T, ccdrad=0.17, polygons=True):
                      np.hypot(T.width, T.height) / 2.)
 
     rad = trad + ccdrad
-    #print 'Target WCS radius:', trad
-    #print 'CCD radius:', ccdrad
     r,d = targetwcs.radec_center()
     I, = np.nonzero(np.abs(T.dec - d) < rad)
-    #print 'Cut to', len(I), 'on Dec'
     I = I[degrees_between(T.ra[I], T.dec[I], r, d) < rad]
-    #print 'Cut to', len(I), 'on RA,Dec'
 
     if not polygons:
         return I
@@ -976,7 +970,6 @@ def ccds_touching_wcs(targetwcs, T, ccdrad=0.17, polygons=True):
     targetpoly = [(0.5,0.5),(tw+0.5,0.5),(tw+0.5,th+0.5),(0.5,th+0.5)]
     cd = targetwcs.get_cd()
     tdet = cd[0]*cd[3] - cd[1]*cd[2]
-    #print 'tdet', tdet
     if tdet > 0:
         targetpoly = list(reversed(targetpoly))
     targetpoly = np.array(targetpoly)
@@ -989,7 +982,6 @@ def ccds_touching_wcs(targetwcs, T, ccdrad=0.17, polygons=True):
                      T.cd1_2[i], T.cd2_1[i], T.cd2_2[i], W, H]])
         cd = wcs.get_cd()
         wdet = cd[0]*cd[3] - cd[1]*cd[2]
-        #print 'wdet', wdet
         poly = []
         for x,y in [(0.5,0.5),(W+0.5,0.5),(W+0.5,H+0.5),(0.5,H+0.5)]:
             rr,dd = wcs.pixelxy2radec(x,y)
@@ -1001,7 +993,6 @@ def ccds_touching_wcs(targetwcs, T, ccdrad=0.17, polygons=True):
         if polygons_intersect(targetpoly, poly):
             keep.append(i)
     I = np.array(keep)
-    #print 'Cut to', len(I), 'on polygons'
     return I
 
 def create_temp(**kwargs):
@@ -1050,7 +1041,7 @@ def run_sed_matched_filters(SEDs, bands, detmaps, detivs, omit_xy,
     apsn = []
 
     for sedname,sed in SEDs:
-        print 'SED', sedname
+        print('SED', sedname)
         if plots:
             pps = ps
         else:
@@ -1058,10 +1049,10 @@ def run_sed_matched_filters(SEDs, bands, detmaps, detivs, omit_xy,
         t0 = Time()
         sedhot,px,py,peakval,apval = sed_matched_detection(
             sedname, sed, detmaps, detivs, bands, xx, yy, nsigma=nsigma, ps=pps)
-        print 'SED took', Time()-t0
+        print('SED took', Time()-t0)
         if sedhot is None:
             continue
-        print len(px), 'new peaks'
+        print(len(px), 'new peaks')
         hot |= sedhot
         # With an empty xx, np.append turns it into a double!
         xx = np.append(xx, px).astype(int)
@@ -1076,7 +1067,7 @@ def run_sed_matched_filters(SEDs, bands, detmaps, detivs, omit_xy,
 
     # Add sources for the new peaks we found
     pr,pd = targetwcs.pixelxy2radec(peakx+1, peaky+1)
-    print 'Adding', len(pr), 'new sources'
+    print('Adding', len(pr), 'new sources')
     # Also create FITS table for new sources
     Tnew = fits_table()
     Tnew.ra  = pr
@@ -1104,12 +1095,12 @@ class Decals(object):
         if decals_dir is None:
             decals_dir = os.environ.get('DECALS_DIR')
             if decals_dir is None:
-                print 'Warning: you should set the $DECALS_DIR environment variable.'
-                print 'On NERSC, you can do:'
-                print '  module use /project/projectdirs/cosmo/work/decam/versions/modules'
-                print '  module load decals'
-                print 'Using the current directory as DECALS_DIR, but this is likely to fail.'
-                print
+                print('''Warning: you should set the $DECALS_DIR environment variable.
+On NERSC, you can do:
+  module use /project/projectdirs/cosmo/work/decam/versions/modules
+  module load decals
+Using the current directory as DECALS_DIR, but this is likely to fail.
+''')
                 decals_dir = os.getcwd()
                 
         self.decals_dir = decals_dir
@@ -1189,16 +1180,16 @@ class Decals(object):
 
         if rahi < ralo:
             # Wrap-around
-            print 'In Dec slice:', len(np.flatnonzero((bricks.dec1 <= dechi) *
-                                                      (bricks.dec2 >= declo)))
-            print 'Above RAlo=', ralo, ':', len(np.flatnonzero(bricks.ra2 >= ralo))
-            print 'Below RAhi=', rahi, ':', len(np.flatnonzero(bricks.ra1 <= rahi))
-            print 'In RA slice:', len(np.nonzero(np.logical_or(bricks.ra2 >= ralo,
-                                                               bricks.ra1 <= rahi)))
+            print('In Dec slice:', len(np.flatnonzero((bricks.dec1 <= dechi) *
+                                                      (bricks.dec2 >= declo))))
+            print('Above RAlo=', ralo, ':', len(np.flatnonzero(bricks.ra2 >= ralo)))
+            print('Below RAhi=', rahi, ':', len(np.flatnonzero(bricks.ra1 <= rahi)))
+            print('In RA slice:', len(np.nonzero(np.logical_or(bricks.ra2 >= ralo,
+                                                               bricks.ra1 <= rahi))))
                     
             I, = np.nonzero(np.logical_or(bricks.ra2 >= ralo, bricks.ra1 <= rahi) *
                             (bricks.dec1 <= dechi) * (bricks.dec2 >= declo))
-            print 'In RA&Dec slice', len(I)
+            print('In RA&Dec slice', len(I))
         else:
             I, = np.nonzero((bricks.ra1  <= rahi ) * (bricks.ra2  >= ralo) *
                             (bricks.dec1 <= dechi) * (bricks.dec2 >= declo))
@@ -1206,9 +1197,9 @@ class Decals(object):
     
     def get_ccds(self):
         fn = os.path.join(self.decals_dir, 'decals-ccds.fits')
-        print 'Reading CCDs from', fn
+        print('Reading CCDs from', fn)
         T = fits_table(fn)
-        print 'Got', len(T), 'CCDs'
+        print('Got', len(T), 'CCDs')
         # "N4 " -> "N4"
         T.ccdname = np.array([s.strip() for s in T.ccdname])
         return T
@@ -1216,7 +1207,6 @@ class Decals(object):
     def ccds_touching_wcs(self, wcs):
         T = self.get_ccds()
         I = ccds_touching_wcs(wcs, T)
-        #print len(I), 'CCDs nearby'
         if len(I) == 0:
             return None
         T.cut(I)
@@ -1241,8 +1231,8 @@ class Decals(object):
                              for band in bands]))
         ims = []
         for t in C:
-            print
-            print 'Image file', t.image_filename, 'hdu', t.image_hdu
+            print()
+            print('Image file', t.image_filename, 'hdu', t.image_hdu)
             im = DecamImage(self, t)
             ims.append(im)
         # Read images, clip to ROI
@@ -1315,7 +1305,7 @@ class Decals(object):
              ]:
             good[crit] = False
             n = sum(good)
-            print 'Flagged', n0-n, 'more non-photometric using criterion:', name
+            print('Flagged', n0-n, 'more non-photometric using criterion:', name)
             n0 = n
 
         return np.flatnonzero(good)
@@ -1342,7 +1332,7 @@ class Decals(object):
         zp = self.get_zeropoint_row_for(im)
         # No updated zeropoint -- use header MAGZERO from primary HDU.
         if zp is None:
-            print 'WARNING: using header zeropoints for', im
+            print('WARNING: using header zeropoints for', im)
             hdr = im.read_image_primary_header()
             # DES Year1 Stripe82 images:
             magzero = hdr['MAGZERO']
@@ -1355,7 +1345,7 @@ class Decals(object):
     def get_astrometric_zeropoint_for(self, im):
         zp = self.get_zeropoint_row_for(im)
         if zp is None:
-            print 'WARNING: no astrometric zeropoints found for', im
+            print('WARNING: no astrometric zeropoints found for', im)
             return 0.,0.
         dra, ddec = zp.ccdraoff, zp.ccddecoff
         return dra / 3600., ddec / 3600.
@@ -1398,13 +1388,9 @@ def exposure_metadata(filenames, hdus=None, trim=None):
     vals = dict([(k,[]) for k,d in allkeys])
 
     for i,fn in enumerate(filenames):
-        print 'Reading', (i+1), 'of', len(filenames), ':', fn
+        print('Reading', (i+1), 'of', len(filenames), ':', fn)
         F = fitsio.FITS(fn)
-        #print F
-        #print len(F)
         primhdr = F[0].read_header()
-        #print primhdr
-
         expstr = '%08i' % primhdr.get('EXPNUM')
 
         # # Parse date with format: 2014-08-09T04:20:50.812543
@@ -1422,7 +1408,7 @@ def exposure_metadata(filenames, hdus=None, trim=None):
         cpfn = fn
         if trim is not None:
             cpfn = cpfn.replace(trim, '')
-        print 'CP fn', cpfn
+        print('CP fn', cpfn)
 
         if hdus is not None:
             hdulist = hdus
@@ -1496,19 +1482,19 @@ class DecamImage(object):
 
         for attr in ['imgfn', 'dqfn', 'wtfn']:
             fn = getattr(self, attr)
-            print attr, '->', fn
+            #print(attr, '->', fn)
             if os.path.exists(fn):
-                print 'Exists.'
+                #print('Exists.')
                 continue
             if fn.endswith('.fz'):
                 fun = fn[:-3]
                 if os.path.exists(fun):
-                    print 'Using      ', fun
-                    print 'rather than', fn
+                    print('Using      ', fun)
+                    print('rather than', fn)
                     setattr(self, attr, fun)
             fn = getattr(self, attr)
-            print attr, fn
-            print '  exists? ', os.path.exists(fn)
+            #print attr, fn
+            #print '  exists? ', os.path.exists(fn)
 
         ibase = os.path.basename(imgfn)
         ibase = ibase.replace('.fits.fz', '')
@@ -1566,17 +1552,17 @@ class DecamImage(object):
         if self.band == 'r' and (('DES' in self.imgfn) or ('COSMOS' in self.imgfn)):
             # Northern chips: drop 100 pix off the bottom
             if 'N' in self.ccdname:
-                print 'Clipping bottom part of northern DES r-band chip'
+                print('Clipping bottom part of northern DES r-band chip')
                 y0 = 100
             else:
                 # Southern chips: drop 100 pix off the top
-                print 'Clipping top part of southern DES r-band chip'
+                print('Clipping top part of southern DES r-band chip')
                 y1 = imh - 100
 
         # Clip the bad half of chip S7.
         # The left half is OK.
         if self.ccdname == 'S7':
-            print 'Clipping the right half of chip S7'
+            print('Clipping the right half of chip S7')
             x1 = 1023
 
         return x0,x1,y0,y1
@@ -1619,19 +1605,15 @@ class DecamImage(object):
             imgpoly = [(1,1),(1,imh),(imw,imh),(imw,1)]
             ok,tx,ty = wcs.radec2pixelxy(radecpoly[:-1,0], radecpoly[:-1,1])
             tpoly = zip(tx,ty)
-            #print 'Target RA,Dec polygon in CCD pixels:', tpoly
-            #print ' --> as ints:', np.array(tpoly).astype(int)
-            #print 'Image polygon:', imgpoly
             clip = clip_polygon(imgpoly, tpoly)
             clip = np.array(clip)
-            #print 'Clipped:', clip
             if len(clip) == 0:
                 return None
             x0,y0 = np.floor(clip.min(axis=0)).astype(int)
             x1,y1 = np.ceil (clip.max(axis=0)).astype(int)
             slc = slice(y0,y1+1), slice(x0,x1+1)
             if y1 - y0 < tiny or x1 - x0 < tiny:
-                print 'Skipping tiny subimage'
+                print('Skipping tiny subimage')
                 return None
         if slc is not None:
             sy,sx = slc
@@ -1642,30 +1624,23 @@ class DecamImage(object):
         new_extent = self.get_good_image_slice((x0,x1,y0,y1), get_extent=True)
         if new_extent != old_extent:
             x0,x1,y0,y1 = new_extent
-            print 'Applying good subregion of CCD: slice is', x0,x1,y0,y1
+            print('Applying good subregion of CCD: slice is', x0,x1,y0,y1)
             if x0 >= x1 or y0 >= y1:
                 return None
             slc = slice(y0,y1), slice(x0,x1)
 
-        print 'Reading image slice:', slc
+        print('Reading image slice:', slc)
         img,imghdr = self.read_image(header=True, slice=slc)
-        invvar = self.read_invvar(slice=slc)
-        dq = self.read_dq(slice=slc)
 
+        # check consistency... something of a DR1 hangover
         e = imghdr['EXTNAME']
-        print 'EXTNAME from image header:', e
-        print '            vs my CCDNAME:', self.ccdname
         assert(e.strip() == self.ccdname.strip())
 
-        uq = np.unique(dq)
-        bits = reduce(np.bitwise_or, uq)
-        print 'DQ bits set: 0x%x' % bits
-
+        invvar = self.read_invvar(slice=slc)
+        dq = self.read_dq(slice=slc)
         invvar[dq != 0] = 0.
-
-        print 'Invvar range:', invvar.min(), invvar.max()
         if np.all(invvar == 0.):
-            print 'Skipping zero-invvar image'
+            print('Skipping zero-invvar image')
             return None
         assert(np.all(np.isfinite(img)))
         assert(np.all(np.isfinite(invvar)))
@@ -1683,11 +1658,9 @@ class DecamImage(object):
             sky.subtract(midsky)
 
         magzp = self.decals.get_zeropoint_for(self)
-        print 'magzp', magzp
         orig_zpscale = zpscale = NanoMaggies.zeropointToScale(magzp)
         if nanomaggies:
             # Scale images to Nanomaggies
-            print 'zpscale', zpscale
             img /= zpscale
             invvar *= zpscale**2
             zpscale = 1.
@@ -1706,10 +1679,10 @@ class DecamImage(object):
             from tractor.basics import NCircularGaussianPSF
             psfex = None
             psf = NCircularGaussianPSF([psf_sigma], [1.0])
-            print 'WARNING: using mock PSF:', psf
+            print('WARNING: using mock PSF:', psf)
         elif pixPsf:
             # constant PixelizedPSF.
-            print 'Reading PsfEx model from', self.psffn
+            print('Reading PsfEx model from', self.psffn)
             from tractor.basics import GaussianMixtureEllipsePSF, PixelizedPSF
             psfex = PsfEx(self.psffn, imw, imh, ny=13, nx=7,
                           psfClass=GaussianMixtureEllipsePSF, K=2)
@@ -1720,7 +1693,7 @@ class DecamImage(object):
             psf = PixelizedPSF(psfim)
         elif const2psf:
             # 2-component constant MoG.
-            print 'Reading PsfEx model from', self.psffn
+            print('Reading PsfEx model from', self.psffn)
             from tractor.basics import GaussianMixtureEllipsePSF
             psfex = PsfEx(self.psffn, imw, imh, ny=13, nx=7,
                           psfClass=GaussianMixtureEllipsePSF, K=2)
@@ -1728,11 +1701,11 @@ class DecamImage(object):
             psfim = psfex.instantiateAt(imw/2, imh/2)
             # trim a little
             psfim = psfim[5:-5, 5:-5]
-            print 'Fitting PsfEx model as 2-component Gaussian...'
+            print('Fitting PsfEx model as 2-component Gaussian...')
             psf = GaussianMixtureEllipsePSF.fromStamp(psfim, N=2)
         else:
             assert(False)
-        print 'Using PSF model', psf
+        print('Using PSF model', psf)
 
         tim = Image(img, invvar=invvar, wcs=twcs, psf=psf,
                     photocal=LinearPhotoCal(zpscale, band=band),
@@ -1787,7 +1760,7 @@ class DecamImage(object):
         return fitsio.read(fn, ext=hdu, header=header, **kwargs)
 
     def read_image(self, **kwargs):
-        print 'Reading image from', self.imgfn, 'hdu', self.hdu
+        print('Reading image from', self.imgfn, 'hdu', self.hdu)
         return self._read_fits(self.imgfn, self.hdu, **kwargs)
 
     def get_image_info(self):
@@ -1806,7 +1779,7 @@ class DecamImage(object):
     def read_dq(self, header=False, **kwargs):
         from distutils.version import StrictVersion
 
-        print 'Reading data quality from', self.dqfn, 'hdu', self.hdu
+        print('Reading data quality from', self.dqfn, 'hdu', self.hdu)
         dq,hdr = self._read_fits(self.dqfn, self.hdu, header=True, **kwargs)
         primhdr = fitsio.read_header(self.dqfn)
         plver = primhdr['PLVER'].strip()
@@ -1842,7 +1815,7 @@ class DecamImage(object):
             return dq
 
     def read_invvar(self, clip=True, **kwargs):
-        print 'Reading inverse-variance from', self.wtfn, 'hdu', self.hdu
+        print('Reading inverse-variance from', self.wtfn, 'hdu', self.hdu)
         invvar = self._read_fits(self.wtfn, self.hdu, **kwargs)
         if clip:
             # Clamp near-zero (incl negative!) invvars to zero
@@ -1852,11 +1825,11 @@ class DecamImage(object):
         return invvar
 
     def read_pv_wcs(self):
-        print 'Reading WCS from', self.pvwcsfn
+        print('Reading WCS from', self.pvwcsfn)
         wcs = Sip(self.pvwcsfn)
         dra,ddec = self.decals.get_astrometric_zeropoint_for(self)
         r,d = wcs.get_crval()
-        print 'Applying astrometric zeropoint:', (dra,ddec)
+        print('Applying astrometric zeropoint:', (dra,ddec))
         wcs.set_crval((r + dra, d + ddec))
         return wcs
     
@@ -1868,7 +1841,7 @@ class DecamImage(object):
         return S
 
     def read_sky_model(self):
-        print 'Reading sky model from', self.skyfn
+        print('Reading sky model from', self.skyfn)
         hdr = fitsio.read_header(self.skyfn)
         skyclass = hdr['SKY']
         clazz = get_class_from_name(skyclass)
@@ -1886,10 +1859,8 @@ class DecamImage(object):
 
         just_check: if True, returns True if calibs need to be run.
         '''
-        #print 'run_calibs:', str(self), 'near RA,Dec', ra,dec, 'with pixscale', pixscale, 'arcsec/pix'
-
         for fn in [self.pvwcsfn, self.sefn, self.psffn, self.skyfn]:
-            print 'exists?', os.path.exists(fn), fn
+            print('exists?', os.path.exists(fn), fn)
         self.makedirs()
 
         if gaussPsf:
@@ -1903,7 +1874,7 @@ class DecamImage(object):
             # Check the PsfEx output file for POLNAME1
             hdr = fitsio.read_header(self.psffn, ext=1)
             if hdr.get('POLNAME1', None) is None:
-                print 'Did not find POLNAME1 in PsfEx header', self.psffn, '-- deleting'
+                print('Did not find POLNAME1 in PsfEx header', self.psffn, '-- deleting')
                 os.unlink(self.psffn)
             else:
                 psfex = False
@@ -1914,9 +1885,9 @@ class DecamImage(object):
             # Check SourceExtractor catalog for size = 0
             fn = self.sefn
             T = fits_table(fn, hdu=2)
-            print 'Read', len(T), 'sources from SE catalog', fn
+            print('Read', len(T), 'sources from SE catalog', fn)
             if T is None or len(T) == 0:
-                print 'SourceExtractor catalog', fn, 'has no sources -- deleting'
+                print('SourceExtractor catalog', fn, 'has no sources -- deleting')
                 try:
                     os.unlink(fn)
                 except:
@@ -1932,7 +1903,7 @@ class DecamImage(object):
                 try:
                     wcs = Sip(fn)
                 except:
-                    print 'Failed to read PV-SIP file', fn, '-- deleting'
+                    print('Failed to read PV-SIP file', fn, '-- deleting')
                     os.unlink(fn)
             if os.path.exists(fn):
                 pvastrom = False
@@ -1943,7 +1914,7 @@ class DecamImage(object):
                 try:
                     hdr = fitsio.read_header(fn)
                 except:
-                    print 'Failed to read sky file', fn, '-- deleting'
+                    print('Failed to read sky file', fn, '-- deleting')
                     os.unlink(fn)
             if os.path.exists(fn):
                 sky = False
@@ -1963,7 +1934,7 @@ class DecamImage(object):
             # fails.  Check whether actually fpacked.
             hdr = fitsio.read_header(self.imgfn, ext=self.hdu)
             if not ((hdr['XTENSION'] == 'BINTABLE') and hdr.get('ZIMAGE', False)):
-                print 'Image', self.imgfn, 'HDU', self.hdu, 'is not actually fpacked; not funpacking, just imcopying.'
+                print('Image', self.imgfn, 'HDU', self.hdu, 'is not actually fpacked; not funpacking, just imcopying.')
                 fcopy = True
 
             tmpimgfn  = create_temp(suffix='.fits')
@@ -1973,7 +1944,7 @@ class DecamImage(object):
                 cmd = 'imcopy %s"+%i" %s' % (self.imgfn, self.hdu, tmpimgfn)
             else:
                 cmd = 'funpack -E %i -O %s %s' % (self.hdu, tmpimgfn, self.imgfn)
-            print cmd
+            print(cmd)
             if os.system(cmd):
                 raise RuntimeError('Command failed: ' + cmd)
             funimgfn = tmpimgfn
@@ -1983,14 +1954,14 @@ class DecamImage(object):
                     cmd = 'imcopy %s"+%i" %s' % (self.dqfn, self.hdu, tmpmaskfn)
                 else:
                     cmd = 'funpack -E %i -O %s %s' % (self.hdu, tmpmaskfn, self.dqfn)
-                print cmd
+                print(cmd)
                 if os.system(cmd):
                     #raise RuntimeError('Command failed: ' + cmd)
-                    print 'Command failed: ' + cmd
+                    print('Command failed: ' + cmd)
                     M,hdr = fitsio.read(self.dqfn, ext=self.hdu, header=True)
-                    print 'Read', M.dtype, M.shape
+                    print('Read', M.dtype, M.shape)
                     fitsio.write(tmpmaskfn, M, header=hdr, clobber=True)
-                    print 'Wrote', tmpmaskfn, 'with fitsio'
+                    print('Wrote', tmpmaskfn, 'with fitsio')
                     
                 funmaskfn = tmpmaskfn
     
@@ -2002,9 +1973,9 @@ class DecamImage(object):
             magzp  = primhdr['MAGZERO']
             fwhm = hdr['FWHM']
             seeing = pixscale * fwhm
-            print 'FWHM', fwhm, 'pix'
-            print 'pixscale', pixscale, 'arcsec/pix'
-            print 'Seeing', seeing, 'arcsec'
+            print('FWHM', fwhm, 'pix')
+            print('pixscale', pixscale, 'arcsec/pix')
+            print('Seeing', seeing, 'arcsec')
     
         if se:
             maskstr = ''
@@ -2024,7 +1995,7 @@ class DecamImage(object):
                 '-ANALYSIS_THRESH 1.0',
                 '-MAG_ZEROPOINT %f' % magzp, '-CATALOG_NAME', self.sefn,
                 funimgfn])
-            print cmd
+            print(cmd)
             if os.system(cmd):
                 raise RuntimeError('Command failed: ' + cmd)
 
@@ -2035,7 +2006,7 @@ class DecamImage(object):
             tmpwcsfn  = create_temp(suffix='.wcs')
             cmd = ('wcs-pv2sip -S -o 6 -e %i %s %s' %
                    (self.hdu, self.imgfn, tmpwcsfn))
-            print cmd
+            print(cmd)
             if os.system(cmd):
                 raise RuntimeError('Command failed: ' + cmd)
             # Read the resulting WCS header and add version info cards to it.
@@ -2045,29 +2016,29 @@ class DecamImage(object):
             for r in wcshdr.records():
                 version_hdr.add_record(r)
             fitsio.write(self.pvwcsfn, None, header=version_hdr, clobber=True)
-            print 'Wrote', self.pvwcsfn
+            print('Wrote', self.pvwcsfn)
 
         if psfex:
             sedir = self.decals.get_se_dir()
             # If we wrote *.psf instead of *.fits in a previous run...
             oldfn = self.psffn.replace('.fits', '.psf')
             if os.path.exists(oldfn):
-                print 'Moving', oldfn, 'to', self.psffn
+                print('Moving', oldfn, 'to', self.psffn)
                 os.rename(oldfn, self.psffn)
             else:
                 cmd = ('psfex -c %s -PSF_DIR %s %s' %
                        (os.path.join(sedir, 'DECaLS-v2.psfex'),
                         os.path.dirname(self.psffn), self.sefn))
-                print cmd
+                print(cmd)
                 rtn = os.system(cmd)
                 if rtn:
                     raise RuntimeError('Command failed: ' + cmd + ': return value: %i' % rtn)
     
         if sky:
-            print 'Fitting sky for', self
+            print('Fitting sky for', self)
 
             slc = self.get_good_image_slice(None)
-            print 'Good image slice is', slc
+            print('Good image slice is', slc)
 
             img = self.read_image(slice=slc)
             wt = self.read_invvar(slice=slc)
@@ -2099,12 +2070,12 @@ def run_calibs(X):
     im = X[0]
     kwargs = X[1]
     args = X[2:]
-    print 'run_calibs for image', im
+    print('run_calibs for image', im)
     return im.run_calibs(*args, **kwargs)
 
 
 def read_one_tim((im, targetrd, gaussPsf, const2psf, pixPsf)):
-    print 'Reading', im
+    print('Reading', im)
     tim = im.get_tractor_image(radecpoly=targetrd, gaussPsf=gaussPsf,
                                const2psf=const2psf, pixPsf=pixPsf)
     return tim
