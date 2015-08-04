@@ -10,19 +10,16 @@ import fitsio
 
 from astrometry.util.fits import fits_table
 from astrometry.util.plotutils import PlotSequence, dimshow
-from astrometry.libkd.spherematch import *
-
-from astrometry.util.util import *
+from astrometry.libkd.spherematch import match_radec
+from astrometry.util.util import Tan
 
 from tractor import *
-
-from common import *
+from legacypipe.common import *
 
 def subplot_grid(ny, nx, i):
     y = i/nx
     x = i%nx
     plt.subplot(ny, nx, 1 + ((ny-1)-y)*nx + x)
-
 
 if __name__ == '__main__':
     decals = Decals()
@@ -55,7 +52,6 @@ if __name__ == '__main__':
 
     pixscale = wcs.pixel_scale()
     run_calibs(im, r, d, pixscale, astrom=True, morph=False, se2=False)
-
 
     iminfo = im.get_image_info()
     print 'img:', iminfo
