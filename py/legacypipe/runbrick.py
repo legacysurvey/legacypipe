@@ -3243,8 +3243,7 @@ python -u projects/desi/runbrick.py --plots --brick 2440p070 --zoom 1900 2400 45
     parser.add_option('-v', '--verbose', dest='verbose', action='count', default=0,
                       help='Make more verbose')
 
-    parser.add_option('-b', '--brick', help='Brick name to run: default %default',
-                      default='2440p070')
+    parser.add_option('-b', '--brick', help='Brick name to run; required unless --radec is given')
 
     parser.add_option('--radec', help='RA,Dec center for a custom location (not a brick)',
                       nargs=2)
@@ -3315,6 +3314,10 @@ python -u projects/desi/runbrick.py --plots --brick 2440p070 --zoom 1900 2400 45
     print()
 
     opt,args = parser.parse_args()
+
+    if opt.brick is not None and opt.radec is not None:
+        print('Only ONE of --brick and --radec may be specified.')
+        return -1
 
     if opt.check_done or opt.skip or opt.skip_coadd:
         outdir = opt.outdir
