@@ -2,7 +2,7 @@ from __future__ import print_function
 from astrometry.util.util import Tan
 from astrometry.util.fits import fits_table
 
-from tractor import PointSource
+from tractor import PointSource, getParamTypeTree
 from tractor.galaxy import ExpGalaxy, DevGalaxy, FixedCompositeGalaxy
 from tractor.ellipses import EllipseESoft, EllipseE
 
