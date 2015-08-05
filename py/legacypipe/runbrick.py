@@ -46,7 +46,7 @@ from astrometry.util.resample import resample_with_wcs, OverlapError
 from astrometry.util.ttime import Time
 from astrometry.util.starutil_numpy import radectoxyz
 
-from tractor import Tractor, PointSource, Image, ShiftedPsf, NanoMaggies
+from tractor import Tractor, PointSource, Image, NanoMaggies
 from tractor.ellipses import EllipseESoft, EllipseE
 from tractor.galaxy import DevGalaxy, ExpGalaxy, FixedCompositeGalaxy, disable_galaxy_cache
 from tractor.utils import _GaussianPriors
@@ -1461,12 +1461,15 @@ def _one_blob((iblob, Isrcs, targetwcs, bx0, by0, blobw, blobh, blobmask, subtim
 
         # If the subimage (blob) is small enough, instantiate a
         # constant PSF model in the center.
+
+        ### FIXME -- do we really need 'ox0,oy0' in here?
+
         if sy1-sy0 < 400 and sx1-sx0 < 400:
             subpsf = psf.constantPsfAt(ox0 + (sx0+sx1)/2., oy0 + (sy0+sy1)/2.)
         else:
             # Otherwise, instantiate a (shifted) spatially-varying
             # PsfEx model.
-            subpsf = ShiftedPsf(psf, ox0+sx0, oy0+sy0)
+            subpsf = psf.getShifted(ox0+sx0, oy0+sy0)
 
         subtim = Image(data=subimg, inverr=subie, wcs=twcs,
                        psf=subpsf, photocal=pcal, sky=sky, name=name)
@@ -1613,7 +1616,7 @@ def _one_blob((iblob, Isrcs, targetwcs, bx0, by0, blobw, blobh, blobmask, subtim
                     wcs.setX0Y0(wx0 + x0, wy0 + y0)
                     srctim = Image(data=tim.getImage ()[slc],
                                    inverr=tim.getInvError()[slc],
-                                   wcs=wcs, psf=ShiftedPsf(tim.getPsf(), x0, y0),
+                                   wcs=wcs, psf=tim.getPsf().getShifted(x0, y0),
                                    photocal=tim.getPhotoCal(),
                                    sky=tim.getSky(), name=tim.name)
                     #srctim.subwcs = tim.getWcs().wcs.get_subimage(x0, y0, mw, mh)
