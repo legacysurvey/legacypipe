@@ -1597,7 +1597,7 @@ def _one_blob((iblob, Isrcs, targetwcs, bx0, by0, blobw, blobh, blobmask, subtim
                 # Make the subimages the same size as the modelMasks.
                 srctims = []
                 modelMasks = []
-                print('Big blob: trimming:')
+                #print('Big blob: trimming:')
                 for tim,imods in zip(subtims, initial_models):
                     mod = imods[i]
                     if mod is None:
@@ -1627,7 +1627,7 @@ def _one_blob((iblob, Isrcs, targetwcs, bx0, by0, blobw, blobh, blobmask, subtim
                     srctim.x0 = x0
                     srctim.y0 = y0
                     srctims.append(srctim)
-                    print('  ', tim.shape, 'to', srctim.shape)
+                    #print('  ', tim.shape, 'to', srctim.shape)
 
                 if plots:
                     bx1 = bx0 + blobw
@@ -1915,7 +1915,7 @@ def _one_blob((iblob, Isrcs, targetwcs, bx0, by0, blobw, blobh, blobmask, subtim
             modelMasks.append(d)
             mod = imods[i]
             if mod is not None:
-                print('Set modelMask:', mod.patch.shape, 'for', src)
+                #print('Set modelMask:', mod.patch.shape, 'for', src)
                 d[src] = Patch(mod.x0, mod.y0, mod.patch != 0)
 
         srctractor = Tractor(subtims, [src])
@@ -1978,7 +1978,7 @@ def _one_blob((iblob, Isrcs, targetwcs, bx0, by0, blobw, blobh, blobmask, subtim
 
         allflags = {}
         for name,newsrc in trymodels:
-            print('Trying model:', name)
+            #print('Trying model:', name)
             if name == 'comp' and newsrc is None:
                 newsrc = comp = FixedCompositeGalaxy(src.getPosition(), src.getBrightness(),
                                                      0.5, exp.getShape(), dev.getShape()).copy()
@@ -2014,9 +2014,9 @@ def _one_blob((iblob, Isrcs, targetwcs, bx0, by0, blobw, blobh, blobmask, subtim
             cpu0 = time.clock()
             p0 = newsrc.getParams()
             for step in range(50):
-                print('optimizing:', newsrc)
+                #print('optimizing:', newsrc)
                 dlnp,X,alpha = srctractor.optimize(**optargs)
-                print('  dlnp:', dlnp, 'new src', newsrc)
+                #print('  dlnp:', dlnp, 'new src', newsrc)
                 cpu = time.clock()
                 performance[i].append((name,'A',step,dlnp,alpha,cpu-cpu0))
                 if cpu-cpu0 > max_cpu_per_source:
@@ -2028,7 +2028,7 @@ def _one_blob((iblob, Isrcs, targetwcs, bx0, by0, blobw, blobh, blobmask, subtim
             else:
                 thisflags |= FLAG_STEPS_A
 
-            print('New source (after first round optimization):', newsrc)
+            #print('New source (after first round optimization):', newsrc)
 
             if plots and False:
                 plt.clf()
@@ -2049,9 +2049,9 @@ def _one_blob((iblob, Isrcs, targetwcs, bx0, by0, blobw, blobh, blobmask, subtim
                 mod = src.getModelPatch(tim)
                 if mod is None:
                     continue
-                print('After first-round fit: model is', mod.shape)
+                #print('After first-round fit: model is', mod.shape)
                 mod = _clip_model_to_blob(mod, tim.shape, tim.getInvError())
-                print('Clipped to', mod.shape)
+                #print('Clipped to', mod.shape)
                 d[newsrc] = Patch(mod.x0, mod.y0, mod.patch != 0)
             srctractor.setModelMasks(mm)
             enable_galaxy_cache()
