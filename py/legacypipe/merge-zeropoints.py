@@ -4,22 +4,31 @@ from glob import glob
 import os
 from astrometry.util.fits import fits_table, merge_tables
 
-decals_dir = os.environ['DECALS_DIR']
 
-cam = 'decam'
-imagedir = os.path.join(decals_dir, 'images', cam)
+def decals_dr2():
+    decals_dir = os.environ['DECALS_DIR']
+    cam = 'decam'
+    image_basedir = os.path.join(decals_dir, 'images')
 
-TT = []
+    TT = []
+    zpdir = '/project/projectdirs/cosmo/work/decam/cats/ZeroPoints'
+    for fn,dirnms in [
+        (os.path.join(zpdir, 'decals-zpt-20140810.fits'), ['CP20140810_?_v2']),
+        (os.path.join(zpdir, 'decals-zpt-20141227.fits'), ['CP20141227']),
+        (os.path.join(zpdir, 'decals-zpt-20150108.fits'), ['CP20150108']),
+        (os.path.join(zpdir, 'decals-zpt-20150326.fits'), ['CP20150326']),
+        (os.path.join(zpdir, 'decals-zpt-20150407.fits'), ['CP20150407']),
+        (os.path.join(zpdir, 'decals-zpt-nondecals.fits'), ['NonDECaLS/*','COSMOS', 'CPDES82']),
+        ]:
+        T = normalize_zeropoints(fn, dirnms, image_basedir, cam)
+        TT.append(T)
+    T = merge_tables(TT)
+    outfn = 'zp.fits'
+    T.writeto(outfn)
+    print('Wrote', outfn)
 
-zpdir = '/project/projectdirs/cosmo/work/decam/cats/ZeroPoints'
-for fn,dirnms in [
-    (os.path.join(zpdir, 'decals-zpt-20140810.fits'), ['CP20140810_?_v2']),
-    (os.path.join(zpdir, 'decals-zpt-20141227.fits'), ['CP20141227']),
-    (os.path.join(zpdir, 'decals-zpt-20150108.fits'), ['CP20150108']),
-    (os.path.join(zpdir, 'decals-zpt-20150326.fits'), ['CP20150326']),
-    (os.path.join(zpdir, 'decals-zpt-20150407.fits'), ['CP20150407']),
-    (os.path.join(zpdir, 'decals-zpt-nondecals.fits'), ['NonDECaLS/*','COSMOS', 'CPDES82']),
-     ]:
+    
+def normalize_zeropoints(fn, dirnms, image_basedir, cam):
     print('Reading', fn)
     T = fits_table(fn)
     T.camera = np.array([cam] * len(T))
@@ -41,17 +50,19 @@ for fn,dirnms in [
         fn = fn.strip()
         fnlist = []
         for dirnm in dirnms:
-            pattern = os.path.join(decals_dir, 'images', cam, dirnm, fn + '*')
+            pattern = os.path.join(image_basedir, cam, dirnm, fn + '*')
             fnlist.extend(glob(pattern))
 
-        pattern_string = os.path.join(decals_dir, 'images', cam, dirnm, fn + '*')
+        pattern_string = os.path.join(image_basedir, cam, dirnm, fn + '*')
         if len(dirnms) > 1:
-            pattern_string = os.path.join(decals_dir, 'images', cam, '{' + ','.join(dirnms) + '}', fn + '*')
+            pattern_string = os.path.join(
+                image_basedir, cam, '{' + ','.join(dirnms) + '}', fn + '*')
 
+        # If multiple versions are available, take the one with greatest
+        # PLVER community pipeline version.
         if len(fnlist) > 1:
             import fitsio
             from distutils.version import StrictVersion
-
             print('WARNING', pattern_string, '->')
             for fn in fnlist:
                 print('  ', fn)
@@ -70,12 +81,11 @@ for fn,dirnms in [
         if len(fnlist) == 0:
             print('WARNING**', pattern_string, '->', fnlist)
             assert(False)
-            #fnlist = ['']
-        fn = fnlist[0].replace(os.path.join(decals_dir, 'images', ''), '')
-        #fn = '%s/%s/%s.fz' % (cam, dirnm % dict(filter=filt), fn)
+
+        fn = fnlist[0].replace(os.path.join(image_basedir, ''), '')
         fns.append(fn)
         fnmap[orig_fn] = fn
-        assert(os.path.exists(os.path.join(decals_dir, 'images', fn)))
+        assert(os.path.exists(os.path.join(image_basedir, fn)))
     T.filename = np.array(fns)
 
     T.rename('ccdhdunum', 'image_hdu')
@@ -87,16 +97,39 @@ for fn,dirnms in [
     T.rename('ccdra',  'ra')
     T.rename('ccddec', 'dec')
 
-    TT.append(T)
+    T.width  = T.width.astype(np.int16)
+    T.height = T.height.astype(np.int16)
+    T.ccdnum = T.ccdnum.astype(np.int16)
+    T.cd1_1 = T.cd1_1.astype(np.float32)
+    T.cd1_2 = T.cd1_2.astype(np.float32)
+    T.cd2_1 = T.cd2_1.astype(np.float32)
+    T.cd2_2 = T.cd2_2.astype(np.float32)
+    
+    return T
 
-T = merge_tables(TT)
-T.width  = T.width.astype(np.int16)
-T.height = T.height.astype(np.int16)
-T.ccdnum = T.ccdnum.astype(np.int16)
-T.cd1_1 = T.cd1_1.astype(np.float32)
-T.cd1_2 = T.cd1_2.astype(np.float32)
-T.cd2_1 = T.cd2_1.astype(np.float32)
-T.cd2_2 = T.cd2_2.astype(np.float32)
-outfn = 'zp.fits'
-T.writeto(outfn)
-print('Wrote', outfn)
+
+
+if __name__ == '__main__':
+    #decals_dr2()
+
+    # Bok tests
+    cam = '90prime'
+    TT = []
+    zpdir = '/scratch1/scratchdirs/arjundey/Bok'
+
+    for fn,dirnms in [
+        (os.path.join(zpdir, 'g/zeropoint-BOK20150413_g.fits'),
+         [os.path.join(zpdir, 'g')]),
+        #(os.path.join(zpdir, 'r/zeropoint-BOK20150413_g.fits'),
+        # [os.path.join(zpdir, 'g')]),
+        ]:
+        image_basedir = '.'
+        T = normalize_zeropoints(fn, dirnms, image_basedir, cam)
+        TT.append(T)
+    T = merge_tables(TT)
+    outfn = 'bok-zp.fits'
+    T.writeto(outfn)
+    print('Wrote', outfn)
+
+
+    
