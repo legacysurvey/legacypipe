@@ -110,7 +110,9 @@ def normalize_zeropoints(fn, dirnms, image_basedir, cam):
 
 
 if __name__ == '__main__':
-    #decals_dr2()
+
+    decals_dr2()
+    sys.exit(0)
 
     # Bok tests
     cam = '90prime'

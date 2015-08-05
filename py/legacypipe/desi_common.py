@@ -1,4 +1,7 @@
 from __future__ import print_function
+
+import numpy as np
+
 from astrometry.util.util import Tan
 from astrometry.util.fits import fits_table
 
