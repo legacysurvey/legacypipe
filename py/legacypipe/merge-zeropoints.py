@@ -111,8 +111,8 @@ def normalize_zeropoints(fn, dirnms, image_basedir, cam):
 
 if __name__ == '__main__':
 
-    decals_dr2()
-    sys.exit(0)
+    #decals_dr2()
+    #sys.exit(0)
 
     # Bok tests
     cam = '90prime'
@@ -127,6 +127,17 @@ if __name__ == '__main__':
         ]:
         image_basedir = '.'
         T = normalize_zeropoints(fn, dirnms, image_basedir, cam)
+        # fake up the exposure number
+        T.expnum = (T.mjd_obs * 100000.).astype(int)
+        # compute extension name
+        T.ccdname = np.array(['ccd%i' % n for n in T.ccdnum])
+        # compute FWHM from Seeing
+        pixscale = 0.45
+        T.fwhm = T.seeing / pixscale
+
+        T.expid = np.array(['%10i-%s' % (expnum,extname.strip())
+                            for expnum,extname in zip(T.expnum, T.ccdname)])
+
         TT.append(T)
     T = merge_tables(TT)
     outfn = 'bok-zp.fits'

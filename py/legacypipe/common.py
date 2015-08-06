@@ -17,6 +17,7 @@ from scipy.ndimage.measurements import label, find_objects
 from scipy.ndimage.morphology import binary_dilation, binary_fill_holes
 
 from astrometry.util.fits import fits_table, merge_tables
+from astrometry.util.file import trymakedirs
 from astrometry.util.plotutils import dimshow
 from astrometry.util.util import Tan, Sip, anwcs_t
 from astrometry.util.ttime import CpuMeas, Time
@@ -1114,8 +1115,13 @@ Using the current directory as DECALS_DIR, but this is likely to fail.
         ### HACK! Hard-coded brick edge size, in degrees!
         self.bricksize = 0.25
 
+        self.image_typemap = {
+            'decam': DecamImage,
+            '90prime': BokImage,
+            }
+
     def get_calib_dir(self):
-        return os.path.join(self.decals_dir, 'calib', 'decam')
+        return os.path.join(self.decals_dir, 'calib')
 
     def get_image_dir(self):
         return os.path.join(self.decals_dir, 'images')
@@ -1204,9 +1210,9 @@ Using the current directory as DECALS_DIR, but this is likely to fail.
         T.ccdname = np.array([s.strip() for s in T.ccdname])
         return T
 
-    def ccds_touching_wcs(self, wcs):
+    def ccds_touching_wcs(self, wcs, **kwargs):
         T = self.get_ccds()
-        I = ccds_touching_wcs(wcs, T)
+        I = ccds_touching_wcs(wcs, T, **kwargs)
         if len(I) == 0:
             return None
         T.cut(I)
@@ -1216,7 +1222,8 @@ Using the current directory as DECALS_DIR, but this is likely to fail.
         '''
         Returns a DecamImage or similar object for one row of the CCDs table.
         '''
-        return DecamImage(self, t)
+        imageType = self.image_typemap[t.camera.strip()]
+        return imageType(self, t)
     
     def tims_touching_wcs(self, targetwcs, mp, bands=None,
                           gaussPsf=False, const2psf=True, pixPsf=False):
@@ -1298,10 +1305,10 @@ Using the current directory as DECALS_DIR, but this is likely to fail.
             ('ccdnmatch < 20', (CCD.ccdnmatch < 20)),
             ('abs(zpt - ccdzpt) > 0.1',
              (np.abs(CCD.zpt - CCD.ccdzpt) > 0.1)),
-            ('zpt < 0.5 mag of nominal',
-             (CCD.zpt < (z0 - 0.5))),
-            ('zpt > 0.25 mag of nominal',
-             (CCD.zpt > (z0 + 0.25))),
+            ('zpt < 0.5 mag of nominal (for DECam)',
+             ((CCD.camera == 'decam') * (CCD.zpt < (z0 - 0.5)))),
+            ('zpt > 0.25 mag of nominal (for DECam)',
+             ((CCD.camera == 'decam') * (CCD.zpt > (z0 + 0.25)))),
              ]:
             good[crit] = False
             n = sum(good)
@@ -1459,7 +1466,7 @@ def exposure_metadata(filenames, hdus=None, trim=None):
 
     return T
 
-class DecamImage(object):
+class LegacySurveyImage(object):
     def __init__(self, decals, t):
         self.decals = decals
 
@@ -1471,48 +1478,18 @@ class DecamImage(object):
             self.imgfn = imgfn
         else:
             self.imgfn = os.path.join(self.decals.get_image_dir(), imgfn)
-        self.dqfn = self.imgfn.replace('_ooi_', '_ood_')
-        self.wtfn = self.imgfn.replace('_ooi_', '_oow_')
 
         self.hdu   = hdu
         self.expnum = expnum
         self.ccdname = ccdname.strip()
         self.band  = band
         self.exptime = exptime
-
-        for attr in ['imgfn', 'dqfn', 'wtfn']:
-            fn = getattr(self, attr)
-            #print(attr, '->', fn)
-            if os.path.exists(fn):
-                #print('Exists.')
-                continue
-            if fn.endswith('.fz'):
-                fun = fn[:-3]
-                if os.path.exists(fun):
-                    print('Using      ', fun)
-                    print('rather than', fn)
-                    setattr(self, attr, fun)
-            fn = getattr(self, attr)
-            #print attr, fn
-            #print '  exists? ', os.path.exists(fn)
-
-        ibase = os.path.basename(imgfn)
-        ibase = ibase.replace('.fits.fz', '')
-        ibase = ibase.replace('.fits', '')
-        idirname = os.path.basename(os.path.dirname(imgfn))
-
-        expstr = '%08i' % expnum
-        self.calname = '%s/%s/decam-%s-%s' % (expstr[:5], expstr, expstr, ccdname)
-        self.name = '%s-%s' % (expstr, ccdname)
-
-        calibdir = self.decals.get_calib_dir()
-        self.pvwcsfn = os.path.join(calibdir, 'astrom-pv', self.calname + '.wcs.fits')
-        self.sefn = os.path.join(calibdir, 'sextractor', self.calname + '.fits')
-        self.psffn = os.path.join(calibdir, 'psfex', self.calname + '.fits')
-        self.skyfn = os.path.join(calibdir, 'sky', self.calname + '.fits')
+        self.camera = t.camera.strip()
+        self.fwhm = t.fwhm
 
     def __str__(self):
-        return 'DECam ' + self.name
+        return self.name
+
     def __repr__(self):
         return str(self)
 
@@ -1544,28 +1521,7 @@ class DecamImage(object):
         return slice(y0,y1), slice(x0,x1)
 
     def get_good_image_subregion(self):
-        x0,x1,y0,y1 = None,None,None,None
-
-        imh,imw = self.get_image_shape()
-        # Handle 'glowing' edges in DES r-band images
-        # aww yeah
-        if self.band == 'r' and (('DES' in self.imgfn) or ('COSMOS' in self.imgfn)):
-            # Northern chips: drop 100 pix off the bottom
-            if 'N' in self.ccdname:
-                print('Clipping bottom part of northern DES r-band chip')
-                y0 = 100
-            else:
-                # Southern chips: drop 100 pix off the top
-                print('Clipping top part of southern DES r-band chip')
-                y1 = imh - 100
-
-        # Clip the bad half of chip S7.
-        # The left half is OK.
-        if self.ccdname == 'S7':
-            print('Clipping the right half of chip S7')
-            x1 = 1023
-
-        return x0,x1,y0,y1
+        return None,None,None,None
 
     def get_tractor_image(self, slc=None, radecpoly=None,
                           gaussPsf=False, const2psf=False, pixPsf=False,
@@ -1597,7 +1553,7 @@ class DecamImage(object):
         band = self.band
         imh,imw = self.get_image_shape()
 
-        wcs = self.read_pv_wcs()
+        wcs = self.get_wcs()
         x0,y0 = 0,0
         x1 = x0 + imw
         y1 = y0 + imh
@@ -1647,7 +1603,8 @@ class DecamImage(object):
         assert(not(np.all(invvar == 0.)))
 
         # header 'FWHM' is in pixels
-        psf_fwhm = imghdr['FWHM']
+        # imghdr['FWHM']
+        psf_fwhm = self.fwhm 
         psf_sigma = psf_fwhm / 2.35
         primhdr = self.read_image_primary_header()
 
@@ -1676,10 +1633,13 @@ class DecamImage(object):
             twcs.setX0Y0(x0,y0)
 
         if gaussPsf:
-            from tractor.basics import NCircularGaussianPSF
-            psfex = None
-            psf = NCircularGaussianPSF([psf_sigma], [1.0])
+            #from tractor.basics import NCircularGaussianPSF
+            #psf = NCircularGaussianPSF([psf_sigma], [1.0])
+            from tractor.basics import GaussianMixturePSF
+            v = psf_sigma**2
+            psf = GaussianMixturePSF(1., 0., 0., v, v, 0.)
             print('WARNING: using mock PSF:', psf)
+            psfex = None
         elif pixPsf:
             # constant PixelizedPSF.
             print('Reading PsfEx model from', self.psffn)
@@ -1726,8 +1686,8 @@ class DecamImage(object):
         tim.hdr = imghdr
         tim.dq = dq
         tim.dq_bits = CP_DQ_BITS
-        tim.saturation = imghdr['SATURATE']
-        tim.satval = tim.saturation
+        tim.saturation = imghdr.get('SATURATE', None)
+        tim.satval = tim.saturation or 0.
         if subsky:
             tim.satval -= midsky
         if nanomaggies:
@@ -1739,15 +1699,6 @@ class DecamImage(object):
                        vmin=mn, vmax=mx)
         return tim
     
-    def makedirs(self):
-        for dirnm in [os.path.dirname(fn) for fn in
-                      [self.sefn, self.psffn, self.skyfn, self.pvwcsfn]]:
-            if not os.path.exists(dirnm):
-                try:
-                    os.makedirs(dirnm)
-                except:
-                    pass
-
     def _read_fits(self, fn, hdu, slice=None, header=None, **kwargs):
         if slice is not None:
             f = fitsio.FITS(fn)[hdu]
@@ -1776,9 +1727,167 @@ class DecamImage(object):
     def read_image_header(self, **kwargs):
         return fitsio.read_header(self.imgfn, ext=self.hdu)
 
+    def read_dq(self, **kwargs):
+        return None
+
+    def read_invvar(self, clip=True, **kwargs):
+        return None
+
+    def read_pv_wcs(self):
+        print('Reading WCS from', self.pvwcsfn)
+        wcs = Sip(self.pvwcsfn)
+        dra,ddec = self.decals.get_astrometric_zeropoint_for(self)
+        r,d = wcs.get_crval()
+        print('Applying astrometric zeropoint:', (dra,ddec))
+        wcs.set_crval((r + dra, d + ddec))
+        return wcs
+    
+    def read_sky_model(self):
+        print('Reading sky model from', self.skyfn)
+        hdr = fitsio.read_header(self.skyfn)
+        skyclass = hdr['SKY']
+        clazz = get_class_from_name(skyclass)
+        fromfits = getattr(clazz, 'fromFitsHeader')
+        skyobj = fromfits(hdr, prefix='SKY_')
+        return skyobj
+
+    def run_calibs(self, ra, dec, pixscale, gaussPsf, W=2048, H=4096,
+                   pvastrom=True, psfex=True, sky=True,
+                   se=False,
+                   funpack=False, fcopy=False, use_mask=True,
+                   force=False, just_check=False):
+        print('run_calibs for', self)
+        print('(not implemented)')
+        pass
+
+class BokImage(LegacySurveyImage):
+    def __init__(self, decals, t):
+        super(BokImage, self).__init__(decals, t)
+
+        self.dqfn = self.imgfn.replace('_oi.fits', '_od.fits')
+
+        expstr = '%10i' % self.expnum
+        self.calname = '%s/%s/bok-%s-%s' % (expstr[:5], expstr, expstr, self.ccdname)
+        self.name = '%s-%s' % (expstr, self.ccdname)
+
+        calibdir = os.path.join(self.decals.get_calib_dir(), self.camera)
+        self.pvwcsfn = os.path.join(calibdir, 'astrom-pv', self.calname + '.wcs.fits')
+        self.sefn = os.path.join(calibdir, 'sextractor', self.calname + '.fits')
+        self.psffn = os.path.join(calibdir, 'psfex', self.calname + '.fits')
+        self.skyfn = os.path.join(calibdir, 'sky', self.calname + '.fits')
+
+    def __str__(self):
+        return 'Bok ' + self.name
+
+    def read_sky_model(self):
+        ## HACK
+        img = self.read_image()
+        sky = np.median(img)
+        print('Median "sky" model:', sky)
+        return ConstantSky(sky)
+
+    def read_dq(self, **kwargs):
+        print('Reading data quality from', self.dqfn, 'hdu', self.hdu)
+        X = self._read_fits(self.dqfn, self.hdu, **kwargs)
+        return X
+
+    def read_invvar(self, **kwargs):
+        print('Reading inverse-variance for image', self.imgfn, 'hdu', self.hdu)
+        ##### HACK!  No weight-maps available?
+        img = self.read_image(**kwargs)
+
+        # # Estimate per-pixel noise via Blanton's 5-pixel MAD
+        slice1 = (slice(0,-5,10),slice(0,-5,10))
+        slice2 = (slice(5,None,10),slice(5,None,10))
+        mad = np.median(np.abs(img[slice1] - img[slice2]).ravel())
+        sig1 = 1.4826 * mad / np.sqrt(2.)
+        print('sig1 estimate:', sig1)
+        invvar = np.ones_like(img) / sig1**2
+        return invvar
+
+    def get_wcs(self):
+        hdr = fitsio.read_header(self.imgfn, self.hdu)
+        print('Converting CTYPE1 from', hdr.get('CTYPE1'), 'to RA---TAN')
+        hdr['CTYPE1'] = 'RA---TAN'
+        print('Converting CTYPE2 from', hdr.get('CTYPE2'), 'to DEC--TAN')
+        hdr['CTYPE2'] = 'DEC--TAN'
+        H,W = self.get_image_shape()
+        hdr['IMAGEW'] = W
+        hdr['IMAGEH'] = H
+        tmphdr = create_temp(suffix='.fits')
+        fitsio.write(tmphdr, None, header=hdr, clobber=True)
+        print('Wrote fake header to', tmphdr)
+        wcs = Tan(tmphdr)
+        print('Returning', wcs)
+        return wcs
+
+
+class DecamImage(LegacySurveyImage):
+    def __init__(self, decals, t):
+        super(DecamImage, self).__init__(decals, t)
+        self.dqfn = self.imgfn.replace('_ooi_', '_ood_')
+        self.wtfn = self.imgfn.replace('_ooi_', '_oow_')
+
+        for attr in ['imgfn', 'dqfn', 'wtfn']:
+            fn = getattr(self, attr)
+            #print(attr, '->', fn)
+            if os.path.exists(fn):
+                #print('Exists.')
+                continue
+            if fn.endswith('.fz'):
+                fun = fn[:-3]
+                if os.path.exists(fun):
+                    print('Using      ', fun)
+                    print('rather than', fn)
+                    setattr(self, attr, fun)
+            fn = getattr(self, attr)
+            #print attr, fn
+            #print '  exists? ', os.path.exists(fn)
+
+        # ibase = os.path.basename(imgfn)
+        # ibase = ibase.replace('.fits.fz', '')
+        # ibase = ibase.replace('.fits', '')
+        # idirname = os.path.basename(os.path.dirname(imgfn))
+
+        expstr = '%08i' % self.expnum
+        self.calname = '%s/%s/decam-%s-%s' % (expstr[:5], expstr, expstr, self.ccdname)
+        self.name = '%s-%s' % (expstr, self.ccdname)
+
+        calibdir = os.path.join(self.decals.get_calib_dir(), self.camera)
+        self.pvwcsfn = os.path.join(calibdir, 'astrom-pv', self.calname + '.wcs.fits')
+        self.sefn = os.path.join(calibdir, 'sextractor', self.calname + '.fits')
+        self.psffn = os.path.join(calibdir, 'psfex', self.calname + '.fits')
+        self.skyfn = os.path.join(calibdir, 'sky', self.calname + '.fits')
+
+    def __str__(self):
+        return 'DECam ' + self.name
+
+    def get_good_image_subregion(self):
+        x0,x1,y0,y1 = None,None,None,None
+
+        imh,imw = self.get_image_shape()
+        # Handle 'glowing' edges in DES r-band images
+        # aww yeah
+        if self.band == 'r' and (('DES' in self.imgfn) or ('COSMOS' in self.imgfn)):
+            # Northern chips: drop 100 pix off the bottom
+            if 'N' in self.ccdname:
+                print('Clipping bottom part of northern DES r-band chip')
+                y0 = 100
+            else:
+                # Southern chips: drop 100 pix off the top
+                print('Clipping top part of southern DES r-band chip')
+                y1 = imh - 100
+
+        # Clip the bad half of chip S7.
+        # The left half is OK.
+        if self.ccdname == 'S7':
+            print('Clipping the right half of chip S7')
+            x1 = 1023
+
+        return x0,x1,y0,y1
+
     def read_dq(self, header=False, **kwargs):
         from distutils.version import StrictVersion
-
         print('Reading data quality from', self.dqfn, 'hdu', self.hdu)
         dq,hdr = self._read_fits(self.dqfn, self.hdu, header=True, **kwargs)
         primhdr = fitsio.read_header(self.dqfn)
@@ -1824,30 +1933,8 @@ class DecamImage(object):
             invvar[invvar < thresh] = 0
         return invvar
 
-    def read_pv_wcs(self):
-        print('Reading WCS from', self.pvwcsfn)
-        wcs = Sip(self.pvwcsfn)
-        dra,ddec = self.decals.get_astrometric_zeropoint_for(self)
-        r,d = wcs.get_crval()
-        print('Applying astrometric zeropoint:', (dra,ddec))
-        wcs.set_crval((r + dra, d + ddec))
-        return wcs
-    
-    def read_sdss(self):
-        S = fits_table(self.sdssfn)
-        # ugh!
-        if S.objc_type.min() > 128:
-            S.objc_type -= 128
-        return S
-
-    def read_sky_model(self):
-        print('Reading sky model from', self.skyfn)
-        hdr = fitsio.read_header(self.skyfn)
-        skyclass = hdr['SKY']
-        clazz = get_class_from_name(skyclass)
-        fromfits = getattr(clazz, 'fromFitsHeader')
-        skyobj = fromfits(hdr, prefix='SKY_')
-        return skyobj
+    def get_wcs(self):
+        return self.read_pv_wcs()
 
     def run_calibs(self, ra, dec, pixscale, gaussPsf, W=2048, H=4096,
                    pvastrom=True, psfex=True, sky=True,
@@ -1861,7 +1948,6 @@ class DecamImage(object):
         '''
         for fn in [self.pvwcsfn, self.sefn, self.psffn, self.skyfn]:
             print('exists?', os.path.exists(fn), fn)
-        self.makedirs()
 
         if gaussPsf:
             psfex = False
@@ -1982,6 +2068,9 @@ class DecamImage(object):
             if use_mask:
                 maskstr = '-FLAG_IMAGE ' + funmaskfn
             sedir = self.decals.get_se_dir()
+
+            trymakedirs(self.sefn, dir=True)
+
             cmd = ' '.join([
                 'sex',
                 '-c', os.path.join(sedir, 'DECaLS-v2.sex'),
@@ -2015,11 +2104,17 @@ class DecamImage(object):
             os.unlink(tmpwcsfn)
             for r in wcshdr.records():
                 version_hdr.add_record(r)
+
+            trymakedirs(self.pvwcsfn, dir=True)
+
             fitsio.write(self.pvwcsfn, None, header=version_hdr, clobber=True)
             print('Wrote', self.pvwcsfn)
 
         if psfex:
             sedir = self.decals.get_se_dir()
+
+            trymakedirs(self.psffn, dir=True)
+
             # If we wrote *.psf instead of *.fits in a previous run...
             oldfn = self.psffn.replace('.fits', '.psf')
             if os.path.exists(oldfn):
@@ -2057,6 +2152,8 @@ class DecamImage(object):
                                 comment='estimate_mode, or fallback to median?'))
             hdr.add_record(dict(name='SKY', value=sky_type, comment='Sky class'))
             tsky.toFitsHeader(hdr, prefix='SKY_')
+
+            trymakedirs(self.skyfn, dir=True)
             fits = fitsio.FITS(self.skyfn, 'rw', clobber=True)
             fits.write(None, header=hdr)
 

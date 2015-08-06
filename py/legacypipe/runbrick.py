@@ -41,6 +41,7 @@ import os
 import fitsio
 
 from astrometry.util.fits import fits_table, merge_tables
+from astrometry.util.file import trymakedirs
 from astrometry.util.plotutils import PlotSequence, dimshow
 from astrometry.util.resample import resample_with_wcs, OverlapError
 from astrometry.util.ttime import Time
@@ -188,16 +189,6 @@ class MyMultiproc(multiproc):
         print('Grand total CPU utilization:  %.2f cores' % (tcpu / twall))
         print('Grand total efficiency:       %.1f %%' % (100. * tcpu / (twall * nthreads)))
         print()
-
-def try_makedirs(dirs):
-    if not os.path.exists(dirs):
-        # there can be a race
-        try:
-            os.makedirs(dirs)
-        except:
-            import traceback
-            traceback.print_exc()
-            pass
 
 class iterwrapper(object):
     def __init__(self, y, n):
@@ -382,7 +373,7 @@ def stage_tims(W=3600, H=3600, pixscale=0.262, brickname=None,
 
     pixscale = targetwcs.pixel_scale()
 
-    T = decals.ccds_touching_wcs(targetwcs)
+    T = decals.ccds_touching_wcs(targetwcs, ccdrad=None)
     if T is None:
         raise NothingToDoError('No CCDs touching brick')
 
@@ -749,7 +740,7 @@ def _write_band_images(band,
 
 def stage_image_coadds(targetwcs=None, bands=None, tims=None, outdir=None,
                        brickname=None, version_header=None,
-                       plots=False, ps=None,
+                       plots=False, ps=None, coadd_bw=False,
                        **kwargs):
     '''
     Immediately after reading the images, we
@@ -762,7 +753,7 @@ def stage_image_coadds(targetwcs=None, bands=None, tims=None, outdir=None,
     if outdir is None:
         outdir = '.'
     basedir = os.path.join(outdir, 'coadd', brickname[:3], brickname)
-    try_makedirs(basedir)
+    trymakedirs(basedir)
 
     C = _coadds(tims, bands, targetwcs,
                 callback=_write_band_images,
@@ -770,7 +761,13 @@ def stage_image_coadds(targetwcs=None, bands=None, tims=None, outdir=None,
 
     tmpfn = create_temp(suffix='.png')
     for name,ims,rgbkw in [('image',C.coimgs,rgbkwargs)]:
-        plt.imsave(tmpfn, get_rgb(ims, bands, **rgbkw), origin='lower')
+        rgb = get_rgb(ims, bands, **rgbkw)
+        kwa = {}
+        if coadd_bw and len(bands) == 1:
+            i = 'zrg'.index(bands[0])
+            rgb = rgb0[:,:,i]
+            kwa = dict(cmap='gray')
+        plt.imsave(tmpfn, rgb, origin='lower', **kwa)
         jpegfn = os.path.join(basedir, 'decals-%s-%s.jpg' % (brickname, name))
         cmd = 'pngtopnm %s | pnmtojpeg -quality 90 > %s' % (tmpfn, jpegfn)
         os.system(cmd)
@@ -931,7 +928,7 @@ def stage_srcs(coimgs=None, cons=None,
             if outdir is None:
                 outdir = '.'
             outdir = os.path.join(outdir, 'metrics', brickname[:3])
-            try_makedirs(outdir)
+            trymakedirs(outdir)
             fn = os.path.join(outdir, 'sources-%s' % brickname)
             ps = PlotSequence(fn)
 
@@ -1239,7 +1236,7 @@ def stage_fitblobs_finish(
         if outdir is None:
             outdir = '.'
         metricsdir = os.path.join(outdir, 'metrics', brickname[:3])
-        try_makedirs(metricsdir)
+        trymakedirs(metricsdir)
         fn = os.path.join(metricsdir, 'all-models-%s.fits' % brickname)
         TT.writeto(fn, header=hdr)
         del TT
@@ -2420,6 +2417,7 @@ def _get_mod((tim, srcs)):
 def stage_coadds(bands=None, version_header=None, targetwcs=None,
                  tims=None, ps=None, brickname=None, ccds=None,
                  outdir=None, T=None, cat=None, pixscale=None, plots=False,
+                 coadd_bw=False,
                  mp=None,
                  **kwargs):
     '''
@@ -2433,7 +2431,7 @@ def stage_coadds(bands=None, version_header=None, targetwcs=None,
     if outdir is None:
         outdir = '.'
     basedir = os.path.join(outdir, 'coadd', brickname[:3], brickname)
-    try_makedirs(basedir)
+    trymakedirs(basedir)
     fn = os.path.join(basedir, 'decals-%s-ccds.fits' % brickname)
     #
     ccds.ccd_x0 = np.array([tim.x0 for tim in tims]).astype(np.int16)
@@ -2501,7 +2499,16 @@ def stage_coadds(bands=None, version_header=None, targetwcs=None,
                            ('model', C.comods, rgbkwargs),
                            ('resid', C.coresids, rgbkwargs_resid),
                            ]:
-        plt.imsave(tmpfn, get_rgb(ims, bands, **rgbkw), origin='lower')
+        rgb = get_rgb(ims, bands, **rgbkw)
+        kwa = {}
+        if coadd_bw and len(bands) == 1:
+            # HACK
+            #rgb = (rgb[:,:,0] + rgb[:,:,1] + rgb[:,:,2])
+            i = 'zrg'.index(bands[0])
+            rgb = rgb[:,:,i]
+            kwa = dict(cmap='gray')
+        plt.imsave(tmpfn, rgb, origin='lower', **kwa)
+        del rgb
         jpegfn = os.path.join(basedir, 'decals-%s-%s.jpg' % (brickname, name))
         cmd = ('pngtopnm %s | pnmtojpeg -quality 90 > %s' % (tmpfn, jpegfn))
         os.system(cmd)
@@ -2815,7 +2822,7 @@ def stage_writecat(
         outdir = os.path.join(outdir, 'tractor', brickname[:3])
         fn = os.path.join(outdir, 'tractor-%s.fits' % brickname)
     dirnm = os.path.dirname(fn)
-    try_makedirs(dirnm)
+    trymakedirs(dirnm)
 
     print('Reading SFD maps...')
     sfd = SFDMap()
@@ -3007,7 +3014,7 @@ def run_brick(brick, radec=None, pixscale=0.262,
               ceres=True,
               outdir=None,
               decals=None, decals_dir=None, threads=None,
-              plots=False, plots2=False,
+              plots=False, plots2=False, coadd_bw=False,
               plotbase=None, plotnumber=0,
               picklePattern='pickles/runbrick-%(brick)s-%%(stage)s.pickle',
               stages=['writecat'],
@@ -3087,6 +3094,7 @@ def run_brick(brick, radec=None, pixscale=0.262,
 
     Plotting options:
 
+    - *coadd_bw*: boolean: if only one band is available, make B&W coadds?
     - *plots*: boolean; make a bunch of plots?
     - *plots2*: boolean; make a bunch more plots?
     - *plotbase*: string, default brick-BRICK, the plot filename prefix.
@@ -3158,7 +3166,7 @@ def run_brick(brick, radec=None, pixscale=0.262,
                   no_sdss=not(sdssInit),
                   outdir=outdir, decals_dir=decals_dir,
                   decals=decals,
-                  plots=plots, plots2=plots2,
+                  plots=plots, plots2=plots2, coadd_bw=coadd_bw,
                   force=forceStages, write=writePickles)
 
     if threads and threads > 1:
@@ -3311,6 +3319,9 @@ python -u projects/desi/runbrick.py --plots --brick 2440p070 --zoom 1900 2400 45
     parser.add_option('--pixpsf', action='store_true', default=False,
                       help='Use the pixelized PsfEx PSF model, and FFT convolution')
 
+    parser.add_option('--coadd-bw', action='store_true', default=False,
+                      help='Create grayscale coadds if only one band is available?')
+
     print()
     print('runbrick.py starting at', datetime.datetime.now().isoformat())
     print('Command-line args:', sys.argv)
@@ -3385,6 +3396,7 @@ python -u projects/desi/runbrick.py --plots --brick 2440p070 --zoom 1900 2400 45
             nblobs=opt.nblobs, blob=opt.blob, blobxy=opt.blobxy,
             pipe=opt.pipe, outdir=opt.outdir, decals_dir=opt.decals_dir,
             plots=opt.plots, plots2=opt.plots2,
+            coadd_bw=opt.coadd_bw,
             plotbase=opt.plot_base, plotnumber=opt.plot_number,
             force=opt.force, forceAll=opt.forceall,
             stages=opt.stage, writePickles=opt.write,
