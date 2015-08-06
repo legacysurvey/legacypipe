@@ -2122,7 +2122,7 @@ class DecamImage(LegacySurveyImage):
                 os.rename(oldfn, self.psffn)
             else:
                 cmd = ('psfex -c %s -PSF_DIR %s %s' %
-                       (os.path.join(sedir, 'DECaLS-checkplots.psfex'),
+                       (os.path.join(sedir, 'DECaLS-v2.psfex'),
                         os.path.dirname(self.psffn), self.sefn))
                 print(cmd)
                 rtn = os.system(cmd)
