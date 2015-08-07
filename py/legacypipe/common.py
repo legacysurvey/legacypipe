@@ -1467,7 +1467,43 @@ def exposure_metadata(filenames, hdus=None, trim=None):
     return T
 
 class LegacySurveyImage(object):
+    '''
+    A base class containing common code for the images we handle.
+
+    You shouldn't directly instantiate this class, but rather use the appropriate
+    subclass:
+     * DecamImage
+     * BokImage
+    '''
+
     def __init__(self, decals, t):
+        '''
+
+        Create a new LegacySurveyImage object, from a Decals object,
+        and one row of a CCDs fits_table object.
+
+        You may not need to instantiate this class directly, instead using
+        Decals.get_image_object():
+
+            decals = Decals()
+            # targetwcs = ....
+            # T = decals.ccds_touching_wcs(targetwcs, ccdrad=None)
+            T = decals.get_ccds()
+            im = decals.get_image_object(T[0])
+            # which does the same thing as:
+            im = DecamImage(decals, T[0])
+            
+        Or, if you have a Community Pipeline-processed input file and
+        FITS HDU extension number:
+
+            decals = Decals()
+            T = exposure_metadata([filename], hdus=[hdu])
+            im = DecamImage(decals, T[0])
+
+        Perhaps the most important method in this class is
+        *get_tractor_image*.
+
+        '''
         self.decals = decals
 
         imgfn, hdu, band, expnum, ccdname, exptime = (
@@ -1521,6 +1557,14 @@ class LegacySurveyImage(object):
         return slice(y0,y1), slice(x0,x1)
 
     def get_good_image_subregion(self):
+        '''
+        Returns x0,x1,y0,y1 of the good region of this chip,
+        or None if no cut should be applied to that edge; returns
+        (None,None,None,None) if the whole chip is good.
+
+        This cut is applied in addition to any masking in the mask or
+        invvar map.
+        '''
         return None,None,None,None
 
     def get_tractor_image(self, slc=None, radecpoly=None,
@@ -1761,6 +1805,14 @@ class LegacySurveyImage(object):
         pass
 
 class BokImage(LegacySurveyImage):
+    '''
+    A LegacySurveyImage subclass to handle images from the 90prime
+    camera on the Bok telescope.
+
+    Currently, there are several hacks and shortcuts in handling the
+    calibration; this is a sketch, not a final working solution.
+
+    '''
     def __init__(self, decals, t):
         super(BokImage, self).__init__(decals, t)
 
@@ -1780,7 +1832,7 @@ class BokImage(LegacySurveyImage):
         return 'Bok ' + self.name
 
     def read_sky_model(self):
-        ## HACK
+        ## HACK -- create the sky model on the fly
         img = self.read_image()
         sky = np.median(img)
         print('Median "sky" model:', sky)
@@ -1806,6 +1858,8 @@ class BokImage(LegacySurveyImage):
         return invvar
 
     def get_wcs(self):
+        ##### HACK!  Ignore the distortion solution in the headers,
+        ##### converting to straight TAN.
         hdr = fitsio.read_header(self.imgfn, self.hdu)
         print('Converting CTYPE1 from', hdr.get('CTYPE1'), 'to RA---TAN')
         hdr['CTYPE1'] = 'RA---TAN'
@@ -1823,6 +1877,12 @@ class BokImage(LegacySurveyImage):
 
 
 class DecamImage(LegacySurveyImage):
+    '''
+
+    A LegacySurveyImage subclass to handle images from the Dark Energy
+    Camera, DECam, on the Blanco telescope.
+
+    '''
     def __init__(self, decals, t):
         super(DecamImage, self).__init__(decals, t)
         self.dqfn = self.imgfn.replace('_ooi_', '_ood_')
@@ -1830,9 +1890,7 @@ class DecamImage(LegacySurveyImage):
 
         for attr in ['imgfn', 'dqfn', 'wtfn']:
             fn = getattr(self, attr)
-            #print(attr, '->', fn)
             if os.path.exists(fn):
-                #print('Exists.')
                 continue
             if fn.endswith('.fz'):
                 fun = fn[:-3]
@@ -1840,14 +1898,6 @@ class DecamImage(LegacySurveyImage):
                     print('Using      ', fun)
                     print('rather than', fn)
                     setattr(self, attr, fun)
-            fn = getattr(self, attr)
-            #print attr, fn
-            #print '  exists? ', os.path.exists(fn)
-
-        # ibase = os.path.basename(imgfn)
-        # ibase = ibase.replace('.fits.fz', '')
-        # ibase = ibase.replace('.fits', '')
-        # idirname = os.path.basename(os.path.dirname(imgfn))
 
         expstr = '%08i' % self.expnum
         self.calname = '%s/%s/decam-%s-%s' % (expstr[:5], expstr, expstr, self.ccdname)
@@ -1890,6 +1940,8 @@ class DecamImage(LegacySurveyImage):
         from distutils.version import StrictVersion
         print('Reading data quality from', self.dqfn, 'hdu', self.hdu)
         dq,hdr = self._read_fits(self.dqfn, self.hdu, header=True, **kwargs)
+        # The format of the DQ maps changed as of version 3.5.0 of the
+        # Community Pipeline.  Handle that here...
         primhdr = fitsio.read_header(self.dqfn)
         plver = primhdr['PLVER'].strip()
         plver = plver.replace('V','')
@@ -1927,7 +1979,8 @@ class DecamImage(LegacySurveyImage):
         print('Reading inverse-variance from', self.wtfn, 'hdu', self.hdu)
         invvar = self._read_fits(self.wtfn, self.hdu, **kwargs)
         if clip:
-            # Clamp near-zero (incl negative!) invvars to zero
+            # Clamp near-zero (incl negative!) invvars to zero.
+            # These arise due to fpack.
             med = np.median(invvar[invvar > 0])
             thresh = 0.2 * med
             invvar[invvar < thresh] = 0
@@ -1942,8 +1995,9 @@ class DecamImage(LegacySurveyImage):
                    funpack=False, fcopy=False, use_mask=True,
                    force=False, just_check=False):
         '''
-        pixscale: in arcsec/pixel
+        Run calibration pre-processing steps.
 
+        pixscale: in arcsec/pixel
         just_check: if True, returns True if calibs need to be run.
         '''
         for fn in [self.pvwcsfn, self.sefn, self.psffn, self.skyfn]:
