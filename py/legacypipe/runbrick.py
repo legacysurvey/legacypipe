@@ -852,23 +852,35 @@ def stage_srcs(coimgs=None, cons=None,
 
             if plots:
                 plt.clf()
-                plt.subplot(1,2,1)
                 sig1 = 1./np.sqrt(np.median(detiv[detiv > 0]))
                 kwa = dict(vmin=-2.*sig1, vmax=20.*sig1)
+                kwa2 = dict()
+                plt.subplot(2,2,1)
                 dimshow(detmap.copy(), **kwa)
                 plt.title('detmap')
+                plt.subplot(2,2,3)
+                dimshow(detmap.copy(), **kwa2)
             
             # Set the central pixel of the detmap to the source's flux
             detmap[T.ity[I], T.itx[I]] = [
                 cat[i].getBrightness().getFlux(band) for i in I]
+            goodpix = np.zeros(detmap.shape, bool)
+            goodpix[T.ity[I], T.itx[I]] = True
             # flood fill... this could be slow!
-            patch_image(detmap, detiv > 0)
+            #detmap_fill = detmap.copy()
+            patch_image(detmap, goodpix, required=(detiv == 0))
+            #detmap[detiv == 0] = detmap_fill[detiv == 0]
 
             if plots:
-                plt.subplot(1,2,2)
+                plt.subplot(2,2,2)
                 dimshow(detmap, **kwa)
                 plt.title('patched')
+                plt.subplot(2,2,4)
+                dimshow(detmap, **kwa2)
                 ps.savefig()
+
+                fitsio.write('detmap-patched-%s.fits' % band, detmap)
+                #fitsio.write('detmap-fill-%s.fits' % band, detmap_fill)
 
     tlast = tnow
     # Median-smooth detection maps
