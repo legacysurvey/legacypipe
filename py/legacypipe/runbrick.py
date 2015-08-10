@@ -842,7 +842,11 @@ def stage_srcs(coimgs=None, cons=None,
     tnow = Time()
     print('[parallel srcs] Detmaps:', tnow-tlast)
 
+    saturated_pix = None
+
     if sdss_xy is not None:
+
+        saturated_pix = np.zeros(detmaps[0].shape, bool)
 
         for band,detmap,detiv in zip(bands, detmaps, detivs):
             I = np.flatnonzero(detiv[T.ity, T.itx] == 0.)
@@ -850,25 +854,12 @@ def stage_srcs(coimgs=None, cons=None,
             if len(I) == 0:
                 continue
 
-            if plots:
-                plt.clf()
-                plt.subplot(1,2,1)
-                sig1 = 1./np.sqrt(np.median(detiv[detiv > 0]))
-                kwa = dict(vmin=-2.*sig1, vmax=20.*sig1)
-                dimshow(detmap.copy(), **kwa)
-                plt.title('detmap')
-            
-            # Set the central pixel of the detmap to the source's flux
-            detmap[T.ity[I], T.itx[I]] = [
-                cat[i].getBrightness().getFlux(band) for i in I]
-            # flood fill... this could be slow!
-            patch_image(detmap, detiv > 0)
+            from scipy.ndimage.morphology import binary_propagation
 
-            if plots:
-                plt.subplot(1,2,2)
-                dimshow(detmap, **kwa)
-                plt.title('patched')
-                ps.savefig()
+            # Set the central pixel of the detmap
+            saturated_pix[T.ity[I], T.itx[I]] = True
+            # Spread the True pixels wherever detiv==0
+            binary_propagation(saturated_pix, mask=(detiv == 0), output=saturated_pix)
 
     tlast = tnow
     # Median-smooth detection maps
@@ -878,9 +869,6 @@ def stage_srcs(coimgs=None, cons=None,
     tnow = Time()
     print('[parallel srcs] Median-filter detmaps:', tnow-tlast)
     tlast = tnow
-
-    print('Bands:', bands)
-    print('detmaps:', len(detmaps))
 
     for i,(detmap,detiv,smoo) in enumerate(zip(detmaps, detivs, smoos)):
         # Subtract binned median image.
@@ -924,7 +912,7 @@ def stage_srcs(coimgs=None, cons=None,
     SEDs = sed_matched_filters(bands)
     Tnew,newcat,hot = run_sed_matched_filters(
         SEDs, bands, detmaps, detivs, sdss_xy, targetwcs,
-        nsigma=nsigma, plots=plots, ps=ps, mp=mp)
+        nsigma=nsigma, saturated_pix=saturated_pix, plots=plots, ps=ps, mp=mp)
 
     peaksn = Tnew.peaksn
     apsn = Tnew.apsn
@@ -2126,6 +2114,7 @@ def _one_blob((iblob, Isrcs, targetwcs, bx0, by0, blobw, blobh, blobmask, subtim
                       for k in nparams.keys()])
 
         if plots:
+            from collections import OrderedDict
             plt.clf()
             rows,cols = 2, 5
             mods = OrderedDict([('none',None), ('ptsrc',ptsrc), ('dev',dev),
