@@ -4,22 +4,22 @@ data reductions.
 
 For calling from other scripts, see:
 
-- `run_brick`
+- :py:func:`run_brick`
 
 Or for much more fine-grained control, see the individual stages:
 
-- `stage_tims`
-- `stage_image_coadds`
-- `stage_srcs`
-- `stage_fitblobs`
-- `stage_fitblobs_finish`
-- `stage_coadds`
-- `stage_wise_forced`
-- `stage_writecat`
+- :py:func:`stage_tims`
+- :py:func:`stage_image_coadds`
+- :py:func:`stage_srcs`
+- :py:func:`stage_fitblobs`
+- :py:func:`stage_fitblobs_finish`
+- :py:func:`stage_coadds`
+- :py:func:`stage_wise_forced`
+- :py:func:`stage_writecat`
 
 To see the code we run on each "blob" of pixels,
 
-- `_one_blob`
+- :py:func:`_one_blob`
 
 '''
 

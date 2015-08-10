@@ -19,7 +19,6 @@ legacypipe module
     :show-inheritance:
 
 
-
 Indices and tables
 ==================
 
