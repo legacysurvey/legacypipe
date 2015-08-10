@@ -15,15 +15,13 @@ class ps1cat():
         self.nside = 32
 
     def get_cat(self,ra,dec):
+        """Read the stack of PS1 catalogs, given ra,dec coordinates"""
         nstar = len(ra)
-        ipring = np.empty(nstar)
-        for iobj in range(nstar):
-            print(iobj, ra[iobj], dec[iobj])
-            hpxy = radecdegtohealpix(ra[iobj],dec[iobj],self.nside)
-            print(hpxy)
-            print(healpix_xy_to_ring(hpxy,self.nside))
+        ipring = np.empty(nstar).astype(int)
+        for iobj, (ra1, dec1) in enumerate(zip(ra,dec)):
+            hpxy = radecdegtohealpix(ra1,dec1,self.nside)
             ipring[iobj] = healpix_xy_to_ring(hpxy,self.nside)
-        pix = np.unique(ipring).astype(int)
+        pix = np.unique(ipring)
 
         cat = list()
         for ipix in pix:
@@ -40,9 +38,3 @@ class ps1cat():
             onoffccd[iobj] = ccdwcs.inside(ra[iobj],dec[iobj])
         onccd = np.where((onccd*1)==1)
         return onccd
-    
-if __name__== '__main__':
-    ps1 = ps1cat()
-    cat = ps1.get_cat([242.3,242.4],[8.6,8.7])
-    
-    

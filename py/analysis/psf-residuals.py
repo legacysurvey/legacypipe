@@ -91,6 +91,15 @@ def main():
     print('img: ', iminfo)
     H,W = iminfo['dims']
 
+    # Get all the PS1 stars on this CCD
+    
+
+    ps1 = ps1cat()
+    cat = ps1.get_cat([242.3,242.4],[8.6,8.7])
+    
+    
+
+
     #ra,dec = PS1
     #mag = PS1
     ra,dec = (106.2861, 27.4828)
