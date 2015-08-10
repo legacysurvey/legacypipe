@@ -2095,6 +2095,7 @@ def _one_blob((iblob, Isrcs, targetwcs, bx0, by0, blobw, blobh, blobmask, subtim
                       for k in nparams.keys()])
 
         if plots:
+            from collections import OrderedDict
             plt.clf()
             rows,cols = 2, 5
             mods = OrderedDict([('none',None), ('ptsrc',ptsrc), ('dev',dev),
