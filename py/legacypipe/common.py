@@ -463,16 +463,59 @@ def detection_maps(tims, targetwcs, bands, mp):
 
 def sed_matched_detection(sedname, sed, detmaps, detivs, bands,
                           xomit, yomit,
+                          omit_fluxes = None,
                           nsigma=5.,
                           saddle=2.,
                           cutonaper=True,
                           ps=None):
     '''
-    detmaps: list of detmaps, same order as "bands"
-    detivs :    ditto
-    
+    Runs a single SED-matched detection filter.
+
+    Avoids creating sources close to existing sources.
+
+    Parameters
+    ----------
+    sedname : string
+        Name of this SED; only used for plots.
+    sed : list of floats
+        The SED -- a list of floats, one per band, of this SED.
+    detmaps : list of numpy arrays
+        The per-band detection maps.  These must all be the same size, the
+        brick image size.
+    detivs : list of numpy arrays
+        The inverse-variance maps associated with `detmaps`.
+    bands : list of strings
+        The band names of the `detmaps` and `detivs` images.
+    xomit, yomit : iterables (lists or numpy arrays) of int
+        Previously known sources that are to be avoided.
+    nsigma : float, optional
+        Detection threshold.
+    saddle : float, optional
+        Saddle-point depth from existing sources down to new sources.
+    cutonaper : bool, optional
+        Apply a cut that the source's detection strength must be greater
+        than `nsigma` above the 16th percentile of the detection strength in
+        an annulus (from 10 to 20 pixels) around the source.
+    ps : PlotSequence object, optional
+        Create plots?
+
+    Returns
+    -------
+    hotblobs : numpy array of bool
+        A map of the blobs yielding sources in this SED.
+    px, py : numpy array of int
+        The new sources found.
+    aper : numpy array of float
+        The detection strength in the annulus around the source, if
+        `cutonaper` is set; else -1.
+    peakval : numpy array of float
+        The detection strength.
+
+    See also
+    --------
+    sed_matched_filters : creates the `(sedname, sed)` pairs used here
+
     '''
-    from astrometry.util.ttime import Time
     t0 = Time()
     H,W = detmaps[0].shape
 
@@ -511,7 +554,8 @@ def sed_matched_detection(sedname, sed, detmaps, detivs, bands,
     t0 = Time()
 
     def saddle_level(Y):
-        # Require a saddle of (the larger of) "saddle" sigma, or 10% of the peak height
+        # Require a saddle that drops by (the larger of) "saddle"
+        # sigma, or 20% of the peak height
         drop = max(saddle, Y * 0.2)
         return Y - drop
 
@@ -529,7 +573,7 @@ def sed_matched_detection(sedname, sed, detmaps, detivs, bands,
     # into the fitting!
     dilate = 8
     hotblobs,nhot = label(binary_fill_holes(
-            binary_dilation(peaks, iterations=dilate))) #, structure=np.ones((3,3)))))
+            binary_dilation(peaks, iterations=dilate)))
 
     # find pixels that are larger than their 8 neighbors
     peaks[1:-1, 1:-1] &= (sedsn[1:-1,1:-1] >= sedsn[0:-2,1:-1])
@@ -556,8 +600,8 @@ def sed_matched_detection(sedname, sed, detmaps, detivs, bands,
             plt.imshow(rgba, interpolation='nearest', origin='lower')
 
         plt.clf()
-        plt.imshow(sedsn, vmin=-2, vmax=10, interpolation='nearest', origin='lower',
-                   cmap='hot')
+        plt.imshow(sedsn, vmin=-2, vmax=10, interpolation='nearest',
+                   origin='lower', cmap='hot')
         above = (sedsn > nsigma)
         plot_boundary_map(above)
         ax = plt.axis()
@@ -568,8 +612,8 @@ def sed_matched_detection(sedname, sed, detmaps, detivs, bands,
         ps.savefig()
 
         # plt.clf()
-        # plt.imshow(sedsn, vmin=-2, vmax=10, interpolation='nearest', origin='lower',
-        #            cmap='hot')
+        # plt.imshow(sedsn, vmin=-2, vmax=10, interpolation='nearest',
+        #            origin='lower', cmap='hot')
         # plot_boundary_map(sedsn > lowest_saddle)
         # plt.title('SED %s: S/N & lowest saddle point bounds' % sedname)
         # ps.savefig()
@@ -629,7 +673,8 @@ def sed_matched_detection(sedname, sed, detmaps, detivs, bands,
             ox = ox.astype(int)
             oy = oy.astype(int)
             cut = any((ox >= 0) * (ox < w) * (oy >= 0) * (oy < h) *
-                      blobs[np.clip(oy,0,h-1), np.clip(ox,0,w-1)] == thisblob)
+                      (blobs[np.clip(oy,0,h-1), np.clip(ox,0,w-1)] == 
+                       thisblob))
 
         if False and (not cut) and ps is not None:
             plt.clf()
@@ -648,7 +693,8 @@ def sed_matched_detection(sedname, sed, detmaps, detivs, bands,
             #ax = plt.axis()
             #plt.plot(ox+x0, oy+y0, 'rx')
             plt.plot(xomit, yomit, 'rx', ms=8, mew=2)
-            plt.plot(px[:i][keep[:i]], py[:i][keep[:i]], '+', color=green, ms=8, mew=2)
+            plt.plot(px[:i][keep[:i]], py[:i][keep[:i]], '+',
+                     color=green, ms=8, mew=2)
             plt.plot(x, y, 'mo', mec='m', mfc='none', ms=12, mew=2)
             plt.axis(ax)
             if cut:
@@ -688,9 +734,12 @@ def sed_matched_detection(sedname, sed, detmaps, detivs, bands,
         if False and ps is not None:
             plt.clf()
             plt.subplot(1,2,1)
-            dimshow(ap, vmin=-2, vmax=10, cmap='hot', extent=[apx0,apx0+apw,apy0,apy0+aph])
+            dimshow(ap, vmin=-2, vmax=10, cmap='hot',
+                    extent=[apx0,apx0+apw,apy0,apy0+aph])
             plt.subplot(1,2,2)
-            dimshow(ap * ((R2 >= apin**2) * (R2 <= apout**2)), vmin=-2, vmax=10, cmap='hot', extent=[apx0,apx0+apw,apy0,apy0+aph])
+            dimshow(ap * ((R2 >= apin**2) * (R2 <= apout**2)),
+                    vmin=-2, vmax=10, cmap='hot',
+                    extent=[apx0,apx0+apw,apy0,apy0+aph])
             plt.suptitle('peak %.1f vs ap %.1f' % (sedsn[y,x], m))
             ps.savefig()
 
@@ -722,7 +771,8 @@ def sed_matched_detection(sedname, sed, detmaps, detivs, bands,
         p3 = plt.plot(xomit, yomit, 'r+', ms=8, mew=2)
         plt.axis(ax)
         plt.title('SED %s: hot blobs' % sedname)
-        plt.figlegend((p3[0],p1[0],p2[0]), ('Existing', 'Keep', 'Drop'), 'upper left')
+        plt.figlegend((p3[0],p1[0],p2[0]), ('Existing', 'Keep', 'Drop'),
+                      'upper left')
         ps.savefig()
 
     return hotblobs, px, py, aper, peakval
@@ -735,7 +785,7 @@ def get_rgb(imgs, bands, mnmx=None, arcsinh=None, scales=None):
     *imgs*  a list of numpy arrays, all the same size, in nanomaggies
     *bands* a list of strings, eg, ['g','r','z']
     *mnmx*  = (min,max), values that will become black/white *after* scaling.
-           Default is (-3,10)
+        Default is (-3,10)
     *arcsinh* use nonlinear scaling as in SDSS
     *scales*
 

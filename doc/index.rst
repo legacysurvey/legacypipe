@@ -11,10 +11,17 @@ Contents:
 .. toctree::
     :maxdepth: 2
 
-legacypipe module
------------------
+legacypipe.runbrick module
+--------------------------
 
 .. automodule:: legacypipe.runbrick
+    :members:
+    :show-inheritance:
+
+legacypipe.common module
+--------------------------
+
+.. automodule:: legacypipe.common
     :members:
     :show-inheritance:
 
