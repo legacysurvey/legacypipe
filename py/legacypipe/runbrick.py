@@ -832,15 +832,23 @@ def stage_srcs(coimgs=None, cons=None,
         T.delete_column('raerr')
         T.delete_column('decerr')
         sdss_xy = T.itx, T.ity
+        sdss_fluxes = np.zeros((len(T), len(bands)))
     else:
         sdss_xy = None
-
+        sdss_fluxes = None
     print('Rendering detection maps...')
     detmaps, detivs = detection_maps(tims, targetwcs, bands, mp)
     tnow = Time()
     print('[parallel srcs] Detmaps:', tnow-tlast)
-    tlast = tnow
 
+    if sdss_xy is not None:
+        for iband,(band,detiv) in enumerate(zip(bands, detivs)):
+            I = np.flatnonzero(detiv[T.ity, T.itx] == 0.)
+            print(len(I), 'SDSS sources have detiv = 0 in band', band)
+            for i in I:
+                sdss_fluxes[i, iband] = cat[i].getBrightness().getFlux(band)
+
+    tlast = tnow
     # Median-smooth detection maps
     binning = 4
     smoos = mp.map(_median_smooth_detmap,
@@ -884,16 +892,17 @@ def stage_srcs(coimgs=None, cons=None,
             dimshow(smoo, **kwa2)
             plt.subplot(2,3,6)
             dimshow(subbed, **kwa2)
-            plt.suptitle('Median filter of detection map: %s band' % bands[i])
+            plt.suptitle('Median filter of detection map: %s band' %
+                         bands[i])
             ps.savefig()
 
 
     # SED-matched detections
     print('Running source detection at', nsigma, 'sigma')
     SEDs = sed_matched_filters(bands)
-    Tnew,newcat,hot = run_sed_matched_filters(SEDs, bands, detmaps, detivs,
-                                              sdss_xy, targetwcs, nsigma=nsigma,
-                                              plots=plots, ps=ps, mp=mp)
+    Tnew,newcat,hot = run_sed_matched_filters(
+        SEDs, bands, detmaps, detivs, sdss_xy, targetwcs,
+        omit_fluxes=sdss_fluxes, nsigma=nsigma, plots=plots, ps=ps, mp=mp)
 
     peaksn = Tnew.peaksn
     apsn = Tnew.apsn

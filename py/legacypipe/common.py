@@ -347,6 +347,17 @@ def segment_and_group_sources(image, T, name=None, ps=None, plots=False):
 
 def get_sdss_sources(bands, targetwcs, photoobjdir=None, local=True,
                      extracols=[], ellipse=None):
+    '''
+    Finds SDSS catalog sources within the given `targetwcs` region,
+    returning FITS table and Tractor Source objects.
+
+    Returns
+    -------
+    cat : Tractor Catalog object
+        Tractor Source objects for the SDSS catalog entries
+    objs : fits_table object
+        FITS table object for the sources.  Row-by-row parallel to `cat`.
+    '''
     from astrometry.sdss import DR9, band_index, AsTransWrapper
     from astrometry.sdss.fields import read_photoobjs_in_wcs
     from tractor.sdss import get_tractor_sources_dr9
@@ -737,7 +748,15 @@ def create_temp(**kwargs):
     return fn
 
 def sed_matched_filters(bands):
-    # List the SED-matched filters to run
+    '''
+    Determines which SED-matched filters to run based on the available
+    bands.
+
+    Returns
+    -------
+    SEDs : list of (name, sed) tuples
+    
+    '''
 
     if len(bands) == 1:
         return [(bands[0], (1.,))]
@@ -900,6 +919,9 @@ def sed_matched_detection(sedname, sed, detmaps, detivs, bands,
         The band names of the `detmaps` and `detivs` images.
     xomit, yomit : iterables (lists or numpy arrays) of int
         Previously known sources that are to be avoided.
+    omit_fluxes : None, or numpy array of shape (len(xomit), len(bands))
+        The integrated flux to use for the xomit,yomit sources.  If zero,
+        this value is ignored.
     nsigma : float, optional
         Detection threshold.
     saddle : float, optional
