@@ -11,6 +11,7 @@ MOCK_MODULES = [
     'astrometry.util.resample', 'astrometry.util.ttime',
     'astrometry.util.starutil_numpy', 'astrometry.util.miscutils',
     'astrometry.util.util', 'astrometry.util.multiproc',
+    'astrometry.util.file',
     'astrometry.libkd',
     'tractor',
     'tractor.ellipses', 'tractor.galaxy', 'tractor.utils', 'tractor.basics',
