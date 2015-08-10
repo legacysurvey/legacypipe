@@ -4,22 +4,22 @@ data reductions.
 
 For calling from other scripts, see:
 
-- `run_brick`
+- :py:func:`run_brick`
 
 Or for much more fine-grained control, see the individual stages:
 
-- `stage_tims`
-- `stage_image_coadds`
-- `stage_srcs`
-- `stage_fitblobs`
-- `stage_fitblobs_finish`
-- `stage_coadds`
-- `stage_wise_forced`
-- `stage_writecat`
+- :py:func:`stage_tims`
+- :py:func:`stage_image_coadds`
+- :py:func:`stage_srcs`
+- :py:func:`stage_fitblobs`
+- :py:func:`stage_fitblobs_finish`
+- :py:func:`stage_coadds`
+- :py:func:`stage_wise_forced`
+- :py:func:`stage_writecat`
 
 To see the code we run on each "blob" of pixels,
 
-- `_one_blob`
+- :py:func:`_one_blob`
 
 '''
 
@@ -46,6 +46,7 @@ from astrometry.util.plotutils import PlotSequence, dimshow
 from astrometry.util.resample import resample_with_wcs, OverlapError
 from astrometry.util.ttime import Time
 from astrometry.util.starutil_numpy import radectoxyz
+from astrometry.util.miscutils import patch_image
 
 from tractor import Tractor, PointSource, Image, NanoMaggies
 from tractor.ellipses import EllipseESoft, EllipseE
@@ -832,15 +833,44 @@ def stage_srcs(coimgs=None, cons=None,
         T.delete_column('raerr')
         T.delete_column('decerr')
         sdss_xy = T.itx, T.ity
+        sdss_fluxes = np.zeros((len(T), len(bands)))
     else:
         sdss_xy = None
-
+        sdss_fluxes = None
     print('Rendering detection maps...')
     detmaps, detivs = detection_maps(tims, targetwcs, bands, mp)
     tnow = Time()
     print('[parallel srcs] Detmaps:', tnow-tlast)
-    tlast = tnow
 
+    if sdss_xy is not None:
+
+        for band,detmap,detiv in zip(bands, detmaps, detivs):
+            I = np.flatnonzero(detiv[T.ity, T.itx] == 0.)
+            print(len(I), 'SDSS sources have detiv = 0 in band', band)
+            if len(I) == 0:
+                continue
+
+            if plots:
+                plt.clf()
+                plt.subplot(1,2,1)
+                sig1 = 1./np.sqrt(np.median(detiv[detiv > 0]))
+                kwa = dict(vmin=-2.*sig1, vmax=20.*sig1)
+                dimshow(detmap.copy(), **kwa)
+                plt.title('detmap')
+            
+            # Set the central pixel of the detmap to the source's flux
+            detmap[T.ity[I], T.itx[I]] = [
+                cat[i].getBrightness().getFlux(band) for i in I]
+            # flood fill... this could be slow!
+            patch_image(detmap, detiv > 0)
+
+            if plots:
+                plt.subplot(1,2,2)
+                dimshow(detmap, **kwa)
+                plt.title('patched')
+                ps.savefig()
+
+    tlast = tnow
     # Median-smooth detection maps
     binning = 4
     smoos = mp.map(_median_smooth_detmap,
@@ -884,16 +914,17 @@ def stage_srcs(coimgs=None, cons=None,
             dimshow(smoo, **kwa2)
             plt.subplot(2,3,6)
             dimshow(subbed, **kwa2)
-            plt.suptitle('Median filter of detection map: %s band' % bands[i])
+            plt.suptitle('Median filter of detection map: %s band' %
+                         bands[i])
             ps.savefig()
 
 
     # SED-matched detections
     print('Running source detection at', nsigma, 'sigma')
     SEDs = sed_matched_filters(bands)
-    Tnew,newcat,hot = run_sed_matched_filters(SEDs, bands, detmaps, detivs,
-                                              sdss_xy, targetwcs, nsigma=nsigma,
-                                              plots=plots, ps=ps, mp=mp)
+    Tnew,newcat,hot = run_sed_matched_filters(
+        SEDs, bands, detmaps, detivs, sdss_xy, targetwcs,
+        nsigma=nsigma, plots=plots, ps=ps, mp=mp)
 
     peaksn = Tnew.peaksn
     apsn = Tnew.apsn

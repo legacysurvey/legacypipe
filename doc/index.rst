@@ -9,14 +9,21 @@ Welcome to legacypipe's documentation!
 Contents:
 
 .. toctree::
-   :maxdepth: 2
+    :maxdepth: 2
 
-legacypipe module
------------------
+legacypipe.runbrick module
+--------------------------
 
 .. automodule:: legacypipe.runbrick
-   :members:
+    :members:
+    :show-inheritance:
 
+legacypipe.common module
+--------------------------
+
+.. automodule:: legacypipe.common
+    :members:
+    :show-inheritance:
 
 
 Indices and tables
