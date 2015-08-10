@@ -777,7 +777,7 @@ def sed_matched_filters(bands):
     return SEDs
 
 def run_sed_matched_filters(SEDs, bands, detmaps, detivs, omit_xy,
-                            targetwcs, nsigma=5,
+                            targetwcs, nsigma=5, saturated_pix=None,
                             plots=False, ps=None, mp=None):
     '''
     Runs a given set of SED-matched filters.
@@ -844,7 +844,7 @@ def run_sed_matched_filters(SEDs, bands, detmaps, detivs, omit_xy,
         t0 = Time()
         sedhot,px,py,peakval,apval = sed_matched_detection(
             sedname, sed, detmaps, detivs, bands, xx, yy,
-            nsigma=nsigma, ps=pps)
+            nsigma=nsigma, saturated_pix=saturated_pix, ps=pps)
         print('SED took', Time()-t0)
         if sedhot is None:
             continue
@@ -889,6 +889,7 @@ def run_sed_matched_filters(SEDs, bands, detmaps, detivs, omit_xy,
 def sed_matched_detection(sedname, sed, detmaps, detivs, bands,
                           xomit, yomit,
                           nsigma=5.,
+                          saturated_pix=None,
                           saddle=2.,
                           cutonaper=True,
                           ps=None):
@@ -1053,6 +1054,8 @@ def sed_matched_detection(sedname, sed, detmaps, detivs, bands,
     # slices; the operations described above need only happen within
     # the slice.
     saddlemap = (sedsn > lowest_saddle)
+    if saturated_pix is not None:
+        saddlemap = np.logical_or(saddlemap, saturated_pix)
     saddlemap = binary_dilation(saddlemap, iterations=dilate)
     allblobs,nblobs = label(saddlemap)
     allslices = find_objects(allblobs)
@@ -1082,7 +1085,10 @@ def sed_matched_detection(sedname, sed, detmaps, detivs, bands,
         index = ablob - 1
         slc = allslices[index]
 
-        saddlemap = (sedsn[slc] > level) * (allblobs[slc] == ablob)
+        saddlemap = (sedsn[slc] > level)
+        if saturated_pix is not None:
+            saddlemap |= saturated_pix[slc]
+        saddlemap *= (allblobs[slc] == ablob)
         saddlemap = binary_fill_holes(saddlemap)
         saddlemap = binary_dilation(saddlemap, iterations=dilate)
         blobs,nblobs = label(saddlemap)

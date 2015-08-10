@@ -842,7 +842,11 @@ def stage_srcs(coimgs=None, cons=None,
     tnow = Time()
     print('[parallel srcs] Detmaps:', tnow-tlast)
 
+    saturated_pix = None
+
     if sdss_xy is not None:
+
+        saturated_pix = np.zeros(detmaps[0].shape, bool)
 
         for band,detmap,detiv in zip(bands, detmaps, detivs):
             I = np.flatnonzero(detiv[T.ity, T.itx] == 0.)
@@ -854,33 +858,39 @@ def stage_srcs(coimgs=None, cons=None,
                 plt.clf()
                 sig1 = 1./np.sqrt(np.median(detiv[detiv > 0]))
                 kwa = dict(vmin=-2.*sig1, vmax=20.*sig1)
-                kwa2 = dict()
                 plt.subplot(2,2,1)
-                dimshow(detmap.copy(), **kwa)
+                dcopy = detmap.copy()
+                dimshow(dcopy, **kwa)
                 plt.title('detmap')
                 plt.subplot(2,2,3)
-                dimshow(detmap.copy(), **kwa2)
-            
+                dimshow(dcopy)
+
+            from scipy.ndimage.morphology import binary_propagation
+
+            # Set the central pixel of the detmap
+            saturated_pix[T.ity[I], T.itx[I]] = True
+            #s2 = binary_propagation(saturated_pix, mask=(detiv == 0))
+            binary_propagation(saturated_pix, mask=(detiv == 0), output=saturated_pix)
+            #assert(np.all(saturated_pix == s2))
+            #saturated_pix = s2
+
             # Set the central pixel of the detmap to the source's flux
-            detmap[T.ity[I], T.itx[I]] = [
-                cat[i].getBrightness().getFlux(band) for i in I]
-            goodpix = np.zeros(detmap.shape, bool)
-            goodpix[T.ity[I], T.itx[I]] = True
-            # flood fill... this could be slow!
-            #detmap_fill = detmap.copy()
-            patch_image(detmap, goodpix, required=(detiv == 0))
-            #detmap[detiv == 0] = detmap_fill[detiv == 0]
+            #detmap[T.ity[I], T.itx[I]] = [
+            #    cat[i].getBrightness().getFlux(band) for i in I]
+            #goodpix = np.zeros(detmap.shape, bool)
+            #goodpix[T.ity[I], T.itx[I]] = True
+            ## Flood fill from the 'goodpix', filling the 'required' pix.
+            #patch_image(detmap, goodpix, required=(detiv == 0))
 
             if plots:
                 plt.subplot(2,2,2)
                 dimshow(detmap, **kwa)
                 plt.title('patched')
                 plt.subplot(2,2,4)
-                dimshow(detmap, **kwa2)
+                dimshow(detmap)
                 ps.savefig()
 
-                fitsio.write('detmap-patched-%s.fits' % band, detmap)
-                #fitsio.write('detmap-fill-%s.fits' % band, detmap_fill)
+                #fitsio.write('detmap-patched-%s.fits' % band, detmap)
 
     tlast = tnow
     # Median-smooth detection maps
@@ -890,9 +900,6 @@ def stage_srcs(coimgs=None, cons=None,
     tnow = Time()
     print('[parallel srcs] Median-filter detmaps:', tnow-tlast)
     tlast = tnow
-
-    print('Bands:', bands)
-    print('detmaps:', len(detmaps))
 
     for i,(detmap,detiv,smoo) in enumerate(zip(detmaps, detivs, smoos)):
         # Subtract binned median image.
@@ -936,7 +943,7 @@ def stage_srcs(coimgs=None, cons=None,
     SEDs = sed_matched_filters(bands)
     Tnew,newcat,hot = run_sed_matched_filters(
         SEDs, bands, detmaps, detivs, sdss_xy, targetwcs,
-        nsigma=nsigma, plots=plots, ps=ps, mp=mp)
+        nsigma=nsigma, saturated_pix=saturated_pix, plots=plots, ps=ps, mp=mp)
 
     peaksn = Tnew.peaksn
     apsn = Tnew.apsn
