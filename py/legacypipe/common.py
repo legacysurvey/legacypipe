@@ -915,6 +915,10 @@ def sed_matched_detection(sedname, sed, detmaps, detivs, bands,
         Previously known sources that are to be avoided.
     nsigma : float, optional
         Detection threshold.
+    saturated_pix : None or numpy array, boolean
+        A map of pixels that are always considered "hot" when
+        determining whether a new source touches hot pixels of an
+        existing source.
     saddle : float, optional
         Saddle-point depth from existing sources down to new sources.
     cutonaper : bool, optional
@@ -1055,7 +1059,7 @@ def sed_matched_detection(sedname, sed, detmaps, detivs, bands,
     # the slice.
     saddlemap = (sedsn > lowest_saddle)
     if saturated_pix is not None:
-        saddlemap = np.logical_or(saddlemap, saturated_pix)
+        saddlemap |= saturated_pix
     saddlemap = binary_dilation(saddlemap, iterations=dilate)
     allblobs,nblobs = label(saddlemap)
     allslices = find_objects(allblobs)

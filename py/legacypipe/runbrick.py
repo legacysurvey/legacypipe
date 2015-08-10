@@ -854,43 +854,12 @@ def stage_srcs(coimgs=None, cons=None,
             if len(I) == 0:
                 continue
 
-            if plots:
-                plt.clf()
-                sig1 = 1./np.sqrt(np.median(detiv[detiv > 0]))
-                kwa = dict(vmin=-2.*sig1, vmax=20.*sig1)
-                plt.subplot(2,2,1)
-                dcopy = detmap.copy()
-                dimshow(dcopy, **kwa)
-                plt.title('detmap')
-                plt.subplot(2,2,3)
-                dimshow(dcopy)
-
             from scipy.ndimage.morphology import binary_propagation
 
             # Set the central pixel of the detmap
             saturated_pix[T.ity[I], T.itx[I]] = True
-            #s2 = binary_propagation(saturated_pix, mask=(detiv == 0))
+            # Spread the True pixels wherever detiv==0
             binary_propagation(saturated_pix, mask=(detiv == 0), output=saturated_pix)
-            #assert(np.all(saturated_pix == s2))
-            #saturated_pix = s2
-
-            # Set the central pixel of the detmap to the source's flux
-            #detmap[T.ity[I], T.itx[I]] = [
-            #    cat[i].getBrightness().getFlux(band) for i in I]
-            #goodpix = np.zeros(detmap.shape, bool)
-            #goodpix[T.ity[I], T.itx[I]] = True
-            ## Flood fill from the 'goodpix', filling the 'required' pix.
-            #patch_image(detmap, goodpix, required=(detiv == 0))
-
-            if plots:
-                plt.subplot(2,2,2)
-                dimshow(detmap, **kwa)
-                plt.title('patched')
-                plt.subplot(2,2,4)
-                dimshow(detmap)
-                ps.savefig()
-
-                #fitsio.write('detmap-patched-%s.fits' % band, detmap)
 
     tlast = tnow
     # Median-smooth detection maps
