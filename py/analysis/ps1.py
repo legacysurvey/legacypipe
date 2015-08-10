@@ -17,8 +17,9 @@ class ps1cat():
         self.nside = 32
         if ccdwcs is None:
             from legacypipe.common import Decals, DecamImage
+            decals = Decals()
             ccd = decals.find_ccds(expnum=expnum,ccdname=ccdname)[0]
-            im = DecamImage(Decals(),ccd)
+            im = DecamImage(decals,ccd)
             self.ccdwcs = im.get_wcs()
         else:
             self.ccdwcs = ccdwcs
@@ -36,6 +37,7 @@ class ps1cat():
         cat = list()
         for ipix in pix:
             fname = os.path.join(self.ps1dir,'ps1-'+'{:05d}'.format(ipix)+'.fits')
+            print('Reading {}'.format(fname))
             cat.append(fits_table(fname))
         cat = merge_tables(cat)
         return cat
@@ -51,8 +53,10 @@ class ps1cat():
         for iobj, cat in enumerate(allcat):
             onccd[iobj] = self.ccdwcs.is_inside(cat.ra,cat.dec)
         cat = allcat[np.where((onccd*1)==1)]
+        print('Found {} stars'.format(len(cat)))
         if rmagcut is not None:
             keep = np.where(((cat.median[:,1]>rmagcut[0])*1)*
                             (cat.median[:,1]<rmagcut[1])*1)[0]
             cat = cat[keep]
+            print('Trimming to {} stars with r=[{},{}]'.format(len(cat),rmagcut[0],rmagcut[1]))
         return cat

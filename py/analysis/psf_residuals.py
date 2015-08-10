@@ -34,7 +34,8 @@ import matplotlib.pyplot as plt
 
 from analysis.ps1 import ps1cat
 from tractor.psfex import PsfEx
-from tractor.basics import GaussianMixtureEllipsePSF, PixelizedPSF, RaDecPos
+from tractor import Tractor
+from tractor.basics import NanoMaggies, PointSource, GaussianMixtureEllipsePSF, PixelizedPSF, RaDecPos
 from astrometry.util.fits import fits_table
 from legacypipe.common import Decals, DecamImage
 
@@ -42,7 +43,7 @@ from legacypipe.common import Decals, DecamImage
 logging.basicConfig(format='%(message)s', level=logging.DEBUG, stream=sys.stdout)
 log = logging.getLogger('check-psfs')
 
-def psf_residuals(expnum,ccdname)
+def psf_residuals(expnum,ccdname,debug=None):
 
     stampsize = 25
     
@@ -75,10 +76,11 @@ def psf_residuals(expnum,ccdname)
     # Get all the PS1 stars on this CCD
     ps1 = ps1cat(ccdwcs=wcs)
     cat = ps1.get_stars(rmagcut=[17,20])
+    cat = cat[50:51]
 
-    for star in cat[5]:
-        ra, dec = (star.ra, star.dec)
-        mag = star.median[1] # r-band
+    for ps1star in cat:
+        ra, dec = (ps1star.ra, ps1star.dec)
+        mag = ps1star.median[1] # r-band
 
         ok, xpos, ypos = wcs.radec2pixelxy(ra, dec)
         ix,iy = int(xpos), int(ypos)
@@ -107,7 +109,6 @@ def psf_residuals(expnum,ccdname)
 
         print('Fitting params:')
         tractor.printThawedParams()
-
         for step in range(50):
             dlnp,X,alpha = tractor.optimize(**optargs)
             print('dlnp', dlnp)
@@ -158,6 +159,7 @@ def psf_residuals(expnum,ccdname)
                 m0 = tractor.getModelImage(0)
                 p0 = np.array(tractor.getParams())
                 tractor.setParams(p0 + 0.001 * np.array(X))
+
                 print('Trying update:', star)
                 m1 = tractor.getModelImage(0)
                 plt.clf()
@@ -181,7 +183,7 @@ def psf_residuals(expnum,ccdname)
         plt.imshow(mod1, **tim.ima)
         plt.title('2-Gaussian model')
         plt.subplot(1,3,3)
-        plt.imshow(mod1, **tim.ima)
+        plt.imshow(mod2, **tim.ima)
         plt.title('PsfEx model')
         plt.savefig('psf.png')
 
@@ -192,9 +194,11 @@ def main():
                         help='exposure number')
     parser.add_argument('-c', '--ccdname', type=str, default='S31', metavar='', 
                         help='CCD name')
+    parser.add_argument('--debug', action='store_true', metavar='', 
+                        help='generate additional debugging plots')
     args = parser.parse_args()
 
-    psf_residuals(expnum=args.expnum,ccdname=args.ccdname)
+    psf_residuals(expnum=args.expnum,ccdname=args.ccdname,debug=args.debug)
     
 if __name__ == "__main__":
     main()
