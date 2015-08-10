@@ -778,7 +778,6 @@ def sed_matched_filters(bands):
 
 def run_sed_matched_filters(SEDs, bands, detmaps, detivs, omit_xy,
                             targetwcs, nsigma=5,
-                            omit_fluxes=None,
                             plots=False, ps=None, mp=None):
     '''
     Runs a given set of SED-matched filters.
@@ -801,11 +800,6 @@ def run_sed_matched_filters(SEDs, bands, detmaps, detivs, omit_xy,
         returned Tractor PointSource objects.
     nsigma : float, optional
         Detection threshold
-    omit_fluxes : None, or numpy array of float, shape (nsources, nbands)
-        Fluxes for the sources listed in `omit_xy` in each band.  Will be
-        used to define the saddle height in order to avoid existing sources.
-        Mostly useful for saturated sources.  If zero, the value will be
-        ignored and the detection-map value used instead.
     plots : boolean, optional
         Create plots?
     ps : PlotSequence object
@@ -850,7 +844,7 @@ def run_sed_matched_filters(SEDs, bands, detmaps, detivs, omit_xy,
         t0 = Time()
         sedhot,px,py,peakval,apval = sed_matched_detection(
             sedname, sed, detmaps, detivs, bands, xx, yy,
-            omit_fluxes=omit_fluxes, nsigma=nsigma, ps=pps)
+            nsigma=nsigma, ps=pps)
         print('SED took', Time()-t0)
         if sedhot is None:
             continue
@@ -894,7 +888,6 @@ def run_sed_matched_filters(SEDs, bands, detmaps, detivs, omit_xy,
 
 def sed_matched_detection(sedname, sed, detmaps, detivs, bands,
                           xomit, yomit,
-                          omit_fluxes = None,
                           nsigma=5.,
                           saddle=2.,
                           cutonaper=True,
@@ -919,9 +912,6 @@ def sed_matched_detection(sedname, sed, detmaps, detivs, bands,
         The band names of the `detmaps` and `detivs` images.
     xomit, yomit : iterables (lists or numpy arrays) of int
         Previously known sources that are to be avoided.
-    omit_fluxes : None, or numpy array of shape (len(xomit), len(bands))
-        The integrated flux to use for the xomit,yomit sources.  If zero,
-        this value is ignored.
     nsigma : float, optional
         Detection threshold.
     saddle : float, optional

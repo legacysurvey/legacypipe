@@ -46,6 +46,7 @@ from astrometry.util.plotutils import PlotSequence, dimshow
 from astrometry.util.resample import resample_with_wcs, OverlapError
 from astrometry.util.ttime import Time
 from astrometry.util.starutil_numpy import radectoxyz
+from astrometry.util.miscutils import patch_image
 
 from tractor import Tractor, PointSource, Image, NanoMaggies
 from tractor.ellipses import EllipseESoft, EllipseE
@@ -842,11 +843,32 @@ def stage_srcs(coimgs=None, cons=None,
     print('[parallel srcs] Detmaps:', tnow-tlast)
 
     if sdss_xy is not None:
-        for iband,(band,detiv) in enumerate(zip(bands, detivs)):
+
+        for band,detmap,detiv in zip(bands, detmaps, detivs):
             I = np.flatnonzero(detiv[T.ity, T.itx] == 0.)
             print(len(I), 'SDSS sources have detiv = 0 in band', band)
-            for i in I:
-                sdss_fluxes[i, iband] = cat[i].getBrightness().getFlux(band)
+            if len(I) == 0:
+                continue
+
+            if plots:
+                plt.clf()
+                plt.subplot(1,2,1)
+                sig1 = 1./np.sqrt(np.median(detiv[detiv > 0]))
+                kwa = dict(vmin=-2.*sig1, vmax=20.*sig1)
+                dimshow(detmap.copy(), **kwa)
+                plt.title('detmap')
+            
+            # Set the central pixel of the detmap to the source's flux
+            detmap[T.ity[I], T.itx[I]] = [
+                cat[i].getBrightness().getFlux(band) for i in I]
+            # flood fill... this could be slow!
+            patch_image(detmap, detiv > 0)
+
+            if plots:
+                plt.subplot(1,2,2)
+                dimshow(detmap, **kwa)
+                plt.title('patched')
+                ps.savefig()
 
     tlast = tnow
     # Median-smooth detection maps
@@ -902,7 +924,7 @@ def stage_srcs(coimgs=None, cons=None,
     SEDs = sed_matched_filters(bands)
     Tnew,newcat,hot = run_sed_matched_filters(
         SEDs, bands, detmaps, detivs, sdss_xy, targetwcs,
-        omit_fluxes=sdss_fluxes, nsigma=nsigma, plots=plots, ps=ps, mp=mp)
+        nsigma=nsigma, plots=plots, ps=ps, mp=mp)
 
     peaksn = Tnew.peaksn
     apsn = Tnew.apsn
