@@ -759,9 +759,56 @@ def sed_matched_filters(bands):
 
 def run_sed_matched_filters(SEDs, bands, detmaps, detivs, omit_xy,
                             targetwcs, nsigma=5,
+                            omit_fluxes=None,
                             plots=False, ps=None, mp=None):
-    from astrometry.util.ttime import Time
+    '''
+    Runs a given set of SED-matched filters.
 
+    Parameters
+    ----------
+    SEDs : list of (name, sed) tuples
+        The SEDs to run.  The `sed` values are lists the same length
+        as `bands`.
+    bands : list of string
+        The band names of `detmaps` and `detivs`.
+    detmaps : numpy array, float
+        Detection maps for each of the listed `bands`.
+    detivs : numpy array, float
+        Inverse-variances of the `detmaps`.
+    omit_xy : None, or (xx,yy) tuple
+        Existing sources to avoid.
+    targetwcs : WCS object
+        WCS object to use to convert pixel values into RA,Decs for the
+        returned Tractor PointSource objects.
+    nsigma : float, optional
+        Detection threshold
+    omit_fluxes : None, or numpy array of float, shape (nsources, nbands)
+        Fluxes for the sources listed in `omit_xy` in each band.  Will be
+        used to define the saddle height in order to avoid existing sources.
+        Mostly useful for saturated sources.  If zero, the value will be
+        ignored and the detection-map value used instead.
+    plots : boolean, optional
+        Create plots?
+    ps : PlotSequence object
+        Create plots?
+    mp : multiproc object
+        Multiprocessing
+        
+    Returns
+    -------
+    Tnew : fits_table
+        Table of new sources detected
+    newcat : list of PointSource objects
+        Newly detected objects, with positions and fluxes, as Tractor
+        PointSource objects.
+    hot : numpy array of bool
+        "Hot pixels" containing sources.
+        
+    See also
+    --------
+    sed_matched_detection : run a single SED-matched filter.
+    
+    '''
     if omit_xy is not None:
         xx,yy = omit_xy
         n0 = len(xx)
@@ -783,7 +830,8 @@ def run_sed_matched_filters(SEDs, bands, detmaps, detivs, omit_xy,
             pps = None
         t0 = Time()
         sedhot,px,py,peakval,apval = sed_matched_detection(
-            sedname, sed, detmaps, detivs, bands, xx, yy, nsigma=nsigma, ps=pps)
+            sedname, sed, detmaps, detivs, bands, xx, yy,
+            omit_fluxes=omit_fluxes, nsigma=nsigma, ps=pps)
         print('SED took', Time()-t0)
         if sedhot is None:
             continue
@@ -878,7 +926,8 @@ def sed_matched_detection(sedname, sed, detmaps, detivs, bands,
     See also
     --------
     sed_matched_filters : creates the `(sedname, sed)` pairs used here
-
+    run_sed_matched_filters : calls this method
+    
     '''
     t0 = Time()
     H,W = detmaps[0].shape
