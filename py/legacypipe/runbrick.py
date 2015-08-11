@@ -46,6 +46,7 @@ from astrometry.util.plotutils import PlotSequence, dimshow
 from astrometry.util.resample import resample_with_wcs, OverlapError
 from astrometry.util.ttime import Time
 from astrometry.util.starutil_numpy import radectoxyz
+from astrometry.util.miscutils import patch_image
 
 from tractor import Tractor, PointSource, Image, NanoMaggies
 from tractor.ellipses import EllipseESoft, EllipseE
@@ -832,15 +833,35 @@ def stage_srcs(coimgs=None, cons=None,
         T.delete_column('raerr')
         T.delete_column('decerr')
         sdss_xy = T.itx, T.ity
+        sdss_fluxes = np.zeros((len(T), len(bands)))
     else:
         sdss_xy = None
-
+        sdss_fluxes = None
     print('Rendering detection maps...')
     detmaps, detivs = detection_maps(tims, targetwcs, bands, mp)
     tnow = Time()
     print('[parallel srcs] Detmaps:', tnow-tlast)
-    tlast = tnow
 
+    saturated_pix = None
+
+    if sdss_xy is not None:
+
+        saturated_pix = np.zeros(detmaps[0].shape, bool)
+
+        for band,detmap,detiv in zip(bands, detmaps, detivs):
+            I = np.flatnonzero(detiv[T.ity, T.itx] == 0.)
+            print(len(I), 'SDSS sources have detiv = 0 in band', band)
+            if len(I) == 0:
+                continue
+
+            from scipy.ndimage.morphology import binary_propagation
+
+            # Set the central pixel of the detmap
+            saturated_pix[T.ity[I], T.itx[I]] = True
+            # Spread the True pixels wherever detiv==0
+            binary_propagation(saturated_pix, mask=(detiv == 0), output=saturated_pix)
+
+    tlast = tnow
     # Median-smooth detection maps
     binning = 4
     smoos = mp.map(_median_smooth_detmap,
@@ -848,9 +869,6 @@ def stage_srcs(coimgs=None, cons=None,
     tnow = Time()
     print('[parallel srcs] Median-filter detmaps:', tnow-tlast)
     tlast = tnow
-
-    print('Bands:', bands)
-    print('detmaps:', len(detmaps))
 
     for i,(detmap,detiv,smoo) in enumerate(zip(detmaps, detivs, smoos)):
         # Subtract binned median image.
@@ -884,16 +902,17 @@ def stage_srcs(coimgs=None, cons=None,
             dimshow(smoo, **kwa2)
             plt.subplot(2,3,6)
             dimshow(subbed, **kwa2)
-            plt.suptitle('Median filter of detection map: %s band' % bands[i])
+            plt.suptitle('Median filter of detection map: %s band' %
+                         bands[i])
             ps.savefig()
 
 
     # SED-matched detections
     print('Running source detection at', nsigma, 'sigma')
     SEDs = sed_matched_filters(bands)
-    Tnew,newcat,hot = run_sed_matched_filters(SEDs, bands, detmaps, detivs,
-                                              sdss_xy, targetwcs, nsigma=nsigma,
-                                              plots=plots, ps=ps, mp=mp)
+    Tnew,newcat,hot = run_sed_matched_filters(
+        SEDs, bands, detmaps, detivs, sdss_xy, targetwcs,
+        nsigma=nsigma, saturated_pix=saturated_pix, plots=plots, ps=ps, mp=mp)
 
     peaksn = Tnew.peaksn
     apsn = Tnew.apsn
@@ -2095,6 +2114,7 @@ def _one_blob((iblob, Isrcs, targetwcs, bx0, by0, blobw, blobh, blobmask, subtim
                       for k in nparams.keys()])
 
         if plots:
+            from collections import OrderedDict
             plt.clf()
             rows,cols = 2, 5
             mods = OrderedDict([('none',None), ('ptsrc',ptsrc), ('dev',dev),
