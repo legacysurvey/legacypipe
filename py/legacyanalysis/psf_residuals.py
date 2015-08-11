@@ -1,24 +1,16 @@
 #!/usr/bin/env python
 
-"""Check the PSFs
+"""Construct a set of PSF diagnostic QAplots.
 
-Get PS1 stars for this brick:
-bb = mrdfits('~/dr1/decals-bricks.fits',1)
-bb = bb[where(bb.brickname eq '2402p062')]
-print, bb.ra1, bb.ra2, bb.dec1, bb.dec2
-       240.08380       240.33520       6.1250000       6.3750000
-on edison:
-pp = read_ps1cat([240.08380D,240.33520D],[6.1250000D,6.3750000D])
-mwrfits, pp, 'ps1cat-all-2402p062.fits', /create
-
-jj = mrdfits('ps1cat-all-2402p062.fits',1)
-tt = mrdfits('vanilla/tractor/240/tractor-2402p062.fits',1)
-spherematch, jj.ra, jj.dec, tt.ra, tt.dec, 1D/3600, m1, m2
-mwrfits, jj[m1], 'ps1cat-2402p062.fits', /create
-
-djs_plot, tt.ra, tt.dec, psym=3, ysty=3
-djs_oplot, jj.ra, jj.dec, psym=6, color='orange'
-djs_oplot, jj[m1].ra, jj[m1].dec, psym=6, color='blue'
+For a given CCD:
+- find PS1 stars
+- for each PS1 star:
+    - create tractor Image object in a teeny patch around this star
+      (for only this one CCD)
+    - create PointSource object with PS1 RA,Dec,flux
+    - tractor.optimize with DR1-style PSF -> model1
+    - tractor.optimize with PsfEx PSF     -> model2
+    - plot image, model1, model2
 
 """
 
@@ -31,190 +23,161 @@ import argparse
 
 import numpy as np
 import matplotlib.pyplot as plt
+import matplotlib.gridspec as gridspec
 
-from analysis.ps1 import ps1cat
 from tractor.psfex import PsfEx
 from tractor import Tractor
-from tractor.basics import NanoMaggies, PointSource, GaussianMixtureEllipsePSF, PixelizedPSF, RaDecPos
+from tractor.basics import (NanoMaggies, PointSource, GaussianMixtureEllipsePSF,
+                            PixelizedPSF, RaDecPos)
+from legacyanalysis.ps1cat import ps1cat
+
 from astrometry.util.fits import fits_table
 from legacypipe.common import Decals, DecamImage
 
-logging.basicConfig(format='%(message)s',level=logging.INFO,stream=sys.stdout)
-#logging.basicConfig(format='%(message)s', level=logging.DEBUG, stream=sys.stdout)
-log = logging.getLogger('psf_residuals')
+def psf_residuals(expnum,ccdname,stampsize=25,
+                  rmagcut=[17,20],verbose=0):
 
-def psf_residuals(expnum,ccdname,debug=None):
+    # Set the debugging level.
+    if verbose==0:
+        lvl = logging.INFO
+    else:
+        lvl = logging.DEBUG
+    logging.basicConfig(level=lvl,format='%(message)s',stream=sys.stdout)
 
-    stampsize = 25
-    
+    # Gather all the info we need about this CCD.
     decals = Decals()
     ccd = decals.find_ccds(expnum=expnum,ccdname=ccdname)[0]
-    ccd.about()
-
-    print('CCD center:', ccd.ra, ccd.dec)
-
-    # For a given CCD:
-    # - find PS1 stars
-    # - for each PS1 star:
-    #     - create tractor Image object in a teeny patch around this star
-    #       (for only this one CCD)
-    #     - create PointSource object with PS1 RA,Dec,flux
-    #     - tractor.optimize with DR1-style PSF -> model1
-    #     - tractor.optimize with PsfEx PSF     -> model2
-    #     - plot image, model1, model2
-
     band = ccd.filter
-    im = DecamImage(decals,ccd)
-    wcs = im.get_wcs()
-    print('Band: ', band)
-    print('Reading: ', im.imgfn)
+    print('Band {}'.format(band))
 
+    im = DecamImage(decals,ccd)
     iminfo = im.get_image_info()
-    print('img: ', iminfo)
     H,W = iminfo['dims']
 
-    # Get all the PS1 stars on this CCD
-    ps1 = ps1cat(ccdwcs=wcs)
-    cat = ps1.get_stars(rmagcut=[17,20])
-    cat = cat[np.argsort(cat.median[1])]
-    cat = cat[0:1]
+    wcs = im.get_wcs()
+    radec = wcs.radec_bounds()
+    print(radec)
 
-    for ps1star in cat:
+    # Get all the PS1 stars on this CCD.
+    ps1 = ps1cat(ccdwcs=wcs)
+    cat = ps1.get_stars(rmagcut=rmagcut)
+    cat = cat[np.argsort(cat.median[:,1])] # sort by r-band magnitude
+
+    qafile = 'qapsf-onccd.png'
+    fig = plt.figure()
+    ax = fig.gca()
+    ax.get_xaxis().get_major_formatter().set_useOffset(False)
+    ax.scatter(cat.ra,cat.dec)
+    ax.set_xlim([radec[1],radec[0]])#*[1.0002,0.9998])
+    ax.set_ylim([radec[2],radec[3]])#*[0.985,1.015])
+    ax.set_xlabel('$RA\ (deg)$',fontsize=18)
+    ax.set_ylabel('$Dec\ (deg)$',fontsize=18)
+    fig.savefig(qafile)
+
+    # Initialize the QAplot
+    ncols = 3
+    nrows = 2
+    cat = cat[:ncols*nrows]
+
+    inchperstamp = 2.0
+    fig = plt.figure(figsize=(inchperstamp*3*ncols,inchperstamp*nrows))
+    gs = gridspec.GridSpec(nrows,3*ncols)
+    irow = 0
+    icol = 0
+    
+    for istar, ps1star in enumerate(cat):
         ra, dec = (ps1star.ra, ps1star.dec)
         mag = ps1star.median[1] # r-band
 
         ok, xpos, ypos = wcs.radec2pixelxy(ra, dec)
         ix,iy = int(xpos), int(ypos)
 
-        # create little tractor Image object around the star
+        # create a little tractor Image object around the star
         slc = (slice(max(iy-stampsize, 0), min(iy+stampsize+1, H)),
                slice(max(ix-stampsize, 0), min(ix+stampsize+1, W)))
+
+        # The PSF model 'const2Psf' is the one used in DR1: a 2-component
+        # Gaussian fit to PsfEx instantiated in the image center.
         tim = im.get_tractor_image(slc=slc, const2psf=True)
-        # the PSF model 'const2Psf' is the one used in DR1 -- 2-component Gaussian fit
-        # to PsfEx instantiated in the image center.
+        stamp = tim.getImage()
 
-        # create tractor PointSource from PS1 measurements
+        # Initialize a tractor PointSource from PS1 measurements
         flux = NanoMaggies.magToNanomaggies(mag)
-        star = PointSource(RaDecPos(ra, dec), NanoMaggies(**{band: flux}))
+        star = PointSource(RaDecPos(ra,dec), NanoMaggies(**{band: flux}))
 
-        # re-fit the source RA,Dec,flux.
+        # Fit just the source RA,Dec,flux.
         tractor = Tractor([tim], [star])
-        # only fit the source
         tractor.freezeParam('images')
 
-        #alphas = [0.1, 0.3, 1.0]
-        #optargs = dict(priors=False, shared_params=False, alphas=alphas)
-        optargs = {}
+        print('2-component MOG:', tim.psf)
+        tractor.printThawedParams()
 
-        print('PSF model:', tim.psf)
-
-        #tractor.printThawedParams()
-
-        print('Optimizing parameters:')
         for step in range(50):
-            dlnp,X,alpha = tractor.optimize(**optargs)
-            print(dlnp)
+            dlnp,X,alpha = tractor.optimize()
             if dlnp < 0.1:
-#                p0 = np.array(tractor.getParams())
-#                tractor.setParams(p0 + 0.001 * np.array(X))
                 break
-            
         print('Fit:', star)
-        mod1 = tractor.getModelImage(0)
-
-#               m0 = tractor.getModelImage(0)
-#               chi0 = tractor.getChiImage(0)
-#               for i,step in enumerate([1e-3, 1e-2, 1e-1, 1.]):
-#                   tractor.setParams(p0 + step * np.array(X))
-#                   print('Trying update:', star)
-#                   m1 = tractor.getModelImage(0)
-#                   chi1 = tractor.getChiImage(0)
-#                   imchi = dict(interpolation='nearest', origin='lower', vmin=-10, vmax=10)
-#                   plt.clf()
-#                   plt.subplot(2,2,1)
-#                   plt.imshow(m0, **tim.ima)
-#                   plt.subplot(2,2,2)
-#                   plt.imshow(m1, **tim.ima)
-#                   plt.subplot(2,2,3)
-#                   plt.imshow(chi0, **imchi)
-#                   plt.subplot(2,2,4)
-#                   plt.imshow(chi1, **imchi)
-#                   plt.savefig('fail1-%i.png' % i)
-#               tractor.setParams(p0)
-
+        model_mog = tractor.getModelImage(0)
+        chi2_mog = -2.0*tractor.getLogLikelihood()
+        mag_mog = NanoMaggies.nanomaggiesToMag(star.brightness)[0]
 
         # Now change the PSF model to a pixelized PSF model from PsfEx instantiated
         # at this place in the image.
         psfimg = tim.psfex.instantiateAt(xpos, ypos, nativeScale=True)
-        pixpsf = PixelizedPSF(psfimg)
+        tim.psf = PixelizedPSF(psfimg)
 
-        # use the new PSF model...
-        tim.psf = pixpsf
-
-        print()
-        print('PSF model:', tim.psf)
+        #print('PSF model:', tim.psf)
         #tractor.printThawedParams()
         for step in range(50):
-            dlnp,X,alpha = tractor.optimize(**optargs)
+            dlnp,X,alpha = tractor.optimize()
             if dlnp < 0.1:
-#               p0 = np.array(tractor.getParams())
-#               tractor.setParams(p0 + 0.001 * np.array(X))
                 break
+
         print('Fit:', star)
-        mod2 = tractor.getModelImage(0)
+        model_psfex = tractor.getModelImage(0)
+        chi2_psfex = -2.0*tractor.getLogLikelihood()
+        mag_psfex = NanoMaggies.nanomaggiesToMag(star.brightness)[0]
 
+        # Generate a QAplot.
+        if (istar>0) and (istar%(ncols)==0):
+            irow = irow+1
+        icol = 3*istar - 3*ncols*irow
+        #print(istar, irow, icol, icol+1, icol+2)
 
-#       for step in range(50):
-#           dlnp,X,alpha = tractor.optimize(**optargs)
-#           if debug is not None:
-#               print('dlnp', dlnp)
-#               print('X,alpha', X, alpha)
-#               
-#           if dlnp < 0.1:
-#               m0 = tractor.getModelImage(0)
-#               p0 = np.array(tractor.getParams())
-#               tractor.setParams(p0 + 0.001 * np.array(X))
-#
-#               if debug is not None:
-#                   print('Trying update:', star)
-#                   m1 = tractor.getModelImage(0)
-#                   plt.clf()
-#                   plt.subplot(1,2,1)
-#                   plt.imshow(m0, **tim.ima)
-#                   plt.subplot(1,2,2)
-#                   plt.imshow(m1, **tim.ima)
-#                   plt.savefig('fail2.png')
-#               tractor.setParams(p0)
-#               break
-#       print('Fit:', star)
-#       mod2 = tractor.getModelImage(0)
+        ax1 = plt.subplot2grid((nrows,3*ncols), (irow,icol), aspect='equal')
+        ax1.axis('off')
+        ax1.imshow(stamp, **tim.ima)
+        gs.update(wspace=0.0,hspace=0.0,bottom=0.0,top=0.0,left=0.0,right=0.0) 
 
-        plt.clf()
-        plt.subplot(1,3,1)
-        cmap = plt.get_cmap('gray')
-        stamp = tim.getImage()
-        plt.imshow(stamp, **tim.ima)
-        plt.title('Image')
-        plt.subplot(1,3,2)
-        plt.imshow(stamp-mod1, **tim.ima)
-        plt.title('2-Gaussian model')
-        plt.subplot(1,3,3)
-        plt.imshow(stamp-mod2, **tim.ima)
-        plt.title('PsfEx model')
-        plt.savefig('psf.png')
+        ax2 = plt.subplot2grid((nrows,3*ncols), (irow,icol+1), aspect='equal')
+        ax2.axis('off')
+        ax2.imshow(stamp-model_mog, **tim.ima)
+
+        #ax2.set_title('{:.3f}, {:.2f}'.format(mag_psfex,chi2_psfex),fontsize=14)
+        #ax2.set_title('{:.3f}, $\chi^{2}$={:.2f}'.format(mag_psfex,chi2_psfex))
+
+        ax3 = plt.subplot2grid((nrows,3*ncols), (irow,icol+2), aspect='equal')
+        ax3.axis('off')
+        ax3.imshow(stamp-model_psfex, **tim.ima)
+        gs.update(wspace=0.1,hspace=0.0,bottom=0.0,top=0.0,left=0.0,right=0.0) 
+
+    fig.savefig('qapsf.png')
 
 def main():
+    """
+    Main routine.
+    """
 
     parser = argparse.ArgumentParser(formatter_class=argparse.ArgumentDefaultsHelpFormatter)
     parser.add_argument('-e', '--expnum', type=long, default='396086', metavar='', 
                         help='exposure number')
     parser.add_argument('-c', '--ccdname', type=str, default='S31', metavar='', 
                         help='CCD name')
-    parser.add_argument('--debug', action='store_true', 
-                        help='generate additional debugging plots')
+    parser.add_argument('-v', '--verbose', dest='verbose', action='count', default=0,
+                        help='Toggle on verbose output')
     args = parser.parse_args()
 
-    psf_residuals(expnum=args.expnum,ccdname=args.ccdname,debug=args.debug)
+    psf_residuals(expnum=args.expnum,ccdname=args.ccdname,verbose=args.verbose)
     
 if __name__ == "__main__":
     main()
