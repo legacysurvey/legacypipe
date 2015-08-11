@@ -39,9 +39,9 @@ from tractor.basics import NanoMaggies, PointSource, GaussianMixtureEllipsePSF, 
 from astrometry.util.fits import fits_table
 from legacypipe.common import Decals, DecamImage
 
-#logging.basicConfig(format='%(message)s',level=logging.INFO,stream=sys.stdout)
-logging.basicConfig(format='%(message)s', level=logging.DEBUG, stream=sys.stdout)
-log = logging.getLogger('check-psfs')
+logging.basicConfig(format='%(message)s',level=logging.INFO,stream=sys.stdout)
+#logging.basicConfig(format='%(message)s', level=logging.DEBUG, stream=sys.stdout)
+log = logging.getLogger('psf_residuals')
 
 def psf_residuals(expnum,ccdname,debug=None):
 
@@ -76,7 +76,8 @@ def psf_residuals(expnum,ccdname,debug=None):
     # Get all the PS1 stars on this CCD
     ps1 = ps1cat(ccdwcs=wcs)
     cat = ps1.get_stars(rmagcut=[17,20])
-    cat = cat[50:51]
+    cat = cat[np.argsort(cat.median[1])]
+    cat = cat[0:1]
 
     for ps1star in cat:
         ra, dec = (ps1star.ra, ps1star.dec)
@@ -107,38 +108,40 @@ def psf_residuals(expnum,ccdname,debug=None):
 
         print('PSF model:', tim.psf)
 
-        print('Fitting params:')
-        tractor.printThawedParams()
+        #tractor.printThawedParams()
+
+        print('Optimizing parameters:')
         for step in range(50):
             dlnp,X,alpha = tractor.optimize(**optargs)
-            print('dlnp', dlnp)
-            print('X,alpha', X, alpha)
+            print(dlnp)
             if dlnp < 0.1:
-
-                m0 = tractor.getModelImage(0)
-                chi0 = tractor.getChiImage(0)
-                p0 = np.array(tractor.getParams())
-                for i,step in enumerate([1e-3, 1e-2, 1e-1, 1.]):
-                    tractor.setParams(p0 + step * np.array(X))
-                    print('Trying update:', star)
-                    m1 = tractor.getModelImage(0)
-                    chi1 = tractor.getChiImage(0)
-                    imchi = dict(interpolation='nearest', origin='lower', vmin=-10, vmax=10)
-                    plt.clf()
-                    plt.subplot(2,2,1)
-                    plt.imshow(m0, **tim.ima)
-                    plt.subplot(2,2,2)
-                    plt.imshow(m1, **tim.ima)
-                    plt.subplot(2,2,3)
-                    plt.imshow(chi0, **imchi)
-                    plt.subplot(2,2,4)
-                    plt.imshow(chi1, **imchi)
-                    plt.savefig('fail1-%i.png' % i)
-                tractor.setParams(p0)
+#                p0 = np.array(tractor.getParams())
+#                tractor.setParams(p0 + 0.001 * np.array(X))
                 break
+            
         print('Fit:', star)
-
         mod1 = tractor.getModelImage(0)
+
+#               m0 = tractor.getModelImage(0)
+#               chi0 = tractor.getChiImage(0)
+#               for i,step in enumerate([1e-3, 1e-2, 1e-1, 1.]):
+#                   tractor.setParams(p0 + step * np.array(X))
+#                   print('Trying update:', star)
+#                   m1 = tractor.getModelImage(0)
+#                   chi1 = tractor.getChiImage(0)
+#                   imchi = dict(interpolation='nearest', origin='lower', vmin=-10, vmax=10)
+#                   plt.clf()
+#                   plt.subplot(2,2,1)
+#                   plt.imshow(m0, **tim.ima)
+#                   plt.subplot(2,2,2)
+#                   plt.imshow(m1, **tim.ima)
+#                   plt.subplot(2,2,3)
+#                   plt.imshow(chi0, **imchi)
+#                   plt.subplot(2,2,4)
+#                   plt.imshow(chi1, **imchi)
+#                   plt.savefig('fail1-%i.png' % i)
+#               tractor.setParams(p0)
+
 
         # Now change the PSF model to a pixelized PSF model from PsfEx instantiated
         # at this place in the image.
@@ -150,40 +153,53 @@ def psf_residuals(expnum,ccdname,debug=None):
 
         print()
         print('PSF model:', tim.psf)
+        #tractor.printThawedParams()
         for step in range(50):
             dlnp,X,alpha = tractor.optimize(**optargs)
-            print('dlnp', dlnp)
-            print('X,alpha', X, alpha)
             if dlnp < 0.1:
-
-                m0 = tractor.getModelImage(0)
-                p0 = np.array(tractor.getParams())
-                tractor.setParams(p0 + 0.001 * np.array(X))
-
-                print('Trying update:', star)
-                m1 = tractor.getModelImage(0)
-                plt.clf()
-                plt.subplot(1,2,1)
-                plt.imshow(m0, **tim.ima)
-                plt.subplot(1,2,2)
-                plt.imshow(m1, **tim.ima)
-                plt.savefig('fail2.png')
-                tractor.setParams(p0)
-
-            break
+#               p0 = np.array(tractor.getParams())
+#               tractor.setParams(p0 + 0.001 * np.array(X))
+                break
         print('Fit:', star)
-
         mod2 = tractor.getModelImage(0)
+
+
+#       for step in range(50):
+#           dlnp,X,alpha = tractor.optimize(**optargs)
+#           if debug is not None:
+#               print('dlnp', dlnp)
+#               print('X,alpha', X, alpha)
+#               
+#           if dlnp < 0.1:
+#               m0 = tractor.getModelImage(0)
+#               p0 = np.array(tractor.getParams())
+#               tractor.setParams(p0 + 0.001 * np.array(X))
+#
+#               if debug is not None:
+#                   print('Trying update:', star)
+#                   m1 = tractor.getModelImage(0)
+#                   plt.clf()
+#                   plt.subplot(1,2,1)
+#                   plt.imshow(m0, **tim.ima)
+#                   plt.subplot(1,2,2)
+#                   plt.imshow(m1, **tim.ima)
+#                   plt.savefig('fail2.png')
+#               tractor.setParams(p0)
+#               break
+#       print('Fit:', star)
+#       mod2 = tractor.getModelImage(0)
 
         plt.clf()
         plt.subplot(1,3,1)
-        plt.imshow(tim.getImage(), **tim.ima)
+        cmap = plt.get_cmap('gray')
+        stamp = tim.getImage()
+        plt.imshow(stamp, **tim.ima)
         plt.title('Image')
         plt.subplot(1,3,2)
-        plt.imshow(mod1, **tim.ima)
+        plt.imshow(stamp-mod1, **tim.ima)
         plt.title('2-Gaussian model')
         plt.subplot(1,3,3)
-        plt.imshow(mod2, **tim.ima)
+        plt.imshow(stamp-mod2, **tim.ima)
         plt.title('PsfEx model')
         plt.savefig('psf.png')
 
@@ -194,7 +210,7 @@ def main():
                         help='exposure number')
     parser.add_argument('-c', '--ccdname', type=str, default='S31', metavar='', 
                         help='CCD name')
-    parser.add_argument('--debug', action='store_true', metavar='', 
+    parser.add_argument('--debug', action='store_true', 
                         help='generate additional debugging plots')
     args = parser.parse_args()
 
