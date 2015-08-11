@@ -3147,6 +3147,13 @@ def run_brick(brick, radec=None, pixscale=0.262,
     - *forceAll*: boolean; run all stages, ignoring all pickle files.
     - *writePickles*: boolean; write pickle files after each stage?
 
+    Raises
+    ------
+    RunbrickError
+        If an invalid brick name is given.
+    NothingToDoError
+        If no CCDs, or no photometric CCDs, overlap the given brick or region.
+
     '''
 
     from astrometry.util.stages import CallGlobalTime, runstage
