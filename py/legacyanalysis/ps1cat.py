@@ -43,8 +43,9 @@ class ps1cat():
         return cat
 
     def get_stars(self,rmagcut=None):
-        """Given the set of PS1 stars on a given CCD.  Optionally trim the stars to a
-        desired r-band magnitude range.
+        """Return the set of PS1 stars on a given CCD with well-measured grz
+        magnitudes. Optionally trim the stars to a desired r-band magnitude
+        range.
 
         """
         bounds = self.ccdwcs.radec_bounds()
@@ -52,8 +53,11 @@ class ps1cat():
         onccd = np.empty(len(allcat))
         for iobj, cat in enumerate(allcat):
             onccd[iobj] = self.ccdwcs.is_inside(cat.ra,cat.dec)
-        cat = allcat[np.where((onccd*1)==1)]
-        print('Found {} stars'.format(len(cat)))
+        cat = allcat[np.where((onccd*1)*
+                              ((allcat.nmag_ok[:,0]>0)*1)*     # g
+                              ((allcat.nmag_ok[:,1]>0)*1)*     # r
+                              ((allcat.nmag_ok[:,3]>0)*1)==1)] # z
+        print('Found {} good PS1 stars'.format(len(cat)))
         if rmagcut is not None:
             keep = np.where(((cat.median[:,1]>rmagcut[0])*1)*
                             (cat.median[:,1]<rmagcut[1])*1)[0]
