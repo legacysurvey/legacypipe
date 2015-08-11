@@ -1000,26 +1000,26 @@ def stage_srcs(coimgs=None, cons=None,
         rtn[k] = locals()[k]
     return rtn
 
-def set_source_radii(bands, orig_wcsxy0, tims, cat, minsigma, minradius=3):
+def set_source_radii(bands, tims, cat, minsigma, minradius=3):
     # FIXME -- set source radii crudely, based on the maximum of the
     # PSF profiles in all images (!) -- should have a source x image
     # structure -- *and* based on SDSS fluxes.
     profiles = []
     R = 100
     minsig1s = dict([(band,1e100) for band in bands])
-    for (ox0,oy0),tim in zip(orig_wcsxy0, tims):
+    for tim in tims:
         minsig1s[tim.band] = min(minsig1s[tim.band], tim.sig1)
         th,tw = tim.shape
 
         if hasattr(tim.psf, 'getMixtureOfGaussians'):
-            mog = tim.psf.getMixtureOfGaussians(px=ox0+(tw/2), py=oy0+(th/2))
+            mog = tim.psf.getMixtureOfGaussians(px=tw/2., py=th/2.)
             profiles.extend([
                     mog.evaluate_grid(0, R, 0, 1, 0., 0.).patch.ravel(),
                     mog.evaluate_grid(-(R-1), 1, 0, 1, 0., 0.).patch.ravel()[-1::-1],
                     mog.evaluate_grid(0, 1, 0, R, 0., 0.).patch.ravel(),
                     mog.evaluate_grid(0, 1, -(R-1), 1, 0., 0.).patch.ravel()[-1::-1]])
         else:
-            patch = tim.psf.getPointSourcePatch(px=ox0+(tw/2), py=oy0+(th/2))
+            patch = tim.psf.getPointSourcePatch(px=tw/2., py=th/2.)
             ph,pw = patch.shape
             profiles.extend([
                     patch.patch[ph/2    , pw/2:   ],
@@ -1066,14 +1066,12 @@ def stage_fitblobs(T=None,
     for tim in tims:
         assert(np.all(np.isfinite(tim.getInvError())))
 
-    orig_wcsxy0 = [tim.wcs.getX0Y0() for tim in tims]
-
     # How far down to render model profiles
     minsigma = 0.1
     for tim in tims:
         tim.modelMinval = minsigma * tim.sig1
 
-    set_source_radii(bands, orig_wcsxy0, tims, cat, minsigma)
+    set_source_radii(bands, tims, cat, minsigma)
 
     if plots:
         coimgs,cons = compute_coadds(tims, bands, targetwcs)
@@ -1169,7 +1167,7 @@ def stage_fitblobs(T=None,
         T.blob = blobs[T.ity, T.itx]
 
     iter = _blob_iter(blobslices, blobsrcs, blobs, targetwcs, tims,
-                      orig_wcsxy0, cat, bands, plots, ps, simul_opt)
+                      cat, bands, plots, ps, simul_opt)
     # to allow debugpool to only queue tasks one at a time
     iter = iterwrapper(iter, len(blobsrcs))
     R = mp.map(_bounce_one_blob, iter)
@@ -1352,7 +1350,7 @@ def stage_fitblobs_finish(
     return rtn
 
 def _blob_iter(blobslices, blobsrcs, blobs,
-               targetwcs, tims, orig_wcsxy0, cat, bands, plots, ps, simul_opt):
+               targetwcs, tims, cat, bands, plots, ps, simul_opt):
     for iblob, (bslc,Isrcs) in enumerate(zip(blobslices, blobsrcs)):
         assert(len(Isrcs) > 0)
 
@@ -1384,9 +1382,7 @@ def _blob_iter(blobslices, blobsrcs, blobs,
             subslc = slice(sy0,sy1),slice(sx0,sx1)
             subimg = tim.getImage ()[subslc]
             subie  = tim.getInvError()[subslc]
-            subwcs = tim.getWcs().copy()
-            ox0,oy0 = orig_wcsxy0[itim]
-            subwcs.setX0Y0(ox0 + sx0, oy0 + sy0)
+            subwcs = tim.getWcs().getShifted(sx0, sy0)
 
             # We pass the *original*, full-image PSF model; _one_blob applies offsets
             #psf = tim.psfex
@@ -1394,7 +1390,7 @@ def _blob_iter(blobslices, blobsrcs, blobs,
 
             subtimargs.append((subimg, subie, subwcs, tim.subwcs, tim.getPhotoCal(),
                                tim.getSky(), psf, tim.name, sx0, sx1, sy0, sy1,
-                               ox0, oy0, tim.band, tim.sig1, tim.modelMinval))
+                               tim.band, tim.sig1, tim.modelMinval))
 
         # Here we assume the "blobs" array has been remapped...
         blobmask = (blobs[bslc] == iblob)
@@ -1458,7 +1454,7 @@ def _one_blob((iblob, Isrcs, targetwcs, bx0, by0, blobw, blobh, blobmask, subtim
 
     subtims = []
     for (subimg, subie, twcs, subwcs, pcal,
-         sky, psf, name, sx0, sx1, sy0, sy1, ox0, oy0,
+         sky, psf, name, sx0, sx1, sy0, sy1,
          band,sig1,modelMinval) in subtimargs:
 
         # Mask out inverr for pixels that are not within the blob.
@@ -1478,14 +1474,12 @@ def _one_blob((iblob, Isrcs, targetwcs, bx0, by0, blobw, blobh, blobmask, subtim
         # If the subimage (blob) is small enough, instantiate a
         # constant PSF model in the center.
 
-        ### FIXME -- do we really need 'ox0,oy0' in here?
-
         if sy1-sy0 < 400 and sx1-sx0 < 400:
-            subpsf = psf.constantPsfAt(ox0 + (sx0+sx1)/2., oy0 + (sy0+sy1)/2.)
+            subpsf = psf.constantPsfAt((sx0+sx1)/2., (sy0+sy1)/2.)
         else:
             # Otherwise, instantiate a (shifted) spatially-varying
             # PsfEx model.
-            subpsf = psf.getShifted(ox0+sx0, oy0+sy0)
+            subpsf = psf.getShifted(sx0, sy0)
 
         subtim = Image(data=subimg, inverr=subie, wcs=twcs,
                        psf=subpsf, photocal=pcal, sky=sky, name=name)
