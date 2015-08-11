@@ -800,6 +800,11 @@ def run_sed_matched_filters(SEDs, bands, detmaps, detivs, omit_xy,
         returned Tractor PointSource objects.
     nsigma : float, optional
         Detection threshold
+    saturated_pix : None or numpy array, boolean
+        Passed through to sed_matched_detection.
+        A map of pixels that are always considered "hot" when
+        determining whether a new source touches hot pixels of an
+        existing source.
     plots : boolean, optional
         Create plots?
     ps : PlotSequence object
