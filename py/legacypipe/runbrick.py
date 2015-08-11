@@ -3050,6 +3050,23 @@ def run_brick(brick, radec=None, pixscale=0.262,
     certainly want to turn it off (with `writePickles=False,
     forceAll=True`) in production.
 
+    Parameters
+    ----------
+    brick : string
+        Brick name such as '2090m065'.
+    radec : tuple of floats (ra,dec)
+        RA,Dec center of the custom region to run.
+    pixscale : float
+        Brick pixel scale, in arcsec/pixel.  Default = 0.262
+    width, height : integers
+        Brick size in pixels.  Default of 3600 pixels (with the default pixel
+        scale of 0.262) leads to a slight overlap between bricks.
+    zoom : list of four integers
+        Pixel coordinates [xlo,xhi, ylo,yhi] of the brick subimage to run.
+
+
+    Notes
+    -----
     You must specify the region of sky to work on, via one of:
 
     - *brick*: string, brick name such as '2090m065'
