@@ -29,7 +29,6 @@ from tractor.basics import ConstantSky, NanoMaggies, ConstantFitsWcs, LinearPhot
 from tractor.engine import Image, Catalog, Patch
 from tractor.galaxy import enable_galaxy_cache, disable_galaxy_cache
 from tractor.utils import get_class_from_name
-from tractor.psfex import PsfEx
 from tractor.ellipses import EllipseE,EllipseESoft
 from tractor.sfd import SFDMap
 
@@ -1811,28 +1810,23 @@ class LegacySurveyImage(object):
             print('WARNING: using mock PSF:', psf)
             psfex = None
         elif pixPsf:
-            # constant PixelizedPSF.
+            # spatially varying pixelized PsfEx
+            from tractor.psfex import PixelizedPsfEx
             print('Reading PsfEx model from', self.psffn)
-            from tractor.basics import GaussianMixtureEllipsePSF, PixelizedPSF
-            psfex = PsfEx(self.psffn, imw, imh, ny=13, nx=7,
-                          psfClass=GaussianMixtureEllipsePSF, K=2)
-            # FIXME -- could instantiate in the center of the ROI...
-            psfim = psfex.instantiateAt(imw/2, imh/2)
-            # trim a little
-            #psfim = psfim[5:-5, 5:-5]
-            psf = PixelizedPSF(psfim)
+            psf = PixelizedPsfEx(self.psffn)
+            psfex = None
         elif const2psf:
+            from tractor.psfex import PsfExModel
+            from tractor.basics import GaussianMixtureEllipsePSF
             # 2-component constant MoG.
             print('Reading PsfEx model from', self.psffn)
-            from tractor.basics import GaussianMixtureEllipsePSF
-            psfex = PsfEx(self.psffn, imw, imh, ny=13, nx=7,
-                          psfClass=GaussianMixtureEllipsePSF, K=2)
-            # FIXME -- could instantiate in the center of the ROI...
-            psfim = psfex.instantiateAt(imw/2, imh/2)
-            # trim a little
+            psfex = PsfExModel(self.psffn)
+            psfim = psfex.psfImageAt(imw/2., imh/2.)
             psfim = psfim[5:-5, 5:-5]
             print('Fitting PsfEx model as 2-component Gaussian...')
             psf = GaussianMixtureEllipsePSF.fromStamp(psfim, N=2)
+            del psfim
+            psfex = None
         else:
             assert(False)
         print('Using PSF model', psf)
