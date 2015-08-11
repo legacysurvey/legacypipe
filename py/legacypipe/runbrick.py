@@ -84,8 +84,8 @@ class EllipseWithPriors(EllipseESoft):
     over softened ellipticity parameters.  This class is used during
     fitting.
 
-    We ALSO place a top-hat prior on log-radius, forcing it to lie
-    within [-5, 5] (= 0.006" to 148" effective radius).
+    We ALSO place a prior on log-radius, forcing it to be < +5 (r_e =
+    148").
     '''
 
     # EllipseESoft extends EllipseE extends ParamList, has
@@ -101,7 +101,7 @@ class EllipseWithPriors(EllipseESoft):
         return EllipseWithPriors(logr, ee1, ee2)
 
     def isLegal(self):
-        return -5. < self.logre < +5.
+        return self.logre < +5.
 
     @staticmethod
     def getName():
