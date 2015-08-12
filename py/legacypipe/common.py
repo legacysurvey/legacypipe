@@ -706,7 +706,7 @@ def ccds_touching_wcs(targetwcs, T, ccdrad=0.17, polygons=True):
     rad = trad + ccdrad
     r,d = targetwcs.radec_center()
     I, = np.nonzero(np.abs(T.dec - d) < rad)
-    I = I[degrees_between(T.ra[I], T.dec[I], r, d) < rad]
+    I = I[np.atleast_1d(degrees_between(T.ra[I], T.dec[I], r, d) < rad)]
 
     if not polygons:
         return I
