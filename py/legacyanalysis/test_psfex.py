@@ -19,10 +19,101 @@ def test_psfex(expnum, ccdname, decals_out_dir):
         #
         im.run_calibs()
 
-    #check_psfex(decals_out, im)
-
+    # check it out...
     psfex = PsfExModel(psfexfn)
     print('Read', psfex)
+
+    bases = psfex.bases()
+    N = len(bases)
+    cols = int(np.ceil(np.sqrt(N)))
+    rows = int(np.ceil(N / float(cols)))
+    plt.clf()
+    plt.subplots_adjust(hspace=0, wspace=0)
+    for i,b in enumerate(bases):
+        plt.subplot(rows, cols, i+1)
+        mx = b.max()
+        plt.imshow(b, interpolation='nearest', origin='lower', vmin=-mx, vmax=mx)
+        plt.xticks([])
+        plt.yticks([])
+    plt.savefig('psf-bases.png')
+
+    ny = 21
+    nx = 11
+
+    H,W = im.shape
+
+    yy = np.linspace(0., H, ny+1)
+    xx = np.linspace(0., W, nx+1)
+    # center of cells
+    yy = yy[:-1] + (yy[1]-yy[0])/2.
+    xx = xx[:-1] + (xx[1]-xx[0])/2.
+
+    decals = decals_out
+
+    tim = im.get_tractor_image(pixPsf = True)
+
+    tim.wcs = NullWCS()
+
+    flux = NanoMaggies.magToNanomaggies(16.)
+    star = PointSource(PixPos(0.,0.), NanoMaggies(**{ tim.band: flux }))
+    modimg = np.zeros_like(tim.getImage())
+
+    yy = yy[::2]
+    xx = xx[::2]
+
+    img_stamps = []
+    mod_stamps = []
+
+    for y in yy:
+        for x in xx:
+            print('Rendering star at', x, y)
+            star.pos.x = x
+            star.pos.y = y
+            mod = star.getModelPatch(tim)
+            mod.addTo(modimg)
+
+            S = 20
+            img_stamps.append(tim.getImage()[y-S:y+S+1, x-S:x+S+1])
+            mod_stamps.append(modimg[y-S:y+S+1, x-S:x+S+1])
+
+    ima = dict(interpolation='nearest', origin='lower', vmin=tim.getImage().min(),
+               vmax=tim.getImage().max())
+    plt.figure(figsize=(6,12))
+    plt.clf()
+    for i,s in enumerate(img_stamps):
+        plt.subplot(len(yy), len(xx), i+1)
+        plt.imshow(s, **ima)
+        plt.xticks([]); plt.yticks([])
+    plt.savefig('psf-imgs.png')
+
+    plt.clf()
+    for i,s in enumerate(mod_stamps):
+        plt.subplot(len(yy), len(xx), i+1)
+        plt.imshow(s, **ima)
+        plt.xticks([]); plt.yticks([])
+    plt.savefig('psf-mods.png')
+
+
+    ima = dict(interpolation='nearest', origin='lower',
+               vmin=-0.01, vmax=0.01)
+
+    nil, xpows, ypows = psfex.polynomials(0., 0., powers=True)
+    for ip,(xp,yp) in enumerate(zip(xpows, ypows)):
+
+        stamps = []
+        for y in yy:
+            for x in xx:
+                psf = np.zeros_like(psfex.shape)
+                term = psfex.polynomials(x, y)[ip]
+                psf = term * psfex.bases()[ip]
+                stamps.append(psf)
+        plt.clf()
+        for i,s in enumerate(stamps):
+            plt.subplot(len(yy), len(xx), i+1)
+            plt.imshow(s, **ima)
+            plt.xticks([]); plt.yticks([])
+        plt.suptitle('PSF component for x^%i y^%i' % (xp, yp))
+        plt.savefig('psf-term-%i.png' % ip)
 
 
 
