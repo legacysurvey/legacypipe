@@ -57,7 +57,7 @@ import numpy as np
 import matplotlib.pyplot as plt
 import matplotlib.gridspec as gridspec
 
-from tractor.psfex import PsfEx
+from tractor.psfex import PsfEx, PixelizedPsfEx
 from tractor import Tractor
 from tractor.basics import (NanoMaggies, PointSource, GaussianMixtureEllipsePSF,
                             PixelizedPSF, RaDecPos)
@@ -186,8 +186,8 @@ def psf_residuals(expnum,ccdname,stampsize=35,nstar=30,
 
         # Now change the PSF model to a pixelized PSF model from PsfEx instantiated
         # at this place in the image.
-        psfimg = tim.psfex.instantiateAt(xpos, ypos, nativeScale=True)
-        tim.psf = PixelizedPSF(psfimg)
+        psf = PixelizedPsfEx(im.psffn)
+        tim.psf = psf.constantPsfAt(xpos, ypos)
 
         #print('PSF model:', tim.psf)
         #tractor.printThawedParams()

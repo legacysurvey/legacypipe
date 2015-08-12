@@ -1823,7 +1823,7 @@ class LegacySurveyImage(object):
             # 2-component constant MoG.
             print('Reading PsfEx model from', self.psffn)
             psfex = PsfExModel(self.psffn)
-            psfim = psfex.psfImageAt(imw/2., imh/2.)
+            psfim = psfex.at(imw/2., imh/2.)
             psfim = psfim[5:-5, 5:-5]
             print('Fitting PsfEx model as 2-component Gaussian...')
             psf = GaussianMixtureEllipsePSF.fromStamp(psfim, N=2)
