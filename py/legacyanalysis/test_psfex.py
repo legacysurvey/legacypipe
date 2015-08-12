@@ -21,11 +21,6 @@ def test_psfex(expnum, ccdname, decals_out_dir):
             ok = False
     if not ok:
         render_fake_image(expnum, ccdname, decals_out_dir)
-        #
-        # indecals = Decals()
-        # inccds = indecals.find_ccds(expnum=expnum,ccdname=ccdname)
-        # inccd = inccds[0]
-        # im = indecals.get_image_object(inccd)
         im.run_calibs()
 
     # check it out...

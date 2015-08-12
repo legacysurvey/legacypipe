@@ -1385,12 +1385,8 @@ def _blob_iter(blobslices, blobsrcs, blobs,
             subie  = tim.getInvError()[subslc]
             subwcs = tim.getWcs().getShifted(sx0, sy0)
 
-            # We pass the *original*, full-image PSF model; _one_blob applies offsets
-            #psf = tim.psfex
-            psf = tim.psf
-
             subtimargs.append((subimg, subie, subwcs, tim.subwcs, tim.getPhotoCal(),
-                               tim.getSky(), psf, tim.name, sx0, sx1, sy0, sy1,
+                               tim.getSky(), tim.psf, tim.name, sx0, sx1, sy0, sy1,
                                tim.band, tim.sig1, tim.modelMinval))
 
         # Here we assume the "blobs" array has been remapped...

@@ -1810,13 +1810,13 @@ class LegacySurveyImage(object):
             v = psf_sigma**2
             psf = GaussianMixturePSF(1., 0., 0., v, v, 0.)
             print('WARNING: using mock PSF:', psf)
-            psfex = None
         elif pixPsf:
             # spatially varying pixelized PsfEx
             from tractor.psfex import PixelizedPsfEx
             print('Reading PsfEx model from', self.psffn)
             psf = PixelizedPsfEx(self.psffn)
-            psfex = None
+            psf.shift(x0, y0)
+
         elif const2psf:
             from tractor.psfex import PsfExModel
             from tractor.basics import GaussianMixtureEllipsePSF
@@ -1828,7 +1828,7 @@ class LegacySurveyImage(object):
             print('Fitting PsfEx model as 2-component Gaussian...')
             psf = GaussianMixtureEllipsePSF.fromStamp(psfim, N=2)
             del psfim
-            psfex = None
+            del psfex
         else:
             assert(False)
         print('Using PSF model', psf)
@@ -1846,7 +1846,6 @@ class LegacySurveyImage(object):
         tim.psf_sigma = psf_sigma
         tim.sip_wcs = wcs
         tim.x0,tim.y0 = int(x0),int(y0)
-        tim.psfex = psfex
         tim.imobj = self
         tim.primhdr = primhdr
         tim.hdr = imghdr
