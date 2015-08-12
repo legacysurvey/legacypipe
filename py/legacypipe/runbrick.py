@@ -399,8 +399,9 @@ def stage_tims(W=3600, H=3600, pixscale=0.262, brickname=None,
 
     # Run calibrations
     kwa = dict()
-    args = [(im, kwa, brick.ra, brick.dec, pixscale, gaussPsf)
-            for im in ims]
+    if gaussPsf:
+        kwa.update(psfex=False)
+    args = [(im, kwa) for im in ims]
     mp.map(run_calibs, args)
     tnow = Time()
     print('[parallel tims] Calibrations:', tnow-tlast)

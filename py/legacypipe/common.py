@@ -1647,6 +1647,8 @@ class LegacySurveyImage(object):
         self.exptime = exptime
         self.camera = t.camera.strip()
         self.fwhm = t.fwhm
+        # in arcsec/pixel
+        self.pixscale = 3600. * np.sqrt(np.abs(t.cd1_1 * t.cd2_2 - t.cd1_2 * t.cd2_1))
 
     def __str__(self):
         return self.name
@@ -1975,9 +1977,7 @@ class LegacySurveyImage(object):
         skyobj = fromfits(hdr, prefix='SKY_')
         return skyobj
 
-    def run_calibs(self, ra, dec, pixscale, gaussPsf, W=2048, H=4096,
-                   pvastrom=True, psfex=True, sky=True,
-                   se=False,
+    def run_calibs(self, pvastrom=True, psfex=True, sky=True, se=False,
                    funpack=False, fcopy=False, use_mask=True,
                    force=False, just_check=False):
         '''
@@ -2172,22 +2172,19 @@ class DecamImage(LegacySurveyImage):
     def get_wcs(self):
         return self.read_pv_wcs()
 
-    def run_calibs(self, ra, dec, pixscale, gaussPsf, W=2048, H=4096,
-                   pvastrom=True, psfex=True, sky=True,
-                   se=False,
+    def run_calibs(self, pvastrom=True, psfex=True, sky=True, se=False,
                    funpack=False, fcopy=False, use_mask=True,
                    force=False, just_check=False):
         '''
         Run calibration pre-processing steps.
 
-        pixscale: in arcsec/pixel
-        just_check: if True, returns True if calibs need to be run.
+        Parameters
+        ----------
+        just_check: boolean
+            If True, returns True if calibs need to be run.
         '''
         for fn in [self.pvwcsfn, self.sefn, self.psffn, self.skyfn]:
             print('exists?', os.path.exists(fn), fn)
-
-        if gaussPsf:
-            psfex = False
 
         if psfex and os.path.exists(self.psffn) and (not force):
             # Sometimes SourceExtractor gets interrupted or something and
@@ -2291,11 +2288,8 @@ class DecamImage(LegacySurveyImage):
         if se:
             # grab header values...
             primhdr = self.read_image_primary_header()
-            hdr     = self.read_image_header()
-    
             magzp  = primhdr['MAGZERO']
-            fwhm = hdr['FWHM']
-            seeing = pixscale * fwhm
+            seeing = self.pixscale * self.fwhm
             print('FWHM', fwhm, 'pix')
             print('pixscale', pixscale, 'arcsec/pix')
             print('Seeing', seeing, 'arcsec')
@@ -2403,10 +2397,8 @@ class DecamImage(LegacySurveyImage):
 def run_calibs(X):
     im = X[0]
     kwargs = X[1]
-    args = X[2:]
     print('run_calibs for image', im)
-    return im.run_calibs(*args, **kwargs)
-
+    return im.run_calibs(**kwargs)
 
 def read_one_tim((im, targetrd, gaussPsf, const2psf, pixPsf)):
     print('Reading', im)

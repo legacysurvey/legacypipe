@@ -379,8 +379,7 @@ if __name__ == '__main__':
         if opt.check:
             log(j+1, 'of', len(allI))
             im = DecamImage(decals, T[i])
-            if not im.run_calibs(im, None, None, None, just_check=True,
-                                 astrom=False):
+            if not im.run_calibs(im, just_check=True)
                 log('Calibs for', im.expnum, im.ccdname, im.calname, 'already done')
                 continue
 

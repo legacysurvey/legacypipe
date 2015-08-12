@@ -1,11 +1,31 @@
 from __future__ import print_function
 
+import sys
+
 from astrometry.util.file import trymakedirs
 
 from tractor import *
 from legacypipe.common import *
 
-def test_psfex(expnum, ccdname, decals_out):
+def test_psfex(expnum, ccdname, decals_out_dir):
+    decals_out = Decals(decals_out_dir)
+    ccds = decals_out.find_ccds(expnum=expnum,ccdname=ccdname)
+    ccd = ccds[0]
+    im = decals_out.get_image_object(ccd)
+    psfexfn = im.psffn
+    if not os.path.exists(psfexfn):
+        render_fake_image(expnum, ccdname, decals_out_dir)
+        #
+        # FIXME -- run calibs...
+        sys.exit(-1)
+
+    #check_psfex(decals_out, im)
+
+    psfex = PsfExModel(psfexfn)
+        
+
+
+def render_fake_image(expnum, ccdname, decals_out_dir):
     decals = Decals()
     ccds = decals.find_ccds(expnum=expnum,ccdname=ccdname)
     ccd = ccds[0]
@@ -60,7 +80,7 @@ def test_psfex(expnum, ccdname, decals_out):
     modimg += noise
 
     #
-    imagedir = os.path.join(decals_out, 'images', 'decam')
+    imagedir = os.path.join(decals_out_dir, 'images', 'decam')
     trymakedirs(imagedir)
     imagefn = os.path.join(imagedir, os.path.basename(ccd.image_filename.strip())).replace(
         '.fits.fz', '.fits')
@@ -68,9 +88,11 @@ def test_psfex(expnum, ccdname, decals_out):
     primhdr = im.read_image_primary_header()
     hdr = im.read_image_header()
 
+    extname = hdr['EXTNAME']
+
     import fitsio
     fitsio.write(imagefn, None, header=primhdr, clobber=True)
-    fitsio.write(imagefn, modimg, header=hdr, clobber=False)
+    fitsio.write(imagefn, modimg, header=hdr, extname=extname, clobber=False)
     print('Wrote', imagefn)
 
     dq = im.read_dq()
@@ -95,15 +117,15 @@ def test_psfex(expnum, ccdname, decals_out):
 
     ccds.image_filename = np.array(['decam/' + os.path.basename(imagefn)])
     ccds.image_hdu[0] = 1
-    ccdfn = os.path.join(decals_out, 'decals-ccds.fits')
+    ccdfn = os.path.join(decals_out_dir, 'decals-ccds.fits')
     ccds.writeto(ccdfn)
     print('Wrote', ccdfn)
 
-    cal = os.path.join(decals_out, 'calib')
+    cal = os.path.join(decals_out_dir, 'calib')
     trymakedirs(cal)
 
     for path in ['decals-bricks.fits', 'calib/se-config']:
-        pathnm = os.path.join(decals_out, path)
+        pathnm = os.path.join(decals_out_dir, path)
         if os.path.exists(pathnm):
             continue
         cmd = 'ln -s %s/%s %s' % (decals.get_decals_dir(), path, pathnm)
