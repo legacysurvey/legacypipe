@@ -42,7 +42,7 @@ class ps1cat():
         cat = merge_tables(cat)
         return cat
 
-    def get_stars(self,rmagcut=None):
+    def get_stars(self,magrange=None,band='r'):
         """Return the set of PS1 stars on a given CCD with well-measured grz
         magnitudes. Optionally trim the stars to a desired r-band magnitude
         range.
@@ -53,14 +53,17 @@ class ps1cat():
         onccd = np.empty(len(allcat))
         for iobj, cat in enumerate(allcat):
             onccd[iobj] = self.ccdwcs.is_inside(cat.ra,cat.dec)
-        cat = allcat[np.where((onccd*1)*
-                              ((allcat.nmag_ok[:,0]>0)*1)*     # g
-                              ((allcat.nmag_ok[:,1]>0)*1)*     # r
-                              ((allcat.nmag_ok[:,3]>0)*1)==1)] # z
+        cat = allcat[np.where((onccd*1)==1)] # z
+        #cat = allcat[np.where((onccd*1)*
+        #                      ((allcat.nmag_ok[:,0]>0)*1)*     # g
+        #                      ((allcat.nmag_ok[:,1]>0)*1)*     # r
+        #                      ((allcat.nmag_ok[:,3]>0)*1)==1)] # z
         print('Found {} good PS1 stars'.format(len(cat)))
-        if rmagcut is not None:
-            keep = np.where(((cat.median[:,1]>rmagcut[0])*1)*
-                            (cat.median[:,1]<rmagcut[1])*1)[0]
+        if magrange is not None:
+            ps1band = dict(g=0,r=1,i=2,z=3,Y=4)
+            keep = np.where(((cat.median[:,ps1band[band]]>magrange[0])*1)*
+                            (cat.median[:,ps1band[band]]<magrange[1])*1)[0]
             cat = cat[keep]
-            print('Trimming to {} stars with r=[{},{}]'.format(len(cat),rmagcut[0],rmagcut[1]))
+            print('Trimming to {} stars with {}=[{},{}]'.
+                  format(len(cat),band,magrange[0],magrange[1]))
         return cat

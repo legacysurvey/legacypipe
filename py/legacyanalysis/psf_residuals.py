@@ -12,6 +12,38 @@ For a given CCD:
     - tractor.optimize with PsfEx PSF     -> model2
     - plot image, model1, model2
 
+
+from legacypipe.common import Decals
+decals = Decals()
+all = decals.get_ccds()
+plt.scatter(all.seeing,all.airmass) ; plt.xlim(0,3) ; plt.show(block=False)
+cut1 = np.where(((all.airmass>0)*1)*((all.airmass<1.1)*1)*((all.seeing<1.0)*1))[0]
+cut2 = np.unique(all.expnum[cut1],return_index=True)[1]
+good = all[cut1[cut2]]
+print(good.expnum)
+[175034 175035 175040 175041 175042 197042 197043 197044 197045 197070
+ 197071 197072 197073 197074 197075 197076 197077 205060 205063 295339
+ 295340 295341 295342 432735 432736 432739 432740 432743 432744 432745
+ 432746 432747 432748 432749 432750 432759 432786 432787 432790 432791
+ 432792 432796 432797 432798 432799 432800 432801 432802 432803 432804
+ 432805 432806 432807 432808 432809 432810 432811 432812 432813 432814
+ 432815 432816 432817 432818 432819 432820 432821 432822 432823 432824
+ 432825 432826 432827 432828 432829 432830 432831 432832 432833 432834
+ 432835 432836 432837 432838 432839 432840 432841 432842 432843]
+
+cut1 = np.where(((all.airmass>2.0)*1)*((all.seeing<1.0)*1))[0]
+cut2 = np.unique(all[cut1].expnum,return_index=True)[1]
+bad = all[cut1[cut2]]
+print(bad.expnum)
+[347427 347512 347513 347518 347519 347526 347763 392888 393579 393580
+ 393581 393584 393684 430521 430522 430525 430960]
+
+# good seeing, high airmass, edge of FOV
+psf_residuals -e 347427 -c S31 -m 14 17 -n 30
+
+# good seeing, low airmass, edge of FOV
+psf_residuals -e 175034 -c S31 -m 14 17 -n 30
+
 """
 
 from __future__ import division, print_function
@@ -34,8 +66,8 @@ from legacyanalysis.ps1cat import ps1cat
 from astrometry.util.fits import fits_table
 from legacypipe.common import Decals, DecamImage
 
-def psf_residuals(expnum,ccdname,stampsize=25,
-                  rmagcut=[17,20],verbose=0):
+def psf_residuals(expnum,ccdname,stampsize=35,nstar=30,
+                  magrange=(13,17),verbose=0):
 
     # Set the debugging level.
     if verbose==0:
@@ -44,50 +76,80 @@ def psf_residuals(expnum,ccdname,stampsize=25,
         lvl = logging.DEBUG
     logging.basicConfig(level=lvl,format='%(message)s',stream=sys.stdout)
 
+    pngprefix = 'qapsf-{}-{}'.format(expnum,ccdname)
+
     # Gather all the info we need about this CCD.
     decals = Decals()
     ccd = decals.find_ccds(expnum=expnum,ccdname=ccdname)[0]
     band = ccd.filter
+    ps1band = dict(g=0,r=1,i=2,z=3,Y=4)
     print('Band {}'.format(band))
+
+    #scales = dict(g=0.0066, r=0.01, z=0.025)
+    #vmin, vmax = np.arcsinh(-1), np.arcsinh(100)
+    #print(scales[band])
 
     im = DecamImage(decals,ccd)
     iminfo = im.get_image_info()
     H,W = iminfo['dims']
 
     wcs = im.get_wcs()
-    radec = wcs.radec_bounds()
-    print(radec)
 
-    # Get all the PS1 stars on this CCD.
+    # Choose a uniformly selected subset of PS1 stars on this CCD.
     ps1 = ps1cat(ccdwcs=wcs)
-    cat = ps1.get_stars(rmagcut=rmagcut)
-    cat = cat[np.argsort(cat.median[:,1])] # sort by r-band magnitude
+    cat = ps1.get_stars(band=band,magrange=magrange)
 
-    qafile = 'qapsf-onccd.png'
-    fig = plt.figure()
+    rand = np.random.RandomState(seed=expnum*ccd.ccdnum)
+    these = rand.choice(len(cat)-1,nstar,replace=False)
+    #these = rand.random_integers(0,len(cat)-1,nstar)
+    cat = cat[these]
+    cat = cat[np.argsort(cat.median[:,ps1band[band]])] # sort by magnitude
+    #print(cat.nmag_ok)
+
+    # Make a QAplot of the positions of all the stars.
+    tim = im.get_tractor_image(const2psf=True)
+    img = tim.getImage()
+    #img = tim.getImage()/scales[band]
+
+    fig = plt.figure(figsize=(5,10))
     ax = fig.gca()
     ax.get_xaxis().get_major_formatter().set_useOffset(False)
-    ax.scatter(cat.ra,cat.dec)
-    ax.set_xlim([radec[1],radec[0]])#*[1.0002,0.9998])
-    ax.set_ylim([radec[2],radec[3]])#*[0.985,1.015])
-    ax.set_xlabel('$RA\ (deg)$',fontsize=18)
-    ax.set_ylabel('$Dec\ (deg)$',fontsize=18)
-    fig.savefig(qafile)
+    #ax.imshow(np.arcsinh(img),cmap='gray',interpolation='nearest',
+    #          origin='lower',vmin=vmax,vmax=vmax)
+    
+    ax.imshow(img, **tim.ima)
+    ax.axis('off')
+    ax.set_title('{}: {}/{} AM={:.2f} Seeing={:.3f}"'.
+                 format(band,expnum,ccdname,ccd.airmass,ccd.seeing))
 
-    # Initialize the QAplot
+    for istar, ps1star in enumerate(cat):
+        ra, dec = (ps1star.ra, ps1star.dec)
+        ok, xpos, ypos = wcs.radec2pixelxy(ra, dec)
+        ax.text(xpos,ypos,'{:2d}'.format(istar+1),color='red',
+                horizontalalignment='left')
+        circ = plt.Circle((xpos,ypos),radius=30,color='g',fill=False,lw=1)
+        ax.add_patch(circ)
+
+    #radec = wcs.radec_bounds()
+    #ax.scatter(cat.ra,cat.dec)
+    #ax.set_xlim([radec[1],radec[0]])#*[1.0002,0.9998])
+    #ax.set_ylim([radec[2],radec[3]])#*[0.985,1.015])
+    #ax.set_xlabel('$RA\ (deg)$',fontsize=18)
+    #ax.set_ylabel('$Dec\ (deg)$',fontsize=18)
+    fig.savefig(pngprefix+'-ccd.png',bbox_inches='tight')
+
+    # Initialize the many-stamp QAplot
     ncols = 3
-    nrows = 2
-    cat = cat[:ncols*nrows]
+    nrows = np.ceil(nstar/ncols).astype('int')
 
     inchperstamp = 2.0
     fig = plt.figure(figsize=(inchperstamp*3*ncols,inchperstamp*nrows))
-    gs = gridspec.GridSpec(nrows,3*ncols)
     irow = 0
     icol = 0
     
     for istar, ps1star in enumerate(cat):
         ra, dec = (ps1star.ra, ps1star.dec)
-        mag = ps1star.median[1] # r-band
+        mag = ps1star.median[ps1band[band]] # r-band
 
         ok, xpos, ypos = wcs.radec2pixelxy(ra, dec)
         ix,iy = int(xpos), int(ypos)
@@ -100,6 +162,7 @@ def psf_residuals(expnum,ccdname,stampsize=25,
         # Gaussian fit to PsfEx instantiated in the image center.
         tim = im.get_tractor_image(slc=slc, const2psf=True)
         stamp = tim.getImage()
+        ivarstamp = tim.getInvvar()
 
         # Initialize a tractor PointSource from PS1 measurements
         flux = NanoMaggies.magToNanomaggies(mag)
@@ -138,6 +201,10 @@ def psf_residuals(expnum,ccdname,stampsize=25,
         chi2_psfex = -2.0*tractor.getLogLikelihood()
         mag_psfex = NanoMaggies.nanomaggiesToMag(star.brightness)[0]
 
+        #mn, mx = np.percentile((stamp-model_psfex)[ivarstamp>0],[1,95])
+        sig = np.std((stamp-model_psfex)[ivarstamp>0])
+        mn, mx = [-2.0*sig,5*sig]
+
         # Generate a QAplot.
         if (istar>0) and (istar%(ncols)==0):
             irow = irow+1
@@ -146,22 +213,43 @@ def psf_residuals(expnum,ccdname,stampsize=25,
 
         ax1 = plt.subplot2grid((nrows,3*ncols), (irow,icol), aspect='equal')
         ax1.axis('off')
-        ax1.imshow(stamp, **tim.ima)
-        gs.update(wspace=0.0,hspace=0.0,bottom=0.0,top=0.0,left=0.0,right=0.0) 
+        #ax1.imshow(stamp, **tim.ima)
+        ax1.imshow(stamp,cmap='gray',interpolation='nearest',
+                   origin='lower',vmin=mn,vmax=mx)
+        ax1.text(0.1,0.9,'{:2d}'.format(istar+1),color='white',
+                horizontalalignment='left',verticalalignment='top',
+                transform=ax1.transAxes)
 
         ax2 = plt.subplot2grid((nrows,3*ncols), (irow,icol+1), aspect='equal')
         ax2.axis('off')
-        ax2.imshow(stamp-model_mog, **tim.ima)
+        #ax2.imshow(stamp-model_mog, **tim.ima)
+        ax2.imshow(stamp-model_mog,cmap='gray',interpolation='nearest',
+                   origin='lower',vmin=mn,vmax=mx)
+        ax2.text(0.1,0.9,'MoG',color='white',
+                horizontalalignment='left',verticalalignment='top',
+                transform=ax2.transAxes)
+        ax2.text(0.08,0.08,'{:.3f}'.format(mag_mog),color='white',
+                 horizontalalignment='left',verticalalignment='bottom',
+                 transform=ax2.transAxes)
 
         #ax2.set_title('{:.3f}, {:.2f}'.format(mag_psfex,chi2_psfex),fontsize=14)
         #ax2.set_title('{:.3f}, $\chi^{2}$={:.2f}'.format(mag_psfex,chi2_psfex))
 
         ax3 = plt.subplot2grid((nrows,3*ncols), (irow,icol+2), aspect='equal')
         ax3.axis('off')
-        ax3.imshow(stamp-model_psfex, **tim.ima)
-        gs.update(wspace=0.1,hspace=0.0,bottom=0.0,top=0.0,left=0.0,right=0.0) 
+        #ax3.imshow(stamp-model_psfex, **tim.ima)
+        ax3.imshow(stamp-model_psfex,cmap='gray',interpolation='nearest',
+                   origin='lower',vmin=mn,vmax=mx)
+        ax3.text(0.1,0.9,'PSFEx',color='white',
+                horizontalalignment='left',verticalalignment='top',
+                transform=ax3.transAxes)
+        ax3.text(0.08,0.08,'{:.3f}'.format(mag_psfex),color='white',
+                 horizontalalignment='left',verticalalignment='bottom',
+                 transform=ax3.transAxes)
 
-    fig.savefig('qapsf.png')
+        if istar==(nstar-1):
+            break
+    fig.savefig(pngprefix+'-stargrid.png',bbox_inches='tight')
 
 def main():
     """
@@ -173,11 +261,17 @@ def main():
                         help='exposure number')
     parser.add_argument('-c', '--ccdname', type=str, default='S31', metavar='', 
                         help='CCD name')
+    parser.add_argument('-n', '--nstar', type=long, default=30, metavar='', 
+                        help='number of stars to display')
+    parser.add_argument('-m', '--magrange', type=float, default=(13,17), nargs=2, metavar='', 
+                        help='PS1 magnitude range')
     parser.add_argument('-v', '--verbose', dest='verbose', action='count', default=0,
                         help='Toggle on verbose output')
     args = parser.parse_args()
 
-    psf_residuals(expnum=args.expnum,ccdname=args.ccdname,verbose=args.verbose)
+    psf_residuals(expnum=args.expnum,ccdname=args.ccdname,
+                  nstar=args.nstar,magrange=args.magrange,
+                  verbose=args.verbose)
     
 if __name__ == "__main__":
     main()
