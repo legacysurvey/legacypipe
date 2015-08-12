@@ -1875,29 +1875,86 @@ class LegacySurveyImage(object):
         return fitsio.read(fn, ext=hdu, header=header, **kwargs)
 
     def read_image(self, **kwargs):
+        '''
+        Reads the image file from disk.
+
+        The image is read from FITS file self.imgfn HDU self.hdu.
+
+        Parameters
+        ----------
+        slice : slice, optional
+            2-dimensional slice of the subimage to read.
+        header : boolean, optional
+            Return the image header also, as tuple (image, header) ?
+
+        Returns
+        -------
+        image : numpy array
+            The image pixels.
+        (image, header) : (numpy array, fitsio header)
+            If `header = True`.
+        '''
         print('Reading image from', self.imgfn, 'hdu', self.hdu)
         return self._read_fits(self.imgfn, self.hdu, **kwargs)
 
     def get_image_info(self):
+        '''
+        Reads the FITS image header and returns some summary information
+        as a dictionary (image size, type, etc).
+        '''
         return fitsio.FITS(self.imgfn)[self.hdu].get_info()
 
     def get_image_shape(self):
-        ''' Returns image H,W '''
+        '''
+        Returns image shape H,W.
+        '''
         return self.get_image_info()['dims']
+
+    @property
+    def shape(self):
+        '''
+        Returns the full shape of the image, (H,W).
+        '''
+        return self.get_image_shape()
     
     def read_image_primary_header(self, **kwargs):
+        '''
+        Reads the FITS primary (HDU 0) header from self.imgfn.
+
+        Returns
+        -------
+        primary_header : fitsio header
+            The FITS header
+        '''
         return fitsio.read_header(self.imgfn)
 
     def read_image_header(self, **kwargs):
+        '''
+        Reads the FITS image header from self.imgfn HDU self.hdu.
+
+        Returns
+        -------
+        header : fitsio header
+            The FITS header
+        '''
         return fitsio.read_header(self.imgfn, ext=self.hdu)
 
     def read_dq(self, **kwargs):
+        '''
+        Reads the Data Quality (DQ) mask image.
+        '''
         return None
 
     def read_invvar(self, clip=True, **kwargs):
+        '''
+        Reads the inverse-variance (weight) map image.
+        '''
         return None
 
     def read_pv_wcs(self):
+        '''
+        Reads the WCS header, returning an `astrometry.util.util.Sip` object.
+        '''
         print('Reading WCS from', self.pvwcsfn)
         wcs = Sip(self.pvwcsfn)
         dra,ddec = self.decals.get_astrometric_zeropoint_for(self)
@@ -1907,6 +1964,9 @@ class LegacySurveyImage(object):
         return wcs
     
     def read_sky_model(self):
+        '''
+        Reads the sky model, returning a Tractor Sky object.
+        '''
         print('Reading sky model from', self.skyfn)
         hdr = fitsio.read_header(self.skyfn)
         skyclass = hdr['SKY']
@@ -1920,6 +1980,9 @@ class LegacySurveyImage(object):
                    se=False,
                    funpack=False, fcopy=False, use_mask=True,
                    force=False, just_check=False):
+        '''
+        Runs any required calibration processes for this image.
+        '''
         print('run_calibs for', self)
         print('(not implemented)')
         pass
