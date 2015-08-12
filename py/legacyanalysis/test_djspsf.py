@@ -29,9 +29,11 @@ def main():
 
     print('Plotting bases')
     djs.psfex.plot_bases(autoscale=False)
+    plt.suptitle('DJS PSF basis functions')
     plt.savefig('djs-bases.png')
 
     djs.psfex.plot_bases(stampsize=stampsz, autoscale=False)
+    plt.suptitle('DJS PSF basis functions')
     plt.savefig('djs-bases2.png')
 
     H,W = 4096, 2048
@@ -73,9 +75,11 @@ def main():
 
     plt.subplots_adjust(hspace=0.2, wspace=0.2)
     psfex.plot_bases(autoscale=False)
+    plt.suptitle('PsfEx basis functions')
     plt.savefig('psfex-bases.png')
 
     psfex.plot_bases(stampsize=stampsz, autoscale=False)
+    plt.suptitle('PsfEx basis functions')
     plt.savefig('psfex-bases2.png')
 
     mx = psfex.psfbases.max()
