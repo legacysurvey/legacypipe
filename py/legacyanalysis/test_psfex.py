@@ -11,30 +11,28 @@ from legacypipe.common import *
 def test_psfex(expnum, ccdname, decals_out_dir):
     decals_out = Decals(decals_out_dir)
     ccds = decals_out.find_ccds(expnum=expnum,ccdname=ccdname)
-    ccd = ccds[0]
-    im = decals_out.get_image_object(ccd)
-    psfexfn = im.psffn
-    if not os.path.exists(psfexfn):
+    print('Found CCDs:', len(ccds))
+    ok = (len(ccds) > 0)
+    if ok:
+        ccd = ccds[0]
+        im = decals_out.get_image_object(ccd)
+        psfexfn = im.psffn
+        if not os.path.exists(psfexfn):
+            ok = False
+    if not ok:
         render_fake_image(expnum, ccdname, decals_out_dir)
         #
+        # indecals = Decals()
+        # inccds = indecals.find_ccds(expnum=expnum,ccdname=ccdname)
+        # inccd = inccds[0]
+        # im = indecals.get_image_object(inccd)
         im.run_calibs()
 
     # check it out...
     psfex = PsfExModel(psfexfn)
     print('Read', psfex)
 
-    bases = psfex.bases()
-    N = len(bases)
-    cols = int(np.ceil(np.sqrt(N)))
-    rows = int(np.ceil(N / float(cols)))
-    plt.clf()
-    plt.subplots_adjust(hspace=0, wspace=0)
-    for i,b in enumerate(bases):
-        plt.subplot(rows, cols, i+1)
-        mx = b.max()
-        plt.imshow(b, interpolation='nearest', origin='lower', vmin=-mx, vmax=mx)
-        plt.xticks([])
-        plt.yticks([])
+    psfex.plot_bases()
     plt.savefig('psf-bases.png')
 
     ny = 21
@@ -84,6 +82,7 @@ def test_psfex(expnum, ccdname, decals_out_dir):
         plt.subplot(len(yy), len(xx), i+1)
         plt.imshow(s, **ima)
         plt.xticks([]); plt.yticks([])
+    plt.suptitle('Image')
     plt.savefig('psf-imgs.png')
 
     plt.clf()
@@ -91,30 +90,24 @@ def test_psfex(expnum, ccdname, decals_out_dir):
         plt.subplot(len(yy), len(xx), i+1)
         plt.imshow(s, **ima)
         plt.xticks([]); plt.yticks([])
+    plt.suptitle('PsfEx Model')
     plt.savefig('psf-mods.png')
 
+    imdiff = dict(interpolation='nearest', origin='lower',
+                  vmin = -tim.getImage().max(),
+                  vmax =  tim.getImage().max())
 
-    ima = dict(interpolation='nearest', origin='lower',
-               vmin=-0.01, vmax=0.01)
+    plt.clf()
+    for i,(img,mod) in enumerate(zip(img_stamps, mod_stamps)):
+        plt.subplot(len(yy), len(xx), i+1)
+        plt.imshow(img - mod, **imdiff)
+        plt.xticks([]); plt.yticks([])
+    plt.suptitle('Image - PsfEx Model')
+    plt.savefig('psf-diff.png')
 
-    nil, xpows, ypows = psfex.polynomials(0., 0., powers=True)
-    for ip,(xp,yp) in enumerate(zip(xpows, ypows)):
-
-        stamps = []
-        for y in yy:
-            for x in xx:
-                psf = np.zeros_like(psfex.shape)
-                term = psfex.polynomials(x, y)[ip]
-                psf = term * psfex.bases()[ip]
-                stamps.append(psf)
-        plt.clf()
-        for i,s in enumerate(stamps):
-            plt.subplot(len(yy), len(xx), i+1)
-            plt.imshow(s, **ima)
-            plt.xticks([]); plt.yticks([])
-        plt.suptitle('PSF component for x^%i y^%i' % (xp, yp))
-        plt.savefig('psf-term-%i.png' % ip)
-
+    for i in range(psfex.nbases):
+        psfex.plot_grid(xx, yy, term=i)
+        plt.savefig('psf-term-%i.png' % i)
 
 
 def render_fake_image(expnum, ccdname, decals_out_dir):

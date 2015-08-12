@@ -44,13 +44,7 @@ if __name__ == '__main__':
         im = DecamImage(D, t)
         print 'Running', im.calname
 
-        pixscale = np.sqrt(np.abs(t.cd1_1 * t.cd2_2 - t.cd1_2 * t.cd2_1))
-        pixscale *= 3600.
-        print 'Pixscale', pixscale, 'arcsec/pix'
-        mock_psf = False
-
-        kwargs = dict(pvastrom=True)
         if opt.force:
             kwargs.update(force=True)
 
-        run_calibs((im, kwargs, t.ra, t.dec, pixscale, mock_psf))
+        run_calibs((im, kwargs))
