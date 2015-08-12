@@ -5,6 +5,7 @@ import sys
 from astrometry.util.file import trymakedirs
 
 from tractor import *
+from tractor.psfex import *
 from legacypipe.common import *
 
 def test_psfex(expnum, ccdname, decals_out_dir):
@@ -16,13 +17,13 @@ def test_psfex(expnum, ccdname, decals_out_dir):
     if not os.path.exists(psfexfn):
         render_fake_image(expnum, ccdname, decals_out_dir)
         #
-        # FIXME -- run calibs...
-        sys.exit(-1)
+        im.run_calibs()
 
     #check_psfex(decals_out, im)
 
     psfex = PsfExModel(psfexfn)
-        
+    print('Read', psfex)
+
 
 
 def render_fake_image(expnum, ccdname, decals_out_dir):

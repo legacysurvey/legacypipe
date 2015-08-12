@@ -2290,8 +2290,8 @@ class DecamImage(LegacySurveyImage):
             primhdr = self.read_image_primary_header()
             magzp  = primhdr['MAGZERO']
             seeing = self.pixscale * self.fwhm
-            print('FWHM', fwhm, 'pix')
-            print('pixscale', pixscale, 'arcsec/pix')
+            print('FWHM', self.fwhm, 'pix')
+            print('pixscale', self.pixscale, 'arcsec/pix')
             print('Seeing', seeing, 'arcsec')
     
         if se:
