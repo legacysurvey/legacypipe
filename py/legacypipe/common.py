@@ -2305,9 +2305,9 @@ class DecamImage(LegacySurveyImage):
 
             cmd = ' '.join([
                 'sex',
-                '-c', os.path.join(sedir, 'DECaLS-v2.sex'),
+                '-c', os.path.join(sedir, 'DECaLS.se'),
                 maskstr, '-SEEING_FWHM %f' % seeing,
-                '-PARAMETERS_NAME', os.path.join(sedir, 'DECaLS-v2.param'),
+                '-PARAMETERS_NAME', os.path.join(sedir, 'DECaLS.param'),
                 '-FILTER_NAME', os.path.join(sedir, 'gauss_5.0_9x9.conv'),
                 '-STARNNW_NAME', os.path.join(sedir, 'default.nnw'),
                 '-PIXEL_SCALE 0',
