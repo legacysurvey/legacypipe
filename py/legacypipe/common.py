@@ -1328,6 +1328,8 @@ Using the current directory as DECALS_DIR, but this is likely to fail.
     
     def get_ccds(self):
         fn = os.path.join(self.decals_dir, 'decals-ccds.fits')
+        if not os.path.exists(fn):
+            fn += '.gz'
         print('Reading CCDs from', fn)
         T = fits_table(fn)
         print('Got', len(T), 'CCDs')
