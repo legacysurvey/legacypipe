@@ -2306,7 +2306,8 @@ class DecamImage(LegacySurveyImage):
             cmd = ' '.join([
                 'sex',
                 '-c', os.path.join(sedir, 'DECaLS.se'),
-                maskstr, '-SEEING_FWHM %f' % seeing,
+                maskstr,
+                '-SEEING_FWHM %f' % seeing,
                 '-PARAMETERS_NAME', os.path.join(sedir, 'DECaLS.param'),
                 '-FILTER_NAME', os.path.join(sedir, 'gauss_5.0_9x9.conv'),
                 '-STARNNW_NAME', os.path.join(sedir, 'default.nnw'),
@@ -2314,7 +2315,8 @@ class DecamImage(LegacySurveyImage):
                 # SE has a *bizarre* notion of "sigma"
                 '-DETECT_THRESH 1.0',
                 '-ANALYSIS_THRESH 1.0',
-                '-MAG_ZEROPOINT %f' % magzp, '-CATALOG_NAME', self.sefn,
+                '-MAG_ZEROPOINT %f' % magzp,
+                '-CATALOG_NAME', self.sefn,
                 funimgfn])
             print(cmd)
             if os.system(cmd):
