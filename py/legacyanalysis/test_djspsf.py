@@ -19,7 +19,7 @@ def main():
     plt.subplots_adjust(hspace=0.2, wspace=0.2)
 
     expnum = 349185
-    ccdname = 'N6'
+    ccdname = 'N7'
 
     djs = PixelizedPsfEx(fn='psf-c4d_140818_011313_ooi_z_v1.fits',
                          psfexmodel=SchlegelPsfModel)

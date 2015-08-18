@@ -218,7 +218,8 @@ def set_globals():
     plt.subplots_adjust(left=0.07, right=0.99, bottom=0.07, top=0.95,
                         hspace=0.2, wspace=0.05)
 
-def _bounce_tim_get_resamp((tim, targetwcs)):
+def _bounce_tim_get_resamp(X):
+    (tim, targetwcs) = X
     return tim_get_resamp(tim, targetwcs)
 
 def tims_compute_resamp(mp, tims, targetwcs):
@@ -778,7 +779,8 @@ def stage_image_coadds(targetwcs=None, bands=None, tims=None, outdir=None,
 
     return None
 
-def _median_smooth_detmap((detmap, detiv, binning)):
+def _median_smooth_detmap(X):
+    (detmap, detiv, binning) = X
     from scipy.ndimage.filters import median_filter
     #from astrometry.util.util import median_smooth
     #smoo = np.zeros_like(detmap)
@@ -1425,11 +1427,12 @@ FLAG_STEPS_B = 8
 FLAG_TRIED_C = 0x10
 FLAG_CPU_C   = 0x20
 
-def _one_blob((iblob, Isrcs, targetwcs, bx0, by0, blobw, blobh, blobmask, subtimargs,
-               srcs, bands, plots, ps, simul_opt)):
+def _one_blob(X):
     '''
     Fits sources contained within a "blob" of pixels.
     '''
+    (iblob, Isrcs, targetwcs, bx0, by0, blobw, blobh, blobmask, subtimargs,
+     srcs, bands, plots, ps, simul_opt) = X
 
     print('Fitting blob', (iblob+1), ':', len(Isrcs), 'sources, size',
           blobw, 'x', blobh, len(subtimargs), 'images')
@@ -2421,7 +2424,8 @@ def _one_blob((iblob, Isrcs, targetwcs, bx0, by0, blobw, blobh, blobmask, subtim
             all_models, performance, fracin, started_in_blob, finished_in_blob)
 
 
-def _get_mod((tim, srcs)):
+def _get_mod(X):
+    (tim, srcs) = X
     tractor = Tractor([tim], srcs)
     return tractor.getModelImage(0)
 
