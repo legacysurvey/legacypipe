@@ -51,9 +51,10 @@ from astrometry.util.miscutils import patch_image
 from tractor import Tractor, PointSource, Image, NanoMaggies
 from tractor.ellipses import EllipseESoft, EllipseE
 from tractor.galaxy import DevGalaxy, ExpGalaxy, FixedCompositeGalaxy, disable_galaxy_cache
-from tractor.utils import _GaussianPriors
 
 from common import *
+from utils import ellipse_with_priors_factory, RunbrickError, NothingToDoError, iterwrapper
+
 from runbrick_plots import _plot_mods
 
 
@@ -65,53 +66,15 @@ useCeres = True
 rgbkwargs = dict(mnmx=(-1,100.), arcsinh=1.)
 rgbkwargs_resid = dict(mnmx=(-5,5))
 
+# Prior on (softened) ellipticity: Gaussian with this standard deviation
+ellipticityStd = 0.25
+EllipseWithPriors = ellipse_with_priors_factory(ellipticityStd)
+
 def runbrick_global_init():
     if nocache:
         disable_galaxy_cache()
     if useCeres:
         from tractor.ceres import ceres_opt
-
-# Prior on (softened) ellipticity: Gaussian with this standard deviation
-ellipticityStd = 0.25
-
-ellipsePriors = _GaussianPriors(None)
-ellipsePriors.add('ee1', 0., ellipticityStd, param=EllipseESoft(1.,0.,0.))
-ellipsePriors.add('ee2', 0., ellipticityStd, param=EllipseESoft(1.,0.,0.))
-
-class EllipseWithPriors(EllipseESoft):
-    '''
-    An ellipse (used to represent galaxy shapes) with Gaussian priors
-    over softened ellipticity parameters.  This class is used during
-    fitting.
-
-    We ALSO place a prior on log-radius, forcing it to be < +5 (r_e =
-    148").
-    '''
-
-    # EllipseESoft extends EllipseE extends ParamList, has
-    # GaussianPriorsMixin.  GaussianPriorsMixin sets a "gpriors"
-    # member variable to a _GaussianPriors
-    def __init__(self, *args, **kwargs):
-        super(EllipseWithPriors, self).__init__(*args, **kwargs)
-        self.gpriors = ellipsePriors
-
-    @staticmethod
-    def fromRAbPhi(r, ba, phi):
-        logr, ee1, ee2 = EllipseESoft.rAbPhiToESoft(r, ba, phi)
-        return EllipseWithPriors(logr, ee1, ee2)
-
-    def isLegal(self):
-        return self.logre < +5.
-
-    @staticmethod
-    def getName():
-        return "EllipseWithPriors"
-
-class RunbrickError(RuntimeError):
-    pass
-
-class NothingToDoError(RunbrickError):
-    pass
 
 # Turn on/off caching for all new Tractor instances.
 def create_tractor(tims, srcs):
@@ -122,172 +85,6 @@ def create_tractor(tims, srcs):
     return t
 ### Woot!
 Tractor = create_tractor
-
-from utils.debugpool import DebugPoolTimestamp
-from astrometry.util.multiproc import multiproc
-class MyMultiproc(multiproc):
-    def __init__(self, *args, **kwargs):
-        super(MyMultiproc, self).__init__(*args, **kwargs)
-        self.t0 = Time()
-        self.serial = []
-        self.parallel = []
-    def map(self, *args, **kwargs):
-        tstart = Time()
-        res = super(MyMultiproc, self).map(*args, **kwargs)
-        tend = Time()
-        self.serial.append((self.t0, tstart))
-        self.parallel.append((tstart, tend))
-        self.t0 = tend
-        return res
-
-    def report(self, nthreads):
-        # Tally the serial time up to now
-        tend = Time()
-        self.serial.append((self.t0, tend))
-        self.t0 = tend
-
-        # Nasty... peek into Time members
-        scpu = 0.
-        swall = 0.
-        print('Serial:')
-        for t0,t1 in self.serial:
-            print(t1-t0)
-            for m0,m1 in zip(t0.meas, t1.meas):
-                if isinstance(m0, CpuMeas):
-                    scpu  += m1.cpu_seconds_since(m0)
-                    swall += m1.wall_seconds_since(m0)
-                    #print '  total cpu', scpu, 'wall', swall
-        pworkercpu = 0.
-        pworkerwall = 0.
-        pwall = 0.
-        pcpu = 0.
-        print('Parallel:')
-        for t0,t1 in self.parallel:
-            print(t1-t0)
-            for m0,m1 in zip(t0.meas, t1.meas):
-                if isinstance(m0, DebugPoolTimestamp):
-                    mt0 = m0.t0
-                    mt1 = m1.t0
-                    pworkercpu  += mt1['worker_cpu' ] - mt0['worker_cpu' ]
-                    pworkerwall += mt1['worker_wall'] - mt0['worker_wall']
-                elif isinstance(m0, CpuMeas):
-                    pwall += m1.wall_seconds_since(m0)
-                    pcpu  += m1.cpu_seconds_since(m0)
-        print()
-        print('Total serial CPU   ', scpu)
-        print('Total serial Wall  ', swall)
-        print('Total worker CPU   ', pworkercpu)
-        print('Total worker Wall  ', pworkerwall)
-        print('Total parallel Wall', pwall)
-        print('Total parallel CPU ', pcpu)
-        print()
-        tcpu = scpu + pworkercpu + pcpu
-        twall = swall + pwall
-        if nthreads is None:
-            nthreads = 1
-        print('Grand total CPU:              %.1f sec' % tcpu)
-        print('Grand total Wall:             %.1f sec' % twall)
-        print('Grand total CPU utilization:  %.2f cores' % (tcpu / twall))
-        print('Grand total efficiency:       %.1f %%' % (100. * tcpu / (twall * nthreads)))
-        print()
-
-class iterwrapper(object):
-    def __init__(self, y, n):
-        self.n = n
-        self.y = y
-    def __str__(self):
-        return 'iterwrapper: n=%i; ' % self.n + str(self.y)
-    def __iter__(self):
-        return self
-    def next(self):
-        try:
-            return self.y.next()
-        except StopIteration:
-            raise
-        except:
-            import traceback
-            print(str(self), 'next()')
-            traceback.print_exc()
-            raise
-
-    def __len__(self):
-        return self.n
-
-def set_globals():
-    plt.figure(figsize=(12,9))
-    plt.subplots_adjust(left=0.07, right=0.99, bottom=0.07, top=0.95,
-                        hspace=0.2, wspace=0.05)
-
-def _bounce_tim_get_resamp(X):
-    (tim, targetwcs) = X
-    return tim_get_resamp(tim, targetwcs)
-
-def tims_compute_resamp(mp, tims, targetwcs):
-    R = mp.map(_bounce_tim_get_resamp, [(tim,targetwcs) for tim in tims])
-    for tim,r in zip(tims, R):
-        tim.resamp = r
-
-# Pretty much only used for plots; the real deal is _coadds().
-def compute_coadds(tims, bands, targetwcs, images=None,
-                   get_cow=False, get_n2=False):
-
-    W = targetwcs.get_width()
-    H = targetwcs.get_height()
-
-    coimgs = []
-    cons = []
-    if get_n2:
-        cons2 = []
-    if get_cow:
-        # moo
-        cowimgs = []
-        wimgs = []
-
-    for ib,band in enumerate(bands):
-        coimg = np.zeros((H,W), np.float32)
-        coimg2 = np.zeros((H,W), np.float32)
-        con   = np.zeros((H,W), np.uint8)
-        con2  = np.zeros((H,W), np.uint8)
-        if get_cow:
-            cowimg = np.zeros((H,W), np.float32)
-            wimg  = np.zeros((H,W), np.float32)
-        for itim,tim in enumerate(tims):
-            if tim.band != band:
-                continue
-            R = tim_get_resamp(tim, targetwcs)
-            if R is None:
-                continue
-            (Yo,Xo,Yi,Xi) = R
-            nn = (tim.getInvError()[Yi,Xi] > 0)
-            if images is None:
-                coimg [Yo,Xo] += tim.getImage()[Yi,Xi] * nn
-                coimg2[Yo,Xo] += tim.getImage()[Yi,Xi]
-            else:
-                coimg [Yo,Xo] += images[itim][Yi,Xi] * nn
-                coimg2[Yo,Xo] += images[itim][Yi,Xi]
-            con   [Yo,Xo] += nn
-            if get_cow:
-                cowimg[Yo,Xo] += tim.getInvvar()[Yi,Xi] * tim.getImage()[Yi,Xi]
-                wimg  [Yo,Xo] += tim.getInvvar()[Yi,Xi]
-            con2  [Yo,Xo] += 1
-        coimg /= np.maximum(con,1)
-        coimg[con == 0] = coimg2[con == 0] / np.maximum(1, con2[con == 0])
-        if get_cow:
-            cowimg /= np.maximum(wimg, 1e-16)
-            cowimg[wimg == 0] = coimg[wimg == 0]
-            cowimgs.append(cowimg)
-            wimgs.append(wimg)
-        coimgs.append(coimg)
-        cons.append(con)
-        if get_n2:
-            cons2.append(con2)
-
-    rtn = [coimgs,cons]
-    if get_cow:
-        rtn.extend([cowimgs, wimgs])
-    if get_n2:
-        rtn.append(cons2)
-    return rtn
 
 def stage_tims(W=3600, H=3600, pixscale=0.262, brickname=None,
                decals=None,
@@ -1732,7 +1529,7 @@ def _one_blob(X):
                 spallnames.append('Fit (all)')
 
             if plots:
-
+                from utils import MyMultiproc
                 mp = MyMultiproc()
                 tims_compute_resamp(mp, srctractor.getImages(), targetwcs)
                 tims_compute_resamp(mp, subtims, targetwcs)
@@ -3016,6 +2813,77 @@ def stage_writecat(
 
     return dict(T2=T2)
 
+def _bounce_tim_get_resamp(X):
+    (tim, targetwcs) = X
+    return tim_get_resamp(tim, targetwcs)
+
+def tims_compute_resamp(mp, tims, targetwcs):
+    R = mp.map(_bounce_tim_get_resamp, [(tim,targetwcs) for tim in tims])
+    for tim,r in zip(tims, R):
+        tim.resamp = r
+
+# Pretty much only used for plots; the real deal is _coadds().
+def compute_coadds(tims, bands, targetwcs, images=None,
+                   get_cow=False, get_n2=False):
+
+    W = targetwcs.get_width()
+    H = targetwcs.get_height()
+
+    coimgs = []
+    cons = []
+    if get_n2:
+        cons2 = []
+    if get_cow:
+        # moo
+        cowimgs = []
+        wimgs = []
+
+    for ib,band in enumerate(bands):
+        coimg = np.zeros((H,W), np.float32)
+        coimg2 = np.zeros((H,W), np.float32)
+        con   = np.zeros((H,W), np.uint8)
+        con2  = np.zeros((H,W), np.uint8)
+        if get_cow:
+            cowimg = np.zeros((H,W), np.float32)
+            wimg  = np.zeros((H,W), np.float32)
+        for itim,tim in enumerate(tims):
+            if tim.band != band:
+                continue
+            R = tim_get_resamp(tim, targetwcs)
+            if R is None:
+                continue
+            (Yo,Xo,Yi,Xi) = R
+            nn = (tim.getInvError()[Yi,Xi] > 0)
+            if images is None:
+                coimg [Yo,Xo] += tim.getImage()[Yi,Xi] * nn
+                coimg2[Yo,Xo] += tim.getImage()[Yi,Xi]
+            else:
+                coimg [Yo,Xo] += images[itim][Yi,Xi] * nn
+                coimg2[Yo,Xo] += images[itim][Yi,Xi]
+            con   [Yo,Xo] += nn
+            if get_cow:
+                cowimg[Yo,Xo] += tim.getInvvar()[Yi,Xi] * tim.getImage()[Yi,Xi]
+                wimg  [Yo,Xo] += tim.getInvvar()[Yi,Xi]
+            con2  [Yo,Xo] += 1
+        coimg /= np.maximum(con,1)
+        coimg[con == 0] = coimg2[con == 0] / np.maximum(1, con2[con == 0])
+        if get_cow:
+            cowimg /= np.maximum(wimg, 1e-16)
+            cowimg[wimg == 0] = coimg[wimg == 0]
+            cowimgs.append(cowimg)
+            wimgs.append(wimg)
+        coimgs.append(coimg)
+        cons.append(con)
+        if get_n2:
+            cons2.append(con2)
+
+    rtn = [coimgs,cons]
+    if get_cow:
+        rtn.extend([cowimgs, wimgs])
+    if get_n2:
+        rtn.append(cons2)
+    return rtn
+
 def run_brick(brick, radec=None, pixscale=0.262,
               width=3600, height=3600,
               zoom=None,
@@ -3154,6 +3022,8 @@ def run_brick(brick, radec=None, pixscale=0.262,
     from astrometry.util.stages import CallGlobalTime, runstage
     from astrometry.util.multiproc import multiproc
 
+    from legacypipe.utils import MyMultiproc
+    
     global useCeres
 
     initargs = {}
@@ -3209,10 +3079,10 @@ def run_brick(brick, radec=None, pixscale=0.262,
                   force=forceStages, write=writePickles)
 
     if threads and threads > 1:
-        from utils.debugpool import DebugPool, DebugPoolMeas
-        pool = DebugPool(threads, initializer=runbrick_global_init,
-                         initargs=[])
-        Time.add_measurement(DebugPoolMeas(pool, pickleTraffic=False))
+        from astrometry.util.timingpool import TimingPool, TimingPoolMeas
+        pool = TimingPool(threads, initializer=runbrick_global_init,
+                          initargs=[])
+        Time.add_measurement(TimingPoolMeas(pool, pickleTraffic=False))
         mp = MyMultiproc(None, pool=pool)
     else:
         mp = MyMultiproc(init=runbrick_global_init, initargs=[])
@@ -3412,7 +3282,9 @@ python -u projects/desi/runbrick.py --plots --brick 2440p070 --zoom 1900 2400 45
     logging.basicConfig(level=lvl, format='%(message)s', stream=sys.stdout)
 
     Time.add_measurement(MemMeas)
-    set_globals()
+    plt.figure(figsize=(12,9))
+    plt.subplots_adjust(left=0.07, right=0.99, bottom=0.07, top=0.95,
+                        hspace=0.2, wspace=0.05)
 
     if len(opt.stage) == 0:
         opt.stage.append('writecat')
