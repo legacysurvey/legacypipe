@@ -3079,10 +3079,10 @@ def run_brick(brick, radec=None, pixscale=0.262,
                   force=forceStages, write=writePickles)
 
     if threads and threads > 1:
-        from utils.debugpool import DebugPool, DebugPoolMeas
-        pool = DebugPool(threads, initializer=runbrick_global_init,
-                         initargs=[])
-        Time.add_measurement(DebugPoolMeas(pool, pickleTraffic=False))
+        from astrometry.util.timingpool import TimingPool, TimingPoolMeas
+        pool = TimingPool(threads, initializer=runbrick_global_init,
+                          initargs=[])
+        Time.add_measurement(TimingPoolMeas(pool, pickleTraffic=False))
         mp = MyMultiproc(None, pool=pool)
     else:
         mp = MyMultiproc(init=runbrick_global_init, initargs=[])
