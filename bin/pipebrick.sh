@@ -32,7 +32,9 @@ echo >> $log
 echo -e "\nStarting on ${NERSC_HOST} $(hostname)\n" >> $log
 echo "-----------------------------------------------------------------------------------------" >> $log
 
-python -u legacypipe/runbrick.py --force-all --no-write --brick $brick --outdir $outdir --threads 6 --nsigma 6 --skip --pipe --pixpsf >> $log 2>&1
+# python -u legacypipe/runbrick.py --force-all --no-write --brick $brick --outdir $outdir --threads 6 --nsigma 6 --skip --pipe --pixpsf >> $log 2>&1
+
+python -u legacypipe/runbrick.py --force-all -P 'pickles/runbrick-fftb-%(brick)s-%%(stage)s.pickle' --brick $brick --outdir $outdir --threads 6 --nsigma 6 --skip --pipe --pixpsf >> $log 2>&1
 
 # Launch from the 'py' directory;
 # qdo launch dr1n 32 --mpack 6 --walltime=48:00:00 --script ../bin/pipebrick.sh --batchqueue regular --verbose
