@@ -53,7 +53,7 @@ from tractor.ellipses import EllipseESoft, EllipseE
 from tractor.galaxy import DevGalaxy, ExpGalaxy, FixedCompositeGalaxy, disable_galaxy_cache
 
 from common import *
-from utils import RunbrickError, NothingToDoError, iterwrapper, EllipseWithPriors
+from utils import RunbrickError, NothingToDoError, iterwrapper
 
 from runbrick_plots import _plot_mods
 
@@ -65,10 +65,6 @@ useCeres = True
 # RGB image args used in the tile viewer:
 rgbkwargs = dict(mnmx=(-1,100.), arcsinh=1.)
 rgbkwargs_resid = dict(mnmx=(-5,5))
-
-class LegacyEllipseWithPriors(EllipseWithPriors):
-    # Prior on (softened) ellipticity: Gaussian with this standard deviation
-    ellipticityStd = 0.25
 
 def runbrick_global_init():
     if nocache:

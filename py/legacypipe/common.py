@@ -49,6 +49,14 @@ CP_DQ_BITS = dict(badpix=1, satur=2, interp=4, cr=16, bleed=64,
                   edge = 256,
                   edge2 = 512) # in z-band images?
 
+
+from utils import EllipseWithPriors
+
+class LegacyEllipseWithPriors(EllipseWithPriors):
+    __package__ = 'legacypipe.runbrick'
+    # Prior on (softened) ellipticity: Gaussian with this standard deviation
+    ellipticityStd = 0.25
+
 class BrickDuck(object):
     pass
 

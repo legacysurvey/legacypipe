@@ -26,9 +26,6 @@ class EllipseWithPriors(EllipseESoft):
     # member variable to a _GaussianPriors
     def __init__(self, *args, **kwargs):
         super(EllipseWithPriors, self).__init__(*args, **kwargs)
-        #self.gpriors = ellipsePriors
-        print('__init__ of', self.__class__)
-        print('self.ellipticityStd = ', self.ellipticityStd)
         if self.ellipsePriors is None:
             ellipsePriors = _GaussianPriors(None)
             ellipsePriors.add('ee1', 0., self.ellipticityStd,
