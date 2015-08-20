@@ -5,44 +5,50 @@ from astrometry.util.timingpool import TimingPoolTimestamp
 from astrometry.util.multiproc import multiproc
 from astrometry.util.ttime import Time
 
-def ellipse_with_priors_factory(ellipticityStd):
-    ellipsePriors = _GaussianPriors(None)
-    ellipsePriors.add('ee1', 0., ellipticityStd,
-                      param=EllipseESoft(1.,0.,0.))
-    ellipsePriors.add('ee2', 0., ellipticityStd,
-                      param=EllipseESoft(1.,0.,0.))
+class EllipseWithPriors(EllipseESoft):
+    '''
+    An ellipse (used to represent galaxy shapes) with Gaussian priors
+    over softened ellipticity parameters.  This class is used during
+    fitting.
     
-    class EllipseWithPriors(EllipseESoft):
-        '''
-        An ellipse (used to represent galaxy shapes) with Gaussian priors
-        over softened ellipticity parameters.  This class is used during
-        fitting.
-    
-        We ALSO place a prior on log-radius, forcing it to be < +5 (r_e =
-        148").
-        '''
-    
-        # EllipseESoft extends EllipseE extends ParamList, has
-        # GaussianPriorsMixin.  GaussianPriorsMixin sets a "gpriors"
-        # member variable to a _GaussianPriors
-        def __init__(self, *args, **kwargs):
-            super(EllipseWithPriors, self).__init__(*args, **kwargs)
-            self.gpriors = ellipsePriors
-    
-        @staticmethod
-        def fromRAbPhi(r, ba, phi):
-            logr, ee1, ee2 = EllipseESoft.rAbPhiToESoft(r, ba, phi)
-            return EllipseWithPriors(logr, ee1, ee2)
-    
-        def isLegal(self):
-            return self.logre < +5.
-    
-        @staticmethod
-        def getName():
-            return "EllipseWithPriors(%f)" % ellipticityStd
+    We ALSO place a prior on log-radius, forcing it to be < +5 (r_e =
+    148").
 
-    return EllipseWithPriors
+    To use this class, subclass it and set the 'ellipticityStd' class
+    member.
 
+    '''
+    ellipticityStd = 0.
+    ellipsePriors = None
+
+    # EllipseESoft extends EllipseE extends ParamList, has
+    # GaussianPriorsMixin.  GaussianPriorsMixin sets a "gpriors"
+    # member variable to a _GaussianPriors
+    def __init__(self, *args, **kwargs):
+        super(EllipseWithPriors, self).__init__(*args, **kwargs)
+        #self.gpriors = ellipsePriors
+        print('__init__ of', self.__class__)
+        print('self.ellipticityStd = ', self.ellipticityStd)
+        if self.ellipsePriors is None:
+            ellipsePriors = _GaussianPriors(None)
+            ellipsePriors.add('ee1', 0., self.ellipticityStd,
+                              param=EllipseESoft(1.,0.,0.))
+            ellipsePriors.add('ee2', 0., self.ellipticityStd,
+                              param=EllipseESoft(1.,0.,0.))
+            self.__class__.ellipsePriors = ellipsePriors
+        self.gpriors = self.ellipsePriors
+
+    @classmethod
+    def fromRAbPhi(cls, r, ba, phi):
+        logr, ee1, ee2 = EllipseESoft.rAbPhiToESoft(r, ba, phi)
+        return cls(logr, ee1, ee2)
+    
+    def isLegal(self):
+        return self.logre < +5.
+    
+    @classmethod
+    def getName(cls):
+        return "EllipseWithPriors(%f)" % cls.ellipticityStd
 
 
 class RunbrickError(RuntimeError):

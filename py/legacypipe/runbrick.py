@@ -53,7 +53,7 @@ from tractor.ellipses import EllipseESoft, EllipseE
 from tractor.galaxy import DevGalaxy, ExpGalaxy, FixedCompositeGalaxy, disable_galaxy_cache
 
 from common import *
-from utils import ellipse_with_priors_factory, RunbrickError, NothingToDoError, iterwrapper
+from utils import RunbrickError, NothingToDoError, iterwrapper, EllipseWithPriors
 
 from runbrick_plots import _plot_mods
 
@@ -66,9 +66,23 @@ useCeres = True
 rgbkwargs = dict(mnmx=(-1,100.), arcsinh=1.)
 rgbkwargs_resid = dict(mnmx=(-5,5))
 
-# Prior on (softened) ellipticity: Gaussian with this standard deviation
-ellipticityStd = 0.25
-EllipseWithPriors = ellipse_with_priors_factory(ellipticityStd)
+class LegacyEllipseWithPriors(EllipseWithPriors):
+    # Prior on (softened) ellipticity: Gaussian with this standard deviation
+    ellipticityStd = 0.25
+
+# test = LegacyEllipseWithPriors(1.,0.,0.)
+# print('test:', test)
+# print('dir(test):', dir(test))
+# print('dir(test.__class__):', dir(test.__class__))
+# print('test dict:', test.__dict__.keys())
+# print('test class dict:', test.__class__.__dict__.keys())
+# c = test.copy()
+# print('copy:', c)
+# t2 = LegacyEllipseWithPriors.fromRAbPhi(1., 0.5, 45.)
+# print('t2:', t2)
+# sys.exit(0)
+
+
 
 def runbrick_global_init():
     if nocache:
@@ -616,7 +630,7 @@ def stage_srcs(coimgs=None, cons=None,
                 'devflux_ivar', 'expflux_ivar', 'calib_status', 'raerr',
                 'decerr']
         cat,T = get_sdss_sources(bands, targetwcs, extracols=cols,
-                                 ellipse=EllipseWithPriors.fromRAbPhi)
+                                 ellipse=LegacyEllipseWithPriors.fromRAbPhi)
         tnow = Time()
         print('[serial srcs] SDSS sources:', tnow-tlast)
         tlast = tnow
@@ -1742,7 +1756,7 @@ def _one_blob(X):
 
         if isinstance(src, PointSource):
             # logr, ee1, ee2
-            shape = EllipseWithPriors(-1., 0., 0.)
+            shape = LegacyEllipseWithPriors(-1., 0., 0.)
             dev = DevGalaxy(src.getPosition(), src.getBrightness(), shape).copy()
             exp = ExpGalaxy(src.getPosition(), src.getBrightness(), shape).copy()
             comp = None
