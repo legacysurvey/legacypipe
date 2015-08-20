@@ -70,20 +70,6 @@ class LegacyEllipseWithPriors(EllipseWithPriors):
     # Prior on (softened) ellipticity: Gaussian with this standard deviation
     ellipticityStd = 0.25
 
-# test = LegacyEllipseWithPriors(1.,0.,0.)
-# print('test:', test)
-# print('dir(test):', dir(test))
-# print('dir(test.__class__):', dir(test.__class__))
-# print('test dict:', test.__dict__.keys())
-# print('test class dict:', test.__class__.__dict__.keys())
-# c = test.copy()
-# print('copy:', c)
-# t2 = LegacyEllipseWithPriors.fromRAbPhi(1., 0.5, 45.)
-# print('t2:', t2)
-# sys.exit(0)
-
-
-
 def runbrick_global_init():
     if nocache:
         disable_galaxy_cache()
