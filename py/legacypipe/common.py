@@ -29,8 +29,10 @@ from tractor.basics import ConstantSky, NanoMaggies, ConstantFitsWcs, LinearPhot
 from tractor.engine import Image, Catalog, Patch
 from tractor.galaxy import enable_galaxy_cache, disable_galaxy_cache
 from tractor.utils import get_class_from_name
-from tractor.ellipses import EllipseE,EllipseESoft
+from tractor.ellipses import EllipseESoft
 from tractor.sfd import SFDMap
+
+from .utils import EllipseWithPriors
 
 # search order: $TMPDIR, $TEMP, $TMP, then /tmp, /var/tmp, /usr/tmp
 tempdir = tempfile.gettempdir()
@@ -49,11 +51,16 @@ CP_DQ_BITS = dict(badpix=1, satur=2, interp=4, cr=16, bleed=64,
                   edge = 256,
                   edge2 = 512) # in z-band images?
 
-
-from utils import EllipseWithPriors
+# Ugly hack: for sphinx documentation, the astrometry and tractor (and
+# other) packages are replaced by mock objects.  But you can't
+# subclass a mock object correctly, so we have to un-mock
+# EllipseWithPriors here.
+if 'Mock' in str(type(EllipseWithPriors)):
+    class duck(object):
+        pass
+    EllipseWithPriors = duck
 
 class LegacyEllipseWithPriors(EllipseWithPriors):
-    __package__ = 'legacypipe.runbrick'
     # Prior on (softened) ellipticity: Gaussian with this standard deviation
     ellipticityStd = 0.25
 
@@ -428,7 +435,8 @@ def get_sdss_sources(bands, targetwcs, photoobjdir=None, local=True,
     cat = Catalog(*srcs)
     return cat, objs
 
-def _detmap((tim, targetwcs, H, W)):
+def _detmap(X):
+    (tim, targetwcs, H, W) = X
     R = tim_get_resamp(tim, targetwcs)
     if R is None:
         return None,None,None,None
@@ -2411,7 +2419,8 @@ def run_calibs(X):
     print('run_calibs for image', im)
     return im.run_calibs(**kwargs)
 
-def read_one_tim((im, targetrd, gaussPsf, const2psf, pixPsf)):
+def read_one_tim(X):
+    (im, targetrd, gaussPsf, const2psf, pixPsf) = X
     print('Reading', im)
     tim = im.get_tractor_image(radecpoly=targetrd, gaussPsf=gaussPsf,
                                const2psf=const2psf, pixPsf=pixPsf)

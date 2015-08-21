@@ -11,6 +11,8 @@ Contents:
 .. toctree::
     :maxdepth: 2
 
+.. automodule:: legacypipe
+
 legacypipe.runbrick module
 --------------------------
 
@@ -22,6 +24,13 @@ legacypipe.common module
 --------------------------
 
 .. automodule:: legacypipe.common
+    :members:
+    :show-inheritance:
+
+legacypipe.utils module
+--------------------------
+
+.. automodule:: legacypipe.utils
     :members:
     :show-inheritance:
 

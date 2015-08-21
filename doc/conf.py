@@ -3,7 +3,7 @@
 # As per http://blog.rtwilson.com/how-to-make-your-sphinx-documentation-compile-with-readthedocs-when-youre-using-numpy-and-scipy/ :
 import sys, os
 
-from mock import Mock
+from mock import Mock as MagicMock
 
 MOCK_MODULES = [
     'fitsio', 'astrometry', 'astrometry.util',
@@ -14,17 +14,26 @@ MOCK_MODULES = [
     'astrometry.util.file', 'astrometry.util.timingpool',
     'astrometry.libkd',
     'tractor',
-    'tractor.ellipses', 'tractor.galaxy', 'tractor.utils', 'tractor.basics',
+    'tractor.ellipses', 'tractor.galaxy', 'tractor.utils',
+    'tractor.basics',
     'tractor.engine', 'tractor.psfex', 'tractor.sfd',
-    'utils', 'utils.debugpool',
     'numpy',
     'scipy',
     'scipy.interpolate', 'scipy.ndimage', 'scipy.ndimage.filters',
     'scipy.ndimage.measurements', 'scipy.ndimage.morphology',
     'matplotlib', 'pylab', 'matplotlib.pyplot',
     ]
-for mod_name in MOCK_MODULES:
-    sys.modules[mod_name] = Mock()
+
+# from mock import Mock
+# for mod_name in MOCK_MODULES:
+#     sys.modules[mod_name] = Mock()
+
+class Mock(MagicMock):
+    @classmethod
+    def __getattr__(cls, name):
+            return Mock()
+
+sys.modules.update((mod_name, Mock()) for mod_name in MOCK_MODULES)
 
 #
 # legacypipe documentation build configuration file, created by
