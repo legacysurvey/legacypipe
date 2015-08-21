@@ -3,7 +3,7 @@ from tractor.utils import _GaussianPriors
 
 from astrometry.util.timingpool import TimingPoolTimestamp
 from astrometry.util.multiproc import multiproc
-from astrometry.util.ttime import Time
+from astrometry.util.ttime import Time, CpuMeas
 
 class EllipseWithPriors(EllipseESoft):
     '''
@@ -94,7 +94,7 @@ class MyMultiproc(multiproc):
         for t0,t1 in self.parallel:
             print(t1-t0)
             for m0,m1 in zip(t0.meas, t1.meas):
-                if isinstance(m0, DebugPoolTimestamp):
+                if isinstance(m0, TimingPoolTimestamp):
                     mt0 = m0.t0
                     mt1 = m1.t0
                     pworkercpu  += mt1['worker_cpu' ] - mt0['worker_cpu' ]
