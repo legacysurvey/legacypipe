@@ -1,3 +1,5 @@
+from __future__ import print_function
+
 from tractor.ellipses import EllipseESoft
 from tractor.utils import _GaussianPriors
 
