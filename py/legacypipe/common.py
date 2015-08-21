@@ -32,7 +32,7 @@ from tractor.utils import get_class_from_name
 from tractor.ellipses import EllipseESoft
 from tractor.sfd import SFDMap
 
-from .utils import EllipseWithPriors
+from utils import EllipseWithPriors
 
 # search order: $TMPDIR, $TEMP, $TMP, then /tmp, /var/tmp, /usr/tmp
 tempdir = tempfile.gettempdir()
