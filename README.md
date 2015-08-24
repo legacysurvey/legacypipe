@@ -15,7 +15,7 @@ Code for the analysis of the DECam Legacy Survey (DECaLS).
 - desi_common.py -- an older set of common routines
 - queue-calib.py -- find & qdo queue bricks & CCDs
 - run-calib.py -- calibrate CCDs
--- kick-tires.py -- check out Tractor catalogs
+- kick-tires.py -- check out Tractor catalogs
 
 
 How various files are generated:
@@ -28,5 +28,6 @@ How various files are generated:
 
 For DR1:
 
+```
 python -u projects/desi/make-exposure-list.py -o decals-ccds-dr1.fits --trim decals/images/ decals/images/decam/{COSMOS,CP*_v2,CP20141227,CP20150108,DESY1_Stripe82}/*_ooi_* > list.log 2>&1 &
-
+```
