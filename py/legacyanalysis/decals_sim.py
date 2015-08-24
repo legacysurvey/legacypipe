@@ -177,8 +177,8 @@ def build_simcat(nobj=None,brickname=None,brickwcs=None,objtype=None,
     gr = rand.uniform(gr_range[0],gr_range[1],nobj)
     rz = rand.uniform(rz_range[0],rz_range[1],nobj)
 
-    gflux = 1E9*10**(-0.4*(rmag+gr))
-    rflux = 1E9*10**(-0.4*rmag)
+    gflux = 1E9*10**(-0.4*(rmag+gr)) # nanomaggies
+    rflux = 1E9*10**(-0.4*rmag) 
     zflux = 1E9*10**(-0.4*(rmag-rz))
 
     # Pack into a Table.

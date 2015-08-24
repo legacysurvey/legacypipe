@@ -3,6 +3,15 @@
 """
 Try to hack decals_sim so we don't have to make copies of the data.
 
+from legacypipe.common import Decals, DecamImage, wcs_for_brick, ccds_touching_wcs
+
+brickname = '2428p117'
+decals = Decals()
+brickinfo = decals.get_brick_by_name(brickname)
+brickwcs = wcs_for_brick(brickinfo)
+ccdinfo = decals.ccds_touching_wcs(brickwcs)
+im = DecamImage(decals,ccdinfo[10])
+tim = im.get_tractor_image(const2psf=True)
 """
 
 import os
@@ -13,10 +22,12 @@ import galsim
 import numpy as np
 import matplotlib.pyplot as plt
 
+from tractor.engine import Patch
 from tractor.psfex import PsfEx, PsfExModel
-from tractor.basics import GaussianMixtureEllipsePSF
+from tractor.basics import GaussianMixtureEllipsePSF, RaDecPos
 from astrometry.util.fits import fits_table, merge_tables
 
+from legacypipe.runbrick import run_brick
 from legacypipe.common import Decals, DecamImage, wcs_for_brick, ccds_touching_wcs
 
 logging.basicConfig(format='%(message)s',level=logging.INFO,stream=sys.stdout)
@@ -38,26 +49,38 @@ class SimImage(DecamImage):
     def get_tractor_image(self, **kwargs):
 
         tim = super(SimImage, self).get_tractor_image(**kwargs)
+        #help(tim)
 
         image = galsim.Image(tim.getImage())
         invvar = galsim.Image(tim.getInvvar())
+
+        psf = tim.getPsf()
+        wcs = tim.wcs
         twcs = self.get_wcs()
 
         # Get the Galsim-compatible WCS and the magnitude zeropoint for this CCD.
-        wcs, origin = galsim.wcs.readFromFitsHeader(
-            galsim.fits.FitsHeader(self.pvwcsfn))
+        #wcs, origin = galsim.wcs.readFromFitsHeader(
+        #    galsim.fits.FitsHeader(self.pvwcsfn))
         magzpt = self.t.ccdzpt+2.5*np.log10(self.t.exptime)
+        gain = self.t.arawgain
+
+        # QAplot
+        #from PIL import Image, ImageDraw
+        #rad = 15
+        #im = Image.fromarray(image.array).convert('RGB')
+        #sz = im.size
+        #draw = ImageDraw.Draw(im)
 
         for obj in self.decals.sim_sources:
         #for iobj in range(5):
-#           obj = self.decals.sim_sources[iobj]
+            #obj = self.decals.sim_sources[iobj]
 
             if twcs.is_inside(obj.ra,obj.dec):
-                objstamp = build_stamp(obj,psffile=self.psffn,wcs=wcs,
+                objstamp = build_stamp(obj,psf=psf,wcs=wcs,
                                        band=self.t.filter,magzpt=magzpt)
                 stamp = objstamp.star()
-                print(stamp.bounds, image.bounds)
-                plt.imshow(stamp) ; plt.show()
+                #print(stamp.bounds, image.bounds)
+                #plt.imshow(stamp.array) ; plt.show()
 
                 overlap = stamp.bounds & image.bounds
                 if (overlap.xmax>=0 and overlap.ymax>=0 and
@@ -66,11 +89,33 @@ class SimImage(DecamImage):
 
                     # Add Poisson noise
                     stamp = stamp[overlap]            # [ADU]
-                    varstamp = invvar[overlap].copy() # [1/ADU^2]
+                    ivarstamp = invvar[overlap].copy() # [1/ADU^2]
+                    stamp, ivarstamp = objstamp.addnoise(stamp,ivarstamp,gain)
 
-                    stamp, varstamp = objstamp.addnoise(stamp,varstamp,siminfo)
                     image[overlap] += stamp
-                    invvar[overlap] = varstamp
+                    invvar[overlap] = ivarstamp
+
+                    #impatch = Patch(overlap.xmin,overlap.ymin,stamp)
+                    #impatch.addTo(image.array)
+                    #varpatch = Patch(overlap.xmin,overlap.ymin,varstamp)
+                    #varpatch.addTo(invvar.array)
+
+                    # QAplot
+                    #plt.imshow(image.array, **tim.ima) ; plt.show()
+                    #draw.ellipse((obj.x-rad, sz[1]-obj.y-rad,obj.x+rad,
+                    #              sz[1]-obj.y+rad))
+
+                    #break
+
+            tim.data = image.array
+            tim.inverr = np.sqrt(invvar.array)
+
+            #outfile = 'test-{}-{}.fits'.format(self.expnum,self.ccdname)
+            #print('Writing {}'.format(outfile))
+            #image.write(outfile,clobber=True)
+
+            #tim.Image(data=image,invvar=invvar)
+            #im.save('test.jpg')
 
 #           patch = src.getModelPatch(tim)
 #           if patch is None:
@@ -80,32 +125,56 @@ class SimImage(DecamImage):
         return tim
 
 class build_stamp():
-    def __init__(self,obj,psffile=None,wcs=None,band=None,magzpt=None):
+    def __init__(self,obj,psf=None,wcs=None,band=None,magzpt=None):
         """Build stamps of different types of objects."""
         #self.objtype = obj.objtype
-        self.band = band.strip().upper()
+
+        self.band = band.strip().lower()
         self.magzpt = magzpt
-        self.pos = wcs.toImage(galsim.CelestialCoord(obj.ra*galsim.degrees,obj.dec*galsim.degrees))
+
+        xx, yy = wcs.positionToPixel(RaDecPos(obj.ra,obj.dec))
+        self.pos = galsim.PositionD(xx,yy)
+        #self.pos = wcs.toImage(galsim.CelestialCoord(obj.ra*galsim.degrees,
+        #                                             obj.dec*galsim.degrees))
         self.xpos = int(self.pos.x)
         self.ypos = int(self.pos.y)
         self.offset = galsim.PositionD(self.pos.x-self.xpos,self.pos.y-self.ypos)
 
+        self.gsparams = galsim.GSParams(maximum_fft_size=2L**30L)
+
         # Get the local WCS
-        self.localwcs = wcs.local(image_pos=self.pos)
-        pixscale, shear, theta, flip = self.localwcs.getDecomposition() # get the pixel scale
-        self.pixscale = pixscale
+        #self.localwcs = wcs.local(image_pos=self.pos)
+        #pixscale, shear, theta, flip = self.localwcs.getDecomposition() # get the pixel scale
+        #self.pixscale = pixscale
+        self.pixscale = wcs.pixel_scale()
+        #print('Pixel scale!', self.pixscale)
 
         # Get the local PSF.  Need to update this to the latest PSFEx models!
-        psfmodel = PsfExModel(psffile).at(self.xpos, self.ypos)[5:-5, 5:-5]
-        #psf = GaussianMixtureEllipsePSF.fromStamp(psfmodel, N=2)
+        #psfmodel = PsfExModel(psffile).at(self.xpos, self.ypos)[5:-5, 5:-5]
+        psfim = psf.constantPsfAt(self.xpos,self.ypos)
+        psfim = psfim.getPointSourcePatch(0,0).getImage()
+        #self.localpsf = galsim.InterpolatedImage(galsim.Image(psfim),scale=pixscale,flux=1.0)
+        self.localpsf = galsim.InterpolatedImage(galsim.Image(psfim),flux=1.0,
+                                                 scale=self.pixscale)
+        #self.localpsf = galsim.InterpolatedImage(galsim.Image(psfim),flux=1.0,
+        #                                         wcs=self.localwcs)
 
-        psf = galsim.InterpolatedImage(galsim.Image(psfmodel),scale=pixscale,flux=1.0)
-        psf_centroid = psf.centroid()
-        self.localpsf = psf.shift(-psf_centroid.x,-psf_centroid.y)
+        #psfex = PsfExModel(psffile)
+        #psfim = psfex.at(self.xpos, self.ypos)
+        #psfim = psfim[5:-5, 5:-5]
+        #psfim = GaussianMixtureEllipsePSF.fromStamp(psfim, N=2)
+        #psfim = psfim.getPointSourcePatch(51,51).getPatch()
+        #psf = galsim.InterpolatedImage(galsim.Image(psfim),scale=pixscale,flux=1.0)
+
+        #psf = galsim.InterpolatedImage(galsim.Image(psfmodel),scale=pixscale,flux=1.0)
+        #print('Hack!!!!!  Setting negative pixels to zero!')
+        #psf.array[psf.array<0] = 0.0
+        #psf_centroid = psf.centroid()
+        #self.localpsf = psf.shift(-psf_centroid.x,-psf_centroid.y)
 
         # Get the integrated object flux in the appropriate band in ADU.
-        flux = obj[self.band+'FLUX']
-        flux *= 10**(0.4*(self.magzpt-22.5)) # [ADU]
+        flux = obj.to_dict()[self.band+'flux']
+        flux *= 10**(-0.4*(self.magzpt-22.5)) # [ADU]
         self.objflux = flux
 
     def convolve_and_draw(self,obj):
@@ -115,29 +184,43 @@ class build_stamp():
         stamp.setCenter(self.xpos,self.ypos)
         return stamp
 
-    def addnoise(self,stamp,varstamp,siminfo):
-        varstamp.invertSelf()            # [ADU^2]
+    def addnoise(self,stamp,ivarstamp,gain=4.0):
+        # Invert the inverse variance stamp, cleaning up zeros.
+        varstamp = ivarstamp.copy()
+        varstamp.invertSelf() # [ADU^2]
+
         medvar = np.median(varstamp.array[varstamp.array>0])
-        varstamp.array[varstamp.array<(0.2*medvar)] = medvar
+        #print('Median variance ', medvar)
+        varstamp.array[varstamp.array<=0] = medvar
 
-        # Convert to electrons
-        stamp *= siminfo.gain         # [electron]
-        varstamp *= (siminfo.gain**2) # [electron^2]
+        # Convert to electrons.
+        stamp *= gain         # [electron]
+        varstamp *= (gain**2) # [electron^2]
 
-        stamp.addNoise(galsim.VariableGaussianNoise(galsim.BaseDeviate(),varstamp))
-        varstamp += stamp
-                
-        stamp /= siminfo.gain          # [ADU]
-        varstamp /= (siminfo.gain**2)  # [ADU^2]
-        varstamp.invertSelf()          # [1/ADU^2]
+        # Add Poisson noise
+        #plt.imshow(varstamp.array) ; plt.show()
+        #print('Turning off adding noise!')
+        #stamp.addNoise(galsim.VariableGaussianNoise(galsim.BaseDeviate(),varstamp))
+        #stamp.addNoise(galsim.VariableGaussianNoise(galsim.BaseDeviate(),stamp))
+        #varstamp += stamp
+        #plt.imshow(varstamp.array) ; plt.show()
 
-        return stamp, varstamp
+        # Convert back to ADU
+        stamp /= gain          # [ADU]
+        varstamp /= (gain**2)  # [ADU^2]
+
+        ivarstamp = varstamp.copy()
+        ivarstamp.invertSelf()  # [1/ADU^2]
+
+        return stamp, ivarstamp
 
     def star(self):
         """Render a star (PSF)."""
         psf = self.localpsf.withFlux(self.objflux)
-        stamp = psf.drawImage(offset=self.offset,wcs=self.localwcs,method='no_pixel')
+        stamp = psf.drawImage(offset=self.offset,scale=self.pixscale,method='no_pixel')
+        #stamp = psf.drawImage(offset=self.offset,wcs=self.localwcs,method='no_pixel')
         stamp.setCenter(self.xpos,self.ypos)
+        #print(psf.getFlux(), stamp.center())
         return stamp
 
     def elg(self,objinfo,siminfo):
@@ -168,7 +251,9 @@ def main():
 
     decals_sim_dir = '/Users/ioannis/decals_sim_dir/star/2428p117'
 
-    zoom = [1800,2000,1800,2000]
+    zoom = [1800,2400,1800,2400]
+    #zoom = [1800,2000,1800,2000]
+    #zoom = None
 
     decals = Decals()
     brickinfo = decals.get_brick_by_name(brickname)
@@ -202,102 +287,20 @@ def main():
     simcat = fits_table('simcat-{}-{}-00.fits'.format(brickname,lobjtype))
     #simcat = fits.getdata('simcat-{}-{}-00.fits'.format(brickname,lobjtype))
     simcat.about()
+    blobxy = zip(simcat.x,simcat.y)
 
     simdecals = SimDecals(sim_sources=simcat)
 
-    sim = SimImage(simdecals,ccdinfo[0])
-    tim = sim.get_tractor_image(const2psf=True)
-    
-    
-#    # Our list of fake sources to insert into images...
-#    decals.fake_sources = [PointSource(RaDecPos(0., 0.),
-#                                       NanoMaggies(g=1000, r=1000, z=1000))]
-#
-#    run_brick(brickname, decals=simdecals, outdir=decals_sim_dir,
-#              threads=8, zoom=zoom, wise=False, sdssInit=False,
-#              forceAll=True, writePickles=False)
-#
-#
-#
-#    # Loop on each CCD and add each object
-#    for ccd in ccdinfo:
-#        # Gather some basic info on this CCD and then read the data, the WCS
-#        # info, and initialize the PSF.
-#        im = DecamImage(decals,ccd)
-#        iminfo = im.get_image_info()
-#
-#        wcs = im.get_wcs()
-#
-#        # Identify the objects that are on this CCD.
-#        onccd = []
-#        for iobj, cat in enumerate(simcat):
-#            if wcs.is_inside(cat.ra,cat.dec)==1:
-#                onccd.append(iobj)
-#        nobj = len(onccd)
-#
-#        # Need to pass the ra,dec positions of all the fake sources so that only
-#        # those blobs are processed.
-#
-#    decals = FakeDecals()
-#
-#    # Our list of fake sources to insert into images...
-#    decals.fake_sources = [PointSource(RaDecPos(0., 0.),
-#                                       NanoMaggies(g=1000, r=1000, z=1000))]
-#
-#    run_brick(brickname, decals=decals, outdir=decals_sim_dir,
-#              threads=8, zoom=zoom, wise=False, sdssInit=False,
-#              forceAll=True, writePickles=False)
+    # For testing!
+    #sim = SimImage(simdecals,ccdinfo[0])
+    #tim = sim.get_tractor_image(const2psf=True)
 
-#    plt.scatter(simcat.ra,simcat.dec) ; plt.scatter(simcat.ra[onccd],simcat.dec[onccd],color='orange') ; plt.show()
-#
-#        if nobj>0:
-#            log.info('Adding {} objects to HDU {}'.format(nobj,ccd.image_hdu))
-#
-#            for objinfo in simcat[onccd]:
-#
-#                # get the local coordinate, WCS, and PSF and then build the stamp
-#                objstamp.getlocal(objinfo,siminfo)
-#                if objtype=='STAR':
-#                    stamp = objstamp.star()
-#                if objtype=='ELG':
-#                    stamp = objstamp.elg(objinfo,siminfo)
-#
-#                overlap = stamp.bounds & image.bounds
-#                if (overlap.xmax>=0 and overlap.ymax>=0 and
-#                    overlap.xmin<=image.bounds.xmax and
-#                    overlap.ymin<=image.bounds.ymax and overlap.area()>0):
-#
-#                    # Add Poisson noise
-#                    stamp = stamp[overlap]            # [ADU]
-#                    varstamp = invvar[overlap].copy() # [1/ADU^2]
-#
-#                    stamp, varstamp = objstamp.addnoise(stamp,varstamp,siminfo)
-#                    image[overlap] += stamp
-#                    invvar[overlap] = varstamp
-#
-#            log.info('Writing {}[{}]'.format(siminfo.imfile_root,siminfo.hdu))
-#            #fits.update(siminfo.imfile,image.array,ext=siminfo.hdu,
-#            #            header=fits.Header(imhdr.items()))
-#            #fits.update(siminfo.ivarfile,invvar.array,ext=siminfo.hdu,
-#            #            header=fits.Header(ivarhdr.items()))
-    
-    
-
-
-#    # Now, we can either call run_brick()....
-#    run_brick(None, decals=decals, radec=(0.,0.), width=100, height=100,
-#              stages=['image_coadds'])
-    
-    
-#   # ... or the individual stages in the pipeline:
-#   if False:
-#       mp = multiproc()
-#       kwa = dict(W = 100, H=100, ra=0., dec=0., mp=mp, brickname='fakey')
-#       kwa.update(decals=decals)
-#       R = stage_tims(**kwa)
-#       kwa.update(R)
-#       R = stage_image_coadds(**kwa)
-#       # ...
+    run_brick(brickname, decals=simdecals, outdir=decals_sim_dir,
+              threads=8, zoom=zoom, wise=False, sdssInit=False,
+              forceAll=True, writePickles=False, blobxy=blobxy,
+              pixPsf=False, stages=['tims','srcs','fitblobs',
+                                    'fitblobs_finish','coadds',
+                                    'writecat'])
 
 if __name__ == '__main__':
     main()
