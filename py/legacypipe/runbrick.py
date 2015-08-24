@@ -3078,7 +3078,7 @@ def run_brick(brick, radec=None, pixscale=0.262,
     kwargs.update(ps=ps, nsigma=nsigma, gaussPsf=gaussPsf, pixPsf=pixPsf,
                   simul_opt=simulOpt, pipe=pipe,
                   no_sdss=not(sdssInit),
-                  outdir=outdir, decals_dir=decals_dir,
+                  outdir=outdir, decals_dir=decals_dir, unwise_dir=unwise_dir,
                   decals=decals,
                   plots=plots, plots2=plots2, coadd_bw=coadd_bw,
                   force=forceStages, write=writePickles)

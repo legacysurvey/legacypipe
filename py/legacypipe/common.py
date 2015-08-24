@@ -200,6 +200,8 @@ def segment_and_group_sources(image, T, name=None, ps=None, plots=False):
     *blobslices*: list of slice objects for blob bounding-boxes.
     
     '''
+    from scipy.ndimage.morphology import binary_fill_holes
+    from scipy.ndimage.measurements import label, find_objects
 
     emptyblob = 0
 
