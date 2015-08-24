@@ -88,6 +88,7 @@ def stage_tims(W=3600, H=3600, pixscale=0.262, brickname=None,
                plots=False, ps=None, decals_dir=None,
                target_extent=None, pipe=False, program_name='runbrick.py',
                bands='grz',
+               do_calibs=True,
                const2psf=True, gaussPsf=False, pixPsf=False,
                mp=None,
                **kwargs):
@@ -191,15 +192,16 @@ def stage_tims(W=3600, H=3600, pixscale=0.262, brickname=None,
     print('[serial tims] Finding images touching brick:', tnow-tlast)
     tlast = tnow
 
-    # Run calibrations
-    kwa = dict()
-    if gaussPsf:
-        kwa.update(psfex=False)
-    args = [(im, kwa) for im in ims]
-    mp.map(run_calibs, args)
-    tnow = Time()
-    print('[parallel tims] Calibrations:', tnow-tlast)
-    tlast = tnow
+    if do_calibs:
+        # Run calibrations
+        kwa = dict()
+        if gaussPsf:
+            kwa.update(psfex=False)
+        args = [(im, kwa) for im in ims]
+        mp.map(run_calibs, args)
+        tnow = Time()
+        print('[parallel tims] Calibrations:', tnow-tlast)
+        tlast = tnow
 
     # Read images, clip to ROI
     args = [(im, targetrd, gaussPsf, const2psf, pixPsf) for im in ims]
@@ -2219,8 +2221,11 @@ def _one_blob(X):
 
 def _get_mod(X):
     (tim, srcs) = X
+    t0 = Time()
     tractor = Tractor([tim], srcs)
-    return tractor.getModelImage(0)
+    mod = tractor.getModelImage(0)
+    print('Getting model for', tim, ':', Time()-t0)
+    return mod
 
 def stage_coadds(bands=None, version_header=None, targetwcs=None,
                  tims=None, ps=None, brickname=None, ccds=None,
@@ -2297,7 +2302,6 @@ def stage_coadds(bands=None, version_header=None, targetwcs=None,
                 callback=_write_band_images,
                 callback_args=(brickname, version_header, tims, targetwcs, basedir),
                 plots=False, ps=ps)
-    #plots=plots, ps=ps)
 
     for c in ['nobs', 'anymask', 'allmask']:
         T.set(c, C.T.get(c))
@@ -2891,6 +2895,7 @@ def run_brick(brick, radec=None, pixscale=0.262,
               simulOpt=False,
               wise=True,
               sdssInit=True,
+              do_calibs=True,
               gaussPsf=False,
               pixPsf=False,
               ceres=True,
@@ -2974,6 +2979,8 @@ def run_brick(brick, radec=None, pixscale=0.262,
     - *wise*: boolean; run WISE forced photometry?
 
     - *sdssInit*: boolean; initialize sources from the SDSS catalogs?
+
+    - *do_calibs*: boolean; run the calibration preprocessing steps?
 
     - *gaussPsf*: boolean; use a simpler single-component Gaussian PSF model?
 
@@ -3078,6 +3085,7 @@ def run_brick(brick, radec=None, pixscale=0.262,
     kwargs.update(ps=ps, nsigma=nsigma, gaussPsf=gaussPsf, pixPsf=pixPsf,
                   simul_opt=simulOpt, pipe=pipe,
                   no_sdss=not(sdssInit),
+                  do_calibs=do_calibs,
                   outdir=outdir, decals_dir=decals_dir, unwise_dir=unwise_dir,
                   decals=decals,
                   plots=plots, plots2=plots2, coadd_bw=coadd_bw,
@@ -3217,6 +3225,9 @@ python -u projects/desi/runbrick.py --plots --brick 2440p070 --zoom 1900 2400 45
     parser.add_option('--skip-coadd', default=False, action='store_true',
                       help='Quit if the output coadd jpeg already exists.')
 
+    parser.add_option('--skip-calibs', target='do_calibs', default=True,
+                      action='store_false', help='Do not run the calibration steps')
+
     parser.add_option('--nsigma', type=float, help='Set N sigma source detection thresh')
 
     parser.add_option('--simul-opt', action='store_true', default=False,
@@ -3311,6 +3322,7 @@ python -u projects/desi/runbrick.py --plots --brick 2440p070 --zoom 1900 2400 45
             width=opt.width, height=opt.height, zoom=opt.zoom,
             pv=opt.pv,
             threads=opt.threads, ceres=opt.ceres,
+            do_calibs=opt.do_calibs,
             gaussPsf=opt.gpsf, pixPsf=opt.pixpsf, simulOpt=opt.simul_opt,
             nblobs=opt.nblobs, blob=opt.blob, blobxy=opt.blobxy,
             pipe=opt.pipe, outdir=opt.outdir, decals_dir=opt.decals_dir,
