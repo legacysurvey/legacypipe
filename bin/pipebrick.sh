@@ -7,6 +7,8 @@ module load astropy-hpcp
 module load photutils-hpcp
 module load ceres-hpcp
 module load sextractor-hpcp
+module load fitsio-hpcp
+module load unwise_coadds/2.0
 
 # module load astrometry_net-hpcp
 # module load tractor-hpcp

@@ -158,7 +158,7 @@ def stage_tims(W=3600, H=3600, pixscale=0.262, brickname=None,
     version_hdr = get_version_header(program_name, decals.decals_dir)
     for i,dep in enumerate(['scipy', 'numpy', 'wcslib', 'astropy', 'photutils',
                             'ceres', 'sextractor', 'psfex', 'astrometry_net',
-                            'tractor']):
+                            'tractor', 'fitsio', 'unwise_coadds']):
         # Look in the OS environment variables for modules-style
         # $scipy_VERSION => 0.15.1_5a3d8dfa-7.1
         default_ver = 'UNAVAILABLE'
@@ -3250,7 +3250,7 @@ python -u projects/desi/runbrick.py --plots --brick 2440p070 --zoom 1900 2400 45
     parser.add_option('--no-wise', action='store_true', default=False,
                       help='Skip unWISE forced photometry')
 
-    parser.add_option('--unwise-dir', default='unwise-coadds',
+    parser.add_option('--unwise-dir', default=None,
                       help='Base directory for unWISE coadds; may be a colon-separated list')
 
     parser.add_option('--no-sdss', action='store_true', default=False,
@@ -3329,6 +3329,9 @@ python -u projects/desi/runbrick.py --plots --brick 2440p070 --zoom 1900 2400 45
         kwa.update(sdssInit=False)
     if opt.no_wise:
         kwa.update(wise=False)
+
+    if opt.unwise_dir is None:
+        opt.unwise_dir = os.environ.get('UNWISE_COADDS_DIR', None)
 
     try:
         run_brick(
