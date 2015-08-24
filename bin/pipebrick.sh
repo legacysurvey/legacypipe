@@ -1,5 +1,16 @@
 #! /bin/bash
 
+module load matplotlib-hpcp
+module load scipy-hpcp
+module load wcslib-hpcp
+module load astropy-hpcp
+module load photutils-hpcp
+module load ceres-hpcp
+module load sextractor-hpcp
+
+# module load astrometry_net-hpcp
+# module load tractor-hpcp
+
 export PYTHONPATH=${PYTHONPATH}:.
 
 ## HACK! -- put my PsfEx ahead of anything else!

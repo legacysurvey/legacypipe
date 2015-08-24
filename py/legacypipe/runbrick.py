@@ -156,6 +156,19 @@ def stage_tims(W=3600, H=3600, pixscale=0.262, brickname=None,
 
 
     version_hdr = get_version_header(program_name, decals.decals_dir)
+    for i,dep in enumerate(['scipy', 'numpy', 'wcslib', 'astropy', 'photutils',
+                            'ceres', 'sextractor', 'psfex']):
+        # Look in the OS environment variables for modules-style
+        # $scipy_VERSION => 0.15.1_5a3d8dfa-7.1
+        default_ver = 'UNAVAILABLE'
+        verstr = os.environ.get('%s_VERSION' % dep, default_ver)
+        if verstr == default_ver:
+            print('Warning: failed to get version string for "%s"' % dep)
+        version_hdr.add_record(dict(name='DEPNAM%02i' % i, value=dep,
+                                    comment='Name of dependency product'))
+        version_hdr.add_record(dict(name='DEPVER%02i' % i, value=verstr,
+                                    comment='Version of dependency product'))
+
     version_hdr.add_record(dict(name='BRICKNAM', value=brickname,  comment='DECaLS brick RRRr[pm]DDd'))
     version_hdr.add_record(dict(name='BRICKID' , value=brickid,    comment='DECaLS brick id'))
     version_hdr.add_record(dict(name='RAMIN'   , value=brick.ra1,  comment='Brick RA min'))
