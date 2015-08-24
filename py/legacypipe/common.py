@@ -12,10 +12,6 @@ import numpy as np
 
 import fitsio
 
-from scipy.ndimage.filters import gaussian_filter
-from scipy.ndimage.measurements import label, find_objects
-from scipy.ndimage.morphology import binary_dilation, binary_fill_holes
-
 from astrometry.util.fits import fits_table, merge_tables
 from astrometry.util.file import trymakedirs
 from astrometry.util.plotutils import dimshow
@@ -436,6 +432,7 @@ def get_sdss_sources(bands, targetwcs, photoobjdir=None, local=True,
     return cat, objs
 
 def _detmap(X):
+    from scipy.ndimage.filters import gaussian_filter
     (tim, targetwcs, H, W) = X
     R = tim_get_resamp(tim, targetwcs)
     if R is None:
@@ -966,6 +963,9 @@ def sed_matched_detection(sedname, sed, detmaps, detivs, bands,
     run_sed_matched_filters : calls this method
     
     '''
+    from scipy.ndimage.measurements import label, find_objects
+    from scipy.ndimage.morphology import binary_dilation, binary_fill_holes
+
     t0 = Time()
     H,W = detmaps[0].shape
 
