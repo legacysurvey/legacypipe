@@ -18,6 +18,7 @@ TODO (@moustakas)
 * Occasionally get a divide-by-zero error when adding noise in insert_simobj().
 
 """
+
 from __future__ import division, print_function
 
 import os
@@ -30,7 +31,6 @@ import numpy as np
 import galsim
 from astropy.io import fits
 from astropy.table import Table, Column, vstack
-from PIL import Image, ImageDraw
 
 from legacypipe.runbrick import run_brick
 from legacypipe.common import Decals, wcs_for_brick, ccds_touching_wcs
@@ -471,10 +471,10 @@ def insert_simobj(objtype,simcat,ccdinfo,decals_sim_dir):
                     invvar[overlap] = varstamp
 
             log.info('Writing {}[{}]'.format(siminfo.imfile_root,siminfo.hdu))
-            fits.update(siminfo.imfile,image.array,ext=siminfo.hdu,
-                        header=fits.Header(imhdr.items()))
-            fits.update(siminfo.ivarfile,invvar.array,ext=siminfo.hdu,
-                        header=fits.Header(ivarhdr.items()))
+            #fits.update(siminfo.imfile,image.array,ext=siminfo.hdu,
+            #            header=fits.Header(imhdr.items()))
+            #fits.update(siminfo.ivarfile,invvar.array,ext=siminfo.hdu,
+            #            header=fits.Header(ivarhdr.items()))
 
 def qaplots(objtype,brickinfo,ccdinfo,simcat,decals_sim_dir=None,chunksuffix=None):
     """Build some simple QAplots of the simulation inputs."""
@@ -604,10 +604,10 @@ def main():
     meta['NCHUNK'] = Column([nchunk],dtype='i2')
     meta['RA'] = Column([ra_range],dtype='f8')
     meta['DEC'] = Column([dec_range],dtype='f8')
-    if args.zoom is None:
-        meta['ZOOM'] = Column([0,3600,0,3600],dtype='i4')
-    else:
-        meta['ZOOM'] = Column([args.zoom],dtype='i4')
+#   if args.zoom is None:
+#       meta['ZOOM'] = Column([0,3600,0,3600],dtype='i4')
+#   else:
+#       meta['ZOOM'] = Column([args.zoom],dtype='i4')
     meta['RMAG'] = Column([args.rmag_range],dtype='f4')
     outfile = os.path.join(decals_sim_dir,'metacat-'+brickname+'-'+
                            objtype.lower()+'.fits')
@@ -631,8 +631,11 @@ def main():
             qaplots(objtype,brickinfo,ccdinfo,simcat,
                     decals_sim_dir,chunksuffix=chunksuffix)
 
+        sys.exit(0)
+
+
         # Copy the CP-processed data we need to DECALS_SIM_DIR.
-        copy_cpdata(ccdinfo,decals_dir,decals_sim_dir)
+        #copy_cpdata(ccdinfo,decals_dir,decals_sim_dir)
 
         # Insert the simulated objects
         insert_simobj(objtype,simcat,ccdinfo,decals_sim_dir)
@@ -640,6 +643,9 @@ def main():
         run_brick(brickname,decals_dir=decals_sim_dir,outdir=decals_sim_dir,
                   threads=args.threads,zoom=args.zoom,wise=False,sdssInit=False,
                   forceAll=True,writePickles=False)
+
+
+        sys.exit(0)
 
         log.info('Cleaning up...')
         shutil.move(os.path.join(decals_sim_dir,'tractor',brickname[:3],
