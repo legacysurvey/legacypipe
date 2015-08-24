@@ -157,7 +157,8 @@ def stage_tims(W=3600, H=3600, pixscale=0.262, brickname=None,
 
     version_hdr = get_version_header(program_name, decals.decals_dir)
     for i,dep in enumerate(['scipy', 'numpy', 'wcslib', 'astropy', 'photutils',
-                            'ceres', 'sextractor', 'psfex']):
+                            'ceres', 'sextractor', 'psfex', 'astrometry_net',
+                            'tractor']):
         # Look in the OS environment variables for modules-style
         # $scipy_VERSION => 0.15.1_5a3d8dfa-7.1
         default_ver = 'UNAVAILABLE'
