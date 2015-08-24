@@ -3225,7 +3225,7 @@ python -u projects/desi/runbrick.py --plots --brick 2440p070 --zoom 1900 2400 45
     parser.add_option('--skip-coadd', default=False, action='store_true',
                       help='Quit if the output coadd jpeg already exists.')
 
-    parser.add_option('--skip-calibs', target='do_calibs', default=True,
+    parser.add_option('--skip-calibs', dest='do_calibs', default=True,
                       action='store_false', help='Do not run the calibration steps')
 
     parser.add_option('--nsigma', type=float, help='Set N sigma source detection thresh')
