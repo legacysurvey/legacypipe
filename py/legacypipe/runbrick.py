@@ -2399,7 +2399,7 @@ def stage_wise_forced(
     T=None,
     targetwcs=None,
     brickname=None,
-    unwise_dir='unwise-coadds',
+    unwise_dir=None,
     brick=None,
     outdir=None,
     **kwargs):
@@ -2408,6 +2408,9 @@ def stage_wise_forced(
     photometry of the unWISE coadds.
     '''
     from wise.forcedphot import unwise_forcedphot, unwise_tiles_touching_wcs
+
+    if unwise_dir is None:
+        unwise_dir = 'unwise-coadds'
 
     roiradec = [brick.ra1, brick.ra2, brick.dec1, brick.dec2]
     tiles = unwise_tiles_touching_wcs(targetwcs)
@@ -2892,7 +2895,9 @@ def run_brick(brick, radec=None, pixscale=0.262,
               pixPsf=False,
               ceres=True,
               outdir=None,
-              decals=None, decals_dir=None, threads=None,
+              decals=None, decals_dir=None,
+              unwise_dir=None,
+              threads=None,
               plots=False, plots2=False, coadd_bw=False,
               plotbase=None, plotnumber=0,
               picklePattern='pickles/runbrick-%(brick)s-%%(stage)s.pickle',
@@ -2985,6 +2990,10 @@ def run_brick(brick, radec=None, pixscale=0.262,
     - *decals_dir*: string; default $DECALS_DIR environment variable;
       where to look for files including calibration files, tables of
       CCDs and bricks, image data, etc.
+
+    - *unwise_dir*: string; default unwise-coadds;
+      where to look for unWISE coadd files.  This may be a colon-separated list of
+      directories to search in order.
 
     - *threads*: integer; how many CPU cores to use
 
@@ -3216,6 +3225,9 @@ python -u projects/desi/runbrick.py --plots --brick 2440p070 --zoom 1900 2400 45
     parser.add_option('--no-wise', action='store_true', default=False,
                       help='Skip unWISE forced photometry')
 
+    parser.add_option('--unwise-dir', default='unwise-coadds',
+                      help='Base directory for unWISE coadds; may be a colon-separated list')
+
     parser.add_option('--no-sdss', action='store_true', default=False,
                       help='Do not initialize from SDSS')
 
@@ -3302,6 +3314,7 @@ python -u projects/desi/runbrick.py --plots --brick 2440p070 --zoom 1900 2400 45
             gaussPsf=opt.gpsf, pixPsf=opt.pixpsf, simulOpt=opt.simul_opt,
             nblobs=opt.nblobs, blob=opt.blob, blobxy=opt.blobxy,
             pipe=opt.pipe, outdir=opt.outdir, decals_dir=opt.decals_dir,
+            unwise_dir=opt.unwise_dir,
             plots=opt.plots, plots2=opt.plots2,
             coadd_bw=opt.coadd_bw,
             plotbase=opt.plot_base, plotnumber=opt.plot_number,
