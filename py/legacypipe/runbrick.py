@@ -2277,6 +2277,7 @@ def stage_coadds(bands=None, version_header=None, targetwcs=None,
     ccds.brick_y0 = np.floor(np.min(y, axis=1)).astype(np.int16)
     ccds.brick_y1 = np.ceil (np.max(y, axis=1)).astype(np.int16)
     ccds.sig1 = np.array([tim.sig1 for tim in tims])
+    ccds.plver = np.array([tim.primhdr['PLVER'] for tim in tims])
     ccds.writeto(fn)
     print('Wrote', fn)
 
