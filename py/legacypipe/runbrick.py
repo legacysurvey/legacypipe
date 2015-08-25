@@ -237,6 +237,12 @@ def stage_tims(W=3600, H=3600, pixscale=0.262, brickname=None,
     if len(tims) == 0:
         raise NothingToDoError('No photometric CCDs touching brick.')
 
+    for tim in tims:
+        for cal,ver in [('sky', tim.skyver), ('wcs', tim.wcsver), ('psf', tim.psfver)]:
+            if tim.plver != ver[1]:
+                print('Warning: image "%s" PLVER is "%s" but %s calib was run on PLVER "%s"' %
+                      (str(tim), tim.plver, cal, ver[1]))
+
     if not pipe:
         # save resampling params
         tims_compute_resamp(mp, tims, targetwcs)
@@ -2279,10 +2285,13 @@ def stage_coadds(bands=None, version_header=None, targetwcs=None,
     ccds.brick_y0 = np.floor(np.min(y, axis=1)).astype(np.int16)
     ccds.brick_y1 = np.ceil (np.max(y, axis=1)).astype(np.int16)
     ccds.sig1 = np.array([tim.sig1 for tim in tims])
-    ccds.plver = np.array([tim.primhdr['PLVER'] for tim in tims])
-    ccds.skyver = np.array([tim.skyver for tim in tims])
-    ccds.wcsver = np.array([tim.wcsver for tim in tims])
-    ccds.psfver = np.array([tim.psfver for tim in tims])
+    ccds.plver = np.array([tim.plver for tim in tims])
+    ccds.skyver = np.array([tim.skyver[0] for tim in tims])
+    ccds.wcsver = np.array([tim.wcsver[0] for tim in tims])
+    ccds.psfver = np.array([tim.psfver[0] for tim in tims])
+    ccds.skyplver = np.array([tim.skyver[1] for tim in tims])
+    ccds.wcsplver = np.array([tim.wcsver[1] for tim in tims])
+    ccds.psfplver = np.array([tim.psfver[1] for tim in tims])
     ccds.writeto(fn)
     print('Wrote', fn)
 
