@@ -63,7 +63,14 @@ class LegacyEllipseWithPriors(EllipseWithPriors):
 class BrickDuck(object):
     pass
 
-def get_version_header(program_name, decals_dir):
+def get_git_version():
+    rtn,version,err = run_command('git describe')
+    if rtn:
+        raise RuntimeError('Failed to get version string (git describe):' + ver + err)
+    version = version.strip()
+    return version
+
+def get_version_header(program_name, decals_dir, git_version=None):
     from astrometry.util.run_command import run_command
     import datetime
 
@@ -71,11 +78,9 @@ def get_version_header(program_name, decals_dir):
         import sys
         program_name = sys.argv[0]
 
-    rtn,version,err = run_command('git describe')
-    if rtn:
-        raise RuntimeError('Failed to get version string (git describe):' + ver + err)
-    version = version.strip()
-    print('Version:', version)
+    if git_version is None:
+        git_version = get_git_version()
+        print('Version:', git_version)
 
     hdr = fitsio.FITSHDR()
 
@@ -84,11 +89,11 @@ def get_version_header(program_name, decals_dir):
         'Full documentation at http://legacysurvey.org',
         ]:
         hdr.add_record(dict(name='COMMENT', value=s, comment=s))
-    hdr.add_record(dict(name='TRACTORV', value=version,
-                        comment='Tractor git version'))
+    hdr.add_record(dict(name='LEGPIPEV', value=git_version,
+                        comment='legacypipe git version'))
     hdr.add_record(dict(name='DECALSV', value=decals_dir,
                         comment='DECaLS version'))
-    hdr.add_record(dict(name='DECALSDR', value='DR1',
+    hdr.add_record(dict(name='DECALSDR', value='DR2',
                         comment='DECaLS release name'))
     hdr.add_record(dict(name='DECALSDT', value=datetime.datetime.now().isoformat(),
                         comment='%s run time' % program_name))
@@ -1823,6 +1828,7 @@ class LegacySurveyImage(object):
         if x0 or y0:
             twcs.setX0Y0(x0,y0)
 
+        psffn = None
         if gaussPsf:
             #from tractor.basics import NCircularGaussianPSF
             #psf = NCircularGaussianPSF([psf_sigma], [1.0])
@@ -1830,12 +1836,14 @@ class LegacySurveyImage(object):
             v = psf_sigma**2
             psf = GaussianMixturePSF(1., 0., 0., v, v, 0.)
             print('WARNING: using mock PSF:', psf)
+            psf.version = '0'
         elif pixPsf:
             # spatially varying pixelized PsfEx
             from tractor.psfex import PixelizedPsfEx
             print('Reading PsfEx model from', self.psffn)
             psf = PixelizedPsfEx(self.psffn)
             psf.shift(x0, y0)
+            psffn = self.psffn
 
         elif const2psf:
             from tractor.psfex import PsfExModel
@@ -1853,6 +1861,11 @@ class LegacySurveyImage(object):
             assert(False)
         print('Using PSF model', psf)
 
+        if psffn is not None:
+            psf.version = fitsio.read_header(psffn).get('LEGSURV', None)
+            if psf.version is None:
+                psf.version = str(os.stat(psffn).st_mtime)
+
         tim = Image(img, invvar=invvar, wcs=twcs, psf=psf,
                     photocal=LinearPhotoCal(zpscale, band=band),
                     sky=sky, name=self.name + ' ' + band)
@@ -1869,6 +1882,9 @@ class LegacySurveyImage(object):
         tim.imobj = self
         tim.primhdr = primhdr
         tim.hdr = imghdr
+        tim.skyver = sky.version
+        tim.wcsver = wcs.version
+        tim.psfver = psf.version
         tim.dq = dq
         tim.dq_bits = CP_DQ_BITS
         tim.saturation = imghdr.get('SATURATE', None)
@@ -1982,6 +1998,10 @@ class LegacySurveyImage(object):
         r,d = wcs.get_crval()
         print('Applying astrometric zeropoint:', (dra,ddec))
         wcs.set_crval((r + dra, d + ddec))
+        hdr = fitsio.read_header(self.pvwcsfn)
+        wcs.version = hdr.get('LEGPIPEV', None)
+        if wcs.version is None:
+            wcs.version = hdr.get('TRACTORV', 'NONE')
         return wcs
     
     def read_sky_model(self):
@@ -1994,11 +2014,14 @@ class LegacySurveyImage(object):
         clazz = get_class_from_name(skyclass)
         fromfits = getattr(clazz, 'fromFitsHeader')
         skyobj = fromfits(hdr, prefix='SKY_')
+        skyobj.version = hdr.get('LEGPIPEV', None)
+        if skyobj.version is None:
+            skyobj.version = hdr.get('TRACTORV', 'NONE')
         return skyobj
 
     def run_calibs(self, pvastrom=True, psfex=True, sky=True, se=False,
                    funpack=False, fcopy=False, use_mask=True,
-                   force=False, just_check=False):
+                   force=False, just_check=False, git_version=None):
         '''
         Runs any required calibration processes for this image.
         '''
@@ -2038,7 +2061,9 @@ class BokImage(LegacySurveyImage):
         img = self.read_image()
         sky = np.median(img)
         print('Median "sky" model:', sky)
-        return ConstantSky(sky)
+        sky = ConstantSky(sky)
+        sky.version = '0'
+        return sky
 
     def read_dq(self, **kwargs):
         print('Reading data quality from', self.dqfn, 'hdu', self.hdu)
@@ -2193,7 +2218,7 @@ class DecamImage(LegacySurveyImage):
 
     def run_calibs(self, pvastrom=True, psfex=True, sky=True, se=False,
                    funpack=False, fcopy=False, use_mask=True,
-                   force=False, just_check=False):
+                   force=False, just_check=False, git_version=None):
         '''
         Run calibration pre-processing steps.
 
@@ -2373,13 +2398,16 @@ class DecamImage(LegacySurveyImage):
                 print('Moving', oldfn, 'to', self.psffn)
                 os.rename(oldfn, self.psffn)
             else:
-                cmd = ('psfex -c %s -PSF_DIR %s %s' %
-                       (os.path.join(sedir, 'DECaLS.psfex'),
-                        os.path.dirname(self.psffn), self.sefn))
-                print(cmd)
-                rtn = os.system(cmd)
-                if rtn:
-                    raise RuntimeError('Command failed: ' + cmd + ': return value: %i' % rtn)
+                cmds = ['psfex -c %s -PSF_DIR %s %s' %
+                        (os.path.join(sedir, 'DECaLS.psfex'),
+                         os.path.dirname(self.psffn), self.sefn),
+                        'modhead %s LEGPIPEV %s "legacypipe git version"' %
+                        (self.psffn, verstr)]
+                for cmd in cmds:
+                    print(cmd)
+                    rtn = os.system(cmd)
+                    if rtn:
+                        raise RuntimeError('Command failed: ' + cmd + ': return value: %i' % rtn)
     
         if sky:
             print('Fitting sky for', self)

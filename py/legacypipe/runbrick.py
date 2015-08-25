@@ -154,9 +154,11 @@ def stage_tims(W=3600, H=3600, pixscale=0.262, brickname=None,
         print('RA1,RA2', brick.ra1, brick.ra2)
         print('Dec1,Dec2', brick.dec1, brick.dec2)
 
+    gitver = get_git_version()
 
-    version_hdr = get_version_header(program_name, decals.decals_dir)
-    for i,dep in enumerate(['scipy', 'numpy', 'wcslib', 'astropy', 'photutils',
+    version_hdr = get_version_header(program_name, decals.decals_dir,
+                                     git_version=gitver)
+    for i,dep in enumerate(['numpy', 'scipy', 'wcslib', 'astropy', 'photutils',
                             'ceres', 'sextractor', 'psfex', 'astrometry_net',
                             'tractor', 'fitsio', 'unwise_coadds']):
         # Look in the OS environment variables for modules-style
@@ -208,7 +210,7 @@ def stage_tims(W=3600, H=3600, pixscale=0.262, brickname=None,
 
     if do_calibs:
         # Run calibrations
-        kwa = dict()
+        kwa = dict(git_version=gitver)
         if gaussPsf:
             kwa.update(psfex=False)
         args = [(im, kwa) for im in ims]
@@ -2278,6 +2280,9 @@ def stage_coadds(bands=None, version_header=None, targetwcs=None,
     ccds.brick_y1 = np.ceil (np.max(y, axis=1)).astype(np.int16)
     ccds.sig1 = np.array([tim.sig1 for tim in tims])
     ccds.plver = np.array([tim.primhdr['PLVER'] for tim in tims])
+    ccds.skyver = np.array([tim.skyver for tim in tims])
+    ccds.wcsver = np.array([tim.wcsver for tim in tims])
+    ccds.psfver = np.array([tim.psfver for tim in tims])
     ccds.writeto(fn)
     print('Wrote', fn)
 
