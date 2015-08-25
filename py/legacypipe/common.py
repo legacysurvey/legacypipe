@@ -64,6 +64,7 @@ class BrickDuck(object):
     pass
 
 def get_git_version():
+    from astrometry.util.run_command import run_command
     rtn,version,err = run_command('git describe')
     if rtn:
         raise RuntimeError('Failed to get version string (git describe):' + ver + err)
@@ -71,7 +72,6 @@ def get_git_version():
     return version
 
 def get_version_header(program_name, decals_dir, git_version=None):
-    from astrometry.util.run_command import run_command
     import datetime
 
     if program_name is None:
@@ -1999,9 +1999,11 @@ class LegacySurveyImage(object):
         print('Applying astrometric zeropoint:', (dra,ddec))
         wcs.set_crval((r + dra, d + ddec))
         hdr = fitsio.read_header(self.pvwcsfn)
-        wcs.version = hdr.get('LEGPIPEV', None)
-        if wcs.version is None:
-            wcs.version = hdr.get('TRACTORV', 'NONE')
+        wcs.version = hdr.get('LEGPIPEV', '')
+        if len(wcs.version) == 0:
+            wcs.version = hdr.get('TRACTORV', '').strip()
+            if len(wcs.version) == 0:
+                wcs.version = str(os.stat(self.pvwcsfn).st_mtime)
         return wcs
     
     def read_sky_model(self):
@@ -2014,9 +2016,12 @@ class LegacySurveyImage(object):
         clazz = get_class_from_name(skyclass)
         fromfits = getattr(clazz, 'fromFitsHeader')
         skyobj = fromfits(hdr, prefix='SKY_')
-        skyobj.version = hdr.get('LEGPIPEV', None)
-        if skyobj.version is None:
-            skyobj.version = hdr.get('TRACTORV', 'NONE')
+
+        skyobj.version = hdr.get('LEGPIPEV', '')
+        if len(skyobj.version) == 0:
+            skyobj.version = hdr.get('TRACTORV', '').strip()
+            if len(skyobj.version) == 0:
+                skyobj.version = str(os.stat(self.skyfn).st_mtime)
         return skyobj
 
     def run_calibs(self, pvastrom=True, psfex=True, sky=True, se=False,
