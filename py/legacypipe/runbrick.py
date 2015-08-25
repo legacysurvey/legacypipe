@@ -154,8 +154,24 @@ def stage_tims(W=3600, H=3600, pixscale=0.262, brickname=None,
         print('RA1,RA2', brick.ra1, brick.ra2)
         print('Dec1,Dec2', brick.dec1, brick.dec2)
 
+    gitver = get_git_version()
 
-    version_hdr = get_version_header(program_name, decals.decals_dir)
+    version_hdr = get_version_header(program_name, decals.decals_dir,
+                                     git_version=gitver)
+    for i,dep in enumerate(['numpy', 'scipy', 'wcslib', 'astropy', 'photutils',
+                            'ceres', 'sextractor', 'psfex', 'astrometry_net',
+                            'tractor', 'fitsio', 'unwise_coadds']):
+        # Look in the OS environment variables for modules-style
+        # $scipy_VERSION => 0.15.1_5a3d8dfa-7.1
+        default_ver = 'UNAVAILABLE'
+        verstr = os.environ.get('%s_VERSION' % dep, default_ver)
+        if verstr == default_ver:
+            print('Warning: failed to get version string for "%s"' % dep)
+        version_hdr.add_record(dict(name='DEPNAM%02i' % i, value=dep,
+                                    comment='Name of dependency product'))
+        version_hdr.add_record(dict(name='DEPVER%02i' % i, value=verstr,
+                                    comment='Version of dependency product'))
+
     version_hdr.add_record(dict(name='BRICKNAM', value=brickname,  comment='DECaLS brick RRRr[pm]DDd'))
     version_hdr.add_record(dict(name='BRICKID' , value=brickid,    comment='DECaLS brick id'))
     version_hdr.add_record(dict(name='RAMIN'   , value=brick.ra1,  comment='Brick RA min'))
@@ -194,7 +210,7 @@ def stage_tims(W=3600, H=3600, pixscale=0.262, brickname=None,
 
     if do_calibs:
         # Run calibrations
-        kwa = dict()
+        kwa = dict(git_version=gitver)
         if gaussPsf:
             kwa.update(psfex=False)
         args = [(im, kwa) for im in ims]
@@ -220,6 +236,12 @@ def stage_tims(W=3600, H=3600, pixscale=0.262, brickname=None,
 
     if len(tims) == 0:
         raise NothingToDoError('No photometric CCDs touching brick.')
+
+    for tim in tims:
+        for cal,ver in [('sky', tim.skyver), ('wcs', tim.wcsver), ('psf', tim.psfver)]:
+            if tim.plver != ver[1]:
+                print('Warning: image "%s" PLVER is "%s" but %s calib was run on PLVER "%s"' %
+                      (str(tim), tim.plver, cal, ver[1]))
 
     if not pipe:
         # save resampling params
@@ -2263,6 +2285,13 @@ def stage_coadds(bands=None, version_header=None, targetwcs=None,
     ccds.brick_y0 = np.floor(np.min(y, axis=1)).astype(np.int16)
     ccds.brick_y1 = np.ceil (np.max(y, axis=1)).astype(np.int16)
     ccds.sig1 = np.array([tim.sig1 for tim in tims])
+    ccds.plver = np.array([tim.plver for tim in tims])
+    ccds.skyver = np.array([tim.skyver[0] for tim in tims])
+    ccds.wcsver = np.array([tim.wcsver[0] for tim in tims])
+    ccds.psfver = np.array([tim.psfver[0] for tim in tims])
+    ccds.skyplver = np.array([tim.skyver[1] for tim in tims])
+    ccds.wcsplver = np.array([tim.wcsver[1] for tim in tims])
+    ccds.psfplver = np.array([tim.psfver[1] for tim in tims])
     ccds.writeto(fn)
     print('Wrote', fn)
 
@@ -3243,7 +3272,7 @@ python -u projects/desi/runbrick.py --plots --brick 2440p070 --zoom 1900 2400 45
     parser.add_option('--no-wise', action='store_true', default=False,
                       help='Skip unWISE forced photometry')
 
-    parser.add_option('--unwise-dir', default='unwise-coadds',
+    parser.add_option('--unwise-dir', default=None,
                       help='Base directory for unWISE coadds; may be a colon-separated list')
 
     parser.add_option('--no-sdss', action='store_true', default=False,
@@ -3322,6 +3351,9 @@ python -u projects/desi/runbrick.py --plots --brick 2440p070 --zoom 1900 2400 45
         kwa.update(sdssInit=False)
     if opt.no_wise:
         kwa.update(wise=False)
+
+    if opt.unwise_dir is None:
+        opt.unwise_dir = os.environ.get('UNWISE_COADDS_DIR', None)
 
     try:
         run_brick(

@@ -1,5 +1,18 @@
 #! /bin/bash
 
+module load matplotlib-hpcp
+module load scipy-hpcp
+module load wcslib-hpcp
+module load astropy-hpcp
+module load photutils-hpcp
+module load ceres-hpcp
+module load sextractor-hpcp
+module load fitsio-hpcp
+module load unwise_coadds/2.0
+
+# module load astrometry_net-hpcp
+# module load tractor-hpcp
+
 export PYTHONPATH=${PYTHONPATH}:.
 
 ## HACK! -- put my PsfEx ahead of anything else!
@@ -38,8 +51,7 @@ echo "--------------------------------------------------------------------------
 # python -u legacypipe/runbrick.py --force-all --no-write --brick $brick --outdir $outdir --threads 6 --nsigma 6 --skip --pipe --pixpsf >> $log 2>&1
 
 python -u legacypipe/runbrick.py --force-all -P 'pickles/runbrick-fftb-%(brick)s-%%(stage)s.pickle' \
-    --brick $brick --outdir $outdir --threads 6 --nsigma 6 --skip --pipe --pixpsf \
-    --unwise-dir unwise-fulldepth:unwise-coadds-orig >> $log 2>&1
+    --brick $brick --outdir $outdir --threads 6 --nsigma 6 --skip --pipe --pixpsf >> $log 2>&1
 
 # Launch from the 'py' directory;
 # qdo launch dr1n 32 --mpack 6 --walltime=48:00:00 --script ../bin/pipebrick.sh --batchqueue regular --verbose

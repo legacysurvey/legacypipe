@@ -63,19 +63,24 @@ class LegacyEllipseWithPriors(EllipseWithPriors):
 class BrickDuck(object):
     pass
 
-def get_version_header(program_name, decals_dir):
+def get_git_version():
     from astrometry.util.run_command import run_command
+    rtn,version,err = run_command('git describe')
+    if rtn:
+        raise RuntimeError('Failed to get version string (git describe):' + ver + err)
+    version = version.strip()
+    return version
+
+def get_version_header(program_name, decals_dir, git_version=None):
     import datetime
 
     if program_name is None:
         import sys
         program_name = sys.argv[0]
 
-    rtn,version,err = run_command('git describe')
-    if rtn:
-        raise RuntimeError('Failed to get version string (git describe):' + ver + err)
-    version = version.strip()
-    print('Version:', version)
+    if git_version is None:
+        git_version = get_git_version()
+        print('Version:', git_version)
 
     hdr = fitsio.FITSHDR()
 
@@ -84,11 +89,11 @@ def get_version_header(program_name, decals_dir):
         'Full documentation at http://legacysurvey.org',
         ]:
         hdr.add_record(dict(name='COMMENT', value=s, comment=s))
-    hdr.add_record(dict(name='TRACTORV', value=version,
-                        comment='Tractor git version'))
+    hdr.add_record(dict(name='LEGPIPEV', value=git_version,
+                        comment='legacypipe git version'))
     hdr.add_record(dict(name='DECALSV', value=decals_dir,
                         comment='DECaLS version'))
-    hdr.add_record(dict(name='DECALSDR', value='DR1',
+    hdr.add_record(dict(name='DECALSDR', value='DR2',
                         comment='DECaLS release name'))
     hdr.add_record(dict(name='DECALSDT', value=datetime.datetime.now().isoformat(),
                         comment='%s run time' % program_name))
@@ -1823,6 +1828,7 @@ class LegacySurveyImage(object):
         if x0 or y0:
             twcs.setX0Y0(x0,y0)
 
+        psffn = None
         if gaussPsf:
             #from tractor.basics import NCircularGaussianPSF
             #psf = NCircularGaussianPSF([psf_sigma], [1.0])
@@ -1830,12 +1836,15 @@ class LegacySurveyImage(object):
             v = psf_sigma**2
             psf = GaussianMixturePSF(1., 0., 0., v, v, 0.)
             print('WARNING: using mock PSF:', psf)
+            psf.version = '0'
+            psf.plver = ''
         elif pixPsf:
             # spatially varying pixelized PsfEx
             from tractor.psfex import PixelizedPsfEx
             print('Reading PsfEx model from', self.psffn)
             psf = PixelizedPsfEx(self.psffn)
             psf.shift(x0, y0)
+            psffn = self.psffn
 
         elif const2psf:
             from tractor.psfex import PsfExModel
@@ -1853,6 +1862,13 @@ class LegacySurveyImage(object):
             assert(False)
         print('Using PSF model', psf)
 
+        if psffn is not None:
+            hdr = fitsio.read_header(psffn)
+            psf.version = hdr.get('LEGSURV', None)
+            if psf.version is None:
+                psf.version = str(os.stat(psffn).st_mtime)
+            psf.plver = hdr.get('PLVER', '').strip()
+
         tim = Image(img, invvar=invvar, wcs=twcs, psf=psf,
                     photocal=LinearPhotoCal(zpscale, band=band),
                     sky=sky, name=self.name + ' ' + band)
@@ -1869,6 +1885,10 @@ class LegacySurveyImage(object):
         tim.imobj = self
         tim.primhdr = primhdr
         tim.hdr = imghdr
+        tim.plver = primhdr['PLVER'].strip()
+        tim.skyver = (sky.version, sky.plver)
+        tim.wcsver = (wcs.version, wcs.plver)
+        tim.psfver = (psf.version, psf.plver)
         tim.dq = dq
         tim.dq_bits = CP_DQ_BITS
         tim.saturation = imghdr.get('SATURATE', None)
@@ -1982,6 +2002,13 @@ class LegacySurveyImage(object):
         r,d = wcs.get_crval()
         print('Applying astrometric zeropoint:', (dra,ddec))
         wcs.set_crval((r + dra, d + ddec))
+        hdr = fitsio.read_header(self.pvwcsfn)
+        wcs.version = hdr.get('LEGPIPEV', '')
+        if len(wcs.version) == 0:
+            wcs.version = hdr.get('TRACTORV', '').strip()
+            if len(wcs.version) == 0:
+                wcs.version = str(os.stat(self.pvwcsfn).st_mtime)
+        wcs.plver = hdr.get('PLVER', '').strip()
         return wcs
     
     def read_sky_model(self):
@@ -1994,11 +2021,18 @@ class LegacySurveyImage(object):
         clazz = get_class_from_name(skyclass)
         fromfits = getattr(clazz, 'fromFitsHeader')
         skyobj = fromfits(hdr, prefix='SKY_')
+
+        skyobj.version = hdr.get('LEGPIPEV', '')
+        if len(skyobj.version) == 0:
+            skyobj.version = hdr.get('TRACTORV', '').strip()
+            if len(skyobj.version) == 0:
+                skyobj.version = str(os.stat(self.skyfn).st_mtime)
+        skyobj.plver = hdr.get('PLVER', '').strip()
         return skyobj
 
     def run_calibs(self, pvastrom=True, psfex=True, sky=True, se=False,
                    funpack=False, fcopy=False, use_mask=True,
-                   force=False, just_check=False):
+                   force=False, just_check=False, git_version=None):
         '''
         Runs any required calibration processes for this image.
         '''
@@ -2038,7 +2072,9 @@ class BokImage(LegacySurveyImage):
         img = self.read_image()
         sky = np.median(img)
         print('Median "sky" model:', sky)
-        return ConstantSky(sky)
+        sky = ConstantSky(sky)
+        sky.version = '0'
+        return sky
 
     def read_dq(self, **kwargs):
         print('Reading data quality from', self.dqfn, 'hdu', self.hdu)
@@ -2193,7 +2229,7 @@ class DecamImage(LegacySurveyImage):
 
     def run_calibs(self, pvastrom=True, psfex=True, sky=True, se=False,
                    funpack=False, fcopy=False, use_mask=True,
-                   force=False, just_check=False):
+                   force=False, just_check=False, git_version=None):
         '''
         Run calibration pre-processing steps.
 
@@ -2351,7 +2387,12 @@ class DecamImage(LegacySurveyImage):
             if os.system(cmd):
                 raise RuntimeError('Command failed: ' + cmd)
             # Read the resulting WCS header and add version info cards to it.
-            version_hdr = get_version_header(None, self.decals.get_decals_dir())
+            version_hdr = get_version_header(None, self.decals.get_decals_dir(),
+                                             git_version=git_version)
+            primhdr = self.read_image_primary_header()
+            plver = primhdr.get('PLVER', '').strip()
+            version_hdr.add_record(dict(name='PLVER', value=plver,
+                                        comment='CP ver of image file'))
             wcshdr = fitsio.read_header(tmpwcsfn)
             os.unlink(tmpwcsfn)
             for r in wcshdr.records():
@@ -2373,13 +2414,20 @@ class DecamImage(LegacySurveyImage):
                 print('Moving', oldfn, 'to', self.psffn)
                 os.rename(oldfn, self.psffn)
             else:
-                cmd = ('psfex -c %s -PSF_DIR %s %s' %
-                       (os.path.join(sedir, 'DECaLS.psfex'),
-                        os.path.dirname(self.psffn), self.sefn))
-                print(cmd)
-                rtn = os.system(cmd)
-                if rtn:
-                    raise RuntimeError('Command failed: ' + cmd + ': return value: %i' % rtn)
+                primhdr = self.read_image_primary_header()
+                plver = primhdr.get('PLVER', '')
+                cmds = ['psfex -c %s -PSF_DIR %s %s' %
+                        (os.path.join(sedir, 'DECaLS.psfex'),
+                         os.path.dirname(self.psffn), self.sefn),
+                        'modhead %s LEGPIPEV %s "legacypipe git version"' %
+                        (self.psffn, verstr),
+                        'modhead %s PLVER %s "CP ver of image file"' %
+                        (self.psffn, plver)]
+                for cmd in cmds:
+                    print(cmd)
+                    rtn = os.system(cmd)
+                    if rtn:
+                        raise RuntimeError('Command failed: ' + cmd + ': return value: %i' % rtn)
     
         if sky:
             print('Fitting sky for', self)
@@ -2399,7 +2447,12 @@ class DecamImage(LegacySurveyImage):
             tsky = ConstantSky(skyval)
             tt = type(tsky)
             sky_type = '%s.%s' % (tt.__module__, tt.__name__)
-            hdr = get_version_header(None, self.decals.get_decals_dir())
+            hdr = get_version_header(None, self.decals.get_decals_dir(),
+                                     git_version=git_version)
+            primhdr = self.read_image_primary_header()
+            plver = primhdr.get('PLVER', '')
+            hdr.add_record(dict(name='PLVER', value=plver,
+                                comment='CP ver of image file'))
             hdr.add_record(dict(name='SKYMETH', value=skymeth,
                                 comment='estimate_mode, or fallback to median?'))
             hdr.add_record(dict(name='SKY', value=sky_type, comment='Sky class'))
