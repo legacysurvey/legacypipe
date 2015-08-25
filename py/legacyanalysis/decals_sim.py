@@ -14,24 +14,24 @@ im = DecamImage(decals,ccdinfo[10])
 tim = im.get_tractor_image(const2psf=True)
 """
 
+from __future__ import division, print_function
+
 import os
 import sys
 import logging
+import argparse
 
 import galsim
 import numpy as np
-import matplotlib.pyplot as plt
 
-from tractor.engine import Patch
+from astropy.table import Table, Column, vstack
+
 from tractor.psfex import PsfEx, PsfExModel
 from tractor.basics import GaussianMixtureEllipsePSF, RaDecPos
 from astrometry.util.fits import fits_table, merge_tables
 
 from legacypipe.runbrick import run_brick
 from legacypipe.common import Decals, DecamImage, wcs_for_brick, ccds_touching_wcs
-
-logging.basicConfig(format='%(message)s',level=logging.INFO,stream=sys.stdout)
-log = logging.getLogger('decals_sim')
 
 class SimDecals(Decals):
     def __init__(self, decals_dir=None, sim_sources=None):
@@ -243,45 +243,201 @@ class build_stamp():
         stamp = self.convolve_and_draw(obj)
         return stamp
 
-def main():
+def build_simcat(nobj=None,brickname=None,brickwcs=None,objtype=None,
+                 ra_range=None,dec_range=None,rmag_range=None,
+                 decals_sim_dir=None,seed=None,chunksuffix=None):
+    """Build the simulated object catalog, which depends on the type of object."""
 
-    brickname = '2428p117'
-    objtype = 'STAR'
+    from pydl.pydlutils.spheregroup import spheregroup
+
+    rand = np.random.RandomState(seed=seed)
+
+    # Assign central coordinates uniformly but remove simulated sources which
+    # are too near to one another.  Iterate until we have the requisite number
+    # of objects. -- see the radectest.py function for a failing code
+    ra = rand.uniform(ra_range[0],ra_range[1],nobj)
+    dec = rand.uniform(dec_range[0],dec_range[1],nobj)
+    #gg = spheregroup(ra,dec,10.0/3600.0)
+
+    xxyy = brickwcs.radec2pixelxy(ra,dec)
+
+    cat = Table()
+    cat['ID'] = Column(np.arange(nobj,dtype='i4'))
+    cat['X'] = Column(xxyy[1][:],dtype='f4')
+    cat['Y'] = Column(xxyy[2][:],dtype='f4')
+    cat['RA'] = Column(ra,dtype='f8')
+    cat['DEC'] = Column(dec,dtype='f8')
+
+    if objtype.upper()=='ELG':
+        sersicn_1_range = [1.0,1.0]
+        r50_1_range = [0.5,2.5]
+        ba_1_range = [0.2,1.0]
+
+        sersicn_1 = rand.uniform(sersicn_1_range[0],sersicn_1_range[1],nobj)
+        r50_1 = rand.uniform(r50_1_range[0],r50_1_range[1],nobj)
+        ba_1 = rand.uniform(ba_1_range[0],ba_1_range[1],nobj)
+        phi_1 = rand.uniform(0,180,nobj)
+
+        cat['SERSICN_1'] = Column(sersicn_1,dtype='f4')
+        cat['R50_1'] = Column(r50_1,dtype='f4')
+        cat['BA_1'] = Column(ba_1,dtype='f4')
+        cat['PHI_1'] = Column(phi_1,dtype='f4')
+
+        ## Bulge parameters
+        #bulge_r50_range = [0.1,1.0]
+        #bulge_n_range = [3.0,5.0]
+        #bdratio_range = [0.0,1.0] # bulge-to-disk ratio
+
+        # Magnitudes and colors
+        gr_range = [-0.3,0.5]
+        rz_range = [0.0,1.5]
+
+    if objtype.upper()=='STAR':
+        gr_range = [0.0,0.5]
+        rz_range = [0.0,1.5]
+
+    # For convenience, also store the grz fluxes in nanomaggies.
+    rmag = rand.uniform(rmag_range[0],rmag_range[1],nobj)
+    gr = rand.uniform(gr_range[0],gr_range[1],nobj)
+    rz = rand.uniform(rz_range[0],rz_range[1],nobj)
+
+    gflux = 1E9*10**(-0.4*(rmag+gr)) # nanomaggies
+    rflux = 1E9*10**(-0.4*rmag) 
+    zflux = 1E9*10**(-0.4*(rmag-rz))
+
+    # Pack into a Table.
+    cat['R'] = Column(rmag,dtype='f4')
+    cat['GR'] = Column(gr,dtype='f4')
+    cat['RZ'] = Column(rz,dtype='f4')
+    cat['GFLUX'] = Column(gflux,dtype='f4')
+    cat['RFLUX'] = Column(rflux,dtype='f4')
+    cat['ZFLUX'] = Column(zflux,dtype='f4')
+
+    # Write out.
+    outfile = os.path.join(decals_sim_dir,'simcat-'+brickname+'-'+
+                           objtype.lower()+'-'+chunksuffix+'.fits')
+    log.info('Writing {}'.format(outfile))
+    if os.path.isfile(outfile):
+        os.remove(outfile)
+    cat.write(outfile)
+
+    return cat
+
+def main():
+    """Main routine which parses the optional inputs."""
+
+    parser = argparse.ArgumentParser(formatter_class=argparse.
+                                     ArgumentDefaultsHelpFormatter,
+                                     description='DECaLS simulations.')
+    parser.add_argument('-n', '--nobj', type=long, default=None, metavar='', 
+                        help='number of objects to simulate (required input)')
+    parser.add_argument('-c', '--chunksize', type=long, default=500, metavar='', 
+                        help='divide NOBJ into CHUNKSIZE chunks')
+    parser.add_argument('-b', '--brick', type=str, default='2428p117', metavar='', 
+                        help='simulate objects in this brick')
+    parser.add_argument('-o', '--objtype', type=str, default='STAR', metavar='', 
+                        help='object type (STAR, ELG, LRG, QSO, LSB)') 
+    parser.add_argument('-t', '--threads', type=int, default=8, metavar='', 
+                        help='number of threads to use when calling The Tractor')
+    parser.add_argument('-s', '--seed', type=long, default=None, metavar='', 
+                        help='random number seed')
+    parser.add_argument('-z', '--zoom', nargs=4, type=int, metavar='', 
+                        help='see runbrick.py; (default is 0 3600 0 3600)')
+    parser.add_argument('--rmag-range', nargs=2, type=float, default=(18,25), metavar='', 
+                        help='r-band magnitude range')
+    parser.add_argument('--no-qaplots', action='store_true',
+                        help='do not generate QAplots')
+    parser.add_argument('-v', '--verbose', dest='verbose', action='count', default=0,
+                        help='toggle on verbose output')
+
+    args = parser.parse_args()
+    if args.nobj is None:
+        parser.print_help()
+        sys.exit(1)
+
+    # Set the debugging level
+    if args.verbose:
+        lvl = logging.DEBUG
+    else:
+        lvl = logging.INFO
+    logging.basicConfig(format='%(message)s',level=lvl,stream=sys.stdout)
+    log = logging.getLogger('__name__')
+
+    brickname = args.brick
+    objtype = args.objtype.upper()
     lobjtype = objtype.lower()
 
-    decals_sim_dir = '/Users/ioannis/decals_sim_dir/star/2428p117'
+    if objtype=='LRG':
+        log.warning('{} objtype not yet supported!'.format(objtype))
+        sys.exit(1)
+    elif objtype=='LSB':
+        log.warning('{} objtype not yet supported!'.format(objtype))
+        sys.exit(1)
+    elif objtype=='QSO':
+        log.warning('{} objtype not yet supported!'.format(objtype))
+        sys.exit(1)
 
-    zoom = [1800,2400,1800,2400]
-    #zoom = [1800,2000,1800,2000]
-    #zoom = None
+    # Determine how many chunks we need
+    nobj = args.nobj
+    chunksize = args.chunksize
+    nchunk = long(np.ceil(nobj/chunksize))
 
+    log.info('Object type = {}'.format(objtype))
+    log.info('Number of objects = {}'.format(nobj))
+    log.info('Chunksize = {}'.format(chunksize))
+    log.info('Number of chunks = {}'.format(nchunk))
+
+    # Optionally zoom into a portion of the brick
     decals = Decals()
     brickinfo = decals.get_brick_by_name(brickname)
     brickwcs = wcs_for_brick(brickinfo)
     W, H, pixscale = brickwcs.get_width(), brickwcs.get_height(), brickwcs.pixel_scale()
 
-    if zoom is not None:
-        # See also runbrick.stage_tims()
-        #(x0,x1,y0,y1) = args.zoom
-        (x0,x1,y0,y1) = zoom
+    log.info('Brick = {}'.format(brickname))
+    if args.zoom is not None: # See also runbrick.stage_tims()
+        (x0,x1,y0,y1) = args.zoom
         W = x1-x0
         H = y1-y0
-        targetwcs = brickwcs.get_subimage(x0, y0, W, H)
+        brickwcs = brickwcs.get_subimage(x0, y0, W, H)
+        log.info('Zoom (pixel boundaries) = {}'.format(args.zoom))
 
-    bounds = brickwcs.radec_bounds()
-    ra_range = bounds[1]-bounds[0]
-    dec_range = bounds[3]-bounds[2]
+    #bounds = brickwcs.radec_bounds()
+    #ra_range = bounds[1]-bounds[0]
+    #dec_range = bounds[3]-bounds[2]
     radec_center = brickwcs.radec_center()
-    print(radec_center, ra_range, dec_range)
-        
-    corners = np.array([brickwcs.pixelxy2radec(x,y) for x,y in
-                        [(1,1),(W,1),(W,H),(1,H),(1,1)]])
-    
+    log.info('RA, Dec center = {}'.format(radec_center))
+    log.info('Brick = {}'.format(brickname))
 
-    # Identify the CCDs in the region of interest.
-    ccdinfo = decals.ccds_touching_wcs(brickwcs)
-    ccdinfo.about()
-    log.info('Got {} CCDs'.format(len(ccdinfo)))
+    if args.seed is not None:
+        log.info('Random seed = {}'.format(args.seed))
+
+    # Pack the input parameters into a meta-data table.
+    meta = Table()
+    meta['BRICKNAME'] = Column([brickname],dtype='S10')
+    meta['OBJTYPE'] = Column([objtype],dtype='S10')
+    if args.seed is not None:
+        meta['SEED'] = Column([args.seed],dtype='i4')
+    meta['NOBJ'] = Column([args.nobj],dtype='i4')
+    meta['CHUNKSIZE'] = Column([args.chunksize],dtype='i2')
+    meta['NCHUNK'] = Column([nchunk],dtype='i2')
+    #meta['RA'] = Column([ra_range],dtype='f8')
+    #meta['DEC'] = Column([dec_range],dtype='f8')
+    if args.zoom is None:
+        meta['ZOOM'] = Column([0,3600,0,3600],dtype='i4')
+    else:
+        meta['ZOOM'] = Column([args.zoom],dtype='i4')
+    meta['RMAG_RANGE'] = Column([args.rmag_range],dtype='f4')
+
+    print('Hack!')
+    decals_sim_dir = './'
+    metafile = os.path.join(decals_sim_dir,'metacat-'+brickname+'-'+
+                           objtype.lower()+'.fits')
+    log.info('Writing {}'.format(metafile))
+    if os.path.isfile(metafile):
+        os.remove(metafile)
+    meta.write(metafile)
+
+    sys.exit(1)
 
     # Generate the catalog of simulated sources here!
     simcat = fits_table('simcat-{}-{}-00.fits'.format(brickname,lobjtype))
@@ -291,16 +447,19 @@ def main():
 
     simdecals = SimDecals(sim_sources=simcat)
 
-    # For testing!
+    # Identify the CCDs in the region of interest.
+    #ccdinfo = decals.ccds_touching_wcs(brickwcs)
+    #ccdinfo.about()
+    #log.info('Got {} CCDs'.format(len(ccdinfo)))
     #sim = SimImage(simdecals,ccdinfo[0])
     #tim = sim.get_tractor_image(const2psf=True)
 
     run_brick(brickname, decals=simdecals, outdir=decals_sim_dir,
               threads=8, zoom=zoom, wise=False, sdssInit=False,
-              forceAll=True, writePickles=False, blobxy=blobxy,
-              pixPsf=False, stages=['tims','srcs','fitblobs',
-                                    'fitblobs_finish','coadds',
-                                    'writecat'])
+              forceAll=True, writePickles=False, do_calibs=False,
+              write_metrics=False, pixPsf=False, blobxy=blobxy,
+              stages=['tims','srcs','fitblobs','fitblobs_finish',
+                      'coadds','writecat'])
 
 if __name__ == '__main__':
     main()
