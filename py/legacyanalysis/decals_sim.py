@@ -1,7 +1,6 @@
 #!/usr/bin/env python
 
-"""
-Try to hack decals_sim so we don't have to make copies of the data.
+"""Try to hack decals_sim so we don't have to make copies of the data.
 
 from legacypipe.common import Decals, DecamImage, wcs_for_brick, ccds_touching_wcs
 
@@ -12,6 +11,12 @@ brickwcs = wcs_for_brick(brickinfo)
 ccdinfo = decals.ccds_touching_wcs(brickwcs)
 im = DecamImage(decals,ccdinfo[10])
 tim = im.get_tractor_image(const2psf=True)
+
+~1 target per square arcminute in DESI, so the random should have ~50 sources
+per square arcminute: 
+
+IDL> print, 50*3600.0*0.25^2
+      11250.0 ; sources over a whole brick
 """
 
 from __future__ import division, print_function
@@ -21,14 +26,16 @@ import sys
 import logging
 import argparse
 
+import fitsio
 import galsim
 import numpy as np
+import matplotlib.pyplot as plt
 
+from pydl.pydlutils.spheregroup import spheregroup
 from astropy.table import Table, Column, vstack
 
 from tractor.psfex import PsfEx, PsfExModel
 from tractor.basics import GaussianMixtureEllipsePSF, RaDecPos
-from astrometry.util.fits import fits_table, merge_tables
 
 from legacypipe.runbrick import run_brick
 from legacypipe.common import Decals, DecamImage, wcs_for_brick, ccds_touching_wcs
@@ -53,6 +60,10 @@ class SimImage(DecamImage):
 
         image = galsim.Image(tim.getImage())
         invvar = galsim.Image(tim.getInvvar())
+        if np.min(invvar.array)<0:
+            print('Negative invvar!')
+            print(np.min(invvar.array))
+            sys.exit(1)
 
         psf = tim.getPsf()
         wcs = tim.wcs
@@ -61,26 +72,18 @@ class SimImage(DecamImage):
         # Get the Galsim-compatible WCS and the magnitude zeropoint for this CCD.
         #wcs, origin = galsim.wcs.readFromFitsHeader(
         #    galsim.fits.FitsHeader(self.pvwcsfn))
-        magzpt = self.t.ccdzpt+2.5*np.log10(self.t.exptime)
+
+        # zpscale is the nanomaggies --> ADU multiplicative conversion factor,
+        # equivalent to magzpt = self.t.ccdzpt+2.5*np.log10(self.t.exptime)
+        zpscale = tim.zpscale 
         gain = self.t.arawgain
 
-        # QAplot
-        #from PIL import Image, ImageDraw
-        #rad = 15
-        #im = Image.fromarray(image.array).convert('RGB')
-        #sz = im.size
-        #draw = ImageDraw.Draw(im)
-
+        print(len(self.decals.sim_sources))
         for obj in self.decals.sim_sources:
-        #for iobj in range(5):
-            #obj = self.decals.sim_sources[iobj]
-
-            if twcs.is_inside(obj.ra,obj.dec):
-                objstamp = build_stamp(obj,psf=psf,wcs=wcs,
-                                       band=self.t.filter,magzpt=magzpt)
+            if twcs.is_inside(obj['ra'],obj['dec']):
+                objstamp = BuildStamp(obj,psf=psf,wcs=wcs,zpscale=zpscale,
+                                      band=self.t.filter)
                 stamp = objstamp.star()
-                #print(stamp.bounds, image.bounds)
-                #plt.imshow(stamp.array) ; plt.show()
 
                 overlap = stamp.bounds & image.bounds
                 if (overlap.xmax>=0 and overlap.ymax>=0 and
@@ -88,51 +91,33 @@ class SimImage(DecamImage):
                     overlap.ymin<=image.bounds.ymax and overlap.area()>0):
 
                     # Add Poisson noise
-                    stamp = stamp[overlap]            # [ADU]
-                    ivarstamp = invvar[overlap].copy() # [1/ADU^2]
+                    stamp = stamp[overlap]                        # [ADU]
+                    ivarstamp = invvar[overlap].copy()/zpscale**2 # [1/ADU^2]
                     stamp, ivarstamp = objstamp.addnoise(stamp,ivarstamp,gain)
 
-                    image[overlap] += stamp
-                    invvar[overlap] = ivarstamp
-
-                    #impatch = Patch(overlap.xmin,overlap.ymin,stamp)
-                    #impatch.addTo(image.array)
-                    #varpatch = Patch(overlap.xmin,overlap.ymin,varstamp)
-                    #varpatch.addTo(invvar.array)
-
-                    # QAplot
-                    #plt.imshow(image.array, **tim.ima) ; plt.show()
-                    #draw.ellipse((obj.x-rad, sz[1]-obj.y-rad,obj.x+rad,
-                    #              sz[1]-obj.y+rad))
-
-                    #break
+                    image[overlap] += stamp/zpscale
+                    invvar[overlap] = ivarstamp*zpscale**2
 
             tim.data = image.array
             tim.inverr = np.sqrt(invvar.array)
 
-            #outfile = 'test-{}-{}.fits'.format(self.expnum,self.ccdname)
-            #print('Writing {}'.format(outfile))
-            #image.write(outfile,clobber=True)
-
-            #tim.Image(data=image,invvar=invvar)
-            #im.save('test.jpg')
-
-#           patch = src.getModelPatch(tim)
-#           if patch is None:
-#               continue
-#           print 'Adding', src
-#           patch.addTo(tim.getImage())
+        outfile = 'test-{}-{}.fits'.format(self.expnum,self.ccdname)
+        print('Writing {}'.format(outfile))
+        testimage = galsim.Image(tim.getImage())
+        testimage.write(outfile,clobber=True)
+        image.write(outfile.replace('.fits','-orig.fits'),clobber=True)
+            
         return tim
 
-class build_stamp():
-    def __init__(self,obj,psf=None,wcs=None,band=None,magzpt=None):
+class BuildStamp():
+    def __init__(self,obj,psf=None,wcs=None,band='r',zpscale=1.0):
         """Build stamps of different types of objects."""
         #self.objtype = obj.objtype
 
         self.band = band.strip().lower()
-        self.magzpt = magzpt
+        self.zpscale = zpscale
 
-        xx, yy = wcs.positionToPixel(RaDecPos(obj.ra,obj.dec))
+        xx, yy = wcs.positionToPixel(RaDecPos(obj['ra'],obj['dec']))
         self.pos = galsim.PositionD(xx,yy)
         #self.pos = wcs.toImage(galsim.CelestialCoord(obj.ra*galsim.degrees,
         #                                             obj.dec*galsim.degrees))
@@ -151,8 +136,11 @@ class build_stamp():
 
         # Get the local PSF.  Need to update this to the latest PSFEx models!
         #psfmodel = PsfExModel(psffile).at(self.xpos, self.ypos)[5:-5, 5:-5]
-        psfim = psf.constantPsfAt(self.xpos,self.ypos)
-        psfim = psfim.getPointSourcePatch(0,0).getImage()
+
+        #psfim = psf.constantPsfAt(self.xpos,self.ypos)
+        #psfim = psfim.getPointSourcePatch(0,0).getImage()
+        psfim = psf.getPointSourcePatch(self.xpos, self.ypos).getImage()
+
         #self.localpsf = galsim.InterpolatedImage(galsim.Image(psfim),scale=pixscale,flux=1.0)
         self.localpsf = galsim.InterpolatedImage(galsim.Image(psfim),flux=1.0,
                                                  scale=self.pixscale)
@@ -173,8 +161,7 @@ class build_stamp():
         #self.localpsf = psf.shift(-psf_centroid.x,-psf_centroid.y)
 
         # Get the integrated object flux in the appropriate band in ADU.
-        flux = obj.to_dict()[self.band+'flux']
-        flux *= 10**(-0.4*(self.magzpt-22.5)) # [ADU]
+        flux = obj[self.band+'flux']*self.zpscale # [ADU]
         self.objflux = flux
 
     def convolve_and_draw(self,obj):
@@ -188,21 +175,28 @@ class build_stamp():
         # Invert the inverse variance stamp, cleaning up zeros.
         varstamp = ivarstamp.copy()
         varstamp.invertSelf() # [ADU^2]
+        if np.min(varstamp.array)<0:
+            print('Negative var!')
+            print(np.min(varstamp.array))
+            sys.exit(1)
 
-        medvar = np.median(varstamp.array[varstamp.array>0])
+        #medvar = np.median(varstamp.array[varstamp.array>0])
         #print('Median variance ', medvar)
-        varstamp.array[varstamp.array<=0] = medvar
+        #varstamp.array[varstamp.array<=0] = medvar
 
         # Convert to electrons.
         stamp *= gain         # [electron]
         varstamp *= (gain**2) # [electron^2]
+        firstvarstamp = varstamp + stamp
 
         # Add Poisson noise
         #plt.imshow(varstamp.array) ; plt.show()
         #print('Turning off adding noise!')
+        plt.imshow(stamp.array) ; plt.show()
         #stamp.addNoise(galsim.VariableGaussianNoise(galsim.BaseDeviate(),varstamp))
-        #stamp.addNoise(galsim.VariableGaussianNoise(galsim.BaseDeviate(),stamp))
-        #varstamp += stamp
+        stamp.addNoise(galsim.VariableGaussianNoise(galsim.BaseDeviate(),firstvarstamp))
+        plt.imshow(stamp.array) ; plt.show()
+        varstamp += stamp
         #plt.imshow(varstamp.array) ; plt.show()
 
         # Convert back to ADU
@@ -243,83 +237,95 @@ class build_stamp():
         stamp = self.convolve_and_draw(obj)
         return stamp
 
-def build_simcat(nobj=None,brickname=None,brickwcs=None,objtype=None,
-                 ra_range=None,dec_range=None,rmag_range=None,
-                 decals_sim_dir=None,seed=None,chunksuffix=None):
-    """Build the simulated object catalog, which depends on the type of object."""
+def build_simcat(nobj=None,brickname=None,brickwcs=None,meta=None):
+    """Build the simulated object catalog, which depends on OBJTYPE."""
 
-    from pydl.pydlutils.spheregroup import spheregroup
-
-    rand = np.random.RandomState(seed=seed)
+    if 'seed' in meta.colnames:
+        seed = meta['seed']
+    else:
+        seed = None
+    rand = np.random.RandomState(seed)
 
     # Assign central coordinates uniformly but remove simulated sources which
     # are too near to one another.  Iterate until we have the requisite number
-    # of objects. -- see the radectest.py function for a failing code
-    ra = rand.uniform(ra_range[0],ra_range[1],nobj)
-    dec = rand.uniform(dec_range[0],dec_range[1],nobj)
-    #gg = spheregroup(ra,dec,10.0/3600.0)
+    # of objects.
+    bounds = brickwcs.radec_bounds()
+    print(bounds)
+    ra = rand.uniform(bounds[0],bounds[1],nobj)
+    dec = rand.uniform(bounds[2],bounds[3],nobj)
+    #ra = np.random.uniform(bounds[0],bounds[1],nobj)
+    #dec = np.random.uniform(bounds[2],bounds[3],nobj)
+
+    #ngood = 0
+    #while ngood<nobj:
+    #    print(nobj, ngood)
+    #    #print(ra)
+    #    gg = spheregroup(ra,dec,5.0/3600.0)
+    #
+    #    nperbin = np.bincount(gg[0],minlength=nobj)
+    #    good = np.delete(np.arange(nobj),np.where(nperbin!=1))
+    #    ngood = len(good)
+    #
+    #    #plt.scatter(ra,dec) ; plt.scatter(ra[good],dec[good],color='orange') ; plt.show()
+    #
+    #    ra = np.append(ra[good],np.random.uniform(bounds[0],bounds[1],nobj))
+    #    dec = np.append(dec[good],np.random.uniform(bounds[2],bounds[3],nobj))
+    #    print(len(ra))
+    #    #np.append(ra[good],rand.uniform(bounds[0],bounds[1],nobj))
+    #    #np.append(dec[good],rand.uniform(bounds[2],bounds[3],nobj))
+    #
+    #ra = ra[:nobj]
+    #dec = dec[:nobj]
+    #
+    #test = spheregroup(ra,dec,10.0/3600.0)
+    #print(np.bincount(test[0],minlength=nobj))
+    #sys.exit(1)
 
     xxyy = brickwcs.radec2pixelxy(ra,dec)
 
     cat = Table()
-    cat['ID'] = Column(np.arange(nobj,dtype='i4'))
-    cat['X'] = Column(xxyy[1][:],dtype='f4')
-    cat['Y'] = Column(xxyy[2][:],dtype='f4')
-    cat['RA'] = Column(ra,dtype='f8')
-    cat['DEC'] = Column(dec,dtype='f8')
+    cat['id'] = Column(np.arange(nobj,dtype='i4'))
+    cat['x'] = Column(xxyy[1][:],dtype='f4')
+    cat['y'] = Column(xxyy[2][:],dtype='f4')
+    cat['ra'] = Column(ra,dtype='f8')
+    cat['dec'] = Column(dec,dtype='f8')
 
-    if objtype.upper()=='ELG':
+    if meta['objtype']=='ELG':
+        gr_range = [-0.3,0.5]
+        rz_range = [0.0,1.5]
+
         sersicn_1_range = [1.0,1.0]
         r50_1_range = [0.5,2.5]
         ba_1_range = [0.2,1.0]
 
-        sersicn_1 = rand.uniform(sersicn_1_range[0],sersicn_1_range[1],nobj)
-        r50_1 = rand.uniform(r50_1_range[0],r50_1_range[1],nobj)
-        ba_1 = rand.uniform(ba_1_range[0],ba_1_range[1],nobj)
-        phi_1 = rand.uniform(0,180,nobj)
-
-        cat['SERSICN_1'] = Column(sersicn_1,dtype='f4')
-        cat['R50_1'] = Column(r50_1,dtype='f4')
-        cat['BA_1'] = Column(ba_1,dtype='f4')
-        cat['PHI_1'] = Column(phi_1,dtype='f4')
+        cat['sersicn_1'] = Column(sersicn_1,dtype='f4')
+        cat['r50_1'] = Column(r50_1,dtype='f4')
+        cat['ba_1'] = Column(ba_1,dtype='f4')
+        cat['phi_1'] = Column(phi_1,dtype='f4')
 
         ## Bulge parameters
         #bulge_r50_range = [0.1,1.0]
         #bulge_n_range = [3.0,5.0]
         #bdratio_range = [0.0,1.0] # bulge-to-disk ratio
 
-        # Magnitudes and colors
-        gr_range = [-0.3,0.5]
-        rz_range = [0.0,1.5]
+        cat = np.concatenate((cat,elgcat))
 
-    if objtype.upper()=='STAR':
+    if meta['objtype']=='STAR':
         gr_range = [0.0,0.5]
         rz_range = [0.0,1.5]
 
     # For convenience, also store the grz fluxes in nanomaggies.
+    rmag_range = meta['rmag_range'][0]
     rmag = rand.uniform(rmag_range[0],rmag_range[1],nobj)
     gr = rand.uniform(gr_range[0],gr_range[1],nobj)
     rz = rand.uniform(rz_range[0],rz_range[1],nobj)
-
-    gflux = 1E9*10**(-0.4*(rmag+gr)) # nanomaggies
-    rflux = 1E9*10**(-0.4*rmag) 
-    zflux = 1E9*10**(-0.4*(rmag-rz))
-
-    # Pack into a Table.
-    cat['R'] = Column(rmag,dtype='f4')
-    cat['GR'] = Column(gr,dtype='f4')
-    cat['RZ'] = Column(rz,dtype='f4')
-    cat['GFLUX'] = Column(gflux,dtype='f4')
-    cat['RFLUX'] = Column(rflux,dtype='f4')
-    cat['ZFLUX'] = Column(zflux,dtype='f4')
-
-    # Write out.
-    outfile = os.path.join(decals_sim_dir,'simcat-'+brickname+'-'+
-                           objtype.lower()+'-'+chunksuffix+'.fits')
-    log.info('Writing {}'.format(outfile))
-    if os.path.isfile(outfile):
-        os.remove(outfile)
-    cat.write(outfile)
+    
+    cat['r'] = rmag
+    cat['gr'] = gr
+    cat['rz'] = rz
+    cat['gflux'] = 1E9*10**(-0.4*(rmag+gr)) # [nanomaggies]
+    cat['rflux'] = 1E9*10**(-0.4*rmag)      # [nanomaggies]
+    cat['zflux'] = 1E9*10**(-0.4*(rmag-rz)) # [nanomaggies]
 
     return cat
 
@@ -401,9 +407,6 @@ def main():
         brickwcs = brickwcs.get_subimage(x0, y0, W, H)
         log.info('Zoom (pixel boundaries) = {}'.format(args.zoom))
 
-    #bounds = brickwcs.radec_bounds()
-    #ra_range = bounds[1]-bounds[0]
-    #dec_range = bounds[3]-bounds[2]
     radec_center = brickwcs.radec_center()
     log.info('RA, Dec center = {}'.format(radec_center))
     log.info('Brick = {}'.format(brickname))
@@ -413,53 +416,65 @@ def main():
 
     # Pack the input parameters into a meta-data table.
     meta = Table()
-    meta['BRICKNAME'] = Column([brickname],dtype='S10')
-    meta['OBJTYPE'] = Column([objtype],dtype='S10')
+    meta['brickname'] = Column([brickname],dtype='S10')
+    meta['objtype'] = Column([objtype],dtype='S10')
     if args.seed is not None:
-        meta['SEED'] = Column([args.seed],dtype='i4')
-    meta['NOBJ'] = Column([args.nobj],dtype='i4')
-    meta['CHUNKSIZE'] = Column([args.chunksize],dtype='i2')
-    meta['NCHUNK'] = Column([nchunk],dtype='i2')
+        meta['seed'] = Column([args.seed],dtype='i4')
+    meta['nobj'] = Column([args.nobj],dtype='i4')
+    meta['chunksize'] = Column([args.chunksize],dtype='i2')
+    meta['nchunk'] = Column([nchunk],dtype='i2')
     #meta['RA'] = Column([ra_range],dtype='f8')
     #meta['DEC'] = Column([dec_range],dtype='f8')
     if args.zoom is None:
-        meta['ZOOM'] = Column([0,3600,0,3600],dtype='i4')
+        meta['zoom'] = Column([[0,3600,0,3600]],dtype='i4')
     else:
-        meta['ZOOM'] = Column([args.zoom],dtype='i4')
-    meta['RMAG_RANGE'] = Column([args.rmag_range],dtype='f4')
+        meta['zoom'] = Column([args.zoom],dtype='i4')
+    meta['rmag_range'] = Column([args.rmag_range],dtype='f4')
 
     print('Hack!')
     decals_sim_dir = './'
-    metafile = os.path.join(decals_sim_dir,'metacat-'+brickname+'-'+
-                           objtype.lower()+'.fits')
+    metafile = os.path.join(decals_sim_dir,'metacat-'+brickname+'-'+lobjtype+'.fits')
     log.info('Writing {}'.format(metafile))
     if os.path.isfile(metafile):
         os.remove(metafile)
     meta.write(metafile)
 
-    sys.exit(1)
+    # Work in chunks.
+    for ichunk in range(nchunk):
+        log.info('Working on chunk {:02d}/{:02d}'.format(ichunk+1,nchunk))
+        chunksuffix = '{:02d}'.format(ichunk)
 
-    # Generate the catalog of simulated sources here!
-    simcat = fits_table('simcat-{}-{}-00.fits'.format(brickname,lobjtype))
-    #simcat = fits.getdata('simcat-{}-{}-00.fits'.format(brickname,lobjtype))
-    simcat.about()
-    blobxy = zip(simcat.x,simcat.y)
+        # There's probably a smarter way to do this 
+        if ((ichunk+1)*chunksize)>nobj:
+            nobjchunk = (ichunk+1)*chunksize-nobj
+        else:
+            nobjchunk = chunksize
+        print(nobjchunk)
 
-    simdecals = SimDecals(sim_sources=simcat)
+        # Build and write out the simulated object catalog.
+        simcat = build_simcat(nobjchunk,brickname,brickwcs,meta)
+        simcatfile = os.path.join(decals_sim_dir,'simcat-'+brickname+'-'+
+                                  lobjtype+'-'+chunksuffix+'.fits')
+        log.info('Writing {}'.format(simcatfile))
+        if os.path.isfile(simcatfile):
+            os.remove(simcatfile)
+        simcat.write(simcatfile)
+        #fitsio.write(simcatfile,simcat)
 
-    # Identify the CCDs in the region of interest.
-    #ccdinfo = decals.ccds_touching_wcs(brickwcs)
-    #ccdinfo.about()
-    #log.info('Got {} CCDs'.format(len(ccdinfo)))
-    #sim = SimImage(simdecals,ccdinfo[0])
-    #tim = sim.get_tractor_image(const2psf=True)
+        # Use Tractor to just process the blobs containing the simulated sources. 
+        simdecals = SimDecals(sim_sources=simcat)
 
-    run_brick(brickname, decals=simdecals, outdir=decals_sim_dir,
-              threads=8, zoom=zoom, wise=False, sdssInit=False,
-              forceAll=True, writePickles=False, do_calibs=False,
-              write_metrics=False, pixPsf=False, blobxy=blobxy,
-              stages=['tims','srcs','fitblobs','fitblobs_finish',
-                      'coadds','writecat'])
+        # Test code
+        ccdinfo = decals.ccds_touching_wcs(brickwcs)
+        sim = SimImage(simdecals,ccdinfo[0])
+        tim = sim.get_tractor_image(const2psf=True)
+
+#       blobxy = zip(simcat['x'],simcat['y'])
+#       run_brick(brickname, decals=simdecals, outdir=decals_sim_dir,
+#                 threads=8, zoom=args.zoom, wise=False, sdssInit=False,
+#                 forceAll=True, writePickles=False, do_calibs=False,
+#                 write_metrics=False, pixPsf=False, blobxy=blobxy,
+#                 early_coadds=False,stages=['writecat'])
 
 if __name__ == '__main__':
     main()

@@ -2285,13 +2285,18 @@ def stage_coadds(bands=None, version_header=None, targetwcs=None,
     ccds.brick_y0 = np.floor(np.min(y, axis=1)).astype(np.int16)
     ccds.brick_y1 = np.ceil (np.max(y, axis=1)).astype(np.int16)
     ccds.sig1 = np.array([tim.sig1 for tim in tims])
-    ccds.plver = np.array([tim.plver for tim in tims])
-    ccds.skyver = np.array([tim.skyver[0] for tim in tims])
-    ccds.wcsver = np.array([tim.wcsver[0] for tim in tims])
-    ccds.psfver = np.array([tim.psfver[0] for tim in tims])
-    ccds.skyplver = np.array([tim.skyver[1] for tim in tims])
-    ccds.wcsplver = np.array([tim.wcsver[1] for tim in tims])
-    ccds.psfplver = np.array([tim.psfver[1] for tim in tims])
+
+    # temporarily try:except for test bricks (reading earlier pickles)
+    try:
+        ccds.plver = np.array([tim.plver for tim in tims])
+        ccds.skyver = np.array([tim.skyver[0] for tim in tims])
+        ccds.wcsver = np.array([tim.wcsver[0] for tim in tims])
+        ccds.psfver = np.array([tim.psfver[0] for tim in tims])
+        ccds.skyplver = np.array([tim.skyver[1] for tim in tims])
+        ccds.wcsplver = np.array([tim.wcsver[1] for tim in tims])
+        ccds.psfplver = np.array([tim.psfver[1] for tim in tims])
+    except:
+        print('Warning: No version tags in tims')
     ccds.writeto(fn)
     print('Wrote', fn)
 
@@ -2924,6 +2929,7 @@ def run_brick(brick, radec=None, pixscale=0.262,
               simulOpt=False,
               wise=True,
               sdssInit=True,
+              early_coadds=True,
               do_calibs=True,
               write_metrics=True,
               gaussPsf=False,
@@ -3009,6 +3015,8 @@ def run_brick(brick, radec=None, pixscale=0.262,
     - *wise*: boolean; run WISE forced photometry?
 
     - *sdssInit*: boolean; initialize sources from the SDSS catalogs?
+
+    - *early_coadds*: boolean; generate the early coadds?
 
     - *do_calibs*: boolean; run the calibration preprocessing steps?
 
@@ -3148,9 +3156,6 @@ def run_brick(brick, radec=None, pixscale=0.262,
 
         #'srcs':'tims',
 
-        'image_coadds':'tims',
-        'srcs':'image_coadds',
-
         'fitblobs':'srcs',
         'fitblobs_finish':'fitblobs',
         'coadds': 'fitblobs_finish',
@@ -3161,6 +3166,16 @@ def run_brick(brick, radec=None, pixscale=0.262,
         'psfplots': 'tims',
         'initplots': 'srcs',
         }
+
+    if early_coadds:
+        prereqs.update({
+            'image_coadds':'tims',
+            'srcs':'image_coadds',
+            })
+    else:
+        prereqs.update({
+            'srcs': 'tims',
+            })
 
     if wise:
         prereqs.update({
@@ -3278,6 +3293,9 @@ python -u projects/desi/runbrick.py --plots --brick 2440p070 --zoom 1900 2400 45
     parser.add_option('--no-sdss', action='store_true', default=False,
                       help='Do not initialize from SDSS')
 
+    parser.add_option('--no-early-coadds', action='store_true', default=False,
+                      help='Skip making the early coadds')
+
     parser.add_option('--gpsf', action='store_true', default=False,
                       help='Use a fixed single-Gaussian PSF')
     parser.add_option('--pixpsf', action='store_true', default=False,
@@ -3351,6 +3369,8 @@ python -u projects/desi/runbrick.py --plots --brick 2440p070 --zoom 1900 2400 45
         kwa.update(sdssInit=False)
     if opt.no_wise:
         kwa.update(wise=False)
+    if opt.no_early_coadds:
+        kwa.update(early_coadds=False)
 
     if opt.unwise_dir is None:
         opt.unwise_dir = os.environ.get('UNWISE_COADDS_DIR', None)
