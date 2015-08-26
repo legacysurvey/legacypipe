@@ -109,10 +109,11 @@ def get_version_header(program_name, decals_dir, git_version=None):
                         comment='NERSC machine where runbrick.py was run'))
     return hdr
 
-
 class MyFITSHDR(fitsio.FITSHDR):
-    ''' This is copied straight from fitsio, simply removing "BUNIT"
-    from the list of headers to remove.
+    '''
+    This is copied straight from fitsio, simply removing "BUNIT" from
+    the list of headers to remove.  This is required to format the
+    tractor catalogs the way we want them.
     '''
     def clean(self):
         """
