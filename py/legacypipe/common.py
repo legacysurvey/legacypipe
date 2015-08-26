@@ -709,10 +709,10 @@ def bricks_touching_wcs(targetwcs, decals=None, B=None, margin=20):
     return B[np.array(keep)]
 
         
-def ccds_touching_wcs(targetwcs, T, ccdrad=0.17, polygons=True):
+def ccds_touching_wcs(targetwcs, ccds, ccdrad=0.17, polygons=True):
     '''
     targetwcs: wcs object describing region of interest
-    T: fits_table object of CCDs
+    ccds: fits_table object of CCDs
 
     ccdrad: radius of CCDs, in degrees.  Default 0.17 is for DECam.
     #If None, computed from T.
@@ -721,13 +721,14 @@ def ccds_touching_wcs(targetwcs, T, ccdrad=0.17, polygons=True):
     '''
     trad = targetwcs.radius()
     if ccdrad is None:
-        ccdrad = max(np.sqrt(np.abs(T.cd1_1 * T.cd2_2 - T.cd1_2 * T.cd2_1)) *
-                     np.hypot(T.width, T.height) / 2.)
+        ccdrad = max(np.sqrt(np.abs(ccds.cd1_1 * ccds.cd2_2 -
+                                    ccds.cd1_2 * ccds.cd2_1)) *
+                     np.hypot(ccds.width, ccds.height) / 2.)
 
     rad = trad + ccdrad
     r,d = targetwcs.radec_center()
-    I, = np.nonzero(np.abs(T.dec - d) < rad)
-    I = I[np.atleast_1d(degrees_between(T.ra[I], T.dec[I], r, d) < rad)]
+    I, = np.nonzero(np.abs(ccds.dec - d) < rad)
+    I = I[np.atleast_1d(degrees_between(ccds.ra[I], ccds.dec[I], r, d) < rad)]
 
     if not polygons:
         return I
@@ -742,10 +743,10 @@ def ccds_touching_wcs(targetwcs, T, ccdrad=0.17, polygons=True):
 
     keep = []
     for i in I:
-        W,H = T.width[i],T.height[i]
+        W,H = ccds.width[i],ccds.height[i]
         wcs = Tan(*[float(x) for x in
-                    [T.crval1[i], T.crval2[i], T.crpix1[i], T.crpix2[i], T.cd1_1[i],
-                     T.cd1_2[i], T.cd2_1[i], T.cd2_2[i], W, H]])
+                    [ccds.crval1[i], ccds.crval2[i], ccds.crpix1[i], ccds.crpix2[i],
+                     ccds.cd1_1[i], ccds.cd1_2[i], ccds.cd2_1[i], ccds.cd2_2[i], W, H]])
         cd = wcs.get_cd()
         wdet = cd[0]*cd[3] - cd[1]*cd[2]
         poly = []
