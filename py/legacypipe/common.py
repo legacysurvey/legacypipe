@@ -2075,6 +2075,7 @@ class BokImage(LegacySurveyImage):
         print('Median "sky" model:', sky)
         sky = ConstantSky(sky)
         sky.version = '0'
+        sky.plver = '0'
         return sky
 
     def read_dq(self, **kwargs):
@@ -2112,6 +2113,8 @@ class BokImage(LegacySurveyImage):
         print('Wrote fake header to', tmphdr)
         wcs = Tan(tmphdr)
         print('Returning', wcs)
+        wcs.version = '0'
+        wcs.plver = '0'
         return wcs
 
 

@@ -585,7 +585,7 @@ def stage_image_coadds(targetwcs=None, bands=None, tims=None, outdir=None,
         kwa = {}
         if coadd_bw and len(bands) == 1:
             i = 'zrg'.index(bands[0])
-            rgb = rgb0[:,:,i]
+            rgb = rgb[:,:,i]
             kwa = dict(cmap='gray')
         plt.imsave(tmpfn, rgb, origin='lower', **kwa)
         jpegfn = os.path.join(basedir, 'decals-%s-%s.jpg' % (brickname, name))
