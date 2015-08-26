@@ -1851,6 +1851,7 @@ class LegacySurveyImage(object):
             from tractor.basics import GaussianMixtureEllipsePSF
             # 2-component constant MoG.
             print('Reading PsfEx model from', self.psffn)
+            psffn = self.psffn
             psfex = PsfExModel(self.psffn)
             psfim = psfex.at(imw/2., imh/2.)
             psfim = psfim[5:-5, 5:-5]

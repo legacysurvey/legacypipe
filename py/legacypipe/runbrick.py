@@ -2930,6 +2930,7 @@ def run_brick(brick, radec=None, pixscale=0.262,
               wise=True,
               sdssInit=True,
               do_calibs=True,
+              write_metrics=True,
               gaussPsf=False,
               pixPsf=False,
               ceres=True,
@@ -3015,6 +3016,8 @@ def run_brick(brick, radec=None, pixscale=0.262,
     - *sdssInit*: boolean; initialize sources from the SDSS catalogs?
 
     - *do_calibs*: boolean; run the calibration preprocessing steps?
+
+    - *write_metrics*: boolean; write out a variety of useful metrics
 
     - *gaussPsf*: boolean; use a simpler single-component Gaussian PSF model?
 
@@ -3120,6 +3123,7 @@ def run_brick(brick, radec=None, pixscale=0.262,
                   simul_opt=simulOpt, pipe=pipe,
                   no_sdss=not(sdssInit),
                   do_calibs=do_calibs,
+                  write_metrics=write_metrics,
                   outdir=outdir, decals_dir=decals_dir, unwise_dir=unwise_dir,
                   decals=decals,
                   plots=plots, plots2=plots2, coadd_bw=coadd_bw,
@@ -3262,6 +3266,9 @@ python -u projects/desi/runbrick.py --plots --brick 2440p070 --zoom 1900 2400 45
     parser.add_option('--skip-calibs', dest='do_calibs', default=True,
                       action='store_false', help='Do not run the calibration steps')
 
+    parser.add_option('--skip-metrics', dest='write_metrics', default=True,
+                      action='store_false', help='Do not generate the metrics directory and files')
+
     parser.add_option('--nsigma', type=float, help='Set N sigma source detection thresh')
 
     parser.add_option('--simul-opt', action='store_true', default=False,
@@ -3360,6 +3367,7 @@ python -u projects/desi/runbrick.py --plots --brick 2440p070 --zoom 1900 2400 45
             pv=opt.pv,
             threads=opt.threads, ceres=opt.ceres,
             do_calibs=opt.do_calibs,
+            write_metrics=opt.write_metrics,
             gaussPsf=opt.gpsf, pixPsf=opt.pixpsf, simulOpt=opt.simul_opt,
             nblobs=opt.nblobs, blob=opt.blob, blobxy=opt.blobxy,
             pipe=opt.pipe, outdir=opt.outdir, decals_dir=opt.decals_dir,
