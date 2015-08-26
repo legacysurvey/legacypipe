@@ -1508,8 +1508,6 @@ Using the current directory as DECALS_DIR, but this is likely to fail.
             return 0.,0.
         dra, ddec = zp.ccdraoff, zp.ccddecoff
         return dra / 3600., ddec / 3600.
-        #dec = zp.ccddec
-        #return dra / np.cos(np.deg2rad(dec)), ddec
 
 def exposure_metadata(filenames, hdus=None, trim=None):
     nan = np.nan
@@ -1659,8 +1657,8 @@ class LegacySurveyImage(object):
         self.decals = decals
 
         imgfn, hdu, band, expnum, ccdname, exptime = (
-            ccd.image_filename.strip(), ccd.image_hdu, ccd.filter.strip(), ccd.expnum,
-            ccd.ccdname.strip(), ccd.exptime)
+            ccd.image_filename.strip(), ccd.image_hdu, ccd.filter.strip(), 
+            ccd.expnum, ccd.ccdname.strip(), ccd.exptime)
 
         if os.path.exists(imgfn):
             self.imgfn = imgfn
