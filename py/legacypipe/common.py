@@ -1628,7 +1628,7 @@ class LegacySurveyImage(object):
      * BokImage
     '''
 
-    def __init__(self, decals, t):
+    def __init__(self, decals, ccd):
         '''
 
         Create a new LegacySurveyImage object, from a Decals object,
@@ -1639,18 +1639,18 @@ class LegacySurveyImage(object):
 
             decals = Decals()
             # targetwcs = ....
-            # T = decals.ccds_touching_wcs(targetwcs, ccdrad=None)
-            T = decals.get_ccds()
-            im = decals.get_image_object(T[0])
+            # ccds = decals.ccds_touching_wcs(targetwcs, ccdrad=None)
+            ccds = decals.get_ccds()
+            im = decals.get_image_object(ccds[0])
             # which does the same thing as:
-            im = DecamImage(decals, T[0])
-            
+            im = DecamImage(decals, ccds[0])
+
         Or, if you have a Community Pipeline-processed input file and
         FITS HDU extension number:
 
             decals = Decals()
-            T = exposure_metadata([filename], hdus=[hdu])
-            im = DecamImage(decals, T[0])
+            ccds = exposure_metadata([filename], hdus=[hdu])
+            im = DecamImage(decals, ccds[0])
 
         Perhaps the most important method in this class is
         *get_tractor_image*.
@@ -1659,8 +1659,8 @@ class LegacySurveyImage(object):
         self.decals = decals
 
         imgfn, hdu, band, expnum, ccdname, exptime = (
-            t.image_filename.strip(), t.image_hdu, t.filter.strip(), t.expnum,
-            t.ccdname.strip(), t.exptime)
+            ccd.image_filename.strip(), ccd.image_hdu, ccd.filter.strip(), ccd.expnum,
+            ccd.ccdname.strip(), ccd.exptime)
 
         if os.path.exists(imgfn):
             self.imgfn = imgfn
@@ -1672,10 +1672,10 @@ class LegacySurveyImage(object):
         self.ccdname = ccdname.strip()
         self.band  = band
         self.exptime = exptime
-        self.camera = t.camera.strip()
-        self.fwhm = t.fwhm
+        self.camera = ccd.camera.strip()
+        self.fwhm = ccd.fwhm
         # in arcsec/pixel
-        self.pixscale = 3600. * np.sqrt(np.abs(t.cd1_1 * t.cd2_2 - t.cd1_2 * t.cd2_1))
+        self.pixscale = 3600. * np.sqrt(np.abs(ccd.cd1_1 * ccd.cd2_2 - ccd.cd1_2 * ccd.cd2_1))
 
     def __str__(self):
         return self.name
