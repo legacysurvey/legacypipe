@@ -2285,13 +2285,18 @@ def stage_coadds(bands=None, version_header=None, targetwcs=None,
     ccds.brick_y0 = np.floor(np.min(y, axis=1)).astype(np.int16)
     ccds.brick_y1 = np.ceil (np.max(y, axis=1)).astype(np.int16)
     ccds.sig1 = np.array([tim.sig1 for tim in tims])
-    ccds.plver = np.array([tim.plver for tim in tims])
-    ccds.skyver = np.array([tim.skyver[0] for tim in tims])
-    ccds.wcsver = np.array([tim.wcsver[0] for tim in tims])
-    ccds.psfver = np.array([tim.psfver[0] for tim in tims])
-    ccds.skyplver = np.array([tim.skyver[1] for tim in tims])
-    ccds.wcsplver = np.array([tim.wcsver[1] for tim in tims])
-    ccds.psfplver = np.array([tim.psfver[1] for tim in tims])
+
+    # temporarily try:except for test bricks (reading earlier pickles)
+    try:
+        ccds.plver = np.array([tim.plver for tim in tims])
+        ccds.skyver = np.array([tim.skyver[0] for tim in tims])
+        ccds.wcsver = np.array([tim.wcsver[0] for tim in tims])
+        ccds.psfver = np.array([tim.psfver[0] for tim in tims])
+        ccds.skyplver = np.array([tim.skyver[1] for tim in tims])
+        ccds.wcsplver = np.array([tim.wcsver[1] for tim in tims])
+        ccds.psfplver = np.array([tim.psfver[1] for tim in tims])
+    except:
+        print('Warning: No version tags in tims')
     ccds.writeto(fn)
     print('Wrote', fn)
 
