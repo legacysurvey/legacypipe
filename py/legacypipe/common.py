@@ -1993,6 +1993,9 @@ class LegacySurveyImage(object):
         '''
         return None
 
+    def get_wcs(self):
+        return self.read_pv_wcs()
+
     def read_pv_wcs(self):
         '''
         Reads the WCS header, returning an `astrometry.util.util.Sip` object.
@@ -2227,9 +2230,6 @@ class DecamImage(LegacySurveyImage):
             thresh = 0.2 * med
             invvar[invvar < thresh] = 0
         return invvar
-
-    def get_wcs(self):
-        return self.read_pv_wcs()
 
     def run_calibs(self, pvastrom=True, psfex=True, sky=True, se=False,
                    funpack=False, fcopy=False, use_mask=True,
