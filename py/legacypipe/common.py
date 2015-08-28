@@ -709,10 +709,10 @@ def bricks_touching_wcs(targetwcs, decals=None, B=None, margin=20):
     return B[np.array(keep)]
 
         
-def ccds_touching_wcs(targetwcs, T, ccdrad=0.17, polygons=True):
+def ccds_touching_wcs(targetwcs, ccds, ccdrad=0.17, polygons=True):
     '''
     targetwcs: wcs object describing region of interest
-    T: fits_table object of CCDs
+    ccds: fits_table object of CCDs
 
     ccdrad: radius of CCDs, in degrees.  Default 0.17 is for DECam.
     #If None, computed from T.
@@ -721,13 +721,14 @@ def ccds_touching_wcs(targetwcs, T, ccdrad=0.17, polygons=True):
     '''
     trad = targetwcs.radius()
     if ccdrad is None:
-        ccdrad = max(np.sqrt(np.abs(T.cd1_1 * T.cd2_2 - T.cd1_2 * T.cd2_1)) *
-                     np.hypot(T.width, T.height) / 2.)
+        ccdrad = max(np.sqrt(np.abs(ccds.cd1_1 * ccds.cd2_2 -
+                                    ccds.cd1_2 * ccds.cd2_1)) *
+                     np.hypot(ccds.width, ccds.height) / 2.)
 
     rad = trad + ccdrad
     r,d = targetwcs.radec_center()
-    I, = np.nonzero(np.abs(T.dec - d) < rad)
-    I = I[np.atleast_1d(degrees_between(T.ra[I], T.dec[I], r, d) < rad)]
+    I, = np.nonzero(np.abs(ccds.dec - d) < rad)
+    I = I[np.atleast_1d(degrees_between(ccds.ra[I], ccds.dec[I], r, d) < rad)]
 
     if not polygons:
         return I
@@ -742,10 +743,10 @@ def ccds_touching_wcs(targetwcs, T, ccdrad=0.17, polygons=True):
 
     keep = []
     for i in I:
-        W,H = T.width[i],T.height[i]
+        W,H = ccds.width[i],ccds.height[i]
         wcs = Tan(*[float(x) for x in
-                    [T.crval1[i], T.crval2[i], T.crpix1[i], T.crpix2[i], T.cd1_1[i],
-                     T.cd1_2[i], T.cd2_1[i], T.cd2_2[i], W, H]])
+                    [ccds.crval1[i], ccds.crval2[i], ccds.crpix1[i], ccds.crpix2[i],
+                     ccds.cd1_1[i], ccds.cd1_2[i], ccds.cd2_1[i], ccds.cd2_2[i], W, H]])
         cd = wcs.get_cd()
         wdet = cd[0]*cd[3] - cd[1]*cd[2]
         poly = []
@@ -1507,8 +1508,6 @@ Using the current directory as DECALS_DIR, but this is likely to fail.
             return 0.,0.
         dra, ddec = zp.ccdraoff, zp.ccddecoff
         return dra / 3600., ddec / 3600.
-        #dec = zp.ccddec
-        #return dra / np.cos(np.deg2rad(dec)), ddec
 
 def exposure_metadata(filenames, hdus=None, trim=None):
     nan = np.nan
@@ -1627,7 +1626,7 @@ class LegacySurveyImage(object):
      * BokImage
     '''
 
-    def __init__(self, decals, t):
+    def __init__(self, decals, ccd):
         '''
 
         Create a new LegacySurveyImage object, from a Decals object,
@@ -1638,18 +1637,18 @@ class LegacySurveyImage(object):
 
             decals = Decals()
             # targetwcs = ....
-            # T = decals.ccds_touching_wcs(targetwcs, ccdrad=None)
-            T = decals.get_ccds()
-            im = decals.get_image_object(T[0])
+            # ccds = decals.ccds_touching_wcs(targetwcs, ccdrad=None)
+            ccds = decals.get_ccds()
+            im = decals.get_image_object(ccds[0])
             # which does the same thing as:
-            im = DecamImage(decals, T[0])
-            
+            im = DecamImage(decals, ccds[0])
+
         Or, if you have a Community Pipeline-processed input file and
         FITS HDU extension number:
 
             decals = Decals()
-            T = exposure_metadata([filename], hdus=[hdu])
-            im = DecamImage(decals, T[0])
+            ccds = exposure_metadata([filename], hdus=[hdu])
+            im = DecamImage(decals, ccds[0])
 
         Perhaps the most important method in this class is
         *get_tractor_image*.
@@ -1658,8 +1657,8 @@ class LegacySurveyImage(object):
         self.decals = decals
 
         imgfn, hdu, band, expnum, ccdname, exptime = (
-            t.image_filename.strip(), t.image_hdu, t.filter.strip(), t.expnum,
-            t.ccdname.strip(), t.exptime)
+            ccd.image_filename.strip(), ccd.image_hdu, ccd.filter.strip(), 
+            ccd.expnum, ccd.ccdname.strip(), ccd.exptime)
 
         if os.path.exists(imgfn):
             self.imgfn = imgfn
@@ -1671,10 +1670,10 @@ class LegacySurveyImage(object):
         self.ccdname = ccdname.strip()
         self.band  = band
         self.exptime = exptime
-        self.camera = t.camera.strip()
-        self.fwhm = t.fwhm
+        self.camera = ccd.camera.strip()
+        self.fwhm = ccd.fwhm
         # in arcsec/pixel
-        self.pixscale = 3600. * np.sqrt(np.abs(t.cd1_1 * t.cd2_2 - t.cd1_2 * t.cd2_1))
+        self.pixscale = 3600. * np.sqrt(np.abs(ccd.cd1_1 * ccd.cd2_2 - ccd.cd1_2 * ccd.cd2_1))
 
     def __str__(self):
         return self.name
@@ -1994,6 +1993,9 @@ class LegacySurveyImage(object):
         '''
         return None
 
+    def get_wcs(self):
+        return self.read_pv_wcs()
+
     def read_pv_wcs(self):
         '''
         Reads the WCS header, returning an `astrometry.util.util.Sip` object.
@@ -2228,9 +2230,6 @@ class DecamImage(LegacySurveyImage):
             thresh = 0.2 * med
             invvar[invvar < thresh] = 0
         return invvar
-
-    def get_wcs(self):
-        return self.read_pv_wcs()
 
     def run_calibs(self, pvastrom=True, psfex=True, sky=True, se=False,
                    funpack=False, fcopy=False, use_mask=True,

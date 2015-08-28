@@ -185,23 +185,23 @@ def stage_tims(W=3600, H=3600, pixscale=0.262, brickname=None,
 
     pixscale = targetwcs.pixel_scale()
 
-    T = decals.ccds_touching_wcs(targetwcs, ccdrad=None)
-    if T is None:
+    ccds = decals.ccds_touching_wcs(targetwcs, ccdrad=None)
+    if ccds is None:
         raise NothingToDoError('No CCDs touching brick')
 
-    print(len(T), 'CCDs touching target WCS')
+    print(len(ccds), 'CCDs touching target WCS')
 
     # Sort images by band
-    T.cut(np.hstack([np.flatnonzero(T.filter == band) for band in bands]))
+    ccds.cut(np.hstack([np.flatnonzero(ccds.filter == band) for band in bands]))
 
     print('Cutting out non-photometric CCDs...')
-    I = decals.photometric_ccds(T)
-    print(len(I), 'of', len(T), 'CCDs are photometric')
-    T.cut(I)
+    I = decals.photometric_ccds(ccds)
+    print(len(I), 'of', len(ccds), 'CCDs are photometric')
+    ccds.cut(I)
 
     ims = []
-    for t in T:
-        im = decals.get_image_object(t)
+    for ccd in ccds:
+        im = decals.get_image_object(ccd)
         ims.append(im)
 
     tnow = Time()
@@ -225,13 +225,12 @@ def stage_tims(W=3600, H=3600, pixscale=0.262, brickname=None,
 
     # Cut the table of CCDs to match the 'tims' list
     I = np.flatnonzero(np.array([tim is not None for tim in tims]))
-    T.cut(I)
-    ccds = T
+    ccds.cut(I)
     tims = [tim for tim in tims if tim is not None]
-    assert(len(T) == len(tims))
+    assert(len(ccds) == len(tims))
 
     tnow = Time()
-    print('[parallel tims] Read', len(T), 'images:', tnow-tlast)
+    print('[parallel tims] Read', len(ccds), 'images:', tnow-tlast)
     tlast = tnow
 
     if len(tims) == 0:
