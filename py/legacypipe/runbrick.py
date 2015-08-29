@@ -1509,11 +1509,12 @@ def _one_blob(X):
             if plots:
                 spmods,spnames = [],[]
                 spallmods,spallnames = [],[]
-            if plots and numi == 0:
+            if plots:
+                if numi == 0:
+                    spallmods.append(subtr.getModelImages())
+                    spallnames.append('Initial (all)')
                 spmods.append(srctractor.getModelImages())
                 spnames.append('Initial')
-                spallmods.append(subtr.getModelImages())
-                spallnames.append('Initial (all)')
 
             max_cpu_per_source = 60.
 
@@ -2246,6 +2247,16 @@ def _get_mod(X):
     tractor = Tractor([tim], srcs)
     mod = tractor.getModelImage(0)
     print('Getting model for', tim, ':', Time()-t0)
+
+    #######
+    # from tractor.galaxy import fft_timing
+    # from astrometry.util.file import pickle_to_file
+    # for row in fft_timing:
+    #     print(row)
+    # pickle_to_file(fft_timing,
+    #                'fft-timing-%s.pickle' % str(tim).replace('Image ','').replace(' ',''))
+    #######
+
     return mod
 
 def stage_coadds(bands=None, version_header=None, targetwcs=None,
