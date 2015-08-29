@@ -17,8 +17,6 @@ compiler:
 
 #  - clang
 
-#script: export NETPBM_INC="-I$(pwd)"; export WCSLIB_INC="-I/usr/include/wcslib-4.8.3"; export WCSLIB_LIB="-lwcs" && git clone https://github.com/dstndstn/astrometry.net.git && (cd astrometry.net && ln -s /usr/include netpbm && make && make py) && git clone https://github.com/dstndstn/tractor.git tractor-git && (cd tractor-git && make) && ln -s astrometry.net astrometry && ln -s tractor-git/tractor . && ln -s tractor-git/tractor/utils . && ln -s tractor-git/tractor/wise . && (cd doc && make)
-
 before_script:
     - export NETPBM_INC="-I$(pwd)"
     - export WCSLIB_INC="-I/usr/include/wcslib-4.8.3"
@@ -36,7 +34,6 @@ before_script:
     - ln -s $HOME/astrometry.net astrometry
     - ln -s $HOME/fitsio/lib/python/fitsio .
     - ln -s $HOME/tractor-git/tractor .
-    - ln -s $HOME/tractor-git/utils .
     - ln -s $HOME/tractor-git/wise .
 
 script:
