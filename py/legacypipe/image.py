@@ -7,6 +7,10 @@ from tractor.basics import NanoMaggies, ConstantFitsWcs, LinearPhotoCal
 from tractor.image import Image
 from .common import CP_DQ_BITS
 
+'''
+Generic image handling code.
+'''
+
 class LegacySurveyImage(object):
     '''
     A base class containing common code for the images we handle.

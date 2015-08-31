@@ -1,6 +1,11 @@
 from __future__ import print_function
 from image import LegacySurveyImage
 
+'''
+Code specific to images from the 90prime camera on the Bok telescope,
+processed by the NOAO pipeline.  This is currently just a sketch.
+'''
+
 class BokImage(LegacySurveyImage):
     '''
     A LegacySurveyImage subclass to handle images from the 90prime
