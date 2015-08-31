@@ -15,7 +15,7 @@ MOCK_MODULES = [
     'astrometry.libkd',
     'tractor',
     'tractor.ellipses', 'tractor.galaxy', 'tractor.utils',
-    'tractor.basics',
+    'tractor.basics', 'tractor.image',
     'tractor.engine', 'tractor.psfex', 'tractor.sfd',
     'numpy',
     'scipy',
