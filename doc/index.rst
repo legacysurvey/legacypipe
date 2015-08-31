@@ -20,6 +20,27 @@ legacypipe.runbrick module
     :members:
     :show-inheritance:
 
+legacypipe.decam module
+-----------------------
+
+.. automodule:: legacypipe.decam
+    :members:
+    :show-inheritance:
+
+legacypipe.detection module
+---------------------------
+
+.. automodule:: legacypipe.detection
+    :members:
+    :show-inheritance:
+
+legacypipe.sdss module
+----------------------
+
+.. automodule:: legacypipe.sdss
+    :members:
+    :show-inheritance:
+
 legacypipe.common module
 --------------------------
 
@@ -31,6 +52,21 @@ legacypipe.utils module
 --------------------------
 
 .. automodule:: legacypipe.utils
+    :members:
+    :show-inheritance:
+
+
+legacypipe.bok
+--------------
+
+.. automodule:: legacypipe.bok
+    :members:
+    :show-inheritance:
+
+legacypipe.image module
+-----------------------
+
+.. automodule:: legacypipe.image
     :members:
     :show-inheritance:
 
