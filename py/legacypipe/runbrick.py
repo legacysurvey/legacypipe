@@ -52,10 +52,10 @@ from tractor import Tractor, PointSource, Image, NanoMaggies
 from tractor.ellipses import EllipseESoft, EllipseE
 from tractor.galaxy import DevGalaxy, ExpGalaxy, FixedCompositeGalaxy, disable_galaxy_cache
 
-from common import *
-from utils import RunbrickError, NothingToDoError, iterwrapper
-
-from runbrick_plots import _plot_mods
+# Argh, can't do relative imports if this script is to be runnable.
+from legacypipe.common import *
+from legacypipe.utils import RunbrickError, NothingToDoError, iterwrapper
+from legacypipe.runbrick_plots import _plot_mods
 
 
 ## GLOBALS!  Oh my!
@@ -66,21 +66,17 @@ useCeres = True
 rgbkwargs = dict(mnmx=(-1,100.), arcsinh=1.)
 rgbkwargs_resid = dict(mnmx=(-5,5))
 
+if useCeres:
+    ## Yuck
+    from tractor.ceres_mixin import TractorCeresMixin
+    class CeresTractor(Tractor, TractorCeresMixin):
+        pass
+
 def runbrick_global_init():
     if nocache:
         disable_galaxy_cache()
     if useCeres:
         from tractor.ceres import ceres_opt
-
-# Turn on/off caching for all new Tractor instances.
-def create_tractor(tims, srcs):
-    import tractor
-    t = tractor.Tractor(tims, srcs)
-    if nocache:
-        t.disable_cache()
-    return t
-### Woot!
-Tractor = create_tractor
 
 def stage_tims(W=3600, H=3600, pixscale=0.262, brickname=None,
                decals=None,
@@ -1330,12 +1326,16 @@ def _one_blob(X):
             if tim.band != b:
                 continue
             btims.append(tim)
-        btr = Tractor(btims, subcat)
-        btr.freezeParam('images')
+
+        
         if useCeres:
+            btr = CeresTractor(btims, subcat)
+            btr.freezeParam('images')
             btr.optimize_forced_photometry(alphas=alphas, shared_params=False,
-                                           use_ceres=True, BW=8, BH=8, wantims=False)
+                                           BW=8, BH=8, wantims=False)
         else:
+            btr = Tractor(btims, subcat)
+            btr.freezeParam('images')
             try:
                 btr.optimize_forced_photometry(alphas=alphas, shared_params=False,
                                                wantims=False)

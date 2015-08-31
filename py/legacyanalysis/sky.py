@@ -54,9 +54,6 @@ def main():
         
         sky = SplineSky.BlantonMethod(img, notmm, 512)
 
-        print('recovered grid?', sky.spl(sky.xgrid, sky.ygrid).T.astype(np.float32))
-        print('vs grid', sky.gridvals)
-        
         skyfn = 'sky-%s.fits' % (mm is not None and 'mask' or 'nomask')
         sky.write_fits(skyfn)
 
