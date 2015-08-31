@@ -2420,6 +2420,7 @@ class DecamImage(LegacySurveyImage):
             else:
                 primhdr = self.read_image_primary_header()
                 plver = primhdr.get('PLVER', '')
+                verstr = get_git_version()
                 cmds = ['psfex -c %s -PSF_DIR %s %s' %
                         (os.path.join(sedir, 'DECaLS.psfex'),
                          os.path.dirname(self.psffn), self.sefn),
