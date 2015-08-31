@@ -2023,8 +2023,13 @@ class LegacySurveyImage(object):
         hdr = fitsio.read_header(self.skyfn)
         skyclass = hdr['SKY']
         clazz = get_class_from_name(skyclass)
-        fromfits = getattr(clazz, 'fromFitsHeader')
-        skyobj = fromfits(hdr, prefix='SKY_')
+
+        if getattr(clazz, 'from_fits'):
+            fromfits = getattr(clazz, 'from_fits')
+            skyobj = fromfits(self.skyfn, hdr)
+        else:
+            fromfits = getattr(clazz, 'fromFitsHeader')
+            skyobj = fromfits(hdr, prefix='SKY_')
 
         skyobj.version = hdr.get('LEGPIPEV', '')
         if len(skyobj.version) == 0:
@@ -2450,8 +2455,7 @@ class DecamImage(LegacySurveyImage):
                 skyval = np.median(img)
                 skymeth = 'median'
             tsky = ConstantSky(skyval)
-            tt = type(tsky)
-            sky_type = '%s.%s' % (tt.__module__, tt.__name__)
+
             hdr = get_version_header(None, self.decals.get_decals_dir(),
                                      git_version=git_version)
             primhdr = self.read_image_primary_header()
@@ -2460,12 +2464,9 @@ class DecamImage(LegacySurveyImage):
                                 comment='CP ver of image file'))
             hdr.add_record(dict(name='SKYMETH', value=skymeth,
                                 comment='estimate_mode, or fallback to median?'))
-            hdr.add_record(dict(name='SKY', value=sky_type, comment='Sky class'))
-            tsky.toFitsHeader(hdr, prefix='SKY_')
-
+            
             trymakedirs(self.skyfn, dir=True)
-            fits = fitsio.FITS(self.skyfn, 'rw', clobber=True)
-            fits.write(None, header=hdr)
+            tsky.write_fits(self.skyfn, hdr=hdr)
 
         if tmpimgfn is not None:
             os.unlink(tmpimgfn)

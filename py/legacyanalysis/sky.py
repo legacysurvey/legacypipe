@@ -17,11 +17,7 @@ def main():
     img = img.T.copy()
     mm = np.median(img)
     img -= mm
-    # PAD
-    padimg = np.zeros((2048, 4096))
-    padimg[1:-1, 1:-1] = img
-    img = padimg
-    
+
     ps = PlotSequence('sky')
     lo,hi = np.percentile(img, [20,80])
     ima = dict(vmin=lo, vmax=hi, interpolation='nearest', origin='lower',
@@ -30,17 +26,14 @@ def main():
     plt.imshow(img, **ima)
     ps.savefig()
 
-    from astrometry.util.util import median_smooth
+    # PAD
+    padimg = np.zeros((2048, 4096))
+    padimg[1:-1, 1:-1] = img
+    img = padimg
     
-    grid = 512
-    #grid = 256
-    img = img.astype(np.float32)
-    med = np.zeros_like(img)
-    median_smooth(img, None, grid/2, med)
-
-    plt.clf()
-    plt.imshow(med, **ima)
-    ps.savefig()
+    from tractor.splinesky import SplineSky
+    from scipy.ndimage.morphology import binary_dilation
+    from astrometry.util.util import median_smooth
 
     # # Estimate per-pixel noise via Blanton's 5-pixel MAD
     slice1 = (slice(0,-5,10),slice(0,-5,10))
@@ -49,7 +42,72 @@ def main():
     sig1 = 1.4826 * mad / np.sqrt(2.)
     print('sig1 estimate:', sig1)
 
-    from scipy.ndimage.morphology import binary_dilation
+    
+    mask = np.zeros(img.shape, bool)
+    mask[binary_dilation(img > 5*sig1, iterations=5)] = True
+
+    for mm in [None, mask]:
+
+        notmm = None
+        if mm is not None:
+            notmm = np.logical_not(mm)
+        
+        sky = SplineSky.BlantonMethod(img, notmm, 512)
+
+        print('recovered grid?', sky.spl(sky.xgrid, sky.ygrid).T.astype(np.float32))
+        print('vs grid', sky.gridvals)
+        
+        skyfn = 'sky-%s.fits' % (mm is not None and 'mask' or 'nomask')
+        sky.write_fits(skyfn)
+
+        from tractor.utils import get_class_from_name
+        
+        print('Reading sky model from', skyfn)
+        hdr = fitsio.read_header(skyfn)
+        skyclass = hdr['SKY']
+        clazz = get_class_from_name(skyclass)
+
+        if getattr(clazz, 'from_fits'):
+            fromfits = getattr(clazz, 'from_fits')
+            skyobj = fromfits(skyfn, hdr)
+        else:
+            fromfits = getattr(clazz, 'fromFitsHeader')
+            skyobj = fromfits(hdr, prefix='SKY_')
+        sky2 = skyobj
+        print('sky2', sky2)
+        sky2.write_fits(skyfn.replace('sky', 'sky2'))
+        
+        mod = np.zeros_like(img)
+        sky.addTo(mod)
+
+        plt.clf()
+        plt.imshow(mod, **ima)
+        plt.title('Blanton method')
+        ps.savefig()
+
+        plt.clf()
+        plt.imshow(img - mod, **ima)
+        plt.title('Blanton method (subtracted)')
+        ps.savefig()
+    
+    
+        grid = 512
+        #grid = 256
+        img = img.astype(np.float32)
+        med = np.zeros_like(img)
+        median_smooth(img, mm, grid/2, med)
+
+        plt.clf()
+        plt.imshow(med, **ima)
+        plt.title('dmedsmooth')
+        ps.savefig()
+
+        plt.clf()
+        plt.imshow(img - med, **ima)
+        plt.title('dmedsmooth (subtracted)')
+        ps.savefig()
+
+    sys.exit(0)
     
     med2 = np.zeros_like(img)
     mask = np.zeros(img.shape, bool)
