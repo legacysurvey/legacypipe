@@ -7,6 +7,10 @@ from astrometry.util.fits import fits_table
 from .image import LegacySurveyImage
 from .common import *
 
+'''
+Code specific to images from the Dark Energy Camera (DECam).
+'''
+
 class DecamImage(LegacySurveyImage):
     '''
 

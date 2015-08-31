@@ -194,9 +194,7 @@ def bin_image(data, invvar, S):
 def segment_and_group_sources(image, T, name=None, ps=None, plots=False):
     '''
     *image*: binary image that defines "blobs"
-    *T*: source table; only ".itx" and ".ity" elements are used (x,y integer pix pos)
-      - ".blob" field is added.
-
+    *T*: source table; only ".itx" and ".ity" elements are used (x,y integer pix pos).  Note: ".blob" field is added.
     *name*: for debugging only
 
     Returns: (blobs, blobsrcs, blobslices)
@@ -384,8 +382,7 @@ def get_rgb(imgs, bands, mnmx=None, arcsinh=None, scales=None):
 
     *imgs*  a list of numpy arrays, all the same size, in nanomaggies
     *bands* a list of strings, eg, ['g','r','z']
-    *mnmx*  = (min,max), values that will become black/white *after* scaling.
-        Default is (-3,10)
+    *mnmx*  = (min,max), values that will become black/white *after* scaling. Default is (-3,10)
     *arcsinh* use nonlinear scaling as in SDSS
     *scales*
 
