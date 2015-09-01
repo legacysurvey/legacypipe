@@ -116,6 +116,7 @@ class LegacySurveyImage(object):
 
     def get_tractor_image(self, slc=None, radecpoly=None,
                           gaussPsf=False, const2psf=False, pixPsf=False,
+                          splinesky=False,
                           nanomaggies=True, subsky=True, tiny=5):
         '''
         Returns a tractor.Image ("tim") object for this image.
@@ -131,14 +132,17 @@ class LegacySurveyImage(object):
         - *const2Psf*: 2-component general Gaussian fit to PsfEx model at image center.
         - *pixPsf*: pixelized PsfEx model at image center.
 
+        Options determining the sky model to use:
+        
+        - *splinesky*: median filter chunks of the image, then spline those.
+
         Options determining the units of the image:
 
         - *nanomaggies*: convert the image to be in units of NanoMaggies;
           *tim.zpscale* contains the scale value the image was divided by.
 
-        - *subsky*: subtract a constant sky value, leaving pixel
-           values distributed around zero.  *tim.midsky* contains the
-           value subtracted.
+        - *subsky*: instantiate and subtract the initial sky model,
+          leaving a constant zero sky model?
 
         '''
         from astrometry.util.miscutils import clip_polygon
@@ -201,11 +205,23 @@ class LegacySurveyImage(object):
         psf_sigma = psf_fwhm / 2.35
         primhdr = self.read_image_primary_header()
 
-        sky = self.read_sky_model()
-        midsky = sky.getConstant()
+        sky = self.read_sky_model(splinesky=splinesky, slc=slc, img=img, invvar=invvar,
+                                  imgheader=imghdr)
+        midsky = 0.
         if subsky:
-            img -= midsky
-            sky.subtract(midsky)
+            print('Instantiating and subtracting sky model...')
+            from tractor.sky import ConstantSky
+            skymod = np.zeros_like(img)
+            sky.addTo(skymod)
+            img -= skymod
+            midsky = np.median(skymod)
+            zsky = ConstantSky(0.)
+            zsky.version = sky.version
+            zsky.plver = sky.plver
+            del skymod
+            del sky
+            sky = zsky
+            del zsky
 
         magzp = self.decals.get_zeropoint_for(self)
         orig_zpscale = zpscale = NanoMaggies.zeropointToScale(magzp)
@@ -414,10 +430,34 @@ class LegacySurveyImage(object):
         wcs.plver = hdr.get('PLVER', '').strip()
         return wcs
     
-    def read_sky_model(self):
+    def read_sky_model(self, splinesky=False, slc=None, img=None, invvar=None, imgheader=None):
         '''
         Reads the sky model, returning a Tractor Sky object.
         '''
+
+        if splinesky:
+            from tractor.splinesky import SplineSky
+            from .common import get_git_version
+
+            #print('Computing spline sky model on the fly, on subimage')
+            #skyobj = SplineSky.BlantonMethod(img, invvar>0, 512)
+
+            print('Computing spline sky model on the fly, on full image')
+            fullimg = self.read_image()
+            fulliv = self.read_invvar()
+            skyobj = SplineSky.BlantonMethod(fullimg, fulliv>0, 512)
+            if slc is not None:
+                sy,sx = slc
+                y0 = sy.start
+                x0 = sx.start
+                skyobj.shift(x0, y0)
+                print('Shifting to subimage', (x0,y0))
+
+            skyobj.version = get_git_version()
+            skyobj.plver = imgheader.get('PLVER', '').strip()
+            print('Sky:', skyobj)
+            return skyobj
+
         print('Reading sky model from', self.skyfn)
         hdr = fitsio.read_header(self.skyfn)
         skyclass = hdr['SKY']
@@ -438,9 +478,7 @@ class LegacySurveyImage(object):
         skyobj.plver = hdr.get('PLVER', '').strip()
         return skyobj
 
-    def run_calibs(self, pvastrom=True, psfex=True, sky=True, se=False,
-                   funpack=False, fcopy=False, use_mask=True,
-                   force=False, just_check=False, git_version=None):
+    def run_calibs(self, **kwargs):
         '''
         Runs any required calibration processes for this image.
         '''

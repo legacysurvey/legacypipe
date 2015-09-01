@@ -788,9 +788,17 @@ Using the current directory as DECALS_DIR, but this is likely to fail.
         return imageType(self, t)
     
     def tims_touching_wcs(self, targetwcs, mp, bands=None,
-                          gaussPsf=False, const2psf=True, pixPsf=False):
+                          **kwargs):
         '''
         mp: multiprocessing object
+
+        kwargs are passed to LegacySurveyImage.get_tractor_image() and may include:
+
+        * gaussPsf
+        * const2psf
+        * pixPsf
+        * splinesky
+        
         '''
         # Read images
         C = self.ccds_touching_wcs(targetwcs)
@@ -808,7 +816,7 @@ Using the current directory as DECALS_DIR, but this is likely to fail.
         W,H = targetwcs.get_width(), targetwcs.get_height()
         targetrd = np.array([targetwcs.pixelxy2radec(x,y) for x,y in
                              [(1,1),(W,1),(W,H),(1,H),(1,1)]])
-        args = [(im, targetrd, gaussPsf, const2psf, pixPsf) for im in ims]
+        args = [(im, targetrd, kwargs) for im in ims]
         tims = mp.map(read_one_tim, args)
         return tims
     
@@ -1034,10 +1042,9 @@ def run_calibs(X):
     return im.run_calibs(**kwargs)
 
 def read_one_tim(X):
-    (im, targetrd, gaussPsf, const2psf, pixPsf) = X
+    (im, targetrd, kwargs) = X
     print('Reading', im)
-    tim = im.get_tractor_image(radecpoly=targetrd, gaussPsf=gaussPsf,
-                               const2psf=const2psf, pixPsf=pixPsf)
+    tim = im.get_tractor_image(radecpoly=targetrd, **kwargs)
     return tim
 
 

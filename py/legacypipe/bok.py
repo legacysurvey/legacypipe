@@ -33,7 +33,7 @@ class BokImage(LegacySurveyImage):
     def __str__(self):
         return 'Bok ' + self.name
 
-    def read_sky_model(self):
+    def read_sky_model(self, **kwargs):
         ## HACK -- create the sky model on the fly
         img = self.read_image()
         sky = np.median(img)

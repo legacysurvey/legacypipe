@@ -86,6 +86,7 @@ def stage_tims(W=3600, H=3600, pixscale=0.262, brickname=None,
                bands='grz',
                do_calibs=True,
                const2psf=True, gaussPsf=False, pixPsf=False,
+               splinesky=False,
                mp=None,
                **kwargs):
     '''
@@ -107,10 +108,14 @@ def stage_tims(W=3600, H=3600, pixscale=0.262, brickname=None,
     - *pixPsf*: boolean.  Pixelized PsfEx model, evaluated at the
       image center.  Uses the FFT-based galaxy convolution code.
 
+    - *splinesky*: boolean.  Use SplineSky model, rather than ConstantSky?
+
     '''
     t0 = tlast = Time()
 
-    # early fail for mysterious "ImportError: c.so.6: cannot open shared object file: No such file or directory"
+    # early fail for mysterious "ImportError: c.so.6: cannot open
+    # shared object file: No such file or directory" seen in DR1 on
+    # Edison.
     from tractor.mix import c_gauss_2d_grid
 
     if decals is None:
@@ -139,6 +144,7 @@ def stage_tims(W=3600, H=3600, pixscale=0.262, brickname=None,
         W = x1-x0
         H = y1-y0
         targetwcs = targetwcs.get_subimage(x0, y0, W, H)
+    pixscale = targetwcs.pixel_scale()
     targetrd = np.array([targetwcs.pixelxy2radec(x,y) for x,y in
                          [(1,1),(W,1),(W,H),(1,H),(1,1)]])
 
@@ -179,12 +185,9 @@ def stage_tims(W=3600, H=3600, pixscale=0.262, brickname=None,
     print('Version header:')
     print(version_hdr)
 
-    pixscale = targetwcs.pixel_scale()
-
     ccds = decals.ccds_touching_wcs(targetwcs, ccdrad=None)
     if ccds is None:
         raise NothingToDoError('No CCDs touching brick')
-
     print(len(ccds), 'CCDs touching target WCS')
 
     # Sort images by band
@@ -209,6 +212,8 @@ def stage_tims(W=3600, H=3600, pixscale=0.262, brickname=None,
         kwa = dict(git_version=gitver)
         if gaussPsf:
             kwa.update(psfex=False)
+        if splinesky:
+            kwa.update(splinesky=True)
         args = [(im, kwa) for im in ims]
         mp.map(run_calibs, args)
         tnow = Time()
@@ -216,7 +221,8 @@ def stage_tims(W=3600, H=3600, pixscale=0.262, brickname=None,
         tlast = tnow
 
     # Read images, clip to ROI
-    args = [(im, targetrd, gaussPsf, const2psf, pixPsf) for im in ims]
+    args = [(im, targetrd, dict(gaussPsf=gaussPsf, const2psf=const2psf,
+                                pixPsf=pixPsf, splinesky=splinesky)) for im in ims]
     tims = mp.map(read_one_tim, args)
 
     # Cut the table of CCDs to match the 'tims' list
@@ -2944,6 +2950,7 @@ def run_brick(brick, radec=None, pixscale=0.262,
               write_metrics=True,
               gaussPsf=False,
               pixPsf=False,
+              splinesky=False,
               ceres=True,
               outdir=None,
               decals=None, decals_dir=None,
@@ -3035,6 +3042,8 @@ def run_brick(brick, radec=None, pixscale=0.262,
     - *gaussPsf*: boolean; use a simpler single-component Gaussian PSF model?
 
     - *pixPsf*: boolean; use the pixelized PsfEx PSF model and FFT convolution?
+
+    - *splinesky*: boolean; use the splined sky model (default is constant)?
 
     - *ceres*: boolean; use Ceres Solver when possible?
 
@@ -3133,6 +3142,7 @@ def run_brick(brick, radec=None, pixscale=0.262,
         ps.skipto(plotnumber)
 
     kwargs.update(ps=ps, nsigma=nsigma, gaussPsf=gaussPsf, pixPsf=pixPsf,
+                  splinesky=splinesky,
                   simul_opt=simulOpt, pipe=pipe,
                   no_sdss=not(sdssInit),
                   do_calibs=do_calibs,
@@ -3164,7 +3174,7 @@ def run_brick(brick, radec=None, pixscale=0.262,
     prereqs = {
         'tims':None,
 
-        #'srcs':'tims',
+        # srcs, image_coadds: see below
 
         'fitblobs':'srcs',
         'fitblobs_finish':'fitblobs',
@@ -3311,6 +3321,9 @@ python -u projects/desi/runbrick.py --plots --brick 2440p070 --zoom 1900 2400 45
     parser.add_option('--pixpsf', action='store_true', default=False,
                       help='Use the pixelized PsfEx PSF model, and FFT convolution')
 
+    parser.add_option('--splinesky', action='store_true', default=False,
+                      help='Use flexible sky model?')
+
     parser.add_option('--coadd-bw', action='store_true', default=False,
                       help='Create grayscale coadds if only one band is available?')
 
@@ -3393,7 +3406,9 @@ python -u projects/desi/runbrick.py --plots --brick 2440p070 --zoom 1900 2400 45
             threads=opt.threads, ceres=opt.ceres,
             do_calibs=opt.do_calibs,
             write_metrics=opt.write_metrics,
-            gaussPsf=opt.gpsf, pixPsf=opt.pixpsf, simulOpt=opt.simul_opt,
+            gaussPsf=opt.gpsf, pixPsf=opt.pixpsf,
+            splinesky=opt.splinesky,
+            simulOpt=opt.simul_opt,
             nblobs=opt.nblobs, blob=opt.blob, blobxy=opt.blobxy,
             pipe=opt.pipe, outdir=opt.outdir, decals_dir=opt.decals_dir,
             unwise_dir=opt.unwise_dir,

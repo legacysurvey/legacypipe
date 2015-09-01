@@ -123,7 +123,9 @@ class DecamImage(LegacySurveyImage):
 
     def run_calibs(self, pvastrom=True, psfex=True, sky=True, se=False,
                    funpack=False, fcopy=False, use_mask=True,
-                   force=False, just_check=False, git_version=None):
+                   force=False, just_check=False, git_version=None,
+                   splinesky=False):
+
         '''
         Run calibration pre-processing steps.
 
