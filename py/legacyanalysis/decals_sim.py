@@ -9,7 +9,7 @@ decals = Decals()
 brickinfo = decals.get_brick_by_name(brickname)
 brickwcs = wcs_for_brick(brickinfo)
 ccdinfo = decals.ccds_touching_wcs(brickwcs)
-im = DecamImage(decals,ccdinfo[10])
+im = DecamImage(decals,ccdinfo[19])
 tim = im.get_tractor_image(const2psf=True)
 
 ~1 target per square arcminute in DESI, so the random should have ~50 sources
@@ -41,10 +41,11 @@ from legacypipe.runbrick import run_brick
 from legacypipe.common import Decals, DecamImage, wcs_for_brick, ccds_touching_wcs
 
 class SimDecals(Decals):
-    def __init__(self, decals_dir=None, metacat=None, simcat=None):
+    def __init__(self, decals_dir=None, metacat=None, simcat=None, test=False):
         super(SimDecals, self).__init__(decals_dir=decals_dir)
         self.metacat = metacat
         self.simcat = simcat
+        self.test = test
 
     def get_image_object(self, t):
         return SimImage(self, t)
@@ -54,7 +55,7 @@ class SimImage(DecamImage):
         super(SimImage, self).__init__(decals, t)
         self.t = t
 
-    def get_tractor_image(self, test=False, **kwargs):
+    def get_tractor_image(self, **kwargs):
 
         tim = super(SimImage, self).get_tractor_image(**kwargs)
 
@@ -66,7 +67,7 @@ class SimImage(DecamImage):
         image = galsim.Image(tim.getImage())
         invvar = galsim.Image(tim.getInvvar())
 
-        if test:
+        if self.decals.test:
             testfile = 'test-{}-{}.fits'.format(self.expnum,self.ccdname)
             print('Writing {}'.format(testfile))
             image.write(testfile.replace('.fits','-orig.fits'),clobber=True)
@@ -100,7 +101,7 @@ class SimImage(DecamImage):
             tim.data = image.array
             tim.inverr = np.sqrt(invvar.array)
 
-        if test:
+        if self.decals.test:
             testimage = galsim.Image(tim.getImage())
             testinvvar = galsim.Image(tim.getInvvar())
             testimage.write(testfile,clobber=True)
@@ -440,10 +441,10 @@ def main():
 #       # Use Tractor to just process the blobs containing the simulated sources. 
         if args.test:
             # Test code
-            simdecals = SimDecals(metacat=metacat,simcat=simcat)
+            simdecals = SimDecals(metacat=metacat, simcat=simcat, test=True)
             ccdinfo = decals.ccds_touching_wcs(brickwcs)
-            sim = SimImage(simdecals,ccdinfo[19])
-            tim = sim.get_tractor_image(const2psf=True, radecpoly=targetrd, test=args.test)
+            sim = SimImage(simdecals, ccdinfo[19])
+            tim = sim.get_tractor_image(const2psf=True, radecpoly=targetrd)
             #for ii, ccd in enumerate(ccdinfo):
             #    log.info('Working on CCD {}'.format(ii))
             #    sim = SimImage(simdecals,ccd)
