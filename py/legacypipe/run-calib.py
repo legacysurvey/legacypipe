@@ -4,7 +4,8 @@ import os
 import numpy as np
 from astrometry.util.fits import fits_table
 
-from common import run_calibs, DecamImage, Decals
+# Argh, no relative imports in runnable scripts
+from legacypipe.common import run_calibs, DecamImage, Decals
 
 if __name__ == '__main__':
     import optparse
@@ -44,6 +45,7 @@ if __name__ == '__main__':
         im = DecamImage(D, t)
         print 'Running', im.calname
 
+        kwargs = {}
         if opt.force:
             kwargs.update(force=True)
 
