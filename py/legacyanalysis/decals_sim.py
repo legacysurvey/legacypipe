@@ -2,6 +2,7 @@
 
 """Try to hack decals_sim so we don't have to make copies of the data.
 
+import numpy as np
 from legacypipe.common import Decals, DecamImage, wcs_for_brick, ccds_touching_wcs
 
 brickname = '2428p117'
@@ -10,7 +11,12 @@ brickinfo = decals.get_brick_by_name(brickname)
 brickwcs = wcs_for_brick(brickinfo)
 ccdinfo = decals.ccds_touching_wcs(brickwcs)
 im = DecamImage(decals,ccdinfo[19])
-tim = im.get_tractor_image(const2psf=True)
+targetrd = np.array([[ 242.98072831,   11.61900584],
+                     [ 242.71332268,   11.61900584],
+                     [ 242.71319548,   11.88093189],
+                     [ 242.98085551,   11.88093189],
+                     [ 242.98072831,   11.61900584]])
+tim = im.get_tractor_image(const2psf=True, radecpoly=targetrd)
 
 ~1 target per square arcminute in DESI, so the random should have ~50 sources
 per square arcminute: 
@@ -58,6 +64,8 @@ class SimImage(DecamImage):
     def get_tractor_image(self, **kwargs):
 
         tim = super(SimImage, self).get_tractor_image(**kwargs)
+        if tim is None: # this can be None when the edge of a CCD overlaps
+            return tim
 
         # Initialize the object stamp class
         objtype = self.decals.metacat['objtype']
@@ -66,6 +74,7 @@ class SimImage(DecamImage):
         # Grab the data and inverse variance images [nanomaggies!]
         image = galsim.Image(tim.getImage())
         invvar = galsim.Image(tim.getInvvar())
+        sys.exit(1)
 
         if self.decals.test:
             testfile = 'test-{}-{}.fits'.format(self.expnum,self.ccdname)
@@ -81,6 +90,7 @@ class SimImage(DecamImage):
 
         # Loop on each object.
         for obj in self.decals.simcat:
+            print(obj)
             if objtype=='STAR':
                 stamp = objstamp.star(obj)
             elif objtype=='ELG':
@@ -376,6 +386,7 @@ def main():
     brickinfo = decals.get_brick_by_name(brickname)
     brickwcs = wcs_for_brick(brickinfo)
     W, H, pixscale = brickwcs.get_width(), brickwcs.get_height(), brickwcs.pixel_scale()
+    print(W, H, pixscale)
 
     log.info('Brick = {}'.format(brickname))
     if args.zoom is not None: # See also runbrick.stage_tims()
