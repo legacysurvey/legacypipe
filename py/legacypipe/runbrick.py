@@ -531,7 +531,7 @@ def _write_band_images(band,
         hdr.add_record(r)
     # Grab these keywords from all input files for this band...
     keys = ['TELESCOP','OBSERVAT','OBS-LAT','OBS-LONG','OBS-ELEV',
-            'INSTRUME']
+            'INSTRUME','FILTER']
     vals = set()
     for tim in tims:
         if tim.band != band:
@@ -547,7 +547,7 @@ def _write_band_images(band,
             else:
                 kk = key[:7] + '%i'%i
             hdr.add_record(dict(name=kk, value=v[ik]))
-    hdr.add_record(dict(name='FILTER', value=band))
+    hdr.add_record(dict(name='FILTERX', value=band))
 
     # DATE-OBS converted to TAI.
     mjds = [tim.time.toMjd() for tim in tims if tim.band == band]
