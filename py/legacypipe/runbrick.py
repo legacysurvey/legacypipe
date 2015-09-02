@@ -45,7 +45,8 @@ from astrometry.util.file import trymakedirs
 from astrometry.util.plotutils import PlotSequence, dimshow
 from astrometry.util.resample import resample_with_wcs, OverlapError
 from astrometry.util.ttime import Time
-from astrometry.util.starutil_numpy import radectoxyz
+from astrometry.util.starutil_numpy import (radectoxyz, ra2hmsstring,
+                                            dec2dmsstring)
 from astrometry.util.miscutils import patch_image
 
 from tractor import Tractor, PointSource, Image, NanoMaggies
@@ -174,14 +175,42 @@ def stage_tims(W=3600, H=3600, pixscale=0.262, brickname=None,
         version_hdr.add_record(dict(name='DEPVER%02i' % i, value=verstr,
                                     comment='Version of dependency product'))
 
-    version_hdr.add_record(dict(name='BRICKNAM', value=brickname,  comment='DECaLS brick RRRr[pm]DDd'))
-    version_hdr.add_record(dict(name='BRICKID' , value=brickid,    comment='DECaLS brick id'))
-    version_hdr.add_record(dict(name='RAMIN'   , value=brick.ra1,  comment='Brick RA min'))
-    version_hdr.add_record(dict(name='RAMAX'   , value=brick.ra2,  comment='Brick RA max'))
-    version_hdr.add_record(dict(name='DECMIN'  , value=brick.dec1, comment='Brick Dec min'))
-    version_hdr.add_record(dict(name='DECMAX'  , value=brick.dec2, comment='Brick Dec max'))
-    version_hdr.add_record(dict(name='BRICKRA' , value=brick.ra,   comment='Brick center'))
-    version_hdr.add_record(dict(name='BRICKDEC', value=brick.dec,  comment='Brick center'))
+    version_hdr.add_record(dict(name='BRICKNAM', value=brickname,
+                                comment='DECaLS brick RRRr[pm]DDd'))
+    version_hdr.add_record(dict(name='BRICKID' , value=brickid,
+                                comment='DECaLS brick id'))
+    version_hdr.add_record(dict(name='RAMIN'   , value=brick.ra1,
+                                comment='Brick RA min'))
+    version_hdr.add_record(dict(name='RAMAX'   , value=brick.ra2,
+                                comment='Brick RA max'))
+    version_hdr.add_record(dict(name='DECMIN'  , value=brick.dec1,
+                                comment='Brick Dec min'))
+    version_hdr.add_record(dict(name='DECMAX'  , value=brick.dec2,
+                                comment='Brick Dec max'))
+    version_hdr.add_record(dict(name='BRICKRA' , value=brick.ra,
+                                comment='Brick center'))
+    version_hdr.add_record(dict(name='BRICKDEC', value=brick.dec,
+                                comment='Brick center'))
+
+    # NOAO-requested headers
+    version_hdr.add_record(dict(
+        name='RA', value=ra2hmsstring(brick.ra, separator=':'),
+        comment='[h] RA Brick center'))
+    version_hdr.add_record(dict(
+        name='DEC', value=dec2dmsstring(brick.dec, separator=':'),
+        comment='[deg] Dec Brick center'))
+
+    version_hdr.add_record(dict(
+        name='CENTRA', value=brick.ra, comment='[deg] Brick center RA'))
+    version_hdr.add_record(dict(
+        name='CENTDEC', value=brick.dec, comment='[deg] Brick center Dec'))
+
+    for i,(r,d) in enumerate(targetrd[:4]):
+        version_hdr.add_record(dict(
+            name='CORN%iRA' % (i+1), value=r, comment='[deg] Brick corner RA'))
+        version_hdr.add_record(dict(
+            name='CORN%iDEC' %(i+1), value=d, comment='[deg] Brick corner Dec'))
+
     print('Version header:')
     print(version_hdr)
 
