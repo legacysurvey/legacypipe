@@ -550,9 +550,11 @@ def _write_band_images(band,
     hdr.add_record(dict(name='FILTERX', value=band))
 
     # DATE-OBS converted to TAI.
+    # print('Times:', [tim.time for tim in tims if tim.band == band])
     mjds = [tim.time.toMjd() for tim in tims if tim.band == band]
     minmjd = min(mjds)
     maxmjd = max(mjds)
+    #print('MJDs', mjds, 'range', minmjd, maxmjd)
     # back to date string in UTC...
     import astropy.time
     tt = [astropy.time.Time(mjd, format='mjd', scale='tai').utc.isot
@@ -570,23 +572,26 @@ def _write_band_images(band,
     hdr.delete('IMAGEH')
 
     imgs = [
-        ('image',  cowimg,  False),
+        ('image', 'image',  cowimg,  False),
         ]
     if cowmod is not None:
         imgs.extend([
-                ('invvar', cow,     False),
-                ('model',  cowmod,  True),
-                ('chi2',   cochi2,  False),
-                ('depth',  detiv,   True),
-                ('nexp',   congood, True),
+                ('invvar', 'wtmap',    cow,     False),
+                ('model',  'model',    cowmod,  True ),
+                ('chi2',   'chi2',     cochi2,  False),
+                ('depth',  'depthmap', detiv,   True ),
+                ('nexp',   'expmap',   congood, True ),
                 ])
-    for name,img,gzip in imgs:
-        # Make a copy, because each image has different values for these headers...
+    for name,prodtype,img,gzip in imgs:
+        # Make a copy, because each image has different values for
+        # these headers...
         hdr2 = MyFITSHDR()
         for r in hdr.records():
             hdr2.add_record(r)
         hdr2.add_record(dict(name='IMTYPE', value=name,
                              comment='DECaLS image type'))
+        hdr2.add_record(dict(name='PRODTYPE', value=prodtype,
+                             comment='NOAO image type'))
         if name in ['image', 'model']:
             hdr2.add_record(dict(name='MAGZERO', value=22.5,
                                  comment='Magnitude zeropoint'))

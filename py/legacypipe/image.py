@@ -293,7 +293,7 @@ class LegacySurveyImage(object):
         import astropy.time
         #mjd_utc = mjd=primhdr.get('MJD-OBS', 0)
         mjd_tai = astropy.time.Time(primhdr['DATE-OBS']).tai.mjd
-        tim.time = TAITime(mjd_tai)
+        tim.time = TAITime(None, mjd=mjd_tai)
         tim.zr = [-3. * sig1, 10. * sig1]
         tim.zpscale = orig_zpscale
         tim.midsky = midsky

@@ -100,6 +100,16 @@ def get_version_header(program_name, decals_dir, git_version=None):
     hdr.add_record(dict(name='SURVEY', value='DECaLS',
                         comment='DECam Legacy Survey'))
 
+    # Requested by NOAO
+    hdr.add_record(dict(name='SURVEYID', value='DECam Legacy Survey (DECaLS)',
+                        comment='Survey name'))
+    hdr.add_record(dict(name='DRVERSIO', value='DR2',
+                        comment='Survey data release number'))
+    hdr.add_record(dict(name='OBSTYPE', value='object',
+                        comment='Observation type'))
+    hdr.add_record(dict(name='PROCTYPE', value='tile',
+                        comment='Processing type'))
+    
     import socket
     hdr.add_record(dict(name='HOSTNAME', value=socket.gethostname(),
                         comment='Machine where runbrick.py was run'))
