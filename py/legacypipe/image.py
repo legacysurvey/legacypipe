@@ -5,6 +5,7 @@ import fitsio
 from tractor.utils import get_class_from_name
 from tractor.basics import NanoMaggies, ConstantFitsWcs, LinearPhotoCal
 from tractor.image import Image
+from tractor.tractortime import TAITime
 from .common import CP_DQ_BITS
 
 '''
@@ -287,6 +288,12 @@ class LegacySurveyImage(object):
                     photocal=LinearPhotoCal(zpscale, band=band),
                     sky=sky, name=self.name + ' ' + band)
         assert(np.all(np.isfinite(tim.getInvError())))
+
+        # CP (DECam) images include DATE-OBS and MJD-OBS, in UTC.
+        import astropy.time
+        #mjd_utc = mjd=primhdr.get('MJD-OBS', 0)
+        mjd_tai = astropy.time.Time(primhdr['DATE-OBS']).tai.mjd
+        tim.time = TAITime(mjd_tai)
         tim.zr = [-3. * sig1, 10. * sig1]
         tim.zpscale = orig_zpscale
         tim.midsky = midsky

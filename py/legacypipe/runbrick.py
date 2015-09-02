@@ -520,6 +520,21 @@ def _write_band_images(band,
             hdr.add_record(dict(name=kk, value=v[ik]))
     hdr.add_record(dict(name='FILTER', value=band))
 
+    # DATE-OBS converted to TAI.
+    mjds = [tim.time.toMjd() for tim in tims if tim.band == band]
+    minmjd = min(mjds)
+    maxmjd = max(mjds)
+    # back to date string in UTC...
+    import astropy.time
+    tt = [astropy.time.Time(mjd, format='mjd', scale='tai').utc.isot
+          for mjd in [minmjd, maxmjd]]
+    hdr.add_record(dict(
+        name='DATEOBS1', value=tt[0],
+        comment='DATE-OBS for the first image in the stack (UTC)'))
+    hdr.add_record(dict(
+        name='DATEOBS2', value=tt[1],
+        comment='DATE-OBS for the last  image in the stack (UTC)'))
+
     # Plug the WCS header cards into these images
     targetwcs.add_to_header(hdr)
     hdr.delete('IMAGEW')
