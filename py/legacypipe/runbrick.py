@@ -2362,7 +2362,13 @@ def stage_coadds(bands=None, version_header=None, targetwcs=None,
         ccds.psfplver = np.array([tim.psfver[1] for tim in tims])
     except:
         print('Warning: No version tags in tims')
-    ccds.writeto(fn)
+
+    primhdr = fitsio.FITSHDR()
+    for r in version_header.records():
+        primhdr.add_record(r)
+    primhdr.add_record(dict(name='PRODTYPE', value='ccdinfo',
+                            comment='NOAO data product type'))
+    ccds.writeto(fn, primheader=primhdr)
     print('Wrote', fn)
 
     tnow = Time()
@@ -2644,6 +2650,9 @@ def stage_writecat(
     primhdr.add_record(dict(name='ALLBANDS', value=allbands,
                             comment='Band order in array values'))
 
+    primhdr.add_record(dict(name='PRODTYPE', value='catalog',
+                            comment='NOAO data product type'))
+    
     if AP is not None:
         for i,ap in enumerate(apertures_arcsec):
             primhdr.add_record(dict(name='APRAD%i' % i, value=ap,
@@ -2703,8 +2712,9 @@ def stage_writecat(
                           w4=6.620)
 
         for band in [1,2,3,4]:
-            primhdr.add_record(dict(name='WISEAB%i' % band, value=vega_to_ab['w%i' % band],
-                                    comment='WISE Vega to AB conv for band %i' % band))
+            primhdr.add_record(dict(
+                name='WISEAB%i' % band, value=vega_to_ab['w%i' % band],
+                comment='WISE Vega to AB conv for band %i' % band))
 
         for band in [1,2,3,4]:
             dm = vega_to_ab['w%i' % band]
@@ -2716,13 +2726,11 @@ def stage_writecat(
 
         T2.wise_flux = np.vstack([WISE.w1_nanomaggies, WISE.w2_nanomaggies,
                                   WISE.w3_nanomaggies, WISE.w4_nanomaggies]).T
-        T2.wise_flux_ivar = np.vstack([WISE.w1_nanomaggies_ivar, WISE.w2_nanomaggies_ivar,
-                                       WISE.w3_nanomaggies_ivar, WISE.w4_nanomaggies_ivar]).T
-        # T2.wise_nobs = np.vstack([WISE.w1_pronexp, WISE.w2_pronexp,
-        #                           WISE.w3_pronexp, WISE.w4_pronexp]).T
+        T2.wise_flux_ivar = np.vstack([
+            WISE.w1_nanomaggies_ivar, WISE.w2_nanomaggies_ivar,
+            WISE.w3_nanomaggies_ivar, WISE.w4_nanomaggies_ivar]).T
         T2.wise_nobs = np.vstack([WISE.w1_nexp, WISE.w2_nexp,
                                   WISE.w3_nexp, WISE.w4_nexp]).T
-
         T2.wise_fracflux = np.vstack([WISE.w1_profracflux, WISE.w2_profracflux,
                                       WISE.w3_profracflux, WISE.w4_profracflux]).T
         T2.wise_rchi2 = np.vstack([WISE.w1_prochi2, WISE.w2_prochi2,
@@ -2760,34 +2768,43 @@ def stage_writecat(
         'left_blob',
         'decam_flux', 'decam_flux_ivar' ]
     if AP is not None:
-        cols.extend(['decam_apflux', 'decam_apflux_resid',
-                     'decam_apflux_ivar'])
+        cols.extend(['decam_apflux', 'decam_apflux_resid', 'decam_apflux_ivar'])
     cols.extend(['decam_mw_transmission', 'decam_nobs',
         'decam_rchi2', 'decam_fracflux', 'decam_fracmasked', 'decam_fracin',
-        'out_of_bounds',
-        'decam_anymask', 'decam_allmask'])
+        'out_of_bounds', 'decam_anymask', 'decam_allmask'])
 
     if WISE is not None:
         cols.extend([
                 'wise_flux', 'wise_flux_ivar',
-                'wise_mw_transmission', 'wise_nobs', 'wise_fracflux', 'wise_rchi2',
+                'wise_mw_transmission', 'wise_nobs', 'wise_fracflux',
+                'wise_rchi2',
                 ])
     cols.extend([
         'dchisq',
-        'fracdev', 'fracDev_ivar', 'shapeexp_r', 'shapeexp_r_ivar', 'shapeexp_e1',
-        'shapeexp_e1_ivar', 'shapeexp_e2', 'shapeexp_e2_ivar', 'shapedev_r',
-        'shapedev_r_ivar', 'shapedev_e1', 'shapedev_e1_ivar', 'shapedev_e2',
-        'shapedev_e2_ivar', 'ebv', 'sdss_run',
+        'fracdev', 'fracDev_ivar', 'shapeexp_r', 'shapeexp_r_ivar',
+        'shapeexp_e1', 'shapeexp_e1_ivar',
+        'shapeexp_e2', 'shapeexp_e2_ivar',
+        'shapedev_r',  'shapedev_r_ivar',
+        'shapedev_e1', 'shapedev_e1_ivar',
+        'shapedev_e2', 'shapedev_e2_ivar',
+        'ebv', 'sdss_run',
         'sdss_camcol', 'sdss_field', 'sdss_id', 'sdss_objid', 'sdss_parent',
         'sdss_nchild', 'sdss_objc_type', 'sdss_objc_flags', 'sdss_objc_flags2',
-        'sdss_flags', 'sdss_flags2', 'sdss_tai', 'sdss_ra', 'sdss_ra_ivar',
-        'sdss_dec', 'sdss_dec_ivar', 'sdss_psf_fwhm',
-        'sdss_mjd', 'sdss_theta_dev', 'sdss_theta_deverr', 'sdss_ab_dev', 'sdss_ab_deverr',
-        'sdss_theta_exp', 'sdss_theta_experr', 'sdss_ab_exp', 'sdss_ab_experr',
-        'sdss_fracdev', 'sdss_phi_dev_deg', 'sdss_phi_exp_deg', 'sdss_psfflux',
-        'sdss_psfflux_ivar', 'sdss_cmodelflux', 'sdss_cmodelflux_ivar', 'sdss_modelflux',
-        'sdss_modelflux_ivar', 'sdss_devflux', 'sdss_devflux_ivar', 'sdss_expflux',
-        'sdss_expflux_ivar', 'sdss_extinction', 'sdss_calib_status',
+        'sdss_flags', 'sdss_flags2', 'sdss_tai',
+        'sdss_ra',  'sdss_ra_ivar',
+        'sdss_dec', 'sdss_dec_ivar',
+        'sdss_psf_fwhm', 'sdss_mjd',
+        'sdss_theta_dev', 'sdss_theta_deverr',
+        'sdss_ab_dev',    'sdss_ab_deverr',
+        'sdss_theta_exp', 'sdss_theta_experr',
+        'sdss_ab_exp', 'sdss_ab_experr',
+        'sdss_fracdev', 'sdss_phi_dev_deg', 'sdss_phi_exp_deg',
+        'sdss_psfflux',    'sdss_psfflux_ivar',
+        'sdss_cmodelflux', 'sdss_cmodelflux_ivar',
+        'sdss_modelflux',  'sdss_modelflux_ivar',
+        'sdss_devflux',    'sdss_devflux_ivar',
+        'sdss_expflux',    'sdss_expflux_ivar',
+        'sdss_extinction', 'sdss_calib_status',
         'sdss_resolve_status',
         ])
 
@@ -2906,11 +2923,12 @@ def stage_writecat(
                 x[blankout] = 0
 
     if write_catalog:
-        arrays = [T2.get(c) for c in cols]
-        arrays = [np.array(a) if isinstance(a,list) else a
-                  for a in arrays]
-        fitsio.write(fn, None, header=primhdr, clobber=True)
-        fitsio.write(fn, arrays, names=cols, header=hdr)
+        T2.writeto(fn, primheader=primhdr, header=hdr, columns=cols)
+        # arrays = [T2.get(c) for c in cols]
+        # arrays = [np.array(a) if isinstance(a,list) else a
+        #           for a in arrays]
+        # fitsio.write(fn, None, header=primhdr, clobber=True)
+        # fitsio.write(fn, arrays, names=cols, header=hdr)
         print('Wrote', fn)
 
     return dict(T2=T2)

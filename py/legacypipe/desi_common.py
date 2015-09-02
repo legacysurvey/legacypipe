@@ -22,9 +22,8 @@ fits_short_typemap = { PointSource: 'S', ExpGalaxy: 'E', DevGalaxy: 'D',
 
 
 def typestring(t):
-    t = repr(t).replace("<class '", '').replace("'>", "")
-    return t
-
+    return '%s.%s' % (t.__module__, t.__name__)
+    
 ellipse_types = dict([(typestring(t), t) for t in
                       [ EllipseESoft, EllipseE,
                         ]])
