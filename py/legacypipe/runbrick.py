@@ -3007,6 +3007,7 @@ def compute_coadds(tims, bands, targetwcs, images=None,
 def run_brick(brick, radec=None, pixscale=0.262,
               width=3600, height=3600,
               zoom=None,
+              bands=None,
               nblobs=None, blob=None, blobxy=None,
               pv=True, pipe=True, nsigma=6,
               simulOpt=False,
@@ -3052,7 +3053,8 @@ def run_brick(brick, radec=None, pixscale=0.262,
         scale of 0.262) leads to a slight overlap between bricks.
     zoom : list of four integers
         Pixel coordinates [xlo,xhi, ylo,yhi] of the brick subimage to run.
-
+    bands : string
+        Filter (band) names to include; default is "grz".
 
     Notes
     -----
@@ -3276,6 +3278,8 @@ def run_brick(brick, radec=None, pixscale=0.262,
 
     initargs.update(W=width, H=height, pixscale=pixscale,
                     target_extent=zoom)
+    if bands is not None:
+        initargs.update(bands=bands)
 
     t0 = Time()
 
