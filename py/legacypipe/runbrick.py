@@ -219,9 +219,10 @@ def stage_tims(W=3600, H=3600, pixscale=0.262, brickname=None,
         raise NothingToDoError('No CCDs touching brick')
     print(len(ccds), 'CCDs touching target WCS')
 
-    # Sort images by band
+    # Sort images by band -- this also eliminates images whose
+    # *image.filter* string is not in *bands*.
     ccds.cut(np.hstack([np.flatnonzero(ccds.filter == band) for band in bands]))
-
+    
     print('Cutting out non-photometric CCDs...')
     I = decals.photometric_ccds(ccds)
     print(len(I), 'of', len(ccds), 'CCDs are photometric')
@@ -249,7 +250,7 @@ def stage_tims(W=3600, H=3600, pixscale=0.262, brickname=None,
         print('[parallel tims] Calibrations:', tnow-tlast)
         tlast = tnow
 
-    # Read images, clip to ROI
+    # Read Tractor images
     args = [(im, targetrd, dict(gaussPsf=gaussPsf, const2psf=const2psf,
                                 pixPsf=pixPsf, splinesky=splinesky)) for im in ims]
     tims = mp.map(read_one_tim, args)
@@ -574,13 +575,16 @@ def _write_band_images(band,
     imgs = [
         ('image', 'image',  cowimg,  False),
         ]
+    if congood is not None:
+        imgs.append(
+            ('nexp',   'expmap',   congood, True ),
+            )
     if cowmod is not None:
         imgs.extend([
                 ('invvar', 'wtmap',    cow,     False),
                 ('model',  'model',    cowmod,  True ),
                 ('chi2',   'chi2',     cochi2,  False),
                 ('depth',  'depthmap', detiv,   True ),
-                ('nexp',   'expmap',   congood, True ),
                 ])
     for name,prodtype,img,gzip in imgs:
         # Make a copy, because each image has different values for
@@ -610,7 +614,7 @@ def _write_band_images(band,
 
 def stage_image_coadds(targetwcs=None, bands=None, tims=None, outdir=None,
                        brickname=None, version_header=None,
-                       plots=False, ps=None, coadd_bw=False,
+                       plots=False, ps=None, coadd_bw=False, W=None, H=None,
                        **kwargs):
     '''
     Immediately after reading the images, we
@@ -620,17 +624,100 @@ def stage_image_coadds(targetwcs=None, bands=None, tims=None, outdir=None,
     just to look at the data.
 
     '''
+
+    if plots:
+
+        for band in bands:
+
+            # Plot sky-subtracted traces (projections)
+            plt.clf()
+
+            rr = []
+            lp,lt = [],[]
+
+            ppp = []
+
+            cc = ['b','r','g','m','k']
+            ci = 0
+            for j,tim in enumerate(tims):
+                if tim.band != band:
+                    continue
+                R = tim_get_resamp(tim, targetwcs)
+                if R is None:
+                    continue
+                Yo,Xo,Yi,Xi = R
+                
+                proj = np.zeros((H,W), np.float32)
+                haveproj = np.zeros((H,W), bool)
+    
+                proj[Yo,Xo] = tim.data[Yi,Xi]
+                haveproj[Yo,Xo] = (tim.inverr[Yi,Xi] > 0)
+    
+                xx,ylo,ymed,yhi = [],[],[],[]
+                for i in range(W):
+                    I = np.flatnonzero(haveproj[:,i])
+                    if len(I) == 0:
+                        continue
+                    xx.append(i)
+                    y = proj[I,i]
+                    lo,m,hi = np.percentile(y, [16, 50, 84])
+                    ylo.append(lo)
+                    ymed.append(m)
+                    yhi.append(hi)
+    
+                if len(xx):
+                    color = cc[ci % len(cc)]
+                    pargs = dict(color=color)
+                    ci += 1
+                    p = plt.plot(xx, ymed, '-', alpha=0.5, zorder=10, **pargs)
+                    plt.plot([xx[0], xx[-1]], [ymed[0], ymed[-1]], 'o', zorder=20, **pargs)
+                    plt.plot(xx, ylo, '-', alpha=0.25, zorder=5, **pargs)
+                    plt.plot(xx, yhi, '-', alpha=0.25, zorder=5, **pargs)
+
+                    lp.append(p[0])
+                    lt.append(tim.name)
+
+                    rr.extend([h-l for h,l in zip(yhi,ylo)])
+
+                    ppp.append((xx, ymed, color, tim.name))
+
+            yrange = np.median(rr)
+            plt.ylim(-yrange, +yrange)
+            plt.xlim(0, W)
+            plt.title('Per-column medians for %s band' % band)
+            plt.legend(lp, lt, loc='upper right')
+            ps.savefig()
+
+            plt.clf()
+            nplots = len(ppp)
+            for i,(xx, ymed, color, name) in enumerate(ppp):
+                dy = 0.25 * (i - float(nplots)/2) * yrange/2.
+                plt.plot(xx, ymed + dy, color=color)
+                plt.axhline(dy, color='k', alpha=0.1)
+                plt.text(np.median(xx), np.median(ymed)+dy, name, ha='center', va='bottom', color='k',
+                         bbox=dict(facecolor='w', edgecolor='none', alpha=0.5))
+            plt.ylim(-yrange, +yrange)
+            plt.title('Per-column medians for %s band' % band)
+            ps.savefig()
+
     if outdir is None:
         outdir = '.'
     basedir = os.path.join(outdir, 'coadd', brickname[:3], brickname)
     trymakedirs(basedir)
 
     C = _coadds(tims, bands, targetwcs,
+                ############
+                ngood=True,
+                ############
                 callback=_write_band_images,
                 callback_args=(brickname, version_header, tims, targetwcs, basedir))
 
+    rgbkwargs2 = dict(mnmx=(-3., 3.))
+
     tmpfn = create_temp(suffix='.png')
-    for name,ims,rgbkw in [('image',C.coimgs,rgbkwargs)]:
+    for name,ims,rgbkw in [('image',C.coimgs,rgbkwargs),
+                           ('image2',C.coimgs,rgbkwargs2),
+                           ]:
         rgb = get_rgb(ims, bands, **rgbkw)
         kwa = {}
         if coadd_bw and len(bands) == 1:

@@ -460,6 +460,10 @@ class LegacySurveyImage(object):
                 skyobj.shift(x0, y0)
                 print('Shifting to subimage', (x0,y0))
 
+            fn = 'splinesky-%s.fits' % (str(self).lower().replace(' ','-'))
+            print('wrote', fn)
+            skyobj.write_fits(fn)
+
             skyobj.version = get_git_version()
             skyobj.plver = imgheader.get('PLVER', '').strip()
             print('Sky:', skyobj)
