@@ -3130,7 +3130,7 @@ def run_brick(brick, radec=None, pixscale=0.262,
     Parameters
     ----------
     brick : string
-        Brick name such as '2090m065'.
+        Brick name such as '2090m065'.  Can be None if *radec* is given.
     radec : tuple of floats (ra,dec)
         RA,Dec center of the custom region to run.
     pixscale : float
