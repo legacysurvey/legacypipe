@@ -48,12 +48,18 @@ class DecamImage(LegacySurveyImage):
         return 'DECam ' + self.name
 
     def get_good_image_subregion(self):
+        from tractor.tractortime import TAITime
+        import datetime
+
         x0,x1,y0,y1 = None,None,None,None
 
         imh,imw = self.get_image_shape()
         # Handle 'glowing' edges in DES r-band images
         # aww yeah
-        if self.band == 'r' and (('DES' in self.imgfn) or ('COSMOS' in self.imgfn)):
+        glowdate = TAITime(None, date=datetime.datetime(2014, 8, 1, 12, 0, 0))
+        if self.band == 'r' and (
+                ('DES' in self.imgfn) or ('COSMOS' in self.imgfn) or
+                (self.time < glowdate)):
             # Northern chips: drop 100 pix off the bottom
             if 'N' in self.ccdname:
                 print('Clipping bottom part of northern DES r-band chip')
