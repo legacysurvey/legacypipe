@@ -703,17 +703,15 @@ def stage_image_coadds(targetwcs=None, bands=None, tims=None, outdir=None,
     trymakedirs(basedir)
 
     C = _coadds(tims, bands, targetwcs,
-                ############
-                ngood=True,
-                ############
+                #ngood=True,
                 callback=_write_band_images,
                 callback_args=(brickname, version_header, tims, targetwcs, basedir))
 
-    rgbkwargs2 = dict(mnmx=(-3., 3.))
+    #rgbkwargs2 = dict(mnmx=(-3., 3.))
 
     tmpfn = create_temp(suffix='.png')
     for name,ims,rgbkw in [('image',C.coimgs,rgbkwargs),
-                           ('image2',C.coimgs,rgbkwargs2),
+                           #('image2',C.coimgs,rgbkwargs2),
                            ]:
         rgb = get_rgb(ims, bands, **rgbkw)
         kwa = {}
@@ -2384,6 +2382,25 @@ def _get_mod(X):
     (tim, srcs) = X
     t0 = Time()
     tractor = Tractor([tim], srcs)
+
+    print('_get_mod', tim)
+    if hasattr(tim, 'modelMinval'):
+        print('tim modelMinval', tim.modelMinval)
+        minval = tim.modelMinval
+    else:
+        tim.modelMinval = minval = tim.sig * 0.1
+    
+
+    for src in srcs:
+        if not isinstance(src, ProfileGalaxy):
+            print('not a ProfileGalaxy:', src)
+            continue
+        px,py = tim.wcs.positionToPixel(tim.getPosition())
+        h = src._getUnitFluxPatchSize(tim, px, py, minval)
+        if h > 512:
+            print('halfsize', h, 'for', src)
+            src.halfsize = 512
+    
     mod = tractor.getModelImage(0)
     print('Getting model for', tim, ':', Time()-t0)
 
@@ -2434,18 +2451,13 @@ def stage_coadds(bands=None, version_header=None, targetwcs=None,
     ccds.brick_y0 = np.floor(np.min(y, axis=1)).astype(np.int16)
     ccds.brick_y1 = np.ceil (np.max(y, axis=1)).astype(np.int16)
     ccds.sig1 = np.array([tim.sig1 for tim in tims])
-
-    # temporarily try:except for test bricks (reading earlier pickles)
-    try:
-        ccds.plver = np.array([tim.plver for tim in tims])
-        ccds.skyver = np.array([tim.skyver[0] for tim in tims])
-        ccds.wcsver = np.array([tim.wcsver[0] for tim in tims])
-        ccds.psfver = np.array([tim.psfver[0] for tim in tims])
-        ccds.skyplver = np.array([tim.skyver[1] for tim in tims])
-        ccds.wcsplver = np.array([tim.wcsver[1] for tim in tims])
-        ccds.psfplver = np.array([tim.psfver[1] for tim in tims])
-    except:
-        print('Warning: No version tags in tims')
+    ccds.plver = np.array([tim.plver for tim in tims])
+    ccds.skyver = np.array([tim.skyver[0] for tim in tims])
+    ccds.wcsver = np.array([tim.wcsver[0] for tim in tims])
+    ccds.psfver = np.array([tim.psfver[0] for tim in tims])
+    ccds.skyplver = np.array([tim.skyver[1] for tim in tims])
+    ccds.wcsplver = np.array([tim.wcsver[1] for tim in tims])
+    ccds.psfplver = np.array([tim.psfver[1] for tim in tims])
 
     primhdr = fitsio.FITSHDR()
     for r in version_header.records():
