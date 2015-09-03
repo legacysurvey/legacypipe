@@ -25,6 +25,8 @@ if __name__ == '__main__':
                       help='Do not compute sky models')
     parser.add_option('--run-se', action='store_true', help='Run SourceExtractor')
 
+    parser.add_option('--splinesky', action='store_true', help='Spline sky, not constant')
+
     opt,args = parser.parse_args()
 
     D = Decals()
@@ -58,5 +60,7 @@ if __name__ == '__main__':
             kwargs.update(force=True)
         if opt.run_se:
             kwargs.update(se=True)
+        if opt.splinesky:
+            kwargs.update(splinesky=True)
 
         run_calibs((im, kwargs))

@@ -43,6 +43,7 @@ class DecamImage(LegacySurveyImage):
         self.sefn = os.path.join(calibdir, 'sextractor', self.calname + '.fits')
         self.psffn = os.path.join(calibdir, 'psfex', self.calname + '.fits')
         self.skyfn = os.path.join(calibdir, 'sky', self.calname + '.fits')
+        self.splineskyfn = os.path.join(calibdir, 'splinesky', self.calname + '.fits')
 
     def __str__(self):
         return 'DECam ' + self.name
@@ -193,8 +194,13 @@ class DecamImage(LegacySurveyImage):
             if os.path.exists(fn):
                 pvastrom = False
 
-        if sky and os.path.exists(self.skyfn) and (not force):
+        if sky and (not force) and (
+            (os.path.exists(self.skyfn) and not splinesky) or
+            (os.path.exists(self.splineskyfn) and splinesky)):
             fn = self.skyfn
+            if splinesky:
+                fn = self.splineskyfn
+
             if os.path.exists(fn):
                 try:
                     hdr = fitsio.read_header(fn)
@@ -343,31 +349,64 @@ class DecamImage(LegacySurveyImage):
         if sky:
             print('Fitting sky for', self)
 
+            hdr = get_version_header(None, self.decals.get_decals_dir(),
+                                     git_version=git_version)
+            primhdr = self.read_image_primary_header()
+            plver = primhdr.get('PLVER', '')
+            hdr.add_record(dict(name='PRODTYPE', value='skymodel',
+                                name='NOAO product type'))
+            hdr.add_record(dict(name='PLVER', value=plver,
+                                comment='CP ver of image file'))
+
             slc = self.get_good_image_slice(None)
             print('Good image slice is', slc)
 
             img = self.read_image(slice=slc)
             wt = self.read_invvar(slice=slc)
-            img = img[wt > 0]
-            try:
-                skyval = estimate_mode(img, raiseOnWarn=True)
-                skymeth = 'mode'
-            except:
-                skyval = np.median(img)
-                skymeth = 'median'
-            tsky = ConstantSky(skyval)
 
-            hdr = get_version_header(None, self.decals.get_decals_dir(),
-                                     git_version=git_version)
-            primhdr = self.read_image_primary_header()
-            plver = primhdr.get('PLVER', '')
-            hdr.add_record(dict(name='PLVER', value=plver,
-                                comment='CP ver of image file'))
-            hdr.add_record(dict(name='SKYMETH', value=skymeth,
-                                comment='estimate_mode, or fallback to median?'))
-            
-            trymakedirs(self.skyfn, dir=True)
-            tsky.write_fits(self.skyfn, hdr=hdr)
+            if splinesky:
+                from tractor.splinesky import SplineSky
+                from scipy.ndimage.morphology import binary_dilation
+
+                # Start by subtracting the overall median
+                med = np.median(img[wt>0])
+                # Compute initial model...
+                skyobj = SplineSky.BlantonMethod(img - med, wt>0, 512)
+                skymod = np.zeros_like(img)
+                skyobj.addTo(skymod)
+                # Now mask bright objects in (image - initial sky model)
+                sig1 = 1./np.sqrt(np.median(wt[wt>0]))
+                masked = (img - med - skymod) > (5.*sig1)
+                masked = binary_dilation(masked, iterations=3)
+                masked[wt == 0] = True
+                # Now find the final sky model using that more extensive mask
+                skyobj = SplineSky.BlantonMethod(img - med, np.logical_not(masked), 512)
+                # add the median back in
+                skyobj.offset(med)
+    
+                if slc is not None:
+                    sy,sx = slc
+                    y0 = sy.start
+                    x0 = sx.start
+                    skyobj.shift(-x0, -y0)
+
+                trymakedirs(self.splineskyfn, dir=True)
+                skyobj.write_fits(self.splineskyfn, primhdr=hdr)
+    
+            else:
+                img = img[wt > 0]
+                try:
+                    skyval = estimate_mode(img, raiseOnWarn=True)
+                    skymeth = 'mode'
+                except:
+                    skyval = np.median(img)
+                    skymeth = 'median'
+                tsky = ConstantSky(skyval)
+
+                hdr.add_record(dict(name='SKYMETH', value=skymeth,
+                                    comment='estimate_mode, or fallback to median?'))
+                trymakedirs(self.skyfn, dir=True)
+                tsky.write_fits(self.skyfn, hdr=hdr)
 
         if tmpimgfn is not None:
             os.unlink(tmpimgfn)
