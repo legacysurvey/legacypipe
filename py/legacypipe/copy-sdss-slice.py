@@ -54,6 +54,7 @@ for i,t in enumerate(T):
     outfn = fn.replace(os.environ['BOSS_PHOTOOBJ'], outdir)
     if os.path.exists(outfn):
         print('  Output exists:', outfn)
+	continue
         try:
             cmd = 'liststruc ' + outfn
             rtn = os.system(cmd)
