@@ -149,7 +149,7 @@ class DecamImage(LegacySurveyImage):
                              get_git_version)
         
 
-        for fn in [self.pvwcsfn, self.sefn, self.psffn, self.skyfn]:
+        for fn in [self.pvwcsfn, self.sefn, self.psffn, self.skyfn, self.splineskyfn]:
             print('exists?', os.path.exists(fn), fn)
 
         if psfex and os.path.exists(self.psffn) and (not force):
@@ -208,6 +208,7 @@ class DecamImage(LegacySurveyImage):
                     print('Failed to read sky file', fn, '-- deleting')
                     os.unlink(fn)
             if os.path.exists(fn):
+                print('File', fn, 'exists -- skipping')
                 sky = False
 
         if just_check:
@@ -353,8 +354,11 @@ class DecamImage(LegacySurveyImage):
                                      git_version=git_version)
             primhdr = self.read_image_primary_header()
             plver = primhdr.get('PLVER', '')
+            hdr.delete('PROCTYPE')
+            hdr.add_record(dict(name='PROCTYPE', value='ccd',
+                                comment='NOAO processing type'))
             hdr.add_record(dict(name='PRODTYPE', value='skymodel',
-                                name='NOAO product type'))
+                                comment='NOAO product type'))
             hdr.add_record(dict(name='PLVER', value=plver,
                                 comment='CP ver of image file'))
 
@@ -392,6 +396,7 @@ class DecamImage(LegacySurveyImage):
 
                 trymakedirs(self.splineskyfn, dir=True)
                 skyobj.write_fits(self.splineskyfn, primhdr=hdr)
+                print('Wrote sky model', self.splineskyfn)
     
             else:
                 img = img[wt > 0]
@@ -407,6 +412,7 @@ class DecamImage(LegacySurveyImage):
                                     comment='estimate_mode, or fallback to median?'))
                 trymakedirs(self.skyfn, dir=True)
                 tsky.write_fits(self.skyfn, hdr=hdr)
+                print('Wrote sky model', self.skyfn)
 
         if tmpimgfn is not None:
             os.unlink(tmpimgfn)
