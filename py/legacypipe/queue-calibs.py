@@ -6,7 +6,8 @@ from collections import OrderedDict
 
 from astrometry.util.fits import fits_table
 from astrometry.util.file import trymakedirs
-from common import Decals, DecamImage
+
+from legacypipe.common import Decals, DecamImage
 
 
 from astrometry.libkd.spherematch import match_radec
@@ -39,7 +40,7 @@ import pylab as plt
 from glob import glob
 
 def log(*s):
-    print >>sys.stderr, ' '.join([str(ss) for ss in s])
+    print(' '.join([str(ss) for ss in s]), file=sys.stderr)
 
 if __name__ == '__main__':
     import optparse
@@ -291,10 +292,6 @@ if __name__ == '__main__':
 
     if not (opt.calibs or opt.forced or opt.lsb):
         sys.exit(0)
-    
-    if 'dr1' in T.columns():
-        T.cut(T.dr1 == 1)
-        log(len(T), 'photometric for DR1')
     
     bands = 'grz'
     log('Filters:', np.unique(T.filter))
