@@ -321,16 +321,13 @@ def _coadds(tims, bands, targetwcs,
     W = targetwcs.get_width()
     H = targetwcs.get_height()
 
-    # always, for patching?
+    # always, for patching SATUR, etc pixels?
     unweighted=True
 
     C.coimgs = []
     if mods:
         C.comods = []
         C.coresids = []
-
-    #if unweighted:
-    #    C.coimgs = []
 
     if apertures is not None:
         unweighted = True
@@ -410,7 +407,6 @@ def _coadds(tims, bands, targetwcs,
                 coimg[Yo,Xo] += goodpix * im
                 con  [Yo,Xo] += goodpix
                 coiv [Yo,Xo] += goodpix * 1./tim.sig1**2  # ...ish
-                #del goodpix
                 del dq
 
             if xy:
@@ -437,6 +433,7 @@ def _coadds(tims, bands, targetwcs,
                 # chi-squared
                 cochi2[Yo,Xo] += iv * (im - mo)**2
                 del mo
+                del goodpix
 
             del Yo,Xo,Yi,Xi,im,iv
 

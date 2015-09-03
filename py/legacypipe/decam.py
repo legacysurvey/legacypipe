@@ -48,18 +48,20 @@ class DecamImage(LegacySurveyImage):
         return 'DECam ' + self.name
 
     def get_good_image_subregion(self):
-        from tractor.tractortime import TAITime
-        import datetime
+        import astropy.time
 
         x0,x1,y0,y1 = None,None,None,None
 
         imh,imw = self.get_image_shape()
         # Handle 'glowing' edges in DES r-band images
         # aww yeah
-        glowdate = TAITime(None, date=datetime.datetime(2014, 8, 1, 12, 0, 0))
+        glowdate = astropy.time.Time('2014-08-01')
+        primhdr = self.read_image_primary_header()
+        obsdate = astropy.time.Time(primhdr['DATE-OBS'])
+
         if self.band == 'r' and (
                 ('DES' in self.imgfn) or ('COSMOS' in self.imgfn) or
-                (self.time < glowdate)):
+                (obsdate < glowdate)):
             # Northern chips: drop 100 pix off the bottom
             if 'N' in self.ccdname:
                 print('Clipping bottom part of northern DES r-band chip')
@@ -107,6 +109,8 @@ class DecamImage(LegacySurveyImage):
             dqbits[dq == 6] |= CP_DQ_BITS['badpix']
             dqbits[dq == 7] |= CP_DQ_BITS['trans']
             dqbits[dq == 8] |= CP_DQ_BITS['trans']
+
+            dq = dqbits
 
         else:
             dq = dq.astype(np.int16)
