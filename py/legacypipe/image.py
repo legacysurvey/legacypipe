@@ -445,14 +445,28 @@ class LegacySurveyImage(object):
         if splinesky:
             from tractor.splinesky import SplineSky
             from .common import get_git_version
-
-            #print('Computing spline sky model on the fly, on subimage')
-            #skyobj = SplineSky.BlantonMethod(img, invvar>0, 512)
+            from scipy.ndimage.morphology import binary_dilation
 
             print('Computing spline sky model on the fly, on full image')
             fullimg = self.read_image()
             fulliv = self.read_invvar()
-            skyobj = SplineSky.BlantonMethod(fullimg, fulliv>0, 512)
+
+            # Start by subtracting the overall median
+            med = np.median(fullimg[fulliv>0])
+            # Compute initial model...
+            skyobj = SplineSky.BlantonMethod(fullimg - med, fulliv>0, 512)
+            skymod = np.zeros_like(fullimg)
+            skyobj.addTo(skymod)
+            # Now mask bright objects in (image - initial sky model)
+            sig1 = 1./np.sqrt(np.median(fulliv[fulliv>0]))
+            masked = (fullimg - med - skymod) > (5.*sig1)
+            masked = binary_dilation(masked, iterations=3)
+            masked[fulliv == 0] = True
+            # Now find the final sky model using that more extensive mask
+            skyobj = SplineSky.BlantonMethod(fullimg - med, np.logical_not(masked), 512)
+            # add the median back in
+            skyobj.offset(med)
+
             if slc is not None:
                 sy,sx = slc
                 y0 = sy.start
@@ -460,9 +474,11 @@ class LegacySurveyImage(object):
                 skyobj.shift(x0, y0)
                 print('Shifting to subimage', (x0,y0))
 
+            ################################
             fn = 'splinesky-%s.fits' % (str(self).lower().replace(' ','-'))
             print('wrote', fn)
             skyobj.write_fits(fn)
+            ################################
 
             skyobj.version = get_git_version()
             skyobj.plver = imgheader.get('PLVER', '').strip()
