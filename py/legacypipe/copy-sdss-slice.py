@@ -18,8 +18,8 @@ import shutil
 T = fits_table('window_flist-cut.fits')
 
 ###
-T.cut((T.ra > 180) * (T.ra < 195) * (T.dec > 5) * (T.dec < 20))
-print('CUT TO', len(T), 'in region')
+#T.cut((T.ra > 180) * (T.ra < 195) * (T.dec > 5) * (T.dec < 20))
+#print('CUT TO', len(T), 'in region')
 
 # These are the 'extra' columns we need in
 # legacypipe/runbrick.py : stage_srcs()
