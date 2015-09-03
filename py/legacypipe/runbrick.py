@@ -2383,19 +2383,18 @@ def _get_mod(X):
     t0 = Time()
     tractor = Tractor([tim], srcs)
 
-    print('_get_mod', tim)
     if hasattr(tim, 'modelMinval'):
         print('tim modelMinval', tim.modelMinval)
         minval = tim.modelMinval
     else:
+        # this doesn't really help when using pixelized PSFs / FFTs
         tim.modelMinval = minval = tim.sig * 0.1
-    
 
     for src in srcs:
+        from tractor.galaxy import ProfileGalaxy
         if not isinstance(src, ProfileGalaxy):
-            print('not a ProfileGalaxy:', src)
             continue
-        px,py = tim.wcs.positionToPixel(tim.getPosition())
+        px,py = tim.wcs.positionToPixel(src.getPosition())
         h = src._getUnitFluxPatchSize(tim, px, py, minval)
         if h > 512:
             print('halfsize', h, 'for', src)
