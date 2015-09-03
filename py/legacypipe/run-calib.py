@@ -17,6 +17,14 @@ if __name__ == '__main__':
     parser.add_option('--expnum', type=int, help='Cut to a single exposure')
     parser.add_option('--extname', '--ccdname', help='Cut to a single extension/CCD name')
 
+    parser.add_option('--no-astrom', dest='astrom', default=True, action='store_false',
+                      help='Do not compute astrometric calibs')
+    parser.add_option('--no-psf', dest='psfex', default=True, action='store_false',
+                      help='Do not compute PsfEx calibs')
+    parser.add_option('--no-sky', dest='sky', default=True, action='store_false',
+                      help='Do not compute sky models')
+    parser.add_option('--run-se', action='store_true', help='Run SourceExtractor')
+
     opt,args = parser.parse_args()
 
     D = Decals()
@@ -45,8 +53,10 @@ if __name__ == '__main__':
         im = DecamImage(D, t)
         print 'Running', im.calname
 
-        kwargs = {}
+        kwargs = dict(pvastrom=opt.astrom, psfex=opt.psfex, sky=opt.sky)
         if opt.force:
             kwargs.update(force=True)
+        if opt.run_se:
+            kwargs.update(se=True)
 
         run_calibs((im, kwargs))
