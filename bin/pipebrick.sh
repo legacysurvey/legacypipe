@@ -16,7 +16,7 @@ module load unwise_coadds/2.0
 export PYTHONPATH=${PYTHONPATH}:.
 
 ## HACK! -- put my PsfEx ahead of anything else!
-export PATH=/global/home/d/dstn/software/psfex-3.17.1/bin:${PATH}
+export PATH=/global/homes/d/dstn/software/psfex-3.17.1/bin:${PATH}
 
 # Force MKL single-threaded
 # https://software.intel.com/en-us/articles/using-threaded-intel-mkl-in-multi-thread-application
