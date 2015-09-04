@@ -997,7 +997,7 @@ def stage_fitblobs(T=None,
                    bands=None, ps=None, tims=None,
                    plots=False, plots2=False,
                    nblobs=None, blob0=None, blobxy=None,
-                   simul_opt=False, mp=None,
+                   simul_opt=False, use_ceres=True, mp=None,
                    **kwargs):
     '''
     This is where the actual source fitting happens.
@@ -1112,7 +1112,7 @@ def stage_fitblobs(T=None,
         T.blob = blobs[T.ity, T.itx]
 
     iter = _blob_iter(blobslices, blobsrcs, blobs, targetwcs, tims,
-                      cat, bands, plots, ps, simul_opt)
+                      cat, bands, plots, ps, simul_opt, use_ceres)
     # to allow debugpool to only queue tasks one at a time
     iter = iterwrapper(iter, len(blobsrcs))
     R = mp.map(_bounce_one_blob, iter)
