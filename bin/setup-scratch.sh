@@ -27,8 +27,8 @@ rsync -v $RSYNC_ARGS ~/cosmo/work/decam/calib/{astrom-pv,psfex,sextractor,sky} $
 ./legacypipe/copy-sdss-slice.py
 
 # unWISE images
-mkdir -p $SCRATCH/unwise
+mkdir -p $SCRATCH/unwise-coadds
 UNW=/project/projectdirs/cosmo/data/unwise/unwise-coadds/
-#cp $UNW/allsky-atlas.fits $SCRATCH/unwise
-rsync -Rv $RSYNC_ARGS $UNW/./*/*/*-w{3,4}-{img-m.fits,invvar-m.fits.gz,n-m.fits.gz,n-u.fits.gz} $SCRATCH/unwise
+#cp $UNW/allsky-atlas.fits $SCRATCH/unwise-coadds
+rsync -Rv $RSYNC_ARGS $UNW/./*/*/*-w{3,4}-{img-m.fits,invvar-m.fits.gz,n-m.fits.gz,n-u.fits.gz} $SCRATCH/unwise-coadds
 
