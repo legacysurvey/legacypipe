@@ -1098,6 +1098,8 @@ def stage_fitblobs(T=None,
     if blob0 is not None or (nblobs is not None and nblobs < len(blobslices)):
         if blob0 is None:
             blob0 = 0
+        if nblobs is None:
+            nblobs = len(blobslices) - blob0
         keepblobs = np.arange(blob0, blob0+nblobs)
 
     if keepblobs is not None:
@@ -3174,7 +3176,7 @@ def run_brick(brick, radec=None, pixscale=0.262,
     If you want to measure only a subset of the astronomical objects,
     you can use:
 
-    - *nblobs*: int; for debugging purposes, only fit the first N blobs.
+    - *nblobs*: None or int; for debugging purposes, only fit the first N blobs.
     - *blob*: int; for debugging purposes, start with this blob index.
     - *blobxy*: list of (x,y) integer tuples; only run the blobs
       containing these pixels.
