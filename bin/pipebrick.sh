@@ -1,28 +1,26 @@
 #! /bin/bash
 
-module load matplotlib-hpcp
-module load scipy-hpcp
-module load wcslib-hpcp
-module load astropy-hpcp
-module load photutils-hpcp
-module load ceres-hpcp
-module load sextractor-hpcp
-module load fitsio-hpcp
-module load unwise_coadds/2.0
-
+# These (and more) are loaded in desiproc's ~/.bashrc.ext
+# module load matplotlib-hpcp
+# module load scipy-hpcp
+# module load wcslib-hpcp
+# module load astropy-hpcp
+# module load photutils-hpcp
+# module load ceres-hpcp
+# module load sextractor-hpcp
+# module load fitsio-hpcp
+# module load unwise_coadds/2.0
 # module load astrometry_net-hpcp
 # module load tractor-hpcp
+# module load psfex
 
 export PYTHONPATH=${PYTHONPATH}:.
-
-## HACK! -- put my PsfEx ahead of anything else!
-export PATH=/global/homes/d/dstn/software/psfex-3.17.1/bin:${PATH}
 
 # Force MKL single-threaded
 # https://software.intel.com/en-us/articles/using-threaded-intel-mkl-in-multi-thread-application
 export MKL_NUM_THREADS=1
 
-outdir=$SCRATCH/fft-b
+outdir=$SCRATCH/dr2b
 
 brick="$1"
 
@@ -48,10 +46,10 @@ echo >> $log
 echo -e "\nStarting on ${NERSC_HOST} $(hostname)\n" >> $log
 echo "-----------------------------------------------------------------------------------------" >> $log
 
-#python -u legacypipe/runbrick.py --force-all --no-write --brick $brick --outdir $outdir --threads 6 --nsigma 6 --skip --pipe --pixpsf >> $log 2>&1
+python -u legacypipe/runbrick.py --force-all --no-write --brick $brick --outdir $outdir --threads 6 --nsigma 6 --skip --pipe --pixpsf --splinesky >> $log 2>&1
 
-python -u legacypipe/runbrick.py -P 'pickles/runbrick-fftb-%(brick)s-%%(stage)s.pickle' \
-    --brick $brick --outdir $outdir --threads 6 --nsigma 6 --skip --pipe --pixpsf >> $log 2>&1
+#python -u legacypipe/runbrick.py -P 'pickles/runbrick-fftb-%(brick)s-%%(stage)s.pickle' \
+#    --brick $brick --outdir $outdir --threads 6 --nsigma 6 --skip --pipe --pixpsf >> $log 2>&1
 
 # Launch from the 'py' directory;
 # qdo launch dr1n 32 --mpack 6 --walltime=48:00:00 --script ../bin/pipebrick.sh --batchqueue regular --verbose
