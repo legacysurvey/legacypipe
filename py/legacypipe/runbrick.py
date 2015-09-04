@@ -1295,7 +1295,7 @@ def stage_fitblobs_finish(
     return rtn
 
 def _blob_iter(blobslices, blobsrcs, blobs,
-               targetwcs, tims, cat, bands, plots, ps, simul_opt):
+               targetwcs, tims, cat, bands, plots, ps, simul_opt, use_ceres):
     for iblob, (bslc,Isrcs) in enumerate(zip(blobslices, blobsrcs)):
         assert(len(Isrcs) > 0)
 
@@ -1337,7 +1337,7 @@ def _blob_iter(blobslices, blobsrcs, blobs,
         blobmask = (blobs[bslc] == iblob)
 
         yield (iblob, Isrcs, targetwcs, bx0, by0, blobw, blobh, blobmask, subtimargs,
-               [cat[i] for i in Isrcs], bands, plots, ps, simul_opt)
+               [cat[i] for i in Isrcs], bands, plots, ps, simul_opt, use_ceres)
 
 def _bounce_one_blob(X):
     try:
@@ -1374,7 +1374,7 @@ def _one_blob(X):
     Fits sources contained within a "blob" of pixels.
     '''
     (iblob, Isrcs, targetwcs, bx0, by0, blobw, blobh, blobmask, subtimargs,
-     srcs, bands, plots, ps, simul_opt) = X
+     srcs, bands, plots, ps, simul_opt, use_ceres) = X
 
     print('Fitting blob', (iblob+1), ':', len(Isrcs), 'sources, size',
           blobw, 'x', blobh, len(subtimargs), 'images')
@@ -1461,7 +1461,7 @@ def _one_blob(X):
         btr = Tractor(btims, subcat)
         btr.freezeParam('images')
         done = False
-        if useCeres:
+        if use_ceres:
             from tractor.ceres_optimizer import CeresOptimizer
             orig_opt = btr.optimizer
             btr.optimizer = CeresOptimizer(BW=8, BH=8)
@@ -2607,6 +2607,7 @@ def stage_wise_forced(
     unwise_dir=None,
     brick=None,
     outdir=None,
+    use_ceres=True,
     **kwargs):
     '''
     After the model fits are finished, we can perform forced
@@ -2629,13 +2630,13 @@ def stage_wise_forced(
 
     try:
         W = unwise_forcedphot(wcat, tiles, roiradecbox=roiradec,
-                              unwise_dir=unwise_dir, use_ceres=useCeres)
+                              unwise_dir=unwise_dir, use_ceres=use_ceres)
     except:
         import traceback
         print('unwise_forcedphot failed:')
         traceback.print_exc()
 
-        if useCeres:
+        if use_ceres:
             print('Trying without Ceres...')
             W = unwise_forcedphot(wcat, tiles, roiradecbox=roiradec,
                                   unwise_dir=unwise_dir, use_ceres=False)
@@ -3306,6 +3307,7 @@ def run_brick(brick, radec=None, pixscale=0.262,
                   splinesky=splinesky,
                   simul_opt=simulOpt, pipe=pipe,
                   no_sdss=not(sdssInit),
+                  use_ceres=ceres,
                   do_calibs=do_calibs,
                   write_metrics=write_metrics,
                   outdir=outdir, decals_dir=decals_dir, unwise_dir=unwise_dir,
