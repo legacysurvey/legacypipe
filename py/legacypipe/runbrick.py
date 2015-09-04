@@ -61,23 +61,14 @@ from legacypipe.runbrick_plots import _plot_mods
 
 ## GLOBALS!  Oh my!
 nocache = True
-useCeres = True
 
 # RGB image args used in the tile viewer:
 rgbkwargs = dict(mnmx=(-1,100.), arcsinh=1.)
 rgbkwargs_resid = dict(mnmx=(-5,5))
 
-if useCeres:
-    ## Yuck
-    from tractor.ceres_mixin import TractorCeresMixin
-    class CeresTractor(Tractor, TractorCeresMixin):
-        pass
-
 def runbrick_global_init():
     if nocache:
         disable_galaxy_cache()
-    if useCeres:
-        from tractor.ceres import ceres_opt
 
 def stage_tims(W=3600, H=3600, pixscale=0.262, brickname=None,
                decals=None,
@@ -1336,7 +1327,7 @@ def _blob_iter(blobslices, blobsrcs, blobs,
             subslc = slice(sy0,sy1),slice(sx0,sx1)
             subimg = tim.getImage ()[subslc]
             subie  = tim.getInvError()[subslc]
-            subwcs = tim.getWcs().getShifted(sx0, sy0)
+            subwcs = tim.getWcs().shifted(sx0, sy0)
 
             subtimargs.append((subimg, subie, subwcs, tim.subwcs, tim.getPhotoCal(),
                                tim.getSky(), tim.psf, tim.name, sx0, sx1, sy0, sy1,
@@ -1467,17 +1458,27 @@ def _one_blob(X):
             btims.append(tim)
 
         
+        btr = Tractor(btims, subcat)
+        btr.freezeParam('images')
+        done = False
         if useCeres:
-            btr = CeresTractor(btims, subcat)
-            btr.freezeParam('images')
-            btr.optimize_forced_photometry(alphas=alphas, shared_params=False,
-                                           BW=8, BH=8, wantims=False)
-        else:
-            btr = Tractor(btims, subcat)
-            btr.freezeParam('images')
+            from tractor.ceres_optimizer import CeresOptimizer
+            orig_opt = btr.optimizer
+            btr.optimizer = CeresOptimizer(BW=8, BH=8)
             try:
-                btr.optimize_forced_photometry(alphas=alphas, shared_params=False,
+                btr.optimize_forced_photometry(shared_params=False,
                                                wantims=False)
+                done = True
+            except:
+                import traceback
+                print('Warning: Optimize_forced_photometry with Ceres failed:')
+                traceback.print_exc()
+                print('Falling back to LSQR')
+                btr.optimizer = orig_opt
+        if not done:
+            try:
+                btr.optimize_forced_photometry(
+                    alphas=alphas, shared_params=False, wantims=False)
             except:
                 import traceback
                 print('Warning: Optimize_forced_photometry failed:')
@@ -1576,12 +1577,10 @@ def _one_blob(X):
                     x0,y0 = mod.x0 , mod.y0
                     x1,y1 = x0 + mw, y0 + mh
                     slc = slice(y0,y1), slice(x0, x1)
-                    wcs = tim.getWcs().copy()
-                    wx0,wy0 = wcs.getX0Y0()
-                    wcs.setX0Y0(wx0 + x0, wy0 + y0)
                     srctim = Image(data=tim.getImage ()[slc],
                                    inverr=tim.getInvError()[slc],
-                                   wcs=wcs, psf=tim.getPsf().getShifted(x0, y0),
+                                   wcs=tim.wcs.shifted(x0, y0),
+                                   psf=tim.psf.getShifted(x0, y0),
                                    photocal=tim.getPhotoCal(),
                                    sky=tim.getSky(), name=tim.name)
                     #srctim.subwcs = tim.getWcs().wcs.get_subimage(x0, y0, mw, mh)
@@ -3261,8 +3260,6 @@ def run_brick(brick, radec=None, pixscale=0.262,
 
     from legacypipe.utils import MyMultiproc
     
-    global useCeres
-
     initargs = {}
     kwargs = {}
 
@@ -3293,8 +3290,6 @@ def run_brick(brick, radec=None, pixscale=0.262,
                          (int(1000*ra), 'm' if dec < 0 else 'p',
                           int(1000*np.abs(dec))))
     initargs.update(brickname=brick)
-
-    useCeres = ceres
 
     stagefunc = CallGlobalTime('stage_%s', globals())
 
