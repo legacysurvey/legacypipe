@@ -18,8 +18,6 @@ export CODE_DIR=$SCRATCH/code
 source /project/projectdirs/cmb/modules/hpcports_NERSC.sh
 
 if [ "$NERSC_HOST" == "edison" ]; then
-  #echo "To work young lads..."
-
   hpcports shared_gnu
 
   # dust
@@ -35,15 +33,12 @@ if [ "$NERSC_HOST" == "edison" ]; then
   module load dust/scratch
   module load unwise_coadds/2.0-scratch
 
-  # packages needed for the Tractor
+  # module load tractor-hpcp
   # module load astrometry_net-hpcp
   module load astropy-hpcp
   module load scipy-hpcp
   module load matplotlib-hpcp
-  # module load ipython-hpcp
-  # module load yaml-hpcp
   module load fitsio-hpcp
-  # module load swig-hpcp
   module load wcslib-hpcp
   module load photutils-hpcp
   module load ceres-hpcp
@@ -51,6 +46,9 @@ if [ "$NERSC_HOST" == "edison" ]; then
   module load psfex
   module load postgresql-hpcp
   module load psycopg2-hpcp
+  
+  # Needed during building Astrometry.net, but not runtime.
+  # module load swig-hpcp
 
   module load mkl
   module load intel
@@ -60,10 +58,8 @@ if [ "$NERSC_HOST" == "edison" ]; then
 
   # unneeded, as far as I know...
   module unload pyyaml-hpcp
-  # module unload ipython
-  # module unload pyparsing-hpcp
+  module unload ipython-hpcp
   module unload cython-hpcp
-
   module unload rca
   module unload curl
   module unload zlib
@@ -103,9 +99,6 @@ if [ "$NERSC_HOST" == "edison" ]; then
   PATH=${PATH}:${CODE_DIR}/qdo/bin
   PYP=${PYP}:${CODE_DIR}/qdo/py
 
-  # pyfits has been removed from hpcports, but Astrometry.net still needs it
-  # PYP=${PYP}:${CODE_DIR}/pyfits-3.3/lib/python
-
   # local astrometry.net install
   PYP=${PYP}:${CODE_DIR}/astrometry.net
   PATH=${PATH}:${CODE_DIR}/astrometry.net/util
@@ -115,6 +108,7 @@ if [ "$NERSC_HOST" == "edison" ]; then
   PYP=${PYP}:${CODE_DIR}/tractor
 
   export PYTHONPATH=${PYP}
+  export PATH
   unset PYP
 
 fi
