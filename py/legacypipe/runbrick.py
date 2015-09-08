@@ -1081,6 +1081,11 @@ def stage_fitblobs(T=None,
         # blobxy is a list like [(x0,y0), (x1,y1), ...]
         keepblobs = []
         for x,y in blobxy:
+            x,y = int(x), int(y)
+            if x < 0 or x >= W or y < 0 or y >= H:
+                print('Warning: clipping blob x,y to brick bounds', x,y)
+                x = np.clip(x, 0, W-1)
+                y = np.clip(y, 0, H-1)
             blob = blobs[y,x]
             if blob >= 0:
                 keepblobs.append(blob)
