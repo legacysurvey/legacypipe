@@ -2797,10 +2797,6 @@ def stage_writecat(
     T2.shapeDev_e1_ivar = T2.shapeDev_ivar[:,1]
     T2.shapeDev_e2_ivar = T2.shapeDev_ivar[:,2]
 
-    # Rename source types.
-    typemap = dict(S='PSF', E='EXP', D='DEV', C='COMP')
-    T2.type = np.array([typemap.get(t,t) for t in T2.type])
-
     # For sources that had DECam flux initialization from SDSS but no
     # overlapping images (hence decam_flux_ivar = 0), zero out the DECam flux.
     T2.decam_flux[T2.decam_flux_ivar == 0] = 0.
