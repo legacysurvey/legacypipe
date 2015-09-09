@@ -1287,10 +1287,7 @@ def stage_fitblobs_finish(
     T.fracmasked = fracmasked
     T.rchi2 = rchi2
     T.dchisq = dchisqs.astype(np.float32)
-    # Set -0 to 0
     T.dchisq[T.dchisq == 0.] = 0.
-    # Make dchisq relative to the first element ("none" model)
-    T.dchisq = T.dchisq[:, 1:] - T.dchisq[:, 0][:,np.newaxis]
 
     invvars = srcivs
 
@@ -1861,6 +1858,7 @@ def _one_blob(X):
     all_models = [{} for i in range(len(Isrcs))]
     performance = [[] for i in range(len(Isrcs))]
     flags = np.zeros(len(Isrcs), np.uint16)
+    delta_chisqs = np.zeros((len(Isrcs), 4), np.float32)
 
     # For sources, in decreasing order of brightness
     for numi,i in enumerate(Ibright):
@@ -1893,15 +1891,18 @@ def _one_blob(X):
         srctractor.setModelMasks(modelMasks)
         enable_galaxy_cache()
 
-        lnp0 = srctractor.getLogProb()
+        # use log likelihood rather than log prior because we use priors on, eg,
+        # the ellipticity to avoid crazy fits.  Here we sort of want to just
+        # evaluate the fit quality regardless of priors on parameters...?
+        lnl0 = srctractor.getLogLikelihood()
 
         srccat = srctractor.getCatalog()
         srccat[0] = None
 
-        lnp_null = srctractor.getLogProb()
+        lnl_null = srctractor.getLogLikelihood()
 
-        lnps = dict(ptsrc=None, dev=None, exp=None, comp=None,
-                    none=lnp_null)
+        lnls = dict(ptsrc=None, dev=None, exp=None, comp=None,
+                    none=lnl_null)
 
         if isinstance(src, PointSource):
             # logr, ee1, ee2
@@ -2053,8 +2054,7 @@ def _one_blob(X):
             srctractor.setModelMasks(None)
             disable_galaxy_cache()
 
-            lnp = srctractor.getLogProb()
-            lnps[name] = lnp
+            lnls[name] = srctractor.getLogLikelihood()
             all_models[i][name] = newsrc.copy()
             allflags[name] = thisflags
 
@@ -2064,7 +2064,8 @@ def _one_blob(X):
         nbands = len(bands)
         nparams = dict(none=0, ptsrc=2, exp=5, dev=5, comp=9)
 
-        plnps = dict([(k, (lnps[k]-lnp0) - 0.5 * nparams[k])
+        # penalized log-likelihoods
+        plnls = dict([(k, lnls[k] - 0.5 * nparams[k])
                       for k in nparams.keys()])
 
         if plots:
@@ -2103,7 +2104,7 @@ def _one_blob(X):
                 cochisq = reduce(np.add, cochisqs)
                 plt.subplot(rows, cols, imod+1+cols)
                 dimshow(cochisq, vmin=0, vmax=25)
-                plt.title('dlnp %.0f' % plnps[modname])
+                plt.title('dlnp %.0f' % plnls[modname])
             plt.suptitle('Blob %i, source %i: was: %s' %
                          (iblob, i, str(src)))
             ps.savefig()
@@ -2116,11 +2117,15 @@ def _one_blob(X):
 
         # This is our "detection threshold": 5-sigma in
         # *penalized* units; ie, ~5.2-sigma for point sources
-        dlnp = 0.5 * 5.**2
+        cut = 0.5 * 5.**2
         # Take the best of ptsrc, dev, exp, comp
-        diff = max([plnps[name] - plnps[keepmod]
+        diff = max([plnls[name] - plnls['none']
                     for name in ['ptsrc', 'dev', 'exp', 'comp']])
-        if diff > dlnp:
+
+        print()
+        print('lnl diffs vs none:', ', '.join(['%s = %.1f' % (name, plnls[name] - plnls['none']) for name in ['ptsrc', 'dev', 'exp', 'comp']]))
+
+        if diff > cut:
             # We're going to keep this source!
             # It starts out as a point source.
             # This has the weird outcome that a source can be accepted
@@ -2132,45 +2137,57 @@ def _one_blob(X):
 
             # This is our "upgrade" threshold: how much better a galaxy
             # fit has to be versus ptsrc, and comp versus galaxy.
-            dlnp = 0.5 * 3.**2
+            cut = 0.5 * 3.**2
 
             # This is the "fractional" upgrade threshold for ptsrc->dev/exp:
             # 2% of ptsrc vs nothing
-            fdlnp = 0.02 * (plnps['ptsrc'] - plnps['none'])
-            dlnp = max(dlnp, fdlnp)
+            fcut = 0.02 * (plnls['ptsrc'] - plnls['none'])
+            cut = max(cut, fcut)
 
-            expdiff = plnps['exp'] - plnps[keepmod]
-            devdiff = plnps['dev'] - plnps[keepmod]
-            if expdiff > dlnp or devdiff > dlnp:
+            expdiff = plnls['exp'] - plnls[keepmod]
+            devdiff = plnls['dev'] - plnls[keepmod]
+
+            print('Keeping source.  Comparing dev/exp vs ptsrc.  dlnp =', 4.5, 'frac =', fcut, 'cut =', cut)
+            print('exp:', expdiff)
+            print('dev:', devdiff)
+
+            if expdiff > cut or devdiff > cut:
                 if expdiff > devdiff:
-                    #print('Upgrading from ptsrc to exp: diff', expdiff)
+                    print('Upgrading from ptsrc to exp: diff', expdiff)
                     keepsrc = exp
                     keepmod = 'exp'
                 else:
-                    #print('Upgrading from ptsrc to dev: diff', devdiff)
+                    print('Upgrading from ptsrc to dev: diff', devdiff)
                     keepsrc = dev
                     keepmod = 'dev'
 
-                diff = plnps['comp'] - plnps[keepmod]
-                if diff > dlnp:
-                    #print('Upgrading for dev/exp to composite: diff', diff)
+                diff = plnls['comp'] - plnls[keepmod]
+                print('Comparing', keepmod, 'to comp.  cut:', cut, 'comp:', diff)
+                if diff > cut:
+                    print('Upgrading from dev/exp to composite.')
                     keepsrc = comp
                     keepmod = 'comp'
+                else:
+                    print('Not upgrading to comp')
+
             else:
-                #print('Keeping ptsrc model:', expdiff, devdiff, '<', devexp_dlnp)
+                print('Not upgrading from ptsrc to dev/exp')
                 pass
         else:
-            #print('Dropping source:', src)
+            print('Dropping source:', src)
             pass
 
+        print('Keeping model:', keepmod)
+        print('Keeping source:', keepsrc)
+
         # Penalized delta chi-squareds
-        delta_chisqs.append([-2. * (plnps[k] - plnps[keepmod])
-                         for k in ['none', 'ptsrc', 'dev', 'exp', 'comp']])
+        dlnl = np.array(plnls[k] for k in ['ptsrc', 'dev', 'exp', 'comp'])
+        delta_chisqs[i, :] = 2. * (dlnl - plnls['none'])
 
         subcat[i] = keepsrc
         flags[i] = allflags.get(keepmod, 0)
         all_models[i]['keep'] = keepmod
-        all_models[i]['dchisqs'] = delta_chisqs[-1]
+        all_models[i]['dchisqs'] = delta_chisqs[i,:]
         all_models[i]['flags'] = allflags
 
         src = keepsrc
@@ -2197,20 +2214,25 @@ def _one_blob(X):
 
     srcs = subcat
     I = np.array([i for i,s in enumerate(srcs) if s is not None])
-    keepI = [i for i,s in zip(Isrcs, srcs) if s is not None]
-    keepsrcs = [s for s in srcs if s is not None]
-    keepdeltas = [x for x,s in zip(delta_chisqs,srcs) if s is not None]
-    flags = np.array([f for f,s in zip(flags, srcs) if s is not None])
-    Isrcs = keepI
-    srcs = keepsrcs
-    delta_chisqs = keepdeltas
+    srcs = [s for s in srcs if s is not None]
+
+    Isrcs = [Isrcs[i] for i in I]
+
     subcat = Catalog(*srcs)
     subtr.catalog = subcat
     if len(I):
         started_in_blob = started_in_blob[I]
+        flags = flags[I]
+        delta_chisqs = delta_chisqs[I,:]
     else:
         started_in_blob = np.array([], bool)
+        flags = np.array([], flags.dtype)
+        delta_chisqs = np.array([], delta_chisqs.dtype)
     assert(len(started_in_blob) == len(srcs))
+
+    print('After cutting sources:')
+    for src,dchi in zip(srcs, delta_chisqs):
+        print('  source', src, 'dchisq', dchi)
 
     ### Simultaneous re-opt.
     if simul_opt and len(subcat) > 1 and len(subcat) <= 10:
