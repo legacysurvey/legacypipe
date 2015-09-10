@@ -1255,7 +1255,7 @@ def stage_fitblobs_finish(
     assert(nb == len(bands))
     ns,nb = dchisqs.shape
     assert(ns == len(cat))
-    assert(nb == 5) # none, ptsrc, dev, exp, comp
+    assert(nb == 4) # ptsrc, dev, exp, comp
     assert(len(flags) == len(cat))
 
     # Renumber blobs to make them contiguous.
@@ -1812,8 +1812,6 @@ def _one_blob(X):
     # families of sources to fit simultaneously.  (The
     # not-friends-of-friends version of blobs!)
 
-    delta_chisqs = []
-
     # We repeat the "compute & subtract initial models" logic from above.
     # -Remember the original subtim images
     # -Compute initial models for each source (in each tim)
@@ -1858,7 +1856,7 @@ def _one_blob(X):
     all_models = [{} for i in range(len(Isrcs))]
     performance = [[] for i in range(len(Isrcs))]
     flags = np.zeros(len(Isrcs), np.uint16)
-    delta_chisqs = np.zeros((len(Isrcs), 4), np.float32)
+    dchisqs = np.zeros((len(Isrcs), 4), np.float32)
 
     # For sources, in decreasing order of brightness
     for numi,i in enumerate(Ibright):
@@ -2180,14 +2178,15 @@ def _one_blob(X):
         print('Keeping model:', keepmod)
         print('Keeping source:', keepsrc)
 
-        # Penalized delta chi-squareds
-        dlnl = np.array(plnls[k] for k in ['ptsrc', 'dev', 'exp', 'comp'])
-        delta_chisqs[i, :] = 2. * (dlnl - plnls['none'])
+        # 2 * log-likelihood differences
+        dchisqs[i, :] = 2. * np.array(
+            [plnls[k] - plnls['none'] for k in ['ptsrc', 'dev', 'exp', 'comp']])
+        print('delta chisqs:', dchisqs)
 
         subcat[i] = keepsrc
         flags[i] = allflags.get(keepmod, 0)
         all_models[i]['keep'] = keepmod
-        all_models[i]['dchisqs'] = delta_chisqs[i,:]
+        all_models[i]['dchisqs'] = dchisqs[i,:]
         all_models[i]['flags'] = allflags
 
         src = keepsrc
@@ -2223,15 +2222,15 @@ def _one_blob(X):
     if len(I):
         started_in_blob = started_in_blob[I]
         flags = flags[I]
-        delta_chisqs = delta_chisqs[I,:]
+        dchisqs = dchisqs[I,:]
     else:
         started_in_blob = np.array([], bool)
         flags = np.array([], flags.dtype)
-        delta_chisqs = np.array([], delta_chisqs.dtype)
+        dchisqs = np.array([], dchisqs.dtype)
     assert(len(started_in_blob) == len(srcs))
 
     print('After cutting sources:')
-    for src,dchi in zip(srcs, delta_chisqs):
+    for src,dchi in zip(srcs, dchisqs):
         print('  source', src, 'dchisq', dchi)
 
     ### Simultaneous re-opt.
@@ -2307,7 +2306,7 @@ def _one_blob(X):
         Isrcs        = [Isrcs[i]        for i in keep]
         srcs         = [srcs[i]         for i in keep]
         srcinvvars   = [srcinvvars[i]   for i in keep]
-        delta_chisqs = [delta_chisqs[i] for i in keep]
+        dchisqs = [dchisqs[i] for i in keep]
         flags        = [flags[i]        for i in keep]
         started_in_blob = [started_in_blob[i] for i in keep]
         subcat = Catalog(*srcs)
@@ -2402,7 +2401,7 @@ def _one_blob(X):
     #print('Blob finished metrics:', Time()-tlast)
     print('Blob', iblob+1, 'finished') #:', Time()-tlast
 
-    return (Isrcs, srcs, srcinvvars, fracflux, rchi2, delta_chisqs, fracmasked, flags,
+    return (Isrcs, srcs, srcinvvars, fracflux, rchi2, dchisqs, fracmasked, flags,
             all_models, performance, fracin, started_in_blob, finished_in_blob)
 
 
@@ -2878,8 +2877,6 @@ def stage_writecat(
     T2.decam_mw_transmission = 10.**(-decam_extinction / 2.5)
     if WISE is not None:
         T2.wise_mw_transmission  = 10.**(-wise_extinction  / 2.5)
-
-    T2.dchisq[T2.dchisq != 0] *= -1.
 
     cols = [
         'brickid', 'brickname', 'objid', 'brick_primary', 'blob', 'type',
