@@ -1873,7 +1873,7 @@ def _one_blob(X):
     B = fits_table()
     B.flags = np.zeros(len(Isrcs), np.uint16)
     B.dchisqs = np.zeros((len(Isrcs), 4), np.float32)
-    B.sources = srcs #[[] for i in range(len(Isrcs))]
+    B.sources = srcs
     B.Isrcs = Isrcs
     B.started_in_blob = started_in_blob
 
@@ -2140,9 +2140,12 @@ def _one_blob(X):
         diff = max([plnls[name] - plnls['none']
                     for name in ['ptsrc', 'dev', 'exp', 'comp']])
 
-        #print()
-        #print('lnl diffs vs none:', ', '.join(['%s = %.1f' % (name, plnls[name] - plnls['none']) for name in ['ptsrc', 'dev', 'exp', 'comp']]))
-
+        print()
+        dlnls = np.array([plnls[name] - plnls['none'] for name in ['ptsrc', 'dev', 'exp', 'comp']])
+        print('lnl diffs vs none:', ', '.join(['%s = %.1f' % (name, dlnl) for name,dlnl in zip(['ptsrc', 'dev', 'exp', 'comp'], dlnls)]))
+        del dlnls
+        print('Diff:', diff, 'cut:', cut)
+        
         if diff > cut:
             # We're going to keep this source!
             # It starts out as a point source.
@@ -2193,7 +2196,7 @@ def _one_blob(X):
                 #print('Not upgrading from ptsrc to dev/exp')
                 pass
         else:
-            #print('Dropping source:', src)
+            print('Dropping source:', src)
             pass
 
         #print('Keeping model:', keepmod)
@@ -2235,31 +2238,15 @@ def _one_blob(X):
     I = np.array([i for i,s in enumerate(subcat) if s is not None])
     B.cut(I)
 
-    print('After cutting sources: B.sources is', type(B.sources))
-    print(B.sources)
+    #print('After cutting sources: B.sources is', type(B.sources))
+    #print(B.sources)
 
-    #srcs = B.sources
     subcat = Catalog(*B.sources)
     subtr.catalog = subcat
 
-    # srcs = subcat
-    # srcs = [s for s in srcs if s is not None]
-    # Isrcs = [Isrcs[i] for i in I]
-    # subcat = Catalog(*srcs)
-    # subtr.catalog = subcat
-    # if len(I):
-    #     started_in_blob = started_in_blob[I]
-    #     flags = flags[I]
-    #     dchisqs = dchisqs[I,:]
-    # else:
-    #     started_in_blob = np.array([], bool)
-    #     flags = np.array([], flags.dtype)
-    #     dchisqs = np.array([], dchisqs.dtype)
-    # assert(len(started_in_blob) == len(srcs))
-
     print('After cutting sources:')
     for src,dchi in zip(B.sources, B.dchisqs):
-        print('  source', src, 'dchisq', dchi)
+        print('  source', src, 'max dchisq', max(dchi), 'dchisqs', dchi)
 
     ### Simultaneous re-opt.
     if simul_opt and len(subcat) > 1 and len(subcat) <= 10:
@@ -2325,33 +2312,14 @@ def _one_blob(X):
     # can be generated during the "Simultaneous re-opt" stage above --
     # sources can get scattered outside the blob.
 
-    # keep = []
-    # for i,(src,ivar) in enumerate(zip(B.sources, B.srcinvvars)):
-    #     # Arbitrarily look at the first element (RA)?
-    #     if ivar[0] == 0.:
-    #         continue
-    #     keep.append(i)
-
+    # Arbitrarily look at the first element (RA)
     I = np.flatnonzero(np.array([iv[0] for iv in B.srcinvvars]))
-    #if len(keep) < len(B):
     if len(I) < len(B):
         print('Keeping', len(I), 'of', len(B), 'sources with non-zero ivar')
-
-        #I = np.array(keep)
         B.cut(I)
 
-        #srcs = B.sources
         subcat = Catalog(*B.sources)
         subtr.catalog = subcat
-
-        # Isrcs        = [Isrcs[i]        for i in keep]
-        # srcs         = [srcs[i]         for i in keep]
-        # srcinvvars   = [srcinvvars[i]   for i in keep]
-        # dchisqs = [dchisqs[i] for i in keep]
-        # flags        = [flags[i]        for i in keep]
-        # started_in_blob = [started_in_blob[i] for i in keep]
-        # subcat = Catalog(*srcs)
-        # subtr.catalog = subcat
 
     # rchi2 quality-of-fit metric
     rchi2_num    = np.zeros((len(B),len(bands)), np.float32)
@@ -2446,11 +2414,7 @@ def _one_blob(X):
     result.B = B
     result.all_models = all_models
     result.performance = performance
-
     return result
-
-    #return (Isrcs, srcs, srcinvvars, fracflux, rchi2, dchisqs, fracmasked, flags,
-    #        all_models, performance, fracin, started_in_blob, finished_in_blob)
 
 class BlobDuck(object):
     pass
