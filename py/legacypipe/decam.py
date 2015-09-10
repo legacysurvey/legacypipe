@@ -149,8 +149,8 @@ class DecamImage(LegacySurveyImage):
                              get_git_version)
         
 
-        for fn in [self.pvwcsfn, self.sefn, self.psffn, self.skyfn, self.splineskyfn]:
-            print('exists?', os.path.exists(fn), fn)
+        #for fn in [self.pvwcsfn, self.sefn, self.psffn, self.skyfn, self.splineskyfn]:
+        #    print('exists?', os.path.exists(fn), fn)
 
         if psfex and os.path.exists(self.psffn) and (not force):
             # Sometimes SourceExtractor gets interrupted or something and
@@ -262,9 +262,9 @@ class DecamImage(LegacySurveyImage):
             primhdr = self.read_image_primary_header()
             magzp  = primhdr['MAGZERO']
             seeing = self.pixscale * self.fwhm
-            print('FWHM', self.fwhm, 'pix')
-            print('pixscale', self.pixscale, 'arcsec/pix')
-            print('Seeing', seeing, 'arcsec')
+            #print('FWHM', self.fwhm, 'pix')
+            #print('pixscale', self.pixscale, 'arcsec/pix')
+            #print('Seeing', seeing, 'arcsec')
     
         if se:
             maskstr = ''
@@ -348,7 +348,7 @@ class DecamImage(LegacySurveyImage):
                         raise RuntimeError('Command failed: ' + cmd + ': return value: %i' % rtn)
     
         if sky:
-            print('Fitting sky for', self)
+            #print('Fitting sky for', self)
 
             hdr = get_version_header(None, self.decals.get_decals_dir(),
                                      git_version=git_version)
@@ -363,7 +363,7 @@ class DecamImage(LegacySurveyImage):
                                 comment='CP ver of image file'))
 
             slc = self.get_good_image_slice(None)
-            print('Good image slice is', slc)
+            #print('Good image slice is', slc)
 
             img = self.read_image(slice=slc)
             wt = self.read_invvar(slice=slc)
