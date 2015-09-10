@@ -1251,23 +1251,22 @@ def stage_fitblobs_finish(
     print('New catalog:', len(newcat))
     cat = Catalog(*newcat)
     tractor.catalog = cat
-    assert(cat.numberOfParams() == len(BB))
-    ns,nb = B.fracflux.shape
+    ns,nb = BB.fracflux.shape
     assert(ns == len(cat))
     assert(nb == len(bands))
-    ns,nb = B.fracmasked.shape
+    ns,nb = BB.fracmasked.shape
     assert(ns == len(cat))
     assert(nb == len(bands))
-    ns,nb = B.fracin.shape
+    ns,nb = BB.fracin.shape
     assert(ns == len(cat))
     assert(nb == len(bands))
-    ns,nb = B.rchi2.shape
+    ns,nb = BB.rchi2.shape
     assert(ns == len(cat))
     assert(nb == len(bands))
-    ns,nb = B.dchisqs.shape
+    ns,nb = BB.dchisqs.shape
     assert(ns == len(cat))
     assert(nb == 4) # ptsrc, dev, exp, comp
-    assert(len(B.flags) == len(cat))
+    assert(len(BB.flags) == len(cat))
 
     # Renumber blobs to make them contiguous.
     ublob,iblob = np.unique(T.blob, return_inverse=True)
@@ -1291,16 +1290,19 @@ def stage_fitblobs_finish(
     del ublob
     T.blob = iblob.astype(np.int32)
 
-    T.decam_flags = B.flags
-    T.fracflux = B.fracflux
-    T.fracin = B.fracin
-    T.left_blob = np.logical_and(B.started_in_blob, np.logical_not(B.finished_in_blob))
-    T.fracmasked = B.fracmasked
-    T.rchi2 = B.rchi2
-    T.dchisq = B.dchisqs.astype(np.float32)
+    T.decam_flags = BB.flags
+    T.fracflux    = BB.fracflux
+    T.fracin      = BB.fracin
+    T.fracmasked  = BB.fracmasked
+    T.rchi2       = BB.rchi2
+    T.dchisq      = BB.dchisqs.astype(np.float32)
+    T.left_blob   = np.logical_and(BB.started_in_blob,
+                                   np.logical_not(BB.finished_in_blob))
+    # Set -0. to 0.
     T.dchisq[T.dchisq == 0.] = 0.
 
-    invvars = B.srcinvvars
+    invvars = np.hstack(BB.srcinvvars)
+    assert(cat.numberOfParams() == len(invvars))
 
     rtn = dict(fitblobs_R = None)
     for k in ['tractor', 'cat', 'invvars', 'T', 'allbands']:
