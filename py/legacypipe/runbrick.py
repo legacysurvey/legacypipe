@@ -1155,14 +1155,14 @@ def stage_fitblobs_finish(
         good_blobsrcs = [blobsrcs[i] for i in good_blobs]
         good_R        = [R       [i] for i in good_blobs]
         # DEBUGging / metrics for us
-        all_models  = [r[8] for r in good_R]
-        performance = [r[9] for r in good_R]
+        all_models  = [r.all_models  for r in good_R]
+        performance = [r.performance for r in good_R]
 
         allmods  = [None]*len(T)
         allperfs = [None]*len(T)
         for Isrcs,mods,perf in zip(good_blobsrcs,all_models,performance):
             for i,mod,per in zip(Isrcs,mods,perf):
-                allmods[i] = mod
+                allmods [i] = mod
                 allperfs[i] = per
         del all_models
         del performance
@@ -1214,23 +1214,34 @@ def stage_fitblobs_finish(
         print('Wrote', fn)
 
     # Drop now-empty blobs.
-    R = [r for r in R if r is not None and len(r[0])]
+    R = [r for r in R if r is not None and len(r.B)]
 
-    II       = np.hstack([r[0] for r in R])
-    srcivs   = np.hstack([np.hstack(r[2]) for r in R])
-    fracflux = np.vstack([r[3] for r in R])
-    rchi2    = np.vstack([r[4] for r in R])
-    dchisqs  = np.vstack(np.vstack([r[5] for r in R]))
-    fracmasked = np.vstack([r[6] for r in R])
-    flags = np.hstack([r[7] for r in R])
-    fracin = np.vstack([r[10] for r in R])
-    started_in = np.hstack([r[11] for r in R])
-    finished_in = np.hstack([r[12] for r in R])
+    #II = np.hstack([r.B.Isrcs for r in R])
 
-    newcat = []
-    for r in R:
-        newcat.extend(r[1])
+    BB = merge_tables([r.B for r in R])
+    print('Total of', len(BB), 'blob measurements')
+    II = BB.Isrcs
+
+    # srcivs   = np.hstack([np.hstack(r[2]) for r in R])
+    # fracflux = np.vstack([r[3] for r in R])
+    # rchi2    = np.vstack([r[4] for r in R])
+    # dchisqs  = np.vstack(np.vstack([r[5] for r in R]))
+    # fracmasked = np.vstack([r[6] for r in R])
+    # flags = np.hstack([r[7] for r in R])
+    # fracin = np.vstack([r[10] for r in R])
+    # started_in = np.hstack([r[11] for r in R])
+    # finished_in = np.hstack([r[12] for r in R])
+
+    print('BB.sources:', type(BB.sources))
+    print(BB.sources)
+
     T.cut(II)
+    newcat = BB.sources
+
+    # newcat = []
+    # for r in R:
+    #     newcat.extend(r[1])
+    # T.cut(II)
 
     del R
     del fitblobs_R
@@ -1240,23 +1251,23 @@ def stage_fitblobs_finish(
     print('New catalog:', len(newcat))
     cat = Catalog(*newcat)
     tractor.catalog = cat
-    assert(cat.numberOfParams() == len(srcivs))
-    ns,nb = fracflux.shape
+    assert(cat.numberOfParams() == len(BB))
+    ns,nb = B.fracflux.shape
     assert(ns == len(cat))
     assert(nb == len(bands))
-    ns,nb = fracmasked.shape
+    ns,nb = B.fracmasked.shape
     assert(ns == len(cat))
     assert(nb == len(bands))
-    ns,nb = fracin.shape
+    ns,nb = B.fracin.shape
     assert(ns == len(cat))
     assert(nb == len(bands))
-    ns,nb = rchi2.shape
+    ns,nb = B.rchi2.shape
     assert(ns == len(cat))
     assert(nb == len(bands))
-    ns,nb = dchisqs.shape
+    ns,nb = B.dchisqs.shape
     assert(ns == len(cat))
     assert(nb == 4) # ptsrc, dev, exp, comp
-    assert(len(flags) == len(cat))
+    assert(len(B.flags) == len(cat))
 
     # Renumber blobs to make them contiguous.
     ublob,iblob = np.unique(T.blob, return_inverse=True)
@@ -1280,16 +1291,16 @@ def stage_fitblobs_finish(
     del ublob
     T.blob = iblob.astype(np.int32)
 
-    T.decam_flags = flags
-    T.fracflux = fracflux
-    T.fracin = fracin
-    T.left_blob = np.logical_and(started_in, np.logical_not(finished_in))
-    T.fracmasked = fracmasked
-    T.rchi2 = rchi2
-    T.dchisq = dchisqs.astype(np.float32)
+    T.decam_flags = B.flags
+    T.fracflux = B.fracflux
+    T.fracin = B.fracin
+    T.left_blob = np.logical_and(B.started_in_blob, np.logical_not(B.finished_in_blob))
+    T.fracmasked = B.fracmasked
+    T.rchi2 = B.rchi2
+    T.dchisq = B.dchisqs.astype(np.float32)
     T.dchisq[T.dchisq == 0.] = 0.
 
-    invvars = srcivs
+    invvars = B.srcinvvars
 
     rtn = dict(fitblobs_R = None)
     for k in ['tractor', 'cat', 'invvars', 'T', 'allbands']:
@@ -1855,8 +1866,18 @@ def _one_blob(X):
 
     all_models = [{} for i in range(len(Isrcs))]
     performance = [[] for i in range(len(Isrcs))]
-    flags = np.zeros(len(Isrcs), np.uint16)
-    dchisqs = np.zeros((len(Isrcs), 4), np.float32)
+
+    # table of per-source measurements for this blob.
+    B = fits_table()
+    B.flags = np.zeros(len(Isrcs), np.uint16)
+    B.dchisqs = np.zeros((len(Isrcs), 4), np.float32)
+    B.sources = srcs #[[] for i in range(len(Isrcs))]
+    B.Isrcs = Isrcs
+    B.started_in_blob = started_in_blob
+
+    del srcs
+    del Isrcs
+    del started_in_blob
 
     # For sources, in decreasing order of brightness
     for numi,i in enumerate(Ibright):
@@ -1898,9 +1919,7 @@ def _one_blob(X):
         srccat[0] = None
 
         lnl_null = srctractor.getLogLikelihood()
-
-        lnls = dict(ptsrc=None, dev=None, exp=None, comp=None,
-                    none=lnl_null)
+        lnls = dict(ptsrc=None, dev=None, exp=None, comp=None, none=lnl_null)
 
         if isinstance(src, PointSource):
             # logr, ee1, ee2
@@ -2063,8 +2082,7 @@ def _one_blob(X):
         nparams = dict(none=0, ptsrc=2, exp=5, dev=5, comp=9)
 
         # penalized log-likelihoods
-        plnls = dict([(k, lnls[k] - 0.5 * nparams[k])
-                      for k in nparams.keys()])
+        plnls = dict([(k, lnls[k] - 0.5 * nparams[k]) for k in nparams.keys()])
 
         if plots:
             from collections import OrderedDict
@@ -2120,8 +2138,8 @@ def _one_blob(X):
         diff = max([plnls[name] - plnls['none']
                     for name in ['ptsrc', 'dev', 'exp', 'comp']])
 
-        print()
-        print('lnl diffs vs none:', ', '.join(['%s = %.1f' % (name, plnls[name] - plnls['none']) for name in ['ptsrc', 'dev', 'exp', 'comp']]))
+        #print()
+        #print('lnl diffs vs none:', ', '.join(['%s = %.1f' % (name, plnls[name] - plnls['none']) for name in ['ptsrc', 'dev', 'exp', 'comp']]))
 
         if diff > cut:
             # We're going to keep this source!
@@ -2145,48 +2163,49 @@ def _one_blob(X):
             expdiff = plnls['exp'] - plnls[keepmod]
             devdiff = plnls['dev'] - plnls[keepmod]
 
-            print('Keeping source.  Comparing dev/exp vs ptsrc.  dlnp =', 4.5, 'frac =', fcut, 'cut =', cut)
-            print('exp:', expdiff)
-            print('dev:', devdiff)
+            #print('Keeping source.  Comparing dev/exp vs ptsrc.  dlnp =', 4.5, 'frac =', fcut, 'cut =', cut)
+            #print('exp:', expdiff)
+            #print('dev:', devdiff)
 
             if expdiff > cut or devdiff > cut:
                 if expdiff > devdiff:
-                    print('Upgrading from ptsrc to exp: diff', expdiff)
+                    #print('Upgrading from ptsrc to exp: diff', expdiff)
                     keepsrc = exp
                     keepmod = 'exp'
                 else:
-                    print('Upgrading from ptsrc to dev: diff', devdiff)
+                    #print('Upgrading from ptsrc to dev: diff', devdiff)
                     keepsrc = dev
                     keepmod = 'dev'
 
                 diff = plnls['comp'] - plnls[keepmod]
-                print('Comparing', keepmod, 'to comp.  cut:', cut, 'comp:', diff)
+                #print('Comparing', keepmod, 'to comp.  cut:', cut, 'comp:', diff)
                 if diff > cut:
-                    print('Upgrading from dev/exp to composite.')
+                    #print('Upgrading from dev/exp to composite.')
                     keepsrc = comp
                     keepmod = 'comp'
                 else:
-                    print('Not upgrading to comp')
+                    #print('Not upgrading to comp')
+                    pass
 
             else:
-                print('Not upgrading from ptsrc to dev/exp')
+                #print('Not upgrading from ptsrc to dev/exp')
                 pass
         else:
-            print('Dropping source:', src)
+            #print('Dropping source:', src)
             pass
 
-        print('Keeping model:', keepmod)
-        print('Keeping source:', keepsrc)
+        #print('Keeping model:', keepmod)
+        #print('Keeping source:', keepsrc)
 
         # 2 * log-likelihood differences
-        dchisqs[i, :] = 2. * np.array(
+        B.dchisqs[i, :] = 2. * np.array(
             [plnls[k] - plnls['none'] for k in ['ptsrc', 'dev', 'exp', 'comp']])
-        print('delta chisqs:', dchisqs)
 
+        B.flags[i] = allflags.get(keepmod, 0)
+        B.sources[i] = keepsrc
         subcat[i] = keepsrc
-        flags[i] = allflags.get(keepmod, 0)
         all_models[i]['keep'] = keepmod
-        all_models[i]['dchisqs'] = dchisqs[i,:]
+        all_models[i]['dchisqs'] = B.dchisqs[i,:]
         all_models[i]['flags'] = allflags
 
         src = keepsrc
@@ -2211,26 +2230,33 @@ def _one_blob(X):
         plotmodnames.append('All model selection')
         _plot_mods(subtims, plotmods, plotmodnames, bands, None, None, bslc, blobw, blobh, ps)
 
-    srcs = subcat
-    I = np.array([i for i,s in enumerate(srcs) if s is not None])
-    srcs = [s for s in srcs if s is not None]
+    I = np.array([i for i,s in enumerate(subcat) if s is not None])
+    B.cut(I)
 
-    Isrcs = [Isrcs[i] for i in I]
+    print('After cutting sources: B.sources is', type(B.sources))
+    print(B.sources)
 
-    subcat = Catalog(*srcs)
+    #srcs = B.sources
+    subcat = Catalog(*B.sources)
     subtr.catalog = subcat
-    if len(I):
-        started_in_blob = started_in_blob[I]
-        flags = flags[I]
-        dchisqs = dchisqs[I,:]
-    else:
-        started_in_blob = np.array([], bool)
-        flags = np.array([], flags.dtype)
-        dchisqs = np.array([], dchisqs.dtype)
-    assert(len(started_in_blob) == len(srcs))
+
+    # srcs = subcat
+    # srcs = [s for s in srcs if s is not None]
+    # Isrcs = [Isrcs[i] for i in I]
+    # subcat = Catalog(*srcs)
+    # subtr.catalog = subcat
+    # if len(I):
+    #     started_in_blob = started_in_blob[I]
+    #     flags = flags[I]
+    #     dchisqs = dchisqs[I,:]
+    # else:
+    #     started_in_blob = np.array([], bool)
+    #     flags = np.array([], flags.dtype)
+    #     dchisqs = np.array([], dchisqs.dtype)
+    # assert(len(started_in_blob) == len(srcs))
 
     print('After cutting sources:')
-    for src,dchi in zip(srcs, dchisqs):
+    for src,dchi in zip(B.sources, B.dchisqs):
         print('  source', src, 'dchisq', dchi)
 
     ### Simultaneous re-opt.
@@ -2260,10 +2286,11 @@ def _one_blob(X):
     #tlast = Time()
 
     # Variances
-    srcinvvars = [[] for src in srcs]
+    B.srcinvvars = [[] for i in range(len(B))]
+
     subcat.thawAllRecursive()
     subcat.freezeAllParams()
-    for isub in range(len(srcs)):
+    for isub in range(len(B.sources)):
         subcat.thawParam(isub)
         src = subcat[isub]
         if src is None:
@@ -2278,16 +2305,16 @@ def _one_blob(X):
 
         allderivs = subtr.getDerivs()
         for iparam,derivs in enumerate(allderivs):
-            dchisq = 0
+            chisq = 0
             for deriv,tim in derivs:
                 h,w = tim.shape
                 deriv.clipTo(w,h)
                 ie = tim.getInvError()
                 slc = deriv.getSlice(ie)
                 chi = deriv.patch * ie[slc]
-                dchisq += (chi**2).sum()
-            srcinvvars[isub].append(dchisq)
-        assert(len(srcinvvars[isub]) == subcat[isub].numberOfParams())
+                chisq += (chi**2).sum()
+            B.srcinvvars[isub].append(chisq)
+        assert(len(B.srcinvvars[isub]) == subcat[isub].numberOfParams())
         subcat.freezeParam(isub)
     #print('Blob variances:', Time()-tlast)
     #tlast = Time()
@@ -2295,49 +2322,61 @@ def _one_blob(X):
     # Check for sources with zero inverse-variance -- I think these
     # can be generated during the "Simultaneous re-opt" stage above --
     # sources can get scattered outside the blob.
-    keep = []
-    for i,(src,ivar) in enumerate(zip(srcs, srcinvvars)):
-        # Arbitrarily look at the first element (RA)?
-        if ivar[0] == 0.:
-            continue
-        keep.append(i)
-    if len(keep) < len(srcs):
-        print('Keeping', len(keep), 'of', len(srcs), 'sources with non-zero ivar')
-        Isrcs        = [Isrcs[i]        for i in keep]
-        srcs         = [srcs[i]         for i in keep]
-        srcinvvars   = [srcinvvars[i]   for i in keep]
-        dchisqs = [dchisqs[i] for i in keep]
-        flags        = [flags[i]        for i in keep]
-        started_in_blob = [started_in_blob[i] for i in keep]
-        subcat = Catalog(*srcs)
+
+    # keep = []
+    # for i,(src,ivar) in enumerate(zip(B.sources, B.srcinvvars)):
+    #     # Arbitrarily look at the first element (RA)?
+    #     if ivar[0] == 0.:
+    #         continue
+    #     keep.append(i)
+
+    I = np.flatnonzero(np.array([iv[0] for iv in B.srcinvvars]))
+    #if len(keep) < len(B):
+    if len(I) < len(B):
+        print('Keeping', len(I), 'of', len(B), 'sources with non-zero ivar')
+
+        #I = np.array(keep)
+        B.cut(I)
+
+        #srcs = B.sources
+        subcat = Catalog(*B.sources)
         subtr.catalog = subcat
 
+        # Isrcs        = [Isrcs[i]        for i in keep]
+        # srcs         = [srcs[i]         for i in keep]
+        # srcinvvars   = [srcinvvars[i]   for i in keep]
+        # dchisqs = [dchisqs[i] for i in keep]
+        # flags        = [flags[i]        for i in keep]
+        # started_in_blob = [started_in_blob[i] for i in keep]
+        # subcat = Catalog(*srcs)
+        # subtr.catalog = subcat
+
     # rchi2 quality-of-fit metric
-    rchi2_num    = np.zeros((len(srcs),len(bands)), np.float32)
-    rchi2_den    = np.zeros((len(srcs),len(bands)), np.float32)
+    rchi2_num    = np.zeros((len(B),len(bands)), np.float32)
+    rchi2_den    = np.zeros((len(B),len(bands)), np.float32)
 
     # fracflux degree-of-blending metric
-    fracflux_num = np.zeros((len(srcs),len(bands)), np.float32)
-    fracflux_den = np.zeros((len(srcs),len(bands)), np.float32)
+    fracflux_num = np.zeros((len(B),len(bands)), np.float32)
+    fracflux_den = np.zeros((len(B),len(bands)), np.float32)
 
     # fracin flux-inside-blob metric
-    fracin_num = np.zeros((len(srcs),len(bands)), np.float32)
-    fracin_den = np.zeros((len(srcs),len(bands)), np.float32)
+    fracin_num = np.zeros((len(B),len(bands)), np.float32)
+    fracin_den = np.zeros((len(B),len(bands)), np.float32)
 
     # fracmasked: fraction of masked pixels metric
-    fracmasked_num = np.zeros((len(srcs),len(bands)), np.float32)
-    fracmasked_den = np.zeros((len(srcs),len(bands)), np.float32)
+    fracmasked_num = np.zeros((len(B),len(bands)), np.float32)
+    fracmasked_den = np.zeros((len(B),len(bands)), np.float32)
 
     for iband,band in enumerate(bands):
         for tim in subtims:
             if tim.band != band:
                 continue
             mod = np.zeros(tim.getModelShape(), subtr.modtype)
-            srcmods = [None for src in srcs]
-            counts = np.zeros(len(srcs))
+            srcmods = [None for src in B.sources]
+            counts = np.zeros(len(B))
             pcal = tim.getPhotoCal()
 
-            for isrc,src in enumerate(srcs):
+            for isrc,src in enumerate(B.sources):
                 patch = subtr.getModelPatch(tim, src, minsb=tim.modelMinval)
                 if patch is None or patch.patch is None:
                     continue
@@ -2384,25 +2423,35 @@ def _one_blob(X):
                 # If the source is not near an image edge, sum(patch.patch) == counts[isrc].
                 rchi2_den[isrc,iband] += np.sum(patch.patch) / counts[isrc]
 
-    fracflux   = fracflux_num   / np.maximum(1, fracflux_den)
-    rchi2      = rchi2_num      / np.maximum(1, rchi2_den)
-    fracmasked = fracmasked_num / np.maximum(1, fracmasked_den)
+    B.fracflux   = fracflux_num   / np.maximum(1, fracflux_den)
+    B.rchi2      = rchi2_num      / np.maximum(1, rchi2_den)
+    B.fracmasked = fracmasked_num / np.maximum(1, fracmasked_den)
     # fracin_{num,den} are in flux * nimages units
     tinyflux = 1e-9
-    fracin     = fracin_num     / np.maximum(tinyflux, fracin_den)
+    B.fracin     = fracin_num     / np.maximum(tinyflux, fracin_den)
 
-    ok,x1,y1 = subtarget.radec2pixelxy(np.array([src.getPosition().ra  for src in srcs]),
-                                       np.array([src.getPosition().dec for src in srcs]))
-    finished_in_blob = blobmask[np.clip(np.round(y1-1).astype(int), 0, blobh-1),
+    ok,x1,y1 = subtarget.radec2pixelxy(np.array([src.getPosition().ra  for src in B.sources]),
+                                       np.array([src.getPosition().dec for src in B.sources]))
+    B.finished_in_blob = blobmask[np.clip(np.round(y1-1).astype(int), 0, blobh-1),
                                 np.clip(np.round(x1-1).astype(int), 0, blobw-1)]
-    assert(len(finished_in_blob) == len(srcs))
-    assert(len(finished_in_blob) == len(started_in_blob))
+    assert(len(B.finished_in_blob) == len(B))
+    assert(len(B.finished_in_blob) == len(B.started_in_blob))
 
     #print('Blob finished metrics:', Time()-tlast)
     print('Blob', iblob+1, 'finished') #:', Time()-tlast
 
-    return (Isrcs, srcs, srcinvvars, fracflux, rchi2, dchisqs, fracmasked, flags,
-            all_models, performance, fracin, started_in_blob, finished_in_blob)
+    result = BlobDuck()
+    result.B = B
+    result.all_models = all_models
+    result.performance = performance
+
+    return result
+
+    #return (Isrcs, srcs, srcinvvars, fracflux, rchi2, dchisqs, fracmasked, flags,
+    #        all_models, performance, fracin, started_in_blob, finished_in_blob)
+
+class BlobDuck(object):
+    pass
 
 
 def _get_mod(X):
