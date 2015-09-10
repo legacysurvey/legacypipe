@@ -49,6 +49,9 @@ if __name__ == '__main__':
     parser.add_option('--calibs', action='store_true', default=False,
                       help='Output CCDs that need to be calibrated.')
 
+    parser.add_option('--nper', type=int, default=None,
+                      help='Batch N calibs per line')
+
     parser.add_option('--forced', action='store_true', default=False,
                       help='Output forced-photometry commands')
 
@@ -361,6 +364,17 @@ if __name__ == '__main__':
     log('Writing calibs to', opt.out)
     f = open(opt.out,'w')
     log('Total of', len(allI), 'CCDs')
+
+    batch = []
+
+    def write_batch(f, batch, cmd):
+        if opt.command:
+            s = '; '.join(batch)
+        else:
+            s = ' '.join(batch)
+        f.write(s + '\n')
+
+
     for j,i in enumerate(allI):
 
         if opt.delete_sky or opt.delete_pvastrom:
@@ -381,12 +395,25 @@ if __name__ == '__main__':
                 continue
 
         if opt.command:
-            f.write('python legacypipe/run-calib.py --expnum %i --ccdname %s\n' %
-                    (T.expnum[i], T.ccdname[i]))
+            s = ('python legacypipe/run-calib.py --expnum %i --ccdname %s' %
+                 (T.expnum[i], T.ccdname[i]))
         else:
-            f.write('%i\n' % T.index[i])
+            s = '%i' % T.index[i]
+
+        if not opt.nper:
+            f.write(s + '\n')
+        else:
+            batch.append(s)
+            if len(batch) >= opt.nper:
+                write_batch(f, batch, opt.command)
+                batch = []
+
         if opt.check:
             f.flush()
+
+    if len(batch):
+        write_batch(f, batch, opt.command)
+
     f.close()
     log('Wrote', opt.out)
 

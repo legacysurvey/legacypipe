@@ -80,7 +80,7 @@ def get_version_header(program_name, decals_dir, git_version=None):
 
     if git_version is None:
         git_version = get_git_version()
-        print('Version:', git_version)
+        #print('Version:', git_version)
 
     hdr = fitsio.FITSHDR()
 

@@ -35,8 +35,7 @@ if __name__ == '__main__':
         print 'Read', len(T), 'from', opt.ccds
     else:
         T = D.get_ccds()
-        print len(T), 'CCDs'
-    print len(T), 'CCDs'
+        #print len(T), 'CCDs'
 
     if len(args) == 0:
         if opt.expnum is not None:
