@@ -9,9 +9,7 @@ from tractor import PointSource, getParamTypeTree
 from tractor.galaxy import ExpGalaxy, DevGalaxy, FixedCompositeGalaxy
 from tractor.ellipses import EllipseESoft, EllipseE
 
-N_subtiles = 4
 unwise_atlas = 'allsky-atlas.fits'
-decam_pixscale = 0.27
 
 # FITS catalogs
 fits_typemap = { PointSource: 'PSF', ExpGalaxy: 'EXP', DevGalaxy: 'DEV',
@@ -27,30 +25,6 @@ def typestring(t):
 ellipse_types = dict([(typestring(t), t) for t in
                       [ EllipseESoft, EllipseE,
                         ]])
-
-def get_subtile_wcs(name, x, y):
-    '''
-    pixscale: arcsec/pixel
-    '''
-    nsub = N_subtiles
-    pixscale = decam_pixscale
-
-    wcs = unwise_wcs_from_name(name)
-    W,H = wcs.get_width(), wcs.get_height()
-    # Tweak to DECam pixel scale and number of pixels.
-    D = int(np.ceil((W * wcs.pixel_scale() / pixscale) / nsub)) * nsub
-    DW,DH = D,D
-    wcs.set_crpix(DW/2 + 1.5, DH/2 + 1.5)
-    pixscale = pixscale / 3600.
-    wcs.set_cd(-pixscale, 0., 0., pixscale)
-    wcs.set_imagesize(DW, DH)
-    W,H = wcs.get_width(), wcs.get_height()
-
-    subw, subh = W/nsub, H/nsub
-    subwcs = Tan(wcs)
-    subwcs.set_crpix(wcs.crpix[0] - x * subw, wcs.crpix[1] - y * subh)
-    subwcs.set_imagesize(subw, subh)
-    return subwcs
 
 def unwise_wcs_from_name(name, atlas=unwise_atlas):
     print('Reading', atlas)
@@ -161,26 +135,13 @@ def prepare_fits_catalog(cat, invvars, T, hdr, filts, fs, allbands = 'ugrizY',
     cat.setParams(params0)
     
     return T, hdr
-        
-# def convert_source_for_output(src):
-#     '''
-#     Converts a tractor source from our internal representation to
-#     output format.
-# 
-#     Specifically, converts EllipseESoft to EllipseE
-#     '''
-#     if instance(src, (DevGalaxy, ExpGalaxy)):
-#         src.shape = EllipseE.fromEllipeESoft(src.shape)
-#     elif instance(src, FixedCompositeGalaxy):
-#         src.shapeExp = EllipseE.fromEllipeESoft(src.shapeExp)
-#         src.shapeDev = EllipseE.fromEllipeESoft(src.shapeDev)
 
 # We'll want to compute errors in our native representation, so have a
 # FITS output routine that can convert those into output format.
 
 def get_tractor_fits_values(T, cat, pat):
     typearray = np.array([fits_typemap[type(src)] for src in cat])
-    # If there are no "COMP" sources, it will be 'S3'...
+    # If there are no "COMP" sources, the type will be 'S3' rather than 'S4'...
     typearray = typearray.astype('S4')
     T.set(pat % 'type', typearray)
 
