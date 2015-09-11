@@ -277,6 +277,16 @@ class LegacySurveyImage(object):
             assert(False)
         print('Using PSF model', psf)
 
+        h,w = img.shape
+        patch = psf.getPointSourcePatch(w/2., h/2.).patch
+        print('PSF PointSourcePatch: sum', patch.sum())
+        # We normalize the patch before taking the norm...
+        psfnorm = np.sqrt(np.sum((patch / patch.sum())**2))
+        # Gaussian:
+        #psfnorm = 1./(2. * np.sqrt(np.pi) * tim.psf_sigma)
+        print('PSF norm', psfnorm, 'vs Gaussian',
+              1./(2. * np.sqrt(np.pi) * psf_sigma))
+        
         if psffn is not None:
             hdr = fitsio.read_header(psffn)
             psf.version = hdr.get('LEGSURV', None)
@@ -301,6 +311,7 @@ class LegacySurveyImage(object):
         tim.band = band
         tim.psf_fwhm = psf_fwhm
         tim.psf_sigma = psf_sigma
+        tim.psfnorm = psfnorm
         tim.sip_wcs = wcs
         tim.x0,tim.y0 = int(x0),int(y0)
         tim.imobj = self

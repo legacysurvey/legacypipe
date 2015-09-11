@@ -197,10 +197,16 @@ if __name__ == '__main__':
         
         C.cut(np.lexsort((C.dchisq[:,0], C.type)))
 
+        detsns = [fitsio.read('detsn-2402p062-%s.fits' % b)
+                   for b in 'zrg']
+        
         for page in range(5):
             plt.clf()
             rows,cols = 7,10
             plt.subplots_adjust(left=0.05, right=0.95, bottom=0.1, top=0.95, hspace=0, wspace=0)
+
+            xytext = []
+            
             i0 = 0
             for i in range(rows*cols):
                 plt.subplot(rows, cols, i+1)
@@ -211,14 +217,33 @@ if __name__ == '__main__':
                     C.cut(np.array([t.strip() == 'PSF' for t in C.type]) * (C.dchisq[:,0] > mindchi))
                     i0 = -i
                 c = C[i + i0]
-                plt.imshow(img[max(0, c.by-S) : min(H, c.by+S+1),
-                               max(0, c.bx-S) : min(W, c.bx+S+1)], interpolation='nearest', origin='lower')
-                plt.text(0, 0, '%s %.0f' % (c.type, c.dchisq[0]), ha='left', va='bottom', color='red', fontsize=8)
+                y0,y1 = max(0, c.by-S), min(H, c.by+S+1)
+                x0,x1 = max(0, c.bx-S), min(W, c.bx+S+1)
+                plt.imshow(img[y0:y1, x0:x1], interpolation='nearest', origin='lower')
+                txt = '%s %.0f' % (c.type, c.dchisq[0])
+                plt.text(0, 0, txt, ha='left', va='bottom', color='red', fontsize=8)
                 plt.xticks([])
                 plt.yticks([])
+
+                xytext.append((x0,x1,y0,y1, txt))
+
             plt.suptitle('Sources with dchisq(psf) < 50')
             ps.savefig()
-        
+
+            for i,(x0,x1,y0,y1,txt) in enumerate(xytext):
+                plt.subplot(rows, cols, i+1)
+
+                sn = np.dstack((detsn[y0:y1,x0:x1] for detsn in detsns))
+                print 'sn', sn.shape
+                lo,hi = -2, 8
+                sn = np.clip((sn - lo) / (hi - lo), 0., 1.)
+                plt.imshow(sn, interpolation='nearest', origin='lower')
+                plt.text(0, 0, txt, ha='left', va='bottom', color='red', fontsize=8)
+                plt.xticks([])
+                plt.yticks([])
+            ps.savefig()
+                
+            
         continue
 
 

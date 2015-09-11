@@ -406,8 +406,7 @@ def _coadds(tims, bands, targetwcs,
                 andmask[Yo,Xo] &= dq
                 del dq
                 # point-source depth
-                psfnorm = 1./(2. * np.sqrt(np.pi) * tim.psf_sigma)
-                detsig1 = tim.sig1 / psfnorm
+                detsig1 = tim.sig1 / tim.psfnorm
                 detiv[Yo,Xo] += (iv > 0) * (1. / detsig1**2)
                 # raw exposure count
                 nobs[Yo,Xo] += 1
@@ -754,6 +753,8 @@ def stage_srcs(coimgs=None, cons=None,
 
     tlast = Time()
     if not no_sdss:
+        from legacypipe.sdss import get_sdss_sources
+        
         # Read SDSS sources
         cols = ['parent', 'tai', 'mjd', 'psf_fwhm', 'objc_flags2', 'flags2',
                 'devflux_ivar', 'expflux_ivar', 'calib_status', 'raerr',
@@ -938,6 +939,15 @@ def stage_srcs(coimgs=None, cons=None,
             'tractor', 'cat', 'ps']
     if not pipe:
         keys.extend(['detmaps', 'detivs'])
+
+        for b,detmap,detiv in zip(bands, detmaps, detivs):
+            fitsio.write('detmap-%s-%s.fits' % (brickname, b),
+                         detmap)
+            fitsio.write('detiv-%s-%s.fits' % (brickname, b),
+                         detiv)
+            fitsio.write('detsn-%s-%s.fits' % (brickname, b),
+                         detmap * np.sqrt(detiv))
+        
     rtn = dict()
     for k in keys:
         rtn[k] = locals()[k]
