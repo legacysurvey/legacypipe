@@ -277,16 +277,6 @@ class LegacySurveyImage(object):
             assert(False)
         print('Using PSF model', psf)
 
-        h,w = img.shape
-        patch = psf.getPointSourcePatch(w/2., h/2.).patch
-        print('PSF PointSourcePatch: sum', patch.sum())
-        # We normalize the patch before taking the norm...
-        psfnorm = np.sqrt(np.sum((patch / patch.sum())**2))
-        # Gaussian:
-        #psfnorm = 1./(2. * np.sqrt(np.pi) * tim.psf_sigma)
-        print('PSF norm', psfnorm, 'vs Gaussian',
-              1./(2. * np.sqrt(np.pi) * psf_sigma))
-        
         if psffn is not None:
             hdr = fitsio.read_header(psffn)
             psf.version = hdr.get('LEGSURV', None)
@@ -299,6 +289,29 @@ class LegacySurveyImage(object):
                     sky=sky, name=self.name + ' ' + band)
         assert(np.all(np.isfinite(tim.getInvError())))
 
+        # PSF norm
+        h,w = tim.shape
+        patch = psf.getPointSourcePatch(w/2., h/2.).patch
+        print('PSF PointSourcePatch: sum', patch.sum())
+        # We normalize the patch before taking the norm...
+        psfnorm = np.sqrt(np.sum((patch / patch.sum())**2))
+        print('PSF norm', psfnorm, 'vs Gaussian',
+              1./(2. * np.sqrt(np.pi) * psf_sigma))
+
+        # Galaxy-detection norm
+        from tractor.galaxy import ExpGalaxy
+        from tractor.ellipses import EllipseE
+        from tractor.patch import Patch
+        cx,cy = w/2., h/2.
+        pos = tim.wcs.pixelToPosition(cx, cy)
+        gal = ExpGalaxy(pos, NanoMaggies(**{band:1.}), EllipseE(0.45, 0., 0.))
+        S = 32
+        mm = Patch(int(cx-S), int(cy-S), np.ones((2*S+1, 2*S+1), bool))
+        galmod = gal.getModelPatch(tim, modelMask = mm).patch
+        #print('Galaxy model:', galmod.shape, galmod.sum())
+        galnorm = np.sqrt(np.sum((galmod / galmod.sum())**2))
+        print('Galaxy norm:', galnorm)
+        
         # CP (DECam) images include DATE-OBS and MJD-OBS, in UTC.
         import astropy.time
         #mjd_utc = mjd=primhdr.get('MJD-OBS', 0)
@@ -312,6 +325,7 @@ class LegacySurveyImage(object):
         tim.psf_fwhm = psf_fwhm
         tim.psf_sigma = psf_sigma
         tim.psfnorm = psfnorm
+        tim.galnorm = galnorm
         tim.sip_wcs = wcs
         tim.x0,tim.y0 = int(x0),int(y0)
         tim.imobj = self

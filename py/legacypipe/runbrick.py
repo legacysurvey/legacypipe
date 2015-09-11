@@ -316,6 +316,7 @@ def _coadds(tims, bands, targetwcs,
     unweighted=True
 
     C.coimgs = []
+    C.galdetivs = []
     C.detivs = []
     if mods:
         C.comods = []
@@ -343,6 +344,9 @@ def _coadds(tims, bands, targetwcs,
         detiv = np.zeros((H,W), np.float32)
         C.detivs.append(detiv)
         kwargs.update(detiv=detiv)
+        galdetiv = np.zeros((H,W), np.float32)
+        C.galdetivs.append(galdetiv)
+        kwargs.update(galdetiv=galdetiv)
         
         if mods:
             cowmod = np.zeros((H,W), np.float32)
@@ -424,9 +428,26 @@ def _coadds(tims, bands, targetwcs,
                           1./(2. * np.sqrt(np.pi) * tim.psf_sigma))
                     tim.psfnorm = psfnorm
 
+                    # Galaxy-detection norm
+                    cx,cy = w/2., h/2.
+                    pos = tim.wcs.pixelToPosition(cx, cy)
+                    gal = ExpGalaxy(pos, NanoMaggies(**{band:1.}), EllipseE(0.45, 0., 0.))
+                    S = 32
+                    mm = Patch(int(cx-S), int(cy-S), np.ones((2*S+1, 2*S+1), bool))
+                    galmod = gal.getModelPatch(tim, modelMask = mm).patch
+                    galnorm = np.sqrt(np.sum((galmod / galmod.sum())**2))
+                    print('Galaxy norm:', galnorm)
+                    tim.galnorm = galnorm
                     
+                    
+                # Point-source detection
                 detsig1 = tim.sig1 / tim.psfnorm
                 detiv[Yo,Xo] += (iv > 0) * (1. / detsig1**2)
+
+                # Galaxy detection
+                gdetsig1 = tim.sig1 / tim.galnorm
+                galdetiv[Yo,Xo] += (iv > 0) * (1. / gdetsig1**2)
+
                 # raw exposure count
                 nobs[Yo,Xo] += 1
 
@@ -531,7 +552,7 @@ def _coadds(tims, bands, targetwcs,
 def _write_band_images(band,
                        brickname, version_header, tims, targetwcs, basedir,
                        cowimg=None, cow=None, cowmod=None, cochi2=None,
-                       detiv=None, congood=None, **kwargs):
+                       detiv=None, galdetiv=None, congood=None, **kwargs):
     # copy version_header before modifying...
     hdr = fitsio.FITSHDR()
     for r in version_header.records():
@@ -2599,22 +2620,27 @@ def stage_coadds(bands=None, version_header=None, targetwcs=None,
     D.depthlo = depthbins[:-1].astype(np.float32)
     D.depthhi = depthbins[1: ].astype(np.float32)
     
-    for band,detiv in zip(bands, C.detivs):
-        # compute stats on 5-sigma point source depth map
-        depth = 5. / np.sqrt(detiv)
-        # that's flux in nanomaggies -- convert to mag
-        depth = -2.5 * (np.log10(depth) - 9)
-        print(band, 'band depth map: percentiles',
-              np.percentile(depth, np.arange(0,101)))
-        if U is not None:
-            depth = depth.flat[U]
-            print(band, 'band depth map: unique percentiles',
-                  np.percentile(depth, np.arange(0,101)))
+    for band,detiv,galdetiv in zip(bands, C.detivs, C.galdetivs):
+        for det,name in [(detiv, 'ptsrc'), (galdetiv, 'gal')]:
+            # compute stats for 5-sigma detection
+            depth = 5. / np.sqrt(det)
+            # that's flux in nanomaggies -- convert to mag
+            depth = -2.5 * (np.log10(depth) - 9)
+            # no coverage -> very bright detection limit
+            depth[np.logical_not(np.isfinite(depth))] = 0.
+            if U is not None:
+                depth = depth.flat[U]
+            print(band, name, 'band depth map: percentiles',
+                  np.percentile(depth, np.arange(0,101, 10)))
+            # histogram
+            D.set('counts_%s_%s' % (name, band),
+                  np.histogram(depth, bins=depthbins)[0].astype(np.int32))
 
-        # histogram
-        D.set('counts_ptsrc_%s' % band,
-              np.histogram(depth, bins=depthbins)[0].astype(np.int32))
     del U
+    del depth
+    del det
+    del detiv
+    del galdetiv
     fn = os.path.join(basedir, 'decals-%s-depth.fits' % (brickname))
     D.writeto(fn)
     print('Wrote', fn)
