@@ -316,6 +316,7 @@ def _coadds(tims, bands, targetwcs,
     unweighted=True
 
     C.coimgs = []
+    C.detivs = []
     if mods:
         C.comods = []
         C.coresids = []
@@ -330,7 +331,7 @@ def _coadds(tims, bands, targetwcs,
         C.T.nobs    = np.zeros((len(ix), len(bands)), np.uint8)
         C.T.anymask = np.zeros((len(ix), len(bands)), np.int16)
         C.T.allmask = np.zeros((len(ix), len(bands)), np.int16)
-
+        
     tinyw = 1e-30
     for iband,band in enumerate(bands):
 
@@ -339,6 +340,10 @@ def _coadds(tims, bands, targetwcs,
 
         kwargs = dict(cowimg=cowimg, cow=cow)
 
+        detiv = np.zeros((H,W), np.float32)
+        C.detivs.append(detiv)
+        kwargs.update(detiv=detiv)
+        
         if mods:
             cowmod = np.zeros((H,W), np.float32)
             cochi2 = np.zeros((H,W), np.float32)
@@ -368,9 +373,8 @@ def _coadds(tims, bands, targetwcs,
             andmask = np.empty((H,W), np.int16)
             allbits = reduce(np.bitwise_or, CP_DQ_BITS.values())
             andmask[:,:] = allbits
-            detiv = np.zeros((H,W), np.float32)
             nobs  = np.zeros((H,W), np.uint8)
-            kwargs.update(ormask=ormask, andmask=andmask, detiv=detiv, nobs=nobs)
+            kwargs.update(ormask=ormask, andmask=andmask, nobs=nobs)
 
         for itim,tim in enumerate(tims):
             if tim.band != band:
@@ -406,6 +410,21 @@ def _coadds(tims, bands, targetwcs,
                 andmask[Yo,Xo] &= dq
                 del dq
                 # point-source depth
+
+                #### HACK #####
+                if not hasattr(tim, 'psfnorm'):
+                    h,w = tim.shape
+                    patch = tim.psf.getPointSourcePatch(w/2., h/2.).patch
+                    print('PSF PointSourcePatch: sum', patch.sum())
+                    # We normalize the patch before taking the norm...
+                    psfnorm = np.sqrt(np.sum((patch / patch.sum())**2))
+                    # Gaussian:
+                    #psfnorm = 1./(2. * np.sqrt(np.pi) * tim.psf_sigma)
+                    print('PSF norm', psfnorm, 'vs Gaussian',
+                          1./(2. * np.sqrt(np.pi) * tim.psf_sigma))
+                    tim.psfnorm = psfnorm
+
+                    
                 detsig1 = tim.sig1 / tim.psfnorm
                 detiv[Yo,Xo] += (iv > 0) * (1. / detsig1**2)
                 # raw exposure count
@@ -566,6 +585,7 @@ def _write_band_images(band,
         imgs.append(
             ('nexp',   'expmap',   congood, True ),
             )
+    # if detiv is not None:
     if cowmod is not None:
         imgs.extend([
                 ('invvar', 'wtmap',    cow,     False),
@@ -598,6 +618,8 @@ def _write_band_images(band,
             fn += '.gz'
         fitsio.write(fn, img, clobber=True, header=hdr2)
         print('Wrote', fn)
+
+        
 
 def stage_image_coadds(targetwcs=None, bands=None, tims=None, outdir=None,
                        brickname=None, version_header=None,
@@ -2469,7 +2491,7 @@ def _get_mod(X):
 def stage_coadds(bands=None, version_header=None, targetwcs=None,
                  tims=None, ps=None, brickname=None, ccds=None,
                  outdir=None, T=None, cat=None, pixscale=None, plots=False,
-                 coadd_bw=False,
+                 coadd_bw=False, brick=None, W=None, H=None,
                  mp=None,
                  **kwargs):
     '''
@@ -2557,7 +2579,47 @@ def stage_coadds(bands=None, version_header=None, targetwcs=None,
 
     for c in ['nobs', 'anymask', 'allmask']:
         T.set(c, C.T.get(c))
+        
 
+    # Compute the brick's unique pixels.
+    U = None
+    if hasattr(brick, 'ra1'):
+        print('Computing unique brick pixels...')
+        xx,yy = np.meshgrid(np.arange(W), np.arange(H))
+        rr,dd = targetwcs.pixelxy2radec(xx+1, yy+1)
+        U = np.flatnonzero((rr >= brick.ra1 ) * (rr < brick.ra2 ) *
+                           (dd >= brick.dec1) * (dd < brick.dec2))
+        print(len(U), 'of', W*H, 'pixels are unique to this brick')
+
+    # depth histogram bins
+    depthbins = np.arange(20, 25.001, 0.1)
+    depthbins[0] = 0.
+    depthbins[-1] = 100.
+    D = fits_table()
+    D.depthlo = depthbins[:-1].astype(np.float32)
+    D.depthhi = depthbins[1: ].astype(np.float32)
+    
+    for band,detiv in zip(bands, C.detivs):
+        # compute stats on 5-sigma point source depth map
+        depth = 5. / np.sqrt(detiv)
+        # that's flux in nanomaggies -- convert to mag
+        depth = -2.5 * (np.log10(depth) - 9)
+        print(band, 'band depth map: percentiles',
+              np.percentile(depth, np.arange(0,101)))
+        if U is not None:
+            depth = depth.flat[U]
+            print(band, 'band depth map: unique percentiles',
+                  np.percentile(depth, np.arange(0,101)))
+
+        # histogram
+        D.set('counts_ptsrc_%s' % band,
+              np.histogram(depth, bins=depthbins)[0].astype(np.int32))
+    del U
+    fn = os.path.join(basedir, 'decals-%s-depth.fits' % (brickname))
+    D.writeto(fn)
+    print('Wrote', fn)
+    del D
+        
     tmpfn = create_temp(suffix='.png')
     for name,ims,rgbkw in [('image', C.coimgs, rgbkwargs),
                            ('model', C.comods, rgbkwargs),
