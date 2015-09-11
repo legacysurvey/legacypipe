@@ -9,14 +9,18 @@ from tractor import PointSource, getParamTypeTree
 from tractor.galaxy import ExpGalaxy, DevGalaxy, FixedCompositeGalaxy
 from tractor.ellipses import EllipseESoft, EllipseE
 
+from legacypipe.common import DesiGalaxy
+
 unwise_atlas = 'allsky-atlas.fits'
 
 # FITS catalogs
 fits_typemap = { PointSource: 'PSF', ExpGalaxy: 'EXP', DevGalaxy: 'DEV',
-                 FixedCompositeGalaxy: 'COMP' }
+                 FixedCompositeGalaxy: 'COMP',
+                 DesiGalaxy: 'DESI' }
 
 fits_short_typemap = { PointSource: 'S', ExpGalaxy: 'E', DevGalaxy: 'D',
-                       FixedCompositeGalaxy: 'C' }
+                       FixedCompositeGalaxy: 'C',
+                       DesiGalaxy: 'G' }
 
 
 def typestring(t):
