@@ -1318,7 +1318,7 @@ def stage_fitblobs_finish(
     assert(nb == len(bands))
     ns,nb = BB.dchisqs.shape
     assert(ns == len(cat))
-    assert(nb == 5) # ptsrc, desi, dev, exp, comp
+    assert(nb == 5) # ptsrc, simple, dev, exp, comp
     assert(len(BB.flags) == len(cat))
 
     # Renumber blobs to make them contiguous.
@@ -1975,20 +1975,20 @@ def _one_blob(X):
 
         lnl_null = srctractor.getLogLikelihood()
         lnls = dict(ptsrc=None, dev=None, exp=None, comp=None, none=lnl_null,
-                    desi=None)
+                    simple=None)
 
         if isinstance(src, PointSource):
             # logr, ee1, ee2
             shape = LegacyEllipseWithPriors(-1., 0., 0.)
             dev = DevGalaxy(src.getPosition(), src.getBrightness(), shape).copy()
             exp = ExpGalaxy(src.getPosition(), src.getBrightness(), shape).copy()
-            desi = DesiGalaxy(src.getPosition(), src.getBrightness()).copy()
+            simple = SimpleGalaxy(src.getPosition(), src.getBrightness()).copy()
 
-            print('Created DESI galaxy', desi)
+            print('Created SIMPLE galaxy', simple)
             
             comp = None
             ptsrc = src.copy()
-            trymodels = [('ptsrc', ptsrc), ('desi', desi), ('dev', dev), ('exp', exp), ('comp', comp)]
+            trymodels = [('ptsrc', ptsrc), ('simple', simple), ('dev', dev), ('exp', exp), ('comp', comp)]
             oldmodel = 'ptsrc'
 
         elif isinstance(src, DevGalaxy):
@@ -1996,8 +1996,8 @@ def _one_blob(X):
             exp = ExpGalaxy(src.getPosition(), src.getBrightness(), src.getShape()).copy()
             comp = None
             ptsrc = PointSource(src.getPosition(), src.getBrightness()).copy()
-            desi = DesiGalaxy(src.getPosition(), src.getBrightness()).copy()
-            trymodels = [('ptsrc', ptsrc), ('desi', desi), ('dev', dev), ('exp', exp), ('comp', comp)]
+            simple = SimpleGalaxy(src.getPosition(), src.getBrightness()).copy()
+            trymodels = [('ptsrc', ptsrc), ('simple', simple), ('dev', dev), ('exp', exp), ('comp', comp)]
             oldmodel = 'dev'
 
         elif isinstance(src, ExpGalaxy):
@@ -2005,8 +2005,8 @@ def _one_blob(X):
             dev = DevGalaxy(src.getPosition(), src.getBrightness(), src.getShape()).copy()
             comp = None
             ptsrc = PointSource(src.getPosition(), src.getBrightness()).copy()
-            desi = DesiGalaxy(src.getPosition(), src.getBrightness()).copy()
-            trymodels = [('ptsrc', ptsrc), ('desi', desi), ('dev', dev), ('exp', exp), ('comp', comp)]
+            simple = SimpleGalaxy(src.getPosition(), src.getBrightness()).copy()
+            trymodels = [('ptsrc', ptsrc), ('simple', simple), ('dev', dev), ('exp', exp), ('comp', comp)]
             oldmodel = 'exp'
 
         elif isinstance(src, FixedCompositeGalaxy):
@@ -2023,8 +2023,8 @@ def _one_blob(X):
             exp = ExpGalaxy(src.getPosition(), src.getBrightness(), shape).copy()
             comp = src.copy()
             ptsrc = PointSource(src.getPosition(), src.getBrightness()).copy()
-            desi = DesiGalaxy(src.getPosition(), src.getBrightness()).copy()
-            trymodels = [('ptsrc', ptsrc), ('desi', desi), ('dev', dev), ('exp', exp), ('comp', comp)]
+            simple = SimpleGalaxy(src.getPosition(), src.getBrightness()).copy()
+            trymodels = [('ptsrc', ptsrc), ('simple', simple), ('dev', dev), ('exp', exp), ('comp', comp)]
             oldmodel = 'comp'
 
         allflags = {}
@@ -2142,7 +2142,7 @@ def _one_blob(X):
         #    _plot_mods(subtims, plotmods, plotmodnames, bands, None, None, bslc, blobw, blobh, ps)
 
         nbands = len(bands)
-        nparams = dict(none=0, ptsrc=2, desi=2, exp=5, dev=5, comp=9)
+        nparams = dict(none=0, ptsrc=2, simple=2, exp=5, dev=5, comp=9)
 
         # penalized log-likelihoods
         plnls = dict([(k, lnls[k] - 0.5 * nparams[k]) for k in nparams.keys()])
@@ -2194,7 +2194,7 @@ def _one_blob(X):
         # We decide separately whether to include the source in the
         # catalog and what type to give it.
 
-        modnames = ['ptsrc', 'desi', 'dev', 'exp', 'comp']
+        modnames = ['ptsrc', 'simple', 'dev', 'exp', 'comp']
         
         # This is our "detection threshold": 5-sigma in
         # *penalized* units; ie, ~5.2-sigma for point sources
@@ -2219,13 +2219,13 @@ def _one_blob(X):
             keepsrc = ptsrc
             keepmod = 'ptsrc'
 
-            # Is the DesiGalaxy better?
+            # Is the SimpleGalaxy better?
             cut = 0.
-            desidiff= plnls['desi'] - plnls['ptsrc']
-            if desidiff > cut:
-                # Switch to 'desi'
-                keepsrc = desi
-                keepmod = 'desi'
+            simplediff= plnls['simple'] - plnls['ptsrc']
+            if simplediff > cut:
+                # Switch to 'simple'
+                keepsrc = simple
+                keepmod = 'simple'
             
             # This is our "upgrade" threshold: how much better a galaxy
             # fit has to be versus ptsrc, and comp versus galaxy.
@@ -3546,7 +3546,7 @@ def main():
     ep = '''
 eg, to run a small field containing a cluster:
 \n
-python -u projects/desi/runbrick.py --plots --brick 2440p070 --zoom 1900 2400 450 950 -P pickles/runbrick-cluster-%%s.pickle
+python -u legacypipe/runbrick.py --plots --brick 2440p070 --zoom 1900 2400 450 950 -P pickles/runbrick-cluster-%%s.pickle
 \n
 '''
     parser = optparse.OptionParser(epilog=ep)

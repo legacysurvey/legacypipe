@@ -62,25 +62,25 @@ class LegacyEllipseWithPriors(EllipseWithPriors):
 
 from tractor.galaxy import ExpGalaxy
 from tractor.ellipses import EllipseE
-class DesiGalaxy(ExpGalaxy):
+class SimpleGalaxy(ExpGalaxy):
     shape = EllipseE(0.45, 0., 0.)
     
     def __init__(self, *args):
-        super(DesiGalaxy, self).__init__(*args)
-        self.shape = DesiGalaxy.shape
+        super(SimpleGalaxy, self).__init__(*args)
+        self.shape = SimpleGalaxy.shape
 
     @staticmethod
     def getNamedParams():
         return dict(pos=0, brightness=1)
 
     def getName(self):
-        return 'DesiGalaxy'
+        return 'SimpleGalaxy'
 
     ### HACK -- for Galaxy.getParamDerivatives()
     def isParamFrozen(self, pname):
         if pname == 'shape':
             return True
-        return super(DesiGalaxy, self).isParamFrozen(pname)
+        return super(SimpleGalaxy, self).isParamFrozen(pname)
     
 class BrickDuck(object):
     pass
