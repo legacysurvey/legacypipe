@@ -303,7 +303,8 @@ def stage_tims(W=3600, H=3600, pixscale=0.262, brickname=None,
 
 def _coadds(tims, bands, targetwcs,
             mods=None, xy=None, apertures=None, apxy=None,
-            ngood=False, callback=None, callback_args=[],
+            ngood=False, detmaps=False,
+            callback=None, callback_args=[],
             plots=False, ps=None):
     class Duck(object):
         pass
@@ -316,8 +317,9 @@ def _coadds(tims, bands, targetwcs,
     unweighted=True
 
     C.coimgs = []
-    C.galdetivs = []
-    C.detivs = []
+    if detmaps:
+        C.galdetivs = []
+        C.detivs = []
     if mods:
         C.comods = []
         C.coresids = []
@@ -341,12 +343,13 @@ def _coadds(tims, bands, targetwcs,
 
         kwargs = dict(cowimg=cowimg, cow=cow)
 
-        detiv = np.zeros((H,W), np.float32)
-        C.detivs.append(detiv)
-        kwargs.update(detiv=detiv)
-        galdetiv = np.zeros((H,W), np.float32)
-        C.galdetivs.append(galdetiv)
-        kwargs.update(galdetiv=galdetiv)
+        if detmaps:
+            detiv = np.zeros((H,W), np.float32)
+            C.detivs.append(detiv)
+            kwargs.update(detiv=detiv)
+            galdetiv = np.zeros((H,W), np.float32)
+            C.galdetivs.append(galdetiv)
+            kwargs.update(galdetiv=galdetiv)
         
         if mods:
             cowmod = np.zeros((H,W), np.float32)
@@ -413,43 +416,17 @@ def _coadds(tims, bands, targetwcs,
                 ormask [Yo,Xo] |= dq
                 andmask[Yo,Xo] &= dq
                 del dq
+                # raw exposure count
+                nobs[Yo,Xo] += 1
+
+            if detmaps:
                 # point-source depth
-
-                #### HACK #####
-                if not hasattr(tim, 'psfnorm'):
-                    h,w = tim.shape
-                    patch = tim.psf.getPointSourcePatch(w/2., h/2.).patch
-                    print('PSF PointSourcePatch: sum', patch.sum())
-                    # We normalize the patch before taking the norm...
-                    psfnorm = np.sqrt(np.sum((patch / patch.sum())**2))
-                    # Gaussian:
-                    #psfnorm = 1./(2. * np.sqrt(np.pi) * tim.psf_sigma)
-                    print('PSF norm', psfnorm, 'vs Gaussian',
-                          1./(2. * np.sqrt(np.pi) * tim.psf_sigma))
-                    tim.psfnorm = psfnorm
-
-                    # Galaxy-detection norm
-                    cx,cy = w/2., h/2.
-                    pos = tim.wcs.pixelToPosition(cx, cy)
-                    gal = ExpGalaxy(pos, NanoMaggies(**{band:1.}), EllipseE(0.45, 0., 0.))
-                    S = 32
-                    mm = Patch(int(cx-S), int(cy-S), np.ones((2*S+1, 2*S+1), bool))
-                    galmod = gal.getModelPatch(tim, modelMask = mm).patch
-                    galnorm = np.sqrt(np.sum((galmod / galmod.sum())**2))
-                    print('Galaxy norm:', galnorm)
-                    tim.galnorm = galnorm
-                    
-                    
-                # Point-source detection
                 detsig1 = tim.sig1 / tim.psfnorm
                 detiv[Yo,Xo] += (iv > 0) * (1. / detsig1**2)
 
                 # Galaxy detection
                 gdetsig1 = tim.sig1 / tim.galnorm
                 galdetiv[Yo,Xo] += (iv > 0) * (1. / gdetsig1**2)
-
-                # raw exposure count
-                nobs[Yo,Xo] += 1
 
             if ngood:
                 congood[Yo,Xo] += (iv > 0)
@@ -553,6 +530,7 @@ def _write_band_images(band,
                        brickname, version_header, tims, targetwcs, basedir,
                        cowimg=None, cow=None, cowmod=None, cochi2=None,
                        detiv=None, galdetiv=None, congood=None, **kwargs):
+
     # copy version_header before modifying...
     hdr = fitsio.FITSHDR()
     for r in version_header.records():
@@ -645,6 +623,7 @@ def _write_band_images(band,
 def stage_image_coadds(targetwcs=None, bands=None, tims=None, outdir=None,
                        brickname=None, version_header=None,
                        plots=False, ps=None, coadd_bw=False, W=None, H=None,
+                       brick=None,
                        **kwargs):
     '''
     Immediately after reading the images, we
@@ -736,9 +715,61 @@ def stage_image_coadds(targetwcs=None, bands=None, tims=None, outdir=None,
     trymakedirs(basedir)
 
     C = _coadds(tims, bands, targetwcs,
-                #ngood=True,
+
+                #############
+                detmaps=True,
+
                 callback=_write_band_images,
                 callback_args=(brickname, version_header, tims, targetwcs, basedir))
+
+    if True:
+        # Compute the brick's unique pixels.
+        U = None
+        if hasattr(brick, 'ra1'):
+            print('Computing unique brick pixels...')
+            xx,yy = np.meshgrid(np.arange(W), np.arange(H))
+            rr,dd = targetwcs.pixelxy2radec(xx+1, yy+1)
+            U = np.flatnonzero((rr >= brick.ra1 ) * (rr < brick.ra2 ) *
+                               (dd >= brick.dec1) * (dd < brick.dec2))
+            print(len(U), 'of', W*H, 'pixels are unique to this brick')
+    
+        # depth histogram bins
+        depthbins = np.arange(19.9, 25.101, 0.1)
+        depthbins[0] = 0.
+        depthbins[-1] = 100.
+        D = fits_table()
+        D.depthlo = depthbins[:-1].astype(np.float32)
+        D.depthhi = depthbins[1: ].astype(np.float32)
+        
+        for band,detiv,galdetiv in zip(bands, C.detivs, C.galdetivs):
+            for det,name in [(detiv, 'ptsrc'), (galdetiv, 'gal')]:
+                # compute stats for 5-sigma detection
+                depth = 5. / np.sqrt(np.maximum(det, 1e-20))
+                # that's flux in nanomaggies -- convert to mag
+                depth = -2.5 * (np.log10(depth) - 9)
+                # no coverage -> very bright detection limit
+                depth[det == 0] = 0.
+                print('Depth values:', np.unique(depth))
+                if U is not None:
+                    depth = depth.flat[U]
+                print('Depth values:', np.unique(depth))
+                print(band, name, 'band depth map: percentiles',
+                      np.percentile(depth, np.arange(0, 101, 10)))
+                # histogram
+                D.set('counts_%s_%s' % (name, band),
+                      np.histogram(depth, bins=depthbins)[0].astype(np.int32))
+    
+        del U
+        del depth
+        del det
+        del detiv
+        del galdetiv
+        fn = os.path.join(basedir, 'decals-%s-depth.fits' % (brickname))
+        D.writeto(fn)
+        print('Wrote', fn)
+        del D
+
+
 
     #rgbkwargs2 = dict(mnmx=(-3., 3.))
 
@@ -2572,7 +2603,8 @@ def stage_coadds(bands=None, version_header=None, targetwcs=None,
     apxy = np.vstack((xx - 1., yy - 1.)).T
     del xx,yy,ok,ra,dec
 
-    C = _coadds(tims, bands, targetwcs, mods=mods, xy=(ix,iy), ngood=True,
+    C = _coadds(tims, bands, targetwcs, mods=mods, xy=(ix,iy),
+                ngood=True, detmaps=True,
                 apertures=apertures, apxy=apxy,
                 callback=_write_band_images,
                 callback_args=(brickname, version_header, tims, targetwcs, basedir),
