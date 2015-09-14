@@ -6,7 +6,7 @@ import numpy as np
 from astrometry.util.fits import *
 from astrometry.util.plotutils import *
 
-def plot_grid(T, img, mod, ps, txtfunc, txtfunc2, title):
+def plot_grid(T, img, mod, ps, txtfunc, txtfunc2, title, xx, yy):
     for page in range(2):
         plt.clf()
         rows,cols = 7,10
@@ -22,7 +22,8 @@ def plot_grid(T, img, mod, ps, txtfunc, txtfunc2, title):
             c = T[i0 + i]
             y0,y1 = max(0, c.by-S), min(H, c.by+S+1)
             x0,x1 = max(0, c.bx-S), min(W, c.bx+S+1)
-            plt.imshow(img[y0:y1, x0:x1], interpolation='nearest', origin='lower')
+            plt.imshow(img[y0:y1, x0:x1], interpolation='nearest', origin='lower',
+                       extent=[x0-0.5,x1-0.5,y0-0.5,y1-0.5])
             txt = txtfunc(c)
             if txt is not None:
                 plt.text(0, 0, txt, ha='left', va='bottom', color='red', fontsize=8)
@@ -32,9 +33,15 @@ def plot_grid(T, img, mod, ps, txtfunc, txtfunc2, title):
                 plt.text(0, S*2, txt2, ha='left', va='top', color='red', fontsize=8)
             plt.xticks([])
             plt.yticks([])
-    
+
             xytext.append((x0,x1,y0,y1, txt))
-    
+
+            I = np.flatnonzero(np.logical_not((xx == c.bx) * (yy == c.by)))
+            ax = plt.axis()
+            plt.plot(xx[I], yy[I], '.', color=(0,1,0), alpha=0.5, ms=8)
+            plt.plot(c.bx, c.by, 'rx', color='r')
+            plt.axis(ax)
+            
         plt.suptitle(title)
         ps.savefig()
 
@@ -100,12 +107,39 @@ if __name__ == '__main__':
 
         
         plt.clf()
-        ha.update(range=(0, 2))
+        ha.update(range=(0, 2), bins=50)
         plt.hist(Tbad[Tbad.isexp].shapeexp_r, color='r', **ha)
         plt.hist(E.shapeexp_r, color='r', alpha=0.25, lw=2, **ha)
         plt.hist(Tbad[Tbad.isdev].shapedev_r, color='b', **ha)
         plt.hist(D.shapedev_r, color='b', alpha=0.25, lw=2, **ha)
+        plt.xlabel('Effective radius of SIMPLE-worse-than-PSF galaxies')
         ps.savefig()
+
+
+        plt.clf()
+        plt.plot(E.shapeexp_r, E.decam_flux[:,2], 'r.', alpha=0.5)
+        plt.plot(Tbad[Tbad.isexp].shapeexp_r, Tbad[Tbad.isexp].decam_flux[:,2], 'ro')
+        plt.plot(D.shapedev_r, D.decam_flux[:,2], 'b.', alpha=0.5)
+        plt.plot(Tbad[Tbad.isdev].shapedev_r, Tbad[Tbad.isdev].decam_flux[:,2], 'bo')
+        plt.xlabel('Effective radius')
+        plt.ylabel('R-band flux')
+        plt.xscale('log')
+        plt.yscale('log')
+        ps.savefig()
+
+        plt.clf()
+        plt.plot(E.shapeexp_r, E.dchisq_psf, 'r.', alpha=0.5)
+        plt.plot(Tbad[Tbad.isexp].shapeexp_r, Tbad[Tbad.isexp].dchisq_psf, 'ro')
+        plt.plot(D.shapedev_r, D.dchisq_psf, 'b.', alpha=0.5)
+        plt.plot(Tbad[Tbad.isdev].shapedev_r, Tbad[Tbad.isdev].dchisq_psf, 'bo')
+        plt.xlabel('Effective radius')
+        plt.ylabel('DCHISQ(PSF)')
+        plt.xlim(0, 2)
+        plt.yscale('log')
+        ps.savefig()
+
+        
+
         
 
         img = plt.imread('decals-2402p062-image.jpg')
@@ -119,10 +153,11 @@ if __name__ == '__main__':
 
 
         
-        plot_grid(Tbad,img, mod, ps,
+        plot_grid(Tbad, img, mod, ps,
                   lambda t: '%s %.0f' % (t.type, t.dchisq_simp - t.dchisq_psf),
-                  lambda t: '%i' % t.blob,
-                  'Galaxies with SIMPLE worse than PSF')
+                  lambda t: '%i %i' % (t.bx,t.by),
+                  'Galaxies with SIMPLE worse than PSF',
+            T.bx, T.by)
 
         
 
