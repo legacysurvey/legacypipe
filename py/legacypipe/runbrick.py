@@ -316,6 +316,8 @@ def _coadds(tims, bands, targetwcs,
     unweighted=True
 
     C.coimgs = []
+    C.galdetivs = []
+    C.detivs = []
     if mods:
         C.comods = []
         C.coresids = []
@@ -330,7 +332,7 @@ def _coadds(tims, bands, targetwcs,
         C.T.nobs    = np.zeros((len(ix), len(bands)), np.uint8)
         C.T.anymask = np.zeros((len(ix), len(bands)), np.int16)
         C.T.allmask = np.zeros((len(ix), len(bands)), np.int16)
-
+        
     tinyw = 1e-30
     for iband,band in enumerate(bands):
 
@@ -339,6 +341,13 @@ def _coadds(tims, bands, targetwcs,
 
         kwargs = dict(cowimg=cowimg, cow=cow)
 
+        detiv = np.zeros((H,W), np.float32)
+        C.detivs.append(detiv)
+        kwargs.update(detiv=detiv)
+        galdetiv = np.zeros((H,W), np.float32)
+        C.galdetivs.append(galdetiv)
+        kwargs.update(galdetiv=galdetiv)
+        
         if mods:
             cowmod = np.zeros((H,W), np.float32)
             cochi2 = np.zeros((H,W), np.float32)
@@ -368,9 +377,8 @@ def _coadds(tims, bands, targetwcs,
             andmask = np.empty((H,W), np.int16)
             allbits = reduce(np.bitwise_or, CP_DQ_BITS.values())
             andmask[:,:] = allbits
-            detiv = np.zeros((H,W), np.float32)
             nobs  = np.zeros((H,W), np.uint8)
-            kwargs.update(ormask=ormask, andmask=andmask, detiv=detiv, nobs=nobs)
+            kwargs.update(ormask=ormask, andmask=andmask, nobs=nobs)
 
         for itim,tim in enumerate(tims):
             if tim.band != band:
@@ -406,9 +414,40 @@ def _coadds(tims, bands, targetwcs,
                 andmask[Yo,Xo] &= dq
                 del dq
                 # point-source depth
-                psfnorm = 1./(2. * np.sqrt(np.pi) * tim.psf_sigma)
-                detsig1 = tim.sig1 / psfnorm
+
+                #### HACK #####
+                if not hasattr(tim, 'psfnorm'):
+                    h,w = tim.shape
+                    patch = tim.psf.getPointSourcePatch(w/2., h/2.).patch
+                    print('PSF PointSourcePatch: sum', patch.sum())
+                    # We normalize the patch before taking the norm...
+                    psfnorm = np.sqrt(np.sum((patch / patch.sum())**2))
+                    # Gaussian:
+                    #psfnorm = 1./(2. * np.sqrt(np.pi) * tim.psf_sigma)
+                    print('PSF norm', psfnorm, 'vs Gaussian',
+                          1./(2. * np.sqrt(np.pi) * tim.psf_sigma))
+                    tim.psfnorm = psfnorm
+
+                    # Galaxy-detection norm
+                    cx,cy = w/2., h/2.
+                    pos = tim.wcs.pixelToPosition(cx, cy)
+                    gal = ExpGalaxy(pos, NanoMaggies(**{band:1.}), EllipseE(0.45, 0., 0.))
+                    S = 32
+                    mm = Patch(int(cx-S), int(cy-S), np.ones((2*S+1, 2*S+1), bool))
+                    galmod = gal.getModelPatch(tim, modelMask = mm).patch
+                    galnorm = np.sqrt(np.sum((galmod / galmod.sum())**2))
+                    print('Galaxy norm:', galnorm)
+                    tim.galnorm = galnorm
+                    
+                    
+                # Point-source detection
+                detsig1 = tim.sig1 / tim.psfnorm
                 detiv[Yo,Xo] += (iv > 0) * (1. / detsig1**2)
+
+                # Galaxy detection
+                gdetsig1 = tim.sig1 / tim.galnorm
+                galdetiv[Yo,Xo] += (iv > 0) * (1. / gdetsig1**2)
+
                 # raw exposure count
                 nobs[Yo,Xo] += 1
 
@@ -513,7 +552,7 @@ def _coadds(tims, bands, targetwcs,
 def _write_band_images(band,
                        brickname, version_header, tims, targetwcs, basedir,
                        cowimg=None, cow=None, cowmod=None, cochi2=None,
-                       detiv=None, congood=None, **kwargs):
+                       detiv=None, galdetiv=None, congood=None, **kwargs):
     # copy version_header before modifying...
     hdr = fitsio.FITSHDR()
     for r in version_header.records():
@@ -567,6 +606,7 @@ def _write_band_images(band,
         imgs.append(
             ('nexp',   'expmap',   congood, True ),
             )
+    # if detiv is not None:
     if cowmod is not None:
         imgs.extend([
                 ('invvar', 'wtmap',    cow,     False),
@@ -599,6 +639,8 @@ def _write_band_images(band,
             fn += '.gz'
         fitsio.write(fn, img, clobber=True, header=hdr2)
         print('Wrote', fn)
+
+        
 
 def stage_image_coadds(targetwcs=None, bands=None, tims=None, outdir=None,
                        brickname=None, version_header=None,
@@ -754,6 +796,8 @@ def stage_srcs(coimgs=None, cons=None,
 
     tlast = Time()
     if not no_sdss:
+        from legacypipe.sdss import get_sdss_sources
+        
         # Read SDSS sources
         cols = ['parent', 'tai', 'mjd', 'psf_fwhm', 'objc_flags2', 'flags2',
                 'devflux_ivar', 'expflux_ivar', 'calib_status', 'raerr',
@@ -938,6 +982,15 @@ def stage_srcs(coimgs=None, cons=None,
             'tractor', 'cat', 'ps']
     if not pipe:
         keys.extend(['detmaps', 'detivs'])
+
+        for b,detmap,detiv in zip(bands, detmaps, detivs):
+            fitsio.write('detmap-%s-%s.fits' % (brickname, b),
+                         detmap)
+            fitsio.write('detiv-%s-%s.fits' % (brickname, b),
+                         detiv)
+            fitsio.write('detsn-%s-%s.fits' % (brickname, b),
+                         detmap * np.sqrt(detiv))
+        
     rtn = dict()
     for k in keys:
         rtn[k] = locals()[k]
@@ -1265,7 +1318,7 @@ def stage_fitblobs_finish(
     assert(nb == len(bands))
     ns,nb = BB.dchisqs.shape
     assert(ns == len(cat))
-    assert(nb == 4) # ptsrc, dev, exp, comp
+    assert(nb == 5) # ptsrc, simple, dev, exp, comp
     assert(len(BB.flags) == len(cat))
 
     # Renumber blobs to make them contiguous.
@@ -1872,7 +1925,7 @@ def _one_blob(X):
     # table of per-source measurements for this blob.
     B = fits_table()
     B.flags = np.zeros(len(Isrcs), np.uint16)
-    B.dchisqs = np.zeros((len(Isrcs), 4), np.float32)
+    B.dchisqs = np.zeros((len(Isrcs), 5), np.float32)
     B.sources = srcs
     B.Isrcs = Isrcs
     B.started_in_blob = started_in_blob
@@ -1915,41 +1968,43 @@ def _one_blob(X):
         # use log likelihood rather than log prior because we use priors on, eg,
         # the ellipticity to avoid crazy fits.  Here we sort of want to just
         # evaluate the fit quality regardless of priors on parameters...?
-        lnl0 = srctractor.getLogLikelihood()
 
         srccat = srctractor.getCatalog()
         srccat[0] = None
+        lnl_none = srctractor.getLogLikelihood()
 
-        lnl_null = srctractor.getLogLikelihood()
-        lnls = dict(ptsrc=None, dev=None, exp=None, comp=None, none=lnl_null)
+        # Actually chi-squared improvement vs no source; larger is a better fit
+        chisqs = dict()
 
         if isinstance(src, PointSource):
+            ptsrc = src.copy()
+            simple = SimpleGalaxy(src.getPosition(), src.getBrightness()).copy()
             # logr, ee1, ee2
             shape = LegacyEllipseWithPriors(-1., 0., 0.)
             dev = DevGalaxy(src.getPosition(), src.getBrightness(), shape).copy()
             exp = ExpGalaxy(src.getPosition(), src.getBrightness(), shape).copy()
             comp = None
-            ptsrc = src.copy()
-            trymodels = [('ptsrc', ptsrc), ('dev', dev), ('exp', exp), ('comp', comp)]
             oldmodel = 'ptsrc'
 
         elif isinstance(src, DevGalaxy):
+            ptsrc = PointSource(src.getPosition(), src.getBrightness()).copy()
+            simple = SimpleGalaxy(src.getPosition(), src.getBrightness()).copy()
             dev = src.copy()
             exp = ExpGalaxy(src.getPosition(), src.getBrightness(), src.getShape()).copy()
             comp = None
-            ptsrc = PointSource(src.getPosition(), src.getBrightness()).copy()
-            trymodels = [('ptsrc', ptsrc), ('dev', dev), ('exp', exp), ('comp', comp)]
             oldmodel = 'dev'
 
         elif isinstance(src, ExpGalaxy):
-            exp = src.copy()
-            dev = DevGalaxy(src.getPosition(), src.getBrightness(), src.getShape()).copy()
-            comp = None
             ptsrc = PointSource(src.getPosition(), src.getBrightness()).copy()
-            trymodels = [('ptsrc', ptsrc), ('dev', dev), ('exp', exp), ('comp', comp)]
+            simple = SimpleGalaxy(src.getPosition(), src.getBrightness()).copy()
+            dev = DevGalaxy(src.getPosition(), src.getBrightness(), src.getShape()).copy()
+            exp = src.copy()
+            comp = None
             oldmodel = 'exp'
 
         elif isinstance(src, FixedCompositeGalaxy):
+            ptsrc = PointSource(src.getPosition(), src.getBrightness()).copy()
+            simple = SimpleGalaxy(src.getPosition(), src.getBrightness()).copy()
             frac = src.fracDev.getValue()
             if frac > 0:
                 shape = src.shapeDev
@@ -1962,17 +2017,17 @@ def _one_blob(X):
                 shape = src.shapeDev
             exp = ExpGalaxy(src.getPosition(), src.getBrightness(), shape).copy()
             comp = src.copy()
-            ptsrc = PointSource(src.getPosition(), src.getBrightness()).copy()
-            trymodels = [('ptsrc', ptsrc), ('dev', dev), ('exp', exp), ('comp', comp)]
             oldmodel = 'comp'
 
+        trymodels = [('ptsrc', ptsrc), ('simple', simple), ('dev', dev), ('exp', exp), ('comp', comp)]
+            
         allflags = {}
         for name,newsrc in trymodels:
-            #print('Trying model:', name)
+            print('Trying model:', name)
             if name == 'comp' and newsrc is None:
                 newsrc = comp = FixedCompositeGalaxy(src.getPosition(), src.getBrightness(),
                                                      0.5, exp.getShape(), dev.getShape()).copy()
-            #print('New source:', newsrc)
+            print('New source:', newsrc)
             srccat[0] = newsrc
 
             # Use the same initial modelMasks as the original source; we'll do a second
@@ -2018,7 +2073,7 @@ def _one_blob(X):
             else:
                 thisflags |= FLAG_STEPS_A
 
-            #print('New source (after first round optimization):', newsrc)
+            print('New source (after first round optimization):', newsrc)
 
             if plots and False:
                 plt.clf()
@@ -2073,18 +2128,12 @@ def _one_blob(X):
             srctractor.setModelMasks(None)
             disable_galaxy_cache()
 
-            lnls[name] = srctractor.getLogLikelihood()
+            chisqs[name] = 2. * (srctractor.getLogLikelihood() - lnl_none)
             all_models[i][name] = newsrc.copy()
             allflags[name] = thisflags
 
         # if plots:
         #    _plot_mods(subtims, plotmods, plotmodnames, bands, None, None, bslc, blobw, blobh, ps)
-
-        nbands = len(bands)
-        nparams = dict(none=0, ptsrc=2, exp=5, dev=5, comp=9)
-
-        # penalized log-likelihoods
-        plnls = dict([(k, lnls[k] - 0.5 * nparams[k]) for k in nparams.keys()])
 
         if plots:
             from collections import OrderedDict
@@ -2105,7 +2154,7 @@ def _one_blob(X):
                     dimshow(get_rgb(comods, bands))
                     plt.title(modname)
 
-                    chisqs = [((tim.getImage() - mod) * tim.getInvError())**2
+                    chis = [((tim.getImage() - mod) * tim.getInvError())**2
                               for tim,mod in zip(subtims, modimgs)]
                 else:
                     coimgs, cons = compute_coadds(subtims, bands, subtarget)
@@ -2116,36 +2165,32 @@ def _one_blob(X):
                     plt.axis(ax)
                     plt.title('Image')
 
-                    chisqs = [((tim.getImage()) * tim.getInvError())**2
+                    chis = [((tim.getImage()) * tim.getInvError())**2
                               for tim in subtims]
-                cochisqs,nil = compute_coadds(subtims, bands, subtarget, images=chisqs)
+                cochisqs,nil = compute_coadds(subtims, bands, subtarget, images=chis)
                 cochisq = reduce(np.add, cochisqs)
                 plt.subplot(rows, cols, imod+1+cols)
                 dimshow(cochisq, vmin=0, vmax=25)
-                plt.title('dlnp %.0f' % plnls[modname])
+                plt.title('chisq %.0f' % chisqs[modname])
             plt.suptitle('Blob %i, source %i: was: %s' %
                          (iblob, i, str(src)))
             ps.savefig()
 
+        # We decide separately whether to include the source in the
+        # catalog and what type to give it.
         keepmod = 'none'
         keepsrc = None
 
-        # We decide separately whether to include the source in the
-        # catalog and what type to give it.
+        modnames = ['ptsrc', 'simple', 'dev', 'exp', 'comp']
 
-        # This is our "detection threshold": 5-sigma in
-        # *penalized* units; ie, ~5.2-sigma for point sources
-        cut = 0.5 * 5.**2
-        # Take the best of ptsrc, dev, exp, comp
-        diff = max([plnls[name] - plnls['none']
-                    for name in ['ptsrc', 'dev', 'exp', 'comp']])
-
-        print()
-        dlnls = np.array([plnls[name] - plnls['none'] for name in ['ptsrc', 'dev', 'exp', 'comp']])
-        print('lnl diffs vs none:', ', '.join(['%s = %.1f' % (name, dlnl) for name,dlnl in zip(['ptsrc', 'dev', 'exp', 'comp'], dlnls)]))
-        del dlnls
-        print('Diff:', diff, 'cut:', cut)
+        nparams = dict(ptsrc=2, simple=2, exp=5, dev=5, comp=9)
         
+        # This is our "detection threshold": 5-sigma in
+        # *parameter-penalized* units; ie, ~5.2-sigma for point sources
+        cut = 5.**2
+        # Take the best of ptsrc, dev, exp, comp
+        diff = max([chisqs[name] - nparams[name] for name in modnames])
+
         if diff > cut:
             # We're going to keep this source!
             # It starts out as a point source.
@@ -2156,17 +2201,25 @@ def _one_blob(X):
             keepsrc = ptsrc
             keepmod = 'ptsrc'
 
+            # Is the SimpleGalaxy better?
+            cut = 0.
+            simplediff= chisqs['simple'] - chisqs['ptsrc']
+            if simplediff > cut:
+                # Switch to 'simple'
+                keepsrc = simple
+                keepmod = 'simple'
+            
             # This is our "upgrade" threshold: how much better a galaxy
             # fit has to be versus ptsrc, and comp versus galaxy.
-            cut = 0.5 * 3.**2
+            cut = 3.**2 + (nparams['exp'] - nparams['ptsrc'])
 
             # This is the "fractional" upgrade threshold for ptsrc->dev/exp:
             # 2% of ptsrc vs nothing
-            fcut = 0.02 * (plnls['ptsrc'] - plnls['none'])
+            fcut = 0.02 * chisqs['ptsrc']
             cut = max(cut, fcut)
 
-            expdiff = plnls['exp'] - plnls[keepmod]
-            devdiff = plnls['dev'] - plnls[keepmod]
+            expdiff = chisqs['exp'] - chisqs[keepmod]
+            devdiff = chisqs['dev'] - chisqs[keepmod]
 
             #print('Keeping source.  Comparing dev/exp vs ptsrc.  dlnp =', 4.5, 'frac =', fcut, 'cut =', cut)
             #print('exp:', expdiff)
@@ -2182,7 +2235,7 @@ def _one_blob(X):
                     keepsrc = dev
                     keepmod = 'dev'
 
-                diff = plnls['comp'] - plnls[keepmod]
+                diff = chisqs['comp'] - chisqs[keepmod]
                 #print('Comparing', keepmod, 'to comp.  cut:', cut, 'comp:', diff)
                 if diff > cut:
                     #print('Upgrading from dev/exp to composite.')
@@ -2202,10 +2255,7 @@ def _one_blob(X):
         #print('Keeping model:', keepmod)
         #print('Keeping source:', keepsrc)
 
-        # 2 * log-likelihood differences
-        B.dchisqs[i, :] = 2. * np.array(
-            [plnls[k] - plnls['none'] for k in ['ptsrc', 'dev', 'exp', 'comp']])
-
+        B.dchisqs[i, :] = np.array([chisqs[k] for k in modnames])
         B.flags[i] = allflags.get(keepmod, 0)
         B.sources[i] = keepsrc
         subcat[i] = keepsrc
@@ -2459,7 +2509,7 @@ def _get_mod(X):
 def stage_coadds(bands=None, version_header=None, targetwcs=None,
                  tims=None, ps=None, brickname=None, ccds=None,
                  outdir=None, T=None, cat=None, pixscale=None, plots=False,
-                 coadd_bw=False,
+                 coadd_bw=False, brick=None, W=None, H=None,
                  mp=None,
                  **kwargs):
     '''
@@ -2547,7 +2597,52 @@ def stage_coadds(bands=None, version_header=None, targetwcs=None,
 
     for c in ['nobs', 'anymask', 'allmask']:
         T.set(c, C.T.get(c))
+        
 
+    # Compute the brick's unique pixels.
+    U = None
+    if hasattr(brick, 'ra1'):
+        print('Computing unique brick pixels...')
+        xx,yy = np.meshgrid(np.arange(W), np.arange(H))
+        rr,dd = targetwcs.pixelxy2radec(xx+1, yy+1)
+        U = np.flatnonzero((rr >= brick.ra1 ) * (rr < brick.ra2 ) *
+                           (dd >= brick.dec1) * (dd < brick.dec2))
+        print(len(U), 'of', W*H, 'pixels are unique to this brick')
+
+    # depth histogram bins
+    depthbins = np.arange(20, 25.001, 0.1)
+    depthbins[0] = 0.
+    depthbins[-1] = 100.
+    D = fits_table()
+    D.depthlo = depthbins[:-1].astype(np.float32)
+    D.depthhi = depthbins[1: ].astype(np.float32)
+    
+    for band,detiv,galdetiv in zip(bands, C.detivs, C.galdetivs):
+        for det,name in [(detiv, 'ptsrc'), (galdetiv, 'gal')]:
+            # compute stats for 5-sigma detection
+            depth = 5. / np.sqrt(det)
+            # that's flux in nanomaggies -- convert to mag
+            depth = -2.5 * (np.log10(depth) - 9)
+            # no coverage -> very bright detection limit
+            depth[np.logical_not(np.isfinite(depth))] = 0.
+            if U is not None:
+                depth = depth.flat[U]
+            print(band, name, 'band depth map: percentiles',
+                  np.percentile(depth, np.arange(0,101, 10)))
+            # histogram
+            D.set('counts_%s_%s' % (name, band),
+                  np.histogram(depth, bins=depthbins)[0].astype(np.int32))
+
+    del U
+    del depth
+    del det
+    del detiv
+    del galdetiv
+    fn = os.path.join(basedir, 'decals-%s-depth.fits' % (brickname))
+    D.writeto(fn)
+    print('Wrote', fn)
+    del D
+        
     tmpfn = create_temp(suffix='.png')
     for name,ims,rgbkw in [('image', C.coimgs, rgbkwargs),
                            ('model', C.comods, rgbkwargs),
@@ -3430,7 +3525,7 @@ def main():
     ep = '''
 eg, to run a small field containing a cluster:
 \n
-python -u projects/desi/runbrick.py --plots --brick 2440p070 --zoom 1900 2400 450 950 -P pickles/runbrick-cluster-%%s.pickle
+python -u legacypipe/runbrick.py --plots --brick 2440p070 --zoom 1900 2400 450 950 -P pickles/runbrick-cluster-%%s.pickle
 \n
 '''
     parser = optparse.OptionParser(epilog=ep)

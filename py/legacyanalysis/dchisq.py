@@ -19,15 +19,19 @@ if __name__ == '__main__':
         T = fits_table(fn)
         print len(T), 'sources'
 
-        P = T[np.array([t.strip() == 'PSF' for t in T.type])]
-        print len(P), 'PSFs'
-        E = T[np.array([t.strip() == 'EXP' for t in T.type])]
-        print len(E), 'exps'
-        D = T[np.array([t.strip() == 'DEV' for t in T.type])]
-        print len(D), 'deVs'
-        C = T[np.array([t.strip() == 'COMP' for t in T.type])]
-        print len(C), 'comps'
+        T.ispsf = np.array([t.strip() == 'PSF' for t in T.type])
+        T.isexp = np.array([t.strip() == 'EXP' for t in T.type])
+        T.isdev = np.array([t.strip() == 'DEV' for t in T.type])
+        T.iscomp = np.array([t.strip() == 'COMP' for t in T.type])
 
+        P = T[T.ispsf]
+        print len(P), 'PSFs'
+        E = T[T.isexp]
+        print len(E), 'exps'
+        D = T[T.isdev]
+        print len(D), 'deVs'
+        C = T[T.iscomp]
+        print len(C), 'comps'
 
         # Find an example where the type is EXP but EXP is not better than PSF.
         d = (E.dchisq[:,2] - E.dchisq[:,0]) / 2.
@@ -119,20 +123,23 @@ if __name__ == '__main__':
 
 
 
-        plt.clf()
-        cc = ['g', 'r', 'b', 'm']
-        modnames = ['ptsrc', 'dev', 'exp', 'comp']
-        lp = []
-        mx = 0
-        for i,(name,X) in enumerate(zip(modnames, [P, D, E, C])):
-            n,b,p = plt.hist(X.dchisq[:,i], range=(0, 1000), bins=25, histtype='step', color=cc[i], normed=True)
-            lp.append(p[0])
-            mx = max(mx, max(n))
-        plt.legend(lp, modnames)
-        plt.xlabel('DCHISQ')
-        plt.ylim(0, 1.1*mx)
-        plt.axvline(25., color='r', alpha=0.2)
-        ps.savefig()
+        for normed in [False, True]:
+            plt.clf()
+            cc = ['g', 'r', 'b', 'm']
+            modnames = ['ptsrc', 'dev', 'exp', 'comp']
+            lp = []
+            mx = 0
+            for i,(name,X) in enumerate(zip(modnames, [P, D, E, C])):
+                n,b,p = plt.hist(X.dchisq[:,i], range=(0, 1000), bins=25,
+                                 histtype='step', color=cc[i], normed=normed)
+                lp.append(p[0])
+                mx = max(mx, max(n))
+            plt.legend(lp, modnames)
+            plt.xlabel('DCHISQ')
+            plt.ylim(0, 1.1*mx)
+            plt.axvline(25., color='r', alpha=0.2)
+            ps.savefig()
+
 
         
         plt.clf()
@@ -191,16 +198,86 @@ if __name__ == '__main__':
         img = np.flipud(img)
         print 'Image', img.shape, img.dtype
         H,W,three = img.shape
+
+        img = plt.imread('decals-2402p062-image.jpg')
+        img = np.flipud(img)
+        mod = plt.imread('decals-2402p062-model.jpg')
+        mod = np.flipud(mod)
         
         C = T[T.dchisq[:,0] < 60]
         print len(C), 'sources have dchisq(psf) < 60'
         
         C.cut(np.lexsort((C.dchisq[:,0], C.type)))
 
-        for page in range(5):
+        C.cut(np.max(C.decam_flux, axis=1) > 0.)
+        print len(C), 'sources have at least one positive flux'
+        
+        detsns = [fitsio.read('detsn-2402p062-%s.fits' % b)
+                   for b in 'zrg']
+
+
+        # Select some marginal classifications.
+        d = T.dchisq[:, 2] - T.dchisq[:,0]
+        I = np.flatnonzero((d > 7) * (d < 11) *
+                           np.logical_or(T.ispsf, T.isexp))
+        print len(I), 'marginal ptsrc/exp classifications'
+
+        # plt.clf()
+        # ha = dict(range=(0,25), bins=25, histtype='step')
+        # plt.hist(d, color='k', **ha)
+        # plt.hist(d[T.ispsf], color='g', **ha)
+        # plt.hist(d[T.isexp], color='r', **ha)
+        # ps.savefig()
+        
+
+        I = np.flatnonzero(np.logical_or(T.ispsf * (d > 7) * (d < 9),
+                                         T.isexp * (d < 11) * (d > 9)))
+        print len(I), 'marginal ptsrc/exp classifications based on chisq alone'
+
+        C = T[I]
+        C.d = d[I]
+        #C.cut(np.lexsort((C.dchisq[:,0], C.type)))
+        #C.cut(np.lexsort((C.d, C.type)))
+        C.cut(np.argsort(-C.d))
+        
+        for page in range(2):
+            plt.clf()
+            #rows,cols = 7,10
+            rows,cols = 9,13
+            plt.subplots_adjust(left=0.05, right=0.95, bottom=0.1, top=0.95, hspace=0, wspace=0)
+            xytext = []
+            i0 = page * rows * cols
+            for i in range(rows*cols):
+                if i0 + i >= len(C):
+                    break
+                plt.subplot(rows, cols, i+1)
+                S = 20
+                c = C[i0 + i]
+                y0,y1 = max(0, c.by-S), min(H, c.by+S+1)
+                x0,x1 = max(0, c.bx-S), min(W, c.bx+S+1)
+                plt.imshow(img[y0:y1, x0:x1], interpolation='nearest', origin='lower')
+                txt = '%s (%.0f)' % (c.type, c.d)
+                plt.text(0, 0, txt, ha='left', va='bottom', color='red', fontsize=8)
+                plt.xticks([])
+                plt.yticks([])
+    
+                xytext.append((x0,x1,y0,y1, txt))
+    
+            plt.suptitle('Sources with marginal classification')
+            ps.savefig()
+        #sys.exit(0)
+
+
+        
+        
+        #for page in range(5):
+        if False:
             plt.clf()
             rows,cols = 7,10
             plt.subplots_adjust(left=0.05, right=0.95, bottom=0.1, top=0.95, hspace=0, wspace=0)
+
+            xytext = []
+            
             i0 = 0
             for i in range(rows*cols):
                 plt.subplot(rows, cols, i+1)
@@ -211,18 +288,46 @@ if __name__ == '__main__':
                     C.cut(np.array([t.strip() == 'PSF' for t in C.type]) * (C.dchisq[:,0] > mindchi))
                     i0 = -i
                 c = C[i + i0]
-                plt.imshow(img[max(0, c.by-S) : min(H, c.by+S+1),
-                               max(0, c.bx-S) : min(W, c.bx+S+1)], interpolation='nearest', origin='lower')
-                plt.text(0, 0, '%s %.0f' % (c.type, c.dchisq[0]), ha='left', va='bottom', color='red', fontsize=8)
+                y0,y1 = max(0, c.by-S), min(H, c.by+S+1)
+                x0,x1 = max(0, c.bx-S), min(W, c.bx+S+1)
+                plt.imshow(img[y0:y1, x0:x1], interpolation='nearest', origin='lower')
+                txt = '%s %.0f' % (c.type, c.dchisq[0])
+                plt.text(0, 0, txt, ha='left', va='bottom', color='red', fontsize=8)
                 plt.xticks([])
                 plt.yticks([])
+
+                xytext.append((x0,x1,y0,y1, txt))
+
             plt.suptitle('Sources with dchisq(psf) < 50')
             ps.savefig()
-        
-        continue
+
+            for i,(x0,x1,y0,y1,txt) in enumerate(xytext):
+                plt.subplot(rows, cols, i+1)
+                plt.imshow(mod[y0:y1, x0:x1], interpolation='nearest', origin='lower')
+                plt.text(0, 0, txt, ha='left', va='bottom', color='red', fontsize=8)
+                plt.xticks([])
+                plt.yticks([])
+            ps.savefig()
+            
+            for i,(x0,x1,y0,y1,txt) in enumerate(xytext):
+                plt.subplot(rows, cols, i+1)
+
+                sn = np.dstack((detsn[y0:y1,x0:x1] for detsn in detsns))
+                lo,hi = -2, 8
+                sn = np.clip((sn - lo) / (hi - lo), 0., 1.)
+                plt.imshow(sn, interpolation='nearest', origin='lower')
+                plt.text(0, 0, txt, ha='left', va='bottom', color='red', fontsize=8)
+                plt.xticks([])
+                plt.yticks([])
+            ps.savefig()
+                
+            
+        #continue
 
 
-        
+        mn,mx = 1e-2, 1e8
+        xx = np.logspace(np.log10(mn), np.log10(mx), 100)
+
         for iother,X,oname in [(1, D, 'deV'), (2, E, 'exp'), (3, C, 'comp')]:
             plt.clf()
             p1 = plt.plot(X.dchisq[:,0], X.dchisq[:,iother], 'k.')
@@ -262,4 +367,8 @@ if __name__ == '__main__':
             plt.axis([mn,mx,lo,hi])
             ps.savefig()
             
+            #lo,hi = 0.5, 10.
+            lo,hi = 0.9, 2.
+            plt.axis([mn,mx,lo,hi])
+            ps.savefig()
 

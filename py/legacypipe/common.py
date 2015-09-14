@@ -60,6 +60,28 @@ class LegacyEllipseWithPriors(EllipseWithPriors):
     # Prior on (softened) ellipticity: Gaussian with this standard deviation
     ellipticityStd = 0.25
 
+from tractor.galaxy import ExpGalaxy
+from tractor.ellipses import EllipseE
+class SimpleGalaxy(ExpGalaxy):
+    shape = EllipseE(0.45, 0., 0.)
+    
+    def __init__(self, *args):
+        super(SimpleGalaxy, self).__init__(*args)
+        self.shape = SimpleGalaxy.shape
+
+    @staticmethod
+    def getNamedParams():
+        return dict(pos=0, brightness=1)
+
+    def getName(self):
+        return 'SimpleGalaxy'
+
+    ### HACK -- for Galaxy.getParamDerivatives()
+    def isParamFrozen(self, pname):
+        if pname == 'shape':
+            return True
+        return super(SimpleGalaxy, self).isParamFrozen(pname)
+    
 class BrickDuck(object):
     pass
 
