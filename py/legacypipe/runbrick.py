@@ -1968,48 +1968,43 @@ def _one_blob(X):
         # use log likelihood rather than log prior because we use priors on, eg,
         # the ellipticity to avoid crazy fits.  Here we sort of want to just
         # evaluate the fit quality regardless of priors on parameters...?
-        lnl0 = srctractor.getLogLikelihood()
 
         srccat = srctractor.getCatalog()
         srccat[0] = None
+        lnl_none = srctractor.getLogLikelihood()
 
-        lnl_null = srctractor.getLogLikelihood()
-        lnls = dict(ptsrc=None, dev=None, exp=None, comp=None, none=lnl_null,
-                    simple=None)
+        # Actually chi-squared improvement vs no source; larger is a better fit
+        chisqs = dict()
 
         if isinstance(src, PointSource):
+            ptsrc = src.copy()
+            simple = SimpleGalaxy(src.getPosition(), src.getBrightness()).copy()
             # logr, ee1, ee2
             shape = LegacyEllipseWithPriors(-1., 0., 0.)
             dev = DevGalaxy(src.getPosition(), src.getBrightness(), shape).copy()
             exp = ExpGalaxy(src.getPosition(), src.getBrightness(), shape).copy()
-            simple = SimpleGalaxy(src.getPosition(), src.getBrightness()).copy()
-
-            print('Created SIMPLE galaxy', simple)
-            
             comp = None
-            ptsrc = src.copy()
-            trymodels = [('ptsrc', ptsrc), ('simple', simple), ('dev', dev), ('exp', exp), ('comp', comp)]
             oldmodel = 'ptsrc'
 
         elif isinstance(src, DevGalaxy):
+            ptsrc = PointSource(src.getPosition(), src.getBrightness()).copy()
+            simple = SimpleGalaxy(src.getPosition(), src.getBrightness()).copy()
             dev = src.copy()
             exp = ExpGalaxy(src.getPosition(), src.getBrightness(), src.getShape()).copy()
             comp = None
-            ptsrc = PointSource(src.getPosition(), src.getBrightness()).copy()
-            simple = SimpleGalaxy(src.getPosition(), src.getBrightness()).copy()
-            trymodels = [('ptsrc', ptsrc), ('simple', simple), ('dev', dev), ('exp', exp), ('comp', comp)]
             oldmodel = 'dev'
 
         elif isinstance(src, ExpGalaxy):
-            exp = src.copy()
-            dev = DevGalaxy(src.getPosition(), src.getBrightness(), src.getShape()).copy()
-            comp = None
             ptsrc = PointSource(src.getPosition(), src.getBrightness()).copy()
             simple = SimpleGalaxy(src.getPosition(), src.getBrightness()).copy()
-            trymodels = [('ptsrc', ptsrc), ('simple', simple), ('dev', dev), ('exp', exp), ('comp', comp)]
+            dev = DevGalaxy(src.getPosition(), src.getBrightness(), src.getShape()).copy()
+            exp = src.copy()
+            comp = None
             oldmodel = 'exp'
 
         elif isinstance(src, FixedCompositeGalaxy):
+            ptsrc = PointSource(src.getPosition(), src.getBrightness()).copy()
+            simple = SimpleGalaxy(src.getPosition(), src.getBrightness()).copy()
             frac = src.fracDev.getValue()
             if frac > 0:
                 shape = src.shapeDev
@@ -2022,11 +2017,10 @@ def _one_blob(X):
                 shape = src.shapeDev
             exp = ExpGalaxy(src.getPosition(), src.getBrightness(), shape).copy()
             comp = src.copy()
-            ptsrc = PointSource(src.getPosition(), src.getBrightness()).copy()
-            simple = SimpleGalaxy(src.getPosition(), src.getBrightness()).copy()
-            trymodels = [('ptsrc', ptsrc), ('simple', simple), ('dev', dev), ('exp', exp), ('comp', comp)]
             oldmodel = 'comp'
 
+        trymodels = [('ptsrc', ptsrc), ('simple', simple), ('dev', dev), ('exp', exp), ('comp', comp)]
+            
         allflags = {}
         for name,newsrc in trymodels:
             print('Trying model:', name)
@@ -2134,18 +2128,12 @@ def _one_blob(X):
             srctractor.setModelMasks(None)
             disable_galaxy_cache()
 
-            lnls[name] = srctractor.getLogLikelihood()
+            chisqs[name] = 2. * (srctractor.getLogLikelihood() - lnl_none)
             all_models[i][name] = newsrc.copy()
             allflags[name] = thisflags
 
         # if plots:
         #    _plot_mods(subtims, plotmods, plotmodnames, bands, None, None, bslc, blobw, blobh, ps)
-
-        nbands = len(bands)
-        nparams = dict(none=0, ptsrc=2, simple=2, exp=5, dev=5, comp=9)
-
-        # penalized log-likelihoods
-        plnls = dict([(k, lnls[k] - 0.5 * nparams[k]) for k in nparams.keys()])
 
         if plots:
             from collections import OrderedDict
@@ -2166,7 +2154,7 @@ def _one_blob(X):
                     dimshow(get_rgb(comods, bands))
                     plt.title(modname)
 
-                    chisqs = [((tim.getImage() - mod) * tim.getInvError())**2
+                    chis = [((tim.getImage() - mod) * tim.getInvError())**2
                               for tim,mod in zip(subtims, modimgs)]
                 else:
                     coimgs, cons = compute_coadds(subtims, bands, subtarget)
@@ -2177,38 +2165,32 @@ def _one_blob(X):
                     plt.axis(ax)
                     plt.title('Image')
 
-                    chisqs = [((tim.getImage()) * tim.getInvError())**2
+                    chis = [((tim.getImage()) * tim.getInvError())**2
                               for tim in subtims]
-                cochisqs,nil = compute_coadds(subtims, bands, subtarget, images=chisqs)
+                cochisqs,nil = compute_coadds(subtims, bands, subtarget, images=chis)
                 cochisq = reduce(np.add, cochisqs)
                 plt.subplot(rows, cols, imod+1+cols)
                 dimshow(cochisq, vmin=0, vmax=25)
-                plt.title('dlnp %.0f' % plnls[modname])
+                plt.title('chisq %.0f' % chisqs[modname])
             plt.suptitle('Blob %i, source %i: was: %s' %
                          (iblob, i, str(src)))
             ps.savefig()
 
+        # We decide separately whether to include the source in the
+        # catalog and what type to give it.
         keepmod = 'none'
         keepsrc = None
 
-        # We decide separately whether to include the source in the
-        # catalog and what type to give it.
-
         modnames = ['ptsrc', 'simple', 'dev', 'exp', 'comp']
+
+        nparams = dict(ptsrc=2, simple=2, exp=5, dev=5, comp=9)
         
         # This is our "detection threshold": 5-sigma in
-        # *penalized* units; ie, ~5.2-sigma for point sources
-        cut = 0.5 * 5.**2
+        # *parameter-penalized* units; ie, ~5.2-sigma for point sources
+        cut = 5.**2
         # Take the best of ptsrc, dev, exp, comp
-        diff = max([plnls[name] - plnls['none']
-                    for name in modnames])
+        diff = max([chisqs[name] - nparams[name] for name in modnames])
 
-        print()
-        dlnls = np.array([plnls[name] - plnls['none'] for name in modnames])
-        print('lnl diffs vs none:', ', '.join(['%s = %.1f' % (name, dlnl) for name,dlnl in zip(modnames, dlnls)]))
-        del dlnls
-        print('Diff:', diff, 'cut:', cut)
-        
         if diff > cut:
             # We're going to keep this source!
             # It starts out as a point source.
@@ -2221,7 +2203,7 @@ def _one_blob(X):
 
             # Is the SimpleGalaxy better?
             cut = 0.
-            simplediff= plnls['simple'] - plnls['ptsrc']
+            simplediff= chisqs['simple'] - chisqs['ptsrc']
             if simplediff > cut:
                 # Switch to 'simple'
                 keepsrc = simple
@@ -2229,15 +2211,15 @@ def _one_blob(X):
             
             # This is our "upgrade" threshold: how much better a galaxy
             # fit has to be versus ptsrc, and comp versus galaxy.
-            cut = 0.5 * 3.**2
+            cut = 3.**2 + (nparams['exp'] - nparams['ptsrc'])
 
             # This is the "fractional" upgrade threshold for ptsrc->dev/exp:
             # 2% of ptsrc vs nothing
-            fcut = 0.02 * (plnls['ptsrc'] - plnls['none'])
+            fcut = 0.02 * chisqs['ptsrc']
             cut = max(cut, fcut)
 
-            expdiff = plnls['exp'] - plnls[keepmod]
-            devdiff = plnls['dev'] - plnls[keepmod]
+            expdiff = chisqs['exp'] - chisqs[keepmod]
+            devdiff = chisqs['dev'] - chisqs[keepmod]
 
             #print('Keeping source.  Comparing dev/exp vs ptsrc.  dlnp =', 4.5, 'frac =', fcut, 'cut =', cut)
             #print('exp:', expdiff)
@@ -2253,7 +2235,7 @@ def _one_blob(X):
                     keepsrc = dev
                     keepmod = 'dev'
 
-                diff = plnls['comp'] - plnls[keepmod]
+                diff = chisqs['comp'] - chisqs[keepmod]
                 #print('Comparing', keepmod, 'to comp.  cut:', cut, 'comp:', diff)
                 if diff > cut:
                     #print('Upgrading from dev/exp to composite.')
@@ -2273,10 +2255,7 @@ def _one_blob(X):
         #print('Keeping model:', keepmod)
         #print('Keeping source:', keepsrc)
 
-        # 2 * log-likelihood differences
-        B.dchisqs[i, :] = 2. * np.array(
-            [plnls[k] - plnls['none'] for k in modnames])
-
+        B.dchisqs[i, :] = np.array([chisqs[k] for k in modnames])
         B.flags[i] = allflags.get(keepmod, 0)
         B.sources[i] = keepsrc
         subcat[i] = keepsrc

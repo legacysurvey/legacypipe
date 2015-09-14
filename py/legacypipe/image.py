@@ -293,8 +293,10 @@ class LegacySurveyImage(object):
         h,w = tim.shape
         patch = psf.getPointSourcePatch(w/2., h/2.).patch
         print('PSF PointSourcePatch: sum', patch.sum())
-        # We normalize the patch before taking the norm...
-        psfnorm = np.sqrt(np.sum((patch / patch.sum())**2))
+        # Clamp up to zero and normalize before taking the norm
+        patch = np.maximum(0, patch)
+        patch /= patch.sum()
+        psfnorm = np.sqrt(np.sum(patch**2))
         print('PSF norm', psfnorm, 'vs Gaussian',
               1./(2. * np.sqrt(np.pi) * psf_sigma))
 
@@ -308,8 +310,9 @@ class LegacySurveyImage(object):
         S = 32
         mm = Patch(int(cx-S), int(cy-S), np.ones((2*S+1, 2*S+1), bool))
         galmod = gal.getModelPatch(tim, modelMask = mm).patch
-        #print('Galaxy model:', galmod.shape, galmod.sum())
-        galnorm = np.sqrt(np.sum((galmod / galmod.sum())**2))
+        galmod = np.maximum(0, galmod)
+        galmod /= galmod.sum()
+        galnorm = np.sqrt(np.sum(galmod**2))
         print('Galaxy norm:', galnorm)
         
         # CP (DECam) images include DATE-OBS and MJD-OBS, in UTC.
