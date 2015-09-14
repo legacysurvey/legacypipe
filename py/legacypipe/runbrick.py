@@ -1017,6 +1017,7 @@ def stage_srcs(coimgs=None, cons=None,
     if not pipe:
         keys.extend(['detmaps', 'detivs'])
 
+    if False:
         for b,detmap,detiv in zip(bands, detmaps, detivs):
             fitsio.write('detmap-%s-%s.fits' % (brickname, b),
                          detmap)

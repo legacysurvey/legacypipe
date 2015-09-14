@@ -6,14 +6,51 @@ import numpy as np
 from astrometry.util.fits import *
 from astrometry.util.plotutils import *
 
+def plot_grid(T, img, mod, ps, txtfunc, txtfunc2, title):
+    for page in range(2):
+        plt.clf()
+        rows,cols = 7,10
+        plt.subplots_adjust(left=0.05, right=0.95, bottom=0.1, top=0.95, hspace=0, wspace=0)
+
+        xytext = []
+        i0 = page * rows * cols
+        for i in range(rows*cols):
+            if i0 + i >= len(T):
+                break
+            plt.subplot(rows, cols, i+1)
+            S = 20
+            c = T[i0 + i]
+            y0,y1 = max(0, c.by-S), min(H, c.by+S+1)
+            x0,x1 = max(0, c.bx-S), min(W, c.bx+S+1)
+            plt.imshow(img[y0:y1, x0:x1], interpolation='nearest', origin='lower')
+            txt = txtfunc(c)
+            if txt is not None:
+                plt.text(0, 0, txt, ha='left', va='bottom', color='red', fontsize=8)
+
+            if txtfunc2 is not None:
+                txt2 = txtfunc2(c)
+                plt.text(0, S*2, txt2, ha='left', va='top', color='red', fontsize=8)
+            plt.xticks([])
+            plt.yticks([])
+    
+            xytext.append((x0,x1,y0,y1, txt))
+    
+        plt.suptitle(title)
+        ps.savefig()
+
+
+    
+
 if __name__ == '__main__':
     ps = PlotSequence('dchisq')
 
     for fn in [#'dr1/tractor/240/tractor-2402p062.fits',
         #'dr2b/tractor/240/tractor-2402p062.fits',
         # After fixing dchisq indexing bug
-        'tractor-2402p062.fits',
-               ]:
+        #'tractor-2402p062.fits',
+        # With "SIMP" as one of the model type options
+        'tst/tractor/240/tractor-2402p062.fits',
+        ]:
         print
         print fn
         T = fits_table(fn)
@@ -23,9 +60,18 @@ if __name__ == '__main__':
         T.isexp = np.array([t.strip() == 'EXP' for t in T.type])
         T.isdev = np.array([t.strip() == 'DEV' for t in T.type])
         T.iscomp = np.array([t.strip() == 'COMP' for t in T.type])
+        T.issimp = np.array([t.strip() == 'SIMP' for t in T.type])
 
+        T.dchisq_psf  = T.dchisq[:,0]
+        T.dchisq_simp = T.dchisq[:,1]
+        T.dchisq_dev  = T.dchisq[:,2]
+        T.dchisq_exp  = T.dchisq[:,3]
+        T.dchisq_comp = T.dchisq[:,4]
+        
         P = T[T.ispsf]
         print len(P), 'PSFs'
+        S = T[T.issimp]
+        print len(S), 'simple'
         E = T[T.isexp]
         print len(E), 'exps'
         D = T[T.isdev]
@@ -33,6 +79,72 @@ if __name__ == '__main__':
         C = T[T.iscomp]
         print len(C), 'comps'
 
+        
+
+        # Are there any galaxies where SIMPLE is worse than PSF?
+
+        plt.clf()
+        lo,hi = -10,10
+        ha = dict(range=(lo, hi), bins=20, histtype='step')
+        plt.hist(np.clip(E.dchisq_simp - E.dchisq_psf, lo, hi), color='r', **ha)
+        plt.hist(np.clip(D.dchisq_simp - D.dchisq_psf, lo, hi), color='b', **ha)
+        plt.hist(np.clip(C.dchisq_simp - C.dchisq_psf, lo, hi), color='m', **ha)
+        plt.xlabel('dchisq (SIMPLE - PSF)')
+        ps.savefig()
+
+
+        Tbad = T[(T.dchisq_simp - T.dchisq_psf < 0) *
+                 reduce(np.logical_or, [T.isexp, T.isdev, T.iscomp])]
+        Tbad.cut(np.argsort(Tbad.dchisq_simp - Tbad.dchisq_psf))
+        Tbad.writeto('bad.fits')
+
+        
+        plt.clf()
+        ha.update(range=(0, 2))
+        plt.hist(Tbad[Tbad.isexp].shapeexp_r, color='r', **ha)
+        plt.hist(E.shapeexp_r, color='r', alpha=0.25, lw=2, **ha)
+        plt.hist(Tbad[Tbad.isdev].shapedev_r, color='b', **ha)
+        plt.hist(D.shapedev_r, color='b', alpha=0.25, lw=2, **ha)
+        ps.savefig()
+        
+
+        img = plt.imread('decals-2402p062-image.jpg')
+        img = np.flipud(img)
+        print 'Image', img.shape, img.dtype
+        H,W,three = img.shape
+        img = plt.imread('decals-2402p062-image.jpg')
+        img = np.flipud(img)
+        mod = plt.imread('decals-2402p062-model.jpg')
+        mod = np.flipud(mod)
+
+
+        
+        plot_grid(Tbad,img, mod, ps,
+                  lambda t: '%s %.0f' % (t.type, t.dchisq_simp - t.dchisq_psf),
+                  lambda t: '%i' % t.blob,
+                  'Galaxies with SIMPLE worse than PSF')
+
+        
+
+        sys.exit(0)
+        
+        
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+        
         # Find an example where the type is EXP but EXP is not better than PSF.
         d = (E.dchisq[:,2] - E.dchisq[:,0]) / 2.
         cut = np.maximum(4.5, (E.dchisq[:,0] / 2.) * 0.02)
@@ -194,15 +306,6 @@ if __name__ == '__main__':
         plt.axvline(25., color='r', alpha=0.2)
         ps.savefig()
 
-        img = plt.imread('decals-2402p062-image.jpg')
-        img = np.flipud(img)
-        print 'Image', img.shape, img.dtype
-        H,W,three = img.shape
-
-        img = plt.imread('decals-2402p062-image.jpg')
-        img = np.flipud(img)
-        mod = plt.imread('decals-2402p062-model.jpg')
-        mod = np.flipud(mod)
         
         C = T[T.dchisq[:,0] < 60]
         print len(C), 'sources have dchisq(psf) < 60'
