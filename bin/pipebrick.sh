@@ -45,7 +45,8 @@ python legacypipe/runbrick.py -P 'pickles/runbrick-dr2c-%(brick)s-%%(stage)s.pic
 # Launch from the 'py' directory;
 # qdo launch dr1n 32 --mpack 6 --walltime=48:00:00 --script ../bin/pipebrick.sh --batchqueue regular --verbose
 
-
+# Serial queue on edison:
+# QDO_BATCH_PROFILE=edison-serial qdo launch dr2c 8 --script ../bin/pipebrick-single.sh --batchopts "-l vmem=10GB" --walltime 24:00:00
 
 # with 8 threads: 3 GB per core * 8 cores (most of the carver nodes have 24 GB)
 # qdo launch bricks 1 --batchopts "-l pvmem=3GB -l nodes=1:ppn=8 -A desi -t 1-20 -q regular" --walltime=48:00:00 --script projects/desi/pipebrick.sh
