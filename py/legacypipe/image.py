@@ -469,58 +469,17 @@ class LegacySurveyImage(object):
         '''
         Reads the sky model, returning a Tractor Sky object.
         '''
-
+        fn = self.skyfn
         if splinesky:
-            from tractor.splinesky import SplineSky
-            from .common import get_git_version
-            from scipy.ndimage.morphology import binary_dilation
-
-            print('Computing spline sky model on the fly, on full image')
-            fullimg = self.read_image()
-            fulliv = self.read_invvar()
-
-            # Start by subtracting the overall median
-            med = np.median(fullimg[fulliv>0])
-            # Compute initial model...
-            skyobj = SplineSky.BlantonMethod(fullimg - med, fulliv>0, 512)
-            skymod = np.zeros_like(fullimg)
-            skyobj.addTo(skymod)
-            # Now mask bright objects in (image - initial sky model)
-            sig1 = 1./np.sqrt(np.median(fulliv[fulliv>0]))
-            masked = (fullimg - med - skymod) > (5.*sig1)
-            masked = binary_dilation(masked, iterations=3)
-            masked[fulliv == 0] = True
-            # Now find the final sky model using that more extensive mask
-            skyobj = SplineSky.BlantonMethod(fullimg - med, np.logical_not(masked), 512)
-            # add the median back in
-            skyobj.offset(med)
-
-            if slc is not None:
-                sy,sx = slc
-                y0 = sy.start
-                x0 = sx.start
-                skyobj.shift(x0, y0)
-                print('Shifting to subimage', (x0,y0))
-
-            ################################
-            # fn = 'splinesky-%s.fits' % (str(self).lower().replace(' ','-'))
-            # print('wrote', fn)
-            # skyobj.write_fits(fn)
-            ################################
-
-            skyobj.version = get_git_version()
-            skyobj.plver = imgheader.get('PLVER', '').strip()
-            print('Sky:', skyobj)
-            return skyobj
-
-        print('Reading sky model from', self.skyfn)
-        hdr = fitsio.read_header(self.skyfn)
+            fn = self.splineskyfn
+        print('Reading sky model from', fn)
+        hdr = fitsio.read_header(fn)
         skyclass = hdr['SKY']
         clazz = get_class_from_name(skyclass)
 
         if getattr(clazz, 'from_fits', None) is not None:
             fromfits = getattr(clazz, 'from_fits')
-            skyobj = fromfits(self.skyfn, hdr)
+            skyobj = fromfits(fn, hdr)
         else:
             fromfits = getattr(clazz, 'fromFitsHeader')
             skyobj = fromfits(hdr, prefix='SKY_')
@@ -529,7 +488,7 @@ class LegacySurveyImage(object):
         if len(skyobj.version) == 0:
             skyobj.version = hdr.get('TRACTORV', '').strip()
             if len(skyobj.version) == 0:
-                skyobj.version = str(os.stat(self.skyfn).st_mtime)
+                skyobj.version = str(os.stat(fn).st_mtime)
         skyobj.plver = hdr.get('PLVER', '').strip()
         return skyobj
 
