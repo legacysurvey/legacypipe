@@ -825,6 +825,9 @@ def stage_srcs(coimgs=None, cons=None,
 
     '''
 
+    from legacypipe.detection import (detection_maps, sed_matched_filters,
+                                      run_sed_matched_filters)
+
     tlast = Time()
     if not no_sdss:
         from legacypipe.sdss import get_sdss_sources

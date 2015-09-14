@@ -685,6 +685,10 @@ def create_temp(**kwargs):
 
 class Decals(object):
     def __init__(self, decals_dir=None):
+
+        from .bok import BokImage
+        from .decam import DecamImage
+
         if decals_dir is None:
             decals_dir = os.environ.get('DECALS_DIR')
             if decals_dir is None:
@@ -711,6 +715,14 @@ Using the current directory as DECALS_DIR, but this is likely to fail.
             'decam': DecamImage,
             '90prime': BokImage,
             }
+
+    def __getstate__(self):
+        '''
+        For pickling: clear the cached ZP table.
+        '''
+        d = self.__dict__.copy()
+        d['ZP'] = None
+        return d
 
     def get_calib_dir(self):
         return os.path.join(self.decals_dir, 'calib')
@@ -1134,12 +1146,3 @@ class SchlegelPsfModel(PsfExModel):
             bh,bw = self.psfbases[0].shape
             self.radius = (bh+1)/2.
 
-
-
-from .sdss  import get_sdss_sources
-from .image import LegacySurveyImage
-from .bok   import BokImage
-from .decam import DecamImage
-from .detection import (detection_maps, sed_matched_filters, 
-                        run_sed_matched_filters)
-            
