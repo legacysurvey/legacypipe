@@ -825,6 +825,9 @@ def stage_srcs(coimgs=None, cons=None,
 
     '''
 
+    from legacypipe.detection import (detection_maps, sed_matched_filters,
+                                      run_sed_matched_filters)
+
     tlast = Time()
     if not no_sdss:
         from legacypipe.sdss import get_sdss_sources
@@ -1101,7 +1104,7 @@ def stage_fitblobs(T=None,
 
     set_source_radii(bands, tims, cat, minsigma)
 
-    if plots:
+    if plots and False:
         coimgs,cons = compute_coadds(tims, bands, targetwcs)
         plt.clf()
         dimshow(get_rgb(coimgs, bands))
@@ -1574,7 +1577,7 @@ def _one_blob(X):
         bslc = (slice(by0, by0+blobh), slice(bx0, bx0+blobw))
         plotmods = []
         plotmodnames = []
-        plotmods.append(subtr.getModelImages())
+        plotmods.append(list(subtr.getModelImages()))
         plotmodnames.append('Initial')
 
     # Optimize individual sources in order of flux
@@ -1676,7 +1679,7 @@ def _one_blob(X):
                     srctims.append(srctim)
                     #print('  ', tim.shape, 'to', srctim.shape)
 
-                if plots:
+                if plots and False:
                     bx1 = bx0 + blobw
                     by1 = by0 + blobh
                     plt.clf()
@@ -1727,14 +1730,14 @@ def _one_blob(X):
             srctractor.freezeParams('images')
             srctractor.setModelMasks(modelMasks)
 
-            if plots:
+            if plots and False:
                 spmods,spnames = [],[]
                 spallmods,spallnames = [],[]
-            if plots:
+            if plots and False:
                 if numi == 0:
-                    spallmods.append(subtr.getModelImages())
+                    spallmods.append(list(subtr.getModelImages()))
                     spallnames.append('Initial (all)')
-                spmods.append(srctractor.getModelImages())
+                spmods.append(list(srctractor.getModelImages()))
                 spnames.append('Initial')
 
             max_cpu_per_source = 60.
@@ -1763,13 +1766,13 @@ def _one_blob(X):
             if DEBUG:
                 _debug_plots(srctractor, ps)
 
-            if plots:
-                spmods.append(srctractor.getModelImages())
+            if plots and False:
+                spmods.append(list(srctractor.getModelImages()))
                 spnames.append('Fit')
-                spallmods.append(subtr.getModelImages())
+                spallmods.append(list(subtr.getModelImages()))
                 spallnames.append('Fit (all)')
 
-            if plots:
+            if plots and False:
                 from utils import MyMultiproc
                 mp = MyMultiproc()
                 tims_compute_resamp(mp, srctractor.getImages(), targetwcs)
@@ -1787,7 +1790,7 @@ def _one_blob(X):
                 plt.suptitle('Blob %i' % iblob)
                 tempims = [tim.getImage() for tim in subtims]
 
-                _plot_mods(srctractor.getImages(), spmods, spnames, bands, None, None, bslc, blobw, blobh, ps,
+                _plot_mods(list(srctractor.getImages()), spmods, spnames, bands, None, None, bslc, blobw, blobh, ps,
                            chi_plots=plots2, rgb_plots=True, main_plot=False,
                            rgb_format='spmods Blob %i, src %i: %%s' % (iblob, i))
                 _plot_mods(subtims, spallmods, spallnames, bands, None, None, bslc, blobw, blobh, ps,
@@ -1857,8 +1860,8 @@ def _one_blob(X):
         subtr.setModelMasks(None)
         disable_galaxy_cache()
 
-    if plots:
-        plotmods.append(subtr.getModelImages())
+    if plots and False:
+        plotmods.append(list(subtr.getModelImages()))
         plotmodnames.append('Per Source')
 
     if len(srcs) > 1 and len(srcs) <= 10:
@@ -1873,11 +1876,11 @@ def _one_blob(X):
                 break
         #print('Simultaneous fit took:', Time()-tfit)
 
-        if plots:
-            plotmods.append(subtr.getModelImages())
+        if plots and False:
+            plotmods.append(list(subtr.getModelImages()))
             plotmodnames.append('All Sources')
 
-    if plots:
+    if plots and False:
         _plot_mods(subtims, plotmods, plotmodnames, bands, None, None,
                    bslc, blobw, blobh, ps)
 
@@ -1989,7 +1992,7 @@ def _one_blob(X):
         lnl_none = srctractor.getLogLikelihood()
 
         # Actually chi-squared improvement vs no source; larger is a better fit
-        chisqs = dict()
+        chisqs = dict(none=0)
 
         if isinstance(src, PointSource):
             ptsrc = src.copy()
@@ -2092,7 +2095,7 @@ def _one_blob(X):
 
             if plots and False:
                 plt.clf()
-                modimgs = srctractor.getModelImages()
+                modimgs = list(srctractor.getModelImages())
                 comods,nil = compute_coadds(subtims, bands, subtarget, images=modimgs)
                 dimshow(get_rgb(comods, bands))
                 plt.title('First-round opt ' + name)
@@ -2134,7 +2137,7 @@ def _one_blob(X):
 
             if plots and False:
                 plt.clf()
-                modimgs = srctractor.getModelImages()
+                modimgs = list(srctractor.getModelImages())
                 comods,nil = compute_coadds(subtims, bands, subtarget, images=modimgs)
                 dimshow(get_rgb(comods, bands))
                 plt.title('Second-round opt ' + name)
@@ -2153,9 +2156,9 @@ def _one_blob(X):
         if plots:
             from collections import OrderedDict
             plt.clf()
-            rows,cols = 2, 5
-            mods = OrderedDict([('none',None), ('ptsrc',ptsrc), ('dev',dev),
-                                ('exp',exp), ('comp',comp)])
+            rows,cols = 2, 6
+            mods = OrderedDict([('none',None), ('ptsrc',ptsrc), ('simple',simple),
+                                ('dev',dev), ('exp',exp), ('comp',comp)])
             for imod,modname in enumerate(mods.keys()):
                 srccat[0] = mods[modname]
 
@@ -2163,14 +2166,18 @@ def _one_blob(X):
                 print(srccat[0])
 
                 plt.subplot(rows, cols, imod+1)
+
                 if modname != 'none':
-                    modimgs = srctractor.getModelImages()
+                    modimgs = list(srctractor.getModelImages())
                     comods,nil = compute_coadds(subtims, bands, subtarget, images=modimgs)
                     dimshow(get_rgb(comods, bands))
                     plt.title(modname)
 
                     chis = [((tim.getImage() - mod) * tim.getInvError())**2
-                              for tim,mod in zip(subtims, modimgs)]
+                            for tim,mod in zip(subtims, modimgs)]
+
+                    res = [(tim.getImage() - mod) for tim,mod in zip(subtims, modimgs)]
+
                 else:
                     coimgs, cons = compute_coadds(subtims, bands, subtarget)
                     dimshow(get_rgb(coimgs, bands))
@@ -2182,10 +2189,20 @@ def _one_blob(X):
 
                     chis = [((tim.getImage()) * tim.getInvError())**2
                               for tim in subtims]
-                cochisqs,nil = compute_coadds(subtims, bands, subtarget, images=chis)
-                cochisq = reduce(np.add, cochisqs)
-                plt.subplot(rows, cols, imod+1+cols)
-                dimshow(cochisq, vmin=0, vmax=25)
+                    res = [tim.getImage() for tim in subtims]
+
+                if False:
+                    cochisqs,nil = compute_coadds(subtims, bands, subtarget, images=chis)
+                    cochisq = reduce(np.add, cochisqs)
+                    plt.subplot(rows, cols, imod+1+cols)
+                    dimshow(cochisq, vmin=0, vmax=25)
+
+                else:
+                    # residuals
+                    coresids,nil = compute_coadds(subtims, bands, subtarget, images=res)
+                    plt.subplot(rows, cols, imod+1+cols)
+                    dimshow(get_rgb(coresids, bands, **rgbkwargs_resid), ticks=False)
+
                 plt.title('chisq %.0f' % chisqs[modname])
             plt.suptitle('Blob %i, source %i: was: %s' %
                          (iblob, i, str(src)))
@@ -2296,7 +2313,7 @@ def _one_blob(X):
 
     if plots:
         plotmods, plotmodnames = [],[]
-        plotmods.append(subtr.getModelImages())
+        plotmods.append(list(subtr.getModelImages()))
         plotmodnames.append('All model selection')
         _plot_mods(subtims, plotmods, plotmodnames, bands, None, None, bslc, blobw, blobh, ps)
 
