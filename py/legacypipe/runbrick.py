@@ -1231,7 +1231,7 @@ def stage_fitblobs_finish(
         assert(len(TT) == len(allperfs))
 
         hdr = fitsio.FITSHDR()
-        for srctype in ['ptsrc', 'dev','exp','comp']:
+        for srctype in ['ptsrc', 'simple', 'dev','exp','comp']:
             xcat = Catalog(*[m[srctype] for m in allmods])
             xcat.thawAllRecursive()
             TT,hdr = prepare_fits_catalog(xcat, None, TT, hdr, bands, None,
@@ -1243,6 +1243,10 @@ def stage_fitblobs_finish(
         TT.delete_column('ptsrc_shapeDev')
         TT.delete_column('ptsrc_fracDev')
         TT.delete_column('ptsrc_type')
+        TT.delete_column('simple_shapeExp')
+        TT.delete_column('simple_shapeDev')
+        TT.delete_column('simple_fracDev')
+        TT.delete_column('simple_type')
         TT.delete_column('dev_shapeExp')
         TT.delete_column('dev_fracDev')
         TT.delete_column('dev_type')
@@ -1269,32 +1273,11 @@ def stage_fitblobs_finish(
     # Drop now-empty blobs.
     R = [r for r in R if r is not None and len(r.B)]
 
-    #II = np.hstack([r.B.Isrcs for r in R])
-
     BB = merge_tables([r.B for r in R])
     print('Total of', len(BB), 'blob measurements')
     II = BB.Isrcs
-
-    # srcivs   = np.hstack([np.hstack(r[2]) for r in R])
-    # fracflux = np.vstack([r[3] for r in R])
-    # rchi2    = np.vstack([r[4] for r in R])
-    # dchisqs  = np.vstack(np.vstack([r[5] for r in R]))
-    # fracmasked = np.vstack([r[6] for r in R])
-    # flags = np.hstack([r[7] for r in R])
-    # fracin = np.vstack([r[10] for r in R])
-    # started_in = np.hstack([r[11] for r in R])
-    # finished_in = np.hstack([r[12] for r in R])
-
-    print('BB.sources:', type(BB.sources))
-    print(BB.sources)
-
     T.cut(II)
     newcat = BB.sources
-
-    # newcat = []
-    # for r in R:
-    #     newcat.extend(r[1])
-    # T.cut(II)
 
     del R
     del fitblobs_R
