@@ -1,3 +1,4 @@
+import sys
 if __name__ == '__main__':
     import matplotlib
     matplotlib.use('Agg')
@@ -26,21 +27,24 @@ def plot_grid(T, img, mod, ps, txtfunc, txtfunc2, title, xx, yy):
                        extent=[x0-0.5,x1-0.5,y0-0.5,y1-0.5])
             txt = txtfunc(c)
             if txt is not None:
-                plt.text(0, 0, txt, ha='left', va='bottom', color='red', fontsize=8)
+                plt.text(x0, y0, txt, ha='left', va='bottom',
+                         color='red', fontsize=8)
 
             if txtfunc2 is not None:
                 txt2 = txtfunc2(c)
-                plt.text(0, S*2, txt2, ha='left', va='top', color='red', fontsize=8)
+                plt.text(x0, y1, txt2, ha='left', va='top',
+                         color='red', fontsize=8)
             plt.xticks([])
             plt.yticks([])
 
             xytext.append((x0,x1,y0,y1, txt))
 
-            I = np.flatnonzero(np.logical_not((xx == c.bx) * (yy == c.by)))
-            ax = plt.axis()
-            plt.plot(xx[I], yy[I], '.', color=(0,1,0), alpha=0.5, ms=8)
-            plt.plot(c.bx, c.by, 'rx', color='r')
-            plt.axis(ax)
+            if xx is not None:
+                I = np.flatnonzero(np.logical_not((xx == c.bx) * (yy == c.by)))
+                ax = plt.axis()
+                plt.plot(xx[I], yy[I], '.', color=(0,1,0), alpha=0.5, ms=8)
+                plt.plot(c.bx, c.by, 'rx', color='r')
+                plt.axis(ax)
             
         plt.suptitle(title)
         ps.savefig()
@@ -105,6 +109,14 @@ if __name__ == '__main__':
         Tbad.cut(np.argsort(Tbad.dchisq_simp - Tbad.dchisq_psf))
         Tbad.writeto('bad.fits')
 
+        plt.clf()
+        plt.hist(T.dchisq_psf, range=(0,200), bins=50,
+                 color='k', histtype='step')
+        plt.hist(Tbad.dchisq_psf, range=(0,200), bins=50,
+                 color='r', histtype='step')
+        plt.xlabel('dchisq(PSF)')
+        ps.savefig()
+        
         
         plt.clf()
         ha.update(range=(0, 2), bins=50)
@@ -116,16 +128,16 @@ if __name__ == '__main__':
         ps.savefig()
 
 
-        plt.clf()
-        plt.plot(E.shapeexp_r, E.decam_flux[:,2], 'r.', alpha=0.5)
-        plt.plot(Tbad[Tbad.isexp].shapeexp_r, Tbad[Tbad.isexp].decam_flux[:,2], 'ro')
-        plt.plot(D.shapedev_r, D.decam_flux[:,2], 'b.', alpha=0.5)
-        plt.plot(Tbad[Tbad.isdev].shapedev_r, Tbad[Tbad.isdev].decam_flux[:,2], 'bo')
-        plt.xlabel('Effective radius')
-        plt.ylabel('R-band flux')
-        plt.xscale('log')
-        plt.yscale('log')
-        ps.savefig()
+        # plt.clf()
+        # plt.plot(E.shapeexp_r, E.decam_flux[:,2], 'r.', alpha=0.5)
+        # plt.plot(Tbad[Tbad.isexp].shapeexp_r, Tbad[Tbad.isexp].decam_flux[:,2], 'ro')
+        # plt.plot(D.shapedev_r, D.decam_flux[:,2], 'b.', alpha=0.5)
+        # plt.plot(Tbad[Tbad.isdev].shapedev_r, Tbad[Tbad.isdev].decam_flux[:,2], 'bo')
+        # plt.xlabel('Effective radius')
+        # plt.ylabel('R-band flux')
+        # plt.xscale('log')
+        # plt.yscale('log')
+        # ps.savefig()
 
         plt.clf()
         plt.plot(E.shapeexp_r, E.dchisq_psf, 'r.', alpha=0.5)
@@ -140,8 +152,6 @@ if __name__ == '__main__':
 
         
 
-        
-
         img = plt.imread('decals-2402p062-image.jpg')
         img = np.flipud(img)
         print 'Image', img.shape, img.dtype
@@ -153,12 +163,16 @@ if __name__ == '__main__':
 
 
         
+        Tbad.cut(np.argsort(Tbad.dchisq_psf))
+        
         plot_grid(Tbad, img, mod, ps,
                   lambda t: '%s %.0f' % (t.type, t.dchisq_simp - t.dchisq_psf),
-                  lambda t: '%i %i' % (t.bx,t.by),
+                  lambda t: '%.0f' % t.dchisq_psf,
                   'Galaxies with SIMPLE worse than PSF',
-            T.bx, T.by)
+                  None,None)
+        #T.bx, T.by)
 
+        #lambda t: '%i %i' % (t.bx,t.by),
         
 
         sys.exit(0)
