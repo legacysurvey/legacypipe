@@ -67,7 +67,7 @@ from astrometry.util.fits import fits_table
 from legacypipe.common import Decals
 
 def psf_residuals(expnum,ccdname,stampsize=35,nstar=30,
-                  magrange=(13,17),verbose=0):
+                  magrange=(13,17),verbose=0, splinesky=False):
 
     # Set the debugging level.
     if verbose==0:
@@ -106,8 +106,10 @@ def psf_residuals(expnum,ccdname,stampsize=35,nstar=30,
     cat = cat[np.argsort(cat.median[:,ps1band[band]])] # sort by magnitude
     #print(cat.nmag_ok)
 
+    get_tim_kwargs = dict(const2psf=True, splinesky=splinesky)
+
     # Make a QAplot of the positions of all the stars.
-    tim = im.get_tractor_image(const2psf=True)
+    tim = im.get_tractor_image(**get_tim_kwargs)
     img = tim.getImage()
     #img = tim.getImage()/scales[band]
 
@@ -160,7 +162,7 @@ def psf_residuals(expnum,ccdname,stampsize=35,nstar=30,
 
         # The PSF model 'const2Psf' is the one used in DR1: a 2-component
         # Gaussian fit to PsfEx instantiated in the image center.
-        tim = im.get_tractor_image(slc=slc, const2psf=True)
+        tim = im.get_tractor_image(slc=slc, **get_tim_kwargs)
         stamp = tim.getImage()
         ivarstamp = tim.getInvvar()
 
@@ -265,13 +267,16 @@ def main():
                         help='number of stars to display')
     parser.add_argument('-m', '--magrange', type=float, default=(13,17), nargs=2, metavar='', 
                         help='PS1 magnitude range')
+
+    parser.add_argument('--splinesky', action='store_true', help='Use spline sky model?')
+
     parser.add_argument('-v', '--verbose', dest='verbose', action='count', default=0,
                         help='Toggle on verbose output')
     args = parser.parse_args()
 
     psf_residuals(expnum=args.expnum,ccdname=args.ccdname,
                   nstar=args.nstar,magrange=args.magrange,
-                  verbose=args.verbose)
+                  verbose=args.verbose,splinesky=args.splinesky)
     
 if __name__ == "__main__":
     main()
