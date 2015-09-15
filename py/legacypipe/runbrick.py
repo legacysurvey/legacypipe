@@ -811,7 +811,8 @@ def stage_srcs(coimgs=None, cons=None,
                plots=False, plots2=False,
                pipe=False, brickname=None,
                mp=None, outdir=None, nsigma=5,
-               no_sdss=False,
+               no_sdss=False, on_bricks=False,
+               decals=None, brick=None,
                **kwargs):
     '''
     In this stage we read SDSS catalog objects overlapping
@@ -880,7 +881,61 @@ def stage_srcs(coimgs=None, cons=None,
             # Set the central pixel of the detmap
             saturated_pix[T.ity[I], T.itx[I]] = True
             # Spread the True pixels wherever detiv==0
-            binary_propagation(saturated_pix, mask=(detiv == 0), output=saturated_pix)
+            binary_propagation(saturated_pix, mask=(detiv == 0),
+                               output=saturated_pix)
+
+
+    if on_bricks:
+        from legacypipe.desi_common import read_fits_catalog
+        # Find nearby bricks from earlier brick phases
+        bricks = decals.get_bricks_readonly()
+        print(len(bricks), 'bricks')
+        bricks = bricks[bricks.brickq < brick.brickq]
+        print(len(bricks), 'from phases before this brickq:', brick.brickq)
+        if len(bricks):
+            from astrometry.libkd.spherematch import match_radec
+
+            bricks.cut(np.abs(brick.dec - bricks.dec) < 1)
+            print(len(bricks), 'within 1 degree of Dec')
+            radius = np.sqrt(2.) * np.abs(brick.dec2 - brick.dec1)
+            I,J,d = match_radec(brick.ra, brick.dec, bricks.ra, bricks.dec,
+                                radius)
+            bricks.cut(J)
+            print(len(bricks), 'within', radius)
+        else:
+            bricks = []
+        B = []
+        if outdir is None:
+            outdir = '.'
+        for b in bricks:
+            fn = os.path.join('tractor', b.brickname[:3],
+                              'tractor-%s.fits' % b.brickname)
+            print('Looking for', fn)
+            B.append(fits_table(fn))
+        B = merge_tables(B)
+        print('Total of', len(B), 'sources from neighbouring bricks')
+        # Keep only sources that are primary in their own brick
+        B.cut(B.brick_primary)
+        print(len(B), 'are BRICK_PRIMARY')
+        # HACK -- Keep only sources whose centers are within this brick??
+        xx,yy = targetwcs.radec2pixelxy(B.ra, B.dec)
+        margin = 20
+        B.cut((xx >= 1-margin) * (xx < W+margin) *
+              (yy >= 1-margin) * (yy < H+margin))
+        print(len(B), 'are within this image + margin')
+        B.cut((B.out_of_bounds == False) * (B.left_blob == False))
+        print(len(B), 'do not have out_of_bounds or left_blob set')
+
+        # Create sources for these catalog entries
+        ### see forced-photom-decam.py for some additional patchups?
+
+        B.shapeexp = np.vstack((B.shapeexp_r, B.shapeexp_e1, B.shapeexp_e2)).T
+        B.shapedev = np.vstack((B.shapedev_r, B.shapedev_e1, B.shapedev_e2)).T
+        bcat = read_fits_catalog(B, ellipseClass=tractor.ellipses.EllipseE)
+        print('Created', len(bcat), 'tractor catalog objects')
+
+        print('HACK -- what now?')
+        
 
     tlast = tnow
     # Median-smooth detection maps
@@ -3317,6 +3372,7 @@ def run_brick(brick, radec=None, pixscale=0.262,
               early_coadds=True,
               do_calibs=True,
               write_metrics=True,
+              on_bricks=False,
               gaussPsf=False,
               pixPsf=False,
               splinesky=False,
@@ -3409,6 +3465,8 @@ def run_brick(brick, radec=None, pixscale=0.262,
 
     - *write_metrics*: boolean; write out a variety of useful metrics
 
+    - *on_bricks*: boolean; tractor-on-bricks?
+    
     - *gaussPsf*: boolean; use a simpler single-component Gaussian PSF model?
 
     - *pixPsf*: boolean; use the pixelized PsfEx PSF model and FFT convolution?
@@ -3514,6 +3572,7 @@ def run_brick(brick, radec=None, pixscale=0.262,
                   use_ceres=ceres,
                   do_calibs=do_calibs,
                   write_metrics=write_metrics,
+                  on_bricks=on_bricks,
                   outdir=outdir, decals_dir=decals_dir, unwise_dir=unwise_dir,
                   decals=decals,
                   plots=plots, plots2=plots2, coadd_bw=coadd_bw,
@@ -3696,6 +3755,9 @@ python -u legacypipe/runbrick.py --plots --brick 2440p070 --zoom 1900 2400 450 9
     parser.add_option('--coadd-bw', action='store_true', default=False,
                       help='Create grayscale coadds if only one band is available?')
 
+    parser.add_option('--on-bricks', action='store_true', default=False,
+                      help='Tractor-on-bricks?')
+    
     print()
     print('runbrick.py starting at', datetime.datetime.now().isoformat())
     print('Command-line args:', sys.argv)
@@ -3775,6 +3837,7 @@ python -u legacypipe/runbrick.py --plots --brick 2440p070 --zoom 1900 2400 450 9
             threads=opt.threads, ceres=opt.ceres,
             do_calibs=opt.do_calibs,
             write_metrics=opt.write_metrics,
+            on_bricks=opt.on_bricks,
             gaussPsf=opt.gpsf, pixPsf=opt.pixpsf,
             splinesky=opt.splinesky,
             simulOpt=opt.simul_opt,
