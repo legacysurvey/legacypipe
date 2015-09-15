@@ -1267,13 +1267,13 @@ def stage_fitblobs_finish(
 
         hdr = fitsio.FITSHDR()
         for srctype in ['ptsrc', 'simple', 'dev','exp','comp']:
-            xcat = Catalog(*[m[srctype] for m in allmods])
+            xcat = Catalog(*[m.get(srctype,None) for m in allmods])
             xcat.thawAllRecursive()
             TT,hdr = prepare_fits_catalog(xcat, None, TT, hdr, bands, None,
                                           allbands=allbands, prefix=srctype+'_',
                                           save_invvars=False)
             TT.set('%s_flags' % srctype,
-                   np.array([m['flags'][srctype] for m in allmods]))
+                   np.array([m['flags'].get(srctype,0) for m in allmods]))
         TT.delete_column('ptsrc_shapeExp')
         TT.delete_column('ptsrc_shapeDev')
         TT.delete_column('ptsrc_fracDev')
@@ -1454,6 +1454,71 @@ FLAG_CPU_B   = 4
 FLAG_STEPS_B = 8
 FLAG_TRIED_C = 0x10
 FLAG_CPU_C   = 0x20
+
+def _select_model(chisqs, nparams, galaxy_margin):
+    '''
+    Returns keepmod
+    '''
+    keepmod = 'none'
+
+    # This is our "detection threshold": 5-sigma in
+    # *parameter-penalized* units; ie, ~5.2-sigma for point sources
+    cut = 5.**2
+    # Take the best of all models computed
+    diff = max([chisqs[name] - nparams[name] for name in chisqs.keys()
+                if name != 'none'])
+
+    if diff < cut:
+        return keepmod
+    
+    # We're going to keep this source!
+    if chisqs['ptsrc'] > chisqs['simple']:
+        keepmod = 'ptsrc'
+    else:
+        keepmod = 'simple'
+
+    if not 'exp' in chisqs:
+        return keepmod
+        
+    # This is our "upgrade" threshold: how much better a galaxy
+    # fit has to be versus ptsrc, and comp versus galaxy.
+    cut = galaxy_margin
+
+    # This is the "fractional" upgrade threshold for ptsrc/simple->dev/exp:
+    # 2% of ptsrc vs nothing
+    fcut = 0.02 * chisqs['ptsrc']
+    cut = max(cut, fcut)
+
+    expdiff = chisqs['exp'] - chisqs[keepmod]
+    devdiff = chisqs['dev'] - chisqs[keepmod]
+
+    #print('Keeping source.  Comparing dev/exp vs ptsrc.  dlnp =', 4.5, 'frac =', fcut, 'cut =', cut)
+    #print('exp:', expdiff)
+    #print('dev:', devdiff)
+
+    if not (expdiff > cut or devdiff > cut):
+        return keepmod
+    
+    if expdiff > devdiff:
+        #print('Upgrading from ptsrc to exp: diff', expdiff)
+        keepmod = 'exp'
+    else:
+        #print('Upgrading from ptsrc to dev: diff', devdiff)
+        keepmod = 'dev'
+
+    if not 'comp' in chisqs:
+        return keepmod
+        
+    diff = chisqs['comp'] - chisqs[keepmod]
+    #print('Comparing', keepmod, 'to comp.  cut:', cut, 'comp:', diff)
+    if diff < cut:
+        return keepmod
+
+    #print('Upgrading from dev/exp to composite.')
+    keepmod = 'comp'
+    return keepmod
+
+    
 
 def _one_blob(X):
     '''
@@ -1991,7 +2056,14 @@ def _one_blob(X):
         srccat[0] = None
         lnl_none = srctractor.getLogLikelihood()
 
-        # Actually chi-squared improvement vs no source; larger is a better fit
+        nparams = dict(ptsrc=2, simple=2, exp=5, dev=5, comp=9)
+
+        # This is our "upgrade" threshold: how much better a galaxy
+        # fit has to be versus ptsrc, and comp versus galaxy.
+        galaxy_margin = 3.**2 + (nparams['exp'] - nparams['ptsrc'])
+        
+        # *chisqs* is actually chi-squared improvement vs no source;
+        # larger is a better fit.
         chisqs = dict(none=0)
 
         if isinstance(src, PointSource):
@@ -2037,12 +2109,31 @@ def _one_blob(X):
             comp = src.copy()
             oldmodel = 'comp'
 
-        trymodels = [('ptsrc', ptsrc), ('simple', simple), ('dev', dev), ('exp', exp), ('comp', comp)]
+        trymodels = [('ptsrc', ptsrc), ('simple', simple)]
+        if oldmodel == 'ptsrc':
+            trymodels.extend([('gals', None)])
+        else:
+            trymodels.extend([('dev', dev), ('exp', exp), ('comp', comp)])
             
         allflags = {}
         for name,newsrc in trymodels:
+
+            if name == 'gals':
+                # If 'simple' was better than 'ptsrc', or the source is
+                # bright, try the galaxy models.
+                if ((chisqs['simple'] > chisqs['ptsrc']) or
+                    (chisqs['ptsrc'] > 100)):
+                    trymodels.extend([
+                        ('dev', dev), ('exp', exp), ('comp', comp)])
+                continue
+                
             print('Trying model:', name)
             if name == 'comp' and newsrc is None:
+                # Compute the comp model if exp or dev would be accepted
+                if (max(chisqs['dev'], chisqs['exp']) <
+                    (chisqs['ptsrc'] + galaxy_margin)):
+                    print('dev/exp not much better than ptsrc; not computing comp model.')
+                    continue
                 newsrc = comp = FixedCompositeGalaxy(src.getPosition(), src.getBrightness(),
                                                      0.5, exp.getShape(), dev.getShape()).copy()
             print('New source:', newsrc)
@@ -2208,86 +2299,19 @@ def _one_blob(X):
                          (iblob, i, str(src)))
             ps.savefig()
 
-        # We decide separately whether to include the source in the
-        # catalog and what type to give it.
-        keepmod = 'none'
-        keepsrc = None
-
+        # This determines the order of the elements in the DCHISQ
+        # column of the catalog.
         modnames = ['ptsrc', 'simple', 'dev', 'exp', 'comp']
 
-        nparams = dict(ptsrc=2, simple=2, exp=5, dev=5, comp=9)
-        
-        # This is our "detection threshold": 5-sigma in
-        # *parameter-penalized* units; ie, ~5.2-sigma for point sources
-        cut = 5.**2
-        # Take the best of ptsrc, dev, exp, comp
-        diff = max([chisqs[name] - nparams[name] for name in modnames])
+        keepmod = _select_model(chisqs, nparams, galaxy_margin)
 
-        if diff > cut:
-            # We're going to keep this source!
-            # It starts out as a point source.
-            # This has the weird outcome that a source can be accepted
-            # into the catalog on the basis of its "deV" fit, but appear
-            # as a point source because the deV fit is not *convincingly*
-            # better than the ptsrc fit.
-            keepsrc = ptsrc
-            keepmod = 'ptsrc'
-
-            # Is the SimpleGalaxy better?
-            cut = 0.
-            simplediff= chisqs['simple'] - chisqs['ptsrc']
-            if simplediff > cut:
-                # Switch to 'simple'
-                keepsrc = simple
-                keepmod = 'simple'
-            
-            # This is our "upgrade" threshold: how much better a galaxy
-            # fit has to be versus ptsrc, and comp versus galaxy.
-            cut = 3.**2 + (nparams['exp'] - nparams['ptsrc'])
-
-            # This is the "fractional" upgrade threshold for ptsrc->dev/exp:
-            # 2% of ptsrc vs nothing
-            fcut = 0.02 * chisqs['ptsrc']
-            cut = max(cut, fcut)
-
-            expdiff = chisqs['exp'] - chisqs[keepmod]
-            devdiff = chisqs['dev'] - chisqs[keepmod]
-
-            #print('Keeping source.  Comparing dev/exp vs ptsrc.  dlnp =', 4.5, 'frac =', fcut, 'cut =', cut)
-            #print('exp:', expdiff)
-            #print('dev:', devdiff)
-
-            if expdiff > cut or devdiff > cut:
-                if expdiff > devdiff:
-                    #print('Upgrading from ptsrc to exp: diff', expdiff)
-                    keepsrc = exp
-                    keepmod = 'exp'
-                else:
-                    #print('Upgrading from ptsrc to dev: diff', devdiff)
-                    keepsrc = dev
-                    keepmod = 'dev'
-
-                diff = chisqs['comp'] - chisqs[keepmod]
-                #print('Comparing', keepmod, 'to comp.  cut:', cut, 'comp:', diff)
-                if diff > cut:
-                    #print('Upgrading from dev/exp to composite.')
-                    keepsrc = comp
-                    keepmod = 'comp'
-                else:
-                    #print('Not upgrading to comp')
-                    pass
-
-            else:
-                #print('Not upgrading from ptsrc to dev/exp')
-                pass
-        else:
-            print('Dropping source:', src)
-            pass
+        keepsrc = dict(none=None, ptsrc=ptsrc, simple=simple,
+                       dev=dev, exp=exp, comp=comp)[keepmod]
 
         #print('Keeping model:', keepmod)
         #print('Keeping source:', keepsrc)
 
-        B.dchisqs[i, :] = np.array([chisqs[k] for k in modnames])
+        B.dchisqs[i, :] = np.array([chisqs.get(k,0) for k in modnames])
         B.flags[i] = allflags.get(keepmod, 0)
         B.sources[i] = keepsrc
         subcat[i] = keepsrc
