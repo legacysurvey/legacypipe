@@ -1518,6 +1518,22 @@ def _select_model(chisqs, nparams, galaxy_margin):
     keepmod = 'comp'
     return keepmod
 
+
+def _positive_flux_likelihood(srctractor, src):
+    fluxes = {}
+    chisq = 0.
+    bright = src.getBrightness()
+    for img in srctractor.images:
+        if img.band in fluxes:
+            flux = fluxes[img.band]
+        else:
+            flux = bright.getFlux(img.band)
+            fluxes[img.band] = flux
+        if flux == 0:
+            continue
+        chi = srctractor.getChiImage(img=img)
+        chisq += np.sign(flux) * (chi ** 2).sum()
+    return -0.5 * chisq
     
 
 def _one_blob(X):
@@ -2237,7 +2253,8 @@ def _one_blob(X):
             srctractor.setModelMasks(None)
             disable_galaxy_cache()
 
-            chisqs[name] = 2. * (srctractor.getLogLikelihood() - lnl_none)
+            chisqs[name] = 2. * (_positive_flux_likelihood(srctractor, newsrc)
+                                 - lnl_none)
             all_models[i][name] = newsrc.copy()
             allflags[name] = thisflags
 
