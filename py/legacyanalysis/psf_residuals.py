@@ -64,7 +64,7 @@ from tractor.basics import (NanoMaggies, PointSource, GaussianMixtureEllipsePSF,
 from legacyanalysis.ps1cat import ps1cat
 
 from astrometry.util.fits import fits_table
-from legacypipe.common import Decals, DecamImage
+from legacypipe.common import Decals
 
 def psf_residuals(expnum,ccdname,stampsize=35,nstar=30,
                   magrange=(13,17),verbose=0):
@@ -89,7 +89,7 @@ def psf_residuals(expnum,ccdname,stampsize=35,nstar=30,
     #vmin, vmax = np.arcsinh(-1), np.arcsinh(100)
     #print(scales[band])
 
-    im = DecamImage(decals,ccd)
+    im = decals.get_image_object(ccd)
     iminfo = im.get_image_info()
     H,W = iminfo['dims']
 

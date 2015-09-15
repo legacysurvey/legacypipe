@@ -14,6 +14,8 @@ class ps1cat():
 
         """
         self.ps1dir = os.getenv('PS1CAT_DIR')
+        if self.ps1dir is None:
+            raise ValueError('You must have the PS1CAT_DIR environment variable set to point to Pan-STARRS1 catalogs')
         self.nside = 32
         if ccdwcs is None:
             from legacypipe.common import Decals, DecamImage
