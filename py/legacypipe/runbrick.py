@@ -591,6 +591,7 @@ def _write_band_images(band,
                 ('model',  'model',    cowmod,  True ),
                 ('chi2',   'chi2',     cochi2,  False),
                 ('depth',  'depthmap', detiv,   True ),
+                ('galdepth',  'depthmap', galdetiv,   True ),
                 ])
     for name,prodtype,img,gzip in imgs:
         # Make a copy, because each image has different values for
