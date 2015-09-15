@@ -18,11 +18,17 @@ def main():
     plt.figure(figsize=(4,8))
     plt.subplots_adjust(hspace=0.2, wspace=0.2)
 
-    expnum = 349185
-    ccdname = 'N7'
+    #expnum = 349185
+    #ccdname = 'N7'
 
-    djs = PixelizedPsfEx(fn='psf-c4d_140818_011313_ooi_z_v1.fits',
+    #djs = PixelizedPsfEx(fn='psf-c4d_140818_011313_ooi_z_v1.fits',
+    #                     psfexmodel=SchlegelPsfModel)
+
+    expnum = 396086
+    ccdname = 'S31'
+    djs = PixelizedPsfEx(fn='decam-00396086-S31.fits',
                          psfexmodel=SchlegelPsfModel)
+
     print('Schlegel PSF', djs)
 
     stampsz = 15
