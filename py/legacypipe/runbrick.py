@@ -1560,7 +1560,7 @@ def _one_blob(X):
                 print('Warning: Optimize_forced_photometry with Ceres failed:')
                 traceback.print_exc()
                 print('Falling back to LSQR')
-                btr.optimizer = orig_opt
+            btr.optimizer = orig_opt
         if not done:
             try:
                 btr.optimize_forced_photometry(
