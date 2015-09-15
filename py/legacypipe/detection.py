@@ -1,4 +1,5 @@
 from __future__ import print_function
+import pylab as plt
 import numpy as np
 from astrometry.util.ttime import Time
 from astrometry.util.fits import fits_table

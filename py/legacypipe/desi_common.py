@@ -16,7 +16,8 @@ unwise_atlas = 'allsky-atlas.fits'
 # FITS catalogs
 fits_typemap = { PointSource: 'PSF', ExpGalaxy: 'EXP', DevGalaxy: 'DEV',
                  FixedCompositeGalaxy: 'COMP',
-                 SimpleGalaxy: 'SIMP' }
+                 SimpleGalaxy: 'SIMP',
+                 type(None): 'NONE' }
 
 fits_short_typemap = { PointSource: 'S', ExpGalaxy: 'E', DevGalaxy: 'D',
                        FixedCompositeGalaxy: 'C',
@@ -97,7 +98,8 @@ def prepare_fits_catalog(cat, invvars, T, hdr, filts, fs, allbands = 'ugrizY',
     decam_flux_ivar = np.zeros((len(cat), len(allbands)), np.float32)
 
     for filt in filts:
-        flux = np.array([sum(b.getFlux(filt) for b in src.getBrightnesses())
+        flux = np.array([src is not None and
+                         sum(b.getFlux(filt) for b in src.getBrightnesses())
                          for src in cat])
 
         if invvars is not None:
@@ -105,7 +107,8 @@ def prepare_fits_catalog(cat, invvars, T, hdr, filts, fs, allbands = 'ugrizY',
             # vector so that we can read off the parameter variances via the
             # python object apis.
             cat.setParams(invvars)
-            flux_iv = np.array([sum(b.getFlux(filt) for b in src.getBrightnesses())
+            flux_iv = np.array([src is not None and
+                                sum(b.getFlux(filt) for b in src.getBrightnesses())
                                 for src in cat])
             cat.setParams(params0)
         else:
@@ -149,8 +152,10 @@ def get_tractor_fits_values(T, cat, pat):
     typearray = typearray.astype('S4')
     T.set(pat % 'type', typearray)
 
-    T.set(pat % 'ra',  np.array([src.getPosition().ra  for src in cat]))
-    T.set(pat % 'dec', np.array([src.getPosition().dec for src in cat]))
+    T.set(pat % 'ra',  np.array([src is not None and 
+                                 src.getPosition().ra  for src in cat]))
+    T.set(pat % 'dec', np.array([src is not None and
+                                 src.getPosition().dec for src in cat]))
 
     shapeExp = np.zeros((len(T), 3))
     shapeDev = np.zeros((len(T), 3))

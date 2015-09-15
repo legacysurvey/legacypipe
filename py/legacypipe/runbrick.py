@@ -812,7 +812,8 @@ def stage_srcs(coimgs=None, cons=None,
                plots=False, plots2=False,
                pipe=False, brickname=None,
                mp=None, outdir=None, nsigma=5,
-               no_sdss=False,
+               no_sdss=False, on_bricks=False,
+               decals=None, brick=None,
                **kwargs):
     '''
     In this stage we read SDSS catalog objects overlapping
@@ -881,7 +882,61 @@ def stage_srcs(coimgs=None, cons=None,
             # Set the central pixel of the detmap
             saturated_pix[T.ity[I], T.itx[I]] = True
             # Spread the True pixels wherever detiv==0
-            binary_propagation(saturated_pix, mask=(detiv == 0), output=saturated_pix)
+            binary_propagation(saturated_pix, mask=(detiv == 0),
+                               output=saturated_pix)
+
+
+    if on_bricks:
+        from legacypipe.desi_common import read_fits_catalog
+        # Find nearby bricks from earlier brick phases
+        bricks = decals.get_bricks_readonly()
+        print(len(bricks), 'bricks')
+        bricks = bricks[bricks.brickq < brick.brickq]
+        print(len(bricks), 'from phases before this brickq:', brick.brickq)
+        if len(bricks):
+            from astrometry.libkd.spherematch import match_radec
+
+            bricks.cut(np.abs(brick.dec - bricks.dec) < 1)
+            print(len(bricks), 'within 1 degree of Dec')
+            radius = np.sqrt(2.) * np.abs(brick.dec2 - brick.dec1)
+            I,J,d = match_radec(brick.ra, brick.dec, bricks.ra, bricks.dec,
+                                radius)
+            bricks.cut(J)
+            print(len(bricks), 'within', radius)
+        else:
+            bricks = []
+        B = []
+        if outdir is None:
+            outdir = '.'
+        for b in bricks:
+            fn = os.path.join('tractor', b.brickname[:3],
+                              'tractor-%s.fits' % b.brickname)
+            print('Looking for', fn)
+            B.append(fits_table(fn))
+        B = merge_tables(B)
+        print('Total of', len(B), 'sources from neighbouring bricks')
+        # Keep only sources that are primary in their own brick
+        B.cut(B.brick_primary)
+        print(len(B), 'are BRICK_PRIMARY')
+        # HACK -- Keep only sources whose centers are within this brick??
+        xx,yy = targetwcs.radec2pixelxy(B.ra, B.dec)
+        margin = 20
+        B.cut((xx >= 1-margin) * (xx < W+margin) *
+              (yy >= 1-margin) * (yy < H+margin))
+        print(len(B), 'are within this image + margin')
+        B.cut((B.out_of_bounds == False) * (B.left_blob == False))
+        print(len(B), 'do not have out_of_bounds or left_blob set')
+
+        # Create sources for these catalog entries
+        ### see forced-photom-decam.py for some additional patchups?
+
+        B.shapeexp = np.vstack((B.shapeexp_r, B.shapeexp_e1, B.shapeexp_e2)).T
+        B.shapedev = np.vstack((B.shapedev_r, B.shapedev_e1, B.shapedev_e2)).T
+        bcat = read_fits_catalog(B, ellipseClass=tractor.ellipses.EllipseE)
+        print('Created', len(bcat), 'tractor catalog objects')
+
+        print('HACK -- what now?')
+        
 
     tlast = tnow
     # Median-smooth detection maps
@@ -1105,7 +1160,7 @@ def stage_fitblobs(T=None,
 
     set_source_radii(bands, tims, cat, minsigma)
 
-    if plots:
+    if plots and False:
         coimgs,cons = compute_coadds(tims, bands, targetwcs)
         plt.clf()
         dimshow(get_rgb(coimgs, bands))
@@ -1268,13 +1323,13 @@ def stage_fitblobs_finish(
 
         hdr = fitsio.FITSHDR()
         for srctype in ['ptsrc', 'simple', 'dev','exp','comp']:
-            xcat = Catalog(*[m[srctype] for m in allmods])
+            xcat = Catalog(*[m.get(srctype,None) for m in allmods])
             xcat.thawAllRecursive()
             TT,hdr = prepare_fits_catalog(xcat, None, TT, hdr, bands, None,
                                           allbands=allbands, prefix=srctype+'_',
                                           save_invvars=False)
             TT.set('%s_flags' % srctype,
-                   np.array([m['flags'][srctype] for m in allmods]))
+                   np.array([m['flags'].get(srctype,0) for m in allmods]))
         TT.delete_column('ptsrc_shapeExp')
         TT.delete_column('ptsrc_shapeDev')
         TT.delete_column('ptsrc_fracDev')
@@ -1456,6 +1511,87 @@ FLAG_STEPS_B = 8
 FLAG_TRIED_C = 0x10
 FLAG_CPU_C   = 0x20
 
+def _select_model(chisqs, nparams, galaxy_margin):
+    '''
+    Returns keepmod
+    '''
+    keepmod = 'none'
+
+    # This is our "detection threshold": 5-sigma in
+    # *parameter-penalized* units; ie, ~5.2-sigma for point sources
+    cut = 5.**2
+    # Take the best of all models computed
+    diff = max([chisqs[name] - nparams[name] for name in chisqs.keys()
+                if name != 'none'])
+
+    if diff < cut:
+        return keepmod
+    
+    # We're going to keep this source!
+    if chisqs['ptsrc'] > chisqs['simple']:
+        keepmod = 'ptsrc'
+    else:
+        keepmod = 'simple'
+
+    if not 'exp' in chisqs:
+        return keepmod
+        
+    # This is our "upgrade" threshold: how much better a galaxy
+    # fit has to be versus ptsrc, and comp versus galaxy.
+    cut = galaxy_margin
+
+    # This is the "fractional" upgrade threshold for ptsrc/simple->dev/exp:
+    # 2% of ptsrc vs nothing
+    fcut = 0.02 * chisqs['ptsrc']
+    cut = max(cut, fcut)
+
+    expdiff = chisqs['exp'] - chisqs[keepmod]
+    devdiff = chisqs['dev'] - chisqs[keepmod]
+
+    #print('Keeping source.  Comparing dev/exp vs ptsrc.  dlnp =', 4.5, 'frac =', fcut, 'cut =', cut)
+    #print('exp:', expdiff)
+    #print('dev:', devdiff)
+
+    if not (expdiff > cut or devdiff > cut):
+        return keepmod
+    
+    if expdiff > devdiff:
+        #print('Upgrading from ptsrc to exp: diff', expdiff)
+        keepmod = 'exp'
+    else:
+        #print('Upgrading from ptsrc to dev: diff', devdiff)
+        keepmod = 'dev'
+
+    if not 'comp' in chisqs:
+        return keepmod
+        
+    diff = chisqs['comp'] - chisqs[keepmod]
+    #print('Comparing', keepmod, 'to comp.  cut:', cut, 'comp:', diff)
+    if diff < cut:
+        return keepmod
+
+    #print('Upgrading from dev/exp to composite.')
+    keepmod = 'comp'
+    return keepmod
+
+
+def _positive_flux_likelihood(srctractor, src):
+    fluxes = {}
+    chisq = 0.
+    bright = src.getBrightness()
+    for img in srctractor.images:
+        if img.band in fluxes:
+            flux = fluxes[img.band]
+        else:
+            flux = bright.getFlux(img.band)
+            fluxes[img.band] = flux
+        if flux == 0:
+            continue
+        chi = srctractor.getChiImage(img=img)
+        chisq += np.sign(flux) * (chi ** 2).sum()
+    return -0.5 * chisq
+    
+
 def _one_blob(X):
     '''
     Fits sources contained within a "blob" of pixels.
@@ -1561,7 +1697,7 @@ def _one_blob(X):
                 print('Warning: Optimize_forced_photometry with Ceres failed:')
                 traceback.print_exc()
                 print('Falling back to LSQR')
-                btr.optimizer = orig_opt
+            btr.optimizer = orig_opt
         if not done:
             try:
                 btr.optimize_forced_photometry(
@@ -1578,7 +1714,7 @@ def _one_blob(X):
         bslc = (slice(by0, by0+blobh), slice(bx0, bx0+blobw))
         plotmods = []
         plotmodnames = []
-        plotmods.append(subtr.getModelImages())
+        plotmods.append(list(subtr.getModelImages()))
         plotmodnames.append('Initial')
 
     # Optimize individual sources in order of flux
@@ -1680,7 +1816,7 @@ def _one_blob(X):
                     srctims.append(srctim)
                     #print('  ', tim.shape, 'to', srctim.shape)
 
-                if plots:
+                if plots and False:
                     bx1 = bx0 + blobw
                     by1 = by0 + blobh
                     plt.clf()
@@ -1731,14 +1867,14 @@ def _one_blob(X):
             srctractor.freezeParams('images')
             srctractor.setModelMasks(modelMasks)
 
-            if plots:
+            if plots and False:
                 spmods,spnames = [],[]
                 spallmods,spallnames = [],[]
-            if plots:
+            if plots and False:
                 if numi == 0:
-                    spallmods.append(subtr.getModelImages())
+                    spallmods.append(list(subtr.getModelImages()))
                     spallnames.append('Initial (all)')
-                spmods.append(srctractor.getModelImages())
+                spmods.append(list(srctractor.getModelImages()))
                 spnames.append('Initial')
 
             max_cpu_per_source = 60.
@@ -1767,13 +1903,13 @@ def _one_blob(X):
             if DEBUG:
                 _debug_plots(srctractor, ps)
 
-            if plots:
-                spmods.append(srctractor.getModelImages())
+            if plots and False:
+                spmods.append(list(srctractor.getModelImages()))
                 spnames.append('Fit')
-                spallmods.append(subtr.getModelImages())
+                spallmods.append(list(subtr.getModelImages()))
                 spallnames.append('Fit (all)')
 
-            if plots:
+            if plots and False:
                 from utils import MyMultiproc
                 mp = MyMultiproc()
                 tims_compute_resamp(mp, srctractor.getImages(), targetwcs)
@@ -1791,7 +1927,7 @@ def _one_blob(X):
                 plt.suptitle('Blob %i' % iblob)
                 tempims = [tim.getImage() for tim in subtims]
 
-                _plot_mods(srctractor.getImages(), spmods, spnames, bands, None, None, bslc, blobw, blobh, ps,
+                _plot_mods(list(srctractor.getImages()), spmods, spnames, bands, None, None, bslc, blobw, blobh, ps,
                            chi_plots=plots2, rgb_plots=True, main_plot=False,
                            rgb_format='spmods Blob %i, src %i: %%s' % (iblob, i))
                 _plot_mods(subtims, spallmods, spallnames, bands, None, None, bslc, blobw, blobh, ps,
@@ -1861,8 +1997,8 @@ def _one_blob(X):
         subtr.setModelMasks(None)
         disable_galaxy_cache()
 
-    if plots:
-        plotmods.append(subtr.getModelImages())
+    if plots and False:
+        plotmods.append(list(subtr.getModelImages()))
         plotmodnames.append('Per Source')
 
     if len(srcs) > 1 and len(srcs) <= 10:
@@ -1877,11 +2013,11 @@ def _one_blob(X):
                 break
         #print('Simultaneous fit took:', Time()-tfit)
 
-        if plots:
-            plotmods.append(subtr.getModelImages())
+        if plots and False:
+            plotmods.append(list(subtr.getModelImages()))
             plotmodnames.append('All Sources')
 
-    if plots:
+    if plots and False:
         _plot_mods(subtims, plotmods, plotmodnames, bands, None, None,
                    bslc, blobw, blobh, ps)
 
@@ -1992,8 +2128,15 @@ def _one_blob(X):
         srccat[0] = None
         lnl_none = srctractor.getLogLikelihood()
 
-        # Actually chi-squared improvement vs no source; larger is a better fit
-        chisqs = dict()
+        nparams = dict(ptsrc=2, simple=2, exp=5, dev=5, comp=9)
+
+        # This is our "upgrade" threshold: how much better a galaxy
+        # fit has to be versus ptsrc, and comp versus galaxy.
+        galaxy_margin = 3.**2 + (nparams['exp'] - nparams['ptsrc'])
+        
+        # *chisqs* is actually chi-squared improvement vs no source;
+        # larger is a better fit.
+        chisqs = dict(none=0)
 
         if isinstance(src, PointSource):
             ptsrc = src.copy()
@@ -2038,12 +2181,31 @@ def _one_blob(X):
             comp = src.copy()
             oldmodel = 'comp'
 
-        trymodels = [('ptsrc', ptsrc), ('simple', simple), ('dev', dev), ('exp', exp), ('comp', comp)]
+        trymodels = [('ptsrc', ptsrc), ('simple', simple)]
+        if oldmodel == 'ptsrc':
+            trymodels.extend([('gals', None)])
+        else:
+            trymodels.extend([('dev', dev), ('exp', exp), ('comp', comp)])
             
         allflags = {}
         for name,newsrc in trymodels:
+
+            if name == 'gals':
+                # If 'simple' was better than 'ptsrc', or the source is
+                # bright, try the galaxy models.
+                if ((chisqs['simple'] > chisqs['ptsrc']) or
+                    (chisqs['ptsrc'] > 100)):
+                    trymodels.extend([
+                        ('dev', dev), ('exp', exp), ('comp', comp)])
+                continue
+                
             print('Trying model:', name)
             if name == 'comp' and newsrc is None:
+                # Compute the comp model if exp or dev would be accepted
+                if (max(chisqs['dev'], chisqs['exp']) <
+                    (chisqs['ptsrc'] + galaxy_margin)):
+                    print('dev/exp not much better than ptsrc; not computing comp model.')
+                    continue
                 newsrc = comp = FixedCompositeGalaxy(src.getPosition(), src.getBrightness(),
                                                      0.5, exp.getShape(), dev.getShape()).copy()
             print('New source:', newsrc)
@@ -2096,7 +2258,7 @@ def _one_blob(X):
 
             if plots and False:
                 plt.clf()
-                modimgs = srctractor.getModelImages()
+                modimgs = list(srctractor.getModelImages())
                 comods,nil = compute_coadds(subtims, bands, subtarget, images=modimgs)
                 dimshow(get_rgb(comods, bands))
                 plt.title('First-round opt ' + name)
@@ -2138,7 +2300,7 @@ def _one_blob(X):
 
             if plots and False:
                 plt.clf()
-                modimgs = srctractor.getModelImages()
+                modimgs = list(srctractor.getModelImages())
                 comods,nil = compute_coadds(subtims, bands, subtarget, images=modimgs)
                 dimshow(get_rgb(comods, bands))
                 plt.title('Second-round opt ' + name)
@@ -2147,7 +2309,8 @@ def _one_blob(X):
             srctractor.setModelMasks(None)
             disable_galaxy_cache()
 
-            chisqs[name] = 2. * (srctractor.getLogLikelihood() - lnl_none)
+            chisqs[name] = 2. * (_positive_flux_likelihood(srctractor, newsrc)
+                                 - lnl_none)
             all_models[i][name] = newsrc.copy()
             allflags[name] = thisflags
 
@@ -2157,9 +2320,9 @@ def _one_blob(X):
         if plots:
             from collections import OrderedDict
             plt.clf()
-            rows,cols = 2, 5
-            mods = OrderedDict([('none',None), ('ptsrc',ptsrc), ('dev',dev),
-                                ('exp',exp), ('comp',comp)])
+            rows,cols = 2, 6
+            mods = OrderedDict([('none',None), ('ptsrc',ptsrc), ('simple',simple),
+                                ('dev',dev), ('exp',exp), ('comp',comp)])
             for imod,modname in enumerate(mods.keys()):
                 srccat[0] = mods[modname]
 
@@ -2167,14 +2330,18 @@ def _one_blob(X):
                 print(srccat[0])
 
                 plt.subplot(rows, cols, imod+1)
+
                 if modname != 'none':
-                    modimgs = srctractor.getModelImages()
+                    modimgs = list(srctractor.getModelImages())
                     comods,nil = compute_coadds(subtims, bands, subtarget, images=modimgs)
                     dimshow(get_rgb(comods, bands))
                     plt.title(modname)
 
                     chis = [((tim.getImage() - mod) * tim.getInvError())**2
-                              for tim,mod in zip(subtims, modimgs)]
+                            for tim,mod in zip(subtims, modimgs)]
+
+                    res = [(tim.getImage() - mod) for tim,mod in zip(subtims, modimgs)]
+
                 else:
                     coimgs, cons = compute_coadds(subtims, bands, subtarget)
                     dimshow(get_rgb(coimgs, bands))
@@ -2186,95 +2353,38 @@ def _one_blob(X):
 
                     chis = [((tim.getImage()) * tim.getInvError())**2
                               for tim in subtims]
-                cochisqs,nil = compute_coadds(subtims, bands, subtarget, images=chis)
-                cochisq = reduce(np.add, cochisqs)
-                plt.subplot(rows, cols, imod+1+cols)
-                dimshow(cochisq, vmin=0, vmax=25)
+                    res = [tim.getImage() for tim in subtims]
+
+                if False:
+                    cochisqs,nil = compute_coadds(subtims, bands, subtarget, images=chis)
+                    cochisq = reduce(np.add, cochisqs)
+                    plt.subplot(rows, cols, imod+1+cols)
+                    dimshow(cochisq, vmin=0, vmax=25)
+
+                else:
+                    # residuals
+                    coresids,nil = compute_coadds(subtims, bands, subtarget, images=res)
+                    plt.subplot(rows, cols, imod+1+cols)
+                    dimshow(get_rgb(coresids, bands, **rgbkwargs_resid), ticks=False)
+
                 plt.title('chisq %.0f' % chisqs[modname])
             plt.suptitle('Blob %i, source %i: was: %s' %
                          (iblob, i, str(src)))
             ps.savefig()
 
-        # We decide separately whether to include the source in the
-        # catalog and what type to give it.
-        keepmod = 'none'
-        keepsrc = None
-
+        # This determines the order of the elements in the DCHISQ
+        # column of the catalog.
         modnames = ['ptsrc', 'simple', 'dev', 'exp', 'comp']
 
-        nparams = dict(ptsrc=2, simple=2, exp=5, dev=5, comp=9)
-        
-        # This is our "detection threshold": 5-sigma in
-        # *parameter-penalized* units; ie, ~5.2-sigma for point sources
-        cut = 5.**2
-        # Take the best of ptsrc, dev, exp, comp
-        diff = max([chisqs[name] - nparams[name] for name in modnames])
+        keepmod = _select_model(chisqs, nparams, galaxy_margin)
 
-        if diff > cut:
-            # We're going to keep this source!
-            # It starts out as a point source.
-            # This has the weird outcome that a source can be accepted
-            # into the catalog on the basis of its "deV" fit, but appear
-            # as a point source because the deV fit is not *convincingly*
-            # better than the ptsrc fit.
-            keepsrc = ptsrc
-            keepmod = 'ptsrc'
-
-            # Is the SimpleGalaxy better?
-            cut = 0.
-            simplediff= chisqs['simple'] - chisqs['ptsrc']
-            if simplediff > cut:
-                # Switch to 'simple'
-                keepsrc = simple
-                keepmod = 'simple'
-            
-            # This is our "upgrade" threshold: how much better a galaxy
-            # fit has to be versus ptsrc, and comp versus galaxy.
-            cut = 3.**2 + (nparams['exp'] - nparams['ptsrc'])
-
-            # This is the "fractional" upgrade threshold for ptsrc->dev/exp:
-            # 2% of ptsrc vs nothing
-            fcut = 0.02 * chisqs['ptsrc']
-            cut = max(cut, fcut)
-
-            expdiff = chisqs['exp'] - chisqs[keepmod]
-            devdiff = chisqs['dev'] - chisqs[keepmod]
-
-            #print('Keeping source.  Comparing dev/exp vs ptsrc.  dlnp =', 4.5, 'frac =', fcut, 'cut =', cut)
-            #print('exp:', expdiff)
-            #print('dev:', devdiff)
-
-            if expdiff > cut or devdiff > cut:
-                if expdiff > devdiff:
-                    #print('Upgrading from ptsrc to exp: diff', expdiff)
-                    keepsrc = exp
-                    keepmod = 'exp'
-                else:
-                    #print('Upgrading from ptsrc to dev: diff', devdiff)
-                    keepsrc = dev
-                    keepmod = 'dev'
-
-                diff = chisqs['comp'] - chisqs[keepmod]
-                #print('Comparing', keepmod, 'to comp.  cut:', cut, 'comp:', diff)
-                if diff > cut:
-                    #print('Upgrading from dev/exp to composite.')
-                    keepsrc = comp
-                    keepmod = 'comp'
-                else:
-                    #print('Not upgrading to comp')
-                    pass
-
-            else:
-                #print('Not upgrading from ptsrc to dev/exp')
-                pass
-        else:
-            print('Dropping source:', src)
-            pass
+        keepsrc = dict(none=None, ptsrc=ptsrc, simple=simple,
+                       dev=dev, exp=exp, comp=comp)[keepmod]
 
         #print('Keeping model:', keepmod)
         #print('Keeping source:', keepsrc)
 
-        B.dchisqs[i, :] = np.array([chisqs[k] for k in modnames])
+        B.dchisqs[i, :] = np.array([chisqs.get(k,0) for k in modnames])
         B.flags[i] = allflags.get(keepmod, 0)
         B.sources[i] = keepsrc
         subcat[i] = keepsrc
@@ -2300,7 +2410,7 @@ def _one_blob(X):
 
     if plots:
         plotmods, plotmodnames = [],[]
-        plotmods.append(subtr.getModelImages())
+        plotmods.append(list(subtr.getModelImages()))
         plotmodnames.append('All model selection')
         _plot_mods(subtims, plotmods, plotmodnames, bands, None, None, bslc, blobw, blobh, ps)
 
@@ -3263,6 +3373,7 @@ def run_brick(brick, radec=None, pixscale=0.262,
               early_coadds=True,
               do_calibs=True,
               write_metrics=True,
+              on_bricks=False,
               gaussPsf=False,
               pixPsf=False,
               splinesky=False,
@@ -3355,6 +3466,8 @@ def run_brick(brick, radec=None, pixscale=0.262,
 
     - *write_metrics*: boolean; write out a variety of useful metrics
 
+    - *on_bricks*: boolean; tractor-on-bricks?
+    
     - *gaussPsf*: boolean; use a simpler single-component Gaussian PSF model?
 
     - *pixPsf*: boolean; use the pixelized PsfEx PSF model and FFT convolution?
@@ -3460,6 +3573,7 @@ def run_brick(brick, radec=None, pixscale=0.262,
                   use_ceres=ceres,
                   do_calibs=do_calibs,
                   write_metrics=write_metrics,
+                  on_bricks=on_bricks,
                   outdir=outdir, decals_dir=decals_dir, unwise_dir=unwise_dir,
                   decals=decals,
                   plots=plots, plots2=plots2, coadd_bw=coadd_bw,
@@ -3642,6 +3756,9 @@ python -u legacypipe/runbrick.py --plots --brick 2440p070 --zoom 1900 2400 450 9
     parser.add_option('--coadd-bw', action='store_true', default=False,
                       help='Create grayscale coadds if only one band is available?')
 
+    parser.add_option('--on-bricks', action='store_true', default=False,
+                      help='Tractor-on-bricks?')
+    
     print()
     print('runbrick.py starting at', datetime.datetime.now().isoformat())
     print('Command-line args:', sys.argv)
@@ -3721,6 +3838,7 @@ python -u legacypipe/runbrick.py --plots --brick 2440p070 --zoom 1900 2400 450 9
             threads=opt.threads, ceres=opt.ceres,
             do_calibs=opt.do_calibs,
             write_metrics=opt.write_metrics,
+            on_bricks=opt.on_bricks,
             gaussPsf=opt.gpsf, pixPsf=opt.pixpsf,
             splinesky=opt.splinesky,
             simulOpt=opt.simul_opt,
