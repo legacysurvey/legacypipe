@@ -634,7 +634,7 @@ def stage_image_coadds(targetwcs=None, bands=None, tims=None, outdir=None,
 
     '''
 
-    if plots:
+    if plots and False:
 
         for band in bands:
 
@@ -855,10 +855,8 @@ def stage_srcs(coimgs=None, cons=None,
         T.delete_column('raerr')
         T.delete_column('decerr')
         sdss_xy = T.itx, T.ity
-        sdss_fluxes = np.zeros((len(T), len(bands)))
     else:
         sdss_xy = None
-        sdss_fluxes = None
     print('Rendering detection maps...')
     detmaps, detivs = detection_maps(tims, targetwcs, bands, mp)
     tnow = Time()
@@ -901,7 +899,7 @@ def stage_srcs(coimgs=None, cons=None,
             I,J,d = match_radec(brick.ra, brick.dec, bricks.ra, bricks.dec,
                                 radius)
             bricks.cut(J)
-            print(len(bricks), 'within', radius)
+            print(len(bricks), 'within', radius, 'degrees')
         else:
             bricks = []
         B = []
@@ -917,15 +915,19 @@ def stage_srcs(coimgs=None, cons=None,
         # Keep only sources that are primary in their own brick
         B.cut(B.brick_primary)
         print(len(B), 'are BRICK_PRIMARY')
-        # HACK -- Keep only sources whose centers are within this brick??
-        xx,yy = targetwcs.radec2pixelxy(B.ra, B.dec)
+        # HACK -- Keep only sources within a margin of this brick
+        B.xx,B.yy = targetwcs.radec2pixelxy(B.ra, B.dec)
         margin = 20
-        B.cut((xx >= 1-margin) * (xx < W+margin) *
-              (yy >= 1-margin) * (yy < H+margin))
+        B.cut((B.xx >= 1-margin) * (B.xx < W+margin) *
+              (B.yy >= 1-margin) * (B.yy < H+margin))
         print(len(B), 'are within this image + margin')
         B.cut((B.out_of_bounds == False) * (B.left_blob == False))
         print(len(B), 'do not have out_of_bounds or left_blob set')
 
+        # Note that we shouldn't need to drop sources that are within this
+        # current brick's unique area, because we cut to sources that are
+        # BRICK_PRIMARY within their own brick.
+        
         # Create sources for these catalog entries
         ### see forced-photom-decam.py for some additional patchups?
 
@@ -934,9 +936,64 @@ def stage_srcs(coimgs=None, cons=None,
         bcat = read_fits_catalog(B, ellipseClass=tractor.ellipses.EllipseE)
         print('Created', len(bcat), 'tractor catalog objects')
 
-        print('HACK -- what now?')
+        # Trim off SDSS sources that overlap this brick.
+        keep_sdss = np.ones(len(T), bool)
+        for brick in bricks:
+            # Drop SDSS sources within the BRICK_PRIMARY region of the
+            # neighbouring brick.
+            keep_sdss[(T.ra  >= brick.ra1 ) * (T.ra  < brick.ra2 ) *
+                      (T.dec >= brick.dec1) * (t.dec < brick.dec2)] = False
+        if sum(keep_sdss) < len(keep_sdss):
+            print('Trimming', len(keep_sdss)-sum(keep_sdss),
+                  'SDSS sources within neighbouring bricks')
+            T.cut(keep_sdss)
+            cat = Catalog(*[src for src,keep in zip(cat,keep_sdss) if keep])
+            if sdss_xy is not None:
+                x,y = sdss_xy
+                sdss_xy = x[keep_sdss], y[keep_sdss]
         
+        # Add the new sources to the 'sdss_xy' list, which are
+        # existing sources that should be avoided when detecting new
+        # faint sources.
+        if sdss_xy is None:
+            sdss_xy = B.xx, B.yy
+        else:
+            x,y = sdss_xy
+            sdss_xy = np.append(x, B.xx), np.append(y, B.yy)
+        
+        print('Subtracting tractor-on-bricks sources from other bricks')
+        ## HACK -- note that this is going to screw up fracflux and
+        ## other metrics for sources in this brick that overlap
+        ## subtracted sources.
+        if plots:
+            mods = []
+            # Before...
+            coimgs,cons = compute_coadds(tims, bands, targetwcs)
+            plt.clf()
+            dimshow(get_rgb(coimgs, bands))
+            plt.title('Before subtracting tractor-on-bricks marginal sources')
+            ps.savefig()
+            
+        str = Tractor(tims, bcat)
+        str.freezeParam('images')
+        for tim,mod in zip(tims, str.getModelImages(sky=False)):
+            tim.data -= mod
+            if plots:
+                mods.append(mod)
 
+        if plots:
+            coimgs,cons = compute_coadds(tims, bands, targetwcs, images=mods)
+            plt.clf()
+            dimshow(get_rgb(coimgs, bands))
+            plt.title('Marginal sources subtracted off')
+            ps.savefig()
+            coimgs,cons = compute_coadds(tims, bands, targetwcs)
+            plt.clf()
+            dimshow(get_rgb(coimgs, bands))
+            plt.title('After subtracting off marginal sources')
+            ps.savefig()
+            
+        
     tlast = tnow
     # Median-smooth detection maps
     binning = 4
@@ -1059,14 +1116,12 @@ def stage_srcs(coimgs=None, cons=None,
             print('blobslice:', blobslices[i])
 
     cat.freezeAllParams()
-    tractor = Tractor(tims, cat)
-    tractor.freezeParam('images')
 
     tnow = Time()
     print('[serial srcs] Blobs:', tnow-tlast)
     tlast = tnow
 
-    keys = ['T',
+    keys = ['T', 'tims',
             'blobsrcs', 'blobslices', 'blobs',
             'tractor', 'cat', 'ps']
     if not pipe:
@@ -1134,7 +1189,7 @@ def set_source_radii(bands, tims, cat, minsigma, minradius=3):
 
 def stage_fitblobs(T=None,
                    blobsrcs=None, blobslices=None, blobs=None,
-                   tractor=None, cat=None, targetrd=None, pixscale=None,
+                   cat=None, targetrd=None, pixscale=None,
                    targetwcs=None,
                    W=None,H=None,
                    bands=None, ps=None, tims=None,
@@ -1376,7 +1431,6 @@ def stage_fitblobs_finish(
     print('Old catalog:', len(cat))
     print('New catalog:', len(newcat))
     cat = Catalog(*newcat)
-    tractor.catalog = cat
     ns,nb = BB.fracflux.shape
     assert(ns == len(cat))
     assert(nb == len(bands))
@@ -1431,7 +1485,7 @@ def stage_fitblobs_finish(
     assert(cat.numberOfParams() == len(invvars))
 
     rtn = dict(fitblobs_R = None)
-    for k in ['tractor', 'cat', 'invvars', 'T', 'allbands']:
+    for k in ['cat', 'invvars', 'T', 'allbands']:
         rtn[k] = locals()[k]
     return rtn
 
@@ -2921,7 +2975,7 @@ def stage_writecat(
     cat=None, targetrd=None, pixscale=None, targetwcs=None,
     W=None,H=None,
     bands=None, ps=None,
-    plots=False, tractor=None,
+    plots=False,
     brickname=None,
     brickid=None,
     brick=None,
