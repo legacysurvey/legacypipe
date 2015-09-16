@@ -591,6 +591,7 @@ def _write_band_images(band,
                 ('model',  'model',    cowmod,  True ),
                 ('chi2',   'chi2',     cochi2,  False),
                 ('depth',  'depthmap', detiv,   True ),
+                ('galdepth',  'depthmap', galdetiv,   True ),
                 ])
     for name,prodtype,img,gzip in imgs:
         # Make a copy, because each image has different values for
@@ -2252,16 +2253,16 @@ def _one_blob(X):
                         ('dev', dev), ('exp', exp), ('comp', comp)])
                 continue
                 
-            print('Trying model:', name)
+            #print('Trying model:', name)
             if name == 'comp' and newsrc is None:
                 # Compute the comp model if exp or dev would be accepted
                 if (max(chisqs['dev'], chisqs['exp']) <
                     (chisqs['ptsrc'] + galaxy_margin)):
-                    print('dev/exp not much better than ptsrc; not computing comp model.')
+                    #print('dev/exp not much better than ptsrc; not computing comp model.')
                     continue
                 newsrc = comp = FixedCompositeGalaxy(src.getPosition(), src.getBrightness(),
                                                      0.5, exp.getShape(), dev.getShape()).copy()
-            print('New source:', newsrc)
+            #print('New source:', newsrc)
             srccat[0] = newsrc
 
             # Use the same initial modelMasks as the original source; we'll do a second
@@ -2307,7 +2308,7 @@ def _one_blob(X):
             else:
                 thisflags |= FLAG_STEPS_A
 
-            print('New source (after first round optimization):', newsrc)
+            #print('New source (after first round optimization):', newsrc)
 
             if plots and False:
                 plt.clf()
@@ -2470,15 +2471,12 @@ def _one_blob(X):
     I = np.array([i for i,s in enumerate(subcat) if s is not None])
     B.cut(I)
 
-    #print('After cutting sources: B.sources is', type(B.sources))
-    #print(B.sources)
-
     subcat = Catalog(*B.sources)
     subtr.catalog = subcat
 
-    print('After cutting sources:')
-    for src,dchi in zip(B.sources, B.dchisqs):
-        print('  source', src, 'max dchisq', max(dchi), 'dchisqs', dchi)
+    # print('After cutting sources:')
+    # for src,dchi in zip(B.sources, B.dchisqs):
+    #     print('  source', src, 'max dchisq', max(dchi), 'dchisqs', dchi)
 
     ### Simultaneous re-opt.
     if simul_opt and len(subcat) > 1 and len(subcat) <= 10:
