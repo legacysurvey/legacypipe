@@ -8,7 +8,7 @@ export PYTHONPATH=${PYTHONPATH}:.
 # https://software.intel.com/en-us/articles/using-threaded-intel-mkl-in-multi-thread-application
 export MKL_NUM_THREADS=1
 
-outdir=$SCRATCH/dr2c
+outdir=$SCRATCH/dr2e
 
 brick="$1"
 
@@ -36,7 +36,7 @@ echo "--------------------------------------------------------------------------
 
 #python legacypipe/runbrick.py --force-all --no-write --brick $brick --outdir $outdir --threads 6 --nsigma 6 --skip --pipe --pixpsf --splinesky >> $log 2>&1
 
-python legacypipe/runbrick.py -P 'pickles/runbrick-dr2c-%(brick)s-%%(stage)s.pickle' \
+python legacypipe/runbrick.py \ #-P 'pickles/runbrick-dr2c-%(brick)s-%%(stage)s.pickle' \
     --brick $brick --outdir $outdir --threads 6 --nsigma 6 --skip --pipe --pixpsf --splinesky --no-sdss >> $log 2>&1
 
 #python -u legacypipe/runbrick.py -P 'pickles/runbrick-fftb-%(brick)s-%%(stage)s.pickle' \
