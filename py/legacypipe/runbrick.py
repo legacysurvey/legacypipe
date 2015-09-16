@@ -1629,22 +1629,29 @@ def _select_model(chisqs, nparams, galaxy_margin):
     return keepmod
 
 
-def _positive_flux_likelihood(srctractor, src):
-    fluxes = {}
-    chisq = 0.
+def _chisq_improvement(src, chisqs, chisqs_none):
+    '''
+    chisqs, chisqs_none: dict of band->chisq
+    '''
     bright = src.getBrightness()
-    for img in srctractor.images:
-        if img.band in fluxes:
-            flux = fluxes[img.band]
-        else:
-            flux = bright.getFlux(img.band)
-            fluxes[img.band] = flux
+    bands = chisqs.keys()
+    fluxes = dict([(b, bright.getFlux(b)) for b in bands])
+    dchisq = 0.
+    for b in bands:
+        flux = fluxes[b]
         if flux == 0:
             continue
+        # this will be positive for an improved model
+        d = chisqs_none[b] - chisqs[b]
+        dchisq += np.sign(flux) * d
+    return dchisq
+
+def _per_band_chisqs(srctractor, bands):
+    chisqs = dict([(b,0) for b in bands])
+    for img in srctractor.images:
         chi = srctractor.getChiImage(img=img)
-        chisq += np.sign(flux) * (chi ** 2).sum()
-    return -0.5 * chisq
-    
+        chisqs[img.band] = chisqs[img.band] + (chi ** 2).sum()
+    return chisqs
 
 def _one_blob(X):
     '''
@@ -2180,7 +2187,7 @@ def _one_blob(X):
 
         srccat = srctractor.getCatalog()
         srccat[0] = None
-        lnl_none = srctractor.getLogLikelihood()
+        chisqs_none = _per_band_chisqs(srctractor, bands)
 
         nparams = dict(ptsrc=2, simple=2, exp=5, dev=5, comp=9)
 
@@ -2363,8 +2370,8 @@ def _one_blob(X):
             srctractor.setModelMasks(None)
             disable_galaxy_cache()
 
-            chisqs[name] = 2. * (_positive_flux_likelihood(srctractor, newsrc)
-                                 - lnl_none)
+            ch = _per_band_chisqs(srctractor, bands)
+            chisqs[name] = _chisq_improvement(newsrc, ch, chisqs_none)
             all_models[i][name] = newsrc.copy()
             allflags[name] = thisflags
 
