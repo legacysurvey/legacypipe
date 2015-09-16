@@ -1124,7 +1124,7 @@ def stage_srcs(coimgs=None, cons=None,
 
     keys = ['T', 'tims',
             'blobsrcs', 'blobslices', 'blobs',
-            'tractor', 'cat', 'ps']
+            'cat', 'ps']
     if not pipe:
         keys.extend(['detmaps', 'detivs'])
 
