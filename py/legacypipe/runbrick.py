@@ -251,15 +251,17 @@ def stage_tims(W=3600, H=3600, pixscale=0.262, brickname=None,
 
             subtim = im.get_tractor_image(splinesky=True, gaussPsf=True, subsky=False,
                                           radecpoly=targetrd)
+            if subtim is None:
+                continue
             tim = subtim
 
             h,w = tim.shape
             x0,x1 = tim.x0, tim.x0 + w
             y0,y1 = tim.y0, tim.y0 + h
             fulltim = im.get_tractor_image(splinesky=True, gaussPsf=True, subsky=False)
-            mod = np.zeros(fulltim.shape, np.float32)
-            fulltim.sky.addTo(mod)
-            midsky = np.median(mod)
+            fullmod = np.zeros(fulltim.shape, np.float32)
+            fulltim.sky.addTo(fullmod)
+            midsky = np.median(fullmod)
             ima = dict(vmin=midsky -2.*tim.sig1, vmax=midsky + 2. * tim.sig1)
 
             print('Fulltim median:', np.median(fulltim.data))
@@ -272,7 +274,7 @@ def stage_tims(W=3600, H=3600, pixscale=0.262, brickname=None,
             plt.plot([x0,x0,x1,x1,x0], [y0,y1,y1,y0,y0], 'r-')
             plt.axis(ax)
             plt.subplot(1,2,2)
-            dimshow(mod, cmap='gray', **ima)
+            dimshow(fullmod, cmap='gray', **ima)
             plt.plot([x0,x0,x1,x1,x0], [y0,y1,y1,y0,y0], 'r-')
             plt.axis(ax)
             plt.suptitle('Full image: ' + tim.name)
@@ -290,6 +292,16 @@ def stage_tims(W=3600, H=3600, pixscale=0.262, brickname=None,
             plt.suptitle('Subimage: ' + tim.name)
             ps.savefig()
 
+            fulltim2 = im.get_tractor_image(splinesky=True, gaussPsf=True)
+
+            plt.clf()
+            plt.hist(((fulltim.getImage() - fullmod) * fulltim.getInvError()).ravel(),
+                     range=(-5,5), bins=100, histtype='step', color='b')
+            plt.hist((fulltim2.getImage() * fulltim.getInvError()).ravel(),
+                     range=(-5,5), bins=100, histtype='step', color='r')
+            plt.xlabel('Pixel values (sigma)')
+            plt.suptitle('Full image: ' + tim.name)
+            ps.savefig()
 
 
     # Read Tractor images
@@ -825,9 +837,11 @@ def stage_image_coadds(targetwcs=None, bands=None, tims=None, outdir=None,
 
     #rgbkwargs2 = dict(mnmx=(-3., 3.))
 
+    rgbkwargs2 = dict(mnmx=(-2., 10.))
+
     tmpfn = create_temp(suffix='.png')
     for name,ims,rgbkw in [('image',C.coimgs,rgbkwargs),
-                           #('image2',C.coimgs,rgbkwargs2),
+                           ('image2',C.coimgs,rgbkwargs2),
                            ]:
         rgb = get_rgb(ims, bands, **rgbkw)
         kwa = {}
