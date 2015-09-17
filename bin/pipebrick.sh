@@ -8,7 +8,7 @@ export PYTHONPATH=${PYTHONPATH}:.
 # https://software.intel.com/en-us/articles/using-threaded-intel-mkl-in-multi-thread-application
 export MKL_NUM_THREADS=1
 
-outdir=$SCRATCH/dr2e
+outdir=$SCRATCH/dr2e-noshortcuts
 
 brick="$1"
 
