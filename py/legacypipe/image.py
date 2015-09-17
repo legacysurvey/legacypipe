@@ -206,8 +206,7 @@ class LegacySurveyImage(object):
         psf_sigma = psf_fwhm / 2.35
         primhdr = self.read_image_primary_header()
 
-        sky = self.read_sky_model(splinesky=splinesky, slc=slc, img=img, invvar=invvar,
-                                  imgheader=imghdr)
+        sky = self.read_sky_model(splinesky=splinesky, slc=slc)
         midsky = 0.
         if subsky:
             print('Instantiating and subtracting sky model...')
@@ -230,6 +229,8 @@ class LegacySurveyImage(object):
             # Scale images to Nanomaggies
             img /= zpscale
             invvar *= zpscale**2
+            if not subsky:
+                sky.scale(1./zpscale)
             zpscale = 1.
 
         assert(np.sum(invvar > 0) > 0)
@@ -319,6 +320,7 @@ class LegacySurveyImage(object):
         import astropy.time
         #mjd_utc = mjd=primhdr.get('MJD-OBS', 0)
         mjd_tai = astropy.time.Time(primhdr['DATE-OBS']).tai.mjd
+        tim.slice = slc
         tim.time = TAITime(None, mjd=mjd_tai)
         tim.zr = [-3. * sig1, 10. * sig1]
         tim.zpscale = orig_zpscale
@@ -465,7 +467,7 @@ class LegacySurveyImage(object):
         wcs.plver = hdr.get('PLVER', '').strip()
         return wcs
     
-    def read_sky_model(self, splinesky=False, slc=None, img=None, invvar=None, imgheader=None):
+    def read_sky_model(self, splinesky=False, slc=None):
         '''
         Reads the sky model, returning a Tractor Sky object.
         '''
@@ -483,6 +485,11 @@ class LegacySurveyImage(object):
         else:
             fromfits = getattr(clazz, 'fromFitsHeader')
             skyobj = fromfits(hdr, prefix='SKY_')
+
+        if slc is not None:
+            sy,sx = slc
+            x0,y0 = sx.start,sy.start
+            skyobj.shift(x0, y0)
 
         skyobj.version = hdr.get('LEGPIPEV', '')
         if len(skyobj.version) == 0:
