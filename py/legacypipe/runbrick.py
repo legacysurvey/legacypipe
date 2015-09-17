@@ -2254,8 +2254,9 @@ def _one_blob(X):
             if name == 'gals':
                 # If 'simple' was better than 'ptsrc', or the source is
                 # bright, try the galaxy models.
-                if ((chisqs['simple'] > chisqs['ptsrc']) or
-                    (chisqs['ptsrc'] > 100)):
+                #if ((chisqs['simple'] > chisqs['ptsrc']) or
+                #    (chisqs['ptsrc'] > 100)):
+                if True:
                     trymodels.extend([
                         ('dev', dev), ('exp', exp), ('comp', comp)])
                 continue
