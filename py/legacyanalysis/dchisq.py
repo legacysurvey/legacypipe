@@ -7,8 +7,8 @@ import numpy as np
 from astrometry.util.fits import *
 from astrometry.util.plotutils import *
 
-def plot_grid(T, img, mod, ps, txtfunc, txtfunc2, title, xx, yy):
-    for page in range(2):
+def plot_grid(T, img, mod, ps, txtfunc, txtfunc2, title, xx, yy, pages=2):
+    for page in range(pages):
         plt.clf()
         rows,cols = 7,10
         plt.subplots_adjust(left=0.05, right=0.95, bottom=0.1, top=0.95, hspace=0, wspace=0)
@@ -60,7 +60,9 @@ if __name__ == '__main__':
         # After fixing dchisq indexing bug
         #'tractor-2402p062.fits',
         # With "SIMP" as one of the model type options
-        'tst/tractor/240/tractor-2402p062.fits',
+        #'tst/tractor/240/tractor-2402p062.fits',
+        # No shortcutting
+        'dr2e-noshortcuts-2/tractor/240/tractor-2402p062.fits',
         ]:
         print
         print fn
@@ -89,6 +91,58 @@ if __name__ == '__main__':
         print len(D), 'deVs'
         C = T[T.iscomp]
         print len(C), 'comps'
+
+        img = plt.imread('decals-2402p062-image.jpg')
+        img = np.flipud(img)
+        print 'Image', img.shape, img.dtype
+        H,W,three = img.shape
+        #mod = plt.imread('decals-2402p062-model.jpg')
+        #mod = np.flipud(mod)
+
+        # What would happen if we changed the threshold for computing
+        # EXP and DEV models?
+        oldclass = np.array([t[0] for t in T.type])
+        for thresh in [100., 200., 400., 800., 1600.]:
+            best = T.dchisq_psf.copy()
+            newclass = np.array(['P' for i in range(len(T))])
+
+            I = T.dchisq_simp > T.dchisq_psf
+            best[I] = T.dchisq_simp[I]
+            newclass[I] = 'S'
+
+            check = np.logical_or(T.dchisq_simp > T.dchisq_psf,
+                                  T.dchisq_psf > thresh)
+
+            from legacypipe.runbrick import _select_model
+            for i in np.flatnonzero(check):
+                galaxy_margin = 3.**2 + (5 - 2)
+                chisqs = dict(ptsrc=T.dchisq_psf[i],
+                              simple=T.dchisq_simp[i],
+                              exp=T.dchisq_exp[i],
+                              dev=T.dchisq_dev[i],
+                              comp=T.dchisq_comp[i])
+                mod = _select_model(
+                    chisqs,
+                    dict(ptsrc=2, simple=2, exp=5, dev=5, comp=9),
+                    galaxy_margin)
+                best[i] = chisqs[mod]
+                newclass[i] = mod[0].upper()
+
+            print 'Thresh =', thresh
+            print np.sum(oldclass == newclass), 'of', len(T), 'classifications the same'
+            I = np.flatnonzero(oldclass != newclass)
+            
+            T.oldtype = oldclass
+            T.newtype = newclass
+            Ti = T[I]
+            Ti.cut(np.argsort(Ti.dchisq_psf))
+            plot_grid(Ti, img, None, ps,
+                  lambda t: '%s / %s' % (t.oldtype, t.newtype),
+                  lambda t: '%.0f' % t.dchisq_psf,
+                  'Misclassifications at threshold %.0f' % thresh,
+                  None,None, pages=1)
+
+
 
         
 
@@ -152,17 +206,6 @@ if __name__ == '__main__':
 
         
 
-        img = plt.imread('decals-2402p062-image.jpg')
-        img = np.flipud(img)
-        print 'Image', img.shape, img.dtype
-        H,W,three = img.shape
-        img = plt.imread('decals-2402p062-image.jpg')
-        img = np.flipud(img)
-        mod = plt.imread('decals-2402p062-model.jpg')
-        mod = np.flipud(mod)
-
-
-        
         Tbad.cut(np.argsort(Tbad.dchisq_psf))
         
         plot_grid(Tbad, img, mod, ps,
@@ -173,6 +216,11 @@ if __name__ == '__main__':
         #T.bx, T.by)
 
         #lambda t: '%i %i' % (t.bx,t.by),
+
+
+
+
+        
         
 
         sys.exit(0)
