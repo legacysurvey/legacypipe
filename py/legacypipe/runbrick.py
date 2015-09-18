@@ -1431,6 +1431,20 @@ def stage_fitblobs_finish(
         for srctype in ['ptsrc', 'simple', 'dev','exp','comp']:
             xcat = Catalog(*[m.get(srctype,None) for m in allmods])
             xcat.thawAllRecursive()
+
+            # Convert shapes to EllipseE types
+            if srctype in ['dev','exp']:
+                for src in xcat:
+                    if src is None:
+                        continue
+                    src.shape = src.shape.toEllipseE()
+            elif srctype == 'comp':
+                for src in xcat:
+                    if src is None:
+                        continue
+                    src.shapeDev = src.shapeDev.toEllipseE()
+                    src.shapeExp = src.shapeExp.toEllipseE()
+
             TT,hdr = prepare_fits_catalog(xcat, None, TT, hdr, bands, None,
                                           allbands=allbands, prefix=srctype+'_',
                                           save_invvars=False)
@@ -1452,6 +1466,24 @@ def stage_fitblobs_finish(
         TT.delete_column('exp_type')
         TT.delete_column('comp_type')
 
+        # Unpack ellipses
+        TT.dev_shape_r  = TT.dev_shapeDev[:,0]
+        TT.dev_shape_e1 = TT.dev_shapeDev[:,1]
+        TT.dev_shape_e2 = TT.dev_shapeDev[:,2]
+        TT.exp_shape_r  = TT.exp_shapeExp[:,0]
+        TT.exp_shape_e1 = TT.exp_shapeExp[:,1]
+        TT.exp_shape_e2 = TT.exp_shapeExp[:,2]
+        TT.comp_shapeDev_r  = TT.comp_shapeDev[:,0]
+        TT.comp_shapeDev_e1 = TT.comp_shapeDev[:,1]
+        TT.comp_shapeDev_e2 = TT.comp_shapeDev[:,2]
+        TT.comp_shapeExp_r  = TT.comp_shapeExp[:,0]
+        TT.comp_shapeExp_e1 = TT.comp_shapeExp[:,1]
+        TT.comp_shapeExp_e2 = TT.comp_shapeExp[:,2]
+        TT.delete_column('dev_shapeDev')
+        TT.delete_column('exp_shapeExp')
+        TT.delete_column('comp_shapeDev')
+        TT.delete_column('comp_shapeExp')
+        
         TT.keepmod = np.array([m['keep'] for m in allmods])
         TT.dchisq = np.array([m['dchisqs'] for m in allmods])
         if outdir is None:
@@ -1459,6 +1491,14 @@ def stage_fitblobs_finish(
         metricsdir = os.path.join(outdir, 'metrics', brickname[:3])
         trymakedirs(metricsdir)
         fn = os.path.join(metricsdir, 'all-models-%s.fits' % brickname)
+
+        primhdr = fitsio.FITSHDR()
+        for r in version_header.records():
+            primhdr.add_record(r)
+            primhdr.add_record(dict(name='ALLBANDS', value=allbands,
+                                    comment='Band order in array values'))
+        primhdr.add_record(dict(name='PRODTYPE', value='catalog',
+                                comment='NOAO data product type'))
         TT.writeto(fn, header=hdr)
         del TT
         print('Wrote', fn)
