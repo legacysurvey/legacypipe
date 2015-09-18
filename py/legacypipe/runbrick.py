@@ -241,6 +241,57 @@ def stage_tims(W=3600, H=3600, pixscale=0.262, brickname=None,
         print('[parallel tims] Calibrations:', tnow-tlast)
         tlast = tnow
 
+
+
+
+    if plots:
+        #for tim in tims:
+        #im = tim.imobj
+        for im in ims:
+
+            subtim = im.get_tractor_image(splinesky=True, gaussPsf=True, subsky=False,
+                                          radecpoly=targetrd)
+            tim = subtim
+
+            h,w = tim.shape
+            x0,x1 = tim.x0, tim.x0 + w
+            y0,y1 = tim.y0, tim.y0 + h
+            fulltim = im.get_tractor_image(splinesky=True, gaussPsf=True, subsky=False)
+            mod = np.zeros(fulltim.shape, np.float32)
+            fulltim.sky.addTo(mod)
+            midsky = np.median(mod)
+            ima = dict(vmin=midsky -2.*tim.sig1, vmax=midsky + 2. * tim.sig1)
+
+            print('Fulltim median:', np.median(fulltim.data))
+            print('Mod median', midsky)
+
+            plt.clf()
+            plt.subplot(1,2,1)
+            dimshow(fulltim.data, cmap='gray', **ima)
+            ax = plt.axis()
+            plt.plot([x0,x0,x1,x1,x0], [y0,y1,y1,y0,y0], 'r-')
+            plt.axis(ax)
+            plt.subplot(1,2,2)
+            dimshow(mod, cmap='gray', **ima)
+            plt.plot([x0,x0,x1,x1,x0], [y0,y1,y1,y0,y0], 'r-')
+            plt.axis(ax)
+            plt.suptitle('Full image: ' + tim.name)
+            ps.savefig()
+
+            #subtim = im.get_tractor_image(splinesky=True, gaussPsf=True, subsky=False,
+            #                              slc=tim.slice)
+            plt.clf()
+            plt.subplot(1,2,1)
+            dimshow(subtim.data, cmap='gray', **ima)
+            mod = np.zeros(subtim.shape, np.float32)
+            subtim.sky.addTo(mod)
+            plt.subplot(1,2,2)
+            dimshow(mod, cmap='gray', **ima)
+            plt.suptitle('Subimage: ' + tim.name)
+            ps.savefig()
+
+
+
     # Read Tractor images
     args = [(im, targetrd, dict(gaussPsf=gaussPsf, const2psf=const2psf,
                                 pixPsf=pixPsf, splinesky=splinesky)) for im in ims]
@@ -1327,17 +1378,17 @@ def stage_fitblobs(T=None,
 
 def stage_fitblobs_finish(
     brickname=None, version_header=None,
-        T=None, blobsrcs=None, blobslices=None, blobs=None,
-        tractor=None, cat=None, targetrd=None, pixscale=None,
-        targetwcs=None,
-        W=None,H=None,
-        bands=None, ps=None, tims=None,
-        plots=False, plots2=False,
-        fitblobs_R=None,
-        outdir=None,
-        write_metrics=True,
-        allbands = 'ugrizY',
-        **kwargs):
+    T=None, blobsrcs=None, blobslices=None, blobs=None,
+    cat=None, targetrd=None, pixscale=None,
+    targetwcs=None,
+    W=None,H=None,
+    bands=None, ps=None, tims=None,
+    plots=False, plots2=False,
+    fitblobs_R=None,
+    outdir=None,
+    write_metrics=True,
+    allbands = 'ugrizY',
+    **kwargs):
     '''
     This is a "glue" stage to repackage the results from the
     `stage_fitblobs` stage.
