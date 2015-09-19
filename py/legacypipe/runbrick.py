@@ -1406,19 +1406,17 @@ def stage_fitblobs_finish(
     # one_blob can reduce the number and change the types of sources!
     # Reorder the sources here...
     R = fitblobs_R
+    del fitblobs_R
     assert(len(R) == len(blobsrcs))
 
     # Drop now-empty blobs.
-    R = [r for r in R if r is not None and len(r.B)]
-
-    BB = merge_tables([r.B for r in R])
+    R = [r for r in R if r is not None and len(r)]
+    BB = merge_tables(R)
+    del R
     print('Total of', len(BB), 'blob measurements')
     II = BB.Isrcs
     T.cut(II)
     newcat = BB.sources
-
-    del R
-    del fitblobs_R
 
     assert(len(T) == len(newcat))
     print('Old catalog:', len(cat))
@@ -2728,13 +2726,7 @@ def _one_blob(X):
     #print('Blob finished metrics:', Time()-tlast)
     print('Blob', iblob+1, 'finished') #:', Time()-tlast
 
-    result = BlobDuck()
-    result.B = B
-    return result
-
-class BlobDuck(object):
-    pass
-
+    return B
 
 def _get_mod(X):
     (tim, srcs) = X
