@@ -31,7 +31,9 @@ if [ "$NERSC_HOST" == "edison" ]; then
 
   module load decals/dr2-scratch
   module load dust/scratch
-  module load unwise_coadds/2.0-scratch
+  #module load unwise_coadds/2.0-scratch
+  # Aaron's zeropoint-corrected version
+  module load unwise_coadds/2.1-scratch
 
   # module load tractor-hpcp
   # module load astrometry_net-hpcp

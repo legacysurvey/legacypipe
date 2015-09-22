@@ -907,6 +907,13 @@ def stage_srcs(coimgs=None, cons=None,
         T.delete_column('raerr')
         T.delete_column('decerr')
         sdss_xy = T.itx, T.ity
+
+        for c in T.columns():
+            if c in ['itx','ity']:
+                continue
+            print('Renaming', c)
+            T.rename(c, 'sdss_c')
+
     else:
         sdss_xy = None
     print('Rendering detection maps...')
@@ -1377,7 +1384,9 @@ def stage_fitblobs(T=None,
                 blobslices=blobslices, blobsrcs=blobsrcs)
 
 def stage_fitblobs_finish(
-    brickname=None, version_header=None,
+    brickname=None,
+    brickid=None,
+    version_header=None,
     T=None, blobsrcs=None, blobslices=None, blobs=None,
     cat=None, targetrd=None, pixscale=None,
     targetwcs=None,
@@ -1397,87 +1406,17 @@ def stage_fitblobs_finish(
     # one_blob can reduce the number and change the types of sources!
     # Reorder the sources here...
     R = fitblobs_R
+    del fitblobs_R
     assert(len(R) == len(blobsrcs))
 
-    if write_metrics:
-        # Drop blobs that failed.
-        good_blobs = np.array([i for i,r in enumerate(R) if r is not None])
-        good_blobsrcs = [blobsrcs[i] for i in good_blobs]
-        good_R        = [R       [i] for i in good_blobs]
-        # DEBUGging / metrics for us
-        all_models  = [r.all_models  for r in good_R]
-        performance = [r.performance for r in good_R]
-
-        allmods  = [None]*len(T)
-        allperfs = [None]*len(T)
-        for Isrcs,mods,perf in zip(good_blobsrcs,all_models,performance):
-            for i,mod,per in zip(Isrcs,mods,perf):
-                allmods [i] = mod
-                allperfs[i] = per
-        del all_models
-        del performance
-
-        from desi_common import prepare_fits_catalog
-        from astrometry.util.file import pickle_to_file
-
-        goodI = np.array([i for i,m in enumerate(allmods) if m is not None])
-        TT = T[goodI]
-        allmods  = [allmods [i] for i in goodI]
-        allperfs = [allperfs[i] for i in goodI]
-        assert(len(TT) == len(allmods))
-        assert(len(TT) == len(allperfs))
-
-        hdr = fitsio.FITSHDR()
-        for srctype in ['ptsrc', 'simple', 'dev','exp','comp']:
-            xcat = Catalog(*[m.get(srctype,None) for m in allmods])
-            xcat.thawAllRecursive()
-            TT,hdr = prepare_fits_catalog(xcat, None, TT, hdr, bands, None,
-                                          allbands=allbands, prefix=srctype+'_',
-                                          save_invvars=False)
-            TT.set('%s_flags' % srctype,
-                   np.array([m['flags'].get(srctype,0) for m in allmods]))
-        TT.delete_column('ptsrc_shapeExp')
-        TT.delete_column('ptsrc_shapeDev')
-        TT.delete_column('ptsrc_fracDev')
-        TT.delete_column('ptsrc_type')
-        TT.delete_column('simple_shapeExp')
-        TT.delete_column('simple_shapeDev')
-        TT.delete_column('simple_fracDev')
-        TT.delete_column('simple_type')
-        TT.delete_column('dev_shapeExp')
-        TT.delete_column('dev_fracDev')
-        TT.delete_column('dev_type')
-        TT.delete_column('exp_shapeDev')
-        TT.delete_column('exp_fracDev')
-        TT.delete_column('exp_type')
-        TT.delete_column('comp_type')
-
-        TT.keepmod = np.array([m['keep'] for m in allmods])
-        TT.dchisq = np.array([m['dchisqs'] for m in allmods])
-        if outdir is None:
-            outdir = '.'
-        metricsdir = os.path.join(outdir, 'metrics', brickname[:3])
-        trymakedirs(metricsdir)
-        fn = os.path.join(metricsdir, 'all-models-%s.fits' % brickname)
-        TT.writeto(fn, header=hdr)
-        del TT
-        print('Wrote', fn)
-
-        fn = os.path.join(metricsdir, 'performance-%s.pickle' % brickname)
-        pickle_to_file(allperfs, fn)
-        print('Wrote', fn)
-
     # Drop now-empty blobs.
-    R = [r for r in R if r is not None and len(r.B)]
-
-    BB = merge_tables([r.B for r in R])
+    R = [r for r in R if r is not None and len(r)]
+    BB = merge_tables(R)
+    del R
     print('Total of', len(BB), 'blob measurements')
     II = BB.Isrcs
     T.cut(II)
     newcat = BB.sources
-
-    del R
-    del fitblobs_R
 
     assert(len(T) == len(newcat))
     print('Old catalog:', len(cat))
@@ -1514,25 +1453,119 @@ def stage_fitblobs_finish(
 
     # write out blob map
     if write_metrics:
+        if outdir is None:
+            outdir = '.'
+        metricsdir = os.path.join(outdir, 'metrics', brickname[:3])
+        trymakedirs(metricsdir)
         fn = os.path.join(metricsdir, 'blobs-%s.fits.gz' % brickname)
         fitsio.write(fn, newblobs, header=version_header, clobber=True)
         print('Wrote', fn)
 
     del newblobs
     del ublob
+
+    T.brickid   = np.zeros(len(T), np.int32) + brickid
+    T.brickname = np.array([brickname] * len(T))
+    T.objid     = np.arange(len(T)).astype(np.int32)
+
     T.blob = iblob.astype(np.int32)
+    T.dchisq      = BB.dchisqs.astype(np.float32)
+    # Set -0. to 0.
+    #T.dchisq[T.dchisq == 0.] = 0.
+
+    
+    if write_metrics:
+        from desi_common import prepare_fits_catalog, fits_typemap
+        from astrometry.util.file import pickle_to_file
+
+        TT = fits_table()
+        # Copy only desired columns...
+        for k in ['blob', 'brickid', 'brickname', 'dchisq', 'objid']:
+            TT.set(k, T.get(k))
+        TT.type = np.array([fits_typemap[type(src)] for src in newcat])
+            
+        hdr = fitsio.FITSHDR()
+        for srctype in ['ptsrc', 'simple', 'dev','exp','comp']:
+            xcat = Catalog(*[m.get(srctype,None) for m in BB.all_models])
+            # Convert shapes to EllipseE types
+            if srctype in ['dev','exp']:
+                for src in xcat:
+                    if src is None:
+                        continue
+                    src.shape = src.shape.toEllipseE()
+            elif srctype == 'comp':
+                for src in xcat:
+                    if src is None:
+                        continue
+                    src.shapeDev = src.shapeDev.toEllipseE()
+                    src.shapeExp = src.shapeExp.toEllipseE()
+
+            xcat.thawAllRecursive()
+
+            namemap = dict(ptsrc='psf', simple='simp')
+            prefix = namemap.get(srctype,srctype)
+            
+            TT,hdr = prepare_fits_catalog(xcat, None, TT, hdr, bands, None,
+                                          allbands=allbands, prefix=prefix+'_',
+                                          save_invvars=False)
+            TT.set('%s_flags' % prefix,
+                   np.array([m.get(srctype,0)
+                             for m in BB.all_model_flags]))
+        TT.delete_column('psf_shapeExp')
+        TT.delete_column('psf_shapeDev')
+        TT.delete_column('psf_fracDev')
+        TT.delete_column('psf_type')
+        TT.delete_column('simp_shapeExp')
+        TT.delete_column('simp_shapeDev')
+        TT.delete_column('simp_fracDev')
+        TT.delete_column('simp_type')
+        TT.delete_column('dev_shapeExp')
+        TT.delete_column('dev_fracDev')
+        TT.delete_column('dev_type')
+        TT.delete_column('exp_shapeDev')
+        TT.delete_column('exp_fracDev')
+        TT.delete_column('exp_type')
+        TT.delete_column('comp_type')
+
+        # Unpack ellipses
+        TT.dev_shape_r  = TT.dev_shapeDev[:,0]
+        TT.dev_shape_e1 = TT.dev_shapeDev[:,1]
+        TT.dev_shape_e2 = TT.dev_shapeDev[:,2]
+        TT.exp_shape_r  = TT.exp_shapeExp[:,0]
+        TT.exp_shape_e1 = TT.exp_shapeExp[:,1]
+        TT.exp_shape_e2 = TT.exp_shapeExp[:,2]
+        TT.comp_shapeDev_r  = TT.comp_shapeDev[:,0]
+        TT.comp_shapeDev_e1 = TT.comp_shapeDev[:,1]
+        TT.comp_shapeDev_e2 = TT.comp_shapeDev[:,2]
+        TT.comp_shapeExp_r  = TT.comp_shapeExp[:,0]
+        TT.comp_shapeExp_e1 = TT.comp_shapeExp[:,1]
+        TT.comp_shapeExp_e2 = TT.comp_shapeExp[:,2]
+        TT.delete_column('dev_shapeDev')
+        TT.delete_column('exp_shapeExp')
+        TT.delete_column('comp_shapeDev')
+        TT.delete_column('comp_shapeExp')
+
+        primhdr = fitsio.FITSHDR()
+        for r in version_header.records():
+            primhdr.add_record(r)
+            primhdr.add_record(dict(name='ALLBANDS', value=allbands,
+                                    comment='Band order in array values'))
+        primhdr.add_record(dict(name='PRODTYPE', value='catalog',
+                                comment='NOAO data product type'))
+
+        fn = os.path.join(metricsdir, 'all-models-%s.fits' % brickname)
+        TT.writeto(fn, header=hdr)
+        del TT
+        print('Wrote', fn)
+
 
     T.decam_flags = BB.flags
     T.fracflux    = BB.fracflux
     T.fracin      = BB.fracin
     T.fracmasked  = BB.fracmasked
     T.rchi2       = BB.rchi2
-    T.dchisq      = BB.dchisqs.astype(np.float32)
     T.left_blob   = np.logical_and(BB.started_in_blob,
                                    np.logical_not(BB.finished_in_blob))
-    # Set -0. to 0.
-    T.dchisq[T.dchisq == 0.] = 0.
-
     invvars = np.hstack(BB.srcinvvars)
     assert(cat.numberOfParams() == len(invvars))
 
@@ -2186,9 +2219,6 @@ def _one_blob(X):
         initial_models.append(mods)
     # print('Subtracting initial models:', Time()-tt)
 
-    all_models = [{} for i in range(len(Isrcs))]
-    performance = [[] for i in range(len(Isrcs))]
-
     # table of per-source measurements for this blob.
     B = fits_table()
     B.flags = np.zeros(len(Isrcs), np.uint16)
@@ -2196,6 +2226,9 @@ def _one_blob(X):
     B.sources = srcs
     B.Isrcs = Isrcs
     B.started_in_blob = started_in_blob
+
+    B.all_models = np.array([{} for i in range(len(Isrcs))])
+    B.all_model_flags = np.array([{} for i in range(len(Isrcs))])
 
     del srcs
     del Isrcs
@@ -2357,7 +2390,6 @@ def _one_blob(X):
                 dlnp,X,alpha = srctractor.optimize(**optargs)
                 #print('  dlnp:', dlnp, 'new src', newsrc)
                 cpu = time.clock()
-                performance[i].append((name,'A',step,dlnp,alpha,cpu-cpu0))
                 if cpu-cpu0 > max_cpu_per_source:
                     print('Warning: Exceeded maximum CPU time for source')
                     thisflags |= FLAG_CPU_A
@@ -2401,7 +2433,6 @@ def _one_blob(X):
                 dlnp,X,alpha = srctractor.optimize(**optargs)
                 #print('  dlnp:', dlnp, 'new src', newsrc)
                 cpu = time.clock()
-                performance[i].append((name,'B',step,dlnp,alpha,cpu-cpu0))
                 if cpu-cpu0 > max_cpu_per_source:
                     print('Warning: Exceeded maximum CPU time for source')
                     thisflags |= FLAG_CPU_B
@@ -2424,8 +2455,8 @@ def _one_blob(X):
 
             ch = _per_band_chisqs(srctractor, bands)
             chisqs[name] = _chisq_improvement(newsrc, ch, chisqs_none)
-            all_models[i][name] = newsrc.copy()
-            allflags[name] = thisflags
+            B.all_models[i][name] = newsrc.copy()
+            B.all_model_flags[i][name] = thisflags
 
         # if plots:
         #    _plot_mods(subtims, plotmods, plotmodnames, bands, None, None, bslc, blobw, blobh, ps)
@@ -2501,9 +2532,6 @@ def _one_blob(X):
         B.flags[i] = allflags.get(keepmod, 0)
         B.sources[i] = keepsrc
         subcat[i] = keepsrc
-        all_models[i]['keep'] = keepmod
-        all_models[i]['dchisqs'] = B.dchisqs[i,:]
-        all_models[i]['flags'] = allflags
 
         src = keepsrc
         if src is not None:
@@ -2551,7 +2579,7 @@ def _one_blob(X):
         for step in range(50):
             dlnp,X,alpha = subtr.optimize(**optargs)
             cpu = time.clock()
-            performance[0].append(('All','J',step,dlnp,alpha,cpu-cpu0))
+            #performance[0].append(('All','J',step,dlnp,alpha,cpu-cpu0))
             if cpu-cpu0 > max_cpu:
                 print('Warning: Exceeded maximum CPU time for source')
                 flags |= FLAG_CPU_C
@@ -2576,10 +2604,10 @@ def _one_blob(X):
             continue
 
         if isinstance(src, (DevGalaxy, ExpGalaxy)):
-            src.shape = EllipseE.fromEllipseESoft(src.shape)
+            src.shape = src.shape.toEllipseE()
         elif isinstance(src, FixedCompositeGalaxy):
-            src.shapeExp = EllipseE.fromEllipseESoft(src.shapeExp)
-            src.shapeDev = EllipseE.fromEllipseESoft(src.shapeDev)
+            src.shapeExp = src.shapeExp.toEllipseE()
+            src.shapeDev = src.shapeDev.toEllipseE()
 
         allderivs = subtr.getDerivs()
         for iparam,derivs in enumerate(allderivs):
@@ -2699,15 +2727,7 @@ def _one_blob(X):
     #print('Blob finished metrics:', Time()-tlast)
     print('Blob', iblob+1, 'finished') #:', Time()-tlast
 
-    result = BlobDuck()
-    result.B = B
-    result.all_models = all_models
-    result.performance = performance
-    return result
-
-class BlobDuck(object):
-    pass
-
+    return B
 
 def _get_mod(X):
     (tim, srcs) = X
@@ -3053,19 +3073,8 @@ def stage_writecat(
     for k in ['itx','ity','index']:
         if k in TT.get_columns():
             TT.delete_column(k)
-    for col in TT.get_columns():
-        if not col in ['tx', 'ty', 'blob',
-                       'fracflux','fracmasked', 'rchi2','dchisq','nobs',
-                       'fracin', 'orig_ra', 'orig_dec', 'left_blob',
-                       'oob', 'anymask', 'allmask',
-                       'decam_flags']:
-            TT.rename(col, 'sdss_%s' % col)
     TT.tx = TT.tx.astype(np.float32)
     TT.ty = TT.ty.astype(np.float32)
-
-    TT.brickid = np.zeros(len(TT), np.int32) + brickid
-    TT.brickname = np.array([brickname] * len(TT))
-    TT.objid   = np.arange(len(TT)).astype(np.int32)
 
     TT.decam_rchi2    = np.zeros((len(TT), len(allbands)), np.float32)
     TT.decam_fracflux = np.zeros((len(TT), len(allbands)), np.float32)
