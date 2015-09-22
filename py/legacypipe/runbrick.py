@@ -1811,6 +1811,8 @@ def _one_blob(X):
     subtr = Tractor(subtims, subcat)
     subtr.freezeParam('images')
 
+    print('Subtims:', [s.shape for s in subtims])
+    
     # Try fitting fluxes first?
     subcat.thawAllRecursive()
     for src in srcs:

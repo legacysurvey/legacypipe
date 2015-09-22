@@ -812,8 +812,9 @@ Using the current directory as DECALS_DIR, but this is likely to fail.
         print('Reading CCDs from', fn)
         T = fits_table(fn)
         print('Got', len(T), 'CCDs')
-        # "N4 " -> "N4"
-        T.ccdname = np.array([s.strip() for s in T.ccdname])
+        if 'ccdname' in T.columns():
+            # "N4 " -> "N4"
+            T.ccdname = np.array([s.strip() for s in T.ccdname])
         return T
 
     def ccds_touching_wcs(self, wcs, **kwargs):
