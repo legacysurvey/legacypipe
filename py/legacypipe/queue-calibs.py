@@ -7,7 +7,7 @@ from collections import OrderedDict
 from astrometry.util.fits import fits_table
 from astrometry.util.file import trymakedirs
 
-from legacypipe.common import Decals, DecamImage
+from legacypipe.common import Decals
 
 
 from astrometry.libkd.spherematch import match_radec
@@ -184,6 +184,11 @@ if __name__ == '__main__':
         rlo,rhi = 240,245
         dlo,dhi =   5, 12
 
+    elif opt.region == 'cosmos1':
+        # 16 bricks in the core of the COSMOS field.
+        rlo,rhi = 149.75, 150.75
+        dlo,dhi = 1.6, 2.6
+
     elif opt.region == 'des':
         dlo, dhi = -6., 4.
         rlo, rhi = 317., 7.
@@ -251,30 +256,41 @@ if __name__ == '__main__':
         T.cut(keep)
         log('Cut to', len(T), 'CCDs near bricks')
     
-    # Aside -- how many near DR1=1 CCDs?
-    if False:
-        T2 = D.get_ccds()
-        log(len(T2), 'CCDs')
-        T2.cut(T2.dr1 == 1)
-        log(len(T2), 'CCDs marked DR1=1')
-        log(len(B), 'bricks in range')
-        I,J,d = match_radec(B.ra, B.dec, T2.ra, T2.dec, 0.25)
-        keep = np.zeros(len(B), bool)
-        for i in I:
-            keep[i] = True
-        B2 = B[keep]
-        log('Total of', len(B2), 'bricks near CCDs with DR1=1')
-        for band in 'grz':
-            Tb = T2[T2.filter == band]
-            log(len(Tb), 'in filter', band)
-            I,J,d = match_radec(B2.ra, B2.dec, Tb.ra, Tb.dec, 0.25)
-            good = np.zeros(len(B2), np.uint8)
-            for i in I:
-                good[i] = 1
-            B2.set('has_' + band, good)
+    # Aside -- cut to photometric CCDs
+    if True:
+        I = decals.photometric_ccds(T)
+        T.cut(I)
+        log('Cut to', len(T), 'photometric CCDs')
+        T.writeto('ccds-photometric.fits')
 
-        B2.writeto('decals-bricks-in-dr1.fits')
-        sys.exit(0)
+        u,J = np.unique(T.expnum, return_index=True)
+        Tj = T[J]
+        J = np.lexsort((Tj.exptime, Tj.filter))
+        for t in Tj[J]:
+            log('%s %8.0f %8.1f %i %s' % (t.filter, t.exptime, t.seeing, t.expnum,
+                                          t.image_filename))
+
+        # T2 = D.get_ccds()
+        # log(len(T2), 'CCDs')
+        # T2.cut(T2.dr1 == 1)
+        # log(len(T2), 'CCDs marked DR1=1')
+        # log(len(B), 'bricks in range')
+        # I,J,d = match_radec(B.ra, B.dec, T2.ra, T2.dec, 0.25)
+        # keep = np.zeros(len(B), bool)
+        # for i in I:
+        #     keep[i] = True
+        # B2 = B[keep]
+        # log('Total of', len(B2), 'bricks near CCDs with DR1=1')
+        # for band in 'grz':
+        #     Tb = T2[T2.filter == band]
+        #     log(len(Tb), 'in filter', band)
+        #     I,J,d = match_radec(B2.ra, B2.dec, Tb.ra, Tb.dec, 0.25)
+        #     good = np.zeros(len(B2), np.uint8)
+        #     for i in I:
+        #         good[i] = 1
+        #     B2.set('has_' + band, good)
+        # B2.writeto('decals-bricks-in-dr1.fits')
+        # sys.exit(0)
 
     # sort by dec decreasing
     B.cut(np.argsort(-B.dec))
@@ -379,7 +395,7 @@ if __name__ == '__main__':
 
         if opt.delete_sky or opt.delete_pvastrom:
             log(j+1, 'of', len(allI))
-            im = DecamImage(decals, T[i])
+            im = decals.get_image_object(T[i])
             if opt.delete_sky and os.path.exists(im.skyfn):
                 log('  deleting:', im.skyfn)
                 os.unlink(im.skyfn)
@@ -389,7 +405,7 @@ if __name__ == '__main__':
 
         if opt.check:
             log(j+1, 'of', len(allI))
-            im = DecamImage(decals, T[i])
+            im = decals.get_image_object(T[i])
             if not im.run_calibs(im, just_check=True):
                 log('Calibs for', im.expnum, im.ccdname, im.calname, 'already done')
                 continue
