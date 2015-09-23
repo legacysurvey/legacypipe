@@ -2337,7 +2337,7 @@ def _one_blob(X):
             trymodels.extend([('gals', None)])
         else:
             trymodels.extend([('dev', dev), ('exp', exp), ('comp', comp)])
-            
+
         allflags = {}
         for name,newsrc in trymodels:
 
@@ -2357,8 +2357,9 @@ def _one_blob(X):
                     (chisqs['ptsrc'] + galaxy_margin)):
                     #print('dev/exp not much better than ptsrc; not computing comp model.')
                     continue
-                newsrc = comp = FixedCompositeGalaxy(src.getPosition(), src.getBrightness(),
-                                                     0.5, exp.getShape(), dev.getShape()).copy()
+                newsrc = comp = FixedCompositeGalaxy(
+                    src.getPosition(), src.getBrightness(),
+                    0.5, exp.getShape(), dev.getShape()).copy()
             #print('New source:', newsrc)
             srccat[0] = newsrc
 
