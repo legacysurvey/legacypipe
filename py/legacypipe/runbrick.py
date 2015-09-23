@@ -916,6 +916,122 @@ def stage_srcs(coimgs=None, cons=None,
 
     else:
         sdss_xy = None
+
+    if on_bricks:
+        from legacypipe.desi_common import read_fits_catalog
+        # Find nearby bricks from earlier brick phases
+        bricks = decals.get_bricks_readonly()
+        print(len(bricks), 'bricks')
+        bricks = bricks[bricks.brickq < brick.brickq]
+        print(len(bricks), 'from phases before this brickq:', brick.brickq)
+        if len(bricks):
+            from astrometry.libkd.spherematch import match_radec
+
+            bricks.cut(np.abs(brick.dec - bricks.dec) < 1)
+            print(len(bricks), 'within 1 degree of Dec')
+            radius = np.sqrt(2.) * np.abs(brick.dec2 - brick.dec1)
+            I,J,d = match_radec(brick.ra, brick.dec, bricks.ra, bricks.dec,
+                                radius)
+            bricks.cut(J)
+            print(len(bricks), 'within', radius, 'degrees')
+        else:
+            bricks = []
+        B = []
+        if outdir is None:
+            outdir = '.'
+        for b in bricks:
+            fn = os.path.join(outdir, 'tractor', b.brickname[:3],
+                              'tractor-%s.fits' % b.brickname)
+            print('Looking for', fn)
+            B.append(fits_table(fn))
+        B = merge_tables(B)
+        print('Total of', len(B), 'sources from neighbouring bricks')
+        # Keep only sources that are primary in their own brick
+        B.cut(B.brick_primary)
+        print(len(B), 'are BRICK_PRIMARY')
+        # HACK -- Keep only sources within a margin of this brick
+        ok,B.xx,B.yy = targetwcs.radec2pixelxy(B.ra, B.dec)
+        margin = 20
+        B.cut((B.xx >= 1-margin) * (B.xx < W+margin) *
+              (B.yy >= 1-margin) * (B.yy < H+margin))
+        print(len(B), 'are within this image + margin')
+        B.cut((B.out_of_bounds == False) * (B.left_blob == False))
+        print(len(B), 'do not have out_of_bounds or left_blob set')
+
+        # Note that we shouldn't need to drop sources that are within this
+        # current brick's unique area, because we cut to sources that are
+        # BRICK_PRIMARY within their own brick.
+        
+        # Create sources for these catalog entries
+        ### see forced-photom-decam.py for some additional patchups?
+
+        B.shapeexp = np.vstack((B.shapeexp_r, B.shapeexp_e1, B.shapeexp_e2)).T
+        B.shapedev = np.vstack((B.shapedev_r, B.shapedev_e1, B.shapedev_e2)).T
+        bcat = read_fits_catalog(B, ellipseClass=EllipseE)
+        print('Created', len(bcat), 'tractor catalog objects')
+
+        # Trim off SDSS sources that overlap this brick.
+        if T is not None:
+            keep_sdss = np.ones(len(T), bool)
+            for brick in bricks:
+                # Drop SDSS sources within the BRICK_PRIMARY region of the
+                # neighbouring brick.
+                keep_sdss[(T.ra  >= brick.ra1 ) * (T.ra  < brick.ra2 ) *
+                          (T.dec >= brick.dec1) * (t.dec < brick.dec2)] = False
+            if sum(keep_sdss) < len(keep_sdss):
+                print('Trimming', len(keep_sdss)-sum(keep_sdss),
+                      'SDSS sources within neighbouring bricks')
+                T.cut(keep_sdss)
+                cat = Catalog(*[src for src,keep in zip(cat,keep_sdss) if keep])
+                if sdss_xy is not None:
+                    x,y = sdss_xy
+                    sdss_xy = x[keep_sdss], y[keep_sdss]
+        
+        # Add the new sources to the 'sdss_xy' list, which are
+        # existing sources that should be avoided when detecting new
+        # faint sources.
+        if sdss_xy is None:
+            sdss_xy = B.xx, B.yy
+        else:
+            x,y = sdss_xy
+            sdss_xy = np.append(x, B.xx), np.append(y, B.yy)
+        
+        print('Subtracting tractor-on-bricks sources belonging to other bricks')
+        ## HACK -- note that this is going to screw up fracflux and
+        ## other metrics for sources in this brick that overlap
+        ## subtracted sources.
+        if plots:
+            mods = []
+            # Before...
+            coimgs,cons = compute_coadds(tims, bands, targetwcs)
+            plt.clf()
+            dimshow(get_rgb(coimgs, bands))
+            plt.title('Before subtracting tractor-on-bricks marginal sources')
+            ps.savefig()
+
+        for i,src in enumerate(bcat):
+            print(' ', i, src)
+            
+        stractor = Tractor(tims, bcat)
+        for tim,mod in zip(tims, stractor.getModelImages(sky=False)):
+            tim.data -= mod
+            if plots:
+                mods.append(mod)
+
+        if plots:
+            coimgs,cons = compute_coadds(tims, bands, targetwcs, images=mods)
+            plt.clf()
+            dimshow(get_rgb(coimgs, bands))
+            plt.title('Marginal sources subtracted off')
+            ps.savefig()
+            coimgs,cons = compute_coadds(tims, bands, targetwcs)
+            plt.clf()
+            dimshow(get_rgb(coimgs, bands))
+            plt.title('After subtracting off marginal sources')
+            ps.savefig()
+            
+
+
     print('Rendering detection maps...')
     detmaps, detivs = detection_maps(tims, targetwcs, bands, mp)
     tnow = Time()
@@ -941,117 +1057,7 @@ def stage_srcs(coimgs=None, cons=None,
             binary_propagation(saturated_pix, mask=(detiv == 0),
                                output=saturated_pix)
 
-    if on_bricks:
-        from legacypipe.desi_common import read_fits_catalog
-        # Find nearby bricks from earlier brick phases
-        bricks = decals.get_bricks_readonly()
-        print(len(bricks), 'bricks')
-        bricks = bricks[bricks.brickq < brick.brickq]
-        print(len(bricks), 'from phases before this brickq:', brick.brickq)
-        if len(bricks):
-            from astrometry.libkd.spherematch import match_radec
-
-            bricks.cut(np.abs(brick.dec - bricks.dec) < 1)
-            print(len(bricks), 'within 1 degree of Dec')
-            radius = np.sqrt(2.) * np.abs(brick.dec2 - brick.dec1)
-            I,J,d = match_radec(brick.ra, brick.dec, bricks.ra, bricks.dec,
-                                radius)
-            bricks.cut(J)
-            print(len(bricks), 'within', radius, 'degrees')
-        else:
-            bricks = []
-        B = []
-        if outdir is None:
-            outdir = '.'
-        for b in bricks:
-            fn = os.path.join('tractor', b.brickname[:3],
-                              'tractor-%s.fits' % b.brickname)
-            print('Looking for', fn)
-            B.append(fits_table(fn))
-        B = merge_tables(B)
-        print('Total of', len(B), 'sources from neighbouring bricks')
-        # Keep only sources that are primary in their own brick
-        B.cut(B.brick_primary)
-        print(len(B), 'are BRICK_PRIMARY')
-        # HACK -- Keep only sources within a margin of this brick
-        B.xx,B.yy = targetwcs.radec2pixelxy(B.ra, B.dec)
-        margin = 20
-        B.cut((B.xx >= 1-margin) * (B.xx < W+margin) *
-              (B.yy >= 1-margin) * (B.yy < H+margin))
-        print(len(B), 'are within this image + margin')
-        B.cut((B.out_of_bounds == False) * (B.left_blob == False))
-        print(len(B), 'do not have out_of_bounds or left_blob set')
-
-        # Note that we shouldn't need to drop sources that are within this
-        # current brick's unique area, because we cut to sources that are
-        # BRICK_PRIMARY within their own brick.
-        
-        # Create sources for these catalog entries
-        ### see forced-photom-decam.py for some additional patchups?
-
-        B.shapeexp = np.vstack((B.shapeexp_r, B.shapeexp_e1, B.shapeexp_e2)).T
-        B.shapedev = np.vstack((B.shapedev_r, B.shapedev_e1, B.shapedev_e2)).T
-        bcat = read_fits_catalog(B, ellipseClass=tractor.ellipses.EllipseE)
-        print('Created', len(bcat), 'tractor catalog objects')
-
-        # Trim off SDSS sources that overlap this brick.
-        keep_sdss = np.ones(len(T), bool)
-        for brick in bricks:
-            # Drop SDSS sources within the BRICK_PRIMARY region of the
-            # neighbouring brick.
-            keep_sdss[(T.ra  >= brick.ra1 ) * (T.ra  < brick.ra2 ) *
-                      (T.dec >= brick.dec1) * (t.dec < brick.dec2)] = False
-        if sum(keep_sdss) < len(keep_sdss):
-            print('Trimming', len(keep_sdss)-sum(keep_sdss),
-                  'SDSS sources within neighbouring bricks')
-            T.cut(keep_sdss)
-            cat = Catalog(*[src for src,keep in zip(cat,keep_sdss) if keep])
-            if sdss_xy is not None:
-                x,y = sdss_xy
-                sdss_xy = x[keep_sdss], y[keep_sdss]
-        
-        # Add the new sources to the 'sdss_xy' list, which are
-        # existing sources that should be avoided when detecting new
-        # faint sources.
-        if sdss_xy is None:
-            sdss_xy = B.xx, B.yy
-        else:
-            x,y = sdss_xy
-            sdss_xy = np.append(x, B.xx), np.append(y, B.yy)
-        
-        print('Subtracting tractor-on-bricks sources from other bricks')
-        ## HACK -- note that this is going to screw up fracflux and
-        ## other metrics for sources in this brick that overlap
-        ## subtracted sources.
-        if plots:
-            mods = []
-            # Before...
-            coimgs,cons = compute_coadds(tims, bands, targetwcs)
-            plt.clf()
-            dimshow(get_rgb(coimgs, bands))
-            plt.title('Before subtracting tractor-on-bricks marginal sources')
-            ps.savefig()
             
-        str = Tractor(tims, bcat)
-        str.freezeParam('images')
-        for tim,mod in zip(tims, str.getModelImages(sky=False)):
-            tim.data -= mod
-            if plots:
-                mods.append(mod)
-
-        if plots:
-            coimgs,cons = compute_coadds(tims, bands, targetwcs, images=mods)
-            plt.clf()
-            dimshow(get_rgb(coimgs, bands))
-            plt.title('Marginal sources subtracted off')
-            ps.savefig()
-            coimgs,cons = compute_coadds(tims, bands, targetwcs)
-            plt.clf()
-            dimshow(get_rgb(coimgs, bands))
-            plt.title('After subtracting off marginal sources')
-            ps.savefig()
-            
-        
     tlast = tnow
     # Median-smooth detection maps
     binning = 4
