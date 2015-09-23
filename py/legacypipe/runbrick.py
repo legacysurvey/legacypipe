@@ -1737,18 +1737,18 @@ def _per_band_chisqs(srctractor, bands):
         chisqs[img.band] = chisqs[img.band] + (chi ** 2).sum()
     return chisqs
 
-def _fit_fluxes(subcat, subtims, bands, use_ceres, alphas)
+def _fit_fluxes(cat, tims, bands, use_ceres, alphas):
     # Try fitting fluxes first?
-    subcat.thawAllRecursive()
-    for src in subcat:
+    cat.thawAllRecursive()
+    for src in cat:
         src.freezeAllBut('brightness')
     for b in bands:
-        for src in srcs:
+        for src in cat:
             src.getBrightness().freezeAllBut(b)
         # Images for this band
-        btims = [tim for tim in subtims if tim.band == b]
+        btims = [tim for tim in tims if tim.band == b]
         
-        btr = Tractor(btims, subcat)
+        btr = Tractor(btims, cat)
         btr.freezeParam('images')
         done = False
         if use_ceres:
@@ -1821,7 +1821,7 @@ class SourceModels(object):
                 mod.addTo(tim.getImage(), scale=-1)
             mods[i] = mod
                 
-    def model_masks(self, i):
+    def model_masks(self, i, src):
         modelMasks = []
         for mods in self.models:
             d = dict()
@@ -1948,7 +1948,7 @@ def _one_blob(X):
         # Create & subtract initial models for each tim x each source
 
         models = SourceModels()
-        models.create_and_subtract(tims, srcs)
+        models.create_and_subtract(subtims, srcs)
         
         # For sources, in decreasing order of brightness
         for numi,i in enumerate(Ibright):
@@ -1958,7 +1958,7 @@ def _one_blob(X):
             src = subcat[i]
 
             # Add this source's initial model back in.
-            models.add(i, tims)
+            models.add(i, subtims)
             
             if bigblob:
                 # Create super-local sub-sub-tims around this source
@@ -2035,7 +2035,7 @@ def _one_blob(X):
 
             else:
                 srctims = subtims
-                modelMasks = models.model_masks(i)
+                modelMasks = models.model_masks(i, src)
 
             srctractor = Tractor(srctims, [src])
             srctractor.freezeParams('images')
