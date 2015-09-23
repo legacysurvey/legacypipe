@@ -1781,6 +1781,15 @@ class SourceModels(object):
     This class maintains a list of the model patches for a set of sources
     in a set of images.
     '''
+    def save_images(self, tims):
+        self.orig_images = [tim.getImage() for tim in tims]
+        for tim,img in zip(tims, self.orig_images):
+            tim.data = img.copy()
+
+    def restore_images(self, tims):
+        for tim,img in zip(tims, self.orig_images):
+            tim.data = img
+            
     def create(self, tims, srcs, subtract=False):
         '''
         Note that this modifies the *tims* if subtract=True.
@@ -1941,14 +1950,10 @@ def _one_blob(X):
         #   -subtract final model (from each tim)
         # -Replace original subtim images
 
-        # Remember original tim images
-        orig_timages = [tim.getImage() for tim in subtims]
-        for tim,img in zip(subtims,orig_timages):
-            tim.data = img.copy()
-
-        # Create & subtract initial models for each tim x each source
-
         models = SourceModels()
+        # Remember original tim images
+        models.save_images(subtims)
+        # Create & subtract initial models for each tim x each source
         models.create(subtims, srcs, subtract=True)
         
         # For sources, in decreasing order of brightness
@@ -2109,8 +2114,7 @@ def _one_blob(X):
                            chi_plots=plots2, rgb_plots=True, main_plot=False,
                            rgb_format='spallmods Blob %i, src %i: %%s' % (iblob, i))
 
-                for tim,orig in zip(subtims, orig_timages):
-                    tim.data = orig
+                models.restore_images(subtims)
                 _plot_mods(subtims, spallmods, spallnames, bands, None, None, bslc, blobw, blobh, ps,
                            chi_plots=plots2, rgb_plots=True, main_plot=False,
                            rgb_format='Blob %i, src %i: %%s' % (iblob, i))
@@ -2126,9 +2130,7 @@ def _one_blob(X):
             #print('Fitting source took', Time()-tsrc)
             #print(src)
 
-        for tim,img in zip(subtims, orig_timages):
-            tim.data = img
-        del orig_timages
+        models.restore_images(subtims)
         del models
 
     else:
