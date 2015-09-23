@@ -1737,6 +1737,46 @@ def _per_band_chisqs(srctractor, bands):
         chisqs[img.band] = chisqs[img.band] + (chi ** 2).sum()
     return chisqs
 
+def _fit_fluxes(subcat, subtims, bands, use_ceres, alphas)
+    # Try fitting fluxes first?
+    subcat.thawAllRecursive()
+    for src in subcat:
+        src.freezeAllBut('brightness')
+    for b in bands:
+        for src in srcs:
+            src.getBrightness().freezeAllBut(b)
+        # Images for this band
+        btims = [tim for tim in subtims if tim.band == b]
+        
+        btr = Tractor(btims, subcat)
+        btr.freezeParam('images')
+        done = False
+        if use_ceres:
+            from tractor.ceres_optimizer import CeresOptimizer
+            orig_opt = btr.optimizer
+            btr.optimizer = CeresOptimizer(BW=8, BH=8)
+            try:
+                btr.optimize_forced_photometry(shared_params=False,
+                                               wantims=False)
+                done = True
+            except:
+                import traceback
+                print('Warning: Optimize_forced_photometry with Ceres failed:')
+                traceback.print_exc()
+                print('Falling back to LSQR')
+            btr.optimizer = orig_opt
+        if not done:
+            try:
+                btr.optimize_forced_photometry(
+                    alphas=alphas, shared_params=False, wantims=False)
+            except:
+                import traceback
+                print('Warning: Optimize_forced_photometry failed:')
+                traceback.print_exc()
+                # carry on
+
+
+
 def _one_blob(X):
     '''
     Fits sources contained within a "blob" of pixels.
@@ -1812,49 +1852,9 @@ def _one_blob(X):
     subtr.freezeParam('images')
 
     print('Subtims:', [s.shape for s in subtims])
+
+    _fit_fluxes(subcat, subtims, bands, use_ceres, alphas)
     
-    # Try fitting fluxes first?
-    subcat.thawAllRecursive()
-    for src in srcs:
-        src.freezeAllBut('brightness')
-    for b in bands:
-        #tband = Time()
-        for src in srcs:
-            src.getBrightness().freezeAllBut(b)
-        btims = []
-        for tim in subtims:
-            if tim.band != b:
-                continue
-            btims.append(tim)
-
-        
-        btr = Tractor(btims, subcat)
-        btr.freezeParam('images')
-        done = False
-        if use_ceres:
-            from tractor.ceres_optimizer import CeresOptimizer
-            orig_opt = btr.optimizer
-            btr.optimizer = CeresOptimizer(BW=8, BH=8)
-            try:
-                btr.optimize_forced_photometry(shared_params=False,
-                                               wantims=False)
-                done = True
-            except:
-                import traceback
-                print('Warning: Optimize_forced_photometry with Ceres failed:')
-                traceback.print_exc()
-                print('Falling back to LSQR')
-            btr.optimizer = orig_opt
-        if not done:
-            try:
-                btr.optimize_forced_photometry(
-                    alphas=alphas, shared_params=False, wantims=False)
-            except:
-                import traceback
-                print('Warning: Optimize_forced_photometry failed:')
-                traceback.print_exc()
-                # carry on
-
     subcat.thawAllRecursive()
 
     if plots:
