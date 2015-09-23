@@ -1,4 +1,6 @@
-Outline of DECam Legacy Survey reductions for Data Release 2
+# Outline of DECam Legacy Survey reductions for Data Release 2
+
+## Bricks
 
 Processing is done on bricks, which are defined by RA,Dec boxes.  For
 processing, we define a 3600x3600-pixel TAN projection centered on the
@@ -8,17 +10,20 @@ bricks.  Some steps of the processing occur in this brick pixel space.
 The first step is to find CCD images that overlap the current brick.
 We then apply a photometricity cut based on the photometric
 calibration parameters for each CCD.  The cuts include:
--exptime >= 30s
--number of matched Pan-STARRS stars >= 20
--|per-CCD zeropoint - per-exposure zeropoint| <= 0.1 mag
--(per-exposure zeropoint - nominal) within the range (-0.5, 0.25).
- (nominal: g=25.08, r=25.29, z=24.92)
+
+- exptime >= 30s
+- number of matched Pan-STARRS stars >= 20
+- |per-CCD zeropoint - per-exposure zeropoint| <= 0.1 mag
+- (per-exposure zeropoint - nominal) within the range (-0.5, 0.25).  Nominal zeropoints: g=25.08, r=25.29, z=24.92.
 
 The overlapping subimage of each photometric CCD is then read.
 
+## Source detection
+
 Next, we detect sources.
 
-(In DR1 we initialized from SDSS measurements.  In DR2...?)
+In DR1 we initialized from SDSS measurements.  In DR2, we are going to
+start from scratch.
 
 (Tractor-on-bricks...)
 
@@ -53,6 +58,8 @@ The result of our source detection step is simply a list of x,y
 positions in brick pixel space, plus the "blob" map of connected
 pixels.
 
+## Fitting
+
 Fitting then proceeds on a blob-by-blob basis.
 
 Subimages of each CCD are cut out.  The blob (which is defined in
@@ -78,6 +85,8 @@ proceeding to the next source.
 If there are 10 of fewer sources in the blob, we perform a
 simultaneous optimization.
 
+### Model selection
+
 We then proceed to perform model selection on each source, in
 decreasing order of brightness.  As before, we subtract the initial
 models for all sources, then when considering a source, we add its
@@ -89,8 +98,8 @@ models.  For each model to try, we optimize the model, then compute
 the final log-likelihood.  For this, rather than the straight
 log-likelihood, we penalize models with negative fluxes.  We compute
 the optimized chi-squared sums per band.  For bands with positive
-flux, the chi-squared improvement versus the "nothing" model count /for/
-the model, while bands with negative flux count /against/ the model.
+flux, the chi-squared improvement versus the "nothing" model count *for*
+the model, while bands with negative flux count *against* the model.
 This is quite a strong penalty for negative fluxes!
 
 For sources that were initially point sources, if the SimpleGalaxy
@@ -152,6 +161,7 @@ uncertainties (inverse-variances) on each source's model parameters,
 as well as the various other metrics (RCHI, FRACFLUX, FRACIN,
 FRACMASKED).
 
+## Coadd & catalog production
 
 Once all the blobs have been run, we produce the coadded data and
 model images, the residual maps, depth maps, and depth histograms.  We
