@@ -1775,6 +1775,63 @@ def _fit_fluxes(subcat, subtims, bands, use_ceres, alphas)
                 traceback.print_exc()
                 # carry on
 
+                
+class SourceModels(object):
+    '''
+    This class maintains a list of the model patches for a set of sources
+    in a set of images.
+    '''
+    def create_and_subtract(self, tims, srcs):
+        '''
+        Note that this modifies the *tims*.
+        '''
+        self.models = []
+        for tim in tims:
+            mods = []
+            sh = tim.shape
+            ie = tim.getInvError()
+            for src in srcs:
+                mod = src.getModelPatch(tim)
+                if mod is not None and mod.patch is not None:
+                    if not np.all(np.isfinite(mod.patch)):
+                        print('Non-finite mod patch')
+                        print('source:', src)
+                        print('tim:', tim)
+                        print('PSF:', tim.getPsf())
+                    assert(np.all(np.isfinite(mod.patch)))
+                    mod = _clip_model_to_blob(mod, sh, ie)
+                    mod.addTo(tim.getImage(), scale=-1)
+                mods.append(mod)
+            self.models.append(mods)
+
+    def add(self, i, tims):
+        '''
+        Adds the models for source *i* back into the tims.
+        '''
+        for tim,mods in zip(tims, self.models):
+            mod = mods[i]
+            if mod is not None:
+                mod.addTo(tim.getImage())
+
+    def update_and_subtract(self, i, src, tims):
+        for tim,mods in zip(tims, self.models):
+            #mod = srctractor.getModelPatch(tim, src)
+            mod = src.getModelPatch(tim)
+            if mod is not None:
+                mod.addTo(tim.getImage(), scale=-1)
+            mods[i] = mod
+                
+    def model_masks(self, i):
+        modelMasks = []
+        for mods in self.models:
+            d = dict()
+            modelMasks.append(d)
+            mod = mods[i]
+            if mod is not None:
+                d[src] = Patch(mod.x0, mod.y0, mod.patch != 0)
+        return modelMasks
+
+                
 
 
 def _one_blob(X):
@@ -1873,7 +1930,7 @@ def _one_blob(X):
         fluxes.append(flux)
     Ibright = np.argsort(-np.array(fluxes))
 
-    if len(Ibright) > 1:
+    if len(subcat) > 1:
         # -Remember the original subtim images
         # -Compute initial models for each source (in each tim)
         # -Subtract initial models from images
@@ -1882,38 +1939,17 @@ def _one_blob(X):
         #   -fit, with Catalog([src])
         #   -subtract final model (from each tim)
         # -Replace original subtim images
-        #
-        # --Might want to omit newly-added detection-filter sources, since their
-        # fluxes are bogus.
 
         # Remember original tim images
         orig_timages = [tim.getImage() for tim in subtims]
         for tim,img in zip(subtims,orig_timages):
             tim.data = img.copy()
 
-        # Create initial models for each tim x each source
-        # initial_models is a list-of-lists: initial_models[itim][isrc]
-        initial_models = []
-        #tt = Time()
-        for tim in subtims:
-            mods = []
-            sh = tim.shape
-            ie = tim.getInvError()
-            for src in subcat:
-                mod = src.getModelPatch(tim)
-                if mod is not None and mod.patch is not None:
-                    if not np.all(np.isfinite(mod.patch)):
-                        print('Non-finite mod patch')
-                        print('source:', src)
-                        print('tim:', tim)
-                        print('PSF:', tim.getPsf())
-                    assert(np.all(np.isfinite(mod.patch)))
-                    mod = _clip_model_to_blob(mod, sh, ie)
-                    mod.addTo(tim.getImage(), scale=-1)
-                mods.append(mod)
+        # Create & subtract initial models for each tim x each source
 
-            initial_models.append(mods)
-
+        models = SourceModels()
+        models.create_and_subtract(tims, srcs)
+        
         # For sources, in decreasing order of brightness
         for numi,i in enumerate(Ibright):
             #tsrc = Time()
@@ -1922,11 +1958,8 @@ def _one_blob(X):
             src = subcat[i]
 
             # Add this source's initial model back in.
-            for tim,mods in zip(subtims, initial_models):
-                mod = mods[i]
-                if mod is not None:
-                    mod.addTo(tim.getImage())
-
+            models.add(i, tims)
+            
             if bigblob:
                 # Create super-local sub-sub-tims around this source
 
@@ -1934,7 +1967,7 @@ def _one_blob(X):
                 srctims = []
                 modelMasks = []
                 #print('Big blob: trimming:')
-                for tim,imods in zip(subtims, initial_models):
+                for tim,imods in zip(subtims, models.models):
                     mod = imods[i]
                     if mod is None:
                         continue
@@ -1947,13 +1980,14 @@ def _one_blob(X):
                     x0,y0 = mod.x0 , mod.y0
                     x1,y1 = x0 + mw, y0 + mh
                     slc = slice(y0,y1), slice(x0, x1)
-                    srctim = Image(data=tim.getImage ()[slc],
+                    subsky = tim.getSky().copy()
+                    subsky.shift(x0, y0)
+                    srctim = Image(data=tim.getImage()[slc],
                                    inverr=tim.getInvError()[slc],
                                    wcs=tim.wcs.shifted(x0, y0),
                                    psf=tim.psf.getShifted(x0, y0),
                                    photocal=tim.getPhotoCal(),
-                                   sky=tim.getSky(), name=tim.name)
-                    #srctim.subwcs = tim.getWcs().wcs.get_subimage(x0, y0, mw, mh)
+                                   sky=subsky, name=tim.name)
                     srctim.subwcs = tim.subwcs.get_subimage(x0, y0, mw, mh)
                     srctim.band = tim.band
                     srctim.sig1 = tim.sig1
@@ -2001,14 +2035,7 @@ def _one_blob(X):
 
             else:
                 srctims = subtims
-
-                modelMasks = []
-                for imods in initial_models:
-                    d = dict()
-                    modelMasks.append(d)
-                    mod = imods[i]
-                    if mod is not None:
-                        d[src] = Patch(mod.x0, mod.y0, mod.patch != 0)
+                modelMasks = models.model_masks(i)
 
             srctractor = Tractor(srctims, [src])
             srctractor.freezeParams('images')
@@ -2089,12 +2116,9 @@ def _one_blob(X):
                 for tim,im in zip(subtims, tempims):
                     tim.data = im
 
-            # Re-remove the final fit model for this source (pull from cache)
-            for tim in srctims:
-                mod = srctractor.getModelPatch(tim, src)
-                if mod is not None:
-                    mod.addTo(tim.getImage(), scale=-1)
-
+            # Re-remove the final fit model for this source
+            models.update_and_subtract(i, src, subtims)
+            
             srctractor.setModelMasks(None)
             disable_galaxy_cache()
 
@@ -2104,7 +2128,7 @@ def _one_blob(X):
         for tim,img in zip(subtims, orig_timages):
             tim.data = img
         del orig_timages
-        del initial_models
+        del models
 
     else:
         # Single source (though this is coded to handle multiple sources)
