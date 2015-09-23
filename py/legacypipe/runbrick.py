@@ -2682,6 +2682,8 @@ def _one_blob(X):
             counts = np.zeros(len(B))
             pcal = tim.getPhotoCal()
 
+            # For each source, compute its model and record its flux
+            # in this image.  Also compute the full model *mod*.
             for isrc,src in enumerate(B.sources):
                 patch = subtr.getModelPatch(tim, src, minsb=tim.modelMinval)
                 if patch is None or patch.patch is None:
@@ -2695,6 +2697,7 @@ def _one_blob(X):
                 srcmods[isrc] = patch
                 patch.addTo(mod)
 
+            # Now compute metrics for each source
             for isrc,patch in enumerate(srcmods):
                 if patch is None:
                     continue
@@ -2703,8 +2706,14 @@ def _one_blob(X):
                 slc = patch.getSlice(mod)
                 # (mod - patch) is flux from others
                 # (mod - patch) / counts is normalized flux from others
-                # patch/counts is unit profile
-                fracflux_num[isrc,iband] += np.sum((mod[slc] - patch.patch) * np.abs(patch.patch)) / counts[isrc]**2
+                # We take that and weight it by this source's profile;
+                #  patch / counts is unit profile
+                # But this takes the dot product between the profiles,
+                # so we have to normalize appropriately, ie by
+                # (patch**2)/counts**2; counts**2 drops out of the
+                # denom.  If you have an identical source with twice the flux,
+                # this results in fracflux being 2.0
+                fracflux_num[isrc,iband] += np.sum((mod[slc] - patch.patch) * np.abs(patch.patch)) / np.sum(patch.patch**2)
                 fracflux_den[isrc,iband] += np.sum(np.abs(patch.patch)) / np.abs(counts[isrc])
 
                 fracmasked_num[isrc,iband] += np.sum((tim.getInvError()[slc] == 0) * np.abs(patch.patch)) / np.abs(counts[isrc])
