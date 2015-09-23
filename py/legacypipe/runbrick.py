@@ -51,7 +51,7 @@ from astrometry.util.miscutils import patch_image
 
 from tractor import Tractor, PointSource, Image, NanoMaggies
 from tractor.ellipses import EllipseESoft, EllipseE
-from tractor.galaxy import DevGalaxy, ExpGalaxy, FixedCompositeGalaxy, disable_galaxy_cache
+from tractor.galaxy import DevGalaxy, ExpGalaxy, FixedCompositeGalaxy, SoftenedFracDev, FracDev, disable_galaxy_cache
 
 # Argh, can't do relative imports if this script is to be runnable.
 from legacypipe.common import *
@@ -1499,6 +1499,7 @@ def stage_fitblobs_finish(
                         continue
                     src.shapeDev = src.shapeDev.toEllipseE()
                     src.shapeExp = src.shapeExp.toEllipseE()
+                    src.fracDev = FracDev(src.fracDev.getValue())
 
             xcat.thawAllRecursive()
 
@@ -2359,7 +2360,7 @@ def _one_blob(X):
                     continue
                 newsrc = comp = FixedCompositeGalaxy(
                     src.getPosition(), src.getBrightness(),
-                    0.5, exp.getShape(), dev.getShape()).copy()
+                    SoftenedFracDev(0.5), exp.getShape(), dev.getShape()).copy()
             #print('New source:', newsrc)
             srccat[0] = newsrc
 
@@ -2625,7 +2626,8 @@ def _one_blob(X):
         elif isinstance(src, FixedCompositeGalaxy):
             src.shapeExp = src.shapeExp.toEllipseE()
             src.shapeDev = src.shapeDev.toEllipseE()
-
+            src.fracDev = FracDev(src.fracDev.getValue())
+            
         allderivs = subtr.getDerivs()
         for iparam,derivs in enumerate(allderivs):
             chisq = 0
