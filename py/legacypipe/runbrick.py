@@ -1781,9 +1781,9 @@ class SourceModels(object):
     This class maintains a list of the model patches for a set of sources
     in a set of images.
     '''
-    def create_and_subtract(self, tims, srcs):
+    def create(self, tims, srcs, subtract=False):
         '''
-        Note that this modifies the *tims*.
+        Note that this modifies the *tims* if subtract=True.
         '''
         self.models = []
         for tim in tims:
@@ -1800,7 +1800,8 @@ class SourceModels(object):
                         print('PSF:', tim.getPsf())
                     assert(np.all(np.isfinite(mod.patch)))
                     mod = _clip_model_to_blob(mod, sh, ie)
-                    mod.addTo(tim.getImage(), scale=-1)
+                    if subtract:
+                        mod.addTo(tim.getImage(), scale=-1)
                 mods.append(mod)
             self.models.append(mods)
 
@@ -1948,7 +1949,7 @@ def _one_blob(X):
         # Create & subtract initial models for each tim x each source
 
         models = SourceModels()
-        models.create_and_subtract(subtims, srcs)
+        models.create(subtims, srcs, subtract=True)
         
         # For sources, in decreasing order of brightness
         for numi,i in enumerate(Ibright):
@@ -2135,15 +2136,10 @@ def _one_blob(X):
         # Fit sources one at a time, but don't subtract other models
         subcat.freezeAllParams()
 
-        modelMasks = []
-        for tim in subtims:
-            d = dict()
-            modelMasks.append(d)
-            for src in subcat:
-                mod = src.getModelPatch(tim)
-                if mod is not None:
-                    mod = _clip_model_to_blob(mod, tim.shape, tim.getInvError())
-                    d[src] = Patch(mod.x0, mod.y0, mod.patch != 0)
+        models = SourceModels()
+        models.create(subtims, [src])
+        modelMasks = models.model_masks(0, src)
+
         subtr.setModelMasks(modelMasks)
         enable_galaxy_cache()
 
