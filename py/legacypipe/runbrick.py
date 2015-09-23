@@ -344,7 +344,7 @@ def stage_tims(W=3600, H=3600, pixscale=0.262, brickname=None,
 
     keys = ['version_header', 'targetrd', 'pixscale', 'targetwcs', 'W','H',
             'bands', 'tims', 'ps', 'brickid', 'brickname', 'brick',
-            'target_extent', 'ccds', 'bands']
+            'target_extent', 'ccds', 'bands', 'decals']
     if not pipe:
         keys.extend(['coimgs', 'cons'])
     rtn = dict()
@@ -940,7 +940,6 @@ def stage_srcs(coimgs=None, cons=None,
             # Spread the True pixels wherever detiv==0
             binary_propagation(saturated_pix, mask=(detiv == 0),
                                output=saturated_pix)
-
 
     if on_bricks:
         from legacypipe.desi_common import read_fits_catalog
@@ -3700,7 +3699,8 @@ def run_brick(brick, radec=None, pixscale=0.262,
             brick = ('custom-%06i%s%05i' %
                          (int(1000*ra), 'm' if dec < 0 else 'p',
                           int(1000*np.abs(dec))))
-    initargs.update(brickname=brick)
+    initargs.update(brickname=brick,
+                    decals=decals)
 
     stagefunc = CallGlobalTime('stage_%s', globals())
 
@@ -3722,7 +3722,6 @@ def run_brick(brick, radec=None, pixscale=0.262,
                   write_metrics=write_metrics,
                   on_bricks=on_bricks,
                   outdir=outdir, decals_dir=decals_dir, unwise_dir=unwise_dir,
-                  decals=decals,
                   plots=plots, plots2=plots2, coadd_bw=coadd_bw,
                   force=forceStages, write=writePickles)
 
