@@ -1511,6 +1511,17 @@ def stage_fitblobs_finish(
             TT.set('%s_flags' % prefix,
                    np.array([m.get(srctype,0)
                              for m in BB.all_model_flags]))
+
+            print('all_model_fluxivs:', BB.all_model_fluxivs)
+            fluxivs = np.zeros((len(TT), len(allbands)), np.float32)
+            bandmap = np.array([allbands.index(b) for b in bands])
+            for j in range(len(xcat)):
+                f = BB.all_model_fluxivs[j].get(srctype, None)
+                if f is None:
+                    continue
+                fluxivs[j, bandmap] = f
+            TT.set('%s_decam_flux_ivar' % prefix, fluxivs)
+            
         TT.delete_column('psf_shapeExp')
         TT.delete_column('psf_shapeDev')
         TT.delete_column('psf_fracDev')
@@ -2230,8 +2241,9 @@ def _one_blob(X):
     B.sources = srcs
     B.Isrcs = Isrcs
     B.started_in_blob = started_in_blob
-    B.all_models = np.array([{} for i in range(len(Isrcs))])
-    B.all_model_flags = np.array([{} for i in range(len(Isrcs))])
+    B.all_models        = np.array([{} for i in range(len(Isrcs))])
+    B.all_model_fluxivs = np.array([{} for i in range(len(Isrcs))])
+    B.all_model_flags   = np.array([{} for i in range(len(Isrcs))])
 
     del srcs
     del Isrcs
@@ -2443,6 +2455,23 @@ def _one_blob(X):
                 plt.title('Second-round opt ' + name)
                 ps.savefig()
 
+            # Compute FLUX inverse-variances for each source
+            newsrc.freezeAllBut('brightness')
+            allderivs = srctractor.getDerivs()
+            ivs = np.zeros(len(bands), np.float32)
+            B.all_model_fluxivs[i][name] = ivs
+            for iparam,derivs in enumerate(allderivs):
+                chisq = 0
+                for deriv,tim in derivs:
+                    h,w = tim.shape
+                    deriv.clipTo(w,h)
+                    ie = tim.getInvError()
+                    slc = deriv.getSlice(ie)
+                    chi = deriv.patch * ie[slc]
+                    chisq += (chi**2).sum()
+                ivs[iparam] = chisq
+            newsrc.thawAllParams()
+                
             srctractor.setModelMasks(None)
             disable_galaxy_cache()
 
