@@ -1826,7 +1826,10 @@ class SourceModels(object):
     def update_and_subtract(self, i, src, tims):
         for tim,mods in zip(tims, self.models):
             #mod = srctractor.getModelPatch(tim, src)
-            mod = src.getModelPatch(tim)
+            if src is None:
+                mod = None
+            else:
+                mod = src.getModelPatch(tim)
             if mod is not None:
                 mod.addTo(tim.getImage(), scale=-1)
             mods[i] = mod
@@ -2212,35 +2215,12 @@ def _one_blob(X):
     #   -subtract final model (from each tim)
     # -Replace original subtim images
 
+    models = SourceModels()
     # Remember original tim images
-    orig_timages = [tim.getImage() for tim in subtims]
-    for tim,img in zip(subtims,orig_timages):
-        tim.data = img.copy()
-    initial_models = []
-
+    models.save_images(subtims)
     # Create initial models for each tim x each source
     # tt = Time()
-    for tim in subtims:
-        mods = []
-        sh = tim.shape
-        ie = tim.getInvError()
-        img = tim.getImage()
-        for src in subcat:
-            mod = src.getModelPatch(tim)
-            if mod is not None and mod.patch is not None:
-                if not np.all(np.isfinite(mod.patch)):
-                    print('Non-finite mod patch')
-                    print('source:', src)
-                    print('tim:', tim)
-                    print('PSF:', tim.getPsf())
-                assert(np.all(np.isfinite(mod.patch)))
-
-                # Blank out pixels that are outside the blob ROI.
-                mod = _clip_model_to_blob(mod, sh, ie)
-                mod.addTo(img, scale=-1)
-            mods.append(mod)
-
-        initial_models.append(mods)
+    models.create(subtims, subcat, subtract=True)
     # print('Subtracting initial models:', Time()-tt)
 
     # table of per-source measurements for this blob.
@@ -2250,7 +2230,6 @@ def _one_blob(X):
     B.sources = srcs
     B.Isrcs = Isrcs
     B.started_in_blob = started_in_blob
-
     B.all_models = np.array([{} for i in range(len(Isrcs))])
     B.all_model_flags = np.array([{} for i in range(len(Isrcs))])
 
@@ -2270,28 +2249,18 @@ def _one_blob(X):
         #     plotmodnames = []
 
         # Add this source's initial model back in.
-        for tim,mods in zip(subtims, initial_models):
-            mod = mods[i]
-            if mod is not None:
-                mod.addTo(tim.getImage())
-
-        modelMasks = []
-        for imods in initial_models:
-            d = dict()
-            modelMasks.append(d)
-            mod = imods[i]
-            if mod is not None:
-                #print('Set modelMask:', mod.patch.shape, 'for', src)
-                d[src] = Patch(mod.x0, mod.y0, mod.patch != 0)
+        models.add(i, subtims)
+        modelMasks = models.model_masks(i, src)
 
         srctractor = Tractor(subtims, [src])
         srctractor.freezeParams('images')
         srctractor.setModelMasks(modelMasks)
         enable_galaxy_cache()
 
-        # use log likelihood rather than log prior because we use priors on, eg,
-        # the ellipticity to avoid crazy fits.  Here we sort of want to just
-        # evaluate the fit quality regardless of priors on parameters...?
+        # use log likelihood rather than log prior because we use
+        # priors on, eg, the ellipticity to avoid crazy fits.  Here we
+        # sort of want to just evaluate the fit quality regardless of
+        # priors on parameters...?
 
         srccat = srctractor.getCatalog()
         srccat[0] = None
@@ -2351,6 +2320,7 @@ def _one_blob(X):
             oldmodel = 'comp'
 
         trymodels = [('ptsrc', ptsrc), ('simple', simple)]
+        ### FIXME -- or just do this for *all* models regardless of initial type?
         if oldmodel == 'ptsrc':
             trymodels.extend([('gals', None)])
         else:
@@ -2380,8 +2350,9 @@ def _one_blob(X):
             #print('New source:', newsrc)
             srccat[0] = newsrc
 
-            # Use the same initial modelMasks as the original source; we'll do a second
-            # round below.  Need to create newsrc->mask mappings though:
+            # Use the same initial modelMasks as the original source;
+            # we'll do a second round below.  Need to create
+            # newsrc->mask mappings though:
             mm = []
             for mim in modelMasks:
                 d = dict()
@@ -2403,10 +2374,9 @@ def _one_blob(X):
 
             max_cpu_per_source = 60.
 
-            thisflags = 0
-
             #tt0 = Time()
             cpu0 = time.clock()
+            thisflags = 0
             p0 = newsrc.getParams()
             for step in range(50):
                 #print('optimizing:', newsrc)
@@ -2557,18 +2527,12 @@ def _one_blob(X):
         subcat[i] = keepsrc
 
         src = keepsrc
-        if src is not None:
-            # Re-remove the final fit model for this source.
-            for tim in subtims:
-                mod = src.getModelPatch(tim)
-                if mod is not None:
-                    mod.addTo(tim.getImage(), scale=-1)
+        # Re-remove the final fit model for this source.
+        models.update_and_subtract(i, src, subtims)
 
-    for tim,img in zip(subtims, orig_timages):
-        tim.data = img
-    del orig_timages
-    del initial_models
-
+    models.restore_images(subtims)
+    del models
+    
     #print('Blob finished model selection:', Time()-tlast)
     #tlast = Time()
 
