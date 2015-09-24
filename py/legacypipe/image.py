@@ -190,7 +190,7 @@ class LegacySurveyImage(object):
         e = imghdr['EXTNAME']
         assert(e.strip() == self.ccdname.strip())
 
-        invvar = self.read_invvar(slice=slc)
+        invvar = self.read_invvar(slice=slc, clipThresh=0.)
         dq = self.read_dq(slice=slc)
         invvar[dq != 0] = 0.
         if np.all(invvar == 0.):
