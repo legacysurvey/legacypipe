@@ -5,7 +5,7 @@ import numpy as np
 from astrometry.util.util import Tan
 from astrometry.util.fits import fits_table
 
-from tractor import PointSource, getParamTypeTree
+from tractor import PointSource, getParamTypeTree, RaDecPos
 from tractor.galaxy import ExpGalaxy, DevGalaxy, FixedCompositeGalaxy
 from tractor.ellipses import EllipseESoft, EllipseE
 
@@ -182,6 +182,7 @@ def get_tractor_fits_values(T, cat, pat):
 
 def read_fits_catalog(T, hdr=None, invvars=False, bands='grz',
                       allbands = 'ugrizY', ellipseClass=None):
+    from tractor import NanoMaggies
     '''
     This is currently a weird hybrid of dynamic and hard-coded.
 

@@ -247,49 +247,89 @@ def stage_tims(W=3600, H=3600, pixscale=0.262, brickname=None,
     if plots:
         #for tim in tims:
         #im = tim.imobj
+
+        sig1s = dict([(b,[]) for b in bands])
+
+        allpix = []
+
         for im in ims:
 
             subtim = im.get_tractor_image(splinesky=True, gaussPsf=True, subsky=False,
                                           radecpoly=targetrd)
-            tim = subtim
+            if subtim is None:
+                continue
 
-            h,w = tim.shape
-            x0,x1 = tim.x0, tim.x0 + w
-            y0,y1 = tim.y0, tim.y0 + h
-            fulltim = im.get_tractor_image(splinesky=True, gaussPsf=True, subsky=False)
-            mod = np.zeros(fulltim.shape, np.float32)
-            fulltim.sky.addTo(mod)
-            midsky = np.median(mod)
-            ima = dict(vmin=midsky -2.*tim.sig1, vmax=midsky + 2. * tim.sig1)
+            if False:
+                tim = subtim
+                h,w = tim.shape
+                x0,x1 = tim.x0, tim.x0 + w
+                y0,y1 = tim.y0, tim.y0 + h
+                fulltim = im.get_tractor_image(splinesky=True, gaussPsf=True, subsky=False)
+                fullmod = np.zeros(fulltim.shape, np.float32)
+                fulltim.sky.addTo(fullmod)
+                midsky = np.median(fullmod)
+                ima = dict(vmin=midsky -2.*tim.sig1, vmax=midsky + 2. * tim.sig1)
+    
+                print('Fulltim median:', np.median(fulltim.data))
+                print('Mod median', midsky)
+    
+                plt.clf()
+                plt.subplot(1,2,1)
+                dimshow(fulltim.data, cmap='gray', **ima)
+                ax = plt.axis()
+                plt.plot([x0,x0,x1,x1,x0], [y0,y1,y1,y0,y0], 'r-')
+                plt.axis(ax)
+                plt.subplot(1,2,2)
+                dimshow(fullmod, cmap='gray', **ima)
+                plt.plot([x0,x0,x1,x1,x0], [y0,y1,y1,y0,y0], 'r-')
+                plt.axis(ax)
+                plt.suptitle('Full image: ' + tim.name)
+                ps.savefig()
+    
+                #subtim = im.get_tractor_image(splinesky=True, gaussPsf=True, subsky=False,
+                #                              slc=tim.slice)
+                plt.clf()
+                plt.subplot(1,2,1)
+                dimshow(subtim.data, cmap='gray', **ima)
+                mod = np.zeros(subtim.shape, np.float32)
+                subtim.sky.addTo(mod)
+                plt.subplot(1,2,2)
+                dimshow(mod, cmap='gray', **ima)
+                plt.suptitle('Subimage: ' + tim.name)
+                ps.savefig()
 
-            print('Fulltim median:', np.median(fulltim.data))
-            print('Mod median', midsky)
+            fulltim2 = im.get_tractor_image(splinesky=True, gaussPsf=True)
 
+            if False:
+                plt.clf()
+                plt.hist(((fulltim.getImage() - fullmod) * fulltim.getInvError()).ravel(),
+                         range=(-5,5), bins=100, histtype='step', color='b')
+                plt.hist((fulltim2.getImage() * fulltim2.getInvError()).ravel(),
+                         range=(-5,5), bins=100, histtype='step', color='r')
+                plt.xlabel('Pixel values (sigma)')
+                plt.suptitle('Full image: ' + tim.name)
+                ps.savefig()
+
+            sig1s[fulltim2.band].append(fulltim2.sig1)
+            allpix.append((fulltim2.band, fulltim2.name, im.exptime,
+                           fulltim2.getImage()[fulltim2.getInvError() > 0]))
+
+        sig1s = dict([(b, np.median(sig1s[b])) for b in sig1s.keys()])
+        for b in bands:
             plt.clf()
-            plt.subplot(1,2,1)
-            dimshow(fulltim.data, cmap='gray', **ima)
-            ax = plt.axis()
-            plt.plot([x0,x0,x1,x1,x0], [y0,y1,y1,y0,y0], 'r-')
-            plt.axis(ax)
-            plt.subplot(1,2,2)
-            dimshow(mod, cmap='gray', **ima)
-            plt.plot([x0,x0,x1,x1,x0], [y0,y1,y1,y0,y0], 'r-')
-            plt.axis(ax)
-            plt.suptitle('Full image: ' + tim.name)
+            lp,lt = [],[]
+            s = sig1s[b]
+            for band,name,exptime,pix in allpix:
+                if band != b:
+                    continue
+                n,bb,p = plt.hist(pix, range=(-5.*s, 5.*s), bins=50, histtype='step',
+                                 alpha=0.5)
+                lp.append(p[0])
+                lt.append('%s: %.0f s' % (name, exptime))
+            plt.legend(lp, lt)
+            plt.xlabel('Pixel values')
+            plt.title('Pixel distributions: %s band' % b)
             ps.savefig()
-
-            #subtim = im.get_tractor_image(splinesky=True, gaussPsf=True, subsky=False,
-            #                              slc=tim.slice)
-            plt.clf()
-            plt.subplot(1,2,1)
-            dimshow(subtim.data, cmap='gray', **ima)
-            mod = np.zeros(subtim.shape, np.float32)
-            subtim.sky.addTo(mod)
-            plt.subplot(1,2,2)
-            dimshow(mod, cmap='gray', **ima)
-            plt.suptitle('Subimage: ' + tim.name)
-            ps.savefig()
-
 
 
     # Read Tractor images
@@ -344,7 +384,7 @@ def stage_tims(W=3600, H=3600, pixscale=0.262, brickname=None,
 
     keys = ['version_header', 'targetrd', 'pixscale', 'targetwcs', 'W','H',
             'bands', 'tims', 'ps', 'brickid', 'brickname', 'brick',
-            'target_extent', 'ccds', 'bands']
+            'target_extent', 'ccds', 'bands', 'decals']
     if not pipe:
         keys.extend(['coimgs', 'cons'])
     rtn = dict()
@@ -825,9 +865,11 @@ def stage_image_coadds(targetwcs=None, bands=None, tims=None, outdir=None,
 
     #rgbkwargs2 = dict(mnmx=(-3., 3.))
 
+    rgbkwargs2 = dict(mnmx=(-2., 10.))
+
     tmpfn = create_temp(suffix='.png')
     for name,ims,rgbkw in [('image',C.coimgs,rgbkwargs),
-                           #('image2',C.coimgs,rgbkwargs2),
+                           ('image2',C.coimgs,rgbkwargs2),
                            ]:
         rgb = get_rgb(ims, bands, **rgbkw)
         kwa = {}
@@ -906,7 +948,7 @@ def stage_srcs(coimgs=None, cons=None,
         T.dec_ivar  = 1./err**2
         T.delete_column('raerr')
         T.delete_column('decerr')
-        sdss_xy = T.itx, T.ity
+        avoid_xy = T.itx, T.ity
 
         for c in T.columns():
             if c in ['itx','ity']:
@@ -915,32 +957,7 @@ def stage_srcs(coimgs=None, cons=None,
             T.rename(c, 'sdss_c')
 
     else:
-        sdss_xy = None
-    print('Rendering detection maps...')
-    detmaps, detivs = detection_maps(tims, targetwcs, bands, mp)
-    tnow = Time()
-    print('[parallel srcs] Detmaps:', tnow-tlast)
-
-    saturated_pix = None
-
-    if sdss_xy is not None:
-
-        saturated_pix = np.zeros(detmaps[0].shape, bool)
-
-        for band,detmap,detiv in zip(bands, detmaps, detivs):
-            I = np.flatnonzero(detiv[T.ity, T.itx] == 0.)
-            print(len(I), 'SDSS sources have detiv = 0 in band', band)
-            if len(I) == 0:
-                continue
-
-            from scipy.ndimage.morphology import binary_propagation
-
-            # Set the central pixel of the detmap
-            saturated_pix[T.ity[I], T.itx[I]] = True
-            # Spread the True pixels wherever detiv==0
-            binary_propagation(saturated_pix, mask=(detiv == 0),
-                               output=saturated_pix)
-
+        avoid_xy = None
 
     if on_bricks:
         from legacypipe.desi_common import read_fits_catalog
@@ -965,7 +982,7 @@ def stage_srcs(coimgs=None, cons=None,
         if outdir is None:
             outdir = '.'
         for b in bricks:
-            fn = os.path.join('tractor', b.brickname[:3],
+            fn = os.path.join(outdir, 'tractor', b.brickname[:3],
                               'tractor-%s.fits' % b.brickname)
             print('Looking for', fn)
             B.append(fits_table(fn))
@@ -975,7 +992,7 @@ def stage_srcs(coimgs=None, cons=None,
         B.cut(B.brick_primary)
         print(len(B), 'are BRICK_PRIMARY')
         # HACK -- Keep only sources within a margin of this brick
-        B.xx,B.yy = targetwcs.radec2pixelxy(B.ra, B.dec)
+        ok,B.xx,B.yy = targetwcs.radec2pixelxy(B.ra, B.dec)
         margin = 20
         B.cut((B.xx >= 1-margin) * (B.xx < W+margin) *
               (B.yy >= 1-margin) * (B.yy < H+margin))
@@ -992,35 +1009,36 @@ def stage_srcs(coimgs=None, cons=None,
 
         B.shapeexp = np.vstack((B.shapeexp_r, B.shapeexp_e1, B.shapeexp_e2)).T
         B.shapedev = np.vstack((B.shapedev_r, B.shapedev_e1, B.shapedev_e2)).T
-        bcat = read_fits_catalog(B, ellipseClass=tractor.ellipses.EllipseE)
+        bcat = read_fits_catalog(B, ellipseClass=EllipseE)
         print('Created', len(bcat), 'tractor catalog objects')
 
         # Trim off SDSS sources that overlap this brick.
-        keep_sdss = np.ones(len(T), bool)
-        for brick in bricks:
-            # Drop SDSS sources within the BRICK_PRIMARY region of the
-            # neighbouring brick.
-            keep_sdss[(T.ra  >= brick.ra1 ) * (T.ra  < brick.ra2 ) *
-                      (T.dec >= brick.dec1) * (t.dec < brick.dec2)] = False
-        if sum(keep_sdss) < len(keep_sdss):
-            print('Trimming', len(keep_sdss)-sum(keep_sdss),
-                  'SDSS sources within neighbouring bricks')
-            T.cut(keep_sdss)
-            cat = Catalog(*[src for src,keep in zip(cat,keep_sdss) if keep])
-            if sdss_xy is not None:
-                x,y = sdss_xy
-                sdss_xy = x[keep_sdss], y[keep_sdss]
+        if T is not None:
+            keep_sdss = np.ones(len(T), bool)
+            for brick in bricks:
+                # Drop SDSS sources within the BRICK_PRIMARY region of the
+                # neighbouring brick.
+                keep_sdss[(T.ra  >= brick.ra1 ) * (T.ra  < brick.ra2 ) *
+                          (T.dec >= brick.dec1) * (t.dec < brick.dec2)] = False
+            if sum(keep_sdss) < len(keep_sdss):
+                print('Trimming', len(keep_sdss)-sum(keep_sdss),
+                      'SDSS sources within neighbouring bricks')
+                T.cut(keep_sdss)
+                cat = Catalog(*[src for src,keep in zip(cat,keep_sdss) if keep])
+                if avoid_xy is not None:
+                    x,y = avoid_xy
+                    avoid_xy = x[keep_sdss], y[keep_sdss]
         
-        # Add the new sources to the 'sdss_xy' list, which are
+        # Add the new sources to the 'avoid_xy' list, which are
         # existing sources that should be avoided when detecting new
         # faint sources.
-        if sdss_xy is None:
-            sdss_xy = B.xx, B.yy
+        if avoid_xy is None:
+            avoid_xy = B.xx, B.yy
         else:
-            x,y = sdss_xy
-            sdss_xy = np.append(x, B.xx), np.append(y, B.yy)
+            x,y = avoid_xy
+            avoid_xy = np.append(x, B.xx), np.append(y, B.yy)
         
-        print('Subtracting tractor-on-bricks sources from other bricks')
+        print('Subtracting tractor-on-bricks sources belonging to other bricks')
         ## HACK -- note that this is going to screw up fracflux and
         ## other metrics for sources in this brick that overlap
         ## subtracted sources.
@@ -1032,13 +1050,19 @@ def stage_srcs(coimgs=None, cons=None,
             dimshow(get_rgb(coimgs, bands))
             plt.title('Before subtracting tractor-on-bricks marginal sources')
             ps.savefig()
-            
-        str = Tractor(tims, bcat)
-        str.freezeParam('images')
-        for tim,mod in zip(tims, str.getModelImages(sky=False)):
+
+        for i,src in enumerate(bcat):
+            print(' ', i, src)
+
+        tlast = Time()
+        mods = mp.map(_get_mod, [(tim, bcat) for tim in tims])
+        tnow = Time()
+        print('[parallel srcs] Getting tractor-on-bricks model images:', tnow-tlast)
+        tlast = tnow
+        for tim,mod in zip(tims, mods):
             tim.data -= mod
-            if plots:
-                mods.append(mod)
+        if not plots:
+            del mods
 
         if plots:
             coimgs,cons = compute_coadds(tims, bands, targetwcs, images=mods)
@@ -1052,7 +1076,32 @@ def stage_srcs(coimgs=None, cons=None,
             plt.title('After subtracting off marginal sources')
             ps.savefig()
             
-        
+    print('Rendering detection maps...')
+    detmaps, detivs = detection_maps(tims, targetwcs, bands, mp)
+    tnow = Time()
+    print('[parallel srcs] Detmaps:', tnow-tlast)
+
+    saturated_pix = None
+
+    if T is not None:
+
+        saturated_pix = np.zeros(detmaps[0].shape, bool)
+
+        for band,detmap,detiv in zip(bands, detmaps, detivs):
+            I = np.flatnonzero(detiv[T.ity, T.itx] == 0.)
+            print(len(I), 'SDSS sources have detiv = 0 in band', band)
+            if len(I) == 0:
+                continue
+
+            from scipy.ndimage.morphology import binary_propagation
+
+            # Set the central pixel of the detmap
+            saturated_pix[T.ity[I], T.itx[I]] = True
+            # Spread the True pixels wherever detiv==0
+            binary_propagation(saturated_pix, mask=(detiv == 0),
+                               output=saturated_pix)
+
+            
     tlast = tnow
     # Median-smooth detection maps
     binning = 4
@@ -1103,7 +1152,7 @@ def stage_srcs(coimgs=None, cons=None,
     print('Running source detection at', nsigma, 'sigma')
     SEDs = sed_matched_filters(bands)
     Tnew,newcat,hot = run_sed_matched_filters(
-        SEDs, bands, detmaps, detivs, sdss_xy, targetwcs,
+        SEDs, bands, detmaps, detivs, avoid_xy, targetwcs,
         nsigma=nsigma, saturated_pix=saturated_pix, plots=plots, ps=ps, mp=mp)
 
     peaksn = Tnew.peaksn
@@ -1499,7 +1548,7 @@ def stage_fitblobs_finish(
                         continue
                     src.shapeDev = src.shapeDev.toEllipseE()
                     src.shapeExp = src.shapeExp.toEllipseE()
-                    src.fracDev = FracDev(src.fracDev.getValue())
+                    src.fracDev = FracDev(src.fracDev.clipped())
 
             xcat.thawAllRecursive()
 
@@ -2318,7 +2367,7 @@ def _one_blob(X):
         elif isinstance(src, FixedCompositeGalaxy):
             ptsrc = PointSource(src.getPosition(), src.getBrightness()).copy()
             simple = SimpleGalaxy(src.getPosition(), src.getBrightness()).copy()
-            frac = src.fracDev.getValue()
+            frac = src.fracDev.clipped()
             if frac > 0:
                 shape = src.shapeDev
             else:
@@ -2626,8 +2675,8 @@ def _one_blob(X):
         elif isinstance(src, FixedCompositeGalaxy):
             src.shapeExp = src.shapeExp.toEllipseE()
             src.shapeDev = src.shapeDev.toEllipseE()
-            src.fracDev = FracDev(src.fracDev.getValue())
-            
+            src.fracDev = FracDev(src.fracDev.clipped())
+
         allderivs = subtr.getDerivs()
         for iparam,derivs in enumerate(allderivs):
             chisq = 0
@@ -2682,6 +2731,8 @@ def _one_blob(X):
             counts = np.zeros(len(B))
             pcal = tim.getPhotoCal()
 
+            # For each source, compute its model and record its flux
+            # in this image.  Also compute the full model *mod*.
             for isrc,src in enumerate(B.sources):
                 patch = subtr.getModelPatch(tim, src, minsb=tim.modelMinval)
                 if patch is None or patch.patch is None:
@@ -2695,6 +2746,7 @@ def _one_blob(X):
                 srcmods[isrc] = patch
                 patch.addTo(mod)
 
+            # Now compute metrics for each source
             for isrc,patch in enumerate(srcmods):
                 if patch is None:
                     continue
@@ -2703,8 +2755,14 @@ def _one_blob(X):
                 slc = patch.getSlice(mod)
                 # (mod - patch) is flux from others
                 # (mod - patch) / counts is normalized flux from others
-                # patch/counts is unit profile
-                fracflux_num[isrc,iband] += np.sum((mod[slc] - patch.patch) * np.abs(patch.patch)) / counts[isrc]**2
+                # We take that and weight it by this source's profile;
+                #  patch / counts is unit profile
+                # But this takes the dot product between the profiles,
+                # so we have to normalize appropriately, ie by
+                # (patch**2)/counts**2; counts**2 drops out of the
+                # denom.  If you have an identical source with twice the flux,
+                # this results in fracflux being 2.0
+                fracflux_num[isrc,iband] += np.sum((mod[slc] - patch.patch) * np.abs(patch.patch)) / np.sum(patch.patch**2)
                 fracflux_den[isrc,iband] += np.sum(np.abs(patch.patch)) / np.abs(counts[isrc])
 
                 fracmasked_num[isrc,iband] += np.sum((tim.getInvError()[slc] == 0) * np.abs(patch.patch)) / np.abs(counts[isrc])
@@ -3691,7 +3749,8 @@ def run_brick(brick, radec=None, pixscale=0.262,
             brick = ('custom-%06i%s%05i' %
                          (int(1000*ra), 'm' if dec < 0 else 'p',
                           int(1000*np.abs(dec))))
-    initargs.update(brickname=brick)
+    initargs.update(brickname=brick,
+                    decals=decals)
 
     stagefunc = CallGlobalTime('stage_%s', globals())
 
@@ -3713,7 +3772,6 @@ def run_brick(brick, radec=None, pixscale=0.262,
                   write_metrics=write_metrics,
                   on_bricks=on_bricks,
                   outdir=outdir, decals_dir=decals_dir, unwise_dir=unwise_dir,
-                  decals=decals,
                   plots=plots, plots2=plots2, coadd_bw=coadd_bw,
                   force=forceStages, write=writePickles)
 
