@@ -3161,6 +3161,7 @@ def stage_writecat(
     version_header=None,
     T=None,
     WISE=None,
+    no_sdss=False,
     AP=None,
     apertures_arcsec=None,
     cat=None, targetrd=None, pixscale=None, targetwcs=None,
@@ -3367,8 +3368,7 @@ def stage_writecat(
         cols.extend([
                 'wise_flux', 'wise_flux_ivar',
                 'wise_mw_transmission', 'wise_nobs', 'wise_fracflux',
-                'wise_rchi2',
-                ])
+                'wise_rchi2'])
     cols.extend([
         'dchisq',
         'fracdev', 'fracDev_ivar', 'shapeexp_r', 'shapeexp_r_ivar',
@@ -3377,26 +3377,25 @@ def stage_writecat(
         'shapedev_r',  'shapedev_r_ivar',
         'shapedev_e1', 'shapedev_e1_ivar',
         'shapedev_e2', 'shapedev_e2_ivar',
-        'ebv', 'sdss_run',
-        'sdss_camcol', 'sdss_field', 'sdss_id', 'sdss_objid', 'sdss_parent',
-        'sdss_nchild', 'sdss_objc_type', 'sdss_objc_flags', 'sdss_objc_flags2',
-        'sdss_flags', 'sdss_flags2', 'sdss_tai',
-        'sdss_ra',  'sdss_ra_ivar',
-        'sdss_dec', 'sdss_dec_ivar',
-        'sdss_psf_fwhm', 'sdss_mjd',
-        'sdss_theta_dev', 'sdss_theta_deverr',
-        'sdss_ab_dev',    'sdss_ab_deverr',
-        'sdss_theta_exp', 'sdss_theta_experr',
-        'sdss_ab_exp', 'sdss_ab_experr',
-        'sdss_fracdev', 'sdss_phi_dev_deg', 'sdss_phi_exp_deg',
-        'sdss_psfflux',    'sdss_psfflux_ivar',
-        'sdss_cmodelflux', 'sdss_cmodelflux_ivar',
-        'sdss_modelflux',  'sdss_modelflux_ivar',
-        'sdss_devflux',    'sdss_devflux_ivar',
-        'sdss_expflux',    'sdss_expflux_ivar',
-        'sdss_extinction', 'sdss_calib_status',
-        'sdss_resolve_status',
-        ])
+        'ebv'])
+    if not no_sdss:
+        cols.extend([
+            'sdss_run', 'sdss_camcol', 'sdss_field', 'sdss_id', 'sdss_objid',
+            'sdss_parent', 'sdss_nchild', 'sdss_objc_type', 'sdss_objc_flags',
+            'sdss_objc_flags2', 'sdss_flags', 'sdss_flags2', 'sdss_tai',
+            'sdss_ra',  'sdss_ra_ivar', 'sdss_dec', 'sdss_dec_ivar',
+            'sdss_psf_fwhm', 'sdss_mjd',
+            'sdss_theta_dev', 'sdss_theta_deverr',
+            'sdss_ab_dev',    'sdss_ab_deverr',
+            'sdss_theta_exp', 'sdss_theta_experr',
+            'sdss_ab_exp', 'sdss_ab_experr',
+            'sdss_fracdev', 'sdss_phi_dev_deg', 'sdss_phi_exp_deg',
+            'sdss_psfflux',    'sdss_psfflux_ivar',
+            'sdss_cmodelflux', 'sdss_cmodelflux_ivar',
+            'sdss_modelflux',  'sdss_modelflux_ivar',
+            'sdss_devflux',    'sdss_devflux_ivar',
+            'sdss_expflux',    'sdss_expflux_ivar',
+            'sdss_extinction', 'sdss_calib_status', 'sdss_resolve_status'])
 
     # TUNIT cards.
     deg='deg'
@@ -3497,28 +3496,24 @@ def stage_writecat(
             if c in arrtypes:
                 T2.set(c, np.zeros((len(T2),5), arrtypes[c]))
 
-    # Blank out all SDSS fields for sources that have moved too much.
-    xyz1 = radectoxyz(T2.ra, T2.dec)
-    xyz2 = radectoxyz(T2.sdss_ra, T2.sdss_dec)
-    d2 = np.sum((xyz2-xyz1)**2, axis=1)
-    # 1.5 arcsec
-    maxd2 = np.deg2rad(1.5 / 3600.)**2
-    blankout = np.flatnonzero((T2.sdss_ra != 0) * (d2 > maxd2))
-    print('Blanking out', len(blankout), 'SDSS no-longer-matches')
-    if len(blankout):
-        Tcols = T2.get_columns()
-        for c in Tcols:
-            if c.startswith('sdss'):
-                x = T2.get(c)
-                x[blankout] = 0
+    if not no_sdss:
+        # Blank out all SDSS fields for sources that have moved too much.
+        xyz1 = radectoxyz(T2.ra, T2.dec)
+        xyz2 = radectoxyz(T2.sdss_ra, T2.sdss_dec)
+        d2 = np.sum((xyz2-xyz1)**2, axis=1)
+        # 1.5 arcsec
+        maxd2 = np.deg2rad(1.5 / 3600.)**2
+        blankout = np.flatnonzero((T2.sdss_ra != 0) * (d2 > maxd2))
+        print('Blanking out', len(blankout), 'SDSS no-longer-matches')
+        if len(blankout):
+            Tcols = T2.get_columns()
+            for c in Tcols:
+                if c.startswith('sdss'):
+                    x = T2.get(c)
+                    x[blankout] = 0
 
     if write_catalog:
         T2.writeto(fn, primheader=primhdr, header=hdr, columns=cols)
-        # arrays = [T2.get(c) for c in cols]
-        # arrays = [np.array(a) if isinstance(a,list) else a
-        #           for a in arrays]
-        # fitsio.write(fn, None, header=primhdr, clobber=True)
-        # fitsio.write(fn, arrays, names=cols, header=hdr)
         print('Wrote', fn)
 
     return dict(T2=T2)
