@@ -1548,7 +1548,7 @@ def stage_fitblobs_finish(
                         continue
                     src.shapeDev = src.shapeDev.toEllipseE()
                     src.shapeExp = src.shapeExp.toEllipseE()
-                    src.fracDev = FracDev(src.fracDev.getValue())
+                    src.fracDev = FracDev(src.fracDev.clipped())
 
             xcat.thawAllRecursive()
 
@@ -2367,7 +2367,7 @@ def _one_blob(X):
         elif isinstance(src, FixedCompositeGalaxy):
             ptsrc = PointSource(src.getPosition(), src.getBrightness()).copy()
             simple = SimpleGalaxy(src.getPosition(), src.getBrightness()).copy()
-            frac = src.fracDev.getValue()
+            frac = src.fracDev.clipped()
             if frac > 0:
                 shape = src.shapeDev
             else:
@@ -2675,8 +2675,8 @@ def _one_blob(X):
         elif isinstance(src, FixedCompositeGalaxy):
             src.shapeExp = src.shapeExp.toEllipseE()
             src.shapeDev = src.shapeDev.toEllipseE()
-            src.fracDev = FracDev(src.fracDev.getValue())
-            
+            src.fracDev = FracDev(src.fracDev.clipped())
+
         allderivs = subtr.getDerivs()
         for iparam,derivs in enumerate(allderivs):
             chisq = 0
