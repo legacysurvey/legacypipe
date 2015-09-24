@@ -1032,11 +1032,13 @@ def stage_srcs(coimgs=None, cons=None,
         # Add the new sources to the 'avoid_xy' list, which are
         # existing sources that should be avoided when detecting new
         # faint sources.
+        ax = np.round(B.xx - 1).astype(int)
+        ay = np.round(B.yy - 1).astype(int)
         if avoid_xy is None:
-            avoid_xy = B.xx, B.yy
+            avoid_xy = ax, ay
         else:
             x,y = avoid_xy
-            avoid_xy = np.append(x, B.xx), np.append(y, B.yy)
+            avoid_xy = np.append(x, ax).astype(int), np.append(y, ay).astype(int)
         
         print('Subtracting tractor-on-bricks sources belonging to other bricks')
         ## HACK -- note that this is going to screw up fracflux and

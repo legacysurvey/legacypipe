@@ -500,7 +500,8 @@ def sed_matched_detection(sedname, sed, detmaps, detivs, bands,
     hbmap = np.zeros(nhot+1, bool)
     hbmap[hotblobs[py,px]] = True
     if len(xomit):
-        hbmap[hotblobs[yomit,xomit]] = True
+        h,w = hotblobs.shape
+        hbmap[hotblobs[np.clip(yomit, 0, h-1), np.clip(xomit, 0, w-1)]] = True
     # in case a source is (somehow) not in a hotblob?
     hbmap[0] = False
     hotblobs = hbmap[hotblobs]
