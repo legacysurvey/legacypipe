@@ -1011,13 +1011,16 @@ def stage_srcs(coimgs=None, cons=None,
 
         for i,src in enumerate(bcat):
             print(' ', i, src)
-            
-        stractor = Tractor(tims, bcat)
-        for tim,mod in zip(tims, stractor.getModelImages(sky=False)):
-            print('Subtracting tractor-on-bricks model from', tim)
+
+        tlast = Time()
+        mods = mp.map(_get_mod, [(tim, bcat) for tim in tims])
+        tnow = Time()
+        print('[parallel srcs] Getting tractor-on-bricks model images:', tnow-tlast)
+        tlast = tnow
+        for tim,mod in zip(tims, mods):
             tim.data -= mod
-            if plots:
-                mods.append(mod)
+        if not plots:
+            del mods
 
         if plots:
             coimgs,cons = compute_coadds(tims, bands, targetwcs, images=mods)
