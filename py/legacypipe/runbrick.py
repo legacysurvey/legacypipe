@@ -1814,7 +1814,10 @@ def _chisq_improvement(src, chisqs, chisqs_none):
             continue
         # this will be positive for an improved model
         d = chisqs_none[b] - chisqs[b]
-        dchisq += np.sign(flux) * d
+        if flux > 0:
+            dchisq += d
+        else:
+            dchisq -= np.abs(d)
     return dchisq
 
 def _per_band_chisqs(srctractor, bands):
@@ -2658,7 +2661,9 @@ def _one_blob(X):
     subtr.catalog = subcat
 
     # Do another quick round of flux-only fitting?
-    _fit_fluxes(subcat, subtims, bands, use_ceres, alphas)
+    # This does horribly -- fluffy galaxies go out of control because they're only constrained
+    # by pixels within this blob.
+    #_fit_fluxes(subcat, subtims, bands, use_ceres, alphas)
     
     # print('After cutting sources:')
     # for src,dchi in zip(B.sources, B.dchisqs):
