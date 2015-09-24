@@ -948,7 +948,7 @@ def stage_srcs(coimgs=None, cons=None,
         T.dec_ivar  = 1./err**2
         T.delete_column('raerr')
         T.delete_column('decerr')
-        sdss_xy = T.itx, T.ity
+        avoid_xy = T.itx, T.ity
 
         for c in T.columns():
             if c in ['itx','ity']:
@@ -957,7 +957,7 @@ def stage_srcs(coimgs=None, cons=None,
             T.rename(c, 'sdss_c')
 
     else:
-        sdss_xy = None
+        avoid_xy = None
 
     if on_bricks:
         from legacypipe.desi_common import read_fits_catalog
@@ -1025,18 +1025,18 @@ def stage_srcs(coimgs=None, cons=None,
                       'SDSS sources within neighbouring bricks')
                 T.cut(keep_sdss)
                 cat = Catalog(*[src for src,keep in zip(cat,keep_sdss) if keep])
-                if sdss_xy is not None:
-                    x,y = sdss_xy
-                    sdss_xy = x[keep_sdss], y[keep_sdss]
+                if avoid_xy is not None:
+                    x,y = avoid_xy
+                    avoid_xy = x[keep_sdss], y[keep_sdss]
         
-        # Add the new sources to the 'sdss_xy' list, which are
+        # Add the new sources to the 'avoid_xy' list, which are
         # existing sources that should be avoided when detecting new
         # faint sources.
-        if sdss_xy is None:
-            sdss_xy = B.xx, B.yy
+        if avoid_xy is None:
+            avoid_xy = B.xx, B.yy
         else:
-            x,y = sdss_xy
-            sdss_xy = np.append(x, B.xx), np.append(y, B.yy)
+            x,y = avoid_xy
+            avoid_xy = np.append(x, B.xx), np.append(y, B.yy)
         
         print('Subtracting tractor-on-bricks sources belonging to other bricks')
         ## HACK -- note that this is going to screw up fracflux and
@@ -1056,6 +1056,7 @@ def stage_srcs(coimgs=None, cons=None,
             
         stractor = Tractor(tims, bcat)
         for tim,mod in zip(tims, stractor.getModelImages(sky=False)):
+            print('Subtracting tractor-on-bricks model from', tim)
             tim.data -= mod
             if plots:
                 mods.append(mod)
@@ -1072,8 +1073,6 @@ def stage_srcs(coimgs=None, cons=None,
             plt.title('After subtracting off marginal sources')
             ps.savefig()
             
-
-
     print('Rendering detection maps...')
     detmaps, detivs = detection_maps(tims, targetwcs, bands, mp)
     tnow = Time()
@@ -1081,7 +1080,7 @@ def stage_srcs(coimgs=None, cons=None,
 
     saturated_pix = None
 
-    if sdss_xy is not None:
+    if T is not None:
 
         saturated_pix = np.zeros(detmaps[0].shape, bool)
 
@@ -1150,7 +1149,7 @@ def stage_srcs(coimgs=None, cons=None,
     print('Running source detection at', nsigma, 'sigma')
     SEDs = sed_matched_filters(bands)
     Tnew,newcat,hot = run_sed_matched_filters(
-        SEDs, bands, detmaps, detivs, sdss_xy, targetwcs,
+        SEDs, bands, detmaps, detivs, avoid_xy, targetwcs,
         nsigma=nsigma, saturated_pix=saturated_pix, plots=plots, ps=ps, mp=mp)
 
     peaksn = Tnew.peaksn
