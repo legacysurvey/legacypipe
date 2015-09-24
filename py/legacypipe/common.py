@@ -69,6 +69,13 @@ class SimpleGalaxy(ExpGalaxy):
         super(SimpleGalaxy, self).__init__(*args)
         self.shape = SimpleGalaxy.shape
 
+    def __str__(self):
+        return (self.name + ' at ' + str(self.pos)
+                + ' with ' + str(self.brightness))
+    def __repr__(self):
+        return (self.name + '(pos=' + repr(self.pos) +
+                ', brightness=' + repr(self.brightness) + ')')
+        
     @staticmethod
     def getNamedParams():
         return dict(pos=0, brightness=1)
@@ -812,8 +819,9 @@ Using the current directory as DECALS_DIR, but this is likely to fail.
         print('Reading CCDs from', fn)
         T = fits_table(fn)
         print('Got', len(T), 'CCDs')
-        # "N4 " -> "N4"
-        T.ccdname = np.array([s.strip() for s in T.ccdname])
+        if 'ccdname' in T.columns():
+            # "N4 " -> "N4"
+            T.ccdname = np.array([s.strip() for s in T.ccdname])
         return T
 
     def ccds_touching_wcs(self, wcs, **kwargs):

@@ -51,7 +51,7 @@ from astrometry.util.miscutils import patch_image
 
 from tractor import Tractor, PointSource, Image, NanoMaggies
 from tractor.ellipses import EllipseESoft, EllipseE
-from tractor.galaxy import DevGalaxy, ExpGalaxy, FixedCompositeGalaxy, disable_galaxy_cache
+from tractor.galaxy import DevGalaxy, ExpGalaxy, FixedCompositeGalaxy, SoftenedFracDev, FracDev, disable_galaxy_cache
 
 # Argh, can't do relative imports if this script is to be runnable.
 from legacypipe.common import *
@@ -384,7 +384,7 @@ def stage_tims(W=3600, H=3600, pixscale=0.262, brickname=None,
 
     keys = ['version_header', 'targetrd', 'pixscale', 'targetwcs', 'W','H',
             'bands', 'tims', 'ps', 'brickid', 'brickname', 'brick',
-            'target_extent', 'ccds', 'bands']
+            'target_extent', 'ccds', 'bands', 'decals']
     if not pipe:
         keys.extend(['coimgs', 'cons'])
     rtn = dict()
@@ -958,6 +958,122 @@ def stage_srcs(coimgs=None, cons=None,
 
     else:
         sdss_xy = None
+
+    if on_bricks:
+        from legacypipe.desi_common import read_fits_catalog
+        # Find nearby bricks from earlier brick phases
+        bricks = decals.get_bricks_readonly()
+        print(len(bricks), 'bricks')
+        bricks = bricks[bricks.brickq < brick.brickq]
+        print(len(bricks), 'from phases before this brickq:', brick.brickq)
+        if len(bricks):
+            from astrometry.libkd.spherematch import match_radec
+
+            bricks.cut(np.abs(brick.dec - bricks.dec) < 1)
+            print(len(bricks), 'within 1 degree of Dec')
+            radius = np.sqrt(2.) * np.abs(brick.dec2 - brick.dec1)
+            I,J,d = match_radec(brick.ra, brick.dec, bricks.ra, bricks.dec,
+                                radius)
+            bricks.cut(J)
+            print(len(bricks), 'within', radius, 'degrees')
+        else:
+            bricks = []
+        B = []
+        if outdir is None:
+            outdir = '.'
+        for b in bricks:
+            fn = os.path.join(outdir, 'tractor', b.brickname[:3],
+                              'tractor-%s.fits' % b.brickname)
+            print('Looking for', fn)
+            B.append(fits_table(fn))
+        B = merge_tables(B)
+        print('Total of', len(B), 'sources from neighbouring bricks')
+        # Keep only sources that are primary in their own brick
+        B.cut(B.brick_primary)
+        print(len(B), 'are BRICK_PRIMARY')
+        # HACK -- Keep only sources within a margin of this brick
+        ok,B.xx,B.yy = targetwcs.radec2pixelxy(B.ra, B.dec)
+        margin = 20
+        B.cut((B.xx >= 1-margin) * (B.xx < W+margin) *
+              (B.yy >= 1-margin) * (B.yy < H+margin))
+        print(len(B), 'are within this image + margin')
+        B.cut((B.out_of_bounds == False) * (B.left_blob == False))
+        print(len(B), 'do not have out_of_bounds or left_blob set')
+
+        # Note that we shouldn't need to drop sources that are within this
+        # current brick's unique area, because we cut to sources that are
+        # BRICK_PRIMARY within their own brick.
+        
+        # Create sources for these catalog entries
+        ### see forced-photom-decam.py for some additional patchups?
+
+        B.shapeexp = np.vstack((B.shapeexp_r, B.shapeexp_e1, B.shapeexp_e2)).T
+        B.shapedev = np.vstack((B.shapedev_r, B.shapedev_e1, B.shapedev_e2)).T
+        bcat = read_fits_catalog(B, ellipseClass=EllipseE)
+        print('Created', len(bcat), 'tractor catalog objects')
+
+        # Trim off SDSS sources that overlap this brick.
+        if T is not None:
+            keep_sdss = np.ones(len(T), bool)
+            for brick in bricks:
+                # Drop SDSS sources within the BRICK_PRIMARY region of the
+                # neighbouring brick.
+                keep_sdss[(T.ra  >= brick.ra1 ) * (T.ra  < brick.ra2 ) *
+                          (T.dec >= brick.dec1) * (t.dec < brick.dec2)] = False
+            if sum(keep_sdss) < len(keep_sdss):
+                print('Trimming', len(keep_sdss)-sum(keep_sdss),
+                      'SDSS sources within neighbouring bricks')
+                T.cut(keep_sdss)
+                cat = Catalog(*[src for src,keep in zip(cat,keep_sdss) if keep])
+                if sdss_xy is not None:
+                    x,y = sdss_xy
+                    sdss_xy = x[keep_sdss], y[keep_sdss]
+        
+        # Add the new sources to the 'sdss_xy' list, which are
+        # existing sources that should be avoided when detecting new
+        # faint sources.
+        if sdss_xy is None:
+            sdss_xy = B.xx, B.yy
+        else:
+            x,y = sdss_xy
+            sdss_xy = np.append(x, B.xx), np.append(y, B.yy)
+        
+        print('Subtracting tractor-on-bricks sources belonging to other bricks')
+        ## HACK -- note that this is going to screw up fracflux and
+        ## other metrics for sources in this brick that overlap
+        ## subtracted sources.
+        if plots:
+            mods = []
+            # Before...
+            coimgs,cons = compute_coadds(tims, bands, targetwcs)
+            plt.clf()
+            dimshow(get_rgb(coimgs, bands))
+            plt.title('Before subtracting tractor-on-bricks marginal sources')
+            ps.savefig()
+
+        for i,src in enumerate(bcat):
+            print(' ', i, src)
+            
+        stractor = Tractor(tims, bcat)
+        for tim,mod in zip(tims, stractor.getModelImages(sky=False)):
+            tim.data -= mod
+            if plots:
+                mods.append(mod)
+
+        if plots:
+            coimgs,cons = compute_coadds(tims, bands, targetwcs, images=mods)
+            plt.clf()
+            dimshow(get_rgb(coimgs, bands))
+            plt.title('Marginal sources subtracted off')
+            ps.savefig()
+            coimgs,cons = compute_coadds(tims, bands, targetwcs)
+            plt.clf()
+            dimshow(get_rgb(coimgs, bands))
+            plt.title('After subtracting off marginal sources')
+            ps.savefig()
+            
+
+
     print('Rendering detection maps...')
     detmaps, detivs = detection_maps(tims, targetwcs, bands, mp)
     tnow = Time()
@@ -983,118 +1099,7 @@ def stage_srcs(coimgs=None, cons=None,
             binary_propagation(saturated_pix, mask=(detiv == 0),
                                output=saturated_pix)
 
-
-    if on_bricks:
-        from legacypipe.desi_common import read_fits_catalog
-        # Find nearby bricks from earlier brick phases
-        bricks = decals.get_bricks_readonly()
-        print(len(bricks), 'bricks')
-        bricks = bricks[bricks.brickq < brick.brickq]
-        print(len(bricks), 'from phases before this brickq:', brick.brickq)
-        if len(bricks):
-            from astrometry.libkd.spherematch import match_radec
-
-            bricks.cut(np.abs(brick.dec - bricks.dec) < 1)
-            print(len(bricks), 'within 1 degree of Dec')
-            radius = np.sqrt(2.) * np.abs(brick.dec2 - brick.dec1)
-            I,J,d = match_radec(brick.ra, brick.dec, bricks.ra, bricks.dec,
-                                radius)
-            bricks.cut(J)
-            print(len(bricks), 'within', radius, 'degrees')
-        else:
-            bricks = []
-        B = []
-        if outdir is None:
-            outdir = '.'
-        for b in bricks:
-            fn = os.path.join('tractor', b.brickname[:3],
-                              'tractor-%s.fits' % b.brickname)
-            print('Looking for', fn)
-            B.append(fits_table(fn))
-        B = merge_tables(B)
-        print('Total of', len(B), 'sources from neighbouring bricks')
-        # Keep only sources that are primary in their own brick
-        B.cut(B.brick_primary)
-        print(len(B), 'are BRICK_PRIMARY')
-        # HACK -- Keep only sources within a margin of this brick
-        B.xx,B.yy = targetwcs.radec2pixelxy(B.ra, B.dec)
-        margin = 20
-        B.cut((B.xx >= 1-margin) * (B.xx < W+margin) *
-              (B.yy >= 1-margin) * (B.yy < H+margin))
-        print(len(B), 'are within this image + margin')
-        B.cut((B.out_of_bounds == False) * (B.left_blob == False))
-        print(len(B), 'do not have out_of_bounds or left_blob set')
-
-        # Note that we shouldn't need to drop sources that are within this
-        # current brick's unique area, because we cut to sources that are
-        # BRICK_PRIMARY within their own brick.
-        
-        # Create sources for these catalog entries
-        ### see forced-photom-decam.py for some additional patchups?
-
-        B.shapeexp = np.vstack((B.shapeexp_r, B.shapeexp_e1, B.shapeexp_e2)).T
-        B.shapedev = np.vstack((B.shapedev_r, B.shapedev_e1, B.shapedev_e2)).T
-        bcat = read_fits_catalog(B, ellipseClass=tractor.ellipses.EllipseE)
-        print('Created', len(bcat), 'tractor catalog objects')
-
-        # Trim off SDSS sources that overlap this brick.
-        keep_sdss = np.ones(len(T), bool)
-        for brick in bricks:
-            # Drop SDSS sources within the BRICK_PRIMARY region of the
-            # neighbouring brick.
-            keep_sdss[(T.ra  >= brick.ra1 ) * (T.ra  < brick.ra2 ) *
-                      (T.dec >= brick.dec1) * (t.dec < brick.dec2)] = False
-        if sum(keep_sdss) < len(keep_sdss):
-            print('Trimming', len(keep_sdss)-sum(keep_sdss),
-                  'SDSS sources within neighbouring bricks')
-            T.cut(keep_sdss)
-            cat = Catalog(*[src for src,keep in zip(cat,keep_sdss) if keep])
-            if sdss_xy is not None:
-                x,y = sdss_xy
-                sdss_xy = x[keep_sdss], y[keep_sdss]
-        
-        # Add the new sources to the 'sdss_xy' list, which are
-        # existing sources that should be avoided when detecting new
-        # faint sources.
-        if sdss_xy is None:
-            sdss_xy = B.xx, B.yy
-        else:
-            x,y = sdss_xy
-            sdss_xy = np.append(x, B.xx), np.append(y, B.yy)
-        
-        print('Subtracting tractor-on-bricks sources from other bricks')
-        ## HACK -- note that this is going to screw up fracflux and
-        ## other metrics for sources in this brick that overlap
-        ## subtracted sources.
-        if plots:
-            mods = []
-            # Before...
-            coimgs,cons = compute_coadds(tims, bands, targetwcs)
-            plt.clf()
-            dimshow(get_rgb(coimgs, bands))
-            plt.title('Before subtracting tractor-on-bricks marginal sources')
-            ps.savefig()
             
-        str = Tractor(tims, bcat)
-        str.freezeParam('images')
-        for tim,mod in zip(tims, str.getModelImages(sky=False)):
-            tim.data -= mod
-            if plots:
-                mods.append(mod)
-
-        if plots:
-            coimgs,cons = compute_coadds(tims, bands, targetwcs, images=mods)
-            plt.clf()
-            dimshow(get_rgb(coimgs, bands))
-            plt.title('Marginal sources subtracted off')
-            ps.savefig()
-            coimgs,cons = compute_coadds(tims, bands, targetwcs)
-            plt.clf()
-            dimshow(get_rgb(coimgs, bands))
-            plt.title('After subtracting off marginal sources')
-            ps.savefig()
-            
-        
     tlast = tnow
     # Median-smooth detection maps
     binning = 4
@@ -1541,6 +1546,7 @@ def stage_fitblobs_finish(
                         continue
                     src.shapeDev = src.shapeDev.toEllipseE()
                     src.shapeExp = src.shapeExp.toEllipseE()
+                    src.fracDev = FracDev(src.fracDev.getValue())
 
             xcat.thawAllRecursive()
 
@@ -1553,6 +1559,17 @@ def stage_fitblobs_finish(
             TT.set('%s_flags' % prefix,
                    np.array([m.get(srctype,0)
                              for m in BB.all_model_flags]))
+
+            print('all_model_fluxivs:', BB.all_model_fluxivs)
+            fluxivs = np.zeros((len(TT), len(allbands)), np.float32)
+            bandmap = np.array([allbands.index(b) for b in bands])
+            for j in range(len(xcat)):
+                f = BB.all_model_fluxivs[j].get(srctype, None)
+                if f is None:
+                    continue
+                fluxivs[j, bandmap] = f
+            TT.set('%s_decam_flux_ivar' % prefix, fluxivs)
+            
         TT.delete_column('psf_shapeExp')
         TT.delete_column('psf_shapeDev')
         TT.delete_column('psf_fracDev')
@@ -1779,6 +1796,116 @@ def _per_band_chisqs(srctractor, bands):
         chisqs[img.band] = chisqs[img.band] + (chi ** 2).sum()
     return chisqs
 
+def _fit_fluxes(cat, tims, bands, use_ceres, alphas):
+    # Try fitting fluxes first?
+    cat.thawAllRecursive()
+    for src in cat:
+        src.freezeAllBut('brightness')
+    for b in bands:
+        for src in cat:
+            src.getBrightness().freezeAllBut(b)
+        # Images for this band
+        btims = [tim for tim in tims if tim.band == b]
+        
+        btr = Tractor(btims, cat)
+        btr.freezeParam('images')
+        done = False
+        if use_ceres:
+            from tractor.ceres_optimizer import CeresOptimizer
+            orig_opt = btr.optimizer
+            btr.optimizer = CeresOptimizer(BW=8, BH=8)
+            try:
+                btr.optimize_forced_photometry(shared_params=False,
+                                               wantims=False)
+                done = True
+            except:
+                import traceback
+                print('Warning: Optimize_forced_photometry with Ceres failed:')
+                traceback.print_exc()
+                print('Falling back to LSQR')
+            btr.optimizer = orig_opt
+        if not done:
+            try:
+                btr.optimize_forced_photometry(
+                    alphas=alphas, shared_params=False, wantims=False)
+            except:
+                import traceback
+                print('Warning: Optimize_forced_photometry failed:')
+                traceback.print_exc()
+                # carry on
+
+                
+class SourceModels(object):
+    '''
+    This class maintains a list of the model patches for a set of sources
+    in a set of images.
+    '''
+    def save_images(self, tims):
+        self.orig_images = [tim.getImage() for tim in tims]
+        for tim,img in zip(tims, self.orig_images):
+            tim.data = img.copy()
+
+    def restore_images(self, tims):
+        for tim,img in zip(tims, self.orig_images):
+            tim.data = img
+            
+    def create(self, tims, srcs, subtract=False):
+        '''
+        Note that this modifies the *tims* if subtract=True.
+        '''
+        self.models = []
+        for tim in tims:
+            mods = []
+            sh = tim.shape
+            ie = tim.getInvError()
+            for src in srcs:
+                mod = src.getModelPatch(tim)
+                if mod is not None and mod.patch is not None:
+                    if not np.all(np.isfinite(mod.patch)):
+                        print('Non-finite mod patch')
+                        print('source:', src)
+                        print('tim:', tim)
+                        print('PSF:', tim.getPsf())
+                    assert(np.all(np.isfinite(mod.patch)))
+                    mod = _clip_model_to_blob(mod, sh, ie)
+                    if subtract:
+                        mod.addTo(tim.getImage(), scale=-1)
+                mods.append(mod)
+            self.models.append(mods)
+
+    def add(self, i, tims):
+        '''
+        Adds the models for source *i* back into the tims.
+        '''
+        for tim,mods in zip(tims, self.models):
+            mod = mods[i]
+            if mod is not None:
+                mod.addTo(tim.getImage())
+
+    def update_and_subtract(self, i, src, tims):
+        for tim,mods in zip(tims, self.models):
+            #mod = srctractor.getModelPatch(tim, src)
+            if src is None:
+                mod = None
+            else:
+                mod = src.getModelPatch(tim)
+            if mod is not None:
+                mod.addTo(tim.getImage(), scale=-1)
+            mods[i] = mod
+                
+    def model_masks(self, i, src):
+        modelMasks = []
+        for mods in self.models:
+            d = dict()
+            modelMasks.append(d)
+            mod = mods[i]
+            if mod is not None:
+                d[src] = Patch(mod.x0, mod.y0, mod.patch != 0)
+        return modelMasks
+
+                
+
+
 def _one_blob(X):
     '''
     Fits sources contained within a "blob" of pixels.
@@ -1853,48 +1980,10 @@ def _one_blob(X):
     subtr = Tractor(subtims, subcat)
     subtr.freezeParam('images')
 
-    # Try fitting fluxes first?
-    subcat.thawAllRecursive()
-    for src in srcs:
-        src.freezeAllBut('brightness')
-    for b in bands:
-        #tband = Time()
-        for src in srcs:
-            src.getBrightness().freezeAllBut(b)
-        btims = []
-        for tim in subtims:
-            if tim.band != b:
-                continue
-            btims.append(tim)
+    print('Subtims:', [s.shape for s in subtims])
 
-        
-        btr = Tractor(btims, subcat)
-        btr.freezeParam('images')
-        done = False
-        if use_ceres:
-            from tractor.ceres_optimizer import CeresOptimizer
-            orig_opt = btr.optimizer
-            btr.optimizer = CeresOptimizer(BW=8, BH=8)
-            try:
-                btr.optimize_forced_photometry(shared_params=False,
-                                               wantims=False)
-                done = True
-            except:
-                import traceback
-                print('Warning: Optimize_forced_photometry with Ceres failed:')
-                traceback.print_exc()
-                print('Falling back to LSQR')
-            btr.optimizer = orig_opt
-        if not done:
-            try:
-                btr.optimize_forced_photometry(
-                    alphas=alphas, shared_params=False, wantims=False)
-            except:
-                import traceback
-                print('Warning: Optimize_forced_photometry failed:')
-                traceback.print_exc()
-                # carry on
-
+    _fit_fluxes(subcat, subtims, bands, use_ceres, alphas)
+    
     subcat.thawAllRecursive()
 
     if plots:
@@ -1913,7 +2002,7 @@ def _one_blob(X):
         fluxes.append(flux)
     Ibright = np.argsort(-np.array(fluxes))
 
-    if len(Ibright) > 1:
+    if len(subcat) > 1:
         # -Remember the original subtim images
         # -Compute initial models for each source (in each tim)
         # -Subtract initial models from images
@@ -1922,38 +2011,13 @@ def _one_blob(X):
         #   -fit, with Catalog([src])
         #   -subtract final model (from each tim)
         # -Replace original subtim images
-        #
-        # --Might want to omit newly-added detection-filter sources, since their
-        # fluxes are bogus.
 
+        models = SourceModels()
         # Remember original tim images
-        orig_timages = [tim.getImage() for tim in subtims]
-        for tim,img in zip(subtims,orig_timages):
-            tim.data = img.copy()
-
-        # Create initial models for each tim x each source
-        # initial_models is a list-of-lists: initial_models[itim][isrc]
-        initial_models = []
-        #tt = Time()
-        for tim in subtims:
-            mods = []
-            sh = tim.shape
-            ie = tim.getInvError()
-            for src in subcat:
-                mod = src.getModelPatch(tim)
-                if mod is not None and mod.patch is not None:
-                    if not np.all(np.isfinite(mod.patch)):
-                        print('Non-finite mod patch')
-                        print('source:', src)
-                        print('tim:', tim)
-                        print('PSF:', tim.getPsf())
-                    assert(np.all(np.isfinite(mod.patch)))
-                    mod = _clip_model_to_blob(mod, sh, ie)
-                    mod.addTo(tim.getImage(), scale=-1)
-                mods.append(mod)
-
-            initial_models.append(mods)
-
+        models.save_images(subtims)
+        # Create & subtract initial models for each tim x each source
+        models.create(subtims, srcs, subtract=True)
+        
         # For sources, in decreasing order of brightness
         for numi,i in enumerate(Ibright):
             #tsrc = Time()
@@ -1962,11 +2026,8 @@ def _one_blob(X):
             src = subcat[i]
 
             # Add this source's initial model back in.
-            for tim,mods in zip(subtims, initial_models):
-                mod = mods[i]
-                if mod is not None:
-                    mod.addTo(tim.getImage())
-
+            models.add(i, subtims)
+            
             if bigblob:
                 # Create super-local sub-sub-tims around this source
 
@@ -1974,7 +2035,7 @@ def _one_blob(X):
                 srctims = []
                 modelMasks = []
                 #print('Big blob: trimming:')
-                for tim,imods in zip(subtims, initial_models):
+                for tim,imods in zip(subtims, models.models):
                     mod = imods[i]
                     if mod is None:
                         continue
@@ -1987,13 +2048,14 @@ def _one_blob(X):
                     x0,y0 = mod.x0 , mod.y0
                     x1,y1 = x0 + mw, y0 + mh
                     slc = slice(y0,y1), slice(x0, x1)
-                    srctim = Image(data=tim.getImage ()[slc],
+                    subsky = tim.getSky().copy()
+                    subsky.shift(x0, y0)
+                    srctim = Image(data=tim.getImage()[slc],
                                    inverr=tim.getInvError()[slc],
                                    wcs=tim.wcs.shifted(x0, y0),
                                    psf=tim.psf.getShifted(x0, y0),
                                    photocal=tim.getPhotoCal(),
-                                   sky=tim.getSky(), name=tim.name)
-                    #srctim.subwcs = tim.getWcs().wcs.get_subimage(x0, y0, mw, mh)
+                                   sky=subsky, name=tim.name)
                     srctim.subwcs = tim.subwcs.get_subimage(x0, y0, mw, mh)
                     srctim.band = tim.band
                     srctim.sig1 = tim.sig1
@@ -2041,14 +2103,7 @@ def _one_blob(X):
 
             else:
                 srctims = subtims
-
-                modelMasks = []
-                for imods in initial_models:
-                    d = dict()
-                    modelMasks.append(d)
-                    mod = imods[i]
-                    if mod is not None:
-                        d[src] = Patch(mod.x0, mod.y0, mod.patch != 0)
+                modelMasks = models.model_masks(i, src)
 
             srctractor = Tractor(srctims, [src])
             srctractor.freezeParams('images')
@@ -2121,45 +2176,34 @@ def _one_blob(X):
                            chi_plots=plots2, rgb_plots=True, main_plot=False,
                            rgb_format='spallmods Blob %i, src %i: %%s' % (iblob, i))
 
-                for tim,orig in zip(subtims, orig_timages):
-                    tim.data = orig
+                models.restore_images(subtims)
                 _plot_mods(subtims, spallmods, spallnames, bands, None, None, bslc, blobw, blobh, ps,
                            chi_plots=plots2, rgb_plots=True, main_plot=False,
                            rgb_format='Blob %i, src %i: %%s' % (iblob, i))
                 for tim,im in zip(subtims, tempims):
                     tim.data = im
 
-            # Re-remove the final fit model for this source (pull from cache)
-            for tim in srctims:
-                mod = srctractor.getModelPatch(tim, src)
-                if mod is not None:
-                    mod.addTo(tim.getImage(), scale=-1)
-
+            # Re-remove the final fit model for this source
+            models.update_and_subtract(i, src, subtims)
+            
             srctractor.setModelMasks(None)
             disable_galaxy_cache()
 
             #print('Fitting source took', Time()-tsrc)
             #print(src)
 
-        for tim,img in zip(subtims, orig_timages):
-            tim.data = img
-        del orig_timages
-        del initial_models
+        models.restore_images(subtims)
+        del models
 
     else:
         # Single source (though this is coded to handle multiple sources)
         # Fit sources one at a time, but don't subtract other models
         subcat.freezeAllParams()
 
-        modelMasks = []
-        for tim in subtims:
-            d = dict()
-            modelMasks.append(d)
-            for src in subcat:
-                mod = src.getModelPatch(tim)
-                if mod is not None:
-                    mod = _clip_model_to_blob(mod, tim.shape, tim.getInvError())
-                    d[src] = Patch(mod.x0, mod.y0, mod.patch != 0)
+        models = SourceModels()
+        models.create(subtims, [src])
+        modelMasks = models.model_masks(0, src)
+
         subtr.setModelMasks(modelMasks)
         enable_galaxy_cache()
 
@@ -2230,35 +2274,12 @@ def _one_blob(X):
     #   -subtract final model (from each tim)
     # -Replace original subtim images
 
+    models = SourceModels()
     # Remember original tim images
-    orig_timages = [tim.getImage() for tim in subtims]
-    for tim,img in zip(subtims,orig_timages):
-        tim.data = img.copy()
-    initial_models = []
-
+    models.save_images(subtims)
     # Create initial models for each tim x each source
     # tt = Time()
-    for tim in subtims:
-        mods = []
-        sh = tim.shape
-        ie = tim.getInvError()
-        img = tim.getImage()
-        for src in subcat:
-            mod = src.getModelPatch(tim)
-            if mod is not None and mod.patch is not None:
-                if not np.all(np.isfinite(mod.patch)):
-                    print('Non-finite mod patch')
-                    print('source:', src)
-                    print('tim:', tim)
-                    print('PSF:', tim.getPsf())
-                assert(np.all(np.isfinite(mod.patch)))
-
-                # Blank out pixels that are outside the blob ROI.
-                mod = _clip_model_to_blob(mod, sh, ie)
-                mod.addTo(img, scale=-1)
-            mods.append(mod)
-
-        initial_models.append(mods)
+    models.create(subtims, subcat, subtract=True)
     # print('Subtracting initial models:', Time()-tt)
 
     # table of per-source measurements for this blob.
@@ -2268,9 +2289,9 @@ def _one_blob(X):
     B.sources = srcs
     B.Isrcs = Isrcs
     B.started_in_blob = started_in_blob
-
-    B.all_models = np.array([{} for i in range(len(Isrcs))])
-    B.all_model_flags = np.array([{} for i in range(len(Isrcs))])
+    B.all_models        = np.array([{} for i in range(len(Isrcs))])
+    B.all_model_fluxivs = np.array([{} for i in range(len(Isrcs))])
+    B.all_model_flags   = np.array([{} for i in range(len(Isrcs))])
 
     del srcs
     del Isrcs
@@ -2288,28 +2309,18 @@ def _one_blob(X):
         #     plotmodnames = []
 
         # Add this source's initial model back in.
-        for tim,mods in zip(subtims, initial_models):
-            mod = mods[i]
-            if mod is not None:
-                mod.addTo(tim.getImage())
-
-        modelMasks = []
-        for imods in initial_models:
-            d = dict()
-            modelMasks.append(d)
-            mod = imods[i]
-            if mod is not None:
-                #print('Set modelMask:', mod.patch.shape, 'for', src)
-                d[src] = Patch(mod.x0, mod.y0, mod.patch != 0)
+        models.add(i, subtims)
+        modelMasks = models.model_masks(i, src)
 
         srctractor = Tractor(subtims, [src])
         srctractor.freezeParams('images')
         srctractor.setModelMasks(modelMasks)
         enable_galaxy_cache()
 
-        # use log likelihood rather than log prior because we use priors on, eg,
-        # the ellipticity to avoid crazy fits.  Here we sort of want to just
-        # evaluate the fit quality regardless of priors on parameters...?
+        # use log likelihood rather than log prior because we use
+        # priors on, eg, the ellipticity to avoid crazy fits.  Here we
+        # sort of want to just evaluate the fit quality regardless of
+        # priors on parameters...?
 
         srccat = srctractor.getCatalog()
         srccat[0] = None
@@ -2369,11 +2380,12 @@ def _one_blob(X):
             oldmodel = 'comp'
 
         trymodels = [('ptsrc', ptsrc), ('simple', simple)]
+        ### FIXME -- or just do this for *all* models regardless of initial type?
         if oldmodel == 'ptsrc':
             trymodels.extend([('gals', None)])
         else:
             trymodels.extend([('dev', dev), ('exp', exp), ('comp', comp)])
-            
+
         allflags = {}
         for name,newsrc in trymodels:
 
@@ -2381,7 +2393,7 @@ def _one_blob(X):
                 # If 'simple' was better than 'ptsrc', or the source is
                 # bright, try the galaxy models.
                 if ((chisqs['simple'] > chisqs['ptsrc']) or
-                    (chisqs['ptsrc'] > 100)):
+                    (chisqs['ptsrc'] > 400)):
                     trymodels.extend([
                         ('dev', dev), ('exp', exp), ('comp', comp)])
                 continue
@@ -2393,13 +2405,15 @@ def _one_blob(X):
                     (chisqs['ptsrc'] + galaxy_margin)):
                     #print('dev/exp not much better than ptsrc; not computing comp model.')
                     continue
-                newsrc = comp = FixedCompositeGalaxy(src.getPosition(), src.getBrightness(),
-                                                     0.5, exp.getShape(), dev.getShape()).copy()
+                newsrc = comp = FixedCompositeGalaxy(
+                    src.getPosition(), src.getBrightness(),
+                    SoftenedFracDev(0.5), exp.getShape(), dev.getShape()).copy()
             #print('New source:', newsrc)
             srccat[0] = newsrc
 
-            # Use the same initial modelMasks as the original source; we'll do a second
-            # round below.  Need to create newsrc->mask mappings though:
+            # Use the same initial modelMasks as the original source;
+            # we'll do a second round below.  Need to create
+            # newsrc->mask mappings though:
             mm = []
             for mim in modelMasks:
                 d = dict()
@@ -2421,10 +2435,9 @@ def _one_blob(X):
 
             max_cpu_per_source = 60.
 
-            thisflags = 0
-
             #tt0 = Time()
             cpu0 = time.clock()
+            thisflags = 0
             p0 = newsrc.getParams()
             for step in range(50):
                 #print('optimizing:', newsrc)
@@ -2491,6 +2504,23 @@ def _one_blob(X):
                 plt.title('Second-round opt ' + name)
                 ps.savefig()
 
+            # Compute FLUX inverse-variances for each source
+            newsrc.freezeAllBut('brightness')
+            allderivs = srctractor.getDerivs()
+            ivs = np.zeros(len(bands), np.float32)
+            B.all_model_fluxivs[i][name] = ivs
+            for iparam,derivs in enumerate(allderivs):
+                chisq = 0
+                for deriv,tim in derivs:
+                    h,w = tim.shape
+                    deriv.clipTo(w,h)
+                    ie = tim.getInvError()
+                    slc = deriv.getSlice(ie)
+                    chi = deriv.patch * ie[slc]
+                    chisq += (chi**2).sum()
+                ivs[iparam] = chisq
+            newsrc.thawAllParams()
+                
             srctractor.setModelMasks(None)
             disable_galaxy_cache()
 
@@ -2575,18 +2605,12 @@ def _one_blob(X):
         subcat[i] = keepsrc
 
         src = keepsrc
-        if src is not None:
-            # Re-remove the final fit model for this source.
-            for tim in subtims:
-                mod = src.getModelPatch(tim)
-                if mod is not None:
-                    mod.addTo(tim.getImage(), scale=-1)
+        # Re-remove the final fit model for this source.
+        models.update_and_subtract(i, src, subtims)
 
-    for tim,img in zip(subtims, orig_timages):
-        tim.data = img
-    del orig_timages
-    del initial_models
-
+    models.restore_images(subtims)
+    del models
+    
     #print('Blob finished model selection:', Time()-tlast)
     #tlast = Time()
 
@@ -2649,7 +2673,8 @@ def _one_blob(X):
         elif isinstance(src, FixedCompositeGalaxy):
             src.shapeExp = src.shapeExp.toEllipseE()
             src.shapeDev = src.shapeDev.toEllipseE()
-
+            src.fracDev = FracDev(src.fracDev.getValue())
+            
         allderivs = subtr.getDerivs()
         for iparam,derivs in enumerate(allderivs):
             chisq = 0
@@ -2704,6 +2729,8 @@ def _one_blob(X):
             counts = np.zeros(len(B))
             pcal = tim.getPhotoCal()
 
+            # For each source, compute its model and record its flux
+            # in this image.  Also compute the full model *mod*.
             for isrc,src in enumerate(B.sources):
                 patch = subtr.getModelPatch(tim, src, minsb=tim.modelMinval)
                 if patch is None or patch.patch is None:
@@ -2717,6 +2744,7 @@ def _one_blob(X):
                 srcmods[isrc] = patch
                 patch.addTo(mod)
 
+            # Now compute metrics for each source
             for isrc,patch in enumerate(srcmods):
                 if patch is None:
                     continue
@@ -2725,8 +2753,14 @@ def _one_blob(X):
                 slc = patch.getSlice(mod)
                 # (mod - patch) is flux from others
                 # (mod - patch) / counts is normalized flux from others
-                # patch/counts is unit profile
-                fracflux_num[isrc,iband] += np.sum((mod[slc] - patch.patch) * np.abs(patch.patch)) / counts[isrc]**2
+                # We take that and weight it by this source's profile;
+                #  patch / counts is unit profile
+                # But this takes the dot product between the profiles,
+                # so we have to normalize appropriately, ie by
+                # (patch**2)/counts**2; counts**2 drops out of the
+                # denom.  If you have an identical source with twice the flux,
+                # this results in fracflux being 2.0
+                fracflux_num[isrc,iband] += np.sum((mod[slc] - patch.patch) * np.abs(patch.patch)) / np.sum(patch.patch**2)
                 fracflux_den[isrc,iband] += np.sum(np.abs(patch.patch)) / np.abs(counts[isrc])
 
                 fracmasked_num[isrc,iband] += np.sum((tim.getInvError()[slc] == 0) * np.abs(patch.patch)) / np.abs(counts[isrc])
@@ -3713,7 +3747,8 @@ def run_brick(brick, radec=None, pixscale=0.262,
             brick = ('custom-%06i%s%05i' %
                          (int(1000*ra), 'm' if dec < 0 else 'p',
                           int(1000*np.abs(dec))))
-    initargs.update(brickname=brick)
+    initargs.update(brickname=brick,
+                    decals=decals)
 
     stagefunc = CallGlobalTime('stage_%s', globals())
 
@@ -3735,7 +3770,6 @@ def run_brick(brick, radec=None, pixscale=0.262,
                   write_metrics=write_metrics,
                   on_bricks=on_bricks,
                   outdir=outdir, decals_dir=decals_dir, unwise_dir=unwise_dir,
-                  decals=decals,
                   plots=plots, plots2=plots2, coadd_bw=coadd_bw,
                   force=forceStages, write=writePickles)
 

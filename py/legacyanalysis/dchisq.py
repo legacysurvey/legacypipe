@@ -129,7 +129,8 @@ if __name__ == '__main__':
                 newclass[i] = mod[0].upper()
 
             print 'Thresh =', thresh
-            print np.sum(oldclass == newclass), 'of', len(T), 'classifications the same'
+            print np.sum(oldclass == newclass), 'of', len(T), 'classifications are the same'
+            print np.count_nonzero(check), 'Dev/Exp models computed'
             I = np.flatnonzero(oldclass != newclass)
             
             T.oldtype = oldclass
