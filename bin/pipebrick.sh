@@ -40,8 +40,9 @@ echo "--------------------------------------------------------------------------
 
 #python legacypipe/runbrick.py --force-all --no-write --brick $brick --outdir $outdir --threads 6 --nsigma 6 --skip --pipe --pixpsf --splinesky >> $log 2>&1
 
-python -u legacypipe/runbrick.py --force-all --no-write \ #-P 'pickles/runbrick-dr2c-%(brick)s-%%(stage)s.pickle' \
-    --brick $brick --outdir $outdir --threads 6 --nsigma 6 --skip --pipe --pixpsf --splinesky --no-sdss >> $log 2>&1
+python -u legacypipe/runbrick.py --force-all --no-write --no-early-coadds --no-sdss \
+    --pixpsf --splinesky --pipe --skip \
+    --brick $brick --outdir $outdir --threads 6 --nsigma 6 >> $log 2>&1
 
 #python -u legacypipe/runbrick.py -P 'pickles/runbrick-fftb-%(brick)s-%%(stage)s.pickle' \
 #    --brick $brick --outdir $outdir --threads 6 --nsigma 6 --skip --pipe --pixpsf >> $log 2>&1

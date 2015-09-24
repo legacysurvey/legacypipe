@@ -807,7 +807,6 @@ def stage_image_coadds(targetwcs=None, bands=None, tims=None, outdir=None,
     trymakedirs(basedir)
 
     C = _coadds(tims, bands, targetwcs,
-
                 #############
                 detmaps=True,
 
@@ -864,12 +863,11 @@ def stage_image_coadds(targetwcs=None, bands=None, tims=None, outdir=None,
 
 
     #rgbkwargs2 = dict(mnmx=(-3., 3.))
-
-    rgbkwargs2 = dict(mnmx=(-2., 10.))
+    #rgbkwargs2 = dict(mnmx=(-2., 10.))
 
     tmpfn = create_temp(suffix='.png')
     for name,ims,rgbkw in [('image',C.coimgs,rgbkwargs),
-                           ('image2',C.coimgs,rgbkwargs2),
+        #('image2',C.coimgs,rgbkwargs2),
                            ]:
         rgb = get_rgb(ims, bands, **rgbkw)
         kwa = {}
