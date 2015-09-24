@@ -1075,6 +1075,32 @@ def stage_srcs(coimgs=None, cons=None,
             dimshow(get_rgb(coimgs, bands))
             plt.title('After subtracting off marginal sources')
             ps.savefig()
+
+
+    if plots:
+        for tim in tims:
+            ivx = tim.imobj.read_invvar(clip=False, slice=tim.slice)
+            plt.clf()
+            plt.subplot(2,2,1)
+            dimshow(tim.getInvvar(), vmin=-0.1 / tim.sig1**2,
+                    vmax=2. / tim.sig1**2, ticks=False)
+            plt.title('Tim invvar')
+            plt.subplot(2,2,2)
+            dimshow(tim.getInvvar() == 0, vmin=0, vmax=1, ticks=False)
+            plt.title('Tim invvar == 0')
+            plt.subplot(2,2,3)
+            dimshow(ivx * tim.zpscale**2, vmin=-0.1 / tim.sig1**2,
+                    vmax=2. / tim.sig1**2, ticks=False)
+            plt.title('Orig invvar')
+            plt.subplot(2,2,4)
+            dimshow(np.logical_or(ivx == 0, tim.dq != 0),
+                    vmin=0, vmax=1, ticks=False)
+            plt.title('Orig invvar == 0 or DQ')
+            #dimshow(tim.dq != 0, vmin=0, vmax=1, ticks=False)
+            #plt.title('DQ')
+            plt.suptitle('Tim ' + tim.name)
+            ps.savefig()
+            
             
     print('Rendering detection maps...')
     detmaps, detivs = detection_maps(tims, targetwcs, bands, mp)
@@ -1982,7 +2008,7 @@ def _one_blob(X):
     subtr = Tractor(subtims, subcat)
     subtr.freezeParam('images')
 
-    print('Subtims:', [s.shape for s in subtims])
+    #print('Subtims:', [s.shape for s in subtims])
 
     _fit_fluxes(subcat, subtims, bands, use_ceres, alphas)
     
@@ -2284,6 +2310,9 @@ def _one_blob(X):
     models.create(subtims, subcat, subtract=True)
     # print('Subtracting initial models:', Time()-tt)
 
+    #for src in subcat:
+    #    print('Subtracting initial model:', src)
+    
     # table of per-source measurements for this blob.
     B = fits_table()
     B.flags = np.zeros(len(Isrcs), np.uint16)
@@ -2598,8 +2627,8 @@ def _one_blob(X):
         keepsrc = dict(none=None, ptsrc=ptsrc, simple=simple,
                        dev=dev, exp=exp, comp=comp)[keepmod]
 
-        #print('Keeping model:', keepmod)
-        #print('Keeping source:', keepsrc)
+        print('Keeping model:', keepmod)
+        print('Keeping source:', keepsrc)
 
         B.dchisqs[i, :] = np.array([chisqs.get(k,0) for k in modnames])
         B.flags[i] = allflags.get(keepmod, 0)
@@ -2628,6 +2657,9 @@ def _one_blob(X):
     subcat = Catalog(*B.sources)
     subtr.catalog = subcat
 
+    # Do another quick round of flux-only fitting?
+    _fit_fluxes(subcat, subtims, bands, use_ceres, alphas)
+    
     # print('After cutting sources:')
     # for src,dchi in zip(B.sources, B.dchisqs):
     #     print('  source', src, 'max dchisq', max(dchi), 'dchisqs', dchi)
