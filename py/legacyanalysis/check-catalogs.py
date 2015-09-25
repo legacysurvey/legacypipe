@@ -93,6 +93,21 @@ K = np.flatnonzero(I < J)
 I,J,d = I[K],J[K],d[K]
 
 plt.clf()
-plt.hist(d, range=(0,10), bins=50)
+plt.hist(d*3600., range=(0,10), bins=50)
 plt.xlabel('Arcsec between pairs')
 plt.savefig('dists.png')
+
+I,J,d = match_radec(T.ra, T.dec, T.ra, T.dec, 1./3600., notself=True)
+K = np.flatnonzero(I < J)
+I,J,d = I[K],J[K],d[K]
+
+print 'Fracflux for nearby pairs:'
+B = np.array([1,2,4])
+for i,j in zip(I,J):
+    print T.decam_fracflux[i,B], T.decam_fracflux[j,B]
+    
+
+print 'r-band fluxes and fracfluxes:'
+b = 2
+for i,j in zip(I,J):
+    print 'fluxes', T.decam_flux[i,b], T.decam_flux[j, b], 'fracs', T.decam_fracflux[i,b], T.decam_fracflux[j,b]

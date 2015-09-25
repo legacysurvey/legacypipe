@@ -1076,7 +1076,7 @@ def stage_srcs(coimgs=None, cons=None,
 
 
     if plots:
-        for tim in tims:
+        for tim in []: #tims:
             ivx = tim.imobj.read_invvar(clip=False, slice=tim.slice)
             plt.clf()
             plt.subplot(2,2,1)
@@ -1098,6 +1098,38 @@ def stage_srcs(coimgs=None, cons=None,
             #plt.title('DQ')
             plt.suptitle('Tim ' + tim.name)
             ps.savefig()
+
+        for tim in tims:
+            plt.clf()
+            plt.subplot(2,2,1)
+            dimshow(tim.getInvvar(), vmin=-0.1 / tim.sig1**2,
+                    vmax=2. / tim.sig1**2, ticks=False)
+            h,w = tim.shape
+            rgba = np.zeros((h,w,4), np.uint8)
+            rgba[:,:,0][tim.inverr == 0] = 255
+            rgba[:,:,3][tim.inverr == 0] = 255
+            dimshow(rgba)
+            plt.title('Tim invvar')
+            plt.subplot(2,2,2)
+            print('Image max:', tim.getImage().max(), 'satval', tim.satval)
+            mx = max(tim.getImage().max(), tim.satval) * 1.1
+            ima = dict(vmin=-2.*tim.sig1, vmax=mx,
+                       ticks=False)
+            dimshow(tim.getImage(), **ima)
+            plt.title('Tim image')
+            plt.subplot(2,2,3)
+            dimshow((tim.dq & tim.dq_bits['satur'] > 0), vmin=0, vmax=1,
+                    ticks=False)
+            plt.title('SATUR')
+            plt.subplot(2,2,4)
+            img = tim.getImage().copy()
+            img[(tim.dq & tim.dq_bits['satur']) > 0] = tim.satval
+            dimshow(img, **ima)
+            plt.title('Patched image')
+            plt.suptitle('Tim ' + tim.name)
+            ps.savefig()
+
+
             
             
     print('Rendering detection maps...')

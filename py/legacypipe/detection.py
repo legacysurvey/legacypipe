@@ -37,7 +37,7 @@ def detection_maps(tims, targetwcs, bands, mp):
         tims, mp.map(_detmap, [(tim, targetwcs, H, W) for tim in tims])):
         if Yo is None:
             continue
-        detmaps[tim.band][Yo,Xo] += incmap*inciv
+        detmaps[tim.band][Yo,Xo] += incmap * inciv
         detivs [tim.band][Yo,Xo] += inciv
 
     for band in bands:
