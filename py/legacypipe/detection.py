@@ -15,7 +15,11 @@ def _detmap(X):
     ie = tim.getInvvar()
     psfnorm = 1./(2. * np.sqrt(np.pi) * tim.psf_sigma)
     detim = tim.getImage().copy()
+
     detim[ie == 0] = 0.
+    # Patch SATURATED pixels with the value saturated pixels would have??
+    #detim[(tim.dq & tim.dq_bits['satur']) > 0] = tim.satval
+    
     detim = gaussian_filter(detim, tim.psf_sigma) / psfnorm**2
     detsig1 = tim.sig1 / psfnorm
     subh,subw = tim.shape
@@ -33,7 +37,7 @@ def detection_maps(tims, targetwcs, bands, mp):
         tims, mp.map(_detmap, [(tim, targetwcs, H, W) for tim in tims])):
         if Yo is None:
             continue
-        detmaps[tim.band][Yo,Xo] += incmap*inciv
+        detmaps[tim.band][Yo,Xo] += incmap * inciv
         detivs [tim.band][Yo,Xo] += inciv
 
     for band in bands:
@@ -326,6 +330,7 @@ def sed_matched_detection(sedname, sed, detmaps, detivs, bands,
     t0 = Time()
 
     if ps is not None:
+        from astrometry.util.plotutils import dimshow
         crossa = dict(ms=10, mew=1.5)
         green = (0,1,0)
 
@@ -338,8 +343,10 @@ def sed_matched_detection(sedname, sed, detmaps, detivs, bands,
             plt.imshow(rgba, interpolation='nearest', origin='lower')
 
         plt.clf()
-        plt.imshow(sedsn, vmin=-2, vmax=10, interpolation='nearest',
-                   origin='lower', cmap='hot')
+        plt.subplot(1,2,2)
+        dimshow(sedsn, vmin=-2, vmax=100, cmap='hot', ticks=False)
+        plt.subplot(1,2,1)
+        dimshow(sedsn, vmin=-2, vmax=10, cmap='hot', ticks=False)
         above = (sedsn > nsigma)
         plot_boundary_map(above)
         ax = plt.axis()

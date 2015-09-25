@@ -186,11 +186,14 @@ class LegacySurveyImage(object):
         print('Reading image slice:', slc)
         img,imghdr = self.read_image(header=True, slice=slc)
 
+        print('SATURATE is', imghdr.get('SATURATE', None))
+        print('Max value in image is', img.max())
+
         # check consistency... something of a DR1 hangover
         e = imghdr['EXTNAME']
         assert(e.strip() == self.ccdname.strip())
 
-        invvar = self.read_invvar(slice=slc)
+        invvar = self.read_invvar(slice=slc, clipThresh=0.)
         dq = self.read_dq(slice=slc)
         invvar[dq != 0] = 0.
         if np.all(invvar == 0.):
@@ -347,7 +350,7 @@ class LegacySurveyImage(object):
         if subsky:
             tim.satval -= midsky
         if nanomaggies:
-            tim.satval /= zpscale
+            tim.satval /= orig_zpscale
         subh,subw = tim.shape
         tim.subwcs = tim.sip_wcs.get_subimage(tim.x0, tim.y0, subw, subh)
         mn,mx = tim.zr

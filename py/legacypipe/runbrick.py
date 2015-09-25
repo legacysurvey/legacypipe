@@ -807,7 +807,6 @@ def stage_image_coadds(targetwcs=None, bands=None, tims=None, outdir=None,
     trymakedirs(basedir)
 
     C = _coadds(tims, bands, targetwcs,
-
                 #############
                 detmaps=True,
 
@@ -864,12 +863,11 @@ def stage_image_coadds(targetwcs=None, bands=None, tims=None, outdir=None,
 
 
     #rgbkwargs2 = dict(mnmx=(-3., 3.))
-
-    rgbkwargs2 = dict(mnmx=(-2., 10.))
+    #rgbkwargs2 = dict(mnmx=(-2., 10.))
 
     tmpfn = create_temp(suffix='.png')
     for name,ims,rgbkw in [('image',C.coimgs,rgbkwargs),
-                           ('image2',C.coimgs,rgbkwargs2),
+        #('image2',C.coimgs,rgbkwargs2),
                            ]:
         rgb = get_rgb(ims, bands, **rgbkw)
         kwa = {}
@@ -1077,6 +1075,64 @@ def stage_srcs(coimgs=None, cons=None,
             dimshow(get_rgb(coimgs, bands))
             plt.title('After subtracting off marginal sources')
             ps.savefig()
+
+
+    if plots:
+        for tim in []: #tims:
+            ivx = tim.imobj.read_invvar(clip=False, slice=tim.slice)
+            plt.clf()
+            plt.subplot(2,2,1)
+            dimshow(tim.getInvvar(), vmin=-0.1 / tim.sig1**2,
+                    vmax=2. / tim.sig1**2, ticks=False)
+            plt.title('Tim invvar')
+            plt.subplot(2,2,2)
+            dimshow(tim.getInvvar() == 0, vmin=0, vmax=1, ticks=False)
+            plt.title('Tim invvar == 0')
+            plt.subplot(2,2,3)
+            dimshow(ivx * tim.zpscale**2, vmin=-0.1 / tim.sig1**2,
+                    vmax=2. / tim.sig1**2, ticks=False)
+            plt.title('Orig invvar')
+            plt.subplot(2,2,4)
+            dimshow(np.logical_or(ivx == 0, tim.dq != 0),
+                    vmin=0, vmax=1, ticks=False)
+            plt.title('Orig invvar == 0 or DQ')
+            #dimshow(tim.dq != 0, vmin=0, vmax=1, ticks=False)
+            #plt.title('DQ')
+            plt.suptitle('Tim ' + tim.name)
+            ps.savefig()
+
+        for tim in tims:
+            plt.clf()
+            plt.subplot(2,2,1)
+            dimshow(tim.getInvvar(), vmin=-0.1 / tim.sig1**2,
+                    vmax=2. / tim.sig1**2, ticks=False)
+            h,w = tim.shape
+            rgba = np.zeros((h,w,4), np.uint8)
+            rgba[:,:,0][tim.inverr == 0] = 255
+            rgba[:,:,3][tim.inverr == 0] = 255
+            dimshow(rgba)
+            plt.title('Tim invvar')
+            plt.subplot(2,2,2)
+            print('Image max:', tim.getImage().max(), 'satval', tim.satval)
+            mx = max(tim.getImage().max(), tim.satval) * 1.1
+            ima = dict(vmin=-2.*tim.sig1, vmax=mx,
+                       ticks=False)
+            dimshow(tim.getImage(), **ima)
+            plt.title('Tim image')
+            plt.subplot(2,2,3)
+            dimshow((tim.dq & tim.dq_bits['satur'] > 0), vmin=0, vmax=1,
+                    ticks=False)
+            plt.title('SATUR')
+            plt.subplot(2,2,4)
+            img = tim.getImage().copy()
+            img[(tim.dq & tim.dq_bits['satur']) > 0] = tim.satval
+            dimshow(img, **ima)
+            plt.title('Patched image')
+            plt.suptitle('Tim ' + tim.name)
+            ps.savefig()
+
+
+            
             
     print('Rendering detection maps...')
     detmaps, detivs = detection_maps(tims, targetwcs, bands, mp)
@@ -1790,7 +1846,10 @@ def _chisq_improvement(src, chisqs, chisqs_none):
             continue
         # this will be positive for an improved model
         d = chisqs_none[b] - chisqs[b]
-        dchisq += np.sign(flux) * d
+        if flux > 0:
+            dchisq += d
+        else:
+            dchisq -= np.abs(d)
     return dchisq
 
 def _per_band_chisqs(srctractor, bands):
@@ -1984,7 +2043,7 @@ def _one_blob(X):
     subtr = Tractor(subtims, subcat)
     subtr.freezeParam('images')
 
-    print('Subtims:', [s.shape for s in subtims])
+    #print('Subtims:', [s.shape for s in subtims])
 
     _fit_fluxes(subcat, subtims, bands, use_ceres, alphas)
     
@@ -2286,6 +2345,9 @@ def _one_blob(X):
     models.create(subtims, subcat, subtract=True)
     # print('Subtracting initial models:', Time()-tt)
 
+    #for src in subcat:
+    #    print('Subtracting initial model:', src)
+    
     # table of per-source measurements for this blob.
     B = fits_table()
     B.flags = np.zeros(len(Isrcs), np.uint16)
@@ -2600,8 +2662,8 @@ def _one_blob(X):
         keepsrc = dict(none=None, ptsrc=ptsrc, simple=simple,
                        dev=dev, exp=exp, comp=comp)[keepmod]
 
-        #print('Keeping model:', keepmod)
-        #print('Keeping source:', keepsrc)
+        print('Keeping model:', keepmod)
+        print('Keeping source:', keepsrc)
 
         B.dchisqs[i, :] = np.array([chisqs.get(k,0) for k in modnames])
         B.flags[i] = allflags.get(keepmod, 0)
@@ -2630,6 +2692,11 @@ def _one_blob(X):
     subcat = Catalog(*B.sources)
     subtr.catalog = subcat
 
+    # Do another quick round of flux-only fitting?
+    # This does horribly -- fluffy galaxies go out of control because they're only constrained
+    # by pixels within this blob.
+    #_fit_fluxes(subcat, subtims, bands, use_ceres, alphas)
+    
     # print('After cutting sources:')
     # for src,dchi in zip(B.sources, B.dchisqs):
     #     print('  source', src, 'max dchisq', max(dchi), 'dchisqs', dchi)
@@ -3126,6 +3193,7 @@ def stage_writecat(
     version_header=None,
     T=None,
     WISE=None,
+    no_sdss=False,
     AP=None,
     apertures_arcsec=None,
     cat=None, targetrd=None, pixscale=None, targetwcs=None,
@@ -3332,8 +3400,7 @@ def stage_writecat(
         cols.extend([
                 'wise_flux', 'wise_flux_ivar',
                 'wise_mw_transmission', 'wise_nobs', 'wise_fracflux',
-                'wise_rchi2',
-                ])
+                'wise_rchi2'])
     cols.extend([
         'dchisq',
         'fracdev', 'fracDev_ivar', 'shapeexp_r', 'shapeexp_r_ivar',
@@ -3342,26 +3409,25 @@ def stage_writecat(
         'shapedev_r',  'shapedev_r_ivar',
         'shapedev_e1', 'shapedev_e1_ivar',
         'shapedev_e2', 'shapedev_e2_ivar',
-        'ebv', 'sdss_run',
-        'sdss_camcol', 'sdss_field', 'sdss_id', 'sdss_objid', 'sdss_parent',
-        'sdss_nchild', 'sdss_objc_type', 'sdss_objc_flags', 'sdss_objc_flags2',
-        'sdss_flags', 'sdss_flags2', 'sdss_tai',
-        'sdss_ra',  'sdss_ra_ivar',
-        'sdss_dec', 'sdss_dec_ivar',
-        'sdss_psf_fwhm', 'sdss_mjd',
-        'sdss_theta_dev', 'sdss_theta_deverr',
-        'sdss_ab_dev',    'sdss_ab_deverr',
-        'sdss_theta_exp', 'sdss_theta_experr',
-        'sdss_ab_exp', 'sdss_ab_experr',
-        'sdss_fracdev', 'sdss_phi_dev_deg', 'sdss_phi_exp_deg',
-        'sdss_psfflux',    'sdss_psfflux_ivar',
-        'sdss_cmodelflux', 'sdss_cmodelflux_ivar',
-        'sdss_modelflux',  'sdss_modelflux_ivar',
-        'sdss_devflux',    'sdss_devflux_ivar',
-        'sdss_expflux',    'sdss_expflux_ivar',
-        'sdss_extinction', 'sdss_calib_status',
-        'sdss_resolve_status',
-        ])
+        'ebv'])
+    if not no_sdss:
+        cols.extend([
+            'sdss_run', 'sdss_camcol', 'sdss_field', 'sdss_id', 'sdss_objid',
+            'sdss_parent', 'sdss_nchild', 'sdss_objc_type', 'sdss_objc_flags',
+            'sdss_objc_flags2', 'sdss_flags', 'sdss_flags2', 'sdss_tai',
+            'sdss_ra',  'sdss_ra_ivar', 'sdss_dec', 'sdss_dec_ivar',
+            'sdss_psf_fwhm', 'sdss_mjd',
+            'sdss_theta_dev', 'sdss_theta_deverr',
+            'sdss_ab_dev',    'sdss_ab_deverr',
+            'sdss_theta_exp', 'sdss_theta_experr',
+            'sdss_ab_exp', 'sdss_ab_experr',
+            'sdss_fracdev', 'sdss_phi_dev_deg', 'sdss_phi_exp_deg',
+            'sdss_psfflux',    'sdss_psfflux_ivar',
+            'sdss_cmodelflux', 'sdss_cmodelflux_ivar',
+            'sdss_modelflux',  'sdss_modelflux_ivar',
+            'sdss_devflux',    'sdss_devflux_ivar',
+            'sdss_expflux',    'sdss_expflux_ivar',
+            'sdss_extinction', 'sdss_calib_status', 'sdss_resolve_status'])
 
     # TUNIT cards.
     deg='deg'
@@ -3462,28 +3528,24 @@ def stage_writecat(
             if c in arrtypes:
                 T2.set(c, np.zeros((len(T2),5), arrtypes[c]))
 
-    # Blank out all SDSS fields for sources that have moved too much.
-    xyz1 = radectoxyz(T2.ra, T2.dec)
-    xyz2 = radectoxyz(T2.sdss_ra, T2.sdss_dec)
-    d2 = np.sum((xyz2-xyz1)**2, axis=1)
-    # 1.5 arcsec
-    maxd2 = np.deg2rad(1.5 / 3600.)**2
-    blankout = np.flatnonzero((T2.sdss_ra != 0) * (d2 > maxd2))
-    print('Blanking out', len(blankout), 'SDSS no-longer-matches')
-    if len(blankout):
-        Tcols = T2.get_columns()
-        for c in Tcols:
-            if c.startswith('sdss'):
-                x = T2.get(c)
-                x[blankout] = 0
+    if not no_sdss:
+        # Blank out all SDSS fields for sources that have moved too much.
+        xyz1 = radectoxyz(T2.ra, T2.dec)
+        xyz2 = radectoxyz(T2.sdss_ra, T2.sdss_dec)
+        d2 = np.sum((xyz2-xyz1)**2, axis=1)
+        # 1.5 arcsec
+        maxd2 = np.deg2rad(1.5 / 3600.)**2
+        blankout = np.flatnonzero((T2.sdss_ra != 0) * (d2 > maxd2))
+        print('Blanking out', len(blankout), 'SDSS no-longer-matches')
+        if len(blankout):
+            Tcols = T2.get_columns()
+            for c in Tcols:
+                if c.startswith('sdss'):
+                    x = T2.get(c)
+                    x[blankout] = 0
 
     if write_catalog:
         T2.writeto(fn, primheader=primhdr, header=hdr, columns=cols)
-        # arrays = [T2.get(c) for c in cols]
-        # arrays = [np.array(a) if isinstance(a,list) else a
-        #           for a in arrays]
-        # fitsio.write(fn, None, header=primhdr, clobber=True)
-        # fitsio.write(fn, arrays, names=cols, header=hdr)
         print('Wrote', fn)
 
     return dict(T2=T2)

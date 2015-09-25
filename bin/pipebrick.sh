@@ -8,7 +8,11 @@ export PYTHONPATH=${PYTHONPATH}:.
 # https://software.intel.com/en-us/articles/using-threaded-intel-mkl-in-multi-thread-application
 export MKL_NUM_THREADS=1
 
-outdir=$SCRATCH/dr2e-noshortcuts-2
+outdir=$SCRATCH/dr2g
+
+# git checkout of https://github.com/legacysurvey/legacypipe-dir
+# branch cosmos-subset
+export DECALS_DIR=/scratch1/scratchdirs/desiproc/decals-cosmos-subset
 
 brick="$1"
 
@@ -36,8 +40,9 @@ echo "--------------------------------------------------------------------------
 
 #python legacypipe/runbrick.py --force-all --no-write --brick $brick --outdir $outdir --threads 6 --nsigma 6 --skip --pipe --pixpsf --splinesky >> $log 2>&1
 
-python -u legacypipe/runbrick.py --force-all --no-write \ #-P 'pickles/runbrick-dr2c-%(brick)s-%%(stage)s.pickle' \
-    --brick $brick --outdir $outdir --threads 12 --nsigma 6 --skip --pipe --pixpsf --splinesky --no-sdss >> $log 2>&1
+python -u legacypipe/runbrick.py --force-all --no-write --no-early-coadds --no-sdss \
+    --pixpsf --splinesky --pipe --skip \
+    --brick $brick --outdir $outdir --threads 6 --nsigma 6 >> $log 2>&1
 
 #python -u legacypipe/runbrick.py -P 'pickles/runbrick-fftb-%(brick)s-%%(stage)s.pickle' \
 #    --brick $brick --outdir $outdir --threads 6 --nsigma 6 --skip --pipe --pixpsf >> $log 2>&1

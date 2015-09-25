@@ -121,14 +121,17 @@ class DecamImage(LegacySurveyImage):
         else:
             return dq
 
-    def read_invvar(self, clip=True, **kwargs):
+    def read_invvar(self, clip=True, clipThresh=0.2, **kwargs):
         print('Reading inverse-variance from', self.wtfn, 'hdu', self.hdu)
         invvar = self._read_fits(self.wtfn, self.hdu, **kwargs)
         if clip:
             # Clamp near-zero (incl negative!) invvars to zero.
             # These arise due to fpack.
-            med = np.median(invvar[invvar > 0])
-            thresh = 0.2 * med
+            if clipThresh > 0.:
+                med = np.median(invvar[invvar > 0])
+                thresh = clipThresh * med
+            else:
+                thresh = 0.
             invvar[invvar < thresh] = 0
         return invvar
 
