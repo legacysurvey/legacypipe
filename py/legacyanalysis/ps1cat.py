@@ -52,10 +52,10 @@ class ps1cat():
         """
         bounds = self.ccdwcs.radec_bounds()
         allcat = self.get_cat([bounds[0],bounds[1]],[bounds[2],bounds[3]])
-        onccd = np.empty(len(allcat))
-        for iobj, cat in enumerate(allcat):
-            onccd[iobj] = self.ccdwcs.is_inside(cat.ra,cat.dec)
-        cat = allcat[np.where((onccd*1)==1)] # z
+        ok,xx,yy = self.ccdwcs.radec2pixelxy(allcat.ra, allcat.dec)
+        onccd = np.flatnonzero((xx >= 1.) * (xx <= self.ccdwcs.get_width()) *
+                               (yy >= 1.) * (yy <= self.ccdwcs.get_height()))
+        cat = allcat[onccd]
         #cat = allcat[np.where((onccd*1)*
         #                      ((allcat.nmag_ok[:,0]>0)*1)*     # g
         #                      ((allcat.nmag_ok[:,1]>0)*1)*     # r
