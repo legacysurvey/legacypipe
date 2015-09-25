@@ -18,10 +18,10 @@ class ps1cat():
             raise ValueError('You must have the PS1CAT_DIR environment variable set to point to Pan-STARRS1 catalogs')
         self.nside = 32
         if ccdwcs is None:
-            from legacypipe.common import Decals, DecamImage
+            from legacypipe.common import Decals
             decals = Decals()
             ccd = decals.find_ccds(expnum=expnum,ccdname=ccdname)[0]
-            im = DecamImage(decals,ccd)
+            im = decals.get_image_object(ccd)
             self.ccdwcs = im.get_wcs()
         else:
             self.ccdwcs = ccdwcs
