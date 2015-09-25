@@ -8,6 +8,7 @@ import os
 import numpy as np
 
 class ps1cat():
+    ps1band = dict(g=0,r=1,i=2,z=3,Y=4)
     def __init__(self,expnum=None,ccdname=None,ccdwcs=None):
         """Initialize the class with either the exposure number *and* CCD name, or
         directly with the WCS of the CCD of interest.
@@ -62,9 +63,8 @@ class ps1cat():
         #                      ((allcat.nmag_ok[:,3]>0)*1)==1)] # z
         print('Found {} good PS1 stars'.format(len(cat)))
         if magrange is not None:
-            ps1band = dict(g=0,r=1,i=2,z=3,Y=4)
-            keep = np.where(((cat.median[:,ps1band[band]]>magrange[0])*1)*
-                            (cat.median[:,ps1band[band]]<magrange[1])*1)[0]
+            keep = np.where((cat.median[:,ps1cat.ps1band[band]]>magrange[0])*
+                            (cat.median[:,ps1cat.ps1band[band]]<magrange[1]))[0]
             cat = cat[keep]
             print('Trimming to {} stars with {}=[{},{}]'.
                   format(len(cat),band,magrange[0],magrange[1]))
