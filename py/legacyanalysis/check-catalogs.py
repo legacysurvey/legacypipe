@@ -95,6 +95,7 @@ I,J,d = I[K],J[K],d[K]
 plt.clf()
 plt.hist(d*3600., range=(0,10), bins=50)
 plt.xlabel('Arcsec between pairs')
+plt.title('COSMOS dr2i -- close pairs')
 plt.savefig('dists.png')
 
 I,J,d = match_radec(T.ra, T.dec, T.ra, T.dec, 1./3600., notself=True)

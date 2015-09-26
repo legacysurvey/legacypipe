@@ -9,7 +9,7 @@ from tractor import Image, PointSource, PixPos, NanoMaggies, Tractor
 
 ps = PlotSequence('rewcs')
 
-expnum, ccdname = 431109, 'N15'
+expnum, ccdname = 431109, 'N14'
 cat = ps1cat(expnum=expnum, ccdname=ccdname)
 stars = cat.get_stars()
 print len(stars), 'stars'
@@ -36,10 +36,12 @@ plt.subplots_adjust(left=0.05, right=0.95, bottom=0.05, top=0.95,
 
 # transpose image
 dimshow(tim.getImage().T, vmin=-2.*tim.sig1, vmax=10.*tim.sig1)
+plt.title('DECaLS ' + tim.name)
 ps.savefig()
 ax = plt.axis()
 plt.plot(stars.iy, stars.ix, 'r.')
 plt.axis(ax)
+plt.title('Pan-STARRS stars in DECaLS ' + tim.name)
 ps.savefig()
 
 iband = ps1cat.ps1band[tim.band]
@@ -59,12 +61,14 @@ ima = dict(vmin=-2.*tim.sig1, vmax=10.*tim.sig1, ticks=False)
 plt.clf()
 
 #R,C = 10,14
-R,C = 9,13
+#R,C = 9,13
+R,C = 10,13
 
 for i,s in enumerate(stars):
     plt.subplot(R, C, i+1)
     dimshow(tim.getImage()[s.iy - margin : s.iy + margin+1,
                            s.ix - margin : s.ix + margin+1], **ima)
+plt.suptitle('DECaLS images of Pan-STARRS stars: ' + tim.name)
 ps.savefig()
 
 resids = []
@@ -105,7 +109,7 @@ for i,s in enumerate(stars):
     
     plt.subplot(R, C, i+1)
     dimshow(mod, **ima)
-plt.suptitle('Models: ' + tim.name)
+plt.suptitle('Models for Pan-STARRS stars: ' + tim.name)
 ps.savefig()
 
 resa = dict(vmin=-5.*tim.sig1, vmax=5.*tim.sig1, ticks=False)
@@ -138,12 +142,15 @@ for i,tr in enumerate(tractors):
     print tr
     src = tr.catalog[0]
     print 'Initial position:', src.pos
+    x,y = src.pos.x, src.pos.y
     tr.freezeParam('images')
     tr.printThawedParams()
-    for i in range(50):
-        dlnp,x,alpha = tr.optimize(priors=False, shared_params=False,
+    for step in range(50):
+        dlnp,X,alpha = tr.optimize(priors=False, shared_params=False,
                                    alphas=alphas)
         print 'dlnp', dlnp
+        print 'pos', src.pos.x, src.pos.y
+        print 'Delta position:', src.pos.x - x, src.pos.y - y
         #if dlnp < 0.1:
         if dlnp == 0.:
             break
@@ -188,6 +195,12 @@ dx = stars.xfit - stars.xx
 dy = stars.yfit - stars.yy
 
 print 'dx,dy:', dx,dy
+
+print 'dx, dy:'
+for x,y in zip(dx,dy):
+    print ' ', x, y
+
+
 plt.clf()
 dimshow(tim.getImage().T, vmin=-2.*tim.sig1, vmax=10.*tim.sig1)
 ax = plt.axis()
@@ -195,5 +208,6 @@ plt.plot(stars.iy, stars.ix, 'r.')
 plt.plot(np.vstack((stars.yy, stars.yy + dy*100)),
          np.vstack((stars.xx, stars.xx + dx*100)), 'r-')
 plt.axis(ax)
+plt.title('Delta-positions of Pan-STARRS stars: ' + tim.name)
 ps.savefig()
 

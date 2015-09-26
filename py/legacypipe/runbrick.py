@@ -1138,27 +1138,6 @@ def stage_srcs(coimgs=None, cons=None,
     detmaps, detivs, satmap = detection_maps(tims, targetwcs, bands, mp)
     tnow = Time()
     print('[parallel srcs] Detmaps:', tnow-tlast)
-
-    saturated_pix = None
-
-    if T is not None:
-
-        saturated_pix = np.zeros(detmaps[0].shape, bool)
-
-        for band,detmap,detiv in zip(bands, detmaps, detivs):
-            I = np.flatnonzero(detiv[T.ity, T.itx] == 0.)
-            print(len(I), 'SDSS sources have detiv = 0 in band', band)
-            if len(I) == 0:
-                continue
-
-            from scipy.ndimage.morphology import binary_propagation
-
-            # Set the central pixel of the detmap
-            saturated_pix[T.ity[I], T.itx[I]] = True
-            # Spread the True pixels wherever detiv==0
-            binary_propagation(saturated_pix, mask=(detiv == 0),
-                               output=saturated_pix)
-
             
     tlast = tnow
     # Median-smooth detection maps
@@ -1205,6 +1184,84 @@ def stage_srcs(coimgs=None, cons=None,
                          bands[i])
             ps.savefig()
 
+    # Handle the margin of interpolated (masked) pixels around
+    # saturated pixels
+    from scipy.ndimage.morphology import binary_dilation
+
+    saturated_pix = binary_dilation(satmap > 0, iterations=10)
+
+    if T is not None:
+        #saturated_pix = np.zeros(detmaps[0].shape, bool)
+        for band,detmap,detiv in zip(bands, detmaps, detivs):
+            I = np.flatnonzero(detiv[T.ity, T.itx] == 0.)
+            print(len(I), 'SDSS sources have detiv = 0 in band', band)
+            if len(I) == 0:
+                continue
+
+            from scipy.ndimage.morphology import binary_propagation
+
+            # Set the central pixel of the detmap
+            saturated_pix[T.ity[I], T.itx[I]] = True
+            # Spread the True pixels wherever detiv==0
+            binary_propagation(saturated_pix, mask=(detiv == 0),
+                               output=saturated_pix)
+
+    # Saturated blobs -- create a source for each?!
+    from scipy.ndimage.measurements import label, find_objects, center_of_mass
+
+    satblobs,nsat = label(satmap > 0)
+    satxy = center_of_mass(satmap, labels=satblobs, index=np.arange(nsat)+1)
+    # NOTE, satxy is transposed
+    satx = np.array([x for y,x in satxy]).astype(int)
+    saty = np.array([y for y,x in satxy]).astype(int)
+    del satxy
+
+    if len(satx):
+        if avoid_xy is not None:
+            x,y = avoid_xy
+            avoid_xy = np.append(x, satx), np.append(y, saty)
+        else:
+            avoid_xy = satx,saty
+
+        Tsat = fits_table()
+        Tsat.tx = Tsat.itx = satx
+        Tsat.ty = Tsat.ity = saty
+        Tsat.ra,Tsat.dec = targetwcs.pixelxy2radec(satx+1, saty+1)
+
+        satcat = []
+        for r,d in zip(Tsat.ra, Tsat.dec):
+            # ??!
+            fluxes = dict([(band, 1.) for band in bands)
+            satcat.append(PointSource(RaDecPos(r, d),
+                                      NanoMaggies(order=bands, **fluxes)))
+        
+    else:
+        Tsat = None
+        satcat = []
+    
+    if plots:
+        plt.clf()
+        dimshow(satmap)
+        plt.title('satmap')
+        ps.savefig()
+
+        rgb = get_rgb(detmaps, bands)
+        plt.clf()
+        dimshow(rgb)
+        plt.title('detmaps')
+        ps.savefig()
+
+        print('rgb', rgb.dtype)
+        rgb[:,:,0][saturated_pix] = 0
+        rgb[:,:,1][saturated_pix] = 1
+        rgb[:,:,2][saturated_pix] = 0
+        plt.clf()
+        dimshow(rgb)
+        ax = plt.axis()
+        plt.plot(satx, saty, 'ro')
+        plt.axis(ax)
+        plt.title('detmaps & saturated')
+        ps.savefig()
 
     # SED-matched detections
     print('Running source detection at', nsigma, 'sigma')
