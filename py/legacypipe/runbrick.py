@@ -1069,7 +1069,6 @@ def stage_srcs(coimgs=None, cons=None,
 
     if Tsdss is not None:
         avoid_xy.extend(zip(Tsdss.itx, Tsdss.ity))
-            
 
     if plots and False:
         for tim in tims:
@@ -1255,6 +1254,11 @@ def stage_srcs(coimgs=None, cons=None,
 
     # SED-matched detections
     print('Running source detection at', nsigma, 'sigma')
+    if len(avoid_xy) == 0:
+        avoid_xy = None
+    else:
+        avoid_xy = np.vstack(avoid_xy)
+        avoid_xy = avoid_xy[:,0], avoid_xy[:,1]
     SEDs = sed_matched_filters(bands)
     Tnew,newcat,hot = run_sed_matched_filters(
         SEDs, bands, detmaps, detivs, avoid_xy, targetwcs,
