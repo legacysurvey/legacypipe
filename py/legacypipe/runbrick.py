@@ -929,33 +929,30 @@ def stage_srcs(coimgs=None, cons=None,
         cols = ['parent', 'tai', 'mjd', 'psf_fwhm', 'objc_flags2', 'flags2',
                 'devflux_ivar', 'expflux_ivar', 'calib_status', 'raerr',
                 'decerr']
-        cat,T = get_sdss_sources(bands, targetwcs, extracols=cols,
+        sdsscat,Tsdss = get_sdss_sources(bands, targetwcs, extracols=cols,
                                  ellipse=LegacyEllipseWithPriors.fromRAbPhi)
         tnow = Time()
         print('[serial srcs] SDSS sources:', tnow-tlast)
         tlast = tnow
     else:
-        cat = []
-        T = None
+        sdsscat = []
+        Tsdss = None
 
-    if T is not None:
+    avoid_xy = []
+    if Tsdss is not None:
         # SDSS RAERR, DECERR are in arcsec.  Convert to deg.
-        err = T.raerr / 3600.
-        T.ra_ivar  = 1./err**2
-        err = T.decerr / 3600.
-        T.dec_ivar  = 1./err**2
-        T.delete_column('raerr')
-        T.delete_column('decerr')
-        avoid_xy = T.itx, T.ity
+        err = Tsdss.raerr / 3600.
+        Tsdss.ra_ivar  = 1./err**2
+        err = Tsdss.decerr / 3600.
+        Tsdss.dec_ivar  = 1./err**2
+        Tsdss.delete_column('raerr')
+        Tsdss.delete_column('decerr')
 
-        for c in T.columns():
+        for c in Tsdss.columns():
             if c in ['itx','ity']:
                 continue
             print('Renaming', c)
-            T.rename(c, 'sdss_c')
-
-    else:
-        avoid_xy = None
+            Tsdss.rename(c, 'sdss_c')
 
     if on_bricks:
         from legacypipe.desi_common import read_fits_catalog
@@ -1011,32 +1008,25 @@ def stage_srcs(coimgs=None, cons=None,
         print('Created', len(bcat), 'tractor catalog objects')
 
         # Trim off SDSS sources that overlap this brick.
-        if T is not None:
-            keep_sdss = np.ones(len(T), bool)
+        if Tsdss is not None:
+            keep_sdss = np.ones(len(Tsdss), bool)
             for brick in bricks:
                 # Drop SDSS sources within the BRICK_PRIMARY region of the
                 # neighbouring brick.
-                keep_sdss[(T.ra  >= brick.ra1 ) * (T.ra  < brick.ra2 ) *
-                          (T.dec >= brick.dec1) * (t.dec < brick.dec2)] = False
+                keep_sdss[(Tsdss.ra  >= brick.ra1 ) * (Tsdss.ra  < brick.ra2 ) *
+                          (Tsdss.dec >= brick.dec1) * (Tsdss.dec < brick.dec2)] = False
             if sum(keep_sdss) < len(keep_sdss):
                 print('Trimming', len(keep_sdss)-sum(keep_sdss),
                       'SDSS sources within neighbouring bricks')
-                T.cut(keep_sdss)
-                cat = Catalog(*[src for src,keep in zip(cat,keep_sdss) if keep])
-                if avoid_xy is not None:
-                    x,y = avoid_xy
-                    avoid_xy = x[keep_sdss], y[keep_sdss]
+                Tsdss.cut(keep_sdss)
+                sdsscat = Catalog(*[src for src,keep in zip(sdsscat,keep_sdss) if keep])
         
         # Add the new sources to the 'avoid_xy' list, which are
         # existing sources that should be avoided when detecting new
         # faint sources.
         ax = np.round(B.xx - 1).astype(int)
         ay = np.round(B.yy - 1).astype(int)
-        if avoid_xy is None:
-            avoid_xy = ax, ay
-        else:
-            x,y = avoid_xy
-            avoid_xy = np.append(x, ax).astype(int), np.append(y, ay).astype(int)
+        avoid_xy.extend(zip(ax, ay))
         
         print('Subtracting tractor-on-bricks sources belonging to other bricks')
         ## HACK -- note that this is going to screw up fracflux and
@@ -1077,8 +1067,12 @@ def stage_srcs(coimgs=None, cons=None,
             ps.savefig()
 
 
-    if plots:
-        for tim in []: #tims:
+    if Tsdss is not None:
+        avoid_xy.extend(zip(Tsdss.itx, Tsdss.ity))
+            
+
+    if plots and False:
+        for tim in tims:
             ivx = tim.imobj.read_invvar(clip=False, slice=tim.slice)
             plt.clf()
             plt.subplot(2,2,1)
@@ -1190,10 +1184,10 @@ def stage_srcs(coimgs=None, cons=None,
 
     saturated_pix = binary_dilation(satmap > 0, iterations=10)
 
-    if T is not None:
+    if Tsdss is not None:
         #saturated_pix = np.zeros(detmaps[0].shape, bool)
         for band,detmap,detiv in zip(bands, detmaps, detivs):
-            I = np.flatnonzero(detiv[T.ity, T.itx] == 0.)
+            I = np.flatnonzero(detiv[Tsdss.ity, Tsdss.itx] == 0.)
             print(len(I), 'SDSS sources have detiv = 0 in band', band)
             if len(I) == 0:
                 continue
@@ -1201,11 +1195,11 @@ def stage_srcs(coimgs=None, cons=None,
             from scipy.ndimage.morphology import binary_propagation
 
             # Set the central pixel of the detmap
-            saturated_pix[T.ity[I], T.itx[I]] = True
+            saturated_pix[Tsdss.ity[I], Tsdss.itx[I]] = True
             # Spread the True pixels wherever detiv==0
             binary_propagation(saturated_pix, mask=(detiv == 0),
                                output=saturated_pix)
-
+            
     # Saturated blobs -- create a source for each?!
     from scipy.ndimage.measurements import label, find_objects, center_of_mass
 
@@ -1217,11 +1211,7 @@ def stage_srcs(coimgs=None, cons=None,
     del satxy
 
     if len(satx):
-        if avoid_xy is not None:
-            x,y = avoid_xy
-            avoid_xy = np.append(x, satx), np.append(y, saty)
-        else:
-            avoid_xy = satx,saty
+        avoid_xy.extend(zip(satx, saty))
 
         Tsat = fits_table()
         Tsat.tx = Tsat.itx = satx
@@ -1231,7 +1221,7 @@ def stage_srcs(coimgs=None, cons=None,
         satcat = []
         for r,d in zip(Tsat.ra, Tsat.dec):
             # ??!
-            fluxes = dict([(band, 1.) for band in bands)
+            fluxes = dict([(band, 1.) for band in bands])
             satcat.append(PointSource(RaDecPos(r, d),
                                       NanoMaggies(order=bands, **fluxes)))
         
@@ -1272,20 +1262,26 @@ def stage_srcs(coimgs=None, cons=None,
 
     peaksn = Tnew.peaksn
     apsn = Tnew.apsn
+    peakx,peaky = Tnew.tx, Tnew.ty
+
     Tnew.delete_column('peaksn')
     Tnew.delete_column('apsn')
 
-    if T is None:
-        Nsdss = 0
-        T = Tnew
-        cat = Catalog(*newcat)
-    else:
-        Nsdss = len(T)
-        T = merge_tables([T,Tnew], columns='fillzero')
-        cat.extend(newcat)
-    # new peaks
-    peakx = T.tx[Nsdss:]
-    peaky = T.ty[Nsdss:]
+    TT = []
+    cats = []
+    if Tsdss is not None:
+        TT.append(Tsdss)
+        cats.extend(sdsscat)
+    if Tsat is not None:
+        TT.append(Tsat)
+        cats.extend(satcat)
+    TT.append(Tnew)
+    cats.extend(newcat)
+
+    T = merge_tables(TT, columns='fillzero')
+    cat = Catalog(*cats)
+    del TT
+    del cats
 
     if pipe:
         del detmaps
