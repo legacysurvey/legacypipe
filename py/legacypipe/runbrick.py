@@ -1135,7 +1135,7 @@ def stage_srcs(coimgs=None, cons=None,
             
             
     print('Rendering detection maps...')
-    detmaps, detivs = detection_maps(tims, targetwcs, bands, mp)
+    detmaps, detivs, satmap = detection_maps(tims, targetwcs, bands, mp)
     tnow = Time()
     print('[parallel srcs] Detmaps:', tnow-tlast)
 

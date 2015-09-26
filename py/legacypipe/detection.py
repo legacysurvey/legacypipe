@@ -26,20 +26,23 @@ def _detmap(X):
     detiv = np.zeros((subh,subw), np.float32) + (1. / detsig1**2)
     detiv[ie == 0] = 0.
     (Yo,Xo,Yi,Xi) = R
-    return Yo, Xo, detim[Yi,Xi], detiv[Yi,Xi]
+    sat = (tim.dq[Yi,Xi] & tim.dq_bits['satur'] > 0)
+    return Yo, Xo, detim[Yi,Xi], detiv[Yi,Xi], sat
 
 def detection_maps(tims, targetwcs, bands, mp):
     # Render the detection maps
     H,W = targetwcs.shape
     detmaps = dict([(b, np.zeros((H,W), np.float32)) for b in bands])
     detivs  = dict([(b, np.zeros((H,W), np.float32)) for b in bands])
-    for tim, (Yo,Xo,incmap,inciv) in zip(
+    satmap  = np.zeros((H,W), np.uint8)
+    for tim, (Yo,Xo,incmap,inciv,sat) in zip(
         tims, mp.map(_detmap, [(tim, targetwcs, H, W) for tim in tims])):
         if Yo is None:
             continue
         detmaps[tim.band][Yo,Xo] += incmap * inciv
         detivs [tim.band][Yo,Xo] += inciv
-
+        satmap           [Yo,Xo] += sat
+        
     for band in bands:
         detmaps[band] /= np.maximum(1e-16, detivs[band])
 
@@ -47,7 +50,7 @@ def detection_maps(tims, targetwcs, bands, mp):
     detmaps = [detmaps[b] for b in bands]
     detivs  = [detivs [b] for b in bands]
         
-    return detmaps, detivs
+    return detmaps, detivs, satmap
 
 
 
