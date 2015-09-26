@@ -8,7 +8,7 @@ export PYTHONPATH=${PYTHONPATH}:.
 # https://software.intel.com/en-us/articles/using-threaded-intel-mkl-in-multi-thread-application
 export MKL_NUM_THREADS=1
 
-outdir=$SCRATCH/dr2g
+outdir=$SCRATCH/dr2j
 
 # git checkout of https://github.com/legacysurvey/legacypipe-dir
 # branch cosmos-subset
