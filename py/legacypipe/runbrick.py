@@ -807,7 +807,6 @@ def stage_image_coadds(targetwcs=None, bands=None, tims=None, outdir=None,
     trymakedirs(basedir)
 
     C = _coadds(tims, bands, targetwcs,
-
                 #############
                 detmaps=True,
 
@@ -864,12 +863,11 @@ def stage_image_coadds(targetwcs=None, bands=None, tims=None, outdir=None,
 
 
     #rgbkwargs2 = dict(mnmx=(-3., 3.))
-
-    rgbkwargs2 = dict(mnmx=(-2., 10.))
+    #rgbkwargs2 = dict(mnmx=(-2., 10.))
 
     tmpfn = create_temp(suffix='.png')
     for name,ims,rgbkw in [('image',C.coimgs,rgbkwargs),
-                           ('image2',C.coimgs,rgbkwargs2),
+        #('image2',C.coimgs,rgbkwargs2),
                            ]:
         rgb = get_rgb(ims, bands, **rgbkw)
         kwa = {}
@@ -931,33 +929,30 @@ def stage_srcs(coimgs=None, cons=None,
         cols = ['parent', 'tai', 'mjd', 'psf_fwhm', 'objc_flags2', 'flags2',
                 'devflux_ivar', 'expflux_ivar', 'calib_status', 'raerr',
                 'decerr']
-        cat,T = get_sdss_sources(bands, targetwcs, extracols=cols,
+        sdsscat,Tsdss = get_sdss_sources(bands, targetwcs, extracols=cols,
                                  ellipse=LegacyEllipseWithPriors.fromRAbPhi)
         tnow = Time()
         print('[serial srcs] SDSS sources:', tnow-tlast)
         tlast = tnow
     else:
-        cat = []
-        T = None
+        sdsscat = []
+        Tsdss = None
 
-    if T is not None:
+    avoid_xy = []
+    if Tsdss is not None:
         # SDSS RAERR, DECERR are in arcsec.  Convert to deg.
-        err = T.raerr / 3600.
-        T.ra_ivar  = 1./err**2
-        err = T.decerr / 3600.
-        T.dec_ivar  = 1./err**2
-        T.delete_column('raerr')
-        T.delete_column('decerr')
-        avoid_xy = T.itx, T.ity
+        err = Tsdss.raerr / 3600.
+        Tsdss.ra_ivar  = 1./err**2
+        err = Tsdss.decerr / 3600.
+        Tsdss.dec_ivar  = 1./err**2
+        Tsdss.delete_column('raerr')
+        Tsdss.delete_column('decerr')
 
-        for c in T.columns():
+        for c in Tsdss.columns():
             if c in ['itx','ity']:
                 continue
             print('Renaming', c)
-            T.rename(c, 'sdss_c')
-
-    else:
-        avoid_xy = None
+            Tsdss.rename(c, 'sdss_c')
 
     if on_bricks:
         from legacypipe.desi_common import read_fits_catalog
@@ -1013,30 +1008,25 @@ def stage_srcs(coimgs=None, cons=None,
         print('Created', len(bcat), 'tractor catalog objects')
 
         # Trim off SDSS sources that overlap this brick.
-        if T is not None:
-            keep_sdss = np.ones(len(T), bool)
+        if Tsdss is not None:
+            keep_sdss = np.ones(len(Tsdss), bool)
             for brick in bricks:
                 # Drop SDSS sources within the BRICK_PRIMARY region of the
                 # neighbouring brick.
-                keep_sdss[(T.ra  >= brick.ra1 ) * (T.ra  < brick.ra2 ) *
-                          (T.dec >= brick.dec1) * (t.dec < brick.dec2)] = False
+                keep_sdss[(Tsdss.ra  >= brick.ra1 ) * (Tsdss.ra  < brick.ra2 ) *
+                          (Tsdss.dec >= brick.dec1) * (Tsdss.dec < brick.dec2)] = False
             if sum(keep_sdss) < len(keep_sdss):
                 print('Trimming', len(keep_sdss)-sum(keep_sdss),
                       'SDSS sources within neighbouring bricks')
-                T.cut(keep_sdss)
-                cat = Catalog(*[src for src,keep in zip(cat,keep_sdss) if keep])
-                if avoid_xy is not None:
-                    x,y = avoid_xy
-                    avoid_xy = x[keep_sdss], y[keep_sdss]
+                Tsdss.cut(keep_sdss)
+                sdsscat = Catalog(*[src for src,keep in zip(sdsscat,keep_sdss) if keep])
         
         # Add the new sources to the 'avoid_xy' list, which are
         # existing sources that should be avoided when detecting new
         # faint sources.
-        if avoid_xy is None:
-            avoid_xy = B.xx, B.yy
-        else:
-            x,y = avoid_xy
-            avoid_xy = np.append(x, B.xx), np.append(y, B.yy)
+        ax = np.round(B.xx - 1).astype(int)
+        ay = np.round(B.yy - 1).astype(int)
+        avoid_xy.extend(zip(ax, ay))
         
         print('Subtracting tractor-on-bricks sources belonging to other bricks')
         ## HACK -- note that this is going to screw up fracflux and
@@ -1077,7 +1067,11 @@ def stage_srcs(coimgs=None, cons=None,
             ps.savefig()
 
 
-    if plots:
+    if Tsdss is not None:
+        avoid_xy.extend(zip(Tsdss.itx, Tsdss.ity))
+            
+
+    if plots and False:
         for tim in tims:
             ivx = tim.imobj.read_invvar(clip=False, slice=tim.slice)
             plt.clf()
@@ -1100,33 +1094,44 @@ def stage_srcs(coimgs=None, cons=None,
             #plt.title('DQ')
             plt.suptitle('Tim ' + tim.name)
             ps.savefig()
+
+        for tim in tims:
+            plt.clf()
+            plt.subplot(2,2,1)
+            dimshow(tim.getInvvar(), vmin=-0.1 / tim.sig1**2,
+                    vmax=2. / tim.sig1**2, ticks=False)
+            h,w = tim.shape
+            rgba = np.zeros((h,w,4), np.uint8)
+            rgba[:,:,0][tim.inverr == 0] = 255
+            rgba[:,:,3][tim.inverr == 0] = 255
+            dimshow(rgba)
+            plt.title('Tim invvar')
+            plt.subplot(2,2,2)
+            print('Image max:', tim.getImage().max(), 'satval', tim.satval)
+            mx = max(tim.getImage().max(), tim.satval) * 1.1
+            ima = dict(vmin=-2.*tim.sig1, vmax=mx,
+                       ticks=False)
+            dimshow(tim.getImage(), **ima)
+            plt.title('Tim image')
+            plt.subplot(2,2,3)
+            dimshow((tim.dq & tim.dq_bits['satur'] > 0), vmin=0, vmax=1,
+                    ticks=False)
+            plt.title('SATUR')
+            plt.subplot(2,2,4)
+            img = tim.getImage().copy()
+            img[(tim.dq & tim.dq_bits['satur']) > 0] = tim.satval
+            dimshow(img, **ima)
+            plt.title('Patched image')
+            plt.suptitle('Tim ' + tim.name)
+            ps.savefig()
+
+
             
             
     print('Rendering detection maps...')
-    detmaps, detivs = detection_maps(tims, targetwcs, bands, mp)
+    detmaps, detivs, satmap = detection_maps(tims, targetwcs, bands, mp)
     tnow = Time()
     print('[parallel srcs] Detmaps:', tnow-tlast)
-
-    saturated_pix = None
-
-    if T is not None:
-
-        saturated_pix = np.zeros(detmaps[0].shape, bool)
-
-        for band,detmap,detiv in zip(bands, detmaps, detivs):
-            I = np.flatnonzero(detiv[T.ity, T.itx] == 0.)
-            print(len(I), 'SDSS sources have detiv = 0 in band', band)
-            if len(I) == 0:
-                continue
-
-            from scipy.ndimage.morphology import binary_propagation
-
-            # Set the central pixel of the detmap
-            saturated_pix[T.ity[I], T.itx[I]] = True
-            # Spread the True pixels wherever detiv==0
-            binary_propagation(saturated_pix, mask=(detiv == 0),
-                               output=saturated_pix)
-
             
     tlast = tnow
     # Median-smooth detection maps
@@ -1173,6 +1178,80 @@ def stage_srcs(coimgs=None, cons=None,
                          bands[i])
             ps.savefig()
 
+    # Handle the margin of interpolated (masked) pixels around
+    # saturated pixels
+    from scipy.ndimage.morphology import binary_dilation
+
+    saturated_pix = binary_dilation(satmap > 0, iterations=10)
+
+    if Tsdss is not None:
+        #saturated_pix = np.zeros(detmaps[0].shape, bool)
+        for band,detmap,detiv in zip(bands, detmaps, detivs):
+            I = np.flatnonzero(detiv[Tsdss.ity, Tsdss.itx] == 0.)
+            print(len(I), 'SDSS sources have detiv = 0 in band', band)
+            if len(I) == 0:
+                continue
+
+            from scipy.ndimage.morphology import binary_propagation
+
+            # Set the central pixel of the detmap
+            saturated_pix[Tsdss.ity[I], Tsdss.itx[I]] = True
+            # Spread the True pixels wherever detiv==0
+            binary_propagation(saturated_pix, mask=(detiv == 0),
+                               output=saturated_pix)
+            
+    # Saturated blobs -- create a source for each?!
+    from scipy.ndimage.measurements import label, find_objects, center_of_mass
+
+    satblobs,nsat = label(satmap > 0)
+    satxy = center_of_mass(satmap, labels=satblobs, index=np.arange(nsat)+1)
+    # NOTE, satxy is transposed
+    satx = np.array([x for y,x in satxy]).astype(int)
+    saty = np.array([y for y,x in satxy]).astype(int)
+    del satxy
+
+    if len(satx):
+        avoid_xy.extend(zip(satx, saty))
+
+        Tsat = fits_table()
+        Tsat.tx = Tsat.itx = satx
+        Tsat.ty = Tsat.ity = saty
+        Tsat.ra,Tsat.dec = targetwcs.pixelxy2radec(satx+1, saty+1)
+
+        satcat = []
+        for r,d in zip(Tsat.ra, Tsat.dec):
+            # ??!
+            fluxes = dict([(band, 1.) for band in bands])
+            satcat.append(PointSource(RaDecPos(r, d),
+                                      NanoMaggies(order=bands, **fluxes)))
+        
+    else:
+        Tsat = None
+        satcat = []
+    
+    if plots:
+        plt.clf()
+        dimshow(satmap)
+        plt.title('satmap')
+        ps.savefig()
+
+        rgb = get_rgb(detmaps, bands)
+        plt.clf()
+        dimshow(rgb)
+        plt.title('detmaps')
+        ps.savefig()
+
+        print('rgb', rgb.dtype)
+        rgb[:,:,0][saturated_pix] = 0
+        rgb[:,:,1][saturated_pix] = 1
+        rgb[:,:,2][saturated_pix] = 0
+        plt.clf()
+        dimshow(rgb)
+        ax = plt.axis()
+        plt.plot(satx, saty, 'ro')
+        plt.axis(ax)
+        plt.title('detmaps & saturated')
+        ps.savefig()
 
     # SED-matched detections
     print('Running source detection at', nsigma, 'sigma')
@@ -1183,20 +1262,26 @@ def stage_srcs(coimgs=None, cons=None,
 
     peaksn = Tnew.peaksn
     apsn = Tnew.apsn
+    peakx,peaky = Tnew.tx, Tnew.ty
+
     Tnew.delete_column('peaksn')
     Tnew.delete_column('apsn')
 
-    if T is None:
-        Nsdss = 0
-        T = Tnew
-        cat = Catalog(*newcat)
-    else:
-        Nsdss = len(T)
-        T = merge_tables([T,Tnew], columns='fillzero')
-        cat.extend(newcat)
-    # new peaks
-    peakx = T.tx[Nsdss:]
-    peaky = T.ty[Nsdss:]
+    TT = []
+    cats = []
+    if Tsdss is not None:
+        TT.append(Tsdss)
+        cats.extend(sdsscat)
+    if Tsat is not None:
+        TT.append(Tsat)
+        cats.extend(satcat)
+    TT.append(Tnew)
+    cats.extend(newcat)
+
+    T = merge_tables(TT, columns='fillzero')
+    cat = Catalog(*cats)
+    del TT
+    del cats
 
     if pipe:
         del detmaps
@@ -3161,6 +3246,7 @@ def stage_writecat(
     version_header=None,
     T=None,
     WISE=None,
+    no_sdss=False,
     AP=None,
     apertures_arcsec=None,
     cat=None, targetrd=None, pixscale=None, targetwcs=None,
@@ -3367,8 +3453,7 @@ def stage_writecat(
         cols.extend([
                 'wise_flux', 'wise_flux_ivar',
                 'wise_mw_transmission', 'wise_nobs', 'wise_fracflux',
-                'wise_rchi2',
-                ])
+                'wise_rchi2'])
     cols.extend([
         'dchisq',
         'fracdev', 'fracDev_ivar', 'shapeexp_r', 'shapeexp_r_ivar',
@@ -3377,26 +3462,25 @@ def stage_writecat(
         'shapedev_r',  'shapedev_r_ivar',
         'shapedev_e1', 'shapedev_e1_ivar',
         'shapedev_e2', 'shapedev_e2_ivar',
-        'ebv', 'sdss_run',
-        'sdss_camcol', 'sdss_field', 'sdss_id', 'sdss_objid', 'sdss_parent',
-        'sdss_nchild', 'sdss_objc_type', 'sdss_objc_flags', 'sdss_objc_flags2',
-        'sdss_flags', 'sdss_flags2', 'sdss_tai',
-        'sdss_ra',  'sdss_ra_ivar',
-        'sdss_dec', 'sdss_dec_ivar',
-        'sdss_psf_fwhm', 'sdss_mjd',
-        'sdss_theta_dev', 'sdss_theta_deverr',
-        'sdss_ab_dev',    'sdss_ab_deverr',
-        'sdss_theta_exp', 'sdss_theta_experr',
-        'sdss_ab_exp', 'sdss_ab_experr',
-        'sdss_fracdev', 'sdss_phi_dev_deg', 'sdss_phi_exp_deg',
-        'sdss_psfflux',    'sdss_psfflux_ivar',
-        'sdss_cmodelflux', 'sdss_cmodelflux_ivar',
-        'sdss_modelflux',  'sdss_modelflux_ivar',
-        'sdss_devflux',    'sdss_devflux_ivar',
-        'sdss_expflux',    'sdss_expflux_ivar',
-        'sdss_extinction', 'sdss_calib_status',
-        'sdss_resolve_status',
-        ])
+        'ebv'])
+    if not no_sdss:
+        cols.extend([
+            'sdss_run', 'sdss_camcol', 'sdss_field', 'sdss_id', 'sdss_objid',
+            'sdss_parent', 'sdss_nchild', 'sdss_objc_type', 'sdss_objc_flags',
+            'sdss_objc_flags2', 'sdss_flags', 'sdss_flags2', 'sdss_tai',
+            'sdss_ra',  'sdss_ra_ivar', 'sdss_dec', 'sdss_dec_ivar',
+            'sdss_psf_fwhm', 'sdss_mjd',
+            'sdss_theta_dev', 'sdss_theta_deverr',
+            'sdss_ab_dev',    'sdss_ab_deverr',
+            'sdss_theta_exp', 'sdss_theta_experr',
+            'sdss_ab_exp', 'sdss_ab_experr',
+            'sdss_fracdev', 'sdss_phi_dev_deg', 'sdss_phi_exp_deg',
+            'sdss_psfflux',    'sdss_psfflux_ivar',
+            'sdss_cmodelflux', 'sdss_cmodelflux_ivar',
+            'sdss_modelflux',  'sdss_modelflux_ivar',
+            'sdss_devflux',    'sdss_devflux_ivar',
+            'sdss_expflux',    'sdss_expflux_ivar',
+            'sdss_extinction', 'sdss_calib_status', 'sdss_resolve_status'])
 
     # TUNIT cards.
     deg='deg'
@@ -3497,28 +3581,24 @@ def stage_writecat(
             if c in arrtypes:
                 T2.set(c, np.zeros((len(T2),5), arrtypes[c]))
 
-    # Blank out all SDSS fields for sources that have moved too much.
-    xyz1 = radectoxyz(T2.ra, T2.dec)
-    xyz2 = radectoxyz(T2.sdss_ra, T2.sdss_dec)
-    d2 = np.sum((xyz2-xyz1)**2, axis=1)
-    # 1.5 arcsec
-    maxd2 = np.deg2rad(1.5 / 3600.)**2
-    blankout = np.flatnonzero((T2.sdss_ra != 0) * (d2 > maxd2))
-    print('Blanking out', len(blankout), 'SDSS no-longer-matches')
-    if len(blankout):
-        Tcols = T2.get_columns()
-        for c in Tcols:
-            if c.startswith('sdss'):
-                x = T2.get(c)
-                x[blankout] = 0
+    if not no_sdss:
+        # Blank out all SDSS fields for sources that have moved too much.
+        xyz1 = radectoxyz(T2.ra, T2.dec)
+        xyz2 = radectoxyz(T2.sdss_ra, T2.sdss_dec)
+        d2 = np.sum((xyz2-xyz1)**2, axis=1)
+        # 1.5 arcsec
+        maxd2 = np.deg2rad(1.5 / 3600.)**2
+        blankout = np.flatnonzero((T2.sdss_ra != 0) * (d2 > maxd2))
+        print('Blanking out', len(blankout), 'SDSS no-longer-matches')
+        if len(blankout):
+            Tcols = T2.get_columns()
+            for c in Tcols:
+                if c.startswith('sdss'):
+                    x = T2.get(c)
+                    x[blankout] = 0
 
     if write_catalog:
         T2.writeto(fn, primheader=primhdr, header=hdr, columns=cols)
-        # arrays = [T2.get(c) for c in cols]
-        # arrays = [np.array(a) if isinstance(a,list) else a
-        #           for a in arrays]
-        # fitsio.write(fn, None, header=primhdr, clobber=True)
-        # fitsio.write(fn, arrays, names=cols, header=hdr)
         print('Wrote', fn)
 
     return dict(T2=T2)

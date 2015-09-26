@@ -8,6 +8,7 @@ import os
 import numpy as np
 
 class ps1cat():
+    ps1band = dict(g=0,r=1,i=2,z=3,Y=4)
     def __init__(self,expnum=None,ccdname=None,ccdwcs=None):
         """Initialize the class with either the exposure number *and* CCD name, or
         directly with the WCS of the CCD of interest.
@@ -18,10 +19,10 @@ class ps1cat():
             raise ValueError('You must have the PS1CAT_DIR environment variable set to point to Pan-STARRS1 catalogs')
         self.nside = 32
         if ccdwcs is None:
-            from legacypipe.common import Decals, DecamImage
+            from legacypipe.common import Decals
             decals = Decals()
             ccd = decals.find_ccds(expnum=expnum,ccdname=ccdname)[0]
-            im = DecamImage(decals,ccd)
+            im = decals.get_image_object(ccd)
             self.ccdwcs = im.get_wcs()
         else:
             self.ccdwcs = ccdwcs
@@ -52,19 +53,18 @@ class ps1cat():
         """
         bounds = self.ccdwcs.radec_bounds()
         allcat = self.get_cat([bounds[0],bounds[1]],[bounds[2],bounds[3]])
-        onccd = np.empty(len(allcat))
-        for iobj, cat in enumerate(allcat):
-            onccd[iobj] = self.ccdwcs.is_inside(cat.ra,cat.dec)
-        cat = allcat[np.where((onccd*1)==1)] # z
+        ok,xx,yy = self.ccdwcs.radec2pixelxy(allcat.ra, allcat.dec)
+        onccd = np.flatnonzero((xx >= 1.) * (xx <= self.ccdwcs.get_width()) *
+                               (yy >= 1.) * (yy <= self.ccdwcs.get_height()))
+        cat = allcat[onccd]
         #cat = allcat[np.where((onccd*1)*
         #                      ((allcat.nmag_ok[:,0]>0)*1)*     # g
         #                      ((allcat.nmag_ok[:,1]>0)*1)*     # r
         #                      ((allcat.nmag_ok[:,3]>0)*1)==1)] # z
         print('Found {} good PS1 stars'.format(len(cat)))
         if magrange is not None:
-            ps1band = dict(g=0,r=1,i=2,z=3,Y=4)
-            keep = np.where(((cat.median[:,ps1band[band]]>magrange[0])*1)*
-                            (cat.median[:,ps1band[band]]<magrange[1])*1)[0]
+            keep = np.where((cat.median[:,ps1cat.ps1band[band]]>magrange[0])*
+                            (cat.median[:,ps1cat.ps1band[band]]<magrange[1]))[0]
             cat = cat[keep]
             print('Trimming to {} stars with {}=[{},{}]'.
                   format(len(cat),band,magrange[0],magrange[1]))
