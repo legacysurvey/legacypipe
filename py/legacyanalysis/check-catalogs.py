@@ -7,22 +7,24 @@ from astrometry.libkd.spherematch import *
 
 from tractor import *
 
-fns = ['dr2i/tractor/149/tractor-1498p017.fits',
-       'dr2i/tractor/149/tractor-1498p020.fits',
-       'dr2i/tractor/149/tractor-1498p022.fits',
-       'dr2i/tractor/149/tractor-1498p025.fits',
-       'dr2i/tractor/150/tractor-1501p017.fits',
-       'dr2i/tractor/150/tractor-1501p020.fits',
-       'dr2i/tractor/150/tractor-1501p022.fits',
-       'dr2i/tractor/150/tractor-1501p025.fits',
-       'dr2i/tractor/150/tractor-1503p017.fits',
-       'dr2i/tractor/150/tractor-1503p020.fits',
-       'dr2i/tractor/150/tractor-1503p022.fits',
-       'dr2i/tractor/150/tractor-1503p025.fits',
-       'dr2i/tractor/150/tractor-1506p017.fits',
-       'dr2i/tractor/150/tractor-1506p020.fits',
-       'dr2i/tractor/150/tractor-1506p022.fits',
-       'dr2i/tractor/150/tractor-1506p025.fits',
+dataset = 'COSMOS DR2j'
+
+fns = ['dr2j/tractor/149/tractor-1498p017.fits',
+       'dr2j/tractor/149/tractor-1498p020.fits',
+       'dr2j/tractor/149/tractor-1498p022.fits',
+       'dr2j/tractor/149/tractor-1498p025.fits',
+       'dr2j/tractor/150/tractor-1501p017.fits',
+       'dr2j/tractor/150/tractor-1501p020.fits',
+       'dr2j/tractor/150/tractor-1501p022.fits',
+       'dr2j/tractor/150/tractor-1501p025.fits',
+       'dr2j/tractor/150/tractor-1503p017.fits',
+       'dr2j/tractor/150/tractor-1503p020.fits',
+       'dr2j/tractor/150/tractor-1503p022.fits',
+       'dr2j/tractor/150/tractor-1503p025.fits',
+       'dr2j/tractor/150/tractor-1506p017.fits',
+       'dr2j/tractor/150/tractor-1506p020.fits',
+       'dr2j/tractor/150/tractor-1506p022.fits',
+       'dr2j/tractor/150/tractor-1506p025.fits',
        ]
 
 T = merge_tables([fits_table(fn) for fn in fns])
@@ -48,6 +50,7 @@ S = T[T.t0 == 'S']
 E = T[T.t0 == 'E']
 D = T[T.t0 == 'D']
 C = T[T.t0 == 'C']
+G = T[np.array([t in 'EDC' for t in T.t0])]
 
 print len(P), 'PSF'
 print len(S), 'Simple'
@@ -125,7 +128,7 @@ plt.xlabel('g - r (mag)')
 plt.ylabel('r - z (mag)')
 plt.title('Point sources')
 plt.axis(ax)
-plt.savefig('cmd-p.png')
+plt.savefig('cc-p.png')
 
 I = S.grzbright
 plt.clf()
@@ -134,7 +137,7 @@ plt.xlabel('g - r (mag)')
 plt.ylabel('r - z (mag)')
 plt.title('Simple galaxies')
 plt.axis(ax)
-plt.savefig('cmd-s.png')
+plt.savefig('cc-s.png')
 
 plt.clf()
 I = E.grzbright
@@ -147,7 +150,7 @@ plt.xlabel('g - r (mag)')
 plt.ylabel('r - z (mag)')
 plt.title('Galaxies')
 plt.axis(ax)
-plt.savefig('cmd-g.png')
+plt.savefig('cc-g.png')
 
 
 # At least one flux should be positive...
@@ -164,7 +167,7 @@ I,J,d = I[K],J[K],d[K]
 plt.clf()
 plt.hist(d*3600., range=(0,10), bins=50)
 plt.xlabel('Arcsec between pairs')
-plt.title('COSMOS dr2i -- close pairs')
+plt.title('%s -- close pairs' % dataset)
 plt.savefig('dists.png')
 
 I,J,d = match_radec(T.ra, T.dec, T.ra, T.dec, 1./3600., notself=True)
@@ -181,3 +184,42 @@ print 'r-band fluxes and fracfluxes:'
 b = 2
 for i,j in zip(I,J)[:10]:
     print 'fluxes', T.decam_flux[i,b], T.decam_flux[j, b], 'fracs', T.decam_fracflux[i,b], T.decam_fracflux[j,b]
+
+plt.clf()
+#plt.plot(T.decam_flux[:,2], T.dchisq[:,1] - T.dchisq[:,0], 'b.')
+#
+plt.plot(P.rmag, P.dchisq[:,1] - P.dchisq[:,0], 'b.', alpha=0.1)
+plt.plot(S.rmag, S.dchisq[:,1] - S.dchisq[:,0], 'g.', alpha=0.1)
+p1 = plt.plot([],[],'b.')
+p2 = plt.plot([],[],'g.')
+plt.ylabel('dchisq_simple - dchisq_pointsource')
+plt.xlabel('r mag')
+plt.legend((p2[0],p1[0]), ('Simple','PointSource'), 'upper right')
+plt.xlim(18,26)
+plt.yscale('symlog', linthreshy = 1, linscaley = 0.5)
+plt.ylim(-1e5, 1e5)
+plt.title(dataset)
+plt.savefig('dchi.png')
+
+ax1 = plt.axis()
+
+plt.ylim(-100, 100)
+plt.xlim(20, 26)
+ax2 = plt.axis()
+plt.savefig('dchi2.png')
+
+plt.plot(G.rmag, G.dchisq[:,1] - G.dchisq[:,0], 'r.', alpha=0.1)
+p3 = plt.plot([],[],'r.')
+plt.legend((p3[0], p2[0],p1[0]), ('Galaxies', 'Simple','PointSource'),
+           'upper right')
+plt.axis(ax1)
+plt.savefig('dchi3.png')
+
+plt.axis(ax2)
+plt.savefig('dchi4.png')
+
+plt.clf()
+plt.hist(T.dchisq[:,1] - T.dchisq[:,0], range=(-30, 30), bins=50,
+         histtype='step', color='b')
+plt.xlabel('dchisq_simple - dchisq_psf')
+plt.savefig('dchi5.png')
