@@ -648,25 +648,36 @@ def stage_initplots(
     # ps.savefig()
 
     # find SDSS fields within that WCS
+    sdsscoimgs,nil = sdss_coadd(clwcs, bands)
+
+    plt.clf()
+    dimshow(get_rgb(sdsscoimgs, bands, **rgbkwargs), ticks=False)
+    #plt.title('SDSS')
+    ps.savefig()
+
+
+def sdss_coadd(targetwcs, bands):
+    from astrometry.sdss import DR9, band_index
     #sdss = DR9(basedir=photoobjdir)
     #sdss.useLocalTree()
     sdss = DR9(basedir='tmp')
     sdss.saveUnzippedFiles('tmp')
 
     #wfn = sdss.filenames.get('window_flist', None)
-    wfn = os.path.join(os.environ['PHOTO_RESOLVE'], 'window_flist.fits')
+    wfn = os.path.join(os.environ.get('PHOTO_RESOLVE',''), 'window_flist.fits')
 
     from astrometry.sdss.fields import radec_to_sdss_rcf
     
-    clra,cldec = clwcs.radec_center()
-    clrad = clwcs.radius()
-    clrad = clrad + np.hypot(10.,14.)/2./60.
-    print 'Searching for run,camcol,fields with radius', clrad, 'deg'
-    RCF = radec_to_sdss_rcf(clra, cldec, radius=clrad*60., tablefn=wfn)
+    ra,dec = targetwcs.radec_center()
+    rad = targetwcs.radius()
+    rad = rad + np.hypot(10.,14.)/2./60.
+    print 'Searching for run,camcol,fields with radius', rad, 'deg'
+    RCF = radec_to_sdss_rcf(ra, dec, radius=rad*60., tablefn=wfn)
     print 'Found %i fields possibly in range' % len(RCF)
 
-    sdsscoimgs = [np.zeros((clH,clW),np.float32) for band in bands]
-    sdsscons   = [np.zeros((clH,clW),np.float32) for band in bands]
+    H,W = targetwcs.shape
+    sdsscoimgs = [np.zeros((H,W),np.float32) for band in bands]
+    sdsscons   = [np.zeros((H,W),np.float32) for band in bands]
     for run,camcol,field,r,d in RCF:
         for iband,band in enumerate(bands):
             bandnum = band_index(band)
@@ -677,7 +688,7 @@ def stage_initplots(
             simg = frame.getImage()
             wcs = AsTransWrapper(frame.astrans, w, h, 0.5, 0.5)
             try:
-                Yo,Xo,Yi,Xi,nil = resample_with_wcs(clwcs, wcs, [], 3)
+                Yo,Xo,Yi,Xi,nil = resample_with_wcs(targetwcs, wcs, [], 3)
             except OverlapError:
                 continue
             sdsscoimgs[iband][Yo,Xo] += simg[Yi,Xi]
@@ -685,11 +696,8 @@ def stage_initplots(
     for co,n in zip(sdsscoimgs, sdsscons):
         co /= np.maximum(1e-6, n)
 
-    plt.clf()
-    dimshow(get_rgb(sdsscoimgs, bands, **rgbkwargs), ticks=False)
-    #plt.title('SDSS')
-    ps.savefig()
-
+    return sdsscoimgs, sdsscons
+        
 
 '''
 Plots; single-image image,invvar,model FITS files

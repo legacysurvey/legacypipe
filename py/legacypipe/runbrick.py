@@ -223,7 +223,8 @@ def stage_tims(W=3600, H=3600, pixscale=0.262, brickname=None,
     for ccd in ccds:
         im = decals.get_image_object(ccd)
         ims.append(im)
-
+        print(im)
+        
     tnow = Time()
     print('[serial tims] Finding images touching brick:', tnow-tlast)
     tlast = tnow
