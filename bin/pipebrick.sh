@@ -12,7 +12,7 @@ outdir=$SCRATCH/dr2j
 
 # git checkout of https://github.com/legacysurvey/legacypipe-dir
 # branch cosmos-subset
-export DECALS_DIR=/scratch1/scratchdirs/desiproc/decals-cosmos-subset
+#export DECALS_DIR=/scratch1/scratchdirs/desiproc/decals-cosmos-subset
 
 brick="$1"
 

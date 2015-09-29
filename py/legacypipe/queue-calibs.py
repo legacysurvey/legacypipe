@@ -7,7 +7,7 @@ from collections import OrderedDict
 from astrometry.util.fits import fits_table
 from astrometry.util.file import trymakedirs
 
-from legacypipe.common import Decals, DecamImage
+from legacypipe.common import Decals
 
 
 from astrometry.libkd.spherematch import match_radec
@@ -183,6 +183,16 @@ if __name__ == '__main__':
         # 535 bricks, ~7000 CCDs
         rlo,rhi = 240,245
         dlo,dhi =   5, 12
+
+    elif opt.region == 'cosmos1':
+        # 16 bricks in the core of the COSMOS field.
+        rlo,rhi = 149.75, 150.75
+        dlo,dhi = 1.6, 2.6
+
+    elif opt.region == 'pristine':
+        # Stream?
+        rlo,rhi = 240,250
+        dlo,dhi = 10,15
 
     elif opt.region == 'des':
         dlo, dhi = -6., 4.
@@ -379,7 +389,7 @@ if __name__ == '__main__':
 
         if opt.delete_sky or opt.delete_pvastrom:
             log(j+1, 'of', len(allI))
-            im = DecamImage(decals, T[i])
+            im = decals.get_image_object(T[i])
             if opt.delete_sky and os.path.exists(im.skyfn):
                 log('  deleting:', im.skyfn)
                 os.unlink(im.skyfn)
@@ -389,7 +399,7 @@ if __name__ == '__main__':
 
         if opt.check:
             log(j+1, 'of', len(allI))
-            im = DecamImage(decals, T[i])
+            im = decals.get_image_object(T[i])
             if not im.run_calibs(im, just_check=True):
                 log('Calibs for', im.expnum, im.ccdname, im.calname, 'already done')
                 continue
