@@ -668,7 +668,8 @@ def _write_band_images(band,
     targetwcs.add_to_header(hdr)
     hdr.delete('IMAGEW')
     hdr.delete('IMAGEH')
-
+    hdr.add_record(dict(name='EQUINOX', value=2000.))
+    
     imgs = [
         ('image', 'image',  cowimg,  False),
         ]
