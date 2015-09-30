@@ -3219,7 +3219,13 @@ def stage_wise_forced(
     if unwise_dir is None:
         unwise_dir = 'unwise-coadds'
 
-    roiradec = [brick.ra1, brick.ra2, brick.dec1, brick.dec2]
+    # Here we assume the targetwcs is axis-aligned and that the
+    # edge midpoints yield the RA,Dec limits (true for TAN).
+    ok,r,d = targetwcs.pixelxy2radec(np.array([1,   W,   W/2, W/2]),
+                                     np.array([H/2, H/2, 1,   H  ]))
+    # the way the roiradec box is used, the min/max order doesn't matter
+    roiradec = [r[0], r[1], d[2], d[3]]
+
     tiles = unwise_tiles_touching_wcs(targetwcs)
     print('Cut to', len(tiles), 'unWISE tiles')
 
