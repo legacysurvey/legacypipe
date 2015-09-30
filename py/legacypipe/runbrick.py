@@ -3206,6 +3206,8 @@ def stage_wise_forced(
     targetwcs=None,
     brickname=None,
     unwise_dir=None,
+    unwise_w12_dir=None,
+    unwise_w34_dir=None,
     brick=None,
     outdir=None,
     use_ceres=True,
@@ -3218,7 +3220,11 @@ def stage_wise_forced(
 
     if unwise_dir is None:
         unwise_dir = 'unwise-coadds'
-
+    if unwise_w12_dir is None:
+        unwise_w12_dir = unwise_dir
+    if unwise_w34_dir is None:
+        unwise_w34_dir = unwise_dir
+        
     # Here we assume the targetwcs is axis-aligned and that the
     # edge midpoints yield the RA,Dec limits (true for TAN).
     ok,r,d = targetwcs.pixelxy2radec(np.array([1,   W,   W/2, W/2]),
@@ -3235,8 +3241,25 @@ def stage_wise_forced(
         src.setBrightness(NanoMaggies(w=1.))
         wcat.append(src)
 
+    args = []
+    for band in [1,2]:
+        args.append((wcat, tiles, band, roiradec, unwise_w12_dir, use_ceres))
+    for band in [3,4]:
+        args.append((wcat, tiles, band, roiradec, unwise_w34_dir, use_ceres))
+
+    phots = mp.map(_unwise_phot, args)
+    WISE = phots[0]
+    for p in phots[1:]
+        WISE.add_columns_from(p)
+
+    WISE.rename('tile', 'unwise_tile')
+    return dict(WISE=WISE)
+
+def _unwise_phot(X):
+    (wcat, tiles, band, roiradec, unwise_dir, use_ceres) = X
+
     try:
-        W = unwise_forcedphot(wcat, tiles, roiradecbox=roiradec,
+        W = unwise_forcedphot(wcat, tiles, roiradecbox=roiradec, bands=[band],
                               unwise_dir=unwise_dir, use_ceres=use_ceres)
     except:
         import traceback
@@ -3245,11 +3268,10 @@ def stage_wise_forced(
 
         if use_ceres:
             print('Trying without Ceres...')
-            W = unwise_forcedphot(wcat, tiles, roiradecbox=roiradec,
+            W = unwise_forcedphot(wcat, tiles, roiradecbox=roiradec, bands=[band],
                                   unwise_dir=unwise_dir, use_ceres=False)
-
-    W.rename('tile', 'unwise_tile')
-    return dict(WISE=W)
+    return W
+        
 
 '''
 Write catalog output
@@ -3719,7 +3741,7 @@ def run_brick(brick, radec=None, pixscale=0.262,
     default, this function will cache the result of each stage in a
     (large) pickle file.  If you re-run, it will read from the
     prerequisite pickle file rather than re-running the prerequisite
-    stage.  This can field faster debugging times, but you almost
+    stage.  This can yield faster debugging times, but you almost
     certainly want to turn it off (with `writePickles=False,
     forceAll=True`) in production.
 
