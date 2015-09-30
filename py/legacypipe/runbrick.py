@@ -3249,7 +3249,7 @@ def stage_wise_forced(
 
     phots = mp.map(_unwise_phot, args)
     WISE = phots[0]
-    for p in phots[1:]
+    for p in phots[1:]:
         WISE.add_columns_from(p)
 
     WISE.rename('tile', 'unwise_tile')
