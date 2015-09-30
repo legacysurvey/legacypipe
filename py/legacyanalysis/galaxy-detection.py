@@ -27,9 +27,12 @@ class FakeDecals(object):
         self.ccds = None
         self.tims = None
 
-    def ccds_touching_wcs(self, targetwcs):
+    def ccds_touching_wcs(self, targetwcs, **kwargs):
         return self.ccds
 
+    def photometric_ccds(self, CCDs):
+        return np.arange(len(CCDs))
+    
     def get_image_object(self, t):
         return FakeImage(self, t)
 
@@ -38,16 +41,10 @@ class FakeImage(object):
         print 'FakeImage:', t
         self.tim = decals.tims[t.index]
 
-    def run_calibs(self, ra, dec, pixscale, mock_psf, W=2048, H=4096,
-                   pvastrom=True, psfex=True, sky=True,
-                   se=False,
-                   funpack=False, fcopy=False, use_mask=True,
-                   force=False, just_check=False):
+    def run_calibs(self, *args, **kwargs):
         pass
 
-    def get_tractor_image(self, slc=None, radecpoly=None,
-                          mock_psf=False, const2psf=False,
-                          nanomaggies=True, subsky=True, tiny=5):
+    def get_tractor_image(self, **kwargs):
         return self.tim
 
 class SimResult(object):
@@ -71,6 +68,7 @@ def run_sim(tims, cat, N, mods=None, **kwargs):
     allcats = []
     allivs = []
     allTs = []
+    allallmods = []
     
     for i in range(N):
         np.random.seed(10000 + i)
@@ -80,7 +78,7 @@ def run_sim(tims, cat, N, mods=None, **kwargs):
     
         kwa = kwargs.copy()
         kwa.update(decals=decals)
-        R = stage_tims(**kwa)
+        R = stage_tims(do_calibs=False, **kwa)
         kwa.update(R)
         R = stage_srcs(no_sdss=True, **kwa)
         ### At this point, R['cat'] has sources whose fluxes are based on the
@@ -88,7 +86,8 @@ def run_sim(tims, cat, N, mods=None, **kwargs):
         kwa.update(R)
         R = stage_fitblobs(**kwa)
         kwa.update(R)
-        R = stage_fitblobs_finish(write_metrics=False, **kwa)
+        R = stage_fitblobs_finish(write_metrics=False, get_all_models=True,
+                                  **kwa)
         kwa.update(R)
     
         cat = kwa['cat']
@@ -105,6 +104,8 @@ def run_sim(tims, cat, N, mods=None, **kwargs):
         allivs.append(iv)
 
         allTs.append(kwa['T'])
+
+        allallmods.append(kwa['all_models'])
         
         bands = kwa['bands']
         
@@ -118,7 +119,8 @@ def run_sim(tims, cat, N, mods=None, **kwargs):
     typemap = { ExpGalaxy: 'E',
                 DevGalaxy: 'D',
                 FixedCompositeGalaxy: 'C',
-                PointSource: 'P' }
+                PointSource: 'P',
+                SimpleGalaxy: 'S', }
 
     T.type = []
     T.re = []
@@ -127,7 +129,8 @@ def run_sim(tims, cat, N, mods=None, **kwargs):
 
     TT = []
     
-    for c,iv,Ti in zip(allcats, allivs, allTs):
+    for c,iv,Ti,allmods in zip(allcats, allivs, allTs, allallmods):
+        print 'len(c)', len(c)
         if len(c) == 1:
             src = c[0]
             T.type.append(typemap[type(src)])
@@ -146,6 +149,11 @@ def run_sim(tims, cat, N, mods=None, **kwargs):
                 fiv.append(src.getBrightness().getFlux(band))
             src.setParams(params)
 
+            print 'Ti:'
+            Ti.about()
+            print 'adding allmods:'
+            allmods.about()
+            Ti.add_columns_from(allmods)
             TT.append(Ti)
         else:
             if len(c) == 0:
@@ -168,6 +176,9 @@ def run_sim(tims, cat, N, mods=None, **kwargs):
     result.T = T
 
     result.TT = merge_tables(TT)
+
+    print 'Returning table:'
+    result.TT.about()
     
     return result
 
@@ -194,6 +205,12 @@ tim = Image(data=data, invvar=np.ones_like(data) / sig1**2, psf=psf, wcs=twcs,
 tim.subwcs = wcs
 tim.band = band
 tim.sig1 = sig1
+tim.skyver = (0,0)
+tim.wcsver = (0,0)
+tim.psfver = (0,0)
+tim.plver = 0
+tim.dq = np.zeros(tim.shape, np.int16)
+tim.dq_bits = dict(satur=1)
 
 # Render synthetic source into image
 re = 0.45
@@ -201,13 +218,14 @@ re = 0.45
 mp = multiproc()
 ps = PlotSequence('galdet')
 
-sourcetypes = [ 'E','D','C','P','-','+' ]
+sourcetypes = [ 'E','D','S','C','P','-','+' ]
 
-ccmap = dict(E='r', D='b', C='m', P='g')
+ccmap = dict(E='r', D='b', S='c', C='m', P='g',
+             exp='r', dev='b', simp='c', comp='m', psf='g')
 ccmap['+'] = 'k'
 ccmap['-'] = '0.5'
 
-namemap = { 'E': 'Exp', 'D': 'deVauc', 'C': 'composite', 'P':'PSF', '+':'>1 src', '-':'No detection' }
+namemap = { 'E': 'Exp', 'D': 'deVauc', 'C': 'composite', 'P':'PSF', 'S': 'simple', '+':'>1 src', '-':'No detection' }
 
 for flux in [ 300. ]:#, 150. ]:
 
@@ -234,11 +252,10 @@ for flux in [ 300. ]:#, 150. ]:
     
         tim.psf = psf
         tim.psf_sigma = psfsig
-    
         tr = Tractor([tim], [gal])
         mod = tr.getModelImage(0)
 
-        N = 500
+        N = 100
         res = run_sim([tim], [gal], N, mods=[mod], 
                       W=W, H=H, ra=ra, dec=dec, mp=mp, bands=[band])
     
@@ -270,22 +287,25 @@ for flux in [ 300. ]:#, 150. ]:
             plt.subplots_adjust(hspace=0)
             plt.clf()
             # dchisq array:
-            # ptsrc, dev, exp, comp  relative to 'none'
-            dchisq = -catalog.dchisq
+            # ptsrc, simple, dev, exp, comp  relative to 'none'
+            #modelindex = dict(P=0, S=1, D=2, E=3, C=4)
+            models = 'PSDEC'
+            
+            dchisq = catalog.dchisq
             lo,hi = dchisq.min(), dchisq.max()
             lp,lt = [],[]
             maxn = 1
-            for i,t in [(0,'P'), (1,'D'), (2,'E'), (3,'C')]:
-                plt.subplot(4,1,i+1)
+            for i,t in enumerate('PSDEC'):
+                plt.subplot(5,1,i+1)
                 n,b,p = plt.hist(dchisq[:, i], bins=25, range=(lo,hi),
                                  histtype='step', color=ccmap[t])
                 maxn = max(maxn, max(n))
                 lp.append(p[0])
                 lt.append('Type = ' + t)
-                if i != 3:
+                if i != 4:
                     plt.xticks([])
             for i in range(1,5):
-                plt.subplot(4,1,i)
+                plt.subplot(5,1,i)
                 plt.ylim(0, maxn*1.1)
             plt.xlabel('chisq improvement (vs no source)')
             plt.figlegend(lp, lt, 'upper right')
@@ -296,8 +316,9 @@ for flux in [ 300. ]:#, 150. ]:
             lp,lt = [],[]
             d = (hi-lo)*0.05
             plt.plot([lo-d,hi+d], [lo-d,hi+d], 'k-', alpha=0.5)
-            for i,t in [(0,'P'), (1,'D'), #(2,'E'),
-                        (3,'C')]:
+            for i,t in enumerate(models):
+                if t == 'E':
+                    continue
                 p = plt.plot(dchisq[:,2], dchisq[:,i], '.', ms=10, alpha=0.5,
                              color=ccmap[t])
                 lp.append(p[0])
@@ -305,16 +326,16 @@ for flux in [ 300. ]:#, 150. ]:
             plt.xlabel('dchisq')
             plt.legend(lp, lt, loc='upper left')
             plt.axis([lo-d,hi+d,lo-d,hi+d])
-            plt.title('Canonical DESI ELG -- Model selection delta-chi-squared')
-            plt.xlabel('chisq improvement for EXP model')
-            plt.ylabel('chisq improvement for other models')
+            plt.title('Delta-chisq vs canonical DESI ELG')
+            plt.xlabel('dchisq for EXP model')
+            plt.ylabel('dchisq for other models')
             ps.savefig()
             
             
             plt.clf()
             lp,lt = [],[]
             maxn = 1
-            for t in 'EDCP':
+            for t in models:
                 I = np.flatnonzero(T.type == t)
                 if len(I) == 0:
                     continue
@@ -328,13 +349,13 @@ for flux in [ 300. ]:#, 150. ]:
             plt.xlabel('Measured flux')
             plt.axvline(flux, color='k', ls='--')
             plt.ylim(0, 1.1*maxn)
-            plt.title('Canonical DESI ELG source -- DR1 Type & Flux measurements')
+            plt.title('Canonical DESI ELG source -- DR2 Type & Flux measurements')
             ps.savefig()
             
             plt.clf()
             lp = []
             lt = []
-            for t in ['E','D','P']:
+            for t in models:
                 I = np.flatnonzero(T.type == t)
                 if len(I) == 0:
                     continue
@@ -346,7 +367,7 @@ for flux in [ 300. ]:#, 150. ]:
             plt.legend(lp, lt)
             plt.xlabel('Measured effective radius (arcsec)')
             plt.axvline(re, color='k', ls='--')
-            plt.title('Canonical DESI ELG source -- DR1 Type & Radius measurements')
+            plt.title('Canonical DESI ELG source -- DR2 Type & Radius measurements')
             ps.savefig()
             
             plt.clf()
@@ -364,10 +385,70 @@ for flux in [ 300. ]:#, 150. ]:
             plt.axvline(re, color='k', ls='--')
             plt.ylabel('Measured flux')
             plt.axhline(flux, color='k', ls='--')
-            plt.title('Canonical DESI ELG source -- DR1 Type & Flux vs Radius measurements')
+            plt.title('Canonical DESI ELG source -- DR2 Type & Flux vs Radius measurements')
             plt.axis([0., 2.*re, 0.5*flux, 1.5*flux])
             ps.savefig()
-    
+
+
+
+
+            # ALL MODELS
+            cat = catalog
+            
+            plt.clf()
+            lp = []
+            lt = []
+            mx = 0
+            for t in ['exp','dev']:
+                n,b,p = plt.hist(cat.get('%s_shape_r' % t), bins=25,
+                              range=(0., 2.*re), histtype='step',
+                              color=ccmap[t])
+                mx = max(mx, max(n))
+                lp.append(p[0])
+                lt.append(t)
+            plt.legend(lp, lt)
+            plt.xlabel('Measured effective radius (arcsec)')
+            plt.axvline(re, color='k', ls='--')
+            plt.title('All models -- Radius measurements')
+            plt.ylim(0, mx*1.1)
+            ps.savefig()
+
+            plt.clf()
+            lp = []
+            lt = []
+            mx = 0
+            for t in ['exp','dev']:
+                n,b,p = plt.hist(cat.get('%s_decam_flux' % t)[:,2], bins=25,
+                              range=(0.5*flux, 1.5*flux), histtype='step',
+                              color=ccmap[t])
+                mx = max(mx, max(n))
+                lp.append(p[0])
+                lt.append(t)
+            plt.legend(lp, lt)
+            plt.xlabel('Measured flux')
+            plt.axvline(flux, color='k', ls='--')
+            plt.title('All models -- Flux measurements')
+            plt.ylim(0, mx*1.1)
+            ps.savefig()
+
+            plt.clf()
+            lp = []
+            lt = []
+            for t in ['exp','dev']:
+                p = plt.plot(cat.get('%s_shape_r' % t), cat.get('%s_decam_flux' % t)[:,2], '.', color=ccmap[t], ms=10, alpha=0.5)
+                lp.append(p[0])
+                lt.append(t)
+            plt.legend(lp, lt)
+            plt.xlabel('Measured effective radius (arcsec)')
+            plt.axvline(re, color='k', ls='--')
+            plt.ylabel('Measured flux')
+            plt.axhline(flux, color='k', ls='--')
+            plt.title('All models -- Flux vs Radius')
+            plt.axis([0., 2.*re, 0.5*flux, 1.5*flux])
+            ps.savefig()
+
+
+            
     
     
     S.to_np_arrays()

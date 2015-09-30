@@ -1562,6 +1562,7 @@ def stage_fitblobs_finish(
     fitblobs_R=None,
     outdir=None,
     write_metrics=True,
+    get_all_models=False,
     allbands = 'ugrizY',
     **kwargs):
     '''
@@ -1639,8 +1640,7 @@ def stage_fitblobs_finish(
     # Set -0. to 0.
     #T.dchisq[T.dchisq == 0.] = 0.
 
-    
-    if write_metrics:
+    if write_metrics or get_all_models:
         from desi_common import prepare_fits_catalog, fits_typemap
         from astrometry.util.file import pickle_to_file
 
@@ -1723,19 +1723,21 @@ def stage_fitblobs_finish(
         TT.delete_column('comp_shapeDev')
         TT.delete_column('comp_shapeExp')
 
-        primhdr = fitsio.FITSHDR()
-        for r in version_header.records():
-            primhdr.add_record(r)
-            primhdr.add_record(dict(name='ALLBANDS', value=allbands,
-                                    comment='Band order in array values'))
-        primhdr.add_record(dict(name='PRODTYPE', value='catalog',
-                                comment='NOAO data product type'))
+        if get_all_models:
+            all_models = TT
+        if write_metrics:
+            primhdr = fitsio.FITSHDR()
+            for r in version_header.records():
+                primhdr.add_record(r)
+                primhdr.add_record(dict(name='ALLBANDS', value=allbands,
+                                        comment='Band order in array values'))
+                primhdr.add_record(dict(name='PRODTYPE', value='catalog',
+                                        comment='NOAO data product type'))
 
-        fn = os.path.join(metricsdir, 'all-models-%s.fits' % brickname)
-        TT.writeto(fn, header=hdr)
-        del TT
-        print('Wrote', fn)
-
+            fn = os.path.join(metricsdir, 'all-models-%s.fits' % brickname)
+            TT.writeto(fn, header=hdr)
+            del TT
+            print('Wrote', fn)
 
     T.decam_flags = BB.flags
     T.fracflux    = BB.fracflux
@@ -1750,6 +1752,8 @@ def stage_fitblobs_finish(
     rtn = dict(fitblobs_R = None)
     for k in ['cat', 'invvars', 'T', 'allbands']:
         rtn[k] = locals()[k]
+    if get_all_models:
+        rtn['all_models'] = all_models
     return rtn
 
 def _blob_iter(blobslices, blobsrcs, blobs,
