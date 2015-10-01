@@ -1578,12 +1578,30 @@ def stage_fitblobs_finish(
 
     # Drop now-empty blobs.
     R = [r for r in R if r is not None and len(r)]
-    BB = merge_tables(R)
+    if len(R) > 0:
+        BB = merge_tables(R)
+    else:
+        BB = fits_table()
+        BB.Isrcs = []
+        BB.sources = []
+        nb = len(bands)
+        BB.fracflux = np.zeros((0,nb))
+        BB.fracmasked = np.zeros((0,nb))
+        BB.fracin = np.zeros((0,nb))
+        BB.rchi2 = np.zeros((0,nb))
+        BB.dchisqs = np.zeros((0,5))
+        BB.flags = np.zeros((0,5))
+        BB.all_models = np.array([])
+        BB.all_model_flags = np.array([])
+        BB.all_model_fluxivs = np.array([])
+        BB.started_in_blob = []
+        BB.finished_in_blob = []
+        BB.srcinvvars = [np.zeros((0,))]
     del R
-    print('Total of', len(BB), 'blob measurements')
     II = BB.Isrcs
-    T.cut(II)
+    print('Total of', len(BB), 'blob measurements')
     newcat = BB.sources
+    T.cut(II)
 
     assert(len(T) == len(newcat))
     print('Old catalog:', len(cat))

@@ -78,7 +78,7 @@ def run_sim(tims, cat, N, mods=None, **kwargs):
     
         kwa = kwargs.copy()
         kwa.update(decals=decals)
-        R = stage_tims(do_calibs=False, **kwa)
+        R = stage_tims(do_calibs=False, pipe=True, **kwa)
         kwa.update(R)
         R = stage_srcs(no_sdss=True, **kwa)
         ### At this point, R['cat'] has sources whose fluxes are based on the
@@ -175,7 +175,7 @@ def run_sim(tims, cat, N, mods=None, **kwargs):
     T.to_np_arrays()
     result.T = T
 
-    result.TT = merge_tables(TT)
+    result.TT = merge_tables(TT, columns='fillzero')
 
     print 'Returning table:'
     result.TT.about()
@@ -197,23 +197,21 @@ wcs = Tan(ra, dec, W/2.+0.5, H/2.+0.5,
 psf = None
 twcs = ConstantFitsWcs(wcs)
 photocal = LinearPhotoCal(1., band=band)
-sig1 = 1.
-data = np.zeros((H,W), np.float32)
 
-tim = Image(data=data, invvar=np.ones_like(data) / sig1**2, psf=psf, wcs=twcs,
+# survey target limiting mag: r=23.6, let's say 5-sig point source
+limit = 23.6
+
+data = np.zeros((H,W), np.float32)
+tim = Image(data=data, inverr=np.ones_like(data), psf=psf, wcs=twcs,
             photocal=photocal)
 tim.subwcs = wcs
 tim.band = band
-tim.sig1 = sig1
 tim.skyver = (0,0)
 tim.wcsver = (0,0)
 tim.psfver = (0,0)
 tim.plver = 0
 tim.dq = np.zeros(tim.shape, np.int16)
 tim.dq_bits = dict(satur=1)
-
-# Render synthetic source into image
-re = 0.45
 
 mp = multiproc()
 ps = PlotSequence('galdet')
@@ -226,6 +224,118 @@ ccmap['+'] = 'k'
 ccmap['-'] = '0.5'
 
 namemap = { 'E': 'Exp', 'D': 'deVauc', 'C': 'composite', 'P':'PSF', 'S': 'simple', '+':'>1 src', '-':'No detection' }
+
+
+#
+
+#mag = 23.0
+#re = 0.45
+
+
+mag = np.arange(20.0, 23.5 + 1e-3, 0.25)
+re  = np.arange(0.1, 0.6 + 1e-3, 0.1)
+psfsig = 2.0
+N = 10
+
+S = fits_table()
+for t in sourcetypes:
+    S.set('frac_%s' % t, [])
+S.frac_U = []
+
+S.mag = []
+S.re = []
+S.psffwhm = []
+
+for mag_i in mag:
+    for re_i in re:
+
+        S.mag.append(mag_i)
+        S.re.append(re_i)
+
+        flux = NanoMaggies.magToNanomaggies(mag_i)
+
+        gal = ExpGalaxy(RaDecPos(ra, dec), NanoMaggies(**{ band: flux }),
+                        EllipseESoft(np.log(re_i), 0., 0.))
+
+        var1 = psfsig**2
+        psf = GaussianMixturePSF(1.0, 0., 0., var1, var1, 0.)
+        tim.psf = psf
+        tim.psf_sigma = psfsig
+
+        # Set the per-pixel noise based on the PSF size!?!
+        limitflux = NanoMaggies.magToNanomaggies(limit)
+        psfnorm = 1./(2. * np.sqrt(np.pi) * tim.psf_sigma)
+        sig1 = limitflux / 5. * psfnorm
+        tim.sig1 = sig1
+        tim.inverr[:,:] = 1./sig1
+
+        print
+        print 'Running mag=', mag_i, 're=', re_i
+        print 'psf norm', psfnorm
+        print 'limiting flux', limitflux
+        print 'sig1:', sig1
+        print 'flux:', flux
+
+        tr = Tractor([tim], [gal])
+        mod = tr.getModelImage(0)
+
+        res = run_sim([tim], [gal], N, mods=[mod], 
+                      W=W, H=H, ra=ra, dec=dec, mp=mp, bands=[band])
+
+        T = res.T
+        T.flux = T.flux_r
+        T.fluxiv = T.fluxiv_r
+        catalog = res.TT
+
+        S.psffwhm.append(psfsig * 2.35 * pixscale)
+        for t in sourcetypes:
+            S.get('frac_%s' % t).append(
+                100. * np.count_nonzero(T.type == t) / float(len(T)))
+        S.frac_U.append(100. * np.count_nonzero(T.nsrcs == 0) / float(len(T)))
+            
+S.to_np_arrays()
+
+print 'S:', len(S)
+
+# Plot mags on x axis = cols
+# Plot re   on y axis = rows
+
+S.imag = np.array([np.argmin(np.abs(m - mag)) for m in S.mag])
+S.ire  = np.array([np.argmin(np.abs(r - re )) for r in S.re])
+
+cols = 1 + max(S.imag)
+rows = 1 + max(S.ire)
+
+S.row = S.ire
+S.col = S.imag
+
+dm = mag[1]-mag[0]
+dr = re [1]-re [0]
+extent = [mag.min()-dm/2, mag.max()+dm/2, re.min()-dr/2, re.max()+dr/2]
+ima = dict(vmin=0, vmax=100, extent=extent, cmap='jet')
+
+for name in ['UNDETECTED', 'PSF', 'SIMPLE', 'EXP', 'DEV', 'COMP']:
+
+    fmap = np.zeros((rows,cols))
+    fmap[S.row, S.col] = S.get('frac_%s' % name[0])
+
+    print 'Fraction classified as', name
+    print fmap
+    
+    plt.clf()
+    dimshow(fmap, **ima)
+    plt.xlabel('Mag')
+    plt.ylabel('radius r_e (arcsec)')
+    plt.colorbar()
+    plt.title('Fraction of sources classified as %s' % name)
+    ps.savefig()
+
+
+sys.exit(0)
+        
+
+
+# Render synthetic source into image
 
 for flux in [ 300. ]:#, 150. ]:
 
