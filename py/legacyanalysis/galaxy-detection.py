@@ -38,7 +38,7 @@ class FakeDecals(object):
 
 class FakeImage(object):
     def __init__(self, decals, t):
-        print 'FakeImage:', t
+        # print 'FakeImage:', t
         self.tim = decals.tims[t.index]
 
     def run_calibs(self, *args, **kwargs):
@@ -50,7 +50,7 @@ class FakeImage(object):
 class SimResult(object):
     pass
     
-def run_sim(tims, cat, N, mods=None, **kwargs):
+def run_sim(tims, cat, N, mods=None, samenoise=True, **kwargs):
     result = SimResult()
     
     if mods is None:
@@ -71,7 +71,8 @@ def run_sim(tims, cat, N, mods=None, **kwargs):
     allallmods = []
     
     for i in range(N):
-        np.random.seed(10000 + i)
+        if samenoise:
+            np.random.seed(10000 + i)
 
         for tim,mod in zip(tims, mods):
             tim.data = mod + tim.sig1 * np.random.normal(size=tim.shape)
@@ -130,7 +131,7 @@ def run_sim(tims, cat, N, mods=None, **kwargs):
     TT = []
     
     for c,iv,Ti,allmods in zip(allcats, allivs, allTs, allallmods):
-        print 'len(c)', len(c)
+        #print 'len(c)', len(c)
         if len(c) == 1:
             src = c[0]
             T.type.append(typemap[type(src)])
@@ -149,10 +150,10 @@ def run_sim(tims, cat, N, mods=None, **kwargs):
                 fiv.append(src.getBrightness().getFlux(band))
             src.setParams(params)
 
-            print 'Ti:'
-            Ti.about()
-            print 'adding allmods:'
-            allmods.about()
+            # print 'Ti:'
+            # Ti.about()
+            # print 'adding allmods:'
+            # allmods.about()
             Ti.add_columns_from(allmods)
             TT.append(Ti)
         else:
@@ -198,6 +199,8 @@ psf = None
 twcs = ConstantFitsWcs(wcs)
 photocal = LinearPhotoCal(1., band=band)
 
+np.random.seed(1000042)
+
 # survey target limiting mag: r=23.6, let's say 5-sig point source
 limit = 23.6
 
@@ -232,10 +235,14 @@ namemap = { 'E': 'Exp', 'D': 'deVauc', 'C': 'composite', 'P':'PSF', 'S': 'simple
 #re = 0.45
 
 
-mag = np.arange(20.0, 23.5 + 1e-3, 0.25)
-re  = np.arange(0.1, 0.6 + 1e-3, 0.1)
+mag = np.arange(19.0, 23.5 + 1e-3, 0.5)
+#mag = np.array([20.])
+
+re  = np.arange(0.1, 0.9 + 1e-3, 0.1)
+
 psfsig = 2.0
-N = 10
+#N = 10
+N = 2
 
 S = fits_table()
 for t in sourcetypes:
@@ -245,10 +252,19 @@ S.frac_U = []
 S.mag = []
 S.re = []
 S.psffwhm = []
+S.mods = []
+S.sig1 = []
+S.dchisq = []
+S.exp_re = []
+
+simk = 0
 
 for mag_i in mag:
     for re_i in re:
 
+        simk += 1
+        np.random.seed(1000 + simk)
+        
         S.mag.append(mag_i)
         S.re.append(re_i)
 
@@ -279,22 +295,40 @@ for mag_i in mag:
         tr = Tractor([tim], [gal])
         mod = tr.getModelImage(0)
 
+        S.mods.append(mod + sig1 * np.random.normal(size=mod.shape))
+        S.sig1.append(sig1)
+        
         res = run_sim([tim], [gal], N, mods=[mod], 
                       W=W, H=H, ra=ra, dec=dec, mp=mp, bands=[band])
 
         T = res.T
         T.flux = T.flux_r
         T.fluxiv = T.fluxiv_r
-        catalog = res.TT
+        #catalog = res.TT
 
         S.psffwhm.append(psfsig * 2.35 * pixscale)
         for t in sourcetypes:
             S.get('frac_%s' % t).append(
                 100. * np.count_nonzero(T.type == t) / float(len(T)))
         S.frac_U.append(100. * np.count_nonzero(T.nsrcs == 0) / float(len(T)))
-            
-S.to_np_arrays()
 
+        TT = res.TT
+        
+        if 'dchisq' in TT.columns():
+            dchisq = TT.dchisq
+            S.dchisq.append(np.mean(dchisq, axis=0))
+        else:
+            S.dchisq.append(np.zeros(5))
+
+        I = []
+        if 'exp_shape_r' in TT.columns():
+            I = np.flatnonzero(TT.exp_shape_r > 0)
+        if len(I):
+            S.exp_re.append(np.mean(TT.exp_shape_r[I]))
+        else:
+            S.exp_re.append(0.)
+
+S.to_np_arrays()
 print 'S:', len(S)
 
 # Plot mags on x axis = cols
@@ -308,6 +342,16 @@ rows = 1 + max(S.ire)
 
 S.row = S.ire
 S.col = S.imag
+
+# Plot the sources
+plt.subplots_adjust(hspace=0, wspace=0)
+plt.clf()
+for i in range(rows*cols):
+    plt.subplot(rows, cols, i+1)
+    si = np.flatnonzero((S.row == (rows-1 - i/cols)) * (S.col == i % cols))[0]
+    sig1 = S.sig1[si]
+    dimshow(S.mods[si], ticks=False, vmin=-2*sig1, vmax=5*sig1)
+ps.savefig()
 
 dm = mag[1]-mag[0]
 dr = re [1]-re [0]
@@ -323,7 +367,7 @@ for name in ['UNDETECTED', 'PSF', 'SIMPLE', 'EXP', 'DEV', 'COMP']:
     print fmap
     
     plt.clf()
-    dimshow(fmap, **ima)
+    dimshow(fmap, aspect='auto', **ima)
     plt.xlabel('Mag')
     plt.ylabel('radius r_e (arcsec)')
     plt.colorbar()
@@ -331,6 +375,72 @@ for name in ['UNDETECTED', 'PSF', 'SIMPLE', 'EXP', 'DEV', 'COMP']:
     ps.savefig()
 
 
+
+ima = dict(vmin=0, extent=extent, cmap='jet')
+
+for i,name in enumerate(['PSF', 'SIMPLE', 'DEV', 'EXP', 'COMP']):
+
+    fmap = np.zeros((rows,cols))
+    fmap[S.row, S.col] = np.sqrt(S.dchisq[:,i])
+
+    plt.clf()
+    dimshow(fmap, aspect='auto', **ima)
+    plt.xlabel('Mag')
+    plt.ylabel('radius r_e (arcsec)')
+    plt.colorbar()
+    plt.title('sqrt(dchisq) for %s' % name)
+    ps.savefig()
+
+
+ipsf = 0
+isimple = 1
+idev = 2
+iexp = 3
+icomp = 4
+
+ima = dict(extent=extent, cmap='jet')
+
+for i,name in enumerate(['SIMPLE', 'DEV', 'EXP', 'COMP']):
+
+    fmap = np.zeros((rows,cols))
+    fmap[S.row, S.col] = S.dchisq[:,i+1] - S.dchisq[:,ipsf]
+
+    plt.clf()
+    dimshow(fmap, aspect='auto', **ima)
+    plt.xlabel('Mag')
+    plt.ylabel('radius r_e (arcsec)')
+    plt.colorbar()
+    plt.title('dchisq_%s - dchisq_PSF' % name)
+    ps.savefig()
+
+
+fmap = np.zeros((rows,cols))
+fmap[S.row, S.col] = S.dchisq[:,iexp] - S.dchisq[:,isimple]
+
+plt.clf()
+dimshow(fmap, aspect='auto', **ima)
+plt.xlabel('Mag')
+plt.ylabel('radius r_e (arcsec)')
+plt.colorbar()
+plt.title('dchisq_EXP - dchisq_SIMPLE')
+ps.savefig()
+
+
+fmap = np.zeros((rows,cols))
+fmap[S.row, S.col] = S.exp_re
+
+plt.clf()
+dimshow(fmap, aspect='auto', **ima)
+plt.xlabel('Mag')
+plt.ylabel('radius r_e (arcsec)')
+plt.colorbar()
+plt.title('EXP fit r_e (arcsec)')
+ps.savefig()
+
+
+    
+
+    
 sys.exit(0)
         
 

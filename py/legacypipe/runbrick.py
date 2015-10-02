@@ -145,8 +145,8 @@ def stage_tims(W=3600, H=3600, pixscale=0.262, brickname=None,
         brick.ra2,nil  = targetwcs.pixelxy2radec(1, H/2)
         nil, brick.dec1 = targetwcs.pixelxy2radec(W/2, 1)
         nil, brick.dec2 = targetwcs.pixelxy2radec(W/2, H)
-        print('RA1,RA2', brick.ra1, brick.ra2)
-        print('Dec1,Dec2', brick.dec1, brick.dec2)
+        #print('RA1,RA2', brick.ra1, brick.ra2)
+        #print('Dec1,Dec2', brick.dec1, brick.dec2)
 
     gitver = get_git_version()
 
@@ -202,8 +202,8 @@ def stage_tims(W=3600, H=3600, pixscale=0.262, brickname=None,
         version_hdr.add_record(dict(
             name='CORN%iDEC' %(i+1), value=d, comment='[deg] Brick corner Dec'))
 
-    print('Version header:')
-    print(version_hdr)
+    # print('Version header:')
+    # print(version_hdr)
 
     ccds = decals.ccds_touching_wcs(targetwcs, ccdrad=None)
     if ccds is None:
@@ -1697,7 +1697,7 @@ def stage_fitblobs_finish(
                    np.array([m.get(srctype,0)
                              for m in BB.all_model_flags]))
 
-            print('all_model_fluxivs:', BB.all_model_fluxivs)
+            # print('all_model_fluxivs:', BB.all_model_fluxivs)
             fluxivs = np.zeros((len(TT), len(allbands)), np.float32)
             bandmap = np.array([allbands.index(b) for b in bands])
             for j in range(len(xcat)):
@@ -1867,8 +1867,10 @@ def _select_model(chisqs, nparams, galaxy_margin):
     
     # We're going to keep this source!
     if chisqs['ptsrc'] > chisqs['simple']:
+        print('Keeping source; PTSRC is better than SIMPLE')
         keepmod = 'ptsrc'
     else:
+        print('Keeping source; SIMPLE is better than PTSRC')
         keepmod = 'simple'
 
     if not 'exp' in chisqs:
@@ -1881,23 +1883,24 @@ def _select_model(chisqs, nparams, galaxy_margin):
     # This is the "fractional" upgrade threshold for ptsrc/simple->dev/exp:
     # 2% of ptsrc vs nothing
     fcut = 0.02 * chisqs['ptsrc']
+    print('Cut: max of', cut, 'and', fcut, ' (fraction of chisq_psf=%.1f)' % chisqs['ptsrc'])
     cut = max(cut, fcut)
 
     expdiff = chisqs['exp'] - chisqs[keepmod]
     devdiff = chisqs['dev'] - chisqs[keepmod]
 
-    #print('Keeping source.  Comparing dev/exp vs ptsrc.  dlnp =', 4.5, 'frac =', fcut, 'cut =', cut)
-    #print('exp:', expdiff)
-    #print('dev:', devdiff)
+    print('EXP vs', keepmod, ':', expdiff)
+    print('DEV vs', keepmod, ':', devdiff)
 
     if not (expdiff > cut or devdiff > cut):
+        print('Keeping', keepmod)
         return keepmod
     
     if expdiff > devdiff:
-        #print('Upgrading from ptsrc to exp: diff', expdiff)
+        print('Upgrading from PTSRC to EXP: diff', expdiff)
         keepmod = 'exp'
     else:
-        #print('Upgrading from ptsrc to dev: diff', devdiff)
+        print('Upgrading from PTSRC to DEV: diff', expdiff)
         keepmod = 'dev'
 
     if not 'comp' in chisqs:
