@@ -1798,7 +1798,8 @@ def _blob_iter(blobslices, blobsrcs, blobs,
             ok,x,y = tim.subwcs.radec2pixelxy(rr,dd)
             sx0,sx1 = x.min(), x.max()
             sy0,sy1 = y.min(), y.max()
-            if sx1 < 0 or sy1 < 0 or sx1 > w or sy1 > h:
+            #print('blob extent in pixel space of', tim.name, ': x', (sx0,sx1), 'y', (sy0,sy1), 'tim shape', (h,w))
+            if sx1 < 0 or sy1 < 0 or sx0 > w or sy0 > h:
                 continue
             sx0 = np.clip(int(np.floor(sx0)), 0, w-1)
             sx1 = np.clip(int(np.ceil (sx1)), 0, w-1) + 1
