@@ -241,8 +241,8 @@ mag = np.arange(19.0, 23.5 + 1e-3, 0.5)
 re  = np.arange(0.1, 0.9 + 1e-3, 0.1)
 
 psfsig = 2.0
-#N = 10
-N = 2
+N = 20
+#N = 2
 
 S = fits_table()
 for t in sourcetypes:
