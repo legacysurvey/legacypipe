@@ -234,15 +234,15 @@ namemap = { 'E': 'Exp', 'D': 'deVauc', 'C': 'composite', 'P':'PSF', 'S': 'simple
 #mag = 23.0
 #re = 0.45
 
-
 mag = np.arange(19.0, 23.5 + 1e-3, 0.5)
-#mag = np.array([20.])
+#mag = np.array([19.])
 
 re  = np.arange(0.1, 0.9 + 1e-3, 0.1)
+#re  = np.array([0.9])
 
 psfsig = 2.0
 N = 20
-#N = 2
+#N = 1
 
 S = fits_table()
 for t in sourcetypes:
@@ -251,6 +251,8 @@ S.frac_U = []
 
 S.mag = []
 S.re = []
+S.imag = []
+S.ire = []
 S.psffwhm = []
 S.mods = []
 S.sig1 = []
@@ -259,15 +261,19 @@ S.exp_re = []
 
 simk = 0
 
-for mag_i in mag:
-    for re_i in re:
+for imag,mag_i in enumerate(mag):
+    for ire,re_i in enumerate(re):
 
-        simk += 1
+        #simk += 1
+        #print 'simk', simk
+        simk = 9
         np.random.seed(1000 + simk)
         
         S.mag.append(mag_i)
         S.re.append(re_i)
-
+        S.imag.append(imag)
+        S.ire.append(ire)
+        
         flux = NanoMaggies.magToNanomaggies(mag_i)
 
         gal = ExpGalaxy(RaDecPos(ra, dec), NanoMaggies(**{ band: flux }),
@@ -306,6 +312,8 @@ for mag_i in mag:
         T.fluxiv = T.fluxiv_r
         #catalog = res.TT
 
+        print 'T.nsrcs:', T.nsrcs
+        
         S.psffwhm.append(psfsig * 2.35 * pixscale)
         for t in sourcetypes:
             S.get('frac_%s' % t).append(
@@ -334,8 +342,8 @@ print 'S:', len(S)
 # Plot mags on x axis = cols
 # Plot re   on y axis = rows
 
-S.imag = np.array([np.argmin(np.abs(m - mag)) for m in S.mag])
-S.ire  = np.array([np.argmin(np.abs(r - re )) for r in S.re])
+#S.imag = np.array([np.argmin(np.abs(m - mag)) for m in S.mag])
+#S.ire  = np.array([np.argmin(np.abs(r - re )) for r in S.re])
 
 cols = 1 + max(S.imag)
 rows = 1 + max(S.ire)
