@@ -16,7 +16,7 @@ def plotMaghist(band,nbin=100):
 	from matplotlib import pyplot as plt
 	from numpy import zeros,array
 	readnoise = 10. # e-; 7.0 to 15.0 according to DECam Data Handbook
-	p = 1.#15 #value given in imaging requirements
+	p = 1.15 #value given in imaging requirements
 	gain = 4.0 #from Dustin
 	f = fitsio.read(dir+'/legacypipe-dir/decals-ccds.fits.gz')
 	NTl = []
@@ -72,6 +72,9 @@ def plotMaghist(band,nbin=100):
 		med = (NTl[len(NTl)/2+1]+NTl[len(NTl)/2])/2.
 	print mean,med,std
 	plt.plot(Nl,hl,'k-')
+	plt.xlabel(r'5$\sigma$ '+band+ ' depth')
+	plt.ylabel('# of ccds')
+	plt.title(str(mean)[:5]+r'$\pm$'+str(std)[:4])
 	#plt.xscale('log')
 	plt.show()
 	return True
