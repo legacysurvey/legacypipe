@@ -211,7 +211,7 @@ def stage_tims(W=3600, H=3600, pixscale=0.262, brickname=None,
     print(len(ccds), 'CCDs touching target WCS')
 
     blacklist = [
-        '2012B-0003', # labeled as ?DES SV?, but appears to exclusively be DES deep fields taken during SV, through Jan 2013.
+        '2012B-0003', # labeled as "DES SV", but appears to exclusively be DES deep fields taken during SV, through Jan 2013.
         '2013A-0351', # lots of deep data on COSMOS
         '2014A-0339', # two strips of sky
         '2013A-0360', # 9 fields total
