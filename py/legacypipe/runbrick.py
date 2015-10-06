@@ -210,10 +210,26 @@ def stage_tims(W=3600, H=3600, pixscale=0.262, brickname=None,
         raise NothingToDoError('No CCDs touching brick')
     print(len(ccds), 'CCDs touching target WCS')
 
+    blacklist = [
+        '2012B-0003', # labeled as "DES SV", but appears to exclusively be DES deep fields taken during SV, through Jan 2013.
+        '2013A-0351', # lots of deep data on COSMOS
+        '2014A-0339', # two strips of sky
+        '2013A-0360', # 9 fields total
+        '2013A-0614', # 2 fields
+        '2013A-0717', # 2 fields
+        '2013B-0502', # 3 fields
+        '2014A-0239', # 1 field
+        '2014A-0429', # 2 fields
+        '2013A-0611', # many 900-sec exposures in EDR region
+        ]
+    keep = np.array([propid not in blacklist for propid in ccds.propid])
+    ccds.cut(keep)
+    print(len(ccds), 'CCDs not in blacklisted propids (too many exposures!)')
+
     # Sort images by band -- this also eliminates images whose
     # *image.filter* string is not in *bands*.
     ccds.cut(np.hstack([np.flatnonzero(ccds.filter == band) for band in bands]))
-    
+
     print('Cutting out non-photometric CCDs...')
     I = decals.photometric_ccds(ccds)
     print(len(I), 'of', len(ccds), 'CCDs are photometric')
@@ -223,7 +239,7 @@ def stage_tims(W=3600, H=3600, pixscale=0.262, brickname=None,
     for ccd in ccds:
         im = decals.get_image_object(ccd)
         ims.append(im)
-        print(im)
+        print(im, im.band, 'exptime', im.exptime, 'propid', ccd.propid)
         
     tnow = Time()
     print('[serial tims] Finding images touching brick:', tnow-tlast)
@@ -1870,10 +1886,10 @@ def _select_model(chisqs, nparams, galaxy_margin):
     
     # We're going to keep this source!
     if chisqs['ptsrc'] > chisqs['simple']:
-        print('Keeping source; PTSRC is better than SIMPLE')
+        #print('Keeping source; PTSRC is better than SIMPLE')
         keepmod = 'ptsrc'
     else:
-        print('Keeping source; SIMPLE is better than PTSRC')
+        #print('Keeping source; SIMPLE is better than PTSRC')
         keepmod = 'simple'
 
     if not 'exp' in chisqs:
@@ -1886,24 +1902,24 @@ def _select_model(chisqs, nparams, galaxy_margin):
     # This is the "fractional" upgrade threshold for ptsrc/simple->dev/exp:
     # 2% of ptsrc vs nothing
     fcut = 0.02 * chisqs['ptsrc']
-    print('Cut: max of', cut, 'and', fcut, ' (fraction of chisq_psf=%.1f)' % chisqs['ptsrc'])
+    #print('Cut: max of', cut, 'and', fcut, ' (fraction of chisq_psf=%.1f)' % chisqs['ptsrc'])
     cut = max(cut, fcut)
 
     expdiff = chisqs['exp'] - chisqs[keepmod]
     devdiff = chisqs['dev'] - chisqs[keepmod]
 
-    print('EXP vs', keepmod, ':', expdiff)
-    print('DEV vs', keepmod, ':', devdiff)
+    #print('EXP vs', keepmod, ':', expdiff)
+    #print('DEV vs', keepmod, ':', devdiff)
 
     if not (expdiff > cut or devdiff > cut):
-        print('Keeping', keepmod)
+        #print('Keeping', keepmod)
         return keepmod
     
     if expdiff > devdiff:
-        print('Upgrading from PTSRC to EXP: diff', expdiff)
+        #print('Upgrading from PTSRC to EXP: diff', expdiff)
         keepmod = 'exp'
     else:
-        print('Upgrading from PTSRC to DEV: diff', expdiff)
+        #print('Upgrading from PTSRC to DEV: diff', expdiff)
         keepmod = 'dev'
 
     if not 'comp' in chisqs:
@@ -2749,8 +2765,8 @@ def _one_blob(X):
         keepsrc = dict(none=None, ptsrc=ptsrc, simple=simple,
                        dev=dev, exp=exp, comp=comp)[keepmod]
 
-        print('Keeping model:', keepmod)
-        print('Keeping source:', keepsrc)
+        #print('Keeping model:', keepmod)
+        #print('Keeping source:', keepsrc)
 
         B.dchisqs[i, :] = np.array([chisqs.get(k,0) for k in modnames])
         B.flags[i] = allflags.get(keepmod, 0)
@@ -2906,6 +2922,8 @@ def _one_blob(X):
             for isrc,patch in enumerate(srcmods):
                 if patch is None:
                     continue
+                if patch.patch is None:
+                    continue
                 if counts[isrc] == 0:
                     continue
                 slc = patch.getSlice(mod)
@@ -2931,7 +2949,7 @@ def _one_blob(X):
             chisq = ((tim.getImage() - mod) * tim.getInvError())**2
 
             for isrc,patch in enumerate(srcmods):
-                if patch is None:
+                if patch is None or patch.patch is None:
                     continue
                 if counts[isrc] == 0:
                     continue
@@ -3232,6 +3250,7 @@ def stage_wise_forced(
     cat=None,
     T=None,
     targetwcs=None,
+    W=None, H=None,
     brickname=None,
     unwise_dir=None,
     unwise_w12_dir=None,
@@ -3239,12 +3258,13 @@ def stage_wise_forced(
     brick=None,
     outdir=None,
     use_ceres=True,
+    mp=None,
     **kwargs):
     '''
     After the model fits are finished, we can perform forced
     photometry of the unWISE coadds.
     '''
-    from wise.forcedphot import unwise_forcedphot, unwise_tiles_touching_wcs
+    from wise.forcedphot import unwise_tiles_touching_wcs
 
     if unwise_dir is None:
         unwise_dir = 'unwise-coadds'
@@ -3255,8 +3275,8 @@ def stage_wise_forced(
         
     # Here we assume the targetwcs is axis-aligned and that the
     # edge midpoints yield the RA,Dec limits (true for TAN).
-    ok,r,d = targetwcs.pixelxy2radec(np.array([1,   W,   W/2, W/2]),
-                                     np.array([H/2, H/2, 1,   H  ]))
+    r,d = targetwcs.pixelxy2radec(np.array([1,   W,   W/2, W/2]),
+                                  np.array([H/2, H/2, 1,   H  ]))
     # the way the roiradec box is used, the min/max order doesn't matter
     roiradec = [r[0], r[1], d[2], d[3]]
 
@@ -3284,6 +3304,8 @@ def stage_wise_forced(
     return dict(WISE=WISE)
 
 def _unwise_phot(X):
+    from wise.forcedphot import unwise_forcedphot
+
     (wcat, tiles, band, roiradec, unwise_dir, use_ceres) = X
 
     try:
