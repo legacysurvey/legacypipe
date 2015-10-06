@@ -2763,8 +2763,8 @@ def _one_blob(X):
         keepsrc = dict(none=None, ptsrc=ptsrc, simple=simple,
                        dev=dev, exp=exp, comp=comp)[keepmod]
 
-        print('Keeping model:', keepmod)
-        print('Keeping source:', keepsrc)
+        #print('Keeping model:', keepmod)
+        #print('Keeping source:', keepsrc)
 
         B.dchisqs[i, :] = np.array([chisqs.get(k,0) for k in modnames])
         B.flags[i] = allflags.get(keepmod, 0)
@@ -2920,6 +2920,8 @@ def _one_blob(X):
             for isrc,patch in enumerate(srcmods):
                 if patch is None:
                     continue
+                if patch.patch is None:
+                    continue
                 if counts[isrc] == 0:
                     continue
                 slc = patch.getSlice(mod)
@@ -2945,7 +2947,7 @@ def _one_blob(X):
             chisq = ((tim.getImage() - mod) * tim.getInvError())**2
 
             for isrc,patch in enumerate(srcmods):
-                if patch is None:
+                if patch is None or patch.patch is None:
                     continue
                 if counts[isrc] == 0:
                     continue
@@ -3246,6 +3248,7 @@ def stage_wise_forced(
     cat=None,
     T=None,
     targetwcs=None,
+    W=None, H=None,
     brickname=None,
     unwise_dir=None,
     unwise_w12_dir=None,
