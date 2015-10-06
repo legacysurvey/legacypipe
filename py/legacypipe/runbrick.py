@@ -145,8 +145,8 @@ def stage_tims(W=3600, H=3600, pixscale=0.262, brickname=None,
         brick.ra2,nil  = targetwcs.pixelxy2radec(1, H/2)
         nil, brick.dec1 = targetwcs.pixelxy2radec(W/2, 1)
         nil, brick.dec2 = targetwcs.pixelxy2radec(W/2, H)
-        print('RA1,RA2', brick.ra1, brick.ra2)
-        print('Dec1,Dec2', brick.dec1, brick.dec2)
+        #print('RA1,RA2', brick.ra1, brick.ra2)
+        #print('Dec1,Dec2', brick.dec1, brick.dec2)
 
     gitver = get_git_version()
 
@@ -202,8 +202,8 @@ def stage_tims(W=3600, H=3600, pixscale=0.262, brickname=None,
         version_hdr.add_record(dict(
             name='CORN%iDEC' %(i+1), value=d, comment='[deg] Brick corner Dec'))
 
-    print('Version header:')
-    print(version_hdr)
+    # print('Version header:')
+    # print(version_hdr)
 
     ccds = decals.ccds_touching_wcs(targetwcs, ccdrad=None)
     if ccds is None:
@@ -1577,6 +1577,7 @@ def stage_fitblobs_finish(
     fitblobs_R=None,
     outdir=None,
     write_metrics=True,
+    get_all_models=False,
     allbands = 'ugrizY',
     **kwargs):
     '''
@@ -1592,12 +1593,30 @@ def stage_fitblobs_finish(
 
     # Drop now-empty blobs.
     R = [r for r in R if r is not None and len(r)]
-    BB = merge_tables(R)
+    if len(R) > 0:
+        BB = merge_tables(R)
+    else:
+        BB = fits_table()
+        BB.Isrcs = []
+        BB.sources = []
+        nb = len(bands)
+        BB.fracflux = np.zeros((0,nb))
+        BB.fracmasked = np.zeros((0,nb))
+        BB.fracin = np.zeros((0,nb))
+        BB.rchi2 = np.zeros((0,nb))
+        BB.dchisqs = np.zeros((0,5))
+        BB.flags = np.zeros((0,5))
+        BB.all_models = np.array([])
+        BB.all_model_flags = np.array([])
+        BB.all_model_fluxivs = np.array([])
+        BB.started_in_blob = []
+        BB.finished_in_blob = []
+        BB.srcinvvars = [np.zeros((0,))]
     del R
-    print('Total of', len(BB), 'blob measurements')
     II = BB.Isrcs
-    T.cut(II)
+    print('Total of', len(BB), 'blob measurements')
     newcat = BB.sources
+    T.cut(II)
 
     assert(len(T) == len(newcat))
     print('Old catalog:', len(cat))
@@ -1654,8 +1673,7 @@ def stage_fitblobs_finish(
     # Set -0. to 0.
     #T.dchisq[T.dchisq == 0.] = 0.
 
-    
-    if write_metrics:
+    if write_metrics or get_all_models:
         from desi_common import prepare_fits_catalog, fits_typemap
         from astrometry.util.file import pickle_to_file
 
@@ -1694,7 +1712,7 @@ def stage_fitblobs_finish(
                    np.array([m.get(srctype,0)
                              for m in BB.all_model_flags]))
 
-            print('all_model_fluxivs:', BB.all_model_fluxivs)
+            # print('all_model_fluxivs:', BB.all_model_fluxivs)
             fluxivs = np.zeros((len(TT), len(allbands)), np.float32)
             bandmap = np.array([allbands.index(b) for b in bands])
             for j in range(len(xcat)):
@@ -1738,19 +1756,21 @@ def stage_fitblobs_finish(
         TT.delete_column('comp_shapeDev')
         TT.delete_column('comp_shapeExp')
 
-        primhdr = fitsio.FITSHDR()
-        for r in version_header.records():
-            primhdr.add_record(r)
-            primhdr.add_record(dict(name='ALLBANDS', value=allbands,
-                                    comment='Band order in array values'))
-        primhdr.add_record(dict(name='PRODTYPE', value='catalog',
-                                comment='NOAO data product type'))
+        if get_all_models:
+            all_models = TT
+        if write_metrics:
+            primhdr = fitsio.FITSHDR()
+            for r in version_header.records():
+                primhdr.add_record(r)
+                primhdr.add_record(dict(name='ALLBANDS', value=allbands,
+                                        comment='Band order in array values'))
+                primhdr.add_record(dict(name='PRODTYPE', value='catalog',
+                                        comment='NOAO data product type'))
 
-        fn = os.path.join(metricsdir, 'all-models-%s.fits' % brickname)
-        TT.writeto(fn, header=hdr)
-        del TT
-        print('Wrote', fn)
-
+            fn = os.path.join(metricsdir, 'all-models-%s.fits' % brickname)
+            TT.writeto(fn, header=hdr)
+            del TT
+            print('Wrote', fn)
 
     T.decam_flags = BB.flags
     T.fracflux    = BB.fracflux
@@ -1765,6 +1785,8 @@ def stage_fitblobs_finish(
     rtn = dict(fitblobs_R = None)
     for k in ['cat', 'invvars', 'T', 'allbands']:
         rtn[k] = locals()[k]
+    if get_all_models:
+        rtn['all_models'] = all_models
     return rtn
 
 def _blob_iter(blobslices, blobsrcs, blobs,
@@ -1791,7 +1813,8 @@ def _blob_iter(blobslices, blobsrcs, blobs,
             ok,x,y = tim.subwcs.radec2pixelxy(rr,dd)
             sx0,sx1 = x.min(), x.max()
             sy0,sy1 = y.min(), y.max()
-            if sx1 < 0 or sy1 < 0 or sx1 > w or sy1 > h:
+            #print('blob extent in pixel space of', tim.name, ': x', (sx0,sx1), 'y', (sy0,sy1), 'tim shape', (h,w))
+            if sx1 < 0 or sy1 < 0 or sx0 > w or sy0 > h:
                 continue
             sx0 = np.clip(int(np.floor(sx0)), 0, w-1)
             sx1 = np.clip(int(np.ceil (sx1)), 0, w-1) + 1
@@ -1860,8 +1883,10 @@ def _select_model(chisqs, nparams, galaxy_margin):
     
     # We're going to keep this source!
     if chisqs['ptsrc'] > chisqs['simple']:
+        print('Keeping source; PTSRC is better than SIMPLE')
         keepmod = 'ptsrc'
     else:
+        print('Keeping source; SIMPLE is better than PTSRC')
         keepmod = 'simple'
 
     if not 'exp' in chisqs:
@@ -1874,23 +1899,24 @@ def _select_model(chisqs, nparams, galaxy_margin):
     # This is the "fractional" upgrade threshold for ptsrc/simple->dev/exp:
     # 2% of ptsrc vs nothing
     fcut = 0.02 * chisqs['ptsrc']
+    print('Cut: max of', cut, 'and', fcut, ' (fraction of chisq_psf=%.1f)' % chisqs['ptsrc'])
     cut = max(cut, fcut)
 
     expdiff = chisqs['exp'] - chisqs[keepmod]
     devdiff = chisqs['dev'] - chisqs[keepmod]
 
-    #print('Keeping source.  Comparing dev/exp vs ptsrc.  dlnp =', 4.5, 'frac =', fcut, 'cut =', cut)
-    #print('exp:', expdiff)
-    #print('dev:', devdiff)
+    print('EXP vs', keepmod, ':', expdiff)
+    print('DEV vs', keepmod, ':', devdiff)
 
     if not (expdiff > cut or devdiff > cut):
+        print('Keeping', keepmod)
         return keepmod
     
     if expdiff > devdiff:
-        #print('Upgrading from ptsrc to exp: diff', expdiff)
+        print('Upgrading from PTSRC to EXP: diff', expdiff)
         keepmod = 'exp'
     else:
-        #print('Upgrading from ptsrc to dev: diff', devdiff)
+        print('Upgrading from PTSRC to DEV: diff', expdiff)
         keepmod = 'dev'
 
     if not 'comp' in chisqs:
@@ -3221,6 +3247,8 @@ def stage_wise_forced(
     targetwcs=None,
     brickname=None,
     unwise_dir=None,
+    unwise_w12_dir=None,
+    unwise_w34_dir=None,
     brick=None,
     outdir=None,
     use_ceres=True,
@@ -3233,8 +3261,18 @@ def stage_wise_forced(
 
     if unwise_dir is None:
         unwise_dir = 'unwise-coadds'
+    if unwise_w12_dir is None:
+        unwise_w12_dir = unwise_dir
+    if unwise_w34_dir is None:
+        unwise_w34_dir = unwise_dir
+        
+    # Here we assume the targetwcs is axis-aligned and that the
+    # edge midpoints yield the RA,Dec limits (true for TAN).
+    ok,r,d = targetwcs.pixelxy2radec(np.array([1,   W,   W/2, W/2]),
+                                     np.array([H/2, H/2, 1,   H  ]))
+    # the way the roiradec box is used, the min/max order doesn't matter
+    roiradec = [r[0], r[1], d[2], d[3]]
 
-    roiradec = [brick.ra1, brick.ra2, brick.dec1, brick.dec2]
     tiles = unwise_tiles_touching_wcs(targetwcs)
     print('Cut to', len(tiles), 'unWISE tiles')
 
@@ -3244,8 +3282,25 @@ def stage_wise_forced(
         src.setBrightness(NanoMaggies(w=1.))
         wcat.append(src)
 
+    args = []
+    for band in [1,2]:
+        args.append((wcat, tiles, band, roiradec, unwise_w12_dir, use_ceres))
+    for band in [3,4]:
+        args.append((wcat, tiles, band, roiradec, unwise_w34_dir, use_ceres))
+
+    phots = mp.map(_unwise_phot, args)
+    WISE = phots[0]
+    for p in phots[1:]:
+        WISE.add_columns_from(p)
+
+    WISE.rename('tile', 'unwise_tile')
+    return dict(WISE=WISE)
+
+def _unwise_phot(X):
+    (wcat, tiles, band, roiradec, unwise_dir, use_ceres) = X
+
     try:
-        W = unwise_forcedphot(wcat, tiles, roiradecbox=roiradec,
+        W = unwise_forcedphot(wcat, tiles, roiradecbox=roiradec, bands=[band],
                               unwise_dir=unwise_dir, use_ceres=use_ceres)
     except:
         import traceback
@@ -3254,11 +3309,10 @@ def stage_wise_forced(
 
         if use_ceres:
             print('Trying without Ceres...')
-            W = unwise_forcedphot(wcat, tiles, roiradecbox=roiradec,
+            W = unwise_forcedphot(wcat, tiles, roiradecbox=roiradec, bands=[band],
                                   unwise_dir=unwise_dir, use_ceres=False)
-
-    W.rename('tile', 'unwise_tile')
-    return dict(WISE=W)
+    return W
+        
 
 '''
 Write catalog output
@@ -3728,7 +3782,7 @@ def run_brick(brick, radec=None, pixscale=0.262,
     default, this function will cache the result of each stage in a
     (large) pickle file.  If you re-run, it will read from the
     prerequisite pickle file rather than re-running the prerequisite
-    stage.  This can field faster debugging times, but you almost
+    stage.  This can yield faster debugging times, but you almost
     certainly want to turn it off (with `writePickles=False,
     forceAll=True`) in production.
 

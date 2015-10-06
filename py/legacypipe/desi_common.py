@@ -58,7 +58,7 @@ def source_param_types(src):
                       [flatten_node(c) for c in node[1:]],
                       [node[0]])
     tree = getParamTypeTree(src)
-    print('Source param types:', tree)
+    #print('Source param types:', tree)
     types = flatten_node(tree)
     return types
     
@@ -79,7 +79,7 @@ def prepare_fits_catalog(cat, invvars, T, hdr, filts, fs, allbands = 'ugrizY',
         for src in cat:
             if type(src) != t:
                 continue
-            print('Parameters for', t, src)
+            #print('Parameters for', t, src)
             sc = src.copy()
             sc.thawAllRecursive()
             for i,nm in enumerate(sc.getParamNames()):

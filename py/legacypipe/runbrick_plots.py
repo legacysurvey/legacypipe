@@ -658,6 +658,8 @@ def stage_initplots(
 
 def sdss_coadd(targetwcs, bands):
     from astrometry.sdss import DR9, band_index
+    from astrometry.sdss import AsTransWrapper
+
     #sdss = DR9(basedir=photoobjdir)
     #sdss.useLocalTree()
     sdss = DR9(basedir='tmp')
