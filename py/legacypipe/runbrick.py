@@ -1884,10 +1884,10 @@ def _select_model(chisqs, nparams, galaxy_margin):
     
     # We're going to keep this source!
     if chisqs['ptsrc'] > chisqs['simple']:
-        print('Keeping source; PTSRC is better than SIMPLE')
+        #print('Keeping source; PTSRC is better than SIMPLE')
         keepmod = 'ptsrc'
     else:
-        print('Keeping source; SIMPLE is better than PTSRC')
+        #print('Keeping source; SIMPLE is better than PTSRC')
         keepmod = 'simple'
 
     if not 'exp' in chisqs:
@@ -1900,24 +1900,24 @@ def _select_model(chisqs, nparams, galaxy_margin):
     # This is the "fractional" upgrade threshold for ptsrc/simple->dev/exp:
     # 2% of ptsrc vs nothing
     fcut = 0.02 * chisqs['ptsrc']
-    print('Cut: max of', cut, 'and', fcut, ' (fraction of chisq_psf=%.1f)' % chisqs['ptsrc'])
+    #print('Cut: max of', cut, 'and', fcut, ' (fraction of chisq_psf=%.1f)' % chisqs['ptsrc'])
     cut = max(cut, fcut)
 
     expdiff = chisqs['exp'] - chisqs[keepmod]
     devdiff = chisqs['dev'] - chisqs[keepmod]
 
-    print('EXP vs', keepmod, ':', expdiff)
-    print('DEV vs', keepmod, ':', devdiff)
+    #print('EXP vs', keepmod, ':', expdiff)
+    #print('DEV vs', keepmod, ':', devdiff)
 
     if not (expdiff > cut or devdiff > cut):
-        print('Keeping', keepmod)
+        #print('Keeping', keepmod)
         return keepmod
     
     if expdiff > devdiff:
-        print('Upgrading from PTSRC to EXP: diff', expdiff)
+        #print('Upgrading from PTSRC to EXP: diff', expdiff)
         keepmod = 'exp'
     else:
-        print('Upgrading from PTSRC to DEV: diff', expdiff)
+        #print('Upgrading from PTSRC to DEV: diff', expdiff)
         keepmod = 'dev'
 
     if not 'comp' in chisqs:
