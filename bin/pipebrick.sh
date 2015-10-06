@@ -40,13 +40,18 @@ echo "--------------------------------------------------------------------------
 
 #python legacypipe/runbrick.py --force-all --no-write --brick $brick --outdir $outdir --threads 6 --nsigma 6 --skip --pipe --pixpsf --splinesky >> $log 2>&1
 #--no-early-coadds 
-python -u legacypipe/runbrick.py --force-all --no-write --no-sdss \
-    --pixpsf --splinesky --pipe --skip \
+
+#    -P 'pickles/runbrick-dr2k-%(brick)s-%%(stage)s.pickle' \
+
+python -u legacypipe/runbrick.py \
+    --pixpsf --splinesky --pipe --skip --no-sdss \
+    --force-all --no-write \
     --threads 6 \
     --brick $brick --outdir $outdir --nsigma 6 >> $log 2>&1
+
 #    -s image_coadds \
 
-#python -u legacypipe/runbrick.py -P 'pickles/runbrick-fftb-%(brick)s-%%(stage)s.pickle' \
+#python -u legacypipe/runbrick.py 
 #    --brick $brick --outdir $outdir --threads 6 --nsigma 6 --skip --pipe --pixpsf >> $log 2>&1
 
 # Launch from the 'py' directory;

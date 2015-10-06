@@ -184,6 +184,10 @@ if __name__ == '__main__':
         rlo,rhi = 240,245
         dlo,dhi =   5, 12
 
+    elif opt.region == 'edr-south':
+        rlo,rhi = 240,245
+        dlo,dhi =   5, 10
+
     elif opt.region == 'cosmos1':
         # 16 bricks in the core of the COSMOS field.
         rlo,rhi = 149.75, 150.75

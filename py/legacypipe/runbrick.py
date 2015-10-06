@@ -3256,12 +3256,13 @@ def stage_wise_forced(
     brick=None,
     outdir=None,
     use_ceres=True,
+    mp=None,
     **kwargs):
     '''
     After the model fits are finished, we can perform forced
     photometry of the unWISE coadds.
     '''
-    from wise.forcedphot import unwise_forcedphot, unwise_tiles_touching_wcs
+    from wise.forcedphot import unwise_tiles_touching_wcs
 
     if unwise_dir is None:
         unwise_dir = 'unwise-coadds'
@@ -3272,8 +3273,8 @@ def stage_wise_forced(
         
     # Here we assume the targetwcs is axis-aligned and that the
     # edge midpoints yield the RA,Dec limits (true for TAN).
-    ok,r,d = targetwcs.pixelxy2radec(np.array([1,   W,   W/2, W/2]),
-                                     np.array([H/2, H/2, 1,   H  ]))
+    r,d = targetwcs.pixelxy2radec(np.array([1,   W,   W/2, W/2]),
+                                  np.array([H/2, H/2, 1,   H  ]))
     # the way the roiradec box is used, the min/max order doesn't matter
     roiradec = [r[0], r[1], d[2], d[3]]
 
@@ -3301,6 +3302,8 @@ def stage_wise_forced(
     return dict(WISE=WISE)
 
 def _unwise_phot(X):
+    from wise.forcedphot import unwise_forcedphot
+
     (wcat, tiles, band, roiradec, unwise_dir, use_ceres) = X
 
     try:
