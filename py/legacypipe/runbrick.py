@@ -220,6 +220,7 @@ def stage_tims(W=3600, H=3600, pixscale=0.262, brickname=None,
         '2013B-0502', # 3 fields
         '2014A-0239', # 1 field
         '2014A-0429', # 2 fields
+        '2013A-0611', # many 900-sec exposures in EDR region
         ]
     keep = np.array([propid not in blacklist for propid in ccds.propid])
     ccds.cut(keep)
@@ -238,7 +239,7 @@ def stage_tims(W=3600, H=3600, pixscale=0.262, brickname=None,
     for ccd in ccds:
         im = decals.get_image_object(ccd)
         ims.append(im)
-        print(im)
+        print(im, im.band, 'exptime', im.exptime, 'propid', ccd.propid)
         
     tnow = Time()
     print('[serial tims] Finding images touching brick:', tnow-tlast)
