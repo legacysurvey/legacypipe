@@ -9,6 +9,7 @@ from astrometry.util.fits import *
 from astrometry.util.multiproc import *
 from astrometry.util.util import *
 from astrometry.util.plotutils import *
+from astrometry.util.stages import *
 
 from tractor import *
 
@@ -186,264 +187,338 @@ def run_sim(tims, cat, N, mods=None, samenoise=True, **kwargs):
 
 
 
-W,H = 40,40
-ra,dec = 0.,0.
-band = 'r'
+def stage_sims(**kwargs):
 
-pixscale = 0.262
-ps = pixscale / 3600.
-wcs = Tan(ra, dec, W/2.+0.5, H/2.+0.5,
-          -ps, 0., 0., ps, float(W), float(H))
+    W,H = 40,40
+    ra,dec = 0.,0.
+    band = 'r'
+    
+    pixscale = 0.262
+    ps = pixscale / 3600.
+    wcs = Tan(ra, dec, W/2.+0.5, H/2.+0.5,
+              -ps, 0., 0., ps, float(W), float(H))
+    
+    psf = None
+    twcs = ConstantFitsWcs(wcs)
+    photocal = LinearPhotoCal(1., band=band)
+    
+    np.random.seed(1000042)
+    
+    # survey target limiting mag: r=23.6, let's say 5-sig point source
+    limit = 23.6
+    
+    data = np.zeros((H,W), np.float32)
+    tim = Image(data=data, inverr=np.ones_like(data), psf=psf, wcs=twcs,
+                photocal=photocal)
+    tim.subwcs = wcs
+    tim.band = band
+    tim.skyver = (0,0)
+    tim.wcsver = (0,0)
+    tim.psfver = (0,0)
+    tim.plver = 0
+    tim.dq = np.zeros(tim.shape, np.int16)
+    tim.dq_bits = dict(satur=1)
+    
+    mp = multiproc()
+    
+    sourcetypes = [ 'E','D','S','C','P','-','+' ]
+    
+    ccmap = dict(E='r', D='b', S='c', C='m', P='g',
+                 exp='r', dev='b', simp='c', comp='m', psf='g')
+    ccmap['+'] = 'k'
+    ccmap['-'] = '0.5'
+    
+    namemap = { 'E': 'Exp', 'D': 'deVauc', 'C': 'composite', 'P':'PSF', 'S': 'simple', '+':'>1 src', '-':'No detection' }
+    
+    
+    #
+    
+    #mag = 23.0
+    #re = 0.45
+    
+    mag = np.arange(19.0, 23.5 + 1e-3, 0.5)
+    #mag = np.array([19.])
+    
+    re  = np.arange(0.1, 0.9 + 1e-3, 0.1)
+    #re  = np.array([0.9])
+    
+    psfsig = 2.0
+    N = 20
+    #N = 1
+    
+    S = fits_table()
+    for t in sourcetypes:
+        S.set('frac_%s' % t, [])
+    S.frac_U = []
+    
+    S.mag = []
+    S.re = []
+    S.imag = []
+    S.ire = []
+    S.psffwhm = []
+    S.mods = []
+    S.sig1 = []
+    S.dchisq = []
+    S.exp_re = []
+    
+    simk = 0
+    
+    for imag,mag_i in enumerate(mag):
+        for ire,re_i in enumerate(re):
+    
+            #simk += 1
+            #print 'simk', simk
+            simk = 9
+            np.random.seed(1000 + simk)
+            
+            S.mag.append(mag_i)
+            S.re.append(re_i)
+            S.imag.append(imag)
+            S.ire.append(ire)
+            
+            flux = NanoMaggies.magToNanomaggies(mag_i)
+    
+            gal = ExpGalaxy(RaDecPos(ra, dec), NanoMaggies(**{ band: flux }),
+                            EllipseESoft(np.log(re_i), 0., 0.))
+    
+            var1 = psfsig**2
+            psf = GaussianMixturePSF(1.0, 0., 0., var1, var1, 0.)
+            tim.psf = psf
+            tim.psf_sigma = psfsig
+    
+            # Set the per-pixel noise based on the PSF size!?!
+            limitflux = NanoMaggies.magToNanomaggies(limit)
+            psfnorm = 1./(2. * np.sqrt(np.pi) * tim.psf_sigma)
+            sig1 = limitflux / 5. * psfnorm
+            tim.sig1 = sig1
+            tim.inverr[:,:] = 1./sig1
+    
+            print
+            print 'Running mag=', mag_i, 're=', re_i
+            print 'psf norm', psfnorm
+            print 'limiting flux', limitflux
+            print 'sig1:', sig1
+            print 'flux:', flux
+    
+            tr = Tractor([tim], [gal])
+            mod = tr.getModelImage(0)
+    
+            S.mods.append(mod + sig1 * np.random.normal(size=mod.shape))
+            S.sig1.append(sig1)
+            
+            res = run_sim([tim], [gal], N, mods=[mod], 
+                          W=W, H=H, ra=ra, dec=dec, mp=mp, bands=[band])
+    
+            T = res.T
+            T.flux = T.flux_r
+            T.fluxiv = T.fluxiv_r
+            #catalog = res.TT
+    
+            print 'T.nsrcs:', T.nsrcs
+            
+            S.psffwhm.append(psfsig * 2.35 * pixscale)
+            for t in sourcetypes:
+                S.get('frac_%s' % t).append(
+                    100. * np.count_nonzero(T.type == t) / float(len(T)))
+            S.frac_U.append(100. * np.count_nonzero(T.nsrcs == 0) / float(len(T)))
+    
+            TT = res.TT
+            
+            if 'dchisq' in TT.columns():
+                dchisq = TT.dchisq
+                S.dchisq.append(np.mean(dchisq, axis=0))
+            else:
+                S.dchisq.append(np.zeros(5))
+    
+            I = []
+            if 'exp_shape_r' in TT.columns():
+                I = np.flatnonzero(TT.exp_shape_r > 0)
+            if len(I):
+                S.exp_re.append(np.mean(TT.exp_shape_r[I]))
+            else:
+                S.exp_re.append(0.)
+    
+    S.to_np_arrays()
+    print 'S:', len(S)
 
-psf = None
-twcs = ConstantFitsWcs(wcs)
-photocal = LinearPhotoCal(1., band=band)
-
-np.random.seed(1000042)
-
-# survey target limiting mag: r=23.6, let's say 5-sig point source
-limit = 23.6
-
-data = np.zeros((H,W), np.float32)
-tim = Image(data=data, inverr=np.ones_like(data), psf=psf, wcs=twcs,
-            photocal=photocal)
-tim.subwcs = wcs
-tim.band = band
-tim.skyver = (0,0)
-tim.wcsver = (0,0)
-tim.psfver = (0,0)
-tim.plver = 0
-tim.dq = np.zeros(tim.shape, np.int16)
-tim.dq_bits = dict(satur=1)
-
-mp = multiproc()
-ps = PlotSequence('galdet')
-
-sourcetypes = [ 'E','D','S','C','P','-','+' ]
-
-ccmap = dict(E='r', D='b', S='c', C='m', P='g',
-             exp='r', dev='b', simp='c', comp='m', psf='g')
-ccmap['+'] = 'k'
-ccmap['-'] = '0.5'
-
-namemap = { 'E': 'Exp', 'D': 'deVauc', 'C': 'composite', 'P':'PSF', 'S': 'simple', '+':'>1 src', '-':'No detection' }
+    rtn = {}
+    for k in ['S', 'mag', 're', 'psfsig']:
+        rtn[k] = locals()[k]
+    return rtn
+    
 
 
-#
+def label_cells(fmap, xx, yy, fmt, **kwa):
+    args = dict(color='k', fontsize=8, va='center', ha='center')
+    args.update(kwa)
+    for j,y in enumerate(yy):
+        for i,x in enumerate(xx):
+            plt.text(x, y, fmt % fmap[j,i], **args)
 
-#mag = 23.0
-#re = 0.45
 
-mag = np.arange(19.0, 23.5 + 1e-3, 0.5)
-#mag = np.array([19.])
-
-re  = np.arange(0.1, 0.9 + 1e-3, 0.1)
-#re  = np.array([0.9])
-
-psfsig = 2.0
-N = 20
-#N = 1
-
-S = fits_table()
-for t in sourcetypes:
-    S.set('frac_%s' % t, [])
-S.frac_U = []
-
-S.mag = []
-S.re = []
-S.imag = []
-S.ire = []
-S.psffwhm = []
-S.mods = []
-S.sig1 = []
-S.dchisq = []
-S.exp_re = []
-
-simk = 0
-
-for imag,mag_i in enumerate(mag):
-    for ire,re_i in enumerate(re):
-
-        #simk += 1
-        #print 'simk', simk
-        simk = 9
-        np.random.seed(1000 + simk)
+    
+def stage_plots(S=None, mag=None, re=None, psfsig=None,
+                **kwargs):
+    ps = PlotSequence('galdet')
+    
+    # Plot mags on x axis = cols
+    # Plot re   on y axis = rows
+    
+    #S.imag = np.array([np.argmin(np.abs(m - mag)) for m in S.mag])
+    #S.ire  = np.array([np.argmin(np.abs(r - re )) for r in S.re])
+    
+    cols = 1 + max(S.imag)
+    rows = 1 + max(S.ire)
+    
+    S.row = S.ire
+    S.col = S.imag
+    
+    # Plot the sources
+    plt.subplots_adjust(hspace=0, wspace=0)
+    plt.clf()
+    for i in range(rows*cols):
+        plt.subplot(rows, cols, i+1)
+        si = np.flatnonzero((S.row == (rows-1 - i/cols)) * (S.col == i % cols))[0]
+        sig1 = S.sig1[si]
+        dimshow(S.mods[si], ticks=False, vmin=-2*sig1, vmax=5*sig1)
+    ps.savefig()
+    
+    dm = mag[1]-mag[0]
+    dr = re [1]-re [0]
+    extent = [mag.min()-dm/2, mag.max()+dm/2, re.min()-dr/2, re.max()+dr/2]
+    ima = dict(vmin=0, vmax=100, extent=extent, cmap='jet')
+    
+    for name in ['UNDETECTED', 'PSF', 'SIMPLE', 'EXP', 'DEV', 'COMP']:
+    
+        fmap = np.zeros((rows,cols))
+        fmap[S.row, S.col] = S.get('frac_%s' % name[0])
+    
+        print 'Fraction classified as', name
+        print fmap
         
-        S.mag.append(mag_i)
-        S.re.append(re_i)
-        S.imag.append(imag)
-        S.ire.append(ire)
+        plt.clf()
+        dimshow(fmap, aspect='auto', **ima)
+        plt.xlabel('Mag')
+        plt.ylabel('radius r_e (arcsec)')
+        plt.colorbar()
+        plt.title('Fraction of sources classified as %s' % name)
+        ps.savefig()
+    
+    
+    
+    ima = dict(vmin=0, extent=extent, cmap='jet')
+    
+    for i,name in enumerate(['PSF', 'SIMPLE', 'DEV', 'EXP', 'COMP']):
+    
+        fmap = np.zeros((rows,cols))
+        fmap[S.row, S.col] = np.sqrt(S.dchisq[:,i])
+    
+        plt.clf()
+        dimshow(fmap, aspect='auto', **ima)
+        plt.xlabel('Mag')
+        plt.ylabel('radius r_e (arcsec)')
+        plt.colorbar()
+        plt.title('sqrt(dchisq) for %s' % name)
+        ps.savefig()
+    
+    
+    ipsf = 0
+    isimple = 1
+    idev = 2
+    iexp = 3
+    icomp = 4
+    
+    ima = dict(extent=extent, cmap='jet')
+    
+    for i,name in enumerate(['SIMPLE', 'DEV', 'EXP', 'COMP']):
+    
+        fmap = np.zeros((rows,cols))
+        fmap[S.row, S.col] = S.dchisq[:,i+1] - S.dchisq[:,ipsf]
+    
+        plt.clf()
+        dimshow(fmap, aspect='auto', **ima)
+        plt.xlabel('Mag')
+        plt.ylabel('radius r_e (arcsec)')
+        plt.colorbar()
+        plt.title('dchisq_%s - dchisq_PSF' % name)
+        ps.savefig()
+
+        plt.clim(-50, 50)
+        ps.savefig()
         
-        flux = NanoMaggies.magToNanomaggies(mag_i)
+        if name != 'SIMPLE':
+            fmap[S.row, S.col] = ( (S.dchisq[:,i+1] - S.dchisq[:,ipsf]) / 
+                                   S.dchisq[:,ipsf] )
+    
+            plt.clf()
+            dimshow(fmap, aspect='auto', vmin=-0.1, vmax=0.1, **ima)
+            plt.xlabel('Mag')
+            plt.ylabel('radius r_e (arcsec)')
+            plt.colorbar()
+            plt.title('(dchisq_%s - dchisq_PSF) / dchisq_PSF' % name)
+            ps.savefig()
 
-        gal = ExpGalaxy(RaDecPos(ra, dec), NanoMaggies(**{ band: flux }),
-                        EllipseESoft(np.log(re_i), 0., 0.))
-
-        var1 = psfsig**2
-        psf = GaussianMixturePSF(1.0, 0., 0., var1, var1, 0.)
-        tim.psf = psf
-        tim.psf_sigma = psfsig
-
-        # Set the per-pixel noise based on the PSF size!?!
-        limitflux = NanoMaggies.magToNanomaggies(limit)
-        psfnorm = 1./(2. * np.sqrt(np.pi) * tim.psf_sigma)
-        sig1 = limitflux / 5. * psfnorm
-        tim.sig1 = sig1
-        tim.inverr[:,:] = 1./sig1
-
-        print
-        print 'Running mag=', mag_i, 're=', re_i
-        print 'psf norm', psfnorm
-        print 'limiting flux', limitflux
-        print 'sig1:', sig1
-        print 'flux:', flux
-
-        tr = Tractor([tim], [gal])
-        mod = tr.getModelImage(0)
-
-        S.mods.append(mod + sig1 * np.random.normal(size=mod.shape))
-        S.sig1.append(sig1)
-        
-        res = run_sim([tim], [gal], N, mods=[mod], 
-                      W=W, H=H, ra=ra, dec=dec, mp=mp, bands=[band])
-
-        T = res.T
-        T.flux = T.flux_r
-        T.fluxiv = T.fluxiv_r
-        #catalog = res.TT
-
-        print 'T.nsrcs:', T.nsrcs
-        
-        S.psffwhm.append(psfsig * 2.35 * pixscale)
-        for t in sourcetypes:
-            S.get('frac_%s' % t).append(
-                100. * np.count_nonzero(T.type == t) / float(len(T)))
-        S.frac_U.append(100. * np.count_nonzero(T.nsrcs == 0) / float(len(T)))
-
-        TT = res.TT
-        
-        if 'dchisq' in TT.columns():
-            dchisq = TT.dchisq
-            S.dchisq.append(np.mean(dchisq, axis=0))
-        else:
-            S.dchisq.append(np.zeros(5))
-
-        I = []
-        if 'exp_shape_r' in TT.columns():
-            I = np.flatnonzero(TT.exp_shape_r > 0)
-        if len(I):
-            S.exp_re.append(np.mean(TT.exp_shape_r[I]))
-        else:
-            S.exp_re.append(0.)
-
-S.to_np_arrays()
-print 'S:', len(S)
-
-# Plot mags on x axis = cols
-# Plot re   on y axis = rows
-
-#S.imag = np.array([np.argmin(np.abs(m - mag)) for m in S.mag])
-#S.ire  = np.array([np.argmin(np.abs(r - re )) for r in S.re])
-
-cols = 1 + max(S.imag)
-rows = 1 + max(S.ire)
-
-S.row = S.ire
-S.col = S.imag
-
-# Plot the sources
-plt.subplots_adjust(hspace=0, wspace=0)
-plt.clf()
-for i in range(rows*cols):
-    plt.subplot(rows, cols, i+1)
-    si = np.flatnonzero((S.row == (rows-1 - i/cols)) * (S.col == i % cols))[0]
-    sig1 = S.sig1[si]
-    dimshow(S.mods[si], ticks=False, vmin=-2*sig1, vmax=5*sig1)
-ps.savefig()
-
-dm = mag[1]-mag[0]
-dr = re [1]-re [0]
-extent = [mag.min()-dm/2, mag.max()+dm/2, re.min()-dr/2, re.max()+dr/2]
-ima = dict(vmin=0, vmax=100, extent=extent, cmap='jet')
-
-for name in ['UNDETECTED', 'PSF', 'SIMPLE', 'EXP', 'DEV', 'COMP']:
-
+            label_cells(fmap, mag, re, '%.2g', color='k')
+            ps.savefig()
+            
+            
+    
     fmap = np.zeros((rows,cols))
-    fmap[S.row, S.col] = S.get('frac_%s' % name[0])
-
-    print 'Fraction classified as', name
-    print fmap
+    fmap[S.row, S.col] = S.dchisq[:,iexp] - S.dchisq[:,isimple]
     
     plt.clf()
     dimshow(fmap, aspect='auto', **ima)
     plt.xlabel('Mag')
     plt.ylabel('radius r_e (arcsec)')
     plt.colorbar()
-    plt.title('Fraction of sources classified as %s' % name)
+    plt.title('dchisq_EXP - dchisq_SIMPLE')
     ps.savefig()
 
+    plt.clim(-50, 50)
+    ps.savefig()
 
-
-ima = dict(vmin=0, extent=extent, cmap='jet')
-
-for i,name in enumerate(['PSF', 'SIMPLE', 'DEV', 'EXP', 'COMP']):
-
+    fmap[S.row, S.col] = ( (S.dchisq[:,iexp] - S.dchisq[:,isimple]) / 
+                           S.dchisq[:,ipsf] )
+    
+    plt.clf()
+    dimshow(fmap, aspect='auto', vmin=-0.1, vmax=0.1, **ima)
+    plt.xlabel('Mag')
+    plt.ylabel('radius r_e (arcsec)')
+    plt.colorbar()
+    plt.title('(dchisq_EXP - dchisq_SIMPLE) / dchisq_PSF')
+    ps.savefig()
+    
+    label_cells(fmap, mag, re, '%.2g', color='k')
+    ps.savefig()
+    
+    
     fmap = np.zeros((rows,cols))
-    fmap[S.row, S.col] = np.sqrt(S.dchisq[:,i])
-
+    fmap[S.row, S.col] = S.exp_re
+    
     plt.clf()
     dimshow(fmap, aspect='auto', **ima)
     plt.xlabel('Mag')
     plt.ylabel('radius r_e (arcsec)')
     plt.colorbar()
-    plt.title('sqrt(dchisq) for %s' % name)
+    plt.title('EXP fit r_e (arcsec)')
     ps.savefig()
+    
+    
 
 
-ipsf = 0
-isimple = 1
-idev = 2
-iexp = 3
-icomp = 4
 
-ima = dict(extent=extent, cmap='jet')
+stage = 'plots'
 
-for i,name in enumerate(['SIMPLE', 'DEV', 'EXP', 'COMP']):
+prereqs = { 'plots': 'sims',
+            'sims': None }
+initargs = {}
+kwargs = dict()
 
-    fmap = np.zeros((rows,cols))
-    fmap[S.row, S.col] = S.dchisq[:,i+1] - S.dchisq[:,ipsf]
+stagefunc = CallGlobalTime('stage_%s', globals())
+picklePattern = 'galdet-%s.pickle'
 
-    plt.clf()
-    dimshow(fmap, aspect='auto', **ima)
-    plt.xlabel('Mag')
-    plt.ylabel('radius r_e (arcsec)')
-    plt.colorbar()
-    plt.title('dchisq_%s - dchisq_PSF' % name)
-    ps.savefig()
-
-
-fmap = np.zeros((rows,cols))
-fmap[S.row, S.col] = S.dchisq[:,iexp] - S.dchisq[:,isimple]
-
-plt.clf()
-dimshow(fmap, aspect='auto', **ima)
-plt.xlabel('Mag')
-plt.ylabel('radius r_e (arcsec)')
-plt.colorbar()
-plt.title('dchisq_EXP - dchisq_SIMPLE')
-ps.savefig()
-
-
-fmap = np.zeros((rows,cols))
-fmap[S.row, S.col] = S.exp_re
-
-plt.clf()
-dimshow(fmap, aspect='auto', **ima)
-plt.xlabel('Mag')
-plt.ylabel('radius r_e (arcsec)')
-plt.colorbar()
-plt.title('EXP fit r_e (arcsec)')
-ps.savefig()
+runstage(stage, picklePattern, stagefunc, prereqs=prereqs,
+         initial_args=initargs, force=[stage], **kwargs)
 
 
     

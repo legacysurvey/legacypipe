@@ -1809,7 +1809,9 @@ def _blob_iter(blobslices, blobsrcs, blobs,
             subimg = tim.getImage ()[subslc]
             subie  = tim.getInvError()[subslc]
             subwcs = tim.getWcs().shifted(sx0, sy0)
-
+            # Note that we *don't* shift the PSF or sky here -- we do that
+            # in the _one_blob code.
+            
             subtimargs.append((subimg, subie, subwcs, tim.subwcs, tim.getPhotoCal(),
                                tim.getSky(), tim.psf, tim.name, sx0, sx1, sy0, sy1,
                                tim.band, tim.sig1, tim.modelMinval))
