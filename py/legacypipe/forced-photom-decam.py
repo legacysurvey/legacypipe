@@ -10,7 +10,7 @@ from astrometry.util.ttime import Time, MemMeas
 
 from tractor import Tractor
 
-from common import Decals, DecamImage, bricks_touching_wcs, exposure_metadata
+from legacypipe.common import Decals, bricks_touching_wcs, exposure_metadata, get_version_header
 from desi_common import read_fits_catalog
 import tractor
 
@@ -18,12 +18,13 @@ import tractor
 
 if __name__ == '__main__':
     import optparse
-    parser = optparse.OptionParser(usage='%prog <decam-image-filename> <decam-HDU> <catalog.fits or "DR1"> <output-catalog.fits>')
+    parser = optparse.OptionParser(usage='%prog <decam-image-filename> <decam-HDU> <catalog.fits or "DR1"/"DR2"> <output-catalog.fits>')
     parser.add_option('--zoom', type=int, nargs=4, help='Set target image extent (default "0 2046 0 4094")')
     parser.add_option('--no-ceres', action='store_false', default=True, dest='ceres', help='Do not use Ceres optimiziation engine (use scipy)')
-    parser.add_option('--catalog-path', default='dr1',
-                      help='Path to DECaLS DR1 catalogs; default %default, eg, /project/projectdirs/cosmo/data/legacysurvey/dr1')
+    parser.add_option('--catalog-path', default=None,
+                      help='Path to DECaLS DR1/DR2 catalogs; default "dr1" or "dr2", eg, /project/projectdirs/cosmo/data/legacysurvey/dr1')
     parser.add_option('--plots', default=None, help='Create plots; specify a base filename for the plots')
+    parser.add_option('--write-cat', help='Write out the catalog subset on which forced phot was done')
     opt,args = parser.parse_args()
 
     if len(args) != 4:
@@ -58,11 +59,14 @@ if __name__ == '__main__':
     T.about()
 
     decals = Decals()
-    im = DecamImage(decals, T[0])
-    tim = im.get_tractor_image(slc=zoomslice, const2psf=True)
+    im = decals.get_image_object(T[0])
+    tim = im.get_tractor_image(slc=zoomslice, pixPsf=True, splinesky=True)
     print 'Got tim:', tim
 
-    if catfn == 'DR1':
+    if catfn in ['DR1', 'DR2']:
+        if opt.catalog_path is None:
+            opt.catalog_path = catfn.lower()
+    
         margin = 20
         TT = []
         chipwcs = tim.subwcs
@@ -91,7 +95,6 @@ if __name__ == '__main__':
         T = merge_tables(TT)
         T._header = TT[0]._header
         del TT
-        #T.writeto('cat.fits')
 
         # Fix up various failure modes:
         # FixedCompositeGalaxy(pos=RaDecPos[240.51147402832561, 10.385488075518923], brightness=NanoMaggies: g=(flux -2.87), r=(flux -5.26), z=(flux -7.65), fracDev=FracDev(0.60177207), shapeExp=re=3.78351e-44, e1=9.30367e-13, e2=1.24392e-16, shapeDev=re=inf, e1=-0, e2=-0)
@@ -114,6 +117,10 @@ if __name__ == '__main__':
             for i in I:
                 T.type[i] = 'DEV'
 
+        if opt.write_cat:
+            T.writeto(opt.write_cat)
+            print 'Wrote catalog to', opt.write_cat
+
     else:
         T = fits_table(catfn)
 
@@ -124,17 +131,19 @@ if __name__ == '__main__':
     #print 'Got cat:', cat
 
     print 'Forced photom...'
-    tr = Tractor([tim], cat)
+    opti = None
+    if opt.ceres:
+        from tractor.ceres_optimizer import CeresOptimizer
+        B = 8
+        opti = CeresOptimizer(BW=B, BH=B)
+
+    tr = Tractor([tim], cat, optimizer=opti)
     tr.freezeParam('images')
     for src in cat:
         src.freezeAllBut('brightness')
         src.getBrightness().freezeAllBut(tim.band)
 
     kwa = {}
-    if opt.ceres:
-        B = 8
-        kwa.update(use_ceres=True, BW=B, BH=B)
-
     if opt.plots is None:
         kwa.update(wantims=False)
 

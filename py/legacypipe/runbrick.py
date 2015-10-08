@@ -2087,7 +2087,8 @@ def _one_blob(X):
 
     plots2 = False
 
-    #tlast = Time()
+    tlast = Time()
+
     alphas = [0.1, 0.3, 1.0]
     optargs = dict(priors=True, shared_params=False, alphas=alphas)
 
@@ -2979,7 +2980,8 @@ def _one_blob(X):
     assert(len(B.finished_in_blob) == len(B.started_in_blob))
 
     #print('Blob finished metrics:', Time()-tlast)
-    print('Blob', iblob+1, 'finished') #:', Time()-tlast
+    #print('Blob', iblob+1, 'finished') #:', Time()-tlast
+    print('Blob', iblob+1, 'finished:', Time()-tlast)
 
     return B
 

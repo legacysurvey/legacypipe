@@ -990,6 +990,7 @@ def exposure_metadata(filenames, hdus=None, trim=None):
                 ('EXPNUM', 0),
                 ('MJD-OBS', 0),
                 ('PROPID', ''),
+                ('INSTRUME', ''),
                 ]
     hdrkeys = [('AVSKY', nan),
                ('ARAWGAIN', nan),
@@ -1063,6 +1064,10 @@ def exposure_metadata(filenames, hdus=None, trim=None):
     for k,d in allkeys:
         T.set(k.lower().replace('-','_'), np.array(vals[k]))
     #T.about()
+
+    # DECam: INSTRUME = 'DECam'
+    T.rename('instrume', 'camera')
+    T.camera = np.array([t.lower() for t in T.camera])
 
     #T.rename('extname', 'ccdname')
     T.ccdname = np.array([t.strip() for t in T.extname])
