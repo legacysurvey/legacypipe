@@ -47,6 +47,10 @@ CP_DQ_BITS = dict(badpix=1, satur=2, interp=4, cr=16, bleed=64,
                   edge = 256,
                   edge2 = 512) # in z-band images?
 
+# The apertures we use in aperture photometry
+apertures_arcsec = np.array([0.5, 0.75, 1., 1.5, 2., 3.5, 5., 7.])
+
+
 # Ugly hack: for sphinx documentation, the astrometry and tractor (and
 # other) packages are replaced by mock objects.  But you can't
 # subclass a mock object correctly, so we have to un-mock

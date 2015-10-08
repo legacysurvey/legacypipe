@@ -10,7 +10,7 @@ from astrometry.util.ttime import Time, MemMeas
 
 from tractor import Tractor
 
-from legacypipe.common import Decals, bricks_touching_wcs, exposure_metadata, get_version_header
+from legacypipe.common import Decals, bricks_touching_wcs, exposure_metadata, get_version_header, apertures_arcsec
 from desi_common import read_fits_catalog
 import tractor
 
@@ -25,6 +25,10 @@ if __name__ == '__main__':
                       help='Path to DECaLS DR1/DR2 catalogs; default "dr1" or "dr2", eg, /project/projectdirs/cosmo/data/legacysurvey/dr1')
     parser.add_option('--plots', default=None, help='Create plots; specify a base filename for the plots')
     parser.add_option('--write-cat', help='Write out the catalog subset on which forced phot was done')
+    parser.add_option('--apphot', action='store_true', default=False,
+                      help='Do aperture photometry?')
+    parser.add_option('--no-forced', dest='forced', default=True, action='store_false',
+                      help='Do NOT do regular forced photometry?  Implies --apphot')
     opt,args = parser.parse_args()
 
     if len(args) != 4:
@@ -33,7 +37,6 @@ if __name__ == '__main__':
 
     Time.add_measurement(MemMeas)
     t0 = Time()
-    
 
     filename = args[0]
     hdu = int(args[1])
@@ -43,6 +46,9 @@ if __name__ == '__main__':
     if os.path.exists(outfn):
         print 'Ouput file exists:', outfn
         sys.exit(0)
+
+    if not opt.forced:
+        opt.apphot = True
 
     zoomslice = None
     if opt.zoom is not None:
@@ -143,34 +149,6 @@ if __name__ == '__main__':
         src.freezeAllBut('brightness')
         src.getBrightness().freezeAllBut(tim.band)
 
-    kwa = {}
-    if opt.plots is None:
-        kwa.update(wantims=False)
-
-    R = tr.optimize_forced_photometry(variance=True, fitstats=True,
-                                      shared_params=False, **kwa)
-
-    if opt.plots:
-        (data,mod,ie,chi,roi) = R.ims1[0]
-
-        ima = tim.ima
-        imchi = dict(interpolation='nearest', origin='lower', vmin=-5, vmax=5)
-        plt.clf()
-        plt.imshow(data, **ima)
-        plt.title('Data: %s' % tim.name)
-        ps.savefig()
-
-        plt.clf()
-        plt.imshow(mod, **ima)
-        plt.title('Model: %s' % tim.name)
-        ps.savefig()
-
-        plt.clf()
-        plt.imshow(chi, **imchi)
-        plt.title('Chi: %s' % tim.name)
-        ps.savefig()
-
-
     F = fits_table()
     F.brickid   = T.brickid
     F.brickname = T.brickname
@@ -184,12 +162,71 @@ if __name__ == '__main__':
     F.x = (x-1).astype(np.float32)
     F.y = (y-1).astype(np.float32)
 
-    F.flux = np.array([src.getBrightness().getFlux(tim.band)
-                       for src in cat]).astype(np.float32)
-    F.flux_ivar = R.IV.astype(np.float32)
+    if opt.apphot:
+        import photutils
 
-    F.fracflux = R.fitstats.profracflux.astype(np.float32)
-    F.rchi2    = R.fitstats.prochi2    .astype(np.float32)
+        img = tim.getImage()
+        ie = tim.getInvError()
+        with np.errstate(divide='ignore'):
+            imsigma = 1. / ie
+        imsigma[ie == 0] = 0.
+
+        apimg = []
+        apimgerr = []
+
+        # Aperture photometry locations
+        xxyy = np.vstack([tim.wcs.positionToPixel(src.getPosition()) for src in cat]).T
+        apxy = xxyy - 1.
+
+        apertures = apertures_arcsec / tim.wcs.pixel_scale()
+        print 'Apertures:', apertures, 'pixels'
+
+        for rad in apertures:
+            aper = photutils.CircularAperture(apxy, rad)
+            p = photutils.aperture_photometry(img, aper, error=imsigma)
+            apimg.append(p.field('aperture_sum'))
+            apimgerr.append(p.field('aperture_sum_err'))
+        ap = np.vstack(apimg).T
+        ap[np.logical_not(np.isfinite(ap))] = 0.
+        F.apflux = ap
+        ap = 1./(np.vstack(apimgerr).T)**2
+        ap[np.logical_not(np.isfinite(ap))] = 0.
+        F.apflux_ivar = ap
+
+    if opt.forced:
+        kwa = {}
+        if opt.plots is None:
+            kwa.update(wantims=False)
+    
+        R = tr.optimize_forced_photometry(variance=True, fitstats=True,
+                                          shared_params=False, **kwa)
+    
+        if opt.plots:
+            (data,mod,ie,chi,roi) = R.ims1[0]
+    
+            ima = tim.ima
+            imchi = dict(interpolation='nearest', origin='lower', vmin=-5, vmax=5)
+            plt.clf()
+            plt.imshow(data, **ima)
+            plt.title('Data: %s' % tim.name)
+            ps.savefig()
+    
+            plt.clf()
+            plt.imshow(mod, **ima)
+            plt.title('Model: %s' % tim.name)
+            ps.savefig()
+    
+            plt.clf()
+            plt.imshow(chi, **imchi)
+            plt.title('Chi: %s' % tim.name)
+            ps.savefig()
+    
+        F.flux = np.array([src.getBrightness().getFlux(tim.band)
+                           for src in cat]).astype(np.float32)
+        F.flux_ivar = R.IV.astype(np.float32)
+    
+        F.fracflux = R.fitstats.profracflux.astype(np.float32)
+        F.rchi2    = R.fitstats.prochi2    .astype(np.float32)
 
     program_name = sys.argv[0]
     version_hdr = get_version_header(program_name, decals.decals_dir)

@@ -3093,8 +3093,7 @@ def stage_coadds(bands=None, version_header=None, targetwcs=None,
     ix = np.clip(np.round(ix - 1), 0, W-1).astype(int)
     iy = np.clip(np.round(iy - 1), 0, H-1).astype(int)
 
-    # Apertures, radii in ARCSEC.
-    apertures_arcsec = np.array([0.5, 0.75, 1., 1.5, 2., 3.5, 5., 7.])
+    # convert apertures to pixels
     apertures = apertures_arcsec / pixscale
 
     # Aperture photometry locations
