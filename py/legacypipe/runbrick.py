@@ -79,6 +79,7 @@ def stage_tims(W=3600, H=3600, pixscale=0.262, brickname=None,
                do_calibs=True,
                const2psf=True, gaussPsf=False, pixPsf=False,
                splinesky=False,
+               use_blacklist = True,
                mp=None,
                **kwargs):
     '''
@@ -222,9 +223,11 @@ def stage_tims(W=3600, H=3600, pixscale=0.262, brickname=None,
         '2014A-0429', # 2 fields
         '2013A-0611', # many 900-sec exposures in EDR region
         ]
-    keep = np.array([propid not in blacklist for propid in ccds.propid])
-    ccds.cut(keep)
-    print(len(ccds), 'CCDs not in blacklisted propids (too many exposures!)')
+
+    if use_blacklist:
+        keep = np.array([propid not in blacklist for propid in ccds.propid])
+        ccds.cut(keep)
+        print(len(ccds), 'CCDs not in blacklisted propids (too many exposures!)')
 
     # Sort images by band -- this also eliminates images whose
     # *image.filter* string is not in *bands*.
@@ -3762,6 +3765,7 @@ def run_brick(brick, radec=None, pixscale=0.262,
               width=3600, height=3600,
               zoom=None,
               bands=None,
+              blacklist=True,
               nblobs=None, blob=None, blobxy=None,
               pv=True, pipe=True, nsigma=6,
               simulOpt=False,
@@ -3965,6 +3969,7 @@ def run_brick(brick, radec=None, pixscale=0.262,
         ps.skipto(plotnumber)
 
     kwargs.update(ps=ps, nsigma=nsigma, gaussPsf=gaussPsf, pixPsf=pixPsf,
+                  use_blacklist=blacklist,
                   splinesky=splinesky,
                   simul_opt=simulOpt, pipe=pipe,
                   no_sdss=not(sdssInit),
@@ -4155,6 +4160,9 @@ python -u legacypipe/runbrick.py --plots --brick 2440p070 --zoom 1900 2400 450 9
 
     parser.add_option('--on-bricks', action='store_true', default=False,
                       help='Tractor-on-bricks?')
+
+    parser.add_option('--no-blacklist', dest='blacklist', default=True,
+                      action='store_false', help='Do not blacklist some proposals?')
     
     print()
     print('runbrick.py starting at', datetime.datetime.now().isoformat())
@@ -4231,6 +4239,7 @@ python -u legacypipe/runbrick.py --plots --brick 2440p070 --zoom 1900 2400 450 9
         run_brick(
             opt.brick, radec=opt.radec, pixscale=opt.pixscale,
             width=opt.width, height=opt.height, zoom=opt.zoom,
+            blacklist=opt.blacklist,
             pv=opt.pv,
             threads=opt.threads, ceres=opt.ceres,
             do_calibs=opt.do_calibs,
