@@ -79,6 +79,7 @@ def stage_tims(W=3600, H=3600, pixscale=0.262, brickname=None,
                do_calibs=True,
                const2psf=True, gaussPsf=False, pixPsf=False,
                splinesky=False,
+               use_blacklist = True,
                mp=None,
                **kwargs):
     '''
@@ -222,9 +223,11 @@ def stage_tims(W=3600, H=3600, pixscale=0.262, brickname=None,
         '2014A-0429', # 2 fields
         '2013A-0611', # many 900-sec exposures in EDR region
         ]
-    keep = np.array([propid not in blacklist for propid in ccds.propid])
-    ccds.cut(keep)
-    print(len(ccds), 'CCDs not in blacklisted propids (too many exposures!)')
+
+    if use_blacklist:
+        keep = np.array([propid not in blacklist for propid in ccds.propid])
+        ccds.cut(keep)
+        print(len(ccds), 'CCDs not in blacklisted propids (too many exposures!)')
 
     # Sort images by band -- this also eliminates images whose
     # *image.filter* string is not in *bands*.
@@ -1825,7 +1828,9 @@ def _blob_iter(blobslices, blobsrcs, blobs,
             subimg = tim.getImage ()[subslc]
             subie  = tim.getInvError()[subslc]
             subwcs = tim.getWcs().shifted(sx0, sy0)
-
+            # Note that we *don't* shift the PSF or sky here -- we do that
+            # in the _one_blob code.
+            
             subtimargs.append((subimg, subie, subwcs, tim.subwcs, tim.getPhotoCal(),
                                tim.getSky(), tim.psf, tim.name, sx0, sx1, sy0, sy1,
                                tim.band, tim.sig1, tim.modelMinval))
@@ -2082,7 +2087,8 @@ def _one_blob(X):
 
     plots2 = False
 
-    #tlast = Time()
+    tlast = Time()
+
     alphas = [0.1, 0.3, 1.0]
     optargs = dict(priors=True, shared_params=False, alphas=alphas)
 
@@ -2974,7 +2980,8 @@ def _one_blob(X):
     assert(len(B.finished_in_blob) == len(B.started_in_blob))
 
     #print('Blob finished metrics:', Time()-tlast)
-    print('Blob', iblob+1, 'finished') #:', Time()-tlast
+    #print('Blob', iblob+1, 'finished') #:', Time()-tlast
+    print('Blob', iblob+1, 'finished:', Time()-tlast)
 
     return B
 
@@ -3086,8 +3093,7 @@ def stage_coadds(bands=None, version_header=None, targetwcs=None,
     ix = np.clip(np.round(ix - 1), 0, W-1).astype(int)
     iy = np.clip(np.round(iy - 1), 0, H-1).astype(int)
 
-    # Apertures, radii in ARCSEC.
-    apertures_arcsec = np.array([0.5, 0.75, 1., 1.5, 2., 3.5, 5., 7.])
+    # convert apertures to pixels
     apertures = apertures_arcsec / pixscale
 
     # Aperture photometry locations
@@ -3760,6 +3766,7 @@ def run_brick(brick, radec=None, pixscale=0.262,
               width=3600, height=3600,
               zoom=None,
               bands=None,
+              blacklist=True,
               nblobs=None, blob=None, blobxy=None,
               pv=True, pipe=True, nsigma=6,
               simulOpt=False,
@@ -3963,6 +3970,7 @@ def run_brick(brick, radec=None, pixscale=0.262,
         ps.skipto(plotnumber)
 
     kwargs.update(ps=ps, nsigma=nsigma, gaussPsf=gaussPsf, pixPsf=pixPsf,
+                  use_blacklist=blacklist,
                   splinesky=splinesky,
                   simul_opt=simulOpt, pipe=pipe,
                   no_sdss=not(sdssInit),
@@ -4153,6 +4161,9 @@ python -u legacypipe/runbrick.py --plots --brick 2440p070 --zoom 1900 2400 450 9
 
     parser.add_option('--on-bricks', action='store_true', default=False,
                       help='Tractor-on-bricks?')
+
+    parser.add_option('--no-blacklist', dest='blacklist', default=True,
+                      action='store_false', help='Do not blacklist some proposals?')
     
     print()
     print('runbrick.py starting at', datetime.datetime.now().isoformat())
@@ -4229,6 +4240,7 @@ python -u legacypipe/runbrick.py --plots --brick 2440p070 --zoom 1900 2400 450 9
         run_brick(
             opt.brick, radec=opt.radec, pixscale=opt.pixscale,
             width=opt.width, height=opt.height, zoom=opt.zoom,
+            blacklist=opt.blacklist,
             pv=opt.pv,
             threads=opt.threads, ceres=opt.ceres,
             do_calibs=opt.do_calibs,

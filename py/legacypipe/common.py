@@ -47,6 +47,10 @@ CP_DQ_BITS = dict(badpix=1, satur=2, interp=4, cr=16, bleed=64,
                   edge = 256,
                   edge2 = 512) # in z-band images?
 
+# The apertures we use in aperture photometry
+apertures_arcsec = np.array([0.5, 0.75, 1., 1.5, 2., 3.5, 5., 7.])
+
+
 # Ugly hack: for sphinx documentation, the astrometry and tractor (and
 # other) packages are replaced by mock objects.  But you can't
 # subclass a mock object correctly, so we have to un-mock
@@ -990,6 +994,7 @@ def exposure_metadata(filenames, hdus=None, trim=None):
                 ('EXPNUM', 0),
                 ('MJD-OBS', 0),
                 ('PROPID', ''),
+                ('INSTRUME', ''),
                 ]
     hdrkeys = [('AVSKY', nan),
                ('ARAWGAIN', nan),
@@ -1063,6 +1068,10 @@ def exposure_metadata(filenames, hdus=None, trim=None):
     for k,d in allkeys:
         T.set(k.lower().replace('-','_'), np.array(vals[k]))
     #T.about()
+
+    # DECam: INSTRUME = 'DECam'
+    T.rename('instrume', 'camera')
+    T.camera = np.array([t.lower() for t in T.camera])
 
     #T.rename('extname', 'ccdname')
     T.ccdname = np.array([t.strip() for t in T.extname])
