@@ -38,6 +38,12 @@ echo >> $log
 echo -e "\nStarting on ${NERSC_HOST} $(hostname)\n" >> $log
 echo "-----------------------------------------------------------------------------------------" >> $log
 
+# Try limiting memory to avoid killing the whole MPI job...
+
+ulimit -S -v 15000000
+
+ulimit -a
+
 #python legacypipe/runbrick.py --force-all --no-write --brick $brick --outdir $outdir --threads 6 --nsigma 6 --skip --pipe --pixpsf --splinesky >> $log 2>&1
 #--no-early-coadds 
 
