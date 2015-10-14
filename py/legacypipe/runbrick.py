@@ -1834,11 +1834,12 @@ def _blob_iter(blobslices, blobsrcs, blobs,
             subimg = tim.getImage ()[subslc]
             subie  = tim.getInvError()[subslc]
             subwcs = tim.getWcs().shifted(sx0, sy0)
-            # Note that we *don't* shift the PSF or sky here -- we do that
+            # Note that we *don't* shift the PSF here -- we do that
             # in the _one_blob code.
+            subsky = tim.getSky().shifted(sx0, sy0)
             
             subtimargs.append((subimg, subie, subwcs, tim.subwcs, tim.getPhotoCal(),
-                               tim.getSky(), tim.psf, tim.name, sx0, sx1, sy0, sy1,
+                               subsky, tim.psf, tim.name, sx0, sx1, sy0, sy1,
                                tim.band, tim.sig1, tim.modelMinval))
 
         # Here we assume the "blobs" array has been remapped...
@@ -1848,6 +1849,13 @@ def _blob_iter(blobslices, blobsrcs, blobs,
                [cat[i] for i in Isrcs], bands, plots, ps, simul_opt, use_ceres)
 
 def _bounce_one_blob(X):
+
+    # iblob = X[0]
+    # fn = 'blob-%i.pickle' % iblob
+    # from astrometry.util.file import pickle_to_file
+    # pickle_to_file(X, fn)
+    # print('Wrote', fn)
+
     try:
         return _one_blob(X)
     except:
@@ -2152,6 +2160,31 @@ def _one_blob(X):
                 continue
             subtim.resamp = (Yo, Xo, Yi, Xi)
 
+            if False:
+                plt.clf()
+                plt.subplot(1,2,1)
+                dimshow(subimg, vmin=-2.*sig1, vmax=5.*sig1)
+                plt.subplot(1,2,2)
+                dimshow(subie, vmin=0, vmax=1.1/sig1)
+                plt.suptitle('Subimage: ' + name)
+                ps.savefig()
+
+    if plots:
+        coimgs,cons = compute_coadds(subtims, bands, subtarget,
+                                     fill_holes=False)
+        plt.clf()
+        dimshow(get_rgb(coimgs, bands))
+        ps.savefig()
+
+        plt.clf()
+        ccmap = dict(g='g', r='r', z='m')
+        for tim in subtims:
+            chi = (tim.data * tim.inverr)[tim.inverr > 0]
+            plt.hist(chi.ravel(), range=(-5,10), bins=100, histtype='step',
+                     color=ccmap[tim.band])
+        plt.xlabel('signal/noise per pixel')
+        ps.savefig()
+            
     subcat = Catalog(*srcs)
     subtr = Tractor(subtims, subcat)
     subtr.freezeParam('images')
@@ -2167,7 +2200,9 @@ def _one_blob(X):
         plotmods = []
         plotmodnames = []
         plotmods.append(list(subtr.getModelImages()))
-        plotmodnames.append('Initial')
+        plotmodnames.append('Initial models')
+        _plot_mods(subtims, plotmods, plotmodnames, bands, None, None,
+                   bslc, blobw, blobh, ps, chi_plots=False)
 
     # Optimize individual sources in order of flux
     fluxes = []
@@ -2224,14 +2259,15 @@ def _one_blob(X):
                     x0,y0 = mod.x0 , mod.y0
                     x1,y1 = x0 + mw, y0 + mh
                     slc = slice(y0,y1), slice(x0, x1)
-                    subsky = tim.getSky().copy()
-                    subsky.shift(x0, y0)
+                    print('  srctim: x0,y0', x0,y0, 'shape', (y1-y0,x1-x0))
+                    subpsf = tim.psf.constantPsfAt((x0+x1)/2., (y0+y1)/2.)
                     srctim = Image(data=tim.getImage()[slc],
                                    inverr=tim.getInvError()[slc],
                                    wcs=tim.wcs.shifted(x0, y0),
-                                   psf=tim.psf.getShifted(x0, y0),
+                                   psf=subpsf,
                                    photocal=tim.getPhotoCal(),
-                                   sky=subsky, name=tim.name)
+                                   sky=tim.sky.shifted(x0, y0),
+                                   name=tim.name)
                     srctim.subwcs = tim.subwcs.get_subimage(x0, y0, mw, mh)
                     srctim.band = tim.band
                     srctim.sig1 = tim.sig1
@@ -2241,26 +2277,27 @@ def _one_blob(X):
                     srctims.append(srctim)
                     #print('  ', tim.shape, 'to', srctim.shape)
 
-                if plots and False:
+                if plots and (numi < 10 or numi >= len(Ibright)-3):
                     bx1 = bx0 + blobw
                     by1 = by0 + blobh
                     plt.clf()
-                    coimgs,cons = compute_coadds(subtims, bands, subtarget)
+                    coimgs,cons = compute_coadds(subtims, bands, subtarget,
+                                                 fill_holes=False)
                     dimshow(get_rgb(coimgs, bands), extent=(bx0,bx1,by0,by1))
-                    plt.plot([bx0,bx0,bx1,bx1,bx0],[by0,by1,by1,by0,by0],'r-')
-                    for tim in srctims:
-                        h,w = tim.shape
-                        tx,ty = [0,0,w,w,0], [0,h,h,0,0]
-                        rd = [tim.getWcs().pixelToPosition(xi,yi)
-                              for xi,yi in zip(tx,ty)]
-                        ra  = [p.ra  for p in rd]
-                        dec = [p.dec for p in rd]
-                        ok,x,y = targetwcs.radec2pixelxy(ra, dec)
-                        plt.plot(x, y, 'g-')
-
-                        ra,dec = tim.subwcs.pixelxy2radec(tx, ty)
-                        ok,x,y = targetwcs.radec2pixelxy(ra, dec)
-                        plt.plot(x, y, 'm-')
+                    # plt.plot([bx0,bx0,bx1,bx1,bx0],[by0,by1,by1,by0,by0],'r-')
+                    # for tim in srctims:
+                    #     h,w = tim.shape
+                    #     tx,ty = [0,0,w,w,0], [0,h,h,0,0]
+                    #     rd = [tim.getWcs().pixelToPosition(xi,yi)
+                    #           for xi,yi in zip(tx,ty)]
+                    #     ra  = [p.ra  for p in rd]
+                    #     dec = [p.dec for p in rd]
+                    #     ok,x,y = targetwcs.radec2pixelxy(ra, dec)
+                    #     plt.plot(x, y, 'g-')
+                    # 
+                    #     ra,dec = tim.subwcs.pixelxy2radec(tx, ty)
+                    #     ok,x,y = targetwcs.radec2pixelxy(ra, dec)
+                    #     plt.plot(x, y, 'm-')
 
                     for tim in subtims:
                         h,w = tim.shape
@@ -2275,6 +2312,7 @@ def _one_blob(X):
                         ra,dec = tim.subwcs.pixelxy2radec(tx, ty)
                         ok,x,y = targetwcs.radec2pixelxy(ra, dec)
                         plt.plot(x, y, 'c-')
+                    plt.title('source %i of %i' % (numi, len(Ibright)))
                     ps.savefig()
 
             else:
@@ -2480,8 +2518,8 @@ def _one_blob(X):
     for numi,i in enumerate(Ibright):
 
         src = subcat[i]
-        #print('Model selection for source %i of %i in blob' %
-        # (numi, len(Ibright)))
+        print('Model selection for source %i of %i in blob' %
+              (numi, len(Ibright)))
 
         # if plots:
         #     plotmods = []
@@ -3708,7 +3746,7 @@ def tims_compute_resamp(mp, tims, targetwcs):
 
 # Pretty much only used for plots; the real deal is _coadds().
 def compute_coadds(tims, bands, targetwcs, images=None,
-                   get_cow=False, get_n2=False):
+                   get_cow=False, get_n2=False, fill_holes=True):
 
     W = targetwcs.get_width()
     H = targetwcs.get_height()
@@ -3750,7 +3788,8 @@ def compute_coadds(tims, bands, targetwcs, images=None,
                 wimg  [Yo,Xo] += tim.getInvvar()[Yi,Xi]
             con2  [Yo,Xo] += 1
         coimg /= np.maximum(con,1)
-        coimg[con == 0] = coimg2[con == 0] / np.maximum(1, con2[con == 0])
+        if fill_holes:
+            coimg[con == 0] = coimg2[con == 0] / np.maximum(1, con2[con == 0])
         if get_cow:
             cowimg /= np.maximum(wimg, 1e-16)
             cowimg[wimg == 0] = coimg[wimg == 0]
