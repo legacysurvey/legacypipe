@@ -222,6 +222,12 @@ def stage_tims(W=3600, H=3600, pixscale=0.262, brickname=None,
         '2014A-0239', # 1 field
         '2014A-0429', # 2 fields
         '2013A-0611', # many 900-sec exposures in EDR region
+        '2013A-0737', # 10 fields
+        '2013A-0719', # 8 fields
+        '2013A-9999', # 11 fields
+        '2013A-0716', # 3 fields
+        '2013A-0529', # 2 fields
+        '2013A-0613', # 40 exposures of 600 sec in g,r and nothing else in DR2
         ]
 
     if use_blacklist:
