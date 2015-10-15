@@ -16,7 +16,6 @@ from astrometry.util.fits import fits_table, merge_tables
 from astrometry.util.file import trymakedirs
 from astrometry.util.plotutils import dimshow
 from astrometry.util.util import Tan, Sip, anwcs_t
-from astrometry.util.ttime import CpuMeas, Time
 from astrometry.util.starutil_numpy import degrees_between, hmsstring2ra, dmsstring2dec
 from astrometry.util.miscutils import polygons_intersect, estimate_mode, clip_polygon, clip_wcs
 from astrometry.util.resample import resample_with_wcs,OverlapError
