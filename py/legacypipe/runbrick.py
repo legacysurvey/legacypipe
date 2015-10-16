@@ -1838,9 +1838,11 @@ def _blob_iter(blobslices, blobsrcs, blobs,
             # in the _one_blob code.
             subsky = tim.getSky().shifted(sx0, sy0)
             
-            subtimargs.append((subimg, subie, subwcs, tim.subwcs, tim.getPhotoCal(),
+            subtimargs.append((subimg, subie, subwcs, tim.subwcs,
+                               tim.getPhotoCal(),
                                subsky, tim.psf, tim.name, sx0, sx1, sy0, sy1,
-                               tim.band, tim.sig1, tim.modelMinval))
+                               tim.band, tim.sig1, tim.modelMinval,
+                               tim.psfnorm, tim.galnorm, tim.propid))
 
         # Here we assume the "blobs" array has been remapped...
         blobmask = (blobs[bslc] == iblob)
@@ -1850,11 +1852,11 @@ def _blob_iter(blobslices, blobsrcs, blobs,
 
 def _bounce_one_blob(X):
 
-    # iblob = X[0]
-    # fn = 'blob-%i.pickle' % iblob
-    # from astrometry.util.file import pickle_to_file
-    # pickle_to_file(X, fn)
-    # print('Wrote', fn)
+    iblob = X[0]
+    fn = 'blob-%i.pickle' % iblob
+    from astrometry.util.file import pickle_to_file
+    pickle_to_file(X, fn)
+    print('Wrote', fn)
 
     try:
         return _one_blob(X)
@@ -2118,7 +2120,7 @@ def _one_blob(X):
     subtims = []
     for (subimg, subie, twcs, subwcs, pcal,
          sky, psf, name, sx0, sx1, sy0, sy1,
-         band,sig1,modelMinval) in subtimargs:
+         band, sig1, modelMinval, psfnorm, galnorm, propid) in subtimargs:
 
         # Mask out inverr for pixels that are not within the blob.
         subsubwcs = subwcs.get_subimage(int(sx0), int(sy0), int(sx1-sx0), int(sy1-sy0))
@@ -2150,6 +2152,9 @@ def _one_blob(X):
         subtim.sig1 = sig1
         subtim.modelMinval = modelMinval
         subtim.subwcs = subsubwcs
+        subtim.psfnorm = psfnorm
+        subtim.galnorm = galnorm
+        subtim.propid = propid
         subtims.append(subtim)
 
         if plots:
@@ -2578,13 +2583,24 @@ def _one_blob(X):
                     if tim.band != band:
                         continue
                     otims.append(tim)
-                    ## FIXME -- PSF norm, or galaxy norm?
-                    detsig1 = tim.sig1 / tim.psfnorm
+
+                    detsig1 = tim.sig1 / tim.galnorm
                     tim.detiv1 = 1./detsig1**2
                     h,w = tim.shape
                     value.append((getattr(tim, 'propid', None) == DECALS_PROPID) * 1000 +
                                  tim.detiv1 * h*w)
 
+                t1,t2,t3 = dict(g=(24.0, 23.7, 23.4),
+                                r=(23.4, 23.1, 22.8),
+                                z=(22.5, 22.2, 21.9))[band]
+                Nsigma = 5.
+                target1 = NanoMaggies.magToNanomaggies(t1) / Nsigma
+                target1 = 1./target1**2
+                target2 = NanoMaggies.magToNanomaggies(t2) / Nsigma
+                target2 = 1./target2**2
+                target3 = NanoMaggies.magToNanomaggies(t3) / Nsigma
+                target3 = 1./target3**2
+                    
                 detiv = np.zeros(srctarget.shape, np.float32)
                 I = np.argsort(-np.array(value))
                 for i in I:
@@ -2598,20 +2614,16 @@ def _one_blob(X):
                     detiv[Yo,Xo] += tim.detiv1
                     timsubset.add(tim.name)
 
-                    # Hit DECaLS depth target?
-                    p1,p2 = np.percentile(detiv, [90, 95])
+                    # Hit DECaLS depth targets?
+                    p1,p2,p3 = np.percentile(detiv, [90, 95, 98])
 
-                    target1,target1 = dict(g=(23.4, 23.0),
-                                           r=(23.0, 22.6),
-                                           z=(22.6, 22.2))[band]
-                    Nsigma = 5.
-                    t1 = NanoMaggies.magToNanomaggies(target1) / Nsigma
-                    t1 = 1./t1**2
-
-                    t2 = NanoMaggies.magToNanomaggies(target2) / Nsigma
-                    t2 = 1./t2**2
-
-                    if p1 >= t1 and p2 >= t2:
+                    m1 = NanoMaggies.nanomaggiesToMag(np.sqrt(1./p1) * 5.)
+                    m2 = NanoMaggies.nanomaggiesToMag(np.sqrt(1./p2) * 5.)
+                    m3 = NanoMaggies.nanomaggiesToMag(np.sqrt(1./p3) * 5.)
+                    print('Added image', tim.name, 'and got depths', m1, m2, m3,
+                          'with target', target1, target2, target3)
+                    
+                    if p1 >= target1 and p2 >= target2 and p3 >= target3:
                         # Got enough depth, thank you!
                         break
 
@@ -3178,7 +3190,7 @@ def _get_subimages(tims, mods, src):
         srctim.modelMinval = tim.modelMinval
         srctim.x0 = x0
         srctim.y0 = y0
-        srctim.propid = tim.propid
+        srctim.propid = getattr(tim, 'propid', None)
         srctim.psfnorm = tim.psfnorm
         srctim.galnorm = tim.galnorm
         srctims.append(srctim)
