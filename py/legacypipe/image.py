@@ -52,22 +52,19 @@ class LegacySurveyImage(object):
         '''
         self.decals = decals
 
-        imgfn, hdu, band, expnum, ccdname, exptime = (
-            ccd.image_filename.strip(), ccd.image_hdu, ccd.filter.strip(), 
-            ccd.expnum, ccd.ccdname.strip(), ccd.exptime)
-
         if os.path.exists(imgfn):
             self.imgfn = imgfn
         else:
             self.imgfn = os.path.join(self.decals.get_image_dir(), imgfn)
 
-        self.hdu   = hdu
-        self.expnum = expnum
-        self.ccdname = ccdname.strip()
-        self.band  = band
-        self.exptime = exptime
-        self.camera = ccd.camera.strip()
-        self.fwhm = ccd.fwhm
+        self.hdu     = ccd.image_hdu
+        self.expnum  = ccd.expnum
+        self.ccdname = ccd.ccdname.strip()
+        self.band    = ccd.filter.strip()
+        self.exptime = ccd.exptime
+        self.camera  = ccd.camera.strip()
+        self.fwhm    = ccd.fwhm
+        self.propid  = ccd.propid
         # in arcsec/pixel
         self.pixscale = 3600. * np.sqrt(np.abs(ccd.cd1_1 * ccd.cd2_2 - ccd.cd1_2 * ccd.cd2_1))
 

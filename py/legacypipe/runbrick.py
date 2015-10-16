@@ -2214,7 +2214,7 @@ def _one_blob(X):
     Ibright = np.argsort(-np.array(fluxes))
 
     print('HACK!  Cutting source list')
-    Ibright = Ibright[:10]
+    Ibright = Ibright[:2]
     
     if len(subcat) > 1:
         # -Remember the original subtim images
@@ -2563,6 +2563,60 @@ def _one_blob(X):
         else:
             trymodels.extend([('dev', dev), ('exp', exp), ('comp', comp)])
 
+
+        # If lots of exposures, cut to a subset that reach the DECaLS
+        # depth goals and use those in an initial round?
+        if True:
+            timsubset = set()
+
+            for band in bands:
+                # Order to try them: first, DECaLS data (our propid),
+                # then in point-source depth (* npix?) order.
+                otims = []
+                value = []
+                for tim in srctims:
+                    if tim.band != band:
+                        continue
+                    otims.append(tim)
+                    ## FIXME -- PSF norm, or galaxy norm?
+                    detsig1 = tim.sig1 / tim.psfnorm
+                    tim.detiv1 = 1./detsig1**2
+                    h,w = tim.shape
+                    value.append((getattr(tim, 'propid', None) == DECALS_PROPID) * 1000 +
+                                 tim.detiv1 * h*w)
+
+                detiv = np.zeros(srctarget.shape, np.float32)
+                I = np.argsort(-np.array(value))
+                for i in I:
+                    tim = otims[i]
+                    try:
+                        Yo,Xo,Yi,Xi,nil = resample_with_wcs(srctarget, tim.subwcs, [], 2)
+                    except:
+                        continue
+                    if len(Yo) == 0:
+                        continue
+                    detiv[Yo,Xo] += tim.detiv1
+                    timsubset.add(tim.name)
+
+                    # Hit DECaLS depth target?
+                    p1,p2 = np.percentile(detiv, [90, 95])
+
+                    target1,target1 = dict(g=(23.4, 23.0),
+                                           r=(23.0, 22.6),
+                                           z=(22.6, 22.2))[band]
+                    Nsigma = 5.
+                    t1 = NanoMaggies.magToNanomaggies(target1) / Nsigma
+                    t1 = 1./t1**2
+
+                    t2 = NanoMaggies.magToNanomaggies(target2) / Nsigma
+                    t2 = 1./t2**2
+
+                    if p1 >= t1 and p2 >= t2:
+                        # Got enough depth, thank you!
+                        break
+
+
+                    
         allflags = {}
         for name,newsrc in trymodels:
 
@@ -2659,6 +2713,12 @@ def _one_blob(X):
             disable_galaxy_cache()
 
             # Recompute modelMasks in the original subtims
+
+            ## FIXME -- avoid huge patches?  Clip to significant
+            ## pixels in model?  Via minval, I guess; appealing to use
+            ## same cut as determining the blobs, but that's in brick
+            ## coadd space.
+
             if bigblob:
                 mods = []
                 for tim in subtims:
@@ -3118,6 +3178,9 @@ def _get_subimages(tims, mods, src):
         srctim.modelMinval = tim.modelMinval
         srctim.x0 = x0
         srctim.y0 = y0
+        srctim.propid = tim.propid
+        srctim.psfnorm = tim.psfnorm
+        srctim.galnorm = tim.galnorm
         srctims.append(srctim)
         #print('  ', tim.shape, 'to', srctim.shape)
     return srctims, modelMasks

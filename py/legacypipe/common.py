@@ -29,6 +29,8 @@ from tractor.sfd import SFDMap
 
 from .utils import EllipseWithPriors
 
+DECALS_PROPID = '2014B-0404'
+
 # search order: $TMPDIR, $TEMP, $TMP, then /tmp, /var/tmp, /usr/tmp
 tempdir = tempfile.gettempdir()
 
