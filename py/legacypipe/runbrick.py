@@ -1837,7 +1837,11 @@ def _blob_iter(blobslices, blobsrcs, blobs,
             # Note that we *don't* shift the PSF here -- we do that
             # in the _one_blob code.
             subsky = tim.getSky().shifted(sx0, sy0)
-            
+
+            # HACK -- temporary --
+            if not hasattr(tim, 'propid'):
+                tim.propid = tim.primhdr['PROPID'].strip()
+                
             subtimargs.append((subimg, subie, subwcs, tim.subwcs,
                                tim.getPhotoCal(),
                                subsky, tim.psf, tim.name, sx0, sx1, sy0, sy1,
@@ -2501,13 +2505,34 @@ def _one_blob(X):
             mods = [mod[i] for mod in models.models]
             srctims,modelMasks = _get_subimages(subtims, mods, src)
             # A little WCS subregion for this source, with arbitrary size
-            ok,sx,sy = subtarget.radec2pixelxy(src.pos.ra, src.pos.dec)
-            srctarget = subtarget.get_subimage(int(sx)-50,int(sy)-50,100,100)
+            #ok,sx,sy = subtarget.radec2pixelxy(src.pos.ra, src.pos.dec)
+            #srctarget = subtarget.get_subimage(int(sx)-50,int(sy)-50,100,100)
 
+            # Create a little local WCS subregion for this source, by
+            # resampling non-zero inverrs from the srctims into subtarget
+            insrc = np.zeros((blobh,blobw), bool)
+            for tim in srctims:
+                try:
+                    Yo,Xo,Yi,Xi,nil = resample_with_wcs(subtarget, tim.subwcs, [], 2)
+                except:
+                    continue
+                insrc[Yo,Xo] |= (tim.inverr[Yi,Xi] > 0)
+            yin = np.max(insrc, axis=1)
+            xin = np.max(insrc, axis=0)
+            yl,yh = np.flatnonzero(yin)[np.array([0,-1])]
+            xl,xh = np.flatnonzero(xin)[np.array([0,-1])]
+            srctarget = subtarget.get_subimage(xl, yl, 1+xh-xl, 1+yh-yl)
+            # A mask for which pixels in the 'srctarget' square are occupied.
+            srcpix = insrc[yl:yh+1, xl:xh+1]
+            from scipy.ndimage.morphology import binary_erosion
+            srcpix2 = binary_erosion(srcpix)
+            
         else:
             modelMasks = models.model_masks(i, src)
             srctims = subtims
             srctarget = subtarget
+            #srcpix = np.ones(srctarget.shape, bool)
+            srcpix = None
             
         srctractor = Tractor(srctims, [src])
         srctractor.freezeParams('images')
@@ -2594,13 +2619,13 @@ def _one_blob(X):
                                 r=(23.4, 23.1, 22.8),
                                 z=(22.5, 22.2, 21.9))[band]
                 Nsigma = 5.
-                target1 = NanoMaggies.magToNanomaggies(t1) / Nsigma
-                target1 = 1./target1**2
-                target2 = NanoMaggies.magToNanomaggies(t2) / Nsigma
-                target2 = 1./target2**2
-                target3 = NanoMaggies.magToNanomaggies(t3) / Nsigma
-                target3 = 1./target3**2
-                    
+                sig = NanoMaggies.magToNanomaggies(t1) / Nsigma
+                target1 = 1./sig**2
+                sig = NanoMaggies.magToNanomaggies(t2) / Nsigma
+                target2 = 1./sig**2
+                sig = NanoMaggies.magToNanomaggies(t3) / Nsigma
+                target3 = 1./sig**2
+
                 detiv = np.zeros(srctarget.shape, np.float32)
                 I = np.argsort(-np.array(value))
                 for i in I:
@@ -2614,20 +2639,43 @@ def _one_blob(X):
                     detiv[Yo,Xo] += tim.detiv1
                     timsubset.add(tim.name)
 
+                    print('Tim:', tim.name)#, 'exptime', tim.exptime, 'FWHM', tim.fwhm)
+                    print('Tim: detiv', tim.detiv1, 'depth mag',
+                          NanoMaggies.nanomaggiesToMag(np.sqrt(1./tim.detiv1) * Nsigma))
+                    print('overlapping pixels:', len(Yo))
+                    
                     # Hit DECaLS depth targets?
-                    p1,p2,p3 = np.percentile(detiv, [90, 95, 98])
+                    if srcpix is None:
+                        p1,p2,p3 = np.percentile(detiv, [100-90, 100-95, 100-98])
+                    else:
+                        p1,p2,p3 = np.percentile(detiv[srcpix2], [100-90, 100-95, 100-98])
 
-                    m1 = NanoMaggies.nanomaggiesToMag(np.sqrt(1./p1) * 5.)
-                    m2 = NanoMaggies.nanomaggiesToMag(np.sqrt(1./p2) * 5.)
-                    m3 = NanoMaggies.nanomaggiesToMag(np.sqrt(1./p3) * 5.)
-                    print('Added image', tim.name, 'and got depths', m1, m2, m3,
-                          'with target', target1, target2, target3)
+                    #pm = np.percentile(detiv, 50)
+                    #mm = NanoMaggies.nanomaggiesToMag(np.sqrt(1./pm) * Nsigma)
+
+                    m1 = NanoMaggies.nanomaggiesToMag(np.sqrt(1./p1) * Nsigma)
+                    m2 = NanoMaggies.nanomaggiesToMag(np.sqrt(1./p2) * Nsigma)
+                    m3 = NanoMaggies.nanomaggiesToMag(np.sqrt(1./p3) * Nsigma)
+                    print('Added image', tim.name, 'and got depths (mag)',
+                          '%.2f, %.2f, %.2f' % (m1,m2,m3),
+                          'vs target mags', t1, t2, t3)
+                    print('  detivs', p1, p2, p3, 'vs targets',
+                          target1, target2, target3)
+                    #print('  median mag', mm)
                     
                     if p1 >= target1 and p2 >= target2 and p3 >= target3:
                         # Got enough depth, thank you!
+                        print('Reached target depth!')
                         break
-
-
+            
+            if plots:
+                dtims = [tim for tim in srctims if tim.name in timsubset]
+                plt.clf()
+                coimgs,cons = compute_coadds(dtims, bands, srctarget,
+                                             fill_holes=False)
+                dimshow(get_rgb(coimgs, bands))
+                plt.title('To-depth data')
+                ps.savefig()
                     
         allflags = {}
         for name,newsrc in trymodels:
@@ -2653,6 +2701,7 @@ def _one_blob(X):
             #print('New source:', newsrc)
             srccat[0] = newsrc
 
+                
             # Use the same modelMask shapes as the original source ('src').
             # Need to create newsrc->mask mappings though:
             mm = []
@@ -2684,6 +2733,61 @@ def _one_blob(X):
                 dimshow(get_rgb(coimgs, bands))
                 plt.title('Initial: ' + name)
                 ps.savefig()
+                
+
+            if True:
+                # Run a quick round of optimization with our to-depth subset?
+                dtims = []
+                dmm = []
+                for tim,mim in zip(srctims, modelMasks):
+                    if not tim.name in timsubset:
+                        continue
+                    dtims.append(tim)
+                    d = dict()
+                    dmm.append(d)
+                    try:
+                        d[newsrc] = mim[src]
+                    except KeyError:
+                        pass
+
+                dtractor = Tractor(dtims, [newsrc])
+                dtractor.freezeParams('images')
+                dtractor.setModelMasks(dmm)
+                enable_galaxy_cache()
+
+
+                max_cpu_per_source = 60.
+    
+                print('Optimizing with tims', [tim.shape for tim in dtractor.images])
+                t0 = Time()
+                
+                cpu0 = time.clock()
+                thisflags = 0
+                for step in range(50):
+                    #print('optimizing:', newsrc)
+                    dlnp,X,alpha = dtractor.optimize(**optargs)
+                    print('  dlnp:', dlnp, 'new src', newsrc)
+                    cpu = time.clock()
+                    if cpu-cpu0 > max_cpu_per_source:
+                        print('Warning: Exceeded maximum CPU time for source')
+                        thisflags |= FLAG_CPU_A
+                        break
+                    if dlnp < 0.1:
+                        break
+                else:
+                    thisflags |= FLAG_STEPS_A
+    
+                print('Mod', name, 'round0 opt', Time()-t0)
+                print('New source (after to-depth round optimization):', newsrc)
+
+                if plots:
+                    plt.clf()
+                    modimgs = list(dtractor.getModelImages())
+                    comods,nil = compute_coadds(dtims, bands, srctarget,
+                                                images=modimgs)
+                    dimshow(get_rgb(comods, bands))
+                    plt.title('To-depth opt: ' + name)
+                    ps.savefig()
                 
             max_cpu_per_source = 60.
 
