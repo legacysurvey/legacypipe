@@ -48,7 +48,7 @@ CP_DQ_BITS = dict(badpix=1, satur=2, interp=4, cr=16, bleed=64,
                   edge = 256,
                   edge2 = 512) # in z-band images?
 
-# The apertures we use in aperture photometry
+# The apertures we use in aperture photometry, in ARCSEC.
 apertures_arcsec = np.array([0.5, 0.75, 1., 1.5, 2., 3.5, 5., 7.])
 
 
@@ -959,7 +959,9 @@ Using the current directory as DECALS_DIR, but this is likely to fail.
                             (ZP.ccdname == im.ccdname))
         if len(I) == 0:
             return None
-        assert(len(I) == 1)
+        #assert(len(I) == 1)
+        if len(I) > 1:
+            print('WARNING: found', len(I), 'zeropoint entries for expnum=%i, ccdname=%s:' % (im.expnum, im.ccdname), I)
         return ZP[I[0]]
             
     def get_zeropoint_for(self, im):
