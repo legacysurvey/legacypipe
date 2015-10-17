@@ -945,6 +945,8 @@ def stage_srcs(coimgs=None, cons=None,
 
     '''
 
+    print('propids:', [tim.propid for tim in tims])
+
     from legacypipe.detection import (detection_maps, sed_matched_filters,
                                       run_sed_matched_filters)
 
