@@ -1838,15 +1838,13 @@ def _blob_iter(blobslices, blobsrcs, blobs,
             # in the _one_blob code.
             subsky = tim.getSky().shifted(sx0, sy0)
 
-            # HACK -- temporary --
-            if not hasattr(tim, 'propid'):
-                tim.propid = tim.primhdr['PROPID'].strip()
-                
+            tim.imobj.psfnorm = tim.psfnorm
+            tim.imobj.galnorm = tim.galnorm
             subtimargs.append((subimg, subie, subwcs, tim.subwcs,
                                tim.getPhotoCal(),
                                subsky, tim.psf, tim.name, sx0, sx1, sy0, sy1,
                                tim.band, tim.sig1, tim.modelMinval,
-                               tim.psfnorm, tim.galnorm, tim.propid))
+                               tim.imobj))
 
         # Here we assume the "blobs" array has been remapped...
         blobmask = (blobs[bslc] == iblob)
@@ -2124,7 +2122,7 @@ def _one_blob(X):
     subtims = []
     for (subimg, subie, twcs, subwcs, pcal,
          sky, psf, name, sx0, sx1, sy0, sy1,
-         band, sig1, modelMinval, psfnorm, galnorm, propid) in subtimargs:
+         band, sig1, modelMinval, imobj) in subtimargs:
 
         # Mask out inverr for pixels that are not within the blob.
         subsubwcs = subwcs.get_subimage(int(sx0), int(sy0), int(sx1-sx0), int(sy1-sy0))
@@ -2156,9 +2154,7 @@ def _one_blob(X):
         subtim.sig1 = sig1
         subtim.modelMinval = modelMinval
         subtim.subwcs = subsubwcs
-        subtim.psfnorm = psfnorm
-        subtim.galnorm = galnorm
-        subtim.propid = propid
+        subtim.meta = imobj
         subtims.append(subtim)
 
         if plots:
@@ -2609,10 +2605,11 @@ def _one_blob(X):
                         continue
                     otims.append(tim)
 
-                    detsig1 = tim.sig1 / tim.galnorm
+                    detsig1 = tim.sig1 / tim.meta.galnorm
                     tim.detiv1 = 1./detsig1**2
                     h,w = tim.shape
-                    value.append((getattr(tim, 'propid', None) == DECALS_PROPID) * 1000 +
+                    propid = tim.meta.propid
+                    value.append((propid == DECALS_PROPID) * 1e12 +
                                  tim.detiv1 * h*w)
 
                 t1,t2,t3 = dict(g=(24.0, 23.7, 23.4),
@@ -2639,7 +2636,7 @@ def _one_blob(X):
                     detiv[Yo,Xo] += tim.detiv1
                     timsubset.add(tim.name)
 
-                    print('Tim:', tim.name)#, 'exptime', tim.exptime, 'FWHM', tim.fwhm)
+                    print('Tim:', tim.name, 'exptime', tim.meta.exptime, 'FWHM', tim.meta.fwhm)
                     print('Tim: detiv', tim.detiv1, 'depth mag',
                           NanoMaggies.nanomaggiesToMag(np.sqrt(1./tim.detiv1) * Nsigma))
                     print('overlapping pixels:', len(Yo))
@@ -3294,9 +3291,7 @@ def _get_subimages(tims, mods, src):
         srctim.modelMinval = tim.modelMinval
         srctim.x0 = x0
         srctim.y0 = y0
-        srctim.propid = getattr(tim, 'propid', None)
-        srctim.psfnorm = tim.psfnorm
-        srctim.galnorm = tim.galnorm
+        srctim.meta = tim.meta
         srctims.append(srctim)
         #print('  ', tim.shape, 'to', srctim.shape)
     return srctims, modelMasks
