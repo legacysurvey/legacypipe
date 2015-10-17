@@ -52,6 +52,7 @@ class LegacySurveyImage(object):
         '''
         self.decals = decals
 
+        imgfn = ccd.image_filename.strip()
         if os.path.exists(imgfn):
             self.imgfn = imgfn
         else:
