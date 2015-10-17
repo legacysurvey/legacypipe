@@ -330,6 +330,7 @@ class LegacySurveyImage(object):
         tim.band = band
         tim.psf_fwhm = psf_fwhm
         tim.psf_sigma = psf_sigma
+        tim.propid = self.propid
         tim.psfnorm = psfnorm
         tim.galnorm = galnorm
         tim.sip_wcs = wcs
