@@ -2114,6 +2114,9 @@ def _one_blob(X):
 
     bigblob = (blobw * blobh) > 100*100
 
+    # 50 CCDs is over 90th percentile over bricks in DR2.
+    many_exposures = len(subtimargs) >= 50
+    
     subtarget = targetwcs.get_subimage(bx0, by0, blobw, blobh)
 
     ok,x0,y0 = subtarget.radec2pixelxy(np.array([src.getPosition().ra  for src in srcs]),
@@ -2131,7 +2134,7 @@ def _one_blob(X):
         try:
             Yo,Xo,Yi,Xi,rims = resample_with_wcs(subsubwcs, subtarget, [], 2)
         except OverlapError:
-            print('No overlap')
+            #print('No overlap')
             continue
         if len(Yo) == 0:
             continue
@@ -2163,7 +2166,7 @@ def _one_blob(X):
             try:
                 Yo,Xo,Yi,Xi,rims = resample_with_wcs(subtarget, subsubwcs, [], 2)
             except OverlapError:
-                print('No overlap')
+                #print('No overlap')
                 continue
             subtim.resamp = (Yo, Xo, Yi, Xi)
 
@@ -2220,8 +2223,8 @@ def _one_blob(X):
         fluxes.append(flux)
     Ibright = np.argsort(-np.array(fluxes))
 
-    print('HACK!  Cutting source list')
-    Ibright = Ibright[:2]
+    #print('HACK!  Cutting source list')
+    #Ibright = Ibright[:2]
     
     if len(subcat) > 1:
         # -Remember the original subtim images
@@ -2253,10 +2256,10 @@ def _one_blob(X):
                 # Create super-local sub-sub-tims around this source
 
                 # Make the subimages the same size as the modelMasks.
-                tbb0 = Time()
+                #tbb0 = Time()
                 mods = [mod[i] for mod in models.models]
                 srctims,modelMasks = _get_subimages(subtims, mods, src)
-                print('Creating srctims:', Time()-tbb0)
+                #print('Creating srctims:', Time()-tbb0)
                     
                 if plots and (numi < 3 or numi >= len(Ibright)-3):
                     bx1 = bx0 + blobw
@@ -2494,7 +2497,7 @@ def _one_blob(X):
         src = subcat[i]
         print('Model selection for source %i of %i in blob' %
               (numi, len(Ibright)))
-        tsel = Time()
+        #tsel = Time()
 
         # Add this source's initial model back in.
         models.add(i, subtims)
@@ -2594,7 +2597,7 @@ def _one_blob(X):
 
         # If lots of exposures, cut to a subset that reach the DECaLS
         # depth goals and use those in an initial round?
-        if True:
+        if many_exposures:
             timsubset = set()
 
             for band in bands:
@@ -2734,7 +2737,7 @@ def _one_blob(X):
                 ps.savefig()
                 
 
-            if True:
+            if many_exposures:
                 # Run a quick round of optimization with our to-depth subset?
                 dtims = []
                 dmm = []
@@ -2757,15 +2760,15 @@ def _one_blob(X):
 
                 max_cpu_per_source = 60.
     
-                print('Optimizing with tims', [tim.shape for tim in dtractor.images])
-                t0 = Time()
+                #print('Optimizing with tims', [tim.shape for tim in dtractor.images])
+                #t0 = Time()
                 
                 cpu0 = time.clock()
                 thisflags = 0
                 for step in range(50):
                     #print('optimizing:', newsrc)
                     dlnp,X,alpha = dtractor.optimize(**optargs)
-                    print('  dlnp:', dlnp, 'new src', newsrc)
+                    #print('  dlnp:', dlnp, 'new src', newsrc)
                     cpu = time.clock()
                     if cpu-cpu0 > max_cpu_per_source:
                         print('Warning: Exceeded maximum CPU time for source')
@@ -2776,8 +2779,8 @@ def _one_blob(X):
                 else:
                     thisflags |= FLAG_STEPS_A
     
-                print('Mod', name, 'round0 opt', Time()-t0)
-                print('New source (after to-depth round optimization):', newsrc)
+                # print('Mod', name, 'round0 opt', Time()-t0)
+                # print('New source (after to-depth round optimization):', newsrc)
 
                 if plots:
                     plt.clf()
@@ -2790,15 +2793,15 @@ def _one_blob(X):
                 
             max_cpu_per_source = 60.
 
-            print('Optimizing with tims', [tim.shape for tim in srctractor.images])
-            t0 = Time()
+            # print('Optimizing with tims', [tim.shape for tim in srctractor.images])
+            #t0 = Time()
             
             cpu0 = time.clock()
             thisflags = 0
             for step in range(50):
                 #print('optimizing:', newsrc)
                 dlnp,X,alpha = srctractor.optimize(**optargs)
-                print('  dlnp:', dlnp, 'new src', newsrc)
+                #print('  dlnp:', dlnp, 'new src', newsrc)
                 cpu = time.clock()
                 if cpu-cpu0 > max_cpu_per_source:
                     print('Warning: Exceeded maximum CPU time for source')
@@ -2809,8 +2812,8 @@ def _one_blob(X):
             else:
                 thisflags |= FLAG_STEPS_A
 
-            print('Mod', name, 'round1 opt', Time()-t0)
-            print('New source (after first round optimization):', newsrc)
+            # print('Mod', name, 'round1 opt', Time()-t0)
+            # print('New source (after first round optimization):', newsrc)
 
             if plots:
                 # _plot_mods(srctims, [list(srctractor.getModelImages())],
@@ -2859,20 +2862,20 @@ def _one_blob(X):
                     d[newsrc] = Patch(mod.x0, mod.y0, mod.patch != 0)
                     modtims.append(tim)
                     
-            print('Second-round shapes:', [tim.shape for tim in modtims])
+            # print('Second-round shapes:', [tim.shape for tim in modtims])
 
             modtractor = Tractor(modtims, [newsrc])
             modtractor.freezeParams('images')
             modtractor.setModelMasks(mm)
             enable_galaxy_cache()
 
-            t0 = Time()
+            #t0 = Time()
             
             # Run another round of opt.
             cpu0 = time.clock()
             for step in range(50):
                 dlnp,X,alpha = modtractor.optimize(**optargs)
-                print('  dlnp:', dlnp, 'new src', newsrc)
+                #print('  dlnp:', dlnp, 'new src', newsrc)
                 cpu = time.clock()
                 if cpu-cpu0 > max_cpu_per_source:
                     print('Warning: Exceeded maximum CPU time for source')
@@ -2883,7 +2886,7 @@ def _one_blob(X):
             else:
                 thisflags |= FLAG_STEPS_B
 
-            print('Mod', name, 'round2 opt', Time()-t0)
+            # print('Mod', name, 'round2 opt', Time()-t0)
 
             if plots:
                 plt.clf()
@@ -3000,8 +3003,8 @@ def _one_blob(X):
         models.update_and_subtract(i, keepsrc, subtims)
 
         #print('Keeping model:', keepmod)
-        print('Keeping source:', keepsrc)
-        print(Time() - tsel)
+        #print('Keeping source:', keepsrc)
+        #print(Time() - tsel)
 
     models.restore_images(subtims)
     del models
@@ -3479,8 +3482,6 @@ def stage_coadds(bands=None, version_header=None, targetwcs=None,
         rgb = get_rgb(ims, bands, **rgbkw)
         kwa = {}
         if coadd_bw and len(bands) == 1:
-            # HACK
-            #rgb = (rgb[:,:,0] + rgb[:,:,1] + rgb[:,:,2])
             i = 'zrg'.index(bands[0])
             rgb = rgb[:,:,i]
             kwa = dict(cmap='gray')
