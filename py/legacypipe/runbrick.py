@@ -944,9 +944,6 @@ def stage_srcs(coimgs=None, cons=None,
     of these blobs will be processed independently.
 
     '''
-
-    print('propids:', [tim.propid for tim in tims])
-
     from legacypipe.detection import (detection_maps, sed_matched_filters,
                                       run_sed_matched_filters)
 
@@ -1445,6 +1442,7 @@ def stage_fitblobs(T=None,
                    targetwcs=None,
                    W=None,H=None,
                    bands=None, ps=None, tims=None,
+                   decals=None,
                    plots=False, plots2=False,
                    nblobs=None, blob0=None, blobxy=None,
                    simul_opt=False, use_ceres=True, mp=None,
@@ -1565,6 +1563,8 @@ def stage_fitblobs(T=None,
 
         # one more place where blob numbers are recorded...
         T.blob = blobs[T.ity, T.itx]
+
+    decals.drop_cache()
 
     iter = _blob_iter(blobslices, blobsrcs, blobs, targetwcs, tims,
                       cat, bands, plots, ps, simul_opt, use_ceres)
@@ -1842,6 +1842,8 @@ def _blob_iter(blobslices, blobsrcs, blobs,
 
             tim.imobj.psfnorm = tim.psfnorm
             tim.imobj.galnorm = tim.galnorm
+            tim.psf.clear_cache()
+
             subtimargs.append((subimg, subie, subwcs, tim.subwcs,
                                tim.getPhotoCal(),
                                subsky, tim.psf, tim.name, sx0, sx1, sy0, sy1,
@@ -1856,11 +1858,19 @@ def _blob_iter(blobslices, blobsrcs, blobs,
 
 def _bounce_one_blob(X):
 
-    iblob = X[0]
-    fn = 'blob-%i.pickle' % iblob
-    from astrometry.util.file import pickle_to_file
-    pickle_to_file(X, fn)
-    print('Wrote', fn)
+    # iblob = X[0]
+    # fn = 'blob-%i.pickle' % iblob
+    # from astrometry.util.file import pickle_to_file
+    # pickle_to_file(X, fn)
+    # print('Wrote', fn)
+
+    # timargs = X[8][0]
+    # pickle_to_file(timargs, 'timargs-%i.pickle' % iblob)    
+    # pickle_to_file(timargs[0], 'timargs-%i-img.pickle' % iblob)    
+    # pickle_to_file(timargs[5], 'timargs-%i-sky.pickle' % iblob)    
+    # pickle_to_file(timargs[6], 'timargs-%i-psf.pickle' % iblob)    
+    # pickle_to_file(timargs[15], 'timargs-%i-imobj.pickle' % iblob)    
+
 
     try:
         return _one_blob(X)

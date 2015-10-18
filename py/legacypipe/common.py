@@ -730,11 +730,21 @@ Using the current directory as DECALS_DIR, but this is likely to fail.
 
     def __getstate__(self):
         '''
-        For pickling: clear the cached ZP table.
+        For pickling: clear the cached ZP and other tables.
         '''
         d = self.__dict__.copy()
         d['ZP'] = None
+        d['bricks'] = None
+        d['bricktree'] = None
         return d
+
+    def drop_cache(self):
+        self.ZP = None
+        self.bricks = None
+        if self.bricktree is not None:
+            from astrometry.libkd.spherematch import tree_free
+            tree_free(self.bricktree)
+        self.bricktree = None
 
     def get_calib_dir(self):
         return os.path.join(self.decals_dir, 'calib')
