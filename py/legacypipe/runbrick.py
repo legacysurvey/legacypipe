@@ -2818,7 +2818,6 @@ def _one_blob(X):
                 modtims = []
                 for tim in subtims:
                     d = dict()
-                    mm.append(d)
                     mod = newsrc.getModelPatch(tim)
                     if mod is None:
                         continue
@@ -2826,6 +2825,7 @@ def _one_blob(X):
                     mod = _clip_model_to_blob(mod, tim.shape, tim.getInvError())
                     d[newsrc] = Patch(mod.x0, mod.y0, mod.patch != 0)
                     modtims.append(tim)
+                    mm.append(d)
                     
             # print('Second-round shapes:', [tim.shape for tim in modtims])
 
