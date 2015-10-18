@@ -8,7 +8,11 @@ export PYTHONPATH=${PYTHONPATH}:.
 # https://software.intel.com/en-us/articles/using-threaded-intel-mkl-in-multi-thread-application
 export MKL_NUM_THREADS=1
 
-outdir=$SCRATCH/dr2j
+# Try limiting memory to avoid killing the whole MPI job...
+ulimit -S -v 15000000
+ulimit -a
+
+outdir=$SCRATCH/dr2k
 
 # git checkout of https://github.com/legacysurvey/legacypipe-dir
 # branch cosmos-subset
@@ -38,12 +42,6 @@ echo >> $log
 echo -e "\nStarting on ${NERSC_HOST} $(hostname)\n" >> $log
 echo "-----------------------------------------------------------------------------------------" >> $log
 
-# Try limiting memory to avoid killing the whole MPI job...
-
-ulimit -S -v 15000000
-
-ulimit -a
-
 #python legacypipe/runbrick.py --force-all --no-write --brick $brick --outdir $outdir --threads 6 --nsigma 6 --skip --pipe --pixpsf --splinesky >> $log 2>&1
 #--no-early-coadds 
 
@@ -54,8 +52,6 @@ python -u legacypipe/runbrick.py \
     --force-all --no-write \
     --threads 6 \
     --brick $brick --outdir $outdir --nsigma 6 >> $log 2>&1
-
-#    -s image_coadds \
 
 #python -u legacypipe/runbrick.py 
 #    --brick $brick --outdir $outdir --threads 6 --nsigma 6 --skip --pipe --pixpsf >> $log 2>&1
