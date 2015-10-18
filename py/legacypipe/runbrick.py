@@ -2315,31 +2315,11 @@ def _one_blob(X):
                 spmods.append(list(srctractor.getModelImages()))
                 spnames.append('Initial')
 
-            max_cpu_per_source = 60.
-
-            # DEBUG
-            DEBUG = False
-            if DEBUG:
-                params = []
-                params.append((srctractor.getLogProb(), srctractor.getParams()))
-
-            cpu0 = time.clock()
             for step in range(50):
                 dlnp,X,alpha = srctractor.optimize(**optargs)
                 # print('dlnp:', dlnp, 'src', src)
-
-                if DEBUG:
-                    params.append((srctractor.getLogProb(), srctractor.getParams()))
-
-                if time.clock()-cpu0 > max_cpu_per_source:
-                    print('Warning: Exceeded maximum CPU time for source')
-                    break
-
                 if dlnp < 0.1:
                     break
-
-            if DEBUG:
-                _debug_plots(srctractor, ps)
 
             if plots and False:
                 spmods.append(list(srctractor.getModelImages()))
@@ -2406,14 +2386,9 @@ def _one_blob(X):
             #print('Fitting source', i, '(%i of %i in blob)' % (numi, len(Ibright)))
             subcat.freezeAllBut(i)
 
-            max_cpu_per_source = 60.
-            cpu0 = time.clock()
             for step in range(50):
                 dlnp,X,alpha = subtr.optimize(**optargs)
                 # print('dlnp:', dlnp)
-                if time.clock()-cpu0 > max_cpu_per_source:
-                    print('Warning: Exceeded maximum CPU time for source')
-                    break
                 if dlnp < 0.1:
                     break
             #print('Fitting source took', Time()-tsrc)
@@ -2757,27 +2732,15 @@ def _one_blob(X):
                 dtractor.setModelMasks(dmm)
                 enable_galaxy_cache()
 
-
-                max_cpu_per_source = 60.
-    
                 #print('Optimizing with tims', [tim.shape for tim in dtractor.images])
                 #t0 = Time()
                 
-                cpu0 = time.clock()
-                thisflags = 0
                 for step in range(50):
                     #print('optimizing:', newsrc)
                     dlnp,X,alpha = dtractor.optimize(**optargs)
                     #print('  dlnp:', dlnp, 'new src', newsrc)
-                    cpu = time.clock()
-                    if cpu-cpu0 > max_cpu_per_source:
-                        print('Warning: Exceeded maximum CPU time for source')
-                        thisflags |= FLAG_CPU_A
-                        break
                     if dlnp < 0.1:
                         break
-                else:
-                    thisflags |= FLAG_STEPS_A
     
                 # print('Mod', name, 'round0 opt', Time()-t0)
                 # print('New source (after to-depth round optimization):', newsrc)
@@ -2791,22 +2754,14 @@ def _one_blob(X):
                     plt.title('To-depth opt: ' + name)
                     ps.savefig()
                 
-            max_cpu_per_source = 60.
-
             # print('Optimizing with tims', [tim.shape for tim in srctractor.images])
             #t0 = Time()
             
-            cpu0 = time.clock()
             thisflags = 0
             for step in range(50):
                 #print('optimizing:', newsrc)
                 dlnp,X,alpha = srctractor.optimize(**optargs)
                 #print('  dlnp:', dlnp, 'new src', newsrc)
-                cpu = time.clock()
-                if cpu-cpu0 > max_cpu_per_source:
-                    print('Warning: Exceeded maximum CPU time for source')
-                    thisflags |= FLAG_CPU_A
-                    break
                 if dlnp < 0.1:
                     break
             else:
@@ -2872,15 +2827,9 @@ def _one_blob(X):
             #t0 = Time()
             
             # Run another round of opt.
-            cpu0 = time.clock()
             for step in range(50):
                 dlnp,X,alpha = modtractor.optimize(**optargs)
                 #print('  dlnp:', dlnp, 'new src', newsrc)
-                cpu = time.clock()
-                if cpu-cpu0 > max_cpu_per_source:
-                    print('Warning: Exceeded maximum CPU time for source')
-                    thisflags |= FLAG_CPU_B
-                    break
                 if dlnp < 0.1:
                     break
             else:
@@ -2919,6 +2868,7 @@ def _one_blob(X):
             # Use the original 'srctractor' here so that the different
             # models are evaluated on the same pixels.
             # ---> AND with the same modelMasks as the original source...
+            # FIXME -- it is not clear that this is what we want!!
             srctractor.setModelMasks(newsrc_mm)
             ch = _per_band_chisqs(srctractor, bands)
             chisqs[name] = _chisq_improvement(newsrc, ch, chisqs_none)
