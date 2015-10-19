@@ -742,7 +742,7 @@ def _write_band_images(band,
 def stage_image_coadds(targetwcs=None, bands=None, tims=None, outdir=None,
                        brickname=None, version_header=None,
                        plots=False, ps=None, coadd_bw=False, W=None, H=None,
-                       brick=None,
+                       brick=None, blobs=None,
                        **kwargs):
     '''
     Immediately after reading the images, we
@@ -836,7 +836,6 @@ def stage_image_coadds(targetwcs=None, bands=None, tims=None, outdir=None,
     C = _coadds(tims, bands, targetwcs,
                 #############
                 detmaps=True,
-
                 callback=_write_band_images,
                 callback_args=(brickname, version_header, tims, targetwcs, basedir))
 
@@ -867,11 +866,9 @@ def stage_image_coadds(targetwcs=None, bands=None, tims=None, outdir=None,
                 depth = -2.5 * (np.log10(depth) - 9)
                 # no coverage -> very bright detection limit
                 depth[det == 0] = 0.
-                print('Depth values:', np.unique(depth))
                 if U is not None:
                     depth = depth.flat[U]
-                print('Depth values:', np.unique(depth))
-                print(band, name, 'band depth map: percentiles',
+                print(band, name, 'band depth map: deciles',
                       np.percentile(depth, np.arange(0, 101, 10)))
                 # histogram
                 D.set('counts_%s_%s' % (name, band),
@@ -886,8 +883,6 @@ def stage_image_coadds(targetwcs=None, bands=None, tims=None, outdir=None,
         D.writeto(fn)
         print('Wrote', fn)
         del D
-
-
 
     #rgbkwargs2 = dict(mnmx=(-3., 3.))
     #rgbkwargs2 = dict(mnmx=(-2., 10.))
@@ -908,6 +903,25 @@ def stage_image_coadds(targetwcs=None, bands=None, tims=None, outdir=None,
         os.system(cmd)
         os.unlink(tmpfn)
         print('Wrote', jpegfn)
+
+        # Blob-outlined version
+        if blobs is not None:
+            from scipy.ndimage.morphology import binary_dilation
+            outline = (binary_dilation(blobs >= 0, structure=np.ones((3,3)))
+                       - (blobs >= 0))
+            # coadd_bw?
+            if len(rgb.shape) == 2:
+                rgb = np.repeat(rgb[:,:,np.newaxis], 3, axis=2)
+            # Outline in green
+            rgb[:,:,0][outline] = 0
+            rgb[:,:,1][outline] = 1
+            rgb[:,:,2][outline] = 0
+            plt.imsave(tmpfn, rgb, origin='lower', **kwa)
+            jpegfn = os.path.join(basedir, 'decals-%s-%s.jpg' % (brickname, name+'blob'))
+            cmd = 'pngtopnm %s | pnmtojpeg -quality 90 > %s' % (tmpfn, jpegfn)
+            os.system(cmd)
+            os.unlink(tmpfn)
+            print('Wrote', jpegfn)
 
     return None
 
@@ -4281,10 +4295,10 @@ def run_brick(brick, radec=None, pixscale=0.262,
 
     prereqs = {
         'tims':None,
+        'srcs': 'tims',
 
-        # srcs, image_coadds: see below
+        # fitblobs: see below
 
-        'fitblobs':'srcs',
         'fitblobs_finish':'fitblobs',
         'coadds': 'fitblobs_finish',
 
@@ -4297,12 +4311,12 @@ def run_brick(brick, radec=None, pixscale=0.262,
 
     if early_coadds:
         prereqs.update({
-            'image_coadds':'tims',
-            'srcs':'image_coadds',
+            'image_coadds':'srcs',
+            'fitblobs':'image_coadds',
             })
     else:
         prereqs.update({
-            'srcs': 'tims',
+            'fitblobs':'srcs',
             })
 
     if wise:

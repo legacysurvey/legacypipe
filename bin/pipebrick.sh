@@ -48,7 +48,7 @@ echo "--------------------------------------------------------------------------
 #    -P 'pickles/runbrick-dr2k-%(brick)s-%%(stage)s.pickle' \
 
 python -u legacypipe/runbrick.py \
-    --pixpsf --splinesky --pipe --skip --no-sdss \
+    --pixpsf --splinesky --pipe --skip --no-sdss --no-early-coadds \
     --force-all --no-write \
     --threads 6 \
     --brick $brick --outdir $outdir --nsigma 6 >> $log 2>&1
