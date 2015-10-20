@@ -738,7 +738,92 @@ def _write_band_images(band,
         fitsio.write(fn, img, clobber=True, header=hdr2)
         print('Wrote', fn)
 
-        
+
+def stage_mask_junk(tims=None, targetwcs=None, W=None, H=None, bands=None,
+                    mp=None, nsigma=None, plots=None, ps=None, **kwargs):
+    from scipy.ndimage.filters import gaussian_filter
+    from scipy.ndimage.morphology import binary_fill_holes
+    from scipy.ndimage.measurements import label, find_objects
+    from scipy.ndimage.measurements import label, find_objects, center_of_mass
+    from scipy.linalg import svd
+
+    if plots:
+        coimgs,cons = compute_coadds(tims, bands, targetwcs)
+        plt.clf()
+        dimshow(get_rgb(coimgs, bands))
+        plt.title('Before')
+        ps.savefig()
+
+    allS = []
+
+    for tim in tims:
+        # detection map
+        det = tim.data * (tim.inverr > 0)
+        det = gaussian_filter(det, tim.psf_sigma) / tim.psfnorm**2
+        detsig1 = tim.sig1 / tim.psfnorm
+        det = (det > nsigma * detsig1)
+        det = binary_fill_holes(det)
+
+        timblobs,timnblobs = label(det)
+        timslices = find_objects(timblobs)
+
+        timS = []
+        for i,slc in enumerate(timslices):
+            inblob = timblobs[slc]
+            inblob = (inblob == (i+1))
+            bh,bw = inblob.shape
+            cy,cx = center_of_mass(inblob)
+            xx,yy = np.meshgrid(np.arange(bw), np.arange(bh))
+            cxx = np.sum((xx - cx)**2 * inblob) / float(np.sum(inblob))
+            cyy = np.sum((yy - cy)**2 * inblob) / float(np.sum(inblob))
+            cxy = np.sum((yy - cy) * (xx - cx) * inblob) / float(np.sum(inblob))
+            C = np.array([[cxx, cxy],[cxy, cyy]])
+            u,s,v = svd(C)
+            #print('sqrt(S)', np.sqrt(np.abs(s)))
+            axis = np.sqrt(np.abs(s[0] / s[1]))
+            #print('axis ratio:', axis)
+            timS.append(np.sqrt(np.abs(s)))
+        allS.extend(timS)
+
+        ss = np.array(timS)
+        ###
+        I = np.flatnonzero((ss[:,0] > 200) * (ss[:,1] / ss[:,0] < 0.1))
+        for i in I:
+            slc = timslices[i]
+            inblob = timblobs[slc]
+            inblob = (inblob == (i+1))
+            tim.inverr[slc] *= np.logical_not(inblob)
+
+    if plots:
+        coimgs,cons = compute_coadds(tims, bands, targetwcs)
+        plt.clf()
+        dimshow(get_rgb(coimgs, bands))
+        plt.title('After')
+        ps.savefig()
+
+        allS = np.array(allS)
+        mx = max(allS.max(), 100) * 1.1
+        plt.clf()
+        plt.plot([0, mx], [0, mx], 'k-', alpha=0.2)
+        plt.plot(allS[:,1], allS[:,0], 'b.')
+        plt.ylabel('Major axis size (pixels)')
+        plt.xlabel('Minor axis size (pixels)')
+        plt.axis('scaled')
+        plt.axis([0, mx, 0, mx])
+        ps.savefig()
+
+        plt.clf()
+        plt.plot(allS[:,0], (allS[:,1]+1.) / (allS[:,0]+1.), 'b.')
+        plt.xlabel('Major axis size (pixels)')
+        plt.ylabel('Axis ratio')
+        plt.axis([0, mx, 0, 1])
+        plt.axhline(0.1, color='r', alpha=0.2)
+        plt.axvline(200, color='r', alpha=0.2)
+        ps.savefig()
+
+
+    return dict(tims=tims)
+
 
 def stage_image_coadds(targetwcs=None, bands=None, tims=None, outdir=None,
                        brickname=None, version_header=None,
@@ -2146,15 +2231,44 @@ def _one_blob(X):
 
     bigblob = (blobw * blobh) > 100*100
 
-    # 50 CCDs is over 90th percentile over bricks in DR2.
+    # 50 CCDs is over 90th percentile of bricks in DR2.
     many_exposures = len(subtimargs) >= 50
-    
+
+    if bigblob:
+        # Measure this blob's axis ratio, moments, etc, to try to
+        # identify satellite hits?
+
+        print('Blobmask:', blobmask.shape, blobmask.dtype)
+
+        from scipy.ndimage.measurements import center_of_mass
+        from scipy.linalg import svd
+
+        cy,cx = center_of_mass(blobmask)
+        xx,yy = np.meshgrid(np.arange(blobw), np.arange(blobh))
+        cxx = np.sum((xx - cx)**2 * blobmask) / float(np.sum(blobmask))
+        cyy = np.sum((yy - cy)**2 * blobmask) / float(np.sum(blobmask))
+        cxy = np.sum((yy - cy) * (xx - cx) * blobmask) / float(np.sum(blobmask))
+        print('cx,cy', cx,cy)
+        print('cxx,cyy,cxy', cxx, cyy, cxy)
+        C = np.array([[cxx, cxy],[cxy, cyy]])
+        u,s,v = svd(C)
+        #print('U', u)
+        print('S', s)
+        #print('V', v)
+        print('sqrt(S)', np.sqrt(np.abs(s)))
+        axis = np.sqrt(np.abs(s[0] / s[1]))
+        print('axis ratio:', axis)
+        del xx,yy
+
     subtarget = targetwcs.get_subimage(bx0, by0, blobw, blobh)
 
     ok,x0,y0 = subtarget.radec2pixelxy(np.array([src.getPosition().ra  for src in srcs]),
                                        np.array([src.getPosition().dec for src in srcs]))
     started_in_blob = blobmask[np.clip(np.round(y0-1).astype(int), 0, blobh-1),
                                np.clip(np.round(x0-1).astype(int), 0, blobw-1)]
+
+    if bigblob:
+        allS = []
 
     subtims = []
     for (subimg, subie, twcs, subwcs, pcal,
@@ -2194,6 +2308,58 @@ def _one_blob(X):
         subtim.meta = imobj
         subtims.append(subtim)
 
+        if bigblob:
+            ### TESTING
+
+            from scipy.ndimage.filters import gaussian_filter
+            from scipy.ndimage.morphology import binary_fill_holes
+            from scipy.ndimage.measurements import label, find_objects
+
+            # detection map?
+            det = subimg * (subie > 0)
+            psfsigma = imobj.fwhm / 2.35
+            det = gaussian_filter(det, psfsigma) / imobj.psfnorm**2
+            detsig1 = sig1 / imobj.psfnorm
+            det /= detsig1
+            
+            if plots and False:
+                plt.clf()
+                dimshow(det, vmin=-2, vmax=6, cmap='hot')
+                plt.title('%s detmap' % subtim.name)
+                plt.colorbar()
+                ps.savefig()
+
+                plt.clf()
+                dimshow(det >= 6., vmin=0, vmax=1)
+                plt.title('%s detections' % subtim.name)
+                ps.savefig()
+
+            det = (det >= 6)
+            det = binary_fill_holes(det)
+
+            timblobs,timnblobs = label(det)
+            timslices = find_objects(timblobs)
+
+            for i,slc in enumerate(timslices):
+                inblob = timblobs[slc]
+                inblob = (inblob == (i+1))
+
+                bh,bw = inblob.shape
+                cy,cx = center_of_mass(inblob)
+                xx,yy = np.meshgrid(np.arange(bw), np.arange(bh))
+                cxx = np.sum((xx - cx)**2 * inblob) / float(np.sum(inblob))
+                cyy = np.sum((yy - cy)**2 * inblob) / float(np.sum(inblob))
+                cxy = np.sum((yy - cy) * (xx - cx) * inblob) / float(np.sum(inblob))
+                print('cx,cy', cx,cy)
+                print('cxx,cyy,cxy', cxx, cyy, cxy)
+                C = np.array([[cxx, cxy],[cxy, cyy]])
+                u,s,v = svd(C)
+                print('S', s)
+                print('sqrt(S)', np.sqrt(np.abs(s)))
+                axis = np.sqrt(np.abs(s[0] / s[1]))
+                print('axis ratio:', axis)
+                allS.append(np.sqrt(np.abs(s)))
+
         if plots:
             try:
                 Yo,Xo,Yi,Xi,rims = resample_with_wcs(subtarget, subsubwcs, [], 2)
@@ -2210,6 +2376,20 @@ def _one_blob(X):
                 dimshow(subie, vmin=0, vmax=1.1/sig1)
                 plt.suptitle('Subimage: ' + name)
                 ps.savefig()
+
+
+    if bigblob and plots:
+        allS = np.array(allS)
+        print('allS:', allS.shape)
+        mx = max(allS.max(), 100) * 1.1
+        plt.clf()
+        plt.plot([0, mx], [0, mx], 'k-', alpha=0.2)
+        plt.plot(allS[:,1], allS[:,0], 'b.')
+        plt.ylabel('Major axis size (pixels)')
+        plt.xlabel('Minor axis size (pixels)')
+        plt.axis('scaled')
+        plt.axis([0, mx, 0, mx])
+        ps.savefig()
 
     if plots:
         coimgs,cons = compute_coadds(subtims, bands, subtarget,
@@ -3058,7 +3238,7 @@ def _one_blob(X):
 
     # Variances
     B.srcinvvars = [[] for i in range(len(B))]
-
+    #print('Computing derivatives...')
     subcat.thawAllRecursive()
     subcat.freezeAllParams()
     for isub in range(len(B.sources)):
@@ -4330,6 +4510,8 @@ def run_brick(brick, radec=None, pixscale=0.262,
         'fitplots': 'fitblobs_finish',
         'psfplots': 'tims',
         'initplots': 'srcs',
+
+        'mask_junk': 'tims',
         }
 
     if early_coadds:
