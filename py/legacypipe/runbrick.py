@@ -267,13 +267,7 @@ def stage_tims(W=3600, H=3600, pixscale=0.262, brickname=None,
         print('[parallel tims] Calibrations:', tnow-tlast)
         tlast = tnow
 
-
-
-
     if plots:
-        #for tim in tims:
-        #im = tim.imobj
-
         sig1s = dict([(b,[]) for b in bands])
 
         allpix = []
@@ -381,6 +375,13 @@ def stage_tims(W=3600, H=3600, pixscale=0.262, brickname=None,
             if tim.plver != ver[1]:
                 print('Warning: image "%s" PLVER is "%s" but %s calib was run on PLVER "%s"' %
                       (str(tim), tim.plver, cal, ver[1]))
+
+    if plots:
+        for tim in tims:
+            plt.clf()
+            dimshow(tim.getImage(), **tim.ima)
+            plt.title(tim.name)
+            ps.savefig()
 
     if not pipe:
         # save resampling params
@@ -1827,9 +1828,19 @@ def _blob_iter(blobslices, blobsrcs, blobs,
         bx0,bx1 = sx.start, sx.stop
         blobh,blobw = by1 - by0, bx1 - bx0
 
+        # Here we assume the "blobs" array has been remapped so that
+        # -1 means "no blob", while 0 and up label the blobs.
+        blobmask = (blobs[bslc] == iblob)
+
+        # find one pixel within the blob (here, in the first row)
+        ii = np.flatnonzero(blobmask[0,:])
+        onex = bx0 + ii[0]
+        oney = by0
+
         print('Blob', iblob+1, 'of', len(blobslices), ':',
               len(Isrcs), 'sources, size', blobw, 'x', blobh,
-              'center', (bx0+bx1)/2, (by0+by1)/2)
+              'center', (bx0+bx1)/2, (by0+by1)/2, 'npix', np.sum(blobmask),
+              'one pixel:', onex,oney)
 
         rr,dd = targetwcs.pixelxy2radec([bx0,bx0,bx1,bx1],[by0,by1,by1,by0])
 
@@ -1863,9 +1874,6 @@ def _blob_iter(blobslices, blobsrcs, blobs,
                                subsky, tim.psf, tim.name, sx0, sx1, sy0, sy1,
                                tim.band, tim.sig1, tim.modelMinval,
                                tim.imobj))
-
-        # Here we assume the "blobs" array has been remapped...
-        blobmask = (blobs[bslc] == iblob)
 
         yield (iblob, Isrcs, targetwcs, bx0, by0, blobw, blobh, blobmask, subtimargs,
                [cat[i] for i in Isrcs], bands, plots, ps, simul_opt, use_ceres)
@@ -2792,7 +2800,7 @@ def _one_blob(X):
                 thisflags |= FLAG_STEPS_A
 
             # print('Mod', name, 'round1 opt', Time()-t0)
-            # print('New source (after first round optimization):', newsrc)
+            #print('New source (after first round optimization):', newsrc)
 
             if plots:
                 # _plot_mods(srctims, [list(srctractor.getModelImages())],
@@ -2816,11 +2824,22 @@ def _one_blob(X):
             ## same cut as determining the blobs, but that's in brick
             ## coadd space.
 
+            tim = subtims[0]
+            from tractor.galaxy import ProfileGalaxy
+            if isinstance(newsrc, ProfileGalaxy):
+                px,py = tim.wcs.positionToPixel(newsrc.getPosition())
+                h = newsrc._getUnitFluxPatchSize(tim, px, py, tim.modelMinval)
+                MAXHALF = 128
+                if h > MAXHALF:
+                    print('halfsize', h, 'for', newsrc, '-> setting to', MAXHALF)
+                    newsrc.halfsize = MAXHALF
+
             if bigblob:
                 mods = []
                 for tim in subtims:
                     mod = newsrc.getModelPatch(tim)
                     if mod is not None:
+                        #print('Model', name, 'round2 in', tim, ': mod', mod.shape)
                         h,w = tim.shape
                         mod.clipTo(w,h)
                         if mod.patch is None:
@@ -2909,6 +2928,10 @@ def _one_blob(X):
             mods = OrderedDict([('none',None), ('ptsrc',ptsrc), ('simple',simple),
                                 ('dev',dev), ('exp',exp), ('comp',comp)])
             for imod,modname in enumerate(mods.keys()):
+
+                if mod != 'none' and not modname in chisqs:
+                    continue
+
                 srccat[0] = mods[modname]
 
                 print('Plotting model for blob', iblob, 'source', i, ':', modname)

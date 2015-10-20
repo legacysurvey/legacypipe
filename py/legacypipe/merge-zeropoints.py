@@ -14,7 +14,7 @@ def decals_dr2():
 
     zpdir = '/project/projectdirs/cosmo/work/decam/cats/ZeroPoints'
     for fn,dirnms in [
-        ('/scratch1/scratchdirs/arjundey/ZeroPoints/decals-zpt-all-2015oct16.fits',
+        ('/scratch1/scratchdirs/arjundey/ZeroPoints/decals-zpt-all-2015oct19.fits',
          ['CP20140810_?_v2', 'CP20141227', 'CP20150108', 'CP20150326',
           'CP20150407', 'NonDECaLS/*','COSMOS', 'CPDES82']),
         # (os.path.join(zpdir, 'decals-zpt-20140810.fits'), ['CP20140810_?_v2']),
