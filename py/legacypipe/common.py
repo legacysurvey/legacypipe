@@ -27,7 +27,7 @@ from tractor.utils import get_class_from_name
 from tractor.ellipses import EllipseESoft
 from tractor.sfd import SFDMap
 
-from .utils import EllipseWithPriors
+from legacypipe.utils import EllipseWithPriors
 
 DECALS_PROPID = '2014B-0404'
 

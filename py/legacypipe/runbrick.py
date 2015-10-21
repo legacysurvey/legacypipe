@@ -81,6 +81,7 @@ def stage_tims(W=3600, H=3600, pixscale=0.262, brickname=None,
                splinesky=False,
                use_blacklist = True,
                mp=None,
+               rsync=False,
                **kwargs):
     '''
     This is the first stage in the pipeline.  It
@@ -249,18 +250,54 @@ def stage_tims(W=3600, H=3600, pixscale=0.262, brickname=None,
         im = decals.get_image_object(ccd)
         ims.append(im)
         print(im, im.band, 'exptime', im.exptime, 'propid', ccd.propid)
-        
+
     tnow = Time()
     print('[serial tims] Finding images touching brick:', tnow-tlast)
     tlast = tnow
 
+    if rsync:
+        # Check for existence of calibration files & rsync missing ones.
+        reqd = []
+        for im in ims:
+            if not gaussPsf:
+                reqd.append(im.psffn)
+            if splinesky:
+                reqd.append(im.splineskyfn)
+            else:
+                reqd.append(im.skyfn)
+            reqd.append(im.pvwcsfn)
+        # Just request missing files?
+        reqd = [fn for fn in reqd if not os.path.exists(fn)]
+        print('Required calib files:', reqd)
+        print('Calib dir:', decals.get_calib_dir())
+        caldir = decals.get_calib_dir() + '/'
+        reqd = [fn.replace(caldir, '') for fn in reqd]
+        
+        cmd = 'rsync -LRrv edison:/scratch1/scratchdirs/desiproc/decals-dir/calib/./"{%s}" %s' % (','.join(reqd), caldir)
+        print(cmd)
+        os.system(cmd)
+
+        # Also grab image files
+        reqd = []
+        for im in ims:
+            reqd.extend([im.imgfn, im.dqfn, im.wtfn])
+        reqd = [fn for fn in reqd if not os.path.exists(fn)]
+        print('Required image files:', reqd)
+        imgdir = decals.get_image_dir() + '/'
+        reqd = [fn.replace(imgdir, '') for fn in reqd]
+        
+        cmd = 'rsync -LRrv edison:/scratch1/scratchdirs/desiproc/images/./"{%s}" %s' % (','.join(reqd), imgdir)
+        print(cmd)
+        os.system(cmd)
+        
     if do_calibs:
-        # Run calibrations
         kwa = dict(git_version=gitver)
         if gaussPsf:
             kwa.update(psfex=False)
         if splinesky:
             kwa.update(splinesky=True)
+
+        # Run calibrations
         args = [(im, kwa) for im in ims]
         mp.map(run_calibs, args)
         tnow = Time()
@@ -1774,6 +1811,9 @@ def stage_fitblobs_finish(
     T.objid     = np.arange(len(T)).astype(np.int32)
 
     T.blob = iblob.astype(np.int32)
+    # How many sources in each blob?
+    ninblob = Counter(T.blob)
+    T.ninblob = np.array([ninblob[b] for b in T.blob]).astype(np.int16)
     T.dchisq      = BB.dchisqs.astype(np.float32)
     # Set -0. to 0.
     #T.dchisq[T.dchisq == 0.] = 0.
@@ -3932,8 +3972,8 @@ def stage_writecat(
         T2.wise_mw_transmission  = 10.**(-wise_extinction  / 2.5)
 
     cols = [
-        'brickid', 'brickname', 'objid', 'brick_primary', 'blob', 'type',
-        'ra', 'ra_ivar', 'dec', 'dec_ivar',
+        'brickid', 'brickname', 'objid', 'brick_primary', 'blob', 'ninblob',
+        'type', 'ra', 'ra_ivar', 'dec', 'dec_ivar',
         'bx', 'by', 'bx0', 'by0',
         'left_blob',
         'decam_flux', 'decam_flux_ivar' ]
@@ -4196,6 +4236,7 @@ def run_brick(brick, radec=None, pixscale=0.262,
               threads=None,
               plots=False, plots2=False, coadd_bw=False,
               plotbase=None, plotnumber=0,
+              rsync=False,
               picklePattern='pickles/runbrick-%(brick)s-%%(stage)s.pickle',
               stages=['writecat'],
               force=[], forceAll=False, writePickles=True):
@@ -4390,6 +4431,7 @@ def run_brick(brick, radec=None, pixscale=0.262,
                   on_bricks=on_bricks,
                   outdir=outdir, decals_dir=decals_dir, unwise_dir=unwise_dir,
                   plots=plots, plots2=plots2, coadd_bw=coadd_bw,
+                  rsync=rsync,
                   force=forceStages, write=writePickles)
 
     if threads and threads > 1:
@@ -4576,6 +4618,9 @@ python -u legacypipe/runbrick.py --plots --brick 2440p070 --zoom 1900 2400 450 9
 
     parser.add_option('--no-blacklist', dest='blacklist', default=True,
                       action='store_false', help='Do not blacklist some proposals?')
+
+    parser.add_option('--rsync', default=False, action='store_true',
+                      help='Rather than running calibrations, rsync from NERSC.  Also rsync missing image file inputs')
     
     print()
     print('runbrick.py starting at', datetime.datetime.now().isoformat())
@@ -4669,7 +4714,8 @@ python -u legacypipe/runbrick.py --plots --brick 2440p070 --zoom 1900 2400 450 9
             plotbase=opt.plot_base, plotnumber=opt.plot_number,
             force=opt.force, forceAll=opt.forceall,
             stages=opt.stage, writePickles=opt.write,
-            picklePattern=opt.picklepat, **kwa)
+            picklePattern=opt.picklepat,
+            rsync=opt.rsync, **kwa)
     except NothingToDoError as e:
         print()
         print(e.message)
@@ -4689,3 +4735,22 @@ def trace(frame, event, arg):
 if __name__ == '__main__':
     #sys.settrace(trace)
     sys.exit(main())
+
+
+# Test bricks & areas
+
+# A single, fairly bright star
+# python -u legacypipe/runbrick.py -b 1498p017 -P 'pickles/runbrick-z-%(brick)s-%%(stage)s.pickle' --zoom 1900 2000 2700 2800 --pixpsf --splinesky --no-sdss
+
+# python -u legacypipe/runbrick.py -b 0001p000 -P 'pickles/runbrick-z-%(brick)s-%%(stage)s.pickle' --zoom 80 380 2970 3270 --pixpsf --splinesky --no-sdss
+
+# 80, 380, 2970, 3270
+
+    # not (380, 480, 0, 100)
+# decmin 0.0851497
+# decmax 0.106983
+# ramin 0.228344
+# ramax 0.250178
+
+
+    
