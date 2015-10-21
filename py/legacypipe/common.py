@@ -97,11 +97,15 @@ class SimpleGalaxy(ExpGalaxy):
 class BrickDuck(object):
     pass
 
-def get_git_version():
+def get_git_version(dir=None):
     from astrometry.util.run_command import run_command
-    rtn,version,err = run_command('git describe')
+    cmd = ''
+    if dir is not None:
+        cmd = "cd '%s' && " % dir
+    cmd += 'git describe'
+    rtn,version,err = run_command(cmd)
     if rtn:
-        raise RuntimeError('Failed to get version string (git describe):' + ver + err)
+        raise RuntimeError('Failed to get version string (%s): ' % cmd + ver + err)
     version = version.strip()
     return version
 
@@ -129,6 +133,9 @@ def get_version_header(program_name, decals_dir, git_version=None):
                         comment='DECaLS version'))
     hdr.add_record(dict(name='DECALSDR', value='DR2',
                         comment='DECaLS release name'))
+    decalsdir_ver = get_git_version(decals_dir)
+    hdr.add_record(dict(name='DECALSDV', value=decalsdir_ver,
+                        comment='legacypipe-dir git version'))
     hdr.add_record(dict(name='DECALSDT', value=datetime.datetime.now().isoformat(),
                         comment='%s run time' % program_name))
     hdr.add_record(dict(name='SURVEY', value='DECaLS',
@@ -730,11 +737,21 @@ Using the current directory as DECALS_DIR, but this is likely to fail.
 
     def __getstate__(self):
         '''
-        For pickling: clear the cached ZP table.
+        For pickling: clear the cached ZP and other tables.
         '''
         d = self.__dict__.copy()
         d['ZP'] = None
+        d['bricks'] = None
+        d['bricktree'] = None
         return d
+
+    def drop_cache(self):
+        self.ZP = None
+        self.bricks = None
+        if self.bricktree is not None:
+            from astrometry.libkd.spherematch import tree_free
+            tree_free(self.bricktree)
+        self.bricktree = None
 
     def get_calib_dir(self):
         return os.path.join(self.decals_dir, 'calib')

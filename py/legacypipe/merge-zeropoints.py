@@ -11,14 +11,18 @@ def decals_dr2():
     image_basedir = os.path.join(decals_dir, 'images')
 
     TT = []
+
     zpdir = '/project/projectdirs/cosmo/work/decam/cats/ZeroPoints'
     for fn,dirnms in [
-        (os.path.join(zpdir, 'decals-zpt-20140810.fits'), ['CP20140810_?_v2']),
-        (os.path.join(zpdir, 'decals-zpt-20141227.fits'), ['CP20141227']),
-        (os.path.join(zpdir, 'decals-zpt-20150108.fits'), ['CP20150108']),
-        (os.path.join(zpdir, 'decals-zpt-20150326.fits'), ['CP20150326']),
-        (os.path.join(zpdir, 'decals-zpt-20150407.fits'), ['CP20150407']),
-        (os.path.join(zpdir, 'decals-zpt-nondecals.fits'), ['NonDECaLS/*','COSMOS', 'CPDES82']),
+        ('/scratch1/scratchdirs/arjundey/ZeroPoints/decals-zpt-all-2015oct19.fits',
+         ['CP20140810_?_v2', 'CP20141227', 'CP20150108', 'CP20150326',
+          'CP20150407', 'NonDECaLS/*','COSMOS', 'CPDES82']),
+        # (os.path.join(zpdir, 'decals-zpt-20140810.fits'), ['CP20140810_?_v2']),
+        # (os.path.join(zpdir, 'decals-zpt-20141227.fits'), ['CP20141227']),
+        # (os.path.join(zpdir, 'decals-zpt-20150108.fits'), ['CP20150108']),
+        # (os.path.join(zpdir, 'decals-zpt-20150326.fits'), ['CP20150326']),
+        # (os.path.join(zpdir, 'decals-zpt-20150407.fits'), ['CP20150407']),
+        # (os.path.join(zpdir, 'decals-zpt-nondecals.fits'), ['NonDECaLS/*','COSMOS', 'CPDES82']),
         ]:
         T = normalize_zeropoints(fn, dirnms, image_basedir, cam)
         TT.append(T)
@@ -111,8 +115,8 @@ def normalize_zeropoints(fn, dirnms, image_basedir, cam):
 
 if __name__ == '__main__':
 
-    #decals_dr2()
-    #sys.exit(0)
+    decals_dr2()
+    sys.exit(0)
 
     # Bok tests
     cam = '90prime'

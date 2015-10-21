@@ -267,13 +267,7 @@ def stage_tims(W=3600, H=3600, pixscale=0.262, brickname=None,
         print('[parallel tims] Calibrations:', tnow-tlast)
         tlast = tnow
 
-
-
-
     if plots:
-        #for tim in tims:
-        #im = tim.imobj
-
         sig1s = dict([(b,[]) for b in bands])
 
         allpix = []
@@ -381,6 +375,13 @@ def stage_tims(W=3600, H=3600, pixscale=0.262, brickname=None,
             if tim.plver != ver[1]:
                 print('Warning: image "%s" PLVER is "%s" but %s calib was run on PLVER "%s"' %
                       (str(tim), tim.plver, cal, ver[1]))
+
+    if plots:
+        for tim in tims:
+            plt.clf()
+            dimshow(tim.getImage(), **tim.ima)
+            plt.title(tim.name)
+            ps.savefig()
 
     if not pipe:
         # save resampling params
@@ -737,12 +738,88 @@ def _write_band_images(band,
         fitsio.write(fn, img, clobber=True, header=hdr2)
         print('Wrote', fn)
 
-        
+
+def stage_mask_junk(tims=None, targetwcs=None, W=None, H=None, bands=None,
+                    mp=None, nsigma=None, plots=None, ps=None, **kwargs):
+    from scipy.ndimage.filters import gaussian_filter
+    from scipy.ndimage.morphology import binary_fill_holes
+    from scipy.ndimage.measurements import label, find_objects
+    from scipy.ndimage.measurements import label, find_objects, center_of_mass
+    from scipy.linalg import svd
+
+    if plots:
+        coimgs,cons = compute_coadds(tims, bands, targetwcs)
+        plt.clf()
+        dimshow(get_rgb(coimgs, bands))
+        plt.title('Before')
+        ps.savefig()
+
+    allss = []
+    for tim in tims:
+        # detection map
+        det = tim.data * (tim.inverr > 0)
+        det = gaussian_filter(det, tim.psf_sigma) / tim.psfnorm**2
+        detsig1 = tim.sig1 / tim.psfnorm
+        det = (det > (nsigma * detsig1))
+        det = binary_fill_holes(det)
+        timblobs,timnblobs = label(det)
+        timslices = find_objects(timblobs)
+
+        for i,slc in enumerate(timslices):
+            inblob = timblobs[slc]
+            inblob = (inblob == (i+1))
+            cy,cx = center_of_mass(inblob)
+            bh,bw = inblob.shape
+            xx = np.arange(bw)
+            yy = np.arange(bh)
+            ninblob = float(np.sum(inblob))
+            cxx = np.sum((xx - cx)**2[np.newaxis,:] * inblob) / ninblob
+            cyy = np.sum((yy - cy)**2[:,np.newaxis] * inblob) / ninblob
+            cxy = np.sum((yy - cy)[:,np.newaxis] * (xx - cx)[np.newaxis,:] * inblob) / ninblob
+            C = np.array([[cxx, cxy],[cxy, cyy]])
+            u,s,v = svd(C)
+            allss.append(np.sqrt(np.abs(s)))
+
+            major = ss[0]
+            minor = ss[1]
+            if major > 200 and minor/major < 0.1:
+                # Zero it out!
+                tim.inverr[slc] *= np.logical_not(inblob)
+                print('Zeroing out a source with major/minor axis', major, '/', minor)
+
+    if plots:
+        coimgs,cons = compute_coadds(tims, bands, targetwcs)
+        plt.clf()
+        dimshow(get_rgb(coimgs, bands))
+        plt.title('After')
+        ps.savefig()
+
+        allss = np.array(allss)
+        mx = max(allss.max(), 100) * 1.1
+        plt.clf()
+        plt.plot([0, mx], [0, mx], 'k-', alpha=0.2)
+        plt.plot(allss[:,1], allss[:,0], 'b.')
+        plt.ylabel('Major axis size (pixels)')
+        plt.xlabel('Minor axis size (pixels)')
+        plt.axis('scaled')
+        plt.axis([0, mx, 0, mx])
+        ps.savefig()
+
+        plt.clf()
+        plt.plot(allss[:,0], (allss[:,1]+1.) / (allss[:,0]+1.), 'b.')
+        plt.xlabel('Major axis size (pixels)')
+        plt.ylabel('Axis ratio')
+        plt.axis([0, mx, 0, 1])
+        plt.axhline(0.1, color='r', alpha=0.2)
+        plt.axvline(200, color='r', alpha=0.2)
+        ps.savefig()
+
+    return dict(tims=tims)
 
 def stage_image_coadds(targetwcs=None, bands=None, tims=None, outdir=None,
                        brickname=None, version_header=None,
                        plots=False, ps=None, coadd_bw=False, W=None, H=None,
-                       brick=None,
+                       brick=None, blobs=None,
                        **kwargs):
     '''
     Immediately after reading the images, we
@@ -836,7 +913,6 @@ def stage_image_coadds(targetwcs=None, bands=None, tims=None, outdir=None,
     C = _coadds(tims, bands, targetwcs,
                 #############
                 detmaps=True,
-
                 callback=_write_band_images,
                 callback_args=(brickname, version_header, tims, targetwcs, basedir))
 
@@ -867,11 +943,9 @@ def stage_image_coadds(targetwcs=None, bands=None, tims=None, outdir=None,
                 depth = -2.5 * (np.log10(depth) - 9)
                 # no coverage -> very bright detection limit
                 depth[det == 0] = 0.
-                print('Depth values:', np.unique(depth))
                 if U is not None:
                     depth = depth.flat[U]
-                print('Depth values:', np.unique(depth))
-                print(band, name, 'band depth map: percentiles',
+                print(band, name, 'band depth map: deciles',
                       np.percentile(depth, np.arange(0, 101, 10)))
                 # histogram
                 D.set('counts_%s_%s' % (name, band),
@@ -886,8 +960,6 @@ def stage_image_coadds(targetwcs=None, bands=None, tims=None, outdir=None,
         D.writeto(fn)
         print('Wrote', fn)
         del D
-
-
 
     #rgbkwargs2 = dict(mnmx=(-3., 3.))
     #rgbkwargs2 = dict(mnmx=(-2., 10.))
@@ -908,6 +980,25 @@ def stage_image_coadds(targetwcs=None, bands=None, tims=None, outdir=None,
         os.system(cmd)
         os.unlink(tmpfn)
         print('Wrote', jpegfn)
+
+        # Blob-outlined version
+        if blobs is not None:
+            from scipy.ndimage.morphology import binary_dilation
+            outline = (binary_dilation(blobs >= 0, structure=np.ones((3,3)))
+                       - (blobs >= 0))
+            # coadd_bw?
+            if len(rgb.shape) == 2:
+                rgb = np.repeat(rgb[:,:,np.newaxis], 3, axis=2)
+            # Outline in green
+            rgb[:,:,0][outline] = 0
+            rgb[:,:,1][outline] = 1
+            rgb[:,:,2][outline] = 0
+            plt.imsave(tmpfn, rgb, origin='lower', **kwa)
+            jpegfn = os.path.join(basedir, 'decals-%s-%s.jpg' % (brickname, name+'blob'))
+            cmd = 'pngtopnm %s | pnmtojpeg -quality 90 > %s' % (tmpfn, jpegfn)
+            os.system(cmd)
+            os.unlink(tmpfn)
+            print('Wrote', jpegfn)
 
     return None
 
@@ -944,9 +1035,6 @@ def stage_srcs(coimgs=None, cons=None,
     of these blobs will be processed independently.
 
     '''
-
-    print('propids:', [tim.propid for tim in tims])
-
     from legacypipe.detection import (detection_maps, sed_matched_filters,
                                       run_sed_matched_filters)
 
@@ -1445,6 +1533,7 @@ def stage_fitblobs(T=None,
                    targetwcs=None,
                    W=None,H=None,
                    bands=None, ps=None, tims=None,
+                   decals=None,
                    plots=False, plots2=False,
                    nblobs=None, blob0=None, blobxy=None,
                    simul_opt=False, use_ceres=True, mp=None,
@@ -1567,6 +1656,8 @@ def stage_fitblobs(T=None,
 
         # one more place where blob numbers are recorded...
         T.blob = blobs[T.ity, T.itx]
+
+    decals.drop_cache()
 
     iter = _blob_iter(blobslices, blobsrcs, blobs, targetwcs, tims,
                       cat, bands, plots, ps, simul_opt, use_ceres)
@@ -1815,9 +1906,19 @@ def _blob_iter(blobslices, blobsrcs, blobs,
         bx0,bx1 = sx.start, sx.stop
         blobh,blobw = by1 - by0, bx1 - bx0
 
+        # Here we assume the "blobs" array has been remapped so that
+        # -1 means "no blob", while 0 and up label the blobs.
+        blobmask = (blobs[bslc] == iblob)
+
+        # find one pixel within the blob (here, in the first row)
+        ii = np.flatnonzero(blobmask[0,:])
+        onex = bx0 + ii[0]
+        oney = by0
+
         print('Blob', iblob+1, 'of', len(blobslices), ':',
               len(Isrcs), 'sources, size', blobw, 'x', blobh,
-              'center', (bx0+bx1)/2, (by0+by1)/2)
+              'center', (bx0+bx1)/2, (by0+by1)/2, 'npix', np.sum(blobmask),
+              'one pixel:', onex,oney)
 
         rr,dd = targetwcs.pixelxy2radec([bx0,bx0,bx1,bx1],[by0,by1,by1,by0])
 
@@ -1844,25 +1945,32 @@ def _blob_iter(blobslices, blobsrcs, blobs,
 
             tim.imobj.psfnorm = tim.psfnorm
             tim.imobj.galnorm = tim.galnorm
+            tim.psf.clear_cache()
+
             subtimargs.append((subimg, subie, subwcs, tim.subwcs,
                                tim.getPhotoCal(),
                                subsky, tim.psf, tim.name, sx0, sx1, sy0, sy1,
                                tim.band, tim.sig1, tim.modelMinval,
                                tim.imobj))
 
-        # Here we assume the "blobs" array has been remapped...
-        blobmask = (blobs[bslc] == iblob)
-
         yield (iblob, Isrcs, targetwcs, bx0, by0, blobw, blobh, blobmask, subtimargs,
                [cat[i] for i in Isrcs], bands, plots, ps, simul_opt, use_ceres)
 
 def _bounce_one_blob(X):
 
-    iblob = X[0]
-    fn = 'blob-%i.pickle' % iblob
-    from astrometry.util.file import pickle_to_file
-    pickle_to_file(X, fn)
-    print('Wrote', fn)
+    # iblob = X[0]
+    # fn = 'blob-%i.pickle' % iblob
+    # from astrometry.util.file import pickle_to_file
+    # pickle_to_file(X, fn)
+    # print('Wrote', fn)
+
+    # timargs = X[8][0]
+    # pickle_to_file(timargs, 'timargs-%i.pickle' % iblob)    
+    # pickle_to_file(timargs[0], 'timargs-%i-img.pickle' % iblob)    
+    # pickle_to_file(timargs[5], 'timargs-%i-sky.pickle' % iblob)    
+    # pickle_to_file(timargs[6], 'timargs-%i-psf.pickle' % iblob)    
+    # pickle_to_file(timargs[15], 'timargs-%i-imobj.pickle' % iblob)    
+
 
     try:
         return _one_blob(X)
@@ -2116,15 +2224,18 @@ def _one_blob(X):
 
     bigblob = (blobw * blobh) > 100*100
 
-    # 50 CCDs is over 90th percentile over bricks in DR2.
+    # 50 CCDs is over 90th percentile of bricks in DR2.
     many_exposures = len(subtimargs) >= 50
-    
+
     subtarget = targetwcs.get_subimage(bx0, by0, blobw, blobh)
 
     ok,x0,y0 = subtarget.radec2pixelxy(np.array([src.getPosition().ra  for src in srcs]),
                                        np.array([src.getPosition().dec for src in srcs]))
     started_in_blob = blobmask[np.clip(np.round(y0-1).astype(int), 0, blobh-1),
                                np.clip(np.round(x0-1).astype(int), 0, blobw-1)]
+
+    if bigblob:
+        allS = []
 
     subtims = []
     for (subimg, subie, twcs, subwcs, pcal,
@@ -2180,6 +2291,20 @@ def _one_blob(X):
                 dimshow(subie, vmin=0, vmax=1.1/sig1)
                 plt.suptitle('Subimage: ' + name)
                 ps.savefig()
+
+
+    if bigblob and plots:
+        allS = np.array(allS)
+        print('allS:', allS.shape)
+        mx = max(allS.max(), 100) * 1.1
+        plt.clf()
+        plt.plot([0, mx], [0, mx], 'k-', alpha=0.2)
+        plt.plot(allS[:,1], allS[:,0], 'b.')
+        plt.ylabel('Major axis size (pixels)')
+        plt.xlabel('Minor axis size (pixels)')
+        plt.axis('scaled')
+        plt.axis([0, mx, 0, mx])
+        ps.savefig()
 
     if plots:
         coimgs,cons = compute_coadds(subtims, bands, subtarget,
@@ -2770,7 +2895,7 @@ def _one_blob(X):
                 thisflags |= FLAG_STEPS_A
 
             # print('Mod', name, 'round1 opt', Time()-t0)
-            # print('New source (after first round optimization):', newsrc)
+            #print('New source (after first round optimization):', newsrc)
 
             if plots:
                 # _plot_mods(srctims, [list(srctractor.getModelImages())],
@@ -2794,11 +2919,22 @@ def _one_blob(X):
             ## same cut as determining the blobs, but that's in brick
             ## coadd space.
 
+            tim = subtims[0]
+            from tractor.galaxy import ProfileGalaxy
+            if isinstance(newsrc, ProfileGalaxy):
+                px,py = tim.wcs.positionToPixel(newsrc.getPosition())
+                h = newsrc._getUnitFluxPatchSize(tim, px, py, tim.modelMinval)
+                MAXHALF = 128
+                if h > MAXHALF:
+                    print('halfsize', h, 'for', newsrc, '-> setting to', MAXHALF)
+                    newsrc.halfsize = MAXHALF
+
             if bigblob:
                 mods = []
                 for tim in subtims:
                     mod = newsrc.getModelPatch(tim)
                     if mod is not None:
+                        #print('Model', name, 'round2 in', tim, ': mod', mod.shape)
                         h,w = tim.shape
                         mod.clipTo(w,h)
                         if mod.patch is None:
@@ -2810,7 +2946,6 @@ def _one_blob(X):
                 modtims = []
                 for tim in subtims:
                     d = dict()
-                    mm.append(d)
                     mod = newsrc.getModelPatch(tim)
                     if mod is None:
                         continue
@@ -2818,6 +2953,7 @@ def _one_blob(X):
                     mod = _clip_model_to_blob(mod, tim.shape, tim.getInvError())
                     d[newsrc] = Patch(mod.x0, mod.y0, mod.patch != 0)
                     modtims.append(tim)
+                    mm.append(d)
                     
             # print('Second-round shapes:', [tim.shape for tim in modtims])
 
@@ -2887,6 +3023,10 @@ def _one_blob(X):
             mods = OrderedDict([('none',None), ('ptsrc',ptsrc), ('simple',simple),
                                 ('dev',dev), ('exp',exp), ('comp',comp)])
             for imod,modname in enumerate(mods.keys()):
+
+                if mod != 'none' and not modname in chisqs:
+                    continue
+
                 srccat[0] = mods[modname]
 
                 print('Plotting model for blob', iblob, 'source', i, ':', modname)
@@ -3013,7 +3153,7 @@ def _one_blob(X):
 
     # Variances
     B.srcinvvars = [[] for i in range(len(B))]
-
+    #print('Computing derivatives...')
     subcat.thawAllRecursive()
     subcat.freezeAllParams()
     for isub in range(len(B.sources)):
@@ -4273,10 +4413,11 @@ def run_brick(brick, radec=None, pixscale=0.262,
 
     prereqs = {
         'tims':None,
+        'mask_junk': 'tims',
+        'srcs': 'mask_junk',
 
-        # srcs, image_coadds: see below
+        # fitblobs: see below
 
-        'fitblobs':'srcs',
         'fitblobs_finish':'fitblobs',
         'coadds': 'fitblobs_finish',
 
@@ -4285,16 +4426,17 @@ def run_brick(brick, radec=None, pixscale=0.262,
         'fitplots': 'fitblobs_finish',
         'psfplots': 'tims',
         'initplots': 'srcs',
+
         }
 
     if early_coadds:
         prereqs.update({
-            'image_coadds':'tims',
-            'srcs':'image_coadds',
+            'image_coadds':'srcs',
+            'fitblobs':'image_coadds',
             })
     else:
         prereqs.update({
-            'srcs': 'tims',
+            'fitblobs':'srcs',
             })
 
     if wise:
