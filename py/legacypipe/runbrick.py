@@ -2225,32 +2225,6 @@ def _one_blob(X):
     # 50 CCDs is over 90th percentile of bricks in DR2.
     many_exposures = len(subtimargs) >= 50
 
-    if bigblob:
-        # Measure this blob's axis ratio, moments, etc, to try to
-        # identify satellite hits?
-
-        print('Blobmask:', blobmask.shape, blobmask.dtype)
-
-        from scipy.ndimage.measurements import center_of_mass
-        from scipy.linalg import svd
-
-        cy,cx = center_of_mass(blobmask)
-        xx,yy = np.meshgrid(np.arange(blobw), np.arange(blobh))
-        cxx = np.sum((xx - cx)**2 * blobmask) / float(np.sum(blobmask))
-        cyy = np.sum((yy - cy)**2 * blobmask) / float(np.sum(blobmask))
-        cxy = np.sum((yy - cy) * (xx - cx) * blobmask) / float(np.sum(blobmask))
-        print('cx,cy', cx,cy)
-        print('cxx,cyy,cxy', cxx, cyy, cxy)
-        C = np.array([[cxx, cxy],[cxy, cyy]])
-        u,s,v = svd(C)
-        #print('U', u)
-        print('S', s)
-        #print('V', v)
-        print('sqrt(S)', np.sqrt(np.abs(s)))
-        axis = np.sqrt(np.abs(s[0] / s[1]))
-        print('axis ratio:', axis)
-        del xx,yy
-
     subtarget = targetwcs.get_subimage(bx0, by0, blobw, blobh)
 
     ok,x0,y0 = subtarget.radec2pixelxy(np.array([src.getPosition().ra  for src in srcs]),
@@ -2298,58 +2272,6 @@ def _one_blob(X):
         subtim.subwcs = subsubwcs
         subtim.meta = imobj
         subtims.append(subtim)
-
-        if bigblob:
-            ### TESTING
-
-            from scipy.ndimage.filters import gaussian_filter
-            from scipy.ndimage.morphology import binary_fill_holes
-            from scipy.ndimage.measurements import label, find_objects
-
-            # detection map?
-            det = subimg * (subie > 0)
-            psfsigma = imobj.fwhm / 2.35
-            det = gaussian_filter(det, psfsigma) / imobj.psfnorm**2
-            detsig1 = sig1 / imobj.psfnorm
-            det /= detsig1
-            
-            if plots and False:
-                plt.clf()
-                dimshow(det, vmin=-2, vmax=6, cmap='hot')
-                plt.title('%s detmap' % subtim.name)
-                plt.colorbar()
-                ps.savefig()
-
-                plt.clf()
-                dimshow(det >= 6., vmin=0, vmax=1)
-                plt.title('%s detections' % subtim.name)
-                ps.savefig()
-
-            det = (det >= 6)
-            det = binary_fill_holes(det)
-
-            timblobs,timnblobs = label(det)
-            timslices = find_objects(timblobs)
-
-            for i,slc in enumerate(timslices):
-                inblob = timblobs[slc]
-                inblob = (inblob == (i+1))
-
-                bh,bw = inblob.shape
-                cy,cx = center_of_mass(inblob)
-                xx,yy = np.meshgrid(np.arange(bw), np.arange(bh))
-                cxx = np.sum((xx - cx)**2 * inblob) / float(np.sum(inblob))
-                cyy = np.sum((yy - cy)**2 * inblob) / float(np.sum(inblob))
-                cxy = np.sum((yy - cy) * (xx - cx) * inblob) / float(np.sum(inblob))
-                print('cx,cy', cx,cy)
-                print('cxx,cyy,cxy', cxx, cyy, cxy)
-                C = np.array([[cxx, cxy],[cxy, cyy]])
-                u,s,v = svd(C)
-                print('S', s)
-                print('sqrt(S)', np.sqrt(np.abs(s)))
-                axis = np.sqrt(np.abs(s[0] / s[1]))
-                print('axis ratio:', axis)
-                allS.append(np.sqrt(np.abs(s)))
 
         if plots:
             try:
