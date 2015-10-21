@@ -754,45 +754,38 @@ def stage_mask_junk(tims=None, targetwcs=None, W=None, H=None, bands=None,
         plt.title('Before')
         ps.savefig()
 
-    allS = []
-
+    allss = []
     for tim in tims:
         # detection map
         det = tim.data * (tim.inverr > 0)
         det = gaussian_filter(det, tim.psf_sigma) / tim.psfnorm**2
         detsig1 = tim.sig1 / tim.psfnorm
-        det = (det > nsigma * detsig1)
+        det = (det > (nsigma * detsig1))
         det = binary_fill_holes(det)
-
         timblobs,timnblobs = label(det)
         timslices = find_objects(timblobs)
 
-        timS = []
         for i,slc in enumerate(timslices):
             inblob = timblobs[slc]
             inblob = (inblob == (i+1))
-            bh,bw = inblob.shape
             cy,cx = center_of_mass(inblob)
-            xx,yy = np.meshgrid(np.arange(bw), np.arange(bh))
-            cxx = np.sum((xx - cx)**2 * inblob) / float(np.sum(inblob))
-            cyy = np.sum((yy - cy)**2 * inblob) / float(np.sum(inblob))
-            cxy = np.sum((yy - cy) * (xx - cx) * inblob) / float(np.sum(inblob))
+            bh,bw = inblob.shape
+            xx = np.arange(bw)
+            yy = np.arange(bh)
+            ninblob = float(np.sum(inblob))
+            cxx = np.sum((xx - cx)**2[np.newaxis,:] * inblob) / ninblob
+            cyy = np.sum((yy - cy)**2[:,np.newaxis] * inblob) / ninblob
+            cxy = np.sum((yy - cy)[:,np.newaxis] * (xx - cx)[np.newaxis,:] * inblob) / ninblob
             C = np.array([[cxx, cxy],[cxy, cyy]])
             u,s,v = svd(C)
-            #print('sqrt(S)', np.sqrt(np.abs(s)))
-            axis = np.sqrt(np.abs(s[0] / s[1]))
-            #print('axis ratio:', axis)
-            timS.append(np.sqrt(np.abs(s)))
-        allS.extend(timS)
+            allss.append(np.sqrt(np.abs(s)))
 
-        ss = np.array(timS)
-        ###
-        I = np.flatnonzero((ss[:,0] > 200) * (ss[:,1] / ss[:,0] < 0.1))
-        for i in I:
-            slc = timslices[i]
-            inblob = timblobs[slc]
-            inblob = (inblob == (i+1))
-            tim.inverr[slc] *= np.logical_not(inblob)
+            major = ss[0]
+            minor = ss[1]
+            if major > 200 and minor/major < 0.1:
+                # Zero it out!
+                tim.inverr[slc] *= np.logical_not(inblob)
+                print('Zeroing out a source with major/minor axis', major, '/', minor)
 
     if plots:
         coimgs,cons = compute_coadds(tims, bands, targetwcs)
@@ -801,11 +794,11 @@ def stage_mask_junk(tims=None, targetwcs=None, W=None, H=None, bands=None,
         plt.title('After')
         ps.savefig()
 
-        allS = np.array(allS)
-        mx = max(allS.max(), 100) * 1.1
+        allss = np.array(allss)
+        mx = max(allss.max(), 100) * 1.1
         plt.clf()
         plt.plot([0, mx], [0, mx], 'k-', alpha=0.2)
-        plt.plot(allS[:,1], allS[:,0], 'b.')
+        plt.plot(allss[:,1], allss[:,0], 'b.')
         plt.ylabel('Major axis size (pixels)')
         plt.xlabel('Minor axis size (pixels)')
         plt.axis('scaled')
@@ -813,7 +806,7 @@ def stage_mask_junk(tims=None, targetwcs=None, W=None, H=None, bands=None,
         ps.savefig()
 
         plt.clf()
-        plt.plot(allS[:,0], (allS[:,1]+1.) / (allS[:,0]+1.), 'b.')
+        plt.plot(allss[:,0], (allss[:,1]+1.) / (allss[:,0]+1.), 'b.')
         plt.xlabel('Major axis size (pixels)')
         plt.ylabel('Axis ratio')
         plt.axis([0, mx, 0, 1])
@@ -821,9 +814,7 @@ def stage_mask_junk(tims=None, targetwcs=None, W=None, H=None, bands=None,
         plt.axvline(200, color='r', alpha=0.2)
         ps.savefig()
 
-
     return dict(tims=tims)
-
 
 def stage_image_coadds(targetwcs=None, bands=None, tims=None, outdir=None,
                        brickname=None, version_header=None,
@@ -4498,7 +4489,8 @@ def run_brick(brick, radec=None, pixscale=0.262,
 
     prereqs = {
         'tims':None,
-        'srcs': 'tims',
+        'mask_junk': 'tims',
+        'srcs': 'mask_junk',
 
         # fitblobs: see below
 
@@ -4511,7 +4503,6 @@ def run_brick(brick, radec=None, pixscale=0.262,
         'psfplots': 'tims',
         'initplots': 'srcs',
 
-        'mask_junk': 'tims',
         }
 
     if early_coadds:
