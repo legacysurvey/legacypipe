@@ -1539,6 +1539,8 @@ def stage_fitblobs(T=None,
             blob = blobs[y,x]
             if blob >= 0:
                 keepblobs.append(blob)
+            else:
+                print('WARNING: blobxy', x,y, 'is not in a blob!')
         keepblobs = np.unique(keepblobs)
 
     if blob0 is not None or (nblobs is not None and nblobs < len(blobslices)):
