@@ -12,7 +12,7 @@ export MKL_NUM_THREADS=1
 ulimit -S -v 15000000
 ulimit -a
 
-outdir=$SCRATCH/dr2k
+outdir=$SCRATCH/dr2m
 
 # git checkout of https://github.com/legacysurvey/legacypipe-dir
 # branch cosmos-subset
