@@ -1950,10 +1950,15 @@ def _blob_iter(blobslices, blobsrcs, blobs,
         # -1 means "no blob", while 0 and up label the blobs.
         blobmask = (blobs[bslc] == iblob)
 
-        # find one pixel within the blob (here, in the first row)
-        ii = np.flatnonzero(blobmask[0,:])
-        onex = bx0 + ii[0]
-        oney = by0
+        # find one pixel within the blob
+        onex = oney = None
+        for y in range(by0, by1):
+            ii = np.flatnonzero(blobmask[y-by0,:])
+            if len(ii) == 0:
+                continue
+            onex = bx0 + ii[0]
+            oney = y
+            break
 
         print('Blob', iblob+1, 'of', len(blobslices), ':',
               len(Isrcs), 'sources, size', blobw, 'x', blobh,
