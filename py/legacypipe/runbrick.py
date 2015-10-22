@@ -810,15 +810,15 @@ def stage_mask_junk(tims=None, targetwcs=None, W=None, H=None, bands=None,
             xx = np.arange(bw)
             yy = np.arange(bh)
             ninblob = float(np.sum(inblob))
-            cxx = np.sum((xx - cx)**2[np.newaxis,:] * inblob) / ninblob
-            cyy = np.sum((yy - cy)**2[:,np.newaxis] * inblob) / ninblob
+            cxx = np.sum(((xx - cx)**2)[np.newaxis,:] * inblob) / ninblob
+            cyy = np.sum(((yy - cy)**2)[:,np.newaxis] * inblob) / ninblob
             cxy = np.sum((yy - cy)[:,np.newaxis] * (xx - cx)[np.newaxis,:] * inblob) / ninblob
             C = np.array([[cxx, cxy],[cxy, cyy]])
             u,s,v = svd(C)
             allss.append(np.sqrt(np.abs(s)))
 
-            major = ss[0]
-            minor = ss[1]
+            major = s[0]
+            minor = s[1]
             if major > 200 and minor/major < 0.1:
                 # Zero it out!
                 tim.inverr[slc] *= np.logical_not(inblob)
