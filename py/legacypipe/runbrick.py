@@ -781,7 +781,6 @@ def stage_mask_junk(tims=None, targetwcs=None, W=None, H=None, bands=None,
                     mp=None, nsigma=None, plots=None, ps=None, **kwargs):
     from scipy.ndimage.filters import gaussian_filter
     from scipy.ndimage.morphology import binary_fill_holes
-    from scipy.ndimage.measurements import label, find_objects
     from scipy.ndimage.measurements import label, find_objects, center_of_mass
     from scipy.linalg import svd
 
@@ -821,8 +820,11 @@ def stage_mask_junk(tims=None, targetwcs=None, W=None, H=None, bands=None,
             u,s,v = svd(C)
             allss.append(np.sqrt(np.abs(s)))
 
-            major = s[0]
-            minor = s[1]
+            # For an ellipse, this gives the major and minor axes
+            # (ie, end to end, not semi-major/minor)
+            ss = np.sqrt(s)
+            major = 4. * ss[0]
+            minor = 4. * ss[1]
             if not (major > 200 and minor/major < 0.1):
                 continue
             # Zero it out!
