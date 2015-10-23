@@ -2279,9 +2279,6 @@ def _one_blob(X):
     started_in_blob = blobmask[np.clip(np.round(y0-1).astype(int), 0, blobh-1),
                                np.clip(np.round(x0-1).astype(int), 0, blobw-1)]
 
-    if bigblob:
-        allS = []
-
     subtims = []
     for (subimg, subie, twcs, subwcs, pcal,
          sky, psf, name, sx0, sx1, sy0, sy1,
@@ -2337,19 +2334,6 @@ def _one_blob(X):
                 plt.suptitle('Subimage: ' + name)
                 ps.savefig()
 
-
-    if bigblob and plots:
-        allS = np.array(allS)
-        print('allS:', allS.shape)
-        mx = max(allS.max(), 100) * 1.1
-        plt.clf()
-        plt.plot([0, mx], [0, mx], 'k-', alpha=0.2)
-        plt.plot(allS[:,1], allS[:,0], 'b.')
-        plt.ylabel('Major axis size (pixels)')
-        plt.xlabel('Minor axis size (pixels)')
-        plt.axis('scaled')
-        plt.axis([0, mx, 0, mx])
-        ps.savefig()
 
     if plots:
         coimgs,cons = compute_coadds(subtims, bands, subtarget,
