@@ -786,7 +786,7 @@ def stage_mask_junk(tims=None, targetwcs=None, W=None, H=None, bands=None,
     from scipy.linalg import svd
 
     if plots:
-        coimgs,cons = compute_coadds(tims, bands, targetwcs)
+        coimgs,cons = compute_coadds(tims, bands, targetwcs, fill_holes=False)
         plt.clf()
         dimshow(get_rgb(coimgs, bands))
         plt.title('Before')
@@ -802,6 +802,9 @@ def stage_mask_junk(tims=None, targetwcs=None, W=None, H=None, bands=None,
         det = binary_fill_holes(det)
         timblobs,timnblobs = label(det)
         timslices = find_objects(timblobs)
+
+        if plots:
+            zeroed = np.zeros(tim.shape, bool)
 
         for i,slc in enumerate(timslices):
             inblob = timblobs[slc]
@@ -820,13 +823,30 @@ def stage_mask_junk(tims=None, targetwcs=None, W=None, H=None, bands=None,
 
             major = s[0]
             minor = s[1]
-            if major > 200 and minor/major < 0.1:
-                # Zero it out!
-                tim.inverr[slc] *= np.logical_not(inblob)
-                print('Zeroing out a source with major/minor axis', major, '/', minor)
+            if not (major > 200 and minor/major < 0.1):
+                continue
+            # Zero it out!
+            tim.inverr[slc] *= np.logical_not(inblob)
+            print('Zeroing out a source with major/minor axis', major, '/', minor)
+
+            if plots:
+                zeroed[slc] = np.logical_not(inblob)
+
+        if plots:
+            if np.sum(zeroed) > 0:
+                plt.clf()
+                from scipy.ndimage.morphology import binary_dilation
+                zout = (binary_dilation(zeroed, structure=np.ones((3,3))) - zeroed)
+                dimshow(tim.getImage(), **tim.ima)
+                outline = np.zeros(zout.shape+(4,), np.uint8)
+                outline[:,:,1] = zout*255
+                outline[:,:,3] = zout*255
+                dimshow(outline)
+                plt.title('Masked: ' + tim.name)
+                ps.savefig()
 
     if plots:
-        coimgs,cons = compute_coadds(tims, bands, targetwcs)
+        coimgs,cons = compute_coadds(tims, bands, targetwcs, fill_holes=False)
         plt.clf()
         dimshow(get_rgb(coimgs, bands))
         plt.title('After')
@@ -2726,7 +2746,7 @@ def _one_blob(X):
             plt.clf()
             coimgs,cons = compute_coadds(srctims, bands, subtarget,
                                          fill_holes=False)
-            dimshow(get_rgb(coimgs, bands), extent=(bx0,bx1,by0,by1))
+            dimshow(get_rgb(coimgs, bands))#, extent=(bx0,bx1,by0,by1))
             plt.title('Model selection: stage1 data')
             ps.savefig()
 
