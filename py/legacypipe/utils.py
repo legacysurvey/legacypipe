@@ -47,7 +47,7 @@ class EllipseWithPriors(EllipseESoft):
     
     @classmethod
     def getName(cls):
-        return "EllipseWithPriors(%f)" % cls.ellipticityStd
+        return "EllipseWithPriors(%g)" % cls.ellipticityStd
 
 class RunbrickError(RuntimeError):
     pass
