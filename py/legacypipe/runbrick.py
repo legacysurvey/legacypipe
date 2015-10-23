@@ -1694,10 +1694,34 @@ def stage_fitblobs(T=None,
         # one more place where blob numbers are recorded...
         T.blob = blobs[T.ity, T.itx]
 
+    # drop any cached data before we start pickling/multiprocessing
     decals.drop_cache()
 
+    tycho = fits_table('tycho2.fits')
+    print('Read', len(tycho), 'Tycho-2 stars')
+    ok,tx,ty = targetwcs.radec2pixelxy(tycho.ra, tycho.dec)
+    margin = 100
+    tycho.cut(ok * (tx > -margin) * (tx < W+margin) *
+              (ty > -margin) * (ty < H+margin))
+    print('Cut to', len(tycho), 'Tycho-2 stars within brick')
+    del ok,tx,ty
+    
+    if plots:
+        ok,tx,ty = targetwcs.radec2pixelxy(tycho.ra, tycho.dec)
+        plt.clf()
+        dimshow(blobs>=0, vmin=0, vmax=1)
+        ax = plt.axis()
+        plt.plot(tx-1, ty-1, 'ro')
+        for x,y,mb,mv,mh in zip(tx,ty,tycho.mag_bt,tycho.mag_vt,tycho.mag_hp):
+            plt.text(x, y, '%.1f/%.1f/%.1f' % (mb,mv,mh),
+                     color='r', fontsize=10,
+                     bbox=dict(facecolor='w', alpha=0.5))
+        plt.axis(ax)
+        plt.title('Tycho-2 stars')
+        ps.savefig()
+    
     iter = _blob_iter(blobslices, blobsrcs, blobs, targetwcs, tims,
-                      cat, bands, plots, ps, simul_opt, use_ceres)
+                      cat, bands, plots, ps, simul_opt, use_ceres, tycho)
     # to allow debugpool to only queue tasks one at a time
     iter = iterwrapper(iter, len(blobsrcs))
     R = mp.map(_bounce_one_blob, iter)
@@ -1935,8 +1959,27 @@ def stage_fitblobs_finish(
     return rtn
 
 def _blob_iter(blobslices, blobsrcs, blobs,
-               targetwcs, tims, cat, bands, plots, ps, simul_opt, use_ceres):
-    for iblob, (bslc,Isrcs) in enumerate(zip(blobslices, blobsrcs)):
+               targetwcs, tims, cat, bands, plots, ps, simul_opt, use_ceres,
+               tycho):
+
+    ok,tx,ty = targetwcs.radec2pixelxy(tycho.ra, tycho.dec)
+    tx = np.round(tx-1).astype(int)
+    ty = np.round(ty-1).astype(int)
+    # FIXME -- Cut or clip to targetwcs region?
+    H,W = targetwcs.shape
+    tx = np.clip(tx, 0, W-1)
+    ty = np.clip(ty, 0, H-1)
+    tychoblobs = set(blobs[ty, tx])
+    print('Blobs containing Tycho-2 stars:', tychoblobs)
+    
+    # sort blobs by size so that larger ones start running first
+    from collections import Counter
+    blobvals = Counter(blobs[blobs>=0])
+    blob_order = np.array([i for i,npix in blobvals.most_common()])
+
+    for iblob in blob_order:
+        bslc  = blobslices[iblob]
+        Isrcs = blobsrcs  [iblob]
         assert(len(Isrcs) > 0)
 
         tblob = Time()
@@ -1947,10 +1990,11 @@ def _blob_iter(blobslices, blobsrcs, blobs,
         blobh,blobw = by1 - by0, bx1 - bx0
 
         # Here we assume the "blobs" array has been remapped so that
-        # -1 means "no blob", while 0 and up label the blobs.
+        # -1 means "no blob", while 0 and up label the blobs, thus
+        # iblob equals the value in the "blobs" map.
         blobmask = (blobs[bslc] == iblob)
 
-        # find one pixel within the blob
+        # find one pixel within the blob, for debugging purposes
         onex = oney = None
         for y in range(by0, by1):
             ii = np.flatnonzero(blobmask[y-by0,:])
@@ -1960,10 +2004,12 @@ def _blob_iter(blobslices, blobsrcs, blobs,
             oney = y
             break
 
+        hastycho = iblob in tychoblobs
+        
         print('Blob', iblob+1, 'of', len(blobslices), ':',
               len(Isrcs), 'sources, size', blobw, 'x', blobh,
               'center', (bx0+bx1)/2, (by0+by1)/2, 'npix', np.sum(blobmask),
-              'one pixel:', onex,oney)
+              'one pixel:', onex,oney, 'has Tycho-2 star:', hastycho)
 
         rr,dd = targetwcs.pixelxy2radec([bx0,bx0,bx1,bx1],[by0,by1,by1,by0])
 
