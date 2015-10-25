@@ -1301,9 +1301,6 @@ def stage_srcs(coimgs=None, cons=None,
             plt.suptitle('Tim ' + tim.name)
             ps.savefig()
 
-
-            
-            
     print('Rendering detection maps...')
     detmaps, detivs, satmap = detection_maps(tims, targetwcs, bands, mp)
     tnow = Time()
@@ -1380,11 +1377,11 @@ def stage_srcs(coimgs=None, cons=None,
     from scipy.ndimage.measurements import label, find_objects, center_of_mass
 
     satblobs,nsat = label(satmap > 0)
-    satxy = center_of_mass(satmap, labels=satblobs, index=np.arange(nsat)+1)
-    # NOTE, satxy is transposed
-    satx = np.array([x for y,x in satxy]).astype(int)
-    saty = np.array([y for y,x in satxy]).astype(int)
-    del satxy
+    satyx = center_of_mass(satmap, labels=satblobs, index=np.arange(nsat)+1)
+    # NOTE, satyx is in y,x order (center_of_mass)
+    satx = np.array([x for y,x in satyx]).astype(int)
+    saty = np.array([y for y,x in satyx]).astype(int)
+    del satyx
 
     if len(satx):
         avoid_xy.extend(zip(satx, saty))
