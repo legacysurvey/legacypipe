@@ -1481,6 +1481,8 @@ def stage_srcs(coimgs=None, cons=None,
             fn = os.path.join(outdir, 'sources-%s' % brickname)
             ps = PlotSequence(fn)
 
+        if coimgs is None:
+            coimgs,cons = compute_coadds(tims, bands, targetwcs)
         crossa = dict(ms=10, mew=1.5)
         plt.clf()
         dimshow(get_rgb(coimgs, bands))
