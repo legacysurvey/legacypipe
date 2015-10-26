@@ -3275,9 +3275,9 @@ def _one_blob(X):
             src.shapeDev = src.shapeDev.toEllipseE()
             src.fracDev = FracDev(src.fracDev.clipped())
 
-        print('Computing variances for source:', src)
-        subtr.printThawedParams()
-        print('halfsize:', getattr(src, 'halfsize', None))
+        #print('Computing variances for source:', src)
+        #subtr.printThawedParams()
+        #print('halfsize:', getattr(src, 'halfsize', None))
         
         allderivs = subtr.getDerivs()
         for iparam,derivs in enumerate(allderivs):
