@@ -2005,7 +2005,7 @@ def _blob_iter(blobslices, blobsrcs, blobs,
     blobvals = Counter(blobs[blobs>=0])
     blob_order = np.array([i for i,npix in blobvals.most_common()])
 
-    for iblob in blob_order:
+    for nblob,iblob in enumerate(blob_order):
         bslc  = blobslices[iblob]
         Isrcs = blobsrcs  [iblob]
         assert(len(Isrcs) > 0)
@@ -2034,7 +2034,7 @@ def _blob_iter(blobslices, blobsrcs, blobs,
 
         hastycho = iblob in tychoblobs
         
-        print('Blob', iblob+1, 'of', len(blobslices), ':',
+        print('Blob number', nblob+1, 'of', len(blobslices), ': blob', iblob,
               len(Isrcs), 'sources, size', blobw, 'x', blobh,
               'center', (bx0+bx1)/2, (by0+by1)/2, 'npix', np.sum(blobmask),
               'one pixel:', onex,oney, 'has Tycho-2 star:', hastycho)
@@ -2084,14 +2084,6 @@ def _bounce_one_blob(X):
     # from astrometry.util.file import pickle_to_file
     # pickle_to_file(X, fn)
     # print('Wrote', fn)
-
-    # timargs = X[8][0]
-    # pickle_to_file(timargs, 'timargs-%i.pickle' % iblob)    
-    # pickle_to_file(timargs[0], 'timargs-%i-img.pickle' % iblob)    
-    # pickle_to_file(timargs[5], 'timargs-%i-sky.pickle' % iblob)    
-    # pickle_to_file(timargs[6], 'timargs-%i-psf.pickle' % iblob)    
-    # pickle_to_file(timargs[15], 'timargs-%i-imobj.pickle' % iblob)    
-
 
     try:
         return _one_blob(X)
@@ -2333,7 +2325,7 @@ def _one_blob(X):
     (iblob, Isrcs, targetwcs, bx0, by0, blobw, blobh, blobmask, subtimargs,
      srcs, bands, plots, ps, simul_opt, use_ceres, hastycho) = X
 
-    print('Fitting blob', (iblob+1), ':', len(Isrcs), 'sources, size',
+    print('Fitting blob', iblob, ':', len(Isrcs), 'sources, size',
           blobw, 'x', blobh, len(subtimargs), 'images')
 
     plots2 = False
@@ -3419,7 +3411,7 @@ def _one_blob(X):
         B.hastycho[:] = True
     
     #print('Blob finished metrics:', Time()-tlast)
-    print('Blob', iblob+1, 'finished:', Time()-tlast)
+    print('Blob', iblob, 'finished:', Time()-tlast)
 
     return B
 
