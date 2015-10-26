@@ -244,47 +244,8 @@ class LegacySurveyImage(object):
         if x0 or y0:
             twcs.setX0Y0(x0,y0)
 
-        psffn = None
-        if gaussPsf:
-            #from tractor.basics import NCircularGaussianPSF
-            #psf = NCircularGaussianPSF([psf_sigma], [1.0])
-            from tractor.basics import GaussianMixturePSF
-            v = psf_sigma**2
-            psf = GaussianMixturePSF(1., 0., 0., v, v, 0.)
-            print('WARNING: using mock PSF:', psf)
-            psf.version = '0'
-            psf.plver = ''
-        elif pixPsf:
-            # spatially varying pixelized PsfEx
-            from tractor.psfex import PixelizedPsfEx
-            print('Reading PsfEx model from', self.psffn)
-            psf = PixelizedPsfEx(self.psffn)
-            psf.shift(x0, y0)
-            psffn = self.psffn
-
-        elif const2psf:
-            from tractor.psfex import PsfExModel
-            from tractor.basics import GaussianMixtureEllipsePSF
-            # 2-component constant MoG.
-            print('Reading PsfEx model from', self.psffn)
-            psffn = self.psffn
-            psfex = PsfExModel(self.psffn)
-            psfim = psfex.at(imw/2., imh/2.)
-            psfim = psfim[5:-5, 5:-5]
-            print('Fitting PsfEx model as 2-component Gaussian...')
-            psf = GaussianMixtureEllipsePSF.fromStamp(psfim, N=2)
-            del psfim
-            del psfex
-        else:
-            assert(False)
-        print('Using PSF model', psf)
-
-        if psffn is not None:
-            hdr = fitsio.read_header(psffn)
-            psf.version = hdr.get('LEGSURV', None)
-            if psf.version is None:
-                psf.version = str(os.stat(psffn).st_mtime)
-            psf.plver = hdr.get('PLVER', '').strip()
+        psf = self.read_psf_model(gaussPsf=gaussPsf, pixPsf=pixPsf,
+                                  const2psf=const2psf)
 
         tim = Image(img, invvar=invvar, wcs=twcs, psf=psf,
                     photocal=LinearPhotoCal(zpscale, band=band),
@@ -500,6 +461,49 @@ class LegacySurveyImage(object):
                 skyobj.version = str(os.stat(fn).st_mtime)
         skyobj.plver = hdr.get('PLVER', '').strip()
         return skyobj
+
+    def read_psf_model(self, gaussPsf=False, pixPsf=False, const2psf=False):
+        psffn = None
+        if gaussPsf:
+            #from tractor.basics import NCircularGaussianPSF
+            #psf = NCircularGaussianPSF([psf_sigma], [1.0])
+            from tractor.basics import GaussianMixturePSF
+            v = psf_sigma**2
+            psf = GaussianMixturePSF(1., 0., 0., v, v, 0.)
+            print('WARNING: using mock PSF:', psf)
+            psf.version = '0'
+            psf.plver = ''
+        elif pixPsf:
+            # spatially varying pixelized PsfEx
+            from tractor.psfex import PixelizedPsfEx
+            print('Reading PsfEx model from', self.psffn)
+            psf = PixelizedPsfEx(self.psffn)
+            psf.shift(x0, y0)
+            psffn = self.psffn
+        elif const2psf:
+            from tractor.psfex import PsfExModel
+            from tractor.basics import GaussianMixtureEllipsePSF
+            # 2-component constant MoG.
+            print('Reading PsfEx model from', self.psffn)
+            psffn = self.psffn
+            psfex = PsfExModel(self.psffn)
+            psfim = psfex.at(imw/2., imh/2.)
+            psfim = psfim[5:-5, 5:-5]
+            print('Fitting PsfEx model as 2-component Gaussian...')
+            psf = GaussianMixtureEllipsePSF.fromStamp(psfim, N=2)
+            del psfim
+            del psfex
+        else:
+            assert(False)
+        print('Using PSF model', psf)
+
+        if psffn is not None:
+            hdr = fitsio.read_header(psffn)
+            psf.version = hdr.get('LEGSURV', None)
+            if psf.version is None:
+                psf.version = str(os.stat(psffn).st_mtime)
+            psf.plver = hdr.get('PLVER', '').strip()
+        return psf
 
     def run_calibs(self, **kwargs):
         '''
