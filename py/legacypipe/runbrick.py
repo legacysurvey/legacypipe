@@ -829,7 +829,10 @@ def stage_mask_junk(tims=None, targetwcs=None, W=None, H=None, bands=None,
                 continue
             # Zero it out!
             tim.inverr[slc] *= np.logical_not(inblob)
-            print('Zeroing out a source with major/minor axis', major, '/', minor)
+            ra,dec = tim.wcs.pixelToPosition(px, py)
+            bx,by = targetwcs.radec2pixelxy(ra, dec)
+            print('Zeroing out a source with major/minor axis', major, '/', minor,
+                  'at RA,Dec=(%.4f,%.4f), brick coords %i,%i' % (ra, dec, bx, by))
 
             if plots:
                 zeroed[slc] = np.logical_not(inblob)
