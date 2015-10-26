@@ -1,17 +1,3 @@
-from __future__ import print_function
-import sys
-import os
-import numpy as np
-from collections import OrderedDict
-
-from astrometry.util.fits import fits_table
-from astrometry.util.file import trymakedirs
-
-from legacypipe.common import Decals
-
-
-from astrometry.libkd.spherematch import match_radec
-
 '''
 This script is used to produce lists of CCDs or bricks, for production
 purposes (building qdo queue, eg).
@@ -33,6 +19,20 @@ python projects/desi/queue-calibs.py  | qdo load bricks -
 qdo launch bricks 1 --batchopts "-A cosmo -t 1-10 -l walltime=24:00:00 -q serial -o pipebrick-logs -j oe -l pvmem=6GB" \
     --script projects/desi/pipebrick.sh
 '''
+from __future__ import print_function
+import sys
+import os
+import numpy as np
+from collections import OrderedDict
+
+from astrometry.util.fits import fits_table
+from astrometry.util.file import trymakedirs
+
+from legacypipe.common import Decals
+
+
+from astrometry.libkd.spherematch import match_radec
+
 
 import matplotlib
 matplotlib.use('Agg')
@@ -42,50 +42,52 @@ from glob import glob
 def log(*s):
     print(' '.join([str(ss) for ss in s]), file=sys.stderr)
 
-if __name__ == '__main__':
-    import optparse
+def main():
+    """Main program.
+    """
+    import argparse
 
-    parser = optparse.OptionParser()
-    parser.add_option('--calibs', action='store_true', default=False,
+    parser = argparse.ArgumentParser(description="This script is used to produce lists of CCDs or bricks, for production purposes (building qdo queue, eg).")
+    parser.add_argument('--calibs', action='store_true',
                       help='Output CCDs that need to be calibrated.')
 
-    parser.add_option('--nper', type=int, default=None,
+    parser.add_argument('--nper', type=int, default=None,
                       help='Batch N calibs per line')
 
-    parser.add_option('--forced', action='store_true', default=False,
+    parser.add_argument('--forced', action='store_true',
                       help='Output forced-photometry commands')
 
-    parser.add_option('--lsb', action='store_true', default=False,
+    parser.add_argument('--lsb', action='store_true',
                       help='Output Low-Surface-Brightness commands')
-    
-    parser.add_option('--touching', action='store_true', default=False,
+
+    parser.add_argument('--touching', action='store_true',
                       help='Cut to only CCDs touching selected bricks')
 
-    parser.add_option('--check', action='store_true', default=False,
+    parser.add_argument('--check', action='store_true',
                       help='Check which calibrations actually need to run.')
-    parser.add_option('--check-coadd', action='store_true', default=False,
+    parser.add_argument('--check-coadd', action='store_true',
                       help='Check which caoadds actually need to run.')
-    parser.add_option('--out', help='Output filename for calibs, default %default',
+    parser.add_argument('--out', help='Output filename for calibs, default %(default)s',
                       default='jobs')
-    parser.add_option('--command', action='store_true', default=False,
+    parser.add_argument('--command', action='store_true',
                       help='Write out full command-line to run calib')
-    
-    parser.add_option('--maxdec', type=float, help='Maximum Dec to run')
-    parser.add_option('--mindec', type=float, help='Minimum Dec to run')
 
-    parser.add_option('--region', help='Region to select')
+    parser.add_argument('--maxdec', type=float, help='Maximum Dec to run')
+    parser.add_argument('--mindec', type=float, help='Minimum Dec to run')
 
-    parser.add_option('--bricks', help='Set bricks.fits file to load')
-    parser.add_option('--ccds', help='Set ccds.fits file to load')
+    parser.add_argument('--region', help='Region to select')
 
-    parser.add_option('--delete-sky', default=False, action='store_true',
+    parser.add_argument('--bricks', help='Set bricks.fits file to load')
+    parser.add_argument('--ccds', help='Set ccds.fits file to load')
+
+    parser.add_argument('--delete-sky', action='store_true',
                       help='Delete any existing sky calibration files')
-    parser.add_option('--delete-pvastrom', default=False, action='store_true',
+    parser.add_argument('--delete-pvastrom', action='store_true',
                       help='Delete any existing PV WCS calibration files')
 
-    parser.add_option('--write-ccds', help='Write CCDs list as FITS table?')
+    parser.add_argument('--write-ccds', help='Write CCDs list as FITS table?')
 
-    opt,args = parser.parse_args()
+    opt = parser.parse_args()
 
     decals = Decals()
     if opt.bricks is not None:
@@ -215,7 +217,7 @@ if __name__ == '__main__':
         # which has_[grz] columns.
         B.cut((B.has_g == 1) * (B.has_r == 1) * (B.has_z == 1))
         log('Cut to', len(B), 'bricks with grz coverage')
-        
+
     elif opt.region == 'nogrz':
         # Bricks without grz coverage.
         # Be sure to use  --bricks decals-bricks-in-dr1.fits
@@ -264,7 +266,7 @@ if __name__ == '__main__':
             keep[j] = True
         T.cut(keep)
         log('Cut to', len(T), 'CCDs near bricks')
-    
+
     # Aside -- how many near DR1=1 CCDs?
     if False:
         T2 = D.get_ccds()
@@ -309,7 +311,7 @@ if __name__ == '__main__':
 
     if not (opt.calibs or opt.forced or opt.lsb):
         sys.exit(0)
-    
+
     bands = 'grz'
     log('Filters:', np.unique(T.filter))
     T.cut(np.flatnonzero(np.array([f in bands for f in T.filter])))
@@ -349,12 +351,12 @@ if __name__ == '__main__':
                                  (expstr, T.ccdname[i]))
             imgfn = os.path.join(decals.decals_dir, 'images',
                                  T.image_filename[i].strip())
-            if (not os.path.exists(imgfn) and 
+            if (not os.path.exists(imgfn) and
                 imgfn.endswith('.fz') and
                 os.path.exists(imgfn[:-3])):
                 imgfn = imgfn[:-3]
 
-            f.write('python legacypipe/forced-photom-decam.py %s %i DR1 %s\n' % 
+            f.write('python legacypipe/forced-photom-decam.py %s %i DR1 %s\n' %
                     (imgfn, T.cpimage_hdu[i], outfn))
 
         f.close()
@@ -373,7 +375,7 @@ if __name__ == '__main__':
         f.close()
         log('Wrote', opt.out)
         sys.exit(0)
-        
+
 
     log('Writing calibs to', opt.out)
     f = open(opt.out,'w')
@@ -430,4 +432,9 @@ if __name__ == '__main__':
 
     f.close()
     log('Wrote', opt.out)
-
+    return 0
+#
+#
+#
+if __name__ == '__main__':
+    sys.exit(main())

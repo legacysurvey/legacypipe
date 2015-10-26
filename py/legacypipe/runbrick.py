@@ -126,7 +126,7 @@ def stage_tims(W=3600, H=3600, pixscale=0.262, brickname=None,
         brick = decals.get_brick_by_name(brickname)
         if brick is None:
             raise RunbrickError('No such brick: "%s"' % brickname)
-            
+
         print('Chosen brick:')
         brick.about()
         brickid = brick.brickid
@@ -272,7 +272,7 @@ def stage_tims(W=3600, H=3600, pixscale=0.262, brickname=None,
         print('Calib dir:', decals.get_calib_dir())
         caldir = decals.get_calib_dir() + '/'
         reqd = [fn.replace(caldir, '') for fn in reqd]
-        
+
         cmd = 'rsync -LRrv edison:/scratch1/scratchdirs/desiproc/decals-dir/calib/./"{%s}" %s' % (','.join(reqd), caldir)
         print(cmd)
         os.system(cmd)
@@ -285,11 +285,11 @@ def stage_tims(W=3600, H=3600, pixscale=0.262, brickname=None,
         print('Required image files:', reqd)
         imgdir = decals.get_image_dir() + '/'
         reqd = [fn.replace(imgdir, '') for fn in reqd]
-        
+
         cmd = 'rsync -LRrv edison:/scratch1/scratchdirs/desiproc/images/./"{%s}" %s' % (','.join(reqd), imgdir)
         print(cmd)
         os.system(cmd)
-        
+
     if do_calibs:
         kwa = dict(git_version=gitver)
         if gaussPsf:
@@ -326,10 +326,10 @@ def stage_tims(W=3600, H=3600, pixscale=0.262, brickname=None,
                 fulltim.sky.addTo(fullmod)
                 midsky = np.median(fullmod)
                 ima = dict(vmin=midsky -2.*tim.sig1, vmax=midsky + 2. * tim.sig1)
-    
+
                 print('Fulltim median:', np.median(fulltim.data))
                 print('Mod median', midsky)
-    
+
                 plt.clf()
                 plt.subplot(1,2,1)
                 dimshow(fulltim.data, cmap='gray', **ima)
@@ -342,7 +342,7 @@ def stage_tims(W=3600, H=3600, pixscale=0.262, brickname=None,
                 plt.axis(ax)
                 plt.suptitle('Full image: ' + tim.name)
                 ps.savefig()
-    
+
                 #subtim = im.get_tractor_image(splinesky=True, gaussPsf=True, subsky=False,
                 #                              slc=tim.slice)
                 plt.clf()
@@ -489,11 +489,11 @@ def _coadds(tims, bands, targetwcs,
         C.T.nobs    = np.zeros((len(ix), len(bands)), np.uint8)
         C.T.anymask = np.zeros((len(ix), len(bands)), np.int16)
         C.T.allmask = np.zeros((len(ix), len(bands)), np.int16)
-        
+
     tinyw = 1e-30
     for iband,band in enumerate(bands):
         print('Computing coadd for band', band)
-        
+
         cow    = np.zeros((H,W), np.float32)
         cowimg = np.zeros((H,W), np.float32)
 
@@ -506,7 +506,7 @@ def _coadds(tims, bands, targetwcs,
             galdetiv = np.zeros((H,W), np.float32)
             C.galdetivs.append(galdetiv)
             kwargs.update(galdetiv=galdetiv)
-        
+
         if mods:
             cowmod = np.zeros((H,W), np.float32)
             cochi2 = np.zeros((H,W), np.float32)
@@ -733,7 +733,7 @@ def _write_band_images(band,
     hdr.delete('IMAGEW')
     hdr.delete('IMAGEH')
     hdr.add_record(dict(name='EQUINOX', value=2000.))
-    
+
     imgs = [
         ('image', 'image',  cowimg,  False),
         ]
@@ -914,13 +914,13 @@ def stage_image_coadds(targetwcs=None, bands=None, tims=None, outdir=None,
                 if R is None:
                     continue
                 Yo,Xo,Yi,Xi = R
-                
+
                 proj = np.zeros((H,W), np.float32)
                 haveproj = np.zeros((H,W), bool)
-    
+
                 proj[Yo,Xo] = tim.data[Yi,Xi]
                 haveproj[Yo,Xo] = (tim.inverr[Yi,Xi] > 0)
-    
+
                 xx,ylo,ymed,yhi = [],[],[],[]
                 for i in range(W):
                     I = np.flatnonzero(haveproj[:,i])
@@ -932,7 +932,7 @@ def stage_image_coadds(targetwcs=None, bands=None, tims=None, outdir=None,
                     ylo.append(lo)
                     ymed.append(m)
                     yhi.append(hi)
-    
+
                 if len(xx):
                     color = cc[ci % len(cc)]
                     pargs = dict(color=color)
@@ -989,7 +989,7 @@ def stage_image_coadds(targetwcs=None, bands=None, tims=None, outdir=None,
             U = np.flatnonzero((rr >= brick.ra1 ) * (rr < brick.ra2 ) *
                                (dd >= brick.dec1) * (dd < brick.dec2))
             print(len(U), 'of', W*H, 'pixels are unique to this brick')
-    
+
         # depth histogram bins
         depthbins = np.arange(19.9, 25.101, 0.1)
         depthbins[0] = 0.
@@ -997,7 +997,7 @@ def stage_image_coadds(targetwcs=None, bands=None, tims=None, outdir=None,
         D = fits_table()
         D.depthlo = depthbins[:-1].astype(np.float32)
         D.depthhi = depthbins[1: ].astype(np.float32)
-        
+
         for band,detiv,galdetiv in zip(bands, C.detivs, C.galdetivs):
             for det,name in [(detiv, 'ptsrc'), (galdetiv, 'gal')]:
                 # compute stats for 5-sigma detection
@@ -1013,7 +1013,7 @@ def stage_image_coadds(targetwcs=None, bands=None, tims=None, outdir=None,
                 # histogram
                 D.set('counts_%s_%s' % (name, band),
                       np.histogram(depth, bins=depthbins)[0].astype(np.int32))
-    
+
         del U
         del depth
         del det
@@ -1104,7 +1104,7 @@ def stage_srcs(coimgs=None, cons=None,
     tlast = Time()
     if not no_sdss:
         from legacypipe.sdss import get_sdss_sources
-        
+
         # Read SDSS sources
         cols = ['parent', 'tai', 'mjd', 'psf_fwhm', 'objc_flags2', 'flags2',
                 'devflux_ivar', 'expflux_ivar', 'calib_status', 'raerr',
@@ -1178,7 +1178,7 @@ def stage_srcs(coimgs=None, cons=None,
         # Note that we shouldn't need to drop sources that are within this
         # current brick's unique area, because we cut to sources that are
         # BRICK_PRIMARY within their own brick.
-        
+
         # Create sources for these catalog entries
         ### see forced-photom-decam.py for some additional patchups?
 
@@ -1200,14 +1200,14 @@ def stage_srcs(coimgs=None, cons=None,
                       'SDSS sources within neighbouring bricks')
                 Tsdss.cut(keep_sdss)
                 sdsscat = Catalog(*[src for src,keep in zip(sdsscat,keep_sdss) if keep])
-        
+
         # Add the new sources to the 'avoid_xy' list, which are
         # existing sources that should be avoided when detecting new
         # faint sources.
         ax = np.round(B.xx - 1).astype(int)
         ay = np.round(B.yy - 1).astype(int)
         avoid_xy.extend(zip(ax, ay))
-        
+
         print('Subtracting tractor-on-bricks sources belonging to other bricks')
         ## HACK -- note that this is going to screw up fracflux and
         ## other metrics for sources in this brick that overlap
@@ -1308,7 +1308,7 @@ def stage_srcs(coimgs=None, cons=None,
     detmaps, detivs, satmap = detection_maps(tims, targetwcs, bands, mp)
     tnow = Time()
     print('[parallel srcs] Detmaps:', tnow-tlast)
-            
+
     tlast = tnow
     # Median-smooth detection maps
     binning = 4
@@ -1375,7 +1375,7 @@ def stage_srcs(coimgs=None, cons=None,
             # Spread the True pixels wherever detiv==0
             binary_propagation(saturated_pix, mask=(detiv == 0),
                                output=saturated_pix)
-            
+
     # Saturated blobs -- create a source for each?!
     from scipy.ndimage.measurements import label, find_objects, center_of_mass
 
@@ -1400,11 +1400,11 @@ def stage_srcs(coimgs=None, cons=None,
             fluxes = dict([(band, 1.) for band in bands])
             satcat.append(PointSource(RaDecPos(r, d),
                                       NanoMaggies(order=bands, **fluxes)))
-        
+
     else:
         Tsat = None
         satcat = []
-    
+
     if plots:
         plt.clf()
         dimshow(satmap)
@@ -1537,7 +1537,7 @@ def stage_srcs(coimgs=None, cons=None,
                          detiv)
             fitsio.write('detsn-%s-%s.fits' % (brickname, b),
                          detmap * np.sqrt(detiv))
-        
+
     rtn = dict()
     for k in keys:
         rtn[k] = locals()[k]
@@ -1730,7 +1730,7 @@ def stage_fitblobs(T=None,
               (ty > -margin) * (ty < H+margin))
     print('Cut to', len(tycho), 'Tycho-2 stars within brick')
     del ok,tx,ty
-    
+
     if plots:
         ok,tx,ty = targetwcs.radec2pixelxy(tycho.ra, tycho.dec)
         plt.clf()
@@ -1744,7 +1744,7 @@ def stage_fitblobs(T=None,
         plt.axis(ax)
         plt.title('Tycho-2 stars')
         ps.savefig()
-    
+
     iter = _blob_iter(blobslices, blobsrcs, blobs, targetwcs, tims,
                       cat, bands, plots, ps, simul_opt, use_ceres, tycho)
     # to allow debugpool to only queue tasks one at a time
@@ -1879,7 +1879,7 @@ def stage_fitblobs_finish(
         for k in ['blob', 'brickid', 'brickname', 'dchisq', 'objid']:
             TT.set(k, T.get(k))
         TT.type = np.array([fits_typemap[type(src)] for src in newcat])
-            
+
         hdr = fitsio.FITSHDR()
         for srctype in ['ptsrc', 'simple', 'dev','exp','comp']:
             xcat = Catalog(*[m.get(srctype,None) for m in BB.all_models])
@@ -1901,7 +1901,7 @@ def stage_fitblobs_finish(
 
             namemap = dict(ptsrc='psf', simple='simp')
             prefix = namemap.get(srctype,srctype)
-            
+
             TT,hdr = prepare_fits_catalog(xcat, None, TT, hdr, bands, None,
                                           allbands=allbands, prefix=prefix+'_',
                                           save_invvars=False)
@@ -1918,7 +1918,7 @@ def stage_fitblobs_finish(
                     continue
                 fluxivs[j, bandmap] = f
             TT.set('%s_decam_flux_ivar' % prefix, fluxivs)
-            
+
         TT.delete_column('psf_shapeExp')
         TT.delete_column('psf_shapeDev')
         TT.delete_column('psf_fracDev')
@@ -1999,7 +1999,7 @@ def _blob_iter(blobslices, blobsrcs, blobs,
     ty = np.clip(ty, 0, H-1)
     tychoblobs = set(blobs[ty, tx])
     print('Blobs containing Tycho-2 stars:', tychoblobs)
-    
+
     # sort blobs by size so that larger ones start running first
     from collections import Counter
     blobvals = Counter(blobs[blobs>=0])
@@ -2033,7 +2033,7 @@ def _blob_iter(blobslices, blobsrcs, blobs,
             break
 
         hastycho = iblob in tychoblobs
-        
+
         print('Blob number', nblob+1, 'of', len(blobslices), ': blob', iblob,
               len(Isrcs), 'sources, size', blobw, 'x', blobh,
               'center', (bx0+bx1)/2, (by0+by1)/2, 'npix', np.sum(blobmask),
@@ -2129,7 +2129,7 @@ def _select_model(chisqs, nparams, galaxy_margin):
 
     if diff < cut:
         return keepmod
-    
+
     # We're going to keep this source!
     if chisqs['ptsrc'] > chisqs['simple']:
         #print('Keeping source; PTSRC is better than SIMPLE')
@@ -2140,7 +2140,7 @@ def _select_model(chisqs, nparams, galaxy_margin):
 
     if not 'exp' in chisqs:
         return keepmod
-        
+
     # This is our "upgrade" threshold: how much better a galaxy
     # fit has to be versus ptsrc, and comp versus galaxy.
     cut = galaxy_margin
@@ -2160,7 +2160,7 @@ def _select_model(chisqs, nparams, galaxy_margin):
     if not (expdiff > cut or devdiff > cut):
         #print('Keeping', keepmod)
         return keepmod
-    
+
     if expdiff > devdiff:
         #print('Upgrading from PTSRC to EXP: diff', expdiff)
         keepmod = 'exp'
@@ -2170,7 +2170,7 @@ def _select_model(chisqs, nparams, galaxy_margin):
 
     if not 'comp' in chisqs:
         return keepmod
-        
+
     diff = chisqs['comp'] - chisqs[keepmod]
     #print('Comparing', keepmod, 'to comp.  cut:', cut, 'comp:', diff)
     if diff < cut:
@@ -2218,7 +2218,7 @@ def _fit_fluxes(cat, tims, bands, use_ceres, alphas):
             src.getBrightness().freezeAllBut(b)
         # Images for this band
         btims = [tim for tim in tims if tim.band == b]
-        
+
         btr = Tractor(btims, cat)
         btr.freezeParam('images')
         done = False
@@ -2246,7 +2246,7 @@ def _fit_fluxes(cat, tims, bands, use_ceres, alphas):
                 traceback.print_exc()
                 # carry on
 
-                
+
 class SourceModels(object):
     '''
     This class maintains a list of the model patches for a set of sources
@@ -2260,7 +2260,7 @@ class SourceModels(object):
     def restore_images(self, tims):
         for tim,img in zip(tims, self.orig_images):
             tim.data = img
-            
+
     def create(self, tims, srcs, subtract=False):
         '''
         Note that this modifies the *tims* if subtract=True.
@@ -2304,7 +2304,7 @@ class SourceModels(object):
             if mod is not None:
                 mod.addTo(tim.getImage(), scale=-1)
             mods[i] = mod
-                
+
     def model_masks(self, i, src):
         modelMasks = []
         for mods in self.models:
@@ -2315,7 +2315,7 @@ class SourceModels(object):
                 d[src] = Patch(mod.x0, mod.y0, mod.patch != 0)
         return modelMasks
 
-                
+
 
 
 def _one_blob(X):
@@ -2419,7 +2419,7 @@ def _one_blob(X):
                      color=ccmap[tim.band])
         plt.xlabel('signal/noise per pixel')
         ps.savefig()
-            
+
     subcat = Catalog(*srcs)
     subtr = Tractor(subtims, subcat)
     subtr.freezeParam('images')
@@ -2427,7 +2427,7 @@ def _one_blob(X):
     #print('Subtims:', [s.shape for s in subtims])
 
     _fit_fluxes(subcat, subtims, bands, use_ceres, alphas)
-    
+
     subcat.thawAllRecursive()
 
     if plots:
@@ -2463,7 +2463,7 @@ def _one_blob(X):
         models.save_images(subtims)
         # Create & subtract initial models for each tim x each source
         models.create(subtims, srcs, subtract=True)
-        
+
         # For sources, in decreasing order of brightness
         for numi,i in enumerate(Ibright):
             #tsrc = Time()
@@ -2473,7 +2473,7 @@ def _one_blob(X):
 
             # Add this source's initial model back in.
             models.add(i, subtims)
-            
+
             if bigblob:
                 # Create super-local sub-sub-tims around this source
 
@@ -2482,7 +2482,7 @@ def _one_blob(X):
                 mods = [mod[i] for mod in models.models]
                 srctims,modelMasks = _get_subimages(subtims, mods, src)
                 #print('Creating srctims:', Time()-tbb0)
-                    
+
                 if plots and (numi < 3 or numi >= len(Ibright)-3):
                     bx1 = bx0 + blobw
                     by1 = by0 + blobh
@@ -2500,7 +2500,7 @@ def _one_blob(X):
                     #     dec = [p.dec for p in rd]
                     #     ok,x,y = targetwcs.radec2pixelxy(ra, dec)
                     #     plt.plot(x, y, 'g-')
-                    # 
+                    #
                     #     ra,dec = tim.subwcs.pixelxy2radec(tx, ty)
                     #     ok,x,y = targetwcs.radec2pixelxy(ra, dec)
                     #     plt.plot(x, y, 'm-')
@@ -2582,7 +2582,7 @@ def _one_blob(X):
 
             # Re-remove the final fit model for this source
             models.update_and_subtract(i, src, subtims)
-            
+
             srctractor.setModelMasks(None)
             disable_galaxy_cache()
 
@@ -2699,7 +2699,7 @@ def _one_blob(X):
 
         # Add this source's initial model back in.
         models.add(i, subtims)
-        
+
         if bigblob:
             mods = [mod[i] for mod in models.models]
             srctims,modelMasks = _get_subimages(subtims, mods, src)
@@ -2731,7 +2731,7 @@ def _one_blob(X):
             srctims = subtims
             srctarget = subtarget
             srcpix = None
-            
+
         srctractor = Tractor(srctims, [src])
         srctractor.freezeParams('images')
         srctractor.setModelMasks(modelMasks)
@@ -2760,7 +2760,7 @@ def _one_blob(X):
             # _plot_mods(srctims, [list(srctractor.getModelImages())],
             #            ['Model selection init'], bands, None, None,
             #            None, srch,srcw, ps, chi_plots=False)
-        
+
         # use log likelihood rather than log prior because we use
         # priors on, eg, the ellipticity to avoid crazy fits.  Here we
         # sort of want to just evaluate the fit quality regardless of
@@ -2776,13 +2776,13 @@ def _one_blob(X):
         # This is our "upgrade" threshold: how much better a galaxy
         # fit has to be versus ptsrc, and comp versus galaxy.
         galaxy_margin = 3.**2 + (nparams['exp'] - nparams['ptsrc'])
-        
+
         # *chisqs* is actually chi-squared improvement vs no source;
         # larger is a better fit.
         chisqs = dict(none=0)
 
         oldmodel, ptsrc, simple, dev, exp, comp = _initialize_models(src)
-        
+
         trymodels = [('ptsrc', ptsrc), ('simple', simple)]
 
         if oldmodel == 'ptsrc':
@@ -2845,7 +2845,7 @@ def _one_blob(X):
                           NanoMaggies.nanomaggiesToMag(np.sqrt(1./tim.detiv1)
                                                        * Nsigma))
                     print('overlapping pixels:', len(Yo))
-                    
+
                     # Hit DECaLS depth targets?
                     pctiles = [100-90, 100-95, 100-98]
                     if srcpix is None:
@@ -2861,12 +2861,12 @@ def _one_blob(X):
                           'vs target mags', t1, t2, t3)
                     print('  detivs', p1, p2, p3, 'vs targets',
                           target1, target2, target3)
-                    
+
                     if p1 >= target1 and p2 >= target2 and p3 >= target3:
                         # Got enough depth, thank you!
                         print('Reached target depth!')
                         break
-            
+
             if plots:
                 dtims = [tim for tim in srctims if tim.name in timsubset]
                 plt.clf()
@@ -2875,7 +2875,7 @@ def _one_blob(X):
                 dimshow(get_rgb(coimgs, bands))
                 plt.title('To-depth data')
                 ps.savefig()
-                    
+
         allflags = {}
         for name,newsrc in trymodels:
 
@@ -2892,7 +2892,7 @@ def _one_blob(X):
                     trymodels.extend([
                         ('dev', dev), ('exp', exp), ('comp', comp)])
                 continue
-                
+
             if name == 'comp' and newsrc is None:
                 # Compute the comp model if exp or dev would be accepted
                 if (max(chisqs['dev'], chisqs['exp']) <
@@ -2906,7 +2906,7 @@ def _one_blob(X):
                     dev.getShape()).copy()
             #print('New source:', newsrc)
             srccat[0] = newsrc
-                
+
             # Use the same modelMask shapes as the original source ('src').
             # Need to create newsrc->mask mappings though:
             mm = []
@@ -2922,7 +2922,7 @@ def _one_blob(X):
 
             # Save these modelMasks for later...
             newsrc_mm = mm
-            
+
             #lnp = srctractor.getLogProb()
             #print('Initial log-prob:', lnp)
             #print('vs original src: ', lnp - lnp0)
@@ -2960,14 +2960,14 @@ def _one_blob(X):
 
                 #print('Optimizing with tims', [tim.shape for tim in dtractor.images])
                 #t0 = Time()
-                
+
                 for step in range(50):
                     #print('optimizing:', newsrc)
                     dlnp,X,alpha = dtractor.optimize(**optargs)
                     #print('  dlnp:', dlnp, 'new src', newsrc)
                     if dlnp < 0.1:
                         break
-    
+
                 # print('Mod', name, 'round0 opt', Time()-t0)
                 # print('New source (after to-depth round optimization):', newsrc)
 
@@ -2979,7 +2979,7 @@ def _one_blob(X):
                     dimshow(get_rgb(comods, bands))
                     plt.title('To-depth opt: ' + name)
                     ps.savefig()
-                
+
             # print('Optimizing with tims', [tim.shape for tim in srctractor.images])
             #t0 = Time()
 
@@ -3057,7 +3057,7 @@ def _one_blob(X):
                     d[newsrc] = Patch(mod.x0, mod.y0, mod.patch != 0)
                     modtims.append(tim)
                     mm.append(d)
-                    
+
             # print('Second-round shapes:', [tim.shape for tim in modtims])
 
             if modtims is not None:
@@ -3065,9 +3065,9 @@ def _one_blob(X):
                 modtractor.freezeParams('images')
                 modtractor.setModelMasks(mm)
                 enable_galaxy_cache()
-    
+
                 #t0 = Time()
-                
+
                 # Run another round of opt.
                 for step in range(50):
                     dlnp,X,alpha = modtractor.optimize(**optargs)
@@ -3076,9 +3076,9 @@ def _one_blob(X):
                         break
                 else:
                     thisflags |= FLAG_STEPS_B
-    
+
                 # print('Mod', name, 'round2 opt', Time()-t0)
-    
+
                 if plots:
                     plt.clf()
                     modimgs = list(modtractor.getModelImages())
@@ -3110,7 +3110,7 @@ def _one_blob(X):
                     chisq += (chi**2).sum()
                 ivs[iparam] = chisq
             newsrc.thawAllParams()
-                
+
             # Use the original 'srctractor' here so that the different
             # models are evaluated on the same pixels.
             # ---> AND with the same modelMasks as the original source...
@@ -3143,7 +3143,7 @@ def _one_blob(X):
                 print(srccat[0])
 
                 srctractor.setModelMasks(None)
-                
+
                 plt.subplot(rows, cols, imod+1)
 
                 if modname != 'none':
@@ -3211,7 +3211,7 @@ def _one_blob(X):
 
     models.restore_images(subtims)
     del models
-    
+
     print('Blob finished model selection:', Time()-tlast)
     tlast = Time()
 
@@ -3232,7 +3232,7 @@ def _one_blob(X):
     # This does horribly -- fluffy galaxies go out of control because
     # they're only constrained by pixels within this blob.
     #_fit_fluxes(subcat, subtims, bands, use_ceres, alphas)
-    
+
     # print('After cutting sources:')
     # for src,dchi in zip(B.sources, B.dchisqs):
     #     print('  source', src, 'max dchisq', max(dchi), 'dchisqs', dchi)
@@ -3278,7 +3278,7 @@ def _one_blob(X):
         #print('Computing variances for source:', src)
         #subtr.printThawedParams()
         #print('halfsize:', getattr(src, 'halfsize', None))
-        
+
         allderivs = subtr.getDerivs()
         for iparam,derivs in enumerate(allderivs):
             chisq = 0
@@ -3364,7 +3364,7 @@ def _one_blob(X):
                 # (patch**2)/counts**2; counts**2 drops out of the
                 # denom.  If you have an identical source with twice the flux,
                 # this results in fracflux being 2.0
-                fracflux_num[isrc,iband] += np.sum((mod[slc] - patch.patch) * 
+                fracflux_num[isrc,iband] += np.sum((mod[slc] - patch.patch) *
                                                    np.abs(patch.patch)) / np.sum(patch.patch**2)
                 fracflux_den[isrc,iband] += np.sum(np.abs(patch.patch)) / np.abs(counts[isrc])
 
@@ -3409,7 +3409,7 @@ def _one_blob(X):
     B.hastycho = np.zeros(len(B), bool)
     if hastycho:
         B.hastycho[:] = True
-    
+
     #print('Blob finished metrics:', Time()-tlast)
     print('Blob', iblob, 'finished:', Time()-tlast)
 
@@ -3527,7 +3527,7 @@ def _get_mod(X):
         if h > 512:
             print('halfsize', h, 'for', src)
             src.halfsize = 512
-    
+
     mod = tractor.getModelImage(0)
     print('Getting model for', tim, ':', Time()-t0)
 
@@ -3634,7 +3634,7 @@ def stage_coadds(bands=None, version_header=None, targetwcs=None,
 
     for c in ['nobs', 'anymask', 'allmask']:
         T.set(c, C.T.get(c))
-        
+
 
     # Compute the brick's unique pixels.
     U = None
@@ -3653,7 +3653,7 @@ def stage_coadds(bands=None, version_header=None, targetwcs=None,
     D = fits_table()
     D.depthlo = depthbins[:-1].astype(np.float32)
     D.depthhi = depthbins[1: ].astype(np.float32)
-    
+
     for band,detiv,galdetiv in zip(bands, C.detivs, C.galdetivs):
         for det,name in [(detiv, 'ptsrc'), (galdetiv, 'gal')]:
             # compute stats for 5-sigma detection
@@ -3679,7 +3679,7 @@ def stage_coadds(bands=None, version_header=None, targetwcs=None,
     D.writeto(fn)
     print('Wrote', fn)
     del D
-        
+
     tmpfn = create_temp(suffix='.png')
     for name,ims,rgbkw in [('image', C.coimgs, rgbkwargs),
                            ('model', C.comods, rgbkwargs),
@@ -3796,7 +3796,7 @@ def stage_wise_forced(
         unwise_w12_dir = unwise_dir
     if unwise_w34_dir is None:
         unwise_w34_dir = unwise_dir
-        
+
     # Here we assume the targetwcs is axis-aligned and that the
     # edge midpoints yield the RA,Dec limits (true for TAN).
     r,d = targetwcs.pixelxy2radec(np.array([1,   W,   W/2, W/2]),
@@ -3845,7 +3845,7 @@ def _unwise_phot(X):
             W = unwise_forcedphot(wcat, tiles, roiradecbox=roiradec, bands=[band],
                                   unwise_dir=unwise_dir, use_ceres=False)
     return W
-        
+
 
 '''
 Write catalog output
@@ -3942,7 +3942,7 @@ def stage_writecat(
 
     primhdr.add_record(dict(name='PRODTYPE', value='catalog',
                             comment='NOAO data product type'))
-    
+
     if AP is not None:
         for i,ap in enumerate(apertures_arcsec):
             primhdr.add_record(dict(name='APRAD%i' % i, value=ap,
@@ -4399,7 +4399,7 @@ def run_brick(brick, radec=None, pixscale=0.262,
     - *write_metrics*: boolean; write out a variety of useful metrics
 
     - *on_bricks*: boolean; tractor-on-bricks?
-    
+
     - *gaussPsf*: boolean; use a simpler single-component Gaussian PSF model?
 
     - *pixPsf*: boolean; use the pixelized PsfEx PSF model and FFT convolution?
@@ -4455,7 +4455,7 @@ def run_brick(brick, radec=None, pixscale=0.262,
     from astrometry.util.multiproc import multiproc
 
     from legacypipe.utils import MyMultiproc
-    
+
     initargs = {}
     kwargs = {}
 
@@ -4586,127 +4586,128 @@ def run_brick(brick, radec=None, pixscale=0.262,
 
 
 def main():
-    import optparse
+    import argparse
     import logging
 
     from astrometry.util.ttime import MemMeas, CpuMeas
     import datetime
+    de = 'Main "pipeline" script for the Dark Energy Camera Legacy Survey (DECaLS) data reductions.'
 
     ep = '''
-eg, to run a small field containing a cluster:
-\n
+e.g., to run a small field containing a cluster:
+
 python -u legacypipe/runbrick.py --plots --brick 2440p070 --zoom 1900 2400 450 950 -P pickles/runbrick-cluster-%%s.pickle
-\n
+
 '''
-    parser = optparse.OptionParser(epilog=ep)
-    parser.add_option('-f', '--force-stage', dest='force', action='append', default=[],
+    parser = argparse.ArgumentParser(description=de,epilog=ep)
+    parser.add_argument('-f', '--force-stage', dest='force', action='append', default=[],
                       help="Force re-running the given stage(s) -- don't read from pickle.")
-    parser.add_option('-F', '--force-all', dest='forceall', action='store_true',
+    parser.add_argument('-F', '--force-all', dest='forceall', action='store_true',
                       help='Force all stages to run')
-    parser.add_option('-s', '--stage', dest='stage', default=[], action='append',
+    parser.add_argument('-s', '--stage', dest='stage', default=[], action='append',
                       help="Run up to the given stage(s)")
-    parser.add_option('-n', '--no-write', dest='write', default=True, action='store_false')
-    parser.add_option('-v', '--verbose', dest='verbose', action='count', default=0,
+    parser.add_argument('-n', '--no-write', dest='write', default=True, action='store_false')
+    parser.add_argument('-v', '--verbose', dest='verbose', action='count', default=0,
                       help='Make more verbose')
 
-    parser.add_option('-b', '--brick', help='Brick name to run; required unless --radec is given')
+    parser.add_argument('-b', '--brick', help='Brick name to run; required unless --radec is given')
 
-    parser.add_option('--radec', help='RA,Dec center for a custom location (not a brick)',
+    parser.add_argument('--radec', help='RA,Dec center for a custom location (not a brick)',
                       nargs=2)
-    parser.add_option('--pixscale', type=float, default=0.262,
+    parser.add_argument('--pixscale', type=float, default=0.262,
                       help='Pixel scale of the output coadds (arcsec/pixel)')
 
-    parser.add_option('-d', '--outdir', help='Set output base directory')
-    parser.add_option('--decals-dir', type=str, default=None,
+    parser.add_argument('-d', '--outdir', help='Set output base directory')
+    parser.add_argument('--decals-dir', type=str, default=None,
                       help='Overwrite the $DECALS_DIR environment variable')
 
-    parser.add_option('--threads', type=int, help='Run multi-threaded')
-    parser.add_option('-p', '--plots', dest='plots', action='store_true',
+    parser.add_argument('--threads', type=int, help='Run multi-threaded')
+    parser.add_argument('-p', '--plots', dest='plots', action='store_true',
                       help='Per-blob plots?')
-    parser.add_option('--plots2', action='store_true',
+    parser.add_argument('--plots2', action='store_true',
                       help='More plots?')
 
-    parser.add_option('-P', '--pickle', dest='picklepat', help='Pickle filename pattern, with %i, default %default',
+    parser.add_argument('-P', '--pickle', dest='picklepat', help='Pickle filename pattern, with %i, default %default',
                       default='pickles/runbrick-%(brick)s-%%(stage)s.pickle')
 
-    parser.add_option('--plot-base', help='Base filename for plots, default brick-BRICK')
-    parser.add_option('--plot-number', type=int, default=0, help='Set PlotSequence starting number')
+    parser.add_argument('--plot-base', help='Base filename for plots, default brick-BRICK')
+    parser.add_argument('--plot-number', type=int, default=0, help='Set PlotSequence starting number')
 
-    parser.add_option('-W', '--width', type=int, default=3600, help='Target image width (default %default)')
-    parser.add_option('-H', '--height', type=int, default=3600, help='Target image height (default %default)')
+    parser.add_argument('-W', '--width', type=int, default=3600, help='Target image width (default %default)')
+    parser.add_argument('-H', '--height', type=int, default=3600, help='Target image height (default %default)')
 
-    parser.add_option('--zoom', type=int, nargs=4, help='Set target image extent (default "0 3600 0 3600")')
+    parser.add_argument('--zoom', type=int, nargs=4, help='Set target image extent (default "0 3600 0 3600")')
 
-    parser.add_option('--no-ceres', dest='ceres', default=True, action='store_false',
+    parser.add_argument('--no-ceres', dest='ceres', default=True, action='store_false',
                       help='Do not use Ceres Solver')
 
-    parser.add_option('--nblobs', type=int, help='Debugging: only fit N blobs')
-    parser.add_option('--blob', type=int, help='Debugging: start with blob #')
-    parser.add_option('--blobxy', type=int, nargs=2, default=None, action='append',
+    parser.add_argument('--nblobs', type=int, help='Debugging: only fit N blobs')
+    parser.add_argument('--blob', type=int, help='Debugging: start with blob #')
+    parser.add_argument('--blobxy', type=int, nargs=2, default=None, action='append',
                       help='Debugging: run the single blob containing pixel <bx> <by>; this option can be repeated to run multiple blobs.')
 
-    parser.add_option('--no-pv', dest='pv', default='True', action='store_false',
+    parser.add_argument('--no-pv', dest='pv', default='True', action='store_false',
                       help='Do not use Community Pipeline WCS with PV distortion terms -- solve using Astrometry.net')
 
-    parser.add_option('--pipe', default=False, action='store_true',
+    parser.add_argument('--pipe', default=False, action='store_true',
                       help='"pipeline" mode')
 
-    parser.add_option('--check-done', default=False, action='store_true',
+    parser.add_argument('--check-done', default=False, action='store_true',
                       help='Just check for existence of output files for this brick?')
-    parser.add_option('--skip', default=False, action='store_true',
+    parser.add_argument('--skip', default=False, action='store_true',
                       help='Quit if the output catalog already exists.')
-    parser.add_option('--skip-coadd', default=False, action='store_true',
+    parser.add_argument('--skip-coadd', default=False, action='store_true',
                       help='Quit if the output coadd jpeg already exists.')
 
-    parser.add_option('--skip-calibs', dest='do_calibs', default=True,
+    parser.add_argument('--skip-calibs', dest='do_calibs', default=True,
                       action='store_false', help='Do not run the calibration steps')
 
-    parser.add_option('--skip-metrics', dest='write_metrics', default=True,
+    parser.add_argument('--skip-metrics', dest='write_metrics', default=True,
                       action='store_false', help='Do not generate the metrics directory and files')
 
-    parser.add_option('--nsigma', type=float, help='Set N sigma source detection thresh')
+    parser.add_argument('--nsigma', type=float, help='Set N sigma source detection thresh')
 
-    parser.add_option('--simul-opt', action='store_true', default=False,
+    parser.add_argument('--simul-opt', action='store_true', default=False,
                       help='Do simultaneous optimization after model selection')
 
-    parser.add_option('--no-wise', action='store_true', default=False,
+    parser.add_argument('--no-wise', action='store_true', default=False,
                       help='Skip unWISE forced photometry')
 
-    parser.add_option('--unwise-dir', default=None,
+    parser.add_argument('--unwise-dir', default=None,
                       help='Base directory for unWISE coadds; may be a colon-separated list')
 
-    parser.add_option('--no-sdss', action='store_true', default=False,
+    parser.add_argument('--no-sdss', action='store_true', default=False,
                       help='Do not initialize from SDSS')
 
-    parser.add_option('--no-early-coadds', action='store_true', default=False,
+    parser.add_argument('--no-early-coadds', action='store_true', default=False,
                       help='Skip making the early coadds')
 
-    parser.add_option('--gpsf', action='store_true', default=False,
+    parser.add_argument('--gpsf', action='store_true', default=False,
                       help='Use a fixed single-Gaussian PSF')
-    parser.add_option('--pixpsf', action='store_true', default=False,
+    parser.add_argument('--pixpsf', action='store_true', default=False,
                       help='Use the pixelized PsfEx PSF model, and FFT convolution')
 
-    parser.add_option('--splinesky', action='store_true', default=False,
+    parser.add_argument('--splinesky', action='store_true', default=False,
                       help='Use flexible sky model?')
 
-    parser.add_option('--coadd-bw', action='store_true', default=False,
+    parser.add_argument('--coadd-bw', action='store_true', default=False,
                       help='Create grayscale coadds if only one band is available?')
 
-    parser.add_option('--on-bricks', action='store_true', default=False,
+    parser.add_argument('--on-bricks', action='store_true', default=False,
                       help='Tractor-on-bricks?')
 
-    parser.add_option('--no-blacklist', dest='blacklist', default=True,
+    parser.add_argument('--no-blacklist', dest='blacklist', default=True,
                       action='store_false', help='Do not blacklist some proposals?')
 
-    parser.add_option('--rsync', default=False, action='store_true',
+    parser.add_argument('--rsync', default=False, action='store_true',
                       help='Rather than running calibrations, rsync from NERSC.  Also rsync missing image file inputs')
-    
+
     print()
     print('runbrick.py starting at', datetime.datetime.now().isoformat())
     print('Command-line args:', sys.argv)
     print()
 
-    opt,args = parser.parse_args()
+    opt = parser.parse_args()
 
     if opt.brick is not None and opt.radec is not None:
         print('Only ONE of --brick and --radec may be specified.')
@@ -4830,6 +4831,3 @@ if __name__ == '__main__':
 # decmax 0.106983
 # ramin 0.228344
 # ramax 0.250178
-
-
-    
