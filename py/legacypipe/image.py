@@ -244,7 +244,7 @@ class LegacySurveyImage(object):
         if x0 or y0:
             twcs.setX0Y0(x0,y0)
 
-        psf = self.read_psf_model(gaussPsf=gaussPsf, pixPsf=pixPsf,
+        psf = self.read_psf_model(x0, y0, gaussPsf=gaussPsf, pixPsf=pixPsf,
                                   const2psf=const2psf)
 
         tim = Image(img, invvar=invvar, wcs=twcs, psf=psf,
@@ -462,7 +462,8 @@ class LegacySurveyImage(object):
         skyobj.plver = hdr.get('PLVER', '').strip()
         return skyobj
 
-    def read_psf_model(self, gaussPsf=False, pixPsf=False, const2psf=False):
+    def read_psf_model(self, x0, y0, gaussPsf=False, pixPsf=False,
+                       const2psf=False):
         psffn = None
         if gaussPsf:
             #from tractor.basics import NCircularGaussianPSF

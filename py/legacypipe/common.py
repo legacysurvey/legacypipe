@@ -721,7 +721,7 @@ Using the current directory as DECALS_DIR, but this is likely to fail.
                 
         self.decals_dir = decals_dir
 
-        self.ZP = None
+        self.ccds = None
         self.bricks = None
 
         # Create and cache a kd-tree for bricks_touching_radec_box ?
@@ -746,7 +746,7 @@ Using the current directory as DECALS_DIR, but this is likely to fail.
         return d
 
     def drop_cache(self):
-        self.ZP = None
+        self.ccds = None
         self.bricks = None
         if self.bricktree is not None:
             from astrometry.libkd.spherematch import tree_free
@@ -833,6 +833,11 @@ Using the current directory as DECALS_DIR, but this is likely to fail.
             I, = np.nonzero((bricks.ra1  <= rahi ) * (bricks.ra2  >= ralo) *
                             (bricks.dec1 <= dechi) * (bricks.dec2 >= declo))
         return I
+
+    def get_ccds_readonly(self):
+        if self.ccds is None:
+            self.ccds = self.get_ccds()
+        return self.ccds
     
     def get_ccds(self):
         fn = os.path.join(self.decals_dir, 'decals-ccds.fits')
@@ -847,11 +852,11 @@ Using the current directory as DECALS_DIR, but this is likely to fail.
         return T
 
     def ccds_touching_wcs(self, wcs, **kwargs):
-        T = self.get_ccds()
+        T = self.get_ccds_readonly()
         I = ccds_touching_wcs(wcs, T, **kwargs)
         if len(I) == 0:
             return None
-        T.cut(I)
+        T = T[I]
         return T
 
     def get_image_object(self, t):
@@ -895,11 +900,11 @@ Using the current directory as DECALS_DIR, but this is likely to fail.
         return tims
     
     def find_ccds(self, expnum=None, ccdname=None):
-        T = self.get_ccds()
+        T = self.get_ccds_readonly()
         if expnum is not None:
-            T.cut(T.expnum == expnum)
+            T = T[T.expnum == expnum]
         if ccdname is not None:
-            T.cut(T.ccdname == ccdname)
+            T = T[T.ccdname == ccdname]
         return T
 
     def photometric_ccds(self, CCD):
@@ -962,11 +967,10 @@ Using the current directory as DECALS_DIR, but this is likely to fail.
         return np.flatnonzero(good)
 
     def _get_zeropoints_table(self):
-        if self.ZP is not None:
-            return self.ZP
-        # Hooray, DRY
-        self.ZP = self.get_ccds()
-        return self.ZP
+        ''' Note, the returned object MUST NOT BE MODIFIED!
+        '''
+        # Hooray, DRY.  ZP table == CCD table.
+        return self.get_ccds_readonly()
 
     def get_zeropoint_row_for(self, im):
         ZP = self._get_zeropoints_table()
