@@ -396,24 +396,51 @@ def sed_matched_detection(sedname, sed, detmaps, detivs, bands,
     aper = []
     apin = 10
     apout = 20
+
+    # Map of pixels that are vetoed by sources found so far.  The veto
+    # area is based on saddle height.  We go from brightest to
+    # faintest pixels.  Thus the saddle level decreases, and the
+    # saddlemap areas become larger; the saddlemap when a source is
+    # found is a lower bound on the pixels that it will veto based on
+    # the saddle heights of fainter sources.  Thus the vetomap isn't
+    # the final word, it is just a quick veto of pixels we know for
+    # sure will be vetoed.
+    vetomap = np.zeros(sedsn.shape, bool)
     
     # For each peak, determine whether it is isolated enough --
     # separated by a low enough saddle from other sources.  Need only
     # search within its "allblob", which is defined by the lowest
     # saddle.
+    print('Found', len(px), 'potential peaks')
+    #tlast = Time()
     for i,(x,y) in enumerate(zip(px, py)):
+        if vetomap[y,x]:
+            #print('  in veto map!')
+            continue
+        #t0 = Time()
+        #t1 = Time()
+        #print('Time since last source:', t1-tlast)
+        #tlast = t1
+
         level = saddle_level(sedsn[y,x])
         ablob = allblobs[y,x]
         index = ablob - 1
         slc = allslices[index]
 
+        #print('source', i, 'of', len(px), 'at', x,y, 'S/N', sedsn[y,x], 'saddle', level)
+        #print('  allblobs slice', slc)
+
         saddlemap = (sedsn[slc] > level)
         if saturated_pix is not None:
             saddlemap |= saturated_pix[slc]
         saddlemap *= (allblobs[slc] == ablob)
+        #print('  saddlemap', Time()-tlast)
         saddlemap = binary_fill_holes(saddlemap)
+        #print('  fill holes', Time()-tlast)
         saddlemap = binary_dilation(saddlemap, iterations=dilate)
+        #print('  dilation', Time()-tlast)
         blobs,nblobs = label(saddlemap)
+        #print('  label', Time()-tlast)
         x0,y0 = allx0[index], ally0[index]
         thisblob = blobs[y-y0, x-x0]
 
@@ -456,8 +483,15 @@ def sed_matched_detection(sedname, sed, detmaps, detivs, bands,
                 plt.suptitle('Keep')
             ps.savefig()
 
+        #t1 = Time()
+        #print(t1 - t0)
+
         if cut:
-            # in same blob as previously found source
+            # in same blob as previously found source.
+            #print('  cut')
+            # update vetomap
+            vetomap[slc] |= saddlemap
+            #print('Added to vetomap:', np.sum(saddlemap), 'pixels set; now total of', np.sum(vetomap), 'pixels set')
             continue
 
         # Measure in aperture...
@@ -476,6 +510,7 @@ def sed_matched_detection(sedname, sed, detmaps, detivs, bands,
         else:
             # fake
             m = -1.
+        #print('  aper', Time()-tlast)
         if cutonaper:
             if sedsn[y,x] - m < nsigma:
                 continue
@@ -483,6 +518,9 @@ def sed_matched_detection(sedname, sed, detmaps, detivs, bands,
         aper.append(m)
         peakval.append(sedsn[y,x])
         keep[i] = True
+
+        vetomap[slc] |= saddlemap
+        #print('Added to vetomap:', np.sum(saddlemap), 'pixels set; now total of', np.sum(vetomap), 'pixels set')
 
         if False and ps is not None:
             plt.clf()
@@ -517,6 +555,12 @@ def sed_matched_detection(sedname, sed, detmaps, detivs, bands,
     hotblobs = hbmap[hotblobs]
 
     if ps is not None:
+        plt.clf()
+        dimshow(vetomap, vmin=0, vmax=1, cmap='hot')
+        plt.title('SED %s: veto map' % sedname)
+        ps.savefig()
+
+
         plt.clf()
         dimshow(hotblobs, vmin=0, vmax=1, cmap='hot')
         ax = plt.axis()

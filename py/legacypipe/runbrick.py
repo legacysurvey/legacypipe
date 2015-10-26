@@ -829,7 +829,10 @@ def stage_mask_junk(tims=None, targetwcs=None, W=None, H=None, bands=None,
                 continue
             # Zero it out!
             tim.inverr[slc] *= np.logical_not(inblob)
-            print('Zeroing out a source with major/minor axis', major, '/', minor)
+            ra,dec = tim.wcs.pixelToPosition(px, py)
+            bx,by = targetwcs.radec2pixelxy(ra, dec)
+            print('Zeroing out a source with major/minor axis', major, '/', minor,
+                  'at RA,Dec=(%.4f,%.4f), brick coords %i,%i' % (ra, dec, bx, by))
 
             if plots:
                 zeroed[slc] = np.logical_not(inblob)
@@ -1481,6 +1484,8 @@ def stage_srcs(coimgs=None, cons=None,
             fn = os.path.join(outdir, 'sources-%s' % brickname)
             ps = PlotSequence(fn)
 
+        if coimgs is None:
+            coimgs,cons = compute_coadds(tims, bands, targetwcs)
         crossa = dict(ms=10, mew=1.5)
         plt.clf()
         dimshow(get_rgb(coimgs, bands))
@@ -2000,7 +2005,7 @@ def _blob_iter(blobslices, blobsrcs, blobs,
     blobvals = Counter(blobs[blobs>=0])
     blob_order = np.array([i for i,npix in blobvals.most_common()])
 
-    for iblob in blob_order:
+    for nblob,iblob in enumerate(blob_order):
         bslc  = blobslices[iblob]
         Isrcs = blobsrcs  [iblob]
         assert(len(Isrcs) > 0)
@@ -2029,7 +2034,7 @@ def _blob_iter(blobslices, blobsrcs, blobs,
 
         hastycho = iblob in tychoblobs
         
-        print('Blob', iblob+1, 'of', len(blobslices), ':',
+        print('Blob number', nblob+1, 'of', len(blobslices), ': blob', iblob,
               len(Isrcs), 'sources, size', blobw, 'x', blobh,
               'center', (bx0+bx1)/2, (by0+by1)/2, 'npix', np.sum(blobmask),
               'one pixel:', onex,oney, 'has Tycho-2 star:', hastycho)
@@ -2079,14 +2084,6 @@ def _bounce_one_blob(X):
     # from astrometry.util.file import pickle_to_file
     # pickle_to_file(X, fn)
     # print('Wrote', fn)
-
-    # timargs = X[8][0]
-    # pickle_to_file(timargs, 'timargs-%i.pickle' % iblob)    
-    # pickle_to_file(timargs[0], 'timargs-%i-img.pickle' % iblob)    
-    # pickle_to_file(timargs[5], 'timargs-%i-sky.pickle' % iblob)    
-    # pickle_to_file(timargs[6], 'timargs-%i-psf.pickle' % iblob)    
-    # pickle_to_file(timargs[15], 'timargs-%i-imobj.pickle' % iblob)    
-
 
     try:
         return _one_blob(X)
@@ -2328,7 +2325,7 @@ def _one_blob(X):
     (iblob, Isrcs, targetwcs, bx0, by0, blobw, blobh, blobmask, subtimargs,
      srcs, bands, plots, ps, simul_opt, use_ceres, hastycho) = X
 
-    print('Fitting blob', (iblob+1), ':', len(Isrcs), 'sources, size',
+    print('Fitting blob', iblob, ':', len(Isrcs), 'sources, size',
           blobw, 'x', blobh, len(subtimargs), 'images')
 
     plots2 = False
@@ -2887,6 +2884,11 @@ def _one_blob(X):
                 # bright, try the galaxy models.
                 if ((chisqs['simple'] > chisqs['ptsrc']) or
                     (chisqs['ptsrc'] > 400)):
+
+                    if hastycho:
+                        print('Not computing galaxy models: Tycho-2 star in blob')
+                        continue
+
                     trymodels.extend([
                         ('dev', dev), ('exp', exp), ('comp', comp)])
                 continue
@@ -3273,9 +3275,9 @@ def _one_blob(X):
             src.shapeDev = src.shapeDev.toEllipseE()
             src.fracDev = FracDev(src.fracDev.clipped())
 
-        print('Computing variances for source:', src)
-        subtr.printThawedParams()
-        print('halfsize:', getattr(src, 'halfsize', None))
+        #print('Computing variances for source:', src)
+        #subtr.printThawedParams()
+        #print('halfsize:', getattr(src, 'halfsize', None))
         
         allderivs = subtr.getDerivs()
         for iparam,derivs in enumerate(allderivs):
@@ -3409,7 +3411,7 @@ def _one_blob(X):
         B.hastycho[:] = True
     
     #print('Blob finished metrics:', Time()-tlast)
-    print('Blob', iblob+1, 'finished:', Time()-tlast)
+    print('Blob', iblob, 'finished:', Time()-tlast)
 
     return B
 

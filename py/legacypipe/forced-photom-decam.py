@@ -18,7 +18,7 @@ import tractor
 
 if __name__ == '__main__':
     import optparse
-    parser = optparse.OptionParser(usage='%prog <decam-image-filename> <decam-HDU> <catalog.fits or "DR1"/"DR2"> <output-catalog.fits>')
+    parser = optparse.OptionParser(usage='%prog <decam-image-filename OR expnum> <decam-HDU OR ccdname> <catalog.fits or "DR1"/"DR2"> <output-catalog.fits>')
     parser.add_option('--zoom', type=int, nargs=4, help='Set target image extent (default "0 2046 0 4094")')
     parser.add_option('--no-ceres', action='store_false', default=True, dest='ceres', help='Do not use Ceres optimiziation engine (use scipy)')
     parser.add_option('--catalog-path', default=None,
@@ -38,10 +38,7 @@ if __name__ == '__main__':
     Time.add_measurement(MemMeas)
     t0 = Time()
 
-    filename = args[0]
-    hdu = int(args[1])
-    catfn = args[2]
-    outfn = args[3]
+    filename, hdu, catfn, outfn = args
 
     if os.path.exists(outfn):
         print 'Ouput file exists:', outfn
@@ -60,11 +57,41 @@ if __name__ == '__main__':
         from astrometry.util.plotutils import PlotSequence
         ps = PlotSequence(opt.plots)
 
-    T = exposure_metadata([filename], hdus=[hdu])
-    print 'Metadata:'
-    T.about()
+    # Try parsing filename as exposure number.
+    try:
+        expnum = int(filename)
+        filename = None
+    except:
+        # make this 'None' for decals.find_ccds()
+        expnum = None
+
+    # Try parsing HDU number
+    try:
+        hdu = int(hdu)
+        ccdname = None
+    except:
+        ccdname = hdu
+        hdu = -1
 
     decals = Decals()
+
+    if filename is not None and hdu >= 0:
+        # Read metadata from file
+        T = exposure_metadata([filename], hdus=[hdu])
+        print 'Metadata:'
+        T.about()
+    else:
+        # Read metadata from decals-ccds.fits table
+        T = decals.find_ccds(expnum=expnum, ccdname=ccdname)
+        print len(T), 'with expnum', expnum, 'and CCDname', ccdname
+        if hdu >= 0:
+            T.cut(T.image_hdu == hdu)
+            print len(T), 'with HDU', hdu
+        if filename is not None:
+            T.cut(np.array([f.strip() == filename for f in T.image_filename]))
+            print len(T), 'with filename', filename
+        assert(len(T) == 1)
+
     im = decals.get_image_object(T[0])
     tim = im.get_tractor_image(slc=zoomslice, pixPsf=True, splinesky=True)
     print 'Got tim:', tim
