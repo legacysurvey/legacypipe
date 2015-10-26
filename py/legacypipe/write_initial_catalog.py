@@ -1,25 +1,30 @@
+"""This script does something.
+"""
 from __future__ import print_function
-if __name__ == '__main__':
-    import matplotlib
-    matplotlib.use('Agg')
+from sys import exit
 import numpy as np
-
-from common import *
+from common import * # This is not best practice.
 from tractor import *
-
-if __name__ == '__main__':
-    import optparse
-    parser = optparse.OptionParser()
-    parser.add_option('-b', '--brick', type=int, help='Brick ID to run: default %default',
-                      default=377306)
-    parser.add_option('-s', '--sed-matched', action='store_true', default=False,
+#
+#
+#
+def main():
+    """Main program.
+    """
+    import argparse
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument('-b', '--brick', type=int, metavar='BRICK',
+        help='Brick ID to run: default %(default)s', default=377306)
+    parser.add_argument('-s', '--sed-matched', action='store_true',
                       help='Run SED-matched filter?')
-    parser.add_option('--bands', default='grz', help='Bands to retrieve')
-    parser.add_option('-o', '--output', help='Output filename for catalog',
+    parser.add_argument('-B', '--bands', default='grz', help='Bands to retrieve')
+    parser.add_argument('-o', '--output', metavar='FILE', help='Output filename for catalog',
                       default='initial-cat.fits')
-    parser.add_option('--threads', type=int, help='Run multi-threaded')
-    parser.add_option('-W', type=int, default=3600, help='Target image width (default %default)')
-    parser.add_option('-H', type=int, default=3600, help='Target image height (default %default)')
+    parser.add_argument('-t', '--threads', type=int, help='Run multi-threaded')
+    parser.add_argument('-W', '--width', type=int, dest='W', default=3600,
+        metavar='PIXELS', help='Target image width (default %(default)s)')
+    parser.add_argument('-H', '--height', type=int, dest='H', default=3600,
+        metavar='PIXELS', help='Target image height (default %(default)s)')
 
     if not (('BOSS_PHOTOOBJ' in os.environ) and ('PHOTO_RESOLVE' in os.environ)):
         print('''$BOSS_PHOTOOBJ and $PHOTO_RESOLVE not set -- on NERSC, you can do:
@@ -28,8 +33,8 @@ export PHOTO_RESOLVE=/project/projectdirs/cosmo/data/sdss/pre13/eboss/resolve/20
 To read SDSS files from the local filesystem rather than downloading them.
 ''')
 
-        
-    opt,args = parser.parse_args()
+
+    opt = parser.parse_args()
     brickid = opt.brick
     bands = opt.bands
     if opt.threads and opt.threads > 1:
@@ -78,7 +83,7 @@ To read SDSS files from the local filesystem rather than downloading them.
     invvars = None
     hdr = None
     fs = None
-    
+
     cat.thawAllRecursive()
     T2,hdr = prepare_fits_catalog(cat, invvars, TT, hdr, bands, fs)
     # Unpack shape columns
@@ -94,7 +99,14 @@ To read SDSS files from the local filesystem rather than downloading them.
     T2.shapeDev_r_ivar  = T2.shapeExp_ivar[:,0]
     T2.shapeDev_e1_ivar = T2.shapeExp_ivar[:,1]
     T2.shapeDev_e2_ivar = T2.shapeExp_ivar[:,2]
-    
+
     T2.writeto(opt.output)
     print('Wrote', opt.output)
-    
+    return 0
+#
+#
+#
+if __name__ == '__main__':
+    import matplotlib
+    matplotlib.use('Agg')
+    exit(main())
