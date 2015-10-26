@@ -2889,6 +2889,11 @@ def _one_blob(X):
                 # bright, try the galaxy models.
                 if ((chisqs['simple'] > chisqs['ptsrc']) or
                     (chisqs['ptsrc'] > 400)):
+
+                    if hastycho:
+                        print('Not computing galaxy models: Tycho-2 star in blob')
+                        continue
+
                     trymodels.extend([
                         ('dev', dev), ('exp', exp), ('comp', comp)])
                 continue
