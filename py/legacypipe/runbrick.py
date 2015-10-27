@@ -826,10 +826,10 @@ def stage_mask_junk(tims=None, targetwcs=None, W=None, H=None, bands=None,
                 continue
             # Zero it out!
             tim.inverr[slc] *= np.logical_not(inblob)
-            ra,dec = tim.wcs.pixelToPosition(px, py)
-            bx,by = targetwcs.radec2pixelxy(ra, dec)
+            ra,dec = tim.wcs.pixelToPosition(cx, cy)
+            ok,bx,by = targetwcs.radec2pixelxy(ra, dec)
             print('Zeroing out a source with major/minor axis', major, '/', minor,
-                  'at RA,Dec=(%.4f,%.4f), brick coords %i,%i' % (ra, dec, bx, by))
+                  'at centroid RA,Dec=(%.4f,%.4f), brick coords %i,%i' % (ra, dec, bx, by))
 
             if plots:
                 zeroed[slc] = np.logical_not(inblob)
@@ -3351,7 +3351,19 @@ def _one_blob(X):
                     continue
                 if counts[isrc] == 0:
                     continue
+                if np.sum(patch.patch**2) == 0:
+                    continue
                 slc = patch.getSlice(mod)
+                patch = patch.patch
+
+                # print('fracflux: band', band, 'isrc', isrc, 'tim', tim.name)
+                # print('patch sum', np.sum(patch), 'abs', np.sum(np.abs(patch)))
+                # print('counts:', counts[isrc])
+                # print('mod slice sum', np.sum(mod[slc]))
+                # print('mod[slc] - patch:', np.sum(mod[slc] - patch))
+                # print('fracflux_num = sum((mod - patch) * abs(patch)) / sum(patch**2):', np.sum((mod[slc] - patch) * np.abs(patch)) / np.sum(patch**2))
+                # print('fracflux_den = sum(abs(patch)) / abs(counts):', np.sum(np.abs(patch)) / np.abs(counts[isrc]))
+                
                 # (mod - patch) is flux from others
                 # (mod - patch) / counts is normalized flux from others
                 # We take that and weight it by this source's profile;
@@ -3361,14 +3373,14 @@ def _one_blob(X):
                 # (patch**2)/counts**2; counts**2 drops out of the
                 # denom.  If you have an identical source with twice the flux,
                 # this results in fracflux being 2.0
-                fracflux_num[isrc,iband] += np.sum((mod[slc] - patch.patch) *
-                                                   np.abs(patch.patch)) / np.sum(patch.patch**2)
-                fracflux_den[isrc,iband] += np.sum(np.abs(patch.patch)) / np.abs(counts[isrc])
+                fracflux_num[isrc,iband] += np.sum((mod[slc] - patch) *
+                                                   np.abs(patch)) / np.sum(patch**2)
+                fracflux_den[isrc,iband] += np.sum(np.abs(patch)) / np.abs(counts[isrc])
 
-                fracmasked_num[isrc,iband] += np.sum((tim.getInvError()[slc] == 0) * np.abs(patch.patch)) / np.abs(counts[isrc])
-                fracmasked_den[isrc,iband] += np.sum(np.abs(patch.patch)) / np.abs(counts[isrc])
+                fracmasked_num[isrc,iband] += np.sum((tim.getInvError()[slc] == 0) * np.abs(patch)) / np.abs(counts[isrc])
+                fracmasked_den[isrc,iband] += np.sum(np.abs(patch)) / np.abs(counts[isrc])
 
-                fracin_num[isrc,iband] += np.abs(np.sum(patch.patch))
+                fracin_num[isrc,iband] += np.abs(np.sum(patch))
                 fracin_den[isrc,iband] += np.abs(counts[isrc])
 
             tim.getSky().addTo(mod)
