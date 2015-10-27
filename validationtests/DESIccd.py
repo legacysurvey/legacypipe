@@ -118,7 +118,7 @@ def plotMaghist(band,nbin=100):
 	else:
 		med = (NTl[len(NTl)/2+1]+NTl[len(NTl)/2])/2.
 	print mean,med,std
-	print 'percentage better than requirements '+str(nbr/float(len(f)))
+	print 'percentage better than requirements '+str(nbr/n)
 
 	plt.plot(Nl,hl,'k-')
 	plt.xlabel(r'5$\sigma$ '+band+ ' depth')
@@ -161,7 +161,7 @@ def plotMaghist2obs(band,ndraw = 1e5,nbin=100):
 		i = int(random()*nr)
 		j = int(random()*nr)
 		#j = i #this is used to test result when conditions are exactly the same on each ccd
-		if f[i]['filter'] == band and f[j]['filter']:
+		if f[i]['filter'] == band and f[j]['filter'] == band:
 			if f[i]['seeing'] != 99 and f[i]['ccdzpt'] != 99 and f[i]['fwhm'] != 99:
 				if f[j]['seeing'] != 99 and f[j]['ccdzpt'] != 99 and f[j]['fwhm'] != 99:
 					if f[j]['dec'] > -20 and f[j]['exptime'] >=30 and f[j]['ccdnmatch'] >= 20 and abs(f[j]['zpt'] - f[j]['ccdzpt']) <= 0.1 and f[j]['zpt'] >= zp0-.5 and f[j]['zpt'] <=zp0+.25:   
@@ -226,7 +226,7 @@ def plotMaghist2obs(band,ndraw = 1e5,nbin=100):
 	plt.plot(Nl,hl,'k-')
 	plt.xlabel(r'5$\sigma$ '+band+ ' depth')
 	plt.ylabel('# of ccds')
-	plt.title('MC 2 tile depth '+str(mean)[:5]+r'$\pm$'+str(std)[:4])
+	plt.title('MC 2 exposure depth '+str(mean)[:5]+r'$\pm$'+str(std)[:4])
 	#plt.xscale('log')
 	plt.show()
 	return True
@@ -264,7 +264,7 @@ def plotMaghist3obs(band,ndraw = 1e5,nbin=100):
 		i = int(random()*nr)
 		j = int(random()*nr)
 		k = int(random()*nr)
-		if f[i]['filter'] == band and f[j]['filter']:
+		if f[i]['filter'] == band and f[j]['filter'] == band and f[k]['filter'] == band:
 			if f[i]['seeing'] != 99 and f[i]['ccdzpt'] != 99 and f[i]['fwhm'] != 99:
 				if f[j]['seeing'] != 99 and f[j]['ccdzpt'] != 99 and f[j]['fwhm'] != 99:
 					if f[k]['seeing'] != 99 and f[k]['ccdzpt'] != 99 and f[k]['fwhm'] != 99:
@@ -338,7 +338,7 @@ def plotMaghist3obs(band,ndraw = 1e5,nbin=100):
 	plt.plot(Nl,hl,'k-')
 	plt.xlabel(r'5$\sigma$ '+band+ ' depth')
 	plt.ylabel('# of ccds')
-	plt.title('MC 3 tile depth '+str(mean)[:5]+r'$\pm$'+str(std)[:4])
+	plt.title('MC 3 exposure depth '+str(mean)[:5]+r'$\pm$'+str(std)[:4])
 	#plt.xscale('log')
 	plt.show()
 	return True
