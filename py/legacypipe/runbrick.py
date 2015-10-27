@@ -301,7 +301,7 @@ def stage_tims(W=3600, H=3600, pixscale=0.262, brickname=None,
         print('[parallel tims] Calibrations:', tnow-tlast)
         tlast = tnow
 
-    if plots:
+    if False and plots:
         # Here, we read full images (not just subimages) to plot their
         # pixel distributions
         sig1s = dict([(b,[]) for b in bands])
