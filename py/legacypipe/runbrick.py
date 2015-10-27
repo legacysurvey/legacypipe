@@ -25,9 +25,6 @@ To see the code we run on each "blob" of pixels,
 
 from __future__ import print_function
 
-# Cython
-#import pyximport; pyximport.install(pyimport=True)
-
 # python -u legacypipe/runbrick.py -b 2437p082 --zoom 2575 2675 400 500 -P "pickles/zoom2-%(brick)s-%%(stage)s.pickle" > log 2>&1 &
 
 if __name__ == '__main__':
@@ -744,11 +741,11 @@ def _write_band_images(band,
     # if detiv is not None:
     if cowmod is not None:
         imgs.extend([
-                ('invvar', 'wtmap',    cow,     False),
-                ('model',  'model',    cowmod,  True ),
-                ('chi2',   'chi2',     cochi2,  False),
-                ('depth',  'depthmap', detiv,   True ),
-                ('galdepth',  'depthmap', galdetiv,   True ),
+                ('invvar',   'wtmap',    cow,      False),
+                ('model',    'model',    cowmod,   True ),
+                ('chi2',     'chi2',     cochi2,   False),
+                ('depth',    'psfdepth', detiv,    True ),
+                ('galdepth', 'galdepth', galdetiv, True ),
                 ])
     for name,prodtype,img,gzip in imgs:
         # Make a copy, because each image has different values for

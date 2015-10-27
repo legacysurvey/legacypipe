@@ -1,3 +1,6 @@
+# Cython
+#import pyximport; pyximport.install(pyimport=True)
+
 if __name__ == '__main__':
     import matplotlib
     matplotlib.use('Agg')
