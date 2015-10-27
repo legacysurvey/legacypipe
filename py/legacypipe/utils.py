@@ -41,10 +41,10 @@ class EllipseWithPriors(EllipseESoft):
     def fromRAbPhi(cls, r, ba, phi):
         logr, ee1, ee2 = EllipseESoft.rAbPhiToESoft(r, ba, phi)
         return cls(logr, ee1, ee2)
-    
+
     def isLegal(self):
         return self.logre < +5.
-    
+
     @classmethod
     def getName(cls):
         return "EllipseWithPriors(%g)" % cls.ellipticityStd
@@ -55,12 +55,26 @@ class RunbrickError(RuntimeError):
 class NothingToDoError(RunbrickError):
     pass
 
+class ImapTracker(object):
+    def __init__(self, real, mymp, tstart):
+        self.real = real
+        self.mymp = mymp
+        self.tstart = tstart
+
+    def next(self, *args, **kwargs):
+        try:
+            return self.real.next(*args, **kwargs)
+        except StopIteration:
+            self.mymp._imap_finished(self.tstart)
+            raise
+
 class MyMultiproc(multiproc):
     def __init__(self, *args, **kwargs):
         super(MyMultiproc, self).__init__(*args, **kwargs)
         self.t0 = Time()
         self.serial = []
         self.parallel = []
+
     def map(self, *args, **kwargs):
         tstart = Time()
         res = super(MyMultiproc, self).map(*args, **kwargs)
@@ -69,6 +83,31 @@ class MyMultiproc(multiproc):
         self.parallel.append((tstart, tend))
         self.t0 = tend
         return res
+
+    def _imap_finished(self, tstart):
+        tend = Time()
+        self.parallel.append((tstart, tend))
+        self.t0 = tend
+
+    def imap_unordered(self, func, iterable, chunksize=None, wrap=False):
+        # So, this is a bit strange, tracking parallel vs serial time
+        # for an async object, via the ImapTracker & callback to
+        # _imap_finished.
+        tstart = Time()
+        self.serial.append((self.t0, tstart))
+
+        #res = super(MyMultiproc, self).imap_unordered(*args, **kwargs)
+        cs = chunksize
+        if cs is None:
+            cs = self.map_chunksize
+        if self.pool is None:
+            import itertools
+            return itertools.imap(func, iterable)
+        if wrap or self.wrap_all:
+            func = funcwrapper(func)
+        res = self.pool.imap_unordered(func, iterable, chunksize=cs)
+
+        return ImapTracker(res, self, tstart)
 
     def report(self, nthreads):
         # Tally the serial time up to now

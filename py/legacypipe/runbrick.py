@@ -783,7 +783,8 @@ def stage_mask_junk(tims=None, targetwcs=None, W=None, H=None, bands=None,
             ninblob = float(np.sum(inblob))
             cxx = np.sum(((xx - cx)**2)[np.newaxis,:] * inblob) / ninblob
             cyy = np.sum(((yy - cy)**2)[:,np.newaxis] * inblob) / ninblob
-            cxy = np.sum((yy - cy)[:,np.newaxis] * (xx - cx)[np.newaxis,:] * inblob) / ninblob
+            cxy = np.sum((yy - cy)[:,np.newaxis] *
+                         (xx - cx)[np.newaxis,:] * inblob) / ninblob
             C = np.array([[cxx, cxy],[cxy, cyy]])
             u,s,v = svd(C)
             allss.append(np.sqrt(np.abs(s)))
@@ -797,10 +798,14 @@ def stage_mask_junk(tims=None, targetwcs=None, W=None, H=None, bands=None,
                 continue
             # Zero it out!
             tim.inverr[slc] *= np.logical_not(inblob)
+            # Add to dq mask bits
+            tim.dq[slc] |= CP_DQ_BITS['longthin']
+
             ra,dec = tim.wcs.pixelToPosition(cx, cy)
             ok,bx,by = targetwcs.radec2pixelxy(ra, dec)
-            print('Zeroing out a source with major/minor axis', major, '/', minor,
-                  'at centroid RA,Dec=(%.4f,%.4f), brick coords %i,%i' % (ra, dec, bx, by))
+            print('Zeroing out a source with major/minor axis', major, '/',
+                  minor, 'at centroid RA,Dec=(%.4f,%.4f), brick coords %i,%i'
+                  % (ra, dec, bx, by))
 
             if plots:
                 zeroed[slc] = np.logical_not(inblob)
@@ -809,7 +814,8 @@ def stage_mask_junk(tims=None, targetwcs=None, W=None, H=None, bands=None,
             if np.sum(zeroed) > 0:
                 plt.clf()
                 from scipy.ndimage.morphology import binary_dilation
-                zout = (binary_dilation(zeroed, structure=np.ones((3,3))) - zeroed)
+                zout = (binary_dilation(zeroed, structure=np.ones((3,3)))
+                        - zeroed)
                 dimshow(tim.getImage(), **tim.ima)
                 outline = np.zeros(zout.shape+(4,), np.uint8)
                 outline[:,:,1] = zout*255
@@ -1567,6 +1573,8 @@ def stage_fitblobs(T=None,
                    plots=False, plots2=False,
                    nblobs=None, blob0=None, blobxy=None,
                    simul_opt=False, use_ceres=True, mp=None,
+                   checkpoint_pattern=None,
+                   checkpoint_period=None,
                    **kwargs):
     '''
     This is where the actual source fitting happens.
@@ -1715,7 +1723,7 @@ def stage_fitblobs(T=None,
 
     iter = _blob_iter(blobslices, blobsrcs, blobs, targetwcs, tims,
                       cat, bands, plots, ps, simul_opt, use_ceres, tycho)
-    # to allow debugpool to only queue tasks one at a time
+    # to allow timingpool to queue tasks one at a time
     iter = iterwrapper(iter, len(blobsrcs))
     R = mp.map(_bounce_one_blob, iter)
     print('[parallel fitblobs] Fitting sources took:', Time()-tlast)
