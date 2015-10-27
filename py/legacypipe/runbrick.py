@@ -376,7 +376,11 @@ def stage_tims(W=3600, H=3600, pixscale=0.262, brickname=None,
             for band,name,exptime,pix in allpix:
                 if band != b:
                     continue
-                n,bb,p = plt.hist(pix, range=(-5.*s, 5.*s), bins=50, histtype='step',
+                # broaden range to encompass most pixels... only req'd when sky is bad
+                lo,hi = -5.*s, 5.*s
+                lo = min(lo, np.percentile(pix, 5))
+                hi = max(hi, np.percentile(pix, 95))
+                n,bb,p = plt.hist(pix, range=(lo, hi), bins=50, histtype='step',
                                  alpha=0.5)
                 lp.append(p[0])
                 lt.append('%s: %.0f s' % (name, exptime))
@@ -3356,13 +3360,13 @@ def _one_blob(X):
                 slc = patch.getSlice(mod)
                 patch = patch.patch
 
-                # print('fracflux: band', band, 'isrc', isrc, 'tim', tim.name)
-                # print('patch sum', np.sum(patch), 'abs', np.sum(np.abs(patch)))
-                # print('counts:', counts[isrc])
-                # print('mod slice sum', np.sum(mod[slc]))
-                # print('mod[slc] - patch:', np.sum(mod[slc] - patch))
-                # print('fracflux_num = sum((mod - patch) * abs(patch)) / sum(patch**2):', np.sum((mod[slc] - patch) * np.abs(patch)) / np.sum(patch**2))
-                # print('fracflux_den = sum(abs(patch)) / abs(counts):', np.sum(np.abs(patch)) / np.abs(counts[isrc]))
+                print('fracflux: band', band, 'isrc', isrc, 'tim', tim.name)
+                print('patch sum', np.sum(patch), 'abs', np.sum(np.abs(patch)))
+                print('counts:', counts[isrc])
+                print('mod slice sum', np.sum(mod[slc]))
+                print('mod[slc] - patch:', np.sum(mod[slc] - patch))
+                print('fracflux_num = sum((mod - patch) * abs(patch)) / sum(patch**2):', np.sum((mod[slc] - patch) * np.abs(patch)) / np.sum(patch**2))
+                print('fracflux_den = sum(abs(patch)) / abs(counts):', np.sum(np.abs(patch)) / np.abs(counts[isrc]))
                 
                 # (mod - patch) is flux from others
                 # (mod - patch) / counts is normalized flux from others
