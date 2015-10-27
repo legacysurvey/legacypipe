@@ -302,72 +302,19 @@ def stage_tims(W=3600, H=3600, pixscale=0.262, brickname=None,
         tlast = tnow
 
     if plots:
+        # Here, we read full images (not just subimages) to plot their
+        # pixel distributions
         sig1s = dict([(b,[]) for b in bands])
-
         allpix = []
-
         for im in ims:
-
             subtim = im.get_tractor_image(splinesky=True, gaussPsf=True, subsky=False,
                                           radecpoly=targetrd)
             if subtim is None:
                 continue
-
-            if False:
-                tim = subtim
-                h,w = tim.shape
-                x0,x1 = tim.x0, tim.x0 + w
-                y0,y1 = tim.y0, tim.y0 + h
-                fulltim = im.get_tractor_image(splinesky=True, gaussPsf=True, subsky=False)
-                fullmod = np.zeros(fulltim.shape, np.float32)
-                fulltim.sky.addTo(fullmod)
-                midsky = np.median(fullmod)
-                ima = dict(vmin=midsky -2.*tim.sig1, vmax=midsky + 2. * tim.sig1)
-
-                print('Fulltim median:', np.median(fulltim.data))
-                print('Mod median', midsky)
-
-                plt.clf()
-                plt.subplot(1,2,1)
-                dimshow(fulltim.data, cmap='gray', **ima)
-                ax = plt.axis()
-                plt.plot([x0,x0,x1,x1,x0], [y0,y1,y1,y0,y0], 'r-')
-                plt.axis(ax)
-                plt.subplot(1,2,2)
-                dimshow(fullmod, cmap='gray', **ima)
-                plt.plot([x0,x0,x1,x1,x0], [y0,y1,y1,y0,y0], 'r-')
-                plt.axis(ax)
-                plt.suptitle('Full image: ' + tim.name)
-                ps.savefig()
-
-                #subtim = im.get_tractor_image(splinesky=True, gaussPsf=True, subsky=False,
-                #                              slc=tim.slice)
-                plt.clf()
-                plt.subplot(1,2,1)
-                dimshow(subtim.data, cmap='gray', **ima)
-                mod = np.zeros(subtim.shape, np.float32)
-                subtim.sky.addTo(mod)
-                plt.subplot(1,2,2)
-                dimshow(mod, cmap='gray', **ima)
-                plt.suptitle('Subimage: ' + tim.name)
-                ps.savefig()
-
-            fulltim2 = im.get_tractor_image(splinesky=True, gaussPsf=True)
-
-            if False:
-                plt.clf()
-                plt.hist(((fulltim.getImage() - fullmod) * fulltim.getInvError()).ravel(),
-                         range=(-5,5), bins=100, histtype='step', color='b')
-                plt.hist((fulltim2.getImage() * fulltim2.getInvError()).ravel(),
-                         range=(-5,5), bins=100, histtype='step', color='r')
-                plt.xlabel('Pixel values (sigma)')
-                plt.suptitle('Full image: ' + tim.name)
-                ps.savefig()
-
-            sig1s[fulltim2.band].append(fulltim2.sig1)
-            allpix.append((fulltim2.band, fulltim2.name, im.exptime,
-                           fulltim2.getImage()[fulltim2.getInvError() > 0]))
-
+            fulltim = im.get_tractor_image(splinesky=True, gaussPsf=True)
+            sig1s[fulltim.band].append(fulltim.sig1)
+            allpix.append((fulltim.band, fulltim.name, im.exptime,
+                           fulltim.getImage()[fulltim.getInvError() > 0]))
         sig1s = dict([(b, np.median(sig1s[b])) for b in sig1s.keys()])
         for b in bands:
             plt.clf()
@@ -376,7 +323,11 @@ def stage_tims(W=3600, H=3600, pixscale=0.262, brickname=None,
             for band,name,exptime,pix in allpix:
                 if band != b:
                     continue
-                n,bb,p = plt.hist(pix, range=(-5.*s, 5.*s), bins=50, histtype='step',
+                # broaden range to encompass most pixels... only req'd when sky is bad
+                lo,hi = -5.*s, 5.*s
+                lo = min(lo, np.percentile(pix, 5))
+                hi = max(hi, np.percentile(pix, 95))
+                n,bb,p = plt.hist(pix, range=(lo, hi), bins=50, histtype='step',
                                  alpha=0.5)
                 lp.append(p[0])
                 lt.append('%s: %.0f s' % (name, exptime))
@@ -409,6 +360,26 @@ def stage_tims(W=3600, H=3600, pixscale=0.262, brickname=None,
             if tim.plver != ver[1]:
                 print('Warning: image "%s" PLVER is "%s" but %s calib was run on PLVER "%s"' %
                       (str(tim), tim.plver, cal, ver[1]))
+
+    if plots:
+        # Pixel histograms of subimages.
+        for b in bands:
+            sig1 = np.median([tim.sig1 for tim in tims if tim.band == b])
+            plt.clf()
+            for tim in tims:
+                if tim.band != b:
+                    continue
+                # broaden range to encompass most pixels... only req'd when sky is bad
+                lo,hi = -5.*s, 5.*s
+                pix = tim.getImage()[tim.getInvError() > 0]
+                lo = min(lo, np.percentile(pix, 5))
+                hi = max(hi, np.percentile(pix, 95))
+                plt.hist(pix, range=(lo, hi), bins=50, histtype='step',
+                         alpha=0.5, label='%s: %.0f s' % (name, exptime))
+            plt.legend()
+            plt.xlabel('Pixel values')
+            plt.title('Pixel distributions: %s band' % b)
+            ps.savefig()
 
     if plots:
         for tim in tims:
@@ -3359,13 +3330,13 @@ def _one_blob(X):
                 slc = patch.getSlice(mod)
                 patch = patch.patch
 
-                # print('fracflux: band', band, 'isrc', isrc, 'tim', tim.name)
-                # print('patch sum', np.sum(patch), 'abs', np.sum(np.abs(patch)))
-                # print('counts:', counts[isrc])
-                # print('mod slice sum', np.sum(mod[slc]))
-                # print('mod[slc] - patch:', np.sum(mod[slc] - patch))
-                # print('fracflux_num = sum((mod - patch) * abs(patch)) / sum(patch**2):', np.sum((mod[slc] - patch) * np.abs(patch)) / np.sum(patch**2))
-                # print('fracflux_den = sum(abs(patch)) / abs(counts):', np.sum(np.abs(patch)) / np.abs(counts[isrc]))
+                print('fracflux: band', band, 'isrc', isrc, 'tim', tim.name)
+                print('patch sum', np.sum(patch), 'abs', np.sum(np.abs(patch)))
+                print('counts:', counts[isrc])
+                print('mod slice sum', np.sum(mod[slc]))
+                print('mod[slc] - patch:', np.sum(mod[slc] - patch))
+                print('fracflux_num = sum((mod - patch) * abs(patch)) / sum(patch**2):', np.sum((mod[slc] - patch) * np.abs(patch)) / np.sum(patch**2))
+                print('fracflux_den = sum(abs(patch)) / abs(counts):', np.sum(np.abs(patch)) / np.abs(counts[isrc]))
                 
                 # (mod - patch) is flux from others
                 # (mod - patch) / counts is normalized flux from others

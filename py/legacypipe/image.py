@@ -240,10 +240,17 @@ class LegacySurveyImage(object):
         assert(np.all(np.isfinite(invvar)))
         assert(np.isfinite(sig1))
 
+        if subsky:
+            ##
+            imgmed = np.median(img[invvar>0])
+            if np.abs(imgmed) > sig1:
+                print('WARNING: image median', imgmed, 'is more than 1 sigma away from zero!')
+
         twcs = ConstantFitsWcs(wcs)
         if x0 or y0:
             twcs.setX0Y0(x0,y0)
 
+        #print('gaussPsf:', gaussPsf, 'pixPsf:', pixPsf, 'const2psf:', const2psf)
         psf = self.read_psf_model(x0, y0, gaussPsf=gaussPsf, pixPsf=pixPsf,
                                   const2psf=const2psf, psf_sigma=psf_sigma)
 
