@@ -1567,6 +1567,8 @@ def stage_fitblobs(T=None,
                    plots=False, plots2=False,
                    nblobs=None, blob0=None, blobxy=None,
                    simul_opt=False, use_ceres=True, mp=None,
+                   checkpoint_pattern=None,
+                   checkpoint_period=None,
                    **kwargs):
     '''
     This is where the actual source fitting happens.
@@ -1715,7 +1717,7 @@ def stage_fitblobs(T=None,
 
     iter = _blob_iter(blobslices, blobsrcs, blobs, targetwcs, tims,
                       cat, bands, plots, ps, simul_opt, use_ceres, tycho)
-    # to allow debugpool to only queue tasks one at a time
+    # to allow timingpool to queue tasks one at a time
     iter = iterwrapper(iter, len(blobsrcs))
     R = mp.map(_bounce_one_blob, iter)
     print('[parallel fitblobs] Fitting sources took:', Time()-tlast)
