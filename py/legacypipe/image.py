@@ -245,7 +245,7 @@ class LegacySurveyImage(object):
             twcs.setX0Y0(x0,y0)
 
         psf = self.read_psf_model(x0, y0, gaussPsf=gaussPsf, pixPsf=pixPsf,
-                                  const2psf=const2psf)
+                                  const2psf=const2psf, psf_sigma=psf_sigma)
 
         tim = Image(img, invvar=invvar, wcs=twcs, psf=psf,
                     photocal=LinearPhotoCal(zpscale, band=band),
@@ -463,7 +463,7 @@ class LegacySurveyImage(object):
         return skyobj
 
     def read_psf_model(self, x0, y0, gaussPsf=False, pixPsf=False,
-                       const2psf=False):
+                       const2psf=False, psf_sigma=1.):
         psffn = None
         if gaussPsf:
             #from tractor.basics import NCircularGaussianPSF
