@@ -98,6 +98,19 @@ class BrickDuck(object):
     pass
 
 def get_git_version(dir=None):
+    '''
+    Runs 'git describe' in the current directory (or given dir) and
+    returns the result as a string.
+
+    Parameters
+    ----------
+    dir : string
+        If non-None, "cd" to the given directory before running 'git describe'
+
+    Returns
+    -------
+    Git version string
+    '''
     from astrometry.util.run_command import run_command
     cmd = ''
     if dir is not None:
@@ -110,6 +123,9 @@ def get_git_version(dir=None):
     return version
 
 def get_version_header(program_name, decals_dir, git_version=None):
+    '''
+    Creates a fitsio header describing a DECaLS data product.
+    '''
     import datetime
 
     if program_name is None:
@@ -614,9 +630,25 @@ def wcs_for_brick(b, W=3600, H=3600, pixscale=0.262):
                float(W), float(H))
 
 def bricks_touching_wcs(targetwcs, decals=None, B=None, margin=20):
-    # margin: How far outside the image to keep objects
-    # FIXME -- should be adaptive to object size!
+    '''
+    Finds DECaLS bricks touching a given WCS header object.
 
+    Parameters
+    ----------
+    targetwcs : astrometry.util.Tan object or similar
+        The region of sky to search
+    decals : legacypipe.common.Decals object
+        From which the brick table will be retrieved
+    B : FITS table
+        The table of brick objects to search
+    margin : int
+        Margin in pixels around the outside of the WCS
+
+    Returns
+    -------
+    A table (subset of B, if given) containing the bricks touching the
+    given WCS region + margin.
+    '''
     from astrometry.libkd.spherematch import match_radec
     if B is None:
         assert(decals is not None)
@@ -703,8 +735,20 @@ def create_temp(**kwargs):
 
 
 class Decals(object):
-    def __init__(self, decals_dir=None):
+    '''
+    A class describing the contents of a DECALS_DIR directory --
+    tables of CCDs and of bricks, and calibration data.  Methods for
+    dealing with the CCDs and bricks tables.
 
+    This class is also responsible for creating LegacySurveyImage
+    objects (eg, DecamImage objects), which then allow data to be read
+    from disk.
+    '''
+    def __init__(self, decals_dir=None):
+        '''
+        Create a Decals object using data from the given *decals_dir*
+        directory, or from the $DECALS_DIR environment variable.
+        '''
         from .bok import BokImage
         from .decam import DecamImage
 
@@ -746,6 +790,10 @@ Using the current directory as DECALS_DIR, but this is likely to fail.
         return d
 
     def drop_cache(self):
+        '''
+        Clears all cached data contained in this object.  Useful for
+        pickling / multiprocessing.
+        '''
         self.ccds = None
         self.bricks = None
         if self.bricktree is not None:
@@ -754,22 +802,43 @@ Using the current directory as DECALS_DIR, but this is likely to fail.
         self.bricktree = None
 
     def get_calib_dir(self):
+        '''
+        Returns the directory containing calibration data.
+        '''
         return os.path.join(self.decals_dir, 'calib')
 
     def get_image_dir(self):
+        '''
+        Returns the directory containing image data.
+        '''
         return os.path.join(self.decals_dir, 'images')
 
     def get_decals_dir(self):
+        '''
+        Returns the base DECALS_DIR directory.
+        '''
         return self.decals_dir
 
     def get_se_dir(self):
+        '''
+        Returns the directory containing SourceExtractor config files,
+        used during calibration.
+        '''
         return os.path.join(self.decals_dir, 'calib', 'se-config')
 
     def get_bricks(self):
+        '''
+        Returns a table of bricks.  The caller owns the table.
+
+        For read-only purposes, see *get_bricks_readonly()*, which
+        uses a cached version.
+        '''
         return fits_table(os.path.join(self.decals_dir, 'decals-bricks.fits'))
 
-    ### HACK...
     def get_bricks_readonly(self):
+        '''
+        Returns a read-only (shared) copy of the table of bricks.
+        '''
         if self.bricks is None:
             self.bricks = self.get_bricks()
             # Assert that bricks are the sizes we think they are.
@@ -779,6 +848,9 @@ Using the current directory as DECALS_DIR, but this is likely to fail.
         return self.bricks
 
     def get_brick(self, brickid):
+        '''
+        Returns a brick (as one row in a table) by *brickid* (integer).
+        '''
         B = self.get_bricks_readonly()
         I, = np.nonzero(B.brickid == brickid)
         if len(I) == 0:
@@ -786,6 +858,9 @@ Using the current directory as DECALS_DIR, but this is likely to fail.
         return B[I[0]]
 
     def get_brick_by_name(self, brickname):
+        '''
+        Returns a brick (as one row in a table) by name (string).
+        '''
         B = self.get_bricks_readonly()
         I, = np.nonzero(np.array([n == brickname for n in B.brickname]))
         if len(I) == 0:
@@ -835,11 +910,17 @@ Using the current directory as DECALS_DIR, but this is likely to fail.
         return I
 
     def get_ccds_readonly(self):
+        '''
+        Returns a shared copy of the table of CCDs.
+        '''
         if self.ccds is None:
             self.ccds = self.get_ccds()
         return self.ccds
     
     def get_ccds(self):
+        '''
+        Returns the table of CCDs.
+        '''
         fn = os.path.join(self.decals_dir, 'decals-ccds.fits')
         if not os.path.exists(fn):
             fn += '.gz'
@@ -852,6 +933,9 @@ Using the current directory as DECALS_DIR, but this is likely to fail.
         return T
 
     def ccds_touching_wcs(self, wcs, **kwargs):
+        '''
+        Returns a table of the CCDs touching the given *wcs* region.
+        '''
         T = self.get_ccds_readonly()
         I = ccds_touching_wcs(wcs, T, **kwargs)
         if len(I) == 0:
@@ -869,6 +953,9 @@ Using the current directory as DECALS_DIR, but this is likely to fail.
     def tims_touching_wcs(self, targetwcs, mp, bands=None,
                           **kwargs):
         '''
+        Creates tractor.Image objects for CCDs touching the given
+        *targetwcs* region.
+        
         mp: multiprocessing object
 
         kwargs are passed to LegacySurveyImage.get_tractor_image() and may include:
@@ -900,6 +987,10 @@ Using the current directory as DECALS_DIR, but this is likely to fail.
         return tims
     
     def find_ccds(self, expnum=None, ccdname=None):
+        '''
+        Returns a table of CCDs matching the given *expnum* (exposure
+        number, integer) and *ccdname* (string).
+        '''
         T = self.get_ccds_readonly()
         if expnum is not None:
             T = T[T.expnum == expnum]
@@ -911,9 +1002,7 @@ Using the current directory as DECALS_DIR, but this is likely to fail.
         '''
         Returns an index array for the members of the table "CCD" that
         are photometric.
-        '''
-        
-        '''
+
         Recipe in [decam-data 1314], 2015-07-15:
         
         * CCDNMATCH >= 20  (At least 20 stars to determine zero-pt)
@@ -938,7 +1027,6 @@ Using the current directory as DECALS_DIR, but this is likely to fail.
         * EXPTIME >= 30
         * CCDNUM = 31 (S7) should mask outside the region [1:1023,1:4094]
         '''
-
         # We assume that the zeropoints are present in the
         # CCDs file (starting in DR2)
         z0 = dict(g = 25.08,
@@ -967,12 +1055,19 @@ Using the current directory as DECALS_DIR, but this is likely to fail.
         return np.flatnonzero(good)
 
     def _get_zeropoints_table(self):
-        ''' Note, the returned object MUST NOT BE MODIFIED!
+        '''
+        Returns the table of zeropoints, which in DR2 is the same as
+        the table of CCDs.
+
+        Note, the returned object MUST NOT BE MODIFIED!
         '''
         # Hooray, DRY.  ZP table == CCD table.
         return self.get_ccds_readonly()
 
     def get_zeropoint_row_for(self, im):
+        '''
+        Returns one row of the zeropoints table for the given CCD table row.
+        '''
         ZP = self._get_zeropoints_table()
         I, = np.nonzero(ZP.expnum == im.expnum)
         if len(I) > 1:
@@ -986,6 +1081,9 @@ Using the current directory as DECALS_DIR, but this is likely to fail.
         return ZP[I[0]]
             
     def get_zeropoint_for(self, im):
+        '''
+        Returns the photometric zeropoint for the given CCD table row object *im*.
+        '''
         zp = self.get_zeropoint_row_for(im)
         # No updated zeropoint -- use header MAGZERO from primary HDU.
         if zp is None:
@@ -1000,6 +1098,10 @@ Using the current directory as DECALS_DIR, but this is likely to fail.
         return magzp
 
     def get_astrometric_zeropoint_for(self, im):
+        '''
+        Returns the astrometric offset for the given CCD table row
+        object *im*, in degrees.
+        '''
         zp = self.get_zeropoint_row_for(im)
         if zp is None:
             print('WARNING: no astrometric zeropoints found for', im)
@@ -1008,6 +1110,24 @@ Using the current directory as DECALS_DIR, but this is likely to fail.
         return dra / 3600., ddec / 3600.
 
 def exposure_metadata(filenames, hdus=None, trim=None):
+    '''
+    Creates a CCD table row object by reading metadata from a FITS
+    file header.
+
+    Parameters
+    ----------
+    filenames : list of strings
+        Filenames to read
+    hdus : list of integers; None to read all HDUs
+        List of FITS extensions (HDUs) to read
+    trim : string
+        String to trim off the start of the *filenames* for the
+        *image_filename* table entry
+
+    Returns
+    -------
+    A table that looks like the CCDs table.
+    '''
     nan = np.nan
     primkeys = [('FILTER',''),
                 ('RA', nan),
