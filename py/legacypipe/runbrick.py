@@ -1830,15 +1830,9 @@ def stage_fitblobs_finish(
 
     # Renumber blobs to make them contiguous.
     ublob,iblob = np.unique(T.blob, return_inverse=True)
+    del ublob
     assert(len(iblob) == len(T))
-    # Build map from (old+1) to new blob numbers, for the blob image.
-    blobmap = np.empty(blobs.max()+2, int)
-    # make sure that dropped blobs -> -1
-    blobmap[:] = -1
-    # in particular,
-    blobmap[0] = -1
-    blobmap[T.blob + 1] = iblob
-    newblobs = blobmap[blobs+1]
+    T.blob = iblob.astype(np.int32)
 
     # write out blob map
     if write_metrics:
@@ -1847,17 +1841,26 @@ def stage_fitblobs_finish(
         metricsdir = os.path.join(outdir, 'metrics', brickname[:3])
         trymakedirs(metricsdir)
         fn = os.path.join(metricsdir, 'blobs-%s.fits.gz' % brickname)
-        fitsio.write(fn, newblobs, header=version_header, clobber=True)
+
+        # Build map from (old+1) to new blob numbers, for the blob image.
+        blobmap = np.empty(blobs.max()+2, int)
+        # make sure that dropped blobs -> -1
+        blobmap[:] = -1
+        # in particular,
+        blobmap[0] = -1
+        blobmap[T.blob + 1] = iblob
+        blobs = blobmap[blobs+1]
+
+        fitsio.write(fn, blobs, header=version_header, clobber=True)
         print('Wrote', fn)
-
-    del newblobs
-    del ublob
-
+        del blobmap
+    del iblob
+    blobs = None
+    
     T.brickid   = np.zeros(len(T), np.int32) + brickid
     T.brickname = np.array([brickname] * len(T))
     T.objid     = np.arange(len(T)).astype(np.int32)
 
-    T.blob = iblob.astype(np.int32)
     # How many sources in each blob?
     from collections import Counter
     ninblob = Counter(T.blob)
@@ -1977,7 +1980,7 @@ def stage_fitblobs_finish(
     assert(cat.numberOfParams() == len(invvars))
 
     rtn = dict(fitblobs_R = None)
-    for k in ['cat', 'invvars', 'T', 'allbands']:
+    for k in ['cat', 'invvars', 'T', 'allbands', 'blobs']:
         rtn[k] = locals()[k]
     if get_all_models:
         rtn['all_models'] = all_models

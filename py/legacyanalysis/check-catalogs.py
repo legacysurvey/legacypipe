@@ -1,31 +1,17 @@
 import matplotlib
 matplotlib.use('Agg')
 import pylab as plt
+from glob import glob
 
 from astrometry.util.fits import *
 from astrometry.libkd.spherematch import *
 
 from tractor import *
 
-dataset = 'COSMOS DR2j'
-
-fns = ['dr2j/tractor/149/tractor-1498p017.fits',
-       'dr2j/tractor/149/tractor-1498p020.fits',
-       'dr2j/tractor/149/tractor-1498p022.fits',
-       'dr2j/tractor/149/tractor-1498p025.fits',
-       'dr2j/tractor/150/tractor-1501p017.fits',
-       'dr2j/tractor/150/tractor-1501p020.fits',
-       'dr2j/tractor/150/tractor-1501p022.fits',
-       'dr2j/tractor/150/tractor-1501p025.fits',
-       'dr2j/tractor/150/tractor-1503p017.fits',
-       'dr2j/tractor/150/tractor-1503p020.fits',
-       'dr2j/tractor/150/tractor-1503p022.fits',
-       'dr2j/tractor/150/tractor-1503p025.fits',
-       'dr2j/tractor/150/tractor-1506p017.fits',
-       'dr2j/tractor/150/tractor-1506p020.fits',
-       'dr2j/tractor/150/tractor-1506p022.fits',
-       'dr2j/tractor/150/tractor-1506p025.fits',
-       ]
+dataset = 'DR2m'
+fns = glob('dr2m/tractor/*/tractor-*.fits')
+fns.sort()
+fns = fns[:10]
 
 T = merge_tables([fits_table(fn) for fn in fns])
 
@@ -42,6 +28,20 @@ T.grzbright = reduce(np.logical_and,
                       T.decam_flux[:,2] * np.sqrt(T.decam_flux_ivar[:,2]) > 5.,
                       T.decam_flux[:,4] * np.sqrt(T.decam_flux_ivar[:,4]) > 5.,
                       ])
+
+print 'Checking finite-ness of decam_fracflux'
+#assert(np.all(np.isfinite(T.decam_fracflux)))
+I,B = np.nonzero(np.logical_not(np.isfinite(T.decam_fracflux)))
+print len(I), 'infinite DECAM_FRACFLUX'
+i = I[0]
+b = B[0]
+t = T[i]
+print 'Example:', repr(t)
+print 'band', b
+
+
+sys.exit(0)
+
 
 T.t0 = np.array([t[0] for t in T.type])
 
