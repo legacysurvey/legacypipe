@@ -46,7 +46,11 @@ tempdir = tempfile.gettempdir()
 CP_DQ_BITS = dict(badpix=1, satur=2, interp=4, cr=16, bleed=64,
                   trans=128,
                   edge = 256,
-                  edge2 = 512) # in z-band images?
+                  edge2 = 512,
+
+                  ## masked by stage_mask_junk
+                  longthin = 1024,
+                  )
 
 # The apertures we use in aperture photometry, in ARCSEC.
 apertures_arcsec = np.array([0.5, 0.75, 1., 1.5, 2., 3.5, 5., 7.])
