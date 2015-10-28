@@ -3338,13 +3338,14 @@ def _one_blob(X):
                 slc = patch.getSlice(mod)
                 patch = patch.patch
 
-                print('fracflux: band', band, 'isrc', isrc, 'tim', tim.name)
-                print('patch sum', np.sum(patch), 'abs', np.sum(np.abs(patch)))
-                print('counts:', counts[isrc])
-                print('mod slice sum', np.sum(mod[slc]))
-                print('mod[slc] - patch:', np.sum(mod[slc] - patch))
-                print('fracflux_num = sum((mod - patch) * abs(patch)) / sum(patch**2):', np.sum((mod[slc] - patch) * np.abs(patch)) / np.sum(patch**2))
-                print('fracflux_den = sum(abs(patch)) / abs(counts):', np.sum(np.abs(patch)) / np.abs(counts[isrc]))
+                # print('fracflux: band', band, 'isrc', isrc, 'tim', tim.name)
+                # print('src:', B.sources[isrc])
+                # print('patch sum', np.sum(patch), 'abs', np.sum(np.abs(patch)))
+                # print('counts:', counts[isrc])
+                # print('mod slice sum', np.sum(mod[slc]))
+                # print('mod[slc] - patch:', np.sum(mod[slc] - patch))
+                # print('fracflux_num = sum((mod - patch) * abs(patch)) / sum(patch**2):', np.sum((mod[slc] - patch) * np.abs(patch)) / np.sum(patch**2))
+                # print('fracflux_den = sum(abs(patch)) / abs(counts):', np.sum(np.abs(patch)) / np.abs(counts[isrc]))
                 
                 # (mod - patch) is flux from others
                 # (mod - patch) / counts is normalized flux from others
@@ -3355,12 +3356,18 @@ def _one_blob(X):
                 # (patch**2)/counts**2; counts**2 drops out of the
                 # denom.  If you have an identical source with twice the flux,
                 # this results in fracflux being 2.0
-                fracflux_num[isrc,iband] += np.sum((mod[slc] - patch) *
-                                                   np.abs(patch)) / np.sum(patch**2)
-                fracflux_den[isrc,iband] += np.sum(np.abs(patch)) / np.abs(counts[isrc])
+
+                # fraction of this source's flux that is inside this patch.
+                # This can be < 1 when the source is near an edge, or if the
+                # source is a huge diffuse galaxy in a small patch.
+                fin = np.abs(np.sum(patch) / counts[isrc])
+                #print('fin:', fin)
+                fracflux_num[isrc,iband] += (fin *
+                    np.sum((mod[slc] - patch) * np.abs(patch)) / np.sum(patch**2))
+                fracflux_den[isrc,iband] += fin
 
                 fracmasked_num[isrc,iband] += np.sum((tim.getInvError()[slc] == 0) * np.abs(patch)) / np.abs(counts[isrc])
-                fracmasked_den[isrc,iband] += np.sum(np.abs(patch)) / np.abs(counts[isrc])
+                fracmasked_den[isrc,iband] += fin
 
                 fracin_num[isrc,iband] += np.abs(np.sum(patch))
                 fracin_den[isrc,iband] += np.abs(counts[isrc])
@@ -3381,9 +3388,15 @@ def _one_blob(X):
                 # If the source is not near an image edge, sum(patch.patch) == counts[isrc].
                 rchi2_den[isrc,iband] += np.sum(patch.patch) / counts[isrc]
 
+    #print('Fracflux_num:', fracflux_num)
+    #print('Fracflux_den:', fracflux_den)
+                
     B.fracflux   = fracflux_num   / np.maximum(1, fracflux_den)
     B.rchi2      = rchi2_num      / np.maximum(1, rchi2_den)
     B.fracmasked = fracmasked_num / np.maximum(1, fracmasked_den)
+
+    #print('Fracflux:', B.fracflux)
+    
     # fracin_{num,den} are in flux * nimages units
     tinyflux = 1e-9
     B.fracin     = fracin_num     / np.maximum(tinyflux, fracin_den)
