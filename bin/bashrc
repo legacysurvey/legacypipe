@@ -34,8 +34,7 @@ if [ "$NERSC_HOST" == "edison" ]; then
   # Aaron's zeropoint-corrected version
   module load unwise_coadds/2.1-scratch
 
-  # Oops, error in tractor/dr2
-  #module load tractor-hpcp
+  module load tractor-hpcp
   module load astrometry_net-hpcp
   module load astropy-hpcp
   module load scipy-hpcp
@@ -107,7 +106,7 @@ if [ "$NERSC_HOST" == "edison" ]; then
   #PATH=${PATH}:${CODE_DIR}/astrometry.net/blind
 
   # local Tractor install
-  PYP=${PYP}:${CODE_DIR}/tractor
+  #PYP=${PYP}:${CODE_DIR}/tractor
 
   export PYTHONPATH=${PYP}
   export PATH
