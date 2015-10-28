@@ -4134,66 +4134,8 @@ def stage_writecat(
             j = cclower.index(c)
             cols[i] = cc[j]
 
-    # fill in any empty columns (eg, SDSS columns in areas outside the
-    # footprint)
-    fitsB = np.uint8
-    fitsI = np.int16
-    fitsJ = np.int32
-    fitsK = np.int64
-    fitsD = float
-    fitsE = np.float32
-    coltypes = dict(sdss_run=fitsI,
-                    sdss_camcol=fitsB,
-                    sdss_field=fitsI,
-                    sdss_id=fitsI,
-                    sdss_objid=fitsK,
-                    sdss_parent=fitsI,
-                    sdss_nchild=fitsI,
-                    sdss_objc_type=fitsJ,
-                    sdss_objc_flags=fitsJ,
-                    sdss_objc_flags2=fitsJ,
-                    sdss_ra=fitsD,
-                    sdss_ra_ivar=fitsD,
-                    sdss_dec=fitsD,
-                    sdss_dec_ivar=fitsD,
-                    sdss_mjd=fitsJ,
-                    sdss_resolve_status=fitsJ
-                    )
-    arrtypes = dict(sdss_flags=fitsJ,
-                    sdss_flags2=fitsJ,
-                    sdss_tai=fitsD,
-                    sdss_psf_fwhm=fitsE,
-                    sdss_theta_dev=fitsE,
-                    sdss_theta_deverr=fitsE,
-                    sdss_ab_dev=fitsE,
-                    sdss_ab_deverr=fitsE,
-                    sdss_theta_exp=fitsE,
-                    sdss_theta_experr=fitsE,
-                    sdss_ab_exp=fitsE,
-                    sdss_ab_experr=fitsE,
-                    sdss_fracdev=fitsE,
-                    sdss_phi_dev_deg=fitsE,
-                    sdss_phi_exp_deg=fitsE,
-                    sdss_psfflux=fitsE,
-                    sdss_psfflux_ivar=fitsE,
-                    sdss_cmodelflux=fitsE,
-                    sdss_cmodelflux_ivar=fitsE,
-                    sdss_modelflux=fitsE,
-                    sdss_modelflux_ivar=fitsE,
-                    sdss_devflux=fitsE,
-                    sdss_devflux_ivar=fitsE,
-                    sdss_expflux=fitsE,
-                    sdss_expflux_ivar=fitsE,
-                    sdss_extinction=fitsE,
-                    sdss_calib_status=fitsJ)
-    Tcols = T2.get_columns()
-    for c in cols:
-        if not c in Tcols:
-            print('Filling in missing column', c)
-            if c in coltypes:
-                T2.set(c, np.zeros(len(T2), coltypes[c]))
-            if c in arrtypes:
-                T2.set(c, np.zeros((len(T2),5), arrtypes[c]))
+    if not no_sdss:
+        _fill_sdss_columns(T2, cols)
 
     if not no_sdss:
         # Blank out all SDSS fields for sources that have moved too much.
@@ -4216,6 +4158,39 @@ def stage_writecat(
         print('Wrote', fn)
 
     return dict(T2=T2)
+
+
+def _fill_sdss_columns(T2, cols):
+    # fill in any empty columns (eg, SDSS columns in areas outside the
+    # footprint).  FITS types:
+    fB = np.uint8
+    fI = np.int16
+    fJ = np.int32
+    fK = np.int64
+    fD = float
+    fE = np.float32
+    # sdss_*
+    coltypes = dict(
+        run=fI, camcol=fB, field=fI, id=fI, objid=fK, parent=fI, nchild=fI,
+        objc_type=fJ, objc_flags=fJ, objc_flags2=fJ, ra=fD, ra_ivar=fD, dec=fD,
+        dec_ivar=fD, mjd=fJ, resolve_status=fJ)
+    arrtypes = dict(
+        flags=fJ, flags2=fJ, tai=fD, psf_fwhm=fE, theta_dev=fE,
+        theta_deverr=fE, ab_dev=fE, ab_deverr=fE, theta_exp=fE,
+        theta_experr=fE, ab_exp=fE, ab_experr=fE, fracdev=fE, phi_dev_deg=fE,
+        phi_exp_deg=fE, psfflux=fE, psfflux_ivar=fE, cmodelflux=fE,
+        cmodelflux_ivar=fE, modelflux=fE, modelflux_ivar=fE, devflux=fE,
+        devflux_ivar=fE, expflux=fE, expflux_ivar=fE, extinction=fE,
+        calib_status=fJ)
+    Tcols = T2.get_columns()
+    for c in cols:
+        if not c in Tcols:
+            print('Filling in missing column', c)
+            sc = c.replace('sdss_','')
+            if sc in coltypes:
+                T2.set(c, np.zeros(len(T2), coltypes[sc]))
+            if sc in arrtypes:
+                T2.set(c, np.zeros((len(T2),5), arrtypes[sc]))
 
 def _bounce_tim_get_resamp(X):
     (tim, targetwcs) = X
