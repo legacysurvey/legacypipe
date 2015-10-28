@@ -1602,8 +1602,9 @@ def stage_fitblobs(T=None,
             sy,sx = bs
             by0,by1 = sy.start, sy.stop
             bx0,bx1 = sx.start, sx.stop
-            plt.plot([bx0, bx0, bx1, bx1, bx0], [by0, by1, by1, by0, by0], 'r-')
-            plt.text((bx0+bx1)/2., by0, '%i' % i, ha='center', va='bottom', color='r')
+            plt.plot([bx0, bx0, bx1, bx1, bx0], [by0, by1, by1, by0, by0],'r-')
+            plt.text((bx0+bx1)/2., by0, '%i' % i,
+                     ha='center', va='bottom', color='r')
         plt.axis(ax)
         plt.title('Blobs')
         ps.savefig()
@@ -1613,7 +1614,8 @@ def stage_fitblobs(T=None,
                 src = cat[isrc]
                 ra,dec = src.getPosition().ra, src.getPosition().dec
                 ok,x,y = targetwcs.radec2pixelxy(ra, dec)
-                plt.text(x, y, 'b%i/s%i' % (i,isrc), ha='center', va='bottom', color='r')
+                plt.text(x, y, 'b%i/s%i' % (i,isrc),
+                         ha='center', va='bottom', color='r')
         plt.axis(ax)
         plt.title('Blobs + Sources')
         ps.savefig()
@@ -1625,8 +1627,9 @@ def stage_fitblobs(T=None,
             sy,sx = bs
             by0,by1 = sy.start, sy.stop
             bx0,bx1 = sx.start, sx.stop
-            plt.plot([bx0, bx0, bx1, bx1, bx0], [by0, by1, by1, by0, by0], 'r-')
-            plt.text((bx0+bx1)/2., by0, '%i' % i, ha='center', va='bottom', color='r')
+            plt.plot([bx0,bx0, bx1, bx1, bx0], [by0, by1, by1, by0, by0], 'r-')
+            plt.text((bx0+bx1)/2., by0, '%i' % i,
+                     ha='center', va='bottom', color='r')
         plt.axis(ax)
         plt.title('Blobs')
         ps.savefig()
@@ -1638,8 +1641,9 @@ def stage_fitblobs(T=None,
             sy,sx = bs
             by0,by1 = sy.start, sy.stop
             bx0,bx1 = sx.start, sx.stop
-            plt.plot([bx0, bx0, bx1, bx1, bx0], [by0, by1, by1, by0, by0], 'r-')
-            plt.text((bx0+bx1)/2., by0, '%i' % i, ha='center', va='bottom', color='r')
+            plt.plot([bx0, bx0, bx1, bx1, bx0], [by0, by1, by1, by0,by0], 'r-')
+            plt.text((bx0+bx1)/2., by0, '%i' % i,
+                     ha='center', va='bottom', color='r')
         plt.axis(ax)
         plt.title('Blobs')
         ps.savefig()
@@ -1911,9 +1915,7 @@ def stage_fitblobs_finish(
     ninblob = Counter(T.blob)
     T.ninblob = np.array([ninblob[b] for b in T.blob]).astype(np.int16)
     T.tycho2inblob = BB.hastycho
-    T.dchisq      = BB.dchisqs.astype(np.float32)
-    # Set -0. to 0.
-    #T.dchisq[T.dchisq == 0.] = 0.
+    T.dchisq       = BB.dchisqs.astype(np.float32)
 
     if write_metrics or get_all_models:
         from desi_common import prepare_fits_catalog, fits_typemap
@@ -1953,8 +1955,6 @@ def stage_fitblobs_finish(
             TT.set('%s_flags' % prefix,
                    np.array([m.get(srctype,0)
                              for m in BB.all_model_flags]))
-
-            # print('all_model_fluxivs:', BB.all_model_fluxivs)
             fluxivs = np.zeros((len(TT), len(allbands)), np.float32)
             bandmap = np.array([allbands.index(b) for b in bands])
             for j in range(len(xcat)):
@@ -1979,7 +1979,6 @@ def stage_fitblobs_finish(
         TT.delete_column('exp_fracDev')
         TT.delete_column('exp_type')
         TT.delete_column('comp_type')
-
         # Unpack ellipses
         TT.dev_shape_r  = TT.dev_shapeDev[:,0]
         TT.dev_shape_e1 = TT.dev_shapeDev[:,1]
@@ -2008,7 +2007,6 @@ def stage_fitblobs_finish(
                                         comment='Band order in array values'))
                 primhdr.add_record(dict(name='PRODTYPE', value='catalog',
                                         comment='NOAO data product type'))
-
             fn = os.path.join(metricsdir, 'all-models-%s.fits' % brickname)
             TT.writeto(fn, header=hdr)
             del TT
@@ -2093,14 +2091,14 @@ def _blob_iter(blobslices, blobsrcs, blobs, targetwcs, tims, cat, bands,
               'one pixel:', onex,oney, 'has Tycho-2 star:', hastycho)
 
         rr,dd = targetwcs.pixelxy2radec([bx0,bx0,bx1,bx1],[by0,by1,by1,by0])
-
         subtimargs = []
         for itim,tim in enumerate(tims):
             h,w = tim.shape
             ok,x,y = tim.subwcs.radec2pixelxy(rr,dd)
             sx0,sx1 = x.min(), x.max()
             sy0,sy1 = y.min(), y.max()
-            #print('blob extent in pixel space of', tim.name, ': x', (sx0,sx1), 'y', (sy0,sy1), 'tim shape', (h,w))
+            #print('blob extent in pixel space of', tim.name, ': x',
+            # (sx0,sx1), 'y', (sy0,sy1), 'tim shape', (h,w))
             if sx1 < 0 or sy1 < 0 or sx0 > w or sy0 > h:
                 continue
             sx0 = np.clip(int(np.floor(sx0)), 0, w-1)
@@ -2114,11 +2112,10 @@ def _blob_iter(blobslices, blobsrcs, blobs, targetwcs, tims, cat, bands,
             # Note that we *don't* shift the PSF here -- we do that
             # in the _one_blob code.
             subsky = tim.getSky().shifted(sx0, sy0)
-
             tim.imobj.psfnorm = tim.psfnorm
             tim.imobj.galnorm = tim.galnorm
+            # FIXME -- maybe the cache is worth sending?
             tim.psf.clear_cache()
-
             subtimargs.append((subimg, subie, subwcs, tim.subwcs,
                                tim.getPhotoCal(),
                                subsky, tim.psf, tim.name, sx0, sx1, sy0, sy1,
@@ -2130,7 +2127,6 @@ def _blob_iter(blobslices, blobsrcs, blobs, targetwcs, tims, cat, bands,
                simul_opt, use_ceres, hastycho)
 
 def _bounce_one_blob(X):
-
     # iblob = X[0]
     # fn = 'blob-%i.pickle' % iblob
     # from astrometry.util.file import pickle_to_file
@@ -2156,7 +2152,8 @@ def _clip_model_to_blob(mod, sh, ie):
     '''
     mslc,islc = mod.getSlices(sh)
     sy,sx = mslc
-    mod = Patch(mod.x0 + sx.start, mod.y0 + sy.start, mod.patch[mslc] * (ie[islc]>0))
+    mod = Patch(mod.x0 + sx.start, mod.y0 + sy.start,
+                mod.patch[mslc] * (ie[islc]>0))
     return mod
 
 FLAG_CPU_A   = 1
@@ -2200,7 +2197,8 @@ def _select_model(chisqs, nparams, galaxy_margin):
     # This is the "fractional" upgrade threshold for ptsrc/simple->dev/exp:
     # 2% of ptsrc vs nothing
     fcut = 0.02 * chisqs['ptsrc']
-    #print('Cut: max of', cut, 'and', fcut, ' (fraction of chisq_psf=%.1f)' % chisqs['ptsrc'])
+    #print('Cut: max of', cut, 'and', fcut, ' (fraction of chisq_psf=%.1f)'
+    # % chisqs['ptsrc'])
     cut = max(cut, fcut)
 
     expdiff = chisqs['exp'] - chisqs[keepmod]
@@ -2529,7 +2527,8 @@ def _one_blob(X):
                     coimgs,cons = compute_coadds(tims, bands, blobwcs,
                                                  fill_holes=False)
                     dimshow(get_rgb(coimgs, bands), extent=(bx0,bx1,by0,by1))
-                    # plt.plot([bx0,bx0,bx1,bx1,bx0],[by0,by1,by1,by0,by0],'r-')
+                    # plt.plot([bx0,bx0,bx1,bx1,bx0],[by0,by1,by1,by0,by0],
+                    #          'r-')
                     # for tim in srctims:
                     #     h,w = tim.shape
                     #     tx,ty = [0,0,w,w,0], [0,h,h,0,0]
@@ -2609,7 +2608,8 @@ def _one_blob(X):
                 _plot_mods(list(srctractor.getImages()), spmods, spnames,
                            bands, None, None, bslc, blobw, blobh, ps,
                            chi_plots=plots2, rgb_plots=True, main_plot=False,
-                           rgb_format='spmods Blob %i, src %i: %%s' % (iblob, i))
+                           rgb_format=('spmods Blob %i, src %i: %%s' %
+                                       (iblob, i)))
                 _plot_mods(tims, spallmods, spallnames, bands, None, None,
                            bslc, blobw, blobh, ps,
                            chi_plots=plots2, rgb_plots=True, main_plot=False,
@@ -2650,7 +2650,8 @@ def _one_blob(X):
 
         for numi,i in enumerate(Ibright):
             #tsrc = Time()
-            #print('Fitting source', i, '(%i of %i in blob)' % (numi, len(Ibright)))
+            #print('Fitting source', i, '(%i of %i in blob)' %
+            #  (numi, len(Ibright)))
             cat.freezeAllBut(i)
 
             for step in range(50):
@@ -2926,7 +2927,8 @@ def _one_blob(X):
                     (chisqs['ptsrc'] > 400)):
 
                     if hastycho:
-                        print('Not computing galaxy models: Tycho-2 star in blob')
+                        print('Not computing galaxy models: Tycho-2 star in '+
+                              'blob')
                         continue
 
                     trymodels.extend([
@@ -2998,9 +3000,6 @@ def _one_blob(X):
                 dtractor.setModelMasks(dmm)
                 enable_galaxy_cache()
 
-                #print('Optimizing with tims', [tim.shape for tim in dtractor.images])
-                #t0 = Time()
-
                 for step in range(50):
                     #print('optimizing:', newsrc)
                     dlnp,X,alpha = dtractor.optimize(**optargs)
@@ -3009,7 +3008,8 @@ def _one_blob(X):
                         break
 
                 # print('Mod', name, 'round0 opt', Time()-t0)
-                # print('New source (after to-depth round optimization):', newsrc)
+                # print('New source (after to-depth round optimization):',
+                #   newsrc)
 
                 if plots:
                     plt.clf()
@@ -3019,9 +3019,6 @@ def _one_blob(X):
                     dimshow(get_rgb(comods, bands))
                     plt.title('To-depth opt: ' + name)
                     ps.savefig()
-
-            # print('Optimizing with tims', [tim.shape for tim in srctractor.images])
-            #t0 = Time()
 
             # First-round optimization (during model selection)
             thisflags = 0
@@ -3070,14 +3067,12 @@ def _one_blob(X):
                     newsrc.halfsize = MAXHALF
 
             if hastycho:
-                # print('There is a Tycho-2 star in this blob; not doing second-round optimization')
                 modtims = None
             elif bigblob:
                 mods = []
                 for tim in tims:
                     mod = newsrc.getModelPatch(tim)
                     if mod is not None:
-                        #print('Model', name, 'round2 in', tim, ': mod', mod.shape)
                         h,w = tim.shape
                         mod.clipTo(w,h)
                         if mod.patch is None:
@@ -3093,12 +3088,10 @@ def _one_blob(X):
                     if mod is None:
                         continue
                     #print('After first-round fit: model is', mod.shape)
-                    mod = _clip_model_to_blob(mod, tim.shape, tim.getInvError())
+                    mod = _clip_model_to_blob(mod, tim.shape,tim.getInvError())
                     d[newsrc] = Patch(mod.x0, mod.y0, mod.patch != 0)
                     modtims.append(tim)
                     mm.append(d)
-
-            # print('Second-round shapes:', [tim.shape for tim in modtims])
 
             if modtims is not None:
                 modtractor = Tractor(modtims, [newsrc])
@@ -3162,7 +3155,8 @@ def _one_blob(X):
             B.all_model_flags[i][name] = thisflags
 
         # if plots:
-        #    _plot_mods(tims, plotmods, plotmodnames, bands, None, None, bslc, blobw, blobh, ps)
+        #    _plot_mods(tims, plotmods, plotmodnames, bands, None, None,
+        #               bslc, blobw, blobh, ps)
 
         if plots:
             from collections import OrderedDict
@@ -3401,13 +3395,13 @@ def _one_blob(X):
 
                 # print('fracflux: band', band, 'isrc', isrc, 'tim', tim.name)
                 # print('src:', B.sources[isrc])
-                # print('patch sum', np.sum(patch), 'abs', np.sum(np.abs(patch)))
+                # print('patch sum', np.sum(patch),'abs',np.sum(np.abs(patch)))
                 # print('counts:', counts[isrc])
                 # print('mod slice sum', np.sum(mod[slc]))
                 # print('mod[slc] - patch:', np.sum(mod[slc] - patch))
-                # print('fracflux_num = sum((mod - patch) * abs(patch)) / sum(patch**2):', np.sum((mod[slc] - patch) * np.abs(patch)) / np.sum(patch**2))
-                # print('fracflux_den = sum(abs(patch)) / abs(counts):', np.sum(np.abs(patch)) / np.abs(counts[isrc]))
-                
+                # print('fracflux_num =', )
+                # print('fracflux_den =', )
+
                 # (mod - patch) is flux from others
                 # (mod - patch) / counts is normalized flux from others
                 # We take that and weight it by this source's profile;
@@ -3424,10 +3418,14 @@ def _one_blob(X):
                 fin = np.abs(np.sum(patch) / counts[isrc])
                 #print('fin:', fin)
                 fracflux_num[isrc,iband] += (fin *
-                    np.sum((mod[slc] - patch) * np.abs(patch)) / np.sum(patch**2))
+                    np.sum((mod[slc] - patch) * np.abs(patch)) /
+                    np.sum(patch**2))
                 fracflux_den[isrc,iband] += fin
 
-                fracmasked_num[isrc,iband] += np.sum((tim.getInvError()[slc] == 0) * np.abs(patch)) / np.abs(counts[isrc])
+                fracmasked_num[isrc,iband] += (
+                    np.sum((tim.getInvError()[slc] == 0) * np.abs(patch)) /
+                    np.abs(counts[isrc]))
+                    
                 fracmasked_den[isrc,iband] += fin
 
                 fracin_num[isrc,iband] += np.abs(np.sum(patch))
@@ -3442,11 +3440,15 @@ def _one_blob(X):
                 if counts[isrc] == 0:
                     continue
                 slc = patch.getSlice(mod)
-                # We compute numerator and denom separately to handle edge objects, where
-                # sum(patch.patch) < counts.  Also, to normalize by the number of images.
-                # (Being on the edge of an image is like being in half an image.)
-                rchi2_num[isrc,iband] += np.sum(chisq[slc] * patch.patch) / counts[isrc]
-                # If the source is not near an image edge, sum(patch.patch) == counts[isrc].
+                # We compute numerator and denom separately to handle
+                # edge objects, where sum(patch.patch) < counts.
+                # Also, to normalize by the number of images.  (Being
+                # on the edge of an image is like being in half an
+                # image.)
+                rchi2_num[isrc,iband] += (np.sum(chisq[slc] * patch.patch) / 
+                                          counts[isrc])
+                # If the source is not near an image edge,
+                # sum(patch.patch) == counts[isrc].
                 rchi2_den[isrc,iband] += np.sum(patch.patch) / counts[isrc]
 
     #print('Fracflux_num:', fracflux_num)
@@ -3551,7 +3553,9 @@ def _get_subimages(tims, mods, src):
 
         subimg = tim.getImage()[slc]
         if subimg.shape != (mh,mw):
-            print('Subimage shape:', subimg.shape, 'image shape', tim.getImage().shape, 'slice y', y0,y1, 'x', x0,x1, 'mod shape', mh,mw)
+            print('Subimage shape:', subimg.shape, 'image shape',
+                  tim.getImage().shape, 'slice y', y0,y1, 'x', x0,x1,
+                  'mod shape', mh,mw)
         # print('  srctim: x0,y0', x0,y0, 'shape', (y1-y0,x1-x0))
         subpsf = tim.psf.constantPsfAt((x0+x1)/2., (y0+y1)/2.)
         srctim = Image(data=subimg,
@@ -3603,7 +3607,8 @@ def _get_mod(X):
     # for row in fft_timing:
     #     print(row)
     # pickle_to_file(fft_timing,
-    #                'fft-timing-%s.pickle' % str(tim).replace('Image ','').replace(' ',''))
+    #                ('fft-timing-%s.pickle' % 
+    # str(tim).replace('Image ','').replace(' ','')))
     #######
 
     return mod
@@ -3629,15 +3634,18 @@ def stage_coadds(bands=None, version_header=None, targetwcs=None,
     fn = os.path.join(basedir, 'decals-%s-ccds.fits' % brickname)
     #
     ccds.ccd_x0 = np.array([tim.x0 for tim in tims]).astype(np.int16)
-    ccds.ccd_x1 = np.array([tim.x0 + tim.shape[1] for tim in tims]).astype(np.int16)
+    ccds.ccd_x1 = np.array([tim.x0 + tim.shape[1]
+                            for tim in tims]).astype(np.int16)
     ccds.ccd_y0 = np.array([tim.y0 for tim in tims]).astype(np.int16)
-    ccds.ccd_y1 = np.array([tim.y0 + tim.shape[0] for tim in tims]).astype(np.int16)
+    ccds.ccd_y1 = np.array([tim.y0 + tim.shape[0]
+                            for tim in tims]).astype(np.int16)
     rd = np.array([[tim.subwcs.pixelxy2radec(1, 1)[-2:],
                     tim.subwcs.pixelxy2radec(1, y1-y0)[-2:],
                     tim.subwcs.pixelxy2radec(x1-x0, 1)[-2:],
                     tim.subwcs.pixelxy2radec(x1-x0, y1-y0)[-2:]]
                     for tim,x0,y0,x1,y1 in
-                   zip(tims, ccds.ccd_x0+1, ccds.ccd_y0+1, ccds.ccd_x1, ccds.ccd_y1)])
+                   zip(tims, ccds.ccd_x0+1, ccds.ccd_y0+1,
+                       ccds.ccd_x1, ccds.ccd_y1)])
     ok,x,y = targetwcs.radec2pixelxy(rd[:,:,0], rd[:,:,1])
     ccds.brick_x0 = np.floor(np.min(x, axis=1)).astype(np.int16)
     ccds.brick_x1 = np.ceil (np.max(x, axis=1)).astype(np.int16)
@@ -3908,8 +3916,9 @@ def _unwise_phot(X):
 
         if use_ceres:
             print('Trying without Ceres...')
-            W = unwise_forcedphot(wcat, tiles, roiradecbox=roiradec, bands=[band],
-                                  unwise_dir=unwise_dir, use_ceres=False)
+            W = unwise_forcedphot(wcat, tiles, roiradecbox=roiradec,
+                                  bands=[band], unwise_dir=unwise_dir,
+                                  use_ceres=False)
     return W
 
 
@@ -3950,13 +3959,13 @@ def stage_writecat(
     TT.tx = TT.tx.astype(np.float32)
     TT.ty = TT.ty.astype(np.float32)
 
-    TT.decam_rchi2    = np.zeros((len(TT), len(allbands)), np.float32)
-    TT.decam_fracflux = np.zeros((len(TT), len(allbands)), np.float32)
+    TT.decam_rchi2      = np.zeros((len(TT), len(allbands)), np.float32)
+    TT.decam_fracflux   = np.zeros((len(TT), len(allbands)), np.float32)
     TT.decam_fracmasked = np.zeros((len(TT), len(allbands)), np.float32)
-    TT.decam_fracin   = np.zeros((len(TT), len(allbands)), np.float32)
-    TT.decam_nobs     = np.zeros((len(TT), len(allbands)), np.uint8)
-    TT.decam_anymask  = np.zeros((len(TT), len(allbands)), TT.anymask.dtype)
-    TT.decam_allmask  = np.zeros((len(TT), len(allbands)), TT.allmask.dtype)
+    TT.decam_fracin     = np.zeros((len(TT), len(allbands)), np.float32)
+    TT.decam_nobs       = np.zeros((len(TT), len(allbands)), np.uint8)
+    TT.decam_anymask    = np.zeros((len(TT), len(allbands)), TT.anymask.dtype)
+    TT.decam_allmask    = np.zeros((len(TT), len(allbands)), TT.allmask.dtype)
     B = np.array([allbands.index(band) for band in bands])
     TT.decam_rchi2     [:,B] = TT.rchi2
     TT.decam_fracflux  [:,B] = TT.fracflux
@@ -3971,24 +3980,22 @@ def stage_writecat(
     TT.delete_column('nobs')
     TT.delete_column('anymask')
     TT.delete_column('allmask')
-
     TT.rename('oob', 'out_of_bounds')
 
     if AP is not None:
         # How many apertures?
         ap = AP.get('apflux_img_%s' % bands[0])
         n,A = ap.shape
-
         TT.decam_apflux = np.zeros((len(TT), len(allbands), A), np.float32)
-        TT.decam_apflux_ivar = np.zeros((len(TT), len(allbands), A),
-                                        np.float32)
+        TT.decam_apflux_ivar  = np.zeros((len(TT), len(allbands), A),
+                                         np.float32)
         TT.decam_apflux_resid = np.zeros((len(TT), len(allbands), A),
                                          np.float32)
         for iband,band in enumerate(bands):
             i = allbands.index(band)
-            TT.decam_apflux[:,i,:] = AP.get('apflux_img_%s' % band)
-            TT.decam_apflux_ivar[:,i,:] = AP.get('apflux_img_ivar_%s' % band)
-            TT.decam_apflux_resid[:,i,:] = AP.get('apflux_resid_%s' % band)
+            TT.decam_apflux      [:,i,:] = AP.get('apflux_img_%s'      % band)
+            TT.decam_apflux_ivar [:,i,:] = AP.get('apflux_img_ivar_%s' % band)
+            TT.decam_apflux_resid[:,i,:] = AP.get('apflux_resid_%s'    % band)
 
     cat.thawAllRecursive()
     hdr = None
@@ -4027,14 +4034,12 @@ def stage_writecat(
     ok,bx,by = targetwcs.radec2pixelxy(T2.orig_ra, T2.orig_dec)
     T2.bx0 = (bx - 1.).astype(np.float32)
     T2.by0 = (by - 1.).astype(np.float32)
-
     ok,bx,by = targetwcs.radec2pixelxy(T2.ra, T2.dec)
     T2.bx = (bx - 1.).astype(np.float32)
     T2.by = (by - 1.).astype(np.float32)
 
     T2.brick_primary = ((T2.ra  >= brick.ra1 ) * (T2.ra  < brick.ra2) *
                         (T2.dec >= brick.dec1) * (T2.dec < brick.dec2))
-
     T2.ra_ivar  = T2.ra_ivar .astype(np.float32)
     T2.dec_ivar = T2.dec_ivar.astype(np.float32)
 
@@ -4072,10 +4077,10 @@ def stage_writecat(
         for band in [1,2,3,4]:
             dm = vega_to_ab['w%i' % band]
             fluxfactor = 10.** (dm / -2.5)
-            f = WISE.get('w%i_nanomaggies' % band)
-            f *= fluxfactor
-            f = WISE.get('w%i_nanomaggies_ivar' % band)
-            f *= (1./fluxfactor**2)
+            c = 'w%i_nanomaggies' % band
+            WISE.set(c, WISE.get(c) * fluxfactor)
+            c = 'w%i_nanomaggies_ivar' % band
+            WISE.set(c, WISE.get(c) / fluxfactor**2)
 
         T2.wise_flux = np.vstack([
             WISE.w1_nanomaggies, WISE.w2_nanomaggies,
@@ -4117,10 +4122,8 @@ def stage_writecat(
 
     cols = [
         'brickid', 'brickname', 'objid', 'brick_primary', 'blob', 'ninblob',
-        'tycho2inblob',
-        'type', 'ra', 'ra_ivar', 'dec', 'dec_ivar',
-        'bx', 'by', 'bx0', 'by0',
-        'left_blob', 'out_of_bounds',
+        'tycho2inblob', 'type', 'ra', 'ra_ivar', 'dec', 'dec_ivar',
+        'bx', 'by', 'bx0', 'by0', 'left_blob', 'out_of_bounds',
         'dchisq', 'ebv',
         'decam_flux', 'decam_flux_ivar' ]
 
@@ -4133,9 +4136,9 @@ def stage_writecat(
 
     if WISE is not None:
         cols.extend([
-                'wise_flux', 'wise_flux_ivar',
-                'wise_mw_transmission', 'wise_nobs', 'wise_fracflux',
-                'wise_rchi2'])
+            'wise_flux', 'wise_flux_ivar',
+            'wise_mw_transmission', 'wise_nobs', 'wise_fracflux',
+            'wise_rchi2'])
 
     cols.extend([
         'fracdev', 'fracDev_ivar', 'shapeexp_r', 'shapeexp_r_ivar',
@@ -4408,16 +4411,17 @@ def run_brick(brick, radec=None, pixscale=0.262,
     If you want to measure only a subset of the astronomical objects,
     you can use:
 
-    - *nblobs*: None or int; for debugging purposes, only fit the first N blobs.
+    - *nblobs*: None or int; for debugging purposes, only fit the
+       first N blobs.
     - *blob*: int; for debugging purposes, start with this blob index.
     - *blobxy*: list of (x,y) integer tuples; only run the blobs
       containing these pixels.
 
     Other options:
 
-    - *pv*: boolean; use the Community Pipeline's WCS headers, with astrometric
-      shifts from the zeropoints.fits file, converted from their native
-      PV format into SIP format.
+    - *pv*: boolean; use the Community Pipeline's WCS headers, with
+      astrometric shifts from the zeropoints.fits file, converted from
+      their native PV format into SIP format.
 
     - *pipe*: boolean; "pipeline mode"; avoid computing non-essential
       things.
@@ -4457,8 +4461,8 @@ def run_brick(brick, radec=None, pixscale=0.262,
       where to look for files including calibration files, tables of
       CCDs and bricks, image data, etc.
 
-    - *unwise_dir*: string; default unwise-coadds;
-      where to look for unWISE coadd files.  This may be a colon-separated list of
+    - *unwise_dir*: string; default unwise-coadds; where to look for
+      unWISE coadd files.  This may be a colon-separated list of
       directories to search in order.
 
     - *threads*: integer; how many CPU cores to use
@@ -4606,13 +4610,13 @@ def run_brick(brick, radec=None, pixscale=0.262,
 
     if wise:
         prereqs.update({
-                'wise_forced': 'coadds',
-                'writecat': 'wise_forced',
-                })
+            'wise_forced': 'coadds',
+            'writecat': 'wise_forced',
+            })
     else:
         prereqs.update({
-                'writecat': 'coadds',
-                })
+            'writecat': 'coadds',
+            })
 
     initargs.update(W=width, H=height, pixscale=pixscale,
                     target_extent=zoom)
@@ -4635,7 +4639,8 @@ def main():
 
     from astrometry.util.ttime import MemMeas, CpuMeas
     import datetime
-    de = 'Main "pipeline" script for the Dark Energy Camera Legacy Survey (DECaLS) data reductions.'
+    de = ('Main "pipeline" script for the Dark Energy Camera Legacy Survey ' +
+          '(DECaLS) data reductions.')
 
     ep = '''
 e.g., to run a small field containing a cluster:
@@ -4665,20 +4670,21 @@ python -u legacypipe/runbrick.py --plots --brick 2440p070 --zoom 1900 2400 450 9
     parser.add_argument('-b', '--brick',
         help='Brick name to run; required unless --radec is given')
 
-    parser.add_argument('--radec', nargs=2,
+    parser.add_argument(
+        '--radec', nargs=2,
         help='RA,Dec center for a custom location (not a brick)')
     parser.add_argument('--pixscale', type=float, default=0.262,
-                      help='Pixel scale of the output coadds (arcsec/pixel)')
+                        help='Pixel scale of the output coadds (arcsec/pixel)')
 
     parser.add_argument('-d', '--outdir', help='Set output base directory')
     parser.add_argument('--decals-dir', type=str, default=None,
-                      help='Overwrite the $DECALS_DIR environment variable')
+                        help='Overwrite the $DECALS_DIR environment variable')
 
     parser.add_argument('--threads', type=int, help='Run multi-threaded')
     parser.add_argument('-p', '--plots', dest='plots', action='store_true',
-                      help='Per-blob plots?')
+                        help='Per-blob plots?')
     parser.add_argument('--plots2', action='store_true',
-                      help='More plots?')
+                        help='More plots?')
 
     parser.add_argument(
         '-P', '--pickle', dest='picklepat',
@@ -4702,66 +4708,81 @@ python -u legacypipe/runbrick.py --plots --brick 2440p070 --zoom 1900 2400 450 9
     parser.add_argument('--no-ceres', dest='ceres', default=True,
                         action='store_false', help='Do not use Ceres Solver')
 
-    parser.add_argument('--nblobs', type=int, help='Debugging: only fit N blobs')
+    parser.add_argument('--nblobs', type=int,help='Debugging: only fit N blobs')
     parser.add_argument('--blob', type=int, help='Debugging: start with blob #')
-    parser.add_argument('--blobxy', type=int, nargs=2, default=None, action='append',
-                      help='Debugging: run the single blob containing pixel <bx> <by>; this option can be repeated to run multiple blobs.')
+    parser.add_argument(
+        '--blobxy', type=int, nargs=2, default=None, action='append',
+        help=('Debugging: run the single blob containing pixel <bx> <by>; '+
+              'this option can be repeated to run multiple blobs.'))
 
-    parser.add_argument('--no-pv', dest='pv', default='True', action='store_false',
-                      help='Do not use Community Pipeline WCS with PV distortion terms -- solve using Astrometry.net')
+    parser.add_argument(
+        '--no-pv', dest='pv', default='True', action='store_false',
+        help=('Do not use Community Pipeline WCS with PV distortion terms '+
+              '-- solve using Astrometry.net'))
 
     parser.add_argument('--pipe', default=False, action='store_true',
-                      help='"pipeline" mode')
+                        help='"pipeline" mode')
 
-    parser.add_argument('--check-done', default=False, action='store_true',
-                      help='Just check for existence of output files for this brick?')
+    parser.add_argument(
+        '--check-done', default=False, action='store_true',
+        help='Just check for existence of output files for this brick?')
     parser.add_argument('--skip', default=False, action='store_true',
-                      help='Quit if the output catalog already exists.')
+                        help='Quit if the output catalog already exists.')
     parser.add_argument('--skip-coadd', default=False, action='store_true',
-                      help='Quit if the output coadd jpeg already exists.')
+                        help='Quit if the output coadd jpeg already exists.')
 
-    parser.add_argument('--skip-calibs', dest='do_calibs', default=True,
-                      action='store_false', help='Do not run the calibration steps')
+    parser.add_argument(
+        '--skip-calibs', dest='do_calibs', default=True, action='store_false',
+        help='Do not run the calibration steps')
 
     parser.add_argument('--skip-metrics', dest='write_metrics', default=True,
-                      action='store_false', help='Do not generate the metrics directory and files')
+                        action='store_false',
+                        help='Do not generate the metrics directory and files')
 
-    parser.add_argument('--nsigma', type=float, help='Set N sigma source detection thresh')
+    parser.add_argument('--nsigma', type=float,
+                        help='Set N sigma source detection thresh')
 
-    parser.add_argument('--simul-opt', action='store_true', default=False,
-                      help='Do simultaneous optimization after model selection')
+    parser.add_argument(
+        '--simul-opt', action='store_true', default=False,
+        help='Do simultaneous optimization after model selection')
 
     parser.add_argument('--no-wise', action='store_true', default=False,
-                      help='Skip unWISE forced photometry')
+                        help='Skip unWISE forced photometry')
 
-    parser.add_argument('--unwise-dir', default=None,
-                      help='Base directory for unWISE coadds; may be a colon-separated list')
+    parser.add_argument(
+        '--unwise-dir', default=None,
+        help='Base directory for unWISE coadds; may be a colon-separated list')
 
     parser.add_argument('--no-sdss', action='store_true', default=False,
-                      help='Do not initialize from SDSS')
+                        help='Do not initialize from SDSS')
 
     parser.add_argument('--no-early-coadds', action='store_true', default=False,
-                      help='Skip making the early coadds')
+                        help='Skip making the early coadds')
 
     parser.add_argument('--gpsf', action='store_true', default=False,
-                      help='Use a fixed single-Gaussian PSF')
-    parser.add_argument('--pixpsf', action='store_true', default=False,
-                      help='Use the pixelized PsfEx PSF model, and FFT convolution')
+                        help='Use a fixed single-Gaussian PSF')
+    parser.add_argument(
+        '--pixpsf', action='store_true', default=False,
+        help='Use the pixelized PsfEx PSF model, and FFT convolution')
 
     parser.add_argument('--splinesky', action='store_true', default=False,
-                      help='Use flexible sky model?')
+                        help='Use flexible sky model?')
 
-    parser.add_argument('--coadd-bw', action='store_true', default=False,
-                      help='Create grayscale coadds if only one band is available?')
+    parser.add_argument(
+        '--coadd-bw', action='store_true', default=False,
+        help='Create grayscale coadds if only one band is available?')
 
     parser.add_argument('--on-bricks', action='store_true', default=False,
-                      help='Tractor-on-bricks?')
+                        help='Tractor-on-bricks?')
 
-    parser.add_argument('--no-blacklist', dest='blacklist', default=True,
-                      action='store_false', help='Do not blacklist some proposals?')
+    parser.add_argument(
+        '--no-blacklist', dest='blacklist', default=True, action='store_false',
+        help='Do not blacklist some proposals?')
 
-    parser.add_argument('--rsync', default=False, action='store_true',
-                      help='Rather than running calibrations, rsync from NERSC.  Also rsync missing image file inputs')
+    parser.add_argument(
+        '--rsync', default=False, action='store_true',
+        help=('Rather than running calibrations, rsync from NERSC.  Also '+
+              'rsync missing image file inputs'))
 
     print()
     print('runbrick.py starting at', datetime.datetime.now().isoformat())
