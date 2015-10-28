@@ -1563,6 +1563,13 @@ def set_source_radii(bands, tims, cat, minsigma, minradius=3):
             continue
         src.fixedRadius = max(minradius, 1 + ii[-1])
 
+def _write_fitblobs_pickle(fn, data):
+    from astrometry.util.file import pickle_to_file
+    tmpfn = fn + '.tmp'
+    pickle_to_file(data, tmpfn)
+    os.rename(tmpfn, fn)
+    print('Wrote', fn)
+        
 def stage_fitblobs(T=None,
                    blobsrcs=None, blobslices=None, blobs=None,
                    cat=None, targetrd=None, pixscale=None,
@@ -1575,6 +1582,7 @@ def stage_fitblobs(T=None,
                    simul_opt=False, use_ceres=True, mp=None,
                    checkpoint_filename=None,
                    checkpoint_period=600,
+                   write_pickle_filename=None,
                    **kwargs):
     '''
     This is where the actual source fitting happens.
@@ -1586,6 +1594,20 @@ def stage_fitblobs(T=None,
     for tim in tims:
         assert(np.all(np.isfinite(tim.getInvError())))
 
+    if write_pickle_filename is not None:
+        #import multiprocessing
+        #write_pool = multiprocessing.Pool(1)
+        import threading
+        keys = ['T', 'blobsrcs', 'blobslices', 'blobs', 'cat', 'targetrd',
+                'pixscale', 'targetwcs', 'W', 'H', 'bands', 'tims', 'decals',]
+        L = locals()
+        vals = dict([(k, L[k]) for k in keys])
+        write_thread = threading.Thread(
+            target=_write_fitblobs_pickle,
+            args=(write_pickle_filename, vals), name='write_pickle')
+        print('Starting thread to write fitblobs pickle')
+        write_thread.start()
+        
     # How far down to render model profiles
     minsigma = 0.1
     for tim in tims:
