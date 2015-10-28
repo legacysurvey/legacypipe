@@ -10,37 +10,9 @@ def nanomaggiesToMag(nm):
 	return -2.5 * (log(nm,10.) - 9.)
 
 '''
-* CCDNMATCH >= 20 (At least 20 stars to determine zero-pt)
-* abs(ZPT - CCDZPT) < 0.10  (Loose agreement with full-frame zero-pt)
-* ZPT within [25.08-0.50, 25.08+0.25] for g-band
-* ZPT within [25.29-0.50, 25.29+0.25] for r-band
-* ZPT within [24.92-0.50, 24.92+0.25] for z-band
-* DEC > -20 (in DESI footprint)
-* EXPTIME >= 30
 * CCDNUM = 31 (S7) should mask outside the region [1:1023,1:4094]
+That constraint has not yet been included!
 '''
-
-        # We assume that the zeropoints are present in the
-        # CCDs file (starting in DR2)
-#         z0 = dict(g = 25.08,
-#                   r = 25.29,
-#                   z = 24.92,)
-#         z0 = np.array([z0[f[0]] for f in CCD.filter])
-# 
-#         good = np.ones(len(CCD), bool)
-#         n0 = sum(good)
-#         # This is our list of cuts to remove non-photometric CCD images
-#         for name,crit in [
-#             ('exptime < 30 s', (CCD.exptime < 30)),
-#             ('ccdnmatch < 20', (CCD.ccdnmatch < 20)),
-#             ('abs(zpt - ccdzpt) > 0.1',
-#              (np.abs(CCD.zpt - CCD.ccdzpt) > 0.1)),
-#             ('zpt < 0.5 mag of nominal (for DECam)',
-#              ((CCD.camera == 'decam') * (CCD.zpt < (z0 - 0.5)))),
-#             ('zpt > 0.25 mag of nominal (for DECam)',
-#              ((CCD.camera == 'decam') * (CCD.zpt > (z0 + 0.25)))),
-#              ]:
-
 
 ### Find calculate depth stats in magnitudes
 
@@ -70,8 +42,11 @@ def plotMaghist(band,nbin=100):
 	nd = 0
 	nbr = 0	
 	for i in range(0,len(f)):
+		DS = f[i]['propid']
+		if DS == '2014B-0404' or DS == '2013A-0741': #enforce DECaLS only
+			DS = 1
 		if f[i]['filter'] == band:
-			if f[i]['seeing'] != 99 and f[i]['ccdzpt'] != 99 and f[i]['fwhm'] != 99:
+			if f[i]['seeing'] != 99 and f[i]['ccdzpt'] != 99 and f[i]['fwhm'] != 99 and DS == 1:
 				if f[i]['dec'] > -20 and f[i]['exptime'] >=30 and f[i]['ccdnmatch'] >= 20 and abs(f[i]['zpt'] - f[i]['ccdzpt']) <= 0.1 and f[i]['zpt'] >= zp0-.5 and f[i]['zpt'] <=zp0+.25:   
 					avsky = f[i]['avsky']
 					skysig = sqrt(avsky * gain + readnoise**2) / gain
@@ -120,12 +95,17 @@ def plotMaghist(band,nbin=100):
 	print mean,med,std
 	print 'percentage better than requirements '+str(nbr/n)
 
+	from matplotlib.backends.backend_pdf import PdfPages
+	plt.clf()
+	pp = PdfPages('DR2DECaLS'+band+'1exposure.pdf')	
+
 	plt.plot(Nl,hl,'k-')
 	plt.xlabel(r'5$\sigma$ '+band+ ' depth')
 	plt.ylabel('# of ccds')
-	plt.title(str(mean)[:5]+r'$\pm$'+str(std)[:4])
+	plt.title('1 exposure depth '+str(mean)[:5]+r'$\pm$'+str(std)[:4]+r', $f_{\rm pass}=$'+str(nbr/float(n))[:5])
 	#plt.xscale('log')
-	plt.show()
+	pp.savefig()
+	pp.close()
 	return True
 
 def plotMaghist2obs(band,ndraw = 1e5,nbin=100):
@@ -161,7 +141,14 @@ def plotMaghist2obs(band,ndraw = 1e5,nbin=100):
 		i = int(random()*nr)
 		j = int(random()*nr)
 		#j = i #this is used to test result when conditions are exactly the same on each ccd
-		if f[i]['filter'] == band and f[j]['filter'] == band:
+		DS = f[i]['propid']
+		DS2 = f[j]['propid']
+		if DS == '2014B-0404' or DS == '2013A-0741': #enforce DECaLS only
+			DS = 1
+		if DS2 == '2014B-0404' or DS2 == '2013A-0741':
+			DS2 = 1
+
+		if f[i]['filter'] == band and f[j]['filter'] == band and DS == 1 and DS2 == 1:
 			if f[i]['seeing'] != 99 and f[i]['ccdzpt'] != 99 and f[i]['fwhm'] != 99:
 				if f[j]['seeing'] != 99 and f[j]['ccdzpt'] != 99 and f[j]['fwhm'] != 99:
 					if f[j]['dec'] > -20 and f[j]['exptime'] >=30 and f[j]['ccdnmatch'] >= 20 and abs(f[j]['zpt'] - f[j]['ccdzpt']) <= 0.1 and f[j]['zpt'] >= zp0-.5 and f[j]['zpt'] <=zp0+.25:   
@@ -223,12 +210,17 @@ def plotMaghist2obs(band,ndraw = 1e5,nbin=100):
 	print mean,med,std
 	print 'percentage better than requirements '+str(nbr/float(nd))
 
+	from matplotlib.backends.backend_pdf import PdfPages
+	plt.clf()
+	pp = PdfPages('DR2DECaLS'+band+'2exposures.pdf')	
+
 	plt.plot(Nl,hl,'k-')
 	plt.xlabel(r'5$\sigma$ '+band+ ' depth')
 	plt.ylabel('# of ccds')
-	plt.title('MC 2 exposure depth '+str(mean)[:5]+r'$\pm$'+str(std)[:4])
+	plt.title('MC 2 exposure depth '+str(mean)[:5]+r'$\pm$'+str(std)[:4]+r', $f_{\rm pass}=$'+str(nbr/float(nd))[:5])
 	#plt.xscale('log')
-	plt.show()
+	pp.savefig()
+	pp.close()
 	return True
 
 def plotMaghist3obs(band,ndraw = 1e5,nbin=100):
@@ -260,61 +252,41 @@ def plotMaghist3obs(band,ndraw = 1e5,nbin=100):
 	nd = 0	
 	#for i in range(0,len(f)):
 	nbr = 0
-	while nd < ndraw:
-		i = int(random()*nr)
-		j = int(random()*nr)
-		k = int(random()*nr)
-		if f[i]['filter'] == band and f[j]['filter'] == band and f[k]['filter'] == band:
-			if f[i]['seeing'] != 99 and f[i]['ccdzpt'] != 99 and f[i]['fwhm'] != 99:
-				if f[j]['seeing'] != 99 and f[j]['ccdzpt'] != 99 and f[j]['fwhm'] != 99:
-					if f[k]['seeing'] != 99 and f[k]['ccdzpt'] != 99 and f[k]['fwhm'] != 99:
-						if f[j]['dec'] > -20 and f[j]['exptime'] >=30 and f[j]['ccdnmatch'] >= 20 and abs(f[j]['zpt'] - f[j]['ccdzpt']) <= 0.1 and f[j]['zpt'] >= zp0-.5 and f[j]['zpt'] <=zp0+.25:   
-							if f[i]['dec'] > -20 and f[i]['exptime'] >=30 and f[i]['ccdnmatch'] >= 20 and abs(f[i]['zpt'] - f[i]['ccdzpt']) <= 0.1 and f[i]['zpt'] >= zp0-.5 and f[i]['zpt'] <=zp0+.25:   
-								if f[k]['dec'] > -20 and f[k]['exptime'] >=30 and f[k]['ccdnmatch'] >= 20 and abs(f[k]['zpt'] - f[k]['ccdzpt']) <= 0.1 and f[k]['zpt'] >= zp0-.5 and f[k]['zpt'] <=zp0+.25:
-									nd += 1
-									avsky = f[i]['avsky']
-									skysig = sqrt(avsky * gain + readnoise**2) / gain
-									zpscale = zeropointToScale(f[i]['ccdzpt'] + 2.5*log(f[i]['exptime'],10.))
-									skysig /= zpscale
-									psf_sigma = f[i]['fwhm'] / 2.35
-									avsky2 = f[j]['avsky']
-									skysig2 = sqrt(avsky2 * gain + readnoise**2) / gain
-									zpscale2 = zeropointToScale(f[j]['ccdzpt'] + 2.5*log(f[j]['exptime'],10.))
-									skysig2 /= zpscale2
-									psf_sigma2 = f[j]['fwhm'] / 2.35
-									avsky3 = f[k]['avsky']
-									skysig3 = sqrt(avsky3 * gain + readnoise**2) / gain
-									zpscale3 = zeropointToScale(f[k]['ccdzpt'] + 2.5*log(f[k]['exptime'],10.))
-									skysig3 /= zpscale3
-									psf_sigma3 = f[k]['fwhm'] / 2.35
-									# point-source depth
-									#psfnorm = 1./(2. * sqrt(pi) * psf_sigma) #1/Neff #for point source
-									#detsig1 = skysig / psfnorm
-									Np = ((4.*pi*psf_sigma**2.)**(1./p) + (8.91*(.45*arcsec2pix)**2. )**(1./p))**p #Neff in requirements doc
-									Np2 = ((4.*pi*psf_sigma2**2.)**(1./p) + (8.91*(.45*arcsec2pix)**2. )**(1./p))**p #Neff in requirements doc
-									Np3 = ((4.*pi*psf_sigma3**2.)**(1./p) + (8.91*(.45*arcsec2pix)**2. )**(1./p))**p #Neff in requirements doc
-									Np = sqrt(Np) #square root necessary because Np gives sum of noise squared
-									Np2 = sqrt(Np2)
-									Np3 = sqrt(Np3)
-									detsig1 = skysig*Np #total noise
-									detsig2 = skysig2*Np2
-									detsig3 = skysig3*Np3
-									detsigtot = sqrt(1./(1./detsig1**2.+1./detsig2**2+1./detsig3**2))
-									m = nanomaggiesToMag(detsigtot * 5.)
-									if m > 30 or m < 18:
-										print skysig,avsky,f[i]['fwhm'],f[i]['ccdzpt'],f[i]['exptime']
-									if m > recm:
-										nbr += 1.	
-									NTl.append(m)
-									if f[i]['exptime'] > emax:
-										emax = f[i]['exptime']
-									if 	f[i]['exptime'] < emin:
-										emin = f[i]['exptime']
-									n += 1.
-									msee += f[i]['seeing']	
-	msee = msee/n
-	print msee,n
-	print emin,emax
+	nl = [] #to speed things up, first make list of noise, then do draws
+	for i in range(0,len(f)):
+		DS = f[i]['propid']
+		if DS == '2014B-0404' or DS == '2013A-0741': #enforce DECaLS only
+			DS = 1
+		if f[i]['filter'] == band:
+			if f[i]['seeing'] != 99 and f[i]['ccdzpt'] != 99 and f[i]['fwhm'] != 99 and DS == 1:
+				if f[i]['dec'] > -20 and f[i]['exptime'] >=30 and f[i]['ccdnmatch'] >= 20 and abs(f[i]['zpt'] - f[i]['ccdzpt']) <= 0.1 and f[i]['zpt'] >= zp0-.5 and f[i]['zpt'] <=zp0+.25:   
+					avsky = f[i]['avsky']
+					skysig = sqrt(avsky * gain + readnoise**2) / gain
+					zpscale = zeropointToScale(f[i]['ccdzpt'] + 2.5*log(f[i]['exptime'],10.))
+					skysig /= zpscale
+					psf_sigma = f[i]['fwhm'] / 2.35
+					# point-source depth
+					#psfnorm = 1./(2. * sqrt(pi) * psf_sigma) #1/Neff #for point source
+					#detsig1 = skysig / psfnorm
+					Np = ((4.*pi*psf_sigma**2.)**(1./p) + (8.91*(.45*arcsec2pix)**2. )**(1./p))**p #Neff in requirements doc
+					Np = sqrt(Np) #square root necessary because Np gives sum of noise squared
+					detsig1 = skysig*Np #total noise
+					nl.append(detsig1)
+	ng = len(nl)
+	print ng
+	for nd in range(0,int(ndraw)):
+		i = int(random()*ng)
+		j = int(random()*ng)
+		k = int(random()*ng)
+		detsig1 = nl[i]
+		detsig2 = nl[j]
+		detsig3 = nl[k]
+		detsigtot = sqrt(1./(1./detsig1**2.+1./detsig2**2+1./detsig3**2))
+		m = nanomaggiesToMag(detsigtot * 5.)
+		if m > recm:
+			nbr += 1.	
+		NTl.append(m)
+		n += 1.
 	minN = min(NTl)
 	maxN = max(NTl)+.0001
 	print minN,maxN
@@ -335,12 +307,17 @@ def plotMaghist3obs(band,ndraw = 1e5,nbin=100):
 		med = (NTl[len(NTl)/2+1]+NTl[len(NTl)/2])/2.
 	print mean,med,std
 	print 'percentage better than requirements '+str(nbr/float(nd))
+	from matplotlib.backends.backend_pdf import PdfPages
+	plt.clf()
+	pp = PdfPages('DR2DECaLS'+band+'3exposures.pdf')	
+
 	plt.plot(Nl,hl,'k-')
 	plt.xlabel(r'5$\sigma$ '+band+ ' depth')
 	plt.ylabel('# of ccds')
-	plt.title('MC 3 exposure depth '+str(mean)[:5]+r'$\pm$'+str(std)[:4])
+	plt.title('MC 3 exposure depth '+str(mean)[:5]+r'$\pm$'+str(std)[:4]+r', $f_{\rm pass}=$'+str(nbr/float(nd))[:5])
 	#plt.xscale('log')
-	plt.show()
+	pp.savefig()
+	pp.close()
 	return True
 
 
