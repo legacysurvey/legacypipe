@@ -1573,8 +1573,8 @@ def stage_fitblobs(T=None,
                    plots=False, plots2=False,
                    nblobs=None, blob0=None, blobxy=None,
                    simul_opt=False, use_ceres=True, mp=None,
-                   checkpoint_pattern=None,
-                   checkpoint_period=None,
+                   checkpoint_filename=None,
+                   checkpoint_period=600,
                    **kwargs):
     '''
     This is where the actual source fitting happens.
@@ -1721,11 +1721,67 @@ def stage_fitblobs(T=None,
         plt.title('Tycho-2 stars')
         ps.savefig()
 
-    iter = _blob_iter(blobslices, blobsrcs, blobs, targetwcs, tims,
-                      cat, bands, plots, ps, simul_opt, use_ceres, tycho)
-    # to allow timingpool to queue tasks one at a time
-    iter = iterwrapper(iter, len(blobsrcs))
-    R = mp.map(_bounce_one_blob, iter)
+    if checkpoint_filename is None:
+        blobiter = _blob_iter(blobslices, blobsrcs, blobs, targetwcs, tims,
+                              cat, bands, plots, ps, simul_opt, use_ceres,
+                              tycho)
+        # to allow timingpool to queue tasks one at a time
+        blobiter = iterwrapper(blobiter, len(blobsrcs))
+        R = mp.map(_bounce_one_blob, blobiter)
+    else:
+        from astrometry.util.ttime import CpuMeas
+
+        # Check for existing checkpoint file.
+        R = []
+        if os.path.exists(checkpoint_filename):
+            print('Reading', checkpoint_filename)
+            try:
+                R = unpickle_from_file(checkpoint_filename)
+                print('Read', len(R), 'results from checkpoint file',
+                      checkpoint_filename)
+            except:
+                import traceback
+                print('Failed to read checkpoint file ' + checkpoint_filename)
+                traceback.print_exc()
+                R = []
+
+        skipblobs = [B.iblob for B in R]
+        blobiter = _blob_iter(blobslices, blobsrcs, blobs, targetwcs, tims,
+                              cat, bands, plots, ps, simul_opt, use_ceres,
+                              tycho, skipblobs=skipblobs)
+        # to allow timingpool to queue tasks one at a time
+        blobiter = iterwrapper(blobiter, len(blobsrcs))
+
+        Riter = mp.imap_unordered(_bounce_one_blob, blobiter)
+        # we'll actually measure wall time -- CpuMeas is just mis-named
+        last_checkpoint = CpuMeas()
+        while True:
+            import multiprocessing
+            from astrometry.util.file import pickle_to_file
+
+            tnow = CpuMeas()
+            dt = tnow.wall_seconds_since(last_checkpoint)
+            if dt >= checkpoint_period:
+                # Write checkpoint!
+                fn = checkpoint_filename + '.tmp'
+                # (this happens out here in the main process, while the worker
+                # processes continue in the background.)
+                pickle_to_file(R, fn)
+                os.rename(fn, checkpoint_filename)
+                print('Wrote checkpoint to', checkpoint_filename)
+                last_checkpoint = tnow
+            try:
+                timeout = 60.
+                r = Riter.next(timeout)
+                R.append(r)
+            except StopIteration:
+                print 'Done'
+                break
+            except multiprocessing.TimeoutError:
+                print 'Timed out waiting for result'
+                continue
+
+
     print('[parallel fitblobs] Fitting sources took:', Time()-tlast)
 
     return dict(fitblobs_R=R, tims=tims, ps=ps, blobs=blobs,
@@ -1965,9 +2021,8 @@ def stage_fitblobs_finish(
         rtn['all_models'] = all_models
     return rtn
 
-def _blob_iter(blobslices, blobsrcs, blobs,
-               targetwcs, tims, cat, bands, plots, ps, simul_opt, use_ceres,
-               tycho):
+def _blob_iter(blobslices, blobsrcs, blobs, targetwcs, tims, cat, bands,
+               plots, ps, simul_opt, use_ceres, tycho, skipblobs=[]):
 
     ok,tx,ty = targetwcs.radec2pixelxy(tycho.ra, tycho.dec)
     tx = np.round(tx-1).astype(int)
@@ -1977,6 +2032,11 @@ def _blob_iter(blobslices, blobsrcs, blobs,
     tx = np.clip(tx, 0, W-1)
     ty = np.clip(ty, 0, H-1)
     tychoblobs = set(blobs[ty, tx])
+    # Remove -1 = no blob from set; not strictly necessary, just cosmetic
+    try:
+        tychoblobs.remove(-1)
+    except:
+        pass
     print('Blobs containing Tycho-2 stars:', tychoblobs)
 
     # sort blobs by size so that larger ones start running first
@@ -1985,6 +2045,10 @@ def _blob_iter(blobslices, blobsrcs, blobs,
     blob_order = np.array([i for i,npix in blobvals.most_common()])
 
     for nblob,iblob in enumerate(blob_order):
+        if iblob in skipblobs:
+            print 'Skipping blob', iblob
+            continue
+
         bslc  = blobslices[iblob]
         Isrcs = blobsrcs  [iblob]
         assert(len(Isrcs) > 0)
@@ -2051,10 +2115,9 @@ def _blob_iter(blobslices, blobsrcs, blobs,
                                tim.band, tim.sig1, tim.modelMinval,
                                tim.imobj))
 
-        yield (iblob, Isrcs, targetwcs, bx0, by0, blobw, blobh, blobmask,
-               subtimargs, [cat[i] for i in Isrcs], bands, plots, ps,
+        yield (nblob, iblob, Isrcs, targetwcs, bx0, by0, blobw, blobh,
+               blobmask, subtimargs, [cat[i] for i in Isrcs], bands, plots, ps,
                simul_opt, use_ceres, hastycho)
-
 
 def _bounce_one_blob(X):
 
@@ -2299,19 +2362,15 @@ def _one_blob(X):
     '''
     Fits sources contained within a "blob" of pixels.
     '''
-    (iblob, Isrcs, brickwcs, bx0, by0, blobw, blobh, blobmask, timargs,
+    (nblob, iblob, Isrcs, brickwcs, bx0, by0, blobw, blobh, blobmask, timargs,
      srcs, bands, plots, ps, simul_opt, use_ceres, hastycho) = X
 
-    print('Fitting blob', iblob, ':', len(Isrcs), 'sources, size',
-          blobw, 'x', blobh, len(timargs), 'images')
-
+    print('Fitting blob #', nblob, 'val', iblob, ':', len(Isrcs),
+          'sources, size', blobw, 'x', blobh, len(timargs), 'images')
     plots2 = False
-
     tlast = Time()
-
     alphas = [0.1, 0.3, 1.0]
     optargs = dict(priors=True, shared_params=False, alphas=alphas)
-
     bigblob = (blobw * blobh) > 100*100
 
     # 50 CCDs is over 90th percentile of bricks in DR2.
@@ -2398,7 +2457,6 @@ def _one_blob(X):
     #print('Tims:', [s.shape for s in tims])
 
     _fit_fluxes(cat, tims, bands, use_ceres, alphas)
-
     cat.thawAllRecursive()
 
     if plots:
@@ -2524,28 +2582,33 @@ def _one_blob(X):
             if plots and False:
                 tims_compute_resamp(None, srctractor.getImages(), brickwcs)
                 tims_compute_resamp(None, tims, brickwcs)
-
                 plt.figure(1, figsize=(8,6))
-                plt.subplots_adjust(left=0.01, right=0.99, top=0.95, bottom=0.01,
-                                    hspace=0.1, wspace=0.05)
+                plt.subplots_adjust(left=0.01, right=0.99, top=0.95,
+                                    bottom=0.01, hspace=0.1, wspace=0.05)
                 #plt.figure(2, figsize=(3,3))
-                #plt.subplots_adjust(left=0.005, right=0.995, top=0.995,bottom=0.005)
-                #_plot_mods(tims, spmods, spnames, bands, None, None, bslc, blobw, blobh, ps,
-                #           chi_plots=plots2)
+                #plt.subplots_adjust(left=0.005, right=0.995,
+                #                    top=0.995,bottom=0.005)
+                #_plot_mods(tims, spmods, spnames, bands, None, None, bslc,
+                #           blobw, blobh, ps, chi_plots=plots2)
                 plt.figure(2, figsize=(3,3.5))
-                plt.subplots_adjust(left=0.005, right=0.995, top=0.88, bottom=0.005)
+                plt.subplots_adjust(left=0.005, right=0.995,
+                                    top=0.88, bottom=0.005)
                 plt.suptitle('Blob %i' % iblob)
                 tempims = [tim.getImage() for tim in tims]
 
-                _plot_mods(list(srctractor.getImages()), spmods, spnames, bands, None, None, bslc, blobw, blobh, ps,
+                _plot_mods(list(srctractor.getImages()), spmods, spnames,
+                           bands, None, None, bslc, blobw, blobh, ps,
                            chi_plots=plots2, rgb_plots=True, main_plot=False,
                            rgb_format='spmods Blob %i, src %i: %%s' % (iblob, i))
-                _plot_mods(tims, spallmods, spallnames, bands, None, None, bslc, blobw, blobh, ps,
+                _plot_mods(tims, spallmods, spallnames, bands, None, None,
+                           bslc, blobw, blobh, ps,
                            chi_plots=plots2, rgb_plots=True, main_plot=False,
-                           rgb_format='spallmods Blob %i, src %i: %%s' % (iblob, i))
+                           rgb_format=('spallmods Blob %i, src %i: %%s' %
+                                       (iblob, i)))
 
                 models.restore_images(tims)
-                _plot_mods(tims, spallmods, spallnames, bands, None, None, bslc, blobw, blobh, ps,
+                _plot_mods(tims, spallmods, spallnames, bands, None, None,
+                           bslc, blobw, blobh, ps,
                            chi_plots=plots2, rgb_plots=True, main_plot=False,
                            rgb_format='Blob %i, src %i: %%s' % (iblob, i))
                 for tim,im in zip(tims, tempims):
@@ -3402,8 +3465,9 @@ def _one_blob(X):
     if hastycho:
         B.hastycho[:] = True
 
-    #print('Blob finished metrics:', Time()-tlast)
     print('Blob', iblob, 'finished:', Time()-tlast)
+
+    B.iblob = iblob
 
     return B
 
@@ -4281,7 +4345,9 @@ def run_brick(brick, radec=None, pixscale=0.262,
               rsync=False,
               picklePattern='pickles/runbrick-%(brick)s-%%(stage)s.pickle',
               stages=['writecat'],
-              force=[], forceAll=False, writePickles=True):
+              force=[], forceAll=False, writePickles=True,
+              checkpoint_filename=None,
+              checkpoint_period=None):
     '''
     Run the full DECaLS data reduction pipeline.
 
@@ -4476,6 +4542,11 @@ def run_brick(brick, radec=None, pixscale=0.262,
                   rsync=rsync,
                   force=forceStages, write=writePickles)
 
+    if checkpoint_filename is not None:
+        kwargs.update(checkpoint_filename=checkpoint_filename)
+        if checkpoint_period is not None:
+            kwargs.update(checkpoint_period=checkpoint_period)
+
     if threads and threads > 1:
         from astrometry.util.timingpool import TimingPool, TimingPoolMeas
         pool = TimingPool(threads, initializer=runbrick_global_init,
@@ -4572,6 +4643,11 @@ python -u legacypipe/runbrick.py --plots --brick 2440p070 --zoom 1900 2400 450 9
     parser.add_argument('-n', '--no-write', dest='write', default=True, action='store_false')
     parser.add_argument('-v', '--verbose', dest='verbose', action='count', default=0,
                       help='Make more verbose')
+
+    parser.add_option('--checkpoint', default=None,
+                      help='Write to checkpoint file?')
+    parser.add_option('--checkpoint-period', type=int, default=None,
+                      help='Period for writing checkpoint files, in seconds; default 600')
 
     parser.add_argument('-b', '--brick', help='Brick name to run; required unless --radec is given')
 
@@ -4758,7 +4834,10 @@ python -u legacypipe/runbrick.py --plots --brick 2440p070 --zoom 1900 2400 450 9
             force=opt.force, forceAll=opt.forceall,
             stages=opt.stage, writePickles=opt.write,
             picklePattern=opt.picklepat,
-            rsync=opt.rsync, **kwa)
+            rsync=opt.rsync,
+            checkpoint_filename=opt.checkpoint,
+            checkpoint_period=opt.checkpoint_period,
+            **kwa)
     except NothingToDoError as e:
         print()
         print(e.message)
