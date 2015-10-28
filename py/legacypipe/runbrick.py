@@ -4099,28 +4099,28 @@ def stage_writecat(
     # TUNIT cards.
     deg='deg'
     degiv='1/deg^2'
+    flux = 'nanomaggy'
+    fluxiv = '1/nanomaggy^2'
     units = dict(
-        ra=deg, dec=deg,
-        ra_ivar=degiv, dec_ivar=degiv,
-        decam_flux='nanomaggy', decam_flux_ivar='1/nanomaggy^2',
-        decam_apflux='nanomaggy', decam_apflux_ivar='1/nanomaggy^2',
-        decam_apflux_resid='nanomaggy',
-        wise_flux='nanomaggy', wise_flux_ivar='1/nanomaggy^2',
+        ra=deg, dec=deg, ra_ivar=degiv, dec_ivar=degiv, ebv='mag',
+        decam_flux=flux, decam_flux_ivar=fluxiv,
+        decam_apflux=flux, decam_apflux_ivar=fluxiv, decam_apflux_resid=flux,
+        wise_flux=flux, wise_flux_ivar=fluxiv,
         shapeexp_r='arcsec', shapeexp_r_ivar='1/arcsec^2',
-        shapedev_r='arcsec', shapedev_r_ivar='1/arcsec^2',
-        ebv='mag',
-        sdss_ra=deg, sdss_ra_ivar=degiv,
-        sdss_dec=deg, sdss_dec_ivar=degiv,
-        sdss_tai='sec', sdss_psf_fwhm='arcsec', sdss_mjd='days',
-        sdss_theta_dev='arcsec', sdss_theta_exp='arcsec',
-        sdss_theta_deverr='1/arcsec', sdss_theta_experr='1/arcsec',
-        sdss_phi_dev_deg=deg, sdss_phi_exp_deg=deg,
-        sdss_psfflux='nanomaggy', sdss_psfflux_ivar='1/nanomaggy^2',
-        sdss_cmodelflux='nanomaggy', sdss_cmodelflux_ivar='1/nanomaggy^2',
-        sdss_modelflux='nanomaggy', sdss_modelflux_ivar='1/nanomaggy^2',
-        sdss_devflux='nanomaggy', sdss_devflux_ivar='1/nanomaggy^2',
-        sdss_expflux='nanomaggy', sdss_expflux_ivar='1/nanomaggy^2',
-        sdss_extinction='mag')
+        shapedev_r='arcsec', shapedev_r_ivar='1/arcsec^2')
+    if not no_sdss:
+        units.update(dict([('sdss_'+k, v) for k,v in dict(
+            ra=deg, ra_ivar=degiv, dec=deg, dec_ivar=degiv,
+            tai='sec', psf_fwhm='arcsec', mjd='days',
+            theta_dev='arcsec', theta_exp='arcsec',
+            theta_deverr='1/arcsec', theta_experr='1/arcsec',
+            phi_dev_deg=deg, phi_exp_deg=deg,
+            psfflux=flux, psfflux_ivar=fluxiv,
+            cmodelflux=flux, cmodelflux_ivar=fluxiv,
+            modelflux=flux, modelflux_ivar=fluxiv,
+            devflux=flux, devflux_ivar=fluxiv,
+            expflux=flux, expflux_ivar=fluxiv,
+            extinction='mag').items()]))
 
     for i,col in enumerate(cols):
         if col in units:
