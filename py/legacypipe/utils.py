@@ -75,6 +75,9 @@ class MyMultiproc(multiproc):
         self.serial = []
         self.parallel = []
 
+    def is_multiproc(self):
+        return self.pool is not None
+        
     def map(self, *args, **kwargs):
         tstart = Time()
         res = super(MyMultiproc, self).map(*args, **kwargs)

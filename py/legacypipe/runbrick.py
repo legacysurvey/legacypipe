@@ -1734,6 +1734,7 @@ def stage_fitblobs(T=None,
         # Check for existing checkpoint file.
         R = []
         if os.path.exists(checkpoint_filename):
+            from astrometry.util.file import unpickle_from_file
             print('Reading', checkpoint_filename)
             try:
                 R = unpickle_from_file(checkpoint_filename)
@@ -1759,6 +1760,10 @@ def stage_fitblobs(T=None,
             import multiprocessing
             from astrometry.util.file import pickle_to_file
 
+            d = os.path.dirname(checkpoint_filename)
+            if len(d) and not os.path.exists(d):
+                trymakedirs(d)
+            
             tnow = CpuMeas()
             dt = tnow.wall_seconds_since(last_checkpoint)
             if dt >= checkpoint_period:
@@ -1770,15 +1775,19 @@ def stage_fitblobs(T=None,
                 os.rename(fn, checkpoint_filename)
                 print('Wrote checkpoint to', checkpoint_filename)
                 last_checkpoint = tnow
+                dt = 0.
             try:
-                timeout = 60.
-                r = Riter.next(timeout)
+                if mp.is_multiproc():
+                    timeout = max(1, checkpoint_period - dt)
+                    r = Riter.next(timeout)
+                else:
+                    r = Riter.next()
                 R.append(r)
             except StopIteration:
-                print 'Done'
+                print('Done')
                 break
             except multiprocessing.TimeoutError:
-                print 'Timed out waiting for result'
+                print('Timed out waiting for result')
                 continue
 
 
@@ -1817,28 +1826,29 @@ def stage_fitblobs_finish(
     # Drop now-empty blobs.
     R = [r for r in R if r is not None and len(r)]
     if len(R) > 0:
+        J = np.argsort([B.iblob for B in R])
+        R = [R[j] for j in J]
         BB = merge_tables(R)
     else:
         BB = fits_table()
         BB.Isrcs = []
         BB.sources = []
         nb = len(bands)
-        BB.fracflux = np.zeros((0,nb))
+        BB.fracflux   = np.zeros((0,nb))
         BB.fracmasked = np.zeros((0,nb))
-        BB.fracin = np.zeros((0,nb))
-        BB.rchi2 = np.zeros((0,nb))
-        BB.dchisqs = np.zeros((0,5))
-        BB.flags = np.zeros((0,5))
+        BB.fracin     = np.zeros((0,nb))
+        BB.rchi2      = np.zeros((0,nb))
+        BB.dchisqs    = np.zeros((0,5))
+        BB.flags      = np.zeros((0,5))
         BB.all_models = np.array([])
-        BB.all_model_flags = np.array([])
+        BB.all_model_flags   = np.array([])
         BB.all_model_fluxivs = np.array([])
-        BB.started_in_blob = []
+        BB.started_in_blob  = []
         BB.finished_in_blob = []
-        BB.hastycho = []
+        BB.hastycho         = []
         BB.srcinvvars = [np.zeros((0,))]
     del R
     II = BB.Isrcs
-    print('Total of', len(BB), 'blob measurements')
     newcat = BB.sources
     T.cut(II)
 
@@ -2046,7 +2056,7 @@ def _blob_iter(blobslices, blobsrcs, blobs, targetwcs, tims, cat, bands,
 
     for nblob,iblob in enumerate(blob_order):
         if iblob in skipblobs:
-            print 'Skipping blob', iblob
+            print('Skipping blob', iblob)
             continue
 
         bslc  = blobslices[iblob]
@@ -4634,25 +4644,29 @@ python -u legacypipe/runbrick.py --plots --brick 2440p070 --zoom 1900 2400 450 9
 
 '''
     parser = argparse.ArgumentParser(description=de,epilog=ep)
-    parser.add_argument('-f', '--force-stage', dest='force', action='append', default=[],
-                      help="Force re-running the given stage(s) -- don't read from pickle.")
-    parser.add_argument('-F', '--force-all', dest='forceall', action='store_true',
-                      help='Force all stages to run')
-    parser.add_argument('-s', '--stage', dest='stage', default=[], action='append',
-                      help="Run up to the given stage(s)")
-    parser.add_argument('-n', '--no-write', dest='write', default=True, action='store_false')
-    parser.add_argument('-v', '--verbose', dest='verbose', action='count', default=0,
-                      help='Make more verbose')
+    parser.add_argument(
+        '-f', '--force-stage', dest='force', action='append', default=[],
+        help="Force re-running the given stage(s) -- don't read from pickle.")
+    parser.add_argument('-F', '--force-all', dest='forceall',
+                        action='store_true', help='Force all stages to run')
+    parser.add_argument('-s', '--stage', dest='stage', default=[],
+                        action='append', help="Run up to the given stage(s)")
+    parser.add_argument('-n', '--no-write', dest='write', default=True,
+                        action='store_false')
+    parser.add_argument('-v', '--verbose', dest='verbose', action='count',
+                        default=0, help='Make more verbose')
 
-    parser.add_option('--checkpoint', default=None,
-                      help='Write to checkpoint file?')
-    parser.add_option('--checkpoint-period', type=int, default=None,
-                      help='Period for writing checkpoint files, in seconds; default 600')
+    parser.add_argument('--checkpoint', default=None,
+                        help='Write to checkpoint file?')
+    parser.add_argument(
+        '--checkpoint-period', type=int, default=None,
+        help='Period for writing checkpoint files, in seconds; default 600')
 
-    parser.add_argument('-b', '--brick', help='Brick name to run; required unless --radec is given')
+    parser.add_argument('-b', '--brick',
+        help='Brick name to run; required unless --radec is given')
 
-    parser.add_argument('--radec', help='RA,Dec center for a custom location (not a brick)',
-                      nargs=2)
+    parser.add_argument('--radec', nargs=2,
+        help='RA,Dec center for a custom location (not a brick)')
     parser.add_argument('--pixscale', type=float, default=0.262,
                       help='Pixel scale of the output coadds (arcsec/pixel)')
 
@@ -4666,19 +4680,27 @@ python -u legacypipe/runbrick.py --plots --brick 2440p070 --zoom 1900 2400 450 9
     parser.add_argument('--plots2', action='store_true',
                       help='More plots?')
 
-    parser.add_argument('-P', '--pickle', dest='picklepat', help='Pickle filename pattern, with %i, default %default',
-                      default='pickles/runbrick-%(brick)s-%%(stage)s.pickle')
+    parser.add_argument(
+        '-P', '--pickle', dest='picklepat',
+        help='Pickle filename pattern, with %i, default %default',
+        default='pickles/runbrick-%(brick)s-%%(stage)s.pickle')
 
-    parser.add_argument('--plot-base', help='Base filename for plots, default brick-BRICK')
-    parser.add_argument('--plot-number', type=int, default=0, help='Set PlotSequence starting number')
+    parser.add_argument('--plot-base',
+                        help='Base filename for plots, default brick-BRICK')
+    parser.add_argument('--plot-number', type=int, default=0,
+                        help='Set PlotSequence starting number')
 
-    parser.add_argument('-W', '--width', type=int, default=3600, help='Target image width (default %default)')
-    parser.add_argument('-H', '--height', type=int, default=3600, help='Target image height (default %default)')
+    parser.add_argument('-W', '--width', type=int, default=3600,
+                        help='Target image width (default %default)')
+    parser.add_argument('-H', '--height', type=int, default=3600,
+                        help='Target image height (default %default)')
 
-    parser.add_argument('--zoom', type=int, nargs=4, help='Set target image extent (default "0 3600 0 3600")')
+    parser.add_argument(
+        '--zoom', type=int, nargs=4,
+        help='Set target image extent (default "0 3600 0 3600")')
 
-    parser.add_argument('--no-ceres', dest='ceres', default=True, action='store_false',
-                      help='Do not use Ceres Solver')
+    parser.add_argument('--no-ceres', dest='ceres', default=True,
+                        action='store_false', help='Do not use Ceres Solver')
 
     parser.add_argument('--nblobs', type=int, help='Debugging: only fit N blobs')
     parser.add_argument('--blob', type=int, help='Debugging: start with blob #')
