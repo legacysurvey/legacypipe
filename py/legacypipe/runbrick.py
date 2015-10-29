@@ -426,7 +426,7 @@ def stage_tims(W=3600, H=3600, pixscale=0.262, brickname=None,
 
 def _coadds(tims, bands, targetwcs,
             mods=None, xy=None, apertures=None, apxy=None,
-            ngood=False, detmaps=False,
+            ngood=False, detmaps=False, psfsize=False,
             callback=None, callback_args=[],
             plots=False, ps=None):
     class Duck(object):
@@ -439,6 +439,9 @@ def _coadds(tims, bands, targetwcs,
     # always, for patching SATUR, etc pixels?
     unweighted=True
 
+    if not xy:
+        psfsize = False
+    
     C.coimgs = []
     if detmaps:
         C.galdetivs = []
@@ -446,7 +449,7 @@ def _coadds(tims, bands, targetwcs,
     if mods:
         C.comods = []
         C.coresids = []
-
+        
     if apertures is not None:
         unweighted = True
         C.AP = fits_table()
@@ -457,6 +460,11 @@ def _coadds(tims, bands, targetwcs,
         C.T.nobs    = np.zeros((len(ix), len(bands)), np.uint8)
         C.T.anymask = np.zeros((len(ix), len(bands)), np.int16)
         C.T.allmask = np.zeros((len(ix), len(bands)), np.int16)
+        if psfsize:
+            C.T.psfsize = np.zeros(len(ix), np.float32)
+    if psfsize:
+        psfsizemap = np.zeros((H,W), np.float32)
+        cowsum = 0.
 
     tinyw = 1e-30
     for iband,band in enumerate(bands):
@@ -543,6 +551,18 @@ def _coadds(tims, bands, targetwcs,
                 # raw exposure count
                 nobs[Yo,Xo] += 1
 
+            if psfsize:
+                # psfnorm is in units of 1/pixels.
+                # (eg, psfnorm for a gaussian is ~ 1/psf_sigma)
+                neff = 1./tim.psfnorm**2
+                #print('Tim', tim.name, 'FWHM', tim.psf_fwhm, 'pixels; sigma',
+                #  tim.psf_sigma, 'FWHM arcsec:', tim.psf_fwhm * 0.262)
+                # Neff is in pixels**2
+                # Narcsec is in arcsec**2
+                narcsec = neff * tim.wcs.pixel_scale()**2
+                # print('Narcsec', narcsec)
+                psfsizemap[Yo,Xo] += iv * narcsec
+
             if detmaps:
                 # point-source depth
                 detsig1 = tim.sig1 / tim.psfnorm
@@ -567,6 +587,7 @@ def _coadds(tims, bands, targetwcs,
                 del goodpix
 
             del Yo,Xo,Yi,Xi,im,iv
+            # END of loop over tims
 
         cowimg /= np.maximum(cow, tinyw)
         C.coimgs.append(cowimg)
@@ -602,13 +623,16 @@ def _coadds(tims, bands, targetwcs,
                 plt.title('AND mask, %s band: %s' % (band,k))
                 ps.savefig()
 
-
         if xy:
             C.T.nobs [:,iband] = nobs[iy,ix]
             C.T.anymask[:,iband] =  ormask [iy,ix]
             C.T.allmask[:,iband] =  andmask[iy,ix]
             # unless there were no images there...
             C.T.allmask[nobs[iy,ix] == 0, iband] = 0
+
+        if psfsize:
+            # We're summing this across bands....
+            cowsum = cowsum + cow
 
         if apertures is not None:
             import photutils
@@ -646,7 +670,25 @@ def _coadds(tims, bands, targetwcs,
 
         if callback is not None:
             callback(band, *callback_args, **kwargs)
+        # END of loop over bands
 
+    if psfsize:
+        # psfsizemap is in units of arcsec**2/iv
+        # Back to units of linear arcsec.
+        #print('Median narcsec', np.median(psfsizemap / cowsum))
+        psfsizemap = np.sqrt(psfsizemap / cowsum)
+        #print('median neff linear arcsec:', np.median(psfsizemap))
+        # Correction factor to get back to equivalent of Gaussian sigma
+        psfsizemap /= (2. * np.sqrt(np.pi))
+        #print('median neff linear sigma:', np.median(psfsizemap))
+        # Conversion factor to FWHM (2.35)
+        psfsizemap *= 2.*np.sqrt(2.*np.log(2.))
+        #print('median FWHM:', np.median(psfsizemap))
+        del cowsum
+        if xy:
+            C.T.psfsize[:] = psfsizemap[iy,ix]
+        del psfsizemap
+            
     return C
 
 
@@ -3721,7 +3763,7 @@ def stage_coadds(bands=None, version_header=None, targetwcs=None,
     del xx,yy,ok,ra,dec
 
     C = _coadds(tims, bands, targetwcs, mods=mods, xy=(ix,iy),
-                ngood=True, detmaps=True,
+                ngood=True, detmaps=True, psfsize=True,
                 apertures=apertures, apxy=apxy,
                 callback=_write_band_images,
                 callback_args=(brickname, version_header, tims, targetwcs,
@@ -3730,7 +3772,7 @@ def stage_coadds(bands=None, version_header=None, targetwcs=None,
 
     for c in ['nobs', 'anymask', 'allmask']:
         T.set(c, C.T.get(c))
-
+    T.decam_psfsize = C.T.psfsize
 
     # Compute the brick's unique pixels.
     U = None
@@ -4154,7 +4196,7 @@ def stage_writecat(
 
     cols.extend(['decam_mw_transmission', 'decam_nobs',
         'decam_rchi2', 'decam_fracflux', 'decam_fracmasked', 'decam_fracin',
-        'decam_anymask', 'decam_allmask'])
+        'decam_anymask', 'decam_allmask', 'decam_psfsize' ])
 
     if WISE is not None:
         cols.extend([
