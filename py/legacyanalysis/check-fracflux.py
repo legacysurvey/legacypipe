@@ -7,11 +7,14 @@ from tractor import *
 from tractor.galaxy import *
 from astrometry.util.util import *
 from astrometry.util.fits import *
+from astrometry.util.plotutils import *
 
 from legacypipe.runbrick import _compute_source_metrics
 
 if __name__ == '__main__':
 
+    ps = PlotSequence('frac')
+    
     W,H = 50,50
     cx,cy = W/2., H/2.
 
@@ -46,7 +49,8 @@ if __name__ == '__main__':
     allfracs = []
 
     img.inverr[H/2:,:] = 0.
-    
+
+
     for ra in np.linspace(-0.001, 0.001, 7):
         gala.pos.ra = ra
 
@@ -62,11 +66,11 @@ if __name__ == '__main__':
     plt.clf()
     plt.plot(allfracs[:,0], 'b-')
     plt.plot(allfracs[:,1], 'r-')
-    plt.savefig('fracs.png')
+    ps.savefig()
     
 
     # Put one galaxy on the edge of the image.
-    galb.pos = wcs.pixelToPosition(0, H/2.)
+    galb.pos = wcs.pixelToPosition(W/2., 0.)
     print 'Gal b:', wcs.positionToPixel(galb.pos)
     allfracs = []
     for ra in np.linspace(-0.002, 0.002, 15):
@@ -76,10 +80,18 @@ if __name__ == '__main__':
         for k,v in M.items():
             B.set(k, v)
         allfracs.append(B.fracflux)
+
+        #sys.exit(0)
+        
+        # mod = tr.getModelImage(0)
+        # plt.clf()
+        # dimshow(mod)
+        # ps.savefig()
+        
     allfracs = np.hstack(allfracs).T
     plt.clf()
     plt.plot(allfracs[:,0], 'b-')
     plt.plot(allfracs[:,1], 'r-')
-    plt.savefig('fracs2.png')
+    ps.savefig()
 
     

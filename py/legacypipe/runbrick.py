@@ -3501,13 +3501,11 @@ def _compute_source_metrics(srcs, tims, bands, tr):
                 patch = patch.patch
 
                 # print('fracflux: band', band, 'isrc', isrc, 'tim', tim.name)
-                # print('src:', B.sources[isrc])
+                # print('src:', srcs[isrc])
                 # print('patch sum', np.sum(patch),'abs',np.sum(np.abs(patch)))
                 # print('counts:', counts[isrc])
                 # print('mod slice sum', np.sum(mod[slc]))
                 # print('mod[slc] - patch:', np.sum(mod[slc] - patch))
-                # print('fracflux_num =', )
-                # print('fracflux_den =', )
 
                 # (mod - patch) is flux from others
                 # (mod - patch) / counts is normalized flux from others
@@ -3523,12 +3521,15 @@ def _compute_source_metrics(srcs, tims, bands, tr):
                 # This can be < 1 when the source is near an edge, or if the
                 # source is a huge diffuse galaxy in a small patch.
                 fin = np.abs(np.sum(patch) / counts[isrc])
-                #print('fin:', fin)
+                # print('fin:', fin)
                 fracflux_num[isrc,iband] += (fin *
                     np.sum((mod[slc] - patch) * np.abs(patch)) /
                     np.sum(patch**2))
                 fracflux_den[isrc,iband] += fin
-
+                # print('fracflux_num: fin *',
+                #      np.sum((mod[slc] - patch) * np.abs(patch)) /
+                #      np.sum(patch**2))
+                
                 fracmasked_num[isrc,iband] += (
                     np.sum((tim.getInvError()[slc] == 0) * np.abs(patch)) /
                     np.abs(counts[isrc]))
@@ -3561,9 +3562,9 @@ def _compute_source_metrics(srcs, tims, bands, tr):
     #print('Fracflux_num:', fracflux_num)
     #print('Fracflux_den:', fracflux_den)
                 
-    fracflux   = fracflux_num   / np.maximum(1, fracflux_den)
-    rchi2      = rchi2_num      / np.maximum(1, rchi2_den)
-    fracmasked = fracmasked_num / np.maximum(1, fracmasked_den)
+    fracflux   = fracflux_num   / fracflux_den
+    rchi2      = rchi2_num      / rchi2_den
+    fracmasked = fracmasked_num / fracmasked_den
 
     #print('Fracflux:', B.fracflux)
     
