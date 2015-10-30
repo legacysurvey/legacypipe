@@ -46,11 +46,11 @@ if __name__ == '__main__':
     
     bands = 'r'
 
-    allfracs = []
-
     img.inverr[H/2:,:] = 0.
 
 
+    allfracs = []
+    allfracins = []
     for ra in np.linspace(-0.001, 0.001, 7):
         gala.pos.ra = ra
 
@@ -59,13 +59,17 @@ if __name__ == '__main__':
             B.set(k, v)
 
         allfracs.append(B.fracflux)
+        allfracins.append(B.fracin)
 
     allfracs = np.hstack(allfracs).T
+    allfracins = np.hstack(allfracins).T
     print 'Allfracs:', allfracs.shape
 
     plt.clf()
     plt.plot(allfracs[:,0], 'b-')
     plt.plot(allfracs[:,1], 'r-')
+    plt.plot(allfracins[:,0], 'b--')
+    plt.plot(allfracins[:,1], 'r--')
     ps.savefig()
     
 
@@ -73,6 +77,7 @@ if __name__ == '__main__':
     galb.pos = wcs.pixelToPosition(W/2., 0.)
     print 'Gal b:', wcs.positionToPixel(galb.pos)
     allfracs = []
+    allfracins = []
     for ra in np.linspace(-0.002, 0.002, 15):
         gala.pos.ra = ra
         print 'Gal a:', wcs.positionToPixel(gala.pos)
@@ -80,7 +85,7 @@ if __name__ == '__main__':
         for k,v in M.items():
             B.set(k, v)
         allfracs.append(B.fracflux)
-
+        allfracins.append(B.fracin)
         #sys.exit(0)
         
         # mod = tr.getModelImage(0)
@@ -89,9 +94,12 @@ if __name__ == '__main__':
         # ps.savefig()
         
     allfracs = np.hstack(allfracs).T
+    allfracins = np.hstack(allfracins).T
     plt.clf()
     plt.plot(allfracs[:,0], 'b-')
     plt.plot(allfracs[:,1], 'r-')
+    plt.plot(allfracins[:,0], 'b--')
+    plt.plot(allfracins[:,1], 'r--')
     ps.savefig()
 
     
