@@ -15,8 +15,11 @@ from astrometry.util.miscutils import *
 from astrometry.util.plotutils import *
 
 if __name__ == '__main__':
-    brick = '1498p017'
-    base = 'dr2j'
+    #brick = '1498p017'
+    #base = 'dr2j'
+
+    base = 'dr2m'
+    brick = '2400p050'
 
     ps = PlotSequence('tidy')
     
