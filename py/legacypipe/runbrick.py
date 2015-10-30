@@ -554,16 +554,19 @@ def _coadds(tims, bands, targetwcs,
             if psfsize:
                 # psfnorm is in units of 1/pixels.
                 # (eg, psfnorm for a gaussian is ~ 1/psf_sigma)
-                neff = 1./tim.psfnorm**2
-                #print('Tim', tim.name, 'FWHM', tim.psf_fwhm, 'pixels; sigma',
-                #  tim.psf_sigma, 'FWHM arcsec:', tim.psf_fwhm * 0.262)
                 # Neff is in pixels**2
+                neff = 1./tim.psfnorm**2
                 # Narcsec is in arcsec**2
                 narcsec = neff * tim.wcs.pixel_scale()**2
-                # print('Narcsec', narcsec)
-                # print(tim.name, 'iv1:', 1./tim.sig1**2)
-                psfsizemap[Yo,Xo] += iv * narcsec
+                psfsizemap[Yo,Xo] += iv * (1. / narcsec)
 
+                #print('Tim', tim.name, 'FWHM', tim.psf_fwhm, 'pixels; sigma',
+                #  tim.psf_sigma, 'FWHM arcsec:', tim.psf_fwhm * 0.262)
+                # print('Narcsec', narcsec)
+                # see2 = np.sqrt(narcsec) / (2.*np.sqrt(np.pi)) * 2.35
+                #print('Tim', tim.name, 'PSF FWHM->', tim.psf_fwhm * 0.262,
+                # 'arcsec vs', see2)
+                
             if detmaps:
                 # point-source depth
                 detsig1 = tim.sig1 / tim.psfnorm
@@ -634,12 +637,13 @@ def _coadds(tims, bands, targetwcs,
         if psfsize:
             # We're summing this across bands....
             wt = cow[iy,ix]
-            # psfsizemap is in units of arcsec**2/iv
+            # psfsizemap is in units of iv * (1 / arcsec**2)
             sz = psfsizemap[iy,ix]
             sz /= np.maximum(wt, tinyw)
             sz[wt == 0] = 0.
             # Back to units of linear arcsec.
-            sz = np.sqrt(sz)
+            sz = 1. / np.sqrt(sz)
+            sz[wt == 0] = 0.
             # Correction factor to get back to equivalent of Gaussian sigma
             sz /= (2. * np.sqrt(np.pi))
             # Conversion factor to FWHM (2.35)
