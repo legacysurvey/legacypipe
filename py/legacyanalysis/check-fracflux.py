@@ -46,11 +46,13 @@ if __name__ == '__main__':
     
     bands = 'r'
 
+    ## Mask out half the image
     img.inverr[H/2:,:] = 0.
 
 
     allfracs = []
     allfracins = []
+    allfracmasked = []
     for ra in np.linspace(-0.001, 0.001, 7):
         gala.pos.ra = ra
 
@@ -60,9 +62,10 @@ if __name__ == '__main__':
 
         allfracs.append(B.fracflux)
         allfracins.append(B.fracin)
-
+        allfracmasked.append(B.fracmasked)
     allfracs = np.hstack(allfracs).T
     allfracins = np.hstack(allfracins).T
+    allfracmasked = np.hstack(allfracmasked).T
     print 'Allfracs:', allfracs.shape
 
     plt.clf()
@@ -70,6 +73,8 @@ if __name__ == '__main__':
     plt.plot(allfracs[:,1], 'r-')
     plt.plot(allfracins[:,0], 'b--')
     plt.plot(allfracins[:,1], 'r--')
+    plt.plot(allfracmasked[:,0], 'b-.')
+    plt.plot(allfracmasked[:,1], 'r-.')
     ps.savefig()
     
 
@@ -78,6 +83,7 @@ if __name__ == '__main__':
     print 'Gal b:', wcs.positionToPixel(galb.pos)
     allfracs = []
     allfracins = []
+    allfracmasked = []
     for ra in np.linspace(-0.002, 0.002, 15):
         gala.pos.ra = ra
         print 'Gal a:', wcs.positionToPixel(gala.pos)
@@ -86,6 +92,7 @@ if __name__ == '__main__':
             B.set(k, v)
         allfracs.append(B.fracflux)
         allfracins.append(B.fracin)
+        allfracmasked.append(B.fracmasked)
         #sys.exit(0)
         
         # mod = tr.getModelImage(0)
@@ -95,11 +102,14 @@ if __name__ == '__main__':
         
     allfracs = np.hstack(allfracs).T
     allfracins = np.hstack(allfracins).T
+    allfracmasked = np.hstack(allfracmasked).T
     plt.clf()
     plt.plot(allfracs[:,0], 'b-')
     plt.plot(allfracs[:,1], 'r-')
     plt.plot(allfracins[:,0], 'b--')
     plt.plot(allfracins[:,1], 'r--')
+    plt.plot(allfracmasked[:,0], 'b-.')
+    plt.plot(allfracmasked[:,1], 'r-.')
     ps.savefig()
 
     
