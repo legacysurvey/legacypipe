@@ -29,6 +29,20 @@ print 'Exptime', E.exptime.min(), E.exptime.max()
 # Target depths (90th percentile)
 target = dict(g=24.0, r=23.4, z=22.5)
 
+E.sig1 = []
+E.psfnorm = []
+E.galnorm = []
+
+for i in range(len(E)):
+    im = decals.get_image_object(E[i])
+    tim = im.get_tractor_image(pixPsf=True, splinesky=True)
+    E.sig1.append(tim.sig1)
+    E.psfnorm.append(tim.psfnorm)
+    E.galnorm.append(tim.galnorm)
+
+E.writeto('cosmos-exposures.fits')
+    
+
 for band in bands:
     B = E[E.filter == band]
     print len(B), 'exposures in', band, 'band'
