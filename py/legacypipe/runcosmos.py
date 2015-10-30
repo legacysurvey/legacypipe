@@ -1,9 +1,9 @@
 from __future__ import print_function
 import os
 import numpy as np
-from .image import LegacySurveyImage
-from .decam import DecamImage
-from .common import *
+
+from legacypipe.decam import DecamImage
+from legacypipe.common import *
 
 '''
 Testing code for adding noise to deeper images to simulate DECaLS depth data.
@@ -17,35 +17,23 @@ class DecamImagePlusNoise(DecamImage):
         super(DecamImagePlusNoise, self).__init__(decals, t)
         self.addnoise = t.addnoise
 
-    def read_invvar(self, header=False, **kwargs):
-        X = super(DecamImagePlusNoise, self).read_invvar(header=header, **kwargs)
-        if header:
-            iv,hdr = X
-        else:
-            iv = X
-
-        newiv = 1. / ((1. / iv) + self.addnoise**2)
-        newiv[iv == 0] = 0.
-        if header:
-            return newiv,hdr
-        else:
-            return newiv
-        
-    def read_image(self, header=False, **kwargs):
-        X = super(DecamImagePlusNoise, self).read_image(header=header,**kwargs)
-        if header:
-            im,hdr = X
-        else:
-            im = X
-
-        im += np.random.normal(size=im.shape) * self.addnoise
-        if header:
-            return im,hdr
-        else:
-            return im
-
-
-
+    def get_tractor_image(self, **kwargs):
+        assert(kwargs.get('nanomaggies', True))
+        tim = super(DecamImagePlusNoise, self).get_tractor_image(**kwargs)
+        if tim is None:
+            return None
+        ie = 1. / (np.hypot(1. / tim.inverr, self.addnoise))
+        ie[tim.inverr == 0] = 0.
+        tim.inverr = ie
+        tim.data += np.random.normal(size=im.shape) * self.addnoise
+        print('Adding noise: sig1 was', tim.sig1)
+        print('Adding', self.addnoise)
+        sig1 = 1. / np.median(ie[ie > 0])
+        print('New sig1 is', sig1)
+        tim.sig1 = sig1
+        tim.zr = [-3. * sig1, 10. * sig1]
+        tim.ima.update(vmin=tim.zr[0], vmax=tim.zr[1])
+        return tim
 
 def main():
     from runbrick import run_brick, get_parser, get_runbrick_kwargs
@@ -63,7 +51,6 @@ def main():
 
     decals = Decals(opt.decals_dir)
     decals.image_typemap.update({'decam+noise' : DecamImagePlusNoise})
-    
     kwargs['decals'] = decals
     
     # runbrick...
