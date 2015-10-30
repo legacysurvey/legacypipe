@@ -3420,34 +3420,61 @@ def _one_blob(X):
         cat = Catalog(*B.sources)
         tr.catalog = cat
 
+    M = _compute_source_metrics(B.sources, tims, bands, tr)
+    for k,v in M.items():
+        B.set(k, v)
+
+    ok,x1,y1 = blobwcs.radec2pixelxy(
+        np.array([src.getPosition().ra  for src in B.sources]),
+        np.array([src.getPosition().dec for src in B.sources]))
+    B.finished_in_blob = blobmask[
+        np.clip(np.round(y1-1).astype(int), 0, blobh-1),
+        np.clip(np.round(x1-1).astype(int), 0, blobw-1)]
+    assert(len(B.finished_in_blob) == len(B))
+    assert(len(B.finished_in_blob) == len(B.started_in_blob))
+
+    B.hastycho = np.zeros(len(B), bool)
+    if hastycho:
+        B.hastycho[:] = True
+
+    print('Blob', iblob, 'finished:', Time()-tlast)
+
+    B.iblob = iblob
+
+    return B
+
+
+
+
+def _compute_source_metrics(srcs, tims, bands, tr):
     # rchi2 quality-of-fit metric
-    rchi2_num    = np.zeros((len(B),len(bands)), np.float32)
-    rchi2_den    = np.zeros((len(B),len(bands)), np.float32)
+    rchi2_num    = np.zeros((len(srcs),len(bands)), np.float32)
+    rchi2_den    = np.zeros((len(srcs),len(bands)), np.float32)
 
     # fracflux degree-of-blending metric
-    fracflux_num = np.zeros((len(B),len(bands)), np.float32)
-    fracflux_den = np.zeros((len(B),len(bands)), np.float32)
+    fracflux_num = np.zeros((len(srcs),len(bands)), np.float32)
+    fracflux_den = np.zeros((len(srcs),len(bands)), np.float32)
 
     # fracin flux-inside-blob metric
-    fracin_num = np.zeros((len(B),len(bands)), np.float32)
-    fracin_den = np.zeros((len(B),len(bands)), np.float32)
+    fracin_num = np.zeros((len(srcs),len(bands)), np.float32)
+    fracin_den = np.zeros((len(srcs),len(bands)), np.float32)
 
     # fracmasked: fraction of masked pixels metric
-    fracmasked_num = np.zeros((len(B),len(bands)), np.float32)
-    fracmasked_den = np.zeros((len(B),len(bands)), np.float32)
+    fracmasked_num = np.zeros((len(srcs),len(bands)), np.float32)
+    fracmasked_den = np.zeros((len(srcs),len(bands)), np.float32)
 
     for iband,band in enumerate(bands):
         for tim in tims:
             if tim.band != band:
                 continue
             mod = np.zeros(tim.getModelShape(), tr.modtype)
-            srcmods = [None for src in B.sources]
-            counts = np.zeros(len(B))
+            srcmods = [None for src in srcs]
+            counts = np.zeros(len(srcs))
             pcal = tim.getPhotoCal()
 
             # For each source, compute its model and record its flux
             # in this image.  Also compute the full model *mod*.
-            for isrc,src in enumerate(B.sources):
+            for isrc,src in enumerate(srcs):
                 patch = tr.getModelPatch(tim, src, minsb=tim.modelMinval)
                 if patch is None or patch.patch is None:
                     continue
@@ -3534,34 +3561,18 @@ def _one_blob(X):
     #print('Fracflux_num:', fracflux_num)
     #print('Fracflux_den:', fracflux_den)
                 
-    B.fracflux   = fracflux_num   / np.maximum(1, fracflux_den)
-    B.rchi2      = rchi2_num      / np.maximum(1, rchi2_den)
-    B.fracmasked = fracmasked_num / np.maximum(1, fracmasked_den)
+    fracflux   = fracflux_num   / np.maximum(1, fracflux_den)
+    rchi2      = rchi2_num      / np.maximum(1, rchi2_den)
+    fracmasked = fracmasked_num / np.maximum(1, fracmasked_den)
 
     #print('Fracflux:', B.fracflux)
     
     # fracin_{num,den} are in flux * nimages units
     tinyflux = 1e-9
-    B.fracin     = fracin_num     / np.maximum(tinyflux, fracin_den)
+    fracin     = fracin_num     / np.maximum(tinyflux, fracin_den)
 
-    ok,x1,y1 = blobwcs.radec2pixelxy(
-        np.array([src.getPosition().ra  for src in B.sources]),
-        np.array([src.getPosition().dec for src in B.sources]))
-    B.finished_in_blob = blobmask[
-        np.clip(np.round(y1-1).astype(int), 0, blobh-1),
-        np.clip(np.round(x1-1).astype(int), 0, blobw-1)]
-    assert(len(B.finished_in_blob) == len(B))
-    assert(len(B.finished_in_blob) == len(B.started_in_blob))
-
-    B.hastycho = np.zeros(len(B), bool)
-    if hastycho:
-        B.hastycho[:] = True
-
-    print('Blob', iblob, 'finished:', Time()-tlast)
-
-    B.iblob = iblob
-
-    return B
+    return dict(fracin=fracin, fracflux=fracflux, rchi2=rchi2,
+                fracmasked=fracmasked)
 
 
 def _initialize_models(src):
