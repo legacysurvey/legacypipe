@@ -100,6 +100,7 @@ for iset in xrange(100):
     expnoise = dict(zip(Eset.expnum, Eset.addnoise))
     Cset = C[np.array([expnum in thisset for expnum in C.expnum])]
     Cset.addnoise = np.array([expnoise[e] for e in Cset.expnum]).astype(np.float32)
+    Cset.camera = np.array([c + '+noise' for c in Cset.camera])
     sets.append(Cset)
     
     E.cut(np.array([expnum not in thisset for expnum in E.expnum]))

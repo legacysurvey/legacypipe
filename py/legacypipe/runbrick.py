@@ -4715,12 +4715,8 @@ def run_brick(brick, radec=None, pixscale=0.262,
     mp.report(threads)
 
 
-def main():
+def get_parser():
     import argparse
-    import logging
-
-    from astrometry.util.ttime import MemMeas, CpuMeas
-    import datetime
     de = ('Main "pipeline" script for the Dark Energy Camera Legacy Survey ' +
           '(DECaLS) data reductions.')
 
@@ -4770,7 +4766,7 @@ python -u legacypipe/runbrick.py --plots --brick 2440p070 --zoom 1900 2400 450 9
 
     parser.add_argument(
         '-P', '--pickle', dest='picklepat',
-        help='Pickle filename pattern, with %i, default %default',
+        help='Pickle filename pattern, default %(default)s',
         default='pickles/runbrick-%(brick)s-%%(stage)s.pickle')
 
     parser.add_argument('--plot-base',
@@ -4779,9 +4775,9 @@ python -u legacypipe/runbrick.py --plots --brick 2440p070 --zoom 1900 2400 450 9
                         help='Set PlotSequence starting number')
 
     parser.add_argument('-W', '--width', type=int, default=3600,
-                        help='Target image width (default %default)')
+                        help='Target image width, default %(default)i')
     parser.add_argument('-H', '--height', type=int, default=3600,
-                        help='Target image height (default %default)')
+                        help='Target image height, default %(default)i')
 
     parser.add_argument(
         '--zoom', type=int, nargs=4,
@@ -4865,14 +4861,9 @@ python -u legacypipe/runbrick.py --plots --brick 2440p070 --zoom 1900 2400 450 9
         '--rsync', default=False, action='store_true',
         help=('Rather than running calibrations, rsync from NERSC.  Also '+
               'rsync missing image file inputs'))
+    return parser
 
-    print()
-    print('runbrick.py starting at', datetime.datetime.now().isoformat())
-    print('Command-line args:', sys.argv)
-    print()
-
-    opt = parser.parse_args()
-
+def get_runbrick_kwargs(opt):
     if opt.brick is not None and opt.radec is not None:
         print('Only ONE of --brick and --radec may be specified.')
         return -1
@@ -4910,17 +4901,6 @@ python -u legacypipe/runbrick.py --plots --brick 2440p070 --zoom 1900 2400 450 9
             print('Found:', fn)
             return 0
 
-    if opt.verbose == 0:
-        lvl = logging.INFO
-    else:
-        lvl = logging.DEBUG
-    logging.basicConfig(level=lvl, format='%(message)s', stream=sys.stdout)
-
-    Time.add_measurement(MemMeas)
-    plt.figure(figsize=(12,9))
-    plt.subplots_adjust(left=0.07, right=0.99, bottom=0.07, top=0.95,
-                        hspace=0.2, wspace=0.05)
-
     if len(opt.stage) == 0:
         opt.stage.append('writecat')
 
@@ -4937,32 +4917,64 @@ python -u legacypipe/runbrick.py --plots --brick 2440p070 --zoom 1900 2400 450 9
     if opt.unwise_dir is None:
         opt.unwise_dir = os.environ.get('UNWISE_COADDS_DIR', None)
 
+    kwa.update(
+        radec=opt.radec, pixscale=opt.pixscale,
+        width=opt.width, height=opt.height, zoom=opt.zoom,
+        blacklist=opt.blacklist,
+        pv=opt.pv,
+        threads=opt.threads, ceres=opt.ceres,
+        do_calibs=opt.do_calibs,
+        write_metrics=opt.write_metrics,
+        on_bricks=opt.on_bricks,
+        gaussPsf=opt.gpsf, pixPsf=opt.pixpsf, splinesky=opt.splinesky,
+        simulOpt=opt.simul_opt,
+        nblobs=opt.nblobs, blob=opt.blob, blobxy=opt.blobxy,
+        pipe=opt.pipe, outdir=opt.outdir, decals_dir=opt.decals_dir,
+        unwise_dir=opt.unwise_dir,
+        plots=opt.plots, plots2=opt.plots2,
+        coadd_bw=opt.coadd_bw,
+        plotbase=opt.plot_base, plotnumber=opt.plot_number,
+        force=opt.force, forceAll=opt.forceall,
+        stages=opt.stage, writePickles=opt.write,
+        picklePattern=opt.picklepat,
+        rsync=opt.rsync,
+        checkpoint_filename=opt.checkpoint,
+        checkpoint_period=opt.checkpoint_period,
+        )
+    return kwa
+    
+def main():
+    import logging
+    from astrometry.util.ttime import MemMeas, CpuMeas
+    import datetime
+
+    print()
+    print('runbrick.py starting at', datetime.datetime.now().isoformat())
+    print('Command-line args:', sys.argv)
+    print()
+
+    parser = get_parser()
+    opt = parser.parse_args()
+    if opt.brick is None and opt.radec is None:
+        parser.print_help()
+        return -1
+    kwargs = get_runbrick_kwargs(opt)
+    if kwargs == -1:
+        return -1
+
+    if opt.verbose == 0:
+        lvl = logging.INFO
+    else:
+        lvl = logging.DEBUG
+    logging.basicConfig(level=lvl, format='%(message)s', stream=sys.stdout)
+
+    Time.add_measurement(MemMeas)
+    plt.figure(figsize=(12,9))
+    plt.subplots_adjust(left=0.07, right=0.99, bottom=0.07, top=0.95,
+                        hspace=0.2, wspace=0.05)
+
     try:
-        run_brick(
-            opt.brick, radec=opt.radec, pixscale=opt.pixscale,
-            width=opt.width, height=opt.height, zoom=opt.zoom,
-            blacklist=opt.blacklist,
-            pv=opt.pv,
-            threads=opt.threads, ceres=opt.ceres,
-            do_calibs=opt.do_calibs,
-            write_metrics=opt.write_metrics,
-            on_bricks=opt.on_bricks,
-            gaussPsf=opt.gpsf, pixPsf=opt.pixpsf,
-            splinesky=opt.splinesky,
-            simulOpt=opt.simul_opt,
-            nblobs=opt.nblobs, blob=opt.blob, blobxy=opt.blobxy,
-            pipe=opt.pipe, outdir=opt.outdir, decals_dir=opt.decals_dir,
-            unwise_dir=opt.unwise_dir,
-            plots=opt.plots, plots2=opt.plots2,
-            coadd_bw=opt.coadd_bw,
-            plotbase=opt.plot_base, plotnumber=opt.plot_number,
-            force=opt.force, forceAll=opt.forceall,
-            stages=opt.stage, writePickles=opt.write,
-            picklePattern=opt.picklepat,
-            rsync=opt.rsync,
-            checkpoint_filename=opt.checkpoint,
-            checkpoint_period=opt.checkpoint_period,
-            **kwa)
+        run_brick(opt.brick, **kwargs)
     except NothingToDoError as e:
         print()
         print(e.message)
