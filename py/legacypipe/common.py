@@ -788,7 +788,7 @@ Using the current directory as DECALS_DIR, but this is likely to fail.
         For pickling: clear the cached ZP and other tables.
         '''
         d = self.__dict__.copy()
-        d['ZP'] = None
+        d['ccds'] = None
         d['bricks'] = None
         d['bricktree'] = None
         return d

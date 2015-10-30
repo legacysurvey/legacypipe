@@ -64,6 +64,8 @@ rgbkwargs = dict(mnmx=(-1,100.), arcsinh=1.)
 rgbkwargs_resid = dict(mnmx=(-5,5))
 
 def runbrick_global_init():
+    t0 = Time()
+    print('Starting process', os.getpid(), Time()-t0)
     if nocache:
         disable_galaxy_cache()
 
@@ -342,18 +344,24 @@ def stage_tims(W=3600, H=3600, pixscale=0.262, brickname=None,
                                 pixPsf=pixPsf, splinesky=splinesky)) for im in ims]
     tims = mp.map(read_one_tim, args)
 
+    tnow = Time()
+    print('[parallel tims] Read', len(ccds), 'images:', tnow-tlast)
+    tlast = tnow
+
     # Cut the table of CCDs to match the 'tims' list
     I = np.flatnonzero(np.array([tim is not None for tim in tims]))
     ccds.cut(I)
     tims = [tim for tim in tims if tim is not None]
     assert(len(ccds) == len(tims))
 
-    tnow = Time()
-    print('[parallel tims] Read', len(ccds), 'images:', tnow-tlast)
-    tlast = tnow
-
     if len(tims) == 0:
         raise NothingToDoError('No photometric CCDs touching brick.')
+
+    npix = 0
+    for tim in tims:
+        h,w = tim.shape
+        npix += h*w
+    print('Total of', npix, 'pixels read')
 
     for tim in tims:
         for cal,ver in [('sky', tim.skyver), ('wcs', tim.wcsver), ('psf', tim.psfver)]:
@@ -1851,6 +1859,7 @@ def stage_fitblobs(T=None,
                 else:
                     r = Riter.next()
                 R.append(r)
+                print('Result r:', type(r))
             except StopIteration:
                 print('Done')
                 break
@@ -2191,6 +2200,7 @@ def _blob_iter(blobslices, blobsrcs, blobs, targetwcs, tims, cat, bands,
                simul_opt, use_ceres, hastycho)
 
 def _bounce_one_blob(X):
+
     # iblob = X[0]
     # fn = 'blob-%i.pickle' % iblob
     # from astrometry.util.file import pickle_to_file
