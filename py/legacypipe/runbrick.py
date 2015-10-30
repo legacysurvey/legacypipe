@@ -2149,7 +2149,7 @@ def _blob_iter(blobslices, blobsrcs, blobs, targetwcs, tims, cat, bands,
 
         hastycho = iblob in tychoblobs
 
-        print('Blob number', nblob+1, 'of', len(blobslices), ': blob', iblob,
+        print('Blob', nblob+1, 'of', len(blobslices), ': blob', iblob,
               len(Isrcs), 'sources, size', blobw, 'x', blobh,
               'center', (bx0+bx1)/2, (by0+by1)/2, 'npix', np.sum(blobmask),
               'one pixel:', onex,oney, 'has Tycho-2 star:', hastycho)
@@ -2437,7 +2437,7 @@ def _one_blob(X):
     (nblob, iblob, Isrcs, brickwcs, bx0, by0, blobw, blobh, blobmask, timargs,
      srcs, bands, plots, ps, simul_opt, use_ceres, hastycho) = X
 
-    print('Fitting blob #', nblob, 'val', iblob, ':', len(Isrcs),
+    print('Fitting blob number', nblob, 'val', iblob, ':', len(Isrcs),
           'sources, size', blobw, 'x', blobh, len(timargs), 'images')
     plots2 = False
     tlast = Time()
@@ -3421,7 +3421,7 @@ def _one_blob(X):
     if hastycho:
         B.hastycho[:] = True
 
-    print('Blob', iblob, 'finished:', Time()-tlast)
+    print('Blob number', nblob, 'iblob', iblob, 'finished:', Time()-tlast)
 
     B.iblob = iblob
 
