@@ -12,7 +12,7 @@ export MKL_NUM_THREADS=1
 ulimit -S -v 15000000
 ulimit -a
 
-outdir=$SCRATCH/dr2n
+outdir=$SCRATCH/dr2o
 
 brick="$1"
 
@@ -43,6 +43,7 @@ echo "--------------------------------------------------------------------------
 python -u legacypipe/runbrick.py \
     --pixpsf --splinesky --pipe --skip --no-sdss --no-early-coadds \
     --force-all --no-write \
+    --checkpoint $(printf checkpoint/chekpoint-%s.pickle $brick) \
     --threads 6 \
     --brick $brick --outdir $outdir --nsigma 6 >> $log 2>&1
 
