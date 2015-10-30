@@ -461,11 +461,7 @@ def _coadds(tims, bands, targetwcs,
         C.T.anymask = np.zeros((len(ix), len(bands)), np.int16)
         C.T.allmask = np.zeros((len(ix), len(bands)), np.int16)
         if psfsize:
-            C.T.psfsize  = np.zeros(len(ix), np.float32)
-            C.T.psfsize2 = np.zeros((len(ix), len(bands)), np.float32)
-    if psfsize:
-        psfsizemap = np.zeros((H,W), np.float32)
-        cowsum = 0.
+            C.T.psfsize = np.zeros((len(ix), len(bands)), np.float32)
 
     tinyw = 1e-30
     for iband,band in enumerate(bands):
@@ -517,7 +513,7 @@ def _coadds(tims, bands, targetwcs,
             kwargs.update(ormask=ormask, andmask=andmask, nobs=nobs)
 
         if psfsize:
-            psfsizemap2 = np.zeros((H,W), np.float32)
+            psfsizemap = np.zeros((H,W), np.float32)
 
         for itim,tim in enumerate(tims):
             if tim.band != band:
@@ -565,9 +561,8 @@ def _coadds(tims, bands, targetwcs,
                 # Narcsec is in arcsec**2
                 narcsec = neff * tim.wcs.pixel_scale()**2
                 # print('Narcsec', narcsec)
+                # print(tim.name, 'iv1:', 1./tim.sig1**2)
                 psfsizemap[Yo,Xo] += iv * narcsec
-                print(tim.name, 'iv1:', 1./tim.sig1**2)
-                psfsizemap2[Yo,Xo] += iv * narcsec
 
             if detmaps:
                 # point-source depth
@@ -638,15 +633,19 @@ def _coadds(tims, bands, targetwcs,
 
         if psfsize:
             # We're summing this across bands....
-            cowsum = cowsum + cow
-            psfsizemap2 /= np.maximum(cow, tinyw)
-            psfsizemap2[cow == 0] = 0.
-            sz = psfsizemap2[iy,ix]
+            wt = cow[iy,ix]
+            # psfsizemap is in units of arcsec**2/iv
+            sz = psfsizemap[iy,ix]
+            sz /= np.maximum(wt, tinyw)
+            sz[wt == 0] = 0.
+            # Back to units of linear arcsec.
             sz = np.sqrt(sz)
+            # Correction factor to get back to equivalent of Gaussian sigma
             sz /= (2. * np.sqrt(np.pi))
+            # Conversion factor to FWHM (2.35)
             sz *= 2. * np.sqrt(2. * np.log(2.))
-            C.T.psfsize2[:,iband] = sz
-            del psfsizemap2
+            C.T.psfsize[:,iband] = sz
+            del psfsizemap
 
         if apertures is not None:
             import photutils
@@ -686,25 +685,6 @@ def _coadds(tims, bands, targetwcs,
             callback(band, *callback_args, **kwargs)
         # END of loop over bands
 
-    if psfsize:
-        # psfsizemap is in units of arcsec**2/iv
-        w = cowsum[iy,ix]
-        del cowsum
-        sz = (psfsizemap[iy,ix] / np.maximum(w, tinyw))
-        del psfsizemap
-        sz[w == 0] = 0.
-        # Back to units of linear arcsec.
-        sz = np.sqrt(sz)
-        #print('median neff linear arcsec:', np.median(psfsizemap))
-        # Correction factor to get back to equivalent of Gaussian sigma
-        sz /= (2. * np.sqrt(np.pi))
-        #print('median neff linear sigma:', np.median(psfsizemap))
-        # Conversion factor to FWHM (2.35)
-        sz *= 2.*np.sqrt(2.*np.log(2.))
-        #print('median FWHM:', np.median(psfsizemap))
-        if xy:
-            C.T.psfsize[:] = sz
-            
     return C
 
 
@@ -3521,14 +3501,16 @@ def _compute_source_metrics(srcs, tims, bands, tr):
                 # This can be < 1 when the source is near an edge, or if the
                 # source is a huge diffuse galaxy in a small patch.
                 fin = np.abs(np.sum(patch) / counts[isrc])
+
                 # print('fin:', fin)
+                # print('fracflux_num: fin *',
+                #      np.sum((mod[slc] - patch) * np.abs(patch)) /
+                #      np.sum(patch**2))
+
                 fracflux_num[isrc,iband] += (fin *
                     np.sum((mod[slc] - patch) * np.abs(patch)) /
                     np.sum(patch**2))
                 fracflux_den[isrc,iband] += fin
-                # print('fracflux_num: fin *',
-                #      np.sum((mod[slc] - patch) * np.abs(patch)) /
-                #      np.sum(patch**2))
                 
                 fracmasked_num[isrc,iband] += (
                     np.sum((tim.getInvError()[slc] == 0) * np.abs(patch)) /
@@ -3798,9 +3780,8 @@ def stage_coadds(bands=None, version_header=None, targetwcs=None,
                                basedir),
                 plots=False, ps=ps)
 
-    for c in ['nobs', 'anymask', 'allmask', 'psfsize2']:
+    for c in ['nobs', 'anymask', 'allmask', 'psfsize']:
         T.set(c, C.T.get(c))
-    T.decam_psfsize = C.T.psfsize
 
     # Compute the brick's unique pixels.
     U = None
@@ -4058,7 +4039,7 @@ def stage_writecat(
     TT.decam_nobs       = np.zeros((len(TT), len(allbands)), np.uint8)
     TT.decam_anymask    = np.zeros((len(TT), len(allbands)), TT.anymask.dtype)
     TT.decam_allmask    = np.zeros((len(TT), len(allbands)), TT.allmask.dtype)
-    TT.decam_psfsize2   = np.zeros((len(TT), len(allbands)), np.float32)
+    TT.decam_psfsize    = np.zeros((len(TT), len(allbands)), np.float32)
     B = np.array([allbands.index(band) for band in bands])
     TT.decam_rchi2     [:,B] = TT.rchi2
     TT.decam_fracflux  [:,B] = TT.fracflux
@@ -4067,7 +4048,7 @@ def stage_writecat(
     TT.decam_nobs      [:,B] = TT.nobs
     TT.decam_anymask   [:,B] = TT.anymask
     TT.decam_allmask   [:,B] = TT.allmask
-    TT.decam_psfsize2  [:,B] = TT.psfsize2
+    TT.decam_psfsize   [:,B] = TT.psfsize
     TT.delete_column('rchi2')
     TT.delete_column('fracflux')
     TT.delete_column('fracin')
@@ -4226,7 +4207,7 @@ def stage_writecat(
 
     cols.extend(['decam_mw_transmission', 'decam_nobs',
         'decam_rchi2', 'decam_fracflux', 'decam_fracmasked', 'decam_fracin',
-        'decam_anymask', 'decam_allmask', 'decam_psfsize', 'decam_psfsize2' ])
+        'decam_anymask', 'decam_allmask', 'decam_psfsize' ])
 
     if WISE is not None:
         cols.extend([
