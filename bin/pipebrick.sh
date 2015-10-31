@@ -43,7 +43,7 @@ echo "--------------------------------------------------------------------------
 python -u legacypipe/runbrick.py \
     --pixpsf --splinesky --pipe --skip --no-sdss --no-early-coadds \
     --force-all --no-write \
-    --checkpoint $(printf checkpoint/chekpoint-%s.pickle $brick) \
+    --checkpoint $(printf checkpoint/checkpoint-%s.pickle $brick) \
     --threads 6 \
     --brick $brick --outdir $outdir --nsigma 6 >> $log 2>&1
 
