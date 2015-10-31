@@ -4969,8 +4969,8 @@ def main():
         parser.print_help()
         return -1
     kwargs = get_runbrick_kwargs(opt)
-    if kwargs == -1:
-        return -1
+    if kwargs in [-1,0]:
+        return kwargs
 
     if opt.verbose == 0:
         lvl = logging.INFO
