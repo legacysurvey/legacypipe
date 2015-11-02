@@ -4746,6 +4746,8 @@ python -u legacypipe/runbrick.py --plots --brick 2440p070 --zoom 1900 2400 450 9
                         action='append', help="Run up to the given stage(s)")
     parser.add_argument('-n', '--no-write', dest='write', default=True,
                         action='store_false')
+    parser.add_argument('-w', '--write-stage', action='append', default=None,
+                        help='Write a pickle for a given stage: eg "tims", "image_coadds", "srcs"')
     parser.add_argument('-v', '--verbose', dest='verbose', action='count',
                         default=0, help='Make more verbose')
 
@@ -4927,6 +4929,13 @@ def get_runbrick_kwargs(opt):
     if opt.unwise_dir is None:
         opt.unwise_dir = os.environ.get('UNWISE_COADDS_DIR', None)
 
+    # list of strings if -w / --write-stage is given; False if
+    # --no-write given; True by default.
+    if opt.write_stage is not None:
+        writeStages = opt.write_stage
+    else:
+        writeStages = opt.write
+
     kwa.update(
         radec=opt.radec, pixscale=opt.pixscale,
         width=opt.width, height=opt.height, zoom=opt.zoom,
@@ -4945,7 +4954,7 @@ def get_runbrick_kwargs(opt):
         coadd_bw=opt.coadd_bw,
         plotbase=opt.plot_base, plotnumber=opt.plot_number,
         force=opt.force, forceAll=opt.forceall,
-        stages=opt.stage, writePickles=opt.write,
+        stages=opt.stage, writePickles=writeStages,
         picklePattern=opt.picklepat,
         rsync=opt.rsync,
         checkpoint_filename=opt.checkpoint,
