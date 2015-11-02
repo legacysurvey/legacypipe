@@ -211,6 +211,34 @@ def main():
         rlo,rhi = 320., 360.
         dlo,dhi = -1.25, 1.25
 
+    elif opt.region == 'northwest':
+        rlo,rhi = 240,360
+        dlo,dhi = 20,40
+    elif opt.region == 'north':
+        rlo,rhi = 120,240
+        dlo,dhi = 20,40
+    elif opt.region == 'northeast':
+        rlo,rhi = 0,120
+        dlo,dhi = 20,40
+    elif opt.region == 'southwest':
+        rlo,rhi = 240,360
+        dlo,dhi = -20,0
+    elif opt.region == 'south':
+        rlo,rhi = 120,240
+        dlo,dhi = -20,0
+    elif opt.region == 'southeast':
+        rlo,rhi = 0,120
+        dlo,dhi = -20,0
+    elif opt.region == 'midwest':
+        rlo,rhi = 240,360
+        dlo,dhi = 0,20
+    elif opt.region == 'middle':
+        rlo,rhi = 120,240
+        dlo,dhi = 0,20
+    elif opt.region == 'mideast':
+        rlo,rhi = 0,120
+        dlo,dhi = 0,20
+
     elif opt.region == 'grz':
         # Bricks with grz coverage.
         # Be sure to use  --bricks decals-bricks-in-dr1.fits
