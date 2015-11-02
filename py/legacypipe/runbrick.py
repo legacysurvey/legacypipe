@@ -4452,7 +4452,8 @@ def run_brick(brick, radec=None, pixscale=0.262,
               stages=['writecat'],
               force=[], forceAll=False, writePickles=True,
               checkpoint_filename=None,
-              checkpoint_period=None):
+              checkpoint_period=None,
+              fitblobs_prereq_filename=None):
     '''
     Run the full DECaLS data reduction pipeline.
 
@@ -4652,6 +4653,8 @@ def run_brick(brick, radec=None, pixscale=0.262,
         kwargs.update(checkpoint_filename=checkpoint_filename)
         if checkpoint_period is not None:
             kwargs.update(checkpoint_period=checkpoint_period)
+    if fitblobs_prereq_filename is not None:
+        kwargs.update(write_pickle_filename=fitblobs_prereq_filename)
 
     if threads and threads > 1:
         from astrometry.util.timingpool import TimingPool, TimingPoolMeas
@@ -4754,6 +4757,9 @@ python -u legacypipe/runbrick.py --plots --brick 2440p070 --zoom 1900 2400 450 9
     parser.add_argument(
         '--checkpoint-period', type=int, default=None,
         help='Period for writing checkpoint files, in seconds; default 600')
+
+    parser.add_argument('--fitblobs-prereq', default=None,
+                        help='Write pickle file containing prereqs for the fitblobs stage')
 
     parser.add_argument('-b', '--brick',
         help='Brick name to run; required unless --radec is given')
@@ -4950,6 +4956,7 @@ def get_runbrick_kwargs(opt):
         rsync=opt.rsync,
         checkpoint_filename=opt.checkpoint,
         checkpoint_period=opt.checkpoint_period,
+        fitblobs_prereq_filename=opt.fitblobs_prereq,
         )
     return kwa
     
