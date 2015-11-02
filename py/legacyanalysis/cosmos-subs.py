@@ -114,11 +114,14 @@ for iset in xrange(100):
     print 'Cut to', len(E), 'remaining exposures'
 
 
-    
 print 'Got', len(sets), 'sets of exposures'
 
 for i,C in enumerate(sets):
     C.writeto('cosmos-ccds-sub%i.fits' % i)
+    C.subset = np.array([i] * len(C)).astype(np.uint8)
+    
+C = merge_tables(sets)
+C.writeto('cosmos-ccds.fits')
 
 #for i,E in enumerate(sets):
 #    E.writeto('cosmos-subset-%i.fits' % i)
