@@ -40,7 +40,7 @@ echo "--------------------------------------------------------------------------
 
 #    -P 'pickles/runbrick-dr2k-%(brick)s-%%(stage)s.pickle' \
 
-python -u legacypipe/runbrick.py \
+python legacypipe/runbrick.py \
     --pixpsf --splinesky --pipe --skip --no-sdss --no-early-coadds \
     --force-all --no-write \
     --checkpoint $(printf checkpoint/checkpoint-%s.pickle $brick) \
