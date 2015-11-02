@@ -35,22 +35,36 @@ class DecamImagePlusNoise(DecamImage):
         tim.ima.update(vmin=tim.zr[0], vmax=tim.zr[1])
         return tim
 
+class CosmosDecals(Decals):
+    def __init__(self, subset=0, **kwargs):
+        super(CosmosDecals, self).__init__(**kwargs)
+        self.subset = subset
+        self.image_typemap.update({'decam+noise' : DecamImagePlusNoise})
+        
+    def get_ccds(self):
+        CCDs = super(CosmosDecals, self).get_ccds()
+        CCDs.cut(CCDs.subset == self.subset)
+        return CCDs
+    
 def main():
     from runbrick import run_brick, get_parser, get_runbrick_kwargs
     
     parser = get_parser()
-    # subset number?
-    #parser.add_argument('--cosmos', type=int, help='COSMOS subset 
+    # subset number
+    parser.add_argument('--subset', type=int, help='COSMOS subset number [0 to 4]', default=0)
     opt = parser.parse_args()
     if opt.brick is None and opt.radec is None:
         parser.print_help()
         return -1
+
+    print('Forcing --no-blacklist')
+    opt.blacklist = False
+
     kwargs = get_runbrick_kwargs(opt)
     if kwargs == -1:
         return -1
 
-    decals = Decals(opt.decals_dir)
-    decals.image_typemap.update({'decam+noise' : DecamImagePlusNoise})
+    decals = CosmosDecals(decals_dir=opt.decals_dir, subset=opt.subset)
     kwargs['decals'] = decals
     
     # runbrick...

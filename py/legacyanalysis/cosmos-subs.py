@@ -20,6 +20,8 @@ print len(C), 'with exptime >= 50 sec'
 C.cut(decals.photometric_ccds(C))
 print len(C), 'photometric'
 
+C.cut(np.lexsort((C.expnum, C.filter)))
+
 efn = 'cosmos-exposures.fits'
 if not os.path.exists(efn):
     nil,I = np.unique(C.expnum, return_index=True)
@@ -43,6 +45,11 @@ else:
 # Target depths (90th percentile), for 5-sigma galaxy profile
 target = dict(g=24.0, r=23.4, z=22.5)
 
+isdecals = np.array([p == '2014B-0404' for p in E.propid])
+print 'Is DECaLS:', np.unique(isdecals), len(isdecals), len(E)
+# Lexsort doesn't seem to work with only a single boolean column; add dumb arange
+E.cut(np.lexsort((np.arange(len(E)), E.filter, np.logical_not(isdecals))))
+
 sets = []
 for iset in xrange(100):
     print '-------------------------------------------'
@@ -62,7 +69,7 @@ for iset in xrange(100):
         detiv = 0.
         for i in range(len(B)):
             exp = B[i]
-            print 'Image', exp.expnum, 'exptime', exp.exptime, 'seeing', exp.seeing
+            print 'Image', exp.expnum, 'propid', exp.propid, 'exptime', exp.exptime, 'seeing', exp.seeing
             thisdetiv = 1. / (exp.sig1 / exp.galnorm)**2
             print '  detiv', thisdetiv, '= fraction of target: %.2f' % (thisdetiv / targetiv)
 
@@ -107,11 +114,14 @@ for iset in xrange(100):
     print 'Cut to', len(E), 'remaining exposures'
 
 
-    
 print 'Got', len(sets), 'sets of exposures'
 
 for i,C in enumerate(sets):
     C.writeto('cosmos-ccds-sub%i.fits' % i)
+    C.subset = np.array([i] * len(C)).astype(np.uint8)
+    
+C = merge_tables(sets)
+C.writeto('cosmos-ccds.fits')
 
 #for i,E in enumerate(sets):
 #    E.writeto('cosmos-subset-%i.fits' % i)
