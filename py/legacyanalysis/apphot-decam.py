@@ -150,7 +150,7 @@ def apphot_ps1stars(ccd, ps,
     T.expnum = np.array([ccd.expnum] * len(T))
     T.ccdname = np.array([ccd.ccdname] * len(T)).astype('S3')
     T.band = np.array([band] * len(T))
-    T.ps1_objid = ps1.objid
+    T.ps1_objid = ps1.obj_id
     T.ps1_mag = psmag
     T.ra  = ps1.ra
     T.dec = ps1.dec
@@ -199,5 +199,5 @@ if __name__ == '__main__':
         for c in E:
             T = apphot_ps1stars(c, ps, apertures, decals)
             TT.append(T)
-        T = merge_tables(TT, header=T[0].primhdr)
+        T = merge_tables(TT, header=TT[0].primhdr)
         T.writeto('apphot-%08i.fits' % e)

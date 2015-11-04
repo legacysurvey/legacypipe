@@ -61,8 +61,8 @@ def main():
     opt.blacklist = False
 
     kwargs = get_runbrick_kwargs(opt)
-    if kwargs == -1:
-        return -1
+    if kwargs in [-1,0]:
+        return kwargs
 
     decals = CosmosDecals(decals_dir=opt.decals_dir, subset=opt.subset)
     kwargs['decals'] = decals

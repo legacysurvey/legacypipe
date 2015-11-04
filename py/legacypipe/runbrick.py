@@ -1649,9 +1649,18 @@ def stage_fitblobs(T=None,
         #write_pool = multiprocessing.Pool(1)
         import threading
         keys = ['T', 'blobsrcs', 'blobslices', 'blobs', 'cat', 'targetrd',
-                'pixscale', 'targetwcs', 'W', 'H', 'bands', 'tims', 'decals',]
+                'pixscale', 'targetwcs', 'W', 'H', 'bands', 'tims', 'decals',
+                'brickname', 'brickid', 'brick', 'version_header', 'ccds']
         L = locals()
-        vals = dict([(k, L[k]) for k in keys])
+        vals = {}
+        for k in keys:
+            if k in L:
+                vals[k] = L[k]
+            else:
+                if k in kwargs:
+                    vals[k] = kwargs[k]
+                else:
+                    print('Missing key:', k)
         write_thread = threading.Thread(
             target=_write_fitblobs_pickle,
             args=(write_pickle_filename, vals), name='write_pickle')
@@ -4039,6 +4048,12 @@ def stage_writecat(
     Final stage in the pipeline: format results for the output
     catalog.
     '''
+
+    ## HACK -- COSMOS repeats
+    if brick is None and brickname is not None:
+        decals = kwargs['decals']
+        brick = decals.get_brick_by_name(brickname)
+        print('recovered brick', brick)
 
     from desi_common import prepare_fits_catalog
     fs = None
