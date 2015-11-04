@@ -144,9 +144,12 @@ def apphot_ps1stars(ccd, ps,
 
     T = fits_table()
     T.apflux = ap.astype(np.float32)
+    T.apfluxerr = aperr.astype(np.float32)
     T.apflux2 = ap2.astype(np.float32)
+    T.apnmasked = nmasked.astype(np.int16)
     T.expnum = np.array([ccd.expnum] * len(T))
     T.ccdname = np.array([ccd.ccdname] * len(T)).astype('S3')
+    T.band = np.array([band] * len(T))
     T.ps1_objid = ps1.objid
     T.ps1_mag = psmag
     T.ra  = ps1.ra
