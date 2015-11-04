@@ -52,7 +52,14 @@ class ps1cat():
 
         """
         bounds = self.ccdwcs.radec_bounds()
-        allcat = self.get_cat([bounds[0],bounds[1]],[bounds[2],bounds[3]])
+
+        W,H = self.ccdwcs.get_width(), self.ccdwcs.get_height()
+        xx,yy = np.meshgrid(np.linspace(1, W, W/100.),
+                            np.linspace(1, H, H/100.))
+        ra,dec = self.ccdwcs.pixelxy2radec(xx.ravel(), yy.ravel())
+        allcat = self.get_cat(ra, dec)
+
+        #allcat = self.get_cat([bounds[0],bounds[1]],[bounds[2],bounds[3]])
         ok,xx,yy = self.ccdwcs.radec2pixelxy(allcat.ra, allcat.dec)
         onccd = np.flatnonzero((xx >= 1.) * (xx <= self.ccdwcs.get_width()) *
                                (yy >= 1.) * (yy <= self.ccdwcs.get_height()))

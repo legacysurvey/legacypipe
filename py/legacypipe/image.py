@@ -184,8 +184,8 @@ class LegacySurveyImage(object):
         print('Reading image slice:', slc)
         img,imghdr = self.read_image(header=True, slice=slc)
 
-        print('SATURATE is', imghdr.get('SATURATE', None))
-        print('Max value in image is', img.max())
+        #print('SATURATE is', imghdr.get('SATURATE', None))
+        #print('Max value in image is', img.max())
 
         # check consistency... something of a DR1 hangover
         e = imghdr['EXTNAME']
@@ -262,13 +262,13 @@ class LegacySurveyImage(object):
         # PSF norm
         h,w = tim.shape
         patch = psf.getPointSourcePatch(w/2., h/2.).patch
-        print('PSF PointSourcePatch: sum', patch.sum())
+        #print('PSF PointSourcePatch: sum', patch.sum())
         # Clamp up to zero and normalize before taking the norm
         patch = np.maximum(0, patch)
         patch /= patch.sum()
         psfnorm = np.sqrt(np.sum(patch**2))
-        print('PSF norm', psfnorm, 'vs Gaussian',
-              1./(2. * np.sqrt(np.pi) * psf_sigma))
+        #print('PSF norm', psfnorm, 'vs Gaussian',
+        #      1./(2. * np.sqrt(np.pi) * psf_sigma))
 
         # Galaxy-detection norm
         from tractor.galaxy import ExpGalaxy
@@ -283,7 +283,7 @@ class LegacySurveyImage(object):
         galmod = np.maximum(0, galmod)
         galmod /= galmod.sum()
         galnorm = np.sqrt(np.sum(galmod**2))
-        print('Galaxy norm:', galnorm)
+        #print('Galaxy norm:', galnorm)
         
         # CP (DECam) images include DATE-OBS and MJD-OBS, in UTC.
         import astropy.time
