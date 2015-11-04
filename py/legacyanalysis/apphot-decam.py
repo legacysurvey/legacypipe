@@ -154,9 +154,7 @@ def apphot_ps1stars(ccd, ps,
     T.ps1_mag = psmag
     T.ra  = ps1.ra
     T.dec = ps1.dec
-    T.tai = np.array([tim.time.toMjd()]).astype(np.float32)
-
-    T.primhdr = tim.primhdr
+    T.tai = np.array([tim.time.toMjd()] * len(T)).astype(np.float32)
 
     #mjds = [tim.time.toMjd() for tim in tims if tim.band == band]
     #import astropy.time
@@ -174,22 +172,26 @@ def apphot_ps1stars(ccd, ps,
         plt.axis(ax)
         ps.savefig()
     
-    return T
+    return T, tim.primhdr
         
 if __name__ == '__main__':
 
     decals = Decals()
-
-    #ps = PlotSequence('uber')
-    #C = fits_table('coadd/000/0001p000/decals-0001p000-ccds.fits')
-    #for c in C:
-    #    apphot_ps1stars(c, ps, apertures, decals)
-    
-    C = decals.get_ccds_readonly()
-
+    ps = None
     pixscale = 0.262
     apertures = apertures_arcsec / pixscale
-    ps = None
+
+    #ps = PlotSequence('uber')
+    C = fits_table('coadd/000/0001p000/decals-0001p000-ccds.fits')
+    for c in C:
+        T,hdr = apphot_ps1stars(c, ps, apertures, decals)
+        T.writeto('apphot-%08i-%s.fits' % (c.expnum, c.ccdname), header=hdr)
+                  
+
+    sys.exit(0)
+        
+    C = decals.get_ccds_readonly()
+
 
     exps = [ 346352, 347460, 347721 ]
 
@@ -197,7 +199,6 @@ if __name__ == '__main__':
         E = C[C.expnum == e]
         TT = []
         for c in E:
-            T = apphot_ps1stars(c, ps, apertures, decals)
-            TT.append(T)
-        T = merge_tables(TT, header=TT[0].primhdr)
-        T.writeto('apphot-%08i.fits' % e)
+            T,hdr = apphot_ps1stars(c, ps, apertures, decals)
+        T = merge_tables(TT)
+        T.writeto('apphot-%08i.fits' % e, hdr)
