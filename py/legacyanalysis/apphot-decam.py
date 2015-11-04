@@ -39,8 +39,13 @@ def apphot_ps1stars(ccd, ps,
     ps1 = ps1cat(ccdwcs=wcs)
     ps1 = ps1.get_stars(magrange=magrange)
     print 'Got', len(ps1), 'PS1 stars'
+    band = ccd.filter
+    piband = ps1cat.ps1band[band]
+    print 'band:', band
 
-
+    ps1.cut(ps1.nmag_ok[:,piband] > 0)
+    print 'Keeping', len(ps1), 'stars with nmag_ok'
+    
     ok,x,y = wcs.radec2pixelxy(ps1.ra, ps1.dec)
     apxy = np.vstack((x - 1., y - 1.)).T
 
@@ -51,9 +56,10 @@ def apphot_ps1stars(ccd, ps,
         ie = tim.getInvError()
         imsigma = 1. / ie
         imsigma[ie == 0] = 0
+    mask = (imsigma == 0)
     for rad in apertures:
         aper = photutils.CircularAperture(apxy, rad)
-        p = photutils.aperture_photometry(img, aper, error=imsigma)
+        p = photutils.aperture_photometry(img, aper, error=imsigma, mask=mask)
         aperr.append(p.field('aperture_sum_err'))
         ap.append(p.field('aperture_sum'))
         p = photutils.aperture_photometry((ie == 0), aper)
@@ -106,10 +112,6 @@ def apphot_ps1stars(ccd, ps,
     print 'median sky', skymed[:5]
     print 'sky sigma', skysigma[:5]
 
-    band = ccd.filter
-    piband = ps1cat.ps1band[band]
-    print 'band:', band
-
     psmag = ps1.median[:,piband]
 
     ap2 = ap - sky[:,np.newaxis] * (np.pi * apertures**2)[np.newaxis,:]
@@ -142,24 +144,32 @@ def apphot_ps1stars(ccd, ps,
         plt.axis(ax)
         ps.savefig()
 
+    color = ps1_to_decam(ps1.median, band)
+    print 'Color terms:', color
+
+    
     T = fits_table()
     T.apflux = ap.astype(np.float32)
     T.apfluxerr = aperr.astype(np.float32)
-    T.apflux2 = ap2.astype(np.float32)
     T.apnmasked = nmasked.astype(np.int16)
+
+    # Zero out the errors when pixels are masked
+    T.apfluxerr[T.apnmasked > 0] = 0.
+
+    #T.apflux2 = ap2.astype(np.float32)
+    T.sky = sky.astype(np.float32)
+    T.skysigma = skysigma.astype(np.float32)
     T.expnum = np.array([ccd.expnum] * len(T))
     T.ccdname = np.array([ccd.ccdname] * len(T)).astype('S3')
     T.band = np.array([band] * len(T))
     T.ps1_objid = ps1.obj_id
-    T.ps1_mag = psmag
+    T.ps1_mag = psmag + color
     T.ra  = ps1.ra
     T.dec = ps1.dec
     T.tai = np.array([tim.time.toMjd()] * len(T)).astype(np.float32)
-
-    #mjds = [tim.time.toMjd() for tim in tims if tim.band == band]
-    #import astropy.time
-    #tt = [astropy.time.Time(mjd, format='mjd', scale='tai').utc.isot
-    #      for mjd in [minmjd, maxmjd]]
+    T.airmass = np.array([tim.primhdr['AIRMASS']] * len(T)).astype(np.float32)
+    T.x = (x + tim.x0).astype(np.float32)
+    T.y = (y + tim.y0).astype(np.float32)
 
     if False:
         plt.clf()
