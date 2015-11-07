@@ -2527,9 +2527,14 @@ def _one_blob(X):
                 ps.savefig()
 
     if plots:
+        print('Plotting blob image for blob', nblob, 'blob id', iblob)
         coimgs,cons = compute_coadds(tims, bands, blobwcs, fill_holes=False)
         plt.clf()
         dimshow(get_rgb(coimgs, bands))
+        ps.savefig()
+
+        plt.plot(x0, y0, 'r.')
+        plt.title('initial sources')
         ps.savefig()
 
         plt.clf()
@@ -2777,6 +2782,17 @@ def _one_blob(X):
     print('Blob finished fitting:', Time()-tlast)
     tlast = Time()
 
+    if plots:
+        plt.clf()
+        dimshow(get_rgb(coimgs, bands))
+        ok,sx,sy = blobwcs.radec2pixelxy(
+            np.array([src.getPosition().ra  for src in srcs]),
+            np.array([src.getPosition().dec for src in srcs]))
+        plt.plot(sx, sy, 'r.')
+        plt.title('after source fitting')
+        ps.savefig()
+
+
     # Next, model selections: point source vs dev/exp vs composite.
 
     # FIXME -- render initial models and find significant flux overlap
@@ -2829,8 +2845,28 @@ def _one_blob(X):
         models.add(i, tims)
 
         if bigblob:
+
+            if plots:
+                plt.clf()
+                for j,tim in enumerate(tims):
+                    plt.subplot(len(tims), 2, j+1)
+                    dimshow(tim.getImage(), vmin=-2*tim.sig1, vmax=5*tim.sig1)
+                    ax = plt.axis()
+                    x,y = tim.wcs.positionToPixel(src.getPosition())
+                    plt.plot(x, y, 'r.')
+                ps.savefig()
+
             mods = [mod[i] for mod in models.models]
             srctims,modelMasks = _get_subimages(tims, mods, src)
+
+            if plots:
+                for j,tim in enumerate(srctims):
+                    plt.subplot(len(tims), 2, len(tims)+j+1)
+                    dimshow(tim.getImage(), vmin=-2*tim.sig1, vmax=5*tim.sig1)
+                    ax = plt.axis()
+                    x,y = tim.wcs.positionToPixel(src.getPosition())
+                    plt.plot(x, y, 'r.')
+                ps.savefig()
             # Create a little local WCS subregion for this source, by
             # resampling non-zero inverrs from the srctims into blobwcs
             insrc = np.zeros((blobh,blobw), bool)
@@ -2841,6 +2877,13 @@ def _one_blob(X):
                 except:
                     continue
                 insrc[Yo,Xo] |= (tim.inverr[Yi,Xi] > 0)
+
+            if np.sum(insrc) == 0:
+                # No source pixels touching blob... this can happen when a source
+                # scatters outside the blob in the fitting stage.
+                # Drop the source here.
+                B.sources[i] = cat[i] = None
+                continue
             yin = np.max(insrc, axis=1)
             xin = np.max(insrc, axis=0)
             yl,yh = np.flatnonzero(yin)[np.array([0,-1])]
