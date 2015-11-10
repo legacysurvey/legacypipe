@@ -192,23 +192,29 @@ if __name__ == '__main__':
     apertures = apertures_arcsec / pixscale
 
     #ps = PlotSequence('uber')
-    C = fits_table('coadd/000/0001p000/decals-0001p000-ccds.fits')
-    for c in C:
-        T,hdr = apphot_ps1stars(c, ps, apertures, decals)
-        T.writeto('apphot-%08i-%s.fits' % (c.expnum, c.ccdname), header=hdr)
-                  
-
-    sys.exit(0)
+    if False:
+        C = fits_table('coadd/000/0001p000/decals-0001p000-ccds.fits')
+        for c in C:
+            T,hdr = apphot_ps1stars(c, ps, apertures, decals)
+            T.writeto('apphot-%08i-%s.fits' % (c.expnum, c.ccdname), header=hdr)
+        sys.exit(0)
         
     C = decals.get_ccds_readonly()
-
 
     exps = [ 346352, 347460, 347721 ]
 
     for e in exps:
+        print
+        print
+        print 'Exposure', e
+        print
         E = C[C.expnum == e]
         TT = []
-        for c in E:
+        for i,c in enumerate(E):
+            print
+            print 'Exposure', e, 'chip', i, 'of', len(E)
+            print
             T,hdr = apphot_ps1stars(c, ps, apertures, decals)
+            TT.append(T)
         T = merge_tables(TT)
-        T.writeto('apphot-%08i.fits' % e, hdr)
+        T.writeto('apphot-%08i.fits' % e, primheader=hdr)

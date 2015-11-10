@@ -67,6 +67,11 @@ class ImapTracker(object):
         except StopIteration:
             self.mymp._imap_finished(self.tstart)
             raise
+        except:
+            import traceback
+            print('ImapTracker:')
+            traceback.print_exc()
+            raise
 
 class MyMultiproc(multiproc):
     def __init__(self, *args, **kwargs):
