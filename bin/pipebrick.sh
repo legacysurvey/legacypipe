@@ -2,8 +2,6 @@
 
 # For modules loaded, see "bashrc" in this directory.
 
-export DECALS_DIR=/scratch1/scratchdirs/desiproc/decals-dir
-
 export PYTHONPATH=${PYTHONPATH}:.
 
 # Force MKL single-threaded
@@ -40,19 +38,9 @@ echo >> $log
 echo -e "\nStarting on ${NERSC_HOST} $(hostname)\n" >> $log
 echo "-----------------------------------------------------------------------------------------" >> $log
 
-#    --force-all --no-write \
-
-echo python -u legacypipe/runbrick.py \
-    --pixpsf --splinesky --pipe --skip --no-sdss --no-early-coadds \
-    -P 'pickles/runbrick-dr2p-%(brick)s-%%(stage)s.pickle' \
-    --checkpoint $(printf checkpoint/checkpoint-%s.pickle $brick) \
-    --threads 6 \
-    --brick $brick --outdir $outdir --nsigma 6
-
-#    -P 'pickles/runbrick-dr2p-%(brick)s-%%(stage)s.pickle' \
-
 python -u legacypipe/runbrick.py \
     --pixpsf --splinesky --pipe --skip --no-sdss --no-early-coadds \
+    --force-all --no-write \
     --checkpoint $(printf checkpoint/checkpoint-%s.pickle $brick) \
     --threads 6 \
     --brick $brick --outdir $outdir --nsigma 6 >> $log 2>&1
