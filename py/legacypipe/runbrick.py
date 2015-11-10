@@ -1858,11 +1858,18 @@ def stage_fitblobs(T=None,
                 fn = checkpoint_filename + '.tmp'
                 # (this happens out here in the main process, while the worker
                 # processes continue in the background.)
+                print('Writing checkpoint', fn)
                 pickle_to_file(R, fn)
-                os.rename(fn, checkpoint_filename)
-                print('Wrote checkpoint to', checkpoint_filename)
-                last_checkpoint = tnow
-                dt = 0.
+                print('Wrote checkpoint to', fn)
+                try:
+                    os.rename(fn, checkpoint_filename)
+                    print('Renamed temp checkpoint', fn, 'to', checkpoint_filename)
+                    last_checkpoint = tnow
+                    dt = 0.
+                except:
+                    print('Failed to rename checkpoint file', fn)
+                    import traceback
+                    traceback.print_exc()
             try:
                 if mp.is_multiproc():
                     timeout = max(1, checkpoint_period - dt)
