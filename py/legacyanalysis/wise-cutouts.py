@@ -6,8 +6,14 @@ from astrometry.util.util import Tan
 from astrometry.util.fits import *
 from astrometry.util.resample import *
 from astrometry.util.plotutils import *
+from wise.forcedphot import unwise_tiles_touching_wcs
+from wise.unwise import get_unwise_tractor_image
+from legacypipe.desi_common import read_fits_catalog
+from tractor.ellipses import EllipseE
+from tractor import Tractor, NanoMaggies
 
-def wise_cutouts(ra, dec, radius, ps, pixscale=2.75, tractor_base='.'):
+def wise_cutouts(ra, dec, radius, ps, pixscale=2.75, tractor_base='.',
+                 unwise_dir='unwise-coadds'):
     '''
     radius in arcsec.
     pixscale: WISE pixel scale in arcsec/pixel;
@@ -74,7 +80,106 @@ def wise_cutouts(ra, dec, radius, ps, pixscale=2.75, tractor_base='.'):
         ps.savefig()
     
     # Find unWISE tiles overlapping
+    tiles = unwise_tiles_touching_wcs(wcs)
+    print('Cut to', len(tiles), 'unWISE tiles')
 
+    # Here we assume the targetwcs is axis-aligned and that the
+    # edge midpoints yield the RA,Dec limits (true for TAN).
+    r,d = wcs.pixelxy2radec(np.array([1,   W,   W/2, W/2]),
+                            np.array([H/2, H/2, 1,   H  ]))
+    # the way the roiradec box is used, the min/max order doesn't matter
+    roiradec = [r[0], r[1], d[2], d[3]]
+
+    ra,dec = T.ra, T.dec
+
+    T.shapeexp = np.vstack((T.shapeexp_r, T.shapeexp_e1, T.shapeexp_e2)).T
+    T.shapedev = np.vstack((T.shapedev_r, T.shapedev_e1, T.shapedev_e2)).T
+    srcs = read_fits_catalog(T, ellipseClass=EllipseE)
+
+    wbands = [1,2]
+    wanyband = 'w'
+
+    coimgs = [np.zeros((H,W), np.float32) for b in wbands]
+    comods = [np.zeros((H,W), np.float32) for b in wbands]
+    con    = [np.zeros((H,W), np.uint8) for b in wbands]
+
+    for iband,band in enumerate(wbands):
+        print('Photometering WISE band', band)
+        wband = 'w%i' % band
+
+        for i,src in enumerate(srcs):
+            #print('Source', src, 'brightness', src.getBrightness(), 'params', src.getBrightness().getParams())
+            #src.getBrightness().setParams([T.wise_flux[i, band-1]])
+            src.setBrightness(NanoMaggies(**{wanyband: T.wise_flux[i, band-1]}))
+            print('Set source brightness:', src.getBrightness())
+            
+        # The tiles have some overlap, so for each source, keep the
+        # fit in the tile whose center is closest to the source.
+        for tile in tiles:
+            print('Reading tile', tile.coadd_id)
+
+            tim = get_unwise_tractor_image(unwise_dir, tile.coadd_id, band,
+                                           bandname=wanyband,
+                                           roiradecbox=roiradec)
+            if tim is None:
+                print('Actually, no overlap with tile', tile.coadd_id)
+                continue
+            
+            print('Read image with shape', tim.shape)
+            
+            # Select sources in play.
+            wisewcs = tim.wcs.wcs
+            H,W = tim.shape
+            ok,x,y = wisewcs.radec2pixelxy(ra, dec)
+            x = (x - 1.).astype(np.float32)
+            y = (y - 1.).astype(np.float32)
+            margin = 10.
+            I = np.flatnonzero((x >= -margin) * (x < W+margin) *
+                               (y >= -margin) * (y < H+margin))
+            print(len(I), 'within the image + margin')
+
+            subcat = [srcs[i] for i in I]
+            tractor = Tractor([tim], subcat)
+            mod = tractor.getModelImage(0)
+
+            # plt.clf()
+            # dimshow(tim.getImage(), ticks=False)
+            # plt.title('WISE %s %s' % (tile.coadd_id, wband))
+            # ps.savefig()
+            # 
+            # plt.clf()
+            # dimshow(mod, ticks=False)
+            # plt.title('WISE %s %s' % (tile.coadd_id, wband))
+            # ps.savefig()
+
+            try:
+                Yo,Xo,Yi,Xi,nil = resample_with_wcs(wcs, tim.wcs.wcs)
+            except ResampleError:
+                continue
+            if len(Yo) == 0:
+                continue
+            print('Resampling', len(Yo), 'pixels from WISE', tile.coadd_id,
+                  band)
+            
+            coimgs[iband][Yo,Xo] += tim.getImage()[Yi,Xi]
+            comods[iband][Yo,Xo] += mod[Yi,Xi]
+            con   [iband][Yo,Xo] += 1
+
+    for img,mod,n in zip(coimgs, comods, con):
+        img /= np.maximum(n, 1)
+        mod /= np.maximum(n, 1)
+
+    for img in coimgs:
+        plt.clf()
+        dimshow(img, ticks=False)
+        ps.savefig()
+
+    for img in comods:
+        plt.clf()
+        dimshow(img, ticks=False)
+        ps.savefig()
+
+        
     # Cut out unWISE images
 
     # Render unWISE models & residuals
