@@ -363,23 +363,6 @@ def stage_tims(W=3600, H=3600, pixscale=0.262, brickname=None,
         npix += h*w
     print('Total of', npix, 'pixels read')
 
-    # Check for at least one pixel actually touching this brick...
-    found = False
-    for tim in tims:
-        h,w = tim.shape
-        rr,dd = tim.subwcs.pixelxy2radec([1,1,w,w], [1,h,h,1])
-        ok,xx,yy = targetwcs.radec2pixelxy(rr, dd)
-        brickpoly = np.array([[1,1],[1,H],[W,H],[W,1]])
-        tpoly = np.array(zip(xx,yy))
-        if polygons_intersect(brickpoly, tpoly):
-            print('Polygons intersect:', tpoly, brickpoly)
-            found = True
-            break
-    if not found:
-        print('No images *actually* overlap this brick')
-        raise NothingToDoError('No photometric CCDs touching brick.')
-
-
     for tim in tims:
         for cal,ver in [('sky', tim.skyver), ('wcs', tim.wcsver), ('psf', tim.psfver)]:
             if tim.plver != ver[1]:
@@ -3878,6 +3861,11 @@ def stage_coadds(bands=None, version_header=None, targetwcs=None,
     if apertures is None:
         # empty table when 0 sources.
         C.AP = fits_table()
+        for band in bands:
+            nap = len(apertures_arcsec)
+            C.AP.set('apflux_img_%s' % band, np.zeros((0,nap)))
+            C.AP.set('apflux_img_ivar_%s' % band, np.zeros((0,nap)))
+            C.AP.set('apflux_resid_%s' % band, np.zeros((0,nap)))
 
     # Compute the brick's unique pixels.
     U = None
