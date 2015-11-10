@@ -1003,6 +1003,8 @@ def stage_image_coadds(targetwcs=None, bands=None, tims=None, outdir=None,
                 callback=_write_band_images,
                 callback_args=(brickname, version_header, tims, targetwcs, basedir))
 
+    
+
     if True:
         # Compute the brick's unique pixels.
         U = None
@@ -1856,11 +1858,18 @@ def stage_fitblobs(T=None,
                 fn = checkpoint_filename + '.tmp'
                 # (this happens out here in the main process, while the worker
                 # processes continue in the background.)
+                print('Writing checkpoint', fn)
                 pickle_to_file(R, fn)
-                os.rename(fn, checkpoint_filename)
-                print('Wrote checkpoint to', checkpoint_filename)
-                last_checkpoint = tnow
-                dt = 0.
+                print('Wrote checkpoint to', fn)
+                try:
+                    os.rename(fn, checkpoint_filename)
+                    print('Renamed temp checkpoint', fn, 'to', checkpoint_filename)
+                    last_checkpoint = tnow
+                    dt = 0.
+                except:
+                    print('Failed to rename checkpoint file', fn)
+                    import traceback
+                    traceback.print_exc()
             try:
                 if mp.is_multiproc():
                     timeout = max(1, checkpoint_period - dt)
@@ -2458,6 +2467,10 @@ def _one_blob(X):
 
     print('Fitting blob number', nblob, 'val', iblob, ':', len(Isrcs),
           'sources, size', blobw, 'x', blobh, len(timargs), 'images')
+
+    if len(timargs) == 0:
+        return None
+
     plots2 = False
     tlast = Time()
     alphas = [0.1, 0.3, 1.0]
@@ -3839,6 +3852,10 @@ def stage_coadds(bands=None, version_header=None, targetwcs=None,
     dec = np.array([src.getPosition().dec for src in cat])
     ok,xx,yy = targetwcs.radec2pixelxy(ra, dec)
     apxy = np.vstack((xx - 1., yy - 1.)).T
+
+    if len(xx) == 0:
+        apertures = None
+        apxy = None
     del xx,yy,ok,ra,dec
 
     C = _coadds(tims, bands, targetwcs, mods=mods, xy=(ix,iy),
@@ -3851,6 +3868,15 @@ def stage_coadds(bands=None, version_header=None, targetwcs=None,
 
     for c in ['nobs', 'anymask', 'allmask', 'psfsize']:
         T.set(c, C.T.get(c))
+
+    if apertures is None:
+        # empty table when 0 sources.
+        C.AP = fits_table()
+        for band in bands:
+            nap = len(apertures_arcsec)
+            C.AP.set('apflux_img_%s' % band, np.zeros((0,nap)))
+            C.AP.set('apflux_img_ivar_%s' % band, np.zeros((0,nap)))
+            C.AP.set('apflux_resid_%s' % band, np.zeros((0,nap)))
 
     # Compute the brick's unique pixels.
     U = None
@@ -5043,7 +5069,7 @@ def main():
         parser.print_help()
         return -1
     kwargs = get_runbrick_kwargs(opt)
-    if kwargs in [-1,0]:
+    if kwargs in [-1, 0]:
         return kwargs
 
     if opt.verbose == 0:
