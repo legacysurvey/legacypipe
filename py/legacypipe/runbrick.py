@@ -2460,6 +2460,10 @@ def _one_blob(X):
 
     print('Fitting blob number', nblob, 'val', iblob, ':', len(Isrcs),
           'sources, size', blobw, 'x', blobh, len(timargs), 'images')
+
+    if len(timargs) == 0:
+        return None
+
     plots2 = False
     tlast = Time()
     alphas = [0.1, 0.3, 1.0]
