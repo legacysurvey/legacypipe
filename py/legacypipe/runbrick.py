@@ -3839,6 +3839,10 @@ def stage_coadds(bands=None, version_header=None, targetwcs=None,
     dec = np.array([src.getPosition().dec for src in cat])
     ok,xx,yy = targetwcs.radec2pixelxy(ra, dec)
     apxy = np.vstack((xx - 1., yy - 1.)).T
+
+    if len(xx) == 0:
+        apertures = None
+        apxy = None
     del xx,yy,ok,ra,dec
 
     C = _coadds(tims, bands, targetwcs, mods=mods, xy=(ix,iy),
@@ -5043,7 +5047,7 @@ def main():
         parser.print_help()
         return -1
     kwargs = get_runbrick_kwargs(opt)
-    if kwargs in [-1,0]:
+    if kwargs in [-1, 0]:
         return kwargs
 
     if opt.verbose == 0:
