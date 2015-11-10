@@ -11,7 +11,7 @@ def _detmap(X):
     (tim, targetwcs, H, W) = X
     R = tim_get_resamp(tim, targetwcs)
     if R is None:
-        return None,None,None,None
+        return None,None,None,None,None
     ie = tim.getInvvar()
     psfnorm = 1./(2. * np.sqrt(np.pi) * tim.psf_sigma)
     detim = tim.getImage().copy()
