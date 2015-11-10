@@ -116,7 +116,8 @@ class LegacySurveyImage(object):
     def get_tractor_image(self, slc=None, radecpoly=None,
                           gaussPsf=False, const2psf=False, pixPsf=False,
                           splinesky=False,
-                          nanomaggies=True, subsky=True, tiny=5):
+                          nanomaggies=True, subsky=True, tiny=5,
+                          dq=True, invvar=True):
         '''
         Returns a tractor.Image ("tim") object for this image.
         
@@ -145,6 +146,9 @@ class LegacySurveyImage(object):
 
         '''
         from astrometry.util.miscutils import clip_polygon
+
+        get_dq = dq
+        get_invvar = invvar
         
         band = self.band
         imh,imw = self.get_image_shape()
@@ -191,9 +195,14 @@ class LegacySurveyImage(object):
         e = imghdr['EXTNAME']
         assert(e.strip() == self.ccdname.strip())
 
-        invvar = self.read_invvar(slice=slc, clipThresh=0.)
-        dq = self.read_dq(slice=slc)
-        invvar[dq != 0] = 0.
+        if get_invvar:
+            invvar = self.read_invvar(slice=slc, clipThresh=0.)
+        else:
+            invvar = np.ones_like(img)
+            
+        if get_dq:
+            dq = self.read_dq(slice=slc)
+            invvar[dq != 0] = 0.
         if np.all(invvar == 0.):
             print('Skipping zero-invvar image')
             return None
@@ -235,7 +244,18 @@ class LegacySurveyImage(object):
             zpscale = 1.
 
         assert(np.sum(invvar > 0) > 0)
-        sig1 = 1./np.sqrt(np.median(invvar[invvar > 0]))
+        if get_invvar:
+            sig1 = 1./np.sqrt(np.median(invvar[invvar > 0]))
+        else:
+            # Estimate from the image?
+            # # Estimate per-pixel noise via Blanton's 5-pixel MAD
+            slice1 = (slice(0,-5,10),slice(0,-5,10))
+            slice2 = (slice(5,None,10),slice(5,None,10))
+            mad = np.median(np.abs(img[slice1] - img[slice2]).ravel())
+            sig1 = 1.4826 * mad / np.sqrt(2.)
+            print('sig1 estimate:', sig1)
+            invvar *= (1. / sig1**2)
+            
         assert(np.all(np.isfinite(img)))
         assert(np.all(np.isfinite(invvar)))
         assert(np.isfinite(sig1))
@@ -310,7 +330,8 @@ class LegacySurveyImage(object):
         tim.skyver = (sky.version, sky.plver)
         tim.wcsver = (wcs.version, wcs.plver)
         tim.psfver = (psf.version, psf.plver)
-        tim.dq = dq
+        if get_dq:
+            tim.dq = dq
         tim.dq_bits = CP_DQ_BITS
         tim.saturation = imghdr.get('SATURATE', None)
         tim.satval = tim.saturation or 0.
