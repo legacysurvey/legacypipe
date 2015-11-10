@@ -169,16 +169,25 @@ def wise_cutouts(ra, dec, radius, ps, pixscale=2.75, tractor_base='.',
         img /= np.maximum(n, 1)
         mod /= np.maximum(n, 1)
 
-    for img in coimgs:
+    for band,img,mod in zip(wbands, coimgs, comods):
+        lo,hi = np.percentile(img, [25,99])
         plt.clf()
-        dimshow(img, ticks=False)
+        dimshow(img, vmin=lo, vmax=hi, ticks=False)
+        plt.title('WISE W%i Data' % band)
         ps.savefig()
 
-    for img in comods:
         plt.clf()
-        dimshow(img, ticks=False)
+        dimshow(mod, vmin=lo, vmax=hi, ticks=False)
+        plt.title('WISE W%i Model' % band)
         ps.savefig()
 
+        resid = img - mod
+        mx = np.abs(resid).max()
+        plt.clf()
+        dimshow(resid, vmin=-mx, vmax=mx, ticks=False)
+        plt.title('WISE W%i Resid' % band)
+        ps.savefig()
+        
         
     # Cut out unWISE images
 
