@@ -1,5 +1,8 @@
-"""This script does something.
-"""
+'''
+This script performs forced photometry of individual DECam images
+given a DECaLS catalog.
+'''
+
 from __future__ import print_function
 import os
 import sys
@@ -19,9 +22,9 @@ import tractor
 
 # python projects/desi/forced-photom-decam.py decals/images/decam/CP20140810_g_v2/c4d_140816_032035_ooi_g_v2.fits.fz 43 DR1 f.fits
 
-def main():
-    """Main program
-    """
+def main(decals=None):
+    '''Driver function for forced photometry of individual DECam images.
+    '''
     import argparse
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--zoom', type=int, nargs=4, help='Set target image extent (default "0 2046 0 4094")')
@@ -43,10 +46,8 @@ def main():
     Time.add_measurement(MemMeas)
     t0 = Time()
 
-    filename, hdu, catfn, outfn = opt.filename, opt.hdu, opt.catfn, opt.outfn
-
-    if os.path.exists(outfn):
-        print('Ouput file exists:', outfn)
+    if os.path.exists(opt.outfn):
+        print('Ouput file exists:', opt.outfn)
         sys.exit(0)
 
     if not opt.forced:
@@ -64,46 +65,47 @@ def main():
 
     # Try parsing filename as exposure number.
     try:
-        expnum = int(filename)
-        filename = None
+        expnum = int(opt.filename)
+        opt.filename = None
     except:
         # make this 'None' for decals.find_ccds()
         expnum = None
 
     # Try parsing HDU number
     try:
-        hdu = int(hdu)
+        opt.hdu = int(opt.hdu)
         ccdname = None
     except:
-        ccdname = hdu
-        hdu = -1
+        ccdname = opt.hdu
+        opt.hdu = -1
 
-    decals = Decals()
+    if decals is None:
+        decals = Decals()
 
-    if filename is not None and hdu >= 0:
+    if opt.filename is not None and opt.hdu >= 0:
         # Read metadata from file
-        T = exposure_metadata([filename], hdus=[hdu])
+        T = exposure_metadata([opt.filename], hdus=[opt.hdu])
         print('Metadata:')
         T.about()
     else:
         # Read metadata from decals-ccds.fits table
         T = decals.find_ccds(expnum=expnum, ccdname=ccdname)
         print(len(T), 'with expnum', expnum, 'and CCDname', ccdname)
-        if hdu >= 0:
-            T.cut(T.image_hdu == hdu)
-            print(len(T), 'with HDU', hdu)
-        if filename is not None:
-            T.cut(np.array([f.strip() == filename for f in T.image_filename]))
-            print(len(T), 'with filename', filename)
+        if opt.hdu >= 0:
+            T.cut(T.image_hdu == opt.hdu)
+            print(len(T), 'with HDU', opt.hdu)
+        if opt.filename is not None:
+            T.cut(np.array([f.strip() == opt.filename for f in T.image_filename]))
+            print(len(T), 'with filename', opt.filename)
         assert(len(T) == 1)
 
     im = decals.get_image_object(T[0])
     tim = im.get_tractor_image(slc=zoomslice, pixPsf=True, splinesky=True)
     print('Got tim:', tim)
 
-    if catfn in ['DR1', 'DR2']:
+    if opt.catfn in ['DR1', 'DR2']:
         if opt.catalog_path is None:
-            opt.catalog_path = catfn.lower()
+            opt.catalog_path = opt.catfn.lower()
 
         margin = 20
         TT = []
@@ -160,7 +162,7 @@ def main():
             print('Wrote catalog to', opt.write_cat)
 
     else:
-        T = fits_table(catfn)
+        T = fits_table(opt.catfn)
 
     T.shapeexp = np.vstack((T.shapeexp_r, T.shapeexp_e1, T.shapeexp_e2)).T
     T.shapedev = np.vstack((T.shapedev_r, T.shapedev_e1, T.shapedev_e2)).T
@@ -294,12 +296,12 @@ def main():
         if col in units:
             hdr.add_record(dict(name='TUNIT%i' % (i+1), value=units[col]))
 
-    outdir = os.path.dirname(outfn)
+    outdir = os.path.dirname(opt.outfn)
     if len(outdir):
         trymakedirs(outdir)
-    fitsio.write(outfn, None, header=version_hdr, clobber=True)
-    F.writeto(outfn, header=hdr, append=True)
-    print('Wrote', outfn)
+    fitsio.write(opt.outfn, None, header=version_hdr, clobber=True)
+    F.writeto(opt.outfn, header=hdr, append=True)
+    print('Wrote', opt.outfn)
 
     print('Finished forced phot:', Time()-t0)
     return 0
