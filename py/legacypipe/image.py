@@ -67,7 +67,11 @@ class LegacySurveyImage(object):
         self.fwhm    = ccd.fwhm
         self.propid  = ccd.propid
         # in arcsec/pixel
-        self.pixscale = 3600. * np.sqrt(np.abs(ccd.cd1_1 * ccd.cd2_2 - ccd.cd1_2 * ccd.cd2_1))
+        self.pixscale = 3600. * np.sqrt(np.abs(ccd.cd1_1 * ccd.cd2_2 -
+                                               ccd.cd1_2 * ccd.cd2_1))
+        self.mjdobs = ccd.mjd_obs
+        self.width  = ccd.width
+        self.height = ccd.height
 
     def __str__(self):
         return self.name
