@@ -1,6 +1,7 @@
 from __future__ import print_function
 import numpy as np
 import pylab as plt
+import fitsio
 from legacypipe.common import *
 from astrometry.util.util import Tan
 from astrometry.util.fits import *
@@ -11,6 +12,9 @@ from wise.unwise import get_unwise_tractor_image
 from legacypipe.desi_common import read_fits_catalog
 from tractor.ellipses import EllipseE
 from tractor import Tractor, NanoMaggies
+
+# UGH, copy-n-pasted below...
+#from decals_web.map.views import _unwise_to_rgb
 
 def wise_cutouts(ra, dec, radius, ps, pixscale=2.75, tractor_base='.',
                  unwise_dir='unwise-coadds'):
@@ -25,7 +29,6 @@ def wise_cutouts(ra, dec, radius, ps, pixscale=2.75, tractor_base='.',
     W = H = npix
     pix = pixscale / 3600.
     wcs = Tan(ra, dec, (W+1)/2., (H+1)/2., -pix, 0., 0., pix,float(W),float(H))
-    
     # Find DECaLS bricks overlapping
     decals = Decals()
     B = bricks_touching_wcs(wcs, decals=decals)
@@ -37,6 +40,7 @@ def wise_cutouts(ra, dec, radius, ps, pixscale=2.75, tractor_base='.',
                           'tractor-%s.fits' % b)
         T = fits_table(fn)
         print('Read', len(T), 'from', b)
+        primhdr = fitsio.read_header(fn)
         TT.append(T)
     T = merge_tables(TT)
     print('Total of', len(T), 'sources')
@@ -73,12 +77,14 @@ def wise_cutouts(ra, dec, radius, ps, pixscale=2.75, tractor_base='.',
             img = plt.imread(fn)
             img = np.flipud(img)
             coimgs[i][Yo,Xo,:] = img[Yi,Xi,:]
-                
+
+    tt = dict(image='Image', model='Model', resid='Resid')
     for img,tag in zip(coimgs, tags):
         plt.clf()
         dimshow(img, ticks=False)
+        plt.title('DECaLS grz %s' % tt[tag])
         ps.savefig()
-    
+
     # Find unWISE tiles overlapping
     tiles = unwise_tiles_touching_wcs(wcs)
     print('Cut to', len(tiles), 'unWISE tiles')
@@ -99,6 +105,9 @@ def wise_cutouts(ra, dec, radius, ps, pixscale=2.75, tractor_base='.',
     wbands = [1,2]
     wanyband = 'w'
 
+    for band in wbands:
+        T.wise_flux[:, band-1] *= 10.**(primhdr['WISEAB%i' % band] / 2.5)
+
     coimgs = [np.zeros((H,W), np.float32) for b in wbands]
     comods = [np.zeros((H,W), np.float32) for b in wbands]
     con    = [np.zeros((H,W), np.uint8) for b in wbands]
@@ -111,8 +120,8 @@ def wise_cutouts(ra, dec, radius, ps, pixscale=2.75, tractor_base='.',
             #print('Source', src, 'brightness', src.getBrightness(), 'params', src.getBrightness().getParams())
             #src.getBrightness().setParams([T.wise_flux[i, band-1]])
             src.setBrightness(NanoMaggies(**{wanyband: T.wise_flux[i, band-1]}))
-            print('Set source brightness:', src.getBrightness())
-            
+            # print('Set source brightness:', src.getBrightness())
+
         # The tiles have some overlap, so for each source, keep the
         # fit in the tile whose center is closest to the source.
         for tile in tiles:
@@ -124,9 +133,8 @@ def wise_cutouts(ra, dec, radius, ps, pixscale=2.75, tractor_base='.',
             if tim is None:
                 print('Actually, no overlap with tile', tile.coadd_id)
                 continue
-            
             print('Read image with shape', tim.shape)
-            
+
             # Select sources in play.
             wisewcs = tim.wcs.wcs
             H,W = tim.shape
@@ -146,7 +154,7 @@ def wise_cutouts(ra, dec, radius, ps, pixscale=2.75, tractor_base='.',
             # dimshow(tim.getImage(), ticks=False)
             # plt.title('WISE %s %s' % (tile.coadd_id, wband))
             # ps.savefig()
-            # 
+
             # plt.clf()
             # dimshow(mod, ticks=False)
             # plt.title('WISE %s %s' % (tile.coadd_id, wband))
@@ -160,7 +168,7 @@ def wise_cutouts(ra, dec, radius, ps, pixscale=2.75, tractor_base='.',
                 continue
             print('Resampling', len(Yo), 'pixels from WISE', tile.coadd_id,
                   band)
-            
+
             coimgs[iband][Yo,Xo] += tim.getImage()[Yi,Xi]
             comods[iband][Yo,Xo] += mod[Yi,Xi]
             con   [iband][Yo,Xo] += 1
@@ -187,23 +195,83 @@ def wise_cutouts(ra, dec, radius, ps, pixscale=2.75, tractor_base='.',
         dimshow(resid, vmin=-mx, vmax=mx, ticks=False)
         plt.title('WISE W%i Resid' % band)
         ps.savefig()
-        
-        
-    # Cut out unWISE images
 
-    # Render unWISE models & residuals
 
-if __name__ == '__main__':
+    #kwa = dict(mn=-0.1, mx=2., arcsinh = 1.)
+    kwa = dict(mn=-0.1, mx=2., arcsinh=None)
+    rgb = _unwise_to_rgb(coimgs, **kwa)
+    plt.clf()
+    dimshow(rgb, ticks=False)
+    plt.title('WISE W1/W2 Data')
+    ps.savefig()
+
+    rgb = _unwise_to_rgb(comods, **kwa)
+    plt.clf()
+    dimshow(rgb, ticks=False)
+    plt.title('WISE W1/W2 Model')
+    ps.savefig()
+
+    kwa = dict(mn=-1, mx=1, arcsinh=None)
+    rgb = _unwise_to_rgb([img-mod for img,mod in zip(coimgs,comods)], **kwa)
+    plt.clf()
+    dimshow(rgb, ticks=False)
+    plt.title('WISE W1/W2 Resid')
+    ps.savefig()
+
+
+def _unwise_to_rgb(imgs, bands=[1,2], mn=-1, mx=100, arcsinh=1.):
+    import numpy as np
+    img = imgs[0]
+    H,W = img.shape
+
+    ## FIXME
+    w1,w2 = imgs
+
+    rgb = np.zeros((H, W, 3), np.uint8)
+
+    scale1 = 50.
+    scale2 = 50.
+
+    #mn,mx = -3.,30.
+    #arcsinh = None
+
+    img1 = w1 / scale1
+    img2 = w2 / scale2
+
+    print('W1 99th', np.percentile(img1, 99))
+    print('W2 99th', np.percentile(img2, 99))
+
+    if arcsinh is not None:
+        def nlmap(x):
+            return np.arcsinh(x * arcsinh) / np.sqrt(arcsinh)
+        #img1 = nlmap(img1)
+        #img2 = nlmap(img2)
+        mean = (img1 + img2) / 2.
+        I = nlmap(mean)
+        img1 = img1 / mean * I
+        img2 = img2 / mean * I
+        mn = nlmap(mn)
+        mx = nlmap(mx)
+    img1 = (img1 - mn) / (mx - mn)
+    img2 = (img2 - mn) / (mx - mn)
+
+    rgb[:,:,2] = (np.clip(img1, 0., 1.) * 255).astype(np.uint8)
+    rgb[:,:,0] = (np.clip(img2, 0., 1.) * 255).astype(np.uint8)
+    rgb[:,:,1] = rgb[:,:,0]/2 + rgb[:,:,2]/2
+
+    return rgb
+
+f __name__ == '__main__':
 
     ra,dec = 203.522, 20.232
     # arcsec
     radius = 90.
 
     ps = PlotSequence('cluster')
-    
+
+    plt.figure(figsize=(4,4))
+    plt.subplots_adjust(left=0.005, right=0.995, bottom=0.005, top=0.995)
+
     wise_cutouts(ra, dec, radius, ps,
                  pixscale=2.75 / 2.,
                  tractor_base='cluster')
-    
-
-    
