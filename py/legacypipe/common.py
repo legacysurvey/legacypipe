@@ -1058,6 +1058,34 @@ Using the current directory as DECALS_DIR, but this is likely to fail.
 
         return np.flatnonzero(good)
 
+    def apply_blacklist(self, ccds):
+        '''
+        Returns an index array of CCDs to KEEP; ie, do
+        ccds = decals.get_ccds()
+        I = decals.apply_blacklist(ccds)
+        ccds.cut(I)
+        '''
+        blacklist = [
+            '2012B-0003', # labeled as "DES SV", but appears to exclusively be DES deep fields taken during SV, through Jan 2013.
+            '2013A-0351', # lots of deep data on COSMOS
+            '2014A-0339', # two strips of sky
+            '2013A-0360', # 9 fields total
+            '2013A-0614', # 2 fields
+            '2013A-0717', # 2 fields
+            '2013B-0502', # 3 fields
+            '2014A-0239', # 1 field
+            '2014A-0429', # 2 fields
+            '2013A-0611', # many 900-sec exposures in EDR region
+            '2013A-0737', # 10 fields
+            '2013A-0719', # 8 fields
+            '2013A-9999', # 11 fields
+            '2013A-0716', # 3 fields
+            '2013A-0529', # 2 fields
+            '2013A-0613', # 40 exposures of 600 sec in g,r and nothing else in DR2
+        ]
+        keep = np.array([propid not in blacklist for propid in ccds.propid])
+        return np.flatnonzero(keep)
+
     def _get_zeropoints_table(self):
         '''
         Returns the table of zeropoints, which in DR2 is the same as
