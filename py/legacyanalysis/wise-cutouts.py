@@ -261,9 +261,10 @@ def _unwise_to_rgb(imgs, bands=[1,2], mn=-1, mx=100, arcsinh=1.):
 
     return rgb
 
-f __name__ == '__main__':
+if __name__ == '__main__':
 
-    ra,dec = 203.522, 20.232
+    # ra,dec = 203.522, 20.232
+    ra,dec = 203.53617, 20.248055
     # arcsec
     radius = 90.
 

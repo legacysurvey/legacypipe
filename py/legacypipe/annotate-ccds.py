@@ -3,6 +3,8 @@ import numpy as np
 
 from astrometry.util.fits import fits_table, merge_tables
 from astrometry.util.starutil_numpy import degrees_between
+from astrometry.util.util import Tan
+from astrometry.util.miscutils import polygon_area
 from legacypipe.common import Decals
 
 def main():
@@ -43,6 +45,11 @@ def main():
     ccds.stdsky  = np.zeros(len(ccds), np.float32)
     ccds.maxsky  = np.zeros(len(ccds), np.float32)
     ccds.minsky  = np.zeros(len(ccds), np.float32)
+
+    ccds.pixscale_mean = np.zeros(len(ccds), np.float32)
+    ccds.pixscale_std  = np.zeros(len(ccds), np.float32)
+    ccds.pixscale_max  = np.zeros(len(ccds), np.float32)
+    ccds.pixscale_min  = np.zeros(len(ccds), np.float32)
     
     for iccd,ccd in enumerate(ccds):
         im = decals.get_image_object(ccd)
@@ -105,6 +112,30 @@ def main():
                                                   rc, dc))
             ccds.ra_center [iccd] = rc
             ccds.dec_center[iccd] = dc
+
+            # Compute scale change across the chip
+            # how many pixels to step
+            step = 10
+            xx = np.linspace(1+step, W-step, 5)
+            yy = np.linspace(1+step, H-step, 5)
+            xx,yy = np.meshgrid(xx, yy)
+            pixscale = []
+            for x,y in zip(xx.ravel(), yy.ravel()):
+                sx = [x-step, x-step, x+step, x+step, x-step]
+                sy = [y-step, y+step, y+step, y-step, y-step]
+                sr,sd = wcs.pixelxy2radec(sx, sy)
+                rc,dc = wcs.pixelxy2radec(x, y)
+                # project around a tiny little TAN WCS at (x,y), with 1" pixels
+                locwcs = Tan(rc, dc, 0., 0., 1./3600, 0., 0., 1./3600, 1., 1.)
+                ok,lx,ly = locwcs.radec2pixelxy(sr, sd)
+                #print('local x,y:', lx, ly)
+                A = polygon_area((lx, ly))
+                pixscale.append(np.sqrt(A / (2*step)**2))
+            print('Pixel scales:', pixscale)
+            ccds.pixscale_mean[iccd] = np.mean(pixscale)
+            ccds.pixscale_min[iccd] = min(pixscale)
+            ccds.pixscale_max[iccd] = max(pixscale)
+            ccds.pixscale_std[iccd] = np.std(pixscale)
             
     ccds.writeto('ccds-annotated.fits')
 
