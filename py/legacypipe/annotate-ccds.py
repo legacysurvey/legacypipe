@@ -6,6 +6,7 @@ from astrometry.util.starutil_numpy import degrees_between
 from astrometry.util.util import Tan
 from astrometry.util.miscutils import polygon_area
 from legacypipe.common import Decals
+import tractor
 
 def main():
     decals = Decals()
@@ -50,6 +51,12 @@ def main():
     ccds.pixscale_std  = np.zeros(len(ccds), np.float32)
     ccds.pixscale_max  = np.zeros(len(ccds), np.float32)
     ccds.pixscale_min  = np.zeros(len(ccds), np.float32)
+
+    ccds.psfnorm_mean = np.zeros(len(ccds), np.float32)
+    ccds.psfnorm_std  = np.zeros(len(ccds), np.float32)
+    ccds.galnorm_mean = np.zeros(len(ccds), np.float32)
+    ccds.galnorm_std  = np.zeros(len(ccds), np.float32)
+
     
     for iccd,ccd in enumerate(ccds):
         im = decals.get_image_object(ccd)
@@ -59,6 +66,8 @@ def main():
             if x is not None:
                 ccds.good_region[iccd,i] = x
 
+        W,H = ccd.width, ccd.height
+                
         psf = None
         try:
             psf = im.read_psf_model(0, 0, pixPsf=True)
@@ -69,8 +78,35 @@ def main():
         if psf is not None:
             print('Got PSF', psf)
             # Instantiate PSF on a grid
-            
+            S = 32
+            xx = np.linspace(1+S, W-S, 5)
+            yy = np.linspace(1+S, H-S, 5)
+            xx,yy = np.meshgrid(xx, yy)
+            psfnorms = []
+            galnorms = []
 
+            # sig1 ?!
+            wcs = im.read_pv_wcs()
+            pcal = tractor.LinearPhotoCal(1., band=ccd.filter)
+            faketim = tractor.Image(data=np.zeros((H,W), np.float32),
+                                    inverr=np.ones((H,W), np.float32),
+                                    psf=psf, wcs=tractor.ConstantFitsWcs(wcs),
+                                    photocal=pcal)
+            faketim.band = ccd.filter
+            
+            #tim = im.get_tractor_image(pixPsf=True, splinesky=True,
+            #                           subsky=False, pixels=False)
+            
+            for x,y in zip(xx.ravel(), yy.ravel()):
+                p = im.psf_norm(faketim, x=x, y=y)
+                g = im.galaxy_norm(faketim, x=x, y=y)
+                psfnorms.append(p)
+                galnorms.append(g)
+            ccds.psfnorm_mean[iccd] = np.mean(psfnorms)
+            ccds.psfnorm_std [iccd] = np.std (psfnorms)
+            ccds.galnorm_mean[iccd] = np.mean(galnorms)
+            ccds.galnorm_std [iccd] = np.std (galnorms)
+                
         sky = None
         try:
             sky = im.read_sky_model(splinesky=True)
@@ -97,7 +133,6 @@ def main():
 
         if wcs is not None:
             print('Got WCS', wcs)
-            W,H = ccd.width, ccd.height
             ccds.ra0[iccd],ccds.dec0[iccd] = wcs.pixelxy2radec(1, 1)
             ccds.ra1[iccd],ccds.dec1[iccd] = wcs.pixelxy2radec(1, H)
             ccds.ra2[iccd],ccds.dec2[iccd] = wcs.pixelxy2radec(W, H)
