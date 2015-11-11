@@ -22,8 +22,9 @@ import tractor
 
 # python projects/desi/forced-photom-decam.py decals/images/decam/CP20140810_g_v2/c4d_140816_032035_ooi_g_v2.fits.fz 43 DR1 f.fits
 
-def main(decals=None):
-    '''Driver function for forced photometry of individual DECam images.
+def get_parser():
+    '''
+    Returns the option parser for forced photometry of DECam images
     '''
     import argparse
     parser = argparse.ArgumentParser(description=__doc__)
@@ -41,7 +42,14 @@ def main(decals=None):
     parser.add_argument('hdu',help='decam-HDU OR CCD name.')
     parser.add_argument('catfn',help='catalog filename OR "DR1/DR2".')
     parser.add_argument('outfn',help='Output catalog filename.')
-    opt = parser.parse_args()
+    return parser
+    
+def main(decals=None, opt=None):
+    '''Driver function for forced photometry of individual DECam images.
+    '''
+    if opt is None:
+        parser = get_parser()
+        opt = parser.parse_args()
 
     Time.add_measurement(MemMeas)
     t0 = Time()
