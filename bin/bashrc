@@ -143,14 +143,14 @@ if [ "$NERSC_HOST" == "cori" ]; then
   module load photutils-hpcp
   module load ceres-hpcp
   module load sextractor-hpcp
-  module load psfex
+  #module load psfex
   module load postgresql-hpcp
   module load psycopg2-hpcp
   
   # Needed during building Astrometry.net, but not runtime.
   # module load swig-hpcp
 
-  module load mkl
+  #module load mkl
   module load intel
 
   # dunno what this is or where it comes from, but it breaks builds
