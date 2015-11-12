@@ -39,6 +39,7 @@ echo -e "\nStarting on ${NERSC_HOST} $(hostname)\n" >> $log
 echo "-----------------------------------------------------------------------------------------" >> $log
 
 python -u legacypipe/runbrick.py \
+    -P 'pickles/runbrick-dr2p-%(brick)s-%%(stage)s.pickle' \
     --pixpsf --splinesky --pipe --skip --no-sdss --no-early-coadds \
     --force-all --no-write \
     --checkpoint $(printf checkpoint/checkpoint-%s.pickle $brick) \

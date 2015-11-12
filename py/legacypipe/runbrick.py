@@ -4008,6 +4008,7 @@ def stage_wise_forced(
     outdir=None,
     use_ceres=True,
     mp=None,
+    rsync=False,
     **kwargs):
     '''
     After the model fits are finished, we can perform forced
@@ -4038,6 +4039,39 @@ def stage_wise_forced(
         src.setBrightness(NanoMaggies(w=1.))
         wcat.append(src)
 
+    if rsync:
+        reqd = []
+        basedirs12 = unwise_w12_dir.split(':')
+        basedirs34 = unwise_w34_dir.split(':')
+        for tile in tiles.coadd_id:
+            for (band,basedirs) in [(1,basedirs12), (2,basedirs12), (3,basedirs34),(4,basedirs34)]:
+                for tag in ['img-m', 'invvar-m', 'n-m', 'n-u']:
+                    fnpart = os.path.join(tile[:3], tile,
+                                          'unwise-%s-w%i-%s.fits' % (tile, band, tag))
+                    found = False
+                    for basedir in basedirs:
+                        fn = os.path.join(basedir, fnpart)
+                        if os.path.exists(fn) or os.path.exists(fn + '.gz'):
+                            found = True
+                            break
+                    if not found:
+                        reqd.append(fnpart)
+        # HACK ... hard-coded paths
+        reqd12 = [fn for fn in reqd if 'w1' in fn or 'w2' in fn]
+        if len(reqd12):
+            cmd = ('rsync -LRrv edison:/scratch1/scratchdirs/ameisner/unwise-coadds/fulldepth_zp/./"{%s}*" %s'
+                   % (','.join(reqd12), '/global/cscratch1/sd/desiproc/unwise-coadds-fulldepth-zp'))
+            print(cmd)
+            os.system(cmd)
+            #
+        reqd34 = [fn for fn in reqd if 'w3' in fn or 'w4' in fn]
+        if len(reqd34):
+            cmd = ('rsync -LRrv edison:/scratch1/scratchdirs/desiproc/unwise-coadds/./"{%s}*" %s'
+                   % (','.join(reqd34), '/global/cscratch1/sd/desiproc/unwise-coadds'))
+            print(cmd)
+            os.system(cmd)
+
+            
     args = []
     for band in [1,2]:
         args.append((wcat, tiles, band, roiradec, unwise_w12_dir, use_ceres))
