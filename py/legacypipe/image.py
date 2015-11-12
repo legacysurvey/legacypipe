@@ -265,6 +265,8 @@ class LegacySurveyImage(object):
             imgmed = np.median(img[invvar>0])
             if np.abs(imgmed) > sig1:
                 print('WARNING: image median', imgmed, 'is more than 1 sigma away from zero!')
+                # Boom!
+                assert(False)
 
         twcs = ConstantFitsWcs(wcs)
         if x0 or y0:
