@@ -251,11 +251,12 @@ def stage_tims(W=3600, H=3600, pixscale=0.262, brickname=None,
         print('Required calib files:', reqd)
         print('Calib dir:', decals.get_calib_dir())
         caldir = decals.get_calib_dir() + '/'
-        reqd = [fn.replace(caldir, '') for fn in reqd]
 
-        cmd = 'rsync -LRrv edison:/scratch1/scratchdirs/desiproc/decals-dir/calib/./"{%s}" %s' % (','.join(reqd), caldir)
-        print(cmd)
-        os.system(cmd)
+        if len(reqd):
+            reqd = [fn.replace(caldir, '') for fn in reqd]
+            cmd = 'rsync -LRrv edison:/scratch1/scratchdirs/desiproc/decals-dir/calib/./"{%s}" %s' % (','.join(reqd), caldir)
+            print(cmd)
+            os.system(cmd)
 
         # Also grab image files
         reqd = []
@@ -264,11 +265,12 @@ def stage_tims(W=3600, H=3600, pixscale=0.262, brickname=None,
         reqd = [fn for fn in reqd if not os.path.exists(fn)]
         print('Required image files:', reqd)
         imgdir = decals.get_image_dir() + '/'
-        reqd = [fn.replace(imgdir, '') for fn in reqd]
 
-        cmd = 'rsync -LRrv edison:/scratch1/scratchdirs/desiproc/images/./"{%s}" %s' % (','.join(reqd), imgdir)
-        print(cmd)
-        os.system(cmd)
+        if len(reqd):
+            reqd = [fn.replace(imgdir, '') for fn in reqd]
+            cmd = 'rsync -LRrv edison:/scratch1/scratchdirs/desiproc/images/./"{%s}" %s' % (','.join(reqd), imgdir)
+            print(cmd)
+            os.system(cmd)
 
     if do_calibs:
         kwa = dict(git_version=gitver)
