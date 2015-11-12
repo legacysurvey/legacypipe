@@ -295,6 +295,7 @@ class LegacySurveyImage(object):
               1./(2. * np.sqrt(np.pi) * psf_sigma))
 
         # Galaxy-detection norm
+        tim.band = band
         galnorm = self.galaxy_norm(tim)
         print('Galaxy norm:', galnorm)
         
@@ -308,7 +309,6 @@ class LegacySurveyImage(object):
         tim.zpscale = orig_zpscale
         tim.midsky = midsky
         tim.sig1 = sig1
-        tim.band = band
         tim.psf_fwhm = psf_fwhm
         tim.psf_sigma = psf_sigma
         tim.propid = self.propid
@@ -363,7 +363,7 @@ class LegacySurveyImage(object):
         h,w = tim.shape
         band = tim.band
         if x is None:
-            x = W/2.
+            x = w/2.
         if y is None:
             y = h/2.
         pos = tim.wcs.pixelToPosition(x, y)
