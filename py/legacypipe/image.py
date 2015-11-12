@@ -67,7 +67,11 @@ class LegacySurveyImage(object):
         self.fwhm    = ccd.fwhm
         self.propid  = ccd.propid
         # in arcsec/pixel
-        self.pixscale = 3600. * np.sqrt(np.abs(ccd.cd1_1 * ccd.cd2_2 - ccd.cd1_2 * ccd.cd2_1))
+        self.pixscale = 3600. * np.sqrt(np.abs(ccd.cd1_1 * ccd.cd2_2 -
+                                               ccd.cd1_2 * ccd.cd2_1))
+        self.mjdobs = ccd.mjd_obs
+        self.width  = ccd.width
+        self.height = ccd.height
 
     def __str__(self):
         return self.name
@@ -117,7 +121,7 @@ class LegacySurveyImage(object):
                           gaussPsf=False, const2psf=False, pixPsf=False,
                           splinesky=False,
                           nanomaggies=True, subsky=True, tiny=5,
-                          dq=True, invvar=True):
+                          dq=True, invvar=True, pixels=True):
         '''
         Returns a tractor.Image ("tim") object for this image.
         
@@ -185,16 +189,20 @@ class LegacySurveyImage(object):
                 return None
             slc = slice(y0,y1), slice(x0,x1)
 
-        print('Reading image slice:', slc)
-        img,imghdr = self.read_image(header=True, slice=slc)
-
-        #print('SATURATE is', imghdr.get('SATURATE', None))
-        #print('Max value in image is', img.max())
-
-        # check consistency... something of a DR1 hangover
-        e = imghdr['EXTNAME']
-        assert(e.strip() == self.ccdname.strip())
-
+        if pixels:
+            print('Reading image slice:', slc)
+            img,imghdr = self.read_image(header=True, slice=slc)
+            #print('SATURATE is', imghdr.get('SATURATE', None))
+            #print('Max value in image is', img.max())
+            # check consistency... something of a DR1 hangover
+            e = imghdr['EXTNAME']
+            assert(e.strip() == self.ccdname.strip())
+        else:
+            img = np.zeros((imh, imw))
+            imghdr = dict()
+            if slc is not None:
+                img = img[slc]
+            
         if get_invvar:
             invvar = self.read_invvar(slice=slc, clipThresh=0.)
         else:
@@ -282,30 +290,13 @@ class LegacySurveyImage(object):
         assert(np.all(np.isfinite(tim.getInvError())))
 
         # PSF norm
-        h,w = tim.shape
-        patch = psf.getPointSourcePatch(w/2., h/2.).patch
-        #print('PSF PointSourcePatch: sum', patch.sum())
-        # Clamp up to zero and normalize before taking the norm
-        patch = np.maximum(0, patch)
-        patch /= patch.sum()
-        psfnorm = np.sqrt(np.sum(patch**2))
-        #print('PSF norm', psfnorm, 'vs Gaussian',
-        #      1./(2. * np.sqrt(np.pi) * psf_sigma))
+        psfnorm = self.psf_norm(tim)
+        print('PSF norm', psfnorm, 'vs Gaussian',
+              1./(2. * np.sqrt(np.pi) * psf_sigma))
 
         # Galaxy-detection norm
-        from tractor.galaxy import ExpGalaxy
-        from tractor.ellipses import EllipseE
-        from tractor.patch import Patch
-        cx,cy = w/2., h/2.
-        pos = tim.wcs.pixelToPosition(cx, cy)
-        gal = ExpGalaxy(pos, NanoMaggies(**{band:1.}), EllipseE(0.45, 0., 0.))
-        S = 32
-        mm = Patch(int(cx-S), int(cy-S), np.ones((2*S+1, 2*S+1), bool))
-        galmod = gal.getModelPatch(tim, modelMask = mm).patch
-        galmod = np.maximum(0, galmod)
-        galmod /= galmod.sum()
-        galnorm = np.sqrt(np.sum(galmod**2))
-        #print('Galaxy norm:', galnorm)
+        galnorm = self.galaxy_norm(tim)
+        print('Galaxy norm:', galnorm)
         
         # CP (DECam) images include DATE-OBS and MJD-OBS, in UTC.
         import astropy.time
@@ -347,6 +338,43 @@ class LegacySurveyImage(object):
         tim.ima = dict(interpolation='nearest', origin='lower', cmap='gray',
                        vmin=mn, vmax=mx)
         return tim
+
+    def psf_norm(self, tim, x=None, y=None):
+        # PSF norm
+        psf = tim.psf
+        h,w = tim.shape
+        if x is None:
+            x = w/2.
+        if y is None:
+            y = h=2.
+        patch = psf.getPointSourcePatch(x, y).patch
+        print('PSF PointSourcePatch: sum', patch.sum())
+        # Clamp up to zero and normalize before taking the norm
+        patch = np.maximum(0, patch)
+        patch /= patch.sum()
+        psfnorm = np.sqrt(np.sum(patch**2))
+        return psfnorm
+
+    def galaxy_norm(self, tim, x=None, y=None):
+        # Galaxy-detection norm
+        from tractor.galaxy import ExpGalaxy
+        from tractor.ellipses import EllipseE
+        from tractor.patch import Patch
+        h,w = tim.shape
+        band = tim.band
+        if x is None:
+            x = W/2.
+        if y is None:
+            y = h/2.
+        pos = tim.wcs.pixelToPosition(x, y)
+        gal = ExpGalaxy(pos, NanoMaggies(**{band:1.}), EllipseE(0.45, 0., 0.))
+        S = 32
+        mm = Patch(int(x-S), int(y-S), np.ones((2*S+1, 2*S+1), bool))
+        galmod = gal.getModelPatch(tim, modelMask=mm).patch
+        galmod = np.maximum(0, galmod)
+        galmod /= galmod.sum()
+        galnorm = np.sqrt(np.sum(galmod**2))
+        return galnorm
     
     def _read_fits(self, fn, hdu, slice=None, header=None, **kwargs):
         if slice is not None:
@@ -393,7 +421,8 @@ class LegacySurveyImage(object):
         '''
         Returns image shape H,W.
         '''
-        return self.get_image_info()['dims']
+        # return self.get_image_info()['dims']
+        return self.height, self.width
 
     @property
     def shape(self):

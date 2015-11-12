@@ -7,6 +7,8 @@ from astrometry.util.fits import fits_table
 from .image import LegacySurveyImage
 from .common import *
 
+import astropy.time
+
 '''
 Code specific to images from the Dark Energy Camera (DECam).
 '''
@@ -48,21 +50,16 @@ class DecamImage(LegacySurveyImage):
     def __str__(self):
         return 'DECam ' + self.name
 
-    def get_good_image_subregion(self):
-        import astropy.time
+    glowmjd = astropy.time.Time('2014-08-01').utc.mjd
 
+    def get_good_image_subregion(self):
         x0,x1,y0,y1 = None,None,None,None
 
-        imh,imw = self.get_image_shape()
         # Handle 'glowing' edges in DES r-band images
         # aww yeah
-        glowdate = astropy.time.Time('2014-08-01')
-        primhdr = self.read_image_primary_header()
-        obsdate = astropy.time.Time(primhdr['DATE-OBS'])
-
         if self.band == 'r' and (
                 ('DES' in self.imgfn) or ('COSMOS' in self.imgfn) or
-                (obsdate < glowdate)):
+                (self.mjdobs < DecamImage.glowmjd)):
             # Northern chips: drop 100 pix off the bottom
             if 'N' in self.ccdname:
                 print('Clipping bottom part of northern DES r-band chip')
@@ -70,7 +67,7 @@ class DecamImage(LegacySurveyImage):
             else:
                 # Southern chips: drop 100 pix off the top
                 print('Clipping top part of southern DES r-band chip')
-                y1 = imh - 100
+                y1 = self.height - 100
 
         # Clip the bad half of chip S7.
         # The left half is OK.
