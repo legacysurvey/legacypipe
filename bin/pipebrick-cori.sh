@@ -38,14 +38,14 @@ echo >> $log
 echo -e "\nStarting on ${NERSC_HOST} $(hostname)\n" >> $log
 echo "-----------------------------------------------------------------------------------------" >> $log
 
-#    -P 'pickles/runbrick-dr2p-%(brick)s-%%(stage)s.pickle' \
-
+#    --force-all --no-write \
+# --no-early-coadds \
 python -u legacypipe/runbrick.py \
     --rsync \
-    --pixpsf --splinesky --pipe --skip --no-sdss --no-early-coadds \
-    --force-all --no-write \
+    -P 'pickles/runbrick-dr2p-%(brick)s-%%(stage)s.pickle' \
+    --pixpsf --splinesky --pipe --skip --no-sdss \
     --checkpoint $(printf checkpoint/checkpoint-%s.pickle $brick) \
-    --threads 6 \
+    --threads 8 \
     --brick $brick --outdir $outdir --nsigma 6 >> $log 2>&1
 
 # qdo launch dr2n 16 --cores_per_worker 6 --walltime=24:00:00 --script ../bin/pipebrick.sh --batchqueue regular --verbose
