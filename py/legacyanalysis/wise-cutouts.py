@@ -265,7 +265,6 @@ def _unwise_to_rgb(imgs, bands=[1,2], mn=-1, mx=100, arcsinh=1.):
     return rgb
 
 if __name__ == '__main__':
-
     import argparse
     parser = argparse.ArgumentParser()
 

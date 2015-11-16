@@ -113,3 +113,103 @@ if [ "$NERSC_HOST" == "edison" ]; then
   unset PYP
 
 fi
+
+
+
+if [ "$NERSC_HOST" == "cori" ]; then
+  hpcports gnu
+
+  # dust
+  module use /project/projectdirs/desi/software/modules/${NERSC_HOST}
+
+  # unwise_coadds
+  module use /project/projectdirs/cosmo/software/modules/${NERSC_HOST}
+
+  # pick up the DECALS_DIR variable
+  module use /project/projectdirs/cosmo/work/decam/modules
+
+  module load decals/dr2-scratch-cori
+  module load dust/scratch
+  # Aaron's zeropoint-corrected version
+  module load unwise_coadds/2.1-scratch
+
+  module load tractor-hpcp
+  module load astrometry_net-hpcp
+  module load astropy-hpcp
+  module load scipy-hpcp
+  module load matplotlib-hpcp
+  module load fitsio-hpcp
+  module load wcslib-hpcp
+  module load photutils-hpcp
+  module load ceres-hpcp
+  module load sextractor-hpcp
+  #module load psfex
+  module load postgresql-hpcp
+  module load psycopg2-hpcp
+  
+  # Needed during building Astrometry.net, but not runtime.
+  # module load swig-hpcp
+
+  #module load mkl
+  module load intel
+
+  # dunno what this is or where it comes from, but it breaks builds
+  module unload darshan
+
+  # unneeded, as far as I know...
+  module unload pyyaml-hpcp
+  module unload ipython-hpcp
+  module unload cython-hpcp
+  module unload rca
+  module unload curl
+  module unload zlib
+  module unload bzip2
+  module unload autoconf-hpcp
+  module unload libtool-hpcp
+  module unload automake-hpcp
+  module unload sqlite-hpcp
+  module unload openssl-hpcp
+  module unload libxml2-hpcp
+  module unload openmpi-hpcp
+  module unload nose-hpcp
+  module unload expat-hpcp
+  module unload libyaml-hpcp
+  module unload yaml-hpcp
+  module unload curl-hpcp
+  module unload git-hpcp
+  module unload boost-hpcp
+  module unload swig-hpcp
+  module unload cmake-hpcp
+  module unload eigen-hpcp
+  module unload sfftw-hpcp
+  module unload plplot-hpcp
+  module unload setuptools-hpcp
+  module unload m4-hpcp
+  module unload termcap-hpcp
+  module unload readline-hpcp
+  module unload pkgconfig-hpcp
+
+  export QDO_BATCH_PROFILE=cori
+
+  export LD_LIBRARY_PATH=${LD_LIBRARY_PATH}:${PYTHON_DIR}/lib
+
+  PYP=${PYTHONPATH}
+
+  # Our local qdo install
+  PATH=${PATH}:${CODE_DIR}/qdo/bin
+  PYP=${PYP}:${CODE_DIR}/qdo/py
+
+  # local astrometry.net install
+  #PYP=${PYP}:${CODE_DIR}/astrometry.net
+  #PATH=${PATH}:${CODE_DIR}/astrometry.net/util
+  #PATH=${PATH}:${CODE_DIR}/astrometry.net/blind
+
+  # local Tractor install
+  #PYP=${PYP}:${CODE_DIR}/tractor
+
+  export PYTHONPATH=${PYP}
+  export PATH
+  unset PYP
+
+fi
+
