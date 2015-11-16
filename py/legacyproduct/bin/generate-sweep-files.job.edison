@@ -1,0 +1,22 @@
+#PBS -j eo
+#PBS -q debug
+#PBS -l mppwidth=24
+
+set -x
+cd $PBS_O_WORKDIR
+module load python/2.7-anaconda
+source /project/projectdirs/m779/python-mpi/activate.sh /dev/shm/local "aprun -n 24"
+
+bcast /project/projectdirs/m779/python-mpi/2.7-anaconda.tar.gz
+
+# anaconda python doesn't have fitsio. So I compiled this for you (it is a RC)
+bcast /project/projectdirs/m779/python-mpi/2.7-anaconda-fitsio-11112015rc.tar.gz
+
+# allow the python modules
+export PYTHONPATH=$PWD/../../:$PYTHONPATH
+
+# use python-mpi. 'python' from anaconda fails with libpython.so.0.1 not found
+# error when ran via aprun, at least on ~yfeng1's environments.
+
+aprun -n 1 -d 24 python-mpi generate-sweep-files.py --numproc 48 -v /project/projectdirs/cosmo/data/legacysurvey/dr1/tractor $SCRATCH/sandbox/sweep-dr1
+
