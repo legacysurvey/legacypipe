@@ -359,12 +359,12 @@ def stage_tims(W=3600, H=3600, pixscale=0.262, brickname=None,
                 if tim.band != b:
                     continue
                 # broaden range to encompass most pixels... only req'd when sky is bad
-                lo,hi = -5.*s, 5.*s
+                lo,hi = -5.*sig1, 5.*sig1
                 pix = tim.getImage()[tim.getInvError() > 0]
                 lo = min(lo, np.percentile(pix, 5))
                 hi = max(hi, np.percentile(pix, 95))
                 plt.hist(pix, range=(lo, hi), bins=50, histtype='step',
-                         alpha=0.5, label='%s: %.0f s' % (name, exptime))
+                         alpha=0.5, label=tim.name)
             plt.legend()
             plt.xlabel('Pixel values')
             plt.title('Pixel distributions: %s band' % b)
@@ -373,8 +373,21 @@ def stage_tims(W=3600, H=3600, pixscale=0.262, brickname=None,
     if plots:
         for tim in tims:
             plt.clf()
+            plt.subplot(2,2,1)
             dimshow(tim.getImage(), **tim.ima)
-            plt.title(tim.name)
+            plt.title('image')
+            plt.subplot(2,2,2)
+            dimshow(tim.getInvError(), vmin=0, vmax=1.1/tim.sig1)
+            plt.title('inverr')
+            plt.subplot(2,2,3)
+            #nil,udq = np.unique(tim.dq, return_inverse=True)
+            dimshow(tim.dq, vmin=0, vmax=tim.dq.max())
+            plt.title('DQ')
+            plt.subplot(2,2,3)
+            #nil,udq = np.unique(tim.dq, return_inverse=True)
+            dimshow((tim.dq & tim.dq_bits['satur'] > 0), vmin=0, vmax=1)
+            plt.title('SATUR')
+            plt.suptitle(tim.name)
             ps.savefig()
 
     if not pipe:
@@ -3887,8 +3900,9 @@ def stage_coadds(bands=None, version_header=None, targetwcs=None,
             depth[np.logical_not(np.isfinite(depth))] = 0.
             if U is not None:
                 depth = depth.flat[U]
-            print(band, name, 'band depth map: percentiles',
-                  np.percentile(depth, np.arange(0,101, 10)))
+            if len(depth):
+                print(band, name, 'band depth map: percentiles',
+                      np.percentile(depth, np.arange(0,101, 10)))
             # histogram
             D.set('counts_%s_%s' % (name, band),
                   np.histogram(depth, bins=depthbins)[0].astype(np.int32))
