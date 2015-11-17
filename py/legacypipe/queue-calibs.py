@@ -180,6 +180,25 @@ def main():
         dlo,dhi = -90,90
         rlo,rhi = 0, 360
 
+    elif opt.region == 'badsky':
+        # A handful of exposures in DR2 with inconsistent sky estimates.
+        C = decals.get_ccds()
+        log(len(C), 'CCDs')
+        #C.cut((C.expnum >= 257400) * (C.expnum < 257500))
+        C.cut(np.array([e in [257496, 257483, 257472, 257469, 257467, 257465,
+                              257464, 257463, 257460, 257461, 257462]
+                        for e in C.expnum]))
+        log(len(C), 'CCDs with bad sky')
+        # CCD radius
+        radius = np.hypot(2048, 4096) / 2. * 0.262 / 3600.
+        # Brick radius
+        radius += np.hypot(0.25, 0.25)/2.
+        I,J,d = match_radec(B.ra, B.dec, C.ra, C.dec, radius * 1.05)
+        keep = np.zeros(len(B), bool)
+        keep[I] = True
+        B.cut(keep)
+        log('Cut to', len(B), 'bricks near CCDs with bad sky')
+
     elif opt.region == 'edr':
         # EDR:
         # 535 bricks, ~7000 CCDs
