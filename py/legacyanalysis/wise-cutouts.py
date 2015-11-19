@@ -71,6 +71,9 @@ def wise_cutouts(ra, dec, radius, ps, pixscale=2.75, tractor_base='.',
         if len(Yo) == 0:
             continue
         print('Resampling', len(Yo), 'pixels from', b)
+        xl,xh,yl,yh = Xi.min(), Xi.max(), Yi.min(), Yi.max()
+        print('python legacypipe/runbrick.py -b %s --zoom %i %i %i %i --outdir cluster --pixpsf --splinesky --pipe --no-early-coadds' %
+              (b, xl-5, xh+5, yl-5, yh+5) + ' -P \'pickles/cluster-%(brick)s-%%(stage)s.pickle\'')
         for i,tag in enumerate(tags):
             fn = os.path.join(tractor_base, 'coadd', b[:3], b,
                               'decals-%s-%s.jpg' % (b, tag))
@@ -262,11 +265,19 @@ def _unwise_to_rgb(imgs, bands=[1,2], mn=-1, mx=100, arcsinh=1.):
     return rgb
 
 if __name__ == '__main__':
+    import argparse
+    parser = argparse.ArgumentParser()
 
-    # ra,dec = 203.522, 20.232
-    ra,dec = 203.53617, 20.248055
+    parser.add_argument('-r', '--ra', type=float,  default=329.0358)
+    parser.add_argument('-d', '--dec', type=float, default=  1.3909)
+    parser.add_argument('-t', '--dir', default='dr2p')
 
-    ra,dec = 329.0358, 1.3909
+    opt = parser.parse_args()
+
+    #ra,dec = 203.522, 20.232
+    #ra,dec = 329.0358,1.3909  # horrible fit
+    #ra,dec = 244.0424,6.9179
+
     # arcsec
     radius = 90.
 
@@ -275,6 +286,7 @@ if __name__ == '__main__':
     plt.figure(figsize=(4,4))
     plt.subplots_adjust(left=0.005, right=0.995, bottom=0.005, top=0.995)
 
-    wise_cutouts(ra, dec, radius, ps,
+    wise_cutouts(opt.ra, opt.dec, radius, ps,
                  pixscale=2.75 / 2.,
-                 tractor_base='cluster')
+                 tractor_base=opt.dir)
+                 #tractor_base='cluster')

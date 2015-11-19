@@ -1,5 +1,7 @@
 #! /bin/bash
 
+#cd $SCRATCH/code/legacypipe/py
+
 # For modules loaded, see "bashrc" in this directory.
 
 export PYTHONPATH=${PYTHONPATH}:.
@@ -40,11 +42,13 @@ echo "--------------------------------------------------------------------------
 
 #    --force-all --no-write \
 # --no-early-coadds \
+#-s tims \
+#--skip 
 python -u legacypipe/runbrick.py \
-    --rsync \
+    --rsync --skip-coadd \
     -P 'pickles/runbrick-dr2p-%(brick)s-%%(stage)s.pickle' \
-    --pixpsf --splinesky --pipe --skip --no-sdss \
     --checkpoint $(printf checkpoint/checkpoint-%s.pickle $brick) \
+    --pixpsf --splinesky --pipe --no-sdss \
     --threads 8 \
     --brick $brick --outdir $outdir --nsigma 6 >> $log 2>&1
 
