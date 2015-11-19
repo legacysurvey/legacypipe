@@ -1449,6 +1449,8 @@ def stage_srcs(coimgs=None, cons=None,
     Tnew,newcat,hot = run_sed_matched_filters(
         SEDs, bands, detmaps, detivs, avoid_xy, targetwcs,
         nsigma=nsigma, saturated_pix=saturated_pix, plots=plots, ps=ps, mp=mp)
+    if Tnew is None:
+        raise NothingToDoError('No sources detected.')
 
     peaksn = Tnew.peaksn
     apsn = Tnew.apsn
