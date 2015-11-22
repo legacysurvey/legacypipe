@@ -1,0 +1,23 @@
+#! /bin/bash
+
+#SBATCH -p debug
+#SBATCH -N 1
+#SBATCH -t 00:30:00
+#SBATCH -o generate-sweep-files.slurm.cori.%j
+
+set -x
+export ATP_ENABLED=0
+source /project/projectdirs/m779/python-mpi/activate.sh /dev/shm/local "srun -n 24"
+
+bcast /project/projectdirs/m779/yfeng1/python-2.7-cori.tar.gz
+bcast /project/projectdirs/m779/yfeng1/python-2.7-cori-fitsio-0.9.8rc2.tar.gz
+
+# allow the python modules
+export PYTHONPATH=$PWD/../../:$PYTHONPATH
+
+# use python-mpi. 'python' from anaconda fails with libpython.so.0.1 not found
+# error when ran via aprun, at least on ~yfeng1's environments.
+find /project/projectdirs/cosmo/data/legacysurvey/dr1/tractor -name 'tractor-*.fits' > filelist
+
+srun -u --cpu_bind=no -n 1 python-mpi generate-sweep-files.py --numproc 48 -F filelist -v -d /project/projectdirs/cosmo/data/legacysurvey/dr1/decals-bricks.fits /project/projectdirs/cosmo/data/legacysurvey/dr1/tractor $SCRATCH/sandbox/sweep-dr1-stripes
+
