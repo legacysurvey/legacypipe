@@ -173,7 +173,7 @@ def save_sweep_file(filename, data, header, format):
         with h5py.File(filename, 'w') as ff:
             dset = ff.create_dataset('SWEEP', data=data)
             for key in header:
-                dset[key] = header[key]
+                dset.attrs[key] = header[key]
     else:
         raise ValueError("Unknown format")
 
