@@ -22,7 +22,7 @@ def main():
     # this may take a while on a file system with slow meta-data 
     # access
     # bricks = [(name, filepath, region), ...]
-    bricks = list_bricks(ns.src, ns.bricklist, ns)
+    bricks = list_bricks(ns)
 
     t0 = time()
             
@@ -35,25 +35,66 @@ def main():
 
     sweeps = sweep_schema_strips(360)
 
-    for sweep in sweeps:
+    t0 = time()
+
+    nbricks_tot = np.zeros((), 'i8')
+    nobj_tot = np.zeros((), 'i8')
+
+    def work(sweep):
         filename = ns.template %  \
             dict(ramin=sweep[0], decmin=sweep[1],
                  ramax=sweep[2], decmax=sweep[3],
                  format=ns.format)
 
-        make_sweep(os.path.join(ns.dest, filename), format, sweep, bricks, ns)
 
-def list_bricks(src, bricklist, ns):
+        data, nbricks = make_sweep(sweep, bricks, ns)
+
+        header = {
+            'RAMIN'  : sweep[0],
+            'DECMIN' : sweep[1],
+            'RAMAX'  : sweep[2],
+            'DECMAX' : sweep[3],
+            }
+
+        if len(data) > 0:
+            save_sweep_file(os.path.join(ns.dest, filename), 
+                data, header, ns.format)
+        return filename, nbricks, len(data)
+
+    def reduce(filename, nbricks, nobj): 
+        nbricks_tot[...] += nbricks
+        nobj_tot[...] += nobj
+
+        if ns.verbose and nobj > 0:
+            print (
+            '%s : %d bricks %d primary objects, %g bricks / sec %g objs / sec' % 
+            ( filename, nbricks, nobj, 
+              nbricks_tot / (time() - t0), 
+              nobj_tot / (time() - t0), 
+            )
+            )
+
+    with sharedmem.MapReduce(np=ns.numproc) as pool:
+        pool.map(work, sweeps, reduce=reduce)
+
+
+def list_bricks(ns):
     t0 = time()
 
-    d = dict(iter_tractor(src))
+    d = dict(iter_tractor(ns.src))
 
     if ns.verbose:
         print('enumerated %d bricks in %g seconds' % (
             len(d), time() - t0))
 
+    if ns.bricksdesc is not None:
+        bricksdesc = fitsio.read(ns.bricksdesc, 1, upper=True)
+        bricksdesc = dict([(item['BRICKNAME'], item) for item in bricksdesc])
+    else:
+        bricksdesc = None
+             
     #- Load list of bricknames to use
-    if bricklist is not None:
+    if ns.bricklist is not None:
         bricklist = np.loadtxt(ns.bricklist, dtype='S8')
         # TODO: skip unknown bricks?
         d = dict([(brickname, d[brickname]) 
@@ -66,7 +107,7 @@ def list_bricks(src, bricklist, ns):
         keys = list(d.keys())
         def work(i):
             return [
-                (brickname, d[brickname], read_region(d[brickname]))
+                (brickname, d[brickname], read_region(brickname, d[brickname], bricksdesc))
                 for brickname in keys[i:i+chunksize]
                 ]
         bricks = sum(pool.map(work, range(0, len(keys), chunksize)), [])
@@ -81,12 +122,11 @@ def sweep_schema_strips(nstrips):
     ra = np.linspace(0, 360, nstrips + 1, endpoint=True)
     return [(ra[i], -90, ra[i+1], 90) for i in range(len(ra) - 1)]
 
-def make_sweep(sweep_filename, format, sweep, bricks, ns):
-    t0 = time()
+def make_sweep(sweep, bricks, ns):
+    data = [np.empty(0, dtype=SWEEP_DTYPE)]
+    ra1, dec1, ra2, dec2 = sweep
 
-    data = []
-
-    with sharedmem.MapReduce(np=ns.numproc) as pool:
+    with sharedmem.MapReduce(np=0) as pool:
         def filter(brickname, filename, region):
             if not intersect(sweep, region): 
                 return None
@@ -94,7 +134,6 @@ def make_sweep(sweep_filename, format, sweep, bricks, ns):
 
             mask = objects['BRICK_PRIMARY'] != 0
             objects = objects[mask]
-            ra1, dec1, ra2, dec2 = region
             mask = objects['RA'] >= ra1
             mask &= objects['RA'] < ra2
             mask &= objects['DEC'] >= dec1
@@ -116,23 +155,11 @@ def make_sweep(sweep_filename, format, sweep, bricks, ns):
 
         pool.map(filter, bricks, star=True, reduce=reduce)
 
-    if len(data) > 0:
-        neff = len(data)
-        data = np.concatenate(data, axis=0)
-        header = {
-            'RAMIN'  : sweep[0],
-            'DECMIN' : sweep[1],
-            'RAMAX'  : sweep[2],
-            'DECMAX' : sweep[3],
-            }
+    neff = len(data) - 1
 
-        save_sweep_file(sweep_filename, data, header, ns.format)
+    data = np.concatenate(data, axis=0)
+    return data, neff
 
-        if ns.verbose:
-            print (
-            '%s : %d bricks %d primary objects, %g seconds' % 
-            (sweep_filename, neff, len(data), time() - t0)
-            )
 
 def save_sweep_file(filename, data, header, format):
     if format == 'fits':
@@ -197,21 +224,25 @@ def iter_tractor(root):
         except ValueError:
             pass
     
-def intersect(region1, region2):
+def intersect(region1, region2, tol=0.1):
     #  ra1, dec1, ra2, dec2 = region1
-    # topleft bottom right
-    def wrap(r):
+    # left top right bottom
+    def pad(r):
         # this do not use periodic boundary yet
-        return r
+        return (r[0] - tol, r[1] - tol, r[2] + tol, r[3] + tol)
 
-    region1 = wrap(region1) 
-    region2 = wrap(region2) 
+    region1 = pad(region1) 
+    region2 = pad(region2) 
 
     dx = min(region1[2], region2[2]) - max(region1[0], region2[0])
     dy = min(region1[3], region2[3]) - max(region1[1], region2[1]) 
     return (dx > 0) & (dy > 0)
 
-def read_region(filename):
+def read_region(brickname, filename, bricksdesc):
+    if bricksdesc is not None:
+        item = bricksdesc[brickname]
+        return item['RA1'], item['DEC1'], item['RA2'], item['DEC2']
+
     f = fitsio.FITS(filename)
     h = f[0].read_header()
     r = h['RAMIN'], h['DECMIN'], h['RAMAX'], h['DECMAX']
@@ -271,6 +302,9 @@ def parse_args():
     ap.add_argument('-t', "--template", 
         default="sweep:%(ramin)+04g%(decmin)+03g:%(ramax)+04g%(decmax)+03g.%(format)s",
         help="Tempalte of the output file name")
+
+    ap.add_argument('-d', "--bricksdesc", default=None, 
+        help="location of decals-bricks.fits, speeds up the scanning")
 
     ap.add_argument('-v', "--verbose", action='store_true')
     ap.add_argument('-b', "--bricklist", 
