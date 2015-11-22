@@ -81,7 +81,11 @@ def main():
 def list_bricks(ns):
     t0 = time()
 
-    d = dict(iter_tractor(ns.src))
+    if ns.filelist is not None:
+        d = dict([(parse_filename(fn.strip()), fn.strip()) 
+            for fn in open(ns.filelist, 'r').readlines()])
+    else:
+        d = dict(iter_tractor(ns.src))
 
     if ns.verbose:
         print('enumerated %d bricks in %g seconds' % (
@@ -174,6 +178,19 @@ def save_sweep_file(filename, data, header, format):
         raise ValueError("Unknown format")
 
 import re
+def parse_filename(filename):
+    """parse filename to check if this is a tractor brick file;
+    returns brickname if it is, otherwise raises ValueError"""
+    if not filename.endswith('.fits'): raise ValueError
+    #- match filename tractor-0003p027.fits -> brickname 0003p027
+    match = re.search('tractor-(\d{4}[pm]\d{3})\.fits', 
+            os.path.basename(filename))
+
+    if not match: raise ValueError
+
+    brickname = match.group(1)
+    return brickname
+
 def iter_tractor(root):
     """ Iterator over all tractor files in a directory.
 
@@ -195,18 +212,6 @@ def iter_tractor(root):
         -----
         root can be a directory or a single file; both create an iterator
     """
-    def parse_filename(filename):
-        """parse filename to check if this is a tractor brick file;
-        returns brickname if it is, otherwise raises ValueError"""
-        if not filename.endswith('.fits'): raise ValueError
-        #- match filename tractor-0003p027.fits -> brickname 0003p027
-        match = re.search('tractor-(\d{4}[pm]\d{3})\.fits', 
-                os.path.basename(filename))
-
-        if not match: raise ValueError
-
-        brickname = match.group(1)
-        return brickname
 
     if os.path.isdir(root):
         for dirpath, dirnames, filenames in os.walk(root, followlinks=True):
@@ -298,6 +303,9 @@ def parse_args():
 
     ap.add_argument('-f', "--format", choices=['fits', 'hdf5'], default="fits",
         help="Format of the output sweep files")
+
+    ap.add_argument('-F', "--filelist", default=None,
+        help="list of tractor brickfiles to use; this will avoid expensive walking of the path.")
 
     ap.add_argument('-t', "--template", 
         default="sweep:%(ramin)+04g%(decmin)+03g:%(ramax)+04g%(decmax)+03g.%(format)s",
