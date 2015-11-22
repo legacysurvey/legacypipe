@@ -12,97 +12,17 @@ from time import time
 
 import fitsio
 
-SWEEP_DTYPE = np.dtype([
-    ('BRICKID', '>i4'), 
-    ('BRICKNAME', 'S8'), 
-    ('OBJID', '>i4'), 
-    ('BRICK_PRIMARY', '?'), 
-    ('TYPE', 'S4'), 
-    ('RA', '>f8'), 
-    ('RA_IVAR', '>f4'), 
-    ('DEC', '>f8'), 
-    ('DEC_IVAR', '>f4'), 
-    ('DECAM_FLUX', '>f4', (6,)), 
-    ('DECAM_FLUX_IVAR', '>f4', (6,)), 
-    ('DECAM_MW_TRANSMISSION', '>f4', (6,)), 
-    ('DECAM_NOBS', 'u1', (6,)), 
-    ('DECAM_RCHI2', '>f4', (6,)), 
-    ('DECAM_FRACFLUX', '>f4', (6,)), 
-    ('DECAM_FRACMASKED', '>f4', (6,)), 
-    ('DECAM_FRACIN', '>f4', (6,)), 
-    ('OUT_OF_BOUNDS', '?'), 
-    ('DECAM_ANYMASK', '>i2', (6,)), 
-    ('DECAM_ALLMASK', '>i2', (6,)), 
-    ('WISE_FLUX', '>f4', (4,)), 
-    ('WISE_FLUX_IVAR', '>f4', (4,)), 
-    ('WISE_MW_TRANSMISSION', '>f4', (4,)), 
-    ('WISE_NOBS', '>i2', (4,)), 
-    ('WISE_FRACFLUX', '>f4', (4,)), 
-    ('WISE_RCHI2', '>f4', (4,)), 
-    ('DCHISQ', '>f4', (4,)), 
-    ('FRACDEV', '>f4'), 
-    ('EBV', '>f4')]
-)
-
-ap = argparse.ArgumentParser(
-description="""Create Sweep files for DECALS. 
-    This tool ensures each sweep file contains roughly '-n' objects. HDF5 and FITS formats are supported.
-    Columns contained in a sweep file are: 
-
-    [%(columns)s].
-""" % dict(columns=str(SWEEP_DTYPE.names)),
-    )
-
-### ap.add_argument("--type", choices=["tractor"], default="tractor", help="Assume a type for src files")
-
-ap.add_argument("src", help="Path to the root directory contains all tractor files")
-ap.add_argument("dest", help="Path to the Output sweep file")
-
-ap.add_argument('-f', "--format", choices=['fits', 'hdf5'], default="fits",
-    help="Format of the output sweep files")
-
-ap.add_argument('-u', "--unordered", action='store_true',
-    help="Allow reordering of the input files; runs faster but may be undesirable.")
-
-ap.add_argument('-n', "--nobjects-per-sweep", dest='nobjs', default=1024*512, type=int, 
-    help="""Expected number of objects in a sweep file. 
-            Will fail if -n is smaller than the number of objects in a tractor file.
-        """)
-
-ap.add_argument('-v', "--verbose", action='store_true')
-ap.add_argument('-b', "--bricklist", 
-    help="""Filename with list of bricknames to include. 
-            If not set, all bricks in src are included, sorted by brickname.
-        """)
-
-ap.add_argument("--numproc", type=int, default=None,
-    help="""Number of concurrent processes to use. 0 for sequential execution. 
-        Default is to use OMP_NUM_THREADS, or the number of cores on the node.""")
-
 def main():
-    ns = ap.parse_args()
+    ns = parse_args()
             
     # avoid each subprocess importing h5py again and again.
     if ns.format == 'h5py': 
         import h5py
 
-    t0 = time()
-
     # this may take a while on a file system with slow meta-data 
     # access
-    bricks = dict(iter_tractor(ns.src))
-
-    print('enumerated %d bricks in %g seconds' % (
-            len(bricks), time() - t0))
-
-    #- Load list of bricknames to use
-    if ns.bricklist is not None:
-        bricklist = np.loadtxt(ns.bricklist, dtype='S8')
-        # TODO: skip unknown bricks?
-        list_of_bricks = [(brickname, bricks[brickname]) 
-                             for brickname in bricklist]
-    else:
-        list_of_bricks = sorted(bricks.items())
+    # bricks = [(name, filepath, region), ...]
+    bricks = list_bricks(ns.src, ns.bricklist, ns)
 
     t0 = time()
             
@@ -113,67 +33,106 @@ def main():
     # (ns.nobjs - buffer_used) is the free buffer
     # we always round off at full bricks
 
-    buffer = sharedmem.empty(ns.nobjs, dtype=SWEEP_DTYPE)
-    buffer_used = sharedmem.empty((), dtype=np.intp)
-    buffer_used[...] = 0
+    sweeps = sweep_schema_strips(360)
 
-    # used in the filename of a new sweep file
-    sweepfile_id = sharedmem.empty((), dtype=np.intp)
-    sweepfile_id[...] = 0
+    for sweep in sweeps:
+        filename = ns.template %  \
+            dict(ramin=sweep[0], decmin=sweep[1],
+                 ramax=sweep[2], decmax=sweep[3],
+                 format=ns.format)
 
-    # number of brick files scanned, used for progress reporting.
-    bricks_scanned = sharedmem.empty((), dtype=np.intp)
-    bricks_scanned[...] = 0
+        make_sweep(os.path.join(ns.dest, filename), format, sweep, bricks, ns)
+
+def list_bricks(src, bricklist, ns):
+    t0 = time()
+
+    d = dict(iter_tractor(src))
+
+    if ns.verbose:
+        print('enumerated %d bricks in %g seconds' % (
+            len(d), time() - t0))
+
+    #- Load list of bricknames to use
+    if bricklist is not None:
+        bricklist = np.loadtxt(ns.bricklist, dtype='S8')
+        # TODO: skip unknown bricks?
+        d = dict([(brickname, d[brickname]) 
+                             for brickname in bricklist])
+
+    t0 = time()
 
     with sharedmem.MapReduce(np=ns.numproc) as pool:
-        def filter(brickname, filename):
+        chunksize = 1024
+        keys = list(d.keys())
+        def work(i):
+            return [
+                (brickname, d[brickname], read_region(d[brickname]))
+                for brickname in keys[i:i+chunksize]
+                ]
+        bricks = sum(pool.map(work, range(0, len(keys), chunksize)), [])
+
+    if ns.verbose:
+        print('read regions of %d bricks in %g seconds' % (
+            len(bricks), time() - t0))
+ 
+    return bricks
+
+def sweep_schema_strips(nstrips):
+    ra = np.linspace(0, 360, nstrips + 1, endpoint=True)
+    return [(ra[i], -90, ra[i+1], 90) for i in range(len(ra) - 1)]
+
+def make_sweep(sweep_filename, format, sweep, bricks, ns):
+    t0 = time()
+
+    data = []
+
+    with sharedmem.MapReduce(np=ns.numproc) as pool:
+        def filter(brickname, filename, region):
+            if not intersect(sweep, region): 
+                return None
             objects = fitsio.read(filename, 1, upper=True)
 
-            chunk = np.empty(len(objects), dtype=buffer.dtype)
+            mask = objects['BRICK_PRIMARY'] != 0
+            objects = objects[mask]
+            ra1, dec1, ra2, dec2 = region
+            mask = objects['RA'] >= ra1
+            mask &= objects['RA'] < ra2
+            mask &= objects['DEC'] >= dec1
+            mask &= objects['DEC'] < dec2
+            objects = objects[mask]
+
+            chunk = np.empty(len(objects), dtype=SWEEP_DTYPE)
 
             for colname in chunk.dtype.names:
                 if colname not in objects.dtype.names:
                     # skip missing columns 
                     continue
                 chunk[colname][...] = objects[colname][...]
-                
-                if len(chunk) > len(buffer):
-                    raise RuntimeError("--number-of-objects per sweep file is too small")
 
-            if not ns.unordered:
-                protection = pool.ordered
-            else:
-                protection = pool.critical
+            return chunk
+        def reduce(chunk):
+            if chunk is not None:
+                data.append(chunk)
 
-            with protection:
-                bricks_scanned[...] += 1
-                if len(chunk) + buffer_used > len(buffer):
-                    data = buffer[:buffer_used].copy()
-                    sweep_filename = os.path.join(ns.dest, 
-                        'sweep-%08d.%s' % (sweepfile_id, ns.format))
-                    
-                    buffer[:len(chunk)] = chunk
-                    buffer_used[...] = len(chunk)
-                    sweepfile_id[...] += 1
-                else:
-                    data = None
-                    buffer[buffer_used:buffer_used + len(chunk)] = chunk
-                    buffer_used[...] += len(chunk)
+        pool.map(filter, bricks, star=True, reduce=reduce)
 
-            # if data is set we shall write a sweep file
-            if data is not None:
-                header = {}
-                save_sweep_file(sweep_filename, data, header, ns.format)
+    if len(data) > 0:
+        neff = len(data)
+        data = np.concatenate(data, axis=0)
+        header = {
+            'RAMIN'  : sweep[0],
+            'DECMIN' : sweep[1],
+            'RAMAX'  : sweep[2],
+            'DECMAX' : sweep[3],
+            }
 
-                rate = bricks_scanned / (time() - t0)
-                if ns.verbose:
-                    print ('%d objs saved in %s' % (len(data), sweep_filename))
-                    print('%d bricks; %g bricks/sec' % (bricks_scanned, rate))
- 
-        pool.map(filter, list_of_bricks, star=True)
+        save_sweep_file(sweep_filename, data, header, ns.format)
 
-    if ns.verbose:
-        print ('written to', ns.dest)
+        if ns.verbose:
+            print (
+            '%s : %d bricks %d primary objects, %g seconds' % 
+            (sweep_filename, neff, len(data), time() - t0)
+            )
 
 def save_sweep_file(filename, data, header, format):
     if format == 'fits':
@@ -238,6 +197,92 @@ def iter_tractor(root):
         except ValueError:
             pass
     
+def intersect(region1, region2):
+    #  ra1, dec1, ra2, dec2 = region1
+    # topleft bottom right
+    def wrap(r):
+        # this do not use periodic boundary yet
+        return r
+
+    region1 = wrap(region1) 
+    region2 = wrap(region2) 
+
+    dx = min(region1[2], region2[2]) - max(region1[0], region2[0])
+    dy = min(region1[3], region2[3]) - max(region1[1], region2[1]) 
+    return (dx > 0) & (dy > 0)
+
+def read_region(filename):
+    f = fitsio.FITS(filename)
+    h = f[0].read_header()
+    r = h['RAMIN'], h['DECMIN'], h['RAMAX'], h['DECMAX']
+    f.close()
+    return r
+
+SWEEP_DTYPE = np.dtype([
+    ('BRICKID', '>i4'), 
+    ('BRICKNAME', 'S8'), 
+    ('OBJID', '>i4'), 
+    ('BRICK_PRIMARY', '?'), 
+    ('TYPE', 'S4'), 
+    ('RA', '>f8'), 
+    ('RA_IVAR', '>f4'), 
+    ('DEC', '>f8'), 
+    ('DEC_IVAR', '>f4'), 
+    ('DECAM_FLUX', '>f4', (6,)), 
+    ('DECAM_FLUX_IVAR', '>f4', (6,)), 
+    ('DECAM_MW_TRANSMISSION', '>f4', (6,)), 
+    ('DECAM_NOBS', 'u1', (6,)), 
+    ('DECAM_RCHI2', '>f4', (6,)), 
+    ('DECAM_FRACFLUX', '>f4', (6,)), 
+    ('DECAM_FRACMASKED', '>f4', (6,)), 
+    ('DECAM_FRACIN', '>f4', (6,)), 
+    ('OUT_OF_BOUNDS', '?'), 
+    ('DECAM_ANYMASK', '>i2', (6,)), 
+    ('DECAM_ALLMASK', '>i2', (6,)), 
+    ('WISE_FLUX', '>f4', (4,)), 
+    ('WISE_FLUX_IVAR', '>f4', (4,)), 
+    ('WISE_MW_TRANSMISSION', '>f4', (4,)), 
+    ('WISE_NOBS', '>i2', (4,)), 
+    ('WISE_FRACFLUX', '>f4', (4,)), 
+    ('WISE_RCHI2', '>f4', (4,)), 
+    ('DCHISQ', '>f4', (4,)), 
+    ('FRACDEV', '>f4'), 
+    ('EBV', '>f4')]
+)
+
+def parse_args():
+    ap = argparse.ArgumentParser(
+    description="""Create Sweep files for DECALS. 
+        This tool ensures each sweep file contains roughly '-n' objects. HDF5 and FITS formats are supported.
+        Columns contained in a sweep file are: 
+
+        [%(columns)s].
+    """ % dict(columns=str(SWEEP_DTYPE.names)),
+        )
+
+    ### ap.add_argument("--type", choices=["tractor"], default="tractor", help="Assume a type for src files")
+
+    ap.add_argument("src", help="Path to the root directory contains all tractor files")
+    ap.add_argument("dest", help="Path to the Output sweep file")
+
+    ap.add_argument('-f', "--format", choices=['fits', 'hdf5'], default="fits",
+        help="Format of the output sweep files")
+
+    ap.add_argument('-t', "--template", 
+        default="sweep:%(ramin)+04g%(decmin)+03g:%(ramax)+04g%(decmax)+03g.%(format)s",
+        help="Tempalte of the output file name")
+
+    ap.add_argument('-v', "--verbose", action='store_true')
+    ap.add_argument('-b', "--bricklist", 
+        help="""Filename with list of bricknames to include. 
+                If not set, all bricks in src are included, sorted by brickname.
+            """)
+
+    ap.add_argument("--numproc", type=int, default=None,
+        help="""Number of concurrent processes to use. 0 for sequential execution. 
+            Default is to use OMP_NUM_THREADS, or the number of cores on the node.""")
+
+    return ap.parse_args()
 
 if __name__ == "__main__":
     main()
