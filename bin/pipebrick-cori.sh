@@ -45,9 +45,10 @@ echo "--------------------------------------------------------------------------
 #--skip 
 #--skip-coadd 
 #    --rsync \
+#    --checkpoint $(printf checkpoint/checkpoint-%s.pickle $brick) \
+#    -s tims \
+#    -P 'pickles/runbrick-dr2p-%(brick)s-%%(stage)s.pickle' \
 python -u legacypipe/runbrick.py \
-    -P 'pickles/runbrick-dr2p-%(brick)s-%%(stage)s.pickle' \
-    --checkpoint $(printf checkpoint/checkpoint-%s.pickle $brick) \
     --pixpsf --splinesky --pipe --no-sdss \
     --threads 8 \
     --brick $brick --outdir $outdir --nsigma 6 >> $log 2>&1
