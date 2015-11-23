@@ -2204,7 +2204,8 @@ def _blob_iter(blobslices, blobsrcs, blobs, targetwcs, tims, cat, bands,
             tim.imobj.psfnorm = tim.psfnorm
             tim.imobj.galnorm = tim.galnorm
             # FIXME -- maybe the cache is worth sending?
-            tim.psf.clear_cache()
+            if hasattr(tim.psf, 'clear_cache'):
+                tim.psf.clear_cache()
             subtimargs.append((subimg, subie, subwcs, tim.subwcs,
                                tim.getPhotoCal(),
                                subsky, tim.psf, tim.name, sx0, sx1, sy0, sy1,
