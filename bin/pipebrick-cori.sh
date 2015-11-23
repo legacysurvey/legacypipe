@@ -1,7 +1,5 @@
 #! /bin/bash
 
-#cd $SCRATCH/code/legacypipe/py
-
 # For modules loaded, see "bashrc" in this directory.
 
 export PYTHONPATH=${PYTHONPATH}:.
@@ -11,7 +9,8 @@ export PYTHONPATH=${PYTHONPATH}:.
 export MKL_NUM_THREADS=1
 
 # Try limiting memory to avoid killing the whole MPI job...
-ulimit -S -v 15000000
+#ulimit -S -v 15000000
+ulimit -S -v 30000000
 ulimit -a
 
 outdir=$SCRATCH/dr2p
@@ -44,8 +43,9 @@ echo "--------------------------------------------------------------------------
 # --no-early-coadds \
 #-s tims \
 #--skip 
+#--skip-coadd 
+#    --rsync \
 python -u legacypipe/runbrick.py \
-    --rsync --skip-coadd \
     -P 'pickles/runbrick-dr2p-%(brick)s-%%(stage)s.pickle' \
     --checkpoint $(printf checkpoint/checkpoint-%s.pickle $brick) \
     --pixpsf --splinesky --pipe --no-sdss \
