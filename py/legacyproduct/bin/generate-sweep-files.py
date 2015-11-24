@@ -30,10 +30,14 @@ def main():
         os.makedirs(ns.dest)
     except OSError:
         pass
-    # (ns.nobjs - buffer_used) is the free buffer
-    # we always round off at full bricks
 
-    sweeps = sweep_schema_strips(360)
+    # blocks or ra stripes?
+    schemas = {
+        'stripes' : sweep_schema_stripes(360),
+        'blocks' : sweep_schema_blocks(36, 10),
+        }
+
+    sweeps = schemas[ns.schema]
 
     t0 = time()
 
@@ -122,9 +126,15 @@ def list_bricks(ns):
  
     return bricks
 
-def sweep_schema_strips(nstrips):
-    ra = np.linspace(0, 360, nstrips + 1, endpoint=True)
+def sweep_schema_stripes(nstripes):
+    ra = np.linspace(0, 360, nstripes + 1, endpoint=True)
     return [(ra[i], -90, ra[i+1], 90) for i in range(len(ra) - 1)]
+
+def sweep_schema_blocks(nra, ndec):
+    ra = np.linspace(0, 360, nra + 1, endpoint=True)
+    dec = np.linspace(-90, 90, ndec + 1, endpoint=True)
+    
+    return [(ra[i], dec[j], ra[i+1], dec[j+1]) for i in range(len(ra) - 1) for j in range(len(dec) - 1)]
 
 def make_sweep(sweep, bricks, ns):
     data = [np.empty(0, dtype=SWEEP_DTYPE)]
@@ -315,6 +325,11 @@ def parse_args():
         help="location of decals-bricks.fits, speeds up the scanning")
 
     ap.add_argument('-v', "--verbose", action='store_true')
+
+    ap.add_argument('-S', "--schema", choices=['blocks', 'stripes'], 
+            default='blocks', 
+            help="""Decomposition schema. Still being tuned. """)
+
     ap.add_argument('-b', "--bricklist", 
         help="""Filename with list of bricknames to include. 
                 If not set, all bricks in src are included, sorted by brickname.
