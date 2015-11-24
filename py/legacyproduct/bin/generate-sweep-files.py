@@ -308,7 +308,7 @@ def parse_args():
         help="list of tractor brickfiles to use; this will avoid expensive walking of the path.")
 
     ap.add_argument('-t', "--template", 
-        default="sweep:%(ramin)+04g%(decmin)+03g:%(ramax)+04g%(decmax)+03g.%(format)s",
+        default="sweep%(ramin)+04g%(decmin)+03g%(ramax)+04g%(decmax)+03g.%(format)s",
         help="Tempalte of the output file name")
 
     ap.add_argument('-d', "--bricksdesc", default=None, 
