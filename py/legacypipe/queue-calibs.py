@@ -200,6 +200,20 @@ def main():
         B.cut(keep)
         log('Cut to', len(B), 'bricks near CCDs with bad sky')
 
+    elif opt.region == 'badsky2':
+        # UGH, missed this one in original 'badsky' definition.
+        T.cut(T.expnum == 257466)
+        log(len(T), 'CCDs with bad sky')
+        # CCD radius
+        radius = np.hypot(2048, 4096) / 2. * 0.262 / 3600.
+        # Brick radius
+        radius += np.hypot(0.25, 0.25)/2.
+        I,J,d = match_radec(B.ra, B.dec, T.ra, T.dec, radius * 1.05)
+        keep = np.zeros(len(B), bool)
+        keep[I] = True
+        B.cut(keep)
+        log('Cut to', len(B), 'bricks near CCDs with bad sky')
+
     elif opt.region == 'edr':
         # EDR:
         # 535 bricks, ~7000 CCDs
