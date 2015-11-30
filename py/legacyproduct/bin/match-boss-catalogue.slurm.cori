@@ -31,7 +31,7 @@ find $ROOT/tractor -name 'tractor-*.fits' > filelist
 
 time srun -u --cpu_bind=no -n 1 python-mpi match-boss-catalogue.py -v \
 --numproc 64 \
--f fits \
+-f fits hdf5 \
 -F filelist \
 /global/project/projectdirs/cosmo/work/sdss/cats/specObj-dr12.fits \
 $ROOT/tractor \
