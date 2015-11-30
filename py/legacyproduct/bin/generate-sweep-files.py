@@ -33,8 +33,9 @@ def main():
 
     # blocks or ra stripes?
     schemas = {
-        'stripes' : sweep_schema_stripes(360),
+        'ra' : sweep_schema_ra(360),
         'blocks' : sweep_schema_blocks(36, 10),
+        'dec' : sweep_schema_dec(180),
         }
 
     sweeps = schemas[ns.schema]
@@ -126,9 +127,13 @@ def list_bricks(ns):
  
     return bricks
 
-def sweep_schema_stripes(nstripes):
+def sweep_schema_ra(nstripes):
     ra = np.linspace(0, 360, nstripes + 1, endpoint=True)
     return [(ra[i], -90, ra[i+1], 90) for i in range(len(ra) - 1)]
+
+def sweep_schema_dec(nstripes):
+    dec = np.linspace(-90, 90, nstripes + 1, endpoint=True)
+    return [(0, dec[i], 360, dec[i+1]) for i in range(len(dec) - 1)]
 
 def sweep_schema_blocks(nra, ndec):
     ra = np.linspace(0, 360, nra + 1, endpoint=True)
@@ -160,8 +165,12 @@ def make_sweep(sweep, bricks, ns):
                 if colname not in objects.dtype.names:
                     # skip missing columns 
                     continue
-                chunk[colname][...] = objects[colname][...]
-
+                try:
+                    chunk[colname][...] = objects[colname][...]
+                except ValueError:
+                    print('failed on column `%s`' % colname)
+                    raise
+                    
             return chunk
         def reduce(chunk):
             if chunk is not None:
@@ -268,7 +277,6 @@ SWEEP_DTYPE = np.dtype([
     ('BRICKID', '>i4'), 
     ('BRICKNAME', 'S8'), 
     ('OBJID', '>i4'), 
-    ('BRICK_PRIMARY', '?'), 
     ('TYPE', 'S4'), 
     ('RA', '>f8'), 
     ('RA_IVAR', '>f4'), 
@@ -279,6 +287,7 @@ SWEEP_DTYPE = np.dtype([
     ('DECAM_MW_TRANSMISSION', '>f4', (6,)), 
     ('DECAM_NOBS', 'u1', (6,)), 
     ('DECAM_RCHI2', '>f4', (6,)), 
+    ('DECAM_PSFSIZE', '>f4', (6,)), 
     ('DECAM_FRACFLUX', '>f4', (6,)), 
     ('DECAM_FRACMASKED', '>f4', (6,)), 
     ('DECAM_FRACIN', '>f4', (6,)), 
@@ -291,8 +300,11 @@ SWEEP_DTYPE = np.dtype([
     ('WISE_NOBS', '>i2', (4,)), 
     ('WISE_FRACFLUX', '>f4', (4,)), 
     ('WISE_RCHI2', '>f4', (4,)), 
-    ('DCHISQ', '>f4', (4,)), 
+    ('DCHISQ', '>f4', (5,)), 
     ('FRACDEV', '>f4'), 
+    ('TYCHO2INBLOB', '?'), 
+    ('SHAPEDEV_R', '>f4'), 
+    ('SHAPEEXP_R', '>f4'), 
     ('EBV', '>f4')]
 )
 
@@ -326,7 +338,7 @@ def parse_args():
 
     ap.add_argument('-v', "--verbose", action='store_true')
 
-    ap.add_argument('-S', "--schema", choices=['blocks', 'stripes'], 
+    ap.add_argument('-S', "--schema", choices=['blocks', 'dec', 'ra'], 
             default='blocks', 
             help="""Decomposition schema. Still being tuned. """)
 
