@@ -34,6 +34,8 @@ def main():
 
             destpath = os.path.join(ns.dest, os.path.relpath(path, ns.src))
             destpath = destpath.replace('tractor', 'decals-boss')
+            mainpath = os.path.splitext(destpath)[0]
+            
             try:
                 os.makedirs(os.path.dirname(destpath))
             except OSError:
@@ -43,7 +45,10 @@ def main():
             header['NMATCHED'] = matched
             header['TOL_ARCSEC'] = ns.tolerance
 
-            save_file(destpath, data, header, ns.format)
+            for format in ns.format:
+                destpath = mainpath + '.' + format
+                save_file(destpath, data, header, format)
+
             return brickname, matched, len(data)
 
         def reduce(brickname, matched, total):
@@ -150,7 +155,7 @@ def parse_args():
     ap.add_argument("src", help="Path to the root directory of all tractor files")
     ap.add_argument("dest", help="Path to the root directory of output matched catalogue")
 
-    ap.add_argument('-f', "--format", choices=['fits', 'hdf5'], default="fits",
+    ap.add_argument('-f', "--format", choices=['fits', 'hdf5'], nargs='+', default=["fits"],
         help="Format of the output sweep files")
 
     ap.add_argument('-t', "--tolerance", default=1., type=float,

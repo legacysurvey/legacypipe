@@ -17,7 +17,7 @@ def main():
     ns = parse_args()
             
     # avoid each subprocess importing h5py again and again.
-    if ns.format == 'h5py': 
+    if 'hdf5' in ns.format: 
         import h5py
 
     # this may take a while on a file system with slow meta-data 
@@ -35,7 +35,7 @@ def main():
     # blocks or ra stripes?
     schemas = {
         'ra' : sweep_schema_ra(360),
-        'blocks' : sweep_schema_blocks(36, 10),
+        'blocks' : sweep_schema_blocks(36, 20),
         'dec' : sweep_schema_dec(180),
         }
 
@@ -47,12 +47,6 @@ def main():
     nobj_tot = np.zeros((), 'i8')
 
     def work(sweep):
-        filename = ns.template %  \
-            dict(ramin=sweep[0], decmin=sweep[1],
-                 ramax=sweep[2], decmax=sweep[3],
-                 format=ns.format)
-
-
         data, nbricks = make_sweep(sweep, bricks, ns)
 
         header = {
@@ -61,10 +55,16 @@ def main():
             'RAMAX'  : sweep[2],
             'DECMAX' : sweep[3],
             }
+        for format in ns.format:
+            filename = ns.template %  \
+                dict(ramin=sweep[0], decmin=sweep[1],
+                     ramax=sweep[2], decmax=sweep[3],
+                     format=format)
 
-        if len(data) > 0:
-            save_sweep_file(os.path.join(ns.dest, filename), 
-                data, header, ns.format)
+            if len(data) > 0:
+                save_sweep_file(os.path.join(ns.dest, filename), 
+                    data, header, format)
+
         return filename, nbricks, len(data)
 
     def reduce(filename, nbricks, nobj): 
@@ -272,7 +272,7 @@ def parse_args():
     ap.add_argument("src", help="Path to the root directory contains all tractor files")
     ap.add_argument("dest", help="Path to the Output sweep file")
 
-    ap.add_argument('-f', "--format", choices=['fits', 'hdf5'], default="fits",
+    ap.add_argument('-f', "--format", choices=['fits', 'hdf5'], nargs='+', default=["fits"],
         help="Format of the output sweep files")
 
     ap.add_argument('-F', "--filelist", default=None,
