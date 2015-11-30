@@ -29,7 +29,7 @@ def main():
         def work(brickname, path):
 
             data = process(brickname, path, tree, boss, tol)
-            mask = data['SURVEY'] != 'N/A'
+            mask = data['FIBERID'] != 0xdead
             matched = mask.sum()
 
             destpath = os.path.join(ns.dest, os.path.relpath(path, ns.src))
@@ -69,7 +69,7 @@ def process(brickname, path, tree, boss, tol):
     mask = d < tol
     result = np.empty(len(objects), boss.dtype)
     result[mask] = boss[i[mask]]
-    result[~mask]['SURVEY'] = 'N/A'
+    result[~mask]['FIBERID'] = 0xdead
     return result
 
 def save_file(filename, data, header, format):
@@ -104,8 +104,19 @@ def read_boss(filename, ns):
         print("%d BOSS objects." % len(boss))
 
     t0 = time()
-    ra = boss['PLUG_RA']
-    dec = boss['PLUG_DEC']
+    for raname, decname in [
+            ('RA', 'DEC'), 
+            ('PLUG_RA', 'PLUG_DEC')
+            ]:
+        if raname in boss.dtype.names \
+        and decname in boss.dtype.names: 
+            ra = boss[raname]
+            dec = boss[decname]
+            if ns.verbose:
+                print('using %s/%s for positions.' % (raname, decname))
+            break
+    else:
+        raise KeyError("No RA/DEC or PLUG_RA/PLUG_DEC in the BOSS catalogue")
 
     pos = radec2pos(ra, dec)
     pos = sharedmem.copy(pos)
