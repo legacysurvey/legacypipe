@@ -8,18 +8,20 @@ from astrometry.util.miscutils import polygon_area
 from legacypipe.common import Decals
 import tractor
 
-def main():
+def main(outfn='ccds-annotated.fits', ccds=None):
     decals = Decals()
-    ccds = decals.get_ccds()
+    if ccds is None:
+        ccds = decals.get_ccds()
 
     # File from the "observing" svn repo:
     # https://desi.lbl.gov/svn/decam/code/observing/trunk
     tiles = fits_table('decam-tiles_obstatus.fits')
 
-    print("HACK!")
-    ccds.cut(np.array([name in ['N15', 'N16', 'N21', 'N9']
-                       for name in ccds.ccdname]) *
-                       ccds.expnum == 229683)
+    ccds.cut(np.arange(100))
+    # print("HACK!")
+    # ccds.cut(np.array([name in ['N15', 'N16', 'N21', 'N9']
+    #                    for name in ccds.ccdname]) *
+    #                    ccds.expnum == 229683)
 
     I = decals.photometric_ccds(ccds)
     ccds.photometric = np.zeros(len(ccds), bool)
@@ -45,6 +47,8 @@ def main():
     ccds.ddec = np.zeros(len(ccds), np.float32)
     ccds.ra_center  = np.zeros(len(ccds), np.float64)
     ccds.dec_center = np.zeros(len(ccds), np.float64)
+
+    ccds.sig1 = np.zeros(len(ccds), np.float32)
 
     ccds.meansky = np.zeros(len(ccds), np.float32)
     ccds.stdsky  = np.zeros(len(ccds), np.float32)
@@ -78,17 +82,11 @@ def main():
     ccds.tilepass = np.zeros(len(ccds), np.uint8)
     ccds.tileebv  = np.zeros(len(ccds), np.float32)
 
-    '''
-    Bitfield to summarize CCD-level errors thrown by the pipeline or
-    perhaps concerns raised by the observers? E.g., how is the
-    photometricity or cloudiness recorded?
-
-    Do we need to associate exposures to passes? This is not always
-    defined.
-    '''
+    plvers = []
 
     for iccd,ccd in enumerate(ccds):
         im = decals.get_image_object(ccd)
+        print('Reading CCD %i of %i:' % (iccd+1, len(ccds)), im)
 
         X = im.get_good_image_subregion()
         for i,x in enumerate(X):
@@ -101,11 +99,17 @@ def main():
         wcs = None
         sky = None
         try:
-            psf = im.read_psf_model(0, 0, pixPsf=True)
-            wcs = im.read_pv_wcs()
-            sky = im.read_sky_model(splinesky=True)
+            # psf = im.read_psf_model(0, 0, pixPsf=True)
+            # wcs = im.read_pv_wcs()
+            # sky = im.read_sky_model(splinesky=True)
+            # hdr = im.read_image_primary_header()
 
-            hdr = im.read_image_primary_header()
+            tim = im.get_tractor_image(pixPsf=True, splinesky=True, subsky=False,
+                                       pixels=False)
+            psf = tim.psf
+            wcs = tim.wcs.wcs
+            sky = tim.sky
+            hdr = tim.primhdr
 
         except:
             import traceback
@@ -113,11 +117,14 @@ def main():
             continue
 
         print('Got PSF', psf)
-        print('Got sky', sky)
+        print('Got sky', type(sky))
         print('Got WCS', wcs)
 
         ccds.humidity[iccd] = hdr.get('HUMIDITY')
         ccds.outtemp[iccd]  = hdr.get('OUTTEMP')
+
+        ccds.sig1[iccd] = tim.sig1
+        plvers.append(tim.plver)
 
         obj = hdr.get('OBJECT')
         # parse 'DECaLS_15150_r'
@@ -136,11 +143,10 @@ def main():
         if tile is not None:
             ccds.tileid  [iccd] = tile.tileid
             ccds.tilepass[iccd] = tile.get('pass')
-            ccds.tileebv [iccd] = ebv_med
+            ccds.tileebv [iccd] = tile.ebv_med
 
-        # Need a tim to instantiate PSF... well, actually the galaxy norm
-        # requires WCS & photocal.
-        # sig1 ?!
+        # Create a fake tim to instantiate PSF (galaxy norm requires
+        # WCS & photocal).  sig1 ?!
         pcal = tractor.LinearPhotoCal(1., band=ccd.filter)
         faketim = tractor.Image(data=np.zeros((H,W), np.float32),
                                 inverr=np.ones((H,W), np.float32),
@@ -253,9 +259,34 @@ def main():
         ccds.pixscale_max[iccd] = max(pixscale)
         ccds.pixscale_std[iccd] = np.std(pixscale)
 
-    ccds.writeto('ccds-annotated.fits')
 
+    ccds.plver = np.array(plvers)
+    ccds.writeto(outfn)
+
+
+def _bounce_main((i, ccds)):
+    outfn = 'ccds-annotated-%03i.fits' % i
+    main(outfn=outfn, ccds=ccds)
 
 if __name__ == '__main__':
     import sys
     sys.exit(main())
+
+    decals = Decals()
+    ccds = decals.get_ccds()
+    from astrometry.util.multiproc import *
+    mp = multiproc(24)
+    N = 1000
+    args = []
+    i = 0
+    while len(ccds):
+        c = ccds[:N]
+        ccds = ccds[N:]
+        args.append((i, c))
+    mp.map(_bounce_main, args)
+
+    # reassemble outputs
+    TT = [fits_table('ccds-annotated-%03i.fits' % i for i,nil in args)]
+    T = merge_tables(TT)
+    T.writeto('ccds-annotated.fits')
+
