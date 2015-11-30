@@ -12,11 +12,15 @@ def main():
     decals = Decals()
     ccds = decals.get_ccds()
 
+    # File from the "observing" svn repo:
+    # https://desi.lbl.gov/svn/decam/code/observing/trunk
+    tiles = fits_table('decam-tiles_obstatus.fits')
+
     print("HACK!")
     ccds.cut(np.array([name in ['N15', 'N16', 'N21', 'N9']
                        for name in ccds.ccdname]) *
                        ccds.expnum == 229683)
-    
+
     I = decals.photometric_ccds(ccds)
     ccds.photometric = np.zeros(len(ccds), bool)
     ccds.photometric[I] = True
@@ -67,9 +71,12 @@ def main():
     ccds.psf_theta = np.zeros(len(ccds), np.float32)
     ccds.psf_ell   = np.zeros(len(ccds), np.float32)
 
-
     ccds.humidity = np.zeros(len(ccds), np.float32)
     ccds.outtemp  = np.zeros(len(ccds), np.float32)
+
+    ccds.tileid   = np.zeros(len(ccds), np.int32)
+    ccds.tilepass = np.zeros(len(ccds), np.uint8)
+    ccds.tileebv  = np.zeros(len(ccds), np.float32)
 
     '''
     Bitfield to summarize CCD-level errors thrown by the pipeline or
@@ -79,7 +86,7 @@ def main():
     Do we need to associate exposures to passes? This is not always
     defined.
     '''
-    
+
     for iccd,ccd in enumerate(ccds):
         im = decals.get_image_object(ccd)
 
@@ -89,7 +96,7 @@ def main():
                 ccds.good_region[iccd,i] = x
 
         W,H = ccd.width, ccd.height
-                
+
         psf = None
         wcs = None
         sky = None
@@ -104,14 +111,33 @@ def main():
             import traceback
             traceback.print_exc()
             continue
-            
+
         print('Got PSF', psf)
         print('Got sky', sky)
         print('Got WCS', wcs)
 
         ccds.humidity[iccd] = hdr.get('HUMIDITY')
         ccds.outtemp[iccd]  = hdr.get('OUTTEMP')
-        
+
+        obj = hdr.get('OBJECT')
+        # parse 'DECaLS_15150_r'
+        words = obj.split('_')
+        tile = None
+        if len(words) == 3 and words[0] == 'DECaLS':
+            try:
+                tileid = int(words[1])
+                tile = tiles[tileid - 1]
+                if tile.tileid != tileid:
+                    I = np.flatnonzero(tile.tileid == tileid)
+                    tile = tiles[I[0]]
+            except:
+                pass
+
+        if tile is not None:
+            ccds.tileid  [iccd] = tile.tileid
+            ccds.tilepass[iccd] = tile.get('pass')
+            ccds.tileebv [iccd] = ebv_med
+
         # Need a tim to instantiate PSF... well, actually the galaxy norm
         # requires WCS & photocal.
         # sig1 ?!
@@ -121,10 +147,10 @@ def main():
                                 psf=psf, wcs=tractor.ConstantFitsWcs(wcs),
                                 photocal=pcal)
         faketim.band = ccd.filter
-            
+
         #tim = im.get_tractor_image(pixPsf=True, splinesky=True,
         #                           subsky=False, pixels=False)
-            
+
         # Instantiate PSF on a grid
         S = 32
         xx = np.linspace(1+S, W-S, 5)
@@ -178,7 +204,7 @@ def main():
         ccds.psf_b[iccd] = b
         ccds.psf_theta[iccd] = theta
         ccds.psf_ell  [iccd] = ell
-        
+
         # Sky
         mod = np.zeros((ccd.height, ccd.width), np.float32)
         sky.addTo(mod)
@@ -226,7 +252,7 @@ def main():
         ccds.pixscale_min[iccd] = min(pixscale)
         ccds.pixscale_max[iccd] = max(pixscale)
         ccds.pixscale_std[iccd] = np.std(pixscale)
-            
+
     ccds.writeto('ccds-annotated.fits')
 
 
