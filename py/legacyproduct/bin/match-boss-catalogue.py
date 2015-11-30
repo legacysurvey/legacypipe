@@ -92,6 +92,7 @@ def radec2pos(ra, dec):
 def read_boss(filename, ns):
     t0 = time()
     boss = fitsio.FITS(filename, upper=True)[1][:]
+    boss = sharedmem.copy(boss)
 
     if ns.verbose:
         print("reading BOSS catlaogue took %g seconds." % (time() - t0))
@@ -102,6 +103,8 @@ def read_boss(filename, ns):
     dec = boss['PLUG_DEC']
 
     pos = radec2pos(ra, dec)
+    pos = sharedmem.copy(pos)
+
     tree = KDTree(pos)
 
     if ns.verbose:
