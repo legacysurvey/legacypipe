@@ -5,6 +5,7 @@ from __future__ import print_function, division
 import numpy as np
 
 from legacyproduct.internal import sharedmem
+from legacyproduct.internal.io import iter_tractor, parse_filename
 
 import argparse
 import os, sys
@@ -18,22 +19,50 @@ def main():
     
     bricks = list_bricks(ns)
 
-    tree, boss = read_boss(ns.boss)
+    tree, boss = read_boss(ns.boss, ns)
 
     # convert to radian
-    tol = ns.tol / (60. * 60. * 180) * numpy.pi
+    tol = ns.tolerance / (60. * 60. * 180) * np.pi
+    nprocessed = np.zeros((), dtype='i8')
+    t0 = time()
+    with sharedmem.MapReduce(np=ns.numproc) as pool:
+        def work(brickname, path):
 
-    for brickname, path in bricks:
-        data = process(brickname, path, tree, boss, tol)
-        destpath = os.path.join(ns.dest, os.path.relpath(path, os.src))
-        save_file(destpath, data, {}, ns.format)
+            data = process(brickname, path, tree, boss, tol)
+            mask = data['SURVEY'] != 'N/A'
+            matched = mask.sum()
 
-def process(brickname, path, tree, boss, tol, ns):
+            destpath = os.path.join(ns.dest, os.path.relpath(path, ns.src))
+            destpath = destpath.replace('tractor', 'decals-boss')
+            try:
+                os.makedirs(os.path.dirname(destpath))
+            except OSError:
+                pass
+            header = {}
+
+            header['NMATCHED'] = matched
+            header['TOL_ARCSEC'] = ns.tolerance
+
+            save_file(destpath, data, header, ns.format)
+            return brickname, matched, len(data)
+
+        def reduce(brickname, matched, total):
+            nprocessed[...] += 1
+            if ns.verbose:
+                if nprocessed % 50 == 0:
+                    print("Processed %d files, %g / second."
+                        % (nprocessed, nprocessed / (time() - t0))
+                        )
+
+        pool.map(work, bricks, star=True, reduce=reduce)
+
+def process(brickname, path, tree, boss, tol):
     objects = fitsio.read(path, 1, upper=True)
     pos = radec2pos(objects['RA'], objects['DEC'])
-    i, d = tree.query(pos, 1)
-    mask = d < i
-    result = numpy.empty(len(objects), boss.dtype)
+    d, i = tree.query(pos, 1)
+
+    mask = d < tol
+    result = np.empty(len(objects), boss.dtype)
     result[mask] = boss[i[mask]]
     result[~mask]['SURVEY'] = 'N/A'
     return result
@@ -52,22 +81,32 @@ def save_file(filename, data, header, format):
     
 
 def radec2pos(ra, dec):
-    pos = numpy.empty(len(ra), ('f4', 3))
-    pos[:, 2] = numpy.sin(dec / 180. * numpy.pi)
-    pos[:, 1] = numpy.cos(dec / 180. * numpy.pi)
+    pos = np.empty(len(ra), ('f4', 3))
+    pos[:, 2] = np.sin(dec / 180. * np.pi)
+    pos[:, 1] = np.cos(dec / 180. * np.pi)
     pos[:, 0] = pos[:, 1]
-    pos[:, 0] *= numpy.sin(ra / 180. * numpy.pi)
-    pos[:, 1] *= numpy.cos(ra / 180. * numpy.pi)
+    pos[:, 0] *= np.sin(ra / 180. * np.pi)
+    pos[:, 1] *= np.cos(ra / 180. * np.pi)
     return pos
 
-def read_boss(filename):
+def read_boss(filename, ns):
+    t0 = time()
     boss = fitsio.FITS(filename, upper=True)[1][:]
 
+    if ns.verbose:
+        print("reading BOSS catlaogue took %g seconds." % (time() - t0))
+        print("%d BOSS objects." % len(boss))
+
+    t0 = time()
     ra = boss['PLUG_RA']
     dec = boss['PLUG_DEC']
 
     pos = radec2pos(ra, dec)
     tree = KDTree(pos)
+
+    if ns.verbose:
+        print("Building KD-Tree took %g seconds." % (time() - t0))
+
     return tree, boss
 
 def list_bricks(ns):
@@ -111,7 +150,7 @@ def parse_args():
     ap.add_argument('-f', "--format", choices=['fits', 'hdf5'], default="fits",
         help="Format of the output sweep files")
 
-    ap.add_argument('-t', "--tolerance", default=0.01,
+    ap.add_argument('-t', "--tolerance", default=1., type=float,
         help="Tolerance of the angular distance for a match, in arc-seconds")
 
     ap.add_argument('-F', "--filelist", default=None,
@@ -129,4 +168,7 @@ def parse_args():
             Default is to use OMP_NUM_THREADS, or the number of cores on the node.""")
 
     return ap.parse_args()
-    
+   
+
+if __name__ == '__main__':
+    main() 
