@@ -31,9 +31,10 @@ find $ROOT/tractor -name 'tractor-*.fits' > filelist
 
 time srun -u --cpu_bind=no -n 1 python-mpi generate-sweep-files.py -v \
 --numproc 64 \
--f fits \
+-f fits hdf5 \
 -F filelist \
---schema dec \
+--schema blocks \
 -d $ROOT/decals-bricks.fits \
 $ROOT/tractor \
-$SCRATCH/sandbox/sweep-dr2p-dec
+$SCRATCH/sandbox/sweep-dr2p-blocks
+
