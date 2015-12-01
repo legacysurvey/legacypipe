@@ -13,17 +13,22 @@ from time import time
 from scipy.spatial import cKDTree as KDTree
 
 import fitsio
+import platform
+
+print('Running from %s' % platform.node())
 
 def main():
     ns = parse_args()
-    
+        
     bricks = list_bricks(ns)
 
     tree, boss = read_boss(ns.boss, ns)
 
     # convert to radian
-    tol = ns.tolerance / (60. * 60. * 180) * np.pi
+    tol = ns.tolerance / (60. * 60.)  * (np.pi / 180)
     nprocessed = np.zeros((), dtype='i8')
+    nmatched = np.zeros((), dtype='i8')
+    ntotal = np.zeros((), dtype='i8')
     t0 = time()
     with sharedmem.MapReduce(np=ns.numproc) as pool:
         def work(brickname, path):
@@ -53,13 +58,19 @@ def main():
 
         def reduce(brickname, matched, total):
             nprocessed[...] += 1
+            nmatched[...] += matched
+            ntotal[...] += total
             if ns.verbose:
                 if nprocessed % 50 == 0:
-                    print("Processed %d files, %g / second."
-                        % (nprocessed, nprocessed / (time() - t0))
+                    print("Processed %d files, %g / second Matched %d / %d objects."
+                        % (nprocessed, nprocessed / (time() - t0), nmatched, ntotal)
                         )
 
         pool.map(work, bricks, star=True, reduce=reduce)
+        if ns.verbose:
+            print("Processed %d files, %g / second Matched %d / %d objects."
+                % (nprocessed, nprocessed / (time() - t0), nmatched, ntotal)
+                )
 
 def process(brickname, path, tree, boss, tol):
     objects = fitsio.read(path, 1, upper=True)
@@ -69,7 +80,7 @@ def process(brickname, path, tree, boss, tol):
     mask = d < tol
     result = np.empty(len(objects), boss.dtype)
     result[mask] = boss[i[mask]]
-    result[~mask]['FIBERID'] = 0xdead
+    result['FIBERID'][~mask] = 0xdead
     return result
 
 def save_file(filename, data, header, format):
@@ -169,7 +180,7 @@ def parse_args():
     ap.add_argument('-f', "--format", choices=['fits', 'hdf5'], nargs='+', default=["fits"],
         help="Format of the output sweep files")
 
-    ap.add_argument('-t', "--tolerance", default=1., type=float,
+    ap.add_argument('-t', "--tolerance", default=2, type=float,
         help="Tolerance of the angular distance for a match, in arc-seconds")
 
     ap.add_argument('-F', "--filelist", default=None,
