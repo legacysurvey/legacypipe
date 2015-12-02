@@ -99,22 +99,17 @@ def main(outfn='ccds-annotated.fits', ccds=None):
         wcs = None
         sky = None
         try:
-            # psf = im.read_psf_model(0, 0, pixPsf=True)
-            # wcs = im.read_pv_wcs()
-            # sky = im.read_sky_model(splinesky=True)
-            # hdr = im.read_image_primary_header()
-
-            tim = im.get_tractor_image(pixPsf=True, splinesky=True, subsky=False,
-                                       pixels=False)
-            psf = tim.psf
-            wcs = tim.wcs.wcs
-            sky = tim.sky
-            hdr = tim.primhdr
-
+            tim = im.get_tractor_image(pixPsf=True, splinesky=True,
+                                       subsky=False, pixels=False)
         except:
             import traceback
             traceback.print_exc()
             continue
+
+        psf = tim.psf
+        wcs = tim.wcs.wcs
+        sky = tim.sky
+        hdr = tim.primhdr
 
         print('Got PSF', psf)
         print('Got sky', type(sky))
@@ -145,18 +140,6 @@ def main(outfn='ccds-annotated.fits', ccds=None):
             ccds.tilepass[iccd] = tile.get('pass')
             ccds.tileebv [iccd] = tile.ebv_med
 
-        # Create a fake tim to instantiate PSF (galaxy norm requires
-        # WCS & photocal).  sig1 ?!
-        pcal = tractor.LinearPhotoCal(1., band=ccd.filter)
-        faketim = tractor.Image(data=np.zeros((H,W), np.float32),
-                                inverr=np.ones((H,W), np.float32),
-                                psf=psf, wcs=tractor.ConstantFitsWcs(wcs),
-                                photocal=pcal)
-        faketim.band = ccd.filter
-
-        #tim = im.get_tractor_image(pixPsf=True, splinesky=True,
-        #                           subsky=False, pixels=False)
-
         # Instantiate PSF on a grid
         S = 32
         xx = np.linspace(1+S, W-S, 5)
@@ -165,8 +148,8 @@ def main(outfn='ccds-annotated.fits', ccds=None):
         psfnorms = []
         galnorms = []
         for x,y in zip(xx.ravel(), yy.ravel()):
-            p = im.psf_norm(faketim, x=x, y=y)
-            g = im.galaxy_norm(faketim, x=x, y=y)
+            p = im.psf_norm(tim, x=x, y=y)
+            g = im.galaxy_norm(tim, x=x, y=y)
             psfnorms.append(p)
             galnorms.append(g)
         ccds.psfnorm_mean[iccd] = np.mean(psfnorms)
