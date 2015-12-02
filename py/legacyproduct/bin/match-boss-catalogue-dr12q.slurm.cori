@@ -1,0 +1,41 @@
+#! /bin/bash
+
+#SBATCH -p regular
+#SBATCH -N 1
+#SBATCH -t 00:30:00
+#SBATCH -o match-boss-catalogue-dr12q.slurm.cori.%j
+#SBATCH --profile=all
+
+set -x
+export ATP_ENABLED=0
+
+# faster python start-up
+source /project/projectdirs/m779/python-mpi/activate.sh /dev/shm/local "srun -n 32"
+
+bcast /project/projectdirs/m779/yfeng1/python-2.7-cori.tar.gz
+bcast /project/projectdirs/m779/yfeng1/python-2.7-cori-fitsio-0.9.8rc2.tar.gz
+
+# allow the python modules
+export PYTHONPATH=$PWD/../../:$PYTHONPATH
+
+# generate filelist (faster than iterating in python)
+ROOT=/project/projectdirs/cosmo/data/legacysurvey/dr1
+ROOT=/project/projectdirs/desiproc/dr2p
+ROOT=/project/projectdirs/desiproc/dr2
+
+find $ROOT/tractor -name 'tractor-*.fits' > filelist
+
+# use python-mpi. 'python' from anaconda fails with libpython.so.0.1 not found
+# error when ran via aprun, at least on ~yfeng1's environments.
+
+#srun -u --cpu_bind=no -n 1 python-mpi generate-sweep-files.py --numproc 64 -F filelist -v -d /project/projectdirs/cosmo/data/legacysurvey/dr1/decals-bricks.fits /project/projectdirs/cosmo/data/legacysurvey/dr1/tractor $SCRATCH/sandbox/sweep-dr1-stripes
+
+
+time srun -u --cpu_bind=no -N 1 python-mpi match-boss-catalogue.py -v \
+--numproc 64 \
+-f fits hdf5 \
+-F filelist \
+/global/projecta/projectdirs/sdss/data/sdss/dr12/boss/qso/DR12Q/DR12Q.fits \
+$ROOT/tractor \
+$SCRATCH/sandbox/dr2p--dr12q/
+

@@ -1,16 +1,16 @@
 #! /bin/bash
 
-#SBATCH -p debug
-#SBATCH -N 3
+#SBATCH -p regular
+#SBATCH -N 1
 #SBATCH -t 00:30:00
-#SBATCH -o match-boss-catalogue.slurm.cori.%j
+#SBATCH -o match-boss-catalogue-superset-dr12q.slurm.cori.%j
 #SBATCH --profile=all
 
 set -x
 export ATP_ENABLED=0
 
 # faster python start-up
-source /project/projectdirs/m779/python-mpi/activate.sh /dev/shm/local "srun -n 1"
+source /project/projectdirs/m779/python-mpi/activate.sh /dev/shm/local "srun -n 32"
 
 bcast /project/projectdirs/m779/yfeng1/python-2.7-cori.tar.gz
 bcast /project/projectdirs/m779/yfeng1/python-2.7-cori-fitsio-0.9.8rc2.tar.gz
@@ -21,6 +21,7 @@ export PYTHONPATH=$PWD/../../:$PYTHONPATH
 # generate filelist (faster than iterating in python)
 ROOT=/project/projectdirs/cosmo/data/legacysurvey/dr1
 ROOT=/project/projectdirs/desiproc/dr2p
+ROOT=/project/projectdirs/desiproc/dr2
 
 find $ROOT/tractor -name 'tractor-*.fits' > filelist
 
@@ -29,28 +30,12 @@ find $ROOT/tractor -name 'tractor-*.fits' > filelist
 
 #srun -u --cpu_bind=no -n 1 python-mpi generate-sweep-files.py --numproc 64 -F filelist -v -d /project/projectdirs/cosmo/data/legacysurvey/dr1/decals-bricks.fits /project/projectdirs/cosmo/data/legacysurvey/dr1/tractor $SCRATCH/sandbox/sweep-dr1-stripes
 
-time srun -u --cpu_bind=no -n 1 python-mpi match-boss-catalogue.py -v \
---numproc 64 \
--f fits hdf5 \
--F filelist \
-/global/project/projectdirs/cosmo/work/sdss/cats/specObj-dr12.fits \
-$ROOT/tractor \
-$SCRATCH/sandbox/sweep-dr2p-boss-dr12/ &
 
-time srun -u --cpu_bind=no -n 1 python-mpi match-boss-catalogue.py -v \
---numproc 64 \
--f fits hdf5 \
--F filelist \
-/global/projecta/projectdirs/sdss/data/sdss/dr12/boss/qso/DR12Q/DR12Q.fits \
-$ROOT/tractor \
-$SCRATCH/sandbox/sweep-dr2p-boss-dr12q/ &
-
-time srun -u --cpu_bind=no -n 1 python-mpi match-boss-catalogue.py -v \
+time srun -u --cpu_bind=no -N 1 python-mpi match-boss-catalogue.py -v \
 --numproc 64 \
 -f fits hdf5 \
 -F filelist \
 /global/projecta/projectdirs/sdss/data/sdss/dr12/boss/qso/DR12Q/Superset_DR12Q.fits \
 $ROOT/tractor \
-$SCRATCH/sandbox/sweep-dr2p-boss-superset-dr12q/ &
+$SCRATCH/sandbox/dr2p--superset-dr12q/
 
-wait
