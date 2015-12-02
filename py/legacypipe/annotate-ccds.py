@@ -256,6 +256,17 @@ def main(outfn='ccds-annotated.fits', ccds=None):
     ccds.decam_extinction = ext[:,:len(allbands)]
     ccds.wise_extinction = ext[:,len(allbands):]
 
+    # Depth
+    detsig1 = ccds.sig1 / ccds.psfnorm_mean
+    depth = 5. * detsig1
+    # that's flux in nanomaggies -- convert to mag
+    ccds.psfdepth = -2.5 * (np.log10(depth) - 9)
+
+    detsig1 = ccds.sig1 / ccds.galnorm_mean
+    depth = 5. * detsig1
+    # that's flux in nanomaggies -- convert to mag
+    ccds.galdepth = -2.5 * (np.log10(depth) - 9)
+
     ccds.writeto(outfn)
 
 
