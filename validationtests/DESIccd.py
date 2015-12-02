@@ -14,7 +14,7 @@ def nanomaggiesToMag(nm):
 That constraint has not yet been included!
 '''
 
-### Find calculate depth stats in magnitudes
+### calculate depth stats in magnitudes
 
 def plotMaghist(band,nbin=100):
 	import fitsio
@@ -33,12 +33,15 @@ def plotMaghist(band,nbin=100):
 	if band == 'g':
 		zp0 = 25.08
 		recm = 24.
+		cor = 0.08
 	if band == 'r':
 		zp0 = 25.29
 		recm = 23.4
+		cor = .16
 	if band == 'z':
 		zp0 = 24.92
 		recm = 22.5
+		cor = .29
 	nd = 0
 	nbr = 0	
 	for i in range(0,len(f)):
@@ -59,7 +62,7 @@ def plotMaghist(band,nbin=100):
 					Np = ((4.*pi*psf_sigma**2.)**(1./p) + (8.91*(.45*arcsec2pix)**2. )**(1./p))**p #Neff in requirements doc
 					Np = sqrt(Np) #square root necessary because Np gives sum of noise squared
 					detsig1 = skysig*Np #total noise
-					m = nanomaggiesToMag(detsig1 * 5.)
+					m = nanomaggiesToMag(detsig1 * 5.)-cor
 					if m > 30 or m < 18:
 						print skysig,avsky,f[i]['fwhm'],f[i]['ccdzpt'],f[i]['exptime']
 					NTl.append(m)
@@ -128,12 +131,15 @@ def plotMaghist2obs(band,ndraw = 1e5,nbin=100):
 	if band == 'g':
 		zp0 = 25.08
 		recm = 24.
+		cor = 0.08
 	if band == 'r':
 		zp0 = 25.29
 		recm = 23.4
+		cor = .16
 	if band == 'z':
 		zp0 = 24.92
 		recm = 22.5
+		cor = .29
 	nd = 0
 	nbr = 0	
 	#for i in range(0,len(f)):
@@ -174,7 +180,7 @@ def plotMaghist2obs(band,ndraw = 1e5,nbin=100):
 							detsig1 = skysig*Np #total noise
 							detsig2 = skysig2*Np2
 							detsigtot = sqrt(1./(1./detsig1**2.+1./detsig2**2))
-							m = nanomaggiesToMag(detsigtot * 5.)
+							m = nanomaggiesToMag(detsigtot * 5.)-cor
 							if m > 30 or m < 18:
 								print skysig,avsky,f[i]['fwhm'],f[i]['ccdzpt'],f[i]['exptime']
 							NTl.append(m)
@@ -243,12 +249,15 @@ def plotMaghist3obs(band,ndraw = 1e5,nbin=100):
 	if band == 'g':
 		zp0 = 25.08
 		recm = 24.
+		cor = 0.08
 	if band == 'r':
 		zp0 = 25.29
 		recm = 23.4
+		cor = .16
 	if band == 'z':
 		zp0 = 24.92
 		recm = 22.5
+		cor = .29
 	nd = 0	
 	#for i in range(0,len(f)):
 	nbr = 0
@@ -282,7 +291,7 @@ def plotMaghist3obs(band,ndraw = 1e5,nbin=100):
 		detsig2 = nl[j]
 		detsig3 = nl[k]
 		detsigtot = sqrt(1./(1./detsig1**2.+1./detsig2**2+1./detsig3**2))
-		m = nanomaggiesToMag(detsigtot * 5.)
+		m = nanomaggiesToMag(detsigtot * 5.)-cor
 		if m > recm:
 			nbr += 1.	
 		NTl.append(m)
@@ -318,6 +327,80 @@ def plotMaghist3obs(band,ndraw = 1e5,nbin=100):
 	#plt.xscale('log')
 	pp.savefig()
 	pp.close()
+	return True
+
+###Test DR2 region
+
+
+def Magcomp(band):
+	import fitsio
+	from matplotlib import pyplot as plt
+	from numpy import zeros,array
+	readnoise = 10. # e-; 7.0 to 15.0 according to DECam Data Handbook
+	p = 1.15 #value given in imaging requirements
+	gain = 4.0 #from Dustin
+	f = fitsio.read(dir+'legacypipe/validationtests/testregion/decals-2444p120-ccds.fits')
+	dpm = fitsio.read(dir+'legacypipe/validationtests/testregion/decals-2444p120-galdepth-'+band+'.fits')
+	expm = fitsio.read(dir+'legacypipe/validationtests/testregion/decals-2444p120-nexp-'+band+'.fits')
+	NTl = []
+	emin = 1000
+	emax = 0
+	msee = 0
+	n = 0
+	arcsec2pix = 1./.262 #from Dustin
+	if band == 'g':
+		zp0 = 25.08
+		recm = 24.
+	if band == 'r':
+		zp0 = 25.29
+		recm = 23.4
+	if band == 'z':
+		zp0 = 24.92
+		recm = 22.5
+	nd = 0
+	nbr = 0	
+	for i in range(0,len(f)):
+		DS = f[i]['propid']
+		if DS == '2014B-0404' or DS == '2013A-0741': #enforce DECaLS only
+			DS = 1
+		dpl = []	
+		if f[i]['filter'] == band:
+			if f[i]['seeing'] != 99 and f[i]['ccdzpt'] != 99 and f[i]['fwhm'] != 99 and DS == 1:
+				if f[i]['dec'] > -20 and f[i]['exptime'] >=30 and f[i]['ccdnmatch'] >= 20 and abs(f[i]['zpt'] - f[i]['ccdzpt']) <= 0.1 and f[i]['zpt'] >= zp0-.5 and f[i]['zpt'] <=zp0+.25:   
+					avsky = f[i]['avsky']
+					skysig = sqrt(avsky * gain + readnoise**2) / gain
+					zpscale = zeropointToScale(f[i]['ccdzpt'] + 2.5*log(f[i]['exptime'],10.))
+					skysig /= zpscale
+					psf_sigma = f[i]['fwhm'] / 2.35
+					# point-source depth
+					#psfnorm = 1./(2. * sqrt(pi) * psf_sigma) #1/Neff #for point source
+					#detsig1 = skysig / psfnorm
+					Np = ((4.*pi*psf_sigma**2.)**(1./p) + (8.91*(.45*arcsec2pix)**2. )**(1./p))**p #Neff in requirements doc
+					Np = sqrt(Np) #square root necessary because Np gives sum of noise squared
+					detsig1 = skysig*Np #total noise
+					m = nanomaggiesToMag(detsig1 * 5.)
+					minx = f[i]['brick_x0']
+					if minx < 0:
+						minx = 0
+					maxx = f[i]['brick_x1']
+					if maxx > 3600:
+						maxx = 3600
+					miny = f[i]['brick_y0']
+					if miny < 0:
+						miny = 0
+					maxy = f[i]['brick_y1']
+					if maxy > 3600:
+						maxy = 3600
+					for x in range(minx,maxx):
+						for y in range(miny,maxy):
+							nexp = expm[x][y]
+							if nexp == 1:								
+								mm = nanomaggiesToMag(1./sqrt(dpm[x][y]) * 5.)
+								dpl.append(mm)
+		print len(dpl)
+		if len(dpl) > 0:
+			print m,sum(dpl)/float(len(dpl))
+			NTl.append((m,sum(dpl)/float(len(dpl))))
 	return True
 
 
