@@ -244,6 +244,18 @@ def main(outfn='ccds-annotated.fits', ccds=None):
 
 
     ccds.plver = np.array(plvers)
+
+    sfd = tractor.SFDMap()
+    allbands = 'ugrizY'
+    filts = ['%s %s' % ('DES', f) for f in allbands]
+    wisebands = ['WISE W1', 'WISE W2', 'WISE W3', 'WISE W4']
+    ebv,ext = sfd.extinction(filts + wisebands, ccds.ra_center,
+                             ccds.dec_center, get_ebv=True)
+    ext = ext.astype(np.float32)
+    ccds.ebv = ebv.astype(np.float32)
+    ccds.decam_extinction = ext[:,:len(allbands)]
+    ccds.wise_extinction = ext[:,len(allbands):]
+
     ccds.writeto(outfn)
 
 
