@@ -4428,7 +4428,13 @@ def stage_writecat(
                     x[blankout] = 0
 
     if write_catalog:
-        T2.writeto(fn, primheader=primhdr, header=hdr, columns=cols)
+        import tempfile
+        f,tempfn = tempfile.mkstemp(
+            suffix='.fits', prefix='tractor-%s-tmp' % brickname,
+            dir=os.path.dirname(fn))
+        os.close(f)
+        T2.writeto(tempfn, primheader=primhdr, header=hdr, columns=cols)
+        os.rename(tempfn, fn)
         print('Wrote', fn)
 
     return dict(T2=T2)
