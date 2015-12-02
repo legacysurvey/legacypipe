@@ -280,7 +280,6 @@ class LegacySurveyImage(object):
         if x0 or y0:
             twcs.setX0Y0(x0,y0)
 
-        #print('gaussPsf:', gaussPsf, 'pixPsf:', pixPsf, 'const2psf:', const2psf)
         psf = self.read_psf_model(x0, y0, gaussPsf=gaussPsf, pixPsf=pixPsf,
                                   const2psf=const2psf, psf_sigma=psf_sigma)
 
@@ -525,8 +524,6 @@ class LegacySurveyImage(object):
                        const2psf=False, psf_sigma=1.):
         psffn = None
         if gaussPsf:
-            #from tractor.basics import NCircularGaussianPSF
-            #psf = NCircularGaussianPSF([psf_sigma], [1.0])
             from tractor.basics import GaussianMixturePSF
             v = psf_sigma**2
             psf = GaussianMixturePSF(1., 0., 0., v, v, 0.)

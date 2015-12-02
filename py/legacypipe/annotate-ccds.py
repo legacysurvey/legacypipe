@@ -17,11 +17,11 @@ def main(outfn='ccds-annotated.fits', ccds=None):
     # https://desi.lbl.gov/svn/decam/code/observing/trunk
     tiles = fits_table('decam-tiles_obstatus.fits')
 
-    ccds.cut(np.arange(100))
-    # print("HACK!")
-    # ccds.cut(np.array([name in ['N15', 'N16', 'N21', 'N9']
-    #                    for name in ccds.ccdname]) *
-    #                    ccds.expnum == 229683)
+    #ccds.cut(np.arange(100))
+    print("HACK!")
+    ccds.cut(np.array([name in ['N15', 'N16', 'N21', 'N9']
+                       for name in ccds.ccdname]) *
+                       ccds.expnum == 229683)
 
     I = decals.photometric_ccds(ccds)
     ccds.photometric = np.zeros(len(ccds), bool)
@@ -64,6 +64,8 @@ def main(outfn='ccds-annotated.fits', ccds=None):
     ccds.psfnorm_std  = np.zeros(len(ccds), np.float32)
     ccds.galnorm_mean = np.zeros(len(ccds), np.float32)
     ccds.galnorm_std  = np.zeros(len(ccds), np.float32)
+
+    gaussgalnorm = np.zeros(len(ccds), np.float32)
 
     # 2nd moments
     ccds.psf_mx2 = np.zeros(len(ccds), np.float32)
@@ -194,6 +196,13 @@ def main(outfn='ccds-annotated.fits', ccds=None):
         ccds.psf_theta[iccd] = theta
         ccds.psf_ell  [iccd] = ell
 
+        # Galaxy norm using Gaussian approximation of PSF.
+        realpsf = tim.psf
+        tim.psf = im.read_psf_model(0, 0, gaussPsf=True,
+                                    psf_sigma=tim.psf_sigma)
+        gaussgalnorm[iccd] = im.galaxy_norm(tim, x=cx, y=cy)
+        tim.psf = realpsf
+        
         # Sky
         mod = np.zeros((ccd.height, ccd.width), np.float32)
         sky.addTo(mod)
@@ -245,7 +254,7 @@ def main(outfn='ccds-annotated.fits', ccds=None):
 
     ccds.plver = np.array(plvers)
 
-    sfd = tractor.SFDMap()
+    sfd = tractor.sfd.SFDMap()
     allbands = 'ugrizY'
     filts = ['%s %s' % ('DES', f) for f in allbands]
     wisebands = ['WISE W1', 'WISE W2', 'WISE W3', 'WISE W4']
@@ -266,6 +275,20 @@ def main(outfn='ccds-annotated.fits', ccds=None):
     depth = 5. * detsig1
     # that's flux in nanomaggies -- convert to mag
     ccds.galdepth = -2.5 * (np.log10(depth) - 9)
+
+    # Depth using Gaussian FWHM.
+    psf_sigma = ccds.fwhm / 2.35
+    gnorm = 1./(2. * np.sqrt(np.pi) * psf_sigma)
+    detsig1 = ccds.sig1 / gnorm
+    depth = 5. * detsig1
+    # that's flux in nanomaggies -- convert to mag
+    ccds.gausspsfdepth = -2.5 * (np.log10(depth) - 9)
+
+    # Gaussian galaxy depth
+    detsig1 = ccds.sig1 / gaussgalnorm
+    depth = 5. * detsig1
+    # that's flux in nanomaggies -- convert to mag
+    ccds.gaussgaldepth = -2.5 * (np.log10(depth) - 9)
 
     ccds.writeto(outfn)
 
