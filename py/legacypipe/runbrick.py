@@ -466,6 +466,9 @@ def _coadds(tims, bands, targetwcs,
         C.T.allmask = np.zeros((len(ix), len(bands)), np.int16)
         if psfsize:
             C.T.psfsize = np.zeros((len(ix), len(bands)), np.float32)
+        if detmaps:
+            C.T.depth    = np.zeros((len(ix), len(bands)), np.float32)
+            C.T.galdepth = np.zeros((len(ix), len(bands)), np.float32)
 
     tinyw = 1e-30
     for iband,band in enumerate(bands):
@@ -639,7 +642,6 @@ def _coadds(tims, bands, targetwcs,
             C.T.allmask[nobs[iy,ix] == 0, iband] = 0
 
         if psfsize:
-            # We're summing this across bands....
             wt = cow[iy,ix]
             # psfsizemap is in units of iv * (1 / arcsec**2)
             sz = psfsizemap[iy,ix]
@@ -654,6 +656,10 @@ def _coadds(tims, bands, targetwcs,
             sz *= 2. * np.sqrt(2. * np.log(2.))
             C.T.psfsize[:,iband] = sz
             del psfsizemap
+
+        if detmaps:
+            C.T.depth   [:,iband] =    detiv[iy, ix]
+            C.T.galdepth[:,iband] = galdetiv[iy, ix]
 
         if apertures is not None:
             import photutils
@@ -3865,7 +3871,7 @@ def stage_coadds(bands=None, version_header=None, targetwcs=None,
                                basedir),
                 plots=False, ps=ps)
 
-    for c in ['nobs', 'anymask', 'allmask', 'psfsize']:
+    for c in ['nobs', 'anymask', 'allmask', 'psfsize', 'depth', 'galdepth']:
         T.set(c, C.T.get(c))
 
     if apertures is None:
@@ -4167,29 +4173,18 @@ def stage_writecat(
     TT.tx = TT.tx.astype(np.float32)
     TT.ty = TT.ty.astype(np.float32)
 
-    TT.decam_rchi2      = np.zeros((len(TT), len(allbands)), np.float32)
-    TT.decam_fracflux   = np.zeros((len(TT), len(allbands)), np.float32)
-    TT.decam_fracmasked = np.zeros((len(TT), len(allbands)), np.float32)
-    TT.decam_fracin     = np.zeros((len(TT), len(allbands)), np.float32)
-    TT.decam_nobs       = np.zeros((len(TT), len(allbands)), np.uint8)
-    TT.decam_anymask    = np.zeros((len(TT), len(allbands)), TT.anymask.dtype)
-    TT.decam_allmask    = np.zeros((len(TT), len(allbands)), TT.allmask.dtype)
-    TT.decam_psfsize    = np.zeros((len(TT), len(allbands)), np.float32)
+    # Set fields such as TT.decam_rchi2, etc -- fields with 6-band values
     B = np.array([allbands.index(band) for band in bands])
-    TT.decam_rchi2     [:,B] = TT.rchi2
-    TT.decam_fracflux  [:,B] = TT.fracflux
-    TT.decam_fracmasked[:,B] = TT.fracmasked
-    TT.decam_fracin    [:,B] = TT.fracin
-    TT.decam_nobs      [:,B] = TT.nobs
-    TT.decam_anymask   [:,B] = TT.anymask
-    TT.decam_allmask   [:,B] = TT.allmask
-    TT.decam_psfsize   [:,B] = TT.psfsize
-    TT.delete_column('rchi2')
-    TT.delete_column('fracflux')
-    TT.delete_column('fracin')
-    TT.delete_column('nobs')
-    TT.delete_column('anymask')
-    TT.delete_column('allmask')
+    atypes = dict(nobs=np.uint8, anymask=TT.anymask.dtype,
+                  allmask=TT.allmask.dtype)
+    for k in ['rchi2', 'fracflux', 'fracmasked', 'fracin', 'nobs',
+              'anymask', 'allmask', 'psfsize', 'depth', 'galdepth']:
+        t = atypes.get(k, np.float32)
+        A = np.zeros((len(TT), len(allbands)), t)
+        A[:,B] = TT.get(k)
+        TT.set('decam_'+k, A)
+        TT.delete_column(k)
+
     TT.rename('oob', 'out_of_bounds')
 
     if AP is not None:
