@@ -35,7 +35,7 @@ def main():
     # blocks or ra stripes?
     schemas = {
         'ra' : sweep_schema_ra(360),
-        'blocks' : sweep_schema_blocks(36, 20),
+        'blocks' : sweep_schema_blocks(36, 36),
         'dec' : sweep_schema_dec(180),
         }
 
@@ -55,10 +55,20 @@ def main():
             'RAMAX'  : sweep[2],
             'DECMAX' : sweep[3],
             }
+
+        template = "sweep-%(ramin)s%(decmin)s-%(ramax)s%(decmax)s.%(format)s"
+
+        def formatdec(dec):
+            return ("%+04g" % dec).replace('-', 'm').replace('+', 'p')
+        def formatra(ra):
+            return ("%03g" % ra)
+
         for format in ns.format:
-            filename = ns.template %  \
-                dict(ramin=sweep[0], decmin=sweep[1],
-                     ramax=sweep[2], decmax=sweep[3],
+            filename = template %  \
+                dict(ramin=formatra(sweep[0]), 
+                     decmin=formatdec(sweep[1]),
+                     ramax=formatra(sweep[2]), 
+                     decmax=formatdec(sweep[3]),
                      format=format)
 
             if len(data) > 0:
@@ -223,6 +233,7 @@ def read_region(brickname, filename, bricksdesc):
     return r
 
 SWEEP_DTYPE = np.dtype([
+    ('BRICK_PRIMARY', '?'), 
     ('BRICKID', '>i4'), 
     ('BRICKNAME', 'S8'), 
     ('OBJID', '>i4'), 
@@ -277,10 +288,6 @@ def parse_args():
 
     ap.add_argument('-F', "--filelist", default=None,
         help="list of tractor brickfiles to use; this will avoid expensive walking of the path.")
-
-    ap.add_argument('-t', "--template", 
-        default="sweep%(ramin)+04g%(decmin)+03g%(ramax)+04g%(decmax)+03g.%(format)s",
-        help="Tempalte of the output file name")
 
     ap.add_argument('-d', "--bricksdesc", default=None, 
         help="location of decals-bricks.fits, speeds up the scanning")
