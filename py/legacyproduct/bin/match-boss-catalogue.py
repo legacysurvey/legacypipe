@@ -24,37 +24,39 @@ def main():
 
     tree, boss = read_boss(ns.boss, ns)
 
+    # get the data type of the match
+    brickname, path = bricks[0]
+    peek = fitsio.read(path, 1, upper=True)
+    matched_catalogue = sharedmem.empty(len(boss), dtype=peek.dtype)
+
+    matched_catalogue['OBJID'] = -1
+    matched_distance = sharedmem.empty(len(boss), dtype='f4')
+
     # convert to radian
     tol = ns.tolerance / (60. * 60.)  * (np.pi / 180)
+
+    matched_distance[:] = tol
     nprocessed = np.zeros((), dtype='i8')
     nmatched = np.zeros((), dtype='i8')
     ntotal = np.zeros((), dtype='i8')
     t0 = time()
+
+
     with sharedmem.MapReduce(np=ns.numproc) as pool:
         def work(brickname, path):
-
-            data = process(brickname, path, tree, boss, tol)
-            mask = data['FIBERID'] != 0xdead
+            objects = fitsio.read(path, 1, upper=True)
+            pos = radec2pos(objects['RA'], objects['DEC'])
+            d, i = tree.query(pos, 1)
+            assert (objects['OBJID'] != -1).all()
+            with pool.critical:
+                mask = d < matched_distance[i]
+                mask &= objects['BRICK_PRIMARY'] 
+                i = i[mask]
+                matched_catalogue[i] = objects[mask]
+                matched_distance[i] = d[mask]
             matched = mask.sum()
 
-            destpath = os.path.join(ns.dest, os.path.relpath(path, ns.src))
-            destpath = destpath.replace('tractor', 'decals-boss')
-            mainpath = os.path.splitext(destpath)[0]
-            
-            try:
-                os.makedirs(os.path.dirname(destpath))
-            except OSError:
-                pass
-            header = {}
-
-            header['NMATCHED'] = matched
-            header['TOL_ARCSEC'] = ns.tolerance
-
-            for format in ns.format:
-                destpath = mainpath + '.' + format
-                save_file(destpath, data, header, format)
-
-            return brickname, matched, len(data)
+            return brickname, matched, len(objects)
 
         def reduce(brickname, matched, total):
             nprocessed[...] += 1
@@ -62,34 +64,43 @@ def main():
             ntotal[...] += total
             if ns.verbose:
                 if nprocessed % 50 == 0:
-                    print("Processed %d files, %g / second Matched %d / %d objects."
+                    print("Processed %d files, %g / second, matched %d / %d objects."
                         % (nprocessed, nprocessed / (time() - t0), nmatched, ntotal)
                         )
 
         pool.map(work, bricks, star=True, reduce=reduce)
+
+        nrealmatched = (matched_catalogue['OBJID'] != -1).sum()
         if ns.verbose:
-            print("Processed %d files, %g / second Matched %d / %d objects."
-                % (nprocessed, nprocessed / (time() - t0), nmatched, ntotal)
+            print("Processed %d files, %g / second, matched %d / %d objects into %d slots."
+                % (nprocessed, nprocessed / (time() - t0), 
+                    nmatched, ntotal, 
+                    nrealmatched)
                 )
 
-def process(brickname, path, tree, boss, tol):
-    objects = fitsio.read(path, 1, upper=True)
-    pos = radec2pos(objects['RA'], objects['DEC'])
-    d, i = tree.query(pos, 1)
+        try:
+            os.makedirs(os.path.dirname(ns.dest))
+        except OSError:
+            pass
+        header = {}
 
-    mask = d < tol
-    result = np.empty(len(objects), boss.dtype)
-    result[mask] = boss[i[mask]]
-    result['FIBERID'][~mask] = 0xdead
-    return result
+        header['NMATCHED'] = nrealmatched
+        header['NCOLLISION'] = nmatched - nrealmatched
+        header['TOL_ARCSEC'] = ns.tolerance
+
+        for format in ns.format:
+            save_file(ns.dest, matched_catalogue, header, format)
 
 def save_file(filename, data, header, format):
+    basename = os.path.splitext(filename)[0]
     if format == 'fits':
-        fitsio.write(filename, data, extname='DECALS-BOSS', header=header, clobber=True)
+        filename = basename + '.fits'
+        fitsio.write(filename, data, extname='DECALS-SDSS', header=header, clobber=True)
     elif format == 'hdf5':
+        filename = basename + '.hdf5'
         import h5py
         with h5py.File(filename, 'w') as ff:
-            dset = ff.create_dataset('DECALS-BOSS', data=data)
+            dset = ff.create_dataset('DECALS-SDSS', data=data)
             for key in header:
                 dset.attrs[key] = header[key]
     else:
@@ -167,18 +178,16 @@ def list_bricks(ns):
     
 def parse_args():
     ap = argparse.ArgumentParser(
-    description="""Match Boss Catalogue for DECALS. 
-        This will create a mirror of tractor catalogue directories, but each file would only contains
-        The corresponding object in BOSS DR12.
+    description="""Find the DECALS value of corresponding SDSS Objects.
         """
         )
 
-    ap.add_argument("boss", help="BOSS DR12 catalogue. e.g. /global/project/projectdirs/cosmo/work/sdss/cats/specObj-dr12.fits")
+    ap.add_argument("boss", help="SDSS catalogue. e.g. /global/project/projectdirs/cosmo/work/sdss/cats/specObj-dr12.fits")
     ap.add_argument("src", help="Path to the root directory of all tractor files")
-    ap.add_argument("dest", help="Path to the root directory of output matched catalogue")
+    ap.add_argument("dest", help="Path to the output file")
 
     ap.add_argument('-f', "--format", choices=['fits', 'hdf5'], nargs='+', default=["fits"],
-        help="Format of the output sweep files")
+        help="Format of the output file")
 
     ap.add_argument('-t', "--tolerance", default=2, type=float,
         help="Tolerance of the angular distance for a match, in arc-seconds")
