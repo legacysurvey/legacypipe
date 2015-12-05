@@ -20,7 +20,7 @@ export PYTHONPATH=$PWD/../../:$PYTHONPATH
 
 # generate filelist (faster than iterating in python)
 ROOT=/project/projectdirs/cosmo/data/legacysurvey/dr1
-ROOT=/project/projectdirs/desiproc/dr2p
+ROOT=/project/projectdirs/desiproc/dr2
 
 find $ROOT/tractor -name 'tractor-*.fits' > filelist
 
@@ -36,5 +36,5 @@ time srun -u --cpu_bind=no -n 1 python-mpi generate-sweep-files.py -v \
 --schema blocks \
 -d $ROOT/decals-bricks.fits \
 $ROOT/tractor \
-$SCRATCH/sandbox/sweep-dr2p-blocks
+$SCRATCH/sandbox/sweep-dr2-blocks
 
