@@ -1,6 +1,9 @@
 from __future__ import print_function
 import numpy as np
 
+import matplotlib
+matplotlib.use('Agg')
+
 from astrometry.util.fits import fits_table, merge_tables
 from astrometry.util.starutil_numpy import degrees_between
 from astrometry.util.util import Tan
@@ -18,10 +21,10 @@ def main(outfn='ccds-annotated.fits', ccds=None):
     tiles = fits_table('decam-tiles_obstatus.fits')
 
     #ccds.cut(np.arange(100))
-    print("HACK!")
-    ccds.cut(np.array([name in ['N15', 'N16', 'N21', 'N9']
-                       for name in ccds.ccdname]) *
-                       ccds.expnum == 229683)
+    #print("HACK!")
+    #ccds.cut(np.array([name in ['N15', 'N16', 'N21', 'N9']
+    #                   for name in ccds.ccdname]) *
+    #                   ccds.expnum == 229683)
 
     I = decals.photometric_ccds(ccds)
     ccds.photometric = np.zeros(len(ccds), bool)
@@ -106,6 +109,9 @@ def main(outfn='ccds-annotated.fits', ccds=None):
         except:
             import traceback
             traceback.print_exc()
+            continue
+
+        if tim is None:
             continue
 
         psf = tim.psf
