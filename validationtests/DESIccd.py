@@ -381,7 +381,7 @@ def plotMaghist3obs(band,ndraw = 1e5,nbin=100):
 	pp.close()
 	return True
 
-def plotMaghist_survey(band,ndraw = 1e5,nbin=100):
+def plotMaghist_survey(band,ndraw = 1e5,nbin=100,magmin=0):
 	#This takes random selections of 1,2,3,4 and 5 exposures in a fraction matching the expected coverage
 	import fitsio
 	from matplotlib import pyplot as plt
@@ -447,9 +447,13 @@ def plotMaghist_survey(band,ndraw = 1e5,nbin=100):
 					Np = ((4.*pi*psf_sigma**2.)**(1./p) + (8.91*(.45*arcsec2pix)**2. )**(1./p))**p #Neff in requirements doc
 					Np = sqrt(Np) #square root necessary because Np gives sum of noise squared
 					detsig1 = skysig*Np #total noise
-					nl.append(detsig1)
+					m = nanomaggiesToMag(detsig1 * 5.)-cor-ext
+					if m > magmin:
+						nl.append(detsig1)
 	ng = len(nl)
 	print ng
+	nbr3 = 0
+	nbr6 = 0
 	for nd in range(0,int(ndraw)):
 		ran = random()
 		if ran < Ftiles[0]:
@@ -473,6 +477,10 @@ def plotMaghist_survey(band,ndraw = 1e5,nbin=100):
 		m = nanomaggiesToMag(detsigtot * 5.)-cor-extcorr
 		if m > recm:
 			nbr += 1.	
+		if m > recm-.3:
+			nbr3 += 1.
+		if m > recm-.6:
+			nbr6 += 1.	
 		NTl.append(m)
 		n += 1.
 	minN = min(NTl)
@@ -488,6 +496,12 @@ def plotMaghist_survey(band,ndraw = 1e5,nbin=100):
 	NTl = array(NTl)
 	mean = sum(NTl)/float(len(NTl))
 	std = sqrt(sum(NTl**2.)/float(len(NTl))-mean**2.)
+	nc = 0
+	for i in range(0,len(hl)):
+		nc += hl[i]
+		if nc > .1*nd:
+			m9 = Nl[i]
+			break
 	NTl.sort()
 	if len(NTl)/2. != len(NTl)/2:
 		med = NTl[len(NTl)/2+1]
@@ -498,11 +512,13 @@ def plotMaghist_survey(band,ndraw = 1e5,nbin=100):
 	from matplotlib.backends.backend_pdf import PdfPages
 	plt.clf()
 	pp = PdfPages('DR2DECaLS'+band+'_simsurvey.pdf')	
-
-	plt.plot(Nl,hl,'k-')
-	plt.xlabel(r'5$\sigma$ '+band+ ' depth')
-	plt.ylabel('# of ccds')
-	plt.title('MC survey depth '+str(mean)[:5]+r'$\pm$'+str(std)[:4]+r', $f_{\rm pass}=$'+str(nbr/float(nd))[:5])
+	fig = plt.figure()
+	ax = fig.add_subplot(111)
+	ax.plot(Nl,hl,'k-')
+	ax.set_xlabel(r'5$\sigma$ '+band+ ' depth')
+	ax.set_ylabel('# of ccds')
+	ax.set_title('MC survey depth '+str(mean)[:5]+r'$\pm$'+str(std)[:4]+r', $f_{r}=$'+str(nbr/float(nd))[:5]+r', $f_{r-0.3}=$'+str(nbr3/float(nd))[:5]+r', $f_{r-0.6}=$'+str(nbr6/float(nd))[:5])
+	ax.text(.4,.9,r'90% depth '+str(m9)[:5], verticalalignment='bottom', horizontalalignment='right', transform=ax.transAxes,fontsize=15)
 	#plt.xscale('log')
 	pp.savefig()
 	pp.close()
