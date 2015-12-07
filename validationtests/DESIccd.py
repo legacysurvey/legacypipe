@@ -1,4 +1,5 @@
 dir = '$HOME/' # obviously needs to be changed
+localdir = '/Users/ashleyross/DESI/' #place for local DESI stuff
 from math import *
 from healpix import healpix,radec2thphi
 import numpy as np
@@ -120,7 +121,7 @@ def plotMaghist(band,nbin=100):
 
 	from matplotlib.backends.backend_pdf import PdfPages
 	plt.clf()
-	pp = PdfPages('DR2DECaLS'+band+'1exposure.pdf')	
+	pp = PdfPages(localdir+'validationplots/DR2DECaLS'+band+'1exposure.pdf')	
 
 	plt.plot(Nl,hl,'k-')
 	plt.xlabel(r'5$\sigma$ '+band+ ' depth')
@@ -256,7 +257,7 @@ def plotMaghist2obs(band,ndraw = 1e5,nbin=100):
 
 	from matplotlib.backends.backend_pdf import PdfPages
 	plt.clf()
-	pp = PdfPages('DR2DECaLS'+band+'2exposures.pdf')	
+	pp = PdfPages(localdir+'validationplots/DR2DECaLS'+band+'2exposures.pdf')	
 
 	plt.plot(Nl,hl,'k-')
 	plt.xlabel(r'5$\sigma$ '+band+ ' depth')
@@ -370,7 +371,7 @@ def plotMaghist3obs(band,ndraw = 1e5,nbin=100):
 	print 'percentage better than requirements '+str(nbr/float(nd))
 	from matplotlib.backends.backend_pdf import PdfPages
 	plt.clf()
-	pp = PdfPages('DR2DECaLS'+band+'3exposures.pdf')	
+	pp = PdfPages(localdir+'validationplots/DR2DECaLS'+band+'3exposures.pdf')	
 
 	plt.plot(Nl,hl,'k-')
 	plt.xlabel(r'5$\sigma$ '+band+ ' depth')
@@ -511,7 +512,7 @@ def plotMaghist_survey(band,ndraw = 1e5,nbin=100,magmin=0):
 	print 'percentage better than requirements '+str(nbr/float(nd))
 	from matplotlib.backends.backend_pdf import PdfPages
 	plt.clf()
-	pp = PdfPages('DR2DECaLS'+band+'_simsurvey.pdf')	
+	pp = PdfPages(localdir+'validationplots/DR2DECaLS'+band+'_simsurvey.pdf')	
 	fig = plt.figure()
 	ax = fig.add_subplot(111)
 	ax.plot(Nl,hl,'k-')
@@ -535,9 +536,9 @@ def Magcomp(band):
 	readnoise = 10. # e-; 7.0 to 15.0 according to DECam Data Handbook
 	p = 1.15 #value given in imaging requirements
 	gain = 4.0 #from Dustin
-	f = fitsio.read(dir+'legacypipe/validationtests/testregion/decals-2444p120-ccds.fits')
-	dpm = fitsio.read(dir+'legacypipe/validationtests/testregion/decals-2444p120-galdepth-'+band+'.fits')
-	expm = fitsio.read(dir+'legacypipe/validationtests/testregion/decals-2444p120-nexp-'+band+'.fits')
+	f = fitsio.read(localdir+'testregion/decals-2444p120-ccds.fits')
+	dpm = fitsio.read(localdir+'testregion/decals-2444p120-galdepth-'+band+'.fits')
+	expm = fitsio.read(localdir+'testregion/decals-2444p120-nexp-'+band+'.fits')
 	NTl = []
 	emin = 1000
 	emax = 0
