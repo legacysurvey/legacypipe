@@ -132,6 +132,105 @@ def plotMaghist(band,nbin=100):
 	pp.close()
 	return True
 
+def plotMagMap(band,size=4):
+	import fitsio
+	from matplotlib import pyplot as plt
+	import matplotlib.cm as cm
+	from numpy import zeros,array
+	readnoise = 10. # e-; 7.0 to 15.0 according to DECam Data Handbook
+	p = 1.15 #value given in imaging requirements
+	gain = 4.0 #from Dustin
+	f = fitsio.read(dir+'/legacypipe-dir/decals-ccds.fits.gz')
+	NTl = []
+	emin = 1000
+	emax = 0
+	msee = 0
+	n = 0
+	arcsec2pix = 1./.262 #from Dustin
+
+	if band == 'g':
+		zp0 = 25.08
+		recm = 24.
+		cor = 0.08
+		extc = 3.303/2.751
+	if band == 'r':
+		zp0 = 25.29
+		recm = 23.4
+		cor = .16
+		extc = 2.285/2.751
+	if band == 'z':
+		zp0 = 24.92
+		recm = 22.5
+		extc = 1.263/2.751
+		cor = .29
+	nd = 0
+	nbr = 0	
+	ral = []
+	decl = []
+	for i in range(0,len(f)):
+		pid = f[i]['propid']
+		#if DS == '2014B-0404' or DS == '2013A-0741': #enforce DECaLS only
+		#	DS = 1
+		DS = 0
+		year = int(f[i]['date_obs'].split('-')[0])
+		if year > 2014:
+			if pid == '2014B-0404' or pid == '2013A-0741':
+				DS = 1 #enforce 2015 data
+		if f[i]['filter'] == band:
+			if f[i]['seeing'] != 99 and f[i]['ccdzpt'] != 99 and f[i]['fwhm'] != 99 and DS == 1:
+				if f[i]['dec'] > -20 and f[i]['exptime'] >=30 and f[i]['ccdnmatch'] >= 20 and abs(f[i]['zpt'] - f[i]['ccdzpt']) <= 0.1 and f[i]['zpt'] >= zp0-.5 and f[i]['zpt'] <=zp0+.25:   
+					ra,dec = f[i]['ra'],f[i]['dec']
+					th,phi = radec2thphi(ra,dec)
+					pix = hpix.ang2pix_nest(256,th,phi)
+					ext = extmap[pix]*extc
+					#if ext > 0.5:
+					#	print ext,extc,ra,dec,pix
+						#break
+					avsky = f[i]['avsky']
+					skysig = sqrt(avsky * gain + readnoise**2) / gain
+					zpscale = zeropointToScale(f[i]['ccdzpt'] + 2.5*log(f[i]['exptime'],10.))
+					skysig /= zpscale
+					psf_sigma = f[i]['fwhm'] / 2.35
+					# point-source depth
+					#psfnorm = 1./(2. * sqrt(pi) * psf_sigma) #1/Neff #for point source
+					#detsig1 = skysig / psfnorm
+					Np = ((4.*pi*psf_sigma**2.)**(1./p) + (8.91*(.45*arcsec2pix)**2. )**(1./p))**p #Neff in requirements doc
+					Np = sqrt(Np) #square root necessary because Np gives sum of noise squared
+					detsig1 = skysig*Np #total noise
+					m = nanomaggiesToMag(detsig1 * 5.)-cor-ext
+					#if m > 30 or m < 18:
+					#	print skysig,avsky,f[i]['fwhm'],f[i]['ccdzpt'],f[i]['exptime']
+					NTl.append(m)
+					ral.append(ra)
+					decl.append(dec)
+					if f[i]['exptime'] > emax:
+						emax = f[i]['exptime']
+					if 	f[i]['exptime'] < emin:
+						emin = f[i]['exptime']
+					n += 1.
+					msee += f[i]['seeing']	
+					if m > recm:
+						nbr += 1.
+
+	from matplotlib.backends.backend_pdf import PdfPages
+	plt.clf()
+	pp = PdfPages(localdir+'validationplots/DR2DECaLS'+band+'map.pdf')	
+
+	#col = (NTl-min(NTl))/(max(NTl)-min(NTl))
+	col = NTl
+	map = plt.scatter(ral,decl,c=col,s=size,cmap=cm.rainbow,lw=0)
+	cbar = plt.colorbar(map)
+	cbar.set_label('depth', rotation=270)
+	plt.xlabel('r.a. (degrees)')
+	plt.ylabel('declination (degrees)')
+	plt.title('Map of 1 exposure depth for DR2 '+band+'-band')
+	#plt.show()
+	#plt.xscale('log')
+	pp.savefig()
+	pp.close()
+	return True
+
+
 def plotMaghist2obs(band,ndraw = 1e5,nbin=100):
 	#This randomly takes two ccd observations and find the coadded depth base on 1/noise^2tot = 1/(1/noise1^2+1/noise2^2)
 	import fitsio
