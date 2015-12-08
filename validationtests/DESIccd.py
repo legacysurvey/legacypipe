@@ -1,4 +1,5 @@
 dir = '$HOME/' # obviously needs to be changed
+localdir = '/Users/ashleyross/DESI/' #place for local DESI stuff
 from math import *
 from healpix import healpix,radec2thphi
 import numpy as np
@@ -120,7 +121,7 @@ def plotMaghist(band,nbin=100):
 
 	from matplotlib.backends.backend_pdf import PdfPages
 	plt.clf()
-	pp = PdfPages('DR2DECaLS'+band+'1exposure.pdf')	
+	pp = PdfPages(localdir+'validationplots/DR2DECaLS'+band+'1exposure.pdf')	
 
 	plt.plot(Nl,hl,'k-')
 	plt.xlabel(r'5$\sigma$ '+band+ ' depth')
@@ -130,6 +131,105 @@ def plotMaghist(band,nbin=100):
 	pp.savefig()
 	pp.close()
 	return True
+
+def plotMagMap(band,size=4):
+	import fitsio
+	from matplotlib import pyplot as plt
+	import matplotlib.cm as cm
+	from numpy import zeros,array
+	readnoise = 10. # e-; 7.0 to 15.0 according to DECam Data Handbook
+	p = 1.15 #value given in imaging requirements
+	gain = 4.0 #from Dustin
+	f = fitsio.read(dir+'/legacypipe-dir/decals-ccds.fits.gz')
+	NTl = []
+	emin = 1000
+	emax = 0
+	msee = 0
+	n = 0
+	arcsec2pix = 1./.262 #from Dustin
+
+	if band == 'g':
+		zp0 = 25.08
+		recm = 24.
+		cor = 0.08
+		extc = 3.303/2.751
+	if band == 'r':
+		zp0 = 25.29
+		recm = 23.4
+		cor = .16
+		extc = 2.285/2.751
+	if band == 'z':
+		zp0 = 24.92
+		recm = 22.5
+		extc = 1.263/2.751
+		cor = .29
+	nd = 0
+	nbr = 0	
+	ral = []
+	decl = []
+	for i in range(0,len(f)):
+		pid = f[i]['propid']
+		#if DS == '2014B-0404' or DS == '2013A-0741': #enforce DECaLS only
+		#	DS = 1
+		DS = 0
+		year = int(f[i]['date_obs'].split('-')[0])
+		if year > 2014:
+			if pid == '2014B-0404' or pid == '2013A-0741':
+				DS = 1 #enforce 2015 data
+		if f[i]['filter'] == band:
+			if f[i]['seeing'] != 99 and f[i]['ccdzpt'] != 99 and f[i]['fwhm'] != 99 and DS == 1:
+				if f[i]['dec'] > -20 and f[i]['exptime'] >=30 and f[i]['ccdnmatch'] >= 20 and abs(f[i]['zpt'] - f[i]['ccdzpt']) <= 0.1 and f[i]['zpt'] >= zp0-.5 and f[i]['zpt'] <=zp0+.25:   
+					ra,dec = f[i]['ra'],f[i]['dec']
+					th,phi = radec2thphi(ra,dec)
+					pix = hpix.ang2pix_nest(256,th,phi)
+					ext = extmap[pix]*extc
+					#if ext > 0.5:
+					#	print ext,extc,ra,dec,pix
+						#break
+					avsky = f[i]['avsky']
+					skysig = sqrt(avsky * gain + readnoise**2) / gain
+					zpscale = zeropointToScale(f[i]['ccdzpt'] + 2.5*log(f[i]['exptime'],10.))
+					skysig /= zpscale
+					psf_sigma = f[i]['fwhm'] / 2.35
+					# point-source depth
+					#psfnorm = 1./(2. * sqrt(pi) * psf_sigma) #1/Neff #for point source
+					#detsig1 = skysig / psfnorm
+					Np = ((4.*pi*psf_sigma**2.)**(1./p) + (8.91*(.45*arcsec2pix)**2. )**(1./p))**p #Neff in requirements doc
+					Np = sqrt(Np) #square root necessary because Np gives sum of noise squared
+					detsig1 = skysig*Np #total noise
+					m = nanomaggiesToMag(detsig1 * 5.)-cor-ext
+					#if m > 30 or m < 18:
+					#	print skysig,avsky,f[i]['fwhm'],f[i]['ccdzpt'],f[i]['exptime']
+					NTl.append(m)
+					ral.append(ra)
+					decl.append(dec)
+					if f[i]['exptime'] > emax:
+						emax = f[i]['exptime']
+					if 	f[i]['exptime'] < emin:
+						emin = f[i]['exptime']
+					n += 1.
+					msee += f[i]['seeing']	
+					if m > recm:
+						nbr += 1.
+
+	from matplotlib.backends.backend_pdf import PdfPages
+	plt.clf()
+	pp = PdfPages(localdir+'validationplots/DR2DECaLS'+band+'map.pdf')	
+
+	#col = (NTl-min(NTl))/(max(NTl)-min(NTl))
+	col = NTl
+	map = plt.scatter(ral,decl,c=col,s=size,cmap=cm.rainbow,lw=0)
+	cbar = plt.colorbar(map)
+	cbar.set_label('depth', rotation=270)
+	plt.xlabel('r.a. (degrees)')
+	plt.ylabel('declination (degrees)')
+	plt.title('Map of 1 exposure depth for DR2 '+band+'-band')
+	#plt.show()
+	#plt.xscale('log')
+	pp.savefig()
+	pp.close()
+	return True
+
 
 def plotMaghist2obs(band,ndraw = 1e5,nbin=100):
 	#This randomly takes two ccd observations and find the coadded depth base on 1/noise^2tot = 1/(1/noise1^2+1/noise2^2)
@@ -256,7 +356,7 @@ def plotMaghist2obs(band,ndraw = 1e5,nbin=100):
 
 	from matplotlib.backends.backend_pdf import PdfPages
 	plt.clf()
-	pp = PdfPages('DR2DECaLS'+band+'2exposures.pdf')	
+	pp = PdfPages(localdir+'validationplots/DR2DECaLS'+band+'2exposures.pdf')	
 
 	plt.plot(Nl,hl,'k-')
 	plt.xlabel(r'5$\sigma$ '+band+ ' depth')
@@ -370,7 +470,7 @@ def plotMaghist3obs(band,ndraw = 1e5,nbin=100):
 	print 'percentage better than requirements '+str(nbr/float(nd))
 	from matplotlib.backends.backend_pdf import PdfPages
 	plt.clf()
-	pp = PdfPages('DR2DECaLS'+band+'3exposures.pdf')	
+	pp = PdfPages(localdir+'validationplots/DR2DECaLS'+band+'3exposures.pdf')	
 
 	plt.plot(Nl,hl,'k-')
 	plt.xlabel(r'5$\sigma$ '+band+ ' depth')
@@ -381,7 +481,7 @@ def plotMaghist3obs(band,ndraw = 1e5,nbin=100):
 	pp.close()
 	return True
 
-def plotMaghist_survey(band,ndraw = 1e5,nbin=100):
+def plotMaghist_survey(band,ndraw = 1e5,nbin=100,magmin=0):
 	#This takes random selections of 1,2,3,4 and 5 exposures in a fraction matching the expected coverage
 	import fitsio
 	from matplotlib import pyplot as plt
@@ -447,9 +547,13 @@ def plotMaghist_survey(band,ndraw = 1e5,nbin=100):
 					Np = ((4.*pi*psf_sigma**2.)**(1./p) + (8.91*(.45*arcsec2pix)**2. )**(1./p))**p #Neff in requirements doc
 					Np = sqrt(Np) #square root necessary because Np gives sum of noise squared
 					detsig1 = skysig*Np #total noise
-					nl.append(detsig1)
+					m = nanomaggiesToMag(detsig1 * 5.)-cor-ext
+					if m > magmin:
+						nl.append(detsig1)
 	ng = len(nl)
 	print ng
+	nbr3 = 0
+	nbr6 = 0
 	for nd in range(0,int(ndraw)):
 		ran = random()
 		if ran < Ftiles[0]:
@@ -473,6 +577,10 @@ def plotMaghist_survey(band,ndraw = 1e5,nbin=100):
 		m = nanomaggiesToMag(detsigtot * 5.)-cor-extcorr
 		if m > recm:
 			nbr += 1.	
+		if m > recm-.3:
+			nbr3 += 1.
+		if m > recm-.6:
+			nbr6 += 1.	
 		NTl.append(m)
 		n += 1.
 	minN = min(NTl)
@@ -488,6 +596,12 @@ def plotMaghist_survey(band,ndraw = 1e5,nbin=100):
 	NTl = array(NTl)
 	mean = sum(NTl)/float(len(NTl))
 	std = sqrt(sum(NTl**2.)/float(len(NTl))-mean**2.)
+	nc = 0
+	for i in range(0,len(hl)):
+		nc += hl[i]
+		if nc > .1*nd:
+			m9 = Nl[i]
+			break
 	NTl.sort()
 	if len(NTl)/2. != len(NTl)/2:
 		med = NTl[len(NTl)/2+1]
@@ -497,12 +611,14 @@ def plotMaghist_survey(band,ndraw = 1e5,nbin=100):
 	print 'percentage better than requirements '+str(nbr/float(nd))
 	from matplotlib.backends.backend_pdf import PdfPages
 	plt.clf()
-	pp = PdfPages('DR2DECaLS'+band+'_simsurvey.pdf')	
-
-	plt.plot(Nl,hl,'k-')
-	plt.xlabel(r'5$\sigma$ '+band+ ' depth')
-	plt.ylabel('# of ccds')
-	plt.title('MC survey depth '+str(mean)[:5]+r'$\pm$'+str(std)[:4]+r', $f_{\rm pass}=$'+str(nbr/float(nd))[:5])
+	pp = PdfPages(localdir+'validationplots/DR2DECaLS'+band+'_simsurvey.pdf')	
+	fig = plt.figure()
+	ax = fig.add_subplot(111)
+	ax.plot(Nl,hl,'k-')
+	ax.set_xlabel(r'5$\sigma$ '+band+ ' depth')
+	ax.set_ylabel('# of ccds')
+	ax.set_title('MC survey depth '+str(mean)[:5]+r'$\pm$'+str(std)[:4]+r', $f_{r}=$'+str(nbr/float(nd))[:5]+r', $f_{r-0.3}=$'+str(nbr3/float(nd))[:5]+r', $f_{r-0.6}=$'+str(nbr6/float(nd))[:5])
+	ax.text(.4,.9,r'90% depth '+str(m9)[:5], verticalalignment='bottom', horizontalalignment='right', transform=ax.transAxes,fontsize=15)
 	#plt.xscale('log')
 	pp.savefig()
 	pp.close()
@@ -519,9 +635,9 @@ def Magcomp(band):
 	readnoise = 10. # e-; 7.0 to 15.0 according to DECam Data Handbook
 	p = 1.15 #value given in imaging requirements
 	gain = 4.0 #from Dustin
-	f = fitsio.read(dir+'legacypipe/validationtests/testregion/decals-2444p120-ccds.fits')
-	dpm = fitsio.read(dir+'legacypipe/validationtests/testregion/decals-2444p120-galdepth-'+band+'.fits')
-	expm = fitsio.read(dir+'legacypipe/validationtests/testregion/decals-2444p120-nexp-'+band+'.fits')
+	f = fitsio.read(localdir+'testregion/decals-2444p120-ccds.fits')
+	dpm = fitsio.read(localdir+'testregion/decals-2444p120-galdepth-'+band+'.fits')
+	expm = fitsio.read(localdir+'testregion/decals-2444p120-nexp-'+band+'.fits')
 	NTl = []
 	emin = 1000
 	emax = 0

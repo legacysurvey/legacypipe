@@ -1,5 +1,9 @@
 from __future__ import print_function
 import numpy as np
+import os
+
+import matplotlib
+matplotlib.use('Agg')
 
 from astrometry.util.fits import fits_table, merge_tables
 from astrometry.util.starutil_numpy import degrees_between
@@ -18,10 +22,10 @@ def main(outfn='ccds-annotated.fits', ccds=None):
     tiles = fits_table('decam-tiles_obstatus.fits')
 
     #ccds.cut(np.arange(100))
-    print("HACK!")
-    ccds.cut(np.array([name in ['N15', 'N16', 'N21', 'N9']
-                       for name in ccds.ccdname]) *
-                       ccds.expnum == 229683)
+    #print("HACK!")
+    #ccds.cut(np.array([name in ['N15', 'N16', 'N21', 'N9']
+    #                   for name in ccds.ccdname]) *
+    #                   ccds.expnum == 229683)
 
     I = decals.photometric_ccds(ccds)
     ccds.photometric = np.zeros(len(ccds), bool)
@@ -106,6 +110,11 @@ def main(outfn='ccds-annotated.fits', ccds=None):
         except:
             import traceback
             traceback.print_exc()
+            plvers.append('')
+            continue
+
+        if tim is None:
+            plvers.append('')
             continue
 
         psf = tim.psf
@@ -113,9 +122,9 @@ def main(outfn='ccds-annotated.fits', ccds=None):
         sky = tim.sky
         hdr = tim.primhdr
 
-        print('Got PSF', psf)
-        print('Got sky', type(sky))
-        print('Got WCS', wcs)
+        # print('Got PSF', psf)
+        # print('Got sky', type(sky))
+        # print('Got WCS', wcs)
 
         ccds.humidity[iccd] = hdr.get('HUMIDITY')
         ccds.outtemp[iccd]  = hdr.get('OUTTEMP')
@@ -165,12 +174,12 @@ def main(outfn='ccds-annotated.fits', ccds=None):
         ph,pw = p.shape
         px,py = np.meshgrid(np.arange(pw), np.arange(ph))
         psum = np.sum(p)
-        print('psum', psum)
+        # print('psum', psum)
         p /= psum
         # centroids
         cenx = np.sum(p * px)
         ceny = np.sum(p * py)
-        print('cenx,ceny', cenx,ceny)
+        # print('cenx,ceny', cenx,ceny)
         # second moments
         x2 = np.sum(p * (px - cenx)**2)
         y2 = np.sum(p * (py - ceny)**2)
@@ -183,10 +192,10 @@ def main(outfn='ccds-annotated.fits', ccds=None):
         b = np.sqrt((x2 + y2) / 2. - s)
         ell = 1. - b/a
 
-        print('PSF second moments', x2, y2, xy)
-        print('PSF position angle', theta)
-        print('PSF semi-axes', a, b)
-        print('PSF ellipticity', ell)
+        # print('PSF second moments', x2, y2, xy)
+        # print('PSF position angle', theta)
+        # print('PSF semi-axes', a, b)
+        # print('PSF ellipticity', ell)
 
         ccds.psf_mx2[iccd] = x2
         ccds.psf_my2[iccd] = y2
@@ -294,12 +303,19 @@ def main(outfn='ccds-annotated.fits', ccds=None):
 
 
 def _bounce_main((i, ccds)):
-    outfn = 'ccds-annotated-%03i.fits' % i
-    main(outfn=outfn, ccds=ccds)
+    try:
+        outfn = 'ccds-annotated-%03i.fits' % i
+        if os.path.exists(outfn):
+            print('Already exists:', outfn)
+            return
+        main(outfn=outfn, ccds=ccds)
+    except:
+        import traceback
+        traceback.print_exc()
 
 if __name__ == '__main__':
-    import sys
-    sys.exit(main())
+    #import sys
+    #sys.exit(main())
 
     decals = Decals()
     ccds = decals.get_ccds()
@@ -312,6 +328,9 @@ if __name__ == '__main__':
         c = ccds[:N]
         ccds = ccds[N:]
         args.append((i, c))
+        i += 1
+    print('Split CCDs file into', len(args), 'pieces')
+    print('sizes:', [len(c) for i,c in args])
     mp.map(_bounce_main, args)
 
     # reassemble outputs
