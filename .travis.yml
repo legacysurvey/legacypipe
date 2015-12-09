@@ -22,10 +22,12 @@ compiler:
 #     - export SYSTEM_GSL=yes
 #     - ls /usr/include/wcslib*
 
+#    - if [ ! -d "$HOME/astrometry.net" ]; then (cd $HOME; git clone https://github.com/dstndstn/astrometry.net.git); fi
+
 before_script:
     - export WCSLIB_INC="-I/usr/include/wcslib-4.8.3"
     - export WCSLIB_LIB="-lwcs"
-    - if [ ! -d "$HOME/astrometry.net" ]; then (cd $HOME; git clone https://github.com/dstndstn/astrometry.net.git); fi
+    - (cd $HOME; git clone https://github.com/dstndstn/astrometry.net.git)
     - (cd $HOME/astrometry.net && pwd && ls && make && make py)
     - if [ ! -d "$HOME/tractor-git" ]; then (cd $HOME; git clone https://github.com/dstndstn/tractor.git tractor-git); fi
     - (cd $HOME/tractor-git && make)
@@ -65,8 +67,10 @@ addons:
 # not whitelisted... needed?
 #    - libgsl10-dev
 
+
 cache:
   directories:
-  - $HOME/astrometry.net
   - $HOME/tractor-git
   - $HOME/fitsio-git
+
+#  - $HOME/astrometry.net
