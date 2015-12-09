@@ -39,7 +39,7 @@ before_script:
     - ln -s $HOME/fitsio/lib/python/fitsio .
     - ln -s $HOME/tractor-git/tractor .
     - ln -s $HOME/tractor-git/wise .
-
+    - pip install numpydoc -t $HOME/numpydoc
 
 #     - pwd
 #     - ls
@@ -51,7 +51,7 @@ before_script:
 #     - python -c "import tractor; print tractor.__file__"
 
 script:
-    - export PYTHONPATH=${PYTHONPATH}:$(pwd)/py:$(pwd)
+    - export PYTHONPATH=${PYTHONPATH}:$(pwd)/py:$(pwd):$HOME/numpydoc
     - (cd doc && make)
 
 addons:
@@ -67,7 +67,9 @@ addons:
     - gsl-bin
     - python-sphinx
     - python-mock
-    - python-numpydoc
+
+# python-numpydoc is only available in 'trusty' and later.
+#    - python-numpydoc
 
 # not whitelisted... needed?
 #    - libgsl10-dev
