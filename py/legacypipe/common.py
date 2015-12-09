@@ -1,8 +1,4 @@
 from __future__ import print_function
-if __name__ == '__main__':
-    import matplotlib
-    matplotlib.use('Agg')
-import pylab as plt
 
 import os
 import tempfile
@@ -14,7 +10,6 @@ import fitsio
 
 from astrometry.util.fits import fits_table, merge_tables
 from astrometry.util.file import trymakedirs
-from astrometry.util.plotutils import dimshow
 from astrometry.util.util import Tan, Sip, anwcs_t
 from astrometry.util.starutil_numpy import degrees_between, hmsstring2ra, dmsstring2dec
 from astrometry.util.miscutils import polygons_intersect, estimate_mode, clip_polygon, clip_wcs
@@ -291,6 +286,8 @@ def segment_and_group_sources(image, T, name=None, ps=None, plots=False):
     T.blob = blobs[T.ity, T.itx]
 
     if plots:
+        import pylab as plt
+        from astrometry.util.plotutils import dimshow
         plt.clf()
         dimshow(blobs > 0, vmin=0, vmax=1)
         ax = plt.axis()
@@ -402,6 +399,8 @@ def segment_and_group_sources(image, T, name=None, ps=None, plots=False):
         fitsio.write('blobs-after-%s.fits' % name, blobs, clobber=True)
 
     if plots:
+        import pylab as plt
+        from astrometry.util.plotutils import dimshow
         plt.clf()
         dimshow(blobs > -1, vmin=0, vmax=1)
         ax = plt.axis()
