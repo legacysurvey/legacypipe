@@ -304,7 +304,7 @@ def main(outfn='ccds-annotated.fits', ccds=None):
 
 def _bounce_main((i, ccds)):
     try:
-        outfn = 'ccds-annotated-%03i.fits' % i
+        outfn = 'ccds-annotated/ccds-annotated-%03i.fits' % i
         if os.path.exists(outfn):
             print('Already exists:', outfn)
             return
@@ -320,7 +320,8 @@ if __name__ == '__main__':
     decals = Decals()
     ccds = decals.get_ccds()
     from astrometry.util.multiproc import *
-    mp = multiproc(24)
+    #mp = multiproc(8)
+    mp = multiproc(4)
     N = 1000
     args = []
     i = 0
@@ -334,7 +335,7 @@ if __name__ == '__main__':
     mp.map(_bounce_main, args)
 
     # reassemble outputs
-    TT = [fits_table('ccds-annotated-%03i.fits' % i for i,nil in args)]
+    TT = [fits_table('ccds-annotated/ccds-annotated-%03i.fits' % i for i,nil in args)]
     T = merge_tables(TT)
     T.writeto('ccds-annotated.fits')
 
