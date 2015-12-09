@@ -23,12 +23,12 @@ compiler:
 #     - ls /usr/include/wcslib*
 
 
+#     - rm -Rf $HOME/astrometry.net
+#     - rm -Rf $HOME/tractor-git
+#     - rm -Rf $HOME/fitsio-git
 before_script:
     - export WCSLIB_INC="-I/usr/include/wcslib-4.8.3"
     - export WCSLIB_LIB="-lwcs"
-    - rm -Rf $HOME/astrometry.net
-    - rm -Rf $HOME/tractor-git
-    - rm -Rf $HOME/fitsio-git
     - if [ ! -d "$HOME/astrometry.net" ]; then (cd $HOME; git clone https://github.com/dstndstn/astrometry.net.git); fi
     - (cd $HOME/astrometry.net && git pull && make && make py)
     - if [ ! -d "$HOME/tractor-git" ]; then (cd $HOME; git clone https://github.com/dstndstn/tractor.git tractor-git); fi
@@ -65,6 +65,7 @@ addons:
     - python-numpy
     - swig
     - gsl-bin
+    - python-sphinx
 
 # not whitelisted... needed?
 #    - libgsl10-dev
