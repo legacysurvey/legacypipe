@@ -320,7 +320,8 @@ if __name__ == '__main__':
     decals = Decals()
     ccds = decals.get_ccds()
     from astrometry.util.multiproc import *
-    mp = multiproc(24)
+    #mp = multiproc(24)
+    mp = multiproc(4)
     N = 1000
     args = []
     i = 0

@@ -788,7 +788,7 @@ Using the current directory as DECALS_DIR, but this is likely to fail.
     def index_of_band(self, b):
         return self.allbands.index(b)
         
-    def find_file(filetype, brick=None, brickpre=None, band='%(band)s'):
+    def find_file(self, filetype, brick=None, brickpre=None, band='%(band)s'):
         '''
         Returns the filename of a DECaLS file.
 
