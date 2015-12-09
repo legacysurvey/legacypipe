@@ -66,6 +66,7 @@ addons:
     - swig
     - gsl-bin
     - python-sphinx
+    - python-mock
 
 # not whitelisted... needed?
 #    - libgsl10-dev
