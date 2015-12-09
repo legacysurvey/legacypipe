@@ -26,7 +26,7 @@ before_script:
     - export WCSLIB_INC="-I/usr/include/wcslib-4.8.3"
     - export WCSLIB_LIB="-lwcs"
     - if [ ! -d "$HOME/astrometry.net" ]; then (cd $HOME; git clone https://github.com/dstndstn/astrometry.net.git); fi
-    - (cd $HOME/astrometry.net && make && make py)
+    - (cd $HOME/astrometry.net && pwd && ls && make && make py)
     - if [ ! -d "$HOME/tractor-git" ]; then (cd $HOME; git clone https://github.com/dstndstn/tractor.git tractor-git); fi
     - (cd $HOME/tractor-git && make)
     - if [ ! -d "$HOME/fitsio-git" ]; then (cd $HOME; git clone https://github.com/esheldon/fitsio.git fitsio-git); fi
@@ -61,7 +61,9 @@ addons:
     - python-numpy
     - swig
     - gsl-bin
-    - libgsl10-dev
+
+# not whitelisted... needed?
+#    - libgsl10-dev
 
 cache:
   directories:
