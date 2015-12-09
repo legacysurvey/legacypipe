@@ -1,9 +1,9 @@
 # Travis-CI.org build script
 
 # container-based infrastructure
-#sudo: false
+sudo: false
 # need APT packages to get white-listed first;
-sudo: required
+#sudo: required
 
 install:
   - sudo apt-get update -qq
