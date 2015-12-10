@@ -314,7 +314,13 @@ def _bounce_main((i, ccds)):
         traceback.print_exc()
 
 if __name__ == '__main__':
-    #import sys
+
+    TT = [fits_table('ccds-annotated/ccds-annotated-%03i.fits' % i) for i in range(515)]
+    T = merge_tables(TT)
+    T.writeto('ccds-annotated.fits')
+
+    import sys
+    sys.exit()
     #sys.exit(main())
 
     decals = Decals()
@@ -335,7 +341,7 @@ if __name__ == '__main__':
     mp.map(_bounce_main, args)
 
     # reassemble outputs
-    TT = [fits_table('ccds-annotated/ccds-annotated-%03i.fits' % i for i,nil in args)]
+    TT = [fits_table('ccds-annotated/ccds-annotated-%03i.fits' % i) for i,nil in args]
     T = merge_tables(TT)
     T.writeto('ccds-annotated.fits')
 
