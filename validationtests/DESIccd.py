@@ -83,7 +83,9 @@ def plotMaghist(band,nbin=100):
 					Np = ((4.*pi*psf_sigma**2.)**(1./p) + (8.91*(.45*arcsec2pix)**2. )**(1./p))**p #Neff in requirements doc
 					Np = sqrt(Np) #square root necessary because Np gives sum of noise squared
 					detsig1 = skysig*Np #total noise
-					m = nanomaggiesToMag(detsig1 * 5.)-cor-ext
+					signalext = 1./10.**(-ext/2.5)
+					#signalext = 1.
+					m = nanomaggiesToMag(detsig1 * 5.*signalext)-cor#-ext
 					#if m > 30 or m < 18:
 					#	print skysig,avsky,f[i]['fwhm'],f[i]['ccdzpt'],f[i]['exptime']
 					NTl.append(m)
@@ -315,10 +317,12 @@ def plotMaghist2obs(band,ndraw = 1e5,nbin=100):
 							Np2 = ((4.*pi*psf_sigma2**2.)**(1./p) + (8.91*(.45*arcsec2pix)**2. )**(1./p))**p #Neff in requirements doc
 							Np = sqrt(Np) #square root necessary because Np gives sum of noise squared
 							Np2 = sqrt(Np2)
+							signalext = 1./10.**(-ext/2.5)
+							signalext2 = 1./10.**(-ext2/2.5)
 							detsig1 = skysig*Np #total noise
 							detsig2 = skysig2*Np2
-							detsigtot = sqrt(1./(1./detsig1**2.+1./detsig2**2))
-							m = nanomaggiesToMag(detsigtot * 5.)-cor-(ext+ext2)/2.
+							detsigtot = sqrt(1./(1./(detsig1*signalext)**2.+1./(detsig2*signalext2)**2))
+							m = nanomaggiesToMag(detsigtot * 5.)-cor#-(ext+ext2)/2.
 							if m > 30 or m < 18:
 								print skysig,avsky,f[i]['fwhm'],f[i]['ccdzpt'],f[i]['exptime']
 							NTl.append(m)
@@ -431,8 +435,11 @@ def plotMaghist3obs(band,ndraw = 1e5,nbin=100):
 					#detsig1 = skysig / psfnorm
 					Np = ((4.*pi*psf_sigma**2.)**(1./p) + (8.91*(.45*arcsec2pix)**2. )**(1./p))**p #Neff in requirements doc
 					Np = sqrt(Np) #square root necessary because Np gives sum of noise squared
+					signalext = 1./10.**(-ext/2.5)
+							
+
 					detsig1 = skysig*Np #total noise
-					nl.append(detsig1)
+					nl.append(detsig1*signalext)
 	ng = len(nl)
 	print ng
 	for nd in range(0,int(ndraw)):
@@ -443,7 +450,7 @@ def plotMaghist3obs(band,ndraw = 1e5,nbin=100):
 		detsig2 = nl[j]
 		detsig3 = nl[k]
 		detsigtot = sqrt(1./(1./detsig1**2.+1./detsig2**2+1./detsig3**2))
-		m = nanomaggiesToMag(detsigtot * 5.)-cor-(extl[i]+extl[j]+extl[k])/3.
+		m = nanomaggiesToMag(detsigtot * 5.)-cor#-(extl[i]+extl[j]+extl[k])/3.
 		if m > recm:
 			nbr += 1.	
 		NTl.append(m)
@@ -547,9 +554,10 @@ def plotMaghist_survey(band,ndraw = 1e5,nbin=100,magmin=0):
 					Np = ((4.*pi*psf_sigma**2.)**(1./p) + (8.91*(.45*arcsec2pix)**2. )**(1./p))**p #Neff in requirements doc
 					Np = sqrt(Np) #square root necessary because Np gives sum of noise squared
 					detsig1 = skysig*Np #total noise
+					signalext = 1./10.**(-ext/2.5)
 					m = nanomaggiesToMag(detsig1 * 5.)-cor-ext
 					if m > magmin:
-						nl.append(detsig1)
+						nl.append(detsig1*signalext)
 	ng = len(nl)
 	print ng
 	nbr3 = 0
@@ -574,7 +582,7 @@ def plotMaghist_survey(band,ndraw = 1e5,nbin=100,magmin=0):
 			extsum += extl[k]
 		extcorr = extsum/float(nexp)
 		detsigtot = sqrt(1./detsigtoti)	
-		m = nanomaggiesToMag(detsigtot * 5.)-cor-extcorr
+		m = nanomaggiesToMag(detsigtot * 5.)-cor#-extcorr
 		if m > recm:
 			nbr += 1.	
 		if m > recm-.3:
