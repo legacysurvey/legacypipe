@@ -4,8 +4,8 @@ from __future__ import print_function, division
 
 import numpy as np
 
-from legacyproduct.internal import sharedmem
-from legacyproduct.internal.io import iter_tractor, parse_filename
+from legacypipe.internal import sharedmem
+from legacypipe.internal.io import iter_tractor, parse_filename
 
 import argparse
 import os, sys
@@ -251,6 +251,8 @@ SWEEP_DTYPE = np.dtype([
     ('DECAM_FRACFLUX', '>f4', (6,)), 
     ('DECAM_FRACMASKED', '>f4', (6,)), 
     ('DECAM_FRACIN', '>f4', (6,)), 
+    ('DECAM_DEPTH', '>f4', (6,)), 
+    ('DECAM_GALDEPTH', '>f4', (6,)), 
     ('OUT_OF_BOUNDS', '?'), 
     ('DECAM_ANYMASK', '>i2', (6,)), 
     ('DECAM_ALLMASK', '>i2', (6,)), 
