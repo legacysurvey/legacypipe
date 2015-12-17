@@ -4,8 +4,8 @@ from __future__ import print_function, division
 
 import numpy as np
 
-from legacyproduct.internal import sharedmem
-from legacyproduct.internal.io import iter_tractor, parse_filename
+from legacypipe.internal import sharedmem
+from legacypipe.internal.io import iter_tractor, parse_filename
 
 import argparse
 import os, sys

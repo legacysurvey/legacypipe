@@ -16,14 +16,14 @@ bcast /project/projectdirs/m779/yfeng1/python-2.7-cori.tar.gz
 bcast /project/projectdirs/m779/yfeng1/python-2.7-cori-fitsio-0.9.8rc2.tar.gz
 
 # allow the python modules
-export PYTHONPATH=$PWD/../../:$PYTHONPATH
+export PYTHONPATH=$PWD/../py:$PYTHONPATH
 
 # generate filelist (faster than iterating in python)
 ROOT=/project/projectdirs/cosmo/data/legacysurvey/dr1
 ROOT=/project/projectdirs/desiproc/dr2p
-ROOT=/project/projectdirs/desiproc/dr2
+ROOT=/project/projectdirs/desiproc/dr2p
 
-find $ROOT/tractor -name 'tractor-*.fits' > filelist
+find $ROOT/tractor+depth -name 'tractor-*.fits' > filelist
 
 # use python-mpi. 'python' from anaconda fails with libpython.so.0.1 not found
 # error when ran via aprun, at least on ~yfeng1's environments.
@@ -36,5 +36,5 @@ time srun -u --cpu_bind=no -N 1 python-mpi match-boss-catalogue.py -v \
 -F filelist \
 /global/project/projectdirs/cosmo/work/sdss/cats/specObj-dr12.fits \
 $ROOT/tractor \
-$SCRATCH/sandbox/decals-dr2-specObj-dr12.fits
+$SCRATCH/sandbox/decals-dr2p/tractor+depth-specObj-dr12.fits
 
