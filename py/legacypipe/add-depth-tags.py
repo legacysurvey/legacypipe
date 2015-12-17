@@ -74,6 +74,45 @@ if __name__ == '__main__':
     decals = Decals()
     bricks = decals.get_bricks()
     bricks.cut(bricks.dec > -15)
+    bricks.cut(bricks.dec <  45)
+
+    # Add has_[grz] tags and cut to bricks that exist in DR2.
+    if True:
+        bricks.nobs_med_g = np.zeros(len(bricks), np.uint8)
+        bricks.nobs_med_r = np.zeros(len(bricks), np.uint8)
+        bricks.nobs_med_z = np.zeros(len(bricks), np.uint8)
+        bricks.nobs_max_g = np.zeros(len(bricks), np.uint8)
+        bricks.nobs_max_r = np.zeros(len(bricks), np.uint8)
+        bricks.nobs_max_z = np.zeros(len(bricks), np.uint8)
+        bricks.in_dr2 = np.zeros(len(bricks), bool)
+
+        for ibrick,brick in enumerate(bricks.brickname):
+
+            fn = '/project/projectdirs/desiproc/dr2/tractor/%s/tractor-%s.fits' % (brick[:3], brick)
+            bricks.in_dr2[ibrick] = os.path.exists(fn)
+
+            dirnm = '/project/projectdirs/desiproc/dr2/coadd/%s/%s' % (brick[:3], brick)
+            for band in 'grz':
+                fn = os.path.join(dirnm, 'decals-%s-nexp-%s.fits.gz' % (brick, band))
+                if not os.path.exists(fn):
+                    continue
+                N = fitsio.read(fn)
+                mn = np.min(N)
+                md = np.median(N)
+                mx = np.max(N)
+                print 'Brick', brick, 'band', band, 'has min/median/max nexp', mn,md,mx
+                bricks.get('nobs_med_%s' % band)[ibrick] = md
+                bricks.get('nobs_max_%s' % band)[ibrick] = mx
+
+        bricks.writeto('decals-brick-dr2-a.fits')
+        mxobs = reduce(np.logical_or, [bricks.nobs_max_g, bricks.nobs_max_r, bricks.nobs_max_r])
+        assert(np.all(mxobs > 0 == bricks.in_dr2))
+        bricks.cut(mxobs > 0)
+        bricks.delete('in_dr2')
+        print len(bricks), 'bricks with coverage'
+        bricks.writeto('decals-brick-dr2.fits')
+
+        sys.exit(0)
 
     # Which bricks are missing the depth tags?
     if True:
