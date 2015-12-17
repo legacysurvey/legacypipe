@@ -37,5 +37,5 @@ time srun -u --cpu_bind=no -n 1 python-mpi generate-sweep-files.py -v \
 --schema blocks \
 -d $ROOT/decals-bricks.fits \
 $ROOT/tractor+depth \
-$SCRATCH/sandbox/dr2p-sweep/tractor+depth
+$SCRATCH/sandbox/decals-dr2p/sweep/tractor+depth
 

@@ -37,5 +37,5 @@ time srun -u --cpu_bind=no -N 1 python-mpi match-boss-catalogue.py -v \
 -F filelist \
 /global/projecta/projectdirs/sdss/data/sdss/dr12/boss/qso/DR12Q/DR12Q.fits \
 $ROOT/tractor+depth \
-$SCRATCH/sandbox/decals-dr2-tractor+depth-DR12Q.fits
+$SCRATCH/sandbox/decals-dr2p/tractor+depth-DR12Q.fits
 

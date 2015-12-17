@@ -36,5 +36,5 @@ time srun -u --cpu_bind=no -N 1 python-mpi match-boss-catalogue.py -v \
 -F filelist \
 /global/project/projectdirs/cosmo/work/sdss/cats/specObj-dr12.fits \
 $ROOT/tractor \
-$SCRATCH/sandbox/decals-dr2p-tractor+depth-specObj-dr12.fits
+$SCRATCH/sandbox/decals-dr2p/tractor+depth-specObj-dr12.fits
 
