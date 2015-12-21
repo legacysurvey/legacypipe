@@ -641,6 +641,10 @@ def _coadds(tims, bands, targetwcs,
             # unless there were no images there...
             C.T.allmask[nobs[iy,ix] == 0, iband] = 0
 
+            if detmaps:
+                C.T.depth   [:,iband] =    detiv[iy, ix]
+                C.T.galdepth[:,iband] = galdetiv[iy, ix]
+
         if psfsize:
             wt = cow[iy,ix]
             # psfsizemap is in units of iv * (1 / arcsec**2)
@@ -656,10 +660,6 @@ def _coadds(tims, bands, targetwcs,
             sz *= 2. * np.sqrt(2. * np.log(2.))
             C.T.psfsize[:,iband] = sz
             del psfsizemap
-
-        if detmaps:
-            C.T.depth   [:,iband] =    detiv[iy, ix]
-            C.T.galdepth[:,iband] = galdetiv[iy, ix]
 
         if apertures is not None:
             import photutils
