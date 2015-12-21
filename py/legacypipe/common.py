@@ -117,7 +117,7 @@ def get_git_version(dir=None):
     cmd += 'git describe'
     rtn,version,err = run_command(cmd)
     if rtn:
-        raise RuntimeError('Failed to get version string (%s): ' % cmd + ver + err)
+        raise RuntimeError('Failed to get version string (%s): ' % cmd + version + err)
     version = version.strip()
     return version
 
