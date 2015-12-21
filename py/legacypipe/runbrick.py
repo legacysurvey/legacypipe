@@ -4553,6 +4553,7 @@ def run_brick(brick, radec=None, pixscale=0.262,
               wise=True,
               sdssInit=True,
               early_coadds=True,
+              blob_image=False,
               do_calibs=True,
               write_metrics=True,
               on_bricks=False,
@@ -4813,10 +4814,17 @@ def run_brick(brick, radec=None, pixscale=0.262,
         }
 
     if early_coadds:
-        prereqs.update({
-            'image_coadds':'srcs',
-            'fitblobs':'image_coadds',
-            })
+        if blob_image:
+            prereqs.update({
+                'image_coadds':'srcs',
+                'fitblobs':'image_coadds',
+                })
+        else:
+            prereqs.update({
+                'image_coadds':'tims',
+                'srcs':'image_coadds',
+                'fitblobs':'srcs',
+                })
     else:
         prereqs.update({
             'fitblobs':'srcs',
@@ -4973,7 +4981,9 @@ python -u legacypipe/runbrick.py --plots --brick 2440p070 --zoom 1900 2400 450 9
 
     parser.add_argument('--no-early-coadds', action='store_true', default=False,
                         help='Skip making the early coadds')
-
+    parser.add_argument('--blob-image', action='store_true', default=False,
+                        help='Create "imageblob" image?')
+    
     parser.add_argument('--gpsf', action='store_true', default=False,
                         help='Use a fixed single-Gaussian PSF')
     parser.add_argument(
@@ -5050,6 +5060,8 @@ def get_runbrick_kwargs(opt):
         kwa.update(wise=False)
     if opt.no_early_coadds:
         kwa.update(early_coadds=False)
+    if opt.blob_image:
+        kwa.update(blob_image=True)
 
     if opt.unwise_dir is None:
         opt.unwise_dir = os.environ.get('UNWISE_COADDS_DIR', None)
