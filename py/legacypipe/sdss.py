@@ -24,6 +24,7 @@ def get_sdss_sources(bands, targetwcs, photoobjdir=None, local=True,
     margin = 0.
 
     if ellipse is None:
+        from tractor.ellipses import EllipseESoft
         ellipse = EllipseESoft.fromRAbPhi
 
     sdss = DR9(basedir=photoobjdir)
