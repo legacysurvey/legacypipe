@@ -969,9 +969,22 @@ Using the current directory as DECALS_DIR, but this is likely to fail.
         print('Reading CCDs from', fn)
         T = fits_table(fn)
         print('Got', len(T), 'CCDs')
+
+        cols = T.columns()
+        # Make DR1 CCDs table somewhat compatible with DR2
+        if 'extname' in cols and not 'ccdname' in cols:
+            T.ccdname = T.extname
+        if not 'camera' in cols:
+            T.camera = np.array(['decam'] * len(T))
+        if 'cpimage' in cols and not 'image_filename' in cols:
+            T.image_filename = T.cpimage
+        if 'cpimage_hdu' in cols and not 'image_hdu' in cols:
+            T.image_hdu = T.cpimage_hdu
+
         if 'ccdname' in T.columns():
             # "N4 " -> "N4"
             T.ccdname = np.array([s.strip() for s in T.ccdname])
+
         return T
 
     def ccds_touching_wcs(self, wcs, **kwargs):
