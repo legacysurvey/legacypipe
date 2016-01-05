@@ -862,6 +862,12 @@ Using the current directory as DECALS_DIR, but this is likely to fail.
         '''
         return os.path.join(self.decals_dir, 'calib', 'se-config')
 
+    def get_bricks_dr2(self):
+        '''
+        Returns a table of bricks with DR2 stats.  The caller owns the table.
+        '''
+        return fits_table(os.path.join(self.decals_dir, 'decals-bricks-dr2.fits'))
+
     def get_bricks(self):
         '''
         Returns a table of bricks.  The caller owns the table.
