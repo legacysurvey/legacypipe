@@ -1,5 +1,9 @@
 from __future__ import print_function
 import numpy as np
+import os
+
+import matplotlib
+matplotlib.use('Agg')
 
 from astrometry.util.fits import fits_table, merge_tables
 from astrometry.util.starutil_numpy import degrees_between
@@ -8,15 +12,21 @@ from astrometry.util.miscutils import polygon_area
 from legacypipe.common import Decals
 import tractor
 
-def main():
+def main(outfn='ccds-annotated.fits', ccds=None):
     decals = Decals()
-    ccds = decals.get_ccds()
+    if ccds is None:
+        ccds = decals.get_ccds()
 
-    print("HACK!")
-    ccds.cut(np.array([name in ['N15', 'N16', 'N21', 'N9']
-                       for name in ccds.ccdname]) *
-                       ccds.expnum == 229683)
-    
+    # File from the "observing" svn repo:
+    # https://desi.lbl.gov/svn/decam/code/observing/trunk
+    tiles = fits_table('decam-tiles_obstatus.fits')
+
+    #ccds.cut(np.arange(100))
+    #print("HACK!")
+    #ccds.cut(np.array([name in ['N15', 'N16', 'N21', 'N9']
+    #                   for name in ccds.ccdname]) *
+    #                   ccds.expnum == 229683)
+
     I = decals.photometric_ccds(ccds)
     ccds.photometric = np.zeros(len(ccds), bool)
     ccds.photometric[I] = True
@@ -42,6 +52,8 @@ def main():
     ccds.ra_center  = np.zeros(len(ccds), np.float64)
     ccds.dec_center = np.zeros(len(ccds), np.float64)
 
+    ccds.sig1 = np.zeros(len(ccds), np.float32)
+
     ccds.meansky = np.zeros(len(ccds), np.float32)
     ccds.stdsky  = np.zeros(len(ccds), np.float32)
     ccds.maxsky  = np.zeros(len(ccds), np.float32)
@@ -57,6 +69,8 @@ def main():
     ccds.galnorm_mean = np.zeros(len(ccds), np.float32)
     ccds.galnorm_std  = np.zeros(len(ccds), np.float32)
 
+    gaussgalnorm = np.zeros(len(ccds), np.float32)
+
     # 2nd moments
     ccds.psf_mx2 = np.zeros(len(ccds), np.float32)
     ccds.psf_my2 = np.zeros(len(ccds), np.float32)
@@ -67,21 +81,18 @@ def main():
     ccds.psf_theta = np.zeros(len(ccds), np.float32)
     ccds.psf_ell   = np.zeros(len(ccds), np.float32)
 
-
     ccds.humidity = np.zeros(len(ccds), np.float32)
     ccds.outtemp  = np.zeros(len(ccds), np.float32)
 
-    '''
-    Bitfield to summarize CCD-level errors thrown by the pipeline or
-    perhaps concerns raised by the observers? E.g., how is the
-    photometricity or cloudiness recorded?
+    ccds.tileid   = np.zeros(len(ccds), np.int32)
+    ccds.tilepass = np.zeros(len(ccds), np.uint8)
+    ccds.tileebv  = np.zeros(len(ccds), np.float32)
 
-    Do we need to associate exposures to passes? This is not always
-    defined.
-    '''
-    
+    plvers = []
+
     for iccd,ccd in enumerate(ccds):
         im = decals.get_image_object(ccd)
+        print('Reading CCD %i of %i:' % (iccd+1, len(ccds)), im)
 
         X = im.get_good_image_subregion()
         for i,x in enumerate(X):
@@ -89,42 +100,57 @@ def main():
                 ccds.good_region[iccd,i] = x
 
         W,H = ccd.width, ccd.height
-                
+
         psf = None
         wcs = None
         sky = None
         try:
-            psf = im.read_psf_model(0, 0, pixPsf=True)
-            wcs = im.read_pv_wcs()
-            sky = im.read_sky_model(splinesky=True)
-
-            hdr = im.read_image_primary_header()
-
+            tim = im.get_tractor_image(pixPsf=True, splinesky=True,
+                                       subsky=False, pixels=False)
         except:
             import traceback
             traceback.print_exc()
+            plvers.append('')
             continue
-            
-        print('Got PSF', psf)
-        print('Got sky', sky)
-        print('Got WCS', wcs)
+
+        if tim is None:
+            plvers.append('')
+            continue
+
+        psf = tim.psf
+        wcs = tim.wcs.wcs
+        sky = tim.sky
+        hdr = tim.primhdr
+
+        # print('Got PSF', psf)
+        # print('Got sky', type(sky))
+        # print('Got WCS', wcs)
 
         ccds.humidity[iccd] = hdr.get('HUMIDITY')
         ccds.outtemp[iccd]  = hdr.get('OUTTEMP')
-        
-        # Need a tim to instantiate PSF... well, actually the galaxy norm
-        # requires WCS & photocal.
-        # sig1 ?!
-        pcal = tractor.LinearPhotoCal(1., band=ccd.filter)
-        faketim = tractor.Image(data=np.zeros((H,W), np.float32),
-                                inverr=np.ones((H,W), np.float32),
-                                psf=psf, wcs=tractor.ConstantFitsWcs(wcs),
-                                photocal=pcal)
-        faketim.band = ccd.filter
-            
-        #tim = im.get_tractor_image(pixPsf=True, splinesky=True,
-        #                           subsky=False, pixels=False)
-            
+
+        ccds.sig1[iccd] = tim.sig1
+        plvers.append(tim.plver)
+
+        obj = hdr.get('OBJECT')
+        # parse 'DECaLS_15150_r'
+        words = obj.split('_')
+        tile = None
+        if len(words) == 3 and words[0] == 'DECaLS':
+            try:
+                tileid = int(words[1])
+                tile = tiles[tileid - 1]
+                if tile.tileid != tileid:
+                    I = np.flatnonzero(tile.tileid == tileid)
+                    tile = tiles[I[0]]
+            except:
+                pass
+
+        if tile is not None:
+            ccds.tileid  [iccd] = tile.tileid
+            ccds.tilepass[iccd] = tile.get('pass')
+            ccds.tileebv [iccd] = tile.ebv_med
+
         # Instantiate PSF on a grid
         S = 32
         xx = np.linspace(1+S, W-S, 5)
@@ -133,8 +159,8 @@ def main():
         psfnorms = []
         galnorms = []
         for x,y in zip(xx.ravel(), yy.ravel()):
-            p = im.psf_norm(faketim, x=x, y=y)
-            g = im.galaxy_norm(faketim, x=x, y=y)
+            p = im.psf_norm(tim, x=x, y=y)
+            g = im.galaxy_norm(tim, x=x, y=y)
             psfnorms.append(p)
             galnorms.append(g)
         ccds.psfnorm_mean[iccd] = np.mean(psfnorms)
@@ -148,12 +174,12 @@ def main():
         ph,pw = p.shape
         px,py = np.meshgrid(np.arange(pw), np.arange(ph))
         psum = np.sum(p)
-        print('psum', psum)
+        # print('psum', psum)
         p /= psum
         # centroids
         cenx = np.sum(p * px)
         ceny = np.sum(p * py)
-        print('cenx,ceny', cenx,ceny)
+        # print('cenx,ceny', cenx,ceny)
         # second moments
         x2 = np.sum(p * (px - cenx)**2)
         y2 = np.sum(p * (py - ceny)**2)
@@ -166,10 +192,10 @@ def main():
         b = np.sqrt((x2 + y2) / 2. - s)
         ell = 1. - b/a
 
-        print('PSF second moments', x2, y2, xy)
-        print('PSF position angle', theta)
-        print('PSF semi-axes', a, b)
-        print('PSF ellipticity', ell)
+        # print('PSF second moments', x2, y2, xy)
+        # print('PSF position angle', theta)
+        # print('PSF semi-axes', a, b)
+        # print('PSF ellipticity', ell)
 
         ccds.psf_mx2[iccd] = x2
         ccds.psf_my2[iccd] = y2
@@ -178,6 +204,13 @@ def main():
         ccds.psf_b[iccd] = b
         ccds.psf_theta[iccd] = theta
         ccds.psf_ell  [iccd] = ell
+
+        # Galaxy norm using Gaussian approximation of PSF.
+        realpsf = tim.psf
+        tim.psf = im.read_psf_model(0, 0, gaussPsf=True,
+                                    psf_sigma=tim.psf_sigma)
+        gaussgalnorm[iccd] = im.galaxy_norm(tim, x=cx, y=cy)
+        tim.psf = realpsf
         
         # Sky
         mod = np.zeros((ccd.height, ccd.width), np.float32)
@@ -226,10 +259,89 @@ def main():
         ccds.pixscale_min[iccd] = min(pixscale)
         ccds.pixscale_max[iccd] = max(pixscale)
         ccds.pixscale_std[iccd] = np.std(pixscale)
-            
-    ccds.writeto('ccds-annotated.fits')
 
+
+    ccds.plver = np.array(plvers)
+
+    sfd = tractor.sfd.SFDMap()
+    allbands = 'ugrizY'
+    filts = ['%s %s' % ('DES', f) for f in allbands]
+    wisebands = ['WISE W1', 'WISE W2', 'WISE W3', 'WISE W4']
+    ebv,ext = sfd.extinction(filts + wisebands, ccds.ra_center,
+                             ccds.dec_center, get_ebv=True)
+    ext = ext.astype(np.float32)
+    ccds.ebv = ebv.astype(np.float32)
+    ccds.decam_extinction = ext[:,:len(allbands)]
+    ccds.wise_extinction = ext[:,len(allbands):]
+
+    # Depth
+    detsig1 = ccds.sig1 / ccds.psfnorm_mean
+    depth = 5. * detsig1
+    # that's flux in nanomaggies -- convert to mag
+    ccds.psfdepth = -2.5 * (np.log10(depth) - 9)
+
+    detsig1 = ccds.sig1 / ccds.galnorm_mean
+    depth = 5. * detsig1
+    # that's flux in nanomaggies -- convert to mag
+    ccds.galdepth = -2.5 * (np.log10(depth) - 9)
+
+    # Depth using Gaussian FWHM.
+    psf_sigma = ccds.fwhm / 2.35
+    gnorm = 1./(2. * np.sqrt(np.pi) * psf_sigma)
+    detsig1 = ccds.sig1 / gnorm
+    depth = 5. * detsig1
+    # that's flux in nanomaggies -- convert to mag
+    ccds.gausspsfdepth = -2.5 * (np.log10(depth) - 9)
+
+    # Gaussian galaxy depth
+    detsig1 = ccds.sig1 / gaussgalnorm
+    depth = 5. * detsig1
+    # that's flux in nanomaggies -- convert to mag
+    ccds.gaussgaldepth = -2.5 * (np.log10(depth) - 9)
+
+    ccds.writeto(outfn)
+
+
+def _bounce_main((i, ccds)):
+    try:
+        outfn = 'ccds-annotated/ccds-annotated-%03i.fits' % i
+        if os.path.exists(outfn):
+            print('Already exists:', outfn)
+            return
+        main(outfn=outfn, ccds=ccds)
+    except:
+        import traceback
+        traceback.print_exc()
 
 if __name__ == '__main__':
+
+    TT = [fits_table('ccds-annotated/ccds-annotated-%03i.fits' % i) for i in range(515)]
+    T = merge_tables(TT)
+    T.writeto('ccds-annotated.fits')
+
     import sys
-    sys.exit(main())
+    sys.exit()
+    #sys.exit(main())
+
+    decals = Decals()
+    ccds = decals.get_ccds()
+    from astrometry.util.multiproc import *
+    #mp = multiproc(8)
+    mp = multiproc(4)
+    N = 1000
+    args = []
+    i = 0
+    while len(ccds):
+        c = ccds[:N]
+        ccds = ccds[N:]
+        args.append((i, c))
+        i += 1
+    print('Split CCDs file into', len(args), 'pieces')
+    print('sizes:', [len(c) for i,c in args])
+    mp.map(_bounce_main, args)
+
+    # reassemble outputs
+    TT = [fits_table('ccds-annotated/ccds-annotated-%03i.fits' % i) for i,nil in args]
+    T = merge_tables(TT)
+    T.writeto('ccds-annotated.fits')
+

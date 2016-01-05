@@ -361,12 +361,12 @@ def stage_tims(W=3600, H=3600, pixscale=0.262, brickname=None,
                 if tim.band != b:
                     continue
                 # broaden range to encompass most pixels... only req'd when sky is bad
-                lo,hi = -5.*s, 5.*s
+                lo,hi = -5.*sig1, 5.*sig1
                 pix = tim.getImage()[tim.getInvError() > 0]
                 lo = min(lo, np.percentile(pix, 5))
                 hi = max(hi, np.percentile(pix, 95))
                 plt.hist(pix, range=(lo, hi), bins=50, histtype='step',
-                         alpha=0.5, label='%s: %.0f s' % (name, exptime))
+                         alpha=0.5, label=tim.name)
             plt.legend()
             plt.xlabel('Pixel values')
             plt.title('Pixel distributions: %s band' % b)
@@ -375,8 +375,21 @@ def stage_tims(W=3600, H=3600, pixscale=0.262, brickname=None,
     if plots:
         for tim in tims:
             plt.clf()
+            plt.subplot(2,2,1)
             dimshow(tim.getImage(), **tim.ima)
-            plt.title(tim.name)
+            plt.title('image')
+            plt.subplot(2,2,2)
+            dimshow(tim.getInvError(), vmin=0, vmax=1.1/tim.sig1)
+            plt.title('inverr')
+            plt.subplot(2,2,3)
+            #nil,udq = np.unique(tim.dq, return_inverse=True)
+            dimshow(tim.dq, vmin=0, vmax=tim.dq.max())
+            plt.title('DQ')
+            plt.subplot(2,2,3)
+            #nil,udq = np.unique(tim.dq, return_inverse=True)
+            dimshow((tim.dq & tim.dq_bits['satur'] > 0), vmin=0, vmax=1)
+            plt.title('SATUR')
+            plt.suptitle(tim.name)
             ps.savefig()
 
     if not pipe:
@@ -453,6 +466,9 @@ def _coadds(tims, bands, targetwcs,
         C.T.allmask = np.zeros((len(ix), len(bands)), np.int16)
         if psfsize:
             C.T.psfsize = np.zeros((len(ix), len(bands)), np.float32)
+        if detmaps:
+            C.T.depth    = np.zeros((len(ix), len(bands)), np.float32)
+            C.T.galdepth = np.zeros((len(ix), len(bands)), np.float32)
 
     tinyw = 1e-30
     for iband,band in enumerate(bands):
@@ -625,8 +641,11 @@ def _coadds(tims, bands, targetwcs,
             # unless there were no images there...
             C.T.allmask[nobs[iy,ix] == 0, iband] = 0
 
+            if detmaps:
+                C.T.depth   [:,iband] =    detiv[iy, ix]
+                C.T.galdepth[:,iband] = galdetiv[iy, ix]
+
         if psfsize:
-            # We're summing this across bands....
             wt = cow[iy,ix]
             # psfsizemap is in units of iv * (1 / arcsec**2)
             sz = psfsizemap[iy,ix]
@@ -1449,6 +1468,8 @@ def stage_srcs(coimgs=None, cons=None,
     Tnew,newcat,hot = run_sed_matched_filters(
         SEDs, bands, detmaps, detivs, avoid_xy, targetwcs,
         nsigma=nsigma, saturated_pix=saturated_pix, plots=plots, ps=ps, mp=mp)
+    if Tnew is None:
+        raise NothingToDoError('No sources detected.')
 
     peaksn = Tnew.peaksn
     apsn = Tnew.apsn
@@ -2189,7 +2210,8 @@ def _blob_iter(blobslices, blobsrcs, blobs, targetwcs, tims, cat, bands,
             tim.imobj.psfnorm = tim.psfnorm
             tim.imobj.galnorm = tim.galnorm
             # FIXME -- maybe the cache is worth sending?
-            tim.psf.clear_cache()
+            if hasattr(tim.psf, 'clear_cache'):
+                tim.psf.clear_cache()
             subtimargs.append((subimg, subie, subwcs, tim.subwcs,
                                tim.getPhotoCal(),
                                subsky, tim.psf, tim.name, sx0, sx1, sy0, sy1,
@@ -3849,7 +3871,7 @@ def stage_coadds(bands=None, version_header=None, targetwcs=None,
                                basedir),
                 plots=False, ps=ps)
 
-    for c in ['nobs', 'anymask', 'allmask', 'psfsize']:
+    for c in ['nobs', 'anymask', 'allmask', 'psfsize', 'depth', 'galdepth']:
         T.set(c, C.T.get(c))
 
     if apertures is None:
@@ -3889,8 +3911,9 @@ def stage_coadds(bands=None, version_header=None, targetwcs=None,
             depth[np.logical_not(np.isfinite(depth))] = 0.
             if U is not None:
                 depth = depth.flat[U]
-            print(band, name, 'band depth map: percentiles',
-                  np.percentile(depth, np.arange(0,101, 10)))
+            if len(depth):
+                print(band, name, 'band depth map: percentiles',
+                      np.percentile(depth, np.arange(0,101, 10)))
             # histogram
             D.set('counts_%s_%s' % (name, band),
                   np.histogram(depth, bins=depthbins)[0].astype(np.int32))
@@ -4150,29 +4173,18 @@ def stage_writecat(
     TT.tx = TT.tx.astype(np.float32)
     TT.ty = TT.ty.astype(np.float32)
 
-    TT.decam_rchi2      = np.zeros((len(TT), len(allbands)), np.float32)
-    TT.decam_fracflux   = np.zeros((len(TT), len(allbands)), np.float32)
-    TT.decam_fracmasked = np.zeros((len(TT), len(allbands)), np.float32)
-    TT.decam_fracin     = np.zeros((len(TT), len(allbands)), np.float32)
-    TT.decam_nobs       = np.zeros((len(TT), len(allbands)), np.uint8)
-    TT.decam_anymask    = np.zeros((len(TT), len(allbands)), TT.anymask.dtype)
-    TT.decam_allmask    = np.zeros((len(TT), len(allbands)), TT.allmask.dtype)
-    TT.decam_psfsize    = np.zeros((len(TT), len(allbands)), np.float32)
+    # Set fields such as TT.decam_rchi2, etc -- fields with 6-band values
     B = np.array([allbands.index(band) for band in bands])
-    TT.decam_rchi2     [:,B] = TT.rchi2
-    TT.decam_fracflux  [:,B] = TT.fracflux
-    TT.decam_fracmasked[:,B] = TT.fracmasked
-    TT.decam_fracin    [:,B] = TT.fracin
-    TT.decam_nobs      [:,B] = TT.nobs
-    TT.decam_anymask   [:,B] = TT.anymask
-    TT.decam_allmask   [:,B] = TT.allmask
-    TT.decam_psfsize   [:,B] = TT.psfsize
-    TT.delete_column('rchi2')
-    TT.delete_column('fracflux')
-    TT.delete_column('fracin')
-    TT.delete_column('nobs')
-    TT.delete_column('anymask')
-    TT.delete_column('allmask')
+    atypes = dict(nobs=np.uint8, anymask=TT.anymask.dtype,
+                  allmask=TT.allmask.dtype)
+    for k in ['rchi2', 'fracflux', 'fracmasked', 'fracin', 'nobs',
+              'anymask', 'allmask', 'psfsize', 'depth', 'galdepth']:
+        t = atypes.get(k, np.float32)
+        A = np.zeros((len(TT), len(allbands)), t)
+        A[:,B] = TT.get(k)
+        TT.set('decam_'+k, A)
+        TT.delete_column(k)
+
     TT.rename('oob', 'out_of_bounds')
 
     if AP is not None:
@@ -4411,7 +4423,13 @@ def stage_writecat(
                     x[blankout] = 0
 
     if write_catalog:
-        T2.writeto(fn, primheader=primhdr, header=hdr, columns=cols)
+        import tempfile
+        f,tempfn = tempfile.mkstemp(
+            suffix='.fits', prefix='tractor-%s-tmp' % brickname,
+            dir=os.path.dirname(fn))
+        os.close(f)
+        T2.writeto(tempfn, primheader=primhdr, header=hdr, columns=cols)
+        os.rename(tempfn, fn)
         print('Wrote', fn)
 
     return dict(T2=T2)
@@ -4535,6 +4553,7 @@ def run_brick(brick, radec=None, pixscale=0.262,
               wise=True,
               sdssInit=True,
               early_coadds=True,
+              blob_image=False,
               do_calibs=True,
               write_metrics=True,
               on_bricks=False,
@@ -4795,10 +4814,17 @@ def run_brick(brick, radec=None, pixscale=0.262,
         }
 
     if early_coadds:
-        prereqs.update({
-            'image_coadds':'srcs',
-            'fitblobs':'image_coadds',
-            })
+        if blob_image:
+            prereqs.update({
+                'image_coadds':'srcs',
+                'fitblobs':'image_coadds',
+                })
+        else:
+            prereqs.update({
+                'image_coadds':'tims',
+                'srcs':'image_coadds',
+                'fitblobs':'srcs',
+                })
     else:
         prereqs.update({
             'fitblobs':'srcs',
@@ -4955,7 +4981,9 @@ python -u legacypipe/runbrick.py --plots --brick 2440p070 --zoom 1900 2400 450 9
 
     parser.add_argument('--no-early-coadds', action='store_true', default=False,
                         help='Skip making the early coadds')
-
+    parser.add_argument('--blob-image', action='store_true', default=False,
+                        help='Create "imageblob" image?')
+    
     parser.add_argument('--gpsf', action='store_true', default=False,
                         help='Use a fixed single-Gaussian PSF')
     parser.add_argument(
@@ -5032,6 +5060,8 @@ def get_runbrick_kwargs(opt):
         kwa.update(wise=False)
     if opt.no_early_coadds:
         kwa.update(early_coadds=False)
+    if opt.blob_image:
+        kwa.update(blob_image=True)
 
     if opt.unwise_dir is None:
         opt.unwise_dir = os.environ.get('UNWISE_COADDS_DIR', None)

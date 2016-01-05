@@ -173,6 +173,9 @@ def run_sed_matched_filters(SEDs, bands, detmaps, detivs, omit_xy,
     peakx = xx[n0:]
     peaky = yy[n0:]
 
+    if len(peakx) == 0:
+        return None,None,None
+
     # Add sources for the new peaks we found
     pr,pd = targetwcs.pixelxy2radec(peakx+1, peaky+1)
     print('Adding', len(pr), 'new sources')

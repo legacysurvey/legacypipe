@@ -1,8 +1,4 @@
 from __future__ import print_function
-if __name__ == '__main__':
-    import matplotlib
-    matplotlib.use('Agg')
-import pylab as plt
 
 import os
 import tempfile
@@ -14,7 +10,6 @@ import fitsio
 
 from astrometry.util.fits import fits_table, merge_tables
 from astrometry.util.file import trymakedirs
-from astrometry.util.plotutils import dimshow
 from astrometry.util.util import Tan, Sip, anwcs_t
 from astrometry.util.starutil_numpy import degrees_between, hmsstring2ra, dmsstring2dec
 from astrometry.util.miscutils import polygons_intersect, estimate_mode, clip_polygon, clip_wcs
@@ -122,7 +117,7 @@ def get_git_version(dir=None):
     cmd += 'git describe'
     rtn,version,err = run_command(cmd)
     if rtn:
-        raise RuntimeError('Failed to get version string (%s): ' % cmd + ver + err)
+        raise RuntimeError('Failed to get version string (%s): ' % cmd + version + err)
     version = version.strip()
     return version
 
@@ -291,6 +286,8 @@ def segment_and_group_sources(image, T, name=None, ps=None, plots=False):
     T.blob = blobs[T.ity, T.itx]
 
     if plots:
+        import pylab as plt
+        from astrometry.util.plotutils import dimshow
         plt.clf()
         dimshow(blobs > 0, vmin=0, vmax=1)
         ax = plt.axis()
@@ -402,6 +399,8 @@ def segment_and_group_sources(image, T, name=None, ps=None, plots=False):
         fitsio.write('blobs-after-%s.fits' % name, blobs, clobber=True)
 
     if plots:
+        import pylab as plt
+        from astrometry.util.plotutils import dimshow
         plt.clf()
         dimshow(blobs > -1, vmin=0, vmax=1)
         ax = plt.axis()
@@ -783,6 +782,39 @@ Using the current directory as DECALS_DIR, but this is likely to fail.
             '90prime': BokImage,
             }
 
+        self.allbands = 'ugrizY'
+
+    def index_of_band(self, b):
+        return self.allbands.index(b)
+        
+    def find_file(self, filetype, brick=None, brickpre=None, band='%(band)s'):
+        '''
+        Returns the filename of a DECaLS file.
+
+        *filetype* : string, type of file to find, including:
+             "tractor" -- Tractor catalogs
+
+        *brick* : string, brick name such as "0001p000"
+
+        Returns: path to the specified file (whether or not it exists).
+        '''
+        if brick is None:
+            brick = '%(brick)s'
+            brickpre = '%(brick).3s'
+        else:
+            brickpre = brick[:3]
+
+        if filetype == 'tractor':
+            return os.path.join(self.decals_dir, 'tractor', brickpre,
+                                'tractor-%s.fits' % brick)
+        elif filetype == 'depth':
+            return os.path.join(self.decals_dir, 'coadd', brickpre, brick,
+                                'decals-%s-depth-%s.fits.gz' % (brick, band))
+        elif filetype == 'galdepth':
+            return os.path.join(self.decals_dir, 'coadd', brickpre, brick,
+                                'decals-%s-galdepth-%s.fits.gz' % (brick, band))
+        assert(False)
+        
     def __getstate__(self):
         '''
         For pickling: clear the cached ZP and other tables.

@@ -1,14 +1,15 @@
 #! /usr/bin/env python
-"""This script does something.
+"""This script runs calibration pre-processing steps including WCS, sky, and PSF models.
 """
 from __future__ import print_function
 import os
 from sys import exit
 import numpy as np
 from astrometry.util.fits import fits_table
+import sys
 
 # Argh, no relative imports in runnable scripts
-from legacypipe.common import run_calibs, DecamImage, Decals
+from legacypipe.common import run_calibs, Decals
 
 def main():
     """Main program.
@@ -56,7 +57,7 @@ def main():
         i = int(a)
         t = T[i]
 
-        im = DecamImage(D, t)
+        im = D.get_image_object(t)
         print('Running', im.calname)
 
         kwargs = dict(pvastrom=opt.astrom, psfex=opt.psfex, sky=opt.sky)
