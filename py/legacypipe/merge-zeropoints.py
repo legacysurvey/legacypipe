@@ -141,8 +141,6 @@ if __name__ == '__main__':
         T = fits_table(fn)
 
         # forgot to include EXPTIME in zeropoint, thus TRANSPARENCY is way off
-        zpt = T.zpt
-        T.delete_column('zpt')
         tmags = 2.5 * np.log10(T.exptime)
         T.ccdphoff += tmags
         T.ccdtransp = 10.**(T.ccdphoff / -2.5)

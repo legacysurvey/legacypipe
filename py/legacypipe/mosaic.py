@@ -236,17 +236,6 @@ class MosaicImage(LegacySurveyImage):
         if tmpmaskfn is not None:
             os.unlink(tmpmaskfn)
 
-                         
-class MosaicDecals(Decals):
-    def __init__(self, **kwargs):
-        super(MosaicDecals, self).__init__(**kwargs)
-        self.image_typemap.update(mosaic=MosaicImage)
-
-    def apply_blacklist(self, ccds):
-        return np.arange(len(ccds))
-
-    def photometric_ccds(self, ccds):
-        return np.arange(len(ccds))
 
 def main():
     import logging
@@ -268,13 +257,7 @@ def main():
         lvl = logging.DEBUG
     logging.basicConfig(level=lvl, format='%(message)s', stream=sys.stdout)
 
-    decals = MosaicDecals()
-
-    kwargs.update(decals=decals,
-                  blacklist=False,
-                  splinesky=True,
-                  pixPsf=True,
-                  )
+    kwargs.update(splinesky=True, pixPsf=True)
 
     run_brick(opt.brick, **kwargs)
     
