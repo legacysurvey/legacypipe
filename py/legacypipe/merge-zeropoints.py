@@ -139,52 +139,19 @@ if __name__ == '__main__':
         ]:
         print('Reading', fn)
         T = fits_table(fn)
-        #T.rename('extname', 'ccdname')
-
-        #print('HACK!  Replacing "v0" with "v1" in filenames')
-        #T.filename = np.array([fn.replace('_v0.', '_v1.') for fn in T.filename])
-
-        #T.ra  = np.array([hmsstring2ra (x) for x in T.ra ])
-        #T.dec = np.array([dmsstring2dec(x) for x in T.dec])
 
         # forgot to include EXPTIME in zeropoint, thus TRANSPARENCY is way off
         zpt = T.zpt
         T.delete_column('zpt')
         tmags = 2.5 * np.log10(T.exptime)
-        #T.ccdzpt = zpt + tmags
-        #T.mag_offset += tmags
-        #T.transparency = 10.**(T.mag_offset / -2.5)
         T.ccdphoff += tmags
-        T.transparency = 10.**(T.ccdphoff / -2.5)
-        # BUT, the exptime gets added BACK into the zpt in Decals.get_zeropoint_for.
-        #T.ccdzpt = zpt
-
-        
+        T.ccdtransp = 10.**(T.ccdphoff / -2.5)
 
         # Fill in BOGUS values; update from header below
         T.ccdhdunum = np.zeros(len(T), np.int32)
-        #T.ccdra  = np.zeros(len(T), np.float64)
-        #T.ccddec = np.zeros(len(T), np.float64)
-        #T.ccdnum = np.zeros(len(T), np.int16)
-        # T.cd1_1  = np.zeros(len(T), np.float32)
-        # T.cd1_2  = np.zeros(len(T), np.float32)
-        # T.cd2_1  = np.zeros(len(T), np.float32)
-        # T.cd2_2  = np.zeros(len(T), np.float32)
-        # T.crval1  = np.zeros(len(T))
-        # T.crval2  = np.zeros(len(T))
-        # T.crpix1  = np.zeros(len(T), np.float32)
-        # T.crpix2  = np.zeros(len(T), np.float32)
-        # T.mjd_obs = np.zeros(len(T), np.float32)
-        # propids = []
-
         T.ccdname = np.array(['ccd%i' % ccdnum for ccdnum in T.ccdnum])
 
         T = normalize_zeropoints(fn, dirnms, imgdir, cam, T=T)
-
-        #T.expid = np.array(['%10i-%s' % (expnum,extname.strip())
-        #                    for expnum,extname in zip(T.expnum, T.ccdname)])
-
-        print('Unique CCD names:', np.unique(T.ccdname))
 
         # HDU number wasn't recorded in zeropoint file -- search for EXTNAME
         fns = np.unique(T.image_filename)
@@ -204,35 +171,12 @@ if __name__ == '__main__':
                 print(len(I), 'rows match')
                 assert(len(I) == 1)
                 T.image_hdu[I] = ext
-                # ccdra -> ra
-                #T.ra [I] = hmsstring2ra (hdr['RA1' ])
-                #T.dec[I] = dmsstring2dec(hdr['DEC1'])
-                #T.ccdnum[I] = hdr['CCDNUM']
-                # T.cd1_1[I] = hdr['CD1_1']
-                # T.cd1_2[I] = hdr['CD1_2']
-                # T.cd2_1[I] = hdr['CD2_1']
-                # T.cd2_2[I] = hdr['CD2_2']
-                # 
-                # T.crval1[I] = hdr['CRVAL1']
-                # T.crval2[I] = hdr['CRVAL2']
-                # T.crpix1[I] = hdr['CRPIX1']
-                # T.crpix2[I] = hdr['CRPIX2']
-
-                # according to the header, "UT approximate"
-                #T.mjd_obs[I] = float(phdr['MJD-OBS'])
-                #propids.append(phdr['PROPID'])
-
         T.fwhm = T.seeing
-        # T.propid = np.array(propids)
-        # T.ccdraoff  = T.ra_offset
-        # T.ccddecoff = T.dec_offset
-
         TT.append(T)
     T = merge_tables(TT)
     outfn = 'mosaicz-ccds.fits'
     T.writeto(outfn)
     print('Wrote', outfn)
-
     
     sys.exit(0)
 
