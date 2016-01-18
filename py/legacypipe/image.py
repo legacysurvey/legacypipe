@@ -281,7 +281,8 @@ class LegacySurveyImage(object):
             twcs.setX0Y0(x0,y0)
 
         psf = self.read_psf_model(x0, y0, gaussPsf=gaussPsf, pixPsf=pixPsf,
-                                  const2psf=const2psf, psf_sigma=psf_sigma)
+                                  const2psf=const2psf, psf_sigma=psf_sigma,
+                                  cx=(x0+x1)/2., cy=(y0+y1)/2.)
 
         tim = Image(img, invvar=invvar, wcs=twcs, psf=psf,
                     photocal=LinearPhotoCal(zpscale, band=band),
@@ -521,7 +522,7 @@ class LegacySurveyImage(object):
         return skyobj
 
     def read_psf_model(self, x0, y0, gaussPsf=False, pixPsf=False,
-                       const2psf=False, psf_sigma=1.):
+                       const2psf=False, psf_sigma=1., cx=0, cy=0):
         psffn = None
         if gaussPsf:
             from tractor.basics import GaussianMixturePSF
@@ -544,7 +545,7 @@ class LegacySurveyImage(object):
             print('Reading PsfEx model from', self.psffn)
             psffn = self.psffn
             psfex = PsfExModel(self.psffn)
-            psfim = psfex.at(imw/2., imh/2.)
+            psfim = psfex.at(cx, cy)
             psfim = psfim[5:-5, 5:-5]
             print('Fitting PsfEx model as 2-component Gaussian...')
             psf = GaussianMixtureEllipsePSF.fromStamp(psfim, N=2)
