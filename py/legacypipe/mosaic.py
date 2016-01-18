@@ -17,8 +17,10 @@ class MosaicImage(LegacySurveyImage):
         # convert FWHM into pixel units
         self.fwhm /= self.pixscale
 
-        self.dqfn = self.imgfn.replace('_ooi_', '_ood_')
-        self.wtfn = self.imgfn.replace('_ooi_', '_oow_')
+        self.dqfn = self.imgfn.replace('_ooi_', '_ood_').replace('_oki_','_ood_')
+        self.wtfn = self.imgfn.replace('_ooi_', '_oow_').replace('_oki_','_oow_')
+        assert(self.dqfn != self.imgfn)
+        assert(self.wtfn != self.imgfn)
 
         expstr = '%08i' % self.expnum
         self.name = '%s-%s' % (expstr, self.ccdname)
