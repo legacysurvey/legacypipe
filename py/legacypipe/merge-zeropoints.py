@@ -130,7 +130,8 @@ if __name__ == '__main__':
     #/global/cscratch1/sd/arjundey/mosaicz/zeropoint-mzls_test1.fits
     for fn,dirnms in [
         (os.path.join(zpdir, 'ZP-MOS3-20151213.fits'),
-         [os.path.join(imgdir, 'MOS151213_8a516af')]),
+         #[os.path.join(imgdir, 'MOS151213_8a516af')]),
+         [os.path.join(imgdir, 'MOS151213_8a7fcee')]),
         ]:
         print('Reading', fn)
         T = fits_table(fn)
