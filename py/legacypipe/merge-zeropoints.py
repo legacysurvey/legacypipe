@@ -136,16 +136,23 @@ if __name__ == '__main__':
         print('Reading', fn)
         T = fits_table(fn)
         T.rename('extname', 'ccdname')
+
+        print('HACK!  Replacing "v0" with "v1" in filenames')
+        T.filename = np.array([fn.replace('_v0.', '_v1.') for fn in T.filename])
+
         T.ra  = np.array([hmsstring2ra (x) for x in T.ra ])
         T.dec = np.array([dmsstring2dec(x) for x in T.dec])
         # forgot to include EXPTIME in zeropoint, thus TRANSPARENCY is way off
         zpt = T.zpt
         T.delete_column('zpt')
         tmags = 2.5 * np.log10(T.exptime)
-        T.ccdzpt = zpt + tmags
+        #T.ccdzpt = zpt + tmags
         T.mag_offset += tmags
         T.transparency = 10.**(T.mag_offset / -2.5)
-        
+
+        # BUT, the exptime gets added BACK into the zpt in Decals.get_zeropoint_for.
+        T.ccdzpt = zpt
+
         # Fill in BOGUS values; update from header below
         T.ccdhdunum = np.zeros(len(T), np.int32)
         T.ccdra  = np.zeros(len(T), np.float64)
@@ -159,6 +166,8 @@ if __name__ == '__main__':
         T.crval2  = np.zeros(len(T))
         T.crpix1  = np.zeros(len(T), np.float32)
         T.crpix2  = np.zeros(len(T), np.float32)
+        T.mjd_obs = np.zeros(len(T), np.float32)
+        propids = []
 
         T = normalize_zeropoints(fn, dirnms, imgdir, cam, T=T)
 
@@ -169,8 +178,10 @@ if __name__ == '__main__':
         fns = np.unique(T.image_filename)
         for fn in fns:
             print('Filename', fn)
-            F = fitsio.FITS(os.path.join(imgdir, fn))
+            pth = os.path.join(imgdir, fn)
+            F = fitsio.FITS(pth)
             print('File', fn, 'exts:', len(F))
+            phdr = fitsio.read_header(pth, 0)
             for ext in range(1, len(F)):
                 print('extension:', ext)
                 hdr = F[ext].read_header()
@@ -194,7 +205,15 @@ if __name__ == '__main__':
                 T.crval2[I] = hdr['CRVAL2']
                 T.crpix1[I] = hdr['CRPIX1']
                 T.crpix2[I] = hdr['CRPIX2']
-                
+
+                # according to the header, "UT approximate"
+                T.mjd_obs[I] = float(phdr['MJD-OBS'])
+                propids.append(phdr['PROPID'])
+
+        T.fwhm = T.seeing
+        T.propid = np.array(propids)
+        T.ccdraoff  = T.ra_offset
+        T.ccddecoff = T.dec_offset
 
         TT.append(T)
     T = merge_tables(TT)
