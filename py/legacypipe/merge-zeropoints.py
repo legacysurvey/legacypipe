@@ -56,7 +56,9 @@ def normalize_zeropoints(fn, dirnms, image_basedir, cam, T=None):
         fnlist = []
         for dirnm in dirnms:
             pattern = os.path.join(image_basedir, cam, dirnm, fn + '*')
-            fnlist.extend(glob(pattern))
+            matched = glob(pattern)
+            #print('Glob pattern', pattern, 'matched', matched)
+            fnlist.extend(matched)
 
         pattern_string = os.path.join(image_basedir, cam, dirnm, fn + '*')
         if len(dirnms) > 1:
@@ -158,7 +160,6 @@ if __name__ == '__main__':
             pth = os.path.join(imgdir, fn)
             F = fitsio.FITS(pth)
             print('File', fn, 'exts:', len(F))
-            phdr = fitsio.read_header(pth, 0)
             for ext in range(1, len(F)):
                 print('extension:', ext)
                 hdr = F[ext].read_header()
@@ -172,6 +173,7 @@ if __name__ == '__main__':
         T.fwhm = T.seeing
         TT.append(T)
     T = merge_tables(TT)
+    T.image_filename = np.array([cam + '/' + fn for fn in T.image_filename])
     outfn = 'mosaicz-ccds.fits'
     T.writeto(outfn)
     print('Wrote', outfn)
