@@ -154,6 +154,10 @@ if __name__ == '__main__':
         T.cd1_2  = np.zeros(len(T), np.float32)
         T.cd2_1  = np.zeros(len(T), np.float32)
         T.cd2_2  = np.zeros(len(T), np.float32)
+        T.crval1  = np.zeros(len(T))
+        T.crval2  = np.zeros(len(T))
+        T.crpix1  = np.zeros(len(T), np.float32)
+        T.crpix2  = np.zeros(len(T), np.float32)
 
         T = normalize_zeropoints(fn, dirnms, imgdir, cam, T=T)
 
@@ -185,6 +189,11 @@ if __name__ == '__main__':
                 T.cd2_1[I] = hdr['CD2_1']
                 T.cd2_2[I] = hdr['CD2_2']
 
+                T.crval1[I] = hdr['CRVAL1']
+                T.crval2[I] = hdr['CRVAL2']
+                T.crpix1[I] = hdr['CRPIX1']
+                T.crpix2[I] = hdr['CRPIX2']
+                
 
         TT.append(T)
     T = merge_tables(TT)
