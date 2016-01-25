@@ -752,8 +752,9 @@ class Decals(object):
         Create a Decals object using data from the given *decals_dir*
         directory, or from the $DECALS_DIR environment variable.
         '''
-        from .bok import BokImage
-        from .decam import DecamImage
+        from .decam  import DecamImage
+        from .mosaic import MosaicImage
+        from .bok    import BokImage
 
         if decals_dir is None:
             decals_dir = os.environ.get('DECALS_DIR')
@@ -779,6 +780,7 @@ Using the current directory as DECALS_DIR, but this is likely to fail.
 
         self.image_typemap = {
             'decam': DecamImage,
+            'mosaic': MosaicImage,
             '90prime': BokImage,
             }
 
@@ -1053,25 +1055,12 @@ Using the current directory as DECALS_DIR, but this is likely to fail.
             T = T[T.ccdname == ccdname]
         return T
 
-    def photometric_ccds(self, CCD):
+    def photometric_ccds(self, ccds):
         '''
-        Returns an index array for the members of the table "CCD" that
+        Returns an index array for the members of the table "ccds" that
         are photometric.
 
-        Recipe in [decam-data 1314], 2015-07-15:
-        
-        * CCDNMATCH >= 20  (At least 20 stars to determine zero-pt)
-        * abs(ZPT - CCDZPT) < 0.10  (Agreement with full-frame zero-pt)
-        * CCDPHRMS < 0.2  (Uniform photometry across the CCD)
-        * ZPT within 0.50 mag of 25.08 for g-band
-        * ZPT within 0.50 mag of 25.29 for r-band
-        * ZPT within 0.50 mag of 24.92 for z-band
-
-        * DEC > -20 (in DESI footprint) 
-        * CCDNUM = 31 (S7) is OK, but only for the region
-          [1:1023,1:4094] (mask region [1024:2046,1:4094] in CCD s7)
-
-        Slightly revised by DJS in Re: [decam-data 828] 2015-07-31:
+        Slightly revised recipe by DJS in Re: [decam-data 828] 2015-07-31:
         
         * CCDNMATCH >= 20 (At least 20 stars to determine zero-pt)
         * abs(ZPT - CCDZPT) < 0.10  (Loose agreement with full-frame zero-pt)
@@ -1082,25 +1071,24 @@ Using the current directory as DECALS_DIR, but this is likely to fail.
         * EXPTIME >= 30
         * CCDNUM = 31 (S7) should mask outside the region [1:1023,1:4094]
         '''
-        # We assume that the zeropoints are present in the
-        # CCDs file (starting in DR2)
+        # Nominal zeropoints (DECam)
         z0 = dict(g = 25.08,
                   r = 25.29,
                   z = 24.92,)
-        z0 = np.array([z0[f[0]] for f in CCD.filter])
+        z0 = np.array([z0[f[0]] for f in ccds.filter])
 
-        good = np.ones(len(CCD), bool)
+        good = np.ones(len(ccds), bool)
         n0 = sum(good)
         # This is our list of cuts to remove non-photometric CCD images
         for name,crit in [
-            ('exptime < 30 s', (CCD.exptime < 30)),
-            ('ccdnmatch < 20', (CCD.ccdnmatch < 20)),
+            ('exptime < 30 s', (ccds.exptime < 30)),
+            ('ccdnmatch < 20', (ccds.ccdnmatch < 20)),
             ('abs(zpt - ccdzpt) > 0.1',
-             (np.abs(CCD.zpt - CCD.ccdzpt) > 0.1)),
+             (np.abs(ccds.zpt - ccds.ccdzpt) > 0.1)),
             ('zpt < 0.5 mag of nominal (for DECam)',
-             ((CCD.camera == 'decam') * (CCD.zpt < (z0 - 0.5)))),
+             ((ccds.camera == 'decam') * (ccds.zpt < (z0 - 0.5)))),
             ('zpt > 0.25 mag of nominal (for DECam)',
-             ((CCD.camera == 'decam') * (CCD.zpt > (z0 + 0.25)))),
+             ((ccds.camera == 'decam') * (ccds.zpt > (z0 + 0.25)))),
              ]:
             good[crit] = False
             n = sum(good)
@@ -1116,7 +1104,7 @@ Using the current directory as DECALS_DIR, but this is likely to fail.
         I = decals.apply_blacklist(ccds)
         ccds.cut(I)
         '''
-        blacklist = [
+        decam_blacklist = [
             '2012B-0003', # labeled as "DES SV", but appears to exclusively be DES deep fields taken during SV, through Jan 2013.
             '2013A-0351', # lots of deep data on COSMOS
             '2014A-0339', # two strips of sky
@@ -1134,7 +1122,8 @@ Using the current directory as DECALS_DIR, but this is likely to fail.
             '2013A-0529', # 2 fields
             '2013A-0613', # 40 exposures of 600 sec in g,r and nothing else in DR2
         ]
-        keep = np.array([propid not in blacklist for propid in ccds.propid])
+        keep = np.array([camera.strip() != 'decam' or propid not in decam_blacklist
+                         for camera,propid in zip(ccds.camera, ccds.propid)])
         return np.flatnonzero(keep)
 
     def _get_zeropoints_table(self):

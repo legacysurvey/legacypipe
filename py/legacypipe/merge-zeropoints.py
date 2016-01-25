@@ -56,7 +56,9 @@ def normalize_zeropoints(fn, dirnms, image_basedir, cam, T=None):
         fnlist = []
         for dirnm in dirnms:
             pattern = os.path.join(image_basedir, cam, dirnm, fn + '*')
-            fnlist.extend(glob(pattern))
+            matched = glob(pattern)
+            #print('Glob pattern', pattern, 'matched', matched)
+            fnlist.extend(matched)
 
         pattern_string = os.path.join(image_basedir, cam, dirnm, fn + '*')
         if len(dirnms) > 1:
@@ -124,83 +126,57 @@ if __name__ == '__main__':
     from astrometry.util.starutil_numpy import hmsstring2ra, dmsstring2dec
     import fitsio
     cam = 'mosaic'
+
     TT = []
-    zpdir = '/project/projectdirs/cosmo/staging/mosaicz/Test'
+    #zpdir = '/project/projectdirs/cosmo/staging/mosaicz/Test'
+    zpdir = '/global/cscratch1/sd/arjundey/mosaicz'
     imgdir = '/project/projectdirs/cosmo/staging/mosaicz/Test'
     #/global/cscratch1/sd/arjundey/mosaicz/zeropoint-mzls_test1.fits
     for fn,dirnms in [
-        (os.path.join(zpdir, 'ZP-MOS3-20151213.fits'),
-         [os.path.join(imgdir, 'MOS151213_8a516af')]),
+        #(os.path.join(zpdir, 'ZP-MOS3-20151213.fits'),
+        # #[os.path.join(imgdir, 'MOS151213_8a516af')]),
+        # [os.path.join(imgdir, 'MOS151213_8a7fcee')]),
+        (os.path.join(zpdir, 'zeropoint-mzls_oki_test1_v1.fits'),
+         [os.path.join(imgdir, 'MOS151213_8a7fcee')]),
         ]:
         print('Reading', fn)
         T = fits_table(fn)
-        T.rename('extname', 'ccdname')
-        T.ra  = np.array([hmsstring2ra (x) for x in T.ra ])
-        T.dec = np.array([dmsstring2dec(x) for x in T.dec])
+
         # forgot to include EXPTIME in zeropoint, thus TRANSPARENCY is way off
-        zpt = T.zpt
-        T.delete_column('zpt')
         tmags = 2.5 * np.log10(T.exptime)
-        T.ccdzpt = zpt + tmags
-        T.mag_offset += tmags
-        T.transparency = 10.**(T.mag_offset / -2.5)
-        
+        T.ccdphoff += tmags
+        T.ccdtransp = 10.**(T.ccdphoff / -2.5)
+
         # Fill in BOGUS values; update from header below
         T.ccdhdunum = np.zeros(len(T), np.int32)
-        T.ccdra  = np.zeros(len(T), np.float64)
-        T.ccddec = np.zeros(len(T), np.float64)
-        T.ccdnum = np.zeros(len(T), np.int16)
-        T.cd1_1  = np.zeros(len(T), np.float32)
-        T.cd1_2  = np.zeros(len(T), np.float32)
-        T.cd2_1  = np.zeros(len(T), np.float32)
-        T.cd2_2  = np.zeros(len(T), np.float32)
-        T.crval1  = np.zeros(len(T))
-        T.crval2  = np.zeros(len(T))
-        T.crpix1  = np.zeros(len(T), np.float32)
-        T.crpix2  = np.zeros(len(T), np.float32)
+        T.ccdname = np.array(['ccd%i' % ccdnum for ccdnum in T.ccdnum])
 
         T = normalize_zeropoints(fn, dirnms, imgdir, cam, T=T)
-
-        #T.expid = np.array(['%10i-%s' % (expnum,extname.strip())
-        #                    for expnum,extname in zip(T.expnum, T.ccdname)])
 
         # HDU number wasn't recorded in zeropoint file -- search for EXTNAME
         fns = np.unique(T.image_filename)
         for fn in fns:
             print('Filename', fn)
-            F = fitsio.FITS(os.path.join(imgdir, fn))
+            pth = os.path.join(imgdir, fn)
+            F = fitsio.FITS(pth)
             print('File', fn, 'exts:', len(F))
             for ext in range(1, len(F)):
                 print('extension:', ext)
                 hdr = F[ext].read_header()
                 extname = hdr['EXTNAME'].strip()
-                print('name', extname)
+                print('EXTNAME "%s"' % extname)
                 I = np.flatnonzero((T.image_filename == fn) *
                                    (T.ccdname == extname))
                 print(len(I), 'rows match')
                 assert(len(I) == 1)
                 T.image_hdu[I] = ext
-                # ccdra -> ra
-                T.ra [I] = hmsstring2ra (hdr['RA1' ])
-                T.dec[I] = dmsstring2dec(hdr['DEC1'])
-                T.ccdnum[I] = hdr['CCDNUM']
-                T.cd1_1[I] = hdr['CD1_1']
-                T.cd1_2[I] = hdr['CD1_2']
-                T.cd2_1[I] = hdr['CD2_1']
-                T.cd2_2[I] = hdr['CD2_2']
-
-                T.crval1[I] = hdr['CRVAL1']
-                T.crval2[I] = hdr['CRVAL2']
-                T.crpix1[I] = hdr['CRPIX1']
-                T.crpix2[I] = hdr['CRPIX2']
-                
-
+        T.fwhm = T.seeing
         TT.append(T)
     T = merge_tables(TT)
+    T.image_filename = np.array([cam + '/' + fn for fn in T.image_filename])
     outfn = 'mosaicz-ccds.fits'
     T.writeto(outfn)
     print('Wrote', outfn)
-
     
     sys.exit(0)
 
