@@ -284,7 +284,7 @@ def main(outfn='ccds-annotated.fits', ccds=None):
     depth = 5. * detsig1
     # that's flux in nanomaggies -- convert to mag
     ccds.galdepth = -2.5 * (np.log10(depth) - 9)
-
+    
     # Depth using Gaussian FWHM.
     psf_sigma = ccds.fwhm / 2.35
     gnorm = 1./(2. * np.sqrt(np.pi) * psf_sigma)
