@@ -37,14 +37,15 @@ import galsim
 import numpy as np
 import matplotlib.pyplot as plt
 
-from pydl.pydlutils.spheregroup import spheregroup
+# from pydl.pydlutils.spheregroup import spheregroup
 from astropy.table import Table, Column, vstack
 
 from tractor.psfex import PsfEx, PsfExModel
 from tractor.basics import GaussianMixtureEllipsePSF, RaDecPos
 
 from legacypipe.runbrick import run_brick
-from legacypipe.common import Decals, DecamImage, wcs_for_brick, ccds_touching_wcs
+from legacypipe.decam import DecamImage
+from legacypipe.common import Decals, wcs_for_brick, ccds_touching_wcs
 
 class SimDecals(Decals):
     def __init__(self, decals_dir=None, metacat=None, simcat=None, test=False):
@@ -74,7 +75,7 @@ class SimImage(DecamImage):
         # Grab the data and inverse variance images [nanomaggies!]
         image = galsim.Image(tim.getImage())
         invvar = galsim.Image(tim.getInvvar())
-        sys.exit(1)
+        #sys.exit(1)
 
         if self.decals.test:
             testfile = 'test-{}-{}.fits'.format(self.expnum,self.ccdname)
@@ -82,15 +83,15 @@ class SimImage(DecamImage):
             image.write(testfile.replace('.fits','-orig.fits'),clobber=True)
             invvar.write(testfile.replace('.fits','-ivar-orig.fits'),clobber=True)
 
-        # Check for negative values but this should never happen.
-        if np.min(invvar.array)<0:
-            print('Negative invvar!')
-            print(np.min(invvar.array))
-            sys.exit(1)
+        ## Check for negative values but this should never happen.
+        #if np.min(invvar.array)<0:
+        #    print('Negative invvar!')
+        #    print(np.min(invvar.array))
+        #    sys.exit(1)
 
         # Loop on each object.
-        for obj in self.decals.simcat:
-            print(obj)
+        for ii, obj in enumerate(self.decals.simcat):
+            #print(obj)
             if objtype=='STAR':
                 stamp = objstamp.star(obj)
             elif objtype=='ELG':
@@ -108,8 +109,15 @@ class SimImage(DecamImage):
                 image[overlap] += stamp
                 invvar[overlap] = ivarstamp
 
+#               print('HERE!!!!!!!!!!!!!!!!!', ii, np.min(invvar.array))
+                if np.min(invvar.array)<0:
+                    print('Negative invvar!')
+                    print(np.min(invvar.array))
+                    sys.exit(1)
+
             tim.data = image.array
             tim.inverr = np.sqrt(invvar.array)
+            print('HERE!!!!!!!!!!!!!!!!!', ii, np.min(tim.inverr))
 
         if self.decals.test:
             testimage = galsim.Image(tim.getImage())
@@ -160,7 +168,7 @@ class BuildStamp():
         if np.min(varstamp.array)<0:
             print('Negative var!!!!')
             print(np.min(varstamp.array))
-            sys.exit(1)
+            #sys.exit(1)
 
         # Add the variance of the object to the variance image (in electrons).
         stamp *= self.nano2e       # [electron]
@@ -454,7 +462,7 @@ def main():
             # Test code
             simdecals = SimDecals(metacat=metacat, simcat=simcat, test=True)
             ccdinfo = decals.ccds_touching_wcs(brickwcs)
-            sim = SimImage(simdecals, ccdinfo[19])
+            sim = SimImage(simdecals, ccdinfo[2])
             tim = sim.get_tractor_image(const2psf=True, radecpoly=targetrd)
             #for ii, ccd in enumerate(ccdinfo):
             #    log.info('Working on CCD {}'.format(ii))
@@ -464,10 +472,10 @@ def main():
             simdecals = SimDecals(metacat=metacat,simcat=simcat)
             blobxy = zip(simcat['x'],simcat['y'])
             run_brick(brickname, decals=simdecals, outdir=decals_sim_dir,
-                      threads=8, zoom=args.zoom, wise=False, sdssInit=False,
-                      forceAll=True, writePickles=False, do_calibs=False,
-                      write_metrics=False, pixPsf=False, blobxy=blobxy, 
-                      early_coadds=False, stages=['writecat'])
+                      threads=args.threads, zoom=args.zoom, wise=False, sdssInit=False,
+                      forceAll=True, writePickles=False, do_calibs=True,
+                      write_metrics=False, pixPsf=True, blobxy=blobxy, 
+                      early_coadds=False, stages=['writecat'], splinesky=True)
 
 if __name__ == '__main__':
     main()
