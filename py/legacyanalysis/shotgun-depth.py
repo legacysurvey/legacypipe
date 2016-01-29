@@ -3,9 +3,11 @@ import matplotlib
 matplotlib.use('Agg')
 import pylab as plt
 import numpy as np
+import sys
 
 from astrometry.util.fits import *
 from astrometry.util.plotutils import *
+from astrometry.libkd.spherematch import match_radec
 
 from tractor.sfd import SFDMap
 
@@ -20,8 +22,11 @@ def main():
     C.cut(C.photometric)
     C.cut(C.blacklist_ok)
     print(len(C), 'photometric and not blacklisted')
-    C.cut(C.tilepass > 0)
-    print(len(C), 'taken by DECaLS')
+    
+    # HACK
+    print('FIXME not cutting on DECALS')
+    #C.cut(C.tilepass > 0)
+    #print(len(C), 'taken by DECaLS')
 
     targets = dict(g=24.0, r=23.4, z=22.5)
 
@@ -171,6 +176,38 @@ def main():
     # plt.plot(ra, dec, 'b.', alpha=0.1)
     # ps.savefig()
 
+    # CCD size
+    margin = 10 * 0.262 / 3600.
+    ccds = C[(C.ra  + C.dra  + margin >  ralo) *
+             (C.ra  - C.dra  - margin <  rahi) *
+             (C.dec + C.ddec + margin > declo) *
+             (C.dec - C.ddec - margin < dechi)]
+    print(len(ccds), 'nearby')
+    assert(len(ccds))
+    
+    radius = np.hypot(2046, 4096) / 2. * 0.262 / 3600 * 1.1
+    II = match_radec(ccds.ra, ccds.dec, ra, dec, radius, indexlist=True)
+    #print('Matching:', II)
+
+    for iccd,I in enumerate(II):
+        if I is None:
+            continue
+        ccd = ccds[iccd]
+        print('Matched to CCD %s: %i' % (ccd.expid, len(I)))
+        # Actually inside CCD RA,Dec box?
+        r = ra[I]
+        d = dec[I]
+        J = np.flatnonzero((degrees_between(r, ccd.dec+np.zeros_like(r),
+                                            ccd.ra, ccd.dec) < ccd.dra) *
+                                            np.abs(d - ccd.dec) < ccd.ddec)
+        print('Actually inside CCD RA,Dec box:', len(J))
+        if len(J) == 0:
+            continue
+        I = np.array(I)[J]
+        
+    
+    sys.exit(0)
+    
     print('Reading extinction values for sample points...')
     sfd = SFDMap()
     filts = ['%s %s' % ('DES', f) for f in bands]
