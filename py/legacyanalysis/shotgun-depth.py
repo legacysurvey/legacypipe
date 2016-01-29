@@ -7,6 +7,8 @@ import numpy as np
 from astrometry.util.fits import *
 from astrometry.util.plotutils import *
 
+from tractor.sfd import SFDMap
+
 from legacypipe.common import *
 
 def main():
@@ -169,6 +171,12 @@ def main():
     # plt.plot(ra, dec, 'b.', alpha=0.1)
     # ps.savefig()
 
+    print('Reading extinction values for sample points...')
+    sfd = SFDMap()
+    filts = ['%s %s' % ('DES', f) for f in bands]
+    ebv,extinction = sfd.extinction(filts, ra, dec, get_ebv=True)
+    print('Extinction:', extinction.shape)
+    
     B = decals.get_bricks_readonly()
     I = decals.bricks_touching_radec_box(None, ralo, rahi, declo, dechi)
     B.cut(I)
@@ -193,7 +201,7 @@ def main():
         x = np.round(x - 1).astype(int)
         y = np.round(y - 1).astype(int)
         
-        for band in bands:
+        for iband,band in enumerate(bands):
             fn = decals.find_file('nexp', brick=brick.brickname, band=band)
             print('Reading', fn)
             if not os.path.exists(fn):
@@ -202,12 +210,16 @@ def main():
             nexp = fitsio.read(fn)
             nexp = nexp[y, x]
 
+            ext = extinction[I, iband]
+            
             fn = decals.find_file('galdepth', brick=brick.brickname, band=band)
             print('Reading', fn)
             galdepth = fitsio.read(fn)
             galdepth = galdepth[y, x]
             # iv -> mag
             galdepth = -2.5 * (np.log10(5. / np.sqrt(galdepth)) - 9)
+            # extinction-corrected
+            galdepth -= ext
             
             un = np.unique(nexp)
             print('Numbers of exposures:', un)
@@ -271,40 +283,59 @@ def main():
                 continue
             hsum += depth_hists_2[key]
 
+        print('%s band:' % band)
+            
         print('Total number of counts in histogram:', sum(hsum))
         # [-1::-1] = reversed
         hsum = np.cumsum(hsum[-1::-1])[-1::-1]
-        hsum *= 100. / float(N)
+        hsum = hsum * 100. / float(N)
 
         plt.clf()
-        plt.plot(left2+binwidth/2, hsum, 'k-')
+        #plt.plot(left2+binwidth/2, hsum, 'k-')
+        plt.plot(left2, hsum, 'k-')
         plt.xlabel('Galaxy depth (mag)')
         plt.ylabel('Cumulative fraction (%)')
         plt.title('%s band' % band)
         # 90% to full depth
-        y,x = 90, targets[band]
-        xf = (x - dlo) / (dhi - dlo)
-        yf = y / 100.
-        plt.axvline(x, ymax=yf, color='r')
-        plt.axhline(y, xmax=xf, color='r')
         # 95% to full depth - 0.3 mag
-        y,x = 95, targets[band] - 0.3
-        xf = (x - dlo) / (dhi - dlo)
-        yf = y / 100.
-        orange = '#ffa000'
-        plt.axvline(x, ymax=yf, color=orange)
-        plt.axhline(y, xmax=xf, color=orange)
         # 98% to full depth - 0.6 mag
-        y,x = 98, targets[band] - 0.6
-        xf = (x - dlo) / (dhi - dlo)
-        yf = y / 100.
-        plt.axvline(x, ymax=yf, color='y')
-        plt.axhline(y, xmax=xf, color='y')
+        for y,x,c in [
+                (90, targets[band], 'r'),
+                (95, targets[band] - 0.3, 'g'),
+                (98, targets[band] - 0.6, 'b')]:
+            xf = (x - dlo) / (dhi - dlo)
+            yf = y / 100.
+            plt.axvline(x, ymax=yf, color=c, lw=3, alpha=0.3)
+            plt.axhline(y, xmax=xf, color=c, lw=3, alpha=0.3)
+
+            #mid = left2 + binwidth2/2
+            
+            print('target  : %.1f %% deeper than %.2f' % (y, x))
+
+            # ??? left or midpoint?
+            ibin = np.flatnonzero(left2 > x)[0]
+            pct = hsum[ibin]
+            status = ' '*20
+            if pct >= y:
+                status += '-> pass'
+            else:
+                status += '-> FAIL'
+
+                plt.axhline(pct, color=c, alpha=0.5) #xmax=xf, 
+                
+            print('achieved: %.1f %% %s' % (pct, status)) # deeper than %.2f' % (hsum[ibin], x))
+            ii = np.flatnonzero(hsum > y)
+            if len(ii):
+                ibin = ii[-1]
+                print('          %.1f %% deeper than %.2f' % (y, left2[ibin]))
+            else:
+                print('          Total coverage only %.1f %%' % max(hsum))
+            print()
+            
+            
         plt.xlim(dlo, dhi)
         plt.ylim(0., 100.)
         ps.savefig()
-
-        m = left2+binwidth/2
 
 
 
