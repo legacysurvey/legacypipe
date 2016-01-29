@@ -795,7 +795,10 @@ Using the current directory as DECALS_DIR, but this is likely to fail.
 
         *filetype* : string, type of file to find, including:
              "tractor" -- Tractor catalogs
-
+             "depth"   -- PSF depth maps
+             "galdepth" -- Canonical galaxy depth maps
+             "nexp" -- number-of-exposure maps
+             
         *brick* : string, brick name such as "0001p000"
 
         Returns: path to the specified file (whether or not it exists).
@@ -815,6 +818,9 @@ Using the current directory as DECALS_DIR, but this is likely to fail.
         elif filetype == 'galdepth':
             return os.path.join(self.decals_dir, 'coadd', brickpre, brick,
                                 'decals-%s-galdepth-%s.fits.gz' % (brick, band))
+        elif filetype == 'nexp':
+            return os.path.join(self.decals_dir, 'coadd', brickpre, brick,
+                                'decals-%s-nexp-%s.fits.gz' % (brick, band))
         assert(False)
         
     def __getstate__(self):
