@@ -272,7 +272,8 @@ def main():
             hsum += depth_hists_2[key]
 
         print('Total number of counts in histogram:', sum(hsum))
-        hsum = np.cumsum(hsum)
+        # [-1::-1] = reversed
+        hsum = np.cumsum(hsum[-1::-1])[-1::-1]
         hsum *= 100. / float(N)
 
         plt.clf()
@@ -285,20 +286,20 @@ def main():
         xf = (x - dlo) / (dhi - dlo)
         yf = y / 100.
         plt.axvline(x, ymax=yf, color='r')
-        plt.axhline(y, xmin=xf, color='r')
-        # 95% to full depth + 0.3 mag
-        y,x = 95, targets[band] + 0.3
+        plt.axhline(y, xmax=xf, color='r')
+        # 95% to full depth - 0.3 mag
+        y,x = 95, targets[band] - 0.3
         xf = (x - dlo) / (dhi - dlo)
         yf = y / 100.
         orange = '#ffa000'
         plt.axvline(x, ymax=yf, color=orange)
-        plt.axhline(y, xmin=xf, color=orange)
-        # 98% to full depth + 0.6 mag
-        y,x = 98, targets[band] + 0.6
+        plt.axhline(y, xmax=xf, color=orange)
+        # 98% to full depth - 0.6 mag
+        y,x = 98, targets[band] - 0.6
         xf = (x - dlo) / (dhi - dlo)
         yf = y / 100.
         plt.axvline(x, ymax=yf, color='y')
-        plt.axhline(y, xmin=xf, color='y')
+        plt.axhline(y, xmax=xf, color='y')
         plt.xlim(dlo, dhi)
         plt.ylim(0., 100.)
         ps.savefig()
