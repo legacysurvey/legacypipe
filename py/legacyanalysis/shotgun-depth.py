@@ -189,6 +189,12 @@ def main():
     II = match_radec(ccds.ra, ccds.dec, ra, dec, radius, indexlist=True)
     #print('Matching:', II)
 
+    depthrange = [20,25]
+    depthbins  = 100
+    depthbins2  = 500
+    
+    galdepths = dict([(b, np.zeros(len(ra))) for b in bands])
+    
     for iccd,I in enumerate(II):
         if I is None:
             continue
@@ -204,10 +210,29 @@ def main():
         if len(J) == 0:
             continue
         I = np.array(I)[J]
-        
-    
-    sys.exit(0)
-    
+
+        band = ccd.filter
+        gd = galdepths[band]
+        # mag -> 5sig1 -> iv
+        cgd = 10.**((ccd.galdepth - 22.5) / -2.5)
+        cgd = 1. / (cgd / 5)**2
+        gd[I] += cgd
+
+    for band in bands:
+        gd = galdepths[band]
+        # iv -> 5sig1 -> mag
+        gd = 5. / np.sqrt(gd)
+        gd = -2.5 * (np.log10(gd) - 9.)
+
+        plt.clf()
+        plt.hist(gd, range=depthrange, bins=depthbins, histtype='step',
+                 color=ccmap[band])
+        plt.xlabel('5-sigma Galaxy depth (mag)')
+        plt.title('%s band' % band)
+        ps.savefig()
+            
+
+
     print('Reading extinction values for sample points...')
     sfd = SFDMap()
     filts = ['%s %s' % ('DES', f) for f in bands]
@@ -221,9 +246,6 @@ def main():
 
     depth_hists = {}
     depth_hists_2 = {}
-    depthrange = [20,25]
-    depthbins  = 100
-    depthbins2  = 500
     
     for brick in B:
         print('Brick', brick.brickname)
