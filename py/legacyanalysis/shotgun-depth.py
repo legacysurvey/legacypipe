@@ -22,7 +22,7 @@ def main():
     C.cut(C.photometric)
     C.cut(C.blacklist_ok)
     print(len(C), 'photometric and not blacklisted')
-    
+
     # HACK
     print('FIXME not cutting on DECALS')
     #C.cut(C.tilepass > 0)
@@ -41,7 +41,7 @@ def main():
 
     ceil_exptime = dict(g=125., r=125., z=250.)
     
-    plt.clf()
+    #plt.clf()
 
     bands = 'grz'
     for band in bands:
@@ -93,7 +93,7 @@ def main():
         print('5-sigma galaxy depth if spread over', sqdeg, 'sqdeg: %.3f' % ivtomag(avgiv))
         print('Fraction of', sqdeg, 'sqdeg survey complete: %.3f' % (avgiv / tiv))
 
-        plt.hist(ccds.exptime, range=(0,250), bins=50, histtype='step', color=ccmap[band])
+        # plt.hist(ccds.exptime, range=(0,250), bins=50, histtype='step', color=ccmap[band])
 
         # I = np.flatnonzero(ccds.exptime < (ceil_exptime[band] - 1.))
         # ccds.cut(I)
@@ -121,15 +121,18 @@ def main():
         # print('Fraction of', sqdeg, 'sqdeg survey complete:', avgiv / tiv)
 
         
-    plt.xlabel('Exposure time (s)')
-    ps.savefig()
+    # plt.xlabel('Exposure time (s)')
+    # ps.savefig()
         
     print()
 
-    ralo  = max(  0, min(C.ra_center  - C.dra ))
-    rahi  = min(360, max(C.ra_center  + C.dra ))
-    declo = max(-90, min(C.dec_center - C.ddec))
-    dechi = min( 90, max(C.dec_center + C.ddec))
+    dra  = 4094 / 2. / 3600 * 0.262
+    ddec = 2046 / 2. / 3600 * 0.262
+
+    ralo  = max(  0, min(C.ra  - dra / np.cos(np.deg2rad(C.dec))))
+    rahi  = min(360, max(C.ra  + dra / np.cos(np.deg2rad(C.dec))))
+    declo = max(-90, min(C.dec - ddec))
+    dechi = min( 90, max(C.dec + ddec))
 
     # brick 0001m002
     #ralo,rahi = 0., 0.25
@@ -167,7 +170,7 @@ def main():
     dec = np.hstack(dd)
     del rr
     del dd
-    ra  = ra[:N]
+    ra  = ra [:N]
     dec = dec[:N]
 
     print('RA,Dec ranges of samples:', (ra.min(), ra.max()), (dec.min(), dec.max()))
@@ -178,15 +181,27 @@ def main():
 
     # CCD size
     margin = 10 * 0.262 / 3600.
-    ccds = C[(C.ra  + C.dra  + margin >  ralo) *
-             (C.ra  - C.dra  - margin <  rahi) *
-             (C.dec + C.ddec + margin > declo) *
-             (C.dec - C.ddec - margin < dechi)]
+    # C.dra is in degrees on the sphere, not delta-RA
+    # dra = C.dra / np.cos(np.deg2rad(C.dec))
+    # ccds = C[(C.ra  +   dra  + margin >  ralo) *
+    #          (C.ra  -   dra  - margin <  rahi) *
+    #          (C.dec + C.ddec + margin > declo) *
+    #          (C.dec - C.ddec - margin < dechi)]
+
+    I,J,d = match_radec(C.ra, C.dec,
+                        (ralo+rahi)/2., (declo+dechi)/2.,
+                        degrees_between(ralo,declo, rahi,dechi)/2. + 1.,
+                        nearest=True)
+    ccds = C[I]
+
     print(len(ccds), 'nearby')
     assert(len(ccds))
-    
+
+    print('RA range', ccds.ra.min(), ccds.ra.max())
+
     radius = np.hypot(2046, 4096) / 2. * 0.262 / 3600 * 1.1
-    II = match_radec(ccds.ra, ccds.dec, ra, dec, radius, indexlist=True)
+    II = match_radec(ccds.ra, ccds.dec, ra, dec,
+                     radius, indexlist=True)
     #print('Matching:', II)
 
     depthrange = [20,25]
@@ -194,6 +209,8 @@ def main():
     depthbins2  = 500
     
     galdepths = dict([(b, np.zeros(len(ra))) for b in bands])
+
+    iccds = []
     
     for iccd,I in enumerate(II):
         if I is None:
@@ -203,25 +220,76 @@ def main():
         # Actually inside CCD RA,Dec box?
         r = ra[I]
         d = dec[I]
+
+        # print('degrees_between: ccd ra,dec', ccd.ra, ccd.dec)
+        # for ri,di in zip(r, degrees_between(r, ccd.dec + np.zeros_like(r),
+        #                                     ccd.ra, ccd.dec)):
+        #     print('ri: di', ri, di)
+
         J = np.flatnonzero((degrees_between(r, ccd.dec+np.zeros_like(r),
-                                            ccd.ra, ccd.dec) < ccd.dra) *
-                                            np.abs(d - ccd.dec) < ccd.ddec)
+                                            ccd.ra, ccd.dec) < dra) *
+                                            (np.abs(d - ccd.dec) < ddec))
         print('Actually inside CCD RA,Dec box:', len(J))
         if len(J) == 0:
             continue
         I = np.array(I)[J]
 
+        # j = J[0]
+        # print('deg between', degrees_between(r[j], ccd.dec,
+        #                                      ccd.ra,  ccd.dec), 'vs', dra)
+        # print('  dec', d[j], 'dist', np.abs(d[j] - ccd.dec), 'vs', ddec)
+        
+        iccds.append((iccd,I[0]))
+        
         band = ccd.filter
         gd = galdepths[band]
+        print('Gal depth in', band, ':', ccd.galdepth)
         # mag -> 5sig1 -> iv
         cgd = 10.**((ccd.galdepth - 22.5) / -2.5)
-        cgd = 1. / (cgd / 5)**2
+        cgd = 1. / cgd**2
         gd[I] += cgd
 
+    plt.clf()
+
+    # plt.plot(ra, dec, 'k.', alpha=0.1)
+    
+    # C1 = fits_table('decals-ccds-annotated.fits')
+    # ii,jj,dd = match_radec(C1.ra, C1.dec, (ralo+rahi)/2.,(declo+dechi)/2,0.5)
+    # C1.cut(ii)
+    # C1.ra -= (C1.ra > 270)*360
+    # for ccd in C1:
+    #     r,dr = ccd.ra,  ccd.dra / np.cos(np.deg2rad(ccd.dec))
+    #     d,dd = ccd.dec, ccd.ddec
+    #     sty = dict(color='k', alpha=0.1)
+    #     if not (ccd.photometric and ccd.blacklist_ok):
+    #         sty = dict(color='c', lw=3)
+    #     plt.plot([r-dr, r+dr, r+dr, r-dr, r-dr], [d-dd,d-dd,d+dd,d+dd,d-dd],
+    #              '-', **sty)
+    
+    for iccd,i in iccds:
+        ccd = ccds[iccd]
+        r,dr = ccd.ra,  dra / np.cos(np.deg2rad(ccd.dec))
+        # HACK
+        r = r + (r > 270)*-360.
+
+        d,dd = ccd.dec, ddec
+        plt.plot([r-dr, r+dr, r+dr, r-dr, r-dr], [d-dd,d-dd,d+dd,d+dd,d-dd],
+                 '-', color=ccmap[ccd.filter], alpha=0.5)
+
+        plt.plot(ra[i], dec[i], 'k.')
+        
+    plt.plot([ralo,ralo,rahi,rahi,ralo],[declo,dechi,dechi,declo,declo],
+             'k-', lw=2)
+    #plt.axis([-0.1, 0.6, -0.1, 0.6])
+    plt.axis([-0.5, 1., -0.5, 1.])
+    plt.xlabel('RA')
+    plt.ylabel('Dec')    
+    ps.savefig()
+        
     for band in bands:
         gd = galdepths[band]
         # iv -> 5sig1 -> mag
-        gd = 5. / np.sqrt(gd)
+        gd = 1. / np.sqrt(gd)
         gd = -2.5 * (np.log10(gd) - 9.)
 
         plt.clf()
