@@ -2,6 +2,11 @@
 
 """Try to hack decals_sim so we don't have to make copies of the data.
 
+3216p000
+
+nohup python ${LEGACYPIPE}/py/legacyanalysis/decals_sim.py -n 32 -c 10 -b 2428p117 -o STAR --zoom 500 1400 600 1300 > log2 2>&1 &
+nohup python ${LEGACYPIPE}/py/legacyanalysis/decals_sim.py -n 5000 -c 500 -b 3216p000 -o STAR > & 3216p000.log &
+
 import numpy as np
 from legacypipe.common import Decals, DecamImage, wcs_for_brick, ccds_touching_wcs
 
@@ -29,6 +34,7 @@ from __future__ import division, print_function
 
 import os
 import sys
+import shutil
 import logging
 import argparse
 
@@ -48,11 +54,10 @@ from legacypipe.decam import DecamImage
 from legacypipe.common import Decals, wcs_for_brick, ccds_touching_wcs
 
 class SimDecals(Decals):
-    def __init__(self, decals_dir=None, metacat=None, simcat=None, test=False):
+    def __init__(self, decals_dir=None, metacat=None, simcat=None):
         super(SimDecals, self).__init__(decals_dir=decals_dir)
         self.metacat = metacat
         self.simcat = simcat
-        self.test = test
 
     def get_image_object(self, t):
         return SimImage(self, t)
@@ -77,18 +82,6 @@ class SimImage(DecamImage):
         invvar = galsim.Image(tim.getInvvar())
         #sys.exit(1)
 
-        if self.decals.test:
-            testfile = 'test-{}-{}.fits'.format(self.expnum,self.ccdname)
-            print('Writing {}'.format(testfile))
-            image.write(testfile.replace('.fits','-orig.fits'),clobber=True)
-            invvar.write(testfile.replace('.fits','-ivar-orig.fits'),clobber=True)
-
-        ## Check for negative values but this should never happen.
-        #if np.min(invvar.array)<0:
-        #    print('Negative invvar!')
-        #    print(np.min(invvar.array))
-        #    sys.exit(1)
-
         # Loop on each object.
         for ii, obj in enumerate(self.decals.simcat):
             #print(obj)
@@ -109,22 +102,13 @@ class SimImage(DecamImage):
                 image[overlap] += stamp
                 invvar[overlap] = ivarstamp
 
-#               print('HERE!!!!!!!!!!!!!!!!!', ii, np.min(invvar.array))
                 if np.min(invvar.array)<0:
                     print('Negative invvar!')
-                    print(np.min(invvar.array))
                     sys.exit(1)
 
             tim.data = image.array
             tim.inverr = np.sqrt(invvar.array)
-            print('HERE!!!!!!!!!!!!!!!!!', ii, np.min(tim.inverr))
 
-        if self.decals.test:
-            testimage = galsim.Image(tim.getImage())
-            testinvvar = galsim.Image(tim.getInvvar())
-            testimage.write(testfile,clobber=True)
-            testinvvar.write(testfile.replace('.fits','-ivar.fits'),clobber=True)
-            
         return tim
 
 class BuildStamp():
@@ -141,7 +125,7 @@ class BuildStamp():
         self.zpscale = tim.zpscale      # nanomaggies-->ADU conversion factor
         self.nano2e = self.zpscale*gain # nanomaggies-->electrons conversion factor
 
-    def getlocal(self,obj):
+    def setlocal(self,obj):
         """Get the pixel positions, local pixel scale, and local PSF.""" 
 
         xx, yy = self.wcs.positionToPixel(RaDecPos(obj['ra'],obj['dec']))
@@ -156,6 +140,8 @@ class BuildStamp():
 
         # Get the local PSF
         psfim = self.psf.getPointSourcePatch(self.xpos, self.ypos).getImage()
+        #plt.imshow(psfim) ; plt.show()
+        
         self.localpsf = galsim.InterpolatedImage(galsim.Image(psfim),scale=self.pixscale)
 
     def addnoise(self,stamp,ivarstamp):
@@ -166,12 +152,14 @@ class BuildStamp():
         varstamp = ivarstamp.copy()
         varstamp.invertSelf()
         if np.min(varstamp.array)<0:
-            print('Negative var!!!!')
             print(np.min(varstamp.array))
             #sys.exit(1)
-
+            
         # Add the variance of the object to the variance image (in electrons).
         stamp *= self.nano2e       # [electron]
+        #stamp.array = np.abs(stamp.array)
+        st = np.abs(stamp.array)
+        stamp = galsim.Image(st)
         varstamp *= self.nano2e**2 # [electron^2]
         firstvarstamp = varstamp + stamp
 
@@ -203,7 +191,8 @@ class BuildStamp():
     def star(self,obj):
         """Render a star (PSF)."""
 
-        self.getlocal(obj)
+#       import pdb ; pdb.set_trace()
+        self.setlocal(obj)
 
         flux = obj[self.band+'flux'] # [nanomaggies]
         psf = self.localpsf.withFlux(flux)
@@ -233,20 +222,15 @@ class BuildStamp():
         stamp = self.convolve_and_draw(obj)
         return stamp
 
-def build_simcat(nobj=None,brickname=None,brickwcs=None,meta=None):
+def build_simcat(nobj=None,brickname=None,brickwcs=None,meta=None,seed=None):
     """Build the simulated object catalog, which depends on OBJTYPE."""
 
-    if 'seed' in meta.colnames:
-        seed = meta['seed']
-    else:
-        seed = None
     rand = np.random.RandomState(seed)
 
     # Assign central coordinates uniformly but remove simulated sources which
     # are too near to one another.  Iterate until we have the requisite number
     # of objects.
     bounds = brickwcs.radec_bounds()
-    print(bounds)
     ra = rand.uniform(bounds[0],bounds[1],nobj)
     dec = rand.uniform(bounds[2],bounds[3],nobj)
     #ra = np.random.uniform(bounds[0],bounds[1],nobj)
@@ -307,8 +291,8 @@ def build_simcat(nobj=None,brickname=None,brickwcs=None,meta=None):
         cat = np.concatenate((cat,elgcat))
 
     if meta['objtype']=='STAR':
-        gr_range = [0.0,0.5]
-        rz_range = [0.0,1.5]
+        gr_range = [-0.2,1.0]
+        rz_range = [-0.2,1.5]
 
     # For convenience, also store the grz fluxes in nanomaggies.
     rmag_range = meta['rmag_range'][0]
@@ -345,10 +329,8 @@ def main():
                         help='random number seed')
     parser.add_argument('-z', '--zoom', nargs=4, type=int, metavar='', 
                         help='see runbrick.py; (default is 0 3600 0 3600)')
-    parser.add_argument('--rmag-range', nargs=2, type=float, default=(18,25), metavar='', 
+    parser.add_argument('--rmag-range', nargs=2, type=float, default=(18,26), metavar='', 
                         help='r-band magnitude range')
-    parser.add_argument('--test', action='store_true',
-                        help='run the test code and write out test images')
     parser.add_argument('-v', '--verbose', action='store_true', 
                         help='toggle on verbose output')
 
@@ -410,15 +392,10 @@ def main():
     log.info('RA, Dec center = {}'.format(radec_center))
     log.info('Brick = {}'.format(brickname))
 
-    if args.seed is not None:
-        log.info('Random seed = {}'.format(args.seed))
-
     # Pack the input parameters into a meta-data table.
     metacat = Table()
     metacat['brickname'] = Column([brickname],dtype='S10')
     metacat['objtype'] = Column([objtype],dtype='S10')
-    if args.seed is not None:
-        metacat['seed'] = Column([args.seed],dtype='i4')
     metacat['nobj'] = Column([args.nobj],dtype='i4')
     metacat['chunksize'] = Column([args.chunksize],dtype='i2')
     metacat['nchunk'] = Column([nchunk],dtype='i2')
@@ -430,9 +407,21 @@ def main():
         metacat['zoom'] = Column([args.zoom],dtype='i4')
     metacat['rmag_range'] = Column([args.rmag_range],dtype='f4')
 
-    print('Hack!')
-    decals_sim_dir = './'
-    metafile = os.path.join(decals_sim_dir,'metacat-'+brickname+'-'+lobjtype+'.fits')
+    # Deal with the random seed
+    if args.seed is not None:
+        log.info('Random seed = {}'.format(args.seed))
+        metacat['seed'] = Column([args.seed],dtype='i4')
+    rand = np.random.RandomState(args.seed)
+    seeds = rand.random_integers(0,2**18,nchunk)
+    
+    if 'DECALS_SIM_DIR' in os.environ:
+        decals_sim_dir = os.getenv('DECALS_SIM_DIR')
+    else:
+        decals_sim_dir = '.'
+    if not os.path.exists(os.path.join(decals_sim_dir,brickname)):
+        os.makedirs(os.path.join(decals_sim_dir,brickname))
+        
+    metafile = os.path.join(decals_sim_dir,brickname,'metacat-'+brickname+'-'+lobjtype+'.fits')
     log.info('Writing {}'.format(metafile))
     if os.path.isfile(metafile):
         os.remove(metafile)
@@ -449,8 +438,8 @@ def main():
             nobjchunk = np.max((nobjchunk,nobj%((nchunk-1)*chunksize)))
 
         # Build and write out the simulated object catalog.
-        simcat = build_simcat(nobjchunk,brickname,brickwcs,metacat)
-        simcatfile = os.path.join(decals_sim_dir,'simcat-'+brickname+'-'+
+        simcat = build_simcat(nobjchunk,brickname,brickwcs,metacat,seeds[ichunk])
+        simcatfile = os.path.join(decals_sim_dir,brickname,'simcat-'+brickname+'-'+
                                   lobjtype+'-'+chunksuffix+'.fits')
         log.info('Writing {}'.format(simcatfile))
         if os.path.isfile(simcatfile):
@@ -458,24 +447,36 @@ def main():
         simcat.write(simcatfile)
 
 #       # Use Tractor to just process the blobs containing the simulated sources. 
-        if args.test:
-            # Test code
-            simdecals = SimDecals(metacat=metacat, simcat=simcat, test=True)
-            ccdinfo = decals.ccds_touching_wcs(brickwcs)
-            sim = SimImage(simdecals, ccdinfo[2])
-            tim = sim.get_tractor_image(const2psf=True, radecpoly=targetrd)
-            #for ii, ccd in enumerate(ccdinfo):
-            #    log.info('Working on CCD {}'.format(ii))
-            #    sim = SimImage(simdecals,ccd)
-            #    tim = sim.get_tractor_image(const2psf=True, radecpoly=targetrd, test=args.test)
-        else:
-            simdecals = SimDecals(metacat=metacat,simcat=simcat)
-            blobxy = zip(simcat['x'],simcat['y'])
-            run_brick(brickname, decals=simdecals, outdir=decals_sim_dir,
-                      threads=args.threads, zoom=args.zoom, wise=False, sdssInit=False,
-                      forceAll=True, writePickles=False, do_calibs=True,
-                      write_metrics=False, pixPsf=True, blobxy=blobxy, 
-                      early_coadds=False, stages=['writecat'], splinesky=True)
+        simdecals = SimDecals(metacat=metacat,simcat=simcat)
+        blobxy = zip(simcat['x'],simcat['y'])
+        run_brick(brickname, decals=simdecals, outdir=os.path.join(decals_sim_dir,brickname), 
+                  threads=args.threads, zoom=args.zoom, wise=False, sdssInit=False,
+                  forceAll=True, writePickles=False, do_calibs=True,
+                  write_metrics=False, pixPsf=True, blobxy=blobxy, 
+                  early_coadds=False, stages=['writecat'], splinesky=True)
 
+        log.info('Cleaning up...')
+        shutil.move(os.path.join(decals_sim_dir,brickname,'tractor',brickname[:3],
+                                 'tractor-'+brickname+'.fits'),
+                    os.path.join(decals_sim_dir,brickname,'tractor-'+brickname+'-'+
+                                 lobjtype+'-'+chunksuffix+'.fits'))
+        shutil.move(os.path.join(decals_sim_dir,brickname,'coadd',brickname[:3],brickname,
+                                 'decals-'+brickname+'-image.jpg'),
+                    os.path.join(decals_sim_dir,brickname,'qa-'+brickname+'-'+lobjtype+
+                                 '-image-'+chunksuffix+'.jpg'))
+        shutil.move(os.path.join(decals_sim_dir,brickname,'coadd',brickname[:3],brickname,
+                                 'decals-'+brickname+'-resid.jpg'),
+                    os.path.join(decals_sim_dir,brickname,'qa-'+brickname+'-'+lobjtype+
+                                 '-resid-'+chunksuffix+'.jpg'))
+
+        shutil.rmtree(os.path.join(decals_sim_dir,brickname,'coadd'))
+        shutil.rmtree(os.path.join(decals_sim_dir,brickname,'tractor'))
+        #shutil.rmtree(os.path.join(decals_sim_dir,brickname,'images'))
+        #shutil.rmtree(os.path.join(decals_sim_dir,brickname,'metrics'))
+
+        # Write a log file
+
+    log.info('All done!')
+        
 if __name__ == '__main__':
     main()
