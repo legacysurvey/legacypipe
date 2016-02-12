@@ -346,7 +346,7 @@ class LegacySurveyImage(object):
         if x is None:
             x = w/2.
         if y is None:
-            y = h=2.
+            y = h/2.
         patch = psf.getPointSourcePatch(x, y).patch
         #print('PSF PointSourcePatch: sum', patch.sum())
         # Clamp up to zero and normalize before taking the norm
