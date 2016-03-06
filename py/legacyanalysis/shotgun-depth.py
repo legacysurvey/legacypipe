@@ -216,7 +216,7 @@ def main():
         if I is None:
             continue
         ccd = ccds[iccd]
-        print('Matched to CCD %s: %i' % (ccd.expid, len(I)))
+        #print('Matched to CCD %s: %i' % (ccd.expid, len(I)))
         # Actually inside CCD RA,Dec box?
         r = ra[I]
         d = dec[I]
@@ -229,11 +229,13 @@ def main():
         J = np.flatnonzero((degrees_between(r, ccd.dec+np.zeros_like(r),
                                             ccd.ra, ccd.dec) < dra) *
                                             (np.abs(d - ccd.dec) < ddec))
-        print('Actually inside CCD RA,Dec box:', len(J))
+        #print('Actually inside CCD RA,Dec box:', len(J))
         if len(J) == 0:
             continue
         I = np.array(I)[J]
 
+        print('%i samples in CCD %s' % (len(I), ccd.expid))
+        
         # j = J[0]
         # print('deg between', degrees_between(r[j], ccd.dec,
         #                                      ccd.ra,  ccd.dec), 'vs', dra)
@@ -244,6 +246,19 @@ def main():
         band = ccd.filter
         gd = galdepths[band]
         print('Gal depth in', band, ':', ccd.galdepth)
+        if not np.isfinite(ccd.galdepth):
+            print('  sig1', ccd.sig1)
+            print('  galnorm', ccd.galnorm_mean)
+            print('  psfnorm', ccd.psfnorm_mean)
+            print('  seeing', ccd.seeing)
+            print('  fwhm', ccd.fwhm)
+            ccd.about()
+            print('  ccd:', ccd)
+
+            im = decals.get_image_object(ccd)
+            tim = im.get_tractor_image(splinesky=True, pixPsf=True)
+            print('  tim:', tim)
+            
         # mag -> 5sig1 -> iv
         cgd = 10.**((ccd.galdepth - 22.5) / -2.5)
         cgd = 1. / cgd**2
