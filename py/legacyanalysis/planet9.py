@@ -80,3 +80,44 @@ if __name__ == '__main__':
         ps.savefig()
     
     
+    A = fits_table('decals/decals-ccds-annotated.fits')
+    
+    for band in ['g','r','z']:
+        Ab = A[(A.filter == band) * (A.tilepass > 0)]
+        ax = [360, 0, -10, 35]
+        plt.clf()
+        I = np.flatnonzero(Ab.tilepass == 1)
+        plt.plot(Ab.ra[I], Ab.dec[I], 'k.', alpha=0.02)
+        plt.xlabel('RA (deg)')
+        plt.ylabel('Dec (deg)')
+        plt.title('%s band, pass 1' % band)
+        plt.axis(ax)
+        ps.savefig()
+        I = np.flatnonzero(Ab.tilepass == 2)
+        plt.plot(Ab.ra[I], Ab.dec[I], 'k.', alpha=0.02)
+        plt.title('%s band, pass 1,2' % band)
+        plt.axis(ax)
+        ps.savefig()
+        I = np.flatnonzero(Ab.tilepass == 3)
+        plt.plot(Ab.ra[I], Ab.dec[I], 'k.', alpha=0.02)
+        plt.title('%s band, pass 1,2,3' % band)
+        plt.axis(ax)
+        ps.savefig()
+
+    h,w = 300,600
+    rgb = np.zeros((h,w,3), np.uint8)
+    ax = [360, 0, -10, 35]
+    for iband,band in enumerate(['z','r','g']):
+        for tilepass in [1,2,3]:
+            Ab = A[(A.filter == band) * (A.tilepass == tilepass)]
+            H,xe,ye = np.histogram2d(Ab.ra, Ab.dec, bins=(w,h), range=((ax[1],ax[0]),(ax[2],ax[3])))
+            rgb[:,:,iband] += (H.T > 0) * 255/3
+    plt.clf()
+    plt.imshow(rgb, extent=[ax[1],ax[0],ax[2],ax[3]], interpolation='nearest',
+               origin='lower', aspect=4)
+    plt.axis(ax)
+    plt.title('Coverage (RGB = z/r/g)')
+    plt.xlabel('RA (deg)')
+    plt.ylabel('Dec (deg)')
+    ps.savefig()
+    
