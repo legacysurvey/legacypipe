@@ -125,95 +125,53 @@ if __name__ == '__main__':
     ps.savefig()
     
 
+    overfn = 'overlapping-ccds.fits'
+    if os.path.exists(overfn):
+        M = fits_table(overfn)
+    else:
+        from astrometry.libkd.spherematch import match_radec
+        radius = np.hypot(2048, 4096) * 0.262/3600.
+        M = fits_table()
+        M.I,M.J,d = match_radec(A.ra, A.dec, A.ra, A.dec, radius, notself=True)
+        M.cut(M.I < M.J)
+        # ra_centers vs dra
+        cosd = np.cos(np.deg2rad(A.dec_center[M.I]))
+        x1 = np.cos(np.deg2rad(A.ra_center[M.I]))
+        y1 = np.sin(np.deg2rad(A.ra_center[M.I]))
+        x2 = np.cos(np.deg2rad(A.ra_center[M.J]))
+        y2 = np.sin(np.deg2rad(A.ra_center[M.J]))
+        dra = np.rad2deg(cosd * np.hypot(x1 - x2, y1 - y2))
+        # widths - dra = overlap
+        M.raoverlap = A.dra[M.I] + A.dra[M.J] - dra
+        M.cut(M.raoverlap > 0)
+            
+        ddec = np.abs(A.dec_center[M.I] - A.dec_center[M.J])
+        # heights - ddec = overlap
+        M.decoverlap = A.ddec[M.I] + A.ddec[M.J] - ddec
+        M.cut(M.decoverlap > 0)
+            
+        M.overlap = (M.raoverlap * M.decoverlap)
+        M.dtime = np.abs(A.mjd_obs[M.I] - A.mjd_obs[M.J])
+        print(len(M), 'total overlaps')
+        
+        # for c in A.columns():
+        #     M.set('%s_1' % c, A.get(c)[M.I])
+        #     M.set('%s_2' % c, A.get(c)[M.J])
+        M.writeto(overfn)
 
     # Find images in the same band with overlapping RA,Dec ranges; plot
     # their overlap area & time lag.
 
     for band in ['g','r','z']:
-        from astrometry.libkd.spherematch import match_radec
+
+        #I = np.flatnonzero((M.filter_1 == band) * (M.filter_2 == band))
+        K = np.flatnonzero((A.filter[M.I] == band) * (A.filter[M.J] == band))
+        MI = M[K]
+        print(len(MI), band, '--', band, 'matches')
+
+        overlaps = MI.overlap
+        dtimes   = MI.dtime
         
-        Ab = A[A.filter == band]
-
-        radius = np.hypot(2048, 4096) * 0.262/3600.
-
-        I,J,d = match_radec(Ab.ra, Ab.dec, Ab.ra, Ab.dec, radius, notself=True)
-        print(len(I), 'raw matches')
-        K = (I < J)
-        I = I[K]
-        J = J[K]
-        print(len(I), 'non-duplicate matches')
-
-        # ra_center, dra
-        #dra = degrees_between(Ab.ra_center[I], Ab.dec_center[I],
-        #                      Ab.ra_center[J], Ab.dec_center[I])
-        cosd = np.cos(np.deg2rad(Ab.dec_center[I]))
-        x1 = np.cos(np.deg2rad(Ab.ra_center[I]))
-        y1 = np.sin(np.deg2rad(Ab.ra_center[I]))
-        x2 = np.cos(np.deg2rad(Ab.ra_center[J]))
-        y2 = np.sin(np.deg2rad(Ab.ra_center[J]))
-        dra = np.rad2deg(cosd * np.hypot(x1 - x2, y1 - y2))
-
-        # widths - dra = overlap
-        raoverlap = Ab.dra[I] + Ab.dra[J] - dra
-        K = (raoverlap > 0)
-        I = I[K]
-        J = J[K]
-        raoverlap = raoverlap[K]
-        print(len(I), 'RA overlap')
-        
-        # ddec = degrees_between(Ab.ra_center[I], Ab.dec_center[I],
-        #                        Ab.ra_center[I], Ab.dec_center[J])
-        ddec = np.abs(Ab.dec_center[I] - Ab.dec_center[J])
-                               
-        # heights - ddec = overlap
-        decoverlap = Ab.ddec[I] + Ab.ddec[J] - ddec
-        K = (decoverlap > 0)
-        I = I[K]
-        J = J[K]
-        raoverlap  =  raoverlap[K]
-        decoverlap = decoverlap[K]
-        print(len(I), 'Dec overlap')
-        
-        overlaps = (raoverlap * decoverlap)
-        dtimes = np.abs(Ab.mjd_obs[I] - Ab.mjd_obs[J])
-
-        #JJ = match_radec(Ab.ra, Ab.dec, Ab.ra, Ab.dec, radius, notself=True,
-        #                 indexlist=True)
-        # overlaps = []
-        # dtimes = []
-        # 
-        # for i,J in enumerate(JJ):
-        #     if J is None:
-        #         continue
-        #     J = np.array(J)
-        #     J = J[J > i]
-        #     if len(J) == 0:
-        #         continue
-        # 
-        #     # ra_center, dra
-        #     dra = degrees_between(Ab.ra_center[i], Ab.dec_center[i],
-        #                           Ab.ra_center[J],
-        #                           np.zeros(len(J)) + Ab.dec_center[i])
-        #     # widths - dra = overlap
-        #     raoverlap = Ab.dra[i] + Ab.dra[J] - dra
-        # 
-        #     ddec = degrees_between(Ab.ra_center[i], Ab.dec_center[i],
-        #                            np.zeros(len(J)) + Ab.ra_center[i],
-        #                            Ab.dec_center[J])
-        #     # heights - ddec = overlap
-        #     decoverlap = Ab.ddec[i] + Ab.ddec[J] - ddec
-        # 
-        #     K = np.flatnonzero((raoverlap > 0) * (decoverlap > 0))
-        #     if len(K) == 0:
-        #         continue
-        # 
-        #     overlaps.append((raoverlap * decoverlap)[K])
-        #     dtimes.append(np.abs(Ab.mjd_obs[i] - Ab.mjd_obs[J])[K])
-        # 
-        # overlaps = np.hstack(overlaps)
-        # dtimes = np.hstack(dtimes)
-        print('Overlapping pairs of CCDs:', len(dtimes))
-
         plt.clf()
         plt.plot(overlaps, dtimes, 'k.', alpha=0.1)
         plt.xlabel('Overlap (sq deg)')
