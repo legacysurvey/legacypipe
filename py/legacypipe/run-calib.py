@@ -9,7 +9,7 @@ from astrometry.util.fits import fits_table
 import sys
 
 # Argh, no relative imports in runnable scripts
-from legacypipe.common import run_calibs, Decals
+from legacypipe.common import run_calibs, LegacySurveyData
 
 def main():
     """Main program.
@@ -35,12 +35,12 @@ def main():
     parser.add_argument('args',nargs=argparse.REMAINDER)
     opt = parser.parse_args()
 
-    D = Decals()
+    survey = LegacySurveyData()
     if opt.ccds is not None:
         T = fits_table(opt.ccds)
         print('Read', len(T), 'from', opt.ccds)
     else:
-        T = D.get_ccds()
+        T = survey.get_ccds()
         #print len(T), 'CCDs'
 
     if len(opt.args) == 0:
@@ -57,7 +57,7 @@ def main():
         i = int(a)
         t = T[i]
 
-        im = D.get_image_object(t)
+        im = survey.get_image_object(t)
         print('Running', im.calname)
 
         kwargs = dict(pvastrom=opt.astrom, psfex=opt.psfex, sky=opt.sky)

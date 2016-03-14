@@ -16,7 +16,7 @@ from astrometry.util.ttime import Time, MemMeas
 
 from tractor import Tractor
 
-from legacypipe.common import Decals, bricks_touching_wcs, exposure_metadata, get_version_header, apertures_arcsec
+from legacypipe.common import LegacySurveyData, bricks_touching_wcs, exposure_metadata, get_version_header, apertures_arcsec
 from desi_common import read_fits_catalog
 import tractor
 

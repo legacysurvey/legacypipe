@@ -3,7 +3,7 @@ import numpy as np
 from astrometry.util.plotutils import *
 
 from legacyanalysis.ps1cat import ps1cat
-from legacypipe.common import Decals
+from legacypipe.common import LegacySurveyData
 
 from tractor import Image, PointSource, PixPos, NanoMaggies, Tractor
 
@@ -14,9 +14,9 @@ cat = ps1cat(expnum=expnum, ccdname=ccdname)
 stars = cat.get_stars()
 print len(stars), 'stars'
 
-decals = Decals()
-ccd = decals.find_ccds(expnum=expnum,ccdname=ccdname)[0]
-im = decals.get_image_object(ccd)
+survey = LegacySurveyData()
+ccd = survey.find_ccds(expnum=expnum,ccdname=ccdname)[0]
+im = survey.get_image_object(ccd)
 wcs = im.get_wcs()
 tim = im.get_tractor_image(pixPsf=True, splinesky=True)
 

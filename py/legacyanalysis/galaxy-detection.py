@@ -22,9 +22,9 @@ think they are.
 
 '''
 
-class FakeDecals(object):
+class FakeSurvey(object):
     def __init__(self):
-        self.decals_dir = ''
+        self.survey_dir = ''
         self.ccds = None
         self.tims = None
 
@@ -38,9 +38,9 @@ class FakeDecals(object):
         return FakeImage(self, t)
 
 class FakeImage(object):
-    def __init__(self, decals, t):
+    def __init__(self, survey, t):
         # print 'FakeImage:', t
-        self.tim = decals.tims[t.index]
+        self.tim = survey.tims[t.index]
 
     def run_calibs(self, *args, **kwargs):
         pass
@@ -58,13 +58,13 @@ def run_sim(tims, cat, N, mods=None, samenoise=True, **kwargs):
         tr = Tractor([], cat)
         mods = [tr.getModelImage(tim) for tim in tims]
 
-    decals = FakeDecals()
+    survey = FakeSurvey()
     ccds = fits_table()
     ccds.filter = [tim.band for tim in tims]
     ccds.to_np_arrays()
     ccds.index = np.arange(len(ccds))
-    decals.ccds = ccds
-    decals.tims = tims
+    survey.ccds = ccds
+    survey.tims = tims
 
     allcats = []
     allivs = []
@@ -79,7 +79,7 @@ def run_sim(tims, cat, N, mods=None, samenoise=True, **kwargs):
             tim.data = mod + tim.sig1 * np.random.normal(size=tim.shape)
     
         kwa = kwargs.copy()
-        kwa.update(decals=decals)
+        kwa.update(survey=survey)
         R = stage_tims(do_calibs=False, pipe=True, **kwa)
         kwa.update(R)
         R = stage_srcs(no_sdss=True, **kwa)

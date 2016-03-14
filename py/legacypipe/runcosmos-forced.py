@@ -4,13 +4,13 @@ import numpy as np
 
 from legacypipe.forced_photom_decam import main as forced_photom_main
 from legacypipe.forced_photom_decam import get_parser as forced_photom_parser
-from legacypipe.runcosmos import CosmosDecals
+from legacypipe.runcosmos import CosmosSurvey
     
 def main():
     parser = forced_photom_parser()
     parser.add_argument('--subset', type=int, help='COSMOS subset number [0 to 4]', default=0)
     opt = parser.parse_args()
-    survey = CosmosDecals(subset=opt.subset)
+    survey = CosmosSurvey(subset=opt.subset)
     
     np.random.seed(1000000 + opt.subset)
     

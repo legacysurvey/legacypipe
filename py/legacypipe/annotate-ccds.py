@@ -9,13 +9,13 @@ from astrometry.util.fits import fits_table, merge_tables
 from astrometry.util.starutil_numpy import degrees_between
 from astrometry.util.util import Tan
 from astrometry.util.miscutils import polygon_area
-from legacypipe.common import Decals
+from legacypipe.common import LegacySurveyData
 import tractor
 
 def main(outfn='ccds-annotated.fits', ccds=None):
-    decals = Decals()
+    survey = LegacySurveyData()
     if ccds is None:
-        ccds = decals.get_ccds()
+        ccds = survey.get_ccds()
 
     # File from the "observing" svn repo:
     # https://desi.lbl.gov/svn/decam/code/observing/trunk
@@ -27,11 +27,11 @@ def main(outfn='ccds-annotated.fits', ccds=None):
     #                   for name in ccds.ccdname]) *
     #                   ccds.expnum == 229683)
 
-    I = decals.photometric_ccds(ccds)
+    I = survey.photometric_ccds(ccds)
     ccds.photometric = np.zeros(len(ccds), bool)
     ccds.photometric[I] = True
 
-    I = decals.apply_blacklist(ccds)
+    I = survey.apply_blacklist(ccds)
     ccds.blacklist_ok = np.zeros(len(ccds), bool)
     ccds.blacklist_ok[I] = True
 
@@ -91,7 +91,7 @@ def main(outfn='ccds-annotated.fits', ccds=None):
     plvers = []
 
     for iccd,ccd in enumerate(ccds):
-        im = decals.get_image_object(ccd)
+        im = survey.get_image_object(ccd)
         print('Reading CCD %i of %i:' % (iccd+1, len(ccds)), im)
 
         X = im.get_good_image_subregion()
@@ -323,8 +323,8 @@ if __name__ == '__main__':
     sys.exit()
     #sys.exit(main())
 
-    decals = Decals()
-    ccds = decals.get_ccds()
+    survey = LegacySurveyData()
+    ccds = survey.get_ccds()
     from astrometry.util.multiproc import *
     #mp = multiproc(8)
     mp = multiproc(4)

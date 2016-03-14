@@ -19,7 +19,7 @@ from legacypipe.utils import MyMultiproc
 
 def stage_plots(targetwcs=None, bands=None, W=None, H=None,
                 coimgs=None, cons=None, tims=None, blobs=None,
-                cat=None, T2=None, decals=None, **kwargs):
+                cat=None, T2=None, survey=None, **kwargs):
 
     plt.figure(figsize=(8,4))
     plt.subplots_adjust(left=0.08, right=0.99, bottom=0.12, top=0.99)
@@ -30,7 +30,7 @@ def stage_plots(targetwcs=None, bands=None, W=None, H=None,
     rg2,dg2 = lbtoradec(ll, bb + 10)
     rg3,dg3 = lbtoradec(ll, bb - 10)
     
-    dall = Decals(decals_dir='decals')
+    dall = LegacySurveyData(survey_dir='survey')
     ccds = dall.get_ccds()
     bricks = dall.get_bricks_readonly()
     brick_coverage = dict()

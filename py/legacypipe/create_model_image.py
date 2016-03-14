@@ -7,7 +7,7 @@ from astrometry.util.util import Sip
 from astrometry.util.fits import merge_tables
 from astrometry.util.plotutils import dimshow
 
-from common import Decals, DecamImage, brick_catalog_for_radec_box, switch_to_soft_ellipses
+from common import LegacySurveyData, DecamImage, brick_catalog_for_radec_box, switch_to_soft_ellipses
 from desi_common import read_fits_catalog
 
 from tractor import Tractor, CachingPsfEx, FixedCompositeGalaxy, ExpGalaxy, DevGalaxy
