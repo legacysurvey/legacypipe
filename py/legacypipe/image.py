@@ -224,7 +224,8 @@ class LegacySurveyImage(object):
         psf_sigma = psf_fwhm / 2.35
         primhdr = self.read_image_primary_header()
 
-        sky = self.read_sky_model(splinesky=splinesky, slc=slc)
+        sky = self.read_sky_model(splinesky=splinesky, slc=slc,
+                                  primhdr=primhdr, imghdr=imghdr)
         midsky = 0.
         if subsky:
             print('Instantiating and subtracting sky model...')

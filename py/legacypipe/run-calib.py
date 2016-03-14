@@ -70,8 +70,7 @@ def main():
 
         run_calibs((im, kwargs))
     return 0
-#
-#
-#
+
 if __name__ == '__main__':
+    import sys
     sys.exit(main())
