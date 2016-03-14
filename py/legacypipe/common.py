@@ -755,6 +755,7 @@ class Decals(object):
         from .decam  import DecamImage
         from .mosaic import MosaicImage
         from .bok    import BokImage
+        from .ptf import PtfImage
 
         if decals_dir is None:
             decals_dir = os.environ.get('DECALS_DIR')
@@ -782,9 +783,16 @@ Using the current directory as DECALS_DIR, but this is likely to fail.
             'decam': DecamImage,
             'mosaic': MosaicImage,
             '90prime': BokImage,
+            'ptf': PtfImage,
             }
 
         self.allbands = 'ugrizY'
+
+    def get_camera_indices(self, ccds):
+        i_ptf= np.where(a.get('camera') == 'ptf')[0]
+        i_decam= np.where(a.get('camera') == 'decam')[0]
+        i_mosaic= np.where(a.get('camera') == 'mosaic')[0]
+        
 
     def index_of_band(self, b):
         return self.allbands.index(b)
@@ -1100,7 +1108,9 @@ Using the current directory as DECALS_DIR, but this is likely to fail.
             n = sum(good)
             print('Flagged', n0-n, 'more non-photometric using criterion:', name)
             n0 = n
-
+        #KJB
+        #unflag PTF data
+        good[ccds.camera == 'ptf']= True
         return np.flatnonzero(good)
 
     def apply_blacklist(self, ccds):
@@ -1162,17 +1172,25 @@ Using the current directory as DECALS_DIR, but this is likely to fail.
         '''
         Returns the photometric zeropoint for the given CCD table row object *im*.
         '''
-        zp = self.get_zeropoint_row_for(im)
-        # No updated zeropoint -- use header MAGZERO from primary HDU.
-        if zp is None:
-            print('WARNING: using header zeropoints for', im)
-            hdr = im.read_image_primary_header()
-            # DES Year1 Stripe82 images:
-            magzero = hdr['MAGZERO']
-            return magzero
-
-        magzp = zp.ccdzpt
-        magzp += 2.5 * np.log10(zp.exptime)
+        #KJB
+        if im.camera == 'decam' or im.camera == 'mosaic':
+            zp = self.get_zeropoint_row_for(im)
+            # No updated zeropoint -- use header MAGZERO from primary HDU.
+            if zp is None:
+                print('WARNING: using header zeropoints for', im)
+                hdr = im.read_image_primary_header()
+                # DES Year1 Stripe82 images:
+                magzero = hdr['MAGZERO']
+                return magzero
+            magzp = zp.ccdzpt
+            magzp += 2.5 * np.log10(zp.exptime)
+        elif im.camera == 'ptf':
+            hdr= im.read_image_primary_header() #calls fitsio.read_header(self.imgfn)
+            magzpt= hdr['IMAGEZPT'] + 2.5 * np.log10(hdr['EXPTIME'])
+            if isinstance(magzp,str):
+                print('WARNING: no ZeroPoint in header for image: ',tractor_image.imgfn)
+                raise ValueError #magzp= 23.
+        else: raise ValueError
         return magzp
 
     def get_astrometric_zeropoint_for(self, im):
