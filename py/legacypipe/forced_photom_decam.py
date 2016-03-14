@@ -271,7 +271,7 @@ def main(survey=None, opt=None):
         F.rchi2    = R.fitstats.prochi2    .astype(np.float32)
 
     program_name = sys.argv[0]
-    version_hdr = get_version_header(program_name, survey.survey_dir)
+    version_hdr = get_version_header(program_name, survey.get_survey_dir())
     # HACK -- print only two directory names + filename of CPFILE.
     fname = os.path.basename(im.imgfn)
     d = os.path.dirname(im.imgfn)

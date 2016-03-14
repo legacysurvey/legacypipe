@@ -10,11 +10,11 @@ def main():
     parser = forced_photom_parser()
     parser.add_argument('--subset', type=int, help='COSMOS subset number [0 to 4]', default=0)
     opt = parser.parse_args()
-    decals = CosmosDecals(subset=opt.subset)
+    survey = CosmosDecals(subset=opt.subset)
     
     np.random.seed(1000000 + opt.subset)
     
-    return forced_photom_main(decals=decals, opt=opt)
+    return forced_photom_main(survey=survey, opt=opt)
     
 if __name__ == '__main__':
     import sys
