@@ -20,8 +20,8 @@ class DecamImage(LegacySurveyImage):
     Camera, DECam, on the Blanco telescope.
 
     '''
-    def __init__(self, decals, t):
-        super(DecamImage, self).__init__(decals, t)
+    def __init__(self, survey, t):
+        super(DecamImage, self).__init__(survey, t)
         self.dqfn = self.imgfn.replace('_ooi_', '_ood_')
         self.wtfn = self.imgfn.replace('_ooi_', '_oow_')
 
@@ -40,7 +40,7 @@ class DecamImage(LegacySurveyImage):
         self.calname = '%s/%s/decam-%s-%s' % (expstr[:5], expstr, expstr, self.ccdname)
         self.name = '%s-%s' % (expstr, self.ccdname)
 
-        calibdir = os.path.join(self.decals.get_calib_dir(), self.camera)
+        calibdir = os.path.join(self.survey.get_calib_dir(), self.camera)
         self.pvwcsfn = os.path.join(calibdir, 'astrom-pv', self.calname + '.wcs.fits')
         self.sefn = os.path.join(calibdir, 'sextractor', self.calname + '.fits')
         self.psffn = os.path.join(calibdir, 'psfex', self.calname + '.fits')
@@ -270,7 +270,7 @@ class DecamImage(LegacySurveyImage):
             maskstr = ''
             if use_mask:
                 maskstr = '-FLAG_IMAGE ' + funmaskfn
-            sedir = self.decals.get_se_dir()
+            sedir = self.survey.get_se_dir()
 
             trymakedirs(self.sefn, dir=True)
 
@@ -304,7 +304,7 @@ class DecamImage(LegacySurveyImage):
             if os.system(cmd):
                 raise RuntimeError('Command failed: ' + cmd)
             # Read the resulting WCS header and add version info cards to it.
-            version_hdr = get_version_header(None, self.decals.get_decals_dir(),
+            version_hdr = get_version_header(None, self.survey.get_survey_dir(),
                                              git_version=git_version)
             primhdr = self.read_image_primary_header()
             plver = primhdr.get('PLVER', '').strip()
@@ -321,7 +321,7 @@ class DecamImage(LegacySurveyImage):
             print('Wrote', self.pvwcsfn)
 
         if psfex:
-            sedir = self.decals.get_se_dir()
+            sedir = self.survey.get_se_dir()
 
             trymakedirs(self.psffn, dir=True)
 
@@ -350,7 +350,7 @@ class DecamImage(LegacySurveyImage):
         if sky:
             #print('Fitting sky for', self)
 
-            hdr = get_version_header(None, self.decals.get_decals_dir(),
+            hdr = get_version_header(None, self.survey.get_survey_dir(),
                                      git_version=git_version)
             primhdr = self.read_image_primary_header()
             plver = primhdr.get('PLVER', '')

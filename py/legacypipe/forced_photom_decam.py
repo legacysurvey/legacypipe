@@ -44,7 +44,7 @@ def get_parser():
     parser.add_argument('outfn',help='Output catalog filename.')
     return parser
     
-def main(decals=None, opt=None):
+def main(survey=None, opt=None):
     '''Driver function for forced photometry of individual DECam images.
     '''
     if opt is None:
@@ -76,7 +76,7 @@ def main(decals=None, opt=None):
         expnum = int(opt.filename)
         opt.filename = None
     except:
-        # make this 'None' for decals.find_ccds()
+        # make this 'None' for survey.find_ccds()
         expnum = None
 
     # Try parsing HDU number
@@ -87,8 +87,8 @@ def main(decals=None, opt=None):
         ccdname = opt.hdu
         opt.hdu = -1
 
-    if decals is None:
-        decals = Decals()
+    if survey is None:
+        survey = LegacySurveyData()
 
     if opt.filename is not None and opt.hdu >= 0:
         # Read metadata from file
@@ -96,8 +96,8 @@ def main(decals=None, opt=None):
         print('Metadata:')
         T.about()
     else:
-        # Read metadata from decals-ccds.fits table
-        T = decals.find_ccds(expnum=expnum, ccdname=ccdname)
+        # Read metadata from survey-ccds.fits table
+        T = survey.find_ccds(expnum=expnum, ccdname=ccdname)
         print(len(T), 'with expnum', expnum, 'and CCDname', ccdname)
         if opt.hdu >= 0:
             T.cut(T.image_hdu == opt.hdu)
@@ -107,7 +107,7 @@ def main(decals=None, opt=None):
             print(len(T), 'with filename', opt.filename)
         assert(len(T) == 1)
 
-    im = decals.get_image_object(T[0])
+    im = survey.get_image_object(T[0])
     tim = im.get_tractor_image(slc=zoomslice, pixPsf=True, splinesky=True)
     print('Got tim:', tim)
 
@@ -118,7 +118,7 @@ def main(decals=None, opt=None):
         margin = 20
         TT = []
         chipwcs = tim.subwcs
-        bricks = bricks_touching_wcs(chipwcs, decals=decals)
+        bricks = bricks_touching_wcs(chipwcs, survey=survey)
         for b in bricks:
             # there is some overlap with this brick... read the catalog.
             fn = os.path.join(opt.catalog_path, 'tractor', b.brickname[:3],
@@ -271,7 +271,7 @@ def main(decals=None, opt=None):
         F.rchi2    = R.fitstats.prochi2    .astype(np.float32)
 
     program_name = sys.argv[0]
-    version_hdr = get_version_header(program_name, decals.decals_dir)
+    version_hdr = get_version_header(program_name, survey.survey_dir)
     # HACK -- print only two directory names + filename of CPFILE.
     fname = os.path.basename(im.imgfn)
     d = os.path.dirname(im.imgfn)

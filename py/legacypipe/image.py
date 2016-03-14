@@ -22,41 +22,41 @@ class LegacySurveyImage(object):
      * BokImage
     '''
 
-    def __init__(self, decals, ccd):
+    def __init__(self, survey, ccd):
         '''
 
-        Create a new LegacySurveyImage object, from a Decals object,
+        Create a new LegacySurveyImage object, from a LegacySurveyData object,
         and one row of a CCDs fits_table object.
 
         You may not need to instantiate this class directly, instead using
-        Decals.get_image_object():
+        survey.get_image_object():
 
-            decals = Decals()
+            survey = LegacySurveyData()
             # targetwcs = ....
-            # ccds = decals.ccds_touching_wcs(targetwcs, ccdrad=None)
-            ccds = decals.get_ccds()
-            im = decals.get_image_object(ccds[0])
+            # ccds = survey.ccds_touching_wcs(targetwcs, ccdrad=None)
+            ccds = survey.get_ccds()
+            im = survey.get_image_object(ccds[0])
             # which does the same thing as:
-            im = DecamImage(decals, ccds[0])
+            im = DecamImage(survey, ccds[0])
 
         Or, if you have a Community Pipeline-processed input file and
         FITS HDU extension number:
 
-            decals = Decals()
+            survey = LegacySurveyData()
             ccds = exposure_metadata([filename], hdus=[hdu])
-            im = DecamImage(decals, ccds[0])
+            im = DecamImage(survey, ccds[0])
 
         Perhaps the most important method in this class is
         *get_tractor_image*.
 
         '''
-        self.decals = decals
+        self.survey = survey
 
         imgfn = ccd.image_filename.strip()
         if os.path.exists(imgfn):
             self.imgfn = imgfn
         else:
-            self.imgfn = os.path.join(self.decals.get_image_dir(), imgfn)
+            self.imgfn = os.path.join(self.survey.get_image_dir(), imgfn)
 
         self.hdu     = ccd.image_hdu
         self.expnum  = ccd.expnum
@@ -242,7 +242,7 @@ class LegacySurveyImage(object):
             sky = zsky
             del zsky
 
-        magzp = self.decals.get_zeropoint_for(self)
+        magzp = self.survey.get_zeropoint_for(self)
         orig_zpscale = zpscale = NanoMaggies.zeropointToScale(magzp)
         if nanomaggies:
             # Scale images to Nanomaggies
@@ -477,7 +477,7 @@ class LegacySurveyImage(object):
 
         print('Reading WCS from', self.pvwcsfn)
         wcs = Sip(self.pvwcsfn)
-        dra,ddec = self.decals.get_astrometric_zeropoint_for(self)
+        dra,ddec = self.survey.get_astrometric_zeropoint_for(self)
         r,d = wcs.get_crval()
         print('Applying astrometric zeropoint:', (dra,ddec))
         wcs.set_crval((r + dra, d + ddec))
