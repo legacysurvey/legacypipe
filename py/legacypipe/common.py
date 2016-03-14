@@ -50,7 +50,6 @@ CP_DQ_BITS = dict(badpix=1, satur=2, interp=4, cr=16, bleed=64,
 # The apertures we use in aperture photometry, in ARCSEC.
 apertures_arcsec = np.array([0.5, 0.75, 1., 1.5, 2., 3.5, 5., 7.])
 
-
 # Ugly hack: for sphinx documentation, the astrometry and tractor (and
 # other) packages are replaced by mock objects.  But you can't
 # subclass a mock object correctly, so we have to un-mock
@@ -95,6 +94,15 @@ class SimpleGalaxy(ExpGalaxy):
     
 class BrickDuck(object):
     pass
+
+#KJB
+def zeropoint_for_ptf(hdr):
+    magzp= hdr['IMAGEZPT'] + 2.5 * np.log10(hdr['EXPTIME'])
+    if isinstance(magzp,str):
+        print('WARNING: no ZeroPoint in header for image: ',tractor_image.imgfn)
+        raise ValueError #magzp= 23.
+    return magzp
+
 
 def get_git_version(dir=None):
     '''
@@ -1094,20 +1102,21 @@ Using the current directory as DECALS_DIR, but this is likely to fail.
         good = np.ones(len(ccds), bool)
         n0 = sum(good)
         # This is our list of cuts to remove non-photometric CCD images
-        for name,crit in [
-            ('exptime < 30 s', (ccds.exptime < 30)),
-            ('ccdnmatch < 20', (ccds.ccdnmatch < 20)),
-            ('abs(zpt - ccdzpt) > 0.1',
-             (np.abs(ccds.zpt - ccds.ccdzpt) > 0.1)),
-            ('zpt < 0.5 mag of nominal (for DECam)',
-             ((ccds.camera == 'decam') * (ccds.zpt < (z0 - 0.5)))),
-            ('zpt > 0.25 mag of nominal (for DECam)',
-             ((ccds.camera == 'decam') * (ccds.zpt > (z0 + 0.25)))),
-             ]:
-            good[crit] = False
-            n = sum(good)
-            print('Flagged', n0-n, 'more non-photometric using criterion:', name)
-            n0 = n
+        if 'ccdnmatch' in ccds.columns():
+            for name,crit in [
+                ('exptime < 30 s', (ccds.exptime < 30)),
+                ('ccdnmatch < 20', (ccds.ccdnmatch < 20)),
+                ('abs(zpt - ccdzpt) > 0.1',
+                 (np.abs(ccds.zpt - ccds.ccdzpt) > 0.1)),
+                ('zpt < 0.5 mag of nominal (for DECam)',
+                 ((ccds.camera == 'decam') * (ccds.zpt < (z0 - 0.5)))),
+                ('zpt > 0.25 mag of nominal (for DECam)',
+                 ((ccds.camera == 'decam') * (ccds.zpt > (z0 + 0.25)))),
+                 ]:
+                good[crit] = False
+                n = sum(good)
+                print('Flagged', n0-n, 'more non-photometric using criterion:', name)
+                n0 = n
         #KJB
         #unflag PTF data
         good[ccds.camera == 'ptf']= True
@@ -1186,10 +1195,7 @@ Using the current directory as DECALS_DIR, but this is likely to fail.
             magzp += 2.5 * np.log10(zp.exptime)
         elif im.camera == 'ptf':
             hdr= im.read_image_primary_header() #calls fitsio.read_header(self.imgfn)
-            magzpt= hdr['IMAGEZPT'] + 2.5 * np.log10(hdr['EXPTIME'])
-            if isinstance(magzp,str):
-                print('WARNING: no ZeroPoint in header for image: ',tractor_image.imgfn)
-                raise ValueError #magzp= 23.
+            magzp= zeropoint_for_ptf(hdr)
         else: raise ValueError
         return magzp
 

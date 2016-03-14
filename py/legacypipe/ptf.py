@@ -93,6 +93,8 @@ class PtfImage(LegacySurveyImage):
         self.dqfn = self.imgfn.replace('_scie_', '_mask_')
         #psfex catalogues
         calibdir = os.path.join(self.decals.get_calib_dir(), self.camera)
+        self.sefn = os.path.join(calibdir, 'sextractor/', os.path.basename(self.imgfn))
+        #self.psffn = os.path.join(calibdir, 'psfex', self.calname + '.fits')
         self.psffn= os.path.join(calibdir,'psfex/',os.path.basename(self.imgfn))
         print('####### self.imgfn,dqfn,calibdir,psffn= ',self.imgfn,self.dqfn,calibdir,self.psffn)
         #self.wtfn = self.imgfn.replace('_ooi_', '_oow_')
@@ -206,17 +208,17 @@ class PtfImage(LegacySurveyImage):
             ####
             trymakedirs('junk',dir=True) #need temp dir for mask-2 and invvar map
             hdu=0
-            maskfn= imgfn.replace('_scie_','_mask_')
-            invvar= read_invvar(imgfn,maskfn,hdu) #note, all post processing on image,mask done in read_invvar
+            maskfn= self.imgfn.replace('_scie_','_mask_')
+            invvar= read_invvar(self.imgfn,maskfn,hdu) #note, all post processing on image,mask done in read_invvar
             mask= read_dq(maskfn,hdu)
             maskfn= os.path.join('junk',os.path.basename(maskfn))
             invvarfn= maskfn.replace('_mask_','_invvar_')
             fitsio.write(maskfn, mask)
             fitsio.write(invvarfn, invvar)
             print('wrote mask-2 to %s, invvar to %s' % (maskfn,invvarfn))
-            #run se
-            magzp  = ptf_zeropoint(imgfn)
-            hdr=fitsio.read_header(imgfn,ext=hdu)
+            #run se 
+            hdr=fitsio.read_header(self.imgfn,ext=hdu)
+            magzp  = zeropoint_for_ptf(hdr)
             seeing = hdr['PIXSCALE'] * hdr['MEDFWHM']
             gain= hdr['GAIN']
             cmd = ' '.join(['sex','-c', os.path.join(sedir, 'DECaLS.se'),
@@ -228,14 +230,14 @@ class PtfImage(LegacySurveyImage):
                             '-DETECT_MINAREA 3',
                             '-PARAMETERS_NAME', os.path.join(sedir, 'DECaLS.param'),
                             '-FILTER_NAME', os.path.join(sedir, 'gauss_3.0_5x5.conv'),
-                            '-STARNNW_NAME', os.path.join(args.configdir, 'default.nnw'),
+                            '-STARNNW_NAME', os.path.join(sedir, 'default.nnw'),
                             '-PIXEL_SCALE 0',
                             # SE has a *bizarre* notion of "sigma"
                             '-DETECT_THRESH 1.0',
                             '-ANALYSIS_THRESH 1.0',
                             '-MAG_ZEROPOINT %f' % magzp,
                             '-CATALOG_NAME', self.sefn,
-                            imgfn])
+                            self.imgfn])
             print(cmd)
             if os.system(cmd):
                 raise RuntimeError('Command failed: ' + cmd)
