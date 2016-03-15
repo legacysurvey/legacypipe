@@ -4,7 +4,7 @@ import numpy as np
 import fitsio
 from astrometry.util.file import trymakedirs
 from astrometry.util.fits import fits_table
-from .image import LegacySurveyImage
+from .image import LegacySurveyImage, CalibMixin
 from .common import *
 
 import astropy.time
@@ -13,7 +13,7 @@ import astropy.time
 Code specific to images from the Dark Energy Camera (DECam).
 '''
 
-class DecamImage(LegacySurveyImage):
+class DecamImage(LegacySurveyImage, CalibMixin):
     '''
 
     A LegacySurveyImage subclass to handle images from the Dark Energy
@@ -148,37 +148,17 @@ class DecamImage(LegacySurveyImage):
         from .common import (create_temp, get_version_header,
                              get_git_version)
         
-
         #for fn in [self.pvwcsfn, self.sefn, self.psffn, self.skyfn, self.splineskyfn]:
         #    print('exists?', os.path.exists(fn), fn)
 
         if psfex and os.path.exists(self.psffn) and (not force):
-            # Sometimes SourceExtractor gets interrupted or something and
-            # writes out 0 detections.  Then PsfEx fails but in a way that
-            # an output file is still written.  Try to detect & fix this
-            # case.
-            # Check the PsfEx output file for POLNAME1
-            hdr = fitsio.read_header(self.psffn, ext=1)
-            if hdr.get('POLNAME1', None) is None:
-                print('Did not find POLNAME1 in PsfEx header', self.psffn, '-- deleting')
-                os.unlink(self.psffn)
-            else:
+            if self.check_psf(self.psffn):
                 psfex = False
         if psfex:
             se = True
             
         if se and os.path.exists(self.sefn) and (not force):
-            # Check SourceExtractor catalog for size = 0
-            fn = self.sefn
-            T = fits_table(fn, hdu=2)
-            print('Read', len(T), 'sources from SE catalog', fn)
-            if T is None or len(T) == 0:
-                print('SourceExtractor catalog', fn, 'has no sources -- deleting')
-                try:
-                    os.unlink(fn)
-                except:
-                    pass
-            if os.path.exists(self.sefn):
+            if self.check_se_cat(self.sefn):
                 se = False
         if se:
             funpack = True
@@ -214,84 +194,17 @@ class DecamImage(LegacySurveyImage):
         if just_check:
             return (se or psfex or sky or pvastrom)
 
-        tmpimgfn = None
-        tmpmaskfn = None
-
-        # Unpacked image file
-        funimgfn = self.imgfn
-        funmaskfn = self.dqfn
-        
+        todelete = []
         if funpack:
-            # For FITS files that are not actually fpack'ed, funpack -E
-            # fails.  Check whether actually fpacked.
-            hdr = fitsio.read_header(self.imgfn, ext=self.hdu)
-            if not ((hdr['XTENSION'] == 'BINTABLE') and hdr.get('ZIMAGE', False)):
-                print('Image', self.imgfn, 'HDU', self.hdu, 'is not actually fpacked; not funpacking, just imcopying.')
-                fcopy = True
-
-            tmpimgfn  = create_temp(suffix='.fits')
-            tmpmaskfn = create_temp(suffix='.fits')
-    
-            if fcopy:
-                cmd = 'imcopy %s"+%i" %s' % (self.imgfn, self.hdu, tmpimgfn)
-            else:
-                cmd = 'funpack -E %i -O %s %s' % (self.hdu, tmpimgfn, self.imgfn)
-            print(cmd)
-            if os.system(cmd):
-                raise RuntimeError('Command failed: ' + cmd)
-            funimgfn = tmpimgfn
-            
-            if use_mask:
-                if fcopy:
-                    cmd = 'imcopy %s"+%i" %s' % (self.dqfn, self.hdu, tmpmaskfn)
-                else:
-                    cmd = 'funpack -E %i -O %s %s' % (self.hdu, tmpmaskfn, self.dqfn)
-                print(cmd)
-                if os.system(cmd):
-                    #raise RuntimeError('Command failed: ' + cmd)
-                    print('Command failed: ' + cmd)
-                    M,hdr = fitsio.read(self.dqfn, ext=self.hdu, header=True)
-                    print('Read', M.dtype, M.shape)
-                    fitsio.write(tmpmaskfn, M, header=hdr, clobber=True)
-                    print('Wrote', tmpmaskfn, 'with fitsio')
-                    
-                funmaskfn = tmpmaskfn
+            # The image & mask files to process (funpacked if necessary)
+            imgfn,maskfn = self.funpack_files(self.imgfn, self.dqfn, self.hdu, todelete)
+        else:
+            imgfn,maskfn = self.imgfn,self.dqfn
     
         if se:
-            # grab header values...
-            primhdr = self.read_image_primary_header()
-            magzp  = primhdr['MAGZERO']
-            seeing = self.pixscale * self.fwhm
-            #print('FWHM', self.fwhm, 'pix')
-            #print('pixscale', self.pixscale, 'arcsec/pix')
-            #print('Seeing', seeing, 'arcsec')
-    
-        if se:
-            maskstr = ''
-            if use_mask:
-                maskstr = '-FLAG_IMAGE ' + funmaskfn
-            sedir = self.survey.get_se_dir()
-
-            trymakedirs(self.sefn, dir=True)
-
-            cmd = ' '.join([
-                'sex',
-                '-c', os.path.join(sedir, 'DECaLS.se'),
-                maskstr,
-                '-SEEING_FWHM %f' % seeing,
-                '-PARAMETERS_NAME', os.path.join(sedir, 'DECaLS.param'),
-                '-FILTER_NAME', os.path.join(sedir, 'gauss_5.0_9x9.conv'),
-                '-STARNNW_NAME', os.path.join(sedir, 'default.nnw'),
-                '-PIXEL_SCALE 0',
-                # SE has a *bizarre* notion of "sigma"
-                '-DETECT_THRESH 1.0',
-                '-ANALYSIS_THRESH 1.0',
-                '-MAG_ZEROPOINT %f' % magzp,
-                '-CATALOG_NAME', self.sefn,
-                funimgfn])
-            print(cmd)
-            if os.system(cmd):
-                raise RuntimeError('Command failed: ' + cmd)
+            self.run_se('DECaLS', imgfn, maskfn)
+        if psfex:
+            self.run_psfex('DECaLS', sefn)
 
         if pvastrom:
             # DECam images appear to have PV coefficients up to PVx_10,
@@ -320,33 +233,6 @@ class DecamImage(LegacySurveyImage):
             fitsio.write(self.pvwcsfn, None, header=version_hdr, clobber=True)
             print('Wrote', self.pvwcsfn)
 
-        if psfex:
-            sedir = self.survey.get_se_dir()
-
-            trymakedirs(self.psffn, dir=True)
-
-            # If we wrote *.psf instead of *.fits in a previous run...
-            oldfn = self.psffn.replace('.fits', '.psf')
-            if os.path.exists(oldfn):
-                print('Moving', oldfn, 'to', self.psffn)
-                os.rename(oldfn, self.psffn)
-            else:
-                primhdr = self.read_image_primary_header()
-                plver = primhdr.get('PLVER', '')
-                verstr = get_git_version()
-                cmds = ['psfex -c %s -PSF_DIR %s %s' %
-                        (os.path.join(sedir, 'DECaLS.psfex'),
-                         os.path.dirname(self.psffn), self.sefn),
-                        'modhead %s LEGPIPEV %s "legacypipe git version"' %
-                        (self.psffn, verstr),
-                        'modhead %s PLVER %s "CP ver of image file"' %
-                        (self.psffn, plver)]
-                for cmd in cmds:
-                    print(cmd)
-                    rtn = os.system(cmd)
-                    if rtn:
-                        raise RuntimeError('Command failed: ' + cmd + ': return value: %i' % rtn)
-    
         if sky:
             #print('Fitting sky for', self)
 
@@ -414,8 +300,6 @@ class DecamImage(LegacySurveyImage):
                 tsky.write_fits(self.skyfn, hdr=hdr)
                 print('Wrote sky model', self.skyfn)
 
-        if tmpimgfn is not None:
-            os.unlink(tmpimgfn)
-        if tmpmaskfn is not None:
-            os.unlink(tmpmaskfn)
+        for fn in todelete:
+            os.unlink(fn)
 

@@ -571,3 +571,132 @@ class LegacySurveyImage(object):
         print('run_calibs for', self)
         print('(not implemented)')
         pass
+
+
+
+
+
+class CalibMixin(object):
+    '''
+    A class to hold common calibration tasks between the different surveys / image
+    subclasses.
+    '''
+
+    def check_psf(self, psffn):
+        '''
+        Returns True if the PsfEx file is ok.
+        '''
+        # Sometimes SourceExtractor gets interrupted or something and
+        # writes out 0 detections.  Then PsfEx fails but in a way that
+        # an output file is still written.  Try to detect & fix this
+        # case.
+        # Check the PsfEx output file for POLNAME1
+        hdr = fitsio.read_header(psffn, ext=1)
+        if hdr.get('POLNAME1', None) is None:
+            print('Did not find POLNAME1 in PsfEx header', psffn, '-- deleting')
+            os.unlink(psffn)
+            return False
+        return True
+
+    def check_se_cat(self, fn):
+        # Check SourceExtractor catalog for size = 0
+        T = fits_table(fn, hdu=2)
+        print('Read', len(T), 'sources from SE catalog', fn)
+        if T is None or len(T) == 0:
+            print('SourceExtractor catalog', fn, 'has no sources -- deleting')
+            try:
+                os.unlink(fn)
+            except:
+                pass
+        return os.path.exists(fn)
+
+    def funpack_files(self, imgfn, maskfn, hdu, todelete):
+        tmpimgfn = None
+        tmpmaskfn = None
+        # For FITS files that are not actually fpack'ed, funpack -E
+        # fails.  Check whether actually fpacked.
+        fcopy = False
+        hdr = fitsio.read_header(imgfn, ext=hdu)
+        if not ((hdr['XTENSION'] == 'BINTABLE') and hdr.get('ZIMAGE', False)):
+            print('Image %s, HDU %i is not fpacked; just imcopying.' % (imgfn,  hdu))
+            fcopy = True
+
+        tmpimgfn  = create_temp(suffix='.fits')
+        tmpmaskfn = create_temp(suffix='.fits')
+        todelete.append(tmpimgfn)
+        todelete.append(tmpmaskfn)
+        
+        if fcopy:
+            cmd = 'imcopy %s"+%i" %s' % (imgfn, hdu, tmpimgfn)
+        else:
+            cmd = 'funpack -E %i -O %s %s' % (hdu, tmpimgfn, imgfn)
+        #cmd = 'funpack -E %i -O %s %s' % (hdu, tmpimgfn, imgfn)
+        print(cmd)
+        if os.system(cmd):
+            raise RuntimeError('Command failed: ' + cmd)
+        
+        #cmd = 'funpack -E %i -O %s %s' % (hdu, tmpmaskfn, maskfn)
+        if fcopy:
+            cmd = 'imcopy %s"+%i" %s' % (maskfn, hdu, tmpmaskfn)
+        else:
+            cmd = 'funpack -E %i -O %s %s' % (hdu, tmpmaskfn, maskfn)
+        print(cmd)
+        if os.system(cmd):
+            print('Command failed: ' + cmd)
+            M,hdr = self._read_fits(maskfn, ext=hdu, header=True)
+            print('Read', M.dtype, M.shape)
+            fitsio.write(tmpmaskfn, M, header=hdr, clobber=True)
+            print('Wrote', tmpmaskfn, 'with fitsio')
+
+        return tmpimgfn,tmpmaskfn
+
+    def run_se(self, surveyname, imgfn, maskfn):
+        # grab header values...
+        primhdr = self.read_image_primary_header()
+        magzp  = primhdr['MAGZERO']
+        seeing = self.pixscale * self.fwhm
+        print('FWHM', self.fwhm, 'pix')
+        print('pixscale', self.pixscale, 'arcsec/pix')
+        print('Seeing', seeing, 'arcsec')
+
+        sedir = self.survey.get_se_dir()
+        trymakedirs(self.sefn, dir=True)
+
+        cmd = ' '.join([
+            'sex',
+            '-c', os.path.join(sedir, surveyname + '.se'),
+            '-FLAG_IMAGE ' + maskfn,
+            '-SEEING_FWHM %f' % seeing,
+            '-PARAMETERS_NAME', os.path.join(sedir, surveyname + '.param'),
+            '-FILTER_NAME', os.path.join(sedir, 'gauss_5.0_9x9.conv'),
+            '-STARNNW_NAME', os.path.join(sedir, 'default.nnw'),
+            '-PIXEL_SCALE 0',
+            # SE has a *bizarre* notion of "sigma"
+            '-DETECT_THRESH 1.0',
+            '-ANALYSIS_THRESH 1.0',
+            '-MAG_ZEROPOINT %f' % magzp,
+            '-CATALOG_NAME', self.sefn,
+            imgfn])
+        print(cmd)
+        if os.system(cmd):
+            raise RuntimeError('Command failed: ' + cmd)
+
+    def run_psfex(self, surveyname):
+        sedir = self.survey.get_se_dir()
+        trymakedirs(self.psffn, dir=True)
+        primhdr = self.read_image_primary_header()
+        plver = primhdr.get('PLVER', '')
+        verstr = get_git_version()
+        cmds = ['psfex -c %s -PSF_DIR %s %s' %
+                (os.path.join(sedir, surveyname + '.psfex'),
+                 os.path.dirname(self.psffn), self.sefn),
+                'modhead %s LEGPIPEV %s "legacypipe git version"' %
+                (self.psffn, verstr),
+                'modhead %s PLVER %s "CP ver of image file"' % (self.psffn, plver)]
+        for cmd in cmds:
+            print(cmd)
+            rtn = os.system(cmd)
+            if rtn:
+                raise RuntimeError('Command failed: %s: return value: %i' %
+                                   (cmd,rtn))
+
