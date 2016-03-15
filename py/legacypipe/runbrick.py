@@ -1719,7 +1719,7 @@ def stage_fitblobs(T=None,
     # drop any cached data before we start pickling/multiprocessing
     survey.drop_cache()
 
-    tycho = fits_table('tycho2.fits')
+    tycho = fits_table(os.path.join(survey.get_survey_dir(), 'tycho2.fits.gz'))
     print('Read', len(tycho), 'Tycho-2 stars')
     ok,tx,ty = targetwcs.radec2pixelxy(tycho.ra, tycho.dec)
     margin = 100
@@ -1734,8 +1734,8 @@ def stage_fitblobs(T=None,
         dimshow(blobs>=0, vmin=0, vmax=1)
         ax = plt.axis()
         plt.plot(tx-1, ty-1, 'ro')
-        for x,y,mb,mv,mh in zip(tx,ty,tycho.mag_bt,tycho.mag_vt,tycho.mag_hp):
-            plt.text(x, y, '%.1f/%.1f/%.1f' % (mb,mv,mh),
+        for x,y,mag in zip(tx,ty,tycho.mag):
+            plt.text(x, y, '%.1f' % (mag),
                      color='r', fontsize=10,
                      bbox=dict(facecolor='w', alpha=0.5))
         plt.axis(ax)
