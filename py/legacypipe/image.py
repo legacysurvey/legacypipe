@@ -599,6 +599,7 @@ class CalibMixin(object):
         return True
 
     def check_se_cat(self, fn):
+        from astrometry.util.fits import fits_table
         # Check SourceExtractor catalog for size = 0
         T = fits_table(fn, hdu=2)
         print('Read', len(T), 'sources from SE catalog', fn)
@@ -611,6 +612,8 @@ class CalibMixin(object):
         return os.path.exists(fn)
 
     def funpack_files(self, imgfn, maskfn, hdu, todelete):
+        from legacypipe.common import create_temp
+
         tmpimgfn = None
         tmpmaskfn = None
         # For FITS files that are not actually fpack'ed, funpack -E
@@ -651,6 +654,7 @@ class CalibMixin(object):
         return tmpimgfn,tmpmaskfn
 
     def run_se(self, surveyname, imgfn, maskfn):
+        from astrometry.util.file import trymakedirs
         # grab header values...
         primhdr = self.read_image_primary_header()
         magzp  = primhdr['MAGZERO']
@@ -682,6 +686,8 @@ class CalibMixin(object):
             raise RuntimeError('Command failed: ' + cmd)
 
     def run_psfex(self, surveyname):
+        from astrometry.util.file import trymakedirs
+        from legacypipe.common import get_git_version
         sedir = self.survey.get_se_dir()
         trymakedirs(self.psffn, dir=True)
         primhdr = self.read_image_primary_header()
