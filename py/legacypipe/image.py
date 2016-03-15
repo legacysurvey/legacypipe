@@ -490,7 +490,7 @@ class LegacySurveyImage(object):
         wcs.plver = hdr.get('PLVER', '').strip()
         return wcs
     
-    def read_sky_model(self, splinesky=False, slc=None):
+    def read_sky_model(self, splinesky=False, slc=None, **kwargs):
         '''
         Reads the sky model, returning a Tractor Sky object.
         '''

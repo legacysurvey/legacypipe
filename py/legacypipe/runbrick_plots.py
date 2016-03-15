@@ -1,4 +1,5 @@
 import pylab as plt
+from astrometry.util.plotutils import dimshow
 from common import *
 
 def _psf_check_plots(tims):

@@ -8,7 +8,7 @@ import numpy as np
 from astrometry.util.util import wcs_pv2sip_hdr
 
 from legacypipe.image import LegacySurveyImage
-from legacypipe.common import Survey
+from legacypipe.common import LegacySurveyData
 
 class MosaicImage(LegacySurveyImage):
     def __init__(self, survey, t):
