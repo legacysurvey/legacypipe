@@ -31,7 +31,11 @@ class MosaicImage(LegacySurveyImage, CalibMixin):
 
     def read_sky_model(self, imghdr=None, **kwargs):
         from tractor.sky import ConstantSky
-        return ConstantSky(imghdr['AVSKY'])
+        sky = ConstantSky(imghdr['AVSKY'])
+        sky.version = ''
+        phdr = fitsio.read_header(self.imgfn, 0)
+        sky.plver = phdr.get('PLVER', '').strip()
+        return sky
         
     def get_wcs(self):
         hdr = fitsio.read_header(self.imgfn, self.hdu)
@@ -63,10 +67,7 @@ class MosaicImage(LegacySurveyImage, CalibMixin):
 
     def run_calibs(self, psfex=True, funpack=False, git_version=None,
                    force=False, **kwargs):
-        #from legacypipe.common import (get_version_header, get_git_version)
-                                       
         print('run_calibs for', self.name, 'kwargs', kwargs)
-
         se = False
         if psfex and os.path.exists(self.psffn) and (not force):
             if self.check_psf(self.psffn):
@@ -117,7 +118,9 @@ def main():
     T.ccdnmatch = np.zeros(len(T), np.int32) + 50
     T.zpt = np.zeros(len(T), np.float32) + 26.518
     T.ccdzpt = T.zpt.copy()
-
+    T.ccdraoff = np.zeros(len(T), np.float32)
+    T.ccddecoff = np.zeros(len(T), np.float32)
+    
     fmap = {'zd':'z'}
     T.filter = np.array([fmap[f] for f in T.filter])
     
