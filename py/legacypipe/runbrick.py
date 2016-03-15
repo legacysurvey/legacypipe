@@ -4978,12 +4978,6 @@ python -u legacypipe/runbrick.py --plots --brick 2440p070 --zoom 1900 2400 450 9
     
     parser.add_argument('--gpsf', action='store_true', default=False,
                         help='Use a fixed single-Gaussian PSF')
-    parser.add_argument(
-        '--pixpsf', action='store_true', default=False,
-        help='Use the pixelized PsfEx PSF model, and FFT convolution')
-
-    parser.add_argument('--splinesky', action='store_true', default=False,
-                        help='Use flexible sky model?')
 
     parser.add_argument(
         '--coadd-bw', action='store_true', default=False,
@@ -5065,6 +5059,8 @@ def get_runbrick_kwargs(opt):
     else:
         writeStages = opt.write
 
+    opt.pixpsf = not opt.gpsf
+        
     kwa.update(
         radec=opt.radec, pixscale=opt.pixscale,
         width=opt.width, height=opt.height, zoom=opt.zoom,
@@ -5073,7 +5069,7 @@ def get_runbrick_kwargs(opt):
         do_calibs=opt.do_calibs,
         write_metrics=opt.write_metrics,
         on_bricks=opt.on_bricks,
-        gaussPsf=opt.gpsf, pixPsf=opt.pixpsf, splinesky=opt.splinesky,
+        gaussPsf=opt.gpsf, pixPsf=opt.pixpsf, splinesky=True,
         simulOpt=opt.simul_opt,
         nblobs=opt.nblobs, blob=opt.blob, blobxy=opt.blobxy,
         pipe=opt.pipe, outdir=opt.outdir, survey_dir=opt.survey_dir,
