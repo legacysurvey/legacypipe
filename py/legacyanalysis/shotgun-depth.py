@@ -16,8 +16,8 @@ from legacypipe.common import *
 def main():
     ps = PlotSequence('shotgun')
 
-    decals = Decals()
-    C = fits_table('decals-ccds-annotated.fits')
+    survey = LegacySurveyData()
+    C = fits_table('survey-ccds-annotated.fits')
     print(len(C), 'CCDs')
     C.cut(C.photometric)
     C.cut(C.blacklist_ok)
@@ -255,7 +255,7 @@ def main():
             ccd.about()
             print('  ccd:', ccd)
 
-            im = decals.get_image_object(ccd)
+            im = survey.get_image_object(ccd)
             tim = im.get_tractor_image(splinesky=True, pixPsf=True)
             print('  tim:', tim)
             
@@ -322,8 +322,8 @@ def main():
     ebv,extinction = sfd.extinction(filts, ra, dec, get_ebv=True)
     print('Extinction:', extinction.shape)
     
-    B = decals.get_bricks_readonly()
-    I = decals.bricks_touching_radec_box(None, ralo, rahi, declo, dechi)
+    B = survey.get_bricks_readonly()
+    I = survey.bricks_touching_radec_box(None, ralo, rahi, declo, dechi)
     B.cut(I)
     print(len(B), 'bricks touching RA,Dec box')
 
@@ -344,7 +344,7 @@ def main():
         y = np.round(y - 1).astype(int)
         
         for iband,band in enumerate(bands):
-            fn = decals.find_file('nexp', brick=brick.brickname, band=band)
+            fn = survey.find_file('nexp', brick=brick.brickname, band=band)
             print('Reading', fn)
             if not os.path.exists(fn):
                 print('Missing:', fn)
@@ -354,7 +354,7 @@ def main():
 
             ext = extinction[I, iband]
             
-            fn = decals.find_file('galdepth', brick=brick.brickname, band=band)
+            fn = survey.find_file('galdepth', brick=brick.brickname, band=band)
             print('Reading', fn)
             galdepth = fitsio.read(fn)
             galdepth = galdepth[y, x]

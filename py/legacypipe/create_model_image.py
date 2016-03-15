@@ -7,7 +7,7 @@ from astrometry.util.util import Sip
 from astrometry.util.fits import merge_tables
 from astrometry.util.plotutils import dimshow
 
-from common import Decals, DecamImage, brick_catalog_for_radec_box, switch_to_soft_ellipses
+from common import LegacySurveyData, DecamImage, brick_catalog_for_radec_box, switch_to_soft_ellipses
 from desi_common import read_fits_catalog
 
 from tractor import Tractor, CachingPsfEx, FixedCompositeGalaxy, ExpGalaxy, DevGalaxy
@@ -15,7 +15,7 @@ from tractor import Tractor, CachingPsfEx, FixedCompositeGalaxy, ExpGalaxy, DevG
 from runbrick import get_sdss_sources
 
 def main():
-    decals = Decals()
+    survey = LegacySurveyData()
 
     catpattern = 'pipebrick-cats/tractor-phot-b%06i.fits'
     ra,dec = 242, 7
@@ -29,17 +29,17 @@ def main():
 
     #expnum = 346623
     #ccdname = 'N12'
-    #chips = decals.find_ccds(expnum=expnum, extname=ccdname)
+    #chips = survey.find_ccds(expnum=expnum, extname=ccdname)
     #print 'Found', len(chips), 'chips for expnum', expnum, 'extname', ccdname
     #if len(chips) != 1:
     #return False
 
-    chips = decals.get_ccds()
+    chips = survey.get_ccds()
     D = np.argsort(np.hypot(chips.ra - ra, chips.dec - dec))
     print('Closest chip:', chips[D[0]])
     chips = [chips[D[0]]]
 
-    im = DecamImage(decals, chips[0])
+    im = DecamImage(survey, chips[0])
     print('Image:', im)
 
     targetwcs = Sip(im.wcsfn)
@@ -52,13 +52,13 @@ def main():
     if r0 > r1:
         # RA wrap-around
         TT = [brick_catalog_for_radec_box(ra,rb, d0-margin,d1+margin,
-                                          decals, catpattern)
+                                          survey, catpattern)
                 for (ra,rb) in [(0, r1+margin), (r0-margin, 360.)]]
         T = merge_tables(TT)
         T._header = TT[0]._header
     else:
         T = brick_catalog_for_radec_box(r0-margin,r1+margin,d0-margin,
-                                        d1+margin, decals, catpattern)
+                                        d1+margin, survey, catpattern)
 
     print('Got', len(T), 'catalog entries within range')
     cat = read_fits_catalog(T, T._header)

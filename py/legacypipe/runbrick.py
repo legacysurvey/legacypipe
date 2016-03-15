@@ -1,5 +1,5 @@
 '''
-Main "pipeline" script for the Dark Energy Camera Legacy Survey (DECaLS)
+Main "pipeline" script for the Legacy Survey (DECaLS, MzLS)
 data reductions.
 
 For calling from other scripts, see:
@@ -70,9 +70,9 @@ def runbrick_global_init():
         disable_galaxy_cache()
 
 def stage_tims(W=3600, H=3600, pixscale=0.262, brickname=None,
-               decals=None,
+               survey=None,
                ra=None, dec=None,
-               plots=False, ps=None, decals_dir=None,
+               plots=False, ps=None, survey_dir=None,
                target_extent=None, pipe=False, program_name='runbrick.py',
                bands='grz',
                do_calibs=True,
@@ -111,8 +111,8 @@ def stage_tims(W=3600, H=3600, pixscale=0.262, brickname=None,
     # Edison.
     from tractor.mix import c_gauss_2d_grid
 
-    if decals is None:
-        decals = Decals(decals_dir)
+    if survey is None:
+        survey = LegacySurveyData(survey_dir)
 
     if ra is not None:
         # Custom brick; create a fake 'brick' object
@@ -122,7 +122,7 @@ def stage_tims(W=3600, H=3600, pixscale=0.262, brickname=None,
         brickid = brick.brickid = -1
         brick.brickname = brickname
     else:
-        brick = decals.get_brick_by_name(brickname)
+        brick = survey.get_brick_by_name(brickname)
         if brick is None:
             raise RunbrickError('No such brick: "%s"' % brickname)
 
@@ -151,7 +151,7 @@ def stage_tims(W=3600, H=3600, pixscale=0.262, brickname=None,
 
     gitver = get_git_version()
 
-    version_hdr = get_version_header(program_name, decals.decals_dir,
+    version_hdr = get_version_header(program_name, survey.survey_dir,
                                      git_version=gitver)
     for i,dep in enumerate(['numpy', 'scipy', 'wcslib', 'astropy', 'photutils',
                             'ceres', 'sextractor', 'psfex', 'astrometry_net',
@@ -168,9 +168,9 @@ def stage_tims(W=3600, H=3600, pixscale=0.262, brickname=None,
                                     comment='Version of dependency product'))
 
     version_hdr.add_record(dict(name='BRICKNAM', value=brickname,
-                                comment='DECaLS brick RRRr[pm]DDd'))
+                                comment='LegacySurvey brick RRRr[pm]DDd'))
     version_hdr.add_record(dict(name='BRICKID' , value=brickid,
-                                comment='DECaLS brick id'))
+                                comment='LegacySurvey brick id'))
     version_hdr.add_record(dict(name='RAMIN'   , value=brick.ra1,
                                 comment='Brick RA min'))
     version_hdr.add_record(dict(name='RAMAX'   , value=brick.ra2,
@@ -206,13 +206,13 @@ def stage_tims(W=3600, H=3600, pixscale=0.262, brickname=None,
     # print('Version header:')
     # print(version_hdr)
 
-    ccds = decals.ccds_touching_wcs(targetwcs, ccdrad=None)
+    ccds = survey.ccds_touching_wcs(targetwcs, ccdrad=None)
     if ccds is None:
         raise NothingToDoError('No CCDs touching brick')
     print(len(ccds), 'CCDs touching target WCS')
 
     if use_blacklist:
-        I = decals.apply_blacklist(ccds)
+        I = survey.apply_blacklist(ccds)
         ccds.cut(I)
         print(len(ccds), 'CCDs not in blacklisted propids (too many exposures!)')
 
@@ -221,13 +221,13 @@ def stage_tims(W=3600, H=3600, pixscale=0.262, brickname=None,
     ccds.cut(np.hstack([np.flatnonzero(ccds.filter == band) for band in bands]))
 
     print('Cutting out non-photometric CCDs...')
-    I = decals.photometric_ccds(ccds)
+    I = survey.photometric_ccds(ccds)
     print(len(I), 'of', len(ccds), 'CCDs are photometric')
     ccds.cut(I)
 
     ims = []
     for ccd in ccds:
-        im = decals.get_image_object(ccd)
+        im = survey.get_image_object(ccd)
         ims.append(im)
         print(im, im.band, 'exptime', im.exptime, 'propid', ccd.propid)
 
@@ -249,8 +249,8 @@ def stage_tims(W=3600, H=3600, pixscale=0.262, brickname=None,
         # Just request missing files?
         reqd = [fn for fn in reqd if not os.path.exists(fn)]
         print('Required calib files:', reqd)
-        print('Calib dir:', decals.get_calib_dir())
-        caldir = decals.get_calib_dir() + '/'
+        print('Calib dir:', survey.get_calib_dir())
+        caldir = survey.get_calib_dir() + '/'
 
         if len(reqd):
             reqd = [fn.replace(caldir, '') for fn in reqd]
@@ -264,7 +264,7 @@ def stage_tims(W=3600, H=3600, pixscale=0.262, brickname=None,
             reqd.extend([im.imgfn, im.dqfn, im.wtfn])
         reqd = [fn for fn in reqd if not os.path.exists(fn)]
         print('Required image files:', reqd)
-        imgdir = decals.get_image_dir() + '/'
+        imgdir = survey.get_image_dir() + '/'
 
         if len(reqd):
             reqd = [fn.replace(imgdir, '') for fn in reqd]
@@ -420,7 +420,7 @@ def stage_tims(W=3600, H=3600, pixscale=0.262, brickname=None,
 
     keys = ['version_header', 'targetrd', 'pixscale', 'targetwcs', 'W','H',
             'bands', 'tims', 'ps', 'brickid', 'brickname', 'brick',
-            'target_extent', 'ccds', 'bands', 'decals']
+            'target_extent', 'ccds', 'bands', 'survey']
     if not pipe:
         keys.extend(['coimgs', 'cons'])
     rtn = dict()
@@ -777,7 +777,7 @@ def _write_band_images(band,
         for r in hdr.records():
             hdr2.add_record(r)
         hdr2.add_record(dict(name='IMTYPE', value=name,
-                             comment='DECaLS image type'))
+                             comment='LegacySurvey image type'))
         hdr2.add_record(dict(name='PRODTYPE', value=prodtype,
                              comment='NOAO image type'))
         if name in ['image', 'model']:
@@ -790,7 +790,7 @@ def _write_band_images(band,
                                  comment='Ivar of ABmag=22.5-2.5*log10(nmgy)'))
 
         fn = os.path.join(basedir,
-                          'decals-%s-%s-%s.fits' % (brickname, name, band))
+                          'legacysurvey-%s-%s-%s.fits' % (brickname, name, band))
         if gzip:
             fn += '.gz'
         fitsio.write(fn, img, clobber=True, header=hdr2)
@@ -1047,7 +1047,7 @@ def stage_image_coadds(targetwcs=None, bands=None, tims=None, outdir=None,
         del det
         del detiv
         del galdetiv
-        fn = os.path.join(basedir, 'decals-%s-depth.fits' % (brickname))
+        fn = os.path.join(basedir, 'legacysurvey-%s-depth.fits' % (brickname))
         D.writeto(fn)
         print('Wrote', fn)
         del D
@@ -1066,7 +1066,7 @@ def stage_image_coadds(targetwcs=None, bands=None, tims=None, outdir=None,
             rgb = rgb[:,:,i]
             kwa = dict(cmap='gray')
         plt.imsave(tmpfn, rgb, origin='lower', **kwa)
-        jpegfn = os.path.join(basedir, 'decals-%s-%s.jpg' % (brickname, name))
+        jpegfn = os.path.join(basedir, 'legacysurvey-%s-%s.jpg' % (brickname, name))
         cmd = 'pngtopnm %s | pnmtojpeg -quality 90 > %s' % (tmpfn, jpegfn)
         os.system(cmd)
         os.unlink(tmpfn)
@@ -1085,7 +1085,7 @@ def stage_image_coadds(targetwcs=None, bands=None, tims=None, outdir=None,
             rgb[:,:,1][outline] = 1
             rgb[:,:,2][outline] = 0
             plt.imsave(tmpfn, rgb, origin='lower', **kwa)
-            jpegfn = os.path.join(basedir, 'decals-%s-%s.jpg' % (brickname, name+'blob'))
+            jpegfn = os.path.join(basedir, 'legacysurvey-%s-%s.jpg' % (brickname, name+'blob'))
             cmd = 'pngtopnm %s | pnmtojpeg -quality 90 > %s' % (tmpfn, jpegfn)
             os.system(cmd)
             os.unlink(tmpfn)
@@ -1113,7 +1113,7 @@ def stage_srcs(coimgs=None, cons=None,
                pipe=False, brickname=None,
                mp=None, outdir=None, nsigma=5,
                no_sdss=False, on_bricks=False,
-               decals=None, brick=None,
+               survey=None, brick=None,
                **kwargs):
     '''
     In this stage we read SDSS catalog objects overlapping
@@ -1165,7 +1165,7 @@ def stage_srcs(coimgs=None, cons=None,
     if on_bricks:
         from legacypipe.desi_common import read_fits_catalog
         # Find nearby bricks from earlier brick phases
-        bricks = decals.get_bricks_readonly()
+        bricks = survey.get_bricks_readonly()
         print(len(bricks), 'bricks')
         bricks = bricks[bricks.brickq < brick.brickq]
         print(len(bricks), 'from phases before this brickq:', brick.brickq)
@@ -1632,7 +1632,7 @@ def stage_fitblobs(T=None,
                    targetwcs=None,
                    W=None,H=None,
                    bands=None, ps=None, tims=None,
-                   decals=None,
+                   survey=None,
                    plots=False, plots2=False,
                    nblobs=None, blob0=None, blobxy=None,
                    simul_opt=False, use_ceres=True, mp=None,
@@ -1655,7 +1655,7 @@ def stage_fitblobs(T=None,
         #write_pool = multiprocessing.Pool(1)
         import threading
         keys = ['T', 'blobsrcs', 'blobslices', 'blobs', 'cat', 'targetrd',
-                'pixscale', 'targetwcs', 'W', 'H', 'bands', 'tims', 'decals',
+                'pixscale', 'targetwcs', 'W', 'H', 'bands', 'tims', 'survey',
                 'brickname', 'brickid', 'brick', 'version_header', 'ccds']
         L = locals()
         vals = {}
@@ -1787,7 +1787,7 @@ def stage_fitblobs(T=None,
         T.blob = blobs[T.ity, T.itx]
 
     # drop any cached data before we start pickling/multiprocessing
-    decals.drop_cache()
+    survey.drop_cache()
 
     tycho = fits_table('tycho2.fits')
     print('Read', len(tycho), 'Tycho-2 stars')
@@ -3789,7 +3789,7 @@ def stage_coadds(bands=None, version_header=None, targetwcs=None,
         outdir = '.'
     basedir = os.path.join(outdir, 'coadd', brickname[:3], brickname)
     trymakedirs(basedir)
-    fn = os.path.join(basedir, 'decals-%s-ccds.fits' % brickname)
+    fn = os.path.join(basedir, 'legacysurvey-%s-ccds.fits' % brickname)
     #
     ccds.ccd_x0 = np.array([tim.x0 for tim in tims]).astype(np.int16)
     ccds.ccd_x1 = np.array([tim.x0 + tim.shape[1]
@@ -3923,7 +3923,7 @@ def stage_coadds(bands=None, version_header=None, targetwcs=None,
     del det
     del detiv
     del galdetiv
-    fn = os.path.join(basedir, 'decals-%s-depth.fits' % (brickname))
+    fn = os.path.join(basedir, 'legacysurvey-%s-depth.fits' % (brickname))
     D.writeto(fn)
     print('Wrote', fn)
     del D
@@ -3941,7 +3941,7 @@ def stage_coadds(bands=None, version_header=None, targetwcs=None,
             kwa = dict(cmap='gray')
         plt.imsave(tmpfn, rgb, origin='lower', **kwa)
         del rgb
-        jpegfn = os.path.join(basedir, 'decals-%s-%s.jpg' % (brickname, name))
+        jpegfn = os.path.join(basedir, 'legacysurvey-%s-%s.jpg' % (brickname, name))
         cmd = ('pngtopnm %s | pnmtojpeg -quality 90 > %s' % (tmpfn, jpegfn))
         os.system(cmd)
         os.unlink(tmpfn)
@@ -4160,8 +4160,8 @@ def stage_writecat(
 
     ## HACK -- COSMOS repeats
     if brick is None and brickname is not None:
-        decals = kwargs['decals']
-        brick = decals.get_brick_by_name(brickname)
+        survey = kwargs['survey']
+        brick = survey.get_brick_by_name(brickname)
         print('recovered brick', brick)
 
     from desi_common import prepare_fits_catalog
@@ -4562,7 +4562,7 @@ def run_brick(brick, radec=None, pixscale=0.262,
               splinesky=False,
               ceres=True,
               outdir=None,
-              decals=None, decals_dir=None,
+              survey=None, survey_dir=None,
               unwise_dir=None,
               threads=None,
               plots=False, plots2=False, coadd_bw=False,
@@ -4575,7 +4575,7 @@ def run_brick(brick, radec=None, pixscale=0.262,
               checkpoint_period=None,
               fitblobs_prereq_filename=None):
     '''
-    Run the full DECaLS data reduction pipeline.
+    Run the full Legacy Survey data reduction pipeline.
 
     The pipeline is built out of "stages" that run in sequence.  By
     default, this function will cache the result of each stage in a
@@ -4610,7 +4610,7 @@ def run_brick(brick, radec=None, pixscale=0.262,
 
     If *radec* is given, *brick* should be *None*.  If *brick* is given,
     that brick's RA,Dec center will be looked up in the
-    "decals-bricks.fits" file.
+    "survey-bricks.fits" file.
 
     You can also change the size of the region to reduce:
 
@@ -4666,11 +4666,11 @@ def run_brick(brick, radec=None, pixscale=0.262,
 
     - *outdir*: string; base directory for output files; default "."
 
-    - *decals*: a "Decals" object (see common.Decals), which is in
+    - *survey*: a "LegacySurveyData" object (see common.LegacySurveyData), which is in
       charge of the list of bricks and CCDs to be handled, and also
       creates DecamImage objects.
 
-    - *decals_dir*: string; default $DECALS_DIR environment variable;
+    - *survey_dir*: string; default $LEGACY_SURVEY_DIR environment variable;
       where to look for files including calibration files, tables of
       CCDs and bricks, image data, etc.
 
@@ -4742,7 +4742,7 @@ def run_brick(brick, radec=None, pixscale=0.262,
                          (int(1000*ra), 'm' if dec < 0 else 'p',
                           int(1000*np.abs(dec))))
     initargs.update(brickname=brick,
-                    decals=decals)
+                    survey=survey)
 
     stagefunc = CallGlobalTime('stage_%s', globals())
 
@@ -4764,7 +4764,7 @@ def run_brick(brick, radec=None, pixscale=0.262,
                   do_calibs=do_calibs,
                   write_metrics=write_metrics,
                   on_bricks=on_bricks,
-                  outdir=outdir, decals_dir=decals_dir, unwise_dir=unwise_dir,
+                  outdir=outdir, survey_dir=survey_dir, unwise_dir=unwise_dir,
                   plots=plots, plots2=plots2, coadd_bw=coadd_bw,
                   rsync=rsync,
                   force=forceStages, write=writePickles)
@@ -4857,8 +4857,8 @@ def run_brick(brick, radec=None, pixscale=0.262,
 
 def get_parser():
     import argparse
-    de = ('Main "pipeline" script for the Dark Energy Camera Legacy Survey ' +
-          '(DECaLS) data reductions.')
+    de = ('Main "pipeline" script for the Legacy Survey ' +
+          '(DECaLS, MzLS, Bok) data reductions.')
 
     ep = '''
 e.g., to run a small field containing a cluster:
@@ -4900,8 +4900,8 @@ python -u legacypipe/runbrick.py --plots --brick 2440p070 --zoom 1900 2400 450 9
                         help='Pixel scale of the output coadds (arcsec/pixel)')
 
     parser.add_argument('-d', '--outdir', help='Set output base directory')
-    parser.add_argument('--decals-dir', type=str, default=None,
-                        help='Overwrite the $DECALS_DIR environment variable')
+    parser.add_argument('--survey-dir', type=str, default=None,
+                        help='Override the $LEGACY_SURVEY_DIR environment variable')
 
     parser.add_argument('--threads', type=int, help='Run multi-threaded')
     parser.add_argument('-p', '--plots', dest='plots', action='store_true',
@@ -5022,7 +5022,7 @@ def get_runbrick_kwargs(opt):
         brickname = opt.brick
         if opt.skip_coadd:
             fn = os.path.join(outdir, 'coadd', brickname[:3], brickname,
-                              'decals-%s-image.jpg' % brickname)
+                              'legacysurvey-%s-image.jpg' % brickname)
         else:
             fn = os.path.join(outdir, 'tractor', brickname[:3],
                               'tractor-%s.fits' % brickname)
@@ -5085,7 +5085,7 @@ def get_runbrick_kwargs(opt):
         gaussPsf=opt.gpsf, pixPsf=opt.pixpsf, splinesky=opt.splinesky,
         simulOpt=opt.simul_opt,
         nblobs=opt.nblobs, blob=opt.blob, blobxy=opt.blobxy,
-        pipe=opt.pipe, outdir=opt.outdir, decals_dir=opt.decals_dir,
+        pipe=opt.pipe, outdir=opt.outdir, survey_dir=opt.survey_dir,
         unwise_dir=opt.unwise_dir,
         plots=opt.plots, plots2=opt.plots2,
         coadd_bw=opt.coadd_bw,

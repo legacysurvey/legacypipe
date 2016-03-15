@@ -5,10 +5,10 @@ import fitsio
 from astrometry.util.fits import *
 
 if __name__ == '__main__':
-    #B = fits_table('cosmo/data/legacysurvey/dr2/decals-bricks-dr2.fits
+    #B = fits_table('cosmo/data/legacysurvey/dr2/survey-bricks-dr2.fits
 
-    decals = Decals()
-    bricks = decals.get_bricks_dr2()
+    survey = LegacySurveyData()
+    bricks = survey.get_bricks_dr2()
     print(len(bricks), 'in DR2 bricks')
     bricks.cut(reduce(np.logical_or, [bricks.nobs_max_g > 0,
                                       bricks.nobs_max_r > 0,

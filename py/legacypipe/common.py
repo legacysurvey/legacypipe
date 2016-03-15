@@ -121,7 +121,7 @@ def get_git_version(dir=None):
     version = version.strip()
     return version
 
-def get_version_header(program_name, decals_dir, git_version=None):
+def get_version_header(program_name, survey_dir, git_version=None):
     '''
     Creates a fitsio header describing a DECaLS data product.
     '''
@@ -144,12 +144,12 @@ def get_version_header(program_name, decals_dir, git_version=None):
         hdr.add_record(dict(name='COMMENT', value=s, comment=s))
     hdr.add_record(dict(name='LEGPIPEV', value=git_version,
                         comment='legacypipe git version'))
-    hdr.add_record(dict(name='DECALSV', value=decals_dir,
-                        comment='DECaLS version'))
+    hdr.add_record(dict(name='SURVEYV', value=survey_dir,
+                        comment='Legacy Survey directory'))
     hdr.add_record(dict(name='DECALSDR', value='DR2',
                         comment='DECaLS release name'))
-    decalsdir_ver = get_git_version(decals_dir)
-    hdr.add_record(dict(name='DECALSDV', value=decalsdir_ver,
+    surveydir_ver = get_git_version(survey_dir)
+    hdr.add_record(dict(name='SURVEYDV', value=surveydir_ver,
                         comment='legacypipe-dir git version'))
     hdr.add_record(dict(name='DECALSDT', value=datetime.datetime.now().isoformat(),
                         comment='%s run time' % program_name))
@@ -519,16 +519,16 @@ def switch_to_soft_ellipses(cat):
             src.shapeExp = EllipseESoft.fromEllipseE(src.shapeExp)
 
 def brick_catalog_for_radec_box(ralo, rahi, declo, dechi,
-                                decals, catpattern, bricks=None):
+                                survey, catpattern, bricks=None):
     '''
     Merges multiple Tractor brick catalogs to cover an RA,Dec
     bounding-box.
 
     No cleverness with RA wrap-around; assumes ralo < rahi.
 
-    decals: Decals object
+    survey: LegacySurveyData object
     
-    bricks: table of bricks, eg from Decals.get_bricks()
+    bricks: table of bricks, eg from LegacySurveyData.get_bricks()
 
     catpattern: filename pattern of catalog files to read,
         eg "pipebrick-cats/tractor-phot-%06i.its"
@@ -538,8 +538,8 @@ def brick_catalog_for_radec_box(ralo, rahi, declo, dechi,
     assert(declo < dechi)
 
     if bricks is None:
-        bricks = decals.get_bricks_readonly()
-    I = decals.bricks_touching_radec_box(bricks, ralo, rahi, declo, dechi)
+        bricks = survey.get_bricks_readonly()
+    I = survey.bricks_touching_radec_box(bricks, ralo, rahi, declo, dechi)
     print(len(I), 'bricks touch RA,Dec box')
     TT = []
     hdr = None
@@ -621,7 +621,7 @@ def ccd_map_extent(ccdname, inset=0.):
 
 def wcs_for_brick(b, W=3600, H=3600, pixscale=0.262):
     '''
-    b: row from decals-bricks.fits file
+    b: row from survey-bricks.fits file
     W,H: size in pixels
     pixscale: pixel scale in arcsec/pixel.
 
@@ -632,15 +632,15 @@ def wcs_for_brick(b, W=3600, H=3600, pixscale=0.262):
                -pixscale, 0., 0., pixscale,
                float(W), float(H))
 
-def bricks_touching_wcs(targetwcs, decals=None, B=None, margin=20):
+def bricks_touching_wcs(targetwcs, survey=None, B=None, margin=20):
     '''
-    Finds DECaLS bricks touching a given WCS header object.
+    Finds LegacySurvey bricks touching a given WCS header object.
 
     Parameters
     ----------
     targetwcs : astrometry.util.Tan object or similar
         The region of sky to search
-    decals : legacypipe.common.Decals object
+    survey : legacypipe.common.LegacySurveyData object
         From which the brick table will be retrieved
     B : FITS table
         The table of brick objects to search
@@ -654,8 +654,8 @@ def bricks_touching_wcs(targetwcs, decals=None, B=None, margin=20):
     '''
     from astrometry.libkd.spherematch import match_radec
     if B is None:
-        assert(decals is not None)
-        B = decals.get_bricks_readonly()
+        assert(survey is not None)
+        B = survey.get_bricks_readonly()
 
     ra,dec = targetwcs.radec_center()
     radius = targetwcs.radius()
@@ -737,9 +737,9 @@ def create_temp(**kwargs):
     return fn
 
 
-class Decals(object):
+class LegacySurveyData(object):
     '''
-    A class describing the contents of a DECALS_DIR directory --
+    A class describing the contents of a LEGACY_SURVEY_DIR directory --
     tables of CCDs and of bricks, and calibration data.  Methods for
     dealing with the CCDs and bricks tables.
 
@@ -747,27 +747,28 @@ class Decals(object):
     objects (eg, DecamImage objects), which then allow data to be read
     from disk.
     '''
-    def __init__(self, decals_dir=None):
+    def __init__(self, survey_dir=None):
         '''
-        Create a Decals object using data from the given *decals_dir*
-        directory, or from the $DECALS_DIR environment variable.
+        Create a LegacySurveyData object using data from the given *survey_dir*
+        directory, or from the $LEGACY_SURVEY_DIR environment variable.
         '''
         from .decam  import DecamImage
         from .mosaic import MosaicImage
         from .bok    import BokImage
 
-        if decals_dir is None:
-            decals_dir = os.environ.get('DECALS_DIR')
-            if decals_dir is None:
-                print('''Warning: you should set the $DECALS_DIR environment variable.
+        if survey_dir is None:
+            survey_dir = os.environ.get('LEGACY_SURVEY_DIR')
+            if survey_dir is None:
+                print('''Warning: you should set the $LEGACY_SURVEY_DIR environment variable.
 On NERSC, you can do:
   module use /project/projectdirs/cosmo/work/decam/versions/modules
-  module load decals
-Using the current directory as DECALS_DIR, but this is likely to fail.
+  module load legacysurvey
+
+Now using the current directory as LEGACY_SURVEY_DIR, but this is likely to fail.
 ''')
-                decals_dir = os.getcwd()
+                survey_dir = os.getcwd()
                 
-        self.decals_dir = decals_dir
+        self.survey_dir = survey_dir
 
         self.ccds = None
         self.bricks = None
@@ -791,7 +792,7 @@ Using the current directory as DECALS_DIR, but this is likely to fail.
         
     def find_file(self, filetype, brick=None, brickpre=None, band='%(band)s'):
         '''
-        Returns the filename of a DECaLS file.
+        Returns the filename of a Legacy Survey file.
 
         *filetype* : string, type of file to find, including:
              "tractor" -- Tractor catalogs
@@ -810,13 +811,13 @@ Using the current directory as DECALS_DIR, but this is likely to fail.
             brickpre = brick[:3]
 
         if filetype == 'tractor':
-            return os.path.join(self.decals_dir, 'tractor', brickpre,
+            return os.path.join(self.survey_dir, 'tractor', brickpre,
                                 'tractor-%s.fits' % brick)
         elif filetype == 'depth':
-            return os.path.join(self.decals_dir, 'coadd', brickpre, brick,
+            return os.path.join(self.survey_dir, 'coadd', brickpre, brick,
                                 'decals-%s-depth-%s.fits.gz' % (brick, band))
         elif filetype == 'galdepth':
-            return os.path.join(self.decals_dir, 'coadd', brickpre, brick,
+            return os.path.join(self.survey_dir, 'coadd', brickpre, brick,
                                 'decals-%s-galdepth-%s.fits.gz' % (brick, band))
         elif filetype == 'nexp':
             return os.path.join(self.decals_dir, 'coadd', brickpre, brick,
@@ -849,32 +850,32 @@ Using the current directory as DECALS_DIR, but this is likely to fail.
         '''
         Returns the directory containing calibration data.
         '''
-        return os.path.join(self.decals_dir, 'calib')
+        return os.path.join(self.survey_dir, 'calib')
 
     def get_image_dir(self):
         '''
         Returns the directory containing image data.
         '''
-        return os.path.join(self.decals_dir, 'images')
+        return os.path.join(self.survey_dir, 'images')
 
-    def get_decals_dir(self):
+    def get_survey_dir(self):
         '''
-        Returns the base DECALS_DIR directory.
+        Returns the base LEGACY_SURVEY_DIR directory.
         '''
-        return self.decals_dir
+        return self.survey_dir
 
     def get_se_dir(self):
         '''
         Returns the directory containing SourceExtractor config files,
         used during calibration.
         '''
-        return os.path.join(self.decals_dir, 'calib', 'se-config')
+        return os.path.join(self.survey_dir, 'calib', 'se-config')
 
     def get_bricks_dr2(self):
         '''
         Returns a table of bricks with DR2 stats.  The caller owns the table.
         '''
-        return fits_table(os.path.join(self.decals_dir, 'decals-bricks-dr2.fits'))
+        return fits_table(os.path.join(self.survey_dir, 'decals-bricks-dr2.fits'))
 
     def get_bricks(self):
         '''
@@ -883,7 +884,7 @@ Using the current directory as DECALS_DIR, but this is likely to fail.
         For read-only purposes, see *get_bricks_readonly()*, which
         uses a cached version.
         '''
-        return fits_table(os.path.join(self.decals_dir, 'decals-bricks.fits'))
+        return fits_table(os.path.join(self.survey_dir, 'survey-bricks.fits'))
 
     def get_bricks_readonly(self):
         '''
@@ -971,7 +972,7 @@ Using the current directory as DECALS_DIR, but this is likely to fail.
         '''
         Returns the table of CCDs.
         '''
-        fn = os.path.join(self.decals_dir, 'decals-ccds.fits')
+        fn = os.path.join(self.survey_dir, 'survey-ccds.fits')
         if not os.path.exists(fn):
             fn += '.gz'
         print('Reading CCDs from', fn)
@@ -1106,8 +1107,8 @@ Using the current directory as DECALS_DIR, but this is likely to fail.
     def apply_blacklist(self, ccds):
         '''
         Returns an index array of CCDs to KEEP; ie, do
-        ccds = decals.get_ccds()
-        I = decals.apply_blacklist(ccds)
+        ccds = survey.get_ccds()
+        I = survey.apply_blacklist(ccds)
         ccds.cut(I)
         '''
         decam_blacklist = [

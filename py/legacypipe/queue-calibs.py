@@ -28,7 +28,7 @@ from collections import OrderedDict
 from astrometry.util.fits import fits_table
 from astrometry.util.file import trymakedirs
 
-from legacypipe.common import Decals
+from legacypipe.common import LegacySurveyData
 
 
 from astrometry.libkd.spherematch import match_radec
@@ -89,18 +89,18 @@ def main():
 
     opt = parser.parse_args()
 
-    decals = Decals()
+    survey = LegacySurveyData()
     if opt.bricks is not None:
         B = fits_table(opt.bricks)
         log('Read', len(B), 'from', opt.bricks)
     else:
-        B = decals.get_bricks()
+        B = survey.get_bricks()
 
     if opt.ccds is not None:
         T = fits_table(opt.ccds)
         log('Read', len(T), 'from', opt.ccds)
     else:
-        T = decals.get_ccds()
+        T = survey.get_ccds()
         log(len(T), 'CCDs')
     T.index = np.arange(len(T))
 
@@ -275,14 +275,14 @@ def main():
 
     elif opt.region == 'grz':
         # Bricks with grz coverage.
-        # Be sure to use  --bricks decals-bricks-in-dr1.fits
+        # Be sure to use  --bricks survey-bricks-in-dr1.fits
         # which has_[grz] columns.
         B.cut((B.has_g == 1) * (B.has_r == 1) * (B.has_z == 1))
         log('Cut to', len(B), 'bricks with grz coverage')
 
     elif opt.region == 'nogrz':
         # Bricks without grz coverage.
-        # Be sure to use  --bricks decals-bricks-in-dr1.fits
+        # Be sure to use  --bricks survey-bricks-in-dr1.fits
         # which has_[grz] columns.
         B.cut(np.logical_not((B.has_g == 1) * (B.has_r == 1) * (B.has_z == 1)))
         log('Cut to', len(B), 'bricks withOUT grz coverage')
@@ -351,7 +351,7 @@ def main():
                 good[i] = 1
             B2.set('has_' + band, good)
 
-        B2.writeto('decals-bricks-in-dr1.fits')
+        B2.writeto('survey-bricks-in-dr1.fits')
         sys.exit(0)
 
     # sort by dec decreasing
@@ -411,7 +411,7 @@ def main():
             outfn = os.path.join('forced', expstr[:5], expstr,
                                  'decam-%s-%s-forced.fits' %
                                  (expstr, T.ccdname[i]))
-            imgfn = os.path.join(decals.decals_dir, 'images',
+            imgfn = os.path.join(survey.survey_dir, 'images',
                                  T.image_filename[i].strip())
             if (not os.path.exists(imgfn) and
                 imgfn.endswith('.fz') and
@@ -457,7 +457,7 @@ def main():
 
         if opt.delete_sky or opt.delete_pvastrom:
             log(j+1, 'of', len(allI))
-            im = decals.get_image_object(T[i])
+            im = survey.get_image_object(T[i])
             if opt.delete_sky and os.path.exists(im.skyfn):
                 log('  deleting:', im.skyfn)
                 os.unlink(im.skyfn)
@@ -467,7 +467,7 @@ def main():
 
         if opt.check:
             log(j+1, 'of', len(allI))
-            im = decals.get_image_object(T[i])
+            im = survey.get_image_object(T[i])
             if not im.run_calibs(im, just_check=True):
                 log('Calibs for', im.expnum, im.ccdname, im.calname, 'already done')
                 continue

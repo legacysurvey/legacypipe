@@ -14,10 +14,10 @@ def main():
     parser.add_argument('brickname',nargs='+',help="Name(s) of brick(s).",metavar='BRICK')
     opt = parser.parse_args()
 
-    decals = Decals()
-    CCDs = decals.get_ccds()
+    survey = LegacySurveyData()
+    CCDs = survey.get_ccds()
     for brickname in opt.brickname:
-        brick = decals.get_brick_by_name(brickname)
+        brick = survey.get_brick_by_name(brickname)
         print('# Brick', brickname, 'RA,Dec', brick.ra, brick.dec)
         wcs = wcs_for_brick(brick)
         I = ccds_touching_wcs(wcs, CCDs)

@@ -8,11 +8,11 @@ import numpy as np
 from astrometry.util.util import wcs_pv2sip_hdr
 
 from legacypipe.image import LegacySurveyImage
-from legacypipe.common import Decals
+from legacypipe.common import LegacySurveyData
 
 class MosaicImage(LegacySurveyImage):
-    def __init__(self, decals, t):
-        super(MosaicImage, self).__init__(decals, t)
+    def __init__(self, survey, t):
+        super(MosaicImage, self).__init__(survey, t)
 
         # convert FWHM into pixel units
         self.fwhm /= self.pixscale
@@ -25,7 +25,7 @@ class MosaicImage(LegacySurveyImage):
         expstr = '%08i' % self.expnum
         self.name = '%s-%s' % (expstr, self.ccdname)
         self.calname = '%s/%s/mosaic-%s-%s' % (expstr[:5], expstr, expstr, self.ccdname)
-        calibdir = os.path.join(self.decals.get_calib_dir(), self.camera)
+        calibdir = os.path.join(self.survey.get_calib_dir(), self.camera)
         self.sefn = os.path.join(calibdir, 'sextractor', self.calname + '.fits')
         self.psffn = os.path.join(calibdir, 'psfex', self.calname + '.fits')
         # hack, for image.py : read_sky_model
@@ -41,7 +41,7 @@ class MosaicImage(LegacySurveyImage):
 
         phdr = fitsio.read_header(self.imgfn, 0)
 
-        dra,ddec = self.decals.get_astrometric_zeropoint_for(self)
+        dra,ddec = self.survey.get_astrometric_zeropoint_for(self)
         r,d = wcs.get_crval()
         print('Applying astrometric zeropoint:', (dra,ddec))
         wcs.set_crval((r + dra, d + ddec))
@@ -133,7 +133,7 @@ class MosaicImage(LegacySurveyImage):
     
         if se:
             maskstr = '-FLAG_IMAGE ' + funmaskfn
-            sedir = self.decals.get_se_dir()
+            sedir = self.survey.get_se_dir()
 
             trymakedirs(self.sefn, dir=True)
 
@@ -156,7 +156,7 @@ class MosaicImage(LegacySurveyImage):
             if os.system(cmd):
                 raise RuntimeError('Command failed: ' + cmd)
         if psfex:
-            sedir = self.decals.get_se_dir()
+            sedir = self.survey.get_se_dir()
             trymakedirs(self.psffn, dir=True)
 
             # If we wrote *.psf instead of *.fits in a previous run...
