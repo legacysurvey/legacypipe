@@ -82,7 +82,7 @@ def run_sim(tims, cat, N, mods=None, samenoise=True, **kwargs):
         kwa.update(survey=survey)
         R = stage_tims(do_calibs=False, pipe=True, **kwa)
         kwa.update(R)
-        R = stage_srcs(no_sdss=True, **kwa)
+        R = stage_srcs(**kwa)
         ### At this point, R['cat'] has sources whose fluxes are based on the
         ### detection maps
         kwa.update(R)

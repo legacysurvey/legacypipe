@@ -450,7 +450,7 @@ def main():
         simdecals = SimDecals(metacat=metacat,simcat=simcat)
         blobxy = zip(simcat['x'],simcat['y'])
         run_brick(brickname, survey=simdecals, outdir=os.path.join(decals_sim_dir,brickname), 
-                  threads=args.threads, zoom=args.zoom, wise=False, sdssInit=False,
+                  threads=args.threads, zoom=args.zoom, wise=False,
                   forceAll=True, writePickles=False, do_calibs=True,
                   write_metrics=False, pixPsf=True, blobxy=blobxy, 
                   early_coadds=False, stages=['writecat'], splinesky=True)

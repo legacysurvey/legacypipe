@@ -782,6 +782,7 @@ Now using the current directory as LEGACY_SURVEY_DIR, but this is likely to fail
         self.image_typemap = {
             'decam': DecamImage,
             'mosaic': MosaicImage,
+            'mosaic3': MosaicImage,
             '90prime': BokImage,
             }
 
@@ -1025,9 +1026,7 @@ Now using the current directory as LEGACY_SURVEY_DIR, but this is likely to fail
         kwargs are passed to LegacySurveyImage.get_tractor_image() and may include:
 
         * gaussPsf
-        * const2psf
         * pixPsf
-        * splinesky
         
         '''
         # Read images
@@ -1218,7 +1217,8 @@ def exposure_metadata(filenames, hdus=None, trim=None):
                 ('MJD-OBS', 0),
                 ('PROPID', ''),
                 ('INSTRUME', ''),
-                ]
+                ('SEEING', nan),
+    ]
     hdrkeys = [('AVSKY', nan),
                ('ARAWGAIN', nan),
                ('FWHM', nan),

@@ -106,7 +106,7 @@ def psf_residuals(expnum,ccdname,stampsize=35,nstar=30,
     cat = cat[np.argsort(cat.median[:,ps1band[band]])] # sort by magnitude
     #print(cat.nmag_ok)
 
-    get_tim_kwargs = dict(const2psf=True, splinesky=splinesky)
+    get_tim_kwargs = dict(pixPsf=True, splinesky=splinesky)
 
     # Make a QAplot of the positions of all the stars.
     tim = im.get_tractor_image(**get_tim_kwargs)

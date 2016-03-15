@@ -76,8 +76,8 @@ def stage_tims(W=3600, H=3600, pixscale=0.262, brickname=None,
                target_extent=None, pipe=False, program_name='runbrick.py',
                bands='grz',
                do_calibs=True,
-               const2psf=False, gaussPsf=False, pixPsf=False,
-               splinesky=False,
+               splinesky=True,
+               gaussPsf=False, pixPsf=False,
                use_blacklist = True,
                mp=None,
                rsync=False,
@@ -91,15 +91,14 @@ def stage_tims(W=3600, H=3600, pixscale=0.262, brickname=None,
 
     PSF options:
 
-    - *const2psf*: boolean.  2-component general Gaussian mixture, fit
-      to PsfEx model at the center of the image.  Used in DR1.
-
     - *gaussPsf*: boolean.  Single-component circular Gaussian, with
       width set from the header FWHM value.  Useful for quick
       debugging.
 
     - *pixPsf*: boolean.  Pixelized PsfEx model, evaluated at the
       image center.  Uses the FFT-based galaxy convolution code.
+
+    Sky:
 
     - *splinesky*: boolean.  Use SplineSky model, rather than ConstantSky?
 
@@ -218,8 +217,10 @@ def stage_tims(W=3600, H=3600, pixscale=0.262, brickname=None,
 
     # Sort images by band -- this also eliminates images whose
     # *image.filter* string is not in *bands*.
+    print('Unique filters:', np.unique(ccds.filter))
     ccds.cut(np.hstack([np.flatnonzero(ccds.filter == band) for band in bands]))
-
+    print('Cut on filter:', len(ccds), 'CCDs remain.')
+    
     print('Cutting out non-photometric CCDs...')
     I = survey.photometric_ccds(ccds)
     print(len(I), 'of', len(ccds), 'CCDs are photometric')
@@ -323,7 +324,7 @@ def stage_tims(W=3600, H=3600, pixscale=0.262, brickname=None,
 
 
     # Read Tractor images
-    args = [(im, targetrd, dict(gaussPsf=gaussPsf, const2psf=const2psf,
+    args = [(im, targetrd, dict(gaussPsf=gaussPsf,
                                 pixPsf=pixPsf, splinesky=splinesky)) for im in ims]
     tims = mp.map(read_one_tim, args)
 
@@ -1112,56 +1113,22 @@ def stage_srcs(coimgs=None, cons=None,
                plots=False, plots2=False,
                pipe=False, brickname=None,
                mp=None, outdir=None, nsigma=5,
-               no_sdss=False, on_bricks=False,
+               on_bricks=False,
                survey=None, brick=None,
                **kwargs):
     '''
-    In this stage we read SDSS catalog objects overlapping
-    our region of interest (if enabled), and also run SED-match
-    detection to find faint objects in the images.  For each object
-    detected, a `tractor` source object is created: a
-    `tractor.PointSource`, `tractor.ExpGalaxy`, `tractor.DevGalaxy`,
-    or `tractor.FixedCompositeGalaxy` object.  In this stage, the
-    sources are also split into "blobs" of overlapping pixels.  Each
-    of these blobs will be processed independently.
-
+    In this stage we run SED-matched detection to find objects in the
+    images.  For each object detected, a `tractor` source object is
+    created: a `tractor.PointSource`, `tractor.ExpGalaxy`,
+    `tractor.DevGalaxy`, or `tractor.FixedCompositeGalaxy` object.  In
+    this stage, the sources are also split into "blobs" of overlapping
+    pixels.  Each of these blobs will be processed independently.
     '''
     from legacypipe.detection import (detection_maps, sed_matched_filters,
                                       run_sed_matched_filters)
 
     tlast = Time()
-    if not no_sdss:
-        from legacypipe.sdss import get_sdss_sources
-
-        # Read SDSS sources
-        cols = ['parent', 'tai', 'mjd', 'psf_fwhm', 'objc_flags2', 'flags2',
-                'devflux_ivar', 'expflux_ivar', 'calib_status', 'raerr',
-                'decerr']
-        sdsscat,Tsdss = get_sdss_sources(bands, targetwcs, extracols=cols,
-                                 ellipse=LegacyEllipseWithPriors.fromRAbPhi)
-        tnow = Time()
-        print('[serial srcs] SDSS sources:', tnow-tlast)
-        tlast = tnow
-    else:
-        sdsscat = []
-        Tsdss = None
-
     avoid_xy = []
-    if Tsdss is not None:
-        # SDSS RAERR, DECERR are in arcsec.  Convert to deg.
-        err = Tsdss.raerr / 3600.
-        Tsdss.ra_ivar  = 1./err**2
-        err = Tsdss.decerr / 3600.
-        Tsdss.dec_ivar  = 1./err**2
-        Tsdss.delete_column('raerr')
-        Tsdss.delete_column('decerr')
-
-        for c in Tsdss.columns():
-            if c in ['itx','ity']:
-                continue
-            print('Renaming', c)
-            Tsdss.rename(c, 'sdss_c')
-
     if on_bricks:
         from legacypipe.desi_common import read_fits_catalog
         # Find nearby bricks from earlier brick phases
@@ -1215,20 +1182,6 @@ def stage_srcs(coimgs=None, cons=None,
         bcat = read_fits_catalog(B, ellipseClass=EllipseE)
         print('Created', len(bcat), 'tractor catalog objects')
 
-        # Trim off SDSS sources that overlap this brick.
-        if Tsdss is not None:
-            keep_sdss = np.ones(len(Tsdss), bool)
-            for brick in bricks:
-                # Drop SDSS sources within the BRICK_PRIMARY region of the
-                # neighbouring brick.
-                keep_sdss[(Tsdss.ra  >= brick.ra1 ) * (Tsdss.ra  < brick.ra2 ) *
-                          (Tsdss.dec >= brick.dec1) * (Tsdss.dec < brick.dec2)] = False
-            if sum(keep_sdss) < len(keep_sdss):
-                print('Trimming', len(keep_sdss)-sum(keep_sdss),
-                      'SDSS sources within neighbouring bricks')
-                Tsdss.cut(keep_sdss)
-                sdsscat = Catalog(*[src for src,keep in zip(sdsscat,keep_sdss) if keep])
-
         # Add the new sources to the 'avoid_xy' list, which are
         # existing sources that should be avoided when detecting new
         # faint sources.
@@ -1273,10 +1226,6 @@ def stage_srcs(coimgs=None, cons=None,
             dimshow(get_rgb(coimgs, bands))
             plt.title('After subtracting off marginal sources')
             ps.savefig()
-
-
-    if Tsdss is not None:
-        avoid_xy.extend(zip(Tsdss.itx, Tsdss.ity))
 
     if plots and False:
         for tim in tims:
@@ -1388,22 +1337,6 @@ def stage_srcs(coimgs=None, cons=None,
 
     saturated_pix = binary_dilation(satmap > 0, iterations=10)
 
-    if Tsdss is not None:
-        #saturated_pix = np.zeros(detmaps[0].shape, bool)
-        for band,detmap,detiv in zip(bands, detmaps, detivs):
-            I = np.flatnonzero(detiv[Tsdss.ity, Tsdss.itx] == 0.)
-            print(len(I), 'SDSS sources have detiv = 0 in band', band)
-            if len(I) == 0:
-                continue
-
-            from scipy.ndimage.morphology import binary_propagation
-
-            # Set the central pixel of the detmap
-            saturated_pix[Tsdss.ity[I], Tsdss.itx[I]] = True
-            # Spread the True pixels wherever detiv==0
-            binary_propagation(saturated_pix, mask=(detiv == 0),
-                               output=saturated_pix)
-
     # Saturated blobs -- create a source for each?!
     from scipy.ndimage.measurements import label, find_objects, center_of_mass
 
@@ -1480,9 +1413,6 @@ def stage_srcs(coimgs=None, cons=None,
 
     TT = []
     cats = []
-    if Tsdss is not None:
-        TT.append(Tsdss)
-        cats.extend(sdsscat)
     if Tsat is not None:
         TT.append(Tsat)
         cats.extend(satcat)
@@ -1576,7 +1506,7 @@ def stage_srcs(coimgs=None, cons=None,
 def set_source_radii(bands, tims, cat, minsigma, minradius=3):
     # FIXME -- set source radii crudely, based on the maximum of the
     # PSF profiles in all images (!) -- should have a source x image
-    # structure -- *and* based on SDSS fluxes.
+    # structure
     profiles = []
     R = 100
     minsig1s = dict([(band,1e100) for band in bands])
@@ -4137,7 +4067,6 @@ def stage_writecat(
     version_header=None,
     T=None,
     WISE=None,
-    no_sdss=False,
     AP=None,
     apertures_arcsec=None,
     cat=None, targetrd=None, pixscale=None, targetwcs=None,
@@ -4262,8 +4191,6 @@ def stage_writecat(
     T2.shapeDev_e1_ivar = T2.shapeDev_ivar[:,1]
     T2.shapeDev_e2_ivar = T2.shapeDev_ivar[:,2]
 
-    # For sources that had DECam flux initialization from SDSS but no
-    # overlapping images (hence decam_flux_ivar = 0), zero out the DECam flux.
     T2.decam_flux[T2.decam_flux_ivar == 0] = 0.
 
     if WISE is not None:
@@ -4353,19 +4280,6 @@ def stage_writecat(
         'shapedev_e1', 'shapedev_e1_ivar',
         'shapedev_e2', 'shapedev_e2_ivar',])
 
-    if not no_sdss:
-        cols.extend(['sdss_'+c for c in [
-            'run', 'camcol', 'field', 'id', 'objid', 'parent', 'nchild',
-            'objc_type', 'objc_flags', 'objc_flags2', 'flags', 'flags2',
-            'tai', 'ra',  'ra_ivar', 'dec', 'dec_ivar', 'psf_fwhm', 'mjd',
-            'theta_dev', 'theta_deverr', 'ab_dev', 'ab_deverr',
-            'theta_exp', 'theta_experr', 'ab_exp', 'ab_experr',
-            'fracdev', 'phi_dev_deg', 'phi_exp_deg',
-            'psfflux',    'psfflux_ivar',   'cmodelflux', 'cmodelflux_ivar',
-            'modelflux',  'modelflux_ivar', 'devflux',    'devflux_ivar',
-            'expflux',    'expflux_ivar',
-            'extinction', 'calib_status', 'resolve_status']])
-
     # TUNIT cards.
     deg='deg'
     degiv='1/deg^2'
@@ -4378,19 +4292,6 @@ def stage_writecat(
         wise_flux=flux, wise_flux_ivar=fluxiv,
         shapeexp_r='arcsec', shapeexp_r_ivar='1/arcsec^2',
         shapedev_r='arcsec', shapedev_r_ivar='1/arcsec^2')
-    if not no_sdss:
-        units.update(dict([('sdss_'+k, v) for k,v in dict(
-            ra=deg, ra_ivar=degiv, dec=deg, dec_ivar=degiv,
-            tai='sec', psf_fwhm='arcsec', mjd='days',
-            theta_dev='arcsec', theta_exp='arcsec',
-            theta_deverr='1/arcsec', theta_experr='1/arcsec',
-            phi_dev_deg=deg, phi_exp_deg=deg,
-            psfflux=flux, psfflux_ivar=fluxiv,
-            cmodelflux=flux, cmodelflux_ivar=fluxiv,
-            modelflux=flux, modelflux_ivar=fluxiv,
-            devflux=flux, devflux_ivar=fluxiv,
-            expflux=flux, expflux_ivar=fluxiv,
-            extinction='mag').items()]))
 
     for i,col in enumerate(cols):
         if col in units:
@@ -4404,24 +4305,6 @@ def stage_writecat(
             j = cclower.index(c)
             cols[i] = cc[j]
 
-    if not no_sdss:
-        _fill_sdss_columns(T2, cols)
-
-        # Blank out all SDSS fields for sources that have moved too much.
-        xyz1 = radectoxyz(T2.ra, T2.dec)
-        xyz2 = radectoxyz(T2.sdss_ra, T2.sdss_dec)
-        d2 = np.sum((xyz2-xyz1)**2, axis=1)
-        # 1.5 arcsec
-        maxd2 = np.deg2rad(1.5 / 3600.)**2
-        blankout = np.flatnonzero((T2.sdss_ra != 0) * (d2 > maxd2))
-        print('Blanking out', len(blankout), 'SDSS no-longer-matches')
-        if len(blankout):
-            Tcols = T2.get_columns()
-            for c in Tcols:
-                if c.startswith('sdss'):
-                    x = T2.get(c)
-                    x[blankout] = 0
-
     if write_catalog:
         import tempfile
         f,tempfn = tempfile.mkstemp(
@@ -4433,39 +4316,6 @@ def stage_writecat(
         print('Wrote', fn)
 
     return dict(T2=T2)
-
-
-def _fill_sdss_columns(T2, cols):
-    # fill in any empty columns (eg, SDSS columns in areas outside the
-    # footprint).  FITS types:
-    fB = np.uint8
-    fI = np.int16
-    fJ = np.int32
-    fK = np.int64
-    fD = float
-    fE = np.float32
-    # sdss_*
-    coltypes = dict(
-        run=fI, camcol=fB, field=fI, id=fI, objid=fK, parent=fI, nchild=fI,
-        objc_type=fJ, objc_flags=fJ, objc_flags2=fJ, ra=fD, ra_ivar=fD, dec=fD,
-        dec_ivar=fD, mjd=fJ, resolve_status=fJ)
-    arrtypes = dict(
-        flags=fJ, flags2=fJ, tai=fD, psf_fwhm=fE, theta_dev=fE,
-        theta_deverr=fE, ab_dev=fE, ab_deverr=fE, theta_exp=fE,
-        theta_experr=fE, ab_exp=fE, ab_experr=fE, fracdev=fE, phi_dev_deg=fE,
-        phi_exp_deg=fE, psfflux=fE, psfflux_ivar=fE, cmodelflux=fE,
-        cmodelflux_ivar=fE, modelflux=fE, modelflux_ivar=fE, devflux=fE,
-        devflux_ivar=fE, expflux=fE, expflux_ivar=fE, extinction=fE,
-        calib_status=fJ)
-    Tcols = T2.get_columns()
-    for c in cols:
-        if not c in Tcols:
-            print('Filling in missing column', c)
-            sc = c.replace('sdss_','')
-            if sc in coltypes:
-                T2.set(c, np.zeros(len(T2), coltypes[sc]))
-            if sc in arrtypes:
-                T2.set(c, np.zeros((len(T2),5), arrtypes[sc]))
 
 def _bounce_tim_get_resamp(X):
     (tim, targetwcs) = X
@@ -4548,10 +4398,9 @@ def run_brick(brick, radec=None, pixscale=0.262,
               bands=None,
               blacklist=True,
               nblobs=None, blob=None, blobxy=None,
-              pv=True, pipe=True, nsigma=6,
+              pipe=True, nsigma=6,
               simulOpt=False,
               wise=True,
-              sdssInit=True,
               early_coadds=True,
               blob_image=False,
               do_calibs=True,
@@ -4632,10 +4481,6 @@ def run_brick(brick, radec=None, pixscale=0.262,
 
     Other options:
 
-    - *pv*: boolean; use the Community Pipeline's WCS headers, with
-      astrometric shifts from the zeropoints.fits file, converted from
-      their native PV format into SIP format.
-
     - *pipe*: boolean; "pipeline mode"; avoid computing non-essential
       things.
 
@@ -4645,8 +4490,6 @@ def run_brick(brick, radec=None, pixscale=0.262,
       sources, run a step of fitting the sources simultaneously?
 
     - *wise*: boolean; run WISE forced photometry?
-
-    - *sdssInit*: boolean; initialize sources from the SDSS catalogs?
 
     - *early_coadds*: boolean; generate the early coadds?
 
@@ -4759,7 +4602,6 @@ def run_brick(brick, radec=None, pixscale=0.262,
                   use_blacklist=blacklist,
                   splinesky=splinesky,
                   simul_opt=simulOpt, pipe=pipe,
-                  no_sdss=not(sdssInit),
                   use_ceres=ceres,
                   do_calibs=do_calibs,
                   write_metrics=write_metrics,
@@ -4938,11 +4780,6 @@ python -u legacypipe/runbrick.py --plots --brick 2440p070 --zoom 1900 2400 450 9
         help=('Debugging: run the single blob containing pixel <bx> <by>; '+
               'this option can be repeated to run multiple blobs.'))
 
-    parser.add_argument(
-        '--no-pv', dest='pv', default='True', action='store_false',
-        help=('Do not use Community Pipeline WCS with PV distortion terms '+
-              '-- solve using Astrometry.net'))
-
     parser.add_argument('--pipe', default=False, action='store_true',
                         help='"pipeline" mode')
 
@@ -4976,9 +4813,6 @@ python -u legacypipe/runbrick.py --plots --brick 2440p070 --zoom 1900 2400 450 9
         '--unwise-dir', default=None,
         help='Base directory for unWISE coadds; may be a colon-separated list')
 
-    parser.add_argument('--no-sdss', action='store_true', default=False,
-                        help='Do not initialize from SDSS')
-
     parser.add_argument('--no-early-coadds', action='store_true', default=False,
                         help='Skip making the early coadds')
     parser.add_argument('--blob-image', action='store_true', default=False,
@@ -4986,12 +4820,6 @@ python -u legacypipe/runbrick.py --plots --brick 2440p070 --zoom 1900 2400 450 9
     
     parser.add_argument('--gpsf', action='store_true', default=False,
                         help='Use a fixed single-Gaussian PSF')
-    parser.add_argument(
-        '--pixpsf', action='store_true', default=False,
-        help='Use the pixelized PsfEx PSF model, and FFT convolution')
-
-    parser.add_argument('--splinesky', action='store_true', default=False,
-                        help='Use flexible sky model?')
 
     parser.add_argument(
         '--coadd-bw', action='store_true', default=False,
@@ -5054,8 +4882,6 @@ def get_runbrick_kwargs(opt):
     kwa = {}
     if opt.nsigma:
         kwa.update(nsigma=opt.nsigma)
-    if opt.no_sdss:
-        kwa.update(sdssInit=False)
     if opt.no_wise:
         kwa.update(wise=False)
     if opt.no_early_coadds:
@@ -5073,16 +4899,17 @@ def get_runbrick_kwargs(opt):
     else:
         writeStages = opt.write
 
+    opt.pixpsf = not opt.gpsf
+        
     kwa.update(
         radec=opt.radec, pixscale=opt.pixscale,
         width=opt.width, height=opt.height, zoom=opt.zoom,
         blacklist=opt.blacklist,
-        pv=opt.pv,
         threads=opt.threads, ceres=opt.ceres,
         do_calibs=opt.do_calibs,
         write_metrics=opt.write_metrics,
         on_bricks=opt.on_bricks,
-        gaussPsf=opt.gpsf, pixPsf=opt.pixpsf, splinesky=opt.splinesky,
+        gaussPsf=opt.gpsf, pixPsf=opt.pixpsf, splinesky=True,
         simulOpt=opt.simul_opt,
         nblobs=opt.nblobs, blob=opt.blob, blobxy=opt.blobxy,
         pipe=opt.pipe, outdir=opt.outdir, survey_dir=opt.survey_dir,
@@ -5112,6 +4939,7 @@ def main():
 
     parser = get_parser()
     opt = parser.parse_args()
+
     if opt.brick is None and opt.radec is None:
         parser.print_help()
         return -1
@@ -5156,9 +4984,9 @@ if __name__ == '__main__':
 # Test bricks & areas
 
 # A single, fairly bright star
-# python -u legacypipe/runbrick.py -b 1498p017 -P 'pickles/runbrick-z-%(brick)s-%%(stage)s.pickle' --zoom 1900 2000 2700 2800 --pixpsf --splinesky --no-sdss
+# python -u legacypipe/runbrick.py -b 1498p017 -P 'pickles/runbrick-z-%(brick)s-%%(stage)s.pickle' --zoom 1900 2000 2700 2800
 
-# python -u legacypipe/runbrick.py -b 0001p000 -P 'pickles/runbrick-z-%(brick)s-%%(stage)s.pickle' --zoom 80 380 2970 3270 --pixpsf --splinesky --no-sdss
+# python -u legacypipe/runbrick.py -b 0001p000 -P 'pickles/runbrick-z-%(brick)s-%%(stage)s.pickle' --zoom 80 380 2970 3270
 
 # 80, 380, 2970, 3270
 
