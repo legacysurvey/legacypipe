@@ -2411,7 +2411,16 @@ def _one_blob(X):
     alphas = [0.1, 0.3, 1.0]
     optargs = dict(priors=True, shared_params=False, alphas=alphas)
     bigblob = (blobw * blobh) > 100*100
-
+    trargs = dict()
+    
+    if use_ceres:
+        from tractor.ceres_optimizer import CeresOptimizer
+        ceres_optimizer = CeresOptimizer()
+        optargs.update(scale_columns=False,
+                       scaled=False,
+                       dynamic_scale=False)
+        trargs.update(optimizer=ceres_optimizer)
+        
     # 50 CCDs is over 90th percentile of bricks in DR2.
     many_exposures = len(timargs) >= 50
 
@@ -2495,10 +2504,8 @@ def _one_blob(X):
         ps.savefig()
 
     cat = Catalog(*srcs)
-    tr = Tractor(tims, cat)
+    tr = Tractor(tims, cat, **trargs)
     tr.freezeParam('images')
-
-    #print('Tims:', [s.shape for s in tims])
 
     _fit_fluxes(cat, tims, bands, use_ceres, alphas)
     cat.thawAllRecursive()
@@ -2598,7 +2605,7 @@ def _one_blob(X):
                 srctims = tims
                 modelMasks = models.model_masks(i, src)
 
-            srctractor = Tractor(srctims, [src])
+            srctractor = Tractor(srctims, [src], **trargs)
             srctractor.freezeParams('images')
             srctractor.setModelMasks(modelMasks)
 
@@ -2612,11 +2619,13 @@ def _one_blob(X):
                 spnames.append('Initial')
 
             # First-round optimization
+            print('First-round initial log-prob:', srctractor.getLogProb())
             for step in range(50):
                 dlnp,X,alpha = srctractor.optimize(**optargs)
-                # print('dlnp:', dlnp, 'src', src)
+                print('dlnp:', dlnp, 'src', src)
                 if dlnp < 0.1:
                     break
+            print('First-round final log-prob:', srctractor.getLogProb())
 
             if plots and False:
                 spmods.append(list(srctractor.getModelImages()))
@@ -2847,7 +2856,7 @@ def _one_blob(X):
             srcwcs = blobwcs
             srcpix = None
 
-        srctractor = Tractor(srctims, [src])
+        srctractor = Tractor(srctims, [src], **trargs)
         srctractor.freezeParams('images')
         srctractor.setModelMasks(modelMasks)
         enable_galaxy_cache()
@@ -3069,7 +3078,7 @@ def _one_blob(X):
                     except KeyError:
                         pass
 
-                dtractor = Tractor(dtims, [newsrc])
+                dtractor = Tractor(dtims, [newsrc], **trargs)
                 dtractor.freezeParams('images')
                 dtractor.setModelMasks(dmm)
                 enable_galaxy_cache()
@@ -3168,7 +3177,7 @@ def _one_blob(X):
                     mm.append(d)
 
             if modtims is not None:
-                modtractor = Tractor(modtims, [newsrc])
+                modtractor = Tractor(modtims, [newsrc], **trargs)
                 modtractor.freezeParams('images')
                 modtractor.setModelMasks(mm)
                 enable_galaxy_cache()
