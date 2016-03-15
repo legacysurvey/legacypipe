@@ -1119,7 +1119,8 @@ Using the current directory as DECALS_DIR, but this is likely to fail.
                 n0 = n
         #KJB
         #unflag PTF data
-        good[ccds.camera == 'ptf']= True
+        if len(ccds.camera == 'ptf') > 0:
+            good[ccds.camera == 'ptf']= True
         return np.flatnonzero(good)
 
     def apply_blacklist(self, ccds):
