@@ -63,7 +63,7 @@ class MosaicImage(LegacySurveyImage, CalibMixin):
 
     def run_calibs(self, psfex=True, funpack=False, git_version=None,
                    force=False, **kwargs):
-        from legacypipe.common import (get_version_header, get_git_version)
+        #from legacypipe.common import (get_version_header, get_git_version)
                                        
         print('run_calibs for', self.name, 'kwargs', kwargs)
 

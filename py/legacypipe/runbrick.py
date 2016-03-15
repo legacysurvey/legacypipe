@@ -76,8 +76,8 @@ def stage_tims(W=3600, H=3600, pixscale=0.262, brickname=None,
                target_extent=None, pipe=False, program_name='runbrick.py',
                bands='grz',
                do_calibs=True,
-               const2psf=False, gaussPsf=False, pixPsf=False,
-               splinesky=False,
+               splinesky=True,
+               gaussPsf=False, pixPsf=False,
                use_blacklist = True,
                mp=None,
                rsync=False,
@@ -91,15 +91,14 @@ def stage_tims(W=3600, H=3600, pixscale=0.262, brickname=None,
 
     PSF options:
 
-    - *const2psf*: boolean.  2-component general Gaussian mixture, fit
-      to PsfEx model at the center of the image.  Used in DR1.
-
     - *gaussPsf*: boolean.  Single-component circular Gaussian, with
       width set from the header FWHM value.  Useful for quick
       debugging.
 
     - *pixPsf*: boolean.  Pixelized PsfEx model, evaluated at the
       image center.  Uses the FFT-based galaxy convolution code.
+
+    Sky:
 
     - *splinesky*: boolean.  Use SplineSky model, rather than ConstantSky?
 
@@ -325,7 +324,7 @@ def stage_tims(W=3600, H=3600, pixscale=0.262, brickname=None,
 
 
     # Read Tractor images
-    args = [(im, targetrd, dict(gaussPsf=gaussPsf, const2psf=const2psf,
+    args = [(im, targetrd, dict(gaussPsf=gaussPsf,
                                 pixPsf=pixPsf, splinesky=splinesky)) for im in ims]
     tims = mp.map(read_one_tim, args)
 

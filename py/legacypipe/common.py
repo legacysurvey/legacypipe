@@ -1026,9 +1026,7 @@ Now using the current directory as LEGACY_SURVEY_DIR, but this is likely to fail
         kwargs are passed to LegacySurveyImage.get_tractor_image() and may include:
 
         * gaussPsf
-        * const2psf
         * pixPsf
-        * splinesky
         
         '''
         # Read images

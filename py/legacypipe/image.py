@@ -118,7 +118,7 @@ class LegacySurveyImage(object):
         return None,None,None,None
 
     def get_tractor_image(self, slc=None, radecpoly=None,
-                          gaussPsf=False, const2psf=False, pixPsf=False,
+                          gaussPsf=False, pixPsf=False,
                           splinesky=False,
                           nanomaggies=True, subsky=True, tiny=5,
                           dq=True, invvar=True, pixels=True):
@@ -282,7 +282,7 @@ class LegacySurveyImage(object):
             twcs.setX0Y0(x0,y0)
 
         psf = self.read_psf_model(x0, y0, gaussPsf=gaussPsf, pixPsf=pixPsf,
-                                  const2psf=const2psf, psf_sigma=psf_sigma,
+                                  psf_sigma=psf_sigma,
                                   cx=(x0+x1)/2., cy=(y0+y1)/2.)
 
         tim = Image(img, invvar=invvar, wcs=twcs, psf=psf,
@@ -523,7 +523,7 @@ class LegacySurveyImage(object):
         return skyobj
 
     def read_psf_model(self, x0, y0, gaussPsf=False, pixPsf=False,
-                       const2psf=False, psf_sigma=1., cx=0, cy=0):
+                       psf_sigma=1., cx=0, cy=0):
         psffn = None
         if gaussPsf:
             from tractor.basics import GaussianMixturePSF
@@ -539,19 +539,6 @@ class LegacySurveyImage(object):
             psf = PixelizedPsfEx(self.psffn)
             psf.shift(x0, y0)
             psffn = self.psffn
-        elif const2psf:
-            from tractor.psfex import PsfExModel
-            from tractor.basics import GaussianMixtureEllipsePSF
-            # 2-component constant MoG.
-            print('Reading PsfEx model from', self.psffn)
-            psffn = self.psffn
-            psfex = PsfExModel(self.psffn)
-            psfim = psfex.at(cx, cy)
-            psfim = psfim[5:-5, 5:-5]
-            print('Fitting PsfEx model as 2-component Gaussian...')
-            psf = GaussianMixtureEllipsePSF.fromStamp(psfim, N=2)
-            del psfim
-            del psfex
         else:
             assert(False)
         print('Using PSF model', psf)
