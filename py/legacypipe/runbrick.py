@@ -4549,7 +4549,7 @@ def run_brick(brick, radec=None, pixscale=0.262,
               bands=None,
               blacklist=True,
               nblobs=None, blob=None, blobxy=None,
-              pv=True, pipe=True, nsigma=6,
+              pipe=True, nsigma=6,
               simulOpt=False,
               wise=True,
               sdssInit=True,
@@ -4632,10 +4632,6 @@ def run_brick(brick, radec=None, pixscale=0.262,
       containing these pixels.
 
     Other options:
-
-    - *pv*: boolean; use the Community Pipeline's WCS headers, with
-      astrometric shifts from the zeropoints.fits file, converted from
-      their native PV format into SIP format.
 
     - *pipe*: boolean; "pipeline mode"; avoid computing non-essential
       things.
@@ -4939,11 +4935,6 @@ python -u legacypipe/runbrick.py --plots --brick 2440p070 --zoom 1900 2400 450 9
         help=('Debugging: run the single blob containing pixel <bx> <by>; '+
               'this option can be repeated to run multiple blobs.'))
 
-    parser.add_argument(
-        '--no-pv', dest='pv', default='True', action='store_false',
-        help=('Do not use Community Pipeline WCS with PV distortion terms '+
-              '-- solve using Astrometry.net'))
-
     parser.add_argument('--pipe', default=False, action='store_true',
                         help='"pipeline" mode')
 
@@ -5078,7 +5069,6 @@ def get_runbrick_kwargs(opt):
         radec=opt.radec, pixscale=opt.pixscale,
         width=opt.width, height=opt.height, zoom=opt.zoom,
         blacklist=opt.blacklist,
-        pv=opt.pv,
         threads=opt.threads, ceres=opt.ceres,
         do_calibs=opt.do_calibs,
         write_metrics=opt.write_metrics,
@@ -5113,6 +5103,7 @@ def main():
 
     parser = get_parser()
     opt = parser.parse_args()
+
     if opt.brick is None and opt.radec is None:
         parser.print_help()
         return -1
