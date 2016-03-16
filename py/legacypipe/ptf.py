@@ -86,6 +86,7 @@ class PtfImage(LegacySurveyImage):
     def __init__(self, decals, t):
         super(PtfImage, self).__init__(decals, t)
 
+        self.imgfn= os.path.join(os.path.dirname(self.imgfn),'ptf/',os.path.basename(self.imgfn))
         self.pixscale= 1.01
         #print("--------pixscale= ",self.pixscale)
         #print("--------changing pixscale to ",1.01)
