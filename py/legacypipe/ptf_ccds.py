@@ -18,9 +18,6 @@ from legacypipe.runptf import read_image,read_dq,read_invvar,ptf_zeropoint
 
 parser = argparse.ArgumentParser(description="test")
 parser.add_argument("-images_dir",action="store",help='path/to/images/')
-#parser.add_argument("-start_stop",nargs=2,type=int,action="store",help='start and stop index, no 0th index, so if 100 image files then [1,100] does all of them, [2,5] does the the 2nd through the 5th, ccd.fits table made for all fits files BUT SExtractor/PSFex only run on index [start,stop] of that fits file list')
-parser.add_argument("-configdir",action="store",help='directory with SExtractor config files')
-parser.add_argument("-bricks_table",action="store",help='all bricks table, not dr2 verions')
 args = parser.parse_args()
 
 def ptf_exposure_metadata(filenames, hdus=None, trim=None):
@@ -144,8 +141,6 @@ def ptf_exposure_metadata(filenames, hdus=None, trim=None):
 scie_files= glob.glob(os.path.join(args.images_dir,'PTF*_scie_*.fits'))
 if len(scie_files) == 0: raise ValueError
 #make ccd table
-ccd_fname= os.path.join(os.path.dirname(args.bricks_table),'decals-ccds.fits')
-if not os.path.exists(ccd_fname): 
-    T=ptf_exposure_metadata(scie_files)
-    T.writeto(ccd_fname)
-    print('Wrote ccd fits table, now SExtractor + PSFex')
+T=ptf_exposure_metadata(scie_files)
+T.writeto('./ptf-ccds.fits')
+print 'wrote ccds table'
