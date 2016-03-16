@@ -1113,14 +1113,16 @@ Using the current directory as DECALS_DIR, but this is likely to fail.
                 ('zpt > 0.25 mag of nominal (for DECam)',
                  ((ccds.camera == 'decam') * (ccds.zpt > (z0 + 0.25)))),
                  ]:
+                #KJB, don't flag PTF data
+                crit= np.logical_and(crit, ccds.camera != 'ptf   ')
                 good[crit] = False
                 n = sum(good)
                 print('Flagged', n0-n, 'more non-photometric using criterion:', name)
                 n0 = n
-        #KJB
-        #unflag PTF data
         if len(ccds.camera == 'ptf') > 0:
-            good[ccds.camera == 'ptf']= True
+            print('UNFLAGGIN ptf ccds!')
+            good[ccds.camera == 'ptf']= 1
+        print('after would have UNFLAGged ptf ccds!')
         return np.flatnonzero(good)
 
     def apply_blacklist(self, ccds):

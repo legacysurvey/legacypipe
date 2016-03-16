@@ -221,16 +221,16 @@ class PtfImage(LegacySurveyImage):
             magzp  = zeropoint_for_ptf(hdr)
             seeing = hdr['PIXSCALE'] * hdr['MEDFWHM']
             gain= hdr['GAIN']
-            cmd = ' '.join(['sex','-c', os.path.join(sedir, 'DECaLS.se'),
+            cmd = ' '.join(['sex','-c', os.path.join(sedir,'ptf/','DECaLS.se'),
                             '-WEIGHT_IMAGE %s' % invvarfn, '-WEIGHT_TYPE MAP_WEIGHT',
                             '-GAIN %f' % gain,
                             '-FLAG_IMAGE %s' % maskfn,
                             '-FLAG_TYPE OR',
                             '-SEEING_FWHM %f' % seeing,
                             '-DETECT_MINAREA 3',
-                            '-PARAMETERS_NAME', os.path.join(sedir, 'DECaLS.param'),
-                            '-FILTER_NAME', os.path.join(sedir, 'gauss_3.0_5x5.conv'),
-                            '-STARNNW_NAME', os.path.join(sedir, 'default.nnw'),
+                            '-PARAMETERS_NAME', os.path.join(sedir,'ptf/', 'DECaLS.param'),
+                            '-FILTER_NAME', os.path.join(sedir, 'ptf/','gauss_3.0_5x5.conv'),
+                            '-STARNNW_NAME', os.path.join(sedir, 'ptf/','default.nnw'),
                             '-PIXEL_SCALE 0',
                             # SE has a *bizarre* notion of "sigma"
                             '-DETECT_THRESH 1.0',
@@ -250,7 +250,7 @@ class PtfImage(LegacySurveyImage):
                 print('Moving', oldfn, 'to', self.psffn)
                 os.rename(oldfn, self.psffn)
             else: 
-                cmd= ' '.join(['psfex',self.sefn,'-c', os.path.join(sedir,'DECaLS.psfex'),
+                cmd= ' '.join(['psfex',self.sefn,'-c', os.path.join(sedir,'psf/','DECaLS.psfex'),
                     '-PSF_DIR',os.path.dirname(self.psffn)])
                 print(cmd)
                 if os.system(cmd):
