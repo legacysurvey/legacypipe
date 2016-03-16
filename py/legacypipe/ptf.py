@@ -7,6 +7,7 @@ import numpy as np
 from legacypipe.image import LegacySurveyImage
 from legacypipe.common import *
 
+from astropy.io import fits as astro_fits
 import fitsio
 from astrometry.util.file import trymakedirs
 from astrometry.util.fits import fits_table
@@ -71,6 +72,20 @@ def read_invvar(imgfn,dqfn,hdu, clip=False):
         else:
             thresh = 0.
         invvar[invvar < thresh] = 0
+    if np.any(invvar < 0): 
+        if invvar[invvar < 0].shape[0] <= 10:
+            print('invvar < 0 at %d pixels setting to 0 there, image= %s' % (invvar[invvar < 0].shape[0],imgfn))
+            invvar[invvar < 0]= 0.
+        else: 
+            print('---WARNING--- invvar < 0 at > 10 pixels, something bad could be happening, img=  %s' % imgfn)
+            print('writing invvar and where invvar to ./ then crashing code') 
+            hdu = astro_fits.PrimaryHDU(invvar)
+            hdu.writeto('./bad_invvar_%s' % os.path.basename(imgfn))
+            new= np.zeros(invvar.shape).astype('int')
+            new[invvar < 0] = 1
+            hdu = astro_fits.PrimaryHDU(new)
+            hdu.writeto('./where_invvar_lt0_%s' % os.path.basename(imgfn))
+            raise ValueError
     return invvar
 
 def isPTF(bands):
@@ -96,7 +111,7 @@ class PtfImage(LegacySurveyImage):
         calibdir = os.path.join(self.decals.get_calib_dir(), self.camera)
         self.sefn = os.path.join(calibdir, 'sextractor/', os.path.basename(self.imgfn))
         #self.psffn = os.path.join(calibdir, 'psfex', self.calname + '.fits')
-        self.psffn= os.path.join(calibdir,'psfex/',os.path.basename(self.imgfn))
+        self.psffn= os.path.join(calibdir,'psfex/',os.path.basename(self.imgfn)) #.replace('.fits','.psf')))
         print('####### self.imgfn,dqfn,calibdir,psffn= ',self.imgfn,self.dqfn,calibdir,self.psffn)
         #self.wtfn = self.imgfn.replace('_ooi_', '_oow_')
 
@@ -251,7 +266,7 @@ class PtfImage(LegacySurveyImage):
                 print('Moving', oldfn, 'to', self.psffn)
                 os.rename(oldfn, self.psffn)
             else: 
-                cmd= ' '.join(['psfex',self.sefn,'-c', os.path.join(sedir,'psf/','DECaLS.psfex'),
+                cmd= ' '.join(['psfex',self.sefn,'-c', os.path.join(sedir,'ptf/','DECaLS.psfex'),
                     '-PSF_DIR',os.path.dirname(self.psffn)])
                 print(cmd)
                 if os.system(cmd):
@@ -428,7 +443,7 @@ class PtfImage(LegacySurveyImage):
                     photocal=LinearPhotoCal(zpscale, band=band),
                     sky=sky, name=self.name + ' ' + band)
         assert(np.all(np.isfinite(tim.getInvError())))
-
+        
         # PSF norm
         psfnorm = self.psf_norm(tim)
         print('PSF norm', psfnorm, 'vs Gaussian',
