@@ -1604,7 +1604,10 @@ def set_source_radii(bands, tims, cat, minsigma, minradius=3):
     profiles = np.array(profiles)
 
     minradius = 3
-    pro = np.max(profiles, axis=0)
+    try: pro = np.max(profiles, axis=0)
+    except ValueError: 
+        print('type(profiles)= ',type(profiles),'profiles.shape=',profiles.shape,'profiles= ',profiles)
+        pro = np.max(profiles, axis=0)
     for src in cat:
         if not isinstance(src, PointSource):
             continue
