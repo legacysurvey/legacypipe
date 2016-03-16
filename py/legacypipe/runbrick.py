@@ -1503,52 +1503,6 @@ def stage_srcs(coimgs=None, cons=None,
         rtn[k] = locals()[k]
     return rtn
 
-def set_source_radii(bands, tims, cat, minsigma, minradius=3):
-    # FIXME -- set source radii crudely, based on the maximum of the
-    # PSF profiles in all images (!) -- should have a source x image
-    # structure
-    profiles = []
-    R = 100
-    minsig1s = dict([(band,1e100) for band in bands])
-    for tim in tims:
-        minsig1s[tim.band] = min(minsig1s[tim.band], tim.sig1)
-        th,tw = tim.shape
-
-        if hasattr(tim.psf, 'getMixtureOfGaussians'):
-            mog = tim.psf.getMixtureOfGaussians(px=tw/2., py=th/2.)
-            profiles.extend([
-                    mog.evaluate_grid(0, R, 0, 1, 0., 0.).patch.ravel(),
-                    mog.evaluate_grid(-(R-1), 1, 0, 1, 0., 0.).patch.ravel()[-1::-1],
-                    mog.evaluate_grid(0, 1, 0, R, 0., 0.).patch.ravel(),
-                    mog.evaluate_grid(0, 1, -(R-1), 1, 0., 0.).patch.ravel()[-1::-1]])
-        else:
-            patch = tim.psf.getPointSourcePatch(px=tw/2., py=th/2.)
-            ph,pw = patch.shape
-            profiles.extend([
-                    patch.patch[ph/2    , pw/2:   ],
-                    patch.patch[ph/2    , pw/2::-1],
-                    patch.patch[ph/2:   , pw/2    ],
-                    patch.patch[ph/2::-1, pw/2    ],
-                    ])
-
-    profiles = np.array(profiles)
-
-    minradius = 3
-    pro = np.max(profiles, axis=0)
-    for src in cat:
-        if not isinstance(src, PointSource):
-            continue
-        nsigmas = 0.
-        bright = src.getBrightness()
-        for band in bands:
-            nsigmas = max(nsigmas, bright.getFlux(band) / minsig1s[band])
-        if nsigmas <= 0:
-            continue
-        ii = np.flatnonzero(pro > (minsigma / nsigmas))
-        if len(ii) == 0:
-            continue
-        src.fixedRadius = max(minradius, 1 + ii[-1])
-
 def _write_fitblobs_pickle(fn, data):
     from astrometry.util.file import pickle_to_file
     tmpfn = fn + '.tmp'
@@ -1607,8 +1561,6 @@ def stage_fitblobs(T=None,
     minsigma = 0.1
     for tim in tims:
         tim.modelMinval = minsigma * tim.sig1
-
-    set_source_radii(bands, tims, cat, minsigma)
 
     if plots and False:
         coimgs,cons = compute_coadds(tims, bands, targetwcs)
