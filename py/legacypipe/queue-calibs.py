@@ -28,7 +28,7 @@ from collections import OrderedDict
 from astrometry.util.fits import fits_table
 from astrometry.util.file import trymakedirs
 
-from legacypipe.common import LegacySurveyData
+from legacypipe.common import LegacySurveyData, wcs_for_brick, ccds_touching_wcs
 
 
 from astrometry.libkd.spherematch import match_radec
