@@ -3196,6 +3196,8 @@ def _one_blob(X):
                         continue
                     #print('After first-round fit: model is', mod.shape)
                     mod = _clip_model_to_blob(mod, tim.shape,tim.getInvError())
+                    if mod is None:
+                        continue
                     d[newsrc] = Patch(mod.x0, mod.y0, mod.patch != 0)
                     modtims.append(tim)
                     mm.append(d)
