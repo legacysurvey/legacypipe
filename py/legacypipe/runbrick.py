@@ -2450,8 +2450,8 @@ def _one_blob(X):
     bigblob = (blobw * blobh) > 100*100
 
     # 50 CCDs is over 90th percentile of bricks in DR2.
-    #KJB many_exposures = len(timargs) >= 50
-    many_exposures = len(timargs) >= 1000
+    many_exposures = len(timargs) >= 50
+    #KJB many_exposures = len(timargs) >= 1000
 
     blobwcs = brickwcs.get_subimage(bx0, by0, blobw, blobh)
     ok,x0,y0 = blobwcs.radec2pixelxy(
@@ -2980,8 +2980,8 @@ def _one_blob(X):
 
                 detiv = np.zeros(srcwcs.shape, np.float32)
                 I = np.argsort(-np.array(value))
-                for i in I:
-                    tim = otims[i]
+                for cnt in I:
+                    tim = otims[cnt]
                     try:
                         Yo,Xo,Yi,Xi,nil = resample_with_wcs(
                             srcwcs, tim.subwcs, [], 2)
