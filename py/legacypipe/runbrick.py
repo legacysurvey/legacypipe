@@ -408,6 +408,10 @@ def stage_tims(W=3600, H=3600, pixscale=0.262, brickname=None,
     timbands = [tim.band for tim in tims]
     bands = [b for b in bands if b in timbands]
     print('Cut bands to', bands)
+    try: assert(np.all(['g' in bands,'r' in bands,'z' in bands],axis=0))
+    except AssertionError: 
+        print('WARNING: grz not all in bands, images are not all photometric, quitting')
+        sys.exit(0)
 
     for band in 'grz':
         hasit = band in bands
