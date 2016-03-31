@@ -408,10 +408,10 @@ def stage_tims(W=3600, H=3600, pixscale=0.262, brickname=None,
     timbands = [tim.band for tim in tims]
     bands = [b for b in bands if b in timbands]
     print('Cut bands to', bands)
-    try: assert(np.all(['g' in bands,'r' in bands,'z' in bands],axis=0))
-    except AssertionError: 
-        print('WARNING: grz not all in bands, images are not all photometric, quitting')
-        sys.exit(0)
+    #try: assert(np.all(['g' in bands,'r' in bands,'z' in bands],axis=0))
+    #except AssertionError: 
+    #    print('WARNING: grz not all in bands, images are not all photometric, quitting')
+    #    sys.exit(0)
 
     for band in 'grz':
         hasit = band in bands
@@ -2450,7 +2450,8 @@ def _one_blob(X):
     bigblob = (blobw * blobh) > 100*100
 
     # 50 CCDs is over 90th percentile of bricks in DR2.
-    many_exposures = len(timargs) >= 50
+    #KJB many_exposures = len(timargs) >= 50
+    many_exposures = len(timargs) >= 1000
 
     blobwcs = brickwcs.get_subimage(bx0, by0, blobw, blobh)
     ok,x0,y0 = blobwcs.radec2pixelxy(
@@ -3244,6 +3245,7 @@ def _one_blob(X):
             newsrc.freezeAllBut('brightness')
             allderivs = modtractor.getDerivs()
             ivs = np.zeros(len(bands), np.float32)
+            print('KJB L3247: ivs.shape= ',ivs.shape,'i=',i,'name=',name,'len(B.all_model_fluxivs)=',len(B.all_model_fluxivs),'B.all_model_fluxivs[0].keys()=',B.all_model_fluxivs[0].keys())
             B.all_model_fluxivs[i][name] = ivs
             for iparam,derivs in enumerate(allderivs):
                 chisq = 0
