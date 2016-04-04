@@ -15,6 +15,9 @@ for x in $(tablist edr-ccds.fits"[col image_filename]" | awk '{print $2}' | sort
 done
 
 
+
+
+
 dr1(d):
 qdo launch bricks 16 --mpack 6 --batchopts "-A desi" --walltime=24:00:00 --script projects/desi/pipebrick.sh --batchqueue regular --verbose
 
@@ -98,6 +101,9 @@ def main():
 
     parser.add_argument('--write-ccds', help='Write CCDs list as FITS table?')
 
+    parser.add_argument('--brickq', type=int, default=None,
+                        help='Queue only bricks with the given "brickq" value [0 to 3]')
+    
     opt = parser.parse_args()
 
     survey = LegacySurveyData()
@@ -204,7 +210,7 @@ def main():
         # CCD radius
         radius = np.hypot(2048, 4096) / 2. * 0.262 / 3600.
         # Brick radius
-        radius += np.hypot(0.25, 0.25)/2.
+        radius += np.hypot(survey.bricksize, survey.bricksize)/2.
         I,J,d = match_radec(B.ra, B.dec, T.ra, T.dec, radius * 1.05)
         keep = np.zeros(len(B), bool)
         keep[I] = True
@@ -218,7 +224,7 @@ def main():
         # CCD radius
         radius = np.hypot(2048, 4096) / 2. * 0.262 / 3600.
         # Brick radius
-        radius += np.hypot(0.25, 0.25)/2.
+        radius += np.hypot(survey.bricksize, survey.bricksize)/2.
         I,J,d = match_radec(B.ra, B.dec, T.ra, T.dec, radius * 1.05)
         keep = np.zeros(len(B), bool)
         keep[I] = True
@@ -326,13 +332,17 @@ def main():
               (B.dec >= dlo) * (B.dec <= dhi))
     log(len(B), 'bricks in range')
 
-    I,J,d = match_radec(B.ra, B.dec, T.ra, T.dec, 0.25)
+    I,J,d = match_radec(B.ra, B.dec, T.ra, T.dec, survey.bricksize)
     keep = np.zeros(len(B), bool)
     for i in I:
         keep[i] = True
     B.cut(keep)
     log('Cut to', len(B), 'bricks near CCDs')
 
+    if opt.brickq is not None:
+        B.cut(B.brickq == opt.brickq)
+        log('Cut to', len(B), 'with brickq =', opt.brickq)
+    
     if opt.touching:
         keep = np.zeros(len(T), bool)
         for j in J:
@@ -347,7 +357,7 @@ def main():
         T2.cut(T2.dr1 == 1)
         log(len(T2), 'CCDs marked DR1=1')
         log(len(B), 'bricks in range')
-        I,J,d = match_radec(B.ra, B.dec, T2.ra, T2.dec, 0.25)
+        I,J,d = match_radec(B.ra, B.dec, T2.ra, T2.dec, survey.bricksize)
         keep = np.zeros(len(B), bool)
         for i in I:
             keep[i] = True
@@ -356,7 +366,7 @@ def main():
         for band in 'grz':
             Tb = T2[T2.filter == band]
             log(len(Tb), 'in filter', band)
-            I,J,d = match_radec(B2.ra, B2.dec, Tb.ra, Tb.dec, 0.25)
+            I,J,d = match_radec(B2.ra, B2.dec, Tb.ra, Tb.dec, survey.bricksize)
             good = np.zeros(len(B2), np.uint8)
             for i in I:
                 good[i] = 1
