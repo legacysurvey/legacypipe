@@ -4,6 +4,17 @@ purposes (building qdo queue, eg).
 
 python legacypipe/queue-calibs.py  | qdo load cal -
 
+
+eg, DR3:
+
+Staging to $SCRATCH to images required to run the EDR region:
+
+python legacypipe/queue-calibs.py --region edr --write-ccds edr-ccds.fits --calibs --touching
+for x in $(tablist edr-ccds.fits"[col image_filename]" | awk '{print $2}' | sort | uniq); do
+  rsync -LRarv $LEGACY_SURVEY_DIR/images/./$x /global/cscratch1/sd/desiproc/legacypipe-dir/images/;
+done
+
+
 dr1(d):
 qdo launch bricks 16 --mpack 6 --batchopts "-A desi" --walltime=24:00:00 --script projects/desi/pipebrick.sh --batchqueue regular --verbose
 

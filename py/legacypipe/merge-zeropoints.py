@@ -5,24 +5,23 @@ import os
 from astrometry.util.fits import fits_table, merge_tables
 
 
-def decals_dr2():
-    decals_dir = os.environ['DECALS_DIR']
+def decals_dr3():
+    basedir = os.environ['LEGACY_SURVEY_DIR']
     cam = 'decam'
-    image_basedir = os.path.join(decals_dir, 'images')
+    image_basedir = os.path.join(basedir, 'images')
 
     TT = []
 
     #zpdir = '/project/projectdirs/cosmo/work/decam/cats/ZeroPoints'
     for fn,dirnms in [
-        ('/scratch1/scratchdirs/desiproc/ZeroPoints/decals-zpt-all-2015oct30.fits',
-         ['CP20140810_?_v2', 'CP20141227', 'CP20150108', 'CP20150326',
-          'CP20150407', 'NonDECaLS/*','COSMOS', 'CPDES82']),
-        # (os.path.join(zpdir, 'decals-zpt-20140810.fits'), ['CP20140810_?_v2']),
-        # (os.path.join(zpdir, 'decals-zpt-20141227.fits'), ['CP20141227']),
-        # (os.path.join(zpdir, 'decals-zpt-20150108.fits'), ['CP20150108']),
-        # (os.path.join(zpdir, 'decals-zpt-20150326.fits'), ['CP20150326']),
-        # (os.path.join(zpdir, 'decals-zpt-20150407.fits'), ['CP20150407']),
-        # (os.path.join(zpdir, 'decals-zpt-nondecals.fits'), ['NonDECaLS/*','COSMOS', 'CPDES82']),
+        ('/global/cscratch1/sd/desiproc/zeropoints/decals-zpt-dr3pr1233b.fits',
+         ['CP20140810_?_v2',
+          'CP20141227', 'CP20150108', 'CP20150326',
+          'CP20150407', 'CP20151010', 'CP20151028', 'CP20151126',
+          'CP20151226', 'CP20160107', 'CP20160225',
+          'COSMOS', 'CPDES82',
+          'NonDECaLS/*',
+         ]),
         ]:
         T = normalize_zeropoints(fn, dirnms, image_basedir, cam)
         TT.append(T)
@@ -36,6 +35,7 @@ def normalize_zeropoints(fn, dirnms, image_basedir, cam, T=None):
     if T is None:
         print('Reading', fn)
         T = fits_table(fn)
+        print('Read', len(T), 'rows')
     T.camera = np.array([cam] * len(T))
     T.expid = np.array(['%08i-%s' % (expnum,extname.strip())
                         for expnum,extname in zip(T.expnum, T.ccdname)])
@@ -45,20 +45,49 @@ def normalize_zeropoints(fn, dirnms, image_basedir, cam, T=None):
     if not 'naxis2' in cols:
         T.naxis2 = np.zeros(len(T), np.int16) + 4094
 
+    # Expand wildcarded directory names
+    realdirs = []
+    for dirnm in dirnms:
+        pattern = os.path.join(image_basedir, cam, dirnm)
+        matched = glob(pattern)
+        print('Pattern', pattern, '->', matched)
+        if len(matched) == 0:
+            continue
+        realdirs.extend(matched)
+    dirnms = realdirs
+
+    # Search all given directory names
+    allfiles = {}
+    for dirnm in dirnms:
+        pattern = os.path.join(image_basedir, cam, dirnm, '*.fits*')
+        matched = glob(pattern)
+        allfiles[dirnm] = matched
+        print('Pattern', pattern, '->', len(matched))
+        
     fns = []
     fnmap = {}
-    for fn,filt in zip(T.filename, T.filter):
+    for ifile,(fn,filt) in enumerate(zip(T.filename, T.filter)):
+        print('CCD', ifile, 'of', len(T), ':', fn)
         if fn in fnmap:
             fns.append(fnmap[fn])
             continue
         orig_fn = fn
         fn = fn.strip()
         fnlist = []
+
         for dirnm in dirnms:
-            pattern = os.path.join(image_basedir, cam, dirnm, fn + '*')
-            matched = glob(pattern)
-            #print('Glob pattern', pattern, 'matched', matched)
-            fnlist.extend(matched)
+            pattern = os.path.join(image_basedir, cam, dirnm, fn)
+            for afn in allfiles[dirnm]:
+                # check for prefix
+                if pattern in afn:
+                    fnlist.append(afn)
+                    print('File', fn, 'matched', afn)
+                    
+        # for dirnm in dirnms:
+        #     pattern = os.path.join(image_basedir, cam, dirnm, fn + '*')
+        #     matched = glob(pattern)
+        #     print('Glob pattern', pattern, 'matched', len(matched))
+        #     fnlist.extend(matched)
 
         pattern_string = os.path.join(image_basedir, cam, dirnm, fn + '*')
         if len(dirnms) > 1:
@@ -119,8 +148,8 @@ def normalize_zeropoints(fn, dirnms, image_basedir, cam, T=None):
 if __name__ == '__main__':
     import sys
 
-    #decals_dr2()
-    #sys.exit(0)
+    decals_dr3()
+    sys.exit(0)
 
     # Mosaicz tests
     from astrometry.util.starutil_numpy import hmsstring2ra, dmsstring2dec
