@@ -467,28 +467,7 @@ class LegacySurveyImage(object):
         return None
 
     def get_wcs(self):
-        return self.read_pv_wcs()
-
-    def read_pv_wcs(self):
-        '''
-        Reads the WCS header, returning an `astrometry.util.util.Sip` object.
-        '''
-        from astrometry.util.util import Sip
-
-        print('Reading WCS from', self.pvwcsfn)
-        wcs = Sip(self.pvwcsfn)
-        dra,ddec = self.survey.get_astrometric_zeropoint_for(self)
-        r,d = wcs.get_crval()
-        print('Applying astrometric zeropoint:', (dra,ddec))
-        wcs.set_crval((r + dra, d + ddec))
-        hdr = fitsio.read_header(self.pvwcsfn)
-        wcs.version = hdr.get('LEGPIPEV', '')
-        if len(wcs.version) == 0:
-            wcs.version = hdr.get('TRACTORV', '').strip()
-            if len(wcs.version) == 0:
-                wcs.version = str(os.stat(self.pvwcsfn).st_mtime)
-        wcs.plver = hdr.get('PLVER', '').strip()
-        return wcs
+        return None
     
     def read_sky_model(self, splinesky=False, slc=None, **kwargs):
         '''

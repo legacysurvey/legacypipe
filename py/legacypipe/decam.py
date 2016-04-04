@@ -4,8 +4,9 @@ import numpy as np
 import fitsio
 from astrometry.util.file import trymakedirs
 from astrometry.util.fits import fits_table
-from .image import LegacySurveyImage, CalibMixin
-from .common import *
+from legacypipe.image import LegacySurveyImage, CalibMixin
+from legacypipe.cpimage import CPMixin
+from legacypipe.common import *
 
 import astropy.time
 
@@ -13,7 +14,7 @@ import astropy.time
 Code specific to images from the Dark Energy Camera (DECam).
 '''
 
-class DecamImage(LegacySurveyImage, CalibMixin):
+class DecamImage(LegacySurveyImage, CalibMixin, CPMixin):
     '''
 
     A LegacySurveyImage subclass to handle images from the Dark Energy
@@ -22,30 +23,6 @@ class DecamImage(LegacySurveyImage, CalibMixin):
     '''
     def __init__(self, survey, t):
         super(DecamImage, self).__init__(survey, t)
-        self.dqfn = self.imgfn.replace('_ooi_', '_ood_')
-        self.wtfn = self.imgfn.replace('_ooi_', '_oow_')
-
-        for attr in ['imgfn', 'dqfn', 'wtfn']:
-            fn = getattr(self, attr)
-            if os.path.exists(fn):
-                continue
-            if fn.endswith('.fz'):
-                fun = fn[:-3]
-                if os.path.exists(fun):
-                    print('Using      ', fun)
-                    print('rather than', fn)
-                    setattr(self, attr, fun)
-
-        expstr = '%08i' % self.expnum
-        self.calname = '%s/%s/decam-%s-%s' % (expstr[:5], expstr, expstr, self.ccdname)
-        self.name = '%s-%s' % (expstr, self.ccdname)
-
-        calibdir = os.path.join(self.survey.get_calib_dir(), self.camera)
-        self.pvwcsfn = os.path.join(calibdir, 'astrom-pv', self.calname + '.wcs.fits')
-        self.sefn = os.path.join(calibdir, 'sextractor', self.calname + '.fits')
-        self.psffn = os.path.join(calibdir, 'psfex', self.calname + '.fits')
-        self.skyfn = os.path.join(calibdir, 'sky', self.calname + '.fits')
-        self.splineskyfn = os.path.join(calibdir, 'splinesky', self.calname + '.fits')
 
     def __str__(self):
         return 'DECam ' + self.name
@@ -132,7 +109,7 @@ class DecamImage(LegacySurveyImage, CalibMixin):
             invvar[invvar < thresh] = 0
         return invvar
 
-    def run_calibs(self, pvastrom=True, psfex=True, sky=True, se=False,
+    def run_calibs(self, psfex=True, sky=True, se=False,
                    funpack=False, fcopy=False, use_mask=True,
                    force=False, just_check=False, git_version=None,
                    splinesky=False):
@@ -148,9 +125,6 @@ class DecamImage(LegacySurveyImage, CalibMixin):
         from .common import (create_temp, get_version_header,
                              get_git_version)
         
-        #for fn in [self.pvwcsfn, self.sefn, self.psffn, self.skyfn, self.splineskyfn]:
-        #    print('exists?', os.path.exists(fn), fn)
-
         if psfex and os.path.exists(self.psffn) and (not force):
             if self.check_psf(self.psffn):
                 psfex = False
@@ -162,17 +136,6 @@ class DecamImage(LegacySurveyImage, CalibMixin):
                 se = False
         if se:
             funpack = True
-
-        if pvastrom and os.path.exists(self.pvwcsfn) and (not force):
-            fn = self.pvwcsfn
-            if os.path.exists(fn):
-                try:
-                    wcs = Sip(fn)
-                except:
-                    print('Failed to read PV-SIP file', fn, '-- deleting')
-                    os.unlink(fn)
-            if os.path.exists(fn):
-                pvastrom = False
 
         if sky and (not force) and (
             (os.path.exists(self.skyfn) and not splinesky) or
@@ -192,7 +155,7 @@ class DecamImage(LegacySurveyImage, CalibMixin):
                 sky = False
 
         if just_check:
-            return (se or psfex or sky or pvastrom)
+            return (se or psfex or sky)
 
         todelete = []
         if funpack:
@@ -205,33 +168,6 @@ class DecamImage(LegacySurveyImage, CalibMixin):
             self.run_se('DECaLS', imgfn, maskfn)
         if psfex:
             self.run_psfex('DECaLS', sefn)
-
-        if pvastrom:
-            # DECam images appear to have PV coefficients up to PVx_10,
-            # which are up to cubic terms in xi,eta,r.  Overshoot what we
-            # need in SIP terms.
-            tmpwcsfn  = create_temp(suffix='.wcs')
-            cmd = ('wcs-pv2sip -S -o 6 -e %i %s %s' %
-                   (self.hdu, self.imgfn, tmpwcsfn))
-            print(cmd)
-            if os.system(cmd):
-                raise RuntimeError('Command failed: ' + cmd)
-            # Read the resulting WCS header and add version info cards to it.
-            version_hdr = get_version_header(None, self.survey.get_survey_dir(),
-                                             git_version=git_version)
-            primhdr = self.read_image_primary_header()
-            plver = primhdr.get('PLVER', '').strip()
-            version_hdr.add_record(dict(name='PLVER', value=plver,
-                                        comment='CP ver of image file'))
-            wcshdr = fitsio.read_header(tmpwcsfn)
-            os.unlink(tmpwcsfn)
-            for r in wcshdr.records():
-                version_hdr.add_record(r)
-
-            trymakedirs(self.pvwcsfn, dir=True)
-
-            fitsio.write(self.pvwcsfn, None, header=version_hdr, clobber=True)
-            print('Wrote', self.pvwcsfn)
 
         if sky:
             #print('Fitting sky for', self)
@@ -269,9 +205,14 @@ class DecamImage(LegacySurveyImage, CalibMixin):
                 masked = (img - med - skymod) > (5.*sig1)
                 masked = binary_dilation(masked, iterations=3)
                 masked[wt == 0] = True
+
+                sig1b = 1./np.sqrt(np.median(wt[masked == False]))
+                print('Sig1 vs sig1b:', sig1, sig1b)
+                
                 # Now find the final sky model using that more extensive mask
-                skyobj = SplineSky.BlantonMethod(img - med, np.logical_not(masked), 512)
-                # add the median back in
+                skyobj = SplineSky.BlantonMethod(
+                    img - med, np.logical_not(masked), 512)
+                # add the overall median back in
                 skyobj.offset(med)
     
                 if slc is not None:
@@ -280,6 +221,11 @@ class DecamImage(LegacySurveyImage, CalibMixin):
                     x0 = sx.start
                     skyobj.shift(-x0, -y0)
 
+                hdr.add_record(dict(name='SIG1', value=sig1,
+                                    comment='Median stdev of unmasked pixels'))
+                hdr.add_record(dict(name='SIG1B', value=sig1,
+                                    comment='Median stdev of unmasked pixels+'))
+                    
                 trymakedirs(self.splineskyfn, dir=True)
                 skyobj.write_fits(self.splineskyfn, primhdr=hdr)
                 print('Wrote sky model', self.splineskyfn)
@@ -296,6 +242,18 @@ class DecamImage(LegacySurveyImage, CalibMixin):
 
                 hdr.add_record(dict(name='SKYMETH', value=skymeth,
                                     comment='estimate_mode, or fallback to median?'))
+                sig1 = 1./np.sqrt(np.median(wt[wt>0]))
+                masked = (img - skyval) > (5.*sig1)
+                masked = binary_dilation(masked, iterations=3)
+                masked[wt == 0] = True
+                sig1b = 1./np.sqrt(np.median(wt[masked == False]))
+                print('Sig1 vs sig1b:', sig1, sig1b)
+
+                hdr.add_record(dict(name='SIG1', value=sig1,
+                                    comment='Median stdev of unmasked pixels'))
+                hdr.add_record(dict(name='SIG1B', value=sig1,
+                                    comment='Median stdev of unmasked pixels+'))
+                
                 trymakedirs(self.skyfn, dir=True)
                 tsky.write_fits(self.skyfn, hdr=hdr)
                 print('Wrote sky model', self.skyfn)

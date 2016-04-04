@@ -8,26 +8,14 @@ import numpy as np
 from astrometry.util.util import wcs_pv2sip_hdr
 
 from legacypipe.image import LegacySurveyImage, CalibMixin
+from legacypipe.cpimage import CPMixin
 from legacypipe.common import LegacySurveyData
 
-class MosaicImage(LegacySurveyImage, CalibMixin):
+class MosaicImage(LegacySurveyImage, CalibMixin, CPMixin):
     def __init__(self, survey, t):
         super(MosaicImage, self).__init__(survey, t)
-
         # convert FWHM into pixel units
         self.fwhm /= self.pixscale
-
-        self.dqfn = self.imgfn.replace('_ooi_', '_ood_').replace('_oki_','_ood_')
-        self.wtfn = self.imgfn.replace('_ooi_', '_oow_').replace('_oki_','_oow_')
-        assert(self.dqfn != self.imgfn)
-        assert(self.wtfn != self.imgfn)
-
-        expstr = '%08i' % self.expnum
-        self.name = '%s-%s' % (expstr, self.ccdname)
-        self.calname = '%s/%s/mosaic-%s-%s' % (expstr[:5], expstr, expstr, self.ccdname)
-        calibdir = os.path.join(self.survey.get_calib_dir(), self.camera)
-        self.sefn = os.path.join(calibdir, 'sextractor', self.calname + '.fits')
-        self.psffn = os.path.join(calibdir, 'psfex', self.calname + '.fits')
 
     def read_sky_model(self, imghdr=None, **kwargs):
         from tractor.sky import ConstantSky
@@ -37,18 +25,6 @@ class MosaicImage(LegacySurveyImage, CalibMixin):
         sky.plver = phdr.get('PLVER', '').strip()
         return sky
         
-    def get_wcs(self):
-        hdr = fitsio.read_header(self.imgfn, self.hdu)
-        wcs = wcs_pv2sip_hdr(hdr)
-        dra,ddec = self.survey.get_astrometric_zeropoint_for(self)
-        r,d = wcs.get_crval()
-        print('Applying astrometric zeropoint:', (dra,ddec))
-        wcs.set_crval((r + dra, d + ddec))
-        wcs.version = ''
-        phdr = fitsio.read_header(self.imgfn, 0)
-        wcs.plver = phdr.get('PLVER', '').strip()
-        return wcs
-
     def read_dq(self, **kwargs):
         '''
         Reads the Data Quality (DQ) mask image.
