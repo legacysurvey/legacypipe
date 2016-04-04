@@ -23,8 +23,6 @@ def main():
     parser.add_argument('--expnum', type=int, help='Cut to a single exposure')
     parser.add_argument('--extname', '--ccdname', help='Cut to a single extension/CCD name')
 
-    parser.add_argument('--no-astrom', dest='astrom', action='store_false',
-                      help='Do not compute astrometric calibs')
     parser.add_argument('--no-psf', dest='psfex', action='store_false',
                       help='Do not compute PsfEx calibs')
     parser.add_argument('--no-sky', dest='sky', action='store_false',
@@ -60,7 +58,7 @@ def main():
         im = survey.get_image_object(t)
         print('Running', im.calname)
 
-        kwargs = dict(pvastrom=opt.astrom, psfex=opt.psfex, sky=opt.sky)
+        kwargs = dict(psfex=opt.psfex, sky=opt.sky)
         if opt.force:
             kwargs.update(force=True)
         if opt.run_se:
