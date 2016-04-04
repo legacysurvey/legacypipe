@@ -1106,6 +1106,24 @@ def _median_smooth_detmap(X):
     smoo = median_filter(binned, (50,50))
     return smoo
 
+def on_bricks_dependencies(brick, survey):
+    # Find nearby bricks from earlier brick phases
+    bricks = survey.get_bricks_readonly()
+    print(len(bricks), 'bricks')
+    bricks = bricks[bricks.brickq < brick.brickq]
+    print(len(bricks), 'from phases before this brickq:', brick.brickq)
+    if len(bricks) == 0:
+        return []
+    from astrometry.libkd.spherematch import match_radec
+
+    radius = survey.bricksize * np.sqrt(2.) * 1.01
+    bricks.cut(np.abs(brick.dec - bricks.dec) < radius)
+    #print(len(bricks), 'within %.2f degree of Dec' % radius)
+    I,J,d = match_radec(brick.ra, brick.dec, bricks.ra, bricks.dec, radius)
+    bricks.cut(J)
+    print(len(bricks), 'within', radius, 'degrees')
+    return bricks
+
 def stage_srcs(coimgs=None, cons=None,
                targetrd=None, pixscale=None, targetwcs=None,
                W=None,H=None,
@@ -1131,23 +1149,9 @@ def stage_srcs(coimgs=None, cons=None,
     avoid_xy = []
     if on_bricks:
         from legacypipe.desi_common import read_fits_catalog
-        # Find nearby bricks from earlier brick phases
-        bricks = survey.get_bricks_readonly()
-        print(len(bricks), 'bricks')
-        bricks = bricks[bricks.brickq < brick.brickq]
-        print(len(bricks), 'from phases before this brickq:', brick.brickq)
-        if len(bricks):
-            from astrometry.libkd.spherematch import match_radec
 
-            bricks.cut(np.abs(brick.dec - bricks.dec) < 1)
-            print(len(bricks), 'within 1 degree of Dec')
-            radius = np.sqrt(2.) * np.abs(brick.dec2 - brick.dec1)
-            I,J,d = match_radec(brick.ra, brick.dec, bricks.ra, bricks.dec,
-                                radius)
-            bricks.cut(J)
-            print(len(bricks), 'within', radius, 'degrees')
-        else:
-            bricks = []
+        bricks = on_bricks_dependencies(brick, survey)
+
         B = []
         if outdir is None:
             outdir = '.'
@@ -4786,9 +4790,6 @@ python -u legacypipe/runbrick.py --plots --brick 2440p070 --zoom 1900 2400 450 9
         '--coadd-bw', action='store_true', default=False,
         help='Create grayscale coadds if only one band is available?')
 
-    parser.add_argument('--on-bricks', action='store_true', default=False,
-                        help='Tractor-on-bricks?')
-
     parser.add_argument(
         '--no-blacklist', dest='blacklist', default=True, action='store_false',
         help='Do not blacklist some proposals?')
@@ -4797,6 +4798,11 @@ python -u legacypipe/runbrick.py --plots --brick 2440p070 --zoom 1900 2400 450 9
         '--rsync', default=False, action='store_true',
         help=('Rather than running calibrations, rsync from NERSC.  Also '+
               'rsync missing image file inputs'))
+
+    parser.add_argument(
+        '--on-bricks', default=False, action='store_true',
+        help='Enable Tractor-on-bricks edge handling?')
+    
     return parser
 
 def get_runbrick_kwargs(opt):
@@ -4914,6 +4920,31 @@ def main():
         lvl = logging.DEBUG
     logging.basicConfig(level=lvl, format='%(message)s', stream=sys.stdout)
 
+    if opt.on_bricks:
+        # Quickly check for existence of required neighboring catalogs
+        # before starting.
+        survey = LegacySurveyData(opt.survey_dir)
+        brick = survey.get_brick_by_name(opt.brick)
+        bricks = on_bricks_dependencies(brick, survey)
+        print('Checking for catalogs for bricks:',
+              ', '.join([b.brickname for b in bricks]))
+        allexist = True
+        for b in bricks:
+            fn = survey.find_file('tractor', brick=b.brickname)
+            print('File', fn)
+            if not os.path.exists(fn):
+                allexist = False
+                print('File', fn, 'does not exist (required for --on-bricks)')
+                continue
+            try:
+                T = fits_table(fn)
+            except:
+                print('Failed to open file', fn, '(reqd for --on-bricks)')
+                allexist = False
+
+        if not allexist:
+            return -1
+                
     Time.add_measurement(MemMeas)
     plt.figure(figsize=(12,9))
     plt.subplots_adjust(left=0.07, right=0.99, bottom=0.07, top=0.95,
