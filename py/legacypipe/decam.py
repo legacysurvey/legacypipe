@@ -22,6 +22,7 @@ class DecamImage(LegacySurveyImage, CalibMixin, CPMixin):
 
     '''
     def __init__(self, survey, t):
+        #print('DecamImage __init__')
         super(DecamImage, self).__init__(survey, t)
 
     def __str__(self):

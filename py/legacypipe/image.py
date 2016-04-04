@@ -50,6 +50,8 @@ class LegacySurveyImage(object):
         *get_tractor_image*.
 
         '''
+        #print('LegacySurveyImage __init__')
+        
         self.survey = survey
 
         imgfn = ccd.image_filename.strip()
@@ -73,6 +75,8 @@ class LegacySurveyImage(object):
         self.width  = ccd.width
         self.height = ccd.height
 
+        super(LegacySurveyImage, self).__init__()
+        
     def __str__(self):
         return self.name
 
@@ -548,6 +552,10 @@ class CalibMixin(object):
     subclasses.
     '''
 
+    def __init__(self):
+        #print('CalibMixin __init__')
+        super(CalibMixin, self).__init__()
+    
     def check_psf(self, psffn):
         '''
         Returns True if the PsfEx file is ok.
