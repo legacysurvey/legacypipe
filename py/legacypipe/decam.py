@@ -168,7 +168,7 @@ class DecamImage(LegacySurveyImage, CalibMixin, CPMixin):
         if se:
             self.run_se('DECaLS', imgfn, maskfn)
         if psfex:
-            self.run_psfex('DECaLS', sefn)
+            self.run_psfex('DECaLS')
 
         if sky:
             #print('Fitting sky for', self)

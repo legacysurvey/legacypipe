@@ -7,12 +7,19 @@ python legacypipe/queue-calibs.py  | qdo load cal -
 
 eg, DR3:
 
-Staging to $SCRATCH to images required to run the EDR region:
+* Staging to $SCRATCH to images required to run the EDR region:
 
-python legacypipe/queue-calibs.py --region edr --write-ccds edr-ccds.fits --calibs --touching
+module switch legacysurvey/dr3
+python legacypipe/queue-calibs.py --region edr --write-ccds edr-ccds.fits --calibs --touching --nper 100
 for x in $(tablist edr-ccds.fits"[col image_filename]" | awk '{print $2}' | sort | uniq); do
-  rsync -LRarv $LEGACY_SURVEY_DIR/images/./$x /global/cscratch1/sd/desiproc/legacypipe-dir/images/;
+  rsync -LRarv $LEGACY_SURVEY_DIR/images/./$(echo $x | sed s/o.i/o??/g) /global/cscratch1/sd/desiproc/legacypipe-dir/images/;
 done
+
+* Running calibration preprocessing for EDR:
+
+module switch legacysurvey/dr3-cori-scratch
+python legacypipe/queue-calibs.py --region edr --calibs --touching --nper 100
+qdo load cal jobs
 
 
 

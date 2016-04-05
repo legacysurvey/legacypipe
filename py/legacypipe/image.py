@@ -620,7 +620,7 @@ class CalibMixin(object):
         print(cmd)
         if os.system(cmd):
             print('Command failed: ' + cmd)
-            M,hdr = self._read_fits(maskfn, ext=hdu, header=True)
+            M,hdr = self._read_fits(maskfn, hdu, header=True)
             print('Read', M.dtype, M.shape)
             fitsio.write(tmpmaskfn, M, header=hdr, clobber=True)
             print('Wrote', tmpmaskfn, 'with fitsio')

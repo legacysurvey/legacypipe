@@ -3,13 +3,13 @@
 export TMPDIR=$SCRATCH/tmp
 mkdir -p $TMPDIR
 
-# SDSS data files
-#export BOSS_PHOTOOBJ=/project/projectdirs/cosmo/data/sdss/pre13/eboss/photoObj.v5b
-# Cut copy on $SCRATCH:
-export BOSS_PHOTOOBJ=$SCRATCH/sdss-cut
-
-export PHOTO_RESOLVE=/project/projectdirs/cosmo/data/sdss/pre13/eboss/resolve/2013-07-29
-export PHOTO_REDUX=
+# # SDSS data files
+# #export BOSS_PHOTOOBJ=/project/projectdirs/cosmo/data/sdss/pre13/eboss/photoObj.v5b
+# # Cut copy on $SCRATCH:
+# export BOSS_PHOTOOBJ=$SCRATCH/sdss-cut
+# 
+# export PHOTO_RESOLVE=/project/projectdirs/cosmo/data/sdss/pre13/eboss/resolve/2013-07-29
+# export PHOTO_REDUX=
 
 # We copy our code to $SCRATCH for speed; see the update-scratch.sh script.
 export CODE_DIR=$SCRATCH/code
@@ -199,7 +199,7 @@ if [ "$NERSC_HOST" == "cori" ]; then
 
   # Our local qdo install
   PATH=${PATH}:${CODE_DIR}/qdo/bin
-  PYP=${PYP}:${CODE_DIR}/qdo/py
+  PYP=${PYP}:${CODE_DIR}/qdo
 
   # local astrometry.net install
   #PYP=${PYP}:${CODE_DIR}/astrometry.net
