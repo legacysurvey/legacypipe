@@ -21,7 +21,7 @@ module switch legacysurvey/dr3-cori-scratch
 python legacypipe/queue-calibs.py --region edr --calibs --touching --nper 100
 qdo load cal jobs
 
-
+qdo launch cal 1 --cores_per_worker 1 --batchqueue shared --script "python legacypipe/run-calib.py --splinesky" --walltime 4:00:00 --keep_env --batchopts "-a 0-15"
 
 
 
@@ -506,6 +506,10 @@ def main():
         else:
             s = '%i' % T.index[i]
 
+        if j < 10:
+            print('Index', T.index[i], 'expnum', T.expnum[i], 'ccdname', T.ccdname[i],
+                  'filename', T.image_filename[i])
+            
         if not opt.nper:
             f.write(s + '\n')
         else:

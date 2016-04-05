@@ -53,6 +53,7 @@ def main():
 
     for a in opt.args:
         i = int(a)
+        print('Index', i)
         t = T[i]
 
         im = survey.get_image_object(t)

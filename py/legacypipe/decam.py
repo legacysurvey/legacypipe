@@ -232,17 +232,18 @@ class DecamImage(LegacySurveyImage, CalibMixin, CPMixin):
                 print('Wrote sky model', self.splineskyfn)
     
             else:
-                img = img[wt > 0]
                 try:
-                    skyval = estimate_mode(img, raiseOnWarn=True)
+                    skyval = estimate_mode(img[wt > 0], raiseOnWarn=True)
                     skymeth = 'mode'
                 except:
-                    skyval = np.median(img)
+                    skyval = np.median(img[wt > 0])
                     skymeth = 'median'
                 tsky = ConstantSky(skyval)
 
                 hdr.add_record(dict(name='SKYMETH', value=skymeth,
                                     comment='estimate_mode, or fallback to median?'))
+
+                from scipy.ndimage.morphology import binary_dilation
                 sig1 = 1./np.sqrt(np.median(wt[wt>0]))
                 masked = (img - skyval) > (5.*sig1)
                 masked = binary_dilation(masked, iterations=3)
