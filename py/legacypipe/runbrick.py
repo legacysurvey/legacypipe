@@ -2451,7 +2451,7 @@ def _one_blob(X):
 
     # 50 CCDs is over 90th percentile of bricks in DR2.
     many_exposures = len(timargs) >= 50
-    #KJB many_exposures = len(timargs) >= 1000
+    #PTF special handling len(timargs) >= 1000
 
     blobwcs = brickwcs.get_subimage(bx0, by0, blobw, blobh)
     ok,x0,y0 = blobwcs.radec2pixelxy(
@@ -3245,7 +3245,6 @@ def _one_blob(X):
             newsrc.freezeAllBut('brightness')
             allderivs = modtractor.getDerivs()
             ivs = np.zeros(len(bands), np.float32)
-            print('KJB L3247: ivs.shape= ',ivs.shape,'i=',i,'name=',name,'len(B.all_model_fluxivs)=',len(B.all_model_fluxivs),'B.all_model_fluxivs[0].keys()=',B.all_model_fluxivs[0].keys())
             B.all_model_fluxivs[i][name] = ivs
             for iparam,derivs in enumerate(allderivs):
                 chisq = 0

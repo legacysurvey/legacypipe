@@ -95,7 +95,7 @@ class SimpleGalaxy(ExpGalaxy):
 class BrickDuck(object):
     pass
 
-#KJB
+#PTF special handling
 def zeropoint_for_ptf(hdr):
     magzp= hdr['IMAGEZPT'] + 2.5 * np.log10(hdr['EXPTIME'])
     if isinstance(magzp,str):
@@ -1113,16 +1113,17 @@ Using the current directory as DECALS_DIR, but this is likely to fail.
                 ('zpt > 0.25 mag of nominal (for DECam)',
                  ((ccds.camera == 'decam') * (ccds.zpt > (z0 + 0.25)))),
                  ]:
-                #KJB, don't flag PTF data
+                #PTF special handling, apply criteria to NON ptf images
                 crit= np.logical_and(crit, ccds.camera != 'ptf   ')
                 good[crit] = False
                 n = sum(good)
                 print('Flagged', n0-n, 'more non-photometric using criterion:', name)
                 n0 = n
-        if len(ccds.camera == 'ptf') > 0:
-            print('UNFLAGGIN ptf ccds!')
-            good[ccds.camera == 'ptf']= 1
-        print('after would have UNFLAGged ptf ccds!')
+        #print N remain for each camera
+        tallies='%d CCDs remain' % len(good) 
+        for cam_str in ['decam','mosaic','bok','ptf   ']: 
+            tallies+= ', %d are %s' %  (ccds.camera[ccds.camera == cam_str].shape[0], cam_str)
+        print(tallies) 
         return np.flatnonzero(good)
 
     def apply_blacklist(self, ccds):
@@ -1184,7 +1185,6 @@ Using the current directory as DECALS_DIR, but this is likely to fail.
         '''
         Returns the photometric zeropoint for the given CCD table row object *im*.
         '''
-        #KJB
         if im.camera == 'decam' or im.camera == 'mosaic':
             zp = self.get_zeropoint_row_for(im)
             # No updated zeropoint -- use header MAGZERO from primary HDU.
@@ -1196,6 +1196,7 @@ Using the current directory as DECALS_DIR, but this is likely to fail.
                 return magzero
             magzp = zp.ccdzpt
             magzp += 2.5 * np.log10(zp.exptime)
+        #PTF special handling
         elif im.camera == 'ptf':
             hdr= im.read_image_primary_header() #calls fitsio.read_header(self.imgfn)
             magzp= zeropoint_for_ptf(hdr)
