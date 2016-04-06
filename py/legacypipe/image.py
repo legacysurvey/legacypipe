@@ -167,6 +167,7 @@ class LegacySurveyImage(object):
         y1 = y0 + imh
         if slc is None and radecpoly is not None:
             imgpoly = [(1,1),(1,imh),(imw,imh),(imw,1)]
+            print('###### self.camera=%s' % self.camera)
             ok,tx,ty = wcs.radec2pixelxy(radecpoly[:-1,0], radecpoly[:-1,1])
             tpoly = zip(tx,ty)
             clip = clip_polygon(imgpoly, tpoly)
