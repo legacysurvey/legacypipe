@@ -8,13 +8,6 @@ def bash(cmd):
         print 'command failed: %s' % cmd
         sys.exit() 
 
-
-def_fn='BB_template.sh'
-fn='submit.sh'
-if os.path.exists(fn): bash('rm %s' % fn)
-bash('cp %s %s' % (def_fn,fn))
-fin=open(fn,'a')
-
 def ap(cmd):
     fin.write('%s\n' % cmd)
 
@@ -31,6 +24,22 @@ scr_mosaic='/global/cscratch1/sd/kaylanb/desi/images/brick_3523p002/mosaicz_Test
 scr_ptf='/global/cscratch1/sd/kaylanb/desi/images/brick_3523p002/ptf'
 scr_tractor='/global/cscratch1/sd/kaylanb/desi/imaging/3523p002_mosaicTest_decamOverlap/ptf_gr_mosaic_z/%s' % out
 
+#open file for writing
+fn='submitBB_nptf%d_ncores%d.sh' % (args.nptf,args.cores)
+if os.path.exists(fn): bash('rm %s' % fn)
+fin=open(fn,'w')
+
+ap('#!/bin/bash -l\n')
+ap('#SBATCH -p regular') 
+ap('#SBATCH -N 1')  
+ap('#SBATCH -t 01:00:00')
+name='nptf%d_ncores%d.o%%j' % (args.nptf,args.cores)
+ap('#SBATCH -J %s' % name)      
+ap('#SBATCH -o %s' % name)
+ap('#SBATCH --mail-user=kburleigh@lbl.gov')
+ap('#SBATCH --mail-type=END,FAIL')
+ap('#DW jobdw capacity=50GB access_mode=striped type=scratch\n')
+
 ap('#get images')
 ap('#DW stage_in source=%s destination=$DW_JOB_STRIPED/mosaic type=directory' % (scr_mosaic))
 ap('#DW stage_in source=%s destination=$DW_JOB_STRIPED/ptf type=directory' % (scr_ptf))
@@ -44,14 +53,15 @@ ap('cd images')
 ap('ln -s $DW_JOB_STRIPED/mosaic mosaic')
 ap('ln -s $DW_JOB_STRIPED/ptf ptf')
 ap('#get tractor codebase')
-ap('#DW stage_in source=scr_legacypipe destination=$DW_JOB_STRIPED/legacypipe type=directory')
+ap('#DW stage_in source=%s destination=$DW_JOB_STRIPED/legacypipe type=directory' % scr_legacypipe)
 ap('#RUN')
 ap('cd $SLURM_SUBMIT_DIR')
 ap('#set up file transfer from output on bb to scratch')
-ap('#DW stage_out source=$DW_JOB_STRIPED/tractor destination=%s/%s type=directory' % (scr_tractor,out))
+ap('#DW stage_out source=$DW_JOB_STRIPED/tractor destination=%s type=directory' % scr_tractor)
+ap('export OMP_NUM_THREADS=%d' % (args.cores))
+ap('echo cores=%d, PTF images=%d' % (args.cores,args.nptf))
 ap('echo START TIME:')
 ap('date')
-ap('export OMP_NUM_THREADS=%d' % (args.cores))
 ap('srun -n 1 -c %d python legacypipe/runbrick.py --brick 3523p002 --no-wise --force-all --no-sdss --width 800 --height 800 --decals-dir $DW_JOB_STRIPED/decals-dir --outdir $DW_JOB_STRIPED/tractor --pixpsf --splinesky --threads %d' % (args.cores,args.cores))
 ap('echo END TIME:')
 ap('date')
