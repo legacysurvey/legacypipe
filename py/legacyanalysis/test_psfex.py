@@ -8,19 +8,19 @@ from tractor import *
 from tractor.psfex import *
 from legacypipe.common import *
 
-def test_psfex(expnum, ccdname, decals_out_dir):
-    decals_out = Decals(decals_out_dir)
-    ccds = decals_out.find_ccds(expnum=expnum,ccdname=ccdname)
+def test_psfex(expnum, ccdname, survey_out_dir):
+    survey_out = LegacySurveyData(survey_out_dir)
+    ccds = survey_out.find_ccds(expnum=expnum,ccdname=ccdname)
     print('Found CCDs:', len(ccds))
     ok = (len(ccds) > 0)
     if ok:
         ccd = ccds[0]
-        im = decals_out.get_image_object(ccd)
+        im = survey_out.get_image_object(ccd)
         psfexfn = im.psffn
         if not os.path.exists(psfexfn):
             ok = False
     if not ok:
-        render_fake_image(expnum, ccdname, decals_out_dir)
+        render_fake_image(expnum, ccdname, survey_out_dir)
         im.run_calibs()
 
     # check it out...
@@ -41,7 +41,7 @@ def test_psfex(expnum, ccdname, decals_out_dir):
     yy = yy[:-1] + (yy[1]-yy[0])/2.
     xx = xx[:-1] + (xx[1]-xx[0])/2.
 
-    decals = decals_out
+    survey = survey_out
 
     tim = im.get_tractor_image(pixPsf = True)
 
@@ -105,12 +105,12 @@ def test_psfex(expnum, ccdname, decals_out_dir):
         plt.savefig('psf-term-%i.png' % i)
 
 
-def render_fake_image(expnum, ccdname, decals_out_dir):
-    decals = Decals()
-    ccds = decals.find_ccds(expnum=expnum,ccdname=ccdname)
+def render_fake_image(expnum, ccdname, survey_out_dir):
+    survey = LegacySurveyData()
+    ccds = survey.find_ccds(expnum=expnum,ccdname=ccdname)
     ccd = ccds[0]
     band = ccd.filter
-    im = decals.get_image_object(ccd)
+    im = survey.get_image_object(ccd)
     print('Read', im)
 
     tim = im.get_tractor_image(gaussPsf=True, nanomaggies=False, subsky=False)
@@ -160,7 +160,7 @@ def render_fake_image(expnum, ccdname, decals_out_dir):
     modimg += noise
 
     #
-    imagedir = os.path.join(decals_out_dir, 'images', 'decam')
+    imagedir = os.path.join(survey_out_dir, 'images', 'decam')
     trymakedirs(imagedir)
     imagefn = os.path.join(imagedir, os.path.basename(ccd.image_filename.strip())).replace(
         '.fits.fz', '.fits')
@@ -197,18 +197,18 @@ def render_fake_image(expnum, ccdname, decals_out_dir):
 
     ccds.image_filename = np.array(['decam/' + os.path.basename(imagefn)])
     ccds.image_hdu[0] = 1
-    ccdfn = os.path.join(decals_out_dir, 'decals-ccds.fits')
+    ccdfn = os.path.join(survey_out_dir, 'survey-ccds.fits')
     ccds.writeto(ccdfn)
     print('Wrote', ccdfn)
 
-    cal = os.path.join(decals_out_dir, 'calib')
+    cal = os.path.join(survey_out_dir, 'calib')
     trymakedirs(cal)
 
-    for path in ['decals-bricks.fits', 'calib/se-config']:
-        pathnm = os.path.join(decals_out_dir, path)
+    for path in ['survey-bricks.fits', 'calib/se-config']:
+        pathnm = os.path.join(survey_out_dir, path)
         if os.path.exists(pathnm):
             continue
-        cmd = 'ln -s %s/%s %s' % (decals.get_decals_dir(), path, pathnm)
+        cmd = 'ln -s %s/%s %s' % (survey.get_survey_dir(), path, pathnm)
         print(cmd)
         os.system(cmd)
 
@@ -223,7 +223,7 @@ def main():
                         help='exposure number')
     parser.add_argument('-c', '--ccdname', type=str, default='S31', metavar='', 
                         help='CCD name')
-    parser.add_argument('-o', '--out', type=str, default='decals-test', metavar='', 
+    parser.add_argument('-o', '--out', type=str, default='test', metavar='', 
                         help='Output directory name (DECALS_DIR)')
     args = parser.parse_args()
 

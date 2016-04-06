@@ -51,11 +51,11 @@ from tractor.basics import GaussianMixtureEllipsePSF, RaDecPos
 
 from legacypipe.runbrick import run_brick
 from legacypipe.decam import DecamImage
-from legacypipe.common import Decals, wcs_for_brick, ccds_touching_wcs
+from legacypipe.common import LegacySurveyData, wcs_for_brick, ccds_touching_wcs
 
-class SimDecals(Decals):
-    def __init__(self, decals_dir=None, metacat=None, simcat=None):
-        super(SimDecals, self).__init__(decals_dir=decals_dir)
+class SimDecals(LegacySurveyData):
+    def __init__(self, survey_dir=None, metacat=None, simcat=None):
+        super(SimDecals, self).__init__(survey_dir=survey_dir)
         self.metacat = metacat
         self.simcat = simcat
 
@@ -63,8 +63,8 @@ class SimDecals(Decals):
         return SimImage(self, t)
 
 class SimImage(DecamImage):
-    def __init__(self, decals, t):
-        super(SimImage, self).__init__(decals, t)
+    def __init__(self, survey, t):
+        super(SimImage, self).__init__(survey, t)
         self.t = t
 
     def get_tractor_image(self, **kwargs):
@@ -74,7 +74,7 @@ class SimImage(DecamImage):
             return tim
 
         # Initialize the object stamp class
-        objtype = self.decals.metacat['objtype']
+        objtype = self.survey.metacat['objtype']
         objstamp = BuildStamp(tim,gain=self.t.arawgain)
 
         # Grab the data and inverse variance images [nanomaggies!]
@@ -83,7 +83,7 @@ class SimImage(DecamImage):
         #sys.exit(1)
 
         # Loop on each object.
-        for ii, obj in enumerate(self.decals.simcat):
+        for ii, obj in enumerate(self.survey.simcat):
             #print(obj)
             if objtype=='STAR':
                 stamp = objstamp.star(obj)
@@ -372,8 +372,8 @@ def main():
     log.info('Number of chunks = {}'.format(nchunk))
 
     # Optionally zoom into a portion of the brick
-    decals = Decals()
-    brickinfo = decals.get_brick_by_name(brickname)
+    survey = LegacySurveyData()
+    brickinfo = survey.get_brick_by_name(brickname)
     brickwcs = wcs_for_brick(brickinfo)
     W, H, pixscale = brickwcs.get_width(), brickwcs.get_height(), brickwcs.pixel_scale()
     print(W, H, pixscale)
@@ -449,8 +449,8 @@ def main():
 #       # Use Tractor to just process the blobs containing the simulated sources. 
         simdecals = SimDecals(metacat=metacat,simcat=simcat)
         blobxy = zip(simcat['x'],simcat['y'])
-        run_brick(brickname, decals=simdecals, outdir=os.path.join(decals_sim_dir,brickname), 
-                  threads=args.threads, zoom=args.zoom, wise=False, sdssInit=False,
+        run_brick(brickname, survey=simdecals, outdir=os.path.join(decals_sim_dir,brickname), 
+                  threads=args.threads, zoom=args.zoom, wise=False,
                   forceAll=True, writePickles=False, do_calibs=True,
                   write_metrics=False, pixPsf=True, blobxy=blobxy, 
                   early_coadds=False, stages=['writecat'], splinesky=True)

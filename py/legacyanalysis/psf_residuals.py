@@ -64,7 +64,7 @@ from tractor.basics import (NanoMaggies, PointSource, GaussianMixtureEllipsePSF,
 from legacyanalysis.ps1cat import ps1cat
 
 from astrometry.util.fits import fits_table
-from legacypipe.common import Decals
+from legacypipe.common import LegacySurveyData
 
 def psf_residuals(expnum,ccdname,stampsize=35,nstar=30,
                   magrange=(13,17),verbose=0, splinesky=False):
@@ -79,8 +79,8 @@ def psf_residuals(expnum,ccdname,stampsize=35,nstar=30,
     pngprefix = 'qapsf-{}-{}'.format(expnum,ccdname)
 
     # Gather all the info we need about this CCD.
-    decals = Decals()
-    ccd = decals.find_ccds(expnum=expnum,ccdname=ccdname)[0]
+    survey = LegacySurveyData()
+    ccd = survey.find_ccds(expnum=expnum,ccdname=ccdname)[0]
     band = ccd.filter
     ps1band = dict(g=0,r=1,i=2,z=3,Y=4)
     print('Band {}'.format(band))
@@ -89,7 +89,7 @@ def psf_residuals(expnum,ccdname,stampsize=35,nstar=30,
     #vmin, vmax = np.arcsinh(-1), np.arcsinh(100)
     #print(scales[band])
 
-    im = decals.get_image_object(ccd)
+    im = survey.get_image_object(ccd)
     iminfo = im.get_image_info()
     H,W = iminfo['dims']
 
@@ -106,7 +106,7 @@ def psf_residuals(expnum,ccdname,stampsize=35,nstar=30,
     cat = cat[np.argsort(cat.median[:,ps1band[band]])] # sort by magnitude
     #print(cat.nmag_ok)
 
-    get_tim_kwargs = dict(const2psf=True, splinesky=splinesky)
+    get_tim_kwargs = dict(pixPsf=True, splinesky=splinesky)
 
     # Make a QAplot of the positions of all the stars.
     tim = im.get_tractor_image(**get_tim_kwargs)

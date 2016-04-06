@@ -4,6 +4,37 @@ purposes (building qdo queue, eg).
 
 python legacypipe/queue-calibs.py  | qdo load cal -
 
+
+eg, DR3:
+
+* Staging to $SCRATCH to images required to run the EDR region:
+
+module switch legacysurvey/dr3
+python legacypipe/queue-calibs.py --region edr --write-ccds edr-ccds.fits --calibs --touching --nper 100
+for x in $(tablist edr-ccds.fits"[col image_filename]" | awk '{print $2}' | sort | uniq); do
+  rsync -LRarv $LEGACY_SURVEY_DIR/images/./$(echo $x | sed s/o.i/o??/g) /global/cscratch1/sd/desiproc/legacypipe-dir/images/;
+done
+
+* Running calibration preprocessing for EDR:
+
+module switch legacysurvey/dr3-cori-scratch
+python legacypipe/queue-calibs.py --region edr --calibs --touching --nper 100
+qdo load cal jobs
+
+# qdo launch cal 1 --cores_per_worker 1 --batchqueue shared --script "python legacypipe/run-calib.py --splinesky" --walltime 4:00:00 --keep_env --batchopts "-a 0-15"
+
+qdo launch cal 1 --cores_per_worker 1 --batchqueue shared --script $(pwd)/cal.sh --walltime 4:00:00 --keep_env --batchopts "-a 0-15"
+cal.sh:
+  cd /global/cscratch1/sd/desiproc/code/legacypipe/py
+  python legacypipe/run-calib.py --splinesky $*
+
+* Running bricks for EDR:
+
+python legacypipe/queue-calibs.py --region edr --brickq 0 > bricks
+grep '^....[pm]...$' bricks | qdo load edr0 -
+
+
+
 dr1(d):
 qdo launch bricks 16 --mpack 6 --batchopts "-A desi" --walltime=24:00:00 --script projects/desi/pipebrick.sh --batchqueue regular --verbose
 
@@ -28,7 +59,7 @@ from collections import OrderedDict
 from astrometry.util.fits import fits_table
 from astrometry.util.file import trymakedirs
 
-from legacypipe.common import Decals
+from legacypipe.common import LegacySurveyData, wcs_for_brick, ccds_touching_wcs
 
 
 from astrometry.libkd.spherematch import match_radec
@@ -87,20 +118,23 @@ def main():
 
     parser.add_argument('--write-ccds', help='Write CCDs list as FITS table?')
 
+    parser.add_argument('--brickq', type=int, default=None,
+                        help='Queue only bricks with the given "brickq" value [0 to 3]')
+    
     opt = parser.parse_args()
 
-    decals = Decals()
+    survey = LegacySurveyData()
     if opt.bricks is not None:
         B = fits_table(opt.bricks)
         log('Read', len(B), 'from', opt.bricks)
     else:
-        B = decals.get_bricks()
+        B = survey.get_bricks()
 
     if opt.ccds is not None:
         T = fits_table(opt.ccds)
         log('Read', len(T), 'from', opt.ccds)
     else:
-        T = decals.get_ccds()
+        T = survey.get_ccds()
         log(len(T), 'CCDs')
     T.index = np.arange(len(T))
 
@@ -193,7 +227,7 @@ def main():
         # CCD radius
         radius = np.hypot(2048, 4096) / 2. * 0.262 / 3600.
         # Brick radius
-        radius += np.hypot(0.25, 0.25)/2.
+        radius += np.hypot(survey.bricksize, survey.bricksize)/2.
         I,J,d = match_radec(B.ra, B.dec, T.ra, T.dec, radius * 1.05)
         keep = np.zeros(len(B), bool)
         keep[I] = True
@@ -207,7 +241,7 @@ def main():
         # CCD radius
         radius = np.hypot(2048, 4096) / 2. * 0.262 / 3600.
         # Brick radius
-        radius += np.hypot(0.25, 0.25)/2.
+        radius += np.hypot(survey.bricksize, survey.bricksize)/2.
         I,J,d = match_radec(B.ra, B.dec, T.ra, T.dec, radius * 1.05)
         keep = np.zeros(len(B), bool)
         keep[I] = True
@@ -275,14 +309,14 @@ def main():
 
     elif opt.region == 'grz':
         # Bricks with grz coverage.
-        # Be sure to use  --bricks decals-bricks-in-dr1.fits
+        # Be sure to use  --bricks survey-bricks-in-dr1.fits
         # which has_[grz] columns.
         B.cut((B.has_g == 1) * (B.has_r == 1) * (B.has_z == 1))
         log('Cut to', len(B), 'bricks with grz coverage')
 
     elif opt.region == 'nogrz':
         # Bricks without grz coverage.
-        # Be sure to use  --bricks decals-bricks-in-dr1.fits
+        # Be sure to use  --bricks survey-bricks-in-dr1.fits
         # which has_[grz] columns.
         B.cut(np.logical_not((B.has_g == 1) * (B.has_r == 1) * (B.has_z == 1)))
         log('Cut to', len(B), 'bricks withOUT grz coverage')
@@ -315,13 +349,17 @@ def main():
               (B.dec >= dlo) * (B.dec <= dhi))
     log(len(B), 'bricks in range')
 
-    I,J,d = match_radec(B.ra, B.dec, T.ra, T.dec, 0.25)
+    I,J,d = match_radec(B.ra, B.dec, T.ra, T.dec, survey.bricksize)
     keep = np.zeros(len(B), bool)
     for i in I:
         keep[i] = True
     B.cut(keep)
     log('Cut to', len(B), 'bricks near CCDs')
 
+    if opt.brickq is not None:
+        B.cut(B.brickq == opt.brickq)
+        log('Cut to', len(B), 'with brickq =', opt.brickq)
+    
     if opt.touching:
         keep = np.zeros(len(T), bool)
         for j in J:
@@ -336,7 +374,7 @@ def main():
         T2.cut(T2.dr1 == 1)
         log(len(T2), 'CCDs marked DR1=1')
         log(len(B), 'bricks in range')
-        I,J,d = match_radec(B.ra, B.dec, T2.ra, T2.dec, 0.25)
+        I,J,d = match_radec(B.ra, B.dec, T2.ra, T2.dec, survey.bricksize)
         keep = np.zeros(len(B), bool)
         for i in I:
             keep[i] = True
@@ -345,13 +383,13 @@ def main():
         for band in 'grz':
             Tb = T2[T2.filter == band]
             log(len(Tb), 'in filter', band)
-            I,J,d = match_radec(B2.ra, B2.dec, Tb.ra, Tb.dec, 0.25)
+            I,J,d = match_radec(B2.ra, B2.dec, Tb.ra, Tb.dec, survey.bricksize)
             good = np.zeros(len(B2), np.uint8)
             for i in I:
                 good[i] = 1
             B2.set('has_' + band, good)
 
-        B2.writeto('decals-bricks-in-dr1.fits')
+        B2.writeto('survey-bricks-in-dr1.fits')
         sys.exit(0)
 
     # sort by dec decreasing
@@ -411,7 +449,7 @@ def main():
             outfn = os.path.join('forced', expstr[:5], expstr,
                                  'decam-%s-%s-forced.fits' %
                                  (expstr, T.ccdname[i]))
-            imgfn = os.path.join(decals.decals_dir, 'images',
+            imgfn = os.path.join(survey.survey_dir, 'images',
                                  T.image_filename[i].strip())
             if (not os.path.exists(imgfn) and
                 imgfn.endswith('.fz') and
@@ -457,7 +495,7 @@ def main():
 
         if opt.delete_sky or opt.delete_pvastrom:
             log(j+1, 'of', len(allI))
-            im = decals.get_image_object(T[i])
+            im = survey.get_image_object(T[i])
             if opt.delete_sky and os.path.exists(im.skyfn):
                 log('  deleting:', im.skyfn)
                 os.unlink(im.skyfn)
@@ -467,7 +505,7 @@ def main():
 
         if opt.check:
             log(j+1, 'of', len(allI))
-            im = decals.get_image_object(T[i])
+            im = survey.get_image_object(T[i])
             if not im.run_calibs(im, just_check=True):
                 log('Calibs for', im.expnum, im.ccdname, im.calname, 'already done')
                 continue
@@ -478,6 +516,10 @@ def main():
         else:
             s = '%i' % T.index[i]
 
+        if j < 10:
+            print('Index', T.index[i], 'expnum', T.expnum[i], 'ccdname', T.ccdname[i],
+                  'filename', T.image_filename[i])
+            
         if not opt.nper:
             f.write(s + '\n')
         else:

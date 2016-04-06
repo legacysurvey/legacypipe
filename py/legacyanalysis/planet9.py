@@ -197,11 +197,11 @@ if __name__ == '__main__':
         ps.savefig()
 
         K = np.flatnonzero((MI.dtime > 0.5) * (MI.dtime < 1.5))
-        MI.cut(K)
-        print(len(MI), 'in', band, 'band with delta-time 0.5 - 1.5 days')
+        MK = MI[K]
+        print(len(MK), 'in', band, 'band with delta-time 0.5 - 1.5 days')
 
         plt.clf()
-        plt.plot(A.ra_center[MI.I], A.dec_center[MI.I], 'k.', alpha=0.1)
+        plt.plot(A.ra_center[MK.I], A.dec_center[MK.I], 'k.', alpha=0.1)
 
         for rlo,rhi in [(240, 300), (0, 150), (45, 105)]:
             ilo = np.flatnonzero(ra == rlo)[0]
@@ -220,4 +220,126 @@ if __name__ == '__main__':
         plt.ylabel('Dec (deg)')
 
         ps.savefig()
+
         
+        K = np.flatnonzero((MI.dtime > 0.5) * (MI.dtime < 10))
+        MK = MI[K]
+        print(len(MK), 'in', band, 'band with delta-time 0.5 - 10 days')
+
+        plt.clf()
+        plt.plot(A.ra_center[MK.I], A.dec_center[MK.I], 'k.', alpha=0.1)
+
+        for rlo,rhi in [(240, 300), (0, 150), (45, 105)]:
+            ilo = np.flatnonzero(ra == rlo)[0]
+            ihi = np.flatnonzero(ra == rhi)[0]
+            sty = dict(lw=3, alpha=0.25)
+            plt.plot([rlo,rlo], [declo[ilo],dechi[ilo]], 'k-', **sty)
+            plt.plot([rhi,rhi], [declo[ihi],dechi[ihi]], 'k-', **sty)
+            plt.plot(ra[ilo:ihi+1], declo[ilo:ihi+1],    'k-', **sty)
+            plt.plot(ra[ilo:ihi+1], dechi[ilo:ihi+1],    'k-', **sty)
+        plt.plot(ra, declo, 'k--')
+        plt.plot(ra, dechi, 'k--')
+
+        plt.axis(ax)
+        plt.title('~ 1-10 day repeats, %s band' % band)
+        plt.xlabel('RA (deg)')
+        plt.ylabel('Dec (deg)')
+
+        ps.savefig()
+
+
+    A.gr = np.array([f in 'gr' for f in A.filter])
+    K = np.flatnonzero(A.gr[M.I] * A.gr[M.J])
+    MI = M[K]
+    print(len(MI), 'gr matches')
+
+    K = np.flatnonzero((MI.dtime > 0.5) * (MI.dtime < 10))
+    MK = MI[K]
+    print(len(MK), 'in [gr] band with delta-time 0.5 - 10 days')
+
+    plt.clf()
+    plt.plot(A.ra_center[MK.I], A.dec_center[MK.I], 'k.', alpha=0.1)
+    for rlo,rhi in [(240, 300), (0, 150), (45, 105)]:
+        ilo = np.flatnonzero(ra == rlo)[0]
+        ihi = np.flatnonzero(ra == rhi)[0]
+        sty = dict(lw=3, alpha=0.25)
+        plt.plot([rlo,rlo], [declo[ilo],dechi[ilo]], 'k-', **sty)
+        plt.plot([rhi,rhi], [declo[ihi],dechi[ihi]], 'k-', **sty)
+        plt.plot(ra[ilo:ihi+1], declo[ilo:ihi+1],    'k-', **sty)
+        plt.plot(ra[ilo:ihi+1], dechi[ilo:ihi+1],    'k-', **sty)
+    plt.plot(ra, declo, 'k--')
+    plt.plot(ra, dechi, 'k--')
+    plt.axis(ax)
+    plt.title('~ 1-10 day repeats, g,r bands')
+    plt.xlabel('RA (deg)')
+    plt.ylabel('Dec (deg)')
+    ps.savefig()
+
+
+    K = np.flatnonzero((M.dtime > 0.5) * (M.dtime < 10))
+    MK = M[K]
+    print(len(MK), 'in any band with delta-time 0.5 - 10 days')
+    plt.clf()
+    plt.plot(A.ra_center[MK.I], A.dec_center[MK.I], 'k.', alpha=0.1)
+    for rlo,rhi in [(240, 300), (0, 150), (45, 105)]:
+        ilo = np.flatnonzero(ra == rlo)[0]
+        ihi = np.flatnonzero(ra == rhi)[0]
+        sty = dict(lw=3, alpha=0.5, color='0.5')
+        plt.plot([rlo,rlo], [declo[ilo],dechi[ilo]], '-', **sty)
+        plt.plot([rhi,rhi], [declo[ihi],dechi[ihi]], '-', **sty)
+        plt.plot(ra[ilo:ihi+1], declo[ilo:ihi+1],    '-', **sty)
+        plt.plot(ra[ilo:ihi+1], dechi[ilo:ihi+1],    '-', **sty)
+    plt.plot(ra, declo, 'k--')
+    plt.plot(ra, dechi, 'k--')
+    plt.axis(ax)
+    plt.title('~ 1-10 day repeats, any bands')
+    plt.xlabel('RA (deg)')
+    plt.ylabel('Dec (deg)')
+    ps.savefig()
+
+
+
+    K = np.flatnonzero((M.dtime > 1./24) * (M.dtime < 10))
+    MK = M[K]
+    print(len(MK), 'in any band with delta-time 1 hour to - 10 days')
+    plt.clf()
+    plt.plot(A.ra_center[MK.I], A.dec_center[MK.I], 'k.', alpha=0.1)
+    for rlo,rhi in [(240, 300), (0, 150), (45, 105)]:
+        ilo = np.flatnonzero(ra == rlo)[0]
+        ihi = np.flatnonzero(ra == rhi)[0]
+        sty = dict(lw=3, alpha=0.5, color='0.5')
+        plt.plot([rlo,rlo], [declo[ilo],dechi[ilo]], '-', **sty)
+        plt.plot([rhi,rhi], [declo[ihi],dechi[ihi]], '-', **sty)
+        plt.plot(ra[ilo:ihi+1], declo[ilo:ihi+1],    '-', **sty)
+        plt.plot(ra[ilo:ihi+1], dechi[ilo:ihi+1],    '-', **sty)
+    plt.plot(ra, declo, 'k--')
+    plt.plot(ra, dechi, 'k--')
+    plt.axis(ax)
+    plt.title('1 hr to 10 day repeats, any bands')
+    plt.xlabel('RA (deg)')
+    plt.ylabel('Dec (deg)')
+    ps.savefig()
+
+    K = np.flatnonzero(M.dtime > 1./24)
+    MK = M[K]
+    print(len(MK), 'in any band with delta-time > 1 hour')
+    plt.clf()
+    plt.plot(A.ra_center[MK.I], A.dec_center[MK.I], 'k.', alpha=0.1)
+    for rlo,rhi in [(240, 300), (0, 150), (45, 105)]:
+        ilo = np.flatnonzero(ra == rlo)[0]
+        ihi = np.flatnonzero(ra == rhi)[0]
+        sty = dict(lw=3, alpha=0.5, color='0.5')
+        plt.plot([rlo,rlo], [declo[ilo],dechi[ilo]], '-', **sty)
+        plt.plot([rhi,rhi], [declo[ihi],dechi[ihi]], '-', **sty)
+        plt.plot(ra[ilo:ihi+1], declo[ilo:ihi+1],    '-', **sty)
+        plt.plot(ra[ilo:ihi+1], dechi[ilo:ihi+1],    '-', **sty)
+    plt.plot(ra, declo, 'k--')
+    plt.plot(ra, dechi, 'k--')
+    plt.axis(ax)
+    plt.title('> 1 hr repeats, any bands')
+    plt.xlabel('RA (deg)')
+    plt.ylabel('Dec (deg)')
+    ps.savefig()
+
+    
+    

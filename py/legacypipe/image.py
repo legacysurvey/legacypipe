@@ -22,41 +22,43 @@ class LegacySurveyImage(object):
      * BokImage
     '''
 
-    def __init__(self, decals, ccd):
+    def __init__(self, survey, ccd):
         '''
 
-        Create a new LegacySurveyImage object, from a Decals object,
+        Create a new LegacySurveyImage object, from a LegacySurveyData object,
         and one row of a CCDs fits_table object.
 
         You may not need to instantiate this class directly, instead using
-        Decals.get_image_object():
+        survey.get_image_object():
 
-            decals = Decals()
+            survey = LegacySurveyData()
             # targetwcs = ....
-            # ccds = decals.ccds_touching_wcs(targetwcs, ccdrad=None)
-            ccds = decals.get_ccds()
-            im = decals.get_image_object(ccds[0])
+            # ccds = survey.ccds_touching_wcs(targetwcs, ccdrad=None)
+            ccds = survey.get_ccds()
+            im = survey.get_image_object(ccds[0])
             # which does the same thing as:
-            im = DecamImage(decals, ccds[0])
+            im = DecamImage(survey, ccds[0])
 
         Or, if you have a Community Pipeline-processed input file and
         FITS HDU extension number:
 
-            decals = Decals()
+            survey = LegacySurveyData()
             ccds = exposure_metadata([filename], hdus=[hdu])
-            im = DecamImage(decals, ccds[0])
+            im = DecamImage(survey, ccds[0])
 
         Perhaps the most important method in this class is
         *get_tractor_image*.
 
         '''
-        self.decals = decals
+        #print('LegacySurveyImage __init__')
+        
+        self.survey = survey
 
         imgfn = ccd.image_filename.strip()
         if os.path.exists(imgfn):
             self.imgfn = imgfn
         else:
-            self.imgfn = os.path.join(self.decals.get_image_dir(), imgfn)
+            self.imgfn = os.path.join(self.survey.get_image_dir(), imgfn)
 
         self.hdu     = ccd.image_hdu
         self.expnum  = ccd.expnum
@@ -73,6 +75,8 @@ class LegacySurveyImage(object):
         self.width  = ccd.width
         self.height = ccd.height
 
+        super(LegacySurveyImage, self).__init__()
+        
     def __str__(self):
         return self.name
 
@@ -118,7 +122,7 @@ class LegacySurveyImage(object):
         return None,None,None,None
 
     def get_tractor_image(self, slc=None, radecpoly=None,
-                          gaussPsf=False, const2psf=False, pixPsf=False,
+                          gaussPsf=False, pixPsf=False,
                           splinesky=False,
                           nanomaggies=True, subsky=True, tiny=5,
                           dq=True, invvar=True, pixels=True):
@@ -224,7 +228,8 @@ class LegacySurveyImage(object):
         psf_sigma = psf_fwhm / 2.35
         primhdr = self.read_image_primary_header()
 
-        sky = self.read_sky_model(splinesky=splinesky, slc=slc)
+        sky = self.read_sky_model(splinesky=splinesky, slc=slc,
+                                  primhdr=primhdr, imghdr=imghdr)
         midsky = 0.
         if subsky:
             print('Instantiating and subtracting sky model...')
@@ -241,7 +246,7 @@ class LegacySurveyImage(object):
             sky = zsky
             del zsky
 
-        magzp = self.decals.get_zeropoint_for(self)
+        magzp = self.survey.get_zeropoint_for(self)
         orig_zpscale = zpscale = NanoMaggies.zeropointToScale(magzp)
         if nanomaggies:
             # Scale images to Nanomaggies
@@ -282,7 +287,7 @@ class LegacySurveyImage(object):
             twcs.setX0Y0(x0,y0)
 
         psf = self.read_psf_model(x0, y0, gaussPsf=gaussPsf, pixPsf=pixPsf,
-                                  const2psf=const2psf, psf_sigma=psf_sigma,
+                                  psf_sigma=psf_sigma,
                                   cx=(x0+x1)/2., cy=(y0+y1)/2.)
 
         tim = Image(img, invvar=invvar, wcs=twcs, psf=psf,
@@ -467,30 +472,9 @@ class LegacySurveyImage(object):
         return None
 
     def get_wcs(self):
-        return self.read_pv_wcs()
-
-    def read_pv_wcs(self):
-        '''
-        Reads the WCS header, returning an `astrometry.util.util.Sip` object.
-        '''
-        from astrometry.util.util import Sip
-
-        print('Reading WCS from', self.pvwcsfn)
-        wcs = Sip(self.pvwcsfn)
-        dra,ddec = self.decals.get_astrometric_zeropoint_for(self)
-        r,d = wcs.get_crval()
-        print('Applying astrometric zeropoint:', (dra,ddec))
-        wcs.set_crval((r + dra, d + ddec))
-        hdr = fitsio.read_header(self.pvwcsfn)
-        wcs.version = hdr.get('LEGPIPEV', '')
-        if len(wcs.version) == 0:
-            wcs.version = hdr.get('TRACTORV', '').strip()
-            if len(wcs.version) == 0:
-                wcs.version = str(os.stat(self.pvwcsfn).st_mtime)
-        wcs.plver = hdr.get('PLVER', '').strip()
-        return wcs
+        return None
     
-    def read_sky_model(self, splinesky=False, slc=None):
+    def read_sky_model(self, splinesky=False, slc=None, **kwargs):
         '''
         Reads the sky model, returning a Tractor Sky object.
         '''
@@ -523,7 +507,7 @@ class LegacySurveyImage(object):
         return skyobj
 
     def read_psf_model(self, x0, y0, gaussPsf=False, pixPsf=False,
-                       const2psf=False, psf_sigma=1., cx=0, cy=0):
+                       psf_sigma=1., cx=0, cy=0):
         psffn = None
         if gaussPsf:
             from tractor.basics import GaussianMixturePSF
@@ -539,19 +523,6 @@ class LegacySurveyImage(object):
             psf = PixelizedPsfEx(self.psffn)
             psf.shift(x0, y0)
             psffn = self.psffn
-        elif const2psf:
-            from tractor.psfex import PsfExModel
-            from tractor.basics import GaussianMixtureEllipsePSF
-            # 2-component constant MoG.
-            print('Reading PsfEx model from', self.psffn)
-            psffn = self.psffn
-            psfex = PsfExModel(self.psffn)
-            psfim = psfex.at(cx, cy)
-            psfim = psfim[5:-5, 5:-5]
-            print('Fitting PsfEx model as 2-component Gaussian...')
-            psf = GaussianMixtureEllipsePSF.fromStamp(psfim, N=2)
-            del psfim
-            del psfex
         else:
             assert(False)
         print('Using PSF model', psf)
@@ -571,3 +542,142 @@ class LegacySurveyImage(object):
         print('run_calibs for', self)
         print('(not implemented)')
         pass
+
+
+
+
+
+class CalibMixin(object):
+    '''
+    A class to hold common calibration tasks between the different surveys / image
+    subclasses.
+    '''
+
+    def __init__(self):
+        #print('CalibMixin __init__')
+        super(CalibMixin, self).__init__()
+    
+    def check_psf(self, psffn):
+        '''
+        Returns True if the PsfEx file is ok.
+        '''
+        # Sometimes SourceExtractor gets interrupted or something and
+        # writes out 0 detections.  Then PsfEx fails but in a way that
+        # an output file is still written.  Try to detect & fix this
+        # case.
+        # Check the PsfEx output file for POLNAME1
+        hdr = fitsio.read_header(psffn, ext=1)
+        if hdr.get('POLNAME1', None) is None:
+            print('Did not find POLNAME1 in PsfEx header', psffn, '-- deleting')
+            os.unlink(psffn)
+            return False
+        return True
+
+    def check_se_cat(self, fn):
+        from astrometry.util.fits import fits_table
+        # Check SourceExtractor catalog for size = 0
+        T = fits_table(fn, hdu=2)
+        print('Read', len(T), 'sources from SE catalog', fn)
+        if T is None or len(T) == 0:
+            print('SourceExtractor catalog', fn, 'has no sources -- deleting')
+            try:
+                os.unlink(fn)
+            except:
+                pass
+        return os.path.exists(fn)
+
+    def funpack_files(self, imgfn, maskfn, hdu, todelete):
+        from legacypipe.common import create_temp
+
+        tmpimgfn = None
+        tmpmaskfn = None
+        # For FITS files that are not actually fpack'ed, funpack -E
+        # fails.  Check whether actually fpacked.
+        fcopy = False
+        hdr = fitsio.read_header(imgfn, ext=hdu)
+        if not ((hdr['XTENSION'] == 'BINTABLE') and hdr.get('ZIMAGE', False)):
+            print('Image %s, HDU %i is not fpacked; just imcopying.' % (imgfn,  hdu))
+            fcopy = True
+
+        tmpimgfn  = create_temp(suffix='.fits')
+        tmpmaskfn = create_temp(suffix='.fits')
+        todelete.append(tmpimgfn)
+        todelete.append(tmpmaskfn)
+        
+        if fcopy:
+            cmd = 'imcopy %s"+%i" %s' % (imgfn, hdu, tmpimgfn)
+        else:
+            cmd = 'funpack -E %i -O %s %s' % (hdu, tmpimgfn, imgfn)
+        #cmd = 'funpack -E %i -O %s %s' % (hdu, tmpimgfn, imgfn)
+        print(cmd)
+        if os.system(cmd):
+            raise RuntimeError('Command failed: ' + cmd)
+        
+        #cmd = 'funpack -E %i -O %s %s' % (hdu, tmpmaskfn, maskfn)
+        if fcopy:
+            cmd = 'imcopy %s"+%i" %s' % (maskfn, hdu, tmpmaskfn)
+        else:
+            cmd = 'funpack -E %i -O %s %s' % (hdu, tmpmaskfn, maskfn)
+        print(cmd)
+        if os.system(cmd):
+            print('Command failed: ' + cmd)
+            M,hdr = self._read_fits(maskfn, hdu, header=True)
+            print('Read', M.dtype, M.shape)
+            fitsio.write(tmpmaskfn, M, header=hdr, clobber=True)
+            print('Wrote', tmpmaskfn, 'with fitsio')
+
+        return tmpimgfn,tmpmaskfn
+
+    def run_se(self, surveyname, imgfn, maskfn):
+        from astrometry.util.file import trymakedirs
+        # grab header values...
+        primhdr = self.read_image_primary_header()
+        magzp  = primhdr['MAGZERO']
+        seeing = self.pixscale * self.fwhm
+        print('FWHM', self.fwhm, 'pix')
+        print('pixscale', self.pixscale, 'arcsec/pix')
+        print('Seeing', seeing, 'arcsec')
+
+        sedir = self.survey.get_se_dir()
+        trymakedirs(self.sefn, dir=True)
+
+        cmd = ' '.join([
+            'sex',
+            '-c', os.path.join(sedir, surveyname + '.se'),
+            '-FLAG_IMAGE ' + maskfn,
+            '-SEEING_FWHM %f' % seeing,
+            '-PARAMETERS_NAME', os.path.join(sedir, surveyname + '.param'),
+            '-FILTER_NAME', os.path.join(sedir, 'gauss_5.0_9x9.conv'),
+            '-STARNNW_NAME', os.path.join(sedir, 'default.nnw'),
+            '-PIXEL_SCALE 0',
+            # SE has a *bizarre* notion of "sigma"
+            '-DETECT_THRESH 1.0',
+            '-ANALYSIS_THRESH 1.0',
+            '-MAG_ZEROPOINT %f' % magzp,
+            '-CATALOG_NAME', self.sefn,
+            imgfn])
+        print(cmd)
+        if os.system(cmd):
+            raise RuntimeError('Command failed: ' + cmd)
+
+    def run_psfex(self, surveyname):
+        from astrometry.util.file import trymakedirs
+        from legacypipe.common import get_git_version
+        sedir = self.survey.get_se_dir()
+        trymakedirs(self.psffn, dir=True)
+        primhdr = self.read_image_primary_header()
+        plver = primhdr.get('PLVER', '')
+        verstr = get_git_version()
+        cmds = ['psfex -c %s -PSF_DIR %s %s' %
+                (os.path.join(sedir, surveyname + '.psfex'),
+                 os.path.dirname(self.psffn), self.sefn),
+                'modhead %s LEGPIPEV %s "legacypipe git version"' %
+                (self.psffn, verstr),
+                'modhead %s PLVER %s "CP ver of image file"' % (self.psffn, plver)]
+        for cmd in cmds:
+            print(cmd)
+            rtn = os.system(cmd)
+            if rtn:
+                raise RuntimeError('Command failed: %s: return value: %i' %
+                                   (cmd,rtn))
+

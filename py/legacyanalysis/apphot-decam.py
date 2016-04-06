@@ -25,10 +25,10 @@ import photutils
 
 def apphot_ps1stars(ccd, ps,
                     apertures,
-                    decals,
+                    survey,
                     sky_inner_r=40,
                     sky_outer_r=50):
-    im = decals.get_image_object(ccd)
+    im = survey.get_image_object(ccd)
 
     tim = im.get_tractor_image(gaussPsf=True, splinesky=True)
     img = tim.getImage()
@@ -186,7 +186,7 @@ def apphot_ps1stars(ccd, ps,
         
 if __name__ == '__main__':
 
-    decals = Decals()
+    survey = LegacySurveyData()
     ps = None
     pixscale = 0.262
     apertures = apertures_arcsec / pixscale
@@ -195,11 +195,11 @@ if __name__ == '__main__':
     if False:
         C = fits_table('coadd/000/0001p000/decals-0001p000-ccds.fits')
         for c in C:
-            T,hdr = apphot_ps1stars(c, ps, apertures, decals)
+            T,hdr = apphot_ps1stars(c, ps, apertures, survey)
             T.writeto('apphot-%08i-%s.fits' % (c.expnum, c.ccdname), header=hdr)
         sys.exit(0)
         
-    C = decals.get_ccds_readonly()
+    C = survey.get_ccds_readonly()
 
     exps = [ 346352, 347460, 347721 ]
 
@@ -214,7 +214,7 @@ if __name__ == '__main__':
             print
             print 'Exposure', e, 'chip', i, 'of', len(E)
             print
-            T,hdr = apphot_ps1stars(c, ps, apertures, decals)
+            T,hdr = apphot_ps1stars(c, ps, apertures, survey)
             TT.append(T)
         T = merge_tables(TT)
         T.writeto('apphot-%08i.fits' % e, primheader=hdr)

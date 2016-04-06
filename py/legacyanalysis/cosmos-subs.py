@@ -3,8 +3,8 @@ import numpy as np
 
 from legacypipe.common import *
 
-decals = Decals()
-C = decals.get_ccds()
+survey = LegacySurveyData()
+C = survey.get_ccds()
 print len(C), 'CCDs'
 
 C.cut(np.hypot(C.ra_bore - 150, C.dec_bore - 2.2) < 1.)
@@ -17,7 +17,7 @@ print len(C), 'in', bands
 C.cut(C.exptime >= 50.)
 print len(C), 'with exptime >= 50 sec'
 
-C.cut(decals.photometric_ccds(C))
+C.cut(survey.photometric_ccds(C))
 print len(C), 'photometric'
 
 C.cut(np.lexsort((C.expnum, C.filter)))
@@ -32,7 +32,7 @@ if not os.path.exists(efn):
     E.psfnorm = np.zeros(len(E), np.float32)
     E.galnorm = np.zeros(len(E), np.float32)
     for i in range(len(E)):
-        im = decals.get_image_object(E[i])
+        im = survey.get_image_object(E[i])
         tim = im.get_tractor_image(pixPsf=True, splinesky=True)
         E.sig1[i] = tim.sig1
         E.psfnorm[i] = tim.psfnorm

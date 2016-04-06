@@ -128,15 +128,15 @@ def compare_mags(TT, name, ps):
 
 def compare_to_ps1(ps, ccds):
     
-    decals = Decals()
+    survey = LegacySurveyData()
 
     allplots = []
 
     for expnum,ccdname in ccds:
-        ccd = decals.find_ccds(expnum=expnum, ccdname=ccdname)
+        ccd = survey.find_ccds(expnum=expnum, ccdname=ccdname)
         assert(len(ccd) == 1)
         ccd = ccd[0]
-        im = decals.get_image_object(ccd)
+        im = survey.get_image_object(ccd)
         print 'Reading', im
 
         wcs = im.get_wcs()
@@ -257,8 +257,8 @@ def compare_to_ps1(ps, ccds):
 
 
 def compare_brick_to_ps1(brickname, ps, name='', basedir=''):
-    decals = Decals()
-    brick = decals.get_brick_by_name(brickname)
+    survey = LegacySurveyData()
+    brick = survey.get_brick_by_name(brickname)
     wcs = wcs_for_brick(brick)
 
     magrange = (15,20)

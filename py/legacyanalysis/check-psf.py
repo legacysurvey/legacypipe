@@ -22,13 +22,13 @@ def subplot_grid(ny, nx, i):
     plt.subplot(ny, nx, 1 + ((ny-1)-y)*nx + x)
 
 if __name__ == '__main__':
-    decals = Decals()
+    survey = LegacySurveyData()
 
     ps = PlotSequence('psf')
 
-    #B = decals.get_bricks()
+    #B = survey.get_bricks()
 
-    T = decals.get_ccds()
+    T = survey.get_ccds()
     T.cut(T.extname == 'S1')
     print 'Cut to', len(T)
     #print 'Expnums:', T[:10]
@@ -39,7 +39,7 @@ if __name__ == '__main__':
     band = T.filter[0]
     print 'Band:', band
 
-    im = DecamImage(decals, T[0])
+    im = DecamImage(survey, T[0])
     print 'Reading', im.imgfn
 
     # Get approximate image center for astrometry

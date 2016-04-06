@@ -4,12 +4,12 @@ from legacypipe.common import *
 from astrometry.util.fits import fits_table
 from astrometry.util.file import trymakedirs
 
-def add_depth_tag(decals, brick, outdir, overwrite=False):
+def add_depth_tag(survey, brick, outdir, overwrite=False):
     outfn = os.path.join(outdir, 'tractor', brick[:3], 'tractor-%s.fits' % brick)
     if os.path.exists(outfn) and not overwrite:
         print 'Exists:', outfn
         return
-    fn = decals.find_file('tractor', brick=brick)
+    fn = survey.find_file('tractor', brick=brick)
     if not os.path.exists(fn):
         print 'Does not exist:', fn
         return
@@ -17,20 +17,20 @@ def add_depth_tag(decals, brick, outdir, overwrite=False):
     primhdr = fitsio.read_header(fn)
     hdr = fitsio.read_header(fn, ext=1)
     print 'Read', len(T), 'from', fn
-    T.decam_depth    = np.zeros((len(T), len(decals.allbands)), np.float32)
-    T.decam_galdepth = np.zeros((len(T), len(decals.allbands)), np.float32)
+    T.decam_depth    = np.zeros((len(T), len(survey.allbands)), np.float32)
+    T.decam_galdepth = np.zeros((len(T), len(survey.allbands)), np.float32)
     bands = 'grz'
-    ibands = [decals.index_of_band(b) for b in bands]
+    ibands = [survey.index_of_band(b) for b in bands]
     ix = np.clip(np.round(T.bx).astype(int), 0, 3599)
     iy = np.clip(np.round(T.by).astype(int), 0, 3599)
     for iband,band in zip(ibands, bands):
-        fn = decals.find_file('depth', brick=brick, band=band)
+        fn = survey.find_file('depth', brick=brick, band=band)
         if os.path.exists(fn):
             print 'Reading', fn
             img = fitsio.read(fn)
             T.decam_depth[:,iband] = img[iy, ix]
 
-        fn = decals.find_file('galdepth', brick=brick, band=band)
+        fn = survey.find_file('galdepth', brick=brick, band=band)
         if os.path.exists(fn):
             print 'Reading', fn
             img = fitsio.read(fn)
@@ -71,8 +71,8 @@ def bounce_add_depth_tag(X):
 if __name__ == '__main__':
     import sys
     outdir = 'tractor2'
-    decals = Decals()
-    bricks = decals.get_bricks()
+    survey = LegacySurveyData()
+    bricks = survey.get_bricks()
     bricks.cut(bricks.dec > -15)
     bricks.cut(bricks.dec <  45)
 
@@ -93,7 +93,7 @@ if __name__ == '__main__':
 
             dirnm = '/project/projectdirs/desiproc/dr2/coadd/%s/%s' % (brick[:3], brick)
             for band in 'grz':
-                fn = os.path.join(dirnm, 'decals-%s-nexp-%s.fits.gz' % (brick, band))
+                fn = os.path.join(dirnm, 'legacysurvey-%s-nexp-%s.fits.gz' % (brick, band))
                 if not os.path.exists(fn):
                     continue
                 N = fitsio.read(fn)
@@ -104,13 +104,13 @@ if __name__ == '__main__':
                 bricks.get('nobs_med_%s' % band)[ibrick] = md
                 bricks.get('nobs_max_%s' % band)[ibrick] = mx
 
-        bricks.writeto('decals-brick-dr2-a.fits')
+        bricks.writeto('legacysurvey-brick-dr2-a.fits')
         mxobs = reduce(np.logical_or, [bricks.nobs_max_g, bricks.nobs_max_r, bricks.nobs_max_r])
         assert(np.all(mxobs > 0 == bricks.in_dr2))
         bricks.cut(mxobs > 0)
         bricks.delete('in_dr2')
         print len(bricks), 'bricks with coverage'
-        bricks.writeto('decals-brick-dr2.fits')
+        bricks.writeto('legacysurvey-brick-dr2.fits')
 
         sys.exit(0)
 
@@ -154,17 +154,17 @@ if __name__ == '__main__':
     bricks.cut((bricks.dec > 20.1) * (bricks.dec < 24.3))
     print len(bricks), 'bricks to re-run'
     for brick in bricks.brickname:
-        add_depth_tag(decals, brick, outdir, overwrite=True)
+        add_depth_tag(survey, brick, outdir, overwrite=True)
 
 
     if True:
         for brick in bricks.brickname:
-            add_depth_tag(decals, brick, outdir)
+            add_depth_tag(survey, brick, outdir)
     else:
         # totally I/O-bound; this doesn't help.
         from astrometry.util.multiproc import *
         mp = multiproc(24)
         mp.map(bounce_add_depth_tag,
-               [(decals, brick, outdir) for brick in bricks.brickname])
+               [(survey, brick, outdir) for brick in bricks.brickname])
 
 

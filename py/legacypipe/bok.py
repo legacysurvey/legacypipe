@@ -15,8 +15,8 @@ class BokImage(LegacySurveyImage):
     calibration; this is a sketch, not a final working solution.
 
     '''
-    def __init__(self, decals, t):
-        super(BokImage, self).__init__(decals, t)
+    def __init__(self, survey, t):
+        super(BokImage, self).__init__(survey, t)
 
         self.dqfn = self.imgfn.replace('_oi.fits', '_od.fits')
 
@@ -24,7 +24,7 @@ class BokImage(LegacySurveyImage):
         self.calname = '%s/%s/bok-%s-%s' % (expstr[:5], expstr, expstr, self.ccdname)
         self.name = '%s-%s' % (expstr, self.ccdname)
 
-        calibdir = os.path.join(self.decals.get_calib_dir(), self.camera)
+        calibdir = os.path.join(self.survey.get_calib_dir(), self.camera)
         self.pvwcsfn = os.path.join(calibdir, 'astrom-pv', self.calname + '.wcs.fits')
         self.sefn = os.path.join(calibdir, 'sextractor', self.calname + '.fits')
         self.psffn = os.path.join(calibdir, 'psfex', self.calname + '.fits')

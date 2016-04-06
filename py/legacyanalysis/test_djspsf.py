@@ -67,10 +67,10 @@ def main():
         plt.savefig('djs-term%i.png' % i)
 
 
-    decals = Decals()
-    ccds = decals.find_ccds(expnum=expnum,ccdname=ccdname)
+    survey = LegacySurveyData()
+    ccds = survey.find_ccds(expnum=expnum,ccdname=ccdname)
     ccd = ccds[0]
-    im = decals.get_image_object(ccd)
+    im = survey.get_image_object(ccd)
     band = ccd.filter
 
     im.run_calibs()

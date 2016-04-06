@@ -13,8 +13,8 @@ class DecamImagePlusNoise(DecamImage):
     '''
     A DecamImage subclass to add noise to DECam images upon read.
     '''
-    def __init__(self, decals, t):
-        super(DecamImagePlusNoise, self).__init__(decals, t)
+    def __init__(self, survey, t):
+        super(DecamImagePlusNoise, self).__init__(survey, t)
         self.addnoise = t.addnoise
 
     def get_tractor_image(self, **kwargs):
@@ -35,14 +35,14 @@ class DecamImagePlusNoise(DecamImage):
         tim.ima.update(vmin=tim.zr[0], vmax=tim.zr[1])
         return tim
 
-class CosmosDecals(Decals):
+class CosmosSurvey(LegacySurveyData):
     def __init__(self, subset=0, **kwargs):
-        super(CosmosDecals, self).__init__(**kwargs)
+        super(CosmosSurvey, self).__init__(**kwargs)
         self.subset = subset
         self.image_typemap.update({'decam+noise' : DecamImagePlusNoise})
         
     def get_ccds(self):
-        CCDs = super(CosmosDecals, self).get_ccds()
+        CCDs = super(CosmosSurvey, self).get_ccds()
         CCDs.cut(CCDs.subset == self.subset)
         return CCDs
     
@@ -64,8 +64,8 @@ def main():
     if kwargs in [-1,0]:
         return kwargs
 
-    decals = CosmosDecals(decals_dir=opt.decals_dir, subset=opt.subset)
-    kwargs['decals'] = decals
+    survey = CosmosSurvey(survey_dir=opt.survey_dir, subset=opt.subset)
+    kwargs['survey'] = survey
     
     # runbrick...
     run_brick(opt.brick, **kwargs)

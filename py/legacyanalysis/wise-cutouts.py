@@ -30,8 +30,8 @@ def wise_cutouts(ra, dec, radius, ps, pixscale=2.75, tractor_base='.',
     pix = pixscale / 3600.
     wcs = Tan(ra, dec, (W+1)/2., (H+1)/2., -pix, 0., 0., pix,float(W),float(H))
     # Find DECaLS bricks overlapping
-    decals = Decals()
-    B = bricks_touching_wcs(wcs, decals=decals)
+    survey = LegacySurveyData()
+    B = bricks_touching_wcs(wcs, survey=survey)
     print('Found', len(B), 'bricks overlapping')
 
     TT = []
@@ -62,7 +62,7 @@ def wise_cutouts(ra, dec, radius, ps, pixscale=2.75, tractor_base='.',
 
     for b in B.brickname:
         fn = os.path.join(tractor_base, 'coadd', b[:3], b,
-                          'decals-%s-image-r.fits' % b)
+                          'legacysurvey-%s-image-r.fits' % b)
         bwcs = Tan(fn)
         try:
             Yo,Xo,Yi,Xi,nil = resample_with_wcs(dwcs, bwcs)
@@ -76,7 +76,7 @@ def wise_cutouts(ra, dec, radius, ps, pixscale=2.75, tractor_base='.',
               (b, xl-5, xh+5, yl-5, yh+5) + ' -P \'pickles/cluster-%(brick)s-%%(stage)s.pickle\'')
         for i,tag in enumerate(tags):
             fn = os.path.join(tractor_base, 'coadd', b[:3], b,
-                              'decals-%s-%s.jpg' % (b, tag))
+                              'legacysurvey-%s-%s.jpg' % (b, tag))
             img = plt.imread(fn)
             img = np.flipud(img)
             coimgs[i][Yo,Xo,:] = img[Yi,Xi,:]

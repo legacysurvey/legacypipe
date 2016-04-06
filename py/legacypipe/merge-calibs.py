@@ -8,7 +8,7 @@ matplotlib.use('Agg')
 
 from astrometry.util.fits import fits_table, merge_tables
 from astrometry.util.file import trymakedirs
-from legacypipe.common import Decals
+from legacypipe.common import LegacySurveyData
 
 def pad_arrays(A):
     '''
@@ -35,8 +35,8 @@ def pad_arrays(A):
     return padded
 
 def main():
-    decals = Decals()
-    ccds = decals.get_ccds()
+    survey = LegacySurveyData()
+    ccds = survey.get_ccds()
     print(len(ccds), 'CCDs')
 
     expnums = np.unique(ccds.expnum)
@@ -62,7 +62,7 @@ def main():
         skyhdrvals = []
 
         for ccd in C:
-            im = decals.get_image_object(ccd)
+            im = survey.get_image_object(ccd)
 
             fn = im.splineskyfn
             if os.path.exists(fn):

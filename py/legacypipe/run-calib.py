@@ -9,7 +9,7 @@ from astrometry.util.fits import fits_table
 import sys
 
 # Argh, no relative imports in runnable scripts
-from legacypipe.common import run_calibs, Decals
+from legacypipe.common import run_calibs, LegacySurveyData
 
 def main():
     """Main program.
@@ -23,8 +23,6 @@ def main():
     parser.add_argument('--expnum', type=int, help='Cut to a single exposure')
     parser.add_argument('--extname', '--ccdname', help='Cut to a single extension/CCD name')
 
-    parser.add_argument('--no-astrom', dest='astrom', action='store_false',
-                      help='Do not compute astrometric calibs')
     parser.add_argument('--no-psf', dest='psfex', action='store_false',
                       help='Do not compute PsfEx calibs')
     parser.add_argument('--no-sky', dest='sky', action='store_false',
@@ -35,12 +33,12 @@ def main():
     parser.add_argument('args',nargs=argparse.REMAINDER)
     opt = parser.parse_args()
 
-    D = Decals()
+    survey = LegacySurveyData()
     if opt.ccds is not None:
         T = fits_table(opt.ccds)
         print('Read', len(T), 'from', opt.ccds)
     else:
-        T = D.get_ccds()
+        T = survey.get_ccds()
         #print len(T), 'CCDs'
 
     if len(opt.args) == 0:
@@ -55,12 +53,13 @@ def main():
 
     for a in opt.args:
         i = int(a)
+        print('Index', i)
         t = T[i]
 
-        im = D.get_image_object(t)
+        im = survey.get_image_object(t)
         print('Running', im.calname)
 
-        kwargs = dict(pvastrom=opt.astrom, psfex=opt.psfex, sky=opt.sky)
+        kwargs = dict(psfex=opt.psfex, sky=opt.sky)
         if opt.force:
             kwargs.update(force=True)
         if opt.run_se:
@@ -70,8 +69,7 @@ def main():
 
         run_calibs((im, kwargs))
     return 0
-#
-#
-#
+
 if __name__ == '__main__':
+    import sys
     sys.exit(main())
