@@ -98,8 +98,8 @@ class PtfImage(LegacySurveyImage):
     Camera, DECam, on the Blanco telescope.
 
     '''
-    def __init__(self, decals, t):
-        super(PtfImage, self).__init__(decals, t)
+    def __init__(self, survey, t):
+        super(PtfImage, self).__init__(survey, t)
 
         self.imgfn= os.path.join(os.path.dirname(self.imgfn),'ptf/',os.path.basename(self.imgfn))
         self.pixscale= 1.01
@@ -108,7 +108,7 @@ class PtfImage(LegacySurveyImage):
         #bit-mask
         self.dqfn = self.imgfn.replace('_scie_', '_mask_')
         #psfex catalogues
-        calibdir = os.path.join(self.decals.get_calib_dir(), self.camera)
+        calibdir = os.path.join(self.survey.get_calib_dir(), self.camera)
         self.sefn = os.path.join(calibdir, 'sextractor/', os.path.basename(self.imgfn))
         #self.psffn = os.path.join(calibdir, 'psfex', self.calname + '.fits')
         self.psffn= os.path.join(calibdir,'psfex/',os.path.basename(self.imgfn)) #.replace('.fits','.psf')))
@@ -133,7 +133,7 @@ class PtfImage(LegacySurveyImage):
         #            print('Using      ', fun)
         #            print('rather than', fn)
         #            setattr(self, attr, fun)
-        #calibdir = os.path.join(self.decals.get_calib_dir(), self.camera)
+        #calibdir = os.path.join(self.survey.get_calib_dir(), self.camera)
         #self.pvwcsfn = os.path.join(calibdir, 'astrom-pv', self.calname + '.wcs.fits')
         #self.sefn = os.path.join(calibdir, 'sextractor', self.calname + '.fits')
         #self.psffn = os.path.join(calibdir, 'psfex', self.calname + '.fits')
@@ -170,7 +170,7 @@ class PtfImage(LegacySurveyImage):
         #from astrometry.util.util import Sip
         #print('Reading WCS from', self.pvwcsfn)
         #wcs = Sip(self.pvwcsfn)
-        #dra,ddec = self.decals.get_astrometric_zeropoint_for(self)
+        #dra,ddec = self.survey.get_astrometric_zeropoint_for(self)
         #r,d = wcs.get_crval()
         #print('Applying astrometric zeropoint:', (dra,ddec))
         #wcs.set_crval((r + dra, d + ddec))
@@ -219,7 +219,7 @@ class PtfImage(LegacySurveyImage):
         if se and os.path.exists(self.sefn) and (not force):
             se = False
         if se:
-            sedir = self.decals.get_se_dir()
+            sedir = self.survey.get_se_dir()
             trymakedirs(self.sefn, dir=True)
             ####
             trymakedirs('junk',dir=True) #need temp dir for mask-2 and invvar map
@@ -237,16 +237,16 @@ class PtfImage(LegacySurveyImage):
             magzp  = zeropoint_for_ptf(hdr)
             seeing = hdr['PIXSCALE'] * hdr['MEDFWHM']
             gain= hdr['GAIN']
-            cmd = ' '.join(['sex','-c', os.path.join(sedir,'ptf/','DECaLS.se'),
+            cmd = ' '.join(['sex','-c', os.path.join(sedir,'ptf.se'),
                             '-WEIGHT_IMAGE %s' % invvarfn, '-WEIGHT_TYPE MAP_WEIGHT',
                             '-GAIN %f' % gain,
                             '-FLAG_IMAGE %s' % maskfn,
                             '-FLAG_TYPE OR',
                             '-SEEING_FWHM %f' % seeing,
                             '-DETECT_MINAREA 3',
-                            '-PARAMETERS_NAME', os.path.join(sedir,'ptf/', 'DECaLS.param'),
-                            '-FILTER_NAME', os.path.join(sedir, 'ptf/','gauss_3.0_5x5.conv'),
-                            '-STARNNW_NAME', os.path.join(sedir, 'ptf/','default.nnw'),
+                            '-PARAMETERS_NAME', os.path.join(sedir,'ptf.param'),
+                            '-FILTER_NAME', os.path.join(sedir, 'ptf_gauss_3.0_5x5.conv'),
+                            '-STARNNW_NAME', os.path.join(sedir, 'ptf_default.nnw'),
                             '-PIXEL_SCALE 0',
                             # SE has a *bizarre* notion of "sigma"
                             '-DETECT_THRESH 1.0',
@@ -258,7 +258,7 @@ class PtfImage(LegacySurveyImage):
             if os.system(cmd):
                 raise RuntimeError('Command failed: ' + cmd)
         if psfex:
-            sedir = self.decals.get_se_dir()
+            sedir = self.survey.get_se_dir()
             trymakedirs(self.psffn, dir=True)
             # If we wrote *.psf instead of *.fits in a previous run...
             oldfn = self.psffn.replace('.fits', '.psf')
@@ -266,7 +266,7 @@ class PtfImage(LegacySurveyImage):
                 print('Moving', oldfn, 'to', self.psffn)
                 os.rename(oldfn, self.psffn)
             else: 
-                cmd= ' '.join(['psfex',self.sefn,'-c', os.path.join(sedir,'ptf/','DECaLS.psfex'),
+                cmd= ' '.join(['psfex',self.sefn,'-c', os.path.join(sedir,'ptf.psfex'),
                     '-PSF_DIR',os.path.dirname(self.psffn)])
                 print(cmd)
                 if os.system(cmd):
@@ -396,7 +396,7 @@ class PtfImage(LegacySurveyImage):
             sky = zsky
             del zsky
 
-        magzp = self.decals.get_zeropoint_for(self)
+        magzp = self.survey.get_zeropoint_for(self)
         orig_zpscale = zpscale = NanoMaggies.zeropointToScale(magzp)
         if nanomaggies:
             # Scale images to Nanomaggies
@@ -437,7 +437,8 @@ class PtfImage(LegacySurveyImage):
 
         #print('gaussPsf:', gaussPsf, 'pixPsf:', pixPsf, 'const2psf:', const2psf)
         psf = self.read_psf_model(x0, y0, gaussPsf=gaussPsf, pixPsf=pixPsf,
-                                  const2psf=const2psf, psf_sigma=psf_sigma)
+                                  psf_sigma=psf_sigma,
+                                  cx=(x0+x1)/2., cy=(y0+y1)/2.)
 
         tim = Image(img, invvar=invvar, wcs=twcs, psf=psf,
                     photocal=LinearPhotoCal(zpscale, band=band),
@@ -495,53 +496,6 @@ class PtfImage(LegacySurveyImage):
         return tim
 
 
-#class PtfDecals(Decals):
-#    def __init__(self, **kwargs):
-#        super(PtfDecals, self).__init__(**kwargs)
-#        self.image_typemap.update({'ptf' : PtfImage})
-
-#    def get_zeropoint_for(self,tractor_image):
-#        print('WARNING: zeropoints from header of ',tractor_image.imgfn)
-#        hdr=fitsio.read_header(tractor_image.imgfn)
-#        magzpt= hdr['IMAGEZPT'] + 2.5 * np.log10(hdr['EXPTIME']) 
-#        if isinstance(magzp,str): 
-#            print('WARNING: no ZeroPoint in header for image: ',tractor_image.imgfn)
-#            raise ValueError #magzp= 23.
-#        return magzp
-   
-    #def ccds_touching_wcs(self, wcs, **kwargs):
-    #    '''PTF testing, continue even if no overlap with DECaLS bricks
-    #    '''
-    #    print('WARNING: ccds do not have to be overlapping with DECaLS bricks')
-    #    T = self.get_ccds_readonly()
-    #    I = ccds_touching_wcs(wcs, T, **kwargs)
-    #    if len(I) == 0:
-    #        return None
-    #    T = T[I]
-    #    return T
-
-#    def photometric_ccds(self, CCD):
-#        '''PTF testing process non-photometric ccds too'''
-#        print('WARNING: non-photometric ccds allowed')
-#        good = np.ones(len(CCD), bool)
-#        return np.flatnonzero(good)
-    
-#    def get_ccds(self):
-#        '''
-#        Return SMALL CCD for testing: 2 rows
-#        '''
-#        fn = os.path.join(self.decals_dir, 'decals-ccds.fits')
-#        if not os.path.exists(fn):
-#            fn += '.gz'
-#        print('Reading CCDs from', fn)
-#        T = fits_table(fn)
-#        print('Got', len(T), 'CCDs')
-#        if 'ccdname' in T.columns():
-#            # "N4 " -> "N4"
-#            T.ccdname = np.array([s.strip() for s in T.ccdname])
-#        #T= T[ [np.where(T.filter == 'R')[0][0],np.where(T.filter == 'g')[0][0]] ] #1 R and 1 g band
-#        print('ccd ra= ',T.ra,'ccd dec= ',T.dec) 
-#        return T
 
 def make_dir(name):
     if not os.path.exists(name): os.makedirs(name)
