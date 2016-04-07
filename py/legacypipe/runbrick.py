@@ -2577,7 +2577,10 @@ def _one_blob(X):
             # First-round optimization
             print('First-round initial log-prob:', srctractor.getLogProb())
             for step in range(50):
+                #R = srctractor.optimize(**optargs)
+                #print('Optimize result:', R)
                 dlnp,X,alpha = srctractor.optimize(**optargs)
+                
                 print('dlnp:', dlnp, 'src', src)
                 if dlnp < 0.1:
                     break
@@ -4735,9 +4738,11 @@ python -u legacypipe/runbrick.py --plots --brick 2440p070 --zoom 1900 2400 450 9
         '--zoom', type=int, nargs=4,
         help='Set target image extent (default "0 3600 0 3600")')
 
-    parser.add_argument('--no-ceres', dest='ceres', default=True,
-                        action='store_false', help='Do not use Ceres Solver')
-
+    #parser.add_argument('--no-ceres', dest='ceres', default=True,
+    #                    action='store_false', help='Do not use Ceres Solver')
+    parser.add_argument('--ceres', default=False, action='store_true',
+                        help='Use Ceres Solver?')
+    
     parser.add_argument('--nblobs', type=int,help='Debugging: only fit N blobs')
     parser.add_argument('--blob', type=int, help='Debugging: start with blob #')
     parser.add_argument(

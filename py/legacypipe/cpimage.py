@@ -10,15 +10,15 @@ from astrometry.util.util import wcs_pv2sip_hdr
 from legacypipe.image import LegacySurveyImage
 from legacypipe.common import LegacySurveyData
 
-class CPMixin(object):
+class CPImage(LegacySurveyImage):
     '''
     A mix-in class for common code between NOAO Community Pipeline-processed
     data from DECam and Mosaic3.
     '''
 
-    def __init__(self):
+    def __init__(self, *args, **kwargs):
         #print('CPMixin __init__')
-        super(CPMixin, self).__init__()
+        super(CPImage, self).__init__(*args, **kwargs)
         '''
         Note, this assumes the "self.imgfn" parameter has been set; this can
         require the inheritance order and order of calling super.__init__()

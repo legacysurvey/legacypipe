@@ -5,7 +5,7 @@ import fitsio
 from astrometry.util.file import trymakedirs
 from astrometry.util.fits import fits_table
 from legacypipe.image import LegacySurveyImage, CalibMixin
-from legacypipe.cpimage import CPMixin
+from legacypipe.cpimage import CPImage
 from legacypipe.common import *
 
 import astropy.time
@@ -14,7 +14,7 @@ import astropy.time
 Code specific to images from the Dark Energy Camera (DECam).
 '''
 
-class DecamImage(LegacySurveyImage, CalibMixin, CPMixin):
+class DecamImage(CPImage, CalibMixin):
     '''
 
     A LegacySurveyImage subclass to handle images from the Dark Energy

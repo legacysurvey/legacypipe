@@ -471,6 +471,8 @@ class LegacySurveyImage(object):
         return None
 
     def get_wcs(self):
+        print('LegacySurveyImage.get_wcs(); self:', type(self), self)
+        print('MRO:', type(self).__mro__)
         return None
     
     def read_sky_model(self, splinesky=False, slc=None, **kwargs):
