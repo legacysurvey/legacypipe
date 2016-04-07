@@ -33,22 +33,9 @@ cal.sh:
 python legacypipe/queue-calibs.py --region edr --brickq 0 > bricks
 grep '^....[pm]...$' bricks | qdo load edr0 -
 
+qdo launch edr0 16 --cores_per_worker 8 --batchqueue regular --walltime 12:00:00 --script ../bin/pipebrick.sh
 
 
-dr1(d):
-qdo launch bricks 16 --mpack 6 --batchopts "-A desi" --walltime=24:00:00 --script projects/desi/pipebrick.sh --batchqueue regular --verbose
-
-qdo launch cal 1 --batchopts "-A cosmo -t 1-50" --walltime=24:00:00 --batchqueue serial --script projects/desi/run-calib.py
-#qdo launch cal 1 --batchopts "-A cosmo -t 1-10" --walltime=24:00:00 --batchqueue serial
-
-Or
-qdo launch cal 8 --batchopts "-A cosmo -t 1-6" --pack --walltime=30:00 --batchqueue debug --script projects/desi/run-calib.py
-
-Or lists of bricks to run in production:
-
-python projects/desi/queue-calibs.py  | qdo load bricks -
-qdo launch bricks 1 --batchopts "-A cosmo -t 1-10 -l walltime=24:00:00 -q serial -o pipebrick-logs -j oe -l pvmem=6GB" \
-    --script projects/desi/pipebrick.sh
 '''
 from __future__ import print_function
 import sys

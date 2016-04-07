@@ -8,10 +8,10 @@ import numpy as np
 from astrometry.util.util import wcs_pv2sip_hdr
 
 from legacypipe.image import LegacySurveyImage, CalibMixin
-from legacypipe.cpimage import CPMixin
+from legacypipe.cpimage import CPImage
 from legacypipe.common import LegacySurveyData
 
-class MosaicImage(LegacySurveyImage, CalibMixin, CPMixin):
+class MosaicImage(CPImage, CalibMixin):
     def __init__(self, survey, t):
         super(MosaicImage, self).__init__(survey, t)
         # convert FWHM into pixel units

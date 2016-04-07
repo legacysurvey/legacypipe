@@ -130,7 +130,8 @@ if [ "$NERSC_HOST" == "cori" ]; then
 
   module load dust/scratch
   # Aaron's zeropoint-corrected version
-  module load unwise_coadds/2.1-scratch
+  #module load unwise_coadds/2.1-scratch
+  module load unwise_coadds/fulldepth-scratch
 
   module load tractor-hpcp
   module load astrometry_net-hpcp
