@@ -306,7 +306,6 @@ class PtfImage(LegacySurveyImage):
 
         '''
         from astrometry.util.miscutils import clip_polygon
-        print('#### IN KBJs get tractor image code! ###')
         get_dq = dq
         get_invvar = invvar
         
