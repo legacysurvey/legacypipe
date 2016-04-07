@@ -68,7 +68,7 @@ def exposure_metadata(filenames, hdus=None, trim=None):
         print('Reading', (i+1), 'of', len(filenames), ':', fn)
         F = fits.open(fn)
         primhdr = F[0].header
-        expstr = '%08i' % primhdr['EXPNUM']
+        expstr = '%08i' % primhdr['IMAGEID'] #EXPNUM']
 
         # # Parse date with format: 2014-08-09T04:20:50.812543
         # date = datetime.datetime.strptime(primhdr.get('DATE-OBS'),
@@ -103,16 +103,16 @@ def exposure_metadata(filenames, hdus=None, trim=None):
             for k,d in hdrkeys:
                 vals[k].append(hdr.get(k, d))
 
-            vals['IMAGE_FILENAME'].append(cpfn)
+            vals['IMAGE_FILENAME'].append( os.path.basename(cpfn) )
             vals['IMAGE_HDU'].append(hdu)
             vals['WIDTH'].append(int(W))
             vals['HEIGHT'].append(int(H))
+            #new column info
+            vals['EXPNUM'][-1]= int(F[0].header['IMAGEID'])
             #FWHM and SEEING not in image fits header, get it from psfex file
             F_psfex = fits.open(os.path.join(os.path.dirname(fn),'./psfex',os.path.basename(fn)))
-            vals['FWHM'].append( float(F_psfex[hdu].header['PSF_FWHM']) )
-            vals['SEEING'].append( vals['FWHM'][-1]/2.355 )
-            print('how convert FWHM to SEEING?')
-            raise ValueError
+            vals['FWHM'][-1]= float(F_psfex[hdu].header['PSF_FWHM']) 
+            vals['SEEING'][-1]=  vals['FWHM'][-1]/2.355
 
     T = fits_table()
     for k,d in allkeys:
@@ -155,6 +155,11 @@ args = parser.parse_args()
 
 fns= glob.glob(args.search_str)
 if len(fns) == 0: raise ValueError
+#.wht.fits and .fits look similar, remove wht
+ibad=[]
+for i in range(len(fns)):
+    if 'wht' in fns[i]: ibad.append(i)
+fns= np.delete(np.array(fns),ibad)
 #make ccd table
 T=exposure_metadata(fns)
 for i in T.get_columns(): print('%s=' % i,T.get(i))
