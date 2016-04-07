@@ -50,7 +50,6 @@ CP_DQ_BITS = dict(badpix=1, satur=2, interp=4, cr=16, bleed=64,
 # The apertures we use in aperture photometry, in ARCSEC.
 apertures_arcsec = np.array([0.5, 0.75, 1., 1.5, 2., 3.5, 5., 7.])
 
-
 # Ugly hack: for sphinx documentation, the astrometry and tractor (and
 # other) packages are replaced by mock objects.  But you can't
 # subclass a mock object correctly, so we have to un-mock
@@ -95,6 +94,15 @@ class SimpleGalaxy(ExpGalaxy):
     
 class BrickDuck(object):
     pass
+
+#PTF special handling
+def zeropoint_for_ptf(hdr):
+    magzp= hdr['IMAGEZPT'] + 2.5 * np.log10(hdr['EXPTIME'])
+    if isinstance(magzp,str):
+        print('WARNING: no ZeroPoint in header for image: ',tractor_image.imgfn)
+        raise ValueError #magzp= 23.
+    return magzp
+
 
 def get_git_version(dir=None):
     '''
@@ -755,6 +763,7 @@ class LegacySurveyData(object):
         from .decam  import DecamImage
         from .mosaic import MosaicImage
         from .bok    import BokImage
+        from .ptf import PtfImage
 
         if survey_dir is None:
             survey_dir = os.environ.get('LEGACY_SURVEY_DIR')
@@ -784,9 +793,16 @@ Now using the current directory as LEGACY_SURVEY_DIR, but this is likely to fail
             'mosaic': MosaicImage,
             'mosaic3': MosaicImage,
             '90prime': BokImage,
+            'ptf': PtfImage,
             }
 
         self.allbands = 'ugrizY'
+
+    def get_camera_indices(self, ccds):
+        i_ptf= np.where(a.get('camera') == 'ptf')[0]
+        i_decam= np.where(a.get('camera') == 'decam')[0]
+        i_mosaic= np.where(a.get('camera') == 'mosaic')[0]
+        
 
     def index_of_band(self, b):
         return self.allbands.index(b)
@@ -1086,21 +1102,28 @@ Now using the current directory as LEGACY_SURVEY_DIR, but this is likely to fail
         good = np.ones(len(ccds), bool)
         n0 = sum(good)
         # This is our list of cuts to remove non-photometric CCD images
-        for name,crit in [
-            ('exptime < 30 s', (ccds.exptime < 30)),
-            ('ccdnmatch < 20', (ccds.ccdnmatch < 20)),
-            ('abs(zpt - ccdzpt) > 0.1',
-             (np.abs(ccds.zpt - ccds.ccdzpt) > 0.1)),
-            ('zpt < 0.5 mag of nominal (for DECam)',
-             ((ccds.camera == 'decam') * (ccds.zpt < (z0 - 0.5)))),
-            ('zpt > 0.25 mag of nominal (for DECam)',
-             ((ccds.camera == 'decam') * (ccds.zpt > (z0 + 0.25)))),
-             ]:
-            good[crit] = False
-            n = sum(good)
-            print('Flagged', n0-n, 'more non-photometric using criterion:', name)
-            n0 = n
-
+        if 'ccdnmatch' in ccds.columns():
+            for name,crit in [
+                ('exptime < 30 s', (ccds.exptime < 30)),
+                ('ccdnmatch < 20', (ccds.ccdnmatch < 20)),
+                ('abs(zpt - ccdzpt) > 0.1',
+                 (np.abs(ccds.zpt - ccds.ccdzpt) > 0.1)),
+                ('zpt < 0.5 mag of nominal (for DECam)',
+                 ((ccds.camera == 'decam') * (ccds.zpt < (z0 - 0.5)))),
+                ('zpt > 0.25 mag of nominal (for DECam)',
+                 ((ccds.camera == 'decam') * (ccds.zpt > (z0 + 0.25)))),
+                 ]:
+                #PTF special handling, apply criteria to NON ptf images
+                crit= np.logical_and(crit, ccds.camera != 'ptf   ')
+                good[crit] = False
+                n = sum(good)
+                print('Flagged', n0-n, 'more non-photometric using criterion:', name)
+                n0 = n
+        #print N remain for each camera
+        tallies='%d CCDs remain' % len(good) 
+        for cam_str in ['decam','mosaic','bok','ptf   ']: 
+            tallies+= ', %d are %s' %  (ccds.camera[ccds.camera == cam_str].shape[0], cam_str)
+        print(tallies) 
         return np.flatnonzero(good)
 
     def apply_blacklist(self, ccds):
@@ -1162,17 +1185,22 @@ Now using the current directory as LEGACY_SURVEY_DIR, but this is likely to fail
         '''
         Returns the photometric zeropoint for the given CCD table row object *im*.
         '''
-        zp = self.get_zeropoint_row_for(im)
-        # No updated zeropoint -- use header MAGZERO from primary HDU.
-        if zp is None:
-            print('WARNING: using header zeropoints for', im)
-            hdr = im.read_image_primary_header()
-            # DES Year1 Stripe82 images:
-            magzero = hdr['MAGZERO']
-            return magzero
-
-        magzp = zp.ccdzpt
-        magzp += 2.5 * np.log10(zp.exptime)
+        if im.camera == 'decam' or im.camera == 'mosaic':
+            zp = self.get_zeropoint_row_for(im)
+            # No updated zeropoint -- use header MAGZERO from primary HDU.
+            if zp is None:
+                print('WARNING: using header zeropoints for', im)
+                hdr = im.read_image_primary_header()
+                # DES Year1 Stripe82 images:
+                magzero = hdr['MAGZERO']
+                return magzero
+            magzp = zp.ccdzpt
+            magzp += 2.5 * np.log10(zp.exptime)
+        #PTF special handling
+        elif im.camera == 'ptf':
+            hdr= im.read_image_primary_header() #calls fitsio.read_header(self.imgfn)
+            magzp= zeropoint_for_ptf(hdr)
+        else: raise ValueError
         return magzp
 
     def get_astrometric_zeropoint_for(self, im):

@@ -158,15 +158,15 @@ if __name__ == '__main__':
 
     TT = []
     #zpdir = '/project/projectdirs/cosmo/staging/mosaicz/Test'
-    zpdir = '/global/cscratch1/sd/arjundey/mosaicz'
-    imgdir = '/project/projectdirs/cosmo/staging/mosaicz/Test'
+    zpdir = '/project/projectdirs/desi/imaging/data/mosaic/cosmos' #/global/cscratch1/sd/arjundey/mosaicz'
+    imgdir = '/project/projectdirs/desi/imaging/data/mosaic/cosmos' #'/project/projectdirs/cosmo/staging/mosaicz/Test'
     #/global/cscratch1/sd/arjundey/mosaicz/zeropoint-mzls_test1.fits
     for fn,dirnms in [
         #(os.path.join(zpdir, 'ZP-MOS3-20151213.fits'),
         # #[os.path.join(imgdir, 'MOS151213_8a516af')]),
         # [os.path.join(imgdir, 'MOS151213_8a7fcee')]),
-        (os.path.join(zpdir, 'zeropoint-mzls_oki_test1_v1.fits'),
-         [os.path.join(imgdir, 'MOS151213_8a7fcee')]),
+        (os.path.join(zpdir, 'zeropoint-mosaic-arjunzp-cosmos.fits.fits'), #zeropoint-mzls_oki_test1_v1.fits'),
+         [os.path.join(imgdir, './')]), #'MOS151213_8a7fcee')]),
         ]:
         print('Reading', fn)
         T = fits_table(fn)
@@ -207,6 +207,7 @@ if __name__ == '__main__':
     T.writeto(outfn)
     print('Wrote', outfn)
     
+    print('exiting after making MZLS ccds.fits file')
     sys.exit(0)
 
     # Bok tests

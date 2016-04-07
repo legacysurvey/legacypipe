@@ -409,6 +409,10 @@ def stage_tims(W=3600, H=3600, pixscale=0.262, brickname=None,
     timbands = [tim.band for tim in tims]
     bands = [b for b in bands if b in timbands]
     print('Cut bands to', bands)
+    #try: assert(np.all(['g' in bands,'r' in bands,'z' in bands],axis=0))
+    #except AssertionError: 
+    #    print('WARNING: grz not all in bands, images are not all photometric, quitting')
+    #    sys.exit(0)
 
     for band in 'grz':
         hasit = band in bands
@@ -2135,8 +2139,19 @@ def _clip_model_to_blob(mod, sh, ie):
     '''
     mslc,islc = mod.getSlices(sh)
     sy,sx = mslc
-    mod = Patch(mod.x0 + sx.start, mod.y0 + sy.start,
-                mod.patch[mslc] * (ie[islc]>0))
+    patch = mod.patch[mslc] * (ie[islc]>0)
+    if patch.shape == (0,0):
+        return None
+    mod = Patch(mod.x0 + sx.start, mod.y0 + sy.start, patch)
+
+    # Check
+    mh,mw = mod.shape
+    assert(mod.x0 >= 0)
+    assert(mod.y0 >= 0)
+    ph,pw = sh
+    assert(mod.x0 + mw <= pw)
+    assert(mod.y0 + mh <= ph)
+
     return mod
 
 FLAG_CPU_A   = 1
@@ -2313,7 +2328,7 @@ class SourceModels(object):
                         print('PSF:', tim.getPsf())
                     assert(np.all(np.isfinite(mod.patch)))
                     mod = _clip_model_to_blob(mod, sh, ie)
-                    if subtract:
+                    if subtract and mod is not None:
                         mod.addTo(tim.getImage(), scale=-1)
                 mods.append(mod)
             self.models.append(mods)
@@ -2379,6 +2394,7 @@ def _one_blob(X):
         
     # 50 CCDs is over 90th percentile of bricks in DR2.
     many_exposures = len(timargs) >= 50
+    #PTF special handling len(timargs) >= 1000
 
     blobwcs = brickwcs.get_subimage(bx0, by0, blobw, blobh)
     ok,x0,y0 = blobwcs.radec2pixelxy(
@@ -2910,8 +2926,8 @@ def _one_blob(X):
 
                 detiv = np.zeros(srcwcs.shape, np.float32)
                 I = np.argsort(-np.array(value))
-                for i in I:
-                    tim = otims[i]
+                for cnt in I:
+                    tim = otims[cnt]
                     try:
                         Yo,Xo,Yi,Xi,nil = resample_with_wcs(
                             srcwcs, tim.subwcs, [], 2)
@@ -3131,6 +3147,8 @@ def _one_blob(X):
                         continue
                     #print('After first-round fit: model is', mod.shape)
                     mod = _clip_model_to_blob(mod, tim.shape,tim.getInvError())
+                    if mod is None:
+                        continue
                     d[newsrc] = Patch(mod.x0, mod.y0, mod.patch != 0)
                     modtims.append(tim)
                     mm.append(d)
@@ -3621,7 +3639,8 @@ def _get_subimages(tims, mods, src):
                        photocal=tim.getPhotoCal(),
                        sky=tim.sky.shifted(x0, y0),
                        name=tim.name)
-        srctim.subwcs = tim.subwcs.get_subimage(x0, y0, mw, mh)
+        sh,sw = srctim.shape
+        srctim.subwcs = tim.subwcs.get_subimage(x0, y0, sw, sh)
         srctim.band = tim.band
         srctim.sig1 = tim.sig1
         srctim.modelMinval = tim.modelMinval

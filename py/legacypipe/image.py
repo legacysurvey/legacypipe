@@ -251,7 +251,8 @@ class LegacySurveyImage(object):
         if nanomaggies:
             # Scale images to Nanomaggies
             img /= zpscale
-            invvar *= zpscale**2
+            #KJB print('img.dtype=',img.dtype,'invvar.dtype=',invvar.dtype,'zpscale.dtype=',zpscale.dtype)
+            invvar= invvar.astype('float')* zpscale**2 #invvar *= zpscale**2
             if not subsky:
                 sky.scale(1./zpscale)
             zpscale = 1.
