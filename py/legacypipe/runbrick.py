@@ -2707,7 +2707,11 @@ def stage_writecat(
         print('Wrote', out.fn)
 
     # compute sha1sums file?
-        
+    hashfn = survey.find_file('sha1sum-brick', brick=brickname, output=True)
+    cmd = 'sha1sum -b ' + ' '.join(survey.output_files) + ' > ' + hashfn
+    print('Checksums:', cmd)
+    os.system(cmd)
+
     return dict(T2=T2)
 
 def _bounce_tim_get_resamp(X):

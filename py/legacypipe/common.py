@@ -881,6 +881,10 @@ Now using the current directory as LEGACY_SURVEY_DIR, but this is likely to fail
         elif filetype in ['all-models']:
             return os.path.join(basedir, 'metrics', brickpre, brick,
                                 'all-models-%s.fits' % (brick))
+
+        elif filetype == 'sha1sum-brick':
+            return os.path.join(basedir, 'tractor', brickpre,
+                                'brick-%s.sha1sum' % brick)
         
         assert(False)
 
