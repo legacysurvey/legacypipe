@@ -2446,13 +2446,55 @@ def stage_wise_forced(
     for band in [3,4]:
         args.append((wcat, tiles, band, roiradec, unwise_w34_dir, use_ceres))
 
-    phots = mp.map(_unwise_phot, args)
+    # Time-resolved WISE coadds too
+    tdir = os.environ['UNWISE_COADDS_TIMERESOLVED_DIR']
+    W = fits_table(os.path.join(tdir, 'time_resolved_neo1-atlas.fits'))
+    print('Read', len(W), 'time-resolved WISE coadd tiles')
+    W.cut(np.array([t in tiles.coadd_id for t in W.coadd_id]))
+    print('Cut to', len(W), 'time-resolved vs', len(tiles), 'full-depth')
+    assert(len(W) == len(tiles))
+
+    eargs = []
+    for band in [1,2]:
+        # W1 is bit 0 (value 0x1), W2 is bit 1 (value 0x2)
+        bitmask = (1 << (band-1))
+        epochs = np.flatnonzero(W.epoch_bitmask & bitmask)
+        print('Epochs:', epochs)
+        for e in epochs:
+            edir = os.path.join(tdir, 'e%03i' % e)
+            eargs.append((e, (wcat, tiles, band, roiradec, edir, use_ceres)))
+        
+    phots = mp.map(_unwise_phot, args + [a for e,a in eargs])
     WISE = phots[0]
     if WISE is not None:
-        for p in phots[1:]:
+        for p in phots[1:len(args)]:
             WISE.add_columns_from(p)
         WISE.rename('tile', 'unwise_tile')
-    return dict(WISE=WISE)
+
+    #
+    Nepochs = 5
+
+    WISE_T = phots[len(args)]
+    if WISE_T is not None:
+        WT = fits_table()
+        phots = phots[len(args):]
+        for (e,a),phot in zip(eargs, phots):
+            print('Epoch', e, 'photometry:')
+            phot.about()
+            phot.delete_column('tile')
+
+            for c in phot.columns():
+                if not c in WT.columns():
+                    x = phot.get(c)
+                    WT.set(c, np.zeros((len(x), Nepochs), x.dtype))
+                    
+                X = WT.get(c)
+                X[:,e] = phot.get(c)
+        WISE_T = WT
+
+    WISE_T.writeto('wise-timeresolved.fits')
+
+    return dict(WISE=WISE, WISE_T=WISE_T)
 
 def _unwise_phot(X):
     from wise.forcedphot import unwise_forcedphot
@@ -2706,7 +2748,7 @@ def stage_writecat(
         T2.writeto(out.fn, primheader=primhdr, header=hdr, columns=cols)
         print('Wrote', out.fn)
 
-    # compute sha1sums file?
+    # produce per-brick sha1sums file
     hashfn = survey.find_file('sha1sum-brick', brick=brickname, output=True)
     cmd = 'sha1sum -b ' + ' '.join(survey.output_files) + ' > ' + hashfn
     print('Checksums:', cmd)
