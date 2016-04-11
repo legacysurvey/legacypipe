@@ -17,6 +17,9 @@ export CODE_DIR=$SCRATCH/code
 # Use HPCPorts for packages
 source /project/projectdirs/cmb/modules/hpcports_NERSC.sh
 
+
+#(>&2 echo "legacypipe/bin/bashrc running -- NERSC_HOST xxx${NERSC_HOST}xxx")
+
 if [ "$NERSC_HOST" == "edison" ]; then
   hpcports shared_gnu
 
@@ -127,6 +130,8 @@ if [ "$NERSC_HOST" == "cori" ]; then
   #
   module use /project/projectdirs/cosmo/work/decam/modules
   module load legacysurvey/dr3-cori-scratch
+
+  #(>&2 echo "Loaded legacysurvey module... LEGACY_SURVEY_DIR is $LEGACY_SURVEY_DIR")
 
   module load dust/scratch
   # Aaron's zeropoint-corrected version

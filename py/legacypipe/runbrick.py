@@ -38,19 +38,14 @@ import os
 import fitsio
 
 from astrometry.util.fits import fits_table, merge_tables
-from astrometry.util.file import trymakedirs
 from astrometry.util.plotutils import PlotSequence, dimshow
-from astrometry.util.resample import resample_with_wcs, OverlapError
 from astrometry.util.ttime import Time
-from astrometry.util.starutil_numpy import (radectoxyz, ra2hmsstring,
-                                            dec2dmsstring)
-from astrometry.util.miscutils import patch_image
+from astrometry.util.starutil_numpy import ra2hmsstring, dec2dmsstring
 
-from tractor import Tractor, PointSource, Image, NanoMaggies, Catalog
-from tractor.ellipses import EllipseESoft, EllipseE
+from tractor import Tractor, PointSource, Image, NanoMaggies, Catalog, RaDecPos
+from tractor.ellipses import EllipseE
 from tractor.galaxy import DevGalaxy, ExpGalaxy, FixedCompositeGalaxy, SoftenedFracDev, FracDev, disable_galaxy_cache
 
-# Argh, can't do relative imports if this script is to be runnable.
 from legacypipe.common import (tim_get_resamp, get_rgb, imsave_jpeg, LegacySurveyData,
                                CP_DQ_BITS)
 from legacypipe.utils import RunbrickError, NothingToDoError, iterwrapper
@@ -1424,17 +1419,6 @@ def stage_srcs(coimgs=None, cons=None,
     tlast = tnow
 
     if plots:
-        if False and not plots:
-            plt.figure(figsize=(18,18))
-            plt.subplots_adjust(left=0.07, right=0.99, bottom=0.07, top=0.95,
-                                hspace=0.2, wspace=0.05)
-            if outdir is None:
-                outdir = '.'
-            outdir = os.path.join(outdir, 'metrics', brickname[:3])
-            trymakedirs(outdir)
-            fn = os.path.join(outdir, 'sources-%s' % brickname)
-            ps = PlotSequence(fn)
-
         if coimgs is None:
             coimgs,cons = compute_coadds(tims, bands, targetwcs)
         crossa = dict(ms=10, mew=1.5)
@@ -1713,7 +1697,7 @@ def stage_fitblobs(T=None,
         last_checkpoint = CpuMeas()
         while True:
             import multiprocessing
-            from astrometry.util.file import pickle_to_file
+            from astrometry.util.file import pickle_to_file, trymakedirs
 
             d = os.path.dirname(checkpoint_filename)
             if len(d) and not os.path.exists(d):
@@ -3368,7 +3352,7 @@ def main():
     if opt.on_bricks:
         # Quickly check for existence of required neighboring catalogs
         # before starting.
-        survey = LegacySurveyData(survey_dir=opt.survey_dir, output_dir=opt.output_dir)
+        survey = LegacySurveyData(survey_dir=opt.survey_dir, output_dir=opt.outdir)
         brick = survey.get_brick_by_name(opt.brick)
         bricks = on_bricks_dependencies(brick, survey)
         print('Checking for catalogs for bricks:',
