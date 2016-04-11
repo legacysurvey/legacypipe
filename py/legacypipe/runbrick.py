@@ -51,7 +51,7 @@ from tractor.ellipses import EllipseESoft, EllipseE
 from tractor.galaxy import DevGalaxy, ExpGalaxy, FixedCompositeGalaxy, SoftenedFracDev, FracDev, disable_galaxy_cache
 
 # Argh, can't do relative imports if this script is to be runnable.
-from legacypipe.common import *
+from legacypipe.common import tim_get_resamp, get_rgb, imsave_jpeg, LegacySurveyData
 from legacypipe.utils import RunbrickError, NothingToDoError, iterwrapper
 from legacypipe.runbrick_plots import _plot_mods
 
@@ -72,7 +72,7 @@ def runbrick_global_init():
 def stage_tims(W=3600, H=3600, pixscale=0.262, brickname=None,
                survey=None,
                ra=None, dec=None,
-               plots=False, ps=None, survey_dir=None,
+               plots=False, ps=None, survey_dir=None, outdir=None,
                target_extent=None, pipe=False, program_name='runbrick.py',
                bands='grz',
                do_calibs=True,
@@ -103,17 +103,16 @@ def stage_tims(W=3600, H=3600, pixscale=0.262, brickname=None,
     - *splinesky*: boolean.  Use SplineSky model, rather than ConstantSky?
 
     '''
+    from legacypipe.common import (get_git_version, get_version_header, wcs_for_brick,
+                                   read_one_tim)
     t0 = tlast = Time()
 
-    # early fail for mysterious "ImportError: c.so.6: cannot open
-    # shared object file: No such file or directory" seen in DR1 on
-    # Edison.
-    from tractor.mix import c_gauss_2d_grid
-
     if survey is None:
-        survey = LegacySurveyData(survey_dir)
+        survey = LegacySurveyData(survey_dir=survey_dir, output_dir=outdir)
 
     if ra is not None:
+        from legacypipe.common import BrickDuck
+        
         # Custom brick; create a fake 'brick' object
         brick = BrickDuck()
         brick.ra  = ra
@@ -274,6 +273,8 @@ def stage_tims(W=3600, H=3600, pixscale=0.262, brickname=None,
             os.system(cmd)
 
     if do_calibs:
+        from legacypipe.common import run_calibs
+
         kwa = dict(git_version=gitver)
         if gaussPsf:
             kwa.update(psfex=False)
@@ -708,7 +709,7 @@ def _coadds(tims, bands, targetwcs,
 
 
 def _write_band_images(band,
-                       brickname, version_header, tims, targetwcs, basedir,
+                       survey, brickname, version_header, tims, targetwcs,
                        cowimg=None, cow=None, cowmod=None, cochi2=None,
                        detiv=None, galdetiv=None, congood=None, **kwargs):
 
@@ -760,22 +761,23 @@ def _write_band_images(band,
     hdr.add_record(dict(name='EQUINOX', value=2000.))
 
     imgs = [
-        ('image', 'image',  cowimg,  False),
+        ('image', 'image',  cowimg),
         ]
     if congood is not None:
         imgs.append(
-            ('nexp',   'expmap',   congood, True ),
+            ('nexp',   'expmap',   congood),
             )
-    # if detiv is not None:
     if cowmod is not None:
         imgs.extend([
-                ('invvar',   'wtmap',    cow,      False),
-                ('model',    'model',    cowmod,   True ),
-                ('chi2',     'chi2',     cochi2,   False),
-                ('depth',    'psfdepth', detiv,    True ),
-                ('galdepth', 'galdepth', galdetiv, True ),
+                ('invvar',   'wtmap',    cow     ),
+                ('model',    'model',    cowmod  ),
+                ('chi2',     'chi2',     cochi2  ),
+                ('depth',    'psfdepth', detiv   ),
+                ('galdepth', 'galdepth', galdetiv),
                 ])
-    for name,prodtype,img,gzip in imgs:
+    for name,prodtype,img in imgs:
+        from legacypipe.common import MyFITSHDR
+
         # Make a copy, because each image has different values for
         # these headers...
         hdr2 = MyFITSHDR()
@@ -794,13 +796,9 @@ def _write_band_images(band,
             hdr2.add_record(dict(name='BUNIT', value='1/nanomaggy^2',
                                  comment='Ivar of ABmag=22.5-2.5*log10(nmgy)'))
 
-        fn = os.path.join(basedir,
-                          'legacysurvey-%s-%s-%s.fits' % (brickname, name, band))
-        if gzip:
-            fn += '.gz'
-        fitsio.write(fn, img, clobber=True, header=hdr2)
-        print('Wrote', fn)
-
+        with survey.write_output(name, brick=brickname, band=band) as out:
+            fitsio.write(out.fn, img, clobber=True, header=hdr2)
+            print('Wrote', out.fn)
 
 def stage_mask_junk(tims=None, targetwcs=None, W=None, H=None, bands=None,
                     mp=None, nsigma=None, plots=None, ps=None, **kwargs):
@@ -910,7 +908,7 @@ def stage_mask_junk(tims=None, targetwcs=None, W=None, H=None, bands=None,
 
     return dict(tims=tims)
 
-def stage_image_coadds(targetwcs=None, bands=None, tims=None, outdir=None,
+def stage_image_coadds(targetwcs=None, bands=None, tims=None,
                        brickname=None, version_header=None,
                        plots=False, ps=None, coadd_bw=False, W=None, H=None,
                        brick=None, blobs=None,
@@ -999,18 +997,9 @@ def stage_image_coadds(targetwcs=None, bands=None, tims=None, outdir=None,
             plt.title('Per-column medians for %s band' % band)
             ps.savefig()
 
-    if outdir is None:
-        outdir = '.'
-    basedir = os.path.join(outdir, 'coadd', brickname[:3], brickname)
-    trymakedirs(basedir)
-
     C = _coadds(tims, bands, targetwcs,
-                #############
-                detmaps=True,
                 callback=_write_band_images,
-                callback_args=(brickname, version_header, tims, targetwcs, basedir))
-
-    
+                callback_args=(survey, brickname, version_header, tims, targetwcs))
 
     if True:
         # Compute the brick's unique pixels.
@@ -1052,15 +1041,14 @@ def stage_image_coadds(targetwcs=None, bands=None, tims=None, outdir=None,
         del det
         del detiv
         del galdetiv
-        fn = os.path.join(basedir, 'legacysurvey-%s-depth.fits' % (brickname))
-        D.writeto(fn)
-        print('Wrote', fn)
+
+        with survey.write_output('depth-table', brick=brickname) as out:
+            D.writeto(out.fn)
+            print('Wrote', out.fn)
         del D
 
     #rgbkwargs2 = dict(mnmx=(-3., 3.))
     #rgbkwargs2 = dict(mnmx=(-2., 10.))
-
-    tmpfn = create_temp(suffix='.png')
     for name,ims,rgbkw in [('image',C.coimgs,rgbkwargs),
         #('image2',C.coimgs,rgbkwargs2),
                            ]:
@@ -1070,12 +1058,11 @@ def stage_image_coadds(targetwcs=None, bands=None, tims=None, outdir=None,
             i = 'zrg'.index(bands[0])
             rgb = rgb[:,:,i]
             kwa = dict(cmap='gray')
-        plt.imsave(tmpfn, rgb, origin='lower', **kwa)
-        jpegfn = os.path.join(basedir, 'legacysurvey-%s-%s.jpg' % (brickname, name))
-        cmd = 'pngtopnm %s | pnmtojpeg -quality 90 > %s' % (tmpfn, jpegfn)
-        os.system(cmd)
-        os.unlink(tmpfn)
-        print('Wrote', jpegfn)
+
+        with survey.write_output(name + '-jpeg', brick=brickname) as out:
+            imsave_jpeg(out.fn, rgb, origin='lower', **kwa)
+            print('Wrote', out.fn)
+        del rgb
 
         # Blob-outlined version
         if blobs is not None:
@@ -1089,22 +1076,18 @@ def stage_image_coadds(targetwcs=None, bands=None, tims=None, outdir=None,
             rgb[:,:,0][outline] = 0
             rgb[:,:,1][outline] = 1
             rgb[:,:,2][outline] = 0
-            plt.imsave(tmpfn, rgb, origin='lower', **kwa)
-            jpegfn = os.path.join(basedir, 'legacysurvey-%s-%s.jpg' % (brickname, name+'blob'))
-            cmd = 'pngtopnm %s | pnmtojpeg -quality 90 > %s' % (tmpfn, jpegfn)
-            os.system(cmd)
-            os.unlink(tmpfn)
-            print('Wrote', jpegfn)
+
+            with survey.write_output(name + 'blob-jpeg', brick=brickname) as out:
+                imsave_jpeg(out.fn, rgb, origin='lower', **kwa)
+                print('Wrote', out.fn)
+            del rgb
 
     return None
 
 def _median_smooth_detmap(X):
-    (detmap, detiv, binning) = X
     from scipy.ndimage.filters import median_filter
-    #from astrometry.util.util import median_smooth
-    #smoo = np.zeros_like(detmap)
-    #median_smooth(detmap, detiv>0, 100, smoo)
-    #smoo = median_filter(detmap, (50,50))
+    from legacypipe.common import bin_image
+    (detmap, detiv, binning) = X
     # Bin down before median-filtering, for speed.
     binned,nil = bin_image(detmap, detiv, binning)
     smoo = median_filter(binned, (50,50))
@@ -1134,7 +1117,7 @@ def stage_srcs(coimgs=None, cons=None,
                bands=None, ps=None, tims=None,
                plots=False, plots2=False,
                pipe=False, brickname=None,
-               mp=None, outdir=None, nsigma=5,
+               mp=None, nsigma=5,
                on_bricks=False,
                survey=None, brick=None,
                **kwargs):
@@ -1152,16 +1135,14 @@ def stage_srcs(coimgs=None, cons=None,
     tlast = Time()
     avoid_xy = []
     if on_bricks:
-        from legacypipe.desi_common import read_fits_catalog
-
         bricks = on_bricks_dependencies(brick, survey)
-
+        if len(bricks) == 0:
+            on_bricks = False
+    if on_bricks:
+        from legacypipe.desi_common import read_fits_catalog
         B = []
-        if outdir is None:
-            outdir = '.'
         for b in bricks:
-            fn = os.path.join(outdir, 'tractor', b.brickname[:3],
-                              'tractor-%s.fits' % b.brickname)
+            fn = survey.find_file('tractor', brick=b.brickname)
             print('Looking for', fn)
             B.append(fits_table(fn))
         B = merge_tables(B)
@@ -1342,7 +1323,8 @@ def stage_srcs(coimgs=None, cons=None,
     # Handle the margin of interpolated (masked) pixels around
     # saturated pixels
     from scipy.ndimage.morphology import binary_dilation
-
+    from legacypipe.common import segment_and_group_sources
+    
     saturated_pix = binary_dilation(satmap > 0, iterations=10)
 
     # Saturated blobs -- create a source for each?!
@@ -1496,15 +1478,6 @@ def stage_srcs(coimgs=None, cons=None,
             'cat', 'ps']
     if not pipe:
         keys.extend(['detmaps', 'detivs'])
-
-    if False:
-        for b,detmap,detiv in zip(bands, detmaps, detivs):
-            fitsio.write('detmap-%s-%s.fits' % (brickname, b),
-                         detmap)
-            fitsio.write('detiv-%s-%s.fits' % (brickname, b),
-                         detiv)
-            fitsio.write('detsn-%s-%s.fits' % (brickname, b),
-                         detmap * np.sqrt(detiv))
 
     rtn = dict()
     for k in keys:
@@ -1796,7 +1769,6 @@ def stage_fitblobs_finish(
     bands=None, ps=None, tims=None,
     plots=False, plots2=False,
     fitblobs_R=None,
-    outdir=None,
     write_metrics=True,
     get_all_models=False,
     allbands = 'ugrizY',
@@ -1870,12 +1842,6 @@ def stage_fitblobs_finish(
 
     # write out blob map
     if write_metrics:
-        if outdir is None:
-            outdir = '.'
-        metricsdir = os.path.join(outdir, 'metrics', brickname[:3])
-        trymakedirs(metricsdir)
-        fn = os.path.join(metricsdir, 'blobs-%s.fits.gz' % brickname)
-
         # Build map from (old+1) to new blob numbers, for the blob image.
         blobmap = np.empty(blobs.max()+2, int)
         # make sure that dropped blobs -> -1
@@ -1885,8 +1851,9 @@ def stage_fitblobs_finish(
         blobmap[T.blob + 1] = iblob
         blobs = blobmap[blobs+1]
 
-        fitsio.write(fn, blobs, header=version_header, clobber=True)
-        print('Wrote', fn)
+        with survey.write_output('blobmap', brick=brickname) as out:
+            fitsio.write(out.fn, blobs, header=version_header, clobber=True)
+            print('Wrote', out.fn)
         del blobmap
     del iblob
     blobs = None
@@ -1992,10 +1959,11 @@ def stage_fitblobs_finish(
                                         comment='Band order in array values'))
                 primhdr.add_record(dict(name='PRODTYPE', value='catalog',
                                         comment='NOAO data product type'))
-            fn = os.path.join(metricsdir, 'all-models-%s.fits' % brickname)
-            TT.writeto(fn, header=hdr)
+
+            with survey.write_output('all-models', brick=brickname) as out:
+                TT.writeto(out.fn, header=hdr)
+                print('Wrote', out.fn)
             del TT
-            print('Wrote', fn)
 
     T.decam_flags = BB.flags
     T.fracflux    = BB.fracflux
@@ -2168,9 +2136,9 @@ def _get_mod(X):
 
     return mod
 
-def stage_coadds(bands=None, version_header=None, targetwcs=None,
+def stage_coadds(survey=None, bands=None, version_header=None, targetwcs=None,
                  tims=None, ps=None, brickname=None, ccds=None,
-                 outdir=None, T=None, cat=None, pixscale=None, plots=False,
+                 T=None, cat=None, pixscale=None, plots=False,
                  coadd_bw=False, brick=None, W=None, H=None,
                  mp=None,
                  **kwargs):
@@ -2182,12 +2150,6 @@ def stage_coadds(bands=None, version_header=None, targetwcs=None,
     '''
     tlast = Time()
 
-    if outdir is None:
-        outdir = '.'
-    basedir = os.path.join(outdir, 'coadd', brickname[:3], brickname)
-    trymakedirs(basedir)
-    fn = os.path.join(basedir, 'legacysurvey-%s-ccds.fits' % brickname)
-    #
     ccds.ccd_x0 = np.array([tim.x0 for tim in tims]).astype(np.int16)
     ccds.ccd_x1 = np.array([tim.x0 + tim.shape[1]
                             for tim in tims]).astype(np.int16)
@@ -2223,8 +2185,10 @@ def stage_coadds(bands=None, version_header=None, targetwcs=None,
         primhdr.add_record(r)
     primhdr.add_record(dict(name='PRODTYPE', value='ccdinfo',
                             comment='NOAO data product type'))
-    ccds.writeto(fn, primheader=primhdr)
-    print('Wrote', fn)
+
+    with survey.write_output('ccds-table', brick=brickname) as out:
+        ccds.writeto(out.fn, primheader=primhdr)
+        print('Wrote', out.fn)
 
     tnow = Time()
     print('[serial coadds]:', tnow-tlast)
@@ -2264,8 +2228,7 @@ def stage_coadds(bands=None, version_header=None, targetwcs=None,
                 ngood=True, detmaps=True, psfsize=True,
                 apertures=apertures, apxy=apxy,
                 callback=_write_band_images,
-                callback_args=(brickname, version_header, tims, targetwcs,
-                               basedir),
+                callback_args=(survey, brickname, version_header, tims, targetwcs),
                 plots=False, ps=ps)
 
     for c in ['nobs', 'anymask', 'allmask', 'psfsize', 'depth', 'galdepth']:
@@ -2320,12 +2283,12 @@ def stage_coadds(bands=None, version_header=None, targetwcs=None,
     del det
     del detiv
     del galdetiv
-    fn = os.path.join(basedir, 'legacysurvey-%s-depth.fits' % (brickname))
-    D.writeto(fn)
-    print('Wrote', fn)
+
+    with survey.write_output('depth-table', brick=brickname) as out:
+        D.writeto(out.fn)
+        print('Wrote', out.fn)
     del D
 
-    tmpfn = create_temp(suffix='.png')
     for name,ims,rgbkw in [('image', C.coimgs, rgbkwargs),
                            ('model', C.comods, rgbkwargs),
                            ('resid', C.coresids, rgbkwargs_resid),
@@ -2336,13 +2299,10 @@ def stage_coadds(bands=None, version_header=None, targetwcs=None,
             i = 'zrg'.index(bands[0])
             rgb = rgb[:,:,i]
             kwa = dict(cmap='gray')
-        plt.imsave(tmpfn, rgb, origin='lower', **kwa)
+        with survey.write_output(name + '-jpeg', brick=brickname) as out:
+            imsave_jpeg(out.fn, rgb, origin='lower', **kwa)
+            print('Wrote', out.fn)
         del rgb
-        jpegfn = os.path.join(basedir, 'legacysurvey-%s-%s.jpg' % (brickname, name))
-        cmd = ('pngtopnm %s | pnmtojpeg -quality 90 > %s' % (tmpfn, jpegfn))
-        os.system(cmd)
-        os.unlink(tmpfn)
-        print('Wrote', jpegfn)
 
     if plots:
         plt.clf()
@@ -2425,7 +2385,6 @@ def stage_wise_forced(
     unwise_w12_dir=None,
     unwise_w34_dir=None,
     brick=None,
-    outdir=None,
     use_ceres=True,
     mp=None,
     rsync=False,
@@ -2545,9 +2504,6 @@ def stage_writecat(
     brickid=None,
     brick=None,
     invvars=None,
-    catalogfn=None,
-    outdir=None,
-    write_catalog=True,
     allbands=None,
     **kwargs):
     '''
@@ -2697,16 +2653,6 @@ def stage_writecat(
             WISE.w1_prochi2, WISE.w2_prochi2,
             WISE.w3_prochi2, WISE.w4_prochi2]).T
 
-    if catalogfn is not None:
-        fn = catalogfn
-    else:
-        if outdir is None:
-            outdir = '.'
-        outdir = os.path.join(outdir, 'tractor', brickname[:3])
-        fn = os.path.join(outdir, 'tractor-%s.fits' % brickname)
-    dirnm = os.path.dirname(fn)
-    trymakedirs(dirnm)
-
     print('Reading SFD maps...')
     sfd = SFDMap()
     filts = ['%s %s' % ('DES', f) for f in allbands]
@@ -2773,15 +2719,9 @@ def stage_writecat(
             j = cclower.index(c)
             cols[i] = cc[j]
 
-    if write_catalog:
-        import tempfile
-        f,tempfn = tempfile.mkstemp(
-            suffix='.fits', prefix='tractor-%s-tmp' % brickname,
-            dir=os.path.dirname(fn))
-        os.close(f)
-        T2.writeto(tempfn, primheader=primhdr, header=hdr, columns=cols)
-        os.rename(tempfn, fn)
-        print('Wrote', fn)
+    with survey.write_output('tractor', brick=brickname) as out:
+        T2.writeto(out.fn, primheader=primhdr, header=hdr, columns=cols)
+        print('Wrote', out.fn)
 
     return dict(T2=T2)
 
@@ -3209,7 +3149,7 @@ python -u legacypipe/runbrick.py --plots --brick 2440p070 --zoom 1900 2400 450 9
     parser.add_argument('--pixscale', type=float, default=0.262,
                         help='Pixel scale of the output coadds (arcsec/pixel)')
 
-    parser.add_argument('-d', '--outdir', help='Set output base directory')
+    parser.add_argument('-d', '--outdir', help='Set output base directory', default='.')
     parser.add_argument('--survey-dir', type=str, default=None,
                         help='Override the $LEGACY_SURVEY_DIR environment variable')
 
@@ -3428,7 +3368,7 @@ def main():
     if opt.on_bricks:
         # Quickly check for existence of required neighboring catalogs
         # before starting.
-        survey = LegacySurveyData(opt.survey_dir)
+        survey = LegacySurveyData(survey_dir=opt.survey_dir, output_dir=opt.output_dir)
         brick = survey.get_brick_by_name(opt.brick)
         bricks = on_bricks_dependencies(brick, survey)
         print('Checking for catalogs for bricks:',

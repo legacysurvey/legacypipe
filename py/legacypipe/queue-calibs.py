@@ -33,7 +33,7 @@ cal.sh:
 python legacypipe/queue-calibs.py --region edr --brickq 0 > bricks
 grep '^....[pm]...$' bricks | qdo load edr0 -
 
-qdo launch edr0 16 --cores_per_worker 8 --batchqueue regular --walltime 12:00:00 --script ../bin/pipebrick.sh
+qdo launch edr0 16 --cores_per_worker 8 --batchqueue regular --walltime 12:00:00 --script ../bin/pipebrick.sh --keep_env
 
 
 '''
