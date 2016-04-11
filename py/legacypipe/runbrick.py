@@ -44,7 +44,8 @@ from astrometry.util.starutil_numpy import ra2hmsstring, dec2dmsstring
 
 from tractor import Tractor, PointSource, Image, NanoMaggies, Catalog, RaDecPos
 from tractor.ellipses import EllipseE
-from tractor.galaxy import DevGalaxy, ExpGalaxy, FixedCompositeGalaxy, SoftenedFracDev, FracDev, disable_galaxy_cache
+from tractor.galaxy import (DevGalaxy, ExpGalaxy, FixedCompositeGalaxy, SoftenedFracDev,
+                            FracDev, disable_galaxy_cache)
 
 from legacypipe.common import (tim_get_resamp, get_rgb, imsave_jpeg, LegacySurveyData,
                                CP_DQ_BITS)
@@ -2654,8 +2655,7 @@ def stage_writecat(
         'brickid', 'brickname', 'objid', 'brick_primary', 'blob', 'ninblob',
         'tycho2inblob', 'type', 'ra', 'ra_ivar', 'dec', 'dec_ivar',
         'bx', 'by', 'bx0', 'by0', 'left_blob', 'out_of_bounds',
-        'dchisq', 'ebv',
-        'decam_flux', 'decam_flux_ivar' ]
+        'dchisq', 'ebv', 'decam_flux', 'decam_flux_ivar' ]
 
     if AP is not None:
         cols.extend(['decam_apflux', 'decam_apflux_resid','decam_apflux_ivar'])
@@ -2667,8 +2667,7 @@ def stage_writecat(
     if WISE is not None:
         cols.extend([
             'wise_flux', 'wise_flux_ivar',
-            'wise_mw_transmission', 'wise_nobs', 'wise_fracflux',
-            'wise_rchi2'])
+            'wise_mw_transmission', 'wise_nobs', 'wise_fracflux', 'wise_rchi2'])
 
     cols.extend([
         'fracdev', 'fracDev_ivar', 'shapeexp_r', 'shapeexp_r_ivar',
@@ -2707,6 +2706,8 @@ def stage_writecat(
         T2.writeto(out.fn, primheader=primhdr, header=hdr, columns=cols)
         print('Wrote', out.fn)
 
+    # compute sha1sums file?
+        
     return dict(T2=T2)
 
 def _bounce_tim_get_resamp(X):

@@ -992,7 +992,7 @@ Now using the current directory as LEGACY_SURVEY_DIR, but this is likely to fail
         For read-only purposes, see *get_bricks_readonly()*, which
         uses a cached version.
         '''
-        return fits_table(os.path.join(self.survey_dir, 'survey-bricks.fits'))
+        return fits_table(os.path.join(self.survey_dir, 'survey-bricks.fits.gz'))
 
     def get_bricks_readonly(self):
         '''
@@ -1080,12 +1080,18 @@ Now using the current directory as LEGACY_SURVEY_DIR, but this is likely to fail
         '''
         Returns the table of CCDs.
         '''
-        fn = os.path.join(self.survey_dir, 'survey-ccds.fits')
-        if not os.path.exists(fn):
-            fn += '.gz'
-        print('Reading CCDs from', fn)
-        T = fits_table(fn)
-        print('Got', len(T), 'CCDs')
+        from glob import glob
+
+        fns = glob(os.path.join(self.survey_dir, 'survey-ccds-*.fits.gz'))
+        TT = []
+        for fn in fns:
+            print('Reading CCDs from', fn)
+            T = fits_table(fn)
+            print('Got', len(T), 'CCDs')
+            TT.append(T)
+        T = merge_tables(TT, columns='fillzero')
+        print('Total of', len(T), 'CCDs')
+        del TT
 
         cols = T.columns()
         # Make DR1 CCDs table somewhat compatible with DR2

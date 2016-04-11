@@ -138,6 +138,9 @@ if [ "$NERSC_HOST" == "cori" ]; then
   #module load unwise_coadds/2.1-scratch
   module load unwise_coadds/fulldepth-scratch
 
+  # module load unwise_coadds_timeresolved/neo1
+  module load unwise_coadds_timeresolved/neo1-cori-scratch
+
   module load tractor-hpcp
   module load astrometry_net-hpcp
   module load astropy-hpcp
