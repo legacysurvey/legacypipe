@@ -46,15 +46,15 @@ from astrometry.util.starutil_numpy import (radectoxyz, ra2hmsstring,
                                             dec2dmsstring)
 from astrometry.util.miscutils import patch_image
 
-from tractor import Tractor, PointSource, Image, NanoMaggies
+from tractor import Tractor, PointSource, Image, NanoMaggies, Catalog
 from tractor.ellipses import EllipseESoft, EllipseE
 from tractor.galaxy import DevGalaxy, ExpGalaxy, FixedCompositeGalaxy, SoftenedFracDev, FracDev, disable_galaxy_cache
 
 # Argh, can't do relative imports if this script is to be runnable.
-from legacypipe.common import tim_get_resamp, get_rgb, imsave_jpeg, LegacySurveyData
+from legacypipe.common import (tim_get_resamp, get_rgb, imsave_jpeg, LegacySurveyData,
+                               CP_DQ_BITS)
 from legacypipe.utils import RunbrickError, NothingToDoError, iterwrapper
 from legacypipe.runbrick_plots import _plot_mods
-
 
 ## GLOBALS!  Oh my!
 nocache = True
@@ -908,7 +908,7 @@ def stage_mask_junk(tims=None, targetwcs=None, W=None, H=None, bands=None,
 
     return dict(tims=tims)
 
-def stage_image_coadds(targetwcs=None, bands=None, tims=None,
+def stage_image_coadds(survey=None, targetwcs=None, bands=None, tims=None,
                        brickname=None, version_header=None,
                        plots=False, ps=None, coadd_bw=False, W=None, H=None,
                        brick=None, blobs=None,
@@ -998,6 +998,7 @@ def stage_image_coadds(targetwcs=None, bands=None, tims=None,
             ps.savefig()
 
     C = _coadds(tims, bands, targetwcs,
+                detmaps=True,
                 callback=_write_band_images,
                 callback_args=(survey, brickname, version_header, tims, targetwcs))
 
@@ -1759,6 +1760,7 @@ def stage_fitblobs(T=None,
                 blobslices=blobslices, blobsrcs=blobsrcs)
 
 def stage_fitblobs_finish(
+    survey=None,
     brickname=None,
     brickid=None,
     version_header=None,
@@ -2148,6 +2150,8 @@ def stage_coadds(survey=None, bands=None, version_header=None, targetwcs=None,
     source model fits, and we can create coadds of the images, model,
     and residuals.  We also perform aperture photometry in this stage.
     '''
+    from legacypipe.common import apertures_arcsec
+
     tlast = Time()
 
     ccds.ccd_x0 = np.array([tim.x0 for tim in tims]).astype(np.int16)
@@ -2238,7 +2242,7 @@ def stage_coadds(survey=None, bands=None, version_header=None, targetwcs=None,
         # empty table when 0 sources.
         C.AP = fits_table()
         for band in bands:
-            nap = len(apertures_arcsec)
+            nap = len(apertures)
             C.AP.set('apflux_img_%s' % band, np.zeros((0,nap)))
             C.AP.set('apflux_img_ivar_%s' % band, np.zeros((0,nap)))
             C.AP.set('apflux_resid_%s' % band, np.zeros((0,nap)))
@@ -2491,6 +2495,7 @@ def _unwise_phot(X):
 Write catalog output
 '''
 def stage_writecat(
+    survey=None,
     version_header=None,
     T=None,
     WISE=None,
@@ -2510,14 +2515,9 @@ def stage_writecat(
     Final stage in the pipeline: format results for the output
     catalog.
     '''
-
-    ## HACK -- COSMOS repeats
-    if brick is None and brickname is not None:
-        survey = kwargs['survey']
-        brick = survey.get_brick_by_name(brickname)
-        print('recovered brick', brick)
-
     from desi_common import prepare_fits_catalog
+    from tractor.sfd import SFDMap
+    
     fs = None
     TT = T.copy()
     for k in ['itx','ity','index']:

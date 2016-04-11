@@ -747,6 +747,7 @@ def create_temp(**kwargs):
     return fn
 
 def imsave_jpeg(jpegfn, img, **kwargs):
+    import pylab as plt
     tmpfn = create_temp(suffix='.png')
     plt.imsave(tmpfn, img, **kwargs)
     cmd = ('pngtopnm %s | pnmtojpeg -quality 90 > %s' % (tmpfn, jpegfn))
@@ -912,6 +913,7 @@ Now using the current directory as LEGACY_SURVEY_DIR, but this is likely to fail
                         os.makedirs(dirnm)
                     except:
                         pass
+                return self
 
             def __exit__(self, exc_type, exc_value, traceback):
                 # If no exception was thrown...
