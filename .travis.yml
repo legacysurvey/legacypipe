@@ -2,8 +2,6 @@
 
 # container-based infrastructure
 sudo: false
-# need APT packages to get white-listed first;
-#sudo: required
 
 # install:
 #   - sudo apt-get update -qq
@@ -11,21 +9,13 @@ sudo: false
 #   - sudo pip install numpydoc
 # # python-numpydoc -- not available until Ubuntu 14.04 trusty
 
+install:
+    - pip install coveralls
+
 language: c
 compiler:
-  - gcc
+    - gcc
 
-#  - clang
-
-#     - pkg-config --exists gsl
-#     - pkg-config --modversion gsl
-#     - export SYSTEM_GSL=yes
-#     - ls /usr/include/wcslib*
-
-
-#     - rm -Rf $HOME/astrometry.net
-#     - rm -Rf $HOME/tractor-git
-#     - rm -Rf $HOME/fitsio-git
 before_script:
     - export WCSLIB_INC="-I/usr/include/wcslib-4.8.3"
     - export WCSLIB_LIB="-lwcs"
@@ -44,18 +34,14 @@ before_script:
     - ln -s $HOME/tractor-git/wise .
     - pip install numpydoc -t $HOME/numpydoc
 
-#     - pwd
-#     - ls
-#     - echo $HOME
-#     - ls $HOME
-#     - echo "$PYTHONPATH"
-#     - ls -l
-#     - python -c "import sys; print '\n'.join(sys.path)"
-#     - python -c "import tractor; print tractor.__file__"
-
 script:
     - export PYTHONPATH=${PYTHONPATH}:$(pwd)/py:$(pwd):$HOME/numpydoc
     - (cd doc && make)
+    - pwd
+    - coverage run legacypipe/runbrick.py -b 2447p120 --zoom 1020 1070 2775 2815 --no-wise --force-all --survey-dir test/testcase3/ --outdir out-testcase3
+
+after_success:
+    - coveralls
 
 addons:
   apt:
