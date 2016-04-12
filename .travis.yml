@@ -10,6 +10,7 @@ sudo: false
 # # python-numpydoc -- not available until Ubuntu 14.04 trusty
 
 install:
+    - pip install --user numpy
     - pip install numpydoc -t $HOME/numpydoc
     - pip install --user coveralls
     - pip install --user astropy
@@ -51,13 +52,15 @@ addons:
     - wcslib-dev
     - libcfitsio3
     - libcfitsio3-dev
-    - python-numpy
+    #- python-numpy
     - swig
     - gsl-bin
     - python-sphinx
     - python-mock
     - python-matplotlib
     - python-scipy
+
+# Ugh, travis's "precise" distro includes numpy 1.6.1
 
 # python-numpydoc is only available in 'trusty' and later.
 #    - python-numpydoc
