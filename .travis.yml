@@ -78,5 +78,5 @@ cache:
   directories:
   - $HOME/astrometry.net
   - $HOME/tractor-git
-  - $HOME/fitsio-git
+  #- $HOME/fitsio-git
   - $HOME/.local
