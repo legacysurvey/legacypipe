@@ -10,8 +10,9 @@ sudo: false
 # # python-numpydoc -- not available until Ubuntu 14.04 trusty
 
 install:
-    - pip install --user coveralls
     - pip install numpydoc -t $HOME/numpydoc
+    - pip install --user coveralls
+    - pip install --user astropy
 
 language: c
 compiler:

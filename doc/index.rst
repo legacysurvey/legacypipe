@@ -28,28 +28,28 @@ legacypipe.detection module
     :show-inheritance:
 
 legacypipe.common module
---------------------------
+------------------------
 
 .. automodule:: legacypipe.common
     :members:
     :show-inheritance:
 
 legacypipe.utils module
---------------------------
+-----------------------
 
 .. automodule:: legacypipe.utils
     :members:
     :show-inheritance:
 
 legacypipe.oneblob module
---------------------------
+-------------------------
 
 .. automodule:: legacypipe.oneblob
     :members:
     :show-inheritance:
 
 legacypipe.image module
---------------------------
+-----------------------
 
 .. automodule:: legacypipe.image
     :members:
@@ -84,7 +84,7 @@ legacypipe.ptf
     :show-inheritance:
 
 legacypipe.mosaic
---------------
+-----------------
 
 .. automodule:: legacypipe.mosaic
     :members:
