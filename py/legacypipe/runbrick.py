@@ -775,7 +775,8 @@ def _write_band_images(band,
 
         # Make a copy, because each image has different values for
         # these headers...
-        hdr2 = MyFITSHDR()
+        #hdr2 = MyFITSHDR()
+        hdr2 = fitsio.FITSHDR()
         for r in hdr.records():
             hdr2.add_record(r)
         hdr2.add_record(dict(name='IMTYPE', value=name,
