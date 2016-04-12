@@ -10,7 +10,7 @@ sudo: false
 # # python-numpydoc -- not available until Ubuntu 14.04 trusty
 
 install:
-    - pip install --user numpy=1.11.0
+    - pip install --user numpy==1.11.0
     - pip install numpydoc -t $HOME/numpydoc
     - pip install --user coveralls
     - pip install --user astropy
