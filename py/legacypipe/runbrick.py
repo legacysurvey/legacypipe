@@ -2471,7 +2471,7 @@ def stage_wise_forced(
             WISE.add_columns_from(p)
         WISE.rename('tile', 'unwise_tile')
 
-    #
+    # this ought to be enough for anyone =)
     Nepochs = 5
 
     WISE_T = phots[len(args)]
@@ -2482,12 +2482,10 @@ def stage_wise_forced(
             print('Epoch', e, 'photometry:')
             phot.about()
             phot.delete_column('tile')
-
             for c in phot.columns():
                 if not c in WT.columns():
                     x = phot.get(c)
                     WT.set(c, np.zeros((len(x), Nepochs), x.dtype))
-                    
                 X = WT.get(c)
                 X[:,e] = phot.get(c)
         WISE_T = WT
@@ -2526,6 +2524,7 @@ def stage_writecat(
     version_header=None,
     T=None,
     WISE=None,
+    WISE_T=None,
     AP=None,
     apertures_arcsec=None,
     cat=None, targetrd=None, pixscale=None, targetwcs=None,
@@ -2662,8 +2661,12 @@ def stage_writecat(
             fluxfactor = 10.** (dm / -2.5)
             c = 'w%i_nanomaggies' % band
             WISE.set(c, WISE.get(c) * fluxfactor)
+            if WISE_T is not None and band <= 2:
+                WISE_T.set(c, WISE_T.get(c) * fluxfactor)
             c = 'w%i_nanomaggies_ivar' % band
             WISE.set(c, WISE.get(c) / fluxfactor**2)
+            if WISE_T is not None and band <= 2:
+                WISE_T.set(c, WISE_T.get(c) / fluxfactor**2)
 
         T2.wise_flux = np.vstack([
             WISE.w1_nanomaggies, WISE.w2_nanomaggies,
@@ -2679,7 +2682,30 @@ def stage_writecat(
         T2.wise_rchi2 = np.vstack([
             WISE.w1_prochi2, WISE.w2_prochi2,
             WISE.w3_prochi2, WISE.w4_prochi2]).T
-
+        
+        if WISE_T is not None:
+            T2.wise_lc_flux = np.hstack(
+                (WISE_T.w1_nanomaggies[:,np.newaxis,:],
+                 WISE_T.w2_nanomaggies[:,np.newaxis,:]))
+            T2.wise_lc_flux_ivar = np.hstack(
+                (WISE_T.w1_nanomaggies_ivar[:,np.newaxis,:],
+                 WISE_T.w2_nanomaggies_ivar[:,np.newaxis,:]))
+            T2.wise_lc_nobs = np.hstack(
+                (WISE_T.w1_nexp[:,np.newaxis,:],
+                 WISE_T.w2_nexp[:,np.newaxis,:]))
+            T2.wise_lc_fracflux = np.hstack(
+                (WISE_T.w1_profracflux[:,np.newaxis,:],
+                 WISE_T.w2_profracflux[:,np.newaxis,:]))
+            T2.wise_lc_rchi2 = np.hstack(
+                (WISE_T.w1_prochi2[:,np.newaxis,:],
+                 WISE_T.w2_prochi2[:,np.newaxis,:]))
+            T2.wise_lc_mjd = np.hstack(
+                (WISE_T.w1_mjd[:,np.newaxis,:],
+                 WISE_T.w2_mjd[:,np.newaxis,:]))
+            
+            print('WISE light-curve shapes:', WISE_T.w1_nanomaggies.shape)
+            
+            
     print('Reading SFD maps...')
     sfd = SFDMap()
     filts = ['%s %s' % ('DES', f) for f in allbands]
@@ -2711,6 +2737,11 @@ def stage_writecat(
             'wise_flux', 'wise_flux_ivar',
             'wise_mw_transmission', 'wise_nobs', 'wise_fracflux', 'wise_rchi2'])
 
+    if WISE_T is not None:
+        cols.extend([
+            'wise_lc_flux', 'wise_lc_flux_ivar',
+            'wise_lc_nobs', 'wise_lc_fracflux', 'wise_lc_rchi2', 'wise_lc_mjd'])
+        
     cols.extend([
         'fracdev', 'fracDev_ivar', 'shapeexp_r', 'shapeexp_r_ivar',
         'shapeexp_e1', 'shapeexp_e1_ivar',
@@ -2729,6 +2760,7 @@ def stage_writecat(
         decam_flux=flux, decam_flux_ivar=fluxiv,
         decam_apflux=flux, decam_apflux_ivar=fluxiv, decam_apflux_resid=flux,
         wise_flux=flux, wise_flux_ivar=fluxiv,
+        wise_lc_flux=flux, wise_lc_flux_ivar=fluxiv,
         shapeexp_r='arcsec', shapeexp_r_ivar='1/arcsec^2',
         shapedev_r='arcsec', shapedev_r_ivar='1/arcsec^2')
 
