@@ -10,7 +10,7 @@ sudo: false
 # # python-numpydoc -- not available until Ubuntu 14.04 trusty
 
 install:
-    - pip install --user numpy
+    - pip install --user --upgrade numpy
     - pip install numpydoc -t $HOME/numpydoc
     - pip install --user coveralls
     - pip install --user astropy
@@ -39,6 +39,8 @@ before_script:
 script:
     - export PYTHONPATH=${PYTHONPATH}:$(pwd)/py:$(pwd):$HOME/numpydoc
     - (cd doc && make)
+    - echo $PYTHONPATH
+    - python -c "import numpy; print numpy.__file__"
     - (cd py && coverage run legacypipe/runbrick.py -b 2447p120 --zoom 1020 1070 2775 2815 --no-wise --force-all --survey-dir test/testcase3/ --outdir out-testcase3)
 
 after_success:
