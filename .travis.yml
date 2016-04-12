@@ -16,6 +16,7 @@ install:
     - pip install --user coveralls
     - pip install --user astropy
     - pip install --user fitsio
+    - pip install --user photutils
 
 language: c
 compiler:
