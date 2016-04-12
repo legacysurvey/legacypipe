@@ -73,13 +73,13 @@ addons:
     - python-scipy
 
 # Ugh, travis's "precise" distro includes numpy 1.6.1
+# (np.fft.rfftfreq doesn't exist)
 
 # python-numpydoc is only available in 'trusty' and later.
 #    - python-numpydoc
 
 # not whitelisted... needed?
 #    - libgsl10-dev
-
 
 cache:
   directories:
