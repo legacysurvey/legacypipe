@@ -10,7 +10,8 @@ sudo: false
 # # python-numpydoc -- not available until Ubuntu 14.04 trusty
 
 install:
-    - pip install coveralls
+    - pip install --user coveralls
+    - pip install numpydoc -t $HOME/numpydoc
 
 language: c
 compiler:
@@ -32,7 +33,6 @@ before_script:
     - ln -s $HOME/fitsio/lib/python/fitsio .
     - ln -s $HOME/tractor-git/tractor .
     - ln -s $HOME/tractor-git/wise .
-    - pip install numpydoc -t $HOME/numpydoc
 
 script:
     - export PYTHONPATH=${PYTHONPATH}:$(pwd)/py:$(pwd):$HOME/numpydoc
