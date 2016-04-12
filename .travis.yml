@@ -14,6 +14,7 @@ install:
     - pip install numpydoc -t $HOME/numpydoc
     - pip install --user coveralls
     - pip install --user astropy
+    - pip install --user fitsio
 
 language: c
 compiler:
@@ -28,12 +29,12 @@ before_script:
     - if [ ! -d "$HOME/tractor-git" ]; then (cd $HOME; git clone https://github.com/dstndstn/tractor.git tractor-git); fi
     - (cd $HOME/tractor-git && git pull) || (rm -Rf $HOME/tractor-git && cd $HOME && git clone https://github.com/dstndstn/tractor.git tractor-git);
     - (cd $HOME/tractor-git && make)
-    - if [ ! -d "$HOME/fitsio-git" ]; then (cd $HOME; git clone https://github.com/esheldon/fitsio.git fitsio-git); fi
+    #- if [ ! -d "$HOME/fitsio-git" ]; then (cd $HOME; git clone https://github.com/esheldon/fitsio.git fitsio-git); fi
     #- (cd $HOME/fitsio-git && git pull) || (rm -Rf $HOME/fitsio-git && cd $HOME && git clone https://github.com/esheldon/fitsio.git fitsio-git);
-    - (rm -Rf $HOME/fitsio-git && cd $HOME && git clone https://github.com/esheldon/fitsio.git fitsio-git);
-    - (cd $HOME/fitsio-git && python setup.py install --home $HOME/fitsio)
+    #- (rm -Rf $HOME/fitsio-git && cd $HOME && git clone https://github.com/esheldon/fitsio.git fitsio-git);
+    #- (cd $HOME/fitsio-git && python setup.py install --home $HOME/fitsio)
     - ln -s $HOME/astrometry.net astrometry
-    - ln -s $HOME/fitsio/lib/python/fitsio .
+    #- ln -s $HOME/fitsio/lib/python/fitsio .
     - ln -s $HOME/tractor-git/tractor .
     - ln -s $HOME/tractor-git/wise .
 
@@ -42,6 +43,7 @@ script:
     - (cd doc && make)
     - echo $PYTHONPATH
     - python -c "import numpy; print numpy.__file__"
+    - python -c "import fitsio; print fitsio.__file__"
     - (cd py && coverage run legacypipe/runbrick.py -b 2447p120 --zoom 1020 1070 2775 2815 --no-wise --force-all --survey-dir test/testcase3/ --outdir out-testcase3)
 
 after_success:
