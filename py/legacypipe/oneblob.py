@@ -36,12 +36,16 @@ def one_blob(X):
                        scaled=False,
                        dynamic_scale=False)
         trargs.update(optimizer=ceres_optimizer)
-        
+    else:
+        optargs.update(dchisq = 0.1)
+
     # 50 CCDs is over 90th percentile of bricks in DR2.
     many_exposures = len(timargs) >= 50
     #PTF special handling len(timargs) >= 1000
 
+    # A local WCS for this blob
     blobwcs = brickwcs.get_subimage(bx0, by0, blobw, blobh)
+    # Did sources start within the blob?
     ok,x0,y0 = blobwcs.radec2pixelxy(
         np.array([src.getPosition().ra  for src in srcs]),
         np.array([src.getPosition().dec for src in srcs]))
@@ -52,13 +56,17 @@ def one_blob(X):
     for (img, inverr, twcs, wcs, pcal, sky, psf, name, sx0, sx1, sy0, sy1,
          band, sig1, modelMinval, imobj) in timargs:
 
+        # In order to make multiprocessing easier, this method is
+        # passed all the ingredients to make local tractor Images
+        # rather than the Images themselves.  Here we build the
+        # 'tims'.
+        
         # Mask out inverr for pixels that are not within the blob.
         subwcs = wcs.get_subimage(int(sx0), int(sy0),
                                   int(sx1-sx0), int(sy1-sy0))
         try:
             Yo,Xo,Yi,Xi,rims = resample_with_wcs(subwcs, blobwcs, [], 2)
         except OverlapError:
-            #print('No overlap')
             continue
         if len(Yo) == 0:
             continue
@@ -137,170 +145,14 @@ def one_blob(X):
                    bslc, blobw, blobh, ps, chi_plots=False)
 
     # Optimize individual sources in order of flux
-    fluxes = []
-    for src in cat:
-        # HACK -- here we just *sum* the nanomaggies in each band.  Bogus!
-        br = src.getBrightness()
-        flux = sum([br.getFlux(band) for band in bands])
-        fluxes.append(flux)
-    Ibright = np.argsort(-np.array(fluxes))
+
+    # Choose the ordering...
+    Ibright = _argsort_by_brightness(cat)
 
     if len(cat) > 1:
-        # -Remember the original images
-        # -Compute initial models for each source (in each tim)
-        # -Subtract initial models from images
-        # -During fitting, for each source:
-        #   -add back in the source's initial model (to each tim)
-        #   -fit, with Catalog([src])
-        #   -subtract final model (from each tim)
-        # -Replace original images
-
-        models = SourceModels()
-        # Remember original tim images
-        models.save_images(tims)
-        # Create & subtract initial models for each tim x each source
-        models.create(tims, srcs, subtract=True)
-
-        # For sources, in decreasing order of brightness
-        for numi,i in enumerate(Ibright):
-            #tsrc = Time()
-            print('Fitting source', i, '(%i of %i in blob)' %
-                  (numi, len(Ibright)))
-            src = cat[i]
-
-            # Add this source's initial model back in.
-            models.add(i, tims)
-
-            if bigblob:
-                # Create super-local sub-sub-tims around this source
-
-                # Make the subimages the same size as the modelMasks.
-                #tbb0 = Time()
-                mods = [mod[i] for mod in models.models]
-                srctims,modelMasks = _get_subimages(tims, mods, src)
-                #print('Creating srctims:', Time()-tbb0)
-
-                if plots and (numi < 3 or numi >= len(Ibright)-3):
-                    bx1 = bx0 + blobw
-                    by1 = by0 + blobh
-                    plt.clf()
-                    coimgs,cons = compute_coadds(tims, bands, blobwcs,
-                                                 fill_holes=False)
-                    dimshow(get_rgb(coimgs, bands), extent=(bx0,bx1,by0,by1))
-                    # plt.plot([bx0,bx0,bx1,bx1,bx0],[by0,by1,by1,by0,by0],
-                    #          'r-')
-                    # for tim in srctims:
-                    #     h,w = tim.shape
-                    #     tx,ty = [0,0,w,w,0], [0,h,h,0,0]
-                    #     rd = [tim.getWcs().pixelToPosition(xi,yi)
-                    #           for xi,yi in zip(tx,ty)]
-                    #     ra  = [p.ra  for p in rd]
-                    #     dec = [p.dec for p in rd]
-                    #     ok,x,y = brickwcs.radec2pixelxy(ra, dec)
-                    #     plt.plot(x, y, 'g-')
-                    #
-                    #     ra,dec = tim.subwcs.pixelxy2radec(tx, ty)
-                    #     ok,x,y = brickwcs.radec2pixelxy(ra, dec)
-                    #     plt.plot(x, y, 'm-')
-                    for tim in tims:
-                        h,w = tim.shape
-                        tx,ty = [0,0,w,w,0], [0,h,h,0,0]
-                        rd = [tim.getWcs().pixelToPosition(xi,yi)
-                              for xi,yi in zip(tx,ty)]
-                        ra  = [p.ra  for p in rd]
-                        dec = [p.dec for p in rd]
-                        ok,x,y = brickwcs.radec2pixelxy(ra, dec)
-                        plt.plot(x, y, 'b-')
-
-                        ra,dec = tim.subwcs.pixelxy2radec(tx, ty)
-                        ok,x,y = brickwcs.radec2pixelxy(ra, dec)
-                        plt.plot(x, y, 'c-')
-                    plt.title('source %i of %i' % (numi, len(Ibright)))
-                    ps.savefig()
-
-            else:
-                srctims = tims
-                modelMasks = models.model_masks(i, src)
-
-            srctractor = Tractor(srctims, [src], **trargs)
-            srctractor.freezeParams('images')
-            srctractor.setModelMasks(modelMasks)
-
-            if plots and False:
-                spmods,spnames = [],[]
-                spallmods,spallnames = [],[]
-                if numi == 0:
-                    spallmods.append(list(tr.getModelImages()))
-                    spallnames.append('Initial (all)')
-                spmods.append(list(srctractor.getModelImages()))
-                spnames.append('Initial')
-
-            # First-round optimization
-            print('First-round initial log-prob:', srctractor.getLogProb())
-            for step in range(50):
-                #R = srctractor.optimize(**optargs)
-                #print('Optimize result:', R)
-                dlnp,X,alpha = srctractor.optimize(**optargs)
-                
-                print('dlnp:', dlnp, 'src', src)
-                if dlnp < 0.1:
-                    break
-            print('First-round final log-prob:', srctractor.getLogProb())
-
-            if plots and False:
-                spmods.append(list(srctractor.getModelImages()))
-                spnames.append('Fit')
-                spallmods.append(list(tr.getModelImages()))
-                spallnames.append('Fit (all)')
-
-            if plots and False:
-                tims_compute_resamp(None, srctractor.getImages(), brickwcs)
-                tims_compute_resamp(None, tims, brickwcs)
-                plt.figure(1, figsize=(8,6))
-                plt.subplots_adjust(left=0.01, right=0.99, top=0.95,
-                                    bottom=0.01, hspace=0.1, wspace=0.05)
-                #plt.figure(2, figsize=(3,3))
-                #plt.subplots_adjust(left=0.005, right=0.995,
-                #                    top=0.995,bottom=0.005)
-                #_plot_mods(tims, spmods, spnames, bands, None, None, bslc,
-                #           blobw, blobh, ps, chi_plots=plots2)
-                plt.figure(2, figsize=(3,3.5))
-                plt.subplots_adjust(left=0.005, right=0.995,
-                                    top=0.88, bottom=0.005)
-                plt.suptitle('Blob %i' % iblob)
-                tempims = [tim.getImage() for tim in tims]
-
-                _plot_mods(list(srctractor.getImages()), spmods, spnames,
-                           bands, None, None, bslc, blobw, blobh, ps,
-                           chi_plots=plots2, rgb_plots=True, main_plot=False,
-                           rgb_format=('spmods Blob %i, src %i: %%s' %
-                                       (iblob, i)))
-                _plot_mods(tims, spallmods, spallnames, bands, None, None,
-                           bslc, blobw, blobh, ps,
-                           chi_plots=plots2, rgb_plots=True, main_plot=False,
-                           rgb_format=('spallmods Blob %i, src %i: %%s' %
-                                       (iblob, i)))
-
-                models.restore_images(tims)
-                _plot_mods(tims, spallmods, spallnames, bands, None, None,
-                           bslc, blobw, blobh, ps,
-                           chi_plots=plots2, rgb_plots=True, main_plot=False,
-                           rgb_format='Blob %i, src %i: %%s' % (iblob, i))
-                for tim,im in zip(tims, tempims):
-                    tim.data = im
-
-            # Re-remove the final fit model for this source
-            models.update_and_subtract(i, src, tims)
-
-            srctractor.setModelMasks(None)
-            disable_galaxy_cache()
-
-            #print('Fitting source took', Time()-tsrc)
-            #print(src)
-
-        models.restore_images(tims)
-        del models
-
+        _optimize_individual_sources_subtract(
+            cat, Ibright, tims, bigblob, optargs, plots, ps, bands,blobwcs,
+            trargs)
     else:
         # Single source (though this is coded to handle multiple sources)
         # Fit sources one at a time, but don't subtract other models
@@ -1067,6 +919,168 @@ def one_blob(X):
     B.iblob = iblob
 
     return B
+
+def _optimize_individual_sources_subtract(
+        cat, Ibright, tims, bigblob, optargs, plots, ps, bands, blobwcs,
+        trargs):
+    # -Remember the original images
+    # -Compute initial models for each source (in each tim)
+    # -Subtract initial models from images
+    # -During fitting, for each source:
+    #   -add back in the source's initial model (to each tim)
+    #   -fit, with Catalog([src])
+    #   -subtract final model (from each tim)
+    # -Replace original images
+
+    models = SourceModels()
+    # Remember original tim images
+    models.save_images(tims)
+    # Create & subtract initial models for each tim x each source
+    models.create(tims, srcs, subtract=True)
+
+    # For sources, in decreasing order of brightness
+    for numi,i in enumerate(Ibright):
+        #tsrc = Time()
+        print('Fitting source', i, '(%i of %i in blob)' %
+              (numi, len(Ibright)))
+        src = cat[i]
+        # Add this source's initial model back in.
+        models.add(i, tims)
+
+        if bigblob:
+            # Create super-local sub-sub-tims around this source
+
+            # Make the subimages the same size as the modelMasks.
+            #tbb0 = Time()
+            mods = [mod[i] for mod in models.models]
+            srctims,modelMasks = _get_subimages(tims, mods, src)
+            #print('Creating srctims:', Time()-tbb0)
+
+            if plots and (numi < 3 or numi >= len(Ibright)-3):
+                bx1 = bx0 + blobw
+                by1 = by0 + blobh
+                plt.clf()
+                coimgs,cons = compute_coadds(tims, bands, blobwcs,
+                                             fill_holes=False)
+                dimshow(get_rgb(coimgs, bands), extent=(bx0,bx1,by0,by1))
+                # plt.plot([bx0,bx0,bx1,bx1,bx0],[by0,by1,by1,by0,by0],
+                #          'r-')
+                # for tim in srctims:
+                #     h,w = tim.shape
+                #     tx,ty = [0,0,w,w,0], [0,h,h,0,0]
+                #     rd = [tim.getWcs().pixelToPosition(xi,yi)
+                #           for xi,yi in zip(tx,ty)]
+                #     ra  = [p.ra  for p in rd]
+                #     dec = [p.dec for p in rd]
+                #     ok,x,y = brickwcs.radec2pixelxy(ra, dec)
+                #     plt.plot(x, y, 'g-')
+                #
+                #     ra,dec = tim.subwcs.pixelxy2radec(tx, ty)
+                #     ok,x,y = brickwcs.radec2pixelxy(ra, dec)
+                #     plt.plot(x, y, 'm-')
+                for tim in tims:
+                    h,w = tim.shape
+                    tx,ty = [0,0,w,w,0], [0,h,h,0,0]
+                    rd = [tim.getWcs().pixelToPosition(xi,yi)
+                          for xi,yi in zip(tx,ty)]
+                    ra  = [p.ra  for p in rd]
+                    dec = [p.dec for p in rd]
+                    ok,x,y = brickwcs.radec2pixelxy(ra, dec)
+                    plt.plot(x, y, 'b-')
+
+                    ra,dec = tim.subwcs.pixelxy2radec(tx, ty)
+                    ok,x,y = brickwcs.radec2pixelxy(ra, dec)
+                    plt.plot(x, y, 'c-')
+                plt.title('source %i of %i' % (numi, len(Ibright)))
+                ps.savefig()
+
+        else:
+            srctims = tims
+            modelMasks = models.model_masks(i, src)
+
+        srctractor = Tractor(srctims, [src], **trargs)
+        srctractor.freezeParams('images')
+        srctractor.setModelMasks(modelMasks)
+
+        if plots and False:
+            spmods,spnames = [],[]
+            spallmods,spallnames = [],[]
+            if numi == 0:
+                spallmods.append(list(tr.getModelImages()))
+                spallnames.append('Initial (all)')
+            spmods.append(list(srctractor.getModelImages()))
+            spnames.append('Initial')
+
+        # First-round optimization
+        print('First-round initial log-prob:', srctractor.getLogProb())
+
+        srctractor.optimize_loop(**optargs)
+        print('First-round final log-prob:', srctractor.getLogProb())
+
+        if plots and False:
+            spmods.append(list(srctractor.getModelImages()))
+            spnames.append('Fit')
+            spallmods.append(list(tr.getModelImages()))
+            spallnames.append('Fit (all)')
+
+        if plots and False:
+            tims_compute_resamp(None, srctractor.getImages(), brickwcs)
+            tims_compute_resamp(None, tims, brickwcs)
+            plt.figure(1, figsize=(8,6))
+            plt.subplots_adjust(left=0.01, right=0.99, top=0.95,
+                                bottom=0.01, hspace=0.1, wspace=0.05)
+            #plt.figure(2, figsize=(3,3))
+            #plt.subplots_adjust(left=0.005, right=0.995,
+            #                    top=0.995,bottom=0.005)
+            #_plot_mods(tims, spmods, spnames, bands, None, None, bslc,
+            #           blobw, blobh, ps, chi_plots=plots2)
+            plt.figure(2, figsize=(3,3.5))
+            plt.subplots_adjust(left=0.005, right=0.995,
+                                top=0.88, bottom=0.005)
+            plt.suptitle('Blob %i' % iblob)
+            tempims = [tim.getImage() for tim in tims]
+
+            _plot_mods(list(srctractor.getImages()), spmods, spnames,
+                       bands, None, None, bslc, blobw, blobh, ps,
+                       chi_plots=plots2, rgb_plots=True, main_plot=False,
+                       rgb_format=('spmods Blob %i, src %i: %%s' %
+                                   (iblob, i)))
+            _plot_mods(tims, spallmods, spallnames, bands, None, None,
+                       bslc, blobw, blobh, ps,
+                       chi_plots=plots2, rgb_plots=True, main_plot=False,
+                       rgb_format=('spallmods Blob %i, src %i: %%s' %
+                                   (iblob, i)))
+
+            models.restore_images(tims)
+            _plot_mods(tims, spallmods, spallnames, bands, None, None,
+                       bslc, blobw, blobh, ps,
+                       chi_plots=plots2, rgb_plots=True, main_plot=False,
+                       rgb_format='Blob %i, src %i: %%s' % (iblob, i))
+            for tim,im in zip(tims, tempims):
+                tim.data = im
+
+        # Re-remove the final fit model for this source
+        models.update_and_subtract(i, src, tims)
+
+        srctractor.setModelMasks(None)
+        disable_galaxy_cache()
+
+        #print('Fitting source took', Time()-tsrc)
+        #print(src)
+
+    models.restore_images(tims)
+    del models
+    
+
+def _argsort_by_brightness(cat):
+    fluxes = []
+    for src in cat:
+        # HACK -- here we just *sum* the nanomaggies in each band.  Bogus!
+        br = src.getBrightness()
+        flux = sum([br.getFlux(band) for band in bands])
+        fluxes.append(flux)
+    Ibright = np.argsort(-np.array(fluxes))
+    return Ibright
 
 def _compute_source_metrics(srcs, tims, bands, tr):
     # rchi2 quality-of-fit metric
