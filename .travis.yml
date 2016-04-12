@@ -57,6 +57,7 @@ addons:
     - python-sphinx
     - python-mock
     - python-matplotlib
+    - python-scipy
 
 # python-numpydoc is only available in 'trusty' and later.
 #    - python-numpydoc
@@ -70,3 +71,4 @@ cache:
   - $HOME/astrometry.net
   - $HOME/tractor-git
   - $HOME/fitsio-git
+  - $HOME/.local
