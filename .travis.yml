@@ -37,8 +37,7 @@ before_script:
 script:
     - export PYTHONPATH=${PYTHONPATH}:$(pwd)/py:$(pwd):$HOME/numpydoc
     - (cd doc && make)
-    - pwd
-    - coverage run legacypipe/runbrick.py -b 2447p120 --zoom 1020 1070 2775 2815 --no-wise --force-all --survey-dir test/testcase3/ --outdir out-testcase3
+    - (cd py && coverage run legacypipe/runbrick.py -b 2447p120 --zoom 1020 1070 2775 2815 --no-wise --force-all --survey-dir test/testcase3/ --outdir out-testcase3)
 
 after_success:
     - coveralls
