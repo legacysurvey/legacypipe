@@ -22,7 +22,6 @@ To see the code we run on each "blob" of pixels,
 - :py:func:`one_blob`
 
 '''
-
 from __future__ import print_function
 
 # python -u legacypipe/runbrick.py -b 2437p082 --zoom 2575 2675 400 500 -P "pickles/zoom2-%(brick)s-%%(stage)s.pickle" > log 2>&1 &
