@@ -22,7 +22,7 @@ MOCK_MODULES = [
     'scipy.interpolate', 'scipy.ndimage', 'scipy.ndimage.filters',
     'scipy.ndimage.measurements', 'scipy.ndimage.morphology',
     'matplotlib', 'pylab', 'matplotlib.pyplot',
-    'astropy', 'astropy.time',
+    'astropy', 'astropy.time', 'astropy.io',
     ]
 
 # from mock import Mock

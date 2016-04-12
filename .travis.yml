@@ -55,6 +55,7 @@ addons:
     - gsl-bin
     - python-sphinx
     - python-mock
+    - python-matplotlib
 
 # python-numpydoc is only available in 'trusty' and later.
 #    - python-numpydoc
