@@ -1132,7 +1132,7 @@ Now using the current directory as LEGACY_SURVEY_DIR, but this is likely to fail
                 n0 = n
         #print N remain for each camera
         tallies='%d CCDs remain' % len(good) 
-        for cam_str in ['decam ','mosaic','90prime','90prime ','90prime  ','ptf   ']: 
+        for cam_str in ['decam ','mosaic','90prime','ptf   ']: 
             tallies+= ', %d are %s' %  (ccds.camera[ccds.camera == cam_str].shape[0], cam_str)
         print(tallies)
         #print('exiting early')

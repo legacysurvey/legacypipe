@@ -131,6 +131,7 @@ def exposure_metadata(filenames, hdus=None, trim=None):
     T.ccdnum = np.array([t.strip()[-1] for t in T.ccdname])
     
     T.filter = np.array([s.strip()[0] for s in T.filter])
+    T.filter[T.filter == 'b']= 'r' #bok g is 'g' but bok r is 'bokr' so this became b with above
     T.ra_bore  = np.array([hmsstring2ra (s) for s in T.ra ])
     T.dec_bore = np.array([dmsstring2dec(s) for s in T.dec])
 
