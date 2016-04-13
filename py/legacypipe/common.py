@@ -106,7 +106,7 @@ def zeropoint_for_ptf(hdr):
 #BOKF special handling
 def zeropoint_for_bok(hdr):
     #no zeropoint exists in header so put in junk number for now
-    return 23.
+    return 27.
     #magzp= hdr['IMAGEZPT'] + 2.5 * np.log10(hdr['EXPTIME'])
     #if isinstance(magzp,str):
     #    print('WARNING: no ZeroPoint in header for image: ',tractor_image.imgfn)
