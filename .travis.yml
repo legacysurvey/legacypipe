@@ -54,7 +54,7 @@ script:
     - (cd py && coverage run legacypipe/runbrick.py -b 2447p120 --zoom 1020 1070 2775 2815 --no-wise --force-all --survey-dir test/testcase3/ --outdir out-testcase3)
 
 after_success:
-    - (cd py && coverall debug)
+    - (cd py && coveralls debug)
     - (cd py && coveralls)
 
 addons:
