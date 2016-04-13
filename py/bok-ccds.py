@@ -103,7 +103,7 @@ def exposure_metadata(filenames, hdus=None, trim=None):
             for k,d in hdrkeys:
                 vals[k].append(hdr.get(k, d))
 
-            vals['IMAGE_FILENAME'].append( os.path.basename(cpfn) )
+            vals['IMAGE_FILENAME'].append( 'bok/'+os.path.basename(cpfn) )
             vals['IMAGE_HDU'].append(hdu)
             vals['WIDTH'].append(int(W))
             vals['HEIGHT'].append(int(H))
@@ -125,7 +125,7 @@ def exposure_metadata(filenames, hdus=None, trim=None):
     
     T.rename('gain', 'ARAWGAIN'.lower()) #ARAWGAIN is name for gain from decam parser
     T.rename('SKYVAL'.lower(), 'AVSKY'.lower()) #AVSKY is name for sky from decam parser
-    T.rename('JULIAN'.lower(), 'MJD-OBS'.lower()) #MJD-OBS is name for julian from decam parser
+    T.rename('JULIAN'.lower(), 'MJD_OBS'.lower()) #MJD-OBS is name for julian from decam parser
     
     T.ccdname = np.array([t.strip() for t in T.ccdname])
     T.ccdnum = np.array([t.strip()[-1] for t in T.ccdname])

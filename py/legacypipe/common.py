@@ -103,6 +103,17 @@ def zeropoint_for_ptf(hdr):
         raise ValueError #magzp= 23.
     return magzp
 
+#BOKF special handling
+def zeropoint_for_bok(hdr):
+    #no zeropoint exists in header so put in junk number for now
+    return 23.
+    #magzp= hdr['IMAGEZPT'] + 2.5 * np.log10(hdr['EXPTIME'])
+    #if isinstance(magzp,str):
+    #    print('WARNING: no ZeroPoint in header for image: ',tractor_image.imgfn)
+    #    raise ValueError #magzp= 23.
+    #return magzp
+
+
 
 def get_git_version(dir=None):
     '''
@@ -1121,9 +1132,12 @@ Now using the current directory as LEGACY_SURVEY_DIR, but this is likely to fail
                 n0 = n
         #print N remain for each camera
         tallies='%d CCDs remain' % len(good) 
-        for cam_str in ['decam','mosaic','bok','ptf   ']: 
+        for cam_str in ['decam ','mosaic','90prime','90prime ','90prime  ','ptf   ']: 
             tallies+= ', %d are %s' %  (ccds.camera[ccds.camera == cam_str].shape[0], cam_str)
-        print(tallies) 
+        print(tallies)
+        #print('exiting early')
+        #import sys 
+        #sys.exit() 
         return np.flatnonzero(good)
 
     def apply_blacklist(self, ccds):
@@ -1200,6 +1214,9 @@ Now using the current directory as LEGACY_SURVEY_DIR, but this is likely to fail
         elif im.camera == 'ptf':
             hdr= im.read_image_primary_header() #calls fitsio.read_header(self.imgfn)
             magzp= zeropoint_for_ptf(hdr)
+        elif im.camera == '90prime':
+            hdr= im.read_image_primary_header() #calls fitsio.read_header(self.imgfn)
+            magzp= zeropoint_for_bok(hdr)
         else: raise ValueError
         return magzp
 
