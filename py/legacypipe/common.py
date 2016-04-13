@@ -191,7 +191,7 @@ class MyFITSHDR(fitsio.FITSHDR):
     the list of headers to remove.  This is required to format the
     tractor catalogs the way we want them.
     '''
-    def clean(self):
+    def clean(self, **kwargs):
         """
         Remove reserved keywords from the header.
         
@@ -1089,8 +1089,13 @@ Now using the current directory as LEGACY_SURVEY_DIR, but this is likely to fail
         fns = glob(os.path.join(self.survey_dir, 'survey-ccds-*.fits.gz'))
         TT = []
         for fn in fns:
+            cols = (
+                'exptime filter propid crpix1 crpix2 crval1 crval2 ' +
+                'cd1_1 cd1_2 cd2_1 cd2_2 ccdname ccdzpt ccdraoff ccddecoff ' +
+                'ccdnmatch camera image_hdu image_filename width height ' +
+                'ra dec zpt expnum fwhm mjd_obs').split()
             print('Reading CCDs from', fn)
-            T = fits_table(fn)
+            T = fits_table(fn, columns=cols)
             print('Got', len(T), 'CCDs')
             TT.append(T)
         T = merge_tables(TT, columns='fillzero')
