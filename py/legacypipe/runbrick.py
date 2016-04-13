@@ -349,7 +349,7 @@ def stage_tims(W=3600, H=3600, pixscale=0.262, brickname=None,
                 print('Warning: image "%s" PLVER is "%s" but %s calib was run on PLVER "%s"' %
                       (str(tim), tim.plver, cal, ver[1]))
 
-    if plots:
+    if plots and False:
         # Pixel histograms of subimages.
         for b in bands:
             sig1 = np.median([tim.sig1 for tim in tims if tim.band == b])
@@ -405,15 +405,18 @@ def stage_tims(W=3600, H=3600, pixscale=0.262, brickname=None,
     timbands = [tim.band for tim in tims]
     bands = [b for b in bands if b in timbands]
     print('Cut bands to', bands)
-    #try: assert(np.all(['g' in bands,'r' in bands,'z' in bands],axis=0))
-    #except AssertionError: 
-    #    print('WARNING: grz not all in bands, images are not all photometric, quitting')
-    #    sys.exit(0)
 
     for band in 'grz':
         hasit = band in bands
-        version_hdr.add_record(dict(name='BRICK_%s' % band, value=hasit,
+        version_hdr.add_record(dict(name='BRICK_%s' % band.upper(), value=hasit,
                                     comment='Does band %s touch this brick?' % band))
+
+        cams = np.unique([tim.imobj.camera for tim in tims
+                          if tim.band == band])
+        version_hdr.add_record(dict(name='CAMS_%s' % band.upper(),
+                                    value=' '.join(cams),
+                                    comment='Cameras contributing band %s' % band))
+        
     version_hdr.add_record(dict(name='BRICKBND', value=''.join(bands),
                                 comment='Bands touching this brick'))
 
