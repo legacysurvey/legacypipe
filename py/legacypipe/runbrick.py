@@ -433,13 +433,16 @@ def _coadds(tims, bands, targetwcs,
             mods=None, xy=None, apertures=None, apxy=None,
             ngood=False, detmaps=False, psfsize=False,
             callback=None, callback_args=[],
-            plots=False, ps=None):
+            plots=False, ps=None,
+            lanczos=True):
+    from astrometry.util.resample import resample_with_wcs, OverlapError
+
     class Duck(object):
         pass
     C = Duck()
 
-    W = targetwcs.get_width()
-    H = targetwcs.get_height()
+    W = int(targetwcs.get_width())
+    H = int(targetwcs.get_height())
 
     # always, for patching SATUR, etc pixels?
     unweighted=True
@@ -475,37 +478,49 @@ def _coadds(tims, bands, targetwcs,
     for iband,band in enumerate(bands):
         print('Computing coadd for band', band)
 
+        # coadded weight map (moo)
         cow    = np.zeros((H,W), np.float32)
+        # coadded weighted image map
         cowimg = np.zeros((H,W), np.float32)
 
         kwargs = dict(cowimg=cowimg, cow=cow)
 
         if detmaps:
+            # detection map inverse-variance (depth map)
             detiv = np.zeros((H,W), np.float32)
             C.detivs.append(detiv)
             kwargs.update(detiv=detiv)
+            # galaxy detection map inverse-variance (galdepth map)
             galdetiv = np.zeros((H,W), np.float32)
             C.galdetivs.append(galdetiv)
             kwargs.update(galdetiv=galdetiv)
 
         if mods:
+            # model image
             cowmod = np.zeros((H,W), np.float32)
+            # chi-squared image
             cochi2 = np.zeros((H,W), np.float32)
             kwargs.update(cowmod=cowmod, cochi2=cochi2)
 
         if unweighted:
+            # unweighted image
             coimg  = np.zeros((H,W), np.float32)
             if mods:
+                # unweighted model
                 comod  = np.zeros((H,W), np.float32)
+            # number of exposures
             con    = np.zeros((H,W), np.uint8)
+            # inverse-variance
             coiv   = np.zeros((H,W), np.float32)
             kwargs.update(coimg=coimg, coiv=coiv)
 
-        # Note that we have 'congood' as well as 'nobs'.
-        # 'congood' is used for the 'nexp' *image*
-        # 'nobs' is used for the per-source measurement (you want to know the number
-        #        of observations within the source footprint, not just the peak pixel
-        #        which may be saturated, etc.)
+        # Note that we have 'congood' as well as 'nobs':
+        # * 'congood' is used for the 'nexp' *image*.
+        # * 'nobs' is used for the per-source measurements
+        #
+        # (you want to know the number of observations within the
+        # source footprint, not just the peak pixel which may be
+        # saturated, etc.)
 
         if ngood:
             congood = np.zeros((H,W), np.uint8)
@@ -513,10 +528,13 @@ def _coadds(tims, bands, targetwcs,
 
         if xy:
             # These match the type of the "DQ" images.
+            # "any" mask
             ormask  = np.zeros((H,W), np.int16)
+            # "all" mask
             andmask = np.empty((H,W), np.int16)
             allbits = reduce(np.bitwise_or, CP_DQ_BITS.values())
             andmask[:,:] = allbits
+            # number of observations
             nobs  = np.zeros((H,W), np.uint8)
             kwargs.update(ormask=ormask, andmask=andmask, nobs=nobs)
 
@@ -526,12 +544,39 @@ def _coadds(tims, bands, targetwcs,
         for itim,tim in enumerate(tims):
             if tim.band != band:
                 continue
-            R = tim_get_resamp(tim, targetwcs)
-            if R is None:
+
+            if lanczos:
+                from astrometry.util.miscutils import patch_image
+                print('Doing Lanczos resampling')
+                patched = tim.getImage().copy()
+                okpix = (tim.getInvError() > 0)
+                patch_image(patched, okpix)
+                del okpix
+                imgs = [patched]
+                if mods:
+                    imgs.append(mods[itim])
+            else:
+                imgs = []
+
+            try:
+                Yo,Xo,Yi,Xi,rimgs = resample_with_wcs(
+                    targetwcs, tim.subwcs, imgs, 3)
+            except OverlapError:
                 continue
-            (Yo,Xo,Yi,Xi) = R
+            if len(Yo) == 0:
+                continue
+
+            if lanczos:
+                im = rimgs[0]
+                if mods:
+                    mo = rimgs[1]
+                del patched,imgs,rimgs
+            else:
+                im = tim.getImage ()[Yi,Xi]
+                if mods:
+                    mo = mods[itim][Yi,Xi]
+
             iv = tim.getInvvar()[Yi,Xi]
-            im = tim.getImage ()[Yi,Xi]
 
             # invvar-weighted image
             cowimg[Yo,Xo] += iv * im
@@ -539,8 +584,9 @@ def _coadds(tims, bands, targetwcs,
 
             if unweighted:
                 dq = tim.dq[Yi,Xi]
-                # include BLEED, SATUR, INTERP pixels if no other pixels exists
-                # (do this by eliminating all other CP flags)
+                # include BLEED, SATUR, INTERP pixels if no other
+                # pixels exists (do this by eliminating all other CP
+                # flags)
                 badbits = 0
                 for bitname in ['badpix', 'cr', 'trans', 'edge', 'edge2']:
                     badbits |= CP_DQ_BITS[bitname]
@@ -567,20 +613,13 @@ def _coadds(tims, bands, targetwcs,
                 # Narcsec is in arcsec**2
                 narcsec = neff * tim.wcs.pixel_scale()**2
                 psfsizemap[Yo,Xo] += iv * (1. / narcsec)
-
-                #print('Tim', tim.name, 'FWHM', tim.psf_fwhm, 'pixels; sigma',
-                #  tim.psf_sigma, 'FWHM arcsec:', tim.psf_fwhm * 0.262)
-                # print('Narcsec', narcsec)
-                # see2 = np.sqrt(narcsec) / (2.*np.sqrt(np.pi)) * 2.35
-                #print('Tim', tim.name, 'PSF FWHM->', tim.psf_fwhm * 0.262,
-                # 'arcsec vs', see2)
                 
             if detmaps:
                 # point-source depth
                 detsig1 = tim.sig1 / tim.psfnorm
                 detiv[Yo,Xo] += (iv > 0) * (1. / detsig1**2)
 
-                # Galaxy detection
+                # Galaxy detection map
                 gdetsig1 = tim.sig1 / tim.galnorm
                 galdetiv[Yo,Xo] += (iv > 0) * (1. / gdetsig1**2)
 
@@ -588,7 +627,6 @@ def _coadds(tims, bands, targetwcs,
                 congood[Yo,Xo] += (iv > 0)
 
             if mods:
-                mo = mods[itim][Yi,Xi]
                 # straight-up
                 comod[Yo,Xo] += goodpix * mo
                 # invvar-weighted
@@ -601,6 +639,8 @@ def _coadds(tims, bands, targetwcs,
             del Yo,Xo,Yi,Xi,im,iv
             # END of loop over tims
 
+        # Per-band:
+        
         cowimg /= np.maximum(cow, tinyw)
         C.coimgs.append(cowimg)
         if mods:
@@ -616,24 +656,6 @@ def _coadds(tims, bands, targetwcs,
             cowimg[cow == 0] = coimg[cow == 0]
             if mods:
                 cowmod[cow == 0] = comod[cow == 0]
-
-        if plots:
-            plt.clf()
-            dimshow(nobs, vmin=0, vmax=max(1,nobs.max()), cmap='jet')
-            plt.colorbar()
-            plt.title('Number of observations, %s band' % band)
-            ps.savefig()
-
-            for k,v in CP_DQ_BITS.items():
-                plt.clf()
-                dimshow(ormask & v, vmin=0, vmax=v)
-                plt.title('OR mask, %s band: %s' % (band, k))
-                ps.savefig()
-
-                plt.clf()
-                dimshow(andmask & v, vmin=0, vmax=v)
-                plt.title('AND mask, %s band: %s' % (band,k))
-                ps.savefig()
 
         if xy:
             C.T.nobs [:,iband] = nobs[iy,ix]
@@ -665,7 +687,8 @@ def _coadds(tims, bands, targetwcs,
         if apertures is not None:
             import photutils
 
-            # Aperture photometry, using the unweighted "coimg" and "coiv" arrays.
+            # Aperture photometry, using the unweighted "coimg" and
+            # "coiv" arrays.
             with np.errstate(divide='ignore'):
                 imsigma = 1.0/np.sqrt(coiv)
                 imsigma[coiv == 0] = 0
@@ -793,9 +816,6 @@ def _write_band_images(band,
                                  comment='Ivar of ABmag=22.5-2.5*log10(nmgy)'))
 
         with survey.write_output(name, brick=brickname, band=band) as out:
-            print('Hdr2:', type(hdr2))
-            print('Hdr2:', hdr2)
-            print('Hdr2.clean:', hdr2.clean)
             fitsio.write(out.fn, img, clobber=True, header=hdr2)
             print('Wrote', out.fn)
 
@@ -910,7 +930,7 @@ def stage_mask_junk(tims=None, targetwcs=None, W=None, H=None, bands=None,
 def stage_image_coadds(survey=None, targetwcs=None, bands=None, tims=None,
                        brickname=None, version_header=None,
                        plots=False, ps=None, coadd_bw=False, W=None, H=None,
-                       brick=None, blobs=None,
+                       brick=None, blobs=None, lanczos=True,
                        **kwargs):
     '''
     Immediately after reading the images, we
@@ -997,10 +1017,28 @@ def stage_image_coadds(survey=None, targetwcs=None, bands=None, tims=None,
             ps.savefig()
 
     C = _coadds(tims, bands, targetwcs,
-                detmaps=True,
+                detmaps=True, lanczos=lanczos,
                 callback=_write_band_images,
                 callback_args=(survey, brickname, version_header, tims, targetwcs))
 
+    if plots:
+        plt.clf()
+        dimshow(nobs, vmin=0, vmax=max(1,nobs.max()), cmap='jet')
+        plt.colorbar()
+        plt.title('Number of observations, %s band' % band)
+        ps.savefig()
+        # for k,v in CP_DQ_BITS.items():
+        #     plt.clf()
+        #     dimshow(ormask & v, vmin=0, vmax=v)
+        #     plt.title('OR mask, %s band: %s' % (band, k))
+        #     ps.savefig()
+        # 
+        #     plt.clf()
+        #     dimshow(andmask & v, vmin=0, vmax=v)
+        #     plt.title('AND mask, %s band: %s' % (band,k))
+        #     ps.savefig()
+
+    
     if True:
         # Compute the brick's unique pixels.
         U = None
@@ -2129,7 +2167,7 @@ def _get_mod(X):
 def stage_coadds(survey=None, bands=None, version_header=None, targetwcs=None,
                  tims=None, ps=None, brickname=None, ccds=None,
                  T=None, cat=None, pixscale=None, plots=False,
-                 coadd_bw=False, brick=None, W=None, H=None,
+                 coadd_bw=False, brick=None, W=None, H=None, lanczos=True,
                  mp=None,
                  **kwargs):
     '''
@@ -2217,7 +2255,7 @@ def stage_coadds(survey=None, bands=None, version_header=None, targetwcs=None,
     del xx,yy,ok,ra,dec
 
     C = _coadds(tims, bands, targetwcs, mods=mods, xy=(ix,iy),
-                ngood=True, detmaps=True, psfsize=True,
+                ngood=True, detmaps=True, psfsize=True, lanczos=lanczos,
                 apertures=apertures, apxy=apxy,
                 callback=_write_band_images,
                 callback_args=(survey, brickname, version_header, tims, targetwcs),
@@ -2875,6 +2913,7 @@ def run_brick(brick, radec=None, pixscale=0.262,
               pipe=True, nsigma=6,
               simulOpt=False,
               wise=True,
+              lanczos=True,
               early_coadds=True,
               blob_image=False,
               do_calibs=True,
@@ -3079,6 +3118,7 @@ def run_brick(brick, radec=None, pixscale=0.262,
                   use_ceres=ceres,
                   do_calibs=do_calibs,
                   write_metrics=write_metrics,
+                  lanczos=lanczos,
                   on_bricks=on_bricks,
                   outdir=outdir, survey_dir=survey_dir, unwise_dir=unwise_dir,
                   plots=plots, plots2=plots2, coadd_bw=coadd_bw,
@@ -3293,6 +3333,10 @@ python -u legacypipe/runbrick.py --plots --brick 2440p070 --zoom 1900 2400 450 9
                         help='Skip making the early coadds')
     parser.add_argument('--blob-image', action='store_true', default=False,
                         help='Create "imageblob" image?')
+
+    parser.add_argument(
+        '--no-lanczos', dest='lanczos', action='store_false', default=True,
+        help='Do nearest-neighbour rather than Lanczos-3 coadds')
     
     parser.add_argument('--gpsf', action='store_true', default=False,
                         help='Use a fixed single-Gaussian PSF')
@@ -3394,6 +3438,7 @@ def get_runbrick_kwargs(opt):
         unwise_dir=opt.unwise_dir,
         plots=opt.plots, plots2=opt.plots2,
         coadd_bw=opt.coadd_bw,
+        lanczos=opt.lanczos,
         plotbase=opt.plot_base, plotnumber=opt.plot_number,
         force=opt.force, forceAll=opt.forceall,
         stages=opt.stage, writePickles=writeStages,
