@@ -812,7 +812,7 @@ class OneBlob(object):
                 srctims,modelMasks = _get_subimages(self.tims, mods, src)
                 #print('Creating srctims:', Time()-tbb0)
     
-                if plots and (numi < 3 or numi >= len(Ibright)-3):
+                if self.plots and (numi < 3 or numi >= len(Ibright)-3):
                     bx1 = bx0 + blobw
                     by1 = by0 + blobh
                     plt.clf()

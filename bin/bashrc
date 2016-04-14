@@ -141,7 +141,7 @@ if [ "$NERSC_HOST" == "cori" ]; then
   # module load unwise_coadds_timeresolved/neo1
   module load unwise_coadds_timeresolved/neo1-cori-scratch
 
-  module load tractor-hpcp
+  # module load tractor-hpcp
   module load astrometry_net-hpcp
   module load astropy-hpcp
   module load scipy-hpcp
@@ -216,7 +216,7 @@ if [ "$NERSC_HOST" == "cori" ]; then
   #PATH=${PATH}:${CODE_DIR}/astrometry.net/blind
 
   # local Tractor install
-  #PYP=${PYP}:${CODE_DIR}/tractor
+  PYP=${PYP}:${CODE_DIR}/tractor
 
   export PYTHONPATH=${PYP}
   export PATH
