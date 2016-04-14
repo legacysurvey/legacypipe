@@ -3452,7 +3452,7 @@ def get_runbrick_kwargs(opt):
         )
     return kwa
     
-def main():
+def main(args=None):
     import logging
     from astrometry.util.ttime import MemMeas, CpuMeas
     import datetime
@@ -3463,7 +3463,7 @@ def main():
     print()
 
     parser = get_parser()
-    opt = parser.parse_args()
+    opt = parser.parse_args(args=args)
 
     if opt.brick is None and opt.radec is None:
         parser.print_help()

@@ -87,9 +87,9 @@ class OneBlob(object):
         if use_ceres:
             from tractor.ceres_optimizer import CeresOptimizer
             ceres_optimizer = CeresOptimizer()
-            optargs.update(scale_columns=False,
-                           scaled=False,
-                           dynamic_scale=False)
+            self.optargs.update(scale_columns=False,
+                                scaled=False,
+                                dynamic_scale=False)
             self.trargs.update(optimizer=ceres_optimizer)
         else:
             self.optargs.update(dchisq = 0.1)
