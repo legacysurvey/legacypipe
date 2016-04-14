@@ -80,8 +80,8 @@ class OneBlob(object):
 
         alphas = [0.1, 0.3, 1.0]
         self.optargs = dict(priors=True, shared_params=False, alphas=alphas)
-        blobh,blobw = blobmask.shape
-        self.bigblob = (blobw * blobh) > 100*100
+        self.blobh,self.blobw = blobmask.shape
+        self.bigblob = (self.blobw * self.blobh) > 100*100
         self.trargs = dict()
     
         if use_ceres:
@@ -281,7 +281,7 @@ class OneBlob(object):
                     ps.savefig()
                 # Create a little local WCS subregion for this source, by
                 # resampling non-zero inverrs from the srctims into blobwcs
-                insrc = np.zeros((blobh,blobw), bool)
+                insrc = np.zeros((self.blobh,self.blobw), bool)
                 for tim in srctims:
                     try:
                         Yo,Xo,Yi,Xi,nil = resample_with_wcs(self.blobwcs, tim.subwcs,
@@ -813,8 +813,8 @@ class OneBlob(object):
                 #print('Creating srctims:', Time()-tbb0)
     
                 if self.plots and (numi < 3 or numi >= len(Ibright)-3):
-                    bx1 = bx0 + blobw
-                    by1 = by0 + blobh
+                    bx1 = bx0 + self.blobw
+                    by1 = by0 + self.blobh
                     plt.clf()
                     coimgs,cons = compute_coadds(self.tims, bands, blobwcs,
                                                  fill_holes=False)
@@ -941,13 +941,13 @@ class OneBlob(object):
         cat.thawAllRecursive()
 
     def _plots(self, title):
-        bslc = (slice(by0, by0+blobh), slice(bx0, bx0+blobw))
+        bslc = (slice(by0, by0+self.blobh), slice(bx0, bx0+self.blobw))
         plotmods = []
         plotmodnames = []
         plotmods.append(list(tr.getModelImages()))
         plotmodnames.append('Initial models')
         _plot_mods(tims, plotmods, plotmodnames, bands, None, None,
-                   bslc, blobw, blobh, ps, chi_plots=False)
+                   bslc, self.blobw, self.blobh, ps, chi_plots=False)
         
     def _initial_plots(self):
         print('Plotting blob image for blob', nblob, 'blob id', iblob)
