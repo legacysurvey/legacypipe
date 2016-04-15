@@ -79,7 +79,8 @@ class OneBlob(object):
         self.plots2 = False
 
         alphas = [0.1, 0.3, 1.0]
-        self.optargs = dict(priors=True, shared_params=False, alphas=alphas)
+        self.optargs = dict(priors=True, shared_params=False, alphas=alphas,
+                            print_progress=False)
         blobh,blobw = blobmask.shape
         self.bigblob = (blobw * blobh) > 100*100
         self.trargs = dict()
