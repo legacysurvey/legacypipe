@@ -81,8 +81,10 @@ class OneBlob(object):
         alphas = [0.1, 0.3, 1.0]
         self.optargs = dict(priors=True, shared_params=False, alphas=alphas,
                             print_progress=False)
-        blobh,blobw = blobmask.shape
-        self.bigblob = (blobw * blobh) > 100*100
+        self.blobh,self.blobw = blobmask.shape
+        self.bigblob = (self.blobw * self.blobh) > 100*100
+        if self.bigblob:
+            print('Big blob:', name)
         self.trargs = dict()
     
         if use_ceres:
@@ -282,7 +284,7 @@ class OneBlob(object):
                     ps.savefig()
                 # Create a little local WCS subregion for this source, by
                 # resampling non-zero inverrs from the srctims into blobwcs
-                insrc = np.zeros((blobh,blobw), bool)
+                insrc = np.zeros((self.blobh,self.blobw), bool)
                 for tim in srctims:
                     try:
                         Yo,Xo,Yi,Xi,nil = resample_with_wcs(self.blobwcs, tim.subwcs,
@@ -301,7 +303,7 @@ class OneBlob(object):
                 xin = np.max(insrc, axis=0)
                 yl,yh = np.flatnonzero(yin)[np.array([0,-1])]
                 xl,xh = np.flatnonzero(xin)[np.array([0,-1])]
-                srcwcs = blobwcs.get_subimage(xl, yl, 1+xh-xl, 1+yh-yl)
+                srcwcs = self.blobwcs.get_subimage(xl, yl, 1+xh-xl, 1+yh-yl)
                 # A mask for which pixels in the 'srcwcs' square are occupied.
                 srcpix = insrc[yl:yh+1, xl:xh+1]
                 from scipy.ndimage.morphology import binary_erosion
@@ -813,9 +815,9 @@ class OneBlob(object):
                 srctims,modelMasks = _get_subimages(self.tims, mods, src)
                 #print('Creating srctims:', Time()-tbb0)
     
-                if plots and (numi < 3 or numi >= len(Ibright)-3):
-                    bx1 = bx0 + blobw
-                    by1 = by0 + blobh
+                if self.plots and (numi < 3 or numi >= len(Ibright)-3):
+                    bx1 = bx0 + self.blobw
+                    by1 = by0 + self.blobh
                     plt.clf()
                     coimgs,cons = compute_coadds(self.tims, bands, blobwcs,
                                                  fill_holes=False)
@@ -868,10 +870,9 @@ class OneBlob(object):
             #     spnames.append('Initial')
     
             # First-round optimization
-            print('First-round initial log-prob:', srctractor.getLogProb())
-    
+            #print('First-round initial log-prob:', srctractor.getLogProb())
             srctractor.optimize_loop(**self.optargs)
-            print('First-round final log-prob:', srctractor.getLogProb())
+            #print('First-round final log-prob:', srctractor.getLogProb())
     
             # if plots and False:
             #     spmods.append(list(srctractor.getModelImages()))
@@ -942,13 +943,13 @@ class OneBlob(object):
         cat.thawAllRecursive()
 
     def _plots(self, title):
-        bslc = (slice(by0, by0+blobh), slice(bx0, bx0+blobw))
+        bslc = (slice(by0, by0+self.blobh), slice(bx0, bx0+self.blobw))
         plotmods = []
         plotmodnames = []
         plotmods.append(list(tr.getModelImages()))
         plotmodnames.append('Initial models')
         _plot_mods(tims, plotmods, plotmodnames, bands, None, None,
-                   bslc, blobw, blobh, ps, chi_plots=False)
+                   bslc, self.blobw, self.blobh, ps, chi_plots=False)
         
     def _initial_plots(self):
         print('Plotting blob image for blob', nblob, 'blob id', iblob)
