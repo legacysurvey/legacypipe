@@ -82,6 +82,7 @@ class OneBlob(object):
         self.optargs = dict(priors=True, shared_params=False, alphas=alphas)
         self.blobh,self.blobw = blobmask.shape
         self.bigblob = (self.blobw * self.blobh) > 100*100
+        print('Big blob:', name)
         self.trargs = dict()
     
         if use_ceres:
@@ -300,7 +301,7 @@ class OneBlob(object):
                 xin = np.max(insrc, axis=0)
                 yl,yh = np.flatnonzero(yin)[np.array([0,-1])]
                 xl,xh = np.flatnonzero(xin)[np.array([0,-1])]
-                srcwcs = blobwcs.get_subimage(xl, yl, 1+xh-xl, 1+yh-yl)
+                srcwcs = self.blobwcs.get_subimage(xl, yl, 1+xh-xl, 1+yh-yl)
                 # A mask for which pixels in the 'srcwcs' square are occupied.
                 srcpix = insrc[yl:yh+1, xl:xh+1]
                 from scipy.ndimage.morphology import binary_erosion
@@ -867,10 +868,9 @@ class OneBlob(object):
             #     spnames.append('Initial')
     
             # First-round optimization
-            print('First-round initial log-prob:', srctractor.getLogProb())
-    
+            #print('First-round initial log-prob:', srctractor.getLogProb())
             srctractor.optimize_loop(**self.optargs)
-            print('First-round final log-prob:', srctractor.getLogProb())
+            #print('First-round final log-prob:', srctractor.getLogProb())
     
             # if plots and False:
             #     spmods.append(list(srctractor.getModelImages()))

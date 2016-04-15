@@ -41,7 +41,7 @@ echo "--------------------------------------------------------------------------
 
 # -s tims \
 # -P 'pickles/runbrick-dr2p-%(brick)s-%%(stage)s.pickle' \
-python -u legacypipe/runbrick.py \
+python legacypipe/runbrick.py \
     --force-all --no-write \
     --no-early-coadds \
     --pipe \
