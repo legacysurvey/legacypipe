@@ -2497,15 +2497,22 @@ def stage_wise_forced(
     print('Cut to', len(W), 'time-resolved vs', len(tiles), 'full-depth')
     assert(len(W) == len(tiles))
 
+    # this ought to be enough for anyone =)
+    Nepochs = 5
+
     eargs = []
     for band in [1,2]:
         # W1 is bit 0 (value 0x1), W2 is bit 1 (value 0x2)
         bitmask = (1 << (band-1))
-        epochs = np.flatnonzero(W.epoch_bitmask & bitmask)
-        print('Epochs:', epochs)
-        for e in epochs:
+        #ntiles,nepochs = W.epoch_bitmask.shape
+        for e in range(Nepochs):
+            # Which tiles have images for this epoch?
+            I = np.flatnonzero(W.epoch_bitmask[:,e] & bitmask)
+            if len(I) == 0:
+                continue
+            print('Epoch %i: %i tiles:' % (e, len(I)), W.coadd_id[I])
             edir = os.path.join(tdir, 'e%03i' % e)
-            eargs.append((e, (wcat, tiles, band, roiradec, edir, use_ceres)))
+            eargs.append((e, (wcat, tiles[I], band, roiradec, edir, use_ceres)))
         
     phots = mp.map(_unwise_phot, args + [a for e,a in eargs])
     WISE = phots[0]
@@ -2513,9 +2520,6 @@ def stage_wise_forced(
         for p in phots[1:len(args)]:
             WISE.add_columns_from(p)
         WISE.rename('tile', 'unwise_tile')
-
-    # this ought to be enough for anyone =)
-    Nepochs = 5
 
     WISE_T = phots[len(args)]
     if WISE_T is not None:
