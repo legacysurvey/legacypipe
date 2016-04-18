@@ -4,7 +4,25 @@ from glob import glob
 import os
 from astrometry.util.fits import fits_table, merge_tables
 
+def decals_dr3_extra():
+    # /global/homes/a/arjundey/ZeroPoints/decals-zpt-dr3-all.fits
+    T = fits_table('/global/cscratch1/sd/desiproc/zeropoints/decals-zpt-dr3-all.fits')
 
+    S1 = fits_table('survey-ccds-nondecals.fits.gz')
+    S2 = fits_table('survey-ccds-decals.fits.gz')
+    S = merge_tables([S1,S2])
+
+    gotchips = set(zip(S.expnum, S.ccdname))
+
+    got = np.array([(e,c) in gotchips for e,c in zip(T.expnum, T.ccdname)])
+    print('Found', len(got), 'of', len(T), 'in existing surveys tables of size', len(S))
+
+    I = np.flatnonzero(np.logical_not(got))
+    T.cut(I)
+    print(len(T), 'remaining')
+    print('Directories:', np.unique([os.path.basename(os.path.dirname(fn)) for fn in T.filename]))
+
+    
 def decals_dr3():
     basedir = os.environ['LEGACY_SURVEY_DIR']
     cam = 'decam'
@@ -29,6 +47,16 @@ def decals_dr3():
     outfn = 'zp.fits'
     T.writeto(outfn)
     print('Wrote', outfn)
+
+    nd = np.array(['NonDECaLS' in fn for fn in T.image_filename])
+    I = np.flatnonzero(nd)
+    T[I].writeto('survey-ccds-nondecals.fits')
+
+    I = np.flatnonzero(np.logical_not(nd))
+    T[I].writeto('survey-ccds-decals.fits')
+
+    for fn in ['survey-ccds-nondecals.fits', 'survey-ccds-decals.fits']:
+        os.system('gzip --best ' + fn)
 
     
 def normalize_zeropoints(fn, dirnms, image_basedir, cam, T=None):
@@ -148,7 +176,8 @@ def normalize_zeropoints(fn, dirnms, image_basedir, cam, T=None):
 if __name__ == '__main__':
     import sys
 
-    decals_dr3()
+    #decals_dr3()
+    decals_dr3_extra()
     sys.exit(0)
 
     # Mosaicz tests

@@ -36,6 +36,7 @@ class EllipseWithPriors(EllipseESoft):
                               param=EllipseESoft(1.,0.,0.))
             self.__class__.ellipsePriors = ellipsePriors
         self.gpriors = self.ellipsePriors
+        self.uppers[0] = 5.
 
     @classmethod
     def fromRAbPhi(cls, r, ba, phi):
