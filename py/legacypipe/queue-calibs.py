@@ -35,6 +35,20 @@ grep '^....[pm]...$' bricks | qdo load edr0 -
 
 qdo launch edr0 16 --cores_per_worker 8 --batchqueue regular --walltime 12:00:00 --script ../bin/pipebrick.sh --keep_env
 
+Brick stage 1:
+
+python legacypipe/queue-calibs.py --region edr --brickq 1 > bricks1
+grep '^....[pm]...$' bricks1 | awk '{print "/global/cscratch1/sd/desiproc/code/legacypipe/bin/pipebrick.sh",$1}' | qdo load jobs -
+
+
+* Staging larger regions:
+
+python legacypipe/queue-calibs.py --region northwest --write-ccds ccds-nw.fits --calibs --near --nper 100 --command --opt "--threads 8"
+
+for x in $(tablist ccds-nw.fits"[col image_filename]" | awk '{print $2}' | sort | uniq); do   rsync -LRarv /project/projectdirs/desiproc/dr3/images/./$(echo $x | sed s/o.i/o??/g) /global/cscratch1/sd/desiproc/dr3/images/; done
+
+qdo load --priority -10 jobs jobs
+
 
 '''
 from __future__ import print_function
@@ -80,6 +94,8 @@ def main():
 
     parser.add_argument('--touching', action='store_true',
                       help='Cut to only CCDs touching selected bricks')
+    parser.add_argument('--near', action='store_true',
+                      help='Quick cut to only CCDs near selected bricks')
 
     parser.add_argument('--check', action='store_true',
                       help='Check which calibrations actually need to run.')
@@ -89,7 +105,8 @@ def main():
                       default='jobs')
     parser.add_argument('--command', action='store_true',
                       help='Write out full command-line to run calib')
-
+    parser.add_argument('--opt', help='With --command, extra options to add')
+    
     parser.add_argument('--maxdec', type=float, help='Maximum Dec to run')
     parser.add_argument('--mindec', type=float, help='Minimum Dec to run')
 
@@ -166,7 +183,7 @@ def main():
     #dlo,dhi = -11, 5
     #dlo,dhi = 15,25.5
 
-    dlo,dhi = -15, 40
+    dlo,dhi = -25, 40
     rlo,rhi = 0, 360
 
     # Arjun says 3x3 coverage area is roughly
@@ -415,6 +432,10 @@ def main():
             allI.update(I)
         allI = list(allI)
         allI.sort()
+    elif opt.near:
+        # Roughly brick radius + DECam image radius
+        radius = 0.35
+        allI,nil,nil = match_radec(T.ra, T.dec, B.ra, B.dec, radius, nearest=True)
     else:
         allI = np.arange(len(T))
 
@@ -471,13 +492,16 @@ def main():
     batch = []
 
     def write_batch(f, batch, cmd):
-        if opt.command:
-            s = '; '.join(batch)
-        else:
-            s = ' '.join(batch)
-        f.write(s + '\n')
+        if cmd is None:
+            cmd = ''
+        f.write(cmd + ' '.join(batch) + '\n')
 
-
+    cmd = None
+    if opt.command:
+        cmd = 'python legacypipe/run-calib.py '
+        if opt.opt is not None:
+            cmd += opt.opt + ' '
+        
     for j,i in enumerate(allI):
 
         if opt.delete_sky or opt.delete_pvastrom:
@@ -498,28 +522,30 @@ def main():
                 continue
 
         if opt.command:
-            s = ('python legacypipe/run-calib.py --expnum %i --ccdname %s' %
-                 (T.expnum[i], T.ccdname[i]))
+            s = '%i-%s' % (T.expnum[i], T.ccdname[i])
+            #('python legacypipe/run-calib.py --expnum %i --ccdname %s' %
+            #     (T.expnum[i], T.ccdname[i]))
         else:
             s = '%i' % T.index[i]
-
+            prefix = ''
+            
         if j < 10:
             print('Index', T.index[i], 'expnum', T.expnum[i], 'ccdname', T.ccdname[i],
                   'filename', T.image_filename[i])
             
         if not opt.nper:
-            f.write(s + '\n')
+            f.write(prefix + s + '\n')
         else:
             batch.append(s)
             if len(batch) >= opt.nper:
-                write_batch(f, batch, opt.command)
+                write_batch(f, batch, cmd)
                 batch = []
 
         if opt.check:
             f.flush()
 
     if len(batch):
-        write_batch(f, batch, opt.command)
+        write_batch(f, batch, cmd)
 
     f.close()
     log('Wrote', opt.out)

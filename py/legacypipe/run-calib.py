@@ -54,9 +54,19 @@ def main():
 
     args = []
     for a in opt.args:
-        i = int(a)
-        print('Index', i)
-        t = T[i]
+        # Check for "expnum-ccdname" format.
+        if '-' in a:
+            words = a.split('-')
+            assert(len(words) == 2)
+            expnum = int(words[0])
+            ccdname = words[1]
+            I = np.flatnonzero((T.expnum == expnum) * (T.ccdname == ccdname))
+            assert(len(I) == 1)
+            t = T[I[0]]
+        else:
+            i = int(a)
+            print('Index', i)
+            t = T[i]
 
         im = survey.get_image_object(t)
         print('Running', im.calname)
