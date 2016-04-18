@@ -80,7 +80,8 @@ class OneBlob(object):
 
         alphas = [0.1, 0.3, 1.0]
         self.optargs = dict(priors=True, shared_params=False, alphas=alphas,
-                            print_progress=False)
+                            print_progress=True)
+                #print_progress=False)
         self.blobh,self.blobw = blobmask.shape
         self.bigblob = (self.blobw * self.blobh) > 100*100
         if self.bigblob:
@@ -306,8 +307,8 @@ class OneBlob(object):
                 srcwcs = self.blobwcs.get_subimage(xl, yl, 1+xh-xl, 1+yh-yl)
                 # A mask for which pixels in the 'srcwcs' square are occupied.
                 srcpix = insrc[yl:yh+1, xl:xh+1]
-                from scipy.ndimage.morphology import binary_erosion
-                srcpix2 = binary_erosion(srcpix)
+                # from scipy.ndimage.morphology import binary_erosion
+                # srcpix2 = binary_erosion(srcpix)
             else:
                 modelMasks = models.model_masks(i, src)
                 srctims = self.tims
@@ -372,8 +373,8 @@ class OneBlob(object):
             # If lots of exposures, cut to a subset that reach the DECaLS
             # depth goals and use those in an initial round?
             if self.many_exposures:
-                dtims,insubset = self._get_todepth_subset(srctims, srcwcs)
-            
+                dtims,insubset = self._get_todepth_subset(srctims, srcwcs,
+                                                          srcpix)
             allflags = {}
             for name,newsrc in trymodels:
     
@@ -668,7 +669,7 @@ class OneBlob(object):
         del models
     
         
-    def _get_todepth_subset(self, srctims, srcwcs):
+    def _get_todepth_subset(self, srctims, srcwcs, srcpix):
         timsubset = set()
         for band in self.bands:
             # Order to try them: first, DECaLS data (our propid),
@@ -724,7 +725,7 @@ class OneBlob(object):
                 if srcpix is None:
                     p1,p2,p3 = np.percentile(detiv, pctiles)
                 else:
-                    p1,p2,p3 = np.percentile(detiv[srcpix2], pctiles)
+                    p1,p2,p3 = np.percentile(detiv[srcpix], pctiles)
 
                 m1 = NanoMaggies.nanomaggiesToMag(np.sqrt(1./p1) * Nsigma)
                 m2 = NanoMaggies.nanomaggiesToMag(np.sqrt(1./p2) * Nsigma)
