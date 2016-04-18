@@ -12,7 +12,6 @@ Or for much more fine-grained control, see the individual stages:
 - :py:func:`stage_image_coadds`
 - :py:func:`stage_srcs`
 - :py:func:`stage_fitblobs`
-- :py:func:`stage_fitblobs_finish`
 - :py:func:`stage_coadds`
 - :py:func:`stage_wise_forced`
 - :py:func:`stage_writecat`
@@ -1521,8 +1520,11 @@ def _write_fitblobs_pickle(fn, data):
     print('Wrote', fn)
         
 def stage_fitblobs(T=None,
+                   brickname=None,
+                   brickid=None,
+                   version_header=None,
                    blobsrcs=None, blobslices=None, blobs=None,
-                   cat=None, targetrd=None, pixscale=None,
+                   cat=None,
                    targetwcs=None,
                    W=None,H=None,
                    bands=None, ps=None, tims=None,
@@ -1533,12 +1535,14 @@ def stage_fitblobs(T=None,
                    checkpoint_filename=None,
                    checkpoint_period=600,
                    write_pickle_filename=None,
+                   write_metrics=True,
+                   get_all_models=False,
+                   allbands = 'ugrizY',
                    **kwargs):
     '''
     This is where the actual source fitting happens.
     The `one_blob` function is called for each "blob" of pixels with
-    the sources contained within that blob.  The results are assembled
-    in the next stage, `stage_fitblobs_finish`.
+    the sources contained within that blob.
     '''
     tlast = Time()
     for tim in tims:
@@ -1548,8 +1552,8 @@ def stage_fitblobs(T=None,
         #import multiprocessing
         #write_pool = multiprocessing.Pool(1)
         import threading
-        keys = ['T', 'blobsrcs', 'blobslices', 'blobs', 'cat', 'targetrd',
-                'pixscale', 'targetwcs', 'W', 'H', 'bands', 'tims', 'survey',
+        keys = ['T', 'blobsrcs', 'blobslices', 'blobs', 'cat',
+                'targetwcs', 'W', 'H', 'bands', 'tims', 'survey',
                 'brickname', 'brickid', 'brick', 'version_header', 'ccds']
         L = locals()
         vals = {}
@@ -1784,34 +1788,10 @@ def stage_fitblobs(T=None,
 
     print('[parallel fitblobs] Fitting sources took:', Time()-tlast)
 
-    return dict(fitblobs_R=R, tims=tims, ps=ps, blobs=blobs,
-                blobslices=blobslices, blobsrcs=blobsrcs)
-
-def stage_fitblobs_finish(
-    survey=None,
-    brickname=None,
-    brickid=None,
-    version_header=None,
-    T=None, blobsrcs=None, blobslices=None, blobs=None,
-    cat=None, targetrd=None, pixscale=None,
-    targetwcs=None,
-    W=None,H=None,
-    bands=None, ps=None, tims=None,
-    plots=False, plots2=False,
-    fitblobs_R=None,
-    write_metrics=True,
-    get_all_models=False,
-    allbands = 'ugrizY',
-    **kwargs):
-    '''
-    This is a "glue" stage to repackage the results from the
-    `stage_fitblobs` stage.
-    '''
+    ## This used to be in fitblobs_finish
 
     # one_blob can reduce the number and change the types of sources!
     # Reorder the sources here...
-    R = fitblobs_R
-    del fitblobs_R
     assert(len(R) == len(blobsrcs))
 
     # Drop now-empty blobs.
@@ -3164,12 +3144,11 @@ def run_brick(brick, radec=None, pixscale=0.262,
 
         # fitblobs: see below
 
-        'fitblobs_finish':'fitblobs',
-        'coadds': 'fitblobs_finish',
+        'coadds': 'fitblobs',
 
         # wise_forced: see below
 
-        'fitplots': 'fitblobs_finish',
+        'fitplots': 'fitblobs',
         'psfplots': 'tims',
         'initplots': 'srcs',
 
