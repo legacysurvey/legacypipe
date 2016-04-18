@@ -30,6 +30,7 @@ def main():
     parser.add_argument('--run-se', action='store_true', help='Run SourceExtractor')
 
     parser.add_argument('--splinesky', action='store_true', help='Spline sky, not constant')
+    parser.add_argument('--threads', type=int, help='Run multi-threaded', default=None)
     parser.add_argument('args',nargs=argparse.REMAINDER)
     opt = parser.parse_args()
 
@@ -51,10 +52,21 @@ def main():
 
         opt.args = range(len(T))
 
+    args = []
     for a in opt.args:
-        i = int(a)
-        print('Index', i)
-        t = T[i]
+        # Check for "expnum-ccdname" format.
+        if '-' in a:
+            words = a.split('-')
+            assert(len(words) == 2)
+            expnum = int(words[0])
+            ccdname = words[1]
+            I = np.flatnonzero((T.expnum == expnum) * (T.ccdname == ccdname))
+            assert(len(I) == 1)
+            t = T[I[0]]
+        else:
+            i = int(a)
+            print('Index', i)
+            t = T[i]
 
         im = survey.get_image_object(t)
         print('Running', im.calname)
@@ -67,7 +79,16 @@ def main():
         if opt.splinesky:
             kwargs.update(splinesky=True)
 
-        run_calibs((im, kwargs))
+        if opt.threads:
+            args.append((im, kwargs))
+        else:
+            run_calibs((im, kwargs))
+
+    if opt.threads:
+        from astrometry.util.multiproc import multiproc
+        mp = multiproc(opt.threads)
+        mp.map(run_calibs, args)
+        
     return 0
 
 if __name__ == '__main__':
