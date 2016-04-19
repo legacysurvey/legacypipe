@@ -1055,23 +1055,16 @@ def stage_image_coadds(survey=None, targetwcs=None, bands=None, tims=None,
                 callback=_write_band_images,
                 callback_args=(survey, brickname, version_header, tims, targetwcs))
 
-    if plots:
-        plt.clf()
-        dimshow(nobs, vmin=0, vmax=max(1,nobs.max()), cmap='jet')
-        plt.colorbar()
-        plt.title('Number of observations, %s band' % band)
-        ps.savefig()
-        # for k,v in CP_DQ_BITS.items():
-        #     plt.clf()
-        #     dimshow(ormask & v, vmin=0, vmax=v)
-        #     plt.title('OR mask, %s band: %s' % (band, k))
-        #     ps.savefig()
-        # 
-        #     plt.clf()
-        #     dimshow(andmask & v, vmin=0, vmax=v)
-        #     plt.title('AND mask, %s band: %s' % (band,k))
-        #     ps.savefig()
-
+    # if plots:
+    #     for k,v in CP_DQ_BITS.items():
+    #         plt.clf()
+    #         dimshow(ormask & v, vmin=0, vmax=v)
+    #         plt.title('OR mask, %s band: %s' % (band, k))
+    #         ps.savefig()
+    #         plt.clf()
+    #         dimshow(andmask & v, vmin=0, vmax=v)
+    #         plt.title('AND mask, %s band: %s' % (band,k))
+    #         ps.savefig()
     
     if True:
         # Compute the brick's unique pixels.
@@ -1203,6 +1196,9 @@ def stage_srcs(coimgs=None, cons=None,
     '''
     from legacypipe.detection import (detection_maps, sed_matched_filters,
                                       run_sed_matched_filters)
+    from legacypipe.common import segment_and_group_sources
+    from scipy.ndimage.morphology import binary_dilation
+    from scipy.ndimage.measurements import label, find_objects, center_of_mass
 
     tlast = Time()
     avoid_xy = []
@@ -1364,44 +1360,11 @@ def stage_srcs(coimgs=None, cons=None,
                 sh,sw = detmap[ii::S, jj::S].shape
                 detmap[ii::S, jj::S] -= smoo[:sh,:sw]
 
-        if plots:
-            sig1 = 1./np.sqrt(np.median(detiv[detiv > 0]))
-            kwa = dict(vmin=-2.*sig1, vmax=10.*sig1)
-            kwa2 = dict(vmin=-2.*sig1, vmax=50.*sig1)
-
-            subbed = detmap.copy()
-            S = binning
-            for ii in range(S):
-                for jj in range(S):
-                    subbed[ii::S, jj::S] -= smoo
-
-            plt.clf()
-            plt.subplot(2,3,1)
-            dimshow(detmap, **kwa)
-            plt.subplot(2,3,2)
-            dimshow(smoo, **kwa)
-            plt.subplot(2,3,3)
-            dimshow(subbed, **kwa)
-            plt.subplot(2,3,4)
-            dimshow(detmap, **kwa2)
-            plt.subplot(2,3,5)
-            dimshow(smoo, **kwa2)
-            plt.subplot(2,3,6)
-            dimshow(subbed, **kwa2)
-            plt.suptitle('Median filter of detection map: %s band' %
-                         bands[i])
-            ps.savefig()
-
     # Handle the margin of interpolated (masked) pixels around
     # saturated pixels
-    from scipy.ndimage.morphology import binary_dilation
-    from legacypipe.common import segment_and_group_sources
-    
     saturated_pix = binary_dilation(satmap > 0, iterations=10)
 
     # Saturated blobs -- create a source for each?!
-    from scipy.ndimage.measurements import label, find_objects, center_of_mass
-
     satblobs,nsat = label(satmap > 0)
     satyx = center_of_mass(satmap, labels=satblobs, index=np.arange(nsat)+1)
     # NOTE, satyx is in y,x order (center_of_mass)
@@ -2234,6 +2197,7 @@ def stage_coadds(survey=None, bands=None, version_header=None, targetwcs=None,
     ok,xx,yy = targetwcs.radec2pixelxy(ra, dec)
     apxy = np.vstack((xx - 1., yy - 1.)).T
 
+    nap = len(apertures)
     if len(xx) == 0:
         apertures = None
         apxy = None
@@ -2253,7 +2217,6 @@ def stage_coadds(survey=None, bands=None, version_header=None, targetwcs=None,
         # empty table when 0 sources.
         C.AP = fits_table()
         for band in bands:
-            nap = len(apertures)
             C.AP.set('apflux_img_%s' % band, np.zeros((0,nap)))
             C.AP.set('apflux_img_ivar_%s' % band, np.zeros((0,nap)))
             C.AP.set('apflux_resid_%s' % band, np.zeros((0,nap)))
