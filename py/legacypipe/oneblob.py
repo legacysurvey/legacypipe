@@ -139,7 +139,7 @@ class OneBlob(object):
 
         if self.plots:
             self._plots(tr, 'After source fitting')
-            
+
         print('Blob finished fitting:', Time()-tlast)
         tlast = Time()
 
@@ -268,27 +268,26 @@ class OneBlob(object):
             models.add(srci, self.tims)
     
             if self.bigblob:
-                if self.plots:
-                    plt.clf()
-                    for j,tim in enumerate(self.tims):
-                        plt.subplot(len(self.tims), 2, j+1)
-                        dimshow(tim.getImage(), vmin=-2*tim.sig1, vmax=5*tim.sig1)
-                        ax = plt.axis()
-                        x,y = tim.wcs.positionToPixel(src.getPosition())
-                        plt.plot(x, y, 'r.')
-                    self.ps.savefig()
-    
+                # if self.plots:
+                #     plt.clf()
+                #     for j,tim in enumerate(self.tims):
+                #         plt.subplot(len(self.tims), 2, j+1)
+                #         dimshow(tim.getImage(), vmin=-2*tim.sig1, vmax=5*tim.sig1)
+                #         ax = plt.axis()
+                #         x,y = tim.wcs.positionToPixel(src.getPosition())
+                #         plt.plot(x, y, 'r.')
+                #     self.ps.savefig()
                 mods = [mod[srci] for mod in models.models]
                 srctims,modelMasks = _get_subimages(self.tims, mods, src)
-    
-                if self.plots:
-                    for j,tim in enumerate(srctims):
-                        plt.subplot(len(srctims), 2, len(srctims)+j+1)
-                        dimshow(tim.getImage(), vmin=-2*tim.sig1, vmax=5*tim.sig1)
-                        ax = plt.axis()
-                        x,y = tim.wcs.positionToPixel(src.getPosition())
-                        plt.plot(x, y, 'r.')
-                    self.ps.savefig()
+                # if self.plots:
+                #     for j,tim in enumerate(srctims):
+                #         plt.subplot(len(srctims), 2, len(srctims)+j+1)
+                #         dimshow(tim.getImage(), vmin=-2*tim.sig1, vmax=5*tim.sig1)
+                #         ax = plt.axis()
+                #         x,y = tim.wcs.positionToPixel(src.getPosition())
+                #         plt.plot(x, y, 'r.')
+                #     self.ps.savefig()
+
                 # Create a little local WCS subregion for this source, by
                 # resampling non-zero inverrs from the srctims into blobwcs
                 insrc = np.zeros((self.blobh,self.blobw), bool)
@@ -601,7 +600,7 @@ class OneBlob(object):
                     if modname == 'none':
                         # In the first panel, we show a coadd of the data
                         coimgs, cons = compute_coadds(srctims, self.bands, srcwcs)
-                        dimshow(get_rgb(coimgs, self.bands))
+                        dimshow(get_rgb(coimgs, self.bands), ticks=False)
                         ax = plt.axis()
                         ok,x,y = self.blobwcs.radec2pixelxy(src.getPosition().ra,
                                                             src.getPosition().dec)
@@ -629,7 +628,7 @@ class OneBlob(object):
                     dimshow(get_rgb(coresids, self.bands, **rgbkwargs_resid),
                                 ticks=False)
                     plt.title('chisq %.0f' % chisqs[modname], fontsize=8)
-                plt.suptitle('%s, source %i: keeping %s\nwas: %s' %
+                plt.suptitle('Blob %s, source %i: keeping %s\nwas: %s' %
                              (self.name, srci, keepmod, str(src)), fontsize=10)
                 self.ps.savefig()
     
@@ -796,6 +795,7 @@ class OneBlob(object):
                 srctims,modelMasks = _get_subimages(self.tims, mods, src)
                 #print('Creating srctims:', Time()-tbb0)
     
+                # We plots only the first & last three sources
                 if self.plots and (numi < 3 or numi >= len(Ibright)-3):
                     plt.clf()
                     # Recompute coadds because of the subtract-all-and-readd shuffle
@@ -914,7 +914,7 @@ class OneBlob(object):
         plotmods = []
         plotmodnames = []
         plotmods.append(list(tr.getModelImages()))
-        plotmodnames.append('Initial models')
+        plotmodnames.append(title)
         _plot_mods(self.tims, plotmods, plotmodnames, self.bands, None, None, None,
                    self.blobw, self.blobh, self.ps, chi_plots=False)
         
