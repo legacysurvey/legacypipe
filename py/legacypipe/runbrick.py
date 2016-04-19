@@ -456,9 +456,7 @@ def stage_tims(W=3600, H=3600, pixscale=0.262, brickname=None,
             'target_extent', 'ccds', 'bands', 'survey']
     if not pipe:
         keys.extend(['coimgs', 'cons'])
-    rtn = dict()
-    for k in keys:
-        rtn[k] = locals()[k]
+    rtn = dict([(k,locals()[k]) for k in keys])
     return rtn
 
 def _coadds(tims, bands, targetwcs,
@@ -505,6 +503,9 @@ def _coadds(tims, bands, targetwcs,
         if detmaps:
             C.T.depth    = np.zeros((len(ix), len(bands)), np.float32)
             C.T.galdepth = np.zeros((len(ix), len(bands)), np.float32)
+
+    if lanczos:
+        print('Doing Lanczos resampling')
 
     tinyw = 1e-30
     for iband,band in enumerate(bands):
@@ -579,7 +580,6 @@ def _coadds(tims, bands, targetwcs,
 
             if lanczos:
                 from astrometry.util.miscutils import patch_image
-                print('Doing Lanczos resampling')
                 patched = tim.getImage().copy()
                 okpix = (tim.getInvError() > 0)
                 patch_image(patched, okpix)
@@ -1497,15 +1497,10 @@ def stage_srcs(coimgs=None, cons=None,
     print('[serial srcs] Blobs:', tnow-tlast)
     tlast = tnow
 
-    keys = ['T', 'tims',
-            'blobsrcs', 'blobslices', 'blobs',
-            'cat', 'ps']
+    keys = ['T', 'tims', 'blobsrcs', 'blobslices', 'blobs', 'cat', 'ps']
     if not pipe:
         keys.extend(['detmaps', 'detivs'])
-
-    rtn = dict()
-    for k in keys:
-        rtn[k] = locals()[k]
+    rtn = dict([(k,locals()[k]) for k in keys])
     return rtn
 
 def _write_fitblobs_pickle(fn, data):
@@ -1572,7 +1567,7 @@ def stage_fitblobs(T=None,
     for tim in tims:
         tim.modelMinval = minsigma * tim.sig1
 
-    if plots and False:
+    if plots:
         coimgs,cons = compute_coadds(tims, bands, targetwcs)
         plt.clf()
         dimshow(get_rgb(coimgs, bands))
@@ -1981,11 +1976,10 @@ def stage_fitblobs(T=None,
     invvars = np.hstack(BB.srcinvvars)
     assert(cat.numberOfParams() == len(invvars))
 
-    rtn = dict(fitblobs_R = None)
-    for k in ['cat', 'invvars', 'T', 'allbands', 'blobs']:
-        rtn[k] = locals()[k]
+    keys = ['cat', 'invvars', 'T', 'allbands', 'blobs']
     if get_all_models:
-        rtn['all_models'] = all_models
+        keys.append('all_models')
+    rtn = dict([(k,locals()[k]) for k in keys])
     return rtn
 
 def _blob_iter(blobslices, blobsrcs, blobs, targetwcs, tims, cat, bands,
