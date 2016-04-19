@@ -48,7 +48,6 @@ from tractor.galaxy import (DevGalaxy, ExpGalaxy, FixedCompositeGalaxy, Softened
 from legacypipe.common import (tim_get_resamp, get_rgb, imsave_jpeg, LegacySurveyData,
                                CP_DQ_BITS)
 from legacypipe.utils import RunbrickError, NothingToDoError, iterwrapper
-from legacypipe.runbrick_plots import _plot_mods
 
 ## GLOBALS!  Oh my!
 nocache = True
@@ -347,6 +346,37 @@ def stage_tims(W=3600, H=3600, pixscale=0.262, brickname=None,
             if tim.plver != ver[1]:
                 print('Warning: image "%s" PLVER is "%s" but %s calib was run on PLVER "%s"' %
                       (str(tim), tim.plver, cal, ver[1]))
+
+    # Add additional columns to the CCDs table.
+    ccds.ccd_x0 = np.array([tim.x0 for tim in tims]).astype(np.int16)
+    ccds.ccd_x1 = np.array([tim.x0 + tim.shape[1]
+                            for tim in tims]).astype(np.int16)
+    ccds.ccd_y0 = np.array([tim.y0 for tim in tims]).astype(np.int16)
+    ccds.ccd_y1 = np.array([tim.y0 + tim.shape[0]
+                            for tim in tims]).astype(np.int16)
+    rd = np.array([[tim.subwcs.pixelxy2radec(1, 1)[-2:],
+                    tim.subwcs.pixelxy2radec(1, y1-y0)[-2:],
+                    tim.subwcs.pixelxy2radec(x1-x0, 1)[-2:],
+                    tim.subwcs.pixelxy2radec(x1-x0, y1-y0)[-2:]]
+                    for tim,x0,y0,x1,y1 in
+                   zip(tims, ccds.ccd_x0+1, ccds.ccd_y0+1,
+                       ccds.ccd_x1, ccds.ccd_y1)])
+    ok,x,y = targetwcs.radec2pixelxy(rd[:,:,0], rd[:,:,1])
+    ccds.brick_x0 = np.floor(np.min(x, axis=1)).astype(np.int16)
+    ccds.brick_x1 = np.ceil (np.max(x, axis=1)).astype(np.int16)
+    ccds.brick_y0 = np.floor(np.min(y, axis=1)).astype(np.int16)
+    ccds.brick_y1 = np.ceil (np.max(y, axis=1)).astype(np.int16)
+    ccds.sig1 = np.array([tim.sig1 for tim in tims])
+    ccds.psfnorm = np.array([tim.psfnorm for tim in tims])
+    ccds.galnorm = np.array([tim.galnorm for tim in tims])
+    ccds.propid = np.array([tim.propid for tim in tims])
+    ccds.plver = np.array([tim.plver for tim in tims])
+    ccds.skyver = np.array([tim.skyver[0] for tim in tims])
+    ccds.wcsver = np.array([tim.wcsver[0] for tim in tims])
+    ccds.psfver = np.array([tim.psfver[0] for tim in tims])
+    ccds.skyplver = np.array([tim.skyver[1] for tim in tims])
+    ccds.wcsplver = np.array([tim.wcsver[1] for tim in tims])
+    ccds.psfplver = np.array([tim.psfver[1] for tim in tims])
 
     if plots and False:
         # Pixel histograms of subimages.
@@ -931,7 +961,7 @@ def stage_mask_junk(tims=None, targetwcs=None, W=None, H=None, bands=None,
 def stage_image_coadds(survey=None, targetwcs=None, bands=None, tims=None,
                        brickname=None, version_header=None,
                        plots=False, ps=None, coadd_bw=False, W=None, H=None,
-                       brick=None, blobs=None, lanczos=True,
+                       brick=None, blobs=None, lanczos=True, ccds=None,
                        **kwargs):
     '''
     Immediately after reading the images, we
@@ -939,7 +969,6 @@ def stage_image_coadds(survey=None, targetwcs=None, bands=None, tims=None,
     including the models will be created (in `stage_coadds`).  But
     it's handy to have the coadds early on, to diagnose problems or
     just to look at the data.
-
     '''
 
     if plots and False:
@@ -1017,6 +1046,10 @@ def stage_image_coadds(survey=None, targetwcs=None, bands=None, tims=None,
             plt.title('Per-column medians for %s band' % band)
             ps.savefig()
 
+    with survey.write_output('ccds-table', brick=brickname) as out:
+        ccds.writeto(out.fn, primheader=version_header)
+        print('Wrote', out.fn)
+            
     C = _coadds(tims, bands, targetwcs,
                 detmaps=True, lanczos=lanczos,
                 callback=_write_band_images,
@@ -2050,7 +2083,9 @@ def _blob_iter(blobslices, blobsrcs, blobs, targetwcs, tims, cat, bands,
 
         print('Blob', nblob+1, 'of', len(blobslices), ': blob', iblob,
               len(Isrcs), 'sources, size', blobw, 'x', blobh,
-              'center', (bx0+bx1)/2, (by0+by1)/2, 'npix', np.sum(blobmask),
+              #'center', (bx0+bx1)/2, (by0+by1)/2,
+              'brick X %i,%i, Y %i,%i' % (bx0,bx1,by0,by1),
+              'npix', np.sum(blobmask),
               'one pixel:', onex,oney, 'has Tycho-2 star:', hastycho)
 
         rr,dd = targetwcs.pixelxy2radec([bx0,bx0,bx1,bx1],[by0,by1,by1,by0])
@@ -2159,45 +2194,13 @@ def stage_coadds(survey=None, bands=None, version_header=None, targetwcs=None,
     and residuals.  We also perform aperture photometry in this stage.
     '''
     from legacypipe.common import apertures_arcsec
-
     tlast = Time()
-
-    ccds.ccd_x0 = np.array([tim.x0 for tim in tims]).astype(np.int16)
-    ccds.ccd_x1 = np.array([tim.x0 + tim.shape[1]
-                            for tim in tims]).astype(np.int16)
-    ccds.ccd_y0 = np.array([tim.y0 for tim in tims]).astype(np.int16)
-    ccds.ccd_y1 = np.array([tim.y0 + tim.shape[0]
-                            for tim in tims]).astype(np.int16)
-    rd = np.array([[tim.subwcs.pixelxy2radec(1, 1)[-2:],
-                    tim.subwcs.pixelxy2radec(1, y1-y0)[-2:],
-                    tim.subwcs.pixelxy2radec(x1-x0, 1)[-2:],
-                    tim.subwcs.pixelxy2radec(x1-x0, y1-y0)[-2:]]
-                    for tim,x0,y0,x1,y1 in
-                   zip(tims, ccds.ccd_x0+1, ccds.ccd_y0+1,
-                       ccds.ccd_x1, ccds.ccd_y1)])
-    ok,x,y = targetwcs.radec2pixelxy(rd[:,:,0], rd[:,:,1])
-    ccds.brick_x0 = np.floor(np.min(x, axis=1)).astype(np.int16)
-    ccds.brick_x1 = np.ceil (np.max(x, axis=1)).astype(np.int16)
-    ccds.brick_y0 = np.floor(np.min(y, axis=1)).astype(np.int16)
-    ccds.brick_y1 = np.ceil (np.max(y, axis=1)).astype(np.int16)
-    ccds.sig1 = np.array([tim.sig1 for tim in tims])
-    ccds.psfnorm = np.array([tim.psfnorm for tim in tims])
-    ccds.galnorm = np.array([tim.galnorm for tim in tims])
-    ccds.propid = np.array([tim.propid for tim in tims])
-    ccds.plver = np.array([tim.plver for tim in tims])
-    ccds.skyver = np.array([tim.skyver[0] for tim in tims])
-    ccds.wcsver = np.array([tim.wcsver[0] for tim in tims])
-    ccds.psfver = np.array([tim.psfver[0] for tim in tims])
-    ccds.skyplver = np.array([tim.skyver[1] for tim in tims])
-    ccds.wcsplver = np.array([tim.wcsver[1] for tim in tims])
-    ccds.psfplver = np.array([tim.psfver[1] for tim in tims])
 
     primhdr = fitsio.FITSHDR()
     for r in version_header.records():
         primhdr.add_record(r)
     primhdr.add_record(dict(name='PRODTYPE', value='ccdinfo',
                             comment='NOAO data product type'))
-
     with survey.write_output('ccds-table', brick=brickname) as out:
         ccds.writeto(out.fn, primheader=primhdr)
         print('Wrote', out.fn)
