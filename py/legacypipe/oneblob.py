@@ -1,14 +1,20 @@
 from __future__ import print_function
 
 import numpy as np
+import pylab as plt
+
 from astrometry.util.ttime import Time
 from astrometry.util.resample import resample_with_wcs, OverlapError
 from astrometry.util.fits import fits_table
+from astrometry.util.plotutils import dimshow
+
 from tractor import Tractor, PointSource, Image, NanoMaggies, Catalog, Patch
 from tractor.galaxy import DevGalaxy, ExpGalaxy, FixedCompositeGalaxy, SoftenedFracDev, FracDev, disable_galaxy_cache, enable_galaxy_cache
-from legacypipe.common import (SimpleGalaxy, LegacyEllipseWithPriors, 
-                               DECALS_PROPID)
 
+from legacypipe.common import (SimpleGalaxy, LegacyEllipseWithPriors, 
+                               DECALS_PROPID, get_rgb)
+from legacypipe.runbrick import compute_coadds
+from legacypipe.runbrick_plots import _plot_mods
 
 def one_blob(X):
     '''
@@ -270,7 +276,7 @@ class OneBlob(object):
                         ax = plt.axis()
                         x,y = tim.wcs.positionToPixel(src.getPosition())
                         plt.plot(x, y, 'r.')
-                    ps.savefig()
+                    self.ps.savefig()
     
                 mods = [mod[i] for mod in models.models]
                 srctims,modelMasks = _get_subimages(self.tims, mods, src)
@@ -282,7 +288,7 @@ class OneBlob(object):
                         ax = plt.axis()
                         x,y = tim.wcs.positionToPixel(src.getPosition())
                         plt.plot(x, y, 'r.')
-                    ps.savefig()
+                    self.ps.savefig()
                 # Create a little local WCS subregion for this source, by
                 # resampling non-zero inverrs from the srctims into blobwcs
                 insrc = np.zeros((self.blobh,self.blobw), bool)
@@ -326,7 +332,7 @@ class OneBlob(object):
                                              fill_holes=False)
                 dimshow(get_rgb(coimgs, bands))#, extent=(bx0,bx1,by0,by1))
                 plt.title('Model selection: stage1 data')
-                ps.savefig()
+                self.ps.savefig()
     
                 for tim in srctims:
                     del tim.resamp
@@ -336,7 +342,7 @@ class OneBlob(object):
                                              fill_holes=False)
                 dimshow(get_rgb(coimgs, bands))
                 plt.title('Model selection: stage1 data')
-                ps.savefig()
+                self.ps.savefig()
     
                 # srch,srcw = srcwcs.shape
                 # _plot_mods(srctims, [list(srctractor.getModelImages())],
@@ -430,7 +436,7 @@ class OneBlob(object):
                 #                                  images=mods, fill_holes=False)
                 #     dimshow(get_rgb(coimgs, bands))
                 #     plt.title('Initial: ' + name)
-                #     ps.savefig()
+                #     self.ps.savefig()
     
                 if self.many_exposures:
                     # Run a quick round of optimization with our to-depth subset
@@ -452,7 +458,7 @@ class OneBlob(object):
                     #                                 images=modimgs)
                     #     dimshow(get_rgb(comods, bands))
                     #     plt.title('To-depth opt: ' + name)
-                    #     ps.savefig()
+                    #     self.ps.savefig()
     
                 # First-round optimization (during model selection)
                 thisflags = 0
@@ -472,7 +478,7 @@ class OneBlob(object):
                 #                                 images=modimgs)
                 #     dimshow(get_rgb(comods, bands))
                 #     plt.title('First-round opt: ' + name)
-                #     ps.savefig()
+                #     self.ps.savefig()
     
                 srctractor.setModelMasks(None)
                 disable_galaxy_cache()
@@ -541,7 +547,7 @@ class OneBlob(object):
                     #                                 images=modimgs)
                     #     dimshow(get_rgb(comods, bands))
                     #     plt.title('Second-round opt: ' + name)
-                    #     ps.savefig()
+                    #     self.ps.savefig()
                 else:
                     # Tycho-2 star; set modtractor = srctractor for the ivars
                     srctractor.setModelMasks(newsrc_mm)
@@ -642,7 +648,7 @@ class OneBlob(object):
             #         plt.title('chisq %.0f' % chisqs[modname], fontsize=8)
             #     plt.suptitle('Blob %i, source %i: was: \n%s' %
             #                  (iblob, i, str(src)), fontsize=10)
-            #     ps.savefig()
+            #     self.ps.savefig()
     
             # This determines the order of the elements in the DCHISQ
             # column of the catalog.
@@ -750,7 +756,7 @@ class OneBlob(object):
                                          fill_holes=False)
             dimshow(get_rgb(coimgs, bands))
             plt.title('To-depth data')
-            ps.savefig()
+            self.ps.savefig()
 
         return dtims, insubset
             
@@ -852,7 +858,7 @@ class OneBlob(object):
                         ok,x,y = brickwcs.radec2pixelxy(ra, dec)
                         plt.plot(x, y, 'c-')
                     plt.title('source %i of %i' % (numi, len(Ibright)))
-                    ps.savefig()
+                    self.ps.savefig()
     
             else:
                 srctims = self.tims
@@ -944,24 +950,29 @@ class OneBlob(object):
         cat.thawAllRecursive()
 
     def _plots(self, title):
-        bslc = (slice(by0, by0+self.blobh), slice(bx0, bx0+self.blobw))
         plotmods = []
         plotmodnames = []
         plotmods.append(list(tr.getModelImages()))
         plotmodnames.append('Initial models')
-        _plot_mods(tims, plotmods, plotmodnames, bands, None, None,
-                   bslc, self.blobw, self.blobh, ps, chi_plots=False)
+        _plot_mods(tims, plotmods, plotmodnames, self.bands, None, None, None,
+                   self.blobw, self.blobh, self.ps, chi_plots=False)
         
     def _initial_plots(self):
-        print('Plotting blob image for blob', nblob, 'blob id', iblob)
-        coimgs,cons = compute_coadds(tims, bands, blobwcs, fill_holes=False)
+        print('Plotting blob image for blob', self.name)
+        self.coimgs,cons = compute_coadds(self.tims, self.bands, self.blobwcs,
+                                          fill_holes=False)
+        self.rgb = get_rgb(self.coimgs, self.bands)
         plt.clf()
-        dimshow(get_rgb(coimgs, bands))
-        ps.savefig()
+        dimshow(self.rgb)
+        self.ps.savefig()
+
+        ok,x0,y0 = self.blobwcs.radec2pixelxy(
+            np.array([src.getPosition().ra  for src in self.srcs]),
+            np.array([src.getPosition().dec for src in self.srcs]))
 
         plt.plot(x0, y0, 'r.')
         plt.title('initial sources')
-        ps.savefig()
+        self.ps.savefig()
 
         # plt.clf()
         # ccmap = dict(g='g', r='r', z='m')
@@ -970,7 +981,7 @@ class OneBlob(object):
         #     plt.hist(chi.ravel(), range=(-5,10), bins=100, histtype='step',
         #              color=ccmap[tim.band])
         # plt.xlabel('signal/noise per pixel')
-        # ps.savefig()
+        # self.ps.savefig()
         
     def create_tims(self, timargs):
         # In order to make multiprocessing easier, the one_blob method
@@ -1028,7 +1039,7 @@ class OneBlob(object):
     #             plt.subplot(1,2,2)
     #             dimshow(inverr, vmin=0, vmax=1.1/sig1)
     #             plt.suptitle('Subimage: ' + name)
-    #             ps.savefig()
+    #             self.ps.savefig()
     # 
     # if plots and False:
     #     plotmods.append(list(tr.getModelImages()))
@@ -1049,7 +1060,7 @@ class OneBlob(object):
     #         np.array([src.getPosition().dec for src in srcs]))
     #     plt.plot(sx, sy, 'r.')
     #     plt.title('after source fitting')
-    #     ps.savefig()
+    #     self.ps.savefig()
 
     # FIXME -- render initial models and find significant flux overlap
     # (product)??  (Could use the same logic above!)  This would give
