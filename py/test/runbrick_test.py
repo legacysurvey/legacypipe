@@ -13,6 +13,12 @@ if __name__ == '__main__':
                '--survey-dir', surveydir,
                '--outdir', 'out-testcase3'])
 
+    # With plots!
+    main(args=['--brick', '2447p120', '--zoom', '1020', '1070', '2775', '2815',
+               '--no-wise', '--force-all', '--no-write',
+               '--survey-dir', surveydir,
+               '--outdir', 'out-testcase3', '--plots'])
+    
     if not travis:
         # With ceres
         main(args=['--brick', '2447p120', '--zoom', '1020', '1070', '2775', '2815',
