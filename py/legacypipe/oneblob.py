@@ -13,7 +13,7 @@ from tractor.galaxy import DevGalaxy, ExpGalaxy, FixedCompositeGalaxy, SoftenedF
 
 from legacypipe.common import (SimpleGalaxy, LegacyEllipseWithPriors, 
                                DECALS_PROPID, get_rgb)
-from legacypipe.runbrick import compute_coadds
+from legacypipe.runbrick import compute_coadds, tims_compute_resamp, rgbkwargs_resid
 from legacypipe.runbrick_plots import _plot_mods
 
 def one_blob(X):
@@ -111,6 +111,7 @@ class OneBlob(object):
     def run(self, B):
         tlast = Time()
         if self.plots:
+            tims_compute_resamp(None, self.tims, self.blobwcs)
             self._initial_plots()
 
         cat = Catalog(*self.srcs)
@@ -119,7 +120,7 @@ class OneBlob(object):
         tr = self.tractor(self.tims, cat)
 
         if self.plots:
-            self._plots('Initial models')
+            self._plots(tr, 'Initial models')
 
         # Optimize individual sources, in order of flux
         # choose the ordering...
@@ -137,7 +138,7 @@ class OneBlob(object):
             tr.optimize_loop(**self.optargs)
 
         if self.plots:
-            self._plots('After source fitting')
+            self._plots(tr, 'After source fitting')
             
         print('Blob finished fitting:', Time()-tlast)
         tlast = Time()
@@ -256,18 +257,17 @@ class OneBlob(object):
         B.all_model_flags   = np.array([{} for i in range(N)])
 
         # Model selection for sources, in decreasing order of brightness
-        for numi,i in enumerate(Ibright):
+        for numi,srci in enumerate(Ibright):
     
-            src = cat[i]
+            src = cat[srci]
             print('Model selection for source %i of %i in blob' %
                   (numi, len(Ibright)))
             #tsel = Time()
     
             # Add this source's initial model back in.
-            models.add(i, self.tims)
+            models.add(srci, self.tims)
     
             if self.bigblob:
-    
                 if self.plots:
                     plt.clf()
                     for j,tim in enumerate(self.tims):
@@ -278,7 +278,7 @@ class OneBlob(object):
                         plt.plot(x, y, 'r.')
                     self.ps.savefig()
     
-                mods = [mod[i] for mod in models.models]
+                mods = [mod[srci] for mod in models.models]
                 srctims,modelMasks = _get_subimages(self.tims, mods, src)
     
                 if self.plots:
@@ -304,7 +304,7 @@ class OneBlob(object):
                     # No source pixels touching blob... this can happen when a source
                     # scatters outside the blob in the fitting stage.
                     # Drop the source here.
-                    B.sources[i] = cat[i] = None
+                    B.sources[srci] = cat[srci] = None
                     continue
                 yin = np.max(insrc, axis=1)
                 xin = np.max(insrc, axis=0)
@@ -316,7 +316,7 @@ class OneBlob(object):
                 # from scipy.ndimage.morphology import binary_erosion
                 # srcpix2 = binary_erosion(srcpix)
             else:
-                modelMasks = models.model_masks(i, src)
+                modelMasks = models.model_masks(srci, src)
                 srctims = self.tims
                 srcwcs = self.blobwcs
                 srcpix = None
@@ -326,29 +326,30 @@ class OneBlob(object):
             enable_galaxy_cache()
     
             if self.plots:
-                tims_compute_resamp(None, srctims, blobwcs)
+                tims_compute_resamp(None, srctims, self.blobwcs)
                 plt.clf()
-                coimgs,cons = compute_coadds(srctims, bands, blobwcs,
+                coimgs,cons = compute_coadds(srctims, self.bands, self.blobwcs,
                                              fill_holes=False)
-                dimshow(get_rgb(coimgs, bands))#, extent=(bx0,bx1,by0,by1))
+                dimshow(get_rgb(coimgs, self.bands))
                 plt.title('Model selection: stage1 data')
                 self.ps.savefig()
     
-                for tim in srctims:
-                    del tim.resamp
-                tims_compute_resamp(None, srctims, srcwcs)
-                plt.clf()
-                coimgs,cons = compute_coadds(srctims, bands, srcwcs,
-                                             fill_holes=False)
-                dimshow(get_rgb(coimgs, bands))
-                plt.title('Model selection: stage1 data')
-                self.ps.savefig()
-    
-                # srch,srcw = srcwcs.shape
-                # _plot_mods(srctims, [list(srctractor.getModelImages())],
-                #            ['Model selection init'], bands, None, None,
-                #            None, srch,srcw, ps, chi_plots=False)
-    
+                if self.bigblob:
+                    tims_compute_resamp(None, srctims, srcwcs, force=True)
+                    plt.clf()
+                    coimgs,cons = compute_coadds(srctims, self.bands, srcwcs,
+                                                 fill_holes=False)
+                    dimshow(get_rgb(coimgs, self.bands))
+                    plt.title('Model selection: stage1 data (srcwcs)')
+                    self.ps.savefig()
+                    for tim in srctims:
+                        del tim.resamp
+
+                srch,srcw = srcwcs.shape
+                tims_compute_resamp(None, srctims, srcwcs, force=True)
+                _plot_mods(srctims, [list(srctractor.getModelImages())],
+                           ['Model selection init'], self.bands, None, None,
+                           None, srcw,srch, self.ps, chi_plots=False)
 
             srccat = srctractor.getCatalog()
 
@@ -424,7 +425,6 @@ class OneBlob(object):
     
                 #lnp = srctractor.getLogProb()
                 #print('Initial log-prob:', lnp)
-
                 #print('vs original src: ', lnp - lnp0)
                 # if self.plots and False:
                 #     # Grid of derivatives.
@@ -450,7 +450,6 @@ class OneBlob(object):
                     # print('Mod', name, 'round0 opt', Time()-t0)
                     # print('New source (after to-depth round optimization):',
                     #   newsrc)
-    
                     # if self.plots:
                     #     plt.clf()
                     #     modimgs = list(dtractor.getModelImages())
@@ -466,30 +465,26 @@ class OneBlob(object):
                 # FIXME N steps: -> FLAG_STEPS_A
     
                 # print('Mod', name, 'round1 opt', Time()-t0)
-                #print('New source (after first round optimization):', newsrc)
+                print('Mod selection: after first-round opt:', newsrc)
     
-                # if self.plots:
-                #     # _plot_mods(srctims, [list(srctractor.getModelImages())],
-                #     #            ['Model selection: ' + name], bands, None, None,
-                #     #            None, srch,srcw, ps, chi_plots=False)
-                #     plt.clf()
-                #     modimgs = list(srctractor.getModelImages())
-                #     comods,nil = compute_coadds(srctims, bands, srcwcs,
-                #                                 images=modimgs)
-                #     dimshow(get_rgb(comods, bands))
-                #     plt.title('First-round opt: ' + name)
-                #     self.ps.savefig()
+                if self.plots:
+                    # _plot_mods(srctims, [list(srctractor.getModelImages())],
+                    #            ['Model selection: ' + name], bands, None, None,
+                    #            None, srch,srcw, ps, chi_plots=False)
+                    plt.clf()
+                    modimgs = list(srctractor.getModelImages())
+                    comods,nil = compute_coadds(srctims, self.bands, srcwcs,
+                                                images=modimgs)
+                    dimshow(get_rgb(comods, self.bands))
+                    plt.title('After first-round opt: ' + name)
+                    self.ps.savefig()
     
                 srctractor.setModelMasks(None)
                 disable_galaxy_cache()
     
                 # Recompute modelMasks in the original tims
-    
-                ## FIXME -- avoid huge patches?  Clip to significant
-                ## pixels in model?  Via minval, I guess; appealing to use
-                ## same cut as determining the blobs, but that's in brick
-                ## coadd space.
-    
+
+                # Limit sizes of huge models
                 tim = self.tims[0]
                 from tractor.galaxy import ProfileGalaxy
                 if isinstance(newsrc, ProfileGalaxy):
@@ -534,20 +529,19 @@ class OneBlob(object):
                     modtractor.setModelMasks(mm)
                     enable_galaxy_cache()
     
-                    #t0 = Time()
                     modtractor.optimize_loop(**self.optargs)
                     # FIXME -- thisflags |= FLAG_STEPS_B
-                    # print('Mod', name, 'round2 opt', Time()-t0)
+                    print('Mod selection: after second-round opt:', newsrc)
     
-                    # if plots:
-                    #     plt.clf()
-                    #     modimgs = list(modtractor.getModelImages())
-                    #     tims_compute_resamp(None, modtims, srcwcs)
-                    #     comods,nil = compute_coadds(modtims, bands, srcwcs,
-                    #                                 images=modimgs)
-                    #     dimshow(get_rgb(comods, bands))
-                    #     plt.title('Second-round opt: ' + name)
-                    #     self.ps.savefig()
+                    if self.plots:
+                        plt.clf()
+                        modimgs = list(modtractor.getModelImages())
+                        tims_compute_resamp(None, modtims, srcwcs, force=True)
+                        comods,nil = compute_coadds(modtims, self.bands, srcwcs,
+                                                    images=modimgs)
+                        dimshow(get_rgb(comods, self.bands))
+                        plt.title('After second-round opt: ' + name)
+                        self.ps.savefig()
                 else:
                     # Tycho-2 star; set modtractor = srctractor for the ivars
                     srctractor.setModelMasks(newsrc_mm)
@@ -558,8 +552,6 @@ class OneBlob(object):
                 newsrc.freezeAllBut('brightness')
                 allderivs = modtractor.getDerivs()
                 ivs = np.zeros(len(self.bands), np.float32)
-                B.all_model_fluxivs[i][name] = ivs
-
                 for iparam,derivs in enumerate(allderivs):
                     chisq = 0
                     for deriv,tim in derivs:
@@ -570,6 +562,7 @@ class OneBlob(object):
                         chi = deriv.patch * ie[slc]
                         chisq += (chi**2).sum()
                     ivs[iparam] = chisq
+                B.all_model_fluxivs[srci][name] = ivs
                 newsrc.thawAllParams()
     
                 # Use the original 'srctractor' here so that the different
@@ -582,90 +575,71 @@ class OneBlob(object):
                 B.all_models[i][name] = newsrc.copy()
                 B.all_model_flags[i][name] = thisflags
     
-            # if plots:
-            #    _plot_mods(tims, plotmods, plotmodnames, bands, None, None,
-            #               bslc, blobw, blobh, ps)
-    
-            # if plots:
-            #     from collections import OrderedDict
-            #     plt.clf()
-            #     rows,cols = 2, 6
-            #     mods = OrderedDict([('none',None), ('ptsrc',ptsrc),
-            #                         ('simple',simple),
-            #                         ('dev',dev), ('exp',exp), ('comp',comp)])
-            #     for imod,modname in enumerate(mods.keys()):
-            # 
-            #         if mod != 'none' and not modname in chisqs:
-            #             continue
-            # 
-            #         srccat[0] = mods[modname]
-            # 
-            #         print('Plotting model for blob', iblob, 'source', i,
-            #               ':', modname)
-            #         print(srccat[0])
-            # 
-            #         srctractor.setModelMasks(None)
-            # 
-            #         plt.subplot(rows, cols, imod+1)
-            # 
-            #         if modname != 'none':
-            #             modimgs = list(srctractor.getModelImages())
-            #             comods,nil = compute_coadds(srctims, bands, srcwcs,
-            #                                         images=modimgs)
-            #             dimshow(get_rgb(comods, bands), ticks=False)
-            #             plt.title(modname)
-            #             chis = [((tim.getImage() - mod) * tim.getInvError())**2
-            #                     for tim,mod in zip(srctims, modimgs)]
-            #             res = [(tim.getImage() - mod) for tim,mod in
-            #                    zip(srctims, modimgs)]
-            #         else:
-            #             coimgs, cons = compute_coadds(srctims, bands, srcwcs)
-            #             dimshow(get_rgb(coimgs, bands))
-            #             ax = plt.axis()
-            #             ok,x,y = blobwcs.radec2pixelxy(src.getPosition().ra,
-            #                                              src.getPosition().dec)
-            #             plt.plot(x-1, y-1, 'r+')
-            #             plt.axis(ax)
-            #             plt.title('Image')
-            #             chis = [((tim.getImage()) * tim.getInvError())**2
-            #                       for tim in srctims]
-            #             res = [tim.getImage() for tim in srctims]
-            # 
-            #         if False:
-            #             cochisqs,nil = compute_coadds(tims, bands, blobwcs,
-            #                                           images=chis)
-            #             cochisq = reduce(np.add, cochisqs)
-            #             plt.subplot(rows, cols, imod+1+cols)
-            #             dimshow(cochisq, vmin=0, vmax=25)
-            # 
-            #         else:
-            #             # residuals
-            #             coresids,nil = compute_coadds(srctims, bands, srcwcs,
-            #                                           images=res)
-            #             plt.subplot(rows, cols, imod+1+cols)
-            #             dimshow(get_rgb(coresids, bands, **rgbkwargs_resid),
-            #                     ticks=False)
-            #         plt.title('chisq %.0f' % chisqs[modname], fontsize=8)
-            #     plt.suptitle('Blob %i, source %i: was: \n%s' %
-            #                  (iblob, i, str(src)), fontsize=10)
-            #     self.ps.savefig()
-    
-            # This determines the order of the elements in the DCHISQ
+            # Actually select which model to keep.
+            # This "modnames" array determines the order of the elements in the DCHISQ
             # column of the catalog.
             modnames = ['ptsrc', 'simple', 'dev', 'exp', 'comp']
-    
             keepmod = _select_model(chisqs, nparams, galaxy_margin)
-    
             keepsrc = dict(none=None, ptsrc=ptsrc, simple=simple,
                            dev=dev, exp=exp, comp=comp)[keepmod]
     
-            B.dchisqs[i, :] = np.array([chisqs.get(k,0) for k in modnames])
-            B.flags[i] = allflags.get(keepmod, 0)
-            B.sources[i] = keepsrc
-            cat[i] = keepsrc
+            # This is the model-selection plot
+            if self.plots:
+                from collections import OrderedDict
+                plt.clf()
+                rows,cols = 2, 6
+                mods = OrderedDict([('none',None), ('ptsrc',ptsrc),
+                                    ('simple',simple),
+                                    ('dev',dev), ('exp',exp), ('comp',comp)])
+                for imod,modname in enumerate(mods.keys()):
+                    if mod != 'none' and not modname in chisqs:
+                        continue
+                    srccat[0] = mods[modname]
+                    srctractor.setModelMasks(None)
+                    plt.subplot(rows, cols, imod+1)
+
+                    if modname == 'none':
+                        # In the first panel, we show a coadd of the data
+                        coimgs, cons = compute_coadds(srctims, self.bands, srcwcs)
+                        dimshow(get_rgb(coimgs, self.bands))
+                        ax = plt.axis()
+                        ok,x,y = self.blobwcs.radec2pixelxy(src.getPosition().ra,
+                                                            src.getPosition().dec)
+                        plt.plot(x-1, y-1, 'r+')
+                        plt.axis(ax)
+                        plt.title('Image')
+                        chis = [((tim.getImage()) * tim.getInvError())**2
+                                  for tim in srctims]
+                        res = [tim.getImage() for tim in srctims]
+                    else:
+                        modimgs = list(srctractor.getModelImages())
+                        comods,nil = compute_coadds(srctims, self.bands, srcwcs,
+                                                    images=modimgs)
+                        dimshow(get_rgb(comods, self.bands), ticks=False)
+                        plt.title(modname)
+                        chis = [((tim.getImage() - mod) * tim.getInvError())**2
+                                for tim,mod in zip(srctims, modimgs)]
+                        res = [(tim.getImage() - mod) for tim,mod in
+                               zip(srctims, modimgs)]
+            
+                    # residuals
+                    coresids,nil = compute_coadds(srctims, self.bands, srcwcs,
+                                                  images=res)
+                    plt.subplot(rows, cols, imod+1+cols)
+                    dimshow(get_rgb(coresids, self.bands, **rgbkwargs_resid),
+                                ticks=False)
+                    plt.title('chisq %.0f' % chisqs[modname], fontsize=8)
+                plt.suptitle('%s, source %i: keeping %s\nwas: %s' %
+                             (self.name, srci, keepmod, str(src)), fontsize=10)
+                self.ps.savefig()
+    
+            B.dchisqs[srci, :] = np.array([chisqs.get(k,0) for k in modnames])
+            B.flags[srci] = allflags.get(keepmod, 0)
+            B.sources[srci] = keepsrc
+            cat[srci] = keepsrc
     
             # Re-remove the final fit model for this source.
-            models.update_and_subtract(i, keepsrc, self.tims)
+            models.update_and_subtract(srci, keepsrc, self.tims)
     
             #print('Keeping model:', keepmod)
             #print('Keeping source:', keepsrc)
@@ -823,41 +797,28 @@ class OneBlob(object):
                 #print('Creating srctims:', Time()-tbb0)
     
                 if self.plots and (numi < 3 or numi >= len(Ibright)-3):
-                    bx1 = bx0 + self.blobw
-                    by1 = by0 + self.blobh
                     plt.clf()
-                    coimgs,cons = compute_coadds(self.tims, bands, blobwcs,
+                    # Recompute coadds because of the subtract-all-and-readd shuffle
+                    coimgs,cons = compute_coadds(self.tims, self.bands, self.blobwcs,
                                                  fill_holes=False)
-                    dimshow(get_rgb(coimgs, bands), extent=(bx0,bx1,by0,by1))
-                    # plt.plot([bx0,bx0,bx1,bx1,bx0],[by0,by1,by1,by0,by0],
-                    #          'r-')
-                    # for tim in srctims:
-                    #     h,w = tim.shape
-                    #     tx,ty = [0,0,w,w,0], [0,h,h,0,0]
-                    #     rd = [tim.getWcs().pixelToPosition(xi,yi)
-                    #           for xi,yi in zip(tx,ty)]
-                    #     ra  = [p.ra  for p in rd]
-                    #     dec = [p.dec for p in rd]
-                    #     ok,x,y = brickwcs.radec2pixelxy(ra, dec)
-                    #     plt.plot(x, y, 'g-')
-                    #
-                    #     ra,dec = tim.subwcs.pixelxy2radec(tx, ty)
-                    #     ok,x,y = brickwcs.radec2pixelxy(ra, dec)
-                    #     plt.plot(x, y, 'm-')
-                    for tim in self.tims:
+                    rgb = get_rgb(coimgs, self.bands)
+                    dimshow(rgb)
+                    #dimshow(self.rgb)
+                    ax = plt.axis()
+                    for tim in srctims:
                         h,w = tim.shape
                         tx,ty = [0,0,w,w,0], [0,h,h,0,0]
                         rd = [tim.getWcs().pixelToPosition(xi,yi)
                               for xi,yi in zip(tx,ty)]
                         ra  = [p.ra  for p in rd]
                         dec = [p.dec for p in rd]
-                        ok,x,y = brickwcs.radec2pixelxy(ra, dec)
+                        ok,x,y = self.blobwcs.radec2pixelxy(ra, dec)
                         plt.plot(x, y, 'b-')
-    
                         ra,dec = tim.subwcs.pixelxy2radec(tx, ty)
-                        ok,x,y = brickwcs.radec2pixelxy(ra, dec)
+                        ok,x,y = self.blobwcs.radec2pixelxy(ra, dec)
                         plt.plot(x, y, 'c-')
                     plt.title('source %i of %i' % (numi, len(Ibright)))
+                    plt.axis(ax)
                     self.ps.savefig()
     
             else:
@@ -949,28 +910,31 @@ class OneBlob(object):
             btr.optimize_forced_photometry(shared_params=False, wantims=False)
         cat.thawAllRecursive()
 
-    def _plots(self, title):
+    def _plots(self, tr, title):
         plotmods = []
         plotmodnames = []
         plotmods.append(list(tr.getModelImages()))
         plotmodnames.append('Initial models')
-        _plot_mods(tims, plotmods, plotmodnames, self.bands, None, None, None,
+        _plot_mods(self.tims, plotmods, plotmodnames, self.bands, None, None, None,
                    self.blobw, self.blobh, self.ps, chi_plots=False)
         
     def _initial_plots(self):
         print('Plotting blob image for blob', self.name)
-        self.coimgs,cons = compute_coadds(self.tims, self.bands, self.blobwcs,
-                                          fill_holes=False)
-        self.rgb = get_rgb(self.coimgs, self.bands)
+        coimgs,cons = compute_coadds(self.tims, self.bands, self.blobwcs,
+                                     fill_holes=False)
+        self.rgb = get_rgb(coimgs, self.bands)
         plt.clf()
         dimshow(self.rgb)
+        plt.title('Blob: %s' % self.name)
         self.ps.savefig()
 
         ok,x0,y0 = self.blobwcs.radec2pixelxy(
             np.array([src.getPosition().ra  for src in self.srcs]),
             np.array([src.getPosition().dec for src in self.srcs]))
 
+        ax = plt.axis()
         plt.plot(x0, y0, 'r.')
+        plt.axis(ax)
         plt.title('initial sources')
         self.ps.savefig()
 
