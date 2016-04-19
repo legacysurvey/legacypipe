@@ -4,6 +4,53 @@ from glob import glob
 import os
 from astrometry.util.fits import fits_table, merge_tables
 
+def decals_dr3_dedup():
+    SN = fits_table('survey-ccds-nondecals.fits.gz')
+    SD = fits_table('survey-ccds-decals.fits.gz')
+    sne = np.unique(SN.expnum)
+    sde = np.unique(SD.expnum)
+    isec = set(sne).intersection(sde)
+    print(len(isec), 'exposures in common between "decals" and "nondecals"')
+    # These are two versions of CP reductions in CPDES82 and CPHETDEX.
+    I = np.flatnonzero(np.array([e in isec for e in SD.expnum]))
+    print(len(I), 'rows in "decals"')
+
+    I = np.flatnonzero(np.array([e not in isec for e in SD.expnum]))
+    SD.cut(I)
+    print(len(SD), 'rows remaining')
+
+    # Now, also move "decals" filenames containing "CPDES82" to "nondecals".
+    I = np.flatnonzero(np.array(['CPDES82' in fn for fn in SD.image_filename]))
+    keep = np.ones(len(SD), bool)
+    keep[I] = False
+
+    print('Merging:')
+    SN.about()
+    SD[I].about()
+    
+    SN2 = merge_tables((SN, SD[I]), columns='fillzero')
+    SD2 = SD[keep]
+
+    print('Moved CPDES82: now', len(SN2), 'non-decals and', len(SD2), 'decals')
+    
+    SN2.writeto('survey-ccds-nondecals.fits')
+    SD2.writeto('survey-ccds-decals.fits')
+
+    SE = fits_table('survey-ccds-extra.fits.gz')
+    SN = fits_table('survey-ccds-nondecals.fits')
+    SD = fits_table('survey-ccds-decals.fits')
+
+    sne = np.unique(SN.expnum)
+    sde = np.unique(SD.expnum)
+    see = np.unique(SE.expnum)
+
+    i1 = set(sne).intersection(sde)
+    i2 = set(sne).intersection(see)
+    i3 = set(sde).intersection(see)
+    print('Intersections:', len(i1), len(i2), len(i3))
+
+    
+
 def decals_dr3_extra():
     # /global/homes/a/arjundey/ZeroPoints/decals-zpt-dr3-all.fits
     T = fits_table('/global/cscratch1/sd/desiproc/zeropoints/decals-zpt-dr3-all.fits')
@@ -15,13 +62,40 @@ def decals_dr3_extra():
     gotchips = set(zip(S.expnum, S.ccdname))
 
     got = np.array([(e,c) in gotchips for e,c in zip(T.expnum, T.ccdname)])
-    print('Found', len(got), 'of', len(T), 'in existing surveys tables of size', len(S))
+    print('Found', sum(got), 'of', len(T), 'dr3-all CCDs in existing surveys tables of size', len(S))
 
     I = np.flatnonzero(np.logical_not(got))
     T.cut(I)
     print(len(T), 'remaining')
-    print('Directories:', np.unique([os.path.basename(os.path.dirname(fn)) for fn in T.filename]))
+    #print('Directories:', np.unique([os.path.basename(os.path.dirname(fn.strip())) for fn in T.filename]))
+    print('Filenames:', np.unique(T.filename))
 
+    T.writeto('extras.fits')
+
+    basedir = os.environ['LEGACY_SURVEY_DIR']
+    cam = 'decam'
+    image_basedir = os.path.join(basedir, 'images')
+    TT = []
+
+    for fn,dirnms in [
+        ('extras.fits',
+         ['CP20140810_?_v2',
+          'CP20141227', 'CP20150108', 'CP20150326',
+          'CP20150407', 'CP20151010', 'CP20151028', 'CP20151126',
+          'CP20151226', 'CP20160107', 'CP20160225',
+          'COSMOS', 'CPDES82',
+          'NonDECaLS/*',
+         ]),
+        ]:
+        T = normalize_zeropoints(fn, dirnms, image_basedir, cam)
+        TT.append(T)
+    T = merge_tables(TT)
+    outfn = 'survey-ccds-extra.fits'
+    T.writeto(outfn)
+    print('Wrote', outfn)
+    
+
+    
     
 def decals_dr3():
     basedir = os.environ['LEGACY_SURVEY_DIR']
@@ -177,7 +251,8 @@ if __name__ == '__main__':
     import sys
 
     #decals_dr3()
-    decals_dr3_extra()
+    #decals_dr3_extra()
+    decals_dr3_dedup()
     sys.exit(0)
 
     # Mosaicz tests
