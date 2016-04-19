@@ -1184,7 +1184,14 @@ def stage_srcs(coimgs=None, cons=None,
             fn = survey.find_file('tractor', brick=b.brickname)
             print('Looking for', fn)
             B.append(fits_table(fn))
-        B = merge_tables(B)
+        try:
+            B = merge_tables(B)
+        except:
+            print('Error merging brick tables:')
+            import traceback
+            traceback.print_exc()
+            print('Retrying with fillzero...')
+            B = merge_tables(B, columns='fillzero')
         print('Total of', len(B), 'sources from neighbouring bricks')
         # Keep only sources that are primary in their own brick
         B.cut(B.brick_primary)
