@@ -67,7 +67,7 @@ from tractor.galaxy import ExpGalaxy
 from tractor.ellipses import EllipseE
 class SimpleGalaxy(ExpGalaxy):
     shape = EllipseE(0.45, 0., 0.)
-    
+
     def __init__(self, *args):
         super(SimpleGalaxy, self).__init__(*args)
         self.shape = SimpleGalaxy.shape

@@ -57,6 +57,9 @@ def main():
         outccds.delete_column(c)
     outccds.image_hdu[:] = 1
 
+    # Convert to list to avoid truncating filenames
+    outccds.image_filename = [fn for fn in outccds.image_filename]
+    
     for iccd,ccd in enumerate(C):
 
         assert(ccd.camera.strip() == 'decam')
@@ -84,6 +87,22 @@ def main():
         crpix2 = tim.hdr['CRPIX2']
         tim.hdr['CRPIX1'] = crpix1 - ccd.ccd_x0
         tim.hdr['CRPIX2'] = crpix2 - ccd.ccd_y0
+
+        # Add image extension to filename
+        outim.imgfn = outim.imgfn.replace('.fits', '-%s.fits' % im.ccdname)
+        outim.wtfn  = outim.wtfn .replace('.fits', '-%s.fits' % im.ccdname)
+        outim.dqfn  = outim.dqfn .replace('.fits', '-%s.fits' % im.ccdname)
+        # fitsio doesn't compress .fz by default
+        outim.imgfn = outim.imgfn.replace('.fits.fz', '.fits')
+        outim.wtfn  = outim.wtfn .replace('.fits.fz', '.fits')
+        outim.dqfn  = outim.dqfn .replace('.fits.fz', '.fits')
+
+        outccds.image_filename[iccd] = outim.imgfn
+
+        print('Changed output filenames to:')
+        print(outim.imgfn)
+        print(outim.wtfn)
+        print(outim.dqfn)
         
         fitsio.write(outim.imgfn, None, header=tim.primhdr, clobber=True)
         fitsio.write(outim.imgfn, tim.getImage(), header=tim.hdr,
@@ -112,7 +131,6 @@ def main():
         fitsio.write(outim.dqfn, None, header=tim.primhdr, clobber=True)
         fitsio.write(outim.dqfn, tim.dq, header=tim.hdr,
                      extname=ccd.ccdname)
-        
         
         print('PSF filename:', outim.psffn)
         trymakedirs(outim.psffn, dir=True)

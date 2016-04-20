@@ -48,7 +48,6 @@ from tractor.galaxy import (DevGalaxy, ExpGalaxy, FixedCompositeGalaxy, Softened
 from legacypipe.common import (tim_get_resamp, get_rgb, imsave_jpeg, LegacySurveyData,
                                CP_DQ_BITS)
 from legacypipe.utils import RunbrickError, NothingToDoError, iterwrapper
-from legacypipe.runbrick_plots import _plot_mods
 
 ## GLOBALS!  Oh my!
 nocache = True
@@ -348,6 +347,37 @@ def stage_tims(W=3600, H=3600, pixscale=0.262, brickname=None,
                 print('Warning: image "%s" PLVER is "%s" but %s calib was run on PLVER "%s"' %
                       (str(tim), tim.plver, cal, ver[1]))
 
+    # Add additional columns to the CCDs table.
+    ccds.ccd_x0 = np.array([tim.x0 for tim in tims]).astype(np.int16)
+    ccds.ccd_x1 = np.array([tim.x0 + tim.shape[1]
+                            for tim in tims]).astype(np.int16)
+    ccds.ccd_y0 = np.array([tim.y0 for tim in tims]).astype(np.int16)
+    ccds.ccd_y1 = np.array([tim.y0 + tim.shape[0]
+                            for tim in tims]).astype(np.int16)
+    rd = np.array([[tim.subwcs.pixelxy2radec(1, 1)[-2:],
+                    tim.subwcs.pixelxy2radec(1, y1-y0)[-2:],
+                    tim.subwcs.pixelxy2radec(x1-x0, 1)[-2:],
+                    tim.subwcs.pixelxy2radec(x1-x0, y1-y0)[-2:]]
+                    for tim,x0,y0,x1,y1 in
+                   zip(tims, ccds.ccd_x0+1, ccds.ccd_y0+1,
+                       ccds.ccd_x1, ccds.ccd_y1)])
+    ok,x,y = targetwcs.radec2pixelxy(rd[:,:,0], rd[:,:,1])
+    ccds.brick_x0 = np.floor(np.min(x, axis=1)).astype(np.int16)
+    ccds.brick_x1 = np.ceil (np.max(x, axis=1)).astype(np.int16)
+    ccds.brick_y0 = np.floor(np.min(y, axis=1)).astype(np.int16)
+    ccds.brick_y1 = np.ceil (np.max(y, axis=1)).astype(np.int16)
+    ccds.sig1 = np.array([tim.sig1 for tim in tims])
+    ccds.psfnorm = np.array([tim.psfnorm for tim in tims])
+    ccds.galnorm = np.array([tim.galnorm for tim in tims])
+    ccds.propid = np.array([tim.propid for tim in tims])
+    ccds.plver = np.array([tim.plver for tim in tims])
+    ccds.skyver = np.array([tim.skyver[0] for tim in tims])
+    ccds.wcsver = np.array([tim.wcsver[0] for tim in tims])
+    ccds.psfver = np.array([tim.psfver[0] for tim in tims])
+    ccds.skyplver = np.array([tim.skyver[1] for tim in tims])
+    ccds.wcsplver = np.array([tim.wcsver[1] for tim in tims])
+    ccds.psfplver = np.array([tim.psfver[1] for tim in tims])
+
     if plots and False:
         # Pixel histograms of subimages.
         for b in bands:
@@ -426,9 +456,7 @@ def stage_tims(W=3600, H=3600, pixscale=0.262, brickname=None,
             'target_extent', 'ccds', 'bands', 'survey']
     if not pipe:
         keys.extend(['coimgs', 'cons'])
-    rtn = dict()
-    for k in keys:
-        rtn[k] = locals()[k]
+    rtn = dict([(k,locals()[k]) for k in keys])
     return rtn
 
 def _coadds(tims, bands, targetwcs,
@@ -475,6 +503,9 @@ def _coadds(tims, bands, targetwcs,
         if detmaps:
             C.T.depth    = np.zeros((len(ix), len(bands)), np.float32)
             C.T.galdepth = np.zeros((len(ix), len(bands)), np.float32)
+
+    if lanczos:
+        print('Doing Lanczos resampling')
 
     tinyw = 1e-30
     for iband,band in enumerate(bands):
@@ -549,7 +580,6 @@ def _coadds(tims, bands, targetwcs,
 
             if lanczos:
                 from astrometry.util.miscutils import patch_image
-                print('Doing Lanczos resampling')
                 patched = tim.getImage().copy()
                 okpix = (tim.getInvError() > 0)
                 patch_image(patched, okpix)
@@ -931,7 +961,7 @@ def stage_mask_junk(tims=None, targetwcs=None, W=None, H=None, bands=None,
 def stage_image_coadds(survey=None, targetwcs=None, bands=None, tims=None,
                        brickname=None, version_header=None,
                        plots=False, ps=None, coadd_bw=False, W=None, H=None,
-                       brick=None, blobs=None, lanczos=True,
+                       brick=None, blobs=None, lanczos=True, ccds=None,
                        **kwargs):
     '''
     Immediately after reading the images, we
@@ -939,7 +969,6 @@ def stage_image_coadds(survey=None, targetwcs=None, bands=None, tims=None,
     including the models will be created (in `stage_coadds`).  But
     it's handy to have the coadds early on, to diagnose problems or
     just to look at the data.
-
     '''
 
     if plots and False:
@@ -1017,28 +1046,25 @@ def stage_image_coadds(survey=None, targetwcs=None, bands=None, tims=None,
             plt.title('Per-column medians for %s band' % band)
             ps.savefig()
 
+    with survey.write_output('ccds-table', brick=brickname) as out:
+        ccds.writeto(out.fn, primheader=version_header)
+        print('Wrote', out.fn)
+            
     C = _coadds(tims, bands, targetwcs,
                 detmaps=True, lanczos=lanczos,
                 callback=_write_band_images,
                 callback_args=(survey, brickname, version_header, tims, targetwcs))
 
-    if plots:
-        plt.clf()
-        dimshow(nobs, vmin=0, vmax=max(1,nobs.max()), cmap='jet')
-        plt.colorbar()
-        plt.title('Number of observations, %s band' % band)
-        ps.savefig()
-        # for k,v in CP_DQ_BITS.items():
-        #     plt.clf()
-        #     dimshow(ormask & v, vmin=0, vmax=v)
-        #     plt.title('OR mask, %s band: %s' % (band, k))
-        #     ps.savefig()
-        # 
-        #     plt.clf()
-        #     dimshow(andmask & v, vmin=0, vmax=v)
-        #     plt.title('AND mask, %s band: %s' % (band,k))
-        #     ps.savefig()
-
+    # if plots:
+    #     for k,v in CP_DQ_BITS.items():
+    #         plt.clf()
+    #         dimshow(ormask & v, vmin=0, vmax=v)
+    #         plt.title('OR mask, %s band: %s' % (band, k))
+    #         ps.savefig()
+    #         plt.clf()
+    #         dimshow(andmask & v, vmin=0, vmax=v)
+    #         plt.title('AND mask, %s band: %s' % (band,k))
+    #         ps.savefig()
     
     if True:
         # Compute the brick's unique pixels.
@@ -1169,6 +1195,9 @@ def stage_srcs(coimgs=None, cons=None,
     '''
     from legacypipe.detection import (detection_maps, sed_matched_filters,
                                       run_sed_matched_filters)
+    from legacypipe.common import segment_and_group_sources
+    from scipy.ndimage.morphology import binary_dilation
+    from scipy.ndimage.measurements import label, find_objects, center_of_mass
 
     tlast = Time()
     avoid_xy = []
@@ -1337,44 +1366,11 @@ def stage_srcs(coimgs=None, cons=None,
                 sh,sw = detmap[ii::S, jj::S].shape
                 detmap[ii::S, jj::S] -= smoo[:sh,:sw]
 
-        if plots:
-            sig1 = 1./np.sqrt(np.median(detiv[detiv > 0]))
-            kwa = dict(vmin=-2.*sig1, vmax=10.*sig1)
-            kwa2 = dict(vmin=-2.*sig1, vmax=50.*sig1)
-
-            subbed = detmap.copy()
-            S = binning
-            for ii in range(S):
-                for jj in range(S):
-                    subbed[ii::S, jj::S] -= smoo
-
-            plt.clf()
-            plt.subplot(2,3,1)
-            dimshow(detmap, **kwa)
-            plt.subplot(2,3,2)
-            dimshow(smoo, **kwa)
-            plt.subplot(2,3,3)
-            dimshow(subbed, **kwa)
-            plt.subplot(2,3,4)
-            dimshow(detmap, **kwa2)
-            plt.subplot(2,3,5)
-            dimshow(smoo, **kwa2)
-            plt.subplot(2,3,6)
-            dimshow(subbed, **kwa2)
-            plt.suptitle('Median filter of detection map: %s band' %
-                         bands[i])
-            ps.savefig()
-
     # Handle the margin of interpolated (masked) pixels around
     # saturated pixels
-    from scipy.ndimage.morphology import binary_dilation
-    from legacypipe.common import segment_and_group_sources
-    
     saturated_pix = binary_dilation(satmap > 0, iterations=10)
 
     # Saturated blobs -- create a source for each?!
-    from scipy.ndimage.measurements import label, find_objects, center_of_mass
-
     satblobs,nsat = label(satmap > 0)
     satyx = center_of_mass(satmap, labels=satblobs, index=np.arange(nsat)+1)
     # NOTE, satyx is in y,x order (center_of_mass)
@@ -1507,15 +1503,10 @@ def stage_srcs(coimgs=None, cons=None,
     print('[serial srcs] Blobs:', tnow-tlast)
     tlast = tnow
 
-    keys = ['T', 'tims',
-            'blobsrcs', 'blobslices', 'blobs',
-            'cat', 'ps']
+    keys = ['T', 'tims', 'blobsrcs', 'blobslices', 'blobs', 'cat', 'ps']
     if not pipe:
         keys.extend(['detmaps', 'detivs'])
-
-    rtn = dict()
-    for k in keys:
-        rtn[k] = locals()[k]
+    rtn = dict([(k,locals()[k]) for k in keys])
     return rtn
 
 def _write_fitblobs_pickle(fn, data):
@@ -1582,7 +1573,7 @@ def stage_fitblobs(T=None,
     for tim in tims:
         tim.modelMinval = minsigma * tim.sig1
 
-    if plots and False:
+    if plots:
         coimgs,cons = compute_coadds(tims, bands, targetwcs)
         plt.clf()
         dimshow(get_rgb(coimgs, bands))
@@ -1991,11 +1982,10 @@ def stage_fitblobs(T=None,
     invvars = np.hstack(BB.srcinvvars)
     assert(cat.numberOfParams() == len(invvars))
 
-    rtn = dict(fitblobs_R = None)
-    for k in ['cat', 'invvars', 'T', 'allbands', 'blobs']:
-        rtn[k] = locals()[k]
+    keys = ['cat', 'invvars', 'T', 'allbands', 'blobs']
     if get_all_models:
-        rtn['all_models'] = all_models
+        keys.append('all_models')
+    rtn = dict([(k,locals()[k]) for k in keys])
     return rtn
 
 def _blob_iter(blobslices, blobsrcs, blobs, targetwcs, tims, cat, bands,
@@ -2056,7 +2046,9 @@ def _blob_iter(blobslices, blobsrcs, blobs, targetwcs, tims, cat, bands,
 
         print('Blob', nblob+1, 'of', len(blobslices), ': blob', iblob,
               len(Isrcs), 'sources, size', blobw, 'x', blobh,
-              'center', (bx0+bx1)/2, (by0+by1)/2, 'npix', np.sum(blobmask),
+              #'center', (bx0+bx1)/2, (by0+by1)/2,
+              'brick X %i,%i, Y %i,%i' % (bx0,bx1,by0,by1),
+              'npix', np.sum(blobmask),
               'one pixel:', onex,oney, 'has Tycho-2 star:', hastycho)
 
         rr,dd = targetwcs.pixelxy2radec([bx0,bx0,bx1,bx1],[by0,by1,by1,by0])
@@ -2165,45 +2157,13 @@ def stage_coadds(survey=None, bands=None, version_header=None, targetwcs=None,
     and residuals.  We also perform aperture photometry in this stage.
     '''
     from legacypipe.common import apertures_arcsec
-
     tlast = Time()
-
-    ccds.ccd_x0 = np.array([tim.x0 for tim in tims]).astype(np.int16)
-    ccds.ccd_x1 = np.array([tim.x0 + tim.shape[1]
-                            for tim in tims]).astype(np.int16)
-    ccds.ccd_y0 = np.array([tim.y0 for tim in tims]).astype(np.int16)
-    ccds.ccd_y1 = np.array([tim.y0 + tim.shape[0]
-                            for tim in tims]).astype(np.int16)
-    rd = np.array([[tim.subwcs.pixelxy2radec(1, 1)[-2:],
-                    tim.subwcs.pixelxy2radec(1, y1-y0)[-2:],
-                    tim.subwcs.pixelxy2radec(x1-x0, 1)[-2:],
-                    tim.subwcs.pixelxy2radec(x1-x0, y1-y0)[-2:]]
-                    for tim,x0,y0,x1,y1 in
-                   zip(tims, ccds.ccd_x0+1, ccds.ccd_y0+1,
-                       ccds.ccd_x1, ccds.ccd_y1)])
-    ok,x,y = targetwcs.radec2pixelxy(rd[:,:,0], rd[:,:,1])
-    ccds.brick_x0 = np.floor(np.min(x, axis=1)).astype(np.int16)
-    ccds.brick_x1 = np.ceil (np.max(x, axis=1)).astype(np.int16)
-    ccds.brick_y0 = np.floor(np.min(y, axis=1)).astype(np.int16)
-    ccds.brick_y1 = np.ceil (np.max(y, axis=1)).astype(np.int16)
-    ccds.sig1 = np.array([tim.sig1 for tim in tims])
-    ccds.psfnorm = np.array([tim.psfnorm for tim in tims])
-    ccds.galnorm = np.array([tim.galnorm for tim in tims])
-    ccds.propid = np.array([tim.propid for tim in tims])
-    ccds.plver = np.array([tim.plver for tim in tims])
-    ccds.skyver = np.array([tim.skyver[0] for tim in tims])
-    ccds.wcsver = np.array([tim.wcsver[0] for tim in tims])
-    ccds.psfver = np.array([tim.psfver[0] for tim in tims])
-    ccds.skyplver = np.array([tim.skyver[1] for tim in tims])
-    ccds.wcsplver = np.array([tim.wcsver[1] for tim in tims])
-    ccds.psfplver = np.array([tim.psfver[1] for tim in tims])
 
     primhdr = fitsio.FITSHDR()
     for r in version_header.records():
         primhdr.add_record(r)
     primhdr.add_record(dict(name='PRODTYPE', value='ccdinfo',
                             comment='NOAO data product type'))
-
     with survey.write_output('ccds-table', brick=brickname) as out:
         ccds.writeto(out.fn, primheader=primhdr)
         print('Wrote', out.fn)
@@ -2237,6 +2197,7 @@ def stage_coadds(survey=None, bands=None, version_header=None, targetwcs=None,
     ok,xx,yy = targetwcs.radec2pixelxy(ra, dec)
     apxy = np.vstack((xx - 1., yy - 1.)).T
 
+    nap = len(apertures)
     if len(xx) == 0:
         apertures = None
         apxy = None
@@ -2256,7 +2217,6 @@ def stage_coadds(survey=None, bands=None, version_header=None, targetwcs=None,
         # empty table when 0 sources.
         C.AP = fits_table()
         for band in bands:
-            nap = len(apertures)
             C.AP.set('apflux_img_%s' % band, np.zeros((0,nap)))
             C.AP.set('apflux_img_ivar_%s' % band, np.zeros((0,nap)))
             C.AP.set('apflux_resid_%s' % band, np.zeros((0,nap)))
@@ -2825,10 +2785,14 @@ def _bounce_tim_get_resamp(X):
     (tim, targetwcs) = X
     return tim_get_resamp(tim, targetwcs)
 
-def tims_compute_resamp(mp, tims, targetwcs):
+def tims_compute_resamp(mp, tims, targetwcs, force=False):
     if mp is None:
         from utils import MyMultiproc
         mp = MyMultiproc()
+    if force:
+        for tim in tims:
+            if hasattr(tim, 'resamp'):
+                del tim.resamp
     R = mp.map(_bounce_tim_get_resamp, [(tim,targetwcs) for tim in tims])
     for tim,r in zip(tims, R):
         tim.resamp = r
