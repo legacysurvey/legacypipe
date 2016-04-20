@@ -764,7 +764,7 @@ class LegacySurveyData(object):
     objects (eg, DecamImage objects), which then allow data to be read
     from disk.
     '''
-    def __init__(self, survey_dir=None, output_dir=None):
+    def __init__(self, survey_dir=None, output_dir=None, version=None):
         '''
         Create a LegacySurveyData object using data from the given *survey_dir*
         directory, or from the $LEGACY_SURVEY_DIR environment variable.
@@ -814,6 +814,9 @@ Now using the current directory as LEGACY_SURVEY_DIR, but this is likely to fail
 
         self.allbands = 'ugrizY'
 
+        assert(version in [None, 'dr2', 'dr1'])
+        self.version = version
+
     def get_camera_indices(self, ccds):
         i_ptf= np.where(a.get('camera') == 'ptf')[0]
         i_decam= np.where(a.get('camera') == 'decam')[0]
@@ -853,8 +856,20 @@ Now using the current directory as LEGACY_SURVEY_DIR, but this is likely to fail
 
         if brick is not None:
             codir = os.path.join(basedir, 'coadd', brickpre, brick)
-            
-        if filetype == 'tractor':
+
+        if filetype == 'bricks':
+            fn = 'survey-bricks.fits.gz'
+            if self.version in ['dr1','dr2']:
+                fn = 'decals-bricks.fits'
+            return os.path.join(basedir, fn)
+
+        elif filetype == 'ccds':
+            if self.version in ['dr1','dr2']:
+                return [os.path.join(basedir, 'decals-ccds.fits')]
+            else:
+                return glob(os.path.join(basedir, 'survey-ccds-*.fits.gz'))
+                
+        elif filetype == 'tractor':
             return os.path.join(basedir, 'tractor', brickpre,
                                 'tractor-%s.fits' % brick)
 
@@ -996,7 +1011,7 @@ Now using the current directory as LEGACY_SURVEY_DIR, but this is likely to fail
         For read-only purposes, see *get_bricks_readonly()*, which
         uses a cached version.
         '''
-        return fits_table(os.path.join(self.survey_dir, 'survey-bricks.fits.gz'))
+        return fits_table(self.find_file('bricks'))
 
     def get_bricks_readonly(self):
         '''
@@ -1086,7 +1101,7 @@ Now using the current directory as LEGACY_SURVEY_DIR, but this is likely to fail
         '''
         from glob import glob
 
-        fns = glob(os.path.join(self.survey_dir, 'survey-ccds-*.fits.gz'))
+        fns = self.find_file('ccds')
         TT = []
         for fn in fns:
             cols = (
