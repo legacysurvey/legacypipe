@@ -1101,7 +1101,6 @@ def stage_image_coadds(survey=None, targetwcs=None, bands=None, tims=None,
         with survey.write_output(name + '-jpeg', brick=brickname) as out:
             imsave_jpeg(out.fn, rgb, origin='lower', **kwa)
             print('Wrote', out.fn)
-        del rgb
 
         # Blob-outlined version
         if blobs is not None:
@@ -1119,7 +1118,7 @@ def stage_image_coadds(survey=None, targetwcs=None, bands=None, tims=None,
             with survey.write_output(name + 'blob-jpeg', brick=brickname) as out:
                 imsave_jpeg(out.fn, rgb, origin='lower', **kwa)
                 print('Wrote', out.fn)
-            del rgb
+        del rgb
 
     return None
 
@@ -2524,7 +2523,7 @@ def stage_wise_forced(
                 X[:,e] = phot.get(c)
         WISE_T = WT
 
-    WISE_T.writeto('wise-timeresolved.fits')
+    #WISE_T.writeto('wise-timeresolved.fits')
 
     return dict(WISE=WISE, WISE_T=WISE_T)
 
