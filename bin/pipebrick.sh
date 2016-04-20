@@ -47,6 +47,7 @@ python legacypipe/runbrick.py \
     --pipe \
     --threads 8 \
     --on-bricks \
+    --skip \
     --brick $brick --outdir $outdir --nsigma 6 >> $log 2>&1
 
 # qdo launch dr2n 16 --cores_per_worker 8 --walltime=24:00:00 --script ../bin/pipebrick.sh --batchqueue regular --verbose

@@ -107,7 +107,9 @@ class OneBlob(object):
         # 50 CCDs is over 90th percentile of bricks in DR2.
         self.many_exposures = len(timargs) >= 50
         #PTF special handling len(timargs) >= 1000
-
+        if self.many_exposures:
+            print('Many exposures for blob', self.name)
+        
     def run(self, B):
         tlast = Time()
         if self.plots:
@@ -381,6 +383,8 @@ class OneBlob(object):
             if self.many_exposures:
                 dtims,insubset = self._get_todepth_subset(srctims, srcwcs,
                                                           srcpix)
+                print('Many exposures: to-depth subset of', len(dtims), 'images out of',
+                      len(srctims))
             allflags = {}
             for name,newsrc in trymodels:
     

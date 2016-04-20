@@ -1127,7 +1127,6 @@ def stage_image_coadds(survey=None, targetwcs=None, bands=None, tims=None,
         with survey.write_output(name + '-jpeg', brick=brickname) as out:
             imsave_jpeg(out.fn, rgb, origin='lower', **kwa)
             print('Wrote', out.fn)
-        del rgb
 
         # Blob-outlined version
         if blobs is not None:
@@ -1145,7 +1144,7 @@ def stage_image_coadds(survey=None, targetwcs=None, bands=None, tims=None,
             with survey.write_output(name + 'blob-jpeg', brick=brickname) as out:
                 imsave_jpeg(out.fn, rgb, origin='lower', **kwa)
                 print('Wrote', out.fn)
-            del rgb
+        del rgb
 
     return None
 
@@ -1213,7 +1212,14 @@ def stage_srcs(coimgs=None, cons=None,
             fn = survey.find_file('tractor', brick=b.brickname)
             print('Looking for', fn)
             B.append(fits_table(fn))
-        B = merge_tables(B)
+        try:
+            B = merge_tables(B)
+        except:
+            print('Error merging brick tables:')
+            import traceback
+            traceback.print_exc()
+            print('Retrying with fillzero...')
+            B = merge_tables(B, columns='fillzero')
         print('Total of', len(B), 'sources from neighbouring bricks')
         # Keep only sources that are primary in their own brick
         B.cut(B.brick_primary)
@@ -2477,7 +2483,7 @@ def stage_wise_forced(
                 X[:,e] = phot.get(c)
         WISE_T = WT
 
-    WISE_T.writeto('wise-timeresolved.fits')
+    #WISE_T.writeto('wise-timeresolved.fits')
 
     return dict(WISE=WISE, WISE_T=WISE_T)
 

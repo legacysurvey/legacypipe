@@ -328,6 +328,10 @@ def main():
         rlo,rhi = 250,260
         dlo,dhi = 30,35
 
+    elif opt.region == 'deep2f3':
+        rlo,rhi = 351.25, 353.75
+        dlo,dhi = 0, 0.5
+
     elif opt.region == 'virgo':
         rlo,rhi = 185,190
         dlo,dhi =  10, 15
