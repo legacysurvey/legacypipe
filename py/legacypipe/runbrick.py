@@ -1842,6 +1842,7 @@ def stage_fitblobs(T=None,
     assert(len(BB.flags) == len(cat))
 
     # Renumber blobs to make them contiguous.
+    oldblob = T.blob
     ublob,iblob = np.unique(T.blob, return_inverse=True)
     del ublob
     assert(len(iblob) == len(T))
@@ -1855,16 +1856,16 @@ def stage_fitblobs(T=None,
         blobmap[:] = -1
         # in particular,
         blobmap[0] = -1
-        blobmap[T.blob + 1] = iblob
+        blobmap[oldblob + 1] = iblob
         blobs = blobmap[blobs+1]
 
         with survey.write_output('blobmap', brick=brickname) as out:
             fitsio.write(out.fn, blobs, header=version_header, clobber=True)
             print('Wrote', out.fn)
         del blobmap
-    del iblob
+    del iblob, oldblob
     blobs = None
-    
+
     T.brickid   = np.zeros(len(T), np.int32) + brickid
     T.brickname = np.array([brickname] * len(T))
     T.objid     = np.arange(len(T)).astype(np.int32)
