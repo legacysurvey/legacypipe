@@ -2473,6 +2473,9 @@ def stage_wise_forced(
         phots = phots[len(args):]
         for (e,a),phot in zip(eargs, phots):
             print('Epoch', e, 'photometry:')
+            if phot is None:
+                print('Failed.')
+                continue
             phot.about()
             phot.delete_column('tile')
             for c in phot.columns():
@@ -2482,8 +2485,6 @@ def stage_wise_forced(
                 X = WT.get(c)
                 X[:,e] = phot.get(c)
         WISE_T = WT
-
-    #WISE_T.writeto('wise-timeresolved.fits')
 
     return dict(WISE=WISE, WISE_T=WISE_T)
 
