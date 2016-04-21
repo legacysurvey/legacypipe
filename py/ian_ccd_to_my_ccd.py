@@ -1,8 +1,14 @@
 from astrometry.util.fits import fits_table,merge_tables
 import numpy as np
+from argparse import ArgumentParser
 
-i=fits.open('bass-ccds-idmnov2015.fits')
-k=fits.open('my_bok-ccds.fits')
+parser = ArgumentParser(description="test")
+parser.add_argument("-ian_ccd",action="store",help='ians ccd.fits table',required=True)
+parser.add_argument("-my_ccd",action="store",help='mine',required=True)
+args = parser.parse_args()
+
+i=fits_table(args.ian_ccd)
+k=fits_table(args.my_ccd)
 #matching indices for g,r ccds
 k_test,i_test=[],[]
 for band in ['g','r']:
