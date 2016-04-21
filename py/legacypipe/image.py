@@ -66,6 +66,7 @@ class LegacySurveyImage(object):
         self.band    = ccd.filter.strip()
         self.exptime = ccd.exptime
         self.camera  = ccd.camera.strip()
+        if self.camera == '90prime': self.ccdzpt= ccd.ccdzpt #Bok specific, zp stored in ccd table for now
         self.fwhm    = ccd.fwhm
         self.propid  = ccd.propid
         # in arcsec/pixel

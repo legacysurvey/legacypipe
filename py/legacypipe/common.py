@@ -104,14 +104,10 @@ def zeropoint_for_ptf(hdr):
     return magzp
 
 #BOKF special handling
-def zeropoint_for_bok(hdr):
-    #no zeropoint exists in header so put in junk number for now
-    return 27.
-    #magzp= hdr['IMAGEZPT'] + 2.5 * np.log10(hdr['EXPTIME'])
-    #if isinstance(magzp,str):
-    #    print('WARNING: no ZeroPoint in header for image: ',tractor_image.imgfn)
-    #    raise ValueError #magzp= 23.
-    #return magzp
+def zeropoint_for_bok(hdr,zp): #zp stored in LegacySurveyImage object IF camera==90prime
+    print('in BOK zeropoint, zp=',zp)
+    magzp= zp + 2.5 * np.log10(hdr['EXPTIME'])
+    return magzp
 
 
 
@@ -1216,7 +1212,7 @@ Now using the current directory as LEGACY_SURVEY_DIR, but this is likely to fail
             magzp= zeropoint_for_ptf(hdr)
         elif im.camera == '90prime':
             hdr= im.read_image_primary_header() #calls fitsio.read_header(self.imgfn)
-            magzp= zeropoint_for_bok(hdr)
+            magzp= zeropoint_for_bok(hdr,im.ccdzpt)
         else: raise ValueError
         return magzp
 
