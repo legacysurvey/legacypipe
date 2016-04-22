@@ -95,20 +95,13 @@ class SimpleGalaxy(ExpGalaxy):
 class BrickDuck(object):
     pass
 
-#PTF special handling
+#PTF special handling of zeropoint
 def zeropoint_for_ptf(hdr):
     magzp= hdr['IMAGEZPT'] + 2.5 * np.log10(hdr['EXPTIME'])
     if isinstance(magzp,str):
         print('WARNING: no ZeroPoint in header for image: ',tractor_image.imgfn)
         raise ValueError #magzp= 23.
     return magzp
-
-#BOKF special handling
-def zeropoint_for_bok(hdr,zp): #zp stored in LegacySurveyImage object IF camera==90prime
-    print('in BOK zeropoint, zp=',zp)
-    magzp= zp + 2.5 * np.log10(hdr['EXPTIME'])
-    return magzp
-
 
 
 def get_git_version(dir=None):
@@ -1017,7 +1010,9 @@ Now using the current directory as LEGACY_SURVEY_DIR, but this is likely to fail
         if 'ccdname' in T.columns():
             # "N4 " -> "N4"
             T.ccdname = np.array([s.strip() for s in T.ccdname])
-
+        #camera must NOT have trailing whitespaces for expected behavior!
+        for i in range(len(T.get('camera'))): T.get('camera')[i]= T.get('camera')[i].strip()
+        #now safe to return
         return T
 
     def ccds_touching_wcs(self, wcs, **kwargs):
@@ -1120,20 +1115,19 @@ Now using the current directory as LEGACY_SURVEY_DIR, but this is likely to fail
                 ('zpt > 0.25 mag of nominal (for DECam)',
                  ((ccds.camera == 'decam') * (ccds.zpt > (z0 + 0.25)))),
                  ]:
-                #PTF special handling, apply criteria to NON ptf images
-                crit= np.logical_and(crit, ccds.camera != 'ptf   ')
+                #prevent Rejection of ALL 90Prime and PTF images
+                crit= np.logical_and(crit, ccds.camera != 'ptf')
+                crit= np.logical_and(crit, ccds.camera != '90prime')
                 good[crit] = False
+                #continue as usual
                 n = sum(good)
                 print('Flagged', n0-n, 'more non-photometric using criterion:', name)
                 n0 = n
         #print N remain for each camera
         tallies='%d CCDs remain' % len(good) 
-        for cam_str in ['decam ','mosaic','90prime','ptf   ']: 
+        for cam_str in ['decam','mosaic','90prime','ptf']: 
             tallies+= ', %d are %s' %  (ccds.camera[ccds.camera == cam_str].shape[0], cam_str)
         print(tallies)
-        #print('exiting early')
-        #import sys 
-        #sys.exit() 
         return np.flatnonzero(good)
 
     def apply_blacklist(self, ccds):
@@ -1195,7 +1189,10 @@ Now using the current directory as LEGACY_SURVEY_DIR, but this is likely to fail
         '''
         Returns the photometric zeropoint for the given CCD table row object *im*.
         '''
-        if im.camera == 'decam' or im.camera == 'mosaic':
+        if im.camera == 'ptf': #special handling for non-DECaLS
+            hdr= im.read_image_primary_header() #calls fitsio.read_header(self.imgfn)
+            magzp= zeropoint_for_ptf(hdr)
+        else:
             zp = self.get_zeropoint_row_for(im)
             # No updated zeropoint -- use header MAGZERO from primary HDU.
             if zp is None:
@@ -1205,15 +1202,8 @@ Now using the current directory as LEGACY_SURVEY_DIR, but this is likely to fail
                 magzero = hdr['MAGZERO']
                 return magzero
             magzp = zp.ccdzpt
-            magzp += 2.5 * np.log10(zp.exptime)
-        #PTF special handling
-        elif im.camera == 'ptf':
-            hdr= im.read_image_primary_header() #calls fitsio.read_header(self.imgfn)
-            magzp= zeropoint_for_ptf(hdr)
-        elif im.camera == '90prime':
-            hdr= im.read_image_primary_header() #calls fitsio.read_header(self.imgfn)
-            magzp= zeropoint_for_bok(hdr,im.ccdzpt)
-        else: raise ValueError
+            if im.camera == 'decam': #mosaic,bok already has exptime correction for all zpts
+                magzp += 2.5 * np.log10(zp.exptime)
         return magzp
 
     def get_astrometric_zeropoint_for(self, im):

@@ -28,7 +28,6 @@ class BokImage(LegacySurveyImage):
     '''
     def __init__(self, survey, t):
         super(BokImage, self).__init__(survey, t)
-
         self.pixscale= 0.455
         self.dqfn = 'junk' #self.imgfn.replace('_oi.fits', '_od.fits')
         self.whtfn= self.imgfn.replace('.fits','.wht.fits')
