@@ -1393,7 +1393,7 @@ def stage_srcs(coimgs=None, cons=None,
     satblobs,nsat = label(satmap > 0)
     print('Satblobs:', satblobs.shape, satblobs.dtype)
     print('nsat', nsat, 'max', satblobs.max(), 'vals', np.unique(satblobs))
-    if Tsat is not None:
+    if len(Tsat):
         # Build a map from old "satblobs" to new; identity to start
         remap = np.arange(nsat+1)
         # Drop blobs that contain a Tycho-2 star
