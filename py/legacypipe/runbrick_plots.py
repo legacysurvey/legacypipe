@@ -357,6 +357,14 @@ def _plot_mods(tims, mods, titles, bands, coimgs, cons, bslc, blobw, blobh, ps,
     for i,subim in enumerate(subims):
         plt.clf()
         rows,cols = 3,5
+        for ib,b in enumerate(bands):
+            plt.subplot(rows,cols,ib+1)
+            plt.title(b)
+        plt.subplot(rows,cols,4)
+        plt.title('RGB')
+        plt.subplot(rows,cols,5)
+        plt.title('RGB(stretch)')
+        
         imgs = []
         themods = []
         resids = []

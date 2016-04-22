@@ -20,13 +20,6 @@ legacypipe.runbrick module
     :members:
     :show-inheritance:
 
-legacypipe.decam module
------------------------
-
-.. automodule:: legacypipe.decam
-    :members:
-    :show-inheritance:
-
 legacypipe.detection module
 ---------------------------
 
@@ -34,32 +27,24 @@ legacypipe.detection module
     :members:
     :show-inheritance:
 
-legacypipe.sdss module
-----------------------
-
-.. automodule:: legacypipe.sdss
-    :members:
-    :show-inheritance:
-
 legacypipe.common module
---------------------------
+------------------------
 
 .. automodule:: legacypipe.common
     :members:
     :show-inheritance:
 
 legacypipe.utils module
---------------------------
+-----------------------
 
 .. automodule:: legacypipe.utils
     :members:
     :show-inheritance:
 
+legacypipe.oneblob module
+-------------------------
 
-legacypipe.bok
---------------
-
-.. automodule:: legacypipe.bok
+.. automodule:: legacypipe.oneblob
     :members:
     :show-inheritance:
 
@@ -70,6 +55,40 @@ legacypipe.image module
     :members:
     :show-inheritance:
 
+legacypipe.cpimage module
+--------------------------
+
+.. automodule:: legacypipe.cpimage
+    :members:
+    :show-inheritance:
+
+legacypipe.decam module
+-----------------------
+
+.. automodule:: legacypipe.decam
+    :members:
+    :show-inheritance:
+
+legacypipe.bok
+--------------
+
+.. automodule:: legacypipe.bok
+    :members:
+    :show-inheritance:
+
+legacypipe.ptf
+--------------
+
+.. automodule:: legacypipe.ptf
+    :members:
+    :show-inheritance:
+
+legacypipe.mosaic
+-----------------
+
+.. automodule:: legacypipe.mosaic
+    :members:
+    :show-inheritance:
 
 Indices and tables
 ==================

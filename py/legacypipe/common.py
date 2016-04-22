@@ -3,6 +3,7 @@ from __future__ import print_function
 import os
 import tempfile
 import time
+from glob import glob
 
 import numpy as np
 
@@ -67,7 +68,7 @@ from tractor.galaxy import ExpGalaxy
 from tractor.ellipses import EllipseE
 class SimpleGalaxy(ExpGalaxy):
     shape = EllipseE(0.45, 0., 0.)
-    
+
     def __init__(self, *args):
         super(SimpleGalaxy, self).__init__(*args)
         self.shape = SimpleGalaxy.shape
@@ -93,6 +94,8 @@ class SimpleGalaxy(ExpGalaxy):
         return super(SimpleGalaxy, self).isParamFrozen(pname)
     
 class BrickDuck(object):
+    '''A little duck-typing class when running on a custom RA,Dec center rather than
+    a brick center.'''
     pass
 
 #PTF special handling of zeropoint
@@ -189,7 +192,7 @@ class MyFITSHDR(fitsio.FITSHDR):
     the list of headers to remove.  This is required to format the
     tractor catalogs the way we want them.
     '''
-    def clean(self):
+    def clean(self, **kwargs):
         """
         Remove reserved keywords from the header.
         
@@ -744,6 +747,13 @@ def create_temp(**kwargs):
     os.unlink(fn)
     return fn
 
+def imsave_jpeg(jpegfn, img, **kwargs):
+    import pylab as plt
+    tmpfn = create_temp(suffix='.png')
+    plt.imsave(tmpfn, img, **kwargs)
+    cmd = ('pngtopnm %s | pnmtojpeg -quality 90 > %s' % (tmpfn, jpegfn))
+    os.system(cmd)
+    os.unlink(tmpfn)
 
 class LegacySurveyData(object):
     '''
@@ -755,7 +765,7 @@ class LegacySurveyData(object):
     objects (eg, DecamImage objects), which then allow data to be read
     from disk.
     '''
-    def __init__(self, survey_dir=None):
+    def __init__(self, survey_dir=None, output_dir=None, version=None):
         '''
         Create a LegacySurveyData object using data from the given *survey_dir*
         directory, or from the $LEGACY_SURVEY_DIR environment variable.
@@ -763,7 +773,7 @@ class LegacySurveyData(object):
         from .decam  import DecamImage
         from .mosaic import MosaicImage
         from .bok    import BokImage
-        from .ptf import PtfImage
+        from .ptf    import PtfImage
 
         if survey_dir is None:
             survey_dir = os.environ.get('LEGACY_SURVEY_DIR')
@@ -779,6 +789,13 @@ Now using the current directory as LEGACY_SURVEY_DIR, but this is likely to fail
                 
         self.survey_dir = survey_dir
 
+        if output_dir is None:
+            self.output_dir = survey_dir
+        else:
+            self.output_dir = output_dir
+
+        self.output_files = []
+
         self.ccds = None
         self.bricks = None
 
@@ -789,25 +806,28 @@ Now using the current directory as LEGACY_SURVEY_DIR, but this is likely to fail
         self.bricksize = 0.25
 
         self.image_typemap = {
-            'decam': DecamImage,
-            'mosaic': MosaicImage,
+            'decam'  : DecamImage,
+            'mosaic' : MosaicImage,
             'mosaic3': MosaicImage,
             '90prime': BokImage,
-            'ptf': PtfImage,
+            'ptf'    : PtfImage,
             }
 
         self.allbands = 'ugrizY'
+
+        assert(version in [None, 'dr2', 'dr1'])
+        self.version = version
 
     def get_camera_indices(self, ccds):
         i_ptf= np.where(a.get('camera') == 'ptf')[0]
         i_decam= np.where(a.get('camera') == 'decam')[0]
         i_mosaic= np.where(a.get('camera') == 'mosaic')[0]
-        
 
     def index_of_band(self, b):
         return self.allbands.index(b)
         
-    def find_file(self, filetype, brick=None, brickpre=None, band='%(band)s'):
+    def find_file(self, filetype, brick=None, brickpre=None, band='%(band)s',
+                  output=False):
         '''
         Returns the filename of a Legacy Survey file.
 
@@ -819,6 +839,9 @@ Now using the current directory as LEGACY_SURVEY_DIR, but this is likely to fail
              
         *brick* : string, brick name such as "0001p000"
 
+        *output*: True if we are about to write this file; will use self.outdir as
+        the base directory rather than self.survey_dir.
+
         Returns: path to the specified file (whether or not it exists).
         '''
         if brick is None:
@@ -827,20 +850,108 @@ Now using the current directory as LEGACY_SURVEY_DIR, but this is likely to fail
         else:
             brickpre = brick[:3]
 
-        if filetype == 'tractor':
-            return os.path.join(self.survey_dir, 'tractor', brickpre,
+        if output:
+            basedir = self.output_dir
+        else:
+            basedir = self.survey_dir
+
+        if brick is not None:
+            codir = os.path.join(basedir, 'coadd', brickpre, brick)
+
+        if filetype == 'bricks':
+            fn = 'survey-bricks.fits.gz'
+            if self.version in ['dr1','dr2']:
+                fn = 'decals-bricks.fits'
+            return os.path.join(basedir, fn)
+
+        elif filetype == 'ccds':
+            if self.version in ['dr1','dr2']:
+                return [os.path.join(basedir, 'decals-ccds.fits')]
+            else:
+                return glob(os.path.join(basedir, 'survey-ccds-*.fits.gz'))
+                
+        elif filetype == 'tractor':
+            return os.path.join(basedir, 'tractor', brickpre,
                                 'tractor-%s.fits' % brick)
-        elif filetype == 'depth':
-            return os.path.join(self.survey_dir, 'coadd', brickpre, brick,
-                                'decals-%s-depth-%s.fits.gz' % (brick, band))
-        elif filetype == 'galdepth':
-            return os.path.join(self.survey_dir, 'coadd', brickpre, brick,
-                                'decals-%s-galdepth-%s.fits.gz' % (brick, band))
-        elif filetype == 'nexp':
-            return os.path.join(self.decals_dir, 'coadd', brickpre, brick,
-                                'decals-%s-nexp-%s.fits.gz' % (brick, band))
-        assert(False)
+
+        elif filetype in ['ccds-table', 'depth-table']:
+            ty = filetype.split('-')[0]
+            return os.path.join(codir, 'legacysurvey-%s-%s.fits' % (brick, ty))
+
+        elif filetype in ['image-jpeg', 'model-jpeg', 'resid-jpeg',
+                          'imageblob-jpeg']:
+            ty = filetype.split('-')[0]
+            return os.path.join(codir, 'legacysurvey-%s-%s.jpg' % (brick, ty))
+
+        elif filetype in ['depth', 'galdepth', 'nexp', 'model']:
+            return os.path.join(codir,
+                                'legacysurvey-%s-%s-%s.fits.gz' % (brick, filetype,band))
+
+        elif filetype in ['invvar', 'chi2', 'image']:
+            return os.path.join(codir,
+                                'legacysurvey-%s-%s-%s.fits' % (brick, filetype,band))
+
+        elif filetype in ['blobmap']:
+            return os.path.join(basedir, 'metrics', brickpre, brick,
+                                'blobs-%s.fits.gz' % (brick))
+        elif filetype in ['all-models']:
+            return os.path.join(basedir, 'metrics', brickpre, brick,
+                                'all-models-%s.fits' % (brick))
+
+        elif filetype == 'sha1sum-brick':
+            return os.path.join(basedir, 'tractor', brickpre,
+                                'brick-%s.sha1sum' % brick)
         
+        assert(False)
+
+    def write_output(self, filetype, **kwargs):
+        '''
+        Returns a context manager for writing an output file; use like:
+
+        with out as survey.write_output('ccds', brick=brickname):
+            ccds.writeto(out.fn, primheader=primhdr)
+
+        Does the following on entry:
+        - calls self.find_file() to determine which filename to write to
+        - ensures the output directory exists
+        - appends a ".tmp" to the filename
+
+        Does the following on exit:
+        - moves the ".tmp" to the final filename (to make it atomic)
+        - records the filename for later SHA1 computation
+        '''
+        class OutputFileContext(object):
+            def __init__(self, fn, survey):
+                self.real_fn = fn
+                self.survey = survey
+                self.fn = os.path.join(os.path.dirname(fn), 'tmp-'+os.path.basename(fn))
+
+            def __enter__(self):
+                dirnm = os.path.dirname(self.fn)
+                if not os.path.exists(dirnm):
+                    try:
+                        os.makedirs(dirnm)
+                    except:
+                        pass
+                return self
+
+            def __exit__(self, exc_type, exc_value, traceback):
+                # If no exception was thrown...
+                if exc_type is None:
+                    os.rename(self.fn, self.real_fn)
+                    self.survey.add_output_file(self.real_fn)
+
+        fn = self.find_file(filetype, output=True, **kwargs)
+        out = OutputFileContext(fn, self)
+        return out
+
+    def add_output_file(self, fn):
+        '''
+        Intended as a callback to be called in the *write_output* routine.  Adds
+        the given filename to the list of files written by the pipeline on this run.
+        '''
+        self.output_files.append(fn)
+
     def __getstate__(self):
         '''
         For pickling: clear the cached ZP and other tables.
@@ -901,7 +1012,7 @@ Now using the current directory as LEGACY_SURVEY_DIR, but this is likely to fail
         For read-only purposes, see *get_bricks_readonly()*, which
         uses a cached version.
         '''
-        return fits_table(os.path.join(self.survey_dir, 'survey-bricks.fits'))
+        return fits_table(self.find_file('bricks'))
 
     def get_bricks_readonly(self):
         '''
@@ -989,12 +1100,23 @@ Now using the current directory as LEGACY_SURVEY_DIR, but this is likely to fail
         '''
         Returns the table of CCDs.
         '''
-        fn = os.path.join(self.survey_dir, 'survey-ccds.fits')
-        if not os.path.exists(fn):
-            fn += '.gz'
-        print('Reading CCDs from', fn)
-        T = fits_table(fn)
-        print('Got', len(T), 'CCDs')
+        from glob import glob
+
+        fns = self.find_file('ccds')
+        TT = []
+        for fn in fns:
+            cols = (
+                'exptime filter propid crpix1 crpix2 crval1 crval2 ' +
+                'cd1_1 cd1_2 cd2_1 cd2_2 ccdname ccdzpt ccdraoff ccddecoff ' +
+                'ccdnmatch camera image_hdu image_filename width height ' +
+                'ra dec zpt expnum fwhm mjd_obs').split()
+            print('Reading CCDs from', fn)
+            T = fits_table(fn, columns=cols)
+            print('Got', len(T), 'CCDs')
+            TT.append(T)
+        T = merge_tables(TT, columns='fillzero')
+        print('Total of', len(T), 'CCDs')
+        del TT
 
         cols = T.columns()
         # Make DR1 CCDs table somewhat compatible with DR2
