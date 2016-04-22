@@ -1370,6 +1370,19 @@ def stage_srcs(coimgs=None, cons=None,
     # saturated pixels
     saturated_pix = binary_dilation(satmap > 0, iterations=10)
 
+    # Add Tycho-2 stars
+    tycho = fits_table(os.path.join(survey.get_survey_dir(), 'tycho2.fits.gz'))
+    print('Read', len(tycho), 'Tycho-2 stars')
+    ok,tx,ty = targetwcs.radec2pixelxy(tycho.ra, tycho.dec)
+    margin = 100
+    tycho.cut(ok * (tx > -margin) * (tx < W+margin) *
+              (ty > -margin) * (ty < H+margin))
+    print('Cut to', len(tycho), 'Tycho-2 stars within brick')
+    del ok,tx,ty
+
+    ### FIXME --
+    
+    
     # Saturated blobs -- create a source for each?!
     satblobs,nsat = label(satmap > 0)
     satyx = center_of_mass(satmap, labels=satblobs, index=np.arange(nsat)+1)
@@ -1503,7 +1516,8 @@ def stage_srcs(coimgs=None, cons=None,
     print('[serial srcs] Blobs:', tnow-tlast)
     tlast = tnow
 
-    keys = ['T', 'tims', 'blobsrcs', 'blobslices', 'blobs', 'cat', 'ps']
+    keys = ['T', 'tims', 'blobsrcs', 'blobslices', 'blobs', 'cat',
+            'ps', 'tycho']
     if not pipe:
         keys.extend(['detmaps', 'detivs'])
     rtn = dict([(k,locals()[k]) for k in keys])
@@ -1535,6 +1549,7 @@ def stage_fitblobs(T=None,
                    write_metrics=True,
                    get_all_models=False,
                    allbands = 'ugrizY',
+                   tycho=None,
                    **kwargs):
     '''
     This is where the actual source fitting happens.
@@ -1663,7 +1678,7 @@ def stage_fitblobs(T=None,
 
     if keepblobs is not None:
         # 'blobs' is an image with values -1 for no blob, or the index of the
-        # blob.  Create a map from old 'blobs+1' to new 'blobs+1'.  +1 so that
+        # blob.  Create a map from old 'blobs+1' to new 'blobs+1'.  +1  so that
         # -1 is a valid index.
         NB = len(blobslices)
         blobmap = np.empty(NB+1, int)
@@ -1681,15 +1696,6 @@ def stage_fitblobs(T=None,
 
     # drop any cached data before we start pickling/multiprocessing
     survey.drop_cache()
-
-    tycho = fits_table(os.path.join(survey.get_survey_dir(), 'tycho2.fits.gz'))
-    print('Read', len(tycho), 'Tycho-2 stars')
-    ok,tx,ty = targetwcs.radec2pixelxy(tycho.ra, tycho.dec)
-    margin = 100
-    tycho.cut(ok * (tx > -margin) * (tx < W+margin) *
-              (ty > -margin) * (ty < H+margin))
-    print('Cut to', len(tycho), 'Tycho-2 stars within brick')
-    del ok,tx,ty
 
     if plots:
         ok,tx,ty = targetwcs.radec2pixelxy(tycho.ra, tycho.dec)
