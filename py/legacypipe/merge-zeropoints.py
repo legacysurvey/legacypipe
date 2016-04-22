@@ -161,7 +161,8 @@ def normalize_zeropoints(fn, dirnms, image_basedir, cam, T=None):
     # Search all given directory names
     allfiles = {}
     for dirnm in dirnms:
-        pattern = os.path.join(image_basedir, cam, dirnm, '*.fits*')
+        #pattern = os.path.join(image_basedir, cam, dirnm, '*.fits*')
+        pattern = os.path.join(dirnm, '*.fits*')
         matched = glob(pattern)
         allfiles[dirnm] = matched
         print('Pattern', pattern, '->', len(matched))
@@ -178,7 +179,8 @@ def normalize_zeropoints(fn, dirnms, image_basedir, cam, T=None):
         fnlist = []
 
         for dirnm in dirnms:
-            pattern = os.path.join(image_basedir, cam, dirnm, fn)
+            #pattern = os.path.join(image_basedir, cam, dirnm, fn)
+            pattern = os.path.join(dirnm, fn)
             for afn in allfiles[dirnm]:
                 # check for prefix
                 if pattern in afn:
@@ -254,7 +256,29 @@ if __name__ == '__main__':
     #decals_dr3_extra()
     #decals_dr3_dedup()
 
-    # MzLS DEEP2
+    basedir = './mzls-deep2f3'
+    cam = 'mosaic'
+    image_basedir = os.path.join(basedir, 'images')
+
+    TT = []
+
+    for fn,dirnms in [
+            (os.path.join(basedir, 'zeropoint-arjun_zpts.fits'),
+             ['CP20151213',]),
+        ]:
+        T = normalize_zeropoints(fn, dirnms, image_basedir, cam)
+        TT.append(T)
+    T = merge_tables(TT)
+    T.fwhm = T.seeing / 0.262
+    T.ccdname = np.array([n.replace('LBL-0', 'ccd') for n in T.ccdname])
+    outfn = 'zp.fits'
+    T.writeto(outfn)
+    print('Wrote', outfn)
+
+    sys.exit(0)
+
+    
+    # MzLS DEEP2 inventory
     import fitsio
     fns = glob('/project/projectdirs/cosmo/staging/mosaicz/MZLS_CP/CP20151213/*_oki_*')
     print(len(fns), 'files')
