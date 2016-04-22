@@ -1314,6 +1314,7 @@ def stage_srcs(coimgs=None, cons=None,
             plt.suptitle('Tim ' + tim.name)
             ps.savefig()
 
+    if plots:
         for tim in tims:
             plt.clf()
             plt.subplot(2,2,1)

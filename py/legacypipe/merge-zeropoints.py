@@ -252,7 +252,41 @@ if __name__ == '__main__':
 
     #decals_dr3()
     #decals_dr3_extra()
-    decals_dr3_dedup()
+    #decals_dr3_dedup()
+
+    # MzLS DEEP2
+    import fitsio
+    fns = glob('/project/projectdirs/cosmo/staging/mosaicz/MZLS_CP/CP20151213/*_oki_*')
+    print(len(fns), 'files')
+    T = fits_table()
+    T.image_filename = np.array(fns)
+    T.expnum = np.zeros(len(T), np.int32)
+    T.exptime = np.zeros(len(T), np.float32)
+    T.ra = np.zeros(len(T), np.float64)
+    T.dec = np.zeros(len(T), np.float64)
+    T.band = np.zeros(len(T), str)
+    for i,fn in enumerate(fns):
+        print('Reading', fn)
+        hdr = fitsio.read_header(fn)
+        T.expnum [i] = hdr['EXPNUM']
+        T.exptime[i] = hdr['EXPTIME']
+        T.ra     [i] = hdr['CENTRA']
+        T.dec    [i] = hdr['CENTDEC']
+        T.band   [i] = hdr['FILTER'][0]
+    T.writeto('mzls-20151213.fits')
+
+    import pylab as plt
+    plt.clf()
+    plt.plot(T.ra, T.dec, 'mo')
+    plt.savefig('mzls-1.png')
+
+    T.cut(np.hypot(T.ra - 350, T.dec - 0) < 5)
+    T.writeto('mzls-d2f3.fits')
+    
+    plt.clf()
+    plt.plot(T.ra, T.dec, 'mo')
+    plt.savefig('mzls-2.png')
+    
     sys.exit(0)
 
     # Mosaicz tests
