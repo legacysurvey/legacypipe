@@ -1371,8 +1371,46 @@ def stage_srcs(coimgs=None, cons=None,
     # saturated pixels
     saturated_pix = binary_dilation(satmap > 0, iterations=10)
 
-    # Saturated blobs -- create a source for each?!
+    # Read Tycho-2 stars
+    tycho = fits_table(os.path.join(survey.get_survey_dir(), 'tycho2.fits.gz'))
+    print('Read', len(tycho), 'Tycho-2 stars')
+    ok,tycho.tx,tycho.ty = targetwcs.radec2pixelxy(tycho.ra, tycho.dec)
+    margin = 100
+    tycho.cut(ok * (tycho.tx > -margin) * (tycho.tx < W+margin) *
+              (tycho.ty > -margin) * (tycho.ty < H+margin))
+    print('Cut to', len(tycho), 'Tycho-2 stars within brick')
+    del ok
+
+    Tsat = fits_table()
+    # Add sources for Tycho-2 stars
+    if len(tycho):
+        Tsat.tx = tycho.tx
+        Tsat.ty = tycho.ty
+        Tsat.mag = tycho.mag
+    
+    # Saturated blobs -- create a source for each, except for those
+    # that already have a Tycho-2 star
     satblobs,nsat = label(satmap > 0)
+    print('Satblobs:', satblobs.shape, satblobs.dtype)
+    print('nsat', nsat, 'max', satblobs.max(), 'vals', np.unique(satblobs))
+    if Tsat is not None:
+        # Build a map from old "satblobs" to new; identity to start
+        remap = np.arange(nsat+1)
+        # Drop blobs that contain a Tycho-2 star
+        itx = np.clip(np.round(Tsat.tx), 0, W).astype(int)
+        ity = np.clip(np.round(Tsat.ty), 0, H).astype(int)
+        zeroout = satblobs[ity, itx]
+        remap[zeroout] = 0
+        # Renumber them to be contiguous
+        I = np.flatnonzero(remap)
+        nsat = len(I)
+        remap[I] = 1 + np.arange(nsat)
+        satblobs = remap[satblobs]
+        print('Remapped satblobs:', satblobs.shape, satblobs.dtype)
+        print('nsat', nsat, 'max', satblobs.max(), 'vals', np.unique(satblobs))
+        del remap, itx, ity, zeroout, I
+
+    # Add sources for any remaining saturated blobs
     satyx = center_of_mass(satmap, labels=satblobs, index=np.arange(nsat)+1)
     # NOTE, satyx is in y,x order (center_of_mass)
     satx = np.array([x for y,x in satyx]).astype(int)
@@ -1380,23 +1418,28 @@ def stage_srcs(coimgs=None, cons=None,
     del satyx
 
     if len(satx):
-        avoid_xy.extend(zip(satx, saty))
-
-        Tsat = fits_table()
-        Tsat.tx = Tsat.itx = satx
-        Tsat.ty = Tsat.ity = saty
-        Tsat.ra,Tsat.dec = targetwcs.pixelxy2radec(satx+1, saty+1)
+        print('Adding', len(satx), 'additional saturated stars')
+        Tsat2 = fits_table()
+        Tsat2.tx = satx
+        Tsat2.ty = saty
+        # MAGIC mag for a saturated star
+        Tsat2.mag = np.zeros(len(satx)) + 15.
+        Tsat = merge_tables([Tsat, Tsat2], columns='fillzero')
+        del Tsat2
+    del satx,saty
+        
+    if len(Tsat):
+        avoid_xy.extend(zip(Tsat.tx, Tsat.ty))
+        Tsat.ra,Tsat.dec = targetwcs.pixelxy2radec(Tsat.tx+1, Tsat.ty+1)
+        Tsat.itx = np.clip(np.round(Tsat.tx), 0, W).astype(int)
+        Tsat.ity = np.clip(np.round(Tsat.ty), 0, H).astype(int)
 
         satcat = []
-        for r,d in zip(Tsat.ra, Tsat.dec):
-            # ??!
-            fluxes = dict([(band, 1.) for band in bands])
+        for r,d,m in zip(Tsat.ra, Tsat.dec, Tsat.mag):
+            fluxes = dict([(band, NanoMaggies.magToNanomaggies(m))
+                           for band in bands])
             satcat.append(PointSource(RaDecPos(r, d),
                                       NanoMaggies(order=bands, **fluxes)))
-
-    else:
-        Tsat = None
-        satcat = []
 
     if plots:
         plt.clf()
@@ -1417,7 +1460,8 @@ def stage_srcs(coimgs=None, cons=None,
         plt.clf()
         dimshow(rgb)
         ax = plt.axis()
-        plt.plot(satx, saty, 'ro')
+        if len(Tsat):
+            plt.plot(Tsat.tx, Tsat.ty, 'ro')
         plt.axis(ax)
         plt.title('detmaps & saturated')
         ps.savefig()
@@ -1429,6 +1473,7 @@ def stage_srcs(coimgs=None, cons=None,
     else:
         avoid_xy = np.vstack(avoid_xy)
         avoid_xy = avoid_xy[:,0], avoid_xy[:,1]
+
     SEDs = sed_matched_filters(bands)
     Tnew,newcat,hot = run_sed_matched_filters(
         SEDs, bands, detmaps, detivs, avoid_xy, targetwcs,
@@ -1445,7 +1490,7 @@ def stage_srcs(coimgs=None, cons=None,
 
     TT = []
     cats = []
-    if Tsat is not None:
+    if len(Tsat):
         TT.append(Tsat)
         cats.extend(satcat)
     TT.append(Tnew)
@@ -1504,7 +1549,8 @@ def stage_srcs(coimgs=None, cons=None,
     print('[serial srcs] Blobs:', tnow-tlast)
     tlast = tnow
 
-    keys = ['T', 'tims', 'blobsrcs', 'blobslices', 'blobs', 'cat', 'ps']
+    keys = ['T', 'tims', 'blobsrcs', 'blobslices', 'blobs', 'cat',
+            'ps', 'tycho']
     if not pipe:
         keys.extend(['detmaps', 'detivs'])
     rtn = dict([(k,locals()[k]) for k in keys])
@@ -1536,6 +1582,7 @@ def stage_fitblobs(T=None,
                    write_metrics=True,
                    get_all_models=False,
                    allbands = 'ugrizY',
+                   tycho=None,
                    **kwargs):
     '''
     This is where the actual source fitting happens.
@@ -1664,7 +1711,7 @@ def stage_fitblobs(T=None,
 
     if keepblobs is not None:
         # 'blobs' is an image with values -1 for no blob, or the index of the
-        # blob.  Create a map from old 'blobs+1' to new 'blobs+1'.  +1 so that
+        # blob.  Create a map from old 'blobs+1' to new 'blobs+1'.  +1  so that
         # -1 is a valid index.
         NB = len(blobslices)
         blobmap = np.empty(NB+1, int)
@@ -1682,15 +1729,6 @@ def stage_fitblobs(T=None,
 
     # drop any cached data before we start pickling/multiprocessing
     survey.drop_cache()
-
-    tycho = fits_table(os.path.join(survey.get_survey_dir(), 'tycho2.fits.gz'))
-    print('Read', len(tycho), 'Tycho-2 stars')
-    ok,tx,ty = targetwcs.radec2pixelxy(tycho.ra, tycho.dec)
-    margin = 100
-    tycho.cut(ok * (tx > -margin) * (tx < W+margin) *
-              (ty > -margin) * (ty < H+margin))
-    print('Cut to', len(tycho), 'Tycho-2 stars within brick')
-    del ok,tx,ty
 
     if plots:
         ok,tx,ty = targetwcs.radec2pixelxy(tycho.ra, tycho.dec)
@@ -1843,6 +1881,7 @@ def stage_fitblobs(T=None,
     assert(len(BB.flags) == len(cat))
 
     # Renumber blobs to make them contiguous.
+    oldblob = T.blob
     ublob,iblob = np.unique(T.blob, return_inverse=True)
     del ublob
     assert(len(iblob) == len(T))
@@ -1856,16 +1895,16 @@ def stage_fitblobs(T=None,
         blobmap[:] = -1
         # in particular,
         blobmap[0] = -1
-        blobmap[T.blob + 1] = iblob
+        blobmap[oldblob + 1] = iblob
         blobs = blobmap[blobs+1]
 
         with survey.write_output('blobmap', brick=brickname) as out:
             fitsio.write(out.fn, blobs, header=version_header, clobber=True)
             print('Wrote', out.fn)
         del blobmap
-    del iblob
+    del iblob, oldblob
     blobs = None
-    
+
     T.brickid   = np.zeros(len(T), np.int32) + brickid
     T.brickname = np.array([brickname] * len(T))
     T.objid     = np.arange(len(T)).astype(np.int32)
@@ -2474,6 +2513,9 @@ def stage_wise_forced(
         phots = phots[len(args):]
         for (e,a),phot in zip(eargs, phots):
             print('Epoch', e, 'photometry:')
+            if phot is None:
+                print('Failed.')
+                continue
             phot.about()
             phot.delete_column('tile')
             for c in phot.columns():
@@ -2483,8 +2525,6 @@ def stage_wise_forced(
                 X = WT.get(c)
                 X[:,e] = phot.get(c)
         WISE_T = WT
-
-    #WISE_T.writeto('wise-timeresolved.fits')
 
     return dict(WISE=WISE, WISE_T=WISE_T)
 
