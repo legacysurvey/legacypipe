@@ -7,6 +7,7 @@ import numpy as np
 from image import LegacySurveyImage
 from common import create_temp, CP_DQ_BITS
 from astrometry.util.util import Tan, Sip, anwcs_t
+from astrometry.util.file import trymakedirs
 from tractor.sky import ConstantSky
 from tractor.basics import NanoMaggies, ConstantFitsWcs, LinearPhotoCal
 from tractor.image import Image
