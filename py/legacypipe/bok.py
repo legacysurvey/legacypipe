@@ -13,6 +13,8 @@ from tractor.basics import NanoMaggies, ConstantFitsWcs, LinearPhotoCal
 from tractor.image import Image
 from tractor.tractortime import TAITime
 
+from legacypipe.common import zeropoint_for_ptf
+
 '''
 Code specific to images from the 90prime camera on the Bok telescope,
 processed by the NOAO pipeline.  This is currently just a sketch.
@@ -135,8 +137,9 @@ class BokImage(LegacySurveyImage):
             trymakedirs('junk',dir=True) #need temp dir for mask-2 and invvar map
             hdu=0
             maskfn= self.imgfn.replace('_scie_','_mask_')
-            invvar= read_invvar(self.imgfn,maskfn,hdu) #note, all post processing on image,mask done in read_invvar
-            mask= read_dq(maskfn,hdu)
+            #invvar= self.read_invvar(self.imgfn,maskfn,hdu) #note, all post processing on image,mask done in read_invvar
+            invvar= self.read_invvar()
+            mask= self.read_dq()
             maskfn= os.path.join('junk',os.path.basename(maskfn))
             invvarfn= maskfn.replace('_mask_','_invvar_')
             fitsio.write(maskfn, mask)

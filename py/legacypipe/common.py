@@ -1105,13 +1105,14 @@ Now using the current directory as LEGACY_SURVEY_DIR, but this is likely to fail
         fns = self.find_file('ccds')
         TT = []
         for fn in fns:
-            cols = (
-                'exptime filter propid crpix1 crpix2 crval1 crval2 ' +
-                'cd1_1 cd1_2 cd2_1 cd2_2 ccdname ccdzpt ccdraoff ccddecoff ' +
-                'ccdnmatch camera image_hdu image_filename width height ' +
-                'ra dec zpt expnum fwhm mjd_obs').split()
             print('Reading CCDs from', fn)
-            T = fits_table(fn, columns=cols)
+            # cols = (
+            #     'exptime filter propid crpix1 crpix2 crval1 crval2 ' +
+            #     'cd1_1 cd1_2 cd2_1 cd2_2 ccdname ccdzpt ccdraoff ccddecoff ' +
+            #     'ccdnmatch camera image_hdu image_filename width height ' +
+            #     'ra dec zpt expnum fwhm mjd_obs').split()
+            #T = fits_table(fn, columns=cols)
+            T = fits_table(fn)
             print('Got', len(T), 'CCDs')
             TT.append(T)
         T = merge_tables(TT, columns='fillzero')
@@ -1476,7 +1477,13 @@ def run_calibs(X):
     im = X[0]
     kwargs = X[1]
     print('run_calibs for image', im)
-    return im.run_calibs(**kwargs)
+    try:
+        return im.run_calibs(**kwargs)
+    except:
+        print('Exception in run_calibs:', im, kwargs)
+        import traceback
+        traceback.print_exc()
+        raise
 
 def read_one_tim(X):
     (im, targetrd, kwargs) = X
