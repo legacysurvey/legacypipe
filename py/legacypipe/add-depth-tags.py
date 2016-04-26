@@ -114,57 +114,8 @@ if __name__ == '__main__':
 
         sys.exit(0)
 
-    # Which bricks are missing the depth tags?
-    if True:
-        for brick in bricks.brickname:
-            #fn = 'tractor2/tractor/%s/tractor-%s.fits' % (brick[:3], brick)
-            fn = '/project/projectdirs/desiproc/dr2/tractor+depth/%s/tractor-%s.fits' % (brick[:3], brick)
-            print 'reading', fn
-            if not os.path.exists(fn):
-                continue
-            T = fits_table(fn)
-            print 'Brick', brick, ':', len(T)
-            if len(T) == 0:
-                continue
-            bad = np.flatnonzero((T.decam_depth[:,1] == 0) * (T.decam_nobs[:,1] > 0))
-            pg = (100*len(bad)/len(T))
-            bad = np.flatnonzero((T.decam_depth[:,2] == 0) * (T.decam_nobs[:,2] > 0))
-            pr = (100*len(bad)/len(T))
-            bad = np.flatnonzero((T.decam_depth[:,4] == 0) * (T.decam_nobs[:,4] > 0))
-            pz = (100*len(bad)/len(T))
-
-            bad = np.flatnonzero((T.decam_galdepth[:,1] == 0) * (T.decam_nobs[:,1] > 0))
-            gg = (100*len(bad)/len(T))
-            bad = np.flatnonzero((T.decam_galdepth[:,2] == 0) * (T.decam_nobs[:,2] > 0))
-            gr = (100*len(bad)/len(T))
-            bad = np.flatnonzero((T.decam_galdepth[:,4] == 0) * (T.decam_nobs[:,4] > 0))
-            gz = (100*len(bad)/len(T))
-            if max(pg, pr, pz, gg, gr, gz) < 10:
-                continue
-            print '%3i' % pg, '% bad g ptsrc'
-            print '%3i' % pr, '% bad r ptsrc'
-            print '%3i' % pz, '% bad z ptsrc'
-            print '%3i' % gg, '% bad g gal'
-            print '%3i' % gr, '% bad r gal'
-            print '%3i' % gz, '% bad z gal'
-
-        # -> p202 through p242
-    sys.exit(0)
-
-    bricks.cut((bricks.dec > 20.1) * (bricks.dec < 24.3))
-    print len(bricks), 'bricks to re-run'
+    # Note to self: don't bother multiprocessing this; I/O bound
     for brick in bricks.brickname:
-        add_depth_tag(survey, brick, outdir, overwrite=True)
-
-
-    if True:
-        for brick in bricks.brickname:
-            add_depth_tag(survey, brick, outdir)
-    else:
-        # totally I/O-bound; this doesn't help.
-        from astrometry.util.multiproc import *
-        mp = multiproc(24)
-        mp.map(bounce_add_depth_tag,
-               [(survey, brick, outdir) for brick in bricks.brickname])
+        add_depth_tag(survey, brick, outdir)
 
 
