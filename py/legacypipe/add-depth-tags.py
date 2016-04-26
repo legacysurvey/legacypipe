@@ -68,15 +68,17 @@ def bounce_add_depth_tag(X):
 
 if __name__ == '__main__':
     import sys
+    import argparse
+    
     parser = argparse.ArgumentParser()
     parser.add_argument('--survey-dir', type=str, default=None,
                         help='Override the $LEGACY_SURVEY_DIR environment variable')
     parser.add_argument('-d', '--outdir', help='Set output base directory',
                         default='tractor2')
-    opt = parser.parse_args(args=args)
+    opt = parser.parse_args()
 
     survey = LegacySurveyData(survey_dir=opt.survey_dir,
-                              outdir_dir=opt.outdir)
+                              output_dir=opt.outdir)
 
     bricks = survey.get_bricks()
     bricks.cut(bricks.dec > -15)
