@@ -42,7 +42,7 @@ def add_depth_tag(survey, brick, outdir, overwrite=False):
         ]:
         primhdr.add_record(dict(name='COMMENT', value=s, comment=s))
 
-    with out as survey.write_output('tractor', brick=brick):
+    with survey.write_output('tractor', brick=brick) as out:
         # print 'Header:', hdr
         # T.writeto(outfn, header=hdr, primheader=primhdr)
 
