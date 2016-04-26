@@ -1317,7 +1317,8 @@ Now using the current directory as LEGACY_SURVEY_DIR, but this is likely to fail
                 magzero = hdr['MAGZERO']
                 return magzero
             magzp = zp.ccdzpt
-            magzp += 2.5 * np.log10(zp.exptime)
+            if im.camera == 'decam':
+                magzp += 2.5 * np.log10(zp.exptime)
         #PTF special handling
         elif im.camera == 'ptf':
             hdr= im.read_image_primary_header() #calls fitsio.read_header(self.imgfn)
