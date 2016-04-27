@@ -908,7 +908,7 @@ Now using the current directory as LEGACY_SURVEY_DIR, but this is likely to fail
         '''
         Returns a context manager for writing an output file; use like:
 
-        with out as survey.write_output('ccds', brick=brickname):
+        with survey.write_output('ccds', brick=brickname) as out:
             ccds.writeto(out.fn, primheader=primhdr)
 
         Does the following on entry:

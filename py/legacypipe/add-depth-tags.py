@@ -5,7 +5,7 @@ from astrometry.util.fits import fits_table
 from astrometry.util.file import trymakedirs
 
 def add_depth_tag(survey, brick, outdir, overwrite=False):
-    outfn = os.path.join(outdir, 'tractor', brick[:3], 'tractor-%s.fits' % brick)
+    outfn = survey.find_file('tractor', brick=brick, output=True)
     if os.path.exists(outfn) and not overwrite:
         print 'Exists:', outfn
         return
@@ -35,8 +35,6 @@ def add_depth_tag(survey, brick, outdir, overwrite=False):
             print 'Reading', fn
             img = fitsio.read(fn)
             T.decam_galdepth[:,iband] = img[iy, ix]
-    outfn = os.path.join(outdir, 'tractor', brick[:3], 'tractor-%s.fits' % brick)
-    trymakedirs(outfn, dir=True)
 
     for s in [
         'Data product of the DECam Legacy Survey (DECaLS)',
@@ -44,40 +42,55 @@ def add_depth_tag(survey, brick, outdir, overwrite=False):
         ]:
         primhdr.add_record(dict(name='COMMENT', value=s, comment=s))
 
-    # print 'Header:', hdr
-    # T.writeto(outfn, header=hdr, primheader=primhdr)
+    with survey.write_output('tractor', brick=brick) as out:
+        # print 'Header:', hdr
+        # T.writeto(outfn, header=hdr, primheader=primhdr)
 
-    # Yuck, all this to get the units right
-    tmpfn = outfn + '.tmp'
-    fits = fitsio.FITS(tmpfn, 'rw', clobber=True)
-    fits.write(None, header=primhdr)
-    cols = T.get_columns()
-    units = []
-    for i in range(1, len(cols)+1):
-        u = hdr.get('TUNIT%i' % i, '')
-        units.append(u)
-    # decam_depth units
-    fluxiv = '1/nanomaggy^2'
-    units[-2] = fluxiv
-    units[-1] = fluxiv
-    fits.write([T.get(c) for c in cols], names=cols, header=hdr, units=units)
-    fits.close()
-    os.rename(tmpfn, outfn)
-    print 'Wrote', outfn
+        # Yuck, all this to get the units right
+        fits = fitsio.FITS(out.fn, 'rw', clobber=True)
+        fits.write(None, header=primhdr)
+        cols = T.get_columns()
+        units = []
+        for i in range(1, len(cols)+1):
+            u = hdr.get('TUNIT%i' % i, '')
+            units.append(u)
+        # decam_depth units
+        fluxiv = '1/nanomaggy^2'
+        units[-2] = fluxiv
+        units[-1] = fluxiv
+        fits.write([T.get(c) for c in cols], names=cols, header=hdr,
+                   units=units)
+        fits.close()
+        print 'Wrote', out.fn
 
 def bounce_add_depth_tag(X):
     return add_depth_tag(*X)
 
 if __name__ == '__main__':
     import sys
-    outdir = 'tractor2'
-    survey = LegacySurveyData()
+    import argparse
+    
+    parser = argparse.ArgumentParser()
+    parser.add_argument('--survey-dir', type=str, default=None,
+                        help='Override the $LEGACY_SURVEY_DIR environment variable')
+    parser.add_argument('-d', '--outdir', help='Set output base directory',
+                        default='tractor2')
+    opt = parser.parse_args()
+
+    survey = LegacySurveyData(survey_dir=opt.survey_dir,
+                              output_dir=opt.outdir)
+
     bricks = survey.get_bricks()
     bricks.cut(bricks.dec > -15)
     bricks.cut(bricks.dec <  45)
 
+    ## HACK -- cut to COSMOS
+    bricks.cut((np.abs(bricks.ra - 150) < 2) *
+               (np.abs(bricks.dec - 2.2) < 2))
+    print('Cut to', len(bricks), 'bricks near COSMOS')
+    
     # Add has_[grz] tags and cut to bricks that exist in DR2.
-    if True:
+    if False:
         bricks.nobs_med_g = np.zeros(len(bricks), np.uint8)
         bricks.nobs_med_r = np.zeros(len(bricks), np.uint8)
         bricks.nobs_med_z = np.zeros(len(bricks), np.uint8)
@@ -114,57 +127,8 @@ if __name__ == '__main__':
 
         sys.exit(0)
 
-    # Which bricks are missing the depth tags?
-    if True:
-        for brick in bricks.brickname:
-            #fn = 'tractor2/tractor/%s/tractor-%s.fits' % (brick[:3], brick)
-            fn = '/project/projectdirs/desiproc/dr2/tractor+depth/%s/tractor-%s.fits' % (brick[:3], brick)
-            print 'reading', fn
-            if not os.path.exists(fn):
-                continue
-            T = fits_table(fn)
-            print 'Brick', brick, ':', len(T)
-            if len(T) == 0:
-                continue
-            bad = np.flatnonzero((T.decam_depth[:,1] == 0) * (T.decam_nobs[:,1] > 0))
-            pg = (100*len(bad)/len(T))
-            bad = np.flatnonzero((T.decam_depth[:,2] == 0) * (T.decam_nobs[:,2] > 0))
-            pr = (100*len(bad)/len(T))
-            bad = np.flatnonzero((T.decam_depth[:,4] == 0) * (T.decam_nobs[:,4] > 0))
-            pz = (100*len(bad)/len(T))
-
-            bad = np.flatnonzero((T.decam_galdepth[:,1] == 0) * (T.decam_nobs[:,1] > 0))
-            gg = (100*len(bad)/len(T))
-            bad = np.flatnonzero((T.decam_galdepth[:,2] == 0) * (T.decam_nobs[:,2] > 0))
-            gr = (100*len(bad)/len(T))
-            bad = np.flatnonzero((T.decam_galdepth[:,4] == 0) * (T.decam_nobs[:,4] > 0))
-            gz = (100*len(bad)/len(T))
-            if max(pg, pr, pz, gg, gr, gz) < 10:
-                continue
-            print '%3i' % pg, '% bad g ptsrc'
-            print '%3i' % pr, '% bad r ptsrc'
-            print '%3i' % pz, '% bad z ptsrc'
-            print '%3i' % gg, '% bad g gal'
-            print '%3i' % gr, '% bad r gal'
-            print '%3i' % gz, '% bad z gal'
-
-        # -> p202 through p242
-    sys.exit(0)
-
-    bricks.cut((bricks.dec > 20.1) * (bricks.dec < 24.3))
-    print len(bricks), 'bricks to re-run'
+    # Note to self: don't bother multiprocessing this; I/O bound
     for brick in bricks.brickname:
-        add_depth_tag(survey, brick, outdir, overwrite=True)
-
-
-    if True:
-        for brick in bricks.brickname:
-            add_depth_tag(survey, brick, outdir)
-    else:
-        # totally I/O-bound; this doesn't help.
-        from astrometry.util.multiproc import *
-        mp = multiproc(24)
-        mp.map(bounce_add_depth_tag,
-               [(survey, brick, outdir) for brick in bricks.brickname])
+        add_depth_tag(survey, brick, opt.outdir)
 
 
