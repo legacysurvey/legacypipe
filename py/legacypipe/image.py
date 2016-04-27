@@ -641,7 +641,7 @@ class CalibMixin(object):
         from astrometry.util.file import trymakedirs
         # grab header values...
         primhdr = self.read_image_primary_header()
-        magzp  = primhdr['MAGZERO']
+        magzp  = primhdr.get('MAGZERO', 25.)
         seeing = self.pixscale * self.fwhm
         print('FWHM', self.fwhm, 'pix')
         print('pixscale', self.pixscale, 'arcsec/pix')
