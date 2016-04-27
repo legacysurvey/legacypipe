@@ -577,7 +577,14 @@ class CalibMixin(object):
 
     def check_se_cat(self, fn):
         from astrometry.util.fits import fits_table
-        # Check SourceExtractor catalog for size = 0
+        from astrometry.util.file import file_size
+        # Check SourceExtractor catalog for file size = 0 or FITS table length = 0
+        if os.path.exists(fn) and file_size(fn) == 0:
+            try:
+                os.unlink(fn)
+            except:
+                pass
+            return False
         T = fits_table(fn, hdu=2)
         print('Read', len(T), 'sources from SE catalog', fn)
         if T is None or len(T) == 0:
