@@ -4,7 +4,7 @@ from legacypipe.common import *
 from astrometry.util.fits import fits_table
 from astrometry.util.file import trymakedirs
 
-def add_depth_tag(survey, brick, outdir, overwrite=False):
+def add_depth_tag(survey, brick, outdir, overwrite=True):
     outfn = survey.find_file('tractor', brick=brick, output=True)
     if os.path.exists(outfn) and not overwrite:
         print 'Exists:', outfn
@@ -29,12 +29,16 @@ def add_depth_tag(survey, brick, outdir, overwrite=False):
             print 'Reading', fn
             img = fitsio.read(fn)
             T.decam_depth[:,iband] = img[iy, ix]
+        else:
+            print 'Did not find depth file:', fn
 
         fn = survey.find_file('galdepth', brick=brick, band=band)
         if os.path.exists(fn):
             print 'Reading', fn
             img = fitsio.read(fn)
             T.decam_galdepth[:,iband] = img[iy, ix]
+        else:
+            print 'Did not find galdepth file:', fn
 
     for s in [
         'Data product of the DECam Legacy Survey (DECaLS)',
@@ -78,7 +82,8 @@ if __name__ == '__main__':
     opt = parser.parse_args()
 
     survey = LegacySurveyData(survey_dir=opt.survey_dir,
-                              output_dir=opt.outdir)
+                              output_dir=opt.outdir,
+                              version = 'dr2')
 
     bricks = survey.get_bricks()
     bricks.cut(bricks.dec > -15)
