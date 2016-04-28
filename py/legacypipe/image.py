@@ -223,7 +223,6 @@ class LegacySurveyImage(object):
         assert(not(np.all(invvar == 0.)))
 
         # header 'FWHM' is in pixels
-        # imghdr['FWHM']
         psf_fwhm = self.fwhm 
         psf_sigma = psf_fwhm / 2.35
         primhdr = self.read_image_primary_header()
@@ -311,7 +310,7 @@ class LegacySurveyImage(object):
         import astropy.time
         #mjd_utc = mjd=primhdr.get('MJD-OBS', 0)
         #mjd_tai = astropy.time.Time(primhdr['DATE-OBS']).tai.mjd
-        mjd_tai = astropy.time.Time(self.mjd_obs, scale='utc').tai.mjd
+        mjd_tai = astropy.time.Time(self.mjdobs, format='mjd', scale='utc').tai.mjd
         tim.time = TAITime(None, mjd=mjd_tai)
         tim.slice = slc
         tim.zr = [-3. * sig1, 10. * sig1]
@@ -449,8 +448,29 @@ class LegacySurveyImage(object):
         primary_header : fitsio header
             The FITS header
         '''
-        return fitsio.read_header(self.imgfn)
-
+        if self.imgfn.endswith('.gz'):
+            return fitsio.read_header(self.imgfn)
+        # Crazily, this can be MUCH faster than letting fitsio do it...
+        hdr = fitsio.FITSHDR()
+        foundEnd = False
+        ff = open(self.imgfn, 'r')
+        h = ''
+        while True:
+            h = h + ff.read(32768)
+            while True:
+                line = h[:80]
+                h = h[80:]
+                # HACK -- fitsio apparently can't handle CONTINUE
+                if line[:8] != 'CONTINUE':
+                    hdr.add_record(line)
+                if line == ('END' + ' '*77):
+                    foundEnd = True
+                    break
+            if foundEnd:
+                break
+        ff.close()
+        return hdr
+        
     def read_image_header(self, **kwargs):
         '''
         Reads the FITS image header from self.imgfn HDU self.hdu.

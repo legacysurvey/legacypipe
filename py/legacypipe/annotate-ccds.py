@@ -127,7 +127,9 @@ def main(outfn='ccds-annotated.fits', ccds=None):
         ccds.sig1[iccd] = tim.sig1
         plvers.append(tim.plver)
 
-        obj = hdr.get('OBJECT')
+        #obj = hdr.get('OBJECT')
+        obj = ccd.object.strip()
+
         # parse 'DECaLS_15150_r'
         words = obj.split('_')
         tile = None
@@ -322,7 +324,7 @@ if __name__ == '__main__':
     survey = LegacySurveyData()
 
     # For profiling...
-    if True:
+    if False:
         name = 'decals'
         ccds = fits_table(os.path.join(survey.survey_dir, 'survey-ccds-%s.fits.gz' % name))
         main(outfn='test.fits', ccds=ccds[:50])
