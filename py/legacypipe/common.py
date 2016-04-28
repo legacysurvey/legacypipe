@@ -858,6 +858,10 @@ Now using the current directory as LEGACY_SURVEY_DIR, but this is likely to fail
         if brick is not None:
             codir = os.path.join(basedir, 'coadd', brickpre, brick)
 
+        sname = 'legacysurvey'
+        if self.version in ['dr1','dr2']:
+            sname = 'decals'
+            
         if filetype == 'bricks':
             fn = 'survey-bricks.fits.gz'
             if self.version in ['dr1','dr2']:
@@ -885,7 +889,7 @@ Now using the current directory as LEGACY_SURVEY_DIR, but this is likely to fail
 
         elif filetype in ['depth', 'galdepth', 'nexp', 'model']:
             return os.path.join(codir,
-                                'legacysurvey-%s-%s-%s.fits.gz' % (brick, filetype,band))
+                                '%s-%s-%s-%s.fits.gz' % (sname, brick, filetype, band))
 
         elif filetype in ['invvar', 'chi2', 'image']:
             return os.path.join(codir,
