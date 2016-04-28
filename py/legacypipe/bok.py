@@ -7,6 +7,9 @@ import numpy as np
 from image import LegacySurveyImage
 from common import create_temp, CP_DQ_BITS
 from astrometry.util.util import Tan, Sip, anwcs_t
+
+from astrometry.util.util import wcs_pv2sip_hdr
+
 from tractor.sky import ConstantSky
 from tractor.basics import NanoMaggies, ConstantFitsWcs, LinearPhotoCal
 from tractor.image import Image
@@ -82,39 +85,27 @@ class BokImage(LegacySurveyImage):
         #invvar = np.ones_like(img) / sig1**2
         #return invvar
 
-    #override funcs get_tractor_image calls
+    #read the TPV header, convert it to SIP, and apply an offset from the CCDs tabl
     def get_wcs(self):
-        return self.read_pv_wcs()
-
-    def read_pv_wcs(self):
-        '''extract wcs from fits header directly'''
+        print('---in bok.py get_wcs ----')
         hdr = fitsio.read_header(self.imgfn, self.hdu)
-        H,W = self.get_image_shape()
-        wcs= Tan(hdr['CRVAL1'], hdr['CRVAL2'],hdr['CRPIX1'],hdr['CRPIX2'],\
-                     hdr['CD1_1'],hdr['CD1_2'],hdr['CD2_1'],hdr['CD2_2'],\
-                     float(W),float(H))
+        wcs = wcs_pv2sip_hdr(hdr)
+        dra,ddec = self.survey.get_astrometric_zeropoint_for(self)
+        r,d = wcs.get_crval()
+        print('Applying astrometric zeropoint:', (dra,ddec))
+        wcs.set_crval((r + dra, d + ddec))
+        wcs.version = ''
+        phdr = fitsio.read_header(self.imgfn, 0)
+        wcs.plver = phdr.get('PLVER', '').strip()
         return wcs
- 
-#    def get_wcs(self):
-#        ##### HACK!  Ignore the distortion solution in the headers,
-#        ##### converting to straight TAN.
-#        hdr = fitsio.read_header(self.imgfn, self.hdu)
-#        print('Converting CTYPE1 from', hdr.get('CTYPE1'), 'to RA---TAN')
-#        hdr['CTYPE1'] = 'RA---TAN'
-#        print('Converting CTYPE2 from', hdr.get('CTYPE2'), 'to DEC--TAN')
-#        hdr['CTYPE2'] = 'DEC--TAN'
-#        H,W = self.get_image_shape()
-#        hdr['IMAGEW'] = W
-#        hdr['IMAGEH'] = H
-#        tmphdr = create_temp(suffix='.fits')
-#        fitsio.write(tmphdr, None, header=hdr, clobber=True)
-#        print('Wrote fake header to', tmphdr)
-#        wcs = Tan(tmphdr)
-#        print('Returning', wcs)
-#        wcs.version = '0'
-#        wcs.plver = '0'
-#        return wcs
-    
+
+
+
+    #override funcs get_tractor_image calls
+    #def get_wcs(self):
+    #    return self.read_pv_wcs()
+
+        
     def run_calibs(self, psfex=True, sky=True, funpack=False, git_version=None,
                        force=False,
                        **kwargs):
