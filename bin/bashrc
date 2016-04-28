@@ -17,6 +17,9 @@ export CODE_DIR=$SCRATCH/code
 # Use HPCPorts for packages
 source /project/projectdirs/cmb/modules/hpcports_NERSC.sh
 
+
+#(>&2 echo "legacypipe/bin/bashrc running -- NERSC_HOST xxx${NERSC_HOST}xxx")
+
 if [ "$NERSC_HOST" == "edison" ]; then
   hpcports shared_gnu
 
@@ -128,12 +131,17 @@ if [ "$NERSC_HOST" == "cori" ]; then
   module use /project/projectdirs/cosmo/work/decam/modules
   module load legacysurvey/dr3-cori-scratch
 
+  #(>&2 echo "Loaded legacysurvey module... LEGACY_SURVEY_DIR is $LEGACY_SURVEY_DIR")
+
   module load dust/scratch
   # Aaron's zeropoint-corrected version
   #module load unwise_coadds/2.1-scratch
   module load unwise_coadds/fulldepth-scratch
 
-  module load tractor-hpcp
+  # module load unwise_coadds_timeresolved/neo1
+  module load unwise_coadds_timeresolved/neo1-cori-scratch
+
+  # module load tractor-hpcp
   module load astrometry_net-hpcp
   module load astropy-hpcp
   module load scipy-hpcp
@@ -208,7 +216,7 @@ if [ "$NERSC_HOST" == "cori" ]; then
   #PATH=${PATH}:${CODE_DIR}/astrometry.net/blind
 
   # local Tractor install
-  #PYP=${PYP}:${CODE_DIR}/tractor
+  PYP=${PYP}:${CODE_DIR}/tractor
 
   export PYTHONPATH=${PYP}
   export PATH

@@ -1,25 +1,24 @@
 #!/usr/bin/env python
-# License information goes here
-#
-# Imports
-#
+
 import glob
 import os
 import sys
 from setuptools import setup, find_packages
 setup_keywords = dict()
-#
-# THESE SETTINGS NEED TO BE CHANGED FOR EVERY PRODUCT.
-#
-setup_keywords['name'] = 'pipeline'
+
+setup_keywords['name'] = 'legacypipe'
 setup_keywords['description'] = 'DECam Legacy Survey data reduction pipeline'
 setup_keywords['author'] = 'DECaLS Collaboration'
 setup_keywords['author_email'] = 'decam-data@desi.lbl.gov'
 setup_keywords['license'] = 'GPLv2'
 setup_keywords['url'] = 'https://github.com/legacysurvey/legacypipe'
+
 #
-# END OF SETTINGS THAT NEED TO BE CHANGED.
-#
+# Setup.py, you suck
+#setup_keywords['test_suite'] = 'nose.collector'
+#setup_keywords['tests_require'] = ['nose']
+#setup_keywords['test_suite'] = 'py/test'
+#setup_keywords['test_suite'] = 'run_tests'
 #
 # Import this module to get __doc__ and __version__.
 #
@@ -28,7 +27,11 @@ try:
     from importlib import import_module
     product = import_module(setup_keywords['name'])
     setup_keywords['long_description'] = product.__doc__
-    setup_keywords['version'] = product.__version__
+
+    from legacypipe.common import get_git_version
+    version = get_git_version(os.path.dirname(__file__)).replace('-','.')
+
+    setup_keywords['version'] = version
 except ImportError:
     #
     # Try to get the long description from the README.rst file.
@@ -38,20 +41,8 @@ except ImportError:
             setup_keywords['long_description'] = readme.read()
     else:
         setup_keywords['long_description'] = ''
-    setup_keywords['version'] = '0.0.1.dev'
-#
-# Indicates if this version is a release version.
-#
-if setup_keywords['version'].endswith('dev'):
-    #
-    # Try to obtain svn information.
-    #
-    if 'github' not in setup_keywords['url'].lower():
-        try:
-            from desiUtil.install import get_svn_devstr
-            setup_keywords['version'] += get_svn_devstr(setup_keywords['name'])
-        except ImportError:
-            pass
+    setup_keywords['version'] = 'dr3.dev'
+
 #
 # Set other keywords for the setup function.  These are automated, & should
 # be left alone unless you are an expert.
@@ -66,7 +57,9 @@ setup_keywords['requires'] = ['Python (>2.6.0)']
 #setup_keywords['install_requires'] = ['Python (>2.6.0)']
 setup_keywords['zip_safe'] = False
 setup_keywords['use_2to3'] = True
+print('Finding packages...')
 setup_keywords['packages'] = find_packages('py')
+print('Done finding packages.')
 setup_keywords['package_dir'] = {'':'py'}
 #
 # Run setup command.
