@@ -13,7 +13,7 @@ from legacypipe.common import LegacySurveyData
 import tractor
 
 def main(outfn='ccds-annotated.fits', ccds=None):
-    survey = LegacySurveyData()
+    survey = LegacySurveyData(ccds=ccds)
     if ccds is None:
         ccds = survey.get_ccds()
 
@@ -208,13 +208,13 @@ def main(outfn='ccds-annotated.fits', ccds=None):
         gaussgalnorm[iccd] = im.galaxy_norm(tim, x=cx, y=cy)
         tim.psf = realpsf
         
-        # Sky
-        mod = np.zeros((ccd.height, ccd.width), np.float32)
-        sky.addTo(mod)
-        ccds.meansky[iccd] = np.mean(mod)
-        ccds.stdsky[iccd]  = np.std(mod)
-        ccds.maxsky[iccd]  = mod.max()
-        ccds.minsky[iccd]  = mod.min()
+        # Sky -- evaluate on a grid (every ~10th pixel)
+        skygrid = sky.evaluateGrid(np.linspace(0, ccd.width-1,  int(1+ccd.width/10)),
+                                   np.linspace(0, ccd.height-1, int(1+ccd.height/10)))
+        ccds.meansky[iccd] = np.mean(skygrid)
+        ccds.stdsky[iccd]  = np.std(skygrid)
+        ccds.maxsky[iccd]  = skygrid.max()
+        ccds.minsky[iccd]  = skygrid.min()
 
         # WCS
         ccds.ra0[iccd],ccds.dec0[iccd] = wcs.pixelxy2radec(1, 1)
@@ -310,17 +310,23 @@ def _bounce_main((name, i, ccds)):
         traceback.print_exc()
 
 if __name__ == '__main__':
+    import sys
 
     # TT = [fits_table('ccds-annotated/ccds-annotated-%03i.fits' % i) for i in range(515)]
     # T = merge_tables(TT)
     # T.writeto('ccds-annotated.fits')
     # 
-    # import sys
     # sys.exit()
     #sys.exit(main())
 
     survey = LegacySurveyData()
 
+
+    name = 'decals'
+    ccds = fits_table(os.path.join(survey.survey_dir, 'survey-ccds-%s.fits.gz' % name))
+    main(outfn='test.fits', ccds=ccds[:10])
+    sys.exit(0)
+    
     #ccds = survey.get_ccds()
 
     from astrometry.util.multiproc import *

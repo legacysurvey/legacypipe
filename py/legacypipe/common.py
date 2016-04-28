@@ -765,7 +765,7 @@ class LegacySurveyData(object):
     objects (eg, DecamImage objects), which then allow data to be read
     from disk.
     '''
-    def __init__(self, survey_dir=None, output_dir=None, version=None):
+    def __init__(self, survey_dir=None, output_dir=None, version=None, ccds=None):
         '''
         Create a LegacySurveyData object using data from the given *survey_dir*
         directory, or from the $LEGACY_SURVEY_DIR environment variable.
@@ -796,7 +796,7 @@ Now using the current directory as LEGACY_SURVEY_DIR, but this is likely to fail
 
         self.output_files = []
 
-        self.ccds = None
+        self.ccds = ccds
         self.bricks = None
 
         # Create and cache a kd-tree for bricks_touching_radec_box ?
