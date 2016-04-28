@@ -70,9 +70,14 @@ def main():
             print('Index', i)
             t = T[i]
 
+        print('CCDnmatch', t.ccdnmatch)
+        if t.ccdnmatch < 20 and not opt.force:
+            print('Skipping ccdnmatch = %i' % t.ccdnmatch)
+            continue
+            
         im = survey.get_image_object(t)
         print('Running', im.calname)
-
+        
         kwargs = dict(psfex=opt.psfex, sky=opt.sky)
         if opt.force:
             kwargs.update(force=True)
@@ -80,7 +85,7 @@ def main():
             kwargs.update(se=True)
         if opt.splinesky:
             kwargs.update(splinesky=True)
-
+            
         if opt.threads:
             args.append((im, kwargs))
         else:

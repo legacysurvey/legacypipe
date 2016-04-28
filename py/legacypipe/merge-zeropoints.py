@@ -4,6 +4,56 @@ from glob import glob
 import os
 from astrometry.util.fits import fits_table, merge_tables
 
+def decals_dr3_check_wcsfailed():
+    import fitsio
+    basedir = os.environ['LEGACY_SURVEY_DIR']
+    image_basedir = os.path.join(basedir, 'images')
+    for fn in [#'survey-ccds-decals.fits.gz',
+               'survey-ccds-nondecals.fits.gz',
+               'survey-ccds-extra.fits.gz',
+               ]:
+        T = fits_table(fn)
+        T.wcscal = np.zeros(len(T), bool)
+        fns = np.unique(np.array([f.strip() for f in T.image_filename]))
+
+        H = fits_table()
+        H.image_filename = fns
+        H.primary_header = []
+        
+        for ifn,f in enumerate(fns):
+            imgfn = os.path.join(image_basedir, f)
+            print('Reading', imgfn)
+            
+            ff = open(imgfn, 'r')
+            h = ff.read(32768)
+            ff.close()
+            hdr = fitsio.FITSHDR()
+            hdrstring = ''
+            while True:
+                line = h[:80]
+                h = h[80:]
+                # fitsio apparently can't handle CONTINUE
+                if line[:8] != 'CONTINUE':
+                    hdr.add_record(line)
+                hdrstring += line
+                if line == ('END' + ' '*77):
+                    break
+            H.primary_header.append(hdrstring)
+                
+            #hdr = fitsio.read_header(imgfn)
+            expnum = hdr['EXPNUM']
+            wcscal = hdr['WCSCAL']
+            wcsok = (wcscal == 'Successful')
+            print('File', f, 'expnum', expnum, 'WCS cal', wcscal, 'ok', wcsok)
+            I = np.flatnonzero(T.expnum == expnum)
+            T.wcscal[I] = wcsok
+
+        T.wcsok = T.wcscal.astype(np.uint8)
+        T.writeto('new-' + fn)
+
+        H.primary_header = np.array(H.primary_header)
+        H.writeto('headers-' + fn)
+        
 def decals_dr3_fix392400():
     T = fits_table('survey-ccds-decals.fits.gz')
     print('Started with', len(T), 'CCDs')
@@ -273,7 +323,9 @@ if __name__ == '__main__':
     #decals_dr3()
     #decals_dr3_extra()
     #decals_dr3_dedup()
-    decals_dr3_fix392400()
+    #decals_dr3_fix392400()
+
+    decals_dr3_check_wcsfailed()
     sys.exit(0)
     
     basedir = './mzls-deep2f3'
