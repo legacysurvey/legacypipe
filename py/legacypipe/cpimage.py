@@ -17,7 +17,6 @@ class CPImage(LegacySurveyImage):
     '''
 
     def __init__(self, *args, **kwargs):
-        #print('CPMixin __init__')
         super(CPImage, self).__init__(*args, **kwargs)
         '''
         Note, this assumes the "self.imgfn" parameter has been set; this can
@@ -42,6 +41,21 @@ class CPImage(LegacySurveyImage):
                     print('Using      ', fun)
                     print('rather than', fn)
                     setattr(self, attr, fun)
+                    fn = fun
+            # Workaround: exposure numbers 330667 through 330890 at least have some of the
+            # files named "v1" and some named "v2".  Try both.
+            if 'v1' in fn:
+                fnother = fn.replace('v1', 'v2')
+                if os.path.exists(fnother):
+                    print('Using', fnother, 'rather than', fn)
+                    setattr(self, attr, fnother)
+                    fn = fnother
+            elif 'v2' in fn:
+                fnother = fn.replace('v2', 'v1')
+                if os.path.exists(fnother):
+                    print('Using', fnother, 'rather than', fn)
+                    setattr(self, attr, fnother)
+                    fn = fnother
 
         expstr = '%08i' % self.expnum
         self.calname = '%s/%s/decam-%s-%s' % (expstr[:5], expstr, expstr, self.ccdname)

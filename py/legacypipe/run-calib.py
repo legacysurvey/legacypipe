@@ -55,12 +55,14 @@ def main():
     args = []
     for a in opt.args:
         # Check for "expnum-ccdname" format.
-        if '-' in a:
+        if '-' in str(a):
             words = a.split('-')
             assert(len(words) == 2)
             expnum = int(words[0])
             ccdname = words[1]
             I = np.flatnonzero((T.expnum == expnum) * (T.ccdname == ccdname))
+            if len(I) != 1:
+                print('Found', len(I), 'CCDs for expnum', expnum, 'CCDname', ccdname, ':', I)
             assert(len(I) == 1)
             t = T[I[0]]
         else:
