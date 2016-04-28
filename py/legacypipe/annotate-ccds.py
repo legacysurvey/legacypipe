@@ -21,12 +21,6 @@ def main(outfn='ccds-annotated.fits', ccds=None):
     # https://desi.lbl.gov/svn/decam/code/observing/trunk
     tiles = fits_table('decam-tiles_obstatus.fits')
 
-    #ccds.cut(np.arange(100))
-    #print("HACK!")
-    #ccds.cut(np.array([name in ['N15', 'N16', 'N21', 'N9']
-    #                   for name in ccds.ccdname]) *
-    #                   ccds.expnum == 229683)
-
     I = survey.photometric_ccds(ccds)
     ccds.photometric = np.zeros(len(ccds), bool)
     ccds.photometric[I] = True
@@ -105,8 +99,9 @@ def main(outfn='ccds-annotated.fits', ccds=None):
         wcs = None
         sky = None
         try:
-            tim = im.get_tractor_image(pixPsf=True, splinesky=True,
-                                       subsky=False, pixels=False)
+            tim = im.get_tractor_image(pixPsf=True, splinesky=True, subsky=False,
+                                       pixels=False, dq=False, invvar=False)
+
         except:
             import traceback
             traceback.print_exc()
@@ -205,6 +200,7 @@ def main(outfn='ccds-annotated.fits', ccds=None):
         ccds.psf_theta[iccd] = theta
         ccds.psf_ell  [iccd] = ell
 
+        print('Computing Gaussian approximate PSF quantities...')
         # Galaxy norm using Gaussian approximation of PSF.
         realpsf = tim.psf
         tim.psf = im.read_psf_model(0, 0, gaussPsf=True,
@@ -302,9 +298,9 @@ def main(outfn='ccds-annotated.fits', ccds=None):
     ccds.writeto(outfn)
 
 
-def _bounce_main((i, ccds)):
+def _bounce_main((name, i, ccds)):
     try:
-        outfn = 'ccds-annotated/ccds-annotated-%03i.fits' % i
+        outfn = 'ccds-annotated/ccds-annotated-%s-%03i.fits' % (name, i)
         if os.path.exists(outfn):
             print('Already exists:', outfn)
             return
@@ -315,33 +311,42 @@ def _bounce_main((i, ccds)):
 
 if __name__ == '__main__':
 
-    TT = [fits_table('ccds-annotated/ccds-annotated-%03i.fits' % i) for i in range(515)]
-    T = merge_tables(TT)
-    T.writeto('ccds-annotated.fits')
-
-    import sys
-    sys.exit()
+    # TT = [fits_table('ccds-annotated/ccds-annotated-%03i.fits' % i) for i in range(515)]
+    # T = merge_tables(TT)
+    # T.writeto('ccds-annotated.fits')
+    # 
+    # import sys
+    # sys.exit()
     #sys.exit(main())
 
     survey = LegacySurveyData()
-    ccds = survey.get_ccds()
+
+    #ccds = survey.get_ccds()
+
     from astrometry.util.multiproc import *
     #mp = multiproc(8)
     mp = multiproc(4)
     N = 1000
-    args = []
-    i = 0
-    while len(ccds):
-        c = ccds[:N]
-        ccds = ccds[N:]
-        args.append((i, c))
-        i += 1
-    print('Split CCDs file into', len(args), 'pieces')
-    print('sizes:', [len(c) for i,c in args])
-    mp.map(_bounce_main, args)
 
-    # reassemble outputs
-    TT = [fits_table('ccds-annotated/ccds-annotated-%03i.fits' % i) for i,nil in args]
-    T = merge_tables(TT)
-    T.writeto('ccds-annotated.fits')
+    for name in ['decals', 'nondecals', 'extra']:
+        print()
+        print('Reading', name)
+        print()
+        args = []
+        i = 0
+        ccds = fits_table(os.path.join(survey.survey_dir, 'survey-ccds-%s.fits.gz' % name))
+        while len(ccds):
+            c = ccds[:N]
+            ccds = ccds[N:]
+            args.append((name, i, c))
+            i += 1
+        print('Split CCDs file into', len(args), 'pieces')
+        print('sizes:', [len(c) for n,i,c in args])
+        mp.map(_bounce_main, args)
+
+        # reassemble outputs
+        TT = [fits_table('ccds-annotated/ccds-annotated-%s-%03i.fits' % (name,i))
+              for name,i,nil in args]
+        T = merge_tables(TT)
+        T.writeto('ccds-annotated-%s.fits')
 

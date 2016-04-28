@@ -160,7 +160,7 @@ class LegacySurveyImage(object):
         
         band = self.band
         imh,imw = self.get_image_shape()
-
+        
         wcs = self.get_wcs()
         x0,y0 = 0,0
         x1 = x0 + imw
@@ -202,7 +202,7 @@ class LegacySurveyImage(object):
             e = imghdr['EXTNAME']
             assert(e.strip() == self.ccdname.strip())
         else:
-            img = np.zeros((imh, imw))
+            img = np.zeros((imh, imw), np.float32)
             imghdr = dict()
             if slc is not None:
                 img = img[slc]
@@ -230,6 +230,8 @@ class LegacySurveyImage(object):
 
         sky = self.read_sky_model(splinesky=splinesky, slc=slc,
                                   primhdr=primhdr, imghdr=imghdr)
+        skysig1 = getattr(sky, 'sig1', None)
+        
         midsky = 0.
         if subsky:
             print('Instantiating and subtracting sky model...')
@@ -251,8 +253,7 @@ class LegacySurveyImage(object):
         if nanomaggies:
             # Scale images to Nanomaggies
             img /= zpscale
-            #KJB print('img.dtype=',img.dtype,'invvar.dtype=',invvar.dtype,'zpscale.dtype=',zpscale.dtype)
-            invvar= invvar.astype('float')* zpscale**2 #invvar *= zpscale**2
+            invvar = invvar * zpscale**2
             if not subsky:
                 sky.scale(1./zpscale)
             zpscale = 1.
@@ -260,6 +261,8 @@ class LegacySurveyImage(object):
         assert(np.sum(invvar > 0) > 0)
         if get_invvar:
             sig1 = 1./np.sqrt(np.median(invvar[invvar > 0]))
+        elif skysig1 is not None:
+            sig1 = skysig1
         else:
             # Estimate from the image?
             # # Estimate per-pixel noise via Blanton's 5-pixel MAD
@@ -297,14 +300,13 @@ class LegacySurveyImage(object):
 
         # PSF norm
         psfnorm = self.psf_norm(tim)
-        print('PSF norm', psfnorm, 'vs Gaussian',
-              1./(2. * np.sqrt(np.pi) * psf_sigma))
+        #print('PSF norm', psfnorm, 'vs Gaussian', 1./(2. * np.sqrt(np.pi) * psf_sigma))
 
         # Galaxy-detection norm
         tim.band = band
         galnorm = self.galaxy_norm(tim)
-        print('Galaxy norm:', galnorm)
-        
+        #print('Galaxy norm:', galnorm)
+
         # CP (DECam) images include DATE-OBS and MJD-OBS, in UTC.
         import astropy.time
         #mjd_utc = mjd=primhdr.get('MJD-OBS', 0)
@@ -506,6 +508,9 @@ class LegacySurveyImage(object):
             if len(skyobj.version) == 0:
                 skyobj.version = str(os.stat(fn).st_mtime)
         skyobj.plver = hdr.get('PLVER', '').strip()
+        sig1 = hdr.get('SIG1', None)
+        if sig1 is not None:
+            skyobj.sig1 = sig1
         return skyobj
 
     def read_psf_model(self, x0, y0, gaussPsf=False, pixPsf=False,
