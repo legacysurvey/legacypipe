@@ -321,11 +321,12 @@ if __name__ == '__main__':
 
     survey = LegacySurveyData()
 
-
-    name = 'decals'
-    ccds = fits_table(os.path.join(survey.survey_dir, 'survey-ccds-%s.fits.gz' % name))
-    main(outfn='test.fits', ccds=ccds[:10])
-    sys.exit(0)
+    # For profiling...
+    if True:
+        name = 'decals'
+        ccds = fits_table(os.path.join(survey.survey_dir, 'survey-ccds-%s.fits.gz' % name))
+        main(outfn='test.fits', ccds=ccds[:50])
+        sys.exit(0)
     
     #ccds = survey.get_ccds()
 

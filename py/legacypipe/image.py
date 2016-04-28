@@ -310,9 +310,10 @@ class LegacySurveyImage(object):
         # CP (DECam) images include DATE-OBS and MJD-OBS, in UTC.
         import astropy.time
         #mjd_utc = mjd=primhdr.get('MJD-OBS', 0)
-        mjd_tai = astropy.time.Time(primhdr['DATE-OBS']).tai.mjd
-        tim.slice = slc
+        #mjd_tai = astropy.time.Time(primhdr['DATE-OBS']).tai.mjd
+        mjd_tai = astropy.time.Time(self.mjd_obs, scale='utc').tai.mjd
         tim.time = TAITime(None, mjd=mjd_tai)
+        tim.slice = slc
         tim.zr = [-3. * sig1, 10. * sig1]
         tim.zpscale = orig_zpscale
         tim.midsky = midsky
