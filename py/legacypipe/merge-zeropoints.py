@@ -4,6 +4,24 @@ from glob import glob
 import os
 from astrometry.util.fits import fits_table, merge_tables
 
+def decals_dr3_fix392400():
+    T = fits_table('survey-ccds-decals.fits.gz')
+    print('Started with', len(T), 'CCDs')
+    T.cut(T.expnum != 392400)
+    print('Removed bad CCDs:', len(T))
+
+    basedir = os.environ['LEGACY_SURVEY_DIR']
+    cam = 'decam'
+    image_basedir = os.path.join(basedir, 'images')
+    fn = '/global/cscratch1/sd/desiproc/zeropoints/zeropoint-c4d_141228_060426_ooi_g_v1.fits'
+    dirnms = ['CP20141227']
+    Tnew = normalize_zeropoints(fn, dirnms, image_basedir, cam)
+    print('Replacement CCDs:', len(Tnew))
+    T = merge_tables([T, Tnew])
+    print('Merged:', len(T))
+    T.writeto('new-survey-ccds-decals.fits.gz')
+    
+
 def decals_dr3_dedup():
     SN = fits_table('survey-ccds-nondecals.fits.gz')
     SD = fits_table('survey-ccds-decals.fits.gz')
@@ -255,7 +273,9 @@ if __name__ == '__main__':
     #decals_dr3()
     #decals_dr3_extra()
     #decals_dr3_dedup()
-
+    decals_dr3_fix392400()
+    sys.exit(0)
+    
     basedir = './mzls-deep2f3'
     cam = 'mosaic'
     image_basedir = os.path.join(basedir, 'images')
