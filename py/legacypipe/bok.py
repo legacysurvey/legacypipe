@@ -91,8 +91,13 @@ class BokImage(LegacySurveyImage):
     #read the TPV header, convert it to SIP, and apply an offset from the CCDs tabl
     def get_wcs(self):
         print('---in bok.py get_wcs ----')
+        # Make sure the PV-to-SIP converter samples enough points for small
+        # images
+        stepsize = 0
+        if min(self.width, self.height) < 600:
+            stepsize = min(self.width, self.height) / 10.
         hdr = fitsio.read_header(self.imgfn, self.hdu)
-        wcs = wcs_pv2sip_hdr(hdr)
+        wcs = wcs_pv2sip_hdr(hdr, stepsize=stepsize)
         dra,ddec = self.survey.get_astrometric_zeropoint_for(self)
         r,d = wcs.get_crval()
         print('Applying astrometric zeropoint:', (dra,ddec))
