@@ -97,6 +97,14 @@ class BokImage(LegacySurveyImage):
         if min(self.width, self.height) < 600:
             stepsize = min(self.width, self.height) / 10.
         hdr = fitsio.read_header(self.imgfn, self.hdu)
+
+        # WORKAROUND bug in astrometry.net when CTYPEx don't have a comment string! Yuk
+        for r in hdr.records():
+            if not r['name'] in ['CTYPE1','CTYPE2']:
+                continue
+            r['comment'] = 'Hello'
+            r['card'] = hdr._record2card(r)
+
         wcs = wcs_pv2sip_hdr(hdr, stepsize=stepsize)
         dra,ddec = self.survey.get_astrometric_zeropoint_for(self)
         r,d = wcs.get_crval()
