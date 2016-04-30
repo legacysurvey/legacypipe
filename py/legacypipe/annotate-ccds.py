@@ -313,6 +313,11 @@ def _bounce_main((name, i, ccds)):
 
 if __name__ == '__main__':
     import sys
+    import argparse
+    parser = argparse.ArgumentParser(description='Produce annotated CCDs file by reading CCDs file + calibration products')
+    parser.add_argument('--part', action='append', help='CCDs file to read, survey-ccds-X.fits.gz, default: ["decals","nondecals","extra"].  Can be repeated.', default=[])
+    parser.add_argument('--threads', type=int, help='Run multi-threaded', default=4)
+    opt = parser.parse_args()
 
     # TT = [fits_table('ccds-annotated/ccds-annotated-%03i.fits' % i) for i in range(515)]
     # T = merge_tables(TT)
@@ -334,10 +339,14 @@ if __name__ == '__main__':
 
     from astrometry.util.multiproc import *
     #mp = multiproc(8)
-    mp = multiproc(4)
+    mp = multiproc(opt.threads)
     N = 1000
-
-    for name in ['decals', 'nondecals', 'extra']:
+    
+    if len(opt.part) == 0:
+        opt.part.append('decals')
+        opt.part.append('nondecals')
+        opt.part.append('extra')
+    for name in opt.part:
         print()
         print('Reading', name)
         print()
@@ -357,5 +366,5 @@ if __name__ == '__main__':
         TT = [fits_table('ccds-annotated/ccds-annotated-%s-%03i.fits' % (name,i))
               for name,i,nil in args]
         T = merge_tables(TT)
-        T.writeto('ccds-annotated-%s.fits')
+        T.writeto('ccds-annotated-%s.fits' % name)
 
