@@ -71,7 +71,6 @@ class BokImage(LegacySurveyImage):
     # read the TPV header, convert it to SIP, and apply an offset from the
     # CCDs table
     def get_wcs(self):
-        print('---in bok.py get_wcs ----')
         # Make sure the PV-to-SIP converter samples enough points for small
         # images
         stepsize = 0
