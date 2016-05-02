@@ -664,6 +664,11 @@ Now using the current directory as LEGACY_SURVEY_DIR, but this is likely to fail
         assert(version in [None, 'dr2', 'dr1'])
         self.version = version
 
+    def image_class_for_camera(self, camera):
+        # Assert that we have correctly removed trailing spaces
+        assert(camera == camera.strip())
+        return self.image_typemap[camera]
+        
     def index_of_band(self, b):
         return self.allbands.index(b)
         
@@ -999,7 +1004,9 @@ Now using the current directory as LEGACY_SURVEY_DIR, but this is likely to fail
         '''
         Returns a DecamImage or similar object for one row of the CCDs table.
         '''
-        imageType = self.image_typemap[t.camera.strip()]
+        # get Image subclass
+        imageType = self.image_class_for_camera(t.camera)
+        # call Image subclass constructor
         return imageType(self, t)
     
     def tims_touching_wcs(self, targetwcs, mp, bands=None,
@@ -1052,51 +1059,20 @@ Now using the current directory as LEGACY_SURVEY_DIR, but this is likely to fail
         '''
         Returns an index array for the members of the table "ccds" that
         are photometric.
-
-        Slightly revised recipe by DJS in Re: [decam-data 828] 2015-07-31:
-        
-        * CCDNMATCH >= 20 (At least 20 stars to determine zero-pt)
-        * abs(ZPT - CCDZPT) < 0.10  (Loose agreement with full-frame zero-pt)
-        * ZPT within [25.08-0.50, 25.08+0.25] for g-band
-        * ZPT within [25.29-0.50, 25.29+0.25] for r-band
-        * ZPT within [24.92-0.50, 24.92+0.25] for z-band
-        * DEC > -20 (in DESI footprint)
-        * EXPTIME >= 30
-        * CCDNUM = 31 (S7) should mask outside the region [1:1023,1:4094]
         '''
-        # Nominal zeropoints (DECam)
-        z0 = dict(g = 25.08,
-                  r = 25.29,
-                  z = 24.92,)
-        z0 = np.array([z0[f[0]] for f in ccds.filter])
-
-        good = np.ones(len(ccds), bool)
-        n0 = sum(good)
-        # This is our list of cuts to remove non-photometric CCD images
-        if 'ccdnmatch' in ccds.columns():
-            for name,crit in [
-                ('exptime < 30 s', (ccds.exptime < 30)),
-                ('ccdnmatch < 20', (ccds.ccdnmatch < 20)),
-                ('abs(zpt - ccdzpt) > 0.1',
-                 (np.abs(ccds.zpt - ccds.ccdzpt) > 0.1)),
-                ('zpt < 0.5 mag of nominal (for DECam)',
-                 ((ccds.camera == 'decam') * (ccds.zpt < (z0 - 0.5)))),
-                ('zpt > 0.25 mag of nominal (for DECam)',
-                 ((ccds.camera == 'decam') * (ccds.zpt > (z0 + 0.25)))),
-                 ]:
-                #prevent Rejection of ALL 90Prime and PTF images
-                crit= np.logical_and(crit, ccds.camera != 'ptf')
-                crit= np.logical_and(crit, ccds.camera != '90prime')
-                good[crit] = False
-                #continue as usual
-                n = sum(good)
-                print('Flagged', n0-n, 'more non-photometric using criterion:', name)
-                n0 = n
-        #print N remain for each camera
-        tallies='%d CCDs remain' % len(good) 
-        for cam_str in ['decam','mosaic','90prime','ptf']: 
-            tallies+= ', %d are %s' %  (ccds.camera[ccds.camera == cam_str].shape[0], cam_str)
-        print(tallies)
+        # Make the is-photometric check camera-specific, handled by the
+        # Image subclass.
+        cameras = np.unique(ccds.camera)
+        print('Finding photometric CCDs.  Cameras:', cameras)
+        good = np.zeros(len(ccds), bool)
+        for cam in cameras:
+            imclass = self.image_class_for_camera(cam)
+            Icam = np.flatnonzero(ccds.camera == cam)
+            print('Checking', len(Icam), 'images from camera', cam)
+            Igood = imclass.photometric_ccds(self, ccds[Icam])
+            print('Keeping', len(Igood), 'photometric CCDs from camera', cam)
+            if len(Igood):
+                good[Icam[Igood]] = True
         return np.flatnonzero(good)
 
     def apply_blacklist(self, ccds):

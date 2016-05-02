@@ -28,6 +28,49 @@ class DecamImage(CPImage, CalibMixin):
     def __str__(self):
         return 'DECam ' + self.name
 
+    @classmethod
+    def photometric_ccds(self, survey, ccds):
+        '''
+        Returns an index array for the members of the table 'ccds' that are
+        photometric.
+
+        Slightly revised recipe by DJS in Re: [decam-data 828] 2015-07-31:
+        
+        * CCDNMATCH >= 20 (At least 20 stars to determine zero-pt)
+        * abs(ZPT - CCDZPT) < 0.10  (Loose agreement with full-frame zero-pt)
+        * ZPT within [25.08-0.50, 25.08+0.25] for g-band
+        * ZPT within [25.29-0.50, 25.29+0.25] for r-band
+        * ZPT within [24.92-0.50, 24.92+0.25] for z-band
+        * DEC > -20 (in DESI footprint)
+        * EXPTIME >= 30
+        * CCDNUM = 31 (S7) should mask outside the region [1:1023,1:4094]
+        '''
+        # Nominal zeropoints (DECam)
+        z0 = dict(g = 25.08,
+                  r = 25.29,
+                  z = 24.92,)
+        z0 = np.array([z0[f[0]] for f in ccds.filter])
+        good = np.ones(len(ccds), bool)
+        n0 = sum(good)
+        # This is our list of cuts to remove non-photometric CCD images
+        for name,crit in [
+            ('exptime < 30 s', (ccds.exptime < 30)),
+            ('ccdnmatch < 20', (ccds.ccdnmatch < 20)),
+            ('abs(zpt - ccdzpt) > 0.1',
+             (np.abs(ccds.zpt - ccds.ccdzpt) > 0.1)),
+            ('zpt < 0.5 mag of nominal',
+             (ccds.zpt < (z0 - 0.5))),
+            ('zpt > 0.25 mag of nominal',
+             (ccds.zpt > (z0 + 0.25))),
+        ]:
+            good[crit] = False
+            #continue as usual
+            n = sum(good)
+            print('Flagged', n0-n, 'more non-photometric using criterion:',
+                  name)
+            n0 = n
+        return np.flatnonzero(good)
+        
     glowmjd = astropy.time.Time('2014-08-01').utc.mjd
 
     def get_good_image_subregion(self):

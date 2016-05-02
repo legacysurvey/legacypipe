@@ -84,6 +84,16 @@ class LegacySurveyImage(object):
     def __repr__(self):
         return str(self)
 
+    @classmethod
+    def photometric_ccds(self, survey, ccds):
+        '''
+        Returns an index array for the members of the table 'ccds' that are
+        photometric.
+
+        Default is to return all CCDs.
+        '''
+        return np.arange(len(ccds))
+    
     def get_good_image_slice(self, extent, get_extent=False):
         '''
         extent = None or extent = [x0,x1,y0,y1]
