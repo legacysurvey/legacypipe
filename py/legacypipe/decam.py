@@ -5,7 +5,7 @@ import fitsio
 from astrometry.util.file import trymakedirs
 from astrometry.util.fits import fits_table
 from legacypipe.image import LegacySurveyImage, CalibMixin
-from legacypipe.cpimage import CPImage
+from legacypipe.cpimage import CPImage, CP_DQ_BITS
 from legacypipe.common import *
 
 import astropy.time
