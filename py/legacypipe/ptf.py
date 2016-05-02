@@ -25,6 +25,7 @@ Code specific to images from the (intermediate) Palomar Transient Factory (iPTF/
 
 #PTF special handling of zeropoint
 def zeropoint_for_ptf(hdr):
+    magzp= hdr['IMAGEZPT'] + 2.5 * np.log10(hdr['EXPTIME'])
     if isinstance(magzp,str):
         print('WARNING: no ZeroPoint in header for image: ',tractor_image.imgfn)
         raise ValueError #magzp= 23.
