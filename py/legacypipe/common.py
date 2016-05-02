@@ -98,7 +98,7 @@ class BrickDuck(object):
     a brick center.'''
     pass
 
-#PTF special handling
+#PTF special handling of zeropoint
 def zeropoint_for_ptf(hdr):
     magzp= hdr['IMAGEZPT'] + 2.5 * np.log10(hdr['EXPTIME'])
     if isinstance(magzp,str):
@@ -1109,13 +1109,14 @@ Now using the current directory as LEGACY_SURVEY_DIR, but this is likely to fail
         fns = self.find_file('ccds')
         TT = []
         for fn in fns:
-            cols = (
-                'exptime filter propid crpix1 crpix2 crval1 crval2 ' +
-                'cd1_1 cd1_2 cd2_1 cd2_2 ccdname ccdzpt ccdraoff ccddecoff ' +
-                'ccdnmatch camera image_hdu image_filename width height ' +
-                'ra dec zpt expnum fwhm mjd_obs').split()
             print('Reading CCDs from', fn)
-            T = fits_table(fn, columns=cols)
+            # cols = (
+            #     'exptime filter propid crpix1 crpix2 crval1 crval2 ' +
+            #     'cd1_1 cd1_2 cd2_1 cd2_2 ccdname ccdzpt ccdraoff ccddecoff ' +
+            #     'ccdnmatch camera image_hdu image_filename width height ' +
+            #     'ra dec zpt expnum fwhm mjd_obs').split()
+            #T = fits_table(fn, columns=cols)
+            T = fits_table(fn)
             print('Got', len(T), 'CCDs')
             TT.append(T)
         T = merge_tables(TT, columns='fillzero')
@@ -1136,7 +1137,9 @@ Now using the current directory as LEGACY_SURVEY_DIR, but this is likely to fail
         if 'ccdname' in T.columns():
             # "N4 " -> "N4"
             T.ccdname = np.array([s.strip() for s in T.ccdname])
-
+        #camera must NOT have trailing whitespaces for expected behavior!
+        for i in range(len(T.get('camera'))): T.get('camera')[i]= T.get('camera')[i].strip()
+        #now safe to return
         return T
 
     def ccds_touching_wcs(self, wcs, **kwargs):
@@ -1239,17 +1242,19 @@ Now using the current directory as LEGACY_SURVEY_DIR, but this is likely to fail
                 ('zpt > 0.25 mag of nominal (for DECam)',
                  ((ccds.camera == 'decam') * (ccds.zpt > (z0 + 0.25)))),
                  ]:
-                #PTF special handling, apply criteria to NON ptf images
-                crit= np.logical_and(crit, ccds.camera != 'ptf   ')
+                #prevent Rejection of ALL 90Prime and PTF images
+                crit= np.logical_and(crit, ccds.camera != 'ptf')
+                crit= np.logical_and(crit, ccds.camera != '90prime')
                 good[crit] = False
+                #continue as usual
                 n = sum(good)
                 print('Flagged', n0-n, 'more non-photometric using criterion:', name)
                 n0 = n
         #print N remain for each camera
         tallies='%d CCDs remain' % len(good) 
-        for cam_str in ['decam','mosaic','bok','ptf   ']: 
+        for cam_str in ['decam','mosaic','90prime','ptf']: 
             tallies+= ', %d are %s' %  (ccds.camera[ccds.camera == cam_str].shape[0], cam_str)
-        print(tallies) 
+        print(tallies)
         return np.flatnonzero(good)
 
     def apply_blacklist(self, ccds):
@@ -1311,7 +1316,10 @@ Now using the current directory as LEGACY_SURVEY_DIR, but this is likely to fail
         '''
         Returns the photometric zeropoint for the given CCD table row object *im*.
         '''
-        if im.camera == 'decam' or im.camera == 'mosaic':
+        if im.camera == 'ptf': #special handling for non-DECaLS
+            hdr= im.read_image_primary_header() #calls fitsio.read_header(self.imgfn)
+            magzp= zeropoint_for_ptf(hdr)
+        else:
             zp = self.get_zeropoint_row_for(im)
             # No updated zeropoint -- use header MAGZERO from primary HDU.
             if zp is None:
@@ -1321,13 +1329,8 @@ Now using the current directory as LEGACY_SURVEY_DIR, but this is likely to fail
                 magzero = hdr['MAGZERO']
                 return magzero
             magzp = zp.ccdzpt
-            if im.camera == 'decam':
+            if im.camera == 'decam': #mosaic,bok already has exptime correction for all zpts
                 magzp += 2.5 * np.log10(zp.exptime)
-        #PTF special handling
-        elif im.camera == 'ptf':
-            hdr= im.read_image_primary_header() #calls fitsio.read_header(self.imgfn)
-            magzp= zeropoint_for_ptf(hdr)
-        else: raise ValueError
         return magzp
 
     def get_astrometric_zeropoint_for(self, im):
@@ -1478,7 +1481,13 @@ def run_calibs(X):
     im = X[0]
     kwargs = X[1]
     print('run_calibs for image', im)
-    return im.run_calibs(**kwargs)
+    try:
+        return im.run_calibs(**kwargs)
+    except:
+        print('Exception in run_calibs:', im, kwargs)
+        import traceback
+        traceback.print_exc()
+        raise
 
 def read_one_tim(X):
     (im, targetrd, kwargs) = X
