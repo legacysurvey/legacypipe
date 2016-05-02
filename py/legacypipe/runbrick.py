@@ -1194,8 +1194,7 @@ def stage_srcs(coimgs=None, cons=None,
     pixels.  Each of these blobs will be processed independently.
     '''
     from legacypipe.detection import (detection_maps, sed_matched_filters,
-                                      run_sed_matched_filters)
-    from legacypipe.common import segment_and_group_sources
+                        run_sed_matched_filters, segment_and_group_sources)
     from scipy.ndimage.morphology import binary_dilation
     from scipy.ndimage.measurements import label, find_objects, center_of_mass
 
@@ -1532,8 +1531,8 @@ def stage_srcs(coimgs=None, cons=None,
         # ps.savefig()
 
     # Segment, and record which sources fall into each blob
-    blobs,blobsrcs,blobslices = segment_and_group_sources(hot, T, name=brickname,
-                                                          ps=ps, plots=plots)
+    blobs,blobsrcs,blobslices = segment_and_group_sources(
+        hot, T, name=brickname, ps=ps, plots=plots)
     del hot
 
     for i,Isrcs in enumerate(blobsrcs):

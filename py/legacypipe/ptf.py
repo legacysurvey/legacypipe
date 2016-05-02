@@ -23,6 +23,13 @@ Code specific to images from the (intermediate) Palomar Transient Factory (iPTF/
 11 CCDs and 1.2m telescope at Palomar Observatory.
 '''
 
+#PTF special handling of zeropoint
+def zeropoint_for_ptf(hdr):
+    magzp= hdr['IMAGEZPT'] + 2.5 * np.log10(hdr['EXPTIME'])
+    if isinstance(magzp,str):
+        print('WARNING: no ZeroPoint in header for image: ',tractor_image.imgfn)
+        raise ValueError #magzp= 23.
+    return magzp
 
 ##key functions##
 def read_image(imgfn,hdu):

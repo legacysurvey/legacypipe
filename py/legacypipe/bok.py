@@ -16,7 +16,7 @@ from tractor.basics import NanoMaggies, ConstantFitsWcs, LinearPhotoCal
 from tractor.image import Image
 from tractor.tractortime import TAITime
 
-from legacypipe.common import zeropoint_for_ptf
+from legacypipe.ptf import zeropoint_for_ptf
 
 '''
 Code specific to images from the 90prime camera on the Bok telescope,
