@@ -26,7 +26,7 @@ def _detmap(X):
     detiv = np.zeros((subh,subw), np.float32) + (1. / detsig1**2)
     detiv[ie == 0] = 0.
     (Yo,Xo,Yi,Xi) = R
-    sat = (tim.dq[Yi,Xi] & tim.dq_bits['satur'] > 0)
+    sat = ((tim.dq[Yi,Xi] & tim.dq_saturation_bits) > 0)
     return Yo, Xo, detim[Yi,Xi], detiv[Yi,Xi], sat
 
 def detection_maps(tims, targetwcs, bands, mp):

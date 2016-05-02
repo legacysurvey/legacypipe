@@ -10,6 +10,24 @@ from astrometry.util.util import wcs_pv2sip_hdr
 from legacypipe.image import LegacySurveyImage
 from legacypipe.common import LegacySurveyData
 
+# From: http://www.noao.edu/noao/staff/fvaldes/CPDocPrelim/PL201_3.html
+# 1   -- detector bad pixel           InstCal
+# 1   -- detector bad pixel/no data   Resampled
+# 1   -- No data                      Stacked
+# 2   -- saturated                    InstCal/Resampled
+# 4   -- interpolated                 InstCal/Resampled
+# 16  -- single exposure cosmic ray   InstCal/Resampled
+# 64  -- bleed trail                  InstCal/Resampled
+# 128 -- multi-exposure transient     InstCal/Resampled 
+CP_DQ_BITS = dict(badpix=1, satur=2, interp=4, cr=16, bleed=64,
+                  trans=128,
+                  edge = 256,
+                  edge2 = 512,
+
+                  ## masked by stage_mask_junk
+                  longthin = 1024,
+                  )
+
 class CPImage(LegacySurveyImage):
     '''
     A mix-in class for common code between NOAO Community Pipeline-processed
@@ -66,7 +84,13 @@ class CPImage(LegacySurveyImage):
         self.psffn = os.path.join(calibdir, 'psfex', self.calname + '.fits')
         self.skyfn = os.path.join(calibdir, 'sky', self.calname + '.fits')
         self.splineskyfn = os.path.join(calibdir, 'splinesky', self.calname + '.fits')
+        self.dq_saturation_bits = CP_DQ_BITS['satur']
         
+    def check_image_header(self, imghdr):
+        # check consistency... something of a DR1 hangover
+        e = imghdr['EXTNAME']
+        assert(e.strip() == self.ccdname.strip())
+
     def get_wcs(self):
         # Make sure the PV-to-SIP converter samples enough points for small
         # images

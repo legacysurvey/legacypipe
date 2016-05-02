@@ -6,25 +6,26 @@ from tractor.utils import get_class_from_name
 from tractor.basics import NanoMaggies, ConstantFitsWcs, LinearPhotoCal
 from tractor.image import Image
 from tractor.tractortime import TAITime
-from .common import CP_DQ_BITS
+from .common import CP_DQ_BITS, SimpleGalaxy
 
 '''
 Generic image handling code.
 '''
 
 class LegacySurveyImage(object):
-    '''
-    A base class containing common code for the images we handle.
+    '''A base class containing common code for the images we handle.
 
-    You shouldn't directly instantiate this class, but rather use the appropriate
-    subclass:
-     * DecamImage
-     * BokImage
+    You probably shouldn't need to directly instantiate this class,
+    but rather use the recipe described in the __init__ method.
+
+    Objects of this class represent the metadata we have on an image,
+    and are used to handle some of the details of going from an entry
+    in the CCDs table to a tractor Image object.
+
     '''
 
     def __init__(self, survey, ccd):
         '''
-
         Create a new LegacySurveyImage object, from a LegacySurveyData object,
         and one row of a CCDs fits_table object.
 
@@ -50,8 +51,6 @@ class LegacySurveyImage(object):
         *get_tractor_image*.
 
         '''
-        #print('LegacySurveyImage __init__')
-        
         self.survey = survey
 
         imgfn = ccd.image_filename.strip()
@@ -157,12 +156,12 @@ class LegacySurveyImage(object):
         Options describing a subimage to return:
 
         - *slc*: y,x slice objects
-        - *radecpoly*: numpy array, shape (N,2), RA,Dec polygon describing bounding box to select.
+        - *radecpoly*: numpy array, shape (N,2), RA,Dec polygon describing
+            bounding box to select.
 
         Options determining the PSF model to use:
 
         - *gaussPsf*: single circular Gaussian PSF based on header FWHM value.
-        - *const2Psf*: 2-component general Gaussian fit to PsfEx model at image center.
         - *pixPsf*: pixelized PsfEx model at image center.
 
         Options determining the sky model to use:
@@ -221,11 +220,7 @@ class LegacySurveyImage(object):
         if pixels:
             print('Reading image slice:', slc)
             img,imghdr = self.read_image(header=True, slice=slc)
-            #print('SATURATE is', imghdr.get('SATURATE', None))
-            #print('Max value in image is', img.max())
-            # check consistency... something of a DR1 hangover
-            e = imghdr['EXTNAME']
-            assert(e.strip() == self.ccdname.strip())
+            self.check_image_header(imghdr)
         else:
             img = np.zeros((imh, imw), np.float32)
             imghdr = dict()
@@ -258,7 +253,7 @@ class LegacySurveyImage(object):
         
         midsky = 0.
         if subsky:
-            print('Instantiating and subtracting sky model...')
+            print('Instantiating and subtracting sky model')
             from tractor.sky import ConstantSky
             skymod = np.zeros_like(img)
             sky.addTo(skymod)
@@ -268,7 +263,6 @@ class LegacySurveyImage(object):
             zsky.version = sky.version
             zsky.plver = sky.plver
             del skymod
-            del sky
             sky = zsky
             del zsky
 
@@ -287,8 +281,7 @@ class LegacySurveyImage(object):
         elif skysig1 is not None:
             sig1 = skysig1
         else:
-            # Estimate from the image?
-            # # Estimate per-pixel noise via Blanton's 5-pixel MAD
+            # Estimate per-pixel noise via Blanton's 5-pixel MAD
             slice1 = (slice(0,-5,10),slice(0,-5,10))
             slice2 = (slice(5,None,10),slice(5,None,10))
             mad = np.median(np.abs(img[slice1] - img[slice2]).ravel())
@@ -301,13 +294,15 @@ class LegacySurveyImage(object):
         assert(np.isfinite(sig1))
 
         if subsky:
-            ##
+            # Warn if the subtracted sky doesn't seem to work well
+            # (can happen, eg, if sky calibration product is inconsistent with
+            #  the data)
             imgmed = np.median(img[invvar>0])
             if np.abs(imgmed) > sig1:
-                print('WARNING: image median', imgmed, 'is more than 1 sigma away from zero!')
-                # Boom!
-                #assert(False)
+                print('WARNING: image median', imgmed, 'is more than 1 sigma',
+                      'away from zero!')
 
+        # tractor WCS object
         twcs = ConstantFitsWcs(wcs)
         if x0 or y0:
             twcs.setX0Y0(x0,y0)
@@ -323,21 +318,16 @@ class LegacySurveyImage(object):
 
         # PSF norm
         psfnorm = self.psf_norm(tim)
-        #print('PSF norm', psfnorm, 'vs Gaussian', 1./(2. * np.sqrt(np.pi) * psf_sigma))
 
         # Galaxy-detection norm
         tim.band = band
         galnorm = self.galaxy_norm(tim)
-        #print('Galaxy norm:', galnorm)
 
         # CP (DECam) images include DATE-OBS and MJD-OBS, in UTC.
         import astropy.time
-        #mjd_utc = mjd=primhdr.get('MJD-OBS', 0)
-        #mjd_tai = astropy.time.Time(primhdr['DATE-OBS']).tai.mjd
         mjd_tai = astropy.time.Time(self.mjdobs, format='mjd', scale='utc').tai.mjd
         tim.time = TAITime(None, mjd=mjd_tai)
         tim.slice = slc
-        tim.zr = [-3. * sig1, 10. * sig1]
         tim.zpscale = orig_zpscale
         tim.midsky = midsky
         tim.sig1 = sig1
@@ -357,20 +347,16 @@ class LegacySurveyImage(object):
         tim.psfver = (psf.version, psf.plver)
         if get_dq:
             tim.dq = dq
-        tim.dq_bits = CP_DQ_BITS
-        tim.saturation = imghdr.get('SATURATE', None)
-        tim.satval = tim.saturation or 0.
-        if subsky:
-            tim.satval -= midsky
+        tim.dq_saturation_bits = self.dq_saturation_bits
         if nanomaggies:
             tim.satval /= orig_zpscale
         subh,subw = tim.shape
         tim.subwcs = tim.sip_wcs.get_subimage(tim.x0, tim.y0, subw, subh)
-        mn,mx = tim.zr
-        tim.ima = dict(interpolation='nearest', origin='lower', cmap='gray',
-                       vmin=mn, vmax=mx)
         return tim
 
+    def check_image_header(self, imghdr):
+        pass
+    
     def psf_norm(self, tim, x=None, y=None):
         # PSF norm
         psf = tim.psf
@@ -380,7 +366,6 @@ class LegacySurveyImage(object):
         if y is None:
             y = h/2.
         patch = psf.getPointSourcePatch(x, y).patch
-        #print('PSF PointSourcePatch: sum', patch.sum())
         # Clamp up to zero and normalize before taking the norm
         patch = np.maximum(0, patch)
         patch /= patch.sum()
@@ -399,7 +384,7 @@ class LegacySurveyImage(object):
         if y is None:
             y = h/2.
         pos = tim.wcs.pixelToPosition(x, y)
-        gal = ExpGalaxy(pos, NanoMaggies(**{band:1.}), EllipseE(0.45, 0., 0.))
+        gal = SimpleGalaxy(pos, NanoMaggies(**{band:1.}))
         S = 32
         mm = Patch(int(x-S), int(y-S), np.ones((2*S+1, 2*S+1), bool))
         galmod = gal.getModelPatch(tim, modelMask=mm).patch
@@ -453,7 +438,6 @@ class LegacySurveyImage(object):
         '''
         Returns image shape H,W.
         '''
-        # return self.get_image_info()['dims']
         return self.height, self.width
 
     @property
@@ -519,8 +503,6 @@ class LegacySurveyImage(object):
         return None
 
     def get_wcs(self):
-        print('LegacySurveyImage.get_wcs(); self:', type(self), self)
-        print('MRO:', type(self).__mro__)
         return None
     
     def read_sky_model(self, splinesky=False, slc=None, **kwargs):
@@ -595,18 +577,13 @@ class LegacySurveyImage(object):
         print('(not implemented)')
         pass
 
-
-
-
-
 class CalibMixin(object):
     '''
-    A class to hold common calibration tasks between the different surveys / image
-    subclasses.
+    A class to hold common calibration tasks between the different
+    surveys / image subclasses.
     '''
 
     def __init__(self):
-        #print('CalibMixin __init__')
         super(CalibMixin, self).__init__()
     
     def check_psf(self, psffn):
@@ -620,7 +597,7 @@ class CalibMixin(object):
         # Check the PsfEx output file for POLNAME1
         hdr = fitsio.read_header(psffn, ext=1)
         if hdr.get('POLNAME1', None) is None:
-            print('Did not find POLNAME1 in PsfEx header', psffn, '-- deleting')
+            print('Did not find POLNAME1 in PsfEx header',psffn,'-- deleting')
             os.unlink(psffn)
             return False
         return True
@@ -628,7 +605,8 @@ class CalibMixin(object):
     def check_se_cat(self, fn):
         from astrometry.util.fits import fits_table
         from astrometry.util.file import file_size
-        # Check SourceExtractor catalog for file size = 0 or FITS table length = 0
+        # Check SourceExtractor catalog for file size = 0 or FITS table
+        # length = 0
         if os.path.exists(fn) and file_size(fn) == 0:
             try:
                 os.unlink(fn)
@@ -655,7 +633,8 @@ class CalibMixin(object):
         fcopy = False
         hdr = fitsio.read_header(imgfn, ext=hdu)
         if not ((hdr['XTENSION'] == 'BINTABLE') and hdr.get('ZIMAGE', False)):
-            print('Image %s, HDU %i is not fpacked; just imcopying.' % (imgfn,  hdu))
+            print('Image %s, HDU %i is not fpacked; just imcopying.' %
+                  (imgfn,  hdu))
             fcopy = True
 
         tmpimgfn  = create_temp(suffix='.fits')
@@ -667,12 +646,10 @@ class CalibMixin(object):
             cmd = 'imcopy %s"+%i" %s' % (imgfn, hdu, tmpimgfn)
         else:
             cmd = 'funpack -E %i -O %s %s' % (hdu, tmpimgfn, imgfn)
-        #cmd = 'funpack -E %i -O %s %s' % (hdu, tmpimgfn, imgfn)
         print(cmd)
         if os.system(cmd):
             raise RuntimeError('Command failed: ' + cmd)
         
-        #cmd = 'funpack -E %i -O %s %s' % (hdu, tmpmaskfn, maskfn)
         if fcopy:
             cmd = 'imcopy %s"+%i" %s' % (maskfn, hdu, tmpmaskfn)
         else:

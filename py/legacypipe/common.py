@@ -25,28 +25,8 @@ from tractor.sfd import SFDMap
 
 from legacypipe.utils import EllipseWithPriors
 
-DECALS_PROPID = '2014B-0404'
-
 # search order: $TMPDIR, $TEMP, $TMP, then /tmp, /var/tmp, /usr/tmp
 tempdir = tempfile.gettempdir()
-
-# From: http://www.noao.edu/noao/staff/fvaldes/CPDocPrelim/PL201_3.html
-# 1   -- detector bad pixel           InstCal
-# 1   -- detector bad pixel/no data   Resampled
-# 1   -- No data                      Stacked
-# 2   -- saturated                    InstCal/Resampled
-# 4   -- interpolated                 InstCal/Resampled
-# 16  -- single exposure cosmic ray   InstCal/Resampled
-# 64  -- bleed trail                  InstCal/Resampled
-# 128 -- multi-exposure transient     InstCal/Resampled 
-CP_DQ_BITS = dict(badpix=1, satur=2, interp=4, cr=16, bleed=64,
-                  trans=128,
-                  edge = 256,
-                  edge2 = 512,
-
-                  ## masked by stage_mask_junk
-                  longthin = 1024,
-                  )
 
 # The apertures we use in aperture photometry, in ARCSEC.
 apertures_arcsec = np.array([0.5, 0.75, 1., 1.5, 2., 3.5, 5., 7.])
@@ -1159,18 +1139,6 @@ def exposure_metadata(filenames, hdus=None, trim=None):
         primhdr = F[0].read_header()
         expstr = '%08i' % primhdr.get('EXPNUM')
 
-        # # Parse date with format: 2014-08-09T04:20:50.812543
-        # date = datetime.datetime.strptime(primhdr.get('DATE-OBS'),
-        #                                   '%Y-%m-%dT%H:%M:%S.%f')
-        # # Subract 12 hours to get the date used by the CP to label the night;
-        # # CP20140818 includes observations with date 2014-08-18 evening and
-        # # 2014-08-19 early AM.
-        # cpdate = date - datetime.timedelta(0.5)
-        # #cpdatestr = '%04i%02i%02i' % (cpdate.year, cpdate.month, cpdate.day)
-        # #print 'Date', date, '-> CP', cpdatestr
-        # cpdateval = cpdate.year * 10000 + cpdate.month * 100 + cpdate.day
-        # print 'Date', date, '-> CP', cpdateval
-
         cpfn = fn
         if trim is not None:
             cpfn = cpfn.replace(trim, '')
@@ -1247,7 +1215,6 @@ def read_one_tim(X):
     print('Reading', im)
     tim = im.get_tractor_image(radecpoly=targetrd, **kwargs)
     return tim
-
 
 from tractor.psfex import PsfExModel
 

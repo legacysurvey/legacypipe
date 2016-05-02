@@ -12,9 +12,11 @@ from tractor import Tractor, PointSource, Image, NanoMaggies, Catalog, Patch
 from tractor.galaxy import DevGalaxy, ExpGalaxy, FixedCompositeGalaxy, SoftenedFracDev, FracDev, disable_galaxy_cache, enable_galaxy_cache
 
 from legacypipe.common import (SimpleGalaxy, LegacyEllipseWithPriors, 
-                               DECALS_PROPID, get_rgb)
+                               get_rgb)
 from legacypipe.runbrick import compute_coadds, tims_compute_resamp, rgbkwargs_resid
 from legacypipe.runbrick_plots import _plot_mods
+
+DECALS_PROPID = '2014B-0404'
 
 def one_blob(X):
     '''
