@@ -70,7 +70,31 @@ class DecamImage(CPImage, CalibMixin):
                   name)
             n0 = n
         return np.flatnonzero(good)
-        
+
+    @classmethod
+    def apply_blacklist(self, survey, ccds):
+        decam_blacklist = [
+            '2012B-0003', # labeled as "DES SV", but appears to exclusively be DES deep fields taken during SV, through Jan 2013.
+            '2013A-0351', # lots of deep data on COSMOS
+            '2014A-0339', # two strips of sky
+            '2013A-0360', # 9 fields total
+            '2013A-0614', # 2 fields
+            '2013A-0717', # 2 fields
+            '2013B-0502', # 3 fields
+            '2014A-0239', # 1 field
+            '2014A-0429', # 2 fields
+            '2013A-0611', # many 900-sec exposures in EDR region
+            '2013A-0737', # 10 fields
+            '2013A-0719', # 8 fields
+            '2013A-9999', # 11 fields
+            '2013A-0716', # 3 fields
+            '2013A-0529', # 2 fields
+            '2013A-0613', # 40 exposures of 600 sec in g,r and nothing else in DR2
+        ]
+        keep = np.array([propid not in decam_blacklist
+                         for propid in ccds.propid])
+        return np.flatnonzero(keep)
+    
     glowmjd = astropy.time.Time('2014-08-01').utc.mjd
 
     def get_good_image_subregion(self):

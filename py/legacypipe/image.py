@@ -93,6 +93,16 @@ class LegacySurveyImage(object):
         Default is to return all CCDs.
         '''
         return np.arange(len(ccds))
+
+    @classmethod
+    def apply_blacklist(self, survey, ccds):
+        '''
+        Returns an index array for the members of the table 'ccds' that are
+        NOT blacklisted.
+
+        Default is to return all CCDs.
+        '''
+        return np.arange(len(ccds))
     
     def get_good_image_slice(self, extent, get_extent=False):
         '''
