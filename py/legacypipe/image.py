@@ -341,7 +341,7 @@ class LegacySurveyImage(object):
         tim.imobj = self
         tim.primhdr = primhdr
         tim.hdr = imghdr
-        tim.plver = primhdr['PLVER'].strip()
+        tim.plver = primhdr.get('PLVER','').strip()
         tim.skyver = (sky.version, sky.plver)
         tim.wcsver = (wcs.version, wcs.plver)
         tim.psfver = (psf.version, psf.plver)
