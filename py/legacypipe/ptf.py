@@ -474,7 +474,6 @@ class PtfImage(LegacySurveyImage):
         mjd_tai = astropy.time.Time(primhdr['DATE-OBS']).tai.mjd
         tim.slice = slc
         tim.time = TAITime(None, mjd=mjd_tai)
-        tim.zr = [-3. * sig1, 10. * sig1]
         tim.zpscale = orig_zpscale
         tim.midsky = midsky
         tim.sig1 = sig1
@@ -494,7 +493,7 @@ class PtfImage(LegacySurveyImage):
         tim.psfver = (psf.version, psf.plver)
         if get_dq:
             tim.dq = dq
-        tim.dq_bits = CP_DQ_BITS
+        tim.dq_saturation_bits = 0
         tim.saturation = imghdr.get('SATURATE', None)
         tim.satval = tim.saturation or 0.
         if subsky:
@@ -503,9 +502,6 @@ class PtfImage(LegacySurveyImage):
             tim.satval /= orig_zpscale
         subh,subw = tim.shape
         tim.subwcs = tim.sip_wcs.get_subimage(tim.x0, tim.y0, subw, subh)
-        mn,mx = tim.zr
-        tim.ima = dict(interpolation='nearest', origin='lower', cmap='gray',
-                       vmin=mn, vmax=mx)
         return tim
 
 

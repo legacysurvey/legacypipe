@@ -5,7 +5,7 @@ import fitsio
 import numpy as np
 
 from image import LegacySurveyImage
-from common import create_temp, CP_DQ_BITS
+from common import create_temp
 from astrometry.util.util import Tan, Sip, anwcs_t
 
 from astrometry.util.util import wcs_pv2sip_hdr

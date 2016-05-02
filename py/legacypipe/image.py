@@ -6,7 +6,7 @@ from tractor.utils import get_class_from_name
 from tractor.basics import NanoMaggies, ConstantFitsWcs, LinearPhotoCal
 from tractor.image import Image
 from tractor.tractortime import TAITime
-from .common import CP_DQ_BITS, SimpleGalaxy
+from .common import SimpleGalaxy
 
 '''
 Generic image handling code.
