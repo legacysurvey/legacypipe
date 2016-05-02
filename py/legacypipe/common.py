@@ -287,7 +287,8 @@ def get_rgb(imgs, bands, mnmx=None, arcsinh=None, scales=None):
 
     *imgs*  a list of numpy arrays, all the same size, in nanomaggies
     *bands* a list of strings, eg, ['g','r','z']
-    *mnmx*  = (min,max), values that will become black/white *after* scaling. Default is (-3,10)
+    *mnmx*  = (min,max), values that will become black/white *after* scaling.
+        Default is (-3,10)
     *arcsinh* use nonlinear scaling as in SDSS
     *scales*
 
@@ -344,6 +345,14 @@ def get_rgb(imgs, bands, mnmx=None, arcsinh=None, scales=None):
     
 
 def switch_to_soft_ellipses(cat):
+    '''
+    Converts our softened-ellipticity EllipseESoft parameters into
+    normal EllipseE ellipses.
+    
+    *cat*: an iterable of tractor Sources, which will be modified
+     in-place.
+
+    '''
     from tractor.galaxy import DevGalaxy, ExpGalaxy, FixedCompositeGalaxy
     from tractor.ellipses import EllipseESoft
     for src in cat:
@@ -400,10 +409,11 @@ def brick_catalog_for_radec_box(ralo, rahi, declo, dechi,
     return T
     
 def ccd_map_image(valmap, empty=0.):
-    '''
-    valmap: { 'N7' : 1., 'N8' : 17.8 }
+    '''valmap: { 'N7' : 1., 'N8' : 17.8 }
 
-    Returns: a numpy image (shape (12,14)) with values mapped to their CCD locations.
+    Returns: a numpy image (shape (12,14)) with values mapped to their
+    CCD locations.
+
     '''
     img = np.empty((12,14))
     img[:,:] = empty
@@ -444,7 +454,8 @@ def ccd_map_extent(ccdname, inset=0.):
     else:
         (x0,x1,y0,y1) = (x0, x0+2, y0, y0+1)
 
-    # Shift from being (0,0)-centered to being aligned with the ccd_map_image() image.
+    # Shift from being (0,0)-centered to being aligned with the
+    # ccd_map_image() image.
     x0 += 7
     x1 += 7
     y0 += 6
@@ -456,6 +467,8 @@ def ccd_map_extent(ccdname, inset=0.):
 
 def wcs_for_brick(b, W=3600, H=3600, pixscale=0.262):
     '''
+    Returns an astrometry.net style Tan WCS object for a given brick object.
+
     b: row from survey-bricks.fits file
     W,H: size in pixels
     pixscale: pixel scale in arcsec/pixel.
@@ -572,6 +585,14 @@ def create_temp(**kwargs):
     return fn
 
 def imsave_jpeg(jpegfn, img, **kwargs):
+    '''Saves a image in JPEG format.  Some matplotlib installations
+    (notably at NERSC) don't support jpeg, so we write to PNG and then
+    convert to JPEG using the venerable netpbm tools.
+    
+    *jpegfn*: JPEG filename
+    *img*: image, in the typical matplotlib formats (see plt.imsave)
+    '''
+
     import pylab as plt
     tmpfn = create_temp(suffix='.png')
     plt.imsave(tmpfn, img, **kwargs)
@@ -589,10 +610,11 @@ class LegacySurveyData(object):
     objects (eg, DecamImage objects), which then allow data to be read
     from disk.
     '''
-    def __init__(self, survey_dir=None, output_dir=None, version=None, ccds=None):
-        '''
-        Create a LegacySurveyData object using data from the given *survey_dir*
-        directory, or from the $LEGACY_SURVEY_DIR environment variable.
+    def __init__(self, survey_dir=None, output_dir=None, version=None,
+                 ccds=None):
+        '''Create a LegacySurveyData object using data from the given
+        *survey_dir* directory, or from the $LEGACY_SURVEY_DIR environment
+        variable.
         '''
         from .decam  import DecamImage
         from .mosaic import MosaicImage
