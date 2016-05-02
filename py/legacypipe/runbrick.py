@@ -45,8 +45,8 @@ from tractor.ellipses import EllipseE
 from tractor.galaxy import (DevGalaxy, ExpGalaxy, FixedCompositeGalaxy, SoftenedFracDev,
                             FracDev, disable_galaxy_cache)
 
-from legacypipe.common import (tim_get_resamp, get_rgb, imsave_jpeg, LegacySurveyData,
-                               CP_DQ_BITS)
+from legacypipe.common import (tim_get_resamp, get_rgb, imsave_jpeg, LegacySurveyData)
+from legacypipe.decam import CP_DQ_BITS
 from legacypipe.utils import RunbrickError, NothingToDoError, iterwrapper
 
 ## GLOBALS!  Oh my!
@@ -402,7 +402,7 @@ def stage_tims(W=3600, H=3600, pixscale=0.262, brickname=None,
         for tim in tims:
             plt.clf()
             plt.subplot(2,2,1)
-            dimshow(tim.getImage(), **tim.ima)
+            dimshow(tim.getImage(), vmin=-3.*tim.sig1, vmax=10.*tim.sig1)
             plt.title('image')
             plt.subplot(2,2,2)
             dimshow(tim.getInvError(), vmin=0, vmax=1.1/tim.sig1)
@@ -413,7 +413,7 @@ def stage_tims(W=3600, H=3600, pixscale=0.262, brickname=None,
             plt.title('DQ')
             plt.subplot(2,2,3)
             #nil,udq = np.unique(tim.dq, return_inverse=True)
-            dimshow((tim.dq & tim.dq_bits['satur'] > 0), vmin=0, vmax=1)
+            dimshow(((tim.dq & tim.dq_saturation_bits) > 0), vmin=0, vmax=1)
             plt.title('SATUR')
             plt.suptitle(tim.name)
             ps.savefig()
@@ -921,7 +921,7 @@ def stage_mask_junk(tims=None, targetwcs=None, W=None, H=None, bands=None,
                 from scipy.ndimage.morphology import binary_dilation
                 zout = (binary_dilation(zeroed, structure=np.ones((3,3)))
                         - zeroed)
-                dimshow(tim.getImage(), **tim.ima)
+                dimshow(tim.getImage(), vmin=-3.*tim.sig1, vmax=10.*tim.sig1)
                 outline = np.zeros(zout.shape+(4,), np.uint8)
                 outline[:,:,1] = zout*255
                 outline[:,:,3] = zout*255
@@ -1326,21 +1326,16 @@ def stage_srcs(coimgs=None, cons=None,
             dimshow(rgba)
             plt.title('Tim invvar')
             plt.subplot(2,2,2)
-            print('Image max:', tim.getImage().max(), 'satval', tim.satval)
-            mx = max(tim.getImage().max(), tim.satval) * 1.1
+
+            mx = tim.getImage().max()
             ima = dict(vmin=-2.*tim.sig1, vmax=mx,
                        ticks=False)
             dimshow(tim.getImage(), **ima)
             plt.title('Tim image')
             plt.subplot(2,2,3)
-            dimshow((tim.dq & tim.dq_bits['satur'] > 0), vmin=0, vmax=1,
+            dimshow((tim.dq & tim.dq_saturation_bits > 0), vmin=0, vmax=1,
                     ticks=False)
             plt.title('SATUR')
-            plt.subplot(2,2,4)
-            img = tim.getImage().copy()
-            img[(tim.dq & tim.dq_bits['satur']) > 0] = tim.satval
-            dimshow(img, **ima)
-            plt.title('Patched image')
             plt.suptitle('Tim ' + tim.name)
             ps.savefig()
 

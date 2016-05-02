@@ -348,8 +348,6 @@ class LegacySurveyImage(object):
         if get_dq:
             tim.dq = dq
         tim.dq_saturation_bits = self.dq_saturation_bits
-        if nanomaggies:
-            tim.satval /= orig_zpscale
         subh,subw = tim.shape
         tim.subwcs = tim.sip_wcs.get_subimage(tim.x0, tim.y0, subw, subh)
         return tim
