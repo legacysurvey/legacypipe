@@ -792,8 +792,9 @@ Now using the current directory as LEGACY_SURVEY_DIR, but this is likely to fail
 
     def add_output_file(self, fn):
         '''
-        Intended as a callback to be called in the *write_output* routine.  Adds
-        the given filename to the list of files written by the pipeline on this run.
+        Intended as a callback to be called in the *write_output* routine.
+        Adds the given filename to the list of files written by the
+        pipeline on this run.
         '''
         self.output_files.append(fn)
 
@@ -975,12 +976,12 @@ Now using the current directory as LEGACY_SURVEY_DIR, but this is likely to fail
         if 'cpimage_hdu' in cols and not 'image_hdu' in cols:
             T.image_hdu = T.cpimage_hdu
 
+        # Remove trailing spaces from 'ccdname' column
         if 'ccdname' in T.columns():
             # "N4 " -> "N4"
             T.ccdname = np.array([s.strip() for s in T.ccdname])
-        #camera must NOT have trailing whitespaces for expected behavior!
-        for i in range(len(T.get('camera'))): T.get('camera')[i]= T.get('camera')[i].strip()
-        #now safe to return
+        # Remove trailing spaces from 'camera' column.
+        T.camera = np.array([c.strip() for c in T.camera])
         return T
 
     def ccds_touching_wcs(self, wcs, **kwargs):
@@ -1003,17 +1004,17 @@ Now using the current directory as LEGACY_SURVEY_DIR, but this is likely to fail
     
     def tims_touching_wcs(self, targetwcs, mp, bands=None,
                           **kwargs):
-        '''
-        Creates tractor.Image objects for CCDs touching the given
+        '''Creates tractor.Image objects for CCDs touching the given
         *targetwcs* region.
         
         mp: multiprocessing object
 
-        kwargs are passed to LegacySurveyImage.get_tractor_image() and may include:
+        kwargs are passed to LegacySurveyImage.get_tractor_image() and
+        may include:
 
         * gaussPsf
         * pixPsf
-        
+
         '''
         # Read images
         C = self.ccds_touching_wcs(targetwcs)
