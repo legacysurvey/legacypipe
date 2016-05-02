@@ -427,7 +427,7 @@ def sed_matched_detection(sedname, sed, detmaps, detivs, bands,
 
         level = saddle_level(sedsn[y,x])
         ablob = allblobs[y,x]
-        index = ablob - 1
+        index = int(ablob - 1)
         slc = allslices[index]
 
         #print('source', i, 'of', len(px), 'at', x,y, 'S/N', sedsn[y,x], 'saddle', level)

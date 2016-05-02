@@ -1098,65 +1098,6 @@ Now using the current directory as LEGACY_SURVEY_DIR, but this is likely to fail
                 good[Icam[Igood]] = True
         return np.flatnonzero(good)
 
-    def _get_zeropoints_table(self):
-        '''
-        Returns the table of zeropoints, which in DR2 is the same as
-        the table of CCDs.
-
-        Note, the returned object MUST NOT BE MODIFIED!
-        '''
-        # Hooray, DRY.  ZP table == CCD table.
-        return self.get_ccds_readonly()
-
-    def get_zeropoint_row_for(self, im):
-        '''
-        Returns one row of the zeropoints table for the given CCD table row.
-        '''
-        ZP = self._get_zeropoints_table()
-        I, = np.nonzero(ZP.expnum == im.expnum)
-        if len(I) > 1:
-            I, = np.nonzero((ZP.expnum == im.expnum) *
-                            (ZP.ccdname == im.ccdname))
-        if len(I) == 0:
-            return None
-        #assert(len(I) == 1)
-        if len(I) > 1:
-            print('WARNING: found', len(I), 'zeropoint entries for expnum=%i, ccdname=%s:' % (im.expnum, im.ccdname), I)
-        return ZP[I[0]]
-
-    def get_zeropoint_for(self, im):
-        '''
-        Returns the photometric zeropoint for the given CCD table row object *im*.
-        '''
-        if im.camera == 'ptf': #special handling for non-DECaLS
-            hdr= im.read_image_primary_header() #calls fitsio.read_header(self.imgfn)
-            magzp= zeropoint_for_ptf(hdr)
-        else:
-            zp = self.get_zeropoint_row_for(im)
-            # No updated zeropoint -- use header MAGZERO from primary HDU.
-            if zp is None:
-                print('WARNING: using header zeropoints for', im)
-                hdr = im.read_image_primary_header()
-                # DES Year1 Stripe82 images:
-                magzero = hdr['MAGZERO']
-                return magzero
-            magzp = zp.ccdzpt
-            if im.camera == 'decam': #mosaic,bok already has exptime correction for all zpts
-                magzp += 2.5 * np.log10(zp.exptime)
-        return magzp
-
-    def get_astrometric_zeropoint_for(self, im):
-        '''
-        Returns the astrometric offset for the given CCD table row
-        object *im*, in degrees.
-        '''
-        zp = self.get_zeropoint_row_for(im)
-        if zp is None:
-            print('WARNING: no astrometric zeropoints found for', im)
-            return 0.,0.
-        dra, ddec = zp.ccdraoff, zp.ccddecoff
-        return dra / 3600., ddec / 3600.
-
 def exposure_metadata(filenames, hdus=None, trim=None):
     '''
     Creates a CCD table row object by reading metadata from a FITS

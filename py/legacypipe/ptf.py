@@ -25,7 +25,6 @@ Code specific to images from the (intermediate) Palomar Transient Factory (iPTF/
 
 #PTF special handling of zeropoint
 def zeropoint_for_ptf(hdr):
-    magzp= hdr['IMAGEZPT'] + 2.5 * np.log10(hdr['EXPTIME'])
     if isinstance(magzp,str):
         print('WARNING: no ZeroPoint in header for image: ',tractor_image.imgfn)
         raise ValueError #magzp= 23.
@@ -108,7 +107,13 @@ class PtfImage(LegacySurveyImage):
     def __init__(self, survey, t):
         super(PtfImage, self).__init__(survey, t)
 
-        self.imgfn= os.path.join(os.path.dirname(self.imgfn),'ptf/',os.path.basename(self.imgfn))
+        # FIXME -- this should happen in the CCD table creation step.
+        self.imgfn= os.path.join(os.path.dirname(self.imgfn),
+                                 'ptf', os.path.basename(self.imgfn))
+
+        hdr= self.read_image_primary_header()
+        self.ccdzpt = hdr['IMAGEZPT'] + 2.5 * np.log10(self.exptime)
+
         self.pixscale= 1.01
         #print("--------pixscale= ",self.pixscale)
         #print("--------changing pixscale to ",1.01)
@@ -116,9 +121,11 @@ class PtfImage(LegacySurveyImage):
         self.dqfn = self.imgfn.replace('_scie_', '_mask_')
         #psfex catalogues
         calibdir = os.path.join(self.survey.get_calib_dir(), self.camera)
-        self.sefn = os.path.join(calibdir, 'sextractor/', os.path.basename(self.imgfn))
+        self.sefn = os.path.join(calibdir, 'sextractor',
+                                 os.path.basename(self.imgfn))
         #self.psffn = os.path.join(calibdir, 'psfex', self.calname + '.fits')
-        self.psffn= os.path.join(calibdir,'psfex/',os.path.basename(self.imgfn)) #.replace('.fits','.psf')))
+        self.psffn= os.path.join(calibdir, 'psfex',
+                                 os.path.basename(self.imgfn)) #.replace('.fits','.psf')))
         print('####### self.imgfn,dqfn,calibdir,psffn= ',self.imgfn,self.dqfn,calibdir,self.psffn)
         #self.wtfn = self.imgfn.replace('_ooi_', '_oow_')
 

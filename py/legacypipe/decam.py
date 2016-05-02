@@ -22,9 +22,11 @@ class DecamImage(CPImage, CalibMixin):
 
     '''
     def __init__(self, survey, t):
-        #print('DecamImage __init__')
         super(DecamImage, self).__init__(survey, t)
 
+        # Adjust zeropoint for exposure time
+        self.ccdzpt += 2.5 * np.log10(self.exptime)
+        
     def __str__(self):
         return 'DECam ' + self.name
 

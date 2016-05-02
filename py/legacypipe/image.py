@@ -66,7 +66,11 @@ class LegacySurveyImage(object):
         self.band    = ccd.filter.strip()
         self.exptime = ccd.exptime
         self.camera  = ccd.camera.strip()
-        if self.camera == '90prime': self.ccdzpt= ccd.ccdzpt #Bok specific, zp stored in ccd table for now
+
+        # Photometric and astrometric zeropoints
+        self.ccdzpt = ccd.ccdzpt
+        self.dradec = (ccd.ccdraoff / 3600., ccd.ccddecoff / 3600.)
+        
         self.fwhm    = ccd.fwhm
         self.propid  = ccd.propid
         # in arcsec/pixel
@@ -268,8 +272,7 @@ class LegacySurveyImage(object):
             sky = zsky
             del zsky
 
-        magzp = self.survey.get_zeropoint_for(self)
-        orig_zpscale = zpscale = NanoMaggies.zeropointToScale(magzp)
+        orig_zpscale = zpscale = NanoMaggies.zeropointToScale(self.ccdzpt)
         if nanomaggies:
             # Scale images to Nanomaggies
             img /= zpscale
