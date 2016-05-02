@@ -664,11 +664,6 @@ Now using the current directory as LEGACY_SURVEY_DIR, but this is likely to fail
         assert(version in [None, 'dr2', 'dr1'])
         self.version = version
 
-    def get_camera_indices(self, ccds):
-        i_ptf= np.where(a.get('camera') == 'ptf')[0]
-        i_decam= np.where(a.get('camera') == 'decam')[0]
-        i_mosaic= np.where(a.get('camera') == 'mosaic')[0]
-
     def index_of_band(self, b):
         return self.allbands.index(b)
         
