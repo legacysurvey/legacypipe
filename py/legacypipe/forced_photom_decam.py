@@ -14,11 +14,12 @@ from astrometry.util.fits import fits_table, merge_tables
 from astrometry.util.file import trymakedirs
 from astrometry.util.ttime import Time, MemMeas
 
-from tractor import Tractor, disable_galaxy_cache
+from tractor import Tractor
+from tractor.galaxy import disable_galaxy_cache
+from tractor.ellipses import EllipseE
 
 from legacypipe.common import LegacySurveyData, bricks_touching_wcs, exposure_metadata, get_version_header, apertures_arcsec
 from desi_common import read_fits_catalog
-import tractor
 
 # python projects/desi/forced-photom-decam.py decals/images/decam/CP20140810_g_v2/c4d_140816_032035_ooi_g_v2.fits.fz 43 DR1 f.fits
 
@@ -182,7 +183,7 @@ def main(survey=None, opt=None):
     T.shapeexp = np.vstack((T.shapeexp_r, T.shapeexp_e1, T.shapeexp_e2)).T
     T.shapedev = np.vstack((T.shapedev_r, T.shapedev_e1, T.shapedev_e2)).T
 
-    cat = read_fits_catalog(T, ellipseClass=tractor.ellipses.EllipseE)
+    cat = read_fits_catalog(T, ellipseClass=EllipseE)
     # print('Got cat:', cat)
 
     print('Read catalog:', Time()-t0)
