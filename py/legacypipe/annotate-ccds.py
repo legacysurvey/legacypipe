@@ -127,10 +127,8 @@ def main(outfn='ccds-annotated.fits', ccds=None):
         ccds.sig1[iccd] = tim.sig1
         plvers.append(tim.plver)
 
-        #obj = hdr.get('OBJECT')
+        # parse 'DECaLS_15150_r' to get tile number
         obj = ccd.object.strip()
-
-        # parse 'DECaLS_15150_r'
         words = obj.split('_')
         tile = None
         if len(words) == 3 and words[0] == 'DECaLS':
@@ -258,7 +256,6 @@ def main(outfn='ccds-annotated.fits', ccds=None):
         ccds.pixscale_max[iccd] = max(pixscale)
         ccds.pixscale_std[iccd] = np.std(pixscale)
 
-
     ccds.plver = np.array(plvers)
 
     sfd = tractor.sfd.SFDMap()
@@ -319,6 +316,63 @@ if __name__ == '__main__':
     parser.add_argument('--threads', type=int, help='Run multi-threaded', default=4)
     opt = parser.parse_args()
 
+
+    #### FIX mistake in DR3 annotated CCDs: sig1
+    for part in ['decals', 'nondecals', 'extra']:
+        from tractor.brightness import NanoMaggies
+        fn = '/global/cscratch1/sd/desiproc/dr3/ccds-annotated-%s.fits.gz' % part
+        T = fits_table(fn)
+        zpt = T.ccdzpt + 2.5 * np.log10(T.exptime)
+        print('Median zpt:', np.median(zpt))
+        zpscale = NanoMaggies.zeropointToScale(zpt)
+        print('Median zpscale:', np.median(zpscale))
+
+        print('Zpscale limits:', zpscale.min(), zpscale.max())
+        print('Non-finite:', np.sum(np.logical_not(np.isfinite(zpscale))))
+
+        T.sig1 /= zpscale
+        T.sig1[np.logical_not(np.isfinite(T.sig1))] = 0.
+        print('Median sig1:', np.median(T.sig1))
+
+        print('Before:')
+        for col in ['psfdepth', 'galdepth', 'gausspsfdepth', 'gaussgaldepth']:
+            c = T.get(col)
+            for band in 'grz':
+                I = np.flatnonzero((T.filter == band) * (T.sig1 > 0))
+                print(col, band, 'median', np.median(c[I]))
+        print(sum(T.sig1 == 0), 'have sig1 = 0')
+
+        offset = 2.5 * np.log10(zpscale)
+        print('Median offset:', np.median(offset))
+        T.psfdepth += offset
+        T.galdepth += offset
+        T.gausspsfdepth += offset
+        T.gaussgaldepth += offset
+
+        print('Photometric:', np.unique(T.photometric))
+        
+        print('After:')
+        for col in ['psfdepth', 'galdepth', 'gausspsfdepth', 'gaussgaldepth']:
+            c = T.get(col)
+            for band in 'grz':
+                I = np.flatnonzero((T.filter == band) * (T.sig1 > 0))
+                print(col, band, 'median', np.median(c[I]))
+        print(sum(T.sig1 == 0), 'have sig1 = 0')
+        print(sum((T.sig1 == 0) * T.photometric), 'have sig1 = 0 and photometric')
+
+        print(np.sum(np.logical_not(np.isfinite(T.sig1))), 'infinite sig1')
+        T.psfdepth[np.logical_not(np.isfinite(T.psfdepth))] = 0.
+        T.galdepth[np.logical_not(np.isfinite(T.galdepth))] = 0.
+        T.gausspsfdepth[np.logical_not(np.isfinite(T.gausspsfdepth))] = 0.
+        T.gaussgaldepth[np.logical_not(np.isfinite(T.gaussgaldepth))] = 0.
+        
+        outfn = os.path.basename(fn)
+        outfn = outfn.replace('.gz', '')
+        print('Wrote', outfn)
+        T.writeto(outfn)
+    sys.exit(0)
+
+    
     # TT = [fits_table('ccds-annotated/ccds-annotated-%03i.fits' % i) for i in range(515)]
     # T = merge_tables(TT)
     # T.writeto('ccds-annotated.fits')
