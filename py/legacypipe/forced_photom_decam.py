@@ -107,7 +107,8 @@ def main(survey=None, opt=None):
             print(len(T), 'with filename', opt.filename)
         assert(len(T) == 1)
 
-    im = survey.get_image_object(T[0])
+    ccd = T[0]
+    im = survey.get_image_object(ccd)
     tim = im.get_tractor_image(slc=zoomslice, pixPsf=True, splinesky=True)
     print('Got tim:', tim)
 
@@ -195,7 +196,7 @@ def main(survey=None, opt=None):
 
     F.filter  = np.array([tim.band]               * len(T))
     F.mjd     = np.array([tim.primhdr['MJD-OBS']] * len(T))
-    F.exptime = np.array([tim.primhdr['EXPTIME']] * len(T))
+    F.exptime = np.array([tim.primhdr['EXPTIME']] * len(T)).astype(np.float32)
 
     ok,x,y = tim.sip_wcs.radec2pixelxy(T.ra, T.dec)
     F.x = (x-1).astype(np.float32)
@@ -227,10 +228,10 @@ def main(survey=None, opt=None):
             apimgerr.append(p.field('aperture_sum_err'))
         ap = np.vstack(apimg).T
         ap[np.logical_not(np.isfinite(ap))] = 0.
-        F.apflux = ap
+        F.apflux = ap.astype(np.float32)
         ap = 1./(np.vstack(apimgerr).T)**2
         ap[np.logical_not(np.isfinite(ap))] = 0.
-        F.apflux_ivar = ap
+        F.apflux_ivar = ap.astype(np.float32)
 
     if opt.forced:
         kwa = {}
@@ -269,21 +270,25 @@ def main(survey=None, opt=None):
 
     program_name = sys.argv[0]
     version_hdr = get_version_header(program_name, survey.get_survey_dir())
-    # HACK -- print only two directory names + filename of CPFILE.
-    fname = os.path.basename(im.imgfn)
-    d = os.path.dirname(im.imgfn)
-    d1 = os.path.basename(d)
-    d = os.path.dirname(d)
-    d2 = os.path.basename(d)
-    fname = os.path.join(d2, d1, fname)
-    print('Trimmed filename to', fname)
-    version_hdr.add_record(dict(name='CPFILE', value=fname, comment='DECam comm.pipeline file'))
-    version_hdr.add_record(dict(name='CPHDU', value=im.hdu, comment='DECam comm.pipeline ext'))
-    version_hdr.add_record(dict(name='CAMERA', value='DECam', comment='Dark Energy Camera'))
-    version_hdr.add_record(dict(name='EXPNUM', value=im.expnum, comment='DECam exposure num'))
-    version_hdr.add_record(dict(name='CCDNAME', value=im.ccdname, comment='DECam CCD name'))
+    filename = getattr(ccd, 'image_filename')
+    if filename is None:
+        # HACK -- print only two directory names + filename of CPFILE.
+        fname = os.path.basename(im.imgfn)
+        d = os.path.dirname(im.imgfn)
+        d1 = os.path.basename(d)
+        d = os.path.dirname(d)
+        d2 = os.path.basename(d)
+        filename = os.path.join(d2, d1, fname)
+        print('Trimmed filename to', filename)
+    version_hdr.add_record(dict(name='CPFILE', value=filename, comment='CP file'))
+    version_hdr.add_record(dict(name='CPHDU', value=im.hdu, comment='CP ext'))
+    version_hdr.add_record(dict(name='CAMERA', value=ccd.camera, comment='Camera'))
+    version_hdr.add_record(dict(name='EXPNUM', value=im.expnum, comment='Exposure num'))
+    version_hdr.add_record(dict(name='CCDNAME', value=im.ccdname, comment='CCD name'))
     version_hdr.add_record(dict(name='FILTER', value=tim.band, comment='Bandpass of this image'))
-    version_hdr.add_record(dict(name='EXPOSURE', value='decam-%s-%s' % (im.expnum, im.ccdname), comment='Name of this image'))
+    version_hdr.add_record(dict(name='EXPOSURE',
+                                value='%s-%s-%s' % (ccd.camera, im.expnum, im.ccdname),
+                                comment='Name of this image'))
 
     keys = ['TELESCOP','OBSERVAT','OBS-LAT','OBS-LONG','OBS-ELEV',
             'INSTRUME']
