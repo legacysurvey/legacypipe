@@ -14,7 +14,7 @@ from astrometry.util.fits import fits_table, merge_tables
 from astrometry.util.file import trymakedirs
 from astrometry.util.ttime import Time, MemMeas
 
-from tractor import Tractor
+from tractor import Tractor, disable_galaxy_cache
 
 from legacypipe.common import LegacySurveyData, bricks_touching_wcs, exposure_metadata, get_version_header, apertures_arcsec
 from desi_common import read_fits_catalog
@@ -112,6 +112,8 @@ def main(survey=None, opt=None):
     tim = im.get_tractor_image(slc=zoomslice, pixPsf=True, splinesky=True)
     print('Got tim:', tim)
 
+    print('Read image:', Time()-t0)
+
     if opt.catfn in ['DR1', 'DR2', 'DR3']:
 
         margin = 20
@@ -174,11 +176,16 @@ def main(survey=None, opt=None):
     else:
         T = fits_table(opt.catfn)
 
+    surveydir = survey.get_survey_dir()
+    del survey
+        
     T.shapeexp = np.vstack((T.shapeexp_r, T.shapeexp_e1, T.shapeexp_e2)).T
     T.shapedev = np.vstack((T.shapedev_r, T.shapedev_e1, T.shapedev_e2)).T
 
     cat = read_fits_catalog(T, ellipseClass=tractor.ellipses.EllipseE)
     # print('Got cat:', cat)
+
+    print('Read catalog:', Time()-t0)
 
     print('Forced photom...')
     opti = None
@@ -192,7 +199,8 @@ def main(survey=None, opt=None):
     for src in cat:
         src.freezeAllBut('brightness')
         src.getBrightness().freezeAllBut(tim.band)
-
+    disable_galaxy_cache()
+        
     F = fits_table()
     F.brickid   = T.brickid
     F.brickname = T.brickname
@@ -205,37 +213,6 @@ def main(survey=None, opt=None):
     ok,x,y = tim.sip_wcs.radec2pixelxy(T.ra, T.dec)
     F.x = (x-1).astype(np.float32)
     F.y = (y-1).astype(np.float32)
-
-    if opt.apphot:
-        import photutils
-
-        img = tim.getImage()
-        ie = tim.getInvError()
-        with np.errstate(divide='ignore'):
-            imsigma = 1. / ie
-        imsigma[ie == 0] = 0.
-
-        apimg = []
-        apimgerr = []
-
-        # Aperture photometry locations
-        xxyy = np.vstack([tim.wcs.positionToPixel(src.getPosition()) for src in cat]).T
-        apxy = xxyy - 1.
-
-        apertures = apertures_arcsec / tim.wcs.pixel_scale()
-        print('Apertures:', apertures, 'pixels')
-
-        for rad in apertures:
-            aper = photutils.CircularAperture(apxy, rad)
-            p = photutils.aperture_photometry(img, aper, error=imsigma)
-            apimg.append(p.field('aperture_sum'))
-            apimgerr.append(p.field('aperture_sum_err'))
-        ap = np.vstack(apimg).T
-        ap[np.logical_not(np.isfinite(ap))] = 0.
-        F.apflux = ap.astype(np.float32)
-        ap = 1./(np.vstack(apimgerr).T)**2
-        ap[np.logical_not(np.isfinite(ap))] = 0.
-        F.apflux_ivar = ap.astype(np.float32)
 
     if opt.forced:
         kwa = {}
@@ -272,8 +249,43 @@ def main(survey=None, opt=None):
         F.fracflux = R.fitstats.profracflux.astype(np.float32)
         F.rchi2    = R.fitstats.prochi2    .astype(np.float32)
 
+        print('Forced photom:', Time()-t0)
+
+        
+    if opt.apphot:
+        import photutils
+
+        img = tim.getImage()
+        ie = tim.getInvError()
+        with np.errstate(divide='ignore'):
+            imsigma = 1. / ie
+        imsigma[ie == 0] = 0.
+
+        apimg = []
+        apimgerr = []
+
+        # Aperture photometry locations
+        xxyy = np.vstack([tim.wcs.positionToPixel(src.getPosition()) for src in cat]).T
+        apxy = xxyy - 1.
+
+        apertures = apertures_arcsec / tim.wcs.pixel_scale()
+        print('Apertures:', apertures, 'pixels')
+
+        for rad in apertures:
+            aper = photutils.CircularAperture(apxy, rad)
+            p = photutils.aperture_photometry(img, aper, error=imsigma)
+            apimg.append(p.field('aperture_sum'))
+            apimgerr.append(p.field('aperture_sum_err'))
+        ap = np.vstack(apimg).T
+        ap[np.logical_not(np.isfinite(ap))] = 0.
+        F.apflux = ap.astype(np.float32)
+        ap = 1./(np.vstack(apimgerr).T)**2
+        ap[np.logical_not(np.isfinite(ap))] = 0.
+        F.apflux_ivar = ap.astype(np.float32)
+        print('Aperture photom:', Time()-t0)
+
     program_name = sys.argv[0]
-    version_hdr = get_version_header(program_name, survey.get_survey_dir())
+    version_hdr = get_version_header(program_name, surveydir)
     filename = getattr(ccd, 'image_filename')
     if filename is None:
         # HACK -- print only two directory names + filename of CPFILE.
