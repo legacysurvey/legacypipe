@@ -280,6 +280,9 @@ class LegacySurveyImage(object):
             sig1 = 1./np.sqrt(np.median(invvar[invvar > 0]))
         elif skysig1 is not None:
             sig1 = skysig1
+            if nanomaggies:
+                # skysig1 is in the native units
+                sig1 /= zpscale
         else:
             # Estimate per-pixel noise via Blanton's 5-pixel MAD
             slice1 = (slice(0,-5,10),slice(0,-5,10))
