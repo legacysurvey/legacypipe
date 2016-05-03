@@ -138,6 +138,9 @@ def main(survey=None, opt=None):
             T.cut((T.out_of_bounds == False) * (T.left_blob == False))
             print('Cut to', len(T), 'on out_of_bounds and left_blob')
             TT.append(T)
+        if len(TT) == 0:
+            print('No sources to photometer.')
+            return 0
         T = merge_tables(TT)
         T._header = TT[0]._header
         del TT
