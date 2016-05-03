@@ -18,6 +18,7 @@ from tractor.tractortime import TAITime
 
 from legacypipe.ptf import zeropoint_for_ptf
 
+
 '''
 Code specific to images from the 90prime camera on the Bok telescope.
 '''
@@ -39,6 +40,7 @@ class BokImage(LegacySurveyImage):
         self.sefn = os.path.join(calibdir, 'sextractor', self.calname + '.fits')
         self.psffn = os.path.join(calibdir, 'psfex', self.calname + '.fits')
         #self.skyfn = os.path.join(calibdir, 'sky', self.calname + '.fits')
+        self.dq_saturation_bits = -1 #junk b/c currently don't have dq images for bok so read_dq returns array of 0s
         print('in BokImage init, calibdir=%s,self.calname=%s,self.imgfn=%s, self.whtfn=%s, self.sefn=%s, self.psffn=%s' % (calibdir,self.calname,self.imgfn,self.whtfn,self.sefn, self.psffn))
         
     def __str__(self):
@@ -69,7 +71,6 @@ class BokImage(LegacySurveyImage):
     # read the TPV header, convert it to SIP, and apply an offset from the
     # CCDs table
     def get_wcs(self):
-        print('---in bok.py get_wcs ----')
         # Make sure the PV-to-SIP converter samples enough points for small
         # images
         stepsize = 0
