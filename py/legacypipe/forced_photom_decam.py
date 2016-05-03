@@ -190,11 +190,24 @@ def main(survey=None, opt=None):
 
     print('Forced photom...')
     opti = None
+    forced_kwargs = {}
     if opt.ceres:
         from tractor.ceres_optimizer import CeresOptimizer
         B = 8
         opti = CeresOptimizer(BW=B, BH=B)
+        forced_kwargs.update(verbose=True)
 
+    for src in cat:
+        # Limit sizes of huge models
+        from tractor.galaxy import ProfileGalaxy
+        if isinstance(src, ProfileGalaxy):
+            px,py = tim.wcs.positionToPixel(src.getPosition())
+            h = src._getUnitFluxPatchSize(tim, px, py, tim.modelMinval)
+            MAXHALF = 128
+            if h > MAXHALF:
+                print('halfsize', h,'for',src,'-> setting to',MAXHALF)
+                src.halfsize = MAXHALF
+        
     tr = Tractor([tim], cat, optimizer=opti)
     tr.freezeParam('images')
     for src in cat:
@@ -216,12 +229,11 @@ def main(survey=None, opt=None):
     F.y = (y-1).astype(np.float32)
 
     if opt.forced:
-        kwa = {}
         if opt.plots is None:
-            kwa.update(wantims=False)
+            forced_kwargs.update(wantims=False)
 
         R = tr.optimize_forced_photometry(variance=True, fitstats=True,
-                                          shared_params=False, **kwa)
+                                          shared_params=False, priors=False, **forced_kwargs)
 
         if opt.plots:
             (data,mod,ie,chi,roi) = R.ims1[0]

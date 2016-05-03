@@ -278,13 +278,13 @@ class DecamImage(CPImage, CalibMixin):
 
                 sig1b = 1./np.sqrt(np.median(wt[masked == False]))
                 print('Sig1 vs sig1b:', sig1, sig1b)
-                
+
                 # Now find the final sky model using that more extensive mask
                 skyobj = SplineSky.BlantonMethod(
                     img - med, np.logical_not(masked), 512)
                 # add the overall median back in
                 skyobj.offset(med)
-    
+
                 if slc is not None:
                     sy,sx = slc
                     y0 = sy.start
