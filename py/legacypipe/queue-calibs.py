@@ -456,8 +456,6 @@ def main():
         log('Total of', len(allI), 'CCDs')
         for j,i in enumerate(allI):
             expstr = '%08i' % T.expnum[i]
-            #outdir = os.path.join('forced', expstr[:5], expstr)
-            #trymakedirs(outdir)
             outfn = os.path.join('forced', expstr[:5], expstr,
                                  'decam-%s-%s-forced.fits' %
                                  (expstr, T.ccdname[i]))
@@ -468,9 +466,12 @@ def main():
                 os.path.exists(imgfn[:-3])):
                 imgfn = imgfn[:-3]
 
-            f.write('python legacypipe/forced-photom-decam.py %s %i DR1 %s\n' %
-                    (imgfn, T.cpimage_hdu[i], outfn))
+            #f.write('python legacypipe/forced_photom_decam.py %s %i DR3 %s\n' %
+            #        (imgfn, T.image_hdu[i], outfn))
 
+            f.write('python legacypipe/forced_photom_decam.py --apphot %i %s DR3 %s\n' %
+                    (T.expnum[i], T.ccdname[i], outfn))
+            
         f.close()
         log('Wrote', opt.out)
         sys.exit(0)

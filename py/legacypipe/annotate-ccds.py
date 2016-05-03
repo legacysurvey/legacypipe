@@ -366,5 +366,10 @@ if __name__ == '__main__':
         TT = [fits_table('ccds-annotated/ccds-annotated-%s-%03i.fits' % (name,i))
               for name,i,nil in args]
         T = merge_tables(TT)
-        T.writeto('ccds-annotated-%s.fits' % name)
+
+        # expand some columns to make the three files have the same structure.
+        T.object = T.object.astype('S37')
+        T.plver  = T.plver.astype('S6')
+
+        T.writeto('survey-ccds-annotated-%s.fits' % name)
 

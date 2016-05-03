@@ -926,7 +926,7 @@ Now using the current directory as LEGACY_SURVEY_DIR, but this is likely to fail
         if self.ccds is None:
             self.ccds = self.get_ccds()
         return self.ccds
-    
+
     def get_ccds(self):
         '''
         Returns the table of CCDs.
@@ -1173,8 +1173,8 @@ def exposure_metadata(filenames, hdus=None, trim=None):
 
     # DECam: INSTRUME = 'DECam'
     T.rename('instrume', 'camera')
-    T.camera = np.array([t.lower() for t in T.camera])
-
+    T.camera = np.array([t.lower().strip() for t in T.camera])
+    
     #T.rename('extname', 'ccdname')
     T.ccdname = np.array([t.strip() for t in T.extname])
     
