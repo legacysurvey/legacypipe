@@ -145,7 +145,7 @@ def main(survey=None, opt=None):
         if len(TT) == 0:
             print('No sources to photometer.')
             return 0
-        T = merge_tables(TT)
+        T = merge_tables(TT, columns='fillzero')
         T._header = TT[0]._header
         del TT
 
