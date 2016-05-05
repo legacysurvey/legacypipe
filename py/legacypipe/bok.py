@@ -31,6 +31,9 @@ class BokImage(LegacySurveyImage):
     def __init__(self, survey, t):
         super(BokImage, self).__init__(survey, t)
         self.pixscale= 0.455
+        self.fwhm = t.fwhm
+        self.arawgain = t.arawgain
+        
         self.whtfn= self.imgfn.replace('.fits','.wht.fits')
 
         self.calname = os.path.basename(self.imgfn).replace('.fits','') 
@@ -123,9 +126,10 @@ class BokImage(LegacySurveyImage):
             print('wrote mask-2 to %s, invvar to %s' % (maskfn,invvarfn))
             #run se 
             hdr=fitsio.read_header(self.imgfn,ext=hdu)
-            magzp  = zeropoint_for_ptf(hdr)
-            seeing = hdr['PIXSCALE'] * hdr['MEDFWHM']
-            gain= hdr['GAIN']
+            #magzp  = zeropoint_for_ptf(hdr)
+            magzp = self.ccdzpt
+            seeing = self.pixscale * self.fwhm
+            gain= self.arawgain
             cmd = ' '.join(['sex','-c', os.path.join(sedir,'ptf.se'),
                             '-WEIGHT_IMAGE %s' % invvarfn, '-WEIGHT_TYPE MAP_WEIGHT',
                             '-GAIN %f' % gain,
