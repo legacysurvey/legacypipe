@@ -137,7 +137,6 @@ class BokImage(LegacySurveyImage, CalibMixin):
         #else:
         #    imgfn,maskfn = self.imgfn,self.dqfn
         imgfn,maskfn = self.imgfn,self.dqfn
-        print('----TEMPORARILY FORCING se and psfex to run for testing ------') 
         if se:
             self.run_se('90prime', imgfn, 'junkname')
         if psfex:
