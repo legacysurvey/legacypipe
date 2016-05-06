@@ -700,6 +700,9 @@ Now using the current directory as LEGACY_SURVEY_DIR, but this is likely to fail
             else:
                 return glob(os.path.join(basedir, 'survey-ccds-*.fits.gz'))
                 
+        elif filetype == 'annotated-ccds':
+            return glob(os.path.join(basedir, 'ccds-annotated-*.fits.gz'))
+
         elif filetype == 'tractor':
             return os.path.join(basedir, 'tractor', brickpre,
                                 'tractor-%s.fits' % brick)
@@ -969,6 +972,30 @@ Now using the current directory as LEGACY_SURVEY_DIR, but this is likely to fail
         T.camera = np.array([c.strip() for c in T.camera])
         return T
 
+    def get_annotated_ccds(self):
+        '''
+        Returns the annotated table of CCDs.
+        '''
+        from glob import glob
+
+        fns = self.find_file('annotated-ccds')
+        TT = []
+        for fn in fns:
+            print('Reading annotated CCDs from', fn)
+            T = fits_table(fn)
+            print('Got', len(T), 'CCDs')
+            TT.append(T)
+        T = merge_tables(TT, columns='fillzero')
+        print('Total of', len(T), 'CCDs')
+        del TT
+        # Remove trailing spaces from 'ccdname' column
+        if 'ccdname' in T.columns():
+            # "N4 " -> "N4"
+            T.ccdname = np.array([s.strip() for s in T.ccdname])
+        # Remove trailing spaces from 'camera' column.
+        T.camera = np.array([c.strip() for c in T.camera])
+        return T
+    
     def ccds_touching_wcs(self, wcs, **kwargs):
         '''
         Returns a table of the CCDs touching the given *wcs* region.

@@ -4,6 +4,7 @@ matplotlib.use('Agg')
 import pylab as plt
 import numpy as np
 import os
+import sys
 
 from astrometry.util.fits import fits_table
 from astrometry.libkd.spherematch import match_radec
@@ -12,7 +13,7 @@ from astrometry.util.plotutils import PlotSequence
 from legacyanalysis.ps1cat import ps1cat, ps1_to_decam
 from legacypipe.common import *
 
-if __name__ == '__main__':
+def main():
     survey_dir = '/project/projectdirs/desiproc/dr3'
     survey = LegacySurveyData(survey_dir=survey_dir)
 
@@ -21,6 +22,134 @@ if __name__ == '__main__':
 
     ps = PlotSequence('comp')
     
+    bands = 'grz'
+
+
+    ccdfn = 'ccds-forced.fits'
+    if not os.path.exists(ccdfn):
+
+        ccds = survey.get_annotated_ccds()
+        ccds.cut((ccds.ra > ralo) * (ccds.ra < rahi) *
+                 (ccds.dec > declo) * (ccds.dec < dechi))
+        print(len(ccds), 'CCDs')
+        
+        ccds.path = np.array([os.path.join('dr3', 'forced', ('%08i' % e)[:5], '%08i' % e, 'decam-%08i-%s-forced.fits' % (e, n.strip()))
+                              for e,n in zip(ccds.expnum, ccds.ccdname)])
+        I, = np.nonzero([os.path.exists(fn) for fn in ccds.path])
+        print(len(I), 'CCDs with forced photometry')
+        ccds.cut(I)
+
+        #ccds = ccds[:500]
+        e,I = np.unique(ccds.expnum, return_index=True)
+        print(len(I), 'unique exposures')
+        ccds.cut(I)
+        
+        read_forcedphot_ccds(ccds, survey)
+        ccds.writeto(ccdfn)
+
+    ccds = fits_table(ccdfn)
+
+    neff = 1. / ccds.psfnorm_mean**2
+    # Narcsec is in arcsec**2
+    narcsec = neff * ccds.pixscale_mean**2
+    # to arcsec
+    narcsec = np.sqrt(narcsec)
+    # Correction factor to get back to equivalent of Gaussian sigma
+    narcsec /= (2. * np.sqrt(np.pi))
+    # Conversion factor to FWHM (2.35)
+    narcsec *= 2. * np.sqrt(2. * np.log(2.))
+    ccds.psfsize = narcsec
+    
+    for band in bands:
+        I = np.flatnonzero(ccds.filter == band)
+
+        mxsee = 4.
+        mlo,mhi = -0.01, 0.05
+        
+        plt.clf()
+        plt.plot(np.clip(ccds.psfsize[I], 0, mxsee),
+                 np.clip(ccds.mdiff[I], mlo,mhi), 'k.')
+        #plt.plot(ccds.seeing[I], ccds.mdiff[I], 'b.')
+        plt.xlabel('PSF size (arcsec)')
+        plt.ylabel('DECaLS PSF - PS1 (mag)')
+        plt.axhline(0, color='k', alpha=0.2)
+        plt.axis([0, mxsee, mlo,mhi])
+        plt.title('DR3: EDR region, Forced phot: %s band' % band)
+        ps.savefig()
+        
+    sys.exit(0)
+
+    
+def read_forcedphot_ccds(ccds, survey):
+    ccds.mdiff = np.zeros(len(ccds))
+    brickcache = {}
+
+    for iccd,ccd in enumerate(ccds):
+        print('CCD', iccd, 'of', len(ccds))
+        F = fits_table(ccd.path)
+        print(len(F), 'sources in', ccd.path)
+
+        # arr, have to match with brick sources to get RA,Dec.
+        F.ra  = np.zeros(len(F))
+        F.dec = np.zeros(len(F))
+
+        for brickname in np.unique(F.brickname):
+            if not brickname in brickcache:
+                brickcache[brickname] = fits_table(survey.find_file('tractor', brick=brickname))
+            T = brickcache[brickname]
+            idtoindex = np.zeros(T.objid.max()+1, int) - 1
+            idtoindex[T.objid] = np.arange(len(T))
+
+            I = np.flatnonzero(F.brickname == brickname)
+            J = idtoindex[F.objid[I]]
+            assert(np.all(J >= 0))
+            F.ra [I] = T.ra [J]
+            F.dec[I] = T.dec[J]
+            
+        wcs = Tan(*[float(x) for x in [ccd.crval1, ccd.crval2, ccd.crpix1, ccd.crpix2,
+                                       ccd.cd1_1, ccd.cd1_2, ccd.cd2_1, ccd.cd2_2,
+                                       ccd.width, ccd.height]])
+
+        ps1 = ps1cat(ccdwcs=wcs)
+        stars = ps1.get_stars()
+        print(len(stars), 'PS1 sources')
+        
+        # Now cut to just *stars* with good colors
+        stars.gicolor = stars.median[:,0] - stars.median[:,2]
+        keep = (stars.gicolor > 0.4) * (stars.gicolor < 2.7)
+        stars.cut(keep)
+        print(len(stars), 'PS1 stars with good colors')
+
+        I,J,d = match_radec(F.ra, F.dec, stars.ra, stars.dec, 1./3600.)
+        print(len(I), 'matches')
+
+        band = ccd.filter
+
+        colorterm = ps1_to_decam(stars.median[J], band)
+
+        psmag = stars.median[J, ps1.ps1band[band]]
+        psmag += colorterm
+            
+        decflux = F.flux[I]
+        decmag = -2.5 * (np.log10(decflux) - 9)
+
+        K = np.flatnonzero((psmag > 14) * (psmag < 21))
+        print(len(K), 'with mag 14 to 21')
+        decmag = decmag[K]
+        psmag  = psmag [K]
+        K = np.flatnonzero(np.abs(decmag - psmag) < 1)
+        print(len(K), 'with good mag matches (< 1 mag difference)')
+        decmag = decmag[K]
+        psmag  = psmag [K]
+        
+        ccds.mdiff[iccd] = np.median(decmag - psmag)
+
+    return
+
+
+
+    
+
     bricks = survey.get_bricks_readonly()
     bricks = bricks[(bricks.ra > ralo) * (bricks.ra < rahi) *
                     (bricks.dec > declo) * (bricks.dec < dechi)]
@@ -30,12 +159,11 @@ if __name__ == '__main__':
                     for b in bricks])
     print(len(I), 'bricks with catalogs')
     bricks.cut(I)
-
-    bands = 'grz'
-
+    
     for band in bands:
         bricks.set('diff_%s' % band, np.zeros(len(bricks), np.float32))
-    
+        bricks.set('psfsize_%s' % band, np.zeros(len(bricks), np.float32))
+        
     diffs = dict([(b,[]) for b in bands])
     for ibrick,b in enumerate(bricks):
         fn = survey.find_file('tractor', brick=b.brickname)
@@ -58,6 +186,9 @@ if __name__ == '__main__':
         print(len(I), 'matches')
         
         for band in bands:
+            bricks.get('psfsize_%s' % band)[ibrick] = np.median(
+                T.decam_psfsize[:, survey.index_of_band(band)])
+
             colorterm = ps1_to_decam(stars.median[J], band)
 
             psmag = stars.median[J, ps1.ps1band[band]]
@@ -77,7 +208,7 @@ if __name__ == '__main__':
             decmag = decmag[K]
             psmag  = psmag [K]
 
-            if ibrick == 0:
+            if False and ibrick == 0:
                 plt.clf()
                 #plt.plot(psmag, decmag, 'b.')
                 plt.plot(psmag, decmag - psmag, 'b.')
@@ -104,13 +235,14 @@ if __name__ == '__main__':
 
         print('Median differences in', band, 'band:', np.median(d))
         
-    plt.clf()
-    plt.hist(diffs['g'], bins=20, range=(-0.02, 0.02), histtype='step', color='g')
-    plt.hist(diffs['r'], bins=20, range=(-0.02, 0.02), histtype='step', color='r')
-    plt.hist(diffs['z'], bins=20, range=(-0.02, 0.02), histtype='step', color='m')
-    plt.xlabel('Median mag difference per brick')
-    plt.title('DR3 EDR PS1 vs DECaLS')
-    ps.savefig()
+    if False:
+        plt.clf()
+        plt.hist(diffs['g'], bins=20, range=(-0.02, 0.02), histtype='step', color='g')
+        plt.hist(diffs['r'], bins=20, range=(-0.02, 0.02), histtype='step', color='r')
+        plt.hist(diffs['z'], bins=20, range=(-0.02, 0.02), histtype='step', color='m')
+        plt.xlabel('Median mag difference per brick')
+        plt.title('DR3 EDR PS1 vs DECaLS')
+        ps.savefig()
 
     rr,dd = np.meshgrid(np.linspace(ralo,rahi, 400), np.linspace(declo,dechi, 400))
     I,J,d = match_radec(rr.ravel(), dd.ravel(), bricks.ra, bricks.dec, 0.18, nearest=True)
@@ -130,16 +262,45 @@ if __name__ == '__main__':
         plt.axis([ralo,rahi,declo,dechi])
         ps.savefig()
 
-    for band in bands:
+
         plt.clf()
-        plt.scatter(bricks.ra, bricks.dec, c=bricks.get('diff_%s' % band), vmin=-0.01, vmax=0.01,
-                    edgecolors='face', s=200)
+        # reuse 'dmag' map...
+        dmag = np.zeros_like(rr)
+        dmag.ravel()[I] = bricks.get('psfsize_%s' % band)[J]
+        plt.imshow(dmag, interpolation='nearest', origin='lower',
+                   cmap='hot', extent=(ralo,rahi,declo,dechi))
         plt.colorbar()
-        plt.title('DR3 EDR PS1 vs DECaLS: %s band' % band)
+        plt.title('DR3 EDR: DECaLS PSF size: %s band' % band)
         plt.xlabel('RA (deg)')
         plt.ylabel('Dec (deg)')
-        plt.axis('scaled')
         plt.axis([ralo,rahi,declo,dechi])
         ps.savefig()
-        
+
+    if False:
+        for band in bands:
+            plt.clf()
+            plt.scatter(bricks.ra, bricks.dec, c=bricks.get('diff_%s' % band), vmin=-0.01, vmax=0.01,
+                        edgecolors='face', s=200)
+            plt.colorbar()
+            plt.title('DR3 EDR PS1 vs DECaLS: %s band' % band)
+            plt.xlabel('RA (deg)')
+            plt.ylabel('Dec (deg)')
+            plt.axis('scaled')
+            plt.axis([ralo,rahi,declo,dechi])
+            ps.savefig()
+
+
+    plt.clf()
+    plt.plot(bricks.psfsize_g, bricks.diff_g, 'g.')
+    plt.plot(bricks.psfsize_r, bricks.diff_r, 'r.')
+    plt.plot(bricks.psfsize_z, bricks.diff_z, 'm.')
+    plt.xlabel('PSF size (arcsec)')
+    plt.ylabel('DECaLS PSF - PS1 (mag)')
+    plt.title('DR3 EDR')
+    ps.savefig()
+
+
+
+if __name__ == '__main__':
+    main()
     
