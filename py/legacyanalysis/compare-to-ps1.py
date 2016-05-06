@@ -155,8 +155,10 @@ def read_forcedphot_ccds(ccds, survey):
     ccds.apscatter = np.zeros((len(ccds), Nap))
 
     ccds.nforced = np.zeros(len(ccds), np.int16)
+    ccds.nunmasked = np.zeros(len(ccds), np.int16)
     ccds.nmatched = np.zeros(len(ccds), np.int16)
-
+    ccds.nps1 = np.zeros(len(ccds), np.int16)
+    
     brickcache = {}
 
     for iccd,ccd in enumerate(ccds):
@@ -164,10 +166,13 @@ def read_forcedphot_ccds(ccds, survey):
         F = fits_table(ccd.path)
         print(len(F), 'sources in', ccd.path)
 
+        ccds.nforced[iccd] = len(F)
+        
         # arr, have to match with brick sources to get RA,Dec.
         F.ra  = np.zeros(len(F))
         F.dec = np.zeros(len(F))
-
+        F.masked = np.zeros(len(F), bool)
+        
         for brickname in np.unique(F.brickname):
             if not brickname in brickcache:
                 brickcache[brickname] = fits_table(survey.find_file('tractor', brick=brickname))
@@ -180,6 +185,12 @@ def read_forcedphot_ccds(ccds, survey):
             assert(np.all(J >= 0))
             F.ra [I] = T.ra [J]
             F.dec[I] = T.dec[J]
+
+            F.masked[I] = (T.decam_anymask[J,:].max(axis=1) > 0)
+
+        F.cut(F.masked == False)
+        print(len(F), 'not masked')
+        ccds.nunmasked[iccd] = len(F)
             
         wcs = Tan(*[float(x) for x in [ccd.crval1, ccd.crval2, ccd.crpix1, ccd.crpix2,
                                        ccd.cd1_1, ccd.cd1_2, ccd.cd2_1, ccd.cd2_2,
@@ -188,6 +199,7 @@ def read_forcedphot_ccds(ccds, survey):
         ps1 = ps1cat(ccdwcs=wcs)
         stars = ps1.get_stars()
         print(len(stars), 'PS1 sources')
+        ccds.nps1[iccd] = len(stars)
         
         # Now cut to just *stars* with good colors
         stars.gicolor = stars.median[:,0] - stars.median[:,2]
@@ -195,6 +207,9 @@ def read_forcedphot_ccds(ccds, survey):
         stars.cut(keep)
         print(len(stars), 'PS1 stars with good colors')
 
+        stars.cut(np.minimum(stars.stdev[:,1], stars.stdev[:,2]) < 0.05)
+        print(len(stars), 'PS1 stars with min stdev(r,i) < 0.05')
+        
         I,J,d = match_radec(F.ra, F.dec, stars.ra, stars.dec, 1./3600.)
         print(len(I), 'matches')
 
@@ -215,7 +230,6 @@ def read_forcedphot_ccds(ccds, survey):
         I = I[K]
         K = np.flatnonzero(np.abs(decmag - psmag) < 1)
         print(len(K), 'with good mag matches (< 1 mag difference)')
-        ccds.nforced[iccd] = len(F)
         ccds.nmatched[iccd] = len(K)
 
         if len(K) == 0:
