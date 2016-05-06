@@ -469,6 +469,7 @@ class LegacySurveyImage(object):
             while True:
                 line = h[:80]
                 h = h[80:]
+                print('Header line:', line)
                 # HACK -- fitsio apparently can't handle CONTINUE
                 if line[:8] != 'CONTINUE':
                     hdr.add_record(line)
