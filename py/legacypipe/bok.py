@@ -40,7 +40,7 @@ class BokImage(LegacySurveyImage, CalibMixin):
 
         calibdir = os.path.join(self.survey.get_calib_dir(), self.camera)
         self.sefn = os.path.join(calibdir, 'sextractor', self.calname + '.fits')
-        self.psffn = os.path.join(calibdir, 'psfex', self.calname + '.fits')
+        self.psffn = os.path.join(calibdir, 'psfex', self.calname + '.psf')
         #self.skyfn = os.path.join(calibdir, 'sky', self.calname + '.fits')
         self.dq_saturation_bits = 0 #not used so set to 0
         print('in BokImage init, calibdir=%s,self.calname=%s,self.imgfn=%s, self.whtfn=%s, self.sefn=%s, self.psffn=%s' % (calibdir,self.calname,self.imgfn,self.whtfn,self.sefn, self.psffn))
@@ -138,14 +138,9 @@ class BokImage(LegacySurveyImage, CalibMixin):
         #    imgfn,maskfn = self.imgfn,self.dqfn
         imgfn,maskfn = self.imgfn,self.dqfn
         print('----TEMPORARILY FORCING se and psfex to run for testing ------') 
-        #if se:
-        self.run_se('90prime', imgfn, 'junkname')
-        #if psfex:
-        self.run_psfex('90prime')
-        
-        print('exiting early')
-        import sys
-        sys.exit()
-
+        if se:
+            self.run_se('90prime', imgfn, 'junkname')
+        if psfex:
+            self.run_psfex('90prime')
         #############
 
