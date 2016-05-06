@@ -148,6 +148,12 @@ def main():
     
 def read_forcedphot_ccds(ccds, survey):
     ccds.mdiff = np.zeros(len(ccds))
+    ccds.mscatter = np.zeros(len(ccds))
+
+    Nap = 8
+    ccds.apdiff = np.zeros((len(ccds), Nap))
+    ccds.apscatter = np.zeros((len(ccds), Nap))
+
     ccds.nforced = np.zeros(len(ccds), np.int16)
     ccds.nmatched = np.zeros(len(ccds), np.int16)
 
@@ -206,14 +212,26 @@ def read_forcedphot_ccds(ccds, survey):
         print(len(K), 'with mag 14 to 21')
         decmag = decmag[K]
         psmag  = psmag [K]
+        I = I[K]
         K = np.flatnonzero(np.abs(decmag - psmag) < 1)
         print(len(K), 'with good mag matches (< 1 mag difference)')
-        decmag = decmag[K]
-        psmag  = psmag [K]
-        
-        ccds.mdiff[iccd] = np.median(decmag - psmag)
         ccds.nforced[iccd] = len(F)
         ccds.nmatched[iccd] = len(K)
+
+        if len(K) == 0:
+            continue
+        decmag = decmag[K]
+        psmag  = psmag [K]
+        I = I[K]
+        
+        ccds.mdiff[iccd] = np.median(decmag - psmag)
+        ccds.mscatter[iccd] = (np.percentile(decmag - psmag, 84) - np.percentile(decmag - psmag, 16))/2.
+
+        for i in range(Nap):
+            apmag = -2.5 * (np.log10(F.apflux[I, i]) - 9)
+
+            ccds.apdiff[iccd,i] = np.median(apmag - psmag)
+            ccds.apscatter[iccd,i] = (np.percentile(apmag - psmag, 84) - np.percentile(apmag - psmag, 16))/2.
         
     return
 
