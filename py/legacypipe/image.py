@@ -460,6 +460,7 @@ class LegacySurveyImage(object):
         '''
         if self.imgfn.endswith('.gz'):
             return fitsio.read_header(self.imgfn)
+
         # Crazily, this can be MUCH faster than letting fitsio do it...
         hdr = fitsio.FITSHDR()
         foundEnd = False
@@ -470,10 +471,15 @@ class LegacySurveyImage(object):
             while True:
                 line = h[:80]
                 h = h[80:]
-                print('Header line:', line)
-                # HACK -- fitsio apparently can't handle CONTINUE
+                # HACK -- fitsio apparently can't handle CONTINUE.
+                # It also has issues with slightly malformed cards, like
+                # KEYWORD  =      / no value
                 if line[:8] != 'CONTINUE':
-                    hdr.add_record(line)
+                    try:
+                        hdr.add_record(line)
+                    except:
+                        print('Warning: failed to parse FITS header line: "%s"; skipped' %
+                              line.strip())
                 if line == ('END' + ' '*77):
                     foundEnd = True
                     break
