@@ -26,7 +26,10 @@ def _detmap(X):
     detiv = np.zeros((subh,subw), np.float32) + (1. / detsig1**2)
     detiv[ie == 0] = 0.
     (Yo,Xo,Yi,Xi) = R
-    sat = ((tim.dq[Yi,Xi] & tim.dq_saturation_bits) > 0)
+    if tim.dq is None:
+        sat = None
+    else:
+        sat = ((tim.dq[Yi,Xi] & tim.dq_saturation_bits) > 0)
     return Yo, Xo, detim[Yi,Xi], detiv[Yi,Xi], sat
 
 def detection_maps(tims, targetwcs, bands, mp):
@@ -41,7 +44,8 @@ def detection_maps(tims, targetwcs, bands, mp):
             continue
         detmaps[tim.band][Yo,Xo] += incmap * inciv
         detivs [tim.band][Yo,Xo] += inciv
-        satmap           [Yo,Xo] += sat
+        if sat is not None:
+            satmap       [Yo,Xo] += sat
         
     for band in bands:
         detmaps[band] /= np.maximum(1e-16, detivs[band])
@@ -51,8 +55,6 @@ def detection_maps(tims, targetwcs, bands, mp):
     detivs  = [detivs [b] for b in bands]
         
     return detmaps, detivs, satmap
-
-
 
 def sed_matched_filters(bands):
     '''

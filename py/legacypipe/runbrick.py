@@ -407,14 +407,15 @@ def stage_tims(W=3600, H=3600, pixscale=0.262, brickname=None,
             plt.subplot(2,2,2)
             dimshow(tim.getInvError(), vmin=0, vmax=1.1/tim.sig1)
             plt.title('inverr')
-            plt.subplot(2,2,3)
-            #nil,udq = np.unique(tim.dq, return_inverse=True)
-            dimshow(tim.dq, vmin=0, vmax=tim.dq.max())
-            plt.title('DQ')
-            plt.subplot(2,2,3)
-            #nil,udq = np.unique(tim.dq, return_inverse=True)
-            dimshow(((tim.dq & tim.dq_saturation_bits) > 0), vmin=0, vmax=1)
-            plt.title('SATUR')
+            if tim.dq is not None:
+                plt.subplot(2,2,3)
+                dimshow(tim.dq, vmin=0, vmax=tim.dq.max())
+                plt.title('DQ')
+
+                plt.subplot(2,2,3)
+                #nil,udq = np.unique(tim.dq, return_inverse=True)
+                dimshow(((tim.dq & tim.dq_saturation_bits) > 0), vmin=0, vmax=1)
+                plt.title('SATUR')
             plt.suptitle(tim.name)
             ps.savefig()
 
@@ -615,25 +616,29 @@ def _coadds(tims, bands, targetwcs,
             cow   [Yo,Xo] += iv
 
             if unweighted:
-                dq = tim.dq[Yi,Xi]
-                # include BLEED, SATUR, INTERP pixels if no other
-                # pixels exists (do this by eliminating all other CP
-                # flags)
-                badbits = 0
-                for bitname in ['badpix', 'cr', 'trans', 'edge', 'edge2']:
-                    badbits |= CP_DQ_BITS[bitname]
-                goodpix = ((dq & badbits) == 0)
-
+                if tim.dq is None:
+                    goodpix = 1
+                else:
+                    dq = tim.dq[Yi,Xi]
+                    # include BLEED, SATUR, INTERP pixels if no other
+                    # pixels exists (do this by eliminating all other CP
+                    # flags)
+                    badbits = 0
+                    for bitname in ['badpix', 'cr', 'trans', 'edge', 'edge2']:
+                        badbits |= CP_DQ_BITS[bitname]
+                    goodpix = ((dq & badbits) == 0)
+                    
                 coimg[Yo,Xo] += goodpix * im
                 con  [Yo,Xo] += goodpix
                 coiv [Yo,Xo] += goodpix * 1./tim.sig1**2  # ...ish
                 del dq
 
             if xy:
-                dq = tim.dq[Yi,Xi]
-                ormask [Yo,Xo] |= dq
-                andmask[Yo,Xo] &= dq
-                del dq
+                if tim.dq is not None:
+                    dq = tim.dq[Yi,Xi]
+                    ormask [Yo,Xo] |= dq
+                    andmask[Yo,Xo] &= dq
+                    del dq
                 # raw exposure count
                 nobs[Yo,Xo] += 1
 
@@ -903,8 +908,9 @@ def stage_mask_junk(tims=None, targetwcs=None, W=None, H=None, bands=None,
                 continue
             # Zero it out!
             tim.inverr[slc] *= np.logical_not(inblob)
-            # Add to dq mask bits
-            tim.dq[slc] |= CP_DQ_BITS['longthin']
+            if tim.dq is not None:
+                # Add to dq mask bits
+                tim.dq[slc] |= CP_DQ_BITS['longthin']
 
             ra,dec = tim.wcs.pixelToPosition(cx, cy)
             ok,bx,by = targetwcs.radec2pixelxy(ra, dec)
@@ -1332,10 +1338,11 @@ def stage_srcs(coimgs=None, cons=None,
                        ticks=False)
             dimshow(tim.getImage(), **ima)
             plt.title('Tim image')
-            plt.subplot(2,2,3)
-            dimshow((tim.dq & tim.dq_saturation_bits > 0), vmin=0, vmax=1,
-                    ticks=False)
-            plt.title('SATUR')
+            if tim.dq is not None:
+                plt.subplot(2,2,3)
+                dimshow((tim.dq & tim.dq_saturation_bits > 0), vmin=0, vmax=1,
+                        ticks=False)
+                plt.title('SATUR')
             plt.suptitle('Tim ' + tim.name)
             ps.savefig()
 

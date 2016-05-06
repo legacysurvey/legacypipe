@@ -59,13 +59,7 @@ class BokImage(LegacySurveyImage):
         sky.plver = '0'
         return sky
 
-    def read_dq(self, slice=None, **kwargs):
-        # already account for bad pixels in wht, so return array of 0s
-        # (good everywhere)
-        dq = np.zeros(self.shape, np.uint8)
-        if slice is not None:
-            dq = dq[slice]
-        return dq
+    # Don't need read_dq(): superclass returns None
 
     def read_invvar(self, **kwargs):
         print('Reading inv=%s for image=%s, hdu=' % (self.whtfn,self.imgfn),

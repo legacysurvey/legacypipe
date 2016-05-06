@@ -234,7 +234,8 @@ class LegacySurveyImage(object):
             
         if get_dq:
             dq = self.read_dq(slice=slc)
-            invvar[dq != 0] = 0.
+            if dq is not None:
+                invvar[dq != 0] = 0.
         if np.all(invvar == 0.):
             print('Skipping zero-invvar image')
             return None
