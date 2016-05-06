@@ -40,15 +40,27 @@ def main():
         ccds.cut(I)
 
         #ccds = ccds[:500]
-        e,I = np.unique(ccds.expnum, return_index=True)
-        print(len(I), 'unique exposures')
-        ccds.cut(I)
+        #e,I = np.unique(ccds.expnum, return_index=True)
+        #print(len(I), 'unique exposures')
+        #ccds.cut(I)
         
         read_forcedphot_ccds(ccds, survey)
         ccds.writeto(ccdfn)
 
     ccds = fits_table(ccdfn)
 
+    # plt.clf()
+    # plt.hist(ccds.nforced, bins=100)
+    # plt.title('nforced')
+    # ps.savefig()
+    # 
+    # plt.clf()
+    # plt.hist(ccds.nmatched, bins=100)
+    # plt.title('nmatched')
+    # ps.savefig()
+
+    ccds.cut(ccds.nmatched >= 150)
+    
     neff = 1. / ccds.psfnorm_mean**2
     # Narcsec is in arcsec**2
     narcsec = neff * ccds.pixscale_mean**2
@@ -68,7 +80,14 @@ def main():
         
         plt.clf()
         plt.plot(np.clip(ccds.psfsize[I], 0, mxsee),
-                 np.clip(ccds.mdiff[I], mlo,mhi), 'k.')
+                 np.clip(ccds.mdiff[I], mlo,mhi), 'k.', alpha=0.1)
+
+        # for p in [1,2,3]:
+        #     J = np.flatnonzero(ccds.tilepass[I] == p)
+        #     if len(J):
+        #         plt.plot(np.clip(ccds.psfsize[I[J]], 0, mxsee),
+        #                  np.clip(ccds.mdiff[I[J]], mlo,mhi), '.', color='rgb'[p-1], alpha=0.2)
+
         #plt.plot(ccds.seeing[I], ccds.mdiff[I], 'b.')
         plt.xlabel('PSF size (arcsec)')
         plt.ylabel('DECaLS PSF - PS1 (mag)')
@@ -76,12 +95,62 @@ def main():
         plt.axis([0, mxsee, mlo,mhi])
         plt.title('DR3: EDR region, Forced phot: %s band' % band)
         ps.savefig()
+
+
+    # Group by exposure
+
+    for band in bands:
+        I = np.flatnonzero(ccds.filter == band)
+
+        E,J = np.unique(ccds.expnum[I], return_index=True)
+        print(len(E), 'unique exposures in', band)
+        exps = ccds[I[J]]
+        print(len(exps), 'unique exposures in', band)
+        assert(len(np.unique(exps.expnum)) == len(exps))
+        exps.ddiff = np.zeros(len(exps))
+        exps.dsize = np.zeros(len(exps))
+        exps.nccds = np.zeros(len(exps), int)
+        
+        for iexp,exp in enumerate(exps):
+            J = np.flatnonzero(ccds.expnum[I] == exp.expnum)
+            J = I[J]
+            print(len(J), 'CCDs in exposure', exp.expnum)
+            exps.mdiff[iexp] = np.median(ccds.mdiff[J])
+            exps.ddiff[iexp] = (np.percentile(ccds.mdiff[J], 84) - np.percentile(ccds.mdiff[J], 16))/2.
+            exps.psfsize[iexp] = np.median(ccds.psfsize[J])
+            exps.dsize[iexp] = (np.percentile(ccds.psfsize[J], 84) - np.percentile(ccds.psfsize[J], 16))/2.
+            exps.nccds[iexp] = len(J)
+
+        mxsee = 4.
+        mlo,mhi = -0.01, 0.05
+
+        exps.cut(exps.nccds >= 10)
+
+        
+        plt.clf()
+        plt.errorbar(np.clip(exps.psfsize, 0, mxsee),
+                     np.clip(exps.mdiff, mlo,mhi), yerr=exps.ddiff,
+                     #xerr=exps.dsize,
+                     fmt='.')
+        #plt.plot(ccds.seeing[I], ccds.mdiff[I], 'b.')
+        plt.xlabel('PSF size (arcsec)')
+        plt.ylabel('DECaLS PSF - PS1 (mag)')
+        plt.axhline(0, color='k', alpha=0.2)
+        plt.axis([0, mxsee, mlo,mhi])
+        plt.title('DR3: EDR region, Forced phot: %s band' % band)
+        ps.savefig()
+
+
+
         
     sys.exit(0)
 
     
 def read_forcedphot_ccds(ccds, survey):
     ccds.mdiff = np.zeros(len(ccds))
+    ccds.nforced = np.zeros(len(ccds), np.int16)
+    ccds.nmatched = np.zeros(len(ccds), np.int16)
+
     brickcache = {}
 
     for iccd,ccd in enumerate(ccds):
@@ -143,7 +212,9 @@ def read_forcedphot_ccds(ccds, survey):
         psmag  = psmag [K]
         
         ccds.mdiff[iccd] = np.median(decmag - psmag)
-
+        ccds.nforced[iccd] = len(F)
+        ccds.nmatched[iccd] = len(K)
+        
     return
 
 
