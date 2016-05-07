@@ -272,8 +272,18 @@ def in_region(thetavals, phivals, thetaU, phiU, thetaR, phiR, thetaL, phiL, thet
 # pixoffset is the number of pixels to truncate on the edges of each ccd image.
 # ratiores is the super-resolution factor, i.e. the edges of each ccd image are processed
 #   at resultion 4*nside and then averaged at resolution nside.
-def computeHPXpix_sequ_new(nside, propertyArray, pixoffset=0, ratiores=4, coadd_cut=True):
+#def computeHPXpix_sequ_new(nside, propertyArray, pixoffset=0, ratiores=4, coadd_cut=True):
+def computeHPXpix_sequ_new(nside, propertyArray, pixoffset=0, ratiores=4, coadd_cut=False): 
+    #return 'ERROR'
     img_ras, img_decs = [propertyArray[v] for v in ['ra0', 'ra1', 'ra2', 'ra3']],[propertyArray[v] for v in ['dec0', 'dec1', 'dec2', 'dec3']]
+    if np.any(img_ras > 360.0):
+        img_ras[img_ras > 360.0] -= 360.0
+    if np.any(img_ras < 0.0):
+        img_ras[img_ras < 0.0] += 360.0
+    #print 'in here'
+    #print len(img_ras)#,len(img_ras[0])
+    #plt.plot(img_ras[0],img_decs[0],'k,')
+    #plt.show()
     #img_ras, img_decs = computeCorners_WCS_TPV(propertyArray, pixoffset)
     # Coordinates of coadd corners
     # RALL, t.DECLL, t.RAUL, t.DECUL, t.RAUR, t.DECUR, t.RALR, t.DECLR, t.URALL, t.UDECLL, t.URAUR, t.UDECUR
@@ -682,6 +692,9 @@ def project_and_write_maps(mode, propertiesweightsoperations, tbdata, catalogue_
     mkdir_p(outroot)
     if mode == 1: # Fully sequential
         for sample_name, ind in zip(sample_names, inds):
+            #print len(tbdata[ind]['ra1'])
+            plt.plot(tbdata[ind]['ra1'],tbdata[ind]['dec1'],'k,')
+            plt.show()
             treemap = makeHealTree( (catalogue_name+'_'+sample_name, nside, ratiores, pixoffset, np.array(tbdata[ind])) )
             for property, weights, operation in propertiesweightsoperations:
                 cutmap_indices, cutmap_signal = makeHpxMap_partial( (treemap, property, weights, operation) )

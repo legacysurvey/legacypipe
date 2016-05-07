@@ -700,7 +700,126 @@ def plotMaghist_proc_sexp(band,ndraw = 1e5,bs=.005,rel='DR3',survey='decals'):
 	plt.plot(Nl,hl,'k-')
 	plt.xlabel(r'5$\sigma$ '+band+ ' depth')
 	plt.ylabel('# of ccds')
-	plt.title('single exposure depth '+str(mean)[:5]+r'$\pm$'+str(std)[:4])#+r', $f_{\rm pass}=$'+str(nbr/float(nd))[:5])
+	plt.title(rel+' single exposure depth '+str(mean)[:5]+r'$\pm$'+str(std)[:4])#+r', $f_{\rm pass}=$'+str(nbr/float(nd))[:5])
+	#plt.xscale('log')
+	pp.savefig()
+	pp.close()
+	return True
+
+
+def plotMaghist_proc_sexpDR2DR3(band,ndraw = 1e5,bs=.01,survey='decals'):
+	#this produces the normalized histograms for Dustin's processed galaxy depth, for single exposures, comparing DR2 and DR3
+	import fitsio
+	from matplotlib import pyplot as plt
+	from numpy import zeros,array
+	from random import random
+	f2 = fitsio.read(localdir+'decals-ccds-annotated.fits')
+	f3 = fitsio.read(localdir+'ccds-annotated-'+survey+'.fits.gz')	
+	nl = []
+	nd = 0
+	nbr = 0	
+		
+	if band == 'g':
+		be = 1
+		zp0 = 25.08
+		recm = 24.
+	if band == 'r':
+		be = 2
+		zp0 = 25.29
+		recm = 23.4
+	if band == 'z':
+		be = 4
+		zp0 = 24.92
+		recm = 22.5
+
+	n = 0
+	for i in range(0,len(f3)):
+		pid = f3[i]['propid']
+		#if DS == '2014B-0404' or DS == '2013A-0741': #enforce DECaLS only
+		#	DS = 1
+		DS = 0
+		year = int(f3[i]['date_obs'].split('-')[0])
+		if year > 2014:
+			#if pid == '2014B-0404' or pid == '2013A-0741':
+			DS = 1 #enforce 2015 data
+
+		if f3[i]['filter'] == band:
+			
+			if DS == 1:
+				n += 1				
+				if f3[i]['dec'] > -20 and f3[i]['photometric'] == True and f3[i]['blacklist_ok'] == True and f3[i]['tileid'] > 0 :   
+				
+				#if f[i]['seeing'] != 99 and f[i]['ccdzpt'] != 99 and f[i]['fwhm'] != 99 and DS == 1:
+					#if f[i]['dec'] > -20 and f[i]['exptime'] >=30 and f[i]['ccdnmatch'] >= 20 and abs(f[i]['zpt'] - f[i]['ccdzpt']) <= 0.1 and f[i]['zpt'] >= zp0-.5 and f[i]['zpt'] <=zp0+.25:   
+					ext = f3[i]['decam_extinction'][be]
+					magdepth = f3[i]['galdepth']-ext
+					#detsig1 = Magtonanomaggies(f[i]['galdepth'])/5. #total noise
+					#signalext = 1./10.**(-ext/2.5)
+					nl.append(magdepth)
+
+	nl2 = []
+	for i in range(0,len(f2)):
+		pid = f2[i]['propid']
+		#if DS == '2014B-0404' or DS == '2013A-0741': #enforce DECaLS only
+		#	DS = 1
+		DS = 0
+		year = int(f2[i]['date_obs'].split('-')[0])
+		if year > 2014:
+			#if pid == '2014B-0404' or pid == '2013A-0741':
+			DS = 1 #enforce 2015 data
+
+		if f2[i]['filter'] == band:
+			
+			if DS == 1:
+				n += 1				
+				if f2[i]['dec'] > -20 and f2[i]['photometric'] == True and f2[i]['blacklist_ok'] == True and f2[i]['tileid'] > 0:   
+				
+				#if f[i]['seeing'] != 99 and f[i]['ccdzpt'] != 99 and f[i]['fwhm'] != 99 and DS == 1:
+					#if f[i]['dec'] > -20 and f[i]['exptime'] >=30 and f[i]['ccdnmatch'] >= 20 and abs(f[i]['zpt'] - f[i]['ccdzpt']) <= 0.1 and f[i]['zpt'] >= zp0-.5 and f[i]['zpt'] <=zp0+.25:   
+					ext = f2[i]['decam_extinction'][be]
+					magdepth = f2[i]['galdepth']-ext
+					#detsig1 = Magtonanomaggies(f[i]['galdepth'])/5. #total noise
+					#signalext = 1./10.**(-ext/2.5)
+					nl2.append(magdepth)
+			
+	print n	
+	print len(nl),len(nl2)
+	ng = len(nl)
+	minN = min(nl)
+	maxN = max(nl)+.0001
+	print minN,maxN
+	nbin = int((maxN-minN)/bs)
+	hl = zeros((nbin))
+	for i in range(0,len(nl)):
+		bin = int(nbin*(nl[i]-minN)/(maxN-minN))
+		hl[bin] += 1
+	Nl = []
+	for i in range(0,len(hl)):
+		Nl.append(minN+i*(maxN-minN)/float(nbin)+0.5*(maxN-minN)/float(nbin))
+	ng2 = len(nl2)
+	minN2 = min(nl2)
+	maxN2 = max(nl2)+.0001
+	print minN2,maxN2
+	nbin2 = int((maxN2-minN2)/bs)
+	hl2 = zeros((nbin))
+	for i in range(0,len(nl2)):
+		bin = int(nbin2*(nl2[i]-minN2)/(maxN2-minN2))
+		hl2[bin] += 1
+	Nl2 = []
+	for i in range(0,len(hl2)):
+		Nl2.append(minN2+i*(maxN2-minN2)/float(nbin2)+0.5*(maxN2-minN2)/float(nbin2))
+
+	from matplotlib.backends.backend_pdf import PdfPages
+	plt.clf()
+	pp = PdfPages(localdir+'validationplots/DR2DR3'+survey+band+'1exposure.pdf')	
+
+	plt.plot(Nl,hl/float(len(nl)),'k-')
+	plt.plot(Nl2,hl2/float(len(nl2)),'r-')
+	plt.xlabel(r'5$\sigma$ '+band+ ' depth')
+	plt.ylabel('Normalized # of ccds')
+	plt.title('single exposure depth, comparing DR2 and DR3')
+	plt.text(minN+.5,.9*(max(hl2))/float(len(nl2)),'DR3',color='k')
+	plt.text(minN+.5,.85*(max(hl2))/float(len(nl2)),'DR2',color='r')
 	#plt.xscale('log')
 	pp.savefig()
 	pp.close()
@@ -1532,6 +1651,72 @@ def plotMaghist_survey(band,ndraw = 1e5,nbin=100,magmin=0):
 	pp.close()
 	return True
 
+def plotradecccdfile(band,rel='DR3',survey='decals',decmin=-20,yearmin=2015):
+	#simply plot ra,dec of all good ccds
+	import fitsio
+	from matplotlib import pyplot as plt
+	from numpy import zeros,array
+	from random import random
+	if rel == 'DR2':
+		f = fitsio.read(localdir+'decals-ccds-annotated.fits')
+	if rel == 'DR3':
+		f = fitsio.read(localdir+'ccds-annotated-'+survey+'.fits.gz')	
+	ral = []
+	decl = []
+	n = 0
+	for i in range(0,len(f)):
+		pid = f[i]['propid']
+		#if DS == '2014B-0404' or DS == '2013A-0741': #enforce DECaLS only
+		#	DS = 1
+		DS = 0
+		year = int(f[i]['date_obs'].split('-')[0])
+		if year >= yearmin:
+			#if pid == '2014B-0404' or pid == '2013A-0741':
+			DS = 1 #enforce 2015 data
+
+		if f[i]['filter'] == band:
+			
+			if DS == 1:
+				n += 1				
+				if f[i]['dec'] > decmin and f[i]['photometric'] == True and f[i]['blacklist_ok'] == True: 
+					ral.append(f[i]['ra1'])
+					decl.append(f[i]['dec1'])
+	plt.plot(ral,decl,'k,')
+	plt.show()
+	return True
+  
+def plotBorismap(band,prop,op='mean',survey='DECaLS_DR3'):
+	import fitsio
+	from matplotlib import pyplot as plt
+	import matplotlib.cm as cm
+	from numpy import zeros,array
+	from healpix import pix2ang_ring,thphi2radec
+	import healpy as hp
+	f = fitsio.read(localdir+survey+'/nside4096_oversamp4/'+survey+'_band_'+band+'_nside4096_oversamp4_'+prop+'__'+op+'.fits.gz')
+	ral = []
+	decl = []
+	val = f['SIGNAL']
+	print min(val),max(val)
+	for i in range(0,len(f)):
+		#th,phi = pix2ang_ring(4096,f[i]['PIXEL'])
+		th,phi = hp.pix2ang(4096,f[i]['PIXEL'])
+		ra,dec = thphi2radec(th,phi)
+		ral.append(ra)
+		decl.append(dec)
+	print min(val),max(val)	
+	map = plt.scatter(ral,decl,c=val,cmap=cm.rainbow,lw=0)
+	cbar = plt.colorbar(map)
+	cbar.set_label(prop, rotation=270)
+	plt.xlabel('r.a. (degrees)')
+	plt.ylabel('declination (degrees)')
+	plt.title('Map of '+prop +' for '+survey+' '+band+'-band')
+	plt.show()
+	#plt.xscale('log')
+	#pp.savefig()
+	#pp.close()
+	return True
+		
+		
 
 ###Test DR2 region
 
