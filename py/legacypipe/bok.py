@@ -117,8 +117,8 @@ class BokImage(LegacySurveyImage):
             mask= self.read_dq()
             maskfn= os.path.join('junk',os.path.basename(maskfn))
             invvarfn= maskfn.replace('_mask_','_invvar_')
-            fitsio.write(maskfn, mask)
-            fitsio.write(invvarfn, invvar)
+            fitsio.write(maskfn, mask, clobber=True)
+            fitsio.write(invvarfn, invvar, clobber=True)
             print('wrote mask-2 to %s, invvar to %s' % (maskfn,invvarfn))
             #run se 
             hdr=fitsio.read_header(self.imgfn,ext=hdu)
