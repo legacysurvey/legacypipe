@@ -26,8 +26,8 @@ def main():
 
 
     ccdfn = 'ccds-forced.fits'
-    if not os.path.exists(ccdfn):
-
+    #if not os.path.exists(ccdfn):
+    if True:
         ccds = survey.get_annotated_ccds()
         ccds.cut((ccds.ra > ralo) * (ccds.ra < rahi) *
                  (ccds.dec > declo) * (ccds.dec < dechi))
@@ -44,22 +44,25 @@ def main():
         #print(len(I), 'unique exposures')
         #ccds.cut(I)
         
-        read_forcedphot_ccds(ccds, survey)
+        FF = read_forcedphot_ccds(ccds, survey)
+        FF.writeto('forced-all-matches.fits')
+        
         ccds.writeto(ccdfn)
 
     ccds = fits_table(ccdfn)
 
-    # plt.clf()
-    # plt.hist(ccds.nforced, bins=100)
-    # plt.title('nforced')
-    # ps.savefig()
-    # 
-    # plt.clf()
-    # plt.hist(ccds.nmatched, bins=100)
-    # plt.title('nmatched')
-    # ps.savefig()
+    plt.clf()
+    plt.hist(ccds.nforced, bins=100)
+    plt.title('nforced')
+    ps.savefig()
+    
+    plt.clf()
+    plt.hist(ccds.nmatched, bins=100)
+    plt.title('nmatched')
+    ps.savefig()
 
-    ccds.cut(ccds.nmatched >= 150)
+    #ccds.cut(ccds.nmatched >= 150)
+    ccds.cut(ccds.nmatched >= 50)
     
     neff = 1. / ccds.psfnorm_mean**2
     # Narcsec is in arcsec**2
@@ -161,6 +164,8 @@ def read_forcedphot_ccds(ccds, survey):
     
     brickcache = {}
 
+    FF = []
+    
     for iccd,ccd in enumerate(ccds):
         print('CCD', iccd, 'of', len(ccds))
         F = fits_table(ccd.path)
@@ -172,6 +177,22 @@ def read_forcedphot_ccds(ccds, survey):
         F.ra  = np.zeros(len(F))
         F.dec = np.zeros(len(F))
         F.masked = np.zeros(len(F), bool)
+
+        maglo,maghi = 14.,21.
+        maxdmag = 1.
+        
+        F.mag = -2.5 * (np.log10(F.flux) - 9)
+        F.cut((F.flux > 0) * (F.mag > maglo-maxdmag) * (F.mag < maghi+maxdmag))
+        print(len(F), 'sources between', (maglo-maxdmag), 'and', (maghi+maxdmag), 'mag')
+
+        im = survey.get_image_object(ccd)
+        print('Reading DQ image for', im)
+        dq = im.read_dq()
+        H,W = dq.shape
+        ix = np.clip(np.round(F.x), 0, W-1).astype(int)
+        iy = np.clip(np.round(F.y), 0, H-1).astype(int)
+        F.mask = dq[iy,ix]
+        print(np.sum(F.mask != 0), 'sources are masked')
         
         for brickname in np.unique(F.brickname):
             if not brickname in brickcache:
@@ -188,8 +209,10 @@ def read_forcedphot_ccds(ccds, survey):
 
             F.masked[I] = (T.decam_anymask[J,:].max(axis=1) > 0)
 
-        F.cut(F.masked == False)
-        print(len(F), 'not masked')
+        #F.cut(F.masked == False)
+        #print(len(F), 'not masked')
+        print(np.sum(F.masked), 'masked in ANYMASK')
+
         ccds.nunmasked[iccd] = len(F)
             
         wcs = Tan(*[float(x) for x in [ccd.crval1, ccd.crval2, ccd.crpix1, ccd.crpix2,
@@ -217,37 +240,45 @@ def read_forcedphot_ccds(ccds, survey):
 
         colorterm = ps1_to_decam(stars.median[J], band)
 
-        psmag = stars.median[J, ps1.ps1band[band]]
-        psmag += colorterm
-            
-        decflux = F.flux[I]
-        decmag = -2.5 * (np.log10(decflux) - 9)
+        F.cut(I)
+        F.psmag = stars.median[J, ps1.ps1band[band]] + colorterm
 
-        K = np.flatnonzero((psmag > 14) * (psmag < 21))
-        print(len(K), 'with mag 14 to 21')
-        decmag = decmag[K]
-        psmag  = psmag [K]
-        I = I[K]
-        K = np.flatnonzero(np.abs(decmag - psmag) < 1)
-        print(len(K), 'with good mag matches (< 1 mag difference)')
+        K = np.flatnonzero((F.psmag > maglo) * (F.psmag < maghi))
+        print(len(K), 'with mag', maglo, 'to', maghi)
+        F.cut(K)
+
+        K = np.flatnonzero(np.abs(F.mag - F.psmag) < maxdmag)
+        print(len(K), 'with good mag matches (<', maxdmag, 'mag difference)')
         ccds.nmatched[iccd] = len(K)
-
         if len(K) == 0:
             continue
-        decmag = decmag[K]
-        psmag  = psmag [K]
-        I = I[K]
+        F.cut(K)
         
-        ccds.mdiff[iccd] = np.median(decmag - psmag)
-        ccds.mscatter[iccd] = (np.percentile(decmag - psmag, 84) - np.percentile(decmag - psmag, 16))/2.
+        ccds.mdiff[iccd] = np.median(F.mag - F.psmag)
+        ccds.mscatter[iccd] = (np.percentile(F.mag - F.psmag, 84) -
+                               np.percentile(F.mag - F.psmag, 16))/2.
 
         for i in range(Nap):
-            apmag = -2.5 * (np.log10(F.apflux[I, i]) - 9)
+            apmag = -2.5 * (np.log10(F.apflux[:, i]) - 9)
 
-            ccds.apdiff[iccd,i] = np.median(apmag - psmag)
-            ccds.apscatter[iccd,i] = (np.percentile(apmag - psmag, 84) - np.percentile(apmag - psmag, 16))/2.
+            ccds.apdiff[iccd,i] = np.median(apmag - F.psmag)
+            ccds.apscatter[iccd,i] = (np.percentile(apmag - F.psmag, 84) -
+                                      np.percentile(apmag - F.psmag, 16))/2.
+
+        #F.about()
+        for c in ['apflux_ivar', 'brickid', 'flux_ivar',
+                  'mjd', 'objid', 'fracflux', 'rchi2', 'x','y']:
+            F.delete_column(c)
+
+        F.expnum = np.zeros(len(F), np.int32) + ccd.expnum
+        F.ccdname = np.array([ccd.ccdname] * len(F))
+        F.iforced = np.zeros(len(F), np.int32) + iccd
         
-    return
+        FF.append(F)
+
+    FF = merge_tables(FF)
+        
+    return FF
 
 
 
