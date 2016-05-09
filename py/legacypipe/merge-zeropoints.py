@@ -200,7 +200,7 @@ def decals_dr3():
     for fn in ['survey-ccds-nondecals.fits', 'survey-ccds-decals.fits']:
         os.system('gzip --best ' + fn)
 
-    
+
 def normalize_zeropoints(fn, dirnms, image_basedir, cam, T=None):
     if T is None:
         print('Reading', fn)
@@ -324,28 +324,61 @@ if __name__ == '__main__':
     #decals_dr3_extra()
     #decals_dr3_dedup()
     #decals_dr3_fix392400()
-
-    decals_dr3_check_wcsfailed()
-    sys.exit(0)
+    #decals_dr3_check_wcsfailed()
+    #sys.exit(0)
     
-    basedir = './mzls-deep2f3'
-    cam = 'mosaic'
+    basedir = './deep2f3'
+    cam = '90prime'
     image_basedir = os.path.join(basedir, 'images')
-
     TT = []
-
     for fn,dirnms in [
-            (os.path.join(basedir, 'zeropoint-arjun_zpts.fits'),
-             ['CP20151213',]),
+            ('/global/project/projectdirs/cosmo/staging/bok/ccds_files/bass-ccds-idm20160506.fits',
+             ['',]),
         ]:
-        T = normalize_zeropoints(fn, dirnms, image_basedir, cam)
+        T = fits_table(fn)
+        T.rename('image_filename', 'filename')
+        T.rename('image_hdu', 'ccdhdunum')
+        T.rename('ra_bore', 'ra')
+        T.rename('dec_bore', 'dec')
+        T.filter = np.array([f.strip() for f in T.filter])
+        
+        T.ccdra  = np.zeros(len(T))
+        T.ccddec = np.zeros(len(T))
+        for i in range(len(T)):
+            from astrometry.util.util import Tan
+            wcs = Tan(*[float(x) for x in [
+                T.crval1[i], T.crval2[i], T.crpix1[i], T.crpix2[i],
+                T.cd1_1[i], T.cd1_2[i], T.cd2_1[i], T.cd2_2[i],
+                T.width[i], T.height[i]]])
+            r,d = wcs.pixelxy2radec(T.width[i]/2.+0.5, T.height[i]/2.+0.5)
+            T.ccdra [i] = r
+            T.ccddec[i] = d
+        
+        T = normalize_zeropoints(fn, dirnms, image_basedir, cam, T=T)
         TT.append(T)
     T = merge_tables(TT)
-    T.fwhm = T.seeing / 0.262
-    T.ccdname = np.array([n.replace('LBL-0', 'ccd') for n in T.ccdname])
+    #T.fwhm = T.seeing / 0.262
+    #T.ccdname = np.array([n.replace('LBL-0', 'ccd') for n in T.ccdname])
     outfn = 'zp.fits'
     T.writeto(outfn)
     print('Wrote', outfn)
+
+
+    # cam = 'mosaic'
+    # image_basedir = os.path.join(basedir, 'images')
+    # TT = []
+    # for fn,dirnms in [
+    #         (os.path.join(basedir, 'zeropoint-arjun_zpts.fits'),
+    #          ['CP20151213',]),
+    #     ]:
+    #     T = normalize_zeropoints(fn, dirnms, image_basedir, cam)
+    #     TT.append(T)
+    # T = merge_tables(TT)
+    # T.fwhm = T.seeing / 0.262
+    # T.ccdname = np.array([n.replace('LBL-0', 'ccd') for n in T.ccdname])
+    # outfn = 'zp.fits'
+    # T.writeto(outfn)
+    # print('Wrote', outfn)
 
     sys.exit(0)
 
