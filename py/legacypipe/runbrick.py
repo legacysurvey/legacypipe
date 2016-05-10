@@ -407,14 +407,15 @@ def stage_tims(W=3600, H=3600, pixscale=0.262, brickname=None,
             plt.subplot(2,2,2)
             dimshow(tim.getInvError(), vmin=0, vmax=1.1/tim.sig1)
             plt.title('inverr')
-            plt.subplot(2,2,3)
-            #nil,udq = np.unique(tim.dq, return_inverse=True)
-            dimshow(tim.dq, vmin=0, vmax=tim.dq.max())
-            plt.title('DQ')
-            plt.subplot(2,2,3)
-            #nil,udq = np.unique(tim.dq, return_inverse=True)
-            dimshow(((tim.dq & tim.dq_saturation_bits) > 0), vmin=0, vmax=1)
-            plt.title('SATUR')
+            if tim.dq is not None:
+                plt.subplot(2,2,3)
+                dimshow(tim.dq, vmin=0, vmax=tim.dq.max())
+                plt.title('DQ')
+
+                plt.subplot(2,2,3)
+                #nil,udq = np.unique(tim.dq, return_inverse=True)
+                dimshow(((tim.dq & tim.dq_saturation_bits) > 0), vmin=0, vmax=1)
+                plt.title('SATUR')
             plt.suptitle(tim.name)
             ps.savefig()
 
@@ -615,25 +616,30 @@ def _coadds(tims, bands, targetwcs,
             cow   [Yo,Xo] += iv
 
             if unweighted:
-                dq = tim.dq[Yi,Xi]
-                # include BLEED, SATUR, INTERP pixels if no other
-                # pixels exists (do this by eliminating all other CP
-                # flags)
-                badbits = 0
-                for bitname in ['badpix', 'cr', 'trans', 'edge', 'edge2']:
-                    badbits |= CP_DQ_BITS[bitname]
-                goodpix = ((dq & badbits) == 0)
-
+                if tim.dq is None:
+                    goodpix = 1
+                else:
+                    dq = tim.dq[Yi,Xi]
+                    # include BLEED, SATUR, INTERP pixels if no other
+                    # pixels exists (do this by eliminating all other CP
+                    # flags)
+                    badbits = 0
+                    for bitname in ['badpix', 'cr', 'trans', 'edge', 'edge2']:
+                        badbits |= CP_DQ_BITS[bitname]
+                    goodpix = ((dq & badbits) == 0)
+                    del dq
+                    
                 coimg[Yo,Xo] += goodpix * im
                 con  [Yo,Xo] += goodpix
                 coiv [Yo,Xo] += goodpix * 1./tim.sig1**2  # ...ish
-                del dq
 
+                
             if xy:
-                dq = tim.dq[Yi,Xi]
-                ormask [Yo,Xo] |= dq
-                andmask[Yo,Xo] &= dq
-                del dq
+                if tim.dq is not None:
+                    dq = tim.dq[Yi,Xi]
+                    ormask [Yo,Xo] |= dq
+                    andmask[Yo,Xo] &= dq
+                    del dq
                 # raw exposure count
                 nobs[Yo,Xo] += 1
 
@@ -903,8 +909,9 @@ def stage_mask_junk(tims=None, targetwcs=None, W=None, H=None, bands=None,
                 continue
             # Zero it out!
             tim.inverr[slc] *= np.logical_not(inblob)
-            # Add to dq mask bits
-            tim.dq[slc] |= CP_DQ_BITS['longthin']
+            if tim.dq is not None:
+                # Add to dq mask bits
+                tim.dq[slc] |= CP_DQ_BITS['longthin']
 
             ra,dec = tim.wcs.pixelToPosition(cx, cy)
             ok,bx,by = targetwcs.radec2pixelxy(ra, dec)
@@ -1199,7 +1206,7 @@ def stage_srcs(coimgs=None, cons=None,
     from scipy.ndimage.measurements import label, find_objects, center_of_mass
 
     tlast = Time()
-    avoid_xy = []
+    avoid_x, avoid_y = [],[]
     if on_bricks:
         bricks = on_bricks_dependencies(brick, survey)
         if len(bricks) == 0:
@@ -1244,12 +1251,11 @@ def stage_srcs(coimgs=None, cons=None,
         bcat = read_fits_catalog(B, ellipseClass=EllipseE)
         print('Created', len(bcat), 'tractor catalog objects')
 
-        # Add the new sources to the 'avoid_xy' list, which are
+        # Add the new sources to the 'avoid_[xy]' lists, which are
         # existing sources that should be avoided when detecting new
         # faint sources.
-        ax = np.round(B.xx - 1).astype(int)
-        ay = np.round(B.yy - 1).astype(int)
-        avoid_xy.extend(zip(ax, ay))
+        avoid_x.extend(np.round(B.xx - 1).astype(int))
+        avoid_y.extend(np.round(B.yy - 1).astype(int))
 
         print('Subtracting tractor-on-bricks sources belonging to other bricks')
         ## HACK -- note that this is going to screw up fracflux and
@@ -1332,10 +1338,11 @@ def stage_srcs(coimgs=None, cons=None,
                        ticks=False)
             dimshow(tim.getImage(), **ima)
             plt.title('Tim image')
-            plt.subplot(2,2,3)
-            dimshow((tim.dq & tim.dq_saturation_bits > 0), vmin=0, vmax=1,
-                    ticks=False)
-            plt.title('SATUR')
+            if tim.dq is not None:
+                plt.subplot(2,2,3)
+                dimshow((tim.dq & tim.dq_saturation_bits > 0), vmin=0, vmax=1,
+                        ticks=False)
+                plt.title('SATUR')
             plt.suptitle('Tim ' + tim.name)
             ps.savefig()
 
@@ -1391,8 +1398,8 @@ def stage_srcs(coimgs=None, cons=None,
         # Build a map from old "satblobs" to new; identity to start
         remap = np.arange(nsat+1)
         # Drop blobs that contain a Tycho-2 star
-        itx = np.clip(np.round(Tsat.tx), 0, W).astype(int)
-        ity = np.clip(np.round(Tsat.ty), 0, H).astype(int)
+        itx = np.clip(np.round(Tsat.tx), 0, W-1).astype(int)
+        ity = np.clip(np.round(Tsat.ty), 0, H-1).astype(int)
         zeroout = satblobs[ity, itx]
         remap[zeroout] = 0
         # Renumber them to be contiguous
@@ -1423,10 +1430,11 @@ def stage_srcs(coimgs=None, cons=None,
     del satx,saty
         
     if len(Tsat):
-        avoid_xy.extend(zip(Tsat.tx, Tsat.ty))
         Tsat.ra,Tsat.dec = targetwcs.pixelxy2radec(Tsat.tx+1, Tsat.ty+1)
-        Tsat.itx = np.clip(np.round(Tsat.tx), 0, W).astype(int)
-        Tsat.ity = np.clip(np.round(Tsat.ty), 0, H).astype(int)
+        Tsat.itx = np.clip(np.round(Tsat.tx), 0, W-1).astype(int)
+        Tsat.ity = np.clip(np.round(Tsat.ty), 0, H-1).astype(int)
+        avoid_x.extend(Tsat.itx)
+        avoid_y.extend(Tsat.ity)
 
         satcat = []
         for r,d,m in zip(Tsat.ra, Tsat.dec, Tsat.mag):
@@ -1462,23 +1470,12 @@ def stage_srcs(coimgs=None, cons=None,
 
     # SED-matched detections
     print('Running source detection at', nsigma, 'sigma')
-    if len(avoid_xy) == 0:
-        avoid_xy = None
-    else:
-        avoid_xy = np.vstack(avoid_xy)
-        avoid_xy = avoid_xy[:,0], avoid_xy[:,1]
-
     SEDs = sed_matched_filters(bands)
     Tnew,newcat,hot = run_sed_matched_filters(
-        SEDs, bands, detmaps, detivs, avoid_xy, targetwcs,
+        SEDs, bands, detmaps, detivs, (avoid_x,avoid_y), targetwcs,
         nsigma=nsigma, saturated_pix=saturated_pix, plots=plots, ps=ps, mp=mp)
     if Tnew is None:
         raise NothingToDoError('No sources detected.')
-
-    peaksn = Tnew.peaksn
-    apsn = Tnew.apsn
-    peakx,peaky = Tnew.tx, Tnew.ty
-
     Tnew.delete_column('peaksn')
     Tnew.delete_column('apsn')
 
@@ -1511,10 +1508,9 @@ def stage_srcs(coimgs=None, cons=None,
         dimshow(get_rgb(coimgs, bands))
         plt.title('Catalog + SED-matched detections')
         ps.savefig()
-
         ax = plt.axis()
         p1 = plt.plot(T.tx, T.ty, 'r+', **crossa)
-        p2 = plt.plot(peakx, peaky, '+', color=(0,1,0), **crossa)
+        p2 = plt.plot(Tnew.tx, Tnew.ty, '+', color=(0,1,0), **crossa)
         plt.axis(ax)
         plt.title('Catalog + SED-matched detections')
         plt.figlegend((p1[0], p2[0]), ('SDSS', 'New'), 'upper left')

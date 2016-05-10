@@ -32,8 +32,12 @@ class BokImage(LegacySurveyImage, CalibMixin):
     def __init__(self, survey, t):
         super(BokImage, self).__init__(survey, t)
         self.pixscale= 0.455
-        self.dqfn= self.read_dq() #array of 0s for now
+        self.dqfn= None #self.read_dq() #array of 0s for now
         self.whtfn= self.imgfn.replace('.fits','.wht.fits')
+        
+        self.fwhm = t.fwhm
+        self.arawgain = t.arawgain
+        
 
         self.calname = os.path.basename(self.imgfn).replace('.fits','') 
         self.name = self.imgfn
@@ -58,11 +62,7 @@ class BokImage(LegacySurveyImage, CalibMixin):
         sky.plver = '0'
         return sky
 
-    def read_dq(self, **kwargs):
-        # already account for bad pixels in wht, so return array of 0s
-        # (good everywhere)
-        dq = np.zeros(self.shape, np.uint8)
-        return dq
+    # Don't need read_dq(): superclass returns None
 
     def read_invvar(self, **kwargs):
         print('Reading inv=%s for image=%s, hdu=' % (self.whtfn,self.imgfn),
@@ -111,7 +111,7 @@ class BokImage(LegacySurveyImage, CalibMixin):
         '''
         print('run_calibs for', self.name, ': sky=', sky, 'kwargs', kwargs) 
         ##################
-        #from decam.py
+        #modified from decam.py
         from .common import (create_temp, get_version_header,
                              get_git_version)
         
@@ -124,8 +124,8 @@ class BokImage(LegacySurveyImage, CalibMixin):
         if se and os.path.exists(self.sefn) and (not force):
             if self.check_se_cat(self.sefn):
                 se = False
-        if se:
-            funpack = True
+        #if se:
+        #    funpack = True
  
         if just_check:
             return (se or psfex)
