@@ -321,14 +321,16 @@ def main():
                         help='divide NOBJ into CHUNKSIZE chunks')
     parser.add_argument('-b', '--brick', type=str, default='2428p117', metavar='', 
                         help='simulate objects in this brick')
-    parser.add_argument('-o', '--objtype', type=str, default='STAR', metavar='', 
-                        help='object type (STAR, ELG, LRG, QSO, LSB)') 
+    parser.add_argument('-o', '--objtype', type=str, choices=['STAR','ELG', 'LRG', 'QSO', 'LSB'],default='STAR', metavar='', 
+                        help='insert these into images') 
     parser.add_argument('-t', '--threads', type=int, default=8, metavar='', 
                         help='number of threads to use when calling The Tractor')
     parser.add_argument('-s', '--seed', type=long, default=None, metavar='', 
                         help='random number seed')
     parser.add_argument('-z', '--zoom', nargs=4, type=int, metavar='', 
                         help='see runbrick.py; (default is 0 3600 0 3600)')
+    parser.add_argument('-survey_dir', '--survey_dir', metavar='', 
+                        help='location of survey-ccds*.fits.gz')
     parser.add_argument('--rmag-range', nargs=2, type=float, default=(18,26), metavar='', 
                         help='r-band magnitude range')
     parser.add_argument('-v', '--verbose', action='store_true', 
@@ -449,7 +451,12 @@ def main():
 #       # Use Tractor to just process the blobs containing the simulated sources. 
         simdecals = SimDecals(metacat=metacat,simcat=simcat)
         blobxy = zip(simcat['x'],simcat['y'])
-        run_brick(brickname, survey=simdecals, outdir=os.path.join(decals_sim_dir,brickname), 
+        #run_brick(brickname, survey=simdecals, outdir=os.path.join(decals_sim_dir,brickname), 
+        #          threads=args.threads, zoom=args.zoom, wise=False,
+        #          forceAll=True, writePickles=False, do_calibs=True,
+        #          write_metrics=False, pixPsf=True, blobxy=blobxy, 
+        #          early_coadds=False, stages=['writecat'], splinesky=True)
+        run_brick(brickname, survey_dir=args.survey_dir, outdir=os.path.join(decals_sim_dir,brickname), 
                   threads=args.threads, zoom=args.zoom, wise=False,
                   forceAll=True, writePickles=False, do_calibs=True,
                   write_metrics=False, pixPsf=True, blobxy=blobxy, 
@@ -461,11 +468,11 @@ def main():
                     os.path.join(decals_sim_dir,brickname,'tractor-'+brickname+'-'+
                                  lobjtype+'-'+chunksuffix+'.fits'))
         shutil.move(os.path.join(decals_sim_dir,brickname,'coadd',brickname[:3],brickname,
-                                 'decals-'+brickname+'-image.jpg'),
+                                 'legacysurvey-'+brickname+'-image.jpg'),
                     os.path.join(decals_sim_dir,brickname,'qa-'+brickname+'-'+lobjtype+
                                  '-image-'+chunksuffix+'.jpg'))
         shutil.move(os.path.join(decals_sim_dir,brickname,'coadd',brickname[:3],brickname,
-                                 'decals-'+brickname+'-resid.jpg'),
+                                 'legacysurvey-'+brickname+'-resid.jpg'),
                     os.path.join(decals_sim_dir,brickname,'qa-'+brickname+'-'+lobjtype+
                                  '-resid-'+chunksuffix+'.jpg'))
 
