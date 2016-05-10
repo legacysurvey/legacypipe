@@ -4,6 +4,8 @@ import os
 import fitsio
 import numpy as np
 
+from legacypipe.image import LegacySurveyImage, CalibMixin
+#from legacypipe.cpimage import CPImage
 from image import LegacySurveyImage
 from common import create_temp
 from astrometry.util.util import Tan, Sip, anwcs_t
@@ -16,14 +18,13 @@ from tractor.basics import NanoMaggies, ConstantFitsWcs, LinearPhotoCal
 from tractor.image import Image
 from tractor.tractortime import TAITime
 
-from legacypipe.ptf import zeropoint_for_ptf
-
 
 '''
 Code specific to images from the 90prime camera on the Bok telescope.
 '''
-
-class BokImage(LegacySurveyImage):
+ 
+#class BokImage(LegacySurveyImage):
+class BokImage(LegacySurveyImage, CalibMixin):
     '''
     A LegacySurveyImage subclass to handle images from the 90prime
     camera on the Bok telescope.
@@ -31,17 +32,19 @@ class BokImage(LegacySurveyImage):
     def __init__(self, survey, t):
         super(BokImage, self).__init__(survey, t)
         self.pixscale= 0.455
+        self.dqfn= None #self.read_dq() #array of 0s for now
+        self.whtfn= self.imgfn.replace('.fits','.wht.fits')
+        
         self.fwhm = t.fwhm
         self.arawgain = t.arawgain
         
-        self.whtfn= self.imgfn.replace('.fits','.wht.fits')
 
         self.calname = os.path.basename(self.imgfn).replace('.fits','') 
         self.name = self.imgfn
 
         calibdir = os.path.join(self.survey.get_calib_dir(), self.camera)
         self.sefn = os.path.join(calibdir, 'sextractor', self.calname + '.fits')
-        self.psffn = os.path.join(calibdir, 'psfex', self.calname + '.fits')
+        self.psffn = os.path.join(calibdir, 'psfex', self.calname + '.psf')
         #self.skyfn = os.path.join(calibdir, 'sky', self.calname + '.fits')
         self.dq_saturation_bits = 0 #not used so set to 0
         print('in BokImage init, calibdir=%s,self.calname=%s,self.imgfn=%s, self.whtfn=%s, self.sefn=%s, self.psffn=%s' % (calibdir,self.calname,self.imgfn,self.whtfn,self.sefn, self.psffn))
@@ -93,71 +96,50 @@ class BokImage(LegacySurveyImage):
         wcs.plver = ''
         return wcs
 
-    def run_calibs(self, psfex=True, sky=True, funpack=False, git_version=None,
-                       force=False,
-                       **kwargs):
+    def run_calibs(self, psfex=True, sky=True, se=False,
+                   funpack=False, fcopy=False, use_mask=True,
+                   force=False, just_check=False, git_version=None,
+                   splinesky=False,**kwargs):
+
+        '''
+        Run calibration pre-processing steps.
+
+        Parameters
+        ----------
+        just_check: boolean
+            If True, returns True if calibs need to be run.
+        '''
         print('run_calibs for', self.name, ': sky=', sky, 'kwargs', kwargs) 
-        se = False
+        ##################
+        #modified from decam.py
+        from .common import (create_temp, get_version_header,
+                             get_git_version)
+        
         if psfex and os.path.exists(self.psffn) and (not force):
-            psfex = False
+            if self.check_psf(self.psffn):
+                psfex = False
         if psfex:
             se = True
-
+            
         if se and os.path.exists(self.sefn) and (not force):
-            se = False
+            if self.check_se_cat(self.sefn):
+                se = False
+        #if se:
+        #    funpack = True
+ 
+        if just_check:
+            return (se or psfex)
+
+        todelete = []
+        #if funpack:
+        #    # The image & mask files to process (funpacked if necessary)
+        #    imgfn,maskfn = self.funpack_files(self.imgfn, self.dqfn, self.hdu, todelete)
+        #else:
+        #    imgfn,maskfn = self.imgfn,self.dqfn
+        imgfn,maskfn = self.imgfn,self.dqfn
         if se:
-            sedir = self.survey.get_se_dir()
-            trymakedirs(self.sefn, dir=True)
-            ####
-            trymakedirs('junk',dir=True) #need temp dir for mask-2 and invvar map
-            hdu=0
-            maskfn= self.imgfn.replace('_scie_','_mask_')
-            #invvar= self.read_invvar(self.imgfn,maskfn,hdu) #note, all post processing on image,mask done in read_invvar
-            invvar= self.read_invvar()
-            mask= self.read_dq()
-            maskfn= os.path.join('junk',os.path.basename(maskfn))
-            invvarfn= maskfn.replace('_mask_','_invvar_')
-            fitsio.write(maskfn, mask, clobber=True)
-            fitsio.write(invvarfn, invvar, clobber=True)
-            print('wrote mask-2 to %s, invvar to %s' % (maskfn,invvarfn))
-            #run se 
-            hdr=fitsio.read_header(self.imgfn,ext=hdu)
-            #magzp  = zeropoint_for_ptf(hdr)
-            magzp = self.ccdzpt
-            seeing = self.pixscale * self.fwhm
-            gain= self.arawgain
-            cmd = ' '.join(['sex','-c', os.path.join(sedir,'ptf.se'),
-                            '-WEIGHT_IMAGE %s' % invvarfn, '-WEIGHT_TYPE MAP_WEIGHT',
-                            '-GAIN %f' % gain,
-                            '-FLAG_IMAGE %s' % maskfn,
-                            '-FLAG_TYPE OR',
-                            '-SEEING_FWHM %f' % seeing,
-                            '-DETECT_MINAREA 3',
-                            '-PARAMETERS_NAME', os.path.join(sedir,'ptf.param'),
-                            '-FILTER_NAME', os.path.join(sedir, 'ptf_gauss_3.0_5x5.conv'),
-                            '-STARNNW_NAME', os.path.join(sedir, 'ptf_default.nnw'),
-                            '-PIXEL_SCALE 0',
-                            # SE has a *bizarre* notion of "sigma"
-                            '-DETECT_THRESH 1.0',
-                            '-ANALYSIS_THRESH 1.0',
-                            '-MAG_ZEROPOINT %f' % magzp,
-                            '-CATALOG_NAME', self.sefn,
-                            self.imgfn])
-            print(cmd)
-            if os.system(cmd):
-                raise RuntimeError('Command failed: ' + cmd)
+            self.run_se('90prime', imgfn, 'junkname')
         if psfex:
-            sedir = self.survey.get_se_dir()
-            trymakedirs(self.psffn, dir=True)
-            # If we wrote *.psf instead of *.fits in a previous run...
-            oldfn = self.psffn.replace('.fits', '.psf')
-            if os.path.exists(oldfn):
-                print('Moving', oldfn, 'to', self.psffn)
-                os.rename(oldfn, self.psffn)
-            else: 
-                cmd= ' '.join(['psfex',self.sefn,'-c', os.path.join(sedir,'ptf.psfex'),
-                    '-PSF_DIR',os.path.dirname(self.psffn)])
-                print(cmd)
-                if os.system(cmd):
-                    raise RuntimeError('Command failed: ' + cmd)
-    
+            self.run_psfex('90prime')
+        #############
+

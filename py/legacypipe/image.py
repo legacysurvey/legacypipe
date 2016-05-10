@@ -689,23 +689,32 @@ class CalibMixin(object):
         
         sedir = self.survey.get_se_dir()
         trymakedirs(self.sefn, dir=True)
-
-        cmd = ' '.join([
-            'sex',
-            '-c', os.path.join(sedir, surveyname + '.se'),
-            '-FLAG_IMAGE ' + maskfn,
-            '-SEEING_FWHM %f' % seeing,
-            '-PARAMETERS_NAME', os.path.join(sedir, surveyname + '.param'),
-            '-FILTER_NAME', os.path.join(sedir, 'gauss_5.0_9x9.conv'),
-            '-STARNNW_NAME', os.path.join(sedir, 'default.nnw'),
-            '-PIXEL_SCALE 0',
-            # SE has a *bizarre* notion of "sigma"
-            '-DETECT_THRESH 1.0',
-            '-ANALYSIS_THRESH 1.0',
-            '-MAG_ZEROPOINT %f' % magzp,
-            '-CATALOG_NAME', self.sefn,
-            imgfn])
+        if surveyname != '90prime':
+            cmd = ' '.join([
+                'sex',
+                '-c', os.path.join(sedir, surveyname + '.se'),
+                '-SEEING_FWHM %f' % seeing,
+                '-PARAMETERS_NAME', os.path.join(sedir, surveyname + '.param'),
+                '-STARNNW_NAME', os.path.join(sedir, 'default.nnw'),
+                '-PIXEL_SCALE 0',
+                # SE has a *bizarre* notion of "sigma"
+                '-DETECT_THRESH 1.0',
+                '-ANALYSIS_THRESH 1.0',
+                '-MAG_ZEROPOINT %f' % magzp,
+                '-FLAG_IMAGE %s' % maskfn,
+                '-FILTER_NAME %s' % os.path.join(sedir, 'gauss_5.0_9x9.conv'),
+                '-CATALOG_NAME %s %s' % (self.sefn,imgfn)])
+        else:
+            cmd = ' '.join([
+                'sex',
+                '-c', os.path.join(sedir, surveyname + '.se'),
+                '-PARAMETERS_NAME', os.path.join(sedir, surveyname + '.param'),
+                '-STARNNW_NAME', os.path.join(sedir, 'default.nnw'),
+                '-FILTER_NAME %s' % os.path.join(sedir, surveyname + '.conv'),
+                '-PHOT_APERTURES 7.5,15.0,22.0',
+                '-CATALOG_NAME %s %s' % (self.sefn,imgfn)])
         print(cmd)
+ 
         if os.system(cmd):
             raise RuntimeError('Command failed: ' + cmd)
 
@@ -717,12 +726,16 @@ class CalibMixin(object):
         primhdr = self.read_image_primary_header()
         plver = primhdr.get('PLVER', '')
         verstr = get_git_version()
-        cmds = ['psfex -c %s -PSF_DIR %s %s' %
-                (os.path.join(sedir, surveyname + '.psfex'),
-                 os.path.dirname(self.psffn), self.sefn),
-                'modhead %s LEGPIPEV %s "legacypipe git version"' %
-                (self.psffn, verstr),
-                'modhead %s PLVER %s "CP ver of image file"' % (self.psffn, plver)]
+        if surveyname == '90prime':
+            cmds = ['psfex %s -c %s -PSF_DIR %s' % \
+                (self.sefn, os.path.join(sedir, surveyname + '.psfex'), os.path.dirname(self.psffn))]
+        else: 
+            cmds = ['psfex -c %s -PSF_DIR %s %s' %
+                    (os.path.join(sedir, surveyname + '.psfex'),
+                     os.path.dirname(self.psffn), self.sefn),
+                    'modhead %s LEGPIPEV %s "legacypipe git version"' %
+                    (self.psffn, verstr),
+                    'modhead %s PLVER %s "CP ver of image file"' % (self.psffn, plver)]
         for cmd in cmds:
             print(cmd)
             rtn = os.system(cmd)
