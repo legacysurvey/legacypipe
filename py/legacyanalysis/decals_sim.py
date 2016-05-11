@@ -58,6 +58,7 @@ class SimDecals(LegacySurveyData):
         super(SimDecals, self).__init__(survey_dir=survey_dir)
         self.metacat = metacat
         self.simcat = simcat
+        #add +fakes string to camera to signal SimDecas
 
     def get_image_object(self, t):
         return SimImage(self, t)
@@ -68,7 +69,9 @@ class SimImage(DecamImage):
         self.t = t
 
     def get_tractor_image(self, **kwargs):
-
+        #print('being called in SimImage, quitting')
+        #print('self.imgfn=',self.imgfn)
+        #sys.exit()
         tim = super(SimImage, self).get_tractor_image(**kwargs)
         if tim is None: # this can be None when the edge of a CCD overlaps
             return tim
@@ -451,12 +454,14 @@ def main():
 #       # Use Tractor to just process the blobs containing the simulated sources. 
         simdecals = SimDecals(metacat=metacat,simcat=simcat)
         blobxy = zip(simcat['x'],simcat['y'])
+        print('<<<<fakes inserted at pixels (x,y)= ',blobxy)
         #run_brick(brickname, survey=simdecals, outdir=os.path.join(decals_sim_dir,brickname), 
         #          threads=args.threads, zoom=args.zoom, wise=False,
         #          forceAll=True, writePickles=False, do_calibs=True,
         #          write_metrics=False, pixPsf=True, blobxy=blobxy, 
         #          early_coadds=False, stages=['writecat'], splinesky=True)
-        run_brick(brickname, survey_dir=args.survey_dir, outdir=os.path.join(decals_sim_dir,brickname), 
+        #run_brick(brickname, survey_dir=args.survey_dir, outdir=os.path.join(decals_sim_dir,brickname), 
+        run_brick(brickname, survey=simdecals, outdir=os.path.join(decals_sim_dir,brickname), 
                   threads=args.threads, zoom=args.zoom, wise=False,
                   forceAll=True, writePickles=False, do_calibs=True,
                   write_metrics=False, pixPsf=True, blobxy=blobxy, 
@@ -476,8 +481,8 @@ def main():
                     os.path.join(decals_sim_dir,brickname,'qa-'+brickname+'-'+lobjtype+
                                  '-resid-'+chunksuffix+'.jpg'))
 
-        shutil.rmtree(os.path.join(decals_sim_dir,brickname,'coadd'))
-        shutil.rmtree(os.path.join(decals_sim_dir,brickname,'tractor'))
+        #shutil.rmtree(os.path.join(decals_sim_dir,brickname,'coadd'))
+        #shutil.rmtree(os.path.join(decals_sim_dir,brickname,'tractor'))
         #shutil.rmtree(os.path.join(decals_sim_dir,brickname,'images'))
         #shutil.rmtree(os.path.join(decals_sim_dir,brickname,'metrics'))
 

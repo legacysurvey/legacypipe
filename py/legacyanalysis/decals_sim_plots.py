@@ -26,7 +26,7 @@ def main():
                                      description='DECaLS simulations.')
     parser.add_argument('-b', '--brick', type=str, default='2428p117', metavar='', 
                         help='process this brick (required input)')
-    parser.add_argument('-o', '--objtype', type=str, default='ELG', metavar='', 
+    parser.add_argument('-o', '--objtype', type=str, choices=['STAR', 'ELG', 'LRG', 'BGS'],default='ELG', metavar='', 
                         help='object type (STAR, ELG, LRG, BGS)') 
     parser.add_argument('-v', '--verbose', action='store_true', 
                         help='toggle on verbose output')

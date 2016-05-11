@@ -3188,7 +3188,6 @@ def run_brick(brick, radec=None, pixscale=0.262,
         initargs.update(bands=bands)
 
     t0 = Time()
-
     for stage in stages:
         runstage(stage, picklePattern, stagefunc, prereqs=prereqs,
                  initial_args=initargs, **kwargs)
