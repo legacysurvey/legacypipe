@@ -620,7 +620,7 @@ Now using the current directory as LEGACY_SURVEY_DIR, but this is likely to fail
         else:
             self.output_dir = output_dir
         #KJB
-        self.survey_dir= '/global/cscratch1/sd/kaylanb/desi/imaging/deep2f3/decals-dir-2'
+        #self.survey_dir= '/global/cscratch1/sd/kaylanb/desi/imaging/dr2_decals_dir'
         self.output_dir= os.path.join(os.getcwd(),'hardcoded_dir')
         #####
         
