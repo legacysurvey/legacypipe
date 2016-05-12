@@ -461,28 +461,36 @@ def main():
         #          write_metrics=False, pixPsf=True, blobxy=blobxy, 
         #          early_coadds=False, stages=['writecat'], splinesky=True)
         #run_brick(brickname, survey_dir=args.survey_dir, outdir=os.path.join(decals_sim_dir,brickname), 
-        run_brick(brickname, survey=simdecals, outdir=os.path.join(decals_sim_dir,brickname), 
+        run_brick(brickname, survey=simdecals,outdir=os.path.join(os.getcwd(),brickname), 
                   threads=args.threads, zoom=args.zoom, wise=False,
                   forceAll=True, writePickles=False, do_calibs=True,
                   write_metrics=False, pixPsf=True, blobxy=blobxy, 
                   early_coadds=False, stages=['writecat'], splinesky=True)
 
         log.info('Cleaning up...')
-        shutil.move(os.path.join(decals_sim_dir,brickname,'tractor',brickname[:3],
-                                 'tractor-'+brickname+'.fits'),
-                    os.path.join(decals_sim_dir,brickname,'tractor-'+brickname+'-'+
-                                 lobjtype+'-'+chunksuffix+'.fits'))
-        shutil.move(os.path.join(decals_sim_dir,brickname,'coadd',brickname[:3],brickname,
-                                 'legacysurvey-'+brickname+'-image.jpg'),
-                    os.path.join(decals_sim_dir,brickname,'qa-'+brickname+'-'+lobjtype+
-                                 '-image-'+chunksuffix+'.jpg'))
-        shutil.move(os.path.join(decals_sim_dir,brickname,'coadd',brickname[:3],brickname,
-                                 'legacysurvey-'+brickname+'-resid.jpg'),
-                    os.path.join(decals_sim_dir,brickname,'qa-'+brickname+'-'+lobjtype+
-                                 '-resid-'+chunksuffix+'.jpg'))
+        def bash(cmd):
+            ret= os.system('%s' % cmd)
+            if ret:
+                print('command failed: %s' % cmd)
+                sys.exit() 
+        bash('mv hardcoded_dir/* %s/' % brickname)
+        bash('rmdir hardcoded_dir')
+        #shutil.move(os.path.join(decals_sim_dir,'tractor',brickname[:3],
+        #                         'tractor-'+brickname+'.fits'),
+        #            os.path.join(decals_sim_dir,'tractor-'+brickname+'-'+
+        #                         lobjtype+'-'+chunksuffix+'.fits'))
+        #shutil.move(os.path.join(decals_sim_dir,'coadd',brickname[:3],brickname,
+        #                         'legacysurvey-'+brickname+'-image.jpg'),
+        #            os.path.join(decals_sim_dir,'qa-'+brickname+'-'+lobjtype+
+        #                         '-image-'+chunksuffix+'.jpg'))
+        #shutil.move(os.path.join(decals_sim_dir,'coadd',brickname[:3],brickname,
+        #                         'legacysurvey-'+brickname+'-resid.jpg'),
+        #            os.path.join(decals_sim_dir,brickname,'qa-'+brickname+'-'+lobjtype+
+        #                         '-resid-'+chunksuffix+'.jpg'))
 
-        #shutil.rmtree(os.path.join(decals_sim_dir,brickname,'coadd'))
-        #shutil.rmtree(os.path.join(decals_sim_dir,brickname,'tractor'))
+        #shutil.rmtree(decals_sim_dir)
+        #shutil.rmtree(os.path.join(decals_sim_dir,'coadd'))
+        #shutil.rmtree(os.path.join(decals_sim_dir,'tractor'))
         #shutil.rmtree(os.path.join(decals_sim_dir,brickname,'images'))
         #shutil.rmtree(os.path.join(decals_sim_dir,brickname,'metrics'))
 

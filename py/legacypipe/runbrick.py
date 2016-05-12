@@ -2195,7 +2195,7 @@ def stage_coadds(survey=None, bands=None, version_header=None, targetwcs=None,
     primhdr.add_record(dict(name='PRODTYPE', value='ccdinfo',
                             comment='NOAO data product type'))
     with survey.write_output('ccds-table', brick=brickname) as out:
-        ccds.writeto(out.fn, primheader=primhdr)
+        ccds.writeto(out.fn, primheader=primhdr) #KJB
         print('Wrote', out.fn)
 
     tnow = Time()

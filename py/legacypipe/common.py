@@ -619,7 +619,11 @@ Now using the current directory as LEGACY_SURVEY_DIR, but this is likely to fail
             self.output_dir = survey_dir
         else:
             self.output_dir = output_dir
-
+        #KJB
+        self.survey_dir= '/global/cscratch1/sd/kaylanb/desi/imaging/deep2f3/decals-dir-2'
+        self.output_dir= os.path.join(os.getcwd(),'hardcoded_dir')
+        #####
+        
         self.output_files = []
 
         self.ccds = ccds
@@ -757,6 +761,7 @@ Now using the current directory as LEGACY_SURVEY_DIR, but this is likely to fail
             def __init__(self, fn, survey):
                 self.real_fn = fn
                 self.survey = survey
+                # KJB self.fn = os.path.join('/global/cscratch1/sd/kaylanb/legacypipe/py/junk10', 'tmp-'+os.path.basename(fn))
                 self.fn = os.path.join(os.path.dirname(fn), 'tmp-'+os.path.basename(fn))
 
             def __enter__(self):
@@ -773,6 +778,8 @@ Now using the current directory as LEGACY_SURVEY_DIR, but this is likely to fail
                 if exc_type is None:
                     os.rename(self.fn, self.real_fn)
                     self.survey.add_output_file(self.real_fn)
+                    #print('self.fn= ',self.fn) #KJB
+                    #self.survey.add_output_file(self.fn)
 
         fn = self.find_file(filetype, output=True, **kwargs)
         out = OutputFileContext(fn, self)
