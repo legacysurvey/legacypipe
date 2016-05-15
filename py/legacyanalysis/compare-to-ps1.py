@@ -26,8 +26,7 @@ def main():
 
 
     ccdfn = 'ccds-forced.fits'
-    #if not os.path.exists(ccdfn):
-    if True:
+    if not os.path.exists(ccdfn):
         ccds = survey.get_annotated_ccds()
         ccds.cut((ccds.ra > ralo) * (ccds.ra < rahi) *
                  (ccds.dec > declo) * (ccds.dec < dechi))
@@ -46,6 +45,8 @@ def main():
         
         FF = read_forcedphot_ccds(ccds, survey)
         FF.writeto('forced-all-matches.fits')
+
+        # - z band -- no trend w/ PS1 mag (brighter-fatter)
         
         ccds.writeto(ccdfn)
 
@@ -63,6 +64,10 @@ def main():
 
     #ccds.cut(ccds.nmatched >= 150)
     ccds.cut(ccds.nmatched >= 50)
+    print('Cut to', len(ccds), 'with >50 matched')
+    
+    ccds.cut(ccds.photometric)
+    print('Cut to', len(ccds), 'photometric')
     
     neff = 1. / ccds.psfnorm_mean**2
     # Narcsec is in arcsec**2
@@ -74,6 +79,39 @@ def main():
     # Conversion factor to FWHM (2.35)
     narcsec *= 2. * np.sqrt(2. * np.log(2.))
     ccds.psfsize = narcsec
+
+
+    for band in bands:
+        I = np.flatnonzero(ccds.filter == band)
+
+        mlo,mhi = -0.01, 0.05
+
+        plt.clf()
+        plt.plot(ccds.ccdzpt[I],
+                 ccds.exptime[I], 'k.', alpha=0.1)
+
+        J = np.flatnonzero((ccds.filter == band) * (ccds.photometric == False))
+        plt.plot(ccds.ccdzpt[J],
+                 ccds.exptime[J], 'r.', alpha=0.1)
+
+        plt.xlabel('Zeropoint (mag)')
+        plt.ylabel('exptime')
+        plt.title('DR3: EDR region, Forced phot: %s band' % band)
+        ps.savefig()
+        
+        plt.clf()
+        plt.plot(ccds.ccdzpt[I],
+                 np.clip(ccds.mdiff[I], mlo,mhi), 'k.', alpha=0.1)
+
+        plt.xlabel('Zeropoint (arcsec)')
+        plt.ylabel('DECaLS PSF - PS1 (mag)')
+        plt.axhline(0, color='k', alpha=0.2)
+        #plt.axis([0, mxsee, mlo,mhi])
+        plt.title('DR3: EDR region, Forced phot: %s band' % band)
+        ps.savefig()
+
+
+
     
     for band in bands:
         I = np.flatnonzero(ccds.filter == band)
