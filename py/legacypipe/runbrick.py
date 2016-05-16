@@ -414,9 +414,23 @@ def stage_tims(W=3600, H=3600, pixscale=0.262, brickname=None,
 
                 plt.subplot(2,2,3)
                 #nil,udq = np.unique(tim.dq, return_inverse=True)
-                dimshow(((tim.dq & tim.dq_saturation_bits) > 0), vmin=0, vmax=1.3, cmap='hot')
+                dimshow(((tim.dq & tim.dq_saturation_bits) > 0), vmin=0, vmax=1.5, cmap='hot')
                 plt.title('SATUR')
             plt.suptitle(tim.name)
+            ps.savefig()
+
+            plt.clf()
+            bitmap = dict([(v,k) for k,v in CP_DQ_BITS.items()])
+            k = 1
+            for i in range(12):
+                bitval = 1 << i
+                if not bitval in bitmap:
+                    continue
+                plt.subplot(3,3,k)
+                k+=1
+                plt.imshow((tim.dq & bitval) > 0, vmin=0, vmax=1.5, cmap='hot')
+                plt.title(bitmap[bitval])
+            plt.suptitle('Mask planes: %s' % tim.name)
             ps.savefig()
 
     if not pipe:

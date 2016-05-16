@@ -85,7 +85,7 @@ class CPImage(LegacySurveyImage):
         self.skyfn = os.path.join(calibdir, 'sky', self.calname + '.fits')
         self.splineskyfn = os.path.join(calibdir, 'splinesky', self.calname + '.fits')
         self.dq_saturation_bits = CP_DQ_BITS['satur']
-        
+
     def check_image_header(self, imghdr):
         # check consistency... something of a DR1 hangover
         e = imghdr['EXTNAME']
