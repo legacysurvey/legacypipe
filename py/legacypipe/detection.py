@@ -13,6 +13,7 @@ def _detmap(X):
     if R is None:
         return None,None,None,None,None
     ie = tim.getInvvar()
+    assert(tim.psf_sigma > 0)
     psfnorm = 1./(2. * np.sqrt(np.pi) * tim.psf_sigma)
     detim = tim.getImage().copy()
 

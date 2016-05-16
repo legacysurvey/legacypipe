@@ -414,7 +414,7 @@ def stage_tims(W=3600, H=3600, pixscale=0.262, brickname=None,
 
                 plt.subplot(2,2,3)
                 #nil,udq = np.unique(tim.dq, return_inverse=True)
-                dimshow(((tim.dq & tim.dq_saturation_bits) > 0), vmin=0, vmax=1)
+                dimshow(((tim.dq & tim.dq_saturation_bits) > 0), vmin=0, vmax=1.3, cmap='hot')
                 plt.title('SATUR')
             plt.suptitle(tim.name)
             ps.savefig()
@@ -1440,6 +1440,7 @@ def stage_srcs(coimgs=None, cons=None,
         for r,d,m in zip(Tsat.ra, Tsat.dec, Tsat.mag):
             fluxes = dict([(band, NanoMaggies.magToNanomaggies(m))
                            for band in bands])
+            assert(np.all(np.isfinite(fluxes.values())))
             satcat.append(PointSource(RaDecPos(r, d),
                                       NanoMaggies(order=bands, **fluxes)))
 
