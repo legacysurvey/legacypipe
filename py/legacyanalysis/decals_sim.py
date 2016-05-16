@@ -54,8 +54,10 @@ from legacypipe.decam import DecamImage
 from legacypipe.common import LegacySurveyData, wcs_for_brick, ccds_touching_wcs
 
 class SimDecals(LegacySurveyData):
-    def __init__(self, survey_dir=None, metacat=None, simcat=None):
-        super(SimDecals, self).__init__(survey_dir=survey_dir)
+    def __init__(self, survey_dir=None, output_dir=None,
+                 metacat=None, simcat=None):
+        super(SimDecals, self).__init__(survey_dir=survey_dir,
+                                        output_dir=output_dir)
         self.metacat = metacat
         self.simcat = simcat
         #add +fakes string to camera to signal SimDecas
@@ -423,6 +425,7 @@ def main():
         decals_sim_dir = os.getenv('DECALS_SIM_DIR')
     else:
         decals_sim_dir = '.'
+    outdir=os.path.join(decals_sim_dir,brickname)
     if not os.path.exists(os.path.join(decals_sim_dir,brickname)):
         os.makedirs(os.path.join(decals_sim_dir,brickname))
         
@@ -452,7 +455,8 @@ def main():
         simcat.write(simcatfile)
 
 #       # Use Tractor to just process the blobs containing the simulated sources. 
-        simdecals = SimDecals(metacat=metacat,simcat=simcat)
+        simdecals = SimDecals(metacat=metacat, simcat=simcat,
+                              survey_dir=args.survey_dir, output_dir=outdir)
         blobxy = zip(simcat['x'],simcat['y'])
         print('<<<<fakes inserted at pixels (x,y)= ',blobxy)
         #run_brick(brickname, survey=simdecals, outdir=os.path.join(decals_sim_dir,brickname), 
@@ -461,7 +465,7 @@ def main():
         #          write_metrics=False, pixPsf=True, blobxy=blobxy, 
         #          early_coadds=False, stages=['writecat'], splinesky=True)
         #run_brick(brickname, survey_dir=args.survey_dir, outdir=os.path.join(decals_sim_dir,brickname), 
-        run_brick(brickname, survey=simdecals, outdir=os.path.join(decals_sim_dir,brickname), 
+        run_brick(brickname, survey=simdecals, 
                   threads=args.threads, zoom=args.zoom, wise=False,
                   forceAll=True, writePickles=False, do_calibs=True,
                   write_metrics=False, pixPsf=True, blobxy=blobxy, 
