@@ -425,11 +425,11 @@ def main():
         decals_sim_dir = os.getenv('DECALS_SIM_DIR')
     else:
         decals_sim_dir = '.'
-    outdir=os.path.join(decals_sim_dir,brickname)
-    if not os.path.exists(os.path.join(decals_sim_dir,brickname)):
-        os.makedirs(os.path.join(decals_sim_dir,brickname))
+    outdir = os.path.join(decals_sim_dir, brickname)
+    if not os.path.exists(outdir):
+        os.makedirs(outdir)
         
-    metafile = os.path.join(decals_sim_dir,brickname,'metacat-'+brickname+'-'+lobjtype+'.fits')
+    metafile = os.path.join(outdir,'metacat-'+brickname+'-'+lobjtype+'.fits')
     log.info('Writing {}'.format(metafile))
     if os.path.isfile(metafile):
         os.remove(metafile)
@@ -447,7 +447,7 @@ def main():
 
         # Build and write out the simulated object catalog.
         simcat = build_simcat(nobjchunk,brickname,brickwcs,metacat,seeds[ichunk])
-        simcatfile = os.path.join(decals_sim_dir,brickname,'simcat-'+brickname+'-'+
+        simcatfile = os.path.join(outdir,'simcat-'+brickname+'-'+
                                   lobjtype+'-'+chunksuffix+'.fits')
         log.info('Writing {}'.format(simcatfile))
         if os.path.isfile(simcatfile):
@@ -459,12 +459,6 @@ def main():
                               survey_dir=args.survey_dir, output_dir=outdir)
         blobxy = zip(simcat['x'],simcat['y'])
         print('<<<<fakes inserted at pixels (x,y)= ',blobxy)
-        #run_brick(brickname, survey=simdecals, outdir=os.path.join(decals_sim_dir,brickname), 
-        #          threads=args.threads, zoom=args.zoom, wise=False,
-        #          forceAll=True, writePickles=False, do_calibs=True,
-        #          write_metrics=False, pixPsf=True, blobxy=blobxy, 
-        #          early_coadds=False, stages=['writecat'], splinesky=True)
-        #run_brick(brickname, survey_dir=args.survey_dir, outdir=os.path.join(decals_sim_dir,brickname), 
         run_brick(brickname, survey=simdecals, 
                   threads=args.threads, zoom=args.zoom, wise=False,
                   forceAll=True, writePickles=False, do_calibs=True,
@@ -472,17 +466,17 @@ def main():
                   early_coadds=False, stages=['writecat'], splinesky=True)
 
         log.info('Cleaning up...')
-        shutil.move(os.path.join(decals_sim_dir,brickname,'tractor',brickname[:3],
+        shutil.move(os.path.join(outdir,'tractor',brickname[:3],
                                  'tractor-'+brickname+'.fits'),
-                    os.path.join(decals_sim_dir,brickname,'tractor-'+brickname+'-'+
+                    os.path.join(outdir,'tractor-'+brickname+'-'+
                                  lobjtype+'-'+chunksuffix+'.fits'))
-        shutil.move(os.path.join(decals_sim_dir,brickname,'coadd',brickname[:3],brickname,
+        shutil.move(os.path.join(outdir,'coadd',brickname[:3],brickname,
                                  'legacysurvey-'+brickname+'-image.jpg'),
-                    os.path.join(decals_sim_dir,brickname,'qa-'+brickname+'-'+lobjtype+
+                    os.path.join(outdir,'qa-'+brickname+'-'+lobjtype+
                                  '-image-'+chunksuffix+'.jpg'))
-        shutil.move(os.path.join(decals_sim_dir,brickname,'coadd',brickname[:3],brickname,
+        shutil.move(os.path.join(outdir,'coadd',brickname[:3],brickname,
                                  'legacysurvey-'+brickname+'-resid.jpg'),
-                    os.path.join(decals_sim_dir,brickname,'qa-'+brickname+'-'+lobjtype+
+                    os.path.join(outdir,'qa-'+brickname+'-'+lobjtype+
                                  '-resid-'+chunksuffix+'.jpg'))
 
         #shutil.rmtree(os.path.join(decals_sim_dir,brickname,'coadd'))
