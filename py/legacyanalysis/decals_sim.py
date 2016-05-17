@@ -466,6 +466,7 @@ def main():
                   early_coadds=False, stages=['writecat'], splinesky=True)
 
         log.info('Cleaning up...')
+        #mv tractor catalogue, coadd/image.jpg and resid.jpg to outdir/
         shutil.move(os.path.join(outdir,'tractor',brickname[:3],
                                  'tractor-'+brickname+'.fits'),
                     os.path.join(outdir,'tractor-'+brickname+'-'+
