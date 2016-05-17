@@ -1798,7 +1798,7 @@ def stage_coadds(survey=None, bands=None, version_header=None, targetwcs=None,
                  tims=None, ps=None, brickname=None, ccds=None,
                  T=None, cat=None, pixscale=None, plots=False,
                  coadd_bw=False, brick=None, W=None, H=None, lanczos=True,
-                 mp=None,
+                 mp=None, on_bricks=None,
                  **kwargs):
     '''
     After the `stage_fitblobs` fitting stage (and
@@ -1853,12 +1853,12 @@ def stage_coadds(survey=None, bands=None, version_header=None, targetwcs=None,
         apxy = None
     del xx,yy,ok,ra,dec
 
-    C = _coadds(tims, bands, targetwcs, mods=mods, xy=(ix,iy),
-                ngood=True, detmaps=True, psfsize=True, lanczos=lanczos,
-                apertures=apertures, apxy=apxy,
-                callback=_write_band_images,
-                callback_args=(survey, brickname, version_header, tims, targetwcs),
-                plots=False, ps=ps)
+    C = make_coadds(tims, bands, targetwcs, mods=mods, xy=(ix,iy),
+                    ngood=True, detmaps=True, psfsize=True, lanczos=lanczos,
+                    apertures=apertures, apxy=apxy,
+                    callback=write_coadd_images,
+                    callback_args=(survey, brickname, version_header, tims, targetwcs),
+                    plots=False, ps=ps)
 
     for c in ['nobs', 'anymask', 'allmask', 'psfsize', 'depth', 'galdepth']:
         T.set(c, C.T.get(c))
@@ -1917,8 +1917,8 @@ def stage_coadds(survey=None, bands=None, version_header=None, targetwcs=None,
         print('Wrote', out.fn)
     del D
 
-    for name,ims,rgbkw in [('image', C.coimgs, rgbkwargs),
-                           ('model', C.comods, rgbkwargs),
+    for name,ims,rgbkw in [('image', C.coimgs,   rgbkwargs),
+                           ('model', C.comods,   rgbkwargs),
                            ('resid', C.coresids, rgbkwargs_resid),
                            ]:
         rgb = get_rgb(ims, bands, **rgbkw)
@@ -1927,6 +1927,16 @@ def stage_coadds(survey=None, bands=None, version_header=None, targetwcs=None,
             i = 'zrg'.index(bands[0])
             rgb = rgb[:,:,i]
             kwa = dict(cmap='gray')
+
+        if on_bricks and name == 'image':
+            # Do not overwrite the image.jpg file if it exists (eg, written during
+            # image_coadds stage), because in the later stage_srcs, we subtract the
+            # overlapping sources from other bricks, modifying the images.
+            fn = survey.find_file(name + '-jpeg', brick=brickname, output=True)
+            if os.path.exists(fn):
+                print('Not overwriting existing image %s because on_bricks is set' % fn)
+                continue
+
         with survey.write_output(name + '-jpeg', brick=brickname) as out:
             imsave_jpeg(out.fn, rgb, origin='lower', **kwa)
             print('Wrote', out.fn)
