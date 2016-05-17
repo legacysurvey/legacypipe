@@ -155,43 +155,47 @@ def main():
     
         
     # Get cutouts of the missing sources
-    imfile = os.path.join(decals_sim_dir,brickname,'qa-'+brickname+'-'+lobjtype+
-                          '-image-'+chunksuffix+'.jpg') 
-    hw = 30 # half-width [pixels]
-    ncols = 5
-    nrows = 5
-    nthumb = ncols*nrows
-    dims = (ncols*hw*2,nrows*hw*2)
-    mosaic = Image.new('RGB',dims)
+    #only if have missing sources
+    if len(missing) > 0:
+        imfile = os.path.join(decals_sim_dir,brickname,'qa-'+brickname+'-'+lobjtype+
+                              '-image-'+chunksuffix+'.jpg') 
+        hw = 30 # half-width [pixels]
+        ncols = 5
+        nrows = 5
+        nthumb = ncols*nrows
+        dims = (ncols*hw*2,nrows*hw*2)
+        mosaic = Image.new('RGB',dims)
 
-    miss = missing[np.argsort(simcat['r'][missing])]
-    print(simcat['r'][miss])
-    
-    xpos, ypos = np.meshgrid(np.arange(0,dims[0],hw*2,dtype='int'),
-                             np.arange(0,dims[1],hw*2,dtype='int'))
-    im = Image.open(imfile)
-    sz = im.size
-    iobj = 0
-    for ic in range(ncols):
-        for ir in range(nrows):
-            mm = miss[iobj]
-            xx = int(simcat['X'][mm])
-            yy = int(sz[1]-simcat['Y'][mm])
-            crop = (xx-hw,yy-hw,xx+hw,yy+hw)
-            box = (xpos[ir,ic],ypos[ir,ic])
-            thumb = im.crop(crop)
-            mosaic.paste(thumb,box)
-            iobj = iobj+1
+        miss = missing[np.argsort(simcat['r'][missing])]
+        print('miss = ',miss)
+        print('missing= ',missing)
+        print(simcat['r'][miss])
+        
+        xpos, ypos = np.meshgrid(np.arange(0,dims[0],hw*2,dtype='int'),
+                                 np.arange(0,dims[1],hw*2,dtype='int'))
+        im = Image.open(imfile)
+        sz = im.size
+        iobj = 0
+        for ic in range(ncols):
+            for ir in range(nrows):
+                mm = miss[iobj]
+                xx = int(simcat['X'][mm])
+                yy = int(sz[1]-simcat['Y'][mm])
+                crop = (xx-hw,yy-hw,xx+hw,yy+hw)
+                box = (xpos[ir,ic],ypos[ir,ic])
+                thumb = im.crop(crop)
+                mosaic.paste(thumb,box)
+                iobj = iobj+1
 
-    # Add a border
-    draw = ImageDraw.Draw(mosaic)
-    for ic in range(ncols):
-        for ir in range(nrows):
-            draw.rectangle([(xpos[ir,ic],ypos[ir,ic]),
-                            (xpos[ir,ic]+hw*2,ypos[ir,ic]+hw*2)])
-    qafile = os.path.join(decals_sim_dir,brickname,'qa-'+brickname+'-'+lobjtype+'-missing.png')
-    log.info('Writing {}'.format(qafile))
-    mosaic.save(qafile)
+        # Add a border
+        draw = ImageDraw.Draw(mosaic)
+        for ic in range(ncols):
+            for ir in range(nrows):
+                draw.rectangle([(xpos[ir,ic],ypos[ir,ic]),
+                                (xpos[ir,ic]+hw*2,ypos[ir,ic]+hw*2)])
+        qafile = os.path.join(decals_sim_dir,brickname,'qa-'+brickname+'-'+lobjtype+'-missing.png')
+        log.info('Writing {}'.format(qafile))
+        mosaic.save(qafile)
 
     # Modify the coadd image and residual files so the simulated sources
     # are labeled.
@@ -201,6 +205,7 @@ def main():
     imfile = [imfile,imfile.replace('-image','-resid')]
     for ifile in imfile:
         im = Image.open(ifile)
+        print('ifile=',ifile)
         sz = im.size
         draw = ImageDraw.Draw(im)
         [draw.ellipse((cat['X']-rad, sz[1]-cat['Y']-rad,cat['X']+rad,
