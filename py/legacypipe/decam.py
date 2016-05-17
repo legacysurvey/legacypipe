@@ -160,6 +160,15 @@ class DecamImage(CPImage, CalibMixin):
         else:
             dq = dq.astype(np.int16)
 
+            # Un-set the SATUR flag for pixels that also have BADPIX set.
+            both = CP_DQ_BITS['badpix'] | CP_DQ_BITS['satur']
+            I = np.flatnonzero((dq & both) == both)
+            if len(I):
+                print('Warning: un-setting SATUR for', len(I),
+                      'pixels with SATUR and BADPIX set.')
+                dq.flat[I] &= ~CP_DQ_BITS['satur']
+                assert(np.all((dq & both) != both))
+
         if header:
             return dq,hdr
         else:
