@@ -13,7 +13,8 @@ from tractor.galaxy import DevGalaxy, ExpGalaxy, FixedCompositeGalaxy, SoftenedF
 
 from legacypipe.common import (SimpleGalaxy, LegacyEllipseWithPriors, 
                                get_rgb)
-from legacypipe.runbrick import compute_coadds, tims_compute_resamp, rgbkwargs_resid
+from legacypipe.runbrick import tims_compute_resamp, rgbkwargs_resid
+from legacypipe.coadds import quick_coadds
 from legacypipe.runbrick_plots import _plot_mods
 
 DECALS_PROPID = '2014B-0404'

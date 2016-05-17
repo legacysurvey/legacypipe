@@ -2,6 +2,7 @@ from __future__ import print_function
 import numpy as np
 import fitsio
 from legacypipe.cpimage import CP_DQ_BITS
+from legacypipe.common import tim_get_resamp
 
 def make_coadds(tims, bands, targetwcs,
             mods=None, xy=None, apertures=None, apxy=None,
