@@ -1,6 +1,7 @@
 from __future__ import print_function
 import numpy as np
 import fitsio
+from astrometry.util.fits import fits_table
 from legacypipe.cpimage import CP_DQ_BITS
 from legacypipe.common import tim_get_resamp
 
@@ -155,6 +156,15 @@ def make_coadds(tims, bands, targetwcs,
 
             iv = tim.getInvvar()[Yi,Xi]
 
+            # surface-brightness correction
+            fscale = (targetwcs.pixel_scale() / tim.subwcs.pixel_scale())**2
+            print('Applying surface-brightness scaling of %.3f to' % fscale, tim.name)
+
+            im *=  fscale
+            iv /= (fscale**2)
+            if mods:
+                mo *= fscale
+
             # invvar-weighted image
             cowimg[Yo,Xo] += iv * im
             cow   [Yo,Xo] += iv
@@ -175,7 +185,7 @@ def make_coadds(tims, bands, targetwcs,
                     
                 coimg[Yo,Xo] += goodpix * im
                 con  [Yo,Xo] += goodpix
-                coiv [Yo,Xo] += goodpix * 1./tim.sig1**2  # ...ish
+                coiv [Yo,Xo] += goodpix * 1./(tim.sig1 * fscale)**2  # ...ish
 
                 
             if xy:
