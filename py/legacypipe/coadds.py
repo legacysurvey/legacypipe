@@ -399,3 +399,66 @@ def write_coadd_images(band,
             fitsio.write(out.fn, img, clobber=True, header=hdr2)
             print('Wrote', out.fn)
 
+# Pretty much only used for plots; the real deal is make_coadds()
+def quick_coadds(tims, bands, targetwcs, images=None,
+                 get_cow=False, get_n2=False, fill_holes=True):
+
+    W = targetwcs.get_width()
+    H = targetwcs.get_height()
+
+    coimgs = []
+    cons = []
+    if get_n2:
+        cons2 = []
+    if get_cow:
+        # moo
+        cowimgs = []
+        wimgs = []
+
+    for ib,band in enumerate(bands):
+        coimg = np.zeros((H,W), np.float32)
+        coimg2 = np.zeros((H,W), np.float32)
+        con   = np.zeros((H,W), np.uint8)
+        con2  = np.zeros((H,W), np.uint8)
+        if get_cow:
+            cowimg = np.zeros((H,W), np.float32)
+            wimg  = np.zeros((H,W), np.float32)
+        for itim,tim in enumerate(tims):
+            if tim.band != band:
+                continue
+            R = tim_get_resamp(tim, targetwcs)
+            if R is None:
+                continue
+            (Yo,Xo,Yi,Xi) = R
+            nn = (tim.getInvError()[Yi,Xi] > 0)
+            if images is None:
+                coimg [Yo,Xo] += tim.getImage()[Yi,Xi] * nn
+                coimg2[Yo,Xo] += tim.getImage()[Yi,Xi]
+            else:
+                coimg [Yo,Xo] += images[itim][Yi,Xi] * nn
+                coimg2[Yo,Xo] += images[itim][Yi,Xi]
+            con   [Yo,Xo] += nn
+            if get_cow:
+                cowimg[Yo,Xo] += tim.getInvvar()[Yi,Xi] * tim.getImage()[Yi,Xi]
+                wimg  [Yo,Xo] += tim.getInvvar()[Yi,Xi]
+            con2  [Yo,Xo] += 1
+        coimg /= np.maximum(con,1)
+        if fill_holes:
+            coimg[con == 0] = coimg2[con == 0] / np.maximum(1, con2[con == 0])
+        if get_cow:
+            cowimg /= np.maximum(wimg, 1e-16)
+            cowimg[wimg == 0] = coimg[wimg == 0]
+            cowimgs.append(cowimg)
+            wimgs.append(wimg)
+        coimgs.append(coimg)
+        cons.append(con)
+        if get_n2:
+            cons2.append(con2)
+
+    rtn = [coimgs,cons]
+    if get_cow:
+        rtn.extend([cowimgs, wimgs])
+    if get_n2:
+        rtn.append(cons2)
+    return rtn
+
