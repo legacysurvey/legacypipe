@@ -275,7 +275,7 @@ def in_region(thetavals, phivals, thetaU, phiU, thetaR, phiR, thetaL, phiL, thet
 #def computeHPXpix_sequ_new(nside, propertyArray, pixoffset=0, ratiores=4, coadd_cut=True):
 def computeHPXpix_sequ_new(nside, propertyArray, pixoffset=0, ratiores=4, coadd_cut=False): 
     #return 'ERROR'
-    img_ras, img_decs = [propertyArray[v] for v in ['ra0', 'ra1', 'ra2', 'ra3']],[propertyArray[v] for v in ['dec0', 'dec1', 'dec2', 'dec3']]
+    img_ras, img_decs = [propertyArray[v] for v in ['ra0', 'ra3', 'ra2', 'ra1','ra0']],[propertyArray[v] for v in ['dec0', 'dec3', 'dec2', 'dec1','dec0']]
     if np.any(img_ras > 360.0):
         img_ras[img_ras > 360.0] -= 360.0
     if np.any(img_ras < 0.0):
