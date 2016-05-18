@@ -13,19 +13,13 @@ from legacypipe.common import LegacySurveyData
 import tractor
 
 def main(outfn='ccds-annotated.fits', ccds=None):
-    survey = LegacySurveyData()
+    survey = LegacySurveyData(ccds=ccds)
     if ccds is None:
         ccds = survey.get_ccds()
 
     # File from the "observing" svn repo:
     # https://desi.lbl.gov/svn/decam/code/observing/trunk
     tiles = fits_table('decam-tiles_obstatus.fits')
-
-    #ccds.cut(np.arange(100))
-    #print("HACK!")
-    #ccds.cut(np.array([name in ['N15', 'N16', 'N21', 'N9']
-    #                   for name in ccds.ccdname]) *
-    #                   ccds.expnum == 229683)
 
     I = survey.photometric_ccds(ccds)
     ccds.photometric = np.zeros(len(ccds), bool)
@@ -105,8 +99,9 @@ def main(outfn='ccds-annotated.fits', ccds=None):
         wcs = None
         sky = None
         try:
-            tim = im.get_tractor_image(pixPsf=True, splinesky=True,
-                                       subsky=False, pixels=False)
+            tim = im.get_tractor_image(pixPsf=True, splinesky=True, subsky=False,
+                                       pixels=False, dq=False, invvar=False)
+
         except:
             import traceback
             traceback.print_exc()
@@ -132,8 +127,8 @@ def main(outfn='ccds-annotated.fits', ccds=None):
         ccds.sig1[iccd] = tim.sig1
         plvers.append(tim.plver)
 
-        obj = hdr.get('OBJECT')
-        # parse 'DECaLS_15150_r'
+        # parse 'DECaLS_15150_r' to get tile number
+        obj = ccd.object.strip()
         words = obj.split('_')
         tile = None
         if len(words) == 3 and words[0] == 'DECaLS':
@@ -205,6 +200,7 @@ def main(outfn='ccds-annotated.fits', ccds=None):
         ccds.psf_theta[iccd] = theta
         ccds.psf_ell  [iccd] = ell
 
+        print('Computing Gaussian approximate PSF quantities...')
         # Galaxy norm using Gaussian approximation of PSF.
         realpsf = tim.psf
         tim.psf = im.read_psf_model(0, 0, gaussPsf=True,
@@ -212,13 +208,13 @@ def main(outfn='ccds-annotated.fits', ccds=None):
         gaussgalnorm[iccd] = im.galaxy_norm(tim, x=cx, y=cy)
         tim.psf = realpsf
         
-        # Sky
-        mod = np.zeros((ccd.height, ccd.width), np.float32)
-        sky.addTo(mod)
-        ccds.meansky[iccd] = np.mean(mod)
-        ccds.stdsky[iccd]  = np.std(mod)
-        ccds.maxsky[iccd]  = mod.max()
-        ccds.minsky[iccd]  = mod.min()
+        # Sky -- evaluate on a grid (every ~10th pixel)
+        skygrid = sky.evaluateGrid(np.linspace(0, ccd.width-1,  int(1+ccd.width/10)),
+                                   np.linspace(0, ccd.height-1, int(1+ccd.height/10)))
+        ccds.meansky[iccd] = np.mean(skygrid)
+        ccds.stdsky[iccd]  = np.std(skygrid)
+        ccds.maxsky[iccd]  = skygrid.max()
+        ccds.minsky[iccd]  = skygrid.min()
 
         # WCS
         ccds.ra0[iccd],ccds.dec0[iccd] = wcs.pixelxy2radec(1, 1)
@@ -259,7 +255,6 @@ def main(outfn='ccds-annotated.fits', ccds=None):
         ccds.pixscale_min[iccd] = min(pixscale)
         ccds.pixscale_max[iccd] = max(pixscale)
         ccds.pixscale_std[iccd] = np.std(pixscale)
-
 
     ccds.plver = np.array(plvers)
 
@@ -302,9 +297,9 @@ def main(outfn='ccds-annotated.fits', ccds=None):
     ccds.writeto(outfn)
 
 
-def _bounce_main((i, ccds)):
+def _bounce_main((name, i, ccds)):
     try:
-        outfn = 'ccds-annotated/ccds-annotated-%03i.fits' % i
+        outfn = 'ccds-annotated/ccds-annotated-%s-%03i.fits' % (name, i)
         if os.path.exists(outfn):
             print('Already exists:', outfn)
             return
@@ -314,34 +309,121 @@ def _bounce_main((i, ccds)):
         traceback.print_exc()
 
 if __name__ == '__main__':
-
-    TT = [fits_table('ccds-annotated/ccds-annotated-%03i.fits' % i) for i in range(515)]
-    T = merge_tables(TT)
-    T.writeto('ccds-annotated.fits')
-
     import sys
-    sys.exit()
+    import argparse
+    parser = argparse.ArgumentParser(description='Produce annotated CCDs file by reading CCDs file + calibration products')
+    parser.add_argument('--part', action='append', help='CCDs file to read, survey-ccds-X.fits.gz, default: ["decals","nondecals","extra"].  Can be repeated.', default=[])
+    parser.add_argument('--threads', type=int, help='Run multi-threaded', default=4)
+    opt = parser.parse_args()
+
+
+    #### FIX mistake in DR3 annotated CCDs: sig1
+    for part in ['decals', 'nondecals', 'extra']:
+        from tractor.brightness import NanoMaggies
+        fn = '/global/cscratch1/sd/desiproc/dr3/ccds-annotated-%s.fits.gz' % part
+        T = fits_table(fn)
+        zpt = T.ccdzpt + 2.5 * np.log10(T.exptime)
+        print('Median zpt:', np.median(zpt))
+        zpscale = NanoMaggies.zeropointToScale(zpt)
+        print('Median zpscale:', np.median(zpscale))
+
+        print('Zpscale limits:', zpscale.min(), zpscale.max())
+        print('Non-finite:', np.sum(np.logical_not(np.isfinite(zpscale))))
+
+        T.sig1 /= zpscale
+        T.sig1[np.logical_not(np.isfinite(T.sig1))] = 0.
+        print('Median sig1:', np.median(T.sig1))
+
+        print('Before:')
+        for col in ['psfdepth', 'galdepth', 'gausspsfdepth', 'gaussgaldepth']:
+            c = T.get(col)
+            for band in 'grz':
+                I = np.flatnonzero((T.filter == band) * (T.sig1 > 0))
+                print(col, band, 'median', np.median(c[I]))
+        print(sum(T.sig1 == 0), 'have sig1 = 0')
+
+        offset = 2.5 * np.log10(zpscale)
+        print('Median offset:', np.median(offset))
+        T.psfdepth += offset
+        T.galdepth += offset
+        T.gausspsfdepth += offset
+        T.gaussgaldepth += offset
+
+        print('Photometric:', np.unique(T.photometric))
+        
+        print('After:')
+        for col in ['psfdepth', 'galdepth', 'gausspsfdepth', 'gaussgaldepth']:
+            c = T.get(col)
+            for band in 'grz':
+                I = np.flatnonzero((T.filter == band) * (T.sig1 > 0))
+                print(col, band, 'median', np.median(c[I]))
+        print(sum(T.sig1 == 0), 'have sig1 = 0')
+        print(sum((T.sig1 == 0) * T.photometric), 'have sig1 = 0 and photometric')
+
+        print(np.sum(np.logical_not(np.isfinite(T.sig1))), 'infinite sig1')
+        T.psfdepth[np.logical_not(np.isfinite(T.psfdepth))] = 0.
+        T.galdepth[np.logical_not(np.isfinite(T.galdepth))] = 0.
+        T.gausspsfdepth[np.logical_not(np.isfinite(T.gausspsfdepth))] = 0.
+        T.gaussgaldepth[np.logical_not(np.isfinite(T.gaussgaldepth))] = 0.
+        
+        outfn = os.path.basename(fn)
+        outfn = outfn.replace('.gz', '')
+        print('Wrote', outfn)
+        T.writeto(outfn)
+    sys.exit(0)
+
+    
+    # TT = [fits_table('ccds-annotated/ccds-annotated-%03i.fits' % i) for i in range(515)]
+    # T = merge_tables(TT)
+    # T.writeto('ccds-annotated.fits')
+    # 
+    # sys.exit()
     #sys.exit(main())
 
     survey = LegacySurveyData()
-    ccds = survey.get_ccds()
+
+    # For profiling...
+    if False:
+        name = 'decals'
+        ccds = fits_table(os.path.join(survey.survey_dir, 'survey-ccds-%s.fits.gz' % name))
+        main(outfn='test.fits', ccds=ccds[:50])
+        sys.exit(0)
+    
+    #ccds = survey.get_ccds()
+
     from astrometry.util.multiproc import *
     #mp = multiproc(8)
-    mp = multiproc(4)
+    mp = multiproc(opt.threads)
     N = 1000
-    args = []
-    i = 0
-    while len(ccds):
-        c = ccds[:N]
-        ccds = ccds[N:]
-        args.append((i, c))
-        i += 1
-    print('Split CCDs file into', len(args), 'pieces')
-    print('sizes:', [len(c) for i,c in args])
-    mp.map(_bounce_main, args)
+    
+    if len(opt.part) == 0:
+        opt.part.append('decals')
+        opt.part.append('nondecals')
+        opt.part.append('extra')
+    for name in opt.part:
+        print()
+        print('Reading', name)
+        print()
+        args = []
+        i = 0
+        ccds = fits_table(os.path.join(survey.survey_dir, 'survey-ccds-%s.fits.gz' % name))
+        while len(ccds):
+            c = ccds[:N]
+            ccds = ccds[N:]
+            args.append((name, i, c))
+            i += 1
+        print('Split CCDs file into', len(args), 'pieces')
+        print('sizes:', [len(c) for n,i,c in args])
+        mp.map(_bounce_main, args)
 
-    # reassemble outputs
-    TT = [fits_table('ccds-annotated/ccds-annotated-%03i.fits' % i) for i,nil in args]
-    T = merge_tables(TT)
-    T.writeto('ccds-annotated.fits')
+        # reassemble outputs
+        TT = [fits_table('ccds-annotated/ccds-annotated-%s-%03i.fits' % (name,i))
+              for name,i,nil in args]
+        T = merge_tables(TT)
+
+        # expand some columns to make the three files have the same structure.
+        T.object = T.object.astype('S37')
+        T.plver  = T.plver.astype('S6')
+
+        T.writeto('survey-ccds-annotated-%s.fits' % name)
 

@@ -12,9 +12,12 @@ from tractor import Tractor, PointSource, Image, NanoMaggies, Catalog, Patch
 from tractor.galaxy import DevGalaxy, ExpGalaxy, FixedCompositeGalaxy, SoftenedFracDev, FracDev, disable_galaxy_cache, enable_galaxy_cache
 
 from legacypipe.common import (SimpleGalaxy, LegacyEllipseWithPriors, 
-                               DECALS_PROPID, get_rgb)
-from legacypipe.runbrick import compute_coadds, tims_compute_resamp, rgbkwargs_resid
+                               get_rgb)
+from legacypipe.runbrick import tims_compute_resamp, rgbkwargs_resid
+from legacypipe.coadds import quick_coadds
 from legacypipe.runbrick_plots import _plot_mods
+
+DECALS_PROPID = '2014B-0404'
 
 def one_blob(X):
     '''
@@ -329,7 +332,7 @@ class OneBlob(object):
             if self.plots:
                 tims_compute_resamp(None, srctims, self.blobwcs)
                 plt.clf()
-                coimgs,cons = compute_coadds(srctims, self.bands, self.blobwcs,
+                coimgs,cons = quick_coadds(srctims, self.bands, self.blobwcs,
                                              fill_holes=False)
                 dimshow(get_rgb(coimgs, self.bands))
                 plt.title('Model selection: stage1 data')
@@ -338,7 +341,7 @@ class OneBlob(object):
                 if self.bigblob:
                     tims_compute_resamp(None, srctims, srcwcs, force=True)
                     plt.clf()
-                    coimgs,cons = compute_coadds(srctims, self.bands, srcwcs,
+                    coimgs,cons = quick_coadds(srctims, self.bands, srcwcs,
                                                  fill_holes=False)
                     dimshow(get_rgb(coimgs, self.bands))
                     plt.title('Model selection: stage1 data (srcwcs)')
@@ -435,7 +438,7 @@ class OneBlob(object):
                 # if self.plots:
                 #     mods = list(srctractor.getModelImages())
                 #     plt.clf()
-                #     coimgs,cons = compute_coadds(srctims, bands, srcwcs,
+                #     coimgs,cons = quick_coadds(srctims, bands, srcwcs,
                 #                                  images=mods, fill_holes=False)
                 #     dimshow(get_rgb(coimgs, bands))
                 #     plt.title('Initial: ' + name)
@@ -456,7 +459,7 @@ class OneBlob(object):
                     # if self.plots:
                     #     plt.clf()
                     #     modimgs = list(dtractor.getModelImages())
-                    #     comods,nil = compute_coadds(dtims, bands, srcwcs,
+                    #     comods,nil = quick_coadds(dtims, bands, srcwcs,
                     #                                 images=modimgs)
                     #     dimshow(get_rgb(comods, bands))
                     #     plt.title('To-depth opt: ' + name)
@@ -476,7 +479,7 @@ class OneBlob(object):
                     #            None, srch,srcw, ps, chi_plots=False)
                     plt.clf()
                     modimgs = list(srctractor.getModelImages())
-                    comods,nil = compute_coadds(srctims, self.bands, srcwcs,
+                    comods,nil = quick_coadds(srctims, self.bands, srcwcs,
                                                 images=modimgs)
                     dimshow(get_rgb(comods, self.bands))
                     plt.title('After first-round opt: ' + name)
@@ -540,7 +543,7 @@ class OneBlob(object):
                         plt.clf()
                         modimgs = list(modtractor.getModelImages())
                         tims_compute_resamp(None, modtims, srcwcs, force=True)
-                        comods,nil = compute_coadds(modtims, self.bands, srcwcs,
+                        comods,nil = quick_coadds(modtims, self.bands, srcwcs,
                                                     images=modimgs)
                         dimshow(get_rgb(comods, self.bands))
                         plt.title('After second-round opt: ' + name)
@@ -603,7 +606,7 @@ class OneBlob(object):
 
                     if modname == 'none':
                         # In the first panel, we show a coadd of the data
-                        coimgs, cons = compute_coadds(srctims, self.bands, srcwcs)
+                        coimgs, cons = quick_coadds(srctims, self.bands, srcwcs)
                         dimshow(get_rgb(coimgs, self.bands), ticks=False)
                         ax = plt.axis()
                         ok,x,y = self.blobwcs.radec2pixelxy(src.getPosition().ra,
@@ -616,7 +619,7 @@ class OneBlob(object):
                         res = [tim.getImage() for tim in srctims]
                     else:
                         modimgs = list(srctractor.getModelImages())
-                        comods,nil = compute_coadds(srctims, self.bands, srcwcs,
+                        comods,nil = quick_coadds(srctims, self.bands, srcwcs,
                                                     images=modimgs)
                         dimshow(get_rgb(comods, self.bands), ticks=False)
                         plt.title(modname)
@@ -626,7 +629,7 @@ class OneBlob(object):
                                zip(srctims, modimgs)]
             
                     # residuals
-                    coresids,nil = compute_coadds(srctims, self.bands, srcwcs,
+                    coresids,nil = quick_coadds(srctims, self.bands, srcwcs,
                                                   images=res)
                     plt.subplot(rows, cols, imod+1+cols)
                     dimshow(get_rgb(coresids, self.bands, **rgbkwargs_resid),
@@ -729,7 +732,7 @@ class OneBlob(object):
 
         if self.plots:
             plt.clf()
-            coimgs,cons = compute_coadds(dtims, bands, srcwcs,
+            coimgs,cons = quick_coadds(dtims, bands, srcwcs,
                                          fill_holes=False)
             dimshow(get_rgb(coimgs, bands))
             plt.title('To-depth data')
@@ -803,7 +806,7 @@ class OneBlob(object):
                 if self.plots and (numi < 3 or numi >= len(Ibright)-3):
                     plt.clf()
                     # Recompute coadds because of the subtract-all-and-readd shuffle
-                    coimgs,cons = compute_coadds(self.tims, self.bands, self.blobwcs,
+                    coimgs,cons = quick_coadds(self.tims, self.bands, self.blobwcs,
                                                  fill_holes=False)
                     rgb = get_rgb(coimgs, self.bands)
                     dimshow(rgb)
@@ -924,7 +927,7 @@ class OneBlob(object):
         
     def _initial_plots(self):
         print('Plotting blob image for blob', self.name)
-        coimgs,cons = compute_coadds(self.tims, self.bands, self.blobwcs,
+        coimgs,cons = quick_coadds(self.tims, self.bands, self.blobwcs,
                                      fill_holes=False)
         self.rgb = get_rgb(coimgs, self.bands)
         plt.clf()

@@ -5,6 +5,7 @@ from healpix import healpix,radec2thphi
 import numpy as np
 hpix = healpix()
 extmap = np.loadtxt('healSFD_r_256_fullsky.dat')
+DECamExt = [3.995,3.214,2.165,1.592,1.211,1.064]
 
 ### A couple of useful conversions
 
@@ -228,6 +229,156 @@ def plotMaghist_proc(band,nbin=100):
 	pp.close()
 	return True
 
+def Magcompgauss(band,nbin=100):
+	#compare Dustin's Gaussian depths to mine
+	import fitsio
+	from matplotlib import pyplot as plt
+	from numpy import zeros,array
+	readnoise = 10. # e-; 7.0 to 15.0 according to DECam Data Handbook
+	p = 1.15 #value given in imaging requirements
+	gain = 4.0 #from Dustin
+	f = fitsio.read(localdir+'decals-ccds-annotated.fits')
+	NTl = []
+	emin = 1000
+	emax = 0
+	msee = 0
+	n = 0
+	arcsec2pix = 1./.262 #from Dustin
+
+	if band == 'g':
+		zp0 = 25.08
+		recm = 24.
+		cor = 0.07
+		extc = 3.303/2.751
+	if band == 'r':
+		zp0 = 25.29
+		recm = 23.4
+		cor = .12
+		extc = 2.285/2.751
+	if band == 'z':
+		zp0 = 24.92
+		recm = 22.5
+		extc = 1.263/2.751
+		cor = .18
+	nd = 0
+	nbr = 0	
+	avem = 0
+	avemd = 0
+	stdd = 0
+	for i in range(0,len(f)):
+		pid = f[i]['propid']
+		#if DS == '2014B-0404' or DS == '2013A-0741': #enforce DECaLS only
+		#	DS = 1
+		DS = 0
+		year = int(f[i]['date_obs'].split('-')[0])
+		if year > 2014:
+			if pid == '2014B-0404' or pid == '2013A-0741':
+				DS = 1 #enforce 2015 data
+
+		if f[i]['filter'] == band:
+			
+			if DS == 1:
+				
+				if f[i]['dec'] > -20 and f[i]['photometric'] == True and f[i]['blacklist_ok'] == True:   
+					n += 1
+				#if f[i]['seeing'] != 99 and f[i]['ccdzpt'] != 99 and f[i]['fwhm'] != 99 and DS == 1:
+				#	if f[i]['dec'] > -20 and f[i]['exptime'] >=30 and f[i]['ccdnmatch'] >= 20 and abs(f[i]['zpt'] - f[i]['ccdzpt']) <= 0.1 and f[i]['zpt'] >= zp0-.5 and f[i]['zpt'] <=zp0+.25:   
+					#ext = f[i]['decam_extinction'][be]
+					avsky = f[i]['avsky']
+					skysig = sqrt(avsky * gain + readnoise**2) / gain
+					zpscale = zeropointToScale(f[i]['ccdzpt'] + 2.5*log(f[i]['exptime'],10.))
+					skysig /= zpscale
+					skysig = f[i]['sig1']
+					psf_sigma = f[i]['fwhm'] / 2.35
+					# point-source depth
+					#psfnorm = 1./(2. * sqrt(pi) * psf_sigma) #1/Neff #for point source
+					#detsig1 = skysig / psfnorm
+					Np = ((4.*pi*psf_sigma**2.)**(1./p) + (8.91*(.45*arcsec2pix)**2. )**(1./p))**p #Neff in requirements doc
+					Np = sqrt(Np) #square root necessary because Np gives sum of noise squared
+					detsig1 = skysig*Np #total noise
+					m = nanomaggiesToMag(detsig1 * 5.)
+					detsig1d = Magtonanomaggies(f[i]['gaussgaldepth'])/5. #total noise
+					md = nanomaggiesToMag(detsig1d * 5.)
+
+					avem += m
+					avemd += md
+					stdd += (md-m)**2.
+	avem = avem/n
+	avemd = avemd/n
+	dif = avemd-avem
+	stdd = sqrt(stdd/n-dif**2.)
+	return avem,avemd,stdd
+
+def Magcompgaussproc(band,nbin=100):
+	#compare Dustin's Gaussian depths to the processed ones
+	import fitsio
+	from matplotlib import pyplot as plt
+	from numpy import zeros,array
+	readnoise = 10. # e-; 7.0 to 15.0 according to DECam Data Handbook
+	p = 1.15 #value given in imaging requirements
+	gain = 4.0 #from Dustin
+	f = fitsio.read(localdir+'decals-ccds-annotated.fits')
+	NTl = []
+	emin = 1000
+	emax = 0
+	msee = 0
+	n = 0
+	arcsec2pix = 1./.262 #from Dustin
+
+	if band == 'g':
+		zp0 = 25.08
+		recm = 24.
+		cor = 0.07
+		extc = 3.303/2.751
+	if band == 'r':
+		zp0 = 25.29
+		recm = 23.4
+		cor = .12
+		extc = 2.285/2.751
+	if band == 'z':
+		zp0 = 24.92
+		recm = 22.5
+		extc = 1.263/2.751
+		cor = .18
+	nd = 0
+	nbr = 0	
+	avem = 0
+	avemd = 0
+	stdd = 0
+	for i in range(0,len(f)):
+		pid = f[i]['propid']
+		#if DS == '2014B-0404' or DS == '2013A-0741': #enforce DECaLS only
+		#	DS = 1
+		DS = 0
+		year = int(f[i]['date_obs'].split('-')[0])
+		if year > 2014:
+			if pid == '2014B-0404' or pid == '2013A-0741':
+				DS = 1 #enforce 2015 data
+
+		if f[i]['filter'] == band:
+			
+			if DS == 1:
+				
+				if f[i]['dec'] > -20 and f[i]['photometric'] == True and f[i]['blacklist_ok'] == True:   
+					n += 1
+				#if f[i]['seeing'] != 99 and f[i]['ccdzpt'] != 99 and f[i]['fwhm'] != 99 and DS == 1:
+				#	if f[i]['dec'] > -20 and f[i]['exptime'] >=30 and f[i]['ccdnmatch'] >= 20 and abs(f[i]['zpt'] - f[i]['ccdzpt']) <= 0.1 and f[i]['zpt'] >= zp0-.5 and f[i]['zpt'] <=zp0+.25:   
+					#ext = f[i]['decam_extinction'][be]
+					detsig1 = Magtonanomaggies(f[i]['galdepth'])
+					m = nanomaggiesToMag(detsig1 )
+					detsig1d = Magtonanomaggies(f[i]['gaussgaldepth']) #total noise
+					md = nanomaggiesToMag(detsig1d )
+
+					avem += m
+					avemd += md
+					stdd += (md-m)**2.
+	avem = avem/n
+	avemd = avemd/n
+	dif = avemd-avem
+	stdd = sqrt(stdd/n-dif**2.)
+	return avem,avemd,stdd
+
+
 def plotMaghist_proccom(band,nbin=100):
 	#this produces the histograms for Dustin's processed galaxy depth and the analytic calculation and compares them
 	import fitsio
@@ -248,7 +399,7 @@ def plotMaghist_proccom(band,nbin=100):
 		be = 1
 		zp0 = 25.08
 		recm = 24.
-		cor = 0.07
+		cor = 0.07+.05
 		
 	if band == 'r':
 		be = 2
@@ -259,7 +410,7 @@ def plotMaghist_proccom(band,nbin=100):
 		be = 4
 		zp0 = 24.92
 		recm = 22.5
-		cor = .18
+		cor = .18+.005
 		
 
 
@@ -291,6 +442,7 @@ def plotMaghist_proccom(band,nbin=100):
 					skysig = sqrt(avsky * gain + readnoise**2) / gain
 					zpscale = zeropointToScale(f[i]['ccdzpt'] + 2.5*log(f[i]['exptime'],10.))
 					skysig /= zpscale
+					skysig = f[i]['sig1']
 					psf_sigma = f[i]['fwhm'] / 2.35
 					# point-source depth
 					#psfnorm = 1./(2. * sqrt(pi) * psf_sigma) #1/Neff #for point source
@@ -298,7 +450,7 @@ def plotMaghist_proccom(band,nbin=100):
 					Np = ((4.*pi*psf_sigma**2.)**(1./p) + (8.91*(.45*arcsec2pix)**2. )**(1./p))**p #Neff in requirements doc
 					Np = sqrt(Np) #square root necessary because Np gives sum of noise squared
 					detsig1a = skysig*Np #total noise
-					
+					#detsig1a = Magtonanomaggies(f[i]['gaussgaldepth'])/5.
 					ma = nanomaggiesToMag(detsig1a * 5.*signalext)-cor
 					#m = f[i]['galdepth']-ext
 				#if m > 30 or m < 18:
@@ -330,6 +482,11 @@ def plotMaghist_proccom(band,nbin=100):
 	std = sqrt(sum(NTl**2.)/float(len(NTl))-mean**2.)
 	meana = sum(NTla)/float(len(NTla))
 	stda = sqrt(sum(NTla**2.)/float(len(NTla))-meana**2.)
+	stdcomp = 0
+	for i in range(0,len(NTl)):
+		stdcomp += (NTla[i]-NTl[i])**2.
+	stdcomp = sqrt(stdcomp/float(len(NTla)))
+	#stdcomp = sqrt(sum(NTla*NTl)/float(len(NTla))-meana*mean)
 	NTl.sort()
 	NTla.sort()
 	if len(NTl)/2. != len(NTl)/2:
@@ -338,7 +495,7 @@ def plotMaghist_proccom(band,nbin=100):
 	else:
 		med = (NTl[len(NTl)/2+1]+NTl[len(NTl)/2])/2.
 		meda = (NTla[len(NTla)/2+1]+NTl[len(NTl)/2])/2.
-	print mean,meana,med,meda,std,stda
+	print mean,meana,med,meda,std,stda,stdcomp
 	print 'percentage better than requirements '+str(nbr/n)
 
 	from matplotlib.backends.backend_pdf import PdfPages
@@ -347,22 +504,29 @@ def plotMaghist_proccom(band,nbin=100):
 
 	plt.plot(Nl,hl,'k-')
 	plt.plot(Nl,al,'r-')
-	plt.xlabel(r'5$\sigma$ '+band+ ' depth')
-	plt.ylabel('# of ccds')
-	plt.title('1 exposure processed depth '+str(mean)[:5]+r'$\pm$'+str(std)[:4]+r', $f_{\rm pass}=$'+str(nbr/float(n))[:5])
+	plt.xlabel(r'5$\sigma$ '+band+ ' depth',size=16)
+	plt.ylabel('# of ccds',size=16)
+	if band == 'g':
+		plt.xlim(22.5,24)
+		plt.text(22.6,1800,'Tractor',color='k',size=16)
+		plt.text(22.6,1700,'Gaussian',color='r',size=16)
+	#plt.title('1 exposure processed depth '+str(mean)[:5]+r'$\pm$'+str(std)[:4]+r', $f_{\rm pass}=$'+str(nbr/float(n))[:5])
 	#plt.xscale('log')
 	pp.savefig()
 	pp.close()
 	return True
 
 
-def plotMaghist_proc_Nexp(band,Nexp,ndraw = 1e5,nbin=100):
+def plotMaghist_proc_Nexp(band,Nexp,ndraw = 1e5,nbin=100,rel='DR3',survey='decals'):
 	#this produces the histogram for Dustin's processed galaxy depth
 	import fitsio
 	from matplotlib import pyplot as plt
 	from numpy import zeros,array
 	from random import random
-	f = fitsio.read(localdir+'decals-ccds-annotated.fits')
+	if rel == 'DR2':
+		f = fitsio.read(localdir+'decals-ccds-annotated.fits')
+	if rel == 'DR3':
+		f = fitsio.read(localdir+'ccds-annotated-'+survey+'.fits.gz')	
 	nl = []
 	nd = 0
 	nbr = 0	
@@ -388,20 +552,21 @@ def plotMaghist_proc_Nexp(band,Nexp,ndraw = 1e5,nbin=100):
 		DS = 0
 		year = int(f[i]['date_obs'].split('-')[0])
 		if year > 2014:
-			if pid == '2014B-0404' or pid == '2013A-0741':
-				DS = 1 #enforce 2015 data
+			#if pid == '2014B-0404' or pid == '2013A-0741':
+			DS = 1 #enforce 2015 data
 
 		if f[i]['filter'] == band:
 			
 			if DS == 1:
-				n += 1
-				#if f[i]['dec'] > -20 #and f[i]['photometric'] == False and f[i]['blacklist_ok'] == False :   
-				if f[i]['seeing'] != 99 and f[i]['ccdzpt'] != 99 and f[i]['fwhm'] != 99 and DS == 1:
-					if f[i]['dec'] > -20 and f[i]['exptime'] >=30 and f[i]['ccdnmatch'] >= 20 and abs(f[i]['zpt'] - f[i]['ccdzpt']) <= 0.1 and f[i]['zpt'] >= zp0-.5 and f[i]['zpt'] <=zp0+.25:   
-						ext = f[i]['decam_extinction'][be]
-						detsig1 = Magtonanomaggies(f[i]['galdepth'])/5. #total noise
-						signalext = 1./10.**(-ext/2.5)
-						nl.append(detsig1*signalext)
+				n += 1				
+				if f[i]['dec'] > -20 and f[i]['photometric'] == True and f[i]['blacklist_ok'] == True :   
+				
+				#if f[i]['seeing'] != 99 and f[i]['ccdzpt'] != 99 and f[i]['fwhm'] != 99 and DS == 1:
+					#if f[i]['dec'] > -20 and f[i]['exptime'] >=30 and f[i]['ccdnmatch'] >= 20 and abs(f[i]['zpt'] - f[i]['ccdzpt']) <= 0.1 and f[i]['zpt'] >= zp0-.5 and f[i]['zpt'] <=zp0+.25:   
+					ext = f[i]['decam_extinction'][be]
+					detsig1 = Magtonanomaggies(f[i]['galdepth'])/5. #total noise
+					signalext = 1./10.**(-ext/2.5)
+					nl.append(detsig1*signalext)
 			
 	print n	
 	print len(nl)
@@ -441,7 +606,7 @@ def plotMaghist_proc_Nexp(band,Nexp,ndraw = 1e5,nbin=100):
 	print 'percentage better than requirements '+str(nbr/float(nd))
 	from matplotlib.backends.backend_pdf import PdfPages
 	plt.clf()
-	pp = PdfPages(localdir+'validationplots/DR2DECaLS'+band+str(Nexp)+'exposures.pdf')	
+	pp = PdfPages(localdir+'validationplots/'+rel+survey+band+str(Nexp)+'exposures.pdf')	
 
 	plt.plot(Nl,hl,'k-')
 	plt.xlabel(r'5$\sigma$ '+band+ ' depth')
@@ -451,6 +616,215 @@ def plotMaghist_proc_Nexp(band,Nexp,ndraw = 1e5,nbin=100):
 	pp.savefig()
 	pp.close()
 	return True
+
+def plotMaghist_proc_sexp(band,ndraw = 1e5,bs=.005,rel='DR3',survey='decals'):
+	#this produces the histogram for Dustin's processed galaxy depth, for single exposures
+	import fitsio
+	from matplotlib import pyplot as plt
+	from numpy import zeros,array
+	from random import random
+	if rel == 'DR2':
+		f = fitsio.read(localdir+'decals-ccds-annotated.fits')
+	if rel == 'DR3':
+		f = fitsio.read(localdir+'ccds-annotated-'+survey+'.fits.gz')	
+	nl = []
+	nd = 0
+	nbr = 0	
+		
+	if band == 'g':
+		be = 1
+		zp0 = 25.08
+		recm = 24.
+	if band == 'r':
+		be = 2
+		zp0 = 25.29
+		recm = 23.4
+	if band == 'z':
+		be = 4
+		zp0 = 24.92
+		recm = 22.5
+
+	n = 0
+	for i in range(0,len(f)):
+		pid = f[i]['propid']
+		#if DS == '2014B-0404' or DS == '2013A-0741': #enforce DECaLS only
+		#	DS = 1
+		DS = 0
+		year = int(f[i]['date_obs'].split('-')[0])
+		if year > 2014:
+			#if pid == '2014B-0404' or pid == '2013A-0741':
+			DS = 1 #enforce 2015 data
+
+		if f[i]['filter'] == band:
+			
+			if DS == 1:
+				n += 1				
+				if f[i]['dec'] > -20 and f[i]['photometric'] == True and f[i]['blacklist_ok'] == True :   
+				
+				#if f[i]['seeing'] != 99 and f[i]['ccdzpt'] != 99 and f[i]['fwhm'] != 99 and DS == 1:
+					#if f[i]['dec'] > -20 and f[i]['exptime'] >=30 and f[i]['ccdnmatch'] >= 20 and abs(f[i]['zpt'] - f[i]['ccdzpt']) <= 0.1 and f[i]['zpt'] >= zp0-.5 and f[i]['zpt'] <=zp0+.25:   
+					ext = f[i]['decam_extinction'][be]
+					magdepth = f[i]['galdepth']-ext
+					#detsig1 = Magtonanomaggies(f[i]['galdepth'])/5. #total noise
+					#signalext = 1./10.**(-ext/2.5)
+					nl.append(magdepth)
+			
+	print n	
+	print len(nl)
+	ng = len(nl)
+	minN = min(nl)
+	maxN = max(nl)+.0001
+	print minN,maxN
+	nbin = int((maxN-minN)/bs)
+	hl = zeros((nbin))
+	for i in range(0,len(nl)):
+		bin = int(nbin*(nl[i]-minN)/(maxN-minN))
+		hl[bin] += 1
+	Nl = []
+	for i in range(0,len(hl)):
+		Nl.append(minN+i*(maxN-minN)/float(nbin)+0.5*(maxN-minN)/float(nbin))
+	nl = array(nl)
+	mean = sum(nl)/float(len(nl))
+	std = sqrt(sum(nl**2.)/float(len(nl))-mean**2.)
+	nl.sort()
+	if len(nl)/2. != len(nl)/2:
+		med = nl[len(nl)/2+1]
+	else:
+		med = (nl[len(nl)/2+1]+nl[len(nl)/2])/2.
+	print mean,med,std
+	print 'percentage better than requirements '+str(nbr/float(ng))
+	from matplotlib.backends.backend_pdf import PdfPages
+	plt.clf()
+	pp = PdfPages(localdir+'validationplots/'+rel+survey+band+'1exposure.pdf')	
+
+	plt.plot(Nl,hl,'k-')
+	plt.xlabel(r'5$\sigma$ '+band+ ' depth')
+	plt.ylabel('# of ccds')
+	plt.title(rel+' single exposure depth '+str(mean)[:5]+r'$\pm$'+str(std)[:4])#+r', $f_{\rm pass}=$'+str(nbr/float(nd))[:5])
+	#plt.xscale('log')
+	pp.savefig()
+	pp.close()
+	return True
+
+
+def plotMaghist_proc_sexpDR2DR3(band,ndraw = 1e5,bs=.01,survey='decals'):
+	#this produces the normalized histograms for Dustin's processed galaxy depth, for single exposures, comparing DR2 and DR3
+	import fitsio
+	from matplotlib import pyplot as plt
+	from numpy import zeros,array
+	from random import random
+	f2 = fitsio.read(localdir+'decals-ccds-annotated.fits')
+	f3 = fitsio.read(localdir+'ccds-annotated-'+survey+'.fits.gz')	
+	nl = []
+	nd = 0
+	nbr = 0	
+		
+	if band == 'g':
+		be = 1
+		zp0 = 25.08
+		recm = 24.
+	if band == 'r':
+		be = 2
+		zp0 = 25.29
+		recm = 23.4
+	if band == 'z':
+		be = 4
+		zp0 = 24.92
+		recm = 22.5
+
+	n = 0
+	for i in range(0,len(f3)):
+		pid = f3[i]['propid']
+		#if DS == '2014B-0404' or DS == '2013A-0741': #enforce DECaLS only
+		#	DS = 1
+		DS = 0
+		year = int(f3[i]['date_obs'].split('-')[0])
+		if year > 2014:
+			#if pid == '2014B-0404' or pid == '2013A-0741':
+			DS = 1 #enforce 2015 data
+
+		if f3[i]['filter'] == band:
+			
+			if DS == 1:
+				n += 1				
+				if f3[i]['dec'] > -20 and f3[i]['photometric'] == True and f3[i]['blacklist_ok'] == True and f3[i]['tileid'] > 0 :   
+				
+				#if f[i]['seeing'] != 99 and f[i]['ccdzpt'] != 99 and f[i]['fwhm'] != 99 and DS == 1:
+					#if f[i]['dec'] > -20 and f[i]['exptime'] >=30 and f[i]['ccdnmatch'] >= 20 and abs(f[i]['zpt'] - f[i]['ccdzpt']) <= 0.1 and f[i]['zpt'] >= zp0-.5 and f[i]['zpt'] <=zp0+.25:   
+					ext = f3[i]['decam_extinction'][be]
+					magdepth = f3[i]['galdepth']-ext
+					#detsig1 = Magtonanomaggies(f[i]['galdepth'])/5. #total noise
+					#signalext = 1./10.**(-ext/2.5)
+					nl.append(magdepth)
+
+	nl2 = []
+	for i in range(0,len(f2)):
+		pid = f2[i]['propid']
+		#if DS == '2014B-0404' or DS == '2013A-0741': #enforce DECaLS only
+		#	DS = 1
+		DS = 0
+		year = int(f2[i]['date_obs'].split('-')[0])
+		if year > 2014:
+			#if pid == '2014B-0404' or pid == '2013A-0741':
+			DS = 1 #enforce 2015 data
+
+		if f2[i]['filter'] == band:
+			
+			if DS == 1:
+				n += 1				
+				if f2[i]['dec'] > -20 and f2[i]['photometric'] == True and f2[i]['blacklist_ok'] == True and f2[i]['tileid'] > 0:   
+				
+				#if f[i]['seeing'] != 99 and f[i]['ccdzpt'] != 99 and f[i]['fwhm'] != 99 and DS == 1:
+					#if f[i]['dec'] > -20 and f[i]['exptime'] >=30 and f[i]['ccdnmatch'] >= 20 and abs(f[i]['zpt'] - f[i]['ccdzpt']) <= 0.1 and f[i]['zpt'] >= zp0-.5 and f[i]['zpt'] <=zp0+.25:   
+					ext = f2[i]['decam_extinction'][be]
+					magdepth = f2[i]['galdepth']-ext
+					#detsig1 = Magtonanomaggies(f[i]['galdepth'])/5. #total noise
+					#signalext = 1./10.**(-ext/2.5)
+					nl2.append(magdepth)
+			
+	print n	
+	print len(nl),len(nl2)
+	ng = len(nl)
+	minN = min(nl)
+	maxN = max(nl)+.0001
+	print minN,maxN
+	nbin = int((maxN-minN)/bs)
+	hl = zeros((nbin))
+	for i in range(0,len(nl)):
+		bin = int(nbin*(nl[i]-minN)/(maxN-minN))
+		hl[bin] += 1
+	Nl = []
+	for i in range(0,len(hl)):
+		Nl.append(minN+i*(maxN-minN)/float(nbin)+0.5*(maxN-minN)/float(nbin))
+	ng2 = len(nl2)
+	minN2 = min(nl2)
+	maxN2 = max(nl2)+.0001
+	print minN2,maxN2
+	nbin2 = int((maxN2-minN2)/bs)
+	hl2 = zeros((nbin))
+	for i in range(0,len(nl2)):
+		bin = int(nbin2*(nl2[i]-minN2)/(maxN2-minN2))
+		hl2[bin] += 1
+	Nl2 = []
+	for i in range(0,len(hl2)):
+		Nl2.append(minN2+i*(maxN2-minN2)/float(nbin2)+0.5*(maxN2-minN2)/float(nbin2))
+
+	from matplotlib.backends.backend_pdf import PdfPages
+	plt.clf()
+	pp = PdfPages(localdir+'validationplots/DR2DR3'+survey+band+'1exposure.pdf')	
+
+	plt.plot(Nl,hl/float(len(nl)),'k-')
+	plt.plot(Nl2,hl2/float(len(nl2)),'r-')
+	plt.xlabel(r'5$\sigma$ '+band+ ' depth')
+	plt.ylabel('Normalized # of ccds')
+	plt.title('single exposure depth, comparing DR2 and DR3')
+	plt.text(minN+.5,.9*(max(hl2))/float(len(nl2)),'DR3',color='k')
+	plt.text(minN+.5,.85*(max(hl2))/float(len(nl2)),'DR2',color='r')
+	#plt.xscale('log')
+	pp.savefig()
+	pp.close()
+	return True
+
 
 def plotMaghist_proc_Nexpcompdata(band,Nexp,ndraw = 1e5,nbin=100):
 	#this produces the histogram for Dustin's processed galaxy depth
@@ -769,10 +1143,10 @@ def plotMaghist_proc_Survey(band,ndraw = 1e5,nbin=100):
 	fig = plt.figure()
 	ax = fig.add_subplot(111)
 	ax.plot(Nl,hl,'k-')
-	ax.set_xlabel(r'5$\sigma$ '+band+ ' depth')
-	ax.set_ylabel('# of ccds')
-	ax.set_title('MC survey depth '+str(mean)[:5]+r'$\pm$'+str(std)[:4]+r', $f_{r}=$'+str(nbr/float(nd))[:5]+r', $f_{r-0.3}=$'+str(nbr3/float(nd))[:5]+r', $f_{r-0.6}=$'+str(nbr6/float(nd))[:5])
-	ax.text(.4,.9,r'90% depth '+str(m9)[:5], verticalalignment='bottom', horizontalalignment='right', transform=ax.transAxes,fontsize=15)
+	ax.set_xlabel(r'5$\sigma$ '+band+ ' depth',size=16)
+	ax.set_ylabel('forecasted relative amoutn of area',size=16)
+	#ax.set_title('MC survey depth '+str(mean)[:5]+r'$\pm$'+str(std)[:4]+r', $f_{r}=$'+str(nbr/float(nd))[:5]+r', $f_{r-0.3}=$'+str(nbr3/float(nd))[:5]+r', $f_{r-0.6}=$'+str(nbr6/float(nd))[:5])
+	#ax.text(.4,.9,r'90% depth '+str(m9)[:5], verticalalignment='bottom', horizontalalignment='right', transform=ax.transAxes,fontsize=15)
 	#plt.xscale('log')
 	pp.savefig()
 	pp.close()
@@ -1277,6 +1651,72 @@ def plotMaghist_survey(band,ndraw = 1e5,nbin=100,magmin=0):
 	pp.close()
 	return True
 
+def plotradecccdfile(band,rel='DR3',survey='decals',decmin=-20,yearmin=2015):
+	#simply plot ra,dec of all good ccds
+	import fitsio
+	from matplotlib import pyplot as plt
+	from numpy import zeros,array
+	from random import random
+	if rel == 'DR2':
+		f = fitsio.read(localdir+'decals-ccds-annotated.fits')
+	if rel == 'DR3':
+		f = fitsio.read(localdir+'ccds-annotated-'+survey+'.fits.gz')	
+	ral = []
+	decl = []
+	n = 0
+	for i in range(0,len(f)):
+		pid = f[i]['propid']
+		#if DS == '2014B-0404' or DS == '2013A-0741': #enforce DECaLS only
+		#	DS = 1
+		DS = 0
+		year = int(f[i]['date_obs'].split('-')[0])
+		if year >= yearmin:
+			#if pid == '2014B-0404' or pid == '2013A-0741':
+			DS = 1 #enforce 2015 data
+
+		if f[i]['filter'] == band:
+			
+			if DS == 1:
+				n += 1				
+				if f[i]['dec'] > decmin and f[i]['photometric'] == True and f[i]['blacklist_ok'] == True: 
+					ral.append(f[i]['ra1'])
+					decl.append(f[i]['dec1'])
+	plt.plot(ral,decl,'k,')
+	plt.show()
+	return True
+  
+def plotBorismap(band,prop,op='mean',survey='DECaLS_DR3'):
+	import fitsio
+	from matplotlib import pyplot as plt
+	import matplotlib.cm as cm
+	from numpy import zeros,array
+	from healpix import pix2ang_ring,thphi2radec
+	import healpy as hp
+	f = fitsio.read(localdir+survey+'/nside4096_oversamp4/'+survey+'_band_'+band+'_nside4096_oversamp4_'+prop+'__'+op+'.fits.gz')
+	ral = []
+	decl = []
+	val = f['SIGNAL']
+	print min(val),max(val)
+	for i in range(0,len(f)):
+		#th,phi = pix2ang_ring(4096,f[i]['PIXEL'])
+		th,phi = hp.pix2ang(4096,f[i]['PIXEL'])
+		ra,dec = thphi2radec(th,phi)
+		ral.append(ra)
+		decl.append(dec)
+	print min(val),max(val)	
+	map = plt.scatter(ral,decl,c=val,cmap=cm.rainbow,lw=0)
+	cbar = plt.colorbar(map)
+	cbar.set_label(prop, rotation=270)
+	plt.xlabel('r.a. (degrees)')
+	plt.ylabel('declination (degrees)')
+	plt.title('Map of '+prop +' for '+survey+' '+band+'-band')
+	plt.show()
+	#plt.xscale('log')
+	#pp.savefig()
+	#pp.close()
+	return True
+		
+		
 
 ###Test DR2 region
 

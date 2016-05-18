@@ -13,6 +13,7 @@ def _detmap(X):
     if R is None:
         return None,None,None,None,None
     ie = tim.getInvvar()
+    assert(tim.psf_sigma > 0)
     psfnorm = 1./(2. * np.sqrt(np.pi) * tim.psf_sigma)
     detim = tim.getImage().copy()
 
@@ -26,7 +27,10 @@ def _detmap(X):
     detiv = np.zeros((subh,subw), np.float32) + (1. / detsig1**2)
     detiv[ie == 0] = 0.
     (Yo,Xo,Yi,Xi) = R
-    sat = (tim.dq[Yi,Xi] & tim.dq_bits['satur'] > 0)
+    if tim.dq is None:
+        sat = None
+    else:
+        sat = ((tim.dq[Yi,Xi] & tim.dq_saturation_bits) > 0)
     return Yo, Xo, detim[Yi,Xi], detiv[Yi,Xi], sat
 
 def detection_maps(tims, targetwcs, bands, mp):
@@ -41,7 +45,8 @@ def detection_maps(tims, targetwcs, bands, mp):
             continue
         detmaps[tim.band][Yo,Xo] += incmap * inciv
         detivs [tim.band][Yo,Xo] += inciv
-        satmap           [Yo,Xo] += sat
+        if sat is not None:
+            satmap       [Yo,Xo] += sat
         
     for band in bands:
         detmaps[band] /= np.maximum(1e-16, detivs[band])
@@ -51,8 +56,6 @@ def detection_maps(tims, targetwcs, bands, mp):
     detivs  = [detivs [b] for b in bands]
         
     return detmaps, detivs, satmap
-
-
 
 def sed_matched_filters(bands):
     '''
@@ -427,7 +430,7 @@ def sed_matched_detection(sedname, sed, detmaps, detivs, bands,
 
         level = saddle_level(sedsn[y,x])
         ablob = allblobs[y,x]
-        index = ablob - 1
+        index = int(ablob - 1)
         slc = allslices[index]
 
         #print('source', i, 'of', len(px), 'at', x,y, 'S/N', sedsn[y,x], 'saddle', level)
@@ -577,3 +580,180 @@ def sed_matched_detection(sedname, sed, detmaps, detivs, bands,
         ps.savefig()
 
     return hotblobs, px, py, aper, peakval
+
+def segment_and_group_sources(image, T, name=None, ps=None, plots=False):
+    '''
+    *image*: binary image that defines "blobs"
+    *T*: source table; only ".itx" and ".ity" elements are used (x,y integer
+        pix pos).  Note: ".blob" field is added.
+    *name*: for debugging only
+
+    Returns: (blobs, blobsrcs, blobslices)
+
+    *blobs*: image, values -1 = no blob, integer blob indices
+    *blobsrcs*: list of np arrays of integers, elements in T within each blob
+    *blobslices*: list of slice objects for blob bounding-boxes.
+    
+    '''
+    from scipy.ndimage.morphology import binary_fill_holes
+    from scipy.ndimage.measurements import label, find_objects
+
+    emptyblob = 0
+
+    image = binary_fill_holes(image)
+
+    blobs,nblobs = label(image)
+    print('N detected blobs:', nblobs)
+    H,W = image.shape
+    del image
+
+    blobslices = find_objects(blobs)
+    T.blob = blobs[T.ity, T.itx]
+
+    if plots:
+        import pylab as plt
+        from astrometry.util.plotutils import dimshow
+        plt.clf()
+        dimshow(blobs > 0, vmin=0, vmax=1)
+        ax = plt.axis()
+        for i,bs in enumerate(blobslices):
+            sy,sx = bs
+            by0,by1 = sy.start, sy.stop
+            bx0,bx1 = sx.start, sx.stop
+            plt.plot([bx0, bx0, bx1, bx1, bx0], [by0, by1, by1, by0, by0], 'r-')
+            plt.text((bx0+bx1)/2., by0, '%i' % (i+1), ha='center', va='bottom', color='r')
+        plt.plot(T.itx, T.ity, 'rx')
+        for i,t in enumerate(T):
+            plt.text(t.itx, t.ity, 'src %i' % i, color='red', ha='left', va='center')
+        plt.axis(ax)
+        plt.title('Blobs')
+        ps.savefig()
+
+    # Find sets of sources within blobs
+    blobsrcs = []
+    keepslices = []
+    blobmap = {}
+    dropslices = {}
+    for blob in range(1, nblobs+1):
+        Isrcs = np.flatnonzero(T.blob == blob)
+        if len(Isrcs) == 0:
+            #print('Blob', blob, 'has no sources')
+            blobmap[blob] = -1
+            dropslices[blob] = blobslices[blob-1]
+            continue
+        blobmap[blob] = len(blobsrcs)
+        blobsrcs.append(Isrcs)
+        bslc = blobslices[blob-1]
+        keepslices.append(bslc)
+
+    blobslices = keepslices
+
+    # Find sources that do not belong to a blob and add them as
+    # singleton "blobs"; otherwise they don't get optimized.
+    # for sources outside the image bounds, what should we do?
+    inblobs = np.zeros(len(T), bool)
+    for Isrcs in blobsrcs:
+        inblobs[Isrcs] = True
+    noblobs = np.flatnonzero(np.logical_not(inblobs))
+    del inblobs
+    # Add new fake blobs!
+    for ib,i in enumerate(noblobs):
+        #S = 3
+        S = 5
+        bslc = (slice(np.clip(T.ity[i] - S, 0, H-1), np.clip(T.ity[i] + S+1, 0, H)),
+                slice(np.clip(T.itx[i] - S, 0, W-1), np.clip(T.itx[i] + S+1, 0, W)))
+
+        # Does this new blob overlap existing blob(s)?
+        oblobs = np.unique(blobs[bslc])
+        oblobs = oblobs[oblobs != emptyblob]
+
+        #print('This blob overlaps existing blobs:', oblobs)
+        if len(oblobs) > 1:
+            print('WARNING: not merging overlapping blobs like maybe we should')
+        if len(oblobs):
+            blob = oblobs[0]
+            #print('Adding source to existing blob', blob)
+            blobs[bslc][blobs[bslc] == emptyblob] = blob
+            blobindex = blobmap[blob]
+            if blobindex == -1:
+                # the overlapping blob was going to be dropped -- restore it.
+                blobindex = len(blobsrcs)
+                blobmap[blob] = blobindex
+                blobslices.append(dropslices[blob])
+                blobsrcs.append(np.array([], np.int64))
+            # Expand the existing blob slice to encompass this new source
+            oldslc = blobslices[blobindex]
+            sy,sx = oldslc
+            oy0,oy1, ox0,ox1 = sy.start,sy.stop, sx.start,sx.stop
+            sy,sx = bslc
+            ny0,ny1, nx0,nx1 = sy.start,sy.stop, sx.start,sx.stop
+            newslc = slice(min(oy0,ny0), max(oy1,ny1)), slice(min(ox0,nx0), max(ox1,nx1))
+            blobslices[blobindex] = newslc
+            # Add this source to the list of source indices for the existing blob.
+            blobsrcs[blobindex] = np.append(blobsrcs[blobindex], np.array([i]))
+
+        else:
+            # Set synthetic blob number
+            blob = nblobs+1 + ib
+            blobs[bslc][blobs[bslc] == emptyblob] = blob
+            blobmap[blob] = len(blobsrcs)
+            blobslices.append(bslc)
+            blobsrcs.append(np.array([i]))
+    #print('Added', len(noblobs), 'new fake singleton blobs')
+
+    # Remap the "blobs" image so that empty regions are = -1 and the blob values
+    # correspond to their indices in the "blobsrcs" list.
+    if len(blobmap):
+        maxblob = max(blobmap.keys())
+    else:
+        maxblob = 0
+    maxblob = max(maxblob, blobs.max())
+    bm = np.zeros(maxblob + 1, int)
+    for k,v in blobmap.items():
+        bm[k] = v
+    bm[0] = -1
+
+    # DEBUG
+    if plots:
+        import fitsio
+        fitsio.write('blobs-before-%s.fits' % name, blobs, clobber=True)
+
+    # Remap blob numbers
+    blobs = bm[blobs]
+
+    if plots:
+        import fitsio
+        fitsio.write('blobs-after-%s.fits' % name, blobs, clobber=True)
+
+    if plots:
+        import pylab as plt
+        from astrometry.util.plotutils import dimshow
+        plt.clf()
+        dimshow(blobs > -1, vmin=0, vmax=1)
+        ax = plt.axis()
+        for i,bs in enumerate(blobslices):
+            sy,sx = bs
+            by0,by1 = sy.start, sy.stop
+            bx0,bx1 = sx.start, sx.stop
+            plt.plot([bx0, bx0, bx1, bx1, bx0], [by0, by1, by1, by0, by0], 'r-')
+            plt.text((bx0+bx1)/2., by0, '%i' % (i+1), ha='center', va='bottom', color='r')
+        plt.plot(T.itx, T.ity, 'rx')
+        for i,t in enumerate(T):
+            plt.text(t.itx, t.ity, 'src %i' % i, color='red', ha='left', va='center')
+        plt.axis(ax)
+        plt.title('Blobs')
+        ps.savefig()
+
+    for j,Isrcs in enumerate(blobsrcs):
+        for i in Isrcs:
+            #assert(blobs[T.ity[i], T.itx[i]] == j)
+            if (blobs[T.ity[i], T.itx[i]] != j):
+                print('---------------------------!!!--------------------------')
+                print('Blob', j, 'sources', Isrcs)
+                print('Source', i, 'coords x,y', T.itx[i], T.ity[i])
+                print('Expected blob value', j, 'but got', blobs[T.ity[i], T.itx[i]])
+
+    T.blob = blobs[T.ity, T.itx]
+    assert(len(blobsrcs) == len(blobslices))
+
+    return blobs, blobsrcs, blobslices

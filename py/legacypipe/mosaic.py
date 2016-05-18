@@ -18,10 +18,13 @@ class MosaicImage(CPImage, CalibMixin):
         self.fwhm /= self.pixscale
 
     def read_sky_model(self, imghdr=None, **kwargs):
+        ''' The Mosaic CP does a good job of sky subtraction, so just
+        use a constant sky level with value from the header.
+        '''
         from tractor.sky import ConstantSky
         sky = ConstantSky(imghdr['AVSKY'])
         sky.version = ''
-        phdr = fitsio.read_header(self.imgfn, 0)
+        phdr = self.read_image_primary_header()
         sky.plver = phdr.get('PLVER', '').strip()
         return sky
         
@@ -87,7 +90,6 @@ class MosaicImage(CPImage, CalibMixin):
         for fn in todelete:
             os.unlink(fn)
 
-
 def main():
 
     from astrometry.util.fits import fits_table, merge_tables
@@ -121,62 +123,6 @@ def main():
     import sys
     sys.exit(0)
     
-    '''
-HDU #2  Binary Table:  47 columns x 514378 rows
- COL NAME             FORMAT
-    1 expnum           J
-       2 exptime          E
-          3 filter           1A
-             4 seeing           E
-                5 date_obs         10A
-                   6 mjd_obs          D
-                      7 ut               15A
-                         8 airmass          E
-                            9 propid           10A
-                              10 zpt              E
-                                11 avsky            E
-                                  12 arawgain         E
-                                    13 fwhm             E
-                                      14 crpix1           E
-                                        15 crpix2           E
-                                          16 crval1           D
-                                            17 crval2           D
-                                              18 cd1_1            E
-                                                19 cd1_2            E
-                                                  20 cd2_1            E
-                                                    21 cd2_2            E
-                                                      22 ccdnum           I
-                                                        23 ccdname          3A
-                                                          24 ccdzpt           E
-                                                            25 ccdzpta          E
-                                                              26 ccdzptb          E
-                                                                27 ccdphoff         E
-                                                                  28 ccdphrms         E
-                                                                    29 ccdskyrms        E
-                                                                      30 ccdraoff         E
-                                                                        31 ccddecoff        E
-                                                                          32 ccdtransp        E
-                                                                            33 ccdnstar         I
-                                                                              34 ccdnmatch        I
-                                                                                35 ccdnmatcha       I
-                                                                                  36 ccdnmatchb       I
-                                                                                    37 ccdmdncol        E
-                                                                                      38 camera           5A
-                                                                                        39 expid            12A
-                                                                                          40 image_hdu        I
-                                                                                            41 image_filename   61A
-                                                                                              42 width            I
-                                                                                                43 height           I
-                                                                                                  44 ra_bore          D
-                                                                                                    45 dec_bore         D
-                                                                                                      46 ra               D
-                                                                                                      dec
-
-    '''
-
-    
-
-
     import logging
     import sys
     from legacypipe.runbrick import run_brick, get_runbrick_kwargs, get_parser

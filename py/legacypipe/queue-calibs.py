@@ -218,40 +218,6 @@ def main():
         dlo,dhi = -90,90
         rlo,rhi = 0, 360
 
-    elif opt.region == 'badsky':
-        # A handful of exposures in DR2 with inconsistent sky estimates.
-        #C = decals.get_ccds()
-        #log(len(C), 'CCDs')
-        #C.cut((C.expnum >= 257400) * (C.expnum < 257500))
-        T.cut(np.array([e in [257460, 257461, 257462, 257463, 257464,
-                              257465, 257466, 257467, 257469, 257472,
-                              257483, 257496]
-                        for e in T.expnum]))
-        log(len(T), 'CCDs with bad sky')
-        # CCD radius
-        radius = np.hypot(2048, 4096) / 2. * 0.262 / 3600.
-        # Brick radius
-        radius += np.hypot(survey.bricksize, survey.bricksize)/2.
-        I,J,d = match_radec(B.ra, B.dec, T.ra, T.dec, radius * 1.05)
-        keep = np.zeros(len(B), bool)
-        keep[I] = True
-        B.cut(keep)
-        log('Cut to', len(B), 'bricks near CCDs with bad sky')
-
-    elif opt.region == 'badsky2':
-        # UGH, missed this one in original 'badsky' definition.
-        T.cut(T.expnum == 257466)
-        log(len(T), 'CCDs with bad sky')
-        # CCD radius
-        radius = np.hypot(2048, 4096) / 2. * 0.262 / 3600.
-        # Brick radius
-        radius += np.hypot(survey.bricksize, survey.bricksize)/2.
-        I,J,d = match_radec(B.ra, B.dec, T.ra, T.dec, radius * 1.05)
-        keep = np.zeros(len(B), bool)
-        keep[I] = True
-        B.cut(keep)
-        log('Cut to', len(B), 'bricks near CCDs with bad sky')
-
     elif opt.region == 'edr':
         # EDR:
         # 535 bricks, ~7000 CCDs
@@ -456,8 +422,6 @@ def main():
         log('Total of', len(allI), 'CCDs')
         for j,i in enumerate(allI):
             expstr = '%08i' % T.expnum[i]
-            #outdir = os.path.join('forced', expstr[:5], expstr)
-            #trymakedirs(outdir)
             outfn = os.path.join('forced', expstr[:5], expstr,
                                  'decam-%s-%s-forced.fits' %
                                  (expstr, T.ccdname[i]))
@@ -468,9 +432,12 @@ def main():
                 os.path.exists(imgfn[:-3])):
                 imgfn = imgfn[:-3]
 
-            f.write('python legacypipe/forced-photom-decam.py %s %i DR1 %s\n' %
-                    (imgfn, T.cpimage_hdu[i], outfn))
+            #f.write('python legacypipe/forced_photom_decam.py %s %i DR3 %s\n' %
+            #        (imgfn, T.image_hdu[i], outfn))
 
+            f.write('python legacypipe/forced_photom_decam.py --apphot %i %s DR3 %s\n' %
+                    (T.expnum[i], T.ccdname[i], outfn))
+            
         f.close()
         log('Wrote', opt.out)
         sys.exit(0)

@@ -4,6 +4,74 @@ from glob import glob
 import os
 from astrometry.util.fits import fits_table, merge_tables
 
+def decals_dr3_check_wcsfailed():
+    import fitsio
+    basedir = os.environ['LEGACY_SURVEY_DIR']
+    image_basedir = os.path.join(basedir, 'images')
+    for fn in [#'survey-ccds-decals.fits.gz',
+               'survey-ccds-nondecals.fits.gz',
+               'survey-ccds-extra.fits.gz',
+               ]:
+        T = fits_table(fn)
+        T.wcscal = np.zeros(len(T), bool)
+        fns = np.unique(np.array([f.strip() for f in T.image_filename]))
+
+        H = fits_table()
+        H.image_filename = fns
+        H.primary_header = []
+        
+        for ifn,f in enumerate(fns):
+            imgfn = os.path.join(image_basedir, f)
+            print('Reading', imgfn)
+            
+            ff = open(imgfn, 'r')
+            h = ff.read(32768)
+            ff.close()
+            hdr = fitsio.FITSHDR()
+            hdrstring = ''
+            while True:
+                line = h[:80]
+                h = h[80:]
+                # fitsio apparently can't handle CONTINUE
+                if line[:8] != 'CONTINUE':
+                    hdr.add_record(line)
+                hdrstring += line
+                if line == ('END' + ' '*77):
+                    break
+            H.primary_header.append(hdrstring)
+                
+            #hdr = fitsio.read_header(imgfn)
+            expnum = hdr['EXPNUM']
+            wcscal = hdr['WCSCAL']
+            wcsok = (wcscal == 'Successful')
+            print('File', f, 'expnum', expnum, 'WCS cal', wcscal, 'ok', wcsok)
+            I = np.flatnonzero(T.expnum == expnum)
+            T.wcscal[I] = wcsok
+
+        T.wcsok = T.wcscal.astype(np.uint8)
+        T.writeto('new-' + fn)
+
+        H.primary_header = np.array(H.primary_header)
+        H.writeto('headers-' + fn)
+        
+def decals_dr3_fix392400():
+    T = fits_table('survey-ccds-decals.fits.gz')
+    print('Started with', len(T), 'CCDs')
+    T.cut(T.expnum != 392400)
+    print('Removed bad CCDs:', len(T))
+
+    basedir = os.environ['LEGACY_SURVEY_DIR']
+    cam = 'decam'
+    image_basedir = os.path.join(basedir, 'images')
+    fn = '/global/cscratch1/sd/desiproc/zeropoints/zeropoint-c4d_141228_060426_ooi_g_v1.fits'
+    dirnms = ['CP20141227']
+    Tnew = normalize_zeropoints(fn, dirnms, image_basedir, cam)
+    print('Replacement CCDs:', len(Tnew))
+    T = merge_tables([T, Tnew])
+    print('Merged:', len(T))
+    T.writeto('new-survey-ccds-decals.fits.gz')
+    
+
 def decals_dr3_dedup():
     SN = fits_table('survey-ccds-nondecals.fits.gz')
     SD = fits_table('survey-ccds-decals.fits.gz')
@@ -132,7 +200,7 @@ def decals_dr3():
     for fn in ['survey-ccds-nondecals.fits', 'survey-ccds-decals.fits']:
         os.system('gzip --best ' + fn)
 
-    
+
 def normalize_zeropoints(fn, dirnms, image_basedir, cam, T=None):
     if T is None:
         print('Reading', fn)
@@ -161,7 +229,8 @@ def normalize_zeropoints(fn, dirnms, image_basedir, cam, T=None):
     # Search all given directory names
     allfiles = {}
     for dirnm in dirnms:
-        pattern = os.path.join(image_basedir, cam, dirnm, '*.fits*')
+        #pattern = os.path.join(image_basedir, cam, dirnm, '*.fits*')
+        pattern = os.path.join(dirnm, '*.fits*')
         matched = glob(pattern)
         allfiles[dirnm] = matched
         print('Pattern', pattern, '->', len(matched))
@@ -178,7 +247,8 @@ def normalize_zeropoints(fn, dirnms, image_basedir, cam, T=None):
         fnlist = []
 
         for dirnm in dirnms:
-            pattern = os.path.join(image_basedir, cam, dirnm, fn)
+            #pattern = os.path.join(image_basedir, cam, dirnm, fn)
+            pattern = os.path.join(dirnm, fn)
             for afn in allfiles[dirnm]:
                 # check for prefix
                 if pattern in afn:
@@ -252,7 +322,100 @@ if __name__ == '__main__':
 
     #decals_dr3()
     #decals_dr3_extra()
-    decals_dr3_dedup()
+    #decals_dr3_dedup()
+    #decals_dr3_fix392400()
+    #decals_dr3_check_wcsfailed()
+    #sys.exit(0)
+    
+    basedir = './deep2f3'
+    cam = '90prime'
+    image_basedir = os.path.join(basedir, 'images')
+    TT = []
+    for fn,dirnms in [
+            ('/global/project/projectdirs/cosmo/staging/bok/ccds_files/bass-ccds-idm20160506.fits',
+             ['',]),
+        ]:
+        T = fits_table(fn)
+        T.rename('image_filename', 'filename')
+        T.rename('image_hdu', 'ccdhdunum')
+        T.rename('ra_bore', 'ra')
+        T.rename('dec_bore', 'dec')
+        T.filter = np.array([f.strip() for f in T.filter])
+        
+        T.ccdra  = np.zeros(len(T))
+        T.ccddec = np.zeros(len(T))
+        for i in range(len(T)):
+            from astrometry.util.util import Tan
+            wcs = Tan(*[float(x) for x in [
+                T.crval1[i], T.crval2[i], T.crpix1[i], T.crpix2[i],
+                T.cd1_1[i], T.cd1_2[i], T.cd2_1[i], T.cd2_2[i],
+                T.width[i], T.height[i]]])
+            r,d = wcs.pixelxy2radec(T.width[i]/2.+0.5, T.height[i]/2.+0.5)
+            T.ccdra [i] = r
+            T.ccddec[i] = d
+        
+        T = normalize_zeropoints(fn, dirnms, image_basedir, cam, T=T)
+        TT.append(T)
+    T = merge_tables(TT)
+    #T.fwhm = T.seeing / 0.262
+    #T.ccdname = np.array([n.replace('LBL-0', 'ccd') for n in T.ccdname])
+    outfn = 'zp.fits'
+    T.writeto(outfn)
+    print('Wrote', outfn)
+
+
+    # cam = 'mosaic'
+    # image_basedir = os.path.join(basedir, 'images')
+    # TT = []
+    # for fn,dirnms in [
+    #         (os.path.join(basedir, 'zeropoint-arjun_zpts.fits'),
+    #          ['CP20151213',]),
+    #     ]:
+    #     T = normalize_zeropoints(fn, dirnms, image_basedir, cam)
+    #     TT.append(T)
+    # T = merge_tables(TT)
+    # T.fwhm = T.seeing / 0.262
+    # T.ccdname = np.array([n.replace('LBL-0', 'ccd') for n in T.ccdname])
+    # outfn = 'zp.fits'
+    # T.writeto(outfn)
+    # print('Wrote', outfn)
+
+    sys.exit(0)
+
+    
+    # MzLS DEEP2 inventory
+    import fitsio
+    fns = glob('/project/projectdirs/cosmo/staging/mosaicz/MZLS_CP/CP20151213/*_oki_*')
+    print(len(fns), 'files')
+    T = fits_table()
+    T.image_filename = np.array(fns)
+    T.expnum = np.zeros(len(T), np.int32)
+    T.exptime = np.zeros(len(T), np.float32)
+    T.ra = np.zeros(len(T), np.float64)
+    T.dec = np.zeros(len(T), np.float64)
+    T.band = np.zeros(len(T), str)
+    for i,fn in enumerate(fns):
+        print('Reading', fn)
+        hdr = fitsio.read_header(fn)
+        T.expnum [i] = hdr['EXPNUM']
+        T.exptime[i] = hdr['EXPTIME']
+        T.ra     [i] = hdr['CENTRA']
+        T.dec    [i] = hdr['CENTDEC']
+        T.band   [i] = hdr['FILTER'][0]
+    T.writeto('mzls-20151213.fits')
+
+    import pylab as plt
+    plt.clf()
+    plt.plot(T.ra, T.dec, 'mo')
+    plt.savefig('mzls-1.png')
+
+    T.cut(np.hypot(T.ra - 350, T.dec - 0) < 5)
+    T.writeto('mzls-d2f3.fits')
+    
+    plt.clf()
+    plt.plot(T.ra, T.dec, 'mo')
+    plt.savefig('mzls-2.png')
+    
     sys.exit(0)
 
     # Mosaicz tests

@@ -1,6 +1,4 @@
 from __future__ import print_function
-import matplotlib
-matplotlib.use('Agg')
 import os
 import numpy as np
 
@@ -23,6 +21,13 @@ Code specific to images from the (intermediate) Palomar Transient Factory (iPTF/
 11 CCDs and 1.2m telescope at Palomar Observatory.
 '''
 
+#PTF special handling of zeropoint
+def zeropoint_for_ptf(hdr):
+    magzp= hdr['IMAGEZPT'] + 2.5 * np.log10(hdr['EXPTIME'])
+    if isinstance(magzp,str):
+        print('WARNING: no ZeroPoint in header for image: ',tractor_image.imgfn)
+        raise ValueError #magzp= 23.
+    return magzp
 
 ##key functions##
 def read_image(imgfn,hdu):
@@ -101,7 +106,13 @@ class PtfImage(LegacySurveyImage):
     def __init__(self, survey, t):
         super(PtfImage, self).__init__(survey, t)
 
-        self.imgfn= os.path.join(os.path.dirname(self.imgfn),'ptf/',os.path.basename(self.imgfn))
+        # FIXME -- this should happen in the CCD table creation step.
+        self.imgfn= os.path.join(os.path.dirname(self.imgfn),
+                                 'ptf', os.path.basename(self.imgfn))
+
+        hdr= self.read_image_primary_header()
+        self.ccdzpt = hdr['IMAGEZPT'] + 2.5 * np.log10(self.exptime)
+
         self.pixscale= 1.01
         #print("--------pixscale= ",self.pixscale)
         #print("--------changing pixscale to ",1.01)
@@ -109,9 +120,11 @@ class PtfImage(LegacySurveyImage):
         self.dqfn = self.imgfn.replace('_scie_', '_mask_')
         #psfex catalogues
         calibdir = os.path.join(self.survey.get_calib_dir(), self.camera)
-        self.sefn = os.path.join(calibdir, 'sextractor/', os.path.basename(self.imgfn))
+        self.sefn = os.path.join(calibdir, 'sextractor',
+                                 os.path.basename(self.imgfn))
         #self.psffn = os.path.join(calibdir, 'psfex', self.calname + '.fits')
-        self.psffn= os.path.join(calibdir,'psfex/',os.path.basename(self.imgfn)) #.replace('.fits','.psf')))
+        self.psffn= os.path.join(calibdir, 'psfex',
+                                 os.path.basename(self.imgfn)) #.replace('.fits','.psf')))
         print('####### self.imgfn,dqfn,calibdir,psffn= ',self.imgfn,self.dqfn,calibdir,self.psffn)
         #self.wtfn = self.imgfn.replace('_ooi_', '_oow_')
 
@@ -460,7 +473,6 @@ class PtfImage(LegacySurveyImage):
         mjd_tai = astropy.time.Time(primhdr['DATE-OBS']).tai.mjd
         tim.slice = slc
         tim.time = TAITime(None, mjd=mjd_tai)
-        tim.zr = [-3. * sig1, 10. * sig1]
         tim.zpscale = orig_zpscale
         tim.midsky = midsky
         tim.sig1 = sig1
@@ -480,7 +492,7 @@ class PtfImage(LegacySurveyImage):
         tim.psfver = (psf.version, psf.plver)
         if get_dq:
             tim.dq = dq
-        tim.dq_bits = CP_DQ_BITS
+        tim.dq_saturation_bits = 0
         tim.saturation = imghdr.get('SATURATE', None)
         tim.satval = tim.saturation or 0.
         if subsky:
@@ -489,9 +501,6 @@ class PtfImage(LegacySurveyImage):
             tim.satval /= orig_zpscale
         subh,subw = tim.shape
         tim.subwcs = tim.sip_wcs.get_subimage(tim.x0, tim.y0, subw, subh)
-        mn,mx = tim.zr
-        tim.ima = dict(interpolation='nearest', origin='lower', cmap='gray',
-                       vmin=mn, vmax=mx)
         return tim
 
 

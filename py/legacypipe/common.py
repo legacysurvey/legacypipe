@@ -25,28 +25,8 @@ from tractor.sfd import SFDMap
 
 from legacypipe.utils import EllipseWithPriors
 
-DECALS_PROPID = '2014B-0404'
-
 # search order: $TMPDIR, $TEMP, $TMP, then /tmp, /var/tmp, /usr/tmp
 tempdir = tempfile.gettempdir()
-
-# From: http://www.noao.edu/noao/staff/fvaldes/CPDocPrelim/PL201_3.html
-# 1   -- detector bad pixel           InstCal
-# 1   -- detector bad pixel/no data   Resampled
-# 1   -- No data                      Stacked
-# 2   -- saturated                    InstCal/Resampled
-# 4   -- interpolated                 InstCal/Resampled
-# 16  -- single exposure cosmic ray   InstCal/Resampled
-# 64  -- bleed trail                  InstCal/Resampled
-# 128 -- multi-exposure transient     InstCal/Resampled 
-CP_DQ_BITS = dict(badpix=1, satur=2, interp=4, cr=16, bleed=64,
-                  trans=128,
-                  edge = 256,
-                  edge2 = 512,
-
-                  ## masked by stage_mask_junk
-                  longthin = 1024,
-                  )
 
 # The apertures we use in aperture photometry, in ARCSEC.
 apertures_arcsec = np.array([0.5, 0.75, 1., 1.5, 2., 3.5, 5., 7.])
@@ -66,7 +46,12 @@ class LegacyEllipseWithPriors(EllipseWithPriors):
 
 from tractor.galaxy import ExpGalaxy
 from tractor.ellipses import EllipseE
+
 class SimpleGalaxy(ExpGalaxy):
+    '''This defines the 'SIMP' galaxy profile -- an exponential profile
+    with a fixed shape of a 0.45 arcsec effective radius and spherical
+    shape.  It is used to detect marginally-resolved galaxies.
+    '''
     shape = EllipseE(0.45, 0., 0.)
 
     def __init__(self, *args):
@@ -94,18 +79,10 @@ class SimpleGalaxy(ExpGalaxy):
         return super(SimpleGalaxy, self).isParamFrozen(pname)
     
 class BrickDuck(object):
-    '''A little duck-typing class when running on a custom RA,Dec center rather than
-    a brick center.'''
+    '''A little duck-typing class when running on a custom RA,Dec center
+    rather than a brick center.
+    '''
     pass
-
-#PTF special handling
-def zeropoint_for_ptf(hdr):
-    magzp= hdr['IMAGEZPT'] + 2.5 * np.log10(hdr['EXPTIME'])
-    if isinstance(magzp,str):
-        print('WARNING: no ZeroPoint in header for image: ',tractor_image.imgfn)
-        raise ValueError #magzp= 23.
-    return magzp
-
 
 def get_git_version(dir=None):
     '''
@@ -128,7 +105,8 @@ def get_git_version(dir=None):
     cmd += 'git describe'
     rtn,version,err = run_command(cmd)
     if rtn:
-        raise RuntimeError('Failed to get version string (%s): ' % cmd + version + err)
+        raise RuntimeError('Failed to get version string (%s): ' % cmd +
+                           version + err)
     version = version.strip()
     return version
 
@@ -157,7 +135,7 @@ def get_version_header(program_name, survey_dir, git_version=None):
                         comment='legacypipe git version'))
     hdr.add_record(dict(name='SURVEYV', value=survey_dir,
                         comment='Legacy Survey directory'))
-    hdr.add_record(dict(name='DECALSDR', value='DR2',
+    hdr.add_record(dict(name='DECALSDR', value='DR3',
                         comment='DECaLS release name'))
     surveydir_ver = get_git_version(survey_dir)
     hdr.add_record(dict(name='SURVEYDV', value=surveydir_ver,
@@ -170,7 +148,7 @@ def get_version_header(program_name, survey_dir, git_version=None):
     # Requested by NOAO
     hdr.add_record(dict(name='SURVEYID', value='DECam Legacy Survey (DECaLS)',
                         comment='Survey name'))
-    hdr.add_record(dict(name='DRVERSIO', value='DR2',
+    hdr.add_record(dict(name='DRVERSIO', value='DR3',
                         comment='Survey data release number'))
     hdr.add_record(dict(name='OBSTYPE', value='object',
                         comment='Observation type'))
@@ -268,180 +246,6 @@ def bin_image(data, invvar, S):
     newdata[newiv == 0] = 0.
     return newdata,newiv
 
-def segment_and_group_sources(image, T, name=None, ps=None, plots=False):
-    '''
-    *image*: binary image that defines "blobs"
-    *T*: source table; only ".itx" and ".ity" elements are used (x,y integer pix pos).  Note: ".blob" field is added.
-    *name*: for debugging only
-
-    Returns: (blobs, blobsrcs, blobslices)
-
-    *blobs*: image, values -1 = no blob, integer blob indices
-    *blobsrcs*: list of np arrays of integers, elements in T within each blob
-    *blobslices*: list of slice objects for blob bounding-boxes.
-    
-    '''
-    from scipy.ndimage.morphology import binary_fill_holes
-    from scipy.ndimage.measurements import label, find_objects
-
-    emptyblob = 0
-
-    image = binary_fill_holes(image)
-
-    blobs,nblobs = label(image)
-    print('N detected blobs:', nblobs)
-    H,W = image.shape
-    del image
-
-    blobslices = find_objects(blobs)
-    T.blob = blobs[T.ity, T.itx]
-
-    if plots:
-        import pylab as plt
-        from astrometry.util.plotutils import dimshow
-        plt.clf()
-        dimshow(blobs > 0, vmin=0, vmax=1)
-        ax = plt.axis()
-        for i,bs in enumerate(blobslices):
-            sy,sx = bs
-            by0,by1 = sy.start, sy.stop
-            bx0,bx1 = sx.start, sx.stop
-            plt.plot([bx0, bx0, bx1, bx1, bx0], [by0, by1, by1, by0, by0], 'r-')
-            plt.text((bx0+bx1)/2., by0, '%i' % (i+1), ha='center', va='bottom', color='r')
-        plt.plot(T.itx, T.ity, 'rx')
-        for i,t in enumerate(T):
-            plt.text(t.itx, t.ity, 'src %i' % i, color='red', ha='left', va='center')
-        plt.axis(ax)
-        plt.title('Blobs')
-        ps.savefig()
-
-    # Find sets of sources within blobs
-    blobsrcs = []
-    keepslices = []
-    blobmap = {}
-    dropslices = {}
-    for blob in range(1, nblobs+1):
-        Isrcs = np.flatnonzero(T.blob == blob)
-        if len(Isrcs) == 0:
-            #print('Blob', blob, 'has no sources')
-            blobmap[blob] = -1
-            dropslices[blob] = blobslices[blob-1]
-            continue
-        blobmap[blob] = len(blobsrcs)
-        blobsrcs.append(Isrcs)
-        bslc = blobslices[blob-1]
-        keepslices.append(bslc)
-
-    blobslices = keepslices
-
-    # Find sources that do not belong to a blob and add them as
-    # singleton "blobs"; otherwise they don't get optimized.
-    # for sources outside the image bounds, what should we do?
-    inblobs = np.zeros(len(T), bool)
-    for Isrcs in blobsrcs:
-        inblobs[Isrcs] = True
-    noblobs = np.flatnonzero(np.logical_not(inblobs))
-    del inblobs
-    # Add new fake blobs!
-    for ib,i in enumerate(noblobs):
-        #S = 3
-        S = 5
-        bslc = (slice(np.clip(T.ity[i] - S, 0, H-1), np.clip(T.ity[i] + S+1, 0, H)),
-                slice(np.clip(T.itx[i] - S, 0, W-1), np.clip(T.itx[i] + S+1, 0, W)))
-
-        # Does this new blob overlap existing blob(s)?
-        oblobs = np.unique(blobs[bslc])
-        oblobs = oblobs[oblobs != emptyblob]
-
-        #print('This blob overlaps existing blobs:', oblobs)
-        if len(oblobs) > 1:
-            print('WARNING: not merging overlapping blobs like maybe we should')
-        if len(oblobs):
-            blob = oblobs[0]
-            #print('Adding source to existing blob', blob)
-            blobs[bslc][blobs[bslc] == emptyblob] = blob
-            blobindex = blobmap[blob]
-            if blobindex == -1:
-                # the overlapping blob was going to be dropped -- restore it.
-                blobindex = len(blobsrcs)
-                blobmap[blob] = blobindex
-                blobslices.append(dropslices[blob])
-                blobsrcs.append(np.array([], np.int64))
-            # Expand the existing blob slice to encompass this new source
-            oldslc = blobslices[blobindex]
-            sy,sx = oldslc
-            oy0,oy1, ox0,ox1 = sy.start,sy.stop, sx.start,sx.stop
-            sy,sx = bslc
-            ny0,ny1, nx0,nx1 = sy.start,sy.stop, sx.start,sx.stop
-            newslc = slice(min(oy0,ny0), max(oy1,ny1)), slice(min(ox0,nx0), max(ox1,nx1))
-            blobslices[blobindex] = newslc
-            # Add this source to the list of source indices for the existing blob.
-            blobsrcs[blobindex] = np.append(blobsrcs[blobindex], np.array([i]))
-
-        else:
-            # Set synthetic blob number
-            blob = nblobs+1 + ib
-            blobs[bslc][blobs[bslc] == emptyblob] = blob
-            blobmap[blob] = len(blobsrcs)
-            blobslices.append(bslc)
-            blobsrcs.append(np.array([i]))
-    #print('Added', len(noblobs), 'new fake singleton blobs')
-
-    # Remap the "blobs" image so that empty regions are = -1 and the blob values
-    # correspond to their indices in the "blobsrcs" list.
-    if len(blobmap):
-        maxblob = max(blobmap.keys())
-    else:
-        maxblob = 0
-    maxblob = max(maxblob, blobs.max())
-    bm = np.zeros(maxblob + 1, int)
-    for k,v in blobmap.items():
-        bm[k] = v
-    bm[0] = -1
-
-    # DEBUG
-    if plots:
-        fitsio.write('blobs-before-%s.fits' % name, blobs, clobber=True)
-
-    # Remap blob numbers
-    blobs = bm[blobs]
-
-    if plots:
-        fitsio.write('blobs-after-%s.fits' % name, blobs, clobber=True)
-
-    if plots:
-        import pylab as plt
-        from astrometry.util.plotutils import dimshow
-        plt.clf()
-        dimshow(blobs > -1, vmin=0, vmax=1)
-        ax = plt.axis()
-        for i,bs in enumerate(blobslices):
-            sy,sx = bs
-            by0,by1 = sy.start, sy.stop
-            bx0,bx1 = sx.start, sx.stop
-            plt.plot([bx0, bx0, bx1, bx1, bx0], [by0, by1, by1, by0, by0], 'r-')
-            plt.text((bx0+bx1)/2., by0, '%i' % (i+1), ha='center', va='bottom', color='r')
-        plt.plot(T.itx, T.ity, 'rx')
-        for i,t in enumerate(T):
-            plt.text(t.itx, t.ity, 'src %i' % i, color='red', ha='left', va='center')
-        plt.axis(ax)
-        plt.title('Blobs')
-        ps.savefig()
-
-    for j,Isrcs in enumerate(blobsrcs):
-        for i in Isrcs:
-            #assert(blobs[T.ity[i], T.itx[i]] == j)
-            if (blobs[T.ity[i], T.itx[i]] != j):
-                print('---------------------------!!!--------------------------')
-                print('Blob', j, 'sources', Isrcs)
-                print('Source', i, 'coords x,y', T.itx[i], T.ity[i])
-                print('Expected blob value', j, 'but got', blobs[T.ity[i], T.itx[i]])
-
-    T.blob = blobs[T.ity, T.itx]
-    assert(len(blobsrcs) == len(blobslices))
-
-    return blobs, blobsrcs, blobslices
-
 def tim_get_resamp(tim, targetwcs):
     if hasattr(tim, 'resamp'):
         return tim.resamp
@@ -463,7 +267,8 @@ def get_rgb(imgs, bands, mnmx=None, arcsinh=None, scales=None):
 
     *imgs*  a list of numpy arrays, all the same size, in nanomaggies
     *bands* a list of strings, eg, ['g','r','z']
-    *mnmx*  = (min,max), values that will become black/white *after* scaling. Default is (-3,10)
+    *mnmx*  = (min,max), values that will become black/white *after* scaling.
+        Default is (-3,10)
     *arcsinh* use nonlinear scaling as in SDSS
     *scales*
 
@@ -520,6 +325,14 @@ def get_rgb(imgs, bands, mnmx=None, arcsinh=None, scales=None):
     
 
 def switch_to_soft_ellipses(cat):
+    '''
+    Converts our softened-ellipticity EllipseESoft parameters into
+    normal EllipseE ellipses.
+    
+    *cat*: an iterable of tractor Sources, which will be modified
+     in-place.
+
+    '''
     from tractor.galaxy import DevGalaxy, ExpGalaxy, FixedCompositeGalaxy
     from tractor.ellipses import EllipseESoft
     for src in cat:
@@ -576,10 +389,11 @@ def brick_catalog_for_radec_box(ralo, rahi, declo, dechi,
     return T
     
 def ccd_map_image(valmap, empty=0.):
-    '''
-    valmap: { 'N7' : 1., 'N8' : 17.8 }
+    '''valmap: { 'N7' : 1., 'N8' : 17.8 }
 
-    Returns: a numpy image (shape (12,14)) with values mapped to their CCD locations.
+    Returns: a numpy image (shape (12,14)) with values mapped to their
+    CCD locations.
+
     '''
     img = np.empty((12,14))
     img[:,:] = empty
@@ -620,7 +434,8 @@ def ccd_map_extent(ccdname, inset=0.):
     else:
         (x0,x1,y0,y1) = (x0, x0+2, y0, y0+1)
 
-    # Shift from being (0,0)-centered to being aligned with the ccd_map_image() image.
+    # Shift from being (0,0)-centered to being aligned with the
+    # ccd_map_image() image.
     x0 += 7
     x1 += 7
     y0 += 6
@@ -632,6 +447,8 @@ def ccd_map_extent(ccdname, inset=0.):
 
 def wcs_for_brick(b, W=3600, H=3600, pixscale=0.262):
     '''
+    Returns an astrometry.net style Tan WCS object for a given brick object.
+
     b: row from survey-bricks.fits file
     W,H: size in pixels
     pixscale: pixel scale in arcsec/pixel.
@@ -748,6 +565,14 @@ def create_temp(**kwargs):
     return fn
 
 def imsave_jpeg(jpegfn, img, **kwargs):
+    '''Saves a image in JPEG format.  Some matplotlib installations
+    (notably at NERSC) don't support jpeg, so we write to PNG and then
+    convert to JPEG using the venerable netpbm tools.
+    
+    *jpegfn*: JPEG filename
+    *img*: image, in the typical matplotlib formats (see plt.imsave)
+    '''
+
     import pylab as plt
     tmpfn = create_temp(suffix='.png')
     plt.imsave(tmpfn, img, **kwargs)
@@ -765,10 +590,11 @@ class LegacySurveyData(object):
     objects (eg, DecamImage objects), which then allow data to be read
     from disk.
     '''
-    def __init__(self, survey_dir=None, output_dir=None, version=None):
-        '''
-        Create a LegacySurveyData object using data from the given *survey_dir*
-        directory, or from the $LEGACY_SURVEY_DIR environment variable.
+    def __init__(self, survey_dir=None, output_dir=None, version=None,
+                 ccds=None):
+        '''Create a LegacySurveyData object using data from the given
+        *survey_dir* directory, or from the $LEGACY_SURVEY_DIR environment
+        variable.
         '''
         from .decam  import DecamImage
         from .mosaic import MosaicImage
@@ -796,7 +622,7 @@ Now using the current directory as LEGACY_SURVEY_DIR, but this is likely to fail
 
         self.output_files = []
 
-        self.ccds = None
+        self.ccds = ccds
         self.bricks = None
 
         # Create and cache a kd-tree for bricks_touching_radec_box ?
@@ -818,11 +644,11 @@ Now using the current directory as LEGACY_SURVEY_DIR, but this is likely to fail
         assert(version in [None, 'dr2', 'dr1'])
         self.version = version
 
-    def get_camera_indices(self, ccds):
-        i_ptf= np.where(a.get('camera') == 'ptf')[0]
-        i_decam= np.where(a.get('camera') == 'decam')[0]
-        i_mosaic= np.where(a.get('camera') == 'mosaic')[0]
-
+    def image_class_for_camera(self, camera):
+        # Assert that we have correctly removed trailing spaces
+        assert(camera == camera.strip())
+        return self.image_typemap[camera]
+        
     def index_of_band(self, b):
         return self.allbands.index(b)
         
@@ -858,6 +684,10 @@ Now using the current directory as LEGACY_SURVEY_DIR, but this is likely to fail
         if brick is not None:
             codir = os.path.join(basedir, 'coadd', brickpre, brick)
 
+        sname = 'legacysurvey'
+        if self.version in ['dr1','dr2']:
+            sname = 'decals'
+            
         if filetype == 'bricks':
             fn = 'survey-bricks.fits.gz'
             if self.version in ['dr1','dr2']:
@@ -870,6 +700,9 @@ Now using the current directory as LEGACY_SURVEY_DIR, but this is likely to fail
             else:
                 return glob(os.path.join(basedir, 'survey-ccds-*.fits.gz'))
                 
+        elif filetype == 'annotated-ccds':
+            return glob(os.path.join(basedir, 'ccds-annotated-*.fits.gz'))
+
         elif filetype == 'tractor':
             return os.path.join(basedir, 'tractor', brickpre,
                                 'tractor-%s.fits' % brick)
@@ -885,7 +718,7 @@ Now using the current directory as LEGACY_SURVEY_DIR, but this is likely to fail
 
         elif filetype in ['depth', 'galdepth', 'nexp', 'model']:
             return os.path.join(codir,
-                                'legacysurvey-%s-%s-%s.fits.gz' % (brick, filetype,band))
+                                '%s-%s-%s-%s.fits.gz' % (sname, brick, filetype, band))
 
         elif filetype in ['invvar', 'chi2', 'image']:
             if self.version in ['dr1','dr2']:
@@ -912,7 +745,7 @@ Now using the current directory as LEGACY_SURVEY_DIR, but this is likely to fail
         '''
         Returns a context manager for writing an output file; use like:
 
-        with out as survey.write_output('ccds', brick=brickname):
+        with survey.write_output('ccds', brick=brickname) as out:
             ccds.writeto(out.fn, primheader=primhdr)
 
         Does the following on entry:
@@ -951,8 +784,9 @@ Now using the current directory as LEGACY_SURVEY_DIR, but this is likely to fail
 
     def add_output_file(self, fn):
         '''
-        Intended as a callback to be called in the *write_output* routine.  Adds
-        the given filename to the list of files written by the pipeline on this run.
+        Intended as a callback to be called in the *write_output* routine.
+        Adds the given filename to the list of files written by the
+        pipeline on this run.
         '''
         self.output_files.append(fn)
 
@@ -1099,7 +933,7 @@ Now using the current directory as LEGACY_SURVEY_DIR, but this is likely to fail
         if self.ccds is None:
             self.ccds = self.get_ccds()
         return self.ccds
-    
+
     def get_ccds(self):
         '''
         Returns the table of CCDs.
@@ -1109,13 +943,14 @@ Now using the current directory as LEGACY_SURVEY_DIR, but this is likely to fail
         fns = self.find_file('ccds')
         TT = []
         for fn in fns:
-            cols = (
-                'exptime filter propid crpix1 crpix2 crval1 crval2 ' +
-                'cd1_1 cd1_2 cd2_1 cd2_2 ccdname ccdzpt ccdraoff ccddecoff ' +
-                'ccdnmatch camera image_hdu image_filename width height ' +
-                'ra dec zpt expnum fwhm mjd_obs').split()
             print('Reading CCDs from', fn)
-            T = fits_table(fn, columns=cols)
+            # cols = (
+            #     'exptime filter propid crpix1 crpix2 crval1 crval2 ' +
+            #     'cd1_1 cd1_2 cd2_1 cd2_2 ccdname ccdzpt ccdraoff ccddecoff ' +
+            #     'ccdnmatch camera image_hdu image_filename width height ' +
+            #     'ra dec zpt expnum fwhm mjd_obs').split()
+            #T = fits_table(fn, columns=cols)
+            T = fits_table(fn)
             print('Got', len(T), 'CCDs')
             TT.append(T)
         T = merge_tables(TT, columns='fillzero')
@@ -1133,12 +968,38 @@ Now using the current directory as LEGACY_SURVEY_DIR, but this is likely to fail
         if 'cpimage_hdu' in cols and not 'image_hdu' in cols:
             T.image_hdu = T.cpimage_hdu
 
+        # Remove trailing spaces from 'ccdname' column
         if 'ccdname' in T.columns():
             # "N4 " -> "N4"
             T.ccdname = np.array([s.strip() for s in T.ccdname])
-
+        # Remove trailing spaces from 'camera' column.
+        T.camera = np.array([c.strip() for c in T.camera])
         return T
 
+    def get_annotated_ccds(self):
+        '''
+        Returns the annotated table of CCDs.
+        '''
+        from glob import glob
+
+        fns = self.find_file('annotated-ccds')
+        TT = []
+        for fn in fns:
+            print('Reading annotated CCDs from', fn)
+            T = fits_table(fn)
+            print('Got', len(T), 'CCDs')
+            TT.append(T)
+        T = merge_tables(TT, columns='fillzero')
+        print('Total of', len(T), 'CCDs')
+        del TT
+        # Remove trailing spaces from 'ccdname' column
+        if 'ccdname' in T.columns():
+            # "N4 " -> "N4"
+            T.ccdname = np.array([s.strip() for s in T.ccdname])
+        # Remove trailing spaces from 'camera' column.
+        T.camera = np.array([c.strip() for c in T.camera])
+        return T
+    
     def ccds_touching_wcs(self, wcs, **kwargs):
         '''
         Returns a table of the CCDs touching the given *wcs* region.
@@ -1154,22 +1015,24 @@ Now using the current directory as LEGACY_SURVEY_DIR, but this is likely to fail
         '''
         Returns a DecamImage or similar object for one row of the CCDs table.
         '''
-        imageType = self.image_typemap[t.camera.strip()]
+        # get Image subclass
+        imageType = self.image_class_for_camera(t.camera)
+        # call Image subclass constructor
         return imageType(self, t)
     
     def tims_touching_wcs(self, targetwcs, mp, bands=None,
                           **kwargs):
-        '''
-        Creates tractor.Image objects for CCDs touching the given
+        '''Creates tractor.Image objects for CCDs touching the given
         *targetwcs* region.
         
         mp: multiprocessing object
 
-        kwargs are passed to LegacySurveyImage.get_tractor_image() and may include:
+        kwargs are passed to LegacySurveyImage.get_tractor_image() and
+        may include:
 
         * gaussPsf
         * pixPsf
-        
+
         '''
         # Read images
         C = self.ccds_touching_wcs(targetwcs)
@@ -1207,49 +1070,20 @@ Now using the current directory as LEGACY_SURVEY_DIR, but this is likely to fail
         '''
         Returns an index array for the members of the table "ccds" that
         are photometric.
-
-        Slightly revised recipe by DJS in Re: [decam-data 828] 2015-07-31:
-        
-        * CCDNMATCH >= 20 (At least 20 stars to determine zero-pt)
-        * abs(ZPT - CCDZPT) < 0.10  (Loose agreement with full-frame zero-pt)
-        * ZPT within [25.08-0.50, 25.08+0.25] for g-band
-        * ZPT within [25.29-0.50, 25.29+0.25] for r-band
-        * ZPT within [24.92-0.50, 24.92+0.25] for z-band
-        * DEC > -20 (in DESI footprint)
-        * EXPTIME >= 30
-        * CCDNUM = 31 (S7) should mask outside the region [1:1023,1:4094]
         '''
-        # Nominal zeropoints (DECam)
-        z0 = dict(g = 25.08,
-                  r = 25.29,
-                  z = 24.92,)
-        z0 = np.array([z0[f[0]] for f in ccds.filter])
-
-        good = np.ones(len(ccds), bool)
-        n0 = sum(good)
-        # This is our list of cuts to remove non-photometric CCD images
-        if 'ccdnmatch' in ccds.columns():
-            for name,crit in [
-                ('exptime < 30 s', (ccds.exptime < 30)),
-                ('ccdnmatch < 20', (ccds.ccdnmatch < 20)),
-                ('abs(zpt - ccdzpt) > 0.1',
-                 (np.abs(ccds.zpt - ccds.ccdzpt) > 0.1)),
-                ('zpt < 0.5 mag of nominal (for DECam)',
-                 ((ccds.camera == 'decam') * (ccds.zpt < (z0 - 0.5)))),
-                ('zpt > 0.25 mag of nominal (for DECam)',
-                 ((ccds.camera == 'decam') * (ccds.zpt > (z0 + 0.25)))),
-                 ]:
-                #PTF special handling, apply criteria to NON ptf images
-                crit= np.logical_and(crit, ccds.camera != 'ptf   ')
-                good[crit] = False
-                n = sum(good)
-                print('Flagged', n0-n, 'more non-photometric using criterion:', name)
-                n0 = n
-        #print N remain for each camera
-        tallies='%d CCDs remain' % len(good) 
-        for cam_str in ['decam','mosaic','bok','ptf   ']: 
-            tallies+= ', %d are %s' %  (ccds.camera[ccds.camera == cam_str].shape[0], cam_str)
-        print(tallies) 
+        # Make the is-photometric check camera-specific, handled by the
+        # Image subclass.
+        cameras = np.unique(ccds.camera)
+        print('Finding photometric CCDs.  Cameras:', cameras)
+        good = np.zeros(len(ccds), bool)
+        for cam in cameras:
+            imclass = self.image_class_for_camera(cam)
+            Icam = np.flatnonzero(ccds.camera == cam)
+            print('Checking', len(Icam), 'images from camera', cam)
+            Igood = imclass.photometric_ccds(self, ccds[Icam])
+            print('Keeping', len(Igood), 'photometric CCDs from camera', cam)
+            if len(Igood):
+                good[Icam[Igood]] = True
         return np.flatnonzero(good)
 
     def apply_blacklist(self, ccds):
@@ -1259,87 +1093,21 @@ Now using the current directory as LEGACY_SURVEY_DIR, but this is likely to fail
         I = survey.apply_blacklist(ccds)
         ccds.cut(I)
         '''
-        decam_blacklist = [
-            '2012B-0003', # labeled as "DES SV", but appears to exclusively be DES deep fields taken during SV, through Jan 2013.
-            '2013A-0351', # lots of deep data on COSMOS
-            '2014A-0339', # two strips of sky
-            '2013A-0360', # 9 fields total
-            '2013A-0614', # 2 fields
-            '2013A-0717', # 2 fields
-            '2013B-0502', # 3 fields
-            '2014A-0239', # 1 field
-            '2014A-0429', # 2 fields
-            '2013A-0611', # many 900-sec exposures in EDR region
-            '2013A-0737', # 10 fields
-            '2013A-0719', # 8 fields
-            '2013A-9999', # 11 fields
-            '2013A-0716', # 3 fields
-            '2013A-0529', # 2 fields
-            '2013A-0613', # 40 exposures of 600 sec in g,r and nothing else in DR2
-        ]
-        keep = np.array([camera.strip() != 'decam' or propid not in decam_blacklist
-                         for camera,propid in zip(ccds.camera, ccds.propid)])
-        return np.flatnonzero(keep)
-
-    def _get_zeropoints_table(self):
-        '''
-        Returns the table of zeropoints, which in DR2 is the same as
-        the table of CCDs.
-
-        Note, the returned object MUST NOT BE MODIFIED!
-        '''
-        # Hooray, DRY.  ZP table == CCD table.
-        return self.get_ccds_readonly()
-
-    def get_zeropoint_row_for(self, im):
-        '''
-        Returns one row of the zeropoints table for the given CCD table row.
-        '''
-        ZP = self._get_zeropoints_table()
-        I, = np.nonzero(ZP.expnum == im.expnum)
-        if len(I) > 1:
-            I, = np.nonzero((ZP.expnum == im.expnum) *
-                            (ZP.ccdname == im.ccdname))
-        if len(I) == 0:
-            return None
-        #assert(len(I) == 1)
-        if len(I) > 1:
-            print('WARNING: found', len(I), 'zeropoint entries for expnum=%i, ccdname=%s:' % (im.expnum, im.ccdname), I)
-        return ZP[I[0]]
-            
-    def get_zeropoint_for(self, im):
-        '''
-        Returns the photometric zeropoint for the given CCD table row object *im*.
-        '''
-        if im.camera == 'decam' or im.camera == 'mosaic':
-            zp = self.get_zeropoint_row_for(im)
-            # No updated zeropoint -- use header MAGZERO from primary HDU.
-            if zp is None:
-                print('WARNING: using header zeropoints for', im)
-                hdr = im.read_image_primary_header()
-                # DES Year1 Stripe82 images:
-                magzero = hdr['MAGZERO']
-                return magzero
-            magzp = zp.ccdzpt
-            magzp += 2.5 * np.log10(zp.exptime)
-        #PTF special handling
-        elif im.camera == 'ptf':
-            hdr= im.read_image_primary_header() #calls fitsio.read_header(self.imgfn)
-            magzp= zeropoint_for_ptf(hdr)
-        else: raise ValueError
-        return magzp
-
-    def get_astrometric_zeropoint_for(self, im):
-        '''
-        Returns the astrometric offset for the given CCD table row
-        object *im*, in degrees.
-        '''
-        zp = self.get_zeropoint_row_for(im)
-        if zp is None:
-            print('WARNING: no astrometric zeropoints found for', im)
-            return 0.,0.
-        dra, ddec = zp.ccdraoff, zp.ccddecoff
-        return dra / 3600., ddec / 3600.
+        # Make the blacklist check camera-specific, handled by the
+        # Image subclass.
+        cameras = np.unique(ccds.camera)
+        print('Finding blacklisted CCDs.  Cameras:', cameras)
+        good = np.zeros(len(ccds), bool)
+        for cam in cameras:
+            imclass = self.image_class_for_camera(cam)
+            Icam = np.flatnonzero(ccds.camera == cam)
+            print('Checking', len(Icam), 'images from camera', cam)
+            Igood = imclass.apply_blacklist(self, ccds[Icam])
+            print('Keeping', len(Igood), 'non-blacklisted CCDs from camera',
+                  cam)
+            if len(Igood):
+                good[Icam[Igood]] = True
+        return np.flatnonzero(good)
 
 def exposure_metadata(filenames, hdus=None, trim=None):
     '''
@@ -1402,18 +1170,6 @@ def exposure_metadata(filenames, hdus=None, trim=None):
         primhdr = F[0].read_header()
         expstr = '%08i' % primhdr.get('EXPNUM')
 
-        # # Parse date with format: 2014-08-09T04:20:50.812543
-        # date = datetime.datetime.strptime(primhdr.get('DATE-OBS'),
-        #                                   '%Y-%m-%dT%H:%M:%S.%f')
-        # # Subract 12 hours to get the date used by the CP to label the night;
-        # # CP20140818 includes observations with date 2014-08-18 evening and
-        # # 2014-08-19 early AM.
-        # cpdate = date - datetime.timedelta(0.5)
-        # #cpdatestr = '%04i%02i%02i' % (cpdate.year, cpdate.month, cpdate.day)
-        # #print 'Date', date, '-> CP', cpdatestr
-        # cpdateval = cpdate.year * 10000 + cpdate.month * 100 + cpdate.day
-        # print 'Date', date, '-> CP', cpdateval
-
         cpfn = fn
         if trim is not None:
             cpfn = cpfn.replace(trim, '')
@@ -1448,8 +1204,8 @@ def exposure_metadata(filenames, hdus=None, trim=None):
 
     # DECam: INSTRUME = 'DECam'
     T.rename('instrume', 'camera')
-    T.camera = np.array([t.lower() for t in T.camera])
-
+    T.camera = np.array([t.lower().strip() for t in T.camera])
+    
     #T.rename('extname', 'ccdname')
     T.ccdname = np.array([t.strip() for t in T.extname])
     
@@ -1477,14 +1233,19 @@ def run_calibs(X):
     im = X[0]
     kwargs = X[1]
     print('run_calibs for image', im)
-    return im.run_calibs(**kwargs)
+    try:
+        return im.run_calibs(**kwargs)
+    except:
+        print('Exception in run_calibs:', im, kwargs)
+        import traceback
+        traceback.print_exc()
+        raise
 
 def read_one_tim(X):
     (im, targetrd, kwargs) = X
     print('Reading', im)
     tim = im.get_tractor_image(radecpoly=targetrd, **kwargs)
     return tim
-
 
 from tractor.psfex import PsfExModel
 

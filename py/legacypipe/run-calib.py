@@ -55,12 +55,14 @@ def main():
     args = []
     for a in opt.args:
         # Check for "expnum-ccdname" format.
-        if '-' in a:
+        if '-' in str(a):
             words = a.split('-')
             assert(len(words) == 2)
             expnum = int(words[0])
             ccdname = words[1]
             I = np.flatnonzero((T.expnum == expnum) * (T.ccdname == ccdname))
+            if len(I) != 1:
+                print('Found', len(I), 'CCDs for expnum', expnum, 'CCDname', ccdname, ':', I)
             assert(len(I) == 1)
             t = T[I[0]]
         else:
@@ -68,9 +70,14 @@ def main():
             print('Index', i)
             t = T[i]
 
+        print('CCDnmatch', t.ccdnmatch)
+        if t.ccdnmatch < 20 and not opt.force:
+            print('Skipping ccdnmatch = %i' % t.ccdnmatch)
+            continue
+            
         im = survey.get_image_object(t)
         print('Running', im.calname)
-
+        
         kwargs = dict(psfex=opt.psfex, sky=opt.sky)
         if opt.force:
             kwargs.update(force=True)
@@ -78,7 +85,7 @@ def main():
             kwargs.update(se=True)
         if opt.splinesky:
             kwargs.update(splinesky=True)
-
+            
         if opt.threads:
             args.append((im, kwargs))
         else:
