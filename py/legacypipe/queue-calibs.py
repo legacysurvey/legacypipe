@@ -124,6 +124,11 @@ def main():
 
     parser.add_argument('--brickq', type=int, default=None,
                         help='Queue only bricks with the given "brickq" value [0 to 3]')
+
+    parser.add_argument('--brickq-deps', action='store_true', default=False,
+                        help='Queue bricks directly using qdo API, setting brickq dependencies')
+    parser.add_argument('--queue', default='bricks',
+                        help='With --brickq-deps, the QDO queue name to use')
     
     opt = parser.parse_args()
 
@@ -310,6 +315,12 @@ def main():
         rlo,rhi = 147.2, 147.8
         dlo,dhi = -0.4, 0.4
 
+    elif opt.region == 'eboss-elg':
+        # RA -45 to +45
+        # Dec -5 to +7
+        rlo,rhi = 315., 45.
+        dlo,dhi = -5., 7.
+        
     if opt.mindec is not None:
         dlo = opt.mindec
     if opt.maxdec is not None:
