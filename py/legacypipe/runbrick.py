@@ -1562,37 +1562,42 @@ def stage_fitblobs(T=None,
             namemap = dict(ptsrc='psf', simple='simp')
             prefix = namemap.get(srctype,srctype)
 
-            TT,hdr = prepare_fits_catalog(xcat, None, TT, hdr, bands, None,
-                                          allbands=allbands, prefix=prefix+'_',
-                                          save_invvars=False)
+            invvars = np.hstack([m.get(srctype,[]) for m in BB.all_model_ivs])
+            assert(len(invvars) == xcat.numberOfParams())
+            
+            TT,hdr = prepare_fits_catalog(xcat, invvars, TT, hdr, bands, None,
+                                          allbands=allbands, prefix=prefix+'_')
+            # save_invvars=False)
             TT.set('%s_flags' % prefix,
                    np.array([m.get(srctype,0)
                              for m in BB.all_model_flags]))
             TT.set('%s_cpu' % prefix,
                    np.array([m.get(srctype,0)
                              for m in BB.all_model_cpu]).astype(np.float32))
-            fluxivs = np.zeros((len(TT), len(allbands)), np.float32)
-            bandmap = np.array([allbands.index(b) for b in bands])
-            for j in range(len(xcat)):
-                f = BB.all_model_fluxivs[j].get(srctype, None)
-                if f is None:
-                    continue
-                fluxivs[j, bandmap] = f
-            TT.set('%s_decam_flux_ivar' % prefix, fluxivs)
 
         TT.delete_column('psf_shapeExp')
         TT.delete_column('psf_shapeDev')
         TT.delete_column('psf_fracDev')
+        TT.delete_column('psf_shapeExp_ivar')
+        TT.delete_column('psf_shapeDev_ivar')
+        TT.delete_column('psf_fracDev_ivar')
         TT.delete_column('psf_type')
         TT.delete_column('simp_shapeExp')
         TT.delete_column('simp_shapeDev')
         TT.delete_column('simp_fracDev')
+        TT.delete_column('simp_shapeExp_ivar')
+        TT.delete_column('simp_shapeDev_ivar')
+        TT.delete_column('simp_fracDev_ivar')
         TT.delete_column('simp_type')
         TT.delete_column('dev_shapeExp')
+        TT.delete_column('dev_shapeExp_ivar')
         TT.delete_column('dev_fracDev')
+        TT.delete_column('dev_fracDev_ivar')
         TT.delete_column('dev_type')
         TT.delete_column('exp_shapeDev')
+        TT.delete_column('exp_shapeDev_ivar')
         TT.delete_column('exp_fracDev')
+        TT.delete_column('exp_fracDev_ivar')
         TT.delete_column('exp_type')
         TT.delete_column('comp_type')
         # Unpack ellipses
@@ -1612,7 +1617,23 @@ def stage_fitblobs(T=None,
         TT.delete_column('exp_shapeExp')
         TT.delete_column('comp_shapeDev')
         TT.delete_column('comp_shapeExp')
-
+        TT.dev_shape_r_ivar  = TT.dev_shapeDev_ivar[:,0]
+        TT.dev_shape_e1_ivar = TT.dev_shapeDev_ivar[:,1]
+        TT.dev_shape_e2_ivar = TT.dev_shapeDev_ivar[:,2]
+        TT.exp_shape_r_ivar  = TT.exp_shapeExp_ivar[:,0]
+        TT.exp_shape_e1_ivar = TT.exp_shapeExp_ivar[:,1]
+        TT.exp_shape_e2_ivar = TT.exp_shapeExp_ivar[:,2]
+        TT.comp_shapeDev_r_ivar  = TT.comp_shapeDev_ivar[:,0]
+        TT.comp_shapeDev_e1_ivar = TT.comp_shapeDev_ivar[:,1]
+        TT.comp_shapeDev_e2_ivar = TT.comp_shapeDev_ivar[:,2]
+        TT.comp_shapeExp_r_ivar  = TT.comp_shapeExp_ivar[:,0]
+        TT.comp_shapeExp_e1_ivar = TT.comp_shapeExp_ivar[:,1]
+        TT.comp_shapeExp_e2_ivar = TT.comp_shapeExp_ivar[:,2]
+        TT.delete_column('dev_shapeDev_ivar')
+        TT.delete_column('exp_shapeExp_ivar')
+        TT.delete_column('comp_shapeDev_ivar')
+        TT.delete_column('comp_shapeExp_ivar')
+        
         if get_all_models:
             all_models = TT
         if write_metrics:

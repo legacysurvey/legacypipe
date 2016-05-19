@@ -267,7 +267,7 @@ class OneBlob(object):
         B.flags = np.zeros(N, np.uint16)
         B.dchisqs = np.zeros((N, 5), np.float32)
         B.all_models        = np.array([{} for i in range(N)])
-        B.all_model_fluxivs = np.array([{} for i in range(N)])
+        B.all_model_ivs     = np.array([{} for i in range(N)])
         B.all_model_flags   = np.array([{} for i in range(N)])
         B.all_model_cpu     = np.array([{} for i in range(N)])
 
@@ -556,11 +556,10 @@ class OneBlob(object):
                     srctractor.setModelMasks(newsrc_mm)
                     modtractor = srctractor
     
-                # Compute FLUX inverse-variances for each source.
+                # Compute inverse-variances for each source.
                 # This uses the second-round modelMasks.
-                newsrc.freezeAllBut('brightness')
                 allderivs = modtractor.getDerivs()
-                ivs = np.zeros(len(self.bands), np.float32)
+                ivs = np.zeros(newsrc.numberOfParams(), np.float32)
                 for iparam,derivs in enumerate(allderivs):
                     chisq = 0
                     for deriv,tim in derivs:
@@ -571,8 +570,7 @@ class OneBlob(object):
                         chi = deriv.patch * ie[slc]
                         chisq += (chi**2).sum()
                     ivs[iparam] = chisq
-                B.all_model_fluxivs[srci][name] = ivs
-                newsrc.thawAllParams()
+                B.all_model_ivs[srci][name] = ivs
 
                 # Use the original 'srctractor' here so that the different
                 # models are evaluated on the same pixels.
@@ -581,11 +579,11 @@ class OneBlob(object):
                 srctractor.setModelMasks(newsrc_mm)
                 ch = _per_band_chisqs(srctractor, self.bands)
                 chisqs[name] = _chisq_improvement(newsrc, ch, chisqs_none)
-                B.all_models[i][name] = newsrc.copy()
-                B.all_model_flags[i][name] = thisflags
+                B.all_models[srci][name] = newsrc.copy()
+                B.all_model_flags[srci][name] = thisflags
                 cpum1 = time.clock()
-                B.all_model_cpu[i][name] = cpum1 - cpum0
-                
+                B.all_model_cpu[srci][name] = cpum1 - cpum0
+
             # Actually select which model to keep.
             # This "modnames" array determines the order of the elements in the DCHISQ
             # column of the catalog.
