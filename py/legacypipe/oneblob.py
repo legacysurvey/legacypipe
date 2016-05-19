@@ -491,15 +491,7 @@ class OneBlob(object):
                 # Recompute modelMasks in the original tims
 
                 # Limit sizes of huge models
-                tim = self.tims[0]
-                from tractor.galaxy import ProfileGalaxy
-                if isinstance(newsrc, ProfileGalaxy):
-                    px,py = tim.wcs.positionToPixel(newsrc.getPosition())
-                    h = newsrc._getUnitFluxPatchSize(tim, px, py, tim.modelMinval)
-                    MAXHALF = 128
-                    if h > MAXHALF:
-                        print('halfsize', h,'for',newsrc,'-> setting to',MAXHALF)
-                        newsrc.halfsize = MAXHALF
+                _limit_galaxy_stamp_size(newsrc, self.tims[0])
     
                 if self.hastycho:
                     modtims = None
@@ -1495,4 +1487,12 @@ def _per_band_chisqs(srctractor, bands):
         chisqs[img.band] = chisqs[img.band] + (chi ** 2).sum()
     return chisqs
 
+def _limit_galaxy_stamp_size(src, tim, maxhalf=128):
+    from tractor.galaxy import ProfileGalaxy
+    if isinstance(src, ProfileGalaxy):
+        px,py = tim.wcs.positionToPixel(src.getPosition())
+        h = src._getUnitFluxPatchSize(tim, px, py, tim.modelMinval)
+        if h > maxhalf:
+            print('halfsize', h, 'for', src, '-> setting to', maxhalf)
+            src.halfsize = maxhalf
 

@@ -11,9 +11,12 @@ ps = PlotSequence('edges')
 #fns = glob('dr2-tractor/*/*.fits')
 #fns = glob('dr2-tractor/24[12]/tractor-*p0[56]*.fits')
 
-plotrange = ((240.9, 242.1), (4.8, 5.9))
+#plotrange = ((240.9, 242.1), (4.8, 5.9))
+plotrange = ((240, 245), (4.5, 12.0))
 
-fns = glob('dr2-tractor/241/tractor-*p05*.fits')
+#fns = glob('dr2-tractor/241/tractor-*p05*.fits')
+
+fns = glob('dr2-tractor/24[01234]/tractor-*.fits')
 fns.sort()
 TT2,TT3 = [],[]
 for fn in fns:
@@ -21,13 +24,15 @@ for fn in fns:
     if not os.path.exists(fn3):
         print('Does not exist:', fn3)
         continue
-    T2 = fits_table(fn)
-    T3 = fits_table(fn3)
+    cols = 'ra dec brick_primary brickname decam_anymask'.split()
+    T2 = fits_table(fn, columns=cols)
+    T3 = fits_table(fn3, columns=cols)
     print('Reading', fn, '->', len(T2), 'DR2,', len(T3), 'DR3')
     TT2.append(T2)
     TT3.append(T3)
-T2 = merge_tables(TT2)
-T3 = merge_tables(TT3)
+T2 = merge_tables(TT2, columns='fillzero')
+T3 = merge_tables(TT3, columns='fillzero')
+del TT2, TT3
 
 plt.clf()
 plothist(T2.ra, T2.dec, nbins=200, range=plotrange)

@@ -420,19 +420,20 @@ def stage_tims(W=3600, H=3600, pixscale=0.262, brickname=None,
             plt.suptitle(tim.name)
             ps.savefig()
 
-            plt.clf()
-            bitmap = dict([(v,k) for k,v in CP_DQ_BITS.items()])
-            k = 1
-            for i in range(12):
-                bitval = 1 << i
-                if not bitval in bitmap:
-                    continue
-                plt.subplot(3,3,k)
-                k+=1
-                plt.imshow((tim.dq & bitval) > 0, vmin=0, vmax=1.5, cmap='hot')
-                plt.title(bitmap[bitval])
-            plt.suptitle('Mask planes: %s' % tim.name)
-            ps.savefig()
+            if tim.dq is not None:
+                plt.clf()
+                bitmap = dict([(v,k) for k,v in CP_DQ_BITS.items()])
+                k = 1
+                for i in range(12):
+                    bitval = 1 << i
+                    if not bitval in bitmap:
+                        continue
+                    plt.subplot(3,3,k)
+                    k+=1
+                    plt.imshow((tim.dq & bitval) > 0, vmin=0, vmax=1.5, cmap='hot')
+                    plt.title(bitmap[bitval])
+                plt.suptitle('Mask planes: %s' % tim.name)
+                ps.savefig()
 
     if not pipe:
         # save resampling params
@@ -2730,7 +2731,7 @@ def run_brick(brick, radec=None, pixscale=0.262,
                 })
         else:
             prereqs.update({
-                'image_coadds':'tims',
+                'image_coadds':'mask_junk',
                 'srcs':'image_coadds',
                 'fitblobs':'srcs',
                 })
