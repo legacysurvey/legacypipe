@@ -1461,6 +1461,9 @@ def stage_fitblobs(T=None,
         BB.all_models = np.array([])
         BB.all_model_flags   = np.array([])
         BB.all_model_fluxivs = np.array([])
+        BB.all_model_cpu     = np.array([])
+        BB.cpu_blob         = []
+        BB.cpu_source       = []
         BB.started_in_blob  = []
         BB.finished_in_blob = []
         BB.hastycho         = []
@@ -1565,6 +1568,9 @@ def stage_fitblobs(T=None,
             TT.set('%s_flags' % prefix,
                    np.array([m.get(srctype,0)
                              for m in BB.all_model_flags]))
+            TT.set('%s_cpu' % prefix,
+                   np.array([m.get(srctype,0)
+                             for m in BB.all_model_cpu]).astype(np.float32))
             fluxivs = np.zeros((len(TT), len(allbands)), np.float32)
             bandmap = np.array([allbands.index(b) for b in bands])
             for j in range(len(xcat)):
@@ -1630,6 +1636,8 @@ def stage_fitblobs(T=None,
     T.rchi2       = BB.rchi2
     T.left_blob   = np.logical_and(BB.started_in_blob,
                                    np.logical_not(BB.finished_in_blob))
+    T.cpu_source  = BB.cpu_source
+    T.cpu_blob    = BB.cpu_blob
     invvars = np.hstack(BB.srcinvvars)
     assert(cat.numberOfParams() == len(invvars))
 
@@ -2378,7 +2386,10 @@ def stage_writecat(
         'brickid', 'brickname', 'objid', 'brick_primary', 'blob', 'ninblob',
         'tycho2inblob', 'type', 'ra', 'ra_ivar', 'dec', 'dec_ivar',
         'bx', 'by', 'bx0', 'by0', 'left_blob', 'out_of_bounds',
-        'dchisq', 'ebv', 'decam_flux', 'decam_flux_ivar' ]
+        'dchisq', 'ebv', 
+        'cpu_source', 'cpu_blob',
+        'decam_flux', 'decam_flux_ivar',
+        ]
 
     if AP is not None:
         cols.extend(['decam_apflux', 'decam_apflux_resid','decam_apflux_ivar'])

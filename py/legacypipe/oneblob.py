@@ -2,8 +2,9 @@ from __future__ import print_function
 
 import numpy as np
 import pylab as plt
+import time
 
-from astrometry.util.ttime import Time
+from astrometry.util.ttime import Time, CpuMeas
 from astrometry.util.resample import resample_with_wcs, OverlapError
 from astrometry.util.fits import fits_table
 from astrometry.util.plotutils import dimshow
@@ -32,6 +33,7 @@ def one_blob(X):
     if len(timargs) == 0:
         return None
 
+    t0 = time.clock()
     # A local WCS for this blob
     blobwcs = brickwcs.get_subimage(bx0, by0, blobw, blobh)
 
@@ -48,6 +50,8 @@ def one_blob(X):
     B.started_in_blob = blobmask[
         np.clip(np.round(y0-1).astype(int), 0,blobh-1),
         np.clip(np.round(x0-1).astype(int), 0,blobw-1)]
+
+    B.cpu_source = np.zeros(len(B), np.float32)
     
     ob = OneBlob('%i'%iblob, blobwcs, blobmask, timargs, srcs, bands,
                  plots, ps, simul_opt, use_ceres, hastycho)
@@ -66,6 +70,10 @@ def one_blob(X):
     if hastycho:
         B.hastycho[:] = True
 
+    B.cpu_blob = np.zeros(len(B), np.float32)
+    t1 = time.clock()
+    B.cpu_blob[:] = t1 - t0
+        
     B.iblob = iblob
     return B
 
@@ -132,9 +140,10 @@ class OneBlob(object):
         Ibright = _argsort_by_brightness(cat, self.bands)
 
         if len(cat) > 1:
-            self._optimize_individual_sources_subtract(cat, Ibright)
+            self._optimize_individual_sources_subtract(
+                cat, Ibright, B.cpu_source)
         else:
-            self._optimize_individual_sources(tr, cat, Ibright)
+            self._optimize_individual_sources(tr, cat, Ibright, B.cpu_source)
 
         # Optimize all at once?
         if len(cat) > 1 and len(cat) <= 10:
@@ -260,14 +269,15 @@ class OneBlob(object):
         B.all_models        = np.array([{} for i in range(N)])
         B.all_model_fluxivs = np.array([{} for i in range(N)])
         B.all_model_flags   = np.array([{} for i in range(N)])
+        B.all_model_cpu     = np.array([{} for i in range(N)])
 
         # Model selection for sources, in decreasing order of brightness
         for numi,srci in enumerate(Ibright):
     
             src = cat[srci]
-            print('Model selection for source %i of %i in blob' %
-                  (numi, len(Ibright)))
-            #tsel = Time()
+            #print('Model selection for source %i of %i in blob' %
+            #      (numi, len(Ibright)))
+            cpu0 = time.clock()
     
             # Add this source's initial model back in.
             models.add(srci, self.tims)
@@ -390,7 +400,8 @@ class OneBlob(object):
                       len(srctims))
             allflags = {}
             for name,newsrc in trymodels:
-    
+                cpum0 = time.clock()
+
                 if name == 'gals':
                     # If 'simple' was better than 'ptsrc', or the source is
                     # bright, try the galaxy models.
@@ -471,7 +482,7 @@ class OneBlob(object):
                 # FIXME N steps: -> FLAG_STEPS_A
     
                 # print('Mod', name, 'round1 opt', Time()-t0)
-                print('Mod selection: after first-round opt:', newsrc)
+                #print('Mod selection: after first-round opt:', newsrc)
     
                 if self.plots:
                     # _plot_mods(srctims, [list(srctractor.getModelImages())],
@@ -529,7 +540,7 @@ class OneBlob(object):
     
                     modtractor.optimize_loop(**self.optargs)
                     # FIXME -- thisflags |= FLAG_STEPS_B
-                    print('Mod selection: after second-round opt:', newsrc)
+                    #print('Mod selection: after second-round opt:', newsrc)
     
                     if self.plots:
                         plt.clf()
@@ -562,7 +573,7 @@ class OneBlob(object):
                     ivs[iparam] = chisq
                 B.all_model_fluxivs[srci][name] = ivs
                 newsrc.thawAllParams()
-    
+
                 # Use the original 'srctractor' here so that the different
                 # models are evaluated on the same pixels.
                 # ---> AND with the same modelMasks as the original source...
@@ -572,7 +583,9 @@ class OneBlob(object):
                 chisqs[name] = _chisq_improvement(newsrc, ch, chisqs_none)
                 B.all_models[i][name] = newsrc.copy()
                 B.all_model_flags[i][name] = thisflags
-    
+                cpum1 = time.clock()
+                B.all_model_cpu[i][name] = cpum1 - cpum0
+                
             # Actually select which model to keep.
             # This "modnames" array determines the order of the elements in the DCHISQ
             # column of the catalog.
@@ -641,7 +654,8 @@ class OneBlob(object):
     
             #print('Keeping model:', keepmod)
             #print('Keeping source:', keepsrc)
-            #print(Time() - tsel)
+            cpu1 = time.clock()
+            B.cpu_source[srci] += (cpu1 - cpu0)
     
         models.restore_images(self.tims)
         del models
@@ -732,7 +746,7 @@ class OneBlob(object):
 
         return dtims, insubset
             
-    def _optimize_individual_sources(self, tr, cat, Ibright):
+    def _optimize_individual_sources(self, tr, cat, Ibright, cputime):
         # Single source (though this is coded to handle multiple sources)
         # Fit sources one at a time, but don't subtract other models
         cat.freezeAllParams()
@@ -742,7 +756,7 @@ class OneBlob(object):
         enable_galaxy_cache()
 
         for numi,i in enumerate(Ibright):
-            #tsrc = Time()
+            cpu0 = time.clock()
             #print('Fitting source', i, '(%i of %i in blob)' %
             #  (numi, len(Ibright)))
             cat.freezeAllBut(i)
@@ -751,7 +765,9 @@ class OneBlob(object):
             tr.optimize_loop(**self.optargs)
             #print('Fitting source took', Time()-tsrc)
             # print(cat[i])
-
+            cpu1 = time.clock()
+            cputime[i] += (cpu1 - cpu0)
+            
         tr.setModelMasks(None)
         disable_galaxy_cache()
         
@@ -760,7 +776,8 @@ class OneBlob(object):
         tr.freezeParams('images')
         return tr
 
-    def _optimize_individual_sources_subtract(self, cat, Ibright):
+    def _optimize_individual_sources_subtract(self, cat, Ibright,
+                                              cputime):
         # -Remember the original images
         # -Compute initial models for each source (in each tim)
         # -Subtract initial models from images
@@ -778,7 +795,7 @@ class OneBlob(object):
 
         # For sources, in decreasing order of brightness
         for numi,i in enumerate(Ibright):
-            #tsrc = Time()
+            cpu0 = time.clock()
             print('Fitting source', i, '(%i of %i in blob)' %
                   (numi, len(Ibright)))
             src = cat[i]
@@ -891,7 +908,9 @@ class OneBlob(object):
     
             #print('Fitting source took', Time()-tsrc)
             #print(src)
-    
+            cpu1 = time.clock()
+            cputime[i] += (cpu1 - cpu0)
+            
         models.restore_images(self.tims)
         del models
     
