@@ -1715,6 +1715,55 @@ def plotBorismap(band,prop,op='mean',survey='DECaLS_DR3',nside='1024',oversamp='
 	#pp.savefig()
 	#pp.close()
 	return True
+
+def plotdepthfromIvar(band,depthmin=23.8,mjdmax='',prop='ivar',op='total',survey='DECaLS_DR3',nside='1024',oversamp='1'):
+	import fitsio
+	from matplotlib import pyplot as plt
+	import matplotlib.cm as cm
+	from numpy import zeros,array
+	import healpix
+	
+	from healpix import pix2ang_ring,thphi2radec
+	h = healpix.healpix()
+	import healpy as hp
+	f = fitsio.read(localdir+survey+mjdmax+'/nside'+nside+'_oversamp'+oversamp+'/'+survey+mjdmax+'_band_'+band+'_nside'+nside+'_oversamp'+oversamp+'_'+prop+'__'+op+'.fits.gz')
+	ral = []
+	decl = []
+	val = f['SIGNAL']
+	magval = []
+	for i in range(0,len(val)):
+		magval.append(nanomaggiesToMag(sqrt(1./val[i]) * 5.))
+	print min(magval),max(magval),len(f)/(float(nside)**2.*12)*360*360./pi
+	if band == 'g':
+		extc = 3.303/2.751
+	if band == 'r':
+		extc = 2.285/2.751
+	if band == 'z':
+		extc = 1.263/2.751
+	magvalgmin = []
+	for i in range(0,len(f)):
+		#th,phi = pix2ang_ring(4096,f[i]['PIXEL'])
+		th,phi = hp.pix2ang(int(nside),f[i]['PIXEL'])
+		ra,dec = thphi2radec(th,phi)
+		pix256 = h.ang2pix_nest(256,th,phi)
+		magval[i] -= extmap[pix256]
+		if magval[i] > depthmin:
+			ral.append(ra)
+			decl.append(dec)
+			magvalgmin.append(magval[i])
+	print len(ral)/(float(nside)**2.*12)*360*360./pi		
+	#print min(val),max(val)	
+	map = plt.scatter(ral,decl,c=magvalgmin,cmap=cm.rainbow,lw=0,s=.1)
+	cbar = plt.colorbar(map)
+	cbar.set_label(r'5$\sigma$ galaxy depth', rotation=270)
+	plt.xlabel('r.a. (degrees)')
+	plt.ylabel('declination (degrees)')
+	plt.title('Map of depth' +' for '+survey+' '+band+'-band')
+	plt.show()
+	#plt.xscale('log')
+	#pp.savefig()
+	#pp.close()
+	return True
 		
 		
 
