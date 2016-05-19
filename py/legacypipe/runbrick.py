@@ -45,7 +45,9 @@ from tractor.ellipses import EllipseE
 from tractor.galaxy import (DevGalaxy, ExpGalaxy, FixedCompositeGalaxy, SoftenedFracDev,
                             FracDev, disable_galaxy_cache)
 
-from legacypipe.common import (tim_get_resamp, get_rgb, imsave_jpeg, LegacySurveyData)
+from legacypipe.common import (
+    tim_get_resamp, get_rgb, imsave_jpeg, LegacySurveyData,
+    on_bricks_dependencies)
 from legacypipe.cpimage import CP_DQ_BITS
 from legacypipe.utils import RunbrickError, NothingToDoError, iterwrapper
 from legacypipe.coadds import make_coadds, write_coadd_images, quick_coadds
@@ -783,24 +785,6 @@ def _median_smooth_detmap(X):
     binned,nil = bin_image(detmap, detiv, binning)
     smoo = median_filter(binned, (50,50))
     return smoo
-
-def on_bricks_dependencies(brick, survey):
-    # Find nearby bricks from earlier brick phases
-    bricks = survey.get_bricks_readonly()
-    print(len(bricks), 'bricks')
-    bricks = bricks[bricks.brickq < brick.brickq]
-    print(len(bricks), 'from phases before this brickq:', brick.brickq)
-    if len(bricks) == 0:
-        return []
-    from astrometry.libkd.spherematch import match_radec
-
-    radius = survey.bricksize * np.sqrt(2.) * 1.01
-    bricks.cut(np.abs(brick.dec - bricks.dec) < radius)
-    #print(len(bricks), 'within %.2f degree of Dec' % radius)
-    I,J,d = match_radec(brick.ra, brick.dec, bricks.ra, bricks.dec, radius)
-    bricks.cut(J)
-    print(len(bricks), 'within', radius, 'degrees')
-    return bricks
 
 def stage_srcs(coimgs=None, cons=None,
                targetrd=None, pixscale=None, targetwcs=None,

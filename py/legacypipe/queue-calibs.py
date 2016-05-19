@@ -394,6 +394,42 @@ def main():
 
         print(b.brickname)
 
+    if opt.brickq_deps:
+        import qdo
+        from legacypipe.common import on_bricks_dependencies
+
+        #... find Queue...
+        q = qdo.connect(opt.queue, create_ok=True)
+        print('Connected to QDO queue', opt.queue, 'q')
+        
+        brick_to_task = dict()
+
+        #I = np.flatnonzero(B.brickq == 0)
+        
+        for brickq in range(4):
+            I = np.flatnonzero(B.brickq == brickq)
+            print(len(I), 'bricks with brickq =', brickq)
+            J = np.flatnonzero(B.brickq < brickq)
+            preB = B[J]
+            reqs = []
+            for b in B[I]:
+                # find brick dependencies
+                brickdeps = on_bricks_dependencies(b, survey, bricks=preB)
+                # convert to task ids
+                taskdeps = [brick_to_task[b.brickname] for b in brickdeps]
+                reqs.append(taskdeps)
+
+                #taskid = q.add(b.brickname, requires=taskdeps)
+                #print('Queued brick', b.brickname, '-> task', taskid)
+                #brick_to_task[b.brickname] = taskid
+                
+            # submit to qdo queue
+            print('Queuing', len(B[I]), 'bricks')
+            taskids = q.add_multiple(B.brickname[I], requires=reqs)
+            #print('Queued brick', b.brickname, '-> task', taskid)
+            print('Queued', len(taskids), 'bricks')
+            brick_to_task.update(dict(zip(B.brickname[I], taskids)))
+        
     if not (opt.calibs or opt.forced or opt.lsb):
         sys.exit(0)
 
