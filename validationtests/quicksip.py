@@ -111,6 +111,8 @@ def  ring2z (nside, ir):
 def in_ring(nside, iz, phi_low, phi_hi, conservative=True):
 # nir is the number of pixels found
 # if no pixel is found, on exit nir =0 and result = -1
+    if phi_hi-phi_low == 0:
+    	return -1
     npix = hp.nside2npix(nside)
     ncap  = 2*nside*(nside-1) # number of pixels in the north polar cap
     listir = -1
@@ -155,7 +157,7 @@ def in_ring(nside, iz, phi_low, phi_hi, conservative=True):
             ip_low = ip_low - nr
         if (ip_hi  < 0 ):
             ip_hi  = ip_hi  + nr
-
+        #print ip_hi-ip_low,nr
     if phi_low <= 0.0 and phi_hi >= 2.0*np.pi:
         ip_low = 0
         ip_hi = nr - 1
@@ -275,7 +277,10 @@ def in_region(thetavals, phivals, thetaU, phiU, thetaR, phiR, thetaL, phiL, thet
 #def computeHPXpix_sequ_new(nside, propertyArray, pixoffset=0, ratiores=4, coadd_cut=True):
 def computeHPXpix_sequ_new(nside, propertyArray, pixoffset=0, ratiores=4, coadd_cut=False): 
     #return 'ERROR'
-    img_ras, img_decs = [propertyArray[v] for v in ['ra0', 'ra3', 'ra2', 'ra1','ra0']],[propertyArray[v] for v in ['dec0', 'dec3', 'dec2', 'dec1','dec0']]
+    img_ras, img_decs = [propertyArray[v] for v in ['ra0', 'ra1', 'ra2','ra3']],[propertyArray[v] for v in ['dec0', 'dec1', 'dec2','dec3']]
+    #x = [1+pixoffset, propertyArray['NAXIS1']-pixoffset, propertyArray['NAXIS1']-pixoffset, 1+pixoffset, 1+pixoffset]
+    #y = [1+pixoffset, 1+pixoffset, propertyArray['NAXIS2']-pixoffset, propertyArray['NAXIS2']-pixoffset, 1+pixoffset]
+
     if np.any(img_ras > 360.0):
         img_ras[img_ras > 360.0] -= 360.0
     if np.any(img_ras < 0.0):
@@ -355,6 +360,45 @@ def computeHPXpix_sequ_new(nside, propertyArray, pixoffset=0, ratiores=4, coadd_
     
     return ipixs_ring[ind], sweights[ind], img_thetas, img_phis, resubweights[ind,:]
 
+def computeHPXpix_sequ_new_simp(nside, propertyArray): 
+    #return 'ERROR'
+    #Hack by AJR, just return all of the pixel centers within the ra,dec range
+    img_ras, img_decs = [propertyArray[v] for v in ['ra0', 'ra1', 'ra2','ra3']],[propertyArray[v] for v in ['dec0', 'dec1', 'dec2','dec3']]
+    #print min(img_ras),max(img_ras)
+    #more efficient version below failed for some reason
+    for i in range(0,len(img_ras)):
+    	if img_ras[i] > 360.:
+    		img_ras[i] -= 360.
+    	if img_ras[i] < 0.:
+    		img_ras[i] += 360.
+    #if max(img_ras) - min(img_ras) > 1.:
+    #	print img_ras,img_decs	
+    #if np.any(img_ras > 360.0):
+    #    img_ras[img_ras > 360.0] -= 360.0
+    #if np.any(img_ras < 0.0):
+    #    img_ras[img_ras < 0.0] += 360.0
+    # Coordinates of image corners
+    #print img_ras
+    img_phis = np.multiply(img_ras , np.pi/180)
+    img_thetas =  np.pi/2  - np.multiply(img_decs , np.pi/180)
+    img_pix = hp.ang2pix(nside, img_thetas, img_phis, nest=False)
+    pix_thetas, pix_phis = hp.pix2ang(nside, img_pix, nest=False)
+    ipix_list = np.zeros(0, dtype=long)
+    # loop over rings until reached bottom
+    iring_U = ring_num(nside, np.cos(img_thetas.min()), shift=0)
+    iring_B = ring_num(nside, np.cos(img_thetas.max()), shift=0)
+    ipixs_ring = []
+    pmax = np.max(img_phis)
+    pmin = np.min(img_phis)
+    if pmax-pmin == 0:
+    	return []
+    ipixs_ring = np.int64(np.concatenate([in_ring(nside, iring, pmin, pmax, conservative=False) for iring in range(iring_U-1, iring_B+1)]))
+    if len(ipixs_ring) > 1000:
+    	print len(ipixs_ring),iring_B-iring_U,pmin,pmax,min(img_ras),max(img_ras)  
+    #print len(ipixs_ring),iring_B-iring_U,pmin,pmax,min(img_ras),max(img_ras)
+    return ipixs_ring
+
+
 # ---------------------------------------------------------------------------------------- #
 
 # Crucial routine: read properties of a ccd image and returns its corners in ra dec.
@@ -432,6 +476,47 @@ def radec_gnom(x, y, center_ra, center_dec, cd, crpix, pv):
     return ra, dec
 
 # ---------------------------------------------------------------------------------------- #
+
+# Class for a pixel of the map, containing trees of images and values
+class NDpix_simp:
+
+    def __init__(self, propertyArray_in):
+        self.nbelem = 1
+        self.ratiores = 1
+        self.propertyArray = [propertyArray_in]
+
+    def addElem(self, propertyArray_in):
+        self.nbelem += 1
+        self.propertyArray.append(propertyArray_in)
+
+
+    # Project NDpix into a single number
+    # for a given property and operation applied to its array of images
+    def project(self, property, weights, operation):
+
+		asperpix = 0.263
+		A = np.pi*(1.0/asperpix)**2
+		pis = np.array([1.0 for proparr in self.propertyArray])
+	
+
+		# No super-resolution or averaging
+		vals = np.array([proparr[property] for proparr in self.propertyArray])
+		if operation == 'mean':
+			return np.mean(vals)
+		if operation == 'median':
+			return np.median(vals)
+		if operation == 'total':
+			return np.sum(vals)
+		if operation == 'min':
+			return np.min(vals)
+		if operation == 'max':
+			return np.max(vals)
+		if operation == 'maxmin':
+			return np.max(vals) - np.min(vals)
+		if operation == 'fracdet':
+			return 1.0
+
+
 
 # Class for a pixel of the map, containing trees of images and values
 class NDpix:
@@ -585,6 +670,30 @@ def makeHealTree(args):
     print '>', samplename, ': tree making took : %.2f' % float(end - start), 'sec for', len(tbdata), 'images'
     return treemap
 
+def makeHealTree_simp(args):
+	#hack by AJR
+    samplename, nside, tbdata = args
+    treemap = HealTree(nside)
+    verbcount = 1000
+    count = 0
+    start = time.time()
+    duration = 0
+    print '>', samplename, ': starting tree making'
+    for i, propertyArray in enumerate(tbdata):
+        count += 1
+        start_one = time.time()
+        treemap.addElem_simp(propertyArray)
+        end_one = time.time()
+        duration += float(end_one - start_one)
+        if count == verbcount:
+            print '>', samplename, ': processed images', i-verbcount+1, '-', i+1, '(on '+str(len(tbdata))+') in %.2f' % duration, 'sec (~ %.3f' % (duration/float(verbcount)), 'per image)'
+            count = 0
+            duration = 0
+    end = time.time()
+    print '>', samplename, ': tree making took : %.2f' % float(end - start), 'sec for', len(tbdata), 'images'
+    return treemap
+
+
 # ---------------------------------------------------------------------------------------- #
 
 # Class for multi-dimensional healpix map that can be
@@ -607,6 +716,20 @@ class HealTree:
                 self.pixlist[ipix] = NDpix(propertyArray, subpixrings[ii,:], ratiores)
             else:
                 self.pixlist[ipix].addElem(propertyArray, subpixrings[ii,:])
+
+    def addElem_simp(self, propertyArray):
+        #AJR hack
+        # Retrieve non-conservative pixel indices, no oversampling, just the pixels with centers in the CCD
+        ipixels = computeHPXpix_sequ_new_simp(self.nside, propertyArray)
+        # For each pixel, absorb image properties
+        #if ipixels == -1:
+        #	return True
+        #if len(i
+        for ipix in ipixels:
+            if self.pixlist[ipix] == 0:
+                self.pixlist[ipix] = NDpix_simp(propertyArray)
+            else:
+                self.pixlist[ipix].addElem(propertyArray)
 
 
      # Project HealTree into partial Healpix map
@@ -693,8 +816,8 @@ def project_and_write_maps(mode, propertiesweightsoperations, tbdata, catalogue_
     if mode == 1: # Fully sequential
         for sample_name, ind in zip(sample_names, inds):
             #print len(tbdata[ind]['ra1'])
-            plt.plot(tbdata[ind]['ra1'],tbdata[ind]['dec1'],'k,')
-            plt.show()
+            #plt.plot(tbdata[ind]['ra1'],tbdata[ind]['dec1'],'k,')
+            #plt.show()
             treemap = makeHealTree( (catalogue_name+'_'+sample_name, nside, ratiores, pixoffset, np.array(tbdata[ind])) )
             for property, weights, operation in propertiesweightsoperations:
                 cutmap_indices, cutmap_signal = makeHpxMap_partial( (treemap, property, weights, operation) )
@@ -754,6 +877,21 @@ def project_and_write_maps(mode, propertiesweightsoperations, tbdata, catalogue_
                 #hp.write_map(fname, outmap, nest=False)
                 cutmap_indices, cutmap_signal = makeHpxMap_partial( (treemap, property, weights, operation) )
                 write_partial_map(fname, cutmap_indices, cutmap_signal, nside, nest=False)
+
+def project_and_write_maps_simp(mode, propertiesweightsoperations, tbdata, catalogue_name, outrootdir, sample_names, inds, nside):
+	#hack by AJR
+	resol_prefix = 'nside'+str(nside)+'_oversamp1'
+	outroot = outrootdir + '/' + catalogue_name + '/' + resol_prefix + '/'
+	mkdir_p(outroot)
+	for sample_name, ind in zip(sample_names, inds):
+		treemap = makeHealTree_simp( (catalogue_name+'_'+sample_name, nside, np.array(tbdata[ind])) )
+		for property, weights, operation in propertiesweightsoperations:
+			cutmap_indices, cutmap_signal = makeHpxMap_partial( (treemap, property, weights, operation) )
+			fname = outroot + '_'.join([catalogue_name, sample_name, resol_prefix, property, weights, operation]) + '.fits'
+			print 'Creating and writing', fname
+			write_partial_map(fname, cutmap_indices, cutmap_signal, nside, nest=False)
+
+
 
 # ---------------------------------------------------------------------------------------- #
 

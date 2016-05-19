@@ -18,13 +18,13 @@ localdir = '/Users/ashleyross/DESI/' #place for local DESI stuff
 # Main runs for SVA1 and Y1A1, from the IMAGE tables.
 # ------------------------------------------------------
 
-nside = 4096 # Resolution of output maps
+nside = 1024 # Resolution of output maps
 nsidesout = None # if you want full sky degraded maps to be written
-ratiores = 4 # Superresolution/oversampling ratio
+ratiores = 1 # Superresolution/oversampling ratio
 mode = 1 # 1: fully sequential, 2: parallel then sequential, 3: fully parallel
 
 catalogue_name = 'DECaLS_DR3'
-pixoffset = 15 # How many pixels are being removed on the edge of each CCD? 15 for DES.
+pixoffset = 0 # How many pixels are being removed on the edge of each CCD? 15 for DES.
 fname = localdir+'ccds-annotated-decals.fits.gz'
 # Where to write the maps ? Make sure directory exists.
 outroot = localdir
@@ -37,10 +37,10 @@ print tbdata.dtype
 
 # Make sure we have the four corners of all coadd images.
 # !!!AJR just put stuff in to make it run!!!
-URALL = tbdata['ra0']
-UDECLL = tbdata['dec0']
-URAUR = tbdata['ra3']
-UDECUR = tbdata['dec3']
+#URALL = tbdata['ra0']
+#UDECLL = tbdata['dec0']
+#URAUR = tbdata['ra3']
+#UDECUR = tbdata['dec3']
 # COADD_RA = tbdata['ra']#(URALL+URAUR)/2
 # COADD_DEC = tbdata['dec']#(UDECLL+UDECUR)/2
 # m1 = np.divide(tbdata['ra3']-tbdata['ra0'],tbdata['dec3']-tbdata['dec0'])
@@ -107,7 +107,8 @@ propertiesToKeep = [ 'filter', 'AIRMASS', 'FWHM','mjd_obs'] \
 #    + ['COADD_MAGZP', 'MAGZP']
 
 # Create big table with all relevant properties. We will send it to the Quicksip library, which will do its magic.
-tbdata = np.core.records.fromarrays([tbdata[prop] for prop in propertiesToKeep] + [URAUL, UDECUL, URALR, UDECLR,ivar], names = propertiesToKeep + ['URAUL', 'UDECUL', 'URALR', 'UDECLR', 'ivar'])
+#tbdata = np.core.records.fromarrays([tbdata[prop] for prop in propertiesToKeep] + [URAUL, UDECUL, URALR, UDECLR,ivar], names = propertiesToKeep + ['URAUL', 'UDECUL', 'URALR', 'UDECLR', 'ivar'])
+tbdata = np.core.records.fromarrays([tbdata[prop] for prop in propertiesToKeep] + [ivar], names = propertiesToKeep + [ 'ivar'])
 #print len(tbdata[indg]['ivar'])
 #plt.plot(tbdata[indg]['ra1'],tbdata[indg]['dec1'],'k,')
 #plt.show()
@@ -117,6 +118,7 @@ tbdata = np.core.records.fromarrays([tbdata[prop] for prop in propertiesToKeep] 
 #    tbdata[nm] = np.mod(tbdata[nm], 360.0)
 
 # Do the magic! Read the table, create Healtree, project it into healpix maps, and write these maps.
-project_and_write_maps(mode, propertiesandoperations, tbdata, catalogue_name, outroot, sample_names, inds, nside, ratiores, pixoffset, nsidesout)
+#project_and_write_maps(mode, propertiesandoperations, tbdata, catalogue_name, outroot, sample_names, inds, nside, ratiores, pixoffset, nsidesout)
+project_and_write_maps_simp(mode, propertiesandoperations, tbdata, catalogue_name, outroot, sample_names, inds, nside)
 
 # ------------------------------------------------------
