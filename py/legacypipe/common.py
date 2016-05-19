@@ -721,8 +721,12 @@ Now using the current directory as LEGACY_SURVEY_DIR, but this is likely to fail
                                 '%s-%s-%s-%s.fits.gz' % (sname, brick, filetype, band))
 
         elif filetype in ['invvar', 'chi2', 'image']:
-            return os.path.join(codir,
-                                'legacysurvey-%s-%s-%s.fits' % (brick, filetype,band))
+            if self.version in ['dr1','dr2']:
+                prefix = 'decals'
+            else:
+                prefix = 'legacysurvey'
+            return os.path.join(codir, '%s-%s-%s-%s.fits' %
+                                (prefix, brick, filetype,band))
 
         elif filetype in ['blobmap']:
             return os.path.join(basedir, 'metrics', brickpre, brick,

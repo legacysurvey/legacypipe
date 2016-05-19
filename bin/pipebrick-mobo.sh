@@ -43,12 +43,15 @@ echo "--------------------------------------------------------------------------
 #--no-early-coadds \
 #--threads 8 \
 #--on-bricks \
+#    --stage image_coadds \
+# --force-all --no-write \
 
-python legacypipe/runbrick.py \
-    --force-all --no-write \
+python -u legacypipe/runbrick.py \
     --pipe \
     --skip \
-    --stage image_coadds \
+    --threads 32 \
+    --stage fitblobs \
+    --pickle 'pickles/runbrick-mobo-%(brick)s-%%(stage)s.pickle' \
     --brick $brick --outdir $outdir --nsigma 6 >> $log 2>&1
 
 # qdo launch dr2n 16 --cores_per_worker 8 --walltime=24:00:00 --script ../bin/pipebrick.sh --batchqueue regular --verbose
