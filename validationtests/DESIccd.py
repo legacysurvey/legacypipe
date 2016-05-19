@@ -1685,21 +1685,21 @@ def plotradecccdfile(band,rel='DR3',survey='decals',decmin=-20,yearmin=2015):
 	plt.show()
 	return True
   
-def plotBorismap(band,prop,op='mean',survey='DECaLS_DR3'):
+def plotBorismap(band,prop,op='mean',survey='DECaLS_DR3',nside='1024',oversamp='1'):
 	import fitsio
 	from matplotlib import pyplot as plt
 	import matplotlib.cm as cm
 	from numpy import zeros,array
 	from healpix import pix2ang_ring,thphi2radec
 	import healpy as hp
-	f = fitsio.read(localdir+survey+'/nside4096_oversamp4/'+survey+'_band_'+band+'_nside4096_oversamp4_'+prop+'__'+op+'.fits.gz')
+	f = fitsio.read(localdir+survey+'/nside'+nside+'_oversamp'+oversamp+'/'+survey+'_band_'+band+'_nside'+nside+'_oversamp'+oversamp+'_'+prop+'__'+op+'.fits.gz')
 	ral = []
 	decl = []
 	val = f['SIGNAL']
-	print min(val),max(val)
+	print min(val),max(val),len(f)/(float(nside)**2.*12)*360*360./pi
 	for i in range(0,len(f)):
 		#th,phi = pix2ang_ring(4096,f[i]['PIXEL'])
-		th,phi = hp.pix2ang(4096,f[i]['PIXEL'])
+		th,phi = hp.pix2ang(int(nside),f[i]['PIXEL'])
 		ra,dec = thphi2radec(th,phi)
 		ral.append(ra)
 		decl.append(dec)
