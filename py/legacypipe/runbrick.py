@@ -2921,6 +2921,9 @@ python -u legacypipe/runbrick.py --plots --brick 2440p070 --zoom 1900 2400 450 9
         '--coadd-bw', action='store_true', default=False,
         help='Create grayscale coadds if only one band is available?')
 
+    parser.add_argument('--bands', default=None,
+                        help='Limit the bands that are included; default "grz"')
+
     parser.add_argument(
         '--no-blacklist', dest='blacklist', default=True, action='store_false',
         help='Do not blacklist some proposals?')
@@ -3014,6 +3017,7 @@ def get_runbrick_kwargs(opt):
         unwise_dir=opt.unwise_dir,
         plots=opt.plots, plots2=opt.plots2,
         coadd_bw=opt.coadd_bw,
+        bands=opt.bands,
         lanczos=opt.lanczos,
         plotbase=opt.plot_base, plotnumber=opt.plot_number,
         force=opt.force, forceAll=opt.forceall,
