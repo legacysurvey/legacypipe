@@ -1448,6 +1448,11 @@ def stage_fitblobs(T=None,
         BB.all_model_cpu     = np.array([])
         BB.cpu_blob         = []
         BB.cpu_source       = []
+        BB.blob_width   = []
+        BB.blob_height  = []
+        BB.blob_npix    = []
+        BB.blob_nimages = []
+        BB.blob_totalpix = []
         BB.started_in_blob  = []
         BB.finished_in_blob = []
         BB.hastycho         = []
@@ -1513,6 +1518,16 @@ def stage_fitblobs(T=None,
     T.ninblob = np.array([ninblob[b] for b in T.blob]).astype(np.int16)
     T.tycho2inblob = BB.hastycho
     T.dchisq       = BB.dchisqs.astype(np.float32)
+    T.decam_flags  = BB.flags
+    T.left_blob    = np.logical_and(BB.started_in_blob,
+                                    np.logical_not(BB.finished_in_blob))
+    for k in ['fracflux', 'fracin', 'fracmasked', 'rchi2', 'cpu_source',
+              'cpu_blob', 'blob_width', 'blob_height', 'blob_npix',
+              'blob_nimages', 'blob_totalpix']:
+        T.set(k, BB.get(k))
+
+    invvars = np.hstack(BB.srcinvvars)
+    assert(cat.numberOfParams() == len(invvars))
 
     if write_metrics or get_all_models:
         from desi_common import prepare_fits_catalog, fits_typemap
@@ -1520,7 +1535,10 @@ def stage_fitblobs(T=None,
 
         TT = fits_table()
         # Copy only desired columns...
-        for k in ['blob', 'brickid', 'brickname', 'dchisq', 'objid']:
+        for k in ['blob', 'brickid', 'brickname', 'dchisq', 'objid',
+                  'cpu_source', 'cpu_blob', 'ninblob',
+                  'blob_width', 'blob_height', 'blob_npix', 'blob_nimages',
+                  'blob_totalpix']:
             TT.set(k, T.get(k))
         TT.type = np.array([fits_typemap[type(src)] for src in newcat])
 
@@ -1546,12 +1564,11 @@ def stage_fitblobs(T=None,
             namemap = dict(ptsrc='psf', simple='simp')
             prefix = namemap.get(srctype,srctype)
 
-            invvars = np.hstack([m.get(srctype,[]) for m in BB.all_model_ivs])
-            assert(len(invvars) == xcat.numberOfParams())
+            allivs = np.hstack([m.get(srctype,[]) for m in BB.all_model_ivs])
+            assert(len(allivs) == xcat.numberOfParams())
             
-            TT,hdr = prepare_fits_catalog(xcat, invvars, TT, hdr, bands, None,
+            TT,hdr = prepare_fits_catalog(xcat, allivs, TT, hdr, bands, None,
                                           allbands=allbands, prefix=prefix+'_')
-            # save_invvars=False)
             TT.set('%s_flags' % prefix,
                    np.array([m.get(srctype,0)
                              for m in BB.all_model_flags]))
@@ -1632,19 +1649,6 @@ def stage_fitblobs(T=None,
             with survey.write_output('all-models', brick=brickname) as out:
                 TT.writeto(out.fn, header=hdr)
                 print('Wrote', out.fn)
-            del TT
-
-    T.decam_flags = BB.flags
-    T.fracflux    = BB.fracflux
-    T.fracin      = BB.fracin
-    T.fracmasked  = BB.fracmasked
-    T.rchi2       = BB.rchi2
-    T.left_blob   = np.logical_and(BB.started_in_blob,
-                                   np.logical_not(BB.finished_in_blob))
-    T.cpu_source  = BB.cpu_source
-    T.cpu_blob    = BB.cpu_blob
-    invvars = np.hstack(BB.srcinvvars)
-    assert(cat.numberOfParams() == len(invvars))
 
     keys = ['cat', 'invvars', 'T', 'allbands', 'blobs']
     if get_all_models:
@@ -2393,6 +2397,8 @@ def stage_writecat(
         'bx', 'by', 'bx0', 'by0', 'left_blob', 'out_of_bounds',
         'dchisq', 'ebv', 
         'cpu_source', 'cpu_blob',
+        'blob_width', 'blob_height', 'blob_npix', 'blob_nimages',
+        'blob_totalpix',
         'decam_flux', 'decam_flux_ivar',
         ]
 

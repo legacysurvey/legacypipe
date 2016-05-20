@@ -52,11 +52,18 @@ def one_blob(X):
         np.clip(np.round(x0-1).astype(int), 0,blobw-1)]
 
     B.cpu_source = np.zeros(len(B), np.float32)
+
+    B.blob_width  = np.zeros(len(B), np.int16) + blobw
+    B.blob_height = np.zeros(len(B), np.int16) + blobh
+    B.blob_npix   = np.zeros(len(B), np.int32) + np.sum(blobmask)
+    B.blob_nimages= np.zeros(len(B), np.int16) + len(timargs)
     
     ob = OneBlob('%i'%iblob, blobwcs, blobmask, timargs, srcs, bands,
                  plots, ps, simul_opt, use_ceres, hastycho)
     ob.run(B)
 
+    B.blob_totalpix = np.zeros(len(B), np.int32) + ob.total_pix
+    
     ok,x1,y1 = blobwcs.radec2pixelxy(
         np.array([src.getPosition().ra  for src in B.sources]),
         np.array([src.getPosition().dec for src in B.sources]))
@@ -92,7 +99,8 @@ class OneBlob(object):
         self.hastycho = hastycho
 
         self.tims = self.create_tims(timargs)
-
+        self.total_pix = sum([np.sum(t.getInvError() > 0) for t in self.tims])
+        
         self.plots2 = False
 
         alphas = [0.1, 0.3, 1.0]
