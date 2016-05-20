@@ -22,10 +22,14 @@ from astrometry.libkd.spherematch import match_radec
 #from thesis_code.fits import tractor_cat
 import thesis_code.targets as targets
 
-class Matched_Cats(self):
-    def __init__(self):
+class Matched_Cats():
+    def __init__(self,):
         self.data={}
-        for key in ['m_decam','m_bokmos','u_decam','u_bokmos']: self.data[key]= np.array([])
+    def initialize(self,data_1,data_2,m1,m2,m1_unm,m2_unm):
+        self.data['m_decam']= targets.data_extract(data_1,m1) 
+        self.data['m_bokmos']= targets.data_extract(data_2,m2)
+        self.data['u_decam']= targets.data_extract(data_1,m1_unm)
+        self.data['u_bokmos']= targets.data_extract(data_2,m2_unm)
     def add_dict(self,camera,new_data):
         for key in self.data[camera].keys(): 
             self.data[camera][key]= np.concatenate([self.data[camera][key],new_data[camera][key]])
@@ -42,6 +46,11 @@ def match_it(cat1,cat2):
     m2_unm = np.delete(np.arange(len(data_2['ra'])),m2,axis=0)
     return data_1,data_2,m1,m2,m1_unm,m2_unm
 
+def read_lines(fn):
+    fin=open(fn,'r')
+    lines=fin.readlines()
+    fin.close()
+    return list(np.char.strip(lines))
 
 parser = argparse.ArgumentParser(formatter_class=argparse.ArgumentDefaultsHelpFormatter,
                                  description='DECaLS simulations.')
@@ -51,16 +60,20 @@ parser.add_argument('-fn2', type=str, help='object type (STAR, ELG, LRG, BGS)')
 args = parser.parse_args()
 
 #get lists of tractor cats to compare
-fns_1=np.loadtxt(args.fn1,dtype=str)
-fns_2=np.loadtxt(args.fn2,dtype=str)
+fns_1= read_lines(args.fn1) 
+fns_2= read_lines(args.fn2) 
+#if fns_1.size == 1: fns_1,fns_2= [fns_1],[fns_2]
 #object to store concatenated matched tractor cats
 a=Matched_Cats()
-for cat1,cat2 in zip(fns_1,fns_2):
+for cnt,cat1,cat2 in zip(range(len(fns_1)),fns_1,fns_2):
     data_1,data_2,m1,m2,m1_unm,m2_unm= match_it(cat1,cat2)
-    a.add_dict('m_decam', data_extract(data_1,m1) )
-    a.add_dict('m_bokmos', data_extract(data_2,m2))
-    a.add_dict('u_decam', data_extract(data_1,m1_unm))
-    a.add_dict('u_bokmos', data_extract(data_2,m2_unm))
+    if cnt == 0:
+        a.initialize(data_1,data_2,m1,m2,m1_unm,m2_unm)
+    else:  
+        a.add_dict('m_decam', targets.data_extract(data_1,m1) )
+        a.add_dict('m_bokmos', targets.data_extract(data_2,m2))
+        a.add_dict('u_decam', targets.data_extract(data_1,m1_unm))
+        a.add_dict('u_bokmos', targets.data_extract(data_2,m2_unm))
 #each key a.data[key] becomes DECaLS() object with grz mags,i_lrg, etc
 
 #unm['decam']= targets.DECaLS(decam, w1=True)
