@@ -68,8 +68,7 @@ def sed_matched_filters(bands):
     '''
     # single-band filters
     SEDs = []
-    #for i,band in enumerate(bands):
-    for i,band in reversed(list(enumerate(bands))):
+    for i,band in enumerate(bands):
         sed = np.zeros(len(bands))
         sed[i] = 1.
         SEDs.append((band, sed))
