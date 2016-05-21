@@ -2780,9 +2780,16 @@ def run_brick(brick, radec=None, pixscale=0.262,
     t0 = Time()
 
     for stage in stages:
+
+        mp.start_subphase('stage ' + stage)
+
         runstage(stage, picklePattern, stagefunc, prereqs=prereqs,
                  initial_args=initargs, **kwargs)
 
+        print('Resources for stage', stage, ':')
+        mp.report(threads)
+        mp.finish_subphase()
+        
     print('All done:', Time()-t0)
     mp.report(threads)
 
