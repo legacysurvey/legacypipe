@@ -392,7 +392,13 @@ def computeHPXpix_sequ_new_simp(nside, propertyArray):
     pmin = np.min(img_phis)
     if pmax-pmin == 0:
     	return []
-    ipixs_ring = np.int64(np.concatenate([in_ring(nside, iring, pmin, pmax, conservative=False) for iring in range(iring_U-1, iring_B+1)]))
+    if pmin < .1 and pmax > 1.9*np.pi:
+    	#straddling line
+		ipixs_ring1 = np.int64(np.concatenate([in_ring(nside, iring, 0, pmin, conservative=False) for iring in range(iring_U-1, iring_B+1)]))
+		ipixs_ring2 = np.int64(np.concatenate([in_ring(nside, iring, pmax, 2.*np.pi, conservative=False) for iring in range(iring_U-1, iring_B+1)]))
+		ipixs_ring = np.concatenate((ipixs_ring1,ipixs_ring2))
+    else:		
+    	ipixs_ring = np.int64(np.concatenate([in_ring(nside, iring, pmin, pmax, conservative=False) for iring in range(iring_U-1, iring_B+1)]))
     if len(ipixs_ring) > 1000:
     	print len(ipixs_ring),iring_B-iring_U,pmin,pmax,min(img_ras),max(img_ras)  
     #print len(ipixs_ring),iring_B-iring_U,pmin,pmax,min(img_ras),max(img_ras)
