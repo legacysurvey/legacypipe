@@ -99,7 +99,7 @@ project_and_write_maps_simp(mode, propertiesandoperations, tbdata, catalogue_nam
 # __________________
 
 from DESIccd import plotdepthfromIvar
-depthminl = [23.8] #if doing multiple bands, add numbers there
+depthminl = [23.] #if doing multiple bands, add numbers there
 for i in range(0,len(sample_names)):
 	band = sample_names[i].split('_')[-1] 
 	depthmin = depthminl[i]
