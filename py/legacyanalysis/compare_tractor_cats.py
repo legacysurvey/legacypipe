@@ -55,6 +55,11 @@ def read_lines(fn):
     fin.close()
     return list(np.char.strip(lines))
 
+#plotting vars
+laba=dict(fontweight='bold',fontsize='x-large')
+kwargs_axtext=dict(fontweight='bold',fontsize='x-large',va='top',ha='left')
+leg_args=dict(loc=1,frameon=True)
+
 
 def plot_SN(obj,m_types=['m_decam','m_bokmos'], index='all'): 
     '''decam,bokmos -- DECaLS() objects with matched OR unmatched indices
@@ -67,9 +72,6 @@ def plot_SN(obj,m_types=['m_decam','m_bokmos'], index='all'):
     #sns.set_style('ticks',{"axes.facecolor": ".97"})
     #sns.set_palette('colorblind')
     #setup plot
-    laba=dict(fontweight='bold',fontsize='x-large')
-    kwargs_axtext=dict(fontweight='bold',fontsize='x-large',va='top',ha='left')
-    leg_args=dict(loc=1,frameon=True)
     fig,ax=plt.subplots(1,3,figsize=(9,3)) #,sharey=True)
     plt.subplots_adjust(wspace=0.5)
     #plot
@@ -97,6 +99,43 @@ def plot_SN(obj,m_types=['m_decam','m_bokmos'], index='all'):
     if matched: fout='sn_%s.png' % index
     else: fout='sn_%s_unmatched.png' % index
     plt.savefig(fout, bbox_extra_artists=[xlab,ylab,sup], bbox_inches='tight',dpi=150)
+    plt.close()
+
+def plot_HistTypes(obj,m_types=['m_decam','m_bokmos']):
+    '''decam,bokmos -- DECaLS() objects with matched OR unmatched indices'''
+    #matched or unmatched objects
+    if m_types[0].startswith('m_') and m_types[1].startswith('m_'): matched=True
+    elif m_types[0].startswith('u_') and m_types[1].startswith('u_'): matched=False   
+    else: raise ValueError
+    #sns.set_style("whitegrid")
+    #sns.set_palette('colorblind')
+    #c1=sns.color_palette()[2] 
+    #c2=sns.color_palette()[0] #'b'
+    c1= 'b' 
+    c2= 'r'
+    ###
+    types= ['PSF','SIMP','EXP','DEV','COMP']
+    ind = np.arange(len(types))  # the x locations for the groups
+    width = 0.35       # the width of the bars
+    ###
+    ht_decam, ht_bokmos= np.zeros(5,dtype=int),np.zeros(5,dtype=int)
+    for cnt,typ in enumerate(types):
+        ht_decam[cnt]= np.where(obj[m_types[0]].data['type'] == typ)[0].shape[0]
+        ht_bokmos[cnt]= np.where(obj[m_types[1]].data['type'] == typ)[0].shape[0]
+    ###
+    fig, ax = plt.subplots()
+    rects1 = ax.bar(ind, ht_decam, width, color=c1)
+    rects2 = ax.bar(ind + width, ht_bokmos, width, color=c2)
+    ylab= ax.set_ylabel("N")
+    if matched: ti= ax.set_title('Matched')
+    else: ti= ax.set_title('Unmatched')
+    ax.set_xticks(ind + width)
+    ax.set_xticklabels(types)
+    ax.legend((rects1[0], rects2[0]), ('decam', 'bokmos'),**leg_args)
+    #save
+    if matched: name='hist_types_Matched.png'
+    else: name='hist_types_Unmatched.png'
+    plt.savefig(name, bbox_extra_artists=[ylab,ti], bbox_inches='tight',dpi=150)
     plt.close()
 
 parser=argparse.ArgumentParser(formatter_class=argparse.ArgumentDefaultsHelpFormatter,
@@ -132,3 +171,5 @@ plot_SN(b,m_types=['m_decam','m_bokmos'], index='lrg')
 plot_SN(b,m_types=['u_decam','u_bokmos'], index='psf')
 plot_SN(b,m_types=['u_decam','u_bokmos'], index='lrg')
 
+plot_HistTypes(b,m_types=['m_decam','m_bokmos'])
+plot_HistTypes(b,m_types=['u_decam','u_bokmos'])
