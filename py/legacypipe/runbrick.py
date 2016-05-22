@@ -1812,6 +1812,94 @@ def _get_mod(X):
 
     return mod
 
+
+def stage_blobiter(T=None,
+                   brickname=None,
+                   brickid=None,
+                   version_header=None,
+                   blobsrcs=None, blobslices=None, blobs=None,
+                   cat=None,
+                   targetwcs=None,
+                   W=None,H=None,
+                   bands=None, ps=None, tims=None,
+                   survey=None,
+                   plots=False, plots2=False,
+                   nblobs=None, blob0=None, blobxy=None,
+                   simul_opt=False, use_ceres=True, mp=None,
+                   checkpoint_filename=None,
+                   checkpoint_period=600,
+                   write_pickle_filename=None,
+                   write_metrics=True,
+                   get_all_models=False,
+                   allbands = 'ugrizY',
+                   tycho=None,
+                   **kwargs):
+    '''
+    Try pre-computing the arguments to the oneblob function; is it a bottleneck in
+    many-threads?
+    '''
+    tlast = Time()
+    # How far down to render model profiles
+    minsigma = 0.1
+    for tim in tims:
+        tim.modelMinval = minsigma * tim.sig1
+    T.orig_ra  = T.ra.copy()
+    T.orig_dec = T.dec.copy()
+
+    keepblobs = None
+    if blobxy is not None:
+        # blobxy is a list like [(x0,y0), (x1,y1), ...]
+        keepblobs = []
+        for x,y in blobxy:
+            x,y = int(x), int(y)
+            if x < 0 or x >= W or y < 0 or y >= H:
+                print('Warning: clipping blob x,y to brick bounds', x,y)
+                x = np.clip(x, 0, W-1)
+                y = np.clip(y, 0, H-1)
+            blob = blobs[y,x]
+            if blob >= 0:
+                keepblobs.append(blob)
+            else:
+                print('WARNING: blobxy', x,y, 'is not in a blob!')
+        keepblobs = np.unique(keepblobs)
+
+    if blob0 is not None or (nblobs is not None and nblobs < len(blobslices)):
+        if blob0 is None:
+            blob0 = 0
+        if nblobs is None:
+            nblobs = len(blobslices) - blob0
+        keepblobs = np.arange(blob0, blob0+nblobs)
+
+    if keepblobs is not None:
+        # 'blobs' is an image with values -1 for no blob, or the index of the
+        # blob.  Create a map from old 'blobs+1' to new 'blobs+1'.  +1  so that
+        # -1 is a valid index.
+        NB = len(blobslices)
+        blobmap = np.empty(NB+1, int)
+        blobmap[:] = -1
+        blobmap[keepblobs + 1] = np.arange(len(keepblobs))
+        # apply the map!
+        blobs = blobmap[blobs + 1]
+
+        # 'blobslices' and 'blobsrcs' are lists
+        blobslices = [blobslices[i] for i in keepblobs]
+        blobsrcs   = [blobsrcs  [i] for i in keepblobs]
+
+        # one more place where blob numbers are recorded...
+        T.blob = blobs[T.ity, T.itx]
+
+    # drop any cached data before we start pickling/multiprocessing
+    survey.drop_cache()
+
+    blobiter = _blob_iter(blobslices, blobsrcs, blobs, targetwcs, tims,
+                          cat, bands, plots, ps, simul_opt, use_ceres,
+                          tycho)
+
+    blobargs = list(blobiter)
+    print('Computing blob args took', Time()-tlast)
+    return dict(blobargs=blobargs)
+    
+
 def stage_coadds(survey=None, bands=None, version_header=None, targetwcs=None,
                  tims=None, ps=None, brickname=None, ccds=None,
                  T=None, cat=None, pixscale=None, plots=False,
@@ -2737,6 +2825,8 @@ def run_brick(brick, radec=None, pixscale=0.262,
 
         'coadds': 'fitblobs',
 
+        'blobiter': 'srcs',
+        
         # wise_forced: see below
 
         'fitplots': 'fitblobs',
