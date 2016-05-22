@@ -1416,7 +1416,6 @@ def stage_fitblobs(T=None,
                 print('Timed out waiting for result')
                 continue
 
-
     print('[parallel fitblobs] Fitting sources took:', Time()-tlast)
 
     ## This used to be in fitblobs_finish
@@ -2805,6 +2804,7 @@ def run_brick(brick, radec=None, pixscale=0.262,
         mp = MyMultiproc(None, pool=pool)
     else:
         mp = MyMultiproc(init=runbrick_global_init, initargs=[])
+        pool = None
     kwargs.update(mp=mp)
 
     if nblobs is not None:
@@ -2869,16 +2869,24 @@ def run_brick(brick, radec=None, pixscale=0.262,
 
     t0 = Time()
 
-    for stage in stages:
-
+    def mystagefunc(stage, **kwargs):
         mp.start_subphase('stage ' + stage)
-
-        runstage(stage, picklePattern, stagefunc, prereqs=prereqs,
-                 initial_args=initargs, **kwargs)
-
+        if pool is not None:
+            print('At start of stage', stage, ':')
+            print(pool.get_pickle_traffic_string())
+        R = stagefunc(stage, **kwargs)
         print('Resources for stage', stage, ':')
         mp.report(threads)
+        if pool is not None:
+            print('At end of stage', stage, ':')
+            print(pool.get_pickle_traffic_string())
         mp.finish_subphase()
+        return R
+    
+    for stage in stages:
+        #runstage(stage, picklePattern, stagefunc, prereqs=prereqs,
+        runstage(stage, picklePattern, mystagefunc, prereqs=prereqs,
+                 initial_args=initargs, **kwargs)
         
     print('All done:', Time()-t0)
     mp.report(threads)

@@ -88,7 +88,9 @@ class MyMultiproc(multiproc):
         self.serial.append((self.t0, tstart))
         self.t0 = tstart
         self.phases.append((name, self.serial, self.parallel, self.t0))
-
+        self.serial = []
+        self.parallel = []
+        
     def finish_subphase(self):
         # pop
         (name, serial, parallel, t0) = self.phases.pop()
