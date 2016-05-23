@@ -58,7 +58,7 @@ def read_lines(fn):
 #plotting vars
 laba=dict(fontweight='bold',fontsize='x-large')
 kwargs_axtext=dict(fontweight='bold',fontsize='x-large',va='top',ha='left')
-leg_args=dict(loc=1,frameon=True)
+leg_args=dict(frameon=True,fontsize='small')
 
 
 def plot_SN(obj,m_types=['m_decam','m_bokmos'], index='all'): 
@@ -90,7 +90,7 @@ def plot_SN(obj,m_types=['m_decam','m_bokmos'], index='all'):
         ax[cnt].set_ylim(1e0,1e3)
         ax[cnt].set_yscale('log')
     ylab=ax[0].set_ylabel(r'$m / \sigma_m$', **laba)
-    ax[2].legend(**leg_args)
+    ax[2].legend(loc=4,**leg_args)
     if matched: sup= '%s, Matched' % index
     else: sup= '%s, Unmatched' % index
     sup=plt.suptitle(sup,**laba)
@@ -138,6 +138,31 @@ def plot_HistTypes(obj,m_types=['m_decam','m_bokmos']):
     plt.savefig(name, bbox_extra_artists=[ylab,ti], bbox_inches='tight',dpi=150)
     plt.close()
 
+def plot_matched_color_color(decam,bokmos, zoom=False):
+    '''decam,bokmos are DECaLS() objects matched to decam ra,dec'''
+    #set seaborn panel styles
+    #sns.set_style('ticks',{"axes.facecolor": ".97"})
+    #sns.set_palette('colorblind')
+    #setup plot
+    fig,ax=plt.subplots(1,3,figsize=(9,3)) #,sharey=True)
+    plt.subplots_adjust(wspace=0.5)
+    #plot
+    for cnt,val in zip(range(3),['rmag','gmag','zmag']):
+        diff= bokmos[val]- decam[val]
+        ax[cnt].scatter(decam[val], diff)
+        xlab=ax[cnt].set_xlabel('%s (decam)' % val[0], **laba)
+        ylab=ax[cnt].set_ylabel('%s (bokmos - decam)' % val[0], **laba)
+        if zoom: 
+            ax[cnt].set_ylim(-0.1,0.1)
+            ax[cnt].set_xlim(20,25)
+    # sup=plt.suptitle('decam with matching bokmos',**laba)
+    #save
+    #sns.despine()
+    if zoom: name="color_diff_zoom.png"
+    else: name="color_diff.png"
+    plt.savefig(name, bbox_extra_artists=[xlab,ylab], bbox_inches='tight',dpi=150)
+    plt.close()
+
 parser=argparse.ArgumentParser(formatter_class=argparse.ArgumentDefaultsHelpFormatter,
                                  description='DECaLS simulations.')
 parser.add_argument('-fn1', type=str, help='process this brick (required input)')
@@ -164,6 +189,12 @@ for cnt,cat1,cat2 in zip(range(len(fns_1)),fns_1,fns_2):
 #each key a.data[key] becomes DECaLS() object with grz mags,i_lrg, etc
 b={}
 for match_type in a.data.keys(): b[match_type]= targets.DECaLS(a.data[match_type], w1=True)
+#store N matched objects not masked before join decam,bokmos masks
+m_decam_not_masked,m_bokmos_not_masked= b['m_decam'].count_not_masked(),b['m_bokmos'].count_not_masked()
+#join decam,bokmos masks for matched pairs 
+mask= np.any((b['m_decam'].data['gmag'].mask, b['m_bokmos'].data['gmag'].mask),axis=0)
+b['m_decam'].propogate_new_mask(mask)
+b['m_bokmos'].propogate_new_mask(mask)
 #plots
 plot_SN(b,m_types=['m_decam','m_bokmos'], index='all')
 plot_SN(b,m_types=['m_decam','m_bokmos'], index='psf')
@@ -173,3 +204,29 @@ plot_SN(b,m_types=['u_decam','u_bokmos'], index='lrg')
 
 plot_HistTypes(b,m_types=['m_decam','m_bokmos'])
 plot_HistTypes(b,m_types=['u_decam','u_bokmos'])
+
+plot_matched_color_color(b['m_decam'].data,b['m_bokmos'].data)
+plot_matched_color_color(b['m_decam'].data,b['m_bokmos'].data, zoom=True)
+#print stats of total objects, each group, # masked, etc
+print("---- DECAM ----")
+print("N not masked due to grz= %d, N total= %d" % \
+        (m_decam_not_masked+b['u_decam'].count_not_masked(), b['m_decam'].count_total()+b['u_decam'].count_total()))
+print("-- Matched --")
+print("N not masked before join bokmos mask= %d, N not masked after= %d" % \
+        (m_decam_not_masked, b['m_decam'].count_not_masked()))
+print("-- Unmatched -- ")
+print("N masked before join bokmos mask = N masked after = %d" % \
+        (b['u_decam'].count_total()- b['u_decam'].count_not_masked()))
+###bokmos
+print("---- BOKMOS ----")
+print("N not masked due to grz= %d, N total= %d" % \
+        (m_bokmos_not_masked+b['u_bokmos'].count_not_masked(), b['m_bokmos'].count_total()+b['u_bokmos'].count_total()))
+print("-- Matched --")
+print("N not masked before join decam mask= %d, N not masked after= %d" % \
+        (m_bokmos_not_masked, b['m_bokmos'].count_not_masked()))
+print("-- Unmatched -- ")
+print("N masked before join decam mask = N masked after = %d" % \
+        (b['u_bokmos'].count_total()- b['u_bokmos'].count_not_masked()))
+print('done')
+
+
