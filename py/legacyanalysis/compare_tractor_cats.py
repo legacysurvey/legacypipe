@@ -23,14 +23,17 @@ from astrometry.libkd.spherematch import match_radec
 import thesis_code.targets as targets
 
 class Matched_Cats():
-    def __init__(self,):
+    def __init__(self):
         self.data={}
-    def initialize(self,data_1,data_2,m1,m2,m1_unm,m2_unm):
-        #self.data['all_1']= targets.data_extract(data_1,range(len(data_1['ra']))) 
+    def initialize(self,data_1,data_2,m1,m2,m1_unm,m2_unm,d12):
+        self.d12= d12 #deg separations between matches objects
         self.data['m_decam']= targets.data_extract(data_1,m1) 
         self.data['m_bokmos']= targets.data_extract(data_2,m2)
         self.data['u_decam']= targets.data_extract(data_1,m1_unm)
         self.data['u_bokmos']= targets.data_extract(data_2,m2_unm)
+    def add_d12(self,d12):
+        '''concatenate new d12 with existing matched deg separation array'''
+        self.d12= np.concatenate([self.d12, d12])
     def add_dict(self,match_type,new_data):
         '''match_type -- m_decam,m_bokmos,u_decam, etc
         new data -- data returend from read_from..() to be concatenated with existing m_decam, etc'''
@@ -47,7 +50,7 @@ def match_it(cat1,cat2):
                             1.0/3600.0,nearest=True)
     m1_unm = np.delete(np.arange(len(data_1['ra'])),m1,axis=0)
     m2_unm = np.delete(np.arange(len(data_2['ra'])),m2,axis=0)
-    return data_1,data_2,m1,m2,m1_unm,m2_unm
+    return data_1,data_2,m1,m2,m1_unm,m2_unm,d12
 
 def read_lines(fn):
     fin=open(fn,'r')
@@ -59,6 +62,30 @@ def read_lines(fn):
 laba=dict(fontweight='bold',fontsize='x-large')
 kwargs_axtext=dict(fontweight='bold',fontsize='x-large',va='top',ha='left')
 leg_args=dict(frameon=True,fontsize='small')
+
+def plot_radec(obj,m_types=['u_decam','u_bokmos']): 
+    '''obj[m_types] -- DECaLS() objects with matched OR unmatched indices'''
+    assert (m_types[0].startswith('u_') and m_types[1].startswith('u_'))
+    #set seaborn panel styles
+    #sns.set_style('ticks',{"axes.facecolor": ".97"})
+    #sns.set_palette('colorblind')
+    #setup plot
+    fig,ax=plt.subplots() #1,figsize=(9,3)) #,sharey=True)
+    #plt.subplots_adjust(wspace=0.5)
+    #plot
+    colors=['b','g']
+    for ith,m_type,color in zip(range(2),m_types,colors):
+        ax.scatter(obj[m_type].data['ra'], obj[m_type].data['dec'], \
+                        edgecolor=color,c='none',lw=2.,label=m_type.split('_')[-1])
+    xlab=ax.set_xlabel('RA', **laba)
+    ylab=ax.set_ylabel('DEC', **laba)
+    ti=ax.set_title('Unmatched', **laba)
+    leg=ax.legend(loc=(1.01,0),**leg_args)
+    #save
+    #sns.despine()
+    plt.savefig('radec_Unmatched.png', bbox_extra_artists=[xlab,ylab,ti,leg], bbox_inches='tight',dpi=150)
+    plt.close()
+
 
 
 def plot_SN(obj,m_types=['m_decam','m_bokmos'], index='all'): 
@@ -163,6 +190,117 @@ def plot_matched_color_color(decam,bokmos, zoom=False):
     plt.savefig(name, bbox_extra_artists=[xlab,ylab], bbox_inches='tight',dpi=150)
     plt.close()
 
+def plot_matched_color_diff_binned(decam,bokmos, zoom=False):
+    '''decam,bokmos are DECaLS() objects matched to decam ra,dec'''
+    #divide into samples of 0.25 mag bins, store q50 of each
+    width=0.25 #in mag
+    low_vals= np.arange(20.,26.,width)
+    med={}
+    for b in ['g','r','z']: med[b]=np.zeros(low_vals.size)-100
+    for i,low in enumerate(low_vals):
+        for band in ['g','r','z']:
+            ind= np.all((low <= decam[band+'mag'],decam[band+'mag'] < low+width),axis=0)
+            if np.where(ind)[0].size > 0:
+                med[band][i]= np.percentile(bokmos[band+'mag'][ind] - decam[band+'mag'][ind],q=50)
+            else: 
+                med[band][i]= np.nan
+    #make plot
+    #set seaborn panel styles
+    #sns.set_style('ticks',{"axes.facecolor": ".97"})
+    #sns.set_palette('colorblind')
+    #setup plot
+    fig,ax=plt.subplots(1,3,figsize=(9,3)) #,sharey=True)
+    plt.subplots_adjust(wspace=0.5)
+    #plot
+    for cnt,band in zip(range(3),['r','g','z']):
+        ax[cnt].scatter(low_vals, med[band],\
+                       edgecolor='b',c='none',lw=2.) #,label=m_type.split('_')[-1])
+        xlab=ax[cnt].set_xlabel('bins of %s (decam)' % band, **laba)
+        ylab=ax[cnt].set_ylabel('q50[%s bokmos - decam]' % band, **laba)
+        if zoom: ax[cnt].set_ylim(-0.25,0.25)
+    # sup=plt.suptitle('decam with matching bokmos',**laba)
+    #save
+    #sns.despine()
+    if zoom: name="median_color_diff_zoom.png"
+    else: name="median_color_diff.png"
+    plt.savefig(name, bbox_extra_artists=[xlab,ylab], bbox_inches='tight',dpi=150)
+    plt.close()
+
+def plot_matched_separation_hist(d12, zoom=False):
+    '''d12 is array of distances in degress between matched objects'''
+    #pixscale to convert d12 into N pixels
+    pixscale=dict(decam=0.25,bokmos=0.45)
+    #sns.set_style('ticks',{"axes.facecolor": ".97"})
+    #sns.set_palette('colorblind')
+    #setup plot
+    fig,ax=plt.subplots()
+    #plot
+    ax.hist(d12*3600./pixscale['decam'],bins=50,color='b',align='mid')
+    ax2 = ax.twiny()
+    ax2.hist(d12*3600./pixscale['bokmos'],bins=50,color='g',align='mid',visible=False)
+    xlab= ax.set_xlabel("pixel separation [decam]")
+    xlab= ax2.set_xlabel("pixel separation [bok]")
+    ylab= ax.set_ylabel("Counts")
+    ti= ax.set_title('Matched')
+    if zoom: ax.set_xlim(0,3)
+    # sup=plt.suptitle('decam with matching bokmos',**laba)
+    #save
+    #sns.despine()
+    if zoom: name="separation_hist_zoom.png"
+    else: name="separation_hist.png"
+    plt.savefig(name, bbox_extra_artists=[xlab,ylab,ti], bbox_inches='tight',dpi=150)
+    plt.close()
+
+def plot_PSF_color(obj): 
+    '''obj['m_decam'] is a DECaLS() object'''
+    #set seaborn panel styles
+    #sns.set_style('ticks',{"axes.facecolor": ".97"})
+    #sns.set_palette('colorblind')
+    #setup plot
+    fig,ax=plt.subplots(2,2) #,figsize=(9,3)) #,sharey=True)
+    plt.subplots_adjust(wspace=0.5,hspace=0)
+    #PSF indices
+    i_PSF={}
+    for val in ['m_decam','m_bokmos','u_decam','u_bokmos']: 
+        i_PSF[val]= obj[val].data['type'] == 'PSF'
+    #bin by g mag
+    width=0.25 #in mag
+    low_vals= np.arange(20.,26.,width)
+    med,rms={},{}
+    for val in ['m_decam','m_bokmos','u_decam','u_bokmos']:
+        med[val]=np.zeros(low_vals.size)-100
+        rms[val]=np.zeros(low_vals.size)-100
+    for val in ['m_decam','m_bokmos','u_decam','u_bokmos']:
+        for i,low in enumerate(low_vals):
+            ind= np.all((low <= obj[val].data['gmag'][i_PSF[val]],obj[val].data['gmag'][i_PSF[val]] < low+width),axis=0)
+            if np.where(ind)[0].size > 0:
+                sample=obj[val].data['gmag'][ind]-obj[val].data['rmag'][ind]
+                med[val][i]= np.percentile(sample,q=50)
+                rms[val][i]= np.sqrt( np.mean( np.power(sample,2) ) )
+            else: 
+                med[val][i]= np.nan
+                med[val][i]= np.nan
+    #plot
+    ti=ax[0,0].set_title('Decam PSF')
+    ti=ax[1,0].set_title('Bokmos PSF')
+    ylab=ax[0,0].set_ylabel('Median g-r')
+    ylab=ax[0,1].set_ylabel('RMS g-r')
+    xlab=ax[1,0].set_xlabel('g binned 0.25')
+    xlab=ax[1,1].set_xlabel('g binned 0.25')
+    #add lines
+    ax[0,0].scatter(low_vals,med['m_decam'],edgecolor='b',c='none',lw=2.,label='matched')
+    ax[0,1].scatter(low_vals,rms['m_decam'],edgecolor='b',c='none',lw=2.,label='matched')
+    ax[0,0].scatter(low_vals,med['u_decam'],edgecolor='g',c='none',lw=2.,label='Unmatched')
+    ax[0,1].scatter(low_vals,rms['u_decam'],edgecolor='g',c='none',lw=2.,label='Unmatched')
+    #finish
+    ax[0,0].legend(loc=0,**leg_args)
+    #save
+    #sns.despine()
+    plt.savefig('psf_color_binned.png', bbox_extra_artists=[ti,xlab,ylab], bbox_inches='tight',dpi=150)
+    plt.close()
+
+
+
 parser=argparse.ArgumentParser(formatter_class=argparse.ArgumentDefaultsHelpFormatter,
                                  description='DECaLS simulations.')
 parser.add_argument('-fn1', type=str, help='process this brick (required input)')
@@ -177,17 +315,18 @@ fns_2= read_lines(args.fn2)
 #object to store concatenated matched tractor cats
 a=Matched_Cats()
 for cnt,cat1,cat2 in zip(range(len(fns_1)),fns_1,fns_2):
-    data_1,data_2,m1,m2,m1_unm,m2_unm= match_it(cat1,cat2)
+    data_1,data_2,m1,m2,m1_unm,m2_unm,d12= match_it(cat1,cat2)
     if cnt == 0:
-        a.initialize(data_1,data_2,m1,m2,m1_unm,m2_unm)
+        a.initialize(data_1,data_2,m1,m2,m1_unm,m2_unm,d12)
     else:  
-        #a.add_dict('all_1', targets.data_extract(data_1,range(len(data_1['ra'])) ))
+        a.add_d12(d12)
         a.add_dict('m_decam', targets.data_extract(data_1,m1) )
         a.add_dict('m_bokmos', targets.data_extract(data_2,m2))
         a.add_dict('u_decam', targets.data_extract(data_1,m1_unm))
         a.add_dict('u_bokmos', targets.data_extract(data_2,m2_unm))
 #each key a.data[key] becomes DECaLS() object with grz mags,i_lrg, etc
 b={}
+b['d12']= a.d12
 for match_type in a.data.keys(): b[match_type]= targets.DECaLS(a.data[match_type], w1=True)
 #store N matched objects not masked before join decam,bokmos masks
 m_decam_not_masked,m_bokmos_not_masked= b['m_decam'].count_not_masked(),b['m_bokmos'].count_not_masked()
@@ -196,6 +335,17 @@ mask= np.any((b['m_decam'].data['gmag'].mask, b['m_bokmos'].data['gmag'].mask),a
 b['m_decam'].propogate_new_mask(mask)
 b['m_bokmos'].propogate_new_mask(mask)
 #plots
+plot_radec(b,m_types=['u_decam','u_bokmos'])
+
+plot_matched_color_diff_binned(b['m_decam'].data,b['m_bokmos'].data)
+plot_matched_color_diff_binned(b['m_decam'].data,b['m_bokmos'].data,zoom=True)
+
+plot_matched_separation_hist(b['d12'])
+
+plot_PSF_color(b)
+
+print('exiting early')
+sys.exit()
 plot_SN(b,m_types=['m_decam','m_bokmos'], index='all')
 plot_SN(b,m_types=['m_decam','m_bokmos'], index='psf')
 plot_SN(b,m_types=['m_decam','m_bokmos'], index='lrg')
