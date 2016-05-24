@@ -86,7 +86,7 @@ for band in bands:
 
         depthfrac = (thisdetiv / targetiv)
 
-        print '  exp', exp.expnum, 'seeing %.3f' % exp.seeing, 'exptime %-3.0f' % exp.exptime, 'propid', exp.propid, 'fraction of depth: %.2f' % depthfrac, 'sig1 %.4f' % exp.sig1, 'pass', E.passnum[exp.index], ('X' if depthfrac < 0.34 else '')
+        print '  exp', exp.expnum, 'seeing %.3f' % exp.seeing, 'exptime %3.0f' % exp.exptime, 'propid', exp.propid, 'fraction of depth: %.2f' % depthfrac, 'sig1 %.4f' % exp.sig1, 'pass', E.passnum[exp.index], ('X' if depthfrac < 0.34 else '')
 
 
         
