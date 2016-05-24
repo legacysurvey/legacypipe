@@ -1188,18 +1188,6 @@ def stage_fitblobs(T=None,
     for tim in tims:
         assert(np.all(np.isfinite(tim.getInvError())))
 
-    # HACK -- DR3 checkpointing bug where wrong keys were saved...
-    if tycho is None:
-        # Read Tycho-2 stars
-        tycho = fits_table(os.path.join(survey.get_survey_dir(), 'tycho2.fits.gz'))
-        print('Read', len(tycho), 'Tycho-2 stars')
-        ok,tycho.tx,tycho.ty = targetwcs.radec2pixelxy(tycho.ra, tycho.dec)
-        margin = 100
-        tycho.cut(ok * (tycho.tx > -margin) * (tycho.tx < W+margin) *
-                  (tycho.ty > -margin) * (tycho.ty < H+margin))
-        print('Cut to', len(tycho), 'Tycho-2 stars within brick')
-        del ok
-
     if write_pickle_filename is not None:
         #import multiprocessing
         #write_pool = multiprocessing.Pool(1)
