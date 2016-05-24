@@ -1204,9 +1204,13 @@ def stage_fitblobs(T=None,
         #import multiprocessing
         #write_pool = multiprocessing.Pool(1)
         import threading
-        keys = ['T', 'blobsrcs', 'blobslices', 'blobs', 'cat',
-                'targetwcs', 'W', 'H', 'bands', 'tims', 'survey',
-                'brickname', 'brickid', 'brick', 'version_header', 'ccds']
+        keys = ['T', 'brickname', 'brickid', 'version_header', 'blobsrcs',
+                'blobslices', 'blobs', 'cat', 'targetwcs', 'W', 'H', 'bands',
+                'tims', 'survey', 'tycho']
+        # Needed by stage_coadds:
+        keys.extend(['ccds', 'pixscale', 'brick', 'lanczos', 'on_bricks'])
+        # Needed by stage_wise_forced: (none)
+        # Needed by stage_writecat: (none)
         L = locals()
         vals = {}
         for k in keys:
@@ -2211,7 +2215,7 @@ def stage_writecat(
     WISE_T=None,
     AP=None,
     apertures_arcsec=None,
-    cat=None, targetrd=None, pixscale=None, targetwcs=None,
+    cat=None, pixscale=None, targetwcs=None,
     W=None,H=None,
     bands=None, ps=None,
     plots=False,
