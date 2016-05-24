@@ -137,7 +137,7 @@ def in_ring(nside, iz, phi_low, phi_hi, conservative=True):
         nr = long(ir*4)
         kshift = 1
 
-    twopi = 2*np.pi
+    twopi = 2.*np.pi
     shift = kshift * .5
     if conservative:
         # conservative : include every intersected pixels,
@@ -379,8 +379,8 @@ def computeHPXpix_sequ_new_simp(nside, propertyArray):
     #    img_ras[img_ras < 0.0] += 360.0
     # Coordinates of image corners
     #print img_ras
-    img_phis = np.multiply(img_ras , np.pi/180)
-    img_thetas =  np.pi/2  - np.multiply(img_decs , np.pi/180)
+    img_phis = np.multiply(img_ras , np.pi/180.)
+    img_thetas =  np.pi/2.  - np.multiply(img_decs , np.pi/180.)
     img_pix = hp.ang2pix(nside, img_thetas, img_phis, nest=False)
     pix_thetas, pix_phis = hp.pix2ang(nside, img_pix, nest=False)
     ipix_list = np.zeros(0, dtype=long)
@@ -392,9 +392,18 @@ def computeHPXpix_sequ_new_simp(nside, propertyArray):
     pmin = np.min(img_phis)
     if pmax-pmin == 0:
     	return []
-    ipixs_ring = np.int64(np.concatenate([in_ring(nside, iring, pmin, pmax, conservative=False) for iring in range(iring_U-1, iring_B+1)]))
+    if pmin < .1 and pmax > 1.9*np.pi:
+    	#straddling line
+		ipixs_ring1 = np.int64(np.concatenate([in_ring(nside, iring, 0, pmin, conservative=False) for iring in range(iring_U-1, iring_B+1)]))
+		ipixs_ring2 = np.int64(np.concatenate([in_ring(nside, iring, pmax, 2.*np.pi, conservative=False) for iring in range(iring_U-1, iring_B+1)]))
+		ipixs_ring = np.concatenate((ipixs_ring1,ipixs_ring2))
+		print len(ipixs_ring),len(ipixs_ring1),len(ipixs_ring2),iring_B-iring_U,pmin,pmax,min(img_ras),max(img_ras)
+    	
+    else:		
+    	ipixs_ring = np.int64(np.concatenate([in_ring(nside, iring, pmin, pmax, conservative=False) for iring in range(iring_U-1, iring_B+1)]))
     if len(ipixs_ring) > 1000:
-    	print len(ipixs_ring),iring_B-iring_U,pmin,pmax,min(img_ras),max(img_ras)  
+    	return [] #temporary fix
+    #	print len(ipixs_ring),iring_B-iring_U,pmin,pmax,min(img_ras),max(img_ras)  
     #print len(ipixs_ring),iring_B-iring_U,pmin,pmax,min(img_ras),max(img_ras)
     return ipixs_ring
 

@@ -80,7 +80,25 @@ class MyMultiproc(multiproc):
         self.t0 = Time()
         self.serial = []
         self.parallel = []
+        self.phases = []
 
+    def start_subphase(self, name):
+        # push current state to stack
+        tstart = Time()
+        self.serial.append((self.t0, tstart))
+        self.t0 = tstart
+        self.phases.append((name, self.serial, self.parallel, self.t0))
+
+    def finish_subphase(self):
+        # pop
+        (name, serial, parallel, t0) = self.phases.pop()
+        print('Popping subphase', name)
+        serial.extend(self.serial)
+        self.serial = serial
+        parallel.extend(self.parallel)
+        self.parallel = parallel
+        #self.t0 = t0
+        
     def is_multiproc(self):
         return self.pool is not None
         

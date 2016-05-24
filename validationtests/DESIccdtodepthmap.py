@@ -22,8 +22,8 @@ nsidesout = None # if you want full sky degraded maps to be written
 ratiores = 1 # Superresolution/oversampling ratio, simp mode doesn't allow anything other than 1
 mode = 1 # 1: fully sequential, 2: parallel then sequential, 3: fully parallel
 
-#mjd_max = 10e10
-mjd_max = 57000
+mjd_max = 10e10
+#mjd_max = 57000
 mjdw = ''
 if mjd_max != 10e10:
 	mjdw += 'mjdmax'+str(mjd_max)
@@ -43,13 +43,13 @@ print tbdata.dtype
 nmag = Magtonanomaggies(tbdata['galdepth'])/5.
 ivar = 1./nmag**2.
 # Select the five bands
-indg = np.where((tbdata['filter'] == 'g') & (tbdata['photometric'] == True) & (tbdata['blacklist_ok'] == True) & (tbdata['mjd_obs'] < mjd_max))# & (tbdata['ra'] < 50.))# & (tbdata['dec'] < 21.))
+#indg = np.where((tbdata['filter'] == 'g') & (tbdata['photometric'] == True) & (tbdata['blacklist_ok'] == True) & (tbdata['mjd_obs'] < mjd_max))# & (tbdata['ra'] < 50.))# & (tbdata['dec'] < 21.))
 #indr = np.where((tbdata['filter'] == 'r') & (tbdata['photometric'] == True) & (tbdata['blacklist_ok'] == True))
-#indz = np.where((tbdata['filter'] == 'z') & (tbdata['photometric'] == True) & (tbdata['blacklist_ok'] == True))
+indz = np.where((tbdata['filter'] == 'z') & (tbdata['photometric'] == True) & (tbdata['blacklist_ok'] == True))
 #sample_names = ['band_g', 'band_r', 'band_z']
-sample_names = ['band_g']
+sample_names = ['band_z']
 #inds = [indg, indr, indz]
-inds = [indg]
+inds = [indz]
 
 # What properties do you want mapped?
 # Each each tuple, the first element is the quantity to be projected,
@@ -92,14 +92,14 @@ tbdata = np.core.records.fromarrays([tbdata[prop] for prop in propertiesToKeep] 
 
 # Do the magic! Read the table, create Healtree, project it into healpix maps, and write these maps.
 #project_and_write_maps(mode, propertiesandoperations, tbdata, catalogue_name, outroot, sample_names, inds, nside, ratiores, pixoffset, nsidesout)
-#project_and_write_maps_simp(mode, propertiesandoperations, tbdata, catalogue_name, outroot, sample_names, inds, nside)
+project_and_write_maps_simp(mode, propertiesandoperations, tbdata, catalogue_name, outroot, sample_names, inds, nside)
 
 # ------------------------------------------------------
 #plot depth maps
 # __________________
 
 from DESIccd import plotdepthfromIvar
-depthminl = [23.8] #if doing multiple bands, add numbers there
+depthminl = [23.] #if doing multiple bands, add numbers there
 for i in range(0,len(sample_names)):
 	band = sample_names[i].split('_')[-1] 
 	depthmin = depthminl[i]
