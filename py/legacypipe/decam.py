@@ -31,6 +31,12 @@ class DecamImage(CPImage, CalibMixin):
         return 'DECam ' + self.name
 
     @classmethod
+    def nominal_zeropoints(self):
+        return dict(g = 25.08,
+                    r = 25.29,
+                    z = 24.92,)
+    
+    @classmethod
     def photometric_ccds(self, survey, ccds):
         '''
         Returns an index array for the members of the table 'ccds' that are
@@ -48,9 +54,7 @@ class DecamImage(CPImage, CalibMixin):
         * CCDNUM = 31 (S7) should mask outside the region [1:1023,1:4094]
         '''
         # Nominal zeropoints (DECam)
-        z0 = dict(g = 25.08,
-                  r = 25.29,
-                  z = 24.92,)
+        z0 = self.nominal_zeropoints()
         z0 = np.array([z0[f[0]] for f in ccds.filter])
         good = np.ones(len(ccds), bool)
         n0 = sum(good)
