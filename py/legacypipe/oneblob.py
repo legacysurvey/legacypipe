@@ -478,30 +478,15 @@ class OneBlob(object):
                                ['Model selection init'], self.bands, None,None,
                                None, srcw,srch, self.ps, chi_plots=False)
 
-
-            if self.bigblob and self.plots and self.deblend:
-                # Whole-blob coadd
-                tims_compute_resamp(None, srctims, self.blobwcs)
-                coimgs,cons = quick_coadds(srctims, self.bands, self.blobwcs,
-                                           fill_holes=False)
-                dwt = np.zeros_like(coimgs[0])
-                self.deb_profiles[srci].addTo(dwt)
-                dcoimgs = [im * dwt / self.deb_prosum
-                           for im in coimgs]
-                plt.clf()
-                dimshow(get_rgb(dcoimgs, self.bands))
-                plt.axis(srcbounds)
-                plt.title('Deblending-weighted data')
-                self.ps.savefig()
-                for tim in srctims:
-                    del tim.resamp
-
             if self.deblend:
                 # Create tims with the deblending-weighted pixels.
-                dtims = [Image(data=tim.data.copy(), inverr=tim.getInvError(),
+                debtims = [Image(data=np.zeros_like(tim.data),
+                               inverr=tim.getInvError(),
                                wcs=tim.wcs, psf=tim.psf, photocal=tim.photocal,
                                sky=tim.sky, name=tim.name) for tim in srctims]
-                for dtim,tim in zip(dtims,srctims):
+                for dtim,tim in zip(debtims,srctims):
+                    dtim.band = tim.band
+                    dtim.subwcs = tim.subwcs
                     # Resample the deb weights from blob space to tim space
                     try:
                         Yo,Xo,Yi,Xi,nil = resample_with_wcs(
@@ -513,12 +498,19 @@ class OneBlob(object):
                     K = np.flatnonzero((Yi >= dpatch.y0) * (Xi >= dpatch.x0) *
                                        (Yi < (dpatch.y0+ph)) *
                                        (Xi < (dpatch.x0+pw)))
-                    dtim.data[Yo[K],Xo[K]] *= (
+                    dtim.data[Yo[K],Xo[K]] = (tim.data[Yo[K], Xo[K]] *
                         dpatch.patch[Yi[K]-dpatch.y0, Xi[K]-dpatch.x0] /
                         np.maximum(self.deb_prosum[Yi[K], Xi[K]], 1e-16))
+                debtractor = self.tractor(debtims, srctractor.catalog)
 
-                debtractor = self.tractor(dtims, [])
-                debtractor.catalog = srctractor.catalog
+            if self.bigblob and self.plots and self.deblend:
+                tims_compute_resamp(None, debtims, srcwcs, force=True)
+                plt.clf()
+                coimgs,cons = quick_coadds(debtims, self.bands, srcwcs,
+                                           fill_holes=False)
+                dimshow(get_rgb(coimgs, self.bands))
+                plt.title('Deblend-weighted data')
+                self.ps.savefig()
                     
             srccat = srctractor.getCatalog()
 
@@ -639,7 +631,7 @@ class OneBlob(object):
                     plt.clf()
                     modimgs = list(debtractor.getModelImages())
                     comods,nil = quick_coadds(
-                        srctims, self.bands, srcwcs, images=modimgs)
+                        debtims, self.bands, srcwcs, images=modimgs)
                     dimshow(get_rgb(comods, self.bands))
                     plt.title('Deblended opt: ' + name)
                     self.ps.savefig()
@@ -1010,76 +1002,6 @@ class OneBlob(object):
     
             srctractor = self.tractor(srctims, [src])
             srctractor.setModelMasks(modelMasks)
-
-            if self.deblend:
-                # Create tims with the deblending-weighted pixels.
-                dtims = [Image(data=np.zeros_like(tim.data), inverr=tim.getInvError(),
-                               wcs=tim.wcs, psf=tim.psf, photocal=tim.photocal,
-                               sky=tim.sky, name=tim.name) for tim in srctims]
-                for dtim,tim in zip(dtims,srctims):
-                    dtim.band = tim.band
-                    dtim.subwcs = tim.subwcs
-                    # Resample the deb weights from blob space to tim space
-                    try:
-                        Yo,Xo,Yi,Xi,nil = resample_with_wcs(
-                            tim.subwcs, self.blobwcs, [], 2)
-                    except:
-                        continue
-                    dpatch = self.deb_profiles[srci]
-                    ph,pw = dpatch.shape
-                    K = np.flatnonzero((Yi >= dpatch.y0) * (Xi >= dpatch.x0) *
-                                       (Yi < (dpatch.y0+ph)) *
-                                       (Xi < (dpatch.x0+pw)))
-                    dtim.data[Yo[K],Xo[K]] = (tim.data[Yo[K], Xo[K]] *
-                        dpatch.patch[Yi[K]-dpatch.y0, Xi[K]-dpatch.x0] /
-                        np.maximum(self.deb_prosum[Yi[K], Xi[K]], 1e-16))
-
-                    # if self.plots:
-                    #     subdeb = np.zeros_like(dtim.data)
-                    #     subdeb[Yo[K],Xo[K]] = dpatch.patch[Yi[K]-dpatch.y0,
-                    #                                        Xi[K]-dpatch.x0]
-                    #     subsum = np.zeros_like(dtim.data)
-                    #     subsum[Yo[K],Xo[K]] = self.deb_prosum[Yi[K], Xi[K]]
-                    # 
-                    #     plt.clf()
-                    #     plt.subplot(2,3,1)
-                    #     dimshow(dpatch.patch, **self.deb_ima)
-                    #     plt.title('deblend profile')
-                    #     plt.subplot(2,3,2)
-                    #     dimshow(subdeb, **self.deb_ima)
-                    #     plt.title('tim-space profile')
-                    #     plt.subplot(2,3,3)
-                    #     dimshow(subsum, **self.deb_ima)
-                    #     plt.title('tim-space sum')
-                    #     plt.subplot(2,3,4)
-                    #     dimshow(tim.data, **self.deb_ima)
-                    #     plt.title('tim data')
-                    #     plt.subplot(2,3,5)
-                    #     dimshow(dtim.data, **self.deb_ima)
-                    #     plt.title('weighted data')
-                    #     self.ps.savefig()
-                    
-                debtractor = self.tractor(dtims, [])
-                debtractor.catalog = srctractor.catalog
-
-                if self.plots:
-                    plt.clf()
-                    coimgs,cons = quick_coadds(dtims, self.bands, self.blobwcs,
-                                                 fill_holes=False)
-                    dimshow(get_rgb(coimgs, self.bands))
-                    plt.title('deblended-weighted')
-                    self.ps.savefig()
-                
-                debtractor.optimize_loop(**self.optargs)
-
-                if self.plots:
-                    plt.clf()
-                    modimgs = list(debtractor.getModelImages())
-                    comods,nil = quick_coadds(dtims, self.bands, self.blobwcs,
-                                              images=modimgs)
-                    dimshow(get_rgb(comods, self.bands))
-                    plt.title('After deb opt')
-                    self.ps.savefig()
             
             # if plots and False:
             #     spmods,spnames = [],[]
