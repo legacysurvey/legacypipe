@@ -335,10 +335,9 @@ def run_ps_thread(pid, ppid, fn):
         
         TT.append(T)
 
-        if step % 3 == 0:
+        if step % 12 == 0:
             # Write out results every ~ minute.
             T = merge_tables(TT, columns='fillzero')
-            #T.about()
             tmpfn = 'tmp-' + fn
             T.writeto(tmpfn, header=fitshdr)
             os.rename(tmpfn, fn)
