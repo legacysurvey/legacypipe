@@ -403,6 +403,45 @@ plot_SN(b, found_by='matched',type='all')
 cm,names= create_confusion_matrix(b)
 plot_confusion_matrix(cm,names)
 
+def n_gt_3_sigma(sample, low=-8.,hi=8.):
+    '''for a sample that should be distributed as N(mean=0,stddev=1), returns mask for the N that are greater 3 sigma
+    low,hi -- minimum and maximum sample values that will be considered'''
+    i_left= np.all((sample >= low,sample <= -3.),axis=0)
+    i_right= np.all((sample <= hi,sample>=3),axis=0)
+    #assert i_left and i_right are mutually exclusive
+    false_arr= np.all((i_left,i_right),axis=0) #should be array of Falses
+    assert( np.all(false_arr == False) ) #should be np.all([True,True,...]) which evaluates to True
+    return np.any((i_left,i_right),axis=0)
+
+def gauss_stats(d, n_samples=10000):
+    '''puts stats about a unit gaussian N(0,1) in a dictionary "d"
+    n_samples number of draws will compute stats for, set this to sample size...
+    mean,stddev,q25,frac outliers above 3 sigma'''
+    G= stats.norm(0,1)
+    xvals=np.linspace(-8,8)
+    plt.plot(xvals,G.pdf(xvals))
+    draws= G.rvs(n_samples) #random draws
+    plt.hist(draws,bins=50,normed=True)
+    tol=1e-2
+    assert(np.mean(draws)<=tol)
+    assert(np.std(draws)-1. <=tol)
+    d['mean'],d['std'],d['q25'],d['frac_out']= np.mean(draws),np.std(draws),np.percentile(draws,q=25),2*G.cdf(-3)
+
+def sample_gauss_stats(sample, low=-8,hi=8):
+    '''for a sample that should be distributed as N(mean=0,stddev=1), returns statistics to compare to gaussian
+    min,max -- minimum and maximum sample values that will be considered'''
+    stats=dict(sample={},gauss={})
+    gauss_stats(stats['gauss']) #, n_samples=sample.size)
+    stats['sample']['mean'],stats['sample']['std'],stats['sample']['q25'],stats['sample']['q75']= \
+            np.mean(sample),np.std(sample),np.percentile(sample,q=25),np.percentile(sample,q=75) 
+    i_outliers= n_gt_3_sigma(sample, low=low,hi=hi)
+    stats['sample']['frac_out']= sample[i_outliers].size/float(sample.size)
+    return stats
+
+sample_gauss_stats(a)
+
+
+
 def plot_flux_diff(b,type='psf', low=-8.,hi=8.):
     stats=dict(sample={},gauss={})
     hist= dict(g=0,r=0,z=0)
