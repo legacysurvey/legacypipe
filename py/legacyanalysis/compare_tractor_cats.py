@@ -184,13 +184,14 @@ def plot_SN(obj, found_by='matched',type='all'):
             index[key]= obj[prefix+key].data['i_lrg']
         else: raise ValueError
     #bin up SN values
+    min,max= 18.,25.
     bin_SN=dict(decam={},bokmos={})
-    for key in binned.keys():
+    for key in bin_SN.keys():
         for band in ['g','r','z']:
             bin_SN[key][band]={}
             i= index[key]
             bin_SN[key][band]['binc'],bin_SN[key][band]['q25'],bin_SN[key][band]['q50'],bin_SN[key][band]['q75']=\
-                    bin_up(obj['m_'+key].data[band+'mag'][i], obj['m_'+key].data[band+'flux'][i]*np.sqrt(obj['m_'+key].data[band+'flux_ivar'][i]))
+                    bin_up(obj['m_'+key].data[band+'mag'][i], obj['m_'+key].data[band+'flux'][i]*np.sqrt(obj['m_'+key].data[band+'flux_ivar'][i]), bL=min, bH=max)
     #setup plot
     fig,ax=plt.subplots(1,3,figsize=(9,3),sharey=True)
     plt.subplots_adjust(wspace=0)
@@ -205,7 +206,7 @@ def plot_SN(obj, found_by='matched',type='all'):
     #labels
     ax[2].legend(loc=1,**leg_args)
     for cnt,band in zip(range(3),['g','r','z']):
-    for cnt in range(3):
+        ax[cnt].set_yscale('log')
         xlab=ax[cnt].set_xlabel('%s' % band, **laba)
         ax[cnt].set_ylim(1,100)
         ax[cnt].set_xlim(20.,26.)
@@ -358,10 +359,12 @@ b['d12']= a.d12
 for match_type in a.data.keys(): b[match_type]= targets.DECaLS(a.data[match_type], w1=True)
 #store N matched objects not masked before join decam,bokmos masks
 m_decam_not_masked,m_bokmos_not_masked= b['m_decam'].count_not_masked(),b['m_bokmos'].count_not_masked()
-#join decam,bokmos masks for matched pairs 
-mask= np.any((b['m_decam'].data['gmag'].mask, b['m_bokmos'].data['gmag'].mask),axis=0)
-b['m_decam'].propogate_new_mask(mask)
-b['m_bokmos'].propogate_new_mask(mask)
+#update masks for matched objects to be the join of decam and bokmos masks
+mask= np.any((b['m_decam'].mask, b['m_bokmos'].mask),axis=0)
+b['m_decam'].update_masks_for_everything(mask=np.any((b['m_decam'].mask, b['m_bokmos'].mask),axis=0),\
+                                    mask_wise=np.any((b['m_decam'].mask_wise, b['m_bokmos'].mask_wise),axis=0) )
+b['m_bokmos'].update_masks_for_everything(mask=np.any((b['m_decam'].mask, b['m_bokmos'].mask),axis=0),\
+                                    mask_wise=np.any((b['m_decam'].mask_wise, b['m_bokmos'].mask_wise),axis=0) )
 #plots
 plot_radec(b,m_types=['u_decam','u_bokmos'])
 
