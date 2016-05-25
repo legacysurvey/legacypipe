@@ -400,7 +400,7 @@ def main():
 
         #... find Queue...
         q = qdo.connect(opt.queue, create_ok=True)
-        print('Connected to QDO queue', opt.queue, 'q')
+        print('Connected to QDO queue', opt.queue, q)
         
         brick_to_task = dict()
 

@@ -1157,7 +1157,7 @@ def _write_fitblobs_pickle(fn, data):
     pickle_to_file(data, tmpfn)
     os.rename(tmpfn, fn)
     print('Wrote', fn)
-        
+
 def stage_fitblobs(T=None,
                    brickname=None,
                    brickid=None,
@@ -1189,12 +1189,16 @@ def stage_fitblobs(T=None,
         assert(np.all(np.isfinite(tim.getInvError())))
 
     if write_pickle_filename is not None:
-        #import multiprocessing
-        #write_pool = multiprocessing.Pool(1)
+        # Start up a thread to write out a pickle file containing the inputs
+        # that are prerequisites for this (and subsequent) stages.
         import threading
-        keys = ['T', 'blobsrcs', 'blobslices', 'blobs', 'cat',
-                'targetwcs', 'W', 'H', 'bands', 'tims', 'survey',
-                'brickname', 'brickid', 'brick', 'version_header', 'ccds']
+        keys = ['T', 'brickname', 'brickid', 'version_header', 'blobsrcs',
+                'blobslices', 'blobs', 'cat', 'targetwcs', 'W', 'H', 'bands',
+                'tims', 'survey', 'tycho']
+        # Needed by stage_coadds:
+        keys.extend(['ccds', 'pixscale', 'brick', 'lanczos', 'on_bricks'])
+        # Needed by stage_wise_forced: (none)
+        # Needed by stage_writecat: (none)
         L = locals()
         vals = {}
         for k in keys:
@@ -2286,7 +2290,7 @@ def stage_writecat(
     WISE_T=None,
     AP=None,
     apertures_arcsec=None,
-    cat=None, targetrd=None, pixscale=None, targetwcs=None,
+    cat=None, pixscale=None, targetwcs=None,
     W=None,H=None,
     bands=None, ps=None,
     plots=False,
@@ -3134,7 +3138,7 @@ def get_runbrick_kwargs(opt):
         fitblobs_prereq_filename=opt.fitblobs_prereq,
         )
     return kwa
-    
+
 def main(args=None):
     import logging
     from astrometry.util.ttime import MemMeas, CpuMeas
@@ -3146,6 +3150,9 @@ def main(args=None):
     print()
 
     parser = get_parser()
+
+    parser.add_argument('--ps', help='Run "ps" and write results to given filename?')
+
     opt = parser.parse_args(args=args)
 
     if opt.brick is None and opt.radec is None:
@@ -3187,10 +3194,22 @@ def main(args=None):
             return -1
                 
     Time.add_measurement(MemMeas)
-    plt.figure(figsize=(12,9))
-    plt.subplots_adjust(left=0.07, right=0.99, bottom=0.07, top=0.95,
-                        hspace=0.2, wspace=0.05)
+    if opt.plots:
+        plt.figure(figsize=(12,9))
+        plt.subplots_adjust(left=0.07, right=0.99, bottom=0.07, top=0.95,
+                            hspace=0.2, wspace=0.05)
 
+    if opt.ps is not None:
+        import threading
+        from legacypipe.utils import run_ps_thread
+        ps_thread = threading.Thread(
+            target=run_ps_thread,
+            args=(os.getpid(), os.getppid(), opt.ps),
+            name='run_ps')
+        ps_thread.daemon = True
+        print('Starting thread to run "ps"')
+        ps_thread.start()
+        
     try:
         run_brick(opt.brick, **kwargs)
     except NothingToDoError as e:
