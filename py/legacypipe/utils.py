@@ -341,7 +341,7 @@ def run_ps_thread(pid, ppid, fn):
             # Write out results every ~ minute.
             T = merge_tables(TT, columns='fillzero')
             #T.about()
-            tmpfn = 'tmp-' + fn
+            tmpfn = os.path.join(os.path.dirname(fn), 'tmp-' + os.path.basename(fn))
             T.writeto(tmpfn, header=fitshdr)
             os.rename(tmpfn, fn)
             print('Wrote', fn)
