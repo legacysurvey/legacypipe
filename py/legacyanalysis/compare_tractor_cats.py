@@ -214,6 +214,34 @@ def plot_SN(obj, found_by='matched',type='all'):
     plt.savefig('sn_%s_%s.png' % (found_by,type), bbox_extra_artists=[xlab,ylab], bbox_inches='tight',dpi=150)
     plt.close()
 
+def plot_confusion_matrix(cm,ticknames):
+    '''cm -- NxN array containing the Confusion Matrix values
+    ticknames -- list of strings of length == N, column and row names for cm plot'''
+    plt.imshow(cm, interpolation='nearest', cmap=plt.cm.Blues)
+    cbar=plt.colorbar()
+    plt.xticks(range(len(ticknames)), ticknames)
+    plt.yticks(range(len(ticknames)), ticknames)
+    ylab=plt.ylabel('True (decam)')
+    xlab=plt.xlabel('Predicted (bassmos)')
+    for row in range(len(ticknames)):
+        for col in range(len(ticknames)):
+            plt.text(col,row,'%.1f'%cm[row,col],va='center',ha='center')
+    plt.savefig('confusion_matrix.png', bbox_extra_artists=[xlab,ylab], bbox_inches='tight',dpi=150)
+    plt.close()
+
+def create_confusion_matrix(obj):
+    '''compares MATCHED decam (truth) to bokmos (prediction)
+    return 5x5 confusion matrix and colum/row names
+    obj[m_decam'] is DECaLS object'''
+    cm=np.zeros((5,5))-1
+    types=['PSF','SIMP','EXP','DEV','COMP']
+    for i_dec,dec_type in enumerate(types):
+        ind= np.where(obj['m_decam'].data['type'] == dec_type)[0]
+        for i_bass,bass_type in enumerate(types):
+            n_bass= np.where(obj['m_bokmos'].data['type'][ind] == bass_type)[0].size
+            cm[i_dec,i_bass]= float(n_bass)/ind.size #ind.size is constant for each loop over bass_types
+    return cm,types
+
 def plot_matched_separation_hist(d12, zoom=False):
     '''d12 is array of distances in degress between matched objects'''
     #pixscale to convert d12 into N pixels
@@ -371,6 +399,10 @@ plot_radec(b,m_types=['u_decam','u_bokmos'])
 plot_SN(b, found_by='matched',type='all')
 #plot_SN(b, found_by='matched',type='psf')
 #plot_SN(b, found_by='unmatched',type='all')
+
+cm,names= create_confusion_matrix(b)
+plot_confusion_matrix(cm,names)
+
 print('exit')
 sys.exit()
 
