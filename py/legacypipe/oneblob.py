@@ -98,7 +98,7 @@ class OneBlob(object):
         self.use_ceres = use_ceres
         self.hastycho = hastycho
 
-        self.deblend = True
+        self.deblend = False
         
         self.tims = self.create_tims(timargs)
         self.total_pix = sum([np.sum(t.getInvError() > 0) for t in self.tims])
