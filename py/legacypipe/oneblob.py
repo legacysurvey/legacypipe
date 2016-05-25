@@ -98,6 +98,8 @@ class OneBlob(object):
         self.use_ceres = use_ceres
         self.hastycho = hastycho
 
+        self.deblend = True
+        
         self.tims = self.create_tims(timargs)
         self.total_pix = sum([np.sum(t.getInvError() > 0) for t in self.tims])
         
@@ -131,7 +133,7 @@ class OneBlob(object):
         
     def run(self, B):
         # Not quite so many plots...
-        self.plots1 = False
+        self.plots1 = True
         cat = Catalog(*self.srcs)
 
         tlast = Time()
@@ -139,83 +141,25 @@ class OneBlob(object):
             tims_compute_resamp(None, self.tims, self.blobwcs)
             self._initial_plots()
 
-        if self.plots:
+        if self.deblend:
             ### Test bogus deblending
             ras  = np.array([src.pos.ra  for src in cat])
             decs = np.array([src.pos.dec for src in cat])
             ok,x,y = self.blobwcs.radec2pixelxy(ras, decs)
             x -= 1
             y -= 1
-            
-            plt.clf()
-            coimgs,cons,cowimgs,wimgs = quick_coadds(
-                self.tims, self.bands, self.blobwcs, get_cow=True,
-                fill_holes=False)
-            dimshow(get_rgb(cowimgs, self.bands))
-            ax = plt.axis()
-            plt.plot(x, y, 'ro')
-            plt.axis(ax)
-            plt.title('deblend test')
-            self.ps.savefig()
-
-            coprofs = []
             Xi = np.round(x).astype(int)
             Yi = np.round(y).astype(int)
-            for img,wimg in zip(cowimgs,wimgs):
-
-                # size of region to use as postage stamp for deblending
-                sz = 25
-                h,w = img.shape
-
-                profiles = []
-                allprofiles = np.zeros_like(img)
-
-                plt.clf()
-                for isrc,(xi,yi) in enumerate(zip(Xi,Yi)):
-                    dx = min(sz, min(xi, w-1-xi))
-                    dy = min(sz, min(yi, h-1-yi))
-                    x0,y0 = xi - dx, yi - dy
-                    slc = slice(y0, yi + dy+1), slice(x0, xi + dx+1)
-                    subimg = img[slc]
-                    subwt = wimg[slc]
-                    flipped = np.fliplr(np.flipud(subimg))
-                    flipwt  = np.fliplr(np.flipud(subwt))
-                    minimg = subimg.copy()
-                    I = np.flatnonzero((flipwt > 0) * (flipped < subimg))
-                    minimg.flat[I] = flipped.flat[I]
-
-                    # Correct for min() bias for two Gaussians.  This isn't
-                    # really the right way to do this
-                    minimg[subwt > 0] += 0.545 * np.sqrt(1. / subwt[subwt > 0])
-                    # And this is *really* a hack
-                    minimg = np.maximum(0, minimg)
-                    
-                    # if isrc < 5:
-                    #     plt.clf()
-                    #     plt.subplot(1,3,1)
-                    #     dimshow(subimg)
-                    #     plt.subplot(1,3,2)
-                    #     dimshow(flipped)
-                    #     plt.subplot(1,3,3)
-                    #     dimshow(minimg)
-                    #     self.ps.savefig()
-
-                    patch = Patch(x0, y0, minimg)
-                    profiles.append(patch)
-                    patch.addTo(allprofiles)
-                coprofs.append(allprofiles)
-                    
-            plt.clf()
-            dimshow(get_rgb(coprofs, self.bands))
-            plt.title('deblend -- all profiles')
-            self.ps.savefig()
 
             # Combine the bands to make a single deblending profile...
             # What weighting to use though?  Median S/N?
             # Straight per-pixel weight?  (That's like flat-spectrum assumptn)
             # (this is like [sed-matched] detection...)
-            wts = [np.median(wt[wt > 0]) for wt in wimgs]
-            print('Median weights:', wts)
+            coimgs,cons,cowimgs,wimgs = quick_coadds(
+                self.tims, self.bands, self.blobwcs, get_cow=True,
+                fill_holes=False)
+            #wts = [np.median(wt[wt > 0]) for wt in wimgs]
+            #print('Median weights:', wts)
             bimg = np.zeros_like(cowimgs[0])
             bwt = np.zeros_like(cowimgs[0])
             for im,wt in zip(cowimgs,wimgs):
@@ -223,12 +167,22 @@ class OneBlob(object):
                 bwt += wt
             bimg /= np.maximum(1e-16, bwt)
             sig1 = 1. / np.sqrt(np.median(wt[wt > 0]))
-            
-            plt.clf()
-            ima = dict(vmin=-2.*sig1, vmax=5.*sig1)
-            dimshow(bimg, **ima)
-            plt.title('Deblend -- merged bands')
-            self.ps.savefig()
+
+            if self.plots:
+                plt.clf()
+                ima = dict(vmin=-2.*sig1, vmax=5.*sig1)
+                dimshow(bimg, **ima)
+                plt.title('Deblend -- merged bands')
+                self.ps.savefig()
+                ax = plt.axis()
+                plt.plot(Xi, Yi, 'r.')
+                plt.axis(ax)
+                self.ps.savefig()
+                self.deb_ima = ima
+                
+            # size of region to use as postage stamp for deblending
+            sz = 32
+            h,w = bimg.shape
 
             profiles = []
             allprofiles = np.zeros_like(bimg)
@@ -242,9 +196,14 @@ class OneBlob(object):
                 flipped = np.fliplr(np.flipud(subimg))
                 flipwt  = np.fliplr(np.flipud(subwt))
                 minimg = subimg.copy()
+                # Mirror the blob boundaries
+                submask = self.blobmask[slc]
+                flipmask = np.fliplr(np.flipud(submask))
+
                 I = np.flatnonzero((flipwt > 0) * (flipped < subimg))
                 minimg.flat[I] = flipped.flat[I]
-
+                minimg[flipmask == False] = 0
+                
                 # Correct for min() bias for two Gaussians.  This isn't
                 # really the right way to do this
                 minimg[subwt > 0] += 0.545 * np.sqrt(1. / subwt[subwt > 0])
@@ -254,15 +213,30 @@ class OneBlob(object):
                 patch = Patch(x0, y0, minimg)
                 profiles.append(patch)
                 patch.addTo(allprofiles)
-            
-            plt.clf()
-            dimshow(allprofiles, **ima)
-            plt.title('Deblend -- sum of profiles')
-            self.ps.savefig()
-            
-            import sys
-            sys.exit(0)
-            
+
+                # if self.plots:
+                #     plt.clf()
+                #     plt.subplot(2,3,1)
+                #     dimshow(subimg, **ima)
+                #     plt.subplot(2,3,2)
+                #     dimshow(flipped, **ima)
+                #     #plt.subplot(2,3,3)
+                #     #dimshow(goodpix, vmin=0, vmax=1)
+                #     plt.subplot(2,3,4)
+                #     dimshow(minimg, **ima)
+                #     plt.subplot(2,3,5)
+                #     dimshow(allprofiles, **ima)
+                #     self.ps.savefig()
+                
+            if self.plots:
+                plt.clf()
+                dimshow(allprofiles, **ima)
+                plt.title('Deblend -- sum of profiles')
+                self.ps.savefig()
+
+            self.deb_profiles = profiles
+            self.deb_prosum = allprofiles
+
         self._fit_fluxes(cat, self.tims, self.bands)
         tr = self.tractor(self.tims, cat)
 
@@ -460,6 +434,7 @@ class OneBlob(object):
                 yl,yh = np.flatnonzero(yin)[np.array([0,-1])]
                 xl,xh = np.flatnonzero(xin)[np.array([0,-1])]
                 srcwcs = self.blobwcs.get_subimage(xl, yl, 1+xh-xl, 1+yh-yl)
+                srcbounds = [xl, xh, yl, yh]
                 # A mask for which pixels in the 'srcwcs' square are occupied.
                 srcpix = insrc[yl:yh+1, xl:xh+1]
                 # from scipy.ndimage.morphology import binary_erosion
@@ -503,6 +478,48 @@ class OneBlob(object):
                                ['Model selection init'], self.bands, None,None,
                                None, srcw,srch, self.ps, chi_plots=False)
 
+
+            if self.bigblob and self.plots and self.deblend:
+                # Whole-blob coadd
+                tims_compute_resamp(None, srctims, self.blobwcs)
+                coimgs,cons = quick_coadds(srctims, self.bands, self.blobwcs,
+                                           fill_holes=False)
+                dwt = np.zeros_like(coimgs[0])
+                self.deb_profiles[srci].addTo(dwt)
+                dcoimgs = [im * dwt / self.deb_prosum
+                           for im in coimgs]
+                plt.clf()
+                dimshow(get_rgb(dcoimgs, self.bands))
+                plt.axis(srcbounds)
+                plt.title('Deblending-weighted data')
+                self.ps.savefig()
+                for tim in srctims:
+                    del tim.resamp
+
+            if self.deblend:
+                # Create tims with the deblending-weighted pixels.
+                dtims = [Image(data=tim.data.copy(), inverr=tim.getInvError(),
+                               wcs=tim.wcs, psf=tim.psf, photocal=tim.photocal,
+                               sky=tim.sky, name=tim.name) for tim in srctims]
+                for dtim,tim in zip(dtims,srctims):
+                    # Resample the deb weights from blob space to tim space
+                    try:
+                        Yo,Xo,Yi,Xi,nil = resample_with_wcs(
+                            tim.subwcs, self.blobwcs, [], 2)
+                    except:
+                        continue
+                    dpatch = self.deb_profiles[srci]
+                    ph,pw = dpatch.shape
+                    K = np.flatnonzero((Yi >= dpatch.y0) * (Xi >= dpatch.x0) *
+                                       (Yi < (dpatch.y0+ph)) *
+                                       (Xi < (dpatch.x0+pw)))
+                    dtim.data[Yo[K],Xo[K]] *= (
+                        dpatch.patch[Yi[K]-dpatch.y0, Xi[K]-dpatch.x0] /
+                        np.maximum(self.deb_prosum[Yi[K], Xi[K]], 1e-16))
+
+                debtractor = self.tractor(dtims, [])
+                debtractor.catalog = srctractor.catalog
+                    
             srccat = srctractor.getCatalog()
 
             # Compute the log-likehood without a source here.
@@ -612,7 +629,21 @@ class OneBlob(object):
                     #     dimshow(get_rgb(comods, bands))
                     #     plt.title('To-depth opt: ' + name)
                     #     self.ps.savefig()
-    
+
+                if self.deblend:
+                    debtractor.setModelMasks(mm)
+                    enable_galaxy_cache()
+                    debtractor.optimize_loop(**self.optargs)
+
+                if self.deblend and self.plots1:
+                    plt.clf()
+                    modimgs = list(debtractor.getModelImages())
+                    comods,nil = quick_coadds(
+                        srctims, self.bands, srcwcs, images=modimgs)
+                    dimshow(get_rgb(comods, self.bands))
+                    plt.title('Deblended opt: ' + name)
+                    self.ps.savefig()
+                    
                 # First-round optimization (during model selection)
                 thisflags = 0
                 srctractor.optimize_loop(**self.optargs)
@@ -930,20 +961,20 @@ class OneBlob(object):
         models.create(self.tims, cat, subtract=True)
 
         # For sources, in decreasing order of brightness
-        for numi,i in enumerate(Ibright):
+        for numi,srci in enumerate(Ibright):
             cpu0 = time.clock()
-            print('Fitting source', i, '(%i of %i in blob)' %
+            print('Fitting source', srci, '(%i of %i in blob)' %
                   (numi, len(Ibright)))
-            src = cat[i]
+            src = cat[srci]
             # Add this source's initial model back in.
-            models.add(i, self.tims)
+            models.add(srci, self.tims)
     
             if self.bigblob:
                 # Create super-local sub-sub-tims around this source
     
                 # Make the subimages the same size as the modelMasks.
                 #tbb0 = Time()
-                mods = [mod[i] for mod in models.models]
+                mods = [mod[srci] for mod in models.models]
                 srctims,modelMasks = _get_subimages(self.tims, mods, src)
                 #print('Creating srctims:', Time()-tbb0)
     
@@ -975,11 +1006,81 @@ class OneBlob(object):
     
             else:
                 srctims = self.tims
-                modelMasks = models.model_masks(i, src)
+                modelMasks = models.model_masks(srci, src)
     
             srctractor = self.tractor(srctims, [src])
             srctractor.setModelMasks(modelMasks)
-    
+
+            if self.deblend:
+                # Create tims with the deblending-weighted pixels.
+                dtims = [Image(data=np.zeros_like(tim.data), inverr=tim.getInvError(),
+                               wcs=tim.wcs, psf=tim.psf, photocal=tim.photocal,
+                               sky=tim.sky, name=tim.name) for tim in srctims]
+                for dtim,tim in zip(dtims,srctims):
+                    dtim.band = tim.band
+                    dtim.subwcs = tim.subwcs
+                    # Resample the deb weights from blob space to tim space
+                    try:
+                        Yo,Xo,Yi,Xi,nil = resample_with_wcs(
+                            tim.subwcs, self.blobwcs, [], 2)
+                    except:
+                        continue
+                    dpatch = self.deb_profiles[srci]
+                    ph,pw = dpatch.shape
+                    K = np.flatnonzero((Yi >= dpatch.y0) * (Xi >= dpatch.x0) *
+                                       (Yi < (dpatch.y0+ph)) *
+                                       (Xi < (dpatch.x0+pw)))
+                    dtim.data[Yo[K],Xo[K]] = (tim.data[Yo[K], Xo[K]] *
+                        dpatch.patch[Yi[K]-dpatch.y0, Xi[K]-dpatch.x0] /
+                        np.maximum(self.deb_prosum[Yi[K], Xi[K]], 1e-16))
+
+                    # if self.plots:
+                    #     subdeb = np.zeros_like(dtim.data)
+                    #     subdeb[Yo[K],Xo[K]] = dpatch.patch[Yi[K]-dpatch.y0,
+                    #                                        Xi[K]-dpatch.x0]
+                    #     subsum = np.zeros_like(dtim.data)
+                    #     subsum[Yo[K],Xo[K]] = self.deb_prosum[Yi[K], Xi[K]]
+                    # 
+                    #     plt.clf()
+                    #     plt.subplot(2,3,1)
+                    #     dimshow(dpatch.patch, **self.deb_ima)
+                    #     plt.title('deblend profile')
+                    #     plt.subplot(2,3,2)
+                    #     dimshow(subdeb, **self.deb_ima)
+                    #     plt.title('tim-space profile')
+                    #     plt.subplot(2,3,3)
+                    #     dimshow(subsum, **self.deb_ima)
+                    #     plt.title('tim-space sum')
+                    #     plt.subplot(2,3,4)
+                    #     dimshow(tim.data, **self.deb_ima)
+                    #     plt.title('tim data')
+                    #     plt.subplot(2,3,5)
+                    #     dimshow(dtim.data, **self.deb_ima)
+                    #     plt.title('weighted data')
+                    #     self.ps.savefig()
+                    
+                debtractor = self.tractor(dtims, [])
+                debtractor.catalog = srctractor.catalog
+
+                if self.plots:
+                    plt.clf()
+                    coimgs,cons = quick_coadds(dtims, self.bands, self.blobwcs,
+                                                 fill_holes=False)
+                    dimshow(get_rgb(coimgs, self.bands))
+                    plt.title('deblended-weighted')
+                    self.ps.savefig()
+                
+                debtractor.optimize_loop(**self.optargs)
+
+                if self.plots:
+                    plt.clf()
+                    modimgs = list(debtractor.getModelImages())
+                    comods,nil = quick_coadds(dtims, self.bands, self.blobwcs,
+                                              images=modimgs)
+                    dimshow(get_rgb(comods, self.bands))
+                    plt.title('After deb opt')
+                    self.ps.savefig()
+            
             # if plots and False:
             #     spmods,spnames = [],[]
             #     spallmods,spallnames = [],[]
@@ -1037,7 +1138,7 @@ class OneBlob(object):
             #         tim.data = im
     
             # Re-remove the final fit model for this source
-            models.update_and_subtract(i, src, self.tims)
+            models.update_and_subtract(srci, src, self.tims)
     
             srctractor.setModelMasks(None)
             disable_galaxy_cache()
@@ -1045,7 +1146,7 @@ class OneBlob(object):
             #print('Fitting source took', Time()-tsrc)
             #print(src)
             cpu1 = time.clock()
-            cputime[i] += (cpu1 - cpu0)
+            cputime[srci] += (cpu1 - cpu0)
             
         models.restore_images(self.tims)
         del models
