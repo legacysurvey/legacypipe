@@ -13,6 +13,7 @@ def _detmap(X):
     if R is None:
         return None,None,None,None,None
     ie = tim.getInvvar()
+    assert(tim.psf_sigma > 0)
     psfnorm = 1./(2. * np.sqrt(np.pi) * tim.psf_sigma)
     detim = tim.getImage().copy()
 
@@ -64,12 +65,7 @@ def sed_matched_filters(bands):
     Returns
     -------
     SEDs : list of (name, sed) tuples
-    
     '''
-
-    if len(bands) == 1:
-        return [(bands[0], (1.,))]
-
     # single-band filters
     SEDs = []
     for i,band in enumerate(bands):

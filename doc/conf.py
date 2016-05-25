@@ -17,6 +17,7 @@ MOCK_MODULES = [
     'tractor.ellipses', 'tractor.galaxy', 'tractor.utils',
     'tractor.basics', 'tractor.image', 'tractor.ceres_mixin',
     'tractor.engine', 'tractor.psfex', 'tractor.sfd', 'tractor.tractortime',
+    'tractor.sky',
     'numpy',
     'scipy',
     'scipy.interpolate', 'scipy.ndimage', 'scipy.ndimage.filters',

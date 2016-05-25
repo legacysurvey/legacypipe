@@ -2,8 +2,9 @@ from __future__ import print_function
 
 import numpy as np
 import pylab as plt
+import time
 
-from astrometry.util.ttime import Time
+from astrometry.util.ttime import Time, CpuMeas
 from astrometry.util.resample import resample_with_wcs, OverlapError
 from astrometry.util.fits import fits_table
 from astrometry.util.plotutils import dimshow
@@ -13,7 +14,8 @@ from tractor.galaxy import DevGalaxy, ExpGalaxy, FixedCompositeGalaxy, SoftenedF
 
 from legacypipe.common import (SimpleGalaxy, LegacyEllipseWithPriors, 
                                get_rgb)
-from legacypipe.runbrick import compute_coadds, tims_compute_resamp, rgbkwargs_resid
+from legacypipe.runbrick import tims_compute_resamp, rgbkwargs_resid
+from legacypipe.coadds import quick_coadds
 from legacypipe.runbrick_plots import _plot_mods
 
 DECALS_PROPID = '2014B-0404'
@@ -31,6 +33,7 @@ def one_blob(X):
     if len(timargs) == 0:
         return None
 
+    t0 = time.clock()
     # A local WCS for this blob
     blobwcs = brickwcs.get_subimage(bx0, by0, blobw, blobh)
 
@@ -47,11 +50,20 @@ def one_blob(X):
     B.started_in_blob = blobmask[
         np.clip(np.round(y0-1).astype(int), 0,blobh-1),
         np.clip(np.round(x0-1).astype(int), 0,blobw-1)]
+
+    B.cpu_source = np.zeros(len(B), np.float32)
+
+    B.blob_width  = np.zeros(len(B), np.int16) + blobw
+    B.blob_height = np.zeros(len(B), np.int16) + blobh
+    B.blob_npix   = np.zeros(len(B), np.int32) + np.sum(blobmask)
+    B.blob_nimages= np.zeros(len(B), np.int16) + len(timargs)
     
     ob = OneBlob('%i'%iblob, blobwcs, blobmask, timargs, srcs, bands,
                  plots, ps, simul_opt, use_ceres, hastycho)
     ob.run(B)
 
+    B.blob_totalpix = np.zeros(len(B), np.int32) + ob.total_pix
+    
     ok,x1,y1 = blobwcs.radec2pixelxy(
         np.array([src.getPosition().ra  for src in B.sources]),
         np.array([src.getPosition().dec for src in B.sources]))
@@ -65,6 +77,10 @@ def one_blob(X):
     if hastycho:
         B.hastycho[:] = True
 
+    B.cpu_blob = np.zeros(len(B), np.float32)
+    t1 = time.clock()
+    B.cpu_blob[:] = t1 - t0
+        
     B.iblob = iblob
     return B
 
@@ -83,7 +99,8 @@ class OneBlob(object):
         self.hastycho = hastycho
 
         self.tims = self.create_tims(timargs)
-
+        self.total_pix = sum([np.sum(t.getInvError() > 0) for t in self.tims])
+        
         self.plots2 = False
 
         alphas = [0.1, 0.3, 1.0]
@@ -131,9 +148,10 @@ class OneBlob(object):
         Ibright = _argsort_by_brightness(cat, self.bands)
 
         if len(cat) > 1:
-            self._optimize_individual_sources_subtract(cat, Ibright)
+            self._optimize_individual_sources_subtract(
+                cat, Ibright, B.cpu_source)
         else:
-            self._optimize_individual_sources(tr, cat, Ibright)
+            self._optimize_individual_sources(tr, cat, Ibright, B.cpu_source)
 
         # Optimize all at once?
         if len(cat) > 1 and len(cat) <= 10:
@@ -257,16 +275,17 @@ class OneBlob(object):
         B.flags = np.zeros(N, np.uint16)
         B.dchisqs = np.zeros((N, 5), np.float32)
         B.all_models        = np.array([{} for i in range(N)])
-        B.all_model_fluxivs = np.array([{} for i in range(N)])
+        B.all_model_ivs     = np.array([{} for i in range(N)])
         B.all_model_flags   = np.array([{} for i in range(N)])
+        B.all_model_cpu     = np.array([{} for i in range(N)])
 
         # Model selection for sources, in decreasing order of brightness
         for numi,srci in enumerate(Ibright):
     
             src = cat[srci]
-            print('Model selection for source %i of %i in blob' %
-                  (numi, len(Ibright)))
-            #tsel = Time()
+            #print('Model selection for source %i of %i in blob' %
+            #      (numi, len(Ibright)))
+            cpu0 = time.clock()
     
             # Add this source's initial model back in.
             models.add(srci, self.tims)
@@ -331,7 +350,7 @@ class OneBlob(object):
             if self.plots:
                 tims_compute_resamp(None, srctims, self.blobwcs)
                 plt.clf()
-                coimgs,cons = compute_coadds(srctims, self.bands, self.blobwcs,
+                coimgs,cons = quick_coadds(srctims, self.bands, self.blobwcs,
                                              fill_holes=False)
                 dimshow(get_rgb(coimgs, self.bands))
                 plt.title('Model selection: stage1 data')
@@ -340,7 +359,7 @@ class OneBlob(object):
                 if self.bigblob:
                     tims_compute_resamp(None, srctims, srcwcs, force=True)
                     plt.clf()
-                    coimgs,cons = compute_coadds(srctims, self.bands, srcwcs,
+                    coimgs,cons = quick_coadds(srctims, self.bands, srcwcs,
                                                  fill_holes=False)
                     dimshow(get_rgb(coimgs, self.bands))
                     plt.title('Model selection: stage1 data (srcwcs)')
@@ -389,7 +408,8 @@ class OneBlob(object):
                       len(srctims))
             allflags = {}
             for name,newsrc in trymodels:
-    
+                cpum0 = time.clock()
+
                 if name == 'gals':
                     # If 'simple' was better than 'ptsrc', or the source is
                     # bright, try the galaxy models.
@@ -437,7 +457,7 @@ class OneBlob(object):
                 # if self.plots:
                 #     mods = list(srctractor.getModelImages())
                 #     plt.clf()
-                #     coimgs,cons = compute_coadds(srctims, bands, srcwcs,
+                #     coimgs,cons = quick_coadds(srctims, bands, srcwcs,
                 #                                  images=mods, fill_holes=False)
                 #     dimshow(get_rgb(coimgs, bands))
                 #     plt.title('Initial: ' + name)
@@ -458,7 +478,7 @@ class OneBlob(object):
                     # if self.plots:
                     #     plt.clf()
                     #     modimgs = list(dtractor.getModelImages())
-                    #     comods,nil = compute_coadds(dtims, bands, srcwcs,
+                    #     comods,nil = quick_coadds(dtims, bands, srcwcs,
                     #                                 images=modimgs)
                     #     dimshow(get_rgb(comods, bands))
                     #     plt.title('To-depth opt: ' + name)
@@ -470,7 +490,7 @@ class OneBlob(object):
                 # FIXME N steps: -> FLAG_STEPS_A
     
                 # print('Mod', name, 'round1 opt', Time()-t0)
-                print('Mod selection: after first-round opt:', newsrc)
+                #print('Mod selection: after first-round opt:', newsrc)
     
                 if self.plots:
                     # _plot_mods(srctims, [list(srctractor.getModelImages())],
@@ -478,7 +498,7 @@ class OneBlob(object):
                     #            None, srch,srcw, ps, chi_plots=False)
                     plt.clf()
                     modimgs = list(srctractor.getModelImages())
-                    comods,nil = compute_coadds(srctims, self.bands, srcwcs,
+                    comods,nil = quick_coadds(srctims, self.bands, srcwcs,
                                                 images=modimgs)
                     dimshow(get_rgb(comods, self.bands))
                     plt.title('After first-round opt: ' + name)
@@ -490,15 +510,7 @@ class OneBlob(object):
                 # Recompute modelMasks in the original tims
 
                 # Limit sizes of huge models
-                tim = self.tims[0]
-                from tractor.galaxy import ProfileGalaxy
-                if isinstance(newsrc, ProfileGalaxy):
-                    px,py = tim.wcs.positionToPixel(newsrc.getPosition())
-                    h = newsrc._getUnitFluxPatchSize(tim, px, py, tim.modelMinval)
-                    MAXHALF = 128
-                    if h > MAXHALF:
-                        print('halfsize', h,'for',newsrc,'-> setting to',MAXHALF)
-                        newsrc.halfsize = MAXHALF
+                _limit_galaxy_stamp_size(newsrc, self.tims[0])
     
                 if self.hastycho:
                     modtims = None
@@ -536,13 +548,13 @@ class OneBlob(object):
     
                     modtractor.optimize_loop(**self.optargs)
                     # FIXME -- thisflags |= FLAG_STEPS_B
-                    print('Mod selection: after second-round opt:', newsrc)
+                    #print('Mod selection: after second-round opt:', newsrc)
     
                     if self.plots:
                         plt.clf()
                         modimgs = list(modtractor.getModelImages())
                         tims_compute_resamp(None, modtims, srcwcs, force=True)
-                        comods,nil = compute_coadds(modtims, self.bands, srcwcs,
+                        comods,nil = quick_coadds(modtims, self.bands, srcwcs,
                                                     images=modimgs)
                         dimshow(get_rgb(comods, self.bands))
                         plt.title('After second-round opt: ' + name)
@@ -552,11 +564,10 @@ class OneBlob(object):
                     srctractor.setModelMasks(newsrc_mm)
                     modtractor = srctractor
     
-                # Compute FLUX inverse-variances for each source.
+                # Compute inverse-variances for each source.
                 # This uses the second-round modelMasks.
-                newsrc.freezeAllBut('brightness')
                 allderivs = modtractor.getDerivs()
-                ivs = np.zeros(len(self.bands), np.float32)
+                ivs = np.zeros(newsrc.numberOfParams(), np.float32)
                 for iparam,derivs in enumerate(allderivs):
                     chisq = 0
                     for deriv,tim in derivs:
@@ -567,9 +578,8 @@ class OneBlob(object):
                         chi = deriv.patch * ie[slc]
                         chisq += (chi**2).sum()
                     ivs[iparam] = chisq
-                B.all_model_fluxivs[srci][name] = ivs
-                newsrc.thawAllParams()
-    
+                B.all_model_ivs[srci][name] = ivs
+
                 # Use the original 'srctractor' here so that the different
                 # models are evaluated on the same pixels.
                 # ---> AND with the same modelMasks as the original source...
@@ -577,9 +587,11 @@ class OneBlob(object):
                 srctractor.setModelMasks(newsrc_mm)
                 ch = _per_band_chisqs(srctractor, self.bands)
                 chisqs[name] = _chisq_improvement(newsrc, ch, chisqs_none)
-                B.all_models[i][name] = newsrc.copy()
-                B.all_model_flags[i][name] = thisflags
-    
+                B.all_models[srci][name] = newsrc.copy()
+                B.all_model_flags[srci][name] = thisflags
+                cpum1 = time.clock()
+                B.all_model_cpu[srci][name] = cpum1 - cpum0
+
             # Actually select which model to keep.
             # This "modnames" array determines the order of the elements in the DCHISQ
             # column of the catalog.
@@ -605,7 +617,7 @@ class OneBlob(object):
 
                     if modname == 'none':
                         # In the first panel, we show a coadd of the data
-                        coimgs, cons = compute_coadds(srctims, self.bands, srcwcs)
+                        coimgs, cons = quick_coadds(srctims, self.bands, srcwcs)
                         dimshow(get_rgb(coimgs, self.bands), ticks=False)
                         ax = plt.axis()
                         ok,x,y = self.blobwcs.radec2pixelxy(src.getPosition().ra,
@@ -618,7 +630,7 @@ class OneBlob(object):
                         res = [tim.getImage() for tim in srctims]
                     else:
                         modimgs = list(srctractor.getModelImages())
-                        comods,nil = compute_coadds(srctims, self.bands, srcwcs,
+                        comods,nil = quick_coadds(srctims, self.bands, srcwcs,
                                                     images=modimgs)
                         dimshow(get_rgb(comods, self.bands), ticks=False)
                         plt.title(modname)
@@ -628,7 +640,7 @@ class OneBlob(object):
                                zip(srctims, modimgs)]
             
                     # residuals
-                    coresids,nil = compute_coadds(srctims, self.bands, srcwcs,
+                    coresids,nil = quick_coadds(srctims, self.bands, srcwcs,
                                                   images=res)
                     plt.subplot(rows, cols, imod+1+cols)
                     dimshow(get_rgb(coresids, self.bands, **rgbkwargs_resid),
@@ -648,7 +660,8 @@ class OneBlob(object):
     
             #print('Keeping model:', keepmod)
             #print('Keeping source:', keepsrc)
-            #print(Time() - tsel)
+            cpu1 = time.clock()
+            B.cpu_source[srci] += (cpu1 - cpu0)
     
         models.restore_images(self.tims)
         del models
@@ -731,7 +744,7 @@ class OneBlob(object):
 
         if self.plots:
             plt.clf()
-            coimgs,cons = compute_coadds(dtims, bands, srcwcs,
+            coimgs,cons = quick_coadds(dtims, bands, srcwcs,
                                          fill_holes=False)
             dimshow(get_rgb(coimgs, bands))
             plt.title('To-depth data')
@@ -739,7 +752,7 @@ class OneBlob(object):
 
         return dtims, insubset
             
-    def _optimize_individual_sources(self, tr, cat, Ibright):
+    def _optimize_individual_sources(self, tr, cat, Ibright, cputime):
         # Single source (though this is coded to handle multiple sources)
         # Fit sources one at a time, but don't subtract other models
         cat.freezeAllParams()
@@ -749,7 +762,7 @@ class OneBlob(object):
         enable_galaxy_cache()
 
         for numi,i in enumerate(Ibright):
-            #tsrc = Time()
+            cpu0 = time.clock()
             #print('Fitting source', i, '(%i of %i in blob)' %
             #  (numi, len(Ibright)))
             cat.freezeAllBut(i)
@@ -758,7 +771,9 @@ class OneBlob(object):
             tr.optimize_loop(**self.optargs)
             #print('Fitting source took', Time()-tsrc)
             # print(cat[i])
-
+            cpu1 = time.clock()
+            cputime[i] += (cpu1 - cpu0)
+            
         tr.setModelMasks(None)
         disable_galaxy_cache()
         
@@ -767,7 +782,8 @@ class OneBlob(object):
         tr.freezeParams('images')
         return tr
 
-    def _optimize_individual_sources_subtract(self, cat, Ibright):
+    def _optimize_individual_sources_subtract(self, cat, Ibright,
+                                              cputime):
         # -Remember the original images
         # -Compute initial models for each source (in each tim)
         # -Subtract initial models from images
@@ -785,7 +801,7 @@ class OneBlob(object):
 
         # For sources, in decreasing order of brightness
         for numi,i in enumerate(Ibright):
-            #tsrc = Time()
+            cpu0 = time.clock()
             print('Fitting source', i, '(%i of %i in blob)' %
                   (numi, len(Ibright)))
             src = cat[i]
@@ -805,7 +821,7 @@ class OneBlob(object):
                 if self.plots and (numi < 3 or numi >= len(Ibright)-3):
                     plt.clf()
                     # Recompute coadds because of the subtract-all-and-readd shuffle
-                    coimgs,cons = compute_coadds(self.tims, self.bands, self.blobwcs,
+                    coimgs,cons = quick_coadds(self.tims, self.bands, self.blobwcs,
                                                  fill_holes=False)
                     rgb = get_rgb(coimgs, self.bands)
                     dimshow(rgb)
@@ -898,7 +914,9 @@ class OneBlob(object):
     
             #print('Fitting source took', Time()-tsrc)
             #print(src)
-    
+            cpu1 = time.clock()
+            cputime[i] += (cpu1 - cpu0)
+            
         models.restore_images(self.tims)
         del models
     
@@ -926,7 +944,7 @@ class OneBlob(object):
         
     def _initial_plots(self):
         print('Plotting blob image for blob', self.name)
-        coimgs,cons = compute_coadds(self.tims, self.bands, self.blobwcs,
+        coimgs,cons = quick_coadds(self.tims, self.bands, self.blobwcs,
                                      fill_holes=False)
         self.rgb = get_rgb(coimgs, self.bands)
         plt.clf()
@@ -1494,4 +1512,12 @@ def _per_band_chisqs(srctractor, bands):
         chisqs[img.band] = chisqs[img.band] + (chi ** 2).sum()
     return chisqs
 
+def _limit_galaxy_stamp_size(src, tim, maxhalf=128):
+    from tractor.galaxy import ProfileGalaxy
+    if isinstance(src, ProfileGalaxy):
+        px,py = tim.wcs.positionToPixel(src.getPosition())
+        h = src._getUnitFluxPatchSize(tim, px, py, tim.modelMinval)
+        if h > maxhalf:
+            print('halfsize', h, 'for', src, '-> setting to', maxhalf)
+            src.halfsize = maxhalf
 

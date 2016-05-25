@@ -1685,21 +1685,21 @@ def plotradecccdfile(band,rel='DR3',survey='decals',decmin=-20,yearmin=2015):
 	plt.show()
 	return True
   
-def plotBorismap(band,prop,op='mean',survey='DECaLS_DR3'):
+def plotBorismap(band,prop,op='mean',survey='DECaLS_DR3',nside='1024',oversamp='1'):
 	import fitsio
 	from matplotlib import pyplot as plt
 	import matplotlib.cm as cm
 	from numpy import zeros,array
 	from healpix import pix2ang_ring,thphi2radec
 	import healpy as hp
-	f = fitsio.read(localdir+survey+'/nside4096_oversamp4/'+survey+'_band_'+band+'_nside4096_oversamp4_'+prop+'__'+op+'.fits.gz')
+	f = fitsio.read(localdir+survey+'/nside'+nside+'_oversamp'+oversamp+'/'+survey+'_band_'+band+'_nside'+nside+'_oversamp'+oversamp+'_'+prop+'__'+op+'.fits.gz')
 	ral = []
 	decl = []
 	val = f['SIGNAL']
-	print min(val),max(val)
+	print min(val),max(val),len(f)/(float(nside)**2.*12)*360*360./pi
 	for i in range(0,len(f)):
 		#th,phi = pix2ang_ring(4096,f[i]['PIXEL'])
-		th,phi = hp.pix2ang(4096,f[i]['PIXEL'])
+		th,phi = hp.pix2ang(int(nside),f[i]['PIXEL'])
 		ra,dec = thphi2radec(th,phi)
 		ral.append(ra)
 		decl.append(dec)
@@ -1710,6 +1710,55 @@ def plotBorismap(band,prop,op='mean',survey='DECaLS_DR3'):
 	plt.xlabel('r.a. (degrees)')
 	plt.ylabel('declination (degrees)')
 	plt.title('Map of '+prop +' for '+survey+' '+band+'-band')
+	plt.show()
+	#plt.xscale('log')
+	#pp.savefig()
+	#pp.close()
+	return True
+
+def plotdepthfromIvar(band,depthmin=23.8,mjdmax='',prop='ivar',op='total',survey='DECaLS_DR3',nside='1024',oversamp='1'):
+	import fitsio
+	from matplotlib import pyplot as plt
+	import matplotlib.cm as cm
+	from numpy import zeros,array
+	import healpix
+	
+	from healpix import pix2ang_ring,thphi2radec
+	h = healpix.healpix()
+	import healpy as hp
+	f = fitsio.read(localdir+survey+mjdmax+'/nside'+nside+'_oversamp'+oversamp+'/'+survey+mjdmax+'_band_'+band+'_nside'+nside+'_oversamp'+oversamp+'_'+prop+'__'+op+'.fits.gz')
+	ral = []
+	decl = []
+	val = f['SIGNAL']
+	magval = []
+	for i in range(0,len(val)):
+		magval.append(nanomaggiesToMag(sqrt(1./val[i]) * 5.))
+	print min(magval),max(magval),len(f)/(float(nside)**2.*12)*360*360./pi
+	if band == 'g':
+		extc = 3.303/2.751
+	if band == 'r':
+		extc = 2.285/2.751
+	if band == 'z':
+		extc = 1.263/2.751
+	magvalgmin = []
+	for i in range(0,len(f)):
+		#th,phi = pix2ang_ring(4096,f[i]['PIXEL'])
+		th,phi = hp.pix2ang(int(nside),f[i]['PIXEL'])
+		ra,dec = thphi2radec(th,phi)
+		pix256 = h.ang2pix_nest(256,th,phi)
+		magval[i] -= extmap[pix256]
+		if magval[i] > depthmin:
+			ral.append(ra)
+			decl.append(dec)
+			magvalgmin.append(magval[i])
+	print len(ral)/(float(nside)**2.*12)*360*360./pi		
+	#print min(val),max(val)	
+	map = plt.scatter(ral,decl,c=magvalgmin,cmap=cm.rainbow,lw=0,s=.1)
+	cbar = plt.colorbar(map)
+	cbar.set_label(r'5$\sigma$ galaxy depth', rotation=270)
+	plt.xlabel('r.a. (degrees)')
+	plt.ylabel('declination (degrees)')
+	plt.title('Map of depth' +' for '+survey+' '+band+'-band')
 	plt.show()
 	#plt.xscale('log')
 	#pp.savefig()

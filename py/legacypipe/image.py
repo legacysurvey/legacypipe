@@ -247,10 +247,11 @@ class LegacySurveyImage(object):
         assert(not(np.all(invvar == 0.)))
 
         # header 'FWHM' is in pixels
+        assert(self.fwhm > 0)
         psf_fwhm = self.fwhm 
         psf_sigma = psf_fwhm / 2.35
         primhdr = self.read_image_primary_header()
-
+        
         sky = self.read_sky_model(splinesky=splinesky, slc=slc,
                                   primhdr=primhdr, imghdr=imghdr)
         skysig1 = getattr(sky, 'sig1', None)

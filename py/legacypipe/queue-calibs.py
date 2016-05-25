@@ -124,6 +124,11 @@ def main():
 
     parser.add_argument('--brickq', type=int, default=None,
                         help='Queue only bricks with the given "brickq" value [0 to 3]')
+
+    parser.add_argument('--brickq-deps', action='store_true', default=False,
+                        help='Queue bricks directly using qdo API, setting brickq dependencies')
+    parser.add_argument('--queue', default='bricks',
+                        help='With --brickq-deps, the QDO queue name to use')
     
     opt = parser.parse_args()
 
@@ -310,6 +315,12 @@ def main():
         rlo,rhi = 147.2, 147.8
         dlo,dhi = -0.4, 0.4
 
+    elif opt.region == 'eboss-elg':
+        # RA -45 to +45
+        # Dec -5 to +7
+        rlo,rhi = 315., 45.
+        dlo,dhi = -5., 7.
+        
     if opt.mindec is not None:
         dlo = opt.mindec
     if opt.maxdec is not None:
@@ -383,6 +394,42 @@ def main():
 
         print(b.brickname)
 
+    if opt.brickq_deps:
+        import qdo
+        from legacypipe.common import on_bricks_dependencies
+
+        #... find Queue...
+        q = qdo.connect(opt.queue, create_ok=True)
+        print('Connected to QDO queue', opt.queue, q)
+        
+        brick_to_task = dict()
+
+        #I = np.flatnonzero(B.brickq == 0)
+        
+        for brickq in range(4):
+            I = np.flatnonzero(B.brickq == brickq)
+            print(len(I), 'bricks with brickq =', brickq)
+            J = np.flatnonzero(B.brickq < brickq)
+            preB = B[J]
+            reqs = []
+            for b in B[I]:
+                # find brick dependencies
+                brickdeps = on_bricks_dependencies(b, survey, bricks=preB)
+                # convert to task ids
+                taskdeps = [brick_to_task[b.brickname] for b in brickdeps]
+                reqs.append(taskdeps)
+
+                #taskid = q.add(b.brickname, requires=taskdeps)
+                #print('Queued brick', b.brickname, '-> task', taskid)
+                #brick_to_task[b.brickname] = taskid
+                
+            # submit to qdo queue
+            print('Queuing', len(B[I]), 'bricks')
+            taskids = q.add_multiple(B.brickname[I], requires=reqs)
+            #print('Queued brick', b.brickname, '-> task', taskid)
+            print('Queued', len(taskids), 'bricks')
+            brick_to_task.update(dict(zip(B.brickname[I], taskids)))
+        
     if not (opt.calibs or opt.forced or opt.lsb):
         sys.exit(0)
 
