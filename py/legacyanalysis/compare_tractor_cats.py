@@ -403,6 +403,40 @@ plot_SN(b, found_by='matched',type='all')
 cm,names= create_confusion_matrix(b)
 plot_confusion_matrix(cm,names)
 
+def plot_flux_diff(b,type='psf', low=-8.,hi=8.):
+    stats=dict(sample={},gauss={})
+    hist= dict(g=0,r=0,z=0)
+    binc= dict(g=0,r=0,z=0)
+    for band in ['g','r','z']:
+        sample=(b['m_decam'].data[band+'flux']-b['m_bokmos'].data[band+'flux'])/np.sqrt(\
+                    np.power(b['m_decam'].data[band+'flux_ivar'],-1)+np.power(b['m_bokmos'].data[band+'flux_ivar'],-1))
+        hist[band],bins,junk= plt.hist(sample,range=(low,hi),bins=50,normed=True)
+        db= (bins[1:]-bins[:-1])/2
+        binc[band]= bins[:-1]+db
+    plt.close()
+    #unit gaussian N(0,1)
+    G= stats.norm(0,1)
+    xvals= np.linspace(low,hi)
+    #plot
+    fig,ax=plt.subplots(1,3,figsize=(9,3),sharey=True)
+    plt.subplots_adjust(wspace=0)
+    for cnt,band in zip(range(3),['g','r','z']):
+        ax[cnt].step(binc[band],hist[band], where='mid',c='b',lw=2)
+        ax[cnt].plot(xvals,G.pdf(xvals),label="N(0,1)")
+    #labels
+    ax[2].legend(loc=1,**leg_args)
+    for cnt,band in zip(range(3),['g','r','z']):
+        xlab=ax[cnt].set_xlabel('%s' % band, **laba)
+        ax[cnt].set_ylim(0,0.6)
+        ax[cnt].set_xlim(low,hi)
+    ylab=ax[0].set_ylabel('PDF', **laba)
+    plt.savefig('flux_diff.png', bbox_extra_artists=[xlab,ylab], bbox_inches='tight',dpi=150)
+    plt.close()
+
+
+
+plot_flux_diff(b,type='psf')
+
 print('exit')
 sys.exit()
 
