@@ -1412,7 +1412,7 @@ def stage_fitblobs(T=None,
                 else:
                     r = Riter.next()
                 R.append(r)
-                print('Result r:', type(r))
+                #print('Result r:', type(r))
             except StopIteration:
                 print('Done')
                 break
@@ -2879,6 +2879,8 @@ def run_brick(brick, radec=None, pixscale=0.262,
         #    print('At start of stage', stage, ':')
         #    print(pool.get_pickle_traffic_string())
         R = stagefunc(stage, **kwargs)
+        sys.stdout.flush()
+        sys.stderr.flush()
         print('Resources for stage', stage, ':')
         mp.report(threads)
         #if pool is not None:
