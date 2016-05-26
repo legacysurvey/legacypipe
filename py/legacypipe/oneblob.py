@@ -126,14 +126,15 @@ class OneBlob(object):
             self.optargs.update(dchisq = 0.1)
 
         # 50 CCDs is over 90th percentile of bricks in DR2.
-        self.many_exposures = len(timargs) >= 50
+        self.many_exposures = len(timargs) >= 20
+        #self.many_exposures = len(timargs) >= 50
         #PTF special handling len(timargs) >= 1000
         if self.many_exposures:
             print('Many exposures for blob', self.name)
         
     def run(self, B):
-        # Not quite so many plots...
-        self.plots1 = True
+        # "verbose" plots
+        self.plots1 = False #self.plots
         cat = Catalog(*self.srcs)
 
         tlast = Time()
@@ -471,9 +472,9 @@ class OneBlob(object):
                 self.ps.savefig()
                 for tim in srctims:
                     del tim.resamp
+                tims_compute_resamp(None, srctims, srcwcs, force=True)
                 if self.plots1:
                     srch,srcw = srcwcs.shape
-                    tims_compute_resamp(None, srctims, srcwcs, force=True)
                     _plot_mods(srctims, [list(srctractor.getModelImages())],
                                ['Model selection init'], self.bands, None,None,
                                None, srcw,srch, self.ps, chi_plots=False)
@@ -541,15 +542,15 @@ class OneBlob(object):
             # If lots of exposures, cut to a subset that reach the DECaLS
             # depth goals and use those in an initial round?
             if self.many_exposures:
-                dtims,insubset = self._get_todepth_subset(srctims, srcwcs,
-                                                          srcpix)
+                dtims,insubset,dnames = self._get_todepth_subset(
+                    srctims, srcwcs, srcpix)
                 print('Many exposures: to-depth subset of', len(dtims),
                       'images out of', len(srctims))
             allflags = {}
             cputimes = {}
             for name,newsrc in trymodels:
                 cpum0 = time.clock()
-
+                
                 if name == 'gals':
                     # If 'simple' was better than 'ptsrc', or the source is
                     # bright, try the galaxy models.
@@ -576,6 +577,8 @@ class OneBlob(object):
                         dev.getShape()).copy()
                 srccat[0] = newsrc
 
+                print('Starting optimization for', name)
+                
                 # Use the same modelMask shapes as the original source ('src').
                 # Need to create newsrc->mask mappings though:
                 mm = remap_modelmask(modelMasks, src, newsrc)
@@ -609,7 +612,13 @@ class OneBlob(object):
                     dtractor = self.tractor(dtims, [newsrc])
                     dtractor.setModelMasks(dmm)
                     enable_galaxy_cache()
+                    cpustep0 = time.clock()
+                    print('Optimizing to-depth first round for', name)
+                    print(newsrc)
                     dtractor.optimize_loop(**self.optargs)
+                    print('Optimizing to-depth first round took',
+                          time.clock()-cpustep0)
+                    print(newsrc)
                     # print('Mod', name, 'round0 opt', Time()-t0)
                     # print('New source (after to-depth round optimization):',
                     #   newsrc)
@@ -638,7 +647,15 @@ class OneBlob(object):
                     
                 # First-round optimization (during model selection)
                 thisflags = 0
+                print('Optimizing: first round for', name, ':', len(srctims))
+                print('  exposure times:',
+                      [(tim.meta.exptime,tim.band) for tim in srctims])
+                print(newsrc)
+                cpustep0 = time.clock()
                 srctractor.optimize_loop(**self.optargs)
+                print('Optimizing first round', name, 'took',
+                      time.clock()-cpustep0)
+                print(newsrc)
                 # FIXME N steps: -> FLAG_STEPS_A
     
                 # print('Mod', name, 'round1 opt', Time()-t0)
@@ -651,7 +668,7 @@ class OneBlob(object):
                     plt.clf()
                     modimgs = list(srctractor.getModelImages())
                     comods,nil = quick_coadds(srctims, self.bands, srcwcs,
-                                                images=modimgs)
+                                              images=modimgs)
                     dimshow(get_rgb(comods, self.bands))
                     plt.title('After first-round opt: ' + name)
                     self.ps.savefig()
@@ -677,6 +694,7 @@ class OneBlob(object):
                                 mod = None
                         mods.append(mod)
                     modtims,mm = _get_subimages(self.tims, mods, newsrc)
+
                 else:
                     mm = []
                     modtims = []
@@ -695,28 +713,63 @@ class OneBlob(object):
                         mm.append(d)
     
                 if modtims is not None:
+
+                    if self.many_exposures:
+                        print('insubset:', insubset)
+                        mdtims = [tim for tim in modtims if tim.name in dnames]
+                        dmm = [m for m,tim in zip(mm,modtims) if tim.name in dnames]
+                        print('Selected mdtims:', [tim.name for tim in mdtims])
+                        dtractor = self.tractor(mdtims, [newsrc])
+                        dtractor.setModelMasks(dmm)
+                        enable_galaxy_cache()
+                        cpustep0 = time.clock()
+                        print('Optimizing to-depth second round for', name)
+                        print(newsrc)
+                        dtractor.optimize_loop(**self.optargs)
+                        print('Optimizing to-depth second round', name, 'took',
+                              time.clock()-cpustep0)
+                        print(newsrc)
+
+                        if self.plots:
+                            self._plot_coadd(mdtims, self.blobwcs)
+                            plt.title('second round to-depth')
+                            self.ps.savefig()
+
+                            self._plot_coadd(mdtims, self.blobwcs,
+                                             model=dtractor)
+                            plt.title('second round to-depth: model %s' % name)
+                            self.ps.savefig()
+                    
                     modtractor = self.tractor(modtims, [newsrc])
                     modtractor.setModelMasks(mm)
                     enable_galaxy_cache()
     
+                    print('Optimizing: second round for', name)
+                    print(newsrc)
+                    cpustep0 = time.clock()
                     modtractor.optimize_loop(**self.optargs)
+                    print('Optimizing second round', name, 'took',
+                          time.clock()-cpustep0)
+                    print(newsrc)
                     # FIXME -- thisflags |= FLAG_STEPS_B
                     #print('Mod selection: after second-round opt:', newsrc)
-    
-                    if self.plots1:
-                        plt.clf()
-                        modimgs = list(modtractor.getModelImages())
-                        tims_compute_resamp(None, modtims, srcwcs, force=True)
-                        comods,nil = quick_coadds(modtims, self.bands, srcwcs,
-                                                    images=modimgs)
-                        dimshow(get_rgb(comods, self.bands))
-                        plt.title('After second-round opt: ' + name)
+                    
+                    # if self.plots1:
+                    if self.plots:
+                        self._plot_coadd(modtims, self.blobwcs)
+                        plt.title('second round')
+                        self.ps.savefig()
+
+                        self._plot_coadd(modtims, self.blobwcs,
+                                         model=modtractor)
+                        plt.title('second round: model %s' % name)
                         self.ps.savefig()
                 else:
                     # Tycho-2 star; set modtractor = srctractor for the ivars
                     srctractor.setModelMasks(newsrc_mm)
                     modtractor = srctractor
-    
+
+                print('Computing inverse-variances for', name)
                 # Compute inverse-variances for each source.
                 # This uses the second-round modelMasks.
                 allderivs = modtractor.getDerivs()
@@ -736,7 +789,15 @@ class OneBlob(object):
                 # Use the original 'srctractor' here so that the different
                 # models are evaluated on the same pixels.
                 # ---> AND with the same modelMasks as the original source...
+                #
                 # FIXME -- it is not clear that this is what we want!!!
+                #
+                # INDEED -- this causes the galaxy models to be
+                # evaluated on small postage stamps, possibly leading
+                # to wrap-around and such.
+                # Can we evaluate the models on the second-round modelMasks
+                # but only count chi-squared within the original masks?
+                #
                 srctractor.setModelMasks(newsrc_mm)
                 ch = _per_band_chisqs(srctractor, self.bands)
                 chisqs[name] = _chisq_improvement(newsrc, ch, chisqs_none)
@@ -745,7 +806,8 @@ class OneBlob(object):
                 cpum1 = time.clock()
                 B.all_model_cpu[srci][name] = cpum1 - cpum0
                 cputimes[name] = cpum1 - cpum0
-
+                print('Fitting', name, 'took', cputimes[name])
+                
             # Actually select which model to keep.  This "modnames"
             # array determines the order of the elements in the DCHISQ
             # column of the catalog.
@@ -815,11 +877,27 @@ class OneBlob(object):
             #print('Keeping source:', keepsrc)
             cpu1 = time.clock()
             B.cpu_source[srci] += (cpu1 - cpu0)
-    
+
+            ###########
+            import sys
+            sys.exit(0)
+            
         models.restore_images(self.tims)
         del models
     
-        
+    def _plot_coadd(self, tims, wcs, model=None):
+        # just to be safe
+        tims_compute_resamp(None, tims, wcs, force=True)
+        if model:
+            tractor = model
+            modimgs = list(tractor.getModelImages())
+        else:
+            modimgs = None
+        comods,nil = quick_coadds(tims, self.bands, wcs, images=modimgs,
+                                  fill_holes=False)
+        plt.clf()
+        dimshow(get_rgb(comods, self.bands))
+
     def _get_todepth_subset(self, srctims, srcwcs, srcpix):
         timsubset = set()
         for band in self.bands:
@@ -897,13 +975,13 @@ class OneBlob(object):
 
         if self.plots:
             plt.clf()
-            coimgs,cons = quick_coadds(dtims, bands, srcwcs,
+            coimgs,cons = quick_coadds(dtims, self.bands, srcwcs,
                                          fill_holes=False)
-            dimshow(get_rgb(coimgs, bands))
+            dimshow(get_rgb(coimgs, self.bands))
             plt.title('To-depth data')
             self.ps.savefig()
 
-        return dtims, insubset
+        return dtims, insubset, timsubset
             
     def _optimize_individual_sources(self, tr, cat, Ibright, cputime):
         # Single source (though this is coded to handle multiple sources)
@@ -1417,7 +1495,7 @@ def _initialize_models(src):
     return oldmodel, ptsrc, simple, dev, exp, comp
 
 def _get_subimages(tims, mods, src):
-    srctims = []
+    subtims = []
     modelMasks = []
     #print('Big blob: trimming:')
     for tim,mod in zip(tims, mods):
@@ -1439,26 +1517,26 @@ def _get_subimages(tims, mods, src):
             print('Subimage shape:', subimg.shape, 'image shape',
                   tim.getImage().shape, 'slice y', y0,y1, 'x', x0,x1,
                   'mod shape', mh,mw)
-        # print('  srctim: x0,y0', x0,y0, 'shape', (y1-y0,x1-x0))
+        # print('  subtim: x0,y0', x0,y0, 'shape', (y1-y0,x1-x0))
         subpsf = tim.psf.constantPsfAt((x0+x1)/2., (y0+y1)/2.)
-        srctim = Image(data=subimg,
+        subtim = Image(data=subimg,
                        inverr=tim.getInvError()[slc],
                        wcs=tim.wcs.shifted(x0, y0),
                        psf=subpsf,
                        photocal=tim.getPhotoCal(),
                        sky=tim.sky.shifted(x0, y0),
                        name=tim.name)
-        sh,sw = srctim.shape
-        srctim.subwcs = tim.subwcs.get_subimage(x0, y0, sw, sh)
-        srctim.band = tim.band
-        srctim.sig1 = tim.sig1
-        srctim.modelMinval = tim.modelMinval
-        srctim.x0 = x0
-        srctim.y0 = y0
-        srctim.meta = tim.meta
-        srctims.append(srctim)
-        #print('  ', tim.shape, 'to', srctim.shape)
-    return srctims, modelMasks
+        sh,sw = subtim.shape
+        subtim.subwcs = tim.subwcs.get_subimage(x0, y0, sw, sh)
+        subtim.band = tim.band
+        subtim.sig1 = tim.sig1
+        subtim.modelMinval = tim.modelMinval
+        subtim.x0 = x0
+        subtim.y0 = y0
+        subtim.meta = tim.meta
+        subtims.append(subtim)
+        #print('  ', tim.shape, 'to', subtim.shape)
+    return subtims, modelMasks
 
 class SourceModels(object):
     '''
@@ -1658,10 +1736,10 @@ def _chisq_improvement(src, chisqs, chisqs_none):
             dchisq -= np.abs(d)
     return dchisq
 
-def _per_band_chisqs(srctractor, bands):
+def _per_band_chisqs(tractor, bands):
     chisqs = dict([(b,0) for b in bands])
-    for img in srctractor.images:
-        chi = srctractor.getChiImage(img=img)
+    for img in tractor.images:
+        chi = tractor.getChiImage(img=img)
         chisqs[img.band] = chisqs[img.band] + (chi ** 2).sum()
     return chisqs
 
