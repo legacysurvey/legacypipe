@@ -656,21 +656,14 @@ class OneBlob(object):
                 print('Optimizing first round', name, 'took',
                       time.clock()-cpustep0)
                 print(newsrc)
-                # FIXME N steps: -> FLAG_STEPS_A
-    
+
                 # print('Mod', name, 'round1 opt', Time()-t0)
                 #print('Mod selection: after first-round opt:', newsrc)
     
-                if self.plots1:
-                    # _plot_mods(srctims, [list(srctractor.getModelImages())],
-                    #        ['Model selection: ' + name], bands, None, None,
-                    #         None, srch,srcw, ps, chi_plots=False)
-                    plt.clf()
-                    modimgs = list(srctractor.getModelImages())
-                    comods,nil = quick_coadds(srctims, self.bands, srcwcs,
-                                              images=modimgs)
-                    dimshow(get_rgb(comods, self.bands))
-                    plt.title('After first-round opt: ' + name)
+                #if self.plots1:
+                if self.plots:
+                    self._plot_coadd(srctims, self.blobwcs, model=srctractor)
+                    plt.title('first round: %s' % name)
                     self.ps.savefig()
     
                 srctractor.setModelMasks(None)
@@ -798,8 +791,42 @@ class OneBlob(object):
                 # Can we evaluate the models on the second-round modelMasks
                 # but only count chi-squared within the original masks?
                 #
-                srctractor.setModelMasks(newsrc_mm)
-                ch = _per_band_chisqs(srctractor, self.bands)
+
+                #if modtractor is srctractor:
+                if True:
+                    srctractor.setModelMasks(newsrc_mm)
+                    ch = _per_band_chisqs(srctractor, self.bands)
+                else:
+                    #### HACK -- this is just so ugly!  All this,
+                    #### effectively, to avoid wrap-around.
+                    slices = []
+                    #srctractor.setModelMasks(newsrc_mm)
+                    for tim in modtims:
+                        mm = None
+                        for stim,modelmask in zip(srctims, newsrc_mm):
+                            if stim.name == tim.name:
+                                mm = modelmask[newsrc]
+                                break
+                        print('Found modelMask:', mm, 'in stim', stim.shape,
+                              'with x0,y0', (stim.x0,stim.y0))
+                        print('Modtim is', tim.shape, 'with x0,y0', tim.x0,tim.y0)
+                        if mm is None:
+                            slices.append(None)
+                            continue
+                        
+                        mh,mw = mm.shape
+                        #y0 = mm.y0 - tim.y0
+                        #x0 = mm.x0 - tim.x0
+                        y0 = stim.y0 - tim.y0
+                        x0 = stim.x0 - tim.x0
+                        assert(x0 >= 0)
+                        assert(y0 >= 0)
+                        print('Slice: x0,y0', x0,y0, 'shape', (mh,mw))
+                        slices.append((slice(y0, y0+mh),
+                                       slice(x0, x0+mw)))
+                    ch = _per_band_chisqs(modtractor, self.bands,
+                                          slices=slices)
+                    
                 chisqs[name] = _chisq_improvement(newsrc, ch, chisqs_none)
                 B.all_models[srci][name] = newsrc.copy()
                 B.all_model_flags[srci][name] = thisflags
@@ -807,6 +834,12 @@ class OneBlob(object):
                 B.all_model_cpu[srci][name] = cpum1 - cpum0
                 cputimes[name] = cpum1 - cpum0
                 print('Fitting', name, 'took', cputimes[name])
+
+                if self.plots:
+                    self._plot_coadd(srctims, self.blobwcs,
+                                     model=srctractor)
+                    plt.title('model selection evaluated for %s' % name)
+                    self.ps.savefig()
                 
             # Actually select which model to keep.  This "modnames"
             # array determines the order of the elements in the DCHISQ
@@ -897,6 +930,8 @@ class OneBlob(object):
                                   fill_holes=False)
         plt.clf()
         dimshow(get_rgb(comods, self.bands))
+        for tim in tims:
+            del tim.resamp
 
     def _get_todepth_subset(self, srctims, srcwcs, srcpix):
         timsubset = set()
@@ -1736,10 +1771,18 @@ def _chisq_improvement(src, chisqs, chisqs_none):
             dchisq -= np.abs(d)
     return dchisq
 
-def _per_band_chisqs(tractor, bands):
+def _per_band_chisqs(tractor, bands, slices=None):
     chisqs = dict([(b,0) for b in bands])
-    for img in tractor.images:
+    for i,img in enumerate(tractor.images):
         chi = tractor.getChiImage(img=img)
+        # CUT...
+        if slices is not None:
+            slc = slices[i]
+            if slc is None:
+                # skip
+                continue
+            chi = chi[slc]
+
         chisqs[img.band] = chisqs[img.band] + (chi ** 2).sum()
     return chisqs
 
