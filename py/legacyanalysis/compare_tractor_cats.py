@@ -76,32 +76,30 @@ laba=dict(fontweight='bold',fontsize='medium')
 kwargs_axtext=dict(fontweight='bold',fontsize='large',va='top',ha='left')
 leg_args=dict(frameon=True,fontsize='x-small')
 
-def plot_radec(obj,matched=False): 
+def plot_radec(obj): 
     '''obj[m_types] -- DECaLS() objects with matched OR unmatched indices'''
     #set seaborn panel styles
     #sns.set_style('ticks',{"axes.facecolor": ".97"})
     #sns.set_palette('colorblind')
     #setup plot
-    fig,ax=plt.subplots() #1,figsize=(9,3)) #,sharey=True)
+    fig,ax=plt.subplots(1,2,figsize=(9,6),sharey=True,sharex=True)
+    plt.subplots_adjust(wspace=0.25)
     #plt.subplots_adjust(wspace=0.5)
     #plot
-    colors=['b','g']
-    if matched: 
-        m_types=['m_decam','m_bokmos']
-        name='Matched'
-    else: 
-        m_types=['u_decam','u_bokmos']
-        name='Unmatched'
-    for ith,m_type,color in zip(range(2),m_types,colors):
-        ax.scatter(obj[m_type].data['ra'], obj[m_type].data['dec'], \
-                        edgecolor=color,c='none',lw=2.,label=m_type.split('_')[-1])
-    xlab=ax.set_xlabel('RA', **laba)
-    ylab=ax.set_ylabel('DEC', **laba)
-    ti=ax.set_title(name, **laba)
-    leg=ax.legend(loc=(1.01,0),**leg_args)
+    ax[0].scatter(obj['m_decam'].data['ra'], obj['m_decam'].data['dec'], \
+                edgecolor='b',c='none',lw=1.)
+    ax[1].scatter(obj['u_decam'].data['ra'], obj['u_decam'].data['dec'], \
+                edgecolor='b',c='none',lw=1.,label='decam')
+    ax[1].scatter(obj['u_bokmos'].data['ra'], obj['u_bokmos'].data['dec'], \
+                edgecolor='g',c='none',lw=1.,label='bokmos')
+    for cnt,ti in zip(range(2),['Matched','Unmatched']):
+        ti=ax[cnt].set_title(ti,**laba)
+        xlab=ax[cnt].set_xlabel('RA', **laba)
+    ylab=ax[0].set_ylabel('DEC', **laba)
+    leg=ax[1].legend(loc=(1.01,0.9),**leg_args)
     #save
     #sns.despine()
-    plt.savefig('radec_%s.png' % name, bbox_extra_artists=[xlab,ylab,ti,leg], bbox_inches='tight',dpi=150)
+    plt.savefig('radec.png', bbox_extra_artists=[xlab,ylab,ti,leg], bbox_inches='tight',dpi=150)
     plt.close()
 
 
@@ -124,13 +122,13 @@ def plot_HistTypes(obj,m_types=['m_decam','m_bokmos']):
     ###
     ht_decam, ht_bokmos= np.zeros(5,dtype=int),np.zeros(5,dtype=int)
     for cnt,typ in enumerate(types):
-        ht_decam[cnt]= np.where(obj[m_types[0]].data['type'] == typ)[0].shape[0]
-        ht_bokmos[cnt]= np.where(obj[m_types[1]].data['type'] == typ)[0].shape[0]
+        ht_decam[cnt]= np.where(obj[m_types[0]].data['type'] == typ)[0].shape[0] / float(obj['deg2_decam'])
+        ht_bokmos[cnt]= np.where(obj[m_types[1]].data['type'] == typ)[0].shape[0] / float(obj['deg2_bokmos'])
     ###
     fig, ax = plt.subplots()
     rects1 = ax.bar(ind, ht_decam, width, color=c1)
     rects2 = ax.bar(ind + width, ht_bokmos, width, color=c2)
-    ylab= ax.set_ylabel("N")
+    ylab= ax.set_ylabel("counts/deg2")
     if matched: ti= ax.set_title('Matched')
     else: ti= ax.set_title('Unmatched')
     ax.set_xticks(ind + width)
@@ -193,7 +191,7 @@ def plot_SN_vs_mag(obj, found_by='matched',type='all'):
                     bin_up(obj[prefix+key].data[band+'mag'][i], obj[prefix+key].data[band+'flux'][i]*np.sqrt(obj[prefix+key].data[band+'flux_ivar'][i]), bL=min, bH=max)
     #setup plot
     fig,ax=plt.subplots(1,3,figsize=(9,3),sharey=True)
-    plt.subplots_adjust(wspace=0)
+    plt.subplots_adjust(wspace=0.25)
     #plot SN
     for cnt,band in zip(range(3),['g','r','z']):
         #horiz line at SN = 5
@@ -262,6 +260,7 @@ def plot_matched_decam_vs_bokmos_psf_fwhm(obj, type='psf'):
     #finish
     for cnt,band in zip(range(3),['g','r','z']):
         ax[cnt].set_xlim(0,3)
+        ax[cnt].set_ylim(0,3)
     xlab=ax[1].set_xlabel('PSF_FWHM (bokmos)', **laba)
     ylab=ax[0].set_ylabel('PSF_FWHM (decam)', **laba)
     ti= plt.suptitle('%s Objects, Matched' % type.upper())
@@ -422,7 +421,7 @@ def plot_dflux_chisq(b,type='psf', low=-8.,hi=8.):
     xvals= np.linspace(low,hi)
     #plot
     fig,ax=plt.subplots(1,3,figsize=(9,3),sharey=True)
-    plt.subplots_adjust(wspace=0)
+    plt.subplots_adjust(wspace=0.25)
     for cnt,band in zip(range(3),['g','r','z']):
         ax[cnt].step(binc[band],hist[band], where='mid',c='b',lw=2)
         ax[cnt].plot(xvals,G.pdf(xvals))
@@ -521,8 +520,8 @@ b['m_decam'].update_masks_for_everything(mask=np.any((b['m_decam'].mask, b['m_bo
 b['m_bokmos'].update_masks_for_everything(mask=np.any((b['m_decam'].mask, b['m_bokmos'].mask),axis=0),\
                                     mask_wise=np.any((b['m_decam'].mask_wise, b['m_bokmos'].mask_wise),axis=0) )
 #plots
-plot_radec(b, matched=False)
-plot_radec(b, matched=True)
+plot_radec(b)
+print('decam deg2= ',b['deg2_decam'],'bokmos deg2= ',b['deg2_bokmos'])
 
 plot_HistTypes(b,m_types=['m_decam','m_bokmos'])
 plot_HistTypes(b,m_types=['u_decam','u_bokmos'])
@@ -531,8 +530,10 @@ plot_matched_separation_hist(b['d12'])
 
 plot_SN_vs_mag(b, found_by='matched',type='all')
 plot_SN_vs_mag(b, found_by='matched',type='psf')
+plot_SN_vs_mag(b, found_by='matched',type='lrg')
 plot_SN_vs_mag(b, found_by='unmatched',type='all')
 plot_SN_vs_mag(b, found_by='unmatched',type='psf')
+plot_SN_vs_mag(b, found_by='unmatched',type='lrg')
 
 maglow,maghi=18,28
 plot_N_per_deg2(b,type='all', maglow=maglow,maghi=maghi)
