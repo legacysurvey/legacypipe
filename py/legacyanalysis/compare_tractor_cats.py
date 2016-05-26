@@ -60,13 +60,12 @@ def read_lines(fn):
     return list(np.char.strip(lines))
 
 #plotting vars
-laba=dict(fontweight='bold',fontsize='large')
+laba=dict(fontweight='bold',fontsize='medium')
 kwargs_axtext=dict(fontweight='bold',fontsize='large',va='top',ha='left')
 leg_args=dict(frameon=True,fontsize='small')
 
-def plot_radec(obj,m_types=['u_decam','u_bokmos']): 
+def plot_radec(obj,matched=False): 
     '''obj[m_types] -- DECaLS() objects with matched OR unmatched indices'''
-    assert (m_types[0].startswith('u_') and m_types[1].startswith('u_'))
     #set seaborn panel styles
     #sns.set_style('ticks',{"axes.facecolor": ".97"})
     #sns.set_palette('colorblind')
@@ -75,16 +74,22 @@ def plot_radec(obj,m_types=['u_decam','u_bokmos']):
     #plt.subplots_adjust(wspace=0.5)
     #plot
     colors=['b','g']
+    if matched: 
+        m_types=['m_decam','m_bokmos']
+        name='Matched'
+    else: 
+        m_types=['u_decam','u_bokmos']
+        name='Unmatched'
     for ith,m_type,color in zip(range(2),m_types,colors):
         ax.scatter(obj[m_type].data['ra'], obj[m_type].data['dec'], \
                         edgecolor=color,c='none',lw=2.,label=m_type.split('_')[-1])
     xlab=ax.set_xlabel('RA', **laba)
     ylab=ax.set_ylabel('DEC', **laba)
-    ti=ax.set_title('Unmatched', **laba)
+    ti=ax.set_title(name, **laba)
     leg=ax.legend(loc=(1.01,0),**leg_args)
     #save
     #sns.despine()
-    plt.savefig('radec_Unmatched.png', bbox_extra_artists=[xlab,ylab,ti,leg], bbox_inches='tight',dpi=150)
+    plt.savefig('radec_%s.png' % name, bbox_extra_artists=[xlab,ylab,ti,leg], bbox_inches='tight',dpi=150)
     plt.close()
 
 
@@ -125,31 +130,6 @@ def plot_HistTypes(obj,m_types=['m_decam','m_bokmos']):
     plt.savefig(name, bbox_extra_artists=[ylab,ti], bbox_inches='tight',dpi=150)
     plt.close()
 
-def plot_matched_color_color(decam,bokmos, zoom=False):
-    '''decam,bokmos are DECaLS() objects matched to decam ra,dec'''
-    #set seaborn panel styles
-    #sns.set_style('ticks',{"axes.facecolor": ".97"})
-    #sns.set_palette('colorblind')
-    #setup plot
-    fig,ax=plt.subplots(1,3,figsize=(9,3)) #,sharey=True)
-    plt.subplots_adjust(wspace=0.5)
-    #plot
-    for cnt,val in zip(range(3),['rmag','gmag','zmag']):
-        diff= bokmos[val]- decam[val]
-        ax[cnt].scatter(decam[val], diff)
-        xlab=ax[cnt].set_xlabel('%s (decam)' % val[0], **laba)
-        ylab=ax[cnt].set_ylabel('%s (bokmos - decam)' % val[0], **laba)
-        if zoom: 
-            ax[cnt].set_ylim(-0.1,0.1)
-            ax[cnt].set_xlim(20,25)
-    # sup=plt.suptitle('decam with matching bokmos',**laba)
-    #save
-    #sns.despine()
-    if zoom: name="color_diff_zoom.png"
-    else: name="color_diff.png"
-    plt.savefig(name, bbox_extra_artists=[xlab,ylab], bbox_inches='tight',dpi=150)
-    plt.close()
-
 def bin_up(data_bin_by,data_percentile,bL=20., bH=26.,bW=0.25):
     '''finds indices for 0.25 bins, returns bin centers and q25,50,75 percentiles of data_percentile in each bin
     bL,bH -- min and max values of data_bin to consider
@@ -171,7 +151,7 @@ def indices_for_type(data,type='all'):
     '''return mask for selecting type == all,psf,lrg
     data -- obj['m_decam'].data'''
     if type == 'all': 
-        return np.arange(data['gflux'].size)
+        return np.ones(data['type'].size, dtype=bool) #1 = True
     elif type == 'psf': 
         return data['type'] == 'PSF'
     elif type == 'lrg': 
@@ -179,7 +159,7 @@ def indices_for_type(data,type='all'):
     else: raise ValueError
 
 
-def plot_SN(obj, found_by='matched',type='all'):
+def plot_SN_vs_mag(obj, found_by='matched',type='all'):
     '''obj['m_decam'] is DECaLS() object
     found_by -- 'matched' or 'unmatched' 
     type -- all,psf,lrg'''
@@ -197,14 +177,14 @@ def plot_SN(obj, found_by='matched',type='all'):
             bin_SN[key][band]={}
             i= index[key]
             bin_SN[key][band]['binc'],bin_SN[key][band]['q25'],bin_SN[key][band]['q50'],bin_SN[key][band]['q75']=\
-                    bin_up(obj['m_'+key].data[band+'mag'][i], obj['m_'+key].data[band+'flux'][i]*np.sqrt(obj['m_'+key].data[band+'flux_ivar'][i]), bL=min, bH=max)
+                    bin_up(obj[prefix+key].data[band+'mag'][i], obj[prefix+key].data[band+'flux'][i]*np.sqrt(obj[prefix+key].data[band+'flux_ivar'][i]), bL=min, bH=max)
     #setup plot
     fig,ax=plt.subplots(1,3,figsize=(9,3),sharey=True)
     plt.subplots_adjust(wspace=0)
     #plot SN
     for cnt,band in zip(range(3),['g','r','z']):
         #horiz line at SN = 5
-        ax[cnt].plot([1,40],[5,5],'k--',lw=2,label='S/N = 5')
+        ax[cnt].plot([1,40],[5,5],'k--',lw=2)
         #data
         for inst,color in zip(['decam','bokmos'],['b','g']):
             ax[cnt].plot(bin_SN[inst][band]['binc'], bin_SN[inst][band]['q50'],c=color,ls='-',lw=2,label=inst)
@@ -216,9 +196,66 @@ def plot_SN(obj, found_by='matched',type='all'):
         xlab=ax[cnt].set_xlabel('%s' % band, **laba)
         ax[cnt].set_ylim(1,100)
         ax[cnt].set_xlim(20.,26.)
-    ylab=ax[0].set_ylabel(r'S/N = f / $\sigma_f$', **laba)
+    ylab=ax[0].set_ylabel('S/N', **laba)
+    text_args= dict(verticalalignment='bottom',horizontalalignment='right',fontsize=10)
+    ax[2].text(26,5,'S/N = 5  ',**text_args)
     plt.savefig('sn_%s_%s.png' % (found_by,type), bbox_extra_artists=[xlab,ylab], bbox_inches='tight',dpi=150)
     plt.close()
+
+def plot_matched_dmag_vs_psf_fwhm(obj, type='psf'):
+    '''using matched sample, plot diff in mags vs. DECAM psf_fwhm in bins 
+    obj['m_decam'] is DECaLS() object'''
+    #indices
+    index= np.all((indices_for_type(b['m_decam'].data,type=type),\
+                    indices_for_type(b['m_bokmos'].data,type=type)), axis=0) #both bokmos and decam of same type
+    #bin up by DECAM psf_fwhm
+    min,max,db= 0.,3.,0.5
+    vals={}
+    for band in ['g','r','z']:
+        vals[band]={}
+        vals[band]['binc'],vals[band]['q25'],vals[band]['q50'],vals[band]['q75']=\
+                bin_up(obj['m_decam'].data[band+'_psf_fwhm'][index], obj['m_bokmos'].data[band+'mag'][index]- obj['m_decam'].data[band+'mag'][index], bL=min, bH=max,bW=db)
+#setup plot
+    fig,ax=plt.subplots(1,3,figsize=(9,3),sharey=True)
+    plt.subplots_adjust(wspace=0.25)
+    text_args= dict(verticalalignment='center',horizontalalignment='left',fontsize=10)
+    #plot
+    for cnt,band in zip(range(3),['g','r','z']):
+        ax[cnt].plot(vals[band]['binc'], vals[band]['q50'],c='b',ls='-',lw=2)
+        ax[cnt].fill_between(vals[band]['binc'],vals[band]['q25'],vals[band]['q75'],color='b',alpha=0.25)
+        ax[cnt].text(0.05,0.95,band,transform=ax[cnt].transAxes,**text_args)
+    #finish
+    xlab=ax[1].set_xlabel('decam PSF_FWHM (%.2f bins)' % db, **laba)
+    ylab=ax[0].set_ylabel(r'Median (D mag - BM mag)', **laba)
+    ti= plt.suptitle('Matched %s' % type.upper())
+    plt.savefig('dmag_vs_psf_fwhm_%s.png' % type, bbox_extra_artists=[ti,xlab,ylab], bbox_inches='tight',dpi=150)
+    plt.close()
+
+def plot_matched_decam_vs_bokmos_psf_fwhm(obj, type='psf'):
+    '''using matched sample, plot decam psf_fwhm vs. bokmos psf_fwhm 
+    obj['m_decam'] is DECaLS() object'''
+    #indices
+    index= np.all((indices_for_type(b['m_decam'].data,type=type),\
+                    indices_for_type(b['m_bokmos'].data,type=type)), axis=0) #both bokmos and decam of same type
+    #setup plot
+    fig,ax=plt.subplots(1,3,figsize=(9,3),sharey=True)
+    plt.subplots_adjust(wspace=0.25)
+    text_args= dict(verticalalignment='center',horizontalalignment='left',fontsize=10)
+    #plot
+    for cnt,band in zip(range(3),['g','r','z']):
+        ax[cnt].scatter(obj['m_bokmos'].data[band+'_psf_fwhm'][index], obj['m_decam'].data[band+'_psf_fwhm'][index],\
+                        edgecolor='b',c='none',lw=1.)
+        ax[cnt].text(0.05,0.95,band,transform=ax[cnt].transAxes,**text_args)
+    #finish
+    for cnt,band in zip(range(3),['g','r','z']):
+        xlab=ax[cnt].set_xlabel('bassmos PSF_FWHM', **laba)
+        ax[cnt].set_xlim(0,3)
+    ylab=ax[0].set_ylabel('decam PSF_FWHM', **laba)
+    ti= plt.suptitle('Matched %s' % type.upper())
+    plt.savefig('decam_vs_bokmos_psf_fwhm_%s.png' % type, bbox_extra_artists=[ti,xlab,ylab], bbox_inches='tight',dpi=150)
+    plt.close()
+
+
 
 def plot_confusion_matrix(cm,ticknames):
     '''cm -- NxN array containing the Confusion Matrix values
@@ -249,7 +286,7 @@ def create_confusion_matrix(obj):
             else: cm[i_dec,i_bass]= np.nan
     return cm,types
 
-def plot_matched_separation_hist(d12, zoom=False):
+def plot_matched_separation_hist(d12):
     '''d12 is array of distances in degress between matched objects'''
     #pixscale to convert d12 into N pixels
     pixscale=dict(decam=0.25,bokmos=0.45)
@@ -258,73 +295,15 @@ def plot_matched_separation_hist(d12, zoom=False):
     #setup plot
     fig,ax=plt.subplots()
     #plot
-    ax.hist(d12*3600./pixscale['decam'],bins=50,color='b',align='mid')
+    ax.hist(d12*3600,bins=50,color='b',align='mid')
     ax2 = ax.twiny()
-    ax2.hist(d12*3600./pixscale['bokmos'],bins=50,color='g',align='mid',visible=False)
-    xlab= ax.set_xlabel("pixel separation [decam]")
-    xlab= ax2.set_xlabel("pixel separation [bok]")
-    ylab= ax.set_ylabel("Counts")
-    ti= ax.set_title('Matched')
-    if zoom: ax.set_xlim(0,3)
-    # sup=plt.suptitle('decam with matching bokmos',**laba)
+    ax2.hist(d12*3600./pixscale['decam'],bins=50,color='g',align='mid',visible=False)
+    xlab= ax.set_xlabel("arcsec")
+    xlab= ax2.set_xlabel("pixels [decam]")
+    ylab= ax.set_ylabel("Matched")
     #save
     #sns.despine()
-    if zoom: name="separation_hist_zoom.png"
-    else: name="separation_hist.png"
-    plt.savefig(name, bbox_extra_artists=[xlab,ylab,ti], bbox_inches='tight',dpi=150)
-    plt.close()
-
-def plot_PSF_color(obj): 
-    '''obj['m_decam'] is a DECaLS() object'''
-    #set seaborn panel styles
-    #sns.set_style('ticks',{"axes.facecolor": ".97"})
-    #sns.set_palette('colorblind')
-    #setup plot
-    fig,ax=plt.subplots(2,2) #,figsize=(9,3)) #,sharey=True)
-    plt.subplots_adjust(wspace=0.5,hspace=0)
-    #PSF indices
-    i_PSF={}
-    for val in ['m_decam','m_bokmos','u_decam','u_bokmos']: 
-        i_PSF[val]= obj[val].data['type'] == 'PSF'
-    #bin by g mag
-    width=0.25 #in mag
-    low_vals= np.arange(20.,26.,width)
-    med,rms={},{}
-    for val in ['m_decam','m_bokmos','u_decam','u_bokmos']:
-        med[val]=np.zeros(low_vals.size)-100
-        rms[val]=np.zeros(low_vals.size)-100
-    for val in ['m_decam','m_bokmos','u_decam','u_bokmos']:
-        for i,low in enumerate(low_vals):
-            ind= np.all((low <= obj[val].data['gmag'][i_PSF[val]],obj[val].data['gmag'][i_PSF[val]] < low+width),axis=0)
-            if np.where(ind)[0].size > 0:
-                sample=obj[val].data['gmag'][ind]-obj[val].data['rmag'][ind]
-                med[val][i]= np.percentile(sample,q=50)
-                rms[val][i]= np.sqrt( np.mean( np.power(sample,2) ) )
-            else: 
-                med[val][i]= np.nan
-                med[val][i]= np.nan
-    #plot
-    ti=ax[0,0].set_title('Decam PSF')
-    ti=ax[0,1].set_title('Bokmos PSF')
-    ylab=ax[0,0].set_ylabel('Median g-r')
-    ylab=ax[1,0].set_ylabel('RMS g-r')
-    xlab=ax[1,0].set_xlabel('g binned 0.25')
-    xlab=ax[1,1].set_xlabel('g binned 0.25')
-    #decam
-    ax[0,0].scatter(low_vals,med['m_decam'],edgecolor='b',c='none',lw=2.,label='Matched')
-    ax[0,0].scatter(low_vals,med['u_decam'],edgecolor='g',c='none',lw=2.,label='Unmatched')
-    ax[1,0].scatter(low_vals,rms['m_decam'],edgecolor='b',c='none',lw=2.)
-    ax[1,0].scatter(low_vals,rms['u_decam'],edgecolor='g',c='none',lw=2.)
-    #bokmos
-    ax[0,0].scatter(low_vals,med['m_bokmos'],edgecolor='b',c='none',lw=2.)
-    ax[0,0].scatter(low_vals,med['u_bokmos'],edgecolor='g',c='none',lw=2.)
-    ax[1,0].scatter(low_vals,rms['m_bokmos'],edgecolor='b',c='none',lw=2.)
-    ax[1,0].scatter(low_vals,rms['u_bokmos'],edgecolor='g',c='none',lw=2.)
-    #finish
-    ax[0,0].legend(loc=3,**leg_args)
-    #save
-    #sns.despine()
-    plt.savefig('psf_color_binned.png', bbox_extra_artists=[ti,xlab,ylab], bbox_inches='tight',dpi=150)
+    plt.savefig("separation_hist.png", bbox_extra_artists=[xlab,ylab], bbox_inches='tight',dpi=150)
     plt.close()
 
 def plot_psf_hists(decam,bokmos, zoom=False):
@@ -394,7 +373,7 @@ def gauss_stats(n_samples=10000):
     assert(abs(std-1.) <= tol)
     return mean,std,q25,perc_out
 
-def sample_gauss_stats(sample, low=-8,hi=8):
+def sample_gauss_stats(sample, low=-20,hi=20):
     '''return dictionary of stats about the data and stats for a sample that is unit gaussian distributed
     low,hi -- minimum and maximum sample values that will be considered'''
     a=dict(sample={},gauss={})
@@ -409,9 +388,10 @@ def sample_gauss_stats(sample, low=-8,hi=8):
 
 
 text_args= dict(verticalalignment='center',fontsize=8)
-def plot_flux_diff(b,type='psf', low=-8.,hi=8.):
-    #select indices BASED ON DECam type
-    i_type= indices_for_type(b['m_decam'].data,type=type)
+def plot_dflux_chisq(b,type='psf', low=-8.,hi=8.):
+    #join indices b/c matched
+    i_type= np.all((indices_for_type(b['m_decam'].data,type=type),\
+                    indices_for_type(b['m_bokmos'].data,type=type)), axis=0) #both bokmos and decam of same type
     #get flux diff for each band
     hist= dict(g=0,r=0,z=0)
     binc= dict(g=0,r=0,z=0)
@@ -422,7 +402,7 @@ def plot_flux_diff(b,type='psf', low=-8.,hi=8.):
         hist[band],bins,junk= plt.hist(sample,range=(low,hi),bins=50,normed=True)
         db= (bins[1:]-bins[:-1])/2
         binc[band]= bins[:-1]+db
-        stats[band]= sample_gauss_stats(sample, low=low,hi=hi)
+        stats[band]= sample_gauss_stats(sample)
     plt.close() #b/c plt.hist above
     #for drawing unit gaussian N(0,1)
     G= sp_stats.norm(0,1)
@@ -446,7 +426,7 @@ def plot_flux_diff(b,type='psf', low=-8.,hi=8.):
     xlab=ax[1].set_xlabel(r'(F[decam] - F[bokmos])/$\sigma$', **laba)
     ylab=ax[0].set_ylabel('PDF, %s' % type, **laba)
     #put stats in suptitle
-    plt.savefig('flux_diff_%s.png' % type, bbox_extra_artists=[ti,xlab,ylab], bbox_inches='tight',dpi=150)
+    plt.savefig('dflux_chisq_%s.png' % type, bbox_extra_artists=[ti,xlab,ylab], bbox_inches='tight',dpi=150)
     plt.close()
 ################
 
@@ -486,34 +466,33 @@ b['m_decam'].update_masks_for_everything(mask=np.any((b['m_decam'].mask, b['m_bo
 b['m_bokmos'].update_masks_for_everything(mask=np.any((b['m_decam'].mask, b['m_bokmos'].mask),axis=0),\
                                     mask_wise=np.any((b['m_decam'].mask_wise, b['m_bokmos'].mask_wise),axis=0) )
 #plots
-plot_radec(b,m_types=['u_decam','u_bokmos'])
+plot_radec(b, matched=False)
+plot_radec(b, matched=True)
 
-plot_SN(b, found_by='matched',type='all')
-#plot_SN(b, found_by='matched',type='psf')
-#plot_SN(b, found_by='unmatched',type='all')
+plot_HistTypes(b,m_types=['m_decam','m_bokmos'])
+plot_HistTypes(b,m_types=['u_decam','u_bokmos'])
+
+plot_matched_separation_hist(b['d12'])
+
+plot_SN_vs_mag(b, found_by='matched',type='all')
+plot_SN_vs_mag(b, found_by='matched',type='psf')
+plot_SN_vs_mag(b, found_by='unmatched',type='all')
+plot_SN_vs_mag(b, found_by='unmatched',type='psf')
+
+plot_matched_dmag_vs_psf_fwhm(b, type='psf')
+plot_matched_decam_vs_bokmos_psf_fwhm(b, type='psf')
 
 cm,names= create_confusion_matrix(b)
 plot_confusion_matrix(cm,names)
 
-plot_flux_diff(b,type='all')
-print('exit')
+plot_dflux_chisq(b,type='all')
+plot_dflux_chisq(b,type='psf')
+
+print('HELO exit')
 sys.exit()
 
 
-plot_matched_color_diff_binned(b['m_decam'].data,b['m_bokmos'].data)
-plot_matched_color_diff_binned(b['m_decam'].data,b['m_bokmos'].data,zoom=True)
-
-plot_matched_separation_hist(b['d12'])
-
-plot_PSF_color(b)
-
-print('exiting early')
-sys.exit()
-plot_HistTypes(b,m_types=['m_decam','m_bokmos'])
-plot_HistTypes(b,m_types=['u_decam','u_bokmos'])
-
-plot_matched_color_color(b['m_decam'].data,b['m_bokmos'].data)
-plot_matched_color_color(b['m_decam'].data,b['m_bokmos'].data, zoom=True)
+#REVISE THIS BELOW
 #print stats of total objects, each group, # masked, etc
 print("---- DECAM ----")
 print("N not masked due to grz= %d, N total= %d" % \
