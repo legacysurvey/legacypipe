@@ -12,6 +12,7 @@ import sys
 import logging
 import argparse
 import numpy as np
+from scipy import stats as sp_stats
 #import seaborn as sns
 
 import matplotlib.pyplot as plt
@@ -59,8 +60,8 @@ def read_lines(fn):
     return list(np.char.strip(lines))
 
 #plotting vars
-laba=dict(fontweight='bold',fontsize='x-large')
-kwargs_axtext=dict(fontweight='bold',fontsize='x-large',va='top',ha='left')
+laba=dict(fontweight='bold',fontsize='large')
+kwargs_axtext=dict(fontweight='bold',fontsize='large',va='top',ha='left')
 leg_args=dict(frameon=True,fontsize='small')
 
 def plot_radec(obj,m_types=['u_decam','u_bokmos']): 
@@ -166,6 +167,17 @@ def bin_up(data_bin_by,data_percentile,bL=20., bH=26.,bW=0.25):
             pass #given qs nan, which they already have
     return low_vals+bW/2,q25,q50,q75
 
+def indices_for_type(data,type='all'):
+    '''return mask for selecting type == all,psf,lrg
+    data -- obj['m_decam'].data'''
+    if type == 'all': 
+        return np.arange(data['gflux'].size)
+    elif type == 'psf': 
+        return data['type'] == 'PSF'
+    elif type == 'lrg': 
+        return data['i_lrg']
+    else: raise ValueError
+
 
 def plot_SN(obj, found_by='matched',type='all'):
     '''obj['m_decam'] is DECaLS() object
@@ -176,13 +188,7 @@ def plot_SN(obj, found_by='matched',type='all'):
     prefix= found_by[0]+'_' # m_ or u_
     index={}
     for key in ['decam','bokmos']:
-        if type == 'all': 
-            index[key]= np.arange(obj[prefix+key].data['gflux'].size)
-        elif index == 'psf': 
-            index[key]= obj[prefix+key].data['type'] == 'PSF'
-        elif index == 'lrg': 
-            index[key]= obj[prefix+key].data['i_lrg']
-        else: raise ValueError
+        index[key]= indices_for_type(obj[prefix+key].data,type=type)
     #bin up SN values
     min,max= 18.,25.
     bin_SN=dict(decam={},bokmos={})
@@ -239,7 +245,8 @@ def create_confusion_matrix(obj):
         ind= np.where(obj['m_decam'].data['type'] == dec_type)[0]
         for i_bass,bass_type in enumerate(types):
             n_bass= np.where(obj['m_bokmos'].data['type'][ind] == bass_type)[0].size
-            cm[i_dec,i_bass]= float(n_bass)/ind.size #ind.size is constant for each loop over bass_types
+            if ind.size > 0: cm[i_dec,i_bass]= float(n_bass)/ind.size #ind.size is constant for each loop over bass_types
+            else: cm[i_dec,i_bass]= np.nan
     return cm,types
 
 def plot_matched_separation_hist(d12, zoom=False):
@@ -356,7 +363,92 @@ def plot_psf_hists(decam,bokmos, zoom=False):
     plt.savefig(name, bbox_extra_artists=[xlab,ylab], bbox_inches='tight',dpi=150)
     plt.close()
 
+##########
+#funcs for flux diff / sqrt(inv var + inv var)
+def n_gt_3_sigma(sample, low=-8.,hi=8.):
+    '''for a sample that should be distributed as N(mean=0,stddev=1), returns mask for the N that are greater 3 sigma
+    low,hi -- minimum and maximum sample values that will be considered'''
+    i_left= np.all((sample >= low,sample <= -3.),axis=0)
+    i_right= np.all((sample <= hi,sample>=3),axis=0)
+    #assert i_left and i_right are mutually exclusive
+    false_arr= np.all((i_left,i_right),axis=0) #should be array of Falses
+    assert( np.all(false_arr == False) ) #should be np.all([True,True,...]) which evaluates to True
+    return np.any((i_left,i_right),axis=0)
 
+def gauss_stats(n_samples=10000):
+    '''returns mean,std,q25, frac outliers > 3 sigma for n_samples drawn from unit gaussian N(0,1)'''
+    G= sp_stats.norm(0,1)
+    mean=std=q25=perc_out=0.
+    for i in range(10): #draw 10 times, take avg of the 10 measurements of each statistic
+        draws= G.rvs(n_samples) 
+        mean+= np.mean(draws)
+        std+= np.std(draws)
+        q25+= np.percentile(draws,q=25)
+        perc_out+= 2*G.cdf(-3)*100 #HACH same number ea time
+    mean/= 10.
+    std/= 10.
+    q25/= 10.
+    perc_out/= 10.
+    tol=1e-1
+    assert(abs(mean) <= tol)
+    assert(abs(std-1.) <= tol)
+    return mean,std,q25,perc_out
+
+def sample_gauss_stats(sample, low=-8,hi=8):
+    '''return dictionary of stats about the data and stats for a sample that is unit gaussian distributed
+    low,hi -- minimum and maximum sample values that will be considered'''
+    a=dict(sample={},gauss={})
+    #vals for unit gaussian distributed data
+    a['gauss']['mean'],a['gauss']['std'],a['gauss']['q25'],a['gauss']['perc_out']= gauss_stats(n_samples=sample.size)
+    #vals for actual sample
+    a['sample']['mean'],a['sample']['std'],a['sample']['q25'],a['sample']['q75']= \
+            np.mean(sample),np.std(sample),np.percentile(sample,q=25),np.percentile(sample,q=75) 
+    i_outliers= n_gt_3_sigma(sample, low=low,hi=hi)
+    a['sample']['perc_out']= sample[i_outliers].size/float(sample.size)*100.
+    return a
+
+
+text_args= dict(verticalalignment='center',fontsize=8)
+def plot_flux_diff(b,type='psf', low=-8.,hi=8.):
+    #select indices BASED ON DECam type
+    i_type= indices_for_type(b['m_decam'].data,type=type)
+    #get flux diff for each band
+    hist= dict(g=0,r=0,z=0)
+    binc= dict(g=0,r=0,z=0)
+    stats=dict(g=0,r=0,z=0) 
+    for band in ['g','r','z']:
+        sample=(b['m_decam'].data[band+'flux'][i_type]-b['m_bokmos'].data[band+'flux'][i_type])/np.sqrt(\
+                    np.power(b['m_decam'].data[band+'flux_ivar'][i_type],-1)+np.power(b['m_bokmos'].data[band+'flux_ivar'][i_type],-1))
+        hist[band],bins,junk= plt.hist(sample,range=(low,hi),bins=50,normed=True)
+        db= (bins[1:]-bins[:-1])/2
+        binc[band]= bins[:-1]+db
+        stats[band]= sample_gauss_stats(sample, low=low,hi=hi)
+    plt.close() #b/c plt.hist above
+    #for drawing unit gaussian N(0,1)
+    G= sp_stats.norm(0,1)
+    xvals= np.linspace(low,hi)
+    #plot
+    fig,ax=plt.subplots(1,3,figsize=(9,3),sharey=True)
+    plt.subplots_adjust(wspace=0)
+    for cnt,band in zip(range(3),['g','r','z']):
+        ax[cnt].step(binc[band],hist[band], where='mid',c='b',lw=2)
+        ax[cnt].plot(xvals,G.pdf(xvals))
+        for yloc,key in zip([0.95,0.85,0.75,0.65,0.55],['mean','std','q25','q75','perc_out']):
+            ax[cnt].text(0.1,yloc,"%s %.2f" % (key,stats[band]['sample'][key]),transform=ax[cnt].transAxes,horizontalalignment='left',**text_args)
+    ax[2].text(0.9,0.95,"N(0,1)",transform=ax[2].transAxes,horizontalalignment='right',**text_args)
+    for yloc,key in zip([0.85,0.75,0.65,0.55],['mean','std','q25','perc_out']):
+        ax[2].text(0.9,yloc,"%s %.2f" % (key,stats['g']['gauss'][key]),transform=ax[2].transAxes,horizontalalignment='right',**text_args)
+    #labels
+    for cnt,band in zip(range(3),['g','r','z']):
+        ti=ax[cnt].set_title('%s' % band, **laba)
+        ax[cnt].set_ylim(0,0.6)
+        ax[cnt].set_xlim(low,hi)
+    xlab=ax[1].set_xlabel(r'(F[decam] - F[bokmos])/$\sigma$', **laba)
+    ylab=ax[0].set_ylabel('PDF, %s' % type, **laba)
+    #put stats in suptitle
+    plt.savefig('flux_diff_%s.png' % type, bbox_extra_artists=[ti,xlab,ylab], bbox_inches='tight',dpi=150)
+    plt.close()
+################
 
 parser=argparse.ArgumentParser(formatter_class=argparse.ArgumentDefaultsHelpFormatter,
                                  description='DECaLS simulations.')
@@ -403,79 +495,7 @@ plot_SN(b, found_by='matched',type='all')
 cm,names= create_confusion_matrix(b)
 plot_confusion_matrix(cm,names)
 
-def n_gt_3_sigma(sample, low=-8.,hi=8.):
-    '''for a sample that should be distributed as N(mean=0,stddev=1), returns mask for the N that are greater 3 sigma
-    low,hi -- minimum and maximum sample values that will be considered'''
-    i_left= np.all((sample >= low,sample <= -3.),axis=0)
-    i_right= np.all((sample <= hi,sample>=3),axis=0)
-    #assert i_left and i_right are mutually exclusive
-    false_arr= np.all((i_left,i_right),axis=0) #should be array of Falses
-    assert( np.all(false_arr == False) ) #should be np.all([True,True,...]) which evaluates to True
-    return np.any((i_left,i_right),axis=0)
-
-def gauss_stats(d, n_samples=10000):
-    '''puts stats about a unit gaussian N(0,1) in a dictionary "d"
-    n_samples number of draws will compute stats for, set this to sample size...
-    mean,stddev,q25,frac outliers above 3 sigma'''
-    G= stats.norm(0,1)
-    xvals=np.linspace(-8,8)
-    plt.plot(xvals,G.pdf(xvals))
-    draws= G.rvs(n_samples) #random draws
-    plt.hist(draws,bins=50,normed=True)
-    tol=1e-2
-    assert(np.mean(draws)<=tol)
-    assert(np.std(draws)-1. <=tol)
-    d['mean'],d['std'],d['q25'],d['frac_out']= np.mean(draws),np.std(draws),np.percentile(draws,q=25),2*G.cdf(-3)
-
-def sample_gauss_stats(sample, low=-8,hi=8):
-    '''for a sample that should be distributed as N(mean=0,stddev=1), returns statistics to compare to gaussian
-    min,max -- minimum and maximum sample values that will be considered'''
-    stats=dict(sample={},gauss={})
-    gauss_stats(stats['gauss']) #, n_samples=sample.size)
-    stats['sample']['mean'],stats['sample']['std'],stats['sample']['q25'],stats['sample']['q75']= \
-            np.mean(sample),np.std(sample),np.percentile(sample,q=25),np.percentile(sample,q=75) 
-    i_outliers= n_gt_3_sigma(sample, low=low,hi=hi)
-    stats['sample']['frac_out']= sample[i_outliers].size/float(sample.size)
-    return stats
-
-sample_gauss_stats(a)
-
-
-
-def plot_flux_diff(b,type='psf', low=-8.,hi=8.):
-    stats=dict(sample={},gauss={})
-    hist= dict(g=0,r=0,z=0)
-    binc= dict(g=0,r=0,z=0)
-    for band in ['g','r','z']:
-        sample=(b['m_decam'].data[band+'flux']-b['m_bokmos'].data[band+'flux'])/np.sqrt(\
-                    np.power(b['m_decam'].data[band+'flux_ivar'],-1)+np.power(b['m_bokmos'].data[band+'flux_ivar'],-1))
-        hist[band],bins,junk= plt.hist(sample,range=(low,hi),bins=50,normed=True)
-        db= (bins[1:]-bins[:-1])/2
-        binc[band]= bins[:-1]+db
-    plt.close()
-    #unit gaussian N(0,1)
-    G= stats.norm(0,1)
-    xvals= np.linspace(low,hi)
-    #plot
-    fig,ax=plt.subplots(1,3,figsize=(9,3),sharey=True)
-    plt.subplots_adjust(wspace=0)
-    for cnt,band in zip(range(3),['g','r','z']):
-        ax[cnt].step(binc[band],hist[band], where='mid',c='b',lw=2)
-        ax[cnt].plot(xvals,G.pdf(xvals),label="N(0,1)")
-    #labels
-    ax[2].legend(loc=1,**leg_args)
-    for cnt,band in zip(range(3),['g','r','z']):
-        xlab=ax[cnt].set_xlabel('%s' % band, **laba)
-        ax[cnt].set_ylim(0,0.6)
-        ax[cnt].set_xlim(low,hi)
-    ylab=ax[0].set_ylabel('PDF', **laba)
-    plt.savefig('flux_diff.png', bbox_extra_artists=[xlab,ylab], bbox_inches='tight',dpi=150)
-    plt.close()
-
-
-
-plot_flux_diff(b,type='psf')
-
+plot_flux_diff(b,type='all')
 print('exit')
 sys.exit()
 
