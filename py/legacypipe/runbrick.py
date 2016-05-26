@@ -2875,15 +2875,15 @@ def run_brick(brick, radec=None, pixscale=0.262,
 
     def mystagefunc(stage, **kwargs):
         mp.start_subphase('stage ' + stage)
-        if pool is not None:
-            print('At start of stage', stage, ':')
-            print(pool.get_pickle_traffic_string())
+        #if pool is not None:
+        #    print('At start of stage', stage, ':')
+        #    print(pool.get_pickle_traffic_string())
         R = stagefunc(stage, **kwargs)
         print('Resources for stage', stage, ':')
         mp.report(threads)
-        if pool is not None:
-            print('At end of stage', stage, ':')
-            print(pool.get_pickle_traffic_string())
+        #if pool is not None:
+        #    print('At end of stage', stage, ':')
+        #    print(pool.get_pickle_traffic_string())
         mp.finish_subphase()
         return R
     
