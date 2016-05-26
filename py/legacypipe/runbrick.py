@@ -2803,7 +2803,7 @@ def run_brick(brick, radec=None, pixscale=0.262,
     if threads and threads > 1:
         from astrometry.util.timingpool import TimingPool, TimingPoolMeas
         pool = TimingPool(threads, initializer=runbrick_global_init,
-                          initargs=[], taskqueuesize=2*threads)
+                          initargs=[])
         Time.add_measurement(TimingPoolMeas(pool, pickleTraffic=False))
         mp = MyMultiproc(None, pool=pool)
     else:
