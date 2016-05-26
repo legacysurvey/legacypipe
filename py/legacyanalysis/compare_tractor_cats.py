@@ -26,8 +26,10 @@ import thesis_code.targets as targets
 class Matched_Cats():
     def __init__(self):
         self.data={}
-    def initialize(self,data_1,data_2,m1,m2,m1_unm,m2_unm,d12):
+    def initialize(self,data_1,data_2,m1,m2,m1_unm,m2_unm,d12, deg2_decam,deg2_bokmos):
         self.d12= d12 #deg separations between matches objects
+        self.deg2_decam= deg2_decam 
+        self.deg2_bokmos= deg2_bokmos 
         self.data['m_decam']= targets.data_extract(data_1,m1) 
         self.data['m_bokmos']= targets.data_extract(data_2,m2)
         self.data['u_decam']= targets.data_extract(data_1,m1_unm)
@@ -41,17 +43,27 @@ class Matched_Cats():
         for key in self.data[match_type].keys(): 
             self.data[match_type][key]= np.concatenate([self.data[match_type][key],new_data[key]])
 
+def deg2_lower_limit(data):
+    '''deg2 spanned by objects in each data set, lower limit'''
+    ra= data['ra'].max()-data['ra'].min()
+    assert(ra > 0.)
+    dec= abs(data['dec'].max()-data['dec'].min())
+    return ra*dec
+
 def match_it(cat1,cat2):
     '''cat1,2 are tractor catalogue to match objects between'''
     #match cats
     data_1= targets.read_from_tractor_cat(cat1)
     data_2= targets.read_from_tractor_cat(cat2)
+    #deg2 spanned by objects in each data set
+    deg2_decam= deg2_lower_limit(data_1)
+    deg2_bokmos= deg2_lower_limit(data_2)
     #all the 'all1' objects that have match in 'all2' 
     m1, m2, d12 = match_radec(data_1['ra'],data_1['dec'],data_2['ra'],data_2['dec'],\
                             1.0/3600.0,nearest=True)
     m1_unm = np.delete(np.arange(len(data_1['ra'])),m1,axis=0)
     m2_unm = np.delete(np.arange(len(data_2['ra'])),m2,axis=0)
-    return data_1,data_2,m1,m2,m1_unm,m2_unm,d12
+    return data_1,data_2,m1,m2,m1_unm,m2_unm,d12, deg2_decam,deg2_bokmos
 
 def read_lines(fn):
     fin=open(fn,'r')
@@ -62,7 +74,7 @@ def read_lines(fn):
 #plotting vars
 laba=dict(fontweight='bold',fontsize='medium')
 kwargs_axtext=dict(fontweight='bold',fontsize='large',va='top',ha='left')
-leg_args=dict(frameon=True,fontsize='small')
+leg_args=dict(frameon=True,fontsize='x-small')
 
 def plot_radec(obj,matched=False): 
     '''obj[m_types] -- DECaLS() objects with matched OR unmatched indices'''
@@ -147,15 +159,16 @@ def bin_up(data_bin_by,data_percentile,bL=20., bH=26.,bW=0.25):
             pass #given qs nan, which they already have
     return low_vals+bW/2,q25,q50,q75
 
-def indices_for_type(data,type='all'):
+def indices_for_type(obj,inst='m_decam',type='all'):
     '''return mask for selecting type == all,psf,lrg
-    data -- obj['m_decam'].data'''
+    data -- obj['m_decam'].data
+    lrg mask -- obje['m_decam'].lrg'''
     if type == 'all': 
-        return np.ones(data['type'].size, dtype=bool) #1 = True
+        return np.ones(obj[inst].data['type'].size, dtype=bool) #1 = True
     elif type == 'psf': 
-        return data['type'] == 'PSF'
+        return obj[inst].data['type'] == 'PSF'
     elif type == 'lrg': 
-        return data['i_lrg']
+        return obj[inst].lrg
     else: raise ValueError
 
 
@@ -168,7 +181,7 @@ def plot_SN_vs_mag(obj, found_by='matched',type='all'):
     prefix= found_by[0]+'_' # m_ or u_
     index={}
     for key in ['decam','bokmos']:
-        index[key]= indices_for_type(obj[prefix+key].data,type=type)
+        index[key]= indices_for_type(obj,inst=prefix+key,type=type)
     #bin up SN values
     min,max= 18.,25.
     bin_SN=dict(decam={},bokmos={})
@@ -206,8 +219,8 @@ def plot_matched_dmag_vs_psf_fwhm(obj, type='psf'):
     '''using matched sample, plot diff in mags vs. DECAM psf_fwhm in bins 
     obj['m_decam'] is DECaLS() object'''
     #indices
-    index= np.all((indices_for_type(b['m_decam'].data,type=type),\
-                    indices_for_type(b['m_bokmos'].data,type=type)), axis=0) #both bokmos and decam of same type
+    index= np.all((indices_for_type(b,inst='m_decam',type=type),\
+                    indices_for_type(b,inst='m_bokmos',type=type)), axis=0) #both bokmos and decam of same type
     #bin up by DECAM psf_fwhm
     min,max,db= 0.,3.,0.5
     vals={}
@@ -226,8 +239,8 @@ def plot_matched_dmag_vs_psf_fwhm(obj, type='psf'):
         ax[cnt].text(0.05,0.95,band,transform=ax[cnt].transAxes,**text_args)
     #finish
     xlab=ax[1].set_xlabel('decam PSF_FWHM (%.2f bins)' % db, **laba)
-    ylab=ax[0].set_ylabel(r'Median (D mag - BM mag)', **laba)
-    ti= plt.suptitle('Matched %s' % type.upper())
+    ylab=ax[0].set_ylabel(r'Median $\Delta \, m$ (decam - bokmos)', **laba)
+    ti= plt.suptitle('%s Objects, Matched' % type.upper())
     plt.savefig('dmag_vs_psf_fwhm_%s.png' % type, bbox_extra_artists=[ti,xlab,ylab], bbox_inches='tight',dpi=150)
     plt.close()
 
@@ -235,8 +248,8 @@ def plot_matched_decam_vs_bokmos_psf_fwhm(obj, type='psf'):
     '''using matched sample, plot decam psf_fwhm vs. bokmos psf_fwhm 
     obj['m_decam'] is DECaLS() object'''
     #indices
-    index= np.all((indices_for_type(b['m_decam'].data,type=type),\
-                    indices_for_type(b['m_bokmos'].data,type=type)), axis=0) #both bokmos and decam of same type
+    index= np.all((indices_for_type(b,inst='m_decam',type=type),\
+                    indices_for_type(b,inst='m_bokmos',type=type)), axis=0) #both bokmos and decam of same type
     #setup plot
     fig,ax=plt.subplots(1,3,figsize=(9,3),sharey=True)
     plt.subplots_adjust(wspace=0.25)
@@ -248,10 +261,10 @@ def plot_matched_decam_vs_bokmos_psf_fwhm(obj, type='psf'):
         ax[cnt].text(0.05,0.95,band,transform=ax[cnt].transAxes,**text_args)
     #finish
     for cnt,band in zip(range(3),['g','r','z']):
-        xlab=ax[cnt].set_xlabel('bassmos PSF_FWHM', **laba)
         ax[cnt].set_xlim(0,3)
-    ylab=ax[0].set_ylabel('decam PSF_FWHM', **laba)
-    ti= plt.suptitle('Matched %s' % type.upper())
+    xlab=ax[1].set_xlabel('PSF_FWHM (bokmos)', **laba)
+    ylab=ax[0].set_ylabel('PSF_FWHM (decam)', **laba)
+    ti= plt.suptitle('%s Objects, Matched' % type.upper())
     plt.savefig('decam_vs_bokmos_psf_fwhm_%s.png' % type, bbox_extra_artists=[ti,xlab,ylab], bbox_inches='tight',dpi=150)
     plt.close()
 
@@ -390,8 +403,8 @@ def sample_gauss_stats(sample, low=-20,hi=20):
 text_args= dict(verticalalignment='center',fontsize=8)
 def plot_dflux_chisq(b,type='psf', low=-8.,hi=8.):
     #join indices b/c matched
-    i_type= np.all((indices_for_type(b['m_decam'].data,type=type),\
-                    indices_for_type(b['m_bokmos'].data,type=type)), axis=0) #both bokmos and decam of same type
+    i_type= np.all((indices_for_type(b, inst='m_decam',type=type),\
+                    indices_for_type(b, inst='m_bokmos',type=type)), axis=0) #both bokmos and decam of same type
     #get flux diff for each band
     hist= dict(g=0,r=0,z=0)
     binc= dict(g=0,r=0,z=0)
@@ -430,6 +443,44 @@ def plot_dflux_chisq(b,type='psf', low=-8.,hi=8.):
     plt.close()
 ################
 
+text_args= dict(verticalalignment='center',fontsize=8)
+def plot_N_per_deg2(obj,type='all', maglow=18.,maghi=26.):
+    #indices for type for matched and unmatched samples
+    index={}
+    for inst in ['m_decam','u_decam','m_bokmos','u_bokmos']:
+        index[inst]= indices_for_type(obj, inst=inst,type=type)
+    #create histograms of counts
+    hist,binc= {},{}
+    for inst in ['decam','bokmos']:
+        hist[inst]= {} 
+        binc[inst]= {} 
+        for band in ['g','r','z']:
+            i_m,i_u= index['m_'+inst], index['u_'+inst] #need m+u
+            #join m_decam,u_decam OR m_bokmos,u_bokmos and only with correct all,psf,lrg index
+            sample= np.ma.concatenate((obj['m_'+inst].data[band+'mag'][i_m], obj['u_'+inst].data[band+'mag'][i_u]),axis=0)
+            hist[inst][band],bins,junk= plt.hist(sample,range=(maglow,maghi),bins=50)
+            db= (bins[1:]-bins[:-1])/2
+            binc[inst][band]= bins[:-1]+db
+    plt.close() #b/c plt.hist above
+    #plot
+    fig,ax=plt.subplots(1,3,figsize=(9,3),sharey=True)
+    plt.subplots_adjust(wspace=0.25)
+    for cnt,band in zip(range(3),['g','r','z']):
+        for inst,color in zip(['decam','bokmos'],['b','g']):
+            ax[cnt].step(binc[inst][band],hist[inst][band]/obj['deg2_'+inst], where='mid',c=color,lw=2,label=inst)
+    #labels
+    for cnt,band in zip(range(3),['g','r','z']):
+        xlab=ax[cnt].set_xlabel('%s' % band, **laba)
+        #ax[cnt].set_ylim(0,0.6)
+        #ax[cnt].set_xlim(maglow,maghi)
+    ax[2].legend(loc=1, **leg_args)
+    ylab=ax[0].set_ylabel('counts/deg2', **laba)
+    ti=plt.suptitle("%s Objects" % type.upper(),**laba)
+    #put stats in suptitle
+    plt.savefig('n_per_deg2_%s.png' % type, bbox_extra_artists=[ti,xlab,ylab], bbox_inches='tight',dpi=150)
+    plt.close()
+
+
 parser=argparse.ArgumentParser(formatter_class=argparse.ArgumentDefaultsHelpFormatter,
                                  description='DECaLS simulations.')
 parser.add_argument('-fn1', type=str, help='process this brick (required input)')
@@ -444,11 +495,13 @@ fns_2= read_lines(args.fn2)
 #object to store concatenated matched tractor cats
 a=Matched_Cats()
 for cnt,cat1,cat2 in zip(range(len(fns_1)),fns_1,fns_2):
-    data_1,data_2,m1,m2,m1_unm,m2_unm,d12= match_it(cat1,cat2)
+    data_1,data_2,m1,m2,m1_unm,m2_unm,d12, deg2_decam,deg2_bokmos= match_it(cat1,cat2)
     if cnt == 0:
-        a.initialize(data_1,data_2,m1,m2,m1_unm,m2_unm,d12)
+        a.initialize(data_1,data_2,m1,m2,m1_unm,m2_unm,d12, deg2_decam,deg2_bokmos)
     else:  
         a.add_d12(d12)
+        a.deg2_decam+= deg2_decam
+        a.deg2_bokmos+= deg2_bokmos
         a.add_dict('m_decam', targets.data_extract(data_1,m1) )
         a.add_dict('m_bokmos', targets.data_extract(data_2,m2))
         a.add_dict('u_decam', targets.data_extract(data_1,m1_unm))
@@ -456,6 +509,8 @@ for cnt,cat1,cat2 in zip(range(len(fns_1)),fns_1,fns_2):
 #each key a.data[key] becomes DECaLS() object with grz mags,i_lrg, etc
 b={}
 b['d12']= a.d12
+b['deg2_decam']= a.deg2_decam
+b['deg2_bokmos']= a.deg2_bokmos
 for match_type in a.data.keys(): b[match_type]= targets.DECaLS(a.data[match_type], w1=True)
 #store N matched objects not masked before join decam,bokmos masks
 m_decam_not_masked,m_bokmos_not_masked= b['m_decam'].count_not_masked(),b['m_bokmos'].count_not_masked()
@@ -478,6 +533,11 @@ plot_SN_vs_mag(b, found_by='matched',type='all')
 plot_SN_vs_mag(b, found_by='matched',type='psf')
 plot_SN_vs_mag(b, found_by='unmatched',type='all')
 plot_SN_vs_mag(b, found_by='unmatched',type='psf')
+
+maglow,maghi=18,28
+plot_N_per_deg2(b,type='all', maglow=maglow,maghi=maghi)
+plot_N_per_deg2(b,type='psf', maglow=maglow,maghi=maghi)
+plot_N_per_deg2(b,type='lrg', maglow=maglow,maghi=maghi)
 
 plot_matched_dmag_vs_psf_fwhm(b, type='psf')
 plot_matched_decam_vs_bokmos_psf_fwhm(b, type='psf')
