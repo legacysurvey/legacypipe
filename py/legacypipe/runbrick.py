@@ -1412,7 +1412,7 @@ def stage_fitblobs(T=None,
                 else:
                     r = Riter.next()
                 R.append(r)
-                print('Result r:', type(r))
+                #print('Result r:', type(r))
             except StopIteration:
                 print('Done')
                 break
@@ -2803,7 +2803,7 @@ def run_brick(brick, radec=None, pixscale=0.262,
     if threads and threads > 1:
         from astrometry.util.timingpool import TimingPool, TimingPoolMeas
         pool = TimingPool(threads, initializer=runbrick_global_init,
-                          initargs=[], taskqueuesize=2*threads)
+                          initargs=[])
         Time.add_measurement(TimingPoolMeas(pool, pickleTraffic=False))
         mp = MyMultiproc(None, pool=pool)
     else:
@@ -2875,15 +2875,17 @@ def run_brick(brick, radec=None, pixscale=0.262,
 
     def mystagefunc(stage, **kwargs):
         mp.start_subphase('stage ' + stage)
-        if pool is not None:
-            print('At start of stage', stage, ':')
-            print(pool.get_pickle_traffic_string())
+        #if pool is not None:
+        #    print('At start of stage', stage, ':')
+        #    print(pool.get_pickle_traffic_string())
         R = stagefunc(stage, **kwargs)
+        sys.stdout.flush()
+        sys.stderr.flush()
         print('Resources for stage', stage, ':')
         mp.report(threads)
-        if pool is not None:
-            print('At end of stage', stage, ':')
-            print(pool.get_pickle_traffic_string())
+        #if pool is not None:
+        #    print('At end of stage', stage, ':')
+        #    print(pool.get_pickle_traffic_string())
         mp.finish_subphase()
         return R
     
