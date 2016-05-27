@@ -31,6 +31,7 @@ before_script:
     - if [ ! -d "$HOME/tractor-git" ]; then (cd $HOME; git clone https://github.com/dstndstn/tractor.git tractor-git); fi
     - (cd $HOME/tractor-git && git pull) || (rm -Rf $HOME/tractor-git && cd $HOME && git clone https://github.com/dstndstn/tractor.git tractor-git);
     - (cd $HOME/tractor-git && make)
+    # pip install fitsio instead
     #- if [ ! -d "$HOME/fitsio-git" ]; then (cd $HOME; git clone https://github.com/esheldon/fitsio.git fitsio-git); fi
     #- (cd $HOME/fitsio-git && git pull) || (rm -Rf $HOME/fitsio-git && cd $HOME && git clone https://github.com/esheldon/fitsio.git fitsio-git);
     #- (rm -Rf $HOME/fitsio-git && cd $HOME && git clone https://github.com/esheldon/fitsio.git fitsio-git);

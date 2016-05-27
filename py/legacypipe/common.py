@@ -28,7 +28,7 @@ from legacypipe.utils import EllipseWithPriors
 # search order: $TMPDIR, $TEMP, $TMP, then /tmp, /var/tmp, /usr/tmp
 tempdir = tempfile.gettempdir()
 
-# The apertures we use in aperture photometry, in ARCSEC.
+# The apertures we use in aperture photometry, in ARCSEC radius
 apertures_arcsec = np.array([0.5, 0.75, 1., 1.5, 2., 3.5, 5., 7.])
 
 # Ugly hack: for sphinx documentation, the astrometry and tractor (and

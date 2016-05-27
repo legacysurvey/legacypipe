@@ -1,0 +1,4 @@
+Created from DR3 data with:
+
+python legacypipe/runbrick.py --brick 3521p002 --zoom 2400 2450 1200 1250 --outdir tst-mobo --force-all
+python legacyanalysis/create_testcase.py tst-mobo/coadd/352/3521p002/legacysurvey-3521p002-ccds.fits mzlsbass 3521p002

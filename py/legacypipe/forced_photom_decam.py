@@ -38,6 +38,11 @@ def get_parser():
     parser.add_argument('--no-forced', dest='forced', action='store_false',
                       help='Do NOT do regular forced photometry?  Implies --apphot')
 
+    parser.add_argument('--save-model',
+                        help='Compute and save model image?')
+    parser.add_argument('--save-data',
+                        help='Compute and save model image?')
+    
     parser.add_argument('filename',help='Filename OR exposure number.')
     parser.add_argument('hdu',help='decam-HDU OR CCD name.')
     parser.add_argument('catfn',help='catalog filename OR "DR1/DR2/DR3".')
@@ -339,6 +344,15 @@ def main(survey=None, opt=None):
     F.writeto(opt.outfn, header=hdr, append=True)
     print('Wrote', opt.outfn)
 
+    if opt.save_model:
+        print('Getting model image...')
+        mod = tr.getModelImage(tim)
+        fitsio.write(opt.save_model, mod)
+        print('Wrote', opt.save_model)
+    if opt.save_data:
+        fitsio.write(opt.save_data, tim.getImage())
+        print('Wrote', opt.save_data)
+    
     print('Finished forced phot:', Time()-t0)
     return 0
 

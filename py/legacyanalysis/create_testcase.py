@@ -112,8 +112,12 @@ def main():
 
         if bok:
             outim.psffn = outim.psffn.replace('.psf', '-%s.psf' % im.ccdname)
-            
-        outccds.image_filename[iccd] = outim.imgfn
+
+        ccdfn = outim.imgfn
+        ccdfn = ccdfn.replace(outsurvey.get_image_dir(),'')
+        if ccdfn.startswith('/'):
+            ccdfn = ccdfn[1:]
+        outccds.image_filename[iccd] = ccdfn
 
         print('Changed output filenames to:')
         print(outim.imgfn)

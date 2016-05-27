@@ -1,4 +1,6 @@
 from __future__ import print_function
+import os
+import numpy as np
 
 from tractor.ellipses import EllipseESoft
 from tractor.utils import _GaussianPriors
@@ -6,6 +8,7 @@ from tractor.utils import _GaussianPriors
 from astrometry.util.timingpool import TimingPoolTimestamp
 from astrometry.util.multiproc import multiproc
 from astrometry.util.ttime import Time, CpuMeas
+from astrometry.util.fits import fits_table, merge_tables
 
 class EllipseWithPriors(EllipseESoft):
     '''
@@ -88,7 +91,9 @@ class MyMultiproc(multiproc):
         self.serial.append((self.t0, tstart))
         self.t0 = tstart
         self.phases.append((name, self.serial, self.parallel, self.t0))
-
+        self.serial = []
+        self.parallel = []
+        
     def finish_subphase(self):
         # pop
         (name, serial, parallel, t0) = self.phases.pop()
@@ -214,6 +219,8 @@ def run_ps_thread(pid, ppid, fn):
     from astrometry.util.run_command import run_command
     import time
     import re
+    import fitsio
+    
     #print('run_ps_thread starting:', pid, ppid, fn)
     #print('My pid:', os.getpid())
     TT = []
@@ -241,6 +248,9 @@ def run_ps_thread(pid, ppid, fn):
             #print('->', tt, 'seconds')
             etime.append(tt)
         return any_failed, etime
+
+    fitshdr = fitsio.FITSHDR()
+    fitshdr['PPID'] = pid
     
     while True:
         time.sleep(5)
@@ -249,7 +259,7 @@ def run_ps_thread(pid, ppid, fn):
         #       'psr rss session vsize args"')
         # OSX-compatible
         cmd = ('ps ax -o "user pcpu pmem state cputime etime pgid pid ppid ' +
-               'rss vsize args"')
+               'rss vsize command"')
         #print('Command:', cmd)
         rtn,out,err = run_command(cmd)
         if rtn:
@@ -258,18 +268,23 @@ def run_ps_thread(pid, ppid, fn):
             break
         #print('Got PS output')
         #print(out)
+        #print('Err')
+        #print(err)
+        if len(err):
+            print('Error string from ps:', err)
         lines = out.split('\n')
         hdr = lines.pop(0)
         cols = hdr.split()
         cols = [c.replace('%','P') for c in cols]
-        # print('Columns:', cols)
+        cols = [c.lower() for c in cols]
+        #print('Columns:', cols)
         vals = [[] for c in cols]
 
-        # maximum length for 'args', command-line args field
+        # maximum length for 'command', command-line args field
         maxlen = 128
         for line in lines:
             words = line.split()
-            # "args" column can contain spaces; it is last
+            # "command" column can contain spaces; it is last
             if len(words) == 0:
                 continue
             words = (words[:len(cols)-1] +
@@ -291,15 +306,15 @@ def run_ps_thread(pid, ppid, fn):
         for c,v in zip(cols, vals):
             # print('Col', c, 'Values:', v[:3], '...')
             v = np.array(v)
-            tt = parsetypes.get(c.lower(), None)
+            tt = parsetypes.get(c, None)
             if tt is not None:
-                    v = v.astype(tt)
-            T.set(c.lower(), v)
+                v = v.astype(tt)
+            T.set(c, v)
 
         # Apply cuts!
         T.cut(reduce(np.logical_or, [
             T.pcpu > 5, T.pmem > 5,
-            (T.ppid == pid) * [not c.startswith('ps ax') for c in T.args]]))
+            (T.ppid == pid) * [not c.startswith('ps ax') for c in T.command]]))
         #print('Cut to', len(T), 'with significant CPU/MEM use or my PPID')
         if len(T) == 0:
             continue
@@ -325,9 +340,8 @@ def run_ps_thread(pid, ppid, fn):
         if step % 12 == 0:
             # Write out results every ~ minute.
             T = merge_tables(TT, columns='fillzero')
-            T.about()
-            tmpfn = 'tmp-' + fn
-            T.writeto(tmpfn)
+            tmpfn = os.path.join(os.path.dirname(fn), 'tmp-' + os.path.basename(fn))
+            T.writeto(tmpfn, header=fitshdr)
             os.rename(tmpfn, fn)
             print('Wrote', fn)
             TT = [T]
