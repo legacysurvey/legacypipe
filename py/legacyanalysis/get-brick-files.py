@@ -13,9 +13,6 @@ import argparse
 from legacypipe.common import LegacySurveyData, wcs_for_brick, ccds_touching_wcs
 
 import numpy as np
-from astropy.io import fits
-import matplotlib.pyplot as plt
-
 import pdb
 
 def main():
@@ -57,9 +54,15 @@ def main():
         brickfiles.write(skyfiles[ii]+'\n')
     for ii in range(nccd):
         brickfiles.write(imagefiles[ii]+'\n')
+    for ii in range(nccd):
+        brickfiles.write(imagefiles[ii].replace('ooi', 'oow')+'\n')
+    for ii in range(nccd):
+        brickfiles.write(imagefiles[ii].replace('ooi', 'ood')+'\n')
     brickfiles.close()
 
-    #cmd = "rsync -avzPn --files-from='/tmp/brickfiles.txt' /global/cscratch1/sd/desiproc/dr3/ nyx:/destination/path/"
+    cmd = "rsync -avP --files-from='/tmp/brickfiles.txt' cori:/global/cscratch1/sd/desiproc/dr3/ /global/work/decam/versions/work/"
+    print('You should run the following command:')
+    print('  {}'.format(cmd))
     
 if __name__ == "__main__":
     main()
