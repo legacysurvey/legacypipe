@@ -257,9 +257,9 @@ def star_profiles(ps):
 
 def main():
 
-    ps = PlotSequence('pro')
-    star_profiles(ps)
-    sys.exit(0)
+    # ps = PlotSequence('pro')
+    # star_profiles(ps)
+    # sys.exit(0)
 
     survey_dir = '/project/projectdirs/desiproc/dr3'
     survey = LegacySurveyData(survey_dir=survey_dir)
@@ -425,9 +425,9 @@ def main():
         plt.clf()
         lo,hi = (-0.02, 0.05)
         ha = dict(bins=50, histtype='step', range=(lo,hi))
-        n,b,p1 = plt.hist(ccds.brightest_mdiff, color='r', **ha)
-        n,b,p2 = plt.hist(ccds.bright_mdiff, color='g', **ha)
-        n,b,p3 = plt.hist(ccds.faint_mdiff, color='b', **ha)
+        n,b,p1 = plt.hist(ccds.brightest_mdiff[I], color='r', **ha)
+        n,b,p2 = plt.hist(ccds.bright_mdiff[I], color='g', **ha)
+        n,b,p3 = plt.hist(ccds.faint_mdiff[I], color='b', **ha)
         plt.legend((p1[0],p2[0],p3[0]), ('Brightest 10%', 'Brightest 50%',
                                          'Faintest 50%'))
         plt.xlabel('DECaLS PSF - PS1 (mag)')
