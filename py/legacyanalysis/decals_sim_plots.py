@@ -14,6 +14,8 @@ import argparse
 import numpy as np
 import seaborn as sns
 
+import pdb
+
 import matplotlib.pyplot as plt
 from PIL import Image, ImageDraw
 
@@ -65,13 +67,14 @@ def main():
 
     # We need this for our histograms below
     magbinsz = 0.2
-    rminmax = np.array(meta['rmag_range'][0],meta['rmag_range'][1])
+    rminmax = meta['rmag_range'].flatten()
+    #pdb.set_trace()
     nmagbin = long((rminmax[1]-rminmax[0])/magbinsz)
     
     # Work in chunks.
-    nchunk = meta['nchunk']
+    nchunk = meta['nchunk'][0]
     for ichunk in range(nchunk):
-        log.info('Working on chunk {:02d}/{:02d}'.format(ichunk+1,nchunk))
+        log.info('Working on chunk {:02d}/{:02d}'.format(ichunk+1, nchunk))
         chunksuffix = '{:02d}'.format(ichunk)
         
         # Read the simulated object catalog
@@ -143,10 +146,6 @@ def main():
     log.info('Writing {}'.format(qafile))
     plt.savefig(qafile)
 
-
-    sys.exit(1)
-    
-        
     # Get cutouts of the missing sources
     imfile = os.path.join(decals_sim_dir,'qa-'+brickname+'-'+lobjtype+
                           '-image-'+chunksuffix+'.jpg')
