@@ -52,6 +52,12 @@ Could this be brighter-fatter?
 computation (decstat)?!
 
 -> Sky estimation?
+
+-> Is PsfEx using any flags (SATUR) to cut candidates?
+
+-> Look at forced phot residuals?  Take model & data slices of a whole
+   pile of stars in expnum 292604 N4
+
 '''
 
 
@@ -199,23 +205,23 @@ def main():
         plt.title('DR3: EDR region, Forced phot: %s band' % band)
         ps.savefig()
 
-        plt.clf()
-        plt.plot(ccds.avsky[I],
-                 np.clip(ccds.mdiff[I], mlo,mhi), 'k.', alpha=0.1)
-        plt.xlabel('avsky')
-        plt.ylabel('DECaLS PSF - PS1 (mag)')
-        plt.axhline(0, color='k', alpha=0.2)
-        plt.title('DR3: EDR region, Forced phot: %s band' % band)
-        ps.savefig()
-
-        plt.clf()
-        plt.plot(ccds.meansky[I],
-                 np.clip(ccds.mdiff[I], mlo,mhi), 'k.', alpha=0.1)
-        plt.xlabel('meansky')
-        plt.ylabel('DECaLS PSF - PS1 (mag)')
-        plt.axhline(0, color='k', alpha=0.2)
-        plt.title('DR3: EDR region, Forced phot: %s band' % band)
-        ps.savefig()
+        # plt.clf()
+        # plt.plot(ccds.avsky[I],
+        #          np.clip(ccds.mdiff[I], mlo,mhi), 'k.', alpha=0.1)
+        # plt.xlabel('avsky')
+        # plt.ylabel('DECaLS PSF - PS1 (mag)')
+        # plt.axhline(0, color='k', alpha=0.2)
+        # plt.title('DR3: EDR region, Forced phot: %s band' % band)
+        # ps.savefig()
+        # 
+        # plt.clf()
+        # plt.plot(ccds.meansky[I],
+        #          np.clip(ccds.mdiff[I], mlo,mhi), 'k.', alpha=0.1)
+        # plt.xlabel('meansky')
+        # plt.ylabel('DECaLS PSF - PS1 (mag)')
+        # plt.axhline(0, color='k', alpha=0.2)
+        # plt.title('DR3: EDR region, Forced phot: %s band' % band)
+        # ps.savefig()
 
 
         plt.clf()
@@ -224,7 +230,10 @@ def main():
         n,b,p1 = plt.hist(ccds.brightest_mdiff, color='r', **ha)
         n,b,p2 = plt.hist(ccds.bright_mdiff, color='g', **ha)
         n,b,p3 = plt.hist(ccds.faint_mdiff, color='b', **ha)
+        plt.legend((p1[0],p2[0],p3[0]), ('Brightest 10%', 'Brightest 50%',
+                                         'Faintest 50%'))
         plt.xlabel('DECaLS PSF - PS1 (mag)')
+        plt.ylabel('Number of CCDs')
         plt.title('DR3: EDR region, Forced phot: %s band' % band)
         plt.xlim(lo,hi)
         ps.savefig()
@@ -341,12 +350,14 @@ def main():
 
 
         plt.clf()
-        plt.plot(np.clip(exps.psfsize, 0, mxsee),
-                     np.clip(exps.brightest_mdiff, mlo,mhi), 'r.', alpha=0.5)
-        plt.plot(np.clip(exps.psfsize, 0, mxsee),
-                     np.clip(exps.bright_mdiff, mlo,mhi), 'g.', alpha=0.5)
-        plt.plot(np.clip(exps.psfsize, 0, mxsee),
-                 np.clip(exps.faint_mdiff, mlo,mhi), 'b.', alpha=0.5)
+        p1 = plt.plot(np.clip(exps.psfsize, 0, mxsee),
+                      np.clip(exps.brightest_mdiff, mlo,mhi), 'r.', alpha=0.5)
+        p2 = plt.plot(np.clip(exps.psfsize, 0, mxsee),
+                      np.clip(exps.bright_mdiff, mlo,mhi), 'g.', alpha=0.5)
+        p3 = plt.plot(np.clip(exps.psfsize, 0, mxsee),
+                      np.clip(exps.faint_mdiff, mlo,mhi), 'b.', alpha=0.5)
+        plt.legend((p1[0],p2[0],p3[0]), ('Brightest 10%', 'Brightest 50%',
+                                'Faintest 50%'))
         plt.xlabel('PSF size (arcsec)')
         plt.ylabel('DECaLS PSF - PS1 (mag)')
         plt.axhline(0, color='k', alpha=0.2)
