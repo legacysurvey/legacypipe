@@ -332,10 +332,12 @@ def main():
                         help='random number seed')
     parser.add_argument('-z', '--zoom', nargs=4, type=int, metavar='', 
                         help='see runbrick.py; (default is 0 3600 0 3600)')
-    parser.add_argument('-survey_dir', '--survey_dir', metavar='', 
-                        help='location of survey-ccds*.fits.gz')
+    parser.add_argument('-survey-dir', '--survey_dir', metavar='', 
+                        help='Location of survey-ccds*.fits.gz')
     parser.add_argument('--rmag-range', nargs=2, type=float, default=(18,26), metavar='', 
                         help='r-band magnitude range')
+    parser.add_argument('--all-blobs', action='store_true', 
+                        help='Process all the blobs, not just those that contain simulated sources.')
     parser.add_argument('-v', '--verbose', action='store_true', 
                         help='toggle on verbose output')
 
@@ -452,31 +454,21 @@ def main():
         simcat.write(simcatfile)
 
 #       # Use Tractor to just process the blobs containing the simulated sources. 
-        simdecals = SimDecals(metacat=metacat,simcat=simcat)
-        blobxy = zip(simcat['x'],simcat['y'])
-        print('<<<<fakes inserted at pixels (x,y)= ',blobxy)
-        #run_brick(brickname, survey=simdecals, outdir=os.path.join(decals_sim_dir,brickname), 
-        #          threads=args.threads, zoom=args.zoom, wise=False,
-        #          forceAll=True, writePickles=False, do_calibs=True,
-        #          write_metrics=False, pixPsf=True, blobxy=blobxy, 
-        #          early_coadds=False, stages=['writecat'], splinesky=True)
-        #run_brick(brickname, survey_dir=args.survey_dir, outdir=os.path.join(decals_sim_dir,brickname), 
-        run_brick(brickname, survey=simdecals,outdir=os.path.join(os.getcwd(),brickname), 
+        simdecals = SimDecals(metacat=metacat, simcat=simcat)
+        if args.all_blobs:
+            blobxy = None
+        else:
+            blobxy = zip(simcat['x'],simcat['y'])
+
+        run_brick(brickname, survey=simdecals, outdir=os.path.join(decals_sim_dir, brickname), 
                   threads=args.threads, zoom=args.zoom, wise=False,
                   forceAll=True, writePickles=False, do_calibs=True,
-                  write_metrics=False, pixPsf=True, #blobxy=blobxy, 
+                  write_metrics=False, pixPsf=True, blobxy=blobxy, 
                   early_coadds=False, stages=['writecat'], splinesky=True,
                   ceres=False)
 
         log.info('Cleaning up...')
-        #def bash(cmd):
-        #    ret= os.system('%s' % cmd)
-        #    if ret:
-        #        print('command failed: %s' % cmd)
-        #        sys.exit() 
-        #bash('mv hardcoded_dir/* %s/' % brickname)
-        #bash('rmdir hardcoded_dir')
-        shutil.move(os.path.join(decals_sim_dir,'tractor',brickname[:3],
+        shutil.move(os.path.join(decals_sim_dir, 'tractor', brickname[:3],
                                  'tractor-'+brickname+'.fits'),
                     os.path.join(decals_sim_dir,'tractor-'+brickname+'-'+
                                  lobjtype+'-'+chunksuffix+'.fits'))
@@ -486,14 +478,14 @@ def main():
                                  '-image-'+chunksuffix+'.jpg'))
         shutil.move(os.path.join(decals_sim_dir,'coadd',brickname[:3],brickname,
                                  'legacysurvey-'+brickname+'-resid.jpg'),
-                    os.path.join(decals_sim_dir,brickname,'qa-'+brickname+'-'+lobjtype+
+                    os.path.join(decals_sim_dir, brickname,'qa-'+brickname+'-'+lobjtype+
                                  '-resid-'+chunksuffix+'.jpg'))
 
         shutil.rmtree(decals_sim_dir)
-        shutil.rmtree(os.path.join(decals_sim_dir,'coadd'))
-        shutil.rmtree(os.path.join(decals_sim_dir,'tractor'))
-        shutil.rmtree(os.path.join(decals_sim_dir,brickname,'images'))
-        shutil.rmtree(os.path.join(decals_sim_dir,brickname,'metrics'))
+        shutil.rmtree(os.path.join(decals_sim_dir, 'coadd'))
+        shutil.rmtree(os.path.join(decals_sim_dir, 'tractor'))
+        shutil.rmtree(os.path.join(decals_sim_dir, brickname, 'images'))
+        #shutil.rmtree(os.path.join(decals_sim_dir,brickname, 'metrics'))
 
         # Write a log file
 
