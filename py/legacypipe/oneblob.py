@@ -133,7 +133,7 @@ class OneBlob(object):
         
     def run(self, B):
         # Not quite so many plots...
-        self.plots1 = True
+        self.plots1 = False
         cat = Catalog(*self.srcs)
 
         tlast = Time()
