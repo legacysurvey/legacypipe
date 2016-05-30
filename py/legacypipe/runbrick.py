@@ -1187,7 +1187,7 @@ def stage_fitblobs(T=None,
     for tim in tims:
         assert(np.all(np.isfinite(tim.getInvError())))
 
-    if write_pickle_filename is not None:
+    if write_pickle_filename is not None and not os.path.exists(write_pickle_filename):
         # Start up a thread to write out a pickle file containing the inputs
         # that are prerequisites for this (and subsequent) stages.
         import threading
