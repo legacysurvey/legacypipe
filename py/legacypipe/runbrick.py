@@ -1934,8 +1934,6 @@ def stage_coadds(survey=None, bands=None, version_header=None, targetwcs=None,
         pixscale = 0.262
         assert(ccds is not None)
         assert(brick is not None)
-        print('On-bricks:', on_bricks)
-        sys.exit(0)
         
     primhdr = fitsio.FITSHDR()
     for r in version_header.records():
