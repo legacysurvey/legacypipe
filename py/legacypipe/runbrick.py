@@ -1423,13 +1423,13 @@ def stage_fitblobs(T=None,
                 print('Timed out waiting for result')
                 continue
 
-            # Write checkpoint when done!
-            fn = checkpoint_filename + '.tmp'
-            print('Writing checkpoint', fn)
-            pickle_to_file(R, fn)
-            print('Wrote checkpoint to', fn)
-            os.rename(fn, checkpoint_filename)
-            print('Renamed temp checkpoint', fn, 'to', checkpoint_filename)
+        # Write checkpoint when done!
+        fn = checkpoint_filename + '.tmp'
+        print('Writing checkpoint', fn)
+        pickle_to_file(R, fn)
+        print('Wrote checkpoint to', fn)
+        os.rename(fn, checkpoint_filename)
+        print('Renamed temp checkpoint', fn, 'to', checkpoint_filename)
             
     print('[parallel fitblobs] Fitting sources took:', Time()-tlast)
 
