@@ -1371,7 +1371,7 @@ def stage_fitblobs(T=None,
                 traceback.print_exc()
                 R = []
 
-        skipblobs = [B.iblob for B in R]
+        skipblobs = [B.iblob for B in R if B is not None]
         blobiter = _blob_iter(blobslices, blobsrcs, blobs, targetwcs, tims,
                               cat, bands, plots, ps, simul_opt, use_ceres,
                               tycho, skipblobs=skipblobs)
