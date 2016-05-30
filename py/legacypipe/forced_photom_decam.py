@@ -200,7 +200,7 @@ def main(survey=None, opt=None):
         from tractor.ceres_optimizer import CeresOptimizer
         B = 8
         opti = CeresOptimizer(BW=B, BH=B)
-        forced_kwargs.update(verbose=True)
+        #forced_kwargs.update(verbose=True)
 
     for src in cat:
         # Limit sizes of huge models
@@ -343,14 +343,17 @@ def main(survey=None, opt=None):
     fitsio.write(opt.outfn, None, header=version_hdr, clobber=True)
     F.writeto(opt.outfn, header=hdr, append=True)
     print('Wrote', opt.outfn)
-
+    
+    if opt.save_model or opt.save_data:
+        hdr = fitsio.FITSHDR()
+        tim.getWcs().wcs.add_to_header(hdr)
     if opt.save_model:
         print('Getting model image...')
         mod = tr.getModelImage(tim)
-        fitsio.write(opt.save_model, mod)
+        fitsio.write(opt.save_model, mod, header=hdr, clobber=True)
         print('Wrote', opt.save_model)
     if opt.save_data:
-        fitsio.write(opt.save_data, tim.getImage())
+        fitsio.write(opt.save_data, tim.getImage(), header=hdr, clobber=True)
         print('Wrote', opt.save_data)
     
     print('Finished forced phot:', Time()-t0)

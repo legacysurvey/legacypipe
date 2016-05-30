@@ -60,15 +60,13 @@ def main():
     print('Forcing --no-blacklist')
     opt.blacklist = False
 
-    kwargs = get_runbrick_kwargs(opt)
+    survey, kwargs = get_runbrick_kwargs(opt)
     if kwargs in [-1,0]:
         return kwargs
 
     survey = CosmosSurvey(survey_dir=opt.survey_dir, subset=opt.subset)
-    kwargs['survey'] = survey
-    
-    # runbrick...
-    run_brick(opt.brick, **kwargs)
+
+    run_brick(opt.brick, survey, **kwargs)
     return 0
     
 if __name__ == '__main__':
