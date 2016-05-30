@@ -1187,6 +1187,10 @@ def stage_fitblobs(T=None,
     for tim in tims:
         assert(np.all(np.isfinite(tim.getInvError())))
 
+    # Missing from some previously written pickles:
+    if tycho is None:
+        tycho = fits_table(survey.find_file('tycho2'))
+        
     if write_pickle_filename is not None and not os.path.exists(write_pickle_filename):
         # Start up a thread to write out a pickle file containing the inputs
         # that are prerequisites for this (and subsequent) stages.
@@ -1374,6 +1378,10 @@ def stage_fitblobs(T=None,
         # to allow timingpool to queue tasks one at a time
         blobiter = iterwrapper(blobiter, len(blobsrcs))
 
+        d = os.path.dirname(checkpoint_filename)
+        if len(d) and not os.path.exists(d):
+            trymakedirs(d)
+
         Riter = mp.imap_unordered(_bounce_one_blob, blobiter)
         # we'll actually measure wall time -- CpuMeas is just mis-named
         last_checkpoint = CpuMeas()
@@ -1381,10 +1389,6 @@ def stage_fitblobs(T=None,
             import multiprocessing
             from astrometry.util.file import pickle_to_file, trymakedirs
 
-            d = os.path.dirname(checkpoint_filename)
-            if len(d) and not os.path.exists(d):
-                trymakedirs(d)
-            
             tnow = CpuMeas()
             dt = tnow.wall_seconds_since(last_checkpoint)
             if dt >= checkpoint_period:
@@ -1419,6 +1423,14 @@ def stage_fitblobs(T=None,
                 print('Timed out waiting for result')
                 continue
 
+            # Write checkpoint when done!
+            fn = checkpoint_filename + '.tmp'
+            print('Writing checkpoint', fn)
+            pickle_to_file(R, fn)
+            print('Wrote checkpoint to', fn)
+            os.rename(fn, checkpoint_filename)
+            print('Renamed temp checkpoint', fn, 'to', checkpoint_filename)
+            
     print('[parallel fitblobs] Fitting sources took:', Time()-tlast)
 
     ## This used to be in fitblobs_finish
@@ -1917,6 +1929,14 @@ def stage_coadds(survey=None, bands=None, version_header=None, targetwcs=None,
     from legacypipe.common import apertures_arcsec
     tlast = Time()
 
+    # Missing from some previously written pickles:
+    if pixscale is None:
+        pixscale = 0.262
+        assert(ccds is not None)
+        assert(brick is not None)
+        print('On-bricks:', on_bricks)
+        sys.exit(0)
+        
     primhdr = fitsio.FITSHDR()
     for r in version_header.records():
         primhdr.add_record(r)
