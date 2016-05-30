@@ -38,6 +38,11 @@ def get_parser():
     parser.add_argument('--no-forced', dest='forced', action='store_false',
                       help='Do NOT do regular forced photometry?  Implies --apphot')
 
+    parser.add_argument('--save-model',
+                        help='Compute and save model image?')
+    parser.add_argument('--save-data',
+                        help='Compute and save model image?')
+    
     parser.add_argument('filename',help='Filename OR exposure number.')
     parser.add_argument('hdu',help='decam-HDU OR CCD name.')
     parser.add_argument('catfn',help='catalog filename OR "DR1/DR2/DR3".')
@@ -195,7 +200,7 @@ def main(survey=None, opt=None):
         from tractor.ceres_optimizer import CeresOptimizer
         B = 8
         opti = CeresOptimizer(BW=B, BH=B)
-        forced_kwargs.update(verbose=True)
+        #forced_kwargs.update(verbose=True)
 
     for src in cat:
         # Limit sizes of huge models
@@ -338,7 +343,19 @@ def main(survey=None, opt=None):
     fitsio.write(opt.outfn, None, header=version_hdr, clobber=True)
     F.writeto(opt.outfn, header=hdr, append=True)
     print('Wrote', opt.outfn)
-
+    
+    if opt.save_model or opt.save_data:
+        hdr = fitsio.FITSHDR()
+        tim.getWcs().wcs.add_to_header(hdr)
+    if opt.save_model:
+        print('Getting model image...')
+        mod = tr.getModelImage(tim)
+        fitsio.write(opt.save_model, mod, header=hdr, clobber=True)
+        print('Wrote', opt.save_model)
+    if opt.save_data:
+        fitsio.write(opt.save_data, tim.getImage(), header=hdr, clobber=True)
+        print('Wrote', opt.save_data)
+    
     print('Finished forced phot:', Time()-t0)
     return 0
 

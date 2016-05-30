@@ -28,7 +28,7 @@ from legacypipe.utils import EllipseWithPriors
 # search order: $TMPDIR, $TEMP, $TMP, then /tmp, /var/tmp, /usr/tmp
 tempdir = tempfile.gettempdir()
 
-# The apertures we use in aperture photometry, in ARCSEC.
+# The apertures we use in aperture photometry, in ARCSEC radius
 apertures_arcsec = np.array([0.5, 0.75, 1., 1.5, 2., 3.5, 5., 7.])
 
 # Ugly hack: for sphinx documentation, the astrometry and tractor (and
@@ -614,6 +614,15 @@ class LegacySurveyData(object):
         '''Create a LegacySurveyData object using data from the given
         *survey_dir* directory, or from the $LEGACY_SURVEY_DIR environment
         variable.
+
+        Parameters
+        ----------
+        survey_dir : string
+            Defaults to $LEGACY_SURVEY_DIR environment variable.  Where to look for
+            files including calibration files, tables of CCDs and bricks, image data,
+            etc.
+        output_dir : string
+            Base directory for output files; default ".".
         '''
         from .decam  import DecamImage
         from .mosaic import MosaicImage
@@ -635,7 +644,7 @@ Now using the current directory as LEGACY_SURVEY_DIR, but this is likely to fail
         self.survey_dir = survey_dir
 
         if output_dir is None:
-            self.output_dir = survey_dir
+            self.output_dir = '.'
         else:
             self.output_dir = output_dir
 
@@ -718,7 +727,10 @@ Now using the current directory as LEGACY_SURVEY_DIR, but this is likely to fail
                 return [os.path.join(basedir, 'decals-ccds.fits')]
             else:
                 return glob(os.path.join(basedir, 'survey-ccds-*.fits.gz'))
-                
+
+        elif filetype == 'tycho2':
+            return os.path.join(basedir, 'tycho2.fits.gz')
+            
         elif filetype == 'annotated-ccds':
             return glob(os.path.join(basedir, 'ccds-annotated-*.fits.gz'))
 

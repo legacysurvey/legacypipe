@@ -132,7 +132,7 @@ def main():
     if opt.brick is None and opt.radec is None:
         parser.print_help()
         return -1
-    kwargs = get_runbrick_kwargs(opt)
+    survey, kwargs = get_runbrick_kwargs(opt)
     if kwargs in [-1, 0]:
         return kwargs
 
@@ -144,7 +144,7 @@ def main():
 
     kwargs.update(splinesky=True, pixPsf=True)
 
-    run_brick(opt.brick, **kwargs)
+    run_brick(opt.brick, survey, **kwargs)
     
 if __name__ == '__main__':
     main()

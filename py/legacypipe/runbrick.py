@@ -68,7 +68,7 @@ def runbrick_global_init():
 def stage_tims(W=3600, H=3600, pixscale=0.262, brickname=None,
                survey=None,
                ra=None, dec=None,
-               plots=False, ps=None, survey_dir=None, outdir=None,
+               plots=False, ps=None,
                target_extent=None, pipe=False, program_name='runbrick.py',
                bands='grz',
                do_calibs=True,
@@ -103,8 +103,7 @@ def stage_tims(W=3600, H=3600, pixscale=0.262, brickname=None,
                                    read_one_tim)
     t0 = tlast = Time()
 
-    if survey is None:
-        survey = LegacySurveyData(survey_dir=survey_dir, output_dir=outdir)
+    assert(survey is not None)
 
     if ra is not None:
         from legacypipe.common import BrickDuck
@@ -977,7 +976,7 @@ def stage_srcs(coimgs=None, cons=None,
     saturated_pix = binary_dilation(satmap > 0, iterations=10)
 
     # Read Tycho-2 stars
-    tycho = fits_table(os.path.join(survey.get_survey_dir(), 'tycho2.fits.gz'))
+    tycho = fits_table(survey.find_file('tycho2'))
     print('Read', len(tycho), 'Tycho-2 stars')
     ok,tycho.tx,tycho.ty = targetwcs.radec2pixelxy(tycho.ra, tycho.dec)
     margin = 100
@@ -2572,7 +2571,7 @@ def tims_compute_resamp(mp, tims, targetwcs, force=False):
     for tim,r in zip(tims, R):
         tim.resamp = r
 
-def run_brick(brick, radec=None, pixscale=0.262,
+def run_brick(brick, survey, radec=None, pixscale=0.262,
               width=3600, height=3600,
               zoom=None,
               bands=None,
@@ -2591,8 +2590,6 @@ def run_brick(brick, radec=None, pixscale=0.262,
               pixPsf=False,
               splinesky=False,
               ceres=True,
-              outdir=None,
-              survey=None, survey_dir=None,
               unwise_dir=None,
               threads=None,
               plots=False, plots2=False, coadd_bw=False,
@@ -2619,6 +2616,9 @@ def run_brick(brick, radec=None, pixscale=0.262,
     ----------
     brick : string
         Brick name such as '2090m065'.  Can be None if *radec* is given.
+    survey : a "LegacySurveyData" object (see common.LegacySurveyData), which is in
+        charge of the list of bricks and CCDs to be handled, and where output files
+        should be written.
     radec : tuple of floats (ra,dec)
         RA,Dec center of the custom region to run.
     pixscale : float
@@ -2687,16 +2687,6 @@ def run_brick(brick, radec=None, pixscale=0.262,
     - *splinesky*: boolean; use the splined sky model (default is constant)?
 
     - *ceres*: boolean; use Ceres Solver when possible?
-
-    - *outdir*: string; base directory for output files; default "."
-
-    - *survey*: a "LegacySurveyData" object (see common.LegacySurveyData), which is in
-      charge of the list of bricks and CCDs to be handled, and also
-      creates DecamImage objects.
-
-    - *survey_dir*: string; default $LEGACY_SURVEY_DIR environment variable;
-      where to look for files including calibration files, tables of
-      CCDs and bricks, image data, etc.
 
     - *unwise_dir*: string; default unwise-coadds; where to look for
       unWISE coadd files.  This may be a colon-separated list of
@@ -2788,7 +2778,7 @@ def run_brick(brick, radec=None, pixscale=0.262,
                   write_metrics=write_metrics,
                   lanczos=lanczos,
                   on_bricks=on_bricks,
-                  outdir=outdir, survey_dir=survey_dir, unwise_dir=unwise_dir,
+                  unwise_dir=unwise_dir,
                   plots=plots, plots2=plots2, coadd_bw=coadd_bw,
                   rsync=rsync,
                   force=forceStages, write=writePickles)
@@ -3055,17 +3045,14 @@ def get_runbrick_kwargs(opt):
         print('Only ONE of --brick and --radec may be specified.')
         return -1
 
+    survey = LegacySurveyData(survey_dir=opt.survey_dir, output_dir=opt.outdir)
+    
     if opt.check_done or opt.skip or opt.skip_coadd:
-        outdir = opt.outdir
-        if outdir is None:
-            outdir = '.'
         brickname = opt.brick
         if opt.skip_coadd:
-            fn = os.path.join(outdir, 'coadd', brickname[:3], brickname,
-                              'legacysurvey-%s-image.jpg' % brickname)
+            fn = survey.find_file('image-jpeg', output=True)
         else:
-            fn = os.path.join(outdir, 'tractor', brickname[:3],
-                              'tractor-%s.fits' % brickname)
+            fn = survey.find_file('tractor', output=True)
         print('Checking for', fn)
         exists = os.path.exists(fn)
         if opt.skip_coadd and exists:
@@ -3124,7 +3111,7 @@ def get_runbrick_kwargs(opt):
         gaussPsf=opt.gpsf, pixPsf=opt.pixpsf, splinesky=True,
         simulOpt=opt.simul_opt,
         nblobs=opt.nblobs, blob=opt.blob, blobxy=opt.blobxy,
-        pipe=opt.pipe, outdir=opt.outdir, survey_dir=opt.survey_dir,
+        pipe=opt.pipe,
         unwise_dir=opt.unwise_dir,
         plots=opt.plots, plots2=opt.plots2,
         coadd_bw=opt.coadd_bw,
@@ -3139,7 +3126,7 @@ def get_runbrick_kwargs(opt):
         checkpoint_period=opt.checkpoint_period,
         fitblobs_prereq_filename=opt.fitblobs_prereq,
         )
-    return kwa
+    return survey, kwa
 
 def main(args=None):
     import logging
@@ -3160,7 +3147,7 @@ def main(args=None):
     if opt.brick is None and opt.radec is None:
         parser.print_help()
         return -1
-    kwargs = get_runbrick_kwargs(opt)
+    survey, kwargs = get_runbrick_kwargs(opt)
     if kwargs in [-1, 0]:
         return kwargs
 
@@ -3173,7 +3160,6 @@ def main(args=None):
     if opt.on_bricks:
         # Quickly check for existence of required neighboring catalogs
         # before starting.
-        survey = LegacySurveyData(survey_dir=opt.survey_dir, output_dir=opt.outdir)
         brick = survey.get_brick_by_name(opt.brick)
         bricks = on_bricks_dependencies(brick, survey)
         print('Checking for catalogs for bricks:',
@@ -3213,7 +3199,7 @@ def main(args=None):
         ps_thread.start()
         
     try:
-        run_brick(opt.brick, **kwargs)
+        run_brick(opt.brick, survey, **kwargs)
     except NothingToDoError as e:
         print()
         print(e.message)

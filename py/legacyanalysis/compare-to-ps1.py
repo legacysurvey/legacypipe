@@ -13,7 +13,254 @@ from astrometry.util.plotutils import PlotSequence
 from legacyanalysis.ps1cat import ps1cat, ps1_to_decam
 from legacypipe.common import *
 
+
+'''
+
+pixsc = 0.262
+apr = [1.0, 2.0, 3.5] / pixsc
+#-> aperture photometry radius in pixels
+decstat -- aper, img, ..., apr
+-> allmags
+
+mags = reform(allmags[2,ii])
+
+Skyrad_pix -- default 7 to 10 pixel radius in pixels
+   skyrad_pix = skyrad/pixsc ; sky radii in pixels
+
+
+image.py -- SE called with PIXEL_SCALE 0 -> determined by SE from header
+
+# corresponding to diameters of [1.5,3,5,7,9,11,13,15] arcsec 
+# assuming 0.262 arcsec pixel scale
+PHOT_APERTURES  5.7251911,11.450382,19.083969,26.717558,34.351147,41.984734,49.618320,57.251911
+
+-> photutils aperture photometry on PsfEx image -> 1.0 at radius ~ 13;
+total ~ 1.05
+
+
+One of the largest differences:
+  z band
+  Photometric diff 0.0249176025391 PSF size 1.07837 expnum 292604
+
+-> Notice that the difference is largest for *small* PSFs.
+
+Could this be brighter-fatter?
+
+-> Check out the region Aaron pointed to with 0.025 errors
+
+-> Is it possible that this is coming from saturation in the zeropoints
+computation (decstat)?!
+
+-> Sky estimation?
+
+-> Is PsfEx using any flags (SATUR) to cut candidates?
+
+-> Look at forced phot residuals?  Take model & data slices of a whole
+   pile of stars in expnum 292604 N4
+
+'''
+
+def star_profiles(ps):
+    # Run an example CCD, 292604-N4, with fairly large difference vs PS1.
+    
+    # python -c "from astrometry.util.fits import *; T = merge_tables([fits_table('/project/projectdirs/desiproc/dr3/tractor/244/tractor-244%s.fits' % b) for b in ['2p065','4p065', '7p065']]); T.writeto('tst-cat.fits')"
+    # python legacypipe/forced_photom_decam.py --save-data tst-data.fits --save-model tst-model.fits 292604 N4 tst-cat.fits tst-phot.fits
+
+    # -> tst-{model,data,phot}.fits
+
+    datafn = 'tst-data.fits'
+    modfn = 'tst-model.fits'
+    photfn = 'tst-phot.fits'
+    catfn = 'tst-cat.fits'
+    
+    img = fitsio.read(datafn)
+    mod = fitsio.read(modfn)
+    phot = fits_table(photfn)
+    cat = fits_table(catfn)
+    print(len(phot), 'forced-photometry results')
+    margin = 25
+    phot.cut((phot.x > 0+margin) * (phot.x < 2046-margin) *
+             (phot.y > 0+margin) * (phot.y < 4096-margin))
+    print(len(phot), 'in bounds')
+
+    cmap = dict([((b,o),i) for i,(b,o) in enumerate(zip(cat.brickname, cat.objid))])
+    I = np.array([cmap.get((b,o), -1) for b,o in zip(phot.brickname, phot.objid)])
+    print(np.sum(I >= 0), 'forced-phot matched cat')
+    phot.type = cat.type[I]
+
+    wcs = Sip(datafn)
+    
+    phot.ra,phot.dec = wcs.pixelxy2radec(phot.x+1, phot.y+1)
+    phot.cut(np.argsort(phot.flux))
+
+    phot.sn = phot.flux * np.sqrt(phot.flux_ivar)
+
+    phot.cut(phot.sn > 5)
+    print(len(phot), 'with S/N > 5')
+    
+    ps1 = ps1cat(ccdwcs=wcs)
+    stars = ps1.get_stars()
+    print(len(stars), 'PS1 sources')
+    # Now cut to just *stars* with good colors
+    stars.gicolor = stars.median[:,0] - stars.median[:,2]
+    keep = (stars.gicolor > 0.4) * (stars.gicolor < 2.7)
+    stars.cut(keep)
+    print(len(stars), 'PS1 stars with good colors')
+    stars.cut(np.minimum(stars.stdev[:,1], stars.stdev[:,2]) < 0.05)
+    print(len(stars), 'PS1 stars with min stdev(r,i) < 0.05')
+    I,J,d = match_radec(phot.ra, phot.dec, stars.ra, stars.dec, 1./3600.)
+    print(len(I), 'matches')
+
+    plt.clf()
+    ha=dict(histtype='step', bins=20, range=(0,100), normed=True)
+    plt.hist(phot.flux, color='b', **ha)
+    plt.hist(phot.flux[I], color='r', **ha)
+    ps.savefig()
+
+    plt.clf()
+    plt.hist(phot.flux * np.sqrt(phot.flux_ivar), bins=100,
+             range=(-10, 50))
+    plt.xlabel('Flux S/N')
+    ps.savefig()
+    
+    K = np.argsort(phot.flux[I])
+    I = I[K]
+    J = J[K]
+
+    ix = np.round(phot.x).astype(int)
+    iy = np.round(phot.y).astype(int)
+    sz = 10
+
+    P = np.flatnonzero(phot.type == 'PSF ')
+    print(len(P), 'PSFs')
+
+    imed = len(P)/2
+    i1 = int(len(P) * 0.75)
+    i2 = int(len(P) * 0.25)
+    N = 401
+
+    allmods = []
+    allimgs = []
+    
+    for II,tt in [#(I[:len(I)/2], 'faint matches to PS1'),
+        #(I[len(I)/2:], 'bright matches to PS1'),
+        #(P[i2: i2+N], '25th pct PSFs'),
+        #(P[imed: imed+N], 'median PSFs'),
+        #(P[i1: i1+N], '75th pct PSFs'),
+        #(P[-25:], 'brightest PSFs'),
+        (P[i2:imed], '2nd quartile of PSFs'),
+        (P[imed:i1], '3rd quartile of PSFs'),
+        #(P[:len(P)/2], 'faint half of PSFs'),
+        #(P[len(P)/2:], 'bright half of PSFs'),
+                  ]:
+        imgs = []
+        mods = []
+        shimgs = []
+        shmods = []
+        imgsum = modsum = 0
+
+        #plt.clf()
+        for i in II:
+
+            from astrometry.util.util import lanczos_shift_image
+            
+            dy = phot.y[i] - iy[i]
+            dx = phot.x[i] - ix[i]
+
+            sub = img[iy[i]-sz : iy[i]+sz+1, ix[i]-sz : ix[i]+sz+1]
+            shimg = lanczos_shift_image(sub, -dx, -dy)
+
+            sub = mod[iy[i]-sz : iy[i]+sz+1, ix[i]-sz : ix[i]+sz+1]
+            shmod = lanczos_shift_image(sub, -dx, -dy)
+
+            iyslice = img[iy[i], ix[i]-sz : ix[i]+sz+1]
+            myslice = mod[iy[i], ix[i]-sz : ix[i]+sz+1]
+            ixslice = img[iy[i]-sz : iy[i]+sz+1, ix[i]]
+            mxslice = mod[iy[i]-sz : iy[i]+sz+1, ix[i]]
+            mx = iyslice.max()
+            # plt.plot(iyslice/mx, 'b-', alpha=0.1)
+            # plt.plot(myslice/mx, 'r-', alpha=0.1)
+            # plt.plot(ixslice/mx, 'b-', alpha=0.1)
+            # plt.plot(mxslice/mx, 'r-', alpha=0.1)
+
+            siyslice = shimg[sz, :]
+            sixslice = shimg[:, sz]
+            smyslice = shmod[sz, :]
+            smxslice = shmod[:, sz]
+
+            shimgs.append(siyslice/mx)
+            shimgs.append(sixslice/mx)
+            shmods.append(smyslice/mx)
+            shmods.append(smxslice/mx)
+
+            imgs.append(iyslice/mx)
+            imgs.append(ixslice/mx)
+            mods.append(myslice/mx)
+            mods.append(mxslice/mx)
+
+            imgsum = imgsum + ixslice + iyslice
+            modsum = modsum + mxslice + myslice
+
+        # plt.ylim(-0.1, 1.1)
+        # plt.title(tt)
+        # ps.savefig()
+        mimg = np.median(np.array(imgs), axis=0)
+        mmod = np.median(np.array(mods), axis=0)
+        mshim = np.median(np.array(shimgs), axis=0)
+        mshmo = np.median(np.array(shmods), axis=0)
+
+        allmods.append(mshmo)
+        allimgs.append(mshim)
+        
+        plt.clf()
+        # plt.plot(mimg, 'b-')
+        # plt.plot(mmod, 'r-')
+        plt.plot(mshim, 'g-')
+        plt.plot(mshmo, 'm-')
+        
+        plt.ylim(-0.1, 1.1)
+        plt.title(tt + ': median; sums %.3f/%.3f' % (np.sum(mimg), np.sum(mmod)))
+        ps.savefig()
+        
+        # plt.clf()
+        # mx = imgsum.max()
+        # plt.plot(imgsum/mx, 'b-')
+        # plt.plot(modsum/mx, 'r-')
+        # plt.ylim(-0.1, 1.1)
+        # plt.title(tt + ': sum')
+        # ps.savefig()
+
+        plt.clf()
+        plt.plot((mimg + 0.01) / (mmod + 0.01), 'k-')
+        plt.plot((imgsum/mx + 0.01) / (modsum/mx + 0.01), 'g-')
+        plt.plot((mshim + 0.01) / (mshmo + 0.01), 'm-')
+        plt.ylabel('(img + 0.01) / (mod + 0.01)')
+        plt.title(tt)
+        ps.savefig()
+        
+
+    iq2,iq3 = allimgs
+    mq2,mq3 = allmods
+    plt.clf()
+
+    plt.plot(iq2, 'r-')
+    plt.plot(mq2, 'm-')
+
+    plt.plot(iq3, 'b-')
+    plt.plot(mq3, 'g-')
+
+    plt.title('Q2 vs Q3')
+    ps.savefig()
+    
+        
+    
+
 def main():
+
+    # ps = PlotSequence('pro')
+    # star_profiles(ps)
+    # sys.exit(0)
+
     survey_dir = '/project/projectdirs/desiproc/dr3'
     survey = LegacySurveyData(survey_dir=survey_dir)
 
@@ -50,8 +297,47 @@ def main():
         
         ccds.writeto(ccdfn)
 
-    ccds = fits_table(ccdfn)
+    ccdfn2 = 'ccds-forced-2.fits'
+    if not os.path.exists(ccdfn2):
+        ccds = fits_table(ccdfn)
+        # Split into brighter/fainter halves
+        FF = fits_table('forced-all-matches.fits')
+        ccds.brightest_mdiff = np.zeros(len(ccds))
+        ccds.brightest_mscatter = np.zeros(len(ccds))
+        ccds.bright_mdiff = np.zeros(len(ccds))
+        ccds.bright_mscatter = np.zeros(len(ccds))
+        ccds.faint_mdiff = np.zeros(len(ccds))
+        ccds.faint_mscatter = np.zeros(len(ccds))
+        for iccd in range(len(ccds)):
+            I = np.flatnonzero(FF.iforced == iccd)
+            if len(I) == 0:
+                continue
+            if len(I) < 10:
+                continue
+            F = FF[I]
+            b = np.percentile(F.psmag, 10)
+            m = np.median(F.psmag)
+            print(len(F), 'matches for CCD', iccd, 'median mag', m, '10th pct', b)
+            J = np.flatnonzero(F.psmag < b)
+            diff = F.mag[J] - F.psmag[J]
+            ccds.brightest_mdiff[iccd] = np.median(diff)
+            ccds.brightest_mscatter[iccd] = (np.percentile(diff, 84) -
+                                             np.percentile(diff, 16))/2.
+            J = np.flatnonzero(F.psmag < m)
+            diff = F.mag[J] - F.psmag[J]
+            ccds.bright_mdiff[iccd] = np.median(diff)
+            ccds.bright_mscatter[iccd] = (np.percentile(diff, 84) -
+                                          np.percentile(diff, 16))/2.
+            J = np.flatnonzero(F.psmag > m)
+            diff = F.mag[J] - F.psmag[J]
+            ccds.faint_mdiff[iccd] = np.median(diff)
+            ccds.faint_mscatter[iccd] = (np.percentile(diff, 84) -
+                                         np.percentile(diff, 16))/2.
 
+        ccds.writeto(ccdfn2)
+
+    ccds = fits_table(ccdfn2)
+        
     plt.clf()
     plt.hist(ccds.nforced, bins=100)
     plt.title('nforced')
@@ -82,7 +368,8 @@ def main():
 
 
     for band in bands:
-        I = np.flatnonzero(ccds.filter == band)
+        I = np.flatnonzero((ccds.filter == band)
+                           * (ccds.photometric) * (ccds.blacklist_ok))
 
         mlo,mhi = -0.01, 0.05
 
@@ -102,16 +389,55 @@ def main():
         plt.clf()
         plt.plot(ccds.ccdzpt[I],
                  np.clip(ccds.mdiff[I], mlo,mhi), 'k.', alpha=0.1)
-
-        plt.xlabel('Zeropoint (arcsec)')
+        plt.xlabel('Zeropoint (mag)')
         plt.ylabel('DECaLS PSF - PS1 (mag)')
         plt.axhline(0, color='k', alpha=0.2)
         #plt.axis([0, mxsee, mlo,mhi])
         plt.title('DR3: EDR region, Forced phot: %s band' % band)
         ps.savefig()
 
+        plt.clf()
+        plt.plot(ccds.ccdzpt[I], ccds.psfsize[I], 'k.', alpha=0.1)
+        plt.xlabel('Zeropoint (mag)')
+        plt.ylabel('PSF size (arcsec)')
+        plt.title('DR3: EDR region, Forced phot: %s band' % band)
+        ps.savefig()
+
+        # plt.clf()
+        # plt.plot(ccds.avsky[I],
+        #          np.clip(ccds.mdiff[I], mlo,mhi), 'k.', alpha=0.1)
+        # plt.xlabel('avsky')
+        # plt.ylabel('DECaLS PSF - PS1 (mag)')
+        # plt.axhline(0, color='k', alpha=0.2)
+        # plt.title('DR3: EDR region, Forced phot: %s band' % band)
+        # ps.savefig()
+        # 
+        # plt.clf()
+        # plt.plot(ccds.meansky[I],
+        #          np.clip(ccds.mdiff[I], mlo,mhi), 'k.', alpha=0.1)
+        # plt.xlabel('meansky')
+        # plt.ylabel('DECaLS PSF - PS1 (mag)')
+        # plt.axhline(0, color='k', alpha=0.2)
+        # plt.title('DR3: EDR region, Forced phot: %s band' % band)
+        # ps.savefig()
 
 
+        plt.clf()
+        lo,hi = (-0.02, 0.05)
+        ha = dict(bins=50, histtype='step', range=(lo,hi))
+        n,b,p1 = plt.hist(ccds.brightest_mdiff[I], color='r', **ha)
+        n,b,p2 = plt.hist(ccds.bright_mdiff[I], color='g', **ha)
+        n,b,p3 = plt.hist(ccds.faint_mdiff[I], color='b', **ha)
+        plt.legend((p1[0],p2[0],p3[0]), ('Brightest 10%', 'Brightest 50%',
+                                         'Faintest 50%'))
+        plt.xlabel('DECaLS PSF - PS1 (mag)')
+        plt.ylabel('Number of CCDs')
+        plt.title('DR3: EDR region, Forced phot: %s band' % band)
+        plt.xlim(lo,hi)
+        ps.savefig()
+        
+        
+        
     
     for band in bands:
         I = np.flatnonzero(ccds.filter == band)
@@ -141,7 +467,8 @@ def main():
     # Group by exposure
 
     for band in bands:
-        I = np.flatnonzero(ccds.filter == band)
+        I = np.flatnonzero((ccds.filter == band)
+                           * (ccds.photometric) * (ccds.blacklist_ok))
 
         E,J = np.unique(ccds.expnum[I], return_index=True)
         print(len(E), 'unique exposures in', band)
@@ -152,10 +479,30 @@ def main():
         exps.dsize = np.zeros(len(exps))
         exps.nccds = np.zeros(len(exps), int)
         
+        exps.brightest_ddiff = np.zeros(len(exps))
+        exps.bright_ddiff = np.zeros(len(exps))
+        exps.faint_ddiff = np.zeros(len(exps))
+        
         for iexp,exp in enumerate(exps):
             J = np.flatnonzero(ccds.expnum[I] == exp.expnum)
             J = I[J]
             print(len(J), 'CCDs in exposure', exp.expnum)
+
+            exps.brightest_mdiff[iexp] = np.median(ccds.brightest_mdiff[J])
+            exps.bright_mdiff[iexp] = np.median(ccds.bright_mdiff[J])
+            exps.faint_mdiff[iexp] = np.median(ccds.faint_mdiff[J])
+
+            exps.brightest_ddiff[iexp] = (
+                np.percentile(ccds.brightest_mdiff[J], 84) -
+                np.percentile(ccds.brightest_mdiff[J], 16))/2.
+            exps.bright_ddiff[iexp] = (
+                np.percentile(ccds.bright_mdiff[J], 84) -
+                np.percentile(ccds.bright_mdiff[J], 16))/2.
+            exps.faint_ddiff[iexp] = (
+                np.percentile(ccds.faint_mdiff[J], 84) -
+                np.percentile(ccds.faint_mdiff[J], 16))/2.
+
+            
             exps.mdiff[iexp] = np.median(ccds.mdiff[J])
             exps.ddiff[iexp] = (np.percentile(ccds.mdiff[J], 84) - np.percentile(ccds.mdiff[J], 16))/2.
             exps.psfsize[iexp] = np.median(ccds.psfsize[J])
@@ -166,13 +513,31 @@ def main():
         mlo,mhi = -0.01, 0.05
 
         exps.cut(exps.nccds >= 10)
-
         
         plt.clf()
         plt.errorbar(np.clip(exps.psfsize, 0, mxsee),
                      np.clip(exps.mdiff, mlo,mhi), yerr=exps.ddiff,
                      #xerr=exps.dsize,
-                     fmt='.')
+                     fmt='.', color='k')
+
+        # plt.errorbar(np.clip(exps.psfsize, 0, mxsee),
+        #              np.clip(exps.brightest_mdiff, mlo,mhi),
+        #              yerr=exps.brightest_ddiff, fmt='r.')
+        # plt.errorbar(np.clip(exps.psfsize, 0, mxsee),
+        #              np.clip(exps.bright_mdiff, mlo,mhi),
+        #              yerr=exps.bright_ddiff, fmt='g.')
+        # plt.errorbar(np.clip(exps.psfsize, 0, mxsee),
+        #              np.clip(exps.faint_mdiff, mlo,mhi),
+        #              yerr=exps.faint_ddiff, fmt='b.')
+
+        # plt.plot(np.clip(exps.psfsize, 0, mxsee),
+        #              np.clip(exps.brightest_mdiff, mlo,mhi), 'r.')
+        # plt.plot(np.clip(exps.psfsize, 0, mxsee),
+        #              np.clip(exps.bright_mdiff, mlo,mhi), 'g.')
+        # plt.plot(np.clip(exps.psfsize, 0, mxsee),
+        #          np.clip(exps.faint_mdiff, mlo,mhi), 'b.')
+
+        
         #plt.plot(ccds.seeing[I], ccds.mdiff[I], 'b.')
         plt.xlabel('PSF size (arcsec)')
         plt.ylabel('DECaLS PSF - PS1 (mag)')
@@ -182,6 +547,26 @@ def main():
         ps.savefig()
 
 
+        plt.clf()
+        p1 = plt.plot(np.clip(exps.psfsize, 0, mxsee),
+                      np.clip(exps.brightest_mdiff, mlo,mhi), 'r.', alpha=0.5)
+        p2 = plt.plot(np.clip(exps.psfsize, 0, mxsee),
+                      np.clip(exps.bright_mdiff, mlo,mhi), 'g.', alpha=0.5)
+        p3 = plt.plot(np.clip(exps.psfsize, 0, mxsee),
+                      np.clip(exps.faint_mdiff, mlo,mhi), 'b.', alpha=0.5)
+        plt.legend((p1[0],p2[0],p3[0]), ('Brightest 10%', 'Brightest 50%',
+                                'Faintest 50%'))
+        plt.xlabel('PSF size (arcsec)')
+        plt.ylabel('DECaLS PSF - PS1 (mag)')
+        plt.axhline(0, color='k', alpha=0.2)
+        plt.axis([0, mxsee, mlo,mhi])
+        plt.title('DR3: EDR region, Forced phot: %s band' % band)
+        ps.savefig()
+
+        J = np.argsort(-exps.mdiff)
+        for j in J:
+            print('  Photometric diff', exps.mdiff[j], 'PSF size', exps.psfsize[j], 'expnum', exps.expnum[j])
+        
 
         
     sys.exit(0)

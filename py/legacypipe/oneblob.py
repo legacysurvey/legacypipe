@@ -98,6 +98,8 @@ class OneBlob(object):
         self.use_ceres = use_ceres
         self.hastycho = hastycho
 
+        self.deblend = False
+        
         self.tims = self.create_tims(timargs)
         self.total_pix = sum([np.sum(t.getInvError() > 0) for t in self.tims])
         
@@ -130,14 +132,112 @@ class OneBlob(object):
             print('Many exposures for blob', self.name)
         
     def run(self, B):
+        # Not quite so many plots...
+        self.plots1 = False
+        cat = Catalog(*self.srcs)
+
         tlast = Time()
         if self.plots:
             tims_compute_resamp(None, self.tims, self.blobwcs)
             self._initial_plots()
 
-        cat = Catalog(*self.srcs)
-        self._fit_fluxes(cat, self.tims, self.bands)
+        if self.deblend:
+            ### Test bogus deblending
+            ras  = np.array([src.pos.ra  for src in cat])
+            decs = np.array([src.pos.dec for src in cat])
+            ok,x,y = self.blobwcs.radec2pixelxy(ras, decs)
+            x -= 1
+            y -= 1
+            Xi = np.round(x).astype(int)
+            Yi = np.round(y).astype(int)
 
+            # Combine the bands to make a single deblending profile...
+            # What weighting to use though?  Median S/N?
+            # Straight per-pixel weight?  (That's like flat-spectrum assumptn)
+            # (this is like [sed-matched] detection...)
+            coimgs,cons,cowimgs,wimgs = quick_coadds(
+                self.tims, self.bands, self.blobwcs, get_cow=True,
+                fill_holes=False)
+            #wts = [np.median(wt[wt > 0]) for wt in wimgs]
+            #print('Median weights:', wts)
+            bimg = np.zeros_like(cowimgs[0])
+            bwt = np.zeros_like(cowimgs[0])
+            for im,wt in zip(cowimgs,wimgs):
+                bimg += im * wt
+                bwt += wt
+            bimg /= np.maximum(1e-16, bwt)
+            sig1 = 1. / np.sqrt(np.median(wt[wt > 0]))
+
+            if self.plots:
+                plt.clf()
+                ima = dict(vmin=-2.*sig1, vmax=5.*sig1)
+                dimshow(bimg, **ima)
+                plt.title('Deblend -- merged bands')
+                self.ps.savefig()
+                ax = plt.axis()
+                plt.plot(Xi, Yi, 'r.')
+                plt.axis(ax)
+                self.ps.savefig()
+                self.deb_ima = ima
+                
+            # size of region to use as postage stamp for deblending
+            sz = 32
+            h,w = bimg.shape
+
+            profiles = []
+            allprofiles = np.zeros_like(bimg)
+            for isrc,(xi,yi) in enumerate(zip(Xi,Yi)):
+                dx = min(sz, min(xi, w-1-xi))
+                dy = min(sz, min(yi, h-1-yi))
+                x0,y0 = xi - dx, yi - dy
+                slc = slice(y0, yi + dy+1), slice(x0, xi + dx+1)
+                subimg = bimg[slc]
+                subwt =   bwt[slc]
+                flipped = np.fliplr(np.flipud(subimg))
+                flipwt  = np.fliplr(np.flipud(subwt))
+                minimg = subimg.copy()
+                # Mirror the blob boundaries
+                submask = self.blobmask[slc]
+                flipmask = np.fliplr(np.flipud(submask))
+
+                I = np.flatnonzero((flipwt > 0) * (flipped < subimg))
+                minimg.flat[I] = flipped.flat[I]
+                minimg[flipmask == False] = 0
+                
+                # Correct for min() bias for two Gaussians.  This isn't
+                # really the right way to do this
+                minimg[subwt > 0] += 0.545 * np.sqrt(1. / subwt[subwt > 0])
+                # And this is *really* a hack
+                minimg = np.maximum(0, minimg)
+                
+                patch = Patch(x0, y0, minimg)
+                profiles.append(patch)
+                patch.addTo(allprofiles)
+
+                # if self.plots:
+                #     plt.clf()
+                #     plt.subplot(2,3,1)
+                #     dimshow(subimg, **ima)
+                #     plt.subplot(2,3,2)
+                #     dimshow(flipped, **ima)
+                #     #plt.subplot(2,3,3)
+                #     #dimshow(goodpix, vmin=0, vmax=1)
+                #     plt.subplot(2,3,4)
+                #     dimshow(minimg, **ima)
+                #     plt.subplot(2,3,5)
+                #     dimshow(allprofiles, **ima)
+                #     self.ps.savefig()
+                
+            if self.plots:
+                plt.clf()
+                dimshow(allprofiles, **ima)
+                plt.title('Deblend -- sum of profiles')
+                self.ps.savefig()
+
+            self.deb_profiles = profiles
+            self.deb_prosum = allprofiles
+
+        self._fit_fluxes(cat, self.tims, self.bands)
         tr = self.tractor(self.tims, cat)
 
         if self.plots:
@@ -253,6 +353,7 @@ class OneBlob(object):
 
         
     def run_model_selection(self, cat, Ibright, B):
+
         # We repeat the "compute & subtract initial models" logic from above.
         # -Remember the original images
         # -Compute initial models for each source (in each tim)
@@ -278,7 +379,7 @@ class OneBlob(object):
         B.all_model_ivs     = np.array([{} for i in range(N)])
         B.all_model_flags   = np.array([{} for i in range(N)])
         B.all_model_cpu     = np.array([{} for i in range(N)])
-
+            
         # Model selection for sources, in decreasing order of brightness
         for numi,srci in enumerate(Ibright):
     
@@ -333,6 +434,7 @@ class OneBlob(object):
                 yl,yh = np.flatnonzero(yin)[np.array([0,-1])]
                 xl,xh = np.flatnonzero(xin)[np.array([0,-1])]
                 srcwcs = self.blobwcs.get_subimage(xl, yl, 1+xh-xl, 1+yh-yl)
+                srcbounds = [xl, xh, yl, yh]
                 # A mask for which pixels in the 'srcwcs' square are occupied.
                 srcpix = insrc[yl:yh+1, xl:xh+1]
                 # from scipy.ndimage.morphology import binary_erosion
@@ -346,8 +448,10 @@ class OneBlob(object):
             srctractor = self.tractor(srctims, [src])
             srctractor.setModelMasks(modelMasks)
             enable_galaxy_cache()
-    
-            if self.plots:
+
+            if self.plots1:
+                # This is a handy blob-coordinates plot of the data
+                # going into the fit.
                 tims_compute_resamp(None, srctims, self.blobwcs)
                 plt.clf()
                 coimgs,cons = quick_coadds(srctims, self.bands, self.blobwcs,
@@ -355,24 +459,59 @@ class OneBlob(object):
                 dimshow(get_rgb(coimgs, self.bands))
                 plt.title('Model selection: stage1 data')
                 self.ps.savefig()
-    
-                if self.bigblob:
-                    tims_compute_resamp(None, srctims, srcwcs, force=True)
-                    plt.clf()
-                    coimgs,cons = quick_coadds(srctims, self.bands, srcwcs,
-                                                 fill_holes=False)
-                    dimshow(get_rgb(coimgs, self.bands))
-                    plt.title('Model selection: stage1 data (srcwcs)')
-                    self.ps.savefig()
-                    for tim in srctims:
-                        del tim.resamp
-
-                srch,srcw = srcwcs.shape
+            if self.bigblob and self.plots:
+                # This is a local source-WCS plot of the data going into the
+                # fit.
                 tims_compute_resamp(None, srctims, srcwcs, force=True)
-                _plot_mods(srctims, [list(srctractor.getModelImages())],
-                           ['Model selection init'], self.bands, None, None,
-                           None, srcw,srch, self.ps, chi_plots=False)
+                plt.clf()
+                coimgs,cons = quick_coadds(srctims, self.bands, srcwcs,
+                                           fill_holes=False)
+                dimshow(get_rgb(coimgs, self.bands))
+                plt.title('Model selection: stage1 data (srcwcs)')
+                self.ps.savefig()
+                for tim in srctims:
+                    del tim.resamp
+                if self.plots1:
+                    srch,srcw = srcwcs.shape
+                    tims_compute_resamp(None, srctims, srcwcs, force=True)
+                    _plot_mods(srctims, [list(srctractor.getModelImages())],
+                               ['Model selection init'], self.bands, None,None,
+                               None, srcw,srch, self.ps, chi_plots=False)
 
+            if self.deblend:
+                # Create tims with the deblending-weighted pixels.
+                debtims = [Image(data=np.zeros_like(tim.data),
+                               inverr=tim.getInvError(),
+                               wcs=tim.wcs, psf=tim.psf, photocal=tim.photocal,
+                               sky=tim.sky, name=tim.name) for tim in srctims]
+                for dtim,tim in zip(debtims,srctims):
+                    dtim.band = tim.band
+                    dtim.subwcs = tim.subwcs
+                    # Resample the deb weights from blob space to tim space
+                    try:
+                        Yo,Xo,Yi,Xi,nil = resample_with_wcs(
+                            tim.subwcs, self.blobwcs, [], 2)
+                    except:
+                        continue
+                    dpatch = self.deb_profiles[srci]
+                    ph,pw = dpatch.shape
+                    K = np.flatnonzero((Yi >= dpatch.y0) * (Xi >= dpatch.x0) *
+                                       (Yi < (dpatch.y0+ph)) *
+                                       (Xi < (dpatch.x0+pw)))
+                    dtim.data[Yo[K],Xo[K]] = (tim.data[Yo[K], Xo[K]] *
+                        dpatch.patch[Yi[K]-dpatch.y0, Xi[K]-dpatch.x0] /
+                        np.maximum(self.deb_prosum[Yi[K], Xi[K]], 1e-16))
+                debtractor = self.tractor(debtims, srctractor.catalog)
+
+            if self.bigblob and self.plots and self.deblend:
+                tims_compute_resamp(None, debtims, srcwcs, force=True)
+                plt.clf()
+                coimgs,cons = quick_coadds(debtims, self.bands, srcwcs,
+                                           fill_holes=False)
+                dimshow(get_rgb(coimgs, self.bands))
+                plt.title('Deblend-weighted data')
+                self.ps.savefig()
+                    
             srccat = srctractor.getCatalog()
 
             # Compute the log-likehood without a source here.
@@ -404,9 +543,10 @@ class OneBlob(object):
             if self.many_exposures:
                 dtims,insubset = self._get_todepth_subset(srctims, srcwcs,
                                                           srcpix)
-                print('Many exposures: to-depth subset of', len(dtims), 'images out of',
-                      len(srctims))
+                print('Many exposures: to-depth subset of', len(dtims),
+                      'images out of', len(srctims))
             allflags = {}
+            cputimes = {}
             for name,newsrc in trymodels:
                 cpum0 = time.clock()
 
@@ -415,12 +555,10 @@ class OneBlob(object):
                     # bright, try the galaxy models.
                     if ((chisqs['simple'] > chisqs['ptsrc']) or
                         (chisqs['ptsrc'] > 400)):
-    
                         if self.hastycho:
-                            print('Not computing galaxy models: Tycho-2 star in '+
-                                  'blob')
+                            print('Not computing galaxy models: Tycho-2 star'
+                                  + ' in blob')
                             continue
-    
                         trymodels.extend([
                             ('dev', dev), ('exp', exp), ('comp', comp)])
                     continue
@@ -429,16 +567,15 @@ class OneBlob(object):
                     # Compute the comp model if exp or dev would be accepted
                     if (max(chisqs['dev'], chisqs['exp']) <
                         (chisqs['ptsrc'] + galaxy_margin)):
-                        #print('dev/exp not much better than ptsrc; not computing
-                        # comp model.')
+                        #print('dev/exp not much better than ptsrc;
+                        #not computing comp model.')
                         continue
                     newsrc = comp = FixedCompositeGalaxy(
                         src.getPosition(), src.getBrightness(),
                         SoftenedFracDev(0.5), exp.getShape(),
                         dev.getShape()).copy()
-                #print('New source:', newsrc)
                 srccat[0] = newsrc
-    
+
                 # Use the same modelMask shapes as the original source ('src').
                 # Need to create newsrc->mask mappings though:
                 mm = remap_modelmask(modelMasks, src, newsrc)
@@ -458,13 +595,14 @@ class OneBlob(object):
                 #     mods = list(srctractor.getModelImages())
                 #     plt.clf()
                 #     coimgs,cons = quick_coadds(srctims, bands, srcwcs,
-                #                                  images=mods, fill_holes=False)
+                #                               images=mods, fill_holes=False)
                 #     dimshow(get_rgb(coimgs, bands))
                 #     plt.title('Initial: ' + name)
                 #     self.ps.savefig()
     
                 if self.many_exposures:
-                    # Run a quick round of optimization with our to-depth subset
+                    # Run a quick round of optimization with our
+                    # to-depth subset
                     dmm = [m for m,isin in zip(modelMasks,insubset) if isin]
                     dmm = remap_modelmask(dmm, src, newsrc)
     
@@ -483,7 +621,21 @@ class OneBlob(object):
                     #     dimshow(get_rgb(comods, bands))
                     #     plt.title('To-depth opt: ' + name)
                     #     self.ps.savefig()
-    
+
+                if self.deblend:
+                    debtractor.setModelMasks(mm)
+                    enable_galaxy_cache()
+                    debtractor.optimize_loop(**self.optargs)
+
+                if self.deblend and self.plots1:
+                    plt.clf()
+                    modimgs = list(debtractor.getModelImages())
+                    comods,nil = quick_coadds(
+                        debtims, self.bands, srcwcs, images=modimgs)
+                    dimshow(get_rgb(comods, self.bands))
+                    plt.title('Deblended opt: ' + name)
+                    self.ps.savefig()
+                    
                 # First-round optimization (during model selection)
                 thisflags = 0
                 srctractor.optimize_loop(**self.optargs)
@@ -492,10 +644,10 @@ class OneBlob(object):
                 # print('Mod', name, 'round1 opt', Time()-t0)
                 #print('Mod selection: after first-round opt:', newsrc)
     
-                if self.plots:
+                if self.plots1:
                     # _plot_mods(srctims, [list(srctractor.getModelImages())],
-                    #            ['Model selection: ' + name], bands, None, None,
-                    #            None, srch,srcw, ps, chi_plots=False)
+                    #        ['Model selection: ' + name], bands, None, None,
+                    #         None, srch,srcw, ps, chi_plots=False)
                     plt.clf()
                     modimgs = list(srctractor.getModelImages())
                     comods,nil = quick_coadds(srctims, self.bands, srcwcs,
@@ -534,7 +686,8 @@ class OneBlob(object):
                         if mod is None:
                             continue
                         #print('After first-round fit: model is', mod.shape)
-                        mod = _clip_model_to_blob(mod, tim.shape,tim.getInvError())
+                        mod = _clip_model_to_blob(mod, tim.shape,
+                                                  tim.getInvError())
                         if mod is None:
                             continue
                         d[newsrc] = Patch(mod.x0, mod.y0, mod.patch != 0)
@@ -550,7 +703,7 @@ class OneBlob(object):
                     # FIXME -- thisflags |= FLAG_STEPS_B
                     #print('Mod selection: after second-round opt:', newsrc)
     
-                    if self.plots:
+                    if self.plots1:
                         plt.clf()
                         modimgs = list(modtractor.getModelImages())
                         tims_compute_resamp(None, modtims, srcwcs, force=True)
@@ -591,9 +744,10 @@ class OneBlob(object):
                 B.all_model_flags[srci][name] = thisflags
                 cpum1 = time.clock()
                 B.all_model_cpu[srci][name] = cpum1 - cpum0
+                cputimes[name] = cpum1 - cpum0
 
-            # Actually select which model to keep.
-            # This "modnames" array determines the order of the elements in the DCHISQ
+            # Actually select which model to keep.  This "modnames"
+            # array determines the order of the elements in the DCHISQ
             # column of the catalog.
             modnames = ['ptsrc', 'simple', 'dev', 'exp', 'comp']
             keepmod = _select_model(chisqs, nparams, galaxy_margin)
@@ -605,23 +759,22 @@ class OneBlob(object):
                 from collections import OrderedDict
                 plt.clf()
                 rows,cols = 2, 6
-                mods = OrderedDict([('none',None), ('ptsrc',ptsrc),
-                                    ('simple',simple),
-                                    ('dev',dev), ('exp',exp), ('comp',comp)])
+                mods = OrderedDict([
+                    ('none',None), ('ptsrc',ptsrc), ('simple',simple),
+                    ('dev',dev), ('exp',exp), ('comp',comp)])
                 for imod,modname in enumerate(mods.keys()):
                     if mod != 'none' and not modname in chisqs:
                         continue
                     srccat[0] = mods[modname]
                     srctractor.setModelMasks(None)
                     plt.subplot(rows, cols, imod+1)
-
                     if modname == 'none':
                         # In the first panel, we show a coadd of the data
-                        coimgs, cons = quick_coadds(srctims, self.bands, srcwcs)
+                        coimgs, cons = quick_coadds(srctims, self.bands,srcwcs)
                         dimshow(get_rgb(coimgs, self.bands), ticks=False)
                         ax = plt.axis()
-                        ok,x,y = self.blobwcs.radec2pixelxy(src.getPosition().ra,
-                                                            src.getPosition().dec)
+                        ok,x,y = self.blobwcs.radec2pixelxy(
+                            src.getPosition().ra, src.getPosition().dec)
                         plt.plot(x-1, y-1, 'r+')
                         plt.axis(ax)
                         plt.title('Image')
@@ -633,7 +786,7 @@ class OneBlob(object):
                         comods,nil = quick_coadds(srctims, self.bands, srcwcs,
                                                     images=modimgs)
                         dimshow(get_rgb(comods, self.bands), ticks=False)
-                        plt.title(modname)
+                        plt.title(modname + '\n(%.0f s)' % cputimes[modname])
                         chis = [((tim.getImage() - mod) * tim.getInvError())**2
                                 for tim,mod in zip(srctims, modimgs)]
                         res = [(tim.getImage() - mod) for tim,mod in
@@ -800,20 +953,20 @@ class OneBlob(object):
         models.create(self.tims, cat, subtract=True)
 
         # For sources, in decreasing order of brightness
-        for numi,i in enumerate(Ibright):
+        for numi,srci in enumerate(Ibright):
             cpu0 = time.clock()
-            print('Fitting source', i, '(%i of %i in blob)' %
+            print('Fitting source', srci, '(%i of %i in blob)' %
                   (numi, len(Ibright)))
-            src = cat[i]
+            src = cat[srci]
             # Add this source's initial model back in.
-            models.add(i, self.tims)
+            models.add(srci, self.tims)
     
             if self.bigblob:
                 # Create super-local sub-sub-tims around this source
     
                 # Make the subimages the same size as the modelMasks.
                 #tbb0 = Time()
-                mods = [mod[i] for mod in models.models]
+                mods = [mod[srci] for mod in models.models]
                 srctims,modelMasks = _get_subimages(self.tims, mods, src)
                 #print('Creating srctims:', Time()-tbb0)
     
@@ -845,11 +998,11 @@ class OneBlob(object):
     
             else:
                 srctims = self.tims
-                modelMasks = models.model_masks(i, src)
+                modelMasks = models.model_masks(srci, src)
     
             srctractor = self.tractor(srctims, [src])
             srctractor.setModelMasks(modelMasks)
-    
+            
             # if plots and False:
             #     spmods,spnames = [],[]
             #     spallmods,spallnames = [],[]
@@ -907,7 +1060,7 @@ class OneBlob(object):
             #         tim.data = im
     
             # Re-remove the final fit model for this source
-            models.update_and_subtract(i, src, self.tims)
+            models.update_and_subtract(srci, src, self.tims)
     
             srctractor.setModelMasks(None)
             disable_galaxy_cache()
@@ -915,7 +1068,7 @@ class OneBlob(object):
             #print('Fitting source took', Time()-tsrc)
             #print(src)
             cpu1 = time.clock()
-            cputime[i] += (cpu1 - cpu0)
+            cputime[srci] += (cpu1 - cpu0)
             
         models.restore_images(self.tims)
         del models
