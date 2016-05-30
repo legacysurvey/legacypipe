@@ -12,11 +12,6 @@ def make_coadds(tims, bands, targetwcs,
                 plots=False, ps=None,
                 lanczos=True, mp=None):
     from astrometry.util.ttime import Time
-
-    if mp is not None and mp.pool is not None:
-        print('Coadds starting:')
-        mp.pool.get_pickle_traffic_string()
-    
     t0 = Time()
     
     class Duck(object):
@@ -63,9 +58,6 @@ def make_coadds(tims, bands, targetwcs,
         # surface-brightness correction
         tim.sbscale = (targetwcs.pixel_scale() / tim.subwcs.pixel_scale())**2
 
-    t1 = Time()
-    print('coadds preamble:', t1-t0)
-        
     # We create one iterator per band to do the tim resampling.  These all run in
     # parallel when multi-processing.
     imaps = []
@@ -91,8 +83,6 @@ def make_coadds(tims, bands, targetwcs,
     tinyw = 1e-30
     for iband,(band,timiter) in enumerate(zip(bands, imaps)):
         print('Computing coadd for band', band)
-
-        bandt0 = Time()
         
         # coadded weight map (moo)
         cow    = np.zeros((H,W), np.float32)
@@ -227,9 +217,6 @@ def make_coadds(tims, bands, targetwcs,
             # END of loop over tims
 
         # Per-band:
-
-        print('Band', band, 'resampling:', Time()-bandt0)
-        
         cowimg /= np.maximum(cow, tinyw)
         C.coimgs.append(cowimg)
         if mods:
@@ -286,14 +273,11 @@ def make_coadds(tims, bands, targetwcs,
                     apargs.append((irad, band, rad, coresid, None, False, apxy))
 
         if callback is not None:
-            writet0 = Time()
             callback(band, *callback_args, **kwargs)
-            print('Band', band, 'writing outputs:', Time()-writet0)
         # END of loop over bands
-        print('Band', band, ':', Time()-bandt0)
 
     t2 = Time()
-    print('coadds images:', t2-t1)
+    print('coadds: images:', t2-t0)
 
     if apertures is not None:
         # Aperture phot, in parallel
@@ -339,16 +323,10 @@ def make_coadds(tims, bands, targetwcs,
         t3 = Time()
         print('coadds apphot:', t3-t2)
 
-    if mp is not None and mp.pool is not None:
-        print('Coadds finished:')
-        mp.pool.get_pickle_traffic_string()
-                
     return C
 
 def _resample_one((itim,tim,mod,lanczos,targetwcs)):
     from astrometry.util.resample import resample_with_wcs, OverlapError
-    from astrometry.util.ttime import Time
-    t0 = Time()
     if lanczos:
         from astrometry.util.miscutils import patch_image
         patched = tim.getImage().copy()
@@ -389,7 +367,6 @@ def _resample_one((itim,tim,mod,lanczos,targetwcs)):
         dq = None
     else:
         dq = tim.dq[Yi,Xi]
-    print('Resampling tim', tim.name, ':', Time()-t0)
     return itim,Yo,Xo,iv,im,mo,dq
 
 def _apphot_one((irad, band, rad, img, sigma, isimage, apxy)):
