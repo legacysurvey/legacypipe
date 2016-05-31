@@ -56,7 +56,7 @@ from legacypipe.common import LegacySurveyData, wcs_for_brick, ccds_touching_wcs
 
 class SimDecals(LegacySurveyData):
     def __init__(self, survey_dir=None, metacat=None, simcat=None, output_dir=None):
-        super(SimDecals, self).__init__(survey_dir=survey_dir, output_dir=None)
+        super(SimDecals, self).__init__(survey_dir=survey_dir, output_dir=output_dir)
         self.metacat = metacat
         self.simcat = simcat
         #add +fakes string to camera to signal SimDecas
@@ -467,7 +467,7 @@ def main():
                   write_metrics=False, pixPsf=True, blobxy=blobxy, early_coadds=False,
                   splinesky=True, ceres=False, stages=['writecat'])
 
-        pdb.set_trace()
+        #pdb.set_trace()
 
         log.info('Cleaning up...')
         shutil.move(os.path.join(output_dir, 'tractor', brickname[:3],
@@ -478,14 +478,16 @@ def main():
                                  'legacysurvey-'+brickname+'-image.jpg'),
                     os.path.join(output_dir, 'qa-'+brickname+'-'+lobjtype+
                                  '-image-'+chunksuffix+'.jpg'))
+        shutil.move(os.path.join(output_dir,'coadd', brickname[:3], brickname,
+                                 'legacysurvey-'+brickname+'-model.jpg'),
+                    os.path.join(output_dir, 'qa-'+brickname+'-'+lobjtype+
+                                 '-model-'+chunksuffix+'.jpg'))
         shutil.move(os.path.join(output_dir, 'coadd', brickname[:3], brickname,
                                  'legacysurvey-'+brickname+'-resid.jpg'),
                     os.path.join(output_dir, 'qa-'+brickname+'-'+lobjtype+
                                  '-resid-'+chunksuffix+'.jpg'))
-        #shutil.rmtree(os.path.join(decals_sim_dir, 'coadd'))
-        #shutil.rmtree(os.path.join(decals_sim_dir, 'tractor'))
-        #shutil.rmtree(os.path.join(decals_sim_dir, brickname, 'images'))
-        #shutil.rmtree(os.path.join(decals_sim_dir,brickname, 'metrics'))
+        shutil.rmtree(os.path.join(output_dir, 'coadd'))
+        shutil.rmtree(os.path.join(output_dir, 'tractor'))
 
         # Write a log file
 
