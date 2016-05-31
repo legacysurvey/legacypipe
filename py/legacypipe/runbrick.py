@@ -1372,6 +1372,7 @@ def stage_fitblobs(T=None,
                 traceback.print_exc()
 
         skipblobs = [B.iblob for B in R if B is not None]
+        R = [r for r in R if r is not None]
         print('Skipping', len(skipblobs), 'blobs from checkpoint file')
         blobiter = _blob_iter(blobslices, blobsrcs, blobs, targetwcs, tims,
                               cat, bands, plots, ps, simul_opt, use_ceres,
@@ -1379,7 +1380,7 @@ def stage_fitblobs(T=None,
         # to allow timingpool to queue tasks one at a time
         blobiter = iterwrapper(blobiter, len(blobsrcs))
         print('blobsrcs:', len(blobsrcs))
-        
+
         d = os.path.dirname(checkpoint_filename)
         if len(d) and not os.path.exists(d):
             trymakedirs(d)
@@ -1444,13 +1445,17 @@ def stage_fitblobs(T=None,
 
     if len(R) == 0:
         raise NothingToDoError('No sources passed significance tests.')
-    
+
+    # Sort results R by 'iblob'
     J = np.argsort([B.iblob for B in R])
     R = [R[j] for j in J]
+    # Merge results R into one big table
     BB = merge_tables(R)
     del R
+    # Pull out the source indices...
     II = BB.Isrcs
     newcat = BB.sources
+    # ... and make the table T parallel with BB.
     T.cut(II)
 
     assert(len(T) == len(newcat))
