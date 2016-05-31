@@ -1441,36 +1441,13 @@ def stage_fitblobs(T=None,
 
     # Drop now-empty blobs.
     R = [r for r in R if r is not None and len(r)]
-    if len(R) > 0:
-        J = np.argsort([B.iblob for B in R])
-        R = [R[j] for j in J]
-        BB = merge_tables(R)
-    else:
-        BB = fits_table()
-        BB.Isrcs = []
-        BB.sources = []
-        nb = len(bands)
-        BB.fracflux   = np.zeros((0,nb))
-        BB.fracmasked = np.zeros((0,nb))
-        BB.fracin     = np.zeros((0,nb))
-        BB.rchi2      = np.zeros((0,nb))
-        BB.dchisqs    = np.zeros((0,5))
-        BB.flags      = np.zeros((0,5))
-        BB.all_models = np.array([])
-        BB.all_model_flags   = np.array([])
-        BB.all_model_fluxivs = np.array([])
-        BB.all_model_cpu     = np.array([])
-        BB.cpu_blob         = []
-        BB.cpu_source       = []
-        BB.blob_width   = []
-        BB.blob_height  = []
-        BB.blob_npix    = []
-        BB.blob_nimages = []
-        BB.blob_totalpix = []
-        BB.started_in_blob  = []
-        BB.finished_in_blob = []
-        BB.hastycho         = []
-        BB.srcinvvars = [np.zeros((0,))]
+
+    if len(R) == 0:
+        raise NothingToDoError('No sources passed significance tests.')
+    
+    J = np.argsort([B.iblob for B in R])
+    R = [R[j] for j in J]
+    BB = merge_tables(R)
     del R
     II = BB.Isrcs
     newcat = BB.sources
