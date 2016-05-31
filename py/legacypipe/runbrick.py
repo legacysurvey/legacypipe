@@ -1356,6 +1356,7 @@ def stage_fitblobs(T=None,
         R = mp.map(_bounce_one_blob, blobiter)
     else:
         from astrometry.util.ttime import CpuMeas
+        from astrometry.util.file import pickle_to_file, trymakedirs
 
         # Check for existing checkpoint file.
         R = []
@@ -1370,14 +1371,16 @@ def stage_fitblobs(T=None,
                 import traceback
                 print('Failed to read checkpoint file ' + checkpoint_filename)
                 traceback.print_exc()
-                R = []
 
-        skipblobs = [B.iblob for B in R]
+        skipblobs = [B.iblob for B in R if B is not None]
+        R = [r for r in R if r is not None]
+        print('Skipping', len(skipblobs), 'blobs from checkpoint file')
         blobiter = _blob_iter(blobslices, blobsrcs, blobs, targetwcs, tims,
                               cat, bands, plots, ps, simul_opt, use_ceres,
                               tycho, skipblobs=skipblobs)
         # to allow timingpool to queue tasks one at a time
         blobiter = iterwrapper(blobiter, len(blobsrcs))
+        print('blobsrcs:', len(blobsrcs))
 
         d = os.path.dirname(checkpoint_filename)
         if len(d) and not os.path.exists(d):
@@ -1388,7 +1391,6 @@ def stage_fitblobs(T=None,
         last_checkpoint = CpuMeas()
         while True:
             import multiprocessing
-            from astrometry.util.file import pickle_to_file, trymakedirs
 
             tnow = CpuMeas()
             dt = tnow.wall_seconds_since(last_checkpoint)
@@ -1416,7 +1418,6 @@ def stage_fitblobs(T=None,
                 else:
                     r = Riter.next()
                 R.append(r)
-                #print('Result r:', type(r))
             except StopIteration:
                 print('Done')
                 break
@@ -1445,13 +1446,17 @@ def stage_fitblobs(T=None,
 
     if len(R) == 0:
         raise NothingToDoError('No sources passed significance tests.')
-    
+
+    # Sort results R by 'iblob'
     J = np.argsort([B.iblob for B in R])
     R = [R[j] for j in J]
+    # Merge results R into one big table
     BB = merge_tables(R)
     del R
+    # Pull out the source indices...
     II = BB.Isrcs
     newcat = BB.sources
+    # ... and make the table T parallel with BB.
     T.cut(II)
 
     assert(len(T) == len(newcat))

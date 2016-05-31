@@ -662,7 +662,8 @@ class OneBlob(object):
                 # Recompute modelMasks in the original tims
 
                 # Limit sizes of huge models
-                _limit_galaxy_stamp_size(newsrc, self.tims[0])
+                if len(self.tims) > 0:
+                    _limit_galaxy_stamp_size(newsrc, self.tims[0])
     
                 if self.hastycho:
                     modtims = None
