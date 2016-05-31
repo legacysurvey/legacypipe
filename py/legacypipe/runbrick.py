@@ -1355,6 +1355,7 @@ def stage_fitblobs(T=None,
         R = mp.map(_bounce_one_blob, blobiter)
     else:
         from astrometry.util.ttime import CpuMeas
+        from astrometry.util.file import pickle_to_file, trymakedirs
 
         # Check for existing checkpoint file.
         R = []
@@ -1369,15 +1370,16 @@ def stage_fitblobs(T=None,
                 import traceback
                 print('Failed to read checkpoint file ' + checkpoint_filename)
                 traceback.print_exc()
-                R = []
 
         skipblobs = [B.iblob for B in R if B is not None]
+        print('Skipping', len(skipblobs), 'blobs from checkpoint file')
         blobiter = _blob_iter(blobslices, blobsrcs, blobs, targetwcs, tims,
                               cat, bands, plots, ps, simul_opt, use_ceres,
                               tycho, skipblobs=skipblobs)
         # to allow timingpool to queue tasks one at a time
         blobiter = iterwrapper(blobiter, len(blobsrcs))
-
+        print('blobsrcs:', len(blobsrcs))
+        
         d = os.path.dirname(checkpoint_filename)
         if len(d) and not os.path.exists(d):
             trymakedirs(d)
@@ -1387,7 +1389,6 @@ def stage_fitblobs(T=None,
         last_checkpoint = CpuMeas()
         while True:
             import multiprocessing
-            from astrometry.util.file import pickle_to_file, trymakedirs
 
             tnow = CpuMeas()
             dt = tnow.wall_seconds_since(last_checkpoint)
@@ -1415,7 +1416,6 @@ def stage_fitblobs(T=None,
                 else:
                     r = Riter.next()
                 R.append(r)
-                #print('Result r:', type(r))
             except StopIteration:
                 print('Done')
                 break
