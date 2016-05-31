@@ -56,20 +56,19 @@ import sys
 import os
 import numpy as np
 from collections import OrderedDict
+from glob import glob
+
+import matplotlib
+matplotlib.use('Agg')
+import pylab as plt
 
 from astrometry.util.fits import fits_table
 from astrometry.util.file import trymakedirs
 
 from legacypipe.common import LegacySurveyData, wcs_for_brick, ccds_touching_wcs
 
-
 from astrometry.libkd.spherematch import match_radec
 
-
-import matplotlib
-matplotlib.use('Agg')
-import pylab as plt
-from glob import glob
 
 def log(*s):
     print(' '.join([str(ss) for ss in s]), file=sys.stderr)
@@ -401,34 +400,93 @@ def main():
         #... find Queue...
         q = qdo.connect(opt.queue, create_ok=True)
         print('Connected to QDO queue', opt.queue, q)
-        
         brick_to_task = dict()
 
-        #I = np.flatnonzero(B.brickq == 0)
+        I = survey.photometric_ccds(T)
+        print(len(I), 'CCDs are photometric')
+        T.cut(I)
+        I = survey.apply_blacklist(T)
+        print(len(I), 'CCDs are not blacklisted')
+        T.cut(I)
+        print(len(T), 'CCDs remaining')
+
+        T.wra = T.ra + (T.ra > 180) * -360
+        wra = rlo - 360
+        plt.clf()
+        plt.plot(T.wra, T.dec, 'b.')
+        ax = [wra, rhi, dlo, dhi]
+        plt.axis(ax)
+        plt.title('CCDs')
+        plt.savefig('q-ccds.png')
+
+        B.wra = B.ra + (B.ra > 180) * -360
+
+        allI = []
         
         for brickq in range(4):
             I = np.flatnonzero(B.brickq == brickq)
             print(len(I), 'bricks with brickq =', brickq)
+
+            # this slight overestimate (for DECam images) is fine
+            radius = 0.3
+            Iccds = match_radec(B.ra[I], B.dec[I], T.ra, T.dec, radius,
+                                indexlist=True)
+
             J = np.flatnonzero(B.brickq < brickq)
             preB = B[J]
             reqs = []
-            for b in B[I]:
-                # find brick dependencies
-                brickdeps = on_bricks_dependencies(b, survey, bricks=preB)
-                # convert to task ids
-                taskdeps = [brick_to_task[b.brickname] for b in brickdeps]
-                reqs.append(taskdeps)
+            ikeep = []
+            for ib,b,Iccd in zip(I, B[I], Iccds):
 
-                #taskid = q.add(b.brickname, requires=taskdeps)
-                #print('Queued brick', b.brickname, '-> task', taskid)
-                #brick_to_task[b.brickname] = taskid
-                
+                if Iccd is None or len(Iccd) == 0:
+                    print('No matched CCDs to brick', b.brickname)
+                    continue
+                wcs = wcs_for_brick(b)
+                cI = ccds_touching_wcs(wcs, T[np.array(Iccd)])
+                print(len(cI), 'CCDs touching brick', b.brickname)
+                if len(cI) == 0:
+                    continue
+                ikeep.append(ib)
+
+                if brickq > 0:
+                    # find brick dependencies
+                    brickdeps = on_bricks_dependencies(b, survey, bricks=preB)
+                    # convert to task ids
+                    taskdeps = [brick_to_task.get(b.brickname,None) for b in brickdeps]
+                    # If we dropped a dependency brick from a previous brickq because
+                    # of no overlapping CCDs, it won't appear in the brick_to_task map.
+                    taskdeps = [t for t in taskdeps if t is not None]
+                    reqs.append(taskdeps)
+
+            ikeep = np.array(ikeep)
+
+            plt.clf()
+            plt.plot(B.wra[ikeep], B.dec[ikeep], 'b.')
+            plt.axis(ax)
+            plt.title('Bricks: brickq=%i' % brickq)
+            plt.savefig('q-bricks-%i.png' % brickq)
+
+            plt.clf()
+            plt.plot(B.wra, B.dec, '.', color='0.5')
+            for I in allI:
+                plt.plot(B.wra[I], B.dec[I], 'b.')
+            plt.plot(B.wra[ikeep], B.dec[ikeep], 'r.')
+            plt.axis(ax)
+            plt.title('All bricks: brickq=%i' % brickq)
+            plt.savefig('q-bricks-%ib.png' % brickq)
+            
+            allI.append(ikeep)
+            
             # submit to qdo queue
-            print('Queuing', len(B[I]), 'bricks')
-            taskids = q.add_multiple(B.brickname[I], requires=reqs)
-            #print('Queued brick', b.brickname, '-> task', taskid)
+            print('Queuing', len(B[ikeep]), 'bricks')
+            if brickq == 0:
+                reqs = None
+            else:
+                assert(len(ikeep) == len(reqs))
+            taskids = q.add_multiple(B.brickname[ikeep], requires=reqs)
+            assert(len(taskids) == len(ikeep))
             print('Queued', len(taskids), 'bricks')
-            brick_to_task.update(dict(zip(B.brickname[I], taskids)))
+            brick_to_task.update(dict(zip(B.brickname[ikeep], taskids)))
         
     if not (opt.calibs or opt.forced or opt.lsb):
         sys.exit(0)
