@@ -465,7 +465,8 @@ def main():
         run_brick(brickname, simdecals, threads=args.threads, zoom=args.zoom,
                   wise=False, forceAll=True, writePickles=False, do_calibs=False,
                   write_metrics=False, pixPsf=True, blobxy=blobxy, early_coadds=False,
-                  splinesky=True, ceres=False, stages=['writecat'])
+                  splinesky=True, ceres=False, stages=['writecat'], plots=True,
+                  plotbase='sim')
 
         #pdb.set_trace()
 
