@@ -207,7 +207,7 @@ def stage_tims(W=3600, H=3600, pixscale=0.262, brickname=None,
     if use_blacklist:
         I = survey.apply_blacklist(ccds)
         ccds.cut(I)
-        print(len(ccds), 'CCDs not in blacklisted propids (too many exposures!)')
+        print(len(ccds), 'CCDs not in blacklist')
 
     # Sort images by band -- this also eliminates images whose
     # *image.filter* string is not in *bands*.
@@ -224,7 +224,8 @@ def stage_tims(W=3600, H=3600, pixscale=0.262, brickname=None,
     for ccd in ccds:
         im = survey.get_image_object(ccd)
         ims.append(im)
-        print(im, im.band, 'exptime', im.exptime, 'propid', ccd.propid)
+        print(im, im.band, 'exptime', im.exptime, 'propid', ccd.propid,
+              'seeing %.2f' % ccd.fwhm*im.pixscale, 'object', ccd.object)
 
     tnow = Time()
     print('[serial tims] Finding images touching brick:', tnow-tlast)
@@ -589,7 +590,7 @@ def stage_mask_junk(tims=None, targetwcs=None, W=None, H=None, bands=None,
 def stage_image_coadds(survey=None, targetwcs=None, bands=None, tims=None,
                        brickname=None, version_header=None,
                        plots=False, ps=None, coadd_bw=False, W=None, H=None,
-                       brick=None, blobs=None, lanczos=True, ccds=None,
+                       brick=None, blobs=None, lanczos=True, ccds=None, mp=None,
                        **kwargs):
     '''
     Immediately after reading the images, we
@@ -681,7 +682,8 @@ def stage_image_coadds(survey=None, targetwcs=None, bands=None, tims=None,
     C = make_coadds(tims, bands, targetwcs,
                     detmaps=True, lanczos=lanczos,
                     callback=write_coadd_images,
-                    callback_args=(survey, brickname, version_header, tims, targetwcs))
+                    callback_args=(survey, brickname, version_header, tims, targetwcs),
+                    mp=mp)
 
     # if plots:
     #     for k,v in CP_DQ_BITS.items():
@@ -1966,7 +1968,7 @@ def stage_coadds(survey=None, bands=None, version_header=None, targetwcs=None,
                     apertures=apertures, apxy=apxy,
                     callback=write_coadd_images,
                     callback_args=(survey, brickname, version_header, tims, targetwcs),
-                    plots=False, ps=ps)
+                    plots=False, ps=ps, mp=mp)
 
     for c in ['nobs', 'anymask', 'allmask', 'psfsize', 'depth', 'galdepth']:
         T.set(c, C.T.get(c))
@@ -2864,6 +2866,11 @@ def run_brick(brick, survey, radec=None, pixscale=0.262,
     t0 = Time()
 
     def mystagefunc(stage, **kwargs):
+        # Update the (pickled) survey output directory...
+        picsurvey = kwargs.get('survey',None)
+        if picsurvey is not None:
+            picsurvey.output_dir = survey.output_dir
+
         mp.start_subphase('stage ' + stage)
         #if pool is not None:
         #    print('At start of stage', stage, ':')
@@ -2932,7 +2939,7 @@ python -u legacypipe/runbrick.py --plots --brick 2440p070 --zoom 1900 2400 450 9
     parser.add_argument('--pixscale', type=float, default=0.262,
                         help='Pixel scale of the output coadds (arcsec/pixel)')
 
-    parser.add_argument('-d', '--outdir', help='Set output base directory', default='.')
+    parser.add_argument('-d', '--outdir', help='Set output base directory, default "."')
     parser.add_argument('--survey-dir', type=str, default=None,
                         help='Override the $LEGACY_SURVEY_DIR environment variable')
 

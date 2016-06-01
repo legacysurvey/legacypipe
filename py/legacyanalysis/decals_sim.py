@@ -446,6 +446,7 @@ def main():
             os.remove(simcatfile)
         simcat.write(simcatfile)
 
+<<<<<<< HEAD
 #       # Use Tractor to just process the blobs containing the simulated sources. 
         simdecals = SimDecals(metacat=metacat,simcat=simcat)
         blobxy = zip(simcat['x'],simcat['y'])
@@ -454,6 +455,22 @@ def main():
                   forceAll=True, writePickles=False, do_calibs=True,
                   write_metrics=False, pixPsf=True, blobxy=blobxy, 
                   early_coadds=False, stages=['writecat'], splinesky=True)
+=======
+#       # Use Tractor to just process the blobs containing the simulated sources.
+        simdecals = SimDecals(metacat=metacat, simcat=simcat, output_dir=output_dir)
+        if args.all_blobs:
+            blobxy = None
+        else:
+            blobxy = zip(simcat['x'], simcat['y'])
+
+        run_brick(brickname, simdecals, threads=args.threads, zoom=args.zoom,
+                  wise=False, forceAll=True, writePickles=False, do_calibs=False,
+                  write_metrics=False, pixPsf=True, blobxy=blobxy, early_coadds=False,
+                  splinesky=True, ceres=False, stages=['writecat'], plots=True,
+                  plotbase='sim')
+
+        #pdb.set_trace()
+>>>>>>> 74df683... import lsb.py from tractor repo
 
         log.info('Cleaning up...')
         shutil.move(os.path.join(decals_sim_dir,brickname,'tractor',brickname[:3],
