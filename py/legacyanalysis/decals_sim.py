@@ -29,8 +29,10 @@ per square arcminute:
 IDL> print, 50*3600.0*0.25^2
       11250.0 ; sources over a whole brick
 """
-
 from __future__ import division, print_function
+
+import matplotlib
+matplotlib.use('Agg')
 
 import os
 import sys
@@ -52,6 +54,8 @@ from tractor.basics import GaussianMixtureEllipsePSF, RaDecPos
 from legacypipe.runbrick import run_brick
 from legacypipe.decam import DecamImage
 from legacypipe.common import LegacySurveyData, wcs_for_brick, ccds_touching_wcs
+
+from thesis_code.galsim import plots
 
 class SimDecals(LegacySurveyData):
     def __init__(self, survey_dir=None, output_dir=None,
@@ -104,8 +108,17 @@ class SimImage(DecamImage):
                 ivarstamp = invvar[overlap]
                 stamp, ivarstamp = objstamp.addnoise(stamp,ivarstamp)
 
+                image_copy= image.copy()
+                image_copy.fill(0.)
+                image_copy[overlap]+= stamp
+                plots.two_images([image.array,image_copy.array], 'image_left_stamp_right.png')
+                
                 image[overlap] += stamp
                 invvar[overlap] = ivarstamp
+                plots.image_plus_stamp(image.array,[stamp.bounds.xmin,stamp.bounds.xmax],\
+                                                    [stamp.bounds.ymin,stamp.bounds.ymax],'yellow_box.png')
+                print('exiting early')
+                sys.exit()
 
                 if np.min(invvar.array)<0:
                     print('Negative invvar!')
