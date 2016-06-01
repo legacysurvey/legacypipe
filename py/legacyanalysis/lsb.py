@@ -1,6 +1,7 @@
 import matplotlib
 matplotlib.use('Agg')
 import pylab as plt
+import os
 
 from scipy.ndimage.morphology import *
 from scipy.ndimage.measurements import *
@@ -14,9 +15,6 @@ from astrometry.util.plotutils import *
 from astrometry.util.ttime import *
 
 from tractor import *
-
-import os
-os.environ['DECALS_DIR'] = 'decals-lsb'
 
 from legacypipe.common import *
 from legacypipe.desi_common import *
@@ -47,7 +45,6 @@ def bin_image_2(data, S):
             subh,subw = sub.shape
             newdata[:subh,:subw] += sub
     return newdata / (S*S)
-
 
 
 def stage_1(expnum=431202, extname='S19', plotprefix='lsb', plots=False,
