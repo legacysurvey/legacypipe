@@ -225,7 +225,7 @@ def stage_tims(W=3600, H=3600, pixscale=0.262, brickname=None,
         im = survey.get_image_object(ccd)
         ims.append(im)
         print(im, im.band, 'exptime', im.exptime, 'propid', ccd.propid,
-              'seeing %.2f' % ccd.fwhm*im.pixscale, 'object', ccd.object)
+              'seeing %.2f' % (ccd.fwhm*im.pixscale), 'object', ccd.object)
 
     tnow = Time()
     print('[serial tims] Finding images touching brick:', tnow-tlast)
