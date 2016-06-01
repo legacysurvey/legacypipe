@@ -91,6 +91,11 @@ class SimImage(DecamImage):
         invvar = galsim.Image(tim.getInvvar())
         #sys.exit(1)
 
+        #store region of image contained by all sims and sum of all sims 
+        image_copy= image.copy() 
+        image_copy.fill(0.) #0s except in stamp overlap
+        stamp_copy= image_copy.copy()
+        x_olap,y_olap=[],[] #x,y range for each sim's/object's location in image
         # Loop on each object.
         for ii, obj in enumerate(self.survey.simcat):
             #print(obj)
@@ -103,22 +108,25 @@ class SimImage(DecamImage):
 
             # Make sure the object falls on the image and then add Poisson noise.
             overlap = stamp.bounds & image.bounds
+            print('overlap=',overlap)
             if (overlap.area()>0):
-                stamp = stamp[overlap]      
+                stamp = stamp[overlap] #image bounds the stamp region, not vice versa     
                 ivarstamp = invvar[overlap]
                 stamp, ivarstamp = objstamp.addnoise(stamp,ivarstamp)
 
-                image_copy= image.copy()
-                image_copy.fill(0.)
-                image_copy[overlap]+= stamp
-                plots.two_images([image.array,image_copy.array], 'image_left_stamp_right.png')
+                image_copy[overlap]= image.copy()[overlap] #region of image at least one sim overlaps
+                stamp_copy[overlap]+= stamp.copy() #just sime, they are ADDED over the whole image
+                x_olap.append( [overlap.xmin-1,overlap.xmax-1] ) #-1 b/c galsim 1st index is 1
+                y_olap.append( [overlap.ymin-1,overlap.ymax-1] )
+                print('obj= %d, img= %s' % (ii,os.path.basename(self.imgfn)))
                 
                 image[overlap] += stamp
                 invvar[overlap] = ivarstamp
-                plots.image_plus_stamp(image.array,[stamp.bounds.xmin,stamp.bounds.xmax],\
-                                                    [stamp.bounds.ymin,stamp.bounds.ymax],'yellow_box.png')
-                print('exiting early')
-                sys.exit()
+                #print('image.bounds=',image.bounds,'stamp.bounds=',stamp.bounds,'overlap=',overlap)
+                #plots.image_plus_stamp(image.array,[overlap.xmin,overlap.xmax],\
+                #                                    [overlap.ymin,overlap.ymax],'yellow_box.png')
+                #print('dir(time)',dir(tim))
+                #print('dir(self)',dir(self))
 
                 if np.min(invvar.array)<0:
                     print('Negative invvar!')
@@ -127,6 +135,13 @@ class SimImage(DecamImage):
             tim.data = image.array
             tim.inverr = np.sqrt(invvar.array)
 
+        #plot image,image regions where have sims, just sims as 3 plot panel with yellow boxes
+        basename= plots.get_basename(self.imgfn)
+        plots.image_v_stamp([image.array,image_copy.array,stamp_copy.array], \
+                            "image_v_stamp_%s.png" % basename,\
+                            sx=x_olap,sy=y_olap,multi_sims=True)
+        print('exiting early')
+        sys.exit()
         return tim
 
 class BuildStamp():
