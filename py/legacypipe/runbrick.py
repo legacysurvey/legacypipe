@@ -3057,9 +3057,9 @@ def get_runbrick_kwargs(opt):
     if opt.check_done or opt.skip or opt.skip_coadd:
         brickname = opt.brick
         if opt.skip_coadd:
-            fn = survey.find_file('image-jpeg', output=True)
+            fn = survey.find_file('image-jpeg', output=True, brick=brickname)
         else:
-            fn = survey.find_file('tractor', output=True)
+            fn = survey.find_file('tractor', output=True, brick=brickname)
         print('Checking for', fn)
         exists = os.path.exists(fn)
         if opt.skip_coadd and exists:
