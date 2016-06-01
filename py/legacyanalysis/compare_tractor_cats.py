@@ -20,8 +20,8 @@ import matplotlib.pyplot as plt
 from astropy.io import fits
 from astrometry.libkd.spherematch import match_radec
 
-#from thesis_code.fits import tractor_cat
-import thesis_code.targets as targets
+#import thesis_code.targets as targets
+from legacyanalysis import targets 
 
 class Matched_Cats():
     def __init__(self):
