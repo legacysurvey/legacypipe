@@ -421,34 +421,33 @@ def main():
 
         B.wra = B.ra + (B.ra > 180) * -360
 
-        allI = []
+        # this slight overestimate (for DECam images) is fine
+        radius = 0.3
+        Iccds = match_radec(B.ra, B.dec, T.ra, T.dec, radius,
+                            indexlist=True)
+        ikeep = []
+        for ib,(b,Iccd) in enumerate(zip(B, Iccds)):
+            if Iccd is None or len(Iccd) == 0:
+                print('No matched CCDs to brick', b.brickname)
+                continue
+            wcs = wcs_for_brick(b)
+            cI = ccds_touching_wcs(wcs, T[np.array(Iccd)])
+            print(len(cI), 'CCDs touching brick', b.brickname)
+            if len(cI) == 0:
+                continue
+            ikeep.append(ib)
+        B.cut(np.array(ikeep))
+        print('Cut to', len(B), 'bricks touched by CCDs')
         
         for brickq in range(4):
             I = np.flatnonzero(B.brickq == brickq)
             print(len(I), 'bricks with brickq =', brickq)
 
-            # this slight overestimate (for DECam images) is fine
-            radius = 0.3
-            Iccds = match_radec(B.ra[I], B.dec[I], T.ra, T.dec, radius,
-                                indexlist=True)
-
             J = np.flatnonzero(B.brickq < brickq)
             preB = B[J]
             reqs = []
-            ikeep = []
-            for ib,b,Iccd in zip(I, B[I], Iccds):
-
-                if Iccd is None or len(Iccd) == 0:
-                    print('No matched CCDs to brick', b.brickname)
-                    continue
-                wcs = wcs_for_brick(b)
-                cI = ccds_touching_wcs(wcs, T[np.array(Iccd)])
-                print(len(cI), 'CCDs touching brick', b.brickname)
-                if len(cI) == 0:
-                    continue
-                ikeep.append(ib)
-
-                if brickq > 0:
+            if brickq > 0:
+                for b in B[I]:
                     # find brick dependencies
                     brickdeps = on_bricks_dependencies(b, survey, bricks=preB)
                     # convert to task ids
@@ -458,35 +457,23 @@ def main():
                     taskdeps = [t for t in taskdeps if t is not None]
                     reqs.append(taskdeps)
 
-            ikeep = np.array(ikeep)
-
             plt.clf()
-            plt.plot(B.wra[ikeep], B.dec[ikeep], 'b.')
+            plt.plot(B.wra, B.dec, '.', color='0.5')
+            plt.plot(B.wra[I], B.dec[I], 'b.')
             plt.axis(ax)
             plt.title('Bricks: brickq=%i' % brickq)
             plt.savefig('q-bricks-%i.png' % brickq)
-
-            plt.clf()
-            plt.plot(B.wra, B.dec, '.', color='0.5')
-            for I in allI:
-                plt.plot(B.wra[I], B.dec[I], 'b.')
-            plt.plot(B.wra[ikeep], B.dec[ikeep], 'r.')
-            plt.axis(ax)
-            plt.title('All bricks: brickq=%i' % brickq)
-            plt.savefig('q-bricks-%ib.png' % brickq)
-            
-            allI.append(ikeep)
             
             # submit to qdo queue
-            print('Queuing', len(B[ikeep]), 'bricks')
+            print('Queuing', len(B[I]), 'bricks')
             if brickq == 0:
                 reqs = None
             else:
-                assert(len(ikeep) == len(reqs))
-            taskids = q.add_multiple(B.brickname[ikeep], requires=reqs)
-            assert(len(taskids) == len(ikeep))
+                assert(len(I) == len(reqs))
+            taskids = q.add_multiple(B.brickname[I], requires=reqs)
+            assert(len(taskids) == len(I))
             print('Queued', len(taskids), 'bricks')
-            brick_to_task.update(dict(zip(B.brickname[ikeep], taskids)))
+            brick_to_task.update(dict(zip(B.brickname[I], taskids)))
         
     if not (opt.calibs or opt.forced or opt.lsb):
         sys.exit(0)
