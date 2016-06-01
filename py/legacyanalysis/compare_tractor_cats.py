@@ -425,11 +425,11 @@ def plot_dflux_chisq(b,type='psf', low=-8.,hi=8.):
     for cnt,band in zip(range(3),['g','r','z']):
         ax[cnt].step(binc[band],hist[band], where='mid',c='b',lw=2)
         ax[cnt].plot(xvals,G.pdf(xvals))
-        for yloc,key in zip([0.95,0.85,0.75,0.65,0.55],['mean','std','q25','q75','perc_out']):
-            ax[cnt].text(0.1,yloc,"%s %.2f" % (key,stats[band]['sample'][key]),transform=ax[cnt].transAxes,horizontalalignment='left',**text_args)
-    ax[2].text(0.9,0.95,"N(0,1)",transform=ax[2].transAxes,horizontalalignment='right',**text_args)
-    for yloc,key in zip([0.85,0.75,0.65,0.55],['mean','std','q25','perc_out']):
-        ax[2].text(0.9,yloc,"%s %.2f" % (key,stats['g']['gauss'][key]),transform=ax[2].transAxes,horizontalalignment='right',**text_args)
+        #for yloc,key in zip([0.95,0.85,0.75,0.65,0.55],['mean','std','q25','q75','perc_out']):
+        #    ax[cnt].text(0.1,yloc,"%s %.2f" % (key,stats[band]['sample'][key]),transform=ax[cnt].transAxes,horizontalalignment='left',**text_args)
+    #ax[2].text(0.9,0.95,"N(0,1)",transform=ax[2].transAxes,horizontalalignment='right',**text_args)
+    #for yloc,key in zip([0.85,0.75,0.65,0.55],['mean','std','q25','perc_out']):
+    #    ax[2].text(0.9,yloc,"%s %.2f" % (key,stats['g']['gauss'][key]),transform=ax[2].transAxes,horizontalalignment='right',**text_args)
     #labels
     for cnt,band in zip(range(3),['g','r','z']):
         ti=ax[cnt].set_title('%s' % band, **laba)
