@@ -52,7 +52,8 @@ python legacypipe/runbrick.py \
      --checkpoint checkpoints/checkpoint-${brick}.pickle \
      --fitblobs-prereq pickles/runbrick-${brick}-srcs.pickle \
      --ps ps/ps-${brick}.fits \
-     --brick $brick --outdir $outdir --nsigma 6 >> $log 2>&1
+     --brick $brick --outdir $outdir --nsigma 6 \
+     --allow-missing-brickq 0 >> $log 2>&1
 
 # qdo launch dr2n 16 --cores_per_worker 8 --walltime=24:00:00 --script ../bin/pipebrick.sh --batchqueue regular --verbose
 # qdo launch edr0 4 --cores_per_worker 8 --batchqueue regular --walltime 4:00:00 --script ../bin/pipebrick.sh --keep_env --batchopts "--qos=premium -a 0-3"
