@@ -833,6 +833,7 @@ def stage_srcs(coimgs=None, cons=None,
                     continue
             B.append(fits_table(fn))
         del bricks
+        B = [b for b in B if b is not None]
         if len(B) == 0:
             on_bricks = False
     if on_bricks:
