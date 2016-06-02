@@ -828,8 +828,8 @@ def stage_srcs(coimgs=None, cons=None,
                 print('File does not exist:', fn)
                 if b.brickq <= allow_missing_brickq:
                     print(('  (allowing this missing brick (brickq = %i) ' +
-                           'because of --allow-missing-brickq %i)' % 
-                           (b.brickq, allow_missing_brickq)))
+                           'because of --allow-missing-brickq %i)') % 
+                           (b.brickq, allow_missing_brickq))
                     continue
             B.append(fits_table(fn))
         try:
@@ -3196,8 +3196,8 @@ def main(args=None):
                 print('File', fn, 'does not exist (required for --on-bricks)')
                 if b.brickq <= opt.allow_missing_brickq:
                     print(('  (allowing this missing brick (brickq = %i) ' +
-                           'because of --allow-missing-brickq %i)' % 
-                           (b.brickq, opt.allow_missing_brickq)))
+                           'because of --allow-missing-brickq %i)') % 
+                           (b.brickq, opt.allow_missing_brickq))
                 else:
                     allexist = False
                 continue
