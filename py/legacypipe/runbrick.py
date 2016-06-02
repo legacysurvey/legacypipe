@@ -832,6 +832,11 @@ def stage_srcs(coimgs=None, cons=None,
                            (b.brickq, allow_missing_brickq))
                     continue
             B.append(fits_table(fn))
+        del bricks
+        B = [b for b in B if b is not None]
+        if len(B) == 0:
+            on_bricks = False
+    if on_bricks:
         try:
             B = merge_tables(B)
         except:
@@ -840,7 +845,6 @@ def stage_srcs(coimgs=None, cons=None,
             traceback.print_exc()
             print('Retrying with fillzero...')
             B = merge_tables(B, columns='fillzero')
-        del bricks
         print('Total of', len(B), 'sources from neighbouring bricks')
         # Keep only sources that are primary in their own brick
         B.cut(B.brick_primary)
@@ -853,7 +857,9 @@ def stage_srcs(coimgs=None, cons=None,
         print(len(B), 'are within this image + margin')
         B.cut((B.out_of_bounds == False) * (B.left_blob == False))
         print(len(B), 'do not have out_of_bounds or left_blob set')
-
+        if len(B) == 0:
+            on_bricks = False
+    if on_bricks:
         # Note that we shouldn't need to drop sources that are within this
         # current brick's unique area, because we cut to sources that are
         # BRICK_PRIMARY within their own brick.
