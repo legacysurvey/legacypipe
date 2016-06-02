@@ -8,7 +8,8 @@ from legacypipe.cpimage import CP_DQ_BITS
 from legacypipe.runbrick import rgbkwargs
 
 def main():
-    brickname = '0362m045'
+    #brickname = '0362m045'
+    brickname = '0359m047'
     W = H = 3600
     pixscale = 0.262
     bands = 'grz'
@@ -21,7 +22,16 @@ def main():
     targetrd = np.array([targetwcs.pixelxy2radec(x,y) for x,y in
                          [(1,1),(W,1),(W,H),(1,H),(1,1)]])
 
-    ccds = survey.ccds_touching_wcs(targetwcs, ccdrad=None)
+    # where to measure the depth
+    probe_ra = brick.ra
+    probe_dec = brick.dec
+    
+    #ccds = survey.ccds_touching_wcs(targetwcs, ccdrad=None)
+
+    ccds = survey.get_annotated_ccds()
+    I = ccds_touching_wcs(targetwcs, ccds)
+    ccds.cut(I)
+
     print(len(ccds), 'CCDs touching target WCS')
 
     #I = survey.apply_blacklist(ccds)
@@ -42,14 +52,28 @@ def main():
     fn = 'coadd-%s-ccds.fits' % brickname
     ccds.writeto(fn)
     print('Wrote', fn)
-    
+
+    psfdepths = dict([(b,0.) for b in bands])
     ims = []
     for ccd in ccds:
         im = survey.get_image_object(ccd)
         ims.append(im)
         print(im, im.band, 'exptime', im.exptime, 'propid', ccd.propid)
 
+        wcs = survey.get_approx_wcs(ccd)
+        if wcs.is_inside(probe_ra, probe_dec):
+            # Point-source detection
+            detsig1 = ccd.sig1 / ccd.psfnorm_mean
+            psfdepths[im.band] += (1. / detsig1**2)
+
+    for band in bands:
+        sig1 = np.sqrt(1. / psfdepths[band])
+        depth = 5. * sig1
+        mag = -2.5 * (np.log10(depth) - 9)
+        print('PSF 5-sigma depth:', mag)
+            
     coimgs = []
+    coimgs2 = []
     
     for band in bands:
         print('Computing coadd for band', band)
@@ -62,24 +86,28 @@ def main():
         coimg  = np.zeros((H,W), np.float32)
         # number of exposures
         con    = np.zeros((H,W), np.uint8)
+
+        # coadded weight map (moo)
+        cow2    = np.zeros((H,W), np.float32)
+        # coadded weighted image map
+        cowimg2 = np.zeros((H,W), np.float32)
+        # unweighted image
+        coimg2  = np.zeros((H,W), np.float32)
+        # number of exposures
+        con2    = np.zeros((H,W), np.uint8)
         
-        unweighted=True
         tinyw = 1e-30
 
-        N = 0
-        
-        for iim,im in enumerate(ims):
-            if im.band != band:
-                continue
+        I = np.flatnonzero(ccds.filter == band)
+        medsee = np.median(ccds.seeing[I])
+
+        for ccd in ccds[I]:
+            im = survey.get_image_object(ccd)
             tim = im.get_tractor_image(radecpoly=targetrd, splinesky=True, gaussPsf=True)
             if tim is None:
                 continue
             print('Reading', tim.name)
 
-            N += 1
-            #if N == 10:
-            #    break
-            
             # surface-brightness correction
             tim.sbscale = (targetwcs.pixel_scale() / tim.subwcs.pixel_scale())**2
 
@@ -88,10 +116,16 @@ def main():
                 continue
             itim,Yo,Xo,iv,im,mo,dq = R
 
+            goodsee = (ccd.seeing < medsee)
+            
             # invvar-weighted image
             cowimg[Yo,Xo] += iv * im
             cow   [Yo,Xo] += iv
-            
+
+            if goodsee:
+                cowimg2[Yo,Xo] += iv * im
+                cow2   [Yo,Xo] += iv
+
             if dq is None:
                 goodpix = 1
             else:
@@ -105,12 +139,15 @@ def main():
                 
             coimg[Yo,Xo] += goodpix * im
             con  [Yo,Xo] += goodpix
-
+            if goodsee:
+                coimg2[Yo,Xo] += goodpix * im
+                con2  [Yo,Xo] += goodpix
+            
         # Per-band:
         cowimg /= np.maximum(cow, tinyw)
         coimg  /= np.maximum(con, 1)
         cowimg[cow == 0] = coimg[cow == 0]
-
+        
         fn = 'coadd-%s-image-%s.fits' % (brickname, band)
         fitsio.write(fn, cowimg, clobber=True)
         print('Wrote', fn)
@@ -122,13 +159,30 @@ def main():
         print('Wrote', fn)
 
         coimgs.append(cowimg)
-    
+
+        cowimg2 /= np.maximum(cow2, tinyw)
+        coimg2  /= np.maximum(con2, 1)
+        cowimg2[cow2 == 0] = coimg2[cow2 == 0]
+        
+        fn = 'coadd-%s-image2-%s.fits' % (brickname, band)
+        fitsio.write(fn, cowimg2, clobber=True)
+        print('Wrote', fn)
+        fn = 'coadd-%s-invvar2-%s.fits' % (brickname, band)
+        fitsio.write(fn, cow2, clobber=True)
+        print('Wrote', fn)
+        fn = 'coadd-%s-n2-%s.fits' % (brickname, band)
+        fitsio.write(fn, con2, clobber=True)
+        print('Wrote', fn)
+
+        coimgs2.append(cowimg2)
+
+        
     rgb = get_rgb(coimgs, bands, **rgbkwargs)
     kwa = {}
     imsave_jpeg('coadd-%s-image.jpg' % brickname, rgb, origin='lower', **kwa)
 
-        
-            
+    rgb = get_rgb(coimgs2, bands, **rgbkwargs)
+    imsave_jpeg('coadd-%s-image2.jpg' % brickname, rgb, origin='lower', **kwa)
             
 if __name__ == '__main__':
     main()

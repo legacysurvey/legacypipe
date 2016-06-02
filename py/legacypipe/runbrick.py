@@ -796,6 +796,7 @@ def stage_srcs(coimgs=None, cons=None,
                pipe=False, brickname=None,
                mp=None, nsigma=5,
                on_bricks=False,
+               allow_missing_brickq=-1,
                survey=None, brick=None,
                **kwargs):
     '''
@@ -823,6 +824,13 @@ def stage_srcs(coimgs=None, cons=None,
         for b in bricks:
             fn = survey.find_file('tractor', brick=b.brickname)
             print('Looking for', fn)
+            if not os.path.exists(fn):
+                print('File does not exist:', fn)
+                if b.brickq <= allow_missing_brickq:
+                    print(('  (allowing this missing brick (brickq = %i) ' +
+                           'because of --allow-missing-brickq %i)') % 
+                           (b.brickq, allow_missing_brickq))
+                    continue
             B.append(fits_table(fn))
         try:
             B = merge_tables(B)
@@ -832,6 +840,7 @@ def stage_srcs(coimgs=None, cons=None,
             traceback.print_exc()
             print('Retrying with fillzero...')
             B = merge_tables(B, columns='fillzero')
+        del bricks
         print('Total of', len(B), 'sources from neighbouring bricks')
         # Keep only sources that are primary in their own brick
         B.cut(B.brick_primary)
@@ -2589,6 +2598,7 @@ def run_brick(brick, survey, radec=None, pixscale=0.262,
               do_calibs=True,
               write_metrics=True,
               on_bricks=False,
+              allow_missing_brickq=-1,
               gaussPsf=False,
               pixPsf=False,
               splinesky=False,
@@ -2781,6 +2791,7 @@ def run_brick(brick, survey, radec=None, pixscale=0.262,
                   write_metrics=write_metrics,
                   lanczos=lanczos,
                   on_bricks=on_bricks,
+                  allow_missing_brickq=allow_missing_brickq,
                   unwise_dir=unwise_dir,
                   plots=plots, plots2=plots2, coadd_bw=coadd_bw,
                   rsync=rsync,
@@ -3045,6 +3056,10 @@ python -u legacypipe/runbrick.py --plots --brick 2440p070 --zoom 1900 2400 450 9
     parser.add_argument(
         '--on-bricks', default=False, action='store_true',
         help='Enable Tractor-on-bricks edge handling?')
+
+    parser.add_argument(
+        '--allow-missing-brickq', type=int, choices=[0,1,2], default=-1,
+        help='Do not fail if a prerequisite brick of given brickq is missing.')
     
     return parser
 
@@ -3118,6 +3133,7 @@ def get_runbrick_kwargs(opt):
         do_calibs=opt.do_calibs,
         write_metrics=opt.write_metrics,
         on_bricks=opt.on_bricks,
+        allow_missing_brickq=opt.allow_missing_brickq,
         gaussPsf=opt.gpsf, pixPsf=opt.pixpsf, splinesky=True,
         simulOpt=opt.simul_opt,
         nblobs=opt.nblobs, blob=opt.blob, blobxy=opt.blobxy,
@@ -3182,8 +3198,13 @@ def main(args=None):
             fn = survey.find_file('tractor', brick=b.brickname)
             print('File', fn)
             if not os.path.exists(fn):
-                allexist = False
                 print('File', fn, 'does not exist (required for --on-bricks)')
+                if b.brickq <= opt.allow_missing_brickq:
+                    print(('  (allowing this missing brick (brickq = %i) ' +
+                           'because of --allow-missing-brickq %i)') % 
+                           (b.brickq, opt.allow_missing_brickq))
+                else:
+                    allexist = False
                 continue
             try:
                 T = fits_table(fn)
