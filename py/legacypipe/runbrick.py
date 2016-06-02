@@ -796,7 +796,7 @@ def stage_srcs(coimgs=None, cons=None,
                pipe=False, brickname=None,
                mp=None, nsigma=5,
                on_bricks=False,
-               allow_missing_brickq=0,
+               allow_missing_brickq=-1,
                survey=None, brick=None,
                **kwargs):
     '''
@@ -2598,7 +2598,7 @@ def run_brick(brick, survey, radec=None, pixscale=0.262,
               do_calibs=True,
               write_metrics=True,
               on_bricks=False,
-              allow_missing_brickq=0,
+              allow_missing_brickq=-1,
               gaussPsf=False,
               pixPsf=False,
               splinesky=False,
@@ -3058,7 +3058,7 @@ python -u legacypipe/runbrick.py --plots --brick 2440p070 --zoom 1900 2400 450 9
         help='Enable Tractor-on-bricks edge handling?')
 
     parser.add_argument(
-        '--allow-missing-brickq', type=int, choices=[1,2,3], default=0,
+        '--allow-missing-brickq', type=int, choices=[0,1,2], default=-1,
         help='Do not fail if a prerequisite brick of given brickq is missing.')
     
     return parser
