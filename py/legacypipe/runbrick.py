@@ -3051,7 +3051,7 @@ python -u legacypipe/runbrick.py --plots --brick 2440p070 --zoom 1900 2400 450 9
 def get_runbrick_kwargs(opt):
     if opt.brick is not None and opt.radec is not None:
         print('Only ONE of --brick and --radec may be specified.')
-        return -1
+        return None, -1
 
     survey = LegacySurveyData(survey_dir=opt.survey_dir, output_dir=opt.outdir)
     
@@ -3064,24 +3064,26 @@ def get_runbrick_kwargs(opt):
         print('Checking for', fn)
         exists = os.path.exists(fn)
         if opt.skip_coadd and exists:
-            return 0
+            return survey,0
         if exists:
             try:
                 T = fits_table(fn)
                 print('Read', len(T), 'sources from', fn)
             except:
                 print('Failed to read file', fn)
+                import traceback
+                traceback.print_exc()
                 exists = False
 
         if opt.skip:
             if exists:
-                return 0
+                return survey,0
         elif opt.check_done:
             if not exists:
                 print('Does not exist:', fn)
-                return -1
+                return survey,-1
             print('Found:', fn)
-            return 0
+            return survey,0
 
     if len(opt.stage) == 0:
         opt.stage.append('writecat')
@@ -3143,7 +3145,10 @@ def main(args=None):
 
     print()
     print('runbrick.py starting at', datetime.datetime.now().isoformat())
-    print('Command-line args:', sys.argv)
+    if args is None:
+        print('Command-line args:', sys.argv)
+    else:
+        print('Args:', args)
     print()
 
     parser = get_parser()
