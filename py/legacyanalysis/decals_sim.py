@@ -75,10 +75,16 @@ class SimImage(DecamImage):
         self.t = t
 
     def get_tractor_image(self, **kwargs):
+        print('get_tractor_image kwargs= ',kwargs)
+        print('dir(self)= ',dir(self))
+        print('dir(self.t)= ',dir(self.t))
+        print('dir(self.survey)= ',dir(self.survey))
+        print('self.survey.output_dir= ',self.survey.output_dir)
         #print('being called in SimImage, quitting')
         #print('self.imgfn=',self.imgfn)
         #sys.exit()
         tim = super(SimImage, self).get_tractor_image(**kwargs)
+        print('dir(tim)= ',dir(tim))
         if tim is None: # this can be None when the edge of a CCD overlaps
             return tim
 
@@ -139,11 +145,12 @@ class SimImage(DecamImage):
         #plot image,image regions where have sims, just sims as 3 plot panel with yellow boxes
         basename= plots.get_basename(self.imgfn)
         plots.image_v_stamp([tim.data,tim.data-tim.sims_image,tim.sims_image], \
-                            xy_lim= tim.sims_xylim, name="image_v_stamp_%s.png" % basename)
+                            xy_lim= tim.sims_xylim, name=os.path.join(self.survey.output_dir,"image_v_stamp_%s.png" % basename))
         plots.image_v_stamp([np.power(tim.inverr,-1),np.power(tim.sims_inverr,-1)], \
-                            xy_lim= tim.sims_xylim, titles=['image_std','sims_std'],name="std_%s.png" % basename)
-        print('exiting early')
-        sys.exit()
+                            xy_lim= tim.sims_xylim, titles=['image_std','sims_std'],\
+                            name=os.path.join(self.survey.output_dir,"std_%s.png" % basename))
+        #print('exiting early')
+        #sys.exit()
         return tim
 
 class BuildStamp():
