@@ -487,7 +487,7 @@ def main():
         # Build and write out the simulated object catalog.
         simcat = build_simcat(nobjchunk,brickname,brickwcs,metacat,seeds[ichunk])
         simcatfile = os.path.join(outdir,'simcat-'+brickname+'-'+
-                                  lobjtype+'-'+chunksuffix+'.fits')
+                                  lobjtype+'.fits')
         log.info('Writing {}'.format(simcatfile))
         if os.path.isfile(simcatfile):
             os.remove(simcatfile)
@@ -497,7 +497,6 @@ def main():
         simdecals = SimDecals(metacat=metacat, simcat=simcat,
                               survey_dir=args.survey_dir, output_dir=outdir)
         blobxy = zip(simcat['x'],simcat['y'])
-        print('<<<<fakes inserted at pixels (x,y)= ',blobxy)
         print('args.stage=',args.stage)
         run_brick(brickname, survey=simdecals, 
                   threads=args.threads, zoom=args.zoom, wise=False,
@@ -507,23 +506,18 @@ def main():
 
         log.info('Cleaning up...')
         #mv tractor catalogue, coadd/image.jpg and resid.jpg to outdir/
-        shutil.move(os.path.join(outdir,'tractor',brickname[:3],
-                                 'tractor-'+brickname+'.fits'),
-                    os.path.join(outdir,'tractor-'+brickname+'-'+
-                                 lobjtype+'-'+chunksuffix+'.fits'))
-        shutil.move(os.path.join(outdir,'coadd',brickname[:3],brickname,
-                                 'legacysurvey-'+brickname+'-image.jpg'),
-                    os.path.join(outdir,'qa-'+brickname+'-'+lobjtype+
-                                 '-image-'+chunksuffix+'.jpg'))
-        shutil.move(os.path.join(outdir,'coadd',brickname[:3],brickname,
-                                 'legacysurvey-'+brickname+'-resid.jpg'),
-                    os.path.join(outdir,'qa-'+brickname+'-'+lobjtype+
-                                 '-resid-'+chunksuffix+'.jpg'))
-
-        #shutil.rmtree(os.path.join(decals_sim_dir,brickname,'coadd'))
-        #shutil.rmtree(os.path.join(decals_sim_dir,brickname,'tractor'))
-        #shutil.rmtree(os.path.join(decals_sim_dir,brickname,'images'))
-        #shutil.rmtree(os.path.join(decals_sim_dir,brickname,'metrics'))
+        #shutil.move(os.path.join(outdir,'tractor',brickname[:3],
+        #                         'tractor-'+brickname+'.fits'),
+        #            os.path.join(outdir,'tractor-'+brickname+'-'+
+        #                         lobjtype+'-'+chunksuffix+'.fits'))
+        #shutil.move(os.path.join(outdir,'coadd',brickname[:3],brickname,
+        #                         'legacysurvey-'+brickname+'-image.jpg'),
+        #            os.path.join(outdir,'qa-'+brickname+'-'+lobjtype+
+        #                         '-image-'+chunksuffix+'.jpg'))
+        #shutil.move(os.path.join(outdir,'coadd',brickname[:3],brickname,
+        #                         'legacysurvey-'+brickname+'-resid.jpg'),
+        #            os.path.join(outdir,'qa-'+brickname+'-'+lobjtype+
+        #                         '-resid-'+chunksuffix+'.jpg'))
 
         # Write a log file
 
