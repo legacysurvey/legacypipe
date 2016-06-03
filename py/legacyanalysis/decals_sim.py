@@ -89,13 +89,13 @@ class SimImage(DecamImage):
         # Grab the data and inverse variance images [nanomaggies!]
         image = galsim.Image(tim.getImage())
         invvar = galsim.Image(tim.getInvvar())
+        sims_image= image.copy() #sum of sims image
+        sims_image.fill(0.) 
+        sims_ivar= sims_image.copy() 
+        tim.sims_xylim= np.empty((len(self.survey.simcat),4))+np.nan #N sims, 4 box corners (xmin,xmax,ymin,ymax) for each sim
         #sys.exit(1)
 
-        #store region of image contained by all sims and sum of all sims 
-        image_copy= image.copy() 
-        image_copy.fill(0.) #0s except in stamp overlap
-        stamp_copy= image_copy.copy()
-        x_olap,y_olap=[],[] #x,y range for each sim's/object's location in image
+        #store simulated galaxy images in tim object 
         # Loop on each object.
         for ii, obj in enumerate(self.survey.simcat):
             #print(obj)
@@ -108,20 +108,18 @@ class SimImage(DecamImage):
 
             # Make sure the object falls on the image and then add Poisson noise.
             overlap = stamp.bounds & image.bounds
-            print('overlap=',overlap)
+            print('obj=%d, image.bounds=' % ii,image.bounds,'stamp.bounds=',stamp.bounds)
             if (overlap.area()>0):
                 stamp = stamp[overlap] #image bounds the stamp region, not vice versa     
                 ivarstamp = invvar[overlap]
                 stamp, ivarstamp = objstamp.addnoise(stamp,ivarstamp)
-
-                image_copy[overlap]= image.copy()[overlap] #region of image at least one sim overlaps
-                stamp_copy[overlap]+= stamp.copy() #just sime, they are ADDED over the whole image
-                x_olap.append( [overlap.xmin-1,overlap.xmax-1] ) #-1 b/c galsim 1st index is 1
-                y_olap.append( [overlap.ymin-1,overlap.ymax-1] )
-                print('obj= %d, img= %s' % (ii,os.path.basename(self.imgfn)))
-                
-                image[overlap] += stamp
-                invvar[overlap] = ivarstamp
+ 
+                #image[overlap] += stamp
+                #plots.one_image(image.array,name='tim.getImage_obj%d.png' % ii)
+                sims_image[overlap] += stamp #just sim, they are ADDED over the whole image
+                sims_ivar[overlap] += ivarstamp
+                tim.sims_xylim[ii,:]= [overlap.xmin-1,overlap.xmax-1,overlap.ymin-1,overlap.ymax-1] #-1 b/c galsim 1st index is 1
+                #print('obj= %d, img= %s' % (ii,os.path.basename(self.imgfn)))
                 #print('image.bounds=',image.bounds,'stamp.bounds=',stamp.bounds,'overlap=',overlap)
                 #plots.image_plus_stamp(image.array,[overlap.xmin,overlap.xmax],\
                 #                                    [overlap.ymin,overlap.ymax],'yellow_box.png')
@@ -131,15 +129,19 @@ class SimImage(DecamImage):
                 if np.min(invvar.array)<0:
                     print('Negative invvar!')
                     sys.exit(1)
-
-            tim.data = image.array
-            tim.inverr = np.sqrt(invvar.array)
-
+        assert(sims_image.array.shape == image.array.shape)
+        assert(sims_ivar.array.shape == invvar.array.shape)
+        tim.sims_image= sims_image.array
+        tim.sims_inverr= np.sqrt(sims_ivar.array)
+        tim.sims_xylim= tim.sims_xylim.astype(int)
+        tim.data = image.array + sims_image.array
+        tim.inverr = np.sqrt(invvar.array + sims_ivar.array)
         #plot image,image regions where have sims, just sims as 3 plot panel with yellow boxes
         basename= plots.get_basename(self.imgfn)
-        plots.image_v_stamp([image.array,image_copy.array,stamp_copy.array], \
-                            "image_v_stamp_%s.png" % basename,\
-                            sx=x_olap,sy=y_olap,multi_sims=True)
+        plots.image_v_stamp([tim.data,tim.data-tim.sims_image,tim.sims_image], \
+                            xy_lim= tim.sims_xylim, name="image_v_stamp_%s.png" % basename)
+        plots.image_v_stamp([np.power(tim.inverr,-1),np.power(tim.sims_inverr,-1)], \
+                            xy_lim= tim.sims_xylim, titles=['image_std','sims_std'],name="std_%s.png" % basename)
         print('exiting early')
         sys.exit()
         return tim
@@ -366,6 +368,8 @@ def main():
                         help='location of survey-ccds*.fits.gz')
     parser.add_argument('--rmag-range', nargs=2, type=float, default=(18,26), metavar='', 
                         help='r-band magnitude range')
+    parser.add_argument('--stage', choices=['tims','image_coadds','srcs','fitblobs','image_coadds'], default='writecat',metavar='', 
+                        help='Run up to the given stage')
     parser.add_argument('-v', '--verbose', action='store_true', 
                         help='toggle on verbose output')
 
@@ -487,11 +491,12 @@ def main():
                               survey_dir=args.survey_dir, output_dir=outdir)
         blobxy = zip(simcat['x'],simcat['y'])
         print('<<<<fakes inserted at pixels (x,y)= ',blobxy)
+        print('args.stage=',args.stage)
         run_brick(brickname, survey=simdecals, 
                   threads=args.threads, zoom=args.zoom, wise=False,
                   forceAll=True, writePickles=False, do_calibs=True,
                   write_metrics=False, pixPsf=True, blobxy=blobxy, 
-                  early_coadds=False, stages=['writecat'], splinesky=True)
+                  early_coadds=False, stages=[args.stage], splinesky=True)
 
         log.info('Cleaning up...')
         #mv tractor catalogue, coadd/image.jpg and resid.jpg to outdir/
