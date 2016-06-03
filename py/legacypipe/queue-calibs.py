@@ -527,7 +527,7 @@ def main():
             #f.write('python legacypipe/forced_photom_decam.py %s %i DR3 %s\n' %
             #        (imgfn, T.image_hdu[i], outfn))
 
-            f.write('python legacypipe/forced_photom_decam.py --apphot %i %s DR3 %s\n' %
+            f.write('python legacypipe/forced_photom_decam.py --apphot --constant-invvar %i %s DR3 %s\n' %
                     (T.expnum[i], T.ccdname[i], outfn))
             
         f.close()
