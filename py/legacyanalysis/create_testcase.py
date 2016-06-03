@@ -27,6 +27,9 @@ def main():
     C = fits_table(args.ccds)
     print(len(C), 'CCDs in', args.ccds)
 
+    C.camera = np.array([c.strip() for c in C.camera])
+
+    
     survey = LegacySurveyData()
     bricks = survey.get_bricks_readonly()
     outbricks = bricks[np.array([n == args.brick for n in bricks.brickname])]
@@ -62,7 +65,9 @@ def main():
     
     for iccd,ccd in enumerate(C):
 
-        assert(ccd.camera.strip() == 'decam')
+        #assert(ccd.camera.strip() == 'decam')
+        decam = (ccd.camera.strip() == 'decam')
+        bok = (ccd.camera.strip() == '90prime')
 
         im = survey.get_image_object(ccd)
         print('Got', im)
@@ -89,19 +94,34 @@ def main():
         tim.hdr['CRPIX2'] = crpix2 - ccd.ccd_y0
 
         # Add image extension to filename
+        # fitsio doesn't compress .fz by default, so drop .fz suffix
+        
         outim.imgfn = outim.imgfn.replace('.fits', '-%s.fits' % im.ccdname)
-        outim.wtfn  = outim.wtfn .replace('.fits', '-%s.fits' % im.ccdname)
-        outim.dqfn  = outim.dqfn .replace('.fits', '-%s.fits' % im.ccdname)
-        # fitsio doesn't compress .fz by default
         outim.imgfn = outim.imgfn.replace('.fits.fz', '.fits')
-        outim.wtfn  = outim.wtfn .replace('.fits.fz', '.fits')
-        outim.dqfn  = outim.dqfn .replace('.fits.fz', '.fits')
 
-        outccds.image_filename[iccd] = outim.imgfn
+        if bok:
+            outim.whtfn  = outim.whtfn .replace('.wht.fits', '-%s.wht.fits' % im.ccdname)
+            outim.whtfn  = outim.whtfn .replace('.fits.fz', '.fits')
+        else:
+            outim.wtfn  = outim.wtfn .replace('.fits', '-%s.fits' % im.ccdname)
+            outim.wtfn  = outim.wtfn .replace('.fits.fz', '.fits')
+
+        if outim.dqfn is not None:
+            outim.dqfn  = outim.dqfn .replace('.fits', '-%s.fits' % im.ccdname)
+            outim.dqfn  = outim.dqfn .replace('.fits.fz', '.fits')
+
+        if bok:
+            outim.psffn = outim.psffn.replace('.psf', '-%s.psf' % im.ccdname)
+
+        ccdfn = outim.imgfn
+        ccdfn = ccdfn.replace(outsurvey.get_image_dir(),'')
+        if ccdfn.startswith('/'):
+            ccdfn = ccdfn[1:]
+        outccds.image_filename[iccd] = ccdfn
 
         print('Changed output filenames to:')
         print(outim.imgfn)
-        print(outim.wtfn)
+        #print(outim.wtfn)
         print(outim.dqfn)
         
         fitsio.write(outim.imgfn, None, header=tim.primhdr, clobber=True)
@@ -120,27 +140,36 @@ def main():
         subwcs = wcs.get_subimage(ccd.ccd_x0, ccd.ccd_y0, w, h)
         outccds.ra[iccd],outccds.dec[iccd] = subwcs.radec_center()
         
-        print('Weight filename:', outim.wtfn)
-        trymakedirs(outim.wtfn, dir=True)
-        fitsio.write(outim.wtfn, None, header=tim.primhdr, clobber=True)
-        fitsio.write(outim.wtfn, tim.getInvvar(), header=tim.hdr,
-                     extname=ccd.ccdname)
+        if not bok:
+            print('Weight filename:', outim.wtfn)
+            trymakedirs(outim.wtfn, dir=True)
+            fitsio.write(outim.wtfn, None, header=tim.primhdr, clobber=True)
+            fitsio.write(outim.wtfn, tim.getInvvar(), header=tim.hdr,
+                         extname=ccd.ccdname)
+        else:
+            print('Weight filename:', outim.whtfn)
+            trymakedirs(outim.whtfn, dir=True)
+            fitsio.write(outim.whtfn, None, header=tim.primhdr, clobber=True)
+            fitsio.write(outim.whtfn, tim.getInvvar(), header=tim.hdr,
+                         extname=ccd.ccdname)
 
-        print('DQ filename', outim.dqfn)
-        trymakedirs(outim.dqfn, dir=True)
-        fitsio.write(outim.dqfn, None, header=tim.primhdr, clobber=True)
-        fitsio.write(outim.dqfn, tim.dq, header=tim.hdr,
-                     extname=ccd.ccdname)
-        
+        if outim.dqfn is not None:
+            print('DQ filename', outim.dqfn)
+            trymakedirs(outim.dqfn, dir=True)
+            fitsio.write(outim.dqfn, None, header=tim.primhdr, clobber=True)
+            fitsio.write(outim.dqfn, tim.dq, header=tim.hdr,
+                         extname=ccd.ccdname)
+
         print('PSF filename:', outim.psffn)
         trymakedirs(outim.psffn, dir=True)
         psfex.writeto(outim.psffn)
 
-        print('Sky filename:', outim.splineskyfn)
-        sky = tim.getSky()
-        print('Sky:', sky)
-        trymakedirs(outim.splineskyfn, dir=True)
-        sky.write_fits(outim.splineskyfn)
+        if not bok:
+            print('Sky filename:', outim.splineskyfn)
+            sky = tim.getSky()
+            print('Sky:', sky)
+            trymakedirs(outim.splineskyfn, dir=True)
+            sky.write_fits(outim.splineskyfn)
 
     outccds.writeto(os.path.join(args.outdir, 'survey-ccds-1.fits.gz'))
 

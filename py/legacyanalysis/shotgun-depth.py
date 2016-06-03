@@ -13,6 +13,37 @@ from tractor.sfd import SFDMap
 
 from legacypipe.common import *
 
+def sample_in_radec_box(ralo, rahi, declo, dechi, N,
+                        nbatch=1000):
+    '''
+    Draw N samples uniformly within the given RA,Dec box, correctly
+    handling the change of scale of RA with respect to Dec.
+    '''
+    rr,dd = [],[]
+    ntotal = 0
+    while ntotal < N:
+        # "unit" values ru in [0, 1) that will be scaled to RA
+        ru = np.random.uniform(size=nbatch)
+        # Draw Dec values
+        d = np.random.uniform(low=declo, high=dechi, size=nbatch)
+        # Taper the accepted width in RA based on Dec; reject ones outside
+        # NOTE that we could make this more efficient (reject fewer) by
+        # scaling by the min/max cos(Dec) values.
+        cosd = np.cos(np.deg2rad(d))
+        I = np.flatnonzero(ru < cosd)
+        if len(I) == 0:
+            continue
+        # Scale "ru" to RAs
+        r = ralo + (rahi - ralo) * ru[I]/cosd[I]
+        d = d[I]
+        rr.append(r)
+        dd.append(d)
+        ntotal += len(r)
+        #print('Kept', len(r), 'of', nbatch)
+    ra  = np.hstack(rr)[:N]
+    dec = np.hstack(dd)[:N]
+    return ra,dec
+
 def main():
     ps = PlotSequence('shotgun')
 
@@ -148,31 +179,7 @@ def main():
 
     N = 10000
 
-    nbatch = 1000
-    rr,dd = [],[]
-    ntotal = 0
-    while ntotal < N:
-        ru = np.random.uniform(size=nbatch)
-        d = np.random.uniform(low=declo, high=dechi, size=nbatch)
-        # Taper the accepted width in RA based on Dec
-        cosd = np.cos(np.deg2rad(d))
-        I = np.flatnonzero(ru < cosd)
-        if len(I) == 0:
-            continue
-        r = ralo + (rahi - ralo) * ru[I]/cosd[I]
-        d = d[I]
-        rr.append(r)
-        dd.append(d)
-        ntotal += len(r)
-        print('Kept', len(r), 'of', nbatch)
-
-    ra  = np.hstack(rr)
-    dec = np.hstack(dd)
-    del rr
-    del dd
-    ra  = ra [:N]
-    dec = dec[:N]
-
+    ra,dec = sample_in_radec_box(ralo, rahi, declo, dechi, N)
     print('RA,Dec ranges of samples:', (ra.min(), ra.max()), (dec.min(), dec.max()))
     
     # plt.clf()

@@ -28,7 +28,7 @@ from legacypipe.utils import EllipseWithPriors
 # search order: $TMPDIR, $TEMP, $TMP, then /tmp, /var/tmp, /usr/tmp
 tempdir = tempfile.gettempdir()
 
-# The apertures we use in aperture photometry, in ARCSEC.
+# The apertures we use in aperture photometry, in ARCSEC radius
 apertures_arcsec = np.array([0.5, 0.75, 1., 1.5, 2., 3.5, 5., 7.])
 
 # Ugly hack: for sphinx documentation, the astrometry and tractor (and
@@ -342,6 +342,25 @@ def switch_to_soft_ellipses(cat):
             src.shapeDev = EllipseESoft.fromEllipseE(src.shapeDev)
             src.shapeExp = EllipseESoft.fromEllipseE(src.shapeExp)
 
+def on_bricks_dependencies(brick, survey, bricks=None):
+    # Find nearby bricks from earlier brick phases
+    if bricks is None:
+        bricks = survey.get_bricks_readonly()
+    print(len(bricks), 'bricks')
+    bricks = bricks[bricks.brickq < brick.brickq]
+    print(len(bricks), 'from phases before this brickq:', brick.brickq)
+    if len(bricks) == 0:
+        return []
+    from astrometry.libkd.spherematch import match_radec
+
+    radius = survey.bricksize * np.sqrt(2.) * 1.01
+    bricks.cut(np.abs(brick.dec - bricks.dec) < radius)
+    #print(len(bricks), 'within %.2f degree of Dec' % radius)
+    I,J,d = match_radec(brick.ra, brick.dec, bricks.ra, bricks.dec, radius)
+    bricks.cut(J)
+    print(len(bricks), 'within', radius, 'degrees')
+    return bricks
+
 def brick_catalog_for_radec_box(ralo, rahi, declo, dechi,
                                 survey, catpattern, bricks=None):
     '''
@@ -595,6 +614,15 @@ class LegacySurveyData(object):
         '''Create a LegacySurveyData object using data from the given
         *survey_dir* directory, or from the $LEGACY_SURVEY_DIR environment
         variable.
+
+        Parameters
+        ----------
+        survey_dir : string
+            Defaults to $LEGACY_SURVEY_DIR environment variable.  Where to look for
+            files including calibration files, tables of CCDs and bricks, image data,
+            etc.
+        output_dir : string
+            Base directory for output files; default ".".
         '''
         from .decam  import DecamImage
         from .mosaic import MosaicImage
@@ -616,7 +644,7 @@ Now using the current directory as LEGACY_SURVEY_DIR, but this is likely to fail
         self.survey_dir = survey_dir
 
         if output_dir is None:
-            self.output_dir = survey_dir
+            self.output_dir = '.'
         else:
             self.output_dir = output_dir
 
@@ -699,7 +727,10 @@ Now using the current directory as LEGACY_SURVEY_DIR, but this is likely to fail
                 return [os.path.join(basedir, 'decals-ccds.fits')]
             else:
                 return glob(os.path.join(basedir, 'survey-ccds-*.fits.gz'))
-                
+
+        elif filetype == 'tycho2':
+            return os.path.join(basedir, 'tycho2.fits.gz')
+            
         elif filetype == 'annotated-ccds':
             return glob(os.path.join(basedir, 'ccds-annotated-*.fits.gz'))
 
@@ -721,8 +752,12 @@ Now using the current directory as LEGACY_SURVEY_DIR, but this is likely to fail
                                 '%s-%s-%s-%s.fits.gz' % (sname, brick, filetype, band))
 
         elif filetype in ['invvar', 'chi2', 'image']:
-            return os.path.join(codir,
-                                'legacysurvey-%s-%s-%s.fits' % (brick, filetype,band))
+            if self.version in ['dr1','dr2']:
+                prefix = 'decals'
+            else:
+                prefix = 'legacysurvey'
+            return os.path.join(codir, '%s-%s-%s-%s.fits' %
+                                (prefix, brick, filetype,band))
 
         elif filetype in ['blobmap']:
             return os.path.join(basedir, 'metrics', brickpre, brick,
@@ -1015,6 +1050,13 @@ Now using the current directory as LEGACY_SURVEY_DIR, but this is likely to fail
         imageType = self.image_class_for_camera(t.camera)
         # call Image subclass constructor
         return imageType(self, t)
+
+    def get_approx_wcs(self, ccd):
+        W,H = ccd.width,ccd.height
+        wcs = Tan(*[float(x) for x in
+                    [ccd.crval1, ccd.crval2, ccd.crpix1, ccd.crpix2,
+                     ccd.cd1_1,  ccd.cd1_2,  ccd.cd2_1, ccd.cd2_2, W, H]])
+        return wcs
     
     def tims_touching_wcs(self, targetwcs, mp, bands=None,
                           **kwargs):

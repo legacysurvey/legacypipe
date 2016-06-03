@@ -1,46 +1,44 @@
 from astrometry.util.fits import *
 import numpy as np
+import pylab as plt
 
 from legacypipe.common import *
-
-survey = LegacySurveyData()
-C = survey.get_ccds()
-print len(C), 'CCDs'
-
-C.cut(np.hypot(C.ra_bore - 150, C.dec_bore - 2.2) < 1.)
-print len(C), 'CCDs on COSMOS'
+from legacypipe.decam import DecamImage
 
 bands = 'grz'
-C.cut(np.array([f in bands for f in C.filter]))
-print len(C), 'in', bands
 
-C.cut(C.exptime >= 50.)
-print len(C), 'with exptime >= 50 sec'
+cfn = 'cosmos-ccds.fits'
+if not os.path.exists(cfn):
+    survey = LegacySurveyData()
+    C = survey.get_annotated_ccds()
+    print len(C), 'annotated CCDs'
 
-C.cut(survey.photometric_ccds(C))
-print len(C), 'photometric'
+    C.cut(np.hypot(C.ra_bore - 150, C.dec_bore - 2.2) < 1.)
+    print len(C), 'CCDs on COSMOS'
 
-C.cut(np.lexsort((C.expnum, C.filter)))
+    C.cut(np.array([f in bands for f in C.filter]))
+    print len(C), 'in', bands
 
-efn = 'cosmos-exposures.fits'
-if not os.path.exists(efn):
-    nil,I = np.unique(C.expnum, return_index=True)
-    E = C[I]
-    print len(E), 'exposures'
+    C.cut(C.exptime >= 50.)
+    print len(C), 'with exptime >= 50 sec'
 
-    E.sig1    = np.zeros(len(E), np.float32)
-    E.psfnorm = np.zeros(len(E), np.float32)
-    E.galnorm = np.zeros(len(E), np.float32)
-    for i in range(len(E)):
-        im = survey.get_image_object(E[i])
-        tim = im.get_tractor_image(pixPsf=True, splinesky=True)
-        E.sig1[i] = tim.sig1
-        E.psfnorm[i] = tim.psfnorm
-        E.galnorm[i] = tim.galnorm
-    E.writeto(efn)
+    C.cut(survey.photometric_ccds(C))
+    print len(C), 'photometric'
 
+    C.cut(np.lexsort((C.expnum, C.filter)))
+    C.writeto(cfn)
+    
 else:
-    E = fits_table(efn)
+    C = fits_table(cfn)
+
+plt.clf()
+plt.plot(C.ra, C.dec, 'bo', alpha=0.2)
+plt.savefig('rd.png')
+    
+nil,I = np.unique(C.expnum, return_index=True)
+E = C[I]
+print len(E), 'exposures'
+E.galnorm = E.galnorm_mean
 
 # Target depths (90th percentile), for 5-sigma galaxy profile
 target = dict(g=24.0, r=23.4, z=22.5)
@@ -50,6 +48,48 @@ print 'Is DECaLS:', np.unique(isdecals), len(isdecals), len(E)
 # Lexsort doesn't seem to work with only a single boolean column; add dumb arange
 E.cut(np.lexsort((np.arange(len(E)), E.filter, np.logical_not(isdecals))))
 
+E.index = np.arange(len(E))
+E.passnum = np.zeros(len(E), np.uint8)
+#E.depthfraction = np.zeros(len(E), np.float32)
+
+zp0 = DecamImage.nominal_zeropoints()
+# HACK -- copied from obsbot
+kx = dict(g = 0.178,
+          r = 0.094,
+          z = 0.060,)
+
+for band in bands:
+    B = E[E.filter == band]
+    B.cut(np.argsort(B.seeing))
+    print len(B), 'exposures in', band, 'band'
+
+    Nsigma = 5.
+    sig = NanoMaggies.magToNanomaggies(target[band]) / Nsigma
+    targetiv = 1./sig**2
+    
+    for exp in B:
+        thisdetiv = 1. / (exp.sig1 / exp.galnorm)**2
+        # Which pass number would this image be assigned?
+        trans = 10.**(-0.4 * (zp0[band] - exp.ccdzpt
+                              - kx[band]*(exp.airmass - 1.)))
+        seeing_good = exp.seeing < 1.3
+        seeing_fair = exp.seeing < 2.0
+        trans_good = trans > 0.9
+        trans_fair = trans > 0.7
+
+        if seeing_good and trans_good:
+            E.passnum[exp.index] = 1
+        elif ((seeing_good and trans_fair) or (seeing_fair and trans_good)):
+            E.passnum[exp.index] = 2
+        else:
+            E.passnum[exp.index] = 3
+
+        depthfrac = (thisdetiv / targetiv)
+
+        print '  exp', exp.expnum, 'seeing %.3f' % exp.seeing, 'exptime %3.0f' % exp.exptime, 'propid', exp.propid, 'fraction of depth: %.2f' % depthfrac, 'sig1 %.4f' % exp.sig1, 'pass', E.passnum[exp.index], ('X' if depthfrac < 0.34 else '')
+
+
+        
 sets = []
 for iset in xrange(100):
     print '-------------------------------------------'
