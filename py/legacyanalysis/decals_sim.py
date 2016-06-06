@@ -84,6 +84,11 @@ class SimImage(DecamImage):
         # Grab the data and inverse variance images [nanomaggies!]
         image = galsim.Image(tim.getImage())
         invvar = galsim.Image(tim.getInvvar())
+        #also store galaxy sims and sims invvar
+        sims_image= image.copy() 
+        sims_image.fill(0.)
+        sims_ivar= sims_image.copy()
+        tim.sims_xylim= np.empty((len(self.survey.simcat),4))+np.nan #N sims, 4 box corners (xmin,xmax,ymin,ymax) for each sim
         #sys.exit(1)
 
         # Loop on each object.
@@ -102,16 +107,25 @@ class SimImage(DecamImage):
                 stamp = stamp[overlap]      
                 ivarstamp = invvar[overlap]
                 stamp, ivarstamp = objstamp.addnoise(stamp,ivarstamp)
-
-                image[overlap] += stamp
-                invvar[overlap] = ivarstamp
+                #stamp full image only where stamps will in insertted
+                sims_image[overlap] += stamp 
+                sims_ivar[overlap] += ivarstamp
+                tim.sims_xylim[ii,:]= [overlap.xmin-1,overlap.xmax-1,overlap.ymin-1,overlap.ymax-1] #-1 b/c galsim 1st index is 1
+                #image[overlap] += stamp
+                #invvar[overlap] = ivarstamp
 
                 if np.min(invvar.array)<0:
                     print('Negative invvar!')
                     sys.exit(1)
-
-            tim.data = image.array
-            tim.inverr = np.sqrt(invvar.array)
+        assert(sims_image.array.shape == image.array.shape)
+        assert(sims_ivar.array.shape == invvar.array.shape)
+        tim.sims_image= sims_image.array
+        tim.sims_inverr= np.sqrt(sims_ivar.array)
+        tim.sims_xylim= tim.sims_xylim.astype(int)
+        tim.data = image.array + sims_image.array
+        tim.inverr = np.sqrt(invvar.array + sims_ivar.array)
+        #tim.data = image.array
+        #tim.inverr = np.sqrt(invvar.array)
 
         return tim
 
