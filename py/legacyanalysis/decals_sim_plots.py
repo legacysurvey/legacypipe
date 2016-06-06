@@ -147,8 +147,8 @@ def main():
     plt.savefig(qafile)
 
     # Get cutouts of the missing sources
-    imfile = os.path.join(decals_sim_dir,'qa-'+brickname+'-'+lobjtype+
-                          '-image-'+chunksuffix+'.jpg')
+    imfile = os.path.join(decals_sim_dir, brickname, 'legacysurvey-2428p117-model.jpg')#+brickname+'-'+lobjtype+'-image-'+chunksuffix+'.jpg')
+    
     hw = 30 # half-width [pixels]
     ncols = 5
     nrows = 5
@@ -188,9 +188,12 @@ def main():
     # Modify the coadd image and residual files so the simulated sources
     # are labeled.
     rad = 15
-    imfile = os.path.join(decals_sim_dir,'qa-'+brickname+'-'+lobjtype+
-                          '-image-'+chunksuffix+'.jpg')
+    
+    imfile = os.path.join(decals_sim_dir, brickname, 'legacysurvey-2428p117-image.jpg')#'qa-'+brickname+'-'+lobjtype+'+chunksuffix+'.png')
+                          
     imfile = [imfile,imfile.replace('-image','-resid')]
+    imfile[0].encode('ascii','ignore').decode()
+
     for ifile in imfile:
         im = Image.open(ifile)
         sz = im.size
