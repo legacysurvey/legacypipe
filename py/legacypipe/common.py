@@ -732,6 +732,8 @@ Now using the current directory as LEGACY_SURVEY_DIR, but this is likely to fail
             return os.path.join(basedir, 'tycho2.fits.gz')
             
         elif filetype == 'annotated-ccds':
+            if self.version == 'dr2':
+                return glob(os.path.join(basedir, 'decals-ccds-annotated.fits'))
             return glob(os.path.join(basedir, 'ccds-annotated-*.fits.gz'))
 
         elif filetype == 'tractor':
