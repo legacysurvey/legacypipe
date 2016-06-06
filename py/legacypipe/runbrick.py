@@ -2086,8 +2086,11 @@ def stage_coadds(survey=None, bands=None, version_header=None, targetwcs=None,
 
         with survey.write_output(name + '-jpeg', brick=brickname) as out:
             imsave_jpeg(out.fn, rgb, origin='lower', **kwa)
+            print('------------------ coadd jpegs, name= ',name,'out.fn= ',out.fn, '-----------------')
             print('Wrote', out.fn)
         del rgb
+    print('exiting after coadd jpegs')
+    sys.exit()
 
     if plots:
         plt.clf()
