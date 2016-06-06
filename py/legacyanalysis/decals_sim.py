@@ -55,7 +55,7 @@ from legacypipe.runbrick import run_brick
 from legacypipe.decam import DecamImage
 from legacypipe.common import LegacySurveyData, wcs_for_brick, ccds_touching_wcs
 
-from thesis_code.galsim import plots
+#from thesis_code.galsim import plots
 
 class SimDecals(LegacySurveyData):
     def __init__(self, survey_dir=None, output_dir=None,
@@ -143,12 +143,12 @@ class SimImage(DecamImage):
         tim.data = image.array + sims_image.array
         tim.inverr = np.sqrt(invvar.array + sims_ivar.array)
         #plot image,image regions where have sims, just sims as 3 plot panel with yellow boxes
-        basename= plots.get_basename(self.imgfn)
-        plots.image_v_stamp([tim.data,tim.data-tim.sims_image,tim.sims_image], \
-                            xy_lim= tim.sims_xylim, name=os.path.join(self.survey.output_dir,"image_v_stamp_%s.png" % basename))
-        plots.image_v_stamp([np.power(tim.inverr,-1),np.power(tim.sims_inverr,-1)], \
-                            xy_lim= tim.sims_xylim, titles=['image_std','sims_std'],\
-                            name=os.path.join(self.survey.output_dir,"std_%s.png" % basename))
+        #basename= plots.get_basename(self.imgfn)
+        #plots.image_v_stamp([tim.data,tim.data-tim.sims_image,tim.sims_image], \
+        #                    xy_lim= tim.sims_xylim, name=os.path.join(self.survey.output_dir,"image_v_stamp_%s.png" % basename))
+        #plots.image_v_stamp([np.power(tim.inverr,-1),np.power(tim.sims_inverr,-1)], \
+        #                    xy_lim= tim.sims_xylim, titles=['image_std','sims_std'],\
+                            #name=os.path.join(self.survey.output_dir,"std_%s.png" % basename))
         #print('exiting early')
         #sys.exit()
         return tim
@@ -502,7 +502,7 @@ def main():
                   threads=args.threads, zoom=args.zoom, wise=False,
                   forceAll=True, writePickles=False, do_calibs=True,
                   write_metrics=False, pixPsf=True, blobxy=blobxy, 
-                  early_coadds=False, stages=[args.stage], splinesky=True)
+                  early_coadds=False, splinesky=True) #stages=[args.stage], splinesky=True)
         log.info('Cleaning up...')
         #mv tractor catalogue, coadd/image.jpg and resid.jpg to outdir/
         #shutil.move(os.path.join(outdir,'tractor',brickname[:3],

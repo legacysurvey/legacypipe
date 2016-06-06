@@ -1987,7 +1987,7 @@ def stage_coadds(survey=None, bands=None, version_header=None, targetwcs=None,
                     callback=write_coadd_images,
                     callback_args=(survey, brickname, version_header, tims, targetwcs),
                     plots=False, ps=ps, mp=mp)
-
+    
     #KJB, sims only and real image only coadds
     sims_mods= np.array([tim.sims_image for tim in tims])
     T_sims_coadds = make_coadds(tims, bands, targetwcs, mods=sims_mods, xy=(ix,iy),
