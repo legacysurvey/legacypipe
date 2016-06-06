@@ -502,7 +502,7 @@ def main():
                   threads=args.threads, zoom=args.zoom, wise=False,
                   forceAll=True, writePickles=False, do_calibs=True,
                   write_metrics=False, pixPsf=True, blobxy=blobxy, 
-                  early_coadds=False, stages=[args.stage], splinesky=True)
+                  early_coadds=False, splinesky=True) #stages=[args.stage], splinesky=True)
         log.info('Cleaning up...')
         #mv tractor catalogue, coadd/image.jpg and resid.jpg to outdir/
         #shutil.move(os.path.join(outdir,'tractor',brickname[:3],

@@ -2063,10 +2063,8 @@ def stage_coadds(survey=None, bands=None, version_header=None, targetwcs=None,
     for name,ims,rgbkw in [('image', C.coimgs,   rgbkwargs),
                            ('model', C.comods,   rgbkwargs),
                            ('resid', C.coresids, rgbkwargs_resid),
-                           ('simsimage', T_sims_only.comods, rgbkwargs),
-                           ('simsimageresidcols', T_sims_only.comods, rgbkwargs_resid),
-                           ('imageonly', T_image_only.comods, rgbkwargs),
-                           ('imageonlyresidcols', T_image_only.comods, rgbkwargs_resid),
+                           ('simsimage', T_sims_coadds.comods, rgbkwargs),
+                           ('imageonly', T_image_coadds.comods, rgbkwargs),
                            ]:
         rgb = get_rgb(ims, bands, **rgbkw)
         kwa = {}
