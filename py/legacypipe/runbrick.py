@@ -99,6 +99,8 @@ def stage_tims(W=3600, H=3600, pixscale=0.262, brickname=None,
     - *splinesky*: boolean.  Use SplineSky model, rather than ConstantSky?
 
     '''
+    print('stage_time exiting')
+    sys.exit()
     from legacypipe.common import (get_git_version, get_version_header, wcs_for_brick,
                                    read_one_tim)
     t0 = tlast = Time()
@@ -2063,10 +2065,8 @@ def stage_coadds(survey=None, bands=None, version_header=None, targetwcs=None,
     for name,ims,rgbkw in [('image', C.coimgs,   rgbkwargs),
                            ('model', C.comods,   rgbkwargs),
                            ('resid', C.coresids, rgbkwargs_resid),
-                           ('simsimage', T_sims_only.comods, rgbkwargs),
-                           ('simsimageresidcols', T_sims_only.comods, rgbkwargs_resid),
-                           ('imageonly', T_image_only.comods, rgbkwargs),
-                           ('imageonlyresidcols', T_image_only.comods, rgbkwargs_resid),
+                           ('simsimage', T_sims_coadds.comods, rgbkwargs),
+                           ('imageonly', T_image_coadds.comods, rgbkwargs),
                            ]:
         rgb = get_rgb(ims, bands, **rgbkw)
         kwa = {}
