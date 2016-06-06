@@ -9,7 +9,8 @@ from legacypipe.runbrick import rgbkwargs
 
 def main():
     #brickname = '0362m045'
-    brickname = '0359m047'
+    #brickname = '0359m047'
+    brickname = '0359m045'
     W = H = 3600
     pixscale = 0.262
     bands = 'grz'
@@ -71,13 +72,22 @@ def main():
         depth = 5. * sig1
         mag = -2.5 * (np.log10(depth) - 9)
         print('PSF 5-sigma depth:', mag)
-            
+
     coimgs = []
     coimgs2 = []
     
     for band in bands:
         print('Computing coadd for band', band)
 
+        hdr = fitsio.FITSHDR()
+        hdr.add_record(dict(name='FILTER', value=band))
+        hdr.add_record(dict(name='BRICK', value=brickname))
+        # Plug the WCS header cards into these images
+        targetwcs.add_to_header(hdr)
+        hdr.delete('IMAGEW')
+        hdr.delete('IMAGEH')
+        hdr.add_record(dict(name='EQUINOX', value=2000.))
+        
         # coadded weight map (moo)
         cow    = np.zeros((H,W), np.float32)
         # coadded weighted image map
@@ -149,13 +159,13 @@ def main():
         cowimg[cow == 0] = coimg[cow == 0]
         
         fn = 'coadd-%s-image-%s.fits' % (brickname, band)
-        fitsio.write(fn, cowimg, clobber=True)
+        fitsio.write(fn, cowimg, clobber=True, header=hdr)
         print('Wrote', fn)
         fn = 'coadd-%s-invvar-%s.fits' % (brickname, band)
-        fitsio.write(fn, cow, clobber=True)
+        fitsio.write(fn, cow, clobber=True, header=hdr)
         print('Wrote', fn)
         fn = 'coadd-%s-n-%s.fits' % (brickname, band)
-        fitsio.write(fn, con, clobber=True)
+        fitsio.write(fn, con, clobber=True, header=hdr)
         print('Wrote', fn)
 
         coimgs.append(cowimg)
@@ -165,13 +175,13 @@ def main():
         cowimg2[cow2 == 0] = coimg2[cow2 == 0]
         
         fn = 'coadd-%s-image2-%s.fits' % (brickname, band)
-        fitsio.write(fn, cowimg2, clobber=True)
+        fitsio.write(fn, cowimg2, clobber=True, header=hdr)
         print('Wrote', fn)
         fn = 'coadd-%s-invvar2-%s.fits' % (brickname, band)
-        fitsio.write(fn, cow2, clobber=True)
+        fitsio.write(fn, cow2, clobber=True, header=hdr)
         print('Wrote', fn)
         fn = 'coadd-%s-n2-%s.fits' % (brickname, band)
-        fitsio.write(fn, con2, clobber=True)
+        fitsio.write(fn, con2, clobber=True, header=hdr)
         print('Wrote', fn)
 
         coimgs2.append(cowimg2)

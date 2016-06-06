@@ -1,3 +1,4 @@
+from __future__ import print_function
 from astrometry.util.fits import *
 import numpy as np
 import pylab as plt
@@ -9,21 +10,23 @@ bands = 'grz'
 
 cfn = 'cosmos-ccds.fits'
 if not os.path.exists(cfn):
+    #survey = LegacySurveyData(version='dr2')
     survey = LegacySurveyData()
+    
     C = survey.get_annotated_ccds()
-    print len(C), 'annotated CCDs'
+    print(len(C), 'annotated CCDs')
 
     C.cut(np.hypot(C.ra_bore - 150, C.dec_bore - 2.2) < 1.)
-    print len(C), 'CCDs on COSMOS'
+    print(len(C), 'CCDs on COSMOS')
 
     C.cut(np.array([f in bands for f in C.filter]))
-    print len(C), 'in', bands
+    print(len(C), 'in', bands)
 
     C.cut(C.exptime >= 50.)
-    print len(C), 'with exptime >= 50 sec'
+    print(len(C), 'with exptime >= 50 sec')
 
     C.cut(survey.photometric_ccds(C))
-    print len(C), 'photometric'
+    print(len(C), 'photometric')
 
     C.cut(np.lexsort((C.expnum, C.filter)))
     C.writeto(cfn)
@@ -37,20 +40,20 @@ plt.savefig('rd.png')
     
 nil,I = np.unique(C.expnum, return_index=True)
 E = C[I]
-print len(E), 'exposures'
+print(len(E), 'exposures')
 E.galnorm = E.galnorm_mean
 
 # Target depths (90th percentile), for 5-sigma galaxy profile
 target = dict(g=24.0, r=23.4, z=22.5)
 
 isdecals = np.array([p == '2014B-0404' for p in E.propid])
-print 'Is DECaLS:', np.unique(isdecals), len(isdecals), len(E)
+print('Is DECaLS:', np.unique(isdecals), sum(isdecals), len(E))
 # Lexsort doesn't seem to work with only a single boolean column; add dumb arange
 E.cut(np.lexsort((np.arange(len(E)), E.filter, np.logical_not(isdecals))))
 
 E.index = np.arange(len(E))
 E.passnum = np.zeros(len(E), np.uint8)
-#E.depthfraction = np.zeros(len(E), np.float32)
+E.depthfraction = np.zeros(len(E), np.float32)
 
 zp0 = DecamImage.nominal_zeropoints()
 # HACK -- copied from obsbot
@@ -61,7 +64,7 @@ kx = dict(g = 0.178,
 for band in bands:
     B = E[E.filter == band]
     B.cut(np.argsort(B.seeing))
-    print len(B), 'exposures in', band, 'band'
+    #print(len(B), 'exposures in', band, 'band')
 
     Nsigma = 5.
     sig = NanoMaggies.magToNanomaggies(target[band]) / Nsigma
@@ -72,6 +75,7 @@ for band in bands:
         # Which pass number would this image be assigned?
         trans = 10.**(-0.4 * (zp0[band] - exp.ccdzpt
                               - kx[band]*(exp.airmass - 1.)))
+        #print('Transparency', trans)
         seeing_good = exp.seeing < 1.3
         seeing_fair = exp.seeing < 2.0
         trans_good = trans > 0.9
@@ -84,22 +88,32 @@ for band in bands:
         else:
             E.passnum[exp.index] = 3
 
-        depthfrac = (thisdetiv / targetiv)
+        E.depthfraction[exp.index] = (thisdetiv / targetiv)
 
-        print '  exp', exp.expnum, 'seeing %.3f' % exp.seeing, 'exptime %3.0f' % exp.exptime, 'propid', exp.propid, 'fraction of depth: %.2f' % depthfrac, 'sig1 %.4f' % exp.sig1, 'pass', E.passnum[exp.index], ('X' if depthfrac < 0.34 else '')
+        #print('  exp', exp.expnum, 'seeing %.3f' % exp.seeing, 'exptime %3.0f' % exp.exptime, 'propid', exp.propid, 'fraction of depth: %.2f' % depthfrac, 'sig1 %.4f' % exp.sig1, 'pass', E.passnum[exp.index], ('X' if depthfrac < 0.34 else ''))
 
+
+for band in bands:
+    B = E[E.filter == band]
+    B.cut(np.lexsort((B.seeing, (B.depthfraction < 0.34), B.passnum)))
+    print(len(B), 'exposures in', band, 'band')
+    for exp in B:
+        print('  e', exp.expnum, 'see %.2f' % exp.seeing,
+              't %3.0f' % exp.exptime, 'pid', exp.propid,
+              'f.depth: %.2f' % exp.depthfraction, #'sig1 %.4f' % exp.sig1,
+              'pass', exp.passnum, ('X' if exp.depthfraction < 0.34 else ''))
 
         
 sets = []
 for iset in xrange(100):
-    print '-------------------------------------------'
+    print('-------------------------------------------')
     thisset = []
     addnoise = []
     for band in bands:
         gotband = False
 
         B = E[E.filter == band]
-        print len(B), 'exposures in', band, 'band'
+        print(len(B), 'exposures in', band, 'band')
 
         Nsigma = 5.
         sig = NanoMaggies.magToNanomaggies(target[band]) / Nsigma
@@ -109,9 +123,9 @@ for iset in xrange(100):
         detiv = 0.
         for i in range(len(B)):
             exp = B[i]
-            print 'Image', exp.expnum, 'propid', exp.propid, 'exptime', exp.exptime, 'seeing', exp.seeing
+            print('Image', exp.expnum, 'propid', exp.propid, 'exptime', exp.exptime, 'seeing', exp.seeing)
             thisdetiv = 1. / (exp.sig1 / exp.galnorm)**2
-            print '  detiv', thisdetiv, '= fraction of target: %.2f' % (thisdetiv / targetiv)
+            print('  detiv', thisdetiv, '= fraction of target: %.2f' % (thisdetiv / targetiv))
 
             maxiv = maxfrac * targetiv
             if thisdetiv > maxiv:
@@ -121,7 +135,7 @@ for iset in xrange(100):
                 addnoise.append(addsig1)
                 newiv = 1. / (np.hypot(exp.sig1, addsig1) / exp.galnorm)**2
                 #print 'Adding', addsig1, 'we will get detiv', newiv, 'vs', maxiv
-                print '  adding factor %.2f more noise' % (addsig1/exp.sig1)
+                print('  adding factor %.2f more noise' % (addsig1/exp.sig1))
                 thisdetiv = maxiv
             else:
                 addnoise.append(0.)
@@ -138,7 +152,7 @@ for iset in xrange(100):
         break
 
     Eset = E[np.array([expnum in thisset for expnum in E.expnum])]
-    print 'Cut to', len(E), 'exposures in set'
+    print('Cut to', len(E), 'exposures in set')
 
     Eset.addnoise = np.array(addnoise)
     #sets.append(thisset)
@@ -151,10 +165,10 @@ for iset in xrange(100):
     sets.append(Cset)
     
     E.cut(np.array([expnum not in thisset for expnum in E.expnum]))
-    print 'Cut to', len(E), 'remaining exposures'
+    print('Cut to', len(E), 'remaining exposures')
 
 
-print 'Got', len(sets), 'sets of exposures'
+print('Got', len(sets), 'sets of exposures')
 
 for i,C in enumerate(sets):
     C.writeto('cosmos-ccds-sub%i.fits' % i)

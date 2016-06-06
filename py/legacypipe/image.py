@@ -149,7 +149,8 @@ class LegacySurveyImage(object):
                           gaussPsf=False, pixPsf=False,
                           splinesky=False,
                           nanomaggies=True, subsky=True, tiny=5,
-                          dq=True, invvar=True, pixels=True):
+                          dq=True, invvar=True, pixels=True,
+                          constant_invvar=False):
         '''
         Returns a tractor.Image ("tim") object for this image.
         
@@ -297,6 +298,10 @@ class LegacySurveyImage(object):
         assert(np.all(np.isfinite(img)))
         assert(np.all(np.isfinite(invvar)))
         assert(np.isfinite(sig1))
+
+        if constant_invvar:
+            print('Setting constant invvar', 1./sig1**2)
+            invvar[invvar > 0] = 1./sig1**2
 
         if subsky:
             # Warn if the subtracted sky doesn't seem to work well

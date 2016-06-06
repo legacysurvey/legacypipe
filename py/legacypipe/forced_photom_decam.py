@@ -38,6 +38,9 @@ def get_parser():
     parser.add_argument('--no-forced', dest='forced', action='store_false',
                       help='Do NOT do regular forced photometry?  Implies --apphot')
 
+    parser.add_argument('--constant-invvar', action='store_true',
+                        help='Set inverse-variance to a constant across the image?')
+    
     parser.add_argument('--save-model',
                         help='Compute and save model image?')
     parser.add_argument('--save-data',
@@ -115,7 +118,8 @@ def main(survey=None, opt=None):
 
     ccd = T[0]
     im = survey.get_image_object(ccd)
-    tim = im.get_tractor_image(slc=zoomslice, pixPsf=True, splinesky=True)
+    tim = im.get_tractor_image(slc=zoomslice, pixPsf=True, splinesky=True,
+                               constant_invvar=opt.constant_invvar)
     print('Got tim:', tim)
 
     print('Read image:', Time()-t0)
