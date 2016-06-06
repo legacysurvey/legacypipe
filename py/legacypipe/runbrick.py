@@ -99,6 +99,8 @@ def stage_tims(W=3600, H=3600, pixscale=0.262, brickname=None,
     - *splinesky*: boolean.  Use SplineSky model, rather than ConstantSky?
 
     '''
+    print('in stage tims, exiting early')
+    sys.exit()
     from legacypipe.common import (get_git_version, get_version_header, wcs_for_brick,
                                    read_one_tim)
     t0 = tlast = Time()
@@ -1985,7 +1987,7 @@ def stage_coadds(survey=None, bands=None, version_header=None, targetwcs=None,
                     callback=write_coadd_images,
                     callback_args=(survey, brickname, version_header, tims, targetwcs),
                     plots=False, ps=ps, mp=mp)
-
+    
     #KJB, sims only and real image only coadds
     sims_mods= np.array([tim.sims_image for tim in tims])
     T_sims_coadds = make_coadds(tims, bands, targetwcs, mods=sims_mods, xy=(ix,iy),
