@@ -32,6 +32,9 @@ IDL> print, 50*3600.0*0.25^2
 
 from __future__ import division, print_function
 
+import matplotlib
+matplotlib.use('Agg')
+
 import os
 import sys
 import shutil
