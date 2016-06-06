@@ -9,26 +9,20 @@ from __future__ import division, print_function
 import os
 import sys
 import argparse
+import numpy as np
+#import pdb
 
 from legacypipe.common import LegacySurveyData, wcs_for_brick, ccds_touching_wcs
 
-import numpy as np
-import pdb
-
-def main():
-
-    parser = argparse.ArgumentParser()
-    parser.add_argument('-b', '--brickname', type=str, default='2428p117', help='Brick of interest')
-    args = parser.parse_args()
+def getbrickfiles(brickname=None):
 
     survey = LegacySurveyData()
-    brickinfo = survey.get_brick_by_name(args.brickname)
+    brickinfo = survey.get_brick_by_name(brickname)
     brickwcs = wcs_for_brick(brickinfo)
     ccdinfo = survey.ccds_touching_wcs(brickwcs)
     nccd = len(ccdinfo)
 
-    # Construct image file names.
-    # Construct calibration file names.
+    # Construct image file names and the calibration file names.
     expnum = ccdinfo.expnum
     ccdname = ccdinfo.ccdname
 
@@ -43,9 +37,17 @@ def main():
         skyfiles.append(os.path.join('calib', 'decam', 'splinesky', rootfile))
         imagefiles.append(os.path.join('images', str(np.core.defchararray.strip(ccdinfo.image_filename[ii]))))
 
-    print(np.array(imagefiles))
-    print(np.array(psffiles))
-    print(np.array(skyfiles))
+    #print(np.array(imagefiles))
+    #print(np.array(psffiles))
+    #print(np.array(skyfiles))
+
+def main():
+
+    parser = argparse.ArgumentParser()
+    parser.add_argument('-b', '--brickname', type=str, default='2428p117', help='Brick of interest')
+    args = parser.parse_args()
+
+    imagefiles, psffiles, skyfiles = getbrickfiles(args.brickname)
 
     brickfiles = open('/tmp/brickfiles.txt', 'w')
     for ii in range(nccd):

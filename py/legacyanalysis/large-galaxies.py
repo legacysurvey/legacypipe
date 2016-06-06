@@ -19,19 +19,19 @@ import logging as log
 
 import matplotlib.pyplot as plt
 
+from astrometry.util.util import Tan
+from astrometry.util.fits import fits_table, merge_tables
+
+from legacypipe.common import bricks_touching_wcs, LegacySurveyData
+
 from astropy.io import fits
 from astropy.table import Table
-import seaborn as sns
 import matplotlib as mpl
-
-sns.set(style='ticks', font_scale=1.2, palette='Set1')
-col = sns.color_palette()
 
 def main():
 
     parser = argparse.ArgumentParser()
     parser.add_argument('--build-sample', action='store_true', help='Build the sample.')
-
     args = parser.parse_args()
 
     # Top-level directory
@@ -42,26 +42,51 @@ def main():
     largedir = os.getenv(key)
 
     # --------------------------------------------------
-    # Build the sample of "big" galaxies and identify the corresponding CCDs and bricks. 
+    # Build the sample of "large" galaxies and identify the corresponding CCDs and bricks. 
 
     if args.build_sample:
         catdir = os.getenv('CATALOGS_DIR')
-        rc3 = fits.getdata(os.path.join(catdir, 'rc3', 'rc3_catalog.fits'), 1)
+        cat = fits_table(os.path.join(catdir, 'rc3', 'rc3_catalog.fits'))
+        #cat = fits.getdata(os.path.join(catdir, 'rc3', 'rc3_catalog.fits'), 1)
 
-        d25_maj = 0.1*10.0**cat['logd_25'] # [arcmin]
+        # Randomly pre-select 10 galaxies.
+        nobj = 10
+        seed = 5781
+        rand = np.random.RandomState(seed)
+        these = rand.randint(0, len(cat)-1, nobj)
+        cat = cat[these]
+
+        d25_maj = 0.1*10.0**cat.logd_25 # [arcmin]
+        #plt.hist(d25_maj, bins=50, range=(0.02,5))
+        #plt.show()
 
         # For each object, create a simple WCS header and then find the unique
         # set of bricks containing the galaxies.  Need to think carefully about
         # galaxies spanning more than one brick.
 
-        
-        
-        plt.hist(d25_maj, bins=50, range=(0.02,5))
-        plt.show()
+        pixscale = 0.262 # average pixel scale [arcsec/pix]
 
-        
+        survey = LegacySurveyData()
 
+        bricklist = []
+        for ii, obj in enumerate(cat):
+            print('Finding bricks for {}/{}/{}, D(25)={:.4f}'.format(
+                cat[ii].name1.replace(' ',''),
+                cat[ii].name2.replace(' ',''), 
+                cat[ii].name3.replace(' ',''), d25_maj[ii]))
+            diam = 2*np.ceil(d25_maj[ii]/60) # [deg]
+            objwcs = Tan(obj.ra, obj.dec, diam/2+0.5, diam/2+0.5,
+                         -pixscale, 0.0, pixscale, 0.0,
+                         float(diam), float(diam))
+            bricks1 = bricks_touching_wcs(objwcs, survey)
+            bricklist.append(bricks1)
+
+        bricks = merge_tables(bricklist)
         pdb.set_trace()
+        
+
+        
+
 
 
     # --------------------------------------------------
