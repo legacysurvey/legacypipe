@@ -1986,6 +1986,23 @@ def stage_coadds(survey=None, bands=None, version_header=None, targetwcs=None,
                     callback_args=(survey, brickname, version_header, tims, targetwcs),
                     plots=False, ps=ps, mp=mp)
 
+    #KJB, sims only and real image only coadds
+    sims_mods= np.array([tim.sims_image for tim in tims])
+    T_sims_coadds = make_coadds(tims, bands, targetwcs, mods=sims_mods, xy=(ix,iy),
+                    ngood=True, detmaps=True, psfsize=True, lanczos=lanczos,
+                    apertures=apertures, apxy=apxy,
+                    callback=write_coadd_images,
+                    callback_args=(survey, brickname, version_header, tims, targetwcs),
+                    plots=False, ps=ps, mp=mp)
+    image_only_mods= np.array([tim.data-tim.sims_image for tim in tims])
+    T_image_coadds = make_coadds(tims, bands, targetwcs, mods=image_only_mods, xy=(ix,iy),
+                    ngood=True, detmaps=True, psfsize=True, lanczos=lanczos,
+                    apertures=apertures, apxy=apxy,
+                    callback=write_coadd_images,
+                    callback_args=(survey, brickname, version_header, tims, targetwcs),
+                    plots=False, ps=ps, mp=mp)
+    #KJB########
+
     for c in ['nobs', 'anymask', 'allmask', 'psfsize', 'depth', 'galdepth']:
         T.set(c, C.T.get(c))
 
@@ -2046,6 +2063,10 @@ def stage_coadds(survey=None, bands=None, version_header=None, targetwcs=None,
     for name,ims,rgbkw in [('image', C.coimgs,   rgbkwargs),
                            ('model', C.comods,   rgbkwargs),
                            ('resid', C.coresids, rgbkwargs_resid),
+                           ('simsimage', T_sims_only.comods, rgbkwargs),
+                           ('simsimageresidcols', T_sims_only.comods, rgbkwargs_resid),
+                           ('imageonly', T_image_only.comods, rgbkwargs),
+                           ('imageonlyresidcols', T_image_only.comods, rgbkwargs_resid),
                            ]:
         rgb = get_rgb(ims, bands, **rgbkw)
         kwa = {}
