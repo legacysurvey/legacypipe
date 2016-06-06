@@ -39,21 +39,23 @@ echo >> $log
 echo -e "\nStarting on ${NERSC_HOST} $(hostname)\n" >> $log
 echo "-----------------------------------------------------------------------------------------" >> $log
 
-# -s tims \
-# -P 'pickles/runbrick-dr2p-%(brick)s-%%(stage)s.pickle' \
-#    --no-early-coadds \
 python legacypipe/runbrick.py \
      --no-write \
      --pipe \
      --threads 8 \
-     --on-bricks \
      --skip \
      --skip-calibs \
      --checkpoint checkpoints/checkpoint-${brick}.pickle \
      --fitblobs-prereq pickles/runbrick-${brick}-srcs.pickle \
-     --ps ps/ps-${brick}.fits \
      --brick $brick --outdir $outdir --nsigma 6 \
-     --allow-missing-brickq 0 >> $log 2>&1
+     >> $log 2>&1
 
+#     --ps ps/ps-${brick}.fits \
+#     --on-bricks \
+#     --allow-missing-brickq 0 \
+
+# -s tims \
+# -P 'pickles/runbrick-dr2p-%(brick)s-%%(stage)s.pickle' \
+#    --no-early-coadds \
 # qdo launch dr2n 16 --cores_per_worker 8 --walltime=24:00:00 --script ../bin/pipebrick.sh --batchqueue regular --verbose
 # qdo launch edr0 4 --cores_per_worker 8 --batchqueue regular --walltime 4:00:00 --script ../bin/pipebrick.sh --keep_env --batchopts "--qos=premium -a 0-3"
