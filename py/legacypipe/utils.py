@@ -65,6 +65,9 @@ class ImapTracker(object):
         self.mymp = mymp
         self.tstart = tstart
 
+    def __iter__(self):
+        return self
+        
     def next(self, *args, **kwargs):
         try:
             return self.real.next(*args, **kwargs)
@@ -91,6 +94,9 @@ class MyMultiproc(multiproc):
         self.serial.append((self.t0, tstart))
         self.t0 = tstart
         self.phases.append((name, self.serial, self.parallel, self.t0))
+        print('Starting subphase', name)
+        print('  pushing serial', self.serial)
+        print('  pushing parallel', self.parallel)
         self.serial = []
         self.parallel = []
         
@@ -98,11 +104,14 @@ class MyMultiproc(multiproc):
         # pop
         (name, serial, parallel, t0) = self.phases.pop()
         print('Popping subphase', name)
+        print('  serial elements during subphase:', self.serial)
+        print('  parallel elements during subphase:', self.parallel)
         serial.extend(self.serial)
         self.serial = serial
         parallel.extend(self.parallel)
         self.parallel = parallel
-        #self.t0 = t0
+        print('  after popping serial', self.serial)
+        print('  after popping parallel', self.parallel)
         
     def is_multiproc(self):
         return self.pool is not None

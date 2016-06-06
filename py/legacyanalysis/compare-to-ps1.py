@@ -279,7 +279,8 @@ def main():
                  (ccds.dec > declo) * (ccds.dec < dechi))
         print(len(ccds), 'CCDs')
         
-        ccds.path = np.array([os.path.join('dr3', 'forced', ('%08i' % e)[:5], '%08i' % e, 'decam-%08i-%s-forced.fits' % (e, n.strip()))
+        ccds.path = np.array([os.path.join(#'dr3',
+            'forced', ('%08i' % e)[:5], '%08i' % e, 'decam-%08i-%s-forced.fits' % (e, n.strip()))
                               for e,n in zip(ccds.expnum, ccds.ccdname)])
         I, = np.nonzero([os.path.exists(fn) for fn in ccds.path])
         print(len(I), 'CCDs with forced photometry')

@@ -6,13 +6,14 @@ from legacypipe.cpimage import CP_DQ_BITS
 from legacypipe.common import tim_get_resamp
 
 def make_coadds(tims, bands, targetwcs,
-            mods=None, xy=None, apertures=None, apxy=None,
-            ngood=False, detmaps=False, psfsize=False,
-            callback=None, callback_args=[],
-            plots=False, ps=None,
-            lanczos=True):
-    from astrometry.util.resample import resample_with_wcs, OverlapError
-
+                mods=None, xy=None, apertures=None, apxy=None,
+                ngood=False, detmaps=False, psfsize=False,
+                callback=None, callback_args=[],
+                plots=False, ps=None,
+                lanczos=True, mp=None):
+    from astrometry.util.ttime import Time
+    t0 = Time()
+    
     class Duck(object):
         pass
     C = Duck()
@@ -53,10 +54,36 @@ def make_coadds(tims, bands, targetwcs,
     if lanczos:
         print('Doing Lanczos resampling')
 
-    tinyw = 1e-30
-    for iband,band in enumerate(bands):
-        print('Computing coadd for band', band)
+    for tim in tims:
+        # surface-brightness correction
+        tim.sbscale = (targetwcs.pixel_scale() / tim.subwcs.pixel_scale())**2
 
+    # We create one iterator per band to do the tim resampling.  These all run in
+    # parallel when multi-processing.
+    imaps = []
+    for band in bands:
+        args = []
+        for itim,tim in enumerate(tims):
+            if tim.band != band:
+                continue
+            if mods:
+                mo = mods[itim]
+            else:
+                mo = None
+            args.append((itim,tim,mo,lanczos,targetwcs))
+        if mp is not None:
+            imaps.append(mp.imap_unordered(_resample_one, args))
+        else:
+            import itertools
+            imaps.append(itertools.imap(_resample_one, args))
+
+    # Args for aperture photometry
+    apargs = []
+            
+    tinyw = 1e-30
+    for iband,(band,timiter) in enumerate(zip(bands, imaps)):
+        print('Computing coadd for band', band)
+        
         # coadded weight map (moo)
         cow    = np.zeros((H,W), np.float32)
         # coadded weighted image map
@@ -120,60 +147,22 @@ def make_coadds(tims, bands, targetwcs,
         if psfsize:
             psfsizemap = np.zeros((H,W), np.float32)
 
-        for itim,tim in enumerate(tims):
-            if tim.band != band:
+        for R in timiter:
+            if R is None:
                 continue
 
-            if lanczos:
-                from astrometry.util.miscutils import patch_image
-                patched = tim.getImage().copy()
-                okpix = (tim.getInvError() > 0)
-                patch_image(patched, okpix)
-                del okpix
-                imgs = [patched]
-                if mods:
-                    imgs.append(mods[itim])
-            else:
-                imgs = []
+            itim,Yo,Xo,iv,im,mo,dq = R
 
-            try:
-                Yo,Xo,Yi,Xi,rimgs = resample_with_wcs(
-                    targetwcs, tim.subwcs, imgs, 3)
-            except OverlapError:
-                continue
-            if len(Yo) == 0:
-                continue
-
-            if lanczos:
-                im = rimgs[0]
-                if mods:
-                    mo = rimgs[1]
-                del patched,imgs,rimgs
-            else:
-                im = tim.getImage ()[Yi,Xi]
-                if mods:
-                    mo = mods[itim][Yi,Xi]
-
-            iv = tim.getInvvar()[Yi,Xi]
-
-            # surface-brightness correction
-            fscale = (targetwcs.pixel_scale() / tim.subwcs.pixel_scale())**2
-            print('Applying surface-brightness scaling of %.3f to' % fscale, tim.name)
-
-            im *=  fscale
-            iv /= (fscale**2)
-            if mods:
-                mo *= fscale
-
+            tim = tims[itim]
+            
             # invvar-weighted image
             cowimg[Yo,Xo] += iv * im
             cow   [Yo,Xo] += iv
 
             if unweighted:
-                if tim.dq is None:
+                if dq is None:
                     goodpix = 1
                 else:
-                    dq = tim.dq[Yi,Xi]
                     # include BLEED, SATUR, INTERP pixels if no other
                     # pixels exists (do this by eliminating all other CP
                     # flags)
@@ -181,19 +170,15 @@ def make_coadds(tims, bands, targetwcs,
                     for bitname in ['badpix', 'cr', 'trans', 'edge', 'edge2']:
                         badbits |= CP_DQ_BITS[bitname]
                     goodpix = ((dq & badbits) == 0)
-                    del dq
                     
                 coimg[Yo,Xo] += goodpix * im
                 con  [Yo,Xo] += goodpix
-                coiv [Yo,Xo] += goodpix * 1./(tim.sig1 * fscale)**2  # ...ish
-
+                coiv [Yo,Xo] += goodpix * 1./(tim.sig1 * tim.sbscale)**2  # ...ish
                 
             if xy:
-                if tim.dq is not None:
-                    dq = tim.dq[Yi,Xi]
+                if dq is not None:
                     ormask [Yo,Xo] |= dq
                     andmask[Yo,Xo] &= dq
-                    del dq
                 # raw exposure count
                 nobs[Yo,Xo] += 1
 
@@ -228,11 +213,10 @@ def make_coadds(tims, bands, targetwcs,
                 del mo
                 del goodpix
 
-            del Yo,Xo,Yi,Xi,im,iv
+            del Yo,Xo,im,iv
             # END of loop over tims
 
         # Per-band:
-        
         cowimg /= np.maximum(cow, tinyw)
         C.coimgs.append(cowimg)
         if mods:
@@ -277,27 +261,54 @@ def make_coadds(tims, bands, targetwcs,
             del psfsizemap
 
         if apertures is not None:
-            import photutils
-
             # Aperture photometry, using the unweighted "coimg" and
             # "coiv" arrays.
             with np.errstate(divide='ignore'):
                 imsigma = 1.0/np.sqrt(coiv)
                 imsigma[coiv == 0] = 0
 
+            for irad,rad in enumerate(apertures):
+                apargs.append((irad, band, rad, coimg, imsigma, True, apxy))
+                if mods:
+                    apargs.append((irad, band, rad, coresid, None, False, apxy))
+
+        if callback is not None:
+            callback(band, *callback_args, **kwargs)
+        # END of loop over bands
+
+    t2 = Time()
+    print('coadds: images:', t2-t0)
+
+    if apertures is not None:
+        # Aperture phot, in parallel
+        if mp is not None:
+            apresults = mp.map(_apphot_one, apargs)
+        else:
+            apresults = map(_apphot_one, apargs)
+        del apargs
+        apresults = iter(apresults)
+        
+        for iband,band in enumerate(bands):
             apimg = []
             apimgerr = []
             if mods:
                 apres = []
-
-            for rad in apertures:
-                aper = photutils.CircularAperture(apxy, rad)
-                p = photutils.aperture_photometry(coimg, aper, error=imsigma)
-                apimg.append(p.field('aperture_sum'))
-                apimgerr.append(p.field('aperture_sum_err'))
+            for irad,rad in enumerate(apertures):
+                (airad, aband, isimg, ap_img, ap_err) = apresults.next()
+                assert(airad == irad)
+                assert(aband == band)
+                assert(isimg)
+                apimg.append(ap_img)
+                apimgerr.append(ap_err)
+    
                 if mods:
-                    p = photutils.aperture_photometry(coresid, aper)
-                    apres.append(p.field('aperture_sum'))
+                    (airad, aband, isimg, ap_img, ap_err) = apresults.next()
+                    assert(airad == irad)
+                    assert(aband == band)
+                    assert(not isimg)
+                    apres.append(ap_img)
+                    assert(ap_err is None)
+                
             ap = np.vstack(apimg).T
             ap[np.logical_not(np.isfinite(ap))] = 0.
             C.AP.set('apflux_img_%s' % band, ap)
@@ -308,15 +319,67 @@ def make_coadds(tims, bands, targetwcs,
                 ap = np.vstack(apres).T
                 ap[np.logical_not(np.isfinite(ap))] = 0.
                 C.AP.set('apflux_resid_%s' % band, ap)
-                del apres
-            del apimg,apimgerr,ap
 
-        if callback is not None:
-            callback(band, *callback_args, **kwargs)
-        # END of loop over bands
+        t3 = Time()
+        print('coadds apphot:', t3-t2)
 
     return C
 
+def _resample_one((itim,tim,mod,lanczos,targetwcs)):
+    from astrometry.util.resample import resample_with_wcs, OverlapError
+    if lanczos:
+        from astrometry.util.miscutils import patch_image
+        patched = tim.getImage().copy()
+        okpix = (tim.getInvError() > 0)
+        patch_image(patched, okpix)
+        del okpix
+        imgs = [patched]
+        if mod is not None:
+            imgs.append(mod)
+    else:
+        imgs = []
+
+    try:
+        Yo,Xo,Yi,Xi,rimgs = resample_with_wcs(
+            targetwcs, tim.subwcs, imgs, 3)
+    except OverlapError:
+        return None
+    if len(Yo) == 0:
+        return None
+    mo = None
+    if lanczos:
+        im = rimgs[0]
+        if mod is not None:
+            mo = rimgs[1]
+        del patched,imgs,rimgs
+    else:
+        im = tim.getImage ()[Yi,Xi]
+        if mod is not None:
+            mo = mods[itim][Yi,Xi]
+    iv = tim.getInvvar()[Yi,Xi]
+    fscale = tim.sbscale
+    print('Applying surface-brightness scaling of %.3f to' % fscale, tim.name)
+    im *=  fscale
+    iv /= (fscale**2)
+    if mod is not None:
+        mo *= fscale
+    if tim.dq is None:
+        dq = None
+    else:
+        dq = tim.dq[Yi,Xi]
+    return itim,Yo,Xo,iv,im,mo,dq
+
+def _apphot_one((irad, band, rad, img, sigma, isimage, apxy)):
+    import photutils
+    result = [irad, band, isimage]
+    aper = photutils.CircularAperture(apxy, rad)
+    p = photutils.aperture_photometry(img, aper, error=sigma)
+    result.append(p.field('aperture_sum'))
+    if sigma is not None:
+        result.append(p.field('aperture_sum_err'))
+    else:
+        result.append(None)
+    return result
 
 def write_coadd_images(band,
                        survey, brickname, version_header, tims, targetwcs,

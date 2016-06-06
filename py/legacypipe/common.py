@@ -732,6 +732,8 @@ Now using the current directory as LEGACY_SURVEY_DIR, but this is likely to fail
             return os.path.join(basedir, 'tycho2.fits.gz')
             
         elif filetype == 'annotated-ccds':
+            if self.version == 'dr2':
+                return glob(os.path.join(basedir, 'decals-ccds-annotated.fits'))
             return glob(os.path.join(basedir, 'ccds-annotated-*.fits.gz'))
 
         elif filetype == 'tractor':
@@ -1050,6 +1052,13 @@ Now using the current directory as LEGACY_SURVEY_DIR, but this is likely to fail
         imageType = self.image_class_for_camera(t.camera)
         # call Image subclass constructor
         return imageType(self, t)
+
+    def get_approx_wcs(self, ccd):
+        W,H = ccd.width,ccd.height
+        wcs = Tan(*[float(x) for x in
+                    [ccd.crval1, ccd.crval2, ccd.crpix1, ccd.crpix2,
+                     ccd.cd1_1,  ccd.cd1_2,  ccd.cd2_1, ccd.cd2_2, W, H]])
+        return wcs
     
     def tims_touching_wcs(self, targetwcs, mp, bands=None,
                           **kwargs):
