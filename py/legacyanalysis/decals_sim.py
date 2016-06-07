@@ -81,8 +81,13 @@ class SimImage(DecamImage):
             return tim
 
         # Initialize the object stamp class
+        if 'seed' in self.survey.metacat.columns:
+            seed = self.survey.metacat['seed']
+        else:
+            seed = None
+
         objtype = self.survey.metacat['objtype']
-        objstamp = BuildStamp(tim, gain=self.t.arawgain)
+        objstamp = BuildStamp(tim, gain=self.t.arawgain, seed=seed)
 
         # Grab the data and inverse variance images [nanomaggies!]
         image = galsim.Image(tim.getImage())
@@ -106,7 +111,7 @@ class SimImage(DecamImage):
 
             # Make sure the object falls on the image and then add Poisson noise.
             overlap = stamp.bounds & image.bounds
-            if (overlap.area()>0):
+            if (overlap.area() > 0):
                 stamp = stamp[overlap]      
                 ivarstamp = invvar[overlap]
                 stamp, ivarstamp = objstamp.addnoise(stamp, ivarstamp)
@@ -118,6 +123,10 @@ class SimImage(DecamImage):
 
                 image[overlap] += stamp
                 invvar[overlap] = ivarstamp
+
+                #print('HACK!!!')
+                #galsim.fits.write(stamp, 'stamp-{:02d}.fits'.format(ii), clobber=True)
+                #galsim.fits.write(ivarstamp, 'ivarstamp-{:02d}.fits'.format(ii), clobber=True)
 
                 if np.min(sims_ivar.array) < 0:
                     print('Negative invvar!')
@@ -136,14 +145,24 @@ class SimImage(DecamImage):
         tim.data = image.array
         tim.inverr = np.sqrt(invvar.array)
 
+        #print('HACK!!!')
+        #galsim.fits.write(invvar, 'invvar.fits'.format(ii), clobber=True)
+        #import pdb ; pdb.set_trace()
+
         return tim
 
 class BuildStamp():
-    def __init__(self,tim, gain=4.0):
+    def __init__(self,tim, gain=4.0, seed=None):
         """Initialize the BuildStamp object with the CCD-level properties we need."""
 
-        self.gsparams = galsim.GSParams(maximum_fft_size=2L**30L)
         self.band = tim.band.strip().lower()
+        self.gsparams = galsim.GSParams(maximum_fft_size=2L**30L)
+        self.gsdeviate = galsim.BaseDeviate()
+        print('FIX ME!!!!!!!!!!!!!!!!!!!!!!!!!!!!')
+        #if seed is None:
+        #    self.gsdeviate = galsim.BaseDeviate()
+        #else:
+        #    self.gsdeviate = galsim.BaseDeviate(seed)
 
         self.wcs = tim.getWcs()
         self.psf = tim.getPsf()
@@ -176,43 +195,54 @@ class BuildStamp():
         are in units of nanomaggies and 1/nanomaggies**2, respectively.
 
         """
+        # Get the set of pixels masked in the input inverse variance image/stamp.
+        mask = ivarstamp.copy()
+        mask = mask.array
+        mask[mask!=0] = 1
+        
         varstamp = ivarstamp.copy()
-        varstamp.invertSelf()
-        if np.min(varstamp.array) < 0:
-            print(np.min(varstamp.array))
+        varstamp.invertSelf() # input data, convert to variance
+        varstamp *= self.nano2e**2 # [electron^2]
             
         # Add the variance of the object to the variance image (in electrons).
-        stamp *= self.nano2e       # [electron]
-        st = np.abs(stamp.array)
-        stamp = galsim.Image(st)
-        varstamp *= self.nano2e**2 # [electron^2]
-        firstvarstamp = varstamp + stamp
-
-        # Add Poisson noise
-        stamp.addNoise(galsim.VariableGaussianNoise(
-            galsim.BaseDeviate(),firstvarstamp))
-
-        # ensure the Poisson variance from the object is >0 (see Galsim.demo13)
+        stamp *= self.nano2e       # [noiseless stamp, electron]
+        #stamp = galsim.Image(np.abs(stamp.array)) # ensure all pixels > 0
         objvar = galsim.Image(np.sqrt(stamp.array**2), scale=stamp.scale) 
         objvar.setOrigin(galsim.PositionI(stamp.xmin, stamp.ymin))
+
+        # Add Poisson noise
+        stamp.addNoise(galsim.VariableGaussianNoise( # pass the random seed
+            self.gsdeviate, objvar))
+
+        # Add Poisson noise
+        #firstvarstamp = varstamp + stamp
+        #stamp.addNoise(galsim.VariableGaussianNoise(
+        #    galsim.BaseDeviate(), firstvarstamp))
+
+        # ensure the Poisson variance from the object is >0 (see Galsim.demo13)
+        #objvar = galsim.Image(np.sqrt(stamp.array**2), scale=stamp.scale) 
+        #objvar.setOrigin(galsim.PositionI(stamp.xmin, stamp.ymin))
+        #import pdb ; pdb.set_trace()
+        
         varstamp += objvar
 
         # Convert back to [nanomaggies]
         stamp /= self.nano2e      
         varstamp /= self.nano2e**2
 
-        import pdb ; pdb.set_trace()
-
         ivarstamp = varstamp.copy()
         ivarstamp.invertSelf()
+
+        # Remask pixels that were masked in the original inverse variance stamp.
+        ivarstamp *= mask
 
         return stamp, ivarstamp
 
     def convolve_and_draw(self,obj):
         """Convolve the object with the PSF and then draw it."""
-        obj = galsim.Convolve([obj,self.localpsf])
-        stamp = obj.drawImage(offset=self.offset,wcs=self.localwcs,method='no_pixel')
-        stamp.setCenter(self.xpos,self.ypos)
+        obj = galsim.Convolve([obj, self.localpsf])
+        stamp = obj.drawImage(offset=self.offset, wcs=self.localwcs, method='no_pixel')
+        stamp.setCenter(self.xpos, self.ypos)
         return stamp
 
     def star(self,obj):
@@ -223,8 +253,8 @@ class BuildStamp():
         flux = obj[self.band+'flux'] # [nanomaggies]
         psf = self.localpsf.withFlux(flux)
 
-        stamp = psf.drawImage(offset=self.offset,scale=self.pixscale,method='no_pixel')
-        stamp.setCenter(self.xpos,self.ypos)
+        stamp = psf.drawImage(offset=self.offset, scale=self.pixscale, method='no_pixel')
+        stamp.setCenter(self.xpos, self.ypos)
 
         return stamp
 
