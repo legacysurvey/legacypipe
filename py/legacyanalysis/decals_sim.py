@@ -82,17 +82,17 @@ class SimImage(DecamImage):
 
         # Initialize the object stamp class
         objtype = self.survey.metacat['objtype']
-        objstamp = BuildStamp(tim,gain=self.t.arawgain)
+        objstamp = BuildStamp(tim, gain=self.t.arawgain)
 
         # Grab the data and inverse variance images [nanomaggies!]
         image = galsim.Image(tim.getImage())
         invvar = galsim.Image(tim.getInvvar())
         #also store galaxy sims and sims invvar
-        sims_image= image.copy() 
-        sims_image.fill(0.)
-        sims_ivar= sims_image.copy()
-        tim.sims_xylim= np.empty((len(self.survey.simcat),4))+np.nan #N sims, 4 box corners (xmin,xmax,ymin,ymax) for each sim
-        #sys.exit(1)
+        sims_image = image.copy() 
+        sims_image.fill(0.0)
+        sims_ivar = sims_image.copy()
+        # N sims, 4 box corners (xmin,xmax,ymin,ymax) for each sim
+        tim.sims_xylim = np.empty((len(self.survey.simcat),4))+np.nan 
 
         # Loop on each object.
         for ii, obj in enumerate(self.survey.simcat):
@@ -109,31 +109,37 @@ class SimImage(DecamImage):
             if (overlap.area()>0):
                 stamp = stamp[overlap]      
                 ivarstamp = invvar[overlap]
-                stamp, ivarstamp = objstamp.addnoise(stamp,ivarstamp)
-                #stamp full image only where stamps will in insertted
+                stamp, ivarstamp = objstamp.addnoise(stamp, ivarstamp)
+                #stamp full image only where stamps will in inserted
                 sims_image[overlap] += stamp 
                 sims_ivar[overlap] += ivarstamp
-                tim.sims_xylim[ii,:]= [overlap.xmin-1,overlap.xmax-1,overlap.ymin-1,overlap.ymax-1] #-1 b/c galsim 1st index is 1
-                #image[overlap] += stamp
-                #invvar[overlap] = ivarstamp
+                tim.sims_xylim[ii, :] = [overlap.xmin-1, overlap.xmax-1,
+                                         overlap.ymin-1, overlap.ymax-1] #-1 b/c galsim 1st index is 1
 
-                if np.min(invvar.array)<0:
+                image[overlap] += stamp
+                invvar[overlap] = ivarstamp
+
+                if np.min(sims_ivar.array) < 0:
                     print('Negative invvar!')
-                    sys.exit(1)
+                    import pdb ; pdb.set_trace()
+
+            #if ii == 17:
+            #    import pdb ; pdb.set_trace()
+                    
         assert(sims_image.array.shape == image.array.shape)
         assert(sims_ivar.array.shape == invvar.array.shape)
-        tim.sims_image= sims_image.array
-        tim.sims_inverr= np.sqrt(sims_ivar.array)
-        tim.sims_xylim= tim.sims_xylim.astype(int)
-        tim.data = image.array + sims_image.array
-        tim.inverr = np.sqrt(invvar.array + sims_ivar.array)
-        #tim.data = image.array
-        #tim.inverr = np.sqrt(invvar.array)
+        tim.sims_image = sims_image.array
+        tim.sims_inverr = np.sqrt(sims_ivar.array)
+        tim.sims_xylim = tim.sims_xylim.astype(int)
+        #tim.data = image.array + sims_image.array
+        #tim.inverr = np.sqrt(invvar.array + sims_ivar.array)
+        tim.data = image.array
+        tim.inverr = np.sqrt(invvar.array)
 
         return tim
 
 class BuildStamp():
-    def __init__(self,tim,gain=4.0):
+    def __init__(self,tim, gain=4.0):
         """Initialize the BuildStamp object with the CCD-level properties we need."""
 
         self.gsparams = galsim.GSParams(maximum_fft_size=2L**30L)
@@ -165,20 +171,18 @@ class BuildStamp():
         
         self.localpsf = galsim.InterpolatedImage(galsim.Image(psfim),scale=self.pixscale)
 
-    def addnoise(self,stamp,ivarstamp):
+    def addnoise(self, stamp, ivarstamp):
         """Add noise to the object postage stamp.  Remember that STAMP and IVARSTAMP
         are in units of nanomaggies and 1/nanomaggies**2, respectively.
 
         """
         varstamp = ivarstamp.copy()
         varstamp.invertSelf()
-        if np.min(varstamp.array)<0:
+        if np.min(varstamp.array) < 0:
             print(np.min(varstamp.array))
-            #sys.exit(1)
             
         # Add the variance of the object to the variance image (in electrons).
         stamp *= self.nano2e       # [electron]
-        #stamp.array = np.abs(stamp.array)
         st = np.abs(stamp.array)
         stamp = galsim.Image(st)
         varstamp *= self.nano2e**2 # [electron^2]
@@ -189,13 +193,15 @@ class BuildStamp():
             galsim.BaseDeviate(),firstvarstamp))
 
         # ensure the Poisson variance from the object is >0 (see Galsim.demo13)
-        objvar = galsim.Image(np.sqrt(stamp.array**2),scale=stamp.scale) 
+        objvar = galsim.Image(np.sqrt(stamp.array**2), scale=stamp.scale) 
         objvar.setOrigin(galsim.PositionI(stamp.xmin, stamp.ymin))
         varstamp += objvar
 
         # Convert back to [nanomaggies]
         stamp /= self.nano2e      
         varstamp /= self.nano2e**2
+
+        import pdb ; pdb.set_trace()
 
         ivarstamp = varstamp.copy()
         ivarstamp.invertSelf()
@@ -482,7 +488,7 @@ def main():
         run_brick(brickname, simdecals, threads=args.threads, zoom=args.zoom,
                   wise=False, forceAll=True, writePickles=False, do_calibs=False,
                   write_metrics=False, pixPsf=True, blobxy=blobxy, early_coadds=False,
-                  splinesky=True, ceres=False, stages=['writecat'], plots=True,
+                  splinesky=True, ceres=False, stages=['writecat'], plots=False,
                   plotbase='sim')
 
         #pdb.set_trace()

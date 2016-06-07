@@ -28,7 +28,7 @@ def main():
                                      description='DECaLS simulations.')
     parser.add_argument('-b', '--brick', type=str, default='2428p117', metavar='', 
                         help='process this brick (required input)')
-    parser.add_argument('-o', '--objtype', type=str, choices=['STAR', 'ELG', 'LRG', 'BGS'],default='ELG', metavar='', 
+    parser.add_argument('-o', '--objtype', type=str, choices=['STAR', 'ELG', 'LRG', 'BGS'], default='ELG', metavar='', 
                         help='object type (STAR, ELG, LRG, BGS)') 
     parser.add_argument('-v', '--verbose', action='store_true', 
                         help='toggle on verbose output')
@@ -43,27 +43,28 @@ def main():
         lvl = logging.DEBUG
     else:
         lvl = logging.INFO
-    logging.basicConfig(format='%(message)s',level=lvl,stream=sys.stdout)
+    logging.basicConfig(format='%(message)s', level=lvl, stream=sys.stdout)
     log = logging.getLogger('__name__')
 
     brickname = args.brick
     objtype = args.objtype.upper()
     lobjtype = objtype.lower()
-    log.info('Analyzing objtype {} on brick {}'.format(objtype,brickname))
+    log.info('Analyzing objtype {} on brick {}'.format(objtype, brickname))
 
     if 'DECALS_SIM_DIR' in os.environ:
         decals_sim_dir = os.getenv('DECALS_SIM_DIR')
     else:
         decals_sim_dir = '.'
-
+    output_dir = os.path.join(decals_sim_dir, brickname)
+    
     # Plotting preferences
     sns.set(style='white',font_scale=1.6,palette='dark')#,font='fantasy')
     col = sns.color_palette('dark')
         
-    # Read the meta-catalog.
-    metafile = os.path.join(decals_sim_dir,brickname,'metacat-'+brickname+'-'+lobjtype+'.fits')
+    # Read the metadata catalog.
+    metafile = os.path.join(output_dir, 'metacat-'+brickname+'-'+lobjtype+'.fits')
     log.info('Reading {}'.format(metafile))
-    meta = fits.getdata(metafile,1)
+    meta = fits.getdata(metafile, 1)
 
     # We need this for our histograms below
     magbinsz = 0.2
@@ -78,20 +79,20 @@ def main():
         chunksuffix = '{:02d}'.format(ichunk)
         
         # Read the simulated object catalog
-        simcatfile = os.path.join(decals_sim_dir,brickname,'simcat-'+brickname+'-'+
+        simcatfile = os.path.join(output_dir, 'simcat-'+brickname+'-'+
                                   lobjtype+'-'+chunksuffix+'.fits')
-        #log.info('Reading {}'.format(simcatfile))
+        log.info('Reading {}'.format(simcatfile))
         simcat = fits.getdata(simcatfile, 1)
 
         # Read and match to the Tractor catalog
-        tractorfile = os.path.join(decals_sim_dir,brickname,'tractor-'+brickname+'-'+
+        tractorfile = os.path.join(output_dir, 'tractor-'+brickname+'-'+
                                    lobjtype+'-'+chunksuffix+'.fits')
-        #log.info('Reading {}'.format(tractorfile))
+        log.info('Reading {}'.format(tractorfile))
         tractor = fits.getdata(tractorfile, 1)
 
-        m1, m2, d12 = match_radec(tractor['ra'],tractor['dec'],
-                                  simcat['ra'],simcat['dec'],1.0/3600.0)
-        missing = np.delete(np.arange(len(simcat)),m2,axis=0)
+        m1, m2, d12 = match_radec(tractor['ra'], tractor['dec'],
+                                  simcat['ra'], simcat['dec'], 1.0/3600.0)
+        missing = np.delete(np.arange(len(simcat)), m2, axis=0)
 
         good = np.where((np.abs(tractor['decam_flux'][m1,2]/simcat['rflux'][m2]-1)<0.3)*1)
 
@@ -120,8 +121,7 @@ def main():
     ax[2].set_xlabel('Input r magnitude (AB mag)')
 
     fig.subplots_adjust(left=0.18,hspace=0.1)
-    qafile = os.path.join(decals_sim_dir,'qa-'+brickname+'-'+
-                          lobjtype+'-flux.png')
+    qafile = os.path.join(output_dir, 'qa-'+brickname+'-'+lobjtype+'-flux.png')
     log.info('Writing {}'.format(qafile))
     plt.savefig(qafile)
 
@@ -141,13 +141,12 @@ def main():
     ax[1].set_ylabel('$\Delta$(r - z) (Tractor minus Input)')
     ax[1].set_xlabel('Input r magnitude (AB mag)')
     fig.subplots_adjust(left=0.18,hspace=0.1)
-    qafile = os.path.join(decals_sim_dir,'qa-'+brickname+'-'+
-                          lobjtype+'-color.png')
+    qafile = os.path.join(output_dir, 'qa-'+brickname+'-'+lobjtype+'-color.png')
     log.info('Writing {}'.format(qafile))
     plt.savefig(qafile)
 
     # Get cutouts of the missing sources
-    imfile = os.path.join(decals_sim_dir, brickname, 'legacysurvey-2428p117-model.jpg')#+brickname+'-'+lobjtype+'-image-'+chunksuffix+'.jpg')
+    imfile = os.path.join(output_dir, 'qa-'+brickname+'-'+lobjtype+'-image-'+chunksuffix+'.jpg')
     
     hw = 30 # half-width [pixels]
     ncols = 5
@@ -169,8 +168,8 @@ def main():
             mm = miss[iobj]
             xx = int(simcat['X'][mm])
             yy = int(sz[1]-simcat['Y'][mm])
-            crop = (xx-hw,yy-hw,xx+hw,yy+hw)
-            box = (xpos[ir,ic],ypos[ir,ic])
+            crop = (xx-hw, yy-hw, xx+hw, yy+hw)
+            box = (xpos[ir,ic], ypos[ir,ic])
             thumb = im.crop(crop)
             mosaic.paste(thumb,box)
             iobj = iobj+1
@@ -181,7 +180,7 @@ def main():
         for ir in range(nrows):
             draw.rectangle([(xpos[ir,ic],ypos[ir,ic]),
                             (xpos[ir,ic]+hw*2,ypos[ir,ic]+hw*2)])
-    qafile = os.path.join(decals_sim_dir,'qa-'+brickname+'-'+lobjtype+'-missing.png')
+    qafile = os.path.join(output_dir, 'qa-'+brickname+'-'+lobjtype+'-missing.png')
     log.info('Writing {}'.format(qafile))
     mosaic.save(qafile)
 
@@ -189,7 +188,7 @@ def main():
     # are labeled.
     rad = 15
     
-    imfile = os.path.join(decals_sim_dir, brickname, 'legacysurvey-2428p117-image.jpg')#'qa-'+brickname+'-'+lobjtype+'+chunksuffix+'.png')
+    imfile = os.path.join(output_dir, 'qa-'+brickname+'-'+lobjtype+'-image-'+chunksuffix+'.png')
                           
     imfile = [imfile,imfile.replace('-image','-resid')]
     imfile[0].encode('ascii','ignore').decode()
@@ -217,7 +216,7 @@ def main():
     ax.set_ylim([0.0,1.1])
     ax.legend(loc='lower left')
     fig.subplots_adjust(bottom=0.15)
-    qafile = os.path.join(decals_sim_dir,'qa-'+brickname+'-'+lobjtype+'-frac.png')
+    qafile = os.path.join(output_dir, 'qa-'+brickname+'-'+lobjtype+'-frac.png')
     log.info('Writing {}'.format(qafile))
     plt.savefig(qafile)
 
@@ -240,7 +239,7 @@ def main():
     plt.ylim([0.0,1.1])
     plt.legend(loc='center left',bbox_to_anchor=(0.08,0.5))
     fig.subplots_adjust(bottom=0.15)
-    qafile = os.path.join(decals_sim_dir,'qa-'+brickname+'-'+lobjtype+'-type.png')
+    qafile = os.path.join(output_dir, 'qa-'+brickname+'-'+lobjtype+'-type.png')
     log.info('Writing {}'.format(qafile))
     plt.savefig(qafile)
 
@@ -264,8 +263,7 @@ def main():
         plt.xlabel('b/a')
         plt.xlim([0.2,1.0])
         fig.subplots_adjust(bottom=0.18)
-        qafile = os.path.join(decals_sim_dir,'qa-'+brickname+'-'+
-                          lobjtype+'-morph.png')
+        qafile = os.path.join(output_dir,'qa-'+brickname+'-'+lobjtype+'-morph.png')
         log.info('Writing {}'.format(qafile))
         plt.savefig(qafile)
     
