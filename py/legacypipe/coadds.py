@@ -31,8 +31,7 @@ def make_coadds(tims, bands, targetwcs,
     if detmaps:
         C.galdetivs = []
         C.detivs = []
-    print('len(mods)=',len(mods),'mods[0].shape=',mods[0].shape)
-    if mods:
+    if mods is not None:
         C.comods = []
         C.coresids = []
         
@@ -69,10 +68,10 @@ def make_coadds(tims, bands, targetwcs,
         for itim,tim in enumerate(tims):
             if tim.band != band:
                 continue
-            if mods:
-                mo = mods[itim]
-            else:
+            if mods is None:
                 mo = None
+            else:
+                mo = mods[itim]
             args.append((itim,tim,mo,lanczos,targetwcs))
         if mp is not None:
             imaps.append(mp.imap_unordered(_resample_one, args))
@@ -104,7 +103,7 @@ def make_coadds(tims, bands, targetwcs,
             C.galdetivs.append(galdetiv)
             kwargs.update(galdetiv=galdetiv)
 
-        if mods:
+        if mods is not None:
             # model image
             cowmod = np.zeros((H,W), np.float32)
             # chi-squared image
@@ -114,7 +113,7 @@ def make_coadds(tims, bands, targetwcs,
         if unweighted:
             # unweighted image
             coimg  = np.zeros((H,W), np.float32)
-            if mods:
+            if mods is not None:
                 # unweighted model
                 comod  = np.zeros((H,W), np.float32)
             # number of exposures
@@ -219,7 +218,7 @@ def make_coadds(tims, bands, targetwcs,
             if ngood:
                 congood[Yo,Xo] += (iv > 0)
 
-            if mods:
+            if mods is not None:
                 # straight-up
                 comod[Yo,Xo] += goodpix * mo
                 # invvar-weighted
@@ -237,7 +236,7 @@ def make_coadds(tims, bands, targetwcs,
         # Per-band:
         cowimg /= np.maximum(cow, tinyw)
         C.coimgs.append(cowimg)
-        if mods:
+        if mods is not None:
             cowmod  /= np.maximum(cow, tinyw)
             C.comods.append(cowmod)
             coresid = cowimg - cowmod
@@ -248,7 +247,7 @@ def make_coadds(tims, bands, targetwcs,
             coimg  /= np.maximum(con, 1)
             del con
             cowimg[cow == 0] = coimg[cow == 0]
-            if mods:
+            if mods is not None:
                 cowmod[cow == 0] = comod[cow == 0]
 
         if xy:
@@ -287,7 +286,7 @@ def make_coadds(tims, bands, targetwcs,
 
             for irad,rad in enumerate(apertures):
                 apargs.append((irad, band, rad, coimg, imsigma, True, apxy))
-                if mods:
+                if mods is not None:
                     apargs.append((irad, band, rad, coresid, None, False, apxy))
 
         if callback is not None:
@@ -309,7 +308,7 @@ def make_coadds(tims, bands, targetwcs,
         for iband,band in enumerate(bands):
             apimg = []
             apimgerr = []
-            if mods:
+            if mods is not None:
                 apres = []
             for irad,rad in enumerate(apertures):
                 (airad, aband, isimg, ap_img, ap_err) = apresults.next()
@@ -319,7 +318,7 @@ def make_coadds(tims, bands, targetwcs,
                 apimg.append(ap_img)
                 apimgerr.append(ap_err)
     
-                if mods:
+                if mods is not None:
                     (airad, aband, isimg, ap_img, ap_err) = apresults.next()
                     assert(airad == irad)
                     assert(aband == band)
@@ -333,7 +332,7 @@ def make_coadds(tims, bands, targetwcs,
             ap = 1./(np.vstack(apimgerr).T)**2
             ap[np.logical_not(np.isfinite(ap))] = 0.
             C.AP.set('apflux_img_ivar_%s' % band, ap)
-            if mods:
+            if mods is not None:
                 ap = np.vstack(apres).T
                 ap[np.logical_not(np.isfinite(ap))] = 0.
                 C.AP.set('apflux_resid_%s' % band, ap)
