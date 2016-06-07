@@ -362,6 +362,7 @@ def main():
                         help='r-band magnitude range')
     parser.add_argument('--stage', choices=['tims','image_coadds','srcs','fitblobs','coadds'], type=str,default='writecat',metavar='', 
                         help='Run up to the given stage')
+    parser.add_argument('--early_coadds', action='store_true', help='add this option to make the jpgs before detection/model fitting')
     parser.add_argument('-v', '--verbose', action='store_true', 
                         help='toggle on verbose output')
 
@@ -482,12 +483,11 @@ def main():
         simdecals = SimDecals(metacat=metacat, simcat=simcat,
                               survey_dir=args.survey_dir, output_dir=outdir)
         blobxy = zip(simcat['x'],simcat['y'])
-        print('args.stage=',args.stage)
         run_brick(brickname, survey=simdecals, 
                   threads=args.threads, zoom=args.zoom, wise=False,
                   forceAll=True, writePickles=False, do_calibs=True,
                   write_metrics=False, pixPsf=True, blobxy=blobxy, 
-                  early_coadds=True, splinesky=True, stages=[args.stage])
+                  early_coadds=args.early_coadds, splinesky=True, stages=[args.stage])
         log.info('Cleaning up...')
         #mv tractor catalogue, coadd/image.jpg and resid.jpg to outdir/
         #shutil.move(os.path.join(outdir,'tractor',brickname[:3],

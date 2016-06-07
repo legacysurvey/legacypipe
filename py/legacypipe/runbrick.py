@@ -768,8 +768,8 @@ def stage_image_coadds(survey=None, targetwcs=None, bands=None, tims=None,
     #rgbkwargs2 = dict(mnmx=(-3., 3.))
     #rgbkwargs2 = dict(mnmx=(-2., 10.))
     for name,ims,rgbkw in [('image',C.coimgs,rgbkwargs),
-                           ('simscoaddb4', sims_coadd, rgbkwargs),
-                           ('imagecoaddb4', image_coadd, rgbkwargs),
+                           ('simscoadd', sims_coadd, rgbkwargs),
+                           ('imagecoadd', image_coadd, rgbkwargs),
         #('image2',C.coimgs,rgbkwargs2),
                            ]:
         rgb = get_rgb(ims, bands, **rgbkw)
@@ -2013,19 +2013,15 @@ def stage_coadds(survey=None, bands=None, version_header=None, targetwcs=None,
     
     #KJB, sims only and real image only coadds
     sims_mods= np.array([tim.sims_image for tim in tims])
-    print('making sims coadd, len()=',len(sims_mods),'sims_mods[0].shape=',sims_mods[0].shape)
     T_sims_coadds = make_coadds(tims, bands, targetwcs, mods=sims_mods, xy=(ix,iy),
                     ngood=True, detmaps=True, psfsize=True, lanczos=lanczos,
                     apertures=apertures, apxy=apxy,
                     callback=write_coadd_images,
                     callback_args=(survey, brickname, version_header, tims, targetwcs),
                     plots=False, ps=ps, mp=mp)
-    #MVP: T_sims_coadds = make_coadds(tims, bands, targetwcs, mods=sims_mods, lanczos=lanczos, plots=False,ps=ps, mp=mp)
     sims_coadd= T_sims_coadds.comods
-    print("len(sims_coadd)= ",len(sims_coadd))
     del T_sims_coadds
     image_only_mods= np.array([tim.data-tim.sims_image for tim in tims])
-    print('making image only coadd, len()=',len(image_only_mods),'image_only_mods[0].shape=',image_only_mods[0].shape)
     T_image_coadds = make_coadds(tims, bands, targetwcs, mods=image_only_mods, xy=(ix,iy),
                     ngood=True, detmaps=True, psfsize=True, lanczos=lanczos,
                     apertures=apertures, apxy=apxy,

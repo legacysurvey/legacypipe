@@ -747,7 +747,7 @@ Now using the current directory as LEGACY_SURVEY_DIR, but this is likely to fail
             return os.path.join(codir, 'legacysurvey-%s-%s.fits' % (brick, ty))
 
         elif filetype in ['image-jpeg', 'model-jpeg', 'resid-jpeg',
-                          'imageblob-jpeg', 'simscoadd-jpeg','imagecoadd-jpeg','simscoaddb4-jpeg','imagecoaddb4-jpeg']: #KJB
+                          'imageblob-jpeg', 'simscoadd-jpeg','imagecoadd-jpeg']: #KJB
             ty = filetype.split('-')[0]
             return os.path.join(codir, 'legacysurvey-%s-%s.jpg' % (brick, ty))
 
