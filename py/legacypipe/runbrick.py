@@ -2049,8 +2049,7 @@ def stage_coadds(survey=None, bands=None, version_header=None, targetwcs=None,
         rgb = get_rgb(ims, bands, **rgbkw)
         kwa = {}
         if coadd_bw and len(bands) == 1:
-            i = 'zrg'.index(bands[0])
-            rgb = rgb[:,:,i]
+            rgb = rgb.sum(axis=2)
             kwa = dict(cmap='gray')
 
         if on_bricks and name == 'image':
