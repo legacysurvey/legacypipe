@@ -99,8 +99,6 @@ def stage_tims(W=3600, H=3600, pixscale=0.262, brickname=None,
     - *splinesky*: boolean.  Use SplineSky model, rather than ConstantSky?
 
     '''
-    print('stage_time exiting')
-    sys.exit()
     from legacypipe.common import (get_git_version, get_version_header, wcs_for_brick,
                                    read_one_tim)
     t0 = tlast = Time()
@@ -1981,6 +1979,7 @@ def stage_coadds(survey=None, bands=None, version_header=None, targetwcs=None,
         apxy = None
     del xx,yy,ok,ra,dec
 
+    print('making usual coadd, len(mods)=',len(mods),'mods[0].shape=',mods[0].shape)
     C = make_coadds(tims, bands, targetwcs, mods=mods, xy=(ix,iy),
                     ngood=True, detmaps=True, psfsize=True, lanczos=lanczos,
                     apertures=apertures, apxy=apxy,
@@ -1990,19 +1989,24 @@ def stage_coadds(survey=None, bands=None, version_header=None, targetwcs=None,
     
     #KJB, sims only and real image only coadds
     sims_mods= np.array([tim.sims_image for tim in tims])
+    print('making sims coadd, len()=',len(sims_mods),'sims_mods[0].shape=',sims_mods[0].shape)
     T_sims_coadds = make_coadds(tims, bands, targetwcs, mods=sims_mods, xy=(ix,iy),
                     ngood=True, detmaps=True, psfsize=True, lanczos=lanczos,
                     apertures=apertures, apxy=apxy,
                     callback=write_coadd_images,
                     callback_args=(survey, brickname, version_header, tims, targetwcs),
                     plots=False, ps=ps, mp=mp)
-    image_only_mods= np.array([tim.data-tim.sims_image for tim in tims])
-    T_image_coadds = make_coadds(tims, bands, targetwcs, mods=image_only_mods, xy=(ix,iy),
-                    ngood=True, detmaps=True, psfsize=True, lanczos=lanczos,
-                    apertures=apertures, apxy=apxy,
-                    callback=write_coadd_images,
-                    callback_args=(survey, brickname, version_header, tims, targetwcs),
-                    plots=False, ps=ps, mp=mp)
+    sims_coadd= T_sims_coadds.comods.copy()
+    print('exiting after sims_coadd made')
+    sys.exit()
+    #image_only_mods= np.array([tim.data-tim.sims_image for tim in tims])
+    #print('making image only coadd, len()=',len(image_only_mods),'image_only_mods[0].shape=',image_only_mods[0].shape)
+    #T_image_coadds = make_coadds(tims, bands, targetwcs, mods=image_only_mods, xy=(ix,iy),
+    #                ngood=True, detmaps=True, psfsize=True, lanczos=lanczos,
+    #                apertures=apertures, apxy=apxy,
+    #                callback=write_coadd_images,
+    #                callback_args=(survey, brickname, version_header, tims, targetwcs),
+    #                plots=False, ps=ps, mp=mp)
     #KJB########
 
     for c in ['nobs', 'anymask', 'allmask', 'psfsize', 'depth', 'galdepth']:
@@ -2065,8 +2069,8 @@ def stage_coadds(survey=None, bands=None, version_header=None, targetwcs=None,
     for name,ims,rgbkw in [('image', C.coimgs,   rgbkwargs),
                            ('model', C.comods,   rgbkwargs),
                            ('resid', C.coresids, rgbkwargs_resid),
-                           ('simsimage', T_sims_coadds.comods, rgbkwargs),
-                           ('imageonly', T_image_coadds.comods, rgbkwargs),
+                           #('simsimage', T_sims_coadds.comods, rgbkwargs),
+                           #('imageonly', T_image_coadds.comods, rgbkwargs),
                            ]:
         rgb = get_rgb(ims, bands, **rgbkw)
         kwa = {}

@@ -31,6 +31,7 @@ def make_coadds(tims, bands, targetwcs,
     if detmaps:
         C.galdetivs = []
         C.detivs = []
+    print('len(mods)=',len(mods),'mods[0].shape=',mods[0].shape)
     if mods:
         C.comods = []
         C.coresids = []
@@ -41,6 +42,8 @@ def make_coadds(tims, bands, targetwcs,
 
     if xy:
         ix,iy = xy
+        print('ix= ',ix)
+        print('iy= ',iy)
         C.T = fits_table()
         C.T.nobs    = np.zeros((len(ix), len(bands)), np.uint8)
         C.T.anymask = np.zeros((len(ix), len(bands)), np.int16)
@@ -147,13 +150,17 @@ def make_coadds(tims, bands, targetwcs,
         if psfsize:
             psfsizemap = np.zeros((H,W), np.float32)
 
+        #begin loop over tims, store max(sims_xy) for each sims object
+        #C.T.sims_xy = np.zeros((, len(bands)), np.int16)
         for R in timiter:
             if R is None:
                 continue
 
             itim,Yo,Xo,iv,im,mo,dq = R
+            print('timiter Yo,Xo,im.shape=',Yo,Xo,im.shape)
 
             tim = tims[itim]
+            print('print ****itim=',itim,' ****') #tim.data.shape= ',tim.data.shape,'tim.sims_xylim.shape= ',tim.sims_xylim.shape,'tim.sims_xylim=',tim.sims_xylim)
             
             # invvar-weighted image
             cowimg[Yo,Xo] += iv * im

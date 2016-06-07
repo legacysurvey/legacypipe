@@ -55,6 +55,7 @@ from legacypipe.runbrick import run_brick
 from legacypipe.decam import DecamImage
 from legacypipe.common import LegacySurveyData, wcs_for_brick, ccds_touching_wcs
 
+
 #from thesis_code.galsim import plots
 
 class SimDecals(LegacySurveyData):
@@ -75,16 +76,7 @@ class SimImage(DecamImage):
         self.t = t
 
     def get_tractor_image(self, **kwargs):
-        print('get_tractor_image kwargs= ',kwargs)
-        print('dir(self)= ',dir(self))
-        print('dir(self.t)= ',dir(self.t))
-        print('dir(self.survey)= ',dir(self.survey))
-        print('self.survey.output_dir= ',self.survey.output_dir)
-        #print('being called in SimImage, quitting')
-        #print('self.imgfn=',self.imgfn)
-        #sys.exit()
         tim = super(SimImage, self).get_tractor_image(**kwargs)
-        print('dir(tim)= ',dir(tim))
         if tim is None: # this can be None when the edge of a CCD overlaps
             return tim
 
@@ -120,17 +112,10 @@ class SimImage(DecamImage):
                 ivarstamp = invvar[overlap]
                 stamp, ivarstamp = objstamp.addnoise(stamp,ivarstamp)
  
-                #image[overlap] += stamp
-                #plots.one_image(image.array,name='tim.getImage_obj%d.png' % ii)
+                #sum sims and invvar for sims
                 sims_image[overlap] += stamp #just sim, they are ADDED over the whole image
                 sims_ivar[overlap] += ivarstamp
                 tim.sims_xylim[ii,:]= [overlap.xmin-1,overlap.xmax-1,overlap.ymin-1,overlap.ymax-1] #-1 b/c galsim 1st index is 1
-                #print('obj= %d, img= %s' % (ii,os.path.basename(self.imgfn)))
-                #print('image.bounds=',image.bounds,'stamp.bounds=',stamp.bounds,'overlap=',overlap)
-                #plots.image_plus_stamp(image.array,[overlap.xmin,overlap.xmax],\
-                #                                    [overlap.ymin,overlap.ymax],'yellow_box.png')
-                #print('dir(time)',dir(tim))
-                #print('dir(self)',dir(self))
 
                 if np.min(invvar.array)<0:
                     print('Negative invvar!')
