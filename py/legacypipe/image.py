@@ -263,8 +263,8 @@ class LegacySurveyImage(object):
             img -= skymod
             midsky = np.median(skymod)
             zsky = ConstantSky(0.)
-            zsky.version = sky.version
-            zsky.plver = sky.plver
+            zsky.version = getattr(sky, 'version', '')
+            zsky.plver = getattr(sky, 'plver', '')
             del skymod
             sky = zsky
             del zsky
@@ -352,9 +352,9 @@ class LegacySurveyImage(object):
         tim.primhdr = primhdr
         tim.hdr = imghdr
         tim.plver = primhdr.get('PLVER','').strip()
-        tim.skyver = (sky.version, sky.plver)
-        tim.wcsver = (wcs.version, wcs.plver)
-        tim.psfver = (psf.version, psf.plver)
+        tim.skyver = (getattr(sky, 'version', ''), getattr(sky, 'plver', ''))
+        tim.wcsver = (getattr(wcs, 'version', ''), getattr(wcs, 'plver', ''))
+        tim.psfver = (getattr(psf, 'version', ''), getattr(psf, 'plver', ''))
         if get_dq:
             tim.dq = dq
         tim.dq_saturation_bits = self.dq_saturation_bits

@@ -305,7 +305,7 @@ def get_rgb(imgs, bands, mnmx=None, arcsinh=None, scales=None):
     rgb = np.zeros((h,w,3), np.float32)
     # Convert to ~ sigmas
     for im,band in zip(imgs, bands):
-        plane,scale = scales[band]
+        plane,scale = scales.get(band, (0,1.))
         rgb[:,:,plane] = (im / scale).astype(np.float32)
 
     if mnmx is None:
