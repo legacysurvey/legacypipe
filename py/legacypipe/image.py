@@ -477,6 +477,7 @@ class LegacySurveyImage(object):
             while True:
                 line = h[:80]
                 h = h[80:]
+                #print('Header line "%s"' % line)
                 # HACK -- fitsio apparently can't handle CONTINUE.
                 # It also has issues with slightly malformed cards, like
                 # KEYWORD  =      / no value
@@ -488,6 +489,8 @@ class LegacySurveyImage(object):
                               line.strip())
                 if line == ('END' + ' '*77):
                     foundEnd = True
+                    break
+                if len(h) < 80:
                     break
             if foundEnd:
                 break
