@@ -261,9 +261,10 @@ def main():
     # star_profiles(ps)
     # sys.exit(0)
 
-    survey_dir = '/project/projectdirs/desiproc/dr3'
-    survey = LegacySurveyData(survey_dir=survey_dir)
-
+    #survey_dir = '/project/projectdirs/desiproc/dr3'
+    #survey = LegacySurveyData(survey_dir=survey_dir)
+    survey = LegacySurveyData()
+    
     ralo,rahi = 240,245
     declo,dechi = 5, 12
 
