@@ -131,7 +131,6 @@ def main():
 
     # --------------------------------------------------
     # Build the sample of large galaxies based on the available imaging.
-
     if args.build_sample:
 
         # Read the parent catalog.
@@ -139,7 +138,7 @@ def main():
         
         # Create a simple WCS object for each object and find all the CCDs
         # touching that WCS footprint.
-        survey = LegacySurveyData()
+        survey = LegacySurveyData(version='dr2') # hack!
         allccds = survey.get_ccds()
         keep = np.concatenate((survey.apply_blacklist(allccds),
                                survey.photometric_ccds(allccds)))
