@@ -360,7 +360,7 @@ def main():
                         help='location of survey-ccds*.fits.gz')
     parser.add_argument('--rmag-range', nargs=2, type=float, default=(18,26), metavar='', 
                         help='r-band magnitude range')
-    parser.add_argument('--stage', choices=['tims','image_coadds','srcs','fitblobs','image_coadds'], default='writecat',metavar='', 
+    parser.add_argument('--stage', choices=['tims','image_coadds','srcs','fitblobs','coadds'], type=str,default='writecat',metavar='', 
                         help='Run up to the given stage')
     parser.add_argument('-v', '--verbose', action='store_true', 
                         help='toggle on verbose output')
@@ -487,7 +487,7 @@ def main():
                   threads=args.threads, zoom=args.zoom, wise=False,
                   forceAll=True, writePickles=False, do_calibs=True,
                   write_metrics=False, pixPsf=True, blobxy=blobxy, 
-                  early_coadds=False, splinesky=True) #stages=[args.stage], splinesky=True)
+                  early_coadds=True, splinesky=True, stages=[args.stage])
         log.info('Cleaning up...')
         #mv tractor catalogue, coadd/image.jpg and resid.jpg to outdir/
         #shutil.move(os.path.join(outdir,'tractor',brickname[:3],
