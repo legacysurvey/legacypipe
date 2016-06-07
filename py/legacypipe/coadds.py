@@ -31,7 +31,7 @@ def make_coadds(tims, bands, targetwcs,
     if detmaps:
         C.galdetivs = []
         C.detivs = []
-    if mods:
+    if mods is not None:
         C.comods = []
         C.coresids = []
         
@@ -41,6 +41,8 @@ def make_coadds(tims, bands, targetwcs,
 
     if xy:
         ix,iy = xy
+        print('ix= ',ix)
+        print('iy= ',iy)
         C.T = fits_table()
         C.T.nobs    = np.zeros((len(ix), len(bands)), np.uint8)
         C.T.anymask = np.zeros((len(ix), len(bands)), np.int16)
@@ -50,6 +52,12 @@ def make_coadds(tims, bands, targetwcs,
         if detmaps:
             C.T.depth    = np.zeros((len(ix), len(bands)), np.float32)
             C.T.galdepth = np.zeros((len(ix), len(bands)), np.float32)
+        #bounding box of galaxy simsC
+        C.T.sims_xy = np.zeros(tims[0].sims_xy.shape) #Nx4 array, xmin,xmax,ymin,ymax, of extends for the N galaxy sims
+        assert(C.T.sims_xy.shape[1] == 4)
+        C.T.sims_xy[:,[0,2]]= np.inf #xmin=min(+inf,xmin)
+        C.T.sims_xy[:,[1,3]]= -np.inf #xmax=max(-inf,xmax)...
+
 
     if lanczos:
         print('Doing Lanczos resampling')
@@ -66,10 +74,10 @@ def make_coadds(tims, bands, targetwcs,
         for itim,tim in enumerate(tims):
             if tim.band != band:
                 continue
-            if mods:
-                mo = mods[itim]
-            else:
+            if mods is None:
                 mo = None
+            else:
+                mo = mods[itim]
             args.append((itim,tim,mo,lanczos,targetwcs))
         if mp is not None:
             imaps.append(mp.imap_unordered(_resample_one, args))
@@ -101,7 +109,7 @@ def make_coadds(tims, bands, targetwcs,
             C.galdetivs.append(galdetiv)
             kwargs.update(galdetiv=galdetiv)
 
-        if mods:
+        if mods is not None:
             # model image
             cowmod = np.zeros((H,W), np.float32)
             # chi-squared image
@@ -111,7 +119,7 @@ def make_coadds(tims, bands, targetwcs,
         if unweighted:
             # unweighted image
             coimg  = np.zeros((H,W), np.float32)
-            if mods:
+            if mods is not None:
                 # unweighted model
                 comod  = np.zeros((H,W), np.float32)
             # number of exposures
@@ -152,9 +160,10 @@ def make_coadds(tims, bands, targetwcs,
                 continue
 
             itim,Yo,Xo,iv,im,mo,dq = R
+            print('timiter Yo,Xo,im.shape=',Yo,Xo,im.shape)
 
             tim = tims[itim]
-            
+
             # invvar-weighted image
             cowimg[Yo,Xo] += iv * im
             cow   [Yo,Xo] += iv
@@ -181,6 +190,12 @@ def make_coadds(tims, bands, targetwcs,
                     andmask[Yo,Xo] &= dq
                 # raw exposure count
                 nobs[Yo,Xo] += 1
+                #each tim has N galaxy sims, store largest bounding box of each galaxy sim 
+                for cnt_sim in range(C.T.sims_xy.shape[0]): 
+                    C.T.sims_xy[cnt_sim,0]= min(C.T.sims_xy[cnt_sim,0],tims[itim].sims_xy[cnt_sim,0])
+                    C.T.sims_xy[cnt_sim,2]= min(C.T.sims_xy[cnt_sim,2],tims[itim].sims_xy[cnt_sim,2])
+                    C.T.sims_xy[cnt_sim,1]= max(C.T.sims_xy[cnt_sim,1],tims[itim].sims_xy[cnt_sim,1])
+                    C.T.sims_xy[cnt_sim,3]= max(C.T.sims_xy[cnt_sim,3],tims[itim].sims_xy[cnt_sim,3])
 
             if psfsize:
                 # psfnorm is in units of 1/pixels.
@@ -203,7 +218,7 @@ def make_coadds(tims, bands, targetwcs,
             if ngood:
                 congood[Yo,Xo] += (iv > 0)
 
-            if mods:
+            if mods is not None:
                 # straight-up
                 comod[Yo,Xo] += goodpix * mo
                 # invvar-weighted
@@ -215,11 +230,10 @@ def make_coadds(tims, bands, targetwcs,
 
             del Yo,Xo,im,iv
             # END of loop over tims
-
         # Per-band:
         cowimg /= np.maximum(cow, tinyw)
         C.coimgs.append(cowimg)
-        if mods:
+        if mods is not None:
             cowmod  /= np.maximum(cow, tinyw)
             C.comods.append(cowmod)
             coresid = cowimg - cowmod
@@ -230,7 +244,7 @@ def make_coadds(tims, bands, targetwcs,
             coimg  /= np.maximum(con, 1)
             del con
             cowimg[cow == 0] = coimg[cow == 0]
-            if mods:
+            if mods is not None:
                 cowmod[cow == 0] = comod[cow == 0]
 
         if xy:
@@ -243,7 +257,10 @@ def make_coadds(tims, bands, targetwcs,
             if detmaps:
                 C.T.depth   [:,iband] =    detiv[iy, ix]
                 C.T.galdepth[:,iband] = galdetiv[iy, ix]
-
+            #galxy sim bounding boxes are ints, not floats
+            assert(np.all(np.isinf(C.T.sims_xy) == False)) #every element is not a np.inf
+            C.T.sims_xy= C.T.sims_xy.astype(int)
+        
         if psfsize:
             wt = cow[iy,ix]
             # psfsizemap is in units of iv * (1 / arcsec**2)
@@ -269,7 +286,7 @@ def make_coadds(tims, bands, targetwcs,
 
             for irad,rad in enumerate(apertures):
                 apargs.append((irad, band, rad, coimg, imsigma, True, apxy))
-                if mods:
+                if mods is not None:
                     apargs.append((irad, band, rad, coresid, None, False, apxy))
 
         if callback is not None:
@@ -291,7 +308,7 @@ def make_coadds(tims, bands, targetwcs,
         for iband,band in enumerate(bands):
             apimg = []
             apimgerr = []
-            if mods:
+            if mods is not None:
                 apres = []
             for irad,rad in enumerate(apertures):
                 (airad, aband, isimg, ap_img, ap_err) = apresults.next()
@@ -301,7 +318,7 @@ def make_coadds(tims, bands, targetwcs,
                 apimg.append(ap_img)
                 apimgerr.append(ap_err)
     
-                if mods:
+                if mods is not None:
                     (airad, aband, isimg, ap_img, ap_err) = apresults.next()
                     assert(airad == irad)
                     assert(aband == band)
@@ -315,7 +332,7 @@ def make_coadds(tims, bands, targetwcs,
             ap = 1./(np.vstack(apimgerr).T)**2
             ap[np.logical_not(np.isfinite(ap))] = 0.
             C.AP.set('apflux_img_ivar_%s' % band, ap)
-            if mods:
+            if mods is not None:
                 ap = np.vstack(apres).T
                 ap[np.logical_not(np.isfinite(ap))] = 0.
                 C.AP.set('apflux_resid_%s' % band, ap)

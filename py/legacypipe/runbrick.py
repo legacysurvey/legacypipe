@@ -686,6 +686,25 @@ def stage_image_coadds(survey=None, targetwcs=None, bands=None, tims=None,
                     callback_args=(survey, brickname, version_header, tims, targetwcs),
                     mp=mp)
 
+    #coadds of galaxy sims only, image only
+    sims_mods= np.array([tim.sims_image for tim in tims])
+    T_sims_coadds = make_coadds(tims, bands, targetwcs, mods=sims_mods,
+                    detmaps=True, lanczos=lanczos,
+                    callback=write_coadd_images,
+                    callback_args=(survey, brickname, version_header, tims, targetwcs),
+                    mp=mp)
+    sims_coadd= T_sims_coadds.comods
+    del T_sims_coadds
+    image_only_mods= np.array([tim.data-tim.sims_image for tim in tims])
+    T_image_coadds = make_coadds(tims, bands, targetwcs, mods=image_only_mods,
+                    detmaps=True, lanczos=lanczos,
+                    callback=write_coadd_images,
+                    callback_args=(survey, brickname, version_header, tims, targetwcs),
+                    mp=mp)
+    image_coadd= T_image_coadds.comods
+    del T_image_coadds
+    ########
+
     # if plots:
     #     for k,v in CP_DQ_BITS.items():
     #         plt.clf()
@@ -746,6 +765,8 @@ def stage_image_coadds(survey=None, targetwcs=None, bands=None, tims=None,
     #rgbkwargs2 = dict(mnmx=(-3., 3.))
     #rgbkwargs2 = dict(mnmx=(-2., 10.))
     for name,ims,rgbkw in [('image',C.coimgs,rgbkwargs),
+                           ('simscoadd', sims_coadd, rgbkwargs),
+                           ('imagecoadd', image_coadd, rgbkwargs),
         #('image2',C.coimgs,rgbkwargs2),
                            ]:
         rgb = get_rgb(ims, bands, **rgbkw)
@@ -1941,7 +1962,7 @@ def stage_coadds(survey=None, bands=None, version_header=None, targetwcs=None,
     primhdr.add_record(dict(name='PRODTYPE', value='ccdinfo',
                             comment='NOAO data product type'))
     with survey.write_output('ccds-table', brick=brickname) as out:
-        ccds.writeto(out.fn, primheader=primhdr) #KJB
+        ccds.writeto(out.fn, primheader=primhdr) 
         print('Wrote', out.fn)
 
     tnow = Time()
@@ -1985,9 +2006,32 @@ def stage_coadds(survey=None, bands=None, version_header=None, targetwcs=None,
                     callback=write_coadd_images,
                     callback_args=(survey, brickname, version_header, tims, targetwcs),
                     plots=False, ps=ps, mp=mp)
+    
+    #coadds of galaxy sims only, image only
+    sims_mods= np.array([tim.sims_image for tim in tims])
+    T_sims_coadds = make_coadds(tims, bands, targetwcs, mods=sims_mods, xy=(ix,iy),
+                    ngood=True, detmaps=True, psfsize=True, lanczos=lanczos,
+                    apertures=apertures, apxy=apxy,
+                    callback=write_coadd_images,
+                    callback_args=(survey, brickname, version_header, tims, targetwcs),
+                    plots=False, ps=ps, mp=mp)
+    sims_coadd= T_sims_coadds.comods
+    del T_sims_coadds
+    image_only_mods= np.array([tim.data-tim.sims_image for tim in tims])
+    T_image_coadds = make_coadds(tims, bands, targetwcs, mods=image_only_mods, xy=(ix,iy),
+                    ngood=True, detmaps=True, psfsize=True, lanczos=lanczos,
+                    apertures=apertures, apxy=apxy,
+                    callback=write_coadd_images,
+                    callback_args=(survey, brickname, version_header, tims, targetwcs),
+                    plots=False, ps=ps, mp=mp)
+    image_coadd= T_image_coadds.comods
+    del T_image_coadds
+    ######
 
     for c in ['nobs', 'anymask', 'allmask', 'psfsize', 'depth', 'galdepth']:
         T.set(c, C.T.get(c))
+    #store galaxy sim bounding box in Tractor cat
+    T.set('sims_xy', C.T.get('sims_xy'))
 
     if apertures is None:
         # empty table when 0 sources.
@@ -2046,6 +2090,8 @@ def stage_coadds(survey=None, bands=None, version_header=None, targetwcs=None,
     for name,ims,rgbkw in [('image', C.coimgs,   rgbkwargs),
                            ('model', C.comods,   rgbkwargs),
                            ('resid', C.coresids, rgbkwargs_resid),
+                           ('simscoadd', sims_coadd, rgbkwargs),
+                           ('imagecoadd', image_coadd, rgbkwargs),
                            ]:
         rgb = get_rgb(ims, bands, **rgbkw)
         kwa = {}
@@ -2324,6 +2370,14 @@ def stage_writecat(
     from desi_common import prepare_fits_catalog
     from tractor.sfd import SFDMap
     
+    #write galaxy sims info to its own fits file
+    sims_data=fits_table()
+    sims_data.set('sims_xy',T.get('sims_xy'))
+    sims_fn = survey.find_file('galaxy-sims', output=True, brick=brickname)
+    sims_data.writeto(sims_fn)
+    print('Wrote',sims_fn)
+    #######
+    
     fs = None
     TT = T.copy()
     for k in ['itx','ity','index']:
@@ -2562,6 +2616,7 @@ def stage_writecat(
             cols[i] = cc[j]
 
     with survey.write_output('tractor', brick=brickname) as out:
+        print('tractor cat data, fn=', out.fn)
         T2.writeto(out.fn, primheader=primhdr, header=hdr, columns=cols)
         print('Wrote', out.fn)
 
@@ -2882,6 +2937,7 @@ def run_brick(brick, survey, radec=None, pixscale=0.262,
         initargs.update(bands=bands)
 
     t0 = Time()
+    
     def mystagefunc(stage, **kwargs):
         # Update the (pickled) survey output directory...
         picsurvey = kwargs.get('survey',None)

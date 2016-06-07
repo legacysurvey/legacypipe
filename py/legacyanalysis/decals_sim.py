@@ -29,7 +29,6 @@ per square arcminute:
 IDL> print, 50*3600.0*0.25^2
       11250.0 ; sources over a whole brick
 """
-
 from __future__ import division, print_function
 
 import matplotlib
@@ -57,12 +56,12 @@ from legacypipe.runbrick import run_brick
 from legacypipe.decam import DecamImage
 from legacypipe.common import LegacySurveyData, wcs_for_brick, ccds_touching_wcs
 
+
 class SimDecals(LegacySurveyData):
     def __init__(self, survey_dir=None, metacat=None, simcat=None, output_dir=None):
         super(SimDecals, self).__init__(survey_dir=survey_dir, output_dir=output_dir)
         self.metacat = metacat
         self.simcat = simcat
-        #add +fakes string to camera to signal SimDecas
 
     def get_image_object(self, t):
         return SimImage(self, t)
@@ -73,9 +72,6 @@ class SimImage(DecamImage):
         self.t = t
 
     def get_tractor_image(self, **kwargs):
-        #print('being called in SimImage, quitting')
-        #print('self.imgfn=',self.imgfn)
-        #sys.exit()
         tim = super(SimImage, self).get_tractor_image(**kwargs)
         if tim is None: # this can be None when the edge of a CCD overlaps
             return tim
@@ -99,6 +95,7 @@ class SimImage(DecamImage):
         # N sims, 4 box corners (xmin,xmax,ymin,ymax) for each sim
         tim.sims_xylim = np.empty((len(self.survey.simcat),4))+np.nan 
 
+        #store simulated galaxy images in tim object 
         # Loop on each object.
         for ii, obj in enumerate(self.survey.simcat):
             #print(obj)
@@ -148,7 +145,6 @@ class SimImage(DecamImage):
         #print('HACK!!!')
         #galsim.fits.write(invvar, 'invvar.fits'.format(ii), clobber=True)
         #import pdb ; pdb.set_trace()
-
         return tim
 
 class BuildStamp():
@@ -391,6 +387,9 @@ def main():
                         help='r-band magnitude range')
     parser.add_argument('--all-blobs', action='store_true', 
                         help='Process all the blobs, not just those that contain simulated sources.')
+    parser.add_argument('--stage', choices=['tims','image_coadds','srcs','fitblobs','coadds'], type=str,default='writecat',metavar='', 
+                        help='Run up to the given stage')
+    parser.add_argument('--early_coadds', action='store_true', help='add this option to make the jpgs before detection/model fitting')
     parser.add_argument('-v', '--verbose', action='store_true', 
                         help='toggle on verbose output')
 
@@ -517,8 +516,8 @@ def main():
 
         run_brick(brickname, simdecals, threads=args.threads, zoom=args.zoom,
                   wise=False, forceAll=True, writePickles=False, do_calibs=False,
-                  write_metrics=False, pixPsf=True, blobxy=blobxy, early_coadds=False,
-                  splinesky=True, ceres=False, stages=['writecat'], plots=False,
+                  write_metrics=False, pixPsf=True, blobxy=blobxy, early_coadds=args.early_coadds,
+                  splinesky=True, ceres=False, stages=[args.stage], plots=False,
                   plotbase='sim')
 
         #pdb.set_trace()
