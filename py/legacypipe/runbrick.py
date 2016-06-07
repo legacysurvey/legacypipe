@@ -2355,12 +2355,9 @@ def stage_writecat(
     #write galaxy sims info to its own fits file
     sims_data=fits_table()
     sims_data.set('sims_xy',T.get('sims_xy'))
-    #print('sims_xy' in T.get_columns())
-    #print('T.get_columns()= ',T.get_columns())
-    with survey.write_output('tractor', brick=brickname) as out:
-        print('sims_data fn=', out.fn)
-        #sims_data.writeto(out.fn.replace('-tractor-','-galsims-'))
-        #print('Wrote', out.fn)
+    sims_fn = survey.find_file('galaxy-sims', output=True, brick=brickname)
+    sims_data.writeto(sims_fn)
+    print('Wrote',sims_fn)
     #######
     
     fs = None
