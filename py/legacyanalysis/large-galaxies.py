@@ -91,12 +91,12 @@ def read_rc3():
     catdir = os.getenv('CATALOGS_DIR')
     cat = fits.getdata(os.path.join(catdir, 'rc3', 'rc3_catalog.fits'), 1)
 
-    # For testing -- randomly pre-select a subset of galaxies.
-    nobj = 500
-    seed = 5781
-    rand = np.random.RandomState(seed)
-    these = rand.randint(0, len(cat)-1, nobj)
-    cat = cat[these]
+    ## For testing -- randomly pre-select a subset of galaxies.
+    #nobj = 500
+    #seed = 5781
+    #rand = np.random.RandomState(seed)
+    #these = rand.randint(0, len(cat)-1, nobj)
+    #cat = cat[these]
 
     outcat = _catalog_template(len(cat))
     outcat['RA'] = cat['RA']
@@ -113,6 +113,11 @@ def read_rc3():
         need = np.where(outcat['GALAXY'] == '')[0]
         if len(need) > 0:
             outcat['GALAXY'][need] = cat[name][need].replace(' ', '')
+
+    # Temporarily cull the sample.
+    these = np.where((outcat['RADIUS'] > 20)*(outcat['RADIUS'] < 25))[0]
+    outcat = outcat[these] 
+    #pdb.set_trace()
 
     return outcat
 
