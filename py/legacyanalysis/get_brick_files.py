@@ -41,6 +41,8 @@ def getbrickfiles(brickname=None):
     #print(np.array(psffiles))
     #print(np.array(skyfiles))
 
+    return imagefiles, psffiles, skyfiles
+
 def main():
 
     parser = argparse.ArgumentParser()
@@ -48,6 +50,7 @@ def main():
     args = parser.parse_args()
 
     imagefiles, psffiles, skyfiles = getbrickfiles(args.brickname)
+    nccd = len(psffiles)
 
     brickfiles = open('/tmp/brickfiles.txt', 'w')
     for ii in range(nccd):

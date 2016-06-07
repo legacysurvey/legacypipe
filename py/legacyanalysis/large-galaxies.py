@@ -11,28 +11,27 @@ from __future__ import division, print_function
 
 import os
 import sys
-import argparse
 import pdb
+import argparse
 
 import numpy as np
-import logging as log
-
 import matplotlib.pyplot as plt
 
-from astrometry.util.util import Tan
-from astrometry.util.fits import fits_table, merge_tables
-
-from legacypipe.common import bricks_touching_wcs, ccds_touching_wcs, LegacySurveyData
-
-from legacyanalysis.get_brick_files import getbrickfiles
-
 from astropy.io import fits
-from astropy.table import Table
-import matplotlib as mpl
+from astropy.table import Table, vstack
 
-def _getfiles(ccdinfo):
-    '''Construct image file names and the calibration file names.'''
+from astrometry.util.util import Tan
+from astrometry.util.fits import merge_tables
+from legacypipe.common import ccds_touching_wcs, LegacySurveyData
 
+def _getfiles(ccds):
+    '''Figure out the set of images and calibration files we need to transfer, if any.'''
+
+    ccdfile = []
+    [ccdfile.append('{}-{}'.format(expnum, ccdname)) for expnum, ccdname in zip(ccds.expnum, ccds.ccdname)]
+    _, indx = np.unique(ccdfile, return_index=True)
+
+    ccdinfo = ccds[indx]
     nccd = len(ccdinfo)
 
     expnum = ccdinfo.expnum
@@ -65,6 +64,58 @@ def _getfiles(ccdinfo):
     print('You should run the following command:')
     print('  {}'.format(cmd))
 
+def _catalog_template(nobj=1):
+    from astropy.table import Table
+    cols = [
+        ('GALAXY', 'S20'), 
+        ('RA', 'f8'), 
+        ('DEC', 'f8'),
+        ('RADIUS', 'f4')
+        ]
+    catalog = Table(np.zeros(nobj, dtype=cols))
+    catalog['RADIUS'].unit = 'arcsec'
+
+    return catalog
+
+def _simplewcs(gal):
+    '''Build a simple WCS object for a single galaxy.'''
+    pixscale = 0.262 # average pixel scale [arcsec/pix]
+    diam = 4*np.ceil(gal['RADIUS']/3600.0) # [deg]
+    galwcs = Tan(gal['RA'], gal['DEC'], diam/2+0.5, diam/2+0.5,
+                 -pixscale, 0.0, pixscale, 0.0, 
+                 float(diam), float(diam))
+    return galwcs
+
+def read_rc3():
+    """Read the RC3 catalog and put it in a standard format."""
+    catdir = os.getenv('CATALOGS_DIR')
+    cat = fits.getdata(os.path.join(catdir, 'rc3', 'rc3_catalog.fits'), 1)
+
+    # For testing -- randomly pre-select a subset of galaxies.
+    nobj = 500
+    seed = 5781
+    rand = np.random.RandomState(seed)
+    these = rand.randint(0, len(cat)-1, nobj)
+    cat = cat[these]
+
+    outcat = _catalog_template(len(cat))
+    outcat['RA'] = cat['RA']
+    outcat['DEC'] = cat['DEC']
+    outcat['RADIUS'] = 0.1*10.0**cat['LOGD_25']*60.0/2.0 # semi-major axis diameter [arcsec]
+    fix = np.where(outcat['RADIUS'] == 0.0)[0]
+    if len(fix) > 0:
+        outcat['RADIUS'][fix] = 30.0
+    
+    #plt.hist(outcat['RADIUS'], bins=50, range=(1, 300))
+    #plt.show()
+
+    for name in ('NAME1', 'NAME2', 'NAME3', 'PGC'):
+        need = np.where(outcat['GALAXY'] == '')[0]
+        if len(need) > 0:
+            outcat['GALAXY'][need] = cat[name][need].replace(' ', '')
+
+    return outcat
+
 def main():
 
     parser = argparse.ArgumentParser()
@@ -74,87 +125,62 @@ def main():
     # Top-level directory
     key = 'LEGACY_SURVEY_LARGE_GALAXIES'
     if key not in os.environ:
-        log.fatal('Required ${} environment variable not set'.format(key))
+        print('Required ${} environment variable not set'.format(key))
         return 0
     largedir = os.getenv(key)
 
     # --------------------------------------------------
-    # Build the sample of "large" galaxies and identify the corresponding CCDs and bricks. 
+    # Build the sample of large galaxies based on the available imaging.
 
     if args.build_sample:
-        catdir = os.getenv('CATALOGS_DIR')
-        cat = fits_table(os.path.join(catdir, 'rc3', 'rc3_catalog.fits'))
-        #cat = fits.getdata(os.path.join(catdir, 'rc3', 'rc3_catalog.fits'), 1)
 
-        # Randomly pre-select 10 galaxies.
-        nobj = 30
-        seed = 5781
-        rand = np.random.RandomState(seed)
-        these = rand.randint(0, len(cat)-1, nobj)
-        cat = cat[these]
-
-        d25_maj = 0.1*10.0**cat.logd_25 # [arcmin]
-        #plt.hist(d25_maj, bins=50, range=(0.02,5))
-        #plt.show()
-
-        # For each object, create a simple WCS header and then find the unique
-        # set of bricks containing the galaxies.  We'll worry about galaxies
-        # spanning more than one brick later.
-
+        # Read the parent catalog.
+        cat = read_rc3()
+        
+        # Create a simple WCS object for each object and find all the CCDs
+        # touching that WCS footprint.
         survey = LegacySurveyData()
         allccds = survey.get_ccds()
-        keep = np.concatenate((survey.apply_blacklist(allccds), survey.photometric_ccds(allccds)))
+        keep = np.concatenate((survey.apply_blacklist(allccds),
+                               survey.photometric_ccds(allccds)))
         allccds.cut(keep)
 
-        #dr2bricks = survey.get_bricks_dr2()
-        #dr2bricks = dr2bricks[np.where((dr2bricks.nobs_med_g>0)*(dr2bricks.nobs_med_r>0)*
-        #                               (dr2bricks.nobs_med_z>0))[0]]
-        #print('Searching through {} bricks'.format(len(dr2bricks)))
-        
-        pixscale = 0.262 # average pixel scale [arcsec/pix]
-
         ccdlist = []
-        #bricklist = []
-        for ii, obj in enumerate(cat):
-            print('Finding bricks for {}/{}/{}, D(25)={:.4f}'.format(
-                cat[ii].name1.replace(' ',''),
-                cat[ii].name2.replace(' ',''), 
-                cat[ii].name3.replace(' ',''), d25_maj[ii]))
-            diam = 2*np.ceil(d25_maj[ii]/60) # [deg]
-            objwcs = Tan(obj.ra, obj.dec, diam/2+0.5, diam/2+0.5,
-                         -pixscale, 0.0, pixscale, 0.0,
-                         float(diam), float(diam))
-            ccds1 = allccds[ccds_touching_wcs(objwcs, allccds)]
-            #bricks1 = bricks_touching_wcs(objwcs, survey, dr2bricks)
-            #if len(bricks1)>0:
-            if len(ccds1)>0:
+        outcat = []
+        for gal in cat:
+            print('Finding CCDs for {}, D(25)={:.4f}'.format(
+                gal['GALAXY'], gal['RADIUS']))
+            galwcs = _simplewcs(gal)
+
+            ccds1 = allccds[ccds_touching_wcs(galwcs, allccds)]
+            if len(ccds1) > 0 and 'g' in ccds1.filter and 'r' in ccds1.filter and 'z' in ccds1.filter:
                 ccdlist.append(ccds1)
-                #bricklist.append(bricks1)
+                if len(outcat) == 0:
+                    outcat = gal
+                else:
+                    outcat = vstack((outcat, gal))
+                #if gal['GALAXY'].strip() == 'MCG-1-6-63':
+                #    pdb.set_trace()
 
-                # Build the url cutout for this galaxy
-                url = 'http://legacysurvey.org/viewer/jpeg-cutout-decals-dr2/?'+\
-                  'ra={:.4f}&dec={:.4f}&pixscale=0.262&size=500'.format(obj.ra, obj.dec)
-                print(url)
+        # Write out the final catalog.
+        outfile = os.path.join(largedir, 'large-galaxies-sample.fits')
+        if os.path.isfile(outfile):
+            os.remove(outfile)
+        print('Writing {}'.format(outfile))
+        outcat.write(outfile)
+        print(outcat)
 
-        # Merge, get the unique subset, and write out.
-        ccds = merge_tables(ccdlist)
-
-        ccdfile = []
-        [ccdfile.append('{}-{}'.format(expnum, ccdname)) for expnum, ccdname in zip(ccds.expnum, ccds.ccdname)]
-        _, indx = np.unique(ccdfile, return_index=True)
-        ccds[indx]
-        nccd = len(ccds)
-        
-        #bricks = merge_tables(bricklist)
-        #_, indx = np.unique(bricks.brickname, return_index=True)
-        #bricks = bricks[np.sort(indx)]
-
-        # Write out the table!
-
-        # Get the files
-        _getfiles(ccds)
+        # Do we need to transfer any of the data to nyx?
+        _getfiles(merge_tables(ccdlist))
 
         pdb.set_trace()
+
+        # # Build the url cutout for this galaxy
+        # url = 'http://legacysurvey.org/viewer/jpeg-cutout-decals-dr2/?'+\
+        #   'ra={:.4f}&dec={:.4f}&pixscale=0.262&size=500'.format(obj.ra, obj.dec)
+        # print(url)
+
+
         
 if __name__ == "__main__":
     main()
