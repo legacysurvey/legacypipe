@@ -5,14 +5,17 @@ from astrometry.util.util import *
 from astrometry.util.plotutils import PlotSequence
 import fitsio
 
-from legacypipe.runbrick import run_brick, rgbkwargs
+from legacypipe.runbrick import run_brick, rgbkwargs, rgbkwargs_resid
 from legacypipe.common import LegacySurveyData
 from legacypipe.image import LegacySurveyImage
 
 from tractor.sky import ConstantSky
 from tractor.sfd import SFDMap
 
-rgbkwargs.update(scales=dict(I=(0, 0.01)))
+rgbscales = dict(I=(0, 0.01))
+rgbkwargs      .update(scales=rgbscales)
+rgbkwargs_resid.update(scales=rgbscales)
+
 SFDMap.extinctions.update({'DES I': 1.592})
 
 
@@ -71,10 +74,15 @@ def make_zeropoints():
         C.ra.append(rc)
         C.dec.append(dc)
 
+        psffn = fn.replace('_sci.VISRES.fits', '_sci.VISRES_psfex.psf')
+        psfhdr = fitsio.read_header(psffn, ext=1)
+        fwhm = psfhdr['PSF_FWHM']
+        
         C.ccdname.append('0')
         C.ccdraoff.append(0.)
         C.ccddecoff.append(0.)
-        C.fwhm.append(0.3)
+        #C.fwhm.append(0.18 / 0.1)
+        C.fwhm.append(fwhm)
         C.propid.append('0')
         C.mjd_obs.append(0.)
         
@@ -94,6 +102,9 @@ class AcsVisImage(LegacySurveyImage):
         self.wtfn = self.imgfn.replace('_sci', '_wht')
         assert(self.wtfn != self.imgfn)
 
+        self.dqfn = self.imgfn.replace('_sci', '_flg')
+        assert(self.dqfn != self.imgfn)
+        
         self.name = 'AcsVisImage: expnum %i' % self.expnum
 
         self.dq_saturation_bits = 0
@@ -115,14 +126,32 @@ class AcsVisImage(LegacySurveyImage):
         '''
         Reads the inverse-variance (weight) map image.
         '''
-        return self._read_fits(self.wtfn, self.hdu, **kwargs)
+        #return self._read_fits(self.wtfn, self.hdu, **kwargs)
 
+        img = self.read_image(**kwargs)
+        # # Estimate per-pixel noise via Blanton's 5-pixel MAD
+        slice1 = (slice(0,-5,10),slice(0,-5,10))
+        slice2 = (slice(5,None,10),slice(5,None,10))
+        mad = np.median(np.abs(img[slice1] - img[slice2]).ravel())
+        sig1 = 1.4826 * mad / np.sqrt(2.)
+        print('sig1 estimate:', sig1)
+        invvar = np.ones_like(img) / sig1**2
+        return invvar
+        
+    def read_dq(self, **kwargs):
+        '''
+        Reads the Data Quality (DQ) mask image.
+        '''
+        print('Reading data quality image', self.dqfn, 'ext', self.hdu)
+        dq = self._read_fits(self.dqfn, self.hdu, **kwargs)
+        return dq
+        
     def read_sky_model(self, splinesky=False, slc=None, **kwargs):
         sky = ConstantSky(0.)
         return sky
     
 if __name__ == '__main__':
-    #make_zeropoints()
+    make_zeropoints()
 
     survey = LegacySurveyData(survey_dir='euclid', output_dir='euclid-out')
     survey.image_typemap['acs-vis'] = AcsVisImage
