@@ -36,8 +36,8 @@ lp,lt = [],[]
 
 allra = []
 alldec = []
-allq = []
 allstate = []
+alltasks = []
 
 for state in qdo.Task.VALID_STATES:
     print('State', state)
@@ -76,9 +76,9 @@ for state in qdo.Task.VALID_STATES:
 
     allra.append(ra)
     alldec.append(dec)
-    #allq.append(brickq)
     allstate.append([state] * len(ra))
-
+    alltasks.append(tasks)
+    
 # HACK
 plt.xlim([-45, 65])
 plt.figlegend(lp, lt, 'upper right')
@@ -87,6 +87,7 @@ plt.savefig('status.png')
 ra = np.hstack(allra)
 dec = np.hstack(alldec)
 state = np.hstack(allstate)
+tasks = np.hstack(alltasks)
 
 # Match to actual table of bricks to get brickq.
 survey = LegacySurveyData()
@@ -97,15 +98,23 @@ print(len(I), 'matches')
 ra = ra[I]
 dec = dec[I]
 state = state[I]
+tasks = tasks[I]
 brickq = bricks.brickq[J]
 
 for q in [0,1,2,3]:
+
+    print()
+    print('Brickq', q)
     plt.clf()
     lp,lt = [],[]
     for s in qdo.Task.VALID_STATES:
         I = np.flatnonzero((brickq == q) * (state == s))
         if len(I) == 0:
             continue
+
+        print('State', s)
+        #if len(I) < 10:
+        print('  tasks', [t.task for t in tasks[I[:10]]], '...' if len(I) > 10 else '')
         
         p = plt.plot(ra[I], dec[I], '.', color=cmap.get(s, 'y'))
         lp.append(p[0])
