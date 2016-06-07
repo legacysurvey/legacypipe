@@ -151,7 +151,10 @@ def make_coadds(tims, bands, targetwcs,
             psfsizemap = np.zeros((H,W), np.float32)
 
         #begin loop over tims, store max(sims_xy) for each sims object
-        #C.T.sims_xy = np.zeros((, len(bands)), np.int16)
+        C.T.sims_xy = np.zeros(tims[0].sims_xy.shape) #Nx4 array, xmin,xmax,ymin,ymax, of extends for the N galaxy sims
+        assert(C.T.sims_xy.shape[1] == 4)
+        C.T.sims_xy[:,[0,2]]= np.inf #xmin=min(+inf,xmin)
+        C.T.sims_xy[:,[1,3]]= -np.inf #xmax=max(-inf,xmax)...
         for R in timiter:
             if R is None:
                 continue
@@ -160,8 +163,14 @@ def make_coadds(tims, bands, targetwcs,
             print('timiter Yo,Xo,im.shape=',Yo,Xo,im.shape)
 
             tim = tims[itim]
-            print('print ****itim=',itim,' ****') #tim.data.shape= ',tim.data.shape,'tim.sims_xylim.shape= ',tim.sims_xylim.shape,'tim.sims_xylim=',tim.sims_xylim)
-            
+            #each tim has N galaxy sims, store largest bounding box of each galaxy sim 
+            for cnt_sim in range(C.T.sims_xy.shape[0]): 
+                C.T.sims_xy[cnt_sim,0]= min(C.T.sims_xy[cnt_sim,0],tims[itim].sims_xy[cnt_sim,0])
+                C.T.sims_xy[cnt_sim,2]= min(C.T.sims_xy[cnt_sim,2],tims[itim].sims_xy[cnt_sim,2])
+                C.T.sims_xy[cnt_sim,1]= max(C.T.sims_xy[cnt_sim,1],tims[itim].sims_xy[cnt_sim,1])
+                C.T.sims_xy[cnt_sim,3]= max(C.T.sims_xy[cnt_sim,3],tims[itim].sims_xy[cnt_sim,3])
+            #######
+
             # invvar-weighted image
             cowimg[Yo,Xo] += iv * im
             cow   [Yo,Xo] += iv
@@ -222,7 +231,9 @@ def make_coadds(tims, bands, targetwcs,
 
             del Yo,Xo,im,iv
             # END of loop over tims
-
+        #galxy sim bounding boxes are ints, not floats
+        assert(np.all(np.isinf(C.T.sims_xy) == False)) #every element is not a np.inf
+        C.T.sims_xy= C.T.sims_xy.astype(int)
         # Per-band:
         cowimg /= np.maximum(cow, tinyw)
         C.coimgs.append(cowimg)

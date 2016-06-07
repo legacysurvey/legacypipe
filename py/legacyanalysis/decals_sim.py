@@ -90,7 +90,7 @@ class SimImage(DecamImage):
         sims_image= image.copy() #sum of sims image
         sims_image.fill(0.) 
         sims_ivar= sims_image.copy() 
-        tim.sims_xylim= np.empty((len(self.survey.simcat),4))+np.nan #N sims, 4 box corners (xmin,xmax,ymin,ymax) for each sim
+        tim.sims_xy= np.empty((len(self.survey.simcat),4))+np.nan #N sims, 4 box corners (xmin,xmax,ymin,ymax) for each sim
         #sys.exit(1)
 
         #store simulated galaxy images in tim object 
@@ -115,7 +115,7 @@ class SimImage(DecamImage):
                 #sum sims and invvar for sims
                 sims_image[overlap] += stamp #just sim, they are ADDED over the whole image
                 sims_ivar[overlap] += ivarstamp
-                tim.sims_xylim[ii,:]= [overlap.xmin-1,overlap.xmax-1,overlap.ymin-1,overlap.ymax-1] #-1 b/c galsim 1st index is 1
+                tim.sims_xy[ii,:]= [overlap.xmin-1,overlap.xmax-1,overlap.ymin-1,overlap.ymax-1] #-1 b/c galsim 1st index is 1
 
                 if np.min(invvar.array)<0:
                     print('Negative invvar!')
@@ -124,15 +124,15 @@ class SimImage(DecamImage):
         assert(sims_ivar.array.shape == invvar.array.shape)
         tim.sims_image= sims_image.array
         tim.sims_inverr= np.sqrt(sims_ivar.array)
-        tim.sims_xylim= tim.sims_xylim.astype(int)
+        tim.sims_xy= tim.sims_xy.astype(int)
         tim.data = image.array + sims_image.array
         tim.inverr = np.sqrt(invvar.array + sims_ivar.array)
         #plot image,image regions where have sims, just sims as 3 plot panel with yellow boxes
         #basename= plots.get_basename(self.imgfn)
         #plots.image_v_stamp([tim.data,tim.data-tim.sims_image,tim.sims_image], \
-        #                    xy_lim= tim.sims_xylim, name=os.path.join(self.survey.output_dir,"image_v_stamp_%s.png" % basename))
+        #                    xy_lim= tim.sims_xy, name=os.path.join(self.survey.output_dir,"image_v_stamp_%s.png" % basename))
         #plots.image_v_stamp([np.power(tim.inverr,-1),np.power(tim.sims_inverr,-1)], \
-        #                    xy_lim= tim.sims_xylim, titles=['image_std','sims_std'],\
+        #                    xy_lim= tim.sims_xy, titles=['image_std','sims_std'],\
                             #name=os.path.join(self.survey.output_dir,"std_%s.png" % basename))
         #print('exiting early')
         #sys.exit()
