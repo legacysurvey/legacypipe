@@ -266,8 +266,8 @@ class LegacySurveyImage(object):
             img -= skymod
             midsky = np.median(skymod)
             zsky = ConstantSky(0.)
-            zsky.version = sky.version
-            zsky.plver = sky.plver
+            zsky.version = getattr(sky, 'version', '')
+            zsky.plver = getattr(sky, 'plver', '')
             del skymod
             sky = zsky
             del zsky
@@ -355,9 +355,9 @@ class LegacySurveyImage(object):
         tim.primhdr = primhdr
         tim.hdr = imghdr
         tim.plver = primhdr.get('PLVER','').strip()
-        tim.skyver = (sky.version, sky.plver)
-        tim.wcsver = (wcs.version, wcs.plver)
-        tim.psfver = (psf.version, psf.plver)
+        tim.skyver = (getattr(sky, 'version', ''), getattr(sky, 'plver', ''))
+        tim.wcsver = (getattr(wcs, 'version', ''), getattr(wcs, 'plver', ''))
+        tim.psfver = (getattr(psf, 'version', ''), getattr(psf, 'plver', ''))
         if get_dq:
             tim.dq = dq
         tim.dq_saturation_bits = self.dq_saturation_bits
@@ -480,6 +480,7 @@ class LegacySurveyImage(object):
             while True:
                 line = h[:80]
                 h = h[80:]
+                #print('Header line "%s"' % line)
                 # HACK -- fitsio apparently can't handle CONTINUE.
                 # It also has issues with slightly malformed cards, like
                 # KEYWORD  =      / no value
@@ -491,6 +492,8 @@ class LegacySurveyImage(object):
                               line.strip())
                 if line == ('END' + ' '*77):
                     foundEnd = True
+                    break
+                if len(h) < 80:
                     break
             if foundEnd:
                 break

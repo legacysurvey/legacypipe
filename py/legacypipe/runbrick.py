@@ -772,8 +772,7 @@ def stage_image_coadds(survey=None, targetwcs=None, bands=None, tims=None,
         rgb = get_rgb(ims, bands, **rgbkw)
         kwa = {}
         if coadd_bw and len(bands) == 1:
-            i = 'zrg'.index(bands[0])
-            rgb = rgb[:,:,i]
+            rgb = rgb.sum(axis=2)
             kwa = dict(cmap='gray')
 
         with survey.write_output(name + '-jpeg', brick=brickname) as out:
@@ -2648,6 +2647,7 @@ def run_brick(brick, survey, radec=None, pixscale=0.262,
               width=3600, height=3600,
               zoom=None,
               bands=None,
+              allbands=None,
               blacklist=True,
               nblobs=None, blob=None, blobxy=None,
               pipe=True, nsigma=6,
@@ -2809,6 +2809,9 @@ def run_brick(brick, survey, radec=None, pixscale=0.262,
     if forceAll:
         kwargs.update(forceall=True)
 
+    if allbands is not None:
+        kwargs.update(allbands=allbands)
+        
     if radec is not None:
         print('RA,Dec:', radec)
         assert(len(radec) == 2)
