@@ -22,6 +22,8 @@ from astropy.table import Table, vstack
 
 from astrometry.util.util import Tan
 from astrometry.util.fits import merge_tables
+
+from legacypipe.runbrick import run_brick
 from legacypipe.common import ccds_touching_wcs, LegacySurveyData
 
 PIXSCALE = 0.262 # average pixel scale [arcsec/pix]
@@ -131,6 +133,7 @@ def main():
     parser.add_argument('--build-sample', action='store_true', help='Build the sample.')
     parser.add_argument('--jpg-cutouts', action='store_true', help='Get jpg cutouts from the viewer.')
     parser.add_argument('--ccd-cutouts', action='store_true', help='Get CCD cutouts of each galaxy.')
+    parser.add_argument('--runbrick', action='store_true', help='Run the pipeline.')
     parser.add_argument('--build-webpage', action='store_true', help='(Re)build the web content.')
     args = parser.parse_args()
 
@@ -263,12 +266,25 @@ def main():
             ccdsfile = os.path.join(largedir, 'ccds', '{}-ccds.fits'.format(galaxy))
             ccds = fits.getdata(ccdsfile)
 
-        run_brick(brickname, survey=simdecals, outdir=os.path.join(decals_sim_dir,brickname),
-                                    threads=args.threads, zoom=args.zoom, wise=False,
-                                                      forceAll=True, writePickles=False, do_calibs=True,
-                                                                        write_metrics=False, pixPsf=True, blobxy=blobxy,
-                                                                                          early_coadds=False, stages=['writecat'], splinesky=True)
-        
+            pdb.set_trace()
+
+    # --------------------------------------------------
+    # Run the pipeline.
+    if args.runbrick:
+        sample = fits.getdata(samplefile, 1)
+
+        for gal in sample[1:2]:
+            galaxy = gal['GALAXY'].strip().lower()
+            diam = 10*np.ceil(gal['RADIUS']/PIXSCALE).astype('int16') # [pixels]
+
+            # Note: zoom is relative to the center of an imaginary brick with
+            # dimensions (0, 3600, 0, 3600).
+            survey = LegacySurveyData(version='dr2', output_dir=largedir)
+            run_brick(None, survey, radec=(gal['RA'], gal['DEC']), 
+                      threads=1, zoom=(1800-diam/2, 1800+diam/2, 1800-diam/2, 1800+diam/2),
+                      wise=False, forceAll=True, writePickles=False, do_calibs=False,
+                      write_metrics=False, pixPsf=True, splinesky=True, 
+                      early_coadds=True, stages=['writecat'], ceres=False)
 
             pdb.set_trace()
 
