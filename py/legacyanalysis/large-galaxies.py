@@ -24,14 +24,20 @@ from astrometry.util.util import Tan
 from astrometry.util.fits import merge_tables
 from legacypipe.common import ccds_touching_wcs, LegacySurveyData
 
+PIXSCALE = 0.262 # average pixel scale [arcsec/pix]
+
+def _uniqccds(ccds):
+    '''Get the unique set of CCD files.'''
+    ccdfile = []
+    [ccdfile.append('{}-{}'.format(expnum, ccdname)) for expnum,
+     ccdname in zip(ccds.expnum, ccds.ccdname)]
+    _, indx = np.unique(ccdfile, return_index=True)
+    return indx
+
 def _getfiles(ccds):
     '''Figure out the set of images and calibration files we need to transfer, if any.'''
 
-    ccdfile = []
-    [ccdfile.append('{}-{}'.format(expnum, ccdname)) for expnum, ccdname in zip(ccds.expnum, ccds.ccdname)]
-    _, indx = np.unique(ccdfile, return_index=True)
-
-    ccdinfo = ccds[indx]
+    ccdinfo = ccds[_uniqccds(ccds)]
     nccd = len(ccdinfo)
 
     expnum = ccdinfo.expnum
@@ -79,10 +85,9 @@ def _catalog_template(nobj=1):
 
 def _simplewcs(gal):
     '''Build a simple WCS object for a single galaxy.'''
-    pixscale = 0.262 # average pixel scale [arcsec/pix]
-    diam = 4*np.ceil(gal['RADIUS']/3600.0) # [deg]
+    diam = np.ceil(gal['RADIUS']/PIXSCALE).astype('int16') # [pixels]
     galwcs = Tan(gal['RA'], gal['DEC'], diam/2+0.5, diam/2+0.5,
-                 -pixscale, 0.0, pixscale, 0.0, 
+                 -PIXSCALE, 0.0, PIXSCALE, 0.0, 
                  float(diam), float(diam))
     return galwcs
 
@@ -117,7 +122,6 @@ def read_rc3():
     # Temporarily cull the sample.
     these = np.where((outcat['RADIUS'] > 20)*(outcat['RADIUS'] < 25))[0]
     outcat = outcat[these] 
-    #pdb.set_trace()
 
     return outcat
 
@@ -125,6 +129,9 @@ def main():
 
     parser = argparse.ArgumentParser()
     parser.add_argument('--build-sample', action='store_true', help='Build the sample.')
+    parser.add_argument('--jpg-cutouts', action='store_true', help='Get jpg cutouts from the viewer.')
+    parser.add_argument('--ccd-cutouts', action='store_true', help='Get CCD cutouts of each galaxy.')
+    parser.add_argument('--build-webpage', action='store_true', help='(Re)build the web content.')
     args = parser.parse_args()
 
     # Top-level directory
@@ -133,6 +140,7 @@ def main():
         print('Required ${} environment variable not set'.format(key))
         return 0
     largedir = os.getenv(key)
+    samplefile = os.path.join(largedir, 'large-galaxies-sample.fits')
 
     # --------------------------------------------------
     # Build the sample of large galaxies based on the available imaging.
@@ -152,37 +160,117 @@ def main():
         ccdlist = []
         outcat = []
         for gal in cat:
-            print('Finding CCDs for {}, D(25)={:.4f}'.format(
-                gal['GALAXY'], gal['RADIUS']))
             galwcs = _simplewcs(gal)
 
             ccds1 = allccds[ccds_touching_wcs(galwcs, allccds)]
+            ccds1 = ccds1[_uniqccds(ccds1)]
+            
             if len(ccds1) > 0 and 'g' in ccds1.filter and 'r' in ccds1.filter and 'z' in ccds1.filter:
+                print('Found {} CCDs for {}, D(25)={:.4f}'.format(
+                    len(ccds1), gal['GALAXY'], gal['RADIUS']))
+                
+                ccdsfile = os.path.join(largedir, 'ccds', '{}-ccds.fits'.format(gal['GALAXY'].strip().lower()))
+                print('  Writing {}'.format(ccdsfile))
+                if os.path.isfile(ccdsfile):
+                    os.remove(ccdsfile)
+                ccds1.writeto(ccdsfile)
+                
                 ccdlist.append(ccds1)
                 if len(outcat) == 0:
                     outcat = gal
                 else:
                     outcat = vstack((outcat, gal))
-                #if gal['GALAXY'].strip() == 'MCG-1-6-63':
+                #if gal['GALAXY'] == 'MCG5-19-36':
                 #    pdb.set_trace()
 
         # Write out the final catalog.
-        outfile = os.path.join(largedir, 'large-galaxies-sample.fits')
-        if os.path.isfile(outfile):
-            os.remove(outfile)
-        print('Writing {}'.format(outfile))
-        outcat.write(outfile)
+        samplefile = os.path.join(largedir, 'large-galaxies-sample.fits')
+        if os.path.isfile(samplefile):
+            os.remove(samplefile)
+        print('Writing {}'.format(samplefile))
+        outcat.write(samplefile)
         print(outcat)
 
         # Do we need to transfer any of the data to nyx?
         _getfiles(merge_tables(ccdlist))
 
-        pdb.set_trace()
+    # --------------------------------------------------
+    # Get data, model, and residual cutouts from the legacysurvey viewer.  Also
+    # get thumbnails that are lower resolution.
+    if args.jpg_cutouts:
+        thumbsize = 100
+        sample = fits.getdata(samplefile, 1)
+        for gal in sample:
+            size = np.ceil(10*gal['RADIUS']/PIXSCALE)
+            thumbpixscale = PIXSCALE*size/thumbsize
 
-        # # Build the url cutout for this galaxy
-        # url = 'http://legacysurvey.org/viewer/jpeg-cutout-decals-dr2/?'+\
-        #   'ra={:.4f}&dec={:.4f}&pixscale=0.262&size=500'.format(obj.ra, obj.dec)
-        # print(url)
+            #imageurl = 'http://legacysurvey.org/viewer/jpeg-cutout-decals-dr2?ra={:.6f}&dec={:.6f}'.format(gal['RA'], gal['DEC'])+\
+            #  '&pixscale={:.3f}&size={:g}'.format(PIXSCALE, size)
+            #imagejpg = os.path.join(largedir, 'cutouts', gal['GALAXY'].strip().lower()+'-image.jpg')
+            #if os.path.isfile(imagejpg):
+            #    os.remove(imagejpg)
+            #os.system('wget --continue -O {:s} "{:s}"' .format(imagejpg, imageurl))
+
+            thumburl = 'http://legacysurvey.org/viewer/jpeg-cutout-decals-dr2?ra={:.6f}&dec={:.6f}'.format(gal['RA'], gal['DEC'])+\
+              '&pixscale={:.3f}&size={:g}'.format(thumbpixscale, thumbsize)
+            thumbjpg = os.path.join(largedir, 'cutouts', gal['GALAXY'].strip().lower()+'-image-thumb.jpg')
+            if os.path.isfile(thumbjpg):
+                os.remove(thumbjpg)
+            os.system('wget --continue -O {:s} "{:s}"' .format(thumbjpg, thumburl))
+
+    # --------------------------------------------------
+    # (Re)build the webpage.
+    if args.build_webpage:
+
+        # index.html
+        html = open(os.path.join(largedir, 'index.html'), 'w')
+        html.write('<html><body>\n')
+        html.write('<h1>Sample of Large Galaxies</h1>\n')
+        html.write('<table border="2" width="30%">\n')
+        html.write('<tbody>\n')
+        sample = fits.getdata(samplefile, 1)
+        for gal in sample:
+            # Add coordinates and sizes here.
+            galaxy = gal['GALAXY'].strip().lower()
+            html.write('<tr>\n')
+            html.write('<td><a href="html/{}.html">{}</a></td>\n'.format(galaxy, galaxy.upper()))
+            html.write('<td><a href="http://legacysurvey.org/viewer/?ra={:.6f}&dec={:.6f}" target="_blank"><img src=cutouts/{}-image-thumb.jpg alt={} /></a></td>\n'.format(gal['RA'], gal['DEC'], galaxy, galaxy.upper()))
+#           html.write('<td><a href="html/{}.html"><img src=cutouts/{}-image-thumb.jpg alt={} /></a></td>\n'.format(galaxy, galaxy, galaxy.upper()))
+            html.write('</tr>\n')
+        html.write('</tbody>\n')
+        html.write('</table>\n')
+        html.write('</body></html>\n')
+        html.close()
+
+        sys.exit(1)
+    
+        # individual galaxy pages
+        for gal in sample[:3]:
+            galaxy = gal['GALAXY'].strip().lower()
+            html = open(os.path.join(largedir, 'html/{}.html'.format(galaxy)), 'w')
+            html.write('<html><body>\n')
+            html.write('<a href=../cutouts/{}.jpg><img src=../cutouts/{}-image.jpg alt={} /></a>\n'.format(galaxy, galaxy, galaxy, galaxy.upper()))
+            html.write('</body></html>\n')
+            html.close()
+
+    # --------------------------------------------------
+    # Get cutouts of all the CCDs for each galaxy.
+    if args.ccd_cutouts:
+        sample = fits.getdata(samplefile, 1)
+
+        for gal in sample[1:2]:
+            galaxy = gal['GALAXY'].strip().lower()
+            ccdsfile = os.path.join(largedir, 'ccds', '{}-ccds.fits'.format(galaxy))
+            ccds = fits.getdata(ccdsfile)
+
+        run_brick(brickname, survey=simdecals, outdir=os.path.join(decals_sim_dir,brickname),
+                                    threads=args.threads, zoom=args.zoom, wise=False,
+                                                      forceAll=True, writePickles=False, do_calibs=True,
+                                                                        write_metrics=False, pixPsf=True, blobxy=blobxy,
+                                                                                          early_coadds=False, stages=['writecat'], splinesky=True)
+        
+
+            pdb.set_trace()
 
 
         
