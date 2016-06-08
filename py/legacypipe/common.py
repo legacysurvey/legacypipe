@@ -724,7 +724,7 @@ Now using the current directory as LEGACY_SURVEY_DIR, but this is likely to fail
 
         elif filetype == 'ccds':
             if self.version in ['dr1','dr2']:
-                return [os.path.join(basedir, 'decals-ccds.fits')]
+                return [os.path.join(basedir, 'decals-ccds.fits.gz')]
             else:
                 return glob(os.path.join(basedir, 'survey-ccds-*.fits.gz'))
 
