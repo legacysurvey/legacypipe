@@ -93,7 +93,7 @@ class SimImage(DecamImage):
         sims_image.fill(0.0)
         sims_ivar = sims_image.copy()
         # N sims, 4 box corners (xmin,xmax,ymin,ymax) for each sim
-        tim.sims_xylim = np.empty((len(self.survey.simcat),4))+np.nan 
+        tim.sims_xy = np.empty((len(self.survey.simcat),4))+np.nan 
 
         #store simulated galaxy images in tim object 
         # Loop on each object.
@@ -115,8 +115,8 @@ class SimImage(DecamImage):
                 #stamp full image only where stamps will in inserted
                 sims_image[overlap] += stamp 
                 sims_ivar[overlap] += ivarstamp
-                tim.sims_xylim[ii, :] = [overlap.xmin-1, overlap.xmax-1,
-                                         overlap.ymin-1, overlap.ymax-1] #-1 b/c galsim 1st index is 1
+                tim.sims_xy[ii, :] = [overlap.xmin-1, overlap.xmax-1,
+                                      overlap.ymin-1, overlap.ymax-1] #-1 b/c galsim 1st index is 1
 
                 image[overlap] += stamp
                 invvar[overlap] = ivarstamp
@@ -136,7 +136,7 @@ class SimImage(DecamImage):
         assert(sims_ivar.array.shape == invvar.array.shape)
         tim.sims_image = sims_image.array
         tim.sims_inverr = np.sqrt(sims_ivar.array)
-        tim.sims_xylim = tim.sims_xylim.astype(int)
+        tim.sims_xy = tim.sims_xy.astype(int)
         #tim.data = image.array + sims_image.array
         #tim.inverr = np.sqrt(invvar.array + sims_ivar.array)
         tim.data = image.array

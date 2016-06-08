@@ -687,7 +687,7 @@ def stage_image_coadds(survey=None, targetwcs=None, bands=None, tims=None,
                     mp=mp)
 
     #coadds of galaxy sims only, image only
-    sims_mods= np.array([tim.sims_image for tim in tims])
+    sims_mods= [tim.sims_image for tim in tims]
     T_sims_coadds = make_coadds(tims, bands, targetwcs, mods=sims_mods,
                     detmaps=True, lanczos=lanczos,
                     callback=write_coadd_images,
@@ -695,7 +695,7 @@ def stage_image_coadds(survey=None, targetwcs=None, bands=None, tims=None,
                     mp=mp)
     sims_coadd= T_sims_coadds.comods
     del T_sims_coadds
-    image_only_mods= np.array([tim.data-tim.sims_image for tim in tims])
+    image_only_mods= [tim.data-tim.sims_image for tim in tims]
     T_image_coadds = make_coadds(tims, bands, targetwcs, mods=image_only_mods,
                     detmaps=True, lanczos=lanczos,
                     callback=write_coadd_images,
@@ -2008,7 +2008,7 @@ def stage_coadds(survey=None, bands=None, version_header=None, targetwcs=None,
                     plots=False, ps=ps, mp=mp)
     
     #coadds of galaxy sims only, image only
-    sims_mods= np.array([tim.sims_image for tim in tims])
+    sims_mods= [tim.sims_image for tim in tims]
     T_sims_coadds = make_coadds(tims, bands, targetwcs, mods=sims_mods, xy=(ix,iy),
                     ngood=True, detmaps=True, psfsize=True, lanczos=lanczos,
                     apertures=apertures, apxy=apxy,
@@ -2017,7 +2017,7 @@ def stage_coadds(survey=None, bands=None, version_header=None, targetwcs=None,
                     plots=False, ps=ps, mp=mp)
     sims_coadd= T_sims_coadds.comods
     del T_sims_coadds
-    image_only_mods= np.array([tim.data-tim.sims_image for tim in tims])
+    image_only_mods= [tim.data-tim.sims_image for tim in tims]
     T_image_coadds = make_coadds(tims, bands, targetwcs, mods=image_only_mods, xy=(ix,iy),
                     ngood=True, detmaps=True, psfsize=True, lanczos=lanczos,
                     apertures=apertures, apxy=apxy,
@@ -2369,15 +2369,7 @@ def stage_writecat(
     '''
     from desi_common import prepare_fits_catalog
     from tractor.sfd import SFDMap
-    
-    #write galaxy sims info to its own fits file
-    sims_data=fits_table()
-    sims_data.set('sims_xy',T.get('sims_xy'))
-    sims_fn = survey.find_file('galaxy-sims', output=True, brick=brickname)
-    sims_data.writeto(sims_fn)
-    print('Wrote',sims_fn)
-    #######
-    
+     
     fs = None
     TT = T.copy()
     for k in ['itx','ity','index']:
@@ -2625,6 +2617,14 @@ def stage_writecat(
     cmd = 'sha1sum -b ' + ' '.join(survey.output_files) + ' > ' + hashfn
     print('Checksums:', cmd)
     os.system(cmd)
+
+    #write fits file with galaxy-sim stuff (xy bounds of each sim)
+    sims_data=fits_table()
+    sims_data.set('sims_xy',T.get('sims_xy'))
+    sims_fn = survey.find_file('galaxy-sims', output=True, brick=brickname)
+    sims_data.writeto(sims_fn)
+    print('Wrote',sims_fn)
+
 
     return dict(T2=T2)
 
