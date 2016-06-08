@@ -146,12 +146,20 @@ def main():
         print('Required ${} environment variable not set'.format(key))
         return 0
     largedir = os.getenv(key)
+
+    key = 'DECALS_DR2_DIR'
+    if key not in os.environ:
+        print('Required ${} environment variable not set'.format(key))
+        return 0
+    drdir = os.getenv(key)
+
     samplefile = os.path.join(largedir, 'large-galaxies-sample.fits')
 
     # Some convenience variables.
     objtype = ('PSF', 'SIMP', 'EXP', 'DEV', 'COMP')
     objcolor = ('white', 'red', 'orange', 'cyan', 'yellow')
-
+    diamfactor = 10
+    
     # --------------------------------------------------
     # Build the sample of large galaxies based on the available imaging.
     if args.build_sample:
@@ -210,17 +218,32 @@ def main():
     if args.viewer_cutouts:
         thumbsize = 100
         sample = fits.getdata(samplefile, 1)
-        for gal in sample:
+        for gal in sample[1:2]:
             galaxy = gal['GALAXY'].strip().lower()
-            size = np.ceil(10*gal['RADIUS']/PIXSCALE)
+            ra = gal['RA']
+            dec = gal['DEC']
+            brick = '{:03d}{}{:03d}'.format(int(10*ra), 'm' if dec < 0 else 'p',
+                                            int(10*np.abs(dec)))
+
+            # Read the tractor catalog!!
+            Need to do bricktouching wcs!!!!
+            tractorfile = os.path.join(drdir, 'tractor', '{}'.format(brick[:3]), 'tractor-{}.fits'.format(brick))
+            print('Reading {}'.format(tractorfile))
+            pdb.set_trace()
+            cat = fits.getdata(tractorfile, 1)
+
+            # SIZE here should be consistent with DIAM in args.runbrick, below
+            size = diamfactor*np.ceil(gal['RADIUS']/PIXSCALE).astype('int16') # [pixels]
             thumbpixscale = PIXSCALE*size/thumbsize
 
-            #imageurl = 'http://legacysurvey.org/viewer/jpeg-cutout-decals-dr2?ra={:.6f}&dec={:.6f}'.format(gal['RA'], gal['DEC'])+\
-            #  '&pixscale={:.3f}&size={:g}'.format(PIXSCALE, size)
-            #imagejpg = os.path.join(largedir, 'cutouts', '{}-image.jpg'.format(galaxy))
-            #if os.path.isfile(imagejpg):
-            #    os.remove(imagejpg)
-            #os.system('wget --continue -O {:s} "{:s}"' .format(imagejpg, imageurl))
+            imageurl = 'http://legacysurvey.org/viewer/jpeg-cutout-decals-dr2?ra={:.6f}&dec={:.6f}'.format(gal['RA'], gal['DEC'])+\
+              '&pixscale={:.3f}&size={:g}'.format(PIXSCALE, size)
+            imagejpg = os.path.join(largedir, 'cutouts', '{}-image.jpg'.format(galaxy))
+            if os.path.isfile(imagejpg):
+                os.remove(imagejpg)
+            os.system('wget --continue -O {:s} "{:s}"' .format(imagejpg, imageurl))
+
+            
 
             thumburl = 'http://legacysurvey.org/viewer/jpeg-cutout-decals-dr2?ra={:.6f}&dec={:.6f}'.format(gal['RA'], gal['DEC'])+\
               '&pixscale={:.3f}&size={:g}'.format(thumbpixscale, thumbsize)
@@ -248,7 +271,7 @@ def main():
 
         for gal in sample[1:2]:
             galaxy = gal['GALAXY'].strip().lower()
-            diam = 10*np.ceil(gal['RADIUS']/PIXSCALE).astype('int16') # [pixels]
+            diam = diamfactor*np.ceil(gal['RADIUS']/PIXSCALE).astype('int16') # [pixels]
 
             # Note: zoom is relative to the center of an imaginary brick with
             # dimensions (0, 3600, 0, 3600).
