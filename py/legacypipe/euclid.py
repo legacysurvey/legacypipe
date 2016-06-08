@@ -13,7 +13,7 @@ from legacypipe.desi_common import read_fits_catalog
 
 from tractor.sky import ConstantSky
 from tractor.sfd import SFDMap
-from tractor import Tractor
+from tractor import Tractor, NanoMaggies
 from tractor.galaxy import disable_galaxy_cache
 from tractor.ellipses import EllipseE
 
@@ -342,9 +342,26 @@ if __name__ == '__main__':
         
         ccds = survey.get_ccds_readonly()
         I = np.flatnonzero(ccds.camera == 'megacam')
+
+        bands = np.unique(ccds.filter[I])
+        print('Unique bands:', bands)
+        for src in cat:
+            src.brightness = NanoMaggies(**dict([(b,1.) for b in bands]))
+
         for i in I:
             ccd = ccds[i]
             im = survey.get_image_object(ccd)
+
+            wcs = im.get_wcs()
+            ok,x,y = wcs.radec2pixelxy(T.ra, T.dec)
+            x = (x-1).astype(np.float32)
+            y = (y-1).astype(np.float32)
+            J = np.flatnonzero((x >= 0) * (x < ccd.width) *
+                               (y >= 0) * (y < ccd.height))
+            if len(J) == 0:
+                print('No sources within image.')
+                continue
+
             tim = im.get_tractor_image(pixPsf=True)
             print('Forced photometry for', tim.name)
 
@@ -365,7 +382,10 @@ if __name__ == '__main__':
                 src.freezeAllBut('brightness')
                 src.getBrightness().freezeAllBut(tim.band)
             disable_galaxy_cache()
-        
+            # Reset fluxes
+            nparams = tr.numberOfParams()
+            tr.setParams(np.zeros(nparams, np.float32))
+            
             F = fits_table()
             F.brickid   = T.brickid
             F.brickname = T.brickname
@@ -386,8 +406,8 @@ if __name__ == '__main__':
             F.flux = np.array([src.getBrightness().getFlux(tim.band)
                                for src in cat]).astype(np.float32)
             F.flux_ivar = R.IV.astype(np.float32)
-            F.fracflux = R.fitstats.profracflux.astype(np.float32)
-            F.rchi2    = R.fitstats.prochi2    .astype(np.float32)
+            #F.fracflux = R.fitstats.profracflux.astype(np.float32)
+            #F.rchi2    = R.fitstats.prochi2    .astype(np.float32)
 
             hdr = fitsio.FITSHDR()
             units = {'exptime':'sec', 'flux':'nanomaggy', 'flux_ivar':'1/nanomaggy^2'}
@@ -396,7 +416,7 @@ if __name__ == '__main__':
                 if col in units:
                     hdr.add_record(dict(name='TUNIT%i' % (i+1), value=units[col]))
 
-            outfn = 'euclid-out/forced/megacam-%i-%s.fits' % (tim.expnum, tim.ccdname)
+            outfn = 'euclid-out/forced/megacam-%i-%s.fits' % (im.expnum, im.ccdname)
             #fitsio.write(outfn, None, header=hdr, clobber=True)
             F.writeto(outfn, header=hdr, append=True)
             
