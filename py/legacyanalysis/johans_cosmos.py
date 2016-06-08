@@ -9,7 +9,7 @@ from scipy.optimize import curve_fit as cu
 from astropy.io import fits
 import astropy.cosmology as co
 
-from legacyanalysis.pathnames import get_indir,get_outdir
+from legacyanalysis.pathnames import get_indir,get_outdir,make_dir
 indir= get_indir('cosmos')
 
 #CREATES THE CATALOG LIST
@@ -46,7 +46,8 @@ for ii, el in enumerate(catList):
         # COMPARES THE PHOTOMETRIC OUTPUTS 
     df_g = dr2[sel]['decam_flux_1'].T[1] / dr2[sel]['decam_mw_transmission_1'].T[1] - dr2[sel]['decam_flux_2'].T[1] / dr2[sel]['decam_mw_transmission_2'].T[1] 
     sigma_g = (1./dr2[sel]['decam_flux_ivar_1'].T[1] + 1./dr2[sel]['decam_flux_ivar_2'].T[1])**(-0.5)
-        # CREATES THE HISTOGRAM 
+        # CREATES THE HISTOGRAM
+    area=1 #plot is normalized so does not matter 
     nnn,bbb, ppp=plt.hist(df_g * sigma_g, bins=np.arange(-4,4.5,0.25), weights = np.ones_like(df_g)/area, histtype='step', label=str(ii), normed=True)
         #FITS A GAUSSIAN TO THE HISTOGRAM AND WRITES THE OUTPUT
     out = cu(gfun,(bbb[1:]+bbb[:-1])/2.,nnn,p0=(0,1))
@@ -60,10 +61,12 @@ plt.xlim((-4,4))
 plt.ylim((0,0.7))
 gp = plt.legend(loc=2, fontsize=10)
 gp.set_frame_on(False)
-pt.title('20<g<21.5 type PSF')
+plt.title('20<g<21.5 type PSF')
 plt.grid()
 #SAVES THE PLOT AND CLOSES THE FILE WHERE THINGS WERE WRITTEnp.
-plt.savefig(os.path.join(get_outdir('cosmos'),"plotsRc", "comparison-depth-normed-g-20-215-cosmos.png"))
+path=os.path.join(get_outdir('cosmos'),"plotsRc")
+make_dir(path)
+plt.savefig(os.path.join(path, "comparison-depth-normed-g-20-215-cosmos.png"))
 plt.clf()
 f.close()
 print('finished comparison: cosmos')

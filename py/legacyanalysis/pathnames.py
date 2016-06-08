@@ -18,6 +18,8 @@ def get_outdir(comparison,outdir='./testing'):
         dir= os.path.join(outdir,'bass-mosaic-decals/')
     elif comparison == 'cosmos':
         dir= os.path.join(outdir,'cosmos/')
+    elif comparison == 'dr23':
+        dir= os.path.join(outdir,'dr2dr3/')
     else: raise ValueError
     make_dir(dir)
     return dir
@@ -31,6 +33,8 @@ def get_indir(comparison,indir='/project/projectdirs/desi/imaging/data/validatio
         dir= os.path.join(indir,'bass-mosaic-decals/')
     elif comparison == 'cosmos':
         dir= os.path.join(indir,'cosmos/')
+    elif comparison == 'dr23':
+        dir= os.path.join(indir,'dr2dr3/')
     else: raise ValueError
     return dir
 
