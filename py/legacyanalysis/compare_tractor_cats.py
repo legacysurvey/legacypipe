@@ -22,6 +22,8 @@ from astrometry.libkd.spherematch import match_radec
 
 #import thesis_code.targets as targets
 from legacyanalysis import targets 
+from legacyanalysis.pathnames import get_outdir
+
 
 class Matched_Cats():
     def __init__(self):
@@ -99,7 +101,7 @@ def plot_radec(obj):
     leg=ax[1].legend(loc=(1.01,0.9),**leg_args)
     #save
     #sns.despine()
-    plt.savefig('radec.png', bbox_extra_artists=[xlab,ylab,ti,leg], bbox_inches='tight',dpi=150)
+    plt.savefig(os.path.join(get_outdir('bmd'),'radec.png'), bbox_extra_artists=[xlab,ylab,ti,leg], bbox_inches='tight',dpi=150)
     plt.close()
 
 
@@ -137,7 +139,7 @@ def plot_HistTypes(obj,m_types=['m_decam','m_bokmos']):
     #save
     if matched: name='hist_types_Matched.png'
     else: name='hist_types_Unmatched.png'
-    plt.savefig(name, bbox_extra_artists=[ylab,ti], bbox_inches='tight',dpi=150)
+    plt.savefig(os.path.join(get_outdir('bmd'),name), bbox_extra_artists=[ylab,ti], bbox_inches='tight',dpi=150)
     plt.close()
 
 def bin_up(data_bin_by,data_percentile,bL=20., bH=26.,bW=0.25):
@@ -210,7 +212,7 @@ def plot_SN_vs_mag(obj, found_by='matched',type='all'):
     ylab=ax[0].set_ylabel('S/N', **laba)
     text_args= dict(verticalalignment='bottom',horizontalalignment='right',fontsize=10)
     ax[2].text(26,5,'S/N = 5  ',**text_args)
-    plt.savefig('sn_%s_%s.png' % (found_by,type), bbox_extra_artists=[xlab,ylab], bbox_inches='tight',dpi=150)
+    plt.savefig(os.path.join(get_outdir('bmd'),'sn_%s_%s.png' % (found_by,type)), bbox_extra_artists=[xlab,ylab], bbox_inches='tight',dpi=150)
     plt.close()
 
 def plot_matched_dmag_vs_psf_fwhm(obj, type='psf'):
@@ -239,7 +241,7 @@ def plot_matched_dmag_vs_psf_fwhm(obj, type='psf'):
     xlab=ax[1].set_xlabel('decam PSF_FWHM (%.2f bins)' % db, **laba)
     ylab=ax[0].set_ylabel(r'Median $\Delta \, m$ (decam - bokmos)', **laba)
     ti= plt.suptitle('%s Objects, Matched' % type.upper())
-    plt.savefig('dmag_vs_psf_fwhm_%s.png' % type, bbox_extra_artists=[ti,xlab,ylab], bbox_inches='tight',dpi=150)
+    plt.savefig(os.path.join(get_outdir('bmd'),'dmag_vs_psf_fwhm_%s.png' % type), bbox_extra_artists=[ti,xlab,ylab], bbox_inches='tight',dpi=150)
     plt.close()
 
 def plot_matched_decam_vs_bokmos_psf_fwhm(obj, type='psf'):
@@ -264,7 +266,7 @@ def plot_matched_decam_vs_bokmos_psf_fwhm(obj, type='psf'):
     xlab=ax[1].set_xlabel('PSF_FWHM (bokmos)', **laba)
     ylab=ax[0].set_ylabel('PSF_FWHM (decam)', **laba)
     ti= plt.suptitle('%s Objects, Matched' % type.upper())
-    plt.savefig('decam_vs_bokmos_psf_fwhm_%s.png' % type, bbox_extra_artists=[ti,xlab,ylab], bbox_inches='tight',dpi=150)
+    plt.savefig(os.path.join(get_outdir('bmd'),'decam_vs_bokmos_psf_fwhm_%s.png' % type), bbox_extra_artists=[ti,xlab,ylab], bbox_inches='tight',dpi=150)
     plt.close()
 
 
@@ -281,7 +283,7 @@ def plot_confusion_matrix(cm,ticknames):
     for row in range(len(ticknames)):
         for col in range(len(ticknames)):
             plt.text(col,row,'%.1f'%cm[row,col],va='center',ha='center')
-    plt.savefig('confusion_matrix.png', bbox_extra_artists=[xlab,ylab], bbox_inches='tight',dpi=150)
+    plt.savefig(os.path.join(get_outdir('bmd'),'confusion_matrix.png'), bbox_extra_artists=[xlab,ylab], bbox_inches='tight',dpi=150)
     plt.close()
 
 def create_confusion_matrix(obj):
@@ -315,7 +317,7 @@ def plot_matched_separation_hist(d12):
     ylab= ax.set_ylabel("Matched")
     #save
     #sns.despine()
-    plt.savefig("separation_hist.png", bbox_extra_artists=[xlab,ylab], bbox_inches='tight',dpi=150)
+    plt.savefig(os.path.join(get_outdir('bmd'),"separation_hist.png"), bbox_extra_artists=[xlab,ylab], bbox_inches='tight',dpi=150)
     plt.close()
 
 def plot_psf_hists(decam,bokmos, zoom=False):
@@ -351,7 +353,7 @@ def plot_psf_hists(decam,bokmos, zoom=False):
     #sns.despine()
     if zoom: name="median_color_diff_zoom.png"
     else: name="median_color_diff.png"
-    plt.savefig(name, bbox_extra_artists=[xlab,ylab], bbox_inches='tight',dpi=150)
+    plt.savefig(os.path.join(get_outdir('bmd'),name), bbox_extra_artists=[xlab,ylab], bbox_inches='tight',dpi=150)
     plt.close()
 
 ##########
@@ -438,7 +440,7 @@ def plot_dflux_chisq(b,type='psf', low=-8.,hi=8.):
     xlab=ax[1].set_xlabel(r'(F[decam] - F[bokmos])/$\sigma$', **laba)
     ylab=ax[0].set_ylabel('PDF, %s' % type, **laba)
     #put stats in suptitle
-    plt.savefig('dflux_chisq_%s.png' % type, bbox_extra_artists=[ti,xlab,ylab], bbox_inches='tight',dpi=150)
+    plt.savefig(os.path.join(get_outdir('bmd'),'dflux_chisq_%s.png' % type), bbox_extra_artists=[ti,xlab,ylab], bbox_inches='tight',dpi=150)
     plt.close()
 ################
 
@@ -476,7 +478,7 @@ def plot_N_per_deg2(obj,type='all', maglow=18.,maghi=26.):
     ylab=ax[0].set_ylabel('counts/deg2', **laba)
     ti=plt.suptitle("%s Objects" % type.upper(),**laba)
     #put stats in suptitle
-    plt.savefig('n_per_deg2_%s.png' % type, bbox_extra_artists=[ti,xlab,ylab], bbox_inches='tight',dpi=150)
+    plt.savefig(os.path.join(get_outdir('bmd'),'n_per_deg2_%s.png' % type), bbox_extra_artists=[ti,xlab,ylab], bbox_inches='tight',dpi=150)
     plt.close()
 
 
@@ -484,7 +486,6 @@ parser=argparse.ArgumentParser(formatter_class=argparse.ArgumentDefaultsHelpForm
                                  description='DECaLS simulations.')
 parser.add_argument('-fn1', type=str, help='process this brick (required input)')
 parser.add_argument('-fn2', type=str, help='object type (STAR, ELG, LRG, BGS)') 
-
 args = parser.parse_args()
 
 #get lists of tractor cats to compare
@@ -549,31 +550,31 @@ plot_confusion_matrix(cm,names)
 plot_dflux_chisq(b,type='all')
 plot_dflux_chisq(b,type='psf')
 
-print('HELO exit')
-sys.exit()
-
-
-#REVISE THIS BELOW
-#print stats of total objects, each group, # masked, etc
-print("---- DECAM ----")
-print("N not masked due to grz= %d, N total= %d" % \
-        (m_decam_not_masked+b['u_decam'].count_not_masked(), b['m_decam'].count_total()+b['u_decam'].count_total()))
-print("-- Matched --")
-print("N not masked before join bokmos mask= %d, N not masked after= %d" % \
-        (m_decam_not_masked, b['m_decam'].count_not_masked()))
-print("-- Unmatched -- ")
-print("N masked before join bokmos mask = N masked after = %d" % \
-        (b['u_decam'].count_total()- b['u_decam'].count_not_masked()))
-###bokmos
-print("---- BOKMOS ----")
-print("N not masked due to grz= %d, N total= %d" % \
-        (m_bokmos_not_masked+b['u_bokmos'].count_not_masked(), b['m_bokmos'].count_total()+b['u_bokmos'].count_total()))
-print("-- Matched --")
-print("N not masked before join decam mask= %d, N not masked after= %d" % \
-        (m_bokmos_not_masked, b['m_bokmos'].count_not_masked()))
-print("-- Unmatched -- ")
-print("N masked before join decam mask = N masked after = %d" % \
-        (b['u_bokmos'].count_total()- b['u_bokmos'].count_not_masked()))
-print('done')
+print('finished comparison: bass-mosaic-decals')
+#sys.exit()
+#
+#
+##REVISE THIS BELOW
+##print stats of total objects, each group, # masked, etc
+#print("---- DECAM ----")
+#print("N not masked due to grz= %d, N total= %d" % \
+#        (m_decam_not_masked+b['u_decam'].count_not_masked(), b['m_decam'].count_total()+b['u_decam'].count_total()))
+#print("-- Matched --")
+#print("N not masked before join bokmos mask= %d, N not masked after= %d" % \
+#        (m_decam_not_masked, b['m_decam'].count_not_masked()))
+#print("-- Unmatched -- ")
+#print("N masked before join bokmos mask = N masked after = %d" % \
+#        (b['u_decam'].count_total()- b['u_decam'].count_not_masked()))
+####bokmos
+#print("---- BOKMOS ----")
+#print("N not masked due to grz= %d, N total= %d" % \
+#        (m_bokmos_not_masked+b['u_bokmos'].count_not_masked(), b['m_bokmos'].count_total()+b['u_bokmos'].count_total()))
+#print("-- Matched --")
+#print("N not masked before join decam mask= %d, N not masked after= %d" % \
+#        (m_bokmos_not_masked, b['m_bokmos'].count_not_masked()))
+#print("-- Unmatched -- ")
+#print("N masked before join decam mask = N masked after = %d" % \
+#        (b['u_bokmos'].count_total()- b['u_bokmos'].count_not_masked()))
+#print('done')
 
 
