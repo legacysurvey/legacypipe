@@ -280,7 +280,7 @@ def main():
             # Note: zoom is relative to the center of an imaginary brick with
             # dimensions (0, 3600, 0, 3600).
             survey = LegacySurveyData(version='dr2', output_dir=largedir)
-            run_brick(None, survey, radec=(gal['RA'], gal['DEC']), 
+            run_brick(None, survey, radec=(gal['RA'], gal['DEC']), blobxy=zip([diam/2], [diam/2]), 
                       threads=1, zoom=(1800-diam/2, 1800+diam/2, 1800-diam/2, 1800+diam/2),
                       wise=False, forceAll=True, writePickles=False, do_calibs=False,
                       write_metrics=False, pixPsf=True, splinesky=True, 
