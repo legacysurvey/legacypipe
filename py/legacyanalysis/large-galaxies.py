@@ -20,6 +20,8 @@ import matplotlib.pyplot as plt
 from astropy.io import fits
 from astropy.table import Table, vstack
 
+from PIL import Image, ImageDraw
+
 from astrometry.util.util import Tan
 from astrometry.util.fits import merge_tables
 
@@ -131,9 +133,10 @@ def main():
 
     parser = argparse.ArgumentParser()
     parser.add_argument('--build-sample', action='store_true', help='Build the sample.')
-    parser.add_argument('--jpg-cutouts', action='store_true', help='Get jpg cutouts from the viewer.')
+    parser.add_argument('--viewer-cutouts', action='store_true', help='Get jpg cutouts from the viewer.')
     parser.add_argument('--ccd-cutouts', action='store_true', help='Get CCD cutouts of each galaxy.')
     parser.add_argument('--runbrick', action='store_true', help='Run the pipeline.')
+    parser.add_argument('--runbrick-cutouts', action='store_true', help='Annotate the jpg cutouts from the custom pipeline.')
     parser.add_argument('--build-webpage', action='store_true', help='(Re)build the web content.')
     args = parser.parse_args()
 
@@ -144,6 +147,10 @@ def main():
         return 0
     largedir = os.getenv(key)
     samplefile = os.path.join(largedir, 'large-galaxies-sample.fits')
+
+    # Some convenience variables.
+    objtype = ('PSF', 'SIMP', 'EXP', 'DEV', 'COMP')
+    objcolor = ('white', 'red', 'orange', 'cyan', 'yellow')
 
     # --------------------------------------------------
     # Build the sample of large galaxies based on the available imaging.
@@ -200,61 +207,27 @@ def main():
     # --------------------------------------------------
     # Get data, model, and residual cutouts from the legacysurvey viewer.  Also
     # get thumbnails that are lower resolution.
-    if args.jpg_cutouts:
+    if args.viewer_cutouts:
         thumbsize = 100
         sample = fits.getdata(samplefile, 1)
         for gal in sample:
+            galaxy = gal['GALAXY'].strip().lower()
             size = np.ceil(10*gal['RADIUS']/PIXSCALE)
             thumbpixscale = PIXSCALE*size/thumbsize
 
             #imageurl = 'http://legacysurvey.org/viewer/jpeg-cutout-decals-dr2?ra={:.6f}&dec={:.6f}'.format(gal['RA'], gal['DEC'])+\
             #  '&pixscale={:.3f}&size={:g}'.format(PIXSCALE, size)
-            #imagejpg = os.path.join(largedir, 'cutouts', gal['GALAXY'].strip().lower()+'-image.jpg')
+            #imagejpg = os.path.join(largedir, 'cutouts', '{}-image.jpg'.format(galaxy))
             #if os.path.isfile(imagejpg):
             #    os.remove(imagejpg)
             #os.system('wget --continue -O {:s} "{:s}"' .format(imagejpg, imageurl))
 
             thumburl = 'http://legacysurvey.org/viewer/jpeg-cutout-decals-dr2?ra={:.6f}&dec={:.6f}'.format(gal['RA'], gal['DEC'])+\
               '&pixscale={:.3f}&size={:g}'.format(thumbpixscale, thumbsize)
-            thumbjpg = os.path.join(largedir, 'cutouts', gal['GALAXY'].strip().lower()+'-image-thumb.jpg')
+            thumbjpg = os.path.join(largedir, 'cutouts', '{}-image-thumb.jpg'.format(galaxy))
             if os.path.isfile(thumbjpg):
                 os.remove(thumbjpg)
             os.system('wget --continue -O {:s} "{:s}"' .format(thumbjpg, thumburl))
-
-    # --------------------------------------------------
-    # (Re)build the webpage.
-    if args.build_webpage:
-
-        # index.html
-        html = open(os.path.join(largedir, 'index.html'), 'w')
-        html.write('<html><body>\n')
-        html.write('<h1>Sample of Large Galaxies</h1>\n')
-        html.write('<table border="2" width="30%">\n')
-        html.write('<tbody>\n')
-        sample = fits.getdata(samplefile, 1)
-        for gal in sample:
-            # Add coordinates and sizes here.
-            galaxy = gal['GALAXY'].strip().lower()
-            html.write('<tr>\n')
-            html.write('<td><a href="html/{}.html">{}</a></td>\n'.format(galaxy, galaxy.upper()))
-            html.write('<td><a href="http://legacysurvey.org/viewer/?ra={:.6f}&dec={:.6f}" target="_blank"><img src=cutouts/{}-image-thumb.jpg alt={} /></a></td>\n'.format(gal['RA'], gal['DEC'], galaxy, galaxy.upper()))
-#           html.write('<td><a href="html/{}.html"><img src=cutouts/{}-image-thumb.jpg alt={} /></a></td>\n'.format(galaxy, galaxy, galaxy.upper()))
-            html.write('</tr>\n')
-        html.write('</tbody>\n')
-        html.write('</table>\n')
-        html.write('</body></html>\n')
-        html.close()
-
-        sys.exit(1)
-    
-        # individual galaxy pages
-        for gal in sample[:3]:
-            galaxy = gal['GALAXY'].strip().lower()
-            html = open(os.path.join(largedir, 'html/{}.html'.format(galaxy)), 'w')
-            html.write('<html><body>\n')
-            html.write('<a href=../cutouts/{}.jpg><img src=../cutouts/{}-image.jpg alt={} /></a>\n'.format(galaxy, galaxy, galaxy, galaxy.upper()))
-            html.write('</body></html>\n')
-            html.close()
 
     # --------------------------------------------------
     # Get cutouts of all the CCDs for each galaxy.
@@ -279,16 +252,112 @@ def main():
 
             # Note: zoom is relative to the center of an imaginary brick with
             # dimensions (0, 3600, 0, 3600).
+            # blobxy = zip([1800], [1800])
             survey = LegacySurveyData(version='dr2', output_dir=largedir)
-            run_brick(None, survey, radec=(gal['RA'], gal['DEC']), blobxy=zip([diam/2], [diam/2]), 
-                      threads=1, zoom=(1800-diam/2, 1800+diam/2, 1800-diam/2, 1800+diam/2),
+            run_brick(None, survey, radec=(gal['RA'], gal['DEC']), blobxy=None, 
+                      threads=10, zoom=(1800-diam/2, 1800+diam/2, 1800-diam/2, 1800+diam/2),
                       wise=False, forceAll=True, writePickles=False, do_calibs=False,
                       write_metrics=False, pixPsf=True, splinesky=True, 
                       early_coadds=True, stages=['writecat'], ceres=False)
 
             pdb.set_trace()
 
+    # --------------------------------------------------
+    # Annotate the image/model/resid jpg cutout after running the custom pipeline.
+    if args.runbrick_cutouts:
+        sample = fits.getdata(samplefile, 1)
 
-        
+        for gal in sample[1:2]:
+            galaxy = gal['GALAXY'].strip().lower()
+            ra = gal['RA']
+            dec = gal['DEC']
+            brick = 'custom-{:06d}{}{:05d}'.format(int(1000*ra), 'm' if dec < 0 else 'p',
+                                                   int(1000*np.abs(dec)))
+            tractorfile = os.path.join(largedir, 'tractor', 'cus', 'tractor-{}.fits'.format(brick))
+            print('Reading {}'.format(tractorfile))
+            cat = fits.getdata(tractorfile, 1)
+
+            rad = 10
+            for imtype in ('image', 'model', 'resid'):
+                cutoutfile = os.path.join(largedir, 'cutouts', '{}-runbrick-{}.jpg'.format(galaxy, imtype))
+                imfile = os.path.join(largedir, 'coadd', 'cus', brick, 'legacysurvey-{}-{}.jpg'.format(brick, imtype))
+                print('Reading {}'.format(imfile))
+
+                im = Image.open(imfile)
+                sz = im.size
+                draw = ImageDraw.Draw(im)
+                for thistype, thiscolor in zip(objtype, objcolor):
+                    these = np.where(cat['TYPE'].strip().upper() == thistype)[0]
+                    if len(these) > 0:
+                        [draw.ellipse((obj['BX']-rad, sz[1]-obj['BY']-rad, obj['BX']+rad,
+                                       sz[1]-obj['BY']+rad), outline=thiscolor) for obj in cat[these]]
+                # Add a legend.
+                im.save(cutoutfile)
+                
+            pdb.set_trace()
+
+    # --------------------------------------------------
+    # Build the webpage.
+    if args.build_webpage:
+
+        # index.html
+        html = open(os.path.join(largedir, 'index.html'), 'w')
+        html.write('<html><body>\n')
+        html.write('<h1>Sample of Large Galaxies</h1>\n')
+        html.write('<table border="2" width="30%"><tbody>\n')
+        sample = fits.getdata(samplefile, 1)
+        for gal in sample:
+            # Add coordinates and sizes here.
+            galaxy = gal['GALAXY'].strip().lower()
+            html.write('<tr>\n')
+            html.write('<td><a href="html/{}.html">{}</a></td>\n'.format(galaxy, galaxy.upper()))
+            html.write('<td><a href="http://legacysurvey.org/viewer/?ra={:.6f}&dec={:.6f}" target="_blank"><img src=cutouts/{}-image-thumb.jpg alt={} /></a></td>\n'.format(gal['RA'], gal['DEC'], galaxy, galaxy.upper()))
+#           html.write('<td><a href="html/{}.html"><img src=cutouts/{}-image-thumb.jpg alt={} /></a></td>\n'.format(galaxy, galaxy, galaxy.upper()))
+            html.write('</tr>\n')
+        html.write('</tbody></table>\n')
+        html.write('</body></html>\n')
+        html.close()
+
+        # individual galaxy pages
+        for gal in sample[:3]:
+            galaxy = gal['GALAXY'].strip().lower()
+            html = open(os.path.join(largedir, 'html/{}.html'.format(galaxy)), 'w')
+            html.write('<html>\n')
+            html.write('<head>\n')
+            html.write('<style type="text/css">\n')
+            html.write('table {width: 90%; }\n')
+            html.write('table, th, td {border: 1px solid black; }\n')
+            html.write('img {width: 100%; }\n')
+            #html.write('td {width: 100px; }\n')
+            #html.write('h2 {color: orange; }\n')
+            html.write('</style>\n')
+            html.write('</head>\n')
+            html.write('<body>\n')
+            html.write('<h1>{}</h1>\n'.format(galaxy.upper()))
+            # ----------
+            # Pipeline cutouts
+            html.write('<h2>DR2 Pipeline</h2>\n')
+            html.write('<table><tbody>\n')
+            html.write('<tr>\n')
+            #for imtype in ('image', 'model', 'resid'):
+            for imtype in ('image', 'image', 'image'): # Hack!
+                html.write('<td><a href=../cutouts/{}-{}.jpg><img src=../cutouts/{}-{}.jpg alt={} /></a></td>\n'.format(
+                    galaxy, imtype, galaxy, imtype, galaxy.upper()))
+            html.write('</tr>\n')
+            html.write('</tbody></table>\n')
+            # ----------
+            # Updated cutouts
+            html.write('<h2>Large-Galaxy Pipeline</h2>\n')
+            html.write('<table><tbody>\n')
+            html.write('<tr>\n')
+            for imtype in ('image', 'model', 'resid'):
+                html.write('<td><a href=../cutouts/{}-runbrick-{}.jpg><img width="100%" src=../cutouts/{}-runbrick-{}.jpg alt={} /></a></td>\n'.format(
+                    galaxy, imtype, galaxy, imtype, galaxy.upper()))
+            html.write('</tr>\n')
+            html.write('</tbody></table>\n')
+
+            html.write('</body></html>\n')
+            html.close()
+            
 if __name__ == "__main__":
     main()
