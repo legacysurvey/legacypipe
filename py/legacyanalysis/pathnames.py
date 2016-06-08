@@ -4,7 +4,7 @@ def bash(cmd):
     ret= os.system('%s' % cmd)
     if ret:
         print 'command failed: %s' % cmd
-        sys.exit() 
+        raise ValueError 
 
 def make_dir(dir):
     if not os.path.exists(dir): bash('mkdir %s' % dir)
@@ -17,7 +17,7 @@ def get_outdir(comparison,outdir='./testing'):
     if comparison == 'bmd':
         dir= os.path.join(outdir,'bass-mosaic-decals/')
     elif comparison == 'cosmos':
-        dir os.path.join(outdir,'cosmos/')
+        dir= os.path.join(outdir,'cosmos/')
     else: raise ValueError
     make_dir(dir)
     return dir
@@ -30,7 +30,7 @@ def get_indir(comparison,indir='/project/projectdirs/desi/imaging/data/validatio
     if comparison == 'bmd':
         dir= os.path.join(indir,'bass-mosaic-decals/')
     elif comparison == 'cosmos':
-        dir os.path.join(indir,'cosmos/')
+        dir= os.path.join(indir,'cosmos/')
     else: raise ValueError
     return dir
 

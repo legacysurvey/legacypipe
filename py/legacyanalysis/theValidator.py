@@ -2,15 +2,9 @@
 
 """run everyone's validation codes
 """
+import os
 
-from argparse import ArgumentParser
 from legacyanalysis.pathnames import bash,get_indir
-
-parser=ArgumentParser(formatter_class=argparse.ArgumentDefaultsHelpFormatter,
-                                 description='DECaLS simulations.')
-parser.add_argument('-fn1', type=str, help='process this brick (required input)')
-parser.add_argument('-fn2', type=str, help='object type (STAR, ELG, LRG, BGS)') 
-args = parser.parse_args()
 
 #BASS/MzLS vs. DECaLS
 decam_cats= os.path.join(get_indir('bmd'),'decam.txt')

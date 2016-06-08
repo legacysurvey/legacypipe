@@ -3,17 +3,22 @@ matplotlib.use('Agg') #display backend
 import matplotlib.pyplot as plt
 import numpy as np
 import os
+from scipy.spatial import KDTree
+import scipy.stats as st
+from scipy.optimize import curve_fit as cu
+from astropy.io import fits
+import astropy.cosmology as co
 
-from legacyanalysis.pathnames import get_indir
+from legacyanalysis.pathnames import get_indir,get_outdir
 indir= get_indir('cosmos')
 
 #CREATES THE CATALOG LIST
-catList = np.array(["catalog-R3-R4.fits",
+catList = ["catalog-R3-R4.fits",
 "catalog-R2-R4.fits",
 "catalog-R2-R3.fits",
 "catalog-R1-R4.fits",
 "catalog-R1-R3.fits",
-"catalog-R1-R2.fits"])
+"catalog-R1-R2.fits"]
 for cnt,cat in enumerate(catList): catList[cnt]= os.path.join(indir,cat) 
 # EACH CATALOG NEEDS TO HAVE THE TYPICAL DECALS CATALOG ENTRIES WITH "_1" AND "_2" APPENDED FOR DR2 and DR3
 
@@ -61,3 +66,4 @@ plt.grid()
 plt.savefig(os.path.join(get_outdir('cosmos'),"plotsRc", "comparison-depth-normed-g-20-215-cosmos.png"))
 plt.clf()
 f.close()
+print('finished comparison: cosmos')
