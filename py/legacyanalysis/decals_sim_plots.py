@@ -71,16 +71,6 @@ def main():
 
     # We need this for our histograms below
     magbinsz = 0.2
-<<<<<<< HEAD
-    rminmax = meta['rmag_range'].flatten()
-    #pdb.set_trace()
-    nmagbin = long((rminmax[1]-rminmax[0])/magbinsz)
-    
-    # Work in chunks.
-    nchunk = meta['nchunk'][0]
-    for ichunk in range(nchunk):
-        log.info('Working on chunk {:02d}/{:02d}'.format(ichunk+1, nchunk))
-=======
     if meta['rmag_range'].shape == (1,2): rmin,rmax = meta['rmag_range'][0][0],meta['rmag_range'][0][1]
     elif meta['rmag_range'].shape == (2,): rmin,rmax = meta['rmag_range'][0],meta['rmag_range'][1]
     rminmax= np.array([rmin,rmax])
@@ -91,7 +81,6 @@ def main():
     for ichunk in range(nchunk):
         print('ichunk= ',ichunk)
         log.info('Working on chunk {:02d}/{:02d}'.format(ichunk+1,nchunk))
->>>>>>> 95e0da74aeff6ac6003ed1b2279feb5907dbffcc
         chunksuffix = '{:02d}'.format(ichunk)
         
         # Read the simulated object catalog
@@ -138,12 +127,7 @@ def main():
     ax[2].set_xlabel('Input r magnitude (AB mag)')
 
     fig.subplots_adjust(left=0.18,hspace=0.1)
-<<<<<<< HEAD
     qafile = os.path.join(output_dir, 'qa-'+brickname+'-'+lobjtype+'-flux.png')
-=======
-    qafile = os.path.join(decals_sim_dir,brickname,'qa-'+brickname+'-'+
-                          lobjtype+'-flux.png')
->>>>>>> 95e0da74aeff6ac6003ed1b2279feb5907dbffcc
     log.info('Writing {}'.format(qafile))
     plt.savefig(qafile)
 
@@ -163,64 +147,14 @@ def main():
     ax[1].set_ylabel('$\Delta$(r - z) (Tractor minus Input)')
     ax[1].set_xlabel('Input r magnitude (AB mag)')
     fig.subplots_adjust(left=0.18,hspace=0.1)
-<<<<<<< HEAD
+
     qafile = os.path.join(output_dir, 'qa-'+brickname+'-'+lobjtype+'-color.png')
     log.info('Writing {}'.format(qafile))
     plt.savefig(qafile)
 
-    # Get cutouts of the missing sources
-    imfile = os.path.join(output_dir, 'qa-'+brickname+'-'+lobjtype+'-image-'+chunksuffix+'.jpg')
-    
-    hw = 30 # half-width [pixels]
-    ncols = 5
-    nrows = 5
-    nthumb = ncols*nrows
-    dims = (ncols*hw*2,nrows*hw*2)
-    mosaic = Image.new('RGB',dims)
-
-    miss = missing[np.argsort(simcat['r'][missing])]
-    print(simcat['r'][miss])
-    
-    xpos, ypos = np.meshgrid(np.arange(0,dims[0],hw*2,dtype='int'),
-                             np.arange(0,dims[1],hw*2,dtype='int'))
-    im = Image.open(imfile)
-    sz = im.size
-    iobj = 0
-    for ic in range(ncols):
-        for ir in range(nrows):
-            mm = miss[iobj]
-            xx = int(simcat['X'][mm])
-            yy = int(sz[1]-simcat['Y'][mm])
-            crop = (xx-hw, yy-hw, xx+hw, yy+hw)
-            box = (xpos[ir,ic], ypos[ir,ic])
-            thumb = im.crop(crop)
-            mosaic.paste(thumb,box)
-            iobj = iobj+1
-
-    # Add a border
-    draw = ImageDraw.Draw(mosaic)
-    for ic in range(ncols):
-        for ir in range(nrows):
-            draw.rectangle([(xpos[ir,ic],ypos[ir,ic]),
-                            (xpos[ir,ic]+hw*2,ypos[ir,ic]+hw*2)])
-    qafile = os.path.join(output_dir, 'qa-'+brickname+'-'+lobjtype+'-missing.png')
-    log.info('Writing {}'.format(qafile))
-    mosaic.save(qafile)
-=======
-    qafile = os.path.join(decals_sim_dir,brickname,'qa-'+brickname+'-'+
-                          lobjtype+'-color.png')
-    log.info('Writing {}'.format(qafile))
-    plt.savefig(qafile)
-
-
-    #sys.exit(1)
-    
-        
-    # Get cutouts of the missing sources
-    #only if have missing sources
+    # Get cutouts of the missing sources - only if have missing sources
     if len(missing) > 0:
-        imfile = os.path.join(decals_sim_dir,brickname,'qa-'+brickname+'-'+lobjtype+
-                              '-image-'+chunksuffix+'.jpg') 
+        imfile = os.path.join(output_dir, 'qa-'+brickname+'-'+lobjtype+'-image-'+chunksuffix+'.jpg')
         hw = 30 # half-width [pixels]
         ncols = 5
         nrows = 5
@@ -255,24 +189,16 @@ def main():
             for ir in range(nrows):
                 draw.rectangle([(xpos[ir,ic],ypos[ir,ic]),
                                 (xpos[ir,ic]+hw*2,ypos[ir,ic]+hw*2)])
-        qafile = os.path.join(decals_sim_dir,brickname,'qa-'+brickname+'-'+lobjtype+'-missing.png')
+        qafile = os.path.join(output_dir, 'qa-'+brickname+'-'+lobjtype+'-missing.png')
         log.info('Writing {}'.format(qafile))
         mosaic.save(qafile)
->>>>>>> 95e0da74aeff6ac6003ed1b2279feb5907dbffcc
-
+        
     # Modify the coadd image and residual files so the simulated sources
     # are labeled.
     rad = 15
-<<<<<<< HEAD
-    
     imfile = os.path.join(output_dir, 'qa-'+brickname+'-'+lobjtype+'-image-'+chunksuffix+'.png')
-                          
-=======
-    imfile = os.path.join(decals_sim_dir,brickname,'qa-'+brickname+'-'+lobjtype+
-                          '-image-'+chunksuffix+'.jpg')
->>>>>>> 95e0da74aeff6ac6003ed1b2279feb5907dbffcc
-    imfile = [imfile,imfile.replace('-image','-resid')]
-    imfile[0].encode('ascii','ignore').decode()
+    imfile = [imfile, imfile.replace('-image','-resid')]
+    imfile[0].encode('ascii', 'ignore').decode()
 
     for ifile in imfile:
         im = Image.open(ifile)
@@ -298,11 +224,7 @@ def main():
     ax.set_ylim([0.0,1.1])
     ax.legend(loc='lower left')
     fig.subplots_adjust(bottom=0.15)
-<<<<<<< HEAD
     qafile = os.path.join(output_dir, 'qa-'+brickname+'-'+lobjtype+'-frac.png')
-=======
-    qafile = os.path.join(decals_sim_dir,brickname,'qa-'+brickname+'-'+lobjtype+'-frac.png')
->>>>>>> 95e0da74aeff6ac6003ed1b2279feb5907dbffcc
     log.info('Writing {}'.format(qafile))
     plt.savefig(qafile)
 
@@ -325,11 +247,8 @@ def main():
     plt.ylim([0.0,1.1])
     plt.legend(loc='center left',bbox_to_anchor=(0.08,0.5))
     fig.subplots_adjust(bottom=0.15)
-<<<<<<< HEAD
+
     qafile = os.path.join(output_dir, 'qa-'+brickname+'-'+lobjtype+'-type.png')
-=======
-    qafile = os.path.join(decals_sim_dir,brickname,'qa-'+brickname+'-'+lobjtype+'-type.png')
->>>>>>> 95e0da74aeff6ac6003ed1b2279feb5907dbffcc
     log.info('Writing {}'.format(qafile))
     plt.savefig(qafile)
 
@@ -353,12 +272,7 @@ def main():
         plt.xlabel('b/a')
         plt.xlim([0.2,1.0])
         fig.subplots_adjust(bottom=0.18)
-<<<<<<< HEAD
         qafile = os.path.join(output_dir,'qa-'+brickname+'-'+lobjtype+'-morph.png')
-=======
-        qafile = os.path.join(decals_sim_dir,brickname,'qa-'+brickname+'-'+
-                          lobjtype+'-morph.png')
->>>>>>> 95e0da74aeff6ac6003ed1b2279feb5907dbffcc
         log.info('Writing {}'.format(qafile))
         plt.savefig(qafile)
     
