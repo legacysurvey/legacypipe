@@ -47,6 +47,7 @@ import fitsio
 import galsim
 import numpy as np
 import matplotlib.pyplot as plt
+from scipy.spatial import KDTree
 
 # from pydl.pydlutils.spheregroup import spheregroup
 from astropy.table import Table, Column, vstack
@@ -269,7 +270,39 @@ class BuildStamp():
         stamp = self.convolve_and_draw(obj)
         return stamp
 
-def build_simcat(nobj=None, brickname=None, brickwcs=None, meta=None, seed=None):
+def no_overlapping_radec(nobj,bounds, seed=1,dist=5./3600):
+    '''returns ra,dec randomly sampled between bounds for nobjects, 
+    new ra,dec chosen for NN (separation < dist) until all NN have separation >= dist
+    nobj-- number objects
+    bounds-- list of [ramin,ramax,decmin,decmax]
+    dist-- minimum separation in degrees'''
+    rand = np.random.RandomState(seed)
+    ra= rand.uniform(bounds[0],bounds[1],nobj)
+    dec= rand.uniform(bounds[2],bounds[3],nobj)
+    #approx distance = sqrt(x^2+y^2) where x=(dec2-dec1), y=cos(avg(dec2,dec1))*(ra2-ra1)
+    #build tree of x,y 
+    tree = KDTree(np.transpose([dec.copy(),np.cos(dec.copy()*np.pi/180)*ra.copy()])) #data has shape NxK, N points and K dimensions (K=2 for ra,dec) 
+    #querry tree with those same x,y, the 1st NN will be itself, the 2nd NN will be the NN 
+    ds, i_tree = tree.query(np.transpose([dec.copy(),np.cos(dec.copy()*np.pi/180)*ra.copy()]), k=2)
+    i_bad= ds[:,1] < dist #ds[:,0] is array of zeros, ds[:,1] is distances to NN of each ra,dec
+    cnt=1
+    print("non overlapping radec for %d objects: iter=%d, overlaps=%d" % (nobj,cnt, ra[i_bad].shape[0]))
+    while ra[i_bad].shape[0] > 0:
+        #get new ra,dec wherever too close
+        ra[i_bad]= rand.uniform(bounds[0],bounds[1],ra[i_bad].shape[0])
+        dec[i_bad]= rand.uniform(bounds[2],bounds[3],dec[i_bad].shape[0])
+        #re-index and get new searations
+        tree = KDTree(np.transpose([dec.copy(),np.cos(dec.copy()*np.pi/180)*ra.copy()])) #data has shape NxK, N points and K dimensions (K=2 for ra,dec) 
+        ds, i_tree = tree.query(np.transpose([dec.copy(),np.cos(dec.copy()*np.pi/180)*ra.copy()]), k=2) #id for each data.query source that is NN of each input source
+        i_bad= ds[:,1] < dist
+        cnt+=1
+        print("non overlapping radec for %d objects: iter=%d, overlaps=%d" % (nobj,cnt, ra[i_bad].shape[0]))
+        if cnt > 30:
+            print('something bad happening, not converging to non-overlapping radec')
+            raise ValueError
+    return ra,dec
+
+def build_simcat(nobj=None, brickname=None, brickwcs=None, meta=None, seed=None,noOverlap=False):
     """Build the simulated object catalog, which depends on OBJTYPE."""
 
     rand = np.random.RandomState(seed)
@@ -278,8 +311,11 @@ def build_simcat(nobj=None, brickname=None, brickwcs=None, meta=None, seed=None)
     # are too near to one another.  Iterate until we have the requisite number
     # of objects.
     bounds = brickwcs.radec_bounds()
-    ra = rand.uniform(bounds[0],bounds[1],nobj)
-    dec = rand.uniform(bounds[2],bounds[3],nobj)
+    if noOverlap:
+        ra,dec= no_overlapping_radec(nobj,bounds,seed=seed, dist=5./3600) 
+    else:
+        ra = rand.uniform(bounds[0],bounds[1],nobj)
+        dec = rand.uniform(bounds[2],bounds[3],nobj)
     #ra = np.random.uniform(bounds[0],bounds[1],nobj)
     #dec = np.random.uniform(bounds[2],bounds[3],nobj)
 
