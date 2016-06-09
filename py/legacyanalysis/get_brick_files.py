@@ -60,9 +60,9 @@ def main():
     for ii in range(nccd):
         brickfiles.write(imagefiles[ii]+'\n')
     for ii in range(nccd):
-        brickfiles.write(imagefiles[ii].replace('ooi', 'oow')+'\n')
+        brickfiles.write(imagefiles[ii].replace('_ooi_', '_oow_').replace('_oki_', '_oow_')+'\n')
     for ii in range(nccd):
-        brickfiles.write(imagefiles[ii].replace('ooi', 'ood')+'\n')
+        brickfiles.write(imagefiles[ii].replace('_ooi_', '_ood_').replace('_oki_', '_oow_')+'\n')
     brickfiles.close()
 
     cmd = "rsync -avP --files-from='/tmp/brickfiles.txt' cori:/global/cscratch1/sd/desiproc/dr3/ /global/work/decam/versions/work/"

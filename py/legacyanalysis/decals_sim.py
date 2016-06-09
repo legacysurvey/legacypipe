@@ -2,6 +2,7 @@
 
 """Try to hack decals_sim so we don't have to make copies of the data.
 
+2428p117
 3216p000
 1315p240
 
@@ -521,22 +522,15 @@ def main():
                   plotbase='sim')
 
         log.info('Cleaning up...')
-        shutil.move(os.path.join(output_dir, 'tractor', brickname[:3],
-                                 'tractor-'+brickname+'.fits'),
-                    os.path.join(output_dir, 'tractor-'+brickname+'-'+
-                                 lobjtype+'-'+chunksuffix+'.fits'))
-        shutil.move(os.path.join(output_dir,'coadd', brickname[:3], brickname,
-                                 'legacysurvey-'+brickname+'-image.jpg'),
-                    os.path.join(output_dir, 'qa-'+brickname+'-'+lobjtype+
-                                 '-image-'+chunksuffix+'.jpg'))
-        shutil.move(os.path.join(output_dir,'coadd', brickname[:3], brickname,
-                                 'legacysurvey-'+brickname+'-model.jpg'),
-                    os.path.join(output_dir, 'qa-'+brickname+'-'+lobjtype+
-                                 '-model-'+chunksuffix+'.jpg'))
-        shutil.move(os.path.join(output_dir, 'coadd', brickname[:3], brickname,
-                                 'legacysurvey-'+brickname+'-resid.jpg'),
-                    os.path.join(output_dir, 'qa-'+brickname+'-'+lobjtype+
-                                 '-resid-'+chunksuffix+'.jpg'))
+        shutil.copy(os.path.join(output_dir, 'tractor', brickname[:3],
+                                 'tractor-{}.fits'.format(brickname)),
+                    os.path.join(output_dir, 'tractor-{}-{}-{}.fits'.format(
+                        brickname, lobjtype, chunksuffix)))
+        for suffix in ('image', 'model', 'resid', 'simscoadd'):
+            shutil.copy(os.path.join(output_dir,'coadd', brickname[:3], brickname,
+                                     'legacysurvey-{}-{}.jpg'.format(brickname, suffix)),
+                                     os.path.join(output_dir, 'qa-{}-{}-{}-{}.jpg'.format(
+                                         brickname, lobjtype, suffix, chunksuffix)))
         shutil.rmtree(os.path.join(output_dir, 'coadd'))
         shutil.rmtree(os.path.join(output_dir, 'tractor'))
 
