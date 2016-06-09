@@ -4,6 +4,7 @@ from astrometry.util.fits import *
 from astrometry.util.util import *
 from astrometry.util.plotutils import PlotSequence
 import fitsio
+import pylab as plt
 
 from legacypipe.runbrick import run_brick, rgbkwargs, rgbkwargs_resid
 from legacypipe.common import LegacySurveyData
@@ -300,22 +301,73 @@ class MegacamImage(LegacySurveyImage):
 if __name__ == '__main__':
     if False:
         make_zeropoints()
+    if False:
+        # Regular tiling with small overlaps; RA,Dec aligned
+        survey = LegacySurveyData(survey_dir='euclid', output_dir='euclid-out')
+        T = fits_table('euclid/survey-ccds-acsvis.fits.gz')
+        plt.clf()
+        for ccd in T:
+            wcs = survey.get_approx_wcs(ccd)
+            h,w = wcs.shape
+            rr,dd = wcs.pixelxy2radec([1,w,w,1,1], [1,1,h,h,1])
+            plt.plot(rr, dd, 'b-')
+        plt.savefig('acs-outlines.png')
 
     survey = LegacySurveyData(survey_dir='euclid', output_dir='euclid-out')
     survey.image_typemap['acs-vis'] = AcsVisImage
     survey.image_typemap['megacam'] = MegacamImage
 
-    if False:
+    if True:
         # CUT to just the ACS-VIS ones!
         ccds = survey.get_ccds_readonly()
         ccds.cut(ccds.camera == 'acs-vis')
         print('Cut to', len(ccds), 'from ACS-VIS')
-    
-        run_brick(None, survey, radec=(150.64, 1.71), pixscale=0.1,
-                  width=1000, height=1000, bands=['I'], wise=False, do_calibs=False,
-                  pixPsf=True, coadd_bw=True, ceres=False,
-                  blob_image=True, allbands=allbands,
-                  forceAll=True, writePickles=False)
+
+        allccds = ccds
+        
+        for iccd in range(len(allccds)):
+            # Process just this single CCD.
+            survey.ccds = allccds[np.array([iccd])]
+
+            ccd = survey.ccds[0]
+
+            brickname = 'acsvis-%03i' % ccd.expnum
+            
+            # oldbrickname = ('custom-%06i%s%05i' %
+            #                 (int(1000*ccd.ra), 'm' if ccd.dec < 0 else 'p',
+            #                  int(1000*np.abs(ccd.dec))))
+            # oldfn = survey.find_file('tractor', brick=oldbrickname, output=True)
+            # print('Old filename:', oldfn)
+            # try:
+            #     T = fits_table(oldfn)
+            #     print('Read', len(T), 'from', oldfn)
+            #     if len(T) < 1000:
+            #         continue
+            #     for ftype in ['tractor', 'ccds-table', 'image', 'depth', 'imageblob-jpeg',
+            #                   'image-jpeg', 'model-jpeg', 'resid-jpeg', 'blobmap',
+            #                   'all-models', 'galdepth', 'nexp', 'model', 'invvar', 'chi2']:
+            #         oldfn = survey.find_file(ftype, brick=oldbrickname, band=ccd.filter,
+            #                                  output=True)
+            #         newfn = survey.find_file(ftype, brick=brickname, band=ccd.filter,
+            #                                  output=True)
+            #         dirnm = os.path.dirname(newfn)
+            #         os.makedirs(dirnm)
+            #         print('Renaming', oldfn, 'to', newfn)
+            #         os.rename(oldfn, newfn)
+            # except:
+            #     import traceback
+            #     traceback.print_exc()
+            #     continue
+            # continue
+            
+            run_brick(brickname, survey, radec=(ccd.ra, ccd.dec), pixscale=0.1,
+                      width=200, height=200,
+                      #width=ccd.width, height=ccd.height, 
+                      bands=['I'],
+                      wise=False, do_calibs=False,
+                      pixPsf=True, coadd_bw=True, ceres=False,
+                      blob_image=True, allbands=allbands,
+                      forceAll=True, writePickles=False)
         #plots=True, plotbase='euclid',
 
     else:
