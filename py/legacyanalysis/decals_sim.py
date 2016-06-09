@@ -43,10 +43,11 @@ import logging
 import argparse
 import pdb
 
-import fitsio
-import galsim
 import numpy as np
 import matplotlib.pyplot as plt
+from pkg_resources import resource_filename
+
+import galsim
 
 # from pydl.pydlutils.spheregroup import spheregroup
 from astropy.table import Table, Column, vstack
@@ -251,10 +252,10 @@ class BuildStamp():
 
     def elg(self,objinfo,siminfo):
         """Create an ELG (disk-like) galaxy."""
-        obj = galsim.Sersic(float(objinfo['SERSICN_1']),half_light_radius=
+        obj = galsim.Sersic(float(objinfo['SERSICN_1']), half_light_radius=
                             float(objinfo['R50_1']),
                             flux=self.objflux,gsparams=siminfo.gsparams)
-        obj = obj.shear(q=float(objinfo['BA_1']),beta=
+        obj = obj.shear(q=float(objinfo['BA_1']), beta=
                         float(objinfo['PHI_1'])*galsim.degrees)
         stamp = self.convolve_and_draw(obj)
         return stamp
@@ -269,6 +270,65 @@ class BuildStamp():
         stamp = self.convolve_and_draw(obj)
         return stamp
 
+class _GaussianMixtureModel():
+    """Read and sample from a pre-defined Gaussian mixture model.
+
+    """
+    def __init__(self, weights, means, covars, covtype):
+        self.weights = weights
+        self.means = means
+        self.covars = covars
+        self.covtype = covtype
+        self.n_components, self.n_dimensions = self.means.shape
+    
+    @staticmethod
+    def save(model, filename):
+        from astropy.io import fits
+        hdus = fits.HDUList()
+        hdr = fits.Header()
+        hdr['covtype'] = model.covariance_type
+        hdus.append(fits.ImageHDU(model.weights_, name='weights', header=hdr))
+        hdus.append(fits.ImageHDU(model.means_, name='means'))
+        hdus.append(fits.ImageHDU(model.covars_, name='covars'))
+        hdus.writeto(filename, clobber=True)
+        
+    @staticmethod
+    def load(filename):
+        from astropy.io import fits
+        hdus = fits.open(filename, memmap=False)
+        hdr = hdus[0].header
+        covtype = hdr['covtype']
+        model = _GaussianMixtureModel(
+            hdus['weights'].data, hdus['means'].data, hdus['covars'].data, covtype)
+        hdus.close()
+        return model
+    
+    def sample(self, n_samples=1, random_state=None):
+        
+        if self.covtype != 'full':
+            return NotImplementedError(
+                'covariance type "{0}" not implemented yet.'.format(self.covtype))
+        
+        # Code adapted from sklearn's GMM.sample()
+        if random_state is None:
+            random_state = np.random.RandomState()
+
+        weight_cdf = np.cumsum(self.weights)
+        X = np.empty((n_samples, self.n_dimensions))
+        rand = random_state.rand(n_samples)
+        # decide which component to use for each sample
+        comps = weight_cdf.searchsorted(rand)
+        # for each component, generate all needed samples
+        for comp in range(self.n_components):
+            # occurrences of current component in X
+            comp_in_X = (comp == comps)
+            # number of those occurrences
+            num_comp_in_X = comp_in_X.sum()
+            if num_comp_in_X > 0:
+                X[comp_in_X] = random_state.multivariate_normal(
+                    self.means[comp], self.covars[comp], num_comp_in_X)
+        return X
+
 def build_simcat(nobj=None, brickname=None, brickwcs=None, meta=None, seed=None):
     """Build the simulated object catalog, which depends on OBJTYPE."""
 
@@ -278,8 +338,8 @@ def build_simcat(nobj=None, brickname=None, brickwcs=None, meta=None, seed=None)
     # are too near to one another.  Iterate until we have the requisite number
     # of objects.
     bounds = brickwcs.radec_bounds()
-    ra = rand.uniform(bounds[0],bounds[1],nobj)
-    dec = rand.uniform(bounds[2],bounds[3],nobj)
+    ra = rand.uniform(bounds[0], bounds[1], nobj)
+    dec = rand.uniform(bounds[2], bounds[3], nobj)
     #ra = np.random.uniform(bounds[0],bounds[1],nobj)
     #dec = np.random.uniform(bounds[2],bounds[3],nobj)
 
@@ -318,8 +378,13 @@ def build_simcat(nobj=None, brickname=None, brickwcs=None, meta=None, seed=None)
     cat['Y'] = Column(xxyy[2][:], dtype='f4')
 
     if meta['OBJTYPE'] == 'STAR':
-        gr_range = [-0.2,1.0]
-        rz_range = [-0.2,1.5]
+
+        # Read the MoG file and sample from it.
+        mogfile = resource_filename('legacypipe', os.path.join('data', 'star_colors_mog.fits'))
+        mog = _GaussianMixtureModel.load(mogfile)
+        grzsample = mog.sample(nobj, random_state=rand)
+        rz = grzsample[:, 0]
+        gr = grzsample[:, 1]
 
     elif meta['objtype'] == 'ELG':
         gr_range = [-0.3, 0.5]
@@ -346,9 +411,9 @@ def build_simcat(nobj=None, brickname=None, brickwcs=None, meta=None, seed=None)
     # For convenience, also store the grz fluxes in nanomaggies.
     rmag_range = np.squeeze(meta['RMAG_RANGE'])
     rmag = rand.uniform(rmag_range[0], rmag_range[1], nobj)
-    gr = rand.uniform(gr_range[0], gr_range[1], nobj)
-    rz = rand.uniform(rz_range[0], rz_range[1], nobj)
-    
+    #gr = rand.uniform(gr_range[0], gr_range[1], nobj)
+    #rz = rand.uniform(rz_range[0], rz_range[1], nobj)
+
     cat['R'] = rmag
     cat['GR'] = gr
     cat['RZ'] = rz
@@ -500,7 +565,7 @@ def main():
             nobjchunk = np.max((nobjchunk, nobj % ((nchunk-1) * chunksize)))
 
         # Build and write out the simulated object catalog.
-        simcat = build_simcat(nobjchunk, brickname, brickwcs, metacat, seeds[ichunk])
+        simcat = build_simcat(nobjchunk, brickname, brickwcs, metacat, seeds[ichunk])       
         simcatfile = os.path.join(output_dir, 'simcat-'+brickname+'-'+
                                   lobjtype+'-'+chunksuffix+'.fits')
         log.info('Writing {}'.format(simcatfile))

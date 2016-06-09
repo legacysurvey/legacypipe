@@ -258,10 +258,6 @@ def main():
     log.info('Writing {}'.format(qafile))
     plt.savefig(qafile)
 
-    sys.exit(1)
-    #pdb.trace()
-
-
 
 
     # Get cutouts of the missing sources - only if have missing sources
