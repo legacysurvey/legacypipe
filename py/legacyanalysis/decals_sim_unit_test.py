@@ -31,6 +31,7 @@ from tractor.basics import (NanoMaggies, PointSource, GaussianMixtureEllipsePSF,
 from astrometry.util.fits import fits_table
 from legacypipe.common import LegacySurveyData,wcs_for_brick
 ###
+import galsim
 from legacyanalysis.decals_sim import BuildStamp,build_simcat
 
 def get_one_tim(brickname,W=200,H=200,pixscale=0.25,verbose=0, splinesky=False):
@@ -84,12 +85,23 @@ def plot_tim(tim):
     ax.axis('off')
     fig.savefig('./test.png',bbox_inches='tight')
 
-#def main():
-"""
-Main routine.
-"""
+def check_poisson_noise(stamp,ivarstamp,objstamp)
+    '''each pixel of stamp+noise image - stamp image should be gaussian distributed with std dev = sqrt(pix value in stamp)'''
+    diff=np.zeros((stamp.array.shape[0],stamp.array.shape[1],1000))
+    for cnt in range(diff.shape[-1]):
+        stamp_copy= stamp.copy()
+        ivarstamp_copy= ivarstamp.copy()
+        stamp_copy, ivarstamp_copy = objstamp.addnoise(stamp_copy, ivarstamp_copy)
+        diff[:,:,cnt]= stamp_copy.array-stamp.array
+    one_std= np.sqrt( np.sqrt(stamp.array**2)) 
+    for x in np.arange(stamp.array.shape[0])[::4]:
+        for y in np.arange(stamp.array.shape[1])[::4]:
+            junk= plt.hist(diff[x,y,:],range=(-2*one_std[x,y],2*one_std[x,y]))
+            plt.savefig('x%d_y%d_hist.png')
+            plt.close()
 
-parser = ArgumentParser(formatter_class=argparse.ArgumentDefaultsHelpFormatter)
+#def main():
+parser = ArgumentParser()
 parser.add_argument('-b', '--brickname', default='2428p117', help='exposure number')
 parser.add_argument('--splinesky', action='store_true', help='Use spline sky model?')
 parser.add_argument('-v', '--verbose', dest='verbose', action='count', default=0,
