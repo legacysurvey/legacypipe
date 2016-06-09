@@ -14,6 +14,7 @@ import sys
 import logging
 import argparse
 import numpy as np
+from astropy.table import vstack, Table
 #import seaborn as sns
 
 import pdb
@@ -77,6 +78,12 @@ def main():
     nmagbin = long((rminmax[1]-rminmax[0])/magbinsz)
     
     # Work in chunks.
+    
+    m1 = []
+    m2 = []
+    missing = []
+    good = []
+    
     nchunk = len(meta['nchunk'])
     for ichunk in range(nchunk):
         print('ichunk= ',ichunk)
@@ -93,7 +100,7 @@ def main():
         tractorfile = os.path.join(output_dir, 'tractor-'+brickname+'-'+
                                    lobjtype+'-'+chunksuffix+'.fits')
         log.info('Reading {}'.format(tractorfile))
-        tractor = fits.getdata(tractorfile, 1)
+        tractor = fits.getdata(tractorfile, 1) # tractor1?
 
         m1, m2, d12 = match_radec(tractor['ra'], tractor['dec'],
                                   simcat['ra'], simcat['dec'], 1.0/3600.0)
@@ -102,7 +109,24 @@ def main():
         good = np.where((np.abs(tractor['decam_flux'][m1,2]/simcat['rflux'][m2]-1)<0.3)*1)
         print("tractor['decam_flux'].shape=",tractor['decam_flux'].shape)
 
+        # build up the m1, m2, good, and missing arrays
+        nout = 0
+        if nchunk > 0:
+            if __ == 0:
+                out = simcat[m2]
+                nout = len(out)
+            else:
+                out = vstack((out, simcat[m2])
+                nout = len(out)
+        print(nout)
         
+        m1.append(__)
+        m2.append(__)
+        good.append()
+        missing.append()
+        # use vstack to buildup all the simcat chunks
+        # vstack on tractor!
+     
     # Flux residuals vs r-band magnitude
     rmag = simcat['r'][m2]
     gflux_sim = simcat['gflux'][m2]
@@ -196,7 +220,7 @@ def main():
     # Modify the coadd image and residual files so the simulated sources
     # are labeled.
     rad = 15
-    imfile = os.path.join(output_dir, 'qa-'+brickname+'-'+lobjtype+'-image-'+chunksuffix+'.png')
+    imfile = os.path.join(output_dir, 'qa-'+brickname+'-'+lobjtype+'-image-'+chunksuffix+'.jpg')
     imfile = [imfile, imfile.replace('-image','-resid')]
     imfile[0].encode('ascii', 'ignore').decode()
 

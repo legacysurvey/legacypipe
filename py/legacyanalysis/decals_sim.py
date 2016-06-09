@@ -3,6 +3,7 @@
 """Try to hack decals_sim so we don't have to make copies of the data.
 
 3216p000
+1315p240
 
 nohup python ${LEGACYPIPE}/py/legacyanalysis/decals_sim.py -n 32 -c 10 -b 2428p117 -o STAR --zoom 500 1400 600 1300 > log2 2>&1 &
 nohup python ${LEGACYPIPE}/py/legacyanalysis/decals_sim.py -n 5000 -c 500 -b 3216p000 -o STAR > & 3216p000.log &
@@ -77,12 +78,12 @@ class SimImage(DecamImage):
             return tim
 
         # Initialize the object stamp class
-        if 'seed' in self.survey.metacat.columns:
-            seed = self.survey.metacat['seed']
+        if 'SEED' in self.survey.metacat.columns:
+            seed = self.survey.metacat['SEED']
         else:
             seed = None
 
-        objtype = self.survey.metacat['objtype']
+        objtype = self.survey.metacat['OBJTYPE']
         objstamp = BuildStamp(tim, gain=self.t.arawgain, seed=seed)
 
         # Grab the data and inverse variance images [nanomaggies!]
@@ -129,16 +130,9 @@ class SimImage(DecamImage):
                     print('Negative invvar!')
                     import pdb ; pdb.set_trace()
 
-            #if ii == 17:
-            #    import pdb ; pdb.set_trace()
-                    
-        assert(sims_image.array.shape == image.array.shape)
-        assert(sims_ivar.array.shape == invvar.array.shape)
         tim.sims_image = sims_image.array
         tim.sims_inverr = np.sqrt(sims_ivar.array)
         tim.sims_xy = tim.sims_xy.astype(int)
-        #tim.data = image.array + sims_image.array
-        #tim.inverr = np.sqrt(invvar.array + sims_ivar.array)
         tim.data = image.array
         tim.inverr = np.sqrt(invvar.array)
 
@@ -151,10 +145,10 @@ class BuildStamp():
     def __init__(self,tim, gain=4.0, seed=None):
         """Initialize the BuildStamp object with the CCD-level properties we need."""
 
-        self.band = tim.band.strip().lower()
+        self.band = tim.band.strip().upper()
         self.gsparams = galsim.GSParams(maximum_fft_size=2L**30L)
+        #print('FIX ME!!!!!!!!!!!!!!!!!!!!!!!!!!!!')
         self.gsdeviate = galsim.BaseDeviate()
-        print('FIX ME!!!!!!!!!!!!!!!!!!!!!!!!!!!!')
         #if seed is None:
         #    self.gsdeviate = galsim.BaseDeviate()
         #else:
@@ -170,11 +164,11 @@ class BuildStamp():
     def setlocal(self,obj):
         """Get the pixel positions, local pixel scale, and local PSF.""" 
 
-        xx, yy = self.wcs.positionToPixel(RaDecPos(obj['ra'],obj['dec']))
-        self.pos = galsim.PositionD(xx,yy)
+        xx, yy = self.wcs.positionToPixel(RaDecPos(obj['RA'], obj['DEC']))
+        self.pos = galsim.PositionD(xx, yy)
         self.xpos = int(self.pos.x)
         self.ypos = int(self.pos.y)
-        self.offset = galsim.PositionD(self.pos.x-self.xpos,self.pos.y-self.ypos)
+        self.offset = galsim.PositionD(self.pos.x-self.xpos, self.pos.y-self.ypos)
 
         # Get the local pixel scale [arcsec/pixel]
         cd = self.wcs.cdAtPixel(self.pos.x, self.pos.y)
@@ -246,7 +240,7 @@ class BuildStamp():
 
         self.setlocal(obj)
 
-        flux = obj[self.band+'flux'] # [nanomaggies]
+        flux = obj[self.band+'FLUX'] # [nanomaggies]
         psf = self.localpsf.withFlux(flux)
 
         stamp = psf.drawImage(offset=self.offset, scale=self.pixscale, method='no_pixel')
@@ -274,7 +268,7 @@ class BuildStamp():
         stamp = self.convolve_and_draw(obj)
         return stamp
 
-def build_simcat(nobj=None,brickname=None,brickwcs=None,meta=None,seed=None):
+def build_simcat(nobj=None, brickname=None, brickwcs=None, meta=None, seed=None):
     """Build the simulated object catalog, which depends on OBJTYPE."""
 
     rand = np.random.RandomState(seed)
@@ -313,51 +307,53 @@ def build_simcat(nobj=None,brickname=None,brickwcs=None,meta=None,seed=None):
     #print(np.bincount(test[0],minlength=nobj))
     #sys.exit(1)
 
-    xxyy = brickwcs.radec2pixelxy(ra,dec)
+    xxyy = brickwcs.radec2pixelxy(ra, dec)
 
     cat = Table()
-    cat['id'] = Column(np.arange(nobj,dtype='i4'))
-    cat['x'] = Column(xxyy[1][:],dtype='f4')
-    cat['y'] = Column(xxyy[2][:],dtype='f4')
-    cat['ra'] = Column(ra,dtype='f8')
-    cat['dec'] = Column(dec,dtype='f8')
+    cat['ID'] = Column(np.arange(nobj, dtype='i4'))
+    cat['RA'] = Column(ra, dtype='f8')
+    cat['DEC'] = Column(dec, dtype='f8')
+    cat['X'] = Column(xxyy[1][:], dtype='f4')
+    cat['Y'] = Column(xxyy[2][:], dtype='f4')
 
-    if meta['objtype']=='ELG':
-        gr_range = [-0.3,0.5]
-        rz_range = [0.0,1.5]
+    if meta['OBJTYPE'] == 'STAR':
+        gr_range = [-0.2,1.0]
+        rz_range = [-0.2,1.5]
 
-        sersicn_1_range = [1.0,1.0]
-        r50_1_range = [0.5,2.5]
-        ba_1_range = [0.2,1.0]
+    elif meta['objtype'] == 'ELG':
+        gr_range = [-0.3, 0.5]
+        rz_range = [0.0, 1.5]
 
-        cat['sersicn_1'] = Column(sersicn_1,dtype='f4')
-        cat['r50_1'] = Column(r50_1,dtype='f4')
-        cat['ba_1'] = Column(ba_1,dtype='f4')
-        cat['phi_1'] = Column(phi_1,dtype='f4')
+        sersicn_1_range = [1.0, 1.0]
+        r50_1_range = [0.5, 2.5]
+        ba_1_range = [0.2, 1.0]
+
+        cat['SERSICN_1'] = Column(sersicn_1, dtype='f4')
+        cat['R50_1'] = Column(r50_1, dtype='f4')
+        cat['BA_1'] = Column(ba_1, dtype='f4')
+        cat['PHI_1'] = Column(phi_1, dtype='f4')
 
         ## Bulge parameters
         #bulge_r50_range = [0.1,1.0]
         #bulge_n_range = [3.0,5.0]
         #bdratio_range = [0.0,1.0] # bulge-to-disk ratio
 
-        cat = np.concatenate((cat,elgcat))
-
-    if meta['objtype']=='STAR':
-        gr_range = [-0.2,1.0]
-        rz_range = [-0.2,1.5]
+    else:
+        print('Unrecognized OBJTYPE!')
+        return 0
 
     # For convenience, also store the grz fluxes in nanomaggies.
-    rmag_range = meta['rmag_range'][0]
-    rmag = rand.uniform(rmag_range[0],rmag_range[1],nobj)
-    gr = rand.uniform(gr_range[0],gr_range[1],nobj)
-    rz = rand.uniform(rz_range[0],rz_range[1],nobj)
+    rmag_range = np.squeeze(meta['RMAG_RANGE'])
+    rmag = rand.uniform(rmag_range[0], rmag_range[1], nobj)
+    gr = rand.uniform(gr_range[0], gr_range[1], nobj)
+    rz = rand.uniform(rz_range[0], rz_range[1], nobj)
     
-    cat['r'] = rmag
-    cat['gr'] = gr
-    cat['rz'] = rz
-    cat['gflux'] = 1E9*10**(-0.4*(rmag+gr)) # [nanomaggies]
-    cat['rflux'] = 1E9*10**(-0.4*rmag)      # [nanomaggies]
-    cat['zflux'] = 1E9*10**(-0.4*(rmag-rz)) # [nanomaggies]
+    cat['R'] = rmag
+    cat['GR'] = gr
+    cat['RZ'] = rz
+    cat['GFLUX'] = 1E9*10**(-0.4*(rmag+gr)) # [nanomaggies]
+    cat['RFLUX'] = 1E9*10**(-0.4*rmag)      # [nanomaggies]
+    cat['ZFLUX'] = 1E9*10**(-0.4*(rmag-rz)) # [nanomaggies]
 
     return cat
 
@@ -373,25 +369,25 @@ def main():
                         help='divide NOBJ into CHUNKSIZE chunks')
     parser.add_argument('-b', '--brick', type=str, default='2428p117', metavar='', 
                         help='simulate objects in this brick')
-    parser.add_argument('-o', '--objtype', type=str, choices=['STAR','ELG', 'LRG', 'QSO', 'LSB'],default='STAR', metavar='', 
+    parser.add_argument('-o', '--objtype', type=str, choices=['STAR','ELG', 'LRG', 'QSO', 'LSB'], default='STAR', metavar='', 
                         help='insert these into images') 
-    parser.add_argument('-t', '--threads', type=int, default=8, metavar='', 
+    parser.add_argument('-t', '--threads', type=int, default=1, metavar='', 
                         help='number of threads to use when calling The Tractor')
     parser.add_argument('-s', '--seed', type=long, default=None, metavar='', 
                         help='random number seed')
-    parser.add_argument('-z', '--zoom', nargs=4, type=int, metavar='', 
+    parser.add_argument('-z', '--zoom', nargs=4, default=(0, 3600, 0, 3600), type=int, metavar='', 
                         help='see runbrick.py; (default is 0 3600 0 3600)')
     parser.add_argument('-survey-dir', '--survey_dir', metavar='', 
                         help='Location of survey-ccds*.fits.gz')
-    parser.add_argument('--rmag-range', nargs=2, type=float, default=(18,26), metavar='', 
+    parser.add_argument('--rmag-range', nargs=2, type=float, default=(18, 26), metavar='', 
                         help='r-band magnitude range')
     parser.add_argument('--all-blobs', action='store_true', 
                         help='Process all the blobs, not just those that contain simulated sources.')
-    parser.add_argument('--stage', choices=['tims','image_coadds','srcs','fitblobs','coadds'], type=str,default='writecat',metavar='', 
-                        help='Run up to the given stage')
-    parser.add_argument('--early_coadds', action='store_true', help='add this option to make the jpgs before detection/model fitting')
-    parser.add_argument('-v', '--verbose', action='store_true', 
-                        help='toggle on verbose output')
+    parser.add_argument('--stage', choices=['tims', 'image_coadds', 'srcs', 'fitblobs', 'coadds'],
+                        type=str, default='writecat', metavar='', help='Run up to the given stage')
+    parser.add_argument('--early_coadds', action='store_true',
+                        help='add this option to make the JPGs before detection/model fitting')
+    parser.add_argument('-v', '--verbose', action='store_true', help='toggle on verbose output')
 
     args = parser.parse_args()
     if args.nobj is None:
@@ -420,6 +416,16 @@ def main():
         log.warning('{} objtype not yet supported!'.format(objtype))
         sys.exit(1)
 
+    # Deal with the paths.
+    if 'DECALS_SIM_DIR' in os.environ:
+        decals_sim_dir = os.getenv('DECALS_SIM_DIR')
+    else:
+        decals_sim_dir = '.'
+    output_dir = os.path.join(decals_sim_dir, brickname)
+        
+    if not os.path.exists(output_dir):
+        os.makedirs(output_dir)
+        
     # Determine how many chunks we need
     nobj = args.nobj
     chunksize = args.chunksize
@@ -435,68 +441,62 @@ def main():
     brickinfo = survey.get_brick_by_name(brickname)
     brickwcs = wcs_for_brick(brickinfo)
     W, H, pixscale = brickwcs.get_width(), brickwcs.get_height(), brickwcs.pixel_scale()
-    print(W, H, pixscale)
 
     log.info('Brick = {}'.format(brickname))
     if args.zoom is not None: # See also runbrick.stage_tims()
-        (x0,x1,y0,y1) = args.zoom
-        W = x1-x0
-        H = y1-y0
+        (x0, x1, y0, y1) = args.zoom
+        W = x1 - x0
+        H = y1 - y0
         brickwcs = brickwcs.get_subimage(x0, y0, W, H)
         log.info('Zoom (pixel boundaries) = {}'.format(args.zoom))
-    targetrd = np.array([brickwcs.pixelxy2radec(x,y) for x,y in
-                         [(1,1),(W,1),(W,H),(1,H),(1,1)]])
+    targetrd = np.array([brickwcs.pixelxy2radec(x, y) for x, y in
+                         [(1,1), (W,1), (W,H), (1,H), (1,1)]])
  
     radec_center = brickwcs.radec_center()
     log.info('RA, Dec center = {}'.format(radec_center))
     log.info('Brick = {}'.format(brickname))
 
-    # Pack the input parameters into a meta-data table.
-    metacat = Table()
-    metacat['brickname'] = Column([brickname],dtype='S10')
-    metacat['objtype'] = Column([objtype],dtype='S10')
-    metacat['nobj'] = Column([args.nobj],dtype='i4')
-    metacat['chunksize'] = Column([args.chunksize],dtype='i2')
-    metacat['nchunk'] = Column([nchunk],dtype='i2')
-    #metacat['RA'] = Column([ra_range],dtype='f8')
-    #metacat['DEC'] = Column([dec_range],dtype='f8')
-    if args.zoom is None:
-        metacat['zoom'] = Column([[0,3600,0,3600]],dtype='i4')
-    else:
-        metacat['zoom'] = Column([args.zoom],dtype='i4')
-    metacat['rmag_range'] = Column([args.rmag_range],dtype='f4')
+    # Pack the input parameters into a meta-data table and write out.
+    metacols = [
+        ('BRICKNAME', 'S10'),
+        ('OBJTYPE', 'S10'),
+        ('NOBJ', 'i4'),
+        ('CHUNKSIZE', 'i2'),
+        ('NCHUNK', 'i2'),
+        ('ZOOM', 'i4', (4,)),
+        ('SEED', 'S20'),
+        ('RMAG_RANGE', 'f4', (2,))]
+    metacat = Table(np.zeros(1, dtype=metacols))
 
-    # Deal with the random seed
-    if args.seed is not None:
+    metacat['BRICKNAME'] = brickname
+    metacat['OBJTYPE'] = objtype
+    metacat['NOBJ'] = args.nobj
+    metacat['CHUNKSIZE'] = args.chunksize
+    metacat['NCHUNK'] = nchunk
+    metacat['ZOOM'] = args.zoom
+    metacat['RMAG_RANGE'] = args.rmag_range
+    if ~args.seed:
         log.info('Random seed = {}'.format(args.seed))
-        metacat['seed'] = Column([args.seed],dtype='i4')
-    rand = np.random.RandomState(args.seed)
-    seeds = rand.random_integers(0,2**18,nchunk)
-    
-    if 'DECALS_SIM_DIR' in os.environ:
-        decals_sim_dir = os.getenv('DECALS_SIM_DIR')
-    else:
-        decals_sim_dir = '.'
-    output_dir = os.path.join(decals_sim_dir, brickname)
-        
-    if not os.path.exists(output_dir):
-        os.makedirs(output_dir)
-        
+        metacat['SEED'] = args.seed
+
     metafile = os.path.join(output_dir, 'metacat-'+brickname+'-'+lobjtype+'.fits')
     log.info('Writing {}'.format(metafile))
     if os.path.isfile(metafile):
         os.remove(metafile)
     metacat.write(metafile)
 
-    # Work in chunks.
+    # Work in chunks, one seed per chunk.
+    rand = np.random.RandomState(args.seed)
+    seeds = rand.random_integers(0,2**18, nchunk)
+
     for ichunk in range(nchunk):
         log.info('Working on chunk {:02d}/{:02d}'.format(ichunk+1,nchunk))
         chunksuffix = '{:02d}'.format(ichunk)
 
         # There's probably a smarter way to do this
-        nobjchunk = np.min((nobj,chunksize))
-        if (nchunk>1) and (ichunk==(nchunk-1)):
-            nobjchunk = np.max((nobjchunk,nobj%((nchunk-1)*chunksize)))
+        nobjchunk = np.min((nobj, chunksize))
+        if (nchunk > 1) and (ichunk == (nchunk-1)):
+            nobjchunk = np.max((nobjchunk, nobj % ((nchunk-1) * chunksize)))
 
         # Build and write out the simulated object catalog.
         simcat = build_simcat(nobjchunk, brickname, brickwcs, metacat, seeds[ichunk])
@@ -507,20 +507,18 @@ def main():
             os.remove(simcatfile)
         simcat.write(simcatfile)
 
-#       # Use Tractor to just process the blobs containing the simulated sources.
+        # Use Tractor to just process the blobs containing the simulated sources.
         simdecals = SimDecals(metacat=metacat, simcat=simcat, output_dir=output_dir)
         if args.all_blobs:
             blobxy = None
         else:
-            blobxy = zip(simcat['x'], simcat['y'])
+            blobxy = zip(simcat['X'], simcat['Y'])
 
         run_brick(brickname, simdecals, threads=args.threads, zoom=args.zoom,
                   wise=False, forceAll=True, writePickles=False, do_calibs=False,
                   write_metrics=False, pixPsf=True, blobxy=blobxy, early_coadds=args.early_coadds,
                   splinesky=True, ceres=False, stages=[args.stage], plots=False,
                   plotbase='sim')
-
-        #pdb.set_trace()
 
         log.info('Cleaning up...')
         shutil.move(os.path.join(output_dir, 'tractor', brickname[:3],
