@@ -9,11 +9,8 @@
 set -x
 export ATP_ENABLED=0
 
-# faster python start-up
-source /project/projectdirs/m779/python-mpi/activate.sh /dev/shm/local "srun -n 32"
-
-bcast /project/projectdirs/m779/yfeng1/python-2.7-cori.tar.gz
-bcast /project/projectdirs/m779/yfeng1/python-2.7-cori-fitsio-0.9.8rc2.tar.gz
+module load python/2.7-anaconda
+source /usr/common/contrib/bccp/python-mpi-bcast/nersc/activate.sh
 
 # allow the python modules
 export PYTHONPATH=$PWD/../py:$PYTHONPATH
@@ -22,8 +19,9 @@ export PYTHONPATH=$PWD/../py:$PYTHONPATH
 ROOT=/project/projectdirs/cosmo/data/legacysurvey/dr1
 ROOT=/project/projectdirs/desiproc/dr2p
 ROOT=/project/projectdirs/desiproc/dr2p
+ROOT=/project/projectdirs/desiproc/dr3
 
-find $ROOT/tractor+depth -name 'tractor-*.fits' > filelist
+find $ROOT/tractor -name 'tractor-*.fits' > filelist
 
 # use python-mpi. 'python' from anaconda fails with libpython.so.0.1 not found
 # error when ran via aprun, at least on ~yfeng1's environments.
@@ -33,9 +31,10 @@ find $ROOT/tractor+depth -name 'tractor-*.fits' > filelist
 
 time srun -u --cpu_bind=no -N 1 python-mpi match-boss-catalogue.py -v \
 --numproc 64 \
+-I \
 -f fits hdf5 \
 -F filelist \
 /global/projecta/projectdirs/sdss/data/sdss/dr12/boss/qso/DR12Q/Superset_DR12Q.fits \
-$ROOT/tractor+depth \
-$SCRATCH/sandbox/decals-dr2p/tractor+depth-Superset_DR12Q.fits
+$ROOT/tractor \
+$SCRATCH/sandbox/decals-dr3/tractor-Superset_DR12Q.fits
 
