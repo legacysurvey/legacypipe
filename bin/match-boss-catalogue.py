@@ -20,6 +20,10 @@ print('Running from %s' % platform.node())
 def main():
     ns = parse_args()
         
+    if ns.ignore_errors:
+        print("Warning: *** Will ignore broken tractor catalogue files ***")
+        print("         *** Disable -I for final data product.         ***")
+
     bricks = list_bricks(ns)
 
     tree, boss = read_boss(ns.boss, ns)
@@ -44,7 +48,15 @@ def main():
 
     with sharedmem.MapReduce(np=ns.numproc) as pool:
         def work(brickname, path):
-            objects = fitsio.read(path, 1, upper=True)
+            try:
+                objects = fitsio.read(path, 1, upper=True)
+            except:
+                if ns.ignore_errors:
+                    print ("IO Error on %s" %path)
+                    return None, None, None
+                else:
+                    raise
+        
             pos = radec2pos(objects['RA'], objects['DEC'])
             d, i = tree.query(pos, 1)
             assert (objects['OBJID'] != -1).all()
@@ -59,6 +71,8 @@ def main():
             return brickname, matched, len(objects)
 
         def reduce(brickname, matched, total):
+            if brickname is None:
+                return
             nprocessed[...] += 1
             nmatched[...] += matched
             ntotal[...] += total
@@ -201,6 +215,8 @@ def parse_args():
             """)
 
     ap.add_argument('-v', "--verbose", action='store_true')
+
+    ap.add_argument('-I', "--ignore-errors", action='store_true')
 
     ap.add_argument("--numproc", type=int, default=None,
         help="""Number of concurrent processes to use. 0 for sequential execution. 
