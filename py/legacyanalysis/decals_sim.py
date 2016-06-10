@@ -334,20 +334,20 @@ def no_overlapping_radec(nobj, bounds, seed=None, dist=5.0/3600):
     print("non overlapping radec for %d objects: iter=%d, overlaps=%d" % (nobj,cnt, ra[i_bad].shape[0]))
     while ra[i_bad].shape[0] > 0:
         #get new ra,dec wherever too close
-        ra[i_bad]= rand.uniform(bounds[0],bounds[1],ra[i_bad].shape[0])
-        dec[i_bad]= rand.uniform(bounds[2],bounds[3],dec[i_bad].shape[0])
+        ra[i_bad]= rand.uniform(bounds[0], bounds[1], ra[i_bad].shape[0])
+        dec[i_bad]= rand.uniform(bounds[2], bounds[3], dec[i_bad].shape[0])
         #re-index and get new searations
-        tree = KDTree(np.transpose([dec.copy(),np.cos(dec.copy()*np.pi/180)*ra.copy()])) #data has shape NxK, N points and K dimensions (K=2 for ra,dec) 
-        ds, i_tree = tree.query(np.transpose([dec.copy(),np.cos(dec.copy()*np.pi/180)*ra.copy()]), k=2) #id for each data.query source that is NN of each input source
+        tree = KDTree(np.transpose([dec.copy(), np.cos(dec.copy()*np.pi/180)*ra.copy()])) #data has shape NxK, N points and K dimensions (K=2 for ra,dec) 
+        ds, i_tree = tree.query(np.transpose([dec.copy(), np.cos(dec.copy()*np.pi/180)*ra.copy()]), k=2) #id for each data.query source that is NN of each input source
         i_bad= ds[:,1] < dist
-        cnt+=1
+        cnt += 1
         print("non overlapping radec for %d objects: iter=%d, overlaps=%d" % (nobj,cnt, ra[i_bad].shape[0]))
         if cnt > 30:
             print('something bad happening, not converging to non-overlapping radec')
             raise ValueError
     return ra, dec
 
-def build_simcat(nobj=None, brickname=None, brickwcs=None, meta=None, seed=None, noOverlap=False):
+def build_simcat(nobj=None, brickname=None, brickwcs=None, meta=None, seed=None, noOverlap=True):
     """Build the simulated object catalog, which depends on OBJTYPE."""
 
     rand = np.random.RandomState(seed)
@@ -357,7 +357,7 @@ def build_simcat(nobj=None, brickname=None, brickwcs=None, meta=None, seed=None,
     # of objects.
     bounds = brickwcs.radec_bounds()
     if noOverlap:
-        ra, dec= no_overlapping_radec(nobj,bounds,seed=seed, dist=5./3600) 
+        ra, dec= no_overlapping_radec(nobj, bounds, seed=seed, dist=5./3600) 
     else:
         ra = rand.uniform(bounds[0],bounds[1],nobj)
         dec = rand.uniform(bounds[2],bounds[3],nobj)
