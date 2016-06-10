@@ -2,6 +2,8 @@
 
 """Try to hack decals_sim so we don't have to make copies of the data.
 
+decals_sim -b 2428p117 -n 2000 --chunksize 500 -o STAR --seed 7618 --threads 15 > ~/2428p117.log 2>&1 & 
+
 2428p117
 3216p000
 1315p240

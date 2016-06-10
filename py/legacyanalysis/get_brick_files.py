@@ -10,8 +10,10 @@ import os
 import sys
 import argparse
 import numpy as np
-#import pdb
+import pdb
 
+from legacypipe.cpimage import CPImage
+from legacypipe.image import LegacySurveyImage
 from legacypipe.common import LegacySurveyData, wcs_for_brick, ccds_touching_wcs
 
 def getbrickfiles(brickname=None):
@@ -30,9 +32,10 @@ def getbrickfiles(brickname=None):
     skyfiles = list()
     imagefiles = list()
     for ii in range(nccd):
+
+
         exp = '{0:08d}'.format(expnum[ii])
         rootfile = os.path.join(exp[:5], exp, 'decam-'+exp+'-'+ccdname[ii]+'.fits')
-        #pdb.set_trace()
         psffiles.append(os.path.join('calib', 'decam', 'psfex', rootfile))
         skyfiles.append(os.path.join('calib', 'decam', 'splinesky', rootfile))
         imagefiles.append(os.path.join('images', str(np.core.defchararray.strip(ccdinfo.image_filename[ii]))))
