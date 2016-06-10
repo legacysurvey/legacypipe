@@ -458,22 +458,17 @@ def main():
         lvl = logging.DEBUG
     else:
         lvl = logging.INFO
-    logging.basicConfig(format='%(message)s',level=lvl,stream=sys.stdout)
+    logging.basicConfig(format='%(message)s', level=lvl, stream=sys.stdout)
     log = logging.getLogger('__name__')
 
     brickname = args.brick
     objtype = args.objtype.upper()
     lobjtype = objtype.lower()
 
-    if objtype == 'LRG':
-        log.warning('{} objtype not yet supported!'.format(objtype))
-        sys.exit(1)
-    elif objtype == 'LSB':
-        log.warning('{} objtype not yet supported!'.format(objtype))
-        sys.exit(1)
-    elif objtype == 'QSO':
-        log.warning('{} objtype not yet supported!'.format(objtype))
-        sys.exit(1)
+    for obj in ('LRG', 'LSB', 'ELG', 'QSO'):
+        if objtype == obj:
+            log.warning('{} objtype not yet supported!'.format(objtype))
+            return 0
 
     # Deal with the paths.
     if 'DECALS_SIM_DIR' in os.environ:
@@ -538,7 +533,7 @@ def main():
         log.info('Random seed = {}'.format(args.seed))
         metacat['SEED'] = args.seed
 
-    metafile = os.path.join(output_dir, 'metacat-'+brickname+'-'+lobjtype+'.fits')
+    metafile = os.path.join(output_dir, 'metacat-{}-{}.fits'.format(brickname, lobjtype))
     log.info('Writing {}'.format(metafile))
     if os.path.isfile(metafile):
         os.remove(metafile)
@@ -559,8 +554,7 @@ def main():
 
         # Build and write out the simulated object catalog.
         simcat = build_simcat(nobjchunk, brickname, brickwcs, metacat, seeds[ichunk])       
-        simcatfile = os.path.join(output_dir, 'simcat-'+brickname+'-'+
-                                  lobjtype+'-'+chunksuffix+'.fits')
+        simcatfile = os.path.join(output_dir, 'simcat-{}-{}-{}.fits'.format(brickname, lobjtype, chunksuffix))
         log.info('Writing {}'.format(simcatfile))
         if os.path.isfile(simcatfile):
             os.remove(simcatfile)
