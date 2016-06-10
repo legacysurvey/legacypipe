@@ -160,8 +160,13 @@ def make_sweep(sweep, bricks, ns):
         def filter(brickname, filename, region):
             if not intersect(sweep, region): 
                 return None
-            objects = fitsio.read(filename, 1, upper=True)
-
+            try:
+                objects = fitsio.read(filename, 1, upper=True)
+            except:
+                if ns.ignore_errors:
+                    return
+                else:
+                    raise
             mask = objects['BRICK_PRIMARY'] != 0
             objects = objects[mask]
             mask = objects['RA'] >= ra1
@@ -295,6 +300,7 @@ def parse_args():
         help="location of decals-bricks.fits, speeds up the scanning")
 
     ap.add_argument('-v', "--verbose", action='store_true')
+    ap.add_argument('-I', "--ignore-errors", action='store_true')
 
     ap.add_argument('-S', "--schema", choices=['blocks', 'dec', 'ra'], 
             default='blocks', 
