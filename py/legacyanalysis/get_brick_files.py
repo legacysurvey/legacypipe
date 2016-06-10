@@ -24,6 +24,9 @@ def getbrickfiles(brickname=None):
     ccdinfo = survey.ccds_touching_wcs(brickwcs)
     nccd = len(ccdinfo)
 
+    calibdir = survey.get_calib_dir()
+    imagedir = survey.survey_dir
+
     # Construct image file names and the calibration file names.
     expnum = ccdinfo.expnum
     ccdname = ccdinfo.ccdname
@@ -31,19 +34,26 @@ def getbrickfiles(brickname=None):
     psffiles = list()
     skyfiles = list()
     imagefiles = list()
-    for ii in range(nccd):
-
-
-        exp = '{0:08d}'.format(expnum[ii])
-        rootfile = os.path.join(exp[:5], exp, 'decam-'+exp+'-'+ccdname[ii]+'.fits')
-        psffiles.append(os.path.join('calib', 'decam', 'psfex', rootfile))
-        skyfiles.append(os.path.join('calib', 'decam', 'splinesky', rootfile))
-        imagefiles.append(os.path.join('images', str(np.core.defchararray.strip(ccdinfo.image_filename[ii]))))
+    for ccd in ccdinfo:
+        info = survey.get_image_object(ccd)
+        for attr in ['imgfn', 'dqfn', 'wtfn']:
+            fn = getattr(info, attr).replace(imagedir+'/', '')
+            #if '160108_073601' in fn:
+            #    pdb.set_trace()
+            imagefiles.append(fn)
+        psffiles.append(info.psffn.replace(calibdir, 'calib'))
+        skyfiles.append(info.splineskyfn.replace(calibdir, 'calib'))
+        
+    #for ii in range(nccd):
+        #exp = '{0:08d}'.format(expnum[ii])
+        #rootfile = os.path.join(exp[:5], exp, 'decam-'+exp+'-'+ccdname[ii]+'.fits')
+        #psffiles.append(os.path.join('calib', 'decam', 'psfex', rootfile))
+        #skyfiles.append(os.path.join('calib', 'decam', 'splinesky', rootfile))
+        #imagefiles.append(os.path.join('images', str(np.core.defchararray.strip(ccdinfo.image_filename[ii]))))
 
     #print(np.array(imagefiles))
     #print(np.array(psffiles))
     #print(np.array(skyfiles))
-
     return imagefiles, psffiles, skyfiles
 
 def main():
@@ -53,19 +63,15 @@ def main():
     args = parser.parse_args()
 
     imagefiles, psffiles, skyfiles = getbrickfiles(args.brickname)
-    nccd = len(psffiles)
+    imagefiles = np.unique(np.array(imagefiles))
 
     brickfiles = open('/tmp/brickfiles.txt', 'w')
-    for ii in range(nccd):
-        brickfiles.write(psffiles[ii]+'\n')
-    for ii in range(nccd):
-        brickfiles.write(skyfiles[ii]+'\n')
-    for ii in range(nccd):
-        brickfiles.write(imagefiles[ii]+'\n')
-    for ii in range(nccd):
-        brickfiles.write(imagefiles[ii].replace('_ooi_', '_oow_').replace('_oki_', '_oow_')+'\n')
-    for ii in range(nccd):
-        brickfiles.write(imagefiles[ii].replace('_ooi_', '_ood_').replace('_oki_', '_oow_')+'\n')
+    for ff in psffiles:
+        brickfiles.write(ff+'\n')
+    for ff in skyfiles:
+        brickfiles.write(ff+'\n')
+    for ff in imagefiles:
+        brickfiles.write(ff+'\n')
     brickfiles.close()
 
     cmd = "rsync -avP --files-from='/tmp/brickfiles.txt' cori:/global/cscratch1/sd/desiproc/dr3/ /global/work/decam/versions/work/"
