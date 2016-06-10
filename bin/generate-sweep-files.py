@@ -16,6 +16,9 @@ import fitsio
 def main():
     ns = parse_args()
             
+    if ns.ignore_errors:
+        print("Warning: *** Will ignore broken tractor catalogue files ***")
+        print("         *** Disable -I for final data product.         ***")
     # avoid each subprocess importing h5py again and again.
     if 'hdf5' in ns.format: 
         import h5py
