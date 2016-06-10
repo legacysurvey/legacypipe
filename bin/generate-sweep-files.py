@@ -167,6 +167,7 @@ def make_sweep(sweep, bricks, ns):
                 objects = fitsio.read(filename, 1, upper=True)
             except:
                 if ns.ignore_errors:
+                    print('IO error on %s' % filename)
                     return
                 else:
                     raise
