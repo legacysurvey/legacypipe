@@ -82,23 +82,26 @@ tmax = np.percentile(H.ravel(), phi)
 H,xe,ye = plothist(eccds.ra, eccds.dec, phi=phi, **pa)
 plt.title('Number of CCDs')
 ps.savefig()
-#mx = np.percentile(H.ravel(), phi)
+nmax = np.percentile(H.ravel(), phi)
+
+pt = pa.copy()
+pt.update(imshowargs=dict(vmax=tmax))
+pn = pa.copy()
+pn.update(imshowargs=dict(vmax=nmax))
 
 eccds.camera = np.array(['decam'] * len(eccds))
 eccds.object = np.array(['nothing'] * len(eccds))
 I = survey.apply_blacklist(eccds)
 
-H,xe,ye = plothist(eccds.ra[I], eccds.dec[I], weights=eccds.exptime[I], phi=phi, **pa)
+H,xe,ye = plothist(eccds.ra[I], eccds.dec[I], weights=eccds.exptime[I], phi=phi, **pt)
 plt.title('CCD Exposure time w/blacklist')
 ps.savefig()
 
-H,xe,ye = plothist(eccds.ra[I], eccds.dec[I], phi=phi, **pa)
+H,xe,ye = plothist(eccds.ra[I], eccds.dec[I], phi=phi, **pn)
 plt.title('Number of CCDs w/blacklist')
 ps.savefig()
 
 
-pt = pa.copy()
-pt.update(imshowargs=dict(vmax=tmax))
 
 for pid in uid:
     I = np.flatnonzero(eccds.propid == pid)
