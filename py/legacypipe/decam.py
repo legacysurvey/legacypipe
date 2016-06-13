@@ -130,11 +130,14 @@ class DecamImage(CPImage, CalibMixin):
         object_blacklist = [
             'DES supernova hex',
             ]
-        
-        keep = np.array([(propid not in propid_blacklist) and
-                         not any([obj.startswith(x) 
-                                  for x in object_blacklist])
-                         for propid,obj in zip(ccds.propid, ccds.object)])
+
+        if survey.version == 'dr1' or survey.version == 'dr2':
+            keep = np.array([(propid not in propid_blacklist) for propid in ccds.propid])
+        else:
+            keep = np.array([(propid not in propid_blacklist) and
+                             not any([obj.startswith(x) 
+                                      for x in object_blacklist])
+                                      for propid,obj in zip(ccds.propid, ccds.object)])
         return np.flatnonzero(keep)
     
     glowmjd = astropy.time.Time('2014-08-01').utc.mjd
