@@ -188,11 +188,13 @@ def main():
         thisax.axhline(y=0.0,lw=2,ls='solid',color='gray')
         
     
-        thisax.text(0.05,0.05, band.lower(), horizontalalignment='left',
-                    verticalalignment='bottom',transform=thisax.transAxes,
-                    fontsize=16)
+        #thisax.text(0.05,0.05, band.lower(), horizontalalignment='left',
+                    #verticalalignment='bottom',transform=thisax.transAxes,
+                    #fontsize=16)
         
-    ax[1].set_ylabel(r'$\Delta$m (Tractor minus Input)')
+    ax[0].set_ylabel('$\Delta$g')
+    ax[1].set_ylabel('$\Delta$r (Tractor minus Input)')
+    ax[2].set_ylabel('$\Delta$z')
     ax[2].set_xlabel('Input r magnitude (AB mag)')
 
     fig.subplots_adjust(left=0.18,hspace=0.1)
