@@ -52,11 +52,12 @@ def make_coadds(tims, bands, targetwcs,
         if detmaps:
             C.T.depth    = np.zeros((len(ix), len(bands)), np.float32)
             C.T.galdepth = np.zeros((len(ix), len(bands)), np.float32)
-        #bounding box of galaxy simsC
-        C.T.sims_xy = np.zeros(tims[0].sims_xy.shape) #Nx4 array, xmin,xmax,ymin,ymax, of extends for the N galaxy sims
-        assert(C.T.sims_xy.shape[1] == 4)
-        C.T.sims_xy[:,[0,2]]= np.inf #xmin=min(+inf,xmin)
-        C.T.sims_xy[:,[1,3]]= -np.inf #xmax=max(-inf,xmax)...
+        #bounding box of galaxy sims
+        if 'sims_xy' in tims[0].__dict__:  
+            C.T.sims_xy = np.zeros(tims[0].sims_xy.shape) #Nx4 array, xmin,xmax,ymin,ymax, of extends for the N galaxy sims
+            assert(C.T.sims_xy.shape[1] == 4)
+            C.T.sims_xy[:,[0,2]]= np.inf #xmin=min(+inf,xmin)
+            C.T.sims_xy[:,[1,3]]= -np.inf #xmax=max(-inf,xmax)...
 
 
     if lanczos:
@@ -191,11 +192,12 @@ def make_coadds(tims, bands, targetwcs,
                 # raw exposure count
                 nobs[Yo,Xo] += 1
                 #each tim has N galaxy sims, store largest bounding box of each galaxy sim 
-                for cnt_sim in range(C.T.sims_xy.shape[0]): 
-                    C.T.sims_xy[cnt_sim,0]= min(C.T.sims_xy[cnt_sim,0],tims[itim].sims_xy[cnt_sim,0])
-                    C.T.sims_xy[cnt_sim,2]= min(C.T.sims_xy[cnt_sim,2],tims[itim].sims_xy[cnt_sim,2])
-                    C.T.sims_xy[cnt_sim,1]= max(C.T.sims_xy[cnt_sim,1],tims[itim].sims_xy[cnt_sim,1])
-                    C.T.sims_xy[cnt_sim,3]= max(C.T.sims_xy[cnt_sim,3],tims[itim].sims_xy[cnt_sim,3])
+                if 'sims_xy' in tims[0].__dict__:  
+                    for cnt_sim in range(C.T.sims_xy.shape[0]): 
+                        C.T.sims_xy[cnt_sim,0]= min(C.T.sims_xy[cnt_sim,0],tims[itim].sims_xy[cnt_sim,0])
+                        C.T.sims_xy[cnt_sim,2]= min(C.T.sims_xy[cnt_sim,2],tims[itim].sims_xy[cnt_sim,2])
+                        C.T.sims_xy[cnt_sim,1]= max(C.T.sims_xy[cnt_sim,1],tims[itim].sims_xy[cnt_sim,1])
+                        C.T.sims_xy[cnt_sim,3]= max(C.T.sims_xy[cnt_sim,3],tims[itim].sims_xy[cnt_sim,3])
 
             if psfsize:
                 # psfnorm is in units of 1/pixels.
@@ -258,8 +260,9 @@ def make_coadds(tims, bands, targetwcs,
                 C.T.depth   [:,iband] =    detiv[iy, ix]
                 C.T.galdepth[:,iband] = galdetiv[iy, ix]
             #galxy sim bounding boxes are ints, not floats
-            assert(np.all(np.isinf(C.T.sims_xy) == False)) #every element is not a np.inf
-            C.T.sims_xy= C.T.sims_xy.astype(int)
+            if 'sims_xy' in tims[0].__dict__:  
+                assert(np.all(np.isinf(C.T.sims_xy) == False)) #every element is not a np.inf
+                C.T.sims_xy= C.T.sims_xy.astype(int)
         
         if psfsize:
             wt = cow[iy,ix]
