@@ -304,6 +304,11 @@ def main():
         ccds = fits_table(ccdfn)
         # Split into brighter/fainter halves
         FF = fits_table('forced-all-matches.fits')
+
+        print(len(FF), 'forced measurements')
+        FF.cut(FF.masked == False)
+        print(len(FF), 'forced measurements not masked')
+
         ccds.brightest_mdiff = np.zeros(len(ccds))
         ccds.brightest_mscatter = np.zeros(len(ccds))
         ccds.bright_mdiff = np.zeros(len(ccds))
