@@ -26,7 +26,7 @@ from astrometry.util.util import Tan
 from astrometry.util.fits import merge_tables
 
 from legacypipe.runbrick import run_brick
-from legacypipe.common import ccds_touching_wcs, LegacySurveyData
+from legacypipe.common import ccds_touching_wcs, bricks_touching_wcs, LegacySurveyData
 
 PIXSCALE = 0.262 # average pixel scale [arcsec/pix]
 
@@ -38,39 +38,38 @@ def _uniqccds(ccds):
     _, indx = np.unique(ccdfile, return_index=True)
     return indx
 
-def _getfiles(ccds):
+def _getfiles(ccdinfo):
     '''Figure out the set of images and calibration files we need to transfer, if any.'''
 
-    ccdinfo = ccds[_uniqccds(ccds)]
     nccd = len(ccdinfo)
+
+    survey = LegacySurveyData()
+    calibdir = survey.get_calib_dir()
+    imagedir = survey.survey_dir
 
     expnum = ccdinfo.expnum
     ccdname = ccdinfo.ccdname
 
-    psffiles = []
-    skyfiles = []
-    imagefiles = []
-    for ii in range(nccd):
-        exp = '{0:08d}'.format(expnum[ii])
-        rootfile = os.path.join(exp[:5], exp, 'decam-'+exp+'-'+ccdname[ii]+'.fits')
-        psffiles.append(os.path.join('calib', 'decam', 'psfex', rootfile))
-        skyfiles.append(os.path.join('calib', 'decam', 'splinesky', rootfile))
-        imagefiles.append(os.path.join('images', str(np.core.defchararray.strip(ccdinfo.image_filename[ii]))))
+    psffiles = list()
+    skyfiles = list()
+    imagefiles = list()
+    for ccd in ccdinfo:
+        info = survey.get_image_object(ccd)
+        for attr in ['imgfn', 'dqfn', 'wtfn']:
+            imagefiles.append(getattr(info, attr).replace(imagedir+'/', ''))
+        psffiles.append(info.psffn.replace(calibdir, 'calib'))
+        skyfiles.append(info.splineskyfn.replace(calibdir, 'calib'))
 
     ccdfiles = open('/tmp/ccdfiles.txt', 'w')
-    for ii in range(nccd):
-        ccdfiles.write(psffiles[ii]+'\n')
-    for ii in range(nccd):
-        ccdfiles.write(skyfiles[ii]+'\n')
-    for ii in range(nccd):
-        ccdfiles.write(imagefiles[ii]+'\n')
-    for ii in range(nccd):
-        ccdfiles.write(imagefiles[ii].replace('ooi', 'oow')+'\n')
-    for ii in range(nccd):
-        ccdfiles.write(imagefiles[ii].replace('ooi', 'ood')+'\n')
+    for ff in psffiles:
+        ccdfiles.write(ff+'\n')
+    for ff in skyfiles:
+        ccdfiles.write(ff+'\n')
+    for ff in imagefiles:
+        ccdfiles.write(ff+'\n')
     ccdfiles.close()
 
-    cmd = "rsync -avP --files-from='/tmp/ccdfiles.txt' cori:/global/cscratch1/sd/desiproc/dr3/ /global/work/decam/versions/work/"
+    cmd = "rsync -avPn --files-from='/tmp/ccdfiles.txt' edison:/global/cscratch1/sd/desiproc/dr3/ /global/work/decam/versions/work/"
     print('You should run the following command:')
     print('  {}'.format(cmd))
 
@@ -80,7 +79,8 @@ def _catalog_template(nobj=1):
         ('GALAXY', 'S20'), 
         ('RA', 'f8'), 
         ('DEC', 'f8'),
-        ('RADIUS', 'f4')
+        ('RADIUS', 'f4'),
+        ('BRICKNAME', 'S17', (4,))
         ]
     catalog = Table(np.zeros(nobj, dtype=cols))
     catalog['RADIUS'].unit = 'arcsec'
@@ -170,6 +170,8 @@ def main():
         # Create a simple WCS object for each object and find all the CCDs
         # touching that WCS footprint.
         survey = LegacySurveyData(version='dr2') # hack!
+        bricks = survey.get_bricks_dr2()
+
         allccds = survey.get_ccds()
         keep = np.concatenate((survey.apply_blacklist(allccds),
                                survey.photometric_ccds(allccds)))
@@ -194,6 +196,18 @@ def main():
                 ccds1.writeto(ccdsfile)
                 
                 ccdlist.append(ccds1)
+
+                # Get the brickname
+                rad = 2*gal['RADIUS']/3600 # [degree]
+                brickindx = survey.bricks_touching_radec_box(bricks,
+                                                             gal['RA']-rad, gal['RA']+rad,
+                                                             gal['DEC']-rad, gal['DEC']+rad)
+                if len(brickindx) == 0 or len(brickindx) > 4:
+                    print('This should not happen!')
+                    pdb.set_trace()
+                gal['BRICKNAME'][:len(brickindx)] = bricks.brickname[brickindx]
+                #gal['BRICKNAME'] = ' '.join(bricks.brickname[brickindx])
+
                 if len(outcat) == 0:
                     outcat = gal
                 else:
@@ -220,37 +234,68 @@ def main():
         sample = fits.getdata(samplefile, 1)
         for gal in sample[1:2]:
             galaxy = gal['GALAXY'].strip().lower()
-            ra = gal['RA']
-            dec = gal['DEC']
-            brick = '{:03d}{}{:03d}'.format(int(10*ra), 'm' if dec < 0 else 'p',
-                                            int(10*np.abs(dec)))
-
-            # Read the tractor catalog!!
-            Need to do bricktouching wcs!!!!
-            tractorfile = os.path.join(drdir, 'tractor', '{}'.format(brick[:3]), 'tractor-{}.fits'.format(brick))
-            print('Reading {}'.format(tractorfile))
-            pdb.set_trace()
-            cat = fits.getdata(tractorfile, 1)
 
             # SIZE here should be consistent with DIAM in args.runbrick, below
             size = diamfactor*np.ceil(gal['RADIUS']/PIXSCALE).astype('int16') # [pixels]
             thumbpixscale = PIXSCALE*size/thumbsize
 
-            imageurl = 'http://legacysurvey.org/viewer/jpeg-cutout-decals-dr2?ra={:.6f}&dec={:.6f}'.format(gal['RA'], gal['DEC'])+\
-              '&pixscale={:.3f}&size={:g}'.format(PIXSCALE, size)
-            imagejpg = os.path.join(largedir, 'cutouts', '{}-image.jpg'.format(galaxy))
-            if os.path.isfile(imagejpg):
-                os.remove(imagejpg)
-            os.system('wget --continue -O {:s} "{:s}"' .format(imagejpg, imageurl))
+            # Get cutouts of the data, model, and residual images.
+            for imtype, viewer, tag in zip(('image', 'model', 'resid'), ('viewer', 'viewer-dev', 'viewer-dev'),
+                                           ('', '&tag=decals-model', '&tag=decals-resid')):
+                imageurl = 'http://legacysurvey.org/{}/jpeg-cutout-decals-dr2?ra={:.6f}&dec={:.6f}&pixscale={:.3f}&size={:g}{}'.format(
+                    viewer, gal['RA'], gal['DEC'], PIXSCALE, size, tag)
+                imagejpg = os.path.join(largedir, 'cutouts', '{}-{}.jpg'.format(galaxy, imtype))
+                #pdb.set_trace()
+                #print('Uncomment me')
+                if os.path.isfile(imagejpg):
+                    os.remove(imagejpg)
+                os.system('wget --continue -O {:s} "{:s}"' .format(imagejpg, imageurl))
 
-            
-
+            # Also get a small thumbnail of just the image.
             thumburl = 'http://legacysurvey.org/viewer/jpeg-cutout-decals-dr2?ra={:.6f}&dec={:.6f}'.format(gal['RA'], gal['DEC'])+\
               '&pixscale={:.3f}&size={:g}'.format(thumbpixscale, thumbsize)
             thumbjpg = os.path.join(largedir, 'cutouts', '{}-image-thumb.jpg'.format(galaxy))
             if os.path.isfile(thumbjpg):
                 os.remove(thumbjpg)
             os.system('wget --continue -O {:s} "{:s}"' .format(thumbjpg, thumburl))
+
+            # Annotate the sources on each cutout.  But we need a WCS for each cutout.
+            rad = 10
+            #print('The cutouts are the wrong size -- hack that here.')
+            #wcscutout = Tan(gal['RA'], gal['DEC'], 512/2+0.5, 512/2+0.5,
+            #                -PIXSCALE, 0.0, PIXSCALE, 0.0, float(512), float(512))
+            #wcscutout = Tan(gal['RA'], gal['DEC'], size/2+0.5, size/2+0.5,
+            #                -PIXSCALE, 0.0, PIXSCALE, 0.0, float(size), float(size))
+            for brick in gal['BRICKNAME'][np.where(gal['BRICKNAME'] != '')[0]]:
+                tractorfile = os.path.join(drdir, 'tractor', '{}'.format(brick[:3]), 'tractor-{}.fits'.format(brick))
+                print('Reading {}'.format(tractorfile))
+                cat = fits.getdata(tractorfile, 1)
+                cat = cat[np.where(cat['BRICK_PRIMARY']*1)[0]]
+
+                for imtype in ('image', 'model', 'resid'):
+                    imfile = os.path.join(largedir, 'cutouts', '{}-{}.jpg'.format(galaxy, imtype))
+                    cutoutfile = os.path.join(largedir, 'cutouts', '{}-{}-runbrick-annot.jpg'.format(galaxy, imtype))
+
+                    print('Reading {}'.format(imfile))
+                    im = Image.open(imfile)
+                    sz = im.size
+                    wcscutout = Tan(gal['RA'], gal['DEC'], sz[0]/2+0.5, sz[1]/2+0.5,
+                                    -PIXSCALE, 0.0, PIXSCALE, 0.0, float(sz[0]), float(sz[1]))
+                    draw = ImageDraw.Draw(im)
+                    for thistype, thiscolor in zip(objtype, objcolor):
+                        these = np.where(cat['TYPE'].strip().upper() == thistype)[0]
+                        if len(these) > 0:
+                            for obj in cat[these]:
+                                _, xx, yy = wcscutout.radec2pixelxy(obj['RA'], obj['DEC'])
+                                xx -= 1
+                                yy -= 1
+                                print(obj['RA'], obj['DEC'], xx, yy)
+                                draw.ellipse((xx-rad, sz[1]-yy-rad, xx+rad, sz[1]-yy+rad),
+                                             outline=thiscolor)
+                    # Add a legend.
+                    print('Writing {}'.format(cutoutfile))
+                    im.save(cutoutfile)
+                    #pdb.set_trace()
 
     # --------------------------------------------------
     # Get cutouts of all the CCDs for each galaxy.
@@ -271,16 +316,18 @@ def main():
 
         for gal in sample[1:2]:
             galaxy = gal['GALAXY'].strip().lower()
-            diam = diamfactor*np.ceil(gal['RADIUS']/PIXSCALE).astype('int16') # [pixels]
 
-            # Note: zoom is relative to the center of an imaginary brick with
-            # dimensions (0, 3600, 0, 3600).
+            # DIAM here should be consistent with SIZE in args.viewer_cutouts,
+            # above.  Also note that ZOOM is relative to the center of an
+            # imaginary brick with dimensions (0, 3600, 0, 3600).
+            diam = diamfactor*np.ceil(gal['RADIUS']/PIXSCALE).astype('int16') # [pixels]
+            zoom = (1800-diam/2, 1800+diam/2, 1800-diam/2, 1800+diam/2)
+ 
             # blobxy = zip([1800], [1800])
             survey = LegacySurveyData(version='dr2', output_dir=largedir)
             run_brick(None, survey, radec=(gal['RA'], gal['DEC']), blobxy=None, 
-                      threads=10, zoom=(1800-diam/2, 1800+diam/2, 1800-diam/2, 1800+diam/2),
-                      wise=False, forceAll=True, writePickles=False, do_calibs=False,
-                      write_metrics=False, pixPsf=True, splinesky=True, 
+                      threads=10, zoom=zoom, wise=False, forceAll=True, writePickles=False,
+                      do_calibs=False, write_metrics=False, pixPsf=True, splinesky=True, 
                       early_coadds=True, stages=['writecat'], ceres=False)
 
             pdb.set_trace()
@@ -302,7 +349,7 @@ def main():
 
             rad = 10
             for imtype in ('image', 'model', 'resid'):
-                cutoutfile = os.path.join(largedir, 'cutouts', '{}-runbrick-{}.jpg'.format(galaxy, imtype))
+                cutoutfile = os.path.join(largedir, 'cutouts', '{}-{}-custom-annot.jpg'.format(galaxy, imtype))
                 imfile = os.path.join(largedir, 'coadd', 'cus', brick, 'legacysurvey-{}-{}.jpg'.format(brick, imtype))
                 print('Reading {}'.format(imfile))
 
@@ -324,7 +371,9 @@ def main():
     if args.build_webpage:
 
         # index.html
-        html = open(os.path.join(largedir, 'index.html'), 'w')
+        htmlfile = os.path.join(largedir, 'index.html')
+        print('Writing {}'.format(htmlfile))
+        html = open(htmlfile, 'w')
         html.write('<html><body>\n')
         html.write('<h1>Sample of Large Galaxies</h1>\n')
         html.write('<table border="2" width="30%"><tbody>\n')
@@ -344,7 +393,9 @@ def main():
         # individual galaxy pages
         for gal in sample[:3]:
             galaxy = gal['GALAXY'].strip().lower()
-            html = open(os.path.join(largedir, 'html/{}.html'.format(galaxy)), 'w')
+            htmlfile = os.path.join(largedir, 'html/{}.html'.format(galaxy))
+            print('Writing {}'.format(htmlfile))
+            html = open(htmlfile, 'w')
             html.write('<html>\n')
             html.write('<head>\n')
             html.write('<style type="text/css">\n')
@@ -363,8 +414,8 @@ def main():
             html.write('<table><tbody>\n')
             html.write('<tr>\n')
             #for imtype in ('image', 'model', 'resid'):
-            for imtype in ('image', 'image', 'image'): # Hack!
-                html.write('<td><a href=../cutouts/{}-{}.jpg><img src=../cutouts/{}-{}.jpg alt={} /></a></td>\n'.format(
+            for imtype in ('image', 'model', 'resid'): # Hack!
+                html.write('<td><a href=../cutouts/{}-{}-runbrick-annot.jpg><img src=../cutouts/{}-{}-runbrick-annot.jpg alt={} /></a></td>\n'.format(
                     galaxy, imtype, galaxy, imtype, galaxy.upper()))
             html.write('</tr>\n')
             html.write('</tbody></table>\n')
@@ -374,7 +425,7 @@ def main():
             html.write('<table><tbody>\n')
             html.write('<tr>\n')
             for imtype in ('image', 'model', 'resid'):
-                html.write('<td><a href=../cutouts/{}-runbrick-{}.jpg><img width="100%" src=../cutouts/{}-runbrick-{}.jpg alt={} /></a></td>\n'.format(
+                html.write('<td><a href=../cutouts/{}-{}-custom-annot.jpg><img width="100%" src=../cutouts/{}-{}-custom-annot.jpg alt={} /></a></td>\n'.format(
                     galaxy, imtype, galaxy, imtype, galaxy.upper()))
             html.write('</tr>\n')
             html.write('</tbody></table>\n')
