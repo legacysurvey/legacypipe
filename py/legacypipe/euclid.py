@@ -1,8 +1,20 @@
 from __future__ import print_function
+import sys
+import os
+
+# YUCK!  scinet bonkers python setup
+paths = os.environ['PYTHONPATH']
+sys.path = paths.split(':') + sys.path
+if __name__ == '__main__':
+    import matplotlib
+    matplotlib.use('Agg')
+
+import astropy
+
 from glob import glob
 from astrometry.util.fits import *
 from astrometry.util.util import *
-from astrometry.util.plotutils import PlotSequence
+from astrometry.util.plotutils import PlotSequence, plothist
 import fitsio
 import pylab as plt
 
@@ -301,6 +313,7 @@ class MegacamImage(LegacySurveyImage):
 if __name__ == '__main__':
     if False:
         make_zeropoints()
+
     if False:
         # Regular tiling with small overlaps; RA,Dec aligned
         survey = LegacySurveyData(survey_dir='euclid', output_dir='euclid-out')
@@ -311,59 +324,105 @@ if __name__ == '__main__':
             h,w = wcs.shape
             rr,dd = wcs.pixelxy2radec([1,w,w,1,1], [1,1,h,h,1])
             plt.plot(rr, dd, 'b-')
+        #plt.savefig('acs-outlines.png')
+
+        T = fits_table('euclid/survey-ccds-megacam.fits.gz')
+        #plt.clf()
+        for ccd in T:
+            wcs = survey.get_approx_wcs(ccd)
+            h,w = wcs.shape
+            rr,dd = wcs.pixelxy2radec([1,w,w,1,1], [1,1,h,h,1])
+            plt.plot(rr, dd, 'r-')
         plt.savefig('acs-outlines.png')
+
+        TT = []
+        fns = glob('euclid-out/tractor/*/tractor-*.fits')
+        for fn in fns:
+            T = fits_table(fn)
+            print(len(T), 'from', fn)
+            TT.append(T)
+        T = merge_tables(TT)
+        plt.clf()
+        plothist(T.ra, T.dec, 200)
+        plt.savefig('acs-sources1.png')
+        T = fits_table('euclid/survey-ccds-acsvis.fits.gz')
+        for ccd in T:
+            wcs = survey.get_approx_wcs(ccd)
+            h,w = wcs.shape
+            rr,dd = wcs.pixelxy2radec([1,w,w,1,1], [1,1,h,h,1])
+            plt.plot(rr, dd, 'b-')
+        plt.savefig('acs-sources2.png')
+
+        sys.exit(0)
+
+        # It's a 7x7 grid... hackily define RA,Dec boundaries.
+        T = fits_table('euclid/survey-ccds-acsvis.fits.gz')
+        ras = T.ra.copy()
+        ras.sort()
+        decs = T.dec.copy()
+        decs.sort()
+        print('RAs:', ras)
+        print('Decs:', decs)
+        ras  =  ras.reshape((-1, 7)).mean(axis=1)
+        decs = decs.reshape((-1, 7)).mean(axis=1)
+        print('RAs:', ras)
+        print('Decs:', decs)
+        rasplits = (ras[:-1] + ras[1:])/2.
+        print('RA boundaries:', rasplits)
+        decsplits = (decs[:-1] + decs[1:])/2.
+        print('Dec boundaries:', decsplits)
+
+
+
+    rasplits = np.array([ 149.72716429, 149.89394223,  150.06073352,
+                          150.22752888,  150.39431559, 150.56110037])
+                          
+    decsplits = np.array([ 1.79290318,  1.95956698,  2.12623253,
+                           2.2929002,   2.45956215,  2.62621403])
+
+    import argparse
+    parser = argparse.ArgumentParser()
+    parser.add_argument('--expnum', type=int,
+                        help='ACS exposure number to run')
+    parser.add_argument('--threads', type=int, help='Run multi-threaded')
+
+    parser.add_argument('--forced', type=int, help='Run forced photometry for given MegaCam CCD index')
+
+    parser.add_argument('--ceres', action='store_true', help='Use Ceres?')
+
+    parser.add_argument(
+        '--zoom', type=int, nargs=4,
+        help='Set target image extent (default "0 3600 0 3600")')
+
+    opt = parser.parse_args()
+    if opt.expnum is None and opt.forced is None:
+        print('Need --expnum or --forced')
+        sys.exit(-1)
 
     survey = LegacySurveyData(survey_dir='euclid', output_dir='euclid-out')
     survey.image_typemap['acs-vis'] = AcsVisImage
     survey.image_typemap['megacam'] = MegacamImage
 
-    if True:
-        # CUT to just the ACS-VIS ones!
+    if opt.expnum is not None:
+        # Run pipeline on a single ACS image.
         ccds = survey.get_ccds_readonly()
         ccds.cut(ccds.camera == 'acs-vis')
         print('Cut to', len(ccds), 'from ACS-VIS')
 
+        ccds.cut(ccds.expnum == opt.expnum)
+        print('Cut to', len(ccds), 'with expnum', opt.expnum)
         allccds = ccds
         
         for iccd in range(len(allccds)):
             # Process just this single CCD.
             survey.ccds = allccds[np.array([iccd])]
-
             ccd = survey.ccds[0]
-
             brickname = 'acsvis-%03i' % ccd.expnum
-            
-            # oldbrickname = ('custom-%06i%s%05i' %
-            #                 (int(1000*ccd.ra), 'm' if ccd.dec < 0 else 'p',
-            #                  int(1000*np.abs(ccd.dec))))
-            # oldfn = survey.find_file('tractor', brick=oldbrickname, output=True)
-            # print('Old filename:', oldfn)
-            # try:
-            #     T = fits_table(oldfn)
-            #     print('Read', len(T), 'from', oldfn)
-            #     if len(T) < 1000:
-            #         continue
-            #     for ftype in ['tractor', 'ccds-table', 'image', 'depth', 'imageblob-jpeg',
-            #                   'image-jpeg', 'model-jpeg', 'resid-jpeg', 'blobmap',
-            #                   'all-models', 'galdepth', 'nexp', 'model', 'invvar', 'chi2']:
-            #         oldfn = survey.find_file(ftype, brick=oldbrickname, band=ccd.filter,
-            #                                  output=True)
-            #         newfn = survey.find_file(ftype, brick=brickname, band=ccd.filter,
-            #                                  output=True)
-            #         dirnm = os.path.dirname(newfn)
-            #         os.makedirs(dirnm)
-            #         print('Renaming', oldfn, 'to', newfn)
-            #         os.rename(oldfn, newfn)
-            # except:
-            #     import traceback
-            #     traceback.print_exc()
-            #     continue
-            # continue
-            
             run_brick(brickname, survey, radec=(ccd.ra, ccd.dec), pixscale=0.1,
-                      width=200, height=200,
-                      #width=ccd.width, height=ccd.height, 
+                      #width=200, height=200,
+                      width=ccd.width, height=ccd.height, 
                       bands=['I'],
+                      threads=opt.threads,
                       wise=False, do_calibs=False,
                       pixPsf=True, coadd_bw=True, ceres=False,
                       blob_image=True, allbands=allbands,
@@ -372,49 +431,110 @@ if __name__ == '__main__':
 
     else:
 
+        # Read all ACS catalogs
+        mfn = 'euclid-out/merged-catalog.fits'
+        if not os.path.exists(mfn):
+            TT = []
+            fns = glob('euclid-out/tractor/*/tractor-*.fits')
+            for fn in fns:
+                T = fits_table(fn)
+                print(len(T), 'from', fn)
+    
+                mra  = np.median(T.ra)
+                mdec = np.median(T.dec)
+    
+                print(np.sum(T.brick_primary), 'PRIMARY')
+                I = np.flatnonzero(rasplits > mra)
+                if len(I) > 0:
+                    T.brick_primary &= (T.ra < rasplits[I[0]])
+                    print(np.sum(T.brick_primary), 'PRIMARY after RA high cut')
+                I = np.flatnonzero(rasplits < mra)
+                if len(I) > 0:
+                    T.brick_primary &= (T.ra >= rasplits[I[-1]])
+                    print(np.sum(T.brick_primary), 'PRIMARY after RA low cut')
+                I = np.flatnonzero(decsplits > mdec)
+                if len(I) > 0:
+                    T.brick_primary &= (T.dec < decsplits[I[0]])
+                    print(np.sum(T.brick_primary), 'PRIMARY after DEC high cut')
+                I = np.flatnonzero(decsplits < mdec)
+                if len(I) > 0:
+                    T.brick_primary &= (T.dec >= decsplits[I[-1]])
+                    print(np.sum(T.brick_primary), 'PRIMARY after DEC low cut')
+    
+                TT.append(T)
+            T = merge_tables(TT)
+            del TT
+            T.writeto(mfn)
+        else:
+            T = fits_table(mfn)
+
+        # plt.clf()
+        # I = T.brick_primary
+        # plothist(T.ra[I], T.dec[I], 200)
+        # plt.savefig('acs-sources3.png')
+
         opti = None
         forced_kwargs = {}
-        #if opt.ceres:
-        if True:
+        if opt.ceres:
+        #if True:
             from tractor.ceres_optimizer import CeresOptimizer
             B = 8
             opti = CeresOptimizer(BW=B, BH=B)
         
-        T = fits_table('euclid-out/tractor/cus/tractor-custom-150640p01710.fits')
-        print(len(T), 'sources in catalog')
-
+        #T = fits_table('euclid-out/tractor/cus/tractor-custom-150640p01710.fits')
+        #print(len(T), 'sources in catalog')
         #declo,dechi = cat.dec.min(), cat.dec.max()
         #ralo , rahi = cat.ra .min(), cat.ra .max()
-
         T.shapeexp = np.vstack((T.shapeexp_r, T.shapeexp_e1, T.shapeexp_e2)).T
         T.shapedev = np.vstack((T.shapedev_r, T.shapedev_e1, T.shapedev_e2)).T
-        cat = read_fits_catalog(T, ellipseClass=EllipseE, allbands=allbands,
-                                bands=allbands)
 
-        
         ccds = survey.get_ccds_readonly()
         I = np.flatnonzero(ccds.camera == 'megacam')
+        print(len(I), 'MegaCam CCDs')
 
-        bands = np.unique(ccds.filter[I])
-        print('Unique bands:', bands)
-        for src in cat:
-            src.brightness = NanoMaggies(**dict([(b,1.) for b in bands]))
+        #bands = np.unique(ccds.filter[I])
+        #print('Unique bands:', bands)
+        #for src in cat:
+        #    src.brightness = NanoMaggies(**dict([(b,1.) for b in bands]))
+
+        print('Cut to a single CCD: index', opt.forced)
+        I = I[np.array([opt.forced])]
+
+        slc = None
+        if opt.zoom:
+            x0,x1,y0,y1 = opt.zoom
+            zw = x1-x0
+            zh = y1-y0
+            slc = slice(y0,y1), slice(x0,x1)
 
         for i in I:
             ccd = ccds[i]
             im = survey.get_image_object(ccd)
+            print('CCD', im)
 
             wcs = im.get_wcs()
+            if opt.zoom:
+                wcs = wcs.get_subimage(x0, y0, zw, zh)
+
             ok,x,y = wcs.radec2pixelxy(T.ra, T.dec)
             x = (x-1).astype(np.float32)
             y = (y-1).astype(np.float32)
-            J = np.flatnonzero((x >= 0) * (x < ccd.width) *
-                               (y >= 0) * (y < ccd.height))
+            h,w = wcs.shape
+            J = np.flatnonzero((x >= 0) * (x < w) *
+                               (y >= 0) * (y < h))
             if len(J) == 0:
                 print('No sources within image.')
                 continue
 
-            tim = im.get_tractor_image(pixPsf=True)
+            Ti = T[J]
+            print('Cut to', len(Ti), 'sources within image')
+
+            cat = read_fits_catalog(Ti, ellipseClass=EllipseE, allbands=allbands,
+                                    bands=allbands)
+            for src in cat:
+                src.brightness = NanoMaggies(**{ ccd.filter: 1. })
+
+            tim = im.get_tractor_image(pixPsf=True, slc=slc)
             print('Forced photometry for', tim.name)
 
             for src in cat:
@@ -439,15 +559,15 @@ if __name__ == '__main__':
             tr.setParams(np.zeros(nparams, np.float32))
             
             F = fits_table()
-            F.brickid   = T.brickid
-            F.brickname = T.brickname
-            F.objid     = T.objid
+            F.brickid   = Ti.brickid
+            F.brickname = Ti.brickname
+            F.objid     = Ti.objid
             
-            F.filter  = np.array([tim.band]               * len(T))
-            F.mjd     = np.array([tim.primhdr['MJD-OBS']] * len(T))
-            F.exptime = np.array([tim.primhdr['EXPTIME']] * len(T)).astype(np.float32)
+            F.filter  = np.array([tim.band]               * len(Ti))
+            F.mjd     = np.array([tim.primhdr['MJD-OBS']] * len(Ti))
+            F.exptime = np.array([tim.primhdr['EXPTIME']] * len(Ti)).astype(np.float32)
 
-            ok,x,y = tim.sip_wcs.radec2pixelxy(T.ra, T.dec)
+            ok,x,y = tim.sip_wcs.radec2pixelxy(Ti.ra, Ti.dec)
             F.x = (x-1).astype(np.float32)
             F.y = (y-1).astype(np.float32)
             
