@@ -317,15 +317,14 @@ class _GaussianMixtureModel():
                     self.means[comp], self.covars[comp], num_comp_in_X)
         return X
 
-def no_overlapping_radec(nobj, bounds, seed=None, dist=5.0/3600):
-    '''returns ra,dec randomly sampled between bounds for nobjects, 
-    new ra,dec chosen for NN (separation < dist) until all NN have separation >= dist
-    nobj-- number objects
+def no_overlapping_radec(ra,dec, bounds, random_state=None, dist=5.0/3600):
+    '''resamples ra,dec where they are within dist of each other 
+    ra,dec -- numpy arrays [degrees]
     bounds-- list of [ramin,ramax,decmin,decmax]
+    random_state-- np.random.RandomState() object
     dist-- minimum separation in degrees'''
-    rand = np.random.RandomState(seed)
-    ra = rand.uniform(bounds[0], bounds[1], nobj)
-    dec = rand.uniform(bounds[2], bounds[3], nobj)
+    if random_state is None:
+        random_state = np.random.RandomState()
     #approx distance = sqrt(x^2+y^2) where x=(dec2-dec1), y=cos(avg(dec2,dec1))*(ra2-ra1)
     #build tree of x,y 
     tree = KDTree(np.transpose([dec.copy(),np.cos(dec.copy()*np.pi/180)*ra.copy()])) #data has shape NxK, N points and K dimensions (K=2 for ra,dec) 
@@ -333,17 +332,17 @@ def no_overlapping_radec(nobj, bounds, seed=None, dist=5.0/3600):
     ds, i_tree = tree.query(np.transpose([dec.copy(), np.cos(dec.copy()*np.pi/180)*ra.copy()]), k=2)
     i_bad= ds[:,1] < dist #ds[:,0] is array of zeros, ds[:,1] is distances to NN of each ra,dec
     cnt = 1
-    print("non overlapping radec for %d objects: iter=%d, overlaps=%d" % (nobj,cnt, ra[i_bad].shape[0]))
+    print("non overlapping radec: iter=%d, overlaps=%d/%d" % (cnt, ra[i_bad].shape[0],ra.shape[0]))
     while ra[i_bad].shape[0] > 0:
         #get new ra,dec wherever too close
-        ra[i_bad]= rand.uniform(bounds[0], bounds[1], ra[i_bad].shape[0])
-        dec[i_bad]= rand.uniform(bounds[2], bounds[3], dec[i_bad].shape[0])
+        ra[i_bad]= random_state.uniform(bounds[0], bounds[1], ra[i_bad].shape[0])
+        dec[i_bad]= random_state.uniform(bounds[2], bounds[3], dec[i_bad].shape[0])
         #re-index and get new searations
         tree = KDTree(np.transpose([dec.copy(), np.cos(dec.copy()*np.pi/180)*ra.copy()])) #data has shape NxK, N points and K dimensions (K=2 for ra,dec) 
         ds, i_tree = tree.query(np.transpose([dec.copy(), np.cos(dec.copy()*np.pi/180)*ra.copy()]), k=2) #id for each data.query source that is NN of each input source
         i_bad= ds[:,1] < dist
         cnt += 1
-        print("non overlapping radec for %d objects: iter=%d, overlaps=%d" % (nobj,cnt, ra[i_bad].shape[0]))
+        print("non overlapping radec: iter=%d, overlaps=%d/%d" % (cnt, ra[i_bad].shape[0],ra.shape[0]))
         if cnt > 30:
             print('something bad happening, not converging to non-overlapping radec')
             raise ValueError
@@ -358,11 +357,17 @@ def build_simcat(nobj=None, brickname=None, brickwcs=None, meta=None, seed=None,
     # are too near to one another.  Iterate until we have the requisite number
     # of objects.
     bounds = brickwcs.radec_bounds()
-    if noOverlap:
-        ra, dec= no_overlapping_radec(nobj, bounds, seed=seed, dist=5./3600) 
-    else:
-        ra = rand.uniform(bounds[0],bounds[1],nobj)
-        dec = rand.uniform(bounds[2],bounds[3],nobj)
+    ra = rand.uniform(bounds[0],bounds[1],nobj)
+    dec = rand.uniform(bounds[2],bounds[3],nobj)
+    #junk=plt.hist(rand.uniform(0,1,10000),bins=100)
+    #plt.savefig('uniform_before.png')
+    #plt.close()
+    if noOverlap: ra,dec= no_overlapping_radec(ra,dec, bounds, random_state=rand, dist=5./3600) 
+    #junk=plt.hist(rand.uniform(0,1,10000),bins=100)
+    #plt.savefig('uniform_after.png')
+    #plt.close()
+    #print('exiting')    
+    #sys.exit()    
 
     xxyy = brickwcs.radec2pixelxy(ra, dec)
 
@@ -531,7 +536,7 @@ def main():
     metacat['NCHUNK'] = nchunk
     metacat['ZOOM'] = args.zoom
     metacat['RMAG_RANGE'] = args.rmag_range
-    if ~args.seed:
+    if not args.seed:
         log.info('Random seed = {}'.format(args.seed))
         metacat['SEED'] = args.seed
 
@@ -561,6 +566,8 @@ def main():
         if os.path.isfile(simcatfile):
             os.remove(simcatfile)
         simcat.write(simcatfile)
+        #print('exiting after simcat written')
+        #sys.exit()
 
         # Use Tractor to just process the blobs containing the simulated sources.
         simdecals = SimDecals(metacat=metacat, simcat=simcat, output_dir=output_dir)

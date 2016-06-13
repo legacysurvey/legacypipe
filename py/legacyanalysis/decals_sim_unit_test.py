@@ -62,18 +62,26 @@ def get_one_tim(brickname,W=200,H=200,pixscale=0.25,verbose=0, splinesky=False):
     tim = im.get_tractor_image(**get_tim_kwargs)
     return tim,targetwcs,ccd
 
-def get_metacat(brickname):
+def get_metacat(brickname,objtype,nobj,chunksize,nchunk,zoom,rmag_range):
     '''following decals_sim'''
-    metacat = Table()
-    metacat['brickname'] = Column([brickname],dtype='S10')
-    metacat['objtype'] = Column(['STAR'],dtype='S10')
-    metacat['nobj'] = Column([1],dtype='i4')
-    metacat['chunksize'] = Column([500],dtype='i2')
-    metacat['nchunk'] = Column([1],dtype='i2')
-    #metacat['RA'] = Column([ra_range],dtype='f8')
-    #metacat['DEC'] = Column([dec_range],dtype='f8')
-    metacat['rmag_range'] = Column([[18,26]],dtype='f4')
-    metacat['seed'] = Column([111],dtype='i4')
+    metacols = [
+        ('BRICKNAME', 'S10'),
+        ('OBJTYPE', 'S10'),
+        ('NOBJ', 'i4'),
+        ('CHUNKSIZE', 'i2'),
+        ('NCHUNK', 'i2'),
+        ('ZOOM', 'i4', (4,)),
+        ('SEED', 'S20'),
+        ('RMAG_RANGE', 'f4', (2,))]
+    metacat = Table(np.zeros(1, dtype=metacols))
+
+    metacat['BRICKNAME'] = brickname
+    metacat['OBJTYPE'] = objtype
+    metacat['NOBJ'] = nobj
+    metacat['CHUNKSIZE'] = chunksize
+    metacat['NCHUNK'] = nchunk
+    metacat['ZOOM'] = zoom
+    metacat['RMAG_RANGE'] = rmag_range    
     return metacat
 
 def plot_tim(tim):
@@ -85,7 +93,7 @@ def plot_tim(tim):
     ax.axis('off')
     fig.savefig('./test.png',bbox_inches='tight')
 
-def check_poisson_noise(stamp,ivarstamp,objstamp)
+def check_poisson_noise(stamp,ivarstamp,objstamp):
     '''each pixel of stamp+noise image - stamp image should be gaussian distributed with std dev = sqrt(pix value in stamp)'''
     diff=np.zeros((stamp.array.shape[0],stamp.array.shape[1],1000))
     for cnt in range(diff.shape[-1]):
@@ -109,14 +117,14 @@ parser.add_argument('-v', '--verbose', dest='verbose', action='count', default=0
 args = parser.parse_args()
 
 #tim object
-tim,brickwcs,ccd= get_one_tim(args.brickname,W=200,H=200,pixscale=0.25,verbose=args.verbose, splinesky=True)
+tim,brickwcs,ccd= get_one_tim(args.brickname,W=3600,H=3600,pixscale=0.25,verbose=args.verbose, splinesky=True)
 #setup sims
-metacat= get_metacat(args.brickname)
-nobj,seed = 1,111
+nobj,seed = 500,None
+metacat= get_metacat(args.brickname,'STAR',nobj,500,1,(0,3600,0,3600),(18, 26))
 simcat = build_simcat(nobj, args.brickname, brickwcs, metacat, seed)
 #stamp
-objstamp = BuildStamp(tim, gain=ccd.arawgain, seed=seed)
-stamp = objstamp.star(simcat[0])
+#objstamp = BuildStamp(tim, gain=ccd.arawgain, seed=seed)
+#stamp = objstamp.star(simcat[0])
 #unit test after this or run from ipython to play with on command line
 
 

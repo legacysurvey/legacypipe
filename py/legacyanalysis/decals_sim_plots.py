@@ -7,6 +7,9 @@
 
 from __future__ import division, print_function
 
+import matplotlib
+matplotlib.use('Agg') # display backend
+
 import os
 import sys
 import pdb
@@ -14,17 +17,17 @@ import logging
 import argparse
 
 import numpy as np
-import matplotlib
 
 from astropy.io import fits
 from astropy.table import vstack, Table
-from astrometry.libkd.spherematch import match_radec
+#from astrometry.libkd.spherematch import match_radec
 
 # import seaborn as sns
 import matplotlib.pyplot as plt
 from PIL import Image, ImageDraw
 
-matplotlib.use('Agg') # display backend
+from thesis_code import matching
+
 
 def main():
 
@@ -97,8 +100,11 @@ def main():
         log.info('Reading {}'.format(tractorfile))
         tractor = Table(fits.getdata(tractorfile, 1))
 
-        m1, m2, d12 = match_radec(tractor['ra'], tractor['dec'],
-                                  simcat['RA'], simcat['DEC'], 1.0/3600.0)
+        #m1, m2, d12 = match_radec(tractor['ra'], tractor['dec'],
+        #                          simcat['RA'], simcat['DEC'], 1.0/3600.0)
+        m1, m2, d12 = matching.match_radec(tractor['ra'], tractor['dec'],simcat['RA'], simcat['DEC'], k=1,dsmax=1./3600)
+        #print('np.sort(m2)=',np.sort(m2))
+        #print('np.sort(mine2)=',np.sort(mine2))
         missing = np.delete(np.arange(len(simcat)), m2, axis=0)
         log.info('Missing {}/{} sources'.format(len(missing), len(simcat)))
 
