@@ -160,6 +160,12 @@ class BuildStamp():
         self.wcs = tim.getWcs()
         self.psf = tim.getPsf()
 
+        ## Get the Galsim-compatible WCS as well.
+        #import pdb ; pdb.set_trace()
+        #galsim_wcs, _ = galsim.wcs.readFromFitsHeader(
+        #    galsim.fits.FitsHeader(tim.pvwcsfn))
+        #self.galsim_wcs = galsim_wcs
+
         # zpscale equivalent to magzpt = self.t.ccdzpt+2.5*np.log10(self.t.exptime)
         self.zpscale = tim.zpscale      # nanomaggies-->ADU conversion factor
         self.nano2e = self.zpscale*gain # nanomaggies-->electrons conversion factor
@@ -173,10 +179,12 @@ class BuildStamp():
         self.ypos = int(self.pos.y)
         self.offset = galsim.PositionD(self.pos.x-self.xpos, self.pos.y-self.ypos)
 
-        # Get the local pixel scale [arcsec/pixel]
+        # Get the local pixel scale [arcsec/pixel] and the local Galsim WCS
+        # object.
         cd = self.wcs.cdAtPixel(self.pos.x, self.pos.y)
         self.pixscale = np.sqrt(np.linalg.det(cd))*3600.0
-
+        #self.localwcs = self.galsim_wcs.local(image_pos=self.pos)
+        
         # Get the local PSF
         psfim = self.psf.getPointSourcePatch(self.xpos, self.ypos).getImage()
         #plt.imshow(psfim) ; plt.show()
@@ -222,7 +230,8 @@ class BuildStamp():
     def convolve_and_draw(self,obj):
         """Convolve the object with the PSF and then draw it."""
         obj = galsim.Convolve([obj, self.localpsf])
-        stamp = obj.drawImage(offset=self.offset, wcs=self.localwcs, method='no_pixel')
+        stamp = obj.drawImage(offset=self.offset, wcs=self.localwcs,
+                              method='no_pixel')
         stamp.setCenter(self.xpos, self.ypos)
         return stamp
 
@@ -239,21 +248,25 @@ class BuildStamp():
 
         return stamp
 
-    def elg(self,objinfo,siminfo):
+    def elg(self,objinfo):
         """Create an ELG (disk-like) galaxy."""
+
+        self.setlocal(objinfo)
+
+        objflux = objinfo[self.band+'FLUX'] # [nanomaggies]
         obj = galsim.Sersic(float(objinfo['SERSICN_1']), half_light_radius=
                             float(objinfo['R50_1']),
-                            flux=self.objflux,gsparams=siminfo.gsparams)
+                            flux=objflux,gsparams=self.gsparams)
         obj = obj.shear(q=float(objinfo['BA_1']), beta=
                         float(objinfo['PHI_1'])*galsim.degrees)
         stamp = self.convolve_and_draw(obj)
         return stamp
 
-    def lrg(self,objinfo,siminfo):
+    def lrg(self,objinfo):
         """Create an LRG (spheroidal) galaxy."""
         obj = galsim.Sersic(float(objinfo['SERSICN_1']),half_light_radius=
                             float(objinfo['R50_1']),
-                            flux=self.objflux,gsparams=siminfo.gsparams)
+                            flux=self.objflux,gsparams=self.gsparams)
         obj = obj.shear(q=float(objinfo['BA_1']),beta=
                         float(objinfo['PHI_1'])*galsim.degrees)
         stamp = self.convolve_and_draw(obj)
@@ -364,10 +377,12 @@ def build_simcat(nobj=None, brickname=None, brickwcs=None, meta=None, seed=None,
     # are too near to one another.  Iterate until we have the requisite number
     # of objects.
     bounds = brickwcs.radec_bounds()
-    ra = rand.uniform(bounds[0],bounds[1],nobj)
-    dec = rand.uniform(bounds[2],bounds[3],nobj)
-    if noOverlap: ra,dec= no_overlapping_radec(ra,dec, bounds, random_state=rand, dist=5./3600) 
-
+    ra = rand.uniform(bounds[0], bounds[1], nobj)
+    dec = rand.uniform(bounds[2], bounds[3], nobj)
+    if noOverlap:
+        ra, dec= no_overlapping_radec(ra,dec, bounds,
+                                      random_state=rand,
+                                      dist=5./3600) 
     xxyy = brickwcs.radec2pixelxy(ra, dec)
 
     cat = Table()
@@ -385,13 +400,19 @@ def build_simcat(nobj=None, brickname=None, brickwcs=None, meta=None, seed=None,
         rz = grzsample[:, 0]
         gr = grzsample[:, 1]
 
-    elif meta['objtype'] == 'ELG':
+    elif meta['OBJTYPE'] == 'ELG':
         gr_range = [-0.3, 0.5]
         rz_range = [0.0, 1.5]
-
         sersicn_1_range = [1.0, 1.0]
         r50_1_range = [0.5, 2.5]
         ba_1_range = [0.2, 1.0]
+
+        gr = rand.uniform(gr_range[0], gr_range[1], nobj)
+        rz = rand.uniform(rz_range[0], rz_range[1], nobj)
+        sersicn_1 = rand.uniform(sersicn_1_range[0], sersicn_1_range[1], nobj)
+        r50_1 = rand.uniform(r50_1_range[0], r50_1_range[1], nobj)
+        ba_1 = rand.uniform(ba_1_range[0], ba_1_range[1], nobj)
+        phi_1 = rand.uniform(0.0, 180.0, nobj)
 
         cat['SERSICN_1'] = Column(sersicn_1, dtype='f4')
         cat['R50_1'] = Column(r50_1, dtype='f4')
@@ -531,7 +552,7 @@ def main():
     objtype = args.objtype.upper()
     lobjtype = objtype.lower()
 
-    for obj in ('LRG', 'LSB', 'ELG', 'QSO'):
+    for obj in ('LRG', 'LSB', 'QSO'):
         if objtype == obj:
             log.warning('{} objtype not yet supported!'.format(objtype))
             return 0
