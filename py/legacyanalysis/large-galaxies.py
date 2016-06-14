@@ -20,7 +20,7 @@ import matplotlib.pyplot as plt
 from astropy.io import fits
 from astropy.table import Table, vstack
 
-from PIL import Image, ImageDraw
+from PIL import Image, ImageDraw, ImageFont
 
 from astrometry.util.util import Tan
 from astrometry.util.fits import merge_tables
@@ -91,7 +91,7 @@ def _simplewcs(gal):
     '''Build a simple WCS object for a single galaxy.'''
     diam = np.ceil(gal['RADIUS']/PIXSCALE).astype('int16') # [pixels]
     galwcs = Tan(gal['RA'], gal['DEC'], diam/2+0.5, diam/2+0.5,
-                 -PIXSCALE, 0.0, PIXSCALE, 0.0, 
+                 -PIXSCALE/3600.0, 0.0, 0.0, PIXSCALE/3600.0, 
                  float(diam), float(diam))
     return galwcs
 
@@ -153,17 +153,24 @@ def main():
         return 0
     drdir = os.getenv(key)
 
-    samplefile = os.path.join(largedir, 'large-galaxies-sample.fits')
-
     # Some convenience variables.
     objtype = ('PSF', 'SIMP', 'EXP', 'DEV', 'COMP')
     objcolor = ('white', 'red', 'orange', 'cyan', 'yellow')
     diamfactor = 10
-    
+    thumbsize = 100
+    fonttype = '/usr/share/fonts/gnu-free/FreeSans.ttf'
+
+    # Read the sample (unless we're building it!)
+    samplefile = os.path.join(largedir, 'large-galaxies-sample.fits')
+    if not args.build_sample:
+        sample = fits.getdata(samplefile, 1)
+        #sample = sample[2:3] # Hack!
+        sample = sample[np.where(np.sum((sample['BRICKNAME'] != '')*1, 1) > 1)[0]]
+        #pdb.set_trace()
+      
     # --------------------------------------------------
     # Build the sample of large galaxies based on the available imaging.
     if args.build_sample:
-
         # Read the parent catalog.
         cat = read_rc3()
         
@@ -212,8 +219,6 @@ def main():
                     outcat = gal
                 else:
                     outcat = vstack((outcat, gal))
-                #if gal['GALAXY'] == 'MCG5-19-36':
-                #    pdb.set_trace()
 
         # Write out the final catalog.
         samplefile = os.path.join(largedir, 'large-galaxies-sample.fits')
@@ -230,9 +235,7 @@ def main():
     # Get data, model, and residual cutouts from the legacysurvey viewer.  Also
     # get thumbnails that are lower resolution.
     if args.viewer_cutouts:
-        thumbsize = 100
-        sample = fits.getdata(samplefile, 1)
-        for gal in sample[1:2]:
+        for gal in sample:
             galaxy = gal['GALAXY'].strip().lower()
 
             # SIZE here should be consistent with DIAM in args.runbrick, below
@@ -240,69 +243,66 @@ def main():
             thumbpixscale = PIXSCALE*size/thumbsize
 
             # Get cutouts of the data, model, and residual images.
-            for imtype, viewer, tag in zip(('image', 'model', 'resid'), ('viewer', 'viewer-dev', 'viewer-dev'),
-                                           ('', '&tag=decals-model', '&tag=decals-resid')):
-                imageurl = 'http://legacysurvey.org/{}/jpeg-cutout-decals-dr2?ra={:.6f}&dec={:.6f}&pixscale={:.3f}&size={:g}{}'.format(
-                    viewer, gal['RA'], gal['DEC'], PIXSCALE, size, tag)
+            for imtype, tag in zip(('image', 'model', 'resid'), ('', '&tag=decals-model', '&tag=decals-resid')):
+                imageurl = 'http://legacysurvey.org/viewer-dev/jpeg-cutout-decals-dr2?ra={:.6f}&dec={:.6f}&pixscale={:.3f}&size={:g}{}'.format(gal['RA'], gal['DEC'], PIXSCALE, size, tag)
                 imagejpg = os.path.join(largedir, 'cutouts', '{}-{}.jpg'.format(galaxy, imtype))
-                #pdb.set_trace()
-                #print('Uncomment me')
-                if os.path.isfile(imagejpg):
-                    os.remove(imagejpg)
-                os.system('wget --continue -O {:s} "{:s}"' .format(imagejpg, imageurl))
+                print('Uncomment me to redownload')
+                #if os.path.isfile(imagejpg):
+                #    os.remove(imagejpg)
+                #os.system('wget --continue -O {:s} "{:s}"' .format(imagejpg, imageurl))
 
             # Also get a small thumbnail of just the image.
-            thumburl = 'http://legacysurvey.org/viewer/jpeg-cutout-decals-dr2?ra={:.6f}&dec={:.6f}'.format(gal['RA'], gal['DEC'])+\
+            thumburl = 'http://legacysurvey.org/viewer-dev/jpeg-cutout-decals-dr2?ra={:.6f}&dec={:.6f}'.format(gal['RA'], gal['DEC'])+\
               '&pixscale={:.3f}&size={:g}'.format(thumbpixscale, thumbsize)
             thumbjpg = os.path.join(largedir, 'cutouts', '{}-image-thumb.jpg'.format(galaxy))
-            if os.path.isfile(thumbjpg):
-                os.remove(thumbjpg)
-            os.system('wget --continue -O {:s} "{:s}"' .format(thumbjpg, thumburl))
+            #if os.path.isfile(thumbjpg):
+            #    os.remove(thumbjpg)
+            #os.system('wget --continue -O {:s} "{:s}"' .format(thumbjpg, thumburl))
 
-            # Annotate the sources on each cutout.  But we need a WCS for each cutout.
             rad = 10
-            #print('The cutouts are the wrong size -- hack that here.')
-            #wcscutout = Tan(gal['RA'], gal['DEC'], 512/2+0.5, 512/2+0.5,
-            #                -PIXSCALE, 0.0, PIXSCALE, 0.0, float(512), float(512))
-            #wcscutout = Tan(gal['RA'], gal['DEC'], size/2+0.5, size/2+0.5,
-            #                -PIXSCALE, 0.0, PIXSCALE, 0.0, float(size), float(size))
-            for brick in gal['BRICKNAME'][np.where(gal['BRICKNAME'] != '')[0]]:
-                tractorfile = os.path.join(drdir, 'tractor', '{}'.format(brick[:3]), 'tractor-{}.fits'.format(brick))
-                print('Reading {}'.format(tractorfile))
-                cat = fits.getdata(tractorfile, 1)
-                cat = cat[np.where(cat['BRICK_PRIMARY']*1)[0]]
+            for imtype in ('image', 'model', 'resid'):
+                imfile = os.path.join(largedir, 'cutouts', '{}-{}.jpg'.format(galaxy, imtype))
+                cutoutfile = os.path.join(largedir, 'cutouts', '{}-{}-runbrick-annot.jpg'.format(galaxy, imtype))
 
-                for imtype in ('image', 'model', 'resid'):
-                    imfile = os.path.join(largedir, 'cutouts', '{}-{}.jpg'.format(galaxy, imtype))
-                    cutoutfile = os.path.join(largedir, 'cutouts', '{}-{}-runbrick-annot.jpg'.format(galaxy, imtype))
-
-                    print('Reading {}'.format(imfile))
-                    im = Image.open(imfile)
-                    sz = im.size
-                    wcscutout = Tan(gal['RA'], gal['DEC'], sz[0]/2+0.5, sz[1]/2+0.5,
-                                    -PIXSCALE, 0.0, PIXSCALE, 0.0, float(sz[0]), float(sz[1]))
-                    draw = ImageDraw.Draw(im)
-                    for thistype, thiscolor in zip(objtype, objcolor):
+                print('Reading {}'.format(imfile))
+                im = Image.open(imfile)
+                sz = im.size
+                fntsize = np.round(sz[0]/35).astype('int')
+                font = ImageFont.truetype(fonttype, size=fntsize)
+                # Annotate the sources on each cutout.
+                wcscutout = Tan(gal['RA'], gal['DEC'], sz[0]/2+0.5, sz[1]/2+0.5,
+                                -PIXSCALE/3600.0, 0.0, 0.0, PIXSCALE/3600.0, float(sz[0]), float(sz[1]))
+                draw = ImageDraw.Draw(im)
+                for bb, brick in enumerate(gal['BRICKNAME'][np.where(gal['BRICKNAME'] != '')[0]]):
+                    tractorfile = os.path.join(drdir, 'tractor', '{}'.format(brick[:3]),
+                                               'tractor-{}.fits'.format(brick))
+                    print('  Reading {}'.format(tractorfile))
+                    cat = fits.getdata(tractorfile, 1)
+                    cat = cat[np.where(cat['BRICK_PRIMARY']*1)[0]]
+                    for ii, (thistype, thiscolor) in enumerate(zip(objtype, objcolor)):
                         these = np.where(cat['TYPE'].strip().upper() == thistype)[0]
                         if len(these) > 0:
                             for obj in cat[these]:
-                                _, xx, yy = wcscutout.radec2pixelxy(obj['RA'], obj['DEC'])
-                                xx -= 1
+                                ok, xx, yy = wcscutout.radec2pixelxy(obj['RA'], obj['DEC'])
+                                xx -= 1 # PIL is zero-indexed
                                 yy -= 1
-                                print(obj['RA'], obj['DEC'], xx, yy)
+                                #print(obj['RA'], obj['DEC'], xx, yy)
                                 draw.ellipse((xx-rad, sz[1]-yy-rad, xx+rad, sz[1]-yy+rad),
                                              outline=thiscolor)
-                    # Add a legend.
-                    print('Writing {}'.format(cutoutfile))
-                    im.save(cutoutfile)
-                    #pdb.set_trace()
+
+                        # Add a legend, but just after the first brick.
+                        if bb == 0:
+                            draw.text((20, 20+ii*fntsize*1.2), thistype, font=font, fill=thiscolor)
+                draw.text((sz[0]-fntsize*4, sz[1]-fntsize*2), imtype.upper(), font=font)
+                print('Writing {}'.format(cutoutfile))
+                im.save(cutoutfile)
+                #pdb.set_trace()
 
     # --------------------------------------------------
     # Get cutouts of all the CCDs for each galaxy.
     if args.ccd_cutouts:
         sample = fits.getdata(samplefile, 1)
-
-        for gal in sample[1:2]:
+        for gal in sample:
             galaxy = gal['GALAXY'].strip().lower()
             ccdsfile = os.path.join(largedir, 'ccds', '{}-ccds.fits'.format(galaxy))
             ccds = fits.getdata(ccdsfile)
@@ -313,8 +313,7 @@ def main():
     # Run the pipeline.
     if args.runbrick:
         sample = fits.getdata(samplefile, 1)
-
-        for gal in sample[1:2]:
+        for gal in sample:
             galaxy = gal['GALAXY'].strip().lower()
 
             # DIAM here should be consistent with SIZE in args.viewer_cutouts,
@@ -327,7 +326,7 @@ def main():
             survey = LegacySurveyData(version='dr2', output_dir=largedir)
             run_brick(None, survey, radec=(gal['RA'], gal['DEC']), blobxy=None, 
                       threads=10, zoom=zoom, wise=False, forceAll=True, writePickles=False,
-                      do_calibs=False, write_metrics=False, pixPsf=True, splinesky=True, 
+                      do_calibs=False, write_metrics=True, pixPsf=True, splinesky=True, 
                       early_coadds=True, stages=['writecat'], ceres=False)
 
             pdb.set_trace()
@@ -336,8 +335,7 @@ def main():
     # Annotate the image/model/resid jpg cutout after running the custom pipeline.
     if args.runbrick_cutouts:
         sample = fits.getdata(samplefile, 1)
-
-        for gal in sample[1:2]:
+        for gal in sample:
             galaxy = gal['GALAXY'].strip().lower()
             ra = gal['RA']
             dec = gal['DEC']
@@ -355,17 +353,20 @@ def main():
 
                 im = Image.open(imfile)
                 sz = im.size
+                fntsize = np.round(sz[0]/35).astype('int')
+                font = ImageFont.truetype(fonttype, size=fntsize)
                 draw = ImageDraw.Draw(im)
-                for thistype, thiscolor in zip(objtype, objcolor):
+                for ii, (thistype, thiscolor) in enumerate(zip(objtype, objcolor)):
                     these = np.where(cat['TYPE'].strip().upper() == thistype)[0]
                     if len(these) > 0:
                         [draw.ellipse((obj['BX']-rad, sz[1]-obj['BY']-rad, obj['BX']+rad,
                                        sz[1]-obj['BY']+rad), outline=thiscolor) for obj in cat[these]]
-                # Add a legend.
+                    # Add a legend.
+                    draw.text((20, 20+ii*fntsize*1.2), thistype, font=font, fill=thiscolor)
+                draw.text((sz[0]-fntsize*4, sz[1]-fntsize*2), imtype.upper(), font=font)
+                #draw.text((sz[0], sz[1]-20), imtype.upper(), font=font)
                 im.save(cutoutfile)
                 
-            pdb.set_trace()
-
     # --------------------------------------------------
     # Build the webpage.
     if args.build_webpage:
@@ -378,20 +379,20 @@ def main():
         html.write('<h1>Sample of Large Galaxies</h1>\n')
         html.write('<table border="2" width="30%"><tbody>\n')
         sample = fits.getdata(samplefile, 1)
-        for gal in sample:
+        for ii, gal in enumerate(sample):
             # Add coordinates and sizes here.
             galaxy = gal['GALAXY'].strip().lower()
             html.write('<tr>\n')
+            html.write('<td>{}</td>\n'.format(ii))
             html.write('<td><a href="html/{}.html">{}</a></td>\n'.format(galaxy, galaxy.upper()))
             html.write('<td><a href="http://legacysurvey.org/viewer/?ra={:.6f}&dec={:.6f}" target="_blank"><img src=cutouts/{}-image-thumb.jpg alt={} /></a></td>\n'.format(gal['RA'], gal['DEC'], galaxy, galaxy.upper()))
-#           html.write('<td><a href="html/{}.html"><img src=cutouts/{}-image-thumb.jpg alt={} /></a></td>\n'.format(galaxy, galaxy, galaxy.upper()))
             html.write('</tr>\n')
         html.write('</tbody></table>\n')
         html.write('</body></html>\n')
         html.close()
 
         # individual galaxy pages
-        for gal in sample[:3]:
+        for gal in sample:
             galaxy = gal['GALAXY'].strip().lower()
             htmlfile = os.path.join(largedir, 'html/{}.html'.format(galaxy))
             print('Writing {}'.format(htmlfile))
@@ -409,18 +410,18 @@ def main():
             html.write('<body>\n')
             html.write('<h1>{}</h1>\n'.format(galaxy.upper()))
             # ----------
-            # Pipeline cutouts
+            # DR2 Pipeline cutouts
             html.write('<h2>DR2 Pipeline</h2>\n')
             html.write('<table><tbody>\n')
             html.write('<tr>\n')
-            #for imtype in ('image', 'model', 'resid'):
-            for imtype in ('image', 'model', 'resid'): # Hack!
-                html.write('<td><a href=../cutouts/{}-{}-runbrick-annot.jpg><img src=../cutouts/{}-{}-runbrick-annot.jpg alt={} /></a></td>\n'.format(
-                    galaxy, imtype, galaxy, imtype, galaxy.upper()))
+            for imtype in ('image', 'model', 'resid'):
+                html.write('<td><a href=../cutouts/{}-{}-runbrick-annot.jpg>'.format(galaxy, imtype)+\
+                           '<img src=../cutouts/{}-{}-runbrick-annot.jpg alt={} /></a></td>\n'.format(galaxy, imtype, galaxy.upper()))
             html.write('</tr>\n')
+            #html.write('<tr><td>Data</td><td>Model</td><td>Residuals</td></tr>\n')
             html.write('</tbody></table>\n')
             # ----------
-            # Updated cutouts
+            # Large-Galaxy custom pipeline cutouts
             html.write('<h2>Large-Galaxy Pipeline</h2>\n')
             html.write('<table><tbody>\n')
             html.write('<tr>\n')
@@ -428,6 +429,7 @@ def main():
                 html.write('<td><a href=../cutouts/{}-{}-custom-annot.jpg><img width="100%" src=../cutouts/{}-{}-custom-annot.jpg alt={} /></a></td>\n'.format(
                     galaxy, imtype, galaxy, imtype, galaxy.upper()))
             html.write('</tr>\n')
+            #html.write('<tr><td>Data</td><td>Model</td><td>Residuals</td></tr>\n')
             html.write('</tbody></table>\n')
 
             html.write('</body></html>\n')
