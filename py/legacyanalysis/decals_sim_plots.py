@@ -15,7 +15,7 @@ import sys
 import pdb
 import logging
 import argparse
-
+import glob
 import numpy as np
 
 from astropy.io import fits
@@ -94,6 +94,8 @@ def main():
                         help='process this brick (required input)')
     parser.add_argument('-o', '--objtype', type=str, choices=['STAR', 'ELG', 'LRG', 'BGS'], default='STAR', metavar='', 
                         help='object type (STAR, ELG, LRG, BGS)') 
+    parser.add_argument('-out', '--output_dir', type=str, default=None, metavar='', 
+                        help='relative path to output directory') 
     parser.add_argument('-v', '--verbose', action='store_true', 
                         help='toggle on verbose output')
 
@@ -119,47 +121,55 @@ def main():
         decals_sim_dir = os.getenv('DECALS_SIM_DIR')
     else:
         decals_sim_dir = '.'
-    output_dir = os.path.join(decals_sim_dir, brickname)
+    input_dir= os.path.join(decals_sim_dir,brickname,lobjtype)
+    if args.output_dir is None: output_dir= input_dir
+    else: output_dir= args.output_dir
+    if not os.path.exists(output_dir): 
+        os.makedirs(output_dir)
     
     # Plotting preferences
     #sns.set(style='white',font_scale=1.6,palette='dark')#,font='fantasy')
     #col = sns.color_palette('dark')
     col = ['b', 'k', 'c', 'm', 'y', 0.8]
-        
-    # Read the metadata catalog.
-    metafile = os.path.join(output_dir, 'metacat-{}-{}.fits'.format(brickname, lobjtype))
-    log.info('Reading {}'.format(metafile))
-    meta = fits.getdata(metafile, 1)
-
-    # We need this for our histograms below
-    magbinsz = 0.2
-    rminmax = np.squeeze(meta['RMAG_RANGE'])
-    nmagbin = long((rminmax[1]-rminmax[0])/magbinsz)
-    
+     
     # Work in chunks.
     allsimcat = []
     bigsimcat = []
     bigtractor = []
-    nchunk = np.squeeze(meta['nchunk'])
-    for ichunk in range(nchunk):
-        print('ichunk= ', ichunk)
+    chunk_dirs= glob.glob(os.path.join(input_dir,'*'))
+    if len(chunk_dirs) == 0: raise ValueError
+    # Loop through chunk dirs 000,001,...,999
+    for cdir in chunk_dirs:
+        chunksuffix = os.path.basename(cdir) #'{:02d}'.format(ichunk)
         #log.info('Working on chunk {:02d}/{:02d}'.format(ichunk+1, nchunk))
-        chunksuffix = '{:02d}'.format(ichunk)
+        
+        # Read the metadata catalog.
+        metafile = os.path.join(cdir, 'metacat-{}-{}.fits'.format(brickname, lobjtype))
+        log.info('Reading {}'.format(metafile))
+        meta = fits.getdata(metafile, 1)
+        
+        # We need this for our histograms below
+        magbinsz = 0.2
+        rminmax = np.squeeze(meta['RMAG_RANGE'])
+        nmagbin = long((rminmax[1]-rminmax[0])/magbinsz)
         
         # Read the simulated object catalog
-        simcatfile = os.path.join(output_dir, 'simcat-{}-{}-{}.fits'.format(brickname, lobjtype, chunksuffix))
+        #simcatfile = os.path.join(cdir, 'simcat-{}-{}-{}.fits'.format(brickname, lobjtype, chunksuffix))
+        # HARDCODED fix this!!!!!
+        simcatfile = os.path.join(cdir, 'simcat-{}-{}-{}.fits'.format(brickname, lobjtype, '00'))
         log.info('Reading {}'.format(simcatfile))
         simcat = Table(fits.getdata(simcatfile, 1))
 
         # Read Tractor catalog
-        tractorfile = os.path.join(output_dir, 'tractor-{}-{}-{}.fits'.format(
-            brickname, lobjtype, chunksuffix))
+        #tractorfile = os.path.join(cdir, 'tractor-{}-{}-{}.fits'.format(brickname, lobjtype, chunksuffix))
+        # HARDCODED fix this!!!!!
+        tractorfile = os.path.join(cdir, 'tractor-{}-{}-{}.fits'.format(brickname, lobjtype, '00'))
         log.info('Reading {}'.format(tractorfile))
         tractor = Table(fits.getdata(tractorfile, 1))
         # Match
         m1, m2, d12 = match_radec(tractor['ra'].copy(), tractor['dec'].copy(),
                                   simcat['RA'].copy(), simcat['DEC'].copy(), 1.0/3600.0)
-
+        
         missing = np.delete(np.arange(len(simcat)), m2, axis=0)
         log.info('Missing {}/{} sources'.format(len(missing), len(simcat)))
 
@@ -190,9 +200,13 @@ def main():
             miss = missing[np.argsort(simcat['R'][missing])]
             xpos, ypos = np.meshgrid(np.arange(0, dims[0], hw*2, dtype='int'),
                                      np.arange(0, dims[1], hw*2, dtype='int'))
-            imfile = os.path.join(output_dir, 'qa-{}-{}-image-{}.jpg'.format(brickname, lobjtype, chunksuffix))
+            #imfile = os.path.join(cdir, 'qa-{}-{}-image-{}.jpg'.format(brickname, lobjtype, chunksuffix))
+            # HARDCODED fix this!!!!!
+            imfile = os.path.join(cdir, 'qa-{}-{}-image-{}.jpg'.format(brickname, lobjtype, '00'))
             for suffix in ['image','simscoadd']:
-                im = Image.open( os.path.join(output_dir, 'qa-{}-{}-{}-{}.jpg'.format(brickname, lobjtype, suffix,chunksuffix)) )
+                #im = Image.open( os.path.join(cdir, 'qa-{}-{}-{}-{}.jpg'.format(brickname, lobjtype, suffix,chunksuffix)) )
+                # HARDCODED fix this!!!!!
+                im = Image.open( os.path.join(cdir, 'qa-{}-{}-{}-{}.jpg'.format(brickname, lobjtype, suffix,'00')) )
                 sz = im.size
                 iobj = 0
                 for ic in range(ncols):
@@ -224,14 +238,15 @@ def main():
         # are labeled.
         rad = 15
         for suffix in ('image', 'resid','simscoadd'):
-            imfile = os.path.join(output_dir, 'qa-{}-{}-{}-{}.jpg'.format(brickname, lobjtype, suffix, chunksuffix))
-            qafile = imfile.replace('.jpg', '-annot.png')
-
+            #imfile = os.path.join(cdir, 'qa-{}-{}-{}-{}.jpg'.format(brickname, lobjtype, suffix, chunksuffix))
+            # HARDCODED fix this!!!!!
+            imfile = os.path.join(cdir, 'qa-{}-{}-{}-{}.jpg'.format(brickname, lobjtype, suffix, '00'))
             im = Image.open(imfile)
             sz = im.size
             draw = ImageDraw.Draw(im)
             [draw.ellipse((cat['X']-rad, sz[1]-cat['Y']-rad, cat['X']+rad,
                            sz[1]-cat['Y']+rad), outline='yellow') for cat in simcat]
+            qafile = os.path.join(output_dir, 'qa-{}-{}-{}-{}-annot.png'.format(brickname, lobjtype,suffix, chunksuffix))
             log.info('Writing {}'.format(qafile))
             im.save(qafile)
 
@@ -242,7 +257,6 @@ def main():
     b_good= np.all((grz_nobs[:,0] > 1,grz_nobs[:,1] > 1,grz_nobs[:,2] > 1,\
                     grz_anymask[:,0] == 0,grz_anymask[:,1] ==0,grz_anymask[:,2] == 0),axis=0)
     b_bad= b_good == False 
-    print("grz_anymask.shape= ",grz_anymask.shape)
     # Flux residuals vs r-band magnitude
     fig, ax = plt.subplots(3, sharex=True, figsize=(6,8))
 
@@ -344,10 +358,10 @@ def main():
 
     # Confusion matrix for distribution of object types
     # Basic cm, use slim=False
+    types= ['PSF ', 'SIMP', 'EXP ', 'DEV ', 'COMP']
     cm,all_names= create_confusion_matrix(np.array(['PSF ']*bigtractor['ra'].data[b_good].shape[0]),
                                                             bigtractor['type'].data[b_good], \
-                                                            types=['PSF ', 'SIMP', 'EXP ', 'DEV ', 'COMP '],\
-                                                            slim=False)
+                                                            types=types,slim=False)
     qafile = os.path.join(output_dir, 'qa-{}-{}-{}-confusion.png'.format(brickname, lobjtype,'good'))
     plot_confusion_matrix(cm,all_names,all_names, log,qafile)
     # Truth is one type only, so cm is a row
@@ -361,7 +375,7 @@ def main():
             stack_names+= ["%d < r <= %d" % (int(rmin),int(rmax))]
             cm,ans_names,all_names= create_confusion_matrix(np.array(['PSF ']*bigtractor['ra'].data[br_cut].shape[0]),
                                                             bigtractor['type'].data[br_cut], \
-                                                            types=['PSF ', 'SIMP', 'EXP ', 'DEV ', 'COMP '])
+                                                            types=types)
             cm_stack+= [cm]
         qafile = os.path.join(output_dir, 'qa-{}-{}-{}-confusion-stack.png'.format(brickname, lobjtype,cut_name))
         plot_cm_stack(cm_stack, stack_names,all_names, log,qafile)
