@@ -60,6 +60,7 @@ from legacypipe.runbrick import run_brick
 from legacypipe.decam import DecamImage
 from legacypipe.common import LegacySurveyData, wcs_for_brick, ccds_touching_wcs
 
+
 class SimDecals(LegacySurveyData):
     def __init__(self, survey_dir=None, metacat=None, simcat=None, output_dir=None):
         super(SimDecals, self).__init__(survey_dir=survey_dir, output_dir=output_dir)
@@ -68,6 +69,7 @@ class SimDecals(LegacySurveyData):
 
     def get_image_object(self, t):
         return SimImage(self, t)
+
 
 class SimImage(DecamImage):
     def __init__(self, survey, t):
@@ -91,17 +93,16 @@ class SimImage(DecamImage):
         # Grab the data and inverse variance images [nanomaggies!]
         image = galsim.Image(tim.getImage())
         invvar = galsim.Image(tim.getInvvar())
-        #also store galaxy sims and sims invvar
+        # Also store galaxy sims and sims invvar
         sims_image = image.copy() 
         sims_image.fill(0.0)
         sims_ivar = sims_image.copy()
         # N sims, 4 box corners (xmin,xmax,ymin,ymax) for each sim
         tim.sims_xy = np.empty((len(self.survey.simcat),4))+np.nan 
 
-        #store simulated galaxy images in tim object 
+        # Store simulated galaxy images in tim object 
         # Loop on each object.
         for ii, obj in enumerate(self.survey.simcat):
-            #print(obj)
             if objtype == 'STAR':
                 stamp = objstamp.star(obj)
             elif objtype == 'ELG':
@@ -115,11 +116,11 @@ class SimImage(DecamImage):
                 stamp = stamp[overlap]      
                 ivarstamp = invvar[overlap]
                 stamp, ivarstamp = objstamp.addnoise(stamp, ivarstamp)
-                #stamp full image only where stamps will in inserted
+                # Only where stamps will in inserted
                 sims_image[overlap] += stamp 
                 sims_ivar[overlap] += ivarstamp
                 tim.sims_xy[ii, :] = [overlap.xmin-1, overlap.xmax-1,
-                                      overlap.ymin-1, overlap.ymax-1] #-1 b/c galsim 1st index is 1
+                                      overlap.ymin-1, overlap.ymax-1] # galsim 1st index is 1
 
                 image[overlap] += stamp
                 invvar[overlap] = ivarstamp
@@ -322,29 +323,35 @@ def no_overlapping_radec(ra,dec, bounds, random_state=None, dist=5.0/3600):
     ra,dec -- numpy arrays [degrees]
     bounds-- list of [ramin,ramax,decmin,decmax]
     random_state-- np.random.RandomState() object
-    dist-- minimum separation in degrees'''
+    dist-- separation in degrees, 
+           sqrt(x^2+y^2) where x=(dec2-dec1), y=cos(avg(dec2,dec1))*(ra2-ra1)
+    '''
     if random_state is None:
         random_state = np.random.RandomState()
-    #approx distance = sqrt(x^2+y^2) where x=(dec2-dec1), y=cos(avg(dec2,dec1))*(ra2-ra1)
-    #build tree of x,y 
-    tree = KDTree(np.transpose([dec.copy(),np.cos(dec.copy()*np.pi/180)*ra.copy()])) #data has shape NxK, N points and K dimensions (K=2 for ra,dec) 
-    #querry tree with those same x,y, the 1st NN will be itself, the 2nd NN will be the NN 
-    ds, i_tree = tree.query(np.transpose([dec.copy(), np.cos(dec.copy()*np.pi/180)*ra.copy()]), k=2)
-    i_bad= ds[:,1] < dist #ds[:,0] is array of zeros, ds[:,1] is distances to NN of each ra,dec
+    # build tree of x,y, data has shape NxK, N points and K=2 dimensions (ra,dec) 
+    tree = KDTree(np.transpose([dec.copy(),\
+                                np.cos(dec.copy()*np.pi/180)*ra.copy()])) 
+    # querry tree with same xy, 1st NN isitself, 2nd is the NN 
+    ds, i_tree = tree.query(np.transpose([dec.copy(),\
+                                        np.cos(dec.copy()*np.pi/180)*ra.copy()]), k=2)
+    i_bad= ds[:,1] < dist # 2nd NN
     cnt = 1
     print("non overlapping radec: iter=%d, overlaps=%d/%d" % (cnt, ra[i_bad].shape[0],ra.shape[0]))
     while ra[i_bad].shape[0] > 0:
-        #get new ra,dec wherever too close
+        # get new ra,dec wherever too close
         ra[i_bad]= random_state.uniform(bounds[0], bounds[1], ra[i_bad].shape[0])
         dec[i_bad]= random_state.uniform(bounds[2], bounds[3], dec[i_bad].shape[0])
-        #re-index and get new searations
-        tree = KDTree(np.transpose([dec.copy(), np.cos(dec.copy()*np.pi/180)*ra.copy()])) #data has shape NxK, N points and K dimensions (K=2 for ra,dec) 
-        ds, i_tree = tree.query(np.transpose([dec.copy(), np.cos(dec.copy()*np.pi/180)*ra.copy()]), k=2) #id for each data.query source that is NN of each input source
+        # re-index and get new separations
+        tree = KDTree(np.transpose([dec.copy(), \
+                                    np.cos(dec.copy()*np.pi/180)*ra.copy()\
+                                    ])) 
+        ds, i_tree = tree.query(np.transpose([dec.copy(), \
+                                              np.cos(dec.copy()*np.pi/180)*ra.copy()]), k=2) 
         i_bad= ds[:,1] < dist
         cnt += 1
         print("non overlapping radec: iter=%d, overlaps=%d/%d" % (cnt, ra[i_bad].shape[0],ra.shape[0]))
         if cnt > 30:
-            print('something bad happening, not converging to non-overlapping radec')
+            print('not converging to non-overlapping radec')
             raise ValueError
     return ra, dec
 
@@ -415,6 +422,7 @@ def build_simcat(nobj=None, brickname=None, brickwcs=None, meta=None, seed=None,
 
     return cat
 
+
 def do_one_chunk(seed,ith_chunk,  decals_sim_dir,brickname,lobjtype,metacat, nobj,brickwcs,log, args):
     '''can be called two ways either 1) a loop over nchunks or 2) for one chunk'''
     output_dir = os.path.join(decals_sim_dir, brickname,lobjtype,'%3.3d' % ith_chunk)    
@@ -462,7 +470,6 @@ def do_one_chunk(seed,ith_chunk,  decals_sim_dir,brickname,lobjtype,metacat, nob
     shutil.rmtree(os.path.join(output_dir, 'coadd'))
     shutil.rmtree(os.path.join(output_dir, 'tractor'))
     return "Finished chunk %3.3d" % ith_chunk
-
 
 
 def main():
@@ -537,7 +544,7 @@ def main():
         
     nobj = args.nobj
     nchunk = args.nchunk
-    rand = np.random.RandomState(args.seed) #determines chunk seeds 0-999
+    rand = np.random.RandomState(args.seed) # determines seed for all chunks
     seeds = rand.random_integers(0,2**18, max_nchunk)
 
     log.info('Object type = {}'.format(objtype))
@@ -585,11 +592,13 @@ def main():
     if not args.seed:
         log.info('Random seed = {}'.format(args.seed))
         metacat['SEED'] = args.seed
-    #run tractor! 2 possible way to run
-    if args.ith_chunk is not None: #run only user specified chunk
+    # run tractor
+    # only specified chunk
+    if args.ith_chunk is not None: 
         message= do_one_chunk(seeds[args.ith_chunk],args.ith_chunk,  decals_sim_dir,brickname,lobjtype,metacat, nobj,brickwcs,log, args)
         print(message)
-    else: #runk all chunks
+    # all chunks
+    else:
         for ith_chunk in range(nchunk):
             log.info('Working on chunk {:02d}/{:02d}'.format(ith_chunk+1,nchunk))
             message= do_one_chunk(seeds[ith_chunk],ith_chunk,  decals_sim_dir,brickname,lobjtype,metacat, nobj,brickwcs,log, args)
