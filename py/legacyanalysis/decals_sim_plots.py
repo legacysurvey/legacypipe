@@ -7,6 +7,9 @@
 
 from __future__ import division, print_function
 
+import matplotlib
+matplotlib.use('Agg') # display backend
+
 import os
 import sys
 import pdb
@@ -14,7 +17,6 @@ import logging
 import argparse
 
 import numpy as np
-import matplotlib
 
 from astropy.io import fits
 from astropy.table import vstack, Table
@@ -24,7 +26,65 @@ from astrometry.libkd.spherematch import match_radec
 import matplotlib.pyplot as plt
 from PIL import Image, ImageDraw
 
-matplotlib.use('Agg') # display backend
+def create_confusion_matrix(answer_type,predict_type, types=['PSF','SIMP','EXP','DEV','COMP'],slim=True):
+    '''compares classifications of matched objects, returns 2D array which is conf matrix and xylabels
+    return 5x5 confusion matrix and colum/row names
+    answer_type,predict_type -- arrays of same length with reference and prediction types'''
+    for typ in set(answer_type): assert(typ in types)
+    for typ in set(predict_type): assert(typ in types)
+    # if a type was not in answer (training) list then don't put in cm
+    if slim: ans_types= set(answer_type)
+    # put in cm regardless
+    else: ans_types= set(types)
+    cm=np.zeros((len(ans_types),len(types)))-1
+    for i_ans,ans_type in enumerate(ans_types):
+        ind= np.where(answer_type == ans_type)[0]
+        for i_pred,pred_type in enumerate(types):
+            n_pred= np.where(predict_type[ind] == pred_type)[0].size
+            if ind.size > 0: cm[i_ans,i_pred]= float(n_pred)/ind.size # ind.size is constant for loop over pred_types
+            else: cm[i_ans,i_pred]= np.nan
+    if slim: return cm,ans_types,types #size ans_types != types
+    else: return cm,types
+
+def plot_confusion_matrix(cm,answer_names,all_names, log,qafile):
+    plt.imshow(cm, interpolation='nearest', cmap=plt.cm.Blues)
+    cbar=plt.colorbar()
+    plt.xticks(range(len(all_names)), all_names)
+    plt.yticks(range(len(answer_names)), answer_names)
+    ylab=plt.ylabel('True')
+    xlab=plt.xlabel('Predicted (tractor)')
+    for row in range(len(answer_names)):
+        for col in range(len(all_names)):
+            if np.isnan(cm[row,col]): 
+                plt.text(col,row,'n/a',va='center',ha='center')
+            else: plt.text(col,row,'%.2f' % cm[row,col],va='center',ha='center')
+    log.info('Writing {}'.format(qafile))
+    plt.savefig(qafile, bbox_extra_artists=[xlab,ylab], bbox_inches='tight',dpi=150)
+    plt.close()
+
+def plot_cm_stack(cm_stack,stack_names,all_names, log,qafile):
+    '''cm_stack -- list of single row confusion matrices
+    stack_names -- list of same len as cm_stack, names for each row of cm_stack'''
+    # combine list into single cm
+    cm=np.zeros((len(cm_stack),len(all_names)))+np.nan
+    for i in range(cm.shape[0]): cm[i,:]= cm_stack[i]
+    # make usual cm, but labels repositioned
+    plt.imshow(cm, interpolation='nearest', cmap=plt.cm.Blues)
+    cbar=plt.colorbar()
+    plt.xticks(range(len(all_names)), all_names)
+    plt.yticks(range(len(stack_names)), stack_names)
+    ylab=plt.ylabel('True = PSF')
+    xlab=plt.xlabel('Predicted (tractor)')
+    for row in range(len(stack_names)):
+        for col in range(len(all_names)):
+            if np.isnan(cm[row,col]): 
+                plt.text(col,row,'n/a',va='center',ha='center')
+            else: plt.text(col,row,'%.2f' % cm[row,col],va='center',ha='center')
+    log.info('Writing {}'.format(qafile))
+    plt.savefig(qafile, bbox_extra_artists=[xlab,ylab], bbox_inches='tight',dpi=150)
+    plt.close()
+
+
 
 def main():
 
@@ -91,14 +151,15 @@ def main():
         log.info('Reading {}'.format(simcatfile))
         simcat = Table(fits.getdata(simcatfile, 1))
 
-        # Read and match to the Tractor catalog
+        # Read Tractor catalog
         tractorfile = os.path.join(output_dir, 'tractor-{}-{}-{}.fits'.format(
             brickname, lobjtype, chunksuffix))
         log.info('Reading {}'.format(tractorfile))
         tractor = Table(fits.getdata(tractorfile, 1))
+        # Match
+        m1, m2, d12 = match_radec(tractor['ra'].copy(), tractor['dec'].copy(),
+                                  simcat['RA'].copy(), simcat['DEC'].copy(), 1.0/3600.0)
 
-        m1, m2, d12 = match_radec(tractor['ra'], tractor['dec'],
-                                  simcat['RA'], simcat['DEC'], 1.0/3600.0)
         missing = np.delete(np.arange(len(simcat)), m2, axis=0)
         log.info('Missing {}/{} sources'.format(len(missing), len(simcat)))
 
@@ -118,7 +179,6 @@ def main():
 
         # Get cutouts of the missing sources in each chunk (if any)
         if len(missing) > 0:
-            imfile = os.path.join(output_dir, 'qa-{}-{}-image-{}.jpg'.format(brickname, lobjtype, chunksuffix))
             hw = 30 # half-width [pixels]
             rad = 5
             ncols = 5
@@ -130,38 +190,40 @@ def main():
             miss = missing[np.argsort(simcat['R'][missing])]
             xpos, ypos = np.meshgrid(np.arange(0, dims[0], hw*2, dtype='int'),
                                      np.arange(0, dims[1], hw*2, dtype='int'))
-            im = Image.open(imfile)
-            sz = im.size
-            iobj = 0
-            for ic in range(ncols):
-                for ir in range(nrows):
-                    xx = int(simcat['X'][miss[iobj]])
-                    yy = int(sz[1]-simcat['Y'][miss[iobj]])
-                    crop = (xx-hw, yy-hw, xx+hw, yy+hw)
-                    box = (xpos[ir, ic], ypos[ir, ic])
-                    thumb = im.crop(crop)
-                    mosaic.paste(thumb, box)
-                    iobj = iobj + 1
+            imfile = os.path.join(output_dir, 'qa-{}-{}-image-{}.jpg'.format(brickname, lobjtype, chunksuffix))
+            for suffix in ['image','simscoadd']:
+                im = Image.open( os.path.join(output_dir, 'qa-{}-{}-{}-{}.jpg'.format(brickname, lobjtype, suffix,chunksuffix)) )
+                sz = im.size
+                iobj = 0
+                for ic in range(ncols):
+                    for ir in range(nrows):
+                        xx = int(simcat['X'][miss[iobj]])
+                        yy = int(sz[1]-simcat['Y'][miss[iobj]])
+                        crop = (xx-hw, yy-hw, xx+hw, yy+hw)
+                        box = (xpos[ir, ic], ypos[ir, ic])
+                        thumb = im.crop(crop)
+                        mosaic.paste(thumb, box)
+                        iobj = iobj + 1
 
-            # Add a border and circle the missing source.
-            draw = ImageDraw.Draw(mosaic)
-            sz = mosaic.size
-            for ic in range(ncols):
-                for ir in range(nrows):
-                    draw.rectangle([(xpos[ir, ic], ypos[ir, ic]),
-                                    (xpos[ir, ic]+hw*2, ypos[ir, ic]+hw*2)])
-                    xx = xpos[ir, ic] + hw
-                    yy = ypos[ir, ic] + hw
-                    draw.ellipse((xx-rad, sz[1]-yy-rad, xx+rad, sz[1]-yy+rad), outline='yellow')
+                # Add a border and circle the missing source.
+                draw = ImageDraw.Draw(mosaic)
+                sz = mosaic.size
+                for ic in range(ncols):
+                    for ir in range(nrows):
+                        draw.rectangle([(xpos[ir, ic], ypos[ir, ic]),
+                                        (xpos[ir, ic]+hw*2, ypos[ir, ic]+hw*2)])
+                        xx = xpos[ir, ic] + hw
+                        yy = ypos[ir, ic] + hw
+                        draw.ellipse((xx-rad, sz[1]-yy-rad, xx+rad, sz[1]-yy+rad), outline='yellow')
 
-            qafile = os.path.join(output_dir, 'qa-{}-{}-missing-{}.png'.format(brickname, lobjtype, chunksuffix))
-            log.info('Writing {}'.format(qafile))
-            mosaic.save(qafile)
+                qafile = os.path.join(output_dir, 'qa-{}-{}-{}-missing-{}.png'.format(brickname, lobjtype,suffix, chunksuffix))
+                log.info('Writing {}'.format(qafile))
+                mosaic.save(qafile)
 
         # Annotate the coadd image and residual files so the simulated sources
         # are labeled.
         rad = 15
-        for suffix in ('image', 'resid'):
+        for suffix in ('image', 'resid','simscoadd'):
             imfile = os.path.join(output_dir, 'qa-{}-{}-{}-{}.jpg'.format(brickname, lobjtype, suffix, chunksuffix))
             qafile = imfile.replace('.jpg', '-annot.png')
 
@@ -173,6 +235,14 @@ def main():
             log.info('Writing {}'.format(qafile))
             im.save(qafile)
 
+    # now operate on concatenated catalogues from multiple chunks
+    # Grab flags
+    grz_anymask= bigtractor['decam_anymask'][:,[1,2,4]]
+    grz_nobs= bigtractor['decam_nobs'][:,[1,2,4]]
+    b_good= np.all((grz_nobs[:,0] > 1,grz_nobs[:,1] > 1,grz_nobs[:,2] > 1,\
+                    grz_anymask[:,0] == 0,grz_anymask[:,1] ==0,grz_anymask[:,2] == 0),axis=0)
+    b_bad= b_good == False 
+    print("grz_anymask.shape= ",grz_anymask.shape)
     # Flux residuals vs r-band magnitude
     fig, ax = plt.subplots(3, sharex=True, figsize=(6,8))
 
@@ -180,19 +250,18 @@ def main():
     for thisax, thiscolor, band, indx in zip(ax, col, ('G', 'R', 'Z'), (1, 2, 4)):
         simflux = bigsimcat[band+'FLUX']
         tractorflux = bigtractor['decam_flux'][:, indx]
-        thisax.scatter(rmag, -2.5*np.log10(tractorflux/simflux),
-                       color=thiscolor, s=10)
-      
+        for bcut,label,newcol in zip([b_good,b_bad],['good','bad'],[thiscolor,'r']):
+            thisax.scatter(rmag[bcut], -2.5*np.log10(tractorflux[bcut]/simflux[bcut]),
+                           s=10,edgecolor=newcol,c='none',lw=1.,label=label)
         thisax.set_ylim(-0.7,0.7)
         thisax.set_xlim(rminmax + [-0.1, 0.0])
         thisax.axhline(y=0.0,lw=2,ls='solid',color='gray')
-        
-    
         #thisax.text(0.05,0.05, band.lower(), horizontalalignment='left',
                     #verticalalignment='bottom',transform=thisax.transAxes,
                     #fontsize=16)
         
     ax[0].set_ylabel('$\Delta$g')
+    ax[0].legend(loc=3,ncol=2,fontsize='medium')
     ax[1].set_ylabel('$\Delta$r (Tractor minus Input)')
     ax[2].set_ylabel('$\Delta$z')
     ax[2].set_xlabel('Input r magnitude (AB mag)')
@@ -201,6 +270,7 @@ def main():
     qafile = os.path.join(output_dir, 'qa-{}-{}-flux.png'.format(brickname, lobjtype))
     log.info('Writing {}'.format(qafile))
     plt.savefig(qafile)
+    plt.close()
     
     # Color residuals
     gr_tra = -2.5*np.log10(bigtractor['decam_flux'][:, 1]/bigtractor['decam_flux'][:, 2])
@@ -225,6 +295,7 @@ def main():
     qafile = os.path.join(output_dir, 'qa-{}-{}-color.png'.format(brickname, lobjtype))
     log.info('Writing {}'.format(qafile))
     plt.savefig(qafile)
+    plt.close()
 
     # Fraction of matching sources
     rmaghist, magbins = np.histogram(allsimcat['R'], bins=nmagbin, range=rminmax)
@@ -244,6 +315,7 @@ def main():
     qafile = os.path.join(output_dir, 'qa-{}-{}-frac.png'.format(brickname, lobjtype))
     log.info('Writing {}'.format(qafile))
     plt.savefig(qafile)
+    plt.close()
 
     # Distribution of object types for matching sources.
     fig = plt.figure(figsize=(8, 6))
@@ -268,7 +340,32 @@ def main():
     qafile = os.path.join(output_dir, 'qa-{}-{}-type.png'.format(brickname, lobjtype))
     log.info('Writing {}'.format(qafile))
     plt.savefig(qafile)
+    plt.close()
 
+    # Confusion matrix for distribution of object types
+    # Basic cm, use slim=False
+    cm,all_names= create_confusion_matrix(np.array(['PSF ']*bigtractor['ra'].data[b_good].shape[0]),
+                                                            bigtractor['type'].data[b_good], \
+                                                            types=['PSF ', 'SIMP', 'EXP ', 'DEV ', 'COMP '],\
+                                                            slim=False)
+    qafile = os.path.join(output_dir, 'qa-{}-{}-{}-confusion.png'.format(brickname, lobjtype,'good'))
+    plot_confusion_matrix(cm,all_names,all_names, log,qafile)
+    # Truth is one type only, so cm is a row
+    # Compute a row for each r mag range and stack rows
+    for bcut,cut_name in zip([b_good,b_bad],['good','bad']):
+        cm_stack,stack_names=[],[]
+        for rmin in [18.,20.,22.,24.]:
+            rmax=rmin+2.
+            # master cut
+            br_cut= np.all((bigsimcat['R'] > rmin,bigsimcat['R'] <= rmax, bcut),axis=0)
+            stack_names+= ["%d < r <= %d" % (int(rmin),int(rmax))]
+            cm,ans_names,all_names= create_confusion_matrix(np.array(['PSF ']*bigtractor['ra'].data[br_cut].shape[0]),
+                                                            bigtractor['type'].data[br_cut], \
+                                                            types=['PSF ', 'SIMP', 'EXP ', 'DEV ', 'COMP '])
+            cm_stack+= [cm]
+        qafile = os.path.join(output_dir, 'qa-{}-{}-{}-confusion-stack.png'.format(brickname, lobjtype,cut_name))
+        plot_cm_stack(cm_stack, stack_names,all_names, log,qafile)
+    
     '''
     # Morphology plots
     if objtype=='ELG':
