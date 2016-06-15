@@ -6,12 +6,63 @@ from tractor.utils import get_class_from_name
 from tractor.basics import NanoMaggies, ConstantFitsWcs, LinearPhotoCal
 from tractor.image import Image
 from tractor.tractortime import TAITime
-from .common import SimpleGalaxy
+from tractor.psfex import PixelizedPsfEx, PsfExModel
+from tractor.psf import HybridPSF
+from tractor.basics import GaussianMixturePSF
+
+from legacypipe.common import SimpleGalaxy
+
 
 '''
 Generic image handling code.
 '''
 
+class MyHybridPsf(HybridPSF):
+    '''
+    This class wraps a pixelized PSF model, adding a Gaussian approximation
+    model.
+    '''
+    def __init__(self, gauss, pix):
+        '''
+        Create a new hybrid PSF model using the given Gaussian approximation
+        *gauss* and pixelized PSF model *pix*.
+        '''
+        super(MyHybridPsf, self).__init__()
+        self.gauss = gauss
+        self.pix = pix
+
+    def __str__(self):
+        return ('MyHybridPsf: Gaussian sigma %.2f, Pix %s' %
+                (np.sqrt(self.gauss.mog.var[0,0,0]), str(self.pix)))
+        
+    def getMixtureOfGaussians(self, **kwargs):
+        return self.gauss.getMixtureOfGaussians(**kwargs)
+
+    def getShifted(self, dx, dy):
+        pix = self.pix.shifted(dx, dy)
+        return MyHybridPsf(self.gauss, pix)
+    
+    def constantPsfAt(self, x, y):
+        pix = self.pix.constantPsfAt(x, y)
+        return MyHybridPsf(self.gauss, pix)
+
+    def __getattr__(self, name):
+        '''Delegate to my pixelized PSF model.'''
+        return getattr(self.pix, name)
+
+    def __setattr__(self, name, val):
+        '''Delegate to my pixelized PSF model.'''
+        if name in ['gauss', 'pix']:
+            return object.__setattr__(self, name, val)
+        setattr(self.__dict__['pix'], name, val)
+
+    # for pickling:
+    def __getstate__(self):
+        return (self.gauss, self.pix)
+     
+    def __setstate__(self, state):
+        self.gauss, self.pix = state
+        
 class LegacySurveyImage(object):
     '''A base class containing common code for the images we handle.
 
@@ -148,6 +199,7 @@ class LegacySurveyImage(object):
     def get_tractor_image(self, slc=None, radecpoly=None,
                           gaussPsf=False, pixPsf=False,
                           splinesky=False,
+                          use_hybrid_psf=True,
                           nanomaggies=True, subsky=True, tiny=5,
                           dq=True, invvar=True, pixels=True):
         '''
@@ -312,7 +364,13 @@ class LegacySurveyImage(object):
         if x0 or y0:
             twcs.setX0Y0(x0,y0)
 
+        hybridPsf = False
+        if use_hybrid_psf and pixPsf:
+            pixPsf = False
+            hybridPsf = True
+            
         psf = self.read_psf_model(x0, y0, gaussPsf=gaussPsf, pixPsf=pixPsf,
+                                  hybridPsf=hybridPsf,
                                   psf_sigma=psf_sigma,
                                   cx=(x0+x1)/2., cy=(y0+y1)/2.)
 
@@ -551,22 +609,36 @@ class LegacySurveyImage(object):
         return skyobj
 
     def read_psf_model(self, x0, y0, gaussPsf=False, pixPsf=False,
+                       hybridPsf=False,
                        psf_sigma=1., cx=0, cy=0):
         psffn = None
         if gaussPsf:
-            from tractor.basics import GaussianMixturePSF
             v = psf_sigma**2
             psf = GaussianMixturePSF(1., 0., 0., v, v, 0.)
             print('WARNING: using mock PSF:', psf)
             psf.version = '0'
             psf.plver = ''
+
         elif pixPsf:
             # spatially varying pixelized PsfEx
-            from tractor.psfex import PixelizedPsfEx
             print('Reading PsfEx model from', self.psffn)
             psf = PixelizedPsfEx(self.psffn)
             psf.shift(x0, y0)
             psffn = self.psffn
+
+        elif hybridPsf:
+            print('Reading PsfEx model from', self.psffn)
+            psfex = PsfExModel(self.psffn)
+            # Instantiate PsfEx model to measure amplitude...
+            psfim = psfex.at(x0, y0)
+            psf_amp = psfim.sum()
+            v = psf_sigma**2
+            gauss = GaussianMixturePSF(psf_amp, 0., 0., v, v, 0.)
+            pix = PixelizedPsfEx(self.psffn)
+            pix.shift(x0, y0)
+            psf = MyHybridPsf(gauss, pix)
+            psffn = self.psffn
+            
         else:
             assert(False)
         print('Using PSF model', psf)

@@ -322,7 +322,9 @@ def stage_tims(W=3600, H=3600, pixscale=0.262, brickname=None,
 
     # Read Tractor images
     args = [(im, targetrd, dict(gaussPsf=gaussPsf,
-                                pixPsf=pixPsf, splinesky=splinesky)) for im in ims]
+                                pixPsf=pixPsf,
+                                splinesky=splinesky))
+                                for im in ims]
     tims = mp.map(read_one_tim, args)
 
     tnow = Time()
