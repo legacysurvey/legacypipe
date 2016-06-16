@@ -863,7 +863,7 @@ class OneBlob(object):
             if self.plots:
                 from collections import OrderedDict
                 plt.clf()
-                rows,cols = 2, 6
+                rows,cols = 3, 6
                 mods = OrderedDict([
                     ('none',None), ('ptsrc',ptsrc), ('simple',simple),
                     ('dev',dev), ('exp',exp), ('comp',comp)])
@@ -876,13 +876,14 @@ class OneBlob(object):
                     if modname == 'none':
                         # In the first panel, we show a coadd of the data
                         coimgs, cons = quick_coadds(srctims, self.bands,srcwcs)
+                        rgbims = coimgs
                         dimshow(get_rgb(coimgs, self.bands), ticks=False)
                         ax = plt.axis()
                         ok,x,y = self.blobwcs.radec2pixelxy(
                             src.getPosition().ra, src.getPosition().dec)
                         plt.plot(x-1, y-1, 'r+')
                         plt.axis(ax)
-                        plt.title('Image')
+                        tt = 'Image'
                         chis = [((tim.getImage()) * tim.getInvError())**2
                                   for tim in srctims]
                         res = [tim.getImage() for tim in srctims]
@@ -890,17 +891,23 @@ class OneBlob(object):
                         modimgs = list(srctractor.getModelImages())
                         comods,nil = quick_coadds(srctims, self.bands, srcwcs,
                                                     images=modimgs)
+                        rgbims = comods
                         dimshow(get_rgb(comods, self.bands), ticks=False)
-                        plt.title(modname + '\n(%.0f s)' % cputimes[modname])
+                        tt = modname + '\n(%.0f s)' % cputimes[modname]
                         chis = [((tim.getImage() - mod) * tim.getInvError())**2
                                 for tim,mod in zip(srctims, modimgs)]
                         res = [(tim.getImage() - mod) for tim,mod in
                                zip(srctims, modimgs)]
-            
+
+                    # Second row: same rgb image with arcsinh stretch
+                    plt.subplot(rows, cols, imod+1+cols)
+                    dimshow(get_rgb(rgbims, self.bands, **rgbkwargs))
+                    plt.title(tt)
+
                     # residuals
                     coresids,nil = quick_coadds(srctims, self.bands, srcwcs,
                                                   images=res)
-                    plt.subplot(rows, cols, imod+1+cols)
+                    plt.subplot(rows, cols, imod+1+2*cols)
                     dimshow(get_rgb(coresids, self.bands, **rgbkwargs_resid),
                                 ticks=False)
                     plt.title('chisq %.0f' % chisqs[modname], fontsize=8)
