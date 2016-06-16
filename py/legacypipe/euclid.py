@@ -424,14 +424,17 @@ if __name__ == '__main__':
         I = np.flatnonzero(F.type == 'PSF ')
         print(len(I), 'PSF')
 
+        for t in ['SIMP', 'DEV ', 'EXP ', 'COMP']:
+            J = np.flatnonzero(F.type == t)
+            print(len(J), t)
+        
         F.fluxsn = F.flux * np.sqrt(F.flux_ivar)
         F.mag = -2.5 * (np.log10(F.flux) - 9.)
         plt.clf()
-        plt.semilogx(F.fluxsn, F.mag, 'k.', alpha=0.1)
-        plt.semilogx(F.fluxsn[I], F.mag[I], 'r.', alpha=0.1)
-        #plt.semilogx(F.fluxsn[J], F.mag[J], 'b.', alpha=0.1)
-        plt.xlabel('Flux S/N')
-        plt.ylabel('Mag')
+        p1 = plt.semilogx(F.fluxsn, F.mag, 'k.', alpha=0.1)
+        p2 = plt.semilogx(F.fluxsn[I], F.mag[I], 'r.', alpha=0.1)
+        plt.xlabel('Megacam forced-photometry Flux S/N')
+        plt.ylabel('Megacam forced-photometry mag')
 
         #plt.xlim(1., 1e5)
         #plt.ylim(10, 26)
@@ -447,60 +450,15 @@ if __name__ == '__main__':
         plt.axvline(5., color='k', alpha=0.5)
         plt.axhline(medmag, color='k', alpha=0.5)
         plt.axhline(medmag, color='r', alpha=0.5, lw=2)
-        
+
+        plt.title('Megacam forced-photometered from ACS-VIS')
+
+        ax = plt.axis()
+        p1 = plt.semilogx([0],[0], 'k.')
+        p2 = plt.semilogx([0], [0], 'r.')
+        plt.legend((p1[0], p2[0]), ('All sources', 'Point sources'))
+        plt.axis(ax)
         ps.savefig()
-
-        J = np.flatnonzero((F.mag[I] > 18) * (F.mag[I] < 22) *
-                           (F.fluxsn[I] > 1.) *
-                           (F.fluxsn[I] < 3.))
-        J = I[J]
-        print('Weird sources', zip(F.ra[J], F.dec[J]))
-
-        plt.clf()
-        plt.loglog(F.flux, 1./np.sqrt(F.flux_ivar), 'k.', alpha=0.01)
-        plt.loglog(F.flux[J], 1./np.sqrt(F.flux_ivar[J]), 'b.')
-        plt.xlabel('Megacam Flux')
-        plt.ylabel('Megacam Flux error')
-        ps.savefig()
-        
-        plt.clf()
-        plt.plot(F.x, F.y, 'k.', alpha=0.01)
-        plt.plot(F.x[J], F.y[J], 'b.')
-        plt.xlabel('Megacam x')
-        plt.ylabel('Megacam y')
-        ps.savefig()
-        
-        plt.clf()
-        plt.plot(F.ra, F.dec, 'k.', alpha=0.01)
-        plt.plot(F.ra[J], F.dec[J], 'b.')
-        ps.savefig()
-        
-        J = J[np.argsort(F.brickname[J])]
-        
-        print('Weird sources:')
-        for f in F[J]:
-            print('Brick', f.brickname, 'x,y %.1f, %.1f' % (f.bx, f.by),
-                  'RA,Dec', f.ra, f.dec)
-
-            # fn = 'legacysurvey-%s-image.jpg' % f.brickname
-            # if os.path.exists(fn):
-            #     I = plt.imread(fn)
-            #     print('Read', I.shape)
-            #     H,W = I.shape[:2]
-            #     S = 50
-            #     y = int(f.by)
-            #     y = H-1 - y
-            #     x = int(f.bx)
-            #     I = I[y - S: y + S+1, x - S : x + S+1]
-            #     plt.clf()
-            #     plt.imshow(I, interpolation='nearest', origin='lower', cmap='gray')
-            #     ps.savefig()
-
-
-        J = J[np.argsort(F.ccdname[J])]
-        print('Weird sources:')
-        for f in F[J]:
-            print('CCD', f.ccdname, 'X,Y', f.x, f.y)
                 
         sys.exit(0)
 
