@@ -588,7 +588,16 @@ if __name__ == '__main__':
                 if col in units:
                     hdr.add_record(dict(name='TUNIT%i' % (i+1), value=units[col]))
 
+            primhdr = fitsio.FITSHDR()
+            primhdr.add_record(dict(name='EXPNUM', value=im.expnum,
+                                    comment='Exposure number'))
+            primhdr.add_record(dict(name='CCDNAME', value=im.ccdname,
+                                    comment='CCD name'))
+            primhdr.add_record(dict(name='CAMERA', value=im.camera,
+                                    comment='Camera'))
+
             outfn = 'euclid-out/forced/megacam-%i-%s.fits' % (im.expnum, im.ccdname)
-            #fitsio.write(outfn, None, header=hdr, clobber=True)
+            fitsio.write(outfn, None, header=primhdr, clobber=True)
             F.writeto(outfn, header=hdr, append=True)
+            #F.writeto(outfn, header=hdr)
             
