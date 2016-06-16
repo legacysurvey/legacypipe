@@ -19,9 +19,8 @@ import fitsio
 import pylab as plt
 
 from legacypipe.runbrick import run_brick, rgbkwargs, rgbkwargs_resid
-from legacypipe.common import LegacySurveyData
+from legacypipe.common import LegacySurveyData, imsave_jpeg
 from legacypipe.image import LegacySurveyImage
-
 from legacypipe.desi_common import read_fits_catalog
 
 from tractor.sky import ConstantSky
