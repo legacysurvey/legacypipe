@@ -19,7 +19,7 @@ import fitsio
 import pylab as plt
 
 from legacypipe.runbrick import run_brick, rgbkwargs, rgbkwargs_resid
-from legacypipe.common import LegacySurveyData, imsave_jpeg
+from legacypipe.common import LegacySurveyData, imsave_jpeg, get_rgb
 from legacypipe.image import LegacySurveyImage
 from legacypipe.desi_common import read_fits_catalog
 
@@ -359,16 +359,22 @@ def read_acs_catalogs():
 
 if __name__ == '__main__':
     if True:
-        fns = glob('euclid-out/coadd/acs/*/*-image-I.fits')
+        fns = glob('euclid-out/coadd/acs/acsvis-1??/*-image-I.fits')
         fns.sort()
+        bands=['I']
         for fn in fns:
-            I = fits_table(fn)
+            I = fitsio.read(fn)
+            print('Read', I.shape, 'from', fn)
+            ims = [I]
             rgb = get_rgb(ims, bands, **rgbkwargs)
+            print('RGB:', rgb.shape)
             # coadd_bw
             rgb = rgb.sum(axis=2)
+            print('B/W:', rgb.shape)
             kwa = dict(cmap='gray')
             outfn = fn.replace('-I.fits', '.jpg')
             imsave_jpeg(outfn, rgb, origin='lower', **kwa)
+            print('Wrote', outfn)
         sys.exit(0)
             
     if True:
