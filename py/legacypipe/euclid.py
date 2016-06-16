@@ -358,11 +358,13 @@ def read_acs_catalogs():
     return T
 
 if __name__ == '__main__':
-    if True:
+    if False:
         fns = glob('euclid-out/coadd/acs/*/*-image-I.fits')
         fns.sort()
+        bands=['I']
         for fn in fns:
             I = fits_table(fn)
+            ims = [I]
             rgb = get_rgb(ims, bands, **rgbkwargs)
             # coadd_bw
             rgb = rgb.sum(axis=2)
@@ -413,13 +415,21 @@ if __name__ == '__main__':
             F.writeto(forcedfn)
 
         print(len(F), 'forced photometry measurements')
+        # There's a great big dead zone around the outside of the image...
+        # roughly X=[0 to 33] and X=[2080 to 2112] and Y=[4612..]
+        J = np.flatnonzero((F.x > 40) * (F.x < 2075) * (F.y < 4600))
+        F.cut(J)
+        print('Cut out edges:', len(F))
+        
         I = np.flatnonzero(F.type == 'PSF ')
         print(len(I), 'PSF')
+
         F.fluxsn = F.flux * np.sqrt(F.flux_ivar)
         F.mag = -2.5 * (np.log10(F.flux) - 9.)
         plt.clf()
         plt.semilogx(F.fluxsn, F.mag, 'k.', alpha=0.1)
         plt.semilogx(F.fluxsn[I], F.mag[I], 'r.', alpha=0.1)
+        #plt.semilogx(F.fluxsn[J], F.mag[J], 'b.', alpha=0.1)
         plt.xlabel('Flux S/N')
         plt.ylabel('Mag')
 
@@ -440,17 +450,58 @@ if __name__ == '__main__':
         
         ps.savefig()
 
-        J = np.flatnonzero((F.mag[I] < 20) * (F.fluxsn[I] > 1.) *
-                           (F.fluxsn[I] < 2.))
+        J = np.flatnonzero((F.mag[I] > 18) * (F.mag[I] < 22) *
+                           (F.fluxsn[I] > 1.) *
+                           (F.fluxsn[I] < 3.))
         J = I[J]
         print('Weird sources', zip(F.ra[J], F.dec[J]))
 
+        plt.clf()
+        plt.loglog(F.flux, 1./np.sqrt(F.flux_ivar), 'k.', alpha=0.01)
+        plt.loglog(F.flux[J], 1./np.sqrt(F.flux_ivar[J]), 'b.')
+        plt.xlabel('Megacam Flux')
+        plt.ylabel('Megacam Flux error')
+        ps.savefig()
+        
+        plt.clf()
+        plt.plot(F.x, F.y, 'k.', alpha=0.01)
+        plt.plot(F.x[J], F.y[J], 'b.')
+        plt.xlabel('Megacam x')
+        plt.ylabel('Megacam y')
+        ps.savefig()
+        
+        plt.clf()
+        plt.plot(F.ra, F.dec, 'k.', alpha=0.01)
+        plt.plot(F.ra[J], F.dec[J], 'b.')
+        ps.savefig()
+        
+        J = J[np.argsort(F.brickname[J])]
+        
         print('Weird sources:')
         for f in F[J]:
             print('Brick', f.brickname, 'x,y %.1f, %.1f' % (f.bx, f.by),
                   'RA,Dec', f.ra, f.dec)
 
-        
+            # fn = 'legacysurvey-%s-image.jpg' % f.brickname
+            # if os.path.exists(fn):
+            #     I = plt.imread(fn)
+            #     print('Read', I.shape)
+            #     H,W = I.shape[:2]
+            #     S = 50
+            #     y = int(f.by)
+            #     y = H-1 - y
+            #     x = int(f.bx)
+            #     I = I[y - S: y + S+1, x - S : x + S+1]
+            #     plt.clf()
+            #     plt.imshow(I, interpolation='nearest', origin='lower', cmap='gray')
+            #     ps.savefig()
+
+
+        J = J[np.argsort(F.ccdname[J])]
+        print('Weird sources:')
+        for f in F[J]:
+            print('CCD', f.ccdname, 'X,Y', f.x, f.y)
+                
         sys.exit(0)
 
 
