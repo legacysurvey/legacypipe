@@ -163,14 +163,14 @@ def main():
         # Read the simulated object catalog
         #simcatfile = os.path.join(cdir, 'simcat-{}-{}-{}.fits'.format(brickname, lobjtype, chunksuffix))
         # HARDCODED fix this!!!!!
-        simcatfile = os.path.join(cdir, 'simcat-{}-{}-{}.fits'.format(brickname, lobjtype, '00'))
+        simcatfile = os.path.join(cdir, 'simcat-{}-{}-{:02d}.fits'.format(brickname, lobjtype, int(chunksuffix)))
         log.info('Reading {}'.format(simcatfile))
         simcat = Table(fits.getdata(simcatfile, 1))
 
         # Read Tractor catalog
         #tractorfile = os.path.join(cdir, 'tractor-{}-{}-{}.fits'.format(brickname, lobjtype, chunksuffix))
         # HARDCODED fix this!!!!!
-        tractorfile = os.path.join(cdir, 'tractor-{}-{}-{}.fits'.format(brickname, lobjtype, '00'))
+        tractorfile = os.path.join(cdir, 'tractor-{}-{}-{:02d}.fits'.format(brickname, lobjtype, int(chunksuffix)))
         log.info('Reading {}'.format(tractorfile))
         tractor = Table(fits.getdata(tractorfile, 1))
         # Match
@@ -212,11 +212,11 @@ def main():
                                      np.arange(0, dims[1], hw*2, dtype='int'))
             #imfile = os.path.join(cdir, 'qa-{}-{}-image-{}.jpg'.format(brickname, lobjtype, chunksuffix))
             # HARDCODED fix this!!!!!
-            imfile = os.path.join(cdir, 'qa-{}-{}-image-{}.jpg'.format(brickname, lobjtype, '00'))
+            imfile = os.path.join(cdir, 'qa-{}-{}-image-{:02d}.jpg'.format(brickname, lobjtype, int(chunksuffix)))
             for suffix in ['image','simscoadd']:
                 #im = Image.open( os.path.join(cdir, 'qa-{}-{}-{}-{}.jpg'.format(brickname, lobjtype, suffix,chunksuffix)) )
                 # HARDCODED fix this!!!!!
-                im = Image.open( os.path.join(cdir, 'qa-{}-{}-{}-{}.jpg'.format(brickname, lobjtype, suffix,'00')) )
+                im = Image.open( os.path.join(cdir, 'qa-{}-{}-{}-{:02d}.jpg'.format(brickname, lobjtype, suffix, int(chunksuffix))) )
                 sz = im.size
                 iobj = 0
                 for ic in range(ncols):
@@ -240,26 +240,26 @@ def main():
                         yy = ypos[ir, ic] + hw
                         draw.ellipse((xx-rad, sz[1]-yy-rad, xx+rad, sz[1]-yy+rad), outline='yellow')
 
-                qafile = os.path.join(output_dir, 'qa-{}-{}-{}-missing-{}.png'.format(brickname, lobjtype,suffix, chunksuffix))
+                qafile = os.path.join(output_dir, 'qa-{}-{}-{}-missing-{:02d}.png'.format(brickname, lobjtype,suffix, int(chunksuffix)))
                 log.info('Writing {}'.format(qafile))
                 mosaic.save(qafile)
 
         # Annotate the coadd image and residual files so the simulated sources
         # are labeled.
-        rad = 15
+        rad = 5/0.262
         for suffix in ('image', 'resid','simscoadd'):
             #imfile = os.path.join(cdir, 'qa-{}-{}-{}-{}.jpg'.format(brickname, lobjtype, suffix, chunksuffix))
             # HARDCODED fix this!!!!!
-            imfile = os.path.join(cdir, 'qa-{}-{}-{}-{}.jpg'.format(brickname, lobjtype, suffix, '00'))
+            imfile = os.path.join(cdir, 'qa-{}-{}-{}-{:02d}.jpg'.format(brickname, lobjtype, suffix, int(chunksuffix)))
             im = Image.open(imfile)
             sz = im.size
             draw = ImageDraw.Draw(im)
             [draw.ellipse((cat['X']-rad, sz[1]-cat['Y']-rad, cat['X']+rad,
                            sz[1]-cat['Y']+rad), outline='yellow') for cat in simcat]
-            qafile = os.path.join(output_dir, 'qa-{}-{}-{}-{}-annot.png'.format(brickname, lobjtype,suffix, chunksuffix))
+            qafile = os.path.join(output_dir, 'qa-{}-{}-{}-{:02d}-annot.png'.format(brickname, lobjtype,suffix, int(chunksuffix)))
             log.info('Writing {}'.format(qafile))
             im.save(qafile)
-
+        sys.exit(1)
     # now operate on concatenated catalogues from multiple chunks
     # Grab flags
     grz_anymask= bigtractor['decam_anymask'][:,[1,2,4]]
