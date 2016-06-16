@@ -2,7 +2,14 @@
 
 """Analyze the output of decals_simulations.
 
-3216p000
+EXAMPLE
+=======
+8 500 star chunks for brick 2523p355 are here 
+/project/projectdirs/desi/image_sims/2523p355
+you can analyze them like this:
+export DECALS_SIM_DIR=/project/projectdirs/desi/image_sims 
+python legacyanalysis/decals_sim_plots.py -b 2523p355 -o STAR -out your/relative/output/path
+out is optional, default is brickname/objtype
 """
 
 from __future__ import division, print_function
@@ -20,8 +27,8 @@ import numpy as np
 
 from astropy.io import fits
 from astropy.table import vstack, Table
-from astrometry.libkd.spherematch import match_radec
-
+#from astrometry.libkd.spherematch import match_radec
+from thesis_code import matching
 # import seaborn as sns
 import matplotlib.pyplot as plt
 from PIL import Image, ImageDraw
@@ -139,7 +146,7 @@ def main():
     chunk_dirs= glob.glob(os.path.join(input_dir,'*'))
     if len(chunk_dirs) == 0: raise ValueError
     # Loop through chunk dirs 000,001,...,999
-    for cdir in chunk_dirs:
+    for cdir in chunk_dirs[:1]:
         chunksuffix = os.path.basename(cdir) #'{:02d}'.format(ichunk)
         #log.info('Working on chunk {:02d}/{:02d}'.format(ichunk+1, nchunk))
         
@@ -167,9 +174,12 @@ def main():
         log.info('Reading {}'.format(tractorfile))
         tractor = Table(fits.getdata(tractorfile, 1))
         # Match
-        m1, m2, d12 = match_radec(tractor['ra'].copy(), tractor['dec'].copy(),
-                                  simcat['RA'].copy(), simcat['DEC'].copy(), 1.0/3600.0)
-        
+        #m1, m2, d12 = match_radec(tractor['ra'].copy(), tractor['dec'].copy(),
+        #                          simcat['RA'].copy(), simcat['DEC'].copy(), 1.0/3600.0)
+        m1, m2, d12 = matching.johan_tree(tractor['ra'].copy(), tractor['dec'].copy(),\
+                                            simcat['RA'].copy(), simcat['DEC'].copy(), dsmax=1.0/3600.0)
+        print('johan_tree: matched %d/%d' % (len(m2),len(simcat['RA'])))
+
         missing = np.delete(np.arange(len(simcat)), m2, axis=0)
         log.info('Missing {}/{} sources'.format(len(missing), len(simcat)))
 
@@ -264,6 +274,7 @@ def main():
     for thisax, thiscolor, band, indx in zip(ax, col, ('G', 'R', 'Z'), (1, 2, 4)):
         simflux = bigsimcat[band+'FLUX']
         tractorflux = bigtractor['decam_flux'][:, indx]
+        tractorivar = bigtractor['decam_flux_ivar'][:, indx]
         for bcut,label,newcol in zip([b_good,b_bad],['good','bad'],[thiscolor,'r']):
             thisax.scatter(rmag[bcut], -2.5*np.log10(tractorflux[bcut]/simflux[bcut]),
                            s=10,edgecolor=newcol,c='none',lw=1.,label=label)
@@ -273,18 +284,53 @@ def main():
         #thisax.text(0.05,0.05, band.lower(), horizontalalignment='left',
                     #verticalalignment='bottom',transform=thisax.transAxes,
                     #fontsize=16)
-        
     ax[0].set_ylabel('$\Delta$g')
-    ax[0].legend(loc=3,ncol=2,fontsize='medium')
     ax[1].set_ylabel('$\Delta$r (Tractor minus Input)')
-    ax[2].set_ylabel('$\Delta$z')
-    ax[2].set_xlabel('Input r magnitude (AB mag)')
+    ylab=ax[2].set_ylabel('$\Delta$z')
+    xlab=ax[2].set_xlabel('Input r magnitude (AB mag)')
+    leg=ax[0].legend(loc=(0,1.01),ncol=2,fontsize='medium')
 
     fig.subplots_adjust(left=0.18,hspace=0.1)
     qafile = os.path.join(output_dir, 'qa-{}-{}-flux.png'.format(brickname, lobjtype))
     log.info('Writing {}'.format(qafile))
-    plt.savefig(qafile)
+    plt.savefig(qafile,bbox_extra_artists=[xlab,ylab,leg], bbox_inches='tight')
     plt.close()
+ 
+    # chi plots: Flux residual / estimated Flux error
+    for zoom in [None,'yes']:
+        fig, ax = plt.subplots(3, sharex=True, figsize=(6,8))
+
+        rmag = bigsimcat['R']
+        for thisax, thiscolor, band, indx in zip(ax, col, ('G', 'R', 'Z'), (1, 2, 4)):
+            simflux = bigsimcat[band+'FLUX']
+            tractorflux = bigtractor['decam_flux'][:, indx]
+            tractorivar = bigtractor['decam_flux_ivar'][:, indx]
+            for bcut,label,newcol in zip([b_good,b_bad],['good','bad'],[thiscolor,'r']):
+                #thisax.scatter(rmag[bcut], -2.5*np.log10(tractorflux[bcut]/simflux[bcut]),
+                #               s=10,edgecolor=newcol,c='none',lw=1.,label=label)
+                thisax.scatter(rmag[bcut], (tractorflux[bcut] - simflux[bcut])*np.sqrt(tractorivar[bcut]),
+                               s=10,edgecolor=newcol,c='none',lw=1.,label=label)
+            #thisax.set_ylim(-0.7,0.7)
+            if zoom is not None: thisax.set_ylim(-8,8)
+            thisax.set_xlim(rminmax + [-0.1, 0.0])
+            thisax.axhline(y=0.0,lw=2,ls='solid',color='gray')
+            #thisax.text(0.05,0.05, band.lower(), horizontalalignment='left',
+                        #verticalalignment='bottom',transform=thisax.transAxes,
+                        #fontsize=16)
+        for i,b in enumerate(['g','r','z']):   
+            ylab=ax[i].set_ylabel(r'%s: $(F_{tractor} - F)/\sigma_{tractor}$' %  b) 
+        #ax[0].set_ylabel('$\Delta$g')
+        #ax[1].set_ylabel('$\Delta$r (Tractor minus Input)')
+        #ax[2].set_ylabel('$\Delta$z')
+        xlab=ax[2].set_xlabel('Input r magnitude (AB mag)')
+        leg=ax[0].legend(loc=(0,1.01),ncol=2,fontsize='medium')
+
+        fig.subplots_adjust(left=0.18,hspace=0.1)
+        if zoom is not None: qafile = os.path.join(output_dir, 'qa-{}-{}-chi.png'.format(brickname, lobjtype))
+        else: qafile = os.path.join(output_dir, 'qa-{}-{}-chi-zoom.png'.format(brickname, lobjtype))
+        log.info('Writing {}'.format(qafile))
+        plt.savefig(qafile,bbox_extra_artists=[xlab,ylab,leg], bbox_inches='tight')
+        plt.close()
     
     # Color residuals
     gr_tra = -2.5*np.log10(bigtractor['decam_flux'][:, 1]/bigtractor['decam_flux'][:, 2])
