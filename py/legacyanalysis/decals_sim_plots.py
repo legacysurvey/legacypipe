@@ -10,6 +10,11 @@ you can analyze them like this:
 export DECALS_SIM_DIR=/project/projectdirs/desi/image_sims 
 python legacyanalysis/decals_sim_plots.py -b 2523p355 -o STAR -out your/relative/output/path
 out is optional, default is brickname/objtype
+
+Missing object and annotated coadd plots
+========================================
+python legacyanalysis/decals_sim_plots.py ... --extra_plots
+default is to NOT make them because chunks > 50
 """
 
 from __future__ import division, print_function
@@ -27,8 +32,8 @@ import numpy as np
 
 from astropy.io import fits
 from astropy.table import vstack, Table
-#from astrometry.libkd.spherematch import match_radec
-from thesis_code import matching
+from astrometry.libkd.spherematch import match_radec
+#from thesis_code import matching
 # import seaborn as sns
 import matplotlib.pyplot as plt
 from PIL import Image, ImageDraw
@@ -103,6 +108,8 @@ def main():
                         help='object type (STAR, ELG, LRG, BGS)') 
     parser.add_argument('-out', '--output_dir', type=str, default=None, metavar='', 
                         help='relative path to output directory') 
+    parser.add_argument('-extra', '--extra_plots', action='store_true', 
+                        help='make missing, annotated, coadded plots, dont if many chunks')
     parser.add_argument('-v', '--verbose', action='store_true', 
                         help='toggle on verbose output')
 
@@ -110,6 +117,9 @@ def main():
     if args.brick is None:
         parser.print_help()
         sys.exit(1)
+    if args.extra_plots: extra_plots= True
+    else: extra_plots= False
+    print('extra_plots=',extra_plots)
 
     # Set the debugging level
     if args.verbose:
@@ -146,7 +156,7 @@ def main():
     chunk_dirs= glob.glob(os.path.join(input_dir,'*'))
     if len(chunk_dirs) == 0: raise ValueError
     # Loop through chunk dirs 000,001,...,999
-    for cdir in chunk_dirs[:1]:
+    for cdir in chunk_dirs:
         chunksuffix = os.path.basename(cdir) #'{:02d}'.format(ichunk)
         #log.info('Working on chunk {:02d}/{:02d}'.format(ichunk+1, nchunk))
         
@@ -174,11 +184,11 @@ def main():
         log.info('Reading {}'.format(tractorfile))
         tractor = Table(fits.getdata(tractorfile, 1))
         # Match
-        #m1, m2, d12 = match_radec(tractor['ra'].copy(), tractor['dec'].copy(),
-        #                          simcat['RA'].copy(), simcat['DEC'].copy(), 1.0/3600.0)
-        m1, m2, d12 = matching.johan_tree(tractor['ra'].copy(), tractor['dec'].copy(),\
-                                            simcat['RA'].copy(), simcat['DEC'].copy(), dsmax=1.0/3600.0)
-        print('johan_tree: matched %d/%d' % (len(m2),len(simcat['RA'])))
+        m1, m2, d12 = match_radec(tractor['ra'].copy(), tractor['dec'].copy(),
+                                  simcat['RA'].copy(), simcat['DEC'].copy(), 1.0/3600.0)
+        #m1, m2, d12 = matching.johan_tree(tractor['ra'].copy(), tractor['dec'].copy(),\
+        #                                    simcat['RA'].copy(), simcat['DEC'].copy(), dsmax=1.0/3600.0)
+        #print('johan_tree: matched %d/%d' % (len(m2),len(simcat['RA'])))
 
         missing = np.delete(np.arange(len(simcat)), m2, axis=0)
         log.info('Missing {}/{} sources'.format(len(missing), len(simcat)))
@@ -198,7 +208,7 @@ def main():
             allsimcat = vstack((allsimcat, simcat))
 
         # Get cutouts of the missing sources in each chunk (if any)
-        if len(missing) > 0:
+        if len(missing) > 0 and extra_plots:
             hw = 30 # half-width [pixels]
             rad = 5
             ncols = 5
@@ -246,20 +256,21 @@ def main():
 
         # Annotate the coadd image and residual files so the simulated sources
         # are labeled.
-        rad = 5/0.262
-        for suffix in ('image', 'resid','simscoadd'):
-            #imfile = os.path.join(cdir, 'qa-{}-{}-{}-{}.jpg'.format(brickname, lobjtype, suffix, chunksuffix))
-            # HARDCODED fix this!!!!!
-            imfile = os.path.join(cdir, 'qa-{}-{}-{}-{:02d}.jpg'.format(brickname, lobjtype, suffix, int(chunksuffix)))
-            im = Image.open(imfile)
-            sz = im.size
-            draw = ImageDraw.Draw(im)
-            [draw.ellipse((cat['X']-rad, sz[1]-cat['Y']-rad, cat['X']+rad,
-                           sz[1]-cat['Y']+rad), outline='yellow') for cat in simcat]
-            qafile = os.path.join(output_dir, 'qa-{}-{}-{}-{:02d}-annot.png'.format(brickname, lobjtype,suffix, int(chunksuffix)))
-            log.info('Writing {}'.format(qafile))
-            im.save(qafile)
-        sys.exit(1)
+        if extra_plots:
+            rad = 5/0.262
+            for suffix in ('image', 'resid','simscoadd'):
+                #imfile = os.path.join(cdir, 'qa-{}-{}-{}-{}.jpg'.format(brickname, lobjtype, suffix, chunksuffix))
+                # HARDCODED fix this!!!!!
+                imfile = os.path.join(cdir, 'qa-{}-{}-{}-{:02d}.jpg'.format(brickname, lobjtype, suffix, int(chunksuffix)))
+                im = Image.open(imfile)
+                sz = im.size
+                draw = ImageDraw.Draw(im)
+                [draw.ellipse((cat['X']-rad, sz[1]-cat['Y']-rad, cat['X']+rad,
+                               sz[1]-cat['Y']+rad), outline='yellow') for cat in simcat]
+                qafile = os.path.join(output_dir, 'qa-{}-{}-{}-{:02d}-annot.png'.format(brickname, lobjtype,suffix, int(chunksuffix)))
+                log.info('Writing {}'.format(qafile))
+                im.save(qafile)
+        #sys.exit(1)
     # now operate on concatenated catalogues from multiple chunks
     # Grab flags
     grz_anymask= bigtractor['decam_anymask'][:,[1,2,4]]
