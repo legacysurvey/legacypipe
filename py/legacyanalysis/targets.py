@@ -23,6 +23,8 @@ def read_from_tractor_cat(fn,same_keys=['ra','dec','type']):
 		data[band+'flux_ivar']= a['decam_flux_ivar'][:,ind]
 		data[band+'_ext']= a['decam_mw_transmission'][:,ind]
 		data[band+'_psf_fwhm']= a['decam_psfsize'][:,ind]
+		data[band+'_anymask']= a['decam_anymask'][:,ind]
+		data[band+'_nobs']= a['decam_nobs'][:,ind]
 	for band,ind in zip(['w1'],[0]):
 		data[band+'flux']= a['wise_flux'][:,ind]
 		data[band+'flux_ivar']= a['wise_flux_ivar'][:,ind]
@@ -101,7 +103,10 @@ class DECaLS(object):
         #PRIMARY: mask is ANY of the following conditions are true
         self.mask=np.any((self.data['gflux'] <= 0,\
                         self.data['rflux'] <= 0,\
-                        self.data['zflux'] <= 0),axis=0)
+                        self.data['zflux'] <= 0, \
+                        self.data['g_anymask'] > 0,\
+                        self.data['r_anymask'] > 0,\
+                        self.data['z_anymask'] > 0),axis=0)
         #SECONDARY: mask + where wise fluxes < 0, only used when use wise fluxes for something, eg lrg selection
         if 'w1' in self.bands and 'w2' in self.bands:
             self.mask_wise= np.any((self.mask,\

@@ -78,7 +78,63 @@ laba=dict(fontweight='bold',fontsize='medium')
 kwargs_axtext=dict(fontweight='bold',fontsize='large',va='top',ha='left')
 leg_args=dict(frameon=True,fontsize='x-small')
 
-def plot_radec(obj): 
+def plot_nobs(b):
+    '''make histograms of nobs so can compare depths of g,r,z between the two catalogues'''   
+    hi=0 
+    for cam in ['m_decam','m_bokmos']:
+        for band in 'grz':
+            hi= np.max((hi, b[cam].data[band+'_nobs'].max()))
+    bins= hi
+    for cam in ['m_decam','m_bokmos']:
+        for band in 'grz':
+            junk=plt.hist(b[cam].data[band+'_nobs'],bins=bins,normed=True,cumulative=True,align='mid')
+            xlab=plt.xlabel('nobs %s' % band, **laba)
+            ylab=plt.ylabel('CDF', **laba)
+            plt.savefig(os.path.join(get_outdir('bmd'),'hist_nobs_%s_%s.png' % (band,cam[2:])), bbox_extra_artists=[xlab,ylab], bbox_inches='tight',dpi=150)
+            plt.close()
+
+#def plot_nobs_2(b):
+#    '''improved version of plot_nobs'''
+#    for cam in ['m_decam','m_bokmos']:
+#        for band in 'grz':
+#            junk=plt.hist(b[cam].data[band+'_nobs'],bins=10,normed=True,cumulative=True,align='mid')
+#            xlab=plt.xlabel('nobs %s' % band, **laba)
+#            ylab=plt.xlabel('CDF', **laba)
+#            plt.savefig(os.path.join(get_outdir('bmd'),'hist_nobs_%s_%s.png' % (band,cam[2:])), bbox_extra_artists=[xlab,ylab], bbox_inches='tight',dpi=150)
+#            plt.close()
+#
+#
+#    c1= 'b' 
+#    c2= 'r'
+#    ###
+#    decam_max= [b['m_decam'].data[b+'_nobs'].max() for b in 'grz']
+#    bokmos_max= [b['m_bokmos'].data[b+'_nobs'].max() for b in 'grz']
+#    types= np.arange(1, np.max((decam_max,bokmos_max)) +1)
+#    ind = types.copy() # the x locations for the groups
+#    width = 1       # the width of the bars
+#    ###
+#    ht_decam, ht_bokmos= np.zeros(5,dtype=int),np.zeros(5,dtype=int)
+#    for cnt,typ in enumerate(types):
+#        ht_decam[cnt]= np.where(obj[m_types[0]].data['type'] == typ)[0].shape[0] / float(obj['deg2_decam'])
+#        ht_bokmos[cnt]= np.where(obj[m_types[1]].data['type'] == typ)[0].shape[0] / float(obj['deg2_bokmos'])
+#    ###
+#    fig, ax = plt.subplots()
+#    rects1 = ax.bar(ind, ht_decam, width, color=c1)
+#    rects2 = ax.bar(ind + width, ht_bokmos, width, color=c2)
+#    ylab= ax.set_ylabel("counts/deg2")
+#    if matched: ti= ax.set_title('Matched')
+#    else: ti= ax.set_title('Unmatched')
+#    ax.set_xticks(ind + width)
+#    ax.set_xticklabels(types)
+#    ax.legend((rects1[0], rects2[0]), ('decam', 'bokmos'),**leg_args)
+#    #save
+#    if matched: name='hist_types_Matched.png'
+#    else: name='hist_types_Unmatched.png'
+#    plt.savefig(os.path.join(get_outdir('bmd'),name), bbox_extra_artists=[ylab,ti], bbox_inches='tight',dpi=150)
+#    plt.close()
+#
+
+def plot_radec(obj, addname=''): 
     '''obj[m_types] -- DECaLS() objects with matched OR unmatched indices'''
     #set seaborn panel styles
     #sns.set_style('ticks',{"axes.facecolor": ".97"})
@@ -101,11 +157,11 @@ def plot_radec(obj):
     leg=ax[1].legend(loc=(1.01,0.9),**leg_args)
     #save
     #sns.despine()
-    plt.savefig(os.path.join(get_outdir('bmd'),'radec.png'), bbox_extra_artists=[xlab,ylab,ti,leg], bbox_inches='tight',dpi=150)
+    plt.savefig(os.path.join(get_outdir('bmd'),'radec%s.png' % addname), bbox_extra_artists=[xlab,ylab,ti,leg], bbox_inches='tight',dpi=150)
     plt.close()
 
 
-def plot_HistTypes(obj,m_types=['m_decam','m_bokmos']):
+def plot_HistTypes(obj,m_types=['m_decam','m_bokmos'], addname=''):
     '''decam,bokmos -- DECaLS() objects with matched OR unmatched indices'''
     #matched or unmatched objects
     if m_types[0].startswith('m_') and m_types[1].startswith('m_'): matched=True
@@ -137,8 +193,8 @@ def plot_HistTypes(obj,m_types=['m_decam','m_bokmos']):
     ax.set_xticklabels(types)
     ax.legend((rects1[0], rects2[0]), ('decam', 'bokmos'),**leg_args)
     #save
-    if matched: name='hist_types_Matched.png'
-    else: name='hist_types_Unmatched.png'
+    if matched: name='hist_types_Matched%s.png' % addname
+    else: name='hist_types_Unmatched%s.png' % addname
     plt.savefig(os.path.join(get_outdir('bmd'),name), bbox_extra_artists=[ylab,ti], bbox_inches='tight',dpi=150)
     plt.close()
 
@@ -172,7 +228,7 @@ def indices_for_type(obj,inst='m_decam',type='all'):
     else: raise ValueError
 
 
-def plot_SN_vs_mag(obj, found_by='matched',type='all'):
+def plot_SN_vs_mag(obj, found_by='matched',type='all', addname=''):
     '''obj['m_decam'] is DECaLS() object
     found_by -- 'matched' or 'unmatched' 
     type -- all,psf,lrg'''
@@ -212,7 +268,7 @@ def plot_SN_vs_mag(obj, found_by='matched',type='all'):
     ylab=ax[0].set_ylabel('S/N', **laba)
     text_args= dict(verticalalignment='bottom',horizontalalignment='right',fontsize=10)
     ax[2].text(26,5,'S/N = 5  ',**text_args)
-    plt.savefig(os.path.join(get_outdir('bmd'),'sn_%s_%s.png' % (found_by,type)), bbox_extra_artists=[xlab,ylab], bbox_inches='tight',dpi=150)
+    plt.savefig(os.path.join(get_outdir('bmd'),'sn_%s_%s%s.png' % (found_by,type,addname)), bbox_extra_artists=[xlab,ylab], bbox_inches='tight',dpi=150)
     plt.close()
 
 def plot_matched_dmag_vs_psf_fwhm(obj, type='psf'):
@@ -271,7 +327,7 @@ def plot_matched_decam_vs_bokmos_psf_fwhm(obj, type='psf'):
 
 
 
-def plot_confusion_matrix(cm,ticknames):
+def plot_confusion_matrix(cm,ticknames, addname=''):
     '''cm -- NxN array containing the Confusion Matrix values
     ticknames -- list of strings of length == N, column and row names for cm plot'''
     plt.imshow(cm, interpolation='nearest', cmap=plt.cm.Blues)
@@ -283,7 +339,7 @@ def plot_confusion_matrix(cm,ticknames):
     for row in range(len(ticknames)):
         for col in range(len(ticknames)):
             plt.text(col,row,'%.1f'%cm[row,col],va='center',ha='center')
-    plt.savefig(os.path.join(get_outdir('bmd'),'confusion_matrix.png'), bbox_extra_artists=[xlab,ylab], bbox_inches='tight',dpi=150)
+    plt.savefig(os.path.join(get_outdir('bmd'),'confusion_matrix%s.png' % addname), bbox_extra_artists=[xlab,ylab], bbox_inches='tight',dpi=150)
     plt.close()
 
 def create_confusion_matrix(obj):
@@ -520,7 +576,9 @@ b['m_decam'].update_masks_for_everything(mask=np.any((b['m_decam'].mask, b['m_bo
                                     mask_wise=np.any((b['m_decam'].mask_wise, b['m_bokmos'].mask_wise),axis=0) )
 b['m_bokmos'].update_masks_for_everything(mask=np.any((b['m_decam'].mask, b['m_bokmos'].mask),axis=0),\
                                     mask_wise=np.any((b['m_decam'].mask_wise, b['m_bokmos'].mask_wise),axis=0) )
+
 #plots
+plot_nobs(b)
 plot_radec(b)
 print('decam deg2= ',b['deg2_decam'],'bokmos deg2= ',b['deg2_bokmos'])
 
@@ -549,6 +607,22 @@ plot_confusion_matrix(cm,names)
 
 plot_dflux_chisq(b,type='all')
 plot_dflux_chisq(b,type='psf')
+
+#mask out nobs <= 4, 60% of BASS objects
+nobs_min=5
+mask= np.all((b['m_bokmos'].data['g_nobs'] >= nobs_min,\
+                b['m_bokmos'].data['r_nobs'] >= nobs_min),axis=0)
+b['m_decam'].update_masks_for_everything(mask=mask, mask_wise=mask)
+b['m_bokmos'].update_masks_for_everything(mask=mask, mask_wise=mask)
+
+#plot fairer comparison
+addname='_nobsBassgrGt5'
+plot_radec(b,addname=addname)
+plot_HistTypes(b,m_types=['m_decam','m_bokmos'],addname=addname)
+plot_SN_vs_mag(b, found_by='matched',type='psf',addname=addname)
+cm,names= create_confusion_matrix(b)
+plot_confusion_matrix(cm,names, addname=addname)
+
 
 print('finished comparison: bass-mosaic-decals')
 #sys.exit()
