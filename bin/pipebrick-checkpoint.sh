@@ -10,8 +10,12 @@ export MKL_NUM_THREADS=1
 
 # Try limiting memory to avoid killing the whole MPI job...
 #ulimit -S -v 15000000
-ulimit -S -v 30000000
+#ulimit -S -v 30000000
 ulimit -a
+
+# Make sure we're reading from Edison scratch
+module unload dust
+module load dust/scratch
 
 outdir=$SCRATCH/dr3
 
@@ -42,7 +46,7 @@ echo "--------------------------------------------------------------------------
 python legacypipe/runbrick.py \
      --no-write \
      --pipe \
-     --threads 8 \
+     --threads 24 \
      --skip \
      --skip-calibs \
      --checkpoint checkpoints/checkpoint-${brick}.pickle \
