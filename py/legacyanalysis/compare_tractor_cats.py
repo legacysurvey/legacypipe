@@ -484,8 +484,8 @@ def plot_N_per_deg2(obj,type='all', maglow=18.,maghi=26.):
 
 parser=argparse.ArgumentParser(formatter_class=argparse.ArgumentDefaultsHelpFormatter,
                                  description='DECaLS simulations.')
-parser.add_argument('-fn1', type=str, help='process this brick (required input)')
-parser.add_argument('-fn2', type=str, help='object type (STAR, ELG, LRG, BGS)') 
+parser.add_argument('-fn1', type=str, help='process this brick (required input)',required=True)
+parser.add_argument('-fn2', type=str, help='object type (STAR, ELG, LRG, BGS)',required=True) 
 args = parser.parse_args()
 
 #get lists of tractor cats to compare
