@@ -358,7 +358,8 @@ def read_acs_catalogs():
     return T
 
 if __name__ == '__main__':
-    if True:
+    if False:
+        # Re-make jpeg images
         fns = glob('euclid-out/coadd/acs/acsvis-1??/*-image-I.fits')
         fns.sort()
         bands=['I']
@@ -424,6 +425,8 @@ if __name__ == '__main__':
         J = np.flatnonzero((F.x > 40) * (F.x < 2075) * (F.y < 4600))
         F.cut(J)
         print('Cut out edges:', len(F))
+        F.fluxsn = F.flux * np.sqrt(F.flux_ivar)
+        F.mag = -2.5 * (np.log10(F.flux) - 9.)
         
         I = np.flatnonzero(F.type == 'PSF ')
         print(len(I), 'PSF')
@@ -431,12 +434,15 @@ if __name__ == '__main__':
         for t in ['SIMP', 'DEV ', 'EXP ', 'COMP']:
             J = np.flatnonzero(F.type == t)
             print(len(J), t)
+
+        S = np.flatnonzero(F.type == 'SIMP')
+        print(len(S), 'SIMP')
+        S = F[S]
         
-        F.fluxsn = F.flux * np.sqrt(F.flux_ivar)
-        F.mag = -2.5 * (np.log10(F.flux) - 9.)
         plt.clf()
-        p1 = plt.semilogx(F.fluxsn, F.mag, 'k.', alpha=0.1)
-        p2 = plt.semilogx(F.fluxsn[I], F.mag[I], 'r.', alpha=0.1)
+        plt.semilogx(F.fluxsn, F.mag, 'k.', alpha=0.1)
+        plt.semilogx(F.fluxsn[I], F.mag[I], 'r.', alpha=0.1)
+        plt.semilogx(S.fluxsn, S.mag, 'b.', alpha=0.1)
         plt.xlabel('Megacam forced-photometry Flux S/N')
         plt.ylabel('Megacam forced-photometry mag')
 
@@ -452,15 +458,25 @@ if __name__ == '__main__':
         print('Median mag', medmag)
         plt.axvline(5., color='r', alpha=0.5, lw=2)
         plt.axvline(5., color='k', alpha=0.5)
-        plt.axhline(medmag, color='k', alpha=0.5)
         plt.axhline(medmag, color='r', alpha=0.5, lw=2)
+        plt.axhline(medmag, color='k', alpha=0.5)
+
+        J = np.flatnonzero((S.fluxsn > 4.5) * (S.fluxsn < 5.5))
+        print(len(J), 'SIMP between flux S/N 4.5 and 5.5')
+        medmag = np.median(S.mag[J])
+        print('Median mag', medmag)
+        plt.axhline(medmag, color='b', alpha=0.5, lw=2)
+        plt.axhline(medmag, color='k', alpha=0.5)
 
         plt.title('Megacam forced-photometered from ACS-VIS')
 
         ax = plt.axis()
         p1 = plt.semilogx([0],[0], 'k.')
         p2 = plt.semilogx([0], [0], 'r.')
-        plt.legend((p1[0], p2[0]), ('All sources', 'Point sources'))
+        p3 = plt.semilogx([0], [0], 'b.')
+        plt.legend((p1[0], p2[0], p3[0]),
+                   ('All sources', 'Point sources',
+                    '"Simple" galaxies'))
         plt.axis(ax)
         ps.savefig()
                 
