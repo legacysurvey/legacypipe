@@ -309,8 +309,154 @@ class MegacamImage(LegacySurveyImage):
         sky = ConstantSky(0.)
         return sky
 
+
+
+# Hackily defined RA,Dec values that split the ACS 7x7 tiling into
+# distinct 'bricks'
+rasplits = np.array([ 149.72716429, 149.89394223,  150.06073352,
+                      150.22752888,  150.39431559, 150.56110037])
+                          
+decsplits = np.array([ 1.79290318,  1.95956698,  2.12623253,
+                       2.2929002,   2.45956215,  2.62621403])
     
+def read_acs_catalogs():
+    # Read all ACS catalogs
+    mfn = 'euclid-out/merged-catalog.fits'
+    if not os.path.exists(mfn):
+        TT = []
+        fns = glob('euclid-out/tractor/*/tractor-*.fits')
+        for fn in fns:
+            T = fits_table(fn)
+            print(len(T), 'from', fn)
+
+            mra  = np.median(T.ra)
+            mdec = np.median(T.dec)
+
+            print(np.sum(T.brick_primary), 'PRIMARY')
+            I = np.flatnonzero(rasplits > mra)
+            if len(I) > 0:
+                T.brick_primary &= (T.ra < rasplits[I[0]])
+                print(np.sum(T.brick_primary), 'PRIMARY after RA high cut')
+            I = np.flatnonzero(rasplits < mra)
+            if len(I) > 0:
+                T.brick_primary &= (T.ra >= rasplits[I[-1]])
+                print(np.sum(T.brick_primary), 'PRIMARY after RA low cut')
+            I = np.flatnonzero(decsplits > mdec)
+            if len(I) > 0:
+                T.brick_primary &= (T.dec < decsplits[I[0]])
+                print(np.sum(T.brick_primary), 'PRIMARY after DEC high cut')
+            I = np.flatnonzero(decsplits < mdec)
+            if len(I) > 0:
+                T.brick_primary &= (T.dec >= decsplits[I[-1]])
+                print(np.sum(T.brick_primary), 'PRIMARY after DEC low cut')
+
+            TT.append(T)
+        T = merge_tables(TT)
+        del TT
+        T.writeto(mfn)
+    else:
+        T = fits_table(mfn)
+    return T
+
 if __name__ == '__main__':
+    if True:
+        fns = glob('euclid-out/coadd/acs/*/*-image-I.fits')
+        fns.sort()
+        for fn in fns:
+            I = fits_table(fn)
+            rgb = get_rgb(ims, bands, **rgbkwargs)
+            # coadd_bw
+            rgb = rgb.sum(axis=2)
+            kwa = dict(cmap='gray')
+            outfn = fn.replace('-I.fits', '.jpg')
+            imsave_jpeg(outfn, rgb, origin='lower', **kwa)
+        sys.exit(0)
+            
+    if True:
+        ps = PlotSequence('euclid')
+
+        forcedfn = 'forced-megacam.fits'
+
+        if os.path.exists(forcedfn):
+            F = fits_table(forcedfn)
+        else:
+            T = read_acs_catalogs()
+            print(len(T), 'ACS catalog entries')
+            #T.cut(T.brick_primary)
+            #print(len(T), 'primary')
+            # read Megacam forced-photometry catalogs
+            fns = glob('euclid-out/forced/megacam-*.fits')
+            fns.sort()
+            F = []
+            for fn in fns:
+                f = fits_table(fn)
+                print(len(f), 'from', fn)
+                fn = os.path.basename(fn)
+                fn = fn.replace('.fits','')
+                words = fn.split('-')
+                assert(words[0] == 'megacam')
+                expnum = int(words[1], 10)
+                ccdname = words[2]
+                f.expnum = np.array([expnum]*len(f))
+                f.ccdname = np.array([ccdname]*len(f))
+                F.append(f)
+            F = merge_tables(F)
+            objmap = dict([((brickname,objid),i) for i,(brickname,objid) in
+                           enumerate(zip(T.brickname, T.objid))])
+            I = np.array([objmap[(brickname, objid)] for brickname,objid
+                          in zip(F.brickname, F.objid)])
+            F.type = T.type[I]
+            F.acs_flux = T.decam_flux[I]
+            F.ra  = T.ra[I]
+            F.dec = T.dec[I]
+            F.bx  = T.bx[I]
+            F.by  = T.by[I]
+            F.writeto(forcedfn)
+
+        print(len(F), 'forced photometry measurements')
+        I = np.flatnonzero(F.type == 'PSF ')
+        print(len(I), 'PSF')
+        F.fluxsn = F.flux * np.sqrt(F.flux_ivar)
+        F.mag = -2.5 * (np.log10(F.flux) - 9.)
+        plt.clf()
+        plt.semilogx(F.fluxsn, F.mag, 'k.', alpha=0.1)
+        plt.semilogx(F.fluxsn[I], F.mag[I], 'r.', alpha=0.1)
+        plt.xlabel('Flux S/N')
+        plt.ylabel('Mag')
+
+        #plt.xlim(1., 1e5)
+        #plt.ylim(10, 26)
+        plt.xlim(1., 1e4)
+        plt.ylim(16, 26)
+
+        J = np.flatnonzero((F.fluxsn[I] > 4.5) * (F.fluxsn[I] < 5.5))
+        print(len(J), 'between flux S/N 4.5 and 5.5')
+        J = I[J]
+        medmag = np.median(F.mag[J])
+        print('Median mag', medmag)
+        plt.axvline(5., color='r', alpha=0.5, lw=2)
+        plt.axvline(5., color='k', alpha=0.5)
+        plt.axhline(medmag, color='k', alpha=0.5)
+        plt.axhline(medmag, color='r', alpha=0.5, lw=2)
+        
+        ps.savefig()
+
+        J = np.flatnonzero((F.mag[I] < 20) * (F.fluxsn[I] > 1.) *
+                           (F.fluxsn[I] < 2.))
+        J = I[J]
+        print('Weird sources', zip(F.ra[J], F.dec[J]))
+
+        print('Weird sources:')
+        for f in F[J]:
+            print('Brick', f.brickname, 'x,y %.1f, %.1f' % (f.bx, f.by),
+                  'RA,Dec', f.ra, f.dec)
+
+        
+        sys.exit(0)
+
+
+
+
     if False:
         make_zeropoints()
 
@@ -374,12 +520,6 @@ if __name__ == '__main__':
 
 
 
-    rasplits = np.array([ 149.72716429, 149.89394223,  150.06073352,
-                          150.22752888,  150.39431559, 150.56110037])
-                          
-    decsplits = np.array([ 1.79290318,  1.95956698,  2.12623253,
-                           2.2929002,   2.45956215,  2.62621403])
-
     import argparse
     parser = argparse.ArgumentParser()
     parser.add_argument('--expnum', type=int,
@@ -430,43 +570,7 @@ if __name__ == '__main__':
         #plots=True, plotbase='euclid',
 
     else:
-
-        # Read all ACS catalogs
-        mfn = 'euclid-out/merged-catalog.fits'
-        if not os.path.exists(mfn):
-            TT = []
-            fns = glob('euclid-out/tractor/*/tractor-*.fits')
-            for fn in fns:
-                T = fits_table(fn)
-                print(len(T), 'from', fn)
-    
-                mra  = np.median(T.ra)
-                mdec = np.median(T.dec)
-    
-                print(np.sum(T.brick_primary), 'PRIMARY')
-                I = np.flatnonzero(rasplits > mra)
-                if len(I) > 0:
-                    T.brick_primary &= (T.ra < rasplits[I[0]])
-                    print(np.sum(T.brick_primary), 'PRIMARY after RA high cut')
-                I = np.flatnonzero(rasplits < mra)
-                if len(I) > 0:
-                    T.brick_primary &= (T.ra >= rasplits[I[-1]])
-                    print(np.sum(T.brick_primary), 'PRIMARY after RA low cut')
-                I = np.flatnonzero(decsplits > mdec)
-                if len(I) > 0:
-                    T.brick_primary &= (T.dec < decsplits[I[0]])
-                    print(np.sum(T.brick_primary), 'PRIMARY after DEC high cut')
-                I = np.flatnonzero(decsplits < mdec)
-                if len(I) > 0:
-                    T.brick_primary &= (T.dec >= decsplits[I[-1]])
-                    print(np.sum(T.brick_primary), 'PRIMARY after DEC low cut')
-    
-                TT.append(T)
-            T = merge_tables(TT)
-            del TT
-            T.writeto(mfn)
-        else:
-            T = fits_table(mfn)
+        T = read_acs_catalogs()
 
         # plt.clf()
         # I = T.brick_primary
