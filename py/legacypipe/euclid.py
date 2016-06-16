@@ -419,15 +419,26 @@ if __name__ == '__main__':
             F.writeto(forcedfn)
 
         print(len(F), 'forced photometry measurements')
+        # There's a great big dead zone around the outside of the image...
+        # roughly X=[0 to 33] and X=[2080 to 2112] and Y=[4612..]
+        J = np.flatnonzero((F.x > 40) * (F.x < 2075) * (F.y < 4600))
+        F.cut(J)
+        print('Cut out edges:', len(F))
+        
         I = np.flatnonzero(F.type == 'PSF ')
         print(len(I), 'PSF')
+
+        for t in ['SIMP', 'DEV ', 'EXP ', 'COMP']:
+            J = np.flatnonzero(F.type == t)
+            print(len(J), t)
+        
         F.fluxsn = F.flux * np.sqrt(F.flux_ivar)
         F.mag = -2.5 * (np.log10(F.flux) - 9.)
         plt.clf()
-        plt.semilogx(F.fluxsn, F.mag, 'k.', alpha=0.1)
-        plt.semilogx(F.fluxsn[I], F.mag[I], 'r.', alpha=0.1)
-        plt.xlabel('Flux S/N')
-        plt.ylabel('Mag')
+        p1 = plt.semilogx(F.fluxsn, F.mag, 'k.', alpha=0.1)
+        p2 = plt.semilogx(F.fluxsn[I], F.mag[I], 'r.', alpha=0.1)
+        plt.xlabel('Megacam forced-photometry Flux S/N')
+        plt.ylabel('Megacam forced-photometry mag')
 
         #plt.xlim(1., 1e5)
         #plt.ylim(10, 26)
@@ -443,20 +454,16 @@ if __name__ == '__main__':
         plt.axvline(5., color='k', alpha=0.5)
         plt.axhline(medmag, color='k', alpha=0.5)
         plt.axhline(medmag, color='r', alpha=0.5, lw=2)
-        
+
+        plt.title('Megacam forced-photometered from ACS-VIS')
+
+        ax = plt.axis()
+        p1 = plt.semilogx([0],[0], 'k.')
+        p2 = plt.semilogx([0], [0], 'r.')
+        plt.legend((p1[0], p2[0]), ('All sources', 'Point sources'))
+        plt.axis(ax)
         ps.savefig()
-
-        J = np.flatnonzero((F.mag[I] < 20) * (F.fluxsn[I] > 1.) *
-                           (F.fluxsn[I] < 2.))
-        J = I[J]
-        print('Weird sources', zip(F.ra[J], F.dec[J]))
-
-        print('Weird sources:')
-        for f in F[J]:
-            print('Brick', f.brickname, 'x,y %.1f, %.1f' % (f.bx, f.by),
-                  'RA,Dec', f.ra, f.dec)
-
-        
+                
         sys.exit(0)
 
 
