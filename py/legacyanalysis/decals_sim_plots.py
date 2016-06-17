@@ -42,17 +42,18 @@ def bin_up(data_bin_by,data_for_percentile, bin_edges=np.arange(20.,26.,0.25)):
     '''finds indices for 0.25 bins, returns bin centers and q25,50,75 percentiles of data_percentile in each bin
     bin_edges: compute percentiles for each sample between bin_edges
     '''
-    q25= np.zeros(len(bin_edges)-1)+np.nan
-    q50,q75= q25.copy(),q25.copy()
-    for i,low,hi in zip(range(len(q25)), bin_edges[:-1],bin_edges[1:]):
+    count= np.zeros(len(bin_edges)-1)+np.nan
+    q25,q50,q75= count.copy(),count.copy(),count.copy()
+    for i,low,hi in zip(range(len(count)), bin_edges[:-1],bin_edges[1:]):
         ind= np.all((low <= data_bin_by,data_bin_by < hi),axis=0)
         if np.where(ind)[0].size > 0:
+            count[i]= np.where(ind)[0].size
             q25[i]= np.percentile(data_for_percentile[ind],q=25)
             q50[i]= np.percentile(data_for_percentile[ind],q=50)
             q75[i]= np.percentile(data_for_percentile[ind],q=75)
         else:
             pass #given qs nan, which they already have
-    return (bin_edges[1:]+bin_edges[:-1])/2.,q25,q50,q75
+    return (bin_edges[1:]+bin_edges[:-1])/2.,count,q25,q50,q75
 
 
 def create_confusion_matrix(answer_type,predict_type, types=['PSF','SIMP','EXP','DEV','COMP'],slim=True):
@@ -76,7 +77,7 @@ def create_confusion_matrix(answer_type,predict_type, types=['PSF','SIMP','EXP',
     else: return cm,types
 
 def plot_confusion_matrix(cm,answer_names,all_names, log,qafile):
-    plt.imshow(cm, interpolation='nearest', cmap=plt.cm.Blues)
+    plt.imshow(cm, interpolation='nearest', cmap=plt.cm.Blues, vmin=0,vmax=1)
     cbar=plt.colorbar()
     plt.xticks(range(len(all_names)), all_names)
     plt.yticks(range(len(answer_names)), answer_names)
@@ -86,7 +87,10 @@ def plot_confusion_matrix(cm,answer_names,all_names, log,qafile):
         for col in range(len(all_names)):
             if np.isnan(cm[row,col]): 
                 plt.text(col,row,'n/a',va='center',ha='center')
-            else: plt.text(col,row,'%.2f' % cm[row,col],va='center',ha='center')
+            elif cm[row,col] > 0.5: 
+                plt.text(col,row,'%.2f' % cm[row,col],va='center',ha='center',color='yellow')
+            else: 
+                plt.text(col,row,'%.2f' % cm[row,col],va='center',ha='center',color='black')
     log.info('Writing {}'.format(qafile))
     plt.savefig(qafile, bbox_extra_artists=[xlab,ylab], bbox_inches='tight',dpi=150)
     plt.close()
@@ -108,7 +112,13 @@ def plot_cm_stack(cm_stack,stack_names,all_names, log,qafile):
         for col in range(len(all_names)):
             if np.isnan(cm[row,col]): 
                 plt.text(col,row,'n/a',va='center',ha='center')
-            else: plt.text(col,row,'%.2f' % cm[row,col],va='center',ha='center')
+            elif cm[row,col] > 0.5: 
+                plt.text(col,row,'%.2f' % cm[row,col],va='center',ha='center',color='yellow')
+            else: 
+                plt.text(col,row,'%.2f' % cm[row,col],va='center',ha='center',color='black')
+            #if np.isnan(cm[row,col]): 
+            #    plt.text(col,row,'n/a',va='center',ha='center')
+            #else: plt.text(col,row,'%.2f' % cm[row,col],va='center',ha='center')
     log.info('Writing {}'.format(qafile))
     plt.savefig(qafile, bbox_extra_artists=[xlab,ylab], bbox_inches='tight',dpi=150)
     plt.close()
@@ -296,6 +306,45 @@ def main():
     b_good= np.all((grz_nobs[:,0] > 1,grz_nobs[:,1] > 1,grz_nobs[:,2] > 1,\
                     grz_anymask[:,0] == 0,grz_anymask[:,1] ==0,grz_anymask[:,2] == 0),axis=0)
     b_bad= b_good == False 
+    # mags and colors of ALL injected sources
+    gr_sim = -2.5*np.log10(allsimcat['GFLUX']/allsimcat['RFLUX'])
+    rz_sim = -2.5*np.log10(allsimcat['RFLUX']/allsimcat['ZFLUX'])
+    grrange = (-0.2, 2.0)
+    rzrange = (-0.4, 2.5)
+    fig, ax = plt.subplots(2,1,figsize=(6,8))
+    ax[0].hist(22.5-2.5*np.log10(allsimcat['RFLUX']),bins=20,align='mid')
+    ax[1].scatter(rz_sim,gr_sim,
+                   s=10,edgecolor='b',c='none',lw=1.)
+    for i,x_lab,y_lab in zip(range(2),['r AB','r-z'],['N','g-r']):
+        xlab=ax[i].set_xlabel(x_lab)
+        ylab=ax[i].set_ylabel(y_lab)
+    ax[1].set_xlim(rzrange)
+    ax[1].set_ylim(grrange)
+    fig.subplots_adjust(wspace=0.25)
+    qafile = os.path.join(output_dir, 'qa-{}-{}-injected-mags.png'.format(brickname, lobjtype))
+    log.info('Writing {}'.format(qafile))
+    plt.savefig(qafile,bbox_extra_artists=[xlab,ylab], bbox_inches='tight')
+    plt.close()
+    
+    # number of bad and good sources binned by r mag
+    rmaghist, magbins = np.histogram(allsimcat['R'], bins=nmagbin, range=rminmax)
+    found=dict(good={},bad={})
+    for index,name in zip([b_good,b_bad],['good','bad']):
+        # bin on true r mag of matched objects, count objects in each bin
+        found[name]['cbin'],found[name]['cnt'],found[name]['q25'],found[name]['q50'],found[name]['q75']= \
+                bin_up(bigsimcat['R'][index],bigsimcat['R'][index], bin_edges=magbins)
+    fig, ax = plt.subplots(1, figsize=(8,6))
+    for name,color in zip(['good','bad'],['k','b']):
+        ax.step(found[name]['cbin'],found[name]['cnt'], c=color,lw=2,label=name)
+    xlab=ax.set_xlabel('Input r AB')
+    ylab=ax.set_ylabel('Number Matched')
+    ax.legend(loc=1)
+    #fig.subplots_adjust(bottom=0.15)
+    qafile = os.path.join(output_dir, 'qa-{}-{}-N-good-bad.png'.format(brickname, lobjtype))
+    log.info('Writing {}'.format(qafile))
+    plt.savefig(qafile, bbox_extra_artists=[xlab,ylab], bbox_inches='tight')
+    plt.close()
+
     # Flux residuals vs r-band magnitude
     fig, ax = plt.subplots(3, sharex=True, figsize=(6,8))
 
@@ -304,9 +353,8 @@ def main():
         simflux = bigsimcat[band+'FLUX']
         tractorflux = bigtractor['decam_flux'][:, indx]
         tractorivar = bigtractor['decam_flux_ivar'][:, indx]
-        for bcut,label,newcol in zip([b_good,b_bad],['good','bad'],[thiscolor,'r']):
-            thisax.scatter(rmag[bcut], -2.5*np.log10(tractorflux[bcut]/simflux[bcut]),
-                           s=10,edgecolor=newcol,c='none',lw=1.,label=label)
+        thisax.scatter(rmag[b_good], -2.5*np.log10(tractorflux[b_good]/simflux[b_good]),
+                       s=10,edgecolor=thiscolor,c='none',lw=1.)
         thisax.set_ylim(-0.7,0.7)
         thisax.set_xlim(rminmax + [-0.1, 0.0])
         thisax.axhline(y=0.0,lw=2,ls='solid',color='gray')
@@ -314,15 +362,13 @@ def main():
                     #verticalalignment='bottom',transform=thisax.transAxes,
                     #fontsize=16)
     ax[0].set_ylabel('$\Delta$g')
-    ax[1].set_ylabel('$\Delta$r (Tractor minus Input)')
+    ax[1].set_ylabel('$\Delta$r (Tractor - Input)')
     ylab=ax[2].set_ylabel('$\Delta$z')
     xlab=ax[2].set_xlabel('Input r magnitude (AB mag)')
-    leg=ax[0].legend(loc=(0,1.01),ncol=2,fontsize='medium')
-
     fig.subplots_adjust(left=0.18,hspace=0.1)
-    qafile = os.path.join(output_dir, 'qa-{}-{}-flux.png'.format(brickname, lobjtype))
+    qafile = os.path.join(output_dir, 'qa-{}-{}-good-flux.png'.format(brickname, lobjtype))
     log.info('Writing {}'.format(qafile))
-    plt.savefig(qafile,bbox_extra_artists=[xlab,ylab,leg], bbox_inches='tight')
+    plt.savefig(qafile,bbox_extra_artists=[xlab,ylab], bbox_inches='tight')
     plt.close()
  
     # chi plots: Flux residual / estimated Flux error
@@ -334,11 +380,10 @@ def main():
             simflux = bigsimcat[band+'FLUX']
             tractorflux = bigtractor['decam_flux'][:, indx]
             tractorivar = bigtractor['decam_flux_ivar'][:, indx]
-            for bcut,label,newcol in zip([b_good,b_bad],['good','bad'],[thiscolor,'r']):
-                #thisax.scatter(rmag[bcut], -2.5*np.log10(tractorflux[bcut]/simflux[bcut]),
-                #               s=10,edgecolor=newcol,c='none',lw=1.,label=label)
-                thisax.scatter(rmag[bcut], (tractorflux[bcut] - simflux[bcut])*np.sqrt(tractorivar[bcut]),
-                               s=10,edgecolor=newcol,c='none',lw=1.,label=label)
+            #thisax.scatter(rmag[bcut], -2.5*np.log10(tractorflux[bcut]/simflux[bcut]),
+            #               s=10,edgecolor=newcol,c='none',lw=1.,label=label)
+            thisax.scatter(rmag[b_good], (tractorflux[b_good] - simflux[b_good])*np.sqrt(tractorivar[b_good]),
+                           s=10,edgecolor=thiscolor,c='none',lw=1.)
             #thisax.set_ylim(-0.7,0.7)
             if zoom is not None: thisax.set_ylim(-8,8)
             thisax.set_xlim(rminmax + [-0.1, 0.0])
@@ -352,13 +397,12 @@ def main():
         #ax[1].set_ylabel('$\Delta$r (Tractor minus Input)')
         #ax[2].set_ylabel('$\Delta$z')
         xlab=ax[2].set_xlabel('Input r magnitude (AB mag)')
-        leg=ax[0].legend(loc=(0,1.01),ncol=2,fontsize='medium')
 
         fig.subplots_adjust(left=0.18,hspace=0.1)
-        if zoom is not None: qafile = os.path.join(output_dir, 'qa-{}-{}-chi.png'.format(brickname, lobjtype))
-        else: qafile = os.path.join(output_dir, 'qa-{}-{}-chi-zoom.png'.format(brickname, lobjtype))
+        if zoom is not None: qafile = os.path.join(output_dir, 'qa-{}-{}-chi-good.png'.format(brickname, lobjtype))
+        else: qafile = os.path.join(output_dir, 'qa-{}-{}-chi-good-zoom.png'.format(brickname, lobjtype))
         log.info('Writing {}'.format(qafile))
-        plt.savefig(qafile,bbox_extra_artists=[xlab,ylab,leg], bbox_inches='tight')
+        plt.savefig(qafile,bbox_extra_artists=[xlab,ylab], bbox_inches='tight')
         plt.close()
     
     # Color residuals
@@ -394,7 +438,7 @@ def main():
     s2n=dict(g={},r={},z={})
     for band,ith in zip(['g','r','z'],[1,2,4]):
         s2n[band]={}
-        s2n[band]['cbin'],s2n[band]['q25'],s2n[band]['q50'],s2n[band]['q75']= \
+        s2n[band]['cbin'],s2n[band]['count'],s2n[band]['q25'],s2n[band]['q50'],s2n[band]['q75']= \
                 bin_up(bigsimcat['R'],bigtractor['decam_flux'][:,ith]*np.sqrt(bigtractor['decam_flux_ivar'][:,ith]), \
                     bin_edges=magbins)
     fig, ax = plt.subplots(1, figsize=(8,6))
@@ -402,23 +446,23 @@ def main():
     #ax.step(cmagbins, 1.0*ymatchgood/rmaghist, lw=3, ls='dashed', label='|$\Delta$m|<0.3')
     ax.axhline(y=1.0,lw=2,ls='dashed',color='k')
     ax.set_xlabel('Input r magnitude (AB mag)')
-    ax.set_ylabel('Fraction of Matching {}s'.format(objtype))
+    ax.set_ylabel('Fraction Recovered'.format(objtype))
     ax.set_ylim([0.0, 1.1])
     #2nd axis for S/N
     ax2 = ax.twinx()
     p_lines={}
-    for col in ['g','r']:
-        ax2.set_ylabel(r'S/N = $F/\sigma$',fontweight='bold',fontsize='xx-large',color=col)
-        p_lines[col]=ax2.plot(s2n[col]['cbin'], s2n[col]['q50'],c=col,ls='-',lw=2,label=col)
-        ax2.fill_between(s2n[col]['cbin'],s2n[col]['q25'],s2n[col]['q75'],color=col,alpha=0.25)
-        ax2.axhline(y=5.,lw=2,ls='dashed',color=col)
-        ax2.spines['right'].set_color(col)
-        ax2.xaxis.label.set_color(col)
-        ax2.tick_params(axis='y', colors=col)
+    for color in ['r','g']:
+        ax2.set_ylabel(r'S/N = $F/\sigma$',fontweight='bold',fontsize='xx-large',color=color)
+        p_lines[color]=ax2.plot(s2n[color]['cbin'], s2n[color]['q50'],c=color,ls='-',lw=2,label=color)
+        ax2.fill_between(s2n[color]['cbin'],s2n[color]['q25'],s2n[color]['q75'],color=color,alpha=0.25)
+        ax2.axhline(y=5.,lw=2,ls='dashed',color=color)
+        ax2.spines['right'].set_color(color)
+        ax2.xaxis.label.set_color(color)
+        ax2.tick_params(axis='y', colors=color)
         ax2.set_yscale('log')
     #finish labeling
-    ax.legend(loc=(0,0.5))
-    ax2.legend(loc=(0,0.1))
+    #ax.legend(loc=(0,0.5))
+    ax2.legend(loc=3)
     #fig.legend((p_frac, p_lines['r']), ('All objects', 'r'), 'lower left')
     fig.subplots_adjust(bottom=0.15)
     qafile = os.path.join(output_dir, 'qa-{}-{}-frac.png'.format(brickname, lobjtype))
@@ -463,8 +507,8 @@ def main():
     # Compute a row for each r mag range and stack rows
     for bcut,cut_name in zip([b_good,b_bad],['good','bad']):
         cm_stack,stack_names=[],[]
-        for rmin in [18.,20.,22.,24.]:
-            rmax=rmin+2.
+        rbins= np.array([18.,20.,22.,23.,24.])
+        for rmin,rmax in zip(rbins[:-1],rbins[1:]):
             # master cut
             br_cut= np.all((bigsimcat['R'] > rmin,bigsimcat['R'] <= rmax, bcut),axis=0)
             stack_names+= ["%d < r <= %d" % (int(rmin),int(rmax))]
