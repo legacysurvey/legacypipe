@@ -115,7 +115,8 @@ class SimImage(DecamImage):
             if (overlap.area() > 0):
                 stamp = stamp[overlap]      
                 ivarstamp = invvar[overlap]
-                stamp, ivarstamp = objstamp.addnoise(stamp, ivarstamp)
+                #FIX ME!!, for now Peter recommends insertting perfect image, since have noisy images and we want to know exactly mag insertted
+                #stamp, ivarstamp = objstamp.addnoise(stamp, ivarstamp)
                 # Only where stamps will in inserted
                 sims_image[overlap] += stamp 
                 sims_ivar[overlap] += ivarstamp
