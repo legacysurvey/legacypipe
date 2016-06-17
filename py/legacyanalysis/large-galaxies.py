@@ -15,20 +15,25 @@ import pdb
 import argparse
 
 import numpy as np
+from glob import glob
 import matplotlib.pyplot as plt
+from mpl_toolkits.axes_grid1 import make_axes_locatable
 
 from astropy.io import fits
 from astropy.table import Table, vstack
+from astropy.visualization import scale_image
 
 from PIL import Image, ImageDraw, ImageFont
 
 from astrometry.util.util import Tan
-from astrometry.util.fits import merge_tables
+from astrometry.util.fits import fits_table, merge_tables
+from astrometry.util.plotutils import dimshow
 
 from legacypipe.runbrick import run_brick
 from legacypipe.common import ccds_touching_wcs, bricks_touching_wcs, LegacySurveyData
 
 PIXSCALE = 0.262 # average pixel scale [arcsec/pix]
+DIAMFACTOR = 10
 
 def _uniqccds(ccds):
     '''Get the unique set of CCD files.'''
@@ -89,7 +94,7 @@ def _catalog_template(nobj=1):
 
 def _simplewcs(gal):
     '''Build a simple WCS object for a single galaxy.'''
-    diam = np.ceil(gal['RADIUS']/PIXSCALE).astype('int16') # [pixels]
+    diam = DIAMFACTOR*np.ceil(gal['RADIUS']/PIXSCALE).astype('int16') # [pixels]
     galwcs = Tan(gal['RA'], gal['DEC'], diam/2+0.5, diam/2+0.5,
                  -PIXSCALE/3600.0, 0.0, 0.0, PIXSCALE/3600.0, 
                  float(diam), float(diam))
@@ -156,7 +161,6 @@ def main():
     # Some convenience variables.
     objtype = ('PSF', 'SIMP', 'EXP', 'DEV', 'COMP')
     objcolor = ('white', 'red', 'orange', 'cyan', 'yellow')
-    diamfactor = 10
     thumbsize = 100
     fonttype = '/usr/share/fonts/gnu-free/FreeSans.ttf'
 
@@ -164,9 +168,11 @@ def main():
     samplefile = os.path.join(largedir, 'large-galaxies-sample.fits')
     if not args.build_sample:
         sample = fits.getdata(samplefile, 1)
-        #sample = sample[2:3] # Hack!
-        sample = sample[np.where(np.sum((sample['BRICKNAME'] != '')*1, 1) > 1)[0]]
+        sample = sample[2:3] # Hack!
+        #sample = sample[np.where(np.sum((sample['BRICKNAME'] != '')*1, 1) > 1)[0]]
         #pdb.set_trace()
+
+    survey = LegacySurveyData(version='dr2') # update to DR3!
       
     # --------------------------------------------------
     # Build the sample of large galaxies based on the available imaging.
@@ -176,7 +182,6 @@ def main():
         
         # Create a simple WCS object for each object and find all the CCDs
         # touching that WCS footprint.
-        survey = LegacySurveyData(version='dr2') # hack!
         bricks = survey.get_bricks_dr2()
 
         allccds = survey.get_ccds()
@@ -239,7 +244,7 @@ def main():
             galaxy = gal['GALAXY'].strip().lower()
 
             # SIZE here should be consistent with DIAM in args.runbrick, below
-            size = diamfactor*np.ceil(gal['RADIUS']/PIXSCALE).astype('int16') # [pixels]
+            size = DIAMFACTOR*np.ceil(gal['RADIUS']/PIXSCALE).astype('int16') # [pixels]
             thumbpixscale = PIXSCALE*size/thumbsize
 
             # Get cutouts of the data, model, and residual images.
@@ -299,51 +304,126 @@ def main():
                 #pdb.set_trace()
 
     # --------------------------------------------------
-    # Get cutouts of all the CCDs for each galaxy.
+    # Get cutouts and build diagnostic plots of all the CCDs for each galaxy.
     if args.ccd_cutouts:
-        sample = fits.getdata(samplefile, 1)
         for gal in sample:
             galaxy = gal['GALAXY'].strip().lower()
+            print('Building CCD QA for galaxy {}'.format(galaxy.upper()))
+            qadir = os.path.join(largedir, 'qa', '{}'.format(galaxy))
+            try:
+                os.stat(qadir)
+            except:
+                os.mkdir(qadir)
+            
             ccdsfile = os.path.join(largedir, 'ccds', '{}-ccds.fits'.format(galaxy))
-            ccds = fits.getdata(ccdsfile)
+            ccds = fits_table(ccdsfile)
+            #print('Hack!!!  Testing with 3 CCDs!')
+            #ccds = ccds[4:5]
 
-            pdb.set_trace()
+            tims = []
+            for ii, ccd in enumerate(ccds):
+                im = survey.get_image_object(ccd)
+                print(im, im.band, 'exptime', im.exptime, 'propid', ccd.propid,
+                      'seeing {:.2f}'.format(ccd.fwhm*im.pixscale), 
+                      'object', getattr(ccd, 'object', None))
+                tim = im.get_tractor_image(splinesky=True, subsky=False, gaussPsf=True)
+                #tims.append(tim)
+
+                # Get the image and read and instantiate the splinesky model.
+                image = tim.getImage()
+                sky = tim.getSky()
+                skymodel = np.zeros_like(image)
+                sky.addTo(skymodel)
+
+                qaccd = os.path.join(qadir, 'qa-{}-ccd{:02d}.png'.format(galaxy, ii))
+                fig, ax = plt.subplots(1, 2, figsize=(6, 6), sharey=True)
+                fig.suptitle(tim.name, y=0.94)
+                #vmin, vmax = (0, np.percentile(image, 95))
+                #vmin, vmax = np.percentile(image, (5, 95))
+                for data, thisax, title in zip((image, skymodel), ax, ('Image', 'SplineSky')):
+                    vmin, vmax = np.percentile(data, (5, 98))
+                    img = scale_image(data, scale='sqrt', min_cut=vmin, max_cut=vmax)
+                    #img = scale_image(data, scale='log', min_percent=0.02, max_percent=0.98)
+                    thisim = thisax.imshow(img, cmap='viridis', interpolation='nearest', origin='lower')
+                    #thisim = thisax.imshow(data, cmap='viridis', vmin=vmin, vmax=vmax,
+                    #                       interpolation='nearest', origin='lower')
+                    div = make_axes_locatable(thisax)
+                    cax = div.append_axes('right', size='15%', pad=0.05)
+                    cbar = fig.colorbar(thisim, cax=cax, format='%.3g')
+                    #cbar.set_label('Colorbar {}'.format(i), size=10)
+                    thisax.set_title(title)
+                    thisax.xaxis.set_visible(False)
+                    thisax.yaxis.set_visible(False)
+                    
+                ## Shared colorbar.
+                #cbarax = fig.add_axes([0.83, 0.15, 0.03, 0.8])
+                #cbar = fig.colorbar(thisim, cax=cbarax)
+                plt.tight_layout(w_pad=0.25)
+                #plt.subplots_adjust(top=0.85)
+                print('Writing {}'.format(qaccd))
+                plt.savefig(qaccd)
+
+                #sys.exit(1)
+                #pdb.set_trace()
 
     # --------------------------------------------------
     # Run the pipeline.
     if args.runbrick:
-        sample = fits.getdata(samplefile, 1)
         for gal in sample:
             galaxy = gal['GALAXY'].strip().lower()
 
             # DIAM here should be consistent with SIZE in args.viewer_cutouts,
             # above.  Also note that ZOOM is relative to the center of an
             # imaginary brick with dimensions (0, 3600, 0, 3600).
-            diam = diamfactor*np.ceil(gal['RADIUS']/PIXSCALE).astype('int16') # [pixels]
+            diam = DIAMFACTOR*np.ceil(gal['RADIUS']/PIXSCALE).astype('int16') # [pixels]
             zoom = (1800-diam/2, 1800+diam/2, 1800-diam/2, 1800+diam/2)
- 
-            # blobxy = zip([1800], [1800])
+
+            nsigma = 20
+            #blobxy = zip([1800], [1800])
             survey = LegacySurveyData(version='dr2', output_dir=largedir)
             run_brick(None, survey, radec=(gal['RA'], gal['DEC']), blobxy=None, 
                       threads=10, zoom=zoom, wise=False, forceAll=True, writePickles=False,
                       do_calibs=False, write_metrics=True, pixPsf=True, splinesky=True, 
-                      early_coadds=True, stages=['writecat'], ceres=False)
+                      early_coadds=False, stages=['writecat'], ceres=False, nsigma=nsigma,
+                      plots=True)
 
-            pdb.set_trace()
+            #pdb.set_trace()
 
     # --------------------------------------------------
-    # Annotate the image/model/resid jpg cutout after running the custom pipeline.
+    # Annotate the image/model/resid jpg cutouts after running the custom pipeline.
     if args.runbrick_cutouts:
-        sample = fits.getdata(samplefile, 1)
         for gal in sample:
             galaxy = gal['GALAXY'].strip().lower()
+            qadir = os.path.join(largedir, 'qa', '{}'.format(galaxy))
+
             ra = gal['RA']
             dec = gal['DEC']
             brick = 'custom-{:06d}{}{:05d}'.format(int(1000*ra), 'm' if dec < 0 else 'p',
                                                    int(1000*np.abs(dec)))
             tractorfile = os.path.join(largedir, 'tractor', 'cus', 'tractor-{}.fits'.format(brick))
+            blobsfile = os.path.join(largedir, 'metrics', 'cus', '{}'.format(brick), 'blobs-{}.fits.gz'.format(brick))
+
             print('Reading {}'.format(tractorfile))
             cat = fits.getdata(tractorfile, 1)
+
+            print('Reading {}'.format(blobsfile))
+            blobs = fits.getdata(blobsfile)
+
+            qablobsfile = os.path.join(qadir, 'qa-{}-blobs.png'.format(galaxy))
+            fig, ax = plt.subplots(1, figsize=(6, 6))
+            dimshow(blobs != -1)
+            for blob in np.unique(cat['BLOB']):
+                these = np.where(cat['BLOB'] == blob)[0]
+                xx, yy = (np.mean(cat['BX'][these]), np.mean(cat['BY'][these]))
+                ax.text(xx, yy, '{}'.format(blob), ha='center', va='bottom', color='orange')
+                ax.set_xlabel('Pixel')
+                ax.set_ylabel('Pixel')
+                ax.set_title('Blobs')
+                
+            print('Writing {}'.format(qablobsfile))
+            plt.savefig(qablobsfile)
+
+            sys.exit(1)
 
             rad = 10
             for imtype in ('image', 'model', 'resid'):
@@ -370,7 +450,8 @@ def main():
     # --------------------------------------------------
     # Build the webpage.
     if args.build_webpage:
-
+        sample = fits.getdata(samplefile, 1)
+        
         # index.html
         htmlfile = os.path.join(largedir, 'index.html')
         print('Writing {}'.format(htmlfile))
@@ -378,7 +459,6 @@ def main():
         html.write('<html><body>\n')
         html.write('<h1>Sample of Large Galaxies</h1>\n')
         html.write('<table border="2" width="30%"><tbody>\n')
-        sample = fits.getdata(samplefile, 1)
         for ii, gal in enumerate(sample):
             # Add coordinates and sizes here.
             galaxy = gal['GALAXY'].strip().lower()
@@ -429,9 +509,24 @@ def main():
                 html.write('<td><a href=../cutouts/{}-{}-custom-annot.jpg><img width="100%" src=../cutouts/{}-{}-custom-annot.jpg alt={} /></a></td>\n'.format(
                     galaxy, imtype, galaxy, imtype, galaxy.upper()))
             html.write('</tr>\n')
-            #html.write('<tr><td>Data</td><td>Model</td><td>Residuals</td></tr>\n')
-            html.write('</tbody></table>\n')
+            # ----------
+            # Blob diagnostic plot
+            html.write('<tr><td><a href=../qa/{}/qa-{}-blobs.png>'.format(galaxy, galaxy)+\
+                       '<img src=../qa/{}/qa-{}-blobs.png alt={} Blobs /></a></td>'.format(galaxy, galaxy, galaxy.upper())+\
+                       '</tr>\n')
+                       #'<td>&nbsp</td><td>&nbsp</td></tr>\n')
+            # ----------
+            # CCD cutouts
+            qadir = os.path.join(largedir, 'qa', '{}'.format(galaxy))
+            qaccd = glob(os.path.join(qadir, 'qa-{}-ccd??.png'.format(galaxy)))
+            pdb.set_trace()
 
+            for ccd in qaccd:
+                html.write('<tr><td><a href=../qa/{}/qa-{}-blobs.png>'.format(galaxy, galaxy)+\
+                           '<img src=../qa/{}/qa-{}-blobs.png alt={} Blobs /></a></td>'.format(galaxy, galaxy, galaxy.upper())+\
+                           '</tr>\n')
+                       #'<td>&nbsp</td><td>&nbsp</td></tr>\n')
+            html.write('</tbody></table>\n')
             html.write('</body></html>\n')
             html.close()
             
