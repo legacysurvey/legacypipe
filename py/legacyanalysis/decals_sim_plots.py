@@ -32,16 +32,33 @@ import numpy as np
 
 from astropy.io import fits
 from astropy.table import vstack, Table
-from astrometry.libkd.spherematch import match_radec
-#from thesis_code import matching
+#from astrometry.libkd.spherematch import match_radec
+from thesis_code import matching
 # import seaborn as sns
 import matplotlib.pyplot as plt
 from PIL import Image, ImageDraw
 
+def bin_up(data_bin_by,data_for_percentile, bin_edges=np.arange(20.,26.,0.25)):
+    '''finds indices for 0.25 bins, returns bin centers and q25,50,75 percentiles of data_percentile in each bin
+    bin_edges: compute percentiles for each sample between bin_edges
+    '''
+    q25= np.zeros(len(bin_edges)-1)+np.nan
+    q50,q75= q25.copy(),q25.copy()
+    for i,low,hi in zip(range(len(q25)), bin_edges[:-1],bin_edges[1:]):
+        ind= np.all((low <= data_bin_by,data_bin_by < hi),axis=0)
+        if np.where(ind)[0].size > 0:
+            q25[i]= np.percentile(data_for_percentile[ind],q=25)
+            q50[i]= np.percentile(data_for_percentile[ind],q=50)
+            q75[i]= np.percentile(data_for_percentile[ind],q=75)
+        else:
+            pass #given qs nan, which they already have
+    return (bin_edges[1:]+bin_edges[:-1])/2.,q25,q50,q75
+
+
 def create_confusion_matrix(answer_type,predict_type, types=['PSF','SIMP','EXP','DEV','COMP'],slim=True):
     '''compares classifications of matched objects, returns 2D array which is conf matrix and xylabels
     return 5x5 confusion matrix and colum/row names
-    answer_type,predict_type -- arrays of same length with reference and prediction types'''
+   answer_type,predict_type -- arrays of same length with reference and prediction types'''
     for typ in set(answer_type): assert(typ in types)
     for typ in set(predict_type): assert(typ in types)
     # if a type was not in answer (training) list then don't put in cm
@@ -156,7 +173,8 @@ def main():
     chunk_dirs= glob.glob(os.path.join(input_dir,'*'))
     if len(chunk_dirs) == 0: raise ValueError
     # Loop through chunk dirs 000,001,...,999
-    for cdir in chunk_dirs:
+    #for cdir in chunk_dirs[:1]:
+    for cdir in [chunk_dirs[0]]:
         chunksuffix = os.path.basename(cdir) #'{:02d}'.format(ichunk)
         #log.info('Working on chunk {:02d}/{:02d}'.format(ichunk+1, nchunk))
         
@@ -184,11 +202,11 @@ def main():
         log.info('Reading {}'.format(tractorfile))
         tractor = Table(fits.getdata(tractorfile, 1))
         # Match
-        m1, m2, d12 = match_radec(tractor['ra'].copy(), tractor['dec'].copy(),
-                                  simcat['RA'].copy(), simcat['DEC'].copy(), 1.0/3600.0)
-        #m1, m2, d12 = matching.johan_tree(tractor['ra'].copy(), tractor['dec'].copy(),\
-        #                                    simcat['RA'].copy(), simcat['DEC'].copy(), dsmax=1.0/3600.0)
-        #print('johan_tree: matched %d/%d' % (len(m2),len(simcat['RA'])))
+        #m1, m2, d12 = match_radec(tractor['ra'].copy(), tractor['dec'].copy(),
+        #                          simcat['RA'].copy(), simcat['DEC'].copy(), 1.0/3600.0)
+        m1, m2, d12 = matching.johan_tree(tractor['ra'].copy(), tractor['dec'].copy(),\
+                                            simcat['RA'].copy(), simcat['DEC'].copy(), dsmax=1.0/3600.0)
+        print('johan_tree: matched %d/%d' % (len(m2),len(simcat['RA'])))
 
         missing = np.delete(np.arange(len(simcat)), m2, axis=0)
         log.info('Missing {}/{} sources'.format(len(missing), len(simcat)))
@@ -372,16 +390,36 @@ def main():
     rmaghist, magbins = np.histogram(allsimcat['R'], bins=nmagbin, range=rminmax)
     cmagbins = (magbins[:-1] + magbins[1:]) / 2.0
     ymatch, binsmatch = np.histogram(bigsimcat['R'], bins=nmagbin, range=rminmax)
-    #ymatchgood, binsgood = np.histogram(bigsimcat['R'][good],bins=nmagbin,range=rminmax)
-
+    #s/n
+    s2n=dict(g={},r={},z={})
+    for band,ith in zip(['g','r','z'],[1,2,4]):
+        s2n[band]={}
+        s2n[band]['cbin'],s2n[band]['q25'],s2n[band]['q50'],s2n[band]['q75']= \
+                bin_up(bigsimcat['R'],bigtractor['decam_flux'][:,ith]*np.sqrt(bigtractor['decam_flux_ivar'][:,ith]), \
+                    bin_edges=magbins)
     fig, ax = plt.subplots(1, figsize=(8,6))
-    ax.step(cmagbins, 1.0*ymatch/rmaghist, lw=3, alpha=0.5, label='All objects')
+    p_frac= ax.step(cmagbins, 1.0*ymatch/rmaghist, c='k',lw=3,label='All objects')
     #ax.step(cmagbins, 1.0*ymatchgood/rmaghist, lw=3, ls='dashed', label='|$\Delta$m|<0.3')
-    ax.axhline(y=1.0,lw=2,ls='dashed',color='gray')
+    ax.axhline(y=1.0,lw=2,ls='dashed',color='k')
     ax.set_xlabel('Input r magnitude (AB mag)')
     ax.set_ylabel('Fraction of Matching {}s'.format(objtype))
     ax.set_ylim([0.0, 1.1])
-    ax.legend(loc='lower left')
+    #2nd axis for S/N
+    ax2 = ax.twinx()
+    p_lines={}
+    for col in ['g','r']:
+        ax2.set_ylabel(r'S/N = $F/\sigma$',fontweight='bold',fontsize='xx-large',color=col)
+        p_lines[col]=ax2.plot(s2n[col]['cbin'], s2n[col]['q50'],c=col,ls='-',lw=2,label=col)
+        ax2.fill_between(s2n[col]['cbin'],s2n[col]['q25'],s2n[col]['q75'],color=col,alpha=0.25)
+        ax2.axhline(y=5.,lw=2,ls='dashed',color=col)
+        ax2.spines['right'].set_color(col)
+        ax2.xaxis.label.set_color(col)
+        ax2.tick_params(axis='y', colors=col)
+        ax2.set_yscale('log')
+    #finish labeling
+    ax.legend(loc=(0,0.5))
+    ax2.legend(loc=(0,0.1))
+    #fig.legend((p_frac, p_lines['r']), ('All objects', 'r'), 'lower left')
     fig.subplots_adjust(bottom=0.15)
     qafile = os.path.join(output_dir, 'qa-{}-{}-frac.png'.format(brickname, lobjtype))
     log.info('Writing {}'.format(qafile))

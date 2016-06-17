@@ -47,7 +47,7 @@ for chunk in range(args.istart,args.istop+1):
     else: ap('export OMP_NUM_THREADS=24') 
     ap('cd $SLURM_SUBMIT_DIR')
     #ap('export DECALS_SIM_DIR=${SLURM_SUBMIT_DIR}/ten_bricks')
-    ap('export DECALS_SIM_DIR=/project/projectdirs/desi/users/burleigh/decals_sim/durham')
+    ap('export DECALS_SIM_DIR=/project/projectdirs/desi/users/burleigh/decals_sim/durham/2523p355_nosimnoise')
     ap('export LEGACY_SURVEY_DIR=/scratch1/scratchdirs/kaylanb/desi/dr3_brick_2523p355')
     ap('export DUST_DIR=/scratch1/scratchdirs/kaylanb/desi/dr3_brick_2523p355/dust/v0_0')
     ap('srun -n 1 -c ${OMP_NUM_THREADS} python legacyanalysis/decals_sim.py --brick %s -n 500 -o STAR -ic %d --threads ${OMP_NUM_THREADS}' % (brick,chunk))
