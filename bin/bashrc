@@ -3,22 +3,11 @@
 export TMPDIR=$SCRATCH/tmp
 mkdir -p $TMPDIR
 
-# # SDSS data files
-# #export BOSS_PHOTOOBJ=/project/projectdirs/cosmo/data/sdss/pre13/eboss/photoObj.v5b
-# # Cut copy on $SCRATCH:
-# export BOSS_PHOTOOBJ=$SCRATCH/sdss-cut
-# 
-# export PHOTO_RESOLVE=/project/projectdirs/cosmo/data/sdss/pre13/eboss/resolve/2013-07-29
-# export PHOTO_REDUX=
-
 # We copy our code to $SCRATCH for speed; see the update-scratch.sh script.
 export CODE_DIR=$SCRATCH/code
 
 # Use HPCPorts for packages
 source /project/projectdirs/cmb/modules/hpcports_NERSC.sh
-
-
-#(>&2 echo "legacypipe/bin/bashrc running -- NERSC_HOST xxx${NERSC_HOST}xxx")
 
 if [ "$NERSC_HOST" == "edison" ]; then
   hpcports shared_gnu
@@ -31,12 +20,12 @@ if [ "$NERSC_HOST" == "edison" ]; then
 
   #
   module use /project/projectdirs/cosmo/work/decam/modules
-  module load legacysurvey/dr2
+  module load legacysurvey/dr3-edison-scratch
   module load dust/scratch
-  # Aaron's zeropoint-corrected version
-  module load unwise_coadds/2.1-scratch
+  module load unwise_coadds/fulldepth-scratch
+  module load unwise_coadds_timeresolved/neo1-edison-scratch
 
-  module load tractor-hpcp
+  #  module load tractor-hpcp
   module load astrometry_net-hpcp
   module load astropy-hpcp
   module load scipy-hpcp
@@ -52,8 +41,10 @@ if [ "$NERSC_HOST" == "edison" ]; then
   
   # Needed during building Astrometry.net, but not runtime.
   # module load swig-hpcp
+  # Needed during ceres build
+  # module load eigen-hpcp
 
-  module load mkl
+  #module load mkl
   module load intel
 
   # dunno what this is or where it comes from, but it breaks builds
@@ -81,9 +72,9 @@ if [ "$NERSC_HOST" == "edison" ]; then
   module unload curl-hpcp
   module unload git-hpcp
   module unload boost-hpcp
-  module unload swig-hpcp
+  #module unload swig-hpcp
   module unload cmake-hpcp
-  module unload eigen-hpcp
+  #module unload eigen-hpcp
   module unload sfftw-hpcp
   module unload plplot-hpcp
   module unload setuptools-hpcp
@@ -100,7 +91,7 @@ if [ "$NERSC_HOST" == "edison" ]; then
 
   # Our local qdo install
   PATH=${PATH}:${CODE_DIR}/qdo/bin
-  PYP=${PYP}:${CODE_DIR}/qdo/py
+  PYP=${PYP}:${CODE_DIR}/qdo
 
   # local astrometry.net install
   #PYP=${PYP}:${CODE_DIR}/astrometry.net
@@ -108,7 +99,7 @@ if [ "$NERSC_HOST" == "edison" ]; then
   #PATH=${PATH}:${CODE_DIR}/astrometry.net/blind
 
   # local Tractor install
-  #PYP=${PYP}:${CODE_DIR}/tractor
+  PYP=${PYP}:${CODE_DIR}/tractor
 
   export PYTHONPATH=${PYP}
   export PATH
@@ -131,11 +122,7 @@ if [ "$NERSC_HOST" == "cori" ]; then
   module use /project/projectdirs/cosmo/work/decam/modules
   module load legacysurvey/dr3-cori-scratch
 
-  #(>&2 echo "Loaded legacysurvey module... LEGACY_SURVEY_DIR is $LEGACY_SURVEY_DIR")
-
   module load dust/scratch
-  # Aaron's zeropoint-corrected version
-  #module load unwise_coadds/2.1-scratch
   module load unwise_coadds/fulldepth-scratch
 
   # module load unwise_coadds_timeresolved/neo1
