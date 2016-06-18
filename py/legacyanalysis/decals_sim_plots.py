@@ -179,12 +179,12 @@ def main():
     # Work in chunks.
     allsimcat = []
     bigsimcat = []
+    bigsimcat_missed = []
     bigtractor = []
     chunk_dirs= glob.glob(os.path.join(input_dir,'*'))
     if len(chunk_dirs) == 0: raise ValueError
     # Loop through chunk dirs 000,001,...,999
-    #for cdir in chunk_dirs[:1]:
-    for cdir in [chunk_dirs[0]]:
+    for cdir in chunk_dirs:
         chunksuffix = os.path.basename(cdir) #'{:02d}'.format(ichunk)
         #log.info('Working on chunk {:02d}/{:02d}'.format(ichunk+1, nchunk))
         
@@ -227,9 +227,11 @@ def main():
         if len(bigsimcat) == 0:
             bigsimcat = simcat[m2]
             bigtractor = tractor[m1]
+            bigsimcat_missing = simcat[missing]
         else:
             bigsimcat = vstack((bigsimcat, simcat[m2]))
             bigtractor = vstack((bigtractor, tractor[m1]))
+            bigsimcat_missing = vstack((bigsimcat_missing, simcat[missing]))
         if len(allsimcat) == 0:
             allsimcat = simcat
         else:
@@ -326,23 +328,26 @@ def main():
     plt.savefig(qafile,bbox_extra_artists=[xlab,ylab], bbox_inches='tight')
     plt.close()
     
-    # number of bad and good sources binned by r mag
+    # number of detected sources that are bad, good and number of undetected, binned by r mag
     rmaghist, magbins = np.histogram(allsimcat['R'], bins=nmagbin, range=rminmax)
-    found=dict(good={},bad={})
+    found=dict(good={},bad={},missed={})
     for index,name in zip([b_good,b_bad],['good','bad']):
         # bin on true r mag of matched objects, count objects in each bin
         found[name]['cbin'],found[name]['cnt'],found[name]['q25'],found[name]['q50'],found[name]['q75']= \
                 bin_up(bigsimcat['R'][index],bigsimcat['R'][index], bin_edges=magbins)
+    name='missed'
+    found[name]['cbin'],found[name]['cnt'],found[name]['q25'],found[name]['q50'],found[name]['q75']= \
+            bin_up(bigsimcat_missing['R'],bigsimcat_missing['R'], bin_edges=magbins)
     fig, ax = plt.subplots(1, figsize=(8,6))
-    for name,color in zip(['good','bad'],['k','b']):
+    for name,color in zip(['good','bad','missed'],['k','b','r']):
         ax.step(found[name]['cbin'],found[name]['cnt'], c=color,lw=2,label=name)
     xlab=ax.set_xlabel('Input r AB')
-    ylab=ax.set_ylabel('Number Matched')
-    ax.legend(loc=1)
+    ylab=ax.set_ylabel('Number Recovered')
+    leg=ax.legend(loc=(0.,1.01),ncol=3)
     #fig.subplots_adjust(bottom=0.15)
-    qafile = os.path.join(output_dir, 'qa-{}-{}-N-good-bad.png'.format(brickname, lobjtype))
+    qafile = os.path.join(output_dir, 'qa-{}-{}-N-good-bad-missed.png'.format(brickname, lobjtype))
     log.info('Writing {}'.format(qafile))
-    plt.savefig(qafile, bbox_extra_artists=[xlab,ylab], bbox_inches='tight')
+    plt.savefig(qafile, bbox_extra_artists=[leg,xlab,ylab], bbox_inches='tight')
     plt.close()
 
     # Flux residuals vs r-band magnitude
@@ -434,41 +439,53 @@ def main():
     rmaghist, magbins = np.histogram(allsimcat['R'], bins=nmagbin, range=rminmax)
     cmagbins = (magbins[:-1] + magbins[1:]) / 2.0
     ymatch, binsmatch = np.histogram(bigsimcat['R'], bins=nmagbin, range=rminmax)
-    #s/n
-    s2n=dict(g={},r={},z={})
-    for band,ith in zip(['g','r','z'],[1,2,4]):
-        s2n[band]={}
-        s2n[band]['cbin'],s2n[band]['count'],s2n[band]['q25'],s2n[band]['q50'],s2n[band]['q75']= \
-                bin_up(bigsimcat['R'],bigtractor['decam_flux'][:,ith]*np.sqrt(bigtractor['decam_flux_ivar'][:,ith]), \
-                    bin_edges=magbins)
     fig, ax = plt.subplots(1, figsize=(8,6))
-    p_frac= ax.step(cmagbins, 1.0*ymatch/rmaghist, c='k',lw=3,label='All objects')
+    ax.step(cmagbins, 1.0*ymatch/rmaghist, c='k',lw=3,label='All objects')
     #ax.step(cmagbins, 1.0*ymatchgood/rmaghist, lw=3, ls='dashed', label='|$\Delta$m|<0.3')
     ax.axhline(y=1.0,lw=2,ls='dashed',color='k')
     ax.set_xlabel('Input r magnitude (AB mag)')
     ax.set_ylabel('Fraction Recovered'.format(objtype))
     ax.set_ylim([0.0, 1.1])
-    #2nd axis for S/N
-    ax2 = ax.twinx()
-    p_lines={}
-    for color in ['r','g']:
-        ax2.set_ylabel(r'S/N = $F/\sigma$',fontweight='bold',fontsize='xx-large',color=color)
-        p_lines[color]=ax2.plot(s2n[color]['cbin'], s2n[color]['q50'],c=color,ls='-',lw=2,label=color)
-        ax2.fill_between(s2n[color]['cbin'],s2n[color]['q25'],s2n[color]['q75'],color=color,alpha=0.25)
-        ax2.axhline(y=5.,lw=2,ls='dashed',color=color)
-        ax2.spines['right'].set_color(color)
-        ax2.xaxis.label.set_color(color)
-        ax2.tick_params(axis='y', colors=color)
-        ax2.set_yscale('log')
-    #finish labeling
-    #ax.legend(loc=(0,0.5))
-    ax2.legend(loc=3)
-    #fig.legend((p_frac, p_lines['r']), ('All objects', 'r'), 'lower left')
+    ax.legend('lower left')
     fig.subplots_adjust(bottom=0.15)
     qafile = os.path.join(output_dir, 'qa-{}-{}-frac.png'.format(brickname, lobjtype))
     log.info('Writing {}'.format(qafile))
     plt.savefig(qafile)
     plt.close()
+
+    # S/N of matched sources (S/N band vs. AB mag band)
+    # min,max mag of all bands
+    grrange = (-0.2, 2.0)
+    rzrange = (-0.4, 2.5)
+    rmin,rmax= allsimcat['R'].min(), allsimcat['R'].max()
+    mag_min= np.min((rmin,rmin+grrange[0],rmin-rzrange[1]))
+    mag_max= np.max((rmax,rmax+grrange[1],rmax-rzrange[0]))
+    # HARDCODED over reasonable mag range 
+    magbins= np.linspace(18,26,num=20)
+    print('#### r min,max= %.2f,%.2f BUT grz min,max= %.2f,%.2f' % (rmin,rmax,mag_min,mag_max))
+    s2n=dict(g={},r={},z={})
+    for band,ith in zip(['g','r','z'],[1,2,4]):
+        s2n[band]={}
+        mag= 22.5-2.5*np.log10(bigsimcat[band.upper()+'FLUX'])
+        s2n[band]['cbin'],s2n[band]['count'],s2n[band]['q25'],s2n[band]['q50'],s2n[band]['q75']= \
+                bin_up(mag, bigtractor['decam_flux'][:,ith]*np.sqrt(bigtractor['decam_flux_ivar'][:,ith]), \
+                       bin_edges=magbins)
+    fig, ax = plt.subplots(1, figsize=(8,6))
+    xlab=ax.set_xlabel('Input magnitude (AB)')
+    ylab=ax.set_ylabel(r'Median S/N = $F/\sigma$',fontweight='bold',fontsize='large')
+    title= ax.set_title('S/N of Recovered Objects')
+    for band,color in zip(['g','r','z'],['g','r','b']):
+        ax.plot(s2n[band]['cbin'], s2n[band]['q50'],c=color,ls='-',lw=2,label=band)
+        #ax.fill_between(s2n[band]['cbin'],s2n[band]['q25'],s2n[band]['q75'],color=color,alpha=0.25)
+    ax.axhline(y=5.,lw=2,ls='dashed',color='k',label='S/N = 5')
+    ax.set_yscale('log')
+    leg=ax.legend(loc=3)
+    fig.subplots_adjust(bottom=0.15)
+    qafile = os.path.join(output_dir, 'qa-{}-{}-SN.png'.format(brickname, lobjtype))
+    log.info('Writing {}'.format(qafile))
+    plt.savefig(qafile,bbox_extra_artists=[leg,xlab,ylab,title], bbox_inches='tight',dpi=150)
+    plt.close()
+    
 
     # Distribution of object types for matching sources.
     fig = plt.figure(figsize=(8, 6))
