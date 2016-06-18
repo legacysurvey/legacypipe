@@ -147,17 +147,17 @@ def plot_radec(obj, addname=''):
     ax[0].scatter(obj['m_decam'].data['ra'], obj['m_decam'].data['dec'], \
                 edgecolor='b',c='none',lw=1.)
     ax[1].scatter(obj['u_decam'].data['ra'], obj['u_decam'].data['dec'], \
-                edgecolor='b',c='none',lw=1.,label='decam')
+                edgecolor='b',c='none',lw=1.,label='DECaLS')
     ax[1].scatter(obj['u_bokmos'].data['ra'], obj['u_bokmos'].data['dec'], \
-                edgecolor='g',c='none',lw=1.,label='bokmos')
+                edgecolor='g',c='none',lw=1.,label='BASS/MzLS')
     for cnt,ti in zip(range(2),['Matched','Unmatched']):
         ti=ax[cnt].set_title(ti,**laba)
         xlab=ax[cnt].set_xlabel('RA', **laba)
     ylab=ax[0].set_ylabel('DEC', **laba)
-    leg=ax[1].legend(loc=(1.01,0.9),**leg_args)
+    ax[0].legend(loc='upper left',**leg_args)
     #save
     #sns.despine()
-    plt.savefig(os.path.join(get_outdir('bmd'),'radec%s.png' % addname), bbox_extra_artists=[xlab,ylab,ti,leg], bbox_inches='tight',dpi=150)
+    plt.savefig(os.path.join(get_outdir('bmd'),'radec%s.png' % addname), bbox_extra_artists=[xlab,ylab,ti], bbox_inches='tight',dpi=150)
     plt.close()
 
 
@@ -191,29 +191,30 @@ def plot_HistTypes(obj,m_types=['m_decam','m_bokmos'], addname=''):
     else: ti= ax.set_title('Unmatched')
     ax.set_xticks(ind + width)
     ax.set_xticklabels(types)
-    ax.legend((rects1[0], rects2[0]), ('decam', 'bokmos'),**leg_args)
+    ax.legend((rects1[0], rects2[0]), ('DECaLS', 'BASS/MzLS'),**leg_args)
     #save
     if matched: name='hist_types_Matched%s.png' % addname
     else: name='hist_types_Unmatched%s.png' % addname
     plt.savefig(os.path.join(get_outdir('bmd'),name), bbox_extra_artists=[ylab,ti], bbox_inches='tight',dpi=150)
     plt.close()
 
-def bin_up(data_bin_by,data_percentile,bL=20., bH=26.,bW=0.25):
+
+def bin_up(data_bin_by,data_for_percentile, bin_edges=np.arange(20.,26.,0.25)):
     '''finds indices for 0.25 bins, returns bin centers and q25,50,75 percentiles of data_percentile in each bin
-    bL,bH -- min and max values of data_bin to consider
-    bW -- bin width'''
-    low_vals= np.arange(bL,bH,bW)
-    q25= np.zeros(low_vals.size)+np.nan
-    q50,q75= q25.copy(),q25.copy()
-    for i,low in enumerate(low_vals):
-        ind= np.all((low <= data_bin_by,data_bin_by < low+bW),axis=0)
+    bin_edges: compute percentiles for each sample between bin_edges
+    '''
+    count= np.zeros(len(bin_edges)-1)+np.nan
+    q25,q50,q75= count.copy(),count.copy(),count.copy()
+    for i,low,hi in zip(range(len(count)), bin_edges[:-1],bin_edges[1:]):
+        ind= np.all((low <= data_bin_by,data_bin_by < hi),axis=0)
         if np.where(ind)[0].size > 0:
-            q25[i]= np.percentile(data_percentile[ind],q=25)
-            q50[i]= np.percentile(data_percentile[ind],q=50)
-            q75[i]= np.percentile(data_percentile[ind],q=75)
-        else: 
+            count[i]= np.where(ind)[0].size
+            q25[i]= np.percentile(data_for_percentile[ind],q=25)
+            q50[i]= np.percentile(data_for_percentile[ind],q=50)
+            q75[i]= np.percentile(data_for_percentile[ind],q=75)
+        else:
             pass #given qs nan, which they already have
-    return low_vals+bW/2,q25,q50,q75
+    return (bin_edges[1:]+bin_edges[:-1])/2.,count,q25,q50,q75
 
 def indices_for_type(obj,inst='m_decam',type='all'):
     '''return mask for selecting type == all,psf,lrg
@@ -245,8 +246,11 @@ def plot_SN_vs_mag(obj, found_by='matched',type='all', addname=''):
         for band in ['g','r','z']:
             bin_SN[key][band]={}
             i= index[key]
-            bin_SN[key][band]['binc'],bin_SN[key][band]['q25'],bin_SN[key][band]['q50'],bin_SN[key][band]['q75']=\
-                    bin_up(obj[prefix+key].data[band+'mag'][i], obj[prefix+key].data[band+'flux'][i]*np.sqrt(obj[prefix+key].data[band+'flux_ivar'][i]), bL=min, bH=max)
+            bin_edges= np.linspace(min,max,num=30)
+            bin_SN[key][band]['binc'],count,bin_SN[key][band]['q25'],bin_SN[key][band]['q50'],bin_SN[key][band]['q75']=\
+                    bin_up(obj[prefix+key].data[band+'mag'][i], \
+                           obj[prefix+key].data[band+'flux'][i]*np.sqrt(obj[prefix+key].data[band+'flux_ivar'][i]),\
+                                bin_edges=bin_edges)
     #setup plot
     fig,ax=plt.subplots(1,3,figsize=(9,3),sharey=True)
     plt.subplots_adjust(wspace=0.25)
@@ -255,8 +259,8 @@ def plot_SN_vs_mag(obj, found_by='matched',type='all', addname=''):
         #horiz line at SN = 5
         ax[cnt].plot([1,40],[5,5],'k--',lw=2)
         #data
-        for inst,color in zip(['decam','bokmos'],['b','g']):
-            ax[cnt].plot(bin_SN[inst][band]['binc'], bin_SN[inst][band]['q50'],c=color,ls='-',lw=2,label=inst)
+        for inst,color,lab in zip(['decam','bokmos'],['b','g'],['DECaLS','BASS/MzLS']):
+            ax[cnt].plot(bin_SN[inst][band]['binc'], bin_SN[inst][band]['q50'],c=color,ls='-',lw=2,label=lab)
             ax[cnt].fill_between(bin_SN[inst][band]['binc'],bin_SN[inst][band]['q25'],bin_SN[inst][band]['q75'],color=color,alpha=0.25)
     #labels
     ax[2].legend(loc=1,**leg_args)
@@ -278,12 +282,14 @@ def plot_matched_dmag_vs_psf_fwhm(obj, type='psf'):
     index= np.all((indices_for_type(b,inst='m_decam',type=type),\
                     indices_for_type(b,inst='m_bokmos',type=type)), axis=0) #both bokmos and decam of same type
     #bin up by DECAM psf_fwhm
-    min,max,db= 0.,3.,0.5
+    bin_edges= np.linspace(0,3,num=6)
     vals={}
     for band in ['g','r','z']:
         vals[band]={}
-        vals[band]['binc'],vals[band]['q25'],vals[band]['q50'],vals[band]['q75']=\
-                bin_up(obj['m_decam'].data[band+'_psf_fwhm'][index], obj['m_bokmos'].data[band+'mag'][index]- obj['m_decam'].data[band+'mag'][index], bL=min, bH=max,bW=db)
+        vals[band]['binc'],count,vals[band]['q25'],vals[band]['q50'],vals[band]['q75']=\
+                bin_up(obj['m_decam'].data[band+'_psf_fwhm'][index], \
+                       obj['m_bokmos'].data[band+'mag'][index]- obj['m_decam'].data[band+'mag'][index], \
+                            bin_edges=bin_edges)
 #setup plot
     fig,ax=plt.subplots(1,3,figsize=(9,3),sharey=True)
     plt.subplots_adjust(wspace=0.25)
@@ -294,7 +300,7 @@ def plot_matched_dmag_vs_psf_fwhm(obj, type='psf'):
         ax[cnt].fill_between(vals[band]['binc'],vals[band]['q25'],vals[band]['q75'],color='b',alpha=0.25)
         ax[cnt].text(0.05,0.95,band,transform=ax[cnt].transAxes,**text_args)
     #finish
-    xlab=ax[1].set_xlabel('decam PSF_FWHM (%.2f bins)' % db, **laba)
+    xlab=ax[1].set_xlabel('decam PSF_FWHM', **laba)
     ylab=ax[0].set_ylabel(r'Median $\Delta \, m$ (decam - bokmos)', **laba)
     ti= plt.suptitle('%s Objects, Matched' % type.upper())
     plt.savefig(os.path.join(get_outdir('bmd'),'dmag_vs_psf_fwhm_%s.png' % type), bbox_extra_artists=[ti,xlab,ylab], bbox_inches='tight',dpi=150)
@@ -330,15 +336,20 @@ def plot_matched_decam_vs_bokmos_psf_fwhm(obj, type='psf'):
 def plot_confusion_matrix(cm,ticknames, addname=''):
     '''cm -- NxN array containing the Confusion Matrix values
     ticknames -- list of strings of length == N, column and row names for cm plot'''
-    plt.imshow(cm, interpolation='nearest', cmap=plt.cm.Blues)
+    plt.imshow(cm, interpolation='nearest', cmap=plt.cm.Blues,vmin=0,vmax=1)
     cbar=plt.colorbar()
     plt.xticks(range(len(ticknames)), ticknames)
     plt.yticks(range(len(ticknames)), ticknames)
-    ylab=plt.ylabel('True (decam)')
-    xlab=plt.xlabel('Predicted (bassmos)')
+    ylab=plt.ylabel('True (DECaLS)')
+    xlab=plt.xlabel('Predicted (BASS/MzLS)')
     for row in range(len(ticknames)):
         for col in range(len(ticknames)):
-            plt.text(col,row,'%.1f'%cm[row,col],va='center',ha='center')
+            if np.isnan(cm[row,col]):
+                plt.text(col,row,'n/a',va='center',ha='center')
+            elif cm[row,col] > 0.5:
+                plt.text(col,row,'%.2f' % cm[row,col],va='center',ha='center',color='yellow')
+            else:
+                plt.text(col,row,'%.2f' % cm[row,col],va='center',ha='center',color='black')
     plt.savefig(os.path.join(get_outdir('bmd'),'confusion_matrix%s.png' % addname), bbox_extra_artists=[xlab,ylab], bbox_inches='tight',dpi=150)
     plt.close()
 
@@ -367,9 +378,9 @@ def plot_matched_separation_hist(d12):
     #plot
     ax.hist(d12*3600,bins=50,color='b',align='mid')
     ax2 = ax.twiny()
-    ax2.hist(d12*3600./pixscale['decam'],bins=50,color='g',align='mid',visible=False)
+    ax2.hist(d12*3600./pixscale['bokmos'],bins=50,color='g',align='mid',visible=False)
     xlab= ax.set_xlabel("arcsec")
-    xlab= ax2.set_xlabel("pixels [decam]")
+    xlab= ax2.set_xlabel("pixels [BASS]")
     ylab= ax.set_ylabel("Matched")
     #save
     #sns.despine()
@@ -458,7 +469,7 @@ def sample_gauss_stats(sample, low=-20,hi=20):
 
 
 text_args= dict(verticalalignment='center',fontsize=8)
-def plot_dflux_chisq(b,type='psf', low=-8.,hi=8.):
+def plot_dflux_chisq(b,type='psf', low=-8.,hi=8.,addname=''):
     #join indices b/c matched
     i_type= np.all((indices_for_type(b, inst='m_decam',type=type),\
                     indices_for_type(b, inst='m_bokmos',type=type)), axis=0) #both bokmos and decam of same type
@@ -490,51 +501,55 @@ def plot_dflux_chisq(b,type='psf', low=-8.,hi=8.):
     #    ax[2].text(0.9,yloc,"%s %.2f" % (key,stats['g']['gauss'][key]),transform=ax[2].transAxes,horizontalalignment='right',**text_args)
     #labels
     for cnt,band in zip(range(3),['g','r','z']):
-        ti=ax[cnt].set_title('%s' % band, **laba)
+        if band == 'r': xlab=ax[cnt].set_xlabel(r'%s  $(F_{d}-F_{bm})/\sqrt{\sigma^2_{d}+\sigma^2_{bm}}$' % band, **laba)
+        else: xlab=ax[cnt].set_xlabel('%s' % band, **laba)
+        #xlab=ax[cnt].set_xlabel('%s' % band, **laba)
         ax[cnt].set_ylim(0,0.6)
         ax[cnt].set_xlim(low,hi)
-    xlab=ax[1].set_xlabel(r'(F[decam] - F[bokmos])/$\sigma$', **laba)
-    ylab=ax[0].set_ylabel('PDF, %s' % type, **laba)
+    ylab=ax[0].set_ylabel('PDF', **laba)
+    ti=ax[1].set_title(type,**laba)
     #put stats in suptitle
-    plt.savefig(os.path.join(get_outdir('bmd'),'dflux_chisq_%s.png' % type), bbox_extra_artists=[ti,xlab,ylab], bbox_inches='tight',dpi=150)
+    plt.savefig(os.path.join(get_outdir('bmd'),'dflux_chisq_%s%s.png' % (type,addname)), bbox_extra_artists=[ti,xlab,ylab], bbox_inches='tight',dpi=150)
     plt.close()
 ################
 
 text_args= dict(verticalalignment='center',fontsize=8)
-def plot_N_per_deg2(obj,type='all', maglow=18.,maghi=26.):
+def plot_N_per_deg2(obj,type='all',req_mags=[24.,23.4,22.5],addname=''):
+    '''image requirements grz<=24,23.4,22.5
+    compute number density in each bin for each band mag [18,requirement]'''
     #indices for type for matched and unmatched samples
     index={}
     for inst in ['m_decam','u_decam','m_bokmos','u_bokmos']:
-        index[inst]= indices_for_type(obj, inst=inst,type=type)
-    #create histograms of counts
-    hist,binc= {},{}
+        index[inst]= indices_for_type(obj, inst=inst,type=type) 
+    bin_nd=dict(decam={},bokmos={})
     for inst in ['decam','bokmos']:
-        hist[inst]= {} 
-        binc[inst]= {} 
-        for band in ['g','r','z']:
+        bin_nd[inst]={}
+        for band,req in zip(['g','r','z'],req_mags):
+            bin_nd[inst][band]={}
+            bin_edges= np.linspace(18.,req,num=15)
             i_m,i_u= index['m_'+inst], index['u_'+inst] #need m+u
             #join m_decam,u_decam OR m_bokmos,u_bokmos and only with correct all,psf,lrg index
             sample= np.ma.concatenate((obj['m_'+inst].data[band+'mag'][i_m], obj['u_'+inst].data[band+'mag'][i_u]),axis=0)
-            hist[inst][band],bins,junk= plt.hist(sample,range=(maglow,maghi),bins=50)
-            db= (bins[1:]-bins[:-1])/2
-            binc[inst][band]= bins[:-1]+db
-    plt.close() #b/c plt.hist above
+            bin_nd[inst][band]['binc'],bin_nd[inst][band]['cnt'],q25,q50,q75=\
+                    bin_up(sample,sample,bin_edges=bin_edges)
     #plot
     fig,ax=plt.subplots(1,3,figsize=(9,3),sharey=True)
     plt.subplots_adjust(wspace=0.25)
     for cnt,band in zip(range(3),['g','r','z']):
-        for inst,color in zip(['decam','bokmos'],['b','g']):
-            ax[cnt].step(binc[inst][band],hist[inst][band]/obj['deg2_'+inst], where='mid',c=color,lw=2,label=inst)
+        for inst,color,lab in zip(['decam','bokmos'],['b','g'],['DECaLS','BASS/MzLS']):
+            ax[cnt].step(bin_nd[inst][band]['binc'],bin_nd[inst][band]['cnt']/obj['deg2_'+inst], where='mid',c=color,lw=2,label=lab)
     #labels
     for cnt,band in zip(range(3),['g','r','z']):
-        xlab=ax[cnt].set_xlabel('%s' % band, **laba)
+        xlab=ax[cnt].set_xlabel('%s' % band) #, **laba)
         #ax[cnt].set_ylim(0,0.6)
         #ax[cnt].set_xlim(maglow,maghi)
-    ax[2].legend(loc=1, **leg_args)
-    ylab=ax[0].set_ylabel('counts/deg2', **laba)
-    ti=plt.suptitle("%s Objects" % type.upper(),**laba)
+    ax[0].legend(loc='upper left', **leg_args)
+    ylab=ax[0].set_ylabel('counts/deg2') #, **laba)
+    ti=plt.suptitle("%ss" % type.upper(),**laba)
+    # Make space for and rotate the x-axis tick labels
+    fig.autofmt_xdate()
     #put stats in suptitle
-    plt.savefig(os.path.join(get_outdir('bmd'),'n_per_deg2_%s.png' % type), bbox_extra_artists=[ti,xlab,ylab], bbox_inches='tight',dpi=150)
+    plt.savefig(os.path.join(get_outdir('bmd'),'n_per_deg2_%s%s.png' % (type,addname)), bbox_extra_artists=[ti,xlab,ylab], bbox_inches='tight',dpi=150)
     plt.close()
 
 
@@ -578,51 +593,44 @@ b['m_bokmos'].update_masks_for_everything(mask=np.any((b['m_decam'].mask, b['m_b
                                     mask_wise=np.any((b['m_decam'].mask_wise, b['m_bokmos'].mask_wise),axis=0) )
 
 #plots
-plot_nobs(b)
 plot_radec(b)
-print('decam deg2= ',b['deg2_decam'],'bokmos deg2= ',b['deg2_bokmos'])
-
-plot_HistTypes(b,m_types=['m_decam','m_bokmos'])
-plot_HistTypes(b,m_types=['u_decam','u_bokmos'])
-
 plot_matched_separation_hist(b['d12'])
-
-plot_SN_vs_mag(b, found_by='matched',type='all')
+# Depths are very different so develop a cut to make fair comparison
 plot_SN_vs_mag(b, found_by='matched',type='psf')
-plot_SN_vs_mag(b, found_by='matched',type='lrg')
-plot_SN_vs_mag(b, found_by='unmatched',type='all')
-plot_SN_vs_mag(b, found_by='unmatched',type='psf')
-plot_SN_vs_mag(b, found_by='unmatched',type='lrg')
+# mask=True where BASS SN g < 5 or BASS SN r < 5
+sn_crit=5.
+mask= np.any((b['m_bokmos'].data['gflux']*np.sqrt(b['m_bokmos'].data['gflux_ivar']) < sn_crit,\
+              b['m_bokmos'].data['rflux']*np.sqrt(b['m_bokmos'].data['rflux_ivar']) < sn_crit),\
+                axis=0)
+b['m_decam'].update_masks_for_everything(mask=mask, mask_wise=mask)
+b['m_bokmos'].update_masks_for_everything(mask=mask, mask_wise=mask)
+# contintue with fairer comparison
+plot_radec(b,addname='snGe5')
+plot_HistTypes(b,m_types=['m_decam','m_bokmos'],addname='snGe5')
+plot_SN_vs_mag(b, found_by='matched',type='psf',addname='snGe5')
+#plot_SN_vs_mag(b, found_by='matched',type='all')
+#plot_SN_vs_mag(b, found_by='matched',type='lrg')
+#plot_SN_vs_mag(b, found_by='unmatched',type='all')
+#plot_SN_vs_mag(b, found_by='unmatched',type='psf')
+#plot_SN_vs_mag(b, found_by='unmatched',type='lrg')
+cm,names= create_confusion_matrix(b)
+plot_confusion_matrix(cm,names,addname='snGe5')
+plot_dflux_chisq(b,type='all',addname='snGe5')
+plot_dflux_chisq(b,type='psf',addname='snGe5')
+# Number density cutting to requirement mags: grz<=24,23.4,22.5
+print('square deg covered by decam=',b['deg2_decam'],'and by bokmos=',b['deg2_bokmos'])
+plot_N_per_deg2(b,type='psf',addname='snGe5')
+plot_N_per_deg2(b,type='lrg',addname='snGe5')
 
-maglow,maghi=18,28
-plot_N_per_deg2(b,type='all', maglow=maglow,maghi=maghi)
-plot_N_per_deg2(b,type='psf', maglow=maglow,maghi=maghi)
-plot_N_per_deg2(b,type='lrg', maglow=maglow,maghi=maghi)
+
+
+
+
+print('exiting early')
+sys.exit()
 
 plot_matched_dmag_vs_psf_fwhm(b, type='psf')
 plot_matched_decam_vs_bokmos_psf_fwhm(b, type='psf')
-
-cm,names= create_confusion_matrix(b)
-plot_confusion_matrix(cm,names)
-
-plot_dflux_chisq(b,type='all')
-plot_dflux_chisq(b,type='psf')
-
-#mask out nobs <= 4, 60% of BASS objects
-nobs_min=5
-mask= np.all((b['m_bokmos'].data['g_nobs'] >= nobs_min,\
-                b['m_bokmos'].data['r_nobs'] >= nobs_min),axis=0)
-b['m_decam'].update_masks_for_everything(mask=mask, mask_wise=mask)
-b['m_bokmos'].update_masks_for_everything(mask=mask, mask_wise=mask)
-
-#plot fairer comparison
-addname='_nobsBassgrGt5'
-plot_radec(b,addname=addname)
-plot_HistTypes(b,m_types=['m_decam','m_bokmos'],addname=addname)
-plot_SN_vs_mag(b, found_by='matched',type='psf',addname=addname)
-cm,names= create_confusion_matrix(b)
-plot_confusion_matrix(cm,names, addname=addname)
-
 
 print('finished comparison: bass-mosaic-decals')
 #sys.exit()
