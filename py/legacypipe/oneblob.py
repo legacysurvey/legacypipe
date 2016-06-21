@@ -384,8 +384,8 @@ class OneBlob(object):
         for numi,srci in enumerate(Ibright):
     
             src = cat[srci]
-            #print('Model selection for source %i of %i in blob' %
-            #      (numi, len(Ibright)))
+            print('Model selection for source %i of %i in blob' %
+                  (numi, len(Ibright)))
             cpu0 = time.clock()
     
             # Add this source's initial model back in.
@@ -700,7 +700,7 @@ class OneBlob(object):
                     modtractor.setModelMasks(mm)
                     enable_galaxy_cache()
     
-                    modtractor.optimize_loop(**self.optargs)
+                    modtractor.optimize_loop(maxcpu=60., **self.optargs)
                     # FIXME -- thisflags |= FLAG_STEPS_B
                     #print('Mod selection: after second-round opt:', newsrc)
     

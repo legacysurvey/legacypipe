@@ -122,7 +122,8 @@ exposures = [397525, 397526, 511250, # g,p1
              397523, 405262, 405292, # r,p3
              180583, 405257, 180582, # z,p1
              180585, 395347, 405254, # z,p2
-             179975, 179971, 179972, # z,p3
+             #179975, 179971, 179972, # z,p3 -- THESE ONES HAVE NASTY SKY GRADIENTS
+             193204, 193180, 192768,
              ]
 # reorder to get one of p1,p2,p3 in each set
 exposures = exposures[::3] + exposures[1::3] + exposures[2::3]
