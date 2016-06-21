@@ -64,7 +64,8 @@ def main():
     if kwargs in [-1,0]:
         return kwargs
 
-    survey = CosmosSurvey(survey_dir=opt.survey_dir, subset=opt.subset)
+    survey = CosmosSurvey(survey_dir=opt.survey_dir, subset=opt.subset,
+                          output_dir=opt.outdir)
 
     run_brick(opt.brick, survey, **kwargs)
     return 0
