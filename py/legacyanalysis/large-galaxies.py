@@ -2,6 +2,8 @@
 
 """Redo the Tractor photometry of the "large" galaxies in Legacy Survey imaging.
 
+rsync -avPn --files-from='/tmp/ccdfiles.txt' nyx:/usr/local/legacysurvey/legacypipe-dir/ /Users/ioannis/repos/git/legacysurvey/legacypipe-dir/
+
 J. Moustakas
 Siena College
 2016 June 6
@@ -16,8 +18,13 @@ import argparse
 
 import numpy as np
 from glob import glob
+
 import matplotlib.pyplot as plt
+import matplotlib.patches as patches
+from matplotlib.colors import LogNorm
 from mpl_toolkits.axes_grid1 import make_axes_locatable
+
+from scipy.ndimage.morphology import binary_dilation
 
 from astropy.io import fits
 from astropy.table import Table, vstack
@@ -28,6 +35,8 @@ from PIL import Image, ImageDraw, ImageFont
 from astrometry.util.util import Tan
 from astrometry.util.fits import fits_table, merge_tables
 from astrometry.util.plotutils import dimshow
+
+from tractor.splinesky import SplineSky
 
 from legacypipe.runbrick import run_brick
 from legacypipe.common import ccds_touching_wcs, bricks_touching_wcs, LegacySurveyData
@@ -92,7 +101,15 @@ def _catalog_template(nobj=1):
 
     return catalog
 
-def _simplewcs(gal):
+def _ccdwcs(ccd):
+    '''Build a simple WCS object for each CCD.'''
+    W, H = ccd.width, ccd.height
+    ccdwcs = Tan(*[float(xx) for xx in [ccd.crval1, ccd.crval2, ccd.crpix1,
+                                        ccd.crpix2, ccd.cd1_1, ccd.cd1_2,
+                                        ccd.cd2_1, ccd.cd2_2, W, H]])
+    return ccdwcs
+
+def _galwcs(gal):
     '''Build a simple WCS object for a single galaxy.'''
     diam = DIAMFACTOR*np.ceil(gal['RADIUS']/PIXSCALE).astype('int16') # [pixels]
     galwcs = Tan(gal['RA'], gal['DEC'], diam/2+0.5, diam/2+0.5,
@@ -162,7 +179,8 @@ def main():
     objtype = ('PSF', 'SIMP', 'EXP', 'DEV', 'COMP')
     objcolor = ('white', 'red', 'orange', 'cyan', 'yellow')
     thumbsize = 100
-    fonttype = '/usr/share/fonts/gnu-free/FreeSans.ttf'
+    #fonttype = '/usr/share/fonts/gnu-free/FreeSans.ttf'
+    fonttype = '/Volumes/Macintosh\ HD/Library/Fonts/Georgia.ttf'
 
     # Read the sample (unless we're building it!)
     samplefile = os.path.join(largedir, 'large-galaxies-sample.fits')
@@ -179,6 +197,7 @@ def main():
     if args.build_sample:
         # Read the parent catalog.
         cat = read_rc3()
+        cat = cat[np.where(cat['GALAXY'] == 'UGC4203')[0]]
         
         # Create a simple WCS object for each object and find all the CCDs
         # touching that WCS footprint.
@@ -192,7 +211,7 @@ def main():
         ccdlist = []
         outcat = []
         for gal in cat:
-            galwcs = _simplewcs(gal)
+            galwcs = _galwcs(gal)
 
             ccds1 = allccds[ccds_touching_wcs(galwcs, allccds)]
             ccds1 = ccds1[_uniqccds(ccds1)]
@@ -230,7 +249,7 @@ def main():
         if os.path.isfile(samplefile):
             os.remove(samplefile)
         print('Writing {}'.format(samplefile))
-        outcat.write(samplefile)
+        #outcat.write(samplefile)
         print(outcat)
 
         # Do we need to transfer any of the data to nyx?
@@ -320,7 +339,56 @@ def main():
             #print('Hack!!!  Testing with 3 CCDs!')
             #ccds = ccds[4:5]
 
-            tims = []
+            # Build a QAplot showing the position of all the CCDs and the coadd
+            # cutout (centered on the galaxy).
+            galwcs = _galwcs(gal)
+            pxscale = galwcs.pixel_scale()/3600.0
+            (width, height) = (galwcs.get_width()*pxscale, galwcs.get_height()*pxscale)
+            bb = galwcs.radec_bounds()
+            bbcc = galwcs.radec_center()
+            ww = 0.2
+
+            qaccdposfile = os.path.join(qadir, 'qa-{}-ccdpos.png'.format(galaxy))
+            fig, allax = plt.subplots(1, 3, figsize=(12, 5), sharey=True, sharex=True)
+
+            for ax, band in zip(allax, ('g', 'r', 'z')):
+                ax.set_aspect('equal')
+                ax.set_xlim(bb[0]+width+ww, bb[0]-ww)
+                ax.set_ylim(bb[2]-ww, bb[2]+height+ww)
+                ax.set_xlabel('RA (deg)')
+                ax.text(0.9, 0.05, band, ha='center', va='bottom',
+                        transform=ax.transAxes, fontsize=18)
+
+                if band == 'g':
+                    ax.set_ylabel('Dec (deg)')
+                ax.get_xaxis().get_major_formatter().set_useOffset(False)
+                ax.add_patch(patches.Rectangle((bb[0], bb[2]), bb[1]-bb[0], bb[3]-bb[2],
+                                               fill=False, edgecolor='black', lw=3, ls='--'))
+                ax.add_patch(patches.Circle((bbcc[0], bbcc[1]), gal['RADIUS']/3600.0/2, 
+                                            fill=False, edgecolor='black', lw=2))
+
+                these = np.where(ccds.filter == band)[0]
+                col = plt.cm.Set1(np.linspace(0, 1, len(ccds)))
+                for ii, ccd in enumerate(ccds[these]):
+                    print(ccd.expnum, ccd.ccdname, ccd.filter)
+                    W, H = ccd.width, ccd.height
+                    ccdwcs = _ccdwcs(ccd)
+
+                    cc = ccdwcs.radec_bounds()
+                    ax.add_patch(patches.Rectangle((cc[0], cc[2]), cc[1]-cc[0],
+                                                   cc[3]-cc[2], fill=False, lw=2, 
+                                                   edgecolor=col[these[ii]],
+                                                   label='ccd{:02d}'.format(these[ii])))
+                    ax.legend(ncol=2, frameon=False, loc='upper left')
+                    
+            plt.subplots_adjust(bottom=0.12, wspace=0.05, left=0.06, right=0.97)
+            print('Writing {}'.format(qaccdposfile))
+            plt.savefig(qaccdposfile)
+
+            #print('Exiting prematurely!')
+            #sys.exit(1)
+
+            #tims = []
             for ii, ccd in enumerate(ccds):
                 im = survey.get_image_object(ccd)
                 print(im, im.band, 'exptime', im.exptime, 'propid', ccd.propid,
@@ -329,28 +397,59 @@ def main():
                 tim = im.get_tractor_image(splinesky=True, subsky=False, gaussPsf=True)
                 #tims.append(tim)
 
-                # Get the image and read and instantiate the splinesky model.
+                # Get the (pixel) coordinates of the galaxy on this CCD
+                ok, x0, y0 = tim.wcs.radec2pixelxy(gal['RA'], gal['DEC'])
+                pxscale = wcs.pixel_scale()
+                radius = DIAMFACTOR*gal['RADIUS']/pxscale/2.0
+
+                # Get the image, read and instantiate the splinesky model, and
+                # also reproduce the image mask used in legacypipe.decam.run_calibs.
                 image = tim.getImage()
+                weight = tim.getInvvar()
                 sky = tim.getSky()
                 skymodel = np.zeros_like(image)
                 sky.addTo(skymodel)
 
+                med = np.median(image[weight > 0])
+                skyobj = SplineSky.BlantonMethod(image - med, weight>0, 512)
+                skymod = np.zeros_like(image)
+                skyobj.addTo(skymod)
+                sig1 = 1.0/np.sqrt(np.median(weight[weight > 0]))
+                mask = ((image - med - skymod) > (5.0*sig1))*1.0
+                mask = binary_dilation(mask, iterations=3)
+                mask[weight == 0] = 1
+
+                #plt.clf()
+                #plt.figure()
+                #plt.hist(image-skymodel, range=(0, 0.1), bins=10) ; plt.show()
+                #plt.savefig('junk.png')
+
                 qaccd = os.path.join(qadir, 'qa-{}-ccd{:02d}.png'.format(galaxy, ii))
-                fig, ax = plt.subplots(1, 2, figsize=(6, 6), sharey=True)
-                fig.suptitle(tim.name, y=0.94)
+                fig, ax = plt.subplots(1, 3, figsize=(9, 5), sharey=True)
+                fig.suptitle('{} (ccd{:02d})'.format(tim.name, ii), y=0.96)
                 #vmin, vmax = (0, np.percentile(image, 95))
-                #vmin, vmax = np.percentile(image, (5, 95))
-                for data, thisax, title in zip((image, skymodel), ax, ('Image', 'SplineSky')):
-                    vmin, vmax = np.percentile(data, (5, 98))
-                    img = scale_image(data, scale='sqrt', min_cut=vmin, max_cut=vmax)
-                    #img = scale_image(data, scale='log', min_percent=0.02, max_percent=0.98)
-                    thisim = thisax.imshow(img, cmap='viridis', interpolation='nearest', origin='lower')
+                #vmin, vmax = np.percentile(image, (2, 90))
+                for data, thisax, title in zip((image, skymodel, mask), ax, ('Image', 'SplineSky', 'Mask')):
+                    if title == 'Mask':
+                        vmin, vmax = (0, 1)
+                    else:
+                        vmin, vmax = np.percentile(data, (1, 99))
+                    #img = scale_image(data, scale='sqrt', min_cut=vmin, max_cut=vmax)
+                    #img = scale_image(data, scale='sqrt')#, min_percent=0.02, max_percent=0.98)
+                    thisim = thisax.imshow(data, cmap='inferno', interpolation='nearest', origin='lower',
+                                           vmin=vmin, vmax=vmax)
+                    thisax.add_patch(patches.Circle((x0, y0), radius, fill=False, edgecolor='white', lw=2))
+
+                    #thisim = thisax.imshow(data, cmap='gray', interpolation='nearest', origin='lower',
+                    #                       norm=LogNorm())
                     #thisim = thisax.imshow(data, cmap='viridis', vmin=vmin, vmax=vmax,
                     #                       interpolation='nearest', origin='lower')
+                    #thisim = dimshow(data, vmin=-3.0*tim.sig1, vmax=10.0*tim.sig1)
+                    #if title != 'Mask':
                     div = make_axes_locatable(thisax)
-                    cax = div.append_axes('right', size='15%', pad=0.05)
-                    cbar = fig.colorbar(thisim, cax=cax, format='%.3g')
-                    #cbar.set_label('Colorbar {}'.format(i), size=10)
+                    cax = div.append_axes('right', size='15%', pad=0.1)
+                    cbar = fig.colorbar(thisim, cax=cax, format='%.4g')
+                        #cbar.set_label('Colorbar {}'.format(i), size=10)
                     thisax.set_title(title)
                     thisax.xaxis.set_visible(False)
                     thisax.yaxis.set_visible(False)
@@ -359,10 +458,12 @@ def main():
                 #cbarax = fig.add_axes([0.83, 0.15, 0.03, 0.8])
                 #cbar = fig.colorbar(thisim, cax=cbarax)
                 plt.tight_layout(w_pad=0.25)
-                #plt.subplots_adjust(top=0.85)
+                plt.subplots_adjust(bottom=0.0, top=0.93)
                 print('Writing {}'.format(qaccd))
                 plt.savefig(qaccd)
 
+                #print('Exiting prematurely!')
+                #sys.exit(1)
                 #sys.exit(1)
                 #pdb.set_trace()
 
@@ -416,13 +517,14 @@ def main():
                 these = np.where(cat['BLOB'] == blob)[0]
                 xx, yy = (np.mean(cat['BX'][these]), np.mean(cat['BY'][these]))
                 ax.text(xx, yy, '{}'.format(blob), ha='center', va='bottom', color='orange')
-                ax.set_xlabel('Pixel')
-                ax.set_ylabel('Pixel')
-                ax.set_title('Blobs')
-                
+                ax.xaxis.set_visible(False)
+                ax.yaxis.set_visible(False)
+            plt.subplots_adjust(left=0, right=1, bottom=0, top=1)
+            
             print('Writing {}'.format(qablobsfile))
             plt.savefig(qablobsfile)
 
+            print('Exiting prematurely!')
             sys.exit(1)
 
             rad = 10
@@ -474,6 +576,8 @@ def main():
         # individual galaxy pages
         for gal in sample:
             galaxy = gal['GALAXY'].strip().lower()
+            qadir = os.path.join(largedir, 'qa', '{}'.format(galaxy))
+
             htmlfile = os.path.join(largedir, 'html/{}.html'.format(galaxy))
             print('Writing {}'.format(htmlfile))
             html = open(htmlfile, 'w')
@@ -491,7 +595,7 @@ def main():
             html.write('<h1>{}</h1>\n'.format(galaxy.upper()))
             # ----------
             # DR2 Pipeline cutouts
-            html.write('<h2>DR2 Pipeline</h2>\n')
+            html.write('<h2>DR2 Pipeline (Image, Model, Residuals)</h2>\n')
             html.write('<table><tbody>\n')
             html.write('<tr>\n')
             for imtype in ('image', 'model', 'resid'):
@@ -502,31 +606,40 @@ def main():
             html.write('</tbody></table>\n')
             # ----------
             # Large-Galaxy custom pipeline cutouts
-            html.write('<h2>Large-Galaxy Pipeline</h2>\n')
+            html.write('<h2>Large-Galaxy Pipeline (Image, Model, Residuals)</h2>\n')
             html.write('<table><tbody>\n')
             html.write('<tr>\n')
             for imtype in ('image', 'model', 'resid'):
                 html.write('<td><a href=../cutouts/{}-{}-custom-annot.jpg><img width="100%" src=../cutouts/{}-{}-custom-annot.jpg alt={} /></a></td>\n'.format(
                     galaxy, imtype, galaxy, imtype, galaxy.upper()))
             html.write('</tr>\n')
+            html.write('</tbody></table>\n')
             # ----------
             # Blob diagnostic plot
+            html.write('<h2>Segmentation (nsigma>20)</h2>\n')
+            html.write('<table><tbody>\n')
             html.write('<tr><td><a href=../qa/{}/qa-{}-blobs.png>'.format(galaxy, galaxy)+\
                        '<img src=../qa/{}/qa-{}-blobs.png alt={} Blobs /></a></td>'.format(galaxy, galaxy, galaxy.upper())+\
                        '</tr>\n')
                        #'<td>&nbsp</td><td>&nbsp</td></tr>\n')
+            html.write('</tbody></table>\n')
             # ----------
             # CCD cutouts
-            qadir = os.path.join(largedir, 'qa', '{}'.format(galaxy))
-            qaccd = glob(os.path.join(qadir, 'qa-{}-ccd??.png'.format(galaxy)))
-            pdb.set_trace()
-
-            for ccd in qaccd:
-                html.write('<tr><td><a href=../qa/{}/qa-{}-blobs.png>'.format(galaxy, galaxy)+\
-                           '<img src=../qa/{}/qa-{}-blobs.png alt={} Blobs /></a></td>'.format(galaxy, galaxy, galaxy.upper())+\
-                           '</tr>\n')
-                       #'<td>&nbsp</td><td>&nbsp</td></tr>\n')
+            html.write('<h2>Configuration of CCDs and Sky-Subtraction</h2>\n')
+            html.write('<table><tbody>\n')
+            html.write('<tr><td><a href=../qa/{}/qa-{}-ccdpos.png>'.format(galaxy, galaxy)+\
+                       '<img src=../qa/{}/qa-{}-ccdpos.png alt={} CCD Positions /></a></td>'.format(galaxy, galaxy, galaxy.upper())+\
+                       '</tr>\n')
             html.write('</tbody></table>\n')
+            qaccd = glob(os.path.join(qadir, 'qa-{}-ccd??.png'.format(galaxy)))
+            if len(qaccd) > 0:
+                html.write('<table><tbody>\n')
+                for ccd in qaccd:
+                    qaccd1 = os.path.split(ccd)[-1]
+                    html.write('<tr><td><a href=../qa/{}/{}>'.format(galaxy, qaccd1)+\
+                               '<img src=../qa/{}/{} alt={} Sky in CCD /></a></td>'.format(galaxy, qaccd1, galaxy.upper())+\
+                               '</tr>\n')
+                html.write('</tbody></table>\n')
             html.write('</body></html>\n')
             html.close()
             
