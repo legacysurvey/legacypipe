@@ -476,42 +476,70 @@ def plot_dflux_chisq(b,type='psf', low=-8.,hi=8.,addname=''):
     #get flux diff for each band
     hist= dict(g=0,r=0,z=0)
     binc= dict(g=0,r=0,z=0)
-    stats=dict(g=0,r=0,z=0) 
+    stats=dict(g=0,r=0,z=0)
+    #chi 
+    sample,mag={},{}
     for band in ['g','r','z']:
-        sample=(b['m_decam'].data[band+'flux'][i_type]-b['m_bokmos'].data[band+'flux'][i_type])/np.sqrt(\
+        sample[band]= (b['m_decam'].data[band+'flux'][i_type]-b['m_bokmos'].data[band+'flux'][i_type])/np.sqrt(\
                     np.power(b['m_decam'].data[band+'flux_ivar'][i_type],-1)+np.power(b['m_bokmos'].data[band+'flux_ivar'][i_type],-1))
-        hist[band],bins,junk= plt.hist(sample,range=(low,hi),bins=50,normed=True)
-        db= (bins[1:]-bins[:-1])/2
-        binc[band]= bins[:-1]+db
-        stats[band]= sample_gauss_stats(sample)
-    plt.close() #b/c plt.hist above
-    #for drawing unit gaussian N(0,1)
-    G= sp_stats.norm(0,1)
-    xvals= np.linspace(low,hi)
+        mag[band]= 22.5-2.5*np.log10(b['m_decam'].data[band+'flux'][i_type])
+    #loop over mag bins, one 3 panel for each mag bin
+    for b_low,b_hi in zip([18,19,20,21,22,23],[19,20,21,22,23,24]):
+        #plot each filter
+        for band in ['g','r','z']:
+            imag= np.all((b_low <= mag[band],mag[band] < b_hi),axis=0)
+            #print("len(imag)=",len(imag),"len(sample)=",len(sample),"len(sample[imag])=",len(sample[imag]))
+            hist[band],bins,junk= plt.hist(sample[band][imag],range=(low,hi),bins=50,normed=True)
+            db= (bins[1:]-bins[:-1])/2
+            binc[band]= bins[:-1]+db
+        plt.close() #b/c plt.hist above
+        #for drawing unit gaussian N(0,1)
+        G= sp_stats.norm(0,1)
+        xvals= np.linspace(low,hi)
+        #plot
+        fig,ax=plt.subplots(1,3,figsize=(9,3),sharey=True)
+        plt.subplots_adjust(wspace=0.25)
+        for cnt,band in zip(range(3),['g','r','z']):
+            ax[cnt].step(binc[band],hist[band], where='mid',c='b',lw=2)
+            ax[cnt].plot(xvals,G.pdf(xvals))
+        #labels
+        for cnt,band in zip(range(3),['g','r','z']):
+            if band == 'r': xlab=ax[cnt].set_xlabel(r'%s  $(F_{d}-F_{bm})/\sqrt{\sigma^2_{d}+\sigma^2_{bm}}$' % band, **laba)
+            else: xlab=ax[cnt].set_xlabel('%s' % band, **laba)
+            #xlab=ax[cnt].set_xlabel('%s' % band, **laba)
+            ax[cnt].set_ylim(0,0.6)
+            ax[cnt].set_xlim(low,hi)
+        ylab=ax[0].set_ylabel('PDF', **laba)
+        ti=ax[1].set_title("%s (%.1f <= %s < %.1f)" % (type,b_low,band,b_hi),**laba)
+        #put stats in suptitle
+        plt.savefig(os.path.join(get_outdir('bmd'),'dflux_chisq_%s_%.1f-%s-%.1f%s.png' % (type,b_low,band,b_hi,addname)), bbox_extra_artists=[ti,xlab,ylab], bbox_inches='tight',dpi=150)
+        plt.close()
+################
+
+def plot_magRatio_vs_mag(b,type='psf',addname=''):
+    #join indices b/c matched
+    i_type= np.all((indices_for_type(b, inst='m_decam',type=type),\
+                    indices_for_type(b, inst='m_bokmos',type=type)), axis=0) #both bokmos and decam of same type
     #plot
     fig,ax=plt.subplots(1,3,figsize=(9,3),sharey=True)
     plt.subplots_adjust(wspace=0.25)
     for cnt,band in zip(range(3),['g','r','z']):
-        ax[cnt].step(binc[band],hist[band], where='mid',c='b',lw=2)
-        ax[cnt].plot(xvals,G.pdf(xvals))
-        #for yloc,key in zip([0.95,0.85,0.75,0.65,0.55],['mean','std','q25','q75','perc_out']):
-        #    ax[cnt].text(0.1,yloc,"%s %.2f" % (key,stats[band]['sample'][key]),transform=ax[cnt].transAxes,horizontalalignment='left',**text_args)
-    #ax[2].text(0.9,0.95,"N(0,1)",transform=ax[2].transAxes,horizontalalignment='right',**text_args)
-    #for yloc,key in zip([0.85,0.75,0.65,0.55],['mean','std','q25','perc_out']):
-    #    ax[2].text(0.9,yloc,"%s %.2f" % (key,stats['g']['gauss'][key]),transform=ax[2].transAxes,horizontalalignment='right',**text_args)
+        magRatio= np.log10(b['m_bokmos'].data[band+'flux'][i_type])/np.log10(b['m_decam'].data[band+'flux'][i_type]) -1.
+        mag= 22.5-2.5*np.log10(b['m_decam'].data[band+'flux'][i_type])
+        ax[cnt].scatter(mag,magRatio, c='b',edgecolor='b',s=5) #,c='none',lw=2.)
     #labels
     for cnt,band in zip(range(3),['g','r','z']):
-        if band == 'r': xlab=ax[cnt].set_xlabel(r'%s  $(F_{d}-F_{bm})/\sqrt{\sigma^2_{d}+\sigma^2_{bm}}$' % band, **laba)
-        else: xlab=ax[cnt].set_xlabel('%s' % band, **laba)
-        #xlab=ax[cnt].set_xlabel('%s' % band, **laba)
-        ax[cnt].set_ylim(0,0.6)
-        ax[cnt].set_xlim(low,hi)
-    ylab=ax[0].set_ylabel('PDF', **laba)
-    ti=ax[1].set_title(type,**laba)
+        xlab=ax[cnt].set_xlabel('%s AB' % band, **laba)
+        ax[cnt].set_ylim(-0.5,0.5)
+        ax[cnt].set_xlim(18,26)
+    ylab=ax[0].set_ylabel(r'$m_{bm}/m_d - 1$', **laba)
+    ti=ax[1].set_title("%s" % type,**laba)
     #put stats in suptitle
-    plt.savefig(os.path.join(get_outdir('bmd'),'dflux_chisq_%s%s.png' % (type,addname)), bbox_extra_artists=[ti,xlab,ylab], bbox_inches='tight',dpi=150)
+    plt.savefig(os.path.join(get_outdir('bmd'),'magRatio_vs_mag_%s%s.png' % (type,addname)), bbox_extra_artists=[ti,xlab,ylab], bbox_inches='tight',dpi=150)
     plt.close()
 ################
+
+
 
 text_args= dict(verticalalignment='center',fontsize=8)
 def plot_N_per_deg2(obj,type='all',req_mags=[24.,23.4,22.5],addname=''):
@@ -593,10 +621,10 @@ b['m_bokmos'].update_masks_for_everything(mask=np.any((b['m_decam'].mask, b['m_b
                                     mask_wise=np.any((b['m_decam'].mask_wise, b['m_bokmos'].mask_wise),axis=0) )
 
 #plots
-plot_radec(b)
-plot_matched_separation_hist(b['d12'])
+#plot_radec(b)
+#plot_matched_separation_hist(b['d12'])
 # Depths are very different so develop a cut to make fair comparison
-plot_SN_vs_mag(b, found_by='matched',type='psf')
+#plot_SN_vs_mag(b, found_by='matched',type='psf')
 # mask=True where BASS SN g < 5 or BASS SN r < 5
 sn_crit=5.
 mask= np.any((b['m_bokmos'].data['gflux']*np.sqrt(b['m_bokmos'].data['gflux_ivar']) < sn_crit,\
@@ -605,23 +633,23 @@ mask= np.any((b['m_bokmos'].data['gflux']*np.sqrt(b['m_bokmos'].data['gflux_ivar
 b['m_decam'].update_masks_for_everything(mask=mask, mask_wise=mask)
 b['m_bokmos'].update_masks_for_everything(mask=mask, mask_wise=mask)
 # contintue with fairer comparison
-plot_radec(b,addname='snGe5')
-plot_HistTypes(b,m_types=['m_decam','m_bokmos'],addname='snGe5')
-plot_SN_vs_mag(b, found_by='matched',type='psf',addname='snGe5')
+#plot_radec(b,addname='snGe5')
+#plot_HistTypes(b,m_types=['m_decam','m_bokmos'],addname='snGe5')
+#plot_SN_vs_mag(b, found_by='matched',type='psf',addname='snGe5')
 #plot_SN_vs_mag(b, found_by='matched',type='all')
 #plot_SN_vs_mag(b, found_by='matched',type='lrg')
 #plot_SN_vs_mag(b, found_by='unmatched',type='all')
 #plot_SN_vs_mag(b, found_by='unmatched',type='psf')
 #plot_SN_vs_mag(b, found_by='unmatched',type='lrg')
-cm,names= create_confusion_matrix(b)
-plot_confusion_matrix(cm,names,addname='snGe5')
-plot_dflux_chisq(b,type='all',addname='snGe5')
+#cm,names= create_confusion_matrix(b)
+#plot_confusion_matrix(cm,names,addname='snGe5')
 plot_dflux_chisq(b,type='psf',addname='snGe5')
+#plot_dflux_chisq(b,type='all',addname='snGe5')
 # Number density cutting to requirement mags: grz<=24,23.4,22.5
 print('square deg covered by decam=',b['deg2_decam'],'and by bokmos=',b['deg2_bokmos'])
-plot_N_per_deg2(b,type='psf',addname='snGe5')
-plot_N_per_deg2(b,type='lrg',addname='snGe5')
-
+#plot_N_per_deg2(b,type='psf',addname='snGe5')
+#plot_N_per_deg2(b,type='lrg',addname='snGe5')
+plot_magRatio_vs_mag(b,type='psf',addname='snGe5')
 
 
 
