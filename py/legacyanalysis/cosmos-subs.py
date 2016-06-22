@@ -209,6 +209,13 @@ for i,C in enumerate(sets):
 C = merge_tables(sets)
 C.writeto('cosmos-ccds.fits')
 
+# Add a copy of this subset without adding noise
+C2 = C.copy()
+C2.subset += 10
+C2.addnoise[:] = 0.
+C = merge_tables([C, C2])
+C.writeto('cosmos-ccds-2.fits')
+
 #for i,E in enumerate(sets):
 #    E.writeto('cosmos-subset-%i.fits' % i)
 
