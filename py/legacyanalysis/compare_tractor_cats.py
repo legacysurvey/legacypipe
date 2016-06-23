@@ -18,6 +18,7 @@ from scipy import stats as sp_stats
 import matplotlib.pyplot as plt
 
 from astropy.io import fits
+from astropy.table import vstack, Table
 from astrometry.libkd.spherematch import match_radec
 
 #import thesis_code.targets as targets
@@ -559,9 +560,17 @@ parser.add_argument('-fn1', type=str, help='process this brick (required input)'
 parser.add_argument('-fn2', type=str, help='object type (STAR, ELG, LRG, BGS)',required=True) 
 args = parser.parse_args()
 
+# Set the debugging level
+if args.verbose:
+    lvl = logging.DEBUG
+else:
+    lvl = logging.INFO
+logging.basicConfig(format='%(message)s', level=lvl, stream=sys.stdout)
+log = logging.getLogger('__name__')
+
 #get lists of tractor cats to compare
 fns_1= read_lines(args.fn1) 
-fns_2= read_lines(args.fn2) 
+log.info('Combining tractor catalogues: ',fns_1) 
 #if fns_1.size == 1: fns_1,fns_2= [fns_1],[fns_2]
 #object to store concatenated matched tractor cats
 a=Matched_Cats()

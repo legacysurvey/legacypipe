@@ -89,8 +89,71 @@ def combine_and_match(ref_cats_file,test_cats_file):
                 )
     return result
 
-    if __name__ == 'main':
-        log.info('do a import combine_and_match')
+
+class DataSet(object):
+    '''a LegacySurvey data set contains bands, masks, mags, target selection
+    data is a astropy Table with same columns as Tractor Catalogue'''
+    def __init__(self,data):
+        assert(key is not None) 
+        self.bands= ['g', 'r', 'z']
+        if 'wise_flux' in data.keys(): 
+            self.bands+= ['w1','w2']
+        # Create mask
+        self.mask= self.Masks(data)
+        # Mags
+        self.magAB,self.magAB_ivar={},{}
+        for band in self.bands:
+            self.magAB[band]= self.get_magAB(data,band)
+            self.magAB_ivar[band]= self.get_magAB_ivar(data,band)
+        # Get targets
+        self.ts= self.TargetSelectin(data)
+
+    def Masks(self,data,keys=None): 
+        '''data has keys like ref_matched and test_matched'''
+        assert(keys is not None)
+        keep=[  np.all((data[key]['gflux'] > 0,\
+                        data[key]['rflux'] > 0,\
+                        data[key]['zflux'] > 0, \
+                        data[key]['g_anymask'] == 0,\
+                        data[key]['r_anymask'] == 0,\
+                        data[key]['z_anymask'] == 0,\
+                        data[key]['fracflux'] <= 0.05,\
+                        data[key]['primary'] == True),axis=0)
+        return keep
+
+    def TargetSelectin(self, data, key=None):
+        assert(key is not None)
+        assert(len(key) == 1)
+        d={}
+        d['desi_target'], d['bgs_target'], d['mws_target']= \
+                        cuts.apply_cuts( data[key] )
+        return d
+
+    def get_magAB(self, data,band,key=None):
+        assert(key is not None)
+        assert(len(key) == 1)
+        mag= data[key][band+'flux']/self.data[band+'_ext']
+        return 22.5 -2.5*np.log10(mag)
+
+    def get_magAB_ivar(self, data,band,key=None):
+        assert(key is not None)
+        assert(len(key) == 1)
+        return np.power(np.log(10.)/2.5*self.data[key][band+'flux'], 2)* self.data[key][band+'flux_ivar']  
+
+if __name__ == 'main':
+    log.info('do a import combine_and_match')
+    ds={}
+    for key in ['ref_matched','test_matched','ref_missed','test_missed']:
+        ds[key]= DataSet(data[key])
+    #combine masks
+    mask_match= np.any((ds['ref_matched'],\
+                        ds['test_matched']), axis=0)
+    mask_missed= np.any((ds['ref_missed'],\
+                         ds['test_missed']), axis=0)
+    for key in ['ref_matched','test_matched']:
+        ds[key].mask= mask_match
+    for key in ['ref_missed','test_missed']:
+        ds[key].mask= mask_missed
 
 
 

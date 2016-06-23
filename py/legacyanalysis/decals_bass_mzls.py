@@ -22,7 +22,7 @@ from astropy.io import fits
 #import thesis_code.targets as targets
 from legacyanalysis import targets 
 from legacyanalysis.pathnames import get_outdir
-from legacyanalysis.combine_cats import combine_and_match
+from legacyanalysis.combine_cats import combine_and_match,DataSet
 
 
 #plotting vars
@@ -475,29 +475,23 @@ args = parser.parse_args()
 #get lists of tractor cats to compare
 fns_1= read_lines(args.decals_list) 
 fns_2= read_lines(args.bassmos_list) 
-a=combine_and_match(ref_cats_file,test_cats_file)
-#each key a.data[key] becomes DECaLS() object with grz mags,i_lrg, etc
-b={}
-b['d12']= a['d_matched']
-b['deg2_decam']= a['deg2']['ref']
-b['deg2_bokmos']= a['deg2']['test']
+data=combine_and_match(ref_cats_file,test_cats_file)
 
-### revised DECaLS class to work with astropy table data
-
-
-for match_type in a.data.keys(): b[match_type]= targets.DECaLS(a.data[match_type], w1=True)
-#store N matched objects not masked before join decam,bokmos masks
-m_decam_not_masked,m_bokmos_not_masked= b['m_decam'].count_not_masked(),b['m_bokmos'].count_not_masked()
-#update masks for matched objects to be the join of decam and bokmos masks
-mask= np.any((b['m_decam'].mask, b['m_bokmos'].mask),axis=0)
-b['m_decam'].update_masks_for_everything(mask=np.any((b['m_decam'].mask, b['m_bokmos'].mask),axis=0),\
-                                    mask_wise=np.any((b['m_decam'].mask_wise, b['m_bokmos'].mask_wise),axis=0) )
-b['m_bokmos'].update_masks_for_everything(mask=np.any((b['m_decam'].mask, b['m_bokmos'].mask),axis=0),\
-                                    mask_wise=np.any((b['m_decam'].mask_wise, b['m_bokmos'].mask_wise),axis=0) )
-
-#plots
-plot_radec(b)
-plot_matched_separation_hist(b['d12'])
+ds={}
+for key in ['ref_matched','test_matched','ref_missed','test_missed']:
+    ds[key]= DataSet(data[key])
+# Combine masks
+mask_match= np.any((ds['ref_matched'],\
+                    ds['test_matched']), axis=0)
+mask_missed= np.any((ds['ref_missed'],\
+                     ds['test_missed']), axis=0)
+for key in ['ref_matched','test_matched']:
+    ds[key].mask= mask_match
+for key in ['ref_missed','test_missed']:
+    ds[key].mask= mask_missed
+# Plots
+plot_radec(data,ds)
+plot_matched_separation_hist(data'deg2']['ref'])
 # Depths are very different so develop a cut to make fair comparison
 plot_SN_vs_mag(b, found_by='matched',type='psf')
 # mask=True where BASS SN g < 5 or BASS SN r < 5
