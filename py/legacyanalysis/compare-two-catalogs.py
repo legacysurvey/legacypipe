@@ -8,6 +8,7 @@ from astrometry.util.fits import fits_table, merge_tables
 from astrometry.libkd.spherematch import match_radec
 from astrometry.util.plotutils import PlotSequence
 from tractor.brightness import NanoMaggies
+import scipy.stats
 
 '''
 This is a little script for comparing two directories full of tractor
@@ -155,6 +156,11 @@ def main():
         y = (mag2 - mag1) / np.hypot(magerr1, magerr2)
         midmag = []
         vals = np.zeros((len(magbins)-1, 5))
+
+        iqd_gauss = scipy.stats.norm.ppf(0.75) - scipy.stats.norm.ppf(0.25)
+
+        # FIXME -- should we do some stats after taking off the mean difference?
+        
         for bini,(mlo,mhi) in enumerate(zip(magbins, magbins[1:])):
             I = P[(mag1[P] >= mlo) * (mag1[P] < mhi)]
             midmag.append((mlo+mhi)/2.)
@@ -166,6 +172,12 @@ def main():
             # +- 2 sigma quantiles
             vals[bini,3] = np.percentile(ybin, 2.3)
             vals[bini,4] = np.percentile(ybin, 97.7)
+
+            iqd = np.percentile(ybin, 75) - np.percentile(ybin, 25)
+            
+            print('Mag bin', midmag[-1], ': IQD is factor', iqd / iqd_gauss,
+                  'vs expected for Gaussian;', len(ybin), 'points')
+            
         plt.errorbar(midmag, vals[:,1], fmt='o', color='b',
                      yerr=(vals[:,1]-vals[:,0], vals[:,2]-vals[:,1]),
                      capthick=3, zorder=20)
@@ -192,12 +204,13 @@ def main():
         ha = dict(bins=25, range=(slo,shi), histtype='step', normed=True)
         y = (mag2 - mag1) / np.hypot(magerr1, magerr2)
         midmag = []
+        nn = []
+        rgbs = []
         lt,lp = [],[]
         for bini,(mlo,mhi) in enumerate(zip(magbins, magbins[1:])):
             I = P[(mag1[P] >= mlo) * (mag1[P] < mhi)]
             if len(I) == 0:
                 continue
-            midmag.append((mlo+mhi)/2.)
             ybin = y[I]
             rgb = [0.,0.,0.]
             rgb[0] = float(bini) / (len(magbins)-1)
@@ -205,6 +218,34 @@ def main():
             n,b,p = plt.hist(ybin, color=rgb, **ha)
             lt.append('mag %g to %g' % (mlo,mhi))
             lp.append(p[0])
+            midmag.append((mlo+mhi)/2.)
+            nn.append(n)
+            rgbs.append(rgb)
+            
+        bins = []
+        gaussint = []
+        for blo,bhi in zip(b, b[1:]):
+            #midbin.append((blo+bhi)/2.)
+            #gaussint.append(scipy.stats.norm.cdf(bhi) -
+            #                scipy.stats.norm.cdf(blo))
+            c = scipy.stats.norm.cdf(bhi) - scipy.stats.norm.cdf(blo)
+            c /= (bhi - blo)
+            bins.extend([blo,bhi])
+            gaussint.extend([c,c])
+        plt.plot(bins, gaussint, 'k-', lw=2, alpha=0.5)
+            
+        plt.legend(lp, lt)
+        plt.title(tt)
+        plt.xlim(slo,shi)
+        ps.savefig()
+
+        bincenters = b[:-1] + (b[1]-b[0])/2.
+        plt.clf()
+        lp = []
+        for n,rgb,mlo,mhi in zip(nn, rgbs, magbins, magbins[1:]):
+            p = plt.plot(bincenters, n, '-', color=rgb)
+            lp.append(p[0])
+        plt.plot(bincenters, gaussint[::2], 'k-', alpha=0.5, lw=2)
         plt.legend(lp, lt)
         plt.title(tt)
         plt.xlim(slo,shi)
