@@ -25,12 +25,17 @@ from matplotlib.colors import LogNorm
 from mpl_toolkits.axes_grid1 import make_axes_locatable
 
 from scipy.ndimage.morphology import binary_dilation
+#from scipy.ndimage.filters import gaussian_filter
+from astropy.convolution import Gaussian2DKernel, convolve
 
 from astropy.io import fits
 from astropy.table import Table, vstack
 from astropy.visualization import scale_image
+from astropy.modeling import models, fitting
 
 from PIL import Image, ImageDraw, ImageFont
+
+import seaborn as sns
 
 from astrometry.util.util import Tan
 from astrometry.util.fits import fits_table, merge_tables
@@ -40,6 +45,7 @@ from tractor.splinesky import SplineSky
 
 from legacypipe.runbrick import run_brick
 from legacypipe.common import ccds_touching_wcs, bricks_touching_wcs, LegacySurveyData
+from legacypipe.cpimage import CP_DQ_BITS
 
 PIXSCALE = 0.262 # average pixel scale [arcsec/pix]
 DIAMFACTOR = 10
@@ -107,7 +113,7 @@ def _ccdwcs(ccd):
     ccdwcs = Tan(*[float(xx) for xx in [ccd.crval1, ccd.crval2, ccd.crpix1,
                                         ccd.crpix2, ccd.cd1_1, ccd.cd1_2,
                                         ccd.cd2_1, ccd.cd2_2, W, H]])
-    return ccdwcs
+    return W, H, ccdwcs
 
 def _galwcs(gal):
     '''Build a simple WCS object for a single galaxy.'''
@@ -197,6 +203,7 @@ def main():
     if args.build_sample:
         # Read the parent catalog.
         cat = read_rc3()
+        print('HACK!!!!!!!!!!!!!!!')
         cat = cat[np.where(cat['GALAXY'] == 'UGC4203')[0]]
         
         # Create a simple WCS object for each object and find all the CCDs
@@ -371,8 +378,7 @@ def main():
                 col = plt.cm.Set1(np.linspace(0, 1, len(ccds)))
                 for ii, ccd in enumerate(ccds[these]):
                     print(ccd.expnum, ccd.ccdname, ccd.filter)
-                    W, H = ccd.width, ccd.height
-                    ccdwcs = _ccdwcs(ccd)
+                    W, H, ccdwcs = _ccdwcs(ccd)
 
                     cc = ccdwcs.radec_bounds()
                     ax.add_patch(patches.Rectangle((cc[0], cc[2]), cc[1]-cc[0],
@@ -394,11 +400,13 @@ def main():
                 print(im, im.band, 'exptime', im.exptime, 'propid', ccd.propid,
                       'seeing {:.2f}'.format(ccd.fwhm*im.pixscale), 
                       'object', getattr(ccd, 'object', None))
-                tim = im.get_tractor_image(splinesky=True, subsky=False, gaussPsf=True)
+                tim = im.get_tractor_image(splinesky=True, subsky=False,
+                                           gaussPsf=True, dq=True)
                 #tims.append(tim)
 
                 # Get the (pixel) coordinates of the galaxy on this CCD
-                ok, x0, y0 = tim.wcs.radec2pixelxy(gal['RA'], gal['DEC'])
+                W, H, wcs = _ccdwcs(ccd)
+                ok, x0, y0 = wcs.radec2pixelxy(gal['RA'], gal['DEC'])
                 pxscale = wcs.pixel_scale()
                 radius = DIAMFACTOR*gal['RADIUS']/pxscale/2.0
 
@@ -417,53 +425,117 @@ def main():
                 sig1 = 1.0/np.sqrt(np.median(weight[weight > 0]))
                 mask = ((image - med - skymod) > (5.0*sig1))*1.0
                 mask = binary_dilation(mask, iterations=3)
-                mask[weight == 0] = 1
+                mask[weight == 0] = 1 # 0=good, 1=bad
 
-                #plt.clf()
-                #plt.figure()
-                #plt.hist(image-skymodel, range=(0, 0.1), bins=10) ; plt.show()
-                #plt.savefig('junk.png')
+                # Make a more aggressive object mask but reset the badpix and
+                # edge bits.
+                print('Iteratively building a more aggressive object mask.')
+                #newmask = ((image - med - skymod) > (3.0*sig1))*1.0
+                newmask = mask.copy()
+                #newmask = (weight == 0)*1 
+                for bit in ('edge', 'edge2'):
+                    ww = np.flatnonzero((tim.dq & CP_DQ_BITS[bit]) == CP_DQ_BITS[bit])
+                    if len(ww) > 0:
+                        newmask.flat[ww] = 0
+                for jj in range(2):
+                    gauss = Gaussian2DKernel(stddev=1)
+                    newmask = convolve(newmask, gauss)
+                    newmask[newmask > 0] = 1 # 0=good, 1=bad
+                
+                newmask += mask
+                newmask[newmask > 0] = 1
 
-                qaccd = os.path.join(qadir, 'qa-{}-ccd{:02d}.png'.format(galaxy, ii))
-                fig, ax = plt.subplots(1, 3, figsize=(9, 5), sharey=True)
-                fig.suptitle('{} (ccd{:02d})'.format(tim.name, ii), y=0.96)
-                #vmin, vmax = (0, np.percentile(image, 95))
-                #vmin, vmax = np.percentile(image, (2, 90))
-                for data, thisax, title in zip((image, skymodel, mask), ax, ('Image', 'SplineSky', 'Mask')):
-                    if title == 'Mask':
-                        vmin, vmax = (0, 1)
-                    else:
-                        vmin, vmax = np.percentile(data, (1, 99))
-                    #img = scale_image(data, scale='sqrt', min_cut=vmin, max_cut=vmax)
-                    #img = scale_image(data, scale='sqrt')#, min_percent=0.02, max_percent=0.98)
+                # Build a new sky model.
+                these = np.flatnonzero((newmask == 0)*1)
+                newmed = np.median(image.flat[these])
+                newsky = np.zeros_like(image) + newmed
+                #newsky = skymodel.copy()
+                
+                if False:
+                    # Now do a lower-order polynomial sky subtraction.
+                    xall, yall = np.mgrid[:H, :W]
+                    these = np.flatnonzero((newmask == 0)*1)
+                    xx = xall.flat[these]
+                    yy = yall.flat[these]
+                    sky = image.flat[these]
+                    plt.clf() ; plt.scatter(xx[:5000], sky[:5000]) ; plt.show()
+                    pdb.set_trace()
+
+                    pinit = models.Polynomial2D(degree=1)
+                    pfit = fitting.LevMarLSQFitter()
+                    coeff = pfit(pinit, xx, yy, sky)
+                    # evaluate the model back on xall, yall
+
+                #make some histograms with the sky-subtracted image --
+                these = np.flatnonzero((newmask == 0)*1)
+                sbins = 40
+                srange = (-5*sig1, +5*sig1)
+                data = ((image - skymodel).flat[these], (image - newsky).flat[these])
+                qaccd = os.path.join(qadir, 'qa-{}-ccd{:02d}-sky.png'.format(galaxy, ii))
+                fig, ax = plt.subplots(1, 2, figsize=(8, 4), sharey=True)
+                fig.suptitle('{} (ccd{:02d})'.format(tim.name, ii), y=0.97)
+                for data1, thisax, title in zip(data, ax.flat, ('Pipeline Sky', 'New Sky')):
+                    (nn, bins, _) = thisax.hist(data1, range=srange, bins=sbins,
+                                                label='Pipeline Sky', normed=True,
+                                                histtype='stepfilled')
+                    ylim = thisax.get_ylim()
+                    thisax.vlines(0.0, ylim[0], ylim[1]*0.99999, colors='k', linestyles='solid')
+                    thisax.set_xlabel('Residuals')
+                    thisax.set_title(title)
+                ax[0].set_ylabel('Relative number of Pixels')
+                plt.tight_layout(w_pad=0.25)
+                plt.subplots_adjust(bottom=0.15, top=0.9)
+                print('Writing {}'.format(qaccd))
+                plt.savefig(qaccd)
+                
+                #print('Exiting prematurely!')
+                #sys.exit(1)
+
+                # Visualize the data, the mask, and the sky.
+                qaccd = os.path.join(qadir, 'qa-{}-ccd{:02d}-2d.png'.format(galaxy, ii))
+                fig, ax = plt.subplots(1, 5, sharey=True, figsize=(14, 4.5))
+                #fig, ax = plt.subplots(3, 2, sharey=True, figsize=(14, 6))
+                fig.suptitle('{} (ccd{:02d})'.format(tim.name, ii), y=0.97)
+
+                vmin_image, vmax_image = np.percentile(image, (1, 99))
+                vmin_weight, vmax_weight = np.percentile(weight, (1, 99))
+                vmin_mask, vmax_mask = (0, 1)
+                vmin_sky, vmax_sky = np.percentile(skymodel, (1, 99))
+                
+                for thisax, data, title in zip(ax.flat, (image, mask, newmask, skymodel, newsky), 
+                                               ('Image', 'Pipeline Mask', 'New Mask',
+                                                'Pipeline Sky', 'New Sky')):
+                #for thisax, data, title in zip(ax.flat, (image, weight, mask, newmask, skymodel, newsky), 
+                #                               ('Image', 'Weight Map', 'Pipeline Mask', 'New Mask',
+                #                                'Pipeline Sky', 'New Sky')):
+                    if 'Mask' in title:
+                        vmin, vmax = vmin_mask, vmax_mask
+                    elif 'Sky' in title:
+                        vmin, vmax = vmin_sky, vmax_sky
+                    elif 'Image' in title:
+                        vmin, vmax = vmin_image, vmax_image
+                    elif 'Weight' in title:
+                        vmin, vmax = vmin_weight, vmax_weight
+                        
                     thisim = thisax.imshow(data, cmap='inferno', interpolation='nearest', origin='lower',
                                            vmin=vmin, vmax=vmax)
                     thisax.add_patch(patches.Circle((x0, y0), radius, fill=False, edgecolor='white', lw=2))
-
-                    #thisim = thisax.imshow(data, cmap='gray', interpolation='nearest', origin='lower',
-                    #                       norm=LogNorm())
-                    #thisim = thisax.imshow(data, cmap='viridis', vmin=vmin, vmax=vmax,
-                    #                       interpolation='nearest', origin='lower')
-                    #thisim = dimshow(data, vmin=-3.0*tim.sig1, vmax=10.0*tim.sig1)
-                    #if title != 'Mask':
                     div = make_axes_locatable(thisax)
                     cax = div.append_axes('right', size='15%', pad=0.1)
                     cbar = fig.colorbar(thisim, cax=cax, format='%.4g')
-                        #cbar.set_label('Colorbar {}'.format(i), size=10)
+
                     thisax.set_title(title)
                     thisax.xaxis.set_visible(False)
                     thisax.yaxis.set_visible(False)
-                    
+                    thisax.set_aspect('equal')
+
                 ## Shared colorbar.
-                #cbarax = fig.add_axes([0.83, 0.15, 0.03, 0.8])
-                #cbar = fig.colorbar(thisim, cax=cbarax)
-                plt.tight_layout(w_pad=0.25)
+                plt.tight_layout(w_pad=0.25, h_pad=0.25)
                 plt.subplots_adjust(bottom=0.0, top=0.93)
                 print('Writing {}'.format(qaccd))
                 plt.savefig(qaccd)
 
                 #print('Exiting prematurely!')
-                #sys.exit(1)
                 #sys.exit(1)
                 #pdb.set_trace()
 
@@ -631,7 +703,7 @@ def main():
                        '<img src=../qa/{}/qa-{}-ccdpos.png alt={} CCD Positions /></a></td>'.format(galaxy, galaxy, galaxy.upper())+\
                        '</tr>\n')
             html.write('</tbody></table>\n')
-            qaccd = glob(os.path.join(qadir, 'qa-{}-ccd??.png'.format(galaxy)))
+            qaccd = glob(os.path.join(qadir, 'qa-{}-ccd??-*.png'.format(galaxy)))
             if len(qaccd) > 0:
                 html.write('<table><tbody>\n')
                 for ccd in qaccd:
