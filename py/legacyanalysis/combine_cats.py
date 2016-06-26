@@ -28,7 +28,7 @@ def deg2_lower_limit(ra,dec):
     dec_wid= abs(dec.max()-dec.min())
     return ra*dec
 
-def combine_and_match(ref_cats_file,test_cats_file):
+def match_two_cats(ref_cats_file,test_cats_file):
     # Set the debugging level
     if args.verbose:
         lvl = logging.DEBUG
@@ -99,16 +99,18 @@ class DataSet(object):
         if 'wise_flux' in data.keys(): 
             self.bands+= ['w1','w2']
         # Create mask
-        self.mask= self.Masks(data)
+        self.keep= self.apply_mask(data)
         # Mags
         self.magAB,self.magAB_ivar={},{}
         for band in self.bands:
             self.magAB[band]= self.get_magAB(data,band)
             self.magAB_ivar[band]= self.get_magAB_ivar(data,band)
         # Get targets
-        self.ts= self.TargetSelectin(data)
+        self.ts= self.get_TargetSelectin(data)
+        # index for where type = psf,simp,exp etc
+        self.type= get_b_types(data)
 
-    def Masks(self,data,keys=None): 
+    def apply_mask(self,data,keys=None): 
         '''data has keys like ref_matched and test_matched'''
         assert(keys is not None)
         keep=[  np.all((data[key]['gflux'] > 0,\
@@ -121,7 +123,11 @@ class DataSet(object):
                         data[key]['primary'] == True),axis=0)
         return keep
 
-    def TargetSelectin(self, data, key=None):
+    def update_mask(self,newmask):
+        assert(self.keep is not None)
+        self.keep= np.any((self.mask,newmask), axis=0)
+
+    def get_TargetSelectin(self, data, key=None):
         assert(key is not None)
         assert(len(key) == 1)
         d={}
@@ -139,6 +145,40 @@ class DataSet(object):
         assert(key is not None)
         assert(len(key) == 1)
         return np.power(np.log(10.)/2.5*self.data[key][band+'flux'], 2)* self.data[key][band+'flux_ivar']  
+
+    def get_b_types(self, data):
+        '''return boolean mask for type = psf,simp,exp, etc'''
+        b_index={}
+        for typ in ['PSF','SIMP','EXP','DEV','COMP']
+            b_index[typ.strip()]= data['TYPE'] == typ 
+        return b_index
+
+def DataSets(data, default_keys=['ref_matched','test_matched','ref_missed','test_missed']):
+    '''data -- returned by match_two_cats()
+    returns dictionary of all additional info needed 
+    to validate/compare two Tractor Catalogues'''
+    for key in data.keys(): assert(key in default_keys)
+    ds={}
+    for key in default_keys:
+        ds[key]= DataSet(data[key])
+    # Combine masks
+    ds['= np.all((ds['ref_matched'].keep,\
+                        ds['test_matched'].keep), axis=0)
+    mask_missefd= np.all((ds['ref_missed'].keep,\
+                         ds['test_missed'].keep), axis=0)
+    for key in ['ref_matched','test_matched']:
+        ds[key].mask= mask_match
+    for key in ['ref_missed','test_missed']:
+        ds[key].mask= mask_missed
+    # Combine type index
+    ds[key].type={}
+    for typ in ['PSF','SIMP','EXP','DEV','COMP']:
+        ds[key].type={}= np.all((data['ref_matched'].type[typ],\
+                            data['test_matched'].type[typ]), axis=0)
+
+    i_type= np.all((self.ds['ref_matched'].type[obj_type],\
+                        self.ds['test_matched'].type[obj_type]), axis=0)
+    return ds
 
 if __name__ == 'main':
     log.info('do a import combine_and_match')
