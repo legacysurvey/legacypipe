@@ -39,39 +39,39 @@ class BassMzls_Decals_Info(object):
         # Kwargs for plots
         self.kwargs= plots.PlotKwargs()
 
-if __name__ == 'main':
-    parser=argparse.ArgumentParser(formatter_class=argparse.ArgumentDefaultsHelpFormatter,
-                                     description='DECaLS simulations.')
-    parser.add_argument('--decals_list', type=str, help='process this brick (required input)',required=True)
-    parser.add_argument('--bassmos_list', type=str, help='object type (STAR, ELG, LRG, BGS)',required=True) 
-    args = parser.parse_args()
+#if __name__ == 'main':
+parser=argparse.ArgumentParser(formatter_class=argparse.ArgumentDefaultsHelpFormatter,
+                                 description='DECaLS simulations.')
+parser.add_argument('--decals_list', type=str, help='process this brick (required input)',required=True)
+parser.add_argument('--bassmos_list', type=str, help='object type (STAR, ELG, LRG, BGS)',required=True) 
+args = parser.parse_args()
 
-    info= BassMzls_Decals_Info(args.decals_list, args.bassmos_list)
-    # plots
-    print('square deg covered by %s=%.2f and %s=%.2f' % \
-        (info.ref_name,info.data['deg2']['ref'],info.test_name,info.data['deg2']['test']))
-    plots.radec(info)
-    plots.matched_separation_hist(info)
-    # Depths are very different so develop a cut to make fair comparison
-    plots.SN_vs_mag(info,type='psf')
-    # Change mask: BASS SN g < 5 or BASS SN r < 5
-    sn_crit=5.
-    mask= np.any((info.data['test_matched']['gflux']*np.sqrt(\
-                    info.data['test_matched']['gflux_ivar']) < sn_crit,\
-                  info.data['test_matched']['rflux']*np.sqrt(\
-                    info.data['test_matched']['rflux_ivar']) < sn_crit),\
-                    axis=0)
-    for key in ['ref_matched','test_matched','ref_missed','test_missed']: 
-        info.ds[key].update_mask(mask)
-    # Continue plotting
-    plots.radec(info,addname='snGe5')
-    plots.HistTypes(info,addname='snGe5')
-    plots.SN_vs_mag(info,type='psf',addname='snGe5')
-    cm,names= create_confusion_matrix(info)
-    plots.confusion_matrix(cm,names, info,name='snGe5')
-    plots.dflux_chisq(info,type='psf',addname='snGe5')
-    plots.N_per_deg2(info,type='psf',addname='snGe5')
-    plots.N_per_deg2(info,type='lrg',addname='snGe5')
+info= BassMzls_Decals_Info(args.decals_list, args.bassmos_list)
+# plots
+print('square deg covered by %s=%.2f and %s=%.2f' % \
+    (info.ref_name,info.data['deg2']['ref'],info.test_name,info.data['deg2']['test']))
+plots.radec(info)
+plots.matched_separation_hist(info)
+# Depths are very different so develop a cut to make fair comparison
+plots.SN_vs_mag(info,obj_type='PSF')
+# Change mask: BASS SN g < 5 or BASS SN r < 5
+sn_crit=5.
+mask= np.any((info.data['test_matched']['gflux']*np.sqrt(\
+                info.data['test_matched']['gflux_ivar']) < sn_crit,\
+              info.data['test_matched']['rflux']*np.sqrt(\
+                info.data['test_matched']['rflux_ivar']) < sn_crit),\
+                axis=0)
+for key in ['ref_matched','test_matched','ref_missed','test_missed']: 
+    info.ds[key].update_mask(mask)
+# Continue plotting
+plots.radec(info,addname='snGe5')
+plots.HistTypes(info,addname='snGe5')
+plots.SN_vs_mag(info,obj_type='PSF',addname='snGe5')
+cm,names= create_confusion_matrix(info)
+plots.confusion_matrix(cm,names, info,name='snGe5')
+plots.dflux_chisq(info,obj_type='PSF',addname='snGe5')
+plots.N_per_deg2(info,obj_type='PSF',addname='snGe5')
+#plots.N_per_deg2(info,obj_type='LRG',addname='snGe5')
 
-    print('finished comparison: BASS/MzLS v DECaLS')
+print('finished comparison: BASS/MzLS v DECaLS')
 

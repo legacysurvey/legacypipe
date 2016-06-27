@@ -10,6 +10,8 @@ plots.nobs(info)
 import matplotlib
 matplotlib.use('Agg') #display backend
 import matplotlib.pyplot as plt
+import os
+import sys
 import numpy as np
 from scipy import stats as sp_stats
 
@@ -67,8 +69,8 @@ def nobs(info):
         for band in 'grz':
             junk=plt.hist(info.data[key][band+'_nobs'],\
                         bins=bins,normed=True,cumulative=True,align='mid')
-            xlab=plt.xlabel('nobs %s' % band, **kwargs.ax)
-            ylab=plt.ylabel('CDF', **kwargs.ax)
+            xlab=plt.xlabel('nobs %s' % band, **info.kwargs.ax)
+            ylab=plt.ylabel('CDF', **info.kwargs.ax)
             plt.savefig(os.path.join(info.outdir,'hist_nobs_%s_%s.png' % (band,cam[2:])), \
                     bbox_extra_artists=[xlab,ylab], bbox_inches='tight',dpi=150)
             plt.close()
@@ -86,14 +88,14 @@ def radec(info,addname=''):
     ax[0].scatter(info.data['ref_matched']['ra'], info.data['ref_matched']['dec'], \
                 edgecolor='b',c='none',lw=1.)
     ax[1].scatter(info.data['ref_missed']['ra'], info.data['ref_missed']['dec'], \
-                edgecolor='b',c='none',lw=1.,label=ds['ref_name'])
+                edgecolor='b',c='none',lw=1.,label=info.ref_name)
     ax[1].scatter(info.data['test_missed']['ra'], info.data['test_missed']['dec'], \
-                edgecolor='g',c='none',lw=1.,label=ds['test_name'])
+                edgecolor='g',c='none',lw=1.,label=info.test_name)
     for cnt,ti in zip(range(2),['Matched','Unmatched']):
-        ti=ax[cnt].set_title(ti,**kwargs.ax)
-        xlab=ax[cnt].set_xlabel('RA', **kwargs.ax)
-    ylab=ax[0].set_ylabel('DEC', **kwargs.ax)
-    ax[0].legend(loc='upper left',**kwargs.leg)
+        ti=ax[cnt].set_title(ti,**info.kwargs.ax)
+        xlab=ax[cnt].set_xlabel('RA', **info.kwargs.ax)
+    ylab=ax[0].set_ylabel('DEC', **info.kwargs.ax)
+    ax[0].legend(loc='upper left',**info.kwargs.leg)
     #save
     #sns.despine()
     plt.savefig(os.path.join(info.outdir,'radec%s.png' % addname), \
@@ -114,9 +116,9 @@ def HistTypes(info,addname=''):
     ###
     ht_ref, ht_test= np.zeros(5,dtype=int),np.zeros(5,dtype=int)
     for cnt,typ in enumerate(types):
-        ht_ref[cnt]= len(info.data['ref_matched']['ra'][ info.ds['ref_matched'].types[typ] ]/ \
+        ht_ref[cnt]= len(info.data['ref_matched']['ra'][ info.ds['ref_matched'].types[typ] ])/ \
                         float(info.data['deg2']['ref'])
-        ht_test[cnt]= len(info.data['test_matched']['ra'][ info.ds['test_matched'].types[typ] ]/ \
+        ht_test[cnt]= len(info.data['test_matched']['ra'][ info.ds['test_matched'].types[typ] ])/ \
                         float(info.data['deg2']['test'])
     ###
     fig, ax = plt.subplots()
@@ -127,7 +129,7 @@ def HistTypes(info,addname=''):
     else: ti= ax.set_title('Unmatched')
     ax.set_xticks(ind + width)
     ax.set_xticklabels(types)
-    ax.legend((rects1[0], rects2[0]), (ds['ref_name'], ds['test_name'],**kwargs.leg)
+    ax.legend((rects1[0], rects2[0]), (info.ref_name, info.test_name),**info.kwargs.leg)
     #save
     if matched: name='hist_types_Matched%s.png' % addname
     else: name='hist_types_Unmatched%s.png' % addname
@@ -144,7 +146,7 @@ def SN_vs_mag(info,obj_type='PSF', addname=''):
     for key in bin_SN.keys():
         for band in ['g','r','z']:
             bin_SN[key][band]={}
-            i= info.ds['key'].type[obj_type]
+            i= info.ds[key].type[obj_type]
             bin_edges= np.linspace(min,max,num=30)
             bin_SN[key][band]['binc'],count,bin_SN[key][band]['q25'],bin_SN[key][band]['q50'],bin_SN[key][band]['q75']=\
                     bin_up(info.ds[key].magAB[band][i], \
@@ -158,18 +160,18 @@ def SN_vs_mag(info,obj_type='PSF', addname=''):
         #horiz line at SN = 5
         ax[cnt].plot([1,40],[5,5],'k--',lw=2)
         #data
-        for inst,color,lab in zip(bin_SN.keys(),['b','g'],[ds['ref_name'],ds['test_name']]):
+        for inst,color,lab in zip(bin_SN.keys(),['b','g'],[info.ref_name,info.test_name]):
             ax[cnt].plot(bin_SN[inst][band]['binc'], bin_SN[inst][band]['q50'],c=color,ls='-',lw=2,label=lab)
             ax[cnt].fill_between(bin_SN[inst][band]['binc'],bin_SN[inst][band]['q25'],bin_SN[inst][band]['q75'],color=color,alpha=0.25)
     #labels
-    ax[2].legend(loc=1,**kwargs.leg)
+    ax[2].legend(loc=1,**info.kwargs.leg)
     for cnt,band in zip(range(3),['g','r','z']):
         ax[cnt].set_yscale('log')
-        xlab=ax[cnt].set_xlabel('%s' % band, **kwargs.ax)
+        xlab=ax[cnt].set_xlabel('%s' % band, **info.kwargs.ax)
         ax[cnt].set_ylim(1,100)
         ax[cnt].set_xlim(20.,26.)
-    ylab=ax[0].set_ylabel('S/N', **kwargs.ax)
-    ax[2].text(26,5,'S/N = 5  ',**kwargs.text)
+    ylab=ax[0].set_ylabel('S/N', **info.kwargs.ax)
+    ax[2].text(26,5,'S/N = 5  ',**info.kwargs.text)
     plt.savefig(os.path.join(info.outdir,'sn_%s%s.png' % (obj_type,addname)), bbox_extra_artists=[xlab,ylab], bbox_inches='tight',dpi=150)
     plt.close()
 
@@ -180,8 +182,8 @@ def confusion_matrix(cm,ticknames, info,addname=''):
     cbar=plt.colorbar()
     plt.xticks(range(len(ticknames)), ticknames)
     plt.yticks(range(len(ticknames)), ticknames)
-    ylab=plt.ylabel('True (%s)' % ds['ref_name'])
-    xlab=plt.xlabel('Predicted (%s)' % ds['test_name'])
+    ylab=plt.ylabel('True (%s)' % info.ref_name)
+    xlab=plt.xlabel('Predicted (%s)' % info.test_name)
     for row in range(len(ticknames)):
         for col in range(len(ticknames)):
             if np.isnan(cm[row,col]):
@@ -245,8 +247,8 @@ def psf_hists(info):
     for cnt,band in zip(range(3),['r','g','z']):
         ax[cnt].scatter(low_vals, med[band],\
                        edgecolor='b',c='none',lw=2.) #,label=m_type.split('_')[-1])
-        xlab=ax[cnt].set_xlabel('bins of %s (%s)' % (band,ds['ref_name']), **kwargs.ax)
-        ylab=ax[cnt].set_ylabel('q50[%s %s - %s]' % (band,ds['test_name'],ds['ref_name']), **kwargs.ax)
+        xlab=ax[cnt].set_xlabel('bins of %s (%s)' % (band,info.ref_name), **info.kwargs.ax)
+        ylab=ax[cnt].set_ylabel('q50[%s %s - %s]' % (band,info.test_name,info.ref_name), **info.kwargs.ax)
         if zoom: ax[cnt].set_ylim(-0.25,0.25)
     # sup=plt.suptitle('decam with matching bokmos',**laba)
     #save
@@ -289,13 +291,13 @@ def plot_dflux_chisq(info,obj_type='PSF', low=-8.,hi=8.,addname=''):
     #    ax[2].text(0.9,yloc,"%s %.2f" % (key,stats['g']['gauss'][key]),transform=ax[2].transAxes,horizontalalignment='right',**text_args)
     #labels
     for cnt,band in zip(range(3),['g','r','z']):
-        if band == 'r': xlab=ax[cnt].set_xlabel(r'%s  $(F_{d}-F_{bm})/\sqrt{\sigma^2_{d}+\sigma^2_{bm}}$' % band, **kwargs.ax)
-        else: xlab=ax[cnt].set_xlabel('%s' % band, **kwargs.ax)
+        if band == 'r': xlab=ax[cnt].set_xlabel(r'%s  $(F_{d}-F_{bm})/\sqrt{\sigma^2_{d}+\sigma^2_{bm}}$' % band, **info.kwargs.ax)
+        else: xlab=ax[cnt].set_xlabel('%s' % band, **info.kwargs.ax)
         #xlab=ax[cnt].set_xlabel('%s' % band, **laba)
         ax[cnt].set_ylim(0,0.6)
         ax[cnt].set_xlim(low,hi)
-    ylab=ax[0].set_ylabel('PDF', **kwargs.ax)
-    ti=ax[1].set_title(type,**kwargs.ax)
+    ylab=ax[0].set_ylabel('PDF', **info.kwargs.ax)
+    ti=ax[1].set_title(type,**info.kwargs.ax)
     #put stats in suptitle
     plt.savefig(os.path.join(info.outdir,'dflux_chisq_%s%s.png' % (type,addname)), \
                 bbox_extra_artists=[ti,xlab,ylab], bbox_inches='tight',dpi=150)
