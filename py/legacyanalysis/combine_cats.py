@@ -153,31 +153,26 @@ class DataSet(object):
             b_index[typ.strip()]= data['TYPE'] == typ 
         return b_index
 
-def DataSets(data, default_keys=['ref_matched','test_matched','ref_missed','test_missed']):
-    '''data -- returned by match_two_cats()
-    returns dictionary of all additional info needed 
-    to validate/compare two Tractor Catalogues'''
+class FillIn(object):
+    def __init__(self):
+        pass
+
+def DataSets(data, \
+            default_keys=['ref_matched','test_matched','ref_missed','test_missed']):
+    '''return dict of DataSet objects, containing all info for validation
+    data -- returned by match_two_cats()
+    ref_name,test_name -- DECaLS, BASS/MzLS if comparing those two'''
     for key in data.keys(): assert(key in default_keys)
     ds={}
     for key in default_keys:
         ds[key]= DataSet(data[key])
-    # Combine masks
-    ds['= np.all((ds['ref_matched'].keep,\
-                        ds['test_matched'].keep), axis=0)
-    mask_missefd= np.all((ds['ref_missed'].keep,\
-                         ds['test_missed'].keep), axis=0)
-    for key in ['ref_matched','test_matched']:
-        ds[key].mask= mask_match
-    for key in ['ref_missed','test_missed']:
-        ds[key].mask= mask_missed
-    # Combine type index
-    ds[key].type={}
+    # Combine matched masks,type indices, etc
+    ds['both']= {}
+    ds['both']['keep']= np.all((ds['ref_matched'].keep,\
+                             ds['test_matched'].keep), axis=0)
     for typ in ['PSF','SIMP','EXP','DEV','COMP']:
-        ds[key].type={}= np.all((data['ref_matched'].type[typ],\
-                            data['test_matched'].type[typ]), axis=0)
-
-    i_type= np.all((self.ds['ref_matched'].type[obj_type],\
-                        self.ds['test_matched'].type[obj_type]), axis=0)
+        ds['both'][typ]= np.all((data['ref_matched'].type[typ],\
+                                 data['test_matched'].type[typ]), axis=0)
     return ds
 
 if __name__ == 'main':
