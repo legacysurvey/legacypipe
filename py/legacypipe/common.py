@@ -596,7 +596,8 @@ def imsave_jpeg(jpegfn, img, **kwargs):
     tmpfn = create_temp(suffix='.png')
     plt.imsave(tmpfn, img, **kwargs)
     cmd = ('pngtopnm %s | pnmtojpeg -quality 90 > %s' % (tmpfn, jpegfn))
-    os.system(cmd)
+    rtn = os.system(cmd)
+    print(cmd, '->', rtn)
     os.unlink(tmpfn)
 
 class LegacySurveyData(object):
