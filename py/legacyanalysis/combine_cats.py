@@ -94,7 +94,7 @@ class DataSet(object):
         if 'wise_flux' in data.keys(): 
             self.bands+= ['w1','w2']
         # Create mask
-        self.keep= self.apply_mask(data)
+        self.keep= self.keep_indices(data)
         # Mags
         self.magAB,self.magAB_ivar={},{}
         for band,iband in zip(['g', 'r', 'z'],[1,2,4]):
@@ -105,7 +105,7 @@ class DataSet(object):
         # index for where type = psf,simp,exp etc
         self.type= self.get_b_types(data)
 
-    def apply_mask(self,data): 
+    def keep_indices(self,data): 
         '''clean set of sources'''
         return  np.all((data['decam_flux'][:,1] > 0,\
                         data['decam_flux'][:,2] > 0,\
@@ -118,9 +118,9 @@ class DataSet(object):
                         data['decam_fracflux'][:,4] <= 0.05,\
                         data['brick_primary'] == True),axis=0)
 
-    def update_mask(self,newmask):
+    def update_keep_indices(self,newkeep):
         assert(self.keep is not None)
-        self.keep= np.any((self.mask,newmask), axis=0)
+        self.keep= np.all((self.keep,newkeep), axis=0)
 
     #def get_TargetSelectin(self, data):
     #    d={}

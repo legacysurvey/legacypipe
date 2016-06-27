@@ -41,16 +41,20 @@ def bin_up(data_bin_by,data_for_percentile, bin_edges=np.arange(20.,26.,0.25)):
     return (bin_edges[1:]+bin_edges[:-1])/2.,count,q25,q50,q75
 
 
-def create_confusion_matrix(obj):
+def create_confusion_matrix(info):
     '''compares MATCHED decam (truth) to bokmos (prediction)
     return 5x5 confusion matrix and colum/row names
     obj[m_decam'] is DECaLS object'''
     cm=np.zeros((5,5))-1
     types=['PSF','SIMP','EXP','DEV','COMP']
     for i_dec,dec_type in enumerate(types):
-        ind= np.where(obj['m_decam'].data['type'] == dec_type)[0]
+        ref_cut= np.all((info.ds['ref_matched'].type[dec_type],\
+                         info.ds['ref_matched'].keep),axis=0)
+        ind= np.where( ref_cut )[0]
         for i_bass,bass_type in enumerate(types):
-            n_bass= np.where(obj['m_bokmos'].data['type'][ind] == bass_type)[0].size
+            test_cut= np.all((info.ds['test_matched'].type[bass_type],\
+                              info.ds['test_matched'].keep),axis=0)
+            n_bass= np.where( test_cut )[0].size
             if ind.size > 0: cm[i_dec,i_bass]= float(n_bass)/ind.size #ind.size is constant for each loop over bass_types
             else: cm[i_dec,i_bass]= np.nan
     return cm,types
@@ -62,12 +66,12 @@ def nobs(info):
     '''make histograms of nobs so can compare depths of g,r,z between the two catalogues'''   
     hi=0 
     for key in ['ref_matched','test_matched']:
-        for band in 'grz':
-            hi= np.max((hi, info.data[key][band+'_nobs'].max()))
+        for band,iband in zip(['g','r','z'],[1,2,4]):
+            hi= np.max((hi, info.data[key]['decam_nobs'][:,iband].max()))
     bins= hi
     for key in ['ref_matched','test_matched']:
-        for band in 'grz':
-            junk=plt.hist(info.data[key][band+'_nobs'],\
+        for band,iband in zip(['g','r','z'],[1,2,4]):
+            junk=plt.hist(info.data[key]['decam_nobs'][:,iband],\
                         bins=bins,normed=True,cumulative=True,align='mid')
             xlab=plt.xlabel('nobs %s' % band, **info.kwargs.ax)
             ylab=plt.ylabel('CDF', **info.kwargs.ax)
@@ -77,6 +81,9 @@ def nobs(info):
 
 def radec(info,addname=''): 
     '''obj[m_types] -- DECaLS() objects with matched OR unmatched indices'''
+    bcut={}
+    for key  in ['ref_matched','ref_missed','test_missed']:
+        bcut[key]= info.ds[key].keep
     #set seaborn panel styles
     #sns.set_style('ticks',{"axes.facecolor": ".97"})
     #sns.set_palette('colorblind')
@@ -85,11 +92,14 @@ def radec(info,addname=''):
     plt.subplots_adjust(wspace=0.25)
     #plt.subplots_adjust(wspace=0.5)
     #plot
-    ax[0].scatter(info.data['ref_matched']['ra'], info.data['ref_matched']['dec'], \
+    ax[0].scatter(info.data['ref_matched']['ra'][ bcut['ref_matched'] ], \
+                  info.data['ref_matched']['dec'][ bcut['ref_matched'] ], \
                 edgecolor='b',c='none',lw=1.)
-    ax[1].scatter(info.data['ref_missed']['ra'], info.data['ref_missed']['dec'], \
+    ax[1].scatter(info.data['ref_missed']['ra'][ bcut['ref_missed'] ], \
+                  info.data['ref_missed']['dec'][ bcut['ref_missed'] ], \
                 edgecolor='b',c='none',lw=1.,label=info.ref_name)
-    ax[1].scatter(info.data['test_missed']['ra'], info.data['test_missed']['dec'], \
+    ax[1].scatter(info.data['test_missed']['ra'][ bcut['test_missed'] ], \
+                  info.data['test_missed']['dec'][ bcut['test_missed'] ], \
                 edgecolor='g',c='none',lw=1.,label=info.test_name)
     for cnt,ti in zip(range(2),['Matched','Unmatched']):
         ti=ax[cnt].set_title(ti,**info.kwargs.ax)
@@ -110,29 +120,31 @@ def HistTypes(info,addname=''):
     c1= 'b' 
     c2= 'r'
     ###
-    types= info.ds.types.keys()
+    types= ['PSF','SIMP','EXP','DEV','COMP']
     ind = np.arange(len(types))  # the x locations for the groups
     width = 0.35       # the width of the bars
     ###
     ht_ref, ht_test= np.zeros(5,dtype=int),np.zeros(5,dtype=int)
     for cnt,typ in enumerate(types):
-        ht_ref[cnt]= len(info.data['ref_matched']['ra'][ info.ds['ref_matched'].types[typ] ])/ \
+        bcut= np.all((info.ds['ref_matched'].type[typ],\
+                      info.ds['ref_matched'].keep),axis=0)
+        ht_ref[cnt]= len(info.data['ref_matched']['ra'][ bcut ])/ \
                         float(info.data['deg2']['ref'])
-        ht_test[cnt]= len(info.data['test_matched']['ra'][ info.ds['test_matched'].types[typ] ])/ \
+        bcut= np.all((info.ds['test_matched'].type[typ],\
+                      info.ds['test_matched'].keep),axis=0)
+        ht_test[cnt]= len(info.data['test_matched']['ra'][ bcut ])/ \
                         float(info.data['deg2']['test'])
     ###
     fig, ax = plt.subplots()
-    rects1 = ax.bar(ind, ht_decam, width, color=c1)
-    rects2 = ax.bar(ind + width, ht_bokmos, width, color=c2)
+    rects1 = ax.bar(ind, ht_ref, width, color=c1)
+    rects2 = ax.bar(ind + width, ht_test, width, color=c2)
     ylab= ax.set_ylabel("counts/deg2")
-    if matched: ti= ax.set_title('Matched')
-    else: ti= ax.set_title('Unmatched')
+    ti= ax.set_title('Matched')
     ax.set_xticks(ind + width)
     ax.set_xticklabels(types)
     ax.legend((rects1[0], rects2[0]), (info.ref_name, info.test_name),**info.kwargs.leg)
     #save
-    if matched: name='hist_types_Matched%s.png' % addname
-    else: name='hist_types_Unmatched%s.png' % addname
+    name='hist_types_Matched%s.png' % addname
     plt.savefig(os.path.join(info.outdir,name), \
                 bbox_extra_artists=[ylab,ti], bbox_inches='tight',dpi=150)
     plt.close()
@@ -144,13 +156,14 @@ def SN_vs_mag(info,obj_type='PSF', addname=''):
     min,max= 18.,25.
     bin_SN=dict(ref_matched={},test_matched={})
     for key in bin_SN.keys():
-        for band in ['g','r','z']:
+        for band,iband in zip(['g','r','z'],[1,2,4]):
             bin_SN[key][band]={}
-            i= info.ds[key].type[obj_type]
+            bcut= np.all((info.ds[key].type[obj_type],\
+                          info.ds[key].keep),axis=0)
             bin_edges= np.linspace(min,max,num=30)
             bin_SN[key][band]['binc'],count,bin_SN[key][band]['q25'],bin_SN[key][band]['q50'],bin_SN[key][band]['q75']=\
-                    bin_up(info.ds[key].magAB[band][i], \
-                           info.data[key][band+'flux'][i]*np.sqrt(info.data[key][band+'flux_ivar'][i]),\
+                    bin_up(info.ds[key].magAB[band][bcut], \
+                           info.data[key]['decam_flux'][:,iband][bcut]*np.sqrt(info.data[key]['decam_flux_ivar'][:,iband][bcut]),\
                                 bin_edges=bin_edges)
     #setup plot
     fig,ax=plt.subplots(1,3,figsize=(9,3),sharey=True)
@@ -259,17 +272,21 @@ def psf_hists(info):
     plt.close()
 
 
-def plot_dflux_chisq(info,obj_type='PSF', low=-8.,hi=8.,addname=''):
+def dflux_chisq(info,obj_type='PSF', low=-8.,hi=8.,addname=''):
     #get flux diff for each band
     hist= dict(g=0,r=0,z=0)
     binc= dict(g=0,r=0,z=0)
-    stats=dict(g=0,r=0,z=0) 
-    i_type= np.all((info.ds['ref_matched'].type[obj_type],\
-                    info.ds['test_matched'].type[obj_type]), axis=0)
-    for band in ['g','r','z']:
-        sample=(info.data['ref_matched'][band+'flux'][i_type]-info.data['test_matched'][band+'flux'][i_type])/\
-                np.sqrt(np.power(info.data['ref_matched'][band+'flux_ivar'][i_type],-1)+\
-                        np.power(info.data['test_matched'][band+'flux_ivar'][i_type],-1))
+    stats=dict(g=0,r=0,z=0)
+    # Cut to objects that are both obj_type and both kept in ref,test 
+    print('dflux_chisq: np.where(info.ds[both][obj_type][0].size= ',np.where(info.ds['both'][obj_type])[0].size, 'same for both keep= ', np.where(info.ds['both']['keep'])[0].size)
+    i= np.all((info.ds['both'][obj_type],\
+               info.ds['both']['keep']),axis=0)
+    print('np.where(i)[0].size=',np.where(i)[0].size)
+    for band,iband in zip(['g','r','z'],[1,2,4]):
+        sample=(info.data['ref_matched']['decam_flux'][:,iband][i]-\
+                    info.data['test_matched']['decam_flux'][:,iband][i])/\
+                np.sqrt(np.power(info.data['ref_matched']['decam_flux_ivar'][:,iband][i],-1)+\
+                        np.power(info.data['test_matched']['decam_flux_ivar'][:,iband][i],-1))
         hist[band],bins,junk= plt.hist(sample,range=(low,hi),bins=50,normed=True)
         db= (bins[1:]-bins[:-1])/2
         binc[band]= bins[:-1]+db
@@ -307,35 +324,37 @@ def plot_dflux_chisq(info,obj_type='PSF', low=-8.,hi=8.,addname=''):
 def N_per_deg2(info,obj_type='PSF',req_mags=[24.,23.4,22.5],addname=''):
     '''image requirements grz<=24,23.4,22.5
     compute number density in each bin for each band mag [18,requirement]'''
-    #indices for type for matched and unmatched samples
-    index={}
-    for inst in ['m_decam','u_decam','m_bokmos','u_bokmos']:
-        index[inst]= indices_for_type(obj, inst=inst,type=type) 
-    bin_nd=dict(decam={},bokmos={})
-    for inst in ['decam','bokmos']:
-        bin_nd[inst]={}
-        for band,req in zip(['g','r','z'],req_mags):
-            bin_nd[inst][band]={}
+    bin_nd=dict(ref={},test={})
+    for key in bin_nd.keys():
+        bin_nd[key]={}
+        for band,iband,req in zip(['g','r','z'],[1,2,4],req_mags):
+            bin_nd[key][band]={}
             bin_edges= np.linspace(18.,req,num=15)
-            i_m,i_u= index['m_'+inst], index['u_'+inst] #need m+u
-            #join m_decam,u_decam OR m_bokmos,u_bokmos and only with correct all,psf,lrg index
-            sample= np.ma.concatenate((obj['m_'+inst].data[band+'mag'][i_m], obj['u_'+inst].data[band+'mag'][i_u]),axis=0)
-            bin_nd[inst][band]['binc'],bin_nd[inst][band]['cnt'],q25,q50,q75=\
+            i_m= np.all((info.ds[key+'_matched'].type[obj_type],\
+                         info.ds[key+'_matched'].keep),axis=0)
+            i_u= np.all((info.ds[key+'_missed'].type[obj_type], \
+                         info.ds[key+'_missed'].keep),axis=0)
+            # Join m_decam,u_decam OR m_bokmos,u_bokmos 
+            sample= np.ma.concatenate((info.ds[key+'_matched'].magAB[band][i_m], \
+                                       info.ds[key+'_missed'].magAB[band][i_u]),\
+                                       axis=0)
+            bin_nd[key][band]['binc'],bin_nd[key][band]['cnt'],q25,q50,q75=\
                     bin_up(sample,sample,bin_edges=bin_edges)
     #plot
     fig,ax=plt.subplots(1,3,figsize=(9,3),sharey=True)
     plt.subplots_adjust(wspace=0.25)
     for cnt,band in zip(range(3),['g','r','z']):
-        for inst,color,lab in zip(['decam','bokmos'],['b','g'],['DECaLS','BASS/MzLS']):
-            ax[cnt].step(bin_nd[inst][band]['binc'],bin_nd[inst][band]['cnt']/obj['deg2_'+inst], where='mid',c=color,lw=2,label=lab)
+        for key,color,lab in zip(bin_nd.keys(),['b','g'],[info.ref_name,info.test_name]):
+            ax[cnt].step(bin_nd[key][band]['binc'],bin_nd[key][band]['cnt']/info.data['deg2'][key], \
+            where='mid',c=color,lw=2,label=lab)
     #labels
     for cnt,band in zip(range(3),['g','r','z']):
         xlab=ax[cnt].set_xlabel('%s' % band) #, **laba)
         #ax[cnt].set_ylim(0,0.6)
         #ax[cnt].set_xlim(maglow,maghi)
-    ax[0].legend(loc='upper left', **leg_args)
+    ax[0].legend(loc='upper left', **info.kwargs.leg)
     ylab=ax[0].set_ylabel('counts/deg2') #, **laba)
-    ti=plt.suptitle("%ss" % type.upper(),**laba)
+    ti=plt.suptitle("%ss" % obj_type,**info.kwargs.ax)
     # Make space for and rotate the x-axis tick labels
     fig.autofmt_xdate()
     #put stats in suptitle
