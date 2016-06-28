@@ -136,7 +136,7 @@ def make_zeropoints():
     C.fwhm = []
     C.propid = []
     C.mjd_obs = []
-    fns = glob(base + 'megacam/???????p.fits')
+    fns = glob(base + 'megacam/*p.fits')
     fns.sort()
 
     for fn in fns:
@@ -380,6 +380,12 @@ def read_acs_catalogs():
         T = fits_table(mfn)
     return T
 
+def get_survey():
+    survey = LegacySurveyData(survey_dir='euclid', output_dir='euclid-out')
+    survey.image_typemap['acs-vis'] = AcsVisImage
+    survey.image_typemap['megacam'] = MegacamImage
+    return survey
+
 if __name__ == '__main__':
 
     import argparse
@@ -387,6 +393,11 @@ if __name__ == '__main__':
 
     parser.add_argument('--zeropoints', action='store_true',
                         help='Read image files to produce CCDs tables.')
+    parser.add_argument('--download', action='store_true',
+                        help='Download images listed in image list files')
+
+    parser.add_argument('--queue-list',
+                        help='List the CCD indices of the images list in the given exposure list filename')
 
     parser.add_argument('--expnum', type=int,
                         help='ACS exposure number to run')
@@ -404,6 +415,59 @@ if __name__ == '__main__':
 
     if opt.zeropoints:
         make_zeropoints()
+        sys.exit(0)
+
+    if opt.download:
+        fns = glob('euclid/images/megacam/lists/*.lst')
+        expnums = set()
+        for fn in fns:
+            for line in open(fn,'r').readlines():
+                words = line.split()
+                e = int(words[0], 10)
+                print('Exposure', e)
+                expnums.add(e)
+        print(len(expnums), 'unique exposure numbers')
+        for expnum in expnums:
+            need = []
+            fn = 'euclid/images/megacam/%ip.fits' % expnum
+            if not os.path.exists(fn):
+                print('Missing:', fn)
+                need.append(fn)
+            psffn = fn.replace('p.fits', 'p_psfex.psf')
+            if not os.path.exists(psffn):
+                print('Missing:', psffn)
+                need.append(psffn)
+            wtfn = fn.replace('p.fits', 'p_weight.fits')
+            if not os.path.exists(wtfn):
+                print('Missing:', wtfn)
+                need.append(wtfn)
+            dqfn = fn.replace('p.fits', 'p_flag.fits')
+            if not os.path.exists(dqfn):
+                print('Missing:', dqfn)
+                need.append(dqfn)
+
+            bands = ['u','g','r','i2','z']
+            for band in bands:
+                for fn in need:
+                    url = 'http://limu.cfht.hawaii.edu/COSMOS-Tractor/FITS/MegaCam/%s/%s' % (band, os.path.basename(fn))
+                    cmd = '(cd euclid/images/megacam && wget -c "%s")' % url
+                    print(cmd)
+                    os.system(cmd)
+                    
+        sys.exit(0)
+
+    if opt.queue_list:
+        survey = get_survey()
+        ccds = survey.get_ccds_readonly()
+        ccds.index = np.arange(len(ccds))
+
+        for line in open(opt.queue_list,'r').readlines():
+            words = line.split()
+            e = int(words[0], 10)
+            #print('Exposure', e)
+            ccds = survey.find_ccds(expnum=e)
+            for i in ccds.index:
+                print(i)
         sys.exit(0)
 
     if opt.expnum is None and opt.forced is None:
@@ -431,7 +495,8 @@ if __name__ == '__main__':
             print('Wrote', outfn)
         sys.exit(0)
             
-    if True:
+    if False:
+        # Analyze forced photometry results
         ps = PlotSequence('euclid')
 
         forcedfn = 'forced-megacam.fits'
@@ -593,12 +658,7 @@ if __name__ == '__main__':
         decsplits = (decs[:-1] + decs[1:])/2.
         print('Dec boundaries:', decsplits)
 
-
-
-
-    survey = LegacySurveyData(survey_dir='euclid', output_dir='euclid-out')
-    survey.image_typemap['acs-vis'] = AcsVisImage
-    survey.image_typemap['megacam'] = MegacamImage
+    survey = get_survey()
 
     if opt.expnum is not None:
         # Run pipeline on a single ACS image.
@@ -628,6 +688,9 @@ if __name__ == '__main__':
 
     else:
         T = read_acs_catalogs()
+        print('Read', len(T), 'ACS catalog entries')
+        T.cut(T.brick_primary)
+        print('Cut to', len(T), 'primary')
 
         # plt.clf()
         # I = T.brick_primary
@@ -637,26 +700,16 @@ if __name__ == '__main__':
         opti = None
         forced_kwargs = {}
         if opt.ceres:
-        #if True:
             from tractor.ceres_optimizer import CeresOptimizer
             B = 8
             opti = CeresOptimizer(BW=B, BH=B)
         
-        #T = fits_table('euclid-out/tractor/cus/tractor-custom-150640p01710.fits')
-        #print(len(T), 'sources in catalog')
-        #declo,dechi = cat.dec.min(), cat.dec.max()
-        #ralo , rahi = cat.ra .min(), cat.ra .max()
         T.shapeexp = np.vstack((T.shapeexp_r, T.shapeexp_e1, T.shapeexp_e2)).T
         T.shapedev = np.vstack((T.shapedev_r, T.shapedev_e1, T.shapedev_e2)).T
 
         ccds = survey.get_ccds_readonly()
         I = np.flatnonzero(ccds.camera == 'megacam')
         print(len(I), 'MegaCam CCDs')
-
-        #bands = np.unique(ccds.filter[I])
-        #print('Unique bands:', bands)
-        #for src in cat:
-        #    src.brightness = NanoMaggies(**dict([(b,1.) for b in bands]))
 
         print('Cut to a single CCD: index', opt.forced)
         I = I[np.array([opt.forced])]
