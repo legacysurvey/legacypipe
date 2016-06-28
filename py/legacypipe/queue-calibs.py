@@ -319,6 +319,13 @@ def main():
         # Dec -5 to +7
         rlo,rhi = 315., 45.
         dlo,dhi = -5., 7.
+
+    elif opt.region == 'eboss-ngc':
+        # NGC ELGs
+        # RA 115 to 175
+        # Dec 15 to  30
+        rlo,rhi = 115., 175.
+        dlo,dhi =  15.,  30.
         
     if opt.mindec is not None:
         dlo = opt.mindec

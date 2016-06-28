@@ -1,4 +1,6 @@
 from __future__ import print_function
+import matplotlib
+matplotlib.use('Agg')
 from astrometry.util.fits import *
 import numpy as np
 import pylab as plt

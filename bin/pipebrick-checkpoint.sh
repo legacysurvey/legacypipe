@@ -51,7 +51,7 @@ python legacypipe/runbrick.py \
      --no-write \
      --pipe \
      --skip \
-     --threads 8 \
+     --threads 6 \
      --skip-calibs \
      --checkpoint checkpoints/checkpoint-${brick}.pickle \
      --fitblobs-prereq pickles/runbrick-${brick}-srcs.pickle \
