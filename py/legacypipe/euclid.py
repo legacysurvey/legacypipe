@@ -138,6 +138,22 @@ def make_zeropoints():
     C.mjd_obs = []
     fns = glob(base + 'megacam/???????p.fits')
     fns.sort()
+
+    for fn in fns:
+        psffn = fn.replace('p.fits', 'p_psfex.psf')
+        if not os.path.exists(psffn):
+            print('Missing:', psffn)
+            sys.exit(-1)
+        wtfn = fn.replace('p.fits', 'p_weight.fits')
+        if not os.path.exists(wtfn):
+            print('Missing:', wtfn)
+            sys.exit(-1)
+        dqfn = fn.replace('p.fits', 'p_flag.fits')
+        if not os.path.exists(dqfn):
+            print('Missing:', dqfn)
+            sys.exit(-1)
+
+
     for fn in fns:
         F = fitsio.FITS(fn)
         print(len(F), 'FITS extensions in', fn)
@@ -148,8 +164,14 @@ def make_zeropoints():
         print('Filter', filt)
         filt = filt[0]
         exptime = phdr['EXPTIME']
+
+        psffn = fn.replace('p.fits', 'p_psfex.psf')
+        PF = fitsio.FITS(psffn)
+
         for hdu in range(1, len(F)):
-            hdr = fitsio.read_header(fn, ext=hdu)
+            print('Reading header', fn, 'hdu', hdu)
+            #hdr = fitsio.read_header(fn, ext=hdu)
+            hdr = F[hdu].read_header()
             C.image_filename.append(fn.replace(base,''))
             C.image_hdu.append(hdu)
             C.camera.append('megacam')
@@ -168,8 +190,9 @@ def make_zeropoints():
             C.ra.append(rc)
             C.dec.append(dc)
 
-            psffn = fn.replace('p.fits', 'p_psfex.psf')
-            psfhdr = fitsio.read_header(psffn, ext=1)
+            print('Reading PSF from', psffn, 'hdu', hdu)
+            #psfhdr = fitsio.read_header(psffn, ext=hdu)
+            psfhdr = PF[hdu].read_header()
             fwhm = psfhdr['PSF_FWHM']
         
             C.ccdname.append(hdr['EXTNAME'])
@@ -358,6 +381,36 @@ def read_acs_catalogs():
     return T
 
 if __name__ == '__main__':
+
+    import argparse
+    parser = argparse.ArgumentParser()
+
+    parser.add_argument('--zeropoints', action='store_true',
+                        help='Read image files to produce CCDs tables.')
+
+    parser.add_argument('--expnum', type=int,
+                        help='ACS exposure number to run')
+    parser.add_argument('--threads', type=int, help='Run multi-threaded')
+
+    parser.add_argument('--forced', type=int, help='Run forced photometry for given MegaCam CCD index')
+
+    parser.add_argument('--ceres', action='store_true', help='Use Ceres?')
+
+    parser.add_argument(
+        '--zoom', type=int, nargs=4,
+        help='Set target image extent (default "0 3600 0 3600")')
+
+    opt = parser.parse_args()
+
+    if opt.zeropoints:
+        make_zeropoints()
+        sys.exit(0)
+
+    if opt.expnum is None and opt.forced is None:
+        print('Need --expnum or --forced')
+        sys.exit(-1)
+
+
     if False:
         # Re-make jpeg images
         fns = glob('euclid-out/coadd/acs/acsvis-1??/*-image-I.fits')
@@ -482,12 +535,6 @@ if __name__ == '__main__':
                 
         sys.exit(0)
 
-
-
-
-    if False:
-        make_zeropoints()
-
     if False:
         # Regular tiling with small overlaps; RA,Dec aligned
         survey = LegacySurveyData(survey_dir='euclid', output_dir='euclid-out')
@@ -548,24 +595,6 @@ if __name__ == '__main__':
 
 
 
-    import argparse
-    parser = argparse.ArgumentParser()
-    parser.add_argument('--expnum', type=int,
-                        help='ACS exposure number to run')
-    parser.add_argument('--threads', type=int, help='Run multi-threaded')
-
-    parser.add_argument('--forced', type=int, help='Run forced photometry for given MegaCam CCD index')
-
-    parser.add_argument('--ceres', action='store_true', help='Use Ceres?')
-
-    parser.add_argument(
-        '--zoom', type=int, nargs=4,
-        help='Set target image extent (default "0 3600 0 3600")')
-
-    opt = parser.parse_args()
-    if opt.expnum is None and opt.forced is None:
-        print('Need --expnum or --forced')
-        sys.exit(-1)
 
     survey = LegacySurveyData(survey_dir='euclid', output_dir='euclid-out')
     survey.image_typemap['acs-vis'] = AcsVisImage
