@@ -635,14 +635,16 @@ def main():
             nsigma = 20
             stages = ['fitblobs']
             #stages = ['writecat']
+            plots = False
             blobxy = zip([1800], [1800])
+            #blobxy = None
             
             survey = LegacySurveyData(version='dr2', output_dir=largedir)
-            run_brick(None, survey, radec=(gal['RA'], gal['DEC']), blobxy=None, 
-                      threads=10, zoom=zoom, wise=False, forceAll=True, writePickles=False,
+            run_brick(None, survey, radec=(gal['RA'], gal['DEC']), blobxy=blobxy, 
+                      threads=1, zoom=zoom, wise=False, forceAll=True, writePickles=False,
                       do_calibs=False, write_metrics=True, pixPsf=True, splinesky=True, 
                       early_coadds=False, stages=stages, ceres=False, nsigma=nsigma,
-                      plots=True)
+                      plots=plots)
 
             #pdb.set_trace()
 
