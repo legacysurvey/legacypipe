@@ -470,11 +470,6 @@ if __name__ == '__main__':
                 print(i)
         sys.exit(0)
 
-    if opt.expnum is None and opt.forced is None:
-        print('Need --expnum or --forced')
-        sys.exit(-1)
-
-
     if False:
         # Re-make jpeg images
         fns = glob('euclid-out/coadd/acs/acsvis-1??/*-image-I.fits')
@@ -602,24 +597,28 @@ if __name__ == '__main__':
 
     if False:
         # Regular tiling with small overlaps; RA,Dec aligned
-        survey = LegacySurveyData(survey_dir='euclid', output_dir='euclid-out')
-        T = fits_table('euclid/survey-ccds-acsvis.fits.gz')
+        
+        # In this dataset, the Megacam images are also very nearly all aligned.
+        
+        survey = get_survey()
+        ccds = survey.get_ccds_readonly()
+        T = ccds[ccds.camera == 'acs-vis']
+        print(len(T), 'ACS CCDs')
         plt.clf()
         for ccd in T:
             wcs = survey.get_approx_wcs(ccd)
             h,w = wcs.shape
             rr,dd = wcs.pixelxy2radec([1,w,w,1,1], [1,1,h,h,1])
             plt.plot(rr, dd, 'b-')
-        #plt.savefig('acs-outlines.png')
 
-        T = fits_table('euclid/survey-ccds-megacam.fits.gz')
-        #plt.clf()
+        T = ccds[ccds.camera == 'megacam']
+        print(len(T), 'Megacam CCDs')
         for ccd in T:
             wcs = survey.get_approx_wcs(ccd)
             h,w = wcs.shape
             rr,dd = wcs.pixelxy2radec([1,w,w,1,1], [1,1,h,h,1])
             plt.plot(rr, dd, 'r-')
-        plt.savefig('acs-outlines.png')
+        plt.savefig('ccd-outlines.png')
 
         TT = []
         fns = glob('euclid-out/tractor/*/tractor-*.fits')
@@ -658,6 +657,12 @@ if __name__ == '__main__':
         decsplits = (decs[:-1] + decs[1:])/2.
         print('Dec boundaries:', decsplits)
 
+        sys.exit(0)
+        
+    if opt.expnum is None and opt.forced is None:
+        print('Need --expnum or --forced')
+        sys.exit(-1)
+
     survey = get_survey()
 
     if opt.expnum is not None:
@@ -685,133 +690,134 @@ if __name__ == '__main__':
                       blob_image=True, allbands=allbands,
                       forceAll=True, writePickles=False)
         #plots=True, plotbase='euclid',
-
-    else:
-        T = read_acs_catalogs()
-        print('Read', len(T), 'ACS catalog entries')
-        T.cut(T.brick_primary)
-        print('Cut to', len(T), 'primary')
-
-        # plt.clf()
-        # I = T.brick_primary
-        # plothist(T.ra[I], T.dec[I], 200)
-        # plt.savefig('acs-sources3.png')
-
-        opti = None
-        forced_kwargs = {}
-        if opt.ceres:
-            from tractor.ceres_optimizer import CeresOptimizer
-            B = 8
-            opti = CeresOptimizer(BW=B, BH=B)
+        sys.exit(0)
         
-        T.shapeexp = np.vstack((T.shapeexp_r, T.shapeexp_e1, T.shapeexp_e2)).T
-        T.shapedev = np.vstack((T.shapedev_r, T.shapedev_e1, T.shapedev_e2)).T
+    # Run forced photometry on a given image or set of images.
+    T = read_acs_catalogs()
+    print('Read', len(T), 'ACS catalog entries')
+    T.cut(T.brick_primary)
+    print('Cut to', len(T), 'primary')
 
-        ccds = survey.get_ccds_readonly()
-        I = np.flatnonzero(ccds.camera == 'megacam')
-        print(len(I), 'MegaCam CCDs')
+    # plt.clf()
+    # I = T.brick_primary
+    # plothist(T.ra[I], T.dec[I], 200)
+    # plt.savefig('acs-sources3.png')
 
-        print('Cut to a single CCD: index', opt.forced)
-        I = I[np.array([opt.forced])]
+    opti = None
+    forced_kwargs = {}
+    if opt.ceres:
+        from tractor.ceres_optimizer import CeresOptimizer
+        B = 8
+        opti = CeresOptimizer(BW=B, BH=B)
+    
+    T.shapeexp = np.vstack((T.shapeexp_r, T.shapeexp_e1, T.shapeexp_e2)).T
+    T.shapedev = np.vstack((T.shapedev_r, T.shapedev_e1, T.shapedev_e2)).T
 
-        slc = None
+    ccds = survey.get_ccds_readonly()
+    I = np.flatnonzero(ccds.camera == 'megacam')
+    print(len(I), 'MegaCam CCDs')
+
+    print('Cut to a single CCD: index', opt.forced)
+    I = I[np.array([opt.forced])]
+
+    slc = None
+    if opt.zoom:
+        x0,x1,y0,y1 = opt.zoom
+        zw = x1-x0
+        zh = y1-y0
+        slc = slice(y0,y1), slice(x0,x1)
+
+    for i in I:
+        ccd = ccds[i]
+        im = survey.get_image_object(ccd)
+        print('CCD', im)
+
+        wcs = im.get_wcs()
         if opt.zoom:
-            x0,x1,y0,y1 = opt.zoom
-            zw = x1-x0
-            zh = y1-y0
-            slc = slice(y0,y1), slice(x0,x1)
+            wcs = wcs.get_subimage(x0, y0, zw, zh)
 
-        for i in I:
-            ccd = ccds[i]
-            im = survey.get_image_object(ccd)
-            print('CCD', im)
+        ok,x,y = wcs.radec2pixelxy(T.ra, T.dec)
+        x = (x-1).astype(np.float32)
+        y = (y-1).astype(np.float32)
+        h,w = wcs.shape
+        J = np.flatnonzero((x >= 0) * (x < w) *
+                           (y >= 0) * (y < h))
+        if len(J) == 0:
+            print('No sources within image.')
+            continue
 
-            wcs = im.get_wcs()
-            if opt.zoom:
-                wcs = wcs.get_subimage(x0, y0, zw, zh)
+        Ti = T[J]
+        print('Cut to', len(Ti), 'sources within image')
 
-            ok,x,y = wcs.radec2pixelxy(T.ra, T.dec)
-            x = (x-1).astype(np.float32)
-            y = (y-1).astype(np.float32)
-            h,w = wcs.shape
-            J = np.flatnonzero((x >= 0) * (x < w) *
-                               (y >= 0) * (y < h))
-            if len(J) == 0:
-                print('No sources within image.')
-                continue
+        cat = read_fits_catalog(Ti, ellipseClass=EllipseE, allbands=allbands,
+                                bands=allbands)
+        for src in cat:
+            src.brightness = NanoMaggies(**{ ccd.filter: 1. })
 
-            Ti = T[J]
-            print('Cut to', len(Ti), 'sources within image')
+        tim = im.get_tractor_image(pixPsf=True, slc=slc)
+        print('Forced photometry for', tim.name)
 
-            cat = read_fits_catalog(Ti, ellipseClass=EllipseE, allbands=allbands,
-                                    bands=allbands)
-            for src in cat:
-                src.brightness = NanoMaggies(**{ ccd.filter: 1. })
+        for src in cat:
+            # Limit sizes of huge models
+            from tractor.galaxy import ProfileGalaxy
+            if isinstance(src, ProfileGalaxy):
+                px,py = tim.wcs.positionToPixel(src.getPosition())
+                h = src._getUnitFluxPatchSize(tim, px, py, tim.modelMinval)
+                MAXHALF = 128
+                if h > MAXHALF:
+                    print('halfsize', h,'for',src,'-> setting to',MAXHALF)
+                    src.halfsize = MAXHALF
+        
+        tr = Tractor([tim], cat, optimizer=opti)
+        tr.freezeParam('images')
+        for src in cat:
+            src.freezeAllBut('brightness')
+            src.getBrightness().freezeAllBut(tim.band)
+        disable_galaxy_cache()
+        # Reset fluxes
+        nparams = tr.numberOfParams()
+        tr.setParams(np.zeros(nparams, np.float32))
+        
+        F = fits_table()
+        F.brickid   = Ti.brickid
+        F.brickname = Ti.brickname
+        F.objid     = Ti.objid
+        
+        F.filter  = np.array([tim.band]               * len(Ti))
+        F.mjd     = np.array([tim.primhdr['MJD-OBS']] * len(Ti))
+        F.exptime = np.array([tim.primhdr['EXPTIME']] * len(Ti)).astype(np.float32)
 
-            tim = im.get_tractor_image(pixPsf=True, slc=slc)
-            print('Forced photometry for', tim.name)
+        ok,x,y = tim.sip_wcs.radec2pixelxy(Ti.ra, Ti.dec)
+        F.x = (x-1).astype(np.float32)
+        F.y = (y-1).astype(np.float32)
+        
+        R = tr.optimize_forced_photometry(variance=True, fitstats=True,
+                                          shared_params=False, priors=False,
+                                          **forced_kwargs)
 
-            for src in cat:
-                # Limit sizes of huge models
-                from tractor.galaxy import ProfileGalaxy
-                if isinstance(src, ProfileGalaxy):
-                    px,py = tim.wcs.positionToPixel(src.getPosition())
-                    h = src._getUnitFluxPatchSize(tim, px, py, tim.modelMinval)
-                    MAXHALF = 128
-                    if h > MAXHALF:
-                        print('halfsize', h,'for',src,'-> setting to',MAXHALF)
-                        src.halfsize = MAXHALF
-            
-            tr = Tractor([tim], cat, optimizer=opti)
-            tr.freezeParam('images')
-            for src in cat:
-                src.freezeAllBut('brightness')
-                src.getBrightness().freezeAllBut(tim.band)
-            disable_galaxy_cache()
-            # Reset fluxes
-            nparams = tr.numberOfParams()
-            tr.setParams(np.zeros(nparams, np.float32))
-            
-            F = fits_table()
-            F.brickid   = Ti.brickid
-            F.brickname = Ti.brickname
-            F.objid     = Ti.objid
-            
-            F.filter  = np.array([tim.band]               * len(Ti))
-            F.mjd     = np.array([tim.primhdr['MJD-OBS']] * len(Ti))
-            F.exptime = np.array([tim.primhdr['EXPTIME']] * len(Ti)).astype(np.float32)
+        F.flux = np.array([src.getBrightness().getFlux(tim.band)
+                           for src in cat]).astype(np.float32)
+        F.flux_ivar = R.IV.astype(np.float32)
+        #F.fracflux = R.fitstats.profracflux.astype(np.float32)
+        #F.rchi2    = R.fitstats.prochi2    .astype(np.float32)
 
-            ok,x,y = tim.sip_wcs.radec2pixelxy(Ti.ra, Ti.dec)
-            F.x = (x-1).astype(np.float32)
-            F.y = (y-1).astype(np.float32)
-            
-            R = tr.optimize_forced_photometry(variance=True, fitstats=True,
-                                              shared_params=False, priors=False,
-                                              **forced_kwargs)
+        hdr = fitsio.FITSHDR()
+        units = {'exptime':'sec', 'flux':'nanomaggy', 'flux_ivar':'1/nanomaggy^2'}
+        columns = F.get_columns()
+        for i,col in enumerate(columns):
+            if col in units:
+                hdr.add_record(dict(name='TUNIT%i' % (i+1), value=units[col]))
 
-            F.flux = np.array([src.getBrightness().getFlux(tim.band)
-                               for src in cat]).astype(np.float32)
-            F.flux_ivar = R.IV.astype(np.float32)
-            #F.fracflux = R.fitstats.profracflux.astype(np.float32)
-            #F.rchi2    = R.fitstats.prochi2    .astype(np.float32)
+        primhdr = fitsio.FITSHDR()
+        primhdr.add_record(dict(name='EXPNUM', value=im.expnum,
+                                comment='Exposure number'))
+        primhdr.add_record(dict(name='CCDNAME', value=im.ccdname,
+                                comment='CCD name'))
+        primhdr.add_record(dict(name='CAMERA', value=im.camera,
+                                comment='Camera'))
 
-            hdr = fitsio.FITSHDR()
-            units = {'exptime':'sec', 'flux':'nanomaggy', 'flux_ivar':'1/nanomaggy^2'}
-            columns = F.get_columns()
-            for i,col in enumerate(columns):
-                if col in units:
-                    hdr.add_record(dict(name='TUNIT%i' % (i+1), value=units[col]))
-
-            primhdr = fitsio.FITSHDR()
-            primhdr.add_record(dict(name='EXPNUM', value=im.expnum,
-                                    comment='Exposure number'))
-            primhdr.add_record(dict(name='CCDNAME', value=im.ccdname,
-                                    comment='CCD name'))
-            primhdr.add_record(dict(name='CAMERA', value=im.camera,
-                                    comment='Camera'))
-
-            outfn = 'euclid-out/forced/megacam-%i-%s.fits' % (im.expnum, im.ccdname)
-            fitsio.write(outfn, None, header=primhdr, clobber=True)
-            F.writeto(outfn, header=hdr, append=True)
-            #F.writeto(outfn, header=hdr)
+        outfn = 'euclid-out/forced/megacam-%i-%s.fits' % (im.expnum, im.ccdname)
+        fitsio.write(outfn, None, header=primhdr, clobber=True)
+        F.writeto(outfn, header=hdr, append=True)
+        #F.writeto(outfn, header=hdr)
             
