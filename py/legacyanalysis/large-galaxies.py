@@ -29,12 +29,13 @@ from scipy.ndimage.morphology import binary_dilation
 from astropy.convolution import Gaussian2DKernel, convolve
 
 from astropy.io import fits
-from astropy.table import Table, vstack
+from astropy.table import Table, vstack, hstack
 from astropy.visualization import scale_image
 from astropy.modeling import models, fitting
 
 from PIL import Image, ImageDraw, ImageFont
-
+from photutils import CircularAperture, CircularAnnulus, aperture_photometry
+                
 import seaborn as sns
 
 from astrometry.util.util import Tan
@@ -197,7 +198,11 @@ def main():
         #pdb.set_trace()
 
     survey = LegacySurveyData(version='dr2') # update to DR3!
-      
+
+    sns.set(style='white', font_scale=1.2, palette='Set2')
+    #sns.set(style='white', font_scale=1.3, palette='Set2')
+    setcolors = sns.color_palette()
+    
     # --------------------------------------------------
     # Build the sample of large galaxies based on the available imaging.
     if args.build_sample:
@@ -395,7 +400,7 @@ def main():
             #sys.exit(1)
 
             #tims = []
-            for ii, ccd in enumerate(ccds):
+            for iccd, ccd in enumerate(ccds):
                 im = survey.get_image_object(ccd)
                 print(im, im.band, 'exptime', im.exptime, 'propid', ccd.propid,
                       'seeing {:.2f}'.format(ccd.fwhm*im.pixscale), 
@@ -407,6 +412,7 @@ def main():
                 # Get the (pixel) coordinates of the galaxy on this CCD
                 W, H, wcs = _ccdwcs(ccd)
                 ok, x0, y0 = wcs.radec2pixelxy(gal['RA'], gal['DEC'])
+                xcen, ycen = x0-1.0, y0-1.0
                 pxscale = wcs.pixel_scale()
                 radius = DIAMFACTOR*gal['RADIUS']/pxscale/2.0
 
@@ -426,6 +432,7 @@ def main():
                 mask = ((image - med - skymod) > (5.0*sig1))*1.0
                 mask = binary_dilation(mask, iterations=3)
                 mask[weight == 0] = 1 # 0=good, 1=bad
+                pipeskypix = np.flatnonzero((mask == 0)*1)
 
                 # Make a more aggressive object mask but reset the badpix and
                 # edge bits.
@@ -441,50 +448,127 @@ def main():
                     gauss = Gaussian2DKernel(stddev=1)
                     newmask = convolve(newmask, gauss)
                     newmask[newmask > 0] = 1 # 0=good, 1=bad
+
+                #http://stackoverflow.com/questions/8647024/how-to-apply-a-disc-shaped-mask-to-a-numpy-array
+                #ymask, xmask = np.ogrid[-a:n-a, -b:n-b]
+                #mask = x*x + y*y <= r*r
                 
                 newmask += mask
                 newmask[newmask > 0] = 1
 
                 # Build a new sky model.
-                these = np.flatnonzero((newmask == 0)*1)
-                newmed = np.median(image.flat[these])
+                newskypix = np.flatnonzero((newmask == 0)*1)
+                newmed = np.median(image.flat[newskypix])
                 newsky = np.zeros_like(image) + newmed
                 #newsky = skymodel.copy()
                 
+                # Now do a lower-order polynomial sky subtraction.
+                xall, yall = np.mgrid[:H, :W]
+                xx = xall.flat[newskypix]
+                yy = yall.flat[newskypix]
+                sky = image.flat[newskypix]
                 if False:
-                    # Now do a lower-order polynomial sky subtraction.
-                    xall, yall = np.mgrid[:H, :W]
-                    these = np.flatnonzero((newmask == 0)*1)
-                    xx = xall.flat[these]
-                    yy = yall.flat[these]
-                    sky = image.flat[these]
                     plt.clf() ; plt.scatter(xx[:5000], sky[:5000]) ; plt.show()
                     pdb.set_trace()
-
                     pinit = models.Polynomial2D(degree=1)
                     pfit = fitting.LevMarLSQFitter()
                     coeff = pfit(pinit, xx, yy, sky)
                     # evaluate the model back on xall, yall
 
-                #make some histograms with the sky-subtracted image --
-                these = np.flatnonzero((newmask == 0)*1)
-                sbins = 40
+                # Perform aperture photometry on the sky-subtracted images.
+                image_nopipesky = image - skymodel
+                image_nonewsky = image - newsky
+
+                #import fitsio
+                #fitsio.write('junk.fits', image_nopipesky)
+                #x0 = 1000 # Hack!!!
+                
+                #with np.errstate(divide = 'ignore'):
+                #    imsigma = 1.0/np.sqrt(weight)
+                #    imsigma[weight == 0] = 0
+
+                deltar = 5.0
+                rin = np.arange(0.0, np.floor(5*gal['RADIUS']/pxscale), 5.0)
+                nap = len(rin)
+
+                apphot = Table(np.zeros(nap, dtype=[('RCEN', 'f4'), ('RIN', 'f4'),
+                                                    ('ROUT', 'f4'), ('PIPEFLUX', 'f4'),
+                                                    ('NEWFLUX', 'f4'), ('PIPESKYFLUX', 'f4'), 
+                                                    ('NEWSKYFLUX', 'f4'), ('AREA', 'f4'),
+                                                    ('SKYAREA', 'f4')]))
+                apphot['RIN'] = rin
+                apphot['ROUT'] = rin + deltar
+                apphot['RCEN'] = rin + deltar/2.0
+                for ii in range(nap):
+                    ap = CircularAperture((xcen, ycen), apphot['RCEN'][ii])
+                    skyap = CircularAnnulus((xcen, ycen), r_in=apphot['RIN'][ii],
+                                            r_out=apphot['ROUT'][ii])
+
+                    #pdb.set_trace()
+                    apphot['PIPEFLUX'][ii] = aperture_photometry(image_nopipesky, ap)['aperture_sum'].data
+                    apphot['NEWFLUX'][ii] = aperture_photometry(image_nonewsky, ap)['aperture_sum'].data
+                    apphot['PIPESKYFLUX'][ii] = aperture_photometry(image_nopipesky, skyap)['aperture_sum'].data
+                    apphot['NEWSKYFLUX'][ii] = aperture_photometry(image_nonewsky, skyap)['aperture_sum'].data
+                    
+                    apphot['AREA'][ii] = ap.area()
+                    apphot['SKYAREA'][ii] = skyap.area()
+
+                # Convert to arcseconds
+                apphot['RIN'] *= pxscale
+                apphot['ROUT'] *= pxscale
+                apphot['RCEN'] *= pxscale
+                apphot['AREA'] *= pxscale**2
+                apphot['SKYAREA'] *= pxscale**2
+                print(apphot)
+                #pdb.set_trace()
+
+                # Now generate some QAplots related to the sky.
+                sbinsz = 0.001
                 srange = (-5*sig1, +5*sig1)
-                data = ((image - skymodel).flat[these], (image - newsky).flat[these])
-                qaccd = os.path.join(qadir, 'qa-{}-ccd{:02d}-sky.png'.format(galaxy, ii))
-                fig, ax = plt.subplots(1, 2, figsize=(8, 4), sharey=True)
-                fig.suptitle('{} (ccd{:02d})'.format(tim.name, ii), y=0.97)
-                for data1, thisax, title in zip(data, ax.flat, ('Pipeline Sky', 'New Sky')):
-                    (nn, bins, _) = thisax.hist(data1, range=srange, bins=sbins,
-                                                label='Pipeline Sky', normed=True,
-                                                histtype='stepfilled')
-                    ylim = thisax.get_ylim()
-                    thisax.vlines(0.0, ylim[0], ylim[1]*0.99999, colors='k', linestyles='solid')
-                    thisax.set_xlabel('Residuals')
-                    thisax.set_title(title)
-                ax[0].set_ylabel('Relative number of Pixels')
+                #sbins = 50
+                sbins = long((srange[1]-srange[0])/sbinsz)
+
+                qaccd = os.path.join(qadir, 'qa-{}-ccd{:02d}-sky.png'.format(galaxy, iccd))
+                fig, ax = plt.subplots(1, 2, figsize=(8, 4))
+                fig.suptitle('{} (ccd{:02d})'.format(tim.name, iccd), y=0.97)
+                for data1, label, color in zip((image_nopipesky.flat[pipeskypix],
+                                                image_nonewsky.flat[newskypix]),
+                                               ('Pipeline Sky', 'New Sky'), setcolors):
+                    nn, bins = np.histogram(data1, bins=sbins, range=srange)
+                    nn = nn/float(np.max(nn))
+                    cbins = (bins[:-1] + bins[1:]) / 2.0
+                    #pdb.set_trace()
+                    ax[0].step(cbins, nn, color=color, lw=2, label=label)
+                    ax[0].set_ylim(0, 1.2)
+                    #(nn, bins, _) = ax[0].hist(data1, range=srange, bins=sbins,
+                    #                           label=label, normed=True, lw=2, 
+                    #                           histtype='step', color=color)
+                ylim = ax[0].get_ylim()
+                ax[0].vlines(0.0, ylim[0], 1.05, colors='k', linestyles='dashed')
+                ax[0].set_xlabel('Residuals (nmaggie)')
+                ax[0].set_ylabel('Relative Fraction of Pixels')
+                ax[0].legend(frameon=False, loc='upper left')
+
+                ax[1].plot(apphot['RCEN'], apphot['PIPESKYFLUX']/apphot['SKYAREA'], 
+                              label='DR2 Pipeline', color=setcolors[0])
+                ax[1].plot(apphot['RCEN'], apphot['NEWSKYFLUX']/apphot['SKYAREA'], 
+                              label='Large Galaxy Pipeline', color=setcolors[1])
+                #ax[1].scatter(apphot['RCEN'], apphot['PIPESKYFLUX']/apphot['SKYAREA'], 
+                #              label='DR2 Pipeline', marker='o', color=setcolors[0])
+                #ax[1].scatter(apphot['RCEN']+1.0, apphot['NEWSKYFLUX']/apphot['SKYAREA'], 
+                #              label='Large Galaxy Pipeline', marker='s', color=setcolors[1])
+                ax[1].set_xlabel('Galactocentric Radius (arcsec)')
+                ax[1].set_ylabel('Flux in {:g}" Annulus (nmaggie/arcsec$^2$)'.format(deltar))
+                ax[1].set_xlim(-2.0, apphot['ROUT'][-1])
+                ax[1].legend(frameon=False, loc='upper right')
+
+                xlim = ax[1].get_xlim()
+                ylim = ax[1].get_ylim()
+                ax[1].hlines(0.0, xlim[0], xlim[1]*0.99999, colors='k', linestyles='dashed')
+                ax[1].vlines(gal['RADIUS'], ylim[0], ylim[1]*0.5, colors='k', linestyles='dashed')
+
                 plt.tight_layout(w_pad=0.25)
-                plt.subplots_adjust(bottom=0.15, top=0.9)
+                plt.subplots_adjust(bottom=0.15, top=0.88)
                 print('Writing {}'.format(qaccd))
                 plt.savefig(qaccd)
                 
@@ -492,10 +576,10 @@ def main():
                 #sys.exit(1)
 
                 # Visualize the data, the mask, and the sky.
-                qaccd = os.path.join(qadir, 'qa-{}-ccd{:02d}-2d.png'.format(galaxy, ii))
+                qaccd = os.path.join(qadir, 'qa-{}-ccd{:02d}-2d.png'.format(galaxy, iccd))
                 fig, ax = plt.subplots(1, 5, sharey=True, figsize=(14, 4.5))
                 #fig, ax = plt.subplots(3, 2, sharey=True, figsize=(14, 6))
-                fig.suptitle('{} (ccd{:02d})'.format(tim.name, ii), y=0.97)
+                fig.suptitle('{} (ccd{:02d})'.format(tim.name, iccd), y=0.97)
 
                 vmin_image, vmax_image = np.percentile(image, (1, 99))
                 vmin_weight, vmax_weight = np.percentile(weight, (1, 99))
@@ -505,9 +589,6 @@ def main():
                 for thisax, data, title in zip(ax.flat, (image, mask, newmask, skymodel, newsky), 
                                                ('Image', 'Pipeline Mask', 'New Mask',
                                                 'Pipeline Sky', 'New Sky')):
-                #for thisax, data, title in zip(ax.flat, (image, weight, mask, newmask, skymodel, newsky), 
-                #                               ('Image', 'Weight Map', 'Pipeline Mask', 'New Mask',
-                #                                'Pipeline Sky', 'New Sky')):
                     if 'Mask' in title:
                         vmin, vmax = vmin_mask, vmax_mask
                     elif 'Sky' in title:
@@ -519,7 +600,7 @@ def main():
                         
                     thisim = thisax.imshow(data, cmap='inferno', interpolation='nearest', origin='lower',
                                            vmin=vmin, vmax=vmax)
-                    thisax.add_patch(patches.Circle((x0, y0), radius, fill=False, edgecolor='white', lw=2))
+                    thisax.add_patch(patches.Circle((xcen, ycen), radius, fill=False, edgecolor='white', lw=2))
                     div = make_axes_locatable(thisax)
                     cax = div.append_axes('right', size='15%', pad=0.1)
                     cbar = fig.colorbar(thisim, cax=cax, format='%.4g')
@@ -552,12 +633,15 @@ def main():
             zoom = (1800-diam/2, 1800+diam/2, 1800-diam/2, 1800+diam/2)
 
             nsigma = 20
-            #blobxy = zip([1800], [1800])
+            stages = ['fitblobs']
+            #stages = ['writecat']
+            blobxy = zip([1800], [1800])
+            
             survey = LegacySurveyData(version='dr2', output_dir=largedir)
             run_brick(None, survey, radec=(gal['RA'], gal['DEC']), blobxy=None, 
                       threads=10, zoom=zoom, wise=False, forceAll=True, writePickles=False,
                       do_calibs=False, write_metrics=True, pixPsf=True, splinesky=True, 
-                      early_coadds=False, stages=['writecat'], ceres=False, nsigma=nsigma,
+                      early_coadds=False, stages=stages, ceres=False, nsigma=nsigma,
                       plots=True)
 
             #pdb.set_trace()
