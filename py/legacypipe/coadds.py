@@ -476,7 +476,7 @@ def write_coadd_images(band,
 # Pretty much only used for plots; the real deal is make_coadds()
 def quick_coadds(tims, bands, targetwcs, images=None,
                  get_cow=False, get_n2=False, fill_holes=True):
-
+    
     W = targetwcs.get_width()
     H = targetwcs.get_height()
 

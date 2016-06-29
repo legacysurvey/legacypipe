@@ -1,4 +1,6 @@
 from __future__ import print_function
+import matplotlib
+matplotlib.use('Agg')
 from astrometry.util.fits import *
 import numpy as np
 import pylab as plt
@@ -122,7 +124,8 @@ exposures = [397525, 397526, 511250, # g,p1
              397523, 405262, 405292, # r,p3
              180583, 405257, 180582, # z,p1
              180585, 395347, 405254, # z,p2
-             179975, 179971, 179972, # z,p3
+             #179975, 179971, 179972, # z,p3 -- THESE ONES HAVE NASTY SKY GRADIENTS
+             193204, 193180, 192768,
              ]
 # reorder to get one of p1,p2,p3 in each set
 exposures = exposures[::3] + exposures[1::3] + exposures[2::3]
@@ -207,6 +210,13 @@ for i,C in enumerate(sets):
     
 C = merge_tables(sets)
 C.writeto('cosmos-ccds.fits')
+
+# Add a copy of this subset without adding noise
+C2 = C.copy()
+C2.subset += 10
+C2.addnoise[:] = 0.
+C = merge_tables([C, C2])
+C.writeto('cosmos-ccds-2.fits')
 
 #for i,E in enumerate(sets):
 #    E.writeto('cosmos-subset-%i.fits' % i)
