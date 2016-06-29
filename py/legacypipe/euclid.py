@@ -9,14 +9,17 @@ if __name__ == '__main__':
     import matplotlib
     matplotlib.use('Agg')
 
+import numpy as np
+import pylab as plt
+from glob import glob
+
+import fitsio
 import astropy
 
-from glob import glob
-from astrometry.util.fits import *
-from astrometry.util.util import *
+from astrometry.util.fits import fits_table, merge_tables
+#from astrometry.util.util import *
 from astrometry.util.plotutils import PlotSequence, plothist
-import fitsio
-import pylab as plt
+from astrometry.util.ttime import Time, MemMeas
 
 from legacypipe.runbrick import run_brick, rgbkwargs, rgbkwargs_resid
 from legacypipe.common import LegacySurveyData, imsave_jpeg, get_rgb
@@ -398,6 +401,8 @@ if __name__ == '__main__':
 
     parser.add_argument('--queue-list',
                         help='List the CCD indices of the images list in the given exposure list filename')
+    parser.add_argument('--name',
+                        help='Name for forced-phot output products, with --queue-list')
 
     parser.add_argument('--expnum', type=int,
                         help='ACS exposure number to run')
@@ -412,6 +417,8 @@ if __name__ == '__main__':
         help='Set target image extent (default "0 3600 0 3600")')
 
     opt = parser.parse_args()
+
+    Time.add_measurement(MemMeas)
 
     if opt.zeropoints:
         make_zeropoints()
@@ -461,21 +468,24 @@ if __name__ == '__main__':
         ccds = survey.get_ccds_readonly()
         ccds.index = np.arange(len(ccds))
 
+        if opt.name is None:
+            opt.name = os.path.basename(opt.queue_list).replace('.lst','')
+
         allccds = []
         for line in open(opt.queue_list,'r').readlines():
             words = line.split()
             e = int(words[0], 10)
-            #print('Exposure', e)
             ccds = survey.find_ccds(expnum=e)
             allccds.append(ccds)
-            for i in ccds.index:
-                print(i)
+            for ccd in ccds:
+                print(ccd.index, '%i-%s' % (ccd.expnum, ccd.ccdname))
 
         allccds = merge_tables(allccds)
         # Now group by CCDname and print out sets of indices to run at once
         for name in np.unique(allccds.ccdname):
             I = np.flatnonzero(allccds.ccdname == name)
-            print(','.join(['%i'%i for i in allccds.index[I]]))
+            print(','.join(['%i'%i for i in allccds.index[I]]),
+                  '%s-%s' % (opt.name, name))
 
         sys.exit(0)
 
@@ -703,6 +713,9 @@ if __name__ == '__main__':
         
     # Run forced photometry on a given image or set of Megacam images,
     # using the ACS catalog as the source.
+
+    t0 = Time()
+
     T = read_acs_catalogs()
     print('Read', len(T), 'ACS catalog entries')
     T.cut(T.brick_primary)
@@ -724,11 +737,13 @@ if __name__ == '__main__':
     T.shapedev = np.vstack((T.shapedev_r, T.shapedev_e1, T.shapedev_e2)).T
 
     ccds = survey.get_ccds_readonly()
-    I = np.flatnonzero(ccds.camera == 'megacam')
-    print(len(I), 'MegaCam CCDs')
+    #I = np.flatnonzero(ccds.camera == 'megacam')
+    #print(len(I), 'MegaCam CCDs')
 
     I = np.array([int(x,10) for x in opt.forced.split(',')])
-    print('Cut to', len(I), 'CCDs: indices', I)
+    print(len(I), 'CCDs: indices', I)
+    print('Exposure numbers:', ccds.expnum[I])
+    print('CCD names:', ccds.ccdname[I])
 
     slc = None
     if opt.zoom:
@@ -770,6 +785,8 @@ if __name__ == '__main__':
 
     bands = np.unique([tim.band for tim in tims])
     print('Bands:', bands)
+    # convert to string
+    bands = ''.join(bands)
     
     cat = read_fits_catalog(T, ellipseClass=EllipseE, allbands=bands,
                             bands=bands)
@@ -813,11 +830,18 @@ if __name__ == '__main__':
         F.x = (x-1).astype(np.float32)
         F.y = (y-1).astype(np.float32)
 
+
+    t1 = Time()
+    print('Prior to forced photometry:', t1-t0)
+
     # FIXME -- should we run one band at a time?
 
     R = tr.optimize_forced_photometry(variance=True, fitstats=True,
                                       shared_params=False, priors=False,
                                       **forced_kwargs)
+
+    t2 = Time()
+    print('Forced photometry:', t2-t1)
 
     units = {'exptime':'sec' }# 'flux':'nanomaggy', 'flux_ivar':'1/nanomaggy^2'}
     for band in bands:
@@ -843,16 +867,22 @@ if __name__ == '__main__':
         if col in units:
             hdr.add_record(dict(name='TUNIT%i' % (i+1), value=units[col]))
 
-        primhdr = fitsio.FITSHDR()
-        primhdr.add_record(dict(name='EXPNUM', value=im.expnum,
-                                comment='Exposure number'))
-        primhdr.add_record(dict(name='CCDNAME', value=im.ccdname,
-                                comment='CCD name'))
-        primhdr.add_record(dict(name='CAMERA', value=im.camera,
-                                comment='Camera'))
+    primhdr = fitsio.FITSHDR()
+    primhdr.add_record(dict(name='EXPNUM', value=im.expnum,
+                            comment='Exposure number'))
+    primhdr.add_record(dict(name='CCDNAME', value=im.ccdname,
+                            comment='CCD name'))
+    primhdr.add_record(dict(name='CAMERA', value=im.camera,
+                            comment='Camera'))
 
-        outfn = 'euclid-out/forced/megacam-%i-%s.fits' % (im.expnum, im.ccdname)
-        fitsio.write(outfn, None, header=primhdr, clobber=True)
-        F.writeto(outfn, header=hdr, append=True)
-
+    if opt.name is None:
+        opt.name = '%i-%s' % (im.expnum, im.ccdname)
+    outfn = 'euclid-out/forced/megacam-%s.fits' % opt.name
+    fitsio.write(outfn, None, header=primhdr, clobber=True)
+    F.writeto(outfn, header=hdr, append=True)
+    print('Wrote', outfn)
             
+    t3 = Time()
+    print('Wrap-up:', t3-t2)
+    print('Total:', t3-t0)
+

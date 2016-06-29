@@ -975,6 +975,7 @@ Now using the current directory as LEGACY_SURVEY_DIR, but this is likely to fail
         from glob import glob
 
         fns = self.find_file('ccds')
+        fns.sort()
         TT = []
         for fn in fns:
             print('Reading CCDs from', fn)
