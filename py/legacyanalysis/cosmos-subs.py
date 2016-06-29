@@ -118,17 +118,22 @@ for band in bands:
 
 ###
 #
-#    A second set of 3 specially tailored sets of exposures --
-#    with a mix of approximately one image from passes 1,2,3
-#    And no overlap in exposures from the first set of 0-4.
+#  A second set of 3 specially tailored sets of exposures --
+#  with a mix of approximately one image from passes 1,2,3
+#  And no overlap in exposures from the first set of 0-4.
 #
-#    These are called subsets 10, 11, 12.
+#  These are called subsets 30, 31, 32.
 #
+#  We also create no-added-noise ones with the same exposures,
+#  called subsets 40, 41, 42.
+#
+#  The 30/31/32 subset differs very slightly (substituted two
+#  exposures) compared to 10/11/12.
 ###
 subset_offset = 30
 
 exposures = [397525, 397526, 511250, # g,p1
-             283978, 431103, 283982, # g,p2   -- 
+             283978, 283979, 283982, # g,p2   -- 283979 was 431103
              289050, 289196, 289155, # g,p3
              405290, 397524, 405291, # r,p1
              397551, 397522, 397552, # r,p2
@@ -136,7 +141,7 @@ exposures = [397525, 397526, 511250, # g,p1
              180583, 405257, 180582, # z,p1
              180585, 395347, 405254, # z,p2
              #179975, 179971, 179972, # z,p3 -- THESE ONES HAVE NASTY SKY GRADIENTS
-             193204, 193180, 192768,
+             193204, 193205, 192768, # z, p3 -- 193205 was 193180
              ]
 # reorder to get one of p1,p2,p3 in each set.  (In the code below we
 # keep adding the next exposure until we reach the desired depth --
