@@ -1,4 +1,6 @@
 from __future__ import print_function
+import matplotlib
+matplotlib.use('Agg')
 from astrometry.util.fits import *
 import numpy as np
 import pylab as plt
@@ -8,7 +10,7 @@ from legacypipe.decam import DecamImage
 
 bands = 'grz'
 
-cfn = 'cosmos-ccds.fits'
+cfn = 'cosmos-all-ccds.fits'
 if not os.path.exists(cfn):
     #survey = LegacySurveyData(version='dr2')
     survey = LegacySurveyData()
@@ -103,6 +105,38 @@ for band in bands:
               'f.depth: %.2f' % exp.depthfraction, #'sig1 %.4f' % exp.sig1,
               'pass', exp.passnum, ('X' if exp.depthfraction < 0.34 else ''))
 
+
+
+###
+#
+#    A second set of 3 specially tailored sets of exposures --
+#    with a mix of approximately one image from passes 1,2,3
+#    And no overlap in exposures from the first set of 0-4.
+#
+###
+subset_offset = 10
+
+exposures = [397525, 397526, 511250, # g,p1
+             283978, 431103, 283982, # g,p2
+             289050, 289196, 289155, # g,p3
+             405290, 397524, 405291, # r,p1
+             397551, 397522, 397552, # r,p2
+             397523, 405262, 405292, # r,p3
+             180583, 405257, 180582, # z,p1
+             180585, 395347, 405254, # z,p2
+             #179975, 179971, 179972, # z,p3 -- THESE ONES HAVE NASTY SKY GRADIENTS
+             193204, 193180, 192768,
+             ]
+# reorder to get one of p1,p2,p3 in each set
+exposures = exposures[::3] + exposures[1::3] + exposures[2::3]
+
+I = []
+for e in exposures:
+    print('expnum', e)
+    I.append(np.flatnonzero(E.expnum == e)[0])
+I = np.array(I)
+E = E[I]
+print('Cut to', len(E), 'exposures')
         
 sets = []
 for iset in xrange(100):
@@ -172,10 +206,17 @@ print('Got', len(sets), 'sets of exposures')
 
 for i,C in enumerate(sets):
     C.writeto('cosmos-ccds-sub%i.fits' % i)
-    C.subset = np.array([i] * len(C)).astype(np.uint8)
+    C.subset = np.array([subset_offset + i] * len(C)).astype(np.uint8)
     
 C = merge_tables(sets)
 C.writeto('cosmos-ccds.fits')
+
+# Add a copy of this subset without adding noise
+C2 = C.copy()
+C2.subset += 10
+C2.addnoise[:] = 0.
+C = merge_tables([C, C2])
+C.writeto('cosmos-ccds-2.fits')
 
 #for i,E in enumerate(sets):
 #    E.writeto('cosmos-subset-%i.fits' % i)

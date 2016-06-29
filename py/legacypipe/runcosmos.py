@@ -31,8 +31,8 @@ class DecamImagePlusNoise(DecamImage):
         sig1 = 1. / np.median(ie[ie > 0])
         print('New sig1 is', sig1)
         tim.sig1 = sig1
-        tim.zr = [-3. * sig1, 10. * sig1]
-        tim.ima.update(vmin=tim.zr[0], vmax=tim.zr[1])
+        #tim.zr = [-3. * sig1, 10. * sig1]
+        #tim.ima.update(vmin=tim.zr[0], vmax=tim.zr[1])
         return tim
 
 class CosmosSurvey(LegacySurveyData):
@@ -51,7 +51,7 @@ def main():
     
     parser = get_parser()
     # subset number
-    parser.add_argument('--subset', type=int, help='COSMOS subset number [0 to 4]', default=0)
+    parser.add_argument('--subset', type=int, help='COSMOS subset number [0 to 4, 10 to 12]', default=0)
     opt = parser.parse_args()
     if opt.brick is None and opt.radec is None:
         parser.print_help()
@@ -64,7 +64,8 @@ def main():
     if kwargs in [-1,0]:
         return kwargs
 
-    survey = CosmosSurvey(survey_dir=opt.survey_dir, subset=opt.subset)
+    survey = CosmosSurvey(survey_dir=opt.survey_dir, subset=opt.subset,
+                          output_dir=opt.outdir)
 
     run_brick(opt.brick, survey, **kwargs)
     return 0

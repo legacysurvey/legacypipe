@@ -10,8 +10,14 @@ export MKL_NUM_THREADS=1
 
 # Try limiting memory to avoid killing the whole MPI job...
 #ulimit -S -v 15000000
-ulimit -S -v 30000000
+#ulimit -S -v 30000000
 ulimit -a
+
+# Make sure we're reading from Edison scratch
+#module unload dust
+#module load dust/scratch
+### argh modules not seeming to work.
+export DUST_DIR=/scratch1/scratchdirs/desiproc/dust/v0_0
 
 outdir=$SCRATCH/dr3
 
@@ -39,11 +45,13 @@ echo >> $log
 echo -e "\nStarting on ${NERSC_HOST} $(hostname)\n" >> $log
 echo "-----------------------------------------------------------------------------------------" >> $log
 
+#     --threads 24 \
+
 python legacypipe/runbrick.py \
      --no-write \
      --pipe \
-     --threads 8 \
      --skip \
+     --threads 6 \
      --skip-calibs \
      --checkpoint checkpoints/checkpoint-${brick}.pickle \
      --fitblobs-prereq pickles/runbrick-${brick}-srcs.pickle \
