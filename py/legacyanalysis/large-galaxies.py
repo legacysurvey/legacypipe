@@ -632,16 +632,16 @@ def main():
             diam = DIAMFACTOR*np.ceil(gal['RADIUS']/PIXSCALE).astype('int16') # [pixels]
             zoom = (1800-diam/2, 1800+diam/2, 1800-diam/2, 1800+diam/2)
 
-            nsigma = 20
-            stages = ['fitblobs']
-            #stages = ['writecat']
+            #nsigma = 15
+            nsigma = 5
+            #stages = ['fitblobs']
+            stages = ['writecat']
             plots = False
-            blobxy = zip([1800], [1800])
-            #blobxy = None
-            
+            #blobxy = zip([diam/2], [diam/2])
+            blobxy = None
             survey = LegacySurveyData(version='dr2', output_dir=largedir)
             run_brick(None, survey, radec=(gal['RA'], gal['DEC']), blobxy=blobxy, 
-                      threads=1, zoom=zoom, wise=False, forceAll=True, writePickles=False,
+                      threads=4, zoom=zoom, wise=False, forceAll=True, writePickles=False,
                       do_calibs=False, write_metrics=True, pixPsf=True, splinesky=True, 
                       early_coadds=False, stages=stages, ceres=False, nsigma=nsigma,
                       plots=plots)
@@ -682,8 +682,8 @@ def main():
             print('Writing {}'.format(qablobsfile))
             plt.savefig(qablobsfile)
 
-            print('Exiting prematurely!')
-            sys.exit(1)
+            #print('Exiting prematurely!')
+            #sys.exit(1)
 
             rad = 10
             for imtype in ('image', 'model', 'resid'):
