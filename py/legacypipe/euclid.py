@@ -403,7 +403,7 @@ if __name__ == '__main__':
                         help='ACS exposure number to run')
     parser.add_argument('--threads', type=int, help='Run multi-threaded')
 
-    parser.add_argument('--forced', type=int, help='Run forced photometry for given MegaCam CCD index')
+    parser.add_argument('--forced', help='Run forced photometry for given MegaCam CCD index (int) or comma-separated list of indices')
 
     parser.add_argument('--ceres', action='store_true', help='Use Ceres?')
 
@@ -692,7 +692,8 @@ if __name__ == '__main__':
         #plots=True, plotbase='euclid',
         sys.exit(0)
         
-    # Run forced photometry on a given image or set of images.
+    # Run forced photometry on a given image or set of Megacam images,
+    # using the ACS catalog as the source.
     T = read_acs_catalogs()
     print('Read', len(T), 'ACS catalog entries')
     T.cut(T.brick_primary)
@@ -717,8 +718,8 @@ if __name__ == '__main__':
     I = np.flatnonzero(ccds.camera == 'megacam')
     print(len(I), 'MegaCam CCDs')
 
-    print('Cut to a single CCD: index', opt.forced)
-    I = I[np.array([opt.forced])]
+    I = np.array([int(x,10) for x in opt.forced.split(',')])
+    print('Cut to', len(I), 'CCDs: indices', I)
 
     slc = None
     if opt.zoom:
@@ -726,6 +727,9 @@ if __name__ == '__main__':
         zw = x1-x0
         zh = y1-y0
         slc = slice(y0,y1), slice(x0,x1)
+
+    tims = []
+    keep_sources = np.zeros(len(T), bool)
 
     for i in I:
         ccd = ccds[i]
@@ -746,67 +750,89 @@ if __name__ == '__main__':
             print('No sources within image.')
             continue
 
-        Ti = T[J]
-        print('Cut to', len(Ti), 'sources within image')
-
-        cat = read_fits_catalog(Ti, ellipseClass=EllipseE, allbands=allbands,
-                                bands=allbands)
-        for src in cat:
-            src.brightness = NanoMaggies(**{ ccd.filter: 1. })
+        print(len(J), 'sources are within this image')
+        keep_sources[J] = True
 
         tim = im.get_tractor_image(pixPsf=True, slc=slc)
-        print('Forced photometry for', tim.name)
+        tims.append(tim)
+        
+    T.cut(keep_sources)
+    print('Cut to', len(T), 'sources within at least one')
 
-        for src in cat:
-            # Limit sizes of huge models
-            from tractor.galaxy import ProfileGalaxy
-            if isinstance(src, ProfileGalaxy):
-                px,py = tim.wcs.positionToPixel(src.getPosition())
-                h = src._getUnitFluxPatchSize(tim, px, py, tim.modelMinval)
-                MAXHALF = 128
-                if h > MAXHALF:
-                    print('halfsize', h,'for',src,'-> setting to',MAXHALF)
-                    src.halfsize = MAXHALF
-        
-        tr = Tractor([tim], cat, optimizer=opti)
-        tr.freezeParam('images')
-        for src in cat:
-            src.freezeAllBut('brightness')
-            src.getBrightness().freezeAllBut(tim.band)
-        disable_galaxy_cache()
-        # Reset fluxes
-        nparams = tr.numberOfParams()
-        tr.setParams(np.zeros(nparams, np.float32))
-        
-        F = fits_table()
-        F.brickid   = Ti.brickid
-        F.brickname = Ti.brickname
-        F.objid     = Ti.objid
-        
-        F.filter  = np.array([tim.band]               * len(Ti))
-        F.mjd     = np.array([tim.primhdr['MJD-OBS']] * len(Ti))
-        F.exptime = np.array([tim.primhdr['EXPTIME']] * len(Ti)).astype(np.float32)
+    bands = np.unique([tim.band for tim in tims])
+    print('Bands:', bands)
+    
+    cat = read_fits_catalog(T, ellipseClass=EllipseE, allbands=bands,
+                            bands=bands)
+    for src in cat:
+        src.brightness = NanoMaggies(**dict([(b, 1.) for b in bands]))
 
-        ok,x,y = tim.sip_wcs.radec2pixelxy(Ti.ra, Ti.dec)
+    for src in cat:
+        # Limit sizes of huge models
+        from tractor.galaxy import ProfileGalaxy
+        if isinstance(src, ProfileGalaxy):
+            tim = tims[0]
+            px,py = tim.wcs.positionToPixel(src.getPosition())
+            h = src._getUnitFluxPatchSize(tim, px, py, tim.modelMinval)
+            MAXHALF = 128
+            if h > MAXHALF:
+                print('halfsize', h,'for',src,'-> setting to',MAXHALF)
+                src.halfsize = MAXHALF
+        
+    tr = Tractor(tims, cat, optimizer=opti)
+    tr.freezeParam('images')
+
+    for src in cat:
+        src.freezeAllBut('brightness')
+        #src.getBrightness().freezeAllBut(tim.band)
+    disable_galaxy_cache()
+    # Reset fluxes
+    nparams = tr.numberOfParams()
+    tr.setParams(np.zeros(nparams, np.float32))
+        
+    F = fits_table()
+    F.brickid   = T.brickid
+    F.brickname = T.brickname
+    F.objid     = T.objid
+    F.mjd     = np.array([tim.primhdr['MJD-OBS']] * len(T))
+    F.exptime = np.array([tim.primhdr['EXPTIME']] * len(T)).astype(np.float32)
+
+    if len(tims) == 1:
+        tim = tims[0]
+        F.filter  = np.array([tim.band] * len(T))
+        ok,x,y = tim.sip_wcs.radec2pixelxy(T.ra, T.dec)
         F.x = (x-1).astype(np.float32)
         F.y = (y-1).astype(np.float32)
+
+    # FIXME -- should we run one band at a time?
+
+    R = tr.optimize_forced_photometry(variance=True, fitstats=True,
+                                      shared_params=False, priors=False,
+                                      **forced_kwargs)
+
+    units = {'exptime':'sec' }# 'flux':'nanomaggy', 'flux_ivar':'1/nanomaggy^2'}
+    for band in bands:
+        F.set('flux_%s' % band, np.array([src.getBrightness().getFlux(band)
+                                          for src in cat]).astype(np.float32))
+        units.update({'flux_%s' % band:' nanomaggy',
+                      'flux_ivar_%s' % band:'1/nanomaggy^2'})
+
+    # HACK -- use the parameter-setting machinery to set the source
+    # brightnesses to the *inverse-variance* estimates, then read them
+    # off...
+    p0 = tr.getParams()
+    tr.setParams(R.IV)
+    for band in bands:
+        F.set('flux_ivar_%s' % band,
+              np.array([src.getBrightness().getFlux(band)
+                        for src in cat]).astype(np.float32))
+    tr.setParams(p0)
         
-        R = tr.optimize_forced_photometry(variance=True, fitstats=True,
-                                          shared_params=False, priors=False,
-                                          **forced_kwargs)
-
-        F.flux = np.array([src.getBrightness().getFlux(tim.band)
-                           for src in cat]).astype(np.float32)
-        F.flux_ivar = R.IV.astype(np.float32)
-        #F.fracflux = R.fitstats.profracflux.astype(np.float32)
-        #F.rchi2    = R.fitstats.prochi2    .astype(np.float32)
-
-        hdr = fitsio.FITSHDR()
-        units = {'exptime':'sec', 'flux':'nanomaggy', 'flux_ivar':'1/nanomaggy^2'}
-        columns = F.get_columns()
-        for i,col in enumerate(columns):
-            if col in units:
-                hdr.add_record(dict(name='TUNIT%i' % (i+1), value=units[col]))
+    hdr = fitsio.FITSHDR()
+    columns = F.get_columns()
+    for i,col in enumerate(columns):
+        if col in units:
+            hdr.add_record(dict(name='TUNIT%i' % (i+1), value=units[col]))
 
         primhdr = fitsio.FITSHDR()
         primhdr.add_record(dict(name='EXPNUM', value=im.expnum,
@@ -819,5 +845,5 @@ if __name__ == '__main__':
         outfn = 'euclid-out/forced/megacam-%i-%s.fits' % (im.expnum, im.ccdname)
         fitsio.write(outfn, None, header=primhdr, clobber=True)
         F.writeto(outfn, header=hdr, append=True)
-        #F.writeto(outfn, header=hdr)
+
             
