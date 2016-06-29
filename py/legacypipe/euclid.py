@@ -461,13 +461,22 @@ if __name__ == '__main__':
         ccds = survey.get_ccds_readonly()
         ccds.index = np.arange(len(ccds))
 
+        allccds = []
         for line in open(opt.queue_list,'r').readlines():
             words = line.split()
             e = int(words[0], 10)
             #print('Exposure', e)
             ccds = survey.find_ccds(expnum=e)
+            allccds.append(ccds)
             for i in ccds.index:
                 print(i)
+
+        allccds = merge_tables(allccds)
+        # Now group by CCDname and print out sets of indices to run at once
+        for name in np.unique(allccds.ccdname):
+            I = np.flatnonzero(allccds.ccdname == name)
+            print(','.join(['%i'%i for i in allccds.index[I]]))
+
         sys.exit(0)
 
     if False:
