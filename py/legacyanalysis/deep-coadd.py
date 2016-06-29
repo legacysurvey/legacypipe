@@ -6,11 +6,16 @@ from legacypipe.common import *
 from legacypipe.coadds import _resample_one
 from legacypipe.cpimage import CP_DQ_BITS
 from legacypipe.runbrick import rgbkwargs
+import sys
 
 def main():
+    for brickname in sys.argv[1:]:
+        make_coadd(brickname)
+
+def make_coadd(brickname):
     #brickname = '0362m045'
     #brickname = '0359m047'
-    brickname = '0359m045'
+    #brickname = '0359m045'
     W = H = 3600
     pixscale = 0.262
     bands = 'grz'
@@ -50,7 +55,7 @@ def main():
     print(len(I), 'of', len(ccds), 'CCDs are photometric')
     ccds.cut(I)
     
-    fn = 'coadd-%s-ccds.fits' % brickname
+    fn = 'deep/coadd-%s-ccds.fits' % brickname
     ccds.writeto(fn)
     print('Wrote', fn)
 
@@ -158,13 +163,13 @@ def main():
         coimg  /= np.maximum(con, 1)
         cowimg[cow == 0] = coimg[cow == 0]
         
-        fn = 'coadd-%s-image-%s.fits' % (brickname, band)
+        fn = 'deep/coadd-%s-image-%s.fits' % (brickname, band)
         fitsio.write(fn, cowimg, clobber=True, header=hdr)
         print('Wrote', fn)
-        fn = 'coadd-%s-invvar-%s.fits' % (brickname, band)
+        fn = 'deep/coadd-%s-invvar-%s.fits' % (brickname, band)
         fitsio.write(fn, cow, clobber=True, header=hdr)
         print('Wrote', fn)
-        fn = 'coadd-%s-n-%s.fits' % (brickname, band)
+        fn = 'deep/coadd-%s-n-%s.fits' % (brickname, band)
         fitsio.write(fn, con, clobber=True, header=hdr)
         print('Wrote', fn)
 
@@ -174,13 +179,13 @@ def main():
         coimg2  /= np.maximum(con2, 1)
         cowimg2[cow2 == 0] = coimg2[cow2 == 0]
         
-        fn = 'coadd-%s-image2-%s.fits' % (brickname, band)
+        fn = 'deep/coadd-%s-image2-%s.fits' % (brickname, band)
         fitsio.write(fn, cowimg2, clobber=True, header=hdr)
         print('Wrote', fn)
-        fn = 'coadd-%s-invvar2-%s.fits' % (brickname, band)
+        fn = 'deep/coadd-%s-invvar2-%s.fits' % (brickname, band)
         fitsio.write(fn, cow2, clobber=True, header=hdr)
         print('Wrote', fn)
-        fn = 'coadd-%s-n2-%s.fits' % (brickname, band)
+        fn = 'deep/coadd-%s-n2-%s.fits' % (brickname, band)
         fitsio.write(fn, con2, clobber=True, header=hdr)
         print('Wrote', fn)
 
@@ -189,10 +194,10 @@ def main():
         
     rgb = get_rgb(coimgs, bands, **rgbkwargs)
     kwa = {}
-    imsave_jpeg('coadd-%s-image.jpg' % brickname, rgb, origin='lower', **kwa)
+    imsave_jpeg('deep/coadd-%s-image.jpg' % brickname, rgb, origin='lower', **kwa)
 
     rgb = get_rgb(coimgs2, bands, **rgbkwargs)
-    imsave_jpeg('coadd-%s-image2.jpg' % brickname, rgb, origin='lower', **kwa)
+    imsave_jpeg('deep/coadd-%s-image2.jpg' % brickname, rgb, origin='lower', **kwa)
             
 if __name__ == '__main__':
     main()
