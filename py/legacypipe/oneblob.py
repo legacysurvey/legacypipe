@@ -135,7 +135,7 @@ class OneBlob(object):
         
     def run(self, B):
         # "verbose" plots
-        self.plots1 = self.plots
+        self.plots1 = False
         cat = Catalog(*self.srcs)
 
         tlast = Time()
@@ -389,8 +389,8 @@ class OneBlob(object):
         for numi,srci in enumerate(Ibright):
     
             src = cat[srci]
-            #print('Model selection for source %i of %i in blob' %
-            #      (numi, len(Ibright)))
+            print('Model selection for source %i of %i in blob' %
+                  (numi, len(Ibright)))
             cpu0 = time.clock()
     
             # Add this source's initial model back in.
@@ -678,7 +678,8 @@ class OneBlob(object):
                 # Recompute modelMasks in the original tims
 
                 # Limit sizes of huge models
-                _limit_galaxy_stamp_size(newsrc, self.tims[0])
+                if len(self.tims) > 0:
+                    _limit_galaxy_stamp_size(newsrc, self.tims[0])
     
                 if self.hastycho:
                     modtims = None
@@ -743,13 +744,7 @@ class OneBlob(object):
                     modtractor.setModelMasks(mm)
                     enable_galaxy_cache()
     
-                    print('Optimizing: second round for', name)
-                    print(newsrc)
-                    cpustep0 = time.clock()
-                    modtractor.optimize_loop(**self.optargs)
-                    print('Optimizing second round', name, 'took',
-                          time.clock()-cpustep0)
-                    print(newsrc)
+                    modtractor.optimize_loop(maxcpu=60., **self.optargs)
                     # FIXME -- thisflags |= FLAG_STEPS_B
                     #print('Mod selection: after second-round opt:', newsrc)
                     

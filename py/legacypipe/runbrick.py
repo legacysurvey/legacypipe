@@ -68,7 +68,7 @@ def runbrick_global_init():
 def stage_tims(W=3600, H=3600, pixscale=0.262, brickname=None,
                survey=None,
                ra=None, dec=None,
-               plots=False, ps=None, survey_dir=None, outdir=None,
+               plots=False, ps=None,
                target_extent=None, pipe=False, program_name='runbrick.py',
                bands='grz',
                do_calibs=True,
@@ -103,8 +103,7 @@ def stage_tims(W=3600, H=3600, pixscale=0.262, brickname=None,
                                    read_one_tim)
     t0 = tlast = Time()
 
-    if survey is None:
-        survey = LegacySurveyData(survey_dir=survey_dir, output_dir=outdir)
+    assert(survey is not None)
 
     if ra is not None:
         from legacypipe.common import BrickDuck
@@ -208,7 +207,7 @@ def stage_tims(W=3600, H=3600, pixscale=0.262, brickname=None,
     if use_blacklist:
         I = survey.apply_blacklist(ccds)
         ccds.cut(I)
-        print(len(ccds), 'CCDs not in blacklisted propids (too many exposures!)')
+        print(len(ccds), 'CCDs not in blacklist')
 
     # Sort images by band -- this also eliminates images whose
     # *image.filter* string is not in *bands*.
@@ -225,7 +224,9 @@ def stage_tims(W=3600, H=3600, pixscale=0.262, brickname=None,
     for ccd in ccds:
         im = survey.get_image_object(ccd)
         ims.append(im)
-        print(im, im.band, 'exptime', im.exptime, 'propid', ccd.propid)
+        print(im, im.band, 'exptime', im.exptime, 'propid', ccd.propid,
+              'seeing %.2f' % (ccd.fwhm*im.pixscale),
+              'object', getattr(ccd, 'object', None))
 
     tnow = Time()
     print('[serial tims] Finding images touching brick:', tnow-tlast)
@@ -592,7 +593,7 @@ def stage_mask_junk(tims=None, targetwcs=None, W=None, H=None, bands=None,
 def stage_image_coadds(survey=None, targetwcs=None, bands=None, tims=None,
                        brickname=None, version_header=None,
                        plots=False, ps=None, coadd_bw=False, W=None, H=None,
-                       brick=None, blobs=None, lanczos=True, ccds=None,
+                       brick=None, blobs=None, lanczos=True, ccds=None, mp=None,
                        **kwargs):
     '''
     Immediately after reading the images, we
@@ -684,7 +685,8 @@ def stage_image_coadds(survey=None, targetwcs=None, bands=None, tims=None,
     C = make_coadds(tims, bands, targetwcs,
                     detmaps=True, lanczos=lanczos,
                     callback=write_coadd_images,
-                    callback_args=(survey, brickname, version_header, tims, targetwcs))
+                    callback_args=(survey, brickname, version_header, tims, targetwcs),
+                    mp=mp)
 
     # if plots:
     #     for k,v in CP_DQ_BITS.items():
@@ -751,8 +753,7 @@ def stage_image_coadds(survey=None, targetwcs=None, bands=None, tims=None,
         rgb = get_rgb(ims, bands, **rgbkw)
         kwa = {}
         if coadd_bw and len(bands) == 1:
-            i = 'zrg'.index(bands[0])
-            rgb = rgb[:,:,i]
+            rgb = rgb.sum(axis=2)
             kwa = dict(cmap='gray')
 
         with survey.write_output(name + '-jpeg', brick=brickname) as out:
@@ -796,6 +797,7 @@ def stage_srcs(coimgs=None, cons=None,
                pipe=False, brickname=None,
                mp=None, nsigma=5,
                on_bricks=False,
+               allow_missing_brickq=-1,
                survey=None, brick=None,
                **kwargs):
     '''
@@ -823,7 +825,19 @@ def stage_srcs(coimgs=None, cons=None,
         for b in bricks:
             fn = survey.find_file('tractor', brick=b.brickname)
             print('Looking for', fn)
+            if not os.path.exists(fn):
+                print('File does not exist:', fn)
+                if b.brickq <= allow_missing_brickq:
+                    print(('  (allowing this missing brick (brickq = %i) ' +
+                           'because of --allow-missing-brickq %i)') % 
+                           (b.brickq, allow_missing_brickq))
+                    continue
             B.append(fits_table(fn))
+        del bricks
+        B = [b for b in B if b is not None]
+        if len(B) == 0:
+            on_bricks = False
+    if on_bricks:
         try:
             B = merge_tables(B)
         except:
@@ -844,7 +858,9 @@ def stage_srcs(coimgs=None, cons=None,
         print(len(B), 'are within this image + margin')
         B.cut((B.out_of_bounds == False) * (B.left_blob == False))
         print(len(B), 'do not have out_of_bounds or left_blob set')
-
+        if len(B) == 0:
+            on_bricks = False
+    if on_bricks:
         # Note that we shouldn't need to drop sources that are within this
         # current brick's unique area, because we cut to sources that are
         # BRICK_PRIMARY within their own brick.
@@ -979,7 +995,7 @@ def stage_srcs(coimgs=None, cons=None,
     saturated_pix = binary_dilation(satmap > 0, iterations=10)
 
     # Read Tycho-2 stars
-    tycho = fits_table(os.path.join(survey.get_survey_dir(), 'tycho2.fits.gz'))
+    tycho = fits_table(survey.find_file('tycho2'))
     print('Read', len(tycho), 'Tycho-2 stars')
     ok,tycho.tx,tycho.ty = targetwcs.radec2pixelxy(tycho.ra, tycho.dec)
     margin = 100
@@ -1190,7 +1206,11 @@ def stage_fitblobs(T=None,
     for tim in tims:
         assert(np.all(np.isfinite(tim.getInvError())))
 
-    if write_pickle_filename is not None:
+    # Missing from some previously written pickles:
+    if tycho is None:
+        tycho = fits_table(survey.find_file('tycho2'))
+        
+    if write_pickle_filename is not None and not os.path.exists(write_pickle_filename):
         # Start up a thread to write out a pickle file containing the inputs
         # that are prerequisites for this (and subsequent) stages.
         import threading
@@ -1354,6 +1374,7 @@ def stage_fitblobs(T=None,
         R = mp.map(_bounce_one_blob, blobiter)
     else:
         from astrometry.util.ttime import CpuMeas
+        from astrometry.util.file import pickle_to_file, trymakedirs
 
         # Check for existing checkpoint file.
         R = []
@@ -1368,26 +1389,27 @@ def stage_fitblobs(T=None,
                 import traceback
                 print('Failed to read checkpoint file ' + checkpoint_filename)
                 traceback.print_exc()
-                R = []
 
-        skipblobs = [B.iblob for B in R]
+        skipblobs = [B.iblob for B in R if B is not None]
+        R = [r for r in R if r is not None]
+        print('Skipping', len(skipblobs), 'blobs from checkpoint file')
         blobiter = _blob_iter(blobslices, blobsrcs, blobs, targetwcs, tims,
                               cat, bands, plots, ps, simul_opt, use_ceres,
                               tycho, skipblobs=skipblobs)
         # to allow timingpool to queue tasks one at a time
         blobiter = iterwrapper(blobiter, len(blobsrcs))
+        print('blobsrcs:', len(blobsrcs))
+
+        d = os.path.dirname(checkpoint_filename)
+        if len(d) and not os.path.exists(d):
+            trymakedirs(d)
 
         Riter = mp.imap_unordered(_bounce_one_blob, blobiter)
         # we'll actually measure wall time -- CpuMeas is just mis-named
         last_checkpoint = CpuMeas()
         while True:
             import multiprocessing
-            from astrometry.util.file import pickle_to_file, trymakedirs
 
-            d = os.path.dirname(checkpoint_filename)
-            if len(d) and not os.path.exists(d):
-                trymakedirs(d)
-            
             tnow = CpuMeas()
             dt = tnow.wall_seconds_since(last_checkpoint)
             if dt >= checkpoint_period:
@@ -1414,7 +1436,6 @@ def stage_fitblobs(T=None,
                 else:
                     r = Riter.next()
                 R.append(r)
-                #print('Result r:', type(r))
             except StopIteration:
                 print('Done')
                 break
@@ -1422,6 +1443,14 @@ def stage_fitblobs(T=None,
                 print('Timed out waiting for result')
                 continue
 
+        # Write checkpoint when done!
+        fn = checkpoint_filename + '.tmp'
+        print('Writing checkpoint', fn)
+        pickle_to_file(R, fn)
+        print('Wrote checkpoint to', fn)
+        os.rename(fn, checkpoint_filename)
+        print('Renamed temp checkpoint', fn, 'to', checkpoint_filename)
+            
     print('[parallel fitblobs] Fitting sources took:', Time()-tlast)
 
     ## This used to be in fitblobs_finish
@@ -1432,39 +1461,20 @@ def stage_fitblobs(T=None,
 
     # Drop now-empty blobs.
     R = [r for r in R if r is not None and len(r)]
-    if len(R) > 0:
-        J = np.argsort([B.iblob for B in R])
-        R = [R[j] for j in J]
-        BB = merge_tables(R)
-    else:
-        BB = fits_table()
-        BB.Isrcs = []
-        BB.sources = []
-        nb = len(bands)
-        BB.fracflux   = np.zeros((0,nb))
-        BB.fracmasked = np.zeros((0,nb))
-        BB.fracin     = np.zeros((0,nb))
-        BB.rchi2      = np.zeros((0,nb))
-        BB.dchisqs    = np.zeros((0,5))
-        BB.flags      = np.zeros((0,5))
-        BB.all_models = np.array([])
-        BB.all_model_flags   = np.array([])
-        BB.all_model_fluxivs = np.array([])
-        BB.all_model_cpu     = np.array([])
-        BB.cpu_blob         = []
-        BB.cpu_source       = []
-        BB.blob_width   = []
-        BB.blob_height  = []
-        BB.blob_npix    = []
-        BB.blob_nimages = []
-        BB.blob_totalpix = []
-        BB.started_in_blob  = []
-        BB.finished_in_blob = []
-        BB.hastycho         = []
-        BB.srcinvvars = [np.zeros((0,))]
+
+    if len(R) == 0:
+        raise NothingToDoError('No sources passed significance tests.')
+
+    # Sort results R by 'iblob'
+    J = np.argsort([B.iblob for B in R])
+    R = [R[j] for j in J]
+    # Merge results R into one big table
+    BB = merge_tables(R)
     del R
+    # Pull out the source indices...
     II = BB.Isrcs
     newcat = BB.sources
+    # ... and make the table T parallel with BB.
     T.cut(II)
 
     assert(len(T) == len(newcat))
@@ -1920,6 +1930,12 @@ def stage_coadds(survey=None, bands=None, version_header=None, targetwcs=None,
     from legacypipe.common import apertures_arcsec
     tlast = Time()
 
+    # Missing from some previously written pickles:
+    if pixscale is None:
+        pixscale = 0.262
+        assert(ccds is not None)
+        assert(brick is not None)
+        
     primhdr = fitsio.FITSHDR()
     for r in version_header.records():
         primhdr.add_record(r)
@@ -1969,7 +1985,7 @@ def stage_coadds(survey=None, bands=None, version_header=None, targetwcs=None,
                     apertures=apertures, apxy=apxy,
                     callback=write_coadd_images,
                     callback_args=(survey, brickname, version_header, tims, targetwcs),
-                    plots=False, ps=ps)
+                    plots=False, ps=ps, mp=mp)
 
     for c in ['nobs', 'anymask', 'allmask', 'psfsize', 'depth', 'galdepth']:
         T.set(c, C.T.get(c))
@@ -2574,10 +2590,11 @@ def tims_compute_resamp(mp, tims, targetwcs, force=False):
     for tim,r in zip(tims, R):
         tim.resamp = r
 
-def run_brick(brick, radec=None, pixscale=0.262,
+def run_brick(brick, survey, radec=None, pixscale=0.262,
               width=3600, height=3600,
               zoom=None,
               bands=None,
+              allbands=None,
               blacklist=True,
               nblobs=None, blob=None, blobxy=None,
               pipe=True, nsigma=6,
@@ -2589,12 +2606,11 @@ def run_brick(brick, radec=None, pixscale=0.262,
               do_calibs=True,
               write_metrics=True,
               on_bricks=False,
+              allow_missing_brickq=-1,
               gaussPsf=False,
               pixPsf=False,
               splinesky=False,
               ceres=True,
-              outdir=None,
-              survey=None, survey_dir=None,
               unwise_dir=None,
               threads=None,
               plots=False, plots2=False, coadd_bw=False,
@@ -2621,6 +2637,9 @@ def run_brick(brick, radec=None, pixscale=0.262,
     ----------
     brick : string
         Brick name such as '2090m065'.  Can be None if *radec* is given.
+    survey : a "LegacySurveyData" object (see common.LegacySurveyData), which is in
+        charge of the list of bricks and CCDs to be handled, and where output files
+        should be written.
     radec : tuple of floats (ra,dec)
         RA,Dec center of the custom region to run.
     pixscale : float
@@ -2690,16 +2709,6 @@ def run_brick(brick, radec=None, pixscale=0.262,
 
     - *ceres*: boolean; use Ceres Solver when possible?
 
-    - *outdir*: string; base directory for output files; default "."
-
-    - *survey*: a "LegacySurveyData" object (see common.LegacySurveyData), which is in
-      charge of the list of bricks and CCDs to be handled, and also
-      creates DecamImage objects.
-
-    - *survey_dir*: string; default $LEGACY_SURVEY_DIR environment variable;
-      where to look for files including calibration files, tables of
-      CCDs and bricks, image data, etc.
-
     - *unwise_dir*: string; default unwise-coadds; where to look for
       unWISE coadd files.  This may be a colon-separated list of
       directories to search in order.
@@ -2747,6 +2756,9 @@ def run_brick(brick, radec=None, pixscale=0.262,
     if forceAll:
         kwargs.update(forceall=True)
 
+    if allbands is not None:
+        kwargs.update(allbands=allbands)
+        
     if radec is not None:
         print('RA,Dec:', radec)
         assert(len(radec) == 2)
@@ -2790,7 +2802,8 @@ def run_brick(brick, radec=None, pixscale=0.262,
                   write_metrics=write_metrics,
                   lanczos=lanczos,
                   on_bricks=on_bricks,
-                  outdir=outdir, survey_dir=survey_dir, unwise_dir=unwise_dir,
+                  allow_missing_brickq=allow_missing_brickq,
+                  unwise_dir=unwise_dir,
                   plots=plots, plots2=plots2, coadd_bw=coadd_bw,
                   rsync=rsync,
                   force=forceStages, write=writePickles)
@@ -2876,6 +2889,11 @@ def run_brick(brick, radec=None, pixscale=0.262,
     t0 = Time()
 
     def mystagefunc(stage, **kwargs):
+        # Update the (pickled) survey output directory...
+        picsurvey = kwargs.get('survey',None)
+        if picsurvey is not None:
+            picsurvey.output_dir = survey.output_dir
+
         mp.start_subphase('stage ' + stage)
         #if pool is not None:
         #    print('At start of stage', stage, ':')
@@ -2944,7 +2962,7 @@ python -u legacypipe/runbrick.py --plots --brick 2440p070 --zoom 1900 2400 450 9
     parser.add_argument('--pixscale', type=float, default=0.262,
                         help='Pixel scale of the output coadds (arcsec/pixel)')
 
-    parser.add_argument('-d', '--outdir', help='Set output base directory', default='.')
+    parser.add_argument('-d', '--outdir', help='Set output base directory, default "."')
     parser.add_argument('--survey-dir', type=str, default=None,
                         help='Override the $LEGACY_SURVEY_DIR environment variable')
 
@@ -3049,46 +3067,49 @@ python -u legacypipe/runbrick.py --plots --brick 2440p070 --zoom 1900 2400 450 9
     parser.add_argument(
         '--on-bricks', default=False, action='store_true',
         help='Enable Tractor-on-bricks edge handling?')
+
+    parser.add_argument(
+        '--allow-missing-brickq', type=int, choices=[0,1,2], default=-1,
+        help='Do not fail if a prerequisite brick of given brickq is missing.')
     
     return parser
 
 def get_runbrick_kwargs(opt):
     if opt.brick is not None and opt.radec is not None:
         print('Only ONE of --brick and --radec may be specified.')
-        return -1
+        return None, -1
 
+    survey = LegacySurveyData(survey_dir=opt.survey_dir, output_dir=opt.outdir)
+    
     if opt.check_done or opt.skip or opt.skip_coadd:
-        outdir = opt.outdir
-        if outdir is None:
-            outdir = '.'
         brickname = opt.brick
         if opt.skip_coadd:
-            fn = os.path.join(outdir, 'coadd', brickname[:3], brickname,
-                              'legacysurvey-%s-image.jpg' % brickname)
+            fn = survey.find_file('image-jpeg', output=True, brick=brickname)
         else:
-            fn = os.path.join(outdir, 'tractor', brickname[:3],
-                              'tractor-%s.fits' % brickname)
+            fn = survey.find_file('tractor', output=True, brick=brickname)
         print('Checking for', fn)
         exists = os.path.exists(fn)
         if opt.skip_coadd and exists:
-            return 0
+            return survey,0
         if exists:
             try:
                 T = fits_table(fn)
                 print('Read', len(T), 'sources from', fn)
             except:
                 print('Failed to read file', fn)
+                import traceback
+                traceback.print_exc()
                 exists = False
 
         if opt.skip:
             if exists:
-                return 0
+                return survey,0
         elif opt.check_done:
             if not exists:
                 print('Does not exist:', fn)
-                return -1
+                return survey,-1
             print('Found:', fn)
-            return 0
+            return survey,0
 
     if len(opt.stage) == 0:
         opt.stage.append('writecat')
@@ -3123,10 +3144,11 @@ def get_runbrick_kwargs(opt):
         do_calibs=opt.do_calibs,
         write_metrics=opt.write_metrics,
         on_bricks=opt.on_bricks,
+        allow_missing_brickq=opt.allow_missing_brickq,
         gaussPsf=opt.gpsf, pixPsf=opt.pixpsf, splinesky=True,
         simulOpt=opt.simul_opt,
         nblobs=opt.nblobs, blob=opt.blob, blobxy=opt.blobxy,
-        pipe=opt.pipe, outdir=opt.outdir, survey_dir=opt.survey_dir,
+        pipe=opt.pipe,
         unwise_dir=opt.unwise_dir,
         plots=opt.plots, plots2=opt.plots2,
         coadd_bw=opt.coadd_bw,
@@ -3141,7 +3163,7 @@ def get_runbrick_kwargs(opt):
         checkpoint_period=opt.checkpoint_period,
         fitblobs_prereq_filename=opt.fitblobs_prereq,
         )
-    return kwa
+    return survey, kwa
 
 def main(args=None):
     import logging
@@ -3150,7 +3172,10 @@ def main(args=None):
 
     print()
     print('runbrick.py starting at', datetime.datetime.now().isoformat())
-    print('Command-line args:', sys.argv)
+    if args is None:
+        print('Command-line args:', sys.argv)
+    else:
+        print('Args:', args)
     print()
 
     parser = get_parser()
@@ -3162,7 +3187,7 @@ def main(args=None):
     if opt.brick is None and opt.radec is None:
         parser.print_help()
         return -1
-    kwargs = get_runbrick_kwargs(opt)
+    survey, kwargs = get_runbrick_kwargs(opt)
     if kwargs in [-1, 0]:
         return kwargs
 
@@ -3175,7 +3200,6 @@ def main(args=None):
     if opt.on_bricks:
         # Quickly check for existence of required neighboring catalogs
         # before starting.
-        survey = LegacySurveyData(survey_dir=opt.survey_dir, output_dir=opt.outdir)
         brick = survey.get_brick_by_name(opt.brick)
         bricks = on_bricks_dependencies(brick, survey)
         print('Checking for catalogs for bricks:',
@@ -3185,8 +3209,13 @@ def main(args=None):
             fn = survey.find_file('tractor', brick=b.brickname)
             print('File', fn)
             if not os.path.exists(fn):
-                allexist = False
                 print('File', fn, 'does not exist (required for --on-bricks)')
+                if b.brickq <= opt.allow_missing_brickq:
+                    print(('  (allowing this missing brick (brickq = %i) ' +
+                           'because of --allow-missing-brickq %i)') % 
+                           (b.brickq, opt.allow_missing_brickq))
+                else:
+                    allexist = False
                 continue
             try:
                 T = fits_table(fn)
@@ -3215,7 +3244,7 @@ def main(args=None):
         ps_thread.start()
         
     try:
-        run_brick(opt.brick, **kwargs)
+        run_brick(opt.brick, survey, **kwargs)
     except NothingToDoError as e:
         print()
         print(e.message)

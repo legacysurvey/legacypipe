@@ -201,7 +201,8 @@ class LegacySurveyImage(object):
                           splinesky=False,
                           use_hybrid_psf=True,
                           nanomaggies=True, subsky=True, tiny=5,
-                          dq=True, invvar=True, pixels=True):
+                          dq=True, invvar=True, pixels=True,
+                          constant_invvar=False):
         '''
         Returns a tractor.Image ("tim") object for this image.
         
@@ -314,8 +315,8 @@ class LegacySurveyImage(object):
             img -= skymod
             midsky = np.median(skymod)
             zsky = ConstantSky(0.)
-            zsky.version = sky.version
-            zsky.plver = sky.plver
+            zsky.version = getattr(sky, 'version', '')
+            zsky.plver = getattr(sky, 'plver', '')
             del skymod
             sky = zsky
             del zsky
@@ -349,6 +350,10 @@ class LegacySurveyImage(object):
         assert(np.all(np.isfinite(img)))
         assert(np.all(np.isfinite(invvar)))
         assert(np.isfinite(sig1))
+
+        if constant_invvar:
+            print('Setting constant invvar', 1./sig1**2)
+            invvar[invvar > 0] = 1./sig1**2
 
         if subsky:
             # Warn if the subtracted sky doesn't seem to work well
@@ -405,9 +410,9 @@ class LegacySurveyImage(object):
         tim.primhdr = primhdr
         tim.hdr = imghdr
         tim.plver = primhdr.get('PLVER','').strip()
-        tim.skyver = (sky.version, sky.plver)
-        tim.wcsver = (wcs.version, wcs.plver)
-        tim.psfver = (psf.version, psf.plver)
+        tim.skyver = (getattr(sky, 'version', ''), getattr(sky, 'plver', ''))
+        tim.wcsver = (getattr(wcs, 'version', ''), getattr(wcs, 'plver', ''))
+        tim.psfver = (getattr(psf, 'version', ''), getattr(psf, 'plver', ''))
         if get_dq:
             tim.dq = dq
         tim.dq_saturation_bits = self.dq_saturation_bits
@@ -530,6 +535,7 @@ class LegacySurveyImage(object):
             while True:
                 line = h[:80]
                 h = h[80:]
+                #print('Header line "%s"' % line)
                 # HACK -- fitsio apparently can't handle CONTINUE.
                 # It also has issues with slightly malformed cards, like
                 # KEYWORD  =      / no value
@@ -541,6 +547,8 @@ class LegacySurveyImage(object):
                               line.strip())
                 if line == ('END' + ' '*77):
                     foundEnd = True
+                    break
+                if len(h) < 80:
                     break
             if foundEnd:
                 break

@@ -45,7 +45,7 @@ def main():
                                        NanoMaggies(g=1000, r=1000, z=1000))]
 
     # Now, we can either call run_brick()....
-    run_brick(None, survey=survey, radec=(0.,0.), width=100, height=100,
+    run_brick(None, survey, radec=(0.,0.), width=100, height=100,
               stages=['image_coadds'])
 
     # ... or the individual stages in the pipeline:

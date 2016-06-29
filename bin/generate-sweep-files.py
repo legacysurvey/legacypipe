@@ -16,6 +16,9 @@ import fitsio
 def main():
     ns = parse_args()
             
+    if ns.ignore_errors:
+        print("Warning: *** Will ignore broken tractor catalogue files ***")
+        print("         *** Disable -I for final data product.         ***")
     # avoid each subprocess importing h5py again and again.
     if 'hdf5' in ns.format: 
         import h5py
@@ -160,8 +163,14 @@ def make_sweep(sweep, bricks, ns):
         def filter(brickname, filename, region):
             if not intersect(sweep, region): 
                 return None
-            objects = fitsio.read(filename, 1, upper=True)
-
+            try:
+                objects = fitsio.read(filename, 1, upper=True)
+            except:
+                if ns.ignore_errors:
+                    print('IO error on %s' % filename)
+                    return
+                else:
+                    raise
             mask = objects['BRICK_PRIMARY'] != 0
             objects = objects[mask]
             mask = objects['RA'] >= ra1
@@ -295,6 +304,7 @@ def parse_args():
         help="location of decals-bricks.fits, speeds up the scanning")
 
     ap.add_argument('-v', "--verbose", action='store_true')
+    ap.add_argument('-I', "--ignore-errors", action='store_true')
 
     ap.add_argument('-S', "--schema", choices=['blocks', 'dec', 'ra'], 
             default='blocks', 

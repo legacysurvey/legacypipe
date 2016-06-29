@@ -305,7 +305,7 @@ def get_rgb(imgs, bands, mnmx=None, arcsinh=None, scales=None):
     rgb = np.zeros((h,w,3), np.float32)
     # Convert to ~ sigmas
     for im,band in zip(imgs, bands):
-        plane,scale = scales[band]
+        plane,scale = scales.get(band, (0,1.))
         rgb[:,:,plane] = (im / scale).astype(np.float32)
 
     if mnmx is None:
@@ -614,6 +614,15 @@ class LegacySurveyData(object):
         '''Create a LegacySurveyData object using data from the given
         *survey_dir* directory, or from the $LEGACY_SURVEY_DIR environment
         variable.
+
+        Parameters
+        ----------
+        survey_dir : string
+            Defaults to $LEGACY_SURVEY_DIR environment variable.  Where to look for
+            files including calibration files, tables of CCDs and bricks, image data,
+            etc.
+        output_dir : string
+            Base directory for output files; default ".".
         '''
         from .decam  import DecamImage
         from .mosaic import MosaicImage
@@ -635,7 +644,7 @@ Now using the current directory as LEGACY_SURVEY_DIR, but this is likely to fail
         self.survey_dir = survey_dir
 
         if output_dir is None:
-            self.output_dir = survey_dir
+            self.output_dir = '.'
         else:
             self.output_dir = output_dir
 
@@ -715,11 +724,16 @@ Now using the current directory as LEGACY_SURVEY_DIR, but this is likely to fail
 
         elif filetype == 'ccds':
             if self.version in ['dr1','dr2']:
-                return [os.path.join(basedir, 'decals-ccds.fits')]
+                return [os.path.join(basedir, 'decals-ccds.fits.gz')]
             else:
                 return glob(os.path.join(basedir, 'survey-ccds-*.fits.gz'))
-                
+
+        elif filetype == 'tycho2':
+            return os.path.join(basedir, 'tycho2.fits.gz')
+            
         elif filetype == 'annotated-ccds':
+            if self.version == 'dr2':
+                return glob(os.path.join(basedir, 'decals-ccds-annotated.fits'))
             return glob(os.path.join(basedir, 'ccds-annotated-*.fits.gz'))
 
         elif filetype == 'tractor':
@@ -1038,6 +1052,13 @@ Now using the current directory as LEGACY_SURVEY_DIR, but this is likely to fail
         imageType = self.image_class_for_camera(t.camera)
         # call Image subclass constructor
         return imageType(self, t)
+
+    def get_approx_wcs(self, ccd):
+        W,H = ccd.width,ccd.height
+        wcs = Tan(*[float(x) for x in
+                    [ccd.crval1, ccd.crval2, ccd.crpix1, ccd.crpix2,
+                     ccd.cd1_1,  ccd.cd1_2,  ccd.cd2_1, ccd.cd2_2, W, H]])
+        return wcs
     
     def tims_touching_wcs(self, targetwcs, mp, bands=None,
                           **kwargs):

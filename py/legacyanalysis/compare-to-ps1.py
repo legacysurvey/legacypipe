@@ -60,12 +60,210 @@ computation (decstat)?!
 
 '''
 
+def star_profiles(ps):
+    # Run an example CCD, 292604-N4, with fairly large difference vs PS1.
+    
+    # python -c "from astrometry.util.fits import *; T = merge_tables([fits_table('/project/projectdirs/desiproc/dr3/tractor/244/tractor-244%s.fits' % b) for b in ['2p065','4p065', '7p065']]); T.writeto('tst-cat.fits')"
+    # python legacypipe/forced_photom_decam.py --save-data tst-data.fits --save-model tst-model.fits 292604 N4 tst-cat.fits tst-phot.fits
 
+    # -> tst-{model,data,phot}.fits
 
+    datafn = 'tst-data.fits'
+    modfn = 'tst-model.fits'
+    photfn = 'tst-phot.fits'
+    catfn = 'tst-cat.fits'
+    
+    img = fitsio.read(datafn)
+    mod = fitsio.read(modfn)
+    phot = fits_table(photfn)
+    cat = fits_table(catfn)
+    print(len(phot), 'forced-photometry results')
+    margin = 25
+    phot.cut((phot.x > 0+margin) * (phot.x < 2046-margin) *
+             (phot.y > 0+margin) * (phot.y < 4096-margin))
+    print(len(phot), 'in bounds')
+
+    cmap = dict([((b,o),i) for i,(b,o) in enumerate(zip(cat.brickname, cat.objid))])
+    I = np.array([cmap.get((b,o), -1) for b,o in zip(phot.brickname, phot.objid)])
+    print(np.sum(I >= 0), 'forced-phot matched cat')
+    phot.type = cat.type[I]
+
+    wcs = Sip(datafn)
+    
+    phot.ra,phot.dec = wcs.pixelxy2radec(phot.x+1, phot.y+1)
+    phot.cut(np.argsort(phot.flux))
+
+    phot.sn = phot.flux * np.sqrt(phot.flux_ivar)
+
+    phot.cut(phot.sn > 5)
+    print(len(phot), 'with S/N > 5')
+    
+    ps1 = ps1cat(ccdwcs=wcs)
+    stars = ps1.get_stars()
+    print(len(stars), 'PS1 sources')
+    # Now cut to just *stars* with good colors
+    stars.gicolor = stars.median[:,0] - stars.median[:,2]
+    keep = (stars.gicolor > 0.4) * (stars.gicolor < 2.7)
+    stars.cut(keep)
+    print(len(stars), 'PS1 stars with good colors')
+    stars.cut(np.minimum(stars.stdev[:,1], stars.stdev[:,2]) < 0.05)
+    print(len(stars), 'PS1 stars with min stdev(r,i) < 0.05')
+    I,J,d = match_radec(phot.ra, phot.dec, stars.ra, stars.dec, 1./3600.)
+    print(len(I), 'matches')
+
+    plt.clf()
+    ha=dict(histtype='step', bins=20, range=(0,100), normed=True)
+    plt.hist(phot.flux, color='b', **ha)
+    plt.hist(phot.flux[I], color='r', **ha)
+    ps.savefig()
+
+    plt.clf()
+    plt.hist(phot.flux * np.sqrt(phot.flux_ivar), bins=100,
+             range=(-10, 50))
+    plt.xlabel('Flux S/N')
+    ps.savefig()
+    
+    K = np.argsort(phot.flux[I])
+    I = I[K]
+    J = J[K]
+
+    ix = np.round(phot.x).astype(int)
+    iy = np.round(phot.y).astype(int)
+    sz = 10
+
+    P = np.flatnonzero(phot.type == 'PSF ')
+    print(len(P), 'PSFs')
+
+    imed = len(P)/2
+    i1 = int(len(P) * 0.75)
+    i2 = int(len(P) * 0.25)
+    N = 401
+
+    allmods = []
+    allimgs = []
+    
+    for II,tt in [#(I[:len(I)/2], 'faint matches to PS1'),
+        #(I[len(I)/2:], 'bright matches to PS1'),
+        #(P[i2: i2+N], '25th pct PSFs'),
+        #(P[imed: imed+N], 'median PSFs'),
+        #(P[i1: i1+N], '75th pct PSFs'),
+        #(P[-25:], 'brightest PSFs'),
+        (P[i2:imed], '2nd quartile of PSFs'),
+        (P[imed:i1], '3rd quartile of PSFs'),
+        #(P[:len(P)/2], 'faint half of PSFs'),
+        #(P[len(P)/2:], 'bright half of PSFs'),
+                  ]:
+        imgs = []
+        mods = []
+        shimgs = []
+        shmods = []
+        imgsum = modsum = 0
+
+        #plt.clf()
+        for i in II:
+
+            from astrometry.util.util import lanczos_shift_image
+            
+            dy = phot.y[i] - iy[i]
+            dx = phot.x[i] - ix[i]
+
+            sub = img[iy[i]-sz : iy[i]+sz+1, ix[i]-sz : ix[i]+sz+1]
+            shimg = lanczos_shift_image(sub, -dx, -dy)
+
+            sub = mod[iy[i]-sz : iy[i]+sz+1, ix[i]-sz : ix[i]+sz+1]
+            shmod = lanczos_shift_image(sub, -dx, -dy)
+
+            iyslice = img[iy[i], ix[i]-sz : ix[i]+sz+1]
+            myslice = mod[iy[i], ix[i]-sz : ix[i]+sz+1]
+            ixslice = img[iy[i]-sz : iy[i]+sz+1, ix[i]]
+            mxslice = mod[iy[i]-sz : iy[i]+sz+1, ix[i]]
+            mx = iyslice.max()
+            # plt.plot(iyslice/mx, 'b-', alpha=0.1)
+            # plt.plot(myslice/mx, 'r-', alpha=0.1)
+            # plt.plot(ixslice/mx, 'b-', alpha=0.1)
+            # plt.plot(mxslice/mx, 'r-', alpha=0.1)
+
+            siyslice = shimg[sz, :]
+            sixslice = shimg[:, sz]
+            smyslice = shmod[sz, :]
+            smxslice = shmod[:, sz]
+
+            shimgs.append(siyslice/mx)
+            shimgs.append(sixslice/mx)
+            shmods.append(smyslice/mx)
+            shmods.append(smxslice/mx)
+
+            imgs.append(iyslice/mx)
+            imgs.append(ixslice/mx)
+            mods.append(myslice/mx)
+            mods.append(mxslice/mx)
+
+            imgsum = imgsum + ixslice + iyslice
+            modsum = modsum + mxslice + myslice
+
+        # plt.ylim(-0.1, 1.1)
+        # plt.title(tt)
+        # ps.savefig()
+        mimg = np.median(np.array(imgs), axis=0)
+        mmod = np.median(np.array(mods), axis=0)
+        mshim = np.median(np.array(shimgs), axis=0)
+        mshmo = np.median(np.array(shmods), axis=0)
+
+        allmods.append(mshmo)
+        allimgs.append(mshim)
+        
+        plt.clf()
+        # plt.plot(mimg, 'b-')
+        # plt.plot(mmod, 'r-')
+        plt.plot(mshim, 'g-')
+        plt.plot(mshmo, 'm-')
+        
+        plt.ylim(-0.1, 1.1)
+        plt.title(tt + ': median; sums %.3f/%.3f' % (np.sum(mimg), np.sum(mmod)))
+        ps.savefig()
+        
+        # plt.clf()
+        # mx = imgsum.max()
+        # plt.plot(imgsum/mx, 'b-')
+        # plt.plot(modsum/mx, 'r-')
+        # plt.ylim(-0.1, 1.1)
+        # plt.title(tt + ': sum')
+        # ps.savefig()
+
+        plt.clf()
+        plt.plot((mimg + 0.01) / (mmod + 0.01), 'k-')
+        plt.plot((imgsum/mx + 0.01) / (modsum/mx + 0.01), 'g-')
+        plt.plot((mshim + 0.01) / (mshmo + 0.01), 'm-')
+        plt.ylabel('(img + 0.01) / (mod + 0.01)')
+        plt.title(tt)
+        ps.savefig()
+        
+
+    iq2,iq3 = allimgs
+    mq2,mq3 = allmods
+    plt.clf()
+
+    plt.plot(iq2, 'r-')
+    plt.plot(mq2, 'm-')
+
+    plt.plot(iq3, 'b-')
+    plt.plot(mq3, 'g-')
+
+    plt.title('Q2 vs Q3')
+    ps.savefig()
+    
+        
+    
 def main():
-    survey_dir = '/project/projectdirs/desiproc/dr3'
-    survey = LegacySurveyData(survey_dir=survey_dir)
 
+    # ps = PlotSequence('pro')
+    # star_profiles(ps)
+    # sys.exit(0)
+
+    #survey_dir = '/project/projectdirs/desiproc/dr3'
+    #survey = LegacySurveyData(survey_dir=survey_dir)
+    survey = LegacySurveyData()
+    
     ralo,rahi = 240,245
     declo,dechi = 5, 12
 
@@ -81,7 +279,8 @@ def main():
                  (ccds.dec > declo) * (ccds.dec < dechi))
         print(len(ccds), 'CCDs')
         
-        ccds.path = np.array([os.path.join('dr3', 'forced', ('%08i' % e)[:5], '%08i' % e, 'decam-%08i-%s-forced.fits' % (e, n.strip()))
+        ccds.path = np.array([os.path.join(#'dr3',
+            'forced', ('%08i' % e)[:5], '%08i' % e, 'decam-%08i-%s-forced.fits' % (e, n.strip()))
                               for e,n in zip(ccds.expnum, ccds.ccdname)])
         I, = np.nonzero([os.path.exists(fn) for fn in ccds.path])
         print(len(I), 'CCDs with forced photometry')
@@ -104,6 +303,11 @@ def main():
         ccds = fits_table(ccdfn)
         # Split into brighter/fainter halves
         FF = fits_table('forced-all-matches.fits')
+
+        print(len(FF), 'forced measurements')
+        FF.cut(FF.masked == False)
+        print(len(FF), 'forced measurements not masked')
+
         ccds.brightest_mdiff = np.zeros(len(ccds))
         ccds.brightest_mscatter = np.zeros(len(ccds))
         ccds.bright_mdiff = np.zeros(len(ccds))
@@ -223,13 +427,30 @@ def main():
         # plt.title('DR3: EDR region, Forced phot: %s band' % band)
         # ps.savefig()
 
+        # plt.clf()
+        # plt.plot(ccds.avsky[I],
+        #          np.clip(ccds.mdiff[I], mlo,mhi), 'k.', alpha=0.1)
+        # plt.xlabel('avsky')
+        # plt.ylabel('DECaLS PSF - PS1 (mag)')
+        # plt.axhline(0, color='k', alpha=0.2)
+        # plt.title('DR3: EDR region, Forced phot: %s band' % band)
+        # ps.savefig()
+        # 
+        # plt.clf()
+        # plt.plot(ccds.meansky[I],
+        #          np.clip(ccds.mdiff[I], mlo,mhi), 'k.', alpha=0.1)
+        # plt.xlabel('meansky')
+        # plt.ylabel('DECaLS PSF - PS1 (mag)')
+        # plt.axhline(0, color='k', alpha=0.2)
+        # plt.title('DR3: EDR region, Forced phot: %s band' % band)
+        # ps.savefig()
 
         plt.clf()
         lo,hi = (-0.02, 0.05)
         ha = dict(bins=50, histtype='step', range=(lo,hi))
-        n,b,p1 = plt.hist(ccds.brightest_mdiff, color='r', **ha)
-        n,b,p2 = plt.hist(ccds.bright_mdiff, color='g', **ha)
-        n,b,p3 = plt.hist(ccds.faint_mdiff, color='b', **ha)
+        n,b,p1 = plt.hist(ccds.brightest_mdiff[I], color='r', **ha)
+        n,b,p2 = plt.hist(ccds.bright_mdiff[I], color='g', **ha)
+        n,b,p3 = plt.hist(ccds.faint_mdiff[I], color='b', **ha)
         plt.legend((p1[0],p2[0],p3[0]), ('Brightest 10%', 'Brightest 50%',
                                          'Faintest 50%'))
         plt.xlabel('DECaLS PSF - PS1 (mag)')

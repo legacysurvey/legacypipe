@@ -209,15 +209,17 @@ def read_fits_catalog(T, hdr=None, invvars=False, bands='grz',
 
         shorttype = fits_short_typemap[clazz]
 
-        assert(np.all(np.isfinite(t.decam_flux[ibands])))
+        flux = np.atleast_1d(t.decam_flux)
+        assert(np.all(np.isfinite(flux[ibands])))
         br = NanoMaggies(order=bands,
-                         **dict(zip(bands, t.decam_flux[ibands])))
+                         **dict(zip(bands, flux[ibands])))
         params = [pos, br]
         if invvars:
             # ASSUME & hard-code that the position and brightness are
             # the first params
+            fluxiv = np.atleast_1d(t.decam_flux_ivar)
             ivs.extend([t.ra_ivar, t.dec_ivar] +
-                       list(t.decam_flux_ivar[ibands]))
+                       list(t.decam_flux_iv[ibands]))
             
         if issubclass(clazz, (DevGalaxy, ExpGalaxy)):
             if ellipseClass is not None:

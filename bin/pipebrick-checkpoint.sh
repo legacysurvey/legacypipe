@@ -10,8 +10,14 @@ export MKL_NUM_THREADS=1
 
 # Try limiting memory to avoid killing the whole MPI job...
 #ulimit -S -v 15000000
-ulimit -S -v 30000000
+#ulimit -S -v 30000000
 ulimit -a
+
+# Make sure we're reading from Edison scratch
+#module unload dust
+#module load dust/scratch
+### argh modules not seeming to work.
+export DUST_DIR=/scratch1/scratchdirs/desiproc/dust/v0_0
 
 outdir=$SCRATCH/dr3
 
@@ -39,20 +45,25 @@ echo >> $log
 echo -e "\nStarting on ${NERSC_HOST} $(hostname)\n" >> $log
 echo "-----------------------------------------------------------------------------------------" >> $log
 
-# -s tims \
-# -P 'pickles/runbrick-dr2p-%(brick)s-%%(stage)s.pickle' \
-#    --no-early-coadds \
+#     --threads 24 \
+
 python legacypipe/runbrick.py \
      --no-write \
      --pipe \
-     --threads 8 \
-     --on-bricks \
      --skip \
+     --threads 6 \
      --skip-calibs \
      --checkpoint checkpoints/checkpoint-${brick}.pickle \
      --fitblobs-prereq pickles/runbrick-${brick}-srcs.pickle \
-     --ps ps/ps-${brick}.fits \
-     --brick $brick --outdir $outdir --nsigma 6 >> $log 2>&1
+     --brick $brick --outdir $outdir --nsigma 6 \
+     >> $log 2>&1
 
+#     --ps ps/ps-${brick}.fits \
+#     --on-bricks \
+#     --allow-missing-brickq 0 \
+
+# -s tims \
+# -P 'pickles/runbrick-dr2p-%(brick)s-%%(stage)s.pickle' \
+#    --no-early-coadds \
 # qdo launch dr2n 16 --cores_per_worker 8 --walltime=24:00:00 --script ../bin/pipebrick.sh --batchqueue regular --verbose
 # qdo launch edr0 4 --cores_per_worker 8 --batchqueue regular --walltime 4:00:00 --script ../bin/pipebrick.sh --keep_env --batchopts "--qos=premium -a 0-3"
