@@ -18,8 +18,10 @@ def get_outdir(comparison):
         outdir = os.getenv('VALIDATION_DIR')
     else:
         outdir = 'validation'
-    #add appropriate dir
-    if comparison == 'bmd':
+    # Add appropriate dir
+    if comparison == 'test':
+        dir= os.path.join(outdir,'test/')
+    elif comparison == 'bmd':
         dir= os.path.join(outdir,'bass-mosaic-decals/')
     elif comparison == 'cosmos':
         dir= os.path.join(outdir,'cosmos/')

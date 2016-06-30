@@ -23,6 +23,8 @@ from astropy.table import vstack, Table, Column
 from scipy.spatial import KDTree
 #from astrometry.libkd.spherematch import match_radec
 
+from legacyanalysis.pathnames import get_outdir
+
 def read_lines(fn):
     fin=open(fn,'r')
     lines=fin.readlines()
@@ -51,7 +53,6 @@ def kdtree_match(ref_ra,ref_dec, ra,dec, k=1, dsmax=1./3600):
     ref_match= np.arange(len(ref_ra))[ds<=dsmax]
     other_match= i_tree[ds<=dsmax]
     assert(len(ref_ra[ref_match]) == len(ra[other_match]))
-    print("Matched: %d/%d objects" % (ref_match.size,len(ref_ra))
     return np.array(ref_match),np.array(other_match),np.array(ds[ds<=dsmax])
 
 def combine_single_cats(cat_list):
@@ -103,16 +104,17 @@ def match_two_cats(ref_cats_file,test_cats_file):
     d_matched= 0.
     deg2= dict(ref=0.,test=0.,matched=0.)
     #for cnt,cat1,cat2 in zip(range(len(fns_1)),fns_1,fns_2):
-    for cnt,cat1,cat2 in zip([0],[fns_1[0]],[fns_2[0]]):
+    for cnt,cat1,cat2 in zip(range(1),fns_1[:1],fns_2[:1]):
         log.info('Reading %s -- %s' % (cat1,cat2))
         ref_tractor = Table(fits.getdata(cat1, 1), masked=True)
         test_tractor = Table(fits.getdata(cat2, 1), masked=True)
-        #m1, m2, d12 = match_radec(ref_tractor['ra'].copy(), ref_tractor['dec'].copy(),\
-        #                          test_tractor['ra'].copy(), test_tractor['dec'].copy(), \
+        #m1, m2, d12 = match_radec(ref_tractor['ra'].data.copy(), ref_tractor['dec'].data.copy(),\
+        #                          test_tractor['ra'].data.copy(), test_tractor['dec'].data.copy(), \
         #                          1.0/3600.0)
         m1, m2, d12= kdtree_match(ref_tractor['ra'].copy(), ref_tractor['dec'].copy(),\
                                   test_tractor['ra'].copy(), test_tractor['dec'].copy(),\
                                   k=1, dsmax=1./3600)
+        print("Matched: %d/%d objects" % (m1.size,len(ref_tractor['ra'])))
         miss1 = np.delete(np.arange(len(ref_tractor)), m1, axis=0)
         miss2 = np.delete(np.arange(len(test_tractor)), m2, axis=0)
 
@@ -142,15 +144,16 @@ def match_two_cats(ref_cats_file,test_cats_file):
 class Single_TractorCat(object):
     '''given a astropy table of a Tractor Catalogue, this object computes
     everything you could need to know for the Tractor Catalogue'''
-    def __init__(self,astropy_t):
+    def __init__(self,astropy_t, comparison='test'):
         self.t= astropy_t
         # outdir for when making plots
-        raise ValueError # self.outdir= 
+        self.outdir= get_outdir(comparison)
         # AB Mags
         self.get_magAB()
         self.get_magAB_ivar()
         # Masks (True where mask OUT values)
         self.masks= dict(default= self.basic_cuts(),\
+                         all= np.zeros(len(self.t['ra'])).astype(bool),\
                          psf= self.cut_on_type('PSF'),\
                          simp= self.cut_on_type('SIMP'),\
                          exp= self.cut_on_type('EXP'),\
@@ -183,16 +186,16 @@ class Single_TractorCat(object):
                         self.t['decam_fracflux'].data[:,4] > 0.05,\
                         self.t['brick_primary'].data == False),axis=0)
 
-    def apply_boolean_mask(mask):
+    def apply_boolean_mask(self, mask):
         '''set each Column's mask to specified mask'''
         # Tell masks dict what that this is the new current mask
         self.masks['current']= mask
         for key in self.t.keys(): self.t[key].mask= self.masks['current']
 
-    def extend_exiting_mask(self,newmask):
-        '''mask wherever current mask OR newmask is True'''
+    def add_to_current_mask(self,newmask):
+        '''mask additional pixels to current mask'''
         assert(self.masks is not None)
-        mask= np.any((self.t['ra'].mask,newmask), axis=0)
+        mask= np.any((self.masks['current'],newmask), axis=0)
         self.apply_boolean_mask(mask)
 
     def combine_mask_by_names(self,list_of_names):
@@ -208,21 +211,19 @@ class Single_TractorCat(object):
 
     def apply_mask_by_names(self,list_of_names):
         '''set mask to union of masks in "list of names"'''
-        union= self.union_mask_by_names(list_of_names)
+        union= self.combine_mask_by_names(list_of_names)
         self.apply_boolean_mask(union)
 
     def number_not_masked(self,list_of_names):
         '''for mask being union of "list of names", 
         returns number object not masked out 
         example -- n_psf= self.number_masked(['psf'])'''
-        union= self.union_mask_by_names(list_of_names)
+        union= self.combine_mask_by_names(list_of_names)
         # Where NOT masked out
         return np.where(union == False)[0].size
-
-     def cut_on_type(self,name):
+    
+    def cut_on_type(self,name):
         '''True where BAD, return boolean array'''
-                'EXTENDED']
-        assert(name in allow)
         # Return boolean array
         if name in ['PSF','SIMP','EXP','DEV','COMP']:
             keep= self.t['type'].data == name
@@ -243,45 +244,20 @@ class Single_TractorCat(object):
 class Single_DataSet(object):
     '''a Single_DataSet contains a concatenated tractor catalogue as Astropy table
     with additional columns for mags, masks, target selection, etc'''
-    def __init__(self,cat_list):
+    def __init__(self,cat_list, comparison='test'):
         # Store tractor catalogue as astropy Table
         astropy_t, self.meta= combine_single_cats(cat_list)
-        self.single= Single_TractorCat(astropy_t)
+        self.single= Single_TractorCat(astropy_t, comparison)
 
 class Matched_DataSet(object):
     '''a Matched_DataSet contains a dict of 4 concatenated, matched, tractor catalogue astropy Tables
     each table has additional columns for mags, target selection, masks, etc.'''
-    def __init__(self,ref_cats_file,test_cats_file):
+    def __init__(self,ref_cats_file,test_cats_file, comparison='test'):
         astropy_ts, self.meta= match_two_cats(ref_cats_file,test_cats_file)
         # have 4 tractor catalogues
-        self.ref_matched= Single_TractorCat(astropy_ts['ref_matched'])
-        self.test_matched= Single_TractorCat(astropy_ts['test_matched'])
-        self.ref_missed= Single_TractorCat(astropy_ts['ref_missed'])
-        self.test_missed= Single_TractorCat(astropy_ts['test_missed'])
-
-## Combine matched masks,type indices, etc
-#    ds['both']= {}
-#    ds['both']['keep']= np.all((ds['ref_matched'].keep,\
-#                                ds['test_matched'].keep), axis=0)
-#    for typ in ['PSF','SIMP','EXP','DEV','COMP']:
-#        ds['both'][typ]= np.all((ds['ref_matched'].type[typ],\
-#                                 ds['test_matched'].type[typ]), axis=0)
-#    return ds
-
-#if __name__ == 'main':
-#    log.info('do a import combine_and_match')
-#    ds={}
-#    for key in ['ref_matched','test_matched','ref_missed','test_missed']:
-#        ds[key]= DataSet(data[key])
-#    #combine masks
-#    mask_match= np.any((ds['ref_matched'],\
-#                        ds['test_matched']), axis=0)
-#    mask_missed= np.any((ds['ref_missed'],\
-#                         ds['test_missed']), axis=0)
-#    for key in ['ref_matched','test_matched']:
-#        ds[key].mask= mask_match
-#    for key in ['ref_missed','test_missed']:
-#        ds[key].mask= mask_missed
-#
+        self.ref_matched= Single_TractorCat(astropy_ts['ref_matched'], comparison)
+        self.test_matched= Single_TractorCat(astropy_ts['test_matched'], comparison)
+        self.ref_missed= Single_TractorCat(astropy_ts['ref_missed'], comparison)
+        self.test_missed= Single_TractorCat(astropy_ts['test_missed'], comparison) 
 
 
