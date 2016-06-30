@@ -1,6 +1,12 @@
 #!/usr/bin/env python
 
 """combine list of tractor cats and match them along the way
+
+Example of Matched Comparison:
+from legacyanalysis.combine_cats import Matched_DataSet
+import common_plots as plots
+d= Matched_DataSet(list_of_ref_cats,list_of_test_cats)
+plots.confusion_matrix(d.ref_matched.t,d.test_matched.t)
 """
 
 from __future__ import division, print_function
@@ -14,8 +20,8 @@ import numpy as np
 
 from astropy.io import fits
 from astropy.table import vstack, Table, Column
-
-from astrometry.libkd.spherematch import match_radec
+from scipy.spatial import KDTree
+#from astrometry.libkd.spherematch import match_radec
 
 def read_lines(fn):
     fin=open(fn,'r')
@@ -30,6 +36,23 @@ def deg2_lower_limit(ra,dec):
     dec_wid= abs(dec.max()-dec.min())
     return ra_wid*dec_wid
 
+def kdtree_match(ref_ra,ref_dec, ra,dec, k=1, dsmax=1./3600):
+    '''finds approx. distance between reference and test points and
+    returns array of indices and distance where distance < dsmax (degrees)
+    '''
+    assert(len(ref_ra) == len(ref_dec))
+    assert(len(ra) == len(dec))
+    # Index the tree
+    tree = KDTree(np.transpose([dec.copy(),ra.copy()])) 
+    # Find the k nearest neighbors to each reference ra,dec
+    ds, i_tree = tree.query(np.transpose([ref_dec.copy(),ref_ra.copy()]), k=k) 
+    # Get indices where match
+    i_ref,i_other={},{}
+    ref_match= np.arange(len(ref_ra))[ds<=dsmax]
+    other_match= i_tree[ds<=dsmax]
+    assert(len(ref_ra[ref_match]) == len(ra[other_match]))
+    print("Matched: %d/%d objects" % (ref_match.size,len(ref_ra))
+    return np.array(ref_match),np.array(other_match),np.array(ds[ds<=dsmax])
 
 def combine_single_cats(cat_list):
     '''return dict containing astropy Table of concatenated tractor cats'''
@@ -84,12 +107,14 @@ def match_two_cats(ref_cats_file,test_cats_file):
         log.info('Reading %s -- %s' % (cat1,cat2))
         ref_tractor = Table(fits.getdata(cat1, 1), masked=True)
         test_tractor = Table(fits.getdata(cat2, 1), masked=True)
-        m1, m2, d12 = match_radec(ref_tractor['ra'].copy(), ref_tractor['dec'].copy(),\
-                                  test_tractor['ra'].copy(), test_tractor['dec'].copy(), \
-                                  1.0/3600.0)
+        #m1, m2, d12 = match_radec(ref_tractor['ra'].copy(), ref_tractor['dec'].copy(),\
+        #                          test_tractor['ra'].copy(), test_tractor['dec'].copy(), \
+        #                          1.0/3600.0)
+        m1, m2, d12= kdtree_match(ref_tractor['ra'].copy(), ref_tractor['dec'].copy(),\
+                                  test_tractor['ra'].copy(), test_tractor['dec'].copy(),\
+                                  k=1, dsmax=1./3600)
         miss1 = np.delete(np.arange(len(ref_tractor)), m1, axis=0)
         miss2 = np.delete(np.arange(len(test_tractor)), m2, axis=0)
-        log.info('matched %d/%d' % (len(m2),len(test_tractor['ra'])))
 
         # Build combined catalogs
         if len(ref_matched) == 0:
@@ -114,40 +139,36 @@ def match_two_cats(ref_cats_file,test_cats_file):
                 test_missed = test_missed), \
            dict(d_matched= d_matched, deg2= deg2)
 
-
-class Single_DataSet(object):
-    '''a Single_DataSet contains a concatenated tractor catalogue as Astropy table
-    with additional columns for mags, masks, target selection, etc'''
-    def __init__(self,cat_list):
-        # t is tractor catalogue Table
-        self.t,self.meta= combine_single_cats(cat_list)
-        # get mags, masks, target selection
-        self.add_info()
-
-    def add_info(self):
-        self.meta['i_grz']= [1,2,4]
-        self.meta['i_wise']= [0,1]
+class Single_TractorCat(object):
+    '''given a astropy table of a Tractor Catalogue, this object computes
+    everything you could need to know for the Tractor Catalogue'''
+    def __init__(self,astropy_t):
+        self.t= astropy_t
+        # outdir for when making plots
+        raise ValueError # self.outdir= 
         # AB Mags
         self.get_magAB()
-        self.get_magAB_ivar(
+        self.get_magAB_ivar()
         # Masks (True where mask OUT values)
         self.masks= dict(default= self.basic_cuts(),\
-                         psf= self.cut_on_type('psf'),\
-                         extended= self.cut_on_type('extended'))
-        # Set default mask
-        self.apply_mask( self.masks['default'] )
+                         psf= self.cut_on_type('PSF'),\
+                         simp= self.cut_on_type('SIMP'),\
+                         exp= self.cut_on_type('EXP'),\
+                         dev= self.cut_on_type('DEV'),\
+                         comp= self.cut_on_type('COMP'),\
+                         extended= self.cut_on_type('EXTENDED'))
+        # Initialize with default mask
+        self.apply_mask_by_names(['default'])
         # Target selection
         #self.targets= self.get_TargetSelectin(data)
 
     def get_magAB(self):
-        inds= self.meta['grz']
-        self.t['decam_mag']= self.t['decam_flux'][:,inds]/self.t['decam_mw_transmission'][:,inds]
+        self.t['decam_mag']= self.t['decam_flux']/self.t['decam_mw_transmission']
         self.t['decam_mag']= 22.5 -2.5*np.log10(self.t['decam_mag'])
 
     def get_magAB_ivar(self):
-        inds= self.meta['grz']
-        self.t['decam_mag_ivar']= np.power(np.log(10.)/2.5*self.t['decam_flux'][:,inds], 2)* \
-                                 self.t['decam_flux_ivar'][:,inds]  
+        self.t['decam_mag_ivar']= np.power(np.log(10.)/2.5*self.t['decam_flux'], 2)* \
+                                 self.t['decam_flux_ivar']
  
     def basic_cuts(self): 
         '''True where BAD, return boolean array'''
@@ -162,191 +183,105 @@ class Single_DataSet(object):
                         self.t['decam_fracflux'].data[:,4] > 0.05,\
                         self.t['brick_primary'].data == False),axis=0)
 
-    def apply_mask(mask):
+    def apply_boolean_mask(mask):
         '''set each Column's mask to specified mask'''
-        for key in self.t.keys(): self.t[key].mask= mask
+        # Tell masks dict what that this is the new current mask
+        self.masks['current']= mask
+        for key in self.t.keys(): self.t[key].mask= self.masks['current']
 
-    def add_to_existing_mask(self,newmask):
+    def extend_exiting_mask(self,newmask):
         '''mask wherever current mask OR newmask is True'''
         assert(self.masks is not None)
         mask= np.any((self.t['ra'].mask,newmask), axis=0)
-        self.apply_mask(mask)
+        self.apply_boolean_mask(mask)
+
+    def combine_mask_by_names(self,list_of_names):
+        '''return boolean union of all masks in "list_of_names"'''
+        assert(self.masks is not None)
+        for name in list_of_names: assert(name in self.masks.keys())
+        # return union
+        mask= self.masks[list_of_names[0]]
+        if len(list_of_names) > 1:
+            for i,name in enumerate(list_of_names[1:]): 
+                mask= np.any((mask, self.masks[name]), axis=0)
+        return mask
+
+    def apply_mask_by_names(self,list_of_names):
+        '''set mask to union of masks in "list of names"'''
+        union= self.union_mask_by_names(list_of_names)
+        self.apply_boolean_mask(union)
+
+    def number_not_masked(self,list_of_names):
+        '''for mask being union of "list of names", 
+        returns number object not masked out 
+        example -- n_psf= self.number_masked(['psf'])'''
+        union= self.union_mask_by_names(list_of_names)
+        # Where NOT masked out
+        return np.where(union == False)[0].size
 
      def cut_on_type(self,name):
-        '''True where BAD, return boolean array,
-        Tractor types are ['PSF','SIMP','EXP','DEV','COMP']''':
-        if name == 'psf':
-            return self.t['type'].data == 'PSF'
-        elif name == 'extended':
-            return self.t['type'].data != 'PSF'
+        '''True where BAD, return boolean array'''
+                'EXTENDED']
+        assert(name in allow)
+        # Return boolean array
+        if name in ['PSF','SIMP','EXP','DEV','COMP']:
+            keep= self.t['type'].data == name
+        elif name == 'EXTENDED':
+            keep= self.t['type'].data != 'PSF'
         else: raise ValueError
+        return keep == False
 
     #def get_TargetSelectin(self, data):
+    ##### store as self.t.masks['elg'], self.t.masks['lrg'], etc
     #    d={}
     #    d['desi_target'], d['bgs_target'], d['mws_target']= \
     #                    cuts.apply_cuts( data )
     #    return d
 
-   
-   
+    
 
-
+class Single_DataSet(object):
+    '''a Single_DataSet contains a concatenated tractor catalogue as Astropy table
+    with additional columns for mags, masks, target selection, etc'''
+    def __init__(self,cat_list):
+        # Store tractor catalogue as astropy Table
+        astropy_t, self.meta= combine_single_cats(cat_list)
+        self.single= Single_TractorCat(astropy_t)
 
 class Matched_DataSet(object):
     '''a Matched_DataSet contains a dict of 4 concatenated, matched, tractor catalogue astropy Tables
     each table has additional columns for mags, target selection, masks, etc.'''
     def __init__(self,ref_cats_file,test_cats_file):
-        self.
-        self.bands= ['g', 'r', 'z']
-        self.ibands= [1, 2, 4]
-        if 'wise_flux' in data.keys(): 
-            self.bands+= ['w1','w2']
-        # Create mask
-        self.keep= self.keep_indices(data)
-        # Mags
-        self.magAB,self.magAB_ivar={},{}
-        for band,iband in zip(['g', 'r', 'z'],[1,2,4]):
-            self.magAB[band]= self.get_magAB(data,iband)
-            self.magAB_ivar[band]= self.get_magAB_ivar(data,iband)
-        # Get targets
-        #self.ts= self.get_TargetSelectin(data)
-        # index for where type = psf,simp,exp etc
-        self.type= self.get_b_types(data)
+        astropy_ts, self.meta= match_two_cats(ref_cats_file,test_cats_file)
+        # have 4 tractor catalogues
+        self.ref_matched= Single_TractorCat(astropy_ts['ref_matched'])
+        self.test_matched= Single_TractorCat(astropy_ts['test_matched'])
+        self.ref_missed= Single_TractorCat(astropy_ts['ref_missed'])
+        self.test_missed= Single_TractorCat(astropy_ts['test_missed'])
 
-    def keep_indices(self,data): 
-        '''clean set of sources'''
-        return  np.all((data['decam_flux'][:,1] > 0,\
-                        data['decam_flux'][:,2] > 0,\
-                        data['decam_flux'][:,4] > 0, \
-                        data['decam_anymask'][:,1] == 0,\
-                        data['decam_anymask'][:,2] == 0,\
-                        data['decam_anymask'][:,4] == 0,\
-                        data['decam_fracflux'][:,1] <= 0.05,\
-                        data['decam_fracflux'][:,2] <= 0.05,\
-                        data['decam_fracflux'][:,4] <= 0.05,\
-                        data['brick_primary'] == True),axis=0)
+## Combine matched masks,type indices, etc
+#    ds['both']= {}
+#    ds['both']['keep']= np.all((ds['ref_matched'].keep,\
+#                                ds['test_matched'].keep), axis=0)
+#    for typ in ['PSF','SIMP','EXP','DEV','COMP']:
+#        ds['both'][typ]= np.all((ds['ref_matched'].type[typ],\
+#                                 ds['test_matched'].type[typ]), axis=0)
+#    return ds
 
-    def update_keep_indices(self,newkeep):
-        assert(self.keep is not None)
-        self.keep= np.all((self.keep,newkeep), axis=0)
-
-    #def get_TargetSelectin(self, data):
-    #    d={}
-    #    d['desi_target'], d['bgs_target'], d['mws_target']= \
-    #                    cuts.apply_cuts( data )
-    #    return d
-
-    def get_magAB(self, data,iband):
-        mag= data['decam_flux'][:,iband]/data['decam_mw_transmission'][:,iband]
-        return 22.5 -2.5*np.log10(mag)
-
-    def get_magAB_ivar(self, data,iband):
-        return np.power(np.log(10.)/2.5*data['decam_flux'][:,iband], 2)* \
-               data['decam_flux_ivar'][:,iband]  
-    
-    def get_b_types(self, data):
-        '''return boolean mask for type = psf,simp,exp, etc'''
-        b_index={}
-        for typ in ['PSF','SIMP','EXP','DEV','COMP']:
-            b_index[typ.strip()]= data['type'] == typ 
-        return b_index
-
-
-class DataSet(object):
-    '''a LegacySurvey data set contains bands, masks, mags, target selection
-    data is a astropy Table with same columns as Tractor Catalogue'''
-    def __init__(self,data):
-        self.bands= ['g', 'r', 'z']
-        self.ibands= [1, 2, 4]
-        if 'wise_flux' in data.keys(): 
-            self.bands+= ['w1','w2']
-        # Create mask
-        self.keep= self.keep_indices(data)
-        # Mags
-        self.magAB,self.magAB_ivar={},{}
-        for band,iband in zip(['g', 'r', 'z'],[1,2,4]):
-            self.magAB[band]= self.get_magAB(data,iband)
-            self.magAB_ivar[band]= self.get_magAB_ivar(data,iband)
-        # Get targets
-        #self.ts= self.get_TargetSelectin(data)
-        # index for where type = psf,simp,exp etc
-        self.type= self.get_b_types(data)
-
-    def keep_indices(self,data): 
-        '''clean set of sources'''
-        return  np.all((data['decam_flux'][:,1] > 0,\
-                        data['decam_flux'][:,2] > 0,\
-                        data['decam_flux'][:,4] > 0, \
-                        data['decam_anymask'][:,1] == 0,\
-                        data['decam_anymask'][:,2] == 0,\
-                        data['decam_anymask'][:,4] == 0,\
-                        data['decam_fracflux'][:,1] <= 0.05,\
-                        data['decam_fracflux'][:,2] <= 0.05,\
-                        data['decam_fracflux'][:,4] <= 0.05,\
-                        data['brick_primary'] == True),axis=0)
-
-    def update_keep_indices(self,newkeep):
-        assert(self.keep is not None)
-        self.keep= np.all((self.keep,newkeep), axis=0)
-
-    #def get_TargetSelectin(self, data):
-    #    d={}
-    #    d['desi_target'], d['bgs_target'], d['mws_target']= \
-    #                    cuts.apply_cuts( data )
-    #    return d
-
-    def get_magAB(self, data,iband):
-        mag= data['decam_flux'][:,iband]/data['decam_mw_transmission'][:,iband]
-        return 22.5 -2.5*np.log10(mag)
-
-    def get_magAB_ivar(self, data,iband):
-        return np.power(np.log(10.)/2.5*data['decam_flux'][:,iband], 2)* \
-               data['decam_flux_ivar'][:,iband]  
-    
-    def get_b_types(self, data):
-        '''return boolean mask for type = psf,simp,exp, etc'''
-        b_index={}
-        for typ in ['PSF','SIMP','EXP','DEV','COMP']:
-            b_index[typ.strip()]= data['type'] == typ 
-        return b_index
-
-class FillIn(object):
-    def __init__(self):
-        pass
-
-def DataSets(data, \
-             required=['ref_matched','test_matched','ref_missed','test_missed']):
-    '''return dict of DataSet objects, containing all info for validation
-    data -- returned by match_two_cats()
-    ref_name,test_name -- DECaLS, BASS/MzLS if comparing those two'''
-    for key in required: 
-        assert(key in data.keys())
-    ds={}
-    for key in required:
-        ds[key]= DataSet(data[key])
-    # Combine matched masks,type indices, etc
-    ds['both']= {}
-    ds['both']['keep']= np.all((ds['ref_matched'].keep,\
-                                ds['test_matched'].keep), axis=0)
-    for typ in ['PSF','SIMP','EXP','DEV','COMP']:
-        ds['both'][typ]= np.all((ds['ref_matched'].type[typ],\
-                                 ds['test_matched'].type[typ]), axis=0)
-    return ds
-
-if __name__ == 'main':
-    log.info('do a import combine_and_match')
-    ds={}
-    for key in ['ref_matched','test_matched','ref_missed','test_missed']:
-        ds[key]= DataSet(data[key])
-    #combine masks
-    mask_match= np.any((ds['ref_matched'],\
-                        ds['test_matched']), axis=0)
-    mask_missed= np.any((ds['ref_missed'],\
-                         ds['test_missed']), axis=0)
-    for key in ['ref_matched','test_matched']:
-        ds[key].mask= mask_match
-    for key in ['ref_missed','test_missed']:
-        ds[key].mask= mask_missed
-
+#if __name__ == 'main':
+#    log.info('do a import combine_and_match')
+#    ds={}
+#    for key in ['ref_matched','test_matched','ref_missed','test_missed']:
+#        ds[key]= DataSet(data[key])
+#    #combine masks
+#    mask_match= np.any((ds['ref_matched'],\
+#                        ds['test_matched']), axis=0)
+#    mask_missed= np.any((ds['ref_missed'],\
+#                         ds['test_missed']), axis=0)
+#    for key in ['ref_matched','test_matched']:
+#        ds[key].mask= mask_match
+#    for key in ['ref_missed','test_missed']:
+#        ds[key].mask= mask_missed
+#
 
 
