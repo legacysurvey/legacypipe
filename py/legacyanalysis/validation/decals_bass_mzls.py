@@ -1,6 +1,6 @@
 #!/usr/bin/env python
 
-"""compare two tractor catalogues that should have same objects
+"""do DECaLS to BASS/MzLS comparison
 """
 
 from __future__ import division, print_function
@@ -59,4 +59,4 @@ d.test_matched.apply_mask_by_names(['default','psf'])
 plots.sn_vs_mag(d.ref_matched, name="Ref_DefaultPsf")
 plots.sn_vs_mag(d.test_matched, name="Test_DefaultPsf")
 
-
+print('finished DECaLS to BASS/MzLS comparison')
