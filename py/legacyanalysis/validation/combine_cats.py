@@ -21,9 +21,9 @@ import numpy as np
 from astropy.io import fits
 from astropy.table import vstack, Table, Column
 from scipy.spatial import KDTree
-from astrometry.libkd.spherematch import match_radec
+#from astrometry.libkd.spherematch import match_radec
 
-from legacyanalysis.pathnames import get_outdir
+from legacyanalysis.validation.pathnames import get_outdir
 
 def read_lines(fn):
     fin=open(fn,'r')
@@ -103,17 +103,17 @@ def match_two_cats(ref_cats_file,test_cats_file):
     test_missed = []
     d_matched= 0.
     deg2= dict(ref=0.,test=0.,matched=0.)
-    for cnt,cat1,cat2 in zip(range(len(fns_1)),fns_1,fns_2):
-    #for cnt,cat1,cat2 in zip(range(1),fns_1[:1],fns_2[:1]):
+    #for cnt,cat1,cat2 in zip(range(len(fns_1)),fns_1,fns_2):
+    for cnt,cat1,cat2 in zip(range(1),fns_1[:1],fns_2[:1]):
         log.info('Reading %s -- %s' % (cat1,cat2))
         ref_tractor = Table(fits.getdata(cat1, 1), masked=True)
         test_tractor = Table(fits.getdata(cat2, 1), masked=True)
-        m1, m2, d12 = match_radec(ref_tractor['ra'].data.copy(), ref_tractor['dec'].data.copy(),\
-                                  test_tractor['ra'].data.copy(), test_tractor['dec'].data.copy(), \
-                                  1.0/3600.0)
-        #m1, m2, d12= kdtree_match(ref_tractor['ra'].copy(), ref_tractor['dec'].copy(),\
-        #                          test_tractor['ra'].copy(), test_tractor['dec'].copy(),\
-        #                          k=1, dsmax=1./3600)
+        #m1, m2, d12 = match_radec(ref_tractor['ra'].data.copy(), ref_tractor['dec'].data.copy(),\
+        #                          test_tractor['ra'].data.copy(), test_tractor['dec'].data.copy(), \
+        #                          1.0/3600.0)
+        m1, m2, d12= kdtree_match(ref_tractor['ra'].copy(), ref_tractor['dec'].copy(),\
+                                  test_tractor['ra'].copy(), test_tractor['dec'].copy(),\
+                                  k=1, dsmax=1./3600)
         print("Matched: %d/%d objects" % (m1.size,len(ref_tractor['ra'])))
         miss1 = np.delete(np.arange(len(ref_tractor)), m1, axis=0)
         miss2 = np.delete(np.arange(len(test_tractor)), m2, axis=0)
