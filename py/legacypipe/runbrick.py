@@ -687,23 +687,9 @@ def stage_image_coadds(survey=None, targetwcs=None, bands=None, tims=None,
                     mp=mp)
 
     #coadds of galaxy sims only, image only
-    if 'sims_image' in tims[0].__dict__:
-        sims_mods= [tim.sims_image for tim in tims]
-        T_sims_coadds = make_coadds(tims, bands, targetwcs, mods=sims_mods,
-                        detmaps=True, lanczos=lanczos,
-                        callback=write_coadd_images,
-                        callback_args=(survey, brickname, version_header, tims, targetwcs),
-                        mp=mp)
-        sims_coadd= T_sims_coadds.comods
-        del T_sims_coadds
-        image_only_mods= [tim.data-tim.sims_image for tim in tims]
-        T_image_coadds = make_coadds(tims, bands, targetwcs, mods=image_only_mods,
-                        detmaps=True, lanczos=lanczos,
-                        callback=write_coadd_images,
-                        callback_args=(survey, brickname, version_header, tims, targetwcs),
-                        mp=mp)
-        image_coadd= T_image_coadds.comods
-        del T_image_coadds
+    if hasattr(tims[0], 'sims_image'):
+        sims_coadd,nil = quick_coadds(tims, bands, targetwcs, images=[tim.sims_image for tim in tims])
+        image_coadd,nil = quick_coadds(tims, bands, targetwcs, images=[tim.data-tim.sims_image for tim in tims])
     ########
 
     # if plots:
