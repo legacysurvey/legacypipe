@@ -133,10 +133,11 @@ def create_confusion_matrix(ref_obj,test_obj):
     cm=np.zeros((5,5))-1
     types=['PSF','SIMP','EXP','DEV','COMP']
     for i_ref,ref_type in enumerate(types):
-        n_ref= ref_obj.number_not_masked(['current',ref_type.lower()])
+        cut_ref= np.where(ref_obj.t['type'] == ref_type)[0]
+        #n_ref= ref_obj.number_not_masked(['current',ref_type.lower()])
         for i_test,test_type in enumerate(types):
-            n_test= test_obj.number_not_masked(['current',test_type.lower()])
-            if n_ref > 0: cm[i_ref,i_test]= float(n_test)/n_ref
+            n_test= np.where(test_obj.t['type'][ cut_ref ] == test_type)[0].size
+            if cut_ref.size > 0: cm[i_ref,i_test]= float(n_test)/cut_ref.size
             else: cm[i_ref,i_test]= np.nan
     return cm,types
 
