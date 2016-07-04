@@ -740,13 +740,17 @@ Now using the current directory as LEGACY_SURVEY_DIR, but this is likely to fail
         elif filetype == 'tractor':
             return os.path.join(basedir, 'tractor', brickpre,
                                 'tractor-%s.fits' % brick)
+        
+        elif filetype == 'galaxy-sims':
+            return os.path.join(basedir, 'tractor', brickpre,
+                                'galaxy-sims-%s.fits' % brick)
 
         elif filetype in ['ccds-table', 'depth-table']:
             ty = filetype.split('-')[0]
             return os.path.join(codir, 'legacysurvey-%s-%s.fits' % (brick, ty))
 
         elif filetype in ['image-jpeg', 'model-jpeg', 'resid-jpeg',
-                          'imageblob-jpeg']:
+                          'imageblob-jpeg', 'simscoadd-jpeg','imagecoadd-jpeg']: 
             ty = filetype.split('-')[0]
             return os.path.join(codir, 'legacysurvey-%s-%s.jpg' % (brick, ty))
 
