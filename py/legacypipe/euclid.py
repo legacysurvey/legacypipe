@@ -17,7 +17,7 @@ import fitsio
 import astropy
 
 from astrometry.util.fits import fits_table, merge_tables
-#from astrometry.util.util import *
+from astrometry.util.util import wcs_pv2sip_hdr
 from astrometry.util.plotutils import PlotSequence, plothist
 from astrometry.util.ttime import Time, MemMeas
 
