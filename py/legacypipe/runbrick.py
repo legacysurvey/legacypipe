@@ -74,6 +74,7 @@ def stage_tims(W=3600, H=3600, pixscale=0.262, brickname=None,
                do_calibs=True,
                splinesky=True,
                gaussPsf=False, pixPsf=False,
+               constant_invvar=False,
                use_blacklist = True,
                mp=None,
                rsync=False,
@@ -322,8 +323,10 @@ def stage_tims(W=3600, H=3600, pixscale=0.262, brickname=None,
 
 
     # Read Tractor images
-    args = [(im, targetrd, dict(gaussPsf=gaussPsf,
-                                pixPsf=pixPsf, splinesky=splinesky)) for im in ims]
+    args = [(im, targetrd, dict(gaussPsf=gaussPsf, pixPsf=pixPsf,
+                                splinesky=splinesky,
+                                constant_invvar=constant_invvar))
+                                for im in ims]
     tims = mp.map(read_one_tim, args)
 
     tnow = Time()
@@ -2660,6 +2663,7 @@ def run_brick(brick, survey, radec=None, pixscale=0.262,
               gaussPsf=False,
               pixPsf=False,
               splinesky=False,
+              constant_invvar=False,
               ceres=True,
               unwise_dir=None,
               threads=None,
@@ -2846,6 +2850,7 @@ def run_brick(brick, survey, radec=None, pixscale=0.262,
         ps.skipto(plotnumber)
 
     kwargs.update(ps=ps, nsigma=nsigma, gaussPsf=gaussPsf, pixPsf=pixPsf,
+                  constant_invvar=constant_invvar,
                   use_blacklist=blacklist,
                   splinesky=splinesky,
                   simul_opt=simulOpt, pipe=pipe,
