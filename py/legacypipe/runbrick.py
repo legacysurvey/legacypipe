@@ -1185,7 +1185,7 @@ def stage_fitblobs(T=None,
                    bands=None, ps=None, tims=None,
                    survey=None,
                    plots=False, plots2=False,
-                   nblobs=None, blob0=None, blobxy=None,
+                   nblobs=None, blob0=None, blobxy=None, blobradec=None,
                    simul_opt=False, use_ceres=True, mp=None,
                    checkpoint_filename=None,
                    checkpoint_period=600,
@@ -1304,6 +1304,15 @@ def stage_fitblobs(T=None,
     tlast = tnow
 
     keepblobs = None
+
+    if blobradec is not None:
+        # blobradec is a list like [(ra0,dec0), ...]
+        rd = np.array(blobradec)
+        ok,x,y = targetwcs.radec2pixelxy(rd[:,0], rd[:,1])
+        x = (x - 1).astype(int)
+        y = (y - 1).astype(int)
+        blobxy = zip(x, y)
+        print('Blobradec -> blobxy:', len(blobxy), 'points')
 
     if blobxy is not None:
         # blobxy is a list like [(x0,y0), (x1,y1), ...]
@@ -1875,6 +1884,7 @@ def stage_blobiter(T=None,
             else:
                 print('WARNING: blobxy', x,y, 'is not in a blob!')
         keepblobs = np.unique(keepblobs)
+        print('Keeping', len(keepblobs), 'blobs')
 
     if blob0 is not None or (nblobs is not None and nblobs < len(blobslices)):
         if blob0 is None:
@@ -2593,7 +2603,7 @@ def run_brick(brick, survey, radec=None, pixscale=0.262,
               bands=None,
               allbands=None,
               blacklist=True,
-              nblobs=None, blob=None, blobxy=None,
+              nblobs=None, blob=None, blobxy=None, blobradec=None,
               pipe=True, nsigma=6,
               simulOpt=False,
               wise=True,
@@ -2677,6 +2687,8 @@ def run_brick(brick, survey, radec=None, pixscale=0.262,
     - *blob*: int; for debugging purposes, start with this blob index.
     - *blobxy*: list of (x,y) integer tuples; only run the blobs
       containing these pixels.
+    - *blobradec*: list of (RA,Dec) tuples; only run the blobs
+      containing these coordinates.
 
     Other options:
 
@@ -2829,6 +2841,8 @@ def run_brick(brick, survey, radec=None, pixscale=0.262,
         kwargs.update(blob0=blob)
     if blobxy is not None:
         kwargs.update(blobxy=blobxy)
+    if blobradec is not None:
+        kwargs.update(blobradec=blobradec)
 
     picklePattern = picklePattern % dict(brick=brick)
 
