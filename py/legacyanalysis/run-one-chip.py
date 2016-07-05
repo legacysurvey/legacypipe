@@ -6,13 +6,12 @@ from astrometry.libkd.spherematch import match_radec
 from astrometry.util.plotutils import PlotSequence
 import pylab as plt
 import numpy as np
-
+import fitsio
 
 if __name__ == '__main__':
     expnum, ccdname = 292604, 'N4'
     
-    survey = LegacySurveyData(output_dir='onechip')
-    #ccds = survey.get_ccds_readonly()
+    survey = LegacySurveyData(output_dir='onechip-civ')
     ccds = survey.find_ccds(expnum=expnum, ccdname=ccdname)
     print('Found', len(ccds), 'CCD')
     # HACK -- cut to JUST that ccd.
@@ -43,6 +42,7 @@ if __name__ == '__main__':
                   do_calibs=False,
                   write_metrics=True,
                   pixPsf=True,
+                  constant_invvar=True,
                   ceres=False,
                   splinesky=True,
                   coadd_bw=True,
@@ -51,10 +51,13 @@ if __name__ == '__main__':
 
     print('Reading', outfn)
     cat = fits_table(outfn)
-
+    primhdr = fitsio.read_header(outfn)
+    
     iband = survey.index_of_band(im.band)
-    cat.mag = -2.5 * (np.log10(cat.decam_flux[:, iband]) - 9.)
-    cat.apmag = -2.5 * (np.log10(cat.decam_apflux[:, iband]) - 9.)
+    cat.flux = cat.decam_flux[:, iband]
+    cat.apflux = cat.decam_apflux[:, iband, :]
+    cat.mag = -2.5 * (np.log10(cat.flux) - 9.)
+    cat.apmag = -2.5 * (np.log10(cat.apflux) - 9.)
     
     I,J,d = match_radec(stars.ra, stars.dec, cat.ra, cat.dec, 1./3600.,
                         nearest=True)
@@ -63,6 +66,7 @@ if __name__ == '__main__':
     colorterm = ps1_to_decam(stars.median, im.band)
     ipsband = ps1cat.ps1band[im.band]
     stars.mag = stars.median[:, ipsband] + colorterm
+    stars.flux = 10.**((stars.mag - 22.5) / -2.5)
     
     mstars = stars[I]
     mcat = cat[J]
@@ -147,5 +151,29 @@ if __name__ == '__main__':
     plt.title(tt)
     ps.savefig()
 
+    print('Median AP - PSF mag:', np.median(mcat.apmag[P, iap] - mcat.mag[P]))
+    
+    plt.clf()
+    plt.plot((mcat.apflux[P, :] / mcat.flux[P, np.newaxis]).T, 'k-', alpha=0.1)
+    plt.ylabel('APflux / PSF flux')
+    plt.xlabel('Aperture diameter (arcsec)')
+    plt.xticks(range(8), [primhdr['APRAD%i' % i]*2 for i in range(8)])
+    plt.ylim(0.5, 1.5)
+    plt.axhline(1., color='b', alpha=0.5)
+    #plt.axhline(1.015, color='r', alpha=0.5)
+    plt.title(tt)
+    ps.savefig()
+    
 
+    plt.clf()
+    plt.plot((mcat.apflux[P, :] / mstars.flux[P, np.newaxis]).T,
+             'k-', alpha=0.1)
+    plt.ylabel('DECaLS APflux / PS1 flux')
+    plt.xlabel('Aperture diameter (arcsec)')
+    plt.xticks(range(8), [primhdr['APRAD%i' % i]*2 for i in range(8)])
+    plt.ylim(0.5, 1.5)
+    plt.axhline(1., color='b', alpha=0.5)
+    #plt.axhline(1.015, color='r', alpha=0.5)
+    plt.title(tt)
+    ps.savefig()
     
