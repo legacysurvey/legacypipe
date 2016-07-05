@@ -57,6 +57,7 @@ python legacypipe/runbrick.py \
      --skip-calibs \
      --checkpoint checkpoints/${bri}/checkpoint-${brick}.pickle \
      --fitblobs-prereq pickles/${bri}/runbrick-${brick}-srcs.pickle \
+     --pickle "pickles/${bri}/runbrick-%(brick)s-%%(stage)s.pickle" \
      --brick $brick --outdir $outdir --nsigma 6 \
      >> $log 2>&1
 
