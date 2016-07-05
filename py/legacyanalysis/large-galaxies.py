@@ -8,6 +8,44 @@ J. Moustakas
 Siena College
 2016 June 6
 
+http://leda.univ-lyon1.fr/leda/fullsql.html
+
+Output file 1: leda-logd25-0.05-0.50.txt
+
+SELECT
+  pgc,
+  objname,
+  objtype,
+  al2000,
+  de2000,
+  type,
+  multiple,
+  logd25,
+  logr25,
+  pa,
+  bt,
+  it,
+  v
+WHERE logd25 > 0.05 AND logd25 < 0.5
+
+Output file 1: leda-logd25-0.50.txt
+
+SELECT
+  pgc,
+  objname,
+  objtype,
+  al2000,
+  de2000,
+  type,
+  multiple,
+  logd25,
+  logr25,
+  pa,
+  bt,
+  it,
+  v
+WHERE logd25 > 0.5
+
 """
 from __future__ import division, print_function
 
@@ -41,7 +79,7 @@ import seaborn as sns
 from astrometry.util.util import Tan
 from astrometry.util.fits import fits_table, merge_tables
 from astrometry.util.plotutils import dimshow
-
+from astrometry.util.miscutils import clip_polygon
 from tractor.splinesky import SplineSky
 
 from legacypipe.runbrick import run_brick
@@ -49,7 +87,8 @@ from legacypipe.common import ccds_touching_wcs, bricks_touching_wcs, LegacySurv
 from legacypipe.cpimage import CP_DQ_BITS
 
 PIXSCALE = 0.262 # average pixel scale [arcsec/pix]
-DIAMFACTOR = 10
+DIAMFACTOR = 5
+#DIAMFACTOR = 10
 
 def _uniqccds(ccds):
     '''Get the unique set of CCD files.'''
@@ -95,11 +134,11 @@ def _getfiles(ccdinfo):
     print('  {}'.format(cmd))
 
 def _catalog_template(nobj=1):
-    from astropy.table import Table
     cols = [
         ('GALAXY', 'S20'), 
         ('RA', 'f8'), 
         ('DEC', 'f8'),
+        ('TYPE', 'S8'),
         ('RADIUS', 'f4'),
         ('BRICKNAME', 'S17', (4,))
         ]
@@ -116,9 +155,10 @@ def _ccdwcs(ccd):
                                         ccd.cd2_1, ccd.cd2_2, W, H]])
     return W, H, ccdwcs
 
-def _galwcs(gal):
+def _galwcs(gal, factor=DIAMFACTOR):
     '''Build a simple WCS object for a single galaxy.'''
-    diam = DIAMFACTOR*np.ceil(gal['RADIUS']/PIXSCALE).astype('int16') # [pixels]
+
+    diam = factor*np.ceil(2.0*gal['RADIUS']/PIXSCALE).astype('int16') # [pixels]
     galwcs = Tan(gal['RA'], gal['DEC'], diam/2+0.5, diam/2+0.5,
                  -PIXSCALE/3600.0, 0.0, 0.0, PIXSCALE/3600.0, 
                  float(diam), float(diam))
@@ -158,9 +198,30 @@ def read_rc3():
 
     return outcat
 
+def read_leda(largedir='.', d25min=0.0, d25max=1000.0, decmin=-90.0, decmax=+90.0):
+    """Read the parent LEDA catalog and put it in a standard format."""
+
+    cat = fits.getdata(os.path.join(largedir, 'sample', 'leda-logd25-0.05.fits.gz'), 1)
+
+    outcat = _catalog_template(len(cat))
+    outcat['GALAXY'] = cat['GALAXY']
+    outcat['RA'] = cat['RA']
+    outcat['DEC'] = cat['DEC']
+    outcat['TYPE'] = cat['TYPE']
+    outcat['RADIUS'] = cat['D25']/2.0 # semi-major axis radius [arcsec]
+
+    these = np.where((outcat['RADIUS']*2/60.0 < d25max)*
+                     (outcat['RADIUS']*2/60.0 > d25min)*
+                     (outcat['DEC'] < decmax)*
+                     (outcat['DEC'] > decmin))[0]
+    outcat = outcat[these] 
+
+    return outcat
+
 def main():
 
     parser = argparse.ArgumentParser()
+    parser.add_argument('--dr', type=str, default='dr2', help='DECaLS Data Release')
     parser.add_argument('--build-sample', action='store_true', help='Build the sample.')
     parser.add_argument('--viewer-cutouts', action='store_true', help='Get jpg cutouts from the viewer.')
     parser.add_argument('--ccd-cutouts', action='store_true', help='Get CCD cutouts of each galaxy.')
@@ -176,7 +237,8 @@ def main():
         return 0
     largedir = os.getenv(key)
 
-    key = 'DECALS_DR2_DIR'
+    dr = args.dr.lower()
+    key = 'DECALS_{}_DIR'.format(dr.upper())
     if key not in os.environ:
         print('Required ${} environment variable not set'.format(key))
         return 0
@@ -186,82 +248,161 @@ def main():
     objtype = ('PSF', 'SIMP', 'EXP', 'DEV', 'COMP')
     objcolor = ('white', 'red', 'orange', 'cyan', 'yellow')
     thumbsize = 100
-    #fonttype = '/usr/share/fonts/gnu-free/FreeSans.ttf'
-    fonttype = '/Volumes/Macintosh\ HD/Library/Fonts/Georgia.ttf'
+    fonttype = '/usr/share/fonts/gnu-free/FreeSans.ttf'
+    #fonttype = '/Volumes/Macintosh\ HD/Library/Fonts/Georgia.ttf'
 
     # Read the sample (unless we're building it!)
-    samplefile = os.path.join(largedir, 'large-galaxies-sample.fits')
+    samplefile = os.path.join(largedir, 'sample', 'large-galaxies-{}.fits'.format(dr))
     if not args.build_sample:
         sample = fits.getdata(samplefile, 1)
-        sample = sample[2:3] # Hack!
+        sample = sample[np.where(np.char.strip(sample['GALAXY']) == 'UGC04203')]
+        #sample = sample[2:3] # Hack!
         #sample = sample[np.where(np.sum((sample['BRICKNAME'] != '')*1, 1) > 1)[0]]
         #pdb.set_trace()
-
-    survey = LegacySurveyData(version='dr2') # update to DR3!
+    survey = LegacySurveyData(version=dr) # update to DR3!
 
     sns.set(style='white', font_scale=1.2, palette='Set2')
     #sns.set(style='white', font_scale=1.3, palette='Set2')
     setcolors = sns.color_palette()
+
+    # Make sure all the necessary subdirectories have been built.
+    newdir = ('ccds', 'cutouts', 'html', 'qa', 'sample')
+    for dd in newdir:
+        try:
+            os.stat(dd)
+        except:
+            os.mkdir(dd)
     
     # --------------------------------------------------
     # Build the sample of large galaxies based on the available imaging.
     if args.build_sample:
-        # Read the parent catalog.
-        cat = read_rc3()
-        print('HACK!!!!!!!!!!!!!!!')
-        cat = cat[np.where(cat['GALAXY'] == 'UGC4203')[0]]
-        
-        # Create a simple WCS object for each object and find all the CCDs
-        # touching that WCS footprint.
-        bricks = survey.get_bricks_dr2()
+        # Read the CCDs file for this DR.
+        if dr == 'dr2':
+            bricks = survey.get_bricks_dr2()
+        else:
+            print('Data Release {} not yet supported!')
+            sys.exit(1)
+        ccdsdir = os.path.join(largedir, 'ccds')
 
-        allccds = survey.get_ccds()
-        keep = np.concatenate((survey.apply_blacklist(allccds),
-                               survey.photometric_ccds(allccds)))
+        # This is a DR2 hack because the set of blacklisted CCDs has been lost.
+        # So read the *annotated* CCDs file, which has the lost information.  An
+        # example is the set of CCDs returned for NGC0963 which are blacklisted
+        # in DR2 but not in DR3.
+        #  decam/NonDECaLS/CP20130129/c4d_130202_010119_ooi_g_v1.fits.fz
+        #  decam/NonDECaLS/CP20130129/c4d_130202_010119_ooi_r_v1.fits.fz
+        #  decam/NonDECaLS/CP20130129/c4d_130202_010119_ooi_z_v1.fits.fz
+        allccds = survey.get_annotated_ccds()
+        keep = np.where(allccds.blacklist_ok*allccds.photometric)[0]
+        #allccds = survey.get_ccds()
+        #keep = np.concatenate((survey.apply_blacklist(allccds),
+        #                       survey.photometric_ccds(allccds)))
         allccds.cut(keep)
 
+        # Now read the parent catalog but remove the very largest galaxies in
+        # the sample.  The five galaxies with the largest angular diameters in
+        # the LEDA catalog are M31, M33, SMC, the Sagittarius Dwarf, and
+        # ESO056-115, all of which have D(25)>50 arcmin (up to 650 arcmin for
+        # ESO056-115).  So for now let's cull the sample to everything smaller
+        # than about 10 arcmin, which spans no more than two-ish DECam CCDs.  To
+        # reduce the size of the sample, also restrict to things larger than
+        # about 30 arcsec (0.5 arcmin) in *diameter*.
+        cat = read_leda(largedir=largedir, d25min=0.5, d25max=10.0,
+                        decmax=np.max(allccds.dec)+0.3,
+                        decmin=np.min(allccds.dec)-0.3)
+        ngal = len(cat)
+        print('Found {} galaxies in the parent catalog.'.format(ngal))
+        #cat = read_rc3()
+        #print('HACK!!!!!!!!!!!!!!!')
+        #cat = cat[np.where(np.char.strip(cat['GALAXY'].data) == 'IC2256')[0]]
+        #cat = cat[np.where(np.char.strip(cat['GALAXY'].data) == 'IC0497')[0]]
+        #cat = cat[np.where(np.char.strip(cat['GALAXY'].data) == 'NGC0963')[0]]
+        #cat = cat[:100]
+
+        # Next, create a simple WCS object for each object and find all the CCDs
+        # touching that WCS footprint.
         ccdlist = []
         outcat = []
-        for gal in cat:
-            galwcs = _galwcs(gal)
+        for igal, gal in enumerate(cat):
+            if ((igal + 1) % 100) == 0:
+                print('Working on galaxy {} {:06d}/{:06d}, (RA, Dec, Radius)=({:.5f}, {:.5f}, {:.4f})'.format(
+                  gal['GALAXY'].strip(), igal+1, ngal, gal['RA'], gal['DEC'], gal['RADIUS']))
 
-            ccds1 = allccds[ccds_touching_wcs(galwcs, allccds)]
-            ccds1 = ccds1[_uniqccds(ccds1)]
+            # Start with a very small WCS object centered on the galaxy to
+            # ensure we have 3-band coverage throughout the galaxy.
+            galwcs = _galwcs(gal, factor=0.5)
+            these = ccds_touching_wcs(galwcs, allccds)
+            if len(these) > 0:
+                ccds1 = allccds[these]
+                ccds1 = ccds1[_uniqccds(ccds1)]
+                
+                if 'g' in ccds1.filter and 'r' in ccds1.filter and 'z' in ccds1.filter:
+                    # Now get a wider set of CCDs.
+                    galwcs = _galwcs(gal)
+                    ccds1 = allccds[ccds_touching_wcs(galwcs, allccds)]
+                    ccds1 = ccds1[_uniqccds(ccds1)]
             
-            if len(ccds1) > 0 and 'g' in ccds1.filter and 'r' in ccds1.filter and 'z' in ccds1.filter:
-                print('Found {} CCDs for {}, D(25)={:.4f}'.format(
-                    len(ccds1), gal['GALAXY'], gal['RADIUS']))
-                
-                ccdsfile = os.path.join(largedir, 'ccds', '{}-ccds.fits'.format(gal['GALAXY'].strip().lower()))
-                print('  Writing {}'.format(ccdsfile))
-                if os.path.isfile(ccdsfile):
-                    os.remove(ccdsfile)
-                ccds1.writeto(ccdsfile)
-                
-                ccdlist.append(ccds1)
+                    print('  Found {} CCDs for {} {:06d}/{:06d}, (RA, Dec, Radius)=({:.5f}, {:.5f}, {:.4f})'.format(
+                        len(ccds1), gal['GALAXY'], igal, ngal, gal['RA'], gal['DEC'], gal['RADIUS']))
 
-                # Get the brickname
-                rad = 2*gal['RADIUS']/3600 # [degree]
-                brickindx = survey.bricks_touching_radec_box(bricks,
-                                                             gal['RA']-rad, gal['RA']+rad,
-                                                             gal['DEC']-rad, gal['DEC']+rad)
-                if len(brickindx) == 0 or len(brickindx) > 4:
-                    print('This should not happen!')
-                    pdb.set_trace()
-                gal['BRICKNAME'][:len(brickindx)] = bricks.brickname[brickindx]
-                #gal['BRICKNAME'] = ' '.join(bricks.brickname[brickindx])
+                    #pdb.set_trace()
 
-                if len(outcat) == 0:
-                    outcat = gal
-                else:
-                    outcat = vstack((outcat, gal))
+                # Ensure we have at least one exposure in each band over the
+                # whole footprint.
+                #galW, galH = int(galwcs.get_width()), int(galwcs.get_height())
+                #galxy = [(1, 1), (1, galH), (galW, galH), (galW, 1)]
+                #galrd = np.array([galwcs.pixelxy2radec(x, y) for x, y in galxy])
+                
+                #imgpoly = [(1, 1), (1, galH), (galW, galH), (galW, 1)]
+                #
+                #galrd = np.array([galwcs.pixelxy2radec(x, y) for x, y in
+                #                  [(1, 1), (galW, 1), (galW, galH), (1, galH), (1, 1)]])
+                #nexp = np.zeros((galW, galH, 3))
+                #for ccd in ccds1:
+                    #ccdW, ccdH, ccdwcs = _ccdwcs(ccd)
+                    #ccdpoly = [(1, 1), (1, ccdH), (ccdW, ccdH), (ccdW, 1)]
+                    #ccdpoly = np.array([ccdwcs.pixelxy2radec(x, y) for x, y in
+                    #                    [(1, 1), (ccdW, 1), (ccdW, ccdH), (1, ccdH), (1,1)]])
+                    #ccdradec = np.array([ccdwcs.pixelxy2radec(x, y) for x, y in
+                    #                     [(1, 1), (1, ccdW), (ccdH, ccdW), (ccdH, 1)]])
+
+                    #ox, cx, cy = ccdwcs.radec2pixelxy(galrd[:, 0], galrd[:, 1])
+                    #clip = np.array(zip(cx, cy))
+                    #x0, y0 = np.floor(clip.min(axis=0)).astype(int)
+                    #x1, y1 = np.ceil (clip.max(axis=0)).astype(int)
+                    #ok, cx, cy = ccdwcs.radec2pixelxy(galrd[:-1, 0], galrd[:-1, 1])
+                    #cpoly = zip(cx, cy)
+                    #clip = np.array(clip_polygon(imgpoly, cpoly))
+                    #print(x0, y0, x1, y1)
+                    #pdb.set_trace()
+                
+                    ccdsfile = os.path.join(ccdsdir, '{}-ccds.fits'.format(gal['GALAXY'].strip().lower()))
+                    #print('  Writing {}'.format(ccdsfile))
+                    if os.path.isfile(ccdsfile):
+                        os.remove(ccdsfile)
+                    ccds1.writeto(ccdsfile)
+                
+                    ccdlist.append(ccds1)
+
+                    # Also get the set of bricks touching this footprint.
+                    rad = 2*gal['RADIUS']/3600 # [degree]
+                    brickindx = survey.bricks_touching_radec_box(bricks,
+                                                                 gal['RA']-rad, gal['RA']+rad,
+                                                                 gal['DEC']-rad, gal['DEC']+rad)
+                    if len(brickindx) == 0 or len(brickindx) > 4:
+                        print('This should not happen!')
+                        pdb.set_trace()
+                    gal['BRICKNAME'][:len(brickindx)] = bricks.brickname[brickindx]
+
+                    if len(outcat) == 0:
+                        outcat = Table(gal)
+                    else:
+                        outcat = vstack((outcat, gal))
 
         # Write out the final catalog.
-        samplefile = os.path.join(largedir, 'large-galaxies-sample.fits')
         if os.path.isfile(samplefile):
             os.remove(samplefile)
         print('Writing {}'.format(samplefile))
-        #outcat.write(samplefile)
+        outcat.write(samplefile)
         print(outcat)
 
         # Do we need to transfer any of the data to nyx?
@@ -271,8 +412,15 @@ def main():
     # Get data, model, and residual cutouts from the legacysurvey viewer.  Also
     # get thumbnails that are lower resolution.
     if args.viewer_cutouts:
+        cutoutdir = os.path.join(largedir, 'cutouts')
+
         for gal in sample:
             galaxy = gal['GALAXY'].strip().lower()
+            cutdir = os.path.join(cutoutdir, '{}'.format(galaxy))
+            try:
+                os.stat(cutdir)
+            except:
+                os.mkdir(cutdir)
 
             # SIZE here should be consistent with DIAM in args.runbrick, below
             size = DIAMFACTOR*np.ceil(gal['RADIUS']/PIXSCALE).astype('int16') # [pixels]
@@ -281,24 +429,24 @@ def main():
             # Get cutouts of the data, model, and residual images.
             for imtype, tag in zip(('image', 'model', 'resid'), ('', '&tag=decals-model', '&tag=decals-resid')):
                 imageurl = 'http://legacysurvey.org/viewer-dev/jpeg-cutout-decals-dr2?ra={:.6f}&dec={:.6f}&pixscale={:.3f}&size={:g}{}'.format(gal['RA'], gal['DEC'], PIXSCALE, size, tag)
-                imagejpg = os.path.join(largedir, 'cutouts', '{}-{}.jpg'.format(galaxy, imtype))
-                print('Uncomment me to redownload')
-                #if os.path.isfile(imagejpg):
-                #    os.remove(imagejpg)
-                #os.system('wget --continue -O {:s} "{:s}"' .format(imagejpg, imageurl))
+                imagejpg = os.path.join(cutdir, '{}-{}.jpg'.format(galaxy, imtype))
+                #print('Uncomment me to redownload')
+                if os.path.isfile(imagejpg):
+                    os.remove(imagejpg)
+                os.system('wget --continue -O {:s} "{:s}"' .format(imagejpg, imageurl))
 
             # Also get a small thumbnail of just the image.
             thumburl = 'http://legacysurvey.org/viewer-dev/jpeg-cutout-decals-dr2?ra={:.6f}&dec={:.6f}'.format(gal['RA'], gal['DEC'])+\
               '&pixscale={:.3f}&size={:g}'.format(thumbpixscale, thumbsize)
-            thumbjpg = os.path.join(largedir, 'cutouts', '{}-image-thumb.jpg'.format(galaxy))
-            #if os.path.isfile(thumbjpg):
-            #    os.remove(thumbjpg)
-            #os.system('wget --continue -O {:s} "{:s}"' .format(thumbjpg, thumburl))
+            thumbjpg = os.path.join(cutdir, '{}-image-thumb.jpg'.format(galaxy))
+            if os.path.isfile(thumbjpg):
+                os.remove(thumbjpg)
+            os.system('wget --continue -O {:s} "{:s}"' .format(thumbjpg, thumburl))
 
             rad = 10
             for imtype in ('image', 'model', 'resid'):
-                imfile = os.path.join(largedir, 'cutouts', '{}-{}.jpg'.format(galaxy, imtype))
-                cutoutfile = os.path.join(largedir, 'cutouts', '{}-{}-runbrick-annot.jpg'.format(galaxy, imtype))
+                imfile = os.path.join(cutdir, '{}-{}.jpg'.format(galaxy, imtype))
+                cutoutfile = os.path.join(cutdir, '{}-{}-runbrick-annot.jpg'.format(galaxy, imtype))
 
                 print('Reading {}'.format(imfile))
                 im = Image.open(imfile)
@@ -337,6 +485,8 @@ def main():
     # --------------------------------------------------
     # Get cutouts and build diagnostic plots of all the CCDs for each galaxy.
     if args.ccd_cutouts:
+        qadir = os.path.join(largedir, 'qa')
+            
         for gal in sample:
             galaxy = gal['GALAXY'].strip().lower()
             print('Building CCD QA for galaxy {}'.format(galaxy.upper()))
@@ -633,7 +783,7 @@ def main():
             zoom = (1800-diam/2, 1800+diam/2, 1800-diam/2, 1800+diam/2)
 
             #nsigma = 15
-            nsigma = 5
+            nsigma = 6
             #stages = ['fitblobs']
             stages = ['writecat']
             plots = False
@@ -641,7 +791,7 @@ def main():
             blobxy = None
             survey = LegacySurveyData(version='dr2', output_dir=largedir)
             run_brick(None, survey, radec=(gal['RA'], gal['DEC']), blobxy=blobxy, 
-                      threads=4, zoom=zoom, wise=False, forceAll=True, writePickles=False,
+                      threads=16, zoom=zoom, wise=False, forceAll=True, writePickles=False,
                       do_calibs=False, write_metrics=True, pixPsf=True, splinesky=True, 
                       early_coadds=False, stages=stages, ceres=False, nsigma=nsigma,
                       plots=plots)
@@ -710,7 +860,7 @@ def main():
     # --------------------------------------------------
     # Build the webpage.
     if args.build_webpage:
-        sample = fits.getdata(samplefile, 1)
+        #sample = fits.getdata(samplefile, 1)
         
         # index.html
         htmlfile = os.path.join(largedir, 'index.html')
@@ -724,8 +874,8 @@ def main():
             galaxy = gal['GALAXY'].strip().lower()
             html.write('<tr>\n')
             html.write('<td>{}</td>\n'.format(ii))
-            html.write('<td><a href="html/{}.html">{}</a></td>\n'.format(galaxy, galaxy.upper()))
-            html.write('<td><a href="http://legacysurvey.org/viewer/?ra={:.6f}&dec={:.6f}" target="_blank"><img src=cutouts/{}-image-thumb.jpg alt={} /></a></td>\n'.format(gal['RA'], gal['DEC'], galaxy, galaxy.upper()))
+            html.write('<td><a href="html/{}.html">{}</a></td>\n'.format(galaxy, galaxy, galaxy.upper()))
+            html.write('<td><a href="http://legacysurvey.org/viewer/?ra={:.6f}&dec={:.6f}" target="_blank"><img src=cutouts/{}/{}-image-thumb.jpg alt={} /></a></td>\n'.format(gal['RA'], gal['DEC'], galaxy, galaxy, galaxy.upper()))
             html.write('</tr>\n')
         html.write('</tbody></table>\n')
         html.write('</body></html>\n')
@@ -736,7 +886,7 @@ def main():
             galaxy = gal['GALAXY'].strip().lower()
             qadir = os.path.join(largedir, 'qa', '{}'.format(galaxy))
 
-            htmlfile = os.path.join(largedir, 'html/{}.html'.format(galaxy))
+            htmlfile = os.path.join(largedir, 'html/{}.html'.format(galaxy, galaxy))
             print('Writing {}'.format(htmlfile))
             html = open(htmlfile, 'w')
             html.write('<html>\n')
@@ -757,8 +907,8 @@ def main():
             html.write('<table><tbody>\n')
             html.write('<tr>\n')
             for imtype in ('image', 'model', 'resid'):
-                html.write('<td><a href=../cutouts/{}-{}-runbrick-annot.jpg>'.format(galaxy, imtype)+\
-                           '<img src=../cutouts/{}-{}-runbrick-annot.jpg alt={} /></a></td>\n'.format(galaxy, imtype, galaxy.upper()))
+                html.write('<td><a href=../cutouts/{}/{}-{}-runbrick-annot.jpg>'.format(galaxy, galaxy, imtype)+\
+                           '<img src=../cutouts/{}/{}-{}-runbrick-annot.jpg alt={} /></a></td>\n'.format(galaxy, galaxy, imtype, galaxy.upper()))
             html.write('</tr>\n')
             #html.write('<tr><td>Data</td><td>Model</td><td>Residuals</td></tr>\n')
             html.write('</tbody></table>\n')
@@ -768,8 +918,8 @@ def main():
             html.write('<table><tbody>\n')
             html.write('<tr>\n')
             for imtype in ('image', 'model', 'resid'):
-                html.write('<td><a href=../cutouts/{}-{}-custom-annot.jpg><img width="100%" src=../cutouts/{}-{}-custom-annot.jpg alt={} /></a></td>\n'.format(
-                    galaxy, imtype, galaxy, imtype, galaxy.upper()))
+                html.write('<td><a href=../cutouts/{}/{}-{}-custom-annot.jpg><img width="100%" src=../cutouts/{}-{}-custom-annot.jpg alt={} /></a></td>\n'.format(
+                    galaxy, galaxy, imtype, galaxy, imtype, galaxy.upper()))
             html.write('</tr>\n')
             html.write('</tbody></table>\n')
             # ----------
