@@ -134,8 +134,8 @@ class OneBlob(object):
             print('Many exposures for blob', self.name)
         
     def run(self, B):
-        # "verbose" plots
-        self.plots1 = False
+        # Not quite so many plots...
+        self.plots1 = self.plots
         cat = Catalog(*self.srcs)
 
         tlast = Time()

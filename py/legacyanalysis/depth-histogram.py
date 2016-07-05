@@ -31,12 +31,34 @@ if os.path.exists(fn):
         plt.title('DECaLS DR2 Depth: Canonical Galaxy, %s' % band)
         ps.savefig()
 
+    for band in 'grz':
+        c = list(reversed(np.cumsum(list(reversed(T.get('counts_gal_%s' % band))))))
+        #N = np.sum(T.get('counts_gal_%s' % band))
+        # Skip bin with no observations?
+        N = np.sum(T.get('counts_gal_%s' % band)[1:])
+
+        plt.clf()
+        plt.bar(dlo, c, width=dd)
+
+        target = dict(g=24.0, r=23.4, z=22.5)[band]
+        plt.axvline(target)
+        plt.axvline(target - 0.3)
+        plt.axvline(target - 0.6)
+        plt.axhline(N * 0.90)
+        plt.axhline(N * 0.95)
+        plt.axhline(N * 0.98)
+        
+        plt.xlabel('Depth: %s band' % band)
+        plt.ylabel('Number of pixels')
+        plt.title('Depth: SIMP Galaxy, %s' % band)
+        ps.savefig()
+        
     import sys
     sys.exit(0)
         
         
 if __name__ == '__main__':
-    fns = glob('dr2p/coadd/*/*/*-depth.fits')
+    fns = glob('cosmos-10/coadd/*/*/*-depth.fits')
     fns.sort()
     print len(fns), 'depth files'
 

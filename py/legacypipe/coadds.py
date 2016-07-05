@@ -41,6 +41,8 @@ def make_coadds(tims, bands, targetwcs,
 
     if xy:
         ix,iy = xy
+        print('ix= ',ix)
+        print('iy= ',iy)
         C.T = fits_table()
         C.T.nobs    = np.zeros((len(ix), len(bands)), np.uint8)
         C.T.anymask = np.zeros((len(ix), len(bands)), np.int16)
@@ -152,9 +154,10 @@ def make_coadds(tims, bands, targetwcs,
                 continue
 
             itim,Yo,Xo,iv,im,mo,dq = R
+            print('timiter Yo,Xo,im.shape=',Yo,Xo,im.shape)
 
             tim = tims[itim]
-            
+
             # invvar-weighted image
             cowimg[Yo,Xo] += iv * im
             cow   [Yo,Xo] += iv
@@ -215,7 +218,6 @@ def make_coadds(tims, bands, targetwcs,
 
             del Yo,Xo,im,iv
             # END of loop over tims
-
         # Per-band:
         cowimg /= np.maximum(cow, tinyw)
         C.coimgs.append(cowimg)
@@ -243,7 +245,7 @@ def make_coadds(tims, bands, targetwcs,
             if detmaps:
                 C.T.depth   [:,iband] =    detiv[iy, ix]
                 C.T.galdepth[:,iband] = galdetiv[iy, ix]
-
+        
         if psfsize:
             wt = cow[iy,ix]
             # psfsizemap is in units of iv * (1 / arcsec**2)

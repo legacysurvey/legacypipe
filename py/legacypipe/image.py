@@ -232,6 +232,9 @@ class LegacySurveyImage(object):
         '''
         from astrometry.util.miscutils import clip_polygon
 
+        #print('being called in IMAGE.py, quitting')
+        #import sys
+        #sys.exit()
         get_dq = dq
         get_invvar = invvar
         
