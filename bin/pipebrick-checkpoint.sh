@@ -19,13 +19,15 @@ ulimit -a
 ### argh modules not seeming to work.
 export DUST_DIR=/scratch1/scratchdirs/desiproc/dust/v0_0
 
+module unload tractor-hpcp
+
 outdir=$SCRATCH/dr3
 
 brick="$1"
 
-logdir=$(echo $brick | head -c 3)
-mkdir -p $outdir/logs/$logdir
-log="$outdir/logs/$logdir/$brick.log"
+bri=$(echo $brick | head -c 3)
+mkdir -p $outdir/logs/$bri
+log="$outdir/logs/$bri/$brick.log"
 
 echo Logging to: $log
 echo Running on ${NERSC_HOST} $(hostname)
@@ -53,8 +55,8 @@ python legacypipe/runbrick.py \
      --skip \
      --threads 6 \
      --skip-calibs \
-     --checkpoint checkpoints/checkpoint-${brick}.pickle \
-     --fitblobs-prereq pickles/runbrick-${brick}-srcs.pickle \
+     --checkpoint checkpoints/${bri}/checkpoint-${brick}.pickle \
+     --fitblobs-prereq pickles/${bri}/runbrick-${brick}-srcs.pickle \
      --brick $brick --outdir $outdir --nsigma 6 \
      >> $log 2>&1
 
