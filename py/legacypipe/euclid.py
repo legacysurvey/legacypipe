@@ -18,7 +18,7 @@ import astropy
 
 from astrometry.util.fits import fits_table, merge_tables
 from astrometry.util.util import wcs_pv2sip_hdr
-from astrometry.util.plotutils import PlotSequence, plothist
+from astrometry.util.plotutils import PlotSequence, plothist, loghist
 from astrometry.util.ttime import Time, MemMeas
 
 from legacypipe.runbrick import run_brick, rgbkwargs, rgbkwargs_resid
@@ -404,6 +404,9 @@ if __name__ == '__main__':
     parser.add_argument('--name',
                         help='Name for forced-phot output products, with --queue-list')
 
+    parser.add_argument('--analyze', 
+                        help='Analyze forced photometry results for images listed in given image list file')
+    
     parser.add_argument('--expnum', type=int,
                         help='ACS exposure number to run')
     parser.add_argument('--threads', type=int, help='Run multi-threaded')
@@ -489,26 +492,199 @@ if __name__ == '__main__':
 
         sys.exit(0)
 
-    if False:
-        # Re-make jpeg images
-        fns = glob('euclid-out/coadd/acs/acsvis-1??/*-image-I.fits')
-        fns.sort()
-        bands=['I']
-        for fn in fns:
-            I = fitsio.read(fn)
-            print('Read', I.shape, 'from', fn)
-            ims = [I]
-            rgb = get_rgb(ims, bands, **rgbkwargs)
-            print('RGB:', rgb.shape)
-            # coadd_bw
-            rgb = rgb.sum(axis=2)
-            print('B/W:', rgb.shape)
-            kwa = dict(cmap='gray')
-            outfn = fn.replace('-I.fits', '.jpg')
-            imsave_jpeg(outfn, rgb, origin='lower', **kwa)
-            print('Wrote', outfn)
-        sys.exit(0)
+    if opt.analyze:
+        fn = opt.analyze
+        expnums = []
+        for line in open(fn,'r').readlines():
+            words = line.split()
+            e = int(words[0], 10)
+            print('Exposure', e)
+            expnums.append(e)
+        print(len(expnums), 'exposures')
+        name = os.path.basename(fn).replace('.lst','')
+        print('Image list name:', name)
+        #for ccd in range(36):
+        for ccd in [0]:
+            fn = os.path.join('euclid-out', 'forced',
+                              'megacam-%s-ccd%02i.fits' % (name, ccd))
+            print('Reading', fn)
+            T = fits_table(fn)
+            print(len(T), 'from', fn)
+
+            fluxes = np.unique([c for c in T.columns()
+                                if c.startswith('flux_') and
+                                not c.startswith('flux_ivar_')])
+            print('Fluxes:', fluxes)
+            assert(len(fluxes) == 1)
+            fluxcol = fluxes[0]
+            print('Flux column:', fluxcol)
+            T.rename(fluxcol, 'flux')
+            T.rename(fluxcol.replace('flux_', 'flux_ivar_'), 'flux_ivar')
             
+            T.allflux = np.zeros((len(T), len(expnums)), np.float32)
+            T.allflux_ivar = np.zeros((len(T), len(expnums)), np.float32)
+
+            T.allx = np.zeros((len(T), len(expnums)), np.float32)
+            T.ally = np.zeros((len(T), len(expnums)), np.float32)
+            
+            TT = []
+            for i,expnum in enumerate(expnums):
+                fn = os.path.join('euclid-out', 'forced',
+                                  'megacam-%i-ccd%02i.fits' % (expnum, ccd))
+                print('Reading', fn)
+                t = fits_table(fn)
+                t.iexp = np.zeros(len(t), np.uint8) + i
+                t.rename(fluxcol, 'flux')
+                t.rename(fluxcol.replace('flux_', 'flux_ivar_'), 'flux_ivar')
+                print(len(t), 'from', fn)
+                # Edge effects...
+                W,H = 2112, 4644
+                margin = 30
+                t.cut((t.x > margin) * (t.x < W-margin) *
+                      (t.y > margin) * (t.y < H-margin))
+                print('Keeping', len(t), 'not close to the edges')
+                
+                TT.append(t)
+            TT = merge_tables(TT)
+
+            imap = dict([((n,o),i) for i,(n,o) in enumerate(zip(T.brickname,
+                                                                T.objid))])
+            TT.index = np.array([imap[(n,o)]
+                                 for n,o in zip(TT.brickname, TT.objid)])
+
+            T.allflux     [TT.index, TT.iexp] = TT.flux
+            T.allflux_ivar[TT.index, TT.iexp] = TT.flux_ivar
+            T.allx        [TT.index, TT.iexp] = TT.x
+            T.ally        [TT.index, TT.iexp] = TT.y
+
+        T.cflux_ivar = np.sum(T.allflux_ivar, axis=1)
+        T.cflux = np.sum(T.allflux * T.allflux_ivar, axis=1) / T.cflux_ivar
+
+        ps = PlotSequence('euclid')
+
+        plt.clf()
+        ha = dict(range=(0, 1600), bins=100, histtype='step')
+        plt.hist(T.flux_ivar, color='k', **ha)
+        for i in range(len(expnums)):
+            plt.hist(T.allflux_ivar[:,i], **ha)
+        plt.xlabel('Invvar')
+        ps.savefig()
+            
+        
+        I = np.flatnonzero(T.flux_ivar > 0)
+
+        tf  = np.repeat(T.flux     [:,np.newaxis], len(expnums), axis=1)
+        tiv = np.repeat(T.flux_ivar[:,np.newaxis], len(expnums), axis=1)
+        J = np.flatnonzero((T.allflux_ivar * tiv) > 0)
+        
+        plt.clf()
+        plt.plot(tf.flat[J], T.allflux.flat[J], 'b.', alpha=0.1)
+        plt.xlabel('Image set flux')
+        plt.ylabel('Exposure fluxes')
+        plt.xscale('symlog')
+        plt.yscale('symlog')
+        plt.title(name)
+        plt.axhline(0., color='k', alpha=0.1)
+        plt.axvline(0., color='k', alpha=0.1)
+        ax = plt.axis()
+        plt.plot([-1e6, 1e6], [-1e6, 1e6], 'k-', alpha=0.1)
+        plt.axis(ax)
+        ps.savefig()
+
+        # Outliers... turned out to be sources on the edges.
+        # J = np.flatnonzero(((T.allflux_ivar * tiv) > 0) *
+        #                    (np.abs(T.allflux) > 1.) *
+        #                    (np.abs(tf) < 1.))
+        # print('Plotting', len(J), 'with sig. diff')
+        # plt.clf()
+        # plt.scatter(T.allx.flat[J], T.ally.flat[J],
+        #             c=(tf.flat[J] - T.allflux.flat[J]), alpha=0.1)
+        # plt.title(name)
+        # ps.savefig()
+        
+        plt.clf()
+        plt.plot(T.flux[I], T.cflux[I], 'b.', alpha=0.1)
+        plt.xlabel('Image set flux')
+        plt.ylabel('Summed exposure fluxes')
+        plt.xscale('symlog')
+        plt.yscale('symlog')
+        plt.title(name)
+        plt.axhline(0., color='k', alpha=0.1)
+        plt.axvline(0., color='k', alpha=0.1)
+        ax = plt.axis()
+        plt.plot([-1e6, 1e6], [-1e6, 1e6], 'k-', alpha=0.1)
+        plt.axis(ax)
+        ps.savefig()
+
+        plt.clf()
+        plt.plot(T.flux_ivar[:,np.newaxis], T.allflux_ivar, 'b.', alpha=0.1)
+        plt.xlabel('Image set flux invvar')
+        plt.ylabel('Exposure flux invvars')
+        plt.title(name)
+        ps.savefig()
+
+        plt.clf()
+        plt.plot(T.flux_ivar, T.cflux_ivar, 'b.', alpha=0.1)
+        plt.xlabel('Image set flux invvar')
+        plt.ylabel('Summed exposure flux invvar')
+        plt.title(name)
+        ax = plt.axis()
+        plt.plot([-1e6, 1e6], [-1e6, 1e6], 'k-', alpha=0.1)
+        plt.axis(ax)
+        ps.savefig()
+
+        K = np.flatnonzero((T.flux_ivar * T.cflux_ivar) > 0)
+        plt.clf()
+        #plt.plot(T.flux_ivar, T.cflux_ivar, 'b.', alpha=0.1)
+        loghist(T.flux_ivar[K], T.cflux_ivar[K], 200)
+        plt.xlabel('Image set flux invvar')
+        plt.ylabel('Summed exposure flux invvar')
+        plt.title(name)
+        ps.savefig()
+
+        plt.clf()
+        loghist(T.flux[K] * np.sqrt(T.flux_ivar[K]),
+                T.cflux[K] * np.sqrt(T.cflux_ivar[K]), 200,
+            range=[[-5,25]]*2)
+        plt.xlabel('Image set S/N')
+        plt.ylabel('Summed exposures S/N')
+        plt.title(name)
+        ps.savefig()
+
+        ACS = read_acs_catalogs()
+
+        imap = dict([((n,o),i) for i,(n,o) in enumerate(zip(ACS.brickname,
+                                                            ACS.objid))])
+        T.index = np.array([imap[(n,o)]
+                            for n,o in zip(T.brickname, T.objid)])
+
+        ACS.cut(T.index)
+        
+        plt.clf()
+        plt.plot(ACS.decam_flux, T.cflux, 'b.', alpha=0.1)
+        plt.xscale('symlog')
+        plt.yscale('symlog')
+        plt.xlabel('ACS flux (I)')
+        plt.ylabel('CFHT flux (i)')
+        plt.title(name)
+        plt.plot([0,1e4],[0,1e4], 'k-', alpha=0.1)
+        plt.ylim(-1, 1e4)
+        ps.savefig()
+
+        ACS.mag = -2.5 * (np.log10(ACS.decam_flux) - 9)
+        T.cmag = -2.5 * (np.log10(T.cflux) - 9)
+        
+        plt.clf()
+        plt.plot(ACS.mag, T.cmag, 'b.', alpha=0.1)
+        plt.xlabel('ACS I (mag)')
+        plt.ylabel('Summed CFHT i (mag)')
+        plt.title(name)
+        plt.plot([0,1e4],[0,1e4], 'k-', alpha=0.5)
+        plt.axis([27, 16, 30, 15])
+        ps.savefig()
+        
+        sys.exit(0)
+
     if False:
         # Analyze forced photometry results
         ps = PlotSequence('euclid')
