@@ -198,6 +198,10 @@ def main():
             matched1.decam_flux[:,iband], matched1.decam_flux_ivar[:,iband])
         mag2, magerr2 = NanoMaggies.fluxErrorsToMagErrors(
             matched2.decam_flux[:,iband], matched2.decam_flux_ivar[:,iband])
+
+        meanmag = NanoMaggies.nanomaggiesToMag((
+            matched1.decam_flux[:,iband] + matched2.decam_flux[:,iband]) / 2.)
+
         psf1 = (matched1.type == 'PSF ')
         psf2 = (matched2.type == 'PSF ')
         good = ((matched1.decam_flux_ivar[:,iband] > 0) *
@@ -243,11 +247,10 @@ def main():
         plt.title(tt)
         ps.savefig()
 
-
-        plt.clf()
-        plt.plot(mag1[P], (mag2[P]-mag1[P]) / np.hypot(magerr1[P], magerr2[P]),
-                     'k.', alpha=0.1)
         y = (mag2 - mag1) / np.hypot(magerr1, magerr2)
+        
+        plt.clf()
+        plt.plot(meanmag[P], y[P], 'k.', alpha=0.1)
 
         midmag = []
         vals = np.zeros((len(magbins)-1, 5))
@@ -258,7 +261,7 @@ def main():
         # FIXME -- should we do some stats after taking off the mean difference?
         
         for bini,(mlo,mhi) in enumerate(zip(magbins, magbins[1:])):
-            I = P[(mag1[P] >= mlo) * (mag1[P] < mhi)]
+            I = P[(meanmag[P] >= mlo) * (meanmag[P] < mhi)]
             midmag.append((mlo+mhi)/2.)
             median_err1.append(np.median(magerr1[I]))
             if len(I) == 0:
@@ -276,6 +279,42 @@ def main():
             
             print('Mag bin', midmag[-1], ': IQD is factor', iqd / iqd_gauss,
                   'vs expected for Gaussian;', len(ybin), 'points')
+
+            # if iqd > iqd_gauss:
+            #     # What error adding in quadrature would you need to make the IQD match?
+            #     err = median_err1[-1]
+            #     target_err = err * (iqd / iqd_gauss)
+            #     sys_err = np.sqrt(target_err**2 - err**2)
+            #     print('--> add systematic error', sys_err)
+
+        # ~ Johan's cuts
+        mlo = 21.
+        mhi = dict(g=24., r=23.5, z=22.5)[band]
+        I = P[(meanmag[P] >= mlo) * (meanmag[P] < mhi)]
+        ybin = y[I]
+        iqd = np.percentile(ybin, 75) - np.percentile(ybin, 25)
+        print('Mag bin', mlo, mhi, 'band', band, ': IQD is factor',
+              iqd / iqd_gauss, 'vs expected for Gaussian;', len(ybin), 'points')
+        if iqd > iqd_gauss:
+            # What error adding in quadrature would you need to make
+            # the IQD match?
+            err = np.median(np.hypot(magerr1[I], magerr2[I]))
+            print('Median error (hypot):', err)
+            target_err = err * (iqd / iqd_gauss)
+            print('Target:', target_err)
+            sys_err = np.sqrt((target_err**2 - err**2) / 2.)
+            print('--> add systematic error', sys_err)
+
+            # check...
+            err_sys = np.hypot(np.hypot(magerr1, sys_err),
+                               np.hypot(magerr2, sys_err))
+            ysys = (mag2 - mag1) / err_sys
+            ysys = ysys[I]
+            print('Resulting median error:', np.median(err_sys[I]))
+            iqd_sys = np.percentile(ysys, 75) - np.percentile(ysys, 25)
+            print('--> IQD', iqd_sys / iqd_gauss, 'vs Gaussian')
+            # Hmmm, this doesn't work... totally overshoots.
+            
             
         plt.errorbar(midmag, vals[:,1], fmt='o', color='b',
                      yerr=(vals[:,1]-vals[:,0], vals[:,2]-vals[:,1]),
@@ -289,13 +328,22 @@ def main():
         plt.axhline(-2., color='b', alpha=0.2)
 
         for mag,err,y in zip(midmag, median_err1, vals[:,3]):
-            plt.text(mag, y, '%.3f' % err, va='top', ha='center', color='k')
+            if not np.isfinite(err):
+                continue
+            if y < -6:
+                continue
+            plt.text(mag, y-0.1, '%.3f' % err, va='top', ha='center', color='k',
+                     fontsize=10)
         
-        plt.xlabel('%s %s (mag)' % (name1, band))
+        plt.xlabel('(%s + %s)/2 %s (mag), PSFs' % (name1, name2, band))
         plt.ylabel('(%s %s - %s %s) / errors (sigma)' %
                    (name2, band, name1, band))
         plt.axhline(0., color='k', alpha=1.)
-        plt.axis([24, 16, -6, 6])
+
+        plt.axvline(21, color='k', alpha=0.3)
+        plt.axvline(dict(g=24, r=23.5, z=22.5)[band], color='k', alpha=0.3)
+
+        plt.axis([24.1, 16, -6, 6])
         plt.title(tt)
         ps.savefig()
 
