@@ -418,7 +418,7 @@ def main():
         '--zoom', type=int, nargs=4,
         help='Set target image extent (default "0 3600 0 3600")')
 
-    parser.add_argument('--skip' action='store_true',
+    parser.add_argument('--skip', action='store_true',
                         help='Skip forced-photometry if output file exists?')
     
     opt = parser.parse_args()
