@@ -389,8 +389,7 @@ def get_survey():
     survey.image_typemap['megacam'] = MegacamImage
     return survey
 
-if __name__ == '__main__':
-
+def main():
     import argparse
     parser = argparse.ArgumentParser()
 
@@ -419,13 +418,16 @@ if __name__ == '__main__':
         '--zoom', type=int, nargs=4,
         help='Set target image extent (default "0 3600 0 3600")')
 
+    parser.add_argument('--skip' action='store_true',
+                        help='Skip forced-photometry if output file exists?')
+    
     opt = parser.parse_args()
 
     Time.add_measurement(MemMeas)
 
     if opt.zeropoints:
         make_zeropoints()
-        sys.exit(0)
+        return 0
 
     if opt.download:
         fns = glob('euclid/images/megacam/lists/*.lst')
@@ -464,7 +466,7 @@ if __name__ == '__main__':
                     print(cmd)
                     os.system(cmd)
                     
-        sys.exit(0)
+        return 0
 
     if opt.queue_list:
         survey = get_survey()
@@ -490,7 +492,7 @@ if __name__ == '__main__':
             print(','.join(['%i'%i for i in allccds.index[I]]),
                   '%s-%s' % (opt.name, name))
 
-        sys.exit(0)
+        return 0
 
     if opt.analyze:
         fn = opt.analyze
@@ -683,7 +685,7 @@ if __name__ == '__main__':
         plt.axis([27, 16, 30, 15])
         ps.savefig()
         
-        sys.exit(0)
+        return 0
 
     if False:
         # Analyze forced photometry results
@@ -788,7 +790,7 @@ if __name__ == '__main__':
         plt.axis(ax)
         ps.savefig()
                 
-        sys.exit(0)
+        return 0
 
     if False:
         # Regular tiling with small overlaps; RA,Dec aligned
@@ -833,7 +835,7 @@ if __name__ == '__main__':
             plt.plot(rr, dd, 'b-')
         plt.savefig('acs-sources2.png')
 
-        sys.exit(0)
+        return 0
 
         # It's a 7x7 grid... hackily define RA,Dec boundaries.
         T = fits_table('euclid/survey-ccds-acsvis.fits.gz')
@@ -852,11 +854,11 @@ if __name__ == '__main__':
         decsplits = (decs[:-1] + decs[1:])/2.
         print('Dec boundaries:', decsplits)
 
-        sys.exit(0)
+        return 0
         
     if opt.expnum is None and opt.forced is None:
         print('Need --expnum or --forced')
-        sys.exit(-1)
+        return -1
 
     survey = get_survey()
 
@@ -885,11 +887,19 @@ if __name__ == '__main__':
                       blob_image=True, allbands=allbands,
                       forceAll=True, writePickles=False)
         #plots=True, plotbase='euclid',
-        sys.exit(0)
+        return 0
         
     # Run forced photometry on a given image or set of Megacam images,
     # using the ACS catalog as the source.
 
+    if opt.name is None:
+        opt.name = '%i-%s' % (im.expnum, im.ccdname)
+    outfn = 'euclid-out/forced/megacam-%s.fits' % opt.name
+
+    if opt.skip and os.path.exists(outfn):
+        print('Output file exists:', outfn)
+        return 0
+    
     t0 = Time()
 
     T = read_acs_catalogs()
@@ -1051,9 +1061,6 @@ if __name__ == '__main__':
     primhdr.add_record(dict(name='CAMERA', value=im.camera,
                             comment='Camera'))
 
-    if opt.name is None:
-        opt.name = '%i-%s' % (im.expnum, im.ccdname)
-    outfn = 'euclid-out/forced/megacam-%s.fits' % opt.name
     fitsio.write(outfn, None, header=primhdr, clobber=True)
     F.writeto(outfn, header=hdr, append=True)
     print('Wrote', outfn)
@@ -1061,4 +1068,8 @@ if __name__ == '__main__':
     t3 = Time()
     print('Wrap-up:', t3-t2)
     print('Total:', t3-t0)
+    return 0
+    
+if __name__ == '__main__':
+    sys.exit(main())
 
