@@ -99,9 +99,9 @@ for comb in combinaisons:
 	plots.hist_types(d.ref_matched, name='DefaulPsfExp'+suffix)
 
 	d.ref_matched.apply_mask_by_names(['psf'])
-	chi_v_gaussian(d.ref_matched, name='DepthComparisonPSF'+suffix)
+	plots.chi_v_gaussian(d.ref_matched, name='DepthComparisonPSF'+suffix)
 
 	d.ref_matched.apply_mask_by_names(['simp'])
-	chi_v_gaussian(d.ref_matched, name='DepthComparisonSimp'+suffix)
+	plots.chi_v_gaussian(d.ref_matched, name='DepthComparisonSimp'+suffix)
 
 print('finished COSMOS comparison')
