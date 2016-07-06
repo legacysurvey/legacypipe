@@ -1,0 +1,22 @@
+# begin .bashrc.ext
+[ -e $HOME/.dbgdot ] && echo "entering .bashrc.ext"
+ 
+# User additions to .bashrc go in this file
+
+# Un-comment and modify the following template for system-specific
+# personal settings.
+#
+# We load the modules built by the HPCPorts package;
+source /project/projectdirs/cmb/modules/hpcports_NERSC.sh
+hpcports shared_gnu
+module load tractor-hpcp
+module load astropy-hpcp
+module load scipy-hpcp
+module load matplotlib-hpcp
+module load fitsio-hpcp
+module load ipython-hpcp
+export PYTHONPATH=.:${PYTHONPATH}
+
+[ -e $HOME/.dbgdot ] && echo "exiting .bashrc.ext"
+# end .bashrc.ext
+
