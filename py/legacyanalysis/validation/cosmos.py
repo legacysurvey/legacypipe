@@ -2,6 +2,9 @@
 
 """do cosmos comparison
 
+to run dustins/johans cosmos script:
+python legacyanalysis/compare-two-catalogs.py --plot-prefix 4041 /project/projectdirs/desi/imaging/data/validation/cosmos/cosmos-40/ /project/projectdirs/desi/imaging/data/validation/cosmos/cosmos-41/
+
 Input Data
 ==========
 cosmos-1[012] -- hand-chosen to have roughly one image from pass 1, 2, 3 in each of g,r,z. Did not choose the exposures that had big sky artifacts and strong gradients. They have, as before, noise added to bring them so that each image has the same depth for our canonical "simple" galaxy profile, and so that the total depth with the three images is exactly our target depth.
@@ -32,10 +35,10 @@ import numpy as np
 
 from legacyanalysis.validation.pathnames import get_outdir,get_indir
 from legacyanalysis.validation.combine_cats import Matched_DataSet
-import legacyanalysis.validation.common_plots as plots
+import legacyanalysis.validation.cosmos_plots as plots
 
 
-# Get input data
+# Find tractor catalogues
 indir= get_indir('cosmos')
 cosmos10BrickList = glob.glob(os.path.join(indir,"cosmos-10/tractor/1*/tractor*.fits"))
 cosmos11BrickList = glob.glob(os.path.join(indir,"cosmos-11/tractor/1*/tractor*.fits"))
@@ -50,7 +53,7 @@ cosmos40BrickList = glob.glob(os.path.join(indir,"cosmos-40/tractor/1*/tractor*.
 cosmos41BrickList = glob.glob(os.path.join(indir,"cosmos-41/tractor/1*/tractor*.fits"))
 cosmos42BrickList = glob.glob(os.path.join(indir,"cosmos-42/tractor/1*/tractor*.fits"))
 
-# Save pathnames to numeric names text file
+# Write cat names to text files
 list_10= os.path.join(indir,'10.txt') 
 list_11= os.path.join(indir,'11.txt') 
 list_12= os.path.join(indir,'12.txt') 
@@ -76,32 +79,18 @@ np.savetxt(list_40, cosmos40BrickList, fmt='%s')
 np.savetxt(list_41, cosmos41BrickList, fmt='%s')
 np.savetxt(list_42, cosmos42BrickList, fmt='%s')
 
-combinaisons = [[list_10, list_11, "_10_11"], [list_10, list_12, "_10_12"], [list_11, list_12, "_11_12"]]
+combinations = [[list_40, list_41, "_40_41"] ]# , [list_10, list_12, "_10_12"], [list_11, list_12, "_11_12"]]
 
-for comb in combinaisons:
-	list_a, list_b, suffix = comb
-	# Compare list_a to list_b
-	# list_a is the "reference", e.g. list_b sources will be matched against list_a
-	d=Matched_DataSet(list_a, list_b, \
-					   comparison='cosmos')
-	# Plot number of psf,exp,etc for list_a 
-	# All 
-	d.ref_matched.apply_mask_by_names(['all'])
-	plots.hist_types(d.ref_matched, name='All'+suffix)
-	# Default, good quality photometry only
-	d.ref_matched.apply_mask_by_names(['default'])
-	plots.hist_types(d.ref_matched, name='Default'+suffix)
-	# psf only
-	d.ref_matched.apply_mask_by_names(['psf'])
-	plots.hist_types(d.ref_matched, name='psf')
-	# Default + psf + exp
-	d.ref_matched.apply_mask_by_names(['default','psf','exp'])
-	plots.hist_types(d.ref_matched, name='DefaulPsfExp'+suffix)
-
-	d.ref_matched.apply_mask_by_names(['psf'])
-	chi_v_gaussian(d.ref_matched, name='DepthComparisonPSF'+suffix)
-
-	d.ref_matched.apply_mask_by_names(['simp'])
-	chi_v_gaussian(d.ref_matched, name='DepthComparisonSimp'+suffix)
+for comb in combinations:
+    list_a, list_b, suffix = comb
+    # Compare list_a to list_b
+    # List_a is the "reference", e.g. list_b sources will be matched against list_a
+    d=Matched_DataSet(list_a, list_b, \
+                       comparison='cosmos',debug=True)
+    # Cosmos_plots.py does all cuts so hand it all objects for now 
+    d.ref_matched.apply_mask_by_names(['all'])
+    d.test_matched.apply_mask_by_names(['all'])
+    plots.all(d.ref_matched,d.test_matched,d.meta['d_matched'],\
+              name1='40',name2='41')
 
 print('finished COSMOS comparison')

@@ -20,8 +20,8 @@ import numpy as np
 
 from astropy.io import fits
 from astropy.table import vstack, Table, Column
-from scipy.spatial import KDTree
-#from astrometry.libkd.spherematch import match_radec
+#from scipy.spatial import KDTree
+from astrometry.libkd.spherematch import match_radec
 
 from legacyanalysis.validation.pathnames import get_outdir
 
@@ -55,7 +55,7 @@ def kdtree_match(ref_ra,ref_dec, ra,dec, k=1, dsmax=1./3600):
     assert(len(ref_ra[ref_match]) == len(ra[other_match]))
     return np.array(ref_match),np.array(other_match),np.array(ds[ds<=dsmax])
 
-def combine_single_cats(cat_list):
+def combine_single_cats(cat_list, debug=False):
     '''return dict containing astropy Table of concatenated tractor cats'''
     # Set the debugging level
     lvl = logging.INFO
@@ -69,6 +69,9 @@ def combine_single_cats(cat_list):
     #object to store concatenated matched tractor cats
     bigtractor = []
     deg2= 0.
+    # One catalogue for quick debugging
+    if debug: fns= fns[:1]
+    # Loop over cats
     for cnt,fn in zip(range(len(fns)),fns):
         log.info('Reading %s' % fn)
         tractor = Table(fits.getdata(fn, 1), masked=True)
@@ -82,7 +85,7 @@ def combine_single_cats(cat_list):
     return bigtractor, dict(deg2=deg2)
 
 
-def match_two_cats(ref_cats_file,test_cats_file):
+def match_two_cats(ref_cats_file,test_cats_file, debug=False):
     '''return dict containing astropy Table of concatenated tractor cats
     one Table for matched and missed reference and test objects, each'''
     # Set the debugging level
@@ -103,17 +106,19 @@ def match_two_cats(ref_cats_file,test_cats_file):
     test_missed = []
     d_matched= 0.
     deg2= dict(ref=0.,test=0.,matched=0.)
-    #for cnt,cat1,cat2 in zip(range(len(fns_1)),fns_1,fns_2):
-    for cnt,cat1,cat2 in zip(range(1),fns_1[:1],fns_2[:1]):
+    # One catalogue for quick debugging
+    if debug: fns_1,fns_2= fns_1[:1],fns_2[:1]
+    # Loop over cats
+    for cnt,cat1,cat2 in zip(range(len(fns_1)),fns_1,fns_2):
         log.info('Reading %s -- %s' % (cat1,cat2))
         ref_tractor = Table(fits.getdata(cat1, 1), masked=True)
         test_tractor = Table(fits.getdata(cat2, 1), masked=True)
-        #m1, m2, d12 = match_radec(ref_tractor['ra'].data.copy(), ref_tractor['dec'].data.copy(),\
-        #                          test_tractor['ra'].data.copy(), test_tractor['dec'].data.copy(), \
-        #                          1.0/3600.0)
-        m1, m2, d12= kdtree_match(ref_tractor['ra'].copy(), ref_tractor['dec'].copy(),\
-                                  test_tractor['ra'].copy(), test_tractor['dec'].copy(),\
-                                  k=1, dsmax=1./3600)
+        m1, m2, d12 = match_radec(ref_tractor['ra'].data.copy(), ref_tractor['dec'].data.copy(),\
+                                  test_tractor['ra'].data.copy(), test_tractor['dec'].data.copy(), \
+                                  1.0/3600.0)
+        #m1, m2, d12= kdtree_match(ref_tractor['ra'].copy(), ref_tractor['dec'].copy(),\
+        #                          test_tractor['ra'].copy(), test_tractor['dec'].copy(),\
+        #                          k=1, dsmax=1./3600)
         print("Matched: %d/%d objects" % (m1.size,len(ref_tractor['ra'])))
         miss1 = np.delete(np.arange(len(ref_tractor)), m1, axis=0)
         miss2 = np.delete(np.arange(len(test_tractor)), m2, axis=0)
@@ -246,16 +251,16 @@ class Single_TractorCat(object):
 class Single_DataSet(object):
     '''a Single_DataSet contains a concatenated tractor catalogue as Astropy table
     with additional columns for mags, masks, target selection, etc'''
-    def __init__(self,cat_list, comparison='test'):
+    def __init__(self,cat_list, comparison='test',debug=False):
         # Store tractor catalogue as astropy Table
-        astropy_t, self.meta= combine_single_cats(cat_list)
+        astropy_t, self.meta= combine_single_cats(cat_list, debug=debug)
         self.single= Single_TractorCat(astropy_t, comparison)
 
 class Matched_DataSet(object):
     '''a Matched_DataSet contains a dict of 4 concatenated, matched, tractor catalogue astropy Tables
     each table has additional columns for mags, target selection, masks, etc.'''
-    def __init__(self,ref_cats_file,test_cats_file, comparison='test'):
-        astropy_ts, self.meta= match_two_cats(ref_cats_file,test_cats_file)
+    def __init__(self,ref_cats_file,test_cats_file, comparison='test',debug=False):
+        astropy_ts, self.meta= match_two_cats(ref_cats_file,test_cats_file, debug=debug)
         # have 4 tractor catalogues
         self.ref_matched= Single_TractorCat(astropy_ts['ref_matched'], comparison)
         self.test_matched= Single_TractorCat(astropy_ts['test_matched'], comparison)
