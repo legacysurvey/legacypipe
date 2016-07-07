@@ -755,6 +755,67 @@ def analyze3(opt):
         ['z.SNR08-BIQ', 'z.SNR06-LIQ', 'z.SNR06-HIQ', 'z.PC.Shallow'],
         ]
 
+    allnames = []
+    for n1,n2 in zip(name1s, name2s):
+        allnames.append(n1)
+        allnames.extend(n2)
+
+    for name in allnames:
+        F = fits_table('euclid-out/forced-%s.fits' % name)
+
+        F.fluxsn = F.flux * np.sqrt(F.flux_ivar)
+        F.mag = -2.5 * (np.log10(F.flux) - 9.)
+
+        I = np.flatnonzero(F.type == 'PSF ')
+        print(len(I), 'PSF')
+        P = F[I]
+
+        I = np.flatnonzero(F.type == 'SIMP')
+        print(len(I), 'SIMP')
+        S = F[I]
+    
+        plt.clf()
+        plt.semilogx(F.fluxsn, F.mag, 'k.', alpha=0.01)
+        plt.semilogx(P.fluxsn, P.mag, 'r.', alpha=0.01)
+        plt.semilogx(S.fluxsn, S.mag, 'b.', alpha=0.01)
+        plt.xlabel('Megacam forced-photometry Flux S/N')
+        plt.ylabel('Megacam forced-photometry mag')
+
+        #plt.xlim(1., 1e4)
+        #plt.ylim(16, 26)
+        plt.xlim(1., 100.)
+        plt.ylim(22., 28.)
+
+        J = np.flatnonzero((P.fluxsn > 4.5) * (P.fluxsn < 5.5))
+        print(len(J), 'between flux S/N 4.5 and 5.5')
+        medmag_psf = np.median(P.mag[J])
+        print('Median mag', medmag_psf)
+        plt.axvline(5., color='r', alpha=0.5, lw=2)
+        plt.axvline(5., color='k', alpha=0.5)
+        plt.axhline(medmag_psf, color='r', alpha=0.5, lw=2)
+        plt.axhline(medmag_psf, color='k', alpha=0.5)
+
+        J = np.flatnonzero((S.fluxsn > 4.5) * (S.fluxsn < 5.5))
+        print(len(J), 'SIMP between flux S/N 4.5 and 5.5')
+        medmag_simp = np.median(S.mag[J])
+        print('Median mag', medmag_simp)
+        plt.axhline(medmag_simp, color='b', alpha=0.5, lw=2)
+        plt.axhline(medmag_simp, color='k', alpha=0.5)
+
+        plt.title('Megacam forced-photometered from ACS-VIS: %s' % name)
+
+        ax = plt.axis()
+        p1 = plt.semilogx([0],[0], 'k.')
+        p2 = plt.semilogx([0], [0], 'r.')
+        p3 = plt.semilogx([0], [0], 'b.')
+        plt.legend((p1[0], p2[0], p3[0]),
+                   ('All sources',
+                    'Point sources (~%.2f @ 5 sigma)' % medmag_psf,
+                    '"Simple" galaxies (~%.2f @ 5 sigma)' % medmag_simp))
+                    
+        plt.axis(ax)
+        ps.savefig()
+
     for name1,N2 in zip(name1s, name2s):
         T1 = fits_table('euclid-out/forced-%s.fits' % name1)
         for name2 in N2:
@@ -770,6 +831,8 @@ def analyze3(opt):
             plt.xlabel(name1 + ' flux')
             plt.ylabel(name2 + ' flux')
             ps.savefig()
+
+
 
 def geometry():
     # Regular tiling with small overlaps; RA,Dec aligned
