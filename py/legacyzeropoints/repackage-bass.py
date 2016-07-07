@@ -4,6 +4,9 @@
 data into more compact multi-extension FITS files and with a slightly
 simplified naming scheme.
 
+The output files are currently written to my scratch directory on edison:
+  /scratch2/scratchdirs/ioannis/bok-reduced
+
 J. Moustakas
 Siena College
 2016 July 6
@@ -33,7 +36,12 @@ def main():
     bassdata_dir = os.getenv(key)
 
     # temporary hack
-    output_dir = '/global/cscratch1/sd/ioannis/bok-reduced'
+    output_dir = os.path.join(os.getenv('SCRATCH'), 'bok-reduced')
+    try:
+        os.stat(output_dir)
+    except:
+        print('Creating top-level directory {}'.format(output_dir))
+        os.mkdir(output_dir)
 
     # If only one filter was used during the night then the directory
     # doesn't have a trailing filter name.
@@ -44,7 +52,7 @@ def main():
     for dir in dirs:
         allfiles = glob(os.path.join(dir, 'p*_1.fits'))
         if len(allfiles) > 0: # some directories are empty
-            for thisfile in allfiles[:2]:
+            for thisfile in allfiles:
                 basefile = os.path.basename(thisfile)
                 if 'bokr' in basefile or 'g' in basefile: # not sure if there are other filters
                     if 'bokr' in basefile:
