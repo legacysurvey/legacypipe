@@ -25,7 +25,7 @@ from astropy.io import fits
 def main():
 
     parser = argparse.ArgumentParser()
-    parser.add_argument('--build-sample', action='store_true', help='Build the sample.')
+    parser.add_argument('-o', '--output-dir', type=str, help='Desired output directory.')
     args = parser.parse_args()
 
     # export BASSDATA=/global/project/projectdirs/cosmo/staging/bok
@@ -35,14 +35,18 @@ def main():
         return 0
     bassdata_dir = os.getenv(key)
 
-    # temporary hack
-    output_dir = os.path.join(os.getenv('SCRATCH'), 'bok-reduced')
+    if args.output_dir is None:
+        output_dir = os.path.join(os.getenv('SCRATCH'), 'bok-reduced')
+    else:
+        output_dir = args.output_dir
+        
     try:
         os.stat(output_dir)
+        print('Writing to top-level directory {}'.format(output_dir))
     except:
         print('Creating top-level directory {}'.format(output_dir))
         os.mkdir(output_dir)
-
+        
     # If only one filter was used during the night then the directory
     # doesn't have a trailing filter name.
     dirs1 = glob(os.path.join(bassdata_dir, 'reduced', '201[5-6]????'))
