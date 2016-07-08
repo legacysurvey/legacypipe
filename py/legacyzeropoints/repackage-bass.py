@@ -14,8 +14,8 @@ TODO (@moustakas):
 * Should we generate weight maps???  What about bad pixel masks?
 * Figure out why the headers give CTYPE[1,2] as RA---TAN,DEC--TAN even
   though there are PV distortion coefficients.
-* The gain for each CCD should be in the header (and measured
-  frequently!)
+* The gain and readnoise for each CCD/amplifier should be in the
+  header (and measured frequently!)
 * All the images should have consistent units (electron/s).  Some are
   in ADU and calibrated using SDSS/UCAC4 and some are in electron/s
   (calibrated on PS1).
@@ -25,7 +25,9 @@ TODO (@moustakas):
   run on all the processed data after it has been rsynced to NERSC.
 * The astrometry on some of these fields is clearly failing, e.g.,
   p_74010159_g.fits
-  
+* We should globally replace the filter name 'bokr' with just 'r'.
+* Make sure EXTNAME exists for every header.
+
 J. Moustakas
 Siena College
 2016 July 6
@@ -73,7 +75,7 @@ def main():
             glob(os.path.join(bassdata_dir, 'reduced', '201[5-6]?????'))
             ))
     dirs = dirs[np.argsort(dirs)]
-    dirs = dirs[19:]
+    #dirs = dirs[19:20]
     #for thisdir in dirs:
     #    print(thisdir)
     #import pdb ; pdb.set_trace()
@@ -84,11 +86,10 @@ def main():
             'p7400g0280_1.fits',    # truncated data
             'p7402bokr0044_1.fits', # truncated data
             'p7430bokr0262_1.fits'])
-#           'p7390g0091_1.fits',    # no CALI_REF
-#           'p7390g0092_1.fits',    # no CALI_REF
-#           'p7390g0093_1.fits'])   # no CALI_REF
 
-    # List of extensions and gains (which shouldn't be hard-coded!)
+    # List of extensions and gains.  These are the average, not
+    # per-amplifier gains, so correcting for gain variations is just a
+    # temporary hack.
     extlist = ('_1', '_2', '_3', '_4')
     gainlist = (1.47, 1.48, 1.42, 1.4275)
     
@@ -109,8 +110,10 @@ def main():
                 if 'bokr' in basefile or 'g' in basefile: # not sure if there are other filters
                     if 'bokr' in basefile:
                         filter = 'bokr'
+                        outfilter = 'r'
                     else:
                         filter = 'g'
+                        outfilter = 'g'
                     expnum = '{}{}'.format(basefile[1:5], basefile[5+len(filter):-7])
                     outdir = os.path.join(output_dir, os.path.basename(thisdir)[:8])
                     try:
@@ -118,7 +121,7 @@ def main():
                     except:
                         print('Creating output directory {}'.format(outdir))
                         os.mkdir(outdir)
-                    outfile = os.path.join(outdir, 'p_{}_{}.fits'.format(expnum, filter))
+                    outfile = os.path.join(outdir, 'p_{}_{}.fits'.format(expnum, outfilter))
                     if os.path.isfile(outfile):
                         os.remove(outfile)
 
@@ -126,7 +129,8 @@ def main():
                     # (e.g., 20160211) it looks like the rsync
                     # transfer was truncated, so check to make sure we
                     # have everything.  Also make sure CALI_REF exists
-                    # in the header.
+                    # in the header and replace the FILTER header
+                    # card.
                     allhere = True
                     for ext in extlist:
                         thisfile1 = thisfile.replace('_1', ext)
@@ -143,11 +147,12 @@ def main():
                             # Images calibrated on PS1 are in
                             # electron/s, otherwise they're in ADU.
                             hdr, img = hduin[0].header, hduin[0].data
+                            hdr['FILTER'] = outfilter
                             if not 'PS1' in hdr['CALI_REF']:
                                 img = img * gain / hdr['exptime']
                             #import pdb ; pdb.set_trace()
                             if ext == '_1':
-                                primhdr = hduin[0].header.copy()
+                                primhdr = hdr.copy()
                                 primhdr['EXTNAME'] = 'PRIMARY'
                                 hduout.append(fits.PrimaryHDU(header=primhdr))
                             hduout.append(fits.ImageHDU(img, header=hdr))
