@@ -7,6 +7,25 @@ simplified naming scheme.
 The output files are currently written to my scratch directory on edison:
   /scratch2/scratchdirs/ioannis/bok-reduced
 
+TODO (@moustakas):
+* Clean up the primary header (right now it's just a copy of the CCD1
+  header but with EXTNAME removed).
+* Consider compressing the output FITS files (e.g., fz).
+* Should we generate weight maps???  What about bad pixel masks?
+* Figure out why the headers give CTYPE[1,2] as RA---TAN,DEC--TAN even
+  though there are PV distortion coefficients.
+* The gain for each CCD should be in the header (and measured
+  frequently!)
+* All the images should have consistent units (electron/s).  Some are
+  in ADU and calibrated using SDSS/UCAC4 and some are in electron/s
+  (calibrated on PS1).
+* There are at least three truncated files in the processed data.
+* Some supposedly calibrated images are missing the CALI_REF header
+  card, including most of the files in 20160209.  A QA code should be
+  run on all the processed data after it has been rsynced to NERSC.
+* The astrometry on some of these fields is clearly failing, e.g.,
+  p_74010159_g.fits
+  
 J. Moustakas
 Siena College
 2016 July 6
@@ -49,13 +68,42 @@ def main():
         
     # If only one filter was used during the night then the directory
     # doesn't have a trailing filter name.
-    dirs1 = glob(os.path.join(bassdata_dir, 'reduced', '201[5-6]????'))
-    dirs2 = glob(os.path.join(bassdata_dir, 'reduced', '201[5-6]?????'))
-    dirs = np.concatenate((dirs1, dirs2))
+    dirs = np.concatenate((
+            glob(os.path.join(bassdata_dir, 'reduced', '201[5-6]????')),
+            glob(os.path.join(bassdata_dir, 'reduced', '201[5-6]?????'))
+            ))
+    dirs = dirs[np.argsort(dirs)]
+    dirs = dirs[19:]
+    #for thisdir in dirs:
+    #    print(thisdir)
+    #import pdb ; pdb.set_trace()
 
-    for dir in dirs:
-        allfiles = glob(os.path.join(dir, 'p*_1.fits'))
+    # These files are corrupted/incomplete.
+    badfiles = ','.join([
+            'p7400g0275_1.fits',    # truncated data
+            'p7400g0280_1.fits',    # truncated data
+            'p7402bokr0044_1.fits', # truncated data
+            'p7430bokr0262_1.fits'])
+#           'p7390g0091_1.fits',    # no CALI_REF
+#           'p7390g0092_1.fits',    # no CALI_REF
+#           'p7390g0093_1.fits'])   # no CALI_REF
+
+    # List of extensions and gains (which shouldn't be hard-coded!)
+    extlist = ('_1', '_2', '_3', '_4')
+    gainlist = (1.47, 1.48, 1.42, 1.4275)
+    
+    for thisdir in dirs:
+        allfiles = np.array(glob(os.path.join(thisdir, 'p*_1.fits')))
+        print('Found {} exposures in directory {}'.format(len(allfiles), thisdir))
         if len(allfiles) > 0: # some directories are empty
+            allfiles = allfiles[np.argsort(allfiles)]
+            # Remove bad exposures/files.
+            isbad = []
+            for ii in range(len(allfiles)):
+                if os.path.basename(allfiles[ii]) in badfiles:
+                    isbad.append(ii)
+            allfiles = np.delete(np.array(allfiles), isbad)
+            
             for thisfile in allfiles:
                 basefile = os.path.basename(thisfile)
                 if 'bokr' in basefile or 'g' in basefile: # not sure if there are other filters
@@ -63,8 +111,8 @@ def main():
                         filter = 'bokr'
                     else:
                         filter = 'g'
-                    expnum = '{}_{}'.format(basefile[1:5], basefile[5+len(filter):-7])
-                    outdir = os.path.join(output_dir, os.path.basename(dir)[:8])
+                    expnum = '{}{}'.format(basefile[1:5], basefile[5+len(filter):-7])
+                    outdir = os.path.join(output_dir, os.path.basename(thisdir)[:8])
                     try:
                         os.stat(outdir)
                     except:
@@ -74,15 +122,40 @@ def main():
                     if os.path.isfile(outfile):
                         os.remove(outfile)
 
-                    # Build the output file.
-                    hduout = fits.HDUList()
-                    hduout.append(fits.PrimaryHDU())
-                    for ext in ('_1', '_2', '_3', '_4'):
-                        hduin = fits.open(thisfile.replace('_1', ext))
-                        hduout.append(fits.ImageHDU(hduin[0].data, header=hduin[0].header))
-                        hduin.close()
-                    print('  Writing {}'.format(outfile))
-                    hduout.writeto(outfile)
+                    # Build the output file.  In some directories
+                    # (e.g., 20160211) it looks like the rsync
+                    # transfer was truncated, so check to make sure we
+                    # have everything.  Also make sure CALI_REF exists
+                    # in the header.
+                    allhere = True
+                    for ext in extlist:
+                        thisfile1 = thisfile.replace('_1', ext)
+                        if not os.path.isfile(thisfile1):
+                            allhere = False
+                        hdr = fits.getheader(thisfile1)
+                        if not 'CALI_REF' in hdr:
+                            allhere = False
+                        
+                    if allhere:
+                        hduout = fits.HDUList()
+                        for ext, gain in zip(extlist, gainlist):
+                            hduin = fits.open(thisfile.replace('_1', ext))
+                            # Images calibrated on PS1 are in
+                            # electron/s, otherwise they're in ADU.
+                            hdr, img = hduin[0].header, hduin[0].data
+                            if not 'PS1' in hdr['CALI_REF']:
+                                img = img * gain / hdr['exptime']
+                            #import pdb ; pdb.set_trace()
+                            if ext == '_1':
+                                primhdr = hduin[0].header.copy()
+                                primhdr['EXTNAME'] = 'PRIMARY'
+                                hduout.append(fits.PrimaryHDU(header=primhdr))
+                            hduout.append(fits.ImageHDU(img, header=hdr))
+                            hduin.close()
+                        print('  Writing {}'.format(outfile))
+                        hduout.writeto(outfile)
+                    else:
+                        print('Missing some files or metadata for exposure {}'.format(thisfile))
                     
 if __name__ == "__main__":
     main()
