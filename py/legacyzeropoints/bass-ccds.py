@@ -45,9 +45,7 @@ from astrometry.util.fits import merge_tables
 from astrometry.util.plotutils import dimshow, plothist
 from astrometry.libkd.spherematch import match_radec
 
-from legacyanalysis.ps1cat import ps1_to_decam, ps1cat
-# Color terms -- no MOSAIC specific ones yet:
-ps1_to_mosaic = ps1_to_decam
+from legacyanalysis.ps1cat import ps1cat
 
 default_aprad = 3.5 # default aperture radius [3.5 arcsec]
 
@@ -300,143 +298,12 @@ class Measurer(object):
         dmag_skylocal = stars['ps1_mag'] - stars['apmag_skylocal']
         dmag_skyglobal = stars['ps1_mag'] - stars['apmag_skyglobal']
 
-        
-        
         pdb.set_trace()
 
-
-        # Quantities to measure from the matched PS1 stars: ccdzpt, ccdphoff,
-        # ccdphrms, ccdtransp, ccdmdncol as well as seeing (and fwhm)
-
-
-        fn = self.fn
-        ext = self.ext
-        pixsc = self.pixscale
-
-        self.hdr = hdr
-
-        fullH, fullW = img.shape
-            
-        band = self.get_band(primhdr)
-        exptime = primhdr['EXPTIME']
-        airmass = primhdr['AIRMASS']
-        print('Band {}, Exptime {}, Airmass {}'.format(band, exptime, airmass))
-
-        # Find the sky value and noise level
-        sky, sig1 = self.get_sky_and_sigma(img)
-        #img -= sky
-
-        # Compare this with what's in the header...
-        sky1 = np.median(sky)
-
-        # Read WCS header and compute boresight
-        wcs = self.get_wcs(hdr)
-        ra_ccd, dec_ccd = wcs.pixelxy2radec((fullW + 1) / 2.0, (fullH + 1) / 2.0)
-
-        # Should probably initialize the CCDs Table above and pack everything
-        # into it, rather than generating a dictionary here.
-        skybr = None
-        meas = dict(band=band, airmass=airmass, exptime=exptime,
-                    skybright=skybr, rawsky=sky1,
-                    pixscale=pixsc, primhdr=primhdr,
-                    hdr=hdr, wcs=wcs, ra_ccd=ra_ccd, dec_ccd=dec_ccd,
-                    extension=ext, camera=self.camera)
-
-        # Consider whether this is necessary...
-        #self.remove_sky_gradients(img)
-
-        # Get the post-sky-subtracted percentile range of pixel values.
-        mn, mx = np.percentile(img.ravel(), [25, 98])
-        self.imgkwa = dict(vmin=mn, vmax=mx, cmap='gray')
-
-        # Perform aperture photometry on each star with sky-subtraction done in
-        # an annulus around each stars.
-        print('Doing aperture photometry')
-        aprad_pix = self.aprad / self.pixscale
-        sky_inner_pix, sky_outer_pix = [skyr / self.pixscale for skyr in self.skyrad]
-
-        ap = CircularAperture((obj['xcentroid'], obj['ycentroid']), aprad_pix)
-        skyap = CircularAnnulus((obj['xcentroid'], obj['ycentroid']),
-                                r_in=sky_inner_pix, r_out=sky_outer_pix)
-        apphot1 = aperture_photometry(img, ap)
-        skyphot1 = aperture_photometry(img, skyap)
-        
-        apphot = hstack([apphot1, skyphot1], table_names=['star', 'sky'])
-        apflux = (apphot['aperture_sum_star'] - apphot['aperture_sum_sky'] / skyap.area() * ap.area()).data
-
-        # Read in the PS1 catalog, and keep those within 0.25 deg of CCD center
-        # and those with main sequence colors
-        pscat = ps1cat(ccdwcs=wcs)
-        stars = pscat.get_stars()
-
-        stars.gicolor = stars.median[:,0] - stars.median[:,2]
-        keep = (stars.gicolor > 0.4) * (stars.gicolor < 2.7)
-        stars.cut(keep)
-        if len(stars) == 0:
-            print('No overlap or too few stars in PS1')
-            pdb.set_trace()
-        print('Got {} PS1 stars'.format(len(stars)))
-
-        # Match against PS1.
-        rr, dd = wcs.pixelxy2radec(obj['xcentroid'], obj['ycentroid'])
-        m1, m2, d12 = match_radec(rr, dd, stars.ra, stars.dec, 3.0/3600.0)
-
-        apflux = apflux[m1]
-
-        plt.plot(stars.median[m2, 1], -2.5*np.log10(apflux), 'bo') ; plt.show()
-        
-        pdb.set_trace()
-
-
-        
-        # we add the color term later
-        try:
-            ps1band = ps1cat.ps1band[band]
-            stars.mag = stars.median[:, ps1band]
-        except KeyError:
-            ps1band = None
-            stars.mag = np.zeros(len(stars), np.float32)
-
-        pdb.set_trace()
-        
-        # Compute photometric offset compared to PS1
-        # as the PS1 minus observed mags
-        colorterm = self.colorterm_ps1_to_observed(stars.median, band)
+        colorterm = self.colorterm_ps1_to_observed(stars.median, self.band)
         stars.mag += colorterm
         ps1mag = stars.mag[I]
-        
-        if False and ps is not None:
-            plt.clf()
-            plt.semilogy(ps1mag, apflux2[J], 'b.')
-            plt.xlabel('PS1 mag')
-            plt.ylabel('DECam ap flux (with sky sub)')
-            ps.savefig()
-        
-            plt.clf()
-            plt.semilogy(ps1mag, apflux[J], 'b.')
-            plt.xlabel('PS1 mag')
-            plt.ylabel('DECam ap flux (no sky sub)')
-            ps.savefig()
 
-        # "apmag2" is the annular sky-subtracted flux
-        apmag2 = -2.5 * np.log10(apflux2) + zp0 + 2.5 * np.log10(exptime)
-        apmag  = -2.5 * np.log10(apflux ) + zp0 + 2.5 * np.log10(exptime)
-    
-        if ps is not None:
-            plt.clf()
-            plt.plot(ps1mag, apmag[J], 'b.', label='No sky sub')
-            plt.plot(ps1mag, apmag2[J], 'r.', label='Sky sub')
-            # ax = plt.axis()
-            # mn = min(ax[0], ax[2])
-            # mx = max(ax[1], ax[3])
-            # plt.plot([mn,mx], [mn,mx], 'k-', alpha=0.1)
-            # plt.axis(ax)
-            plt.xlabel('PS1 mag')
-            plt.ylabel('DECam ap mag')
-            plt.legend(loc='upper left')
-            plt.title('Zeropoint')
-            ps.savefig()
-    
         dm = ps1mag - apmag[J]
         dmag,dsig = sensible_sigmaclip(dm, nsigma=2.5)
         print('Mag offset: %8.3f' % dmag)
@@ -445,7 +312,7 @@ class Measurer(object):
         if not np.isfinite(dmag) or not np.isfinite(dsig):
             print('FAILED TO GET ZEROPOINT!')
             meas.update(zp=None)
-            return meas
+            return ccds, stars
 
         from scipy.stats import sigmaclip
         goodpix,lo,hi = sigmaclip(dm, low=3, high=3)
@@ -466,18 +333,6 @@ class Measurer(object):
         goodpix,lo,hi = sigmaclip(dm, low=3, high=3)
         dmagmedsky = np.median(goodpix)
 
-        if ps is not None:
-            plt.clf()
-            plt.plot(ps1mag, apmag[J] + dmag - ps1mag, 'b.', label='No sky sub')
-            plt.plot(ps1mag, apmag2[J]+ dmag2- ps1mag, 'r.', label='Sky sub')
-            plt.xlabel('PS1 mag')
-            plt.ylabel('DECam ap mag - PS1 mag')
-            plt.legend(loc='upper left')
-            plt.ylim(-0.25, 0.25)
-            plt.axhline(0, color='k', alpha=0.25)
-            plt.title('Zeropoint')
-            ps.savefig()
-
         zp_mean = zp0 + dmag
 
         zp_obs = zp0 + dmagmedsky
@@ -488,20 +343,7 @@ class Measurer(object):
         print('Fiducial  %6.3f' % zp0)
         print('Transparency: %.3f' % transparency)
 
-        # Also return the zeropoints using the sky-subtracted mags,
-        # and using median rather than clipped mean.
-        meas.update(zp_mean = zp_mean,
-                    zp_skysub = zp0 + dmag2,
-                    zp_med = zp_med,
-                    zp_med_skysub = zp0 + dmagmedsky)
-        
 
-        # print('Using sky-subtracted values:')
-        # zp_sky = zp0 + dmag2
-        # trans_sky = 10.**(-0.4 * (zp0 - zp_sky - kx * (airmass - 1.)))
-        # print('Zeropoint %6.3f' % zp_sky)
-        # print('Transparency: %.3f' % trans_sky)
-        
         fwhms = []
         psf_r = 15
         if n_fwhm not in [0, None]:
@@ -567,74 +409,13 @@ class Measurer(object):
                     break
     
             fwhms.append(psf.sigmas[0] * 2.35 * pixsc)
-                
-            if doplot:
-                mod1 = tr.getModelImage(0)
-                chi1 = tr.getChiImage(0)
-            
-                plt.clf()
-                plt.subplot(2,2,1)
-                plt.title('Image')
-                dimshow(pix, **self.imgkwa)
-                plt.subplot(2,2,2)
-                plt.title('Initial model')
-                dimshow(mod0, **self.imgkwa)
-                plt.subplot(2,2,3)
-                plt.title('Final model')
-                dimshow(mod1, **self.imgkwa)
-                plt.subplot(2,2,4)
-                plt.title('Final chi')
-                dimshow(chi1, vmin=-10, vmax=10)
-                plt.suptitle('PSF fit')
-                ps.savefig()
-    
-        fwhms = np.array(fwhms)
-        fwhm = np.median(fwhms)
-        print('Median FWHM: %.3f' % np.median(fwhms))
-        meas.update(seeing=fwhm)
-    
-        if False and ps is not None:
-            lo,hi = np.percentile(fwhms, [5,95])
-            lo -= 0.1
-            hi += 0.1
-            plt.clf()
-            plt.hist(fwhms, 25, range=(lo,hi), histtype='step', color='b')
-            plt.xlabel('FWHM (arcsec)')
-            ps.savefig()
-    
-        if ps is not None:
-            plt.clf()
-            for i,(xi,yi) in enumerate(zip(fx[J],fy[J])[:50]):
-                ix = int(np.round(xi))
-                iy = int(np.round(yi))
-                xlo = max(0, ix-psf_r)
-                xhi = min(W, ix+psf_r+1)
-                ylo = max(0, iy-psf_r)
-                yhi = min(H, iy+psf_r+1)
-                pix = img[ylo:yhi, xlo:xhi]
-        
-                slc = pix[iy-ylo, :].copy()
-                slc /= np.sum(slc)
-                p1 = plt.plot(slc, 'b-', alpha=0.2)
-                slc = pix[:, ix-xlo].copy()
-                slc /= np.sum(slc)
-                p2 = plt.plot(slc, 'r-', alpha=0.2)
-                ph,pw = pix.shape
-                cx,cy = pw/2, ph/2
-                if i == 0:
-                    xx = np.linspace(0, pw, 300)
-                    dx = xx[1]-xx[0]
-                    sig = fwhm / pixsc / 2.35
-                    yy = np.exp(-0.5 * (xx-cx)**2 / sig**2) # * np.sum(pix)
-                    yy /= (np.sum(yy) * dx)
-                    p3 = plt.plot(xx, yy, 'k-', zorder=20)
-            #plt.ylim(-0.2, 1.0)
-            plt.legend([p1[0], p2[0], p3[0]],
-                       ['image slice (y)', 'image slice (x)', 'fit'])
-            plt.title('PSF fit')
-            ps.savefig()
 
-        return meas
+        fwhms = np.array(fwhms)
+        medfwhm = np.median(fwhms)
+        print('Median FWHM: {:.3f}'.format(medfwhm))
+        ccds['seeing'] = medfwhm
+
+        return ccds, stars
 
 
 class DECamMeasurer(Measurer):
@@ -660,6 +441,7 @@ class DECamMeasurer(Measurer):
         return wcs
 
     def colorterm_ps1_to_observed(self, ps1stars, band):
+        from legacyanalysis.ps1cat import ps1_to_decam
         return ps1_to_decam(ps1stars, band)
 
 class DECamCPMeasurer(DECamMeasurer):
@@ -709,6 +491,7 @@ class Mosaic3Measurer(Measurer):
         return wcs
 
     def colorterm_ps1_to_observed(self, ps1stars, band):
+        from legacyanalysis.ps1cat import ps1_to_mosaic
         return ps1_to_mosaic(ps1stars, band)
 
 class NinetyPrimeMeasurer(Measurer):
@@ -762,8 +545,8 @@ class NinetyPrimeMeasurer(Measurer):
         pass
 
     def colorterm_ps1_to_observed(self, ps1stars, band):
-        return ps1_to_mosaic(ps1stars, band)
-
+        from legacyanalysis.ps1cat import ps1_to_90prime
+        return ps1_to_90prime(ps1stars, band)
 
 def measure_mosaic3(fn, ext='im4', nom=None, ps=None, **kwargs):
     if nom is None:
