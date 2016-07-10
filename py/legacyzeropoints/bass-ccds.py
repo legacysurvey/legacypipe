@@ -51,7 +51,7 @@ ps1_to_mosaic = ps1_to_decam
 
 default_aprad = 3.5 # default aperture radius [3.5 arcsec]
 
-def ccds_table():
+def _ccds_table():
     '''Initialize the output CCDs table.  See decstat and merge-zeropoints.py for
     details
 
@@ -75,6 +75,19 @@ def ccds_table():
         ]
     ccds = Table(np.zeros(1, dtype=cols))
     return ccds
+
+def _stars_table(nstars=1):
+    '''Initialize the stars table, which will contain information on all the stars
+       detected on the CCD, including the PS1 photometry.
+
+    '''
+
+    cols = [('x', 'f4'), ('y', 'f4'), ('ra', 'f8'), ('dec', 'f8'), ('fwhm', 'f4'),
+            ('apmag_skylocal', 'f4'), ('apmag_skyglobal', 'f4'), 
+            ('ps1_ra', 'f8'), ('ps1_dec', 'f8'), ('ps1_mag', 'f4'), ('ps1_gicolor', 'f4')]
+    stars = Table(np.zeros(nstars, dtype=cols))
+
+    return stars
 
 class Measurer(object):
     def __init__(self, fn, ext, aprad=3.5, skyrad_inner=7.0, skyrad_outer=10.0):
@@ -149,7 +162,7 @@ class Measurer(object):
         img, hdr = fitsio.read(self.fn, ext=self.ext, header=True)
 
         # Initialize and begin populating the output CCDs table.
-        ccds = ccds_table()
+        ccds = _ccds_table()
         ccds['image_filename'] = self.fn
         ccds['expnum'] = self.expnum
         ccds['filter'] = self.band
@@ -171,7 +184,7 @@ class Measurer(object):
         for ckey, hkey in zip(ccdskey, hdrkey):
             ccds[ckey] = hdr[hkey]
 
-        print('Band {}, Exptime {}, Airmass {}'.format(ccds['filter'].data[0],
+        print('Band {}, Exptime {}, Airmass {}'.format(self.band,
                                                        ccds['exptime'].data[0],
                                                        ccds['airmass'].data[0]))
 
@@ -181,14 +194,16 @@ class Measurer(object):
         ccds['ra'] = ccdra
         ccds['dec'] = ccddec
 
-        # Measure the sky brightness and (sky) noise level.
+        # Measure the sky brightness and (sky) noise level.  Need to capture
+        # negative sky.
         zp0 = self.zeropoint(self.band)
         sky0 = self.sky(self.band)
 
         print('Computing the sky image.')
+        exptime = ccds['exptime'].data[0]
         sky, sig1 = self.get_sky_and_sigma(img)
         sky1 = np.median(sky)
-        skybr = zp0 - 2.5*np.log10(sky1/self.pixscale/self.pixscale/ccds['exptime'].data[0])
+        skybr = zp0 - 2.5*np.log10(sky1/self.pixscale/self.pixscale/exptime)
 
         print('  Sky brightness: {:.3f} mag/arcsec^2'.format(skybr))
         print('  Fiducial:       {:.3f} mag/arcsec^2'.format(sky0))
@@ -197,7 +212,7 @@ class Measurer(object):
         ccds['ccdskycounts'] = sky1 # [electron/s/pix]
         ccds['ccdskymag'] = skybr   # [mag/arcsec^2]
 
-        # Detect stars on the image.
+        # Detect stars on the image.  
         det_thresh = self.det_thresh
         obj = daofind(img, fwhm=self.nominal_fwhm,
                       threshold=det_thresh*sig1,
@@ -213,36 +228,81 @@ class Measurer(object):
 
         if nobj == 0:
             print('No sources detected!  Giving up.')
-            return ccds
+            return ccds, _stars_table()
 
-        # Aperture photometry here?  So we can cut on the uncertainties...
+        # Aperture photometry here?  So we can cut on the uncertainties...?
 
         # Read and match all PS1 stars on this CCD.
-        stars = ps1cat(ccdwcs=self.wcs).get_stars()
-        nstar = len(stars)
+        ps1 = ps1cat(ccdwcs=self.wcs).get_stars()
+        nps1 = len(ps1)
 
-        if nstar == 0:
+        if nps1 == 0:
             print('No overlapping PS1 stars in this field!')
-            return ccds
+            return ccds, _stars_table()
 
         objra, objdec = self.wcs.pixelxy2radec(obj['xcentroid'], obj['ycentroid'])
-        m1, m2, d12 = match_radec(objra, objdec, stars.ra, stars.dec, self.matchradius/3600.0)
+        m1, m2, d12 = match_radec(objra, objdec, ps1.ra, ps1.dec, self.matchradius/3600.0)
         nmatch = len(m1)
         ccds['ccdnmatch'] = nmatch
         
         print('{} PS1 stars match detected sources within {} arcsec.'.format(nmatch, self.matchradius))
 
+        # Initialize the stars table and begin populating it.
+        stars = _stars_table(nmatch)
+        stars['x'] = obj['xcentroid'][m1]
+        stars['y'] = obj['ycentroid'][m1]
+        stars['ra'] = objra[m1]
+        stars['dec'] = objdec[m1]
+
+        stars['ps1_ra'] = ps1.ra[m2]
+        stars['ps1_dec'] = ps1.dec[m2]
+        stars['ps1_gicolor'] = ps1.median[m2, 0] - ps1.median[m2, 2]
+
+        ps1band = ps1cat.ps1band[self.band]
+        stars['ps1_mag'] = ps1.median[m2, ps1band]
+
         # Compute the astrometric residuals relative to PS1.
-        raoff = np.median((objra[m1]-stars.ra[m2]) * np.cos(np.deg2rad(ccddec)) * 3600.0)
-        decoff = np.median((objdec[m1]-stars.dec[m2]) * 3600.0)
+        raoff = np.median((stars['ra'] - stars['ps1_ra']) * np.cos(np.deg2rad(ccddec)) * 3600.0)
+        decoff = np.median((stars['dec'] - stars['ps1_dec']) * 3600.0)
         ccds['ccdraoff'] = raoff
         ccds['ccddecoff'] = decoff
         print('Median offsets (arcsec) relative to PS1: dra = {}, ddec = {}'.format(raoff, decoff))
 
-        # Compute the photometric zeropoints.
+        # Do aperture photometry in a fixed aperture but with two different
+        # types of sky-subtraction -- local and global.
+        print('Aperture photometry')
+        aprad_pix = self.aprad / self.pixscale
+        sky_inner_pix, sky_outer_pix = [skyr / self.pixscale for skyr in self.skyrad]
+
+        ap = CircularAperture((stars['x'], stars['y']), aprad_pix)
+        skyap = CircularAnnulus((stars['x'], stars['y']), r_in=sky_inner_pix, r_out=sky_outer_pix)
+        apphot_global = aperture_photometry(img - sky, ap)
+        apphot_local = aperture_photometry(img, ap)
+        skyphot_local = aperture_photometry(img, skyap)
+
+        apflux_skyglobal = apphot_global['aperture_sum']
+        apflux_skylocal = apphot_local['aperture_sum'] - skyphot_local['aperture_sum'] / skyap.area() * ap.area()
+
+        stars['apmag_skyglobal'] = - 2.5 * np.log10(apflux_skyglobal) + zp0 + 2.5 * np.log10(exptime)
+        stars['apmag_skylocal'] = - 2.5 * np.log10(apflux_skylocal) + zp0 + 2.5 * np.log10(exptime)
+
+        # Compute the photometric zeropoint.  Only use stars with main sequence
+        # g-i colors.
+        print('Computing the photometric zeropoint.')
+        mskeep = (stars['ps1_gicolor'] > 0.4) * (stars['ps1_gicolor'] < 2.7)
+        nms = np.sum(mskeep*1)
+        if nms == 0:
+            print('Not enough PS1 stars with main sequence colors.')
+            return ccds, stars
+
+        # Get the photometric offset relative to PS1 as the observed PS1
+        # magnitude minus the observed / measured magnitude.
+        dmag_skylocal = stars['ps1_mag'] - stars['apmag_skylocal']
+        dmag_skyglobal = stars['ps1_mag'] - stars['apmag_skyglobal']
+
+        
         
         pdb.set_trace()
-
 
 
         # Quantities to measure from the matched PS1 stars: ccdzpt, ccdphoff,
