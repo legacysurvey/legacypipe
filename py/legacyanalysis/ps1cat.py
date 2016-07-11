@@ -68,7 +68,7 @@ class ps1cat():
         #                      ((allcat.nmag_ok[:,0]>0)*1)*     # g
         #                      ((allcat.nmag_ok[:,1]>0)*1)*     # r
         #                      ((allcat.nmag_ok[:,3]>0)*1)==1)] # z
-        print('Found {} good PS1 stars'.format(len(cat)))
+        print('Found {} good PS1 stars.'.format(len(cat)))
         if magrange is not None:
             keep = np.where((cat.median[:,ps1cat.ps1band[band]]>magrange[0])*
                             (cat.median[:,ps1cat.ps1band[band]]<magrange[1]))[0]
@@ -76,7 +76,6 @@ class ps1cat():
             print('Trimming to {} stars with {}=[{},{}]'.
                   format(len(cat),band,magrange[0],magrange[1]))
         return cat
-
 
 def ps1_to_decam(psmags, band):
     '''
@@ -92,6 +91,42 @@ def ps1_to_decam(psmags, band):
         g = [0.0, -0.04709, -0.00084, 0.00340],
         r = [0.0,  0.09939, -0.04509, 0.01488],
         z = [0.0,  0.13404, -0.06591, 0.01695])[band]
+
+    colorterm = -(coeffs[0] + coeffs[1]*gi + coeffs[2]*gi**2 + coeffs[3]*gi**3)
+    return colorterm
+    
+def ps1_to_90prime(psmags, band):
+    '''
+    psmags: 2-d array (Nstars, Nbands)
+    band: [gr]
+
+    color terms are taken from:
+      https://desi.lbl.gov/trac/wiki/BokLegacy/Photometric
+    
+    '''
+    g_index = ps1cat.ps1band['g']
+    i_index = ps1cat.ps1band['i']
+    gmag = psmags[:, g_index]
+    imag = psmags[:, i_index]
+    gi = gmag - imag
+    coeffs = dict(
+        g = [0.0, +0.08612, -0.00392, -0.00393],
+        r = [0.0, -0.07831, +0.03304, -0.01027])[band]
+
+    colorterm = -(coeffs[0] + coeffs[1]*gi + coeffs[2]*gi**2 + coeffs[3]*gi**3)
+    return colorterm
+    
+def ps1_to_mosaic(psmags, band):
+    '''
+    psmags: 2-d array (Nstars, Nbands)
+    band: [gr]
+    '''
+    g_index = ps1cat.ps1band['g']
+    i_index = ps1cat.ps1band['i']
+    gmag = psmags[:, g_index]
+    imag = psmags[:, i_index]
+    gi = gmag - imag
+    coeffs = dict(z = [0.0,  0.13404, -0.06591, 0.01695])[band]
 
     colorterm = -(coeffs[0] + coeffs[1]*gi + coeffs[2]*gi**2 + coeffs[3]*gi**3)
     return colorterm
