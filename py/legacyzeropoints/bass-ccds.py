@@ -572,16 +572,19 @@ def measure_mosaic3(fn, ext='im4', nom=None, **kwargs):
     results = meas.run(**kwargs)
     return results
 
-def measure_90prime(fn, ext='CCD1', measureargs={}, **kwargs):
-    measure = NinetyPrimeMeasurer(fn, ext, **measureargs)
-    ccds, stars = measure.run(**kwargs)
+def measure_90prime(fn, ext='CCD1', **kwargs):
+    measure = NinetyPrimeMeasurer(fn, ext, **kwargs)
+    ccds, stars = measure.run()
     return ccds, stars
 
 def camera_name(primhdr):
     '''
     Returns 'mosaic3', 'decam', or '90prime'
     '''
-    return primhdr.get('INSTRUME','').strip().lower()
+    camera = primhdr.get('INSTRUME','').strip().lower()
+    if camera == '90prime':
+        extlist = ('CCD1', 'CCD2', 'CCD3', 'CCD4')
+    return camera, extlist
     
 def sensible_sigmaclip(arr, nsigma = 4.):
     '''sigmaclip returns unclipped pixels, lo,hi, where lo,hi are the
@@ -594,58 +597,71 @@ def sensible_sigmaclip(arr, nsigma = 4.):
     sigma = (meanval - lo) / nsigma
     return meanval, sigma
 
-def measure_image(fn, **kwargs):
+def _measure_image(args):
+    '''Utility function to wrap measure_image for multiprocessing map.'''
+    return measure_image(*args)
+
+def measure_image(filelist, measureargs={}):
     '''Wrapper on the camera-specific classes to measure the CCD-level data on all
-    the FITS extensions.
+    the FITS extensions for a given set of images.
 
     '''
 
-    primhdr = fitsio.read_header(fn)
-    camera = camera_name(primhdr)
+    allccds = []
+    for fn in filelist:
+        print('Working on image {}'.format(fn))
+        if not os.path.isfile(fn):
+            print('  Image {} not found!'.format(fn))
+            continue
 
-    if camera == 'decam':
-        # CP-processed DECam image
-        import decam
-        nom = decam.DecamNominalCalibration()
-        ext = kwargs.pop('ext')
-        meas = DECamCPMeasurer(fn, ext, nom)
-        result = meas.run(**kwargs)
+        primhdr = fitsio.read_header(fn)
+        camera, extlist = camera_name(primhdr)
+        nnext = len(extlist)
 
-    elif camera == 'mosaic3':
-        result = measure_mosaic3(fn)
+        if camera == 'decam':
+            measure = measure_decam
+        elif camera == 'mosaic3':
+            measure = measure_mosaic3
+        elif camera == '90prime':
+            measure = measure_90prime
+        else:
+            print('Camera {} not recognized!'.format(camera))
+            continue
 
-    elif camera == '90prime':
         ccds = []
         stars = []
-        #for ext in ('CCD1', 'CCD2'):
-        for ext in ('CCD1', 'CCD2', 'CCD3', 'CCD4'):
-            ccds1, stars1 = measure_90prime(fn, ext, **kwargs)
+        for ext in extlist:
+            ccds1, stars1 = measure(fn, ext, **measureargs)
             ccds.append(ccds1)
             stars.append(stars1)
+
+        # Compute the median zeropoint across all the CCDs.
         ccds = vstack(ccds)
         stars = vstack(stars)
-    else:
-        print('Camera {} not recognized!'.format(camera))
-        return 0
+        ccds['zpt'] = np.median(ccds['ccdzpt'])
 
-    # Compute the median zeropoint across all the CCDs.
-    ccds['zpt'] = np.median(ccds['ccdzpt'])
-    return ccds, stars
+        if len(allccds) == 0:
+            allccds = ccds
+            allstars = stars
+        else:
+            allccds = vstack((allccds, ccds))
+            allstars = vstack((allstars, stars))
+        
+    return allccds, allstars
 
 def main():
 
-    '''
-
-    python ~/repos/git/legacysurvey/py/legacyzeropoints/bass-ccds.py p_7402_0038_bokr.fits
+    '''Generate a legacypipe-compatible CCDs file.
 
     '''
 
     parser = argparse.ArgumentParser(description='Generate a legacypipe-compatible CCDs file from a set of reduced imaging.')
-    parser.add_argument('--ccdsfile', type=str, default='ccds.fits', help='Output file name for the CCD information.')
-    parser.add_argument('--starsfile', type=str, default='stars.fits', help='Output file name for the stars.')
+    parser.add_argument('--ccdsfile', type=str, default='test-ccds.fits', help='Output file name for the CCD information.')
+    parser.add_argument('--starsfile', type=str, default='test-stars.fits', help='Output file name for the stars.')
     parser.add_argument('--aprad', type=float, default=3.5, help='Aperture photometry radius (arcsec).')
     parser.add_argument('--skyrad-inner', type=float, default=7.0, help='Radius of inner sky annulus (arcsec).')
     parser.add_argument('--skyrad-outer', type=float, default=10.0, help='Radius of outer sky annulus (arcsec).')
+    parser.add_argument('--nproc', type=int, default=1, help='Number of CPUs to use.')
     parser.add_argument('--calibrate', action='store_true',
                         help='Use this option when deriving the photometric transformation equations.')
     parser.add_argument('--sky-global', action='store_true',
@@ -659,14 +675,28 @@ def main():
     images = measureargs.pop('images')
     ccdsfile = measureargs.pop('ccdsfile')
     starsfile = measureargs.pop('starsfile')
+    nproc = measureargs.pop('nproc')
 
-    # Push this to multiprocessing, one image per core...
-    for thisfile in images:
-        print('Working on image {}'.format(thisfile))
-        if os.path.isfile(thisfile):
-            ccds, stars = measure_image(thisfile, measureargs=measureargs)
-        else:
-            print('Image {} not found!'.format(thisfile))
+    # Process the data, optionally with multiprocessing.
+    if nproc > 1:
+        import multiprocessing
+        args = list()
+        for ii in range(nproc):
+            print(images[ii::nproc])
+            args.append((images[ii::nproc], measureargs))
+        pool = multiprocessing.Pool(nproc)
+        results = pool.map(_measure_image, args)
+
+        # Pack the results back together (should we sort by filename?).
+        ccds = []
+        stars = []
+        for result in results:
+            ccds.append(result[0])
+            stars.append(result[1])
+        ccds = vstack(ccds)
+        stars = vstack(stars)
+    else:
+        ccds, stars = measure_image(images, measureargs)
 
     # Write out.
     if os.path.isfile(ccdsfile):
