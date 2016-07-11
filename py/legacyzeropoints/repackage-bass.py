@@ -16,9 +16,10 @@ TODO (@moustakas):
   though there are PV distortion coefficients.
 * The gain and readnoise for each CCD/amplifier should be in the
   header (and measured frequently!)
-* All the images should have consistent units (electron/s).  Some are
-  in ADU and calibrated using SDSS/UCAC4 and some are in electron/s
-  (calibrated on PS1).
+* All the images should have consistent units (electron, to be
+  consistent with the CP-processed images).  Some are in ADU and
+  calibrated using SDSS/UCAC4 and some are in electron(?) (calibrated
+  on PS1).
 * There are at least three truncated files in the processed data.
 * Some supposedly calibrated images are missing the CALI_REF header
   card, including most of the files in 20160209.  A QA code should be
@@ -107,6 +108,7 @@ def main():
             
             for thisfile in allfiles:
                 basefile = os.path.basename(thisfile)
+                #import pdb ; pdb.set_trace()                
                 if 'bokr' in basefile or 'g' in basefile: # not sure if there are other filters
                     if 'bokr' in basefile:
                         filter = 'bokr'
@@ -141,15 +143,19 @@ def main():
                             allhere = False
                         
                     if allhere:
+                        # Temporary hack
+                        #if 'PS1' in fits.getheader(thisfile)['CALI_REF']:
+                        #    continue
                         hduout = fits.HDUList()
                         for ext, gain in zip(extlist, gainlist):
                             hduin = fits.open(thisfile.replace('_1', ext))
                             # Images calibrated on PS1 are in
-                            # electron/s, otherwise they're in ADU.
+                            # electrons, otherwise they're in ADU; fix
+                            # that here.
                             hdr, img = hduin[0].header, hduin[0].data
                             hdr['FILTER'] = outfilter
                             if not 'PS1' in hdr['CALI_REF']:
-                                img = img * gain / hdr['exptime']
+                                img = img * gain 
                             #import pdb ; pdb.set_trace()
                             if ext == '_1':
                                 primhdr = hdr.copy()
