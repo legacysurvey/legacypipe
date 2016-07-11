@@ -99,6 +99,10 @@ def ps1_to_90prime(psmags, band):
     '''
     psmags: 2-d array (Nstars, Nbands)
     band: [gr]
+
+    color terms are taken from:
+      https://desi.lbl.gov/trac/wiki/BokLegacy/Photometric
+    
     '''
     g_index = ps1cat.ps1band['g']
     i_index = ps1cat.ps1band['i']
@@ -106,8 +110,8 @@ def ps1_to_90prime(psmags, band):
     imag = psmags[:, i_index]
     gi = gmag - imag
     coeffs = dict(
-        g = [0.0, -0.04709, -0.00084, 0.00340],
-        r = [0.0,  0.09939, -0.04509, 0.01488],
+        g = [0.0, +0.08612, -0.00392, -0.00393],
+        r = [0.0, -0.07831, +0.03304, -0.01027])[band]
 
     colorterm = -(coeffs[0] + coeffs[1]*gi + coeffs[2]*gi**2 + coeffs[3]*gi**3)
     return colorterm
@@ -122,8 +126,7 @@ def ps1_to_mosaic(psmags, band):
     gmag = psmags[:, g_index]
     imag = psmags[:, i_index]
     gi = gmag - imag
-    coeffs = dict(
-        z = [0.0,  0.13404, -0.06591, 0.01695])[band]
+    coeffs = dict(z = [0.0,  0.13404, -0.06591, 0.01695])[band]
 
     colorterm = -(coeffs[0] + coeffs[1]*gi + coeffs[2]*gi**2 + coeffs[3]*gi**3)
     return colorterm
