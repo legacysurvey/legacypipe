@@ -493,46 +493,49 @@ def do_one_chunk(seed,ith_chunk,  decals_sim_dir,brickname,lobjtype,metacat, nob
     shutil.rmtree(os.path.join(output_dir, 'tractor'))
     return "Finished chunk %3.3d" % ith_chunk
 
-
-def main(args=None):
-    """Main routine which parses the optional inputs."""
+def get_parser():
+    '''return parser object, tells it what options to look for
+    options can come from a list of strings or command line'''
     parser = argparse.ArgumentParser(formatter_class=argparse.
                                      ArgumentDefaultsHelpFormatter,
                                      description='DECaLS simulations.')
-    if args is None:
-        parser.add_argument('-n', '--nobj', type=long, default=500, metavar='', 
-                            help='number of objects to simulate (required input)')
-        parser.add_argument('-ic', '--ith_chunk', type=long, default=None, metavar='', 
-                            help='run the ith chunk, 0-999')
-        parser.add_argument('-c', '--nchunk', type=long, default=1, metavar='', 
-                            help='run chunks 0 to nchunk')
-        parser.add_argument('-b', '--brick', type=str, default='2428p117', metavar='', 
-                            help='simulate objects in this brick')
-        parser.add_argument('-o', '--objtype', type=str, choices=['STAR','ELG', 'LRG', 'QSO', 'LSB'], default='STAR', metavar='', 
-                            help='insert these into images') 
-        parser.add_argument('-t', '--threads', type=int, default=1, metavar='', 
-                            help='number of threads to use when calling The Tractor')
-        parser.add_argument('-s', '--seed', type=long, default=None, metavar='', 
-                            help='random number seed, determines chunk seeds 0-999')
-        parser.add_argument('-z', '--zoom', nargs=4, default=(0, 3600, 0, 3600), type=int, metavar='', 
-                            help='see runbrick.py; (default is 0 3600 0 3600)')
-        parser.add_argument('-survey-dir', '--survey_dir', metavar='', 
-                            help='Location of survey-ccds*.fits.gz')
-        parser.add_argument('--rmag-range', nargs=2, type=float, default=(18, 26), metavar='', 
-                            help='r-band magnitude range')
-        parser.add_argument('--all-blobs', action='store_true', 
-                            help='Process all the blobs, not just those that contain simulated sources.')
-        parser.add_argument('--stage', choices=['tims', 'image_coadds', 'srcs', 'fitblobs', 'coadds'],
-                            type=str, default='writecat', metavar='', help='Run up to the given stage')
-        parser.add_argument('--early_coadds', action='store_true',
-                            help='add this option to make the JPGs before detection/model fitting')
-        parser.add_argument('-v', '--verbose', action='store_true', help='toggle on verbose output')
+    parser.add_argument('-n', '--nobj', type=long, default=500, metavar='', 
+                        help='number of objects to simulate (required input)')
+    parser.add_argument('-ic', '--ith_chunk', type=long, default=None, metavar='', 
+                        help='run the ith chunk, 0-999')
+    parser.add_argument('-c', '--nchunk', type=long, default=1, metavar='', 
+                        help='run chunks 0 to nchunk')
+    parser.add_argument('-b', '--brick', type=str, default='2428p117', metavar='', 
+                        help='simulate objects in this brick')
+    parser.add_argument('-o', '--objtype', type=str, choices=['STAR','ELG', 'LRG', 'QSO', 'LSB'], default='STAR', metavar='', 
+                        help='insert these into images') 
+    parser.add_argument('-t', '--threads', type=int, default=1, metavar='', 
+                        help='number of threads to use when calling The Tractor')
+    parser.add_argument('-s', '--seed', type=long, default=None, metavar='', 
+                        help='random number seed, determines chunk seeds 0-999')
+    parser.add_argument('-z', '--zoom', nargs=4, default=(0, 3600, 0, 3600), type=int, metavar='', 
+                        help='see runbrick.py; (default is 0 3600 0 3600)')
+    parser.add_argument('-survey-dir', '--survey_dir', metavar='', 
+                        help='Location of survey-ccds*.fits.gz')
+    parser.add_argument('--rmag-range', nargs=2, type=float, default=(18, 26), metavar='', 
+                        help='r-band magnitude range')
+    parser.add_argument('--all-blobs', action='store_true', 
+                        help='Process all the blobs, not just those that contain simulated sources.')
+    parser.add_argument('--stage', choices=['tims', 'image_coadds', 'srcs', 'fitblobs', 'coadds'],
+                        type=str, default='writecat', metavar='', help='Run up to the given stage')
+    parser.add_argument('--early_coadds', action='store_true',
+                        help='add this option to make the JPGs before detection/model fitting')
+    parser.add_argument('-v', '--verbose', action='store_true', help='toggle on verbose output')
+    return parser
+   
 
-        args = parser.parse_args()
-    else: 
-        args = parser.parse_args(args=args)
-
-    print("args=",args)
+def main(args=None):
+    """Main routine which parses the optional inputs."""
+    # Tell parser options to look for
+    parser= get_parser()    
+    # If args is not None the input args are used instead of command line
+    args = parser.parse_args(args=args)
+    print('decals_sim.py args: ',args)
 
     max_nobj=500
     max_nchunk=1000
