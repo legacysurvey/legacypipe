@@ -24,8 +24,15 @@ bands = 'grz'
 # Target depths (90th percentile = 3-pass coverage), for 5-sigma galaxy profile.
 target = dict(g=24.0, r=23.4, z=22.5)
 
+import argparse
+parser = argparse.ArgumentParser()
+parser.add_argument('--region', default='cosmos', help='Region: "cosmos", "s82qso"')
+opt = parser.parse_args()
+
+region = opt.region
+
 # We cache the table of good CCDs in the COSMOS region in this file...
-cfn = 'cosmos-all-ccds.fits'
+cfn = '%s-all-ccds.fits' % region
 if not os.path.exists(cfn):
     #survey = LegacySurveyData(version='dr2')
     survey = LegacySurveyData()
@@ -33,8 +40,15 @@ if not os.path.exists(cfn):
     C = survey.get_annotated_ccds()
     print(len(C), 'annotated CCDs')
 
-    C.cut(np.hypot(C.ra_bore - 150, C.dec_bore - 2.2) < 1.)
-    print(len(C), 'CCDs on COSMOS')
+    if region == 'cosmos':
+        C.cut(np.hypot(C.ra_bore - 150, C.dec_bore - 2.2) < 1.)
+    elif region == 's82qso':
+        #C.cut((C.ra > 35.75) * (C.ra < 42.25) * (C.dec > -1.5) * (C.dec < 1.5))
+        C.cut((C.ra > 36) * (C.ra < 36.5) * (C.dec > 0) * (C.dec < 0.5))
+    else:
+        assert(False)
+
+    print(len(C), 'CCDs in', region)
 
     C.cut(np.array([f in bands for f in C.filter]))
     print(len(C), 'in', bands)
@@ -112,6 +126,7 @@ for band in bands:
     for exp in B:
         print('  e', exp.expnum, 'see %.2f' % exp.seeing,
               't %3.0f' % exp.exptime, 'pid', exp.propid,
+              'object', exp.object,
               'f.depth: %.2f' % exp.depthfraction, #'sig1 %.4f' % exp.sig1,
               'pass', exp.passnum, ('X' if exp.depthfraction < 0.34 else ''))
 
@@ -224,18 +239,18 @@ for iset in xrange(100):
 print('Got', len(sets), 'sets of exposures')
 
 for i,C in enumerate(sets):
-    C.writeto('cosmos-ccds-sub%i.fits' % i)
+    C.writeto('%s-ccds-sub%i.fits' % (region, i))
     C.subset = np.array([subset_offset + i] * len(C)).astype(np.uint8)
     
 C = merge_tables(sets)
-C.writeto('cosmos-ccds.fits')
+C.writeto('%s-ccds.fits' % region)
 
 # Add a copy of this subset without adding noise
 C2 = C.copy()
 C2.subset += 10
 C2.addnoise[:] = 0.
 C = merge_tables([C, C2])
-C.writeto('cosmos-ccds-2.fits')
+C.writeto('%s-ccds-2.fits' % region)
 
 #for i,E in enumerate(sets):
 #    E.writeto('cosmos-subset-%i.fits' % i)
