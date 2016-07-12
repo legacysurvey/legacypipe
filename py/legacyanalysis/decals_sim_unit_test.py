@@ -24,6 +24,9 @@ import numpy as np
 import matplotlib.pyplot as plt
 import matplotlib.gridspec as gridspec
 from astropy.table import Table, Column, vstack
+import galsim
+import photutils
+
 ###
 from tractor.psfex import PsfEx, PixelizedPsfEx
 from tractor import Tractor
@@ -31,12 +34,15 @@ from tractor.basics import (NanoMaggies, PointSource, GaussianMixtureEllipsePSF,
 from astrometry.util.fits import fits_table
 from legacypipe.common import LegacySurveyData,wcs_for_brick
 ###
-import galsim
-from legacyanalysis.decals_sim import BuildStamp,build_simcat
+from legacyanalysis.decals_sim import SimImage,SimDecals,BuildStamp,build_simcat
 
-def get_one_tim(brickname,W=200,H=200,pixscale=0.25,verbose=0, splinesky=False):
-    '''given brickname returns tim and targetwcs,ccd for that tim object'''
+def get_metacat_simcat_tim(brickname, W=200,H=200,pixscale=0.262,verbose=0, splinesky=False):
+    '''return metacat,simcat, one tim object
+    metacat,simcat -- from decals_sim
+    tim object -- for same ra,dec range of metacat,simcat'''
+    
     survey = LegacySurveyData()
+    survey = SimDecals(metacat=metacat, simcat=simcat, output_dir=output_dir)
     brick = survey.get_brick_by_name(brickname)
     targetwcs = wcs_for_brick(brick, W=W, H=H, pixscale=pixscale)
     ccds = survey.ccds_touching_wcs(targetwcs, ccdrad=None)
@@ -117,15 +123,44 @@ parser.add_argument('-v', '--verbose', dest='verbose', action='count', default=0
 args = parser.parse_args()
 
 #tim object
-tim,brickwcs,ccd= get_one_tim(args.brickname,W=3600,H=3600,pixscale=0.25,verbose=args.verbose, splinesky=True)
+tim,brickwcs,ccd= get_one_tim(args.brickname,W=3600,H=3600,pixscale=0.262,verbose=args.verbose, splinesky=True)
 #setup sims
 nobj,seed = 500,None
 metacat= get_metacat(args.brickname,'STAR',nobj,500,1,(0,3600,0,3600),(18, 26))
 simcat = build_simcat(nobj, args.brickname, brickwcs, metacat, seed)
+stamp_builder = BuildStamp(tim, gain=ccd.arawgain, seed=seed)
+ap_flux=np.zeros(len(simcat))-1
+for i,obj in enumerate(simcat):  
+    stamp = stamp_builder.star(obj)
+
+    ap_size=7. #arcsec
+    pixsc=0.262 #decam
+    aper=photutils.CircularAperture((obj['X'],obj['Y']),ap_size/pixsc)
+    p = photutils.aperture_photometry(stamp.array, aper) # error=np.zeros(stamp.array.shape)
+    ap_flux[i]= p['aperture_sum']
+
 #stamp
-#objstamp = BuildStamp(tim, gain=ccd.arawgain, seed=seed)
-#stamp = objstamp.star(simcat[0])
 #unit test after this or run from ipython to play with on command line
+
+####
+# check_poisson_noise()
+
+####
+#in decals_sim.py have a test option that if turned on makes 3panel yellow box plots, using code like below
+#tim.sims_image= sims_image.array
+#tim.sims_inverr= np.sqrt(sims_ivar.array)
+#tim.sims_xy= tim.sims_xy.astype(int)
+#tim.data = image.array + sims_image.array
+#tim.inverr = np.sqrt(invvar.array + sims_ivar.array)
+#plot image,image regions where have sims, just sims as 3 plot panel with yellow boxes
+#basename= plots.get_basename(self.imgfn)
+#plots.image_v_stamp([tim.data,tim.data-tim.sims_image,tim.sims_image], \
+#                    xy_lim= tim.sims_xy, name=os.path.join(self.survey.output_dir,"image_v_stamp_%s.png" % basename))
+#plots.image_v_stamp([np.power(tim.inverr,-1),np.power(tim.sims_inverr,-1)], \
+#                    xy_lim= tim.sims_xy, titles=['image_std','sims_std'],\
+					#name=os.path.join(self.survey.output_dir,"std_%s.png" % basename))
+#print('exiting early')
+#sys.exit()
 
 
 #if __name__ == "__main__":

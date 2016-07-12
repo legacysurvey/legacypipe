@@ -493,10 +493,9 @@ def do_one_chunk(seed,ith_chunk,  decals_sim_dir,brickname,lobjtype,metacat, nob
     shutil.rmtree(os.path.join(output_dir, 'tractor'))
     return "Finished chunk %3.3d" % ith_chunk
 
-
-def main():
-    """Main routine which parses the optional inputs."""
-
+def get_parser():
+    '''return parser object, tells it what options to look for
+    options can come from a list of strings or command line'''
     parser = argparse.ArgumentParser(formatter_class=argparse.
                                      ArgumentDefaultsHelpFormatter,
                                      description='DECaLS simulations.')
@@ -527,8 +526,16 @@ def main():
     parser.add_argument('--early_coadds', action='store_true',
                         help='add this option to make the JPGs before detection/model fitting')
     parser.add_argument('-v', '--verbose', action='store_true', help='toggle on verbose output')
+    return parser
+   
 
-    args = parser.parse_args()
+def main(args=None):
+    """Main routine which parses the optional inputs."""
+    # Tell parser options to look for
+    parser= get_parser()    
+    # If args is not None the input args are used instead of command line
+    args = parser.parse_args(args=args)
+    print('decals_sim.py args: ',args)
 
     max_nobj=500
     max_nchunk=1000
