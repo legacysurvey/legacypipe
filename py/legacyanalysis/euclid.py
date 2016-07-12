@@ -833,6 +833,58 @@ def analyze3(opt):
             ps.savefig()
 
 
+def analyze4(opt):
+    ps = PlotSequence('euclid')
+
+    names = ['r.SNR10-HIQ',
+             'r.SNR12-LIQ', 'r.SNR10-LIQ', 'r.SNR08-MIQ', 'r.PC.Shallow']
+    exps = [get_exposures_in_list('euclid/images/megacam/lists/%s.lst' % n)
+            for n in names]
+
+    uexps = np.unique(np.hstack(exps))
+    print('Unique exposures:', uexps)
+
+    e1 = uexps[0]
+    e2 = uexps[1]
+
+    for e1,e2 in zip(uexps[::2], uexps[1::2]):
+        for ccd in [0]:
+            fn1 = os.path.join('euclid-out', 'forced',
+                               'megacam-%s-ccd%02i.fits' % (e1, ccd))
+            fn2 = os.path.join('euclid-out', 'forced',
+                               'megacam-%s-ccd%02i.fits' % (e2, ccd))
+            T1 = fits_table(fn1)
+            T2 = fits_table(fn2)
+            print(len(T1), 'from', fn1)
+            print(len(T2), 'from', fn2)
+    
+            imap = dict([((n,o),i) for i,(n,o) in enumerate(zip(T1.brickname,
+                                                                T1.objid))])
+            imatch = np.array([imap.get((n,o), -1) for n,o in zip(T2.brickname, T2.objid)])
+            T2.cut(imatch >= 0)
+            T1.cut(imatch[imatch >= 0])
+            print(len(T1), 'matched')
+    
+            I = np.flatnonzero((T1.flux_ivar_r > 0) * (T2.flux_ivar_r > 0))
+            T1.cut(I)
+            T2.cut(I)
+            print(len(T1), 'good')
+    
+            plt.clf()
+            n,b,p = plt.hist((T1.flux_r - T2.flux_r) / np.sqrt(1./T1.flux_ivar_r + 1./T2.flux_ivar_r),
+                             range=(-5, 5), bins=100,
+                             histtype='step', color='b', label='All sources')
+    
+            binc = (b[1:] + b[:-1])/2.
+            yy = np.exp(-0.5 * binc**2)
+            plt.plot(binc, yy / yy.sum() * np.sum(n), 'k-', alpha=0.5, lw=2)
+            
+            plt.xlabel('Flux difference / Error (sigma)')
+            plt.xlim(-5,5)
+            plt.title('Forced phot differences: Megacam r %s to %s, ccd%02i' % (e1, e2, ccd))
+            ps.savefig()
+
+
 
 def geometry():
     # Regular tiling with small overlaps; RA,Dec aligned
@@ -1082,7 +1134,8 @@ def main():
 
     if opt.analyze:
         #analyze(opt)
-        analyze3(opt)
+        #analyze3(opt)
+        analyze4(opt)
         return 0
 
     if opt.package:
