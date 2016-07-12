@@ -39,7 +39,7 @@ if __name__ == '__main__':
     #sim_main(args=['--brick', '2523p355', '-n', '5', '-o', 'STAR', \
     #               '-ic', '1', '--rmag-range', '18 26', '--threads', '1',\
     #               '--zoom', '1750 1800 1750 1800'])
-    #bash("python legacyanalysis/decals_sim.py --brick 2523p355 -n 2 -o STAR -ic 1 --rmag-range 18 26 --threads 1")
+    bash("python legacyanalysis/decals_sim.py --brick 2523p355 -n 2 -o STAR -ic 1 --rmag-range 18 26 --threads 1")
     # Check if correct files written out
     rt_dir= os.path.join(os.getenv('DECALS_SIM_DIR'),'2523p355','star','001')
     for fn in ['metacat-2523p355-star.fits','tractor-2523p355-star-01.fits',\
