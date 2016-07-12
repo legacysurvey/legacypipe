@@ -15,13 +15,24 @@ A script to examine the pixel distributions vs the CP weight maps.
 
 survey = LegacySurveyData()
 ccds = survey.get_ccds_readonly()
-ccds = ccds[np.abs(ccds.mjd_obs - 57444) < 7.]
-print(len(ccds), 'CCDs near mjd')
+#ccds = ccds[np.abs(ccds.mjd_obs - 57444) < 7.]
+#print(len(ccds), 'CCDs near mjd')
 ccds.cut(ccds.ccdname == 'N4')
 print(len(ccds), 'exposures')
 print('bands:', np.unique(ccds.filter))
 
-ccds.cut(np.random.permutation(len(ccds)))
+## HACK
+np.random.seed(44)
+
+# Alternate 'oki' and 'ooi' images...
+oki = np.array(['oki' in ccd.image_filename for ccd in ccds])
+I1 = np.flatnonzero(oki)
+I2 = np.flatnonzero(oki == False)
+print(len(I1), 'oki images')
+print(len(I2), 'non-oki images')
+ccds.cut(np.hstack(zip(I1[np.random.permutation(len(I1))],
+                       I2[np.random.permutation(len(I2))])))
+#ccds.cut(np.random.permutation(len(ccds)))
 
 ps = PlotSequence('noise')
 
@@ -63,6 +74,101 @@ for ccd in ccds[:1]:
 
     plt.suptitle(tim.name)
     ps.savefig()
+
+
+for ccd in ccds[:2]:
+    im = survey.get_image_object(ccd)
+
+    tim2 = im.get_tractor_image(gaussPsf=True, splinesky=True, dq=False,
+                                 nanomaggies=False, subsky=False)
+    tim = tim2
+    #tim = im.get_tractor_image(gaussPsf=True, splinesky=True, dq=False)
+    img = tim.getImage()
+    ie = tim.getInvError()
+
+    skymod = np.zeros_like(img)
+    tim.getSky().addTo(skymod)
+    midsky = np.median(skymod)
+    print('Median spline sky model level:', midsky)
+    #img -= midsky
+
+    medsky = np.median(img[ie > 0])
+    print('Median image level:', medsky)
+    img -= medsky
+
+    # Select pixels in range [-2 sigma, +2 sigma]
+
+    ie[np.logical_or(img < -2.*tim.sig1, img > 2.*tim.sig1)] = 0.
+
+    medsky = np.median(img[ie > 0])
+    print('Median of unmasked image pixels:', medsky)
+
+    plt.clf()
+    plt.imshow(img * (ie > 0), interpolation='nearest', origin='lower',
+               vmin=-2.*tim.sig1, vmax=2.*tim.sig1)
+    plt.title(tim.name)
+    ps.savefig()
+
+    dists = np.arange(1, 51)
+    corrs = []
+    corrs_x = []
+    corrs_y = []
+
+    rcorrs = []
+    rcorrs_x = []
+    rcorrs_y = []
+
+
+    for dist in dists:
+        offset = dist
+        slice1 = (slice(0,-offset,1),slice(0,-offset,1))
+        slice2 = (slice(offset,None,1),slice(offset,None,1))
+
+        slicex = (slice1[0], slice2[1])
+        slicey = (slice2[0], slice1[1])
+
+        corr = img[slice1] * img[slice2]
+        corr = corr[(ie[slice1] > 0) * (ie[slice2] > 0)]
+        print('Dist', dist, '; number of corr pixels', len(corr))
+        rcorr = np.median(corr) / tim.sig1**2
+        corr = np.mean(corr) / tim.sig1**2
+        print('-> corr', corr)
+        corrs.append(corr)
+        rcorrs.append(rcorr)
+
+        corr = img[slice1] * img[slicex]
+        corr = corr[(ie[slice1] > 0) * (ie[slicex] > 0)]
+        rcorr = np.median(corr) / tim.sig1**2
+        corr = np.mean(corr) / tim.sig1**2
+        corrs_x.append(corr)
+        rcorrs_x.append(rcorr)
+
+        corr = img[slice1] * img[slicey]
+        corr = corr[(ie[slice1] > 0) * (ie[slicey] > 0)]
+        rcorr = np.median(corr) / tim.sig1**2
+        corr = np.mean(corr) / tim.sig1**2
+        corrs_y.append(corr)
+        rcorrs_y.append(rcorr)
+
+    plt.clf()
+    p1 = plt.plot(dists, corrs, 'b.-')
+    p2 = plt.plot(dists, corrs_x, 'r.-')
+    p3 = plt.plot(dists, corrs_y, 'g.-')
+    p4 = plt.plot(dists, rcorrs, 'b.--')
+    p5 = plt.plot(dists, rcorrs_x, 'r.--')
+    p6 = plt.plot(dists, rcorrs_y, 'g.--')
+    plt.xlabel('Pixel offset')
+    plt.ylabel('Correlation')
+    plt.legend([p1[0],p2[0],p3[0]], ['Diagonal', 'X', 'Y'], loc='upper right')
+    plt.title(tim.name + ' ' + '/'.join(im.imgfn.split('/')[-2:]))
+    #plt.ylim(-0.005, 0.02)
+    plt.ylim(-0.001, 0.011)
+    plt.axhline(0, color='k', alpha=0.3)
+    ps.savefig()
+
+
+
+sys.exit(0)
 
 
 allsigs1 = []
