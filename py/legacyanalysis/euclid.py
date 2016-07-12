@@ -841,6 +841,8 @@ def analyze4(opt):
     exps = [get_exposures_in_list('euclid/images/megacam/lists/%s.lst' % n)
             for n in names]
 
+    name_to_exps = dict(zip(names, exps))
+
     uexps = np.unique(np.hstack(exps))
     print('Unique exposures:', uexps)
 
@@ -848,7 +850,12 @@ def analyze4(opt):
     e2 = uexps[1]
 
     for e1,e2 in zip(uexps[::2], uexps[1::2]):
-        for ccd in [0]:
+        TT1 = []
+        TT2 = []
+
+        plt.clf()
+
+        for ccd in range(36):
             fn1 = os.path.join('euclid-out', 'forced',
                                'megacam-%s-ccd%02i.fits' % (e1, ccd))
             fn2 = os.path.join('euclid-out', 'forced',
@@ -869,21 +876,158 @@ def analyze4(opt):
             T1.cut(I)
             T2.cut(I)
             print(len(T1), 'good')
-    
-            plt.clf()
+
+            TT1.append(T1)
+            TT2.append(T2)
+
             n,b,p = plt.hist((T1.flux_r - T2.flux_r) / np.sqrt(1./T1.flux_ivar_r + 1./T2.flux_ivar_r),
                              range=(-5, 5), bins=100,
-                             histtype='step', color='b', label='All sources')
+                             histtype='step', color='k', label='All sources', normed=True)
+
+        binc = (b[1:] + b[:-1])/2.
+        yy = np.exp(-0.5 * binc**2)
+        plt.plot(binc, yy / yy.sum() * np.sum(n), 'k-', alpha=0.5, lw=2)
+        plt.xlabel('Flux difference / Flux errors (sigma)')
+        plt.xlim(-5,5)
+        plt.title('Forced phot differences: Megacam r %s to %s' % (e1, e2))
+        ps.savefig()
+
+
+        T1 = merge_tables(TT1)
+        T2 = merge_tables(TT2)
+    
+        plt.clf()
+        n,b,p = plt.hist((T1.flux_r - T2.flux_r) / np.sqrt(1./T1.flux_ivar_r + 1./T2.flux_ivar_r),
+                         range=(-5, 5), bins=100,
+                         histtype='step', color='k', label='All sources', normed=True)
+
+        binc = (b[1:] + b[:-1])/2.
+        yy = np.exp(-0.5 * binc**2)
+        plt.plot(binc, yy / yy.sum() * np.sum(n), 'k-', alpha=0.5, lw=2)
+
+        #for magcut in [21,23]:
+        for magcut in [23]:
+            meanmag = -2.5 * (np.log10((T1.flux_r + T2.flux_r)/2.) - 9)
+            I = np.flatnonzero(meanmag < magcut)
+            plt.hist((T1.flux_r[I] - T2.flux_r[I]) /
+                     np.sqrt(1./T1.flux_ivar_r[I] + 1./T2.flux_ivar_r[I]),
+                     range=(-5, 5), bins=100,
+                     histtype='step', label='mag < %g' % magcut, normed=True)
+        
+        plt.xlabel('Flux difference / Flux errors (sigma)')
+        plt.xlim(-5,5)
+        #plt.title('Forced phot differences: Megacam r %s to %s, ccd%02i' % (e1, e2, ccd))
+        plt.title('Forced phot differences: Megacam r %s to %s' % (e1, e2))
+        plt.legend(loc='upper right')
+        ps.savefig()
+
+        T1.mag = -2.5 * (np.log10(T1.flux_r) - 9)
+        T2.mag = -2.5 * (np.log10(T2.flux_r) - 9)
+        plt.clf()
+        ha = dict(range=(20,26), bins=100, histtype='step')
+        plt.hist(T1.mag, color='b', **ha)
+        plt.hist(T2.mag, color='r', **ha)
+        plt.xlabel('Mag')
+        plt.title('Forced phot: Megacam r %s, %s, ccd%02i' % (e1, e2, ccd))
+        ps.savefig()
+
+
+        break
+
+
+    from collections import Counter
+
+    #name1 = names[0]
+    #names2 = names[1:]
+
+    for iname1,name1 in enumerate(names):
+        for name2 in names[iname1+1:]:
+            T1 = fits_table('euclid-out/forced-%s.fits' % name1)
+            T2 = fits_table('euclid-out/forced-%s.fits' % name2)
+    
+            #print('T1 nexp:', Counter(T1.nexp).most_common())
+            #print('T2 nexp:', Counter(T2.nexp).most_common())
+    
+            mexp1 = np.median(T1.nexp[T1.nexp > 0])
+            mexp2 = np.median(T2.nexp[T2.nexp > 0])
+    
+            I = np.flatnonzero((T1.nexp >= mexp1) * (T2.nexp >= mexp2))
+    
+            T1.cut(I)
+            T2.cut(I)
+            print(len(T1), 'sources kept')
+    
+            plt.clf()
+            n,b,p = plt.hist((T1.flux - T2.flux) /
+                             np.sqrt(1./T1.flux_ivar + 1./T2.flux_ivar),
+                             range=(-5, 5), bins=100,
+                             histtype='step', color='k', label='All sources', normed=True)
+    
+            # for magcut in [23, 24, 25]:
+            #     meanmag = -2.5 * (np.log10((T1.flux + T2.flux)/2.) - 9)
+            #     I = np.flatnonzero(meanmag < magcut)
+            #     plt.hist((T1.flux[I] - T2.flux[I]) /
+            #              np.sqrt(1./T1.flux_ivar[I] + 1./T2.flux_ivar[I]),
+            #              range=(-5, 5), bins=100,
+            #              histtype='step', label='mag < %g' % magcut, normed=True)
+
+            for maglo, maghi in [(18,23), (23,24), (24,25)]:
+                meanmag = -2.5 * (np.log10((T1.flux + T2.flux)/2.) - 9)
+                I = np.flatnonzero((meanmag > maglo) * (meanmag <= maghi))
+                plt.hist((T1.flux[I] - T2.flux[I]) /
+                         np.sqrt(1./T1.flux_ivar[I] + 1./T2.flux_ivar[I]),
+                         range=(-5, 5), bins=100,
+                         histtype='step', label='mag %g to %g' % (maglo,maghi),
+                         normed=True)
     
             binc = (b[1:] + b[:-1])/2.
             yy = np.exp(-0.5 * binc**2)
             plt.plot(binc, yy / yy.sum() * np.sum(n), 'k-', alpha=0.5, lw=2)
-            
-            plt.xlabel('Flux difference / Error (sigma)')
-            plt.xlim(-5,5)
-            plt.title('Forced phot differences: Megacam r %s to %s, ccd%02i' % (e1, e2, ccd))
-            ps.savefig()
 
+            exps1 = set(name_to_exps[name1])
+            exps2 = set(name_to_exps[name2])
+            print(name1, 'has', len(exps1))
+            print(name2, 'has', len(exps2))
+            incommon = len(exps1.intersection(exps2))
+            print(incommon, 'in common')
+            
+            plt.legend(loc='upper right')
+            plt.xlabel('Flux difference / Flux errors (sigma)')
+            plt.xlim(-5,5)
+            #plt.title('Forced phot differences: Megacam %s to %s (%i exposures in common)' % (name1, name2, incommon))
+            plt.title('Forced phot differences: Megacam %s to %s' % (name1, name2))
+            ps.savefig()
+    
+            # plt.clf()
+            # n,b,p = loghist(np.log(T1.flux),
+            #                 np.log(T2.flux),
+            #                 range=((-3,5),(-3,5)), bins=200)
+            # plt.xlabel('log Flux 1')
+            # plt.ylabel('log Flux 2')
+            # plt.title('Forced phot differences: Megacam %s to %s' % (name1, name2))
+            # ps.savefig()
+    
+            # plt.clf()
+            # n,b,p = loghist(np.log((T1.flux + T2.flux)/2.),
+            #                 (T1.flux - T2.flux) /
+            #                 np.sqrt(1./T1.flux_ivar + 1./T2.flux_ivar),
+            #                 range=((-3,5),(-5,5)), bins=200)
+            # plt.axhline(0, color=(0.3,0.3,1.0))
+            # plt.xlabel('log average Flux')
+            # plt.ylabel('Flux difference / Flux errors (sigma)')
+            # plt.title('Forced phot differences: Megacam %s to %s' % (name1, name2))
+            # ps.savefig()
+    
+            # T1.mag = -2.5 * (np.log10(T1.flux) - 9)
+            # T2.mag = -2.5 * (np.log10(T2.flux) - 9)
+            # plt.clf()
+            # ha = dict(range=(20,28), bins=100, histtype='step')
+            # plt.hist(T1.mag, color='b', **ha)
+            # plt.hist(T2.mag, color='r', **ha)
+            # plt.xlabel('Mag')
+            # plt.title('Forced phot: Megacam r %s, %s, ccd%02i' % (e1, e2, ccd))
+            # ps.savefig()
+        break
 
 
 def geometry():
