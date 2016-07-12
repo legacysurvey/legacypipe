@@ -445,53 +445,6 @@ def build_simcat(nobj=None, brickname=None, brickwcs=None, meta=None, seed=None,
     return cat
 
 
-def do_one_chunk(seed,ith_chunk,  decals_sim_dir,brickname,lobjtype,metacat, nobj,brickwcs,log, args):
-    '''can be called two ways either 1) a loop over nchunks or 2) for one chunk'''
-    output_dir = os.path.join(decals_sim_dir, brickname,lobjtype,'%3.3d' % ith_chunk)    
-    if not os.path.exists(output_dir): 
-        os.makedirs(output_dir)
-    
-    metafile = os.path.join(output_dir, 'metacat-{}-{}.fits'.format(brickname, lobjtype))
-    log.info('Writing {}'.format(metafile))
-    if os.path.isfile(metafile):
-        os.remove(metafile)
-    metacat.write(metafile)
-
-    chunksuffix = '{:02d}'.format(ith_chunk)
-    # Build and write out the simulated object catalog.
-    simcat = build_simcat(nobj, brickname, brickwcs, metacat, seed)       
-    simcatfile = os.path.join(output_dir, 'simcat-{}-{}-{}.fits'.format(brickname, lobjtype, chunksuffix))
-    log.info('Writing {}'.format(simcatfile))
-    if os.path.isfile(simcatfile):
-        os.remove(simcatfile)
-    simcat.write(simcatfile)
-
-    # Use Tractor to just process the blobs containing the simulated sources.
-    simdecals = SimDecals(metacat=metacat, simcat=simcat, output_dir=output_dir)
-    if args.all_blobs:
-        blobxy = None
-    else:
-        blobxy = zip(simcat['X'], simcat['Y'])
-
-    run_brick(brickname, simdecals, threads=args.threads, zoom=args.zoom,
-              wise=False, forceAll=True, writePickles=False, do_calibs=False,
-              write_metrics=False, pixPsf=True, blobxy=blobxy, early_coadds=args.early_coadds,
-              splinesky=True, ceres=False, stages=[args.stage], plots=False,
-              plotbase='sim')
-
-    log.info('Cleaning up...')
-    shutil.copy(os.path.join(output_dir, 'tractor', brickname[:3],
-                             'tractor-{}.fits'.format(brickname)),
-                os.path.join(output_dir, 'tractor-{}-{}-{}.fits'.format(
-                    brickname, lobjtype, chunksuffix)))
-    for suffix in ('image', 'model', 'resid', 'simscoadd'):
-        shutil.copy(os.path.join(output_dir,'coadd', brickname[:3], brickname,
-                                 'legacysurvey-{}-{}.jpg'.format(brickname, suffix)),
-                                 os.path.join(output_dir, 'qa-{}-{}-{}-{}.jpg'.format(
-                                     brickname, lobjtype, suffix, chunksuffix)))
-    shutil.rmtree(os.path.join(output_dir, 'coadd'))
-    shutil.rmtree(os.path.join(output_dir, 'tractor'))
-    return "Finished chunk %3.3d" % ith_chunk
 
 def get_parser():
     '''return parser object, tells it what options to look for
@@ -528,9 +481,8 @@ def get_parser():
     parser.add_argument('-v', '--verbose', action='store_true', help='toggle on verbose output')
     return parser
    
-
-def main(args=None):
-    """Main routine which parses the optional inputs."""
+def get_metadata_other(args=None):
+    '''Parses input and returns dict containing metadata table and other info like seeds'''
     # Tell parser options to look for
     parser= get_parser()    
     # If args is not None the input args are used instead of command line
@@ -621,18 +573,112 @@ def main(args=None):
     if not args.seed:
         log.info('Random seed = {}'.format(args.seed))
         metacat['SEED'] = args.seed
-    # run tractor
-    # only specified chunk
-    if args.ith_chunk is not None: 
-        message= do_one_chunk(seeds[args.ith_chunk],args.ith_chunk,  decals_sim_dir,brickname,lobjtype,metacat, nobj,brickwcs,log, args)
-        print(message)
-    # all chunks
+   
+    metacat_dir = os.path.join(decals_sim_dir, brickname,lobjtype)    
+    if not os.path.exists(metacat_dir): 
+        os.makedirs(metacat_dir)
+    
+    metafile = os.path.join(metacat_dir, 'metacat-{}-{}.fits'.format(brickname, lobjtype))
+    log.info('Writing {}'.format(metafile))
+    if os.path.isfile(metafile):
+        os.remove(metafile)
+    metacat.write(metafile)
+    
+    # With this can get simcat for each chunk
+    return dict(seeds=seeds,\
+                brickname=brickname, \
+                metacat=metacat,\
+                decals_sim_dir= decals_sim_dir,\
+                brickwcs= brickwcs, \
+                lobjtype=lobjtype,\
+                nobj=nobj,\
+                log=log,\
+                nchunk=nchunk,\
+                metacat_dir=metacat_dir,\
+                args=args)
+
+def get_ith_simcat(ith_chunk, d=None):
+    '''add simcat, simcat_dir to dict d
+    simcat -- contains randomized ra,dec and PDF fluxes etc for ith chunk
+    d -- dict returned by get_metadata_others()'''
+    assert(d is not None)
+    chunksuffix = '{:02d}'.format(ith_chunk)
+    # Build and write out the simulated object catalog.
+    seed= d['seeds'][ith_chunk]
+    simcat = build_simcat(d['nobj'], d['brickname'], d['brickwcs'], d['metacat'], seed)
+    # Save file
+    simcat_dir = os.path.join(d['metacat_dir'],'%3.3d' % ith_chunk)    
+    if not os.path.exists(simcat_dir): 
+        os.makedirs(simcat_dir)
+    simcatfile = os.path.join(simcat_dir, 'simcat-{}-{}-{}.fits'.format(d['brickname'], d['lobjtype'], chunksuffix))
+    d['log'].info('Writing {}'.format(simcatfile))
+    if os.path.isfile(simcatfile):
+        os.remove(simcatfile)
+    simcat.write(simcatfile)
+    # add to dict
+    d['simcat']= simcat
+    d['simcat_dir']= simcat_dir
+
+def do_one_chunk(d=None):
+    '''Run tractor
+    Can be run as 1) a loop over nchunks or 2) for one chunk
+    d -- dict returned by get_metadata_others() AND added to by get_ith_simcat()'''
+    assert(d is not None)
+    simdecals = SimDecals(metacat=d['metacat'], simcat=d['simcat'], output_dir=d['simcat_dir'])
+    # Use Tractor to just process the blobs containing the simulated sources.
+    if d['args'].all_blobs:
+        blobxy = None
     else:
-        for ith_chunk in range(nchunk):
-            log.info('Working on chunk {:02d}/{:02d}'.format(ith_chunk+1,nchunk))
-            message= do_one_chunk(seeds[ith_chunk],ith_chunk,  decals_sim_dir,brickname,lobjtype,metacat, nobj,brickwcs,log, args)
-            print(message)
-    log.info('All done!')
-        
+        blobxy = zip(d['simcat']['X'], d['simcat']['Y'])
+
+    run_brick(d['brickname'], simdecals, threads=d['args'].threads, zoom=d['args'].zoom,
+              wise=False, forceAll=True, writePickles=False, do_calibs=False,
+              write_metrics=False, pixPsf=True, blobxy=blobxy, early_coadds=d['args'].early_coadds,
+              splinesky=True, ceres=False, stages=[ d['args'].stage ], plots=False,
+              plotbase='sim')
+
+def do_ith_cleanup(ith_chunk=None, d=None):
+    '''for each chunk that finishes running, 
+    Remove unecessary files and give unique names to all others
+    d -- dict returned by get_metadata_others() AND added to by get_ith_simcat()'''
+    assert(ith_chunk is not None and d is not None) 
+    d['log'].info('Cleaning up...')
+    chunksuffix = '{:02d}'.format(ith_chunk)
+    brickname= d['brickname']
+    output_dir= d['simcat_dir']
+    lobjtype= d['lobjtype'] 
+    shutil.copy(os.path.join(output_dir, 'tractor', brickname[:3],
+                             'tractor-{}.fits'.format(brickname)),
+                os.path.join(output_dir, 'tractor-{}-{}-{}.fits'.format(
+                    brickname, lobjtype, chunksuffix)))
+    for suffix in ('image', 'model', 'resid', 'simscoadd'):
+        shutil.copy(os.path.join(output_dir,'coadd', brickname[:3], brickname,
+                                 'legacysurvey-{}-{}.jpg'.format(brickname, suffix)),
+                                 os.path.join(output_dir, 'qa-{}-{}-{}-{}.jpg'.format(
+                                     brickname, lobjtype, suffix, chunksuffix)))
+    shutil.rmtree(os.path.join(output_dir, 'coadd'))
+    shutil.rmtree(os.path.join(output_dir, 'tractor'))
+    d['log'].info("Finished chunk %3.3d" % ith_chunk)
+
+
+def main(args=None):
+    """Main routine which parses the optional inputs."""
+    # Get info that is independent of chunks
+    kwargs= get_metadata_other(args=args)
+    # do chunks
+    if kwargs['args'].ith_chunk is not None: 
+        chunk_list= [kwargs['args'].ith_chunk]
+    else: 
+        chunk_list= range(kwargs['nchunk'])
+    for ith_chunk in chunk_list:
+        kwargs['log'].info('Working on chunk {:02d}/{:02d}'.format(ith_chunk,kwargs['nchunk']-1))
+        # Random ra,dec and source properties
+        get_ith_simcat(ith_chunk, d=kwargs)
+        # Run tractor
+        do_one_chunk(d=kwargs)
+        # Clean up output
+        do_ith_cleanup(ith_chunk=ith_chunk, d=kwargs)
+    kwargs['log'].info('All done!')
+     
 if __name__ == '__main__':
     main()
