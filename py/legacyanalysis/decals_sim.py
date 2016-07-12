@@ -77,6 +77,7 @@ class SimImage(DecamImage):
         self.t = t
 
     def get_tractor_image(self, **kwargs):
+        print('creating tim from SIM DECALS!')
         tim = super(SimImage, self).get_tractor_image(**kwargs)
         if tim is None: # this can be None when the edge of a CCD overlaps
             return tim
@@ -102,6 +103,7 @@ class SimImage(DecamImage):
 
         # Store simulated galaxy images in tim object 
         # Loop on each object.
+        cnt_added=0
         for ii, obj in enumerate(self.survey.simcat):
             if objtype == 'STAR':
                 stamp = objstamp.star(obj)
@@ -113,6 +115,7 @@ class SimImage(DecamImage):
             # Make sure the object falls on the image and then add Poisson noise.
             overlap = stamp.bounds & image.bounds
             if (overlap.area() > 0):
+                cnt_added+=1
                 stamp = stamp[overlap]      
                 ivarstamp = invvar[overlap]
                 #FIX ME!!, for now Peter recommends insertting perfect image, since have noisy images and we want to know exactly mag insertted
@@ -133,7 +136,7 @@ class SimImage(DecamImage):
                 if np.min(sims_ivar.array) < 0:
                     print('Negative invvar!')
                     import pdb ; pdb.set_trace()
-
+        print('--------\n%d/%d fakes overlap with image bounds\n-------' % (cnt_added,len(self.survey.simcat)))
         tim.sims_image = sims_image.array
         tim.sims_inverr = np.sqrt(sims_ivar.array)
         tim.sims_xy = tim.sims_xy.astype(int)
@@ -482,7 +485,8 @@ def get_parser():
     return parser
    
 def get_metadata_other(args=None):
-    '''Parses input and returns dict containing metadata table and other info like seeds'''
+    '''Parses input and returns dict containing 
+    metatable,seeds,brickwcs, other goodies'''
     # Tell parser options to look for
     parser= get_parser()    
     # If args is not None the input args are used instead of command line
