@@ -32,13 +32,15 @@ import numpy as np
 
 from astropy.io import fits
 from astropy.table import vstack, Table
-from astrometry.libkd.spherematch import match_radec
-#from thesis_code import matching
+#from astrometry.libkd.spherematch import match_radec
+from thesis_code import matching
 # import seaborn as sns
 import matplotlib.pyplot as plt
 from PIL import Image, ImageDraw
+import photutils
 
-def plot_missing_src_examples(simcat,missing, brickname,lobjtype,chunksuffix):
+def plot_missing_src_examples(simcat,missing, brickname,lobjtype,chunksuffix, \
+                              indir=None, img_name='simscoadd',qafile='test.png'):
     hw = 30 # half-width [pixels]
     rad = 5
     ncols = 5
@@ -52,52 +54,81 @@ def plot_missing_src_examples(simcat,missing, brickname,lobjtype,chunksuffix):
                              np.arange(0, dims[1], hw*2, dtype='int'))
     #imfile = os.path.join(cdir, 'qa-{}-{}-image-{}.jpg'.format(brickname, lobjtype, chunksuffix))
     # HARDCODED fix this!!!!!
-    imfile = os.path.join(cdir, 'qa-{}-{}-image-{:02d}.jpg'.format(brickname, lobjtype, int(chunksuffix)))
-    for suffix in ['image','simscoadd']:
-        #im = Image.open( os.path.join(cdir, 'qa-{}-{}-{}-{}.jpg'.format(brickname, lobjtype, suffix,chunksuffix)) )
-        # HARDCODED fix this!!!!!
-        im = Image.open( os.path.join(cdir, 'qa-{}-{}-{}-{:02d}.jpg'.format(brickname, lobjtype, suffix, int(chunksuffix))) )
-        sz = im.size
-        iobj = 0
-        for ic in range(ncols):
-            for ir in range(nrows):
-                xx = int(simcat['X'][miss[iobj]])
-                yy = int(sz[1]-simcat['Y'][miss[iobj]])
-                crop = (xx-hw, yy-hw, xx+hw, yy+hw)
-                box = (xpos[ir, ic], ypos[ir, ic])
-                thumb = im.crop(crop)
-                mosaic.paste(thumb, box)
-                iobj = iobj + 1
+    #imfile = os.path.join(indir, 'qa-{}-{}-image-{:02d}.jpg'.format(brickname, lobjtype, int(chunksuffix)))
+    #im = Image.open( os.path.join(cdir, 'qa-{}-{}-{}-{}.jpg'.format(brickname, lobjtype, suffix,chunksuffix)) )
+    # HARDCODED fix this!!!!!
+    im = Image.open( os.path.join(indir, 'qa-{}-{}-{}-{:02d}.jpg'.format(brickname, lobjtype, img_name, int(chunksuffix))) )
+    sz = im.size
+    iobj = 0
+    for ic in range(ncols):
+        for ir in range(nrows):
+            xx = int(simcat['X'][miss[iobj]])
+            yy = int(sz[1]-simcat['Y'][miss[iobj]])
+            crop = (xx-hw, yy-hw, xx+hw, yy+hw)
+            box = (xpos[ir, ic], ypos[ir, ic])
+            thumb = im.crop(crop)
+            mosaic.paste(thumb, box)
+            iobj = iobj + 1
 
-        # Add a border and circle the missing source.
-        draw = ImageDraw.Draw(mosaic)
-        sz = mosaic.size
-        for ic in range(ncols):
-            for ir in range(nrows):
-                draw.rectangle([(xpos[ir, ic], ypos[ir, ic]),
-                                (xpos[ir, ic]+hw*2, ypos[ir, ic]+hw*2)])
-                xx = xpos[ir, ic] + hw
-                yy = ypos[ir, ic] + hw
-                draw.ellipse((xx-rad, sz[1]-yy-rad, xx+rad, sz[1]-yy+rad), outline='yellow')
+    # Add a border and circle the missing source.
+    draw = ImageDraw.Draw(mosaic)
+    sz = mosaic.size
+    for ic in range(ncols):
+        for ir in range(nrows):
+            draw.rectangle([(xpos[ir, ic], ypos[ir, ic]),
+                            (xpos[ir, ic]+hw*2, ypos[ir, ic]+hw*2)])
+            xx = xpos[ir, ic] + hw
+            yy = ypos[ir, ic] + hw
+            draw.ellipse((xx-rad, sz[1]-yy-rad, xx+rad, sz[1]-yy+rad), outline='yellow')
+    mosaic.save(qafile)
 
-        qafile = os.path.join(output_dir, 'qa-{}-{}-{}-missing-{:02d}.png'.format(brickname, lobjtype,suffix, int(chunksuffix)))
-        log.info('Writing {}'.format(qafile))
-        mosaic.save(qafile)
+def plot_annotated_coadds(simcat, brickname, lobjtype, chunksuffix,\
+                          indir=None,img_name='simscoadd',qafile='test.png'):
+    rad = 7/0.262
+    #imfile = os.path.join(cdir, 'qa-{}-{}-{}-{}.jpg'.format(brickname, lobjtype, suffix, chunksuffix))
+    # HARDCODED fix this!!!!!
+    imfile = os.path.join(indir, 'qa-{}-{}-{}-{:02d}.jpg'.format(brickname, lobjtype, img_name, int(chunksuffix)))
+    im = Image.open(imfile)
+    sz = im.size
+    draw = ImageDraw.Draw(im)
+    [draw.ellipse((cat['X']-rad, sz[1]-cat['Y']-rad, cat['X']+rad,
+                   sz[1]-cat['Y']+rad), outline='yellow') for cat in simcat]
+    # print aperture fluxes
+    #ap_flux=np.zeros((len(simcat),3))-1
+    #imarr = np.array(im) 
+    #print('imarr.shape= ',imarr.shape)
+    #for i,cat in enumerate(simcat): 
+    #    aper=photutils.CircularAperture((cat['X'],cat['Y']),rad)
+    #    for band in range(3):
+    #        p = photutils.aperture_photometry(imarr[:,:,band], aper) # error=np.zeros(stamp.array.shape)
+    #        ap_flux[i,band]= p['aperture_sum']
+    #print('ap_flux grz:')
+    #for g,r,z in zip(ap_flux[:,0],ap_flux[:,1],ap_flux[:,2]): print(g,r,z)
+    im.save(qafile)
 
-def plot_annotated_coadds(brickname, lobjtype, chunksuffix):
-    rad = 5/0.262
-    for suffix in ('image', 'resid','simscoadd'):
-        #imfile = os.path.join(cdir, 'qa-{}-{}-{}-{}.jpg'.format(brickname, lobjtype, suffix, chunksuffix))
-        # HARDCODED fix this!!!!!
-        imfile = os.path.join(cdir, 'qa-{}-{}-{}-{:02d}.jpg'.format(brickname, lobjtype, suffix, int(chunksuffix)))
-        im = Image.open(imfile)
-        sz = im.size
-        draw = ImageDraw.Draw(im)
-        [draw.ellipse((cat['X']-rad, sz[1]-cat['Y']-rad, cat['X']+rad,
-                       sz[1]-cat['Y']+rad), outline='yellow') for cat in simcat]
-        qafile = os.path.join(output_dir, 'qa-{}-{}-{}-{:02d}-annot.png'.format(brickname, lobjtype,suffix, int(chunksuffix)))
-        log.info('Writing {}'.format(qafile))
-        im.save(qafile)
+def plot_annotated_coadds2(simcat, brickname, lobjtype, chunksuffix,\
+                          indir=None,img_name='simscoadd',qafile='test.png'):
+    from matplotlib.patches import Circle
+    import matplotlib.image as mpimg
+    imfile = os.path.join(indir, 'qa-{}-{}-{}-{:02d}.jpg'.format(brickname, lobjtype, img_name, int(chunksuffix)))
+    im = Image.open(imfile)
+    imarr = np.array(im)
+    #imarr=mpimg.imread(imfile)
+    print('plot_annotated_coadds2, imarr.shape= ',imarr.shape)
+    # Imshow image
+    fig = plt.figure() #figsize=(5,10))
+    ax = fig.gca()
+    ax.get_xaxis().get_major_formatter().set_useOffset(False)
+    ax.imshow(imarr)
+    ax.axis('off')
+    # Draw circles around sources
+    rad = 7/0.262
+    for cat in simcat:
+        patch= Circle((cat['X'],imarr.shape[1]-cat['Y']), rad,\
+                      fill=False,edgecolor="yellow",linewidth=0.5,alpha=0.5) 
+        ax.add_patch(patch)
+    fig.savefig(qafile,dpi=150,bbox_inches='tight')
+
 
 def bin_up(data_bin_by,data_for_percentile, bin_edges=np.arange(20.,26.,0.25)):
     '''finds indices for 0.25 bins, returns bin centers and q25,50,75 percentiles of data_percentile in each bin
@@ -484,11 +515,11 @@ def main():
         log.info('Reading {}'.format(tractorfile))
         tractor = Table(fits.getdata(tractorfile, 1))
         # Match
-        m1, m2, d12 = match_radec(tractor['ra'].copy(), tractor['dec'].copy(),
-                                  simcat['RA'].copy(), simcat['DEC'].copy(), 1.0/3600.0)
-        #m1, m2, d12 = matching.johan_tree(tractor['ra'].copy(), tractor['dec'].copy(),\
-        #                                    simcat['RA'].copy(), simcat['DEC'].copy(), dsmax=1.0/3600.0)
-        #print('johan_tree: matched %d/%d' % (len(m2),len(simcat['RA'])))
+        #m1, m2, d12 = match_radec(tractor['ra'].copy(), tractor['dec'].copy(),
+        #                          simcat['RA'].copy(), simcat['DEC'].copy(), 1.0/3600.0)
+        m1, m2, d12 = matching.johan_tree(tractor['ra'].copy(), tractor['dec'].copy(),\
+                                            simcat['RA'].copy(), simcat['DEC'].copy(), dsmax=1.0/3600.0)
+        print('johan_tree: matched %d/%d' % (len(m2),len(simcat['RA'])))
 
         missing = np.delete(np.arange(len(simcat)), m2, axis=0)
         log.info('Missing {}/{} sources'.format(len(missing), len(simcat)))
@@ -511,12 +542,30 @@ def main():
 
         # Get cutouts of the missing sources in each chunk (if any)
         if len(missing) > 0 and extra_plots:
-            plot_missing_src_examples(simcat,missing, brickname,lobjtype,chunksuffix)
+            for img_name in ['image','simscoadd']:
+                qafile = os.path.join(output_dir, 'qa-{}-{}-{}-missing-{:02d}.png'.format(\
+                                            brickname, lobjtype, img_name, int(chunksuffix)))
+                plot_missing_src_examples(simcat,missing, brickname,lobjtype,chunksuffix, \
+                                          indir=cdir,img_name=img_name,qafile=qafile)
+                log.info('Wrote {}'.format(qafile))
+            
+            
 
         # Annotate the coadd image and residual files so the simulated sources
         # are labeled.
         if extra_plots:
-            plot_annotated_coadds(brickname, lobjtype, chunksuffix)
+            for img_name in ('simscoadd','image', 'resid'):
+                qafile = os.path.join(output_dir, 'qa-{}-{}-{}-{:02d}-annot.png'.format(\
+                                      brickname, lobjtype,img_name, int(chunksuffix)))
+                plot_annotated_coadds(simcat, brickname, lobjtype, chunksuffix, \
+                                      indir=cdir,img_name=img_name,qafile=qafile)
+                qafile = os.path.join(output_dir, 'qa-{}-{}-{}-{:02d}-annot2.png'.format(\
+                                      brickname, lobjtype,img_name, int(chunksuffix)))
+                plot_annotated_coadds2(simcat, brickname, lobjtype, chunksuffix, \
+                                      indir=cdir,img_name=img_name,qafile=qafile)
+                log.info('Wrote {}'.format(qafile))
+                print('exitig early')
+                sys.exit()
 
     # now operate on concatenated catalogues from multiple chunks
     # Grab flags
