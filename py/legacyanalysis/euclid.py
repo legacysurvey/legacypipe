@@ -70,6 +70,74 @@ def make_zeropoints():
     C.mjd_obs = []
     
     base = 'euclid/images/'
+    for iband,band in enumerate(['Y','J','H']):
+        fn = base + 'vista/UVISTA_%s_DR1_CFHT.fits' % band
+        hdu = 0
+        hdr = fitsio.read_header(fn, ext=hdu)
+        C.image_hdu.append(hdu)
+        C.image_filename.append(fn.replace(base,''))
+        C.camera.append('vista')
+        expnum = iband + 1
+        C.expnum.append(expnum)
+        C.filter.append(band)
+        C.exptime.append(hdr['EXPTIME'])
+        C.ccdzpt.append(hdr['MAGZEROP'])
+        for k in ['CRPIX1','CRPIX2','CRVAL1','CRVAL2','CD1_1','CD1_2','CD2_1','CD2_2']:
+            C.get(k.lower()).append(hdr[k])
+        C.width.append(hdr['NAXIS1'])
+        C.height.append(hdr['NAXIS2'])
+            
+        wcs = wcs_pv2sip_hdr(hdr)
+        rc,dc = wcs.radec_center()
+        C.ra.append(rc)
+        C.dec.append(dc)
+
+        psffn = fn.replace('.fits', '_psfex.psf')
+        psfhdr = fitsio.read_header(psffn, ext=1)
+        fwhm = psfhdr['PSF_FWHM']
+        C.fwhm.append(fwhm)
+        
+        C.ccdname.append('0')
+        C.ccdraoff.append(0.)
+        C.ccddecoff.append(0.)
+        C.propid.append('0')
+        C.mjd_obs.append(0.)
+        
+    C.to_np_arrays()
+    fn = 'euclid/survey-ccds-vista.fits.gz'
+    C.writeto(fn)
+    print('Wrote', fn)
+
+    return
+
+    C = fits_table()
+    C.image_filename = []
+    C.image_hdu = []
+    C.camera = []
+    C.expnum = []
+    C.filter = []
+    C.exptime = []
+    C.crpix1 = []
+    C.crpix2 = []
+    C.crval1 = []
+    C.crval2 = []
+    C.cd1_1 = []
+    C.cd1_2 = []
+    C.cd2_1 = []
+    C.cd2_2 = []
+    C.width = []
+    C.height = []
+    C.ra = []
+    C.dec = []
+    C.ccdzpt = []
+    C.ccdname = []
+    C.ccdraoff = []
+    C.ccddecoff = []
+    C.fwhm = []
+    C.propid = []
+    C.mjd_obs = []
+    
+    base = 'euclid/images/'
     fns = glob(base + 'acs-vis/*_sci.VISRES.fits')
     fns.sort()
     for fn in fns:
