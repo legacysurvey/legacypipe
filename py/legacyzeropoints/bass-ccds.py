@@ -24,6 +24,10 @@ Proposed changes to the -ccds file used by legacypipe:
  * We should store the pixel scale, too although it can be gotten from the CD matrix.
  * AVSKY should be in electron or electron/s, to account for the varying gain of
    the amplifiers.
+ * Should we cross-match against the tiles file here?  What else from the
+   annotated CCDs file should be directly calculate?
+ * We are definitely going to need to run a merge-zeropoints-like code after
+   this code, to deal with various data issues.
 
 """
 from __future__ import division, print_function
@@ -51,14 +55,15 @@ from legacyanalysis.ps1cat import ps1cat
 
 def _ccds_table(camera='decam'):
     '''Initialize the output CCDs table.  See decstat and merge-zeropoints.py for
-    details
+    details.
 
     '''
     cols = [
         ('image_filename', 'S65'), ('image_hdu', '>i2'), ('camera', 'S7'), ('expnum', '>i4'),
-        ('ccdname', 'S4'), ('ccdnum', '>i2'), ('expid', 'S12'), ('object', 'S35'), ('propid', 'S10'), ('filter', 'S1'),
-        ('exptime', '>f4'), ('date_obs', 'S10'), ('mjd_obs', '>f8'), ('ut', 'S15'), ('ha', 'S13'),
-        ('airmass', '>f4'), ('seeing', '>f4'), ('fwhm', '>f4'), ('arawgain', '>f4'), ('avsky', '>f4'),
+        ('ccdname', 'S4'), ('ccdnum', '>i2'), ('expid', 'S12'), ('object', 'S35'),
+        ('propid', 'S10'), ('filter', 'S1'), ('exptime', '>f4'), ('date_obs', 'S10'),
+        ('mjd_obs', '>f8'), ('ut', 'S15'), ('ha', 'S13'), ('airmass', '>f4'),
+        ('seeing', '>f4'), ('fwhm', '>f4'), ('arawgain', '>f4'), ('avsky', '>f4'),
         ('ccdskymag', '>f4'), ('ccdskycounts', '>f4'), ('ccdskyrms', '>f4'),
         ('ra', '>f8'), ('dec', '>f8'), ('ra_bore', '>f8'), ('dec_bore', '>f8'),
         ('crpix1', '>f4'), ('crpix2', '>f4'), ('crval1', '>f8'), ('crval2', '>f8'), ('cd1_1', '>f4'),
@@ -70,8 +75,7 @@ def _ccds_table(camera='decam'):
 
     # Add camera-specific keywords to the output table.
     if camera == 'decam':
-        cols.extend([('ccdzpta', '>f4'), ('ccdzptb','>f4'),
-                     ('ccdnmatcha', '>i2'), ('ccdnmatchb', '>i2'),
+        cols.extend([('ccdzpta', '>f4'), ('ccdzptb','>f4'), ('ccdnmatcha', '>i2'), ('ccdnmatchb', '>i2'),
                      ('temp', '>f4')])
     elif camera == 'mosaic':
         pass
@@ -88,11 +92,9 @@ def _stars_table(nstars=1):
 
     '''
 
-    # ToDo: add a MS tag, add amplifier and CCD number identifying information.
-
-    cols = [('x', 'f4'), ('y', 'f4'), ('ra', 'f8'), ('dec', 'f8'),
-        ('fwhm', 'f4'), ('apmag', 'f4'),
-        ('ps1_ra', 'f8'), ('ps1_dec', 'f8'), ('ps1_mag', 'f4'), ('ps1_gicolor', 'f4')]
+    cols = [('expid', 'S12'), ('filter', 'S1'), ('x', 'f4'), ('y', 'f4'),
+            ('ra', 'f8'), ('dec', 'f8'), ('fwhm', 'f4'), ('apmag', 'f4'),
+            ('ps1_ra', 'f8'), ('ps1_dec', 'f8'), ('ps1_mag', 'f4'), ('ps1_gicolor', 'f4')]
     stars = Table(np.zeros(nstars, dtype=cols))
 
     return stars
@@ -173,6 +175,7 @@ class Measurer(object):
 
         # Initialize and begin populating the output CCDs table.
         ccds = _ccds_table(self.camera)
+
         ccds['image_filename'] = self.fn
         ccds['image_hdu'] = self.image_hdu
         ccds['camera'] = self.camera
@@ -265,8 +268,10 @@ class Measurer(object):
         apflux = apflux[istar].data
         ccds['ccdnstar'] = len(istar)
 
-        # Now match against PS1.
-        ps1 = ps1cat(ccdwcs=self.wcs).get_stars()
+        # Now match against (good) PS1 stars with magnitudes between 15 and 22.
+        ps1 = ps1cat(ccdwcs=self.wcs).get_stars(magrange=(15, 22))
+        good = np.where((ps1.nmag_ok[:, 0] > 0)*(ps1.nmag_ok[:, 1] > 0)*(ps1.nmag_ok[:, 2] > 0))[0]
+        ps1.cut(good)
         nps1 = len(ps1)
 
         if nps1 == 0:
@@ -296,6 +301,10 @@ class Measurer(object):
         ps1band = ps1cat.ps1band[self.band]
         stars['ps1_mag'] = ps1.median[m2, ps1band]
 
+        #plt.scatter(stars['ra'], stars['dec'], color='orange') ; plt.scatter(stars['ps1_ra'], stars['ps1_dec'], color='blue') ; plt.show()
+        
+        pdb.set_trace()
+
         # Unless we're calibrating the photometric transformation, bring PS1
         # onto the photometric system of this camera (we add the color term
         # below).
@@ -322,6 +331,10 @@ class Measurer(object):
 
         # Get the photometric offset relative to PS1 as the observed PS1
         # magnitude minus the observed / measured magnitude.
+
+        print('measure the magnitude offset using just brighter stars!')
+        pdb.set_trace()
+        
         stars['ps1_mag'] += colorterm
         dmagall = stars['ps1_mag'][mskeep] - stars['apmag'][mskeep]
         _, dmagsig = sensible_sigmaclip(dmagall, nsigma=2.5)
@@ -426,15 +439,13 @@ class Measurer(object):
         return ccds, stars
 
 class DECamMeasurer(Measurer):
+    '''Class to measure a variety of quantities from a single DECam CCD.'''
     def __init__(self, *args, **kwargs):
         if not 'pixscale' in kwargs:
             import decam
             kwargs.update(pixscale = decam.decam_nominal_pixscale)
         super(DECamMeasurer, self).__init__(*args, **kwargs)
         self.camera = 'decam'
-
-    def read_raw(self, F, ext):
-        return read_raw_decam(F, ext)
 
     def get_sky_and_sigma(self, img):
         sky,sig1 = sensible_sigmaclip(img[1500:2500, 500:1000])
@@ -451,14 +462,8 @@ class DECamMeasurer(Measurer):
         from legacyanalysis.ps1cat import ps1_to_decam
         return ps1_to_decam(ps1stars, band)
 
-class DECamCPMeasurer(DECamMeasurer):
-    def read_raw(self, F, ext):
-        img = F[ext].read()
-        hdr = F[ext].read_header()
-        img = img.astype(np.float32)
-        return img,hdr
-
 class Mosaic3Measurer(Measurer):
+    '''Class to measure a variety of quantities from a single Mosaic3 CCD.'''
     def __init__(self, *args, **kwargs):
         if not 'pixscale' in kwargs:
             import mosaic
@@ -509,7 +514,7 @@ class NinetyPrimeMeasurer(Measurer):
         
         self.camera = '90prime'
         self.propid = 'BASS'
-        self.expnum = np.int32(self.fn[2:10])
+        self.expnum = np.int32(os.path.basename(self.fn)[2:10])
 
         self.ccdname = self.hdr['EXTNAME'].strip()
         self.ccdnum = self.hdr['CCD_NO']
@@ -527,7 +532,6 @@ class NinetyPrimeMeasurer(Measurer):
         # Average (nominal) gain values.  The gain is sort of a hack since this
         # information should be scraped from the headers, plus we're ignoring
         # the gain variations across amplifiers (on a given CCD).
-
         gaindict = dict(ccd1 = 1.47, ccd2 = 1.48, ccd3 = 1.42, ccd4 = 1.4275)
         self.gain = gaindict[self.ccdname.lower()]
 
@@ -564,15 +568,14 @@ class NinetyPrimeMeasurer(Measurer):
         from legacyanalysis.ps1cat import ps1_to_90prime
         return ps1_to_90prime(ps1stars, band)
 
-def measure_mosaic3(fn, ext='im4', nom=None, **kwargs):
-    if nom is None:
-        import mosaic
-        nom = mosaic.MosaicNominalCalibration()
-    meas = Mosaic3Measurer(fn, ext, nom, **measargs)
-    results = meas.run(**kwargs)
-    return results
+def measure_mosaic3(fn, ext='im4', **kwargs):
+    '''Wrapper function to measure quantities from the Mosaic3 camera.'''
+    measure = Mosaic3Measurer(fn, ext, **kwargs)
+    ccds, stars = measure.run()
+    return ccds, stars
 
 def measure_90prime(fn, ext='CCD1', **kwargs):
+    '''Wrapper function to measure quantities from the 90prime camera.'''
     measure = NinetyPrimeMeasurer(fn, ext, **kwargs)
     ccds, stars = measure.run()
     return ccds, stars
@@ -583,7 +586,9 @@ def camera_name(primhdr):
     '''
     camera = primhdr.get('INSTRUME','').strip().lower()
     if camera == '90prime':
-        extlist = ('CCD1', 'CCD2', 'CCD3', 'CCD4')
+        print('HACK!!!!!')
+        extlist = ['CCD4']
+        #extlist = ['CCD1', 'CCD2', 'CCD3', 'CCD4']
     return camera, extlist
     
 def sensible_sigmaclip(arr, nsigma = 4.):
@@ -598,7 +603,7 @@ def sensible_sigmaclip(arr, nsigma = 4.):
     return meanval, sigma
 
 def _measure_image(args):
-    '''Utility function to wrap measure_image for multiprocessing map.'''
+    '''Utility function to wrap measure_image function for multiprocessing map.''' 
     return measure_image(*args)
 
 def measure_image(filelist, measureargs={}):
@@ -672,7 +677,7 @@ def main():
 
     # Build a dictionary with the optional inputs.
     measureargs = vars(args)
-    images = measureargs.pop('images')
+    images = np.array(measureargs.pop('images'))
     ccdsfile = measureargs.pop('ccdsfile')
     starsfile = measureargs.pop('starsfile')
     nproc = measureargs.pop('nproc')
@@ -680,10 +685,10 @@ def main():
     # Process the data, optionally with multiprocessing.
     if nproc > 1:
         import multiprocessing
+        splitimages = np.array_split(images, nproc)
         args = list()
         for ii in range(nproc):
-            print(images[ii::nproc])
-            args.append((images[ii::nproc], measureargs))
+            args.append((splitimages[ii], measureargs))
         pool = multiprocessing.Pool(nproc)
         results = pool.map(_measure_image, args)
 
