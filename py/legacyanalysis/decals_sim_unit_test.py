@@ -128,7 +128,7 @@ xlim,ylim=tim.data.shape
 keep=np.all((d['simcat']['X'] <= xlim-1,d['simcat']['Y'] <= ylim-1),axis=0)
 
 # Aperature flux
-#nobj,seed = 500,None
+#nobj,seed = 500,N
 #metacat= get_metacat(args.brickname,'STAR',nobj,500,1,(0,3600,0,3600),(18, 26))
 #simcat = build_simcat(nobj, args.brickname, brickwcs, metacat, seed)
 #stamp_builder = BuildStamp(tim, gain=ccd.arawgain, seed=seed)

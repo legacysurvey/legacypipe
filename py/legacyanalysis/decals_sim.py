@@ -60,6 +60,7 @@ from legacypipe.runbrick import run_brick
 from legacypipe.decam import DecamImage
 from legacypipe.common import LegacySurveyData, wcs_for_brick, ccds_touching_wcs
 
+from pickle import dump
 
 class SimDecals(LegacySurveyData):
     def __init__(self, survey_dir=None, metacat=None, simcat=None, output_dir=None):
@@ -104,6 +105,9 @@ class SimImage(DecamImage):
         # Store simulated galaxy images in tim object 
         # Loop on each object.
         cnt_added=0
+        ######
+        stamp_c=[]
+        #####
         for ii, obj in enumerate(self.survey.simcat):
             if objtype == 'STAR':
                 stamp = objstamp.star(obj)
@@ -111,6 +115,9 @@ class SimImage(DecamImage):
                 stamp = objstamp.elg(obj)
             elif objtype == 'LRG':
                 stamp = objstamp.lrg(obj)
+            #####
+            stamp_c.append( (stamp.trueCenter().x,stamp.trueCenter().y) )
+            #####
 
             # Make sure the object falls on the image and then add Poisson noise.
             overlap = stamp.bounds & image.bounds
@@ -142,6 +149,14 @@ class SimImage(DecamImage):
         tim.sims_xy = tim.sims_xy.astype(int)
         tim.data = image.array
         tim.inverr = np.sqrt(invvar.array)
+        ##########
+        stamp_c= np.array(stamp_c)
+        fout=open('aper.pickle','w')
+        dump((tim.data,tim.sims_image,self.survey.simcat,stamp_c),fout)
+        fout.close()
+        print('exiting after writig aper.pickle')
+        sys.exit()
+        ##########
 
         #print('HACK!!!')
         #galsim.fits.write(invvar, 'invvar.fits'.format(ii), clobber=True)

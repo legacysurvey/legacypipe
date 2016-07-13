@@ -21,6 +21,9 @@ from __future__ import division, print_function
 
 import matplotlib
 matplotlib.use('Agg') # display backend
+import matplotlib.pyplot as plt
+from matplotlib.patches import Circle
+import matplotlib.image as mpimg
 
 import os
 import sys
@@ -35,9 +38,55 @@ from astropy.table import vstack, Table
 #from astrometry.libkd.spherematch import match_radec
 from thesis_code import matching
 # import seaborn as sns
-import matplotlib.pyplot as plt
 from PIL import Image, ImageDraw
 import photutils
+
+def fix_flux(fn='fix_flux.pickle'):
+    print('loading pickle %s' % fn)
+    import pickle
+    fin=open('aper.pickle','r')
+    image_and_sims,sims_image,simcat,stamp_c= pickle.load(fin)
+    fin.close()
+    #return image_and_sims,sims_image,simcat,stamp_c
+    #
+    # Aperture photom for flux correction
+    # 10 brightest g sources
+    i_hilo=np.argsort(simcat['GFLUX'].data)[::-1][:10]
+    imarr= sims_image
+    #xy_arr_of_tups= stamp_c[i_hilo]
+    xy_arr_of_tups= np.array( [(x,imarr.shape[1]-y) for x,y in zip(simcat[i_hilo]['X'].data,simcat[i_hilo]['Y'].data)] )
+    # Compare stamp centers to simcat XY
+    print('simcatX simcatY stampX stampY xmax-stampX ymax-stampY')
+    for cat,c in zip(simcat[i_hilo],stamp_c[i_hilo]): 
+        print('%.2f %.2f %.2f %.2f %.2f %.2f' % (cat['X'],cat['Y'],c[0],c[1],imarr.shape[0]-c[0],imarr.shape[1]-c[1]))
+    #
+    # Aperture photom on index list
+    rad = 7/0.262
+    apers= photutils.CircularAperture(xy_arr_of_tups, r=rad)
+    #band=0
+    #apy_table = photutils.aperture_photometry(imarr[:,:,band], apers)
+    apy_table = photutils.aperture_photometry(imarr, apers)
+    apflux= np.array(apy_table['aperture_sum'].data)
+    gflux= np.array(simcat[i_hilo]['GFLUX'].data)
+    print("GFLUX apFLUX corr")
+    for ap,g in zip(apflux,gflux): print("%.2f %.2f %.2f" % (g,ap,ap/g))
+    # Imshow image
+    fig = plt.figure() #figsize=(5,10))
+    ax = fig.gca()
+    ax.get_xaxis().get_major_formatter().set_useOffset(False)
+    ax.imshow(imarr,cmap='gray')
+    ax.axis('off')
+    # Aperture photom and Draw circles around sources
+        # Draw circles
+    for (x,y) in xy_arr_of_tups:
+        patch= Circle((x,y), rad,\
+                      fill=False,edgecolor="yellow",linewidth=0.5,alpha=0.5) 
+        ax.add_patch(patch)
+    qafile='fix_flux.png'
+    fig.savefig(qafile,dpi=150,bbox_inches='tight')
+    print('wrote %s' % qafile)
+
+
 
 def plot_missing_src_examples(simcat,missing, brickname,lobjtype,chunksuffix, \
                               indir=None, img_name='simscoadd',qafile='test.png'):
@@ -108,11 +157,13 @@ def plot_annotated_coadds(simcat, brickname, lobjtype, chunksuffix,\
 
 def plot_annotated_coadds2(simcat, brickname, lobjtype, chunksuffix,\
                           indir=None,img_name='simscoadd',qafile='test.png'):
-    from matplotlib.patches import Circle
-    import matplotlib.image as mpimg
     imfile = os.path.join(indir, 'qa-{}-{}-{}-{:02d}.jpg'.format(brickname, lobjtype, img_name, int(chunksuffix)))
-    im = Image.open(imfile)
-    imarr = np.array(im)
+    if img_name == 'image':
+        imfile2 = os.path.join(indir, 'qa-{}-{}-{}-{:02d}.jpg'.format(brickname, lobjtype, 'simscoadd', int(chunksuffix)))
+        imarr = np.array(Image.open(imfile))-np.array(Image.open(imfile2))
+    else: 
+        im = Image.open(imfile)
+        imarr = np.array(im)
     #imarr=mpimg.imread(imfile)
     print('plot_annotated_coadds2, imarr.shape= ',imarr.shape)
     # Imshow image
@@ -121,12 +172,36 @@ def plot_annotated_coadds2(simcat, brickname, lobjtype, chunksuffix,\
     ax.get_xaxis().get_major_formatter().set_useOffset(False)
     ax.imshow(imarr)
     ax.axis('off')
-    # Draw circles around sources
+    # Aperture photom and Draw circles around sources
+    # 10 brightest g sources
+    i_hilo=np.argsort(simcat['GFLUX'].data)[::-1][:10]
+    # Aperture photom on index list
+    xy_arr_of_tups= np.array( [(x,imarr.shape[1]-y) for x,y in zip(simcat[i_hilo]['X'].data,simcat[i_hilo]['Y'].data)] )
     rad = 7/0.262
-    for cat in simcat:
-        patch= Circle((cat['X'],imarr.shape[1]-cat['Y']), rad,\
+    apers= photutils.CircularAperture(xy_arr_of_tups, r=rad)
+    band=0
+    apy_table = photutils.aperture_photometry(imarr[:,:,band], apers)
+    apflux= np.array(apy_table['aperture_sum'].data)
+    gflux= np.array(simcat['GFLUX'].data)
+    print("%s: apflux gflux" % img_name)
+    for ap,g in zip(apflux,gflux): print("%.3f %.3f" % (ap,g))
+    # Draw circles
+    for (x,y) in xy_arr_of_tups:
+        patch= Circle((x,y), rad,\
                       fill=False,edgecolor="yellow",linewidth=0.5,alpha=0.5) 
         ax.add_patch(patch)
+    #x0,y0= cat['X'],imarr.shape[1]-cat['Y']
+    #for cat in simcat[i_hilo][:10]:
+    #    x0,y0= cat['X'],imarr.shape[1]-cat['Y']
+    #    # print fluxes
+    #    gflux= cat['GFLUX'].data
+    #    aper=photutils.CircularAperture((x0,y0),rad)
+    #    band=0
+    #    r_aper = photutils.aperture_photometry(imarr[:,:,band], aper)
+    #    print("r_aper['aperture_sum']=",r_aper['aperture_sum'].data[0])
+    #    gflux_ap= r_aper['aperture_sum']
+    #    print("apFLUX=",gflux_ap,"GFLUX=",gflux)
+    #    print("%s: apFLUX=%.3f GFLUX=%.3f" % (img_name,gflux_ap,gflux))
     fig.savefig(qafile,dpi=150,bbox_inches='tight')
 
 
@@ -554,18 +629,18 @@ def main():
         # Annotate the coadd image and residual files so the simulated sources
         # are labeled.
         if extra_plots:
-            for img_name in ('simscoadd','image', 'resid'):
-                qafile = os.path.join(output_dir, 'qa-{}-{}-{}-{:02d}-annot.png'.format(\
-                                      brickname, lobjtype,img_name, int(chunksuffix)))
-                plot_annotated_coadds(simcat, brickname, lobjtype, chunksuffix, \
-                                      indir=cdir,img_name=img_name,qafile=qafile)
+            for img_name in ('simscoadd','image'): #, 'resid'):
+                #qafile = os.path.join(output_dir, 'qa-{}-{}-{}-{:02d}-annot.png'.format(\
+                #                      brickname, lobjtype,img_name, int(chunksuffix)))
+                #plot_annotated_coadds(simcat, brickname, lobjtype, chunksuffix, \
+                #                      indir=cdir,img_name=img_name,qafile=qafile)
                 qafile = os.path.join(output_dir, 'qa-{}-{}-{}-{:02d}-annot2.png'.format(\
                                       brickname, lobjtype,img_name, int(chunksuffix)))
                 plot_annotated_coadds2(simcat, brickname, lobjtype, chunksuffix, \
                                       indir=cdir,img_name=img_name,qafile=qafile)
                 log.info('Wrote {}'.format(qafile))
-                print('exitig early')
-                sys.exit()
+            print('exitig early')
+            sys.exit()
 
     # now operate on concatenated catalogues from multiple chunks
     # Grab flags
@@ -647,4 +722,5 @@ def main():
     '''
     
 if __name__ == "__main__":
-    main()
+    #main()
+    fix_flux(fn='aper.pickle')
