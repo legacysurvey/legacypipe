@@ -339,13 +339,16 @@ class MegacamImage(LegacySurveyImage):
     def __init__(self, *args, **kwargs):
         super(MegacamImage, self).__init__(*args, **kwargs)
 
-        self.psffn = self.imgfn.replace('p.fits', 'p_psfex.psf')
+        #self.psffn = self.imgfn.replace('p.fits', 'p_psfex.psf')
+        self.psffn = self.imgfn.replace('.fits', '_psfex.psf')
         assert(self.psffn != self.imgfn)
 
-        self.wtfn = self.imgfn.replace('p.fits', 'p_weight.fits')
+        #self.wtfn = self.imgfn.replace('p.fits', 'p_weight.fits')
+        self.wtfn = self.imgfn.replace('.fits', '_weight.fits')
         assert(self.wtfn != self.imgfn)
 
-        self.dqfn = self.imgfn.replace('p.fits', 'p_flag.fits')
+        #self.dqfn = self.imgfn.replace('p.fits', 'p_flag.fits')
+        self.dqfn = self.imgfn.replace('.fits', '_flag.fits')
         assert(self.dqfn != self.imgfn)
         
         self.name = 'MegacamImage: %i-%s' % (self.expnum, self.ccdname)
@@ -403,6 +406,36 @@ class MegacamImage(LegacySurveyImage):
         return sky
 
 
+class VistaImage(MegacamImage):
+    def __init__(self, *args, **kwargs):
+        super(VistaImage, self).__init__(*args, **kwargs)
+        self.name = 'VistaImage: %i-%s %s' % (self.expnum, self.ccdname, self.band)
+        self.wtfn = self.wtfn.replace('_weight.fits', '.weight.fits')
+        self.dqfn = self.dqfn.replace('_flag.fits', '.flg.fits')
+        assert(self.dqfn != self.imgfn)
+        assert(self.wtfn != self.imgfn)
+
+    def read_invvar(self, clip=True, **kwargs):
+        '''
+        Reads the inverse-variance (weight) map image.
+        '''
+        print('Reading weight map', self.wtfn, 'ext', self.hdu)
+        iv = self._read_fits(self.wtfn, self.hdu, **kwargs)
+        print('Read', iv.shape, iv.dtype)
+        print('Range', iv.min(), iv.max(), 'median', np.median(iv))
+        return iv
+
+    def read_dq(self, **kwargs):
+        '''
+        Reads the Data Quality (DQ) mask image.
+        '''
+        print('Reading data quality image', self.dqfn, 'ext', self.hdu)
+        dq = self._read_fits(self.dqfn, self.hdu, **kwargs)
+        print('Got', dq.dtype, dq.shape)
+        print('Blanking out bit 1...')
+        dq -= (dq & 1)
+        return dq
+
 
 # Hackily defined RA,Dec values that split the ACS 7x7 tiling into
 # distinct 'bricks'
@@ -455,6 +488,7 @@ def get_survey():
     survey = LegacySurveyData(survey_dir='euclid', output_dir='euclid-out')
     survey.image_typemap['acs-vis'] = AcsVisImage
     survey.image_typemap['megacam'] = MegacamImage
+    survey.image_typemap['vista'] = VistaImage
     return survey
 
 def get_exposures_in_list(fn):
@@ -1307,6 +1341,9 @@ def main():
     parser.add_argument('--name',
                         help='Name for forced-phot output products, with --queue-list')
 
+    parser.add_argument('--out',
+                        help='Filename for forced-photometry output catalog')
+
     parser.add_argument('--analyze', 
                         help='Analyze forced photometry results for images listed in given image list file')
 
@@ -1368,13 +1405,21 @@ def main():
         # Run pipeline on a single ACS image.
         return reduce_acs_image(opt, survey)
 
-        
+    return forced_photometry(opt, survey)
+
+
+def forced_photometry(opt, survey):
     # Run forced photometry on a given image or set of Megacam images,
     # using the ACS catalog as the source.
 
-    if opt.name is None:
-        opt.name = '%i-%s' % (im.expnum, im.ccdname)
-    outfn = 'euclid-out/forced/megacam-%s.fits' % opt.name
+    ps = PlotSequence('euclid')
+
+    #if opt.name is None:
+    #    opt.name = '%i-%s' % (im.expnum, im.ccdname)
+    if opt.out is not None:
+        outfn = opt.out
+    else:
+        outfn = 'euclid-out/forced/megacam-%s.fits' % opt.name
 
     if opt.skip and os.path.exists(outfn):
         print('Output file exists:', outfn)
@@ -1444,7 +1489,25 @@ def main():
         keep_sources[J] = True
 
         tim = im.get_tractor_image(pixPsf=True, slc=slc)
+        print('Tim:', tim)
         tims.append(tim)
+
+        plt.clf()
+        plt.hist((tim.getImage() * tim.getInvError()).ravel(), range=(-5,5), bins=100,
+                 histtype='step', color='b')
+        plt.xlim(-5,5)
+        plt.xlabel('Pixel sigmas')
+        plt.title(tim.name)
+        ps.savefig()
+
+        plt.clf()
+        plt.imshow(tim.getImage(), interpolation='nearest', origin='lower',
+                   vmin=-2.*tim.sig1, vmax=5.*tim.sig1)
+        plt.title(tim.name)
+        ps.savefig()
+
+        plt.plot(x[keep_sources], y[keep_sources], 'b.')
+        ps.savefig()
         
     T.cut(keep_sources)
     print('Cut to', len(T), 'sources within at least one')
@@ -1486,8 +1549,8 @@ def main():
     F.brickid   = T.brickid
     F.brickname = T.brickname
     F.objid     = T.objid
-    F.mjd     = np.array([tim.primhdr['MJD-OBS']] * len(T))
-    F.exptime = np.array([tim.primhdr['EXPTIME']] * len(T)).astype(np.float32)
+    F.mjd     = np.array([tim.primhdr.get('MJD-OBS', 0.)] * len(T)).astype(np.float32)
+    F.exptime = np.array([tim.primhdr.get('EXPTIME', 0.)] * len(T)).astype(np.float32)
 
     if len(tims) == 1:
         tim = tims[0]
