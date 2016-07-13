@@ -20,6 +20,7 @@ from astrometry.util.fits import fits_table, merge_tables
 from astrometry.util.util import wcs_pv2sip_hdr
 from astrometry.util.plotutils import PlotSequence, plothist, loghist
 from astrometry.util.ttime import Time, MemMeas
+from astrometry.util.multiproc import multiproc
 
 from legacypipe.runbrick import run_brick, rgbkwargs, rgbkwargs_resid
 from legacypipe.common import LegacySurveyData, imsave_jpeg, get_rgb
@@ -988,7 +989,11 @@ def analyze4(opt):
 
         binc = (b[1:] + b[:-1])/2.
         yy = np.exp(-0.5 * binc**2)
-        plt.plot(binc, yy / yy.sum() * np.sum(n), 'k-', alpha=0.5, lw=2)
+        p1 = plt.plot(binc, yy / yy.sum() * np.sum(n), 'k-', alpha=0.5, lw=2,
+                      label='N(0,1)')
+        yy = np.exp(-0.5 * binc**2 / (1.2**2))
+        p2 = plt.plot(binc, yy / yy.sum() * np.sum(n), 'k--', alpha=0.5, lw=2,
+                      label='N(0,1.2)')
         plt.xlabel('Flux difference / Flux errors (sigma)')
         plt.xlim(-5,5)
         plt.title('Forced phot differences: Megacam r %s to %s' % (e1, e2))
@@ -1005,7 +1010,11 @@ def analyze4(opt):
 
         binc = (b[1:] + b[:-1])/2.
         yy = np.exp(-0.5 * binc**2)
-        plt.plot(binc, yy / yy.sum() * np.sum(n), 'k-', alpha=0.5, lw=2)
+        plt.plot(binc, yy / yy.sum() * np.sum(n), 'k-', alpha=0.5, lw=2,
+                      label='N(0,1)')
+        yy = np.exp(-0.5 * binc**2 / (1.2**2))
+        p2 = plt.plot(binc, yy / yy.sum() * np.sum(n), 'k--', alpha=0.5, lw=2,
+                      label='N(0,1.2)')
 
         #for magcut in [21,23]:
         for magcut in [23]:
@@ -1044,9 +1053,11 @@ def analyze4(opt):
 
     for iname1,name1 in enumerate(names):
         for name2 in names[iname1+1:]:
-            T1 = fits_table('euclid-out/forced-%s.fits' % name1)
-            T2 = fits_table('euclid-out/forced-%s.fits' % name2)
-    
+            #T1 = fits_table('euclid-out/forced-%s.fits' % name1)
+            #T2 = fits_table('euclid-out/forced-%s.fits' % name2)
+            T1 = fits_table('euclid-out/forced2-%s.fits' % name1)
+            T2 = fits_table('euclid-out/forced2-%s.fits' % name2)
+
             #print('T1 nexp:', Counter(T1.nexp).most_common())
             #print('T2 nexp:', Counter(T2.nexp).most_common())
     
@@ -1084,7 +1095,14 @@ def analyze4(opt):
     
             binc = (b[1:] + b[:-1])/2.
             yy = np.exp(-0.5 * binc**2)
-            plt.plot(binc, yy / yy.sum() * np.sum(n), 'k-', alpha=0.5, lw=2)
+            plt.plot(binc, yy / yy.sum() * np.sum(n), 'k-', alpha=0.5, lw=2,
+                      label='N(0,1)')
+            yy = np.exp(-0.5 * binc**2 / (1.2**2))
+            plt.plot(binc, yy / yy.sum() * np.sum(n), 'k--', alpha=0.5, lw=2,
+                     label='N(0,1.2)')
+            yy = np.exp(-0.5 * binc**2 / (1.25**2))
+            plt.plot(binc, yy / yy.sum() * np.sum(n), 'k-',
+                     label='N(0,1.25)')
 
             exps1 = set(name_to_exps[name1])
             exps2 = set(name_to_exps[name2])
@@ -1225,10 +1243,6 @@ def package(opt):
     explists = [get_exposures_in_list(fn) for fn in listfns]
     ccds = list(range(36))
 
-    #expnums = set()
-    #for l in explists:
-    #    expnums.update(l)
-
     ACS = read_acs_catalogs()
     print('Read', len(ACS), 'ACS catalog entries')
     ACS.cut(ACS.brick_primary)
@@ -1242,15 +1256,10 @@ def package(opt):
     results = []
 
     for expnums in explists:
-
-        #allflux =      np.zeros((len(ACS), len(expnums)), np.float32)
-        #allflux_ivar = np.zeros((len(ACS), len(expnums)), np.float32)
-
         cflux      = np.zeros(len(ACS), np.float32)
         cflux_ivar = np.zeros(len(ACS), np.float32)
         nexp       = np.zeros(len(ACS), np.uint8)
 
-        #TT = []
         for i,expnum in enumerate(expnums):
             for ccd in ccds:
                 fn = os.path.join('euclid-out', 'forced',
@@ -1265,8 +1274,6 @@ def package(opt):
                 assert(len(fluxes) == 1)
                 fluxcol = fluxes[0]
                 print('Flux column:', fluxcol)
-                #filtername = fluxcol.split('_')[-1]
-                #print('Filter:', filtername)
 
                 t.iexp = np.zeros(len(t), np.uint8) + i
                 t.ccd  = np.zeros(len(t), np.uint8) + ccd
@@ -1279,10 +1286,25 @@ def package(opt):
                 t.cut((t.x > margin) * (t.x < W-margin) *
                       (t.y > margin) * (t.y < H-margin))
                 print('Keeping', len(t), 'not close to the edges')
-                #TT.append(t)
-                #TT = merge_tables(TT)
                 acsindex = np.array([imap[(n,o)]
                                      for n,o in zip(t.brickname, t.objid)])
+
+                # Find sources with existing measurements
+                I = np.flatnonzero((cflux_ivar[acsindex] > 0) * (cflux[acsindex] > 0) * (t.flux > 0))
+                if len(I) > 100:
+                    print(len(I), 'sources have previous measurements')
+                    ai = acsindex[I]
+                    cmag,cmagerr = NanoMaggies.fluxErrorsToMagErrors(
+                        cflux[ai] / np.maximum(cflux_ivar[ai], 1e-16), cflux_ivar[ai])
+                    mag,magerr = NanoMaggies.fluxErrorsToMagErrors(
+                        t.flux[I], t.flux_ivar[I])
+                    var = np.maximum(cmagerr, 0.02)**2 + np.maximum(magerr, 0.02)**2
+                    offset = np.sum((mag - cmag) * 1./var) / np.sum(1./var)
+                    print('Offset of', offset, 'mag')
+                    scale = 10.**(offset / 2.5)
+                    print('Applying scale of', scale, 'to fluxes and ivars')
+                    t.flux *= scale
+                    t.flux_ivar /= (scale**2)
 
                 cflux     [acsindex] += t.flux * t.flux_ivar
                 cflux_ivar[acsindex] += t.flux_ivar
@@ -1313,7 +1335,7 @@ def package(opt):
         primhdr.add_record(dict(name='FILTER', value=filt,
                                 comment='MegaCam filter'))
 
-        T.writeto('euclid-out/forced-%s.fits' % name,
+        T.writeto('euclid-out/forced2-%s.fits' % name,
                   columns=['ra', 'dec', 'flux', 'flux_ivar', 'nexp',
                            'brickname', 'objid', 'type', 'ra_ivar', 'dec_ivar',
                            'dchisq', 'ebv', 'acs_flux', 'acs_flux_ivar',
@@ -1362,6 +1384,9 @@ def main():
         '--zoom', type=int, nargs=4,
         help='Set target image extent (default "0 3600 0 3600")')
 
+    parser.add_argument('--grid', action='store_true',
+                        help='Forced photometry on a grid of subimages?')
+
     parser.add_argument('--skip', action='store_true',
                         help='Skip forced-photometry if output file exists?')
     
@@ -1383,17 +1408,15 @@ def main():
 
     if opt.analyze:
         #analyze(opt)
+        #analyze2(opt)
         #analyze3(opt)
+        #geometry()
         analyze4(opt)
         return 0
 
     if opt.package:
         package(opt)
         return 0
-
-    if False:
-        analyze2(opt)
-        geometry()
 
     if opt.expnum is None and opt.forced is None:
         print('Need --expnum or --forced')
@@ -1405,8 +1428,87 @@ def main():
         # Run pipeline on a single ACS image.
         return reduce_acs_image(opt, survey)
 
+
+    if opt.grid:
+        
+        assert(opt.out)
+
+        i = int(opt.forced, 10)
+        print('CCD index', i)
+        ccds = survey.get_ccds_readonly()
+        ccd = ccds[i]
+        print('CCD', ccd)
+        im = survey.get_image_object(ccd)
+        print('Image', im)
+        H,W = im.height, im.width
+        print('Image size', W, 'x', H)
+
+        overlap = 50
+        ngrid = 20
+        xsize = (W + overlap) / ngrid
+        ysize = (H + overlap) / ngrid
+        print('Size without overlap:', xsize, ysize)
+
+        x0 = np.arange(ngrid) * xsize
+        x1 = x0 + xsize + overlap
+        x1[-1] = min(x1[-1], W)
+        print('X ranges:')
+        for xx0,xx1 in zip(x0,x1):
+            print('  ', xx0,xx1)
+        y0 = np.arange(ngrid) * ysize
+        y1 = y0 + ysize + overlap
+        y1[-1] = min(y1[-1], H)
+        print('Y ranges:')
+        for yy0,yy1 in zip(y0,y1):
+            print('  ', yy0,yy1)
+
+        print('Opt is a', opt)
+
+        fns = []
+        args = []
+        for iy,(yy0,yy1) in enumerate(zip(y0,y1)):
+            for ix,(xx0,xx1) in enumerate(zip(x0,x1)):
+                newopt = argparse.Namespace()
+                for k,v in opt.__dict__.items():
+                    setattr(newopt, k, v)
+                    print('Setting option', k, '=', v)
+                outfn = opt.out.replace('.fits', '-x%02i-y%02i.fits' % (ix,iy))
+                fns.append((outfn, ix, iy))
+                newopt.out = outfn
+                newopt.zoom = [xx0, xx1, yy0, yy1]
+                print('New options:', newopt.__dict__)
+                args.append((newopt, survey))
+
+        xcuts = reduce(np.append, ([0], (x0[1:] + x1[:-1])/2., W))
+        ycuts = reduce(np.append, ([0], (y0[1:] + y1[:-1])/2., H))
+        print('X cuts:', xcuts)
+        print('Y cuts:', ycuts)
+
+        mp = multiproc(8)
+        mp.map(_bounce_forced, args)
+
+        TT = []
+        for fn,ix,iy in fns:
+            T = fits_table(fn)
+            print('Read', len(T), 'from', fn)
+            print('X range:', T.x.min(), T.x.max())
+            xlo,xhi = xcuts[ix], xcuts[ix+1]
+            print('Cut lo,hi', xlo, xhi)
+            print('Y range:', T.y.min(), T.y.max())
+            ylo,yhi = ycuts[iy], ycuts[iy+1]
+            print('Cut lo,hi', ylo, yhi)
+            T.cut((T.x >= xlo) * (T.x < xhi) * (T.y >= ylo) * (T.y < yhi))
+            print('Cut to', len(T), 'sources')
+            TT.append(T)
+        TT = merge_tables(TT)
+        TT.writeto(opt.out)
+        print('Wrote', opt.out)
+        return 0
+
     return forced_photometry(opt, survey)
 
+def _bounce_forced(args):
+    return forced_photometry(*args)
 
 def forced_photometry(opt, survey):
     # Run forced photometry on a given image or set of Megacam images,
@@ -1492,22 +1594,24 @@ def forced_photometry(opt, survey):
         print('Tim:', tim)
         tims.append(tim)
 
-        plt.clf()
-        plt.hist((tim.getImage() * tim.getInvError()).ravel(), range=(-5,5), bins=100,
-                 histtype='step', color='b')
-        plt.xlim(-5,5)
-        plt.xlabel('Pixel sigmas')
-        plt.title(tim.name)
-        ps.savefig()
-
-        plt.clf()
-        plt.imshow(tim.getImage(), interpolation='nearest', origin='lower',
-                   vmin=-2.*tim.sig1, vmax=5.*tim.sig1)
-        plt.title(tim.name)
-        ps.savefig()
-
-        plt.plot(x[keep_sources], y[keep_sources], 'b.')
-        ps.savefig()
+        # plt.clf()
+        # plt.hist((tim.getImage() * tim.getInvError()).ravel(), range=(-5,5), bins=100,
+        #          histtype='step', color='b')
+        # plt.xlim(-5,5)
+        # plt.xlabel('Pixel sigmas')
+        # plt.title(tim.name)
+        # ps.savefig()
+        # 
+        # plt.clf()
+        # plt.imshow(tim.getImage(), interpolation='nearest', origin='lower',
+        #            vmin=-2.*tim.sig1, vmax=5.*tim.sig1)
+        # plt.title(tim.name)
+        # ps.savefig()
+        # 
+        # ax = plt.axis()
+        # plt.plot(x[keep_sources], y[keep_sources], 'b.')
+        # plt.axis(ax)
+        # ps.savefig()
         
     T.cut(keep_sources)
     print('Cut to', len(T), 'sources within at least one')
@@ -1565,7 +1669,7 @@ def forced_photometry(opt, survey):
 
     # FIXME -- should we run one band at a time?
 
-    R = tr.optimize_forced_photometry(variance=True, fitstats=True,
+    R = tr.optimize_forced_photometry(variance=True, fitstats=False, #fitstats=True,
                                       shared_params=False, priors=False,
                                       **forced_kwargs)
 
