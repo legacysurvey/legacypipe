@@ -44,12 +44,13 @@ import shutil
 import logging
 import argparse
 import pdb
+import photutils
+import galsim
 
 import numpy as np
 import matplotlib.pyplot as plt
 from pkg_resources import resource_filename
 
-import galsim
 from scipy.spatial import KDTree
 from astropy.table import Table, Column, vstack
 
@@ -150,6 +151,8 @@ class SimImage(DecamImage):
         tim.data = image.array
         tim.inverr = np.sqrt(invvar.array)
         ##########
+        print('exiting before write aper.pickle')
+        sys.exit()
         stamp_c= np.array(stamp_c)
         fout=open('aper.pickle','w')
         dump((tim.data,tim.sims_image,self.survey.simcat,stamp_c),fout)
@@ -168,7 +171,7 @@ class BuildStamp():
         """Initialize the BuildStamp object with the CCD-level properties we need."""
 
         self.band = tim.band.strip().upper()
-        self.gsparams = galsim.GSParams(maximum_fft_size=2L**30L)
+        self.gsparams = galsim.GSParams(maximum_fft_size=2L**30L,folding_threshold=1.e-3) #added flux within 0.1%
         #print('FIX ME!!!!!!!!!!!!!!!!!!!!!!!!!!!!')
         self.gsdeviate = galsim.BaseDeviate()
         #if seed is None:
@@ -263,8 +266,20 @@ class BuildStamp():
         psf = self.localpsf.withFlux(flux)
 
         stamp = psf.drawImage(offset=self.offset, scale=self.pixscale, method='no_pixel')
+        # check flux
+        rad = 7/0.262
+        print('aperture diam[pix]=%.1f, width/height stamp[pix]=%d/%d' % \
+               (2*rad,stamp.bounds.xmax-stamp.bounds.xmin,stamp.bounds.ymax-stamp.bounds.ymin))
+        #print('stamp trueCenter=',stamp.trueCenter(), 'stamp.bounds=',stampbounds)
+        apers= photutils.CircularAperture((stamp.trueCenter().x,stamp.trueCenter().y), r=rad)
+        apy_table = photutils.aperture_photometry(stamp.array, apers)
+        apflux= np.array(apy_table['aperture_sum'])
+        #print('in star(), input flux=%.2f flux in stamp=%.2f apflux 7''=' % \
+        #        (input_flux,stamp.added_flux), apflux)
+ 
+        # Convert stamp's center to its corresponding center on full tractor image
         stamp.setCenter(self.xpos, self.ypos)
-
+        
         return stamp
 
     def elg(self,objinfo):
