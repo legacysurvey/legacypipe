@@ -29,6 +29,8 @@ TODO (@moustakas):
 * We should globally replace the filter name 'bokr' with just 'r'.
 * Make sure EXTNAME exists for every header.
 
+salloc -N 1 -p debug -L SCRATCH,project
+
 J. Moustakas
 Siena College
 2016 July 6
@@ -76,6 +78,7 @@ def main():
             glob(os.path.join(bassdata_dir, 'reduced', '201[5-6]?????'))
             ))
     dirs = dirs[np.argsort(dirs)]
+    dirs = ['20160113g']
     #dirs = dirs[19:20]
     #for thisdir in dirs:
     #    print(thisdir)
@@ -91,11 +94,12 @@ def main():
     # List of extensions and gains.  These are the average, not
     # per-amplifier gains, so correcting for gain variations is just a
     # temporary hack.
-    extlist = ('_1', '_2', '_3', '_4')
-    gainlist = (1.47, 1.48, 1.42, 1.4275)
+    extlist = ['_1', '_2', '_3', '_4']
+    gainlist = [1.47, 1.48, 1.42, 1.4275]
     
     for thisdir in dirs:
         allfiles = np.array(glob(os.path.join(thisdir, 'p*_1.fits')))
+        allfiles = np.array(glob(os.path.join(thisdir, 'p7401g002[2-3]_1.fit*')))
         print('Found {} exposures in directory {}'.format(len(allfiles), thisdir))
         if len(allfiles) > 0: # some directories are empty
             allfiles = allfiles[np.argsort(allfiles)]
@@ -154,6 +158,8 @@ def main():
                             # that here.
                             hdr, img = hduin[0].header, hduin[0].data
                             hdr['FILTER'] = outfilter
+                            hdr['CTYPE1'] = 'RA---TPV'
+                            hdr['CTYPE2'] = 'DEC--TPV'
                             if not 'PS1' in hdr['CALI_REF']:
                                 img = img * gain 
                             #import pdb ; pdb.set_trace()
@@ -163,6 +169,7 @@ def main():
                                 hduout.append(fits.PrimaryHDU(header=primhdr))
                             hduout.append(fits.ImageHDU(img, header=hdr))
                             hduin.close()
+                            #import pdb ; pdb.set_trace()
                         print('  Writing {}'.format(outfile))
                         hduout.writeto(outfile)
                     else:
