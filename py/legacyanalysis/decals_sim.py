@@ -79,7 +79,6 @@ class SimImage(DecamImage):
         self.t = t
 
     def get_tractor_image(self, **kwargs):
-        print('creating tim from SIM DECALS!')
         tim = super(SimImage, self).get_tractor_image(**kwargs)
         if tim is None: # this can be None when the edge of a CCD overlaps
             return tim
