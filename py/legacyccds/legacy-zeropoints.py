@@ -586,9 +586,7 @@ def camera_name(primhdr):
     '''
     camera = primhdr.get('INSTRUME','').strip().lower()
     if camera == '90prime':
-        print('HACK!!!!!')
-        extlist = ['CCD4']
-        #extlist = ['CCD1', 'CCD2', 'CCD3', 'CCD4']
+        extlist = ['CCD1', 'CCD2', 'CCD3', 'CCD4']
     return camera, extlist
     
 def sensible_sigmaclip(arr, nsigma = 4.):

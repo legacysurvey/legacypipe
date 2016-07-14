@@ -77,8 +77,9 @@ def main():
             glob(os.path.join(bassdata_dir, 'reduced', '201[5-6]????')),
             glob(os.path.join(bassdata_dir, 'reduced', '201[5-6]?????'))
             ))
+    print('Hack!')
+    dirs = np.array(glob(os.path.join(bassdata_dir, 'reduced', '20151111')))
     dirs = dirs[np.argsort(dirs)]
-    dirs = ['20160113g']
     #dirs = dirs[19:20]
     #for thisdir in dirs:
     #    print(thisdir)
@@ -99,7 +100,7 @@ def main():
     
     for thisdir in dirs:
         allfiles = np.array(glob(os.path.join(thisdir, 'p*_1.fits')))
-        allfiles = np.array(glob(os.path.join(thisdir, 'p7401g002[2-3]_1.fit*')))
+        #allfiles = np.array(glob(os.path.join(thisdir, '*p7401g0022_1.fit*')))
         print('Found {} exposures in directory {}'.format(len(allfiles), thisdir))
         if len(allfiles) > 0: # some directories are empty
             allfiles = allfiles[np.argsort(allfiles)]
