@@ -65,7 +65,7 @@ def _ccds_table(camera='decam'):
     '''
     cols = [
         ('image_filename', 'S65'), ('image_hdu', '>i2'), ('camera', 'S7'), ('expnum', '>i4'),
-        ('ccdname', 'S4'), ('ccdnum', '>i2'), ('expid', 'S12'), ('object', 'S35'),
+        ('ccdname', 'S4'), ('ccdnum', '>i2'), ('expid', 'S16'), ('object', 'S35'),
         ('propid', 'S10'), ('filter', 'S1'), ('exptime', '>f4'), ('date_obs', 'S10'),
         ('mjd_obs', '>f8'), ('ut', 'S15'), ('ha', 'S13'), ('airmass', '>f4'),
         ('seeing', '>f4'), ('fwhm', '>f4'), ('arawgain', '>f4'), ('avsky', '>f4'),
@@ -97,7 +97,7 @@ def _stars_table(nstars=1):
 
     '''
 
-    cols = [('expid', 'S12'), ('filter', 'S1'), ('x', 'f4'), ('y', 'f4'),
+    cols = [('expid', 'S16'), ('filter', 'S1'), ('x', 'f4'), ('y', 'f4'),
             ('ra', 'f8'), ('dec', 'f8'), ('fwhm', 'f4'), ('apmag', 'f4'),
             ('ps1_ra', 'f8'), ('ps1_dec', 'f8'), ('ps1_mag', 'f4'), ('ps1_gicolor', 'f4')]
     stars = Table(np.zeros(nstars, dtype=cols))
