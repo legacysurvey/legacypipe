@@ -110,8 +110,8 @@ def ps1_to_90prime(psmags, band):
     imag = psmags[:, i_index]
     gi = gmag - imag
     coeffs = dict(
-        g = [0.0, +0.08612, -0.00392, -0.00393],
-        r = [0.0, -0.07831, +0.03304, -0.01027])[band]
+        g = [0.0, -0.08612, +0.00392, +0.00393],
+        r = [0.0, +0.07831, -0.03304, +0.01027])[band]
 
     colorterm = -(coeffs[0] + coeffs[1]*gi + coeffs[2]*gi**2 + coeffs[3]*gi**3)
     return colorterm
