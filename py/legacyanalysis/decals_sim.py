@@ -51,8 +51,9 @@ import numpy as np
 import matplotlib.pyplot as plt
 from pkg_resources import resource_filename
 
-from scipy.spatial import KDTree
 from astropy.table import Table, Column, vstack
+
+from astrometry.libkd.spherematch import match_radec
 
 from tractor.psfex import PsfEx, PsfExModel
 from tractor.basics import GaussianMixtureEllipsePSF, RaDecPos
@@ -379,30 +380,21 @@ def no_overlapping_radec(ra,dec, bounds, random_state=None, dist=5.0/3600):
     '''
     if random_state is None:
         random_state = np.random.RandomState()
-    # build tree of x,y, data has shape NxK, N points and K=2 dimensions (ra,dec) 
-    tree = KDTree(np.transpose([dec.copy(),\
-                                np.cos(dec.copy()*np.pi/180)*ra.copy()])) 
-    # querry tree with same xy, 1st NN isitself, 2nd is the NN 
-    ds, i_tree = tree.query(np.transpose([dec.copy(),\
-                                        np.cos(dec.copy()*np.pi/180)*ra.copy()]), k=2)
-    i_bad= ds[:,1] < dist # 2nd NN
+    # ra,dec indices of just neighbors within "dist" away, just nerest neighbor of those
+    m1, m2, d12 = match_radec(ra.copy(),dec.copy(), ra.copy(),dec.copy(),\
+                              dist, nearest=True,notself=True) 
+
     cnt = 1
-    print("non overlapping radec: iter=%d, overlaps=%d/%d" % (cnt, ra[i_bad].shape[0],ra.shape[0]))
-    while ra[i_bad].shape[0] > 0:
-        # get new ra,dec wherever too close
-        ra[i_bad]= random_state.uniform(bounds[0], bounds[1], ra[i_bad].shape[0])
-        dec[i_bad]= random_state.uniform(bounds[2], bounds[3], dec[i_bad].shape[0])
-        # re-index and get new separations
-        tree = KDTree(np.transpose([dec.copy(), \
-                                    np.cos(dec.copy()*np.pi/180)*ra.copy()\
-                                    ])) 
-        ds, i_tree = tree.query(np.transpose([dec.copy(), \
-                                              np.cos(dec.copy()*np.pi/180)*ra.copy()]), k=2) 
-        i_bad= ds[:,1] < dist
+    print("after iter=%d, have overlapping ra,dec %d/%d" % (cnt, len(m2),ra.shape[0]))
+    while len(m2) > 0:
+        ra[m2]= random_state.uniform(bounds[0], bounds[1], len(m2))
+        dec[m2]= random_state.uniform(bounds[2], bounds[3], len(m2))
+        m1, m2, d12 = match_radec(ra.copy(),dec.copy(), ra.copy(),dec.copy(),\
+                                  dist, nearest=True,notself=True) 
         cnt += 1
-        print("non overlapping radec: iter=%d, overlaps=%d/%d" % (cnt, ra[i_bad].shape[0],ra.shape[0]))
+        print("after iter=%d, have overlapping ra,dec %d/%d" % (cnt, len(m2),ra.shape[0]))
         if cnt > 30:
-            print('not converging to non-overlapping radec')
+            print('Crash, could not get non-overlapping ra,dec in 30 iterations')
             raise ValueError
     return ra, dec
 
@@ -420,7 +412,7 @@ def build_simcat(nobj=None, brickname=None, brickwcs=None, meta=None, seed=None,
     if noOverlap:
         ra, dec= no_overlapping_radec(ra,dec, bounds,
                                       random_state=rand,
-                                      dist=5./3600) 
+                                      dist=5./3600)
     xxyy = brickwcs.radec2pixelxy(ra, dec)
 
     cat = Table()
