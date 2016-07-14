@@ -9,6 +9,7 @@ from astrometry.libkd.spherematch import match_radec
 from astrometry.util.plotutils import PlotSequence
 from tractor.brightness import NanoMaggies
 import scipy.stats
+import sys
 
 '''
 This is a little script for comparing two directories full of tractor
@@ -79,29 +80,31 @@ def main():
     I,J,d = match_radec(cat1.ra, cat1.dec, cat2.ra, cat2.dec, opt.match/3600.,
                         nearest=True)
     print(len(I), 'matched')
+    matched1 = cat1[I]
+    matched2 = cat2[J]
 
+def all(matched1,matched2,d, name1='ref',name2='test'):
+    tt= 'Comparing %s to %s' % (name1, name2)
     plt.clf()
     plt.hist(d * 3600., 100)
     plt.xlabel('Match distance (arcsec)')
     plt.title(tt)
-    ps.savefig()
-
-    matched1 = cat1[I]
-    matched2 = cat2[J]
+    plt.savefig(os.path.join(matched1.outdir,'sep_hist.png'))
+    plt.close()
 
     for iband,band,cc in [(1,'g','g'),(2,'r','r'),(4,'z','m')]:
-        K = np.flatnonzero((matched1.decam_flux_ivar[:,iband] > 0) *
-                           (matched2.decam_flux_ivar[:,iband] > 0))
+        K = np.flatnonzero((matched1.t['decam_flux_ivar'][:,iband] > 0) *
+                           (matched2.t['decam_flux_ivar'][:,iband] > 0))
         
         print('Median mw_trans', band, 'is',
-              np.median(matched1.decam_mw_transmission[:,iband]))
+              np.median(matched1.t['decam_mw_transmission'][:,iband]))
         
         plt.clf()
-        plt.errorbar(matched1.decam_flux[K,iband],
-                     matched2.decam_flux[K,iband],
+        plt.errorbar(matched1.t['decam_flux'][K,iband],
+                     matched2.t['decam_flux'][K,iband],
                      fmt='.', color=cc,
-                     xerr=1./np.sqrt(matched1.decam_flux_ivar[K,iband]),
-                     yerr=1./np.sqrt(matched2.decam_flux_ivar[K,iband]),
+                     xerr=1./np.sqrt(matched1.t['decam_flux_ivar'][K,iband]),
+                     yerr=1./np.sqrt(matched2.t['decam_flux_ivar'][K,iband]),
                      alpha=0.1,
                      )
         plt.xlabel('%s flux: %s' % (name1, band))
@@ -109,9 +112,11 @@ def main():
         plt.plot([-1e6, 1e6], [-1e6,1e6], 'k-', alpha=1.)
         plt.axis([-100, 1000, -100, 1000])
         plt.title(tt)
-        ps.savefig()
+        plt.savefig(os.path.join(matched1.outdir,'%s_fluxerr.png' % band))
+        plt.close()
 
-
+    print("exiting early")
+    sys.exit()
     for iband,band,cc in [(1,'g','g'),(2,'r','r'),(4,'z','m')]:
         good = ((matched1.decam_flux_ivar[:,iband] > 0) *
                 (matched2.decam_flux_ivar[:,iband] > 0))
@@ -183,7 +188,7 @@ def main():
         bins.append((blo+bhi)/2.)
         gaussint.append(c)
     plt.plot(bins, gaussint, 'k-', lw=2, alpha=0.5)
-    
+
     plt.title(tt)
     plt.xlabel('Flux difference / error (sigma)')
     plt.axvline(0, color='k', alpha=0.1)
