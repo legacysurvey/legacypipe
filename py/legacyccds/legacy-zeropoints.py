@@ -1,33 +1,39 @@
 #!/usr/bin/env python
 
-"""Generate a legacypipe-compatible CCDs file for a given set of (reduced) BASS
-data.
+"""Generate a legacypipe-compatible CCD-level zeropoints file for a given set of
+(reduced) BASS, MzLS, or DECaLS imaging.
 
 This script borrows liberally from code written by Ian, Kaylan, Dustin, David
 S. and Arjun, including rapala.survey.bass_ccds, legacypipe.simple-bok-ccds,
-legacypipe.merge-zeropoints, obsbot.measure_raw, and the IDL code decstat.
+obsbot.measure_raw, and the IDL codes decstat and mosstat.
 
-The script runs on the temporarily repackaged BASS data created by the script
-legacyzeropoints/repackage-bass.py (which writes out multi-extension FITS files
-with a different naming convention relative to what NAOC delivers).  On edison
-these data are located in /scratch2/scratchdirs/ioannis/bok-reduced
+Although the script was developed to run on the temporarily repackaged BASS data
+created by the script legacyccds/repackage-bass.py (which writes out
+multi-extension FITS files with a different naming convention relative to what
+NAOC delivers), it is largely camera-agnostic, and should therefore eventually
+be able to be used to derive zeropoints for all the Legacy Survey imaging.
 
-Proposed changes to the -ccds file used by legacypipe:
- * Rename arawgain --> gain
- * The quantities ccdzpta, ccdzptb, ccdnmatcha, and ccdnmatchb are specific to
-   DECam and need to be expanded to accommodate the four amplifiers in the
-   90prime camera.
+On edison the repackaged BASS data are located in
+/scratch2/scratchdirs/ioannis/bok-reduced with the correct permissions.
+
+Proposed changes to the -ccds.fits file used by legacypipe:
+ * Rename arawgain --> gain to be camera-agnostic.
+ * The quantities ccdzpta and ccdzptb are specific to DECam, while for 90prime
+   these quantities are ccdzpt1, ccdzpt2, ccdzpt3, and ccdzpt4.  These columns
+   can be kept in the -zeropoints.fits file but should be removed from the final
+   -ccds.fits file.
  * The pipeline uses the SE-measured FWHM (FWHM, pixels) to do source detection
    and to estimate the depth, instead of SEEING (FWHM, arcsec), which is
-   measured by decstat in the case of DECam.  We should probably remove our
-   dependence on SExtractor, right?
- * We should store the pixel scale, too although it can be gotten from the CD matrix.
- * AVSKY should be in electron or electron/s, to account for the varying gain of
-   the amplifiers.
- * Should we cross-match against the tiles file here?  What else from the
-   annotated CCDs file should be directly calculate?
- * We are definitely going to need to run a merge-zeropoints-like code after
-   this code, to deal with various data issues.
+   measured by decstat in the case of DECam.  We should remove our dependence on
+   SExtractor and simply use the seeing/fwhm estimate measured by us (e.g., this
+   code).
+ * The pixel scale should be added to the output file, although it can be gotten
+   from the CD matrix.
+ * AVSKY should be converted to electron or electron/s, to account for the
+   varying gain of the amplifiers.
+ * We probably shouldn't cross-match against the tiles file in this code (but
+   instead in something like merge-zeropoints), but what else from the annotated
+   CCDs file should be directly calculated and stored here?
 
 """
 from __future__ import division, print_function
@@ -48,7 +54,6 @@ import matplotlib.pyplot as plt
 from photutils import CircularAperture, CircularAnnulus, aperture_photometry, daofind
 
 from astrometry.util.util import wcs_pv2sip_hdr
-from astrometry.util.plotutils import dimshow, plothist
 from astrometry.libkd.spherematch import match_radec
 
 from legacyanalysis.ps1cat import ps1cat
@@ -287,6 +292,8 @@ class Measurer(object):
 
         # Initialize the stars table and begin populating it.
         stars = _stars_table(nmatch)
+        stars['filter'] = self.band
+        stars['expid'] = self.expid
         stars['x'] = obj['xcentroid'][m1]
         stars['y'] = obj['ycentroid'][m1]
         stars['ra'] = objra[m1]
@@ -303,8 +310,6 @@ class Measurer(object):
 
         #plt.scatter(stars['ra'], stars['dec'], color='orange') ; plt.scatter(stars['ps1_ra'], stars['ps1_dec'], color='blue') ; plt.show()
         
-        pdb.set_trace()
-
         # Unless we're calibrating the photometric transformation, bring PS1
         # onto the photometric system of this camera (we add the color term
         # below).
@@ -332,10 +337,8 @@ class Measurer(object):
         # Get the photometric offset relative to PS1 as the observed PS1
         # magnitude minus the observed / measured magnitude.
 
-        print('measure the magnitude offset using just brighter stars!')
-        pdb.set_trace()
-        
         stars['ps1_mag'] += colorterm
+        #plt.scatter(stars['ps1_gicolor'], stars['apmag']-stars['ps1_mag']) ; plt.show()
         dmagall = stars['ps1_mag'][mskeep] - stars['apmag'][mskeep]
         _, dmagsig = sensible_sigmaclip(dmagall, nsigma=2.5)
 
@@ -586,9 +589,7 @@ def camera_name(primhdr):
     '''
     camera = primhdr.get('INSTRUME','').strip().lower()
     if camera == '90prime':
-        print('HACK!!!!!')
-        extlist = ['CCD4']
-        #extlist = ['CCD1', 'CCD2', 'CCD3', 'CCD4']
+        extlist = ['CCD1', 'CCD2', 'CCD3', 'CCD4']
     return camera, extlist
     
 def sensible_sigmaclip(arr, nsigma = 4.):
@@ -661,8 +662,8 @@ def main():
     '''
 
     parser = argparse.ArgumentParser(description='Generate a legacypipe-compatible CCDs file from a set of reduced imaging.')
-    parser.add_argument('--ccdsfile', type=str, default='test-ccds.fits', help='Output file name for the CCD information.')
-    parser.add_argument('--starsfile', type=str, default='test-stars.fits', help='Output file name for the stars.')
+    parser.add_argument('--zptsfile', type=str, default='zeropoints.fits', help='Output file name for the CCD information.')
+    parser.add_argument('--zptstarsfile', type=str, default='zeropoints-stars.fits', help='Output file name for the stars.')
     parser.add_argument('--aprad', type=float, default=3.5, help='Aperture photometry radius (arcsec).')
     parser.add_argument('--skyrad-inner', type=float, default=7.0, help='Radius of inner sky annulus (arcsec).')
     parser.add_argument('--skyrad-outer', type=float, default=10.0, help='Radius of outer sky annulus (arcsec).')
@@ -678,8 +679,8 @@ def main():
     # Build a dictionary with the optional inputs.
     measureargs = vars(args)
     images = np.array(measureargs.pop('images'))
-    ccdsfile = measureargs.pop('ccdsfile')
-    starsfile = measureargs.pop('starsfile')
+    zptsfile = measureargs.pop('zptsfile')
+    zptstarsfile = measureargs.pop('zptstarsfile')
     nproc = measureargs.pop('nproc')
 
     # Process the data, optionally with multiprocessing.
@@ -704,18 +705,18 @@ def main():
         ccds, stars = measure_image(images, measureargs)
 
     # Write out.
-    if os.path.isfile(ccdsfile):
-        os.remove(ccdsfile)
-    print('Writing {}'.format(ccdsfile))
-    ccds.write(ccdsfile)
+    if os.path.isfile(zptsfile):
+        os.remove(zptsfile)
+    print('Writing {}'.format(zptsfile))
+    ccds.write(zptsfile)
 
     # Also write out the table of stars, although eventually we'll want to only
     # write this out if we're calibrating the photometry (or if the user
     # requests).
-    if os.path.isfile(starsfile):
-        os.remove(starsfile)
-    print('Writing {}'.format(starsfile))
-    stars.write(starsfile)
+    if os.path.isfile(zptstarsfile):
+        os.remove(zptstarsfile)
+    print('Writing {}'.format(zptstarsfile))
+    stars.write(zptstarsfile)
                     
 if __name__ == "__main__":
     main()
