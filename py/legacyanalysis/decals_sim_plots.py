@@ -553,32 +553,33 @@ def main():
     #sns.set(style='white',font_scale=1.6,palette='dark')#,font='fantasy')
     #col = sns.color_palette('dark')
     col = ['b', 'k', 'c', 'm', 'y', 0.8]
-     
+    
+    # Read metadata catalog.
+    metafile = os.path.join(input_dir, 'metacat-{}-{}.fits'.format(brickname, lobjtype))
+    log.info('Reading {}'.format(metafile))
+    meta = fits.getdata(metafile, 1)
+    
+    # We need this for our histograms below
+    magbinsz = 0.2
+    rminmax = np.squeeze(meta['RMAG_RANGE'])
+    nmagbin = long((rminmax[1]-rminmax[0])/magbinsz)
+
     # Work in chunks.
     allsimcat = []
     bigsimcat = []
     bigsimcat_missed = []
     bigtractor = []
-    chunk_dirs= glob.glob(os.path.join(input_dir,'*'))
-    if len(chunk_dirs) == 0: raise ValueError
+    chunk_dirs= glob.glob(os.path.join(input_dir,'0*'))
+    nchunk= len(chunk_dirs)
+    if nchunk == 0: raise ValueError
     # Loop through chunk dirs 000,001,...,999
-    for cdir in [chunk_dirs[0]]:
+    for ichunk,cdir in enumerate([chunk_dirs[0]]):
         chunksuffix = os.path.basename(cdir) #'{:02d}'.format(ichunk)
-        #log.info('Working on chunk {:02d}/{:02d}'.format(ichunk+1, nchunk))
-        
-        # Read the metadata catalog.
-        metafile = os.path.join(cdir, 'metacat-{}-{}.fits'.format(brickname, lobjtype))
-        log.info('Reading {}'.format(metafile))
-        meta = fits.getdata(metafile, 1)
-        
-        # We need this for our histograms below
-        magbinsz = 0.2
-        rminmax = np.squeeze(meta['RMAG_RANGE'])
-        nmagbin = long((rminmax[1]-rminmax[0])/magbinsz)
+        #if 'metacat' in chunksuffix: 
+        #    continue
+        log.info('Working on chunk {:02d}/{:02d}'.format(ichunk+1, nchunk))
         
         # Read the simulated object catalog
-        #simcatfile = os.path.join(cdir, 'simcat-{}-{}-{}.fits'.format(brickname, lobjtype, chunksuffix))
-        # HARDCODED fix this!!!!!
         simcatfile = os.path.join(cdir, 'simcat-{}-{}-{:02d}.fits'.format(brickname, lobjtype, int(chunksuffix)))
         log.info('Reading {}'.format(simcatfile))
         simcat = Table(fits.getdata(simcatfile, 1))
@@ -722,5 +723,5 @@ def main():
     '''
     
 if __name__ == "__main__":
-    #main()
-    fix_flux(fn='aper.pickle')
+    main()
+    #fix_flux(fn='aper.pickle')
