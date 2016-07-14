@@ -65,10 +65,12 @@ from legacypipe.common import LegacySurveyData, wcs_for_brick, ccds_touching_wcs
 from pickle import dump
 
 class SimDecals(LegacySurveyData):
-    def __init__(self, survey_dir=None, metacat=None, simcat=None, output_dir=None):
+    def __init__(self, survey_dir=None, metacat=None, simcat=None, output_dir=None,\
+                       add_sim_noise=False):
         super(SimDecals, self).__init__(survey_dir=survey_dir, output_dir=output_dir)
         self.metacat = metacat
         self.simcat = simcat
+        self.add_sim_noise= add_sim_noise
 
     def get_image_object(self, t):
         return SimImage(self, t)
@@ -124,8 +126,9 @@ class SimImage(DecamImage):
             if (overlap.area() > 0):
                 stamp = stamp[overlap]      
                 ivarstamp = invvar[overlap]
-                #FIX ME!!, for now Peter recommends insertting perfect image, since have noisy images and we want to know exactly mag insertted
-                #stamp, ivarstamp = objstamp.addnoise(stamp, ivarstamp)
+                # Add noise to simulated source
+                if self.survey.add_sim_noise:
+                    stamp, ivarstamp = objstamp.addnoise(stamp, ivarstamp)
                 # Only where stamps will in inserted
                 sims_image[overlap] += stamp 
                 sims_ivar[overlap] += ivarstamp
@@ -501,6 +504,7 @@ def get_parser():
                         help='Location of survey-ccds*.fits.gz')
     parser.add_argument('--rmag-range', nargs=2, type=float, default=(18, 26), metavar='', 
                         help='r-band magnitude range')
+    parser.add_argument('--add_sim_noise', action="store_true", help="set to add noise to simulated sources")
     parser.add_argument('--all-blobs', action='store_true', 
                         help='Process all the blobs, not just those that contain simulated sources.')
     parser.add_argument('--stage', choices=['tims', 'image_coadds', 'srcs', 'fitblobs', 'coadds'],
@@ -654,7 +658,8 @@ def do_one_chunk(d=None):
     Can be run as 1) a loop over nchunks or 2) for one chunk
     d -- dict returned by get_metadata_others() AND added to by get_ith_simcat()'''
     assert(d is not None)
-    simdecals = SimDecals(metacat=d['metacat'], simcat=d['simcat'], output_dir=d['simcat_dir'])
+    simdecals = SimDecals(metacat=d['metacat'], simcat=d['simcat'], output_dir=d['simcat_dir'], \
+                          add_sim_noise=d['args'].add_sim_noise)
     # Use Tractor to just process the blobs containing the simulated sources.
     if d['args'].all_blobs:
         blobxy = None
