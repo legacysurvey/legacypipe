@@ -29,8 +29,9 @@ Proposed changes to the -ccds.fits file used by legacypipe:
    code).
  * The pixel scale should be added to the output file, although it can be gotten
    from the CD matrix.
- * AVSKY should be converted to electron or electron/s, to account for the
-   varying gain of the amplifiers.
+ * AVSKY should be converted to electron or electron/s, to account for
+   the varying gain of the amplifiers.  It's actually not even clear
+   we need this header keyword.
  * We probably shouldn't cross-match against the tiles file in this code (but
    instead in something like merge-zeropoints), but what else from the annotated
    CCDs file should be directly calculated and stored here?
@@ -526,7 +527,10 @@ class NinetyPrimeMeasurer(Measurer):
         self.expid = '{:08d}-{}'.format(self.expnum, self.ccdname)
 
         self.band = self.get_band()
-        self.avsky = self.hdr['SKADU'] # [ADU]
+        if 'SKADU' in self.hdr:
+            self.avsky = self.hdr['SKADU'] # [ADU]
+        else:
+            self.avsky = 0.0
 
         self.wcs = wcs_pv2sip_hdr(self.hdr) # PV distortion
         self.pixscale = self.wcs.pixel_scale()
@@ -548,7 +552,10 @@ class NinetyPrimeMeasurer(Measurer):
         self.A_ext = dict(g = 3.303, r = 2.285)
 
         # Eventually we would like FWHM to not come from SExtractor.
-        self.fwhm = 2.35 * self.hdr['SEEING'] / self.pixscale  # [FWHM, pixels]
+        if self.hdr['SEEING'] > 0:
+            self.fwhm = 2.35 * self.hdr['SEEING'] / self.pixscale  # [FWHM, pixels]
+        else:
+            self.fwhm = 2.35 * 1.5 / self.pixscale  # Hack!
 
         # Ambient temperature
         self.temp = -999.0 # no data
