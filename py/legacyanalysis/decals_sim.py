@@ -120,7 +120,9 @@ class SimImage(DecamImage):
                 stamp = objstamp.elg(obj)
             elif objtype == 'LRG':
                 stamp = objstamp.lrg(obj)
-
+            # store actual flux added 99-100% of requested
+            self.survey.simcat['STAMP_'+objstamp.band+'FLUX'][ii]= stamp.added_flux 
+            
             # Make sure the object falls on the image and then add Poisson noise.
             overlap = stamp.bounds & image.bounds
             if (overlap.area() > 0):
@@ -263,8 +265,9 @@ class BuildStamp():
         """Render a star (PSF)."""
         # Set total stamp flux to input flux
         self.setlocal(obj)
-        flux = obj[self.band+'FLUX'] # [nanomaggies]
-        psf = self.localpsf.withFlux(flux)
+        #flux = obj[self.band+'FLUX'] # [nanomaggies]
+        #psf = self.localpsf.withFlux(flux)
+        psf = self.localpsf.withFlux(1.)
         stamp = psf.drawImage(offset=self.offset, scale=self.pixscale, method='no_pixel')
         # Get flux in 7'' diameter aperture
         diam = 7/self.pixscale
@@ -281,7 +284,9 @@ class BuildStamp():
         apy_table = photutils.aperture_photometry(stamp.array, apers)
         apflux= np.array(apy_table['aperture_sum'])[0]
         # Set total flux to aperture flux
-        psf = self.localpsf.withFlux(apflux)
+        #psf = self.localpsf.withFlux(flux*flux/apflux) #apflux
+        flux = obj[self.band+'FLUX'] # [nanomaggies]
+        psf = self.localpsf.withFlux(flux*(2.-apflux/stamp.added_flux))
         stamp = psf.drawImage(offset=self.offset, scale=self.pixscale, method='no_pixel')
         assert(stamp.added_flux > 0.99 * psf.getFlux()) #adds UP TO 100% of flux
         # Convert stamp's center to its corresponding center on full tractor image
@@ -473,6 +478,12 @@ def build_simcat(nobj=None, brickname=None, brickwcs=None, meta=None, seed=None,
     cat['GFLUX'] = 1E9*10**(-0.4*(rmag+gr)) # [nanomaggies]
     cat['RFLUX'] = 1E9*10**(-0.4*rmag)      # [nanomaggies]
     cat['ZFLUX'] = 1E9*10**(-0.4*(rmag-rz)) # [nanomaggies]
+    # flux actually added to stamp will be 99-100% of GRZ FLUX above
+    # store added flux here in real time
+    cat['STAMP_GFLUX'] = np.zeros(len(cat['GFLUX']))-1
+    cat['STAMP_RFLUX'] = cat['STAMP_GFLUX'].data.copy()
+    cat['STAMP_ZFLUX'] = cat['STAMP_GFLUX'].data.copy()
+    
 
     return cat
 

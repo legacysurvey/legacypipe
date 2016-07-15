@@ -262,13 +262,16 @@ def plot_good_bad_ugly(allsimcat,bigsimcat,bigsimcat_missing, nmagbin,rminmax, b
     plt.savefig(qafile, bbox_extra_artists=[leg,xlab,ylab], bbox_inches='tight')
     plt.close()
 
-def plot_tractor_minus_answer(bigsimcat,bigtractor, b_good,rminmax, log,qafile='test.png'):
+def plot_tractor_minus_answer(bigsimcat,bigtractor, b_good,rminmax, log,qafile='test.png',stamp_flux=False):
     fig, ax = plt.subplots(3, sharex=True, figsize=(6,8))
 
     col = ['b', 'k', 'c', 'm', 'y', 0.8]
     rmag = bigsimcat['R']
     for thisax, thiscolor, band, indx in zip(ax, col, ('G', 'R', 'Z'), (1, 2, 4)):
-        simflux = bigsimcat[band+'FLUX']
+        if stamp_flux:
+            simflux = bigsimcat['STAMP_'+band+'FLUX']
+        else:
+            simflux = bigsimcat[band+'FLUX']
         tractorflux = bigtractor['decam_flux'][:, indx]
         tractorivar = bigtractor['decam_flux_ivar'][:, indx]
         thisax.scatter(rmag[b_good], -2.5*np.log10(tractorflux[b_good]/simflux[b_good]),
@@ -661,6 +664,9 @@ def main():
     # Flux residuals vs r-band magnitude
     plot_tractor_minus_answer(bigsimcat,bigtractor, b_good,rminmax, log, qafile=\
             os.path.join(output_dir, 'qa-{}-{}-good-flux.png'.format(brickname, lobjtype)))
+    # same but stamp flux = True
+    plot_tractor_minus_answer(bigsimcat,bigtractor, b_good,rminmax, log, stamp_flux=True,qafile=\
+            os.path.join(output_dir, 'qa-{}-{}-good-flux-stampflux.png'.format(brickname, lobjtype)))
  
     # chi plots: Flux residual / estimated Flux error
     plot_chi(bigsimcat,bigtractor, b_good,rminmax, log, qafile=\
