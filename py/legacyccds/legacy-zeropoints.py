@@ -284,7 +284,7 @@ class Measurer(object):
             print('No overlapping PS1 stars in this field!')
             return ccds, _stars_table()
 
-        objra, objdec = self.wcs.pixelxy2radec(obj['xcentroid'], obj['ycentroid'])
+        objra, objdec = self.wcs.pixelxy2radec(obj['xcentroid']+1, obj['ycentroid']+1)
         m1, m2, d12 = match_radec(objra, objdec, ps1.ra, ps1.dec, self.matchradius/3600.0)
         nmatch = len(m1)
         ccds['ccdnmatch'] = nmatch
