@@ -263,6 +263,9 @@ def plot_good_bad_ugly(allsimcat,bigsimcat,bigsimcat_missing, nmagbin,rminmax, b
     plt.close()
 
 def plot_tractor_minus_answer(bigsimcat,bigtractor, b_good,rminmax, log,qafile='test.png',stamp_flux=False):
+    for band in 'GRZ':
+        print('%sFLUX STAMP_%sFLUX' % (band,band))
+        for cat in bigsimcat[:10]: print('%.3f %.3f' % (cat[band+'FLUX'],cat['STAMP_'+band+'FLUX']))
     fig, ax = plt.subplots(3, sharex=True, figsize=(6,8))
 
     col = ['b', 'k', 'c', 'm', 'y', 0.8]

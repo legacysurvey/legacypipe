@@ -120,8 +120,6 @@ class SimImage(DecamImage):
                 stamp = objstamp.elg(obj)
             elif objtype == 'LRG':
                 stamp = objstamp.lrg(obj)
-            # store actual flux added 99-100% of requested
-            self.survey.simcat['STAMP_'+objstamp.band+'FLUX'][ii]= stamp.added_flux 
             
             # Make sure the object falls on the image and then add Poisson noise.
             overlap = stamp.bounds & image.bounds
@@ -153,6 +151,12 @@ class SimImage(DecamImage):
         tim.data = image.array
         tim.inverr = np.sqrt(invvar.array)
         ##########
+        #print('objstamp.gsparams=', objstamp.gsparams) 
+        #print('self.survey.simcat STAMP_%sFLUX/%sFLUX=' % (objstamp.band,objstamp.band),\
+        #         self.survey.simcat[objstamp.band+'FLUX']/self.survey.simcat['STAMP_'+objstamp.band+'FLUX']) 
+        #print('exiting early')
+        #sys.exit()
+        ##########
         #print('min,max,median apflux/influx= ',np.min(ap_flux/in_flux),np.max(ap_flux/in_flux),np.median(ap_flux/in_flux))
         #print('min,max,median added_flux/apflux= ',np.min(added_flux/ap_flux),np.max(added_flux/ap_flux),np.median(added_flux/ap_flux))
         #print('exiting before write aper.pickle')
@@ -170,12 +174,18 @@ class SimImage(DecamImage):
         #import pdb ; pdb.set_trace()
         return tim
 
+def perc_diff(test,answer):
+    '''returns percentage that test and answer differ by'''
+    return 100.*abs(test-answer)/answer
+
 class BuildStamp():
     def __init__(self,tim, gain=4.0, seed=None):
         """Initialize the BuildStamp object with the CCD-level properties we need."""
 
         self.band = tim.band.strip().upper()
-        self.gsparams = galsim.GSParams(maximum_fft_size=2L**30L,folding_threshold=1.e-4) #1e-4 tested on 2000 stars gives added flux within 0.5%
+        # Folding_threshold chosen so that percent diff between stamp.added_flux and requested AB mag flux is < 1e-2%
+        self.gsparams = galsim.GSParams(maximum_fft_size=2L**30L,\
+                                        folding_threshold=1.e-6) 
         #print('FIX ME!!!!!!!!!!!!!!!!!!!!!!!!!!!!')
         self.gsdeviate = galsim.BaseDeviate()
         #if seed is None:
@@ -215,7 +225,9 @@ class BuildStamp():
         psfim = self.psf.getPointSourcePatch(self.xpos, self.ypos).getImage()
         #plt.imshow(psfim) ; plt.show()
         
-        self.localpsf = galsim.InterpolatedImage(galsim.Image(psfim),scale=self.pixscale)
+        # make galsim PSF object
+        self.localpsf = galsim.InterpolatedImage(galsim.Image(psfim),scale=self.pixscale,\
+                                    gsparams=self.gsparams)
 
     def addnoise(self, stamp, ivarstamp):
         """Add noise to the object postage stamp.  Remember that STAMP and IVARSTAMP
@@ -288,7 +300,8 @@ class BuildStamp():
         flux = obj[self.band+'FLUX'] # [nanomaggies]
         psf = self.localpsf.withFlux(flux*(2.-apflux/stamp.added_flux))
         stamp = psf.drawImage(offset=self.offset, scale=self.pixscale, method='no_pixel')
-        assert(stamp.added_flux > 0.99 * psf.getFlux()) #adds UP TO 100% of flux
+        #stamp looses less than 0.01% of requested flux
+        assert( perc_diff(stamp.added_flux,psf.getFlux()) < 1.e-2) 
         # Convert stamp's center to its corresponding center on full tractor image
         stamp.setCenter(self.xpos, self.ypos)
         
@@ -478,12 +491,6 @@ def build_simcat(nobj=None, brickname=None, brickwcs=None, meta=None, seed=None,
     cat['GFLUX'] = 1E9*10**(-0.4*(rmag+gr)) # [nanomaggies]
     cat['RFLUX'] = 1E9*10**(-0.4*rmag)      # [nanomaggies]
     cat['ZFLUX'] = 1E9*10**(-0.4*(rmag-rz)) # [nanomaggies]
-    # flux actually added to stamp will be 99-100% of GRZ FLUX above
-    # store added flux here in real time
-    cat['STAMP_GFLUX'] = np.zeros(len(cat['GFLUX']))-1
-    cat['STAMP_RFLUX'] = cat['STAMP_GFLUX'].data.copy()
-    cat['STAMP_ZFLUX'] = cat['STAMP_GFLUX'].data.copy()
-    
 
     return cat
 
