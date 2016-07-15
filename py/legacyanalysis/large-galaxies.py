@@ -8,6 +8,13 @@ J. Moustakas
 Siena College
 2016 June 6
 
+ToDo:  redo the query with objtype restricted (see my TechNote)
+
+objtype='G' or objtype='g' or objtype='M' or objtype='M2' or objtype='M3' or objtype='MG' or objtype='MC'
+
+
+
+
 http://leda.univ-lyon1.fr/leda/fullsql.html
 
 Output file 1: leda-logd25-0.05-0.50.txt
