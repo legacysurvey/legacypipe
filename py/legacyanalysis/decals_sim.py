@@ -66,11 +66,13 @@ from pickle import dump
 
 class SimDecals(LegacySurveyData):
     def __init__(self, survey_dir=None, metacat=None, simcat=None, output_dir=None,\
-                       add_sim_noise=False):
+                       add_sim_noise=False, folding_threshold=1.e-6):
+        '''folding_threshold -- make smaller to increase stamp_flux/input_flux'''
         super(SimDecals, self).__init__(survey_dir=survey_dir, output_dir=output_dir)
         self.metacat = metacat
         self.simcat = simcat
         self.add_sim_noise= add_sim_noise
+        self.folding_threshold= folding_threshold
 
     def get_image_object(self, t):
         return SimImage(self, t)
@@ -93,7 +95,8 @@ class SimImage(DecamImage):
             seed = None
 
         objtype = self.survey.metacat['OBJTYPE']
-        objstamp = BuildStamp(tim, gain=self.t.arawgain, seed=seed)
+        objstamp = BuildStamp(tim, gain=self.t.arawgain, seed=seed, \
+                              folding_threshold=self.survey.folding_threshold)
 
         # Grab the data and inverse variance images [nanomaggies!]
         image = galsim.Image(tim.getImage())
@@ -174,18 +177,13 @@ class SimImage(DecamImage):
         #import pdb ; pdb.set_trace()
         return tim
 
-def perc_diff(test,answer):
-    '''returns percentage that test and answer differ by'''
-    return 100.*abs(test-answer)/answer
-
 class BuildStamp():
-    def __init__(self,tim, gain=4.0, seed=None):
+    def __init__(self,tim, gain=4.0, seed=None, folding_threshold=1.e-6):
         """Initialize the BuildStamp object with the CCD-level properties we need."""
-
         self.band = tim.band.strip().upper()
         # Folding_threshold chosen so that percent diff between stamp.added_flux and requested AB mag flux is < 1e-2%
         self.gsparams = galsim.GSParams(maximum_fft_size=2L**30L,\
-                                        folding_threshold=1.e-6) 
+                                        folding_threshold=folding_threshold) 
         #print('FIX ME!!!!!!!!!!!!!!!!!!!!!!!!!!!!')
         self.gsdeviate = galsim.BaseDeviate()
         #if seed is None:
@@ -298,10 +296,13 @@ class BuildStamp():
         # Set total flux to aperture flux
         #psf = self.localpsf.withFlux(flux*flux/apflux) #apflux
         flux = obj[self.band+'FLUX'] # [nanomaggies]
-        psf = self.localpsf.withFlux(flux*(2.-apflux/stamp.added_flux))
+        flux*= (2.-apflux/stamp.added_flux)
+        psf = self.localpsf.withFlux(flux)
         stamp = psf.drawImage(offset=self.offset, scale=self.pixscale, method='no_pixel')
         #stamp looses less than 0.01% of requested flux
-        assert( perc_diff(stamp.added_flux,psf.getFlux()) < 1.e-2) 
+        if stamp.added_flux/flux <= 0.9999:
+            print('WARNING: stamp lost more than 0.01% of requested flux, stamp_flux/flux=',stamp.added_flux/flux)
+            #raise ValueError 
         # Convert stamp's center to its corresponding center on full tractor image
         stamp.setCenter(self.xpos, self.ypos)
         
@@ -523,6 +524,7 @@ def get_parser():
     parser.add_argument('--rmag-range', nargs=2, type=float, default=(18, 26), metavar='', 
                         help='r-band magnitude range')
     parser.add_argument('--add_sim_noise', action="store_true", help="set to add noise to simulated sources")
+    parser.add_argument('--folding_threshold', type=float,default=1.e-6,action="store", help="for galsim.GSParams")
     parser.add_argument('--all-blobs', action='store_true', 
                         help='Process all the blobs, not just those that contain simulated sources.')
     parser.add_argument('--stage', choices=['tims', 'image_coadds', 'srcs', 'fitblobs', 'coadds'],
@@ -677,7 +679,7 @@ def do_one_chunk(d=None):
     d -- dict returned by get_metadata_others() AND added to by get_ith_simcat()'''
     assert(d is not None)
     simdecals = SimDecals(metacat=d['metacat'], simcat=d['simcat'], output_dir=d['simcat_dir'], \
-                          add_sim_noise=d['args'].add_sim_noise)
+                          add_sim_noise=d['args'].add_sim_noise, folding_threshold=d['args'].folding_threshold)
     # Use Tractor to just process the blobs containing the simulated sources.
     if d['args'].all_blobs:
         blobxy = None
