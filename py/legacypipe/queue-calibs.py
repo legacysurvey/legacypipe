@@ -347,6 +347,12 @@ def main():
     B.cut(keep)
     log('Cut to', len(B), 'bricks near CCDs')
 
+    plt.clf()
+    plt.plot(B.ra, B.dec, 'b.')
+    plt.title('DR3 bricks')
+    plt.axis([360, 0, np.min(B.dec)-1, np.max(B.dec)+1])
+    plt.savefig('bricks.png')
+
     if opt.brickq is not None:
         B.cut(B.brickq == opt.brickq)
         log('Cut to', len(B), 'with brickq =', opt.brickq)
