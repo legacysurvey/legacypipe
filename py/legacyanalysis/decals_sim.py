@@ -66,7 +66,7 @@ from pickle import dump
 
 class SimDecals(LegacySurveyData):
     def __init__(self, survey_dir=None, metacat=None, simcat=None, output_dir=None,\
-                       add_sim_noise=False, folding_threshold=1.e-6):
+                       add_sim_noise=False, folding_threshold=1.e-5):
         '''folding_threshold -- make smaller to increase stamp_flux/input_flux'''
         super(SimDecals, self).__init__(survey_dir=survey_dir, output_dir=output_dir)
         self.metacat = metacat
@@ -154,11 +154,11 @@ class SimImage(DecamImage):
         tim.data = image.array
         tim.inverr = np.sqrt(invvar.array)
         ##########
-        #print('objstamp.gsparams=', objstamp.gsparams) 
+        print('objstamp.gsparams=', objstamp.gsparams) 
         #print('self.survey.simcat STAMP_%sFLUX/%sFLUX=' % (objstamp.band,objstamp.band),\
         #         self.survey.simcat[objstamp.band+'FLUX']/self.survey.simcat['STAMP_'+objstamp.band+'FLUX']) 
-        #print('exiting early')
-        #sys.exit()
+        print('exiting early')
+        sys.exit()
         ##########
         #print('min,max,median apflux/influx= ',np.min(ap_flux/in_flux),np.max(ap_flux/in_flux),np.median(ap_flux/in_flux))
         #print('min,max,median added_flux/apflux= ',np.min(added_flux/ap_flux),np.max(added_flux/ap_flux),np.median(added_flux/ap_flux))
@@ -178,7 +178,7 @@ class SimImage(DecamImage):
         return tim
 
 class BuildStamp():
-    def __init__(self,tim, gain=4.0, seed=None, folding_threshold=1.e-6):
+    def __init__(self,tim, gain=4.0, seed=None, folding_threshold=1.e-5):
         """Initialize the BuildStamp object with the CCD-level properties we need."""
         self.band = tim.band.strip().upper()
         # Folding_threshold chosen so that percent diff between stamp.added_flux and requested AB mag flux is < 1e-2%
@@ -273,14 +273,12 @@ class BuildStamp():
 
     def star(self,obj):
         """Render a star (PSF)."""
-        # Set total stamp flux to input flux
+        # Input flux is really 7'' aperture flux
         self.setlocal(obj)
-        #flux = obj[self.band+'FLUX'] # [nanomaggies]
-        #psf = self.localpsf.withFlux(flux)
         psf = self.localpsf.withFlux(1.)
         stamp = psf.drawImage(offset=self.offset, scale=self.pixscale, method='no_pixel')
         # Get flux in 7'' diameter aperture
-        diam = 7/self.pixscale
+        diam = 7/0.262 #0.262 fixed for zeropoints
         # If aperture larger than stamp, Redraw with stamp 2 pix larger than aperture
         width= stamp.bounds.xmax-stamp.bounds.xmin
         height= stamp.bounds.ymax-stamp.bounds.ymin
@@ -293,16 +291,18 @@ class BuildStamp():
         apers= photutils.CircularAperture((stamp.trueCenter().x,stamp.trueCenter().y), r=diam/2)
         apy_table = photutils.aperture_photometry(stamp.array, apers)
         apflux= np.array(apy_table['aperture_sum'])[0]
-        # Set total flux to aperture flux
-        #psf = self.localpsf.withFlux(flux*flux/apflux) #apflux
-        flux = obj[self.band+'FLUX'] # [nanomaggies]
-        flux*= (2.-apflux/stamp.added_flux)
+        # Set total flux in stamp to 7'' flux + extra
+        flux = obj[self.band+'FLUX']*(2.-apflux/stamp.added_flux) # [nanomaggies]
         psf = self.localpsf.withFlux(flux)
         stamp = psf.drawImage(offset=self.offset, scale=self.pixscale, method='no_pixel')
         #stamp looses less than 0.01% of requested flux
         if stamp.added_flux/flux <= 0.9999:
             print('WARNING: stamp lost more than 0.01% of requested flux, stamp_flux/flux=',stamp.added_flux/flux)
-            #raise ValueError 
+        ######## test if obj[self.band+'FLUX'] really is in the 7'' aperture
+        #apers= photutils.CircularAperture((stamp.trueCenter().x,stamp.trueCenter().y), r=diam/2)
+        #apy_table = photutils.aperture_photometry(stamp.array, apers)
+        #apflux= np.array(apy_table['aperture_sum'])[0]
+        #print("7'' flux/input flux= ",apflux/obj[self.band+'FLUX'])
         # Convert stamp's center to its corresponding center on full tractor image
         stamp.setCenter(self.xpos, self.ypos)
         
@@ -524,7 +524,7 @@ def get_parser():
     parser.add_argument('--rmag-range', nargs=2, type=float, default=(18, 26), metavar='', 
                         help='r-band magnitude range')
     parser.add_argument('--add_sim_noise', action="store_true", help="set to add noise to simulated sources")
-    parser.add_argument('--folding_threshold', type=float,default=1.e-6,action="store", help="for galsim.GSParams")
+    parser.add_argument('--folding_threshold', type=float,default=1.e-5,action="store", help="for galsim.GSParams")
     parser.add_argument('--all-blobs', action='store_true', 
                         help='Process all the blobs, not just those that contain simulated sources.')
     parser.add_argument('--stage', choices=['tims', 'image_coadds', 'srcs', 'fitblobs', 'coadds'],

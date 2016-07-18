@@ -268,13 +268,15 @@ def plot_tractor_minus_answer(bigsimcat,bigtractor, b_good,rminmax, log,qafile='
     col = ['b', 'k', 'c', 'm', 'y', 0.8]
     rmag = bigsimcat['R']
     for thisax, thiscolor, band, indx in zip(ax, col, ('G', 'R', 'Z'), (1, 2, 4)):
-        simflux = bigsimcat[band+'FLUX']
+        inputflux = bigsimcat[band+'FLUX']
         tractorflux = bigtractor['decam_flux'][:, indx]
         tractorivar = bigtractor['decam_flux_ivar'][:, indx]
-        thisax.scatter(rmag[b_good], -2.5*np.log10(tractorflux[b_good]/simflux[b_good]),
+        inputmag = 22.5-2.5*np.log10(inputflux[b_good])
+        thisax.scatter(inputmag, \
+                       -2.5*np.log10(tractorflux[b_good]/inputflux[b_good]),
                        s=10,edgecolor=thiscolor,c='none',lw=1.)
-        thisax.set_ylim(-0.7,0.7)
-        thisax.set_xlim(rminmax + [-0.1, 0.0])
+        thisax.set_ylim(-0.1,0.1)
+        thisax.set_xlim(inputmag.min()-0.1, inputmag.max()+0.1)
         thisax.axhline(y=0.0,lw=2,ls='solid',color='gray')
         #thisax.text(0.05,0.05, band.lower(), horizontalalignment='left',
                     #verticalalignment='bottom',transform=thisax.transAxes,
@@ -282,7 +284,7 @@ def plot_tractor_minus_answer(bigsimcat,bigtractor, b_good,rminmax, log,qafile='
     ax[0].set_ylabel('$\Delta$g')
     ax[1].set_ylabel('$\Delta$r (Tractor - Input)')
     ylab=ax[2].set_ylabel('$\Delta$z')
-    xlab=ax[2].set_xlabel('Input r magnitude (AB mag)')
+    xlab=ax[2].set_xlabel('Input magnitude (AB mag)')
     fig.subplots_adjust(left=0.18,hspace=0.1)
     log.info('Writing {}'.format(qafile))
     plt.savefig(qafile,bbox_extra_artists=[xlab,ylab], bbox_inches='tight')
@@ -302,7 +304,7 @@ def plot_chi(bigsimcat,bigtractor, b_good,rminmax, log,qafile='test.png'):
         thisax.scatter(rmag[b_good], (tractorflux[b_good] - simflux[b_good])*np.sqrt(tractorivar[b_good]),
                        s=10,edgecolor=thiscolor,c='none',lw=1.)
         #thisax.set_ylim(-0.7,0.7)
-        thisax.set_ylim(-8,8)
+        thisax.set_ylim(-4,4)
         thisax.set_xlim(rminmax + [-0.1, 0.0])
         thisax.axhline(y=0.0,lw=2,ls='solid',color='gray')
         #thisax.text(0.05,0.05, band.lower(), horizontalalignment='left',
@@ -658,7 +660,7 @@ def main():
     plot_good_bad_ugly(allsimcat,bigsimcat,bigsimcat_missing, nmagbin,rminmax, b_good,b_bad, log, qafile=\
             os.path.join(output_dir, 'qa-{}-{}-N-good-bad-missed.png'.format(brickname, lobjtype)))
 
-    # Flux residuals vs r-band magnitude
+    # Flux residuals vs input magnitude
     plot_tractor_minus_answer(bigsimcat,bigtractor, b_good,rminmax, log, qafile=\
             os.path.join(output_dir, 'qa-{}-{}-good-flux.png'.format(brickname, lobjtype)))
  
