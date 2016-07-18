@@ -4,6 +4,33 @@ from glob import glob
 import os
 from astrometry.util.fits import fits_table, merge_tables
 
+# Runs 13 and 15, for adjusting obstatus file...
+
+def decals_dr3_plus():
+    basedir = os.environ['LEGACY_SURVEY_DIR']
+    cam = 'decam'
+    image_basedir = os.path.join(basedir, 'images')
+
+    TT = []
+
+    #zpdir = '/project/projectdirs/cosmo/work/decam/cats/ZeroPoints'
+    for fn,dirnms in [
+        ('/global/homes/a/arjundey/ZeroPoints/decals-zpt-20160407.fits',
+         ['CP20160407',]),
+        ('/global/homes/a/arjundey/ZeroPoints/decals-zpt-20160606.fits',
+         ['CP20160606',]),
+        ]:
+        T = normalize_zeropoints(fn, dirnms, image_basedir, cam)
+        TT.append(T)
+    T = merge_tables(TT)
+    outfn = 'survey-ccds-dr3plus.fits'
+    T.writeto(outfn)
+    print('Wrote', outfn)
+
+    for fn in [outfn]:
+        os.system('gzip --best ' + fn)
+
+
 def decals_dr3_check_wcsfailed():
     import fitsio
     basedir = os.environ['LEGACY_SURVEY_DIR']
@@ -325,7 +352,8 @@ if __name__ == '__main__':
     #decals_dr3_dedup()
     #decals_dr3_fix392400()
     #decals_dr3_check_wcsfailed()
-    #sys.exit(0)
+    decals_dr3_plus()
+    sys.exit(0)
     
     basedir = './deep2f3'
     cam = '90prime'

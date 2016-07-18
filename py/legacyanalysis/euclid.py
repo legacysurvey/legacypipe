@@ -1237,11 +1237,35 @@ def reduce_acs_image(opt, survey):
     return 0
 
 def package(opt):
-    listfns = glob('euclid/images/megacam/lists/*.lst')
 
-    listnames = [os.path.basename(fn).replace('.lst','') for fn in listfns]
-    explists = [get_exposures_in_list(fn) for fn in listfns]
-    ccds = list(range(36))
+    print('HACK -- fixing up VISTA forced photometry...')
+    # Match VISTA images to the others...
+    ACS = fits_table('euclid-out/forced-r.SNR10-HIQ.fits')
+    imap = dict([((n,o),i) for i,(n,o) in enumerate(zip(ACS.brickname,
+                                                        ACS.objid))])
+    for band in ['Y','J','H']:
+        fn = 'euclid-out/forced-vista-%s.fits' % band
+        T = fits_table(fn)
+        print('Read', len(T), 'from', fn)
+        T.rename('flux_%s' % band.lower(), 'flux')
+        T.rename('flux_ivar_%s' % band.lower(), 'flux_ivar')
+        T.acsindex = np.array([imap.get((n,o), -1)
+                               for n,o in zip(T.brickname, T.objid)])
+        T.cut(T.acsindex >= 0)
+        print('Kept', len(T), 'with a match')
+        
+        ACS.flux = np.zeros(len(ACS), np.float32)
+        ACS.flux_ivar = np.zeros(len(ACS), np.float32)
+        ACS.nexp = np.zeros(len(ACS), np.uint8)
+        ACS.flux[T.acsindex] = T.flux
+        ACS.flux_ivar[T.acsindex] = T.flux_ivar
+        ACS.nexp[T.acsindex] = 1
+
+        fn = 'euclid-out/forced-vista-%s-2.fits' % band
+        ACS.writeto(fn)
+        print('Wrote', fn)
+
+    return 0
 
     ACS = read_acs_catalogs()
     print('Read', len(ACS), 'ACS catalog entries')
@@ -1252,6 +1276,12 @@ def package(opt):
                                                         ACS.objid))])
 
     keepacs = np.zeros(len(ACS), bool)
+
+    listfns = glob('euclid/images/megacam/lists/*.lst')
+
+    listnames = [os.path.basename(fn).replace('.lst','') for fn in listfns]
+    explists = [get_exposures_in_list(fn) for fn in listfns]
+    ccds = list(range(36))
 
     results = []
 
@@ -1290,21 +1320,21 @@ def package(opt):
                                      for n,o in zip(t.brickname, t.objid)])
 
                 # Find sources with existing measurements
-                I = np.flatnonzero((cflux_ivar[acsindex] > 0) * (cflux[acsindex] > 0) * (t.flux > 0))
-                if len(I) > 100:
-                    print(len(I), 'sources have previous measurements')
-                    ai = acsindex[I]
-                    cmag,cmagerr = NanoMaggies.fluxErrorsToMagErrors(
-                        cflux[ai] / np.maximum(cflux_ivar[ai], 1e-16), cflux_ivar[ai])
-                    mag,magerr = NanoMaggies.fluxErrorsToMagErrors(
-                        t.flux[I], t.flux_ivar[I])
-                    var = np.maximum(cmagerr, 0.02)**2 + np.maximum(magerr, 0.02)**2
-                    offset = np.sum((mag - cmag) * 1./var) / np.sum(1./var)
-                    print('Offset of', offset, 'mag')
-                    scale = 10.**(offset / 2.5)
-                    print('Applying scale of', scale, 'to fluxes and ivars')
-                    t.flux *= scale
-                    t.flux_ivar /= (scale**2)
+                # I = np.flatnonzero((cflux_ivar[acsindex] > 0) * (cflux[acsindex] > 0) * (t.flux > 0))
+                # if len(I) > 100:
+                #     print(len(I), 'sources have previous measurements')
+                #     ai = acsindex[I]
+                #     cmag,cmagerr = NanoMaggies.fluxErrorsToMagErrors(
+                #         cflux[ai] / np.maximum(cflux_ivar[ai], 1e-16), cflux_ivar[ai])
+                #     mag,magerr = NanoMaggies.fluxErrorsToMagErrors(
+                #         t.flux[I], t.flux_ivar[I])
+                #     var = np.maximum(cmagerr, 0.02)**2 + np.maximum(magerr, 0.02)**2
+                #     offset = np.sum((mag - cmag) * 1./var) / np.sum(1./var)
+                #     print('Offset of', offset, 'mag')
+                #     scale = 10.**(offset / 2.5)
+                #     print('Applying scale of', scale, 'to fluxes and ivars')
+                #     t.flux *= scale
+                #     t.flux_ivar /= (scale**2)
 
                 cflux     [acsindex] += t.flux * t.flux_ivar
                 cflux_ivar[acsindex] += t.flux_ivar
