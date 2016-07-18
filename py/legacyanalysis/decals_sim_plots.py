@@ -86,19 +86,48 @@ def fix_flux(fn='fix_flux.pickle'):
     fig.savefig(qafile,dpi=150,bbox_inches='tight')
     print('wrote %s' % qafile)
 
+def i_keep(tractor):
+    '''return boolean indices for which to keep and throw out'''
+    flux= tractor['decam_flux'][:,[1,2,4]]
+    grz_anymask= tractor['decam_anymask'][:,[1,2,4]]
+    grz_nobs= tractor['decam_nobs'][:,[1,2,4]]
+    b_good= np.all((flux[:,0] > 0, flux[:,1] > 0, flux[:,2] > 0, \
+                    grz_nobs[:,0] > 1,grz_nobs[:,1] > 1,grz_nobs[:,2] > 1,\
+                    grz_anymask[:,0] == 0,grz_anymask[:,1] ==0,grz_anymask[:,2] == 0),axis=0)
+    b_bad= b_good == False
+    return b_good,b_bad
 
-
-def plot_missing_src_examples(simcat,missing, brickname,lobjtype,chunksuffix, \
-                              indir=None, img_name='simscoadd',qafile='test.png'):
+def i_bright_magdiff(matched_simcat,matched_tractor):
+    '''returns three boolean masks, dmag < -median/2, -median/2 <= dmag <= median/2, dmag > median/2
+    median -- for "good" and "bright" sources'''
+    bright= dict(G=20.,R=19.,Z=18.)
+    b_good,junk= i_keep(matched_tractor)
+    med,b={},{}
+    for band,iband in zip(['G','R','Z'],[1,2,4]):
+        inputflux = matched_simcat[band+'FLUX'][b_good]
+        inputmag = 22.5-2.5*np.log10(inputflux)
+        tractorflux = matched_tractor['decam_flux'][:, iband][b_good]
+        # Median for bright sources
+        b_bright= inputmag <= bright[band]
+        mag_diff= -2.5*np.log10(inputflux/tractorflux)[b_bright]
+        med[band]= np.median(mag_diff)
+        # Three populations
+        b[band]={}
+        b['low']= mag_diff < -med[band]/2.
+        b['mid']= np.all((mag_diff >= -med[band]/2.,mag_diff <= med[band]/2.),axis=0)
+        b['hi']= mag_diff > med[band]/2.
+    return b,med
+ 
+def plot_cutouts_by_index(simcat,index, brickname,lobjtype,chunksuffix, \
+                          indir=None, img_name='simscoadd',qafile='test.png'):
     hw = 30 # half-width [pixels]
     rad = 5
-    ncols = 5
-    nrows = 5
+    ncols = 6
+    nrows = 6
     nthumb = ncols*nrows
     dims = (ncols*hw*2,nrows*hw*2)
     mosaic = Image.new('RGB',dims)
 
-    miss = missing[np.argsort(simcat['R'][missing])]
     xpos, ypos = np.meshgrid(np.arange(0, dims[0], hw*2, dtype='int'),
                              np.arange(0, dims[1], hw*2, dtype='int'))
     #imfile = os.path.join(cdir, 'qa-{}-{}-image-{}.jpg'.format(brickname, lobjtype, chunksuffix))
@@ -110,14 +139,16 @@ def plot_missing_src_examples(simcat,missing, brickname,lobjtype,chunksuffix, \
     sz = im.size
     iobj = 0
     for ic in range(ncols):
+        if iobj >= len(index) or iobj >= ncols*nrows: break
         for ir in range(nrows):
-            xx = int(simcat['X'][miss[iobj]])
-            yy = int(sz[1]-simcat['Y'][miss[iobj]])
+            if iobj >= len(index) or iobj >= ncols*nrows: break
+            xx = int(simcat['X'][index[iobj]])
+            yy = int(sz[1]-simcat['Y'][index[iobj]])
             crop = (xx-hw, yy-hw, xx+hw, yy+hw)
             box = (xpos[ir, ic], ypos[ir, ic])
             thumb = im.crop(crop)
             mosaic.paste(thumb, box)
-            iobj = iobj + 1
+            iobj+= 1
 
     # Add a border and circle the missing source.
     draw = ImageDraw.Draw(mosaic)
@@ -130,6 +161,7 @@ def plot_missing_src_examples(simcat,missing, brickname,lobjtype,chunksuffix, \
             yy = ypos[ir, ic] + hw
             draw.ellipse((xx-rad, sz[1]-yy-rad, xx+rad, sz[1]-yy+rad), outline='yellow')
     mosaic.save(qafile)
+
 
 def plot_annotated_coadds(simcat, brickname, lobjtype, chunksuffix,\
                           indir=None,img_name='simscoadd',qafile='test.png'):
@@ -271,13 +303,25 @@ def plot_tractor_minus_answer(bigsimcat,bigtractor, b_good,rminmax, log,qafile='
         inputflux = bigsimcat[band+'FLUX']
         tractorflux = bigtractor['decam_flux'][:, indx]
         tractorivar = bigtractor['decam_flux_ivar'][:, indx]
+        #import pickle
+        #fout=open('test.pickle','w')
+        #pickle.dump((tractorflux,inputflux,b_good),fout)
+        #fout.close()
+        #print('exiting early')
+        #sys.exit()
         inputmag = 22.5-2.5*np.log10(inputflux[b_good])
-        thisax.scatter(inputmag, \
-                       -2.5*np.log10(tractorflux[b_good]/inputflux[b_good]),
+        mag_diff= -2.5*np.log10(tractorflux[b_good]/inputflux[b_good])
+        thisax.scatter(inputmag, mag_diff,
                        s=10,edgecolor=thiscolor,c='none',lw=1.)
         thisax.set_ylim(-0.1,0.1)
         thisax.set_xlim(inputmag.min()-0.1, inputmag.max()+0.1)
         thisax.axhline(y=0.0,lw=2,ls='solid',color='gray')
+        #arr= np.ma.masked_array(mag_diff, mask= np.isfinite(mag_diff) == False)
+        #med= np.median(arr)
+        #print('arr=',arr)
+        b3,med= i_bright_magdiff(bigsimcat,bigtractor)
+        thisax.axhline(y=med[band],lw=2,ls='dashed',color='red',label='Median=%.3f' % med[band])
+        thisax.legend(loc='upper left',fontsize='x-small')
         #thisax.text(0.05,0.05, band.lower(), horizontalalignment='left',
                     #verticalalignment='bottom',transform=thisax.transAxes,
                     #fontsize=16)
@@ -619,12 +663,24 @@ def main():
             allsimcat = vstack((allsimcat, simcat))
 
         # Get cutouts of the missing sources in each chunk (if any)
+        if extra_plots:
+            for img_name in ['image']: #,'simscoadd']:
+                b3,med= i_bright_magdiff(simcat[m2],tractor[m1])
+                band='G'
+                for sample in ['low','mid','hi']:
+                    qafile = os.path.join(output_dir, 'qa-{}-{}-{}-bright-dmag-{}-{}-{:02d}.png'.format(\
+                                                brickname, lobjtype, img_name, band,sample, int(chunksuffix)))
+                    plot_cutouts_by_index(simcat,m2[ b3[band][sample] ], brickname,lobjtype,chunksuffix, \
+                                          indir=cdir,img_name=img_name,qafile=qafile)
+                    log.info('Wrote {}'.format(qafile))
+         
         if len(missing) > 0 and extra_plots:
-            for img_name in ['image','simscoadd']:
+            for img_name in ['image']: #,'simscoadd']:
                 qafile = os.path.join(output_dir, 'qa-{}-{}-{}-missing-{:02d}.png'.format(\
                                             brickname, lobjtype, img_name, int(chunksuffix)))
-                plot_missing_src_examples(simcat,missing, brickname,lobjtype,chunksuffix, \
-                                          indir=cdir,img_name=img_name,qafile=qafile)
+                miss = missing[np.argsort(simcat['R'][missing])]
+                plot_cutouts_by_index(simcat,miss, brickname,lobjtype,chunksuffix, \
+                                      indir=cdir,img_name=img_name,qafile=qafile)
                 log.info('Wrote {}'.format(qafile))
             
             
@@ -632,26 +688,23 @@ def main():
         # Annotate the coadd image and residual files so the simulated sources
         # are labeled.
         if extra_plots:
-            for img_name in ('simscoadd','image'): #, 'resid'):
+            #for img_name in ('simscoadd','image', 'resid'):
+                # cutouts of recovered bright sources with especially large flux diff  
                 #qafile = os.path.join(output_dir, 'qa-{}-{}-{}-{:02d}-annot.png'.format(\
                 #                      brickname, lobjtype,img_name, int(chunksuffix)))
-                #plot_annotated_coadds(simcat, brickname, lobjtype, chunksuffix, \
-                #                      indir=cdir,img_name=img_name,qafile=qafile)
-                qafile = os.path.join(output_dir, 'qa-{}-{}-{}-{:02d}-annot2.png'.format(\
+                #plot_annotated_coadds2(simcat, brickname, lobjtype, chunksuffix, \
+                #                       indir=cdir,img_name=img_name,qafile=qafile)
+            for img_name in ('simscoadd','image', 'resid'):
+                qafile = os.path.join(output_dir, 'qa-{}-{}-{}-{:02d}-annot.png'.format(\
                                       brickname, lobjtype,img_name, int(chunksuffix)))
-                plot_annotated_coadds2(simcat, brickname, lobjtype, chunksuffix, \
+                plot_annotated_coadds(simcat, brickname, lobjtype, chunksuffix, \
                                       indir=cdir,img_name=img_name,qafile=qafile)
                 log.info('Wrote {}'.format(qafile))
-            print('exitig early')
-            sys.exit()
 
     # now operate on concatenated catalogues from multiple chunks
     # Grab flags
-    grz_anymask= bigtractor['decam_anymask'][:,[1,2,4]]
-    grz_nobs= bigtractor['decam_nobs'][:,[1,2,4]]
-    b_good= np.all((grz_nobs[:,0] > 1,grz_nobs[:,1] > 1,grz_nobs[:,2] > 1,\
-                    grz_anymask[:,0] == 0,grz_anymask[:,1] ==0,grz_anymask[:,2] == 0),axis=0)
-    b_bad= b_good == False 
+    b_good,b_bad= i_keep(bigtractor)
+
     # mags and colors of ALL injected sources
     plot_injected_mags(allsimcat, log, qafile=\
            os.path.join(output_dir, 'qa-{}-{}-injected-mags.png'.format(brickname, lobjtype)))
@@ -726,4 +779,3 @@ def main():
     
 if __name__ == "__main__":
     main()
-    #fix_flux(fn='aper.pickle')
