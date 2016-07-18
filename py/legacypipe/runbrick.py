@@ -2289,11 +2289,15 @@ def stage_wise_forced(
             print('Epoch %i: %i tiles:' % (e, len(I)), W.coadd_id[I])
             edir = os.path.join(tdir, 'e%03i' % e)
             eargs.append((e, (wcat, tiles[I], band, roiradec, edir, use_ceres)))
-        
+
     phots = mp.map(_unwise_phot, args + [a for e,a in eargs])
     WISE = phots[0]
     if WISE is not None:
-        for p in phots[1:len(args)]:
+        for i,p in enumerate(phots[1:len(args)]):
+            if p is None:
+                (wcat,tiles,band,nil,nil,nil) = args[i+1]
+                print('"None" result from WISE forced phot:', tiles, band)
+                continue
             WISE.add_columns_from(p)
         WISE.rename('tile', 'unwise_tile')
 
