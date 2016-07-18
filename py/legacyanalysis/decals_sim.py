@@ -110,14 +110,8 @@ class SimImage(DecamImage):
 
         # Store simulated galaxy images in tim object 
         # Loop on each object.
-        ######
-        #in_flux= np.zeros(len(self.survey.simcat))+np.nan
-        #ap_flux= in_flux.copy()
-        #added_flux= in_flux.copy()
-        #####
         for ii, obj in enumerate(self.survey.simcat):
             if objtype == 'STAR':
-                #stamp, in_flux[ii],ap_flux[ii],added_flux[ii] = objstamp.star(obj)
                 stamp = objstamp.star(obj)
             elif objtype == 'ELG':
                 stamp = objstamp.elg(obj)
@@ -153,25 +147,7 @@ class SimImage(DecamImage):
         tim.sims_xy = tim.sims_xy.astype(int)
         tim.data = image.array
         tim.inverr = np.sqrt(invvar.array)
-        ##########
-        print('objstamp.gsparams=', objstamp.gsparams) 
-        #print('self.survey.simcat STAMP_%sFLUX/%sFLUX=' % (objstamp.band,objstamp.band),\
-        #         self.survey.simcat[objstamp.band+'FLUX']/self.survey.simcat['STAMP_'+objstamp.band+'FLUX']) 
-        print('exiting early')
-        sys.exit()
-        ##########
-        #print('min,max,median apflux/influx= ',np.min(ap_flux/in_flux),np.max(ap_flux/in_flux),np.median(ap_flux/in_flux))
-        #print('min,max,median added_flux/apflux= ',np.min(added_flux/ap_flux),np.max(added_flux/ap_flux),np.median(added_flux/ap_flux))
-        #print('exiting before write aper.pickle')
-        #sys.exit()
-        #stamp_c= np.array(stamp_c)
-        #fout=open('aper.pickle','w')
-        #dump((tim.data,tim.sims_image,self.survey.simcat,stamp_c),fout)
-        #fout.close()
-        #print('exiting after writig aper.pickle')
-        #sys.exit()
-        ##########
-
+        
         #print('HACK!!!')
         #galsim.fits.write(invvar, 'invvar.fits'.format(ii), clobber=True)
         #import pdb ; pdb.set_trace()
@@ -181,7 +157,6 @@ class BuildStamp():
     def __init__(self,tim, gain=4.0, seed=None, folding_threshold=1.e-5):
         """Initialize the BuildStamp object with the CCD-level properties we need."""
         self.band = tim.band.strip().upper()
-        # Folding_threshold chosen so that percent diff between stamp.added_flux and requested AB mag flux is < 1e-2%
         self.gsparams = galsim.GSParams(maximum_fft_size=2L**30L,\
                                         folding_threshold=folding_threshold) 
         #print('FIX ME!!!!!!!!!!!!!!!!!!!!!!!!!!!!')
@@ -273,13 +248,13 @@ class BuildStamp():
 
     def star(self,obj):
         """Render a star (PSF)."""
-        # Input flux is really 7'' aperture flux
+        # Use input flux as the 7'' aperture flux
         self.setlocal(obj)
         psf = self.localpsf.withFlux(1.)
         stamp = psf.drawImage(offset=self.offset, scale=self.pixscale, method='no_pixel')
-        # Get flux in 7'' diameter aperture
-        diam = 7/0.262 #0.262 fixed for zeropoints
-        # If aperture larger than stamp, Redraw with stamp 2 pix larger than aperture
+        # Fraction flux in 7'', FIXED pixelscale
+        diam = 7/0.262
+        # Aperture fits on stamp
         width= stamp.bounds.xmax-stamp.bounds.xmin
         height= stamp.bounds.ymax-stamp.bounds.ymin
         if diam > width and diam > height:
@@ -287,27 +262,26 @@ class BuildStamp():
             stamp = psf.drawImage(nx=nxy,ny=nxy, offset=self.offset, scale=self.pixscale, method='no_pixel')
         assert(diam <= float(stamp.bounds.xmax-stamp.bounds.xmin))
         assert(diam <= float(stamp.bounds.ymax-stamp.bounds.ymin))
-        # Aperture fits on stamp
+        # Aperture photometry
         apers= photutils.CircularAperture((stamp.trueCenter().x,stamp.trueCenter().y), r=diam/2)
         apy_table = photutils.aperture_photometry(stamp.array, apers)
         apflux= np.array(apy_table['aperture_sum'])[0]
-        # Set total flux in stamp to 7'' flux + extra
+        # Incrase flux so input flux contained in aperture
         flux = obj[self.band+'FLUX']*(2.-apflux/stamp.added_flux) # [nanomaggies]
         psf = self.localpsf.withFlux(flux)
         stamp = psf.drawImage(offset=self.offset, scale=self.pixscale, method='no_pixel')
-        #stamp looses less than 0.01% of requested flux
+        # stamp looses less than 0.01% of requested flux
         if stamp.added_flux/flux <= 0.9999:
             print('WARNING: stamp lost more than 0.01% of requested flux, stamp_flux/flux=',stamp.added_flux/flux)
-        ######## test if obj[self.band+'FLUX'] really is in the 7'' aperture
+        # test if obj[self.band+'FLUX'] really is in the 7'' aperture
         #apers= photutils.CircularAperture((stamp.trueCenter().x,stamp.trueCenter().y), r=diam/2)
         #apy_table = photutils.aperture_photometry(stamp.array, apers)
         #apflux= np.array(apy_table['aperture_sum'])[0]
         #print("7'' flux/input flux= ",apflux/obj[self.band+'FLUX'])
+        
         # Convert stamp's center to its corresponding center on full tractor image
         stamp.setCenter(self.xpos, self.ypos)
-        
-        #print('pixelscale=%.5f, input flux=%.3f, apflux=%.3f, stamp flux=%.3f' % (self.pixscale,flux,apflux,stamp.added_flux))
-        return stamp #, flux,apflux,stamp.added_flux
+        return stamp 
 
     def elg(self,objinfo):
         """Create an ELG (disk-like) galaxy."""
