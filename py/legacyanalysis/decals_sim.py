@@ -140,7 +140,7 @@ class SimImage(DecamImage):
                 #galsim.fits.write(ivarstamp, 'ivarstamp-{:02d}.fits'.format(ii), clobber=True)
 
                 if np.min(sims_ivar.array) < 0:
-                    print('Negative invvar!')
+                    log.warning('Negative invvar!')
                     import pdb ; pdb.set_trace()
         tim.sims_image = sims_image.array
         tim.sims_inverr = np.sqrt(sims_ivar.array)
@@ -272,7 +272,7 @@ class BuildStamp():
         stamp = psf.drawImage(offset=self.offset, scale=self.pixscale, method='no_pixel')
         # stamp looses less than 0.01% of requested flux
         if stamp.added_flux/flux <= 0.9999:
-            print('WARNING: stamp lost more than 0.01% of requested flux, stamp_flux/flux=',stamp.added_flux/flux)
+            log.warning('stamp lost more than 0.01% of requested flux, stamp_flux/flux=%.7f',stamp.added_flux/flux)
         # test if obj[self.band+'FLUX'] really is in the 7'' aperture
         #apers= photutils.CircularAperture((stamp.trueCenter().x,stamp.trueCenter().y), r=diam/2)
         #apy_table = photutils.aperture_photometry(stamp.array, apers)
@@ -374,6 +374,7 @@ def no_overlapping_radec(ra,dec, bounds, random_state=None, dist=5.0/3600):
     dist-- separation in degrees, 
            sqrt(x^2+y^2) where x=(dec2-dec1), y=cos(avg(dec2,dec1))*(ra2-ra1)
     '''
+    log = logging.getLogger('decals_sim')
     if random_state is None:
         random_state = np.random.RandomState()
     # ra,dec indices of just neighbors within "dist" away, just nerest neighbor of those
@@ -381,21 +382,22 @@ def no_overlapping_radec(ra,dec, bounds, random_state=None, dist=5.0/3600):
                               dist, nearest=True,notself=True) 
 
     cnt = 1
-    print("after iter=%d, have overlapping ra,dec %d/%d" % (cnt, len(m2),ra.shape[0]))
+    log.info("after iter=%d, have overlapping ra,dec %d/%d", cnt, len(m2),ra.shape[0])
     while len(m2) > 0:
         ra[m2]= random_state.uniform(bounds[0], bounds[1], len(m2))
         dec[m2]= random_state.uniform(bounds[2], bounds[3], len(m2))
         m1, m2, d12 = match_radec(ra.copy(),dec.copy(), ra.copy(),dec.copy(),\
                                   dist, nearest=True,notself=True) 
         cnt += 1
-        print("after iter=%d, have overlapping ra,dec %d/%d" % (cnt, len(m2),ra.shape[0]))
+        log.info("after iter=%d, have overlapping ra,dec %d/%d", cnt, len(m2),ra.shape[0])
         if cnt > 30:
-            print('Crash, could not get non-overlapping ra,dec in 30 iterations')
+            log.error('Crash, could not get non-overlapping ra,dec in 30 iterations')
             raise ValueError
     return ra, dec
 
 def build_simcat(nobj=None, brickname=None, brickwcs=None, meta=None, seed=None, noOverlap=True):
     """Build the simulated object catalog, which depends on OBJTYPE."""
+    log = logging.getLogger('decals_sim')
 
     rand = np.random.RandomState(seed)
 
@@ -451,7 +453,7 @@ def build_simcat(nobj=None, brickname=None, brickwcs=None, meta=None, seed=None,
         #bdratio_range = [0.0,1.0] # bulge-to-disk ratio
 
     else:
-        print('Unrecognized OBJTYPE!')
+        log.error('Unrecognized OBJTYPE!')
         return 0
 
     # For convenience, also store the grz fluxes in nanomaggies.
@@ -507,16 +509,130 @@ def get_parser():
                         help='add this option to make the JPGs before detection/model fitting')
     parser.add_argument('-v', '--verbose', action='store_true', help='toggle on verbose output')
     return parser
-   
-def get_metadata_other(args=None):
+ 
+def create_metadata(kwargs=None):
     '''Parses input and returns dict containing 
     metatable,seeds,brickwcs, other goodies'''
-    # Tell parser options to look for
-    parser= get_parser()    
-    # If args is not None the input args are used instead of command line
-    args = parser.parse_args(args=args)
-    print('decals_sim.py args: ',args)
+    assert(kwargs is not None)
+    log = logging.getLogger('decals_sim')
+    # Pack the input parameters into a meta-data table and write out.
+    metacols = [
+        ('BRICKNAME', 'S10'),
+        ('OBJTYPE', 'S10'),
+        ('NOBJ', 'i4'),
+        ('CHUNKSIZE', 'i2'),
+        ('NCHUNK', 'i2'),
+        ('ZOOM', 'i4', (4,)),
+        ('SEED', 'S20'),
+        ('RMAG_RANGE', 'f4', (2,))]
+    metacat = Table(np.zeros(1, dtype=metacols))
 
+    metacat['BRICKNAME'] = kwargs['brickname']
+    metacat['OBJTYPE'] =kwargs['objtype']
+    metacat['NOBJ'] = kwargs['args'].nobj
+    metacat['NCHUNK'] = kwargs['nchunk']
+    metacat['ZOOM'] = kwargs['args'].zoom
+    metacat['RMAG_RANGE'] = kwargs['args'].rmag_range
+    if not kwargs['args'].seed:
+        log.info('Random seed = {}'.format(kwargs['args'].seed))
+        metacat['SEED'] = kwargs['args'].seed
+   
+    metacat_dir = os.path.join(kwargs['decals_sim_dir'], kwargs['brickname'], kwargs['lobjtype'])    
+    if not os.path.exists(metacat_dir): 
+        os.makedirs(metacat_dir)
+    
+    metafile = os.path.join(metacat_dir, 'metacat-{}-{}.fits'.format(kwargs['brickname'], kwargs['lobjtype']))
+    log.info('Writing {}'.format(metafile))
+    if os.path.isfile(metafile):
+        os.remove(metafile)
+    metacat.write(metafile)
+    
+    # Store new stuff
+    kwargs['metacat']=metacat
+    kwargs['metacat_dir']=metacat_dir
+
+
+def create_ith_simcat(ith_chunk, d=None):
+    '''add simcat, simcat_dir to dict d
+    simcat -- contains randomized ra,dec and PDF fluxes etc for ith chunk
+    d -- dict returned by get_metadata_others()'''
+    assert(d is not None)
+    log = logging.getLogger('decals_sim')
+    chunksuffix = '{:02d}'.format(ith_chunk)
+    # Build and write out the simulated object catalog.
+    seed= d['seeds'][ith_chunk]
+    simcat = build_simcat(d['nobj'], d['brickname'], d['brickwcs'], d['metacat'], seed)
+    # Save file
+    simcat_dir = os.path.join(d['metacat_dir'],'%3.3d' % ith_chunk)    
+    if not os.path.exists(simcat_dir): 
+        os.makedirs(simcat_dir)
+    simcatfile = os.path.join(simcat_dir, 'simcat-{}-{}-{}.fits'.format(d['brickname'], d['lobjtype'], chunksuffix))
+    log.info('Writing {}'.format(simcatfile))
+    if os.path.isfile(simcatfile):
+        os.remove(simcatfile)
+    simcat.write(simcatfile)
+    # add to dict
+    d['simcat']= simcat
+    d['simcat_dir']= simcat_dir
+
+def do_one_chunk(d=None):
+    '''Run tractor
+    Can be run as 1) a loop over nchunks or 2) for one chunk
+    d -- dict returned by get_metadata_others() AND added to by get_ith_simcat()'''
+    assert(d is not None)
+    simdecals = SimDecals(metacat=d['metacat'], simcat=d['simcat'], output_dir=d['simcat_dir'], \
+                          add_sim_noise=d['args'].add_sim_noise, folding_threshold=d['args'].folding_threshold)
+    # Use Tractor to just process the blobs containing the simulated sources.
+    if d['args'].all_blobs:
+        blobxy = None
+    else:
+        blobxy = zip(d['simcat']['X'], d['simcat']['Y'])
+
+    run_brick(d['brickname'], simdecals, threads=d['args'].threads, zoom=d['args'].zoom,
+              wise=False, forceAll=True, writePickles=False, do_calibs=False,
+              write_metrics=False, pixPsf=True, blobxy=blobxy, early_coadds=d['args'].early_coadds,
+              splinesky=True, ceres=False, stages=[ d['args'].stage ], plots=False,
+              plotbase='sim')
+
+def do_ith_cleanup(ith_chunk=None, d=None):
+    '''for each chunk that finishes running, 
+    Remove unecessary files and give unique names to all others
+    d -- dict returned by get_metadata_others() AND added to by get_ith_simcat()'''
+    assert(ith_chunk is not None and d is not None) 
+    log = logging.getLogger('decals_sim')
+    log.info('Cleaning up...')
+    chunksuffix = '{:02d}'.format(ith_chunk)
+    brickname= d['brickname']
+    output_dir= d['simcat_dir']
+    lobjtype= d['lobjtype'] 
+    shutil.copy(os.path.join(output_dir, 'tractor', brickname[:3],
+                             'tractor-{}.fits'.format(brickname)),
+                os.path.join(output_dir, 'tractor-{}-{}-{}.fits'.format(
+                    brickname, lobjtype, chunksuffix)))
+    for suffix in ('image', 'model', 'resid', 'simscoadd'):
+        shutil.copy(os.path.join(output_dir,'coadd', brickname[:3], brickname,
+                                 'legacysurvey-{}-{}.jpg'.format(brickname, suffix)),
+                                 os.path.join(output_dir, 'qa-{}-{}-{}-{}.jpg'.format(
+                                     brickname, lobjtype, suffix, chunksuffix)))
+    shutil.rmtree(os.path.join(output_dir, 'coadd'))
+    shutil.rmtree(os.path.join(output_dir, 'tractor'))
+    log.info("Finished chunk %3.3d" % ith_chunk)
+
+
+def main(args=None):
+    """Main routine which parses the optional inputs."""
+    # Command line options
+    parser= get_parser()    
+    args = parser.parse_args(args=args)
+    # Setup loggers
+    if args.verbose:
+        lvl = logging.DEBUG
+    else:
+        lvl = logging.INFO
+    logging.basicConfig(level=lvl, stream=sys.stdout) #,format='%(message)s')
+    log = logging.getLogger('decals_sim')
+    # Sort through args 
+    log.info('decals_sim.py args={}'.format(args))
     max_nobj=500
     max_nchunk=1000
     if args.ith_chunk is not None: assert(args.ith_chunk <= max_nchunk-1)
@@ -527,15 +643,7 @@ def get_metadata_other(args=None):
     if args.nobj is None:
         parser.print_help()
         sys.exit(1)
-
-    # Set the debugging level
-    if args.verbose:
-        lvl = logging.DEBUG
-    else:
-        lvl = logging.INFO
-    logging.basicConfig(format='%(message)s', level=lvl, stream=sys.stdout)
-    log = logging.getLogger('__name__')
-
+ 
     brickname = args.brick
     objtype = args.objtype.upper()
     lobjtype = objtype.lower()
@@ -579,135 +687,35 @@ def get_metadata_other(args=None):
     radec_center = brickwcs.radec_center()
     log.info('RA, Dec center = {}'.format(radec_center))
     log.info('Brick = {}'.format(brickname))
-
-    # Pack the input parameters into a meta-data table and write out.
-    metacols = [
-        ('BRICKNAME', 'S10'),
-        ('OBJTYPE', 'S10'),
-        ('NOBJ', 'i4'),
-        ('CHUNKSIZE', 'i2'),
-        ('NCHUNK', 'i2'),
-        ('ZOOM', 'i4', (4,)),
-        ('SEED', 'S20'),
-        ('RMAG_RANGE', 'f4', (2,))]
-    metacat = Table(np.zeros(1, dtype=metacols))
-
-    metacat['BRICKNAME'] = brickname
-    metacat['OBJTYPE'] = objtype
-    metacat['NOBJ'] = args.nobj
-    metacat['NCHUNK'] = nchunk
-    metacat['ZOOM'] = args.zoom
-    metacat['RMAG_RANGE'] = args.rmag_range
-    if not args.seed:
-        log.info('Random seed = {}'.format(args.seed))
-        metacat['SEED'] = args.seed
-   
-    metacat_dir = os.path.join(decals_sim_dir, brickname,lobjtype)    
-    if not os.path.exists(metacat_dir): 
-        os.makedirs(metacat_dir)
     
-    metafile = os.path.join(metacat_dir, 'metacat-{}-{}.fits'.format(brickname, lobjtype))
-    log.info('Writing {}'.format(metafile))
-    if os.path.isfile(metafile):
-        os.remove(metafile)
-    metacat.write(metafile)
-    
-    # With this can get simcat for each chunk
-    return dict(seeds=seeds,\
+    if args.ith_chunk is not None: 
+        chunk_list= [args.ith_chunk]
+    else: 
+        chunk_list= range(nchunk)
+
+    # Store args in dict for easy func passing
+    kwargs=dict(seeds=seeds,\
                 brickname=brickname, \
-                metacat=metacat,\
                 decals_sim_dir= decals_sim_dir,\
                 brickwcs= brickwcs, \
+                objtype=objtype,\
                 lobjtype=lobjtype,\
                 nobj=nobj,\
-                log=log,\
                 nchunk=nchunk,\
-                metacat_dir=metacat_dir,\
-                args=args)
-
-def get_ith_simcat(ith_chunk, d=None):
-    '''add simcat, simcat_dir to dict d
-    simcat -- contains randomized ra,dec and PDF fluxes etc for ith chunk
-    d -- dict returned by get_metadata_others()'''
-    assert(d is not None)
-    chunksuffix = '{:02d}'.format(ith_chunk)
-    # Build and write out the simulated object catalog.
-    seed= d['seeds'][ith_chunk]
-    simcat = build_simcat(d['nobj'], d['brickname'], d['brickwcs'], d['metacat'], seed)
-    # Save file
-    simcat_dir = os.path.join(d['metacat_dir'],'%3.3d' % ith_chunk)    
-    if not os.path.exists(simcat_dir): 
-        os.makedirs(simcat_dir)
-    simcatfile = os.path.join(simcat_dir, 'simcat-{}-{}-{}.fits'.format(d['brickname'], d['lobjtype'], chunksuffix))
-    d['log'].info('Writing {}'.format(simcatfile))
-    if os.path.isfile(simcatfile):
-        os.remove(simcatfile)
-    simcat.write(simcatfile)
-    # add to dict
-    d['simcat']= simcat
-    d['simcat_dir']= simcat_dir
-
-def do_one_chunk(d=None):
-    '''Run tractor
-    Can be run as 1) a loop over nchunks or 2) for one chunk
-    d -- dict returned by get_metadata_others() AND added to by get_ith_simcat()'''
-    assert(d is not None)
-    simdecals = SimDecals(metacat=d['metacat'], simcat=d['simcat'], output_dir=d['simcat_dir'], \
-                          add_sim_noise=d['args'].add_sim_noise, folding_threshold=d['args'].folding_threshold)
-    # Use Tractor to just process the blobs containing the simulated sources.
-    if d['args'].all_blobs:
-        blobxy = None
-    else:
-        blobxy = zip(d['simcat']['X'], d['simcat']['Y'])
-
-    run_brick(d['brickname'], simdecals, threads=d['args'].threads, zoom=d['args'].zoom,
-              wise=False, forceAll=True, writePickles=False, do_calibs=False,
-              write_metrics=False, pixPsf=True, blobxy=blobxy, early_coadds=d['args'].early_coadds,
-              splinesky=True, ceres=False, stages=[ d['args'].stage ], plots=False,
-              plotbase='sim')
-
-def do_ith_cleanup(ith_chunk=None, d=None):
-    '''for each chunk that finishes running, 
-    Remove unecessary files and give unique names to all others
-    d -- dict returned by get_metadata_others() AND added to by get_ith_simcat()'''
-    assert(ith_chunk is not None and d is not None) 
-    d['log'].info('Cleaning up...')
-    chunksuffix = '{:02d}'.format(ith_chunk)
-    brickname= d['brickname']
-    output_dir= d['simcat_dir']
-    lobjtype= d['lobjtype'] 
-    shutil.copy(os.path.join(output_dir, 'tractor', brickname[:3],
-                             'tractor-{}.fits'.format(brickname)),
-                os.path.join(output_dir, 'tractor-{}-{}-{}.fits'.format(
-                    brickname, lobjtype, chunksuffix)))
-    for suffix in ('image', 'model', 'resid', 'simscoadd'):
-        shutil.copy(os.path.join(output_dir,'coadd', brickname[:3], brickname,
-                                 'legacysurvey-{}-{}.jpg'.format(brickname, suffix)),
-                                 os.path.join(output_dir, 'qa-{}-{}-{}-{}.jpg'.format(
-                                     brickname, lobjtype, suffix, chunksuffix)))
-    shutil.rmtree(os.path.join(output_dir, 'coadd'))
-    shutil.rmtree(os.path.join(output_dir, 'tractor'))
-    d['log'].info("Finished chunk %3.3d" % ith_chunk)
-
-
-def main(args=None):
-    """Main routine which parses the optional inputs."""
-    # Get info that is independent of chunks
-    kwargs= get_metadata_other(args=args)
+                args=args) 
+    
+    # Create simulated catalogues and run Tractor
+    create_metadata(kwargs=kwargs)
     # do chunks
-    if kwargs['args'].ith_chunk is not None: 
-        chunk_list= [kwargs['args'].ith_chunk]
-    else: 
-        chunk_list= range(kwargs['nchunk'])
     for ith_chunk in chunk_list:
-        kwargs['log'].info('Working on chunk {:02d}/{:02d}'.format(ith_chunk,kwargs['nchunk']-1))
+        log.info('Working on chunk {:02d}/{:02d}'.format(ith_chunk,kwargs['nchunk']-1))
         # Random ra,dec and source properties
-        get_ith_simcat(ith_chunk, d=kwargs)
+        create_ith_simcat(ith_chunk, d=kwargs)
         # Run tractor
         do_one_chunk(d=kwargs)
         # Clean up output
         do_ith_cleanup(ith_chunk=ith_chunk, d=kwargs)
-    kwargs['log'].info('All done!')
+    log.info('All done!')
      
 if __name__ == '__main__':
     main()
