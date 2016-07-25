@@ -533,10 +533,10 @@ def main():
         log.info('Reading {}'.format(tractorfile))
         tractor = Table(fits.getdata(tractorfile, 1))
         # Match
-        m1, m2, d12 = match_radec(tractor['ra'].copy(), tractor['dec'].copy(),
-                                  simcat['RA'].copy(), simcat['DEC'].copy(), 1.0/3600.0)
-        #m1, m2, d12 = matching.johan_tree(tractor['ra'].copy(), tractor['dec'].copy(),\
-        #                                    simcat['RA'].copy(), simcat['DEC'].copy(), dsmax=1.0/3600.0)
+        #m1, m2, d12 = match_radec(tractor['ra'].copy(), tractor['dec'].copy(),
+        #                          simcat['RA'].copy(), simcat['DEC'].copy(), 1.0/3600.0)
+        m1, m2, d12 = matching.johan_tree(tractor['ra'].copy(), tractor['dec'].copy(),\
+                                            simcat['RA'].copy(), simcat['DEC'].copy(), dsmax=1.0/3600.0)
         print('matched %d/%d' % (len(m2),len(simcat['RA'])))
 
         missing = np.delete(np.arange(len(simcat)), m2, axis=0)
@@ -560,7 +560,7 @@ def main():
 
         # Get cutouts of the bright matched sources with small/large delta mag 
         if extra_plots:
-            for img_name in ['image','resid']:
+            for img_name in ['image','resid','simscoadd']:
                 # Indices of large and small dmag
                 junk,i_large_dmag,i_small_dmag= bright_dmag_cut(simcat[m2],tractor[m1])
                 # Large dmag cutouts

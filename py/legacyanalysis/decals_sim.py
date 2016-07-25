@@ -66,13 +66,16 @@ from pickle import dump
 
 class SimDecals(LegacySurveyData):
     def __init__(self, survey_dir=None, metacat=None, simcat=None, output_dir=None,\
-                       add_sim_noise=False, folding_threshold=1.e-5):
+                       add_sim_noise=False, folding_threshold=1.e-5, image_eq_model=False):
         '''folding_threshold -- make smaller to increase stamp_flux/input_flux'''
         super(SimDecals, self).__init__(survey_dir=survey_dir, output_dir=output_dir)
         self.metacat = metacat
         self.simcat = simcat
+        # Additional options from command line
         self.add_sim_noise= add_sim_noise
         self.folding_threshold= folding_threshold
+        self.image_eq_model= image_eq_model
+        print('SimDecals: self.image_eq_model=',self.image_eq_model)
 
     def get_image_object(self, t):
         return SimImage(self, t)
@@ -145,8 +148,14 @@ class SimImage(DecamImage):
         tim.sims_image = sims_image.array
         tim.sims_inverr = np.sqrt(sims_ivar.array)
         tim.sims_xy = tim.sims_xy.astype(int)
-        tim.data = image.array
-        tim.inverr = np.sqrt(invvar.array)
+        # Can set image=model, ivar=1/model for testing
+        if self.survey.image_eq_model:
+            tim.data = sims_image.array.copy()
+            tim.inverr = np.zeros(tim.data.shape)
+            tim.inverr[sims_image.array > 0.] = np.sqrt(1./sims_image.array.copy()[sims_image.array > 0.]) 
+        else:
+            tim.data = image.array
+            tim.inverr = np.sqrt(invvar.array)
         
         #print('HACK!!!')
         #galsim.fits.write(invvar, 'invvar.fits'.format(ii), clobber=True)
@@ -501,6 +510,7 @@ def get_parser():
                         help='r-band magnitude range')
     parser.add_argument('--add_sim_noise', action="store_true", help="set to add noise to simulated sources")
     parser.add_argument('--folding_threshold', type=float,default=1.e-5,action="store", help="for galsim.GSParams")
+    parser.add_argument('-testA','--image_eq_model', action="store_true", help="set to set image,inverr by model only (ignore real image,invvar)")
     parser.add_argument('--all-blobs', action='store_true', 
                         help='Process all the blobs, not just those that contain simulated sources.')
     parser.add_argument('--stage', choices=['tims', 'image_coadds', 'srcs', 'fitblobs', 'coadds'],
@@ -581,7 +591,8 @@ def do_one_chunk(d=None):
     d -- dict returned by get_metadata_others() AND added to by get_ith_simcat()'''
     assert(d is not None)
     simdecals = SimDecals(metacat=d['metacat'], simcat=d['simcat'], output_dir=d['simcat_dir'], \
-                          add_sim_noise=d['args'].add_sim_noise, folding_threshold=d['args'].folding_threshold)
+                          add_sim_noise=d['args'].add_sim_noise, folding_threshold=d['args'].folding_threshold,\
+                          image_eq_model=d['args'].image_eq_model)
     # Use Tractor to just process the blobs containing the simulated sources.
     if d['args'].all_blobs:
         blobxy = None
