@@ -20,6 +20,7 @@ from astrometry.util.fits import fits_table, merge_tables
 from astrometry.util.util import wcs_pv2sip_hdr
 from astrometry.util.plotutils import PlotSequence, plothist, loghist
 from astrometry.util.ttime import Time, MemMeas
+from astrometry.util.multiproc import multiproc
 
 from legacypipe.runbrick import run_brick, rgbkwargs, rgbkwargs_resid
 from legacypipe.common import LegacySurveyData, imsave_jpeg, get_rgb
@@ -42,6 +43,74 @@ allbands = 'I'
 
 
 def make_zeropoints():
+    C = fits_table()
+    C.image_filename = []
+    C.image_hdu = []
+    C.camera = []
+    C.expnum = []
+    C.filter = []
+    C.exptime = []
+    C.crpix1 = []
+    C.crpix2 = []
+    C.crval1 = []
+    C.crval2 = []
+    C.cd1_1 = []
+    C.cd1_2 = []
+    C.cd2_1 = []
+    C.cd2_2 = []
+    C.width = []
+    C.height = []
+    C.ra = []
+    C.dec = []
+    C.ccdzpt = []
+    C.ccdname = []
+    C.ccdraoff = []
+    C.ccddecoff = []
+    C.fwhm = []
+    C.propid = []
+    C.mjd_obs = []
+    
+    base = 'euclid/images/'
+    for iband,band in enumerate(['Y','J','H']):
+        fn = base + 'vista/UVISTA_%s_DR1_CFHT.fits' % band
+        hdu = 0
+        hdr = fitsio.read_header(fn, ext=hdu)
+        C.image_hdu.append(hdu)
+        C.image_filename.append(fn.replace(base,''))
+        C.camera.append('vista')
+        expnum = iband + 1
+        C.expnum.append(expnum)
+        C.filter.append(band)
+        C.exptime.append(hdr['EXPTIME'])
+        C.ccdzpt.append(hdr['MAGZEROP'])
+        for k in ['CRPIX1','CRPIX2','CRVAL1','CRVAL2','CD1_1','CD1_2','CD2_1','CD2_2']:
+            C.get(k.lower()).append(hdr[k])
+        C.width.append(hdr['NAXIS1'])
+        C.height.append(hdr['NAXIS2'])
+            
+        wcs = wcs_pv2sip_hdr(hdr)
+        rc,dc = wcs.radec_center()
+        C.ra.append(rc)
+        C.dec.append(dc)
+
+        psffn = fn.replace('.fits', '_psfex.psf')
+        psfhdr = fitsio.read_header(psffn, ext=1)
+        fwhm = psfhdr['PSF_FWHM']
+        C.fwhm.append(fwhm)
+        
+        C.ccdname.append('0')
+        C.ccdraoff.append(0.)
+        C.ccddecoff.append(0.)
+        C.propid.append('0')
+        C.mjd_obs.append(0.)
+        
+    C.to_np_arrays()
+    fn = 'euclid/survey-ccds-vista.fits.gz'
+    C.writeto(fn)
+    print('Wrote', fn)
+
+    return
+
     C = fits_table()
     C.image_filename = []
     C.image_hdu = []
@@ -271,13 +340,16 @@ class MegacamImage(LegacySurveyImage):
     def __init__(self, *args, **kwargs):
         super(MegacamImage, self).__init__(*args, **kwargs)
 
-        self.psffn = self.imgfn.replace('p.fits', 'p_psfex.psf')
+        #self.psffn = self.imgfn.replace('p.fits', 'p_psfex.psf')
+        self.psffn = self.imgfn.replace('.fits', '_psfex.psf')
         assert(self.psffn != self.imgfn)
 
-        self.wtfn = self.imgfn.replace('p.fits', 'p_weight.fits')
+        #self.wtfn = self.imgfn.replace('p.fits', 'p_weight.fits')
+        self.wtfn = self.imgfn.replace('.fits', '_weight.fits')
         assert(self.wtfn != self.imgfn)
 
-        self.dqfn = self.imgfn.replace('p.fits', 'p_flag.fits')
+        #self.dqfn = self.imgfn.replace('p.fits', 'p_flag.fits')
+        self.dqfn = self.imgfn.replace('.fits', '_flag.fits')
         assert(self.dqfn != self.imgfn)
         
         self.name = 'MegacamImage: %i-%s' % (self.expnum, self.ccdname)
@@ -335,6 +407,36 @@ class MegacamImage(LegacySurveyImage):
         return sky
 
 
+class VistaImage(MegacamImage):
+    def __init__(self, *args, **kwargs):
+        super(VistaImage, self).__init__(*args, **kwargs)
+        self.name = 'VistaImage: %i-%s %s' % (self.expnum, self.ccdname, self.band)
+        self.wtfn = self.wtfn.replace('_weight.fits', '.weight.fits')
+        self.dqfn = self.dqfn.replace('_flag.fits', '.flg.fits')
+        assert(self.dqfn != self.imgfn)
+        assert(self.wtfn != self.imgfn)
+
+    def read_invvar(self, clip=True, **kwargs):
+        '''
+        Reads the inverse-variance (weight) map image.
+        '''
+        print('Reading weight map', self.wtfn, 'ext', self.hdu)
+        iv = self._read_fits(self.wtfn, self.hdu, **kwargs)
+        print('Read', iv.shape, iv.dtype)
+        print('Range', iv.min(), iv.max(), 'median', np.median(iv))
+        return iv
+
+    def read_dq(self, **kwargs):
+        '''
+        Reads the Data Quality (DQ) mask image.
+        '''
+        print('Reading data quality image', self.dqfn, 'ext', self.hdu)
+        dq = self._read_fits(self.dqfn, self.hdu, **kwargs)
+        print('Got', dq.dtype, dq.shape)
+        print('Blanking out bit 1...')
+        dq -= (dq & 1)
+        return dq
+
 
 # Hackily defined RA,Dec values that split the ACS 7x7 tiling into
 # distinct 'bricks'
@@ -387,6 +489,7 @@ def get_survey():
     survey = LegacySurveyData(survey_dir='euclid', output_dir='euclid-out')
     survey.image_typemap['acs-vis'] = AcsVisImage
     survey.image_typemap['megacam'] = MegacamImage
+    survey.image_typemap['vista'] = VistaImage
     return survey
 
 def get_exposures_in_list(fn):
@@ -755,6 +858,67 @@ def analyze3(opt):
         ['z.SNR08-BIQ', 'z.SNR06-LIQ', 'z.SNR06-HIQ', 'z.PC.Shallow'],
         ]
 
+    allnames = []
+    for n1,n2 in zip(name1s, name2s):
+        allnames.append(n1)
+        allnames.extend(n2)
+
+    for name in allnames:
+        F = fits_table('euclid-out/forced-%s.fits' % name)
+
+        F.fluxsn = F.flux * np.sqrt(F.flux_ivar)
+        F.mag = -2.5 * (np.log10(F.flux) - 9.)
+
+        I = np.flatnonzero(F.type == 'PSF ')
+        print(len(I), 'PSF')
+        P = F[I]
+
+        I = np.flatnonzero(F.type == 'SIMP')
+        print(len(I), 'SIMP')
+        S = F[I]
+    
+        plt.clf()
+        plt.semilogx(F.fluxsn, F.mag, 'k.', alpha=0.01)
+        plt.semilogx(P.fluxsn, P.mag, 'r.', alpha=0.01)
+        plt.semilogx(S.fluxsn, S.mag, 'b.', alpha=0.01)
+        plt.xlabel('Megacam forced-photometry Flux S/N')
+        plt.ylabel('Megacam forced-photometry mag')
+
+        #plt.xlim(1., 1e4)
+        #plt.ylim(16, 26)
+        plt.xlim(1., 100.)
+        plt.ylim(22., 28.)
+
+        J = np.flatnonzero((P.fluxsn > 4.5) * (P.fluxsn < 5.5))
+        print(len(J), 'between flux S/N 4.5 and 5.5')
+        medmag_psf = np.median(P.mag[J])
+        print('Median mag', medmag_psf)
+        plt.axvline(5., color='r', alpha=0.5, lw=2)
+        plt.axvline(5., color='k', alpha=0.5)
+        plt.axhline(medmag_psf, color='r', alpha=0.5, lw=2)
+        plt.axhline(medmag_psf, color='k', alpha=0.5)
+
+        J = np.flatnonzero((S.fluxsn > 4.5) * (S.fluxsn < 5.5))
+        print(len(J), 'SIMP between flux S/N 4.5 and 5.5')
+        medmag_simp = np.median(S.mag[J])
+        print('Median mag', medmag_simp)
+        plt.axhline(medmag_simp, color='b', alpha=0.5, lw=2)
+        plt.axhline(medmag_simp, color='k', alpha=0.5)
+
+        plt.title('Megacam forced-photometered from ACS-VIS: %s' % name)
+
+        ax = plt.axis()
+        p1 = plt.semilogx([0],[0], 'k.')
+        p2 = plt.semilogx([0], [0], 'r.')
+        p3 = plt.semilogx([0], [0], 'b.')
+        plt.legend((p1[0], p2[0], p3[0]),
+                   ('All sources',
+                    'Point sources (~%.2f @ 5 sigma)' % medmag_psf,
+                    '"Simple" galaxies (~%.2f @ 5 sigma)' % medmag_simp))
+                    
+        plt.axis(ax)
+        ps.savefig()
+
     for name1,N2 in zip(name1s, name2s):
         T1 = fits_table('euclid-out/forced-%s.fits' % name1)
         for name2 in N2:
@@ -770,6 +934,221 @@ def analyze3(opt):
             plt.xlabel(name1 + ' flux')
             plt.ylabel(name2 + ' flux')
             ps.savefig()
+
+
+def analyze4(opt):
+    ps = PlotSequence('euclid')
+
+    names = ['r.SNR10-HIQ',
+             'r.SNR12-LIQ', 'r.SNR10-LIQ', 'r.SNR08-MIQ', 'r.PC.Shallow']
+    exps = [get_exposures_in_list('euclid/images/megacam/lists/%s.lst' % n)
+            for n in names]
+
+    name_to_exps = dict(zip(names, exps))
+
+    uexps = np.unique(np.hstack(exps))
+    print('Unique exposures:', uexps)
+
+    e1 = uexps[0]
+    e2 = uexps[1]
+
+    for e1,e2 in zip(uexps[::2], uexps[1::2]):
+        TT1 = []
+        TT2 = []
+
+        plt.clf()
+
+        for ccd in range(36):
+            fn1 = os.path.join('euclid-out', 'forced',
+                               'megacam-%s-ccd%02i.fits' % (e1, ccd))
+            fn2 = os.path.join('euclid-out', 'forced',
+                               'megacam-%s-ccd%02i.fits' % (e2, ccd))
+            T1 = fits_table(fn1)
+            T2 = fits_table(fn2)
+            print(len(T1), 'from', fn1)
+            print(len(T2), 'from', fn2)
+    
+            imap = dict([((n,o),i) for i,(n,o) in enumerate(zip(T1.brickname,
+                                                                T1.objid))])
+            imatch = np.array([imap.get((n,o), -1) for n,o in zip(T2.brickname, T2.objid)])
+            T2.cut(imatch >= 0)
+            T1.cut(imatch[imatch >= 0])
+            print(len(T1), 'matched')
+    
+            I = np.flatnonzero((T1.flux_ivar_r > 0) * (T2.flux_ivar_r > 0))
+            T1.cut(I)
+            T2.cut(I)
+            print(len(T1), 'good')
+
+            TT1.append(T1)
+            TT2.append(T2)
+
+            n,b,p = plt.hist((T1.flux_r - T2.flux_r) / np.sqrt(1./T1.flux_ivar_r + 1./T2.flux_ivar_r),
+                             range=(-5, 5), bins=100,
+                             histtype='step', color='k', label='All sources', normed=True)
+
+        binc = (b[1:] + b[:-1])/2.
+        yy = np.exp(-0.5 * binc**2)
+        p1 = plt.plot(binc, yy / yy.sum() * np.sum(n), 'k-', alpha=0.5, lw=2,
+                      label='N(0,1)')
+        yy = np.exp(-0.5 * binc**2 / (1.2**2))
+        p2 = plt.plot(binc, yy / yy.sum() * np.sum(n), 'k--', alpha=0.5, lw=2,
+                      label='N(0,1.2)')
+        plt.xlabel('Flux difference / Flux errors (sigma)')
+        plt.xlim(-5,5)
+        plt.title('Forced phot differences: Megacam r %s to %s' % (e1, e2))
+        ps.savefig()
+
+
+        T1 = merge_tables(TT1)
+        T2 = merge_tables(TT2)
+    
+        plt.clf()
+        n,b,p = plt.hist((T1.flux_r - T2.flux_r) / np.sqrt(1./T1.flux_ivar_r + 1./T2.flux_ivar_r),
+                         range=(-5, 5), bins=100,
+                         histtype='step', color='k', label='All sources', normed=True)
+
+        binc = (b[1:] + b[:-1])/2.
+        yy = np.exp(-0.5 * binc**2)
+        plt.plot(binc, yy / yy.sum() * np.sum(n), 'k-', alpha=0.5, lw=2,
+                      label='N(0,1)')
+        yy = np.exp(-0.5 * binc**2 / (1.2**2))
+        p2 = plt.plot(binc, yy / yy.sum() * np.sum(n), 'k--', alpha=0.5, lw=2,
+                      label='N(0,1.2)')
+
+        #for magcut in [21,23]:
+        for magcut in [23]:
+            meanmag = -2.5 * (np.log10((T1.flux_r + T2.flux_r)/2.) - 9)
+            I = np.flatnonzero(meanmag < magcut)
+            plt.hist((T1.flux_r[I] - T2.flux_r[I]) /
+                     np.sqrt(1./T1.flux_ivar_r[I] + 1./T2.flux_ivar_r[I]),
+                     range=(-5, 5), bins=100,
+                     histtype='step', label='mag < %g' % magcut, normed=True)
+        
+        plt.xlabel('Flux difference / Flux errors (sigma)')
+        plt.xlim(-5,5)
+        #plt.title('Forced phot differences: Megacam r %s to %s, ccd%02i' % (e1, e2, ccd))
+        plt.title('Forced phot differences: Megacam r %s to %s' % (e1, e2))
+        plt.legend(loc='upper right')
+        ps.savefig()
+
+        T1.mag = -2.5 * (np.log10(T1.flux_r) - 9)
+        T2.mag = -2.5 * (np.log10(T2.flux_r) - 9)
+        plt.clf()
+        ha = dict(range=(20,26), bins=100, histtype='step')
+        plt.hist(T1.mag, color='b', **ha)
+        plt.hist(T2.mag, color='r', **ha)
+        plt.xlabel('Mag')
+        plt.title('Forced phot: Megacam r %s, %s, ccd%02i' % (e1, e2, ccd))
+        ps.savefig()
+
+
+        break
+
+
+    from collections import Counter
+
+    #name1 = names[0]
+    #names2 = names[1:]
+
+    for iname1,name1 in enumerate(names):
+        for name2 in names[iname1+1:]:
+            #T1 = fits_table('euclid-out/forced-%s.fits' % name1)
+            #T2 = fits_table('euclid-out/forced-%s.fits' % name2)
+            T1 = fits_table('euclid-out/forced2-%s.fits' % name1)
+            T2 = fits_table('euclid-out/forced2-%s.fits' % name2)
+
+            #print('T1 nexp:', Counter(T1.nexp).most_common())
+            #print('T2 nexp:', Counter(T2.nexp).most_common())
+    
+            mexp1 = np.median(T1.nexp[T1.nexp > 0])
+            mexp2 = np.median(T2.nexp[T2.nexp > 0])
+    
+            I = np.flatnonzero((T1.nexp >= mexp1) * (T2.nexp >= mexp2))
+    
+            T1.cut(I)
+            T2.cut(I)
+            print(len(T1), 'sources kept')
+    
+            plt.clf()
+            n,b,p = plt.hist((T1.flux - T2.flux) /
+                             np.sqrt(1./T1.flux_ivar + 1./T2.flux_ivar),
+                             range=(-5, 5), bins=100,
+                             histtype='step', color='k', label='All sources', normed=True)
+    
+            # for magcut in [23, 24, 25]:
+            #     meanmag = -2.5 * (np.log10((T1.flux + T2.flux)/2.) - 9)
+            #     I = np.flatnonzero(meanmag < magcut)
+            #     plt.hist((T1.flux[I] - T2.flux[I]) /
+            #              np.sqrt(1./T1.flux_ivar[I] + 1./T2.flux_ivar[I]),
+            #              range=(-5, 5), bins=100,
+            #              histtype='step', label='mag < %g' % magcut, normed=True)
+
+            for maglo, maghi in [(18,23), (23,24), (24,25)]:
+                meanmag = -2.5 * (np.log10((T1.flux + T2.flux)/2.) - 9)
+                I = np.flatnonzero((meanmag > maglo) * (meanmag <= maghi))
+                plt.hist((T1.flux[I] - T2.flux[I]) /
+                         np.sqrt(1./T1.flux_ivar[I] + 1./T2.flux_ivar[I]),
+                         range=(-5, 5), bins=100,
+                         histtype='step', label='mag %g to %g' % (maglo,maghi),
+                         normed=True)
+    
+            binc = (b[1:] + b[:-1])/2.
+            yy = np.exp(-0.5 * binc**2)
+            plt.plot(binc, yy / yy.sum() * np.sum(n), 'k-', alpha=0.5, lw=2,
+                      label='N(0,1)')
+            yy = np.exp(-0.5 * binc**2 / (1.2**2))
+            plt.plot(binc, yy / yy.sum() * np.sum(n), 'k--', alpha=0.5, lw=2,
+                     label='N(0,1.2)')
+            yy = np.exp(-0.5 * binc**2 / (1.25**2))
+            plt.plot(binc, yy / yy.sum() * np.sum(n), 'k-',
+                     label='N(0,1.25)')
+
+            exps1 = set(name_to_exps[name1])
+            exps2 = set(name_to_exps[name2])
+            print(name1, 'has', len(exps1))
+            print(name2, 'has', len(exps2))
+            incommon = len(exps1.intersection(exps2))
+            print(incommon, 'in common')
+            
+            plt.legend(loc='upper right')
+            plt.xlabel('Flux difference / Flux errors (sigma)')
+            plt.xlim(-5,5)
+            #plt.title('Forced phot differences: Megacam %s to %s (%i exposures in common)' % (name1, name2, incommon))
+            plt.title('Forced phot differences: Megacam %s to %s' % (name1, name2))
+            ps.savefig()
+    
+            # plt.clf()
+            # n,b,p = loghist(np.log(T1.flux),
+            #                 np.log(T2.flux),
+            #                 range=((-3,5),(-3,5)), bins=200)
+            # plt.xlabel('log Flux 1')
+            # plt.ylabel('log Flux 2')
+            # plt.title('Forced phot differences: Megacam %s to %s' % (name1, name2))
+            # ps.savefig()
+    
+            # plt.clf()
+            # n,b,p = loghist(np.log((T1.flux + T2.flux)/2.),
+            #                 (T1.flux - T2.flux) /
+            #                 np.sqrt(1./T1.flux_ivar + 1./T2.flux_ivar),
+            #                 range=((-3,5),(-5,5)), bins=200)
+            # plt.axhline(0, color=(0.3,0.3,1.0))
+            # plt.xlabel('log average Flux')
+            # plt.ylabel('Flux difference / Flux errors (sigma)')
+            # plt.title('Forced phot differences: Megacam %s to %s' % (name1, name2))
+            # ps.savefig()
+    
+            # T1.mag = -2.5 * (np.log10(T1.flux) - 9)
+            # T2.mag = -2.5 * (np.log10(T2.flux) - 9)
+            # plt.clf()
+            # ha = dict(range=(20,28), bins=100, histtype='step')
+            # plt.hist(T1.mag, color='b', **ha)
+            # plt.hist(T2.mag, color='r', **ha)
+            # plt.xlabel('Mag')
+            # plt.title('Forced phot: Megacam r %s, %s, ccd%02i' % (e1, e2, ccd))
+            # ps.savefig()
+        break
+
 
 def geometry():
     # Regular tiling with small overlaps; RA,Dec aligned
@@ -858,15 +1237,35 @@ def reduce_acs_image(opt, survey):
     return 0
 
 def package(opt):
-    listfns = glob('euclid/images/megacam/lists/*.lst')
 
-    listnames = [os.path.basename(fn).replace('.lst','') for fn in listfns]
-    explists = [get_exposures_in_list(fn) for fn in listfns]
-    ccds = list(range(36))
+    print('HACK -- fixing up VISTA forced photometry...')
+    # Match VISTA images to the others...
+    ACS = fits_table('euclid-out/forced-r.SNR10-HIQ.fits')
+    imap = dict([((n,o),i) for i,(n,o) in enumerate(zip(ACS.brickname,
+                                                        ACS.objid))])
+    for band in ['Y','J','H']:
+        fn = 'euclid-out/forced-vista-%s.fits' % band
+        T = fits_table(fn)
+        print('Read', len(T), 'from', fn)
+        T.rename('flux_%s' % band.lower(), 'flux')
+        T.rename('flux_ivar_%s' % band.lower(), 'flux_ivar')
+        T.acsindex = np.array([imap.get((n,o), -1)
+                               for n,o in zip(T.brickname, T.objid)])
+        T.cut(T.acsindex >= 0)
+        print('Kept', len(T), 'with a match')
+        
+        ACS.flux = np.zeros(len(ACS), np.float32)
+        ACS.flux_ivar = np.zeros(len(ACS), np.float32)
+        ACS.nexp = np.zeros(len(ACS), np.uint8)
+        ACS.flux[T.acsindex] = T.flux
+        ACS.flux_ivar[T.acsindex] = T.flux_ivar
+        ACS.nexp[T.acsindex] = 1
 
-    #expnums = set()
-    #for l in explists:
-    #    expnums.update(l)
+        fn = 'euclid-out/forced-vista-%s-2.fits' % band
+        ACS.writeto(fn)
+        print('Wrote', fn)
+
+    return 0
 
     ACS = read_acs_catalogs()
     print('Read', len(ACS), 'ACS catalog entries')
@@ -878,18 +1277,19 @@ def package(opt):
 
     keepacs = np.zeros(len(ACS), bool)
 
+    listfns = glob('euclid/images/megacam/lists/*.lst')
+
+    listnames = [os.path.basename(fn).replace('.lst','') for fn in listfns]
+    explists = [get_exposures_in_list(fn) for fn in listfns]
+    ccds = list(range(36))
+
     results = []
 
     for expnums in explists:
-
-        #allflux =      np.zeros((len(ACS), len(expnums)), np.float32)
-        #allflux_ivar = np.zeros((len(ACS), len(expnums)), np.float32)
-
         cflux      = np.zeros(len(ACS), np.float32)
         cflux_ivar = np.zeros(len(ACS), np.float32)
         nexp       = np.zeros(len(ACS), np.uint8)
 
-        #TT = []
         for i,expnum in enumerate(expnums):
             for ccd in ccds:
                 fn = os.path.join('euclid-out', 'forced',
@@ -904,8 +1304,6 @@ def package(opt):
                 assert(len(fluxes) == 1)
                 fluxcol = fluxes[0]
                 print('Flux column:', fluxcol)
-                #filtername = fluxcol.split('_')[-1]
-                #print('Filter:', filtername)
 
                 t.iexp = np.zeros(len(t), np.uint8) + i
                 t.ccd  = np.zeros(len(t), np.uint8) + ccd
@@ -918,10 +1316,25 @@ def package(opt):
                 t.cut((t.x > margin) * (t.x < W-margin) *
                       (t.y > margin) * (t.y < H-margin))
                 print('Keeping', len(t), 'not close to the edges')
-                #TT.append(t)
-                #TT = merge_tables(TT)
                 acsindex = np.array([imap[(n,o)]
                                      for n,o in zip(t.brickname, t.objid)])
+
+                # Find sources with existing measurements
+                # I = np.flatnonzero((cflux_ivar[acsindex] > 0) * (cflux[acsindex] > 0) * (t.flux > 0))
+                # if len(I) > 100:
+                #     print(len(I), 'sources have previous measurements')
+                #     ai = acsindex[I]
+                #     cmag,cmagerr = NanoMaggies.fluxErrorsToMagErrors(
+                #         cflux[ai] / np.maximum(cflux_ivar[ai], 1e-16), cflux_ivar[ai])
+                #     mag,magerr = NanoMaggies.fluxErrorsToMagErrors(
+                #         t.flux[I], t.flux_ivar[I])
+                #     var = np.maximum(cmagerr, 0.02)**2 + np.maximum(magerr, 0.02)**2
+                #     offset = np.sum((mag - cmag) * 1./var) / np.sum(1./var)
+                #     print('Offset of', offset, 'mag')
+                #     scale = 10.**(offset / 2.5)
+                #     print('Applying scale of', scale, 'to fluxes and ivars')
+                #     t.flux *= scale
+                #     t.flux_ivar /= (scale**2)
 
                 cflux     [acsindex] += t.flux * t.flux_ivar
                 cflux_ivar[acsindex] += t.flux_ivar
@@ -952,7 +1365,7 @@ def package(opt):
         primhdr.add_record(dict(name='FILTER', value=filt,
                                 comment='MegaCam filter'))
 
-        T.writeto('euclid-out/forced-%s.fits' % name,
+        T.writeto('euclid-out/forced2-%s.fits' % name,
                   columns=['ra', 'dec', 'flux', 'flux_ivar', 'nexp',
                            'brickname', 'objid', 'type', 'ra_ivar', 'dec_ivar',
                            'dchisq', 'ebv', 'acs_flux', 'acs_flux_ivar',
@@ -980,6 +1393,9 @@ def main():
     parser.add_argument('--name',
                         help='Name for forced-phot output products, with --queue-list')
 
+    parser.add_argument('--out',
+                        help='Filename for forced-photometry output catalog')
+
     parser.add_argument('--analyze', 
                         help='Analyze forced photometry results for images listed in given image list file')
 
@@ -997,6 +1413,9 @@ def main():
     parser.add_argument(
         '--zoom', type=int, nargs=4,
         help='Set target image extent (default "0 3600 0 3600")')
+
+    parser.add_argument('--grid', action='store_true',
+                        help='Forced photometry on a grid of subimages?')
 
     parser.add_argument('--skip', action='store_true',
                         help='Skip forced-photometry if output file exists?')
@@ -1019,16 +1438,15 @@ def main():
 
     if opt.analyze:
         #analyze(opt)
-        analyze3(opt)
+        #analyze2(opt)
+        #analyze3(opt)
+        #geometry()
+        analyze4(opt)
         return 0
 
     if opt.package:
         package(opt)
         return 0
-
-    if False:
-        analyze2(opt)
-        geometry()
 
     if opt.expnum is None and opt.forced is None:
         print('Need --expnum or --forced')
@@ -1040,13 +1458,100 @@ def main():
         # Run pipeline on a single ACS image.
         return reduce_acs_image(opt, survey)
 
+
+    if opt.grid:
         
+        assert(opt.out)
+
+        i = int(opt.forced, 10)
+        print('CCD index', i)
+        ccds = survey.get_ccds_readonly()
+        ccd = ccds[i]
+        print('CCD', ccd)
+        im = survey.get_image_object(ccd)
+        print('Image', im)
+        H,W = im.height, im.width
+        print('Image size', W, 'x', H)
+
+        overlap = 50
+        ngrid = 20
+        xsize = (W + overlap) / ngrid
+        ysize = (H + overlap) / ngrid
+        print('Size without overlap:', xsize, ysize)
+
+        x0 = np.arange(ngrid) * xsize
+        x1 = x0 + xsize + overlap
+        x1[-1] = min(x1[-1], W)
+        print('X ranges:')
+        for xx0,xx1 in zip(x0,x1):
+            print('  ', xx0,xx1)
+        y0 = np.arange(ngrid) * ysize
+        y1 = y0 + ysize + overlap
+        y1[-1] = min(y1[-1], H)
+        print('Y ranges:')
+        for yy0,yy1 in zip(y0,y1):
+            print('  ', yy0,yy1)
+
+        print('Opt is a', opt)
+
+        fns = []
+        args = []
+        for iy,(yy0,yy1) in enumerate(zip(y0,y1)):
+            for ix,(xx0,xx1) in enumerate(zip(x0,x1)):
+                newopt = argparse.Namespace()
+                for k,v in opt.__dict__.items():
+                    setattr(newopt, k, v)
+                    print('Setting option', k, '=', v)
+                outfn = opt.out.replace('.fits', '-x%02i-y%02i.fits' % (ix,iy))
+                fns.append((outfn, ix, iy))
+                newopt.out = outfn
+                newopt.zoom = [xx0, xx1, yy0, yy1]
+                print('New options:', newopt.__dict__)
+                args.append((newopt, survey))
+
+        xcuts = reduce(np.append, ([0], (x0[1:] + x1[:-1])/2., W))
+        ycuts = reduce(np.append, ([0], (y0[1:] + y1[:-1])/2., H))
+        print('X cuts:', xcuts)
+        print('Y cuts:', ycuts)
+
+        mp = multiproc(8)
+        mp.map(_bounce_forced, args)
+
+        TT = []
+        for fn,ix,iy in fns:
+            T = fits_table(fn)
+            print('Read', len(T), 'from', fn)
+            print('X range:', T.x.min(), T.x.max())
+            xlo,xhi = xcuts[ix], xcuts[ix+1]
+            print('Cut lo,hi', xlo, xhi)
+            print('Y range:', T.y.min(), T.y.max())
+            ylo,yhi = ycuts[iy], ycuts[iy+1]
+            print('Cut lo,hi', ylo, yhi)
+            T.cut((T.x >= xlo) * (T.x < xhi) * (T.y >= ylo) * (T.y < yhi))
+            print('Cut to', len(T), 'sources')
+            TT.append(T)
+        TT = merge_tables(TT)
+        TT.writeto(opt.out)
+        print('Wrote', opt.out)
+        return 0
+
+    return forced_photometry(opt, survey)
+
+def _bounce_forced(args):
+    return forced_photometry(*args)
+
+def forced_photometry(opt, survey):
     # Run forced photometry on a given image or set of Megacam images,
     # using the ACS catalog as the source.
 
-    if opt.name is None:
-        opt.name = '%i-%s' % (im.expnum, im.ccdname)
-    outfn = 'euclid-out/forced/megacam-%s.fits' % opt.name
+    ps = PlotSequence('euclid')
+
+    #if opt.name is None:
+    #    opt.name = '%i-%s' % (im.expnum, im.ccdname)
+    if opt.out is not None:
+        outfn = opt.out
+    else:
+        outfn = 'euclid-out/forced/megacam-%s.fits' % opt.name
 
     if opt.skip and os.path.exists(outfn):
         print('Output file exists:', outfn)
@@ -1116,7 +1621,27 @@ def main():
         keep_sources[J] = True
 
         tim = im.get_tractor_image(pixPsf=True, slc=slc)
+        print('Tim:', tim)
         tims.append(tim)
+
+        # plt.clf()
+        # plt.hist((tim.getImage() * tim.getInvError()).ravel(), range=(-5,5), bins=100,
+        #          histtype='step', color='b')
+        # plt.xlim(-5,5)
+        # plt.xlabel('Pixel sigmas')
+        # plt.title(tim.name)
+        # ps.savefig()
+        # 
+        # plt.clf()
+        # plt.imshow(tim.getImage(), interpolation='nearest', origin='lower',
+        #            vmin=-2.*tim.sig1, vmax=5.*tim.sig1)
+        # plt.title(tim.name)
+        # ps.savefig()
+        # 
+        # ax = plt.axis()
+        # plt.plot(x[keep_sources], y[keep_sources], 'b.')
+        # plt.axis(ax)
+        # ps.savefig()
         
     T.cut(keep_sources)
     print('Cut to', len(T), 'sources within at least one')
@@ -1158,8 +1683,8 @@ def main():
     F.brickid   = T.brickid
     F.brickname = T.brickname
     F.objid     = T.objid
-    F.mjd     = np.array([tim.primhdr['MJD-OBS']] * len(T))
-    F.exptime = np.array([tim.primhdr['EXPTIME']] * len(T)).astype(np.float32)
+    F.mjd     = np.array([tim.primhdr.get('MJD-OBS', 0.)] * len(T)).astype(np.float32)
+    F.exptime = np.array([tim.primhdr.get('EXPTIME', 0.)] * len(T)).astype(np.float32)
 
     if len(tims) == 1:
         tim = tims[0]
@@ -1174,7 +1699,7 @@ def main():
 
     # FIXME -- should we run one band at a time?
 
-    R = tr.optimize_forced_photometry(variance=True, fitstats=True,
+    R = tr.optimize_forced_photometry(variance=True, fitstats=False, #fitstats=True,
                                       shared_params=False, priors=False,
                                       **forced_kwargs)
 
