@@ -677,6 +677,10 @@ Now using the current directory as LEGACY_SURVEY_DIR, but this is likely to fail
         # Assert that we have correctly removed trailing spaces
         assert(camera == camera.strip())
         return self.image_typemap[camera]
+
+    def sed_matched_filters(self, bands):
+        from detection import sed_matched_filters
+        return sed_matched_filters(bands)
         
     def index_of_band(self, b):
         return self.allbands.index(b)
@@ -899,7 +903,7 @@ Now using the current directory as LEGACY_SURVEY_DIR, but this is likely to fail
             # Assert that bricks are the sizes we think they are.
             # ... except for the two poles, which are half-sized
             assert(np.all(np.abs((self.bricks.dec2 - self.bricks.dec1)[1:-1] -
-                                 self.bricksize) < 1e-8))
+                                 self.bricksize) < 1e-3))
         return self.bricks
 
     def get_brick(self, brickid):

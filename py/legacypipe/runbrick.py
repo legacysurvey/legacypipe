@@ -1102,7 +1102,7 @@ def stage_srcs(coimgs=None, cons=None,
 
     # SED-matched detections
     print('Running source detection at', nsigma, 'sigma')
-    SEDs = sed_matched_filters(bands)
+    SEDs = survey.sed_matched_filters(bands)
     Tnew,newcat,hot = run_sed_matched_filters(
         SEDs, bands, detmaps, detivs, (avoid_x,avoid_y), targetwcs,
         nsigma=nsigma, saturated_pix=saturated_pix, plots=plots, ps=ps, mp=mp)
