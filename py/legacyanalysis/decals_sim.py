@@ -52,6 +52,7 @@ import matplotlib.pyplot as plt
 from pkg_resources import resource_filename
 
 from astropy.table import Table, Column, vstack
+from astropy import wcs as astropy_wcs
 
 from astrometry.libkd.spherematch import match_radec
 
@@ -166,6 +167,7 @@ class BuildStamp():
     def __init__(self,tim, gain=4.0, seed=None, folding_threshold=1.e-5):
         """Initialize the BuildStamp object with the CCD-level properties we need."""
         self.band = tim.band.strip().upper()
+        # GSParams should be used when galsim object is initialized
         self.gsparams = galsim.GSParams(maximum_fft_size=2L**30L,\
                                         folding_threshold=folding_threshold) 
         #print('FIX ME!!!!!!!!!!!!!!!!!!!!!!!!!!!!')
@@ -177,8 +179,23 @@ class BuildStamp():
 
         self.wcs = tim.getWcs()
         self.psf = tim.getPsf()
-
-        ## Get the Galsim-compatible WCS as well.
+        ########################################
+        #fout=open('wcs.pickle','w')
+        #dump((self.wcs),fout)
+        #fout.close()
+        #print('exiting early')
+        #sys.exit()
+        # Get the Galsim-compatible WCS as well.
+        # wcs = galsim.AstropyWCS(wcs=wcs), see http://docs.astropy.org/en/stable/wcs
+        w = astropy_wcs.WCS(naxis=2)
+        w.wcs.crpix = self.wcs.wcs.get_crpix()
+        # FIX ME
+        w.wcs.cdelt = self.wcs.wcs.get_cd()  
+        w.wcs.crval = self.wcs.wcs.get_crval() 
+        w.wcs.ctype = ["RA---TPV", "DEC--TPV"]
+        # FIX ME
+        w.wcs.set_pv([(2, 1, 45.0)])  
+        wcs = galsim.AstropyWCS(wcs=w)
         #import pdb ; pdb.set_trace()
         #galsim_wcs, _ = galsim.wcs.readFromFitsHeader(
         #    galsim.fits.FitsHeader(tim.pvwcsfn))
@@ -294,15 +311,15 @@ class BuildStamp():
 
     def elg(self,objinfo):
         """Create an ELG (disk-like) galaxy."""
-
+        # Create localpsf object
         self.setlocal(objinfo)
-
         objflux = objinfo[self.band+'FLUX'] # [nanomaggies]
-        obj = galsim.Sersic(float(objinfo['SERSICN_1']), half_light_radius=
-                            float(objinfo['R50_1']),
-                            flux=objflux,gsparams=self.gsparams)
-        obj = obj.shear(q=float(objinfo['BA_1']), beta=
-                        float(objinfo['PHI_1'])*galsim.degrees)
+        obj = galsim.Sersic(n=1.,half_light_radius=2.,flux=objflux,gsparams=self.gsparams)
+        #obj = galsim.Sersic(float(objinfo['SERSICN_1']), half_light_radius=
+        #                    float(objinfo['R50_1']),
+        #                    flux=objflux,gsparams=self.gsparams)
+        #obj = obj.shear(q=float(objinfo['BA_1']), beta=
+        #                float(objinfo['PHI_1'])*galsim.degrees)
         stamp = self.convolve_and_draw(obj)
         return stamp
 
@@ -472,8 +489,12 @@ def build_simcat(nobj=None, brickname=None, brickwcs=None, meta=None, seed=None,
     #rz = rand.uniform(rz_range[0], rz_range[1], nobj)
 
     cat['R'] = rmag
-    cat['GR'] = gr
-    cat['RZ'] = rz
+    if meta['OBJTYPE'] == 'ELG':
+        cat['GR'] = 0.
+        cat['RZ'] = 0.
+    else: 
+        cat['GR'] = gr
+        cat['RZ'] = rz
     cat['GFLUX'] = 1E9*10**(-0.4*(rmag+gr)) # [nanomaggies]
     cat['RFLUX'] = 1E9*10**(-0.4*rmag)      # [nanomaggies]
     cat['ZFLUX'] = 1E9*10**(-0.4*(rmag-rz)) # [nanomaggies]
