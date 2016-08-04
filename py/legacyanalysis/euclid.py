@@ -43,6 +43,147 @@ allbands = 'I'
 
 
 def make_zeropoints():
+    base = 'euclid/images/'
+
+
+    C = fits_table()
+    C.image_filename = []
+    C.image_hdu = []
+    C.camera = []
+    C.expnum = []
+    C.filter = []
+    C.exptime = []
+    C.crpix1 = []
+    C.crpix2 = []
+    C.crval1 = []
+    C.crval2 = []
+    C.cd1_1 = []
+    C.cd1_2 = []
+    C.cd2_1 = []
+    C.cd2_2 = []
+    C.width = []
+    C.height = []
+    C.ra = []
+    C.dec = []
+    C.ccdzpt = []
+    C.ccdname = []
+    C.ccdraoff = []
+    C.ccddecoff = []
+    C.fwhm = []
+    C.propid = []
+    C.mjd_obs = []
+    fns = glob(base + 'cfhtls/CFHTLS_D25_*_100028p021230_T0007_MEDIAN.fits')
+    fns.sort()
+
+    for fn in fns:
+        psffn = fn.replace('.fits', '_psfex.psf')
+        if not os.path.exists(psffn):
+            print('Missing:', psffn)
+            sys.exit(-1)
+        wtfn = fn.replace('.fits', '_weight.fits')
+        if not os.path.exists(wtfn):
+            print('Missing:', wtfn)
+            sys.exit(-1)
+        dqfn = fn.replace('.fits', '.flg.fits')
+        if not os.path.exists(dqfn):
+            print('Missing:', dqfn)
+            sys.exit(-1)
+
+    extname = 'D25'
+
+    ralo = 360.
+    rahi = 0.
+    declo = 90.
+    dechi = -90.
+
+    for i,fn in enumerate(fns):
+        F = fitsio.FITS(fn)
+        print(len(F), 'FITS extensions in', fn)
+        print(F)
+        phdr = F[0].read_header()
+        # FAKE
+        expnum = 7000 + i+1
+        filt = phdr['FILTER']
+        print('Filter', filt)
+        filt = filt[0]
+        exptime = phdr['EXPTIME']
+
+        psffn = fn.replace('.fits', '_psfex.psf')
+        PF = fitsio.FITS(psffn)
+
+        # Just one big image in the primary HDU.
+        hdr = phdr
+        hdu = 0
+        C.image_filename.append(fn.replace(base,''))
+        C.image_hdu.append(hdu)
+        C.camera.append('cfhtls')
+        C.expnum.append(expnum)
+        C.filter.append(filt)
+        C.exptime.append(exptime)
+        C.ccdzpt.append(hdr['MZP_AB'])
+
+        for k in ['CRPIX1','CRPIX2','CRVAL1','CRVAL2','CD1_1','CD1_2','CD2_1','CD2_2']:
+            C.get(k.lower()).append(hdr[k])
+        W = hdr['NAXIS1']
+        H = hdr['NAXIS2']
+        C.width.append(W)
+        C.height.append(H)
+            
+        wcs = wcs_pv2sip_hdr(hdr)
+        rc,dc = wcs.radec_center()
+        C.ra.append(rc)
+        C.dec.append(dc)
+
+        x,y = np.array([1,1,1,W/2.,W,W,W,W/2.]), np.array([1,H/2.,H,H,H,H/2.,1,1])
+        rr,dd = wcs.pixelxy2radec(x,y)
+        ralo = min(ralo, rr.min())
+        rahi = max(rahi, rr.max())
+        declo = min(declo, dd.min())
+        dechi = max(dechi, dd.max())
+
+        hdu = 1
+        print('Reading PSF from', psffn, 'hdu', hdu)
+        psfhdr = PF[hdu].read_header()
+        fwhm = psfhdr['PSF_FWHM']
+        
+        C.ccdname.append(extname)
+        C.ccdraoff.append(0.)
+        C.ccddecoff.append(0.)
+        C.fwhm.append(fwhm)
+        C.propid.append('0')
+        C.mjd_obs.append(0.)
+        
+    C.to_np_arrays()
+    fn = 'euclid/survey-ccds-cfhtls.fits.gz'
+    C.writeto(fn)
+    print('Wrote', fn)
+
+    print('RA range', ralo, rahi)
+    print('Dec range', declo, dechi)
+
+    r = np.linspace(ralo,  rahi,  21)
+    d = np.linspace(declo, dechi, 21)
+    rr,dd = np.meshgrid(r, d)
+    cols,rows = np.meshgrid(np.arange(len(r)), np.arange(len(d)))
+
+    B = fits_table()
+    B.ra1  = rr[1:,:-1].ravel()
+    B.ra2  = rr[1:, 1:].ravel()
+    B.dec1 = dd[:-1,1:].ravel()
+    B.dec2 = dd[1: ,1:].ravel()
+    B.ra  = (B.ra1  + B.ra2 ) / 2.
+    B.dec = (B.dec1 + B.dec2) / 2.
+    B.brickrow = rows[:-1,:-1].ravel()
+    B.brickcol = cols[:-1,:-1].ravel()
+    B.brickq = (B.brickrow % 2) * 2 + (B.brickcol % 2)
+    B.brickid = 1 + np.arange(len(B))
+    B.brickname = np.array(['%05ip%04i' % (int(100.*r), int(100.*d))
+                            for r,d in zip(B.ra, B.dec)])
+    B.writeto('euclid/survey-bricks.fits.gz')
+
+    return
+
+
     C = fits_table()
     C.image_filename = []
     C.image_hdu = []
@@ -70,7 +211,6 @@ def make_zeropoints():
     C.propid = []
     C.mjd_obs = []
     
-    base = 'euclid/images/'
     for iband,band in enumerate(['Y','J','H']):
         fn = base + 'vista/UVISTA_%s_DR1_CFHT.fits' % band
         hdu = 0
