@@ -385,7 +385,7 @@ def stage_tims(W=3600, H=3600, pixscale=0.262, brickname=None,
     ccds.wcsplver = np.array([tim.wcsver[1] for tim in tims])
     ccds.psfplver = np.array([tim.psfver[1] for tim in tims])
 
-    if plots and False:
+    if plots:
         # Pixel histograms of subimages.
         for b in bands:
             sig1 = np.median([tim.sig1 for tim in tims if tim.band == b])
@@ -405,7 +405,24 @@ def stage_tims(W=3600, H=3600, pixscale=0.262, brickname=None,
             plt.title('Pixel distributions: %s band' % b)
             ps.savefig()
 
-    if plots:
+            plt.clf()
+            lo,hi = -5., 5.
+            for tim in tims:
+                if tim.band != b:
+                    continue
+                ie = tim.getInvError()
+                pix = (tim.getImage() * ie)[ie > 0]
+                plt.hist(pix, range=(lo, hi), bins=50, histtype='step',
+                         alpha=0.5, label=tim.name)
+            plt.legend()
+            plt.xlabel('Pixel values (sigma)')
+            plt.xlim(lo,hi)
+            plt.title('Pixel distributions: %s band' % b)
+            ps.savefig()
+
+
+
+    if plots and False:
         for tim in tims:
             plt.clf()
             plt.subplot(2,2,1)

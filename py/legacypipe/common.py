@@ -281,6 +281,8 @@ def get_rgb(imgs, bands, mnmx=None, arcsinh=None, scales=None):
                       z = (0, 0.025),
                       )
 
+    print('get_rgb: bands', bands)
+
     if scales is None:
         if bands == 'grz':
             scales = grzscales
@@ -298,14 +300,24 @@ def get_rgb(imgs, bands, mnmx=None, arcsinh=None, scales=None):
                           r = (1, 0.004),
                           i = (0, 0.005),
                           )
+        elif bands == 'ugriz':
+            scales = dict(g = (2, 0.0066),
+                          r = (1, 0.01),
+                          i = (0, 0.05),
+                          )
         else:
             scales = grzscales
+
+    print('Using scales:', scales)
         
     h,w = imgs[0].shape
     rgb = np.zeros((h,w,3), np.float32)
-    # Convert to ~ sigmas
     for im,band in zip(imgs, bands):
+        if not band in scales:
+            print('Warning: band', band, 'not used in creating RGB image')
+            continue
         plane,scale = scales.get(band, (0,1.))
+        print('RGB: band', band, 'in plane', plane, 'scaled by', scale)
         rgb[:,:,plane] = (im / scale).astype(np.float32)
 
     if mnmx is None:

@@ -33,13 +33,12 @@ from tractor import Tractor, NanoMaggies
 from tractor.galaxy import disable_galaxy_cache
 from tractor.ellipses import EllipseE
 
-rgbscales = dict(I=(0, 0.01))
-rgbkwargs      .update(scales=rgbscales)
-rgbkwargs_resid.update(scales=rgbscales)
-
-SFDMap.extinctions.update({'DES I': 1.592})
-
-allbands = 'I'
+# For ACS reductions:
+# rgbscales = dict(I=(0, 0.01))
+# rgbkwargs      .update(scales=rgbscales)
+# rgbkwargs_resid.update(scales=rgbscales)
+# SFDMap.extinctions.update({'DES I': 1.592})
+# allbands = 'I'
 
 
 def make_zeropoints():
@@ -546,7 +545,6 @@ class MegacamImage(LegacySurveyImage):
         sky = ConstantSky(0.)
         return sky
 
-
 class VistaImage(MegacamImage):
     def __init__(self, *args, **kwargs):
         super(VistaImage, self).__init__(*args, **kwargs)
@@ -577,6 +575,50 @@ class VistaImage(MegacamImage):
         dq -= (dq & 1)
         return dq
 
+
+class CfhtlsImage(VistaImage):
+    def __init__(self, *args, **kwargs):
+        super(CfhtlsImage, self).__init__(*args, **kwargs)
+        self.name = 'CFHTLSImage: %s %s' % (self.ccdname, self.band)
+        self.wtfn = self.wtfn.replace('.weight.fits', '_weight.fits')
+
+    # Use MAD to scale the weight maps...?
+    def read_invvar(self, clip=True, **kwargs):
+        iv = super(CfhtlsImage, self).read_invvar(clip=clip, **kwargs)
+        img = super(CfhtlsImage, self).read_image(header=False, **kwargs)
+        chi = img * np.sqrt(iv)
+        # MAD of chi map...
+        slice1 = (slice(0,-5,10),slice(0,-5,10))
+        slice2 = (slice(5,None,10),slice(5,None,10))
+        diff = np.abs(chi[slice1] - chi[slice2])
+        diff = diff[(iv[slice1] > 0) * (iv[slice2] > 0)]
+        mad = np.median(diff.ravel())
+        sig1 = 1.4826 * mad / np.sqrt(2.)
+        print('MAD of chi map:', sig1)
+        iv /= sig1**2
+        return iv
+
+class CfhtlsSurveyData(LegacySurveyData):
+    def find_file(self, filetype, **kwargs):
+        if filetype == 'ccds':
+            basedir = self.survey_dir
+            return [os.path.join(basedir, 'survey-ccds-cfhtls.fits.gz')]
+        return super(CfhtlsSurveyData, self).find_file(filetype, **kwargs)
+
+    def sed_matched_filters(self, bands):
+        # single-band filters
+        SEDs = []
+        for i,band in enumerate(bands):
+            sed = np.zeros(len(bands))
+            sed[i] = 1.
+            SEDs.append((band, sed))
+        if len(bands) > 1:
+            gri = dict(g=1., r=1., i=1., u=0., z=0.)
+            SEDs.append(('gri', [gri[b] for b in bands]))
+            #red = dict(u=0., g=2.5, r=1., i=0.4, z=0.4)
+            #SEDs.append(('Red', [red[b] for b in bands]))
+        return SEDs
+        
 
 # Hackily defined RA,Dec values that split the ACS 7x7 tiling into
 # distinct 'bricks'
@@ -1559,6 +1601,9 @@ def main():
 
     parser.add_argument('--skip', action='store_true',
                         help='Skip forced-photometry if output file exists?')
+
+
+    parser.add_argument('--brick', help='Run one brick of CFHTLS reduction')
     
     opt = parser.parse_args()
 
@@ -1587,6 +1632,21 @@ def main():
     if opt.package:
         package(opt)
         return 0
+
+    if opt.brick:
+
+        survey = CfhtlsSurveyData(output_dir='euclid-out/cfhtls')
+        survey.bricksize = 3./60.
+        survey.image_typemap.update({'cfhtls' : CfhtlsImage})
+        # SED-matched filters
+
+        return run_brick(opt.brick, survey, pixscale=0.186, width=1000, height=1000,
+                         bands='ugriz', blacklist=False, wise=False, blob_image=True,
+                         ceres=False,
+                         pixPsf=True, constant_invvar=False, threads=opt.threads,
+                         #stages=['image_coadds'],
+                         #plots=True
+                         )
 
     if opt.expnum is None and opt.forced is None:
         print('Need --expnum or --forced')
