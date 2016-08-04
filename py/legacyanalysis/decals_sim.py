@@ -53,6 +53,7 @@ from pkg_resources import resource_filename
 
 from astropy.table import Table, Column, vstack
 from astropy import wcs as astropy_wcs
+from fitsio import FITSHDR
 
 from astrometry.libkd.spherematch import match_radec
 
@@ -179,23 +180,28 @@ class BuildStamp():
 
         self.wcs = tim.getWcs()
         self.psf = tim.getPsf()
+        # Throw tractor wcs into galsim wcs object
+        #hdr = FITSHDR()
+        #tim.wcs.toStandardFitsHeader(hdr)
+        #fitsio.write('wcs.fits', None, header=hdr)
+        #wcs = galsim.GSFitsWCS('wcs_fits')
         ########################################
         #fout=open('wcs.pickle','w')
-        #dump((self.wcs),fout)
+        #dump((hdr,self.wcs),fout)
         #fout.close()
         #print('exiting early')
         #sys.exit()
         # Get the Galsim-compatible WCS as well.
         # wcs = galsim.AstropyWCS(wcs=wcs), see http://docs.astropy.org/en/stable/wcs
-        w = astropy_wcs.WCS(naxis=2)
-        w.wcs.crpix = self.wcs.wcs.get_crpix()
-        # FIX ME
-        w.wcs.cdelt = self.wcs.wcs.get_cd()  
-        w.wcs.crval = self.wcs.wcs.get_crval() 
-        w.wcs.ctype = ["RA---TPV", "DEC--TPV"]
-        # FIX ME
-        w.wcs.set_pv([(2, 1, 45.0)])  
-        wcs = galsim.AstropyWCS(wcs=w)
+        #w = astropy_wcs.WCS(naxis=2)
+        #w.wcs.crpix = self.wcs.wcs.get_crpix()
+        ## FIX ME
+        #w.wcs.cdelt = self.wcs.wcs.get_cd()  
+        #w.wcs.crval = self.wcs.wcs.get_crval() 
+        #w.wcs.ctype = ["RA---TPV", "DEC--TPV"]
+        ## FIX ME
+        #w.wcs.set_pv([(2, 1, 45.0)])  
+        #wcs = galsim.AstropyWCS(wcs=w)
         #import pdb ; pdb.set_trace()
         #galsim_wcs, _ = galsim.wcs.readFromFitsHeader(
         #    galsim.fits.FitsHeader(tim.pvwcsfn))
@@ -266,9 +272,10 @@ class BuildStamp():
 
     def convolve_and_draw(self,obj):
         """Convolve the object with the PSF and then draw it."""
-        obj = galsim.Convolve([obj, self.localpsf])
-        stamp = obj.drawImage(offset=self.offset, wcs=self.localwcs,
-                              method='no_pixel')
+        obj = galsim.Convolve([obj, self.localpsf], gsparams=self.gsparams)
+        #stamp = obj.drawImage(offset=self.offset, wcs=self.localwcs,method='no_pixel')
+        # Pixscale instead of wcs
+        stamp = obj.drawImage(offset=self.offset, scale=self.pixscale,method='no_pixel')
         stamp.setCenter(self.xpos, self.ypos)
         return stamp
 
@@ -314,7 +321,8 @@ class BuildStamp():
         # Create localpsf object
         self.setlocal(objinfo)
         objflux = objinfo[self.band+'FLUX'] # [nanomaggies]
-        obj = galsim.Sersic(n=1.,half_light_radius=2.,flux=objflux,gsparams=self.gsparams)
+        obj = galsim.Sersic(n=1.,half_light_radius=2.,flux=objflux,\
+                            gsparams=self.gsparams)
         #obj = galsim.Sersic(float(objinfo['SERSICN_1']), half_light_radius=
         #                    float(objinfo['R50_1']),
         #                    flux=objflux,gsparams=self.gsparams)
