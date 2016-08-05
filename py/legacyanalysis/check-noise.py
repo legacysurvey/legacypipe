@@ -261,8 +261,9 @@ for ccd in ccds[:16]:
     
         bsigs = {}
         for offset in [5, 3, 1]:
-            slice1 = (slice(0,-offset,10),slice(0,-offset,10))
-            slice2 = (slice(offset,None,10),slice(offset,None,10))
+            step = 1
+            slice1 = (slice(0,-offset,step),slice(0,-offset,step))
+            slice2 = (slice(offset,None,step),slice(offset,None,step))
             diff = img[slice1] - img[slice2]
             #print('Blanton number of pixels:', len(diff.ravel()))
             diff = diff[(ie[slice1] > 0) * (ie[slice2] > 0)]
