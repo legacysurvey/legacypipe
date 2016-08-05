@@ -2,6 +2,7 @@ from __future__ import print_function
 import numpy as np
 from glob import glob
 import os
+from collections import Counter
 from astrometry.util.fits import fits_table, merge_tables
 
 # Runs 13 and 15, for adjusting obstatus file...
@@ -13,15 +14,27 @@ def decals_dr3_plus():
 
     TT = []
 
-    #zpdir = '/project/projectdirs/cosmo/work/decam/cats/ZeroPoints'
+    expnums = [547257, 535154, 535106]
     for fn,dirnms in [
         ('/global/homes/a/arjundey/ZeroPoints/decals-zpt-20160407.fits',
          ['CP20160407',]),
         ('/global/homes/a/arjundey/ZeroPoints/decals-zpt-20160606.fits',
          ['CP20160606',]),
         ]:
+        T = fits_table(fn)
+        T.cut(np.nonzero([e not in expnums for e in T.expnum])[0])
+        normalize_zeropoints(fn, dirnms, image_basedir, cam, T=T)
+        TT.append(T)
+
+    dirnms = ['CP20160407','CP20160606']
+    for fn in [
+        '/global/cscratch1/sd/arjundey/ZeroPoints/zeropoint-c4d_160408_023844_oki_r_v1.fits',
+        '/global/cscratch1/sd/arjundey/ZeroPoints/zeropoint-c4d_160408_001343_oki_r_v1.fits',
+        '/global/cscratch1/sd/arjundey/ZeroPoints/zeropoint-c4d_160607_023641_oki_g_v1.fits',
+        ]:
         T = normalize_zeropoints(fn, dirnms, image_basedir, cam)
         TT.append(T)
+
     T = merge_tables(TT)
     outfn = 'survey-ccds-dr3plus.fits'
     T.writeto(outfn)
@@ -236,6 +249,16 @@ def normalize_zeropoints(fn, dirnms, image_basedir, cam, T=None):
     T.camera = np.array([cam] * len(T))
     T.expid = np.array(['%08i-%s' % (expnum,extname.strip())
                         for expnum,extname in zip(T.expnum, T.ccdname)])
+
+    c = Counter(T.expid)
+    bad = False
+    for k,v in c.most_common():
+        if v == 1:
+            break
+        print('Warning: repeated EXPNUM/CCDNAME:', k, 'appears', v, 'times')
+        bad = True
+    #assert(not bad)
+
     cols = T.columns()
     if not 'naxis1' in cols:
         T.naxis1 = np.zeros(len(T), np.int16) + 2046
@@ -256,7 +279,6 @@ def normalize_zeropoints(fn, dirnms, image_basedir, cam, T=None):
     # Search all given directory names
     allfiles = {}
     for dirnm in dirnms:
-        #pattern = os.path.join(image_basedir, cam, dirnm, '*.fits*')
         pattern = os.path.join(dirnm, '*.fits*')
         matched = glob(pattern)
         allfiles[dirnm] = matched
@@ -274,7 +296,6 @@ def normalize_zeropoints(fn, dirnms, image_basedir, cam, T=None):
         fnlist = []
 
         for dirnm in dirnms:
-            #pattern = os.path.join(image_basedir, cam, dirnm, fn)
             pattern = os.path.join(dirnm, fn)
             for afn in allfiles[dirnm]:
                 # check for prefix
@@ -282,12 +303,6 @@ def normalize_zeropoints(fn, dirnms, image_basedir, cam, T=None):
                     fnlist.append(afn)
                     print('File', fn, 'matched', afn)
                     
-        # for dirnm in dirnms:
-        #     pattern = os.path.join(image_basedir, cam, dirnm, fn + '*')
-        #     matched = glob(pattern)
-        #     print('Glob pattern', pattern, 'matched', len(matched))
-        #     fnlist.extend(matched)
-
         pattern_string = os.path.join(image_basedir, cam, dirnm, fn + '*')
         if len(dirnms) > 1:
             pattern_string = os.path.join(
