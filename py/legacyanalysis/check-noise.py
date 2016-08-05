@@ -234,88 +234,10 @@ ccds.cut(np.hstack(zip(I1[np.random.permutation(len(I1))],
                        I2[np.random.permutation(len(I2))])))
 #ccds.cut(np.random.permutation(len(ccds)))
 
-for ccd in ccds[:1]:
-    im = survey.get_image_object(ccd)
-
-    #tim2 = im.get_tractor_image(gaussPsf=True, splinesky=True, dq=False,
-    #                             nanomaggies=False, subsky=False)
-    #tim = tim2
-    tim = im.get_tractor_image(gaussPsf=True, splinesky=True, dq=False)
-    img = tim.getImage()
-    ie = tim.getInvError()
-
-    plt.clf()
-    plt.subplot(2,1,1)
-    n,b,p1 = plt.hist(img[ie>0].ravel(), range=(-5. * tim.sig1, 5. * tim.sig1),
-                     bins=100, histtype='step', color='b')
-    bc = (b[:-1] + b[1:])/2.
-    y = np.exp(-0.5 * bc**2 / tim.sig1**2)
-    N = np.sum(n)
-    y *= N / np.sum(y)
-    p2 = plt.plot(bc, y, 'r--')
-    plt.xlim(-5.*tim.sig1, 5.*tim.sig1)
-    plt.yscale('symlog')
-    plt.legend((p1[0], p2[0]), ('Image pixels', 'Gaussian sig1'), loc='lower center')
-
-    plt.subplot(2,1,2)
-    n,b,p1 = plt.hist((img * ie)[ie>0].ravel(), range=(-5., 5.), bins=100,
-                      histtype='step', color='b')
-    bc = (b[:-1] + b[1:])/2.
-    y = np.exp(-0.5 * bc**2)
-    N = np.sum(n)
-    y *= N / np.sum(y)
-    p2 = plt.plot(bc, y, 'r--')
-    plt.xlim(-5., 5.)
-    plt.yscale('symlog')
-    plt.legend((p1[0], p2[0]), ('Image pixels * sqrt(Weight map)', 'Unit gaussian'),
-               loc='lower center')
-
-    plt.suptitle(tim.name)
-    ps.savefig()
-
-
-for ccd in ccds[:2]:
-    im = survey.get_image_object(ccd)
-
-    tim2 = im.get_tractor_image(gaussPsf=True, splinesky=True, dq=False,
-                                 nanomaggies=False, subsky=False)
-    tim = tim2
-    #tim = im.get_tractor_image(gaussPsf=True, splinesky=True, dq=False)
-    img = tim.getImage()
-    ie = tim.getInvError()
-
-    skymod = np.zeros_like(img)
-    tim.getSky().addTo(skymod)
-    midsky = np.median(skymod)
-    print('Median spline sky model level:', midsky)
-    #img -= midsky
-
-    medsky = np.median(img[ie > 0])
-    print('Median image level:', medsky)
-    img -= medsky
-
-    # Select pixels in range [-2 sigma, +2 sigma]
-
-    ie[np.logical_or(img < -2.*tim.sig1, img > 2.*tim.sig1)] = 0.
-
-    medsky = np.median(img[ie > 0])
-    print('Median of unmasked image pixels:', medsky)
-
-    plt.clf()
-    plt.imshow(img * (ie > 0), interpolation='nearest', origin='lower',
-               vmin=-2.*tim.sig1, vmax=2.*tim.sig1)
-    plt.title(tim.name)
-    ps.savefig()
-
-    plot_correlations(img, ie)
-    plt.title(tim.name + ' ' + '/'.join(im.imgfn.split('/')[-2:]))
-    #plt.ylim(-0.005, 0.02)
-    plt.ylim(-0.001, 0.011)
-    ps.savefig()
 
 
 
-sys.exit(0)
+
 
 
 allsigs1 = []
@@ -406,7 +328,105 @@ plt.title('Error estimates vs pixel difference distributions')
 ps.savefig()
 
 
+
 sys.exit(0)
+
+
+
+
+
+
+
+
+
+
+
+
+for ccd in ccds[:1]:
+    im = survey.get_image_object(ccd)
+
+    #tim2 = im.get_tractor_image(gaussPsf=True, splinesky=True, dq=False,
+    #                             nanomaggies=False, subsky=False)
+    #tim = tim2
+    tim = im.get_tractor_image(gaussPsf=True, splinesky=True, dq=False)
+    img = tim.getImage()
+    ie = tim.getInvError()
+
+    plt.clf()
+    plt.subplot(2,1,1)
+    n,b,p1 = plt.hist(img[ie>0].ravel(), range=(-5. * tim.sig1, 5. * tim.sig1),
+                     bins=100, histtype='step', color='b')
+    bc = (b[:-1] + b[1:])/2.
+    y = np.exp(-0.5 * bc**2 / tim.sig1**2)
+    N = np.sum(n)
+    y *= N / np.sum(y)
+    p2 = plt.plot(bc, y, 'r--')
+    plt.xlim(-5.*tim.sig1, 5.*tim.sig1)
+    plt.yscale('symlog')
+    plt.legend((p1[0], p2[0]), ('Image pixels', 'Gaussian sig1'), loc='lower center')
+
+    plt.subplot(2,1,2)
+    n,b,p1 = plt.hist((img * ie)[ie>0].ravel(), range=(-5., 5.), bins=100,
+                      histtype='step', color='b')
+    bc = (b[:-1] + b[1:])/2.
+    y = np.exp(-0.5 * bc**2)
+    N = np.sum(n)
+    y *= N / np.sum(y)
+    p2 = plt.plot(bc, y, 'r--')
+    plt.xlim(-5., 5.)
+    plt.yscale('symlog')
+    plt.legend((p1[0], p2[0]), ('Image pixels * sqrt(Weight map)', 'Unit gaussian'),
+               loc='lower center')
+
+    plt.suptitle(tim.name)
+    ps.savefig()
+
+
+for ccd in ccds[:2]:
+    im = survey.get_image_object(ccd)
+
+    tim2 = im.get_tractor_image(gaussPsf=True, splinesky=True, dq=False,
+                                 nanomaggies=False, subsky=False)
+    tim = tim2
+    #tim = im.get_tractor_image(gaussPsf=True, splinesky=True, dq=False)
+    img = tim.getImage()
+    ie = tim.getInvError()
+
+    skymod = np.zeros_like(img)
+    tim.getSky().addTo(skymod)
+    midsky = np.median(skymod)
+    print('Median spline sky model level:', midsky)
+    #img -= midsky
+
+    medsky = np.median(img[ie > 0])
+    print('Median image level:', medsky)
+    img -= medsky
+
+    # Select pixels in range [-2 sigma, +2 sigma]
+
+    ie[np.logical_or(img < -2.*tim.sig1, img > 2.*tim.sig1)] = 0.
+
+    medsky = np.median(img[ie > 0])
+    print('Median of unmasked image pixels:', medsky)
+
+    plt.clf()
+    plt.imshow(img * (ie > 0), interpolation='nearest', origin='lower',
+               vmin=-2.*tim.sig1, vmax=2.*tim.sig1)
+    plt.title(tim.name)
+    ps.savefig()
+
+    plot_correlations(img, ie)
+    plt.title(tim.name + ' ' + '/'.join(im.imgfn.split('/')[-2:]))
+    #plt.ylim(-0.005, 0.02)
+    plt.ylim(-0.001, 0.011)
+    ps.savefig()
+
+
+
+sys.exit(0)
+
+
+
 
 
 
