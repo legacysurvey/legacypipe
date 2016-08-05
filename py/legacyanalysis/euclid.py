@@ -1845,10 +1845,14 @@ def main():
         survey = CfhtlsSurveyData(output_dir='euclid-out/cfhtls')
         survey.bricksize = 3./60.
         survey.image_typemap.update({'cfhtls' : CfhtlsImage})
-        # SED-matched filters
+
+        outfn = survey.find_file('tractor', brick=opt.brick, output=True)
+        print('Checking output file', outfn)
+        if os.path.exists(outfn):
+            print('File exists:', outfn)
+            return 0
 
         global rgbkwargs, rgbkwargs_resid
-
         rgbscales = dict(g = (2, 0.004),
                          r = (1, 0.006),
                          i = (0, 0.02),
