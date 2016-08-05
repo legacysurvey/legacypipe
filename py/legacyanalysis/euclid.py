@@ -1027,6 +1027,212 @@ def analyze2(opt):
     plt.axis(ax)
     ps.savefig()
 
+def analyze_vista(opt):
+    # Analyze VISTA forced photometry results
+    ps = PlotSequence('vista')
+
+    survey = get_survey()
+    ccds = survey.get_ccds_readonly()
+    ccds.cut(ccds.camera == 'vista')
+    print(len(ccds), 'VISTA images')
+
+    for ccd in ccds:
+        im = survey.get_image_object(ccd)
+        tim = im.get_tractor_image(pixPsf=True, slc=(slice(0,2000), slice(0,2000)))
+
+        img = tim.getImage()
+        ie = tim.getInvError()
+        sig1 = tim.sig1
+        medians = True
+
+        # plot_correlations from legacyanalysis/check-noise.py
+        
+        corrs = []
+        corrs_x = []
+        corrs_y = []
+        mads = []
+        mads_x = []
+        mads_y = []
+        rcorrs = []
+        rcorrs_x = []
+        rcorrs_y = []
+        dists = np.arange(1, 51)
+        for dist in dists:
+            offset = dist
+            slice1 = (slice(0,-offset,1),slice(0,-offset,1))
+            slice2 = (slice(offset,None,1),slice(offset,None,1))
+    
+            slicex = (slice1[0], slice2[1])
+            slicey = (slice2[0], slice1[1])
+    
+            corr = img[slice1] * img[slice2]
+            corr = corr[(ie[slice1] > 0) * (ie[slice2] > 0)]
+    
+            diff = img[slice1] - img[slice2]
+            diff = diff[(ie[slice1] > 0) * (ie[slice2] > 0)]
+            sig1 = 1.4826 / np.sqrt(2.) * np.median(np.abs(diff).ravel())
+            mads.append(sig1)
+    
+            #print('Dist', dist, '; number of corr pixels', len(corr))
+            #t0 = Time()
+            if medians:
+                rcorr = np.median(corr) / sig1**2
+                rcorrs.append(rcorr)
+            #t1 = Time()
+            corr = np.mean(corr) / sig1**2
+            #t2 = Time()
+            #print('median:', t1-t0)
+            #print('mean  :', t2-t1)
+            corrs.append(corr)
+    
+            corr = img[slice1] * img[slicex]
+            corr = corr[(ie[slice1] > 0) * (ie[slicex] > 0)]
+    
+            diff = img[slice1] - img[slicex]
+            diff = diff[(ie[slice1] > 0) * (ie[slicex] > 0)]
+            sig1 = 1.4826 / np.sqrt(2.) * np.median(np.abs(diff).ravel())
+            mads_x.append(sig1)
+    
+            if medians:
+                rcorr = np.median(corr) / sig1**2
+                rcorrs_x.append(rcorr)
+            corr = np.mean(corr) / sig1**2
+            corrs_x.append(corr)
+    
+            corr = img[slice1] * img[slicey]
+            corr = corr[(ie[slice1] > 0) * (ie[slicey] > 0)]
+    
+            diff = img[slice1] - img[slicey]
+            diff = diff[(ie[slice1] > 0) * (ie[slicey] > 0)]
+            #Nmad = len(diff)
+            sig1 = 1.4826 / np.sqrt(2.) * np.median(np.abs(diff).ravel())
+            mads_y.append(sig1)
+    
+            if medians:
+                rcorr = np.median(corr) / sig1**2
+                rcorrs_y.append(rcorr)
+            corr = np.mean(corr) / sig1**2
+            corrs_y.append(corr)
+    
+            #print('Dist', dist, '-> corr', corr, 'X,Y', corrs_x[-1], corrs_y[-1],
+            #      'robust', rcorrs[-1], 'X,Y', rcorrs_x[-1], rcorrs_y[-1])
+    
+        pix = img[ie > 0].ravel()
+        Nmad = len(pix) / 2
+        P = np.random.permutation(len(pix))[:(Nmad*2)]
+        diff = pix[P[:Nmad]] - pix[P[Nmad:]]
+        mad_random = 1.4826 / np.sqrt(2.) * np.median(np.abs(diff))
+    
+        plt.clf()
+        p1 = plt.plot(dists, corrs, 'b.-')
+        p2 = plt.plot(dists, corrs_x, 'r.-')
+        p3 = plt.plot(dists, corrs_y, 'g.-')
+        if medians:
+            p4 = plt.plot(dists, rcorrs, 'b.--')
+            p5 = plt.plot(dists, rcorrs_x, 'r.--')
+            p6 = plt.plot(dists, rcorrs_y, 'g.--')
+        plt.xlabel('Pixel offset')
+        plt.ylabel('Correlation')
+        plt.axhline(0, color='k', alpha=0.3)
+        plt.legend([p1[0],p2[0],p3[0]], ['Diagonal', 'X', 'Y'], loc='upper right')
+
+        plt.title('VISTA ' + tim.name)
+        ps.savefig()
+
+        plt.clf()
+        p4 = plt.plot(dists, mads, 'b.-')
+        p5 = plt.plot(dists, mads_x, 'r.-')
+        p6 = plt.plot(dists, mads_y, 'g.-')
+        plt.xlabel('Pixel offset')
+        plt.ylabel('MAD error estimate')
+        #plt.axhline(0, color='k', alpha=0.3)
+        p7 = plt.axhline(mad_random, color='k', alpha=0.3)
+        plt.legend([p4[0],p5[0],p6[0], p7], ['Diagonal', 'X', 'Y', 'Random'],
+                   loc='lower right')
+        plt.title('VISTA ' + tim.name)
+        ps.savefig()
+        
+
+
+
+    for band in ['Y','J','H']:
+        forcedfn = 'euclid-out/forced-vista-%s.fits' % band
+        F = fits_table(forcedfn)
+        F.rename('flux_%s' % band.lower(), 'flux')
+        F.rename('flux_ivar_%s' % band.lower(), 'flux_ivar')
+
+        T = read_acs_catalogs()
+        print(len(T), 'ACS catalog entries')
+        objmap = dict([((brickname,objid),i) for i,(brickname,objid) in
+                       enumerate(zip(T.brickname, T.objid))])
+        I = np.array([objmap[(brickname, objid)] for brickname,objid
+                      in zip(F.brickname, F.objid)])
+        F.type = T.type[I]
+        F.acs_flux = T.decam_flux[I]
+        F.ra  = T.ra[I]
+        F.dec = T.dec[I]
+        F.bx  = T.bx[I]
+        F.by  = T.by[I]
+        #F.writeto(forcedfn)
+
+        print(len(F), 'forced photometry measurements')
+    
+        F.fluxsn = F.flux * np.sqrt(F.flux_ivar)
+        F.mag = -2.5 * (np.log10(F.flux) - 9.)
+        
+        I = np.flatnonzero(F.type == 'PSF ')
+        print(len(I), 'PSF')
+    
+        for t in ['SIMP', 'DEV ', 'EXP ', 'COMP']:
+            J = np.flatnonzero(F.type == t)
+            print(len(J), t)
+    
+        S = np.flatnonzero(F.type == 'SIMP')
+        print(len(S), 'SIMP')
+        S = F[S]
+        
+        plt.clf()
+        plt.semilogx(F.fluxsn, F.mag, 'k.', alpha=0.1)
+        plt.semilogx(F.fluxsn[I], F.mag[I], 'r.', alpha=0.1)
+        plt.semilogx(S.fluxsn, S.mag, 'b.', alpha=0.1)
+        plt.xlabel('Vista forced-photometry Flux S/N')
+        plt.ylabel('Vista forced-photometry mag')
+    
+        #plt.xlim(1., 1e5)
+        #plt.ylim(10, 26)
+        plt.xlim(1., 1e4)
+        plt.ylim(18, 28)
+    
+        J = np.flatnonzero((F.fluxsn[I] > 4.5) * (F.fluxsn[I] < 5.5))
+        print(len(J), 'between flux S/N 4.5 and 5.5')
+        J = I[J]
+        medmag = np.median(F.mag[J])
+        print('Median mag', medmag)
+        plt.axvline(5., color='r', alpha=0.5, lw=2)
+        plt.axvline(5., color='k', alpha=0.5)
+        plt.axhline(medmag, color='r', alpha=0.5, lw=2)
+        plt.axhline(medmag, color='k', alpha=0.5)
+    
+        J = np.flatnonzero((S.fluxsn > 4.5) * (S.fluxsn < 5.5))
+        print(len(J), 'SIMP between flux S/N 4.5 and 5.5')
+        medmag = np.median(S.mag[J])
+        print('Median mag', medmag)
+        plt.axhline(medmag, color='b', alpha=0.5, lw=2)
+        plt.axhline(medmag, color='k', alpha=0.5)
+    
+        plt.title('VISTA %s forced-photometered from ACS-VIS' % band)
+    
+        ax = plt.axis()
+        p1 = plt.semilogx([0],[0], 'k.')
+        p2 = plt.semilogx([0], [0], 'r.')
+        p3 = plt.semilogx([0], [0], 'b.')
+        plt.legend((p1[0], p2[0], p3[0]),
+                   ('All sources', 'Point sources',
+                    '"Simple" galaxies'))
+        plt.axis(ax)
+        ps.savefig()
+
+
 def analyze3(opt):
     ps = PlotSequence('euclid')
 
@@ -1626,7 +1832,8 @@ def main():
         #analyze2(opt)
         #analyze3(opt)
         #geometry()
-        analyze4(opt)
+        #analyze4(opt)
+        analyze_vista(opt)
         return 0
 
     if opt.package:
@@ -1640,10 +1847,23 @@ def main():
         survey.image_typemap.update({'cfhtls' : CfhtlsImage})
         # SED-matched filters
 
+        global rgbkwargs, rgbkwargs_resid
+
+        rgbscales = dict(g = (2, 0.004),
+                         r = (1, 0.006),
+                         i = (0, 0.02),
+                         )
+        rgbkwargs      .update(scales=rgbscales)
+        rgbkwargs_resid.update(scales=rgbscales)
+
+        checkpointfn = 'checkpoints/checkpoint-%s.pickle' % opt.brick
+
         return run_brick(opt.brick, survey, pixscale=0.186, width=1000, height=1000,
                          bands='ugriz', blacklist=False, wise=False, blob_image=True,
                          ceres=False,
                          pixPsf=True, constant_invvar=False, threads=opt.threads,
+                         checkpoint_filename=checkpointfn,
+                         checkpoint_period=300,
                          #stages=['image_coadds'],
                          #plots=True
                          )
