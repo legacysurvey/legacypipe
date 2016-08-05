@@ -52,7 +52,8 @@ import matplotlib.pyplot as plt
 from pkg_resources import resource_filename
 
 from astropy.table import Table, Column, vstack
-from astropy import wcs as astropy_wcs
+from astropy.io import fits
+#from astropy import wcs as astropy_wcs
 from fitsio import FITSHDR
 
 from astrometry.libkd.spherematch import match_radec
@@ -180,39 +181,24 @@ class BuildStamp():
 
         self.wcs = tim.getWcs()
         self.psf = tim.getPsf()
-        # Throw tractor wcs into galsim wcs object
-        #hdr = FITSHDR()
-        #tim.wcs.toStandardFitsHeader(hdr)
-        #fitsio.write('wcs.fits', None, header=hdr)
-        #wcs = galsim.GSFitsWCS('wcs_fits')
-        ########################################
-        #fout=open('wcs.pickle','w')
-        #dump((hdr,self.wcs),fout)
-        #fout.close()
-        #print('exiting early')
-        #sys.exit()
-        # Get the Galsim-compatible WCS as well.
-        # wcs = galsim.AstropyWCS(wcs=wcs), see http://docs.astropy.org/en/stable/wcs
-        #w = astropy_wcs.WCS(naxis=2)
-        #w.wcs.crpix = self.wcs.wcs.get_crpix()
-        ## FIX ME
-        #w.wcs.cdelt = self.wcs.wcs.get_cd()  
-        #w.wcs.crval = self.wcs.wcs.get_crval() 
-        #w.wcs.ctype = ["RA---TPV", "DEC--TPV"]
-        ## FIX ME
-        #w.wcs.set_pv([(2, 1, 45.0)])  
-        #wcs = galsim.AstropyWCS(wcs=w)
-        #import pdb ; pdb.set_trace()
-        #galsim_wcs, _ = galsim.wcs.readFromFitsHeader(
-        #    galsim.fits.FitsHeader(tim.pvwcsfn))
-        #self.galsim_wcs = galsim_wcs
-
+        # Tractor wcs object -> galsim wcs object
+        temp_hdr = FITSHDR()
+        subwcs = tim.wcs.wcs.get_subimage(tim.wcs.x0, tim.wcs.y0,
+                                  int(tim.wcs.wcs.get_width())-tim.wcs.x0,
+                                  int(tim.wcs.wcs.get_height())-tim.wcs.y0)
+        subwcs.add_to_header(temp_hdr)
+        # Galsim uses astropy header, not fitsio
+        hdr = fits.Header()
+        for key in temp_hdr.keys(): hdr[key]=temp_hdr[key]
+        self.galsim_wcs = galsim.GSFitsWCS(header=hdr)
+        del subwcs,temp_hdr,hdr
+        
         # zpscale equivalent to magzpt = self.t.ccdzpt+2.5*np.log10(self.t.exptime)
         self.zpscale = tim.zpscale      # nanomaggies-->ADU conversion factor
         self.nano2e = self.zpscale*gain # nanomaggies-->electrons conversion factor
 
     def setlocal(self,obj):
-        """Get the pixel positions, local pixel scale, and local PSF.""" 
+        """Get the pixel positions, local wcs, local PSF.""" 
 
         xx, yy = self.wcs.positionToPixel(RaDecPos(obj['RA'], obj['DEC']))
         self.pos = galsim.PositionD(xx, yy)
@@ -220,19 +206,18 @@ class BuildStamp():
         self.ypos = int(self.pos.y)
         self.offset = galsim.PositionD(self.pos.x-self.xpos, self.pos.y-self.ypos)
 
-        # Get the local pixel scale [arcsec/pixel] and the local Galsim WCS
-        # object.
-        cd = self.wcs.cdAtPixel(self.pos.x, self.pos.y)
-        self.pixscale = np.sqrt(np.linalg.det(cd))*3600.0
-        #self.localwcs = self.galsim_wcs.local(image_pos=self.pos)
+        # galsim.drawImage() requires local (linear) wcs
+        self.localwcs = self.galsim_wcs.local(image_pos=self.pos)
+        #cd = self.wcs.cdAtPixel(self.pos.x, self.pos.y)
+        #self.pixscale = np.sqrt(np.linalg.det(cd))*3600.0
         
         # Get the local PSF
         psfim = self.psf.getPointSourcePatch(self.xpos, self.ypos).getImage()
         #plt.imshow(psfim) ; plt.show()
         
         # make galsim PSF object
-        self.localpsf = galsim.InterpolatedImage(galsim.Image(psfim),scale=self.pixscale,\
-                                    gsparams=self.gsparams)
+        self.localpsf = galsim.InterpolatedImage(galsim.Image(psfim), wcs=self.galsim_wcs,\
+                                                 gsparams=self.gsparams)
 
     def addnoise(self, stamp, ivarstamp):
         """Add noise to the object postage stamp.  Remember that STAMP and IVARSTAMP
@@ -273,9 +258,8 @@ class BuildStamp():
     def convolve_and_draw(self,obj):
         """Convolve the object with the PSF and then draw it."""
         obj = galsim.Convolve([obj, self.localpsf], gsparams=self.gsparams)
-        #stamp = obj.drawImage(offset=self.offset, wcs=self.localwcs,method='no_pixel')
-        # Pixscale instead of wcs
-        stamp = obj.drawImage(offset=self.offset, scale=self.pixscale,method='no_pixel')
+        # drawImage() requires local wcs
+        stamp = obj.drawImage(offset=self.offset, wcs=self.localwcs,method='no_pixel')
         stamp.setCenter(self.xpos, self.ypos)
         return stamp
 
@@ -284,7 +268,7 @@ class BuildStamp():
         # Use input flux as the 7'' aperture flux
         self.setlocal(obj)
         psf = self.localpsf.withFlux(1.)
-        stamp = psf.drawImage(offset=self.offset, scale=self.pixscale, method='no_pixel')
+        stamp = psf.drawImage(offset=self.offset, wcs=self.localwcs, method='no_pixel')
         # Fraction flux in 7'', FIXED pixelscale
         diam = 7/0.262
         # Aperture fits on stamp
@@ -292,7 +276,7 @@ class BuildStamp():
         height= stamp.bounds.ymax-stamp.bounds.ymin
         if diam > width and diam > height:
             nxy= int(diam)+2
-            stamp = psf.drawImage(nx=nxy,ny=nxy, offset=self.offset, scale=self.pixscale, method='no_pixel')
+            stamp = psf.drawImage(nx=nxy,ny=nxy, offset=self.offset, wcs=self.localwcs, method='no_pixel')
         assert(diam <= float(stamp.bounds.xmax-stamp.bounds.xmin))
         assert(diam <= float(stamp.bounds.ymax-stamp.bounds.ymin))
         # Aperture photometry
@@ -302,7 +286,7 @@ class BuildStamp():
         # Incrase flux so input flux contained in aperture
         flux = obj[self.band+'FLUX']*(2.-apflux/stamp.added_flux) # [nanomaggies]
         psf = self.localpsf.withFlux(flux)
-        stamp = psf.drawImage(offset=self.offset, scale=self.pixscale, method='no_pixel')
+        stamp = psf.drawImage(offset=self.offset, wcs=self.localwcs, method='no_pixel')
         # stamp looses less than 0.01% of requested flux
         if stamp.added_flux/flux <= 0.9999:
             log.warning('stamp lost more than 0.01% of requested flux, stamp_flux/flux=%.7f',stamp.added_flux/flux)
@@ -354,7 +338,6 @@ class _GaussianMixtureModel():
     
     @staticmethod
     def save(model, filename):
-        from astropy.io import fits
         hdus = fits.HDUList()
         hdr = fits.Header()
         hdr['covtype'] = model.covariance_type
@@ -365,7 +348,6 @@ class _GaussianMixtureModel():
         
     @staticmethod
     def load(filename):
-        from astropy.io import fits
         hdus = fits.open(filename, memmap=False)
         hdr = hdus[0].header
         covtype = hdr['covtype']
