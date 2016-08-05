@@ -265,6 +265,7 @@ class BuildStamp():
 
     def star(self,obj):
         """Render a star (PSF)."""
+        log = logging.getLogger('decals_sim')
         # Use input flux as the 7'' aperture flux
         self.setlocal(obj)
         psf = self.localpsf.withFlux(1.)
@@ -289,7 +290,7 @@ class BuildStamp():
         stamp = psf.drawImage(offset=self.offset, wcs=self.localwcs, method='no_pixel')
         # stamp looses less than 0.01% of requested flux
         if stamp.added_flux/flux <= 0.9999:
-            log.warning('stamp lost more than 0.01% of requested flux, stamp_flux/flux=%.7f',stamp.added_flux/flux)
+            log.warning('stamp lost more than 0.01 percent of requested flux, stamp_flux/flux=%.7f',stamp.added_flux/flux)
         # test if obj[self.band+'FLUX'] really is in the 7'' aperture
         #apers= photutils.CircularAperture((stamp.trueCenter().x,stamp.trueCenter().y), r=diam/2)
         #apy_table = photutils.aperture_photometry(stamp.array, apers)
