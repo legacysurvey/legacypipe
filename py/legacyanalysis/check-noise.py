@@ -118,99 +118,102 @@ ps = PlotSequence('noise')
 # img = img[100:-100, 100:-100]
 # img -= np.median(img)
 
-from obsbot.measure_raw import DECamMeasurer
-from obsbot.decam import DecamNominalCalibration
-
-nom = DecamNominalCalibration()
-fn = 'flat.fits'
-ext = 1
-meas = DECamMeasurer(fn, ext, nom)
-F = fitsio.FITS(fn)
-img,hdr = meas.read_raw(F, ext)
-
-rawimg = F[ext].read()
-plo,phi = np.percentile(rawimg.ravel(), [16,84])
-plt.clf()
-plt.imshow(rawimg, interpolation='nearest', origin='lower', vmin=plo, vmax=phi)
-plt.title('Flat image (raw)')
-plt.colorbar()
-ps.savefig()
-
-plo,phi = np.percentile(img.ravel(), [16,84])
-plt.clf()
-plt.imshow(img, interpolation='nearest', origin='lower', vmin=plo, vmax=phi)
-plt.title('Flat image')
-plt.colorbar()
-ps.savefig()
-
-img,trim_x0,trim_y0 = meas.trim_edges(img)
-sky,sig1 = meas.get_sky_and_sigma(img)
-img -= sky
-meas.remove_sky_gradients(img)
-
-plt.clf()
-plt.imshow(img, interpolation='nearest', origin='lower', vmin=-2.*sig1, vmax=2.*sig1)
-plt.title('Flat image (gradient removed)')
-plt.colorbar()
-ps.savefig()
-
-plt.clf()
-plt.imshow(img, interpolation='nearest', origin='lower', vmin=-4.*sig1, vmax=4.*sig1)
-plt.title('Flat image (gradient removed)')
-plt.colorbar()
-ps.savefig()
-
-plt.clf()
-n,b,p = plt.hist(img.ravel() / sig1, range=(-5,5), bins=100, histtype='step', color='b')
-binc = (b[1:] + b[:-1])/2.
-yy = np.exp(-0.5 * binc**2)
-plt.plot(binc, yy / yy.sum() * np.sum(n), 'k-', alpha=0.5, lw=2)
-plt.xlim(-5,5)
-plt.xlabel('Pixel values / sigma')
-plt.title('Flat image (gradient removed)')
-ps.savefig()
-
-# #binned = (img[0::4, :] + img[1::4, :] + img[2::4, :] + img[3::4, :]) / 4.
-# plt.clf()
-# #plt.plot(np.median(binned, axis=1), 'b-')
-# plt.plot([np.median(img[i*10:(i+1)*10, :]) for i in range(400)], 'b.')
-# plt.ylabel('Row median')
-# ps.savefig()
-
-fitsio.write('flat-grad.fits', img, clobber=True)
-
-X = plot_correlations(img, np.ones_like(img), sig1, medians=False)
-plt.title('Flat image')
-ps.savefig()
-(dists, corrs, corrs_x, corrs_y, rcorrs, rcorrs_x, rcorrs_y,
- mads, mads_x, mads_y, mad_random) = X
-
-# plt.clf()
-# p4 = plt.plot(dists, rcorrs, 'b.--')
-# p5 = plt.plot(dists, rcorrs_x, 'r.--')
-# p6 = plt.plot(dists, rcorrs_y, 'g.--')
-# plt.xlabel('Pixel offset')
-# plt.ylabel('Correlation')
-# plt.axhline(0, color='k', alpha=0.3)
-# plt.legend([p4[0],p5[0],p6[0]], ['Diagonal (med)', 'X (med)', 'Y (med)'],
-#            loc='upper right')
-# plt.title('Flat image')
-# ps.savefig()
-
-plt.clf()
-p4 = plt.plot(dists, mads, 'b.-')
-p5 = plt.plot(dists, mads_x, 'r.-')
-p6 = plt.plot(dists, mads_y, 'g.-')
-plt.xlabel('Pixel offset')
-plt.ylabel('MAD error estimate')
-#plt.axhline(0, color='k', alpha=0.3)
-p7 = plt.axhline(mad_random, color='k', alpha=0.3)
-plt.legend([p4[0],p5[0],p6[0], p7], ['Diagonal', 'X', 'Y', 'Random'],
-           loc='lower right')
-plt.title('Flat image')
-ps.savefig()
-
-sys.exit(0)
+# Pixel correlations in a flat image:
+if False:
+    
+    from obsbot.measure_raw import DECamMeasurer
+    from obsbot.decam import DecamNominalCalibration
+    
+    nom = DecamNominalCalibration()
+    fn = 'flat.fits'
+    ext = 1
+    meas = DECamMeasurer(fn, ext, nom)
+    F = fitsio.FITS(fn)
+    img,hdr = meas.read_raw(F, ext)
+    
+    rawimg = F[ext].read()
+    plo,phi = np.percentile(rawimg.ravel(), [16,84])
+    plt.clf()
+    plt.imshow(rawimg, interpolation='nearest', origin='lower', vmin=plo, vmax=phi)
+    plt.title('Flat image (raw)')
+    plt.colorbar()
+    ps.savefig()
+    
+    plo,phi = np.percentile(img.ravel(), [16,84])
+    plt.clf()
+    plt.imshow(img, interpolation='nearest', origin='lower', vmin=plo, vmax=phi)
+    plt.title('Flat image')
+    plt.colorbar()
+    ps.savefig()
+    
+    img,trim_x0,trim_y0 = meas.trim_edges(img)
+    sky,sig1 = meas.get_sky_and_sigma(img)
+    img -= sky
+    meas.remove_sky_gradients(img)
+    
+    plt.clf()
+    plt.imshow(img, interpolation='nearest', origin='lower', vmin=-2.*sig1, vmax=2.*sig1)
+    plt.title('Flat image (gradient removed)')
+    plt.colorbar()
+    ps.savefig()
+    
+    plt.clf()
+    plt.imshow(img, interpolation='nearest', origin='lower', vmin=-4.*sig1, vmax=4.*sig1)
+    plt.title('Flat image (gradient removed)')
+    plt.colorbar()
+    ps.savefig()
+    
+    plt.clf()
+    n,b,p = plt.hist(img.ravel() / sig1, range=(-5,5), bins=100, histtype='step', color='b')
+    binc = (b[1:] + b[:-1])/2.
+    yy = np.exp(-0.5 * binc**2)
+    plt.plot(binc, yy / yy.sum() * np.sum(n), 'k-', alpha=0.5, lw=2)
+    plt.xlim(-5,5)
+    plt.xlabel('Pixel values / sigma')
+    plt.title('Flat image (gradient removed)')
+    ps.savefig()
+    
+    # #binned = (img[0::4, :] + img[1::4, :] + img[2::4, :] + img[3::4, :]) / 4.
+    # plt.clf()
+    # #plt.plot(np.median(binned, axis=1), 'b-')
+    # plt.plot([np.median(img[i*10:(i+1)*10, :]) for i in range(400)], 'b.')
+    # plt.ylabel('Row median')
+    # ps.savefig()
+    
+    fitsio.write('flat-grad.fits', img, clobber=True)
+    
+    X = plot_correlations(img, np.ones_like(img), sig1, medians=False)
+    plt.title('Flat image')
+    ps.savefig()
+    (dists, corrs, corrs_x, corrs_y, rcorrs, rcorrs_x, rcorrs_y,
+     mads, mads_x, mads_y, mad_random) = X
+    
+    # plt.clf()
+    # p4 = plt.plot(dists, rcorrs, 'b.--')
+    # p5 = plt.plot(dists, rcorrs_x, 'r.--')
+    # p6 = plt.plot(dists, rcorrs_y, 'g.--')
+    # plt.xlabel('Pixel offset')
+    # plt.ylabel('Correlation')
+    # plt.axhline(0, color='k', alpha=0.3)
+    # plt.legend([p4[0],p5[0],p6[0]], ['Diagonal (med)', 'X (med)', 'Y (med)'],
+    #            loc='upper right')
+    # plt.title('Flat image')
+    # ps.savefig()
+    
+    plt.clf()
+    p4 = plt.plot(dists, mads, 'b.-')
+    p5 = plt.plot(dists, mads_x, 'r.-')
+    p6 = plt.plot(dists, mads_y, 'g.-')
+    plt.xlabel('Pixel offset')
+    plt.ylabel('MAD error estimate')
+    #plt.axhline(0, color='k', alpha=0.3)
+    p7 = plt.axhline(mad_random, color='k', alpha=0.3)
+    plt.legend([p4[0],p5[0],p6[0], p7], ['Diagonal', 'X', 'Y', 'Random'],
+               loc='lower right')
+    plt.title('Flat image')
+    ps.savefig()
+    
+    sys.exit(0)
 
 
 survey = LegacySurveyData()
@@ -233,6 +236,164 @@ print(len(I2), 'non-oki images')
 ccds.cut(np.hstack(zip(I1[np.random.permutation(len(I1))],
                        I2[np.random.permutation(len(I2))])))
 #ccds.cut(np.random.permutation(len(ccds)))
+
+
+
+
+
+
+
+allsigs1 = []
+allsigs2 = []
+names = []
+
+offsets = [1,2,3,5,10,20,40]
+
+for ccd in ccds[:16]:
+    im = survey.get_image_object(ccd)
+
+    tim1 = im.get_tractor_image(gaussPsf=True, splinesky=True, dq=False)
+
+    tim2 = im.get_tractor_image(gaussPsf=True, splinesky=True, dq=False,
+                                 nanomaggies=False, subsky=False)
+    tim = tim2
+
+    name = tim.name
+    if 'oki' in im.imgfn:
+        name += ' oki'
+    elif 'ooi' in im.imgfn:
+        name += ' ooi'
+    names.append(name)
+
+    for tim,sigs in [(tim1,allsigs1),(tim2,allsigs2)]:
+        img = tim.getImage()
+        ie = tim.getInvError()
+
+        # # Estimate per-pixel noise via Blanton's 5-pixel MAD
+        #plt.clf()
+
+        sig = []
+    
+        #bsigs = {}
+        for offset in offsets:
+            step = 1
+
+            slice1 = (slice(0,-offset,step),slice(0,-offset,step))
+            slice2 = (slice(offset,None,step),slice(offset,None,step))
+
+            slicex = (slice1[0], slice2[1])
+            slicey = (slice2[0], slice1[1])
+
+            diff = img[slice1] - img[slice2]
+            #print('Blanton number of pixels:', len(diff.ravel()))
+            diff = diff[(ie[slice1] > 0) * (ie[slice2] > 0)]
+            #print('Blanton number of pixels kept:', len(diff.ravel()))
+            mad = np.median(np.abs(diff).ravel())
+            bsig1 = 1.4826 * mad / np.sqrt(2.)
+            #bsigs[offset] = bsig1
+            sig.append(bsig1)
+
+            diff = img[slice1] - img[slicex]
+            diff = diff[(ie[slice1] > 0) * (ie[slicex] > 0)]
+            mad = np.median(np.abs(diff).ravel())
+            #bsigs[1000 + offset] = 1.4826 * mad / np.sqrt(2.)
+            sig.append(1.4826 * mad / np.sqrt(2.))
+
+            diff = img[slice1] - img[slicey]
+            diff = diff[(ie[slice1] > 0) * (ie[slicey] > 0)]
+            mad = np.median(np.abs(diff).ravel())
+            #bsigs[2000 + offset] = 1.4826 * mad / np.sqrt(2.)
+            sig.append(1.4826 * mad / np.sqrt(2.))
+
+        Ndiff = len(diff)
+        # Draw random pixels and see what that MAD distribution looks like
+        pix = img[ie>0].ravel()
+        Nrand = min(Ndiff, len(pix)/2)
+        P = np.random.permutation(len(pix))[:(Nrand*2)]
+        diff2 = pix[P[:Nrand]] - pix[P[Nrand:]]
+        mad2 = np.median(np.abs(diff2).ravel())
+        bsig2 = 1.4826 * mad2 / np.sqrt(2.)
+        #bsigs[0] = bsig2
+        sig.append(bsig2)
+        #plt.hist(np.abs(diff2), range=(0, tim.sig1*5), bins=50, histtype='step',
+        #         label='Blanton(Random)', normed=True)
+    
+        # Draw Gaussian random pixels
+        print('                                           sig1: %.2f' % tim.sig1)
+        diff3 = tim.sig1 * (np.random.normal(size=Ndiff) - np.random.normal(size=Ndiff))
+        mad3 = np.median(np.abs(diff3).ravel())
+        bsig3 = 1.4826 * mad3 / np.sqrt(2.)
+        print('Blanton sig1 estimate for Gaussian pixels      : %.2f' % bsig3)
+        #bsigs[-1] = bsig3
+    
+        # for offset in [1,3,5]:
+        #     print('Blanton sig1 estimate for offset of %i pixels   : %.2f' % (offset, bsigs[offset]))
+        #print('Blanton sig1 estimate for randomly drawn pixels: %.2f' % bsig2)
+    
+        # sigs.append([bsigs[o]/tim.sig1 for o in [-1, 1, 3, 5, 0,
+        #                                           1001,1003,1005,2001,2003,2005]])
+        sigs.append([s/tim.sig1 for s in sig])
+
+
+allsigs = np.array(allsigs1)
+for alls,title in [(allsigs1,'Error estimates vs pixel difference distributions (w/splinesky)'),
+                   (allsigs2, 'Error estimates vs pixel difference distributions')]:
+    allsigs = np.array(alls)
+    print('Allsigs shape', allsigs.shape)
+
+    rsigs = allsigs[:,np.array([-1])]
+    allsigs = allsigs[:,:-1]
+
+    dsigs = allsigs[:,::3]
+    xsigs = allsigs[:,1::3]
+    ysigs = allsigs[:,2::3]
+
+    print('rsigs:', rsigs.shape)
+    print('dsigs:', dsigs.shape)
+
+    dsigs = np.hstack((dsigs, rsigs))
+
+    #xsigs = allsigs[:,5:8]
+    #ysigs = allsigs[:,8:]
+    #allsigs = allsigs[:,:5]
+
+    nr,nc = xsigs.shape
+
+    plt.clf()
+    p1 = plt.plot(dsigs.T, 'bo-', label='Diagonal')
+    p2 = plt.plot(np.repeat(np.arange(nc)[:,np.newaxis], 2, axis=1),
+                  xsigs.T, 'go-', label='X')
+    p3 = plt.plot(np.repeat(np.arange(nc)[:,np.newaxis], 2, axis=1),
+                  ysigs.T, 'ro-', label='Y')
+    plt.xticks(np.arange(nc+1), ['%i pix'%o for o in offsets] + ['Random'])
+    plt.axhline(1., color='k', alpha=0.3)
+    plt.ylabel('Error estimate / pipeline sig1')
+    plt.title(title)
+    #plt.legend(loc='upper left')
+    plt.legend([p1[0],p2[0],p3[0]], ['Diagonal', 'X', 'Y'], loc='upper left')
+
+    names = np.array(names)
+    yy = dsigs[:,-1]
+    ii = np.argsort(yy)
+    yy = np.linspace(min(yy), max(yy), len(ii))
+    for i,y in zip(ii, yy):
+        plt.text(nc+0.1, y, names[i], ha='left', va='center', color='b')
+    plt.xlim(-0.5, nc+3)
+    
+    ps.savefig()
+
+sys.exit(0)
+
+
+
+
+
+
+
+
+
+
+
 
 for ccd in ccds[:1]:
     im = survey.get_image_object(ccd)
@@ -318,95 +479,7 @@ for ccd in ccds[:2]:
 sys.exit(0)
 
 
-allsigs1 = []
-allsigs2 = []
 
-for ccd in ccds[:16]:
-    im = survey.get_image_object(ccd)
-
-    tim1 = im.get_tractor_image(gaussPsf=True, splinesky=True, dq=False)
-
-    tim2 = im.get_tractor_image(gaussPsf=True, splinesky=True, dq=False,
-                                 nanomaggies=False, subsky=False)
-    tim = tim2
-
-    for tim,sigs in [(tim1,allsigs1),(tim2,allsigs2)]:
-        img = tim.getImage()
-        ie = tim.getInvError()
-
-        # # Estimate per-pixel noise via Blanton's 5-pixel MAD
-        #plt.clf()
-    
-        bsigs = {}
-        for offset in [5, 3, 1]:
-            slice1 = (slice(0,-offset,10),slice(0,-offset,10))
-            slice2 = (slice(offset,None,10),slice(offset,None,10))
-            diff = img[slice1] - img[slice2]
-            #print('Blanton number of pixels:', len(diff.ravel()))
-            diff = diff[(ie[slice1] > 0) * (ie[slice2] > 0)]
-            #print('Blanton number of pixels kept:', len(diff.ravel()))
-            mad = np.median(np.abs(diff).ravel())
-            bsig1 = 1.4826 * mad / np.sqrt(2.)
-            bsigs[offset] = bsig1
-    
-            #plt.hist(np.abs(diff), range=(0, tim.sig1*5), bins=100, histtype='step',
-            #         label='Blanton(%i)' % offset, normed=True)
-        # Draw random pixels and see what that MAD distribution looks like
-        pix = img[ie>0].ravel()
-        Ndiff = len(diff)
-        P = np.random.permutation(len(pix))[:(Ndiff*2)]
-        diff2 = pix[P[:Ndiff]] - pix[P[Ndiff:]]
-        mad2 = np.median(np.abs(diff2).ravel())
-        bsig2 = 1.4826 * mad2 / np.sqrt(2.)
-        bsigs[0] = bsig2
-        #plt.hist(np.abs(diff2), range=(0, tim.sig1*5), bins=50, histtype='step',
-        #         label='Blanton(Random)', normed=True)
-    
-        # Draw Gaussian random pixels
-        print('                                           sig1: %.2f' % tim.sig1)
-        diff3 = tim.sig1 * (np.random.normal(size=Ndiff) - np.random.normal(size=Ndiff))
-        mad3 = np.median(np.abs(diff3).ravel())
-        bsig3 = 1.4826 * mad3 / np.sqrt(2.)
-        print('Blanton sig1 estimate for Gaussian pixels      : %.2f' % bsig3)
-        bsigs[-1] = bsig3
-        #plt.hist(np.abs(diff3), range=(0, tim.sig1*5), bins=50, histtype='step',
-        #         label='Blanton(Gaussian)', normed=True)
-    
-        for offset in [1,3,5]:
-            print('Blanton sig1 estimate for offset of %i pixels   : %.2f' % (offset, bsigs[offset]))
-    
-        print('Blanton sig1 estimate for randomly drawn pixels: %.2f' % bsig2)
-    
-        # plt.xlim(0, tim.sig1*5)
-        # plt.legend()
-        # plt.xlabel('abs(pixel difference)')
-        # ps.savefig()
-    
-        sigs.append([bsigs[o]/tim.sig1 for o in [-1, 1, 3, 5, 0]])
-
-
-allsigs = np.array(allsigs1)
-
-plt.clf()
-plt.plot(allsigs.T, 'bo-')
-plt.xticks(np.arange(5), ['Gaussian', '1 pix', '3 pix', '5 pix', 'Random'])
-plt.axhline(1., color='k', alpha=0.3)
-plt.ylabel('Error estimate / pipeline sig1')
-plt.title('Error estimates vs pixel difference distributions (w/splinesky)')
-ps.savefig()
-
-allsigs = np.array(allsigs2)
-
-plt.clf()
-plt.plot(allsigs.T, 'bo-')
-plt.xticks(np.arange(5), ['Gaussian', '1 pix', '3 pix', '5 pix', 'Random'])
-plt.axhline(1., color='k', alpha=0.3)
-plt.ylabel('Error estimate / pipeline sig1')
-plt.title('Error estimates vs pixel difference distributions')
-ps.savefig()
-
-
-sys.exit(0)
 
 
 
