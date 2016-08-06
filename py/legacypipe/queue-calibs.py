@@ -275,6 +275,9 @@ def main():
     elif opt.region == 'southeast':
         rlo,rhi = 0,120
         dlo,dhi = -20,0
+    elif opt.region == 'southsoutheast':
+        rlo,rhi = 0,120
+        dlo,dhi = -20,-10
     elif opt.region == 'midwest':
         rlo,rhi = 240,360
         dlo,dhi = 0,20
