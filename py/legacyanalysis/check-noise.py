@@ -286,9 +286,11 @@ def plot_mads(allsigs, names, loc='upper left'):
                  fontsize=10)
     plt.xlim(-0.5, nc+3)
 
+
+
     
 # Simulate the effect of sources in a MAD estimate.
-if True:
+if False:
     np.random.seed(44)
 
     H,W = 4000,2000

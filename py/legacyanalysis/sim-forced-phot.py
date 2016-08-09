@@ -38,8 +38,8 @@ class TrackingTractor(Tractor):
 def sim(nims, nsrcs, H,W, ps, dpix, nsamples, forced=True, ceres=False,
         alphas=None):
 
-    wcs = Tan(0., 0., W/2., H/2., -pixscale, 0., 0., pixscale,
-              float(W), float(H))
+    truewcs = Tan(0., 0., W/2., H/2., -pixscale, 0., 0., pixscale,
+                  float(W), float(H))
 
     #ngrid = int(np.ceil(np.sqrt(nsrcs)))
     #xx,yy = np.meshgrid(
@@ -71,7 +71,7 @@ def sim(nims, nsrcs, H,W, ps, dpix, nsamples, forced=True, ceres=False,
         
         tims.append(Image(data=np.zeros((H,W), np.float32),
                           inverr=np.ones((H,W), np.float32) * 1./sig1,
-                          wcs=ConstantFitsWcs(wcs),
+                          wcs=ConstantFitsWcs(truewcs),
                           photocal=LinearPhotoCal(1.),
                           psf=psf))
 
@@ -115,16 +115,41 @@ def sim(nims, nsrcs, H,W, ps, dpix, nsamples, forced=True, ceres=False,
         tr.reset_tracking()
             
         # Scatter the tim WCS CRPIX values
+        dx = np.zeros(len(tims))
+        dy = np.zeros(len(tims))
+        
         for i,tim in enumerate(tims):
-            #dx = dpix * np.random.normal()
-            #dy = dpix * np.random.normal()
-            dx = dpix * np.random.uniform(low=-2., high=2.)
-            dy = dpix * np.random.uniform(low=-2., high=2.)
+            dx[i] = dpix * np.random.uniform(low=-1., high=1.)
+            dy[i] = dpix * np.random.uniform(low=-1., high=1.)
             wcs = Tan(0., 0.,
-                      W/2. + dx, H/2. + dy,
+                      W/2. + dx[i], H/2. + dy[i],
                       -pixscale, 0., 0., pixscale, float(W), float(H))
             tim.wcs = ConstantFitsWcs(wcs)
 
+        if ps is not None and isamp == 0:
+            plt.clf()
+            cols = int(np.ceil(np.sqrt(len(tims))))
+            rows = int(np.ceil(len(tims) / float(cols)))
+            for i,tim in enumerate(tims):
+            #     from astrometry.util.resample import resample_with_wcs
+            #     Yo,Xo,Yi,Xi,rims = resample_with_wcs(truewcs, tim.wcs.wcs,
+            #                                          [tim.data])
+            #     rimg = np.zeros(truewcs.shape)
+            #     rimg[Yo,Xo] = rims[0]
+            #     plt.subplot(rows, cols, i+1)
+            #     plt.imshow(rimg, interpolation='nearest', origin='lower')
+                plt.subplot(rows, cols, i+1)
+                plt.imshow(tim.data, interpolation='nearest', origin='lower',
+                           cmap='gray')
+                x,y = tim.wcs.positionToPixel(srcs[0].pos)
+                plt.axhline(y, color='r', alpha=0.5, lw=2)
+                plt.axvline(x, color='r', alpha=0.5, lw=2)
+                x,y = W/2, H/2
+                plt.axhline(y, color='b', alpha=0.5, lw=2)
+                plt.axvline(x, color='b', alpha=0.5, lw=2)
+            plt.suptitle('Astrometric scatter: +- %g pix' % dpix)
+            ps.savefig()
+            
         tr.setParams(p0)
 
         track = []
@@ -137,13 +162,17 @@ def sim(nims, nsrcs, H,W, ps, dpix, nsamples, forced=True, ceres=False,
                 optargs.update(alphas=alphas)
             #tr.optimize_loop()
             track.append(((None,None,None),tr.getParams(),tr.getLogProb()))
-            for step in range(50):
-                dlnp,X,alpha = tr.optimizer.optimize(tr, **optargs)
-                track.append(((dlnp,X,alpha),tr.getParams(),tr.getLogProb()))
-                print('dlnp,X,alpha', dlnp,X,alpha)
-                if dlnp == 0:
-                    break
-                
+
+            if not ceres:
+                for step in range(50):
+                    dlnp,X,alpha = tr.optimizer.optimize(tr, **optargs)
+                    track.append(((dlnp,X,alpha),tr.getParams(),tr.getLogProb()))
+                    #print('dlnp,X,alpha', dlnp,X,alpha)
+                    if dlnp == 0:
+                        break
+            else:
+                tr.optimize_loop()
+
         if forced:
             results.append((dx, dy, tr.getParams()))
         else:
@@ -151,59 +180,9 @@ def sim(nims, nsrcs, H,W, ps, dpix, nsamples, forced=True, ceres=False,
                             tr.tracked_lnprob,
                             tr.getLogProb()))
     return results
-            
-    
-if __name__ == '__main__':
-    import datetime
-    
-    ps = PlotSequence('sim')
 
-    nims = 1
-    nsrcs = 1
-    #H,W = 50,50
-    H,W = 21,21
 
-    us = datetime.datetime.now().microsecond
-    print('Setting random seed to', us)
-    seed = us
-    
-    if False:
-        results = sim(nims, nsrcs, H,W, ps, 1.0, 100)
-        # Zoom in near zero
-        np.random.seed(42)
-        results2 = sim(nims, nsrcs, H,W, None, 0.1, 100)
-    
-        results.extend(results2)
-    
-        dx = np.array([x for x,y,p in results])
-        dy = np.array([y for x,y,p in results])
-        pp = np.array([p for x,y,p in results])
-        print('Params:', pp.shape)
-        
-        flux = pp[:,0]
-        
-        plt.clf()
-        plt.scatter(dx, dy, c=flux)
-        plt.colorbar()
-        plt.xlabel('WCS Scatter x (pix)')
-        plt.ylabel('WCS Scatter y (pix)')
-        plt.axis('equal')
-        ax = plt.axis()
-        mx = max(np.abs(ax))
-        plt.axis([-mx,mx,-mx,mx])
-        plt.axhline(0., color='k', alpha=0.2)
-        plt.axvline(0., color='k', alpha=0.2)
-        plt.axis([-2,2,-2,2])
-        ps.savefig()
-    
-        r = np.hypot(dx, dy)
-        plt.clf()
-        plt.plot(r, flux, 'b.')
-        plt.xlabel('WCS Scatter Distance (pix)')
-        plt.ylabel('Flux')
-        plt.title('Forced photometry: Astrometry sensitivity')
-        ps.savefig()
-
+def compare_optimizers():
     allfluxes = []
     allra = []
     alldec = []
@@ -465,3 +444,112 @@ if __name__ == '__main__':
     plt.ylabel('RA/Dec shift - fit')
     ps.savefig()
     
+    
+if __name__ == '__main__':
+    import datetime
+    
+    ps = PlotSequence('sim')
+
+    nims = 1
+    nsrcs = 1
+    #H,W = 50,50
+    H,W = 21,21
+
+    us = datetime.datetime.now().microsecond
+    print('Setting random seed to', us)
+    seed = us
+    
+    if False:
+        results = sim(nims, nsrcs, H,W, ps, 1.0, 100)
+        # Zoom in near zero
+        np.random.seed(42)
+        results2 = sim(nims, nsrcs, H,W, None, 0.1, 100)
+    
+        results.extend(results2)
+    
+        dx = np.array([x for x,y,p in results])
+        dy = np.array([y for x,y,p in results])
+        pp = np.array([p for x,y,p in results])
+        print('Params:', pp.shape)
+        
+        flux = pp[:,0]
+        
+        plt.clf()
+        plt.scatter(dx, dy, c=flux)
+        plt.colorbar()
+        plt.xlabel('WCS Scatter x (pix)')
+        plt.ylabel('WCS Scatter y (pix)')
+        plt.axis('equal')
+        ax = plt.axis()
+        mx = max(np.abs(ax))
+        plt.axis([-mx,mx,-mx,mx])
+        plt.axhline(0., color='k', alpha=0.2)
+        plt.axvline(0., color='k', alpha=0.2)
+        plt.axis([-2,2,-2,2])
+        ps.savefig()
+    
+        r = np.hypot(dx, dy)
+        plt.clf()
+        plt.plot(r, flux, 'b.')
+        plt.xlabel('WCS Scatter Distance (pix)')
+        plt.ylabel('Flux')
+        plt.title('Forced photometry: Astrometry sensitivity')
+        ps.savefig()
+
+    if False:
+        # How does scatter in the WCS (single image) affect flux measurements?
+        # (this devolved into looking at differences between LSQR and Ceres)
+        compare_optimizers()
+        
+        
+    if True:
+        # Look at how scatter in WCS solutions (multiple images) affects
+        # flux measurements.
+
+        nims = 4
+        nsamples = 100
+
+        allfluxes = []
+        names = []
+
+        dpixes = [1., 0.3, 0.1, 0.]
+        for dpix in dpixes:
+
+            # Reset the seed -- same pixel noise instantiation for
+            # each set, same directions of dpix scatter; all that
+            # changes is the dpix scaling.
+            np.random.seed(seed)
+
+            ns = nsamples
+            if dpix == 0:
+                ns = 1
+            alphas = [0.1, 0.3, 1.0]
+            results = sim(nims, nsrcs, H, W, ps if dpix==1. else None,
+                          dpix, ns,
+                          forced=False,
+                          alphas=alphas)
+            #ceres=True)
+
+            pp = np.array([r[2] for r in results])
+            flux = pp[:,2]
+
+            allfluxes.append(flux)
+            names.append('+- %g pix' % dpix)
+            
+        plt.clf()
+        bins = 20
+        mn = min([min(flux) for flux in allfluxes])
+        mx = max([max(flux) for flux in allfluxes])
+        bins = np.linspace(mn, mx, bins)
+        mx = 0
+        for flux,name,dpix in zip(allfluxes, names, dpixes):
+            if dpix == 0:
+                plt.axvline(flux, color='k', alpha=0.5, lw=2, label=name)
+            else:
+                n,bins,p = plt.hist(flux, bins=bins, histtype='step',label=name)
+                mx = max(mx, max(n))
+        plt.ylim(0, mx*1.05)
+        plt.xlabel('Flux')
+        plt.legend(loc='upper left')
+        plt.title('Astrometric scatter: %i images' % nims)
+        ps.savefig()
