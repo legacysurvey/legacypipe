@@ -24,11 +24,16 @@ pixscale = 0.262 / 3600.
 class TrackingTractor(Tractor):
     def __init__(self, *args, **kwargs):
         super(TrackingTractor, self).__init__(*args, **kwargs)
-        self.tracked_params = []
+        self.reset_tracking()
 
+    def reset_tracking(self):
+        self.tracked_params = []
+        self.tracked_lnprob = []
+        
     def setParams(self, p):
         self.tracked_params.append(np.array(p).copy())
         super(TrackingTractor, self).setParams(p)
+        self.tracked_lnprob.append(self.getLogProb())
 
 def sim(nims, nsrcs, H,W, ps, dpix, nsamples, forced=True, ceres=False,
         alphas=None):
@@ -74,7 +79,7 @@ def sim(nims, nsrcs, H,W, ps, dpix, nsamples, forced=True, ceres=False,
     if ceres:
         from tractor.ceres_optimizer import *
         opt = CeresOptimizer()
-        
+
     # Render "true" models, add noise
     tr = TrackingTractor(tims, srcs, optimizer=opt)
     mods = []
@@ -107,7 +112,7 @@ def sim(nims, nsrcs, H,W, ps, dpix, nsamples, forced=True, ceres=False,
         if isamp % 100 == 0:
             print('Sample', isamp)
 
-        tr.tracked_params = []
+        tr.reset_tracking()
             
         # Scatter the tim WCS CRPIX values
         for i,tim in enumerate(tims):
@@ -131,23 +136,26 @@ def sim(nims, nsrcs, H,W, ps, dpix, nsamples, forced=True, ceres=False,
             if alphas is not None:
                 optargs.update(alphas=alphas)
             #tr.optimize_loop()
-            track.append(((None,None,None),tr.getParams()))
+            track.append(((None,None,None),tr.getParams(),tr.getLogProb()))
             for step in range(50):
                 dlnp,X,alpha = tr.optimizer.optimize(tr, **optargs)
-                track.append(((dlnp,X,alpha),tr.getParams()))
+                track.append(((dlnp,X,alpha),tr.getParams(),tr.getLogProb()))
                 print('dlnp,X,alpha', dlnp,X,alpha)
                 if dlnp == 0:
                     break
-
+                
         if forced:
             results.append((dx, dy, tr.getParams()))
         else:
-            results.append((dx, dy, tr.getParams(), track, tr.tracked_params))
+            results.append((dx, dy, tr.getParams(), track, tr.tracked_params,
+                            tr.tracked_lnprob,
+                            tr.getLogProb()))
     return results
             
     
 if __name__ == '__main__':
-
+    import datetime
+    
     ps = PlotSequence('sim')
 
     nims = 1
@@ -155,8 +163,10 @@ if __name__ == '__main__':
     #H,W = 50,50
     H,W = 21,21
 
-    np.random.seed(42)
-
+    us = datetime.datetime.now().microsecond
+    print('Setting random seed to', us)
+    seed = us
+    
     if False:
         results = sim(nims, nsrcs, H,W, ps, 1.0, 100)
         # Zoom in near zero
@@ -202,11 +212,20 @@ if __name__ == '__main__':
 
     alltracks = []
 
+    alllnprobtracks = []
+
     names = []
+
+    bestlogprobs = None
     
     #for i in range(3):
     for i in range(3):
-        nsamples = 20
+
+        np.random.seed(seed)
+
+        name = ''
+        
+        nsamples = 200
         if i in [0,1]:
             print()
             print('LSQR Opt')
@@ -214,9 +233,9 @@ if __name__ == '__main__':
             alphas = None
             if i == 1:
                 alphas = [0.1, 0.3, 1.0]
-                names.append('LSQR, alphas')
+                name = 'LSQR, alphas'
             else:
-                names.append('LSQR')
+                name = 'LSQR'
                 
             results = sim(nims, nsrcs, H,W, None, 1.0, nsamples, forced=False,
                           alphas=alphas)
@@ -224,10 +243,12 @@ if __name__ == '__main__':
             print()
             print('Ceres Opt')
             print()
-            names.append('Ceres')
+            name = 'Ceres'
             results = sim(nims, nsrcs, H,W, None, 1.0, nsamples, forced=False, ceres=True)
         #results = sim(nims, nsrcs, H,W, None, 1.0, 10, forced=False)
-    
+
+        names.append(name)
+        
         dx = np.array([r[0] for r in results])
         dy = np.array([r[1] for r in results])
         pp = np.array([r[2] for r in results])
@@ -236,6 +257,12 @@ if __name__ == '__main__':
         tracks2 = [r[4] for r in results]
         flux = pp[:,2]
 
+        logprobs = np.array([r[6] for r in results])
+        if bestlogprobs is None:
+            bestlogprobs = logprobs
+        else:
+            bestlogprobs = np.maximum(bestlogprobs, logprobs)
+        
         alltracks.append(tracks)
         allfluxes.append(flux)
         allra.append(pp[:,0])
@@ -243,6 +270,8 @@ if __name__ == '__main__':
         alldx.append(dx)
         alldy.append(dy)
 
+        alllnprobtracks.append([r[5] for r in results])
+        
         ras  = pp[:,0] - dx * pixscale
         decs = pp[:,1] + dy * pixscale
         meanra  = np.mean(ras)
@@ -260,38 +289,44 @@ if __name__ == '__main__':
         plt.axhline(0., color='k', alpha=0.2)
         plt.axvline(0., color='k', alpha=0.2)
         plt.axis([-2,2,-2,2])
+        plt.title(name)
         ps.savefig()
 
-        plt.clf()
-        for dxi,dyi,track in zip(dx, dy, tracks):
-            tp = np.array([t[1] for t in track])
-            rapix  = tp[:,0] / pixscale  - dxi
-            decpix = tp[:,1] / pixscale  + dyi
-            flux = tp[:,2]
-            plt.scatter(rapix, decpix, c=flux, zorder=20)
-            plt.plot(rapix, decpix, 'k-', alpha=0.1, lw=2, zorder=10)
-        plt.colorbar()
-        plt.xlabel('RA (pix)')
-        plt.ylabel('Dec (pix)')
-        #plt.axis('equal')
-        #plt.axis('scaled')
-        ax = plt.axis()
-        mx = max(np.abs(ax))
-        plt.axis([-mx,mx,-mx,mx])
-        plt.axhline(0., color='k', alpha=0.2)
-        plt.axvline(0., color='k', alpha=0.2)
-        plt.axis([-2,2,-2,2])
-        ps.savefig()
+        # plt.clf()
+        # for dxi,dyi,track in zip(dx, dy, tracks):
+        #     tp = np.array([t[1] for t in track])
+        #     rapix  = tp[:,0] / pixscale  - dxi
+        #     decpix = tp[:,1] / pixscale  + dyi
+        #     flux = tp[:,2]
+        #     plt.scatter(rapix, decpix, c=flux, zorder=20)
+        #     plt.plot(rapix, decpix, 'k-', alpha=0.1, lw=2, zorder=10)
+        # plt.colorbar()
+        # plt.xlabel('RA (pix)')
+        # plt.ylabel('Dec (pix)')
+        # #plt.axis('equal')
+        # #plt.axis('scaled')
+        # ax = plt.axis()
+        # mx = max(np.abs(ax))
+        # plt.axis([-mx,mx,-mx,mx])
+        # plt.axhline(0., color='k', alpha=0.2)
+        # plt.axvline(0., color='k', alpha=0.2)
+        # plt.axis([-2,2,-2,2])
+        # plt.title(name)
+        # ps.savefig()
 
         plt.clf()
         for dxi,dyi,track,track2 in zip(dx, dy, tracks, tracks2):
             #tp = np.array([t[1] for t in track])
             #print('track2', track2)
             tp = np.vstack(track2)
-            rapix  = tp[:,0] / pixscale  - dxi
-            decpix = tp[:,1] / pixscale  + dyi
-            flux = tp[:,2]
-            plt.scatter(rapix, decpix, c=flux, zorder=20)
+            rapix  = (tp[:,0] - dxi*pixscale - meanra ) / pixscale
+            decpix = (tp[:,1] + dyi*pixscale - meandec) / pixscale
+            #rapix  = tp[:,0] / pixscale  - dxi
+            #decpix = tp[:,1] / pixscale  + dyi
+            #flux = tp[:,2]
+            #plt.scatter(rapix, decpix, c=flux, zorder=20)
+            plt.scatter(rapix, decpix,
+                        c=np.arange(len(rapix))/float(len(rapix)),zorder=20)
             plt.plot(rapix, decpix, 'k-', alpha=0.1, lw=2, zorder=10)
         plt.colorbar()
         plt.xlabel('RA (pix)')
@@ -304,13 +339,18 @@ if __name__ == '__main__':
         plt.axhline(0., color='k', alpha=0.2)
         plt.axvline(0., color='k', alpha=0.2)
         plt.axis([-2,2,-2,2])
-        plt.title('track2')
+        plt.title(name)
         ps.savefig()
         
-        # plt.xscale('symlog', linthreshx=1e-2)
-        # plt.yscale('symlog', linthreshy=1e-2)
+        # plt.xscale('symlog', linthreshx=1e-4)
+        # plt.yscale('symlog', linthreshy=1e-4)
         # ps.savefig()
 
+        # plt.axis([-0.2, 0.2, -0.2, 0.2])
+        # ps.savefig()
+        # plt.axis([-0.02, 0.02, -0.02, 0.02])
+        # ps.savefig()
+        
         # plt.clf()
         # plt.subplot(2,1,1)
         # for dxi,track in zip(dx,tracks):
@@ -357,11 +397,12 @@ if __name__ == '__main__':
             # print('Mean RA', meanra)
             # print('Track dec', tp[:,1])
             # print('Mean Dec', meandec)
-            plt.plot(np.hypot(rapix, decpix), 'o-')
+            plt.plot(np.hypot(rapix, decpix), '.-')
         plt.xlabel('Opt Step')
         plt.ylabel('Radius from mean (pix)')
+        plt.yscale('symlog', linthreshy=1e-3)
         ps.savefig()
-        
+
         # plt.clf()
         # for dxi,dyi,track in zip(dx, dy, tracks):
         #     tp = np.array([t[1] for t in track])
@@ -373,7 +414,17 @@ if __name__ == '__main__':
         # plt.ylabel('Flux')
         # ps.savefig()
 
-        
+    #for name,tracks in zip(names, alltracks):
+    for name,tracks in zip(names, alllnprobtracks):
+        plt.clf()
+        for track,bestlnp in zip(tracks, bestlogprobs):
+            lnprob = [-(t - bestlnp) for t in track]
+            plt.plot(lnprob, '.-')
+        plt.xlabel('Opt Step')
+        plt.ylabel('Log-Prob gap vs best')
+        plt.yscale('symlog', linthreshy=1e-4)
+        plt.title(name)
+        ps.savefig()
         
     plt.clf()
     for name,flux in zip(names, allfluxes):
