@@ -34,19 +34,10 @@ install:
     - pip install astropy
     - pip install fitsio
     - pip install photutils
-    - easy_install3 pip
-    - pip3 install numpy==1.11.0
-    - pip3 install matplotlib==1.5.1
-    - pip3 install numpydoc -t $HOME/numpydoc
-    - pip3 install coveralls
-    - pip3 install astropy
-    - pip3 install fitsio
-    - pip3 install photutils
 
-
-language: c
-compiler:
-    - gcc
+# language: c
+# compiler:
+#     - gcc
 
 language: python
 python:
