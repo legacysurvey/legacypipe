@@ -17,6 +17,7 @@ install:
     - pip install --user astropy
     - pip install --user fitsio
     - pip install --user photutils
+    - easy_install3 pip
     - pip3 install --user numpy==1.11.0
     - pip3 install --user matplotlib==1.5.1
     - pip3 install numpydoc -t $HOME/numpydoc
@@ -87,7 +88,7 @@ addons:
     #- python-matplotlib
     - python-scipy
     - python3
-
+    - python3-setuptools
     #- python3-numpy
 
 
