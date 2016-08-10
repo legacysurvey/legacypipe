@@ -19,6 +19,8 @@ ulimit -a
 ### argh modules not seeming to work.
 export DUST_DIR=/scratch1/scratchdirs/desiproc/dust/v0_0
 
+export UNWISE_COADDS_DIR=${UNWISE_COADDS_DIR}:/project/projectdirs/cosmo/data/unwise/unwise-coadds
+
 module unload tractor-hpcp
 
 outdir=$SCRATCH/dr3
