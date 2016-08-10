@@ -9,22 +9,40 @@ sudo: false
 #   - sudo pip install numpydoc
 # # python-numpydoc -- not available until Ubuntu 14.04 trusty
 
+# install:
+#     - pip install --user numpy==1.11.0
+#     - pip install --user matplotlib==1.5.1
+#     - pip install numpydoc -t $HOME/numpydoc
+#     - pip install --user coveralls
+#     - pip install --user astropy
+#     - pip install --user fitsio
+#     - pip install --user photutils
+#     - easy_install3 --user pip
+#     - pip3 install --user numpy==1.11.0
+#     - pip3 install --user matplotlib==1.5.1
+#     - pip3 install numpydoc -t $HOME/numpydoc
+#     - pip3 install --user coveralls
+#     - pip3 install --user astropy
+#     - pip3 install --user fitsio
+#     - pip3 install --user photutils
+
 install:
-    - pip install --user numpy==1.11.0
-    - pip install --user matplotlib==1.5.1
+    - pip install numpy==1.11.0
+    - pip install matplotlib==1.5.1
     - pip install numpydoc -t $HOME/numpydoc
-    - pip install --user coveralls
-    - pip install --user astropy
-    - pip install --user fitsio
-    - pip install --user photutils
-    - easy_install3 --user pip
-    - pip3 install --user numpy==1.11.0
-    - pip3 install --user matplotlib==1.5.1
+    - pip install coveralls
+    - pip install astropy
+    - pip install fitsio
+    - pip install photutils
+    - easy_install3 pip
+    - pip3 install numpy==1.11.0
+    - pip3 install matplotlib==1.5.1
     - pip3 install numpydoc -t $HOME/numpydoc
-    - pip3 install --user coveralls
-    - pip3 install --user astropy
-    - pip3 install --user fitsio
-    - pip3 install --user photutils
+    - pip3 install coveralls
+    - pip3 install astropy
+    - pip3 install fitsio
+    - pip3 install photutils
+
 
 language: c
 compiler:
