@@ -53,7 +53,7 @@ script:
     - python -c "import matplotlib; print matplotlib.__file__"
     - python -c "import fitsio; print fitsio.__file__"
     - (cd py && coverage run test/runbrick_test.py travis)
-    - python3 -c "import numpy; print numpy.__file__"
+    - python3 -c "import numpy; print(numpy.__file__)"
 
 after_success:
     - (cd py && coveralls debug)
