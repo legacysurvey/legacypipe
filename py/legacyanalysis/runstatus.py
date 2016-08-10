@@ -71,7 +71,16 @@ cmap = { qdo.Task.WAITING: 'k',
 
 plt.clf()
 lp,lt = [],[]
-for state in qdo.Task.VALID_STATES:
+
+cmap = { qdo.Task.WAITING: 'k',
+         qdo.Task.PENDING: '0.5',
+         qdo.Task.RUNNING: 'b',
+         qdo.Task.SUCCEEDED: 'g',
+         qdo.Task.FAILED: 'r',
+}
+
+for state in [qdo.Task.WAITING, qdo.Task.SUCCEEDED, qdo.Task.PENDING,
+              qdo.Task.RUNNING, qdo.Task.FAILED]:
     if not state in state_radec:
         continue
     ra,dec = state_radec[state]

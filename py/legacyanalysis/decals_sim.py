@@ -44,14 +44,19 @@ import shutil
 import logging
 import argparse
 import pdb
+import photutils
+import galsim
 
 import numpy as np
 import matplotlib.pyplot as plt
 from pkg_resources import resource_filename
 
-import galsim
-from scipy.spatial import KDTree
 from astropy.table import Table, Column, vstack
+from astropy.io import fits
+#from astropy import wcs as astropy_wcs
+from fitsio import FITSHDR
+
+from astrometry.libkd.spherematch import match_radec
 
 from tractor.psfex import PsfEx, PsfExModel
 from tractor.basics import GaussianMixtureEllipsePSF, RaDecPos
@@ -60,12 +65,20 @@ from legacypipe.runbrick import run_brick
 from legacypipe.decam import DecamImage
 from legacypipe.common import LegacySurveyData, wcs_for_brick, ccds_touching_wcs
 
+from pickle import dump
 
 class SimDecals(LegacySurveyData):
-    def __init__(self, survey_dir=None, metacat=None, simcat=None, output_dir=None):
+    def __init__(self, survey_dir=None, metacat=None, simcat=None, output_dir=None,\
+                       add_sim_noise=False, folding_threshold=1.e-5, image_eq_model=False):
+        '''folding_threshold -- make smaller to increase stamp_flux/input_flux'''
         super(SimDecals, self).__init__(survey_dir=survey_dir, output_dir=output_dir)
         self.metacat = metacat
         self.simcat = simcat
+        # Additional options from command line
+        self.add_sim_noise= add_sim_noise
+        self.folding_threshold= folding_threshold
+        self.image_eq_model= image_eq_model
+        print('SimDecals: self.image_eq_model=',self.image_eq_model)
 
     def get_image_object(self, t):
         return SimImage(self, t)
@@ -88,7 +101,8 @@ class SimImage(DecamImage):
             seed = None
 
         objtype = self.survey.metacat['OBJTYPE']
-        objstamp = BuildStamp(tim, gain=self.t.arawgain, seed=seed)
+        objstamp = BuildStamp(tim, gain=self.t.arawgain, seed=seed, \
+                              folding_threshold=self.survey.folding_threshold)
 
         # Grab the data and inverse variance images [nanomaggies!]
         image = galsim.Image(tim.getImage())
@@ -109,14 +123,15 @@ class SimImage(DecamImage):
                 stamp = objstamp.elg(obj)
             elif objtype == 'LRG':
                 stamp = objstamp.lrg(obj)
-
+            
             # Make sure the object falls on the image and then add Poisson noise.
             overlap = stamp.bounds & image.bounds
             if (overlap.area() > 0):
                 stamp = stamp[overlap]      
                 ivarstamp = invvar[overlap]
-                #FIX ME!!, for now Peter recommends insertting perfect image, since have noisy images and we want to know exactly mag insertted
-                #stamp, ivarstamp = objstamp.addnoise(stamp, ivarstamp)
+                # Add noise to simulated source
+                if self.survey.add_sim_noise:
+                    stamp, ivarstamp = objstamp.addnoise(stamp, ivarstamp)
                 # Only where stamps will in inserted
                 sims_image[overlap] += stamp 
                 sims_ivar[overlap] += ivarstamp
@@ -131,26 +146,32 @@ class SimImage(DecamImage):
                 #galsim.fits.write(ivarstamp, 'ivarstamp-{:02d}.fits'.format(ii), clobber=True)
 
                 if np.min(sims_ivar.array) < 0:
-                    print('Negative invvar!')
+                    log.warning('Negative invvar!')
                     import pdb ; pdb.set_trace()
-
         tim.sims_image = sims_image.array
         tim.sims_inverr = np.sqrt(sims_ivar.array)
         tim.sims_xy = tim.sims_xy.astype(int)
-        tim.data = image.array
-        tim.inverr = np.sqrt(invvar.array)
-
+        # Can set image=model, ivar=1/model for testing
+        if self.survey.image_eq_model:
+            tim.data = sims_image.array.copy()
+            tim.inverr = np.zeros(tim.data.shape)
+            tim.inverr[sims_image.array > 0.] = np.sqrt(1./sims_image.array.copy()[sims_image.array > 0.]) 
+        else:
+            tim.data = image.array
+            tim.inverr = np.sqrt(invvar.array)
+        
         #print('HACK!!!')
         #galsim.fits.write(invvar, 'invvar.fits'.format(ii), clobber=True)
         #import pdb ; pdb.set_trace()
         return tim
 
 class BuildStamp():
-    def __init__(self,tim, gain=4.0, seed=None):
+    def __init__(self,tim, gain=4.0, seed=None, folding_threshold=1.e-5):
         """Initialize the BuildStamp object with the CCD-level properties we need."""
-
         self.band = tim.band.strip().upper()
-        self.gsparams = galsim.GSParams(maximum_fft_size=2L**30L)
+        # GSParams should be used when galsim object is initialized
+        self.gsparams = galsim.GSParams(maximum_fft_size=2L**30L,\
+                                        folding_threshold=folding_threshold) 
         #print('FIX ME!!!!!!!!!!!!!!!!!!!!!!!!!!!!')
         self.gsdeviate = galsim.BaseDeviate()
         #if seed is None:
@@ -160,19 +181,24 @@ class BuildStamp():
 
         self.wcs = tim.getWcs()
         self.psf = tim.getPsf()
-
-        ## Get the Galsim-compatible WCS as well.
-        #import pdb ; pdb.set_trace()
-        #galsim_wcs, _ = galsim.wcs.readFromFitsHeader(
-        #    galsim.fits.FitsHeader(tim.pvwcsfn))
-        #self.galsim_wcs = galsim_wcs
-
+        # Tractor wcs object -> galsim wcs object
+        temp_hdr = FITSHDR()
+        subwcs = tim.wcs.wcs.get_subimage(tim.wcs.x0, tim.wcs.y0,
+                                  int(tim.wcs.wcs.get_width())-tim.wcs.x0,
+                                  int(tim.wcs.wcs.get_height())-tim.wcs.y0)
+        subwcs.add_to_header(temp_hdr)
+        # Galsim uses astropy header, not fitsio
+        hdr = fits.Header()
+        for key in temp_hdr.keys(): hdr[key]=temp_hdr[key]
+        self.galsim_wcs = galsim.GSFitsWCS(header=hdr)
+        del subwcs,temp_hdr,hdr
+        
         # zpscale equivalent to magzpt = self.t.ccdzpt+2.5*np.log10(self.t.exptime)
         self.zpscale = tim.zpscale      # nanomaggies-->ADU conversion factor
         self.nano2e = self.zpscale*gain # nanomaggies-->electrons conversion factor
 
     def setlocal(self,obj):
-        """Get the pixel positions, local pixel scale, and local PSF.""" 
+        """Get the pixel positions, local wcs, local PSF.""" 
 
         xx, yy = self.wcs.positionToPixel(RaDecPos(obj['RA'], obj['DEC']))
         self.pos = galsim.PositionD(xx, yy)
@@ -180,17 +206,18 @@ class BuildStamp():
         self.ypos = int(self.pos.y)
         self.offset = galsim.PositionD(self.pos.x-self.xpos, self.pos.y-self.ypos)
 
-        # Get the local pixel scale [arcsec/pixel] and the local Galsim WCS
-        # object.
-        cd = self.wcs.cdAtPixel(self.pos.x, self.pos.y)
-        self.pixscale = np.sqrt(np.linalg.det(cd))*3600.0
-        #self.localwcs = self.galsim_wcs.local(image_pos=self.pos)
+        # galsim.drawImage() requires local (linear) wcs
+        self.localwcs = self.galsim_wcs.local(image_pos=self.pos)
+        #cd = self.wcs.cdAtPixel(self.pos.x, self.pos.y)
+        #self.pixscale = np.sqrt(np.linalg.det(cd))*3600.0
         
         # Get the local PSF
         psfim = self.psf.getPointSourcePatch(self.xpos, self.ypos).getImage()
         #plt.imshow(psfim) ; plt.show()
         
-        self.localpsf = galsim.InterpolatedImage(galsim.Image(psfim),scale=self.pixscale)
+        # make galsim PSF object
+        self.localpsf = galsim.InterpolatedImage(galsim.Image(psfim), wcs=self.galsim_wcs,\
+                                                 gsparams=self.gsparams)
 
     def addnoise(self, stamp, ivarstamp):
         """Add noise to the object postage stamp.  Remember that STAMP and IVARSTAMP
@@ -230,36 +257,62 @@ class BuildStamp():
 
     def convolve_and_draw(self,obj):
         """Convolve the object with the PSF and then draw it."""
-        obj = galsim.Convolve([obj, self.localpsf])
-        stamp = obj.drawImage(offset=self.offset, wcs=self.localwcs,
-                              method='no_pixel')
+        obj = galsim.Convolve([obj, self.localpsf], gsparams=self.gsparams)
+        # drawImage() requires local wcs
+        stamp = obj.drawImage(offset=self.offset, wcs=self.localwcs,method='no_pixel')
         stamp.setCenter(self.xpos, self.ypos)
         return stamp
 
     def star(self,obj):
         """Render a star (PSF)."""
-
+        log = logging.getLogger('decals_sim')
+        # Use input flux as the 7'' aperture flux
         self.setlocal(obj)
-
-        flux = obj[self.band+'FLUX'] # [nanomaggies]
+        psf = self.localpsf.withFlux(1.)
+        stamp = psf.drawImage(offset=self.offset, wcs=self.localwcs, method='no_pixel')
+        # Fraction flux in 7'', FIXED pixelscale
+        diam = 7/0.262
+        # Aperture fits on stamp
+        width= stamp.bounds.xmax-stamp.bounds.xmin
+        height= stamp.bounds.ymax-stamp.bounds.ymin
+        if diam > width and diam > height:
+            nxy= int(diam)+2
+            stamp = psf.drawImage(nx=nxy,ny=nxy, offset=self.offset, wcs=self.localwcs, method='no_pixel')
+        assert(diam <= float(stamp.bounds.xmax-stamp.bounds.xmin))
+        assert(diam <= float(stamp.bounds.ymax-stamp.bounds.ymin))
+        # Aperture photometry
+        apers= photutils.CircularAperture((stamp.trueCenter().x,stamp.trueCenter().y), r=diam/2)
+        apy_table = photutils.aperture_photometry(stamp.array, apers)
+        apflux= np.array(apy_table['aperture_sum'])[0]
+        # Incrase flux so input flux contained in aperture
+        flux = obj[self.band+'FLUX']*(2.-apflux/stamp.added_flux) # [nanomaggies]
         psf = self.localpsf.withFlux(flux)
-
-        stamp = psf.drawImage(offset=self.offset, scale=self.pixscale, method='no_pixel')
+        stamp = psf.drawImage(offset=self.offset, wcs=self.localwcs, method='no_pixel')
+        # stamp looses less than 0.01% of requested flux
+        if stamp.added_flux/flux <= 0.9999:
+            log.warning('stamp lost more than 0.01 percent of requested flux, stamp_flux/flux=%.7f',stamp.added_flux/flux)
+        # test if obj[self.band+'FLUX'] really is in the 7'' aperture
+        #apers= photutils.CircularAperture((stamp.trueCenter().x,stamp.trueCenter().y), r=diam/2)
+        #apy_table = photutils.aperture_photometry(stamp.array, apers)
+        #apflux= np.array(apy_table['aperture_sum'])[0]
+        #print("7'' flux/input flux= ",apflux/obj[self.band+'FLUX'])
+        
+        # Convert stamp's center to its corresponding center on full tractor image
         stamp.setCenter(self.xpos, self.ypos)
-
-        return stamp
+        return stamp 
 
     def elg(self,objinfo):
         """Create an ELG (disk-like) galaxy."""
-
+        # Create localpsf object
         self.setlocal(objinfo)
-
         objflux = objinfo[self.band+'FLUX'] # [nanomaggies]
-        obj = galsim.Sersic(float(objinfo['SERSICN_1']), half_light_radius=
-                            float(objinfo['R50_1']),
-                            flux=objflux,gsparams=self.gsparams)
-        obj = obj.shear(q=float(objinfo['BA_1']), beta=
-                        float(objinfo['PHI_1'])*galsim.degrees)
+        obj = galsim.Sersic(n=1.,half_light_radius=2.,flux=objflux,\
+                            gsparams=self.gsparams)
+        #obj = galsim.Sersic(float(objinfo['SERSICN_1']), half_light_radius=
+        #                    float(objinfo['R50_1']),
+        #                    flux=objflux,gsparams=self.gsparams)
+        #obj = obj.shear(q=float(objinfo['BA_1']), beta=
+        #                float(objinfo['PHI_1'])*galsim.degrees)
         stamp = self.convolve_and_draw(obj)
         return stamp
 
@@ -286,7 +339,6 @@ class _GaussianMixtureModel():
     
     @staticmethod
     def save(model, filename):
-        from astropy.io import fits
         hdus = fits.HDUList()
         hdr = fits.Header()
         hdr['covtype'] = model.covariance_type
@@ -297,7 +349,6 @@ class _GaussianMixtureModel():
         
     @staticmethod
     def load(filename):
-        from astropy.io import fits
         hdus = fits.open(filename, memmap=False)
         hdr = hdus[0].header
         covtype = hdr['covtype']
@@ -340,37 +391,30 @@ def no_overlapping_radec(ra,dec, bounds, random_state=None, dist=5.0/3600):
     dist-- separation in degrees, 
            sqrt(x^2+y^2) where x=(dec2-dec1), y=cos(avg(dec2,dec1))*(ra2-ra1)
     '''
+    log = logging.getLogger('decals_sim')
     if random_state is None:
         random_state = np.random.RandomState()
-    # build tree of x,y, data has shape NxK, N points and K=2 dimensions (ra,dec) 
-    tree = KDTree(np.transpose([dec.copy(),\
-                                np.cos(dec.copy()*np.pi/180)*ra.copy()])) 
-    # querry tree with same xy, 1st NN isitself, 2nd is the NN 
-    ds, i_tree = tree.query(np.transpose([dec.copy(),\
-                                        np.cos(dec.copy()*np.pi/180)*ra.copy()]), k=2)
-    i_bad= ds[:,1] < dist # 2nd NN
+    # ra,dec indices of just neighbors within "dist" away, just nerest neighbor of those
+    m1, m2, d12 = match_radec(ra.copy(),dec.copy(), ra.copy(),dec.copy(),\
+                              dist, nearest=True,notself=True) 
+
     cnt = 1
-    print("non overlapping radec: iter=%d, overlaps=%d/%d" % (cnt, ra[i_bad].shape[0],ra.shape[0]))
-    while ra[i_bad].shape[0] > 0:
-        # get new ra,dec wherever too close
-        ra[i_bad]= random_state.uniform(bounds[0], bounds[1], ra[i_bad].shape[0])
-        dec[i_bad]= random_state.uniform(bounds[2], bounds[3], dec[i_bad].shape[0])
-        # re-index and get new separations
-        tree = KDTree(np.transpose([dec.copy(), \
-                                    np.cos(dec.copy()*np.pi/180)*ra.copy()\
-                                    ])) 
-        ds, i_tree = tree.query(np.transpose([dec.copy(), \
-                                              np.cos(dec.copy()*np.pi/180)*ra.copy()]), k=2) 
-        i_bad= ds[:,1] < dist
+    log.info("after iter=%d, have overlapping ra,dec %d/%d", cnt, len(m2),ra.shape[0])
+    while len(m2) > 0:
+        ra[m2]= random_state.uniform(bounds[0], bounds[1], len(m2))
+        dec[m2]= random_state.uniform(bounds[2], bounds[3], len(m2))
+        m1, m2, d12 = match_radec(ra.copy(),dec.copy(), ra.copy(),dec.copy(),\
+                                  dist, nearest=True,notself=True) 
         cnt += 1
-        print("non overlapping radec: iter=%d, overlaps=%d/%d" % (cnt, ra[i_bad].shape[0],ra.shape[0]))
+        log.info("after iter=%d, have overlapping ra,dec %d/%d", cnt, len(m2),ra.shape[0])
         if cnt > 30:
-            print('not converging to non-overlapping radec')
+            log.error('Crash, could not get non-overlapping ra,dec in 30 iterations')
             raise ValueError
     return ra, dec
 
 def build_simcat(nobj=None, brickname=None, brickwcs=None, meta=None, seed=None, noOverlap=True):
     """Build the simulated object catalog, which depends on OBJTYPE."""
+    log = logging.getLogger('decals_sim')
 
     rand = np.random.RandomState(seed)
 
@@ -383,7 +427,7 @@ def build_simcat(nobj=None, brickname=None, brickwcs=None, meta=None, seed=None,
     if noOverlap:
         ra, dec= no_overlapping_radec(ra,dec, bounds,
                                       random_state=rand,
-                                      dist=5./3600) 
+                                      dist=5./3600)
     xxyy = brickwcs.radec2pixelxy(ra, dec)
 
     cat = Table()
@@ -426,7 +470,7 @@ def build_simcat(nobj=None, brickname=None, brickwcs=None, meta=None, seed=None,
         #bdratio_range = [0.0,1.0] # bulge-to-disk ratio
 
     else:
-        print('Unrecognized OBJTYPE!')
+        log.error('Unrecognized OBJTYPE!')
         return 0
 
     # For convenience, also store the grz fluxes in nanomaggies.
@@ -436,8 +480,12 @@ def build_simcat(nobj=None, brickname=None, brickwcs=None, meta=None, seed=None,
     #rz = rand.uniform(rz_range[0], rz_range[1], nobj)
 
     cat['R'] = rmag
-    cat['GR'] = gr
-    cat['RZ'] = rz
+    if meta['OBJTYPE'] == 'ELG':
+        cat['GR'] = 0.
+        cat['RZ'] = 0.
+    else: 
+        cat['GR'] = gr
+        cat['RZ'] = rz
     cat['GFLUX'] = 1E9*10**(-0.4*(rmag+gr)) # [nanomaggies]
     cat['RFLUX'] = 1E9*10**(-0.4*rmag)      # [nanomaggies]
     cat['ZFLUX'] = 1E9*10**(-0.4*(rmag-rz)) # [nanomaggies]
@@ -445,58 +493,10 @@ def build_simcat(nobj=None, brickname=None, brickwcs=None, meta=None, seed=None,
     return cat
 
 
-def do_one_chunk(seed,ith_chunk,  decals_sim_dir,brickname,lobjtype,metacat, nobj,brickwcs,log, args):
-    '''can be called two ways either 1) a loop over nchunks or 2) for one chunk'''
-    output_dir = os.path.join(decals_sim_dir, brickname,lobjtype,'%3.3d' % ith_chunk)    
-    if not os.path.exists(output_dir): 
-        os.makedirs(output_dir)
-    
-    metafile = os.path.join(output_dir, 'metacat-{}-{}.fits'.format(brickname, lobjtype))
-    log.info('Writing {}'.format(metafile))
-    if os.path.isfile(metafile):
-        os.remove(metafile)
-    metacat.write(metafile)
 
-    chunksuffix = '{:02d}'.format(ith_chunk)
-    # Build and write out the simulated object catalog.
-    simcat = build_simcat(nobj, brickname, brickwcs, metacat, seed)       
-    simcatfile = os.path.join(output_dir, 'simcat-{}-{}-{}.fits'.format(brickname, lobjtype, chunksuffix))
-    log.info('Writing {}'.format(simcatfile))
-    if os.path.isfile(simcatfile):
-        os.remove(simcatfile)
-    simcat.write(simcatfile)
-
-    # Use Tractor to just process the blobs containing the simulated sources.
-    simdecals = SimDecals(metacat=metacat, simcat=simcat, output_dir=output_dir)
-    if args.all_blobs:
-        blobxy = None
-    else:
-        blobxy = zip(simcat['X'], simcat['Y'])
-
-    run_brick(brickname, simdecals, threads=args.threads, zoom=args.zoom,
-              wise=False, forceAll=True, writePickles=False, do_calibs=False,
-              write_metrics=False, pixPsf=True, blobxy=blobxy, early_coadds=args.early_coadds,
-              splinesky=True, ceres=False, stages=[args.stage], plots=False,
-              plotbase='sim')
-
-    log.info('Cleaning up...')
-    shutil.copy(os.path.join(output_dir, 'tractor', brickname[:3],
-                             'tractor-{}.fits'.format(brickname)),
-                os.path.join(output_dir, 'tractor-{}-{}-{}.fits'.format(
-                    brickname, lobjtype, chunksuffix)))
-    for suffix in ('image', 'model', 'resid', 'simscoadd'):
-        shutil.copy(os.path.join(output_dir,'coadd', brickname[:3], brickname,
-                                 'legacysurvey-{}-{}.jpg'.format(brickname, suffix)),
-                                 os.path.join(output_dir, 'qa-{}-{}-{}-{}.jpg'.format(
-                                     brickname, lobjtype, suffix, chunksuffix)))
-    shutil.rmtree(os.path.join(output_dir, 'coadd'))
-    shutil.rmtree(os.path.join(output_dir, 'tractor'))
-    return "Finished chunk %3.3d" % ith_chunk
-
-
-def main():
-    """Main routine which parses the optional inputs."""
-
+def get_parser():
+    '''return parser object, tells it what options to look for
+    options can come from a list of strings or command line'''
     parser = argparse.ArgumentParser(formatter_class=argparse.
                                      ArgumentDefaultsHelpFormatter,
                                      description='DECaLS simulations.')
@@ -520,6 +520,9 @@ def main():
                         help='Location of survey-ccds*.fits.gz')
     parser.add_argument('--rmag-range', nargs=2, type=float, default=(18, 26), metavar='', 
                         help='r-band magnitude range')
+    parser.add_argument('--add_sim_noise', action="store_true", help="set to add noise to simulated sources")
+    parser.add_argument('--folding_threshold', type=float,default=1.e-5,action="store", help="for galsim.GSParams")
+    parser.add_argument('-testA','--image_eq_model', action="store_true", help="set to set image,inverr by model only (ignore real image,invvar)")
     parser.add_argument('--all-blobs', action='store_true', 
                         help='Process all the blobs, not just those that contain simulated sources.')
     parser.add_argument('--stage', choices=['tims', 'image_coadds', 'srcs', 'fitblobs', 'coadds'],
@@ -527,9 +530,132 @@ def main():
     parser.add_argument('--early_coadds', action='store_true',
                         help='add this option to make the JPGs before detection/model fitting')
     parser.add_argument('-v', '--verbose', action='store_true', help='toggle on verbose output')
+    return parser
+ 
+def create_metadata(kwargs=None):
+    '''Parses input and returns dict containing 
+    metatable,seeds,brickwcs, other goodies'''
+    assert(kwargs is not None)
+    log = logging.getLogger('decals_sim')
+    # Pack the input parameters into a meta-data table and write out.
+    metacols = [
+        ('BRICKNAME', 'S10'),
+        ('OBJTYPE', 'S10'),
+        ('NOBJ', 'i4'),
+        ('CHUNKSIZE', 'i2'),
+        ('NCHUNK', 'i2'),
+        ('ZOOM', 'i4', (4,)),
+        ('SEED', 'S20'),
+        ('RMAG_RANGE', 'f4', (2,))]
+    metacat = Table(np.zeros(1, dtype=metacols))
 
-    args = parser.parse_args()
+    metacat['BRICKNAME'] = kwargs['brickname']
+    metacat['OBJTYPE'] =kwargs['objtype']
+    metacat['NOBJ'] = kwargs['args'].nobj
+    metacat['NCHUNK'] = kwargs['nchunk']
+    metacat['ZOOM'] = kwargs['args'].zoom
+    metacat['RMAG_RANGE'] = kwargs['args'].rmag_range
+    if not kwargs['args'].seed:
+        log.info('Random seed = {}'.format(kwargs['args'].seed))
+        metacat['SEED'] = kwargs['args'].seed
+   
+    metacat_dir = os.path.join(kwargs['decals_sim_dir'], kwargs['brickname'], kwargs['lobjtype'])    
+    if not os.path.exists(metacat_dir): 
+        os.makedirs(metacat_dir)
+    
+    metafile = os.path.join(metacat_dir, 'metacat-{}-{}.fits'.format(kwargs['brickname'], kwargs['lobjtype']))
+    log.info('Writing {}'.format(metafile))
+    if os.path.isfile(metafile):
+        os.remove(metafile)
+    metacat.write(metafile)
+    
+    # Store new stuff
+    kwargs['metacat']=metacat
+    kwargs['metacat_dir']=metacat_dir
 
+
+def create_ith_simcat(ith_chunk, d=None):
+    '''add simcat, simcat_dir to dict d
+    simcat -- contains randomized ra,dec and PDF fluxes etc for ith chunk
+    d -- dict returned by get_metadata_others()'''
+    assert(d is not None)
+    log = logging.getLogger('decals_sim')
+    chunksuffix = '{:02d}'.format(ith_chunk)
+    # Build and write out the simulated object catalog.
+    seed= d['seeds'][ith_chunk]
+    simcat = build_simcat(d['nobj'], d['brickname'], d['brickwcs'], d['metacat'], seed)
+    # Save file
+    simcat_dir = os.path.join(d['metacat_dir'],'%3.3d' % ith_chunk)    
+    if not os.path.exists(simcat_dir): 
+        os.makedirs(simcat_dir)
+    simcatfile = os.path.join(simcat_dir, 'simcat-{}-{}-{}.fits'.format(d['brickname'], d['lobjtype'], chunksuffix))
+    log.info('Writing {}'.format(simcatfile))
+    if os.path.isfile(simcatfile):
+        os.remove(simcatfile)
+    simcat.write(simcatfile)
+    # add to dict
+    d['simcat']= simcat
+    d['simcat_dir']= simcat_dir
+
+def do_one_chunk(d=None):
+    '''Run tractor
+    Can be run as 1) a loop over nchunks or 2) for one chunk
+    d -- dict returned by get_metadata_others() AND added to by get_ith_simcat()'''
+    assert(d is not None)
+    simdecals = SimDecals(metacat=d['metacat'], simcat=d['simcat'], output_dir=d['simcat_dir'], \
+                          add_sim_noise=d['args'].add_sim_noise, folding_threshold=d['args'].folding_threshold,\
+                          image_eq_model=d['args'].image_eq_model)
+    # Use Tractor to just process the blobs containing the simulated sources.
+    if d['args'].all_blobs:
+        blobxy = None
+    else:
+        blobxy = zip(d['simcat']['X'], d['simcat']['Y'])
+
+    run_brick(d['brickname'], simdecals, threads=d['args'].threads, zoom=d['args'].zoom,
+              wise=False, forceAll=True, writePickles=False, do_calibs=False,
+              write_metrics=False, pixPsf=True, blobxy=blobxy, early_coadds=d['args'].early_coadds,
+              splinesky=True, ceres=False, stages=[ d['args'].stage ], plots=False,
+              plotbase='sim')
+
+def do_ith_cleanup(ith_chunk=None, d=None):
+    '''for each chunk that finishes running, 
+    Remove unecessary files and give unique names to all others
+    d -- dict returned by get_metadata_others() AND added to by get_ith_simcat()'''
+    assert(ith_chunk is not None and d is not None) 
+    log = logging.getLogger('decals_sim')
+    log.info('Cleaning up...')
+    chunksuffix = '{:02d}'.format(ith_chunk)
+    brickname= d['brickname']
+    output_dir= d['simcat_dir']
+    lobjtype= d['lobjtype'] 
+    shutil.copy(os.path.join(output_dir, 'tractor', brickname[:3],
+                             'tractor-{}.fits'.format(brickname)),
+                os.path.join(output_dir, 'tractor-{}-{}-{}.fits'.format(
+                    brickname, lobjtype, chunksuffix)))
+    for suffix in ('image', 'model', 'resid', 'simscoadd'):
+        shutil.copy(os.path.join(output_dir,'coadd', brickname[:3], brickname,
+                                 'legacysurvey-{}-{}.jpg'.format(brickname, suffix)),
+                                 os.path.join(output_dir, 'qa-{}-{}-{}-{}.jpg'.format(
+                                     brickname, lobjtype, suffix, chunksuffix)))
+    shutil.rmtree(os.path.join(output_dir, 'coadd'))
+    shutil.rmtree(os.path.join(output_dir, 'tractor'))
+    log.info("Finished chunk %3.3d" % ith_chunk)
+
+
+def main(args=None):
+    """Main routine which parses the optional inputs."""
+    # Command line options
+    parser= get_parser()    
+    args = parser.parse_args(args=args)
+    # Setup loggers
+    if args.verbose:
+        lvl = logging.DEBUG
+    else:
+        lvl = logging.INFO
+    logging.basicConfig(level=lvl, stream=sys.stdout) #,format='%(message)s')
+    log = logging.getLogger('decals_sim')
+    # Sort through args 
+    log.info('decals_sim.py args={}'.format(args))
     max_nobj=500
     max_nchunk=1000
     if args.ith_chunk is not None: assert(args.ith_chunk <= max_nchunk-1)
@@ -540,15 +666,7 @@ def main():
     if args.nobj is None:
         parser.print_help()
         sys.exit(1)
-
-    # Set the debugging level
-    if args.verbose:
-        lvl = logging.DEBUG
-    else:
-        lvl = logging.INFO
-    logging.basicConfig(format='%(message)s', level=lvl, stream=sys.stdout)
-    log = logging.getLogger('__name__')
-
+ 
     brickname = args.brick
     objtype = args.objtype.upper()
     lobjtype = objtype.lower()
@@ -592,40 +710,35 @@ def main():
     radec_center = brickwcs.radec_center()
     log.info('RA, Dec center = {}'.format(radec_center))
     log.info('Brick = {}'.format(brickname))
-
-    # Pack the input parameters into a meta-data table and write out.
-    metacols = [
-        ('BRICKNAME', 'S10'),
-        ('OBJTYPE', 'S10'),
-        ('NOBJ', 'i4'),
-        ('CHUNKSIZE', 'i2'),
-        ('NCHUNK', 'i2'),
-        ('ZOOM', 'i4', (4,)),
-        ('SEED', 'S20'),
-        ('RMAG_RANGE', 'f4', (2,))]
-    metacat = Table(np.zeros(1, dtype=metacols))
-
-    metacat['BRICKNAME'] = brickname
-    metacat['OBJTYPE'] = objtype
-    metacat['NOBJ'] = args.nobj
-    metacat['NCHUNK'] = nchunk
-    metacat['ZOOM'] = args.zoom
-    metacat['RMAG_RANGE'] = args.rmag_range
-    if not args.seed:
-        log.info('Random seed = {}'.format(args.seed))
-        metacat['SEED'] = args.seed
-    # run tractor
-    # only specified chunk
+    
     if args.ith_chunk is not None: 
-        message= do_one_chunk(seeds[args.ith_chunk],args.ith_chunk,  decals_sim_dir,brickname,lobjtype,metacat, nobj,brickwcs,log, args)
-        print(message)
-    # all chunks
-    else:
-        for ith_chunk in range(nchunk):
-            log.info('Working on chunk {:02d}/{:02d}'.format(ith_chunk+1,nchunk))
-            message= do_one_chunk(seeds[ith_chunk],ith_chunk,  decals_sim_dir,brickname,lobjtype,metacat, nobj,brickwcs,log, args)
-            print(message)
+        chunk_list= [args.ith_chunk]
+    else: 
+        chunk_list= range(nchunk)
+
+    # Store args in dict for easy func passing
+    kwargs=dict(seeds=seeds,\
+                brickname=brickname, \
+                decals_sim_dir= decals_sim_dir,\
+                brickwcs= brickwcs, \
+                objtype=objtype,\
+                lobjtype=lobjtype,\
+                nobj=nobj,\
+                nchunk=nchunk,\
+                args=args) 
+    
+    # Create simulated catalogues and run Tractor
+    create_metadata(kwargs=kwargs)
+    # do chunks
+    for ith_chunk in chunk_list:
+        log.info('Working on chunk {:02d}/{:02d}'.format(ith_chunk,kwargs['nchunk']-1))
+        # Random ra,dec and source properties
+        create_ith_simcat(ith_chunk, d=kwargs)
+        # Run tractor
+        do_one_chunk(d=kwargs)
+        # Clean up output
+        do_ith_cleanup(ith_chunk=ith_chunk, d=kwargs)
     log.info('All done!')
-        
+     
 if __name__ == '__main__':
     main()

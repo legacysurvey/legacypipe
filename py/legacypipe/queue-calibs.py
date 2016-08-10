@@ -228,6 +228,10 @@ def main():
         rlo,rhi = 240,245
         dlo,dhi =   5, 12
 
+    elif opt.region == 'edrplus':
+        rlo,rhi = 235,248
+        dlo,dhi =   5, 15
+
     elif opt.region == 'edr-south':
         rlo,rhi = 240,245
         dlo,dhi =   5, 10
@@ -271,6 +275,9 @@ def main():
     elif opt.region == 'southeast':
         rlo,rhi = 0,120
         dlo,dhi = -20,0
+    elif opt.region == 'southsoutheast':
+        rlo,rhi = 0,120
+        dlo,dhi = -20,-10
     elif opt.region == 'midwest':
         rlo,rhi = 240,360
         dlo,dhi = 0,20

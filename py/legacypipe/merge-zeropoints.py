@@ -5,8 +5,60 @@ import os
 from collections import Counter
 from astrometry.util.fits import fits_table, merge_tables
 
-# Runs 13 and 15, for adjusting obstatus file...
+def mzls_to_20160226():
+    basedir = os.environ['LEGACY_SURVEY_DIR']
+    cam = 'mosaic'
+    image_basedir = os.path.join(basedir, 'images')
+    TT = []
 
+    for fn,dirnms in [
+        ('/global/homes/a/arjundey/ZeroPoints/mzls-zpt-all.fits',
+         ['CP20160202','CP20160203','CP20160204','CP20160205','CP20160206','CP20160208',
+          'CP20160209','CP20160210','CP20160211','CP20160212','CP20160213','CP20160214',
+          'CP20160215','CP20160216','CP20160217','CP20160219','CP20160224','CP20160225',
+          'CP20160226']),
+        ]:
+        T = fits_table(fn)
+        normalize_zeropoints(fn, dirnms, image_basedir, cam, T=T)
+        TT.append(T)
+    T = merge_tables(TT)
+
+    I = np.flatnonzero(T.fwhm == 0)
+    if len(I):
+        T.fwhm[I] = T.seeing[I] / 0.262
+
+    outfn = 'survey-ccds-mzls-to-20160226.fits'
+    T.writeto(outfn)
+    print('Wrote', outfn)
+
+    for fn in [outfn]:
+        os.system('gzip --best ' + fn)
+
+# Runs 16 and 17, for adjusting obstatus file...
+def decals_run16():
+    basedir = os.environ['LEGACY_SURVEY_DIR']
+    cam = 'decam'
+    image_basedir = os.path.join(basedir, 'images')
+    TT = []
+
+    for fn,dirnms in [
+        ('/global/homes/a/arjundey/ZeroPoints/decals-zpt-20160709_20.fits',
+         ['CP20160709', 'CP20160720']),
+        ]:
+        T = fits_table(fn)
+        #T.cut(np.nonzero([e not in expnums for e in T.expnum])[0])
+        normalize_zeropoints(fn, dirnms, image_basedir, cam, T=T)
+        TT.append(T)
+    T = merge_tables(TT)
+    outfn = 'survey-ccds-run16.fits'
+    T.writeto(outfn)
+    print('Wrote', outfn)
+
+    for fn in [outfn]:
+        os.system('gzip --best ' + fn)
+
+
+# Runs 13 and 15, for adjusting obstatus file...
 def decals_dr3_plus():
     basedir = os.environ['LEGACY_SURVEY_DIR']
     cam = 'decam'
@@ -367,7 +419,9 @@ if __name__ == '__main__':
     #decals_dr3_dedup()
     #decals_dr3_fix392400()
     #decals_dr3_check_wcsfailed()
-    decals_dr3_plus()
+    #decals_dr3_plus()
+    #decals_run16()
+    mzls_to_20160226()
     sys.exit(0)
     
     basedir = './deep2f3'
