@@ -288,7 +288,7 @@ class LegacySurveyImage(object):
             sig1 = skysig1
             if nanomaggies:
                 # skysig1 is in the native units
-                sig1 /= zpscale
+                sig1 /= orig_zpscale
         else:
             # Estimate per-pixel noise via Blanton's 5-pixel MAD
             slice1 = (slice(0,-5,10),slice(0,-5,10))
