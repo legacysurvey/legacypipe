@@ -5,8 +5,31 @@ import os
 from collections import Counter
 from astrometry.util.fits import fits_table, merge_tables
 
-# Runs 13 and 15, for adjusting obstatus file...
+# Runs 16 and 17, for adjusting obstatus file...
+def decals_run16():
+    basedir = os.environ['LEGACY_SURVEY_DIR']
+    cam = 'decam'
+    image_basedir = os.path.join(basedir, 'images')
+    TT = []
 
+    for fn,dirnms in [
+        ('/global/homes/a/arjundey/ZeroPoints/decals-zpt-20160709_20.fits',
+         ['CP20160709', 'CP20160720']),
+        ]:
+        T = fits_table(fn)
+        #T.cut(np.nonzero([e not in expnums for e in T.expnum])[0])
+        normalize_zeropoints(fn, dirnms, image_basedir, cam, T=T)
+        TT.append(T)
+    T = merge_tables(TT)
+    outfn = 'survey-ccds-run16.fits'
+    T.writeto(outfn)
+    print('Wrote', outfn)
+
+    for fn in [outfn]:
+        os.system('gzip --best ' + fn)
+
+
+# Runs 13 and 15, for adjusting obstatus file...
 def decals_dr3_plus():
     basedir = os.environ['LEGACY_SURVEY_DIR']
     cam = 'decam'
@@ -367,7 +390,8 @@ if __name__ == '__main__':
     #decals_dr3_dedup()
     #decals_dr3_fix392400()
     #decals_dr3_check_wcsfailed()
-    decals_dr3_plus()
+    #decals_dr3_plus()
+    decals_run16()
     sys.exit(0)
     
     basedir = './deep2f3'
