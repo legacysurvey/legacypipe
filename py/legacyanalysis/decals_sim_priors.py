@@ -130,7 +130,7 @@ class _GaussianMixtureModel(object):
         return X
 
 
-def add_MoG_curves(ax, means_, covars_, weights_, label=None):
+def add_MoG_curves(ax, means_, covars_, weights_):
     '''plot 2-sigma ellipses for each multivariate component'''
     ax.scatter(means_[:, 0], means_[:, 1], c='w')
     scale=2.
@@ -155,7 +155,7 @@ def add_MoG_curves(ax, means_, covars_, weights_, label=None):
         ax.add_patch(Ellipse((mu[0], mu[1]),
                      2 * scale * sigma1, 2 * scale * sigma2,
                      alpha * 180. / np.pi,\
-                     fc='none', ec='k'),label=label)
+                     fc='none', ec='k'))
         cnt+=1
 
 
