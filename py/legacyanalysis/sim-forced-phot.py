@@ -18,6 +18,7 @@ from legacypipe.common import LegacySurveyData, imsave_jpeg, get_rgb
 from scipy.ndimage.filters import gaussian_filter
 
 from tractor import *
+from tractor.pointsource import BasicSource
 
 pixscale = 0.262 / 3600.
 
@@ -35,8 +36,35 @@ class TrackingTractor(Tractor):
         super(TrackingTractor, self).setParams(p)
         self.tracked_lnprob.append(self.getLogProb())
 
+class SourceDerivatives(MultiParams, BasicSource):
+    def __init__(self, real, freeze, thaw, brights):
+        '''
+        *real*: The real source whose derivatives are my profiles.
+        *freeze*: List of parameter names to freeze before taking derivs
+        *thaw*: List of parameter names to thaw before taking derivs
+        '''
+        super(SourceDerivatives,self).__init__(*brights)
+        self.real = real
+        self.freeze = freeze
+        self.thaw = thaw
+        self.brights = brights
+
+    # forced photom calls getUnitFluxModelPatches
+    def getUnitFluxModelPatches(self, img, minval=0., modelMask=None):
+        self.real.freezeParamsRecursive(*self.freeze)
+        self.real.thawParamsRecursive(*self.thaw)
+        print('SourceDerivatives: source has params:')
+        self.real.printThawedParams()
+        derivs = self.real.getParamDerivatives(img, modelMask=modelMask)
+        print('SourceDerivs: derivs', derivs)
+        # and revert...
+        self.real.freezeParamsRecursive(*self.thaw)
+        self.real.thawParamsRecursive(*self.freeze)
+        return derivs
+        
+        
 def sim(nims, nsrcs, H,W, ps, dpix, nsamples, forced=True, ceres=False,
-        alphas=None):
+        alphas=None, derivs=False):
 
     truewcs = Tan(0., 0., W/2., H/2., -pixscale, 0., 0., pixscale,
                   float(W), float(H))
@@ -56,8 +84,16 @@ def sim(nims, nsrcs, H,W, ps, dpix, nsamples, forced=True, ceres=False,
     
     srcs = []
     for i in range(nsrcs):
-        srcs.append(PointSource(RaDecPos(0., 0.), Flux(flux)))
-
+        src = PointSource(RaDecPos(0., 0.), Flux(flux))
+        srcs.append(src)
+        if forced:
+            src.freezeAllBut('brightness')
+        if derivs:
+            realsrc = src
+            dsrc = SourceDerivatives(realsrc, ['brightness'], ['pos'],
+                                     [Flux(0.),Flux(0.)])
+            srcs.append(dsrc)
+            
     tims = []
     for i in range(nims):
         v = psf_sigma**2
@@ -87,7 +123,6 @@ def sim(nims, nsrcs, H,W, ps, dpix, nsamples, forced=True, ceres=False,
         mod = tr.getModelImage(i)
         mod += np.random.normal(size=mod.shape) * sig1
         tim.data = mod
-        print('Mod type', mod.dtype)
         mods.append(mod)
 
     if ps is not None:
@@ -96,10 +131,6 @@ def sim(nims, nsrcs, H,W, ps, dpix, nsamples, forced=True, ceres=False,
         ps.savefig()
         
     tr.freezeParam('images')
-
-    if forced:
-        for src in srcs:
-            src.freezeAllBut('brightness')
 
     print('Params:')
     tr.printThawedParams()
@@ -458,6 +489,37 @@ if __name__ == '__main__':
     us = datetime.datetime.now().microsecond
     print('Setting random seed to', us)
     seed = us
+
+    if True:
+        np.random.seed(seed)
+        results = sim(nims, nsrcs, H,W, ps, 1.0, 10, derivs=True)
+
+        dx = np.array([x for x,y,p in results])
+        dy = np.array([y for x,y,p in results])
+        pp = np.array([p for x,y,p in results])
+        print('Params:', pp.shape)
+        
+        flux = pp[:,0]
+        fluxdx = pp[:,1] * 3600 * 100
+        fluxdy = pp[:,2] * 3600 * 100
+
+        print('Fluxdx:', fluxdx)
+        print('Fluxdy:', fluxdy)
+        
+        r = np.hypot(dx, dy)
+        plt.clf()
+        plt.plot(r, flux, 'b.', label='Flux')
+        plt.xlabel('WCS Scatter Distance (pix)')
+        plt.ylabel('Flux')
+        plt.title('Forced photometry: Astrometry sensitivity')
+
+        plt.plot(dx, fluxdx, 'r.', label='x deriv')
+        plt.plot(dy, fluxdy, 'g.', label='y deriv')
+        plt.legend()
+
+        ps.savefig()
+
+        sys.exit(0)
     
     if False:
         results = sim(nims, nsrcs, H,W, ps, 1.0, 100)
