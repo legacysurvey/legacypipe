@@ -27,8 +27,8 @@ sudo: false
 #     - pip3 install --user photutils
 
 install:
-    - pip install numpy==1.11.0
-    - pip install matplotlib==1.5.1
+    - pip install numpy
+    - pip install matplotlib
     - pip install numpydoc -t $HOME/numpydoc
     - pip install coveralls
     - pip install astropy
