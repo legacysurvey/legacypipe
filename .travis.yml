@@ -9,44 +9,46 @@ sudo: false
 #   - sudo pip install numpydoc
 # # python-numpydoc -- not available until Ubuntu 14.04 trusty
 
-# install:
-#     - pip install --user numpy==1.11.0
-#     - pip install --user matplotlib==1.5.1
-#     - pip install numpydoc -t $HOME/numpydoc
-#     - pip install --user coveralls
-#     - pip install --user astropy
-#     - pip install --user fitsio
-#     - pip install --user photutils
-#     - easy_install3 --user pip
-#     - pip3 install --user numpy==1.11.0
-#     - pip3 install --user matplotlib==1.5.1
-#     - pip3 install numpydoc -t $HOME/numpydoc
-#     - pip3 install --user coveralls
-#     - pip3 install --user astropy
-#     - pip3 install --user fitsio
-#     - pip3 install --user photutils
-
 install:
-    - pip install numpy
-    - python -c "from __future__ import print_function; import numpy; print(numpy.__file__)"
-    - python -c "from __future__ import print_function; import numpy.distutils.system_info as sysinfo; print([(x, sysinfo.get_info(x)) for x in ['atlas', 'lapack', 'blas', 'lapack_src', 'blas_src']])"
-    - python -c "from __future__ import print_function; import numpy; print(numpy.__config__.show())"
-    - pip install scipy
-    - pip install matplotlib
+    - pip install --user numpy==1.11.0
+    - pip install --user matplotlib==1.5.1
     - pip install numpydoc -t $HOME/numpydoc
-    - pip install coveralls
-    - pip install astropy
-    - pip install fitsio
-    - pip install photutils
+    - pip install --user coveralls
+    - pip install --user astropy
+    - pip install --user fitsio
+    - pip install --user photutils
+    - easy_install3 --user pip
+    - pip3 install --user numpy==1.11.0
+    - pip3 install --user matplotlib==1.5.1
+    - pip3 install numpydoc -t $HOME/numpydoc
+    - pip3 install --user coveralls
+    - pip3 install --user astropy
+    - pip3 install --user fitsio
+    - pip3 install --user photutils
 
-# language: c
-# compiler:
-#     - gcc
+# This failed due to error building scipy (blas)
+# language: python
+# python:
+#   - "2.7"
+#   - "2.7_with_system_site_packages"
+#   - "3.4"
+# install:
+#     - pip install numpy
+#     - python -c "from __future__ import print_function; import numpy; print(numpy.__file__)"
+#     - python -c "from __future__ import print_function; import numpy.distutils.system_info as sysinfo; print([(x, sysinfo.get_info(x)) for x in ['atlas', 'lapack', 'blas', 'lapack_src', 'blas_src']])"
+#     - python -c "from __future__ import print_function; import numpy; print(numpy.__config__.show())"
+#     - pip install scipy
+#     - pip install matplotlib
+#     - pip install numpydoc -t $HOME/numpydoc
+#     - pip install coveralls
+#     - pip install astropy
+#     - pip install fitsio
+#     - pip install photutils
 
-language: python
-python:
-  - "2.7"
-  - "3.4"
+language: c
+compiler:
+    - gcc
+
 
 before_script:
     - export WCSLIB_INC="-I/usr/include/wcslib-4.8.3"
@@ -102,7 +104,7 @@ addons:
     - gsl-bin
     - python-sphinx
     - python-mock
-    - python-numpy   # try just to get blas deps
+    #- python-numpy   # try just to get blas deps
     #- python-matplotlib
     - python-scipy
     - python3
