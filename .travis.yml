@@ -81,9 +81,9 @@ script:
     - python -c "import matplotlib; print matplotlib.__file__"
     - python -c "import fitsio; print fitsio.__file__"
     - (cd py && coverage run test/runbrick_test.py travis)
-    - python3 -c "import numpy; print(numpy.__file__)"
-    - python3 -c "import matplotlib; print(matplotlib.__file__)"
-    - python3 -c "import fitsio; print(fitsio.__file__)"
+#     - python3 -c "import numpy; print(numpy.__file__)"
+#     - python3 -c "import matplotlib; print(matplotlib.__file__)"
+#     - python3 -c "import fitsio; print(fitsio.__file__)"
 # Ugh, travis's "precise" distro includes numpy 1.6.1
 # (np.fft.rfftfreq doesn't exist)
 # For python3 it's also numpy 1.6
