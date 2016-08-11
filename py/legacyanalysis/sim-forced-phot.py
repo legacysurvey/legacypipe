@@ -47,8 +47,8 @@ def sim(nims, nsrcs, H,W, ps, dpix, nsamples, forced=True, ceres=False,
 
     sig1 = 1.
     flux = 100.
-    # PSF variance
-    psf_sigma = 1.5
+    #psf_sigma = 1.5
+    psf_sigma = 2.0
 
     psfnorm = 1./(2. * np.sqrt(np.pi) * psf_sigma)
     nsigma = flux * psfnorm / sig1
@@ -119,8 +119,10 @@ def sim(nims, nsrcs, H,W, ps, dpix, nsamples, forced=True, ceres=False,
         dy = np.zeros(len(tims))
         
         for i,tim in enumerate(tims):
-            dx[i] = dpix * np.random.uniform(low=-1., high=1.)
-            dy[i] = dpix * np.random.uniform(low=-1., high=1.)
+            # dx[i] = dpix * np.random.uniform(low=-1., high=1.)
+            # dy[i] = dpix * np.random.uniform(low=-1., high=1.)
+            dx[i] = dpix * np.random.normal()
+            dy[i] = dpix * np.random.normal()
             wcs = Tan(0., 0.,
                       W/2. + dx[i], H/2. + dy[i],
                       -pixscale, 0., 0., pixscale, float(W), float(H))
@@ -507,12 +509,12 @@ if __name__ == '__main__':
         # flux measurements.
 
         nims = 4
-        nsamples = 100
+        nsamples = 500
 
         allfluxes = []
         names = []
 
-        dpixes = [1., 0.3, 0.1, 0.]
+        dpixes = [1.5, 1., 0.5, 0.1, 0.]
         for dpix in dpixes:
 
             # Reset the seed -- same pixel noise instantiation for
@@ -537,7 +539,7 @@ if __name__ == '__main__':
             names.append('+- %g pix' % dpix)
             
         plt.clf()
-        bins = 20
+        bins = 50
         mn = min([min(flux) for flux in allfluxes])
         mx = max([max(flux) for flux in allfluxes])
         bins = np.linspace(mn, mx, bins)
