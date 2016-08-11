@@ -17,41 +17,6 @@ python legacyanalysis/decals_sim_plots.py ... --extra_plots
 default is to NOT make them because chunks > 50
 """
 
-from __future__ import division, print_function
-
-import matplotlib
-matplotlib.use('Agg') # display backend
-import matplotlib.pyplot as plt
-from matplotlib.patches import Circle
-import matplotlib.image as mpimg
-
-import os
-import sys
-import pdb
-import logging
-import argparse
-import glob
-import numpy as np
-
-from astropy.io import fits
-from astropy.table import vstack, Table
-from astrometry.libkd.spherematch import match_radec
-#from thesis_code import matching
-# import seaborn as sns
-from PIL import Image, ImageDraw
-import photutils
-
-def basic_cut(tractor):
-    '''return boolean indices for which to keep and throw out'''
-    flux= tractor['decam_flux'][:,[1,2,4]]
-    grz_anymask= tractor['decam_anymask'][:,[1,2,4]]
-    grz_nobs= tractor['decam_nobs'][:,[1,2,4]]
-    b_good= np.all((flux[:,0] > 0, flux[:,1] > 0, flux[:,2] > 0, \
-                    grz_anymask[:,0] == 0,grz_anymask[:,1] ==0,grz_anymask[:,2] == 0),axis=0)
-                    #grz_nobs[:,0] > 1,grz_nobs[:,1] > 1,grz_nobs[:,2] > 1,\
-    b_bad= b_good == False
-    return b_good,b_bad
-
 def bright_dmag_cut(matched_simcat,matched_tractor):
     '''return: 
     1) median dmag of bright sources
@@ -675,4 +640,28 @@ def main():
     '''
     
 if __name__ == "__main__":
+    from __future__ import division, print_function
+
+    import matplotlib
+    matplotlib.use('Agg') # display backend
+    import matplotlib.pyplot as plt
+    from matplotlib.patches import Circle
+    import matplotlib.image as mpimg
+
+    import os
+    import sys
+    import pdb
+    import logging
+    import argparse
+    import glob
+    import numpy as np
+
+    from astropy.io import fits
+    from astropy.table import vstack, Table
+    from astrometry.libkd.spherematch import match_radec
+    #from thesis_code import matching
+    # import seaborn as sns
+    from PIL import Image, ImageDraw
+    import photutils
+    
     main()
