@@ -16,6 +16,30 @@ Missing object and annotated coadd plots
 python legacyanalysis/decals_sim_plots.py ... --extra_plots
 default is to NOT make them because chunks > 50
 """
+from __future__ import division, print_function
+
+import matplotlib
+matplotlib.use('Agg') # display backend
+import matplotlib.pyplot as plt
+from matplotlib.patches import Circle
+import matplotlib.image as mpimg
+
+import os
+import sys
+import pdb
+import logging
+import argparse
+import glob
+import numpy as np
+
+from astropy.io import fits
+from astropy.table import vstack, Table
+from astropy import units
+from astropy.coordinates import SkyCoord
+
+# import seaborn as sns
+from PIL import Image, ImageDraw
+import photutils
 
 def bright_dmag_cut(matched_simcat,matched_tractor):
     '''return: 
@@ -498,12 +522,14 @@ def main():
         log.info('Reading {}'.format(tractorfile))
         tractor = Table(fits.getdata(tractorfile, 1))
         # Match
-        m1, m2, d12 = match_radec(tractor['ra'].copy(), tractor['dec'].copy(),
-                                  simcat['RA'].copy(), simcat['DEC'].copy(), 1.0/3600.0)
-        #m1, m2, d12 = matching.johan_tree(tractor['ra'].copy(), tractor['dec'].copy(),\
-        #                                    simcat['RA'].copy(), simcat['DEC'].copy(), dsmax=1.0/3600.0)
+        cat1 = SkyCoord(ra=tractor['ra']*units.degree, dec=tractor['dec']*units.degree)
+        cat2 = SkyCoord(ra=simcat['RA']*units.degree, dec=simcat['DEC']*units.degree)
+        m2, d2d, d3d = cat1.match_to_catalog_3d(cat2)
+        b= np.array(d2d) <= 1./3600
+        m2= np.array(m2)[b]
+        m1= np.arange(len(tractor))[b]
         print('matched %d/%d' % (len(m2),len(simcat['RA'])))
-
+        
         missing = np.delete(np.arange(len(simcat)), m2, axis=0)
         log.info('Missing {}/{} sources'.format(len(missing), len(simcat)))
 
@@ -639,29 +665,5 @@ def main():
         plt.savefig(qafile)
     '''
     
-if __name__ == "__main__":
-    from __future__ import division, print_function
-
-    import matplotlib
-    matplotlib.use('Agg') # display backend
-    import matplotlib.pyplot as plt
-    from matplotlib.patches import Circle
-    import matplotlib.image as mpimg
-
-    import os
-    import sys
-    import pdb
-    import logging
-    import argparse
-    import glob
-    import numpy as np
-
-    from astropy.io import fits
-    from astropy.table import vstack, Table
-    from astrometry.libkd.spherematch import match_radec
-    #from thesis_code import matching
-    # import seaborn as sns
-    from PIL import Image, ImageDraw
-    import photutils
-    
+if __name__ == "__main__":    
     main()

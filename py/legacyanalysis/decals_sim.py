@@ -57,7 +57,8 @@ from astropy.io import fits
 #from astropy import wcs as astropy_wcs
 from fitsio import FITSHDR
 
-from astrometry.libkd.spherematch import match_radec
+from astropy import units
+from astropy.coordinates import SkyCoord
 
 from tractor.psfex import PsfEx, PsfExModel
 from tractor.basics import GaussianMixtureEllipsePSF, RaDecPos
@@ -306,13 +307,10 @@ class BuildStamp():
         # Create localpsf object
         self.setlocal(objinfo)
         objflux = objinfo[self.band+'FLUX'] # [nanomaggies]
-        obj = galsim.Sersic(n=1.,half_light_radius=2.,flux=objflux,\
-                            gsparams=self.gsparams)
-        #obj = galsim.Sersic(float(objinfo['SERSICN_1']), half_light_radius=
-        #                    float(objinfo['R50_1']),
-        #                    flux=objflux,gsparams=self.gsparams)
-        #obj = obj.shear(q=float(objinfo['BA_1']), beta=
-        #                float(objinfo['PHI_1'])*galsim.degrees)
+        obj = galsim.Sersic(float(objinfo['SERSICN_1']), half_light_radius=float(objinfo['R50_1']),\
+                            flux=objflux, gsparams=self.gsparams)
+        obj = obj.shear(q=float(objinfo['BA_1']), beta=float(objinfo['PHI_1'])*galsim.degrees,\
+                        gsparams=self.gsparams)
         stamp = self.convolve_and_draw(obj)
         return stamp
 
@@ -339,16 +337,25 @@ def no_overlapping_radec(ra,dec, bounds, random_state=None, dist=5.0/3600):
     if random_state is None:
         random_state = np.random.RandomState()
     # ra,dec indices of just neighbors within "dist" away, just nerest neighbor of those
-    m1, m2, d12 = match_radec(ra.copy(),dec.copy(), ra.copy(),dec.copy(),\
-                              dist, nearest=True,notself=True) 
+    cat1 = SkyCoord(ra=ra*units.degree, dec=dec*units.degree)
+    cat2 = SkyCoord(ra=ra*units.degree, dec=dec*units.degree)
+    m2, d2d, d3d = cat1.match_to_catalog_sky(cat2,nthneighbor=2) # don't match to self
+    b= np.array(d2d) <= dist
+    m2= np.array(m2)[b]
 
     cnt = 1
-    log.info("after iter=%d, have overlapping ra,dec %d/%d", cnt, len(m2),ra.shape[0])
+    #log.info("astrom: after iter=%d, have overlapping ra,dec %d/%d", cnt, len(m2),ra.shape[0])
+    log.info("Astrpy: after iter=%d, have overlapping ra,dec %d/%d", cnt, len(m2),ra.shape[0])
     while len(m2) > 0:
         ra[m2]= random_state.uniform(bounds[0], bounds[1], len(m2))
         dec[m2]= random_state.uniform(bounds[2], bounds[3], len(m2))
-        m1, m2, d12 = match_radec(ra.copy(),dec.copy(), ra.copy(),dec.copy(),\
-                                  dist, nearest=True,notself=True) 
+        # Any more matches? 
+        cat1 = SkyCoord(ra=ra*units.degree, dec=dec*units.degree)
+        cat2 = SkyCoord(ra=ra*units.degree, dec=dec*units.degree)
+        m2, d2d, d3d = cat1.match_to_catalog_sky(cat2,nthneighbor=2) # don't match to self
+        b= np.array(d2d) <= dist
+        m2= np.array(m2)[b]
+        #
         cnt += 1
         log.info("after iter=%d, have overlapping ra,dec %d/%d", cnt, len(m2),ra.shape[0])
         if cnt > 30:
@@ -390,18 +397,17 @@ def build_simcat(nobj=None, brickname=None, brickwcs=None, meta=None, seed=None,
         gr = grzsample[:, 1]
 
     elif meta['OBJTYPE'] == 'ELG':
-        gr_range = [-0.3, 0.5]
-        rz_range = [0.0, 1.5]
-        sersicn_1_range = [1.0, 1.0]
-        r50_1_range = [0.5, 2.5]
-        ba_1_range = [0.2, 1.0]
-
-        gr = rand.uniform(gr_range[0], gr_range[1], nobj)
-        rz = rand.uniform(rz_range[0], rz_range[1], nobj)
-        sersicn_1 = rand.uniform(sersicn_1_range[0], sersicn_1_range[1], nobj)
-        r50_1 = rand.uniform(r50_1_range[0], r50_1_range[1], nobj)
-        ba_1 = rand.uniform(ba_1_range[0], ba_1_range[1], nobj)
-        phi_1 = rand.uniform(0.0, 180.0, nobj)
+        # Read the MoG file and sample from it.
+        mogfile = resource_filename('legacypipe', os.path.join('data', 'elg_colors_mog.fits'))
+        mog = priors._GaussianMixtureModel.load(mogfile)
+        grzsample = mog.sample(nobj, random_state=rand)
+        # Samples
+        rz = grzsample[:, 0]
+        gr = grzsample[:, 1]
+        sersicn_1 = rand.uniform(0.5,0.5, nobj)
+        r50_1 = rand.uniform(0.5,0.5, nobj)
+        ba_1 = rand.uniform(0.2,1.0, nobj) #minor to major axis ratio
+        phi_1 = rand.uniform(0.0, 180.0, nobj) #position angle
 
         cat['SERSICN_1'] = Column(sersicn_1, dtype='f4')
         cat['R50_1'] = Column(r50_1, dtype='f4')
