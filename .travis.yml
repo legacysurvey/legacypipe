@@ -102,7 +102,7 @@ addons:
     - gsl-bin
     - python-sphinx
     - python-mock
-    #- python-numpy
+    - python-numpy   # try just to get blas deps
     #- python-matplotlib
     - python-scipy
     - python3
