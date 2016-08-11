@@ -30,6 +30,7 @@ install:
     - pip install numpy
     - python -c "from __future__ import print_function; import numpy; print(numpy.__file__)"
     - python -c "from __future__ import print_function; import numpy.distutils.system_info as sysinfo; print([(x, sysinfo.get_info(x)) for x in ['atlas', 'lapack', 'blas', 'lapack_src', 'blas_src']])"
+    - python -c "from __future__ import print_function; import numpy; print(numpy.__config__.show())"
     - pip install scipy
     - pip install matplotlib
     - pip install numpydoc -t $HOME/numpydoc
