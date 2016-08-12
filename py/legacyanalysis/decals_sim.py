@@ -309,8 +309,7 @@ class BuildStamp():
         objflux = objinfo[self.band+'FLUX'] # [nanomaggies]
         obj = galsim.Sersic(float(objinfo['SERSICN_1']), half_light_radius=float(objinfo['R50_1']),\
                             flux=objflux, gsparams=self.gsparams)
-        obj = obj.shear(q=float(objinfo['BA_1']), beta=float(objinfo['PHI_1'])*galsim.degrees,\
-                        gsparams=self.gsparams)
+        obj = obj.shear(q=float(objinfo['BA_1']), beta=float(objinfo['PHI_1'])*galsim.degrees)
         stamp = self.convolve_and_draw(obj)
         return stamp
 
