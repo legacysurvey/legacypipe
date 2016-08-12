@@ -423,21 +423,12 @@ def build_simcat(nobj=None, brickname=None, brickwcs=None, meta=None, seed=None,
         log.error('Unrecognized OBJTYPE!')
         return 0
 
-    # For convenience, also store the grz fluxes in nanomaggies.
+    # Store grz fluxes in nanomaggies.
     rmag_range = np.squeeze(meta['RMAG_RANGE'])
     rmag = rand.uniform(rmag_range[0], rmag_range[1], nobj)
-    #gr = rand.uniform(gr_range[0], gr_range[1], nobj)
-    #rz = rand.uniform(rz_range[0], rz_range[1], nobj)
 
-    cat['R'] = rmag
-    if meta['OBJTYPE'] == 'ELG':
-        cat['GR'] = 0.
-        cat['RZ'] = 0.
-    else: 
-        cat['GR'] = gr
-        cat['RZ'] = rz
-    cat['GFLUX'] = 1E9*10**(-0.4*(rmag+gr)) # [nanomaggies]
     cat['RFLUX'] = 1E9*10**(-0.4*rmag)      # [nanomaggies]
+    cat['GFLUX'] = 1E9*10**(-0.4*(rmag+gr)) # [nanomaggies]
     cat['ZFLUX'] = 1E9*10**(-0.4*(rmag-rz)) # [nanomaggies]
 
     return cat
