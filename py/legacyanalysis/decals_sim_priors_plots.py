@@ -417,22 +417,6 @@ def lrg_data_for_FDR():
 
 
 if __name__ == "__main__":
-    # LRGs
-    zcat,cuts,Xall= lrg_data_for_FDR()
-    plot_FDR(zcat,cuts,src='LRG')
-    # Choose 2 compoenents
-    mog = GMM(n_components=2, covariance_type="full").fit(Xall)
-    lrg_mogfile= 'legacypipe/data/lrg_colors_mog.fits'
-    if os.path.exists(lrg_mogfile):
-        print('LRG MoG exists, not overwritting: %s' % lrg_mogfile)
-    else:
-        print('Writing {}'.format(lrg_mogfile))
-        priors._GaussianMixtureModel.save(mog, lrg_mogfile)
-    #
-    qa_plot_BIC(Xall, src='LRG')
-    qa_plot_MoG(Xall, src='LRG') #,extra=True)
-    sys.exit('exit after LRG')
-    #qa_plot_Priors(d=morph,src='LRG')
     # Stars
     Xall= star_data()
     # Choose 5 compoenents
@@ -464,6 +448,20 @@ if __name__ == "__main__":
     qa_plot_BIC(Xall, src='ELG')
     qa_plot_MoG(Xall, src='ELG') #,extra=True)
     qa_plot_Priors(d=morph,src='ELG')
+    # LRGs
+    zcat,cuts,Xall= lrg_data_for_FDR()
+    plot_FDR(zcat,cuts,src='LRG')
+    # Choose 2 compoenents
+    mog = GMM(n_components=2, covariance_type="full").fit(Xall)
+    lrg_mogfile= 'legacypipe/data/lrg_colors_mog.fits'
+    if os.path.exists(lrg_mogfile):
+        print('LRG MoG exists, not overwritting: %s' % lrg_mogfile)
+    else:
+        print('Writing {}'.format(lrg_mogfile))
+        priors._GaussianMixtureModel.save(mog, lrg_mogfile)
+    #
+    qa_plot_BIC(Xall, src='LRG')
+    qa_plot_MoG(Xall, src='LRG') #,extra=True)
      
     print('done')
   
