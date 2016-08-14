@@ -4,7 +4,6 @@ import matplotlib.pyplot as plt
 import numpy as np
 from scipy.stats import norm
 import os
-import seaborn as sns
 from astropy.io import fits
 import sys
 from sklearn.mixture import GMM 
@@ -74,6 +73,15 @@ class TSBox(object):
             else: raise ValueError
         else: raise ValueError('non ELG not supported')
 
+def rm_last_ticklabel(ax):
+    '''for multiplot'''
+    labels=ax.get_xticks().tolist()
+    labels=np.array(labels).astype(float) #prevent from making float
+    labels=list(labels)
+    labels[-1]=''
+    ax.set_xticklabels(labels)
+
+
 def flux2mag(nanoflux):
     return 22.5-2.5*np.log10(nanoflux)
 
@@ -100,96 +108,75 @@ def elg_data_for_FDR():
                             zcat['CFHTLS_R']<rfaint,\
                             zcat['OII_3727_ERR']!=-2.0,\
                             zcat['OII_3727']>oiicut1),axis=0)
+    any_elg= np.all((zcat['CFHTLS_R']<rfaint,\
+                     zcat['OII_3727_ERR']!=-2.0,\
+                     zcat['OII_3727']>oiicut1),axis=0)
+    # color data
+    rz= (zcat['CFHTLS_R'] - zcat['CFHTLS_Z'])
+    gr= (zcat['CFHTLS_G'] - zcat['CFHTLS_R'])
+    Xall = np.array([rz,gr]).T
     cuts=dict(loz=loz,\
               oiifaint=oiifaint,\
               oiibright_loz=oiibright_loz,\
-              oiibright_hiz=oiibright_hiz)
-    return zcat,cuts              
+              oiibright_hiz=oiibright_hiz,\
+              any_elg=any_elg)
+    return Xall,cuts            
 
 
-def plot_FDR(zcat,cuts,src='ELG'):
+def plot_FDR(Xall,cuts,src='ELG'):
     # Object to add target selection box
     ts= TSBox(src=src)
+    import seaborn as sns
+    sns.set(style='ticks', font_scale=1.6, palette='deep')
+    col = sns.color_palette()
+    fig, ax = plt.subplots()
     if src == 'ELG':
-        def getgrz(zcat, index=None,inbox=False):
-            assert(index is not None)
-            if inbox:
-                y = zcat['CFHTLS_G'] - zcat['CFHTLS_R']
-                x = zcat['CFHTLS_R'] - zcat['CFHTLS_Z']
-                b=np.all((index,\
-                          y < ts.ts_box(x,'y1'), y < ts.ts_box(x,'y2'), x > 0.3, x < 1.6),axis=0)
-                gr= y[b]
-                rz= x[b]
-            else:
-                gr = zcat['CFHTLS_G'][index] - zcat['CFHTLS_R'][index]
-                rz = zcat['CFHTLS_R'][index] - zcat['CFHTLS_Z'][index]
-            return gr, rz
         # Set up figure
-        grrange = (-0.2, 2.0)
-        rzrange = (-0.4, 2.5)
-        sns.set(style='white', font_scale=1.6, palette='deep')
-        col = sns.color_palette()
-        fig, ax = plt.subplots()
-        # Plot
-        # Add box
-        ts.add_ts_box(ax, xlim=rzrange,ylim=grrange)
-        # Add points
-        gr, rz = getgrz(zcat, index=cuts['loz'])
-        ax.scatter(rz, gr, marker='^', color=col[2], label=r'$z<0.6$')
-
-        gr, rz = getgrz(zcat, index=cuts['oiifaint'])
-        ax.scatter(rz, gr, marker='s', color='tan',
-                        label=r'$z>0.6, [OII]<8\times10^{-17}$')
-
-        gr, rz = getgrz(zcat, index=cuts['oiibright_loz'])
-        ax.scatter(rz, gr, marker='o', color='powderblue',
-                        label=r'$z>0.6, [OII]>8\times10^{-17}$')
-
-        gr, rz = getgrz(zcat, index=cuts['oiibright_hiz'])
-        ax.scatter(rz, gr, marker='o', color='powderblue', edgecolor='black',
-                        label=r'$z>1.0, [OII]>8\times10^{-17}$')
-        ax.set_xlim(rzrange)
-        ax.set_ylim(grrange)
-        ax.legend(loc='upper left', prop={'size': 14}, labelspacing=0.2,
-                  markerscale=1.5)
-        # Label
-        xlab=ax.set_xlabel('r - z')
-        ylab=ax.set_ylabel('g - r')
-    elif src == 'LRG':
-        def getcolor(zcat, index=None):
-            assert(index is not None)
-            # get mags
-            mag={}
-            for iband,band in zip([2,4],['r','z']):
-                mag[band]= flux2mag( zcat['DECAM_FLUX'][:,iband][index] / zcat['DECAM_MW_TRANSMISSION'][:,iband][index] )
-            for iband,band in zip([0],['w1']):
-                mag[band]= flux2mag( zcat['WISE_FLUX'][:,iband][index] / zcat['WISE_MW_TRANSMISSION'][:,iband][index] )
-            # return color
-            return mag['r']-mag['z'],mag['r']-mag['w1']
-        # Set up figure
-        xrange = (0, 2.5)
-        yrange = (-2, 6)
-        sns.set(style='white', font_scale=1.6, palette='deep')
-        col = sns.color_palette()
-        fig, ax = plt.subplots()
+        xlab='r - z'
+        ylab='g - r'
+        xrange = (-0.4, 2.5)
+        yrange = (-0.2, 2.0)
         # Plot
         # Add box
         ts.add_ts_box(ax, xlim=xrange,ylim=yrange)
         # Add points
-        rz, rw1 = getcolor(zcat, index=cuts['lrg'])
-        ax.scatter(rz, rw1, marker='^', color='b', label='LRG')
+        b= cuts['loz']
+        ax.scatter(Xall[:,0][b],Xall[:,1][b], marker='^', color=col[2], label=r'$z<0.6$')
 
-        #rz, rw1 = getcolor(zcat, index=cuts['psf'])
-        #ax.scatter(rz, rw1, marker='s', color='g',label='PSF')
-        ax.set_xlim(xrange)
-        ax.set_ylim(yrange)
-        ax.legend(loc='upper left', prop={'size': 14}, labelspacing=0.2,
-                  markerscale=1.5)
-        # Label
-        xlab=ax.set_xlabel('r - z')
-        ylab=ax.set_ylabel('r - w1')
+        b=cuts['oiifaint']
+        ax.scatter(Xall[:,0][b],Xall[:,1][b], marker='s', color='tan',
+                        label=r'$z>0.6, [OII]<8\times10^{-17}$')
+
+        b= cuts['oiibright_loz']
+        ax.scatter(Xall[:,0][b],Xall[:,1][b], marker='o', color='powderblue',
+                        label=r'$z>0.6, [OII]>8\times10^{-17}$')
+
+        b=cuts['oiibright_hiz']
+        ax.scatter(Xall[:,0][b],Xall[:,1][b], marker='o', color='powderblue', edgecolor='black',
+                        label=r'$z>1.0, [OII]>8\times10^{-17}$')
+    elif src == 'LRG':
+        # Set up figure
+        xlab='r - z'
+        ylab='r - w1'
+        xrange = (0, 2.5)
+        yrange = (-2, 6)
+        # Plot
+        # Add box
+        ts.add_ts_box(ax, xlim=xrange,ylim=yrange)
+        # Add points
+        b= cuts['lrg']
+        ax.scatter(Xall[:,0][b],Xall[:,1][b], marker='^', color='b', label='LRG')
+        #b= cuts['psf']
+        #ax.scatter(Xall[:,0][b],Xall[:,1][b], marker='o', color='g', label='PSF')
     else: 
         raise ValueError('src=%s not supported' % src)
+    # Finish labeling
+    ax.set_xlim(xrange)
+    ax.set_ylim(yrange)
+    xlab= ax.set_xlabel(xlab)
+    ylab= ax.set_ylabel(ylab)
+    ax.legend(loc='upper left', prop={'size': 14}, labelspacing=0.2,
+              markerscale=1.5)
     name='%s_fdr.png' % src
     print('Writing {}'.format(name))
     kwargs= dict(bbox_extra_artists=[xlab,ylab], bbox_inches='tight',dpi=150)
@@ -222,8 +209,6 @@ def star_data():
 def elg_data():
     '''Use DEEP2 ELGs whose SEDs have been modeled.'''
     elgs = fits.getdata('/project/projectdirs/desi/spectro/templates/basis_templates/v2.2/elg_templates_v2.0.fits', 1)
-    keep = elgs['radius_halflight'] > 0
-    print('Grabbed {} ELGs, of which {} have HST morphologies.'.format(len(elgs), len(elgs[keep])))
     # Colors
     gg = elgs['DECAM_G']
     rr = elgs['DECAM_R']
@@ -231,14 +216,18 @@ def elg_data():
     gr = gg - rr
     rz = rr - zz
     Xall = np.array([rz, gr]).T
+    # Cuts
+    has_morph = elgs['radius_halflight'] > 0
+    cuts= dict(has_morph=has_morph) 
+    print('%d/%d of Fit Template Spectra ELGs have morphologies' % (len(elgs[has_morph]), len(elgs)))
     # Morphology
     morph= {}
-    morph['rz'] = rz[keep]
-    morph['gr'] = gr[keep]
-    morph['r50'] = elgs['RADIUS_HALFLIGHT'][keep] #arcsec
-    morph['n'] = elgs['SERSICN'][keep]                            
-    morph['ba'] = elgs['AXIS_RATIO'][keep] #minor/major
-    return Xall,morph                            
+    morph['rz'] = rz[has_morph]
+    morph['gr'] = gr[has_morph]
+    morph['r50'] = elgs['RADIUS_HALFLIGHT'][has_morph] #arcsec
+    morph['n'] = elgs['SERSICN'][has_morph]                            
+    morph['ba'] = elgs['AXIS_RATIO'][has_morph] #minor/major
+    return Xall,cuts,morph                            
 
 
 def getbic(X, ncomp=[3]):
@@ -248,83 +237,57 @@ def getbic(X, ncomp=[3]):
     #    print(ncomp[ii], bic[ii])
     return bic
 
-def plot_mog_and_sample(samp,Xall, src='STAR',name='test.png'): 
+def qa_plot_MoG(Xall,ncomp=2, src='STAR',nsamp=10000,outdir='.',extra=False,append=''): 
     '''Build a color-color plot.  Show the data on the left-hand panel and random draws from 
     the MoGs on the right-hand panel.'''
-    sns.set(style='white', font_scale=1.6, palette='deep')
-    col = sns.color_palette()
-    fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(8.5, 5), sharey=True)
-    
-    from sklearn.mixture import GMM
-    # show ncomp+1 b/c +1 shows noise contribution
+    fig, ax = plt.subplots(1, 3, sharey=True,figsize=(10., 5))
+ 
     if src == 'STAR':
-        ncomp=6
-        xrange = (-0.2, 2.0)
-        yrange = (-0.4, 2.5)
+        mog = priors._GaussianMixtureModel.load('legacypipe/data/star_colors_mog.fits')
+        xrange = (-0.4, 2.5)
+        yrange = (-0.2, 2.0)
         xlab='r - z'
         ylab='g - r'
     elif src == 'ELG':
-        ncomp=7
-        xrange = (-0.2, 2.0)
-        yrange = (-0.4, 2.5)
+        mog = priors._GaussianMixtureModel.load('legacypipe/data/elg_colors_mog.fits')
+        xrange = (-0.4, 2.5)
+        yrange = (-0.2, 2.0)
         xlab='r - z'
         ylab='g - r'
     elif src == 'LRG':
-        ncomp=4
+        mog = priors._GaussianMixtureModel.load('legacypipe/data/lrg_colors_mog.fits')
         xrange = (0, 2.5)
         yrange = (-2, 6)
         xlab='r - z'
         ylab='r - w1'
     else: raise ValueError('src=%s not supported' % src)
+    # Build MoG
+    from sklearn.mixture import GMM
     mog = GMM(n_components=ncomp, covariance_type="full").fit(Xall)
-    priors.add_MoG_curves(ax1, mog.means_, mog.covars_, mog.weights_)
-    ax1.set_xlim(xrange)
-    ax1.set_ylim(yrange)
-    xlab=ax1.set_xlabel(xlab)
-    ylab=ax1.set_ylabel(ylab)
-    ti=ax1.set_title('N comp + 1 extra')
-    
-    ax2.plot(samp[:,0], samp[:,1], 'o', c=col[0], markersize=3)
-    ax2.set_xlim(xrange)
-    ax2.set_ylim(yrange)
-    ax2.yaxis.tick_right()
-    ax2.yaxis.set_label_position("right")
-    xlab=ax2.set_xlabel(xlab)
-    ylab2=ax2.set_ylabel(ylab)
-    ti=ax2.set_title('%.2g Draws, %d comps' % (float(len(samp[:,0])),ncomp-1))
-    # ax2.legend(loc='lower right', prop={'size': 14}, labelspacing=0.25, markerscale=2)
-    fig.subplots_adjust(wspace=0.05, hspace=0.1)
+    samp = mog.sample(n_samples=nsamp)
+    #if extra: 
+    #    # Higher accuracy sampling, but more time consuming and negligible improvment
+    #    samp= mog.sample_full_pdf(nsamp)
+    ax[0].plot(Xall[:,0],Xall[:,1], 'o', c='b', markersize=3)
+    priors.add_MoG_curves(ax[1], mog.means_, mog.covars_, mog.weights_)
+    ax[2].plot(samp[:,0], samp[:,1], 'o', c='b', markersize=3)
+    for i,title in zip(range(3),['Data','Gaussian Mixture','%d Draws' % nsamp]):
+        xlab1=ax[i].set_xlabel(xlab)
+        ax[i].set_xlim(xrange)
+        ax[i].set_ylim(yrange)
+        ti=ax[i].set_title(title)
+    ylab1=ax[0].set_ylabel(ylab)
+    fig.subplots_adjust(wspace=0) #, hspace=0.1)
+    for i in range(2):
+        rm_last_ticklabel(ax[i])
+    name= os.path.join(outdir,'qa-mog-sample-%s%s.png' % (src,append))
     print('Writing {}'.format(name))
-    plt.savefig(name, bbox_extra_artists=[xlab,ylab,ylab2,ti], bbox_inches='tight',dpi=150)
+    plt.savefig(name, bbox_extra_artists=[xlab1,ylab1,ti], bbox_inches='tight',dpi=150)
     plt.close()
 
-def qa_plot_MoG(Xall, src='STAR',extra=False):
-    '''Simple function to compute the Bayesian information criterion.'''
-    nsamp= 10000
-    name= 'qa-mog-sample-%s.png' % src
-    if src=='STAR': 
-        mog = priors._GaussianMixtureModel.load('legacypipe/data/star_colors_mog.fits')
-        samp = mog.sample(nsamp)
-        plot_mog_and_sample(samp,Xall, src=src,name=name)
-        if extra: 
-            # Higher accuracy sampling, but more time consuming and negligible improvment
-            samp= mog.sample_full_pdf(nsamp)
-            plot_mog_and_sample(samp,Xall, src=src,name=name.replace('-sample-','-sampleAllmogs-'))
-    elif src=='ELG':
-        mog = priors._GaussianMixtureModel.load('legacypipe/data/elg_colors_mog.fits')
-        samp = mog.sample(nsamp)
-        plot_mog_and_sample(samp,Xall, src=src,name=name)
-    elif src == 'LRG':
-        mog = priors._GaussianMixtureModel.load('legacypipe/data/lrg_colors_mog.fits')
-        samp = mog.sample(nsamp)
-        plot_mog_and_sample(samp,Xall, src=src,name=name)
-    else:
-        raise ValueError('src=%s not supported' % src)
-        
-
-def qa_plot_BIC(Xall,src='STAR'):
+def qa_plot_BIC(Xall,src='STAR',append=''):
     '''Number componentes from Bayesian Information Criterion'''
-    ncomp = np.arange(2, 10)
+    ncomp = np.arange(1, 6)
     bic = getbic(Xall, ncomp)
     fig, ax = plt.subplots(1, 1, figsize=(8,5))
     ax.plot(ncomp, bic, marker='s', ls='-')
@@ -339,12 +302,13 @@ def qa_plot_BIC(Xall,src='STAR'):
         plt.legend(labels=['%s r-w1, r-z colors' % src])
     else: raise ValueError('src=%s not supportd' % src)
     plt.tight_layout()
-    name='qa-mog-bic-%s.png' % src
+    name='qa-mog-bic-%s%s.png' % (src,append)
     print('Writing {}'.format(name))
     plt.savefig(name)
     plt.close()
 
 def create_joinplot(df,xkey,ykey,xlab,ylab,xlim,ylim,color,src='ELG'):
+    import seaborn as sns
     g = sns.JointGrid(x=xkey, y=ykey, data=df, xlim=xlim, ylim=ylim)
     g = g.plot_joint(plt.scatter, color=color, edgecolor="white")
     g = g.plot_marginals(sns.distplot, kde=False, color=color)
@@ -359,6 +323,7 @@ def create_joinplot(df,xkey,ykey,xlab,ylab,xlim,ylim,color,src='ELG'):
 
 def qa_plot_Priors(d=None,src='ELG'):
     '''d -- dictionary of morphology params'''
+    import seaborn as sns
     assert(d is not None)
     # JoinGrid needs pandas DataFrame
     df= DataFrame(d)
@@ -388,8 +353,6 @@ def lrg_data_for_FDR():
         flux[band]= dr2['DECAM_FLUX'][:,iband] / dr2['DECAM_MW_TRANSMISSION'][:,iband]
     for iband,band in zip([0],['w1']):
         flux[band]= dr2['WISE_FLUX'][:,iband] / dr2['WISE_MW_TRANSMISSION'][:,iband]
-    mag={}
-    for key in flux.keys(): mag[key]= flux2mag(flux[key])
     # LRG
     lrg= np.all((flux['z'] > 10**((22.5-20.46)/2.5),\
                  flux['z'] > flux['r']*10**(1.5/2.5),\
@@ -410,58 +373,68 @@ def lrg_data_for_FDR():
               psf=psf,\
               good_z=good_z)
     # color data
-    rz= (mag['r']-mag['z'])[lrg]
-    rw1= (mag['r']-mag['w1'])[lrg]
+    mag={}
+    for key in flux.keys(): mag[key]= flux2mag(flux[key])
+    rz= mag['r']-mag['z']
+    rw1= mag['r']-mag['w1']
     Xall = np.array([rz,rw1]).T
-    return dr2,cuts,Xall              
+    return Xall,cuts              
 
 
 if __name__ == "__main__":
     # Stars
     Xall= star_data()
-    # Choose 5 compoenents
-    mog = GMM(n_components=5, covariance_type="full").fit(Xall)
+    qa_plot_BIC(Xall,src='STAR')
+    qa_plot_MoG(Xall,ncomp=3, src='STAR') 
+    # Save 3 comp model
+    mog = GMM(n_components=3, covariance_type="full").fit(Xall)
     star_mogfile= 'legacypipe/data/star_colors_mog.fits'
     if os.path.exists(star_mogfile):
         print('STAR MoG exists, not overwritting: %s' % star_mogfile)
     else:
         print('Writing {}'.format(star_mogfile))
         priors._GaussianMixtureModel.save(mog, star_mogfile)
-    # QA plots
-    qa_plot_BIC(Xall,src='STAR')
-    qa_plot_MoG(Xall, src='STAR') #,extra=True)
+    
     # ELGs
-    # Target selection plot 
-    zcat,cuts= elg_data_for_FDR()
-    plot_FDR(zcat,cuts,src='ELG')
-    # Mog for Synthetic spectra -> colors
-    Xall, morph= elg_data()
-    # Choose 6 comps
-    mog = GMM(n_components=6, covariance_type="full").fit(Xall)
+    # FDR data
+    Xall,cuts= elg_data_for_FDR()
+    plot_FDR(Xall,cuts,src='ELG')
+    b= cuts['any_elg']
+    qa_plot_BIC(Xall[b,:], src='ELG',append='_FDR')
+    qa_plot_MoG(Xall[b,:],ncomp=6, src='ELG',append='_FDR') #,extra=True)
+    # Fit template spectra data
+    Xall,cuts, morph= elg_data()
+    qa_plot_BIC(Xall, src='ELG',append='_synth')
+    qa_plot_MoG(Xall,ncomp=3, src='ELG',append='_synth') #,extra=True)
+    b= cuts['has_morph']
+    qa_plot_BIC(Xall[b,:], src='ELG',append='_synth+morph')
+    qa_plot_MoG(Xall[b,:],ncomp=4, src='ELG',append='_synth+morph') #,extra=True)
+    # only have priors for morph cut
+    qa_plot_Priors(d=morph,src='ELG')
+    # Save 3 component synth MoG
+    b= cuts['has_morph']
+    mog = GMM(n_components=3, covariance_type="full").fit(Xall)
     elg_mogfile='legacypipe/data/elg_colors_mog.fits'
     if os.path.exists(elg_mogfile):
         print('ELG MoG exists, not overwritting: %s' % elg_mogfile)
     else:
         print('Writing {}'.format(elg_mogfile))
         priors._GaussianMixtureModel.save(mog, elg_mogfile)
-    # QA plots
-    qa_plot_BIC(Xall, src='ELG')
-    qa_plot_MoG(Xall, src='ELG') #,extra=True)
-    qa_plot_Priors(d=morph,src='ELG')
     # LRGs
-    zcat,cuts,Xall= lrg_data_for_FDR()
-    plot_FDR(zcat,cuts,src='LRG')
-    # Choose 2 compoenents
-    mog = GMM(n_components=2, covariance_type="full").fit(Xall)
+    Xall,cuts= lrg_data_for_FDR()
+    plot_FDR(Xall,cuts,src='LRG')
+    b= cuts['lrg']
+    qa_plot_BIC(Xall[b,:], src='LRG')
+    qa_plot_MoG(Xall[b,:], ncomp=2,src='LRG') #,extra=True)
+    # Save 2 comp model
+    b= cuts['lrg']
+    mog = GMM(n_components=2, covariance_type="full").fit(Xall[b,:])
     lrg_mogfile= 'legacypipe/data/lrg_colors_mog.fits'
     if os.path.exists(lrg_mogfile):
         print('LRG MoG exists, not overwritting: %s' % lrg_mogfile)
     else:
         print('Writing {}'.format(lrg_mogfile))
         priors._GaussianMixtureModel.save(mog, lrg_mogfile)
-    #
-    qa_plot_BIC(Xall, src='LRG')
-    qa_plot_MoG(Xall, src='LRG') #,extra=True)
      
     print('done')
   
