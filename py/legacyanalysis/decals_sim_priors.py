@@ -7,21 +7,24 @@ class _GaussianMixtureModel(object):
     """Read and sample from a pre-defined Gaussian mixture model.
     This assumes 'sklearn.mixture.GMM' has already been used to determine MoGs 
     """
-    def __init__(self, weights, means, covars, covtype):
-        self.weights = weights
-        self.means = means
-        self.covars = covars
+    def __init__(self, weights_, means_, covars_, covtype):
+        self.weights_ = weights_
+        self.means_ = means_
+        self.covars_ = covars_
         self.covtype = covtype
-        self.n_components, self.n_dimensions = self.means.shape
+        self.n_components, self.n_dimensions = self.means_.shape
     
     @staticmethod
-    def save(model, filename):
+    def save(model, filename,index=None):
+        '''index: optional nddex array for subset of compenents to save'''
         hdus = fits.HDUList()
         hdr = fits.Header()
         hdr['covtype'] = model.covariance_type
-        hdus.append(fits.ImageHDU(model.weights_, name='weights', header=hdr))
-        hdus.append(fits.ImageHDU(model.means_, name='means'))
-        hdus.append(fits.ImageHDU(model.covars_, name='covars'))
+        if index is None:
+            index=np.arange(len(model.weights_))
+        hdus.append(fits.ImageHDU(model.weights_[index], name='weights_', header=hdr))
+        hdus.append(fits.ImageHDU(model.means_[index,...], name='means_'))
+        hdus.append(fits.ImageHDU(model.covars_[index,...], name='covars_'))
         hdus.writeto(filename, clobber=True)
         
     @staticmethod
@@ -30,7 +33,7 @@ class _GaussianMixtureModel(object):
         hdr = hdus[0].header
         covtype = hdr['covtype']
         model = _GaussianMixtureModel(
-            hdus['weights'].data, hdus['means'].data, hdus['covars'].data, covtype)
+            hdus['weights_'].data, hdus['means_'].data, hdus['covars_'].data, covtype)
         hdus.close()
         return model
     
@@ -44,7 +47,7 @@ class _GaussianMixtureModel(object):
         if random_state is None:
             random_state = np.random.RandomState()
 
-        weight_cdf = np.cumsum(self.weights)
+        weight_cdf = np.cumsum(self.weights_)
         X = np.empty((n_samples, self.n_dimensions))
         rand = random_state.rand(n_samples)
         # decide which component to use for each sample
@@ -57,7 +60,7 @@ class _GaussianMixtureModel(object):
             num_comp_in_X = comp_in_X.sum()
             if num_comp_in_X > 0:
                 X[comp_in_X] = random_state.multivariate_normal(
-                    self.means[comp], self.covars[comp], num_comp_in_X)
+                    self.means_[comp], self.covars_[comp], num_comp_in_X)
         return X
     
     def sample_full_pdf(self, n_samples=1, random_state=None):
@@ -104,7 +107,7 @@ class _GaussianMixtureModel(object):
         # 2D probability map
         grrange = (-0.2, 2.0)
         rzrange = (-0.4, 2.5)
-        pmap,xvec,yvec= prob_map(self.means,self.covars,self.weights,\
+        pmap,xvec,yvec= prob_map(self.means_,self.covars_,self.weights_,\
                                  xrng=rzrange,yrng=grrange)
         # Sample self.n_dimensions using map
         if random_state is None:
@@ -134,9 +137,7 @@ def add_MoG_curves(ax, means_, covars_, weights_):
     '''plot 2-sigma ellipses for each multivariate component'''
     ax.scatter(means_[:, 0], means_[:, 1], c='w')
     scale=2.
-    cnt=0
-    for mu, C, w in zip(means_, covars_, weights_):
-        print 'cnt=%d, wt=' % cnt,w
+    for cnt, mu, C, w in zip(range(means_.shape[0]),means_, covars_, weights_):
     #     draw_ellipse(mu, C, scales=[1.5], ax=ax, fc='none', ec='k')
         # Draw MoG outlines
         sigma_x2 = C[0, 0]
@@ -150,12 +151,12 @@ def add_MoG_curves(ax, means_, covars_, weights_):
 
         sigma1 = np.sqrt(tmp1 + tmp2)
         sigma2 = np.sqrt(tmp1 - tmp2)
+        print('comp=%d, sigma1=%f,sigma2=%f' % (cnt+1,sigma1,sigma2))
 
-        ax.text(mu[0],mu[1],str(cnt),color='blue')
+        ax.text(mu[0],mu[1],str(cnt+1),color='blue')
         ax.add_patch(Ellipse((mu[0], mu[1]),
                      2 * scale * sigma1, 2 * scale * sigma2,
                      alpha * 180. / np.pi,\
                      fc='none', ec='k'))
-        cnt+=1
 
 

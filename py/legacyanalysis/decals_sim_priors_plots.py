@@ -12,6 +12,16 @@ from scipy.optimize import newton
 
 import legacyanalysis.decals_sim_priors as priors
 
+# Globals
+xyrange=dict(x_star=[-0.5,2.2],\
+             y_star=[-0.3,2.],\
+             x_elg=[-0.5,2.2],\
+             y_elg=[-0.3,2.],\
+             x_lrg= [0, 2.5],\
+             y_lrg= [-2, 6])
+####
+
+
 class TSBox(object):
     '''functions to add Target Selection box to ELG, LRG, etc plot
     add_ts_box -- main functino to call'''
@@ -25,8 +35,8 @@ class TSBox(object):
             #g-r vs. r-z
             xint= newton(self.ts_root,np.array([1.]),args=('y1-y2',))
             
-            x=np.linspace(xlim[0],xlim[1],num=100)
-            y=np.linspace(ylim[0],ylim[1],num=100)
+            x=np.linspace(xlim[0],xlim[1],num=1000)
+            y=np.linspace(ylim[0],ylim[1],num=1000)
             x1,y1= x,self.ts_box(x,'y1')
             x2,y2= x,self.ts_box(x,'y2')
             x3,y3= np.array([0.3]*len(x)),y
@@ -39,22 +49,22 @@ class TSBox(object):
             x3,y3= x3[b],y3[b]
             b= y4 <= np.min(y2)
             x4,y4= x4[b],y4[b]
-            ax.plot(x1,y1,'k-',lw=2)
-            ax.plot(x2,y2,'k-',lw=2)
-            ax.plot(x3,y3,'k-',lw=2)
-            ax.plot(x4,y4,'k-',lw=2) 
+            ax.plot(x1,y1,'k--',lw=2)
+            ax.plot(x2,y2,'k--',lw=2)
+            ax.plot(x3,y3,'k--',lw=2)
+            ax.plot(x4,y4,'k--',lw=2) 
         elif self.src == 'LRG':
             #r-w1 vs. r-z
-            x=np.linspace(xlim[0],xlim[1],num=100)
-            y=np.linspace(ylim[0],ylim[1],num=100)
+            x=np.linspace(xlim[0],xlim[1],num=1000)
+            y=np.linspace(ylim[0],ylim[1],num=1000)
             x1,y1= x,self.ts_box(x,'y1')
             x2,y2= np.array([1.5]*len(x)),y
             b= x >= 1.5
             x1,y1= x1[b],y1[b]
             b= y2 >= np.min(y1)
             x2,y2= x2[b],y2[b]
-            ax.plot(x1,y1,'k-',lw=2)
-            ax.plot(x2,y2,'k-',lw=2)
+            ax.plot(x1,y1,'k--',lw=2)
+            ax.plot(x2,y2,'k--',lw=2)
         else: raise ValueError('src=%s not supported' % src)
 
     def ts_box(self, x,name):
@@ -134,8 +144,8 @@ def plot_FDR(Xall,cuts,src='ELG'):
         # Set up figure
         xlab='r - z'
         ylab='g - r'
-        xrange = (-0.4, 2.5)
-        yrange = (-0.2, 2.0)
+        xrange = xyrange['x_%s' % src.lower()]
+        yrange = xyrange['y_%s' % src.lower()]
         # Plot
         # Add box
         ts.add_ts_box(ax, xlim=xrange,ylim=yrange)
@@ -158,8 +168,8 @@ def plot_FDR(Xall,cuts,src='ELG'):
         # Set up figure
         xlab='r - z'
         ylab='r - w1'
-        xrange = (0, 2.5)
-        yrange = (-2, 6)
+        xrange = xyrange['x_%s' % src.lower()]
+        yrange = xyrange['y_%s' % src.lower()]
         # Plot
         # Add box
         ts.add_ts_box(ax, xlim=xrange,ylim=yrange)
@@ -240,37 +250,44 @@ def getbic(X, ncomp=[3]):
 def qa_plot_MoG(Xall,ncomp=2, src='STAR',nsamp=10000,outdir='.',extra=False,append=''): 
     '''Build a color-color plot.  Show the data on the left-hand panel and random draws from 
     the MoGs on the right-hand panel.'''
-    fig, ax = plt.subplots(1, 3, sharey=True,figsize=(10., 5))
- 
     if src == 'STAR':
-        mog = priors._GaussianMixtureModel.load('legacypipe/data/star_colors_mog.fits')
-        xrange = (-0.4, 2.5)
-        yrange = (-0.2, 2.0)
+        mog_file = 'legacypipe/data/star_colors_mog.fits'
+        xrange = xyrange['x_%s' % src.lower()]
+        yrange = xyrange['y_%s' % src.lower()]
         xlab='r - z'
         ylab='g - r'
     elif src == 'ELG':
-        mog = priors._GaussianMixtureModel.load('legacypipe/data/elg_colors_mog.fits')
-        xrange = (-0.4, 2.5)
-        yrange = (-0.2, 2.0)
+        mog_file = 'legacypipe/data/elg_colors_mog.fits'
+        xrange = xyrange['x_%s' % src.lower()]
+        yrange = xyrange['y_%s' % src.lower()]
         xlab='r - z'
         ylab='g - r'
     elif src == 'LRG':
-        mog = priors._GaussianMixtureModel.load('legacypipe/data/lrg_colors_mog.fits')
-        xrange = (0, 2.5)
-        yrange = (-2, 6)
+        mog_file = 'legacypipe/data/lrg_colors_mog.fits'
+        xrange = xyrange['x_%s' % src.lower()]
+        yrange = xyrange['y_%s' % src.lower()]
         xlab='r - z'
         ylab='r - w1'
     else: raise ValueError('src=%s not supported' % src)
     # Build MoG
-    from sklearn.mixture import GMM
-    mog = GMM(n_components=ncomp, covariance_type="full").fit(Xall)
+    if ncomp is None:
+        mog = priors._GaussianMixtureModel.load(mog_file)
+    else:
+        from sklearn.mixture import GMM
+        mog = GMM(n_components=ncomp, covariance_type="full").fit(Xall)
     samp = mog.sample(n_samples=nsamp)
     #if extra: 
     #    # Higher accuracy sampling, but more time consuming and negligible improvment
     #    samp= mog.sample_full_pdf(nsamp)
+    fig, ax = plt.subplots(1, 3, sharey=True,figsize=(12, 4))
     ax[0].plot(Xall[:,0],Xall[:,1], 'o', c='b', markersize=3)
     priors.add_MoG_curves(ax[1], mog.means_, mog.covars_, mog.weights_)
     ax[2].plot(samp[:,0], samp[:,1], 'o', c='b', markersize=3)
+    # Add ts box
+    if src != 'STAR':
+        ts= TSBox(src=src)
+        for i in [0,2]: 
+            ts.add_ts_box(ax[i], xlim=xrange,ylim=yrange)
     for i,title in zip(range(3),['Data','Gaussian Mixture','%d Draws' % nsamp]):
         xlab1=ax[i].set_xlabel(xlab)
         ax[i].set_xlim(xrange)
@@ -385,16 +402,17 @@ if __name__ == "__main__":
     # Stars
     Xall= star_data()
     qa_plot_BIC(Xall,src='STAR')
-    qa_plot_MoG(Xall,ncomp=3, src='STAR') 
-    # Save 3 comp model
-    mog = GMM(n_components=3, covariance_type="full").fit(Xall)
+    qa_plot_MoG(Xall,ncomp=6, src='STAR') 
+    # Save Model
+    mog = GMM(n_components=6, covariance_type="full").fit(Xall)
     star_mogfile= 'legacypipe/data/star_colors_mog.fits'
     if os.path.exists(star_mogfile):
         print('STAR MoG exists, not overwritting: %s' % star_mogfile)
     else:
         print('Writing {}'.format(star_mogfile))
-        priors._GaussianMixtureModel.save(mog, star_mogfile)
-    
+        # with 6 comp, 6th is noise, 1-5 are physical
+        priors._GaussianMixtureModel.save(mog, star_mogfile,index=np.arange(5))
+    qa_plot_MoG(Xall,ncomp=None, src='STAR',append='saved')
     # ELGs
     # FDR data
     Xall,cuts= elg_data_for_FDR()
@@ -412,7 +430,6 @@ if __name__ == "__main__":
     # only have priors for morph cut
     qa_plot_Priors(d=morph,src='ELG')
     # Save 3 component synth MoG
-    b= cuts['has_morph']
     mog = GMM(n_components=3, covariance_type="full").fit(Xall)
     elg_mogfile='legacypipe/data/elg_colors_mog.fits'
     if os.path.exists(elg_mogfile):
@@ -420,6 +437,7 @@ if __name__ == "__main__":
     else:
         print('Writing {}'.format(elg_mogfile))
         priors._GaussianMixtureModel.save(mog, elg_mogfile)
+    qa_plot_MoG(Xall,ncomp=None, src='ELG',append='saved')
     # LRGs
     Xall,cuts= lrg_data_for_FDR()
     plot_FDR(Xall,cuts,src='LRG')
@@ -435,6 +453,7 @@ if __name__ == "__main__":
     else:
         print('Writing {}'.format(lrg_mogfile))
         priors._GaussianMixtureModel.save(mog, lrg_mogfile)
+    qa_plot_MoG(Xall,ncomp=None, src='LRG',append='saved')
      
     print('done')
   
