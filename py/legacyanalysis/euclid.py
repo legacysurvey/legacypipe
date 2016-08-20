@@ -672,6 +672,7 @@ def get_survey():
     survey.image_typemap['acs-vis'] = AcsVisImage
     survey.image_typemap['megacam'] = MegacamImage
     survey.image_typemap['vista'] = VistaImage
+    survey.image_typemap['cfhtls'] = CfhtlsImage
     return survey
 
 def get_exposures_in_list(fn):
@@ -1811,6 +1812,9 @@ def main():
 
     parser.add_argument('--brick', help='Run one brick of CFHTLS reduction')
     
+    parser.add_argument('--wise', action='store_true',
+                        help='Run unWISE forced phot')
+
     opt = parser.parse_args()
 
     Time.add_measurement(MemMeas)
@@ -1840,8 +1844,8 @@ def main():
         package(opt)
         return 0
 
+    # Run CFHTLS alone
     if opt.brick:
-
         survey = CfhtlsSurveyData(output_dir='euclid-out/cfhtls')
         survey.bricksize = 3./60.
         survey.image_typemap.update({'cfhtls' : CfhtlsImage})
@@ -1872,11 +1876,159 @@ def main():
                          #plots=True
                          )
 
+    if opt.wise:
+        A = fits_table('/project/projectdirs/cosmo/data/unwise/unwise-coadds/allsky-atlas.fits')
+        print(len(A), 'WISE atlas tiles')
+
+        T = read_acs_catalogs()
+        print('Read', len(T), 'ACS catalog entries')
+        T.cut(T.brick_primary)
+        print('Cut to', len(T), 'primary')
+        #T.about()
+
+        T.shapeexp = np.vstack((T.shapeexp_r, T.shapeexp_e1, T.shapeexp_e2)).T
+        T.shapedev = np.vstack((T.shapedev_r, T.shapedev_e1, T.shapedev_e2)).T
+
+        print('RA', T.ra.min(), T.ra.max())
+        print('Dec', T.dec.min(), T.dec.max())
+
+        # mag = -2.5 * (np.log10(T.decam_flux) - 9)
+        # mag = mag[np.isfinite(mag)]
+        # mag = mag[(mag > 10) * (mag < 30)]
+        # print(len(mag), 'with good mags')
+        # plt.clf()
+        # plt.hist(mag, 100)
+        # plt.xlabel('ACS mag')
+        # plt.savefig('acs-mags.png')
+        # 
+        # plt.clf()
+        # plt.hist(T.decam_flux_ivar, 100)
+        # plt.xlabel('ACS flux_ivar')
+        # plt.savefig('acs-flux-iv.png')
+
+        T.cut(T.decam_flux_ivar > 0)
+        print('Cut to', len(T), 'with good flux ivar')
+        T.cut(T.decam_flux > 0)
+        print('Cut to', len(T), 'with good flux')
+
+
+        # TEST
+        #T = T[np.arange(0, len(T), 100)]
+
+        from astrometry.libkd.spherematch import match_radec
+        I,J,d = match_radec(A.ra, A.dec, T.ra, T.dec, 1.2, nearest=True)
+        print(len(I), 'atlas tiles possibly within range')
+        A.cut(I)
+
+        from wise.unwise import unwise_tile_wcs
+        from wise.forcedphot import unwise_forcedphot, get_unwise_tractor_image
+
+        unwise_dir = '/project/projectdirs/cosmo/data/unwise/neo1/unwise-coadds/fulldepth/'
+
+        # tim used to limit sizes of huge models
+        tim = get_unwise_tractor_image(unwise_dir, A.coadd_id[0], 1, bandname='w')
+
+        Wall = []
+        for tile in A:
+            print('Tile', tile.coadd_id)
+            wcs = unwise_tile_wcs(tile.ra, tile.dec)
+            ok, T.x, T.y = wcs.radec2pixelxy(T.ra, T.dec)
+            H,W = wcs.shape
+            I = np.flatnonzero((T.x > 1) * (T.x < W) * (T.y > 1) * (T.y < H))
+            print(len(I), 'sources within image')
+
+
+            step = 256
+            margin = 10
+
+            for iy,yp in enumerate(np.arange(1, H, step)):
+                for ix,xp in enumerate(np.arange(1, W, step)):
+
+                    I = np.flatnonzero((T.x > (xp - margin)) * (T.x < (xp + step + margin)) *
+                                       (T.y > (yp - margin)) * (T.y < (yp + step + margin)))
+                    print(len(I), 'sources within sub-image')
+                    if len(I) == 0:
+                        continue
+
+                    outfn = 'euclid-out/grid/forced-unwise-%s-x%i-y%i.fits' % (tile.coadd_id, ix, iy)
+                    print('Output filename', outfn)
+                    if os.path.exists(outfn):
+                        WW = fits_table(outfn)
+                        print('Read', len(WW), 'from', outfn)
+                        Wall.append(WW)
+                        continue
+
+                    bands = ['w']
+                    wcat = read_fits_catalog(T[I], ellipseClass=EllipseE, allbands=bands,
+                                             bands=bands)
+                    for src in wcat:
+                        src.brightness = NanoMaggies(**dict([(b, 1.) for b in bands]))
+                
+                    for src in wcat:
+                        from tractor.galaxy import ProfileGalaxy
+                        if isinstance(src, ProfileGalaxy):
+                            px,py = tim.wcs.positionToPixel(src.getPosition())
+                            h = src._getUnitFluxPatchSize(tim, px, py, tim.modelMinval)
+                            MAXHALF = 32
+                            if h > MAXHALF:
+                                print('halfsize', h,'for',src,'-> setting to',MAXHALF)
+                                src.halfsize = MAXHALF
+                    #wcat = [cat[i] for i in I]
+
+                    tiles = [tile]
+
+                    ra1,dec1 = wcs.pixelxy2radec(xp-margin, yp-margin)
+                    ra2,dec2 = wcs.pixelxy2radec(xp+step+margin, yp+step+margin)
+
+                    roiradec = [min(ra1,ra2), max(ra1,ra2),
+                                min(dec1,dec2), max(dec1,dec2)]
+                    #roiradec = [T.ra.min(), T.ra.max(), T.dec.min(), T.dec.max()]
+                    use_ceres = True
+
+                    WW = []
+                    for band in [1,2]:
+                        Wi = unwise_forcedphot(wcat, tiles, roiradecbox=roiradec, bands=[band],
+                                              unwise_dir=unwise_dir, use_ceres=use_ceres)
+                        #print('Got', Wi)
+                        #Wi.about()
+                        WW.append(Wi)
+                    # Merge W1,W2
+                    W1,W2 = WW
+                    WW = W1
+                    WW.add_columns_from(W2)
+                    WW.brickname = T.brickname[I]
+                    WW.objid = T.objid[I]
+                    WW.ra = T.ra[I]
+                    WW.dec = T.dec[I]
+
+                    WW.primary = ((T.x[I] >= xp) * (T.x[I] < xp+step) *
+                                  (T.y[I] >= yp) * (T.y[I] < yp+step))
+                    WW.bx = T.x[I]
+                    WW.by = T.y[I]
+
+                    # cache
+                    WW.writeto(outfn)
+                    print('Wrote', outfn)
+
+                    Wall.append(WW)
+
+        Wall = merge_tables(Wall)
+        Wall.writeto('euclid-out/forced-unwise.fits')
+
+        return 0
+
     if opt.expnum is None and opt.forced is None:
         print('Need --expnum or --forced')
         return -1
 
     survey = get_survey()
+
+    ccds = survey.get_ccds_readonly()
+    lastcam = None
+    for i,cam in enumerate(ccds.camera):
+        if cam != lastcam:
+            print('Camera', cam, 'at', i)
+            lastcam = cam
 
     if opt.expnum is not None:
         # Run pipeline on a single ACS image.
@@ -1922,11 +2074,14 @@ def main():
         args = []
         for iy,(yy0,yy1) in enumerate(zip(y0,y1)):
             for ix,(xx0,xx1) in enumerate(zip(x0,x1)):
+                outfn = opt.out.replace('.fits', '-x%02i-y%02i.fits' % (ix,iy))
+                if os.path.exists(outfn):
+                    print('Already exists:', outfn)
+                    continue
                 newopt = argparse.Namespace()
                 for k,v in opt.__dict__.items():
                     setattr(newopt, k, v)
                     print('Setting option', k, '=', v)
-                outfn = opt.out.replace('.fits', '-x%02i-y%02i.fits' % (ix,iy))
                 fns.append((outfn, ix, iy))
                 newopt.out = outfn
                 newopt.zoom = [xx0, xx1, yy0, yy1]
@@ -1938,7 +2093,9 @@ def main():
         print('X cuts:', xcuts)
         print('Y cuts:', ycuts)
 
-        mp = multiproc(8)
+        if opt.threads is None:
+            opt.threads = 1
+        mp = multiproc(opt.threads)
         mp.map(_bounce_forced, args)
 
         TT = []
