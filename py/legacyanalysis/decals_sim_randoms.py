@@ -45,7 +45,7 @@ class QuickRandoms(object):
         else:
             ra,dec=draw_unit_sphere(ramin=self.ramin,ramax=self.ramax,\
                                     dcmin=self.dcmin,dcmax=self.dcmax,Nran=self.Nran)
-        self.ra,self,dec=ra,dec 
+        self.ra,self.dec=ra,dec 
 
     def save_randoms(self,fn='quick_randoms.pickle'):
         if not os.path.exists(fn):
@@ -65,7 +65,7 @@ class QuickRandoms(object):
 
     def plot(self,xlim=None,ylim=None,text=''):
         fig,ax=plt.subplots()
-        add_scatter(ax,self.ra,self.dec,c='b',m='o',alpha=0.5)
+        add_scatter(ax,self.ra,self.dec,c='b',m='.',alpha=0.5)
         ax.set_xlabel('RA')
         ax.set_ylabel('DEC')
         if xlim is not None and ylim is not None: 
@@ -99,7 +99,7 @@ class DesiRandoms(object):
         else: 
             self.ra,self.dec,self.i_inbricks,self.i_inimages= self.make_randoms()
 
-    def save_randoms(self,fn='desi_randoms.pickle')
+    def save_randoms(self,fn='desi_randoms.pickle'):
         if not os.path.exists(fn):
             fout=open(fn, 'w')
             pickle.dump((self.ra,self.dec,self.i_inbricks,self.i_inimages),fout)
@@ -155,15 +155,15 @@ class DesiRandoms(object):
         return np.array(randoms['RA']), np.array(randoms['DEC']), i_inbricks,i_inimages
 
     def plot(self,name='desirandoms.png'):
-        fig,ax=plt.subplots(1,3,sharey=True,sharex=True)
+        fig,ax=plt.subplots(1,3,sharey=True,sharex=True,figsize=(15,5))
         add_scatter(ax[0],self.ra, self.dec, c='b',m='o')
-        add_scatter(ax[1],self.ra[self.i_inbricks], self.dec[self.i_inbricks], c='b',m='o')
-        add_scatter(ax[2],self.ra[self.i_inimages], self.dec[self.i_inimages], c='b',m='o')
+        add_scatter(ax[1],self.ra[self.i_inbricks], self.dec[self.i_inbricks], c='b',m='.')
+        add_scatter(ax[2],self.ra[self.i_inimages], self.dec[self.i_inimages], c='b',m='.')
         for i,title in zip(range(3),['All','in Bricks','in Images']):
             ti=ax[i].set_title(title)
             xlab=ax[i].set_xlabel('ra')
-            ax[i].set_ylim(ax[0].get_ylim)
-            ax[i].set_xlim(ax[0].get_xlim)
+            ax[i].set_ylim((self.dec.min(),self.dec.max()))
+            ax[i].set_xlim((self.ra.min(),self.ra.max()))
         ylab=ax[0].set_ylabel('dec')
         plt.savefig(name, bbox_extra_artists=[ti,xlab,ylab], bbox_inches='tight',dpi=150)
         plt.close()
@@ -172,6 +172,14 @@ class DesiRandoms(object):
 
 
 class Angular_Correlator(object):
+    '''Compute w(theta) from observed ra,dec and random ra,dec
+    uses landy szalay estimator: DD - 2DR + RR / RR
+    two numerical methods: 1) Yu Feng's kdcount, 2) astroML
+    Example:
+    ac= Angular_Correlator(gal_ra,gal_dec,ran_ra,ran_dec)
+    ac.compute()
+    ac.plot()
+    '''
     def __init__(self,gal_ra,gal_dec,ran_ra,ran_dec,ncores=1):
         self.gal_ra=gal_ra
         self.gal_dec=gal_dec
@@ -192,7 +200,7 @@ class Angular_Correlator(object):
 
     def ac_astroML(self):
         '''from two_point_angular() in astroML/correlation.py'''
-        from astroML.correlation import two_point
+        from astroML.correlation import two_point,ra_dec_to_xyz,angular_dist_to_euclidean_dist
         # 3d project
         data = np.asarray(ra_dec_to_xyz(self.gal_ra, self.gal_dec), order='F').T
         data_R = np.asarray(ra_dec_to_xyz(self.ran_ra, self.ran_dec), order='F').T
@@ -208,7 +216,7 @@ class Angular_Correlator(object):
         from kdcount import sphere
         abin = sphere.AngularBinning(np.logspace(-4, -2.6, 10))
         D = sphere.points(self.gal_ra, self.gal_dec)
-        R = sphere.points(self.ran_ra, self.rand_dec) #weights=wt_array
+        R = sphere.points(self.ran_ra, self.ran_dec) #weights=wt_array
         DD = correlate.paircount(D, D, abin, np=self.ncores)
         DR = correlate.paircount(D, R, abin, np=self.ncores)
         RR = correlate.paircount(R, R, abin, np=self.ncores)
@@ -219,6 +227,7 @@ class Angular_Correlator(object):
     def plot(self,name='wtheta.png'):
         fig,ax=plt.subplots()
         for key,col,mark in zip(['yu','astroML'],['g','b'],['o']*2):
+            print "%s: theta,w" % key,self.theta[key],self.w[key]
             add_scatter(ax,self.theta[key], self.w[key], c=col,m=mark,lab=key,alpha=0.5)
         t = np.array([0.01, 10])
         plt.plot(t, 10 * (t / 0.01) ** -0.8, ':k', lw=1)
@@ -231,12 +240,27 @@ class Angular_Correlator(object):
         plt.close()
         print "wrote: %s" % name
 
+def unit_test():
+    qran= QuickRandoms(ramin=243.,ramax=246.,dcmin=7.,dcmax=10.,Nran=216000)
+    qran.get_randoms()
+    # subset
+    index= np.all((qran.ra >= 244.,qran.ra <= 244.5,\
+                   qran.dec >= 8.,qran.dec <= 8.5),axis=0)
+    ra,dec= qran.ra[index],qran.dec[index]
+    # use these as Ducks for DesiRandoms
+    ran= DesiRandoms()
+    ran.ra,ran.dec= ra,dec
+    index= np.all((ran.ra >= 244.,ran.ra <= 244.25),axis=0)
+    ran.i_inbricks= np.where(index)[0]
+    index= np.all((index,ran.dec >= 8.1,ran.dec <= 8.4),axis=0)
+    ran.i_inimages= np.where(index)[0]
+    ran.plot()
+    # wtheta
+    ac= Angular_Correlator(ran.ra[ran.i_inimages],ran.dec[ran.i_inimages],ran.ra,ran.dec)
+    ac.compute()
+    ac.plot() 
+    print 'finished unit_test'
 
 
 if __name__ == '__main__':
-    qran= QuickRandoms(ramin=243.,ramax=246.,dcmin=7.,dcmax=10.,Nran=216000)
-    qran.get_randoms()
-    # save and plot
-    qran.save_randoms()
-    qran.plot(xlim=(244.,244.1),ylim=(8.,8.1)) #,xlim=(244.,244.+10./360),ylim=(8.,8.+10./360.)) 
-
+    unit_test()
