@@ -112,8 +112,9 @@ class DesiRandoms(object):
         '''Nran -- # of randoms'''
         import imaginglss
         from imaginglss.model import dataproduct
+        from imaginglss.model.datarelease import contains
         import h5py
-        print "Creating %d Randoms" % Nran
+        print "Creating %d Randoms" % self.Nran
         # dr2 cache
         decals = imaginglss.DECALS('/project/projectdirs/desi/users/burleigh/dr3_testdir_for_bb/imaginglss/dr2.conf.py')
         foot= decals.datarelease.create_footprint((self.ramin,self.ramax,self.dcmin,self.dcmax))
@@ -126,11 +127,11 @@ class DesiRandoms(object):
         randoms['DEC'] = dec
         # mask for those inbricks
         # copied from def filter()
-        coord= numpy.array((ra,dec))
+        coord= np.array((ra,dec))
         bid = foot.brickindex.query_internal(coord)
-        i_inbricks = contains(goot._covered_brickids, bid)
+        i_inbricks = contains(foot._covered_brickids, bid)
         i_inbricks = np.where(i_inbricks)[0]
-        print('Number Density in bricks= ',len(randoms['RA'])/eBOSS.area)
+        print('Number Density in bricks= ',len(randoms['RA'])/foot.area)
         # mask union of inbricks and have imaging data
         # set randoms['INTRINSIC_NOISELEVEL'] to np.inf where no imaging data exists
         coord[:, i_inbricks]
@@ -142,8 +143,8 @@ class DesiRandoms(object):
         #randoms['INTRINSIC_NOISELEVEL'][nanmask] = np.inf
         nanmask=np.all(nanmask[:,[1,2,4]],axis=1) # shape (Nran,)
         i_inimages= i_inbricks[~nanmask]
-        print('Total sq.deg. where have imaging data approx.= ',eBOSS.area*(len(randoms['RA'][~nanmask]))/len(randoms['RA']))
-        print('Number Density for sources where have images= ',len(randoms['RA'][~nanmask])/eBOSS.area)
+        print('Total sq.deg. where have imaging data approx.= ',foot.area*(len(randoms['RA'][~nanmask]))/len(randoms['RA']))
+        print('Number Density for sources where have images= ',len(randoms['RA'][~nanmask])/foot.area)
         # save ra,dec,mask to file
         #with h5py.File('eboss_randoms.hdf5', 'w') as ff:
         #    ds = ff.create_dataset('_HEADER', shape=(0,))
@@ -240,7 +241,8 @@ class Angular_Correlator(object):
         plt.close()
         print "wrote: %s" % name
 
-def unit_test():
+def ac_unit_test():
+    '''angular correlation func unit test'''
     qran= QuickRandoms(ramin=243.,ramax=246.,dcmin=7.,dcmax=10.,Nran=216000)
     qran.get_randoms()
     # subset
@@ -263,4 +265,9 @@ def unit_test():
 
 
 if __name__ == '__main__':
-    unit_test()
+    #ac_unit_test()
+    ran= DesiRandoms(ramin=243.,ramax=246.,dcmin=7.,dcmax=10.,Nran=10)
+    ran.get_randoms()
+    # save randoms if file not exist and plot
+    ran.save_randoms()
+    ran.plot() 
