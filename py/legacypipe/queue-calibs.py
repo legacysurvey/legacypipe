@@ -146,6 +146,14 @@ def main():
         log(len(T), 'CCDs')
     T.index = np.arange(len(T))
 
+    I = survey.photometric_ccds(T)
+    print(len(I), 'CCDs are photometric')
+    T.cut(I)
+    I = survey.apply_blacklist(T)
+    print(len(I), 'CCDs are not blacklisted')
+    T.cut(I)
+    print(len(T), 'CCDs remain')
+
     # I,J,d,counts = match_radec(B.ra, B.dec, T.ra, T.dec, 0.2, nearest=True, count=True)
     # plt.clf()
     # plt.hist(counts, counts.max()+1)
@@ -397,7 +405,9 @@ def main():
         sys.exit(0)
 
     # sort by dec decreasing
-    B.cut(np.argsort(-B.dec))
+    #B.cut(np.argsort(-B.dec))
+    # RA increasing
+    B.cut(np.argsort(B.ra))
 
     for b in B:
         if opt.check:
