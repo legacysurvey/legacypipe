@@ -122,29 +122,30 @@ class DesiRandoms(object):
         # Sample full ra,dec box
         ra,dec=draw_unit_sphere(ramin=self.ramin,ramax=self.ramax,\
                                 dcmin=self.dcmin,dcmax=self.dcmax,Nran=self.Nran)
-        randoms = np.empty(len(ra), dtype=dataproduct.RandomCatalogue)
-        randoms['RA'] = ra
-        randoms['DEC'] = dec
-        # mask for those inbricks
-        # copied from def filter()
+        #randoms = np.empty(len(ra), dtype=dataproduct.RandomCatalogue)
+        #randoms['RA'] = ra
+        #randoms['DEC'] = dec
+        # Get indices of inbrick points, copied from def filter()
         coord= np.array((ra,dec))
         bid = foot.brickindex.query_internal(coord)
         i_inbricks = contains(foot._covered_brickids, bid)
         i_inbricks = np.where(i_inbricks)[0]
-        print('Number Density in bricks= ',len(randoms['RA'])/foot.area)
-        # mask union of inbricks and have imaging data
-        # set randoms['INTRINSIC_NOISELEVEL'] to np.inf where no imaging data exists
-        coord[:, i_inbricks]
+        print('Number Density in bricks= ',len(ra)/foot.area)
+        # Union of inbricks and have imaging data, evaluate depths at ra,dec
+        coord= coord[:, i_inbricks]
         cat_lim = decals.datarelease.read_depths(coord, 'grz')
-        randoms['INTRINSIC_NOISELEVEL'][:, :6] = (cat_lim['DECAM_DEPTH'] ** -0.5 / cat_lim['DECAM_MW_TRANSMISSION'])
-        randoms['INTRINSIC_NOISELEVEL'][:, 6:] = 0 # shape (Nran,10)
-        nanmask = np.isnan(randoms['INTRINSIC_NOISELEVEL'])
-        randoms['INTRINSIC_NOISELEVEL'][nanmask] = np.inf
-        #randoms['INTRINSIC_NOISELEVEL'][nanmask] = np.inf
+        depth= cat_lim['DECAM_DEPTH'] ** -0.5 / cat_lim['DECAM_MW_TRANSMISSION']
+        nanmask= np.isnan(depth)
         nanmask=np.all(nanmask[:,[1,2,4]],axis=1) # shape (Nran,)
-        i_inimages= i_inbricks[~nanmask]
-        print('Total sq.deg. where have imaging data approx.= ',foot.area*(len(randoms['RA'][~nanmask]))/len(randoms['RA']))
-        print('Number Density for sources where have images= ',len(randoms['RA'][~nanmask])/foot.area)
+        i_inimages= i_inbricks[nanmask == False]
+        print('ra.size=%d, i_inbricks.size=%d, i_inimages.size=%d' % (ra.size, i_inbricks.size, i_inimages.size))
+        # We are not using Yu's randoms dtype=dataproduct.RandomCatalogue
+        #randoms['INTRINSIC_NOISELEVEL'][:, :6] = (cat_lim['DECAM_DEPTH'] ** -0.5 / cat_lim['DECAM_MW_TRANSMISSION'])
+        #randoms['INTRINSIC_NOISELEVEL'][:, 6:] = 0
+        #nanmask = np.isnan(randoms['INTRINSIC_NOISELEVEL'])
+        #randoms['INTRINSIC_NOISELEVEL'][nanmask] = np.inf
+        print('Total sq.deg. where have imaging data approx.= ',foot.area*(len(ra[i_inimages]))/len(ra))
+        print('Number Density for sources where have images= ',len(ra[i_inimages])/foot.area)
         # save ra,dec,mask to file
         #with h5py.File('eboss_randoms.hdf5', 'w') as ff:
         #    ds = ff.create_dataset('_HEADER', shape=(0,))
@@ -153,7 +154,7 @@ class DesiRandoms(object):
         #    for column in randoms.dtype.names:
         #        ds = ff.create_dataset(column, data=randoms[column])
         #    ds = ff.create_dataset('nanmask', data=nanmask)
-        return np.array(randoms['RA']), np.array(randoms['DEC']), i_inbricks,i_inimages
+        return ra,dec, i_inbricks,i_inimages
 
     def plot(self,name='desirandoms.png'):
         fig,ax=plt.subplots(1,3,sharey=True,sharex=True,figsize=(15,5))
@@ -266,8 +267,11 @@ def ac_unit_test():
 
 if __name__ == '__main__':
     #ac_unit_test()
-    ran= DesiRandoms(ramin=243.,ramax=246.,dcmin=7.,dcmax=10.,Nran=10)
+    #Nran=int(2.4e3*9.) 
+    #ran= DesiRandoms(ramin=243.,ramax=246.,dcmin=7.,dcmax=10.,Nran=216000)
+    Nran=int(2.4e3*1.e2) 
+    ran= DesiRandoms(ramin=120.,ramax=130.,dcmin=20.,dcmax=30.,Nran=Nran)
     ran.get_randoms()
     # save randoms if file not exist and plot
-    ran.save_randoms()
+    ran.save_randoms(fn='desi_randoms_qual.pickle')
     ran.plot() 
