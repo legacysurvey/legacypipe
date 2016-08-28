@@ -148,7 +148,7 @@ class LegacySurveyImage(object):
     def get_tractor_image(self, slc=None, radecpoly=None,
                           gaussPsf=False, pixPsf=False,
                           splinesky=False,
-                          nanomaggies=True, subsky=True, tiny=5,
+                          nanomaggies=True, subsky=True, tiny=10,
                           dq=True, invvar=True, pixels=True,
                           constant_invvar=False):
         '''
