@@ -341,6 +341,10 @@ def main():
         # Dec 15 to  30
         rlo,rhi = 115., 175.
         dlo,dhi =  15.,  30.
+
+    elif opt.region == 'mzls':
+        dlo,dhi = 30., 90.
+
         
     if opt.mindec is not None:
         dlo = opt.mindec
