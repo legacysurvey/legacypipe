@@ -1,5 +1,7 @@
 from __future__ import print_function
+import os
 import fitsio
+import numpy as np
 from legacypipe.common import LegacySurveyData
 from astrometry.util.fits import fits_table
 
