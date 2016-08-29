@@ -116,7 +116,7 @@ if __name__ == '__main__':
                 mn = np.min(N)
                 md = np.median(N)
                 mx = np.max(N)
-                print 'Brick', brick, 'band', band, 'has min/median/max nexp', mn,md,mx
+                print('Brick', brick, 'band', band, 'has min/median/max nexp', mn,md,mx)
                 bricks.get('nobs_med_%s' % band)[ibrick] = md
                 bricks.get('nobs_max_%s' % band)[ibrick] = mx
 
@@ -125,7 +125,7 @@ if __name__ == '__main__':
         assert(np.all(mxobs > 0 == bricks.in_dr2))
         bricks.cut(mxobs > 0)
         bricks.delete('in_dr2')
-        print len(bricks), 'bricks with coverage'
+        print(len(bricks), 'bricks with coverage')
         bricks.writeto('legacysurvey-brick-dr2.fits')
 
         sys.exit(0)
