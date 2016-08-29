@@ -8,6 +8,7 @@ from astrometry.util.fits import fits_table, merge_tables
 from astrometry.util.plotutils import PlotSequence, plothist, loghist
 from astrometry.util.ttime import Time
 from legacypipe.common import LegacySurveyData, imsave_jpeg, get_rgb
+from scipy.ndimage.filters import gaussian_filter
 
 '''
 A script to examine the pixel distributions vs the CP weight maps.
@@ -216,6 +217,193 @@ if False:
     sys.exit(0)
 
 
+
+
+def measure_mads(img, ie, offsets, step=1):
+    sig = []
+    for offset in offsets:
+        slice1 = (slice(0,-offset,step),slice(0,-offset,step))
+        slice2 = (slice(offset,None,step),slice(offset,None,step))
+        slicex = (slice1[0], slice2[1])
+        slicey = (slice2[0], slice1[1])
+
+        diff = img[slice1] - img[slice2]
+        diff = diff[(ie[slice1] > 0) * (ie[slice2] > 0)]
+        mad = np.median(np.abs(diff).ravel())
+        bsig1 = 1.4826 * mad / np.sqrt(2.)
+        sig.append(bsig1)
+
+        diff = img[slice1] - img[slicex]
+        diff = diff[(ie[slice1] > 0) * (ie[slicex] > 0)]
+        mad = np.median(np.abs(diff).ravel())
+        sig.append(1.4826 * mad / np.sqrt(2.))
+
+        diff = img[slice1] - img[slicey]
+        diff = diff[(ie[slice1] > 0) * (ie[slicey] > 0)]
+        mad = np.median(np.abs(diff).ravel())
+        sig.append(1.4826 * mad / np.sqrt(2.))
+
+    Ndiff = len(diff)
+    # Draw random pixels and see what that MAD distribution looks like
+    pix = img[ie>0].ravel()
+    Nrand = min(Ndiff, len(pix)/2)
+    P = np.random.permutation(len(pix))[:(Nrand*2)]
+    diff2 = pix[P[:Nrand]] - pix[P[Nrand:]]
+    mad2 = np.median(np.abs(diff2).ravel())
+    bsig2 = 1.4826 * mad2 / np.sqrt(2.)
+    sig.append(bsig2)
+    return sig
+
+def plot_mads(allsigs, names, loc='upper left'):
+    allsigs = np.array(allsigs)
+    allsigs = np.atleast_2d(allsigs)
+    #print('Allsigs shape', allsigs.shape)
+    rsigs = allsigs[:,np.array([-1])]
+    allsigs = allsigs[:,:-1]
+    dsigs = allsigs[:,::3]
+    xsigs = allsigs[:,1::3]
+    ysigs = allsigs[:,2::3]
+    dsigs = np.hstack((dsigs, rsigs))
+    nr,nc = xsigs.shape
+
+    plt.clf()
+    p1 = plt.plot(dsigs.T, 'bo-', label='Diagonal')
+    p2 = plt.plot(np.repeat(np.arange(nc)[:,np.newaxis], 2, axis=1),
+                  xsigs.T, 'go-', label='X')
+    p3 = plt.plot(np.repeat(np.arange(nc)[:,np.newaxis], 2, axis=1),
+                  ysigs.T, 'ro-', label='Y')
+    plt.xticks(np.arange(nc+1), ['%i pix'%o for o in offsets] + ['Random'])
+    plt.axhline(1., color='k', alpha=0.3)
+    plt.ylabel('Error estimate / sig1')
+    plt.legend([p1[0],p2[0],p3[0]], ['Diagonal', 'X', 'Y'], loc=loc)
+
+    names = np.array(names)
+    yy = dsigs[:,-1]
+    ii = np.argsort(yy)
+    yy = np.linspace(min(yy), max(yy), len(ii))
+    for i,y in zip(ii, yy):
+        plt.text(nc+0.1, y, names[i], ha='left', va='center', color='b',
+                 fontsize=10)
+    plt.xlim(-0.5, nc+3)
+
+
+
+    
+# Simulate the effect of sources in a MAD estimate.
+if False:
+    np.random.seed(44)
+
+    H,W = 4000,2000
+    #Nsrcs = 4000
+    #psf_sigma = 2.
+    sig1 = 1.
+    #nsigma = 20.
+
+    offsets = [1,2,3,5,10,20,40]
+
+    #### Simulate effect of pixel-to-pixel correlations
+
+    allsigs1 = []
+    names = []
+    title = 'Simulated MAD'
+
+    for corr in [ 0.01, 0.02, 0.03 ]:
+        img = sig1 * np.random.normal(size=(H,W)).astype(np.float32)
+        ie = np.ones_like(img) / sig1
+        cimg = np.zeros_like(img)
+        cimg[1:-1, 1:-1] = ((1. - 4.*corr) * img[1:-1, 1:-1] +
+                            corr * img[:-2, 1:-1] +
+                            corr * img[2: , 1:-1] +
+                            corr * img[1:-1, :-2] +
+                            corr * img[1:-1, 2: ])
+        img = cimg
+        names.append('Correlation %g' % corr)
+        sig = measure_mads(img, ie, offsets)
+        allsigs1.append(sig)
+    plot_mads(allsigs1, names, loc='lower right')
+    plt.title(title)
+    ps.savefig()
+
+    allsigs1 = []
+    names = []
+    for s in [0.1, 0.2, 0.3]:
+        img = sig1 * np.random.normal(size=(H,W)).astype(np.float32)
+        ie = np.ones_like(img) / sig1
+        img = gaussian_filter(img, s)
+        names.append('Gaussian %g' % s)
+        sig = measure_mads(img, ie, offsets)
+        allsigs1.append(sig)
+    plot_mads(allsigs1, names, loc='center left')
+    plt.title(title)
+    ps.savefig()
+
+
+
+
+    #### Effects of sources
+
+    allsigs1 = []
+    names = []
+    title = 'Simulated MAD'
+
+    for Nsrcs, psf_sigma in [
+            (2000, 2.),
+            (4000, 2.),
+            (4000, 4.),
+            ]:
+
+        ph,pw = 25,25
+        psz = pw/2
+        xx,yy = np.meshgrid(np.arange(pw), np.arange(ph))
+        psfimg = np.exp(-0.5 * ((xx - pw/2)**2 + (yy - ph/2)**2) /
+                        (2.*psf_sigma**2))
+        psfimg /= np.sum(psfimg)
+        psfnorm = np.sqrt(np.sum(psfimg**2))
+        #flux = nsigma * sig1 / psfnorm
+        flux = 100.
+
+        print('N sigma:', flux * psfnorm / sig1)
+        
+        img = np.zeros((H,W), np.float32)
+        ie = np.ones_like(img) / sig1
+        sx = np.random.randint(low=psz, high=W-psz, size=Nsrcs)
+        sy = np.random.randint(low=psz, high=H-psz, size=Nsrcs)
+        for x,y in zip(sx,sy):
+            img[y-psz: y-psz+ph, x-psz: x-psz+pw] += psfimg * flux
+        img += sig1 * np.random.normal(size=img.shape)
+
+        #plt.clf()
+        #plt.imshow(img, interpolation='nearest', origin='lower',
+        #           vmin=-2.*sig1, vmax=5.*sig1)
+        #ps.savefig()
+
+        names.append('%i srcs, seeing %.2f' % (Nsrcs, psf_sigma * 2.35 * 0.262))
+
+
+        ####
+        sig = measure_mads(img, ie, offsets)
+        allsigs1.append(sig)
+    
+
+    plot_mads(allsigs1, names)
+    plt.title(title)
+    ps.savefig()
+
+
+
+
+    
+
+
+    
+    
+        
+
+    sys.exit(0)
+
+
+
+    
 survey = LegacySurveyData()
 ccds = survey.get_ccds_readonly()
 #ccds = ccds[np.abs(ccds.mjd_obs - 57444) < 7.]

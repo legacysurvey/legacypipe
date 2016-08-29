@@ -148,7 +148,7 @@ class LegacySurveyImage(object):
     def get_tractor_image(self, slc=None, radecpoly=None,
                           gaussPsf=False, pixPsf=False,
                           splinesky=False,
-                          nanomaggies=True, subsky=True, tiny=5,
+                          nanomaggies=True, subsky=True, tiny=10,
                           dq=True, invvar=True, pixels=True,
                           constant_invvar=False):
         '''
@@ -288,7 +288,7 @@ class LegacySurveyImage(object):
             sig1 = skysig1
             if nanomaggies:
                 # skysig1 is in the native units
-                sig1 /= zpscale
+                sig1 /= orig_zpscale
         else:
             # Estimate per-pixel noise via Blanton's 5-pixel MAD
             slice1 = (slice(0,-5,10),slice(0,-5,10))

@@ -2048,7 +2048,8 @@ def stage_coadds(survey=None, bands=None, version_header=None, targetwcs=None,
     for c in ['nobs', 'anymask', 'allmask', 'psfsize', 'depth', 'galdepth']:
         T.set(c, C.T.get(c))
     #store galaxy sim bounding box in Tractor cat
-    if 'sims_xy' in C.T.get_columns(): T.set('sims_xy', C.T.get('sims_xy'))
+    if 'sims_xy' in C.T.get_columns():
+        T.set('sims_xy', C.T.get('sims_xy'))
 
     if apertures is None:
         # empty table when 0 sources.
@@ -2580,7 +2581,8 @@ def stage_writecat(
 
     cols.extend(['decam_mw_transmission', 'decam_nobs',
         'decam_rchi2', 'decam_fracflux', 'decam_fracmasked', 'decam_fracin',
-        'decam_anymask', 'decam_allmask', 'decam_psfsize' ])
+        'decam_anymask', 'decam_allmask', 'decam_psfsize',
+        'decam_depth', 'decam_galdepth' ])
 
     if WISE is not None:
         cols.extend([
@@ -2609,6 +2611,7 @@ def stage_writecat(
         ra=deg, dec=deg, ra_ivar=degiv, dec_ivar=degiv, ebv='mag',
         decam_flux=flux, decam_flux_ivar=fluxiv,
         decam_apflux=flux, decam_apflux_ivar=fluxiv, decam_apflux_resid=flux,
+        decam_depth=fluxiv, decam_galdepth=fluxiv,
         wise_flux=flux, wise_flux_ivar=fluxiv,
         wise_lc_flux=flux, wise_lc_flux_ivar=fluxiv,
         shapeexp_r='arcsec', shapeexp_r_ivar='1/arcsec^2',
@@ -2644,7 +2647,6 @@ def stage_writecat(
         sims_fn = survey.find_file('galaxy-sims', output=True, brick=brickname)
         sims_data.writeto(sims_fn)
         print('Wrote',sims_fn)
-
 
     return dict(T2=T2)
 
