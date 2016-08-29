@@ -43,25 +43,49 @@ class SourceDerivatives(MultiParams, BasicSource):
         *freeze*: List of parameter names to freeze before taking derivs
         *thaw*: List of parameter names to thaw before taking derivs
         '''
+        # This a subclass of MultiParams and we pass the brightnesses
+        # as our params.
         super(SourceDerivatives,self).__init__(*brights)
         self.real = real
         self.freeze = freeze
         self.thaw = thaw
         self.brights = brights
-
+        self.umods = None
+        
     # forced photom calls getUnitFluxModelPatches
     def getUnitFluxModelPatches(self, img, minval=0., modelMask=None):
         self.real.freezeParamsRecursive(*self.freeze)
         self.real.thawParamsRecursive(*self.thaw)
-        print('SourceDerivatives: source has params:')
-        self.real.printThawedParams()
+        #print('SourceDerivatives: source has params:')
+        #self.real.printThawedParams()
+        # The derivatives will be scaled by the source brightness;
+        # undo that scaling.
+        #print('Brightness:', self.real.brightness)
+        counts = img.getPhotoCal().brightnessToCounts(self.real.brightness)
         derivs = self.real.getParamDerivatives(img, modelMask=modelMask)
-        print('SourceDerivs: derivs', derivs)
+        #print('SourceDerivs: derivs', derivs)
+        for d in derivs:
+            if d is not None:
+                d /= counts
+                print('Deriv: abs max', np.abs(d.patch).max(), 'range', d.patch.min(), d.patch.max(), 'sum', d.patch.sum())
         # and revert...
         self.real.freezeParamsRecursive(*self.thaw)
         self.real.thawParamsRecursive(*self.freeze)
+        self.umods = derivs
         return derivs
-        
+
+    def getModelPatch(self, img, minsb=0., modelMask=None):
+        if self.umods is None:
+            return None
+        #print('getModelPatch()')
+        #print('modelMask', modelMask)
+        pc = img.getPhotoCal()
+        #counts = [pc.brightnessToCounts(b) for b in self.brights]
+        #print('umods', self.umods)
+        return (self.umods[0] * pc.brightnessToCounts(self.brights[0]) +
+                self.umods[1] * pc.brightnessToCounts(self.brights[1]))
+
+
         
 def sim(nims, nsrcs, H,W, ps, dpix, nsamples, forced=True, ceres=False,
         alphas=None, derivs=False):
@@ -73,8 +97,10 @@ def sim(nims, nsrcs, H,W, ps, dpix, nsamples, forced=True, ceres=False,
     #xx,yy = np.meshgrid(
     assert(nsrcs == 1)
 
-    sig1 = 1.
+    sig1 = 0.25
     flux = 100.
+    # sig1 = 0.0025
+    # flux = 1.
     #psf_sigma = 1.5
     psf_sigma = 2.0
 
@@ -82,18 +108,19 @@ def sim(nims, nsrcs, H,W, ps, dpix, nsamples, forced=True, ceres=False,
     nsigma = flux * psfnorm / sig1
     print('S/N:', nsigma)
     
-    srcs = []
+    realsrcs = []
+    derivsrcs = []
     for i in range(nsrcs):
         src = PointSource(RaDecPos(0., 0.), Flux(flux))
-        srcs.append(src)
+        realsrcs.append(src)
         if forced:
             src.freezeAllBut('brightness')
         if derivs:
             realsrc = src
             dsrc = SourceDerivatives(realsrc, ['brightness'], ['pos'],
                                      [Flux(0.),Flux(0.)])
-            srcs.append(dsrc)
-            
+            derivsrcs.append(dsrc)
+    
     tims = []
     for i in range(nims):
         v = psf_sigma**2
@@ -117,7 +144,7 @@ def sim(nims, nsrcs, H,W, ps, dpix, nsamples, forced=True, ceres=False,
         opt = CeresOptimizer()
 
     # Render "true" models, add noise
-    tr = TrackingTractor(tims, srcs, optimizer=opt)
+    tr = TrackingTractor(tims, realsrcs, optimizer=opt)
     mods = []
     for i,tim in enumerate(tims):
         mod = tr.getModelImage(i)
@@ -132,14 +159,17 @@ def sim(nims, nsrcs, H,W, ps, dpix, nsamples, forced=True, ceres=False,
         
     tr.freezeParam('images')
 
+    if derivs:
+        tr.catalog = Catalog(*(realsrcs + derivsrcs))
+    
     print('Params:')
     tr.printThawedParams()
 
     p0 = tr.getParams()
-    
+
     results = []
     for isamp in range(nsamples):
-        print('Sample', isamp)
+        #print('Sample', isamp)
         if isamp % 100 == 0:
             print('Sample', isamp)
 
@@ -174,7 +204,7 @@ def sim(nims, nsrcs, H,W, ps, dpix, nsamples, forced=True, ceres=False,
                 plt.subplot(rows, cols, i+1)
                 plt.imshow(tim.data, interpolation='nearest', origin='lower',
                            cmap='gray')
-                x,y = tim.wcs.positionToPixel(srcs[0].pos)
+                x,y = tim.wcs.positionToPixel(realsrcs[0].pos)
                 plt.axhline(y, color='r', alpha=0.5, lw=2)
                 plt.axvline(x, color='r', alpha=0.5, lw=2)
                 x,y = W/2, H/2
@@ -182,7 +212,7 @@ def sim(nims, nsrcs, H,W, ps, dpix, nsamples, forced=True, ceres=False,
                 plt.axvline(x, color='b', alpha=0.5, lw=2)
             plt.suptitle('Astrometric scatter: +- %g pix' % dpix)
             ps.savefig()
-            
+
         tr.setParams(p0)
 
         track = []
@@ -212,6 +242,70 @@ def sim(nims, nsrcs, H,W, ps, dpix, nsamples, forced=True, ceres=False,
             results.append((dx, dy, tr.getParams(), track, tr.tracked_params,
                             tr.tracked_lnprob,
                             tr.getLogProb()))
+
+        if ps is not None and isamp == 0:
+            if derivs:
+                plt.clf()
+                tim = tims[0]
+                mod1 = tr.getModelImage(tim, srcs=realsrcs)
+
+                print('mod1 max value', mod1.max()/np.sum(mod1))
+                
+                # save derivative params
+                pd = [d.getParams() for d in derivsrcs]
+                # zero out the dDec coefficient
+                for d,dp0 in zip(derivsrcs,pd):
+                    p = dp0[:]
+                    p[1] = 0.
+                    d.setParams(p)
+                modr = tr.getModelImage(tim, srcs=derivsrcs)
+                # zero out the dRA coefficient, restore the dDec coeff
+                for d,dp0 in zip(derivsrcs,pd):
+                    p = dp0[:]
+                    p[0] = 0.
+                    d.setParams(p)
+                modd = tr.getModelImage(tim, srcs=derivsrcs)
+                # restore the dRA coeff
+                for d,dp0 in zip(derivsrcs,pd):
+                    d.setParams(dp0)
+
+                mod = tr.getModelImage(tim)
+                mx = mod.max()
+                ima = dict(interpolation='nearest', origin='lower',
+                           vmin=-mx, vmax=mx, cmap='gray')
+                plt.subplot(2,3,1)
+                plt.imshow(tim.getImage(), **ima)
+                plt.title('data')
+                plt.subplot(2,3,2)
+                plt.imshow(mod1, **ima)
+                plt.title('source')
+
+                dscale = 5
+                plt.subplot(2,3,3)
+                plt.imshow(dscale * (tim.getImage() - mod1), **ima)
+                plt.title('(data - source) x %g' % dscale)
+
+                plt.subplot(2,3,4)
+                plt.imshow(modr*dscale, **ima)
+                plt.title('dRA x %g' % dscale)
+                plt.subplot(2,3,5)
+                plt.imshow(modd*dscale, **ima)
+                plt.title('dDec x %g' % dscale)
+                plt.subplot(2,3,6)
+                plt.imshow(mod, **ima)
+                plt.title('total')
+                x1,y1 = tim.wcs.positionToPixel(realsrcs[0].pos)
+                x2,y2 = W/2, H/2
+                for i in [1,2,4,5,6]:
+                    plt.subplot(2,3,i)
+                    plt.axhline(y1, color='r', alpha=0.5, lw=2)
+                    plt.axvline(x1, color='r', alpha=0.5, lw=2)
+                    plt.axhline(y2, color='b', alpha=0.5, lw=2)
+                    plt.axvline(x2, color='b', alpha=0.5, lw=2)
+                ps.savefig()
+            
+
+            
     return results
 
 
@@ -493,8 +587,15 @@ if __name__ == '__main__':
     seed = us
 
     if True:
+        nsamples = 400
         np.random.seed(seed)
-        results = sim(nims, nsrcs, H,W, ps, 1.0, 10, derivs=True)
+        results = sim(nims, nsrcs, H,W, None, 1.0, nsamples)
+
+        pp = np.array([p for x,y,p in results])
+        flux0 = pp[:,0]
+
+        np.random.seed(seed)
+        results = sim(nims, nsrcs, H,W, ps, 1.0, nsamples, derivs=True)
 
         dx = np.array([x for x,y,p in results])
         dy = np.array([y for x,y,p in results])
@@ -502,25 +603,70 @@ if __name__ == '__main__':
         print('Params:', pp.shape)
         
         flux = pp[:,0]
-        fluxdx = pp[:,1] * 3600 * 100
-        fluxdy = pp[:,2] * 3600 * 100
+        fluxdx = pp[:,1]
+        fluxdy = pp[:,2]
 
-        print('Fluxdx:', fluxdx)
-        print('Fluxdy:', fluxdy)
-        
         r = np.hypot(dx, dy)
         plt.clf()
+        plt.plot(r, flux0, 'k.', label='Flux (no derivs)')
         plt.plot(r, flux, 'b.', label='Flux')
         plt.xlabel('WCS Scatter Distance (pix)')
         plt.ylabel('Flux')
         plt.title('Forced photometry: Astrometry sensitivity')
-
-        plt.plot(dx, fluxdx, 'r.', label='x deriv')
-        plt.plot(dy, fluxdy, 'g.', label='y deriv')
-        plt.legend()
-
+        plt.legend(loc='lower left')
         ps.savefig()
 
+        plt.clf()
+        plt.plot(dx,  fluxdx / flux / pixscale, 'r.', label='RA deriv')
+        plt.plot(dy, -fluxdy / flux / pixscale, 'g.', label='Dec deriv')
+        ax = plt.axis()
+        plt.plot([-10,10],[-10,10],'k-', alpha=0.1)
+        mx = np.abs(np.array(ax)).max()
+        plt.axis([-mx,mx,-mx,mx])
+        plt.legend(loc='upper left')
+        plt.xlabel('WCS scatter (pix)')
+        plt.ylabel('Computed offset (pix)')
+        plt.title('Forced photometry: Fitting derivatives to recover scatter')
+        plt.axhline(0, color='k', alpha=0.1)
+        plt.axvline(0, color='k', alpha=0.1)
+        ps.savefig()
+
+        plt.clf()
+        plt.scatter(dx, dy, c=flux)
+        plt.axhline(0, color='k', alpha=0.1)
+        plt.axvline(0, color='k', alpha=0.1)
+        ax = plt.axis()
+        mx = np.abs(np.array(ax)).max()
+        plt.axis([-mx,mx,-mx,mx])
+        plt.xlabel('dx (pix)')
+        plt.ylabel('dy (pix)')
+        plt.title('Forced photometry: flux when fit w/derivatives')
+        plt.colorbar()
+        ps.savefig()
+
+        plt.clf()
+        plt.scatter(dx, dy, c=flux0)
+        plt.axhline(0, color='k', alpha=0.1)
+        plt.axvline(0, color='k', alpha=0.1)
+        ax = plt.axis()
+        mx = np.abs(np.array(ax)).max()
+        plt.axis([-mx,mx,-mx,mx])
+        plt.xlabel('dx (pix)')
+        plt.ylabel('dy (pix)')
+        plt.title('Forced photometry: flux when fit w/out derivatives')
+        plt.colorbar()
+        ps.savefig()
+
+        
+        
+        # i = np.argmax(dx)
+        # fluxdx = pp[:,1]
+        # fluxdy = pp[:,2]
+        # print('dx', dx[i], 'pixels')
+        # print('fluxdx', fluxdx[i])
+        # print('flux', flux[i])
+        # print('d pix', fluxdx[i] / flux[i] / pixscale)
+        
         sys.exit(0)
     
     if False:
