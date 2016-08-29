@@ -5,7 +5,7 @@ import os
 from collections import Counter
 from astrometry.util.fits import fits_table, merge_tables
 
-def mzls_to_20160226():
+def mzls_to_20160315():
     basedir = os.environ['LEGACY_SURVEY_DIR']
     cam = 'mosaic'
     image_basedir = os.path.join(basedir, 'images')
@@ -16,7 +16,12 @@ def mzls_to_20160226():
          ['CP20160202','CP20160203','CP20160204','CP20160205','CP20160206','CP20160208',
           'CP20160209','CP20160210','CP20160211','CP20160212','CP20160213','CP20160214',
           'CP20160215','CP20160216','CP20160217','CP20160219','CP20160224','CP20160225',
-          'CP20160226']),
+          'CP20160226','CP20160227','CP20160228','CP20160229','CP20160301','CP20160302',
+          'CP20160303','CP20160304','CP20160305','CP20160306','CP20160308','CP20160309',
+          'CP20160310','CP20160311','CP20160312','CP20160313','CP20160314','CP20160315',
+          'CP20160316','CP20160317','CP20160318','CP20160319','CP20160320','CP20160325',
+          'CP20160326','CP20160327','CP20160328','CP20160330','CP20160331','CP20160401',
+          'CP20160402','CP20160403','CP20160404','CP20160408',]),
         ]:
         T = fits_table(fn)
         normalize_zeropoints(fn, dirnms, image_basedir, cam, T=T)
@@ -27,7 +32,7 @@ def mzls_to_20160226():
     if len(I):
         T.fwhm[I] = T.seeing[I] / 0.262
 
-    outfn = 'survey-ccds-mzls-to-20160226.fits'
+    outfn = 'survey-ccds-mzls-to-20160315.fits'
     T.writeto(outfn)
     print('Wrote', outfn)
 
@@ -421,7 +426,7 @@ if __name__ == '__main__':
     #decals_dr3_check_wcsfailed()
     #decals_dr3_plus()
     #decals_run16()
-    mzls_to_20160226()
+    mzls_to_20160315()
     sys.exit(0)
     
     basedir = './deep2f3'
