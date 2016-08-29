@@ -1,22 +1,21 @@
+from __future__ import print_function
 import fitsio
-from legacypipe.common import *
-
+from legacypipe.common import LegacySurveyData
 from astrometry.util.fits import fits_table
-from astrometry.util.file import trymakedirs
 
-def add_depth_tag(survey, brick, outdir, overwrite=True):
+def add_depth_tag(survey, brick, overwrite=True):
     outfn = survey.find_file('tractor', brick=brick, output=True)
     if os.path.exists(outfn) and not overwrite:
-        print 'Exists:', outfn
+        print('Exists:', outfn)
         return
     fn = survey.find_file('tractor', brick=brick)
     if not os.path.exists(fn):
-        print 'Does not exist:', fn
+        print('Input does not exist:', fn)
         return
     T = fits_table(fn, lower=False)
     primhdr = fitsio.read_header(fn)
     hdr = fitsio.read_header(fn, ext=1)
-    print 'Read', len(T), 'from', fn
+    print('Read', len(T), 'from', fn)
     T.decam_depth    = np.zeros((len(T), len(survey.allbands)), np.float32)
     T.decam_galdepth = np.zeros((len(T), len(survey.allbands)), np.float32)
     bands = 'grz'
@@ -26,19 +25,19 @@ def add_depth_tag(survey, brick, outdir, overwrite=True):
     for iband,band in zip(ibands, bands):
         fn = survey.find_file('depth', brick=brick, band=band)
         if os.path.exists(fn):
-            print 'Reading', fn
+            print('Reading', fn)
             img = fitsio.read(fn)
             T.decam_depth[:,iband] = img[iy, ix]
         else:
-            print 'Did not find depth file:', fn
+            print('Did not find depth file:', fn)
 
         fn = survey.find_file('galdepth', brick=brick, band=band)
         if os.path.exists(fn):
-            print 'Reading', fn
+            print('Reading', fn)
             img = fitsio.read(fn)
             T.decam_galdepth[:,iband] = img[iy, ix]
         else:
-            print 'Did not find galdepth file:', fn
+            print('Did not find galdepth file:', fn)
 
     for s in [
         'Data product of the DECam Legacy Survey (DECaLS)',
@@ -47,9 +46,6 @@ def add_depth_tag(survey, brick, outdir, overwrite=True):
         primhdr.add_record(dict(name='COMMENT', value=s, comment=s))
 
     with survey.write_output('tractor', brick=brick) as out:
-        # print 'Header:', hdr
-        # T.writeto(outfn, header=hdr, primheader=primhdr)
-
         # Yuck, all this to get the units right
         fits = fitsio.FITS(out.fn, 'rw', clobber=True)
         fits.write(None, header=primhdr)
@@ -65,10 +61,7 @@ def add_depth_tag(survey, brick, outdir, overwrite=True):
         fits.write([T.get(c) for c in cols], names=cols, header=hdr,
                    units=units)
         fits.close()
-        print 'Wrote', out.fn
-
-def bounce_add_depth_tag(X):
-    return add_depth_tag(*X)
+        print('Wrote', out.fn)
 
 if __name__ == '__main__':
     import sys
@@ -82,18 +75,23 @@ if __name__ == '__main__':
     opt = parser.parse_args()
 
     survey = LegacySurveyData(survey_dir=opt.survey_dir,
-                              output_dir=opt.outdir,
-                              version = 'dr2')
+                              output_dir=opt.outdir)
 
     bricks = survey.get_bricks()
-    bricks.cut(bricks.dec > -15)
-    bricks.cut(bricks.dec <  45)
+    bricks.cut(bricks.dec > -25)
+    bricks.cut(bricks.dec <  40)
 
     ## HACK -- cut to COSMOS
-    bricks.cut((np.abs(bricks.ra - 150) < 2) *
-               (np.abs(bricks.dec - 2.2) < 2))
-    print('Cut to', len(bricks), 'bricks near COSMOS')
-    
+    #bricks.cut((np.abs(bricks.ra - 150) < 2) *
+    #           (np.abs(bricks.dec - 2.2) < 2))
+    #print('Cut to', len(bricks), 'bricks near COSMOS')
+
+    # Note to self: don't bother multiprocessing this; I/O bound
+    for brick in bricks.brickname:
+        add_depth_tag(survey, brick, opt.outdir)
+
+
+        
     # Add has_[grz] tags and cut to bricks that exist in DR2.
     if False:
         bricks.nobs_med_g = np.zeros(len(bricks), np.uint8)
@@ -132,8 +130,5 @@ if __name__ == '__main__':
 
         sys.exit(0)
 
-    # Note to self: don't bother multiprocessing this; I/O bound
-    for brick in bricks.brickname:
-        add_depth_tag(survey, brick, opt.outdir)
 
 
