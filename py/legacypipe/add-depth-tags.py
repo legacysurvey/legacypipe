@@ -74,14 +74,19 @@ if __name__ == '__main__':
                         help='Override the $LEGACY_SURVEY_DIR environment variable')
     parser.add_argument('-d', '--outdir', help='Set output base directory',
                         default='tractor2')
+    parser.add_argument('--north', help='Set Dec limits for Northern Cap surveys',
+                        action='store_true')
     opt = parser.parse_args()
 
     survey = LegacySurveyData(survey_dir=opt.survey_dir,
                               output_dir=opt.outdir)
 
     bricks = survey.get_bricks()
-    bricks.cut(bricks.dec > -25)
-    bricks.cut(bricks.dec <  40)
+    if opt.north:
+        bricks.cut(bricks.dec > 30)
+    else:
+        bricks.cut(bricks.dec > -25)
+        bricks.cut(bricks.dec <  40)
 
     ## HACK -- cut to COSMOS
     #bricks.cut((np.abs(bricks.ra - 150) < 2) *

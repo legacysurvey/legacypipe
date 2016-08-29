@@ -38,11 +38,41 @@ if __name__ == '__main__':
                 v = T.get(col).astype(np.int64)
             T.set(col, v)
     T.brickname = np.array([brickname_from_filename(fn)] * len(T))
-    TT.append(T)
+    TT.append(T.copy())
     
     for ifn,fn in enumerate(fns):
         print('Reading', ifn, 'of', len(fns), ':', fn)
         t = fits_table(fn)
+        if not (np.all(t.depthlo == T.depthlo) and
+                np.all(t.depthhi == T.depthhi)):
+            print('T depthlo', T.depthlo)
+            print('T depthhi', T.depthhi)
+            print('t depthlo', t.depthlo)
+            print('t depthhi', t.depthhi)
+            if len(t.depthlo) == 52 and len(T.depthlo) == 50:
+                # [0,] 20, 20.1, ..., 24.9, [25,] 100
+                for band in 'grz':
+                    for pro in ['ptsrc', 'gal']:
+                        col = 'counts_%s_%s' % (pro, band)
+                        if col in t.columns():
+                            # merge counts for bin 0-20 into bin 20-20.1
+                            C = T.get(col)
+                            C[1] += C[0]
+                            # merge counts for bin 25-100 into bin 24.9-100
+                            C[-2] += C[-1]
+                # change lower limit of bin 1 from 20 to 0
+                t.depthlo[1] = t.depthlo[0]
+                # change upper limit of bin -2 from 25 to 100
+                t.depthhi[-2] = t.depthhi[-1]
+                t = t[1:-1]
+                
+                print('Cut to:')
+                print('T depthlo', T.depthlo)
+                print('T depthhi', T.depthhi)
+                print('t depthlo', t.depthlo)
+                print('t depthhi', t.depthhi)
+
+
         assert(np.all(t.depthlo == T.depthlo))
         assert(np.all(t.depthhi == T.depthhi))
         cols = t.get_columns()
@@ -58,10 +88,11 @@ if __name__ == '__main__':
             C += t.get(col)
         TT.append(t)
             
+    T.delete_column('brickname')
     T.writeto(summaryfn)
     print('Wrote', summaryfn)
     
-    T = merge_tables(TT)
+    T = merge_tables(TT, columns='fillzero')
     T.writeto(outfn)
     print('Wrote', outfn)
 
