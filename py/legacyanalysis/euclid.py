@@ -33,16 +33,156 @@ from tractor import Tractor, NanoMaggies
 from tractor.galaxy import disable_galaxy_cache
 from tractor.ellipses import EllipseE
 
-rgbscales = dict(I=(0, 0.01))
-rgbkwargs      .update(scales=rgbscales)
-rgbkwargs_resid.update(scales=rgbscales)
-
-SFDMap.extinctions.update({'DES I': 1.592})
-
-allbands = 'I'
+# For ACS reductions:
+# rgbscales = dict(I=(0, 0.01))
+# rgbkwargs      .update(scales=rgbscales)
+# rgbkwargs_resid.update(scales=rgbscales)
+# SFDMap.extinctions.update({'DES I': 1.592})
+# allbands = 'I'
 
 
 def make_zeropoints():
+    base = 'euclid/images/'
+
+
+    C = fits_table()
+    C.image_filename = []
+    C.image_hdu = []
+    C.camera = []
+    C.expnum = []
+    C.filter = []
+    C.exptime = []
+    C.crpix1 = []
+    C.crpix2 = []
+    C.crval1 = []
+    C.crval2 = []
+    C.cd1_1 = []
+    C.cd1_2 = []
+    C.cd2_1 = []
+    C.cd2_2 = []
+    C.width = []
+    C.height = []
+    C.ra = []
+    C.dec = []
+    C.ccdzpt = []
+    C.ccdname = []
+    C.ccdraoff = []
+    C.ccddecoff = []
+    C.fwhm = []
+    C.propid = []
+    C.mjd_obs = []
+    fns = glob(base + 'cfhtls/CFHTLS_D25_*_100028p021230_T0007_MEDIAN.fits')
+    fns.sort()
+
+    for fn in fns:
+        psffn = fn.replace('.fits', '_psfex.psf')
+        if not os.path.exists(psffn):
+            print('Missing:', psffn)
+            sys.exit(-1)
+        wtfn = fn.replace('.fits', '_weight.fits')
+        if not os.path.exists(wtfn):
+            print('Missing:', wtfn)
+            sys.exit(-1)
+        dqfn = fn.replace('.fits', '.flg.fits')
+        if not os.path.exists(dqfn):
+            print('Missing:', dqfn)
+            sys.exit(-1)
+
+    extname = 'D25'
+
+    ralo = 360.
+    rahi = 0.
+    declo = 90.
+    dechi = -90.
+
+    for i,fn in enumerate(fns):
+        F = fitsio.FITS(fn)
+        print(len(F), 'FITS extensions in', fn)
+        print(F)
+        phdr = F[0].read_header()
+        # FAKE
+        expnum = 7000 + i+1
+        filt = phdr['FILTER']
+        print('Filter', filt)
+        filt = filt[0]
+        exptime = phdr['EXPTIME']
+
+        psffn = fn.replace('.fits', '_psfex.psf')
+        PF = fitsio.FITS(psffn)
+
+        # Just one big image in the primary HDU.
+        hdr = phdr
+        hdu = 0
+        C.image_filename.append(fn.replace(base,''))
+        C.image_hdu.append(hdu)
+        C.camera.append('cfhtls')
+        C.expnum.append(expnum)
+        C.filter.append(filt)
+        C.exptime.append(exptime)
+        C.ccdzpt.append(hdr['MZP_AB'])
+
+        for k in ['CRPIX1','CRPIX2','CRVAL1','CRVAL2','CD1_1','CD1_2','CD2_1','CD2_2']:
+            C.get(k.lower()).append(hdr[k])
+        W = hdr['NAXIS1']
+        H = hdr['NAXIS2']
+        C.width.append(W)
+        C.height.append(H)
+            
+        wcs = wcs_pv2sip_hdr(hdr)
+        rc,dc = wcs.radec_center()
+        C.ra.append(rc)
+        C.dec.append(dc)
+
+        x,y = np.array([1,1,1,W/2.,W,W,W,W/2.]), np.array([1,H/2.,H,H,H,H/2.,1,1])
+        rr,dd = wcs.pixelxy2radec(x,y)
+        ralo = min(ralo, rr.min())
+        rahi = max(rahi, rr.max())
+        declo = min(declo, dd.min())
+        dechi = max(dechi, dd.max())
+
+        hdu = 1
+        print('Reading PSF from', psffn, 'hdu', hdu)
+        psfhdr = PF[hdu].read_header()
+        fwhm = psfhdr['PSF_FWHM']
+        
+        C.ccdname.append(extname)
+        C.ccdraoff.append(0.)
+        C.ccddecoff.append(0.)
+        C.fwhm.append(fwhm)
+        C.propid.append('0')
+        C.mjd_obs.append(0.)
+        
+    C.to_np_arrays()
+    fn = 'euclid/survey-ccds-cfhtls.fits.gz'
+    C.writeto(fn)
+    print('Wrote', fn)
+
+    print('RA range', ralo, rahi)
+    print('Dec range', declo, dechi)
+
+    r = np.linspace(ralo,  rahi,  21)
+    d = np.linspace(declo, dechi, 21)
+    rr,dd = np.meshgrid(r, d)
+    cols,rows = np.meshgrid(np.arange(len(r)), np.arange(len(d)))
+
+    B = fits_table()
+    B.ra1  = rr[1:,:-1].ravel()
+    B.ra2  = rr[1:, 1:].ravel()
+    B.dec1 = dd[:-1,1:].ravel()
+    B.dec2 = dd[1: ,1:].ravel()
+    B.ra  = (B.ra1  + B.ra2 ) / 2.
+    B.dec = (B.dec1 + B.dec2) / 2.
+    B.brickrow = rows[:-1,:-1].ravel()
+    B.brickcol = cols[:-1,:-1].ravel()
+    B.brickq = (B.brickrow % 2) * 2 + (B.brickcol % 2)
+    B.brickid = 1 + np.arange(len(B))
+    B.brickname = np.array(['%05ip%04i' % (int(100.*r), int(100.*d))
+                            for r,d in zip(B.ra, B.dec)])
+    B.writeto('euclid/survey-bricks.fits.gz')
+
+    return
+
+
     C = fits_table()
     C.image_filename = []
     C.image_hdu = []
@@ -70,7 +210,6 @@ def make_zeropoints():
     C.propid = []
     C.mjd_obs = []
     
-    base = 'euclid/images/'
     for iband,band in enumerate(['Y','J','H']):
         fn = base + 'vista/UVISTA_%s_DR1_CFHT.fits' % band
         hdu = 0
@@ -406,7 +545,6 @@ class MegacamImage(LegacySurveyImage):
         sky = ConstantSky(0.)
         return sky
 
-
 class VistaImage(MegacamImage):
     def __init__(self, *args, **kwargs):
         super(VistaImage, self).__init__(*args, **kwargs)
@@ -437,6 +575,50 @@ class VistaImage(MegacamImage):
         dq -= (dq & 1)
         return dq
 
+
+class CfhtlsImage(VistaImage):
+    def __init__(self, *args, **kwargs):
+        super(CfhtlsImage, self).__init__(*args, **kwargs)
+        self.name = 'CFHTLSImage: %s %s' % (self.ccdname, self.band)
+        self.wtfn = self.wtfn.replace('.weight.fits', '_weight.fits')
+
+    # Use MAD to scale the weight maps...?
+    def read_invvar(self, clip=True, **kwargs):
+        iv = super(CfhtlsImage, self).read_invvar(clip=clip, **kwargs)
+        img = super(CfhtlsImage, self).read_image(header=False, **kwargs)
+        chi = img * np.sqrt(iv)
+        # MAD of chi map...
+        slice1 = (slice(0,-5,10),slice(0,-5,10))
+        slice2 = (slice(5,None,10),slice(5,None,10))
+        diff = np.abs(chi[slice1] - chi[slice2])
+        diff = diff[(iv[slice1] > 0) * (iv[slice2] > 0)]
+        mad = np.median(diff.ravel())
+        sig1 = 1.4826 * mad / np.sqrt(2.)
+        print('MAD of chi map:', sig1)
+        iv /= sig1**2
+        return iv
+
+class CfhtlsSurveyData(LegacySurveyData):
+    def find_file(self, filetype, **kwargs):
+        if filetype == 'ccds':
+            basedir = self.survey_dir
+            return [os.path.join(basedir, 'survey-ccds-cfhtls.fits.gz')]
+        return super(CfhtlsSurveyData, self).find_file(filetype, **kwargs)
+
+    def sed_matched_filters(self, bands):
+        # single-band filters
+        SEDs = []
+        for i,band in enumerate(bands):
+            sed = np.zeros(len(bands))
+            sed[i] = 1.
+            SEDs.append((band, sed))
+        if len(bands) > 1:
+            gri = dict(g=1., r=1., i=1., u=0., z=0.)
+            SEDs.append(('gri', [gri[b] for b in bands]))
+            #red = dict(u=0., g=2.5, r=1., i=0.4, z=0.4)
+            #SEDs.append(('Red', [red[b] for b in bands]))
+        return SEDs
+        
 
 # Hackily defined RA,Dec values that split the ACS 7x7 tiling into
 # distinct 'bricks'
@@ -844,6 +1026,212 @@ def analyze2(opt):
                 '"Simple" galaxies'))
     plt.axis(ax)
     ps.savefig()
+
+def analyze_vista(opt):
+    # Analyze VISTA forced photometry results
+    ps = PlotSequence('vista')
+
+    survey = get_survey()
+    ccds = survey.get_ccds_readonly()
+    ccds.cut(ccds.camera == 'vista')
+    print(len(ccds), 'VISTA images')
+
+    for ccd in ccds:
+        im = survey.get_image_object(ccd)
+        tim = im.get_tractor_image(pixPsf=True, slc=(slice(0,2000), slice(0,2000)))
+
+        img = tim.getImage()
+        ie = tim.getInvError()
+        sig1 = tim.sig1
+        medians = True
+
+        # plot_correlations from legacyanalysis/check-noise.py
+        
+        corrs = []
+        corrs_x = []
+        corrs_y = []
+        mads = []
+        mads_x = []
+        mads_y = []
+        rcorrs = []
+        rcorrs_x = []
+        rcorrs_y = []
+        dists = np.arange(1, 51)
+        for dist in dists:
+            offset = dist
+            slice1 = (slice(0,-offset,1),slice(0,-offset,1))
+            slice2 = (slice(offset,None,1),slice(offset,None,1))
+    
+            slicex = (slice1[0], slice2[1])
+            slicey = (slice2[0], slice1[1])
+    
+            corr = img[slice1] * img[slice2]
+            corr = corr[(ie[slice1] > 0) * (ie[slice2] > 0)]
+    
+            diff = img[slice1] - img[slice2]
+            diff = diff[(ie[slice1] > 0) * (ie[slice2] > 0)]
+            sig1 = 1.4826 / np.sqrt(2.) * np.median(np.abs(diff).ravel())
+            mads.append(sig1)
+    
+            #print('Dist', dist, '; number of corr pixels', len(corr))
+            #t0 = Time()
+            if medians:
+                rcorr = np.median(corr) / sig1**2
+                rcorrs.append(rcorr)
+            #t1 = Time()
+            corr = np.mean(corr) / sig1**2
+            #t2 = Time()
+            #print('median:', t1-t0)
+            #print('mean  :', t2-t1)
+            corrs.append(corr)
+    
+            corr = img[slice1] * img[slicex]
+            corr = corr[(ie[slice1] > 0) * (ie[slicex] > 0)]
+    
+            diff = img[slice1] - img[slicex]
+            diff = diff[(ie[slice1] > 0) * (ie[slicex] > 0)]
+            sig1 = 1.4826 / np.sqrt(2.) * np.median(np.abs(diff).ravel())
+            mads_x.append(sig1)
+    
+            if medians:
+                rcorr = np.median(corr) / sig1**2
+                rcorrs_x.append(rcorr)
+            corr = np.mean(corr) / sig1**2
+            corrs_x.append(corr)
+    
+            corr = img[slice1] * img[slicey]
+            corr = corr[(ie[slice1] > 0) * (ie[slicey] > 0)]
+    
+            diff = img[slice1] - img[slicey]
+            diff = diff[(ie[slice1] > 0) * (ie[slicey] > 0)]
+            #Nmad = len(diff)
+            sig1 = 1.4826 / np.sqrt(2.) * np.median(np.abs(diff).ravel())
+            mads_y.append(sig1)
+    
+            if medians:
+                rcorr = np.median(corr) / sig1**2
+                rcorrs_y.append(rcorr)
+            corr = np.mean(corr) / sig1**2
+            corrs_y.append(corr)
+    
+            #print('Dist', dist, '-> corr', corr, 'X,Y', corrs_x[-1], corrs_y[-1],
+            #      'robust', rcorrs[-1], 'X,Y', rcorrs_x[-1], rcorrs_y[-1])
+    
+        pix = img[ie > 0].ravel()
+        Nmad = len(pix) / 2
+        P = np.random.permutation(len(pix))[:(Nmad*2)]
+        diff = pix[P[:Nmad]] - pix[P[Nmad:]]
+        mad_random = 1.4826 / np.sqrt(2.) * np.median(np.abs(diff))
+    
+        plt.clf()
+        p1 = plt.plot(dists, corrs, 'b.-')
+        p2 = plt.plot(dists, corrs_x, 'r.-')
+        p3 = plt.plot(dists, corrs_y, 'g.-')
+        if medians:
+            p4 = plt.plot(dists, rcorrs, 'b.--')
+            p5 = plt.plot(dists, rcorrs_x, 'r.--')
+            p6 = plt.plot(dists, rcorrs_y, 'g.--')
+        plt.xlabel('Pixel offset')
+        plt.ylabel('Correlation')
+        plt.axhline(0, color='k', alpha=0.3)
+        plt.legend([p1[0],p2[0],p3[0]], ['Diagonal', 'X', 'Y'], loc='upper right')
+
+        plt.title('VISTA ' + tim.name)
+        ps.savefig()
+
+        plt.clf()
+        p4 = plt.plot(dists, mads, 'b.-')
+        p5 = plt.plot(dists, mads_x, 'r.-')
+        p6 = plt.plot(dists, mads_y, 'g.-')
+        plt.xlabel('Pixel offset')
+        plt.ylabel('MAD error estimate')
+        #plt.axhline(0, color='k', alpha=0.3)
+        p7 = plt.axhline(mad_random, color='k', alpha=0.3)
+        plt.legend([p4[0],p5[0],p6[0], p7], ['Diagonal', 'X', 'Y', 'Random'],
+                   loc='lower right')
+        plt.title('VISTA ' + tim.name)
+        ps.savefig()
+        
+
+
+
+    for band in ['Y','J','H']:
+        forcedfn = 'euclid-out/forced-vista-%s.fits' % band
+        F = fits_table(forcedfn)
+        F.rename('flux_%s' % band.lower(), 'flux')
+        F.rename('flux_ivar_%s' % band.lower(), 'flux_ivar')
+
+        T = read_acs_catalogs()
+        print(len(T), 'ACS catalog entries')
+        objmap = dict([((brickname,objid),i) for i,(brickname,objid) in
+                       enumerate(zip(T.brickname, T.objid))])
+        I = np.array([objmap[(brickname, objid)] for brickname,objid
+                      in zip(F.brickname, F.objid)])
+        F.type = T.type[I]
+        F.acs_flux = T.decam_flux[I]
+        F.ra  = T.ra[I]
+        F.dec = T.dec[I]
+        F.bx  = T.bx[I]
+        F.by  = T.by[I]
+        #F.writeto(forcedfn)
+
+        print(len(F), 'forced photometry measurements')
+    
+        F.fluxsn = F.flux * np.sqrt(F.flux_ivar)
+        F.mag = -2.5 * (np.log10(F.flux) - 9.)
+        
+        I = np.flatnonzero(F.type == 'PSF ')
+        print(len(I), 'PSF')
+    
+        for t in ['SIMP', 'DEV ', 'EXP ', 'COMP']:
+            J = np.flatnonzero(F.type == t)
+            print(len(J), t)
+    
+        S = np.flatnonzero(F.type == 'SIMP')
+        print(len(S), 'SIMP')
+        S = F[S]
+        
+        plt.clf()
+        plt.semilogx(F.fluxsn, F.mag, 'k.', alpha=0.1)
+        plt.semilogx(F.fluxsn[I], F.mag[I], 'r.', alpha=0.1)
+        plt.semilogx(S.fluxsn, S.mag, 'b.', alpha=0.1)
+        plt.xlabel('Vista forced-photometry Flux S/N')
+        plt.ylabel('Vista forced-photometry mag')
+    
+        #plt.xlim(1., 1e5)
+        #plt.ylim(10, 26)
+        plt.xlim(1., 1e4)
+        plt.ylim(18, 28)
+    
+        J = np.flatnonzero((F.fluxsn[I] > 4.5) * (F.fluxsn[I] < 5.5))
+        print(len(J), 'between flux S/N 4.5 and 5.5')
+        J = I[J]
+        medmag = np.median(F.mag[J])
+        print('Median mag', medmag)
+        plt.axvline(5., color='r', alpha=0.5, lw=2)
+        plt.axvline(5., color='k', alpha=0.5)
+        plt.axhline(medmag, color='r', alpha=0.5, lw=2)
+        plt.axhline(medmag, color='k', alpha=0.5)
+    
+        J = np.flatnonzero((S.fluxsn > 4.5) * (S.fluxsn < 5.5))
+        print(len(J), 'SIMP between flux S/N 4.5 and 5.5')
+        medmag = np.median(S.mag[J])
+        print('Median mag', medmag)
+        plt.axhline(medmag, color='b', alpha=0.5, lw=2)
+        plt.axhline(medmag, color='k', alpha=0.5)
+    
+        plt.title('VISTA %s forced-photometered from ACS-VIS' % band)
+    
+        ax = plt.axis()
+        p1 = plt.semilogx([0],[0], 'k.')
+        p2 = plt.semilogx([0], [0], 'r.')
+        p3 = plt.semilogx([0], [0], 'b.')
+        plt.legend((p1[0], p2[0], p3[0]),
+                   ('All sources', 'Point sources',
+                    '"Simple" galaxies'))
+        plt.axis(ax)
+        ps.savefig()
+
 
 def analyze3(opt):
     ps = PlotSequence('euclid')
@@ -1419,6 +1807,9 @@ def main():
 
     parser.add_argument('--skip', action='store_true',
                         help='Skip forced-photometry if output file exists?')
+
+
+    parser.add_argument('--brick', help='Run one brick of CFHTLS reduction')
     
     opt = parser.parse_args()
 
@@ -1441,12 +1832,45 @@ def main():
         #analyze2(opt)
         #analyze3(opt)
         #geometry()
-        analyze4(opt)
+        #analyze4(opt)
+        analyze_vista(opt)
         return 0
 
     if opt.package:
         package(opt)
         return 0
+
+    if opt.brick:
+
+        survey = CfhtlsSurveyData(output_dir='euclid-out/cfhtls')
+        survey.bricksize = 3./60.
+        survey.image_typemap.update({'cfhtls' : CfhtlsImage})
+
+        outfn = survey.find_file('tractor', brick=opt.brick, output=True)
+        print('Checking output file', outfn)
+        if os.path.exists(outfn):
+            print('File exists:', outfn)
+            return 0
+
+        global rgbkwargs, rgbkwargs_resid
+        rgbscales = dict(g = (2, 0.004),
+                         r = (1, 0.006),
+                         i = (0, 0.02),
+                         )
+        rgbkwargs      .update(scales=rgbscales)
+        rgbkwargs_resid.update(scales=rgbscales)
+
+        checkpointfn = 'checkpoints/checkpoint-%s.pickle' % opt.brick
+
+        return run_brick(opt.brick, survey, pixscale=0.186, width=1000, height=1000,
+                         bands='ugriz', blacklist=False, wise=False, blob_image=True,
+                         ceres=False,
+                         pixPsf=True, constant_invvar=False, threads=opt.threads,
+                         checkpoint_filename=checkpointfn,
+                         checkpoint_period=300,
+                         #stages=['image_coadds'],
+                         #plots=True
+                         )
 
     if opt.expnum is None and opt.forced is None:
         print('Need --expnum or --forced')

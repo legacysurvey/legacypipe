@@ -146,6 +146,14 @@ def main():
         log(len(T), 'CCDs')
     T.index = np.arange(len(T))
 
+    I = survey.photometric_ccds(T)
+    print(len(I), 'CCDs are photometric')
+    T.cut(I)
+    I = survey.apply_blacklist(T)
+    print(len(I), 'CCDs are not blacklisted')
+    T.cut(I)
+    print(len(T), 'CCDs remain')
+
     # I,J,d,counts = match_radec(B.ra, B.dec, T.ra, T.dec, 0.2, nearest=True, count=True)
     # plt.clf()
     # plt.hist(counts, counts.max()+1)
@@ -228,6 +236,10 @@ def main():
         rlo,rhi = 240,245
         dlo,dhi =   5, 12
 
+    elif opt.region == 'edrplus':
+        rlo,rhi = 235,248
+        dlo,dhi =   5, 15
+
     elif opt.region == 'edr-south':
         rlo,rhi = 240,245
         dlo,dhi =   5, 10
@@ -271,6 +283,9 @@ def main():
     elif opt.region == 'southeast':
         rlo,rhi = 0,120
         dlo,dhi = -20,0
+    elif opt.region == 'southsoutheast':
+        rlo,rhi = 0,120
+        dlo,dhi = -20,-10
     elif opt.region == 'midwest':
         rlo,rhi = 240,360
         dlo,dhi = 0,20
@@ -326,6 +341,10 @@ def main():
         # Dec 15 to  30
         rlo,rhi = 115., 175.
         dlo,dhi =  15.,  30.
+
+    elif opt.region == 'mzls':
+        dlo,dhi = 30., 90.
+
         
     if opt.mindec is not None:
         dlo = opt.mindec
@@ -390,7 +409,9 @@ def main():
         sys.exit(0)
 
     # sort by dec decreasing
-    B.cut(np.argsort(-B.dec))
+    #B.cut(np.argsort(-B.dec))
+    # RA increasing
+    B.cut(np.argsort(B.ra))
 
     for b in B:
         if opt.check:
