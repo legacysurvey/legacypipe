@@ -33,7 +33,7 @@ if __name__ == '__main__':
         for pro in ['ptsrc', 'gal']:
             col = 'counts_%s_%s' % (pro, band)
             if not col in T.columns():
-                v = np.array(len(T), np.int64)
+                v = np.zeros(len(T), np.int64)
             else:
                 v = T.get(col).astype(np.int64)
             T.set(col, v)
