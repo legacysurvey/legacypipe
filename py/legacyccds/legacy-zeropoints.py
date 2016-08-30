@@ -35,6 +35,7 @@ Proposed changes to the -ccds.fits file used by legacypipe:
  * We probably shouldn't cross-match against the tiles file in this code (but
    instead in something like merge-zeropoints), but what else from the annotated
    CCDs file should be directly calculated and stored here?
+ * Are ccdnum and image_hdu redundant?
 
 """
 from __future__ import division, print_function
@@ -60,23 +61,60 @@ from astrometry.libkd.spherematch import match_radec
 from legacyanalysis.ps1cat import ps1cat
 
 def _ccds_table(camera='decam'):
-    '''Initialize the output CCDs table.  See decstat and merge-zeropoints.py for
-    details.
+    '''Initialize the output CCDs table.  See decstat.pro and merge-zeropoints.py
+    for details.
 
     '''
     cols = [
-        ('image_filename', 'S65'), ('image_hdu', '>i2'), ('camera', 'S7'), ('expnum', '>i4'),
-        ('ccdname', 'S4'), ('ccdnum', '>i2'), ('expid', 'S16'), ('object', 'S35'),
-        ('propid', 'S10'), ('filter', 'S1'), ('exptime', '>f4'), ('date_obs', 'S10'),
-        ('mjd_obs', '>f8'), ('ut', 'S15'), ('ha', 'S13'), ('airmass', '>f4'),
-        ('seeing', '>f4'), ('fwhm', '>f4'), ('arawgain', '>f4'), ('avsky', '>f4'),
-        ('ccdskymag', '>f4'), ('ccdskycounts', '>f4'), ('ccdskyrms', '>f4'),
-        ('ra', '>f8'), ('dec', '>f8'), ('ra_bore', '>f8'), ('dec_bore', '>f8'),
-        ('crpix1', '>f4'), ('crpix2', '>f4'), ('crval1', '>f8'), ('crval2', '>f8'), ('cd1_1', '>f4'),
-        ('cd1_2', '>f4'), ('cd2_1', '>f4'), ('cd2_2', '>f4'), ('zpt', '>f4'),
-        ('ccdnstar', '>i2'), ('ccdnmatch', '>i2'), ('ccdmdncol', '>f4'), 
-        ('ccdphoff', '>f4'), ('ccdphrms', '>f4'), ('ccdzpt', '>f4'), ('ccdtransp', '>f4'), 
-        ('ccdraoff', '>f4'), ('ccddecoff', '>f4'), ('width', '>i2'), ('height', '>i2')
+        ('image_filename', 'S65'), # image filename, including the subdirectory
+        ('image_hdu', '>i2'),      # integer extension number
+        ('camera', 'S7'),          # camera name
+        ('expnum', '>i4'),         # unique exposure number
+        ('ccdname', 'S4'),         # FITS extension name
+#       ('ccdnum', '>i2'),         # CCD number 
+        ('expid', 'S16'),          # combination of EXPNUM and CCDNAME
+        ('object', 'S35'),         # object (field) name
+        ('propid', 'S10'),         # proposal ID
+        ('filter', 'S1'),          # filter name / bandpass
+        ('exptime', '>f4'),        # exposure time (s)
+        ('date_obs', 'S10'),       # date of observation (from header)
+        ('mjd_obs', '>f8'),        # MJD of observation (from header)
+        ('ut', 'S15'),             # UT time (from header)
+        ('ha', 'S13'),             # hour angle (from header)
+        ('airmass', '>f4'),        # airmass (from header)
+        #('seeing', '>f4'),        # seeing estimate (from header, arcsec)
+        ('fwhm', '>f4'),           # FWHM (from header, pixels) -- used in Tractor source detection!
+        #('arawgain', '>f4'),       
+        ('gain', '>f4'),           # average gain (camera-specific, e/ADU) -- remove?
+        ('avsky', '>f4'),          # average sky value from CP (from header, ADU) -- remove?
+        ('width', '>i2'),          # image width (pixels, NAXIS1, from header)
+        ('height', '>i2'),         # image height (pixels, NAXIS2, from header)
+        ('ra_bore', '>f8'),        # RA at the center of the field (deg, CRVAL1, from header)
+        ('dec_bore', '>f8'),       # Dec at the center of the field (deg, CRVAL2, from header)
+        ('crpix1', '>f4'),
+        ('crpix2', '>f4'),
+        ('crval1', '>f8'),
+        ('crval2', '>f8'),
+        ('cd1_1', '>f4'),
+        ('cd1_2', '>f4'),
+        ('cd2_1', '>f4'),
+        ('cd2_2', '>f4'),
+        # -- derived quantities --
+        ('ra', '>f8'),
+        ('dec', '>f8'),
+        ('zpt', '>f4'),
+        ('ccdskymag', '>f4'),      
+        ('ccdskycounts', '>f4'),
+        ('ccdskyrms', '>f4'),
+        ('ccdnstar', '>i2'),
+        ('ccdnmatch', '>i2'),
+        ('ccdmdncol', '>f4'), 
+        ('ccdphoff', '>f4'),
+        ('ccdphrms', '>f4'),
+        ('ccdzpt', '>f4'),
+        ('ccdtransp', '>f4'), 
+        ('ccdraoff', '>f4'),
+        ('ccddecoff', '>f4')
         ]
 
     # Add camera-specific keywords to the output table.
@@ -97,7 +135,6 @@ def _stars_table(nstars=1):
        detected on the CCD, including the PS1 photometry.
 
     '''
-
     cols = [('expid', 'S16'), ('filter', 'S1'), ('x', 'f4'), ('y', 'f4'),
             ('ra', 'f8'), ('dec', 'f8'), ('fwhm', 'f4'), ('apmag', 'f4'),
             ('ps1_ra', 'f8'), ('ps1_dec', 'f8'), ('ps1_mag', 'f4'), ('ps1_gicolor', 'f4')]
@@ -120,7 +157,6 @@ class Measurer(object):
         Sky annulus radius in arcsec
 
         '''
-
         self.fn = fn
         self.ext = ext
 
@@ -139,6 +175,36 @@ class Measurer(object):
         # Read the primary header and the header for this extension.
         self.primhdr = fitsio.read_header(fn, ext=0)
         self.hdr = fitsio.read_header(fn, ext=ext)
+
+        # Camera-agnostic primary header cards
+        self.propid = self.primhdr['PROPID']
+        self.exptime = self.primhdr['EXPTIME']
+        self.date_obs = self.primhdr['DATE-OBS']
+        self.mjd_obs = self.primhdr['MJD-OBS']
+        self.airmass = self.primhdr['AIRMASS']
+        self.ha = self.primhdr['HA']
+        self.ut = self.primhdr['UT']
+
+        if 'EXPNUM' in self.hdr: # temporary hack!
+            self.expnum = self.hdr['EXPNUM']
+        else:
+            self.expnum = np.int32(os.path.basename(self.fn)[11:17])
+
+        self.ccdname = self.hdr['EXTNAME'].strip()
+        self.image_hdu = np.int(self.hdr['CCDNUM'])
+        #self.ccdnum = self.hdr['CCDNUM']
+        #self.image_hdu = np.int(self.ccdnum)
+
+        self.expid = '{:08d}-{}'.format(self.expnum, self.ccdname)
+        self.band = self.get_band()
+
+        self.object = self.primhdr['OBJECT']
+
+        self.wcs = wcs_pv2sip_hdr(self.hdr) # PV distortion
+        self.pixscale = self.wcs.pixel_scale()
+
+        # Eventually we would like FWHM to not come from SExtractor.
+        self.fwhm = 2.35 * self.primhdr['SEEING'] / self.pixscale  # [FWHM, pixels]
 
     def get_band(self):
         band = self.primhdr['FILTER']
@@ -182,28 +248,37 @@ class Measurer(object):
         # Initialize and begin populating the output CCDs table.
         ccds = _ccds_table(self.camera)
 
-        ccds['image_filename'] = self.fn
-        ccds['image_hdu'] = self.image_hdu
+        ccds['image_filename'] = self.fn   
+        ccds['image_hdu'] = self.image_hdu 
         ccds['camera'] = self.camera
         ccds['expnum'] = self.expnum
         ccds['ccdname'] = self.ccdname
-        ccds['ccdnum'] = self.ccdnum
+        #ccds['ccdnum'] = self.ccdnum
         ccds['expid'] = self.expid
+        ccds['object'] = self.object
         ccds['propid'] = self.propid
         ccds['filter'] = self.band
-        ccds['arawgain'] = self.gain # average gain [electron/s]
-        ccds['avsky'] = self.avsky # [ADU]
+        ccds['exptime'] = self.exptime
+        ccds['date_obs'] = self.date_obs
+        ccds['mjd_obs'] = self.mjd_obs
+        ccds['ut'] = self.ut
+        ccds['ha'] = self.ha
+        ccds['airmass'] = self.airmass
+        ccds['fwhm'] = self.fwhm
+        ccds['gain'] = self.gain
+
+        #ccds['arawgain'] = self.gain # average gain [electron/s]
 
         # Copy some header cards directly.
-        hdrkey = ('object', 'exptime', 'date-obs', 'mjd_obs', 'time-obs', 'ha',
-                  'airmass','crpix1', 'crpix2', 'crval1', 'crval2', 'cd1_1',
-                  'cd1_2', 'cd2_1', 'cd2_2', 'naxis1', 'naxis2', 'crval1', 'crval2')
-        ccdskey = ('object', 'exptime', 'date_obs', 'mjd_obs', 'ut', 'ha',
-                   'airmass', 'crpix1', 'crpix2', 'crval1', 'crval2', 'cd1_1',
-                   'cd1_2', 'cd2_1', 'cd2_2', 'width', 'height', 'ra_bore', 'dec_bore')
+        hdrkey = ('avsky', 'crpix1', 'crpix2', 'crval1', 'crval2', 'cd1_1',
+                  'cd1_2', 'cd2_1', 'cd2_2', 'crval1', 'crval2',
+                  'naxis1', 'naxis2')
+        ccdskey = ('avsky', 'crpix1', 'crpix2', 'crval1', 'crval2', 'cd1_1',
+                   'cd1_2', 'cd2_1', 'cd2_2', 'ra_bore', 'dec_bore',
+                   'width', 'height')
         for ckey, hkey in zip(ccdskey, hdrkey):
             ccds[ckey] = hdr[hkey]
-
+            
         exptime = ccds['exptime'].data[0]
         airmass = ccds['airmass'].data[0]
         print('Band {}, Exptime {}, Airmass {}'.format(self.band, exptime, airmass))
@@ -517,23 +592,25 @@ class NinetyPrimeMeasurer(Measurer):
         super(NinetyPrimeMeasurer, self).__init__(*args, **kwargs)
         
         self.camera = '90prime'
-        self.propid = 'BASS'
-        self.expnum = np.int32(os.path.basename(self.fn)[2:10])
 
-        self.ccdname = self.hdr['EXTNAME'].strip()
-        self.ccdnum = self.hdr['CCD_NO']
+        # from repackage-bass
+        # self.expnum = np.int32(os.path.basename(self.fn)[2:10]) 
+        # self.ccdnum = self.hdr['CCD_NO']
         #self.ccdnum = self.ccdname[-1]
-        self.image_hdu = np.int(self.ccdnum)
-        self.expid = '{:08d}-{}'.format(self.expnum, self.ccdname)
 
-        self.band = self.get_band()
-        if 'SKADU' in self.hdr:
-            self.avsky = self.hdr['SKADU'] # [ADU]
-        else:
-            self.avsky = 0.0
+        # Eventually we would like FWHM to not come from SExtractor.
+        #if self.hdr['SEEING'] > 0:
+        #    self.fwhm = 2.35 * self.hdr['SEEING'] / self.pixscale  # [FWHM, pixels]
+        #else:
+        #    self.fwhm = 2.35 * 1.5 / self.pixscale  # Hack!
 
-        self.wcs = wcs_pv2sip_hdr(self.hdr) # PV distortion
-        self.pixscale = self.wcs.pixel_scale()
+        #self.ccdnum = self.ccdname[3]
+
+        #if 'SKADU' in self.hdr:
+        #    self.avsky = self.hdr['SKADU'] # [ADU]
+        #else:
+        #    self.avsky = 0.0
+
         #self.pixscale = 0.445 # Check this!
 
         # Average (nominal) gain values.  The gain is sort of a hack since this
@@ -551,14 +628,8 @@ class NinetyPrimeMeasurer(Measurer):
         self.k_ext = dict(g = 0.17, r = 0.10)
         self.A_ext = dict(g = 3.303, r = 2.285)
 
-        # Eventually we would like FWHM to not come from SExtractor.
-        if self.hdr['SEEING'] > 0:
-            self.fwhm = 2.35 * self.hdr['SEEING'] / self.pixscale  # [FWHM, pixels]
-        else:
-            self.fwhm = 2.35 * 1.5 / self.pixscale  # Hack!
-
         # Ambient temperature
-        self.temp = -999.0 # no data
+        # self.temp = -999.0 # no data
 
     def get_sky_and_sigma(self, img):
         '''Consider doing just a simple median sky'''
