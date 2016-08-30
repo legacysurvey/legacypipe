@@ -38,6 +38,7 @@ from __future__ import division, print_function
 if __name__ == '__main__':
     import matplotlib
     matplotlib.use('Agg')
+import galsim
 import os
 import sys
 import shutil
@@ -45,18 +46,19 @@ import logging
 import argparse
 import pdb
 import photutils
-import galsim
 
 import numpy as np
 import matplotlib.pyplot as plt
 from pkg_resources import resource_filename
+from pickle import dump
 
 from astropy.table import Table, Column, vstack
 from astropy.io import fits
 #from astropy import wcs as astropy_wcs
 from fitsio import FITSHDR
 
-from astrometry.libkd.spherematch import match_radec
+from astropy import units
+from astropy.coordinates import SkyCoord
 
 from tractor.psfex import PsfEx, PsfExModel
 from tractor.basics import GaussianMixtureEllipsePSF, RaDecPos
@@ -64,8 +66,7 @@ from tractor.basics import GaussianMixtureEllipsePSF, RaDecPos
 from legacypipe.runbrick import run_brick
 from legacypipe.decam import DecamImage
 from legacypipe.common import LegacySurveyData, wcs_for_brick, ccds_touching_wcs
-
-from pickle import dump
+import legacyanalysis.decals_sim_priors as priors
 
 class SimDecals(LegacySurveyData):
     def __init__(self, survey_dir=None, metacat=None, simcat=None, output_dir=None,\
@@ -306,13 +307,9 @@ class BuildStamp():
         # Create localpsf object
         self.setlocal(objinfo)
         objflux = objinfo[self.band+'FLUX'] # [nanomaggies]
-        obj = galsim.Sersic(n=1.,half_light_radius=2.,flux=objflux,\
-                            gsparams=self.gsparams)
-        #obj = galsim.Sersic(float(objinfo['SERSICN_1']), half_light_radius=
-        #                    float(objinfo['R50_1']),
-        #                    flux=objflux,gsparams=self.gsparams)
-        #obj = obj.shear(q=float(objinfo['BA_1']), beta=
-        #                float(objinfo['PHI_1'])*galsim.degrees)
+        obj = galsim.Sersic(float(objinfo['SERSICN_1']), half_light_radius=float(objinfo['R50_1']),\
+                            flux=objflux, gsparams=self.gsparams)
+        obj = obj.shear(q=float(objinfo['BA_1']), beta=float(objinfo['PHI_1'])*galsim.degrees)
         stamp = self.convolve_and_draw(obj)
         return stamp
 
@@ -326,62 +323,6 @@ class BuildStamp():
         stamp = self.convolve_and_draw(obj)
         return stamp
 
-class _GaussianMixtureModel():
-    """Read and sample from a pre-defined Gaussian mixture model.
-
-    """
-    def __init__(self, weights, means, covars, covtype):
-        self.weights = weights
-        self.means = means
-        self.covars = covars
-        self.covtype = covtype
-        self.n_components, self.n_dimensions = self.means.shape
-    
-    @staticmethod
-    def save(model, filename):
-        hdus = fits.HDUList()
-        hdr = fits.Header()
-        hdr['covtype'] = model.covariance_type
-        hdus.append(fits.ImageHDU(model.weights_, name='weights', header=hdr))
-        hdus.append(fits.ImageHDU(model.means_, name='means'))
-        hdus.append(fits.ImageHDU(model.covars_, name='covars'))
-        hdus.writeto(filename, clobber=True)
-        
-    @staticmethod
-    def load(filename):
-        hdus = fits.open(filename, memmap=False)
-        hdr = hdus[0].header
-        covtype = hdr['covtype']
-        model = _GaussianMixtureModel(
-            hdus['weights'].data, hdus['means'].data, hdus['covars'].data, covtype)
-        hdus.close()
-        return model
-    
-    def sample(self, n_samples=1, random_state=None):
-        
-        if self.covtype != 'full':
-            return NotImplementedError(
-                'covariance type "{0}" not implemented yet.'.format(self.covtype))
-        
-        # Code adapted from sklearn's GMM.sample()
-        if random_state is None:
-            random_state = np.random.RandomState()
-
-        weight_cdf = np.cumsum(self.weights)
-        X = np.empty((n_samples, self.n_dimensions))
-        rand = random_state.rand(n_samples)
-        # decide which component to use for each sample
-        comps = weight_cdf.searchsorted(rand)
-        # for each component, generate all needed samples
-        for comp in range(self.n_components):
-            # occurrences of current component in X
-            comp_in_X = (comp == comps)
-            # number of those occurrences
-            num_comp_in_X = comp_in_X.sum()
-            if num_comp_in_X > 0:
-                X[comp_in_X] = random_state.multivariate_normal(
-                    self.means[comp], self.covars[comp], num_comp_in_X)
-        return X
 
 def no_overlapping_radec(ra,dec, bounds, random_state=None, dist=5.0/3600):
     '''resamples ra,dec where they are within dist of each other 
@@ -395,16 +336,25 @@ def no_overlapping_radec(ra,dec, bounds, random_state=None, dist=5.0/3600):
     if random_state is None:
         random_state = np.random.RandomState()
     # ra,dec indices of just neighbors within "dist" away, just nerest neighbor of those
-    m1, m2, d12 = match_radec(ra.copy(),dec.copy(), ra.copy(),dec.copy(),\
-                              dist, nearest=True,notself=True) 
+    cat1 = SkyCoord(ra=ra*units.degree, dec=dec*units.degree)
+    cat2 = SkyCoord(ra=ra*units.degree, dec=dec*units.degree)
+    m2, d2d, d3d = cat1.match_to_catalog_sky(cat2,nthneighbor=2) # don't match to self
+    b= np.array(d2d) <= dist
+    m2= np.array(m2)[b]
 
     cnt = 1
-    log.info("after iter=%d, have overlapping ra,dec %d/%d", cnt, len(m2),ra.shape[0])
+    #log.info("astrom: after iter=%d, have overlapping ra,dec %d/%d", cnt, len(m2),ra.shape[0])
+    log.info("Astrpy: after iter=%d, have overlapping ra,dec %d/%d", cnt, len(m2),ra.shape[0])
     while len(m2) > 0:
         ra[m2]= random_state.uniform(bounds[0], bounds[1], len(m2))
         dec[m2]= random_state.uniform(bounds[2], bounds[3], len(m2))
-        m1, m2, d12 = match_radec(ra.copy(),dec.copy(), ra.copy(),dec.copy(),\
-                                  dist, nearest=True,notself=True) 
+        # Any more matches? 
+        cat1 = SkyCoord(ra=ra*units.degree, dec=dec*units.degree)
+        cat2 = SkyCoord(ra=ra*units.degree, dec=dec*units.degree)
+        m2, d2d, d3d = cat1.match_to_catalog_sky(cat2,nthneighbor=2) # don't match to self
+        b= np.array(d2d) <= dist
+        m2= np.array(m2)[b]
+        #
         cnt += 1
         log.info("after iter=%d, have overlapping ra,dec %d/%d", cnt, len(m2),ra.shape[0])
         if cnt > 30:
@@ -440,24 +390,23 @@ def build_simcat(nobj=None, brickname=None, brickwcs=None, meta=None, seed=None,
     if meta['OBJTYPE'] == 'STAR':
         # Read the MoG file and sample from it.
         mogfile = resource_filename('legacypipe', os.path.join('data', 'star_colors_mog.fits'))
-        mog = _GaussianMixtureModel.load(mogfile)
+        mog = priors._GaussianMixtureModel.load(mogfile)
         grzsample = mog.sample(nobj, random_state=rand)
         rz = grzsample[:, 0]
         gr = grzsample[:, 1]
 
     elif meta['OBJTYPE'] == 'ELG':
-        gr_range = [-0.3, 0.5]
-        rz_range = [0.0, 1.5]
-        sersicn_1_range = [1.0, 1.0]
-        r50_1_range = [0.5, 2.5]
-        ba_1_range = [0.2, 1.0]
-
-        gr = rand.uniform(gr_range[0], gr_range[1], nobj)
-        rz = rand.uniform(rz_range[0], rz_range[1], nobj)
-        sersicn_1 = rand.uniform(sersicn_1_range[0], sersicn_1_range[1], nobj)
-        r50_1 = rand.uniform(r50_1_range[0], r50_1_range[1], nobj)
-        ba_1 = rand.uniform(ba_1_range[0], ba_1_range[1], nobj)
-        phi_1 = rand.uniform(0.0, 180.0, nobj)
+        # Read the MoG file and sample from it.
+        mogfile = resource_filename('legacypipe', os.path.join('data', 'elg_colors_mog.fits'))
+        mog = priors._GaussianMixtureModel.load(mogfile)
+        grzsample = mog.sample(nobj, random_state=rand)
+        # Samples
+        rz = grzsample[:, 0]
+        gr = grzsample[:, 1]
+        sersicn_1 = rand.uniform(0.5,0.5, nobj)
+        r50_1 = rand.uniform(0.5,0.5, nobj)
+        ba_1 = rand.uniform(0.2,1.0, nobj) #minor to major axis ratio
+        phi_1 = rand.uniform(0.0, 180.0, nobj) #position angle
 
         cat['SERSICN_1'] = Column(sersicn_1, dtype='f4')
         cat['R50_1'] = Column(r50_1, dtype='f4')
@@ -473,21 +422,12 @@ def build_simcat(nobj=None, brickname=None, brickwcs=None, meta=None, seed=None,
         log.error('Unrecognized OBJTYPE!')
         return 0
 
-    # For convenience, also store the grz fluxes in nanomaggies.
+    # Store grz fluxes in nanomaggies.
     rmag_range = np.squeeze(meta['RMAG_RANGE'])
     rmag = rand.uniform(rmag_range[0], rmag_range[1], nobj)
-    #gr = rand.uniform(gr_range[0], gr_range[1], nobj)
-    #rz = rand.uniform(rz_range[0], rz_range[1], nobj)
 
-    cat['R'] = rmag
-    if meta['OBJTYPE'] == 'ELG':
-        cat['GR'] = 0.
-        cat['RZ'] = 0.
-    else: 
-        cat['GR'] = gr
-        cat['RZ'] = rz
-    cat['GFLUX'] = 1E9*10**(-0.4*(rmag+gr)) # [nanomaggies]
     cat['RFLUX'] = 1E9*10**(-0.4*rmag)      # [nanomaggies]
+    cat['GFLUX'] = 1E9*10**(-0.4*(rmag+gr)) # [nanomaggies]
     cat['ZFLUX'] = 1E9*10**(-0.4*(rmag-rz)) # [nanomaggies]
 
     return cat
