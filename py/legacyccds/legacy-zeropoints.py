@@ -184,6 +184,7 @@ class Measurer(object):
         self.airmass = self.primhdr['AIRMASS']
         self.ha = self.primhdr['HA']
         self.ut = self.primhdr['UT']
+        self.seeing = self.primhdr['SEEING']
 
         if 'EXPNUM' in self.hdr: # temporary hack!
             self.expnum = self.hdr['EXPNUM']
@@ -219,6 +220,17 @@ class Measurer(object):
 
     def extinction(self, band):
         return self.k_ext[band]
+
+    def get_sky_and_sigma(self, img):
+        # Spline sky model to handle (?) ghost / pupil?
+        from tractor.splinesky import SplineSky
+
+        splinesky = SplineSky.BlantonMethod(img, None, 256)
+        skyimg = np.zeros_like(img)
+        splinesky.addTo(skyimg)
+        
+        mnsky,sig1 = sensible_sigmaclip(img - skyimg)
+        return skyimg,sig1
 
     def remove_sky_gradients(self, img):
         from scipy.ndimage.filters import median_filter
@@ -439,8 +451,8 @@ class Measurer(object):
 
         # Hack!  Fit each star with Tractor to measure the FWHM seeing, but for
         # now just take the header (SE-measured) values.
-        ccds['seeing'] = 2.35 * self.hdr['seeing'] # FWHM [arcsec]
-        ccds['fwhm'] = 2.35 * self.hdr['seeing'] / self.pixscale # FWHM [pixels]
+        # ccds['seeing'] = 2.35 * self.hdr['seeing'] # FWHM [arcsec]
+        ccds['fwhm'] = 2.35 * self.seeing / self.pixscale # FWHM [pixels]
         stars['fwhm'] = np.repeat(ccds['fwhm'].data, len(stars))
 
         #alse:
@@ -515,6 +527,8 @@ class Measurer(object):
 	#    print('Median FWHM: {:.3f}'.format(medfwhm))
 	#    ccds['seeing'] = medfwhm
 
+        pdb.set_trace()
+
         return ccds, stars
 
 class DECamMeasurer(Measurer):
@@ -544,42 +558,10 @@ class DECamMeasurer(Measurer):
 class Mosaic3Measurer(Measurer):
     '''Class to measure a variety of quantities from a single Mosaic3 CCD.'''
     def __init__(self, *args, **kwargs):
-        if not 'pixscale' in kwargs:
-            import mosaic
-            kwargs.update(pixscale = mosaic.mosaic_nominal_pixscale)
         super(Mosaic3Measurer, self).__init__(*args, **kwargs)
+
         self.camera = 'mosaic3'
-
-    def get_band(self, primhdr):
-        band = super(Mosaic3Measurer,self).get_band(primhdr)
-        # "zd" -> "z"
-        return band[0]
-
-    def get_sky_and_sigma(self, img):
-        # Spline sky model to handle (?) ghost / pupil?
-        from tractor.splinesky import SplineSky
-
-        splinesky = SplineSky.BlantonMethod(img, None, 256)
-        skyimg = np.zeros_like(img)
-        splinesky.addTo(skyimg)
-        
-        mnsky,sig1 = sensible_sigmaclip(img - skyimg)
-        return skyimg,sig1
-
-    def remove_sky_gradients(self, img):
-        pass
-
-    def get_wcs(self, hdr):
-        # Older images have ZPX, newer TPV.
-        if hdr['CTYPE1'] == 'RA---TPV':
-            from astrometry.util.util import wcs_pv2sip_hdr
-            wcs = wcs_pv2sip_hdr(hdr)
-        else:
-            from astrometry.util.util import Tan
-            hdr['CTYPE1'] = 'RA---TAN'
-            hdr['CTYPE2'] = 'DEC--TAN'
-            wcs = Tan(hdr)
-        return wcs
+        self.gain = self.hdr['GAIN']
 
     def colorterm_ps1_to_observed(self, ps1stars, band):
         from legacyanalysis.ps1cat import ps1_to_mosaic
@@ -587,31 +569,10 @@ class Mosaic3Measurer(Measurer):
 
 class NinetyPrimeMeasurer(Measurer):
     '''Class to measure a variety of quantities from a single 90prime CCD.'''
-
     def __init__(self, *args, **kwargs):
         super(NinetyPrimeMeasurer, self).__init__(*args, **kwargs)
         
         self.camera = '90prime'
-
-        # from repackage-bass
-        # self.expnum = np.int32(os.path.basename(self.fn)[2:10]) 
-        # self.ccdnum = self.hdr['CCD_NO']
-        #self.ccdnum = self.ccdname[-1]
-
-        # Eventually we would like FWHM to not come from SExtractor.
-        #if self.hdr['SEEING'] > 0:
-        #    self.fwhm = 2.35 * self.hdr['SEEING'] / self.pixscale  # [FWHM, pixels]
-        #else:
-        #    self.fwhm = 2.35 * 1.5 / self.pixscale  # Hack!
-
-        #self.ccdnum = self.ccdname[3]
-
-        #if 'SKADU' in self.hdr:
-        #    self.avsky = self.hdr['SKADU'] # [ADU]
-        #else:
-        #    self.avsky = 0.0
-
-        #self.pixscale = 0.445 # Check this!
 
         # Average (nominal) gain values.  The gain is sort of a hack since this
         # information should be scraped from the headers, plus we're ignoring
@@ -628,28 +589,11 @@ class NinetyPrimeMeasurer(Measurer):
         self.k_ext = dict(g = 0.17, r = 0.10)
         self.A_ext = dict(g = 3.303, r = 2.285)
 
-        # Ambient temperature
-        # self.temp = -999.0 # no data
-
-    def get_sky_and_sigma(self, img):
-        '''Consider doing just a simple median sky'''
-        from tractor.splinesky import SplineSky
-        
-        splinesky = SplineSky.BlantonMethod(img, None, 256)
-        skyimg = np.zeros_like(img)
-        splinesky.addTo(skyimg)
-        
-        mnsky,sig1 = sensible_sigmaclip(img - skyimg)
-        return skyimg, sig1
-
-    def remove_sky_gradients(self, img):
-        pass
-
     def colorterm_ps1_to_observed(self, ps1stars, band):
         from legacyanalysis.ps1cat import ps1_to_90prime
         return ps1_to_90prime(ps1stars, band)
 
-def measure_mosaic3(fn, ext='im4', **kwargs):
+def measure_mosaic3(fn, ext='CCD1', **kwargs):
     '''Wrapper function to measure quantities from the Mosaic3 camera.'''
     measure = Mosaic3Measurer(fn, ext, **kwargs)
     ccds, stars = measure.run()
@@ -661,6 +605,12 @@ def measure_90prime(fn, ext='CCD1', **kwargs):
     ccds, stars = measure.run()
     return ccds, stars
 
+def measure_decam(fn, ext='N4', **kwargs):
+    '''Wrapper function to measure quantities from the DECam camera.'''
+    measure = DecamMeasurer(fn, ext, **kwargs)
+    ccds, stars = measure.run()
+    return ccds, stars
+
 def camera_name(primhdr):
     '''
     Returns 'mosaic3', 'decam', or '90prime'
@@ -668,6 +618,20 @@ def camera_name(primhdr):
     camera = primhdr.get('INSTRUME','').strip().lower()
     if camera == '90prime':
         extlist = ['CCD1', 'CCD2', 'CCD3', 'CCD4']
+    elif camera == 'mosaic3':
+        extlist = ['CCD1', 'CCD2', 'CCD3', 'CCD4']
+    elif camera == 'decam':
+        extlist = ['S29', 'S31', 'S25', 'S26', 'S27', 'S28', 'S20', 'S21', 'S22',
+                   'S23', 'S24', 'S14', 'S15', 'S16', 'S17', 'S18', 'S19', 'S8',
+                   'S9', 'S10', 'S11', 'S12', 'S13', 'S1', 'S2', 'S3', 'S4', 'S5',
+                   'S6', 'S7', 'N1', 'N2', 'N3', 'N4', 'N5', 'N6', 'N7', 'N8', 'N9',
+                   'N10', 'N11', 'N12', 'N13', 'N14', 'N15', 'N16', 'N17', 'N18',
+                   'N19', 'N20', 'N21', 'N22', 'N23', 'N24', 'N25', 'N26', 'N27',
+                   'N28', 'N29', 'N31']
+    else:
+        print('Camera {} not recognized!'.format(camera))
+        pdb.set_trace()
+    
     return camera, extlist
     
 def sensible_sigmaclip(arr, nsigma = 4.):
@@ -708,9 +672,6 @@ def measure_image(filelist, measureargs={}):
             measure = measure_mosaic3
         elif camera == '90prime':
             measure = measure_90prime
-        else:
-            print('Camera {} not recognized!'.format(camera))
-            continue
 
         ccds = []
         stars = []
