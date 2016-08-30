@@ -55,7 +55,6 @@ import matplotlib.pyplot as plt
 
 from photutils import CircularAperture, CircularAnnulus, aperture_photometry, daofind
 
-from astrometry.util.util import wcs_pv2sip_hdr
 from astrometry.libkd.spherematch import match_radec
 
 from legacyanalysis.ps1cat import ps1cat
@@ -157,6 +156,8 @@ class Measurer(object):
         Sky annulus radius in arcsec
 
         '''
+        from astrometry.util.util import wcs_pv2sip_hdr
+        
         self.fn = fn
         self.ext = ext
 
@@ -183,7 +184,6 @@ class Measurer(object):
         self.mjd_obs = self.primhdr['MJD-OBS']
         self.airmass = self.primhdr['AIRMASS']
         self.ha = self.primhdr['HA']
-        self.ut = self.primhdr['UT']
         self.seeing = self.primhdr['SEEING']
 
         if 'EXPNUM' in self.hdr: # temporary hack!
@@ -207,11 +207,6 @@ class Measurer(object):
         # Eventually we would like FWHM to not come from SExtractor.
         self.fwhm = 2.35 * self.primhdr['SEEING'] / self.pixscale  # [FWHM, pixels]
 
-    def get_band(self):
-        band = self.primhdr['FILTER']
-        band = band.split()[0]
-        return band
-
     def zeropoint(self, band):
         return self.zp0[band]
 
@@ -221,16 +216,30 @@ class Measurer(object):
     def extinction(self, band):
         return self.k_ext[band]
 
+    def sensible_sigmaclip(self, arr, nsigma = 4.0):
+        '''sigmaclip returns unclipped pixels, lo,hi, where lo,hi are the
+        mean(goodpix) +- nsigma * sigma
+
+        '''
+        from scipy.stats import sigmaclip
+        
+        goodpix, lo, hi = sigmaclip(arr, low=nsigma, high=nsigma)
+        meanval = np.mean(goodpix)
+        sigma = (meanval - lo) / nsigma
+        return meanval, sigma
+
     def get_sky_and_sigma(self, img):
         # Spline sky model to handle (?) ghost / pupil?
         from tractor.splinesky import SplineSky
 
+        #sky, sig1 = self.sensible_sigmaclip(img[1500:2500, 500:1000])
+
         splinesky = SplineSky.BlantonMethod(img, None, 256)
         skyimg = np.zeros_like(img)
         splinesky.addTo(skyimg)
-        
-        mnsky,sig1 = sensible_sigmaclip(img - skyimg)
-        return skyimg,sig1
+
+        mnsky, sig1 = self.sensible_sigmaclip(img - skyimg)
+        return skyimg, sig1
 
     def remove_sky_gradients(self, img):
         from scipy.ndimage.filters import median_filter
@@ -254,8 +263,8 @@ class Measurer(object):
 
     def run(self):
 
-        # Read the image and header.  Not sure what units the images are in... 
-        img, hdr = fitsio.read(self.fn, ext=self.ext, header=True)
+        # Read the image and header.
+        img, hdr = self.read_image()
 
         # Initialize and begin populating the output CCDs table.
         ccds = _ccds_table(self.camera)
@@ -278,8 +287,6 @@ class Measurer(object):
         ccds['airmass'] = self.airmass
         ccds['fwhm'] = self.fwhm
         ccds['gain'] = self.gain
-
-        #ccds['arawgain'] = self.gain # average gain [electron/s]
 
         # Copy some header cards directly.
         hdrkey = ('avsky', 'crpix1', 'crpix2', 'crval1', 'crval2', 'cd1_1',
@@ -310,7 +317,8 @@ class Measurer(object):
         print('Computing the sky background.')
         sky, sig1 = self.get_sky_and_sigma(img)
         sky1 = np.median(sky)
-        skybr = zp0 - 2.5*np.log10(sky1/self.pixscale/self.pixscale/exptime)
+        skybr = zp0 - 2.5*np.log10(sky1 / self.pixscale / self.pixscale / exptime)
+        #skybr = zp0 - 2.5*np.log10(sky1 / self.pixscale / self.pixscale)
 
         print('  Sky brightness: {:.3f} mag/arcsec^2'.format(skybr))
         print('  Fiducial:       {:.3f} mag/arcsec^2'.format(sky0))
@@ -428,7 +436,7 @@ class Measurer(object):
         stars['ps1_mag'] += colorterm
         #plt.scatter(stars['ps1_gicolor'], stars['apmag']-stars['ps1_mag']) ; plt.show()
         dmagall = stars['ps1_mag'][mskeep] - stars['apmag'][mskeep]
-        _, dmagsig = sensible_sigmaclip(dmagall, nsigma=2.5)
+        _, dmagsig = self.sensible_sigmaclip(dmagall, nsigma=2.5)
 
         dmag, _, _ = sigmaclip(dmagall, low=3, high=3.0)
         dmagmed = np.median(dmag)
@@ -527,33 +535,40 @@ class Measurer(object):
 	#    print('Median FWHM: {:.3f}'.format(medfwhm))
 	#    ccds['seeing'] = medfwhm
 
-        pdb.set_trace()
-
+        #pdb.set_trace()
         return ccds, stars
-
+    
 class DECamMeasurer(Measurer):
     '''Class to measure a variety of quantities from a single DECam CCD.'''
     def __init__(self, *args, **kwargs):
-        if not 'pixscale' in kwargs:
-            import decam
-            kwargs.update(pixscale = decam.decam_nominal_pixscale)
         super(DECamMeasurer, self).__init__(*args, **kwargs)
+
         self.camera = 'decam'
+        self.ut = self.primhdr['TIME-OBS']
+        self.gain = self.hdr['ARAWGAIN'] # hack! average gain [electron/sec]
 
-    def get_sky_and_sigma(self, img):
-        sky,sig1 = sensible_sigmaclip(img[1500:2500, 500:1000])
-        return sky,sig1
+        print('Hack! Using a constant gain!')
+        corr = 2.5 * np.log10(self.gain)
+        #corr = 2.5 * np.log10(self.gain) - 2.5 * np.log10(self.exptime)
+        self.zp0 = dict(z = 26.552 + corr)
+        self.sky0 = dict(z = 18.46 + corr)
+        self.k_ext = dict(z = 0.06)
 
-    def get_wcs(self, hdr):
-        from astrometry.util.util import wcs_pv2sip_hdr
-        # HACK -- convert TPV WCS header to SIP.
-        wcs = wcs_pv2sip_hdr(hdr)
-        #print('Converted WCS to', wcs)
-        return wcs
+    def get_band(self):
+        band = self.primhdr['FILTER']
+        band = band.split()[0]
+        return band
 
     def colorterm_ps1_to_observed(self, ps1stars, band):
         from legacyanalysis.ps1cat import ps1_to_decam
-        return ps1_to_decam(ps1stars, band)
+        return ps1_to_mosaic(ps1stars, band)
+
+    def read_image(self):
+        '''Read the image and header.  Convert image from ADU to electrons.'''
+        img, hdr = fitsio.read(self.fn, ext=self.ext, header=True)
+        img *= self.gain
+        #img *= self.gain / self.exptime
+        return img, hdr
 
 class Mosaic3Measurer(Measurer):
     '''Class to measure a variety of quantities from a single Mosaic3 CCD.'''
@@ -561,11 +576,29 @@ class Mosaic3Measurer(Measurer):
         super(Mosaic3Measurer, self).__init__(*args, **kwargs)
 
         self.camera = 'mosaic3'
-        self.gain = self.hdr['GAIN']
+        self.ut = self.primhdr['TIME-OBS']
+        self.gain = self.hdr['GAIN'] # hack! average gain
+
+        print('Hack! Using an average Mosaic3 zeropoint!!')
+        corr = 2.5 * np.log10(self.gain)
+        self.zp0 = dict(z = 26.552 + corr)
+        self.sky0 = dict(z = 18.46 + corr)
+        self.k_ext = dict(z = 0.06)
+
+    def get_band(self):
+        band = self.primhdr['FILTER']
+        band = band.split()[0][0] # zd --> z
+        return band
 
     def colorterm_ps1_to_observed(self, ps1stars, band):
         from legacyanalysis.ps1cat import ps1_to_mosaic
         return ps1_to_mosaic(ps1stars, band)
+
+    def read_image(self):
+        '''Read the image and header.  Convert image from electrons/sec to electrons.'''
+        img, hdr = fitsio.read(self.fn, ext=self.ext, header=True)
+        img *= self.exptime
+        return img, hdr
 
 class NinetyPrimeMeasurer(Measurer):
     '''Class to measure a variety of quantities from a single 90prime CCD.'''
@@ -573,6 +606,7 @@ class NinetyPrimeMeasurer(Measurer):
         super(NinetyPrimeMeasurer, self).__init__(*args, **kwargs)
         
         self.camera = '90prime'
+        self.ut = self.primhdr['UT']
 
         # Average (nominal) gain values.  The gain is sort of a hack since this
         # information should be scraped from the headers, plus we're ignoring
@@ -583,34 +617,27 @@ class NinetyPrimeMeasurer(Measurer):
         # Nominal zeropoints, sky brightness, and extinction values (taken from
         # rapala.ninetyprime.boketc.py).  The sky and zeropoints are both in
         # ADU, so account for the gain here.
-        gaincor = -2.5 * np.log10(self.gain)
-        self.zp0 = dict(g = 25.55-gaincor, r = 25.38-gaincor)
-        self.sky0 = dict(g = 22.10-gaincor, r = 21.07-gaincor)
+        corr = 2.5 * np.log10(self.gain)
+        self.zp0 = dict(g = 25.55 + corr, r = 25.38 + corr)
+        self.sky0 = dict(g = 22.10 + corr, r = 21.07 + corr)
         self.k_ext = dict(g = 0.17, r = 0.10)
-        self.A_ext = dict(g = 3.303, r = 2.285)
+
+    def get_band(self):
+        band = self.primhdr['FILTER']
+        band = band.split()[0]
+        band.replace('bokr', 'r')
+        return band
 
     def colorterm_ps1_to_observed(self, ps1stars, band):
         from legacyanalysis.ps1cat import ps1_to_90prime
         return ps1_to_90prime(ps1stars, band)
 
-def measure_mosaic3(fn, ext='CCD1', **kwargs):
-    '''Wrapper function to measure quantities from the Mosaic3 camera.'''
-    measure = Mosaic3Measurer(fn, ext, **kwargs)
-    ccds, stars = measure.run()
-    return ccds, stars
-
-def measure_90prime(fn, ext='CCD1', **kwargs):
-    '''Wrapper function to measure quantities from the 90prime camera.'''
-    measure = NinetyPrimeMeasurer(fn, ext, **kwargs)
-    ccds, stars = measure.run()
-    return ccds, stars
-
-def measure_decam(fn, ext='N4', **kwargs):
-    '''Wrapper function to measure quantities from the DECam camera.'''
-    measure = DecamMeasurer(fn, ext, **kwargs)
-    ccds, stars = measure.run()
-    return ccds, stars
-
+    def read_image(self):
+        '''Read the image and header.  Convert image from electrons/sec to electrons.'''
+        img, hdr = fitsio.read(self.fn, ext=self.ext, header=True)
+        img *= self.exptime
+        return img, hdr
+  
 def camera_name(primhdr):
     '''
     Returns 'mosaic3', 'decam', or '90prime'
@@ -634,16 +661,23 @@ def camera_name(primhdr):
     
     return camera, extlist
     
-def sensible_sigmaclip(arr, nsigma = 4.):
-    '''sigmaclip returns unclipped pixels, lo,hi, where lo,hi are the
-      mean(goodpix) +- nsigma * sigma
+def measure_mosaic3(fn, ext='CCD1', **kwargs):
+    '''Wrapper function to measure quantities from the Mosaic3 camera.'''
+    measure = Mosaic3Measurer(fn, ext, **kwargs)
+    ccds, stars = measure.run()
+    return ccds, stars
 
-    '''
-    from scipy.stats import sigmaclip
-    goodpix,lo,hi = sigmaclip(arr, low=nsigma, high=nsigma)
-    meanval = np.mean(goodpix)
-    sigma = (meanval - lo) / nsigma
-    return meanval, sigma
+def measure_90prime(fn, ext='CCD1', **kwargs):
+    '''Wrapper function to measure quantities from the 90prime camera.'''
+    measure = NinetyPrimeMeasurer(fn, ext, **kwargs)
+    ccds, stars = measure.run()
+    return ccds, stars
+
+def measure_decam(fn, ext='N4', **kwargs):
+    '''Wrapper function to measure quantities from the DECam camera.'''
+    measure = DecamMeasurer(fn, ext, **kwargs)
+    ccds, stars = measure.run()
+    return ccds, stars
 
 def _measure_image(args):
     '''Utility function to wrap measure_image function for multiprocessing map.''' 
@@ -654,7 +688,6 @@ def measure_image(filelist, measureargs={}):
     the FITS extensions for a given set of images.
 
     '''
-
     allccds = []
     for fn in filelist:
         print('Working on image {}'.format(fn))
@@ -695,14 +728,13 @@ def measure_image(filelist, measureargs={}):
     return allccds, allstars
 
 def main():
-
     '''Generate a legacypipe-compatible CCDs file.
 
     '''
 
     parser = argparse.ArgumentParser(description='Generate a legacypipe-compatible CCDs file from a set of reduced imaging.')
-    parser.add_argument('--zptsfile', type=str, default='zeropoints.fits', help='Output file name for the CCD information.')
-    parser.add_argument('--zptstarsfile', type=str, default='zeropoints-stars.fits', help='Output file name for the stars.')
+    parser.add_argument('--prefix', type=str, default='zeropoints', help='Prefix to prepend to the output files.')
+    parser.add_argument('--outdir', type=str, default='./', help='Output directory.')
     parser.add_argument('--aprad', type=float, default=3.5, help='Aperture photometry radius (arcsec).')
     parser.add_argument('--skyrad-inner', type=float, default=7.0, help='Radius of inner sky annulus (arcsec).')
     parser.add_argument('--skyrad-outer', type=float, default=10.0, help='Radius of outer sky annulus (arcsec).')
@@ -718,9 +750,12 @@ def main():
     # Build a dictionary with the optional inputs.
     measureargs = vars(args)
     images = np.array(measureargs.pop('images'))
-    zptsfile = measureargs.pop('zptsfile')
-    zptstarsfile = measureargs.pop('zptstarsfile')
     nproc = measureargs.pop('nproc')
+
+    prefix = measureargs.pop('prefix')
+    outdir = measureargs.pop('outdir')
+    zptsfile = os.path.join(outdir, '{}.fits'.format(prefix))
+    zptstarsfile = os.path.join(outdir, '{}-stars.fits'.format(prefix))
 
     # Process the data, optionally with multiprocessing.
     if nproc > 1:
