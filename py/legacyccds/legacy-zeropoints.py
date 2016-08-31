@@ -46,18 +46,10 @@ import argparse
 
 import numpy as np
 from glob import glob
-from scipy.stats import sigmaclip
 
 import fitsio
-from astropy.io import fits
 from astropy.table import Table, vstack
 import matplotlib.pyplot as plt
-
-from photutils import CircularAperture, CircularAnnulus, aperture_photometry, daofind
-
-from astrometry.libkd.spherematch import match_radec
-
-from legacyanalysis.ps1cat import ps1cat
 
 def _ccds_table(camera='decam'):
     '''Initialize the output CCDs table.  See decstat.pro and merge-zeropoints.py
@@ -82,7 +74,7 @@ def _ccds_table(camera='decam'):
         ('ha', 'S13'),             # hour angle (from header)
         ('airmass', '>f4'),        # airmass (from header)
         #('seeing', '>f4'),        # seeing estimate (from header, arcsec)
-        ('fwhm', '>f4'),           # FWHM (from header, pixels) -- used in Tractor source detection!
+        ('fwhm', '>f4'),           # FWHM (pixels)
         #('arawgain', '>f4'),       
         ('gain', '>f4'),           # average gain (camera-specific, e/ADU) -- remove?
         ('avsky', '>f4'),          # average sky value from CP (from header, ADU) -- remove?
@@ -101,6 +93,7 @@ def _ccds_table(camera='decam'):
         # -- derived quantities --
         ('ra', '>f8'),
         ('dec', '>f8'),
+        ('pixscale', 'f4'),        # mean pixel scale [arcsec/pix]
         ('zpt', '>f4'),
         ('ccdskymag', '>f4'),      
         ('ccdskycounts', '>f4'),
@@ -170,6 +163,7 @@ class Measurer(object):
         # Set the nominal detection FWHM (in pixels) and detection threshold.
         self.nominal_fwhm = 5.0 # [pixels]
         self.det_thresh = 10    # [S/N] - used to be 20
+        self.stampradius = 15   # stamp radius around each star [pixels]
 
         self.matchradius = 2.0  # search radius for finding matching PS1 stars [arcsec]
 
@@ -184,14 +178,14 @@ class Measurer(object):
         self.mjd_obs = self.primhdr['MJD-OBS']
         self.airmass = self.primhdr['AIRMASS']
         self.ha = self.primhdr['HA']
-        self.seeing = self.primhdr['SEEING']
+        #self.seeing = self.primhdr['SEEING']
 
         if 'EXPNUM' in self.hdr: # temporary hack!
             self.expnum = self.hdr['EXPNUM']
         else:
             self.expnum = np.int32(os.path.basename(self.fn)[11:17])
 
-        self.ccdname = self.hdr['EXTNAME'].strip()
+        self.ccdname = self.hdr['EXTNAME'].strip().upper()
         self.image_hdu = np.int(self.hdr['CCDNUM'])
         #self.ccdnum = self.hdr['CCDNUM']
         #self.image_hdu = np.int(self.ccdnum)
@@ -205,7 +199,7 @@ class Measurer(object):
         self.pixscale = self.wcs.pixel_scale()
 
         # Eventually we would like FWHM to not come from SExtractor.
-        self.fwhm = 2.35 * self.primhdr['SEEING'] / self.pixscale  # [FWHM, pixels]
+        #self.fwhm = 2.35 * self.primhdr['SEEING'] / self.pixscale  # [FWHM, pixels]
 
     def zeropoint(self, band):
         return self.zp0[band]
@@ -261,9 +255,85 @@ class Measurer(object):
         dy = py[I] - fully[J]
         return I,J,dx,dy
 
+    def fitstars(self, img, ierr, xstar, ystar, fluxstar):
+        '''Fit each star using a Tractor model.'''
+        import tractor
+
+        H, W = img.shape
+
+        fwhms = []
+        stamp = self.stampradius
+                
+        for ii, (xi, yi, fluxi) in enumerate(zip(xstar, ystar, fluxstar)):
+            #print('Fitting source', i, 'of', len(Jf))
+            ix = int(np.round(xi))
+            iy = int(np.round(yi))
+            xlo = max(0, ix-stamp)
+            xhi = min(W, ix+stamp+1)
+            ylo = max(0, iy-stamp)
+            yhi = min(H, iy+stamp+1)
+            xx, yy = np.meshgrid(np.arange(xlo, xhi), np.arange(ylo, yhi))
+            r2 = (xx - xi)**2 + (yy - yi)**2
+            keep = (r2 < stamp**2)
+            pix = img[ylo:yhi, xlo:xhi].copy()
+            ie = ierr[ylo:yhi, xlo:xhi].copy()
+            #print('fitting source at', ix,iy)
+            #print('number of active pixels:', np.sum(ie > 0), 'shape', ie.shape)
+
+            psf = tractor.NCircularGaussianPSF([4.0], [1.0])
+            tim = tractor.Image(data=pix, inverr=ie, psf=psf)
+            src = tractor.PointSource(tractor.PixPos(xi-xlo, yi-ylo),
+                                      tractor.Flux(fluxi))
+            tr = tractor.Tractor([tim], [src])
+        
+            #print('Posterior before prior:', tr.getLogProb())
+            src.pos.addGaussianPrior('x', 0.0, 1.0)
+            #print('Posterior after prior:', tr.getLogProb())
+                
+            tim.freezeAllBut('psf')
+            psf.freezeAllBut('sigmas')
+        
+            # print('Optimizing params:')
+            # tr.printThawedParams()
+        
+            #print('Parameter step sizes:', tr.getStepSizes())
+            optargs = dict(priors=False, shared_params=False)
+            for step in range(50):
+                dlnp, x, alpha = tr.optimize(**optargs)
+                #print('dlnp', dlnp)
+                #print('src', src)
+                #print('psf', psf)
+                if dlnp == 0:
+                    break
+                
+            # Now fit only the PSF size
+            tr.freezeParam('catalog')
+            # print('Optimizing params:')
+            # tr.printThawedParams()
+        
+            for step in range(50):
+                dlnp, x, alpha = tr.optimize(**optargs)
+                #print('dlnp', dlnp)
+                #print('src', src)
+                #print('psf', psf)
+                if dlnp == 0:
+                    break
+
+            fwhms.append(2.35 * psf.sigmas[0]) # [pixels]
+            #model = tr.getModelImage(0)
+            #pdb.set_trace()
+        
+        return np.array(fwhms)
+
     def run(self):
+        from scipy.stats import sigmaclip
+        from legacyanalysis.ps1cat import ps1cat
+        from astrometry.libkd.spherematch import match_radec
+        from photutils import (CircularAperture, CircularAnnulus,
+                               aperture_photometry, daofind)
 
         # Read the image and header.
+        print('Todo: read the ivar image')
         img, hdr = self.read_image()
 
         # Initialize and begin populating the output CCDs table.
@@ -285,8 +355,9 @@ class Measurer(object):
         ccds['ut'] = self.ut
         ccds['ha'] = self.ha
         ccds['airmass'] = self.airmass
-        ccds['fwhm'] = self.fwhm
+        #ccds['fwhm'] = self.fwhm
         ccds['gain'] = self.gain
+        ccds['pixscale'] = self.pixscale
 
         # Copy some header cards directly.
         hdrkey = ('avsky', 'crpix1', 'crpix2', 'crval1', 'crval2', 'cd1_1',
@@ -329,12 +400,12 @@ class Measurer(object):
 
         # Detect stars on the image.  
         det_thresh = self.det_thresh
-        obj = daofind(img, fwhm=self.fwhm,
+        obj = daofind(img, fwhm=self.nominal_fwhm,
                       threshold=det_thresh*sig1,
                       exclude_border=True)
         if len(obj) < 20:
             det_thresh = self.det_thresh / 2.0
-            obj = daofind(img, fwhm=self.fwhm,
+            obj = daofind(img, fwhm=self.nominal_fwhm,
                           threshold=det_thresh*sig1,
                           exclude_border=True)
         nobj = len(obj)
@@ -346,7 +417,7 @@ class Measurer(object):
 
         # Do aperture photometry in a fixed aperture but using either local (in
         # an annulus around each star) or global sky-subtraction.
-        print('Performing aperture photometry')
+        print('Performing aperture photometry -- need to include the mask!')
 
         ap = CircularAperture((obj['xcentroid'], obj['ycentroid']), self.aprad / self.pixscale)
         if self.sky_global:
@@ -395,7 +466,8 @@ class Measurer(object):
         stars['ra'] = objra[m1]
         stars['dec'] = objdec[m1]
 
-        stars['apmag'] = - 2.5 * np.log10(apflux[m1]) + zp0 + 2.5 * np.log10(exptime)
+        apflux = apflux[m1] # we need apflux for Tractor, below
+        stars['apmag'] = - 2.5 * np.log10(apflux) + zp0 + 2.5 * np.log10(exptime)
 
         stars['ps1_ra'] = ps1.ra[m2]
         stars['ps1_dec'] = ps1.dec[m2]
@@ -457,91 +529,33 @@ class Measurer(object):
         ccds['ccdzpt'] = zptmed
         ccds['ccdtransp'] = transp
 
-        # Hack!  Fit each star with Tractor to measure the FWHM seeing, but for
-        # now just take the header (SE-measured) values.
-        # ccds['seeing'] = 2.35 * self.hdr['seeing'] # FWHM [arcsec]
-        ccds['fwhm'] = 2.35 * self.seeing / self.pixscale # FWHM [pixels]
-        stars['fwhm'] = np.repeat(ccds['fwhm'].data, len(stars))
+        # Fit each star with Tractor.
+        ivar = np.zeros_like(img) + 1.0/sig1**2
+        ierr = np.sqrt(ivar)
 
-        #alse:
-        #fwhms = []
-        #psf_r = 15
-        #if n_fwhm not in [0, None]:
-        #    Jf = J[:n_fwhm]
-	#        
-	#    for i,(xi,yi,fluxi) in enumerate(zip(fx[Jf],fy[Jf],apflux[Jf])):
-	#        #print('Fitting source', i, 'of', len(Jf))
-	#        ix = int(np.round(xi))
-	#        iy = int(np.round(yi))
-	#        xlo = max(0, ix-psf_r)
-	#        xhi = min(W, ix+psf_r+1)
-	#        ylo = max(0, iy-psf_r)
-	#        yhi = min(H, iy+psf_r+1)
-	#        xx,yy = np.meshgrid(np.arange(xlo,xhi), np.arange(ylo,yhi))
-	#        r2 = (xx - xi)**2 + (yy - yi)**2
-	#        keep = (r2 < psf_r**2)
-	#        pix = img[ylo:yhi, xlo:xhi].copy()
-	#        ie = np.zeros_like(pix)
-	#        ie[keep] = 1. / sig1
-	#        #print('fitting source at', ix,iy)
-	#        #print('number of active pixels:', np.sum(ie > 0), 'shape', ie.shape)
-	#
-	#        psf = tractor.NCircularGaussianPSF([4.], [1.])
-	#        tim = tractor.Image(data=pix, inverr=ie, psf=psf)
-	#        src = tractor.PointSource(tractor.PixPos(xi-xlo, yi-ylo),
-	#                                  tractor.Flux(fluxi))
-	#        tr = tractor.Tractor([tim],[src])
-	#
-	#        #print('Posterior before prior:', tr.getLogProb())
-	#        src.pos.addGaussianPrior('x', 0., 1.)
-	#        #print('Posterior after prior:', tr.getLogProb())
-	#        
-	#        doplot = (i < 5) * (ps is not None)
-	#        if doplot:
-	#            mod0 = tr.getModelImage(0)
-	#
-	#        tim.freezeAllBut('psf')
-	#        psf.freezeAllBut('sigmas')
-	#
-	#        # print('Optimizing params:')
-	#        # tr.printThawedParams()
-	#
-	#        #print('Parameter step sizes:', tr.getStepSizes())
-	#        optargs = dict(priors=False, shared_params=False)
-	#        for step in range(50):
-	#            dlnp,x,alpha = tr.optimize(**optargs)
-	#            #print('dlnp', dlnp)
-	#            #print('src', src)
-	#            #print('psf', psf)
-	#            if dlnp == 0:
-	#                break
-	#        # Now fit only the PSF size
-	#        tr.freezeParam('catalog')
-	#        # print('Optimizing params:')
-	#        # tr.printThawedParams()
-	#
-	#        for step in range(50):
-	#            dlnp,x,alpha = tr.optimize(**optargs)
-	#            #print('dlnp', dlnp)
-	#            #print('src', src)
-	#            #print('psf', psf)
-	#            if dlnp == 0:
-	#                break
-	#
-	#        fwhms.append(psf.sigmas[0] * 2.35 * pixsc)
-	#
-	#    fwhms = np.array(fwhms)
-	#    medfwhm = np.median(fwhms)
-	#    print('Median FWHM: {:.3f}'.format(medfwhm))
-	#    ccds['seeing'] = medfwhm
+        print('Fitting stars')
+        fwhms = self.fitstars(img - sky, ierr, stars['x'], stars['y'], apflux)
+
+        medfwhm = np.median(fwhms)
+        print('Median FWHM: {:.3f} pixels'.format(medfwhm))
+        ccds['fwhm'] = medfwhm
+        stars['fwhm'] = fwhms
+        #pdb.set_trace()
+
+        # Hack! For now just take the header (SE-measured) values.
+        # ccds['seeing'] = 2.35 * self.hdr['seeing'] # FWHM [arcsec]
+        #print('Hack -- assuming fixed FWHM!')
+        #ccds['fwhm'] = 5.0
+        ##ccds['fwhm'] = self.fwhm
+        #stars['fwhm'] = np.repeat(ccds['fwhm'].data, len(stars))
 
         #pdb.set_trace()
         return ccds, stars
     
-class DECamMeasurer(Measurer):
+class DecamMeasurer(Measurer):
     '''Class to measure a variety of quantities from a single DECam CCD.'''
     def __init__(self, *args, **kwargs):
-        super(DECamMeasurer, self).__init__(*args, **kwargs)
+        super(DecamMeasurer, self).__init__(*args, **kwargs)
 
         self.camera = 'decam'
         self.ut = self.primhdr['TIME-OBS']
@@ -561,7 +575,7 @@ class DECamMeasurer(Measurer):
 
     def colorterm_ps1_to_observed(self, ps1stars, band):
         from legacyanalysis.ps1cat import ps1_to_decam
-        return ps1_to_mosaic(ps1stars, band)
+        return ps1_to_decam(ps1stars, band)
 
     def read_image(self):
         '''Read the image and header.  Convert image from ADU to electrons.'''
