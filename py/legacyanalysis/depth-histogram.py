@@ -18,7 +18,7 @@ if __name__ == '__main__':
     outfn = 'dr3-depth.fits'
     summaryfn = 'dr3-depth-summary.fits'
 
-    fns = glob('coadd/*/*/*-depth.fits')
+    fns = glob('coadd/25*/*/*-depth.fits')
     fns.sort()
     print(len(fns), 'depth files')
     

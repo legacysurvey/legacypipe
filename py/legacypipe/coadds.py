@@ -442,13 +442,19 @@ def write_coadd_images(band,
         imgs.append(
             ('nexp',   'expmap',   congood),
             )
+    if detiv is not None:
+        imgs.extend([
+                ('depth',    'psfdepth', detiv   ),
+                ])
+    if galdetiv is not None:
+        imgs.extend([
+                ('galdepth', 'galdepth', galdetiv),
+                ])
     if cowmod is not None:
         imgs.extend([
                 ('invvar',   'wtmap',    cow     ),
                 ('model',    'model',    cowmod  ),
                 ('chi2',     'chi2',     cochi2  ),
-                ('depth',    'psfdepth', detiv   ),
-                ('galdepth', 'galdepth', galdetiv),
                 ])
     for name,prodtype,img in imgs:
         from legacypipe.common import MyFITSHDR
