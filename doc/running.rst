@@ -34,27 +34,27 @@ then massaged by the `legacypipe/merge-zeropoints.py` code.
 
 The CCDs table must contain the following fields:
 
- * camera
- * image_filename
- * image_hdu
- * expnum
- * ccdname
- * filter
- * exptime
- * seeing
- * zpt
- * crpix1
- * crpix2
- * crval1
- * crval2
- * cd1_1
- * cd1_2
- * cd2_1
- * cd2_2
- * width
- * height
- * ra
- * dec
+ * camera -- string, see below
+ * image_filename -- string, path relative to `$LEGACY_SURVEY_DIR/images`
+ * image_hdu -- integer, FITS extension containing pixels
+ * expnum -- integer exposure number counter.  This plus `ccdname` is used to identify a CCD.
+ * ccdname -- string
+ * filter -- string of length 1
+ * exptime -- float, exposure time in seconds
+ * seeing -- float, seeing FWHM in arcseconds
+ * zpt -- float, zeropoint (average for the exposure)
+ * crpix1 -- float, WCS reference pixel X
+ * crpix2 -- float, WCS reference pixel Y
+ * crval1 -- float, WCS reference RA
+ * crval2 -- float, WCS reference Dec
+ * cd1_1 -- float, WCS transformation matrix
+ * cd1_2 -- float, WCS transformation matrix
+ * cd2_1 -- float, WCS transformation matrix
+ * cd2_2 -- float, WCS transformation matrix
+ * width -- integer, image width in pixels
+ * height -- integer, image height in pixels
+ * ra -- float, image center RA
+ * dec -- float, image center Dec
 
 Each row of the table should correspond to one contiguous chunk of
 pixels contained in one HDU of a FITS file, that is described by a
