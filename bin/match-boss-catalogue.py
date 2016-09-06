@@ -181,7 +181,7 @@ def list_bricks(ns):
     if ns.bricklist is not None:
         bricklist = np.loadtxt(ns.bricklist, dtype='S8')
         # TODO: skip unknown bricks?
-        d = dict([(brickname, d[brickname]) 
+        d = dict([(brickname.decode(), d[brickname]) 
                              for brickname in bricklist])
 
     t0 = time()
