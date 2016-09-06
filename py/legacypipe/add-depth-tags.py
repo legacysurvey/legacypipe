@@ -5,11 +5,13 @@ import numpy as np
 from legacypipe.common import LegacySurveyData
 from astrometry.util.fits import fits_table
 
-def add_depth_tag(survey, brick, overwrite=True):
+def add_depth_tag(survey, brick, overwrite=False):
     outfn = survey.find_file('tractor', brick=brick, output=True)
-    if os.path.exists(outfn) and not overwrite:
+    if os.path.exists(outfn):
         print('Exists:', outfn)
-        return
+        if not overwrite:
+            print('Skipping.')
+            return
     fn = survey.find_file('tractor', brick=brick)
     if not os.path.exists(fn):
         print('Input does not exist:', fn)
@@ -76,6 +78,8 @@ if __name__ == '__main__':
                         default='tractor2')
     parser.add_argument('--north', help='Set Dec limits for Northern Cap surveys',
                         action='store_true')
+    parser.add_argument('--overwrite', action='store_true', default=False,
+                        help='Overwrite existing output files?  Default is to skip them.')
     opt = parser.parse_args()
 
     survey = LegacySurveyData(survey_dir=opt.survey_dir,
@@ -95,7 +99,7 @@ if __name__ == '__main__':
 
     # Note to self: don't bother multiprocessing this; I/O bound
     for brick in bricks.brickname:
-        add_depth_tag(survey, brick, opt.outdir)
+        add_depth_tag(survey, brick, overwrite=opt.overwrite)
 
 
         
