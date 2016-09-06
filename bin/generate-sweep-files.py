@@ -112,7 +112,7 @@ def list_bricks(ns):
 
     if ns.bricksdesc is not None:
         bricksdesc = fitsio.read(ns.bricksdesc, 1, upper=True)
-        bricksdesc = dict([(item['BRICKNAME'], item) for item in bricksdesc])
+        bricksdesc = dict([(item['BRICKNAME'].decode(), item) for item in bricksdesc])
     else:
         bricksdesc = None
              
@@ -120,7 +120,7 @@ def list_bricks(ns):
     if ns.bricklist is not None:
         bricklist = np.loadtxt(ns.bricklist, dtype='S8')
         # TODO: skip unknown bricks?
-        d = dict([(brickname, d[brickname]) 
+        d = dict([(brickname.decode(), d[brickname]) 
                              for brickname in bricklist])
 
     t0 = time()
