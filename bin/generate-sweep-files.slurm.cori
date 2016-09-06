@@ -10,7 +10,7 @@ set -x
 export ATP_ENABLED=0
 
 # faster python start-up
-module load python/2.7-anaconda
+module load python/3.5-anaconda
 
 source /usr/common/contrib/bccp/python-mpi-bcast/nersc/activate.sh
 
@@ -22,8 +22,10 @@ ROOT=/project/projectdirs/cosmo/data/legacysurvey/dr1
 ROOT=/project/projectdirs/desiproc/dr2
 ROOT=/project/projectdirs/desiproc/dr2p
 ROOT=/project/projectdirs/desiproc/dr3
+ROOT=/project/projectdirs/cosmo/work/legacysurvey/dr3
+TRACTOR=$ROOT/tractor+tags
 
-find $ROOT/tractor -name 'tractor-*.fits' > filelist
+find $TRACTOR -name 'tractor-*.fits' > filelist
 
 # use python-mpi. 'python' from anaconda fails with libpython.so.0.1 not found
 # error when ran via aprun, at least on ~yfeng1's environments.
@@ -37,6 +39,6 @@ time srun -u --cpu_bind=no -n 1 python-mpi generate-sweep-files.py -v \
 -F filelist \
 --schema blocks \
 -d $ROOT/survey-bricks.fits.gz \
-$ROOT/tractor \
+$TRACTOR \
 $SCRATCH/sandbox/decals-dr3/sweep/tractor
 
