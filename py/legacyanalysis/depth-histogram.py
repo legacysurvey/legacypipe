@@ -18,7 +18,7 @@ if __name__ == '__main__':
     outfn = 'dr3-depth.fits'
     summaryfn = 'dr3-depth-summary.fits'
 
-    fns = glob('coadd/25*/*/*-depth.fits')
+    fns = glob('coadd/*/*/*-depth.fits')
     fns.sort()
     print(len(fns), 'depth files')
     
@@ -56,10 +56,12 @@ if __name__ == '__main__':
                         col = 'counts_%s_%s' % (pro, band)
                         if col in t.columns():
                             # merge counts for bin 0-20 into bin 20-20.1
-                            C = T.get(col)
-                            C[1] += C[0]
+                            counts = t.get(col)
+                            counts[1] += counts[0]
+                            counts[0] = 0
                             # merge counts for bin 25-100 into bin 24.9-100
-                            C[-2] += C[-1]
+                            counts[-2] += counts[-1]
+                            counts[-1] = 0
                 # change lower limit of bin 1 from 20 to 0
                 t.depthlo[1] = t.depthlo[0]
                 # change upper limit of bin -2 from 25 to 100
