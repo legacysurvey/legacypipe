@@ -10,7 +10,7 @@ set -x
 export ATP_ENABLED=0
 
 # faster python start-up
-module load python/2.7-anaconda
+module load python/3.5-anaconda
 
 source /usr/common/contrib/bccp/python-mpi-bcast/nersc/activate.sh
 
@@ -21,8 +21,9 @@ export PYTHONPATH=$PWD/../py:$PYTHONPATH
 ROOT=/project/projectdirs/cosmo/data/legacysurvey/dr1
 ROOT=/project/projectdirs/desiproc/dr2p
 ROOT=/project/projectdirs/desiproc/dr2p
-
 ROOT=/project/projectdirs/desiproc/dr3
+ROOT=/project/projectdirs/cosmo/work/legacysurvey/dr3
+TRACTOR=$ROOT/tractor+tags
 
 find $ROOT/tractor -name 'tractor-*.fits' > filelist
 
@@ -38,6 +39,6 @@ time srun -u --cpu_bind=no -N 1 python-mpi match-boss-catalogue.py -v \
 -f fits hdf5 \
 -F filelist \
 /global/projecta/projectdirs/sdss/data/sdss/dr12/boss/qso/DR12Q/DR12Q.fits \
-$ROOT/tractor \
-$SCRATCH/sandbox/decals-dr3/tractor-DR12Q.fits
+$TRACTOR \
+$SCRATCH/sandbox/decals-dr3/tractor-BOSS-DR12Q.fits
 
