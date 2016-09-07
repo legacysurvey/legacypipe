@@ -14,10 +14,70 @@ def brickname_from_filename(fn):
     assert(len(words) == 3)
     return words[1]
 
+def summary_plots(summaryfn, ps):
+    T = fits_table(summaryfn)
+    dlo = T.depthlo.copy()
+    dd = dlo[2] - dlo[1]
+    dlo[0] = dlo[1] - dd
+
+    for band in 'grz':
+
+        I = np.flatnonzero((dlo >= 21.5) * (dlo < 24.8))
+        #I = np.flatnonzero((dlo >= 21.5))
+
+        pixarea = (0.262 / 3600.)**2
+        
+        plt.clf()
+        plt.bar(dlo[I], T.get('counts_ptsrc_%s' % band)[I] * pixarea, width=dd)
+        plt.xlabel('Depth: %s band' % band)
+        #plt.ylabel('Number of pixels')
+        plt.ylabel('Area (sq.deg)')
+        plt.title('DECaLS DR3 Depth: Point Sources, %s' % band)
+        plt.xlim(21.5, 24.8)
+        #plt.xlim(21.5, 25.)
+        ps.savefig()
+
+        plt.clf()
+        plt.bar(dlo[I], T.get('counts_gal_%s' % band)[I] * pixarea, width=dd)
+        plt.xlabel('Depth: %s band' % band)
+        #plt.ylabel('Number of pixels')
+        plt.ylabel('Area (sq.deg)')
+        plt.title('DECaLS DR3 Depth: Canonical Galaxy, %s' % band)
+        plt.xlim(21.5, 24.8)
+        #plt.xlim(21.5, 25.)
+        ps.savefig()
+
+    for band in 'grz':
+        c = list(reversed(np.cumsum(list(reversed(T.get('counts_gal_%s' % band))))))
+        #N = np.sum(T.get('counts_gal_%s' % band))
+        # Skip bin with no observations?
+        N = np.sum(T.get('counts_gal_%s' % band)[1:])
+
+        plt.clf()
+        plt.bar(dlo, c, width=dd)
+
+        target = dict(g=24.0, r=23.4, z=22.5)[band]
+        plt.axvline(target)
+        plt.axvline(target - 0.3)
+        plt.axvline(target - 0.6)
+        plt.axhline(N * 0.90)
+        plt.axhline(N * 0.95)
+        plt.axhline(N * 0.98)
+        
+        plt.xlabel('Depth: %s band' % band)
+        plt.ylabel('Number of pixels')
+        plt.title('Depth: SIMP Galaxy, %s' % band)
+
+        ps.savefig()
+
 if __name__ == '__main__':
     outfn = 'dr3-depth.fits'
     summaryfn = 'dr3-depth-summary.fits'
 
+    #ps = PlotSequence('depth')
+    #summary_plots(summaryfn, ps)
+    #sys.exit(0)
+    
     fns = glob('coadd/*/*/*-depth.fits')
     fns.sort()
     print(len(fns), 'depth files')
@@ -99,49 +159,6 @@ if __name__ == '__main__':
     print('Wrote', outfn)
 
 
-    T = fits_table(summaryfn)
-    dlo = T.depthlo.copy()
-    dd = dlo[2] - dlo[1]
-    dlo[0] = dlo[1] - dd
-
-    ps = PlotSequence('depth')
-    
-    for band in 'grz':
-        plt.clf()
-        plt.bar(dlo, T.get('counts_ptsrc_%s' % band), width=dd)
-        plt.xlabel('Depth: %s band' % band)
-        plt.ylabel('Number of pixels')
-        plt.title('DECaLS DR3 Depth: Point Sources, %s' % band)
-        ps.savefig()
-
-        plt.clf()
-        plt.bar(dlo, T.get('counts_gal_%s' % band), width=dd)
-        plt.xlabel('Depth: %s band' % band)
-        plt.ylabel('Number of pixels')
-        plt.title('DECaLS DR3 Depth: Canonical Galaxy, %s' % band)
-        ps.savefig()
-
-    for band in 'grz':
-        c = list(reversed(np.cumsum(list(reversed(T.get('counts_gal_%s' % band))))))
-        #N = np.sum(T.get('counts_gal_%s' % band))
-        # Skip bin with no observations?
-        N = np.sum(T.get('counts_gal_%s' % band)[1:])
-
-        plt.clf()
-        plt.bar(dlo, c, width=dd)
-
-        target = dict(g=24.0, r=23.4, z=22.5)[band]
-        plt.axvline(target)
-        plt.axvline(target - 0.3)
-        plt.axvline(target - 0.6)
-        plt.axhline(N * 0.90)
-        plt.axhline(N * 0.95)
-        plt.axhline(N * 0.98)
-        
-        plt.xlabel('Depth: %s band' % band)
-        plt.ylabel('Number of pixels')
-        plt.title('Depth: SIMP Galaxy, %s' % band)
-        ps.savefig()
         
 
     

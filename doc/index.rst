@@ -11,6 +11,8 @@ Contents:
 .. toctree::
     :maxdepth: 2
 
+   running
+
 .. automodule:: legacypipe
 
 legacypipe.runbrick module
