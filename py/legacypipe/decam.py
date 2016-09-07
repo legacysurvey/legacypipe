@@ -177,28 +177,7 @@ class DecamImage(CPImage, CalibMixin):
         plver = primhdr['PLVER'].strip()
         plver = plver.replace('V','')
         if StrictVersion(plver) >= StrictVersion('3.5.0'):
-            # Integer codes, not bit masks.
-            dqbits = np.zeros(dq.shape, np.int16)
-            '''
-            1 = bad
-            2 = no value (for remapped and stacked data)
-            3 = saturated
-            4 = bleed mask
-            5 = cosmic ray
-            6 = low weight
-            7 = diff detect (multi-exposure difference detection from median)
-            8 = long streak (e.g. satellite trail)
-            '''
-            dqbits[dq == 1] |= CP_DQ_BITS['badpix']
-            dqbits[dq == 2] |= CP_DQ_BITS['badpix']
-            dqbits[dq == 3] |= CP_DQ_BITS['satur']
-            dqbits[dq == 4] |= CP_DQ_BITS['bleed']
-            dqbits[dq == 5] |= CP_DQ_BITS['cr']
-            dqbits[dq == 6] |= CP_DQ_BITS['badpix']
-            dqbits[dq == 7] |= CP_DQ_BITS['trans']
-            dqbits[dq == 8] |= CP_DQ_BITS['trans']
-
-            dq = dqbits
+            dq = self.remap_dq_codes(dq)
 
         else:
             dq = dq.astype(np.int16)
