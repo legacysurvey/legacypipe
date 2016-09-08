@@ -766,24 +766,20 @@ Now using the current directory as LEGACY_SURVEY_DIR, but this is likely to fail
 
         elif filetype in ['ccds-table', 'depth-table']:
             ty = filetype.split('-')[0]
-            return os.path.join(codir, 'legacysurvey-%s-%s.fits' % (brick, ty))
+            return os.path.join(codir, '%s-%s-%s.fits' % (sname, brick, ty))
 
         elif filetype in ['image-jpeg', 'model-jpeg', 'resid-jpeg',
                           'imageblob-jpeg', 'simscoadd-jpeg','imagecoadd-jpeg']: 
             ty = filetype.split('-')[0]
-            return os.path.join(codir, 'legacysurvey-%s-%s.jpg' % (brick, ty))
+            return os.path.join(codir, '%s-%s-%s.jpg' % (sname, brick, ty))
 
         elif filetype in ['depth', 'galdepth', 'nexp', 'model']:
             return os.path.join(codir,
                                 '%s-%s-%s-%s.fits.gz' % (sname, brick, filetype, band))
 
         elif filetype in ['invvar', 'chi2', 'image']:
-            if self.version in ['dr1','dr2']:
-                prefix = 'decals'
-            else:
-                prefix = 'legacysurvey'
             return os.path.join(codir, '%s-%s-%s-%s.fits' %
-                                (prefix, brick, filetype,band))
+                                (sname, brick, filetype,band))
 
         elif filetype in ['blobmap']:
             return os.path.join(basedir, 'metrics', brickpre, brick,
