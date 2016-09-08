@@ -288,6 +288,135 @@ def plot_mads(allsigs, names, loc='upper left'):
 
 
 
+# Look at CP-processed flat images
+if True:
+
+
+    # img = fitsio.read('correlation-tests/c4d_160811_205129_foi_z_v1.fits.fz')
+    # ie  = fitsio.read('correlation-tests/c4d_160811_205129_fow_z_v1.fits.fz')
+    # ie = np.sqrt(ie)
+    # sig1 = 1. / np.median(ie[ie>0])
+
+    allsigs1 = []
+    names = []
+    offsets = [1,2,3,5,10,20,40]
+
+    sigs = allsigs1
+
+    for fn in [
+        'correlation-tests/c4d_160811_202238_foi_g_v1.fits.fz',
+        'correlation-tests/c4d_160811_202342_foi_g_v1.fits.fz',
+        'correlation-tests/c4d_160811_202444_foi_g_v1.fits.fz',
+        'correlation-tests/c4d_160811_203354_foi_r_v1.fits.fz',
+        'correlation-tests/c4d_160811_203430_foi_r_v1.fits.fz',
+        'correlation-tests/c4d_160811_203508_foi_r_v1.fits.fz',
+        'correlation-tests/c4d_160811_205019_foi_z_v1.fits.fz',
+        'correlation-tests/c4d_160811_205055_foi_z_v1.fits.fz',
+        'correlation-tests/c4d_160811_205129_foi_z_v1.fits.fz',
+        ]:
+        img = fitsio.read(fn)
+        print('File', fn)
+        print('Median counts', np.median(img))
+        ie  = fitsio.read(fn.replace('_foi_', '_fow_'))
+        dq  = fitsio.read(fn.replace('_foi_', '_fod_'))
+        #print('DQ', np.unique(dq))
+        ie[dq > 0] = 0
+        ie = np.sqrt(ie)
+        sig1 = 1. / np.median(ie[ie>0])
+
+        sig = []
+        for offset in offsets:
+            step = 1
+            slice1 = (slice(0,-offset,step),slice(0,-offset,step))
+            slice2 = (slice(offset,None,step),slice(offset,None,step))
+    
+            slicex = (slice1[0], slice2[1])
+            slicey = (slice2[0], slice1[1])
+    
+            diff = img[slice1] - img[slice2]
+            diff = diff[(ie[slice1] > 0) * (ie[slice2] > 0)]
+            mad = np.median(np.abs(diff).ravel())
+            sig.append(1.4826 * mad / np.sqrt(2.))
+    
+            diff = img[slice1] - img[slicex]
+            diff = diff[(ie[slice1] > 0) * (ie[slicex] > 0)]
+            mad = np.median(np.abs(diff).ravel())
+            sig.append(1.4826 * mad / np.sqrt(2.))
+    
+            diff = img[slice1] - img[slicey]
+            diff = diff[(ie[slice1] > 0) * (ie[slicey] > 0)]
+            mad = np.median(np.abs(diff).ravel())
+            sig.append(1.4826 * mad / np.sqrt(2.))
+    
+        Ndiff = len(diff)
+        # Draw random pixels and see what that MAD distribution looks like
+        pix = img[ie>0].ravel()
+        Nrand = min(Ndiff, len(pix)/2)
+        P = np.random.permutation(len(pix))[:(Nrand*2)]
+        diff2 = pix[P[:Nrand]] - pix[P[Nrand:]]
+        mad2 = np.median(np.abs(diff2).ravel())
+        bsig2 = 1.4826 * mad2 / np.sqrt(2.)
+        sig.append(bsig2)
+    
+        # Draw Gaussian random pixels
+        #print('                                           sig1: %.2f' % sig1)
+        diff3 = sig1 * (np.random.normal(size=Ndiff) - np.random.normal(size=Ndiff))
+        mad3 = np.median(np.abs(diff3).ravel())
+        bsig3 = 1.4826 * mad3 / np.sqrt(2.)
+        #print('Blanton sig1 estimate for Gaussian pixels      : %.2f' % bsig3)
+    
+        sigs.append([s/sig1 for s in sig])
+
+
+
+    allsigs = np.array(sigs)
+    title = 'Error estimates vs pixel difference distributions'
+    print('Allsigs shape', allsigs.shape)
+
+    rsigs = allsigs[:,np.array([-1])]
+    allsigs = allsigs[:,:-1]
+
+    dsigs = allsigs[:,::3]
+    xsigs = allsigs[:,1::3]
+    ysigs = allsigs[:,2::3]
+
+    print('rsigs:', rsigs.shape)
+    print('dsigs:', dsigs.shape)
+
+    dsigs = np.hstack((dsigs, rsigs))
+
+    #xsigs = allsigs[:,5:8]
+    #ysigs = allsigs[:,8:]
+    #allsigs = allsigs[:,:5]
+
+    nr,nc = xsigs.shape
+
+    plt.clf()
+    p1 = plt.plot(dsigs.T, 'bo-', label='Diagonal')
+    p2 = plt.plot(np.repeat(np.arange(nc)[:,np.newaxis], 2, axis=1),
+                  xsigs.T, 'go-', label='X')
+    p3 = plt.plot(np.repeat(np.arange(nc)[:,np.newaxis], 2, axis=1),
+                  ysigs.T, 'ro-', label='Y')
+    plt.xticks(np.arange(nc+1), ['%i pix'%o for o in offsets] + ['Random'])
+    plt.axhline(1., color='k', alpha=0.3)
+    plt.ylabel('Error estimate / pipeline sig1')
+    plt.title(title)
+    #plt.legend(loc='upper left')
+    plt.legend([p1[0],p2[0],p3[0]], ['Diagonal', 'X', 'Y'], loc='upper left')
+
+    # names = np.array(names)
+    # yy = dsigs[:,-1]
+    # ii = np.argsort(yy)
+    # yy = np.linspace(min(yy), max(yy), len(ii))
+    # for i,y in zip(ii, yy):
+    #     plt.text(nc+0.1, y, names[i], ha='left', va='center', color='b')
+    # plt.xlim(-0.5, nc+3)
+    
+    ps.savefig()
+
+    sys.exit(0)
+
+
     
 # Simulate the effect of sources in a MAD estimate.
 if False:
