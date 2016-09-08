@@ -685,6 +685,11 @@ Now using the current directory as LEGACY_SURVEY_DIR, but this is likely to fail
         assert(version in [None, 'dr2', 'dr1'])
         self.version = version
 
+        # Filename prefix for coadd files
+        self.file_prefix = 'legacysurvey'
+        if self.version in ['dr1','dr2']:
+            self.file_prefix = 'decals'
+
     def image_class_for_camera(self, camera):
         # Assert that we have correctly removed trailing spaces
         assert(camera == camera.strip())
@@ -729,9 +734,7 @@ Now using the current directory as LEGACY_SURVEY_DIR, but this is likely to fail
         if brick is not None:
             codir = os.path.join(basedir, 'coadd', brickpre, brick)
 
-        sname = 'legacysurvey'
-        if self.version in ['dr1','dr2']:
-            sname = 'decals'
+        sname = self.file_prefix
             
         if filetype == 'bricks':
             fn = 'survey-bricks.fits.gz'
@@ -793,6 +796,7 @@ Now using the current directory as LEGACY_SURVEY_DIR, but this is likely to fail
             return os.path.join(basedir, 'tractor', brickpre,
                                 'brick-%s.sha1sum' % brick)
         
+        print('Unknown filetype "%s"' % filetype)
         assert(False)
 
     def write_output(self, filetype, **kwargs):
