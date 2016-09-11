@@ -275,7 +275,17 @@ SWEEP_DTYPE = np.dtype([
     ('FRACDEV', '>f4'), 
     ('TYCHO2INBLOB', '?'), 
     ('SHAPEDEV_R', '>f4'), 
+    ('SHAPEDEV_R_IVAR', '>f4'), 
+    ('SHAPEDEV_E1', '>f4'), 
+    ('SHAPEDEV_E1_IVAR', '>f4'), 
+    ('SHAPEDEV_E2', '>f4'), 
+    ('SHAPEDEV_E2_IVAR', '>f4'), 
     ('SHAPEEXP_R', '>f4'), 
+    ('SHAPEEXP_R_IVAR', '>f4'), 
+    ('SHAPEEXP_E1', '>f4'), 
+    ('SHAPEEXP_E1_IVAR', '>f4'), 
+    ('SHAPEEXP_E2', '>f4'), 
+    ('SHAPEEXP_E2_IVAR', '>f4'), 
     ('EBV', '>f4')]
 )
 
