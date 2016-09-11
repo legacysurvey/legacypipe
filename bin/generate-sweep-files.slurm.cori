@@ -23,7 +23,7 @@ ROOT=/project/projectdirs/desiproc/dr2
 ROOT=/project/projectdirs/desiproc/dr2p
 ROOT=/project/projectdirs/desiproc/dr3
 ROOT=/project/projectdirs/cosmo/work/legacysurvey/dr3
-TRACTOR=$ROOT/tractor+tags
+TRACTOR=$ROOT/tractor
 
 find $TRACTOR -name 'tractor-*.fits' > filelist
 
