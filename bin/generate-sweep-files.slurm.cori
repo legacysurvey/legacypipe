@@ -33,7 +33,7 @@ find $TRACTOR -name 'tractor-*.fits' > filelist
 #srun -u --cpu_bind=no -n 1 python-mpi generate-sweep-files.py --numproc 64 -F filelist -v -d /project/projectdirs/cosmo/data/legacysurvey/dr1/decals-bricks.fits /project/projectdirs/cosmo/data/legacysurvey/dr1/tractor $SCRATCH/sandbox/sweep-dr1-stripes
 
 time srun -u --cpu_bind=no -n 1 python-mpi generate-sweep-files.py -v \
---numproc 64 \
+--numproc 24 \
 -I \
 -f fits hdf5 \
 -F filelist \
