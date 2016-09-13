@@ -222,7 +222,12 @@ def make_sweep(sweep, bricks, ns):
 
 def save_sweep_file(filename, data, header, format):
     if format == 'fits':
-        fitsio.write(filename, data, extname='SWEEP', header=header, clobber=True)
+        header = [dict(name=key, value=header[key]) for key in sorted(header.keys())]
+        with fitsio.FITS(filename, mode='rw', clobber=True) as ff:
+            ff.create_image_hdu()
+            ff[0].write_keys(header)
+            ff.write_table(data, extname='SWEEP', header=header)
+
     elif format == 'hdf5':
         import h5py
         with h5py.File(filename, 'w') as ff:
@@ -258,7 +263,7 @@ def read_region(brickname, filename, bricksdesc):
     return r
 
 SWEEP_DTYPE = np.dtype([
-    ('BRICK_PRIMARY', '?'), 
+#    ('BRICK_PRIMARY', '?'), 
     ('BRICKID', '>i4'), 
     ('BRICKNAME', 'S8'), 
     ('OBJID', '>i4'), 
