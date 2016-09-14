@@ -59,6 +59,7 @@ def main():
     parser.add_argument('-o', '--out', dest='outfn', help='Output filename',
                       default='TMP/nexp.fits')
     parser.add_argument('--merge', action='store_true', help='Merge sub-tables')
+    parser.add_argument('--plot', action='store_true', help='Plot results')
     parser.add_argument('files', metavar='nexp-file.fits.gz', nargs='+',
                         help='List of nexp files to process')
 
@@ -76,6 +77,60 @@ def main():
         T = merge_tables(TT)
         T.writeto(opt.outfn)
         print('Wrote', opt.outfn)
+
+    if opt.plot:
+        T = fits_table(opt.files[0])
+        import pylab as plt
+        import matplotlib
+        
+        cm = matplotlib.cm.get_cmap('jet', 6)
+
+        ax = [360, 0, -21, 36]
+
+        plt.figure(figsize=(8,5))
+        for band in 'grz':
+            plt.clf()
+            plt.scatter(T.ra, T.dec, c=T.get('nexp_%s' % band), s=2,
+                        edgecolors='none',
+                        vmin=-0.5, vmax=5.5, cmap=cm)
+            plt.axis(ax)
+            plt.xlabel('RA (deg)')
+            plt.xticks(np.arange(0, 361, 45))
+            plt.ylabel('Dec (deg)')
+            plt.colorbar(ticks=range(6))
+            plt.title('DECaLS DR3: Number of exposures in %s' % band)
+            plt.savefig('nexp-%s.png' % band)
+
+        for col in ['nobjs', 'npsf', 'nsimp', 'nexp', 'ndev', 'ncomp']:
+            plt.clf()
+            N = T.get(col)
+            mx = np.percentile(N, 99.5)
+            plt.scatter(T.ra, T.dec, c=N, s=2,
+                        edgecolors='none', vmin=0, vmax=mx)
+            plt.axis(ax)
+            plt.xlabel('RA (deg)')
+            plt.xticks(np.arange(0, 361, 45))
+            plt.ylabel('Dec (deg)')
+            plt.colorbar()
+            plt.title('DECaLS DR3: Number of objects of type %s' % col[1:])
+            plt.savefig('nobjs-%s.png' % col[1:])
+
+        Ntot = T.nobjs
+        for col in ['npsf', 'nsimp', 'nexp', 'ndev', 'ncomp']:
+            plt.clf()
+            N = T.get(col) / Ntot.astype(np.float32)
+            mx = np.percentile(N, 99.5)
+            plt.scatter(T.ra, T.dec, c=N, s=2,
+                        edgecolors='none', vmin=0, vmax=mx)
+            plt.axis(ax)
+            plt.xlabel('RA (deg)')
+            plt.xticks(np.arange(0, 361, 45))
+            plt.ylabel('Dec (deg)')
+            plt.colorbar()
+            plt.title('DECaLS DR3: Fraction of objects of type %s' % col[1:])
+            plt.savefig('fobjs-%s.png' % col[1:])
+
+            
         return 0
 
     # fnpats = opt.files
