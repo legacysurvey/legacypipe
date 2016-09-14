@@ -87,30 +87,70 @@ def main():
 
         ax = [360, 0, -21, 36]
 
-        plt.figure(figsize=(8,5))
-        for band in 'grz':
-            plt.clf()
-            plt.scatter(T.ra, T.dec, c=T.get('nexp_%s' % band), s=2,
-                        edgecolors='none',
-                        vmin=-0.5, vmax=5.5, cmap=cm)
+        def radec_plot():
             plt.axis(ax)
             plt.xlabel('RA (deg)')
             plt.xticks(np.arange(0, 361, 45))
             plt.ylabel('Dec (deg)')
+
+            gl = np.arange(361)
+            gb = np.zeros_like(gl)
+            from astrometry.util.starutil_numpy import lbtoradec
+            rr,dd = lbtoradec(gl, gb)
+            plt.plot(rr, dd, 'k-', alpha=0.5, lw=1)
+            rr,dd = lbtoradec(gl, gb+10)
+            plt.plot(rr, dd, 'k-', alpha=0.25, lw=1)
+            rr,dd = lbtoradec(gl, gb-10)
+            plt.plot(rr, dd, 'k-', alpha=0.25, lw=1)
+            
+        plt.figure(figsize=(8,5))
+
+        # Map of the tile centers we want to observe...
+        O = fits_table('obstatus/decam-tiles_obstatus.fits')
+        O.cut(O.in_desi == 1)
+        rr,dd = np.meshgrid(np.linspace(ax[1],ax[0], 700),
+                            np.linspace(ax[2],ax[3], 200))
+        from astrometry.libkd.spherematch import match_radec
+        I,J,d = match_radec(O.ra, O.dec, rr.ravel(), dd.ravel(), 1.)
+        desimap = np.zeros(rr.shape, bool)
+        desimap.flat[J] = True
+
+        def desi_map():
+            # Show the DESI tile map in the background.
+            from astrometry.util.plotutils import antigray
+            plt.imshow(desimap, origin='lower', interpolation='nearest',
+                       extent=[ax[1],ax[0],ax[2],ax[3]], aspect='auto',
+                       cmap=antigray, vmax=8)
+
+        for band in 'grz':
+            plt.clf()
+            desi_map()
+            plt.scatter(T.ra, T.dec, c=T.get('nexp_%s' % band), s=2,
+                        edgecolors='none',
+                        vmin=-0.5, vmax=5.5, cmap=cm)
+            radec_plot()
             plt.colorbar(ticks=range(6))
             plt.title('DECaLS DR3: Number of exposures in %s' % band)
             plt.savefig('nexp-%s.png' % band)
 
+            plt.clf()
+            desi_map()
+            plt.scatter(T.ra, T.dec, c=T.get('nexp_%s' % band), s=2,
+                        edgecolors='none', vmin=0, vmax=2.)
+            radec_plot()
+            plt.colorbar()
+            plt.title('DECaLS DR3: PSF size, band %s' % band)
+            plt.savefig('psfsize-%s.png' % band)
+
+            
         for col in ['nobjs', 'npsf', 'nsimp', 'nexp', 'ndev', 'ncomp']:
             plt.clf()
+            desi_map()
             N = T.get(col)
             mx = np.percentile(N, 99.5)
             plt.scatter(T.ra, T.dec, c=N, s=2,
                         edgecolors='none', vmin=0, vmax=mx)
-            plt.axis(ax)
-            plt.xlabel('RA (deg)')
-            plt.xticks(np.arange(0, 361, 45))
-            plt.ylabel('Dec (deg)')
+            radec_plot()
             plt.colorbar()
             plt.title('DECaLS DR3: Number of objects of type %s' % col[1:])
             plt.savefig('nobjs-%s.png' % col[1:])
@@ -118,14 +158,12 @@ def main():
         Ntot = T.nobjs
         for col in ['npsf', 'nsimp', 'nexp', 'ndev', 'ncomp']:
             plt.clf()
+            desi_map()
             N = T.get(col) / Ntot.astype(np.float32)
             mx = np.percentile(N, 99.5)
             plt.scatter(T.ra, T.dec, c=N, s=2,
                         edgecolors='none', vmin=0, vmax=mx)
-            plt.axis(ax)
-            plt.xlabel('RA (deg)')
-            plt.xticks(np.arange(0, 361, 45))
-            plt.ylabel('Dec (deg)')
+            radec_plot()
             plt.colorbar()
             plt.title('DECaLS DR3: Fraction of objects of type %s' % col[1:])
             plt.savefig('fobjs-%s.png' % col[1:])
