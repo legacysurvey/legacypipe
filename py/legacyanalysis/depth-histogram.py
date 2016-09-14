@@ -78,7 +78,7 @@ if __name__ == '__main__':
     #summary_plots(summaryfn, ps)
     #sys.exit(0)
     
-    fns = glob('coadd/*/*/*-depth.fits')
+    fns = glob('/project/projectdirs/cosmo/work/legacysurvey/dr3/coadd/*/*/*-depth.fits')
     fns.sort()
     print(len(fns), 'depth files')
     

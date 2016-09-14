@@ -701,7 +701,7 @@ def stage_image_coadds(survey=None, targetwcs=None, bands=None, tims=None,
         print('Wrote', out.fn)
             
     C = make_coadds(tims, bands, targetwcs,
-                    detmaps=True, lanczos=lanczos,
+                    detmaps=True, ngood=True, lanczos=lanczos,
                     callback=write_coadd_images,
                     callback_args=(survey, brickname, version_header, tims, targetwcs),
                     mp=mp)
