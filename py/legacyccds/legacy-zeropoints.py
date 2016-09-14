@@ -49,6 +49,7 @@ from glob import glob
 
 import fitsio
 from astropy.table import Table, vstack
+from astrometry.util.starutil_numpy import hmsstring2ra, dmsstring2dec
 import matplotlib.pyplot as plt
 
 def _ccds_table(camera='decam'):
@@ -62,7 +63,7 @@ def _ccds_table(camera='decam'):
         ('camera', 'S7'),          # camera name
         ('expnum', '>i4'),         # unique exposure number
         ('ccdname', 'S4'),         # FITS extension name
-#       ('ccdnum', '>i2'),         # CCD number 
+        #('ccdnum', '>i2'),        # CCD number 
         ('expid', 'S16'),          # combination of EXPNUM and CCDNAME
         ('object', 'S35'),         # object (field) name
         ('propid', 'S10'),         # proposal ID
@@ -74,15 +75,15 @@ def _ccds_table(camera='decam'):
         ('ha', 'S13'),             # hour angle (from header)
         ('airmass', '>f4'),        # airmass (from header)
         #('seeing', '>f4'),        # seeing estimate (from header, arcsec)
-        ('fwhm', '>f4'),           # FWHM (pixels)
+        #('fwhm', '>f4'),          # FWHM (pixels)
         #('arawgain', '>f4'),       
         ('gain', '>f4'),           # average gain (camera-specific, e/ADU) -- remove?
-        ('avsky', '>f4'),          # average sky value from CP (from header, ADU) -- remove?
+        #('avsky', '>f4'),         # average sky value from CP (from header, ADU) -- remove?
         ('width', '>i2'),          # image width (pixels, NAXIS1, from header)
         ('height', '>i2'),         # image height (pixels, NAXIS2, from header)
-        ('ra_bore', '>f8'),        # RA at the center of the field (deg, CRVAL1, from header)
-        ('dec_bore', '>f8'),       # Dec at the center of the field (deg, CRVAL2, from header)
-        ('crpix1', '>f4'),
+        ('ra_bore', '>f8'),        # telescope RA (deg, from header)
+        ('dec_bore', '>f8'),       # telescope Dec (deg, from header)
+        ('crpix1', '>f4'),         # astrometric solution (no distortion terms)
         ('crpix2', '>f4'),
         ('crval1', '>f8'),
         ('crval2', '>f8'),
@@ -90,23 +91,25 @@ def _ccds_table(camera='decam'):
         ('cd1_2', '>f4'),
         ('cd2_1', '>f4'),
         ('cd2_2', '>f4'),
-        # -- derived quantities --
-        ('ra', '>f8'),
-        ('dec', '>f8'),
-        ('pixscale', 'f4'),        # mean pixel scale [arcsec/pix]
-        ('zpt', '>f4'),
-        ('ccdskymag', '>f4'),      
-        ('ccdskycounts', '>f4'),
-        ('ccdskyrms', '>f4'),
-        ('ccdnstar', '>i2'),
-        ('ccdnmatch', '>i2'),
-        ('ccdmdncol', '>f4'), 
-        ('ccdphoff', '>f4'),
-        ('ccdphrms', '>f4'),
-        ('ccdzpt', '>f4'),
-        ('ccdtransp', '>f4'), 
-        ('ccdraoff', '>f4'),
-        ('ccddecoff', '>f4')
+        ('pixscale', 'f4'),   # mean pixel scale [arcsec/pix]
+        ('zptavg', '>f4'),    # zeropoint averaged over all CCDs [=zpt in decstat]
+        # -- CCD-level quantities --
+        ('ra', '>f8'),        # ra at center of the CCD
+        ('dec', '>f8'),       # dec at the center of the CCD
+        ('skymag', '>f4'),    # average sky surface brightness [mag/arcsec^2] [=ccdskymag in decstat]
+        ('skycounts', '>f4'), # median sky level [electron/pix]               [=ccdskycounts in decstat]
+        ('skyrms', '>f4'),    # sky variance [electron/pix]                   [=ccdskyrms in decstat]
+        ('nstar', '>i2'),     # number of detected stars                      [=ccdnstar in decstat]
+        ('nmatch', '>i2'),    # number of PS1-matched stars                   [=ccdnmatch in decstat]
+        ('mdncol', '>f4'),    # median g-i color of PS1-matched main-sequence stars [=ccdmdncol in decstat]
+        ('phoff', '>f4'),     # photometric offset relative to PS1 (mag)      [=ccdphoff in decstat]
+        ('phrms', '>f4'),     # photometric rms relative to PS1 (mag)         [=ccdphrms in decstat]
+        ('zpt', '>f4'),       # median/mean zeropoint (mag)                   [=ccdzpt in decstat]
+        ('transp', '>f4'),    # transparency                                  [=ccdtransp in decstat]
+        ('raoff', '>f4'),     # median RA offset (arcsec)                     [=ccdraoff in decstat]
+        ('decoff', '>f4'),    # median Dec offset (arcsec)                    [=ccddecoff in decstat]
+        ('rarms', '>f4'),     # rms RA offset (arcsec)                        [=ccdrarms in decstat]
+        ('decrms', '>f4')     # rms Dec offset (arcsec)                       [=ccddecrms in decstat]
         ]
 
     # Add camera-specific keywords to the output table.
@@ -127,7 +130,7 @@ def _stars_table(nstars=1):
        detected on the CCD, including the PS1 photometry.
 
     '''
-    cols = [('expid', 'S16'), ('filter', 'S1'), ('x', 'f4'), ('y', 'f4'),
+    cols = [('expid', 'S16'), ('filter', 'S1'), ('amplifier', 'i2'), ('x', 'f4'), ('y', 'f4'),
             ('ra', 'f8'), ('dec', 'f8'), ('fwhm', 'f4'), ('apmag', 'f4'),
             ('ps1_ra', 'f8'), ('ps1_dec', 'f8'), ('ps1_mag', 'f4'), ('ps1_gicolor', 'f4')]
     stars = Table(np.zeros(nstars, dtype=cols))
@@ -353,6 +356,8 @@ class Measurer(object):
         ccds['date_obs'] = self.date_obs
         ccds['mjd_obs'] = self.mjd_obs
         ccds['ut'] = self.ut
+        ccds['ra_bore'] = self.ra_bore
+        ccds['dec_bore'] = self.dec_bore
         ccds['ha'] = self.ha
         ccds['airmass'] = self.airmass
         #ccds['fwhm'] = self.fwhm
@@ -361,11 +366,9 @@ class Measurer(object):
 
         # Copy some header cards directly.
         hdrkey = ('avsky', 'crpix1', 'crpix2', 'crval1', 'crval2', 'cd1_1',
-                  'cd1_2', 'cd2_1', 'cd2_2', 'crval1', 'crval2',
-                  'naxis1', 'naxis2')
+                  'cd1_2', 'cd2_1', 'cd2_2', 'naxis1', 'naxis2')
         ccdskey = ('avsky', 'crpix1', 'crpix2', 'crval1', 'crval2', 'cd1_1',
-                   'cd1_2', 'cd2_1', 'cd2_2', 'ra_bore', 'dec_bore',
-                   'width', 'height')
+                   'cd1_2', 'cd2_1', 'cd2_2', 'width', 'height')
         for ckey, hkey in zip(ccdskey, hdrkey):
             ccds[ckey] = hdr[hkey]
             
@@ -394,9 +397,9 @@ class Measurer(object):
         print('  Sky brightness: {:.3f} mag/arcsec^2'.format(skybr))
         print('  Fiducial:       {:.3f} mag/arcsec^2'.format(sky0))
 
-        ccds['ccdskyrms'] = sig1    # [electron/pix]
-        ccds['ccdskycounts'] = sky1 # [electron/pix]
-        ccds['ccdskymag'] = skybr   # [mag/arcsec^2]
+        ccds['skyrms'] = sig1    # [electron/pix]
+        ccds['skycounts'] = sky1 # [electron/pix]
+        ccds['skymag'] = skybr   # [mag/arcsec^2]
 
         # Detect stars on the image.  
         det_thresh = self.det_thresh
@@ -438,7 +441,7 @@ class Measurer(object):
             return ccds, _stars_table()
         obj = obj[istar]
         apflux = apflux[istar].data
-        ccds['ccdnstar'] = len(istar)
+        ccds['nstar'] = len(istar)
 
         # Now match against (good) PS1 stars with magnitudes between 15 and 22.
         ps1 = ps1cat(ccdwcs=self.wcs).get_stars(magrange=(15, 22))
@@ -453,11 +456,12 @@ class Measurer(object):
         objra, objdec = self.wcs.pixelxy2radec(obj['xcentroid']+1, obj['ycentroid']+1)
         m1, m2, d12 = match_radec(objra, objdec, ps1.ra, ps1.dec, self.matchradius/3600.0)
         nmatch = len(m1)
-        ccds['ccdnmatch'] = nmatch
+        ccds['nmatch'] = nmatch
         
         print('{} PS1 stars match detected sources within {} arcsec.'.format(nmatch, self.matchradius))
 
         # Initialize the stars table and begin populating it.
+        print('Add the amplifier number!!!')
         stars = _stars_table(nmatch)
         stars['filter'] = self.band
         stars['expid'] = self.expid
@@ -487,11 +491,14 @@ class Measurer(object):
             colorterm = self.colorterm_ps1_to_observed(ps1.median[m2, :], self.band)
 
         # Compute the astrometric residuals relative to PS1.
-        raoff = np.median((stars['ra'] - stars['ps1_ra']) * np.cos(np.deg2rad(ccddec)) * 3600.0)
-        decoff = np.median((stars['dec'] - stars['ps1_dec']) * 3600.0)
-        ccds['ccdraoff'] = raoff
-        ccds['ccddecoff'] = decoff
-        print('Median offsets (arcsec) relative to PS1: dra = {}, ddec = {}'.format(raoff, decoff))
+        radiff = (stars['ra'] - stars['ps1_ra']) * np.cos(np.deg2rad(ccddec)) * 3600.0
+        decdiff = (stars['dec'] - stars['ps1_dec']) * 3600.0
+        ccds['raoff'] = np.median(radiff)
+        ccds['decoff'] = np.median(decdiff)
+        ccds['rarms'] = np.std(radiff)
+        ccds['decrms'] = np.std(decdiff)
+        print('RA, Dec offsets (arcsec) relative to PS1: {}, {}'.format(ccds['raoff'], ccds['decoff']))
+        print('RA, Dec rms (arcsec) relative to PS1: {}, {}'.format(ccds['rarms'], ccds['decrms']))
 
         # Compute the photometric zeropoint but only use stars with main
         # sequence g-i colors.
@@ -500,7 +507,7 @@ class Measurer(object):
         if len(mskeep) == 0:
             print('Not enough PS1 stars with main sequence colors.')
             return ccds, stars
-        ccds['ccdmdncol'] = np.median(stars['ps1_gicolor'][mskeep]) # median g-i color
+        ccds['mdncol'] = np.median(stars['ps1_gicolor'][mskeep]) # median g-i color
 
         # Get the photometric offset relative to PS1 as the observed PS1
         # magnitude minus the observed / measured magnitude.
@@ -524,15 +531,22 @@ class Measurer(object):
         print('  Zeropoint {:.3f}'.format(zptmed))
         print('  Transparency: {:.3f}'.format(transp))
 
-        ccds['ccdphoff'] = dmagmed
-        ccds['ccdphrms'] = dmagsig
-        ccds['ccdzpt'] = zptmed
-        ccds['ccdtransp'] = transp
+        ccds['phoff'] = dmagmed
+        ccds['phrms'] = dmagsig
+        ccds['zpt'] = zptmed
+        ccds['transp'] = transp
 
         # Fit each star with Tractor.
         ivar = np.zeros_like(img) + 1.0/sig1**2
         ierr = np.sqrt(ivar)
 
+        # Fit the PSF here and write out the pixelized PSF.
+        # Desired inputs: image, ivar, x, y, apflux
+        # Output: 6x64x64
+        # input_image = AstroImage(image, ivar)
+        # psf_fitter = PSFFitter(AstroImage, len(x))
+        # psf_fitter.go(x, y)
+        
         print('Fitting stars')
         fwhms = self.fitstars(img - sky, ierr, stars['x'], stars['y'], apflux)
 
@@ -559,6 +573,8 @@ class DecamMeasurer(Measurer):
 
         self.camera = 'decam'
         self.ut = self.primhdr['TIME-OBS']
+        self.ra_bore = hmsstring2ra(self.primhdr['TELRA'])
+        self.dec_bore = dmsstring2dec(self.primhdr['TELDEC'])
         self.gain = self.hdr['ARAWGAIN'] # hack! average gain [electron/sec]
 
         print('Hack! Using a constant gain!')
@@ -591,6 +607,8 @@ class Mosaic3Measurer(Measurer):
 
         self.camera = 'mosaic3'
         self.ut = self.primhdr['TIME-OBS']
+        self.ra_bore = hmsstring2ra(self.primhdr['TELRA'])
+        self.dec_bore = dmsstring2dec(self.primhdr['TELDEC'])
         self.gain = self.hdr['GAIN'] # hack! average gain
 
         print('Hack! Using an average Mosaic3 zeropoint!!')
@@ -620,6 +638,8 @@ class NinetyPrimeMeasurer(Measurer):
         super(NinetyPrimeMeasurer, self).__init__(*args, **kwargs)
         
         self.camera = '90prime'
+        self.ra_bore = hmsstring2ra(self.primhdr['RA'])
+        self.dec_bore = dmsstring2dec(self.primhdr['DEC'])
         self.ut = self.primhdr['UT']
 
         # Average (nominal) gain values.  The gain is sort of a hack since this
@@ -730,7 +750,7 @@ def measure_image(filelist, measureargs={}):
         # Compute the median zeropoint across all the CCDs.
         ccds = vstack(ccds)
         stars = vstack(stars)
-        ccds['zpt'] = np.median(ccds['ccdzpt'])
+        ccds['zptavg'] = np.median(ccds['zpt'])
 
         if len(allccds) == 0:
             allccds = ccds
