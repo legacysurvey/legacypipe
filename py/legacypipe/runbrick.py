@@ -1551,8 +1551,20 @@ def stage_fitblobs(T=None,
         blobmap[oldblob + 1] = iblob
         blobs = blobmap[blobs+1]
 
+        # copy version_header before modifying it.
+        hdr = fitsio.FITSHDR()
+        for r in version_header.records():
+            hdr.add_record(r)
+        # Plug the WCS header cards into these images
+        targetwcs.add_to_header(hdr)
+        hdr.delete('IMAGEW')
+        hdr.delete('IMAGEH')
+        hdr.add_record(dict(name='IMTYPE', value='blobmap',
+                            comment='LegacySurvey image type'))
+        hdr.add_record(dict(name='EQUINOX', value=2000.))
+
         with survey.write_output('blobmap', brick=brickname) as out:
-            fitsio.write(out.fn, blobs, header=version_header, clobber=True)
+            fitsio.write(out.fn, blobs, header=hdr, clobber=True)
             print('Wrote', out.fn)
         del blobmap
     del iblob, oldblob
