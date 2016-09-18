@@ -1572,6 +1572,9 @@ def stage_fitblobs(T=None,
 
     T.brickid   = np.zeros(len(T), np.int32) + brickid
     T.brickname = np.array([brickname] * len(T))
+    if len(T.brickname) == 0:
+        # FIXME -- brickname length??  Could get from survey.bricks.brickname.dtype...
+        T.brickname = T.brickname.astype('S8')
     T.objid     = np.arange(len(T)).astype(np.int32)
 
     # How many sources in each blob?
