@@ -26,7 +26,7 @@ class HealpixedCatalog(object):
         return ipring
 
     def get_healpix_catalog(self, healpix):
-        fname = fnpattern % dict(hp=healpix)
+        fname = self.fnpattern % dict(hp=healpix)
         return fits_table(fname)
     
     def get_healpix_catalogs(self, healpixes):
