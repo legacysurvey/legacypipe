@@ -39,8 +39,8 @@ class HealpixedCatalog(object):
         # Grid the CCD in pixel space
         W,H = wcs.get_width(), wcs.get_height()
         xx,yy = np.meshgrid(
-            np.linspace(1-margin, W+margin, 1+int((W+2*margin)/step)),
-            np.linspace(1-margin, H+margin, 1+int((H+2*margin)/step)))
+            np.linspace(1-margin, W+margin, 2+int((W+2*margin)/step)),
+            np.linspace(1-margin, H+margin, 2+int((H+2*margin)/step)))
         # Convert to RA,Dec and then to unique healpixes
         ra,dec = wcs.pixelxy2radec(xx.ravel(), yy.ravel())
         healpixes = set()
