@@ -15,7 +15,7 @@ class GaiaCatalog(HealpixedCatalog):
         rr,dd = np.meshgrid(np.linspace(ralo,  rahi,  2+( rahi- ralo)/0.1),
                             np.linspace(declo, dechi, 2+(dechi-declo)/0.1))
         healpixes = set()
-        for r,d in zip(rr,dd):
+        for r,d in zip(rr.ravel(), dd.ravel()):
             healpixes.add(self.healpix_for_radec(r, d))
         # Read catalog in those healpixes
         cat = self.get_healpix_catalogs(healpixes)
