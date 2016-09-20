@@ -1,3 +1,4 @@
+import os
 from ps1cat import HealpixedCatalog
     
 class GaiaCatalog(HealpixedCatalog):
