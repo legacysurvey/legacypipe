@@ -26,14 +26,16 @@ class HealpixedCatalog(object):
         return ipring
 
     def get_healpix_catalog(self, healpix):
+        from astrometry.util.fits import fits_table
         fname = self.fnpattern % dict(hp=healpix)
         return fits_table(fname)
     
     def get_healpix_catalogs(self, healpixes):
+        from astrometry.util.fits import merge_tables
         cats = []
         for hp in healpixes:
             cats.append(self.get_healpix_catalog(hp))
-        return merge_catalog(cats)
+        return merge_tables(cats)
 
     def get_catalog_in_wcs(self, wcs, step=100., margin=10):
         # Grid the CCD in pixel space
