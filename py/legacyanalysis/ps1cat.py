@@ -7,7 +7,58 @@ Find all the PS1 stars in a given DECaLS CCD.
 import os
 import numpy as np
 
-class ps1cat():
+class HealpixedCatalog(object):
+    def __init__(self, fnpattern, nside=32):
+        '''
+        fnpattern: string formatter with key "hp", eg
+        'dir/fn-%(hp)05i.fits'
+        '''
+        self.fnpattern = fnpattern
+        self.nside = nside
+
+    def healpix_for_radec(self, ra, dec):
+        '''
+        Returns the healpix number for a given single (scalar) RA,Dec.
+        '''
+        from astrometry.util.util import radecdegtohealpix, healpix_xy_to_ring
+        hpxy = radecdegtohealpix(ra, dec, self.nside)
+        ipring = healpix_xy_to_ring(hpxy, self.nside)
+        return ipring
+
+    def get_healpix_catalog(self, healpix):
+        fname = fnpattern % dict(hp=healpix)
+        return fits_table(fname)
+    
+    def get_healpix_catalogs(self, healpixes):
+        cats = []
+        for hp in healpixes:
+            cats.append(self.get_healpix_catalog(hp))
+        return merge_catalog(cats)
+
+    def get_catalog_in_wcs(self, wcs, step=100., margin=10):
+        # Grid the CCD in pixel space
+        W,H = wcs.get_width(), wcs.get_height()
+        xx,yy = np.meshgrid(
+            np.linspace(1-margin, W+margin, 1+int((W+2*margin)/step)),
+            np.linspace(1-margin, H+margin, 1+int((H+2*margin)/step)))
+        # Convert to RA,Dec and then to unique healpixes
+        ra,dec = wcs.pixelxy2radec(xx.ravel(), yy.ravel())
+        healpixes = set()
+        for r,d in zip(ra,dec):
+            healpixes.add(self.healpix_for_radec(r, d))
+        # Read catalog in those healpixes
+        cat = self.get_healpix_catalogs(healpixes)
+        # Cut to sources actually within the CCD.
+        ok,xx,yy = wcs.radec2pixelxy(cat.ra, cat.dec)
+        cat.x = x
+        cat.y = y
+        onccd = np.flatnonzero((xx >= 1.-margin) * (xx <= W+margin) *
+                               (yy >= 1.-margin) * (yy <= H+margin))
+        cat.cut(onccd)
+        return cat
+    
+    
+class ps1cat(HealpixedCatalog):
     ps1band = dict(g=0,r=1,i=2,z=3,Y=4)
     def __init__(self,expnum=None,ccdname=None,ccdwcs=None):
         """Initialize the class with either the exposure number *and* CCD name, or
@@ -17,7 +68,10 @@ class ps1cat():
         self.ps1dir = os.getenv('PS1CAT_DIR')
         if self.ps1dir is None:
             raise ValueError('You must have the PS1CAT_DIR environment variable set to point to Pan-STARRS1 catalogs')
-        self.nside = 32
+        fnpattern = os.path.join(self.ps1dir, 'ps1-%(hp)05d.fits')
+
+        super(ps1cat, self).__init__(fnpattern)
+        
         if ccdwcs is None:
             from legacypipe.common import LegacySurveyData
             survey = LegacySurveyData()
@@ -29,45 +83,21 @@ class ps1cat():
 
     def get_cat(self,ra,dec):
         """Read the healpixed PS1 catalogs given input ra,dec coordinates."""
-        from astrometry.util.fits import fits_table, merge_tables
-        from astrometry.util.util import radecdegtohealpix, healpix_xy_to_ring
-        ipring = np.empty(len(ra)).astype(int)
-        for iobj, (ra1, dec1) in enumerate(zip(ra,dec)):
-            hpxy = radecdegtohealpix(ra1,dec1,self.nside)
-            ipring[iobj] = healpix_xy_to_ring(hpxy,self.nside)
-        pix = np.unique(ipring)
-
-        cat = list()
-        for ipix in pix:
-            fname = os.path.join(self.ps1dir,'ps1-'+'{:05d}'.format(ipix)+'.fits')
-            print('Reading {}'.format(fname))
-            cat.append(fits_table(fname))
-        cat = merge_tables(cat)
+        # Convert RA,Decs to unique healpixes
+        ra,dec = wcs.pixelxy2radec(xx.ravel(), yy.ravel())
+        healpixes = set()
+        for r,d in zip(ra,dec):
+            healpixes.add(self.healpix_for_radec(r, d))
+        # Read catalog in those healpixes
+        cat = self.get_healpix_catalogs(healpixes)
         return cat
 
     def get_stars(self,magrange=None,band='r'):
         """Return the set of PS1 stars on a given CCD with well-measured grz
         magnitudes. Optionally trim the stars to a desired r-band magnitude
         range.
-
         """
-        bounds = self.ccdwcs.radec_bounds()
-
-        W,H = self.ccdwcs.get_width(), self.ccdwcs.get_height()
-        xx,yy = np.meshgrid(np.linspace(1, W, W/100.),
-                            np.linspace(1, H, H/100.))
-        ra,dec = self.ccdwcs.pixelxy2radec(xx.ravel(), yy.ravel())
-        allcat = self.get_cat(ra, dec)
-
-        #allcat = self.get_cat([bounds[0],bounds[1]],[bounds[2],bounds[3]])
-        ok,xx,yy = self.ccdwcs.radec2pixelxy(allcat.ra, allcat.dec)
-        onccd = np.flatnonzero((xx >= 1.) * (xx <= self.ccdwcs.get_width()) *
-                               (yy >= 1.) * (yy <= self.ccdwcs.get_height()))
-        cat = allcat[onccd]
-        #cat = allcat[np.where((onccd*1)*
-        #                      ((allcat.nmag_ok[:,0]>0)*1)*     # g
-        #                      ((allcat.nmag_ok[:,1]>0)*1)*     # r
-        #                      ((allcat.nmag_ok[:,3]>0)*1)==1)] # z
+        cat = self.get_catalog_in_wcs()
         print('Found {} good PS1 stars'.format(len(cat)))
         if magrange is not None:
             keep = np.where((cat.median[:,ps1cat.ps1band[band]]>magrange[0])*
