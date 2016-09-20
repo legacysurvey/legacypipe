@@ -10,6 +10,7 @@ class GaiaCatalog(HealpixedCatalog):
         super(GaiaCatalog, self).__init__(fnpattern)
 
     def get_catalog_radec_box(self, ralo, rahi, declo, dechi):
+        import numpy as np
         # Prepare RA,Dec grid to pick up overlapping healpixes
         rr,dd = np.meshgrid(np.linspace(ralo,  rahi,  2+( rahi- ralo)/0.1),
                             np.linspace(declo, dechi, 2+(dechi-declo)/0.1))
