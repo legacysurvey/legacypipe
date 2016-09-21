@@ -53,6 +53,18 @@ def find_unique_pixels(wcs, W, unique, ra1,ra2,dec1,dec2):
             break
 
 
+def colorbar_axes(parent, frac=0.12, pad=0.03, aspect=20):
+	pb = parent.get_position(original=True).frozen()
+	# new parent box, padding, child box
+	(pbnew, padbox, cbox) = pb.splitx(1.0-(frac+pad), 1.0-frac)
+	cbox = cbox.anchored('C', cbox)
+	parent.set_position(pbnew)
+	parent.set_anchor((1.0, 0.5))
+	cax = parent.get_figure().add_axes(cbox)
+	cax.set_aspect(aspect, anchor=((0.0, 0.5)), adjustable='box')
+	parent.get_figure().sca(parent)
+	return cax
+        
 def main():
     import argparse
     parser = argparse.ArgumentParser()
@@ -83,8 +95,6 @@ def main():
         import pylab as plt
         import matplotlib
         
-        cm = matplotlib.cm.get_cmap('jet', 6)
-
         ax = [360, 0, -21, 36]
 
         def radec_plot():
@@ -104,7 +114,8 @@ def main():
             plt.plot(rr, dd, 'k-', alpha=0.25, lw=1)
             
         plt.figure(figsize=(8,5))
-
+        plt.subplots_adjust(left=0.1, right=0.98, top=0.93)
+        
         # Map of the tile centers we want to observe...
         O = fits_table('obstatus/decam-tiles_obstatus.fits')
         O.cut(O.in_desi == 1)
@@ -125,11 +136,18 @@ def main():
         for band in 'grz':
             plt.clf()
             desi_map()
-            plt.scatter(T.ra, T.dec, c=T.get('nexp_%s' % band), s=2,
+            N = T.get('nexp_%s' % band)
+            I = np.flatnonzero(N > 0)
+            #cm = matplotlib.cm.get_cmap('jet', 6)
+            #cm = matplotlib.cm.get_cmap('winter', 5)
+            cm = matplotlib.cm.viridis
+            plt.scatter(T.ra[I], T.dec[I], c=N[I], s=2,
                         edgecolors='none',
-                        vmin=-0.5, vmax=5.5, cmap=cm)
+                        vmin=0.5, vmax=5.5, cmap=cm)
             radec_plot()
-            plt.colorbar(ticks=range(6))
+            cax = colorbar_axes(plt.gca(), frac=0.06)
+            plt.colorbar(cax=cax, ticks=range(6))
+            #plt.colorbar(ticks=range(6))
             plt.title('DECaLS DR3: Number of exposures in %s' % band)
             plt.savefig('nexp-%s.png' % band)
 
@@ -142,6 +160,7 @@ def main():
             plt.title('DECaLS DR3: PSF size, band %s' % band)
             plt.savefig('psfsize-%s.png' % band)
 
+        return 0
             
         for col in ['nobjs', 'npsf', 'nsimp', 'nexp', 'ndev', 'ncomp']:
             plt.clf()
