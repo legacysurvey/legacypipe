@@ -2,12 +2,12 @@ from __future__ import print_function
 import sys
 import os
 
-# YUCK!  scinet bonkers python setup
-paths = os.environ['PYTHONPATH']
-sys.path = paths.split(':') + sys.path
-if __name__ == '__main__':
-    import matplotlib
-    matplotlib.use('Agg')
+# # YUCK!  scinet bonkers python setup
+# paths = os.environ['PYTHONPATH']
+# sys.path = paths.split(':') + sys.path
+# if __name__ == '__main__':
+#     import matplotlib
+#     matplotlib.use('Agg')
 
 import numpy as np
 import pylab as plt
@@ -34,11 +34,12 @@ from tractor.galaxy import disable_galaxy_cache
 from tractor.ellipses import EllipseE
 
 # For ACS reductions:
-# rgbscales = dict(I=(0, 0.01))
-# rgbkwargs      .update(scales=rgbscales)
-# rgbkwargs_resid.update(scales=rgbscales)
-# SFDMap.extinctions.update({'DES I': 1.592})
-# allbands = 'I'
+#rgbscales = dict(I=(0, 0.01))
+rgbscales = dict(I=(0, 0.003))
+rgbkwargs      .update(scales=rgbscales)
+rgbkwargs_resid.update(scales=rgbscales)
+SFDMap.extinctions.update({'DES I': 1.592})
+allbands = 'I'
 
 
 def make_zeropoints():
@@ -667,8 +668,8 @@ def read_acs_catalogs():
         T = fits_table(mfn)
     return T
 
-def get_survey():
-    survey = LegacySurveyData(survey_dir='euclid', output_dir='euclid-out')
+def get_survey(outdir='euclid-out'):
+    survey = LegacySurveyData(survey_dir='euclid', output_dir=outdir)
     survey.image_typemap['acs-vis'] = AcsVisImage
     survey.image_typemap['megacam'] = MegacamImage
     survey.image_typemap['vista'] = VistaImage
@@ -1599,6 +1600,71 @@ def geometry():
     decsplits = (decs[:-1] + decs[1:])/2.
     print('Dec boundaries:', decsplits)
 
+def stage_plot_model(tims=None, bands=None, targetwcs=None,
+                     lanczos=None, survey=None, brickname=None, version_header=None,
+                     mp=None, coadd_bw=None, **kwargs):
+    #ACS = read_acs_catalogs()
+    fn = survey.find_file('tractor', brick=brickname, output=True)
+    ACS = fits_table(fn)
+    print('Read', len(ACS), 'ACS catalog entries')
+    ACS.cut(ACS.brick_primary)
+    print('Cut to', len(ACS), 'primary')
+    ACS.shapeexp = np.vstack((ACS.shapeexp_r, ACS.shapeexp_e1, ACS.shapeexp_e2)).T
+    ACS.shapedev = np.vstack((ACS.shapedev_r, ACS.shapedev_e1, ACS.shapedev_e2)).T
+
+    ACS.cut(ACS.decam_flux_ivar > 0)
+
+    tim = tims[0]
+    #ok,xx,yy = tim.getWcs().wcs.radec2pixelxy(ACS.ra, ACS.dec)
+    ok,xx,yy = tim.subwcs.radec2pixelxy(ACS.ra, ACS.dec)
+    H,W = tim.shape
+    ACS.cut((xx >= 1.) * (xx < W) * (yy >= 1.) * (yy < H))
+    print('Cut to', len(ACS), 'in image')
+
+    print('Creating catalog objects...')
+    cat = read_fits_catalog(ACS, ellipseClass=EllipseE, allbands=bands,
+                            bands=bands)
+    tr = Tractor(tims, cat)
+
+    # Clip sizes of big models
+    tim = tims[0]
+    for src in cat:
+        from tractor.galaxy import ProfileGalaxy
+        if isinstance(src, ProfileGalaxy):
+            px,py = tim.wcs.positionToPixel(src.getPosition())
+            h = src._getUnitFluxPatchSize(tim, px, py, tim.modelMinval)
+            MAXHALF = 128
+            if h > MAXHALF:
+                print('halfsize', h,'for',src,'-> setting to',MAXHALF)
+                src.halfsize = MAXHALF
+
+
+    print('Rendering mods...')
+    mods = list(tr.getModelImages())
+
+    print('Writing coadds...')
+    from legacypipe.coadds import write_coadd_images, make_coadds
+    C = make_coadds(tims, bands, targetwcs, mods=mods, lanczos=lanczos,
+                    callback=write_coadd_images,
+                    callback_args=(survey, brickname, version_header, tims, targetwcs),
+                    plots=False, mp=mp)
+    coadd_list= [('image',C.coimgs,rgbkwargs),
+                ('model', C.comods,   rgbkwargs),
+                ('resid', C.coresids, rgbkwargs_resid)]
+    for name,ims,rgbkw in coadd_list:
+        rgb = get_rgb(ims, bands, **rgbkw)
+        kwa = {}
+        if coadd_bw and len(bands) == 1:
+            rgb = rgb.sum(axis=2)
+            kwa = dict(cmap='gray')
+        with survey.write_output(name + '-jpeg', brick=brickname) as out:
+            imsave_jpeg(out.fn, rgb, origin='lower', **kwa)
+            print('Wrote', out.fn)
+        del rgb
+
+    
+from legacypipe.runbrick import stage_tims, stage_mask_junk
+
 def reduce_acs_image(opt, survey):
     ccds = survey.get_ccds_readonly()
     ccds.cut(ccds.camera == 'acs-vis')
@@ -1608,20 +1674,33 @@ def reduce_acs_image(opt, survey):
     print('Cut to', len(ccds), 'with expnum', opt.expnum)
     allccds = ccds
     
+    prereqs_update = {'plot_model': 'mask_junk'}
+    from astrometry.util.stages import CallGlobalTime
+    stagefunc = CallGlobalTime('stage_%s', globals())
+
     for iccd in range(len(allccds)):
         # Process just this single CCD.
         survey.ccds = allccds[np.array([iccd])]
         ccd = survey.ccds[0]
         brickname = 'acsvis-%03i' % ccd.expnum
-        run_brick(brickname, survey, radec=(ccd.ra, ccd.dec), pixscale=0.1,
+        run_brick(brickname, survey, pixscale=0.1,
+                  radec = (150.588, 1.776),
+                  width = 540, height=540,
+                  #radec=(ccd.ra, ccd.dec), pixscale=0.1,
                   #width=200, height=200,
-                  width=ccd.width, height=ccd.height, 
+                  forceAll=True, writePickles=False,
+                  #width=ccd.width, height=ccd.height, 
+                  #stages=['image_coadds'],
+                  stages=['plot_model'],
                   bands=['I'],
                   threads=opt.threads,
                   wise=False, do_calibs=False,
                   pixPsf=True, coadd_bw=True, ceres=False,
-                  blob_image=True, allbands=allbands,
-                  forceAll=True, writePickles=False)
+                  #blob_image=True,
+                  allbands=allbands,
+
+                  prereqs_update=prereqs_update,
+                  stagefunc=stagefunc)
     #plots=True, plotbase='euclid',
     return 0
 
@@ -1784,6 +1863,9 @@ def main():
 
     parser.add_argument('--out',
                         help='Filename for forced-photometry output catalog')
+
+    parser.add_argument('--outdir',
+                        default='euclid-out')
 
     parser.add_argument('--analyze', 
                         help='Analyze forced photometry results for images listed in given image list file')
@@ -2021,7 +2103,7 @@ def main():
         print('Need --expnum or --forced')
         return -1
 
-    survey = get_survey()
+    survey = get_survey(opt.outdir)
 
     ccds = survey.get_ccds_readonly()
     lastcam = None
