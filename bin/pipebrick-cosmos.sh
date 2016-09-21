@@ -26,9 +26,9 @@ subset="$2"
 
 outdir=$SCRATCH/cosmos-$subset
 
-logdir=$(echo $brick | head -c 3)
-mkdir -p $outdir/logs/$logdir
-log="$outdir/logs/$logdir/$brick.log"
+bri=$(echo $brick | head -c 3)
+mkdir -p $outdir/logs/$bri
+log="$outdir/logs/$bri/$brick.log"
 
 echo Logging to: $log
 echo Running on ${NERSC_HOST} $(hostname)
@@ -48,6 +48,11 @@ echo >> $log
 echo -e "\nStarting on ${NERSC_HOST} $(hostname)\n" >> $log
 echo "-----------------------------------------------------------------------------------------" >> $log
 
+CHK=${outdir}/checkpoints/${bri}
+PIC=${outdir}/pickles/${bri}
+mkdir -p $CHK
+mkdir -p $PIC
+
 python -u legacypipe/runcosmos.py \
     --subset $subset \
     --no-write \
@@ -55,6 +60,8 @@ python -u legacypipe/runcosmos.py \
     --threads 24 \
     --skip-calibs \
     --brick $brick --outdir $outdir --nsigma 6 \
+     --checkpoint $CHK/checkpoint-${brick}.pickle \
+     --pickle "$PIC/cosmos-%(brick)s-%%(stage)s.pickle" \
      >> $log 2>&1
 
 #    --skip \
