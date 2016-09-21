@@ -2713,7 +2713,11 @@ def run_brick(brick, survey, radec=None, pixscale=0.262,
               force=[], forceAll=False, writePickles=True,
               checkpoint_filename=None,
               checkpoint_period=None,
-              fitblobs_prereq_filename=None):
+              fitblobs_prereq_filename=None,
+
+              prereqs_update=None,
+              stagefunc = None,
+              ):
     '''
     Run the full Legacy Survey data reduction pipeline.
 
@@ -2876,7 +2880,8 @@ def run_brick(brick, survey, radec=None, pixscale=0.262,
     initargs.update(brickname=brick,
                     survey=survey)
 
-    stagefunc = CallGlobalTime('stage_%s', globals())
+    if stagefunc is None:
+        stagefunc = CallGlobalTime('stage_%s', globals())
 
     plot_base_default = 'brick-%(brick)s'
     if plotbase is None:
@@ -2977,6 +2982,9 @@ def run_brick(brick, survey, radec=None, pixscale=0.262,
         prereqs.update({
             'writecat': 'coadds',
             })
+
+    if prereqs_update is not None:
+        prereqs.update(prereqs_update)
 
     initargs.update(W=width, H=height, pixscale=pixscale,
                     target_extent=zoom)
