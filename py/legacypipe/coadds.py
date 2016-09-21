@@ -154,7 +154,7 @@ def make_coadds(tims, bands, targetwcs,
                 continue
 
             itim,Yo,Xo,iv,im,mo,dq = R
-            print('timiter Yo,Xo,im.shape=',Yo,Xo,im.shape)
+            #print('timiter Yo,Xo,im.shape=',Yo,Xo,im.shape)
 
             tim = tims[itim]
 
