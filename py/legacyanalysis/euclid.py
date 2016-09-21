@@ -40,6 +40,13 @@ from tractor.ellipses import EllipseE
 # SFDMap.extinctions.update({'DES I': 1.592})
 # allbands = 'I'
 
+rgbscales_cfht = dict(g = (2, 0.004),
+                      r = (1, 0.006),
+                      i = (0, 0.02),
+    )
+    
+
+
 
 def make_zeropoints():
     base = 'euclid/images/'
@@ -1797,6 +1804,8 @@ def main():
 
     parser.add_argument('--forced', help='Run forced photometry for given MegaCam CCD index (int) or comma-separated list of indices')
 
+    parser.add_argument('--fits', help='Forced photometry: base filename to write *-model.fits and *-image.fits')
+    
     parser.add_argument('--ceres', action='store_true', help='Use Ceres?')
 
     parser.add_argument(
@@ -1857,12 +1866,8 @@ def main():
             return 0
 
         global rgbkwargs, rgbkwargs_resid
-        rgbscales = dict(g = (2, 0.004),
-                         r = (1, 0.006),
-                         i = (0, 0.02),
-                         )
-        rgbkwargs      .update(scales=rgbscales)
-        rgbkwargs_resid.update(scales=rgbscales)
+        rgbkwargs      .update(scales=rgbscales_cfht)
+        rgbkwargs_resid.update(scales=rgbscales_cfht)
 
         checkpointfn = 'checkpoints/checkpoint-%s.pickle' % opt.brick
 
@@ -2287,6 +2292,63 @@ def forced_photometry(opt, survey):
     t2 = Time()
     print('Forced photometry:', t2-t1)
 
+    if opt.fits:
+        tim = tims[0]
+
+        fn = '%s-image.fits' % opt.fits
+        print('Writing image to', fn)
+        fitsio.write(fn, tim.getImage(), clobber=True)
+
+        mod = tr.getModelImage(0)
+
+        fn = '%s-model.fits' % opt.fits
+        print('Writing model to', fn)
+        fitsio.write(fn, mod, clobber=True)
+        
+        rgbkwargs = dict(mnmx=(-1,100.), arcsinh=1.)
+
+        fn = '%s-image.jpg' % opt.fits
+        print('Writing image to', fn)
+        rgb = get_rgb([tim.getImage()], [tim.band], scales=rgbscales_cfht,
+                      **rgbkwargs)
+        for i in range(3):
+            print('range in plane', i, ':', rgb[:,:,i].min(), rgb[:,:,i].max())
+        print('RGB', rgb.shape, rgb.dtype)
+        (plane,scale) = rgbscales_cfht[tim.band]
+        #rgb = rgb.sum(axis=2)
+        rgb = rgb[:,:,plane]
+        print('RGB', rgb.shape)
+        #imsave_jpeg(rgb, fn)
+        plt.imsave(fn, rgb, vmin=0, vmax=1, cmap='gray')
+
+        fn = '%s-model.jpg' % opt.fits
+        print('Writing model to', fn)
+        rgb = get_rgb([mod], [tim.band], scales=rgbscales_cfht,
+                      **rgbkwargs)
+        print('RGB', rgb.shape)
+        #rgb = rgb.sum(axis=2)
+        rgb = rgb[:,:,plane]
+        print('RGB', rgb.shape)
+        #imsave_jpeg(rgb, fn)
+        plt.imsave(fn, rgb, vmin=0, vmax=1, cmap='gray')
+
+        ie = tim.getInvError()
+        noise = np.random.normal(size=ie.shape) * 1./ie
+        noise[ie == 0] = 0.
+        noisymod = mod + noise
+
+        fn = '%s-model+noise.jpg' % opt.fits
+        print('Writing model+noise to', fn)
+        rgb = get_rgb([noisymod], [tim.band], scales=rgbscales_cfht,
+                      **rgbkwargs)
+        rgb = rgb[:,:,plane]
+        #rgb = rgb.sum(axis=2)
+        plt.imsave(fn, rgb, vmin=0, vmax=1, cmap='gray')
+        
+        fn = '%s-cat.fits' % opt.fits
+        print('Writing catalog to', fn)
+        T.writeto(fn)
+        
     units = {'exptime':'sec' }# 'flux':'nanomaggy', 'flux_ivar':'1/nanomaggy^2'}
     for band in bands:
         F.set('flux_%s' % band, np.array([src.getBrightness().getFlux(band)
