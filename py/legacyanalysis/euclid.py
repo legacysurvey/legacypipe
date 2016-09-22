@@ -1691,7 +1691,12 @@ def reduce_acs_image(opt, survey):
         ccd = survey.ccds[0]
         brickname = 'acsvis-%03i' % ccd.expnum
         run_brick(brickname, survey, pixscale=0.1,
-                  radec = (150.588, 1.776),
+                  # euclid-out2
+                  #radec = (150.588, 1.776),
+                  # euclid-out3
+                  #radec = (150.570, 1.779),
+                  # euclid-out4
+                  radec = (150.598, 1.767),
                   width = 540, height=540,
                   #radec=(ccd.ra, ccd.dec), pixscale=0.1,
                   #width=200, height=200,

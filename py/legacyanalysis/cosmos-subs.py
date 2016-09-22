@@ -190,7 +190,6 @@ for band in bands:
 #
 #
 ###
-subset_offset = 30
 
 exposures = [397525, 397526, 511250, # g,p1
              283978, 283979, 283982, # g,p2   -- 283979 was 431103
@@ -207,7 +206,11 @@ exposures = [397525, 397526, 511250, # g,p1
 # keep adding the next exposure until we reach the desired depth --
 # here we're setting up the exposure list so that it selects the ones
 # we want.)
-exposures = exposures[::3] + exposures[1::3] + exposures[2::3]
+
+#subset_offset = 30
+#exposures = exposures[::3] + exposures[1::3] + exposures[2::3]
+
+subset_offset = 50
 
 # Pull out our exposures into table E.
 I = []

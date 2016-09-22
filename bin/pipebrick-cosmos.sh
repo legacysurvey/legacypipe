@@ -55,16 +55,19 @@ mkdir -p $PIC
 
 python -u legacypipe/runcosmos.py \
     --subset $subset \
-    --no-write \
     --pipe \
     --threads 24 \
     --skip-calibs \
     --brick $brick --outdir $outdir --nsigma 6 \
      --checkpoint $CHK/checkpoint-${brick}.pickle \
      --pickle "$PIC/cosmos-%(brick)s-%%(stage)s.pickle" \
+    --skip \
      >> $log 2>&1
 
-#    --skip \
+
+
+
+#    --no-write \
 #    --no-wise \
 
 # qdo launch cosmos 1 --cores_per_worker 24 --batchqueue regular --walltime 4:00:00 --keep_env --batchopts "-a 0-19 --qos=premium" --script ../bin/pipebrick-cosmos.sh
