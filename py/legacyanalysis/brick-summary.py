@@ -141,6 +141,7 @@ def main():
             #cm = matplotlib.cm.get_cmap('jet', 6)
             #cm = matplotlib.cm.get_cmap('winter', 5)
             cm = matplotlib.cm.viridis
+            cm = matplotlib.cm.get_cmap(cm, 5)
             plt.scatter(T.ra[I], T.dec[I], c=N[I], s=2,
                         edgecolors='none',
                         vmin=0.5, vmax=5.5, cmap=cm)

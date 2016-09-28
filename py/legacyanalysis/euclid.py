@@ -44,6 +44,8 @@ allbands = 'I'
 rgbscales_cfht = dict(g = (2, 0.004),
                       r = (1, 0.006),
                       i = (0, 0.02),
+                      # DECam
+                      z = (0, 0.025),
     )
     
 
@@ -675,8 +677,8 @@ def read_acs_catalogs():
         T = fits_table(mfn)
     return T
 
-def get_survey(outdir='euclid-out'):
-    survey = LegacySurveyData(survey_dir='euclid', output_dir=outdir)
+def get_survey(survey_dir='euclid', outdir='euclid-out'):
+    survey = LegacySurveyData(survey_dir=survey_dir, output_dir=outdir)
     survey.image_typemap['acs-vis'] = AcsVisImage
     survey.image_typemap['megacam'] = MegacamImage
     survey.image_typemap['vista'] = VistaImage
@@ -1878,6 +1880,8 @@ def main():
 
     parser.add_argument('--outdir',
                         default='euclid-out')
+    parser.add_argument('--survey-dir',
+                        default='euclid')
 
     parser.add_argument('--analyze', 
                         help='Analyze forced photometry results for images listed in given image list file')
@@ -2113,7 +2117,7 @@ def main():
         print('Need --expnum or --forced')
         return -1
 
-    survey = get_survey(opt.outdir)
+    survey = get_survey(opt.survey_dir, opt.outdir)
 
     ccds = survey.get_ccds_readonly()
     lastcam = None
@@ -2293,7 +2297,11 @@ def forced_photometry(opt, survey):
         print(len(J), 'sources are within this image')
         keep_sources[J] = True
 
-        tim = im.get_tractor_image(pixPsf=True, slc=slc)
+        tim = im.get_tractor_image(pixPsf=True, slc=slc,
+                                   # DECam
+                                   splinesky=True
+                                   )
+
         print('Tim:', tim)
         tims.append(tim)
 
