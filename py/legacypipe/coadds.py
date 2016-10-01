@@ -154,7 +154,7 @@ def make_coadds(tims, bands, targetwcs,
                 continue
 
             itim,Yo,Xo,iv,im,mo,dq = R
-            print('timiter Yo,Xo,im.shape=',Yo,Xo,im.shape)
+            #print('timiter Yo,Xo,im.shape=',Yo,Xo,im.shape)
 
             tim = tims[itim]
 
@@ -436,7 +436,8 @@ def write_coadd_images(band,
     hdr.add_record(dict(name='EQUINOX', value=2000.))
 
     imgs = [
-        ('image', 'image',  cowimg),
+        ('image',  'image', cowimg),
+        ('invvar', 'wtmap', cow   ),
         ]
     if congood is not None:
         imgs.append(
@@ -452,7 +453,6 @@ def write_coadd_images(band,
                 ])
     if cowmod is not None:
         imgs.extend([
-                ('invvar',   'wtmap',    cow     ),
                 ('model',    'model',    cowmod  ),
                 ('chi2',     'chi2',     cochi2  ),
                 ])

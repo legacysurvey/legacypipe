@@ -701,7 +701,7 @@ def stage_image_coadds(survey=None, targetwcs=None, bands=None, tims=None,
         print('Wrote', out.fn)
             
     C = make_coadds(tims, bands, targetwcs,
-                    detmaps=True, lanczos=lanczos,
+                    detmaps=True, ngood=True, lanczos=lanczos,
                     callback=write_coadd_images,
                     callback_args=(survey, brickname, version_header, tims, targetwcs),
                     mp=mp)
@@ -1551,8 +1551,20 @@ def stage_fitblobs(T=None,
         blobmap[oldblob + 1] = iblob
         blobs = blobmap[blobs+1]
 
+        # copy version_header before modifying it.
+        hdr = fitsio.FITSHDR()
+        for r in version_header.records():
+            hdr.add_record(r)
+        # Plug the WCS header cards into these images
+        targetwcs.add_to_header(hdr)
+        hdr.delete('IMAGEW')
+        hdr.delete('IMAGEH')
+        hdr.add_record(dict(name='IMTYPE', value='blobmap',
+                            comment='LegacySurvey image type'))
+        hdr.add_record(dict(name='EQUINOX', value=2000.))
+
         with survey.write_output('blobmap', brick=brickname) as out:
-            fitsio.write(out.fn, blobs, header=version_header, clobber=True)
+            fitsio.write(out.fn, blobs, header=hdr, clobber=True)
             print('Wrote', out.fn)
         del blobmap
     del iblob, oldblob
@@ -1560,6 +1572,9 @@ def stage_fitblobs(T=None,
 
     T.brickid   = np.zeros(len(T), np.int32) + brickid
     T.brickname = np.array([brickname] * len(T))
+    if len(T.brickname) == 0:
+        # FIXME -- brickname length??  Could get from survey.bricks.brickname.dtype...
+        T.brickname = T.brickname.astype('S8')
     T.objid     = np.arange(len(T)).astype(np.int32)
 
     # How many sources in each blob?
@@ -2698,7 +2713,11 @@ def run_brick(brick, survey, radec=None, pixscale=0.262,
               force=[], forceAll=False, writePickles=True,
               checkpoint_filename=None,
               checkpoint_period=None,
-              fitblobs_prereq_filename=None):
+              fitblobs_prereq_filename=None,
+
+              prereqs_update=None,
+              stagefunc = None,
+              ):
     '''
     Run the full Legacy Survey data reduction pipeline.
 
@@ -2861,7 +2880,8 @@ def run_brick(brick, survey, radec=None, pixscale=0.262,
     initargs.update(brickname=brick,
                     survey=survey)
 
-    stagefunc = CallGlobalTime('stage_%s', globals())
+    if stagefunc is None:
+        stagefunc = CallGlobalTime('stage_%s', globals())
 
     plot_base_default = 'brick-%(brick)s'
     if plotbase is None:
@@ -2962,6 +2982,9 @@ def run_brick(brick, survey, radec=None, pixscale=0.262,
         prereqs.update({
             'writecat': 'coadds',
             })
+
+    if prereqs_update is not None:
+        prereqs.update(prereqs_update)
 
     initargs.update(W=width, H=height, pixscale=pixscale,
                     target_extent=zoom)
