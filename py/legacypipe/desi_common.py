@@ -31,7 +31,7 @@ ellipse_types = dict([(typestring(t), t) for t in
                       [ EllipseESoft, EllipseE,
                         ]])
 
-def source_param_types(src):
+def _source_param_types(src):
     def flatten_node(node):
         return reduce(lambda x,y: x+y,
                       [flatten_node(c) for c in node[1:]],
@@ -65,7 +65,7 @@ def prepare_fits_catalog(cat, invvars, T, hdr, filts, fs, allbands = 'ugrizY',
                 hdr.add_record(dict(name='TR_%s_P%i' % (ts, i), value=nm,
                                     comment='Tractor param name'))
 
-            for i,t in enumerate(source_param_types(sc)):
+            for i,t in enumerate(_source_param_types(sc)):
                 t = typestring(t)
                 hdr.add_record(dict(name='TR_%s_T%i' % (ts, i),
                                     value=t, comment='Tractor param type'))
