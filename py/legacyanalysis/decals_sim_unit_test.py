@@ -32,7 +32,7 @@ import photutils
 #from tractor import Tractor
 from tractor.basics import (NanoMaggies, PointSource, GaussianMixtureEllipsePSF,PixelizedPSF, RaDecPos)
 #from astrometry.util.fits import fits_table
-#from legacypipe.common import wcs_for_brick
+#from legacypipe.survey import wcs_for_brick
 ###
 from legacyanalysis.decals_sim import SimDecals,get_metadata_other,get_ith_simcat
 

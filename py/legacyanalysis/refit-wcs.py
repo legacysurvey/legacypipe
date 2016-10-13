@@ -3,7 +3,7 @@ import numpy as np
 from astrometry.util.plotutils import *
 
 from legacyanalysis.ps1cat import ps1cat
-from legacypipe.common import LegacySurveyData
+from legacypipe.survey import LegacySurveyData
 
 from tractor import Image, PointSource, PixPos, NanoMaggies, Tractor
 

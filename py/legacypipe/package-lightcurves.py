@@ -1,7 +1,7 @@
 from __future__ import print_function
 import os
 import numpy as np
-from legacypipe.common import *
+from legacypipe.survey import *
 from astrometry.util.util import Tan
 from astrometry.util.fits import *
 

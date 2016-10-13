@@ -9,7 +9,7 @@ from tractor import PointSource, getParamTypeTree, RaDecPos
 from tractor.galaxy import ExpGalaxy, DevGalaxy, FixedCompositeGalaxy
 from tractor.ellipses import EllipseESoft, EllipseE
 
-from legacypipe.common import SimpleGalaxy
+from legacypipe.survey import SimpleGalaxy
 
 unwise_atlas = 'allsky-atlas.fits'
 

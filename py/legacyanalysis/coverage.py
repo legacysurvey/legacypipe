@@ -3,7 +3,7 @@ import os
 import pylab as plt
 import matplotlib
 import numpy as np
-from legacypipe.common import LegacySurveyData
+from legacypipe.survey import LegacySurveyData
 from astrometry.util.plotutils import PlotSequence
 from astrometry.util.fits import fits_table
 from astrometry.util.util import Tan

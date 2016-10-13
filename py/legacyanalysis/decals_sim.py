@@ -12,7 +12,7 @@ nohup python ${LEGACYPIPE}/py/legacyanalysis/decals_sim.py -n 32 -c 10 -b 2428p1
 nohup python ${LEGACYPIPE}/py/legacyanalysis/decals_sim.py -n 5000 -c 500 -b 3216p000 -o STAR > & 3216p000.log &
 
 import numpy as np
-from legacypipe.common import Decals, DecamImage, wcs_for_brick, ccds_touching_wcs
+from legacypipe.survey import Decals, DecamImage, wcs_for_brick, ccds_touching_wcs
 
 brickname = '2428p117'
 decals = Decals()
@@ -63,7 +63,7 @@ from tractor.basics import GaussianMixtureEllipsePSF, RaDecPos
 
 from legacypipe.runbrick import run_brick
 from legacypipe.decam import DecamImage
-from legacypipe.common import LegacySurveyData, wcs_for_brick, ccds_touching_wcs
+from legacypipe.survey import LegacySurveyData, wcs_for_brick, ccds_touching_wcs
 
 from pickle import dump
 

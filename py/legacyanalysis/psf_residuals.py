@@ -13,7 +13,7 @@ For a given CCD:
     - plot image, model1, model2
 
 
-from legacypipe.common import Decals
+from legacypipe.survey import Decals
 decals = Decals()
 all = decals.get_ccds()
 plt.scatter(all.seeing,all.airmass) ; plt.xlim(0,3) ; plt.show(block=False)
@@ -64,7 +64,7 @@ from tractor.basics import (NanoMaggies, PointSource, GaussianMixtureEllipsePSF,
 from legacyanalysis.ps1cat import ps1cat
 
 from astrometry.util.fits import fits_table
-from legacypipe.common import LegacySurveyData
+from legacypipe.survey import LegacySurveyData
 
 def psf_residuals(expnum,ccdname,stampsize=35,nstar=30,
                   magrange=(13,17),verbose=0, splinesky=False):

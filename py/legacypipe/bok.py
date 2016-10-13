@@ -7,7 +7,7 @@ import numpy as np
 from legacypipe.image import LegacySurveyImage, CalibMixin
 #from legacypipe.cpimage import CPImage
 from image import LegacySurveyImage
-from common import create_temp
+from survey import create_temp
 from astrometry.util.util import Tan, Sip, anwcs_t
 
 from astrometry.util.util import wcs_pv2sip_hdr
@@ -112,7 +112,7 @@ class BokImage(LegacySurveyImage, CalibMixin):
         print('run_calibs for', self.name, ': sky=', sky, 'kwargs', kwargs) 
         ##################
         #modified from decam.py
-        from .common import (create_temp, get_version_header,
+        from .survey import (create_temp, get_version_header,
                              get_git_version)
         
         if psfex and os.path.exists(self.psffn) and (not force):

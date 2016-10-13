@@ -9,7 +9,7 @@ from astrometry.util.fits import fits_table, merge_tables
 from astrometry.util.starutil_numpy import degrees_between
 from astrometry.util.util import Tan
 from astrometry.util.miscutils import polygon_area
-from legacypipe.common import LegacySurveyData
+from legacypipe.survey import LegacySurveyData
 import tractor
 
 def main(outfn='ccds-annotated.fits', ccds=None):

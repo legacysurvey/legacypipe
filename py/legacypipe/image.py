@@ -6,7 +6,7 @@ from tractor.utils import get_class_from_name
 from tractor.basics import NanoMaggies, ConstantFitsWcs, LinearPhotoCal
 from tractor.image import Image
 from tractor.tractortime import TAITime
-from .common import SimpleGalaxy
+from .survey import SimpleGalaxy
 
 '''
 Generic image handling code.
@@ -645,7 +645,7 @@ class CalibMixin(object):
         return os.path.exists(fn)
 
     def funpack_files(self, imgfn, maskfn, hdu, todelete):
-        from legacypipe.common import create_temp
+        from legacypipe.survey import create_temp
 
         tmpimgfn = None
         tmpmaskfn = None
@@ -732,7 +732,7 @@ class CalibMixin(object):
 
     def run_psfex(self, surveyname):
         from astrometry.util.file import trymakedirs
-        from legacypipe.common import get_git_version
+        from legacypipe.survey import get_git_version
         sedir = self.survey.get_se_dir()
         trymakedirs(self.psffn, dir=True)
         primhdr = self.read_image_primary_header()

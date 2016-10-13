@@ -5,7 +5,7 @@ from astrometry.util.fits import fits_table, merge_tables
 import numpy as np
 import pylab as plt
 
-from legacypipe.common import *
+from legacypipe.survey import *
 from legacypipe.decam import DecamImage
 
 from tractor.sfd import SFDMap

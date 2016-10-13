@@ -9,7 +9,7 @@ from astrometry.util.fits import fits_table
 from astrometry.util.file import trymakedirs
 from astrometry.util.util import Tan
 
-from legacypipe.common import LegacySurveyData, wcs_for_brick
+from legacypipe.survey import LegacySurveyData, wcs_for_brick
 
 def main():
     import argparse

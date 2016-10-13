@@ -12,7 +12,7 @@ from astrometry.util.plotutils import dimshow
 from tractor import Tractor, PointSource, Image, NanoMaggies, Catalog, Patch
 from tractor.galaxy import DevGalaxy, ExpGalaxy, FixedCompositeGalaxy, SoftenedFracDev, FracDev, disable_galaxy_cache, enable_galaxy_cache
 
-from legacypipe.common import (SimpleGalaxy, LegacyEllipseWithPriors, 
+from legacypipe.survey import (SimpleGalaxy, LegacyEllipseWithPriors, 
                                get_rgb)
 from legacypipe.runbrick import tims_compute_resamp, rgbkwargs_resid
 from legacypipe.coadds import quick_coadds

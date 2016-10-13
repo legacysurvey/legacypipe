@@ -4,7 +4,7 @@ import numpy as np
 from astrometry.util.ttime import Time
 from astrometry.util.fits import fits_table
 from tractor.basics import PointSource, RaDecPos, NanoMaggies
-from .common import tim_get_resamp
+from .survey import tim_get_resamp
 
 def _detmap(X):
     from scipy.ndimage.filters import gaussian_filter

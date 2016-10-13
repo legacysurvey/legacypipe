@@ -14,7 +14,7 @@ from astrometry.libkd.spherematch import match_radec
 from astrometry.util.util import Tan
 
 from tractor import *
-from legacypipe.common import *
+from legacypipe.survey import *
 
 def subplot_grid(ny, nx, i):
     y = i/nx

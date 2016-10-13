@@ -2,7 +2,7 @@ from __future__ import print_function
 import numpy as np
 import pylab as plt
 import fitsio
-from legacypipe.common import *
+from legacypipe.survey import *
 from astrometry.util.util import Tan
 from astrometry.util.fits import *
 from astrometry.util.resample import *

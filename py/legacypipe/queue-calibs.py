@@ -65,7 +65,7 @@ import pylab as plt
 from astrometry.util.fits import fits_table
 from astrometry.util.file import trymakedirs
 
-from legacypipe.common import LegacySurveyData, wcs_for_brick, ccds_touching_wcs
+from legacypipe.survey import LegacySurveyData, wcs_for_brick, ccds_touching_wcs
 
 from astrometry.libkd.spherematch import match_radec
 
@@ -429,7 +429,7 @@ def main():
 
     if opt.brickq_deps:
         import qdo
-        from legacypipe.common import on_bricks_dependencies
+        from legacypipe.survey import on_bricks_dependencies
 
         #... find Queue...
         q = qdo.connect(opt.queue, create_ok=True)

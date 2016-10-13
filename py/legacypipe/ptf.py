@@ -3,7 +3,7 @@ import os
 import numpy as np
 
 from legacypipe.image import LegacySurveyImage
-from legacypipe.common import *
+from legacypipe.survey import *
 
 from astropy.io import fits as astro_fits
 import fitsio

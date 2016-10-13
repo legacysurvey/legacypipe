@@ -6,7 +6,7 @@ from astrometry.util.file import trymakedirs
 from astrometry.util.fits import fits_table
 from legacypipe.image import LegacySurveyImage, CalibMixin
 from legacypipe.cpimage import CPImage, CP_DQ_BITS
-from legacypipe.common import *
+from legacypipe.survey import *
 
 import astropy.time
 
@@ -223,7 +223,7 @@ class DecamImage(CPImage, CalibMixin):
         just_check: boolean
             If True, returns True if calibs need to be run.
         '''
-        from .common import (create_temp, get_version_header,
+        from .survey import (create_temp, get_version_header,
                              get_git_version)
         
         if psfex and os.path.exists(self.psffn) and (not force):
