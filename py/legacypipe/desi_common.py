@@ -11,8 +11,6 @@ from tractor.ellipses import EllipseESoft, EllipseE
 
 from legacypipe.survey import SimpleGalaxy
 
-unwise_atlas = 'allsky-atlas.fits'
-
 # FITS catalogs
 fits_typemap = { PointSource: 'PSF', ExpGalaxy: 'EXP', DevGalaxy: 'DEV',
                  FixedCompositeGalaxy: 'COMP',
@@ -22,14 +20,6 @@ fits_typemap = { PointSource: 'PSF', ExpGalaxy: 'EXP', DevGalaxy: 'DEV',
 fits_short_typemap = { PointSource: 'S', ExpGalaxy: 'E', DevGalaxy: 'D',
                        FixedCompositeGalaxy: 'C',
                        SimpleGalaxy: 'G' }
-
-
-def typestring(t):
-    return '%s.%s' % (t.__module__, t.__name__)
-    
-ellipse_types = dict([(typestring(t), t) for t in
-                      [ EllipseESoft, EllipseE,
-                        ]])
 
 def _source_param_types(src):
     def flatten_node(node):
@@ -44,6 +34,13 @@ def _source_param_types(src):
 
 def prepare_fits_catalog(cat, invvars, T, hdr, filts, fs, allbands = 'ugrizY',
                          prefix='', save_invvars=True):
+
+    def typestring(t):
+        return '%s.%s' % (t.__module__, t.__name__)
+    
+    ellipse_types = dict([(typestring(t), t) for t in
+                          [ EllipseESoft, EllipseE, ]])
+
     if T is None:
         T = fits_table()
     if hdr is None:
