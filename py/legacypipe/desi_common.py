@@ -31,16 +31,6 @@ ellipse_types = dict([(typestring(t), t) for t in
                       [ EllipseESoft, EllipseE,
                         ]])
 
-# from unwise_coadd.py : get_coadd_tile_wcs()
-def unwise_tile_wcs(ra, dec, W=2048, H=2048, pixscale=2.75):
-    '''
-    Returns a Tan WCS object at the given RA,Dec center, axis aligned, with the
-    given pixel W,H and pixel scale in arcsec/pixel.
-    '''
-    cowcs = Tan(ra, dec, (W+1)/2., (H+1)/2.,
-                -pixscale/3600., 0., 0., pixscale/3600., W, H)
-    return cowcs
-
 def source_param_types(src):
     def flatten_node(node):
         return reduce(lambda x,y: x+y,
