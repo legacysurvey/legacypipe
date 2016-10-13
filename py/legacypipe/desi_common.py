@@ -31,17 +31,6 @@ ellipse_types = dict([(typestring(t), t) for t in
                       [ EllipseESoft, EllipseE,
                         ]])
 
-def unwise_wcs_from_name(name, atlas=unwise_atlas):
-    print('Reading', atlas)
-    T = fits_table(atlas)
-    print('Read', len(T), 'WISE tiles')
-    I = np.flatnonzero(name == T.coadd_id)
-    if len(I) != 1:
-        raise RuntimeError('Failed to find WISE tile "%s"' % name)
-    I = I[0]
-    tra,tdec = T.ra[I],T.dec[I]
-    return unwise_tile_wcs(tra, tdec)
-
 # from unwise_coadd.py : get_coadd_tile_wcs()
 def unwise_tile_wcs(ra, dec, W=2048, H=2048, pixscale=2.75):
     '''
