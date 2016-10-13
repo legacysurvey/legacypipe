@@ -846,7 +846,7 @@ def stage_srcs(coimgs=None, cons=None,
         if len(bricks) == 0:
             on_bricks = False
     if on_bricks:
-        from legacypipe.desi_common import read_fits_catalog
+        from legacypipe.catalog import read_fits_catalog
         B = []
         for b in bricks:
             fn = survey.find_file('tractor', brick=b.brickname)
@@ -1595,7 +1595,7 @@ def stage_fitblobs(T=None,
     assert(cat.numberOfParams() == len(invvars))
 
     if write_metrics or get_all_models:
-        from desi_common import prepare_fits_catalog, fits_typemap
+        from catalog import prepare_fits_catalog, fits_typemap
         from astrometry.util.file import pickle_to_file
 
         TT = fits_table()
@@ -2402,7 +2402,7 @@ def stage_writecat(
     Final stage in the pipeline: format results for the output
     catalog.
     '''
-    from desi_common import prepare_fits_catalog
+    from catalog import prepare_fits_catalog
     from tractor.sfd import SFDMap
      
     fs = None

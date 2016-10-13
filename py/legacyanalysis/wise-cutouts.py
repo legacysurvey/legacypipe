@@ -9,7 +9,7 @@ from astrometry.util.resample import *
 from astrometry.util.plotutils import *
 from wise.forcedphot import unwise_tiles_touching_wcs
 from wise.unwise import get_unwise_tractor_image
-from legacypipe.desi_common import read_fits_catalog
+from legacypipe.catalog import read_fits_catalog
 from tractor.ellipses import EllipseE
 from tractor import Tractor, NanoMaggies
 

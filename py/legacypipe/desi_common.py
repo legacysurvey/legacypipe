@@ -105,14 +105,14 @@ def prepare_fits_catalog(cat, invvars, T, hdr, filts, fs, allbands = 'ugrizY',
             x = np.array(x).astype(np.float32)
             T.set('%sdecam_%s_%s' % (prefix, tim.filter, k), x.astype(np.float32))
 
-    get_tractor_fits_values(T, cat, '%s%%s' % prefix)
+    _get_tractor_fits_values(T, cat, '%s%%s' % prefix)
 
     if save_invvars:
         if invvars is not None:
             cat.setParams(invvars)
         else:
             cat.setParams(np.zeros(cat.numberOfParams()))
-        get_tractor_fits_values(T, cat, '%s%%s_ivar' % prefix)
+        _get_tractor_fits_values(T, cat, '%s%%s_ivar' % prefix)
         # Heh, "no uncertainty here!"
         T.delete_column('%stype_ivar' % prefix)
     cat.setParams(params0)
@@ -122,7 +122,7 @@ def prepare_fits_catalog(cat, invvars, T, hdr, filts, fs, allbands = 'ugrizY',
 # We'll want to compute errors in our native representation, so have a
 # FITS output routine that can convert those into output format.
 
-def get_tractor_fits_values(T, cat, pat):
+def _get_tractor_fits_values(T, cat, pat):
     typearray = np.array([fits_typemap[type(src)] for src in cat])
     # If there are no "COMP" sources, the type will be 'S3' rather than 'S4'...
     typearray = typearray.astype('S4')
