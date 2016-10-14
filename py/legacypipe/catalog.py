@@ -21,6 +21,12 @@ fits_short_typemap = { PointSource: 'S', ExpGalaxy: 'E', DevGalaxy: 'D',
                        FixedCompositeGalaxy: 'C',
                        SimpleGalaxy: 'G' }
 
+def _typestring(t):
+    return '%s.%s' % (t.__module__, t.__name__)
+    
+ellipse_types = dict([(_typestring(t), t) for t in
+                      [ EllipseESoft, EllipseE, ]])
+
 def _source_param_types(src):
     def flatten_node(node):
         return reduce(lambda x,y: x+y,
@@ -34,12 +40,6 @@ def _source_param_types(src):
 
 def prepare_fits_catalog(cat, invvars, T, hdr, filts, fs, allbands = 'ugrizY',
                          prefix='', save_invvars=True):
-
-    def typestring(t):
-        return '%s.%s' % (t.__module__, t.__name__)
-    
-    ellipse_types = dict([(typestring(t), t) for t in
-                          [ EllipseESoft, EllipseE, ]])
 
     if T is None:
         T = fits_table()
@@ -63,7 +63,7 @@ def prepare_fits_catalog(cat, invvars, T, hdr, filts, fs, allbands = 'ugrizY',
                                     comment='Tractor param name'))
 
             for i,t in enumerate(_source_param_types(sc)):
-                t = typestring(t)
+                t = _typestring(t)
                 hdr.add_record(dict(name='TR_%s_T%i' % (ts, i),
                                     value=t, comment='Tractor param type'))
             break
