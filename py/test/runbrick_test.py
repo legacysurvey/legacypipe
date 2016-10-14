@@ -17,12 +17,13 @@ if __name__ == '__main__':
     surveydir = os.path.join(os.path.dirname(__file__), 'testcase4')
     outdir = 'out-testcase4'
     main(args=['--brick', '1867p255', '--zoom', '2050', '2300', '1150', '1400',
-               '--no-wise', '--force-all', '--no-write',
+               '--no-wise', '--force-all', '--no-write', '--coadd-bw',
                '--survey-dir', surveydir,
                '--outdir', outdir])
-    assert(os.path.exists(os.path.join(surveydir, 'calib', 'decam',
-                                       'splinesky', '00431' '00431608',
-                                       'decam-00431608-N3.fits')))
+    fn = os.path.join(surveydir, 'calib', 'decam', 'splinesky', '00431',
+                      '00431608', 'decam-00431608-N3.fits')
+    print('Checking for calib file', fn)
+    assert(os.path.exists(fn))
     
     surveydir = os.path.join(os.path.dirname(__file__), 'testcase3')
     outdir = 'out-testcase3'
