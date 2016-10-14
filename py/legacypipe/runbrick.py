@@ -96,31 +96,24 @@ def stage_tims(W=3600, H=3600, pixscale=0.262, brickname=None,
     - *splinesky*: boolean.  Use SplineSky model, rather than ConstantSky?
 
     '''
-    from legacypipe.survey import (get_git_version, get_version_header, wcs_for_brick,
-                                   read_one_tim)
+    from legacypipe.survey import (
+        get_git_version, get_version_header, wcs_for_brick, read_one_tim)
     t0 = tlast = Time()
-
     assert(survey is not None)
 
+    # Get brick object
     if ra is not None:
         from legacypipe.survey import BrickDuck
-        
         # Custom brick; create a fake 'brick' object
-        brick = BrickDuck()
-        brick.ra  = ra
-        brick.dec = dec
-        brickid = brick.brickid = -1
-        brick.brickname = brickname
+        brick = BrickDuck(ra, dec, brickname)
     else:
         brick = survey.get_brick_by_name(brickname)
         if brick is None:
             raise RunbrickError('No such brick: "%s"' % brickname)
+    brickid = brick.brickid
+    brickname = brick.brickname
 
-        print('Chosen brick:')
-        brick.about()
-        brickid = brick.brickid
-        brickname = brick.brickname
-
+    # Get WCS object describing brick
     targetwcs = wcs_for_brick(brick, W=W, H=H, pixscale=pixscale)
     if target_extent is not None:
         (x0,x1,y0,y1) = target_extent
@@ -130,17 +123,15 @@ def stage_tims(W=3600, H=3600, pixscale=0.262, brickname=None,
     pixscale = targetwcs.pixel_scale()
     targetrd = np.array([targetwcs.pixelxy2radec(x,y) for x,y in
                          [(1,1),(W,1),(W,H),(1,H),(1,1)]])
-
+    # custom brick -- set RA,Dec bounds
     if ra is not None:
         brick.ra1,nil  = targetwcs.pixelxy2radec(W, H/2)
         brick.ra2,nil  = targetwcs.pixelxy2radec(1, H/2)
         nil, brick.dec1 = targetwcs.pixelxy2radec(W/2, 1)
         nil, brick.dec2 = targetwcs.pixelxy2radec(W/2, H)
-        #print('RA1,RA2', brick.ra1, brick.ra2)
-        #print('Dec1,Dec2', brick.dec1, brick.dec2)
 
+    # Create FITS header with version strings
     gitver = get_git_version()
-
     version_hdr = get_version_header(program_name, survey.survey_dir,
                                      git_version=gitver)
     for i,dep in enumerate(['numpy', 'scipy', 'wcslib', 'astropy', 'photutils',
@@ -174,28 +165,24 @@ def stage_tims(W=3600, H=3600, pixscale=0.262, brickname=None,
     version_hdr.add_record(dict(name='BRICKDEC', value=brick.dec,
                                 comment='Brick center'))
 
-    # NOAO-requested headers
+    # Add NOAO-requested headers
     version_hdr.add_record(dict(
         name='RA', value=ra2hmsstring(brick.ra, separator=':'),
         comment='[h] RA Brick center'))
     version_hdr.add_record(dict(
         name='DEC', value=dec2dmsstring(brick.dec, separator=':'),
         comment='[deg] Dec Brick center'))
-
     version_hdr.add_record(dict(
         name='CENTRA', value=brick.ra, comment='[deg] Brick center RA'))
     version_hdr.add_record(dict(
         name='CENTDEC', value=brick.dec, comment='[deg] Brick center Dec'))
-
     for i,(r,d) in enumerate(targetrd[:4]):
         version_hdr.add_record(dict(
-            name='CORN%iRA' % (i+1), value=r, comment='[deg] Brick corner RA'))
+            name='CORN%iRA' %(i+1), value=r, comment='[deg] Brick corner RA'))
         version_hdr.add_record(dict(
-            name='CORN%iDEC' %(i+1), value=d, comment='[deg] Brick corner Dec'))
+            name='CORN%iDEC'%(i+1), value=d, comment='[deg] Brick corner Dec'))
 
-    # print('Version header:')
-    # print(version_hdr)
-
+    # Find CCDs
     ccds = survey.ccds_touching_wcs(targetwcs, ccdrad=None)
     if ccds is None:
         raise NothingToDoError('No CCDs touching brick')
@@ -207,16 +194,17 @@ def stage_tims(W=3600, H=3600, pixscale=0.262, brickname=None,
         print(len(ccds), 'CCDs not in blacklist')
 
     # Sort images by band -- this also eliminates images whose
-    # *image.filter* string is not in *bands*.
+    # *filter* string is not in *bands*.
     print('Unique filters:', np.unique(ccds.filter))
-    ccds.cut(np.hstack([np.flatnonzero(ccds.filter == band) for band in bands]))
+    ccds.cut(np.hstack([np.flatnonzero(ccds.filter==band) for band in bands]))
     print('Cut on filter:', len(ccds), 'CCDs remain.')
-    
+
     print('Cutting out non-photometric CCDs...')
     I = survey.photometric_ccds(ccds)
     print(len(I), 'of', len(ccds), 'CCDs are photometric')
     ccds.cut(I)
 
+    # Create Image objects for each CCD
     ims = []
     for ccd in ccds:
         im = survey.get_image_object(ccd)
@@ -231,13 +219,11 @@ def stage_tims(W=3600, H=3600, pixscale=0.262, brickname=None,
 
     if do_calibs:
         from legacypipe.survey import run_calibs
-
         kwa = dict(git_version=gitver)
         if gaussPsf:
             kwa.update(psfex=False)
         if splinesky:
             kwa.update(splinesky=True)
-
         # Run calibrations
         args = [(im, kwa) for im in ims]
         mp.map(run_calibs, args)
@@ -251,8 +237,8 @@ def stage_tims(W=3600, H=3600, pixscale=0.262, brickname=None,
         sig1s = dict([(b,[]) for b in bands])
         allpix = []
         for im in ims:
-            subtim = im.get_tractor_image(splinesky=True, gaussPsf=True, subsky=False,
-                                          radecpoly=targetrd)
+            subtim = im.get_tractor_image(splinesky=True, gaussPsf=True,
+                                          subsky=False, radecpoly=targetrd)
             if subtim is None:
                 continue
             fulltim = im.get_tractor_image(splinesky=True, gaussPsf=True)
@@ -267,19 +253,19 @@ def stage_tims(W=3600, H=3600, pixscale=0.262, brickname=None,
             for band,name,exptime,pix in allpix:
                 if band != b:
                     continue
-                # broaden range to encompass most pixels... only req'd when sky is bad
+                # broaden range to encompass most pixels... only req'd
+                # when sky is bad
                 lo,hi = -5.*s, 5.*s
                 lo = min(lo, np.percentile(pix, 5))
                 hi = max(hi, np.percentile(pix, 95))
-                n,bb,p = plt.hist(pix, range=(lo, hi), bins=50, histtype='step',
-                                 alpha=0.5)
+                n,bb,p = plt.hist(pix, range=(lo, hi), bins=50,
+                                  histtype='step', alpha=0.5)
                 lp.append(p[0])
                 lt.append('%s: %.0f s' % (name, exptime))
             plt.legend(lp, lt)
             plt.xlabel('Pixel values')
             plt.title('Pixel distributions: %s band' % b)
             ps.savefig()
-
 
     # Read Tractor images
     args = [(im, targetrd, dict(gaussPsf=gaussPsf, pixPsf=pixPsf,
@@ -297,27 +283,29 @@ def stage_tims(W=3600, H=3600, pixscale=0.262, brickname=None,
     ccds.cut(I)
     tims = [tim for tim in tims if tim is not None]
     assert(len(ccds) == len(tims))
-
     if len(tims) == 0:
         raise NothingToDoError('No photometric CCDs touching brick.')
 
+    # Count pixels
     npix = 0
     for tim in tims:
         h,w = tim.shape
         npix += h*w
     print('Total of', npix, 'pixels read')
 
+    # Check calibration product versions
     for tim in tims:
-        for cal,ver in [('sky', tim.skyver), ('wcs', tim.wcsver), ('psf', tim.psfver)]:
+        for cal,ver in [('sky', tim.skyver), ('wcs', tim.wcsver),
+                        ('psf', tim.psfver)]:
             if tim.plver != ver[1]:
-                print('Warning: image "%s" PLVER is "%s" but %s calib was run on PLVER "%s"' %
-                      (str(tim), tim.plver, cal, ver[1]))
+                print(('Warning: image "%s" PLVER is "%s" but %s calib was run'
+                      +' on PLVER "%s"') % (str(tim), tim.plver, cal, ver[1]))
 
     # Add additional columns to the CCDs table.
     ccds.ccd_x0 = np.array([tim.x0 for tim in tims]).astype(np.int16)
+    ccds.ccd_y0 = np.array([tim.y0 for tim in tims]).astype(np.int16)
     ccds.ccd_x1 = np.array([tim.x0 + tim.shape[1]
                             for tim in tims]).astype(np.int16)
-    ccds.ccd_y0 = np.array([tim.y0 for tim in tims]).astype(np.int16)
     ccds.ccd_y1 = np.array([tim.y0 + tim.shape[0]
                             for tim in tims]).astype(np.int16)
     rd = np.array([[tim.subwcs.pixelxy2radec(1, 1)[-2:],
@@ -325,8 +313,8 @@ def stage_tims(W=3600, H=3600, pixscale=0.262, brickname=None,
                     tim.subwcs.pixelxy2radec(x1-x0, 1)[-2:],
                     tim.subwcs.pixelxy2radec(x1-x0, y1-y0)[-2:]]
                     for tim,x0,y0,x1,y1 in
-                   zip(tims, ccds.ccd_x0+1, ccds.ccd_y0+1,
-                       ccds.ccd_x1, ccds.ccd_y1)])
+                    zip(tims, ccds.ccd_x0+1, ccds.ccd_y0+1,
+                        ccds.ccd_x1, ccds.ccd_y1)])
     ok,x,y = targetwcs.radec2pixelxy(rd[:,:,0], rd[:,:,1])
     ccds.brick_x0 = np.floor(np.min(x, axis=1)).astype(np.int16)
     ccds.brick_x1 = np.ceil (np.max(x, axis=1)).astype(np.int16)
@@ -336,7 +324,7 @@ def stage_tims(W=3600, H=3600, pixscale=0.262, brickname=None,
     ccds.psfnorm = np.array([tim.psfnorm for tim in tims])
     ccds.galnorm = np.array([tim.galnorm for tim in tims])
     ccds.propid = np.array([tim.propid for tim in tims])
-    ccds.plver = np.array([tim.plver for tim in tims])
+    ccds.plver  = np.array([tim.plver for tim in tims])
     ccds.skyver = np.array([tim.skyver[0] for tim in tims])
     ccds.wcsver = np.array([tim.wcsver[0] for tim in tims])
     ccds.psfver = np.array([tim.psfver[0] for tim in tims])
@@ -352,7 +340,8 @@ def stage_tims(W=3600, H=3600, pixscale=0.262, brickname=None,
             for tim in tims:
                 if tim.band != b:
                     continue
-                # broaden range to encompass most pixels... only req'd when sky is bad
+                # broaden range to encompass most pixels... only req'd
+                # when sky is bad
                 lo,hi = -5.*sig1, 5.*sig1
                 pix = tim.getImage()[tim.getInvError() > 0]
                 lo = min(lo, np.percentile(pix, 5))
@@ -379,9 +368,8 @@ def stage_tims(W=3600, H=3600, pixscale=0.262, brickname=None,
             plt.title('Pixel distributions: %s band' % b)
             ps.savefig()
 
-
-
     if plots and False:
+        # Plot image pixels, invvars, masks
         for tim in tims:
             plt.clf()
             plt.subplot(2,2,1)
@@ -394,10 +382,10 @@ def stage_tims(W=3600, H=3600, pixscale=0.262, brickname=None,
                 plt.subplot(2,2,3)
                 dimshow(tim.dq, vmin=0, vmax=tim.dq.max())
                 plt.title('DQ')
-
                 plt.subplot(2,2,3)
                 #nil,udq = np.unique(tim.dq, return_inverse=True)
-                dimshow(((tim.dq & tim.dq_saturation_bits) > 0), vmin=0, vmax=1.5, cmap='hot')
+                dimshow(((tim.dq & tim.dq_saturation_bits) > 0),
+                        vmin=0, vmax=1.5, cmap='hot')
                 plt.title('SATUR')
             plt.suptitle(tim.name)
             ps.savefig()
@@ -412,7 +400,8 @@ def stage_tims(W=3600, H=3600, pixscale=0.262, brickname=None,
                         continue
                     plt.subplot(3,3,k)
                     k+=1
-                    plt.imshow((tim.dq & bitval) > 0, vmin=0, vmax=1.5, cmap='hot')
+                    plt.imshow((tim.dq & bitval) > 0,
+                               vmin=0, vmax=1.5, cmap='hot')
                     plt.title(bitmap[bitval])
                 plt.suptitle('Mask planes: %s' % tim.name)
                 ps.savefig()
@@ -422,20 +411,20 @@ def stage_tims(W=3600, H=3600, pixscale=0.262, brickname=None,
     bands = [b for b in bands if b in timbands]
     print('Cut bands to', bands)
 
+    # Add header cards about which bands and cameras are involved.
     for band in 'grz':
         hasit = band in bands
-        version_hdr.add_record(dict(name='BRICK_%s' % band.upper(), value=hasit,
-                                    comment='Does band %s touch this brick?' % band))
+        version_hdr.add_record(dict(
+            name='BRICK_%s' % band.upper(), value=hasit,
+            comment='Does band %s touch this brick?' % band))
 
         cams = np.unique([tim.imobj.camera for tim in tims
                           if tim.band == band])
-        version_hdr.add_record(dict(name='CAMS_%s' % band.upper(),
-                                    value=' '.join(cams),
-                                    comment='Cameras contributing band %s' % band))
-        
+        version_hdr.add_record(dict(
+            name='CAMS_%s' % band.upper(), value=' '.join(cams),
+            comment='Cameras contributing band %s' % band))
     version_hdr.add_record(dict(name='BRICKBND', value=''.join(bands),
                                 comment='Bands touching this brick'))
-
     version_header = version_hdr
 
     keys = ['version_header', 'targetrd', 'pixscale', 'targetwcs', 'W','H',
@@ -446,6 +435,11 @@ def stage_tims(W=3600, H=3600, pixscale=0.262, brickname=None,
 
 def stage_mask_junk(tims=None, targetwcs=None, W=None, H=None, bands=None,
                     mp=None, nsigma=None, plots=None, ps=None, **kwargs):
+    '''
+    This pipeline stage tries to detect artifacts in the individual
+    exposures, by running a detection step and removing blobs with
+    large axis ratio (long, thin objects, often satellite trails).
+    '''
     from scipy.ndimage.filters import gaussian_filter
     from scipy.ndimage.morphology import binary_fill_holes
     from scipy.ndimage.measurements import label, find_objects, center_of_mass
@@ -455,12 +449,12 @@ def stage_mask_junk(tims=None, targetwcs=None, W=None, H=None, bands=None,
         coimgs,cons = quick_coadds(tims, bands, targetwcs, fill_holes=False)
         plt.clf()
         dimshow(get_rgb(coimgs, bands))
-        plt.title('Before')
+        plt.title('Before mask_junk')
         ps.savefig()
 
     allss = []
     for tim in tims:
-        # detection map
+        # Create a detection map for this image and detect blobs
         det = tim.data * (tim.inverr > 0)
         det = gaussian_filter(det, tim.psf_sigma) / tim.psfnorm**2
         detsig1 = tim.sig1 / tim.psfnorm
@@ -473,6 +467,7 @@ def stage_mask_junk(tims=None, targetwcs=None, W=None, H=None, bands=None,
             zeroed = np.zeros(tim.shape, bool)
 
         for i,slc in enumerate(timslices):
+            # Compute moments for each blob
             inblob = timblobs[slc]
             inblob = (inblob == (i+1))
             cy,cx = center_of_mass(inblob)
@@ -493,6 +488,7 @@ def stage_mask_junk(tims=None, targetwcs=None, W=None, H=None, bands=None,
             ss = np.sqrt(s)
             major = 4. * ss[0]
             minor = 4. * ss[1]
+            # Remove only long, thin objects.
             if not (major > 200 and minor/major < 0.1):
                 continue
             # Zero it out!
@@ -528,7 +524,7 @@ def stage_mask_junk(tims=None, targetwcs=None, W=None, H=None, bands=None,
         coimgs,cons = quick_coadds(tims, bands, targetwcs, fill_holes=False)
         plt.clf()
         dimshow(get_rgb(coimgs, bands))
-        plt.title('After')
+        plt.title('After mask_junk')
         ps.savefig()
 
         allss = np.array(allss)
@@ -556,7 +552,8 @@ def stage_mask_junk(tims=None, targetwcs=None, W=None, H=None, bands=None,
 def stage_image_coadds(survey=None, targetwcs=None, bands=None, tims=None,
                        brickname=None, version_header=None,
                        plots=False, ps=None, coadd_bw=False, W=None, H=None,
-                       brick=None, blobs=None, lanczos=True, ccds=None, mp=None,
+                       brick=None, blobs=None, lanczos=True, ccds=None,
+                       mp=None,
                        **kwargs):
     '''
     Immediately after reading the images, we
@@ -570,7 +567,6 @@ def stage_image_coadds(survey=None, targetwcs=None, bands=None, tims=None,
         from legacypipe.survey import tim_get_resamp
 
         for band in bands:
-
             # Plot sky-subtracted traces (projections)
             plt.clf()
 
@@ -588,13 +584,10 @@ def stage_image_coadds(survey=None, targetwcs=None, bands=None, tims=None,
                 if R is None:
                     continue
                 Yo,Xo,Yi,Xi = R
-
                 proj = np.zeros((H,W), np.float32)
                 haveproj = np.zeros((H,W), bool)
-
                 proj[Yo,Xo] = tim.data[Yi,Xi]
                 haveproj[Yo,Xo] = (tim.inverr[Yi,Xi] > 0)
-
                 xx,ylo,ymed,yhi = [],[],[],[]
                 for i in range(W):
                     I = np.flatnonzero(haveproj[:,i])

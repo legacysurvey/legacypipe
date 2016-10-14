@@ -82,7 +82,12 @@ class BrickDuck(object):
     '''A little duck-typing class when running on a custom RA,Dec center
     rather than a brick center.
     '''
-    pass
+    def __init__(self, ra, dec, brickname):
+        self.ra  = ra
+        self.dec = dec
+        self.brickname = brickname
+        self.brickid = -1
+
 
 def get_git_version(dir=None):
     '''
