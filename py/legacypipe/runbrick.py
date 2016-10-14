@@ -1577,26 +1577,21 @@ def _get_mod(X):
     return mod
 
 def stage_coadds(survey=None, bands=None, version_header=None, targetwcs=None,
+                 W=None,H=None,
                  tims=None, ps=None, brickname=None, ccds=None,
                  T=None, cat=None, pixscale=None, plots=False,
                  coadd_bw=False, brick=None, W=None, H=None, lanczos=True,
                  mp=None, on_bricks=None,
                  **kwargs):
     '''
-    After the `stage_fitblobs` fitting stage (and
-    `stage_fitblobs_finish` reformatting stage), we have all the
-    source model fits, and we can create coadds of the images, model,
-    and residuals.  We also perform aperture photometry in this stage.
+    After the `stage_fitblobs` fitting stage, we have all the source
+    model fits, and we can create coadds of the images, model, and
+    residuals.  We also perform aperture photometry in this stage.
     '''
     from legacypipe.survey import apertures_arcsec
     tlast = Time()
 
-    # Missing from some previously written pickles:
-    if pixscale is None:
-        pixscale = 0.262
-        assert(ccds is not None)
-        assert(brick is not None)
-        
+    # Write per-brick CCDs table
     primhdr = fitsio.FITSHDR()
     for r in version_header.records():
         primhdr.add_record(r)
@@ -1609,30 +1604,27 @@ def stage_coadds(survey=None, bands=None, version_header=None, targetwcs=None,
     tnow = Time()
     print('[serial coadds]:', tnow-tlast)
     tlast = tnow
+    # Render model images...
     mods = mp.map(_get_mod, [(tim, cat) for tim in tims])
+
     tnow = Time()
     print('[parallel coadds] Getting model images:', tnow-tlast)
     tlast = tnow
 
-    W = targetwcs.get_width()
-    H = targetwcs.get_height()
-
-    # Look up number of images overlapping each source's position.
+    # Compute source pixel positions
     assert(len(T) == len(cat))
-    rr = np.array([s.getPosition().ra  for s in cat])
-    dd = np.array([s.getPosition().dec for s in cat])
-    ok,ix,iy = targetwcs.radec2pixelxy(rr, dd)
-    T.oob = reduce(np.logical_or, [ix < 0.5, iy < 0.5, ix > W+0.5, iy > H+0.5])
-    ix = np.clip(np.round(ix - 1), 0, W-1).astype(int)
-    iy = np.clip(np.round(iy - 1), 0, H-1).astype(int)
-
-    # convert apertures to pixels
-    apertures = apertures_arcsec / pixscale
-
-    # Aperture photometry locations
     ra  = np.array([src.getPosition().ra  for src in cat])
     dec = np.array([src.getPosition().dec for src in cat])
     ok,xx,yy = targetwcs.radec2pixelxy(ra, dec)
+    
+    # Get integer brick pixel coords for each source, for referencing maps
+    T.oob = reduce(np.logical_or, [xx < 0.5, yy < 0.5, xx > W+0.5, yy > H+0.5])
+    ix = np.clip(np.round(xx - 1), 0, W-1).astype(int)
+    iy = np.clip(np.round(yy - 1), 0, H-1).astype(int)
+
+    # convert apertures to pixels
+    apertures = apertures_arcsec / pixscale
+    # Aperture photometry locations
     apxy = np.vstack((xx - 1., yy - 1.)).T
 
     nap = len(apertures)
@@ -1645,37 +1637,32 @@ def stage_coadds(survey=None, bands=None, version_header=None, targetwcs=None,
                     ngood=True, detmaps=True, psfsize=True, lanczos=lanczos,
                     apertures=apertures, apxy=apxy,
                     callback=write_coadd_images,
-                    callback_args=(survey, brickname, version_header, tims, targetwcs),
+                    callback_args=(survey, brickname, version_header, tims,
+                                   targetwcs),
                     plots=False, ps=ps, mp=mp)
     
-    #coadds of galaxy sims only, image only
+    # Coadds of galaxy sims only, image only
     if 'sims_image' in tims[0].__dict__:
-        sims_mods= [tim.sims_image for tim in tims]
-        T_sims_coadds = make_coadds(tims, bands, targetwcs, mods=sims_mods, xy=(ix,iy),
-                        ngood=True, detmaps=True, psfsize=True, lanczos=lanczos,
-                        apertures=apertures, apxy=apxy,
-                        callback=write_coadd_images,
-                        callback_args=(survey, brickname, version_header, tims, targetwcs),
-                        plots=False, ps=ps, mp=mp)
-        sims_coadd= T_sims_coadds.comods
+        sims_mods = [tim.sims_image for tim in tims]
+        T_sims_coadds = make_coadds(tims, bands, targetwcs, mods=sims_mods,
+                                    lanczos=lanczos, mp=mp)
+        sims_coadd = T_sims_coadds.comods
         del T_sims_coadds
         image_only_mods= [tim.data-tim.sims_image for tim in tims]
-        T_image_coadds = make_coadds(tims, bands, targetwcs, mods=image_only_mods, xy=(ix,iy),
-                        ngood=True, detmaps=True, psfsize=True, lanczos=lanczos,
-                        apertures=apertures, apxy=apxy,
-                        callback=write_coadd_images,
-                        callback_args=(survey, brickname, version_header, tims, targetwcs),
-                        plots=False, ps=ps, mp=mp)
+        T_image_coadds = make_coadds(tims, bands, targetwcs,
+                                     mods=image_only_mods,
+                                     lanczos=lanczos, mp=mp)
         image_coadd= T_image_coadds.comods
         del T_image_coadds
-    ######
+    ###
 
     for c in ['nobs', 'anymask', 'allmask', 'psfsize', 'depth', 'galdepth']:
         T.set(c, C.T.get(c))
-    #store galaxy sim bounding box in Tractor cat
+    # store galaxy sim bounding box in Tractor cat
     if 'sims_xy' in C.T.get_columns():
         T.set('sims_xy', C.T.get('sims_xy'))
 
+    # FIXME -- do we need to handle the case where there are 0 sources?
     if apertures is None:
         # empty table when 0 sources.
         C.AP = fits_table()
@@ -1696,6 +1683,7 @@ def stage_coadds(survey=None, bands=None, version_header=None, targetwcs=None,
                  ('resid', C.coresids, rgbkwargs_resid)]
     if 'sims_image' in tims[0].__dict__:
         coadd_list.append(('simscoadd', sims_coadd, rgbkwargs))
+
     for name,ims,rgbkw in coadd_list:
         rgb = get_rgb(ims, bands, **rgbkw)
         kwa = {}
@@ -1704,12 +1692,13 @@ def stage_coadds(survey=None, bands=None, version_header=None, targetwcs=None,
             kwa = dict(cmap='gray')
 
         if on_bricks and name == 'image':
-            # Do not overwrite the image.jpg file if it exists (eg, written during
-            # image_coadds stage), because in the later stage_srcs, we subtract the
-            # overlapping sources from other bricks, modifying the images.
+            # Do not overwrite the image.jpg file if it exists (eg,
+            # written during image_coadds stage), because in the later
+            # stage_srcs, we subtract the overlapping sources from
+            # other bricks, modifying the images.
             fn = survey.find_file(name + '-jpeg', brick=brickname, output=True)
             if os.path.exists(fn):
-                print('Not overwriting existing image %s because on_bricks is set' % fn)
+                print('Not overwriting existing image %s: on_bricks' % fn)
                 continue
 
         with survey.write_output(name + '-jpeg', brick=brickname) as out:
@@ -1776,10 +1765,8 @@ def stage_coadds(survey=None, bands=None, version_header=None, targetwcs=None,
                 xx = xx[3:]
                 yy = yy[3:]
                 plt.plot(xx, yy, '-', color=c)
-
         plt.axis(ax)
         ps.savefig()
-
 
     tnow = Time()
     print('[serial coadds] Aperture photometry, wrap-up', tnow-tlast)
@@ -1868,6 +1855,7 @@ def stage_wise_forced(
         src.setBrightness(NanoMaggies(w=1.))
         wcat.append(src)
 
+    # Create list of groups-of-tiles to photometer
     args = []
     for band in [1,2]:
         args.append((wcat, tiles, band, roiradec, unwise_w12_dir, use_ceres))
@@ -1885,6 +1873,7 @@ def stage_wise_forced(
     # this ought to be enough for anyone =)
     Nepochs = 5
 
+    # Add time-resolved coadds
     eargs = []
     for band in [1,2]:
         # W1 is bit 0 (value 0x1), W2 is bit 1 (value 0x2)
@@ -1897,9 +1886,12 @@ def stage_wise_forced(
                 continue
             print('Epoch %i: %i tiles:' % (e, len(I)), W.coadd_id[I])
             edir = os.path.join(tdir, 'e%03i' % e)
-            eargs.append((e, (wcat, tiles[I], band, roiradec, edir, use_ceres)))
+            eargs.append((e,(wcat, tiles[I], band, roiradec, edir, use_ceres)))
 
+    # Run the forced photometry!
     phots = mp.map(_unwise_phot, args + [a for e,a in eargs])
+
+    # Unpack results...
     WISE = phots[0]
     if WISE is not None:
         for i,p in enumerate(phots[1:len(args)]):
@@ -1910,6 +1902,7 @@ def stage_wise_forced(
             WISE.add_columns_from(p)
         WISE.rename('tile', 'unwise_tile')
 
+    # Unpack time-resolved results...
     WISE_T = phots[len(args)]
     if WISE_T is not None:
         WT = fits_table()
@@ -1933,9 +1926,7 @@ def stage_wise_forced(
 
 def _unwise_phot(X):
     from wise.forcedphot import unwise_forcedphot
-
     (wcat, tiles, band, roiradec, unwise_dir, use_ceres) = X
-
     try:
         W = unwise_forcedphot(wcat, tiles, roiradecbox=roiradec, bands=[band],
                               unwise_dir=unwise_dir, use_ceres=use_ceres)
@@ -1952,10 +1943,6 @@ def _unwise_phot(X):
         W = None
     return W
 
-
-'''
-Write catalog output
-'''
 def stage_writecat(
     survey=None,
     version_header=None,
@@ -1981,7 +1968,6 @@ def stage_writecat(
     from catalog import prepare_fits_catalog
     from tractor.sfd import SFDMap
      
-    fs = None
     TT = T.copy()
     for k in ['itx','ity','index']:
         if k in TT.get_columns():
@@ -1989,7 +1975,7 @@ def stage_writecat(
     TT.tx = TT.tx.astype(np.float32)
     TT.ty = TT.ty.astype(np.float32)
 
-    # Set fields such as TT.decam_rchi2, etc -- fields with 6-band values
+    # Set fields such as TT.decam_rchi2 -- fields with 6-band values
     B = np.array([allbands.index(band) for band in bands])
     atypes = dict(nobs=np.uint8, anymask=TT.anymask.dtype,
                   allmask=TT.allmask.dtype)
@@ -2020,6 +2006,7 @@ def stage_writecat(
 
     cat.thawAllRecursive()
     hdr = None
+    fs = None
     T2,hdr = prepare_fits_catalog(cat, invvars, TT, hdr, bands, fs,
                                   allbands=allbands)
 
@@ -2030,10 +2017,8 @@ def stage_writecat(
     primhdr = fitsio.FITSHDR()
     for r in version_header.records():
         primhdr.add_record(r)
-
     primhdr.add_record(dict(name='ALLBANDS', value=allbands,
                             comment='Band order in array values'))
-
     primhdr.add_record(dict(name='PRODTYPE', value='catalog',
                             comment='NOAO data product type'))
 
@@ -2042,6 +2027,7 @@ def stage_writecat(
             primhdr.add_record(dict(name='APRAD%i' % i, value=ap,
                                     comment='Aperture radius, in arcsec'))
 
+    # Record the meaning of mask bits
     bits = CP_DQ_BITS.values()
     bits.sort()
     bitmap = dict((v,k) for k,v in CP_DQ_BITS.items())
@@ -2139,23 +2125,22 @@ def stage_writecat(
             T2.wise_lc_mjd = np.hstack(
                 (WISE_T.w1_mjd[:,np.newaxis,:],
                  WISE_T.w2_mjd[:,np.newaxis,:]))
-            
             print('WISE light-curve shapes:', WISE_T.w1_nanomaggies.shape)
-            
             
     print('Reading SFD maps...')
     sfd = SFDMap()
     filts = ['%s %s' % ('DES', f) for f in allbands]
     wisebands = ['WISE W1', 'WISE W2', 'WISE W3', 'WISE W4']
     ebv,ext = sfd.extinction(filts + wisebands, T2.ra, T2.dec, get_ebv=True)
-    ext = ext.astype(np.float32)
-    decam_extinction = ext[:,:len(allbands)]
-    wise_extinction = ext[:,len(allbands):]
     T2.ebv = ebv.astype(np.float32)
-    T2.decam_mw_transmission = 10.**(-decam_extinction / 2.5)
+    ext = ext.astype(np.float32)
+    decam_ext = ext[:,:len(allbands)]
+    T2.decam_mw_transmission = 10.**(-decam_ext / 2.5)
     if WISE is not None:
-        T2.wise_mw_transmission  = 10.**(-wise_extinction  / 2.5)
+        wise_ext  = ext[:,len(allbands):]
+        T2.wise_mw_transmission  = 10.**(-wise_ext / 2.5)
 
+    # Column ordering...
     cols = [
         'brickid', 'brickname', 'objid', 'brick_primary', 'blob', 'ninblob',
         'tycho2inblob', 'type', 'ra', 'ra_ivar', 'dec', 'dec_ivar',
@@ -2178,13 +2163,13 @@ def stage_writecat(
     if WISE is not None:
         cols.extend([
             'wise_flux', 'wise_flux_ivar',
-            'wise_mw_transmission', 'wise_nobs', 'wise_fracflux', 'wise_rchi2'])
+            'wise_mw_transmission', 'wise_nobs', 'wise_fracflux','wise_rchi2'])
 
     if WISE_T is not None:
         cols.extend([
             'wise_lc_flux', 'wise_lc_flux_ivar',
-            'wise_lc_nobs', 'wise_lc_fracflux', 'wise_lc_rchi2', 'wise_lc_mjd'])
-        
+            'wise_lc_nobs', 'wise_lc_fracflux', 'wise_lc_rchi2','wise_lc_mjd'])
+
     cols.extend([
         'fracdev', 'fracDev_ivar', 'shapeexp_r', 'shapeexp_r_ivar',
         'shapeexp_e1', 'shapeexp_e1_ivar',
@@ -2231,13 +2216,13 @@ def stage_writecat(
     print('Checksums:', cmd)
     os.system(cmd)
 
-    #write fits file with galaxy-sim stuff (xy bounds of each sim)
+    # write fits file with galaxy-sim stuff (xy bounds of each sim)
     if 'sims_xy' in T.get_columns(): 
-        sims_data=fits_table()
-        sims_data.set('sims_xy',T.get('sims_xy'))
-        sims_fn = survey.find_file('galaxy-sims', output=True, brick=brickname)
-        sims_data.writeto(sims_fn)
-        print('Wrote',sims_fn)
+        sims_data = fits_table()
+        sims_data.sims_xy = T.sims_xy
+        with survey.write_output('galaxy-sims', brick=brickname) as out:
+            sims_data.writeto(out.fn)
+            print('Wrote', out.fn)
 
     return dict(T2=T2)
 
@@ -2613,9 +2598,11 @@ python -u legacypipe/runbrick.py --plots --brick 2440p070 --zoom 1900 2400 450 9
     parser.add_argument('--pixscale', type=float, default=0.262,
                         help='Pixel scale of the output coadds (arcsec/pixel)')
 
-    parser.add_argument('-d', '--outdir', help='Set output base directory, default "."')
-    parser.add_argument('--survey-dir', type=str, default=None,
-                        help='Override the $LEGACY_SURVEY_DIR environment variable')
+    parser.add_argument('-d', '--outdir',
+                        help='Set output base directory, default "."')
+    parser.add_argument(
+        '--survey-dir', type=str, default=None,
+        help='Override the $LEGACY_SURVEY_DIR environment variable')
 
     parser.add_argument('--threads', type=int, help='Run multi-threaded')
     parser.add_argument('-p', '--plots', dest='plots', action='store_true',
@@ -2820,7 +2807,8 @@ def main(args=None):
 
     parser = get_parser()
 
-    parser.add_argument('--ps', help='Run "ps" and write results to given filename?')
+    parser.add_argument(
+        '--ps', help='Run "ps" and write results to given filename?')
 
     opt = parser.parse_args(args=args)
 
@@ -2897,26 +2885,11 @@ def main(args=None):
         return -1
     return 0
 
-def trace(frame, event, arg):
-    print("%s, %s:%d" % (event, frame.f_code.co_filename, frame.f_lineno))
-    return trace
-
 if __name__ == '__main__':
-    #sys.settrace(trace)
     sys.exit(main())
-
 
 # Test bricks & areas
 
 # A single, fairly bright star
 # python -u legacypipe/runbrick.py -b 1498p017 -P 'pickles/runbrick-z-%(brick)s-%%(stage)s.pickle' --zoom 1900 2000 2700 2800
-
 # python -u legacypipe/runbrick.py -b 0001p000 -P 'pickles/runbrick-z-%(brick)s-%%(stage)s.pickle' --zoom 80 380 2970 3270
-
-# 80, 380, 2970, 3270
-
-    # not (380, 480, 0, 100)
-# decmin 0.0851497
-# decmax 0.106983
-# ramin 0.228344
-# ramax 0.250178
