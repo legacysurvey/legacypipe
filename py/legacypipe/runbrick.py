@@ -74,7 +74,6 @@ def stage_tims(W=3600, H=3600, pixscale=0.262, brickname=None,
                constant_invvar=False,
                use_blacklist = True,
                mp=None,
-               rsync=False,
                **kwargs):
     '''
     This is the first stage in the pipeline.  It
@@ -229,43 +228,6 @@ def stage_tims(W=3600, H=3600, pixscale=0.262, brickname=None,
     tnow = Time()
     print('[serial tims] Finding images touching brick:', tnow-tlast)
     tlast = tnow
-
-    if rsync:
-        # Check for existence of calibration files & rsync missing ones.
-        reqd = []
-        for im in ims:
-            if not gaussPsf:
-                reqd.append(im.psffn)
-            if splinesky:
-                reqd.append(im.splineskyfn)
-            else:
-                reqd.append(im.skyfn)
-            reqd.append(im.pvwcsfn)
-        # Just request missing files?
-        reqd = [fn for fn in reqd if not os.path.exists(fn)]
-        print('Required calib files:', reqd)
-        print('Calib dir:', survey.get_calib_dir())
-        caldir = survey.get_calib_dir() + '/'
-
-        if len(reqd):
-            reqd = [fn.replace(caldir, '') for fn in reqd]
-            cmd = 'rsync -LRrv edison:/scratch1/scratchdirs/desiproc/decals-dir/calib/./"{%s}" %s' % (','.join(reqd), caldir)
-            print(cmd)
-            os.system(cmd)
-
-        # Also grab image files
-        reqd = []
-        for im in ims:
-            reqd.extend([im.imgfn, im.dqfn, im.wtfn])
-        reqd = [fn for fn in reqd if not os.path.exists(fn)]
-        print('Required image files:', reqd)
-        imgdir = survey.get_image_dir() + '/'
-
-        if len(reqd):
-            reqd = [fn.replace(imgdir, '') for fn in reqd]
-            cmd = 'rsync -LRrv edison:/scratch1/scratchdirs/desiproc/images/./"{%s}" %s' % (','.join(reqd), imgdir)
-            print(cmd)
-            os.system(cmd)
 
     if do_calibs:
         from legacypipe.survey import run_calibs
@@ -2209,7 +2171,6 @@ def stage_wise_forced(
     brick=None,
     use_ceres=True,
     mp=None,
-    rsync=False,
     **kwargs):
     '''
     After the model fits are finished, we can perform forced
@@ -2240,39 +2201,6 @@ def stage_wise_forced(
         src.setBrightness(NanoMaggies(w=1.))
         wcat.append(src)
 
-    if rsync:
-        reqd = []
-        basedirs12 = unwise_w12_dir.split(':')
-        basedirs34 = unwise_w34_dir.split(':')
-        for tile in tiles.coadd_id:
-            for (band,basedirs) in [(1,basedirs12), (2,basedirs12), (3,basedirs34),(4,basedirs34)]:
-                for tag in ['img-m', 'invvar-m', 'n-m', 'n-u']:
-                    fnpart = os.path.join(tile[:3], tile,
-                                          'unwise-%s-w%i-%s.fits' % (tile, band, tag))
-                    found = False
-                    for basedir in basedirs:
-                        fn = os.path.join(basedir, fnpart)
-                        if os.path.exists(fn) or os.path.exists(fn + '.gz'):
-                            found = True
-                            break
-                    if not found:
-                        reqd.append(fnpart)
-        # HACK ... hard-coded paths
-        reqd12 = [fn for fn in reqd if 'w1' in fn or 'w2' in fn]
-        if len(reqd12):
-            cmd = ('rsync -LRrv edison:/scratch1/scratchdirs/ameisner/unwise-coadds/fulldepth_zp/./"{%s}*" %s'
-                   % (','.join(reqd12), '/global/cscratch1/sd/desiproc/unwise-coadds-fulldepth-zp'))
-            print(cmd)
-            os.system(cmd)
-            #
-        reqd34 = [fn for fn in reqd if 'w3' in fn or 'w4' in fn]
-        if len(reqd34):
-            cmd = ('rsync -LRrv edison:/scratch1/scratchdirs/desiproc/unwise-coadds/./"{%s}*" %s'
-                   % (','.join(reqd34), '/global/cscratch1/sd/desiproc/unwise-coadds'))
-            print(cmd)
-            os.system(cmd)
-
-            
     args = []
     for band in [1,2]:
         args.append((wcat, tiles, band, roiradec, unwise_w12_dir, use_ceres))
@@ -2672,7 +2600,6 @@ def run_brick(brick, survey, radec=None, pixscale=0.262,
               threads=None,
               plots=False, plots2=False, coadd_bw=False,
               plotbase=None, plotnumber=0,
-              rsync=False,
               picklePattern='pickles/runbrick-%(brick)s-%%(stage)s.pickle',
               stages=['writecat'],
               force=[], forceAll=False, writePickles=True,
@@ -2867,7 +2794,6 @@ def run_brick(brick, survey, radec=None, pixscale=0.262,
                   allow_missing_brickq=allow_missing_brickq,
                   unwise_dir=unwise_dir,
                   plots=plots, plots2=plots2, coadd_bw=coadd_bw,
-                  rsync=rsync,
                   force=forceStages, write=writePickles)
 
     if checkpoint_filename is not None:
@@ -3124,11 +3050,6 @@ python -u legacypipe/runbrick.py --plots --brick 2440p070 --zoom 1900 2400 450 9
         help='Do not blacklist some proposals?')
 
     parser.add_argument(
-        '--rsync', default=False, action='store_true',
-        help=('Rather than running calibrations, rsync from NERSC.  Also '+
-              'rsync missing image file inputs'))
-
-    parser.add_argument(
         '--on-bricks', default=False, action='store_true',
         help='Enable Tractor-on-bricks edge handling?')
 
@@ -3221,7 +3142,6 @@ def get_runbrick_kwargs(opt):
         force=opt.force, forceAll=opt.forceall,
         stages=opt.stage, writePickles=writeStages,
         picklePattern=opt.picklepat,
-        rsync=opt.rsync,
         checkpoint_filename=opt.checkpoint,
         checkpoint_period=opt.checkpoint_period,
         fitblobs_prereq_filename=opt.fitblobs_prereq,
