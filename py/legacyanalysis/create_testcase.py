@@ -175,10 +175,12 @@ def main():
 
     # WISE
     if args.wise is not None:
+        from wise.forcedphot import unwise_tiles_touching_wcs
+        from wise.unwise import (unwise_tile_wcs, unwise_tiles_touching_wcs,
+                                 get_unwise_tractor_image, get_unwise_tile_dir)
         # Read WCS...
         print('Reading TAN wcs header from', args.wise)
         targetwcs = Tan(args.wise)
-        from wise.forcedphot import unwise_tiles_touching_wcs
         tiles = unwise_tiles_touching_wcs(targetwcs)
         print('Cut to', len(tiles), 'unWISE tiles')
         H,W = targetwcs.shape
@@ -186,15 +188,50 @@ def main():
                                       np.array([H/2, H/2, 1,   H  ]))
         roiradec = [r[0], r[1], d[2], d[3]]
         unwise_dir = os.environ['UNWISE_COADDS_DIR']
+
+        wise_out = os.path.join(args.outdir, 'images', 'unwise')
+        print('Will write WISE outputs to', wise_out)
+
         for tile in tiles:
             for band in [1,2,3,4]:
                 wanyband = 'w'
                 tim = get_unwise_tractor_image(unwise_dir, tile.coadd_id, band,
-                                               bandname=wanyband, roiradecbox=roiradecbox)
+                                               bandname=wanyband, roiradecbox=roiradec)
                 print('Got unWISE tim', tim)
                 print(tim.shape)
+                
+                thisdir = get_unwise_tile_dir(wise_out, tile.coadd_id)
+                print('Directory for this WISE tile:', thisdir)
+                base = os.path.join(thisdir, 'unwise-%s-w%i-' % (tile.coadd_id, band))
+                print('Base filename:', base)
+                
+                masked = True
+                mu = 'm' if masked else 'u'
 
+                imfn = base + 'img-%s.fits'       % mu
+                ivfn = base + 'invvar-%s.fits.gz' % mu
+                nifn = base + 'n-%s.fits.gz'      % mu
+                nufn = base + 'n-u.fits.gz'
 
+                print('WISE image header:', tim.hdr)
+
+                # Adjust the header WCS by x0,y0
+                wcs = tim.wcs.wcs
+                tim.hdr['CRPIX1'] = wcs.crpix[0]
+                tim.hdr['CRPIX2'] = wcs.crpix[1]
+
+                print('WCS:', wcs)
+                print('Header CRPIX', tim.hdr['CRPIX1'], tim.hdr['CRPIX2'])
+
+                trymakedirs(imfn, dir=True)
+                fitsio.write(imfn, tim.getImage(), header=tim.hdr, clobber=True)
+                print('Wrote', imfn)
+                fitsio.write(ivfn, tim.getInvvar(), header=tim.hdr, clobber=True)
+                print('Wrote', ivfn)
+                fitsio.write(nifn, tim.nims, header=tim.hdr, clobber=True)
+                print('Wrote', nifn)
+                fitsio.write(nufn, tim.nuims, header=tim.hdr, clobber=True)
+                print('Wrote', nufn)
     
     outC = outsurvey.get_ccds_readonly()
     for iccd,ccd in enumerate(outC):
