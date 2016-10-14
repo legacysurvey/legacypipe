@@ -674,8 +674,8 @@ def stage_srcs(coimgs=None, cons=None,
     detmaps, detivs, satmap = detection_maps(tims, targetwcs, bands, mp)
     tnow = Time()
     print('[parallel srcs] Detmaps:', tnow-tlast)
-
     tlast = tnow
+
     # Median-smooth detection maps
     binning = 4
     smoos = mp.map(_median_smooth_detmap,
@@ -706,18 +706,15 @@ def stage_srcs(coimgs=None, cons=None,
     print('Cut to', len(tycho), 'Tycho-2 stars within brick')
     del ok
 
-    Tsat = fits_table()
-    # Add sources for Tycho-2 stars
+    # Create "Tsat", list of saturated sources -- from Tycho-2
     if len(tycho):
-        Tsat.tx = tycho.tx
-        Tsat.ty = tycho.ty
-        Tsat.mag = tycho.mag
+        Tsat = tycho
+    else:
+        Tsat = fits_table()
     
     # Saturated blobs -- create a source for each, except for those
     # that already have a Tycho-2 star
     satblobs,nsat = label(satmap > 0)
-    print('Satblobs:', satblobs.shape, satblobs.dtype)
-    print('nsat', nsat, 'max', satblobs.max(), 'vals', np.unique(satblobs))
     if len(Tsat):
         # Build a map from old "satblobs" to new; identity to start
         remap = np.arange(nsat+1)
@@ -731,18 +728,14 @@ def stage_srcs(coimgs=None, cons=None,
         nsat = len(I)
         remap[I] = 1 + np.arange(nsat)
         satblobs = remap[satblobs]
-        print('Remapped satblobs:', satblobs.shape, satblobs.dtype)
-        print('nsat', nsat, 'max', satblobs.max(), 'vals', np.unique(satblobs))
         del remap, itx, ity, zeroout, I
 
     # Add sources for any remaining saturated blobs
     satyx = center_of_mass(satmap, labels=satblobs, index=np.arange(nsat)+1)
-    # NOTE, satyx is in y,x order (center_of_mass)
-    satx = np.array([x for y,x in satyx]).astype(int)
-    saty = np.array([y for y,x in satyx]).astype(int)
-    del satyx
-
-    if len(satx):
+    if len(satyx):
+        # NOTE, satyx is in y,x order (center_of_mass)
+        satx = np.array([x for y,x in satyx]).astype(int)
+        saty = np.array([y for y,x in satyx]).astype(int)
         print('Adding', len(satx), 'additional saturated stars')
         Tsat2 = fits_table()
         Tsat2.tx = satx
@@ -751,16 +744,17 @@ def stage_srcs(coimgs=None, cons=None,
         Tsat2.mag = np.zeros(len(satx)) + 15.
         Tsat = merge_tables([Tsat, Tsat2], columns='fillzero')
         del Tsat2
-    del satx,saty
+        del satx,saty
+    del satyx
         
+    satcat = []
     if len(Tsat):
         Tsat.ra,Tsat.dec = targetwcs.pixelxy2radec(Tsat.tx+1, Tsat.ty+1)
         Tsat.itx = np.clip(np.round(Tsat.tx), 0, W-1).astype(int)
         Tsat.ity = np.clip(np.round(Tsat.ty), 0, H-1).astype(int)
         avoid_x.extend(Tsat.itx)
         avoid_y.extend(Tsat.ity)
-
-        satcat = []
+        # Create catalog entries...
         for r,d,m in zip(Tsat.ra, Tsat.dec, Tsat.mag):
             fluxes = dict([(band, NanoMaggies.magToNanomaggies(m))
                            for band in bands])
@@ -780,7 +774,6 @@ def stage_srcs(coimgs=None, cons=None,
         plt.title('detmaps')
         ps.savefig()
 
-        print('rgb', rgb.dtype)
         rgb[:,:,0][saturated_pix] = 0
         rgb[:,:,1][saturated_pix] = 1
         rgb[:,:,2][saturated_pix] = 0
@@ -803,21 +796,13 @@ def stage_srcs(coimgs=None, cons=None,
         raise NothingToDoError('No sources detected.')
     Tnew.delete_column('peaksn')
     Tnew.delete_column('apsn')
-
-    TT = []
-    cats = []
-    if len(Tsat):
-        TT.append(Tsat)
-        cats.extend(satcat)
-    TT.append(Tnew)
-    cats.extend(newcat)
-
-    T = merge_tables(TT, columns='fillzero')
-    cat = Catalog(*cats)
-    del TT
-    del cats
     del detmaps
     del detivs
+
+    # Merge newly detected sources with existing saturated source list
+    T = merge_tables([Tsat, Tnew], columns='fillzero')
+    cat = Catalog(satcat + newcat)
+    cat.freezeAllParams()
 
     tnow = Time()
     print('[serial srcs] Peaks:', tnow-tlast)
@@ -848,15 +833,6 @@ def stage_srcs(coimgs=None, cons=None,
     blobs,blobsrcs,blobslices = segment_and_group_sources(
         hot, T, name=brickname, ps=ps, plots=plots)
     del hot
-
-    for i,Isrcs in enumerate(blobsrcs):
-        if not (Isrcs.dtype in [int, np.int64]):
-            print('Isrcs dtype', Isrcs.dtype)
-            print('i:', i)
-            print('Isrcs:', Isrcs)
-            print('blobslice:', blobslices[i])
-
-    cat.freezeAllParams()
 
     tnow = Time()
     print('[serial srcs] Blobs:', tnow-tlast)
