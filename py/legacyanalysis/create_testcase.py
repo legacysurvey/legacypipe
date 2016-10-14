@@ -21,14 +21,14 @@ def main():
     parser.add_argument('ccds', help='CCDs table describing region to grab')
     parser.add_argument('outdir', help='Output directory name')
     parser.add_argument('brick', help='Brick containing these images')
+
+    parser.add_argument('--wise', help='For WISE outputs, give the path to a WCS file describing the sub-brick region of interest, eg, a coadd image')
     
     args = parser.parse_args()
 
     C = fits_table(args.ccds)
     print(len(C), 'CCDs in', args.ccds)
-
     C.camera = np.array([c.strip() for c in C.camera])
-
     
     survey = LegacySurveyData()
     bricks = survey.get_bricks_readonly()
@@ -173,6 +173,29 @@ def main():
 
     outccds.writeto(os.path.join(args.outdir, 'survey-ccds-1.fits.gz'))
 
+    # WISE
+    if args.wise is not None:
+        # Read WCS...
+        print('Reading TAN wcs header from', args.wise)
+        targetwcs = Tan(args.wise)
+        from wise.forcedphot import unwise_tiles_touching_wcs
+        tiles = unwise_tiles_touching_wcs(targetwcs)
+        print('Cut to', len(tiles), 'unWISE tiles')
+        H,W = targetwcs.shape
+        r,d = targetwcs.pixelxy2radec(np.array([1,   W,   W/2, W/2]),
+                                      np.array([H/2, H/2, 1,   H  ]))
+        roiradec = [r[0], r[1], d[2], d[3]]
+        unwise_dir = os.environ['UNWISE_COADDS_DIR']
+        for tile in tiles:
+            for band in [1,2,3,4]:
+                wanyband = 'w'
+                tim = get_unwise_tractor_image(unwise_dir, tile.coadd_id, band,
+                                               bandname=wanyband, roiradecbox=roiradecbox)
+                print('Got unWISE tim', tim)
+                print(tim.shape)
+
+
+    
     outC = outsurvey.get_ccds_readonly()
     for iccd,ccd in enumerate(outC):
         outim = outsurvey.get_image_object(ccd)
