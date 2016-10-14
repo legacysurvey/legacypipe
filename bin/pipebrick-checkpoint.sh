@@ -53,7 +53,6 @@ echo "--------------------------------------------------------------------------
 
 python legacypipe/runbrick.py \
      --no-write \
-     --pipe \
      --skip \
      --threads 6 \
      --skip-calibs \

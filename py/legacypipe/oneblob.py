@@ -14,7 +14,7 @@ from tractor.galaxy import DevGalaxy, ExpGalaxy, FixedCompositeGalaxy, SoftenedF
 
 from legacypipe.survey import (SimpleGalaxy, LegacyEllipseWithPriors, 
                                get_rgb)
-from legacypipe.runbrick import tims_compute_resamp, rgbkwargs_resid
+from legacypipe.runbrick import rgbkwargs_resid
 from legacypipe.coadds import quick_coadds
 from legacypipe.runbrick_plots import _plot_mods
 
@@ -138,7 +138,6 @@ class OneBlob(object):
 
         tlast = Time()
         if self.plots:
-            tims_compute_resamp(None, self.tims, self.blobwcs)
             self._initial_plots()
 
         if self.deblend:
@@ -452,7 +451,6 @@ class OneBlob(object):
             if self.plots1:
                 # This is a handy blob-coordinates plot of the data
                 # going into the fit.
-                tims_compute_resamp(None, srctims, self.blobwcs)
                 plt.clf()
                 coimgs,cons = quick_coadds(srctims, self.bands, self.blobwcs,
                                              fill_holes=False)
@@ -462,7 +460,6 @@ class OneBlob(object):
             if self.bigblob and self.plots:
                 # This is a local source-WCS plot of the data going into the
                 # fit.
-                tims_compute_resamp(None, srctims, srcwcs, force=True)
                 plt.clf()
                 coimgs,cons = quick_coadds(srctims, self.bands, srcwcs,
                                            fill_holes=False)
@@ -473,8 +470,8 @@ class OneBlob(object):
                     del tim.resamp
                 if self.plots1:
                     srch,srcw = srcwcs.shape
-                    tims_compute_resamp(None, srctims, srcwcs, force=True)
                     _plot_mods(srctims, [list(srctractor.getModelImages())],
+                               self.blobwcs,
                                ['Model selection init'], self.bands, None,None,
                                None, srcw,srch, self.ps, chi_plots=False)
 
@@ -504,7 +501,6 @@ class OneBlob(object):
                 debtractor = self.tractor(debtims, srctractor.catalog)
 
             if self.bigblob and self.plots and self.deblend:
-                tims_compute_resamp(None, debtims, srcwcs, force=True)
                 plt.clf()
                 coimgs,cons = quick_coadds(debtims, self.bands, srcwcs,
                                            fill_holes=False)
@@ -707,7 +703,6 @@ class OneBlob(object):
                     if self.plots1:
                         plt.clf()
                         modimgs = list(modtractor.getModelImages())
-                        tims_compute_resamp(None, modtims, srcwcs, force=True)
                         comods,nil = quick_coadds(modtims, self.bands, srcwcs,
                                                     images=modimgs)
                         dimshow(get_rgb(comods, self.bands))
@@ -1025,8 +1020,6 @@ class OneBlob(object):
             #     spallnames.append('Fit (all)')
             # 
             # if plots and False:
-            #     tims_compute_resamp(None, srctractor.getImages(), brickwcs)
-            #     tims_compute_resamp(None, tims, brickwcs)
             #     plt.figure(1, figsize=(8,6))
             #     plt.subplots_adjust(left=0.01, right=0.99, top=0.95,
             #                         bottom=0.01, hspace=0.1, wspace=0.05)
@@ -1093,7 +1086,7 @@ class OneBlob(object):
         plotmodnames = []
         plotmods.append(list(tr.getModelImages()))
         plotmodnames.append(title)
-        _plot_mods(self.tims, plotmods, plotmodnames, self.bands, None, None, None,
+        _plot_mods(self.tims, plotmods, self.blobwcs, plotmodnames, self.bands, None, None, None,
                    self.blobw, self.blobh, self.ps, chi_plots=False)
         
     def _initial_plots(self):
