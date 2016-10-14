@@ -670,56 +670,6 @@ def stage_srcs(coimgs=None, cons=None,
         if avoid is not None;
             avoid_x,avoid_y = avoid
 
-    if plots and False:
-        for tim in tims:
-            ivx = tim.imobj.read_invvar(clip=False, slice=tim.slice)
-            plt.clf()
-            plt.subplot(2,2,1)
-            dimshow(tim.getInvvar(), vmin=-0.1 / tim.sig1**2,
-                    vmax=2. / tim.sig1**2, ticks=False)
-            plt.title('Tim invvar')
-            plt.subplot(2,2,2)
-            dimshow(tim.getInvvar() == 0, vmin=0, vmax=1, ticks=False)
-            plt.title('Tim invvar == 0')
-            plt.subplot(2,2,3)
-            dimshow(ivx * tim.zpscale**2, vmin=-0.1 / tim.sig1**2,
-                    vmax=2. / tim.sig1**2, ticks=False)
-            plt.title('Orig invvar')
-            plt.subplot(2,2,4)
-            dimshow(np.logical_or(ivx == 0, tim.dq != 0),
-                    vmin=0, vmax=1, ticks=False)
-            plt.title('Orig invvar == 0 or DQ')
-            #dimshow(tim.dq != 0, vmin=0, vmax=1, ticks=False)
-            #plt.title('DQ')
-            plt.suptitle('Tim ' + tim.name)
-            ps.savefig()
-
-    if plots:
-        for tim in tims:
-            plt.clf()
-            plt.subplot(2,2,1)
-            dimshow(tim.getInvvar(), vmin=-0.1 / tim.sig1**2,
-                    vmax=2. / tim.sig1**2, ticks=False)
-            h,w = tim.shape
-            rgba = np.zeros((h,w,4), np.uint8)
-            rgba[:,:,0][tim.inverr == 0] = 255
-            rgba[:,:,3][tim.inverr == 0] = 255
-            dimshow(rgba)
-            plt.title('Tim invvar')
-            plt.subplot(2,2,2)
-            mx = tim.getImage().max()
-            ima = dict(vmin=-2.*tim.sig1, vmax=mx,
-                       ticks=False)
-            dimshow(tim.getImage(), **ima)
-            plt.title('Tim image')
-            if tim.dq is not None:
-                plt.subplot(2,2,3)
-                dimshow((tim.dq & tim.dq_saturation_bits > 0), vmin=0, vmax=1,
-                        ticks=False)
-                plt.title('SATUR')
-            plt.suptitle('Tim ' + tim.name)
-            ps.savefig()
-
     print('Rendering detection maps...')
     detmaps, detivs, satmap = detection_maps(tims, targetwcs, bands, mp)
     tnow = Time()
