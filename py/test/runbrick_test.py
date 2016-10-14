@@ -18,6 +18,7 @@ if __name__ == '__main__':
     outdir = 'out-testcase4'
     main(args=['--brick', '1867p255', '--zoom', '2050', '2300', '1150', '1400',
                '--no-wise', '--force-all', '--no-write', '--coadd-bw',
+               '--blob-image',
                '--survey-dir', surveydir,
                '--outdir', outdir])
     fn = os.path.join(surveydir, 'calib', 'decam', 'splinesky', '00431',
