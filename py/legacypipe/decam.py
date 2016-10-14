@@ -21,6 +21,9 @@ class DecamImage(CPImage, CalibMixin):
     Camera, DECam, on the Blanco telescope.
 
     '''
+    # this is defined here for testing purposes (to handle small images)
+    splinesky_boxsize = 512
+
     def __init__(self, survey, t):
         super(DecamImage, self).__init__(survey, t)
 
@@ -295,10 +298,12 @@ class DecamImage(CPImage, CalibMixin):
                 from tractor.splinesky import SplineSky
                 from scipy.ndimage.morphology import binary_dilation
 
+                boxsize = DecamImage.splinesky_boxsize
+                
                 # Start by subtracting the overall median
                 med = np.median(img[wt>0])
                 # Compute initial model...
-                skyobj = SplineSky.BlantonMethod(img - med, wt>0, 512)
+                skyobj = SplineSky.BlantonMethod(img - med, wt>0, boxsize)
                 skymod = np.zeros_like(img)
                 skyobj.addTo(skymod)
                 # Now mask bright objects in (image - initial sky model)
@@ -312,7 +317,7 @@ class DecamImage(CPImage, CalibMixin):
 
                 # Now find the final sky model using that more extensive mask
                 skyobj = SplineSky.BlantonMethod(
-                    img - med, np.logical_not(masked), 512)
+                    img - med, np.logical_not(masked), boxsize)
                 # add the overall median back in
                 skyobj.offset(med)
 
