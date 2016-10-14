@@ -1046,8 +1046,8 @@ def stage_fitblobs(T=None,
     print('[serial fitblobs]:', tnow-tlast)
     tlast = tnow
 
+    # Were we asked to only run a subset of blobs?
     keepblobs = None
-
     if blobradec is not None:
         # blobradec is a list like [(ra0,dec0), ...]
         rd = np.array(blobradec)
@@ -1116,6 +1116,7 @@ def stage_fitblobs(T=None,
         ps.savefig()
 
     if checkpoint_filename is None:
+        # Run one_blob on each blob!
         blobiter = _blob_iter(blobslices, blobsrcs, blobs, targetwcs, tims,
                               cat, bands, plots, ps, simul_opt, use_ceres,
                               tycho)
@@ -1140,6 +1141,15 @@ def stage_fitblobs(T=None,
                 print('Failed to read checkpoint file ' + checkpoint_filename)
                 traceback.print_exc()
 
+        def _write_checkpoint(R, checkpoint_filename):
+            fn = checkpoint_filename + '.tmp'
+            print('Writing checkpoint', fn)
+            pickle_to_file(R, fn)
+            print('Wrote checkpoint to', fn)
+            os.rename(fn, checkpoint_filename)
+            print('Renamed temp checkpoint', fn, 'to', checkpoint_filename)
+
+        # Create the iterator over blobs to process
         skipblobs = [B.iblob for B in R if B is not None]
         R = [r for r in R if r is not None]
         print('Skipping', len(skipblobs), 'blobs from checkpoint file')
@@ -1148,37 +1158,31 @@ def stage_fitblobs(T=None,
                               tycho, skipblobs=skipblobs)
         # to allow timingpool to queue tasks one at a time
         blobiter = iterwrapper(blobiter, len(blobsrcs))
-        print('blobsrcs:', len(blobsrcs))
 
         d = os.path.dirname(checkpoint_filename)
         if len(d) and not os.path.exists(d):
             trymakedirs(d)
 
+        # Begin running one_blob on each blob...
         Riter = mp.imap_unordered(_bounce_one_blob, blobiter)
-        # we'll actually measure wall time -- CpuMeas is just mis-named
+        # measure wall time and write out checkpoint file periodically.
         last_checkpoint = CpuMeas()
         while True:
             import multiprocessing
-
+            # Time to write a checkpoint file?
             tnow = CpuMeas()
             dt = tnow.wall_seconds_since(last_checkpoint)
             if dt >= checkpoint_period:
                 # Write checkpoint!
-                fn = checkpoint_filename + '.tmp'
-                # (this happens out here in the main process, while the worker
-                # processes continue in the background.)
-                print('Writing checkpoint', fn)
-                pickle_to_file(R, fn)
-                print('Wrote checkpoint to', fn)
                 try:
-                    os.rename(fn, checkpoint_filename)
-                    print('Renamed temp checkpoint', fn, 'to', checkpoint_filename)
+                    _write_checkpoint(checkpoint_filename, R)
                     last_checkpoint = tnow
                     dt = 0.
                 except:
                     print('Failed to rename checkpoint file', fn)
                     import traceback
                     traceback.print_exc()
+            # Wait for results (with timeout)
             try:
                 if mp.is_multiproc():
                     timeout = max(1, checkpoint_period - dt)
@@ -1190,31 +1194,23 @@ def stage_fitblobs(T=None,
                 print('Done')
                 break
             except multiprocessing.TimeoutError:
-                print('Timed out waiting for result')
+                # print('Timed out waiting for result')
                 continue
 
         # Write checkpoint when done!
-        fn = checkpoint_filename + '.tmp'
-        print('Writing checkpoint', fn)
-        pickle_to_file(R, fn)
-        print('Wrote checkpoint to', fn)
-        os.rename(fn, checkpoint_filename)
-        print('Renamed temp checkpoint', fn, 'to', checkpoint_filename)
+        _write_checkpoint(checkpoint_filename, R)
             
     print('[parallel fitblobs] Fitting sources took:', Time()-tlast)
 
-    ## This used to be in fitblobs_finish
-
-    # one_blob can reduce the number and change the types of sources!
-    # Reorder the sources here...
+    # Repackage the results from one_blob...
+    
+    # one_blob can reduce the number and change the types of sources.
+    # Reorder the sources:
     assert(len(R) == len(blobsrcs))
-
     # Drop now-empty blobs.
     R = [r for r in R if r is not None and len(r)]
-
     if len(R) == 0:
         raise NothingToDoError('No sources passed significance tests.')
-
     # Sort results R by 'iblob'
     J = np.argsort([B.iblob for B in R])
     R = [R[j] for j in J]
@@ -1288,7 +1284,6 @@ def stage_fitblobs(T=None,
     T.brickid   = np.zeros(len(T), np.int32) + brickid
     T.brickname = np.array([brickname] * len(T))
     if len(T.brickname) == 0:
-        # FIXME -- brickname length??  Could get from survey.bricks.brickname.dtype...
         T.brickname = T.brickname.astype('S8')
     T.objid     = np.arange(len(T)).astype(np.int32)
 
@@ -1296,6 +1291,9 @@ def stage_fitblobs(T=None,
     from collections import Counter
     ninblob = Counter(T.blob)
     T.ninblob = np.array([ninblob[b] for b in T.blob]).astype(np.int16)
+    del ninblob
+
+    # Copy blob results to table T
     T.tycho2inblob = BB.hastycho
     T.dchisq       = BB.dchisqs.astype(np.float32)
     T.decam_flags  = BB.flags
@@ -1310,111 +1308,7 @@ def stage_fitblobs(T=None,
     assert(cat.numberOfParams() == len(invvars))
 
     if write_metrics or get_all_models:
-        from catalog import prepare_fits_catalog, fits_typemap
-        from astrometry.util.file import pickle_to_file
-
-        TT = fits_table()
-        # Copy only desired columns...
-        for k in ['blob', 'brickid', 'brickname', 'dchisq', 'objid',
-                  'cpu_source', 'cpu_blob', 'ninblob',
-                  'blob_width', 'blob_height', 'blob_npix', 'blob_nimages',
-                  'blob_totalpix']:
-            TT.set(k, T.get(k))
-        TT.type = np.array([fits_typemap[type(src)] for src in newcat])
-
-        hdr = fitsio.FITSHDR()
-        for srctype in ['ptsrc', 'simple', 'dev','exp','comp']:
-            xcat = Catalog(*[m.get(srctype,None) for m in BB.all_models])
-            # Convert shapes to EllipseE types
-            if srctype in ['dev','exp']:
-                for src in xcat:
-                    if src is None:
-                        continue
-                    src.shape = src.shape.toEllipseE()
-            elif srctype == 'comp':
-                for src in xcat:
-                    if src is None:
-                        continue
-                    src.shapeDev = src.shapeDev.toEllipseE()
-                    src.shapeExp = src.shapeExp.toEllipseE()
-                    src.fracDev = FracDev(src.fracDev.clipped())
-
-            xcat.thawAllRecursive()
-
-            namemap = dict(ptsrc='psf', simple='simp')
-            prefix = namemap.get(srctype,srctype)
-
-            allivs = np.hstack([m.get(srctype,[]) for m in BB.all_model_ivs])
-            assert(len(allivs) == xcat.numberOfParams())
-            
-            TT,hdr = prepare_fits_catalog(xcat, allivs, TT, hdr, bands, None,
-                                          allbands=allbands, prefix=prefix+'_')
-            TT.set('%s_flags' % prefix,
-                   np.array([m.get(srctype,0)
-                             for m in BB.all_model_flags]))
-            TT.set('%s_cpu' % prefix,
-                   np.array([m.get(srctype,0)
-                             for m in BB.all_model_cpu]).astype(np.float32))
-
-        TT.delete_column('psf_shapeExp')
-        TT.delete_column('psf_shapeDev')
-        TT.delete_column('psf_fracDev')
-        TT.delete_column('psf_shapeExp_ivar')
-        TT.delete_column('psf_shapeDev_ivar')
-        TT.delete_column('psf_fracDev_ivar')
-        TT.delete_column('psf_type')
-        TT.delete_column('simp_shapeExp')
-        TT.delete_column('simp_shapeDev')
-        TT.delete_column('simp_fracDev')
-        TT.delete_column('simp_shapeExp_ivar')
-        TT.delete_column('simp_shapeDev_ivar')
-        TT.delete_column('simp_fracDev_ivar')
-        TT.delete_column('simp_type')
-        TT.delete_column('dev_shapeExp')
-        TT.delete_column('dev_shapeExp_ivar')
-        TT.delete_column('dev_fracDev')
-        TT.delete_column('dev_fracDev_ivar')
-        TT.delete_column('dev_type')
-        TT.delete_column('exp_shapeDev')
-        TT.delete_column('exp_shapeDev_ivar')
-        TT.delete_column('exp_fracDev')
-        TT.delete_column('exp_fracDev_ivar')
-        TT.delete_column('exp_type')
-        TT.delete_column('comp_type')
-        # Unpack ellipses
-        TT.dev_shape_r  = TT.dev_shapeDev[:,0]
-        TT.dev_shape_e1 = TT.dev_shapeDev[:,1]
-        TT.dev_shape_e2 = TT.dev_shapeDev[:,2]
-        TT.exp_shape_r  = TT.exp_shapeExp[:,0]
-        TT.exp_shape_e1 = TT.exp_shapeExp[:,1]
-        TT.exp_shape_e2 = TT.exp_shapeExp[:,2]
-        TT.comp_shapeDev_r  = TT.comp_shapeDev[:,0]
-        TT.comp_shapeDev_e1 = TT.comp_shapeDev[:,1]
-        TT.comp_shapeDev_e2 = TT.comp_shapeDev[:,2]
-        TT.comp_shapeExp_r  = TT.comp_shapeExp[:,0]
-        TT.comp_shapeExp_e1 = TT.comp_shapeExp[:,1]
-        TT.comp_shapeExp_e2 = TT.comp_shapeExp[:,2]
-        TT.delete_column('dev_shapeDev')
-        TT.delete_column('exp_shapeExp')
-        TT.delete_column('comp_shapeDev')
-        TT.delete_column('comp_shapeExp')
-        TT.dev_shape_r_ivar  = TT.dev_shapeDev_ivar[:,0]
-        TT.dev_shape_e1_ivar = TT.dev_shapeDev_ivar[:,1]
-        TT.dev_shape_e2_ivar = TT.dev_shapeDev_ivar[:,2]
-        TT.exp_shape_r_ivar  = TT.exp_shapeExp_ivar[:,0]
-        TT.exp_shape_e1_ivar = TT.exp_shapeExp_ivar[:,1]
-        TT.exp_shape_e2_ivar = TT.exp_shapeExp_ivar[:,2]
-        TT.comp_shapeDev_r_ivar  = TT.comp_shapeDev_ivar[:,0]
-        TT.comp_shapeDev_e1_ivar = TT.comp_shapeDev_ivar[:,1]
-        TT.comp_shapeDev_e2_ivar = TT.comp_shapeDev_ivar[:,2]
-        TT.comp_shapeExp_r_ivar  = TT.comp_shapeExp_ivar[:,0]
-        TT.comp_shapeExp_e1_ivar = TT.comp_shapeExp_ivar[:,1]
-        TT.comp_shapeExp_e2_ivar = TT.comp_shapeExp_ivar[:,2]
-        TT.delete_column('dev_shapeDev_ivar')
-        TT.delete_column('exp_shapeExp_ivar')
-        TT.delete_column('comp_shapeDev_ivar')
-        TT.delete_column('comp_shapeExp_ivar')
-        
+        TT,hdr = _format_all_models(T, newcat, BB, bands, allbands)
         if get_all_models:
             all_models = TT
         if write_metrics:
@@ -1427,7 +1321,7 @@ def stage_fitblobs(T=None,
                                         comment='NOAO data product type'))
 
             with survey.write_output('all-models', brick=brickname) as out:
-                TT.writeto(out.fn, header=hdr)
+                TT.writeto(out.fn, header=hdr, primheader=primhdr)
                 print('Wrote', out.fn)
 
     keys = ['cat', 'invvars', 'T', 'allbands', 'blobs']
@@ -1435,6 +1329,112 @@ def stage_fitblobs(T=None,
         keys.append('all_models')
     rtn = dict([(k,locals()[k]) for k in keys])
     return rtn
+
+def _format_all_models(T, newcat, BB, bands, allbands):
+    from catalog import prepare_fits_catalog, fits_typemap
+    from astrometry.util.file import pickle_to_file
+
+    TT = fits_table()
+    # Copy only desired columns...
+    for k in ['blob', 'brickid', 'brickname', 'dchisq', 'objid',
+              'cpu_source', 'cpu_blob', 'ninblob',
+              'blob_width', 'blob_height', 'blob_npix', 'blob_nimages',
+              'blob_totalpix']:
+        TT.set(k, T.get(k))
+    TT.type = np.array([fits_typemap[type(src)] for src in newcat])
+
+    hdr = fitsio.FITSHDR()
+    for srctype in ['ptsrc', 'simple', 'dev','exp','comp']:
+        # Create catalog with the fit results for each source type
+        xcat = Catalog(*[m.get(srctype,None) for m in BB.all_models])
+        # Convert shapes to EllipseE types
+        if srctype in ['dev','exp']:
+            for src in xcat:
+                if src is None:
+                    continue
+                src.shape = src.shape.toEllipseE()
+        elif srctype == 'comp':
+            for src in xcat:
+                if src is None:
+                    continue
+                src.shapeDev = src.shapeDev.toEllipseE()
+                src.shapeExp = src.shapeExp.toEllipseE()
+                src.fracDev = FracDev(src.fracDev.clipped())
+        xcat.thawAllRecursive()
+
+        namemap = dict(ptsrc='psf', simple='simp')
+        prefix = namemap.get(srctype,srctype)
+
+        allivs = np.hstack([m.get(srctype,[]) for m in BB.all_model_ivs])
+        assert(len(allivs) == xcat.numberOfParams())
+        
+        TT,hdr = prepare_fits_catalog(xcat, allivs, TT, hdr, bands, None,
+                                      allbands=allbands, prefix=prefix+'_')
+        TT.set('%s_flags' % prefix,
+               np.array([m.get(srctype,0) for m in BB.all_model_flags]))
+        TT.set('%s_cpu' % prefix,
+               np.array([m.get(srctype,0) 
+                         for m in BB.all_model_cpu]).astype(np.float32))
+
+    TT.delete_column('psf_shapeExp')
+    TT.delete_column('psf_shapeDev')
+    TT.delete_column('psf_fracDev')
+    TT.delete_column('psf_shapeExp_ivar')
+    TT.delete_column('psf_shapeDev_ivar')
+    TT.delete_column('psf_fracDev_ivar')
+    TT.delete_column('psf_type')
+    TT.delete_column('simp_shapeExp')
+    TT.delete_column('simp_shapeDev')
+    TT.delete_column('simp_fracDev')
+    TT.delete_column('simp_shapeExp_ivar')
+    TT.delete_column('simp_shapeDev_ivar')
+    TT.delete_column('simp_fracDev_ivar')
+    TT.delete_column('simp_type')
+    TT.delete_column('dev_shapeExp')
+    TT.delete_column('dev_shapeExp_ivar')
+    TT.delete_column('dev_fracDev')
+    TT.delete_column('dev_fracDev_ivar')
+    TT.delete_column('dev_type')
+    TT.delete_column('exp_shapeDev')
+    TT.delete_column('exp_shapeDev_ivar')
+    TT.delete_column('exp_fracDev')
+    TT.delete_column('exp_fracDev_ivar')
+    TT.delete_column('exp_type')
+    TT.delete_column('comp_type')
+    # Unpack ellipses
+    TT.dev_shape_r  = TT.dev_shapeDev[:,0]
+    TT.dev_shape_e1 = TT.dev_shapeDev[:,1]
+    TT.dev_shape_e2 = TT.dev_shapeDev[:,2]
+    TT.exp_shape_r  = TT.exp_shapeExp[:,0]
+    TT.exp_shape_e1 = TT.exp_shapeExp[:,1]
+    TT.exp_shape_e2 = TT.exp_shapeExp[:,2]
+    TT.comp_shapeDev_r  = TT.comp_shapeDev[:,0]
+    TT.comp_shapeDev_e1 = TT.comp_shapeDev[:,1]
+    TT.comp_shapeDev_e2 = TT.comp_shapeDev[:,2]
+    TT.comp_shapeExp_r  = TT.comp_shapeExp[:,0]
+    TT.comp_shapeExp_e1 = TT.comp_shapeExp[:,1]
+    TT.comp_shapeExp_e2 = TT.comp_shapeExp[:,2]
+    TT.delete_column('dev_shapeDev')
+    TT.delete_column('exp_shapeExp')
+    TT.delete_column('comp_shapeDev')
+    TT.delete_column('comp_shapeExp')
+    TT.dev_shape_r_ivar  = TT.dev_shapeDev_ivar[:,0]
+    TT.dev_shape_e1_ivar = TT.dev_shapeDev_ivar[:,1]
+    TT.dev_shape_e2_ivar = TT.dev_shapeDev_ivar[:,2]
+    TT.exp_shape_r_ivar  = TT.exp_shapeExp_ivar[:,0]
+    TT.exp_shape_e1_ivar = TT.exp_shapeExp_ivar[:,1]
+    TT.exp_shape_e2_ivar = TT.exp_shapeExp_ivar[:,2]
+    TT.comp_shapeDev_r_ivar  = TT.comp_shapeDev_ivar[:,0]
+    TT.comp_shapeDev_e1_ivar = TT.comp_shapeDev_ivar[:,1]
+    TT.comp_shapeDev_e2_ivar = TT.comp_shapeDev_ivar[:,2]
+    TT.comp_shapeExp_r_ivar  = TT.comp_shapeExp_ivar[:,0]
+    TT.comp_shapeExp_e1_ivar = TT.comp_shapeExp_ivar[:,1]
+    TT.comp_shapeExp_e2_ivar = TT.comp_shapeExp_ivar[:,2]
+    TT.delete_column('dev_shapeDev_ivar')
+    TT.delete_column('exp_shapeExp_ivar')
+    TT.delete_column('comp_shapeDev_ivar')
+    TT.delete_column('comp_shapeExp_ivar')
+    return TT,hdr
 
 def _blob_iter(blobslices, blobsrcs, blobs, targetwcs, tims, cat, bands,
                plots, ps, simul_opt, use_ceres, tycho, skipblobs=[]):
