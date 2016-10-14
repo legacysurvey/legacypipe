@@ -471,6 +471,7 @@ class OneBlob(object):
                 if self.plots1:
                     srch,srcw = srcwcs.shape
                     _plot_mods(srctims, [list(srctractor.getModelImages())],
+                               self.blobwcs,
                                ['Model selection init'], self.bands, None,None,
                                None, srcw,srch, self.ps, chi_plots=False)
 
@@ -1085,7 +1086,7 @@ class OneBlob(object):
         plotmodnames = []
         plotmods.append(list(tr.getModelImages()))
         plotmodnames.append(title)
-        _plot_mods(self.tims, plotmods, plotmodnames, self.bands, None, None, None,
+        _plot_mods(self.tims, plotmods, self.blobwcs, plotmodnames, self.bands, None, None, None,
                    self.blobw, self.blobh, self.ps, chi_plots=False)
         
     def _initial_plots(self):

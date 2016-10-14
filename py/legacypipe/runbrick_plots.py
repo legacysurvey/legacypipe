@@ -2,6 +2,7 @@ import pylab as plt
 from astrometry.util.plotutils import dimshow
 from survey import *
 
+
 def _psf_check_plots(tims):
     # HACK -- check PSF models
     plt.figure(num=2, figsize=(7,4.08))
@@ -290,7 +291,8 @@ def _plot_derivs(subtims, newsrc, srctractor, ps):
     plt.title('Initial ' + name)
     ps.savefig()
             
-def _plot_mods(tims, mods, titles, bands, coimgs, cons, bslc, blobw, blobh, ps,
+def _plot_mods(tims, mods, blobwcs, titles, bands, coimgs, cons, bslc,
+               blobw, blobh, ps,
                chi_plots=True, rgb_plots=False, main_plot=True,
                rgb_format='%s'):
     import numpy as np
@@ -313,7 +315,10 @@ def _plot_mods(tims, mods, titles, bands, coimgs, cons, bslc, blobw, blobh, ps,
         for itim,tim in enumerate(tims):
             if tim.band != band:
                 continue
-            (Yo,Xo,Yi,Xi) = tim.resamp
+            R = tim_get_resamp(tim, blobwcs)
+            if R is None:
+                continue
+            (Yo,Xo,Yi,Xi) = R
 
             rechi = np.zeros((blobh,blobw))
             chilist = []
