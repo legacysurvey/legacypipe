@@ -801,9 +801,12 @@ def stage_srcs(coimgs=None, cons=None,
 
     # Merge newly detected sources with existing saturated source list
     T = merge_tables([Tsat, Tnew], columns='fillzero')
-    cat = Catalog(satcat + newcat)
+    cat = Catalog(*(satcat + newcat))
     cat.freezeAllParams()
 
+    assert(len(T) > 0)
+    assert(len(cat) == len(T))
+    
     tnow = Time()
     print('[serial srcs] Peaks:', tnow-tlast)
     tlast = tnow
