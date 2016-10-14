@@ -1499,6 +1499,7 @@ def _blob_iter(blobslices, blobsrcs, blobs, targetwcs, tims, cat, bands,
               'npix', np.sum(blobmask),
               'one pixel:', onex,oney, 'has Tycho-2 star:', hastycho)
 
+        # Here we cut out subimages for the blob...
         rr,dd = targetwcs.pixelxy2radec([bx0,bx0,bx1,bx1],[by0,by1,by1,by0])
         subtimargs = []
         for itim,tim in enumerate(tims):
@@ -1537,22 +1538,16 @@ def _blob_iter(blobslices, blobsrcs, blobs, targetwcs, tims, cat, bands,
                simul_opt, use_ceres, hastycho)
 
 def _bounce_one_blob(X):
-
-    # iblob = X[0]
-    # fn = 'blob-%i.pickle' % iblob
-    # from astrometry.util.file import pickle_to_file
-    # pickle_to_file(X, fn)
-    # print('Wrote', fn)
+    ''' This just wraps the one_blob function, for debugging &
+    multiprocessing purposes.
+    '''
     from oneblob import one_blob
-    
     try:
         return one_blob(X)
     except:
         import traceback
         print('Exception in one_blob: (iblob = %i)' % (X[0]))
         traceback.print_exc()
-        #print 'CARRYING ON...'
-        #return None
         raise
 
 def _get_mod(X):
@@ -1579,19 +1574,7 @@ def _get_mod(X):
 
     mod = tractor.getModelImage(0)
     print('Getting model for', tim, ':', Time()-t0)
-
-    #######
-    # from tractor.galaxy import fft_timing
-    # from astrometry.util.file import pickle_to_file
-    # for row in fft_timing:
-    #     print(row)
-    # pickle_to_file(fft_timing,
-    #                ('fft-timing-%s.pickle' % 
-    # str(tim).replace('Image ','').replace(' ','')))
-    #######
-
     return mod
-
 
 def stage_blobiter(T=None,
                    brickname=None,
