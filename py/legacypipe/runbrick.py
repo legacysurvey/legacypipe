@@ -1577,7 +1577,6 @@ def _get_mod(X):
     return mod
 
 def stage_coadds(survey=None, bands=None, version_header=None, targetwcs=None,
-                 W=None,H=None,
                  tims=None, ps=None, brickname=None, ccds=None,
                  T=None, cat=None, pixscale=None, plots=False,
                  coadd_bw=False, brick=None, W=None, H=None, lanczos=True,
