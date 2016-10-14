@@ -16,22 +16,20 @@ Or for much more fine-grained control, see the individual stages:
 - :py:func:`stage_wise_forced`
 - :py:func:`stage_writecat`
 
-To see the code we run on each "blob" of pixels,
+To see the code we run on each "blob" of pixels, see "oneblob.py".
 
 - :py:func:`one_blob`
 
 '''
 from __future__ import print_function
-
-# python -u legacypipe/runbrick.py -b 2437p082 --zoom 2575 2675 400 500 -P "pickles/zoom2-%(brick)s-%%(stage)s.pickle" > log 2>&1 &
-
 if __name__ == '__main__':
     import matplotlib
     matplotlib.use('Agg')
-import pylab as plt
-import numpy as np
 import sys
 import os
+
+import pylab as plt
+import numpy as np
 
 import fitsio
 
@@ -42,7 +40,7 @@ from astrometry.util.starutil_numpy import ra2hmsstring, dec2dmsstring
 
 from tractor import Tractor, PointSource, Image, NanoMaggies, Catalog, RaDecPos
 from tractor.ellipses import EllipseE
-from tractor.galaxy import (DevGalaxy, ExpGalaxy, FixedCompositeGalaxy, SoftenedFracDev,
+from tractor.galaxy import (DevGalaxy, ExpGalaxy, FixedCompositeGalaxy,
                             FracDev, disable_galaxy_cache)
 
 from legacypipe.survey import (
@@ -69,7 +67,7 @@ def stage_tims(W=3600, H=3600, pixscale=0.262, brickname=None,
                survey=None,
                ra=None, dec=None,
                plots=False, ps=None,
-               target_extent=None, pipe=False, program_name='runbrick.py',
+               target_extent=None, program_name='runbrick.py',
                bands='grz',
                do_calibs=True,
                splinesky=True,
@@ -458,18 +456,6 @@ def stage_tims(W=3600, H=3600, pixscale=0.262, brickname=None,
                 plt.suptitle('Mask planes: %s' % tim.name)
                 ps.savefig()
 
-    if not pipe:
-        # save resampling params
-        tims_compute_resamp(mp, tims, targetwcs)
-        tnow = Time()
-        print('Computing resampling:', tnow-tlast)
-        tlast = tnow
-        # Produce per-band coadds, for plots
-        coimgs,cons = quick_coadds(tims, bands, targetwcs)
-        tnow = Time()
-        print('Coadds:', tnow-tlast)
-        tlast = tnow
-
     # Cut "bands" down to just the bands for which we have images.
     timbands = [tim.band for tim in tims]
     bands = [b for b in bands if b in timbands]
@@ -494,8 +480,6 @@ def stage_tims(W=3600, H=3600, pixscale=0.262, brickname=None,
     keys = ['version_header', 'targetrd', 'pixscale', 'targetwcs', 'W','H',
             'bands', 'tims', 'ps', 'brickid', 'brickname', 'brick',
             'target_extent', 'ccds', 'bands', 'survey']
-    if not pipe:
-        keys.extend(['coimgs', 'cons'])
     rtn = dict([(k,locals()[k]) for k in keys])
     return rtn
 
@@ -820,7 +804,7 @@ def stage_srcs(coimgs=None, cons=None,
                W=None,H=None,
                bands=None, ps=None, tims=None,
                plots=False, plots2=False,
-               pipe=False, brickname=None,
+               brickname=None,
                mp=None, nsigma=5,
                on_bricks=False,
                allow_missing_brickq=-1,
@@ -1140,10 +1124,8 @@ def stage_srcs(coimgs=None, cons=None,
     cat = Catalog(*cats)
     del TT
     del cats
-
-    if pipe:
-        del detmaps
-        del detivs
+    del detmaps
+    del detivs
 
     tnow = Time()
     print('[serial srcs] Peaks:', tnow-tlast)
@@ -1190,8 +1172,6 @@ def stage_srcs(coimgs=None, cons=None,
 
     keys = ['T', 'tims', 'blobsrcs', 'blobslices', 'blobs', 'cat',
             'ps', 'tycho']
-    if not pipe:
-        keys.extend(['detmaps', 'detivs'])
     rtn = dict([(k,locals()[k]) for k in keys])
     return rtn
 
@@ -2688,7 +2668,7 @@ def run_brick(brick, survey, radec=None, pixscale=0.262,
               allbands=None,
               blacklist=True,
               nblobs=None, blob=None, blobxy=None, blobradec=None,
-              pipe=True, nsigma=6,
+              nsigma=6,
               simulOpt=False,
               wise=True,
               lanczos=True,
@@ -2780,9 +2760,6 @@ def run_brick(brick, survey, radec=None, pixscale=0.262,
       containing these coordinates.
 
     Other options:
-
-    - *pipe*: boolean; "pipeline mode"; avoid computing non-essential
-      things.
 
     - *nsigma*: float; detection threshold in sigmas.
 
@@ -2896,7 +2873,7 @@ def run_brick(brick, survey, radec=None, pixscale=0.262,
                   constant_invvar=constant_invvar,
                   use_blacklist=blacklist,
                   splinesky=splinesky,
-                  simul_opt=simulOpt, pipe=pipe,
+                  simul_opt=simulOpt,
                   use_ceres=ceres,
                   do_calibs=do_calibs,
                   write_metrics=write_metrics,
@@ -3108,9 +3085,6 @@ python -u legacypipe/runbrick.py --plots --brick 2440p070 --zoom 1900 2400 450 9
         help=('Debugging: run the single blob containing pixel <bx> <by>; '+
               'this option can be repeated to run multiple blobs.'))
 
-    parser.add_argument('--pipe', default=False, action='store_true',
-                        help='"pipeline" mode')
-
     parser.add_argument(
         '--check-done', default=False, action='store_true',
         help='Just check for existence of output files for this brick?')
@@ -3253,7 +3227,6 @@ def get_runbrick_kwargs(opt):
         gaussPsf=opt.gpsf, pixPsf=opt.pixpsf, splinesky=True,
         simulOpt=opt.simul_opt,
         nblobs=opt.nblobs, blob=opt.blob, blobxy=opt.blobxy,
-        pipe=opt.pipe,
         unwise_dir=opt.unwise_dir,
         plots=opt.plots, plots2=opt.plots2,
         coadd_bw=opt.coadd_bw,
