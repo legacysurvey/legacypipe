@@ -29,10 +29,17 @@ legacypipe.detection module
     :members:
     :show-inheritance:
 
-legacypipe.common module
+legacypipe.catalog module
+-------------------------
+
+.. automodule:: legacypipe.catalog
+    :members:
+    :show-inheritance:
+
+legacypipe.survey module
 ------------------------
 
-.. automodule:: legacypipe.common
+.. automodule:: legacypipe.survey
     :members:
     :show-inheritance:
 
