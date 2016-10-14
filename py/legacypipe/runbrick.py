@@ -44,13 +44,12 @@ from tractor.galaxy import (DevGalaxy, ExpGalaxy, FixedCompositeGalaxy,
                             FracDev, disable_galaxy_cache)
 
 from legacypipe.survey import (
-    tim_get_resamp, get_rgb, imsave_jpeg, LegacySurveyData,
-    on_bricks_dependencies)
+    get_rgb, imsave_jpeg, LegacySurveyData, on_bricks_dependencies)
 from legacypipe.cpimage import CP_DQ_BITS
 from legacypipe.utils import RunbrickError, NothingToDoError, iterwrapper
 from legacypipe.coadds import make_coadds, write_coadd_images, quick_coadds
 
-## GLOBALS!  Oh my!
+# Globals, oh my!
 nocache = True
 
 # RGB image args used in the tile viewer:
@@ -606,6 +605,7 @@ def stage_image_coadds(survey=None, targetwcs=None, bands=None, tims=None,
     '''
 
     if plots and False:
+        from legacypipe.survey import tim_get_resamp
 
         for band in bands:
 
@@ -2100,10 +2100,11 @@ def stage_coadds(survey=None, bands=None, version_header=None, targetwcs=None,
         print('Wrote', out.fn)
     del D
 
-    coadd_list= [('image',C.coimgs,rgbkwargs),
-                ('model', C.comods,   rgbkwargs),
-                ('resid', C.coresids, rgbkwargs_resid)]
-    if 'sims_image' in tims[0].__dict__: coadd_list+= [('simscoadd', sims_coadd, rgbkwargs)] 
+    coadd_list= [('image', C.coimgs,   rgbkwargs),
+                 ('model', C.comods,   rgbkwargs),
+                 ('resid', C.coresids, rgbkwargs_resid)]
+    if 'sims_image' in tims[0].__dict__:
+        coadd_list.append(('simscoadd', sims_coadd, rgbkwargs))
     for name,ims,rgbkw in coadd_list:
         rgb = get_rgb(ims, bands, **rgbkw)
         kwa = {}
