@@ -1178,11 +1178,12 @@ def stage_fitblobs(T=None,
             if dt >= checkpoint_period:
                 # Write checkpoint!
                 try:
-                    _write_checkpoint(checkpoint_filename, R)
+                    _write_checkpoint(R, checkpoint_filename)
                     last_checkpoint = tnow
                     dt = 0.
                 except:
-                    print('Failed to rename checkpoint file', fn)
+                    print('Failed to rename checkpoint file',
+                          checkpoint_filename)
                     import traceback
                     traceback.print_exc()
             # Wait for results (with timeout)
@@ -1201,7 +1202,7 @@ def stage_fitblobs(T=None,
                 continue
 
         # Write checkpoint when done!
-        _write_checkpoint(checkpoint_filename, R)
+        _write_checkpoint(R, checkpoint_filename)
             
     print('[parallel fitblobs] Fitting sources took:', Time()-tlast)
 

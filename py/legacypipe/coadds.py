@@ -41,8 +41,6 @@ def make_coadds(tims, bands, targetwcs,
 
     if xy:
         ix,iy = xy
-        print('ix= ',ix)
-        print('iy= ',iy)
         C.T = fits_table()
         C.T.nobs    = np.zeros((len(ix), len(bands)), np.uint8)
         C.T.anymask = np.zeros((len(ix), len(bands)), np.int16)

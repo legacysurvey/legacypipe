@@ -27,10 +27,16 @@ if __name__ == '__main__':
     
     surveydir = os.path.join(os.path.dirname(__file__), 'testcase3')
     outdir = 'out-testcase3'
+    checkpoint_fn = os.path.join(outdir, 'checkpoint.pickle')
+    if os.path.exists(checkpoint_fn):
+        os.unlink(checkpoint_fn)
     main(args=['--brick', '2447p120', '--zoom', '1020', '1070', '2775', '2815',
                '--no-wise', '--force-all', '--no-write',
                '--survey-dir', surveydir,
-               '--outdir', outdir])
+               '--outdir', outdir,
+               '--checkpoint', checkpoint_fn,
+               '--checkpoint-period', '1',
+               '--threads', '2'])
 
     # Read catalog into Tractor sources to test read_fits_catalog
     from legacypipe.catalog import read_fits_catalog
