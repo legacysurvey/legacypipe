@@ -17,7 +17,8 @@ if __name__ == '__main__':
     surveydir = os.path.join(os.path.dirname(__file__), 'testcase4')
     outdir = 'out-testcase4'
     main(args=['--brick', '1867p255', '--zoom', '2050', '2300', '1150', '1400',
-               '--no-wise', '--force-all', '--no-write', '--coadd-bw',
+               '--force-all', '--no-write', '--coadd-bw',
+               '--unwise-dir', os.path.join(surveydir, 'images', 'unwise'),
                '--blob-image',
                '--survey-dir', surveydir,
                '--outdir', outdir])
