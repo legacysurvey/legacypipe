@@ -639,7 +639,7 @@ def stage_srcs(coimgs=None, cons=None,
                bands=None, ps=None, tims=None,
                plots=False, plots2=False,
                brickname=None,
-               mp=None, nsigma=5,
+               mp=None, nsigma=None,
                on_bricks=False,
                allow_missing_brickq=-1,
                survey=None, brick=None,
@@ -658,108 +658,17 @@ def stage_srcs(coimgs=None, cons=None,
     from scipy.ndimage.measurements import label, find_objects, center_of_mass
 
     tlast = Time()
+
+    # existing sources that should be avoided when detecting new
+    # sources.
     avoid_x, avoid_y = [],[]
+
     if on_bricks:
-        bricks = on_bricks_dependencies(brick, survey)
-        if len(bricks) == 0:
-            on_bricks = False
-    if on_bricks:
-        from legacypipe.catalog import read_fits_catalog
-        B = []
-        for b in bricks:
-            fn = survey.find_file('tractor', brick=b.brickname)
-            print('Looking for', fn)
-            if not os.path.exists(fn):
-                print('File does not exist:', fn)
-                if b.brickq <= allow_missing_brickq:
-                    print(('  (allowing this missing brick (brickq = %i) ' +
-                           'because of --allow-missing-brickq %i)') % 
-                           (b.brickq, allow_missing_brickq))
-                    continue
-            B.append(fits_table(fn))
-        del bricks
-        B = [b for b in B if b is not None]
-        if len(B) == 0:
-            on_bricks = False
-    if on_bricks:
-        try:
-            B = merge_tables(B)
-        except:
-            print('Error merging brick tables:')
-            import traceback
-            traceback.print_exc()
-            print('Retrying with fillzero...')
-            B = merge_tables(B, columns='fillzero')
-        print('Total of', len(B), 'sources from neighbouring bricks')
-        # Keep only sources that are primary in their own brick
-        B.cut(B.brick_primary)
-        print(len(B), 'are BRICK_PRIMARY')
-        # HACK -- Keep only sources within a margin of this brick
-        ok,B.xx,B.yy = targetwcs.radec2pixelxy(B.ra, B.dec)
-        margin = 20
-        B.cut((B.xx >= 1-margin) * (B.xx < W+margin) *
-              (B.yy >= 1-margin) * (B.yy < H+margin))
-        print(len(B), 'are within this image + margin')
-        B.cut((B.out_of_bounds == False) * (B.left_blob == False))
-        print(len(B), 'do not have out_of_bounds or left_blob set')
-        if len(B) == 0:
-            on_bricks = False
-    if on_bricks:
-        # Note that we shouldn't need to drop sources that are within this
-        # current brick's unique area, because we cut to sources that are
-        # BRICK_PRIMARY within their own brick.
-
-        # Create sources for these catalog entries
-        ### see forced-photom-decam.py for some additional patchups?
-
-        B.shapeexp = np.vstack((B.shapeexp_r, B.shapeexp_e1, B.shapeexp_e2)).T
-        B.shapedev = np.vstack((B.shapedev_r, B.shapedev_e1, B.shapedev_e2)).T
-        bcat = read_fits_catalog(B, ellipseClass=EllipseE)
-        print('Created', len(bcat), 'tractor catalog objects')
-
-        # Add the new sources to the 'avoid_[xy]' lists, which are
-        # existing sources that should be avoided when detecting new
-        # faint sources.
-        avoid_x.extend(np.round(B.xx - 1).astype(int))
-        avoid_y.extend(np.round(B.yy - 1).astype(int))
-
-        print('Subtracting tractor-on-bricks sources belonging to other bricks')
-        ## HACK -- note that this is going to screw up fracflux and
-        ## other metrics for sources in this brick that overlap
-        ## subtracted sources.
-        if plots:
-            mods = []
-            # Before...
-            coimgs,cons = quick_coadds(tims, bands, targetwcs)
-            plt.clf()
-            dimshow(get_rgb(coimgs, bands))
-            plt.title('Before subtracting tractor-on-bricks marginal sources')
-            ps.savefig()
-
-        for i,src in enumerate(bcat):
-            print(' ', i, src)
-
-        tlast = Time()
-        mods = mp.map(_get_mod, [(tim, bcat) for tim in tims])
-        tnow = Time()
-        print('[parallel srcs] Getting tractor-on-bricks model images:', tnow-tlast)
-        tlast = tnow
-        for tim,mod in zip(tims, mods):
-            tim.data -= mod
-        if not plots:
-            del mods
-
-        if plots:
-            coimgs,cons = quick_coadds(tims, bands, targetwcs, images=mods)
-            plt.clf()
-            dimshow(get_rgb(coimgs, bands))
-            plt.title('Marginal sources subtracted off')
-            ps.savefig()
-            coimgs,cons = quick_coadds(tims, bands, targetwcs)
-            plt.clf()
-            dimshow(get_rgb(coimgs, bands))
-            plt.title('After subtracting off marginal sources')
-            ps.savefig()
+        avoid = _subtract_onbricks_sources(
+            survey, brick, allow_missing_brickq, targetwcs, tims, bands,
+            plots, ps, mp)
+        if avoid is not None;
+            avoid_x,avoid_y = avoid
 
     if plots and False:
         for tim in tims:
@@ -798,7 +707,6 @@ def stage_srcs(coimgs=None, cons=None,
             dimshow(rgba)
             plt.title('Tim invvar')
             plt.subplot(2,2,2)
-
             mx = tim.getImage().max()
             ima = dict(vmin=-2.*tim.sig1, vmax=mx,
                        ticks=False)
@@ -1008,6 +916,112 @@ def stage_srcs(coimgs=None, cons=None,
             'ps', 'tycho']
     rtn = dict([(k,locals()[k]) for k in keys])
     return rtn
+
+def _subtract_onbricks_sources(survey, brick, allow_missing_brickq,
+                               targetwcs, tims, bands, plots, ps, mp):
+    # Check tractor-on-bricks dependencies
+    bricks = on_bricks_dependencies(brick, survey)
+    if len(bricks) == 0:
+        return None
+    from legacypipe.catalog import read_fits_catalog
+    B = []
+    for b in bricks:
+        fn = survey.find_file('tractor', brick=b.brickname)
+        print('Looking for', fn)
+        if not os.path.exists(fn):
+            print('File does not exist:', fn)
+            if b.brickq <= allow_missing_brickq:
+                print(('  (allowing this missing brick (brickq = %i) ' +
+                       'because of --allow-missing-brickq %i)') % 
+                       (b.brickq, allow_missing_brickq))
+                continue
+        B.append(fits_table(fn))
+    del bricks
+    B = [b for b in B if b is not None]
+    if len(B) == 0:
+        return None
+
+    try:
+        B = merge_tables(B)
+    except:
+        print('Error merging brick tables:')
+        import traceback
+        traceback.print_exc()
+        print('Retrying with fillzero...')
+        B = merge_tables(B, columns='fillzero')
+    print('Total of', len(B), 'sources from neighbouring bricks')
+    # Keep only sources that are primary in their own brick
+    B.cut(B.brick_primary)
+    print(len(B), 'are BRICK_PRIMARY')
+    # HACK -- Keep only sources within a margin of this brick
+    ok,B.xx,B.yy = targetwcs.radec2pixelxy(B.ra, B.dec)
+    margin = 20
+    B.cut((B.xx >= 1-margin) * (B.xx < W+margin) *
+          (B.yy >= 1-margin) * (B.yy < H+margin))
+    print(len(B), 'are within this image + margin')
+    B.cut((B.out_of_bounds == False) * (B.left_blob == False))
+    print(len(B), 'do not have out_of_bounds or left_blob set')
+    if len(B) == 0:
+        return None
+
+    # Note that we shouldn't need to drop sources that are within this
+    # current brick's unique area, because we cut to sources that are
+    # BRICK_PRIMARY within their own brick.
+
+    # Create sources for these catalog entries
+    ### see forced-photom-decam.py for some additional patchups?
+
+    B.shapeexp = np.vstack((B.shapeexp_r, B.shapeexp_e1, B.shapeexp_e2)).T
+    B.shapedev = np.vstack((B.shapedev_r, B.shapedev_e1, B.shapedev_e2)).T
+    bcat = read_fits_catalog(B, ellipseClass=EllipseE)
+    print('Created', len(bcat), 'tractor catalog objects')
+
+    # Add the new sources to the 'avoid_[xy]' lists, which are
+    # existing sources that should be avoided when detecting new
+    # faint sources.
+    avoid_x = np.round(B.xx - 1).astype(int)
+    avoid_y = np.round(B.yy - 1).astype(int)
+
+    print('Subtracting tractor-on-bricks sources belonging to other bricks')
+    ## HACK -- note that this is going to screw up fracflux and
+    ## other metrics for sources in this brick that overlap
+    ## subtracted sources.
+    if plots:
+        mods = []
+        # Before...
+        coimgs,cons = quick_coadds(tims, bands, targetwcs)
+        plt.clf()
+        dimshow(get_rgb(coimgs, bands))
+        plt.title('Before subtracting tractor-on-bricks marginal sources')
+        ps.savefig()
+
+    for i,src in enumerate(bcat):
+        print(' ', i, src)
+
+    tlast = Time()
+    mods = mp.map(_get_mod, [(tim, bcat) for tim in tims])
+    tnow = Time()
+    print('[parallel srcs] Getting tractor-on-bricks model images:',tnow-tlast)
+    tlast = tnow
+    for tim,mod in zip(tims, mods):
+        tim.data -= mod
+    if not plots:
+        del mods
+
+    if plots:
+        coimgs,cons = quick_coadds(tims, bands, targetwcs, images=mods)
+        plt.clf()
+        dimshow(get_rgb(coimgs, bands))
+        plt.title('Marginal sources subtracted off')
+        ps.savefig()
+        coimgs,cons = quick_coadds(tims, bands, targetwcs)
+        plt.clf()
+        dimshow(get_rgb(coimgs, bands))
+        plt.title('After subtracting off marginal sources')
+        ps.savefig()
+
+    return avoid_x,avoid_y
+
 
 def _write_fitblobs_pickle(fn, data):
     from astrometry.util.file import pickle_to_file
