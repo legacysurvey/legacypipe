@@ -556,11 +556,10 @@ def stage_image_coadds(survey=None, targetwcs=None, bands=None, tims=None,
                        mp=None,
                        **kwargs):
     '''
-    Immediately after reading the images, we
-    create coadds of just the image products.  Later, full coadds
-    including the models will be created (in `stage_coadds`).  But
-    it's handy to have the coadds early on, to diagnose problems or
-    just to look at the data.
+    Immediately after reading the images, we can create coadds of just
+    the image products.  Later, full coadds including the models will
+    be created (in `stage_coadds`).  But it's handy to have the coadds
+    early on, to diagnose problems or just to look at the data.
     '''
     with survey.write_output('ccds-table', brick=brickname) as out:
         ccds.writeto(out.fn, primheader=version_header)
@@ -569,79 +568,33 @@ def stage_image_coadds(survey=None, targetwcs=None, bands=None, tims=None,
     C = make_coadds(tims, bands, targetwcs,
                     detmaps=True, ngood=True, lanczos=lanczos,
                     callback=write_coadd_images,
-                    callback_args=(survey, brickname, version_header, tims, targetwcs),
+                    callback_args=(survey, brickname, version_header, tims,
+                                   targetwcs),
                     mp=mp)
 
-    #coadds of galaxy sims only, image only
+    # Sims: coadds of galaxy sims only, image only
     if hasattr(tims[0], 'sims_image'):
-        sims_coadd,nil = quick_coadds(tims, bands, targetwcs, images=[tim.sims_image for tim in tims])
-        image_coadd,nil = quick_coadds(tims, bands, targetwcs, images=[tim.data-tim.sims_image for tim in tims])
-    ########
+        sims_coadd, nil = quick_coadds(
+            tims, bands, targetwcs, images=[tim.sims_image for tim in tims])
+        image_coadd,nil = quick_coadds(
+            tims, bands, targetwcs, images=[tim.data - tim.sims_image
+                                            for tim in tims])
+    ###
 
-    # if plots:
-    #     for k,v in CP_DQ_BITS.items():
-    #         plt.clf()
-    #         dimshow(ormask & v, vmin=0, vmax=v)
-    #         plt.title('OR mask, %s band: %s' % (band, k))
-    #         ps.savefig()
-    #         plt.clf()
-    #         dimshow(andmask & v, vmin=0, vmax=v)
-    #         plt.title('AND mask, %s band: %s' % (band,k))
-    #         ps.savefig()
-    
-    if True:
-        # Compute the brick's unique pixels.
-        U = None
-        if hasattr(brick, 'ra1'):
-            print('Computing unique brick pixels...')
-            xx,yy = np.meshgrid(np.arange(W), np.arange(H))
-            rr,dd = targetwcs.pixelxy2radec(xx+1, yy+1)
-            U = np.flatnonzero((rr >= brick.ra1 ) * (rr < brick.ra2 ) *
-                               (dd >= brick.dec1) * (dd < brick.dec2))
-            print(len(U), 'of', W*H, 'pixels are unique to this brick')
-
-        # depth histogram bins
-        depthbins = np.arange(19.9, 25.101, 0.1)
-        depthbins[0] = 0.
-        depthbins[-1] = 100.
-        D = fits_table()
-        D.depthlo = depthbins[:-1].astype(np.float32)
-        D.depthhi = depthbins[1: ].astype(np.float32)
-
-        for band,detiv,galdetiv in zip(bands, C.detivs, C.galdetivs):
-            for det,name in [(detiv, 'ptsrc'), (galdetiv, 'gal')]:
-                # compute stats for 5-sigma detection
-                depth = 5. / np.sqrt(np.maximum(det, 1e-20))
-                # that's flux in nanomaggies -- convert to mag
-                depth = -2.5 * (np.log10(depth) - 9)
-                # no coverage -> very bright detection limit
-                depth[det == 0] = 0.
-                if U is not None:
-                    depth = depth.flat[U]
-                print(band, name, 'band depth map: deciles',
-                      np.percentile(depth, np.arange(0, 101, 10)))
-                # histogram
-                D.set('counts_%s_%s' % (name, band),
-                      np.histogram(depth, bins=depthbins)[0].astype(np.int32))
-
-        del U
-        del depth
-        del det
-        del detiv
-        del galdetiv
-
-        with survey.write_output('depth-table', brick=brickname) as out:
-            D.writeto(out.fn)
-            print('Wrote', out.fn)
-        del D
+    D = _depth_histogram(brick, targetwcs, bands, C.detivs, C.galdetivs)
+    with survey.write_output('depth-table', brick=brickname) as out:
+        D.writeto(out.fn)
+        print('Wrote', out.fn)
+    del D
 
     #rgbkwargs2 = dict(mnmx=(-3., 3.))
     #rgbkwargs2 = dict(mnmx=(-2., 10.))
     coadd_list= [('image',C.coimgs,rgbkwargs)]
-    if 'sims_image' in tims[0].__dict__: coadd_list+= [('simscoadd', sims_coadd, rgbkwargs)] 
-    for name,ims,rgbkw in coadd_list:
-        #('image2',C.coimgs,rgbkwargs2),
+    if 'sims_image' in tims[0].__dict__:
+        coadd_list.append(('simscoadd', sims_coadd, rgbkwargs))
         #('imagecoadd', image_coadd, rgbkwargs)
+
+    for name,ims,rgbkw in coadd_list:
         rgb = get_rgb(ims, bands, **rgbkw)
         kwa = {}
         if coadd_bw and len(bands) == 1:
@@ -657,7 +610,7 @@ def stage_image_coadds(survey=None, targetwcs=None, bands=None, tims=None,
             from scipy.ndimage.morphology import binary_dilation
             outline = (binary_dilation(blobs >= 0, structure=np.ones((3,3)))
                        - (blobs >= 0))
-            # coadd_bw?
+            # coadd_bw
             if len(rgb.shape) == 2:
                 rgb = np.repeat(rgb[:,:,np.newaxis], 3, axis=2)
             # Outline in green
@@ -665,11 +618,10 @@ def stage_image_coadds(survey=None, targetwcs=None, bands=None, tims=None,
             rgb[:,:,1][outline] = 1
             rgb[:,:,2][outline] = 0
 
-            with survey.write_output(name + 'blob-jpeg', brick=brickname) as out:
+            with survey.write_output(name+'blob-jpeg', brick=brickname) as out:
                 imsave_jpeg(out.fn, rgb, origin='lower', **kwa)
                 print('Wrote', out.fn)
         del rgb
-
     return None
 
 def _median_smooth_detmap(X):
@@ -1936,47 +1888,8 @@ def stage_coadds(survey=None, bands=None, version_header=None, targetwcs=None,
             C.AP.set('apflux_img_ivar_%s' % band, np.zeros((0,nap)))
             C.AP.set('apflux_resid_%s' % band, np.zeros((0,nap)))
 
-    # Compute the brick's unique pixels.
-    U = None
-    if hasattr(brick, 'ra1'):
-        print('Computing unique brick pixels...')
-        xx,yy = np.meshgrid(np.arange(W), np.arange(H))
-        rr,dd = targetwcs.pixelxy2radec(xx+1, yy+1)
-        U = np.flatnonzero((rr >= brick.ra1 ) * (rr < brick.ra2 ) *
-                           (dd >= brick.dec1) * (dd < brick.dec2))
-        print(len(U), 'of', W*H, 'pixels are unique to this brick')
-
-    # depth histogram bins
-    depthbins = np.arange(20, 25.001, 0.1)
-    depthbins[0] = 0.
-    depthbins[-1] = 100.
-    D = fits_table()
-    D.depthlo = depthbins[:-1].astype(np.float32)
-    D.depthhi = depthbins[1: ].astype(np.float32)
-
-    for band,detiv,galdetiv in zip(bands, C.detivs, C.galdetivs):
-        for det,name in [(detiv, 'ptsrc'), (galdetiv, 'gal')]:
-            # compute stats for 5-sigma detection
-            depth = 5. / np.sqrt(det)
-            # that's flux in nanomaggies -- convert to mag
-            depth = -2.5 * (np.log10(depth) - 9)
-            # no coverage -> very bright detection limit
-            depth[np.logical_not(np.isfinite(depth))] = 0.
-            if U is not None:
-                depth = depth.flat[U]
-            if len(depth):
-                print(band, name, 'band depth map: percentiles',
-                      np.percentile(depth, np.arange(0,101, 10)))
-            # histogram
-            D.set('counts_%s_%s' % (name, band),
-                  np.histogram(depth, bins=depthbins)[0].astype(np.int32))
-
-    del U
-    del depth
-    del det
-    del detiv
-    del galdetiv
-
+    # Compute depth histogram
+    D = _depth_histogram(brick, targetwcs, bands, C.detivs, C.galdetivs)
     with survey.write_output('depth-table', brick=brickname) as out:
         D.writeto(out.fn)
         print('Wrote', out.fn)
@@ -2078,6 +1991,44 @@ def stage_coadds(survey=None, bands=None, version_header=None, targetwcs=None,
     return dict(T=T, AP=C.AP, apertures_pix=apertures,
                 apertures_arcsec=apertures_arcsec)
 
+
+def _depth_histogram(brick, targetwcs, bands, detivs, galdetivs):
+    # Compute the brick's unique pixels.
+    U = None
+    if hasattr(brick, 'ra1'):
+        print('Computing unique brick pixels...')
+        H,W = targetwcs.shape
+        xx,yy = np.meshgrid(np.arange(W), np.arange(H))
+        rr,dd = targetwcs.pixelxy2radec(xx+1, yy+1)
+        U = np.flatnonzero((rr >= brick.ra1 ) * (rr < brick.ra2 ) *
+                           (dd >= brick.dec1) * (dd < brick.dec2))
+        print(len(U), 'of', W*H, 'pixels are unique to this brick')
+
+    # depth histogram bins
+    depthbins = np.arange(20, 25.001, 0.1)
+    depthbins[0] = 0.
+    depthbins[-1] = 100.
+    D = fits_table()
+    D.depthlo = depthbins[:-1].astype(np.float32)
+    D.depthhi = depthbins[1: ].astype(np.float32)
+
+    for band,detiv,galdetiv in zip(bands,detivs,galdetivs):
+        for det,name in [(detiv, 'ptsrc'), (galdetiv, 'gal')]:
+            # compute stats for 5-sigma detection
+            depth = 5. / np.sqrt(det)
+            # that's flux in nanomaggies -- convert to mag
+            depth = -2.5 * (np.log10(depth) - 9)
+            # no coverage -> very bright detection limit
+            depth[np.logical_not(np.isfinite(depth))] = 0.
+            if U is not None:
+                depth = depth.flat[U]
+            if len(depth):
+                print(band, name, 'band depth map: percentiles',
+                      np.percentile(depth, np.arange(0,101, 10)))
+            # histogram
+            D.set('counts_%s_%s' % (name, band),
+                  np.histogram(depth, bins=depthbins)[0].astype(np.int32))
+    return D
 
 def stage_wise_forced(
     cat=None,
