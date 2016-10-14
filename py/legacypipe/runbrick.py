@@ -948,14 +948,6 @@ def _subtract_onbricks_sources(survey, brick, allow_missing_brickq,
 
     return avoid_x,avoid_y
 
-
-def _write_fitblobs_pickle(fn, data):
-    from astrometry.util.file import pickle_to_file
-    tmpfn = fn + '.tmp'
-    pickle_to_file(data, tmpfn)
-    os.rename(tmpfn, fn)
-    print('Wrote', fn)
-
 def stage_fitblobs(T=None,
                    brickname=None,
                    brickid=None,
@@ -986,37 +978,6 @@ def stage_fitblobs(T=None,
     for tim in tims:
         assert(np.all(np.isfinite(tim.getInvError())))
 
-    # Missing from some previously written pickles:
-    if tycho is None:
-        tycho = fits_table(survey.find_file('tycho2'))
-        
-    if write_pickle_filename is not None and not os.path.exists(write_pickle_filename):
-        # Start up a thread to write out a pickle file containing the inputs
-        # that are prerequisites for this (and subsequent) stages.
-        import threading
-        keys = ['T', 'brickname', 'brickid', 'version_header', 'blobsrcs',
-                'blobslices', 'blobs', 'cat', 'targetwcs', 'W', 'H', 'bands',
-                'tims', 'survey', 'tycho']
-        # Needed by stage_coadds:
-        keys.extend(['ccds', 'pixscale', 'brick', 'lanczos', 'on_bricks'])
-        # Needed by stage_wise_forced: (none)
-        # Needed by stage_writecat: (none)
-        L = locals()
-        vals = {}
-        for k in keys:
-            if k in L:
-                vals[k] = L[k]
-            else:
-                if k in kwargs:
-                    vals[k] = kwargs[k]
-                else:
-                    print('Missing key:', k)
-        write_thread = threading.Thread(
-            target=_write_fitblobs_pickle,
-            args=(write_pickle_filename, vals), name='write_pickle')
-        print('Starting thread to write fitblobs pickle')
-        write_thread.start()
-        
     # How far down to render model profiles
     minsigma = 0.1
     for tim in tims:
@@ -1647,7 +1608,6 @@ def stage_blobiter(T=None,
                    simul_opt=False, use_ceres=True, mp=None,
                    checkpoint_filename=None,
                    checkpoint_period=600,
-                   write_pickle_filename=None,
                    write_metrics=True,
                    get_all_models=False,
                    allbands = 'ugrizY',
@@ -2416,8 +2376,6 @@ def run_brick(brick, survey, radec=None, pixscale=0.262,
               force=[], forceAll=False, writePickles=True,
               checkpoint_filename=None,
               checkpoint_period=None,
-              fitblobs_prereq_filename=None,
-
               prereqs_update=None,
               stagefunc = None,
               ):
@@ -2611,8 +2569,6 @@ def run_brick(brick, survey, radec=None, pixscale=0.262,
         kwargs.update(checkpoint_filename=checkpoint_filename)
         if checkpoint_period is not None:
             kwargs.update(checkpoint_period=checkpoint_period)
-    if fitblobs_prereq_filename is not None:
-        kwargs.update(write_pickle_filename=fitblobs_prereq_filename)
 
     if threads and threads > 1:
         from astrometry.util.timingpool import TimingPool, TimingPoolMeas
@@ -2753,9 +2709,6 @@ python -u legacypipe/runbrick.py --plots --brick 2440p070 --zoom 1900 2400 450 9
     parser.add_argument(
         '--checkpoint-period', type=int, default=None,
         help='Period for writing checkpoint files, in seconds; default 600')
-
-    parser.add_argument('--fitblobs-prereq', default=None,
-                        help='Write pickle file containing prereqs for the fitblobs stage')
 
     parser.add_argument('-b', '--brick',
         help='Brick name to run; required unless --radec is given')
@@ -2955,7 +2908,6 @@ def get_runbrick_kwargs(opt):
         picklePattern=opt.picklepat,
         checkpoint_filename=opt.checkpoint,
         checkpoint_period=opt.checkpoint_period,
-        fitblobs_prereq_filename=opt.fitblobs_prereq,
         )
     return survey, kwa
 
