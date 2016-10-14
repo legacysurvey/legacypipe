@@ -2645,22 +2645,6 @@ def stage_writecat(
 
     return dict(T2=T2)
 
-def _bounce_tim_get_resamp(X):
-    (tim, targetwcs) = X
-    return tim_get_resamp(tim, targetwcs)
-
-def tims_compute_resamp(mp, tims, targetwcs, force=False):
-    if mp is None:
-        from utils import MyMultiproc
-        mp = MyMultiproc()
-    if force:
-        for tim in tims:
-            if hasattr(tim, 'resamp'):
-                del tim.resamp
-    R = mp.map(_bounce_tim_get_resamp, [(tim,targetwcs) for tim in tims])
-    for tim,r in zip(tims, R):
-        tim.resamp = r
-
 def run_brick(brick, survey, radec=None, pixscale=0.262,
               width=3600, height=3600,
               zoom=None,
