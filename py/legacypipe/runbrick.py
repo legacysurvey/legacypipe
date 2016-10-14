@@ -667,7 +667,7 @@ def stage_srcs(coimgs=None, cons=None,
         avoid = _subtract_onbricks_sources(
             survey, brick, allow_missing_brickq, targetwcs, tims, bands,
             plots, ps, mp)
-        if avoid is not None;
+        if avoid is not None:
             avoid_x,avoid_y = avoid
 
     print('Rendering detection maps...')
