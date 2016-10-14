@@ -3,7 +3,7 @@ import numpy as np
 import fitsio
 from astrometry.util.fits import fits_table
 from legacypipe.cpimage import CP_DQ_BITS
-from legacypipe.common import tim_get_resamp
+from legacypipe.survey import tim_get_resamp
 
 def make_coadds(tims, bands, targetwcs,
                 mods=None, xy=None, apertures=None, apxy=None,
@@ -457,7 +457,7 @@ def write_coadd_images(band,
                 ('chi2',     'chi2',     cochi2  ),
                 ])
     for name,prodtype,img in imgs:
-        from legacypipe.common import MyFITSHDR
+        from legacypipe.survey import MyFITSHDR
         hdr2 = MyFITSHDR()
         # Make a copy, because each image has different values for
         # these headers...

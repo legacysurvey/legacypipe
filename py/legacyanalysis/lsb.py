@@ -16,8 +16,8 @@ from astrometry.util.ttime import *
 
 from tractor import *
 
-from legacypipe.common import *
-from legacypipe.desi_common import *
+from legacypipe.survey import *
+from legacypipe.catalog import *
 
 def bin_image(data, S):
     # rebin image data

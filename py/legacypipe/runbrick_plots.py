@@ -1,6 +1,6 @@
 import pylab as plt
 from astrometry.util.plotutils import dimshow
-from common import *
+from survey import *
 
 def _psf_check_plots(tims):
     # HACK -- check PSF models

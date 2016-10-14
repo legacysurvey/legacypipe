@@ -19,7 +19,7 @@ class ps1cat():
             raise ValueError('You must have the PS1CAT_DIR environment variable set to point to Pan-STARRS1 catalogs')
         self.nside = 32
         if ccdwcs is None:
-            from legacypipe.common import LegacySurveyData
+            from legacypipe.survey import LegacySurveyData
             survey = LegacySurveyData()
             ccd = survey.find_ccds(expnum=expnum,ccdname=ccdname)[0]
             im = survey.get_image_object(ccd)

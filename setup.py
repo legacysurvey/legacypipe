@@ -28,7 +28,7 @@ try:
     product = import_module(setup_keywords['name'])
     setup_keywords['long_description'] = product.__doc__
 
-    from legacypipe.common import get_git_version
+    from legacypipe.survey import get_git_version
     version = get_git_version(os.path.dirname(__file__)).replace('-','.')
 
     setup_keywords['version'] = version

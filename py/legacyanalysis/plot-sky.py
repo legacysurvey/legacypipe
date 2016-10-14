@@ -10,7 +10,7 @@ import numpy as np
 import fitsio
 from astrometry.util.plotutils import *
 
-from legacypipe.common import *
+from legacypipe.survey import *
 
 if __name__ == '__main__':
     import argparse

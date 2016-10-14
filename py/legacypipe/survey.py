@@ -499,7 +499,7 @@ def bricks_touching_wcs(targetwcs, survey=None, B=None, margin=20):
     ----------
     targetwcs : astrometry.util.Tan object or similar
         The region of sky to search
-    survey : legacypipe.common.LegacySurveyData object
+    survey : legacypipe.survey.LegacySurveyData object
         From which the brick table will be retrieved
     B : FITS table
         The table of brick objects to search

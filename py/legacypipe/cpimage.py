@@ -8,7 +8,7 @@ import numpy as np
 from astrometry.util.util import wcs_pv2sip_hdr
 
 from legacypipe.image import LegacySurveyImage
-from legacypipe.common import LegacySurveyData
+from legacypipe.survey import LegacySurveyData
 
 # From: http://www.noao.edu/noao/staff/fvaldes/CPDocPrelim/PL201_3.html
 # 1   -- detector bad pixel           InstCal

@@ -23,9 +23,9 @@ from astrometry.util.ttime import Time, MemMeas
 from astrometry.util.multiproc import multiproc
 
 from legacypipe.runbrick import run_brick, rgbkwargs, rgbkwargs_resid
-from legacypipe.common import LegacySurveyData, imsave_jpeg, get_rgb
+from legacypipe.survey import LegacySurveyData, imsave_jpeg, get_rgb
 from legacypipe.image import LegacySurveyImage
-from legacypipe.desi_common import read_fits_catalog
+from legacypipe.catalog import read_fits_catalog
 
 from tractor.sky import ConstantSky
 from tractor.sfd import SFDMap

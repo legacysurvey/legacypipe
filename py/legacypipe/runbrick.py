@@ -45,7 +45,7 @@ from tractor.ellipses import EllipseE
 from tractor.galaxy import (DevGalaxy, ExpGalaxy, FixedCompositeGalaxy, SoftenedFracDev,
                             FracDev, disable_galaxy_cache)
 
-from legacypipe.common import (
+from legacypipe.survey import (
     tim_get_resamp, get_rgb, imsave_jpeg, LegacySurveyData,
     on_bricks_dependencies)
 from legacypipe.cpimage import CP_DQ_BITS
@@ -100,14 +100,14 @@ def stage_tims(W=3600, H=3600, pixscale=0.262, brickname=None,
     - *splinesky*: boolean.  Use SplineSky model, rather than ConstantSky?
 
     '''
-    from legacypipe.common import (get_git_version, get_version_header, wcs_for_brick,
+    from legacypipe.survey import (get_git_version, get_version_header, wcs_for_brick,
                                    read_one_tim)
     t0 = tlast = Time()
 
     assert(survey is not None)
 
     if ra is not None:
-        from legacypipe.common import BrickDuck
+        from legacypipe.survey import BrickDuck
         
         # Custom brick; create a fake 'brick' object
         brick = BrickDuck()
@@ -271,7 +271,7 @@ def stage_tims(W=3600, H=3600, pixscale=0.262, brickname=None,
             os.system(cmd)
 
     if do_calibs:
-        from legacypipe.common import run_calibs
+        from legacypipe.survey import run_calibs
 
         kwa = dict(git_version=gitver)
         if gaussPsf:
@@ -808,7 +808,7 @@ def stage_image_coadds(survey=None, targetwcs=None, bands=None, tims=None,
 
 def _median_smooth_detmap(X):
     from scipy.ndimage.filters import median_filter
-    from legacypipe.common import bin_image
+    from legacypipe.survey import bin_image
     (detmap, detiv, binning) = X
     # Bin down before median-filtering, for speed.
     binned,nil = bin_image(detmap, detiv, binning)
@@ -846,7 +846,7 @@ def stage_srcs(coimgs=None, cons=None,
         if len(bricks) == 0:
             on_bricks = False
     if on_bricks:
-        from legacypipe.desi_common import read_fits_catalog
+        from legacypipe.catalog import read_fits_catalog
         B = []
         for b in bricks:
             fn = survey.find_file('tractor', brick=b.brickname)
@@ -1595,7 +1595,7 @@ def stage_fitblobs(T=None,
     assert(cat.numberOfParams() == len(invvars))
 
     if write_metrics or get_all_models:
-        from desi_common import prepare_fits_catalog, fits_typemap
+        from catalog import prepare_fits_catalog, fits_typemap
         from astrometry.util.file import pickle_to_file
 
         TT = fits_table()
@@ -1978,7 +1978,7 @@ def stage_coadds(survey=None, bands=None, version_header=None, targetwcs=None,
     source model fits, and we can create coadds of the images, model,
     and residuals.  We also perform aperture photometry in this stage.
     '''
-    from legacypipe.common import apertures_arcsec
+    from legacypipe.survey import apertures_arcsec
     tlast = Time()
 
     # Missing from some previously written pickles:
@@ -2402,7 +2402,7 @@ def stage_writecat(
     Final stage in the pipeline: format results for the output
     catalog.
     '''
-    from desi_common import prepare_fits_catalog
+    from catalog import prepare_fits_catalog
     from tractor.sfd import SFDMap
      
     fs = None

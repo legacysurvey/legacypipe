@@ -9,7 +9,7 @@ from astrometry.util.util import wcs_pv2sip_hdr
 
 from legacypipe.image import LegacySurveyImage, CalibMixin
 from legacypipe.cpimage import CPImage
-from legacypipe.common import LegacySurveyData
+from legacypipe.survey import LegacySurveyData
 
 class MosaicImage(CPImage, CalibMixin):
     '''
@@ -135,7 +135,7 @@ class MosaicImage(CPImage, CalibMixin):
 def main():
 
     from astrometry.util.fits import fits_table, merge_tables
-    from legacypipe.common import exposure_metadata
+    from legacypipe.survey import exposure_metadata
     # Fake up a survey-ccds.fits table from MzLS_CP
     from glob import glob
     #fns = glob('/project/projectdirs/cosmo/staging/mosaicz/MZLS_CP/CP20160202/k4m_160203_*oki*')

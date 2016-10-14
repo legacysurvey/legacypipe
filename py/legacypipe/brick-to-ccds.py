@@ -1,7 +1,7 @@
 """This script does something.
 """
 from __future__ import print_function
-from common import * # This is not best practice.
+from survey import LegacySurveyData, wcs_for_brick, ccds_touching_wcs
 from sys import exit
 #
 #

@@ -14,7 +14,7 @@ from astrometry.util.fits import fits_table, merge_tables
 from astrometry.util.plotutils import PlotSequence, plothist, loghist
 from astrometry.util.ttime import Time
 from astrometry.util.util import Tan
-from legacypipe.common import LegacySurveyData, imsave_jpeg, get_rgb
+from legacypipe.survey import LegacySurveyData, imsave_jpeg, get_rgb
 from scipy.ndimage.filters import gaussian_filter
 
 from tractor import *

@@ -9,9 +9,7 @@ from tractor import PointSource, getParamTypeTree, RaDecPos
 from tractor.galaxy import ExpGalaxy, DevGalaxy, FixedCompositeGalaxy
 from tractor.ellipses import EllipseESoft, EllipseE
 
-from legacypipe.common import SimpleGalaxy
-
-unwise_atlas = 'allsky-atlas.fits'
+from legacypipe.survey import SimpleGalaxy
 
 # FITS catalogs
 fits_typemap = { PointSource: 'PSF', ExpGalaxy: 'EXP', DevGalaxy: 'DEV',
@@ -23,36 +21,7 @@ fits_short_typemap = { PointSource: 'S', ExpGalaxy: 'E', DevGalaxy: 'D',
                        FixedCompositeGalaxy: 'C',
                        SimpleGalaxy: 'G' }
 
-
-def typestring(t):
-    return '%s.%s' % (t.__module__, t.__name__)
-    
-ellipse_types = dict([(typestring(t), t) for t in
-                      [ EllipseESoft, EllipseE,
-                        ]])
-
-def unwise_wcs_from_name(name, atlas=unwise_atlas):
-    print('Reading', atlas)
-    T = fits_table(atlas)
-    print('Read', len(T), 'WISE tiles')
-    I = np.flatnonzero(name == T.coadd_id)
-    if len(I) != 1:
-        raise RuntimeError('Failed to find WISE tile "%s"' % name)
-    I = I[0]
-    tra,tdec = T.ra[I],T.dec[I]
-    return unwise_tile_wcs(tra, tdec)
-
-# from unwise_coadd.py : get_coadd_tile_wcs()
-def unwise_tile_wcs(ra, dec, W=2048, H=2048, pixscale=2.75):
-    '''
-    Returns a Tan WCS object at the given RA,Dec center, axis aligned, with the
-    given pixel W,H and pixel scale in arcsec/pixel.
-    '''
-    cowcs = Tan(ra, dec, (W+1)/2., (H+1)/2.,
-                -pixscale/3600., 0., 0., pixscale/3600., W, H)
-    return cowcs
-
-def source_param_types(src):
+def _source_param_types(src):
     def flatten_node(node):
         return reduce(lambda x,y: x+y,
                       [flatten_node(c) for c in node[1:]],
@@ -65,6 +34,13 @@ def source_param_types(src):
 
 def prepare_fits_catalog(cat, invvars, T, hdr, filts, fs, allbands = 'ugrizY',
                          prefix='', save_invvars=True):
+
+    def typestring(t):
+        return '%s.%s' % (t.__module__, t.__name__)
+    
+    ellipse_types = dict([(typestring(t), t) for t in
+                          [ EllipseESoft, EllipseE, ]])
+
     if T is None:
         T = fits_table()
     if hdr is None:
@@ -86,7 +62,7 @@ def prepare_fits_catalog(cat, invvars, T, hdr, filts, fs, allbands = 'ugrizY',
                 hdr.add_record(dict(name='TR_%s_P%i' % (ts, i), value=nm,
                                     comment='Tractor param name'))
 
-            for i,t in enumerate(source_param_types(sc)):
+            for i,t in enumerate(_source_param_types(sc)):
                 t = typestring(t)
                 hdr.add_record(dict(name='TR_%s_T%i' % (ts, i),
                                     value=t, comment='Tractor param type'))
@@ -129,14 +105,14 @@ def prepare_fits_catalog(cat, invvars, T, hdr, filts, fs, allbands = 'ugrizY',
             x = np.array(x).astype(np.float32)
             T.set('%sdecam_%s_%s' % (prefix, tim.filter, k), x.astype(np.float32))
 
-    get_tractor_fits_values(T, cat, '%s%%s' % prefix)
+    _get_tractor_fits_values(T, cat, '%s%%s' % prefix)
 
     if save_invvars:
         if invvars is not None:
             cat.setParams(invvars)
         else:
             cat.setParams(np.zeros(cat.numberOfParams()))
-        get_tractor_fits_values(T, cat, '%s%%s_ivar' % prefix)
+        _get_tractor_fits_values(T, cat, '%s%%s_ivar' % prefix)
         # Heh, "no uncertainty here!"
         T.delete_column('%stype_ivar' % prefix)
     cat.setParams(params0)
@@ -146,7 +122,7 @@ def prepare_fits_catalog(cat, invvars, T, hdr, filts, fs, allbands = 'ugrizY',
 # We'll want to compute errors in our native representation, so have a
 # FITS output routine that can convert those into output format.
 
-def get_tractor_fits_values(T, cat, pat):
+def _get_tractor_fits_values(T, cat, pat):
     typearray = np.array([fits_typemap[type(src)] for src in cat])
     # If there are no "COMP" sources, the type will be 'S3' rather than 'S4'...
     typearray = typearray.astype('S4')
