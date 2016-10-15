@@ -254,88 +254,6 @@ class TSBox(object):
 
 
 
-def plot_FDR(Xall,cuts,src='ELG'):
-    # Object to add target selection box
-    ts= TSBox(src=src)
-    import seaborn as sns
-    sns.set(style='ticks', font_scale=1.6, palette='deep')
-    col = sns.color_palette()
-    fig, ax = plt.subplots()
-    if src == 'ELG':
-        # Set up figure
-        xlab='r - z'
-        ylab='g - r'
-        xrange = xyrange['x_%s' % src.lower()]
-        yrange = xyrange['y_%s' % src.lower()]
-        # Plot
-        # Add box
-        ts.add_ts_box(ax, xlim=xrange,ylim=yrange)
-        # Add points
-        b= cuts['loz']
-        ax.scatter(Xall[:,0][b],Xall[:,1][b], marker='^', color=col[2], label=r'$z<0.6$')
-
-        b=cuts['oiifaint']
-        ax.scatter(Xall[:,0][b],Xall[:,1][b], marker='s', color='tan',
-                        label=r'$z>0.6, [OII]<8\times10^{-17}$')
-
-        b= cuts['oiibright_loz']
-        ax.scatter(Xall[:,0][b],Xall[:,1][b], marker='o', color='powderblue',
-                        label=r'$z>0.6, [OII]>8\times10^{-17}$')
-
-        b=cuts['oiibright_hiz']
-        ax.scatter(Xall[:,0][b],Xall[:,1][b], marker='o', color='powderblue', edgecolor='black',
-                        label=r'$z>1.0, [OII]>8\times10^{-17}$')
-    elif src == 'LRG':
-        # Set up figure
-        xlab='r - z'
-        ylab='r - w1'
-        xrange = xyrange['x_%s' % src.lower()]
-        yrange = xyrange['y_%s' % src.lower()]
-        # Plot
-        # Add box
-        ts.add_ts_box(ax, xlim=xrange,ylim=yrange)
-        # Add points
-        b= cuts['lrg']
-        ax.scatter(Xall[:,0][b],Xall[:,1][b], marker='^', color='b', label='LRG')
-        #b= cuts['psf']
-        #ax.scatter(Xall[:,0][b],Xall[:,1][b], marker='o', color='g', label='PSF')
-    else: 
-        raise ValueError('src=%s not supported' % src)
-    # Finish labeling
-    ax.set_xlim(xrange)
-    ax.set_ylim(yrange)
-    xlab= ax.set_xlabel(xlab)
-    ylab= ax.set_ylabel(ylab)
-    ax.legend(loc='upper left', prop={'size': 14}, labelspacing=0.2,
-              markerscale=1.5)
-    name='%s_fdr.png' % src
-    print('Writing {}'.format(name))
-    kwargs= dict(bbox_extra_artists=[xlab,ylab], bbox_inches='tight',dpi=150)
-    plt.savefig(name, **kwargs)
-    plt.close()
-
-def star_data():
-    '''Model the g-r, r-z color-color sequence for stars'''
-    # Build a sample of stars with good photometry from a single sweep.
-    rbright = 18
-    rfaint = 19.5
-    swp_dir='/global/project/projectdirs/cosmo/data/legacysurvey/dr2/sweep/2.0'
-    sweep = fits.getdata(os.path.join(swp_dir,'sweep-340p000-350p005.fits'), 1)
-    keep = np.where((sweep['TYPE'].strip() == 'PSF')*
-                    (np.sum((sweep['DECAM_FLUX'][:, [1,2,4]] > 0)*1, axis=1)==3)*
-                    (np.sum((sweep['DECAM_ANYMASK'][:, [1,2,4]] > 0)*1, axis=1)==0)*
-                    (np.sum((sweep['DECAM_FRACFLUX'][:, [1,2,4]] < 0.05)*1, axis=1)==3)*
-                    (sweep['DECAM_FLUX'][:,2]<(10**(0.4*(22.5-rbright))))*
-                    (sweep['DECAM_FLUX'][:,2]>(10**(0.4*(22.5-rfaint)))))[0]
-    stars = sweep[keep]
-    print('Found {} stars with good photometry.'.format(len(stars)))
-    gg = 22.5-2.5*np.log10(stars['DECAM_FLUX'][:, 1])
-    rr = 22.5-2.5*np.log10(stars['DECAM_FLUX'][:, 2])
-    zz = 22.5-2.5*np.log10(stars['DECAM_FLUX'][:, 4])
-    gr = gg - rr
-    rz = rr - zz
-    return np.array([rz, gr]).T # Npts x 2
-
 def elg_data():
     '''Use DEEP2 ELGs whose SEDs have been modeled.'''
     elgs = fits.getdata('/project/projectdirs/desi/spectro/templates/basis_templates/v2.2/elg_templates_v2.0.fits', 1)
@@ -358,83 +276,6 @@ def elg_data():
     morph['n'] = elgs['SERSICN'][has_morph]                            
     morph['ba'] = elgs['AXIS_RATIO'][has_morph] #minor/major
     return Xall,cuts,morph                            
-
-def lrg_data_for_FDR():
-    '''various Truth catalogues have been used to make the FDR 
-    and the LRG ts is being revised as I write, VIPERS covers more 
-    deg2 than cosmos and should be plenty for our purposes'''
-    dr2 = fits.getdata('/project/projectdirs/desi/target/analysis/truth/decals-dr2-vipers-w4.fits.gz', 1)
-    vip = fits.getdata('/project/projectdirs/desi/target/analysis/truth/vipers-w4.fits.gz', 1)
-    #zcat = fits.getdata('/project/projectdirs/desi/target/analysis/lrg/decals-dr2-lrg-sdss.fits.gz', 1)
-    # Cuts (don't do isdss >  19.9 OR rAB < 19.5, consider full sample)
-    flux={}
-    for iband,band in zip([2,4],['r','z']):
-        flux[band]= dr2['DECAM_FLUX'][:,iband] / dr2['DECAM_MW_TRANSMISSION'][:,iband]
-    for iband,band in zip([0],['w1']):
-        flux[band]= dr2['WISE_FLUX'][:,iband] / dr2['WISE_MW_TRANSMISSION'][:,iband]
-    # LRG
-    lrg= np.all((flux['z'] > 10**((22.5-20.46)/2.5),\
-                 flux['z'] > flux['r']*10**(1.5/2.5),\
-                 flux['w1']*np.power(flux['r'],1.8-1) > np.power(flux['z'],1.8)*10**(-1.0/2.5),\
-                 flux['w1'] > 0),axis=0)
-    psf= dr2['TYPE'] == 'PSF '
-    # Quality
-    # ANYMASK -> ALLMASK
-    good= np.all((dr2['BRICK_PRIMARY'] == 'T',\
-                  dr2['DECAM_ANYMASK'][:,2] == 0,\
-                  dr2['DECAM_ANYMASK'][:,4] == 0),axis=0)  
-    lrg= np.all((lrg,good),axis=0)
-    psf= np.all((psf,good),axis=0)
-    # Good z
-    flag= vip['ZFLG'].astype(int)
-    good_z= np.all((flag >= 2, flag <= 9),axis=0) 
-    cuts=dict(lrg=lrg,\
-              psf=psf,\
-              good_z=good_z)
-    # color data
-    mag={}
-    for key in flux.keys(): mag[key]= flux2mag(flux[key])
-    rz= mag['r']-mag['z']
-    rw1= mag['r']-mag['w1']
-    Xall = np.array([rz,rw1]).T
-    return Xall,cuts              
-
-
-
-def color_color_plot(Xall,src='STAR',outdir='.',append=''): 
-    '''Make color-color plot.'''
-    if src == 'STAR':
-        xrange = xyrange['x_%s' % src.lower()]
-        yrange = xyrange['y_%s' % src.lower()]
-        xlab='r - z'
-        ylab='g - r'
-    elif src == 'ELG':
-        xrange = xyrange['x_%s' % src.lower()]
-        yrange = xyrange['y_%s' % src.lower()]
-        xlab='r - z'
-        ylab='g - r'
-    elif src == 'LRG':
-        xrange = xyrange['x_%s' % src.lower()]
-        yrange = xyrange['y_%s' % src.lower()]
-        xlab='r - z'
-        ylab='r - w1'
-    else: raise ValueError('src=%s not supported' % src)
-    fig, ax = plt.subplots(1, 2, sharey=True,figsize=(8, 4))
-    ax[0].plot(Xall[:,0],Xall[:,1], 'o', c='b', markersize=3)
-    # Add ts box
-    for i,title in zip(range(1),['Data']):
-        xlab1=ax[i].set_xlabel(xlab)
-        ax[i].set_xlim(xrange)
-        ax[i].set_ylim(yrange)
-        ti=ax[i].set_title(title)
-    ylab1=ax[0].set_ylabel(ylab)
-    fig.subplots_adjust(wspace=0) #, hspace=0.1)
-    for i in range(2):
-        rm_last_ticklabel(ax[i])
-    name= os.path.join(outdir,'priors-%s%s.png' % (src,append))
-    print('Writing {}'.format(name))
-    plt.savefig(name, bbox_extra_artists=[xlab1,ylab1,ti], bbox_inches='tight',dpi=150)
-    plt.close()
 
 
 class ReadWrite(object):
@@ -532,7 +373,6 @@ class ELG(ReadWrite):
 
     def plot(self):
         self.plot_FDR()
-        sys.exit('stopping early')
         #plot_FDR(self.Xall,self.cuts,src='ELG')
         #b= self.cuts['any_elg']
         #color_color_plot(self.Xall[b,:],src='ELG',append='_FDR') #,extra=True)
@@ -543,7 +383,7 @@ class ELG(ReadWrite):
 
 class LRG(ReadWrite):
     def __init__(self):
-        self.Xall,self.cuts= lrg_data_for_FDR()
+        pass
         #self.fn_cat= ''
         #self.cat= self.read_fits(self.fn_cat)
     def get_FDR(self):
@@ -603,25 +443,124 @@ class LRG(ReadWrite):
         #handles,labels= np.array(handles)[index],np.array(labels)[index]
         #leg=ax.legend(handles,labels,loc=(0,1.05),ncol=2,scatterpoints=1,markerscale=2)
         name='update_FDR_LRG.png'
-        plt.savefig('update_FDR_LRG.png',\
+        plt.savefig(name,\
                     bbox_extra_artists=[ti,xlab,ylab], bbox_inches='tight',dpi=150)
         plt.close()
         print('Wrote {}'.format(name))
 
+    def get_vipers(self):
+        '''LRGs from VIPERS in CFHTLS W4 field (12 deg2)'''
+        # DR2 matched
+        dr2 = self.read_fits('/project/projectdirs/desi/target/analysis/truth/decals-dr2-vipers-w4.fits.gz')
+        Z_FLUX = dr2['DECAM_FLUX'][:,4] / dr2['DECAM_MW_TRANSMISSION'][:,4]
+        W1_FLUX = dr2['WISE_FLUX'][:,0] / dr2['WISE_MW_TRANSMISSION'][:,0]
+        index={}
+        index['decals']= np.all((Z_FLUX < 10**((22.5-20.46)/2.5),\
+                                 W1_FLUX > 0.,\
+                                 dr2['BRICK_PRIMARY'] == 'T'),axis=0)
+                                 #dr2['DECAM_ANYMASK'][:,2] == 0,\
+                                 #dr2['DECAM_ANYMASK'][:,4] == 0),axis=0)  
+        # VIPERS
+        # https://arxiv.org/abs/1310.1008
+        # https://arxiv.org/abs/1303.2623
+        vip = self.read_fits('/project/projectdirs/desi/target/analysis/truth/vipers-w4.fits.gz')
+        flag= vip['ZFLG'].astype(int)
+        index['good_z']= np.all((flag >= 2,\
+                                 flag <= 9,\
+                                 vip['ZSPEC'] < 9.9),axis=0) 
+        # return Mags
+        rz,rW1={},{}
+        R_FLUX = dr2['DECAM_FLUX'][:,2] / dr2['DECAM_MW_TRANSMISSION'][:,2]
+        cut= np.all((index['decals'],\
+                     index['good_z']),axis=0)
+        rz= flux2mag(R_FLUX[cut]) - flux2mag(Z_FLUX[cut])
+        rW1= flux2mag(R_FLUX[cut]) - flux2mag(W1_FLUX[cut])
+        return rz,rW1
+    
+    def plot_vipers(self):
+        rz,rW1= self.get_vipers()
+        fig,ax = plt.subplots(figsize=(5,4))
+        plt.subplots_adjust(wspace=0,hspace=0)
+        rgb=get_rgb_cols()[0]
+        rgb= (rgb[0]/255.,rgb[1]/255.,rgb[2]/255.)
+        ax.scatter(rz,rW1,c=[rgb],edgecolors='none',marker='o',s=10.,rasterized=True)#,label=key)
+        ax.set_xlim([0,2.5])
+        ax.set_ylim([-2,6])
+        xlab=ax.set_xlabel('r-z')
+        ylab=ax.set_ylabel('r-W1')
+        #handles,labels = ax.get_legend_handles_labels()
+        #index=[0,1,2,3]
+        #handles,labels= np.array(handles)[index],np.array(labels)[index]
+        #leg=ax.legend(handles,labels,loc=(0,1.05),ncol=2,scatterpoints=1,markerscale=2)
+        name='LRG_vipers.png'
+        plt.savefig(name,\
+                    bbox_extra_artists=[xlab,ylab], bbox_inches='tight',dpi=150)
+        plt.close()
+        print('Wrote {}'.format(name))
+
+
     def plot(self):
         self.plot_FDR()
+        self.plot_vipers()
         #plot_FDR(self.Xall,self.cuts,src='LRG')
         #color_color_plot(self.Xall,src='LRG',append='cc') #,extra=True)
         #b= self.cuts['lrg']
         #color_color_plot(self.Xall[b,:],src='LRG') #,extra=True)
 
+
+
 class STAR(ReadWrite):
     def __init__(self):
-        self.Xall= star_data()
+        pass
+        #self.Xall= star_data()
         #self.fn_cat= ''
         #self.cat= self.read_fits(self.fn_cat)
+    
+    def get_dr2stars(self):
+        '''Model the g-r, r-z color-color sequence for stars'''
+        # Build a sample of stars with good photometry from a single sweep.
+        rbright = 18
+        rfaint = 19.5
+        swp_dir='/global/project/projectdirs/cosmo/data/legacysurvey/dr2/sweep/2.0'
+        sweep = self.read_fits(os.path.join(swp_dir,'sweep-340p000-350p005.fits'))
+        keep = np.where((sweep['TYPE'] == 'PSF ')*
+                        (np.sum((sweep['DECAM_FLUX'][:, [1,2,4]] > 0)*1, axis=1)==3)*
+                        (np.sum((sweep['DECAM_ANYMASK'][:, [1,2,4]] > 0)*1, axis=1)==0)*
+                        (np.sum((sweep['DECAM_FRACFLUX'][:, [1,2,4]] < 0.05)*1, axis=1)==3)*
+                        (sweep['DECAM_FLUX'][:,2]<(10**(0.4*(22.5-rbright))))*
+                        (sweep['DECAM_FLUX'][:,2]>(10**(0.4*(22.5-rfaint)))))[0]
+        stars = sweep[keep]
+        print('dr2stars sample: {}'.format(len(stars)))
+        gg = 22.5-2.5*np.log10(stars['DECAM_FLUX'][:, 1])
+        rr = 22.5-2.5*np.log10(stars['DECAM_FLUX'][:, 2])
+        zz = 22.5-2.5*np.log10(stars['DECAM_FLUX'][:, 4])
+        gr = gg - rr
+        rz = rr - zz
+        return np.array(rz),np.array(gr)
+
+    def plot_dr2stars(self): 
+        rz,gr= self.get_dr2stars()
+        fig,ax = plt.subplots(figsize=(5,4))
+        plt.subplots_adjust(wspace=0,hspace=0)
+        rgb=get_rgb_cols()[0]
+        rgb= (rgb[0]/255.,rgb[1]/255.,rgb[2]/255.)
+        ax.scatter(rz,gr,c=[rgb],edgecolors='none',marker='o',s=10.,rasterized=True)#,label=key)
+        ax.set_xlim([-0.5,2.2])
+        ax.set_ylim([-0.3,2.])
+        xlab=ax.set_xlabel('r-z')
+        ylab=ax.set_ylabel('g-r')
+        #handles,labels = ax.get_legend_handles_labels()
+        #index=[0,1,2,3]
+        #handles,labels= np.array(handles)[index],np.array(labels)[index]
+        #leg=ax.legend(handles,labels,loc=(0,1.05),ncol=2,scatterpoints=1,markerscale=2)
+        name='STAR_dr2.png'
+        plt.savefig(name,\
+                    bbox_extra_artists=[xlab,ylab], bbox_inches='tight',dpi=150)
+        plt.close()
+        print('Wrote {}'.format(name))
+       
     def plot(self):
-        color_color_plot(self.Xall, src='STAR') 
+        self.plot_dr2stars() 
         #plt.plot(self.cat['ra'],self.cat['dec'])
         #plt.savefig('test.png')
         #plt.close()
@@ -629,14 +568,14 @@ class STAR(ReadWrite):
 class GalaxyPrior(object):
     def __init__(self):
         #self.qso= QSO()
-        self.elg= ELG()
-        self.lrg= LRG()
         self.star= STAR()
+        self.lrg= LRG()
+        self.elg= ELG()
     def plot_all(self):
         #self.qso.plot()
+        self.star.plot()
         self.lrg.plot()
         self.elg.plot()
-        #self.star.plot()
 
 if __name__ == '__main__':
     gals=GalaxyPrior()
