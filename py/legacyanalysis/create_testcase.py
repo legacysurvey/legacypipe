@@ -187,22 +187,58 @@ def main():
         r,d = targetwcs.pixelxy2radec(np.array([1,   W,   W/2, W/2]),
                                       np.array([H/2, H/2, 1,   H  ]))
         roiradec = [r[0], r[1], d[2], d[3]]
-        unwise_dir = os.environ['UNWISE_COADDS_DIR']
 
+        unwise_dir = os.environ['UNWISE_COADDS_DIR']
         wise_out = os.path.join(args.outdir, 'images', 'unwise')
         print('Will write WISE outputs to', wise_out)
 
-        for tile in tiles:
-            for band in [1,2,3,4]:
+        unwise_tr_dir = os.environ['UNWISE_COADDS_TIMERESOLVED_DIR']
+        wise_tr_out = os.path.join(args.outdir, 'images', 'unwise-tr')
+        print('Will write WISE time-resolved outputs to', wise_tr_out)
+
+        W = fits_table(os.path.join(unwise_tr_dir, 'time_resolved_neo1-atlas.fits'))
+        print('Read', len(W), 'time-resolved WISE coadd tiles')
+        W.cut(np.array([t in tiles.coadd_id for t in W.coadd_id]))
+        print('Cut to', len(W), 'time-resolved vs', len(tiles), 'full-depth')
+
+        # Write the time-resolved index subset.
+        W.writeto(os.path.join(wise_tr_out, 'time_resolved_neo1-atlas.fits'))
+
+        # this ought to be enough for anyone =)
+        Nepochs = 5
+
+        wisedata = []
+
+        # full depth
+        for band in [1,2,3,4]:
+            wisedata.append((unwise_dir, wise_out, tiles.coadd_id, band))
+
+        # time-resolved
+        for band in [1,2]:
+            # W1 is bit 0 (value 0x1), W2 is bit 1 (value 0x2)
+            bitmask = (1 << (band-1))
+            for e in range(Nepochs):
+                # Which tiles have images for this epoch?
+                I = np.flatnonzero(W.epoch_bitmask[:,e] & bitmask)
+                if len(I) == 0:
+                    continue
+                print('Epoch %i: %i tiles:' % (e, len(I)), W.coadd_id[I])
+                edir = os.path.join(unwise_tr_dir, 'e%03i' % e)
+                eoutdir = os.path.join(wise_tr_out, 'e%03i' % e)
+                wisedata.append((edir, eoutdir, tiles.coadd_id[I], band))
+
+
+        for indir, outdir, tiles, band in wisedata:
+            for tile in tiles:
                 wanyband = 'w'
-                tim = get_unwise_tractor_image(unwise_dir, tile.coadd_id, band,
+                tim = get_unwise_tractor_image(indir, tile, band,
                                                bandname=wanyband, roiradecbox=roiradec)
                 print('Got unWISE tim', tim)
                 print(tim.shape)
                 
-                thisdir = get_unwise_tile_dir(wise_out, tile.coadd_id)
+                thisdir = get_unwise_tile_dir(outdir, tile)
                 print('Directory for this WISE tile:', thisdir)
-                base = os.path.join(thisdir, 'unwise-%s-w%i-' % (tile.coadd_id, band))
+                base = os.path.join(thisdir, 'unwise-%s-w%i-' % (tile, band))
                 print('Base filename:', base)
                 
                 masked = True
