@@ -2649,6 +2649,10 @@ python -u legacypipe/runbrick.py --plots --brick 2440p070 --zoom 1900 2400 450 9
         '--blobxy', type=int, nargs=2, default=None, action='append',
         help=('Debugging: run the single blob containing pixel <bx> <by>; '+
               'this option can be repeated to run multiple blobs.'))
+    parser.add_argument(
+        '--blobradec', type=float, nargs=2, default=None, action='append',
+        help=('Debugging: run the single blob containing RA,Dec <ra> <dec>; '+
+              'this option can be repeated to run multiple blobs.'))
 
     parser.add_argument(
         '--check-done', default=False, action='store_true',
@@ -2787,6 +2791,7 @@ def get_runbrick_kwargs(opt):
         gaussPsf=opt.gpsf, pixPsf=opt.pixpsf, splinesky=True,
         simulOpt=opt.simul_opt,
         nblobs=opt.nblobs, blob=opt.blob, blobxy=opt.blobxy,
+        blobradec=opt.blobradec,
         unwise_dir=opt.unwise_dir,
         plots=opt.plots, plots2=opt.plots2,
         coadd_bw=opt.coadd_bw,

@@ -31,6 +31,22 @@ if __name__ == '__main__':
     assert(os.path.exists(fn))
 
     del os.environ['UNWISE_COADDS_TIMERESOLVED_DIR']
+
+    # Custom RA,Dec; blob ra,dec.
+    outdir = 'out-testcase4b'
+    main(args=['--radec', '186.743965', '25.461788',
+               '--width', '250', '--height', '250',
+               '--force-all', '--no-write', '--no-wise',
+               '--blobradec', '186.740369', '25.453855',
+               '--survey-dir', surveydir,
+               '--outdir', outdir])
+
+    # Catalog written with one entry (--blobradec)
+    fn = os.path.join(outdir, 'tractor', 'cus',
+                      'tractor-custom-186743p25461.fits')
+    T = fits_table(fn)
+    assert(len(T) == 1)
+
     
     surveydir = os.path.join(os.path.dirname(__file__), 'testcase3')
     outdir = 'out-testcase3'
