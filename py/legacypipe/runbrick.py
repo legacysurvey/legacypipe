@@ -1866,30 +1866,34 @@ def stage_wise_forced(
         args.append((wcat, tiles, band, roiradec, unwise_w34_dir, use_ceres))
 
     # Time-resolved WISE coadds too
-    tdir = os.environ['UNWISE_COADDS_TIMERESOLVED_DIR']
-    W = fits_table(os.path.join(tdir, 'time_resolved_neo1-atlas.fits'))
-    print('Read', len(W), 'time-resolved WISE coadd tiles')
-    W.cut(np.array([t in tiles.coadd_id for t in W.coadd_id]))
-    print('Cut to', len(W), 'time-resolved vs', len(tiles), 'full-depth')
-    assert(len(W) == len(tiles))
-
-    # this ought to be enough for anyone =)
-    Nepochs = 5
-
-    # Add time-resolved coadds
+    tdir = os.environ.get('UNWISE_COADDS_TIMERESOLVED_DIR', None)
     eargs = []
-    for band in [1,2]:
-        # W1 is bit 0 (value 0x1), W2 is bit 1 (value 0x2)
-        bitmask = (1 << (band-1))
-        #ntiles,nepochs = W.epoch_bitmask.shape
-        for e in range(Nepochs):
-            # Which tiles have images for this epoch?
-            I = np.flatnonzero(W.epoch_bitmask[:,e] & bitmask)
-            if len(I) == 0:
-                continue
-            print('Epoch %i: %i tiles:' % (e, len(I)), W.coadd_id[I])
-            edir = os.path.join(tdir, 'e%03i' % e)
-            eargs.append((e,(wcat, tiles[I], band, roiradec, edir, use_ceres)))
+    if tdir is None:
+        print('WARNING: no unWISE time-resolved coadds!')
+    else:
+        W = fits_table(os.path.join(tdir, 'time_resolved_neo1-atlas.fits'))
+        print('Read', len(W), 'time-resolved WISE coadd tiles')
+        W.cut(np.array([t in tiles.coadd_id for t in W.coadd_id]))
+        print('Cut to', len(W), 'time-resolved vs', len(tiles), 'full-depth')
+        assert(len(W) == len(tiles))
+    
+        # this ought to be enough for anyone =)
+        Nepochs = 5
+    
+        # Add time-resolved coadds
+        for band in [1,2]:
+            # W1 is bit 0 (value 0x1), W2 is bit 1 (value 0x2)
+            bitmask = (1 << (band-1))
+            #ntiles,nepochs = W.epoch_bitmask.shape
+            for e in range(Nepochs):
+                # Which tiles have images for this epoch?
+                I = np.flatnonzero(W.epoch_bitmask[:,e] & bitmask)
+                if len(I) == 0:
+                    continue
+                print('Epoch %i: %i tiles:' % (e, len(I)), W.coadd_id[I])
+                edir = os.path.join(tdir, 'e%03i' % e)
+                eargs.append((e,(wcat, tiles[I], band, roiradec, edir,
+                                 use_ceres)))
 
     # Run the forced photometry!
     phots = mp.map(_unwise_phot, args + [a for e,a in eargs])
@@ -1906,7 +1910,9 @@ def stage_wise_forced(
         WISE.rename('tile', 'unwise_tile')
 
     # Unpack time-resolved results...
-    WISE_T = phots[len(args)]
+    WISE_T = None
+    if len(phots) > len(args):
+        WISE_T = phots[len(args)]
     if WISE_T is not None:
         WT = fits_table()
         phots = phots[len(args):]
