@@ -4,6 +4,7 @@ import sys
 import numpy as np
 from legacypipe.runbrick import main
 #from legacyanalysis.decals_sim import main as sim_main
+from astrometry.util.fits import fits_table
 
 if __name__ == '__main__':
 
