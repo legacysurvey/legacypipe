@@ -39,7 +39,7 @@ def _source_param_types(src):
     
 
 def prepare_fits_catalog(cat, invvars, T, hdr, filts, fs, allbands = 'ugrizY',
-                         prefix='', save_invvars=True):
+                         prefix='', save_invvars=True, unpackShape=True):
 
     if T is None:
         T = fits_table()
@@ -105,14 +105,15 @@ def prepare_fits_catalog(cat, invvars, T, hdr, filts, fs, allbands = 'ugrizY',
             x = np.array(x).astype(np.float32)
             T.set('%sdecam_%s_%s' % (prefix, tim.filter, k), x.astype(np.float32))
 
-    _get_tractor_fits_values(T, cat, '%s%%s' % prefix)
+    _get_tractor_fits_values(T, cat, '%s%%s' % prefix, unpackShape=unpackShape)
 
     if save_invvars:
         if invvars is not None:
             cat.setParams(invvars)
         else:
             cat.setParams(np.zeros(cat.numberOfParams()))
-        _get_tractor_fits_values(T, cat, '%s%%s_ivar' % prefix)
+        _get_tractor_fits_values(T, cat, '%s%%s_ivar' % prefix,
+                                 unpackShape=unpackShape)
         # Heh, "no uncertainty here!"
         T.delete_column('%stype_ivar' % prefix)
     cat.setParams(params0)
@@ -122,7 +123,7 @@ def prepare_fits_catalog(cat, invvars, T, hdr, filts, fs, allbands = 'ugrizY',
 # We'll want to compute errors in our native representation, so have a
 # FITS output routine that can convert those into output format.
 
-def _get_tractor_fits_values(T, cat, pat):
+def _get_tractor_fits_values(T, cat, pat, unpackShape=True):
     typearray = np.array([fits_typemap[type(src)] for src in cat])
     # If there are no "COMP" sources, the type will be 'S3' rather than 'S4'...
     typearray = typearray.astype('S4')
@@ -133,9 +134,9 @@ def _get_tractor_fits_values(T, cat, pat):
     T.set(pat % 'dec', np.array([src is not None and
                                  src.getPosition().dec for src in cat]))
 
-    shapeExp = np.zeros((len(T), 3))
-    shapeDev = np.zeros((len(T), 3))
-    fracDev  = np.zeros(len(T))
+    shapeExp = np.zeros((len(T), 3), np.float32)
+    shapeDev = np.zeros((len(T), 3), np.float32)
+    fracDev  = np.zeros(len(T), np.float32)
 
     for i,src in enumerate(cat):
         if isinstance(src, ExpGalaxy):
@@ -148,12 +149,18 @@ def _get_tractor_fits_values(T, cat, pat):
             shapeDev[i,:] = src.shapeDev.getAllParams()
             fracDev[i] = src.fracDev.getValue()
 
-    T.set(pat % 'shapeExp', shapeExp.astype(np.float32))
-    T.set(pat % 'shapeDev', shapeDev.astype(np.float32))
-    T.set(pat % 'fracDev',   fracDev.astype(np.float32))
-    return
+    T.set(pat % 'fracDev',   fracDev)
 
-
+    if unpackShape:
+        T.set(pat % 'shapeExp_r',  shapeExp[:,0])
+        T.set(pat % 'shapeExp_e1', shapeExp[:,1])
+        T.set(pat % 'shapeExp_e2', shapeExp[:,2])
+        T.set(pat % 'shapeDev_r',  shapeDev[:,0])
+        T.set(pat % 'shapeDev_e1', shapeDev[:,1])
+        T.set(pat % 'shapeDev_e2', shapeDev[:,2])
+    else:
+        T.set(pat % 'shapeExp', shapeExp)
+        T.set(pat % 'shapeDev', shapeDev)
 
 
 def read_fits_catalog(T, hdr=None, invvars=False, bands='grz',

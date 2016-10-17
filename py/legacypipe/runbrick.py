@@ -1378,64 +1378,24 @@ def _format_all_models(T, newcat, BB, bands, allbands):
                np.array([m.get(srctype,0) 
                          for m in BB.all_model_cpu]).astype(np.float32))
 
-    TT.delete_column('psf_shapeExp')
-    TT.delete_column('psf_shapeDev')
-    TT.delete_column('psf_fracDev')
-    TT.delete_column('psf_shapeExp_ivar')
-    TT.delete_column('psf_shapeDev_ivar')
-    TT.delete_column('psf_fracDev_ivar')
-    TT.delete_column('psf_type')
-    TT.delete_column('simp_shapeExp')
-    TT.delete_column('simp_shapeDev')
-    TT.delete_column('simp_fracDev')
-    TT.delete_column('simp_shapeExp_ivar')
-    TT.delete_column('simp_shapeDev_ivar')
-    TT.delete_column('simp_fracDev_ivar')
-    TT.delete_column('simp_type')
-    TT.delete_column('dev_shapeExp')
-    TT.delete_column('dev_shapeExp_ivar')
+    # remove silly columns
+    for col in TT.columns():
+        # all types
+        if '_type' in col:
+            TT.delete_column(col)
+            continue
+        # shapes for shapeless types
+        if (('psf_' in col or 'simp_' in col) and
+            ('shape' in col or 'fracDev' in col)):
+            TT.delete_column(col)
+            continue
+        # shapeDev for exp sources, vice versa
+        if (('exp_' in col and 'Dev' in col) or
+            ('dev_' in col and 'Exp' in col)):
+            TT.delete_column(col)
+            continue
     TT.delete_column('dev_fracDev')
     TT.delete_column('dev_fracDev_ivar')
-    TT.delete_column('dev_type')
-    TT.delete_column('exp_shapeDev')
-    TT.delete_column('exp_shapeDev_ivar')
-    TT.delete_column('exp_fracDev')
-    TT.delete_column('exp_fracDev_ivar')
-    TT.delete_column('exp_type')
-    TT.delete_column('comp_type')
-    # Unpack ellipses
-    TT.dev_shape_r  = TT.dev_shapeDev[:,0]
-    TT.dev_shape_e1 = TT.dev_shapeDev[:,1]
-    TT.dev_shape_e2 = TT.dev_shapeDev[:,2]
-    TT.exp_shape_r  = TT.exp_shapeExp[:,0]
-    TT.exp_shape_e1 = TT.exp_shapeExp[:,1]
-    TT.exp_shape_e2 = TT.exp_shapeExp[:,2]
-    TT.comp_shapeDev_r  = TT.comp_shapeDev[:,0]
-    TT.comp_shapeDev_e1 = TT.comp_shapeDev[:,1]
-    TT.comp_shapeDev_e2 = TT.comp_shapeDev[:,2]
-    TT.comp_shapeExp_r  = TT.comp_shapeExp[:,0]
-    TT.comp_shapeExp_e1 = TT.comp_shapeExp[:,1]
-    TT.comp_shapeExp_e2 = TT.comp_shapeExp[:,2]
-    TT.delete_column('dev_shapeDev')
-    TT.delete_column('exp_shapeExp')
-    TT.delete_column('comp_shapeDev')
-    TT.delete_column('comp_shapeExp')
-    TT.dev_shape_r_ivar  = TT.dev_shapeDev_ivar[:,0]
-    TT.dev_shape_e1_ivar = TT.dev_shapeDev_ivar[:,1]
-    TT.dev_shape_e2_ivar = TT.dev_shapeDev_ivar[:,2]
-    TT.exp_shape_r_ivar  = TT.exp_shapeExp_ivar[:,0]
-    TT.exp_shape_e1_ivar = TT.exp_shapeExp_ivar[:,1]
-    TT.exp_shape_e2_ivar = TT.exp_shapeExp_ivar[:,2]
-    TT.comp_shapeDev_r_ivar  = TT.comp_shapeDev_ivar[:,0]
-    TT.comp_shapeDev_e1_ivar = TT.comp_shapeDev_ivar[:,1]
-    TT.comp_shapeDev_e2_ivar = TT.comp_shapeDev_ivar[:,2]
-    TT.comp_shapeExp_r_ivar  = TT.comp_shapeExp_ivar[:,0]
-    TT.comp_shapeExp_e1_ivar = TT.comp_shapeExp_ivar[:,1]
-    TT.comp_shapeExp_e2_ivar = TT.comp_shapeExp_ivar[:,2]
-    TT.delete_column('dev_shapeDev_ivar')
-    TT.delete_column('exp_shapeExp_ivar')
-    TT.delete_column('comp_shapeDev_ivar')
-    TT.delete_column('comp_shapeExp_ivar')
     return TT,hdr
 
 def _blob_iter(blobslices, blobsrcs, blobs, targetwcs, tims, cat, bands,
@@ -2056,20 +2016,6 @@ def stage_writecat(
     T2.ra_ivar  = T2.ra_ivar .astype(np.float32)
     T2.dec_ivar = T2.dec_ivar.astype(np.float32)
 
-    # Unpack shape columns
-    T2.shapeExp_r  = T2.shapeExp[:,0]
-    T2.shapeExp_e1 = T2.shapeExp[:,1]
-    T2.shapeExp_e2 = T2.shapeExp[:,2]
-    T2.shapeDev_r  = T2.shapeDev[:,0]
-    T2.shapeDev_e1 = T2.shapeDev[:,1]
-    T2.shapeDev_e2 = T2.shapeDev[:,2]
-    T2.shapeExp_r_ivar  = T2.shapeExp_ivar[:,0]
-    T2.shapeExp_e1_ivar = T2.shapeExp_ivar[:,1]
-    T2.shapeExp_e2_ivar = T2.shapeExp_ivar[:,2]
-    T2.shapeDev_r_ivar  = T2.shapeDev_ivar[:,0]
-    T2.shapeDev_e1_ivar = T2.shapeDev_ivar[:,1]
-    T2.shapeDev_e2_ivar = T2.shapeDev_ivar[:,2]
-
     T2.decam_flux[T2.decam_flux_ivar == 0] = 0.
 
     if WISE is not None:
@@ -2199,7 +2145,7 @@ def stage_writecat(
         shapeexp_r='arcsec', shapeexp_r_ivar='1/arcsec^2',
         shapedev_r='arcsec', shapedev_r_ivar='1/arcsec^2')
     # Reformat as list aligned with cols
-    units = [units.get(c, None) for c in cols]
+    units = [units.get(c, '') for c in cols]
 
     # match case to T2.
     cc = T2.get_columns()
