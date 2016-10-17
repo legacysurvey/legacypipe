@@ -102,10 +102,6 @@ def stage_1(expnum=431202, extname='S19', plotprefix='lsb', plots=False,
         print 'Cut to', len(T), 'brick_primary'
         T.cut((T.out_of_bounds == False) * (T.left_blob == False))
         print 'Cut to', len(T), 'not out-of-bound or left-blob'
-        
-        T.shapeexp = np.vstack((T.shapeexp_r, T.shapeexp_e1, T.shapeexp_e2)).T
-        T.shapedev = np.vstack((T.shapedev_r, T.shapedev_e1, T.shapedev_e2)).T
-        
         print 'Brightest z-band:', np.max(T.decam_flux[:,4])
         print 'Brightest r-band:', np.max(T.decam_flux[:,2])
     

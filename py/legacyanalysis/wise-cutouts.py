@@ -101,9 +101,7 @@ def wise_cutouts(ra, dec, radius, ps, pixscale=2.75, tractor_base='.',
 
     ra,dec = T.ra, T.dec
 
-    T.shapeexp = np.vstack((T.shapeexp_r, T.shapeexp_e1, T.shapeexp_e2)).T
-    T.shapedev = np.vstack((T.shapedev_r, T.shapedev_e1, T.shapedev_e2)).T
-    srcs = read_fits_catalog(T, ellipseClass=EllipseE)
+    srcs = read_fits_catalog(T)
 
     wbands = [1,2]
     wanyband = 'w'

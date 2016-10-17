@@ -189,10 +189,7 @@ def main(survey=None, opt=None):
     surveydir = survey.get_survey_dir()
     del survey
         
-    T.shapeexp = np.vstack((T.shapeexp_r, T.shapeexp_e1, T.shapeexp_e2)).T
-    T.shapedev = np.vstack((T.shapedev_r, T.shapedev_e1, T.shapedev_e2)).T
-
-    cat = read_fits_catalog(T, ellipseClass=EllipseE)
+    cat = read_fits_catalog(T)
     # print('Got cat:', cat)
 
     print('Read catalog:', Time()-t0)
