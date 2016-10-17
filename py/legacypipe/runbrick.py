@@ -2016,7 +2016,6 @@ def stage_writecat(
     fs = None
     T2,hdr = prepare_fits_catalog(cat, invvars, TT, hdr, bands, fs,
                                   allbands=allbands)
-
     # mod
     T2.ra += (T2.ra <   0) * 360.
     T2.ra -= (T2.ra > 360) * 360.
@@ -2185,7 +2184,7 @@ def stage_writecat(
         'shapedev_e1', 'shapedev_e1_ivar',
         'shapedev_e2', 'shapedev_e2_ivar',])
 
-    # TUNIT cards.
+    # Units
     deg='deg'
     degiv='1/deg^2'
     flux = 'nanomaggy'
@@ -2199,10 +2198,8 @@ def stage_writecat(
         wise_lc_flux=flux, wise_lc_flux_ivar=fluxiv,
         shapeexp_r='arcsec', shapeexp_r_ivar='1/arcsec^2',
         shapedev_r='arcsec', shapedev_r_ivar='1/arcsec^2')
-
-    for i,col in enumerate(cols):
-        if col in units:
-            hdr.add_record(dict(name='TUNIT%i' % (i+1), value=units[col]))
+    # Reformat as list aligned with cols
+    units = [units.get(c, None) for c in cols]
 
     # match case to T2.
     cc = T2.get_columns()
@@ -2214,7 +2211,8 @@ def stage_writecat(
 
     with survey.write_output('tractor', brick=brickname) as out:
         print('tractor cat data, fn=', out.fn)
-        T2.writeto(out.fn, primheader=primhdr, header=hdr, columns=cols)
+        T2.writeto(out.fn, primheader=primhdr, header=hdr, columns=cols,
+                   units=units)
         print('Wrote', out.fn)
 
     # produce per-brick sha1sums file
