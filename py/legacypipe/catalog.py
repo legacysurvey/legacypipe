@@ -157,7 +157,8 @@ def _get_tractor_fits_values(T, cat, pat):
 
 
 def read_fits_catalog(T, hdr=None, invvars=False, bands='grz',
-                      allbands = 'ugrizY', ellipseClass=None):
+                      allbands = 'ugrizY', ellipseClass=EllipseE,
+                      unpackShape=True):
     from tractor import NanoMaggies
     '''
     This is currently a weird hybrid of dynamic and hard-coded.
@@ -166,10 +167,24 @@ def read_fits_catalog(T, hdr=None, invvars=False, bands='grz',
 
     If invvars=True, return sources,invvars
     where invvars is a list matching sources.getParams()
+
+    If *ellipseClass* is set, assume that type for galaxy shapes; if None,
+    read the type from the header.
+
+    If *unpackShapes* is True and *ellipseClass* is EllipseE, read
+    catalog entries "shapeexp_r", "shapeexp_e1", "shapeexp_e2" rather than
+    "shapeExp", and similarly for "dev".
     '''
     if hdr is None:
         hdr = T._header
     rev_typemap = dict([(v,k) for k,v in fits_typemap.items()])
+
+    if unpackShape and ellipseClass != EllipseE:
+        print('Not doing unpackShape because ellipseClass != EllipseE.')
+        unpackShape = False
+    if unpackShape:
+        T.shapeexp = np.vstack((T.shapeexp_r, T.shapeexp_e1, T.shapeexp_e2)).T
+        T.shapedev = np.vstack((T.shapedev_r, T.shapedev_e1, T.shapedev_e2)).T
 
     ivbandcols = []
 

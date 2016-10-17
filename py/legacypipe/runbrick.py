@@ -900,9 +900,7 @@ def _subtract_onbricks_sources(survey, brick, allow_missing_brickq,
     # Create sources for these catalog entries
     ### see forced-photom-decam.py for some additional patchups?
 
-    B.shapeexp = np.vstack((B.shapeexp_r, B.shapeexp_e1, B.shapeexp_e2)).T
-    B.shapedev = np.vstack((B.shapedev_r, B.shapedev_e1, B.shapedev_e2)).T
-    bcat = read_fits_catalog(B, ellipseClass=EllipseE)
+    bcat = read_fits_catalog(B)
     print('Created', len(bcat), 'tractor catalog objects')
 
     # Add the new sources to the 'avoid_[xy]' lists, which are
