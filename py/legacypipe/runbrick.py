@@ -1960,12 +1960,9 @@ def stage_writecat(
     fs = None
     T2,hdr = prepare_fits_catalog(cat, invvars, TT, hdr, bands, fs,
                                   allbands=allbands)
-
     primhdr = fitsio.FITSHDR()
     for r in version_header.records():
         primhdr.add_record(r)
-    primhdr.add_record(dict(name='ALLBANDS', value=allbands,
-                            comment='Band order in array values'))
     primhdr.add_record(dict(name='PRODTYPE', value='catalog',
                             comment='NOAO data product type'))
 
@@ -2107,23 +2104,10 @@ def stage_writecat(
         'shapedev_e1', 'shapedev_e1_ivar',
         'shapedev_e2', 'shapedev_e2_ivar',])
 
-    # Units
-    deg='deg'
-    degiv='1/deg^2'
-    flux = 'nanomaggy'
-    fluxiv = '1/nanomaggy^2'
-    units = dict(
-        ra=deg, dec=deg, ra_ivar=degiv, dec_ivar=degiv, ebv='mag',
-        decam_flux=flux, decam_flux_ivar=fluxiv,
-        decam_apflux=flux, decam_apflux_ivar=fluxiv, decam_apflux_resid=flux,
-        decam_depth=fluxiv, decam_galdepth=fluxiv,
-        wise_flux=flux, wise_flux_ivar=fluxiv,
-        wise_lc_flux=flux, wise_lc_flux_ivar=fluxiv,
-        shapeexp_r='arcsec', shapeexp_r_ivar='1/arcsec^2',
-        shapedev_r='arcsec', shapedev_r_ivar='1/arcsec^2')
-    # Reformat as list aligned with cols
-    units = [units.get(c, '') for c in cols]
 
+    print('Columns:', cols)
+    print('T2 columns:', T2.columns())
+    
     # match case to T2.
     cc = T2.get_columns()
     cclower = [c.lower() for c in cc]
