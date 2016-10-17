@@ -117,6 +117,15 @@ def prepare_fits_catalog(cat, invvars, T, hdr, filts, fs, allbands = 'ugrizY',
         # Heh, "no uncertainty here!"
         T.delete_column('%stype_ivar' % prefix)
     cat.setParams(params0)
+
+    # mod
+    T.ra += (T.ra <   0) * 360.
+    T.ra -= (T.ra > 360) * 360.
+
+    T.ra_ivar  = T.ra_ivar .astype(np.float32)
+    T.dec_ivar = T.dec_ivar.astype(np.float32)
+
+    T.decam_flux[T.decam_flux_ivar == 0] = 0.
     
     return T, hdr
 

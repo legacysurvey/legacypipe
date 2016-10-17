@@ -1933,27 +1933,11 @@ def stage_writecat(
     catalog.
     '''
     from catalog import prepare_fits_catalog
-    from tractor.sfd import SFDMap
      
     TT = T.copy()
     for k in ['itx','ity','index']:
         if k in TT.get_columns():
             TT.delete_column(k)
-    TT.tx = TT.tx.astype(np.float32)
-    TT.ty = TT.ty.astype(np.float32)
-
-    # Set fields such as TT.decam_rchi2 -- fields with 6-band values
-    B = np.array([allbands.index(band) for band in bands])
-    atypes = dict(nobs=np.uint8, anymask=TT.anymask.dtype,
-                  allmask=TT.allmask.dtype)
-    for k in ['rchi2', 'fracflux', 'fracmasked', 'fracin', 'nobs',
-              'anymask', 'allmask', 'psfsize', 'depth', 'galdepth']:
-        t = atypes.get(k, np.float32)
-        A = np.zeros((len(TT), len(allbands)), t)
-        A[:,B] = TT.get(k)
-        TT.set('decam_'+k, A)
-        TT.delete_column(k)
-
     TT.rename('oob', 'out_of_bounds')
 
     if AP is not None:
@@ -1976,9 +1960,6 @@ def stage_writecat(
     fs = None
     T2,hdr = prepare_fits_catalog(cat, invvars, TT, hdr, bands, fs,
                                   allbands=allbands)
-    # mod
-    T2.ra += (T2.ra <   0) * 360.
-    T2.ra -= (T2.ra > 360) * 360.
 
     primhdr = fitsio.FITSHDR()
     for r in version_header.records():
@@ -2013,10 +1994,6 @@ def stage_writecat(
 
     T2.brick_primary = ((T2.ra  >= brick.ra1 ) * (T2.ra  < brick.ra2) *
                         (T2.dec >= brick.dec1) * (T2.dec < brick.dec2))
-    T2.ra_ivar  = T2.ra_ivar .astype(np.float32)
-    T2.dec_ivar = T2.dec_ivar.astype(np.float32)
-
-    T2.decam_flux[T2.decam_flux_ivar == 0] = 0.
 
     if WISE is not None:
         # Convert WISE fluxes from Vega to AB.
