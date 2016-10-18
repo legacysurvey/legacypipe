@@ -1455,7 +1455,7 @@ def _blob_iter(blobslices, blobsrcs, blobs, targetwcs, tims, cat, bands,
         # skip it!
         if np.all(U[bslc][blobmask] == False):
             print('This blob is completely outside the unique region of this brick -- skipping')
-            continue
+            yield None
 
         # find one pixel within the blob, for debugging purposes
         onex = oney = None
@@ -1523,7 +1523,9 @@ def _bounce_one_blob(X):
         return one_blob(X)
     except:
         import traceback
-        print('Exception in one_blob: (iblob = %i)' % (X[0]))
+        print('Exception in one_blob:')
+        if X is not None:
+            print('(iblob = %i)' % (X[0]))
         traceback.print_exc()
         raise
 

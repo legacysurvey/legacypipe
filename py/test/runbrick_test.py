@@ -45,7 +45,6 @@ if __name__ == '__main__':
     T = fits_table(fn)
     assert(len(T) == 1)
 
-    
     surveydir = os.path.join(os.path.dirname(__file__), 'testcase3')
     outdir = 'out-testcase3'
     checkpoint_fn = os.path.join(outdir, 'checkpoint.pickle')

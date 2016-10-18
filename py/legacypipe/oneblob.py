@@ -24,6 +24,8 @@ def one_blob(X):
     '''
     Fits sources contained within a "blob" of pixels.
     '''
+    if X is None:
+        return None
     (nblob, iblob, Isrcs, brickwcs, bx0, by0, blobw, blobh, blobmask, timargs,
      srcs, bands, plots, ps, simul_opt, use_ceres, hastycho) = X
 
