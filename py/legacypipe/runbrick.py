@@ -1232,6 +1232,7 @@ def stage_fitblobs(T=None,
     assert(len(T) == len(newcat))
     print('Old catalog:', len(cat))
     print('New catalog:', len(newcat))
+    assert(len(newcat) > 0)
     cat = Catalog(*newcat)
     ns,nb = BB.fracflux.shape
     assert(ns == len(cat))
@@ -1589,11 +1590,6 @@ def stage_coadds(survey=None, bands=None, version_header=None, targetwcs=None,
     apertures = apertures_arcsec / pixscale
     # Aperture photometry locations
     apxy = np.vstack((xx - 1., yy - 1.)).T
-
-    nap = len(apertures)
-    if len(xx) == 0:
-        apertures = None
-        apxy = None
     del xx,yy,ok,ra,dec
 
     C = make_coadds(tims, bands, targetwcs, mods=mods, xy=(ix,iy),
@@ -1624,15 +1620,6 @@ def stage_coadds(survey=None, bands=None, version_header=None, targetwcs=None,
     # store galaxy sim bounding box in Tractor cat
     if 'sims_xy' in C.T.get_columns():
         T.set('sims_xy', C.T.get('sims_xy'))
-
-    # FIXME -- do we need to handle the case where there are 0 sources?
-    if apertures is None:
-        # empty table when 0 sources.
-        C.AP = fits_table()
-        for band in bands:
-            C.AP.set('apflux_img_%s' % band, np.zeros((0,nap)))
-            C.AP.set('apflux_img_ivar_%s' % band, np.zeros((0,nap)))
-            C.AP.set('apflux_resid_%s' % band, np.zeros((0,nap)))
 
     # Compute depth histogram
     D = _depth_histogram(brick, targetwcs, bands, C.detivs, C.galdetivs)
@@ -1942,21 +1929,21 @@ def stage_writecat(
             TT.delete_column(k)
     TT.rename('oob', 'out_of_bounds')
 
-    if AP is not None:
-        # How many apertures?
-        ap = AP.get('apflux_img_%s' % bands[0])
-        n,A = ap.shape
-        TT.apflux       = np.zeros((len(TT), len(bands), A), np.float32)
-        TT.apflux_ivar  = np.zeros((len(TT), len(bands), A), np.float32)
-        TT.apflux_resid = np.zeros((len(TT), len(bands), A), np.float32)
-        for iband,band in enumerate(bands):
-            TT.apflux      [:,iband,:] = AP.get('apflux_img_%s'      % band)
-            TT.apflux_ivar [:,iband,:] = AP.get('apflux_img_ivar_%s' % band)
-            TT.apflux_resid[:,iband,:] = AP.get('apflux_resid_%s'    % band)
+    assert(AP is not None)
+    #if AP is not None:
+    # How many apertures?
+    ap = AP.get('apflux_img_%s' % bands[0])
+    n,A = ap.shape
+    TT.apflux       = np.zeros((len(TT), len(bands), A), np.float32)
+    TT.apflux_ivar  = np.zeros((len(TT), len(bands), A), np.float32)
+    TT.apflux_resid = np.zeros((len(TT), len(bands), A), np.float32)
+    for iband,band in enumerate(bands):
+        TT.apflux      [:,iband,:] = AP.get('apflux_img_%s'      % band)
+        TT.apflux_ivar [:,iband,:] = AP.get('apflux_img_ivar_%s' % band)
+        TT.apflux_resid[:,iband,:] = AP.get('apflux_resid_%s'    % band)
 
     cat.thawAllRecursive()
-    hdr = None
-    fs = None
+    hdr = fs = None
     T2,hdr = prepare_fits_catalog(cat, invvars, TT, hdr, bands, fs)
 
     primhdr = fitsio.FITSHDR()
@@ -1965,10 +1952,9 @@ def stage_writecat(
     primhdr.add_record(dict(name='PRODTYPE', value='catalog',
                             comment='NOAO data product type'))
 
-    if AP is not None:
-        for i,ap in enumerate(apertures_arcsec):
-            primhdr.add_record(dict(name='APRAD%i' % i, value=ap,
-                                    comment='Aperture radius, in arcsec'))
+    for i,ap in enumerate(apertures_arcsec):
+        primhdr.add_record(dict(name='APRAD%i' % i, value=ap,
+                                comment='Aperture radius, in arcsec'))
 
     # Record the meaning of mask bits
     bits = CP_DQ_BITS.values()
