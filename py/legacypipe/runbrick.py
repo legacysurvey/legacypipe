@@ -1456,6 +1456,7 @@ def _blob_iter(blobslices, blobsrcs, blobs, targetwcs, tims, cat, bands,
         if np.all(U[bslc][blobmask] == False):
             print('This blob is completely outside the unique region of this brick -- skipping')
             yield None
+            continue
 
         # find one pixel within the blob, for debugging purposes
         onex = oney = None
