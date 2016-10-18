@@ -39,7 +39,12 @@ class ps1cat():
 
         cat = list()
         for ipix in pix:
-            fname = os.path.join(self.ps1dir,'ps1-'+'{:05d}'.format(ipix)+'.fits')
+            if 'gaia' in os.getenv('PS1CAT_DIR'):
+                # See /project/projectdirs/cosmo/work/gaia/chunks-ps1-gaia
+                fname = os.path.join(self.ps1dir,'chunk-'+'{:05d}'.format(ipix)+'.fits')
+            else:
+                # See /project/projectdirs/cosmo/work/ps1/cats/chunks-qz-star-v2
+                fname = os.path.join(self.ps1dir,'ps1-'+'{:05d}'.format(ipix)+'.fits')
             print('Reading {}'.format(fname))
             cat.append(fits_table(fname))
         cat = merge_tables(cat)
