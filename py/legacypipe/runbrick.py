@@ -423,6 +423,11 @@ def stage_tims(W=3600, H=3600, pixscale=0.262, brickname=None,
         version_hdr.add_record(dict(
             name='CAMS_%s' % band.upper(), value=' '.join(cams),
             comment='Cameras contributing band %s' % band))
+
+    for i,band in enumerate(bands):
+        version_hdr.add_record(dict(name='BAND%i' % i, value=band,
+                                    comment='Band name in this catalog'))
+
     version_hdr.add_record(dict(name='BRICKBND', value=''.join(bands),
                                 comment='Bands touching this brick'))
     version_header = version_hdr
@@ -967,7 +972,6 @@ def stage_fitblobs(T=None,
                    write_pickle_filename=None,
                    write_metrics=True,
                    get_all_models=False,
-                   allbands = 'ugrizY',
                    tycho=None,
                    **kwargs):
     '''
@@ -1310,15 +1314,13 @@ def stage_fitblobs(T=None,
     assert(cat.numberOfParams() == len(invvars))
 
     if write_metrics or get_all_models:
-        TT,hdr = _format_all_models(T, newcat, BB, bands, allbands)
+        TT,hdr = _format_all_models(T, newcat, BB, bands)
         if get_all_models:
             all_models = TT
         if write_metrics:
             primhdr = fitsio.FITSHDR()
             for r in version_header.records():
                 primhdr.add_record(r)
-                primhdr.add_record(dict(name='ALLBANDS', value=allbands,
-                                        comment='Band order in array values'))
                 primhdr.add_record(dict(name='PRODTYPE', value='catalog',
                                         comment='NOAO data product type'))
 
@@ -1326,13 +1328,13 @@ def stage_fitblobs(T=None,
                 TT.writeto(out.fn, header=hdr, primheader=primhdr)
                 print('Wrote', out.fn)
 
-    keys = ['cat', 'invvars', 'T', 'allbands', 'blobs']
+    keys = ['cat', 'invvars', 'T', 'blobs']
     if get_all_models:
         keys.append('all_models')
     rtn = dict([(k,locals()[k]) for k in keys])
     return rtn
 
-def _format_all_models(T, newcat, BB, bands, allbands):
+def _format_all_models(T, newcat, BB, bands):
     from catalog import prepare_fits_catalog, fits_typemap
     from astrometry.util.file import pickle_to_file
 
@@ -1371,7 +1373,7 @@ def _format_all_models(T, newcat, BB, bands, allbands):
         assert(len(allivs) == xcat.numberOfParams())
         
         TT,hdr = prepare_fits_catalog(xcat, allivs, TT, hdr, bands, None,
-                                      allbands=allbands, prefix=prefix+'_')
+                                      prefix=prefix+'_')
         TT.set('%s_flags' % prefix,
                np.array([m.get(srctype,0) for m in BB.all_model_flags]))
         TT.set('%s_cpu' % prefix,
@@ -1955,8 +1957,7 @@ def stage_writecat(
     cat.thawAllRecursive()
     hdr = None
     fs = None
-    T2,hdr = prepare_fits_catalog(cat, invvars, TT, hdr, bands, fs,
-                                  allbands=bands)
+    T2,hdr = prepare_fits_catalog(cat, invvars, TT, hdr, bands, fs)
 
     primhdr = fitsio.FITSHDR()
     for r in version_header.records():
@@ -1979,10 +1980,6 @@ def stage_writecat(
             primhdr.add_record(dict(name='MASKB%i' % i, value=bitmap[bit],
                                     comment='Mask bit 2**%i=%i meaning' %
                                     (i, bit)))
-
-    for i,band in enumerate(bands):
-        primhdr.add_record(dict(name='BAND%i' % i, value=band,
-                                comment='Band name in this catalog'))
 
     # Brick pixel positions
     ok,bx,by = targetwcs.radec2pixelxy(T2.orig_ra, T2.orig_dec)
@@ -2065,8 +2062,7 @@ def stage_writecat(
     ### FIXME -- convert intermediate tractor catalog to final, for now...
     from format_catalog import format_catalog
     with survey.write_output('tractor', brick=brickname) as out:
-        format_catalog(T2, hdr, primhdr, allbands, out.fn,
-                       flux_prefix='decam_')
+        format_catalog(T2, hdr, primhdr, allbands, out.fn, flux_prefix='decam_')
         print('Wrote', out.fn)
         
     # produce per-brick sha1sums file
@@ -2653,6 +2649,7 @@ def get_runbrick_kwargs(opt):
         picklePattern=opt.picklepat,
         checkpoint_filename=opt.checkpoint,
         checkpoint_period=opt.checkpoint_period,
+        allbands='ugrizY',
         )
     return survey, kwa
 

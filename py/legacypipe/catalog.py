@@ -38,14 +38,15 @@ def _source_param_types(src):
     return types
     
 
-def prepare_fits_catalog(cat, invvars, T, hdr, filts, fs, allbands = 'ugrizY',
+def prepare_fits_catalog(cat, invvars, T, hdr, filts, fs, allbands=None,
                          prefix='', save_invvars=True, unpackShape=True):
-
     if T is None:
         T = fits_table()
     if hdr is None:
         import fitsio
         hdr = fitsio.FITSHDR()
+    if allbands is None:
+        allbands = filts
 
     hdr.add_record(dict(name='TR_VER', value=1, comment='Tractor output format version'))
 
@@ -184,9 +185,8 @@ def _get_tractor_fits_values(T, cat, pat, unpackShape=True):
 
 
 def read_fits_catalog(T, hdr=None, invvars=False, bands='grz',
-                      allbands = 'ugrizY', ellipseClass=EllipseE,
+                      allbands=None, ellipseClass=EllipseE,
                       unpackShape=True, fluxPrefix='decam_'):
-    from tractor import NanoMaggies
     '''
     This is currently a weird hybrid of dynamic and hard-coded.
 
@@ -202,8 +202,11 @@ def read_fits_catalog(T, hdr=None, invvars=False, bands='grz',
     catalog entries "shapeexp_r", "shapeexp_e1", "shapeexp_e2" rather than
     "shapeExp", and similarly for "dev".
     '''
+    from tractor import NanoMaggies
     if hdr is None:
         hdr = T._header
+    if allbands is None:
+        allbands = bands    
     rev_typemap = dict([(v,k) for k,v in fits_typemap.items()])
 
     if unpackShape and ellipseClass != EllipseE:
