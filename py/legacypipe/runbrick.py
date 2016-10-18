@@ -2082,7 +2082,7 @@ def run_brick(brick, survey, radec=None, pixscale=0.262,
               simulOpt=False,
               wise=True,
               lanczos=True,
-              early_coadds=True,
+              early_coadds=False,
               blob_image=False,
               do_calibs=True,
               write_metrics=True,
@@ -2529,8 +2529,8 @@ python -u legacypipe/runbrick.py --plots --brick 2440p070 --zoom 1900 2400 450 9
         '--unwise-tr-dir', default=None,
         help='Base directory for unWISE time-resolved coadds; may be a colon-separated list')
 
-    parser.add_argument('--no-early-coadds', action='store_true', default=False,
-                        help='Skip making the early coadds')
+    parser.add_argument('--early-coadds', action='store_true', default=False,
+                        help='Make early coadds?')
     parser.add_argument('--blob-image', action='store_true', default=False,
                         help='Create "imageblob" image?')
 
@@ -2607,8 +2607,8 @@ def get_runbrick_kwargs(opt):
         kwa.update(nsigma=opt.nsigma)
     if opt.no_wise:
         kwa.update(wise=False)
-    if opt.no_early_coadds:
-        kwa.update(early_coadds=False)
+    if opt.early_coadds:
+        kwa.update(early_coadds=True)
     if opt.blob_image:
         kwa.update(blob_image=True)
 
