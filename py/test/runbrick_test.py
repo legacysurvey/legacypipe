@@ -72,8 +72,6 @@ if __name__ == '__main__':
     survey = LegacySurveyData(survey_dir=outdir)
     fn = survey.find_file('tractor', brick='2447p120')
     T = fits_table(fn)
-    T.shapeexp = np.vstack((T.shapeexp_r, T.shapeexp_e1, T.shapeexp_e2)).T
-    T.shapedev = np.vstack((T.shapedev_r, T.shapedev_e1, T.shapedev_e2)).T
     cat = read_fits_catalog(T)
     print('Read catalog:', cat)
     assert(len(cat) == 2)

@@ -765,6 +765,10 @@ Now using the current directory as LEGACY_SURVEY_DIR, but this is likely to fail
             return os.path.join(basedir, 'tractor', brickpre,
                                 'tractor-%s.fits' % brick)
         
+        elif filetype == 'tractor-intermediate':
+            return os.path.join(basedir, 'tractor-i', brickpre,
+                                'tractor-%s.fits' % brick)
+
         elif filetype == 'galaxy-sims':
             return os.path.join(basedir, 'tractor', brickpre,
                                 'galaxy-sims-%s.fits' % brick)

@@ -1618,9 +1618,6 @@ def stage_plot_model(tims=None, bands=None, targetwcs=None,
     print('Read', len(ACS), 'ACS catalog entries')
     ACS.cut(ACS.brick_primary)
     print('Cut to', len(ACS), 'primary')
-    ACS.shapeexp = np.vstack((ACS.shapeexp_r, ACS.shapeexp_e1, ACS.shapeexp_e2)).T
-    ACS.shapedev = np.vstack((ACS.shapedev_r, ACS.shapedev_e1, ACS.shapedev_e2)).T
-
     ACS.cut(ACS.decam_flux_ivar > 0)
 
     tim = tims[0]
@@ -1631,8 +1628,7 @@ def stage_plot_model(tims=None, bands=None, targetwcs=None,
     print('Cut to', len(ACS), 'in image')
 
     print('Creating catalog objects...')
-    cat = read_fits_catalog(ACS, ellipseClass=EllipseE, allbands=bands,
-                            bands=bands)
+    cat = read_fits_catalog(ACS, allbands=bands, bands=bands)
     tr = Tractor(tims, cat)
 
     # Clip sizes of big models
@@ -1982,9 +1978,6 @@ def main():
         print('Cut to', len(T), 'primary')
         #T.about()
 
-        T.shapeexp = np.vstack((T.shapeexp_r, T.shapeexp_e1, T.shapeexp_e2)).T
-        T.shapedev = np.vstack((T.shapedev_r, T.shapedev_e1, T.shapedev_e2)).T
-
         print('RA', T.ra.min(), T.ra.max())
         print('Dec', T.dec.min(), T.dec.max())
 
@@ -2055,8 +2048,7 @@ def main():
                         continue
 
                     bands = ['w']
-                    wcat = read_fits_catalog(T[I], ellipseClass=EllipseE, allbands=bands,
-                                             bands=bands)
+                    wcat = read_fits_catalog(T[I], allbands=bands, bands=bands)
                     for src in wcat:
                         src.brightness = NanoMaggies(**dict([(b, 1.) for b in bands]))
                 
@@ -2253,9 +2245,6 @@ def forced_photometry(opt, survey):
         B = 8
         opti = CeresOptimizer(BW=B, BH=B)
     
-    T.shapeexp = np.vstack((T.shapeexp_r, T.shapeexp_e1, T.shapeexp_e2)).T
-    T.shapedev = np.vstack((T.shapedev_r, T.shapedev_e1, T.shapedev_e2)).T
-
     ccds = survey.get_ccds_readonly()
     #I = np.flatnonzero(ccds.camera == 'megacam')
     #print(len(I), 'MegaCam CCDs')
@@ -2332,8 +2321,7 @@ def forced_photometry(opt, survey):
     # convert to string
     bands = ''.join(bands)
     
-    cat = read_fits_catalog(T, ellipseClass=EllipseE, allbands=bands,
-                            bands=bands)
+    cat = read_fits_catalog(T, allbands=bands, bands=bands)
     for src in cat:
         src.brightness = NanoMaggies(**dict([(b, 1.) for b in bands]))
 

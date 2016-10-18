@@ -423,6 +423,11 @@ def stage_tims(W=3600, H=3600, pixscale=0.262, brickname=None,
         version_hdr.add_record(dict(
             name='CAMS_%s' % band.upper(), value=' '.join(cams),
             comment='Cameras contributing band %s' % band))
+
+    for i,band in enumerate(bands):
+        version_hdr.add_record(dict(name='BAND%i' % i, value=band,
+                                    comment='Band name in this catalog'))
+
     version_hdr.add_record(dict(name='BRICKBND', value=''.join(bands),
                                 comment='Bands touching this brick'))
     version_header = version_hdr
@@ -900,9 +905,7 @@ def _subtract_onbricks_sources(survey, brick, allow_missing_brickq,
     # Create sources for these catalog entries
     ### see forced-photom-decam.py for some additional patchups?
 
-    B.shapeexp = np.vstack((B.shapeexp_r, B.shapeexp_e1, B.shapeexp_e2)).T
-    B.shapedev = np.vstack((B.shapedev_r, B.shapedev_e1, B.shapedev_e2)).T
-    bcat = read_fits_catalog(B, ellipseClass=EllipseE)
+    bcat = read_fits_catalog(B)
     print('Created', len(bcat), 'tractor catalog objects')
 
     # Add the new sources to the 'avoid_[xy]' lists, which are
@@ -969,7 +972,6 @@ def stage_fitblobs(T=None,
                    write_pickle_filename=None,
                    write_metrics=True,
                    get_all_models=False,
-                   allbands = 'ugrizY',
                    tycho=None,
                    **kwargs):
     '''
@@ -1230,6 +1232,7 @@ def stage_fitblobs(T=None,
     assert(len(T) == len(newcat))
     print('Old catalog:', len(cat))
     print('New catalog:', len(newcat))
+    assert(len(newcat) > 0)
     cat = Catalog(*newcat)
     ns,nb = BB.fracflux.shape
     assert(ns == len(cat))
@@ -1312,15 +1315,13 @@ def stage_fitblobs(T=None,
     assert(cat.numberOfParams() == len(invvars))
 
     if write_metrics or get_all_models:
-        TT,hdr = _format_all_models(T, newcat, BB, bands, allbands)
+        TT,hdr = _format_all_models(T, newcat, BB, bands)
         if get_all_models:
             all_models = TT
         if write_metrics:
             primhdr = fitsio.FITSHDR()
             for r in version_header.records():
                 primhdr.add_record(r)
-                primhdr.add_record(dict(name='ALLBANDS', value=allbands,
-                                        comment='Band order in array values'))
                 primhdr.add_record(dict(name='PRODTYPE', value='catalog',
                                         comment='NOAO data product type'))
 
@@ -1328,13 +1329,13 @@ def stage_fitblobs(T=None,
                 TT.writeto(out.fn, header=hdr, primheader=primhdr)
                 print('Wrote', out.fn)
 
-    keys = ['cat', 'invvars', 'T', 'allbands', 'blobs']
+    keys = ['cat', 'invvars', 'T', 'blobs']
     if get_all_models:
         keys.append('all_models')
     rtn = dict([(k,locals()[k]) for k in keys])
     return rtn
 
-def _format_all_models(T, newcat, BB, bands, allbands):
+def _format_all_models(T, newcat, BB, bands):
     from catalog import prepare_fits_catalog, fits_typemap
     from astrometry.util.file import pickle_to_file
 
@@ -1373,71 +1374,31 @@ def _format_all_models(T, newcat, BB, bands, allbands):
         assert(len(allivs) == xcat.numberOfParams())
         
         TT,hdr = prepare_fits_catalog(xcat, allivs, TT, hdr, bands, None,
-                                      allbands=allbands, prefix=prefix+'_')
+                                      prefix=prefix+'_')
         TT.set('%s_flags' % prefix,
                np.array([m.get(srctype,0) for m in BB.all_model_flags]))
         TT.set('%s_cpu' % prefix,
                np.array([m.get(srctype,0) 
                          for m in BB.all_model_cpu]).astype(np.float32))
 
-    TT.delete_column('psf_shapeExp')
-    TT.delete_column('psf_shapeDev')
-    TT.delete_column('psf_fracDev')
-    TT.delete_column('psf_shapeExp_ivar')
-    TT.delete_column('psf_shapeDev_ivar')
-    TT.delete_column('psf_fracDev_ivar')
-    TT.delete_column('psf_type')
-    TT.delete_column('simp_shapeExp')
-    TT.delete_column('simp_shapeDev')
-    TT.delete_column('simp_fracDev')
-    TT.delete_column('simp_shapeExp_ivar')
-    TT.delete_column('simp_shapeDev_ivar')
-    TT.delete_column('simp_fracDev_ivar')
-    TT.delete_column('simp_type')
-    TT.delete_column('dev_shapeExp')
-    TT.delete_column('dev_shapeExp_ivar')
+    # remove silly columns
+    for col in TT.columns():
+        # all types
+        if '_type' in col:
+            TT.delete_column(col)
+            continue
+        # shapes for shapeless types
+        if (('psf_' in col or 'simp_' in col) and
+            ('shape' in col or 'fracDev' in col)):
+            TT.delete_column(col)
+            continue
+        # shapeDev for exp sources, vice versa
+        if (('exp_' in col and 'Dev' in col) or
+            ('dev_' in col and 'Exp' in col)):
+            TT.delete_column(col)
+            continue
     TT.delete_column('dev_fracDev')
     TT.delete_column('dev_fracDev_ivar')
-    TT.delete_column('dev_type')
-    TT.delete_column('exp_shapeDev')
-    TT.delete_column('exp_shapeDev_ivar')
-    TT.delete_column('exp_fracDev')
-    TT.delete_column('exp_fracDev_ivar')
-    TT.delete_column('exp_type')
-    TT.delete_column('comp_type')
-    # Unpack ellipses
-    TT.dev_shape_r  = TT.dev_shapeDev[:,0]
-    TT.dev_shape_e1 = TT.dev_shapeDev[:,1]
-    TT.dev_shape_e2 = TT.dev_shapeDev[:,2]
-    TT.exp_shape_r  = TT.exp_shapeExp[:,0]
-    TT.exp_shape_e1 = TT.exp_shapeExp[:,1]
-    TT.exp_shape_e2 = TT.exp_shapeExp[:,2]
-    TT.comp_shapeDev_r  = TT.comp_shapeDev[:,0]
-    TT.comp_shapeDev_e1 = TT.comp_shapeDev[:,1]
-    TT.comp_shapeDev_e2 = TT.comp_shapeDev[:,2]
-    TT.comp_shapeExp_r  = TT.comp_shapeExp[:,0]
-    TT.comp_shapeExp_e1 = TT.comp_shapeExp[:,1]
-    TT.comp_shapeExp_e2 = TT.comp_shapeExp[:,2]
-    TT.delete_column('dev_shapeDev')
-    TT.delete_column('exp_shapeExp')
-    TT.delete_column('comp_shapeDev')
-    TT.delete_column('comp_shapeExp')
-    TT.dev_shape_r_ivar  = TT.dev_shapeDev_ivar[:,0]
-    TT.dev_shape_e1_ivar = TT.dev_shapeDev_ivar[:,1]
-    TT.dev_shape_e2_ivar = TT.dev_shapeDev_ivar[:,2]
-    TT.exp_shape_r_ivar  = TT.exp_shapeExp_ivar[:,0]
-    TT.exp_shape_e1_ivar = TT.exp_shapeExp_ivar[:,1]
-    TT.exp_shape_e2_ivar = TT.exp_shapeExp_ivar[:,2]
-    TT.comp_shapeDev_r_ivar  = TT.comp_shapeDev_ivar[:,0]
-    TT.comp_shapeDev_e1_ivar = TT.comp_shapeDev_ivar[:,1]
-    TT.comp_shapeDev_e2_ivar = TT.comp_shapeDev_ivar[:,2]
-    TT.comp_shapeExp_r_ivar  = TT.comp_shapeExp_ivar[:,0]
-    TT.comp_shapeExp_e1_ivar = TT.comp_shapeExp_ivar[:,1]
-    TT.comp_shapeExp_e2_ivar = TT.comp_shapeExp_ivar[:,2]
-    TT.delete_column('dev_shapeDev_ivar')
-    TT.delete_column('exp_shapeExp_ivar')
-    TT.delete_column('comp_shapeDev_ivar')
-    TT.delete_column('comp_shapeExp_ivar')
     return TT,hdr
 
 def _blob_iter(blobslices, blobsrcs, blobs, targetwcs, tims, cat, bands,
@@ -1629,11 +1590,6 @@ def stage_coadds(survey=None, bands=None, version_header=None, targetwcs=None,
     apertures = apertures_arcsec / pixscale
     # Aperture photometry locations
     apxy = np.vstack((xx - 1., yy - 1.)).T
-
-    nap = len(apertures)
-    if len(xx) == 0:
-        apertures = None
-        apxy = None
     del xx,yy,ok,ra,dec
 
     C = make_coadds(tims, bands, targetwcs, mods=mods, xy=(ix,iy),
@@ -1664,15 +1620,6 @@ def stage_coadds(survey=None, bands=None, version_header=None, targetwcs=None,
     # store galaxy sim bounding box in Tractor cat
     if 'sims_xy' in C.T.get_columns():
         T.set('sims_xy', C.T.get('sims_xy'))
-
-    # FIXME -- do we need to handle the case where there are 0 sources?
-    if apertures is None:
-        # empty table when 0 sources.
-        C.AP = fits_table()
-        for band in bands:
-            C.AP.set('apflux_img_%s' % band, np.zeros((0,nap)))
-            C.AP.set('apflux_img_ivar_%s' % band, np.zeros((0,nap)))
-            C.AP.set('apflux_resid_%s' % band, np.zeros((0,nap)))
 
     # Compute depth histogram
     D = _depth_histogram(brick, targetwcs, bands, C.detivs, C.galdetivs)
@@ -1975,66 +1922,39 @@ def stage_writecat(
     catalog.
     '''
     from catalog import prepare_fits_catalog
-    from tractor.sfd import SFDMap
      
     TT = T.copy()
-    for k in ['itx','ity','index']:
+    for k in ['itx','ity','index','tx','ty']:
         if k in TT.get_columns():
             TT.delete_column(k)
-    TT.tx = TT.tx.astype(np.float32)
-    TT.ty = TT.ty.astype(np.float32)
-
-    # Set fields such as TT.decam_rchi2 -- fields with 6-band values
-    B = np.array([allbands.index(band) for band in bands])
-    atypes = dict(nobs=np.uint8, anymask=TT.anymask.dtype,
-                  allmask=TT.allmask.dtype)
-    for k in ['rchi2', 'fracflux', 'fracmasked', 'fracin', 'nobs',
-              'anymask', 'allmask', 'psfsize', 'depth', 'galdepth']:
-        t = atypes.get(k, np.float32)
-        A = np.zeros((len(TT), len(allbands)), t)
-        A[:,B] = TT.get(k)
-        TT.set('decam_'+k, A)
-        TT.delete_column(k)
-
     TT.rename('oob', 'out_of_bounds')
 
-    if AP is not None:
-        # How many apertures?
-        ap = AP.get('apflux_img_%s' % bands[0])
-        n,A = ap.shape
-        TT.decam_apflux = np.zeros((len(TT), len(allbands), A), np.float32)
-        TT.decam_apflux_ivar  = np.zeros((len(TT), len(allbands), A),
-                                         np.float32)
-        TT.decam_apflux_resid = np.zeros((len(TT), len(allbands), A),
-                                         np.float32)
-        for iband,band in enumerate(bands):
-            i = allbands.index(band)
-            TT.decam_apflux      [:,i,:] = AP.get('apflux_img_%s'      % band)
-            TT.decam_apflux_ivar [:,i,:] = AP.get('apflux_img_ivar_%s' % band)
-            TT.decam_apflux_resid[:,i,:] = AP.get('apflux_resid_%s'    % band)
+    assert(AP is not None)
+    #if AP is not None:
+    # How many apertures?
+    ap = AP.get('apflux_img_%s' % bands[0])
+    n,A = ap.shape
+    TT.apflux       = np.zeros((len(TT), len(bands), A), np.float32)
+    TT.apflux_ivar  = np.zeros((len(TT), len(bands), A), np.float32)
+    TT.apflux_resid = np.zeros((len(TT), len(bands), A), np.float32)
+    for iband,band in enumerate(bands):
+        TT.apflux      [:,iband,:] = AP.get('apflux_img_%s'      % band)
+        TT.apflux_ivar [:,iband,:] = AP.get('apflux_img_ivar_%s' % band)
+        TT.apflux_resid[:,iband,:] = AP.get('apflux_resid_%s'    % band)
 
     cat.thawAllRecursive()
-    hdr = None
-    fs = None
-    T2,hdr = prepare_fits_catalog(cat, invvars, TT, hdr, bands, fs,
-                                  allbands=allbands)
-
-    # mod
-    T2.ra += (T2.ra <   0) * 360.
-    T2.ra -= (T2.ra > 360) * 360.
+    hdr = fs = None
+    T2,hdr = prepare_fits_catalog(cat, invvars, TT, hdr, bands, fs)
 
     primhdr = fitsio.FITSHDR()
     for r in version_header.records():
         primhdr.add_record(r)
-    primhdr.add_record(dict(name='ALLBANDS', value=allbands,
-                            comment='Band order in array values'))
     primhdr.add_record(dict(name='PRODTYPE', value='catalog',
                             comment='NOAO data product type'))
 
-    if AP is not None:
-        for i,ap in enumerate(apertures_arcsec):
-            primhdr.add_record(dict(name='APRAD%i' % i, value=ap,
-                                    comment='Aperture radius, in arcsec'))
+    for i,ap in enumerate(apertures_arcsec):
+        primhdr.add_record(dict(name='APRAD%i' % i, value=ap,
+                                comment='Aperture radius, in arcsec'))
 
     # Record the meaning of mask bits
     bits = CP_DQ_BITS.values()
@@ -2047,6 +1967,7 @@ def stage_writecat(
                                     comment='Mask bit 2**%i=%i meaning' %
                                     (i, bit)))
 
+    # Brick pixel positions
     ok,bx,by = targetwcs.radec2pixelxy(T2.orig_ra, T2.orig_dec)
     T2.bx0 = (bx - 1.).astype(np.float32)
     T2.by0 = (by - 1.).astype(np.float32)
@@ -2054,26 +1975,11 @@ def stage_writecat(
     T2.bx = (bx - 1.).astype(np.float32)
     T2.by = (by - 1.).astype(np.float32)
 
+    T2.delete_column('orig_ra')
+    T2.delete_column('orig_dec')
+    
     T2.brick_primary = ((T2.ra  >= brick.ra1 ) * (T2.ra  < brick.ra2) *
                         (T2.dec >= brick.dec1) * (T2.dec < brick.dec2))
-    T2.ra_ivar  = T2.ra_ivar .astype(np.float32)
-    T2.dec_ivar = T2.dec_ivar.astype(np.float32)
-
-    # Unpack shape columns
-    T2.shapeExp_r  = T2.shapeExp[:,0]
-    T2.shapeExp_e1 = T2.shapeExp[:,1]
-    T2.shapeExp_e2 = T2.shapeExp[:,2]
-    T2.shapeDev_r  = T2.shapeDev[:,0]
-    T2.shapeDev_e1 = T2.shapeDev[:,1]
-    T2.shapeDev_e2 = T2.shapeDev[:,2]
-    T2.shapeExp_r_ivar  = T2.shapeExp_ivar[:,0]
-    T2.shapeExp_e1_ivar = T2.shapeExp_ivar[:,1]
-    T2.shapeExp_e2_ivar = T2.shapeExp_ivar[:,2]
-    T2.shapeDev_r_ivar  = T2.shapeDev_ivar[:,0]
-    T2.shapeDev_e1_ivar = T2.shapeDev_ivar[:,1]
-    T2.shapeDev_e2_ivar = T2.shapeDev_ivar[:,2]
-
-    T2.decam_flux[T2.decam_flux_ivar == 0] = 0.
 
     if WISE is not None:
         # Convert WISE fluxes from Vega to AB.
@@ -2087,7 +1993,6 @@ def stage_writecat(
             primhdr.add_record(dict(
                 name='WISEAB%i' % band, value=vega_to_ab['w%i' % band],
                 comment='WISE Vega to AB conv for band %i' % band))
-
         for band in [1,2,3,4]:
             dm = vega_to_ab['w%i' % band]
             fluxfactor = 10.** (dm / -2.5)
@@ -2135,90 +2040,18 @@ def stage_writecat(
                 (WISE_T.w1_mjd[:,np.newaxis,:],
                  WISE_T.w2_mjd[:,np.newaxis,:]))
             print('WISE light-curve shapes:', WISE_T.w1_nanomaggies.shape)
-            
-    print('Reading SFD maps...')
-    sfd = SFDMap()
-    filts = ['%s %s' % ('DES', f) for f in allbands]
-    wisebands = ['WISE W1', 'WISE W2', 'WISE W3', 'WISE W4']
-    ebv,ext = sfd.extinction(filts + wisebands, T2.ra, T2.dec, get_ebv=True)
-    T2.ebv = ebv.astype(np.float32)
-    ext = ext.astype(np.float32)
-    decam_ext = ext[:,:len(allbands)]
-    T2.decam_mw_transmission = 10.**(-decam_ext / 2.5)
-    if WISE is not None:
-        wise_ext  = ext[:,len(allbands):]
-        T2.wise_mw_transmission  = 10.**(-wise_ext / 2.5)
 
-    # Column ordering...
-    cols = [
-        'brickid', 'brickname', 'objid', 'brick_primary', 'blob', 'ninblob',
-        'tycho2inblob', 'type', 'ra', 'ra_ivar', 'dec', 'dec_ivar',
-        'bx', 'by', 'bx0', 'by0', 'left_blob', 'out_of_bounds',
-        'dchisq', 'ebv', 
-        'cpu_source', 'cpu_blob',
-        'blob_width', 'blob_height', 'blob_npix', 'blob_nimages',
-        'blob_totalpix',
-        'decam_flux', 'decam_flux_ivar',
-        ]
-
-    if AP is not None:
-        cols.extend(['decam_apflux', 'decam_apflux_resid','decam_apflux_ivar'])
-
-    cols.extend(['decam_mw_transmission', 'decam_nobs',
-        'decam_rchi2', 'decam_fracflux', 'decam_fracmasked', 'decam_fracin',
-        'decam_anymask', 'decam_allmask', 'decam_psfsize',
-        'decam_depth', 'decam_galdepth' ])
-
-    if WISE is not None:
-        cols.extend([
-            'wise_flux', 'wise_flux_ivar',
-            'wise_mw_transmission', 'wise_nobs', 'wise_fracflux','wise_rchi2'])
-
-    if WISE_T is not None:
-        cols.extend([
-            'wise_lc_flux', 'wise_lc_flux_ivar',
-            'wise_lc_nobs', 'wise_lc_fracflux', 'wise_lc_rchi2','wise_lc_mjd'])
-
-    cols.extend([
-        'fracdev', 'fracDev_ivar', 'shapeexp_r', 'shapeexp_r_ivar',
-        'shapeexp_e1', 'shapeexp_e1_ivar',
-        'shapeexp_e2', 'shapeexp_e2_ivar',
-        'shapedev_r',  'shapedev_r_ivar',
-        'shapedev_e1', 'shapedev_e1_ivar',
-        'shapedev_e2', 'shapedev_e2_ivar',])
-
-    # TUNIT cards.
-    deg='deg'
-    degiv='1/deg^2'
-    flux = 'nanomaggy'
-    fluxiv = '1/nanomaggy^2'
-    units = dict(
-        ra=deg, dec=deg, ra_ivar=degiv, dec_ivar=degiv, ebv='mag',
-        decam_flux=flux, decam_flux_ivar=fluxiv,
-        decam_apflux=flux, decam_apflux_ivar=fluxiv, decam_apflux_resid=flux,
-        decam_depth=fluxiv, decam_galdepth=fluxiv,
-        wise_flux=flux, wise_flux_ivar=fluxiv,
-        wise_lc_flux=flux, wise_lc_flux_ivar=fluxiv,
-        shapeexp_r='arcsec', shapeexp_r_ivar='1/arcsec^2',
-        shapedev_r='arcsec', shapedev_r_ivar='1/arcsec^2')
-
-    for i,col in enumerate(cols):
-        if col in units:
-            hdr.add_record(dict(name='TUNIT%i' % (i+1), value=units[col]))
-
-    # match case to T2.
-    cc = T2.get_columns()
-    cclower = [c.lower() for c in cc]
-    for i,c in enumerate(cols):
-        if (not c in cc) and c in cclower:
-            j = cclower.index(c)
-            cols[i] = cc[j]
-
-    with survey.write_output('tractor', brick=brickname) as out:
-        print('tractor cat data, fn=', out.fn)
-        T2.writeto(out.fn, primheader=primhdr, header=hdr, columns=cols)
+    with survey.write_output('tractor-intermediate', brick=brickname) as out:
+        T2.writeto(out.fn, primheader=primhdr, header=hdr)
         print('Wrote', out.fn)
 
+    ### FIXME -- convert intermediate tractor catalog to final, for now...
+    ### FIXME -- note that this is now the only place where 'allbands' is used.
+    from format_catalog import format_catalog
+    with survey.write_output('tractor', brick=brickname) as out:
+        format_catalog(T2, hdr, primhdr, allbands, out.fn, flux_prefix='decam_')
+        print('Wrote', out.fn)
+        
     # produce per-brick sha1sums file
     hashfn = survey.find_file('sha1sum-brick', brick=brickname, output=True)
     cmd = 'sha1sum -b ' + ' '.join(survey.output_files) + ' > ' + hashfn
@@ -2803,6 +2636,7 @@ def get_runbrick_kwargs(opt):
         picklePattern=opt.picklepat,
         checkpoint_filename=opt.checkpoint,
         checkpoint_period=opt.checkpoint_period,
+        allbands='ugrizY',
         )
     return survey, kwa
 
