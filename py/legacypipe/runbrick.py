@@ -2046,6 +2046,7 @@ def stage_writecat(
         print('Wrote', out.fn)
 
     ### FIXME -- convert intermediate tractor catalog to final, for now...
+    ### FIXME -- note that this is now the only place where 'allbands' is used.
     from format_catalog import format_catalog
     with survey.write_output('tractor', brick=brickname) as out:
         format_catalog(T2, hdr, primhdr, allbands, out.fn, flux_prefix='decam_')
