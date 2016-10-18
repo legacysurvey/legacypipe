@@ -1982,6 +1982,7 @@ def stage_writecat(
                                     comment='Mask bit 2**%i=%i meaning' %
                                     (i, bit)))
 
+    # Brick pixel positions
     ok,bx,by = targetwcs.radec2pixelxy(T2.orig_ra, T2.orig_dec)
     T2.bx0 = (bx - 1.).astype(np.float32)
     T2.by0 = (by - 1.).astype(np.float32)
@@ -2004,7 +2005,6 @@ def stage_writecat(
             primhdr.add_record(dict(
                 name='WISEAB%i' % band, value=vega_to_ab['w%i' % band],
                 comment='WISE Vega to AB conv for band %i' % band))
-
         for band in [1,2,3,4]:
             dm = vega_to_ab['w%i' % band]
             fluxfactor = 10.** (dm / -2.5)
@@ -2097,13 +2097,12 @@ def stage_writecat(
             'wise_lc_nobs', 'wise_lc_fracflux', 'wise_lc_rchi2','wise_lc_mjd'])
 
     cols.extend([
-        'fracdev', 'fracDev_ivar', 'shapeexp_r', 'shapeexp_r_ivar',
+        'fracdev', 'fracdev_ivar', 'shapeexp_r', 'shapeexp_r_ivar',
         'shapeexp_e1', 'shapeexp_e1_ivar',
         'shapeexp_e2', 'shapeexp_e2_ivar',
         'shapedev_r',  'shapedev_r_ivar',
         'shapedev_e1', 'shapedev_e1_ivar',
         'shapedev_e2', 'shapedev_e2_ivar',])
-
 
     print('Columns:', cols)
     print('T2 columns:', T2.columns())
@@ -2116,12 +2115,19 @@ def stage_writecat(
             j = cclower.index(c)
             cols[i] = cc[j]
 
-    with survey.write_output('tractor', brick=brickname) as out:
-        print('tractor cat data, fn=', out.fn)
+    with survey.write_output('tractor-intermediate', brick=brickname) as out:
         T2.writeto(out.fn, primheader=primhdr, header=hdr, columns=cols,
                    units=units)
         print('Wrote', out.fn)
 
+    from format_catalog import format_catalog
+
+    with survey.write_output('tractor', brick=brickname) as out:
+        format_catalog(T2, hdr, primhdr, allbands, out.fn,
+                       flux_prefix='decam_')
+        print('Wrote', out.fn)
+
+        
     # produce per-brick sha1sums file
     hashfn = survey.find_file('sha1sum-brick', brick=brickname, output=True)
     cmd = 'sha1sum -b ' + ' '.join(survey.output_files) + ' > ' + hashfn

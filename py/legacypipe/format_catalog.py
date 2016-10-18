@@ -28,8 +28,16 @@ def main(args=None):
     T = fits_table(opt.infn)
     hdr = T.get_header()
     primhdr = fitsio.read_header(opt.infn)
-    
     allbands = opt.allbands
+
+    format_catalog(T, hdr, primhdr, allbands, opt.out,
+                   in_flux_prefix=opt.in_flux_prefix,
+                   flux_prefix=opt.flux_prefix)
+    #T.writeto(opt.out)
+    print('Wrote', opt.out)
+    
+def format_catalog(T, hdr, primhdr, allbands, outfn,
+                   in_flux_prefix='', flux_prefix='')
     
     # Retrieve the bands in this catalog.
     bands = []
@@ -45,13 +53,13 @@ def main(args=None):
 
     for k in ['rchi2', 'fracflux', 'fracmasked', 'fracin', 'nobs',
               'anymask', 'allmask', 'psfsize', 'depth', 'galdepth']:
-        incol = '%s%s' % (opt.in_flux_prefix, k)
+        incol = '%s%s' % (in_flux_prefix, k)
         X = T.get(incol)
         A = np.zeros((len(T), len(allbands)), X.dtype)
         A[:,B] = X
         T.delete_column(incol)
-        T.set('%s%s' % (opt.flux_prefix, k), A)
-        
+        T.set('%s%s' % (flux_prefix, k), A)
+
     primhdr.add_record(dict(name='ALLBANDS', value=allbands,
                             comment='Band order in array values'))
 
@@ -62,20 +70,21 @@ def main(args=None):
     fluxiv = '1/nanomaggy^2'
     units = dict(
         ra=deg, dec=deg, ra_ivar=degiv, dec_ivar=degiv, ebv='mag',
-
-    ##### FIXME
-        decam_flux=flux, decam_flux_ivar=fluxiv,
-        decam_apflux=flux, decam_apflux_ivar=fluxiv, decam_apflux_resid=flux,
-        decam_depth=fluxiv, decam_galdepth=fluxiv,
-
         wise_flux=flux, wise_flux_ivar=fluxiv,
         wise_lc_flux=flux, wise_lc_flux_ivar=fluxiv,
         shapeexp_r='arcsec', shapeexp_r_ivar='1/arcsec^2',
         shapedev_r='arcsec', shapedev_r_ivar='1/arcsec^2')
+    # Fields that take prefixes
+    funits = dict(
+        flux=flux, flux_ivar=fluxiv,
+        apflux=flux, apflux_ivar=fluxiv, apflux_resid=flux,
+        depth=fluxiv, galdepth=fluxiv)
+    units.update([('%s%s' % (flux_prefix, k), v) for k,v in funits.items()])
+
     # Reformat as list aligned with cols
     units = [units.get(c, '') for c in cols]
     
-    T.writeto(opt.outfn, header=hdr, primheader=primhdr, units=units)
+    T.writeto(outfn, header=hdr, primheader=primhdr, units=units)
         
 if __name__ == '__main__':
     main()
