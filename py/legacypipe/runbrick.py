@@ -136,7 +136,8 @@ def stage_tims(W=3600, H=3600, pixscale=0.262, brickname=None,
                                      git_version=gitver)
     for i,dep in enumerate(['numpy', 'scipy', 'wcslib', 'astropy', 'photutils',
                             'ceres', 'sextractor', 'psfex', 'astrometry_net',
-                            'tractor', 'fitsio', 'unwise_coadds']):
+                            'tractor', 'fitsio', 'unwise_coadds', 'python',
+                            'unwise_coadds_timeresolved']):
         # Look in the OS environment variables for modules-style
         # $scipy_VERSION => 0.15.1_5a3d8dfa-7.1
         default_ver = 'UNAVAILABLE'
@@ -1770,8 +1771,7 @@ def stage_wise_forced(
     W=None, H=None,
     brickname=None,
     unwise_dir=None,
-    unwise_w12_dir=None,
-    unwise_w34_dir=None,
+    unwise_tr_dir=None,
     brick=None,
     use_ceres=True,
     mp=None,
@@ -1781,13 +1781,6 @@ def stage_wise_forced(
     photometry of the unWISE coadds.
     '''
     from wise.forcedphot import unwise_tiles_touching_wcs
-
-    if unwise_dir is None:
-        unwise_dir = 'unwise-coadds'
-    if unwise_w12_dir is None:
-        unwise_w12_dir = unwise_dir
-    if unwise_w34_dir is None:
-        unwise_w34_dir = unwise_dir
 
     # Here we assume the targetwcs is axis-aligned and that the
     # edge midpoints yield the RA,Dec limits (true for TAN).
@@ -1807,26 +1800,23 @@ def stage_wise_forced(
 
     # Create list of groups-of-tiles to photometer
     args = []
-    for band in [1,2]:
-        args.append((wcat, tiles, band, roiradec, unwise_w12_dir, use_ceres))
-    for band in [3,4]:
-        args.append((wcat, tiles, band, roiradec, unwise_w34_dir, use_ceres))
+    # Skip if $UNWISE_COADDS_DIR or --unwise-dir not set.
+    if unwise_dir is not None:
+        for band in [1,2,3,4]:
+            args.append((wcat, tiles, band, roiradec, unwise_dir, use_ceres))
 
-    # Time-resolved WISE coadds too
-    tdir = os.environ.get('UNWISE_COADDS_TIMERESOLVED_DIR', None)
-    eargs = []
-    if tdir is None:
-        print('WARNING: no unWISE time-resolved coadds!')
-    else:
+    # Add time-resolved WISE coadds
+    # Skip if $UNWISE_COADDS_TIMERESOLVED_DIR or --unwise-tr-dir not set.
+    if unwise_tr_dir is not None:
+        eargs = []
+        tdir = unwise_tr_dir
         W = fits_table(os.path.join(tdir, 'time_resolved_neo1-atlas.fits'))
         print('Read', len(W), 'time-resolved WISE coadd tiles')
         W.cut(np.array([t in tiles.coadd_id for t in W.coadd_id]))
         print('Cut to', len(W), 'time-resolved vs', len(tiles), 'full-depth')
         assert(len(W) == len(tiles))
-    
         # this ought to be enough for anyone =)
         Nepochs = 5
-    
         # Add time-resolved coadds
         for band in [1,2]:
             # W1 is bit 0 (value 0x1), W2 is bit 1 (value 0x2)
@@ -1846,7 +1836,9 @@ def stage_wise_forced(
     phots = mp.map(_unwise_phot, args + [a for e,a in eargs])
 
     # Unpack results...
-    WISE = phots[0]
+    WISE = None
+    if len(phots):
+        WISE = phots[0]
     if WISE is not None:
         for i,p in enumerate(phots[1:len(args)]):
             if p is None:
@@ -1861,7 +1853,7 @@ def stage_wise_forced(
     if len(phots) > len(args):
         WISE_T = phots[len(args)]
     if WISE_T is not None:
-        WT = fits_table()
+        WISE_T = fits_table()
         phots = phots[len(args):]
         for (e,a),phot in zip(eargs, phots):
             print('Epoch', e, 'photometry:')
@@ -1871,12 +1863,11 @@ def stage_wise_forced(
             phot.about()
             phot.delete_column('tile')
             for c in phot.columns():
-                if not c in WT.columns():
+                if not c in WISE_T.columns():
                     x = phot.get(c)
-                    WT.set(c, np.zeros((len(x), Nepochs), x.dtype))
-                X = WT.get(c)
+                    WISE_T.set(c, np.zeros((len(x), Nepochs), x.dtype))
+                X = WISE_T.get(c)
                 X[:,e] = phot.get(c)
-        WISE_T = WT
 
     return dict(WISE=WISE, WISE_T=WISE_T)
 
@@ -2091,6 +2082,7 @@ def run_brick(brick, survey, radec=None, pixscale=0.262,
               constant_invvar=False,
               ceres=True,
               unwise_dir=None,
+              unwise_tr_dir=None,
               threads=None,
               plots=False, plots2=False, coadd_bw=False,
               plotbase=None, plotnumber=0,
@@ -2188,7 +2180,11 @@ def run_brick(brick, survey, radec=None, pixscale=0.262,
 
     - *ceres*: boolean; use Ceres Solver when possible?
 
-    - *unwise_dir*: string; default unwise-coadds; where to look for
+    - *unwise_dir*: string; where to look for unWISE coadd files.
+      This may be a colon-separated list of directories to search in
+      order.
+
+    - *unwise_tr_dir*: string; where to look for time-resolved
       unWISE coadd files.  This may be a colon-separated list of
       directories to search in order.
 
@@ -2285,6 +2281,7 @@ def run_brick(brick, survey, radec=None, pixscale=0.262,
                   on_bricks=on_bricks,
                   allow_missing_brickq=allow_missing_brickq,
                   unwise_dir=unwise_dir,
+                  unwise_tr_dir=unwise_tr_dir,
                   plots=plots, plots2=plots2, coadd_bw=coadd_bw,
                   force=forceStages, write=writePickles)
 
@@ -2516,6 +2513,9 @@ python -u legacypipe/runbrick.py --plots --brick 2440p070 --zoom 1900 2400 450 9
     parser.add_argument(
         '--unwise-dir', default=None,
         help='Base directory for unWISE coadds; may be a colon-separated list')
+    parser.add_argument(
+        '--unwise-tr-dir', default=None,
+        help='Base directory for unWISE time-resolved coadds; may be a colon-separated list')
 
     parser.add_argument('--no-early-coadds', action='store_true', default=False,
                         help='Skip making the early coadds')
@@ -2603,6 +2603,10 @@ def get_runbrick_kwargs(opt):
     if opt.unwise_dir is None:
         opt.unwise_dir = os.environ.get('UNWISE_COADDS_DIR', None)
 
+    if opt.unwise_tr_dir is None:
+        opt.unwise_tr_dir = os.environ.get('UNWISE_COADDS_TIMERESOLVED_DIR',
+                                           None)
+
     # list of strings if -w / --write-stage is given; False if
     # --no-write given; True by default.
     if opt.write_stage is not None:
@@ -2626,6 +2630,7 @@ def get_runbrick_kwargs(opt):
         nblobs=opt.nblobs, blob=opt.blob, blobxy=opt.blobxy,
         blobradec=opt.blobradec,
         unwise_dir=opt.unwise_dir,
+        unwise_tr_dir=opt.unwise_tr_dir,
         plots=opt.plots, plots2=opt.plots2,
         coadd_bw=opt.coadd_bw,
         bands=opt.bands,
