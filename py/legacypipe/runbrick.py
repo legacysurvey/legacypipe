@@ -1982,6 +1982,10 @@ def stage_writecat(
                                     comment='Mask bit 2**%i=%i meaning' %
                                     (i, bit)))
 
+    for i,band in enumerate(bands):
+        hdr.add_record(dict(name='BAND%i' % i, value=band,
+                            comment='Band name in this catalog'))
+            
     # Brick pixel positions
     ok,bx,by = targetwcs.radec2pixelxy(T2.orig_ra, T2.orig_dec)
     T2.bx0 = (bx - 1.).astype(np.float32)
@@ -2052,72 +2056,9 @@ def stage_writecat(
                 (WISE_T.w1_mjd[:,np.newaxis,:],
                  WISE_T.w2_mjd[:,np.newaxis,:]))
             print('WISE light-curve shapes:', WISE_T.w1_nanomaggies.shape)
-            
-    print('Reading SFD maps...')
-    sfd = SFDMap()
-    filts = ['%s %s' % ('DES', f) for f in allbands]
-    wisebands = ['WISE W1', 'WISE W2', 'WISE W3', 'WISE W4']
-    ebv,ext = sfd.extinction(filts + wisebands, T2.ra, T2.dec, get_ebv=True)
-    T2.ebv = ebv.astype(np.float32)
-    ext = ext.astype(np.float32)
-    decam_ext = ext[:,:len(allbands)]
-    T2.decam_mw_transmission = 10.**(-decam_ext / 2.5)
-    if WISE is not None:
-        wise_ext  = ext[:,len(allbands):]
-        T2.wise_mw_transmission  = 10.**(-wise_ext / 2.5)
-
-    # Column ordering...
-    cols = [
-        'brickid', 'brickname', 'objid', 'brick_primary', 'blob', 'ninblob',
-        'tycho2inblob', 'type', 'ra', 'ra_ivar', 'dec', 'dec_ivar',
-        'bx', 'by', 'bx0', 'by0', 'left_blob', 'out_of_bounds',
-        'dchisq', 'ebv', 
-        'cpu_source', 'cpu_blob',
-        'blob_width', 'blob_height', 'blob_npix', 'blob_nimages',
-        'blob_totalpix',
-        'decam_flux', 'decam_flux_ivar',
-        ]
-
-    if AP is not None:
-        cols.extend(['decam_apflux', 'decam_apflux_resid','decam_apflux_ivar'])
-
-    cols.extend(['decam_mw_transmission', 'decam_nobs',
-        'decam_rchi2', 'decam_fracflux', 'decam_fracmasked', 'decam_fracin',
-        'decam_anymask', 'decam_allmask', 'decam_psfsize',
-        'decam_depth', 'decam_galdepth' ])
-
-    if WISE is not None:
-        cols.extend([
-            'wise_flux', 'wise_flux_ivar',
-            'wise_mw_transmission', 'wise_nobs', 'wise_fracflux','wise_rchi2'])
-
-    if WISE_T is not None:
-        cols.extend([
-            'wise_lc_flux', 'wise_lc_flux_ivar',
-            'wise_lc_nobs', 'wise_lc_fracflux', 'wise_lc_rchi2','wise_lc_mjd'])
-
-    cols.extend([
-        'fracdev', 'fracdev_ivar', 'shapeexp_r', 'shapeexp_r_ivar',
-        'shapeexp_e1', 'shapeexp_e1_ivar',
-        'shapeexp_e2', 'shapeexp_e2_ivar',
-        'shapedev_r',  'shapedev_r_ivar',
-        'shapedev_e1', 'shapedev_e1_ivar',
-        'shapedev_e2', 'shapedev_e2_ivar',])
-
-    print('Columns:', cols)
-    print('T2 columns:', T2.columns())
-    
-    # match case to T2.
-    cc = T2.get_columns()
-    cclower = [c.lower() for c in cc]
-    for i,c in enumerate(cols):
-        if (not c in cc) and c in cclower:
-            j = cclower.index(c)
-            cols[i] = cc[j]
 
     with survey.write_output('tractor-intermediate', brick=brickname) as out:
-        T2.writeto(out.fn, primheader=primhdr, header=hdr, columns=cols,
-                   units=units)
+        T2.writeto(out.fn, primheader=primhdr, header=hdr)
         print('Wrote', out.fn)
 
     from format_catalog import format_catalog

@@ -119,13 +119,19 @@ def prepare_fits_catalog(cat, invvars, T, hdr, filts, fs, allbands = 'ugrizY',
     cat.setParams(params0)
 
     # mod
-    T.ra += (T.ra <   0) * 360.
-    T.ra -= (T.ra > 360) * 360.
+    ra = T.get('%sra' % prefix)
+    ra += (ra <   0) * 360.
+    ra -= (ra > 360) * 360.
 
-    T.ra_ivar  = T.ra_ivar .astype(np.float32)
-    T.dec_ivar = T.dec_ivar.astype(np.float32)
+    # Downconvert types
+    for c in ['ra','dec']:
+        col = '%s%s' % (prefix, c)
+        T.set(col, T.get(col).astype(np.float32))
 
-    T.decam_flux[T.decam_flux_ivar == 0] = 0.
+    # Zero out unconstrained values
+    flux = T.get('%s%s' % (prefix, 'decam_flux'))
+    iv = T.get('%s%s' % (prefix, 'decam_flux_ivar'))
+    flux[iv == 0] = 0.
     
     return T, hdr
 
@@ -138,10 +144,17 @@ def _get_tractor_fits_values(T, cat, pat, unpackShape=True):
     typearray = typearray.astype('S4')
     T.set(pat % 'type', typearray)
 
-    T.set(pat % 'ra',  np.array([src is not None and 
-                                 src.getPosition().ra  for src in cat]))
-    T.set(pat % 'dec', np.array([src is not None and
-                                 src.getPosition().dec for src in cat]))
+    ra,dec = [],[]
+    for src in cat:
+        if src is None:
+            ra.append(0.)
+            dec.append(0.)
+        else:
+            pos = src.getPosition()
+            ra.append(pos.ra)
+            dec.append(pos.dec)
+    T.set(pat % 'ra',  np.array(ra))
+    T.set(pat % 'dec', np.array(dec))
 
     shapeExp = np.zeros((len(T), 3), np.float32)
     shapeDev = np.zeros((len(T), 3), np.float32)
