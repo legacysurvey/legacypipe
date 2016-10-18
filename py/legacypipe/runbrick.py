@@ -1860,6 +1860,37 @@ def stage_wise_forced(
             WISE.add_columns_from(p)
         WISE.rename('tile', 'unwise_tile')
 
+        # Look up mask bits
+        ra  = np.array([src.getPosition().ra  for src in cat])
+        dec = np.array([src.getPosition().dec for src in cat])
+        WISE.wise_mask = np.zeros((len(T), 4), np.uint8)
+        for tile in tiles.coadd_id:
+            fn = os.path.join(unwise_dir, tile[:3], tile,
+                              'unwise-%s-msk.fits.gz' % tile)
+            if not os.path.exists(fn):
+                print('unWISE mask file', fn, 'does not exist')
+                continue
+            # read header to pull out WCS
+            M,hdr = fitsio.read(fn, header=True)
+            wcs = Tan(*[float(hdr[k]) for k in
+                        ['CRVAL1', 'CRVAL2', 'CRPIX1', 'CRPIX2',
+                         'CD1_1', 'CD1_2', 'CD2_1','CD2_2','NAXIS2','NAXIS1']])
+            print('Read WCS header', wcs)
+            ok,xx,yy = targetwcs.radec2pixelxy(ra, dec)
+            hh,ww = wcs.get_height(), wcs.get_width()
+            print('unWISE image size', hh,ww)
+            xx = np.round(xx - 1).astype(int)
+            yy = np.round(yy - 1).astype(int)
+            I = np.flatnonzero(ok * (xx >= 0)*(xx < ww) * (yy >= 0)*(yy < hh))
+            print(len(I), 'sources are within tile', tile)
+            if len(I) == 0:
+                continue
+            M = M[yy, xx]
+            for band in [1,2,3,4]:
+                sd1 = (np.bitwise_and(M, 2**(2*(band-1)  )) != 0).astype(int)
+                sd2 = (np.bitwise_and(M, 2**(2*(band-1)+1)) != 0).astype(int)
+                WISE.wise_mask[I, band-1] = sd1 + 2*sd2
+
     # Unpack time-resolved results...
     WISE_T = None
     if len(phots) > len(args):
