@@ -18,11 +18,10 @@ if __name__ == '__main__':
     surveydir = os.path.join(os.path.dirname(__file__), 'testcase4')
     outdir = 'out-testcase4'
 
-    os.environ['UNWISE_COADDS_TIMERESOLVED_DIR'] = os.path.join(surveydir, 'images', 'unwise-tr')
-
     main(args=['--brick', '1867p255', '--zoom', '2050', '2300', '1150', '1400',
                '--force-all', '--no-write', '--coadd-bw',
                '--unwise-dir', os.path.join(surveydir, 'images', 'unwise'),
+               '--unwise-tr-dir', os.path.join(surveydir,'images','unwise-tr'),
                '--blob-image',
                '--survey-dir', surveydir,
                '--outdir', outdir])
@@ -30,8 +29,6 @@ if __name__ == '__main__':
                       '00431608', 'decam-00431608-N3.fits')
     print('Checking for calib file', fn)
     assert(os.path.exists(fn))
-
-    del os.environ['UNWISE_COADDS_TIMERESOLVED_DIR']
 
     # Custom RA,Dec; blob ra,dec.
     outdir = 'out-testcase4b'
