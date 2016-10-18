@@ -7,51 +7,7 @@ from collections import Counter
 from astrometry.util.fits import fits_table
 from astrometry.util.util import Tan
 #from tractor.sfd import SFDMap
-
-def ring_unique(wcs, W, i, unique, ra1,ra2,dec1,dec2):
-    lo,hi = i, W-i-1
-    # one slice per side; we double-count the last pix of each side.
-    side = slice(lo,hi+1)
-    top = (lo, side)
-    bot = (hi, side)
-    left  = (side, lo)
-    right = (side, hi)
-    xx = yy = np.arange(W)
-    nu,ntot = 0,0
-    for slc in [top, bot, left, right]:
-        #print('xx,yy', xx[slc], yy[slc])
-        (yslc,xslc) = slc
-        rr,dd = wcs.pixelxy2radec(xx[xslc]+1, yy[yslc]+1)
-        U = (rr >= ra1 ) * (rr < ra2 ) * (dd >= dec1) * (dd < dec2)
-        #print('Pixel', i, ':', np.sum(U), 'of', len(U), 'pixels are unique')
-        #allin *= np.all(U)
-        unique[slc] = U
-        nu += np.sum(U)
-        ntot += len(U)
-    #if allin:
-    #    print('Scanned to pixel', i)
-    #    break
-    return nu,ntot
-
-def find_unique_pixels(wcs, W, unique, ra1,ra2,dec1,dec2):
-    step = 10
-    for i in range(0, W/2, step):
-        nu,ntot = ring_unique(wcs, W, i, unique, ra1,ra2,dec1,dec2)
-        #print('Pixel', i, ': nu/ntot', nu, ntot)
-        if nu > 0:
-            i -= step
-            break
-        unique[:i,:] = False
-        unique[W-1-i:,:] = False
-        unique[:,:i] = False
-        unique[:,W-1-i:] = False
-
-    for j in range(i+1, W/2):
-        nu,ntot = ring_unique(wcs, W, j, unique, ra1,ra2,dec1,dec2)
-        #print('Pixel', j, ': nu/ntot', nu, ntot)
-        if nu == ntot:
-            break
-
+from legacypipe.utils import find_unique_pixels
 
 def colorbar_axes(parent, frac=0.12, pad=0.03, aspect=20):
 	pb = parent.get_position(original=True).frozen()
@@ -307,7 +263,8 @@ def main():
             # scan the outer annulus of pixels, and shrink in until all pixels are unique.
             unique[:,:] = True
     
-            find_unique_pixels(wcs, W, unique, br.ra1, br.ra2, br.dec1, br.dec2)
+            find_unique_pixels(wcs, W, H, unique,
+                               br.ra1, br.ra2, br.dec1, br.dec2)
     
             # for i in range(W/2):
             #     allin = True

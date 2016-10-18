@@ -223,6 +223,50 @@ class iterwrapper(object):
     def __len__(self):
         return self.n
 
+def _ring_unique(wcs, W, H, i, unique, ra1,ra2,dec1,dec2):
+    lo, hix, hiy = i, W-i-1, H-i-1
+    # one slice per side; we double-count the last pix of each side.
+    sidex = slice(lo,hix+1)
+    sidey = slice(lo,hiy+1)
+    top = (lo, sidex)
+    bot = (hi, sidex)
+    left  = (sidey, lo)
+    right = (sidey, hi)
+    xx = yy = np.arange(W)
+    nu,ntot = 0,0
+    for slc in [top, bot, left, right]:
+        #print('xx,yy', xx[slc], yy[slc])
+        (yslc,xslc) = slc
+        rr,dd = wcs.pixelxy2radec(xx[xslc]+1, yy[yslc]+1)
+        U = (rr >= ra1 ) * (rr < ra2 ) * (dd >= dec1) * (dd < dec2)
+        #print('Pixel', i, ':', np.sum(U), 'of', len(U), 'pixels are unique')
+        #allin *= np.all(U)
+        unique[slc] = U
+        nu += np.sum(U)
+        ntot += len(U)
+    #if allin:
+    #    print('Scanned to pixel', i)
+    #    break
+    return nu,ntot
+
+def find_unique_pixels(wcs, W, H, unique, ra1,ra2,dec1,dec2):
+    step = 10
+    for i in range(0, W/2, step):
+        nu,ntot = _ring_unique(wcs, W, H, i, unique, ra1,ra2,dec1,dec2)
+        #print('Pixel', i, ': nu/ntot', nu, ntot)
+        if nu > 0:
+            i -= step
+            break
+        unique[:i,:] = False
+        unique[H-1-i:,:] = False
+        unique[:,:i] = False
+        unique[:,W-1-i:] = False
+
+    for j in range(i+1, W/2):
+        nu,ntot = _ring_unique(wcs, W, H, j, unique, ra1,ra2,dec1,dec2)
+        #print('Pixel', j, ': nu/ntot', nu, ntot)
+        if nu == ntot:
+            break
 
 def run_ps_thread(pid, ppid, fn):
     from astrometry.util.run_command import run_command
