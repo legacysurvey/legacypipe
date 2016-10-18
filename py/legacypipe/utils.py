@@ -229,10 +229,11 @@ def _ring_unique(wcs, W, H, i, unique, ra1,ra2,dec1,dec2):
     sidex = slice(lo,hix+1)
     sidey = slice(lo,hiy+1)
     top = (lo, sidex)
-    bot = (hi, sidex)
+    bot = (hiy, sidex)
     left  = (sidey, lo)
-    right = (sidey, hi)
-    xx = yy = np.arange(W)
+    right = (sidey, hix)
+    xx = np.arange(W)
+    yy = np.arange(H)
     nu,ntot = 0,0
     for slc in [top, bot, left, right]:
         #print('xx,yy', xx[slc], yy[slc])
@@ -240,7 +241,6 @@ def _ring_unique(wcs, W, H, i, unique, ra1,ra2,dec1,dec2):
         rr,dd = wcs.pixelxy2radec(xx[xslc]+1, yy[yslc]+1)
         U = (rr >= ra1 ) * (rr < ra2 ) * (dd >= dec1) * (dd < dec2)
         #print('Pixel', i, ':', np.sum(U), 'of', len(U), 'pixels are unique')
-        #allin *= np.all(U)
         unique[slc] = U
         nu += np.sum(U)
         ntot += len(U)
@@ -250,6 +250,10 @@ def _ring_unique(wcs, W, H, i, unique, ra1,ra2,dec1,dec2):
     return nu,ntot
 
 def find_unique_pixels(wcs, W, H, unique, ra1,ra2,dec1,dec2):
+    if unique is None:
+        unique = np.ones((H,W), bool)
+    # scan the outer annulus of pixels, and shrink in until all pixels
+    # are unique.
     step = 10
     for i in range(0, W/2, step):
         nu,ntot = _ring_unique(wcs, W, H, i, unique, ra1,ra2,dec1,dec2)
@@ -262,11 +266,12 @@ def find_unique_pixels(wcs, W, H, unique, ra1,ra2,dec1,dec2):
         unique[:,:i] = False
         unique[:,W-1-i:] = False
 
-    for j in range(i+1, W/2):
+    for j in range(max(i+1, 0), W/2):
         nu,ntot = _ring_unique(wcs, W, H, j, unique, ra1,ra2,dec1,dec2)
         #print('Pixel', j, ': nu/ntot', nu, ntot)
         if nu == ntot:
             break
+    return unique
 
 def run_ps_thread(pid, ppid, fn):
     from astrometry.util.run_command import run_command

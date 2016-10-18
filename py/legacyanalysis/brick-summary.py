@@ -260,7 +260,6 @@ def main():
     
             t0 = time.clock()
     
-            # scan the outer annulus of pixels, and shrink in until all pixels are unique.
             unique[:,:] = True
     
             find_unique_pixels(wcs, W, H, unique,

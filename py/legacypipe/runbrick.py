@@ -46,7 +46,8 @@ from tractor.galaxy import (DevGalaxy, ExpGalaxy, FixedCompositeGalaxy,
 from legacypipe.survey import (
     get_rgb, imsave_jpeg, LegacySurveyData, on_bricks_dependencies)
 from legacypipe.cpimage import CP_DQ_BITS
-from legacypipe.utils import RunbrickError, NothingToDoError, iterwrapper
+from legacypipe.utils import (
+    RunbrickError, NothingToDoError, iterwrapper, find_unique_pixels)
 from legacypipe.coadds import make_coadds, write_coadd_images, quick_coadds
 
 # Globals, oh my!
@@ -1725,17 +1726,15 @@ def stage_coadds(survey=None, bands=None, version_header=None, targetwcs=None,
     return dict(T=T, AP=C.AP, apertures_pix=apertures,
                 apertures_arcsec=apertures_arcsec)
 
-
 def _depth_histogram(brick, targetwcs, bands, detivs, galdetivs):
     # Compute the brick's unique pixels.
     U = None
     if hasattr(brick, 'ra1'):
         print('Computing unique brick pixels...')
         H,W = targetwcs.shape
-        xx,yy = np.meshgrid(np.arange(W), np.arange(H))
-        rr,dd = targetwcs.pixelxy2radec(xx+1, yy+1)
-        U = np.flatnonzero((rr >= brick.ra1 ) * (rr < brick.ra2 ) *
-                           (dd >= brick.dec1) * (dd < brick.dec2))
+        U = find_unique_pixels(targetwcs, W, H, None,
+                               brick.ra1, brick.ra2, brick.dec1, brick.dec2)
+        U = np.flatnonzero(U)
         print(len(U), 'of', W*H, 'pixels are unique to this brick')
 
     # depth histogram bins
