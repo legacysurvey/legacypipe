@@ -959,6 +959,7 @@ def _subtract_onbricks_sources(survey, brick, allow_missing_brickq,
 def stage_fitblobs(T=None,
                    brickname=None,
                    brickid=None,
+                   brick=None,
                    version_header=None,
                    blobsrcs=None, blobslices=None, blobs=None,
                    cat=None,
@@ -1126,7 +1127,7 @@ def stage_fitblobs(T=None,
         # Run one_blob on each blob!
         blobiter = _blob_iter(blobslices, blobsrcs, blobs, targetwcs, tims,
                               cat, bands, plots, ps, simul_opt, use_ceres,
-                              tycho)
+                              tycho, brick)
         # to allow timingpool to queue tasks one at a time
         blobiter = iterwrapper(blobiter, len(blobsrcs))
         R = mp.map(_bounce_one_blob, blobiter)
@@ -1162,7 +1163,7 @@ def stage_fitblobs(T=None,
         print('Skipping', len(skipblobs), 'blobs from checkpoint file')
         blobiter = _blob_iter(blobslices, blobsrcs, blobs, targetwcs, tims,
                               cat, bands, plots, ps, simul_opt, use_ceres,
-                              tycho, skipblobs=skipblobs)
+                              tycho, brick, skipblobs=skipblobs)
         # to allow timingpool to queue tasks one at a time
         blobiter = iterwrapper(blobiter, len(blobsrcs))
 
@@ -1404,7 +1405,7 @@ def _format_all_models(T, newcat, BB, bands):
     return TT,hdr
 
 def _blob_iter(blobslices, blobsrcs, blobs, targetwcs, tims, cat, bands,
-               plots, ps, simul_opt, use_ceres, tycho, skipblobs=[]):
+               plots, ps, simul_opt, use_ceres, tycho, brick, skipblobs=[]):
 
     ok,tx,ty = targetwcs.radec2pixelxy(tycho.ra, tycho.dec)
     tx = np.round(tx-1).astype(int)
@@ -1426,6 +1427,9 @@ def _blob_iter(blobslices, blobsrcs, blobs, targetwcs, tims, cat, bands,
     blobvals = Counter(blobs[blobs>=0])
     blob_order = np.array([i for i,npix in blobvals.most_common()])
 
+    U = find_unique_pixels(targetwcs, W, H, None,
+                           brick.ra1, brick.ra2, brick.dec1, brick.dec2)
+
     for nblob,iblob in enumerate(blob_order):
         if iblob in skipblobs:
             print('Skipping blob', iblob)
@@ -1446,6 +1450,12 @@ def _blob_iter(blobslices, blobsrcs, blobs, targetwcs, tims, cat, bands,
         # -1 means "no blob", while 0 and up label the blobs, thus
         # iblob equals the value in the "blobs" map.
         blobmask = (blobs[bslc] == iblob)
+
+        # If the blob is solely outside the unique region of this brick,
+        # skip it!
+        if np.all(U[bslc][blobmask] == False):
+            print('This blob is completely outside the unique region of this brick -- skipping')
+            continue
 
         # find one pixel within the blob, for debugging purposes
         onex = oney = None
