@@ -10,6 +10,23 @@ if __name__ == '__main__':
 
     travis = 'travis' in sys.argv
 
+    # Check skipping blobs outside the brick's unique area.
+    surveydir = os.path.join(os.path.dirname(__file__), 'testcase5')
+    outdir = 'out-testcase5'
+
+    fn = os.path.join(outdir, 'tractor', '186', 'tractor-1867p255.fits')
+    if os.path.exists(fn):
+        os.unlink(fn)
+
+    main(args=['--brick', '1867p255', '--zoom', '0', '150', '0', '150',
+               '--force-all', '--no-write', '--coadd-bw',
+               '--survey-dir', surveydir,
+               '--outdir', outdir])
+
+    assert(os.path.exists(fn))
+    T = fits_table(fn)
+    assert(len(T) == 1)
+    
     # Test that we can run splinesky calib if required...
     
     from legacypipe.decam import DecamImage

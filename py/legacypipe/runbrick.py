@@ -1819,8 +1819,8 @@ def stage_wise_forced(
 
     # Add time-resolved WISE coadds
     # Skip if $UNWISE_COADDS_TIMERESOLVED_DIR or --unwise-tr-dir not set.
+    eargs = []
     if unwise_tr_dir is not None:
-        eargs = []
         tdir = unwise_tr_dir
         W = fits_table(os.path.join(tdir, 'time_resolved_neo1-atlas.fits'))
         print('Read', len(W), 'time-resolved WISE coadd tiles')
