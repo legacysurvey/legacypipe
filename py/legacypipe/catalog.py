@@ -70,40 +70,38 @@ def prepare_fits_catalog(cat, invvars, T, hdr, filts, fs, allbands = 'ugrizY',
 
     params0 = cat.getParams()
 
-    decam_flux = np.zeros((len(cat), len(allbands)), np.float32)
-    decam_flux_ivar = np.zeros((len(cat), len(allbands)), np.float32)
+    flux = np.zeros((len(cat), len(allbands)), np.float32)
+    flux_ivar = np.zeros((len(cat), len(allbands)), np.float32)
 
     for filt in filts:
-        flux = np.array([src is not None and
-                         sum(b.getFlux(filt) for b in src.getBrightnesses())
-                         for src in cat])
-
-        if invvars is not None:
-            # Oh my, this is tricky... set parameter values to the variance
-            # vector so that we can read off the parameter variances via the
-            # python object apis.
-            cat.setParams(invvars)
-            flux_iv = np.array([src is not None and
-                                sum(b.getFlux(filt) for b in src.getBrightnesses())
-                                for src in cat])
-            cat.setParams(params0)
-        else:
-            flux_iv = np.zeros_like(flux)
-
         i = allbands.index(filt)
-        decam_flux[:,i] = flux.astype(np.float32)
-        decam_flux_ivar[:,i] = flux_iv.astype(np.float32)
+        for j,src in enumerate(cat):
+            if src is not None:
+                flux[j,i] = sum(b.getFlux(filt) for b in src.getBrightnesses())
 
-    T.set('%sdecam_flux' % prefix, decam_flux)
+        if invvars is None:
+            continue
+        # Oh my, this is tricky... set parameter values to the variance
+        # vector so that we can read off the parameter variances via the
+        # python object apis.
+        cat.setParams(invvars)
+
+        for j,src in enumerate(cat):
+            if src is not None:
+                flux_ivar[j,i] = sum(b.getFlux(filt) for b in src.getBrightnesses())
+
+        cat.setParams(params0)
+
+    T.set('%sflux' % prefix, flux)
     if save_invvars:
-        T.set('%sdecam_flux_ivar' % prefix, decam_flux_ivar)
+        T.set('%sflux_ivar' % prefix, flux_ivar)
 
     if fs is not None:
         fskeys = ['prochi2', 'pronpix', 'profracflux', 'proflux', 'npix']
         for k in fskeys:
             x = getattr(fs, k)
             x = np.array(x).astype(np.float32)
-            T.set('%sdecam_%s_%s' % (prefix, tim.filter, k), x.astype(np.float32))
+            T.set('%s%s_%s' % (prefix, tim.filter, k), x.astype(np.float32))
 
     _get_tractor_fits_values(T, cat, '%s%%s' % prefix, unpackShape=unpackShape)
 
@@ -129,8 +127,8 @@ def prepare_fits_catalog(cat, invvars, T, hdr, filts, fs, allbands = 'ugrizY',
         T.set(col, T.get(col).astype(np.float32))
 
     # Zero out unconstrained values
-    flux = T.get('%s%s' % (prefix, 'decam_flux'))
-    iv = T.get('%s%s' % (prefix, 'decam_flux_ivar'))
+    flux = T.get('%s%s' % (prefix, 'flux'))
+    iv = T.get('%s%s' % (prefix, 'flux_ivar'))
     flux[iv == 0] = 0.
     
     return T, hdr
@@ -187,7 +185,7 @@ def _get_tractor_fits_values(T, cat, pat, unpackShape=True):
 
 def read_fits_catalog(T, hdr=None, invvars=False, bands='grz',
                       allbands = 'ugrizY', ellipseClass=EllipseE,
-                      unpackShape=True):
+                      unpackShape=True, fluxPrefix='decam_'):
     from tractor import NanoMaggies
     '''
     This is currently a weird hybrid of dynamic and hard-coded.
@@ -229,7 +227,7 @@ def read_fits_catalog(T, hdr=None, invvars=False, bands='grz',
 
         shorttype = fits_short_typemap[clazz]
 
-        flux = np.atleast_1d(t.decam_flux)
+        flux = np.atleast_1d(t.get(fluxPrefix + 'flux'))
         assert(np.all(np.isfinite(flux[ibands])))
         br = NanoMaggies(order=bands,
                          **dict(zip(bands, flux[ibands])))
@@ -237,10 +235,10 @@ def read_fits_catalog(T, hdr=None, invvars=False, bands='grz',
         if invvars:
             # ASSUME & hard-code that the position and brightness are
             # the first params
-            fluxiv = np.atleast_1d(t.decam_flux_ivar)
+            fluxiv = np.atleast_1d(t.get(fluxPrefix + 'flux_ivar'))
             ivs.extend([t.ra_ivar, t.dec_ivar] +
-                       list(t.decam_flux_iv[ibands]))
-            
+                       list(fluxiv[ibands]))
+
         if issubclass(clazz, (DevGalaxy, ExpGalaxy)):
             if ellipseClass is not None:
                 eclazz = ellipseClass

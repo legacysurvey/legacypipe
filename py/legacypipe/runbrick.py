@@ -1935,7 +1935,7 @@ def stage_writecat(
     from catalog import prepare_fits_catalog
      
     TT = T.copy()
-    for k in ['itx','ity','index']:
+    for k in ['itx','ity','index','tx','ty']:
         if k in TT.get_columns():
             TT.delete_column(k)
     TT.rename('oob', 'out_of_bounds')
@@ -1944,22 +1944,20 @@ def stage_writecat(
         # How many apertures?
         ap = AP.get('apflux_img_%s' % bands[0])
         n,A = ap.shape
-        TT.decam_apflux = np.zeros((len(TT), len(allbands), A), np.float32)
-        TT.decam_apflux_ivar  = np.zeros((len(TT), len(allbands), A),
-                                         np.float32)
-        TT.decam_apflux_resid = np.zeros((len(TT), len(allbands), A),
-                                         np.float32)
+        TT.apflux       = np.zeros((len(TT), len(bands), A), np.float32)
+        TT.apflux_ivar  = np.zeros((len(TT), len(bands), A), np.float32)
+        TT.apflux_resid = np.zeros((len(TT), len(bands), A), np.float32)
         for iband,band in enumerate(bands):
-            i = allbands.index(band)
-            TT.decam_apflux      [:,i,:] = AP.get('apflux_img_%s'      % band)
-            TT.decam_apflux_ivar [:,i,:] = AP.get('apflux_img_ivar_%s' % band)
-            TT.decam_apflux_resid[:,i,:] = AP.get('apflux_resid_%s'    % band)
+            TT.apflux      [:,iband,:] = AP.get('apflux_img_%s'      % band)
+            TT.apflux_ivar [:,iband,:] = AP.get('apflux_img_ivar_%s' % band)
+            TT.apflux_resid[:,iband,:] = AP.get('apflux_resid_%s'    % band)
 
     cat.thawAllRecursive()
     hdr = None
     fs = None
     T2,hdr = prepare_fits_catalog(cat, invvars, TT, hdr, bands, fs,
-                                  allbands=allbands)
+                                  allbands=bands)
+
     primhdr = fitsio.FITSHDR()
     for r in version_header.records():
         primhdr.add_record(r)
@@ -1983,9 +1981,9 @@ def stage_writecat(
                                     (i, bit)))
 
     for i,band in enumerate(bands):
-        hdr.add_record(dict(name='BAND%i' % i, value=band,
-                            comment='Band name in this catalog'))
-            
+        primhdr.add_record(dict(name='BAND%i' % i, value=band,
+                                comment='Band name in this catalog'))
+
     # Brick pixel positions
     ok,bx,by = targetwcs.radec2pixelxy(T2.orig_ra, T2.orig_dec)
     T2.bx0 = (bx - 1.).astype(np.float32)
@@ -1994,6 +1992,9 @@ def stage_writecat(
     T2.bx = (bx - 1.).astype(np.float32)
     T2.by = (by - 1.).astype(np.float32)
 
+    T2.delete_column('orig_ra')
+    T2.delete_column('orig_dec')
+    
     T2.brick_primary = ((T2.ra  >= brick.ra1 ) * (T2.ra  < brick.ra2) *
                         (T2.dec >= brick.dec1) * (T2.dec < brick.dec2))
 
@@ -2061,13 +2062,12 @@ def stage_writecat(
         T2.writeto(out.fn, primheader=primhdr, header=hdr)
         print('Wrote', out.fn)
 
+    ### FIXME -- convert intermediate tractor catalog to final, for now...
     from format_catalog import format_catalog
-
     with survey.write_output('tractor', brick=brickname) as out:
         format_catalog(T2, hdr, primhdr, allbands, out.fn,
                        flux_prefix='decam_')
         print('Wrote', out.fn)
-
         
     # produce per-brick sha1sums file
     hashfn = survey.find_file('sha1sum-brick', brick=brickname, output=True)

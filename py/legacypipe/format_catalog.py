@@ -42,31 +42,40 @@ def format_catalog(T, hdr, primhdr, allbands, outfn,
     # Retrieve the bands in this catalog.
     bands = []
     for i in range(10):
-        b = hdr.get('BAND%i' % i)
+        b = primhdr.get('BAND%i' % i)
         if b is None:
             break
         bands.append(b)
-
-    # Expand out FLUX and related fields.
-
-    B = np.array([allbands.index(band) for band in bands])
-
-    for k in ['rchi2', 'fracflux', 'fracmasked', 'fracin', 'nobs',
-              'anymask', 'allmask', 'psfsize', 'depth', 'galdepth']:
-        incol = '%s%s' % (in_flux_prefix, k)
-        X = T.get(incol)
-        A = np.zeros((len(T), len(allbands)), X.dtype)
-        A[:,B] = X
-        T.delete_column(incol)
-        T.set('%s%s' % (flux_prefix, k), A)
+    print('Bands in this catalog:', bands)
 
     primhdr.add_record(dict(name='ALLBANDS', value=allbands,
                             comment='Band order in array values'))
 
     has_wise = 'wise_flux' in T.columns()
     has_wise_lc = 'wise_lc_flux' in T.columns()
-    has_ap = 'decam_apflux' in T.columns()
+    has_ap = 'apflux' in T.columns()
     
+    # Expand out FLUX and related fields.
+    B = np.array([allbands.index(band) for band in bands])
+    keys = ['flux', 'flux_ivar', 'rchi2', 'fracflux', 'fracmasked', 'fracin',
+            'nobs', 'anymask', 'allmask', 'psfsize', 'depth', 'galdepth']
+    if has_ap:
+        keys.extend(['apflux', 'apflux_resid', 'apflux_ivar'])
+    for k in keys:
+        incol = '%s%s' % (in_flux_prefix, k)
+        X = T.get(incol)
+        # apflux array columns...
+        sh = X.shape
+        if len(sh) == 3:
+            nt,nb,N = sh
+            A = np.zeros((len(T), len(allbands), N), X.dtype)
+            A[:,B,:] = X
+        else:
+            A = np.zeros((len(T), len(allbands)), X.dtype)
+            A[:,B] = X
+        T.delete_column(incol)
+        T.set('%s%s' % (flux_prefix, k), A)
+
     from tractor.sfd import SFDMap
     print('Reading SFD maps...')
     sfd = SFDMap()
@@ -90,16 +99,18 @@ def format_catalog(T, hdr, primhdr, allbands, outfn,
         'cpu_source', 'cpu_blob',
         'blob_width', 'blob_height', 'blob_npix', 'blob_nimages',
         'blob_totalpix',
-        'decam_flux', 'decam_flux_ivar',
         ]
 
+    cols.extend([flux_prefix + c for c in ['flux', 'flux_ivar']])
+    
     if has_ap:
-        cols.extend(['decam_apflux', 'decam_apflux_resid','decam_apflux_ivar'])
+        cols.extend([flux_prefix + c for c in
+                     ['apflux', 'apflux_resid','apflux_ivar']])
 
-    cols.extend(['decam_mw_transmission', 'decam_nobs',
-        'decam_rchi2', 'decam_fracflux', 'decam_fracmasked', 'decam_fracin',
-        'decam_anymask', 'decam_allmask', 'decam_psfsize',
-        'decam_depth', 'decam_galdepth' ])
+    cols.append('decam_mw_transmission')
+    cols.extend([flux_prefix + c for c in [
+        'nobs', 'rchi2', 'fracflux', 'fracmasked', 'fracin', 'anymask',
+        'allmask', 'psfsize', 'depth', 'galdepth']])
 
     if has_wise:
         cols.extend([
