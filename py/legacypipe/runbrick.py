@@ -2086,10 +2086,7 @@ def stage_writecat(
     ### FIXME -- convert intermediate tractor catalog to final, for now...
     ### FIXME -- note that this is now the only place where 'allbands' is used.
     # Re-read to test round-tripping
-    fn = survey.find_file('tractor-intermediate', brick=brickname, output=True)
-    T2 = fits_table(fn)
-    hdr = T2.get_header()
-    primhdr = fitsio.read_header(fn)
+    T2,hdr,primhdr = survey.read_intermediate_catalog(brickname, output=True)
 
     from format_catalog import format_catalog
     with survey.write_output('tractor', brick=brickname) as out:

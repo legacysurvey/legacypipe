@@ -706,6 +706,35 @@ Now using the current directory as LEGACY_SURVEY_DIR, but this is likely to fail
         
     def index_of_band(self, b):
         return self.allbands.index(b)
+
+    def read_intermediate_catalog(self, brick, **kwargs):
+        '''
+        Reads the intermediate tractor catalog for the given brickname.
+
+        *kwargs*: passed to self.find_file()
+        
+        Returns (T, hdr, primhdr)
+        '''
+        fn = self.find_file('tractor-intermediate', brick=brick, **kwargs)
+        T = fits_table(fn)
+        hdr = T.get_header()
+        primhdr = fitsio.read_header(fn)
+
+        in_flux_prefix = ''
+        # Ensure flux arrays are 2d (N x 1)
+        keys = ['flux', 'flux_ivar', 'rchi2', 'fracflux', 'fracmasked',
+                'fracin', 'nobs', 'anymask', 'allmask', 'psfsize', 'depth',
+                'galdepth']
+        for k in keys:
+            incol = '%s%s' % (in_flux_prefix, k)
+            X = T.get(incol)
+            # Hmm, if we need to reshape one of these arrays, we will
+            # need to do all of them.
+            if len(X.shape) == 1:
+                X = X[:, np.newaxis]
+                T.set(incol, X)
+        
+        return T, hdr, primhdr
         
     def find_file(self, filetype, brick=None, brickpre=None, band='%(band)s',
                   output=False):
