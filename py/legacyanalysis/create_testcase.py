@@ -250,12 +250,16 @@ def main():
                 nifn = base + 'n-%s.fits.gz'      % mu
                 nufn = base + 'n-u.fits.gz'
 
-                print('WISE image header:', tim.hdr)
+                #print('WISE image header:', tim.hdr)
 
                 # Adjust the header WCS by x0,y0
                 wcs = tim.wcs.wcs
                 tim.hdr['CRPIX1'] = wcs.crpix[0]
                 tim.hdr['CRPIX2'] = wcs.crpix[1]
+
+                H,W = tim.shape
+                tim.hdr['IMAGEW'] = W
+                tim.hdr['IMAGEH'] = H
 
                 print('WCS:', wcs)
                 print('Header CRPIX', tim.hdr['CRPIX1'], tim.hdr['CRPIX2'])
