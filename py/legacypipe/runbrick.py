@@ -425,13 +425,13 @@ def stage_tims(W=3600, H=3600, pixscale=0.262, brickname=None,
         version_hdr.add_record(dict(
             name='CAMS_%s' % band.upper(), value=' '.join(cams),
             comment='Cameras contributing band %s' % band))
-
+    version_hdr.add_record(dict(name='BRICKBND', value=''.join(bands),
+                                comment='Bands touching this brick'))
+    version_hdr.add_record(dict(name='NBANDS', value=len(bands),
+                                    comment='Number of bands in this catalog'))
     for i,band in enumerate(bands):
         version_hdr.add_record(dict(name='BAND%i' % i, value=band,
                                     comment='Band name in this catalog'))
-
-    version_hdr.add_record(dict(name='BRICKBND', value=''.join(bands),
-                                comment='Bands touching this brick'))
     version_header = version_hdr
 
     keys = ['version_header', 'targetrd', 'pixscale', 'targetwcs', 'W','H',
