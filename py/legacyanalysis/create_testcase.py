@@ -227,6 +227,7 @@ def main():
                 eoutdir = os.path.join(wise_tr_out, 'e%03i' % e)
                 wisedata.append((edir, eoutdir, tiles.coadd_id[I], band))
 
+        wrote_masks = set()
 
         for indir, outdir, tiles, band in wisedata:
             for tile in tiles:
@@ -240,7 +241,7 @@ def main():
                 print('Directory for this WISE tile:', thisdir)
                 base = os.path.join(thisdir, 'unwise-%s-w%i-' % (tile, band))
                 print('Base filename:', base)
-                
+
                 masked = True
                 mu = 'm' if masked else 'u'
 
@@ -268,7 +269,28 @@ def main():
                 print('Wrote', nifn)
                 fitsio.write(nufn, tim.nuims, header=tim.hdr, clobber=True)
                 print('Wrote', nufn)
-    
+
+                if not (indir,tile) in wrote_masks:
+                    print('Looking for mask file for', indir, tile)
+                    # record that we tried this dir/tile combo
+                    wrote_masks.add((indir,tile))
+                    for idir in indir.split(':'):
+                        tdir = get_unwise_tile_dir(idir, tile)
+                        maskfn = 'unwise-%s-msk.fits.gz' % tile
+                        fn = os.path.join(tdir, maskfn)
+                        print('Mask file:', fn)
+                        if os.path.exists(fn):
+                            print('Reading', fn)
+                            (x0,x1,y0,y1) = tim.roi
+                            roislice = (slice(y0,y1), slice(x0,x1))
+                            F = fitsio.FITS(fn)[0]
+                            hdr = F.read_header()
+                            M = F[roislice]
+                            outfn = os.path.join(thisdir, maskfn)
+                            fitsio.write(outfn, M, header=tim.hdr, clobber=True)
+                            print('Wrote', outfn)
+                            break
+
     outC = outsurvey.get_ccds_readonly()
     for iccd,ccd in enumerate(outC):
         outim = outsurvey.get_image_object(ccd)
