@@ -51,7 +51,13 @@ if __name__ == '__main__':
     assert(len(T) == 1)
     
     # Custom RA,Dec; blob ra,dec.
+    surveydir = os.path.join(os.path.dirname(__file__), 'testcase4')
     outdir = 'out-testcase4b'
+    # Catalog written with one entry (--blobradec)
+    fn = os.path.join(outdir, 'tractor', 'cus',
+                      'tractor-custom-186743p25461.fits')
+    if os.path.exists(fn):
+        os.unlink(fn)
     main(args=['--radec', '186.743965', '25.461788',
                '--width', '250', '--height', '250',
                '--force-all', '--no-write', '--no-wise',
@@ -59,9 +65,7 @@ if __name__ == '__main__':
                '--survey-dir', surveydir,
                '--outdir', outdir])
 
-    # Catalog written with one entry (--blobradec)
-    fn = os.path.join(outdir, 'tractor', 'cus',
-                      'tractor-custom-186743p25461.fits')
+    assert(os.path.exists(fn))
     T = fits_table(fn)
     assert(len(T) == 1)
 
