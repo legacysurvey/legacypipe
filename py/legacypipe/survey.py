@@ -627,7 +627,7 @@ class LegacySurveyData(object):
     objects (eg, DecamImage objects), which then allow data to be read
     from disk.
     '''
-    def __init__(self, survey_dir=None, output_dir=None, version=None,
+    def __init__(self, survey_dir=None, output_dir=None, run=None, version=None,
                  ccds=None):
         '''Create a LegacySurveyData object using data from the given
         *survey_dir* directory, or from the $LEGACY_SURVEY_DIR environment
@@ -647,6 +647,8 @@ class LegacySurveyData(object):
         from .bok    import BokImage
         from .ptf    import PtfImage
 
+        self.run = run
+        
         if survey_dir is None:
             survey_dir = os.environ.get('LEGACY_SURVEY_DIR')
             if survey_dir is None:
@@ -694,6 +696,11 @@ Now using the current directory as LEGACY_SURVEY_DIR, but this is likely to fail
         self.file_prefix = 'legacysurvey'
         if self.version in ['dr1','dr2']:
             self.file_prefix = 'decals'
+
+    def ccds_for_fitting(self, brick, ccds):
+        if self.run is None:
+            return None
+        return self.run.ccds_for_fitting(brick, ccds)
 
     def image_class_for_camera(self, camera):
         # Assert that we have correctly removed trailing spaces
