@@ -1865,18 +1865,20 @@ def stage_wise_forced(
         dec = np.array([src.getPosition().dec for src in cat])
         WISE.wise_mask = np.zeros((len(T), 4), np.uint8)
         for tile in tiles.coadd_id:
+            from astrometry.util.util import Tan
             fn = os.path.join(unwise_dir, tile[:3], tile,
                               'unwise-%s-msk.fits.gz' % tile)
+            print('Looking for unWISE mask file', fn)
             if not os.path.exists(fn):
                 print('unWISE mask file', fn, 'does not exist')
                 continue
-            # read header to pull out WCS
+            # read header to pull out WCS (because it's compressed)
             M,hdr = fitsio.read(fn, header=True)
             wcs = Tan(*[float(hdr[k]) for k in
                         ['CRVAL1', 'CRVAL2', 'CRPIX1', 'CRPIX2',
                          'CD1_1', 'CD1_2', 'CD2_1','CD2_2','NAXIS2','NAXIS1']])
             print('Read WCS header', wcs)
-            ok,xx,yy = targetwcs.radec2pixelxy(ra, dec)
+            ok,xx,yy = wcs.radec2pixelxy(ra, dec)
             hh,ww = wcs.get_height(), wcs.get_width()
             print('unWISE image size', hh,ww)
             xx = np.round(xx - 1).astype(int)
@@ -2053,6 +2055,8 @@ def stage_writecat(
         T2.wise_rchi2 = np.vstack([
             WISE.w1_prochi2, WISE.w2_prochi2,
             WISE.w3_prochi2, WISE.w4_prochi2]).T
+
+        T2.wise_mask = WISE.wise_mask
         
         if WISE_T is not None:
             T2.wise_lc_flux = np.hstack(

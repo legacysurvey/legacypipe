@@ -10,6 +10,29 @@ if __name__ == '__main__':
 
     travis = 'travis' in sys.argv
 
+    # Test that we can run splinesky calib if required...
+    
+    from legacypipe.decam import DecamImage
+    DecamImage.splinesky_boxsize = 128
+    
+    surveydir = os.path.join(os.path.dirname(__file__), 'testcase4')
+    outdir = 'out-testcase4'
+
+    fn = os.path.join(surveydir, 'calib', 'decam', 'splinesky', '00431',
+                      '00431608', 'decam-00431608-N3.fits')
+    if os.path.exists(fn):
+        os.unlink(fn)
+
+    main(args=['--brick', '1867p255', '--zoom', '2050', '2300', '1150', '1400',
+               '--force-all', '--no-write', '--coadd-bw',
+               '--unwise-dir', os.path.join(surveydir, 'images', 'unwise'),
+               '--unwise-tr-dir', os.path.join(surveydir,'images','unwise-tr'),
+               '--blob-image',
+               '--survey-dir', surveydir,
+               '--outdir', outdir])
+    print('Checking for calib file', fn)
+    assert(os.path.exists(fn))
+
     # Check skipping blobs outside the brick's unique area.
     surveydir = os.path.join(os.path.dirname(__file__), 'testcase5')
     outdir = 'out-testcase5'
@@ -27,26 +50,6 @@ if __name__ == '__main__':
     T = fits_table(fn)
     assert(len(T) == 1)
     
-    # Test that we can run splinesky calib if required...
-    
-    from legacypipe.decam import DecamImage
-    DecamImage.splinesky_boxsize = 128
-    
-    surveydir = os.path.join(os.path.dirname(__file__), 'testcase4')
-    outdir = 'out-testcase4'
-
-    main(args=['--brick', '1867p255', '--zoom', '2050', '2300', '1150', '1400',
-               '--force-all', '--no-write', '--coadd-bw',
-               '--unwise-dir', os.path.join(surveydir, 'images', 'unwise'),
-               '--unwise-tr-dir', os.path.join(surveydir,'images','unwise-tr'),
-               '--blob-image',
-               '--survey-dir', surveydir,
-               '--outdir', outdir])
-    fn = os.path.join(surveydir, 'calib', 'decam', 'splinesky', '00431',
-                      '00431608', 'decam-00431608-N3.fits')
-    print('Checking for calib file', fn)
-    assert(os.path.exists(fn))
-
     # Custom RA,Dec; blob ra,dec.
     outdir = 'out-testcase4b'
     main(args=['--radec', '186.743965', '25.461788',
