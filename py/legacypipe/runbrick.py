@@ -2615,14 +2615,12 @@ def get_runbrick_kwargs(opt):
         print('Only ONE of --brick and --radec may be specified.')
         return None, -1
 
-    from legacypipe.runs import get_run
-    run_class = get_run(opt.run)
-    run = run_class(opt)
-    print('Using run:', run)
+    from legacypipe.runs import get_survey
 
-    survey = LegacySurveyData(survey_dir=opt.survey_dir, output_dir=opt.outdir,
-                              run=run)
-    
+    survey = get_survey(opt.run,
+                        survey_dir=opt.survey_dir, output_dir=opt.outdir)
+    print('Got survey:', survey)
+
     if opt.check_done or opt.skip or opt.skip_coadd:
         brickname = opt.brick
         if opt.skip_coadd:
