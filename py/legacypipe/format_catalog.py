@@ -45,6 +45,7 @@ def format_catalog(T, hdr, primhdr, allbands, outfn,
         b = primhdr.get('BAND%i' % i)
         if b is None:
             break
+        b = b.strip()
         bands.append(b)
     print('Bands in this catalog:', bands)
 
@@ -64,8 +65,13 @@ def format_catalog(T, hdr, primhdr, allbands, outfn,
     for k in keys:
         incol = '%s%s' % (in_flux_prefix, k)
         X = T.get(incol)
+        #print('Column', k, 'has shape', X.shape)
         # apflux array columns...
         sh = X.shape
+        if len(sh) == 1:
+            X = X[:, np.newaxis]
+            #print('Reshaped to', X.shape)
+            sh = X.shape
         if len(sh) == 3:
             nt,nb,N = sh
             A = np.zeros((len(T), len(allbands), N), X.dtype)
