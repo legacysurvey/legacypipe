@@ -1030,6 +1030,13 @@ Now using the current directory as LEGACY_SURVEY_DIR, but this is likely to fail
             self.ccds = self.get_ccds()
         return self.ccds
 
+    def filter_ccds_files(self, fns):
+        '''
+        When reading the list of CCDs, we find all files named
+        survey-ccds-*.fits.gz, then filter that list using this function.
+        '''
+        return fns
+
     def get_ccds(self):
         '''
         Returns the table of CCDs.
@@ -1038,6 +1045,7 @@ Now using the current directory as LEGACY_SURVEY_DIR, but this is likely to fail
 
         fns = self.find_file('ccds')
         fns.sort()
+        fns = self.filter_ccds_files(fns)
         TT = []
         for fn in fns:
             print('Reading CCDs from', fn)
