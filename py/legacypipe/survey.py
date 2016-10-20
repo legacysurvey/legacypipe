@@ -698,9 +698,8 @@ Now using the current directory as LEGACY_SURVEY_DIR, but this is likely to fail
             self.file_prefix = 'decals'
 
     def ccds_for_fitting(self, brick, ccds):
-        if self.run is None:
-            return None
-        return self.run.ccds_for_fitting(brick, ccds)
+        # By default, use all.
+        return None
 
     def image_class_for_camera(self, camera):
         # Assert that we have correctly removed trailing spaces

@@ -206,12 +206,12 @@ def stage_tims(W=3600, H=3600, pixscale=0.262, brickname=None,
     print(len(I), 'of', len(ccds), 'CCDs are photometric')
     ccds.cut(I)
 
-    print('Cutting CCDs based on run parameters...')
+    print('Cutting on CCDs to be used for fitting...')
     I = survey.ccds_for_fitting(brick, ccds)
     if I is not None:
-        print('Cutting to', len(I), 'of', len(ccds), 'CCDs for run.')
+        print('Cutting to', len(I), 'of', len(ccds), 'CCDs for fitting.')
         ccds.cut(I)
-    
+
     # Create Image objects for each CCD
     ims = []
     for ccd in ccds:

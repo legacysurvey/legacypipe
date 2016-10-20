@@ -3,41 +3,25 @@ import numpy as np
 
 from legacypipe.survey import LegacySurveyData
 
-# class LegacySurveyRun(object):
-#     def __init__(self, opt):
-#         self.opt = opt
-# 
-#     def ccds_for_fitting(survey, brick, ccds):
-#         print('ccds_for_fitting')
-#         return None
-#     def __str__(self):
-#         return 'Run: ' + str(type(self))
-# 
-# class Dr3Decals(LegacySurveyRun):
-#     def ccds_for_fitting(survey, brick, ccds):
-#         return np.flatnonzero(ccds.camera == 'decam')
-# 
-# class Dr4MzLS(LegacySurveyRun):
-#     def ccds_for_fitting(survey, brick, ccds):
-#         return np.flatnonzero(np.logical_or(ccds.camera == 'mosaic',
-#                                             ccds.camera == '90prime'))
-#     #def __str__(self):
-#     #    return 'Dr4(MzLS)'
-# 
-# runs = {
-#     'dr3': Dr3Decals,
-#     'dr4': Dr4MzLS,
-#     None: LegacySurveyRun,
-# }
-# 
-# def get_run(name):
-#     return runs[name]
+class Dr3DecalsSurvey(LegacySurveyData):
+    # Do we want/need this cut?
+    # def filter_ccds_files(self, fns):
+    #     return [fn for fn in fns if
+    #             ('survey-ccds-decals.fits.gz' in fn or
+    #              'survey-ccds-nondecals.fits.gz' in fn or
+    #              'survey-ccds-extra.fits.gz' in fn)]
 
-class Dr3Survey(LegacySurveyData):
-    pass
+    def ccds_for_fitting(self, brick, ccds):
+        return np.flatnonzero(ccds.camera == 'decam')
 
+class Dr4MzlsSurvey(LegacySurveyData):
+    def ccds_for_fitting(survey, brick, ccds):
+        return np.flatnonzero(np.logical_or(ccds.camera == 'mosaic',
+                                            ccds.camera == '90prime'))
+    
 runs = {
-    'dr3': Dr3Survey,
+    'dr3': Dr3DecalsSurvey,
+    'dr4': Dr4MzlsSurvey,
     None: LegacySurveyData,
 }
 
