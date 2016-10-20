@@ -695,6 +695,10 @@ Now using the current directory as LEGACY_SURVEY_DIR, but this is likely to fail
         if self.version in ['dr1','dr2']:
             self.file_prefix = 'decals'
 
+    def ccds_for_fitting(self, brick, ccds):
+        # By default, use all.
+        return None
+
     def image_class_for_camera(self, camera):
         # Assert that we have correctly removed trailing spaces
         assert(camera == camera.strip())
@@ -706,6 +710,35 @@ Now using the current directory as LEGACY_SURVEY_DIR, but this is likely to fail
         
     def index_of_band(self, b):
         return self.allbands.index(b)
+
+    def read_intermediate_catalog(self, brick, **kwargs):
+        '''
+        Reads the intermediate tractor catalog for the given brickname.
+
+        *kwargs*: passed to self.find_file()
+        
+        Returns (T, hdr, primhdr)
+        '''
+        fn = self.find_file('tractor-intermediate', brick=brick, **kwargs)
+        T = fits_table(fn)
+        hdr = T.get_header()
+        primhdr = fitsio.read_header(fn)
+
+        in_flux_prefix = ''
+        # Ensure flux arrays are 2d (N x 1)
+        keys = ['flux', 'flux_ivar', 'rchi2', 'fracflux', 'fracmasked',
+                'fracin', 'nobs', 'anymask', 'allmask', 'psfsize', 'depth',
+                'galdepth']
+        for k in keys:
+            incol = '%s%s' % (in_flux_prefix, k)
+            X = T.get(incol)
+            # Hmm, if we need to reshape one of these arrays, we will
+            # need to do all of them.
+            if len(X.shape) == 1:
+                X = X[:, np.newaxis]
+                T.set(incol, X)
+        
+        return T, hdr, primhdr
         
     def find_file(self, filetype, brick=None, brickpre=None, band='%(band)s',
                   output=False):
@@ -997,6 +1030,13 @@ Now using the current directory as LEGACY_SURVEY_DIR, but this is likely to fail
             self.ccds = self.get_ccds()
         return self.ccds
 
+    def filter_ccds_files(self, fns):
+        '''
+        When reading the list of CCDs, we find all files named
+        survey-ccds-*.fits.gz, then filter that list using this function.
+        '''
+        return fns
+
     def get_ccds(self):
         '''
         Returns the table of CCDs.
@@ -1005,6 +1045,7 @@ Now using the current directory as LEGACY_SURVEY_DIR, but this is likely to fail
 
         fns = self.find_file('ccds')
         fns.sort()
+        fns = self.filter_ccds_files(fns)
         TT = []
         for fn in fns:
             print('Reading CCDs from', fn)

@@ -52,10 +52,10 @@ def format_catalog(T, hdr, primhdr, allbands, outfn,
     primhdr.add_record(dict(name='ALLBANDS', value=allbands,
                             comment='Band order in array values'))
 
-    has_wise = 'wise_flux' in T.columns()
+    has_wise =    'wise_flux'    in T.columns()
     has_wise_lc = 'wise_lc_flux' in T.columns()
-    has_ap = 'apflux' in T.columns()
-    
+    has_ap =      'apflux'       in T.columns()
+
     # Expand out FLUX and related fields.
     B = np.array([allbands.index(band) for band in bands])
     keys = ['flux', 'flux_ivar', 'rchi2', 'fracflux', 'fracmasked', 'fracin',
@@ -65,13 +65,9 @@ def format_catalog(T, hdr, primhdr, allbands, outfn,
     for k in keys:
         incol = '%s%s' % (in_flux_prefix, k)
         X = T.get(incol)
-        #print('Column', k, 'has shape', X.shape)
+        # print('Column', k, 'has shape', X.shape)
         # apflux array columns...
         sh = X.shape
-        if len(sh) == 1:
-            X = X[:, np.newaxis]
-            #print('Reshaped to', X.shape)
-            sh = X.shape
         if len(sh) == 3:
             nt,nb,N = sh
             A = np.zeros((len(T), len(allbands), N), X.dtype)

@@ -206,6 +206,12 @@ def stage_tims(W=3600, H=3600, pixscale=0.262, brickname=None,
     print(len(I), 'of', len(ccds), 'CCDs are photometric')
     ccds.cut(I)
 
+    print('Cutting on CCDs to be used for fitting...')
+    I = survey.ccds_for_fitting(brick, ccds)
+    if I is not None:
+        print('Cutting to', len(I), 'of', len(ccds), 'CCDs for fitting.')
+        ccds.cut(I)
+
     # Create Image objects for each CCD
     ims = []
     for ccd in ccds:
@@ -2086,10 +2092,7 @@ def stage_writecat(
     ### FIXME -- convert intermediate tractor catalog to final, for now...
     ### FIXME -- note that this is now the only place where 'allbands' is used.
     # Re-read to test round-tripping
-    fn = survey.find_file('tractor-intermediate', brick=brickname, output=True)
-    T2 = fits_table(fn)
-    hdr = T2.get_header()
-    primhdr = fitsio.read_header(fn)
+    T2,hdr,primhdr = survey.read_intermediate_catalog(brickname, output=True)
 
     from format_catalog import format_catalog
     with survey.write_output('tractor', brick=brickname) as out:
@@ -2461,6 +2464,10 @@ python -u legacypipe/runbrick.py --plots --brick 2440p070 --zoom 1900 2400 450 9
 
 '''
     parser = argparse.ArgumentParser(description=de,epilog=ep)
+
+    parser.add_argument('-r', '--run', default=None,
+                        help='Set the run type to execute')
+
     parser.add_argument(
         '-f', '--force-stage', dest='force', action='append', default=[],
         help="Force re-running the given stage(s) -- don't read from pickle.")
@@ -2600,7 +2607,7 @@ python -u legacypipe/runbrick.py --plots --brick 2440p070 --zoom 1900 2400 450 9
     parser.add_argument(
         '--allow-missing-brickq', type=int, choices=[0,1,2], default=-1,
         help='Do not fail if a prerequisite brick of given brickq is missing.')
-    
+
     return parser
 
 def get_runbrick_kwargs(opt):
@@ -2608,8 +2615,12 @@ def get_runbrick_kwargs(opt):
         print('Only ONE of --brick and --radec may be specified.')
         return None, -1
 
-    survey = LegacySurveyData(survey_dir=opt.survey_dir, output_dir=opt.outdir)
-    
+    from legacypipe.runs import get_survey
+
+    survey = get_survey(opt.run,
+                        survey_dir=opt.survey_dir, output_dir=opt.outdir)
+    print('Got survey:', survey)
+
     if opt.check_done or opt.skip or opt.skip_coadd:
         brickname = opt.brick
         if opt.skip_coadd:
