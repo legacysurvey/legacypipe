@@ -51,6 +51,7 @@ import fitsio
 from astropy.table import Table, vstack
 from astrometry.util.starutil_numpy import hmsstring2ra, dmsstring2dec
 import matplotlib.pyplot as plt
+import sys
 
 def _ccds_table(camera='decam'):
     '''Initialize the output CCDs table.  See decstat.pro and merge-zeropoints.py
@@ -132,7 +133,8 @@ def _stars_table(nstars=1):
     '''
     cols = [('expid', 'S16'), ('filter', 'S1'), ('amplifier', 'i2'), ('x', 'f4'), ('y', 'f4'),
             ('ra', 'f8'), ('dec', 'f8'), ('fwhm', 'f4'), ('apmag', 'f4'),
-            ('ps1_ra', 'f8'), ('ps1_dec', 'f8'), ('ps1_mag', 'f4'), ('ps1_gicolor', 'f4')]
+            ('gaia_ra', 'f8'), ('gaia_dec', 'f8'), ('ps1_mag', 'f4'), ('ps1_gicolor', 'f4')]
+            #('ps1_ra', 'f8'), ('ps1_dec', 'f8'), ('ps1_mag', 'f4'), ('ps1_gicolor', 'f4')]
     stars = Table(np.zeros(nstars, dtype=cols))
 
     return stars
@@ -453,12 +455,18 @@ class Measurer(object):
             print('No overlapping PS1 stars in this field!')
             return ccds, _stars_table()
 
+        # Compute the Gaia RA and DEC for the PS1 stars
+        gdec=ps1.dec_ok-ps1.ddec/3600000.
+        gra=ps1.ra_ok-ps1.dra/3600000./np.cos(np.deg2rad(gdec))
+        
         objra, objdec = self.wcs.pixelxy2radec(obj['xcentroid']+1, obj['ycentroid']+1)
-        m1, m2, d12 = match_radec(objra, objdec, ps1.ra, ps1.dec, self.matchradius/3600.0)
+        #m1, m2, d12 = match_radec(objra, objdec, ps1.ra, ps1.dec, self.matchradius/3600.0)
+        m1, m2, d12 = match_radec(objra, objdec, gra, gdec, self.matchradius/3600.0)
         nmatch = len(m1)
         ccds['nmatch'] = nmatch
         
-        print('{} PS1 stars match detected sources within {} arcsec.'.format(nmatch, self.matchradius))
+        #print('{} PS1 stars match detected sources within {} arcsec.'.format(nmatch, self.matchradius))
+        print('{} GAIA sources match detected sources within {} arcsec.'.format(nmatch, self.matchradius))
 
         # Initialize the stars table and begin populating it.
         print('Add the amplifier number!!!')
@@ -473,8 +481,10 @@ class Measurer(object):
         apflux = apflux[m1] # we need apflux for Tractor, below
         stars['apmag'] = - 2.5 * np.log10(apflux) + zp0 + 2.5 * np.log10(exptime)
 
-        stars['ps1_ra'] = ps1.ra[m2]
-        stars['ps1_dec'] = ps1.dec[m2]
+        #stars['ps1_ra'] = ps1.ra[m2]
+        #stars['ps1_dec'] = ps1.dec[m2]
+        stars['gaia_ra'] = gra[m2]
+        stars['gaia_dec'] = gdec[m2]
         stars['ps1_gicolor'] = ps1.median[m2, 0] - ps1.median[m2, 2]
 
         ps1band = ps1cat.ps1band[self.band]
@@ -491,14 +501,18 @@ class Measurer(object):
             colorterm = self.colorterm_ps1_to_observed(ps1.median[m2, :], self.band)
 
         # Compute the astrometric residuals relative to PS1.
-        radiff = (stars['ra'] - stars['ps1_ra']) * np.cos(np.deg2rad(ccddec)) * 3600.0
-        decdiff = (stars['dec'] - stars['ps1_dec']) * 3600.0
+        #radiff = (stars['ra'] - stars['ps1_ra']) * np.cos(np.deg2rad(ccddec)) * 3600.0
+        #decdiff = (stars['dec'] - stars['ps1_dec']) * 3600.0
+        radiff = (stars['ra'] - stars['gaia_ra']) * np.cos(np.deg2rad(ccddec)) * 3600.0
+        decdiff = (stars['dec'] - stars['gaia_dec']) * 3600.0
         ccds['raoff'] = np.median(radiff)
         ccds['decoff'] = np.median(decdiff)
         ccds['rarms'] = np.std(radiff)
         ccds['decrms'] = np.std(decdiff)
-        print('RA, Dec offsets (arcsec) relative to PS1: {}, {}'.format(ccds['raoff'], ccds['decoff']))
-        print('RA, Dec rms (arcsec) relative to PS1: {}, {}'.format(ccds['rarms'], ccds['decrms']))
+        #print('RA, Dec offsets (arcsec) relative to PS1: {}, {}'.format(ccds['raoff'], ccds['decoff']))
+        #print('RA, Dec rms (arcsec) relative to PS1: {}, {}'.format(ccds['rarms'], ccds['decrms']))
+        print('RA, Dec offsets (arcsec) relative to GAIA: {}, {}'.format(ccds['raoff'], ccds['decoff']))
+        print('RA, Dec rms (arcsec) relative to GAIA: {}, {}'.format(ccds['rarms'], ccds['decrms']))
 
         # Compute the photometric zeropoint but only use stars with main
         # sequence g-i colors.
@@ -765,8 +779,8 @@ def main():
     '''Generate a legacypipe-compatible CCDs file.
 
     '''
-
     parser = argparse.ArgumentParser(description='Generate a legacypipe-compatible CCDs file from a set of reduced imaging.')
+    parser.add_argument('--images',action='store',help='List of images to process',required=True)
     parser.add_argument('--prefix', type=str, default='zeropoints', help='Prefix to prepend to the output files.')
     parser.add_argument('--outdir', type=str, default='./', help='Output directory.')
     parser.add_argument('--aprad', type=float, default=3.5, help='Aperture photometry radius (arcsec).')
@@ -777,19 +791,23 @@ def main():
                         help='Use this option when deriving the photometric transformation equations.')
     parser.add_argument('--sky-global', action='store_true',
                         help='Use a global rather than a local sky-subtraction around the stars.')
-    parser.add_argument('images', metavar='*.fits', nargs='+', help='List of images to process')
 
     args = parser.parse_args()
 
+    images= glob(args.images) #print("len(images)=",len(images),'images=',images)
+    #sys.exit('exiting')
+    
     # Build a dictionary with the optional inputs.
     measureargs = vars(args)
-    images = np.array(measureargs.pop('images'))
+    measureargs.pop('images')
+    #images = np.array(measureargs.pop('images'))
     nproc = measureargs.pop('nproc')
 
     prefix = measureargs.pop('prefix')
     outdir = measureargs.pop('outdir')
     zptsfile = os.path.join(outdir, '{}.fits'.format(prefix))
     zptstarsfile = os.path.join(outdir, '{}-stars.fits'.format(prefix))
+
 
     # Process the data, optionally with multiprocessing.
     if nproc > 1:

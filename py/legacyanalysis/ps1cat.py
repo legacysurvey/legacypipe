@@ -14,9 +14,12 @@ class ps1cat():
         directly with the WCS of the CCD of interest.
 
         """
-        self.ps1dir = os.getenv('PS1CAT_DIR')
-        if self.ps1dir is None:
-            raise ValueError('You must have the PS1CAT_DIR environment variable set to point to Pan-STARRS1 catalogs')
+        # GAIA and PS1 info, gaia for astrometry, ps1 for photometry
+        self.gaiadir = os.getenv('GAIACAT_DIR')
+        # PS1 only
+        self.ps1dir = os.getenv('PS1CAT_DIR') # PS1 only
+        if self.ps1dir is None or self.gaiadir is None:
+            raise ValueError('You must have the GAIACAT_DIR and PS1CAT_DIR environment variables set to point to right catalogs')
         self.nside = 32
         if ccdwcs is None:
             from legacypipe.common import LegacySurveyData
@@ -27,7 +30,7 @@ class ps1cat():
         else:
             self.ccdwcs = ccdwcs
 
-    def get_cat(self,ra,dec):
+    def get_cat(self,ra,dec,gaia_ps1=True):
         """Read the healpixed PS1 catalogs given input ra,dec coordinates."""
         from astrometry.util.fits import fits_table, merge_tables
         from astrometry.util.util import radecdegtohealpix, healpix_xy_to_ring
@@ -39,11 +42,11 @@ class ps1cat():
 
         cat = list()
         for ipix in pix:
-            if 'gaia' in os.getenv('PS1CAT_DIR'):
-                # See /project/projectdirs/cosmo/work/gaia/chunks-ps1-gaia
-                fname = os.path.join(self.ps1dir,'chunk-'+'{:05d}'.format(ipix)+'.fits')
+            if gaia_ps1:
+                print('reading gaia+ps1 catalog')
+                fname = os.path.join(self.gaiadir,'chunk-'+'{:05d}'.format(ipix)+'.fits')
             else:
-                # See /project/projectdirs/cosmo/work/ps1/cats/chunks-qz-star-v2
+                print('reading ps1 only catalog')
                 fname = os.path.join(self.ps1dir,'ps1-'+'{:05d}'.format(ipix)+'.fits')
             print('Reading {}'.format(fname))
             cat.append(fits_table(fname))
