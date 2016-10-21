@@ -50,8 +50,15 @@ from glob import glob
 import fitsio
 from astropy.table import Table, vstack
 from astrometry.util.starutil_numpy import hmsstring2ra, dmsstring2dec
+from astrometry.util.ttime import Time
+import datetime
 import matplotlib.pyplot as plt
 import sys
+
+def ptime(text,t0):
+    tnow=Time()
+    print('TIMING:%s ' % text,tnow-t0)
+    return tnow 
 
 def _ccds_table(camera='decam'):
     '''Initialize the output CCDs table.  See decstat.pro and merge-zeropoints.py
@@ -331,15 +338,20 @@ class Measurer(object):
         return np.array(fwhms)
 
     def run(self):
+        t0= Time()
         from scipy.stats import sigmaclip
         from legacyanalysis.ps1cat import ps1cat
         from astrometry.libkd.spherematch import match_radec
         from photutils import (CircularAperture, CircularAnnulus,
                                aperture_photometry, daofind)
+        t0= ptime('import-statements-in-measure.run',t0)
 
         # Read the image and header.
         print('Todo: read the ivar image')
         img, hdr = self.read_image()
+        #fits=fitsio.FITS(fn,mode='r',clobber=False,lower=True)
+        #hdr= fits[0].read_header()
+        #img= fits[ext].read()
 
         # Initialize and begin populating the output CCDs table.
         ccds = _ccds_table(self.camera)
@@ -383,6 +395,7 @@ class Measurer(object):
         ccdra, ccddec = self.wcs.pixelxy2radec((W+1) / 2.0, (H + 1) / 2.0)
         ccds['ra'] = ccdra   # [degree]
         ccds['dec'] = ccddec # [degree]
+        t0= ptime('read-image-getheader-info',t0)
 
         # Measure the sky brightness and (sky) noise level.  Need to capture
         # negative sky.
@@ -402,6 +415,7 @@ class Measurer(object):
         ccds['skyrms'] = sig1    # [electron/pix]
         ccds['skycounts'] = sky1 # [electron/pix]
         ccds['skymag'] = skybr   # [mag/arcsec^2]
+        t0= ptime('measure-sky',t0)
 
         # Detect stars on the image.  
         det_thresh = self.det_thresh
@@ -419,6 +433,7 @@ class Measurer(object):
         if nobj == 0:
             print('No sources detected!  Giving up.')
             return ccds, _stars_table()
+        t0= ptime('detect-stars',t0)
 
         # Do aperture photometry in a fixed aperture but using either local (in
         # an annulus around each star) or global sky-subtraction.
@@ -435,6 +450,7 @@ class Measurer(object):
             apphot = aperture_photometry(img, ap)
             skyphot = aperture_photometry(img, skyap)
             apflux = apphot['aperture_sum'] - skyphot['aperture_sum'] / skyap.area() * ap.area()
+        t0= ptime('aperture-photometry',t0)
 
         # Remove stars with negative flux (or very large photometric uncertainties).
         istar = np.where(apflux > 0)[0]
@@ -467,6 +483,7 @@ class Measurer(object):
         
         #print('{} PS1 stars match detected sources within {} arcsec.'.format(nmatch, self.matchradius))
         print('{} GAIA sources match detected sources within {} arcsec.'.format(nmatch, self.matchradius))
+        t0= ptime('match-to-gaia-radec',t0)
 
         # Initialize the stars table and begin populating it.
         print('Add the amplifier number!!!')
@@ -544,6 +561,7 @@ class Measurer(object):
         print('  {} stars used for zeropoint median'.format(ndmag))
         print('  Zeropoint {:.3f}'.format(zptmed))
         print('  Transparency: {:.3f}'.format(transp))
+        t0= ptime('photometry-using-ps1',t0)
 
         ccds['phoff'] = dmagmed
         ccds['phrms'] = dmagsig
@@ -563,6 +581,7 @@ class Measurer(object):
         
         print('Fitting stars')
         fwhms = self.fitstars(img - sky, ierr, stars['x'], stars['y'], apflux)
+        t0= ptime('tractor-fitstars',t0)
 
         medfwhm = np.median(fwhms)
         print('Median FWHM: {:.3f} pixels'.format(medfwhm))
@@ -610,6 +629,9 @@ class DecamMeasurer(Measurer):
     def read_image(self):
         '''Read the image and header.  Convert image from ADU to electrons.'''
         img, hdr = fitsio.read(self.fn, ext=self.ext, header=True)
+        #fits=fitsio.FITS(fn,mode='r',clobber=False,lower=True)
+        #hdr= fits[0].read_header()
+        #img= fits[ext].read()
         img *= self.gain
         #img *= self.gain / self.exptime
         return img, hdr
@@ -643,6 +665,9 @@ class Mosaic3Measurer(Measurer):
     def read_image(self):
         '''Read the image and header.  Convert image from electrons/sec to electrons.'''
         img, hdr = fitsio.read(self.fn, ext=self.ext, header=True)
+        #fits=fitsio.FITS(fn,mode='r',clobber=False,lower=True)
+        #hdr= fits[0].read_header()
+        #img= fits[ext].read()
         img *= self.exptime
         return img, hdr
 
@@ -683,6 +708,9 @@ class NinetyPrimeMeasurer(Measurer):
     def read_image(self):
         '''Read the image and header.  Convert image from electrons/sec to electrons.'''
         img, hdr = fitsio.read(self.fn, ext=self.ext, header=True)
+        #fits=fitsio.FITS(fn,mode='r',clobber=False,lower=True)
+        #hdr= fits[0].read_header()
+        #img= fits[ext].read()
         img *= self.exptime
         return img, hdr
   
@@ -738,6 +766,16 @@ def measure_image(filelist, measureargs={}):
     '''
     allccds = []
     for fn in filelist:
+        t0=Time()
+        # Copy to SCRATCH for improved I/O
+        fn_scr= fn.replace('/project/projectdirs','/scratch2/scratchdirs/kaylanb')
+        if not os.path.exists(fn_scr): 
+            cmd= "cp %s %s" % (fn,fn_scr)
+            os.system(cmd) 
+        fn= fn_scr
+        t0= ptime('copy-to-scratch',t0)
+        timage=t0
+
         print('Working on image {}'.format(fn))
         if not os.path.isfile(fn):
             print('  Image {} not found!'.format(fn))
@@ -758,6 +796,7 @@ def measure_image(filelist, measureargs={}):
         stars = []
         for ext in extlist:
             ccds1, stars1 = measure(fn, ext, **measureargs)
+            t0= ptime('measured-ext-%s' % ext,t0)
             ccds.append(ccds1)
             stars.append(stars1)
 
@@ -772,6 +811,7 @@ def measure_image(filelist, measureargs={}):
         else:
             allccds = vstack((allccds, ccds))
             allstars = vstack((allstars, stars))
+        t0= ptime('measure-image-%s' % fn,timage)
         
     return allccds, allstars
 
@@ -779,6 +819,9 @@ def main():
     '''Generate a legacypipe-compatible CCDs file.
 
     '''
+    t0 = Time()
+    tmain=t0
+    print('TIMING:main-start ',datetime.datetime.now())
     parser = argparse.ArgumentParser(description='Generate a legacypipe-compatible CCDs file from a set of reduced imaging.')
     parser.add_argument('--images',action='store',help='List of images to process',required=True)
     parser.add_argument('--prefix', type=str, default='zeropoints', help='Prefix to prepend to the output files.')
@@ -829,6 +872,7 @@ def main():
         stars = vstack(stars)
     else:
         ccds, stars = measure_image(images, measureargs)
+        t0= ptime('measure_image',t0)
 
     # Write out.
     if os.path.isfile(zptsfile):
@@ -843,6 +887,10 @@ def main():
         os.remove(zptstarsfile)
     print('Writing {}'.format(zptstarsfile))
     stars.write(zptstarsfile)
+    t0= ptime('write-results-to-fits',t0)
+    
+    tnow= Time()
+    print("TIMING:main %s" % (tnow-tmain,))
                     
 if __name__ == "__main__":
     main()

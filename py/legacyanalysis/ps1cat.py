@@ -134,7 +134,9 @@ def ps1_to_mosaic(psmags, band):
     gmag = psmags[:, g_index]
     imag = psmags[:, i_index]
     gi = gmag - imag
-    coeffs = dict(z = [0.0,  0.13404, -0.06591, 0.01695])[band]
+    # Average color term for Mosaic3 
+    # https://desi.lbl.gov/trac/wiki/MayallZbandLegacy/CPReductions
+    coeffs = dict(z = [0.0, -0.121315, 0.046082623, -0.011642475])[band]
 
     colorterm = -(coeffs[0] + coeffs[1]*gi + coeffs[2]*gi**2 + coeffs[3]*gi**3)
     return colorterm
