@@ -759,61 +759,41 @@ def _measure_image(args):
     '''Utility function to wrap measure_image function for multiprocessing map.''' 
     return measure_image(*args)
 
-def measure_image(filelist, measureargs={}):
+def measure_image(img_fn, measureargs={}):
     '''Wrapper on the camera-specific classes to measure the CCD-level data on all
     the FITS extensions for a given set of images.
-
     '''
-    allccds = []
-    for fn in filelist:
-        t0=Time()
-        # Copy to SCRATCH for improved I/O
-        fn_scr= fn.replace('/project/projectdirs','/scratch2/scratchdirs/kaylanb')
-        if not os.path.exists(fn_scr): 
-            cmd= "cp %s %s" % (fn,fn_scr)
-            os.system(cmd) 
-        fn= fn_scr
-        t0= ptime('copy-to-scratch',t0)
-        timage=t0
+    t0= Time()
 
-        print('Working on image {}'.format(fn))
-        if not os.path.isfile(fn):
-            print('  Image {} not found!'.format(fn))
-            continue
+    print('Working on image {}'.format(img_fn))
 
-        primhdr = fitsio.read_header(fn)
-        camera, extlist = camera_name(primhdr)
-        nnext = len(extlist)
+    primhdr = fitsio.read_header(img_fn)
+    camera, extlist = camera_name(primhdr)
+    nnext = len(extlist)
 
-        if camera == 'decam':
-            measure = measure_decam
-        elif camera == 'mosaic3':
-            measure = measure_mosaic3
-        elif camera == '90prime':
-            measure = measure_90prime
+    if camera == 'decam':
+        measure = measure_decam
+    elif camera == 'mosaic3':
+        measure = measure_mosaic3
+    elif camera == '90prime':
+        measure = measure_90prime
 
-        ccds = []
-        stars = []
-        for ext in extlist:
-            ccds1, stars1 = measure(fn, ext, **measureargs)
-            t0= ptime('measured-ext-%s' % ext,t0)
-            ccds.append(ccds1)
-            stars.append(stars1)
+    ccds = []
+    stars = []
+    for ext in extlist:
+        ccds1, stars1 = measure(img_fn, ext, **measureargs)
+        t0= ptime('measured-ext-%s' % ext,t0)
+        ccds.append(ccds1)
+        stars.append(stars1)
 
-        # Compute the median zeropoint across all the CCDs.
-        ccds = vstack(ccds)
-        stars = vstack(stars)
-        ccds['zptavg'] = np.median(ccds['zpt'])
+    # Compute the median zeropoint across all the CCDs.
+    ccds = vstack(ccds)
+    stars = vstack(stars)
+    ccds['zptavg'] = np.median(ccds['zpt'])
 
-        if len(allccds) == 0:
-            allccds = ccds
-            allstars = stars
-        else:
-            allccds = vstack((allccds, ccds))
-            allstars = vstack((allstars, stars))
-        t0= ptime('measure-image-%s' % fn,timage)
+    t0= ptime('measure-image-%s' % img_fn,t0)
         
-    return allccds, allstars
+    return ccds, stars
 
 def main():
     '''Generate a legacypipe-compatible CCDs file.
@@ -836,6 +816,7 @@ def main():
                         help='Use a global rather than a local sky-subtraction around the stars.')
 
     args = parser.parse_args()
+    t0=ptime('parse-args',t0)
 
     images= glob(args.images) #print("len(images)=",len(images),'images=',images)
     #sys.exit('exiting')
@@ -848,46 +829,68 @@ def main():
 
     prefix = measureargs.pop('prefix')
     outdir = measureargs.pop('outdir')
-    zptsfile = os.path.join(outdir, '{}.fits'.format(prefix))
-    zptstarsfile = os.path.join(outdir, '{}-stars.fits'.format(prefix))
 
 
     # Process the data, optionally with multiprocessing.
-    if nproc > 1:
-        import multiprocessing
-        splitimages = np.array_split(images, nproc)
-        args = list()
-        for ii in range(nproc):
-            args.append((splitimages[ii], measureargs))
-        pool = multiprocessing.Pool(nproc)
-        results = pool.map(_measure_image, args)
+    #if nproc > 1:
+    #    import multiprocessing
+    #    splitimages = np.array_split(images, nproc)
+    #    args = list()
+    #    for ii in range(nproc):
+    #        args.append((splitimages[ii], measureargs))
+    #    pool = multiprocessing.Pool(nproc)
+    #    results = pool.map(_measure_image, args)
 
-        # Pack the results back together (should we sort by filename?).
-        ccds = []
-        stars = []
-        for result in results:
-            ccds.append(result[0])
-            stars.append(result[1])
-        ccds = vstack(ccds)
-        stars = vstack(stars)
-    else:
-        ccds, stars = measure_image(images, measureargs)
+    #    # Pack the results back together (should we sort by filename?).
+    #    ccds = []
+    #    stars = []
+    #    for result in results:
+    #        ccds.append(result[0])
+    #        stars.append(result[1])
+    #    ccds = vstack(ccds)
+    #    stars = vstack(stars)
+    #else:
+    for img_fn in images:
+        # Check if zpt already computed
+        zptsfile= os.path.dirname(img_fn).replace('/project/projectdirs','/scratch2/scratchdirs/kaylanb')
+        zptsfile= os.path.join(zptsfile,'zpts/','zerpoint-%s' % os.path.basename(img_fn))
+        zptsfile= zptsfile.replace('.fz','')
+        zptstarsfile = zptsfile.replace('.fits','-stars.fits')
+        #zptsfile = os.path.join(outdir, '{}.fits'.format(prefix))
+        #zptstarsfile = os.path.join(outdir, '{}-stars.fits'.format(prefix))
+        if os.path.exists(zptsfile) and os.path.exists(zptstarsfile):
+            # Already done
+            continue
+        if not os.path.exists(os.path.dirname(zptsfile)):
+            os.makedirs(os.path.dirname(zptsfile))
+        
+        # Copy to SCRATCH for improved I/O
+        fn_scr= img_fn.replace('/project/projectdirs','/scratch2/scratchdirs/kaylanb')
+        if not os.path.exists(fn_scr): 
+            cmd= "cp %s %s" % (img_fn,fn_scr)
+            os.system(cmd) 
+        t0= ptime('copy-to-scratch',t0)
+     
+        ccds, stars= measure_image(fn_scr, measureargs)
+        # If combining ccds from multiple images:
+        #allccds = []
+        #if len(allccds) == 0:
+        #    allccds = ccds
+        #    allstars = stars
+        #else:
+        #    allccds = vstack((allccds, ccds))
+        #    allstars = vstack((allstars, stars))
         t0= ptime('measure_image',t0)
 
-    # Write out.
-    if os.path.isfile(zptsfile):
-        os.remove(zptsfile)
-    print('Writing {}'.format(zptsfile))
-    ccds.write(zptsfile)
-
-    # Also write out the table of stars, although eventually we'll want to only
-    # write this out if we're calibrating the photometry (or if the user
-    # requests).
-    if os.path.isfile(zptstarsfile):
-        os.remove(zptstarsfile)
-    print('Writing {}'.format(zptstarsfile))
-    stars.write(zptstarsfile)
-    t0= ptime('write-results-to-fits',t0)
+        # Write out.
+        ccds.write(zptsfile)
+        print('Wrote {}'.format(zptsfile))
+        # Also write out the table of stars, although eventually we'll want to only
+        # write this out if we're calibrating the photometry (or if the user
+        # requests).
+        stars.write(zptstarsfile)
+        print('Wrote {}'.format(zptstarsfile))
+        t0= ptime('write-results-to-fits',t0)
     
     tnow= Time()
     print("TIMING:main %s" % (tnow-tmain,))
