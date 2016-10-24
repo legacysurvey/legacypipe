@@ -367,7 +367,7 @@ class Measurer(object):
         # Initialize and begin populating the output CCDs table.
         ccds = _ccds_table(self.camera)
 
-        ccds['image_filename'] = self.fn   
+        ccds['image_filename'] = os.path.basename(self.fn)   
         ccds['image_hdu'] = self.image_hdu 
         ccds['camera'] = self.camera
         ccds['expnum'] = self.expnum
@@ -865,7 +865,7 @@ def main():
     for img_fn in images:
         # Check if zpt already written
         zptsfile= os.path.dirname(img_fn).replace('/project/projectdirs','/scratch2/scratchdirs/kaylanb')
-        zptsfile= os.path.join(zptsfile,'zpts/','zerpoint-%s' % os.path.basename(img_fn))
+        zptsfile= os.path.join(zptsfile,'zpts/','zeropoint-%s' % os.path.basename(img_fn))
         zptsfile= zptsfile.replace('.fz','')
         zptstarsfile = zptsfile.replace('.fits','-stars.fits')
         #zptsfile = os.path.join(outdir, '{}.fits'.format(prefix))
