@@ -58,8 +58,7 @@ rgbkwargs = dict(mnmx=(-1,100.), arcsinh=1.)
 rgbkwargs_resid = dict(mnmx=(-5,5))
 
 def runbrick_global_init():
-    t0 = Time()
-    print('Starting process', os.getpid(), Time()-t0)
+    print('Starting process', os.getpid(), Time()-Time())
     if nocache:
         disable_galaxy_cache()
 

@@ -59,6 +59,7 @@ if __name__ == '__main__':
     main(args=['--brick', '1867p255', '--zoom', '0', '150', '0', '150',
                '--force-all', '--no-write', '--coadd-bw',
                '--survey-dir', surveydir,
+               '--early-coadds',
                '--outdir', outdir])
 
     assert(os.path.exists(fn))
