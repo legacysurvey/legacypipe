@@ -122,6 +122,17 @@ if __name__ == '__main__':
     # DevGalaxy(pos=RaDecPos[244.77975494973529, 12.072348111713127], brightness=NanoMaggies: g=19.2, r=17.9, z=17.1, shape=re=2.09234, e1=-0.198453, e2=0.023652,
     # PointSource(RaDecPos[244.77833280764278, 12.072521274981987], NanoMaggies: g=25, r=23, z=21.7)
 
+    # Check that we can run again, using that checkpoint file.
+    main(args=['--brick', '2447p120', '--zoom', '1020', '1070', '2775', '2815',
+               '--no-wise', '--force-all', '--no-write',
+               '--survey-dir', surveydir,
+               '--outdir', outdir,
+               '--checkpoint', checkpoint_fn,
+               '--checkpoint-period', '1',
+               '--threads', '2'])
+    # Assert...... something?
+
+    
     # MzLS + BASS data
     surveydir2 = os.path.join(os.path.dirname(__file__), 'mzlsbass')
     main(args=['--brick', '3521p002', '--zoom', '2400', '2450', '1200', '1250',
