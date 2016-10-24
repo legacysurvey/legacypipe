@@ -17,13 +17,13 @@ ulimit -a
 #module unload dust
 #module load dust/scratch
 ### argh modules not seeming to work.
-export DUST_DIR=/scratch1/scratchdirs/desiproc/dust/v0_0
+#export DUST_DIR=/scratch1/scratchdirs/desiproc/dust/v0_0
 
 export UNWISE_COADDS_DIR=${UNWISE_COADDS_DIR}:/project/projectdirs/cosmo/data/unwise/unwise-coadds
 
 module unload tractor-hpcp
 
-outdir=$SCRATCH/dr3
+outdir=$SCRATCH/dr3more
 
 brick="$1"
 
@@ -49,15 +49,13 @@ echo >> $log
 echo -e "\nStarting on ${NERSC_HOST} $(hostname)\n" >> $log
 echo "-----------------------------------------------------------------------------------------" >> $log
 
-#     --threads 24 \
+#     --no-write \
 
 python legacypipe/runbrick.py \
-     --no-write \
      --skip \
-     --threads 6 \
+     --threads 24 \
      --skip-calibs \
      --checkpoint checkpoints/${bri}/checkpoint-${brick}.pickle \
-     --fitblobs-prereq pickles/${bri}/runbrick-${brick}-srcs.pickle \
      --pickle "pickles/${bri}/runbrick-%(brick)s-%%(stage)s.pickle" \
      --brick $brick --outdir $outdir --nsigma 6 \
      >> $log 2>&1
