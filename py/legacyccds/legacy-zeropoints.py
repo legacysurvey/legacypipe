@@ -60,6 +60,17 @@ def ptime(text,t0):
     print('TIMING:%s ' % text,tnow-t0)
     return tnow 
 
+def read_lines(fn):
+    fin=open(fn,'r')
+    lines=fin.readlines()
+    fin.close()
+    if len(lines) < 1: raise ValueError('lines not read properly from %s' % fn)
+    return np.array( list(np.char.strip(lines)) )
+
+def dobash(cmd):
+    print('UNIX cmd: %s' % cmd)
+    if os.system(cmd): raise ValueError
+
 def _ccds_table(camera='decam'):
     '''Initialize the output CCDs table.  See decstat.pro and merge-zeropoints.py
     for details.
@@ -569,8 +580,9 @@ class Measurer(object):
         ccds['transp'] = transp
 
         # Fit each star with Tractor.
-        ivar = np.zeros_like(img) + 1.0/sig1**2
-        ierr = np.sqrt(ivar)
+        # Skip for now, most time consuming part
+        #ivar = np.zeros_like(img) + 1.0/sig1**2
+        #ierr = np.sqrt(ivar)
 
         # Fit the PSF here and write out the pixelized PSF.
         # Desired inputs: image, ivar, x, y, apflux
@@ -579,24 +591,24 @@ class Measurer(object):
         # psf_fitter = PSFFitter(AstroImage, len(x))
         # psf_fitter.go(x, y)
         
-        print('Fitting stars')
-        fwhms = self.fitstars(img - sky, ierr, stars['x'], stars['y'], apflux)
-        t0= ptime('tractor-fitstars',t0)
+        #print('Fitting stars')
+        #fwhms = self.fitstars(img - sky, ierr, stars['x'], stars['y'], apflux)
+        #t0= ptime('tractor-fitstars',t0)
 
-        medfwhm = np.median(fwhms)
-        print('Median FWHM: {:.3f} pixels'.format(medfwhm))
-        ccds['fwhm'] = medfwhm
-        stars['fwhm'] = fwhms
+        #medfwhm = np.median(fwhms)
+        #print('Median FWHM: {:.3f} pixels'.format(medfwhm))
+        #ccds['fwhm'] = medfwhm
+        #stars['fwhm'] = fwhms
         #pdb.set_trace()
 
-        # Hack! For now just take the header (SE-measured) values.
-        # ccds['seeing'] = 2.35 * self.hdr['seeing'] # FWHM [arcsec]
-        #print('Hack -- assuming fixed FWHM!')
-        #ccds['fwhm'] = 5.0
-        ##ccds['fwhm'] = self.fwhm
-        #stars['fwhm'] = np.repeat(ccds['fwhm'].data, len(stars))
-
-        #pdb.set_trace()
+        ## Hack! For now just take the header (SE-measured) values.
+        ## ccds['seeing'] = 2.35 * self.hdr['seeing'] # FWHM [arcsec]
+        ##print('Hack -- assuming fixed FWHM!')
+        ##ccds['fwhm'] = 5.0
+        ###ccds['fwhm'] = self.fwhm
+        ##stars['fwhm'] = np.repeat(ccds['fwhm'].data, len(stars))
+        ##pdb.set_trace()
+        
         return ccds, stars
     
 class DecamMeasurer(Measurer):
@@ -818,8 +830,8 @@ def main():
     args = parser.parse_args()
     t0=ptime('parse-args',t0)
 
-    images= glob(args.images) #print("len(images)=",len(images),'images=',images)
-    #sys.exit('exiting')
+    images= read_lines(args.images) 
+    #images= glob(args.images) 
     
     # Build a dictionary with the optional inputs.
     measureargs = vars(args)
@@ -851,7 +863,7 @@ def main():
     #    stars = vstack(stars)
     #else:
     for img_fn in images:
-        # Check if zpt already computed
+        # Check if zpt already written
         zptsfile= os.path.dirname(img_fn).replace('/project/projectdirs','/scratch2/scratchdirs/kaylanb')
         zptsfile= os.path.join(zptsfile,'zpts/','zerpoint-%s' % os.path.basename(img_fn))
         zptsfile= zptsfile.replace('.fz','')
@@ -862,14 +874,14 @@ def main():
             # Already done
             continue
         if not os.path.exists(os.path.dirname(zptsfile)):
-            os.makedirs(os.path.dirname(zptsfile))
+            dobash('mkdir -p %s' % os.path.dirname(zptsfile))
+            #os.makedirs(os.path.dirname(zptsfile))
         
         # Copy to SCRATCH for improved I/O
         fn_scr= img_fn.replace('/project/projectdirs','/scratch2/scratchdirs/kaylanb')
         if not os.path.exists(fn_scr): 
-            cmd= "cp %s %s" % (img_fn,fn_scr)
-            os.system(cmd) 
-        t0= ptime('copy-to-scratch',t0)
+            dobash("cp %s %s" % (img_fn,fn_scr))
+            t0= ptime('copy-to-scratch',t0)
      
         ccds, stars= measure_image(fn_scr, measureargs)
         # If combining ccds from multiple images:
