@@ -761,7 +761,7 @@ class OneBlob(object):
                     ('none',None), ('ptsrc',ptsrc), ('simple',simple),
                     ('dev',dev), ('exp',exp), ('comp',comp)])
                 for imod,modname in enumerate(mods.keys()):
-                    if mod != 'none' and not modname in chisqs:
+                    if modname != 'none' and not modname in chisqs:
                         continue
                     srccat[0] = mods[modname]
                     srctractor.setModelMasks(None)

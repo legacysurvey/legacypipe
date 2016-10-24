@@ -10,6 +10,21 @@ if __name__ == '__main__':
 
     travis = 'travis' in sys.argv
 
+    # Test with a Tycho-2 star in the blob.
+
+    surveydir = os.path.join(os.path.dirname(__file__), 'testcase6')
+    outdir = 'out-testcase6'
+    main(args=['--brick', '1102p240', '--zoom', '500', '600', '650', '750',
+               '--force-all', '--no-write', '--no-wise',
+               #'--blob-image', '--early-coadds',
+               #'--plots',
+               '--survey-dir', surveydir,
+               '--outdir', outdir])
+    fn = os.path.join(outdir, 'tractor', '110', 'tractor-1102p240.fits')
+    assert(os.path.exists(fn))
+    T = fits_table(fn)
+    assert(len(T) == 2)
+
     # Test that we can run splinesky calib if required...
     
     from legacypipe.decam import DecamImage

@@ -154,11 +154,17 @@ def main():
                          extname=ccd.ccdname)
 
         if outim.dqfn is not None:
+            if decam:
+                # DECam-specific code remaps the DQ codes... re-read raw
+                print('Reading data quality from', im.dqfn, 'hdu', im.hdu)
+                dq = im._read_fits(im.dqfn, im.hdu, slice=tim.slice)
+            else:
+                dq = tim.dq
+
             print('DQ filename', outim.dqfn)
             trymakedirs(outim.dqfn, dir=True)
             fitsio.write(outim.dqfn, None, header=tim.primhdr, clobber=True)
-            fitsio.write(outim.dqfn, tim.dq, header=tim.hdr,
-                         extname=ccd.ccdname)
+            fitsio.write(outim.dqfn, dq, header=tim.hdr, extname=ccd.ccdname)
 
         print('PSF filename:', outim.psffn)
         trymakedirs(outim.psffn, dir=True)
