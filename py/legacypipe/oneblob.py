@@ -684,7 +684,9 @@ class OneBlob(object):
                                                   tim.getInvError())
                         if mod is None:
                             continue
-                        d[newsrc] = Patch(mod.x0, mod.y0, mod.patch != 0)
+                        #d[newsrc] = ModelMask(mod.x0, mod.y0, mod.patch != 0)
+                        mh,mw = mod.shape
+                        d[newsrc] = ModelMask(mod.x0, mod.y0, mw, mh)
                         modtims.append(tim)
                         mm.append(d)
     
@@ -993,6 +995,7 @@ class OneBlob(object):
                 modelMasks = models.model_masks(srci, src)
     
             srctractor = self.tractor(srctims, [src])
+            print('Setting modelMasks:', modelMasks)
             srctractor.setModelMasks(modelMasks)
             
             # if plots and False:
@@ -1516,7 +1519,7 @@ class SourceModels(object):
             modelMasks.append(d)
             mod = mods[i]
             if mod is not None:
-                if filledModelMasks:
+                if self.filledModelMasks:
                     mh,mw = mod.shape
                     d[src] = ModelMask(mod.x0, mod.y0, mw, mh)
                 else:
