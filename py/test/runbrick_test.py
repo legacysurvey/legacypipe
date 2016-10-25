@@ -10,6 +10,20 @@ if __name__ == '__main__':
 
     travis = 'travis' in sys.argv
 
+    # Test with a Tycho-2 star + another saturated star in the blob.
+
+    surveydir = os.path.join(os.path.dirname(__file__), 'testcase7')
+    outdir = 'out-testcase7'
+    main(args=['--brick', '1102p240', '--zoom', '250', '350', '1550', '1650',
+               '--force-all', '--no-write', '--no-wise', '--plots',
+               '--survey-dir', surveydir,
+               '--outdir', outdir])
+    fn = os.path.join(outdir, 'tractor', '110', 'tractor-1102p240.fits')
+    assert(os.path.exists(fn))
+    T = fits_table(fn)
+    assert(len(T) == 3)
+
+
     # Test with a Tycho-2 star in the blob.
 
     surveydir = os.path.join(os.path.dirname(__file__), 'testcase6')
