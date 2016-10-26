@@ -94,24 +94,24 @@ class MyMultiproc(multiproc):
         self.serial.append((self.t0, tstart))
         self.t0 = tstart
         self.phases.append((name, self.serial, self.parallel, self.t0))
-        print('Starting subphase', name)
-        print('  pushing serial', self.serial)
-        print('  pushing parallel', self.parallel)
+        # print('Starting subphase', name)
+        # print('  pushing serial', self.serial)
+        # print('  pushing parallel', self.parallel)
         self.serial = []
         self.parallel = []
         
     def finish_subphase(self):
         # pop
         (name, serial, parallel, t0) = self.phases.pop()
-        print('Popping subphase', name)
-        print('  serial elements during subphase:', self.serial)
-        print('  parallel elements during subphase:', self.parallel)
+        # print('Popping subphase', name)
+        # print('  serial elements during subphase:', self.serial)
+        # print('  parallel elements during subphase:', self.parallel)
         serial.extend(self.serial)
         self.serial = serial
         parallel.extend(self.parallel)
         self.parallel = parallel
-        print('  after popping serial', self.serial)
-        print('  after popping parallel', self.parallel)
+        # print('  after popping serial', self.serial)
+        # print('  after popping parallel', self.parallel)
         
     def is_multiproc(self):
         return self.pool is not None
@@ -159,9 +159,9 @@ class MyMultiproc(multiproc):
         # Nasty... peek into Time members
         scpu = 0.
         swall = 0.
-        print('Serial:')
+        #print('Serial:')
         for t0,t1 in self.serial:
-            print(t1-t0)
+            #print(t1-t0)
             for m0,m1 in zip(t0.meas, t1.meas):
                 if isinstance(m0, CpuMeas):
                     scpu  += m1.cpu_seconds_since(m0)
@@ -171,9 +171,9 @@ class MyMultiproc(multiproc):
         pworkerwall = 0.
         pwall = 0.
         pcpu = 0.
-        print('Parallel:')
+        #print('Parallel:')
         for t0,t1 in self.parallel:
-            print(t1-t0)
+            #print(t1-t0)
             for m0,m1 in zip(t0.meas, t1.meas):
                 if isinstance(m0, TimingPoolTimestamp):
                     mt0 = m0.t0
