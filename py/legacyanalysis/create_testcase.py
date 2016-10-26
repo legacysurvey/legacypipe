@@ -2,6 +2,7 @@ from __future__ import print_function
 
 import os
 import numpy as np
+import tempfile
 
 import fitsio
 
@@ -23,6 +24,7 @@ def main():
     parser.add_argument('brick', help='Brick containing these images')
 
     parser.add_argument('--wise', help='For WISE outputs, give the path to a WCS file describing the sub-brick region of interest, eg, a coadd image')
+    parser.add_argument('--fpack', action='store_true', default=False)
     
     args = parser.parse_args()
 
@@ -97,18 +99,22 @@ def main():
         # fitsio doesn't compress .fz by default, so drop .fz suffix
         
         outim.imgfn = outim.imgfn.replace('.fits', '-%s.fits' % im.ccdname)
-        outim.imgfn = outim.imgfn.replace('.fits.fz', '.fits')
+        if not args.fpack:
+            outim.imgfn = outim.imgfn.replace('.fits.fz', '.fits')
 
         if bok:
             outim.whtfn  = outim.whtfn .replace('.wht.fits', '-%s.wht.fits' % im.ccdname)
-            outim.whtfn  = outim.whtfn .replace('.fits.fz', '.fits')
+            if not args.fpack:
+                outim.whtfn  = outim.whtfn .replace('.fits.fz', '.fits')
         else:
             outim.wtfn  = outim.wtfn .replace('.fits', '-%s.fits' % im.ccdname)
-            outim.wtfn  = outim.wtfn .replace('.fits.fz', '.fits')
+            if not args.fpack:
+                outim.wtfn  = outim.wtfn .replace('.fits.fz', '.fits')
 
         if outim.dqfn is not None:
             outim.dqfn  = outim.dqfn .replace('.fits', '-%s.fits' % im.ccdname)
-            outim.dqfn  = outim.dqfn .replace('.fits.fz', '.fits')
+            if not args.fpack:
+                outim.dqfn  = outim.dqfn .replace('.fits.fz', '.fits')
 
         if bok:
             outim.psffn = outim.psffn.replace('.psf', '-%s.psf' % im.ccdname)
@@ -123,10 +129,19 @@ def main():
         print(outim.imgfn)
         #print(outim.wtfn)
         print(outim.dqfn)
-        
-        fitsio.write(outim.imgfn, None, header=tim.primhdr, clobber=True)
-        fitsio.write(outim.imgfn, tim.getImage(), header=tim.hdr,
+
+        ofn = outim.imgfn
+        if args.fpack:
+            f,ofn = tempfile.mkstemp(suffix='.fits')
+            os.close(f)
+        fitsio.write(ofn, None, header=tim.primhdr, clobber=True)
+        fitsio.write(ofn, tim.getImage(), header=tim.hdr,
                      extname=ccd.ccdname)
+
+        if args.fpack:
+            cmd = 'fpack -qz 8 -S %s > %s && rm %s' % (ofn, outim.imgfn, ofn)
+            print('Running:', cmd)
+            os.system(cmd)
 
         h,w = tim.shape
         outccds.width[iccd] = w
@@ -142,16 +157,27 @@ def main():
         
         if not bok:
             print('Weight filename:', outim.wtfn)
-            trymakedirs(outim.wtfn, dir=True)
-            fitsio.write(outim.wtfn, None, header=tim.primhdr, clobber=True)
-            fitsio.write(outim.wtfn, tim.getInvvar(), header=tim.hdr,
-                         extname=ccd.ccdname)
+            wfn = outim.wtfn
         else:
             print('Weight filename:', outim.whtfn)
-            trymakedirs(outim.whtfn, dir=True)
-            fitsio.write(outim.whtfn, None, header=tim.primhdr, clobber=True)
-            fitsio.write(outim.whtfn, tim.getInvvar(), header=tim.hdr,
-                         extname=ccd.ccdname)
+            wfn = outim.whtfn
+
+        trymakedirs(wfn, dir=True)
+
+        ofn = wfn
+        if args.fpack:
+            f,ofn = tempfile.mkstemp(suffix='.fits')
+            os.close(f)
+
+        fitsio.write(ofn, None, header=tim.primhdr, clobber=True)
+        fitsio.write(ofn, tim.getInvvar(), header=tim.hdr,
+                     extname=ccd.ccdname)
+
+        if args.fpack:
+            cmd = 'fpack -qz 8 -S %s > %s && rm %s' % (ofn, wfn, ofn)
+            print('Running:', cmd)
+            os.system(cmd)
+
 
         if outim.dqfn is not None:
             if decam:
@@ -163,8 +189,19 @@ def main():
 
             print('DQ filename', outim.dqfn)
             trymakedirs(outim.dqfn, dir=True)
-            fitsio.write(outim.dqfn, None, header=tim.primhdr, clobber=True)
-            fitsio.write(outim.dqfn, dq, header=tim.hdr, extname=ccd.ccdname)
+
+            ofn = outim.dqfn
+            if args.fpack:
+                f,ofn = tempfile.mkstemp(suffix='.fits')
+                os.close(f)
+
+            fitsio.write(ofn, None, header=tim.primhdr, clobber=True)
+            fitsio.write(ofn, dq, header=tim.hdr, extname=ccd.ccdname)
+
+            if args.fpack:
+                cmd = 'fpack -g -q 0 -S %s > %s && rm %s' % (ofn, outim.dqfn, ofn)
+                print('Running:', cmd)
+                os.system(cmd)
 
         print('PSF filename:', outim.psffn)
         trymakedirs(outim.psffn, dir=True)
