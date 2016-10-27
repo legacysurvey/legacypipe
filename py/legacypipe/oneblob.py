@@ -463,8 +463,6 @@ class OneBlob(object):
                 dimshow(get_rgb(coimgs, self.bands))
                 plt.title('Model selection: stage1 data (srcwcs)')
                 self.ps.savefig()
-                for tim in srctims:
-                    del tim.resamp
                 if self.plots1:
                     srch,srcw = srcwcs.shape
                     _plot_mods(srctims, [list(srctractor.getModelImages())],

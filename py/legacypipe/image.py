@@ -179,22 +179,19 @@ class LegacySurveyImage(object):
           leaving a constant zero sky model?
 
         '''
-        from astrometry.util.miscutils import clip_polygon
-
-        #print('being called in IMAGE.py, quitting')
-        #import sys
-        #sys.exit()
         get_dq = dq
         get_invvar = invvar
-        
+
         band = self.band
         imh,imw = self.get_image_shape()
-        
         wcs = self.get_wcs()
         x0,y0 = 0,0
         x1 = x0 + imw
         y1 = y0 + imh
+
+        # Clip to RA,Dec polygon?
         if slc is None and radecpoly is not None:
+            from astrometry.util.miscutils import clip_polygon
             imgpoly = [(1,1),(1,imh),(imw,imh),(imw,1)]
             ok,tx,ty = wcs.radec2pixelxy(radecpoly[:-1,0], radecpoly[:-1,1])
             tpoly = zip(tx,ty)
@@ -208,11 +205,13 @@ class LegacySurveyImage(object):
             if y1 - y0 < tiny or x1 - x0 < tiny:
                 print('Skipping tiny subimage')
                 return None
+        # Slice?
         if slc is not None:
             sy,sx = slc
             y0,y1 = sy.start, sy.stop
             x0,x1 = sx.start, sx.stop
 
+        # Is part of this image bad?
         old_extent = (x0,x1,y0,y1)
         new_extent = self.get_good_image_slice((x0,x1,y0,y1), get_extent=True)
         if new_extent != old_extent:
@@ -222,6 +221,7 @@ class LegacySurveyImage(object):
                 return None
             slc = slice(y0,y1), slice(x0,x1)
 
+        # Read image pixels
         if pixels:
             print('Reading image slice:', slc)
             img,imghdr = self.read_image(header=True, slice=slc)
@@ -231,22 +231,25 @@ class LegacySurveyImage(object):
             imghdr = dict()
             if slc is not None:
                 img = img[slc]
+        assert(np.all(np.isfinite(img)))
             
+        # Read inverse-variance (weight) map
         if get_invvar:
             invvar = self.read_invvar(slice=slc, clipThresh=0.)
         else:
             invvar = np.ones_like(img)
-            
+        assert(np.all(np.isfinite(invvar)))
+        if np.all(invvar == 0.):
+            print('Skipping zero-invvar image')
+            return None
+        # Negative invvars (from, eg, fpack decompression noise) cause havoc
+        assert(np.all(invvar >= 0.))
+
+        # Read data-quality (flags) map
         if get_dq:
             dq = self.read_dq(slice=slc)
             if dq is not None:
                 invvar[dq != 0] = 0.
-        if np.all(invvar == 0.):
-            print('Skipping zero-invvar image')
-            return None
-        assert(np.all(np.isfinite(img)))
-        assert(np.all(np.isfinite(invvar)))
-        assert(not(np.all(invvar == 0.)))
 
         # header 'FWHM' is in pixels
         assert(self.fwhm > 0)
@@ -282,7 +285,7 @@ class LegacySurveyImage(object):
                 sky.scale(1./zpscale)
             zpscale = 1.
 
-        assert(np.sum(invvar > 0) > 0)
+        # Compute 'sig1', scalar typical per-pixel noise
         if get_invvar:
             sig1 = 1./np.sqrt(np.median(invvar[invvar > 0]))
         elif skysig1 is not None:
@@ -298,9 +301,6 @@ class LegacySurveyImage(object):
             sig1 = 1.4826 * mad / np.sqrt(2.)
             print('sig1 estimate:', sig1)
             invvar *= (1. / sig1**2)
-            
-        assert(np.all(np.isfinite(img)))
-        assert(np.all(np.isfinite(invvar)))
         assert(np.isfinite(sig1))
 
         if constant_invvar:
@@ -342,7 +342,8 @@ class LegacySurveyImage(object):
 
         # CP (DECam) images include DATE-OBS and MJD-OBS, in UTC.
         import astropy.time
-        mjd_tai = astropy.time.Time(self.mjdobs, format='mjd', scale='utc').tai.mjd
+        mjd_tai = astropy.time.Time(self.mjdobs,
+                                    format='mjd', scale='utc').tai.mjd
         tim.time = TAITime(None, mjd=mjd_tai)
         tim.slice = slc
         tim.zpscale = orig_zpscale
@@ -492,8 +493,9 @@ class LegacySurveyImage(object):
                     try:
                         hdr.add_record(line)
                     except:
-                        print('Warning: failed to parse FITS header line: "%s"; skipped' %
-                              line.strip())
+                        print('Warning: failed to parse FITS header line: ' +
+                              ('"%s"; skipped' % line.strip()))
+                              
                 if line == ('END' + ' '*77):
                     foundEnd = True
                     break

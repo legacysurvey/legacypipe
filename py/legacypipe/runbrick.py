@@ -341,6 +341,11 @@ def stage_tims(W=3600, H=3600, pixscale=0.262, brickname=None,
     ccds.wcsplver = np.array([tim.wcsver[1] for tim in tims])
     ccds.psfplver = np.array([tim.psfver[1] for tim in tims])
 
+    # Cut "bands" down to just the bands for which we have images.
+    timbands = [tim.band for tim in tims]
+    bands = [b for b in bands if b in timbands]
+    print('Cut bands to', bands)
+
     if plots:
         # Pixel histograms of subimages.
         for b in bands:
@@ -414,11 +419,6 @@ def stage_tims(W=3600, H=3600, pixscale=0.262, brickname=None,
                     plt.title(bitmap[bitval])
                 plt.suptitle('Mask planes: %s' % tim.name)
                 ps.savefig()
-
-    # Cut "bands" down to just the bands for which we have images.
-    timbands = [tim.band for tim in tims]
-    bands = [b for b in bands if b in timbands]
-    print('Cut bands to', bands)
 
     # Add header cards about which bands and cameras are involved.
     for band in 'grz':
@@ -2687,7 +2687,7 @@ def get_runbrick_kwargs(opt):
         writeStages = opt.write
 
     opt.pixpsf = not opt.gpsf
-        
+
     kwa.update(
         radec=opt.radec, pixscale=opt.pixscale,
         width=opt.width, height=opt.height, zoom=opt.zoom,

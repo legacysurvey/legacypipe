@@ -286,7 +286,7 @@ def get_rgb(imgs, bands, mnmx=None, arcsinh=None, scales=None):
                       z = (0, 0.025),
                       )
 
-    print('get_rgb: bands', bands)
+    # print('get_rgb: bands', bands)
 
     if scales is None:
         if bands == 'grz':
@@ -313,7 +313,7 @@ def get_rgb(imgs, bands, mnmx=None, arcsinh=None, scales=None):
         else:
             scales = grzscales
 
-    print('Using scales:', scales)
+    # print('Using scales:', scales)
         
     h,w = imgs[0].shape
     rgb = np.zeros((h,w,3), np.float32)
@@ -322,7 +322,7 @@ def get_rgb(imgs, bands, mnmx=None, arcsinh=None, scales=None):
             print('Warning: band', band, 'not used in creating RGB image')
             continue
         plane,scale = scales.get(band, (0,1.))
-        print('RGB: band', band, 'in plane', plane, 'scaled by', scale)
+        # print('RGB: band', band, 'in plane', plane, 'scaled by', scale)
         rgb[:,:,plane] = (im / scale).astype(np.float32)
 
     if mnmx is None:
