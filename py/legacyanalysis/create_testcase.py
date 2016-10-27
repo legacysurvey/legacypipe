@@ -25,6 +25,8 @@ def main():
 
     parser.add_argument('--wise', help='For WISE outputs, give the path to a WCS file describing the sub-brick region of interest, eg, a coadd image')
     parser.add_argument('--fpack', action='store_true', default=False)
+    parser.add_argument('--pad', action='store_true', default=False,
+                        help='Keep original image size, but zero out pixels outside ROI')
     
     args = parser.parse_args()
 
@@ -67,9 +69,8 @@ def main():
     
     for iccd,ccd in enumerate(C):
 
-        #assert(ccd.camera.strip() == 'decam')
         decam = (ccd.camera.strip() == 'decam')
-        bok = (ccd.camera.strip() == '90prime')
+        bok   = (ccd.camera.strip() == '90prime')
 
         im = survey.get_image_object(ccd)
         print('Got', im)
@@ -89,11 +90,34 @@ def main():
         print('Image filename:', outim.imgfn)
         trymakedirs(outim.imgfn, dir=True)
 
-        # Adjust the header WCS by x0,y0
-        crpix1 = tim.hdr['CRPIX1']
-        crpix2 = tim.hdr['CRPIX2']
-        tim.hdr['CRPIX1'] = crpix1 - ccd.ccd_x0
-        tim.hdr['CRPIX2'] = crpix2 - ccd.ccd_y0
+        imgdata = tim.getImage()
+        dqdata = tim.dq
+        if decam:
+            # DECam-specific code remaps the DQ codes... re-read raw
+            print('Reading data quality from', im.dqfn, 'hdu', im.hdu)
+            dqdata = im._read_fits(im.dqfn, im.hdu, slice=tim.slice)
+        ivdata = tim.getInvvar()
+
+        if args.pad:
+            # Create zero image of full size, copy in data.
+            fullsize = np.zeros((ccd.height, ccd.width), imgdata.dtype)
+            fullsize[slc] = imgdata
+            imgdata = fullsize
+
+            fullsize = np.zeros((ccd.height, ccd.width), dqdata.dtype)
+            fullsize[slc] = dqdata
+            dqdata = fullsize
+
+            fullsize = np.zeros((ccd.height, ccd.width), ivdata.dtype)
+            fullsize[slc] = ivdata
+            ivdata = fullsize
+            
+        else:
+            # Adjust the header WCS by x0,y0
+            crpix1 = tim.hdr['CRPIX1']
+            crpix2 = tim.hdr['CRPIX2']
+            tim.hdr['CRPIX1'] = crpix1 - ccd.ccd_x0
+            tim.hdr['CRPIX2'] = crpix2 - ccd.ccd_y0
 
         # Add image extension to filename
         # fitsio doesn't compress .fz by default, so drop .fz suffix
@@ -127,7 +151,6 @@ def main():
 
         print('Changed output filenames to:')
         print(outim.imgfn)
-        #print(outim.wtfn)
         print(outim.dqfn)
 
         ofn = outim.imgfn
@@ -135,26 +158,31 @@ def main():
             f,ofn = tempfile.mkstemp(suffix='.fits')
             os.close(f)
         fitsio.write(ofn, None, header=tim.primhdr, clobber=True)
-        fitsio.write(ofn, tim.getImage(), header=tim.hdr,
-                     extname=ccd.ccdname)
+        fitsio.write(ofn, imgdata, header=tim.hdr, extname=ccd.ccdname)
 
         if args.fpack:
             cmd = 'fpack -qz 8 -S %s > %s && rm %s' % (ofn, outim.imgfn, ofn)
             print('Running:', cmd)
-            os.system(cmd)
+            rtn = os.system(cmd)
+            assert(rtn == 0)
 
         h,w = tim.shape
-        outccds.width[iccd] = w
-        outccds.height[iccd] = h
-        outccds.crpix1[iccd] = crpix1 - ccd.ccd_x0
-        outccds.crpix2[iccd] = crpix2 - ccd.ccd_y0
+        if not args.pad:
+            outccds.width[iccd] = w
+            outccds.height[iccd] = h
+            outccds.crpix1[iccd] = crpix1 - ccd.ccd_x0
+            outccds.crpix2[iccd] = crpix2 - ccd.ccd_y0
 
         wcs = Tan(*[float(x) for x in
                     [ccd.crval1, ccd.crval2, ccd.crpix1, ccd.crpix2,
                      ccd.cd1_1, ccd.cd1_2, ccd.cd2_1, ccd.cd2_2, ccd.width, ccd.height]])
-        subwcs = wcs.get_subimage(ccd.ccd_x0, ccd.ccd_y0, w, h)
-        outccds.ra[iccd],outccds.dec[iccd] = subwcs.radec_center()
-        
+
+        if args.pad:
+            subwcs = wcs
+        else:
+            subwcs = wcs.get_subimage(ccd.ccd_x0, ccd.ccd_y0, w, h)
+            outccds.ra[iccd],outccds.dec[iccd] = subwcs.radec_center()
+
         if not bok:
             print('Weight filename:', outim.wtfn)
             wfn = outim.wtfn
@@ -170,23 +198,15 @@ def main():
             os.close(f)
 
         fitsio.write(ofn, None, header=tim.primhdr, clobber=True)
-        fitsio.write(ofn, tim.getInvvar(), header=tim.hdr,
-                     extname=ccd.ccdname)
+        fitsio.write(ofn, ivdata, header=tim.hdr, extname=ccd.ccdname)
 
         if args.fpack:
             cmd = 'fpack -qz 8 -S %s > %s && rm %s' % (ofn, wfn, ofn)
             print('Running:', cmd)
-            os.system(cmd)
-
+            rtn = os.system(cmd)
+            assert(rtn == 0)
 
         if outim.dqfn is not None:
-            if decam:
-                # DECam-specific code remaps the DQ codes... re-read raw
-                print('Reading data quality from', im.dqfn, 'hdu', im.hdu)
-                dq = im._read_fits(im.dqfn, im.hdu, slice=tim.slice)
-            else:
-                dq = tim.dq
-
             print('DQ filename', outim.dqfn)
             trymakedirs(outim.dqfn, dir=True)
 
@@ -196,12 +216,13 @@ def main():
                 os.close(f)
 
             fitsio.write(ofn, None, header=tim.primhdr, clobber=True)
-            fitsio.write(ofn, dq, header=tim.hdr, extname=ccd.ccdname)
+            fitsio.write(ofn, dqdata, header=tim.hdr, extname=ccd.ccdname)
 
             if args.fpack:
                 cmd = 'fpack -g -q 0 -S %s > %s && rm %s' % (ofn, outim.dqfn, ofn)
                 print('Running:', cmd)
-                os.system(cmd)
+                rtn = os.system(cmd)
+                assert(rtn == 0)
 
         print('PSF filename:', outim.psffn)
         trymakedirs(outim.psffn, dir=True)
