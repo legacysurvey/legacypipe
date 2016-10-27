@@ -122,9 +122,9 @@ def prepare_fits_catalog(cat, invvars, T, hdr, filts, fs, allbands=None,
     ra += (ra <   0) * 360.
     ra -= (ra > 360) * 360.
 
-    # Downconvert types
+    # Downconvert RA,Dec invvars to float32
     for c in ['ra','dec']:
-        col = '%s%s' % (prefix, c)
+        col = '%s%s_ivar' % (prefix, c)
         T.set(col, T.get(col).astype(np.float32))
 
     # Zero out unconstrained values
