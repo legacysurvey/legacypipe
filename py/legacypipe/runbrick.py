@@ -1370,21 +1370,8 @@ def _format_all_models(T, newcat, BB, bands, rex):
     for srctype in srctypes:
         # Create catalog with the fit results for each source type
         xcat = Catalog(*[m.get(srctype,None) for m in BB.all_models])
-        # Convert shapes to EllipseE types
-        # if srctype in ['dev','exp']:
-        #     for src in xcat:
-        #         if src is None:
-        #             continue
-        #         src.shape = src.shape.toEllipseE()
-        # elif srctype == 'comp':
-        #     for src in xcat:
-        #         if src is None:
-        #             continue
-        #         src.shapeDev = src.shapeDev.toEllipseE()
-        #         src.shapeExp = src.shapeExp.toEllipseE()
-        #         src.fracDev = FracDev(src.fracDev.clipped())
-
-        #xcat.thawAllRecursive()
+        # NOTE that for Rex, the shapes have been converted to EllipseE
+        # and the e1,e2 params are frozen.
 
         namemap = dict(ptsrc='psf', simple='simp')
         prefix = namemap.get(srctype,srctype)
@@ -1413,11 +1400,17 @@ def _format_all_models(T, newcat, BB, bands, rex):
             continue
         # shapeDev for exp sources, vice versa
         if (('exp_' in col and 'Dev' in col) or
-            ('dev_' in col and 'Exp' in col)):
+            ('dev_' in col and 'Exp' in col) or
+            ('rex_' in col and 'Dev' in col)):
             TT.delete_column(col)
             continue
     TT.delete_column('dev_fracDev')
     TT.delete_column('dev_fracDev_ivar')
+    if rex:
+        TT.delete_column('rex_shapeExp_e1')
+        TT.delete_column('rex_shapeExp_e2')
+        TT.delete_column('rex_shapeExp_e1_ivar')
+        TT.delete_column('rex_shapeExp_e2_ivar')
     return TT,hdr
 
 def _blob_iter(blobslices, blobsrcs, blobs, targetwcs, tims, cat, bands,
@@ -1995,7 +1988,6 @@ def stage_writecat(
         TT.apflux_ivar [:,iband,:] = AP.get('apflux_img_ivar_%s' % band)
         TT.apflux_resid[:,iband,:] = AP.get('apflux_resid_%s'    % band)
 
-    cat.thawAllRecursive()
     hdr = fs = None
     T2,hdr = prepare_fits_catalog(cat, invvars, TT, hdr, bands, fs)
 
