@@ -695,6 +695,10 @@ Now using the current directory as LEGACY_SURVEY_DIR, but this is likely to fail
         if self.version in ['dr1','dr2']:
             self.file_prefix = 'decals'
 
+    def __str__(self):
+        return ('%s: dir %s, out %s' %
+                (type(self).__name__, self.survey_dir, self.output_dir))
+
     def ccds_for_fitting(self, brick, ccds):
         # By default, use all.
         return None
