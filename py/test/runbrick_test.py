@@ -10,6 +10,16 @@ if __name__ == '__main__':
 
     travis = 'travis' in sys.argv
 
+    surveydir = os.path.join(os.path.dirname(__file__), 'testcase8')
+    outdir = 'out-testcase8'
+    
+    main(args=['--brick', '1209p050', '--zoom', '720', '1095', '3220', '3500',
+               '--force-all', '--no-write', '--no-wise', '--plots',
+               '--hybrid-psf',
+               '--survey-dir', surveydir,
+               '--outdir', outdir])
+    sys.exit(0)
+    
     # Test with a Tycho-2 star + another saturated star in the blob.
 
     surveydir = os.path.join(os.path.dirname(__file__), 'testcase7')

@@ -70,7 +70,7 @@ def stage_tims(W=3600, H=3600, pixscale=0.262, brickname=None,
                bands='grz',
                do_calibs=True,
                splinesky=True,
-               gaussPsf=False, pixPsf=False,
+               gaussPsf=False, pixPsf=False, hybridPsf=False,
                constant_invvar=False,
                use_blacklist = True,
                mp=None,
@@ -88,8 +88,9 @@ def stage_tims(W=3600, H=3600, pixscale=0.262, brickname=None,
       width set from the header FWHM value.  Useful for quick
       debugging.
 
-    - *pixPsf*: boolean.  Pixelized PsfEx model, evaluated at the
-      image center.  Uses the FFT-based galaxy convolution code.
+    - *pixPsf*: boolean.  Pixelized PsfEx model.
+
+    - *hybridPsf*: boolean.  Hybrid Pixelized PsfEx / Gaussian approx model.
 
     Sky:
 
@@ -276,6 +277,7 @@ def stage_tims(W=3600, H=3600, pixscale=0.262, brickname=None,
 
     # Read Tractor images
     args = [(im, targetrd, dict(gaussPsf=gaussPsf, pixPsf=pixPsf,
+                                hybridPsf=hybridPsf,
                                 splinesky=splinesky,
                                 constant_invvar=constant_invvar))
                                 for im in ims]
@@ -2133,6 +2135,7 @@ def run_brick(brick, survey, radec=None, pixscale=0.262,
               allow_missing_brickq=-1,
               gaussPsf=False,
               pixPsf=False,
+              hybridPsf=False,
               splinesky=False,
               constant_invvar=False,
               ceres=True,
@@ -2231,6 +2234,8 @@ def run_brick(brick, survey, radec=None, pixscale=0.262,
 
     - *pixPsf*: boolean; use the pixelized PsfEx PSF model and FFT convolution?
 
+    - *hybridPsf*: boolean; use combo pixelized PsfEx + Gaussian approx model
+    
     - *splinesky*: boolean; use the splined sky model (default is constant)?
 
     - *ceres*: boolean; use Ceres Solver when possible?
@@ -2324,7 +2329,8 @@ def run_brick(brick, survey, radec=None, pixscale=0.262,
     if plotnumber:
         ps.skipto(plotnumber)
 
-    kwargs.update(ps=ps, nsigma=nsigma, gaussPsf=gaussPsf, pixPsf=pixPsf,
+    kwargs.update(ps=ps, nsigma=nsigma,
+                  gaussPsf=gaussPsf, pixPsf=pixPsf, hybridPsf=hybridPsf,
                   constant_invvar=constant_invvar,
                   use_blacklist=blacklist,
                   splinesky=splinesky,
@@ -2588,6 +2594,9 @@ python -u legacypipe/runbrick.py --plots --brick 2440p070 --zoom 1900 2400 450 9
     parser.add_argument('--gpsf', action='store_true', default=False,
                         help='Use a fixed single-Gaussian PSF')
 
+    parser.add_argument('--hybrid-psf', action='store_true', default=False,
+                        help='Use a hybrid pixelized/Gaussian PSF model')
+    
     parser.add_argument(
         '--coadd-bw', action='store_true', default=False,
         help='Create grayscale coadds if only one band is available?')
@@ -2688,7 +2697,8 @@ def get_runbrick_kwargs(opt):
         write_metrics=opt.write_metrics,
         on_bricks=opt.on_bricks,
         allow_missing_brickq=opt.allow_missing_brickq,
-        gaussPsf=opt.gpsf, pixPsf=opt.pixpsf, splinesky=True,
+        gaussPsf=opt.gpsf, pixPsf=opt.pixpsf, hybridPsf=opt.hybrid_psf,
+        splinesky=True,
         simulOpt=opt.simul_opt,
         nblobs=opt.nblobs, blob=opt.blob, blobxy=opt.blobxy,
         blobradec=opt.blobradec,

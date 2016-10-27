@@ -146,7 +146,7 @@ class LegacySurveyImage(object):
         return None,None,None,None
 
     def get_tractor_image(self, slc=None, radecpoly=None,
-                          gaussPsf=False, pixPsf=False,
+                          gaussPsf=False, pixPsf=False, hybridPsf=False,
                           splinesky=False,
                           nanomaggies=True, subsky=True, tiny=10,
                           dq=True, invvar=True, pixels=True,
@@ -163,7 +163,8 @@ class LegacySurveyImage(object):
         Options determining the PSF model to use:
 
         - *gaussPsf*: single circular Gaussian PSF based on header FWHM value.
-        - *pixPsf*: pixelized PsfEx model at image center.
+        - *pixPsf*: pixelized PsfEx model.
+        - *hybridPsf*: combo pixelized PsfEx + Gaussian approx.
 
         Options determining the sky model to use:
         
@@ -320,7 +321,10 @@ class LegacySurveyImage(object):
         if x0 or y0:
             twcs.setX0Y0(x0,y0)
 
+        if hybridPsf:
+            pixPsf = False
         psf = self.read_psf_model(x0, y0, gaussPsf=gaussPsf, pixPsf=pixPsf,
+                                  hybridPsf=hybridPsf,
                                   psf_sigma=psf_sigma,
                                   cx=(x0+x1)/2., cy=(y0+y1)/2.)
 
@@ -561,8 +565,10 @@ class LegacySurveyImage(object):
             skyobj.sig1 = sig1
         return skyobj
 
-    def read_psf_model(self, x0, y0, gaussPsf=False, pixPsf=False,
+    def read_psf_model(self, x0, y0,
+                       gaussPsf=False, pixPsf=False, hybridPsf=False,
                        psf_sigma=1., cx=0, cy=0):
+        assert(gaussPsf or pixPsf or hybridPsf)
         psffn = None
         if gaussPsf:
             from tractor.basics import GaussianMixturePSF
@@ -571,15 +577,17 @@ class LegacySurveyImage(object):
             print('WARNING: using mock PSF:', psf)
             psf.version = '0'
             psf.plver = ''
-        elif pixPsf:
+        else:
             # spatially varying pixelized PsfEx
             from tractor.psfex import PixelizedPsfEx
             print('Reading PsfEx model from', self.psffn)
             psf = PixelizedPsfEx(self.psffn)
             psf.shift(x0, y0)
             psffn = self.psffn
-        else:
-            assert(False)
+            if hybridPsf:
+                from tractor.psf import HybridPixelizedPSF
+                psf = HybridPixelizedPSF(psf)
+
         print('Using PSF model', psf)
 
         if psffn is not None:
