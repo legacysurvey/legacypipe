@@ -9,17 +9,19 @@ from tractor import PointSource, getParamTypeTree, RaDecPos
 from tractor.galaxy import ExpGalaxy, DevGalaxy, FixedCompositeGalaxy
 from tractor.ellipses import EllipseESoft, EllipseE
 
-from legacypipe.survey import SimpleGalaxy
+from legacypipe.survey import SimpleGalaxy, RexGalaxy
 
 # FITS catalogs
 fits_typemap = { PointSource: 'PSF', ExpGalaxy: 'EXP', DevGalaxy: 'DEV',
                  FixedCompositeGalaxy: 'COMP',
                  SimpleGalaxy: 'SIMP',
+                 RexGalaxy: 'REX',
                  type(None): 'NONE' }
 
 fits_short_typemap = { PointSource: 'S', ExpGalaxy: 'E', DevGalaxy: 'D',
                        FixedCompositeGalaxy: 'C',
-                       SimpleGalaxy: 'G' }
+                       SimpleGalaxy: 'G',
+                       RexGalaxy: 'R' }
 
 def _typestring(t):
     return '%s.%s' % (t.__module__, t.__name__)
@@ -155,12 +157,19 @@ def _get_tractor_fits_values(T, cat, pat, unpackShape=True):
     T.set(pat % 'ra',  np.array(ra))
     T.set(pat % 'dec', np.array(dec))
 
+    #rexRadius = np.zeros((len(T)), np.float32)
     shapeExp = np.zeros((len(T), 3), np.float32)
     shapeDev = np.zeros((len(T), 3), np.float32)
     fracDev  = np.zeros(len(T), np.float32)
 
     for i,src in enumerate(cat):
-        if isinstance(src, ExpGalaxy):
+        print('_get_tractor_fits_values for pattern', pat, 'src', src)
+        if isinstance(src, RexGalaxy):
+            print('Rex shape type', src.shape)
+            print('all shape params:', src.shape.getAllParams())
+            #rexRadius[i] = src.shape.getAllParams()[0]
+            shapeExp[i,0] = src.shape.getAllParams()[0]
+        elif isinstance(src, ExpGalaxy):
             shapeExp[i,:] = src.shape.getAllParams()
         elif isinstance(src, DevGalaxy):
             shapeDev[i,:] = src.shape.getAllParams()
@@ -171,6 +180,7 @@ def _get_tractor_fits_values(T, cat, pat, unpackShape=True):
             fracDev[i] = src.fracDev.getValue()
 
     T.set(pat % 'fracDev',   fracDev)
+    #T.set(pat % 'rexdec', np.array(dec))
 
     if unpackShape:
         T.set(pat % 'shapeExp_r',  shapeExp[:,0])

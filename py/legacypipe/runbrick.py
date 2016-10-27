@@ -983,6 +983,7 @@ def stage_fitblobs(T=None,
                    write_metrics=True,
                    get_all_models=False,
                    tycho=None,
+                   rex=True,
                    **kwargs):
     '''
     This is where the actual source fitting happens.
@@ -1134,7 +1135,7 @@ def stage_fitblobs(T=None,
         # Run one_blob on each blob!
         blobiter = _blob_iter(blobslices, blobsrcs, blobs, targetwcs, tims,
                               cat, bands, plots, ps, simul_opt, use_ceres,
-                              tycho, brick)
+                              tycho, brick, rex)
         # to allow timingpool to queue tasks one at a time
         blobiter = iterwrapper(blobiter, len(blobsrcs))
         R = mp.map(_bounce_one_blob, blobiter)
@@ -1170,7 +1171,7 @@ def stage_fitblobs(T=None,
         print('Skipping', len(skipblobs), 'blobs from checkpoint file')
         blobiter = _blob_iter(blobslices, blobsrcs, blobs, targetwcs, tims,
                               cat, bands, plots, ps, simul_opt, use_ceres,
-                              tycho, brick, skipblobs=skipblobs)
+                              tycho, brick, rex, skipblobs=skipblobs)
         # to allow timingpool to queue tasks one at a time
         blobiter = iterwrapper(blobiter, len(blobsrcs))
 
@@ -1325,7 +1326,7 @@ def stage_fitblobs(T=None,
     assert(cat.numberOfParams() == len(invvars))
 
     if write_metrics or get_all_models:
-        TT,hdr = _format_all_models(T, newcat, BB, bands)
+        TT,hdr = _format_all_models(T, newcat, BB, bands, rex)
         if get_all_models:
             all_models = TT
         if write_metrics:
@@ -1345,7 +1346,7 @@ def stage_fitblobs(T=None,
     rtn = dict([(k,locals()[k]) for k in keys])
     return rtn
 
-def _format_all_models(T, newcat, BB, bands):
+def _format_all_models(T, newcat, BB, bands, rex):
     from catalog import prepare_fits_catalog, fits_typemap
     from astrometry.util.file import pickle_to_file
 
@@ -1359,23 +1360,31 @@ def _format_all_models(T, newcat, BB, bands):
     TT.type = np.array([fits_typemap[type(src)] for src in newcat])
 
     hdr = fitsio.FITSHDR()
-    for srctype in ['ptsrc', 'simple', 'dev','exp','comp']:
+
+    if rex:
+        simpname = 'rex'
+    else:
+        simpname = 'simple'
+    srctypes = ['ptsrc', simpname, 'dev','exp','comp']
+
+    for srctype in srctypes:
         # Create catalog with the fit results for each source type
         xcat = Catalog(*[m.get(srctype,None) for m in BB.all_models])
         # Convert shapes to EllipseE types
-        if srctype in ['dev','exp']:
-            for src in xcat:
-                if src is None:
-                    continue
-                src.shape = src.shape.toEllipseE()
-        elif srctype == 'comp':
-            for src in xcat:
-                if src is None:
-                    continue
-                src.shapeDev = src.shapeDev.toEllipseE()
-                src.shapeExp = src.shapeExp.toEllipseE()
-                src.fracDev = FracDev(src.fracDev.clipped())
-        xcat.thawAllRecursive()
+        # if srctype in ['dev','exp']:
+        #     for src in xcat:
+        #         if src is None:
+        #             continue
+        #         src.shape = src.shape.toEllipseE()
+        # elif srctype == 'comp':
+        #     for src in xcat:
+        #         if src is None:
+        #             continue
+        #         src.shapeDev = src.shapeDev.toEllipseE()
+        #         src.shapeExp = src.shapeExp.toEllipseE()
+        #         src.fracDev = FracDev(src.fracDev.clipped())
+
+        #xcat.thawAllRecursive()
 
         namemap = dict(ptsrc='psf', simple='simp')
         prefix = namemap.get(srctype,srctype)
@@ -1412,7 +1421,8 @@ def _format_all_models(T, newcat, BB, bands):
     return TT,hdr
 
 def _blob_iter(blobslices, blobsrcs, blobs, targetwcs, tims, cat, bands,
-               plots, ps, simul_opt, use_ceres, tycho, brick, skipblobs=[]):
+               plots, ps, simul_opt, use_ceres, tycho, brick, rex,
+               skipblobs=[]):
 
     ok,tx,ty = targetwcs.radec2pixelxy(tycho.ra, tycho.dec)
     tx = np.round(tx-1).astype(int)
@@ -1520,7 +1530,7 @@ def _blob_iter(blobslices, blobsrcs, blobs, targetwcs, tims, cat, bands,
 
         yield (nblob, iblob, Isrcs, targetwcs, bx0, by0, blobw, blobh,
                blobmask, subtimargs, [cat[i] for i in Isrcs], bands, plots, ps,
-               simul_opt, use_ceres, hastycho)
+               simul_opt, use_ceres, hastycho, rex)
 
 def _bounce_one_blob(X):
     ''' This just wraps the one_blob function, for debugging &

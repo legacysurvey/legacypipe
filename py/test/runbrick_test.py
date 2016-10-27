@@ -10,30 +10,49 @@ if __name__ == '__main__':
 
     travis = 'travis' in sys.argv
 
-    surveydir = os.path.join(os.path.dirname(__file__), 'testcase8')
-    outdir = 'out-testcase8'
+    # Test RexGalaxy
+    if False:
+        from legacypipe.survey import RexGalaxy
+        from tractor import RaDecPos, NanoMaggies, PixPos
+        from tractor import ScalarParam
+        from tractor import Image, GaussianMixturePSF, LinearPhotoCal
+        #from tractor import ConstantFitsWcs
+        #RaDecPos(1., 2.),
+        from legacypipe.survey import LogRadius
     
-    main(args=['--brick', '1209p050', '--zoom', '720', '1095', '3220', '3500',
-               '--force-all', '--no-write', '--no-wise', '--plots',
-               '--hybrid-psf',
-               '--survey-dir', surveydir,
-               '--outdir', outdir])
-    sys.exit(0)
+        rex = RexGalaxy(
+            PixPos(1., 2.),
+            NanoMaggies(r=3.),
+            LogRadius(0.))
+            
+        #ScalarParam(4.))
+        print('Rex:', rex)
+        print('Rex params:', rex.getParams())
+        print('Rex nparams:', rex.numberOfParams())
     
-    # Test with a Tycho-2 star + another saturated star in the blob.
-
-    surveydir = os.path.join(os.path.dirname(__file__), 'testcase7')
-    outdir = 'out-testcase7'
-    main(args=['--brick', '1102p240', '--zoom', '250', '350', '1550', '1650',
-               '--force-all', '--no-write', '--no-wise', '--plots',
-               '--survey-dir', surveydir,
-               '--outdir', outdir])
-    fn = os.path.join(outdir, 'tractor', '110', 'tractor-1102p240.fits')
-    assert(os.path.exists(fn))
-    T = fits_table(fn)
-    assert(len(T) == 3)
-
-
+        H,W = 100,100
+        tim = Image(data=np.zeros((H,W), np.float32),
+                    inverr=np.ones((H,W), np.float32),
+                    psf=GaussianMixturePSF(1., 0., 0., 4., 4., 0.),
+                    photocal=LinearPhotoCal(1., band='r'),
+                )
+        
+        derivs = rex.getParamDerivatives(tim)
+        print('Derivs:', len(derivs))
+        print('Rex params:', rex.getParamNames())
+    
+        import pylab as plt
+        from astrometry.util.plotutils import PlotSequence
+        ps = PlotSequence('rex')
+    
+        for d,nm in zip(derivs, rex.getParamNames()):
+            plt.clf()
+            plt.imshow(d.patch, interpolation='nearest', origin='lower')
+            plt.title('Derivative %s' % nm)
+            ps.savefig()
+        
+        sys.exit(0)
+    
     # Test with a Tycho-2 star in the blob.
 
     surveydir = os.path.join(os.path.dirname(__file__), 'testcase6')
@@ -49,6 +68,8 @@ if __name__ == '__main__':
     T = fits_table(fn)
     assert(len(T) == 2)
 
+    sys.exit(0)
+    
     # Test that we can run splinesky calib if required...
     
     from legacypipe.decam import DecamImage
@@ -71,6 +92,30 @@ if __name__ == '__main__':
                '--outdir', outdir])
     print('Checking for calib file', fn)
     assert(os.path.exists(fn))
+
+
+    # Wrap-around, hybrid PSF
+    surveydir = os.path.join(os.path.dirname(__file__), 'testcase8')
+    outdir = 'out-testcase8'
+    
+    main(args=['--brick', '1209p050', '--zoom', '720', '1095', '3220', '3500',
+               '--force-all', '--no-write', '--no-wise', '--plots',
+               '--hybrid-psf',
+               '--survey-dir', surveydir,
+               '--outdir', outdir])
+    
+    # Test with a Tycho-2 star + another saturated star in the blob.
+
+    surveydir = os.path.join(os.path.dirname(__file__), 'testcase7')
+    outdir = 'out-testcase7'
+    main(args=['--brick', '1102p240', '--zoom', '250', '350', '1550', '1650',
+               '--force-all', '--no-write', '--no-wise', '--plots',
+               '--survey-dir', surveydir,
+               '--outdir', outdir])
+    fn = os.path.join(outdir, 'tractor', '110', 'tractor-1102p240.fits')
+    assert(os.path.exists(fn))
+    T = fits_table(fn)
+    assert(len(T) == 3)
 
     # Check skipping blobs outside the brick's unique area.
     surveydir = os.path.join(os.path.dirname(__file__), 'testcase5')

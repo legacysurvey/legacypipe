@@ -47,6 +47,75 @@ class LegacyEllipseWithPriors(EllipseWithPriors):
 from tractor.galaxy import ExpGalaxy
 from tractor.ellipses import EllipseE
 
+class LogRadius(EllipseESoft):
+    def __init__(self, *args, **kwargs):
+        super(LogRadius, self).__init__(*args, **kwargs)
+        self.lowers = [None]
+        self.uppers = [None]
+
+    @staticmethod
+    def getName():
+        return 'LogRadius'
+
+    @staticmethod
+    def getNamedParams():
+        # log r: log of effective radius in arcsec
+        return dict(logre=0)
+
+    def __repr__(self):
+        return 'log r_e=%g' % (self.logre)
+
+    @property
+    def theta(self):
+        return 0.
+
+    @property
+    def e(self):
+        return 0.
+
+class RexGalaxy(ExpGalaxy):
+    '''This defines the 'REX' galaxy profile -- an exponential profile
+    that is round (zero ellipticity) with variable radius.
+    It is used to detect marginally-resolved galaxies.
+    '''
+    def __init__(self, *args):
+        super(RexGalaxy, self).__init__(*args)
+
+    # def __str__(self):
+    #     return (self.name + ' at ' + str(self.pos)
+    #             + ' with ' + str(self.brightness) + ' and log-radius ' +
+    #             str(self.logre))
+    # 
+    # def __repr__(self):
+    #     return (self.name + '(pos=' + repr(self.pos) +
+    #             ', brightness=' + repr(self.brightness) + ', logre=' +
+    #             repr(self.logre) + ')')
+
+    # @property
+    # def logre(self):
+    #     return self.shape.logre
+    
+    # @staticmethod
+    # def getNamedParams():
+    #     return dict(pos=0, brightness=1, logre=2)
+
+    # @property
+    # def shape(self):
+    #     #
+    #     print('Request for .shape param in RexGalaxy; logre', self.logre)
+    #     e = EllipseESoft(self.logre.getValue(), 0., 0.)
+    #     e.freezeParams('ee1', 'ee2')
+    #     return e
+        
+    def getName(self):
+        return 'RexGalaxy'
+
+    ### HACK -- for Galaxy.getParamDerivatives()
+    # def isParamFrozen(self, pname):
+    #     if pname == 'shape':
+    #         pname = 'logre'
+    #     return super(RexGalaxy, self).isParamFrozen(pname)
+
 class SimpleGalaxy(ExpGalaxy):
     '''This defines the 'SIMP' galaxy profile -- an exponential profile
     with a fixed shape of a 0.45 arcsec effective radius and spherical
