@@ -1230,13 +1230,10 @@ class OneBlob(object):
     #tlast = Time()
 
 def _convert_ellipses(src):
-    #if isinstance(src, (SimpleGalaxy, RexGalaxy)):
-    #    pass
-    #el
     if isinstance(src, (DevGalaxy, ExpGalaxy)):
-        print('Converting ellipse for source', src)
+        #print('Converting ellipse for source', src)
         src.shape = src.shape.toEllipseE()
-        print('--->', src.shape)
+        #print('--->', src.shape)
         if isinstance(src, RexGalaxy):
             src.shape.freezeParams('e1', 'e2')
     elif isinstance(src, FixedCompositeGalaxy):
@@ -1405,13 +1402,8 @@ def _initialize_models(src, rex):
         if rex:
             from legacypipe.survey import LogRadius
             simple = RexGalaxy(src.getPosition(), src.getBrightness(),
-                               LogRadius(0.)).copy()
-            # from tractor import ScalarParam
-            # simple = RexGalaxy(src.getPosition(), src.getBrightness(),
-            #                    ScalarParam(0.)).copy()
-            #simple = RexGalaxy(src.getPosition(), src.getBrightness(),
-            #                   0.).copy()
-            print('Rex:', simple)
+                               LogRadius(-1.)).copy()
+            #print('Created Rex:', simple)
         else:
             simple = SimpleGalaxy(src.getPosition(), src.getBrightness()).copy()
         # logr, ee1, ee2

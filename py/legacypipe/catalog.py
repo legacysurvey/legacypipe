@@ -157,17 +157,14 @@ def _get_tractor_fits_values(T, cat, pat, unpackShape=True):
     T.set(pat % 'ra',  np.array(ra))
     T.set(pat % 'dec', np.array(dec))
 
-    #rexRadius = np.zeros((len(T)), np.float32)
     shapeExp = np.zeros((len(T), 3), np.float32)
     shapeDev = np.zeros((len(T), 3), np.float32)
     fracDev  = np.zeros(len(T), np.float32)
 
     for i,src in enumerate(cat):
-        print('_get_tractor_fits_values for pattern', pat, 'src', src)
+        #print('_get_tractor_fits_values for pattern', pat, 'src', src)
         if isinstance(src, RexGalaxy):
-            print('Rex shape type', src.shape)
-            print('all shape params:', src.shape.getAllParams())
-            #rexRadius[i] = src.shape.getAllParams()[0]
+            #print('Rex shape', src.shape, 'params', src.shape.getAllParams())
             shapeExp[i,0] = src.shape.getAllParams()[0]
         elif isinstance(src, ExpGalaxy):
             shapeExp[i,:] = src.shape.getAllParams()
@@ -180,7 +177,6 @@ def _get_tractor_fits_values(T, cat, pat, unpackShape=True):
             fracDev[i] = src.fracDev.getValue()
 
     T.set(pat % 'fracDev',   fracDev)
-    #T.set(pat % 'rexdec', np.array(dec))
 
     if unpackShape:
         T.set(pat % 'shapeExp_r',  shapeExp[:,0])

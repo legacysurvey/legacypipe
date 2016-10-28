@@ -48,6 +48,9 @@ from tractor.galaxy import ExpGalaxy
 from tractor.ellipses import EllipseE
 
 class LogRadius(EllipseESoft):
+    ''' Class used during fitting of the RexGalaxy type -- an ellipse
+    type where only the radius is variable, and is represented in log
+    space.'''
     def __init__(self, *args, **kwargs):
         super(LogRadius, self).__init__(*args, **kwargs)
         self.lowers = [None]
@@ -76,45 +79,20 @@ class LogRadius(EllipseESoft):
 class RexGalaxy(ExpGalaxy):
     '''This defines the 'REX' galaxy profile -- an exponential profile
     that is round (zero ellipticity) with variable radius.
-    It is used to detect marginally-resolved galaxies.
+    It is used to measure marginally-resolved galaxies.
+
+    The real action (what makes it a Rex) happens when it is constructed,
+    via, eg,
+
+        rex = RexGalaxy(position, brightness, LogRadius(0.))
+
+    (which happens in oneblob.py)
     '''
     def __init__(self, *args):
         super(RexGalaxy, self).__init__(*args)
 
-    # def __str__(self):
-    #     return (self.name + ' at ' + str(self.pos)
-    #             + ' with ' + str(self.brightness) + ' and log-radius ' +
-    #             str(self.logre))
-    # 
-    # def __repr__(self):
-    #     return (self.name + '(pos=' + repr(self.pos) +
-    #             ', brightness=' + repr(self.brightness) + ', logre=' +
-    #             repr(self.logre) + ')')
-
-    # @property
-    # def logre(self):
-    #     return self.shape.logre
-    
-    # @staticmethod
-    # def getNamedParams():
-    #     return dict(pos=0, brightness=1, logre=2)
-
-    # @property
-    # def shape(self):
-    #     #
-    #     print('Request for .shape param in RexGalaxy; logre', self.logre)
-    #     e = EllipseESoft(self.logre.getValue(), 0., 0.)
-    #     e.freezeParams('ee1', 'ee2')
-    #     return e
-        
     def getName(self):
         return 'RexGalaxy'
-
-    ### HACK -- for Galaxy.getParamDerivatives()
-    # def isParamFrozen(self, pname):
-    #     if pname == 'shape':
-    #         pname = 'logre'
-    #     return super(RexGalaxy, self).isParamFrozen(pname)
 
 class SimpleGalaxy(ExpGalaxy):
     '''This defines the 'SIMP' galaxy profile -- an exponential profile
