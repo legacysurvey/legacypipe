@@ -78,8 +78,6 @@ if __name__ == '__main__':
     print('Types:', T.type)
     assert(T.type[0] == 'REX ')
     
-    sys.exit(0)
-    
     # Test that we can run splinesky calib if required...
     
     from legacypipe.decam import DecamImage
@@ -109,7 +107,7 @@ if __name__ == '__main__':
     outdir = 'out-testcase8'
     
     main(args=['--brick', '1209p050', '--zoom', '720', '1095', '3220', '3500',
-               '--force-all', '--no-write', '--no-wise', '--plots',
+               '--force-all', '--no-write', '--no-wise', #'--plots',
                '--hybrid-psf',
                '--survey-dir', surveydir,
                '--outdir', outdir])
@@ -119,7 +117,7 @@ if __name__ == '__main__':
     surveydir = os.path.join(os.path.dirname(__file__), 'testcase7')
     outdir = 'out-testcase7'
     main(args=['--brick', '1102p240', '--zoom', '250', '350', '1550', '1650',
-               '--force-all', '--no-write', '--no-wise', '--plots',
+               '--force-all', '--no-write', '--no-wise', #'--plots',
                '--survey-dir', surveydir,
                '--outdir', outdir])
     fn = os.path.join(outdir, 'tractor', '110', 'tractor-1102p240.fits')
@@ -223,7 +221,8 @@ if __name__ == '__main__':
     main(args=['--brick', '2447p120', '--zoom', '1020', '1070', '2775', '2815',
                '--no-wise', '--force-all', '--no-write',
                '--survey-dir', surveydir,
-               '--outdir', 'out-testcase3', '--plots'])
+               '--outdir', 'out-testcase3', '--plots',
+               '--nblobs', '1'])
 
     # Decals Image Simulations
     # Uncomment WHEN galsim build for Travis
