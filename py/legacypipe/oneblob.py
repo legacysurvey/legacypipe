@@ -711,7 +711,6 @@ class OneBlob(object):
                     srctractor.setModelMasks(newsrc_mm)
                     modtractor = srctractor
 
-
                 # Compute inverse-variances for each source.
                 # Convert to "vanilla" ellipse parameterization
                 # (but save old shapes first)
@@ -733,6 +732,11 @@ class OneBlob(object):
                 B.all_model_ivs[srci][name] = np.array(ivars).astype(np.float32)
                 B.all_models[srci][name] = newsrc.copy()
                 assert(B.all_models[srci][name].numberOfParams() == nsrcparams)
+
+                print('Model', name)
+                for nm,p,piv in zip(newsrc.getParamNames(), newsrc.getParams(),
+                                    ivars):
+                    print('  S/N of', nm, '=', p * np.sqrt(piv))
                 
                 # Now revert the ellipses!
                 if isinstance(newsrc, (DevGalaxy, ExpGalaxy)):
@@ -1627,17 +1631,19 @@ def _select_model(chisqs, nparams, galaxy_margin, rex):
     if diff < cut:
         return keepmod
 
+    # We're going to keep this source!
     if rex:
         simname = 'rex'
     else:
         simname = 'simple'
     
-    # We're going to keep this source!
+    # Now choose between point source and simple model (SIMP/REX)
     if chisqs['ptsrc'] > chisqs[simname]:
         #print('Keeping source; PTSRC is better than SIMPLE')
         keepmod = 'ptsrc'
     else:
         #print('Keeping source; SIMPLE is better than PTSRC')
+        #print('REX is better fit.  Radius', simplemod.shape.re)
         keepmod = simname
 
     if not 'exp' in chisqs:
