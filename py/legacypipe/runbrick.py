@@ -983,7 +983,7 @@ def stage_fitblobs(T=None,
                    write_metrics=True,
                    get_all_models=False,
                    tycho=None,
-                   rex=True,
+                   rex=False,
                    **kwargs):
     '''
     This is where the actual source fitting happens.
@@ -2138,6 +2138,7 @@ def run_brick(brick, survey, radec=None, pixscale=0.262,
               gaussPsf=False,
               pixPsf=False,
               hybridPsf=False,
+              rex=False,
               splinesky=False,
               constant_invvar=False,
               ceres=True,
@@ -2333,6 +2334,7 @@ def run_brick(brick, survey, radec=None, pixscale=0.262,
 
     kwargs.update(ps=ps, nsigma=nsigma,
                   gaussPsf=gaussPsf, pixPsf=pixPsf, hybridPsf=hybridPsf,
+                  rex=rex,
                   constant_invvar=constant_invvar,
                   use_blacklist=blacklist,
                   splinesky=splinesky,
@@ -2598,6 +2600,9 @@ python -u legacypipe/runbrick.py --plots --brick 2440p070 --zoom 1900 2400 450 9
 
     parser.add_argument('--hybrid-psf', action='store_true', default=False,
                         help='Use a hybrid pixelized/Gaussian PSF model')
+
+    parser.add_argument('--rex', action='store_true', default=False,
+                        help='Use REX as simple galaxy models, rather than SIMP')
     
     parser.add_argument(
         '--coadd-bw', action='store_true', default=False,
@@ -2700,6 +2705,7 @@ def get_runbrick_kwargs(opt):
         on_bricks=opt.on_bricks,
         allow_missing_brickq=opt.allow_missing_brickq,
         gaussPsf=opt.gpsf, pixPsf=opt.pixpsf, hybridPsf=opt.hybrid_psf,
+        rex=opt.rex,
         splinesky=True,
         simulOpt=opt.simul_opt,
         nblobs=opt.nblobs, blob=opt.blob, blobxy=opt.blobxy,

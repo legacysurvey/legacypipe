@@ -16,27 +16,19 @@ if __name__ == '__main__':
         from tractor import RaDecPos, NanoMaggies, PixPos
         from tractor import ScalarParam
         from tractor import Image, GaussianMixturePSF, LinearPhotoCal
-        #from tractor import ConstantFitsWcs
-        #RaDecPos(1., 2.),
         from legacypipe.survey import LogRadius
-    
         rex = RexGalaxy(
             PixPos(1., 2.),
             NanoMaggies(r=3.),
             LogRadius(0.))
-            
-        #ScalarParam(4.))
         print('Rex:', rex)
         print('Rex params:', rex.getParams())
         print('Rex nparams:', rex.numberOfParams())
-    
         H,W = 100,100
         tim = Image(data=np.zeros((H,W), np.float32),
                     inverr=np.ones((H,W), np.float32),
                     psf=GaussianMixturePSF(1., 0., 0., 4., 4., 0.),
-                    photocal=LinearPhotoCal(1., band='r'),
-                )
-        
+                    photocal=LinearPhotoCal(1., band='r'))
         derivs = rex.getParamDerivatives(tim)
         print('Derivs:', len(derivs))
         print('Rex params:', rex.getParamNames())
@@ -67,7 +59,25 @@ if __name__ == '__main__':
     assert(os.path.exists(fn))
     T = fits_table(fn)
     assert(len(T) == 2)
+    print('Types:', T.type)
+    assert(T.type[0] == 'SIMP')
 
+    # Test RexGalaxy
+
+    surveydir = os.path.join(os.path.dirname(__file__), 'testcase6')
+    outdir = 'out-testcase6-rex'
+    main(args=['--brick', '1102p240', '--zoom', '500', '600', '650', '750',
+               '--force-all', '--no-write', '--no-wise',
+               '--rex',
+               '--survey-dir', surveydir,
+               '--outdir', outdir])
+    fn = os.path.join(outdir, 'tractor', '110', 'tractor-1102p240.fits')
+    assert(os.path.exists(fn))
+    T = fits_table(fn)
+    assert(len(T) == 2)
+    print('Types:', T.type)
+    assert(T.type[0] == 'REX ')
+    
     sys.exit(0)
     
     # Test that we can run splinesky calib if required...
