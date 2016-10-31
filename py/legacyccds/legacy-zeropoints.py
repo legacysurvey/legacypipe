@@ -55,13 +55,84 @@ import datetime
 import matplotlib.pyplot as plt
 import sys
 
-def ptime(text,t0,rank):
-    if rank == 0:
-        tnow=Time()
-        print('TIMING:%s ' % text,tnow-t0)
-        return tnow
-    else:
-        return -1 
+######## 
+## Ted's
+import time
+from contextlib import contextmanager
+
+@contextmanager
+def stdouterr_redirected(to=os.devnull, comm=None):
+    '''
+    Based on http://stackoverflow.com/questions/5081657
+    import os
+    with stdouterr_redirected(to=filename):
+        print("from Python")
+        os.system("echo non-Python applications are also supported")
+    '''
+    sys.stdout.flush()
+    sys.stderr.flush()
+    fd = sys.stdout.fileno()
+    fde = sys.stderr.fileno()
+
+    ##### assert that Python and C stdio write using the same file descriptor
+    ####assert libc.fileno(ctypes.c_void_p.in_dll(libc, "stdout")) == fd == 1
+
+    def _redirect_stdout(to):
+        sys.stdout.close() # + implicit flush()
+        os.dup2(to.fileno(), fd) # fd writes to 'to' file
+        sys.stdout = os.fdopen(fd, 'w') # Python writes to fd
+        sys.stderr.close() # + implicit flush()
+        os.dup2(to.fileno(), fde) # fd writes to 'to' file
+        sys.stderr = os.fdopen(fde, 'w') # Python writes to fd
+        
+    with os.fdopen(os.dup(fd), 'w') as old_stdout:
+        if (comm is None) or (comm.rank == 0):
+            print("Begin log redirection to {} at {}".format(to, time.asctime()))
+        sys.stdout.flush()
+        sys.stderr.flush()
+        pto = to
+        if comm is None:
+            if not os.path.exists(os.path.dirname(pto)):
+                os.makedirs(os.path.dirname(pto))
+            with open(pto, 'w') as file:
+                _redirect_stdout(to=file)
+        else:
+            pto = "{}_{}".format(to, comm.rank)
+            with open(pto, 'w') as file:
+                _redirect_stdout(to=file)
+        try:
+            yield # allow code to be run with the redirected stdout
+        finally:
+            sys.stdout.flush()
+            sys.stderr.flush()
+            _redirect_stdout(to=old_stdout) # restore stdout.
+                                            # buffering and flags such as
+                                            # CLOEXEC may be different
+            if comm is not None:
+                # concatenate per-process files
+                comm.barrier()
+                if comm.rank == 0:
+                    with open(to, 'w') as outfile:
+                        for p in range(comm.size):
+                            outfile.write("================= Process {} =================\n".format(p))
+                            fname = "{}_{}".format(to, p)
+                            with open(fname) as infile:
+                                outfile.write(infile.read())
+                            os.remove(fname)
+                comm.barrier()
+
+            if (comm is None) or (comm.rank == 0):
+                print("End log redirection to {} at {}".format(to, time.asctime()))
+            sys.stdout.flush()
+            sys.stderr.flush()
+            
+    return
+##############
+
+def ptime(text,t0):
+    tnow=Time()
+    print('TIMING:%s ' % text,tnow-t0)
+    return tnow
 
 def read_lines(fn):
     fin=open(fn,'r')
@@ -191,7 +262,7 @@ class Measurer(object):
         self.det_thresh = 10    # [S/N] - used to be 20
         self.stampradius = 15   # stamp radius around each star [pixels]
 
-        self.matchradius = 2.0  # search radius for finding matching PS1 stars [arcsec]
+        self.matchradius = 1. #2.0  # search radius for finding matching PS1 stars [arcsec]
 
         # Read the primary header and the header for this extension.
         self.primhdr = fitsio.read_header(fn, ext=0)
@@ -351,14 +422,14 @@ class Measurer(object):
         
         return np.array(fwhms)
 
-    def run(self,rank=-1):
+    def run(self):
         t0= Time()
         from scipy.stats import sigmaclip
         from legacyanalysis.ps1cat import ps1cat
         from astrometry.libkd.spherematch import match_radec
         from photutils import (CircularAperture, CircularAnnulus,
                                aperture_photometry, daofind)
-        t0= ptime('import-statements-in-measure.run',t0,rank=rank)
+        t0= ptime('import-statements-in-measure.run',t0)
 
         # Read the image and header.
         print('Todo: read the ivar image')
@@ -409,7 +480,7 @@ class Measurer(object):
         ccdra, ccddec = self.wcs.pixelxy2radec((W+1) / 2.0, (H + 1) / 2.0)
         ccds['ra'] = ccdra   # [degree]
         ccds['dec'] = ccddec # [degree]
-        t0= ptime('read-image-getheader-info',t0,rank=rank)
+        t0= ptime('read-image-getheader-info',t0)
 
         # Measure the sky brightness and (sky) noise level.  Need to capture
         # negative sky.
@@ -429,7 +500,7 @@ class Measurer(object):
         ccds['skyrms'] = sig1    # [electron/pix]
         ccds['skycounts'] = sky1 # [electron/pix]
         ccds['skymag'] = skybr   # [mag/arcsec^2]
-        t0= ptime('measure-sky',t0,rank=rank)
+        t0= ptime('measure-sky',t0)
 
         # Detect stars on the image.  
         det_thresh = self.det_thresh
@@ -447,7 +518,7 @@ class Measurer(object):
         if nobj == 0:
             print('No sources detected!  Giving up.')
             return ccds, _stars_table()
-        t0= ptime('detect-stars',t0,rank=rank)
+        t0= ptime('detect-stars',t0)
 
         # Do aperture photometry in a fixed aperture but using either local (in
         # an annulus around each star) or global sky-subtraction.
@@ -464,7 +535,7 @@ class Measurer(object):
             apphot = aperture_photometry(img, ap)
             skyphot = aperture_photometry(img, skyap)
             apflux = apphot['aperture_sum'] - skyphot['aperture_sum'] / skyap.area() * ap.area()
-        t0= ptime('aperture-photometry',t0,rank=rank)
+        t0= ptime('aperture-photometry',t0)
 
         # Remove stars with negative flux (or very large photometric uncertainties).
         istar = np.where(apflux > 0)[0]
@@ -497,7 +568,7 @@ class Measurer(object):
         
         #print('{} PS1 stars match detected sources within {} arcsec.'.format(nmatch, self.matchradius))
         print('{} GAIA sources match detected sources within {} arcsec.'.format(nmatch, self.matchradius))
-        t0= ptime('match-to-gaia-radec',t0,rank=rank)
+        t0= ptime('match-to-gaia-radec',t0)
 
         # Initialize the stars table and begin populating it.
         print('Add the amplifier number!!!')
@@ -575,7 +646,7 @@ class Measurer(object):
         print('  {} stars used for zeropoint median'.format(ndmag))
         print('  Zeropoint {:.3f}'.format(zptmed))
         print('  Transparency: {:.3f}'.format(transp))
-        t0= ptime('photometry-using-ps1',t0,rank=rank)
+        t0= ptime('photometry-using-ps1',t0)
 
         ccds['phoff'] = dmagmed
         ccds['phrms'] = dmagsig
@@ -683,7 +754,8 @@ class Mosaic3Measurer(Measurer):
         #fits=fitsio.FITS(fn,mode='r',clobber=False,lower=True)
         #hdr= fits[0].read_header()
         #img= fits[ext].read()
-        img *= self.exptime
+        #img *= self.exptime
+        img *= self.exptime*self.gain #KJB
         return img, hdr
 
 class NinetyPrimeMeasurer(Measurer):
@@ -752,29 +824,29 @@ def camera_name(primhdr):
     
     return camera, extlist
     
-def measure_mosaic3(fn, ext='CCD1', rank=-1,**kwargs):
+def measure_mosaic3(fn, ext='CCD1', **kwargs):
     '''Wrapper function to measure quantities from the Mosaic3 camera.'''
     measure = Mosaic3Measurer(fn, ext, **kwargs)
-    ccds, stars = measure.run(rank=rank)
+    ccds, stars = measure.run()
     return ccds, stars
 
-def measure_90prime(fn, ext='CCD1', rank=-1,**kwargs):
+def measure_90prime(fn, ext='CCD1', **kwargs):
     '''Wrapper function to measure quantities from the 90prime camera.'''
     measure = NinetyPrimeMeasurer(fn, ext, **kwargs)
-    ccds, stars = measure.run(rank=rank)
+    ccds, stars = measure.run()
     return ccds, stars
 
-def measure_decam(fn, ext='N4', rank=-1,**kwargs):
+def measure_decam(fn, ext='N4', **kwargs):
     '''Wrapper function to measure quantities from the DECam camera.'''
     measure = DecamMeasurer(fn, ext, **kwargs)
-    ccds, stars = measure.run(rank=rank)
+    ccds, stars = measure.run()
     return ccds, stars
 
 def _measure_image(args):
     '''Utility function to wrap measure_image function for multiprocessing map.''' 
     return measure_image(*args)
 
-def measure_image(img_fn, measureargs={},rank=-1):
+def measure_image(img_fn, measureargs={}):
     '''Wrapper on the camera-specific classes to measure the CCD-level data on all
     the FITS extensions for a given set of images.
     '''
@@ -796,8 +868,8 @@ def measure_image(img_fn, measureargs={},rank=-1):
     ccds = []
     stars = []
     for ext in extlist:
-        ccds1, stars1 = measure(img_fn, ext, rank=rank,**measureargs)
-        t0= ptime('measured-ext-%s' % ext,t0,rank=rank)
+        ccds1, stars1 = measure(img_fn, ext, **measureargs)
+        t0= ptime('measured-ext-%s' % ext,t0)
         ccds.append(ccds1)
         stars.append(stars1)
 
@@ -806,56 +878,56 @@ def measure_image(img_fn, measureargs={},rank=-1):
     stars = vstack(stars)
     ccds['zptavg'] = np.median(ccds['zpt'])
 
-    t0= ptime('measure-image-%s' % img_fn,t0,rank=rank)
+    t0= ptime('measure-image-%s' % img_fn,t0)
         
     return ccds, stars
 
-def runit(image_list,measureargs,rank=-1):
+
+def get_output_fns(img_fn):
+    zptsfile= os.path.dirname(img_fn).replace('/project/projectdirs','/scratch2/scratchdirs/kaylanb')
+    zptsfile= os.path.join(zptsfile,'zpts/','units_1arcsec_zeropoint-%s' % os.path.basename(img_fn))
+    zptsfile= zptsfile.replace('.fz','')
+    zptstarsfile = zptsfile.replace('.fits','-stars.fits')
+    #zptsfile = os.path.join(outdir, '{}.fits'.format(prefix))
+    #zptstarsfile = os.path.join(outdir, '{}-stars.fits'.format(prefix))
+    return zptsfile,zptstarsfile
+
+
+def runit(img_fn,measureargs, zptsfile='zpt.fits',zptstarsfile='zptstar.fits'):
     '''Generate a legacypipe-compatible CCDs file for a given image.
 
     '''
     t0 = Time()
-    for img_fn in image_list:
-        # Check if zpt already written
-        zptsfile= os.path.dirname(img_fn).replace('/project/projectdirs','/scratch2/scratchdirs/kaylanb')
-        zptsfile= os.path.join(zptsfile,'zpts/','zeropoint-%s' % os.path.basename(img_fn))
-        zptsfile= zptsfile.replace('.fz','')
-        zptstarsfile = zptsfile.replace('.fits','-stars.fits')
-        #zptsfile = os.path.join(outdir, '{}.fits'.format(prefix))
-        #zptstarsfile = os.path.join(outdir, '{}-stars.fits'.format(prefix))
-        if os.path.exists(zptsfile) and os.path.exists(zptstarsfile):
-            # Already done
-            continue
-        if not os.path.exists(os.path.dirname(zptsfile)):
-            dobash('mkdir -p %s' % os.path.dirname(zptsfile))
-            #os.makedirs(os.path.dirname(zptsfile))
-        
-        # Copy to SCRATCH for improved I/O
-        fn_scr= img_fn.replace('/project/projectdirs','/scratch2/scratchdirs/kaylanb')
-        if not os.path.exists(fn_scr): 
-            dobash("cp %s %s" % (img_fn,fn_scr))
-            t0= ptime('copy-to-scratch',t0,rank=rank)
-     
-        ccds, stars= measure_image(fn_scr, measureargs,rank=rank)
-        # If combining ccds from multiple images:
-        #allccds = []
-        #if len(allccds) == 0:
-        #    allccds = ccds
-        #    allstars = stars
-        #else:
-        #    allccds = vstack((allccds, ccds))
-        #    allstars = vstack((allstars, stars))
-        t0= ptime('measure_image',t0,rank=rank)
+    if not os.path.exists(os.path.dirname(zptsfile)):
+        dobash('mkdir -p %s' % os.path.dirname(zptsfile))
+        #os.makedirs(os.path.dirname(zptsfile))
 
-        # Write out.
-        ccds.write(zptsfile)
-        print('Wrote {}'.format(zptsfile))
-        # Also write out the table of stars, although eventually we'll want to only
-        # write this out if we're calibrating the photometry (or if the user
-        # requests).
-        stars.write(zptstarsfile)
-        print('Wrote {}'.format(zptstarsfile))
-        t0= ptime('write-results-to-fits',t0,rank=rank)
+    # Copy to SCRATCH for improved I/O
+    fn_scr= img_fn.replace('/project/projectdirs','/scratch2/scratchdirs/kaylanb')
+    if not os.path.exists(fn_scr): 
+        dobash("cp %s %s" % (img_fn,fn_scr))
+        t0= ptime('copy-to-scratch',t0)
+
+    ccds, stars= measure_image(fn_scr, measureargs)
+    # If combining ccds from multiple images:
+    #allccds = []
+    #if len(allccds) == 0:
+    #    allccds = ccds
+    #    allstars = stars
+    #else:
+    #    allccds = vstack((allccds, ccds))
+    #    allstars = vstack((allstars, stars))
+    t0= ptime('measure_image',t0)
+
+    # Write out.
+    ccds.write(zptsfile)
+    print('Wrote {}'.format(zptsfile))
+    # Also write out the table of stars, although eventually we'll want to only
+    # write this out if we're calibrating the photometry (or if the user
+    # requests).
+    stars.write(zptstarsfile)
+    print('Wrote {}'.format(zptstarsfile))
+    t0= ptime('write-results-to-fits',t0)
     
                     
 if __name__ == "__main__":
@@ -864,8 +936,9 @@ if __name__ == "__main__":
     print('TIMING:after-imports ',datetime.datetime.now())
     parser = argparse.ArgumentParser(description='Generate a legacypipe-compatible CCDs file from a set of reduced imaging.')
     parser.add_argument('--image_list',action='store',help='List of images to process',required=True)
+    parser.add_argument('--jobid',action='store',help='slurm jobid',default='001',required=False)
     parser.add_argument('--prefix', type=str, default='zeropoints', help='Prefix to prepend to the output files.')
-    parser.add_argument('--outdir', type=str, default='./', help='Output directory.')
+    parser.add_argument('--outdir', type=str, default='./legacy_zpt_outdir', help='Output directory.')
     parser.add_argument('--aprad', type=float, default=3.5, help='Aperture photometry radius (arcsec).')
     parser.add_argument('--skyrad-inner', type=float, default=7.0, help='Radius of inner sky annulus (arcsec).')
     parser.add_argument('--skyrad-outer', type=float, default=10.0, help='Radius of outer sky annulus (arcsec).')
@@ -888,34 +961,52 @@ if __name__ == "__main__":
 
     prefix = measureargs.pop('prefix')
     outdir = measureargs.pop('outdir')
+    if not os.path.exists(outdir):
+        os.makedirs(outdir)
+    jobid = measureargs.pop('jobid')
 
 
     if nproc > 1:
         from mpi4py.MPI import COMM_WORLD as comm
-    else: 
-        rank=0
-    t0=ptime('parse-args',t0,rank=rank)
+    t0=ptime('parse-args',t0)
 
     
     # RUN HERE
     if nproc > 1:
-        t0=ptime('b4-run rank=%d' % comm.rank,t0,rank=comm.rank)
-        images_per_proc= np.array_split(images, comm.size)
-        runit(images_per_proc[comm.rank], measureargs, rank=comm.rank)
-        t0=ptime('after-run rank=%d' % comm.rank,t0,rank=comm.rank)
-        # Finish up 
+        images_split= np.array_split(images, comm.size)
+        for image in images_split[comm.rank]:
+            # Check if zpt already written
+            zptsfile,zptstarsfile= get_output_fns(image_fn)
+            if os.path.exists(zptsfile) and os.path.exists(zptstarsfile):
+                print('Skipping b/c exists: %s' % zptsfile)
+                continue  # Already done
+            # Log to unique file
+            outfn=os.path.join(outdir,"std%s.img%s" % (jobid,os.path.basename(image_fn)))  
+            with stdouterr_redirected(to=outfn, comm=None):  
+                t0=ptime('b4-run',t0)
+                runit(image_fn, measureargs, \
+                      zptsfile=zptsfile,zptstarsfile=zptstarsfile)
+                t0=ptime('after-run',t0)
+                # Finish up 
         # HACK, not sure if need to wait for all proc to finish 
-        confirm_files = comm.gather( images_per_proc[comm.rank], root=0 )
+        confirm_files = comm.gather( images_split[comm.rank], root=0 )
         if comm.rank == 0:
-            print('\nRank 0 gathered the results:')
+            print('Rank 0 gathered the results:')
+            print('len(images)=%d, len(gathered)=%d' % (len(images),len(confirm_files)))
             tnow= Time()
             print("TIMING:total %s" % (tnow-tbegin,))
             print("Done")
     else:
-        rank=0
-        t0=ptime('b4-run rank=%d' % rank,t0,rank=rank)
-        runit(images, measureargs, rank=rank)
-        t0=ptime('after-run rank=%d' % rank,t0,rank=rank)
-        print("TIMING:total %s" % (tnow-tbegin,))
-        print("Done")
+        for image_fn in images:
+            # Check if zpt already written
+            zptsfile,zptstarsfile= get_output_fns(image_fn)
+            if os.path.exists(zptsfile) and os.path.exists(zptstarsfile):
+                continue  # Already done
+            # Create the file
+            t0=ptime('b4-run',t0)
+            runit(image_fn, measureargs,\
+                  zptsfile=zptsfile,zptstarsfile=zptstarsfile)
+            t0=ptime('after-run',t0)
+            print("TIMING:total %s" % (tnow-tbegin,))
+            print("Done")
 
