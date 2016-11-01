@@ -974,14 +974,14 @@ if __name__ == "__main__":
     # RUN HERE
     if nproc > 1:
         images_split= np.array_split(images, comm.size)
-        for image in images_split[comm.rank]:
+        for image_fn in images_split[comm.rank]:
             # Check if zpt already written
             zptsfile,zptstarsfile= get_output_fns(image_fn)
             if os.path.exists(zptsfile) and os.path.exists(zptstarsfile):
                 print('Skipping b/c exists: %s' % zptsfile)
                 continue  # Already done
             # Log to unique file
-            outfn=os.path.join(outdir,"std%s.img%s" % (jobid,os.path.basename(image_fn)))  
+            outfn=os.path.join(outdir,"std.zpt%s_jobid%s" % (os.path.basename(image_fn),jobid))  
             with stdouterr_redirected(to=outfn, comm=None):  
                 t0=ptime('b4-run',t0)
                 runit(image_fn, measureargs, \
