@@ -245,11 +245,14 @@ class LegacySurveyImage(object):
         # Negative invvars (from, eg, fpack decompression noise) cause havoc
         assert(np.all(invvar >= 0.))
 
-        # Read data-quality (flags) map
+        # Read data-quality (flags) map and zero out the invvars of masked pixels
         if get_dq:
             dq = self.read_dq(slice=slc)
             if dq is not None:
                 invvar[dq != 0] = 0.
+            if np.all(invvar == 0.):
+                print('Skipping zero-invvar image (after DQ masking)')
+                return None
 
         # header 'FWHM' is in pixels
         assert(self.fwhm > 0)
