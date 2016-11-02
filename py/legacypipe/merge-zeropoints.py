@@ -39,6 +39,26 @@ def mzls_to_20160315():
     for fn in [outfn]:
         os.system('gzip --best ' + fn)
 
+# Runs 19 and 20, for adjusting obstatus file...
+def decals_run19():
+    basedir = os.environ['LEGACY_SURVEY_DIR']
+    cam = 'decam'
+    image_basedir = os.path.join(basedir, 'images')
+    TT = []
+    for fn,dirnms in [
+        ('/global/homes/a/arjundey/ZeroPoints/decals-zpt-20160801_20161011.fits',
+         ['CP20160801', 'CP20161011']),
+        ]:
+        T = fits_table(fn)
+        normalize_zeropoints(fn, dirnms, image_basedir, cam, T=T)
+        TT.append(T)
+    T = merge_tables(TT)
+    outfn = 'survey-ccds-run19.fits'
+    T.writeto(outfn)
+    print('Wrote', outfn)
+    for fn in [outfn]:
+        os.system('gzip --best ' + fn)
+
 # Runs 16 and 17, for adjusting obstatus file...
 def decals_run16():
     basedir = os.environ['LEGACY_SURVEY_DIR']
@@ -426,7 +446,8 @@ if __name__ == '__main__':
     #decals_dr3_check_wcsfailed()
     #decals_dr3_plus()
     #decals_run16()
-    mzls_to_20160315()
+    #mzls_to_20160315()
+    decals_run19()
     sys.exit(0)
     
     basedir = './deep2f3'
