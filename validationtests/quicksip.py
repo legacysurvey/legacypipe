@@ -250,11 +250,11 @@ def in_ring(nside, iz, phi_low, phi_hi, conservative=True):
         nir = long(ip_hi - ip_low + 1 )
         listir = np.arange(ip_low, nir+ip_low)
     #below added by AJR to address region around ra = 360
-    if float(listir[-1]-listir[0])/(ipix2-ipix1) > .5:
-    	listir1 = np.arange(ipix1, listir[0]+1)
-    	listir2 = np.arange(listir[-1], ipix2+1)
-    	#print listir[-1],listir[0],ipix1,ipix2,len(listir1),len(listir2)
-    	listir   = np.concatenate( (listir1,listir2  ) )   
+    #if float(listir[-1]-listir[0])/(ipix2-ipix1) > .5:
+    #	listir1 = np.arange(ipix1, listir[0]+1)
+    #	listir2 = np.arange(listir[-1], ipix2+1)
+    #	#print listir[-1],listir[0],ipix1,ipix2,len(listir1),len(listir2)
+    #	listir   = np.concatenate( (listir1,listir2  ) )   
     	#print len(listir)
     return listir
 
@@ -349,19 +349,19 @@ def in_region(thetavals, phivals, thetaU, phiU, thetaR, phiR, thetaL, phiL, thet
 #def computeHPXpix_sequ_new(nside, propertyArray, pixoffset=0, ratiores=4, coadd_cut=True):
 def computeHPXpix_sequ_new(nside, propertyArray, pixoffset=0, ratiores=4, coadd_cut=False): 
     #return 'ERROR'
-    img_ras, img_decs = [propertyArray[v] for v in ['ra0', 'ra1', 'ra2','ra3']],[propertyArray[v] for v in ['dec0', 'dec1', 'dec2','dec3']]
+    #img_ras, img_decs = [propertyArray[v] for v in ['ra0', 'ra1', 'ra2','ra3']],[propertyArray[v] for v in ['dec0', 'dec1', 'dec2','dec3']]
     #x = [1+pixoffset, propertyArray['NAXIS1']-pixoffset, propertyArray['NAXIS1']-pixoffset, 1+pixoffset, 1+pixoffset]
     #y = [1+pixoffset, 1+pixoffset, propertyArray['NAXIS2']-pixoffset, propertyArray['NAXIS2']-pixoffset, 1+pixoffset]
 
-    if np.any(img_ras > 360.0):
-        img_ras[img_ras > 360.0] -= 360.0
-    if np.any(img_ras < 0.0):
-        img_ras[img_ras < 0.0] += 360.0
+    #if np.any(img_ras > 360.0):
+    #    img_ras[img_ras > 360.0] -= 360.0
+    #if np.any(img_ras < 0.0):
+    #    img_ras[img_ras < 0.0] += 360.0
     #print 'in here'
     #print len(img_ras)#,len(img_ras[0])
     #plt.plot(img_ras[0],img_decs[0],'k,')
     #plt.show()
-    #img_ras, img_decs = computeCorners_WCS_TPV(propertyArray, pixoffset)
+    img_ras, img_decs = computeCorners_WCS_TPV(propertyArray, pixoffset)
     # Coordinates of coadd corners
     # RALL, t.DECLL, t.RAUL, t.DECUL, t.RAUR, t.DECUR, t.RALR, t.DECLR, t.URALL, t.UDECLL, t.URAUR, t.UDECUR
     if coadd_cut:
@@ -499,9 +499,12 @@ def computeHPXpix_sequ_new_simp(nside, propertyArray):
 # Crucial routine: read properties of a ccd image and returns its corners in ra dec.
 # pixoffset is the number of pixels to truncate on the edges of each ccd image.
 def computeCorners_WCS_TPV(propertyArray, pixoffset):
-    x = [1+pixoffset, propertyArray['NAXIS1']-pixoffset, propertyArray['NAXIS1']-pixoffset, 1+pixoffset, 1+pixoffset]
-    y = [1+pixoffset, 1+pixoffset, propertyArray['NAXIS2']-pixoffset, propertyArray['NAXIS2']-pixoffset, 1+pixoffset]
-    ras, decs = xy2radec(x, y, propertyArray)
+    #x = [1+pixoffset, propertyArray['NAXIS1']-pixoffset, propertyArray['NAXIS1']-pixoffset, 1+pixoffset, 1+pixoffset]
+    #y = [1+pixoffset, 1+pixoffset, propertyArray['NAXIS2']-pixoffset, propertyArray['NAXIS2']-pixoffset, 1+pixoffset]
+    x = [1+pixoffset, propertyArray['width']-pixoffset, propertyArray['width']-pixoffset, 1+pixoffset, 1+pixoffset]
+    y = [1+pixoffset, 1+pixoffset, propertyArray['height']-pixoffset, propertyArray['height']-pixoffset, 1+pixoffset]
+   #ras, decs = xy2radec(x, y, propertyArray)
+    ras, decs = xy2radec_nopv(x, y, propertyArray)
     return ras, decs
 
 # ---------------------------------------------------------------------------------------- #
@@ -534,6 +537,24 @@ def xy2radec(x, y, propertyArray):
         ras[ras < 0.0] += 360.0
     return ras, decs
 
+def xy2radec_nopv(x, y, propertyArray):
+
+    crpix = np.array( [ propertyArray['crpix1'], propertyArray['crpix2'] ] )
+    cd = np.array( [ [ propertyArray['cd1_1'], propertyArray['cd1_2'] ],
+                     [ propertyArray['cd2_1'], propertyArray['cd2_2'] ] ] )
+
+    center_ra = propertyArray['crval1'] * np.pi / 180.0
+    center_dec = propertyArray['crval2'] * np.pi / 180.0
+    ras, decs = radec_gnom(x, y, center_ra, center_dec, cd, crpix, pv=False)
+    ras = np.multiply( ras, 180.0 / np.pi )
+    decs = np.multiply( decs, 180.0 / np.pi )
+    if np.any(ras > 360.0):
+        ras[ras > 360.0] -= 360.0
+    if np.any(ras < 0.0):
+        ras[ras < 0.0] += 360.0
+    return ras, decs
+
+
 # ---------------------------------------------------------------------------------------- #
 
 # Deproject into ra dec values
@@ -554,21 +575,25 @@ def deproject_gnom(u, v, center_ra, center_dec):
 # ---------------------------------------------------------------------------------------- #
 
 def radec_gnom(x, y, center_ra, center_dec, cd, crpix, pv):
-    p1 = np.array( [ np.atleast_1d(x), np.atleast_1d(y) ] )
-    p2 = np.dot(cd, p1 - crpix[:,np.newaxis])
-    u = p2[0]
-    v = p2[1]
-    usq = u*u
-    vsq = v*v
-    ones = np.ones(u.shape)
-    upow = np.array([ ones, u, usq, usq*u ])
-    vpow = np.array([ ones, v, vsq, vsq*v ])
-    temp = np.dot(pv, vpow)
-    p2 = np.sum(upow * temp, axis=1)
-    u = - p2[0] * degree_to_arcsec
-    v = p2[1] * degree_to_arcsec
-    ra, dec = deproject_gnom(u, v, center_ra, center_dec)
-    return ra, dec
+	p1 = np.array( [ np.atleast_1d(x), np.atleast_1d(y) ] )
+	p2 = np.dot(cd, p1 - crpix[:,np.newaxis])
+	u = p2[0]
+	v = p2[1]
+	if pv:
+		usq = u*u
+		vsq = v*v
+		ones = np.ones(u.shape)
+		upow = np.array([ ones, u, usq, usq*u ])
+		vpow = np.array([ ones, v, vsq, vsq*v ])
+		temp = np.dot(pv, vpow)
+		p2 = np.sum(upow * temp, axis=1)
+		u = - p2[0] * degree_to_arcsec
+		v = p2[1] * degree_to_arcsec
+	else:
+		u = -u * degree_to_arcsec
+		v = v * degree_to_arcsec
+	ra, dec = deproject_gnom(u, v, center_ra, center_dec)
+	return ra, dec
 
 # ---------------------------------------------------------------------------------------- #
 
