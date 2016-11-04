@@ -23,6 +23,7 @@ ROOT=/project/projectdirs/desiproc/dr2
 ROOT=/project/projectdirs/desiproc/dr2p
 ROOT=/project/projectdirs/desiproc/dr3
 ROOT=/project/projectdirs/cosmo/work/legacysurvey/dr3
+ROOT=/global/project/projectdirs/desi/users/yfeng1/legacysurvey/dr3.1
 TRACTOR=$ROOT/tractor
 
 find $TRACTOR -name 'tractor-*.fits' > filelist
@@ -40,5 +41,5 @@ time srun -u --cpu_bind=no -n 1 python-mpi generate-sweep-files.py -v \
 --schema blocks \
 -d $ROOT/survey-bricks.fits.gz \
 $TRACTOR \
-$SCRATCH/sandbox/decals-dr3/sweep/tractor
+$SCRATCH/sandbox/decals-dr3.1/sweep/tractor
 
