@@ -379,7 +379,7 @@ class ELG(ReadWrite):
                         label=r'$z>0.6, [OII]>8\times10^{-17}$')
 
         b=cuts['oiibright_hiz']
-        ax.scatter(Xall[:,0][b],Xall[:,1][b], marker='o', color='powderblue', edgecolor='black',
+        ax.scatter(Xall[:,0][b],Xall[:,1][b], marker='o', color='blue',
                         label=r'$z>1.0, [OII]>8\times10^{-17}$')
         ax.set_xlim(xrange)
         ax.set_ylim(yrange)
@@ -387,7 +387,7 @@ class ELG(ReadWrite):
         ylab= ax.set_ylabel('g-r')
         leg=ax.legend(loc=(0,1.05), ncol=2,prop={'size': 14}, labelspacing=0.2,
                   markerscale=1.5)
-        name='update_FDR_ELG.png'
+        name='dr%d_FDR_ELG.png' % self.DR
         kwargs= dict(bbox_extra_artists=[leg,xlab,ylab], bbox_inches='tight',dpi=150)
         if self.savefig:
             plt.savefig(name, **kwargs)
@@ -403,7 +403,7 @@ class ELG(ReadWrite):
         plt.subplots_adjust(wspace=0.1,hspace=0)
         for cnt,key,col,marker,ti in zip(range(4),\
                                ['loz','oiifaint','oiibright_loz','oiibright_hiz'],\
-                               ['magenta','tan','powderblue','powderblue'],\
+                               ['magenta','tan','powderblue','blue'],\
                                ['^','s','o','o'],\
                                [r'$z<0.6$',r'$z>0.6, [OII]<8\times10^{-17}$',r'$z>0.6, [OII]>8\times10^{-17}$',r'$z>1.0, [OII]>8\times10^{-17}$']):
             # Add box
@@ -416,7 +416,7 @@ class ELG(ReadWrite):
             ax[cnt].set_ylim(yrange)
             xlab= ax[cnt].set_xlabel('r-z')
             ylab= ax[cnt].set_ylabel('g-r')
-            name='dr3_FDR_ELG_multipanel.png'
+            name='dr%d_FDR_ELG_multipanel.png' % self.DR
         kwargs= dict(bbox_extra_artists=[ti_loc,xlab,ylab], bbox_inches='tight',dpi=150)
         if self.savefig:
             plt.savefig(name, **kwargs)
@@ -497,8 +497,37 @@ class LRG(ReadWrite):
                                  
     def plot_FDR(self):
         rz,rW1= self.get_FDR()
+        fig,ax = plt.subplots()
+        rgb_cols=get_rgb_cols()
+        xrange,yrange= xyrange['x_lrg'],xyrange['y_lrg']
+        # Add box
+        ts= TSBox(src='LRG')
+        ts.add_ts_box(ax, xlim=xrange,ylim=yrange)
+        # Data
+        for cnt,key,rgb in zip(range(4),rz.keys(),rgb_cols):
+            rgb= (rgb[0]/255.,rgb[1]/255.,rgb[2]/255.)
+            ax.scatter(rz[key],rW1[key],c=[rgb],edgecolors='none',marker='o',s=10.,rasterized=True,label=key)
+        ax.set_xlim(xrange)
+        ax.set_ylim(yrange)
+        xlab=ax.set_xlabel('r-z')
+        ylab=ax.set_ylabel('r-W1')
+        leg=ax.legend(loc=(0,1.05), ncol=2,prop={'size': 14}, labelspacing=0.2,\
+                      markerscale=2,scatterpoints=1)
+        #handles,labels = ax.get_legend_handles_labels()
+        #index=[0,1,2,3]
+        #handles,labels= np.array(handles)[index],np.array(labels)[index]
+        #leg=ax.legend(handles,labels,loc=(0,1.05),ncol=2,scatterpoints=1,markerscale=2)
+        name='dr%d_FDR_LRG.png' % self.DR
+        if self.savefig:
+            plt.savefig(name,\
+                        bbox_extra_artists=[leg,xlab,ylab], bbox_inches='tight',dpi=150)
+            plt.close()
+            print('Wrote {}'.format(name))
+
+    def plot_FDR_multipanel(self):
+        rz,rW1= self.get_FDR()
         fig,ax = plt.subplots(1,4,sharex=True,sharey=True,figsize=(16,4))
-        plt.subplots_adjust(wspace=0,hspace=0)
+        plt.subplots_adjust(wspace=0.1,hspace=0)
         rgb_cols=get_rgb_cols()
         for cnt,key,rgb in zip(range(4),rz.keys(),rgb_cols):
             rgb= (rgb[0]/255.,rgb[1]/255.,rgb[2]/255.)
@@ -511,12 +540,12 @@ class LRG(ReadWrite):
             ts= TSBox(src='LRG')
             xrange,yrange= xyrange['x_lrg'],xyrange['y_lrg']
             ts.add_ts_box(ax[cnt], xlim=xrange,ylim=yrange)
-        ylab=ax[0].set_ylabel('r-W1')
+            ylab=ax[cnt].set_ylabel('r-W1')
         #handles,labels = ax.get_legend_handles_labels()
         #index=[0,1,2,3]
         #handles,labels= np.array(handles)[index],np.array(labels)[index]
         #leg=ax.legend(handles,labels,loc=(0,1.05),ncol=2,scatterpoints=1,markerscale=2)
-        name='dr%d_FDR_LRG.png' % self.DR
+        name='dr%d_FDR_LRG_multi.png' % self.DR
         if self.savefig:
             plt.savefig(name,\
                         bbox_extra_artists=[ti,xlab,ylab], bbox_inches='tight',dpi=150)
@@ -579,7 +608,7 @@ class LRG(ReadWrite):
         #index=[0,1,2,3]
         #handles,labels= np.array(handles)[index],np.array(labels)[index]
         #leg=ax.legend(handles,labels,loc=(0,1.05),ncol=2,scatterpoints=1,markerscale=2)
-        name='LRG_vipers.png'
+        name='dr%d_LRG_vipers.png' % self.DR
         if self.savefig:
             plt.savefig(name,\
                         bbox_extra_artists=[xlab,ylab], bbox_inches='tight',dpi=150)
@@ -589,6 +618,7 @@ class LRG(ReadWrite):
 
     def plot(self):
         self.plot_FDR()
+        self.plot_FDR_multipanel()
         self.plot_vipers()
         #plot_FDR(self.Xall,self.cuts,src='LRG')
         #color_color_plot(self.Xall,src='LRG',append='cc') #,extra=True)
