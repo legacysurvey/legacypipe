@@ -625,16 +625,16 @@ class LRG(ReadWrite):
         #b= self.cuts['lrg')
         #color_color_plot(self.Xall[b,:],src='LRG') #,extra=True)
 
-
-
 class STAR(ReadWrite):
-    def __init__(self):
-        pass
-        #self.Xall= star_data()
-        #self.fn_cat= ''
-        #self.cat= self.read_fits(self.fn_cat)
+    def __init__(self,DR=2,savefig=False):
+        self.DR=DR
+        self.savefig=savefig
+        if self.DR == 2:
+            self.truth_dir= '/project/projectdirs/desi/target/analysis/truth'
+        elif self.DR == 3:
+            raise ValueError()
     
-    def get_dr2stars(self):
+    def get_sweepstars(self):
         '''Model the g-r, r-z color-color sequence for stars'''
         # Build a sample of stars with good photometry from a single sweep.
         rbright = 18
@@ -656,8 +656,8 @@ class STAR(ReadWrite):
         rz = rr - zz
         return np.array(rz),np.array(gr)
 
-    def plot_dr2stars(self,savefig=False): 
-        rz,gr= self.get_dr2stars()
+    def plot_sweepstars(self): 
+        rz,gr= self.get_sweepstars()
         fig,ax = plt.subplots(figsize=(5,4))
         plt.subplots_adjust(wspace=0,hspace=0)
         rgb=get_rgb_cols()[0]
@@ -672,14 +672,17 @@ class STAR(ReadWrite):
         #handles,labels= np.array(handles)[index],np.array(labels)[index]
         #leg=ax.legend(handles,labels,loc=(0,1.05),ncol=2,scatterpoints=1,markerscale=2)
         name='STAR_dr2.png'
-        if savefig:
+        if self.savefig:
             plt.savefig(name,\
                         bbox_extra_artists=[xlab,ylab], bbox_inches='tight',dpi=150)
             plt.close()
             print('Wrote {}'.format(name))
-       
+      
+    def get_purestars(self):
+        stars=fits_table(os.path.join(self.truth_dir,'Stars_str82_355_4.DECaLS.dr2.fits'))
+ 
     def plot(self,savefig):
-        self.plot_dr2stars(savefig=savefig) 
+        self.plot_sweepstars() 
         #plt.plot(self.cat.get('ra'),self.cat.get('dec'))
         #plt.savefig('test.png')
         #plt.close()
