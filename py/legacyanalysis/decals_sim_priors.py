@@ -286,18 +286,6 @@ class ReadWrite(object):
 
 
 
-class QSO(ReadWrite):
-    def __init__(self):
-        self.fn_cat= ''
-        self.cat= self.read_fits(self.fn_cat)
-    def plot(self,savefig=False):
-        plt.plot(self.cat['ra'],self.cat['dec'])
-        if savefig:
-            name='test.png'
-            plt.savefig(name)
-            plt.close()
-            print('Wrote {}'.format(name))
-
 class ELG(ReadWrite):
     def __init__(self,DR=2,savefig=False):
         self.DR=DR
@@ -325,7 +313,8 @@ class ELG(ReadWrite):
             G_MAG= decals.get('decam_mag')[:,1]
             R_MAG= decals.get('decam_mag')[:,2]
             Z_MAG= decals.get('decam_mag')[:,4]
-            rmag_cut= decals.get('decam_flux')[:,2] > 10**((22.5-rfaint)/2.5)
+            rflux= decals.get('decam_flux')[:,2]/decals.get('decam_mw_transmission')[:,2]
+            rmag_cut= rflux > 10**((22.5-rfaint)/2.5)
         # Cuts
         oiicut1 = 8E-17 # [erg/s/cm2]
         zmin = 0.6
@@ -679,13 +668,125 @@ class STAR(ReadWrite):
             print('Wrote {}'.format(name))
       
     def get_purestars(self):
-        stars=fits_table(os.path.join(self.truth_dir,'Stars_str82_355_4.DECaLS.dr2.fits'))
+        if self.DR == 2:
+            stars=fits_table(os.path.join(self.truth_dir,'Stars_str82_355_4.DECaLS.dr2.fits'))
+            i= stars.get('brick_primary') == True
+            # Add AB mags
+            from theValidator.catalogues import CatalogueFuncs 
+            CatalogueFuncs().set_extra_data(stars)
+            #mags={}
+            #for iband,band in zip([1,2,4],'grz'):
+            #    mags[band]= decals.get('decam_mag')[:,iband]
+            #for iband,band in zip([0,1],['w1','w2']):
+            #    mags[band]= decals.get('wise_mag')[:,iband]
+            return stars[i]
+        elif self.DR == 3:
+            raise ValueError()
  
     def plot(self,savefig):
         self.plot_sweepstars() 
         #plt.plot(self.cat.get('ra'),self.cat.get('dec'))
         #plt.savefig('test.png')
         #plt.close()
+
+class QSO(ReadWrite):
+    def __init__(self,DR=2,savefig=False):
+        self.DR=DR
+        self.savefig=savefig
+        if self.DR == 2:
+            self.truth_dir= '/project/projectdirs/desi/target/analysis/truth'
+        elif self.DR == 3:
+            self.truth_dir= '/project/projectdirs/desi/users/burleigh/desi/target/analysis/truth'
+        else: raise ValueError()
+  
+    def get_qsos(self):
+        if self.DR == 2:        
+            qsos= self.read_fits( os.path.join(self.truth_dir,'AllQSO.DECaLS.dr2.fits') )
+            i= qsos.get('brick_primary') == True
+            # Add AB mags
+            from theValidator.catalogues import CatalogueFuncs 
+            CatalogueFuncs().set_extra_data(qsos)
+            #mags={}
+            #for iband,band in zip([1,2,4],'grz'):
+            #    mags[band]= decals.get('decam_mag')[:,iband]
+            #for iband,band in zip([0,1],['w1','w2']):
+            #    mags[band]= decals.get('wise_mag')[:,iband]
+            return qsos[i]
+        elif self.DR == 3:
+            #qsos=self.read_fits( os.path.join(self.truth_dir,'qsoCatalogQSO-dr3matched.fits') )
+            #decals=self.read_fits( os.path.join(self.truth_dir,'dr3-qsoCatalogQSOmatched.fits') )
+            raise ValueError()
+        #G_FLUX= decals.get('decam_flux')[:,1]/decals.get('decam_mw_transmission')[:,1]
+        #R_FLUX= decals.get('decam_flux')[:,2]/decals.get('decam_mw_transmission')[:,2]
+        #Z_FLUX= decals.get('decam_flux')[:,4]/decals.get('decam_mw_transmission')[:,4]
+        # DECaLS
+        #index={}
+        #rfaint=22.7
+        #grzbright=17.
+        #index['decals']= np.all((R_FLUX > 10**((22.5-rfaint)/2.5),\
+        #                         G_FLUX < 10**((22.5-grzbright)/2.5),\
+        #                         R_FLUX < 10**((22.5-grzbright)/2.5),\
+        #                         Z_FLUX < 10**((22.5-grzbright)/2.5),\
+        #                         decals.get('brick_primary') == True),axis=0)
+        # QSO
+        # Return
+     
+    def plot_FDR(self):
+        # Data
+        qsos= self.get_qsos()
+        star_obj= STAR(DR=self.DR,savefig=False)
+        stars= star_obj.get_purestars()
+        hiz=2.1
+        index={}
+        index['hiz']= qsos.get('z') > hiz
+        index['loz']= qsos.get('z') <= hiz
+        # Plot
+        fig,ax = plt.subplots(1,2,figsize=(10,4))
+        plt.subplots_adjust(wspace=0.1,hspace=0)
+        # Stars
+        ax[0].scatter(stars.get('decam_mag')[:,2]-stars.get('decam_mag')[:,4],\
+                      stars.get('decam_mag')[:,1]-stars.get('decam_mag')[:,2],\
+                      c='b',edgecolors='none',marker='o',s=10.,rasterized=True, label='stars')
+        W= 0.75*stars.get('wise_mag')[:,0]+ 0.25*stars.get('wise_mag')[:,1]
+        ax[1].scatter(stars.get('decam_mag')[:,1]-stars.get('decam_mag')[:,4],\
+                      stars.get('decam_mag')[:,2]-W,\
+                      c='b',edgecolors='none',marker='o',s=10.,rasterized=True, label='stars')
+        # QSOs
+        for key,lab,col in zip(['loz','hiz'],['(z < 2.1)','(z > 2.1)'],['magenta','red']):
+            i= index[key]
+            ax[0].scatter(qsos.get('decam_mag')[:,2][i]-qsos.get('decam_mag')[:,4][i],\
+                          qsos.get('decam_mag')[:,1][i]-qsos.get('decam_mag')[:,2][i],\
+                          c=col,edgecolors='none',marker='o',s=10.,rasterized=True, label='qso '+lab)
+            W= 0.75*qsos.get('wise_mag')[:,0]+ 0.25*qsos.get('wise_mag')[:,1]
+            ax[1].scatter(qsos.get('decam_mag')[:,1][i]-qsos.get('decam_mag')[:,4][i],\
+                          qsos.get('decam_mag')[:,2][i]-W[i],\
+                          c=col,edgecolors='none',marker='o',s=10.,rasterized=True, label='qso '+lab)
+        
+        #for xlim,ylim,x_lab,y_lab in ax[0].set_xlim([-0.5,3.])
+        ax[0].set_xlim([-0.5,3.])
+        ax[1].set_xlim([-0.5,4.5])
+        ax[0].set_ylim([-0.5,2.5])
+        ax[1].set_ylim([-2.5,3.5])
+        xlab=ax[0].set_xlabel('r-z')
+        xlab=ax[1].set_xlabel('g-z')
+        ylab=ax[0].set_ylabel('g-r')
+        ylab=ax[1].set_ylabel('r-W')
+        leg=ax[0].legend(loc=(0,1.02),scatterpoints=1,ncol=3,markerscale=2)
+        ## Add box
+        #ts= TSBox(src='LRG')
+        #xrange,yrange= xyrange['x_lrg'],xyrange['y_lrg']
+        #ts.add_ts_box(ax[cnt], xlim=xrange,ylim=yrange)
+        name='dr%d_FDR_QSO.png' % self.DR
+        if self.savefig:
+            plt.savefig(name,\
+                        bbox_extra_artists=[leg,xlab,ylab], bbox_inches='tight',dpi=150)
+            plt.close()
+            print('Wrote {}'.format(name))
+
+ 
+    def plot(self):
+        self.plot_FDR()
+
 
 class GalaxyPrior(object):
     def __init__(self):
