@@ -721,17 +721,20 @@ class QSO(CommonInit):
         super(QSO,self).__init__(**kwargs)
   
     def get_qsos(self):
+        from theValidator.catalogues import CatalogueFuncs 
         if self.DR == 2:        
             qsos= self.read_fits( os.path.join(self.truth_dir,'AllQSO.DECaLS.dr2.fits') )
             # Add AB mags
-            from theValidator.catalogues import CatalogueFuncs 
             CatalogueFuncs().set_extra_data(qsos)
             qsos.cut( self.imaging_cut(qsos) )
             return qsos
         elif self.DR == 3:
-            #qsos=self.read_fits( os.path.join(self.truth_dir,'qsoCatalogQSO-dr3matched.fits') )
-            #decals=self.read_fits( os.path.join(self.truth_dir,'dr3-qsoCatalogQSOmatched.fits') )
-            raise ValueError()
+            qsos=self.read_fits( os.path.join(self.truth_dir,'qso-dr3sweepmatched.fits') )
+            decals=self.read_fits( os.path.join(self.truth_dir,'dr3-qsosweepmatched.fits') )
+            decals.set('z',qsos.get('z'))
+            CatalogueFuncs().set_extra_data(decals)
+            decals.cuts( self.imaging_cut(decals) )
+            return decals
         #G_FLUX= decals.get('decam_flux')[:,1]/decals.get('decam_mw_transmission')[:,1]
         #R_FLUX= decals.get('decam_flux')[:,2]/decals.get('decam_mw_transmission')[:,2]
         #Z_FLUX= decals.get('decam_flux')[:,4]/decals.get('decam_mw_transmission')[:,4]
