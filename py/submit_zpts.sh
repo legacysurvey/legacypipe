@@ -1,8 +1,8 @@
 #!/bin/bash -l
 
 #SBATCH -p debug
-#SBATCH -N 10
-#SBATCH -t 00:15:00
+#SBATCH -N 5
+#SBATCH -t 00:10:00
 #SBATCH -J zpts
 #SBATCH -L SCRATCH,project
 #SBATCH --mail-user=kburleigh@lbl.gov
@@ -28,4 +28,11 @@ elif [ "$NERSC_HOST" == "edison" ]; then
     cores=24
 fi
 let tasks=${SLURM_JOB_NUM_NODES}*${cores}
-srun -n $tasks -N ${SLURM_JOB_NUM_NODES} -c 1 python legacyccds/legacy-zeropoints.py --image_list cp_list_mzls_v2_all.text  --nproc $tasks
+
+#input=mzls_cps.txt
+#srun -n $tasks -N ${SLURM_JOB_NUM_NODES} -c 1 python legacyccds/legacy-zeropoints.py --image_list $input --nproc $tasks --only_ccd_centers
+
+#input=mzls_zpt_test.txt
+#srun -n 2 -N 1 -c 1 python legacyccds/legacy-zeropoints-gather.py --file_list $input --nproc 2 --outname gathered_mpi.fits
+input=bok_zpt_files.txt
+srun -n $tasks -N ${SLURM_JOB_NUM_NODES} -c 1 python legacyccds/legacy-zeropoints-gather.py --file_list $input --nproc $tasks --outname gathered_all_mpi.fits
