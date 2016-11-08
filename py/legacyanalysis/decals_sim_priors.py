@@ -284,18 +284,72 @@ class ReadWrite(object):
         #return Table(fits.getdata(fn, 1))
         return fits_table(fn)
 
-
-
-class ELG(ReadWrite):
-    def __init__(self,DR=2,savefig=False):
-        self.DR=DR
-        self.savefig=savefig
+#DR=2,savefig=False,alpha=1.,\
+#brick_primary=True,anymask=False,allmask=False,fracflux=False):
+class CommonInit(ReadWrite):
+    def __init__(self,**kwargs):
+        # Syntax is self.val2 = kwargs.get('val2',"default value")
+        self.DR= kwargs.get('DR',2)
+        self.savefig= kwargs.get('savefig',False)
+        self.alpha= kwargs.get('alpha',1.)
+        self.brick_primary= kwargs.get('brick_primary',True)
+        self.anymask= kwargs.get('anymask',False)
+        self.allmask= kwargs.get('allmask',False)
+        self.fracflux= kwargs.get('fracflux',False)
+        print('self.fracflux=',self.fracflux,'kwargs= ',kwargs)
         if self.DR == 2:
             self.truth_dir= '/project/projectdirs/desi/target/analysis/truth'
         elif self.DR == 3:
             self.truth_dir= '/project/projectdirs/desi/users/burleigh/desi/target/analysis/truth'
-        else: raise ValueError()
+        else: raise valueerror()
 
+    def imaging_cut(self,data):
+        '''data is a fits_table object with Tractor Catalogue columns'''
+        cut=np.ones(len(data)).astype(bool)
+        if self.brick_primary:
+            if data.get('brick_primary').dtype == 'bool':
+                cut*= data.get('brick_primary') == True
+            elif data.get('brick_primary').dtype == 'S1':
+                cut*= data.get('brick_primary') == 'T'
+            else: 
+                raise ValueError('brick_primary has type=',data.get('brick_primary').dtype)
+        if self.anymask:
+            cut*= np.all((data.get('decam_anymask')[:, [1,2,4]] == 0),axis=1)
+        if self.allmask:
+            cut*= np.all((data.get('decam_allmask')[:, [1,2,4]] == 0),axis=1)
+        if self.fracflux:
+            cut*= np.all((data.get('decam_fracflux')[:, [1,2,4]] < 0.05),axis=1)
+        return cut
+
+    def std_star_cut(self,data):
+        '''See: https://desi.lbl.gov/trac/wiki/TargetSelectionWG/TargetSelection#SpectrophotometricStandardStarsFSTD
+           data is a fits_table object with Tractor Catalogue columns
+        '''
+        # Remove whitespaces 'PSF ' --> 'PSF'
+        if not 'decam_mag' in data.get_columns():
+            from theValidator.catalogues import CatalogueFuncs 
+            CatalogueFuncs().set_extra_data(data)
+        RFLUX_obs = data.get('decam_flux')[:,2]
+        GFLUX = data.get('decam_flux')[:,1] / data.get('decam_mw_transmission')[:,1]
+        RFLUX = data.get('decam_flux')[:,2] / data.get('decam_mw_transmission')[:,2]
+        ZFLUX = data.get('decam_flux')[:,4] / data.get('decam_mw_transmission')[:,4]
+        GRZSN = data.get('decam_flux')[:,[1,2,4]] * np.sqrt(data.get('decam_flux_ivar')[:,[1,2,4]])
+        GRCOLOR = 2.5 * np.log10(RFLUX / GFLUX)
+        RZCOLOR = 2.5 * np.log10(ZFLUX / RFLUX)
+        cut= np.all((data.get('brick_primary') == True,\
+                     data.get('type') == 'PSF',\
+                     np.all((data.get('decam_fracflux')[:, [1,2,4]] < 0.04),axis=1),\
+                     np.all((GRZSN > 10),axis=1),\
+                     RFLUX_obs < 10**((22.5-16.0)/2.5)),axis=0)
+                     #np.power(GRCOLOR - 0.32,2) + np.power(RZCOLOR - 0.13,2) < 0.06**2,\
+                     #RFLUX_obs > 10**((22.5-19.0)/2.5)),axis=0)
+        return cut 
+
+
+class ELG(CommonInit):
+    def __init__(self,**kwargs):
+        super(ELG, self).__init__(**kwargs)
+        
     def get_FDR(self):
         '''version 3.0 of data discussed in
         https://desi.lbl.gov/DocDB/cgi-bin/private/RetrieveFile?docid=912'''
@@ -315,6 +369,7 @@ class ELG(ReadWrite):
             Z_MAG= decals.get('decam_mag')[:,4]
             rflux= decals.get('decam_flux')[:,2]/decals.get('decam_mw_transmission')[:,2]
             rmag_cut= rflux > 10**((22.5-rfaint)/2.5)
+            rmag_cut*= self.imaging_cut(decals) 
         # Cuts
         oiicut1 = 8E-17 # [erg/s/cm2]
         zmin = 0.6
@@ -424,24 +479,14 @@ class ELG(ReadWrite):
         #b= cuts['has_morph']
         #color_color_plot(Xall[b,:],src='ELG',append='_synth+morph') #,extra=True)
 
-class LRG(ReadWrite):
-    def __init__(self,DR=2,savefig=False):
-        self.DR=DR
-        self.savefig=savefig
-        if self.DR == 2:
-            self.truth_dir= '/project/projectdirs/desi/target/analysis/truth'
-        elif self.DR == 3:
-            self.truth_dir= '/project/projectdirs/desi/users/burleigh/desi/target/analysis/truth'
-        else: raise ValueError()
+class LRG(CommonInit):
+    def __init__(self,**kwargs):
+        super(LRG, self).__init__(**kwargs)
     
     def get_FDR(self):
         if self.DR == 2:
             decals=self.read_fits( os.path.join(self.truth_dir,'decals-dr2-cosmos-zphot.fits.gz') )
             spec=self.read_fits( os.path.join(self.truth_dir,'cosmos-zphot.fits.gz') )
-            # brick_primary set to T and F not boolean
-            new= np.zeros(len(decals.get('brick_primary'))).astype(bool)
-            new[decals.get('brick_primary') == 'T']= True
-            decals.set('brick_primary',new)
         elif self.DR == 3:
             decals=self.read_fits( os.path.join(self.truth_dir,'dr3-cosmoszphotmatched.fits') )
             spec=self.read_fits( os.path.join(self.truth_dir,'cosmos-zphot-dr3matched.fits') )
@@ -452,8 +497,8 @@ class LRG(ReadWrite):
         # BUG!!
         #index['decals']= np.all((Z_FLUX < 10**((22.5-20.46)/2.5),\
         index['decals']= np.all((Z_FLUX > 10**((22.5-20.46)/2.5),\
-                                 W1_FLUX > 0.,\
-                                 decals.get('brick_primary') == True),axis=0)
+                                 W1_FLUX > 0.),axis=0)
+        index['decals']*= self.imaging_cut(decals)
         # Cosmos
         # http://irsa.ipac.caltech.edu/data/COSMOS/gator_docs/cosmos_zphot_mag25_colDescriptions.html
         # http://irsa.ipac.caltech.edu/data/COSMOS/tables/redshift/cosmos_zphot_mag25.README
@@ -547,10 +592,6 @@ class LRG(ReadWrite):
         if self.DR == 2:
             decals = self.read_fits(os.path.join(self.truth_dir,'decals-dr2-vipers-w4.fits.gz'))
             vip = self.read_fits(os.path.join(self.truth_dir,'vipers-w4.fits.gz'))
-            # brick_primary set to T and F not boolean
-            new= np.zeros(len(decals.get('brick_primary'))).astype(bool)
-            new[decals.get('brick_primary') == 'T']= True
-            decals.set('brick_primary',new)
         elif self.DR == 3:
             decals = self.read_fits(os.path.join(self.truth_dir,'dr3-vipersw1w4matched.fits'))
             vip = self.read_fits(os.path.join(self.truth_dir,'vipersw1w4-dr3matched.fits'))
@@ -558,10 +599,8 @@ class LRG(ReadWrite):
         W1_FLUX = decals.get('wise_flux')[:,0] / decals.get('wise_mw_transmission')[:,0]
         index={}
         index['decals']= np.all((Z_FLUX > 10**((22.5-20.46)/2.5),\
-                                 W1_FLUX > 0.,\
-                                 decals.get('brick_primary') == True),axis=0)
-                                 #decals.get('DECAM_ANYMASK')[:,2] == 0,\
-                                 #decals.get('DECAM_ANYMASK')[:,4] == 0),axis=0)  
+                                 W1_FLUX > 0.),axis=0)
+        index['decals']*= self.imaging_cut(decals)
         # VIPERS
         # https://arxiv.org/abs/1310.1008
         # https://arxiv.org/abs/1303.2623
@@ -614,14 +653,9 @@ class LRG(ReadWrite):
         #b= self.cuts['lrg')
         #color_color_plot(self.Xall[b,:],src='LRG') #,extra=True)
 
-class STAR(ReadWrite):
-    def __init__(self,DR=2,savefig=False):
-        self.DR=DR
-        self.savefig=savefig
-        if self.DR == 2:
-            self.truth_dir= '/project/projectdirs/desi/target/analysis/truth'
-        elif self.DR == 3:
-            raise ValueError()
+class STAR(CommonInit):
+    def __init__(self,**kwargs):
+        super(STAR,self).__init__(**kwargs)
     
     def get_sweepstars(self):
         '''Model the g-r, r-z color-color sequence for stars'''
@@ -668,18 +702,11 @@ class STAR(ReadWrite):
             print('Wrote {}'.format(name))
       
     def get_purestars(self):
+        # https://desi.lbl.gov/trac/wiki/TargetSelectionWG/TargetSelection#SpectrophotometricStandardStarsFSTD
         if self.DR == 2:
             stars=fits_table(os.path.join(self.truth_dir,'Stars_str82_355_4.DECaLS.dr2.fits'))
-            i= stars.get('brick_primary') == True
-            # Add AB mags
-            from theValidator.catalogues import CatalogueFuncs 
-            CatalogueFuncs().set_extra_data(stars)
-            #mags={}
-            #for iband,band in zip([1,2,4],'grz'):
-            #    mags[band]= decals.get('decam_mag')[:,iband]
-            #for iband,band in zip([0,1],['w1','w2']):
-            #    mags[band]= decals.get('wise_mag')[:,iband]
-            return stars[i]
+            stars.cut( self.std_star_cut(stars) )
+            return stars
         elif self.DR == 3:
             raise ValueError()
  
@@ -689,29 +716,18 @@ class STAR(ReadWrite):
         #plt.savefig('test.png')
         #plt.close()
 
-class QSO(ReadWrite):
-    def __init__(self,DR=2,savefig=False):
-        self.DR=DR
-        self.savefig=savefig
-        if self.DR == 2:
-            self.truth_dir= '/project/projectdirs/desi/target/analysis/truth'
-        elif self.DR == 3:
-            self.truth_dir= '/project/projectdirs/desi/users/burleigh/desi/target/analysis/truth'
-        else: raise ValueError()
+class QSO(CommonInit):
+    def __init__(self,**kwargs):
+        super(QSO,self).__init__(**kwargs)
   
     def get_qsos(self):
         if self.DR == 2:        
             qsos= self.read_fits( os.path.join(self.truth_dir,'AllQSO.DECaLS.dr2.fits') )
-            i= qsos.get('brick_primary') == True
             # Add AB mags
             from theValidator.catalogues import CatalogueFuncs 
             CatalogueFuncs().set_extra_data(qsos)
-            #mags={}
-            #for iband,band in zip([1,2,4],'grz'):
-            #    mags[band]= decals.get('decam_mag')[:,iband]
-            #for iband,band in zip([0,1],['w1','w2']):
-            #    mags[band]= decals.get('wise_mag')[:,iband]
-            return qsos[i]
+            qsos.cut( self.imaging_cut(qsos) )
+            return qsos
         elif self.DR == 3:
             #qsos=self.read_fits( os.path.join(self.truth_dir,'qsoCatalogQSO-dr3matched.fits') )
             #decals=self.read_fits( os.path.join(self.truth_dir,'dr3-qsoCatalogQSOmatched.fits') )
@@ -746,21 +762,21 @@ class QSO(ReadWrite):
         # Stars
         ax[0].scatter(stars.get('decam_mag')[:,2]-stars.get('decam_mag')[:,4],\
                       stars.get('decam_mag')[:,1]-stars.get('decam_mag')[:,2],\
-                      c='b',edgecolors='none',marker='o',s=10.,rasterized=True, label='stars')
+                      c='b',edgecolors='none',marker='o',s=10.,rasterized=True, label='stars',alpha=self.alpha)
         W= 0.75*stars.get('wise_mag')[:,0]+ 0.25*stars.get('wise_mag')[:,1]
         ax[1].scatter(stars.get('decam_mag')[:,1]-stars.get('decam_mag')[:,4],\
                       stars.get('decam_mag')[:,2]-W,\
-                      c='b',edgecolors='none',marker='o',s=10.,rasterized=True, label='stars')
+                      c='b',edgecolors='none',marker='o',s=10.,rasterized=True, label='stars',alpha=self.alpha)
         # QSOs
         for key,lab,col in zip(['loz','hiz'],['(z < 2.1)','(z > 2.1)'],['magenta','red']):
             i= index[key]
             ax[0].scatter(qsos.get('decam_mag')[:,2][i]-qsos.get('decam_mag')[:,4][i],\
                           qsos.get('decam_mag')[:,1][i]-qsos.get('decam_mag')[:,2][i],\
-                          c=col,edgecolors='none',marker='o',s=10.,rasterized=True, label='qso '+lab)
+                          c=col,edgecolors='none',marker='o',s=10.,rasterized=True, label='qso '+lab,alpha=self.alpha)
             W= 0.75*qsos.get('wise_mag')[:,0]+ 0.25*qsos.get('wise_mag')[:,1]
             ax[1].scatter(qsos.get('decam_mag')[:,1][i]-qsos.get('decam_mag')[:,4][i],\
                           qsos.get('decam_mag')[:,2][i]-W[i],\
-                          c=col,edgecolors='none',marker='o',s=10.,rasterized=True, label='qso '+lab)
+                          c=col,edgecolors='none',marker='o',s=10.,rasterized=True, label='qso '+lab,alpha=self.alpha)
         
         #for xlim,ylim,x_lab,y_lab in ax[0].set_xlim([-0.5,3.])
         ax[0].set_xlim([-0.5,3.])
