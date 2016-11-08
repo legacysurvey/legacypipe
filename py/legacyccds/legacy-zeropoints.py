@@ -233,7 +233,7 @@ def _stars_table(nstars=1):
 
 class Measurer(object):
     def __init__(self, fn, ext, aprad=3.5, skyrad_inner=7.0, skyrad_outer=10.0,
-                 sky_global=False, calibrate=False):
+                 sky_global=False, calibrate=False, only_ccd_centers=False):
         '''This is the work-horse class which operates on a given image regardless of
         its origin (decam, mosaic, 90prime).
 
@@ -253,6 +253,7 @@ class Measurer(object):
 
         self.sky_global = sky_global
         self.calibrate = calibrate
+        self.only_ccd_centers=only_ccd_centers
         
         self.aprad = aprad
         self.skyrad = (skyrad_inner, skyrad_outer)
@@ -481,6 +482,9 @@ class Measurer(object):
         ccds['ra'] = ccdra   # [degree]
         ccds['dec'] = ccddec # [degree]
         t0= ptime('read-image-getheader-info',t0)
+        if self.only_ccd_centers:
+            print('Stopping early, only_ccd_centers=',self.only_ccd_centers)
+            return ccds, _stars_table()
 
         # Measure the sky brightness and (sky) noise level.  Need to capture
         # negative sky.
@@ -885,7 +889,7 @@ def measure_image(img_fn, measureargs={}):
 
 def get_output_fns(img_fn):
     zptsfile= os.path.dirname(img_fn).replace('/project/projectdirs','/scratch2/scratchdirs/kaylanb')
-    zptsfile= os.path.join(zptsfile,'zpts/','units_1arcsec_zeropoint-%s' % os.path.basename(img_fn))
+    zptsfile= os.path.join(zptsfile,'zpts/','only_ccd_centers_zeropoint-%s' % os.path.basename(img_fn))
     zptsfile= zptsfile.replace('.fz','')
     zptstarsfile = zptsfile.replace('.fits','-stars.fits')
     #zptsfile = os.path.join(outdir, '{}.fits'.format(prefix))
@@ -928,6 +932,10 @@ def runit(img_fn,measureargs, zptsfile='zpt.fits',zptstarsfile='zptstar.fits'):
     stars.write(zptstarsfile)
     print('Wrote {}'.format(zptstarsfile))
     t0= ptime('write-results-to-fits',t0)
+    if os.path.exists(fn_scr): 
+        assert(fn_scr.startswith('/scratch2/scratchdirs/kaylanb'))
+        dobash("rm %s" % fn_scr)
+        t0= ptime('removed-cp-from-scratch',t0)
     
                     
 if __name__ == "__main__":
@@ -947,6 +955,7 @@ if __name__ == "__main__":
                         help='Use this option when deriving the photometric transformation equations.')
     parser.add_argument('--sky-global', action='store_true',
                         help='Use a global rather than a local sky-subtraction around the stars.')
+    parser.add_argument('--only_ccd_centers', action='store_true', default=False, help='get ccd ra,dec centers only')
 
     args = parser.parse_args()
     
@@ -965,6 +974,7 @@ if __name__ == "__main__":
         os.makedirs(outdir)
     jobid = measureargs.pop('jobid')
 
+    print("measureargs['only_ccd_centers']= ",measureargs['only_ccd_centers'])
 
     if nproc > 1:
         from mpi4py.MPI import COMM_WORLD as comm
@@ -1001,12 +1011,14 @@ if __name__ == "__main__":
             # Check if zpt already written
             zptsfile,zptstarsfile= get_output_fns(image_fn)
             if os.path.exists(zptsfile) and os.path.exists(zptstarsfile):
+                print('continuing'.upper())
                 continue  # Already done
             # Create the file
             t0=ptime('b4-run',t0)
             runit(image_fn, measureargs,\
                   zptsfile=zptsfile,zptstarsfile=zptstarsfile)
             t0=ptime('after-run',t0)
-            print("TIMING:total %s" % (tnow-tbegin,))
-            print("Done")
+        tnow= Time()
+        print("TIMING:total %s" % (tnow-tbegin,))
+        print("Done")
 
