@@ -629,7 +629,11 @@ class CalibMixin(object):
         # an output file is still written.  Try to detect & fix this
         # case.
         # Check the PsfEx output file for POLNAME1
-        hdr = fitsio.read_header(psffn, ext=1)
+        try:
+            hdr = fitsio.read_header(psffn, ext=1)
+        except:
+            print('Failed to read header from existing PSF model file', psffn)
+            return False
         if hdr.get('POLNAME1', None) is None:
             print('Did not find POLNAME1 in PsfEx header',psffn,'-- deleting')
             os.unlink(psffn)
