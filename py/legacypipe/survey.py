@@ -828,11 +828,9 @@ Now using the current directory as LEGACY_SURVEY_DIR, but this is likely to fail
                                 (sname, brick, filetype,band))
 
         elif filetype in ['blobmap']:
-            return os.path.join(basedir, 'metrics', brickpre, brick,
-                                'blobs-%s.fits.gz' % (brick))
+            return os.path.join(basedir, 'metrics', brickpre, 'blobs-%s.fits.gz' % (brick))
         elif filetype in ['all-models']:
-            return os.path.join(basedir, 'metrics', brickpre, brick,
-                                'all-models-%s.fits' % (brick))
+            return os.path.join(basedir, 'metrics', brickpre, 'all-models-%s.fits' % (brick))
 
         elif filetype == 'sha1sum-brick':
             return os.path.join(basedir, 'tractor', brickpre,
