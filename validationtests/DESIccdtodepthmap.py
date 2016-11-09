@@ -80,7 +80,7 @@ propertiesandoperations = [
 #propertiesToKeep = ['COADD_ID', 'ID', 'TILENAME', 'BAND', 'AIRMASS', 'SKYBRITE', 'SKYSIGMA', 'EXPTIME'] \
 #	+ ['FWHM', 'FWHM_MEAN', 'FWHM_PIXELFREE_MEAN', 'FWHM_FROMFLUXRADIUS_MEAN', 'NSTARS_ACCEPTED_MEAN'] \
 propertiesToKeep = [ 'filter', 'AIRMASS', 'FWHM','mjd_obs'] \
-	+ ['RA', 'DEC', 'CRVAL1', 'CRVAL2', 'CRPIX1', 'CRPIX2', 'CD1_1', 'CD1_2', 'CD2_1', 'CD2_2'] + ['ra0','ra1','ra2','ra3','dec0','dec1','dec2','dec3','ra','dec'] #, 'NAXIS1', 'NAXIS2']  \
+	+ ['RA', 'DEC', 'crval1', 'crval2', 'crpix1', 'crpix2', 'cd1_1', 'cd1_2', 'cd2_1', 'cd2_2','width','height'] + ['ra0','ra1','ra2','ra3','dec0','dec1','dec2','dec3','ra','dec'] #, 'NAXIS1', 'NAXIS2']  \
 	 #\
 #    + ['PV1_'+str(i) for i in range(11)] + ['PV2_'+str(i) for i in range(11)] \
 #   + ['RALL', 'RAUL', 'RAUR', 'RALR', 'DECLL', 'DECUL', 'DECUR', 'DECLR', 'URALL', 'UDECLL', 'URAUR', 'UDECUR', 'COADD_RA', 'COADD_DEC'] \
@@ -91,15 +91,15 @@ propertiesToKeep = [ 'filter', 'AIRMASS', 'FWHM','mjd_obs'] \
 tbdata = np.core.records.fromarrays([tbdata[prop] for prop in propertiesToKeep] + [ivar], names = propertiesToKeep + [ 'ivar'])
 
 # Do the magic! Read the table, create Healtree, project it into healpix maps, and write these maps.
-#project_and_write_maps(mode, propertiesandoperations, tbdata, catalogue_name, outroot, sample_names, inds, nside, ratiores, pixoffset, nsidesout)
-project_and_write_maps_simp(mode, propertiesandoperations, tbdata, catalogue_name, outroot, sample_names, inds, nside)
+project_and_write_maps(mode, propertiesandoperations, tbdata, catalogue_name, outroot, sample_names, inds, nside, ratiores, pixoffset, nsidesout)
+#project_and_write_maps_simp(mode, propertiesandoperations, tbdata, catalogue_name, outroot, sample_names, inds, nside)
 
 # ------------------------------------------------------
 #plot depth maps
 # __________________
 
 from DESIccd import plotdepthfromIvar
-depthminl = [23.] #if doing multiple bands, add numbers there
+depthminl = [22.] #if doing multiple bands, add numbers there
 for i in range(0,len(sample_names)):
 	band = sample_names[i].split('_')[-1] 
 	depthmin = depthminl[i]
