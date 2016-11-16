@@ -57,6 +57,8 @@ import datetime
 import matplotlib.pyplot as plt
 import sys
 
+from astrometry.util.fits import fits_table, merge_tables
+
 ######## 
 ## Ted's
 import time
@@ -232,6 +234,19 @@ def _stars_table(nstars=1):
     stars = Table(np.zeros(nstars, dtype=cols))
 
     return stars
+
+def _stars_table2(nstars=1):
+    '''Initialize the stars table, which will contain information on all the stars
+       detected on the CCD, including the PS1 photometry.
+
+    '''
+    cols = [('nmatch', 'i4'),('filename','S32'),('expid', 'S16'), ('ccd_x', 'f4'), ('ccd_y', 'f4'),
+            ('ccd_ra', 'f8'), ('ccd_dec', 'f8'), ('ccd_mag', 'f4'),
+            ('ra_off', 'f8'), ('dec_off', 'f8'), ('gmag', 'f4'), 
+            ('ps1_g', 'f4'), ('ps1_r', 'f4'),('ps1_i', 'f4'),('ps1_z', 'f4')]
+    stars = Table(np.zeros(nstars, dtype=cols))
+    return stars
+
 
 class Measurer(object):
     def __init__(self, fn, ext, aprad=3.5, skyrad_inner=7.0, skyrad_outer=10.0,
@@ -580,6 +595,7 @@ class Measurer(object):
             print('All stars have negative aperture photometry AND/OR contain masked pixels!')
             return ccds, _stars_table()
         obj = obj[istar]
+        objra, objdec = self.wcs.pixelxy2radec(obj['xcentroid']+1, obj['ycentroid']+1)
         apflux = apflux[istar].data
         ccds['nstar'] = len(istar)
 
@@ -599,6 +615,8 @@ class Measurer(object):
         # final cut
         good = np.where(good)[0]
         ps1.cut(good)
+        gdec=ps1.dec_ok-ps1.ddec/3600000.
+        gra=ps1.ra_ok-ps1.dra/3600000./np.cos(np.deg2rad(gdec))
         nps1 = len(ps1)
 
         if nps1 == 0:
@@ -606,9 +624,6 @@ class Measurer(object):
             return ccds, _stars_table()
     
         # Match GAIA and Our Data
-        gdec=ps1.dec_ok-ps1.ddec/3600000.
-        gra=ps1.ra_ok-ps1.dra/3600000./np.cos(np.deg2rad(gdec))
-        objra, objdec = self.wcs.pixelxy2radec(obj['xcentroid']+1, obj['ycentroid']+1)
         #m1, m2, d12 = match_radec(objra, objdec, ps1.ra, ps1.dec, self.matchradius/3600.0)
         m1, m2, d12 = match_radec(objra, objdec, gra, gdec, self.matchradius/3600.0)
         nmatch = len(m1)
@@ -620,25 +635,49 @@ class Measurer(object):
 
         # Initialize the stars table and begin populating it.
         print('Add the amplifier number!!!')
-        stars = _stars_table(nmatch)
-        stars['filter'] = self.band
-        stars['expid'] = self.expid
-        stars['x'] = obj['xcentroid'][m1]
-        stars['y'] = obj['ycentroid'][m1]
-        stars['ra'] = objra[m1]
-        stars['dec'] = objdec[m1]
+        arjun_names=True
+        if arjun_names:
+            stars = _stars_table2(nmatch)
+            stars['nmatch'] = nmatch
+            stars['filename'] = os.path.basename(self.fn).replace('.fz','')   
+            stars['expid'] = self.expid
+            stars['ccd_x'] = obj['xcentroid'][m1]
+            stars['ccd_y'] = obj['ycentroid'][m1]
+            stars['ccd_ra'] = objra[m1]
+            stars['ccd_dec'] = objdec[m1]
 
-        apflux = apflux[m1] # we need apflux for Tractor, below
-        stars['apmag'] = - 2.5 * np.log10(apflux) + zp0 + 2.5 * np.log10(exptime)
+            apflux = apflux[m1] # we need apflux for Tractor, below
+            stars['ccd_mag'] = - 2.5 * np.log10(apflux) + zp0 + 2.5 * np.log10(exptime)
 
-        #stars['ps1_ra'] = ps1.ra[m2]
-        #stars['ps1_dec'] = ps1.dec[m2]
-        stars['gaia_ra'] = gra[m2]
-        stars['gaia_dec'] = gdec[m2]
-        stars['ps1_gicolor'] = ps1.median[m2, 0] - ps1.median[m2, 2]
+            stars['ra_off'] = (gra[m2] - objra[m1])*np.cos( np.deg2rad(objra[m1]) )*3600.
+            stars['dec_off']= (gdec[m2] - objdec[m1])*3600.
 
-        ps1band = ps1cat.ps1band[self.band]
-        stars['ps1_mag'] = ps1.median[m2, ps1band]
+            stars['gmag']= ps1.phot_g_mean_mag[m2]
+            stars['ps1_g']= ps1.median[:,0][m2]
+            stars['ps1_r']= ps1.median[:,1][m2]
+            stars['ps1_i']= ps1.median[:,2][m2]
+            stars['ps1_z']= ps1.median[:,3][m2]
+            return ccds, stars
+        else:
+            stars = _stars_table(nmatch)
+            stars['filter'] = self.band
+            stars['expid'] = self.expid
+            stars['x'] = obj['xcentroid'][m1]
+            stars['y'] = obj['ycentroid'][m1]
+            stars['ra'] = objra[m1]
+            stars['dec'] = objdec[m1]
+
+            apflux = apflux[m1] # we need apflux for Tractor, below
+            stars['apmag'] = - 2.5 * np.log10(apflux) + zp0 + 2.5 * np.log10(exptime)
+
+            #stars['ps1_ra'] = ps1.ra[m2]
+            #stars['ps1_dec'] = ps1.dec[m2]
+            stars['gaia_ra'] = gra[m2]
+            stars['gaia_dec'] = gdec[m2]
+            stars['ps1_gicolor'] = ps1.median[m2, 0] - ps1.median[m2, 2]
+
+            ps1band = ps1cat.ps1band[self.band]
+            stars['ps1_mag'] = ps1.median[m2, ps1band]
 
         #plt.scatter(stars['ra'], stars['dec'], color='orange') ; plt.scatter(stars['ps1_ra'], stars['ps1_dec'], color='blue') ; plt.show()
         
@@ -654,7 +693,8 @@ class Measurer(object):
         #radiff = (stars['ra'] - stars['ps1_ra']) * np.cos(np.deg2rad(ccddec)) * 3600.0
         #decdiff = (stars['dec'] - stars['ps1_dec']) * 3600.0
         # Negative sign so same sign as mosstat
-        radiff = -(stars['ra'] - stars['gaia_ra']) * np.cos(np.deg2rad(ccddec)) * 3600.0
+        radiff = -(stars['ra'] - stars['gaia_ra']) * np.cos(np.deg2rad(stars['dec'])) * 3600.0
+        #radiff = -(stars['ra'] - stars['gaia_ra']) * np.cos(np.deg2rad(ccddec)) * 3600.0
         decdiff = -(stars['dec'] - stars['gaia_dec']) * 3600.0
         ccds['raoff'] = np.median(radiff)
         ccds['decoff'] = np.median(decdiff)
@@ -667,12 +707,14 @@ class Measurer(object):
 
         # Compute the photometric zeropoint but only use stars with main
         # sequence g-i colors.
+        print('B4 redundant gicolor cut, len(stars)=%d' % len(stars))
         print('Computing the photometric zeropoint.')
         mskeep = np.where((stars['ps1_gicolor'] > 0.4) * (stars['ps1_gicolor'] < 2.7))[0]
         if len(mskeep) == 0:
             print('Not enough PS1 stars with main sequence colors.')
             return ccds, stars
         ccds['mdncol'] = np.median(stars['ps1_gicolor'][mskeep]) # median g-i color
+        print('After redundant gicolor cut, len(stars)=%d' % len(stars))
 
         # Get the photometric offset relative to PS1 as the observed PS1
         # magnitude minus the observed / measured magnitude.
@@ -960,8 +1002,9 @@ def runit(img_fn,measureargs, zptsfile='zpt.fits',zptstarsfile='zptstar.fits'):
     fn_scr= img_fn.replace('/project/projectdirs','/scratch2/scratchdirs/kaylanb')
     if not os.path.exists(fn_scr): 
         dobash("cp %s %s" % (img_fn,fn_scr))
+    if not os.path.exists(fn_scr.replace('_ooi_','_ood_')): 
         dobash("cp %s %s" % (img_fn.replace('_ooi_','_ood_'),fn_scr.replace('_ooi_','_ood_')))
-        t0= ptime('copy-to-scratch',t0)
+    t0= ptime('copy-to-scratch',t0)
 
     ccds, stars= measure_image(fn_scr, measureargs)
     # If combining ccds from multiple images:
