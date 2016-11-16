@@ -518,7 +518,6 @@ class Measurer(object):
         # negative sky.
         sky0 = self.sky(self.band)
         zp0 = self.zeropoint(self.band)
-        #zp0 = self.zeropoint(self.band) -2.5*np.log10(1.8) #KJB
         kext = self.extinction(self.band)
 
         print('Computing the sky background.')
@@ -533,6 +532,9 @@ class Measurer(object):
         ccds['skyrms'] = sig1    # [electron/pix]
         ccds['skycounts'] = sky1 # [electron/pix]
         ccds['skymag'] = skybr   # [mag/arcsec^2]
+        # Divide electron/pix by expt to agree with Arjun's
+        ccds['skyrms'] /= exptime   #KJB
+        ccds['skycounts'] /= exptime 
         t0= ptime('measure-sky',t0)
 
         # Detect stars on the image.  
@@ -724,11 +726,11 @@ class Measurer(object):
         # Get the photometric offset relative to PS1 as the observed PS1
         # magnitude minus the observed / measured magnitude.
 
-        stars['ps1_mag'] += colorterm
+        #stars['ps1_mag'] += colorterm
+        stars['ps1_mag'] += stars['decam_colorterm'] #KJB
         #plt.scatter(stars['ps1_gicolor'], stars['apmag']-stars['ps1_mag']) ; plt.show()
         
         # APMAG computed using zp0, which is 2.5log10(1.8) larger for John compared to Arjun
-        #dmagall = stars['ps1_mag'][mskeep] - stars['apmag'][mskeep]
         dmagall = stars['ps1_mag'][mskeep] - stars['apmag'][mskeep]
         _, dmagsig = self.sensible_sigmaclip(dmagall, nsigma=2.5)
 

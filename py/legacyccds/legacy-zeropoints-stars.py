@@ -823,7 +823,8 @@ class Mosaic3Measurer(Measurer):
         self.ut = self.primhdr['TIME-OBS']
         self.ra_bore = hmsstring2ra(self.primhdr['TELRA'])
         self.dec_bore = dmsstring2dec(self.primhdr['TELDEC'])
-        self.gain = self.hdr['GAIN'] # hack! average gain
+        #self.gain = self.hdr['GAIN'] # hack! average gain
+        self.gain = 1.8 #Mosstat
 
         print('Hack! Using an average Mosaic3 zeropoint!!')
         corr = 2.5 * np.log10(self.gain) 
