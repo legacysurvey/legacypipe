@@ -349,8 +349,8 @@ class CommonInit(ReadWrite):
 class ELG(CommonInit):
     def __init__(self,**kwargs):
         super(ELG, self).__init__(**kwargs)
-        
-    def get_FDR(self):
+       
+    def get_elgs_FDR_cuts(self):
         '''version 3.0 of data discussed in
         https://desi.lbl.gov/DocDB/cgi-bin/private/RetrieveFile?docid=912'''
         rfaint = 23.4
@@ -388,22 +388,22 @@ class ELG(CommonInit):
                                 rmag_cut,\
                                 zcat.get('oii_3727_err')!=-2.0,\
                                 zcat.get('oii_3727')>oiicut1),axis=0)
-        any_elg= np.all((rmag_cut,\
-                         zcat.get('oii_3727_err')!=-2.0,\
-                         zcat.get('oii_3727')>oiicut1),axis=0)
+        med2hiz_oiibright= np.all((zcat.get('zhelio')>0.6,\
+                                   rmag_cut,\
+                                   zcat.get('oii_3727_err')!=-2.0,\
+                                   zcat.get('oii_3727')>oiicut1),axis=0)
+
         # color data
-        rz= (R_MAG - Z_MAG)
-        gr= (G_MAG - R_MAG)
-        Xall = np.array([rz,gr]).T
-        cuts=dict(loz=loz,\
-                  oiifaint=oiifaint,\
-                  oiibright_loz=oiibright_loz,\
-                  oiibright_hiz=oiibright_hiz,\
-                  any_elg=any_elg)
-        return Xall,cuts    
-            
+        rz,gr,r={},{},{}
+        for key,cut in zip(['loz','oiifaint','oiibright_loz','oiibright_hiz','med2hiz_oiibright'],\
+                           [loz,oiifaint,oiibright_loz,oiibright_hiz,med2hiz_oiibright]):
+            rz[key]= (R_MAG - Z_MAG)[cut]
+            gr[key]= (G_MAG - R_MAG)[cut]
+            r[key]= R_MAG[cut]
+        return rz,gr,r
+
     def plot_FDR(self):
-        Xall,cuts= self.get_FDR()
+        rz,gr,r= self.get_elgs_FDR_cuts()
         # Object to add target selection box
         ts= TSBox(src='ELG')
         fig, ax = plt.subplots()
@@ -411,19 +411,19 @@ class ELG(CommonInit):
         xrange,yrange= xyrange['x_elg'],xyrange['y_elg']
         ts.add_ts_box(ax, xlim=xrange,ylim=yrange)
         # Add points
-        b= cuts['loz']
-        ax.scatter(Xall[:,0][b],Xall[:,1][b], marker='^', color='magenta', label=r'$z<0.6$')
+        b= 'loz'
+        ax.scatter(rz[b],gr[b], marker='^', color='magenta', label=r'$z<0.6$')
 
-        b=cuts['oiifaint']
-        ax.scatter(Xall[:,0][b],Xall[:,1][b], marker='s', color='tan',
+        b='oiifaint'
+        ax.scatter(rz[b],gr[b], marker='s', color='tan',
                         label=r'$z>0.6, [OII]<8\times10^{-17}$')
 
-        b= cuts['oiibright_loz']
-        ax.scatter(Xall[:,0][b],Xall[:,1][b], marker='o', color='powderblue',
+        b= 'oiibright_loz'
+        ax.scatter(rz[b],gr[b], marker='o', color='powderblue',
                         label=r'$z>0.6, [OII]>8\times10^{-17}$')
 
-        b=cuts['oiibright_hiz']
-        ax.scatter(Xall[:,0][b],Xall[:,1][b], marker='o', color='blue',
+        b='oiibright_hiz'
+        ax.scatter(rz[b],gr[b], marker='o', color='blue',
                         label=r'$z>1.0, [OII]>8\times10^{-17}$')
         ax.set_xlim(xrange)
         ax.set_ylim(yrange)
@@ -439,7 +439,7 @@ class ELG(CommonInit):
             print('Wrote {}'.format(name))
  
     def plot_FDR_multipanel(self):
-        Xall,cuts= self.get_FDR()
+        rz,gr,r= self.get_elgs_FDR_cuts()
         ts= TSBox(src='ELG')
         xrange,yrange= xyrange['x_elg'],xyrange['y_elg']
         # Plot
@@ -453,8 +453,8 @@ class ELG(CommonInit):
             # Add box
             ts.add_ts_box(ax[cnt], xlim=xrange,ylim=yrange)
             # Add points
-            b= cuts[key]
-            ax[cnt].scatter(Xall[:,0][b],Xall[:,1][b], marker=marker,color=col)
+            b= key
+            ax[cnt].scatter(rz[b],gr[b], marker=marker,color=col)
             ti_loc=ax[cnt].set_title(ti)
             ax[cnt].set_xlim(xrange)
             ax[cnt].set_ylim(yrange)
@@ -466,7 +466,6 @@ class ELG(CommonInit):
             plt.savefig(name, **kwargs)
             plt.close()
             print('Wrote {}'.format(name))
-
 
     def plot(self):
         self.plot_FDR()
@@ -483,7 +482,7 @@ class LRG(CommonInit):
     def __init__(self,**kwargs):
         super(LRG, self).__init__(**kwargs)
     
-    def get_FDR(self):
+    def get_lrgs_FDR_cuts(self):
         if self.DR == 2:
             decals=self.read_fits( os.path.join(self.truth_dir,'decals-dr2-cosmos-zphot.fits.gz') )
             spec=self.read_fits( os.path.join(self.truth_dir,'cosmos-zphot.fits.gz') )
@@ -521,16 +520,17 @@ class LRG(CommonInit):
                                     spec.get('mod_gal') <= 8,\
                                     spec.get('zp_gal') > 0.6),axis=0)
         # return Mags
-        rz,rW1={},{}
+        rz,rW1,r={},{},{}
         R_FLUX = decals.get('decam_flux')[:,2] / decals.get('decam_mw_transmission')[:,2]
         for key in ['star','red_galaxy_lowz','red_galaxy_hiz','blue_galaxy']:
             cut= index[key]
             rz[key]= flux2mag(R_FLUX[cut]) - flux2mag(Z_FLUX[cut])
             rW1[key]= flux2mag(R_FLUX[cut]) - flux2mag(W1_FLUX[cut])
-        return rz,rW1
+            r[key]= flux2mag(R_FLUX[cut])
+        return rz,rW1,r
                                  
     def plot_FDR(self):
-        rz,rW1= self.get_FDR()
+        rz,rW1,r= self.get_lrgs_FDR_cuts()
         fig,ax = plt.subplots()
         rgb_cols=get_rgb_cols()
         xrange,yrange= xyrange['x_lrg'],xyrange['y_lrg']
@@ -559,7 +559,7 @@ class LRG(CommonInit):
             print('Wrote {}'.format(name))
 
     def plot_FDR_multipanel(self):
-        rz,rW1= self.get_FDR()
+        rz,rW1,r= self.get_lrgs_FDR_cuts()
         fig,ax = plt.subplots(1,4,sharex=True,sharey=True,figsize=(16,4))
         plt.subplots_adjust(wspace=0.1,hspace=0)
         rgb_cols=get_rgb_cols()
