@@ -349,17 +349,20 @@ class CommonInit(ReadWrite):
 class ELG(CommonInit):
     def __init__(self,**kwargs):
         super(ELG, self).__init__(**kwargs)
-       
+        self.rlimit= 23.4
+        if 'rlimit' in kwargs:
+            self.rlimit= kwargs['rlimit']
+        print('ELGs, self.rlimit= ',self.rlimit)
+    
     def get_elgs_FDR_cuts(self):
         '''version 3.0 of data discussed in
         https://desi.lbl.gov/DocDB/cgi-bin/private/RetrieveFile?docid=912'''
-        rfaint = 23.4
         if self.DR == 2:
             zcat = self.read_fits(os.path.join(self.truth_dir,'../deep2/v3.0/','deep2-field1-oii.fits.gz'))
             G_MAG= zcat.get('cfhtls_g')
             R_MAG= zcat.get('cfhtls_r')
             Z_MAG= zcat.get('cfhtls_z')
-            rmag_cut= R_MAG<rfaint 
+            rmag_cut= R_MAG<self.rlimit 
         elif self.DR == 3:
             zcat = self.read_fits(os.path.join(self.truth_dir,'deep2f234-dr3matched.fits'))
             decals = self.read_fits(os.path.join(self.truth_dir,'dr3-deep2f234matched.fits'))
@@ -368,7 +371,7 @@ class ELG(CommonInit):
             R_MAG= decals.get('decam_mag')[:,2]
             Z_MAG= decals.get('decam_mag')[:,4]
             rflux= decals.get('decam_flux')[:,2]/decals.get('decam_mw_transmission')[:,2]
-            rmag_cut= rflux > 10**((22.5-rfaint)/2.5)
+            rmag_cut= rflux > 10**((22.5-self.rlimit)/2.5)
             rmag_cut*= self.imaging_cut(decals) 
         # Cuts
         oiicut1 = 8E-17 # [erg/s/cm2]
@@ -481,6 +484,10 @@ class ELG(CommonInit):
 class LRG(CommonInit):
     def __init__(self,**kwargs):
         super(LRG, self).__init__(**kwargs)
+        self.zlimit= 20.46
+        if 'zlimit' in  kwargs:
+            self.zlimit= kwargs['zlimit']
+        print('LRGs, self.zlimit= ',self.zlimit)
     
     def get_lrgs_FDR_cuts(self):
         if self.DR == 2:
@@ -495,7 +502,7 @@ class LRG(CommonInit):
         index={}
         # BUG!!
         #index['decals']= np.all((Z_FLUX < 10**((22.5-20.46)/2.5),\
-        index['decals']= np.all((Z_FLUX > 10**((22.5-20.46)/2.5),\
+        index['decals']= np.all((Z_FLUX > 10**((22.5-self.zlimit)/2.5),\
                                  W1_FLUX > 0.),axis=0)
         index['decals']*= self.imaging_cut(decals)
         # Cosmos
@@ -598,7 +605,7 @@ class LRG(CommonInit):
         Z_FLUX = decals.get('decam_flux')[:,4] / decals.get('decam_mw_transmission')[:,4]
         W1_FLUX = decals.get('wise_flux')[:,0] / decals.get('wise_mw_transmission')[:,0]
         index={}
-        index['decals']= np.all((Z_FLUX > 10**((22.5-20.46)/2.5),\
+        index['decals']= np.all((Z_FLUX > 10**((22.5-self.zlimit)/2.5),\
                                  W1_FLUX > 0.),axis=0)
         index['decals']*= self.imaging_cut(decals)
         # VIPERS
@@ -719,6 +726,10 @@ class STAR(CommonInit):
 class QSO(CommonInit):
     def __init__(self,**kwargs):
         super(QSO,self).__init__(**kwargs)
+        self.rlimit= 22.7
+        if 'rlimit' in  kwargs:
+            self.rlimit= kwargs['rlimit']
+        print('QSOs, self.rlimit= ',self.rlimit)
   
     def get_qsos(self):
         from theValidator.catalogues import CatalogueFuncs 
@@ -727,6 +738,14 @@ class QSO(CommonInit):
             # Add AB mags
             CatalogueFuncs().set_extra_data(qsos)
             qsos.cut( self.imaging_cut(qsos) )
+            # r < 22.7, grz > 17
+            GFLUX = qsos.get('decam_flux')[:,1] / qsos.get('decam_mw_transmission')[:,1]
+            RFLUX = qsos.get('decam_flux')[:,2] / qsos.get('decam_mw_transmission')[:,2]
+            ZFLUX = qsos.get('decam_flux')[:,4] / qsos.get('decam_mw_transmission')[:,4]
+            GRZFLUX = (GFLUX + 0.8* RFLUX + 0.5* ZFLUX ) / 2.3
+            cut= np.all((RFLUX > 10**((22.5-self.rlimit)/2.5),\
+                         GRZFLUX < 10**((22.5-17.0)/2.5)),axis=0)
+            qsos.cut(cut)
             return qsos
         elif self.DR == 3:
             qsos=self.read_fits( os.path.join(self.truth_dir,'qso-dr3sweepmatched.fits') )
