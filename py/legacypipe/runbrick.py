@@ -1874,11 +1874,17 @@ def stage_wise_forced(
         WISE.wise_mask = np.zeros((len(T), 4), np.uint8)
         for tile in tiles.coadd_id:
             from astrometry.util.util import Tan
-            fn = os.path.join(unwise_dir, tile[:3], tile,
-                              'unwise-%s-msk.fits.gz' % tile)
-            print('Looking for unWISE mask file', fn)
-            if not os.path.exists(fn):
-                print('unWISE mask file', fn, 'does not exist')
+            # unwise_dir can be a colon-separated list of paths
+            found = False
+            for d in unwise_dir.split(':'):
+                fn = os.path.join(d, tile[:3], tile,
+                                  'unwise-%s-msk.fits.gz' % tile)
+                print('Looking for unWISE mask file', fn)
+                if os.path.exists(fn):
+                    found = True
+                    break
+            if not found:
+                print('unWISE mask file for tile', tile, 'does not exist')
                 continue
             # read header to pull out WCS (because it's compressed)
             M,hdr = fitsio.read(fn, header=True)
