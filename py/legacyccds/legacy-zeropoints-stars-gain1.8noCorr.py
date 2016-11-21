@@ -727,7 +727,8 @@ class Measurer(object):
         # magnitude minus the observed / measured magnitude.
 
         #stars['ps1_mag'] += colorterm
-        stars['ps1_mag'] += stars['decam_colorterm'] #KJB
+        #stars['ps1_mag'] += stars['decam_colorterm'] #KJB
+        stars['ps1_mag'] += stars['mzls_colorterm'] 
         #plt.scatter(stars['ps1_gicolor'], stars['apmag']-stars['ps1_mag']) ; plt.show()
         
         # APMAG computed using zp0, which is 2.5log10(1.8) larger for John compared to Arjun
@@ -908,6 +909,11 @@ class NinetyPrimeMeasurer(Measurer):
         #img= fits[ext].read()
         img *= self.exptime
         return img, hdr
+    
+    def read_bitmask(self):
+        fn= self.fn.replace('ooi','ood')
+        mask, junk = fitsio.read(fn, ext=self.ext, header=True)
+        return mask
   
 def camera_name(primhdr):
     '''

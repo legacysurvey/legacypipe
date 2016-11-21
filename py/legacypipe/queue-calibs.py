@@ -146,9 +146,10 @@ def main():
         log(len(T), 'CCDs')
     T.index = np.arange(len(T))
 
-    I = survey.photometric_ccds(T)
-    print(len(I), 'CCDs are photometric')
-    T.cut(I)
+    print(len(T), 'CCDs before cuts')
+    #I = survey.photometric_ccds(T)
+    #print(len(I), 'CCDs are photometric')
+    #T.cut(I)
     I = survey.apply_blacklist(T)
     print(len(I), 'CCDs are not blacklisted')
     T.cut(I)
@@ -345,6 +346,10 @@ def main():
     elif opt.region == 'mzls':
         dlo,dhi = 30., 90.
 
+    elif opt.region == 'desi':
+        dlo,dhi = -30, 90.
+        rlo,rhi = 0, 360
+    print('dlo,dhi,rlo,rhi=%f,%f,%f,%f' % (dlo,dhi,rlo,rhi))
         
     if opt.mindec is not None:
         dlo = opt.mindec
@@ -382,6 +387,10 @@ def main():
             keep[j] = True
         T.cut(keep)
         log('Cut to', len(T), 'CCDs near bricks')
+
+    B.writeto('cut_bricks.fits')
+    T.writeto('cut_ccds.fits')
+    sys.exit('early')
 
     # Aside -- how many near DR1=1 CCDs?
     if False:
