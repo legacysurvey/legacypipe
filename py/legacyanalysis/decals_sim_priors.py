@@ -254,8 +254,13 @@ xyrange=dict(x_star=[-0.5,2.2],\
              y_star=[-0.3,2.],\
              x_elg=[-0.5,2.2],\
              y_elg=[-0.3,2.],\
-             x_lrg= [0, 2.5],\
-             y_lrg= [-2, 6])
+             x_lrg= [0, 3.],\
+             y_lrg= [-2, 6],\
+             x1_qso= [-0.5,3.],\
+             y1_qso= [-0.5,2.5],\
+             x2_qso= [-0.5,4.5],\
+             y2_qso= [-2.5,3.5])
+
 def rm_last_ticklabel(ax):
     '''for multiplot'''
     labels=ax.get_xticks().tolist()
@@ -566,7 +571,7 @@ class ELG(CommonInit):
         kde= KernelOfTruth([x,y,z],labels,\
                            [(20.5,25.),(0,2),(-0.5,1.5)],\
                            bandwidth=0.05)
-        xylims=dict(x1=(20.5,25.5),y1=(0,0.5),\
+        xylims=dict(x1=(20.5,25.5),y1=(0,0.8),\
                     x2=xyrange['x_elg'],y2=xyrange['y_elg'])
         kde.plot_1band_and_color(ndraws=1000,xylims=xylims,prefix='elg_')
 
@@ -597,7 +602,8 @@ class LRG(CommonInit):
         # Cosmos
         # http://irsa.ipac.caltech.edu/data/COSMOS/gator_docs/cosmos_zphot_mag25_colDescriptions.html
         # http://irsa.ipac.caltech.edu/data/COSMOS/tables/redshift/cosmos_zphot_mag25.README
-        for key in ['star','red_galaxy_lowz','red_galaxy_hiz','blue_galaxy']:
+        keys= ['star','red_galaxy_lowz','red_galaxy_hiz','blue_galaxy','red_galaxy']
+        for key in keys:
             if key == 'star': 
                 index[key]= np.all((index['decals'],\
                                     spec.get('type') == 1),axis=0)
@@ -615,9 +621,13 @@ class LRG(CommonInit):
                                     spec.get('type') == 0,\
                                     spec.get('mod_gal') <= 8,\
                                     spec.get('zp_gal') > 0.6),axis=0)
+            elif key == 'red_galaxy': 
+                index[key]= np.all((index['decals'],\
+                                    spec.get('type') == 0,\
+                                    spec.get('mod_gal') <= 8),axis=0)
         # return Mags
         rz,rW1,r_nodust,r_wdust,z_nodust,z_wdust={},{},{},{},{},{}
-        for key in ['star','red_galaxy_lowz','red_galaxy_hiz','blue_galaxy']:
+        for key in keys:
             cut= index[key]
             rz[key]= decals.get('decam_mag_nodust')[:,2][cut] - decals.get('decam_mag_nodust')[:,4][cut]
             rW1[key]= decals.get('decam_mag_nodust')[:,2][cut] - decals.get('wise_mag_nodust')[:,0][cut]
@@ -751,6 +761,22 @@ class LRG(CommonInit):
         #b= self.cuts['lrg')
         #color_color_plot(self.Xall[b,:],src='LRG') #,extra=True)
 
+    def plot_kde(self):
+        rz,rW1,r_nodust,r_wdust,z_nodust,z_wdust= self.get_lrgs_FDR_cuts()
+        x= z_wdust['red_galaxy']
+        y= rz['red_galaxy']
+        z= rW1['red_galaxy']
+        cut= (np.isfinite(x))* (np.isfinite(y))* (np.isfinite(z))
+        x,y,z= x[cut],y[cut],z[cut]
+        labels=['z wdust','r-z','r-W1']
+        kde= KernelOfTruth([x,y,z],labels,\
+                           [(17.,22.),(0,2.5),(-2,5.)],\
+                           bandwidth=0.05)
+        xylims=dict(x1=(17.,22.),y1=(0,0.7),\
+                    x2=xyrange['x_lrg'],y2=xyrange['y_lrg'])
+        kde.plot_1band_and_color(ndraws=1000,xylims=xylims,prefix='lrg_')
+
+
 class STAR(CommonInit):
     def __init__(self,**kwargs):
         super(STAR,self).__init__(**kwargs)
@@ -850,6 +876,7 @@ class QSO(CommonInit):
             qsos.cut(cut)
             return qsos
         elif self.DR == 3:
+            raise ValueError('Not done yet')
             qsos=self.read_fits( os.path.join(self.truth_dir,'qso-dr3sweepmatched.fits') )
             decals=self.read_fits( os.path.join(self.truth_dir,'dr3-qsosweepmatched.fits') )
             CatalogueFuncs().set_mags(decals)
@@ -903,10 +930,10 @@ class QSO(CommonInit):
                           c=col,edgecolors='none',marker='o',s=10.,rasterized=True, label='qso '+lab,alpha=self.alpha)
         
         #for xlim,ylim,x_lab,y_lab in ax[0].set_xlim([-0.5,3.])
-        ax[0].set_xlim([-0.5,3.])
-        ax[1].set_xlim([-0.5,4.5])
-        ax[0].set_ylim([-0.5,2.5])
-        ax[1].set_ylim([-2.5,3.5])
+        ax[0].set_xlim(xyrange['x1_qso'])
+        ax[1].set_xlim(xyrange['x2_qso'])
+        ax[0].set_ylim(xyrange['y1_qso'])
+        ax[1].set_ylim(xyrange['y2_qso'])
         xlab=ax[0].set_xlabel('r-z')
         xlab=ax[1].set_xlabel('g-z')
         ylab=ax[0].set_ylabel('g-r')
@@ -926,6 +953,23 @@ class QSO(CommonInit):
  
     def plot(self):
         self.plot_FDR()
+
+    def plot_kde(self):
+        qsos= self.get_qsos()
+        x= qsos.get('decam_mag_wdust')[:,2]
+        y= qsos.get('decam_mag_wdust')[:,2]-qsos.get('decam_mag_wdust')[:,4]
+        z= qsos.get('decam_mag_wdust')[:,1]-qsos.get('decam_mag_wdust')[:,2]
+        hiz=2.1
+        cut= (qsos.get('z') <= hiz)*\
+             (np.isfinite(x))*(np.isfinite(y))*(np.isfinite(z))
+        x,y,z= x[cut],y[cut],z[cut]
+        labels=['r wdust','r-z','g-r']
+        kde= KernelOfTruth([x,y,z],labels,\
+                           [(15.,24.),(-1.,1.5),(-1.,2.)],\
+                           bandwidth=0.05)
+        xylims=dict(x1=(15.,24),y1=(0,0.5),\
+                    x2=xyrange['x1_qso'],y2=xyrange['y1_qso'])
+        kde.plot_1band_and_color(ndraws=1000,xylims=xylims,prefix='qso_')
 
 
 class GalaxyPrior(object):
@@ -947,6 +991,11 @@ if __name__ == '__main__':
     kwargs=dict(DR=2,savefig=False)
     star=STAR(**kwargs)
     star.plot_kde()
+    qso=QSO(**kwargs)
+    qso.plot_kde()
     kwargs.update(dict(DR=3, rlimit=23.4+1.))
     elg= ELG(**kwargs) 
     elg.plot_kde()
+    kwargs.update(dict(zlimit=20.46+1.))
+    lrg= LRG(**kwargs)
+    lrg.plot_kde()
