@@ -17,8 +17,69 @@ from astrometry.util.fits import fits_table, merge_tables
 import os
 import sys
 from scipy.optimize import newton
+from sklearn.neighbors import KernelDensity
 
 from theValidator.catalogues import CatalogueFuncs 
+
+
+class KernelOfTruth(object):
+    '''Approximate color distributions with a Gaussian Kernel Density Estimator
+    See: http://scikit-learn.org/stable/auto_examples/neighbors/plot_kde_1d.html
+    '''
+    def __init__(self,array_list,lims,bandwidth=0.05):
+        '''
+        array_list -- list of length nfeatures, each element is a numpy array of nsamples
+        lims -- list of tuples giving low,hi limits
+        '''
+        # Data
+        self.X= np.array(array_list).T
+        assert(self.X.shape[1] == len(array_list))
+        # Limits
+        self.X_plot=[]
+        for i in range(len(lims)):
+            self.X_plot+= [np.linspace(lims[i][0],lims[i][1],1000)]
+        self.X_plot= np.array(self.X_plot).T
+        assert(self.X_plot.shape[1] == len(lims))
+        self.kde = KernelDensity(kernel='gaussian', bandwidth=bandwidth).fit(self.X)
+
+    def plot(self, ndraws=1000,xylims=None):
+        '''xylims -- dict of x1,y1,x2,y2,... where x1 is tuple of low,hi for first plot xaxis'''
+        fig,ax= plt.subplots(2,2,figsize=(15,10))
+        plt.subplots_adjust(wspace=0.2,hspace=0.2)
+        # Data
+        xyz= self.kde.sample(n_samples=ndraws)
+        ax[0,0].hist(self.X[:,0],normed=True)
+        ax[0,1].scatter(self.X[:,1],self.X[:,2],\
+                      c='b',edgecolors='none',marker='o',s=10.,rasterized=True,alpha=0.2)
+        # KDE distribution
+        xyz= self.kde.sample(n_samples=ndraws)
+        ax[1,0].hist(xyz[:,0],normed=True)
+        ax[1,1].scatter(xyz[:,1],xyz[:,2],\
+                      c='b',edgecolors='none',marker='o',s=10.,rasterized=True,alpha=0.2)
+        for cnt in range(2):
+            if xylims is not None:
+                ax[cnt,0].set_xlim(xylims['x1'])
+                ax[cnt,0].set_ylim(xylims['y1'])
+                ax[cnt,1].set_xlim(xylims['x2'])
+                ax[cnt,1].set_ylim(xylims['y2'])
+            xlab=ax[cnt,0].set_xlabel('r wdust')
+            xlab=ax[cnt,1].set_xlabel('color')
+            ylab=ax[cnt,1].set_ylabel('color')
+        plt.savefig('kde.png',bbox_extra_artists=[xlab], bbox_inches='tight',dpi=150)
+    
+    def save(self,name='kde.pickle'):
+        fout=open(name,'w')
+        pickle.dump(kde,fout)
+        fout.close()
+    
+    def load(self,name='kde.pickle'):
+        fout=open(name,'r')
+        self.kde= pickle.load(fout)
+        fout.close()
+
+
+
+
 
 class _GaussianMixtureModel(object):
     """Read and sample from a pre-defined Gaussian mixture model.
@@ -175,6 +236,9 @@ def add_MoG_curves(ax, means_, covars_, weights_):
                      2 * scale * sigma1, 2 * scale * sigma2,
                      alpha * 180. / np.pi,\
                      fc='none', ec='k'))
+
+
+
 
 def get_rgb_cols():
     return [(255,0,255),(102,255,255),(0,153,153),\
@@ -734,6 +798,18 @@ class STAR(CommonInit):
         #plt.savefig('test.png')
         #plt.close()
 
+    def plot_kde(self):
+        stars= self.get_purestars()
+        x=stars.get('decam_mag_nodust')[:,2]
+        y=stars.get('decam_mag_nodust')[:,2]-stars.get('decam_mag_nodust')[:,4]
+        z=stars.get('decam_mag_nodust')[:,1]-stars.get('decam_mag_nodust')[:,2]
+        kde= KernelOfTruth([x,y,z],\
+                           [(15,24),(0,2),(0,1.5)],\
+                           bandwidth=0.05)
+        xylims=dict(x1=(15,24),y1=(0,0.3),\
+                    x2=(-1,3.5),y2=(-0.5,2))
+        kde.plot(ndraws=1000,xylims=xylims)
+
 class QSO(CommonInit):
     def __init__(self,**kwargs):
         super(QSO,self).__init__(**kwargs)
@@ -847,6 +923,9 @@ class GalaxyPrior(object):
         self.elg.plot()
 
 if __name__ == '__main__':
-    gals=GalaxyPrior()
-    gals.plot_all()
-    print "gals.__dict__= ",gals.__dict__
+    #gals=GalaxyPrior()
+    #gals.plot_all()
+    #print "gals.__dict__= ",gals.__dict__
+    kwargs=dict(DR=2,savefig=False)
+    star=STAR(**kwargs)
+    star.plot_kde()
