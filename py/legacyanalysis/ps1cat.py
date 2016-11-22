@@ -117,11 +117,14 @@ def ps1_to_90prime(psmags, band):
     gmag = psmags[:, g_index]
     imag = psmags[:, i_index]
     gi = gmag - imag
+    # July 22, 2016
+    # https://desi.lbl.gov/trac/wiki/BokLegacy/Photometric
     coeffs = dict(
-        g = [0.0, -0.08612, +0.00392, +0.00393],
-        r = [0.0, +0.07831, -0.03304, +0.01027])[band]
-
-    colorterm = -(coeffs[0] + coeffs[1]*gi + coeffs[2]*gi**2 + coeffs[3]*gi**3)
+        g = [0.0, +0.06630, -0.00958, -0.00672],
+        r = [0.0, -0.04836, +0.01100, -0.00563])[band]
+        #g = [0.0, +0.08612, -0.00392, -0.00393],
+        #r = [0.0, -0.07831, +0.03304, -0.01027])[band]
+    colorterm = (coeffs[0] + coeffs[1]*gi + coeffs[2]*gi**2 + coeffs[3]*gi**3)
     return colorterm
     
 def ps1_to_mosaic(psmags, band):
