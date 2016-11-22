@@ -26,11 +26,12 @@ class KernelOfTruth(object):
     '''Approximate color distributions with a Gaussian Kernel Density Estimator
     See: http://scikit-learn.org/stable/auto_examples/neighbors/plot_kde_1d.html
     '''
-    def __init__(self,array_list,lims,bandwidth=0.05):
+    def __init__(self,array_list,labels,lims,bandwidth=0.05):
         '''
         array_list -- list of length nfeatures, each element is a numpy array of nsamples
         lims -- list of tuples giving low,hi limits
         '''
+        self.labels=labels
         # Data
         self.X= np.array(array_list).T
         assert(self.X.shape[1] == len(array_list))
@@ -42,7 +43,7 @@ class KernelOfTruth(object):
         assert(self.X_plot.shape[1] == len(lims))
         self.kde = KernelDensity(kernel='gaussian', bandwidth=bandwidth).fit(self.X)
 
-    def plot(self, ndraws=1000,xylims=None):
+    def plot_1band_and_color(self, ndraws=1000,xylims=None,prefix=''):
         '''xylims -- dict of x1,y1,x2,y2,... where x1 is tuple of low,hi for first plot xaxis'''
         fig,ax= plt.subplots(2,2,figsize=(15,10))
         plt.subplots_adjust(wspace=0.2,hspace=0.2)
@@ -62,10 +63,10 @@ class KernelOfTruth(object):
                 ax[cnt,0].set_ylim(xylims['y1'])
                 ax[cnt,1].set_xlim(xylims['x2'])
                 ax[cnt,1].set_ylim(xylims['y2'])
-            xlab=ax[cnt,0].set_xlabel('r wdust')
-            xlab=ax[cnt,1].set_xlabel('color')
-            ylab=ax[cnt,1].set_ylabel('color')
-        plt.savefig('kde.png',bbox_extra_artists=[xlab], bbox_inches='tight',dpi=150)
+            xlab=ax[cnt,0].set_xlabel(self.labels[0],fontsize='x-large')
+            xlab=ax[cnt,1].set_xlabel(self.labels[1],fontsize='x-large')
+            ylab=ax[cnt,1].set_ylabel(self.labels[2],fontsize='x-large')
+        plt.savefig('%skde.png' % prefix,bbox_extra_artists=[xlab], bbox_inches='tight',dpi=150)
     
     def save(self,name='kde.pickle'):
         fout=open(name,'w')
@@ -554,6 +555,22 @@ class ELG(CommonInit):
         #b= cuts['has_morph']
         #color_color_plot(Xall[b,:],src='ELG',append='_synth+morph') #,extra=True)
 
+    def plot_kde(self):
+        rz,gr,r_nodust,r_wdust= self.get_elgs_FDR_cuts()
+        x= r_wdust['med2hiz_oiibright']
+        y= rz['med2hiz_oiibright']
+        z= gr['med2hiz_oiibright']
+        cut= (np.isfinite(x))* (np.isfinite(y))* (np.isfinite(z))
+        x,y,z= x[cut],y[cut],z[cut]
+        labels=['r wdust','r-z','g-r']
+        kde= KernelOfTruth([x,y,z],labels,\
+                           [(20.5,25.),(0,2),(-0.5,1.5)],\
+                           bandwidth=0.05)
+        xylims=dict(x1=(20.5,25.5),y1=(0,0.5),\
+                    x2=xyrange['x_elg'],y2=xyrange['y_elg'])
+        kde.plot_1band_and_color(ndraws=1000,xylims=xylims,prefix='elg_')
+
+
 class LRG(CommonInit):
     def __init__(self,**kwargs):
         super(LRG, self).__init__(**kwargs)
@@ -800,15 +817,16 @@ class STAR(CommonInit):
 
     def plot_kde(self):
         stars= self.get_purestars()
-        x=stars.get('decam_mag_nodust')[:,2]
+        x=stars.get('decam_mag_wdust')[:,2]
         y=stars.get('decam_mag_nodust')[:,2]-stars.get('decam_mag_nodust')[:,4]
         z=stars.get('decam_mag_nodust')[:,1]-stars.get('decam_mag_nodust')[:,2]
-        kde= KernelOfTruth([x,y,z],\
+        labels=['r wdust','r-z','g-r']
+        kde= KernelOfTruth([x,y,z],labels,\
                            [(15,24),(0,2),(0,1.5)],\
                            bandwidth=0.05)
         xylims=dict(x1=(15,24),y1=(0,0.3),\
                     x2=(-1,3.5),y2=(-0.5,2))
-        kde.plot(ndraws=1000,xylims=xylims)
+        kde.plot_1band_and_color(ndraws=1000,xylims=xylims,prefix='star_')
 
 class QSO(CommonInit):
     def __init__(self,**kwargs):
@@ -929,3 +947,6 @@ if __name__ == '__main__':
     kwargs=dict(DR=2,savefig=False)
     star=STAR(**kwargs)
     star.plot_kde()
+    kwargs.update(dict(DR=3, rlimit=23.4+1.))
+    elg= ELG(**kwargs) 
+    elg.plot_kde()
