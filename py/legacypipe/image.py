@@ -395,7 +395,7 @@ class LegacySurveyImage(object):
         # Galaxy-detection norm
         from tractor.galaxy import ExpGalaxy
         from tractor.ellipses import EllipseE
-        from tractor.patch import Patch
+        from tractor.patch import ModelMask
         h,w = tim.shape
         band = tim.band
         if x is None:
@@ -405,7 +405,7 @@ class LegacySurveyImage(object):
         pos = tim.wcs.pixelToPosition(x, y)
         gal = SimpleGalaxy(pos, NanoMaggies(**{band:1.}))
         S = 32
-        mm = Patch(int(x-S), int(y-S), np.ones((2*S+1, 2*S+1), bool))
+        mm = ModelMask(int(x-S), int(y-S), np.ones((2*S+1, 2*S+1), bool))
         galmod = gal.getModelPatch(tim, modelMask=mm).patch
         galmod = np.maximum(0, galmod)
         galmod /= galmod.sum()
