@@ -395,7 +395,7 @@ class LegacySurveyImage(object):
         # Galaxy-detection norm
         from tractor.galaxy import ExpGalaxy
         from tractor.ellipses import EllipseE
-        from tractor.patch import Patch
+        from tractor.patch import ModelMask
         h,w = tim.shape
         band = tim.band
         if x is None:
@@ -405,7 +405,7 @@ class LegacySurveyImage(object):
         pos = tim.wcs.pixelToPosition(x, y)
         gal = SimpleGalaxy(pos, NanoMaggies(**{band:1.}))
         S = 32
-        mm = Patch(int(x-S), int(y-S), np.ones((2*S+1, 2*S+1), bool))
+        mm = ModelMask(int(x-S), int(y-S), np.ones((2*S+1, 2*S+1), bool))
         galmod = gal.getModelPatch(tim, modelMask=mm).patch
         galmod = np.maximum(0, galmod)
         galmod /= galmod.sum()
@@ -629,7 +629,11 @@ class CalibMixin(object):
         # an output file is still written.  Try to detect & fix this
         # case.
         # Check the PsfEx output file for POLNAME1
-        hdr = fitsio.read_header(psffn, ext=1)
+        try:
+            hdr = fitsio.read_header(psffn, ext=1)
+        except:
+            print('Failed to read header from existing PSF model file', psffn)
+            return False
         if hdr.get('POLNAME1', None) is None:
             print('Did not find POLNAME1 in PsfEx header',psffn,'-- deleting')
             os.unlink(psffn)
