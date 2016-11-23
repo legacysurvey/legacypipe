@@ -18,6 +18,7 @@ import os
 import sys
 from scipy.optimize import newton
 from sklearn.neighbors import KernelDensity
+import pickle
 
 from theValidator.catalogues import CatalogueFuncs 
 
@@ -26,11 +27,15 @@ class KernelOfTruth(object):
     '''Approximate color distributions with a Gaussian Kernel Density Estimator
     See: http://scikit-learn.org/stable/auto_examples/neighbors/plot_kde_1d.html
     '''
-    def __init__(self,array_list,labels,lims,bandwidth=0.05):
+    def __init__(self,array_list,labels,lims,bandwidth=0.05,\
+                 kdefn='kde.pickle',loadkde=False):
         '''
         array_list -- list of length nfeatures, each element is a numpy array of nsamples
         lims -- list of tuples giving low,hi limits
         '''
+        self.kdefn= kdefn
+        self.loadkde= loadkde
+        self.bandwidth= bandwidth
         self.labels=labels
         # Data
         self.X= np.array(array_list).T
@@ -41,7 +46,19 @@ class KernelOfTruth(object):
             self.X_plot+= [np.linspace(lims[i][0],lims[i][1],1000)]
         self.X_plot= np.array(self.X_plot).T
         assert(self.X_plot.shape[1] == len(lims))
-        self.kde = KernelDensity(kernel='gaussian', bandwidth=bandwidth).fit(self.X)
+        # KDE
+        self.kde= self.get_kde()
+
+    def get_kde(self):
+        if self.loadkde:
+            fout=open(self.kdefn,'r')
+            kde= pickle.load(fout)
+            fout.close()
+            print('loaded kde: %s' % self.kdefn)
+            return kde
+        else:
+            print('fit kde')
+            return KernelDensity(kernel='gaussian', bandwidth=self.bandwidth).fit(self.X)
 
     def plot_1band_and_color(self, ndraws=1000,xylims=None,prefix=''):
         '''xylims -- dict of x1,y1,x2,y2,... where x1 is tuple of low,hi for first plot xaxis'''
@@ -67,16 +84,26 @@ class KernelOfTruth(object):
             xlab=ax[cnt,1].set_xlabel(self.labels[1],fontsize='x-large')
             ylab=ax[cnt,1].set_ylabel(self.labels[2],fontsize='x-large')
         plt.savefig('%skde.png' % prefix,bbox_extra_artists=[xlab], bbox_inches='tight',dpi=150)
-    
+        plt.close()
+        if prefix == 'lrg_':
+            # plot g band distribution even though no Targeting cuts on g
+            fig,ax= plt.subplots(2,1,figsize=(8,10))
+            plt.subplots_adjust(hspace=0.2)
+            ax[0].hist(self.X[:,3],normed=True)
+            ax[1].hist(xyz[:,3],normed=True) 
+            for cnt in range(2):
+                if xylims is not None:
+                    ax[cnt].set_xlim(xylims['x3'])
+                    ax[cnt].set_ylim(xylims['y3'])
+            xlab=ax[0].set_xlabel(self.labels[3],fontsize='x-large')
+            plt.savefig('%sg_kde.png' % prefix,bbox_extra_artists=[xlab], bbox_inches='tight',dpi=150)
+            plt.close()
+
     def save(self,name='kde.pickle'):
         fout=open(name,'w')
-        pickle.dump(kde,fout)
+        pickle.dump(self.kde,fout)
         fout.close()
-    
-    def load(self,name='kde.pickle'):
-        fout=open(name,'r')
-        self.kde= pickle.load(fout)
-        fout.close()
+        print('Wrote %s' % name)
 
 
 
@@ -381,6 +408,10 @@ class CommonInit(ReadWrite):
         elif self.DR == 3:
             self.truth_dir= '/project/projectdirs/desi/users/burleigh/desi/target/analysis/truth'
         else: raise valueerror()
+        # KDE params
+        self.kdefn= kwargs.get('kdefn','kde.pickle')
+        self.loadkde= kwargs.get('loadkde',False)
+        self.savekde= kwargs.get('savekde',False)
 
     def imaging_cut(self,data):
         '''data is a fits_table object with Tractor Catalogue columns'''
@@ -426,6 +457,8 @@ class ELG(CommonInit):
         super(ELG, self).__init__(**kwargs)
         self.rlimit= kwargs.get('rlimit',23.4)
         print('ELGs, self.rlimit= ',self.rlimit)
+        # KDE params
+        self.kdefn= 'elg-kde.pickle'
     
     def get_elgs_FDR_cuts(self):
         '''version 3.0 of data discussed in
@@ -471,17 +504,17 @@ class ELG(CommonInit):
             R_MAG= zcat.get('cfhtls_r')
             Z_MAG= zcat.get('cfhtls_z')
         elif self.DR == 3:
-            G_MAG= decals.get('decam_mag_nodust')[:,1]
-            R_MAG= decals.get('decam_mag_nodust')[:,2]
-            Z_MAG= decals.get('decam_mag_nodust')[:,4]
-            R_MAG_wdust= decals.get('decam_mag_wdust')[:,2]
+            G_MAG= decals.get('decam_mag_wdust')[:,1]
+            R_MAG= decals.get('decam_mag_wdust')[:,2]
+            Z_MAG= decals.get('decam_mag_wdust')[:,4]
+            R_MAG_nodust= decals.get('decam_mag_nodust')[:,2]
         rz,gr,r_nodust,r_wdust={},{},{},{}
         for key,cut in zip(['loz','oiifaint','oiibright_loz','oiibright_hiz','med2hiz_oiibright'],\
                            [loz,oiifaint,oiibright_loz,oiibright_hiz,med2hiz_oiibright]):
             rz[key]= (R_MAG - Z_MAG)[cut]
             gr[key]= (G_MAG - R_MAG)[cut]
-            r_nodust[key]= R_MAG[cut]
-            r_wdust[key]= R_MAG_wdust[cut]
+            r_wdust[key]= R_MAG[cut]
+            r_nodust[key]= R_MAG_nodust[cut]
         return rz,gr,r_nodust,r_wdust
 
     def plot_FDR(self):
@@ -568,12 +601,17 @@ class ELG(CommonInit):
         cut= (np.isfinite(x))* (np.isfinite(y))* (np.isfinite(z))
         x,y,z= x[cut],y[cut],z[cut]
         labels=['r wdust','r-z','g-r']
-        kde= KernelOfTruth([x,y,z],labels,\
-                           [(20.5,25.),(0,2),(-0.5,1.5)],\
-                           bandwidth=0.05)
+        kde_obj= KernelOfTruth([x,y,z],labels,\
+                               [(20.5,25.),(0,2),(-0.5,1.5)],\
+                               bandwidth=0.05,
+                               kdefn=self.kdefn,loadkde=self.loadkde)
         xylims=dict(x1=(20.5,25.5),y1=(0,0.8),\
                     x2=xyrange['x_elg'],y2=xyrange['y_elg'])
-        kde.plot_1band_and_color(ndraws=1000,xylims=xylims,prefix='elg_')
+        kde_obj.plot_1band_and_color(ndraws=1000,xylims=xylims,prefix='elg_')
+        if self.savekde:
+            if os.path.exists(self.kdefn):
+                os.remove(self.kdefn)
+            kde_obj.save(name=self.kdefn)
 
 
 class LRG(CommonInit):
@@ -581,6 +619,8 @@ class LRG(CommonInit):
         super(LRG, self).__init__(**kwargs)
         self.zlimit= kwargs.get('zlimit',20.46)
         print('LRGs, self.zlimit= ',self.zlimit)
+        # KDE params
+        self.kdefn= 'lrg-kde.pickle'
     
     def get_lrgs_FDR_cuts(self):
         if self.DR == 2:
@@ -626,19 +666,20 @@ class LRG(CommonInit):
                                     spec.get('type') == 0,\
                                     spec.get('mod_gal') <= 8),axis=0)
         # return Mags
-        rz,rW1,r_nodust,r_wdust,z_nodust,z_wdust={},{},{},{},{},{}
+        rz,rW1,r_nodust,r_wdust,z_nodust,z_wdust,g_wdust={},{},{},{},{},{},{}
         for key in keys:
             cut= index[key]
-            rz[key]= decals.get('decam_mag_nodust')[:,2][cut] - decals.get('decam_mag_nodust')[:,4][cut]
-            rW1[key]= decals.get('decam_mag_nodust')[:,2][cut] - decals.get('wise_mag_nodust')[:,0][cut]
+            rz[key]= decals.get('decam_mag_wdust')[:,2][cut] - decals.get('decam_mag_wdust')[:,4][cut]
+            rW1[key]= decals.get('decam_mag_wdust')[:,2][cut] - decals.get('wise_mag_wdust')[:,0][cut]
             r_nodust[key]= decals.get('decam_mag_nodust')[:,2][cut]
             z_nodust[key]= decals.get('decam_mag_nodust')[:,4][cut]
             r_wdust[key]= decals.get('decam_mag_wdust')[:,2][cut]
             z_wdust[key]= decals.get('decam_mag_wdust')[:,4][cut]
-        return rz,rW1,r_nodust,r_wdust,z_nodust,z_wdust
+            g_wdust[key]= decals.get('decam_mag_wdust')[:,1][cut]
+        return rz,rW1,r_nodust,r_wdust,z_nodust,z_wdust,g_wdust
                                  
     def plot_FDR(self):
-        rz,rW1,r_nodust,r_wdust,z_nodust,z_wdust= self.get_lrgs_FDR_cuts()
+        rz,rW1,r_nodust,r_wdust,z_nodust,z_wdust,g_wdust= self.get_lrgs_FDR_cuts()
         fig,ax = plt.subplots()
         rgb_cols=get_rgb_cols()
         xrange,yrange= xyrange['x_lrg'],xyrange['y_lrg']
@@ -667,7 +708,7 @@ class LRG(CommonInit):
             print('Wrote {}'.format(name))
 
     def plot_FDR_multipanel(self):
-        rz,rW1,r_nodust,r_wdust,z_nodust,z_wdust= self.get_lrgs_FDR_cuts()
+        rz,rW1,r_nodust,r_wdust,z_nodust,z_wdust,g_wdust= self.get_lrgs_FDR_cuts()
         fig,ax = plt.subplots(1,4,sharex=True,sharey=True,figsize=(16,4))
         plt.subplots_adjust(wspace=0.1,hspace=0)
         rgb_cols=get_rgb_cols()
@@ -761,25 +802,35 @@ class LRG(CommonInit):
         #b= self.cuts['lrg')
         #color_color_plot(self.Xall[b,:],src='LRG') #,extra=True)
 
-    def plot_kde(self):
-        rz,rW1,r_nodust,r_wdust,z_nodust,z_wdust= self.get_lrgs_FDR_cuts()
+    def plot_kde(self,loadkde=False,savekde=False):
+        '''No Targeting cuts on g band, but need to fit it so can insert in grz image'''
+        rz,rW1,r_nodust,r_wdust,z_nodust,z_wdust,g_wdust= self.get_lrgs_FDR_cuts()
         x= z_wdust['red_galaxy']
         y= rz['red_galaxy']
         z= rW1['red_galaxy']
-        cut= (np.isfinite(x))* (np.isfinite(y))* (np.isfinite(z))
-        x,y,z= x[cut],y[cut],z[cut]
-        labels=['z wdust','r-z','r-W1']
-        kde= KernelOfTruth([x,y,z],labels,\
-                           [(17.,22.),(0,2.5),(-2,5.)],\
-                           bandwidth=0.05)
+        M= g_wdust['red_galaxy']
+        cut= (np.isfinite(x))* (np.isfinite(y))* (np.isfinite(z)* (np.isfinite(M)))
+        x,y,z,M= x[cut],y[cut],z[cut],M[cut]
+        labels=['z wdust','r-z','r-W1','g wdust']
+        kde_obj= KernelOfTruth([x,y,z,M],labels,\
+                           [(17.,22.),(0,2.5),(-2,5.),(17.,29)],\
+                           bandwidth=0.05,\
+                           kdefn=self.kdefn,loadkde=self.loadkde)
         xylims=dict(x1=(17.,22.),y1=(0,0.7),\
-                    x2=xyrange['x_lrg'],y2=xyrange['y_lrg'])
-        kde.plot_1band_and_color(ndraws=1000,xylims=xylims,prefix='lrg_')
+                    x2=xyrange['x_lrg'],y2=xyrange['y_lrg'],\
+                    x3=(17.,29),y3=(0,0.7))
+        kde_obj.plot_1band_and_color(ndraws=1000,xylims=xylims,prefix='lrg_')
+        if self.savekde:
+            if os.path.exists(self.kdefn):
+                os.remove(self.kdefn)
+            kde_obj.save(name=self.kdefn)
 
 
 class STAR(CommonInit):
     def __init__(self,**kwargs):
         super(STAR,self).__init__(**kwargs)
+        # KDE params
+        self.kdefn= 'star-kde.pickle'
     
     def get_sweepstars(self):
         '''Model the g-r, r-z color-color sequence for stars'''
@@ -841,24 +892,31 @@ class STAR(CommonInit):
         #plt.savefig('test.png')
         #plt.close()
 
-    def plot_kde(self):
+    def plot_kde(self,loadkde=False,savekde=False):
         stars= self.get_purestars()
         x=stars.get('decam_mag_wdust')[:,2]
         y=stars.get('decam_mag_nodust')[:,2]-stars.get('decam_mag_nodust')[:,4]
         z=stars.get('decam_mag_nodust')[:,1]-stars.get('decam_mag_nodust')[:,2]
         labels=['r wdust','r-z','g-r']
-        kde= KernelOfTruth([x,y,z],labels,\
+        kde_obj= KernelOfTruth([x,y,z],labels,\
                            [(15,24),(0,2),(0,1.5)],\
-                           bandwidth=0.05)
+                           bandwidth=0.05,\
+                           kdefn=self.kdefn,loadkde=self.loadkde)
         xylims=dict(x1=(15,24),y1=(0,0.3),\
                     x2=(-1,3.5),y2=(-0.5,2))
-        kde.plot_1band_and_color(ndraws=1000,xylims=xylims,prefix='star_')
+        kde_obj.plot_1band_and_color(ndraws=1000,xylims=xylims,prefix='star_')
+        if self.savekde:
+            if os.path.exists(self.kdefn):
+                os.remove(self.kdefn)
+            kde_obj.save(name=self.kdefn)
 
 class QSO(CommonInit):
     def __init__(self,**kwargs):
         super(QSO,self).__init__(**kwargs)
         self.rlimit= kwargs.get('rlimit',22.7)
         print('QSOs, self.rlimit= ',self.rlimit)
+        # KDE params
+        self.kdefn= 'qso-kde.pickle'
   
     def get_qsos(self):
         if self.DR == 2:        
@@ -954,7 +1012,7 @@ class QSO(CommonInit):
     def plot(self):
         self.plot_FDR()
 
-    def plot_kde(self):
+    def plot_kde(self,loadkde=False,savekde=False):
         qsos= self.get_qsos()
         x= qsos.get('decam_mag_wdust')[:,2]
         y= qsos.get('decam_mag_wdust')[:,2]-qsos.get('decam_mag_wdust')[:,4]
@@ -964,12 +1022,17 @@ class QSO(CommonInit):
              (np.isfinite(x))*(np.isfinite(y))*(np.isfinite(z))
         x,y,z= x[cut],y[cut],z[cut]
         labels=['r wdust','r-z','g-r']
-        kde= KernelOfTruth([x,y,z],labels,\
+        kde_obj= KernelOfTruth([x,y,z],labels,\
                            [(15.,24.),(-1.,1.5),(-1.,2.)],\
-                           bandwidth=0.05)
+                           bandwidth=0.05,\
+                           kdefn=self.kdefn,loadkde=self.loadkde)
         xylims=dict(x1=(15.,24),y1=(0,0.5),\
                     x2=xyrange['x1_qso'],y2=xyrange['y1_qso'])
-        kde.plot_1band_and_color(ndraws=1000,xylims=xylims,prefix='qso_')
+        kde_obj.plot_1band_and_color(ndraws=1000,xylims=xylims,prefix='qso_')
+        if self.savekde:
+            if os.path.exists(self.kdefn):
+                os.remove(self.kdefn)
+            kde_obj.save(name=self.kdefn)
 
 
 class GalaxyPrior(object):
@@ -988,14 +1051,14 @@ if __name__ == '__main__':
     #gals=GalaxyPrior()
     #gals.plot_all()
     #print "gals.__dict__= ",gals.__dict__
-    kwargs=dict(DR=2,savefig=False)
-    star=STAR(**kwargs)
-    star.plot_kde()
-    qso=QSO(**kwargs)
-    qso.plot_kde()
+    kwargs=dict(DR=2,savefig=False,loadkde=True,savekde=False)
+    #star=STAR(**kwargs)
+    #star.plot_kde()
+    #qso=QSO(**kwargs)
+    #qso.plot_kde()
     kwargs.update(dict(DR=3, rlimit=23.4+1.))
-    elg= ELG(**kwargs) 
-    elg.plot_kde()
+    #elg= ELG(**kwargs) 
+    #elg.plot_kde()
     kwargs.update(dict(zlimit=20.46+1.))
     lrg= LRG(**kwargs)
     lrg.plot_kde()

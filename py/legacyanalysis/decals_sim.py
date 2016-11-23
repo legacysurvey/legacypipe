@@ -389,11 +389,16 @@ def build_simcat(nobj=None, brickname=None, brickwcs=None, meta=None, seed=None,
 
     if meta['OBJTYPE'] == 'STAR':
         # Read the MoG file and sample from it.
-        mogfile = resource_filename('legacypipe', os.path.join('data', 'star_colors_mog.fits'))
-        mog = priors._GaussianMixtureModel.load(mogfile)
-        grzsample = mog.sample(nobj, random_state=rand)
-        rz = grzsample[:, 0]
-        gr = grzsample[:, 1]
+        #mogfile = resource_filename('legacypipe', os.path.join('data', 'star_colors_mog.fits'))
+        #mog = priors._GaussianMixtureModel.load(mogfile)
+        #grzsample = mog.sample(nobj, random_state=rand)
+        #rz = grzsample[:, 0]
+        #gr = grzsample[:, 1]
+        # KDE
+        kdefn = resource_filename('legacypipe', os.path.join('data', 'star_colors_mog.fits'))
+        #cat['RFLUX'] = 1E9*10**(-0.4*rmag)      # [nanomaggies]
+        #cat['GFLUX'] = 1E9*10**(-0.4*(rmag+gr)) # [nanomaggies]
+        #cat['ZFLUX'] = 1E9*10**(-0.4*(rmag-rz)) # [nanomaggies]
 
     elif meta['OBJTYPE'] == 'ELG':
         # Read the MoG file and sample from it.
@@ -423,12 +428,12 @@ def build_simcat(nobj=None, brickname=None, brickwcs=None, meta=None, seed=None,
         return 0
 
     # Store grz fluxes in nanomaggies.
-    rmag_range = np.squeeze(meta['RMAG_RANGE'])
-    rmag = rand.uniform(rmag_range[0], rmag_range[1], nobj)
+    #rmag_range = np.squeeze(meta['RMAG_RANGE'])
+    #rmag = rand.uniform(rmag_range[0], rmag_range[1], nobj)
 
-    cat['RFLUX'] = 1E9*10**(-0.4*rmag)      # [nanomaggies]
-    cat['GFLUX'] = 1E9*10**(-0.4*(rmag+gr)) # [nanomaggies]
-    cat['ZFLUX'] = 1E9*10**(-0.4*(rmag-rz)) # [nanomaggies]
+    #cat['RFLUX'] = 1E9*10**(-0.4*rmag)      # [nanomaggies]
+    #cat['GFLUX'] = 1E9*10**(-0.4*(rmag+gr)) # [nanomaggies]
+    #cat['ZFLUX'] = 1E9*10**(-0.4*(rmag-rz)) # [nanomaggies]
 
     return cat
 
