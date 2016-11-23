@@ -296,9 +296,10 @@ class Measurer(object):
         self.ha = self.primhdr['HA']
         #self.seeing = self.primhdr['SEEING']
 
-        if 'EXPNUM' in self.hdr: # temporary hack!
-            self.expnum = self.hdr['EXPNUM']
+        if 'EXPNUM' in self.primhdr: # temporary hack!
+            self.expnum = self.primhdr['EXPNUM']
         else:
+            print('WARNING! no EXPNUM in %s' % self.fn)
             self.expnum = np.int32(os.path.basename(self.fn)[11:17])
 
         self.ccdname = self.hdr['EXTNAME'].strip().upper()
