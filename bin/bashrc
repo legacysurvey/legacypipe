@@ -93,17 +93,19 @@ if [ "$NERSC_HOST" == "edison" ]; then
   PATH=${PATH}:${CODE_DIR}/qdo/bin
   PYP=${PYP}:${CODE_DIR}/qdo
 
-  # local astrometry.net install
-  PYP=${CODE_DIR}/astrometry_kaylanb/lib/python:${PYP}
-  PATH=${CODE_DIR}/astrometry_kaylanb/lib/python/astrometry/util:${PATH}
-  PATH=${CODE_DIR}/astrometry_kaylanb/lib/python/astrometry/blind:${PATH}
-
   # local Tractor install
   PYP=${PYP}:.:${CODE_DIR}/tractor
 
   export PYTHONPATH=${PYP}
   export PATH
   unset PYP
+
+
+  # local astrometry.net install
+  export PYTHONPATH=${CODE_DIR}/astrometry_kaylanb/lib/python:${PYTHONPATH}
+  export PATH=${CODE_DIR}/astrometry_kaylanb/lib/python/astrometry:${PATH}
+  #PATH=${CODE_DIR}/astrometry_kaylanb/lib/python/astrometry/util:${PATH}
+  #PATH=${CODE_DIR}/astrometry_kaylanb/lib/python/astrometry/blind:${PATH}
 
 fi
 
