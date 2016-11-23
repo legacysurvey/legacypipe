@@ -1,10 +1,12 @@
 ## ~/.bashrc file portion for 'desiproc' user @ NERSC.
 
+alias myjobs='squeue -u desiproc'
+
 export TMPDIR=$SCRATCH/tmp
 mkdir -p $TMPDIR
 
 # We copy our code to $SCRATCH for speed; see the update-scratch.sh script.
-export CODE_DIR=$SCRATCH/code
+export CODE_DIR=$SCRATCH/DRs/code/dr4
 
 # Use HPCPorts for packages
 source /project/projectdirs/cmb/modules/hpcports_NERSC.sh
@@ -12,19 +14,17 @@ source /project/projectdirs/cmb/modules/hpcports_NERSC.sh
 if [ "$NERSC_HOST" == "edison" ]; then
   hpcports shared_gnu
 
-  # dust
-  module use /project/projectdirs/desi/software/modules/${NERSC_HOST}
-
-  # unwise_coadds
+  # LegacySurvey modules
+  #module use /project/projectdirs/desi/software/modules/${NERSC_HOST}
   module use /project/projectdirs/cosmo/software/modules/${NERSC_HOST}
-
-  #
-  module use /project/projectdirs/cosmo/work/decam/modules
-  module load legacysurvey/dr3-edison-scratch
-  module load dust/scratch
   module load unwise_coadds/fulldepth-scratch
   module load unwise_coadds_timeresolved/neo1-edison-scratch
+  module use /project/projectdirs/cosmo/work/decam/modules
+  #module load legacysurvey/dr3-edison-scratch
+  module load legacysurvey/dr4-edison-scratch
+  module load dust/scratch
 
+  # NERSC modules
   #  module load tractor-hpcp
   module load astrometry_net-hpcp
   module load astropy-hpcp
@@ -94,12 +94,12 @@ if [ "$NERSC_HOST" == "edison" ]; then
   PYP=${PYP}:${CODE_DIR}/qdo
 
   # local astrometry.net install
-  #PYP=${PYP}:${CODE_DIR}/astrometry.net
-  #PATH=${PATH}:${CODE_DIR}/astrometry.net/util
-  #PATH=${PATH}:${CODE_DIR}/astrometry.net/blind
+  PYP=${CODE_DIR}/astrometry_kaylanb/lib/python:${PYP}
+  PATH=${CODE_DIR}/astrometry_kaylanb/lib/python/astrometry/util:${PATH}
+  PATH=${CODE_DIR}/astrometry_kaylanb/lib/python/astrometry/blind:${PATH}
 
   # local Tractor install
-  PYP=${PYP}:${CODE_DIR}/tractor
+  PYP=${PYP}:.:${CODE_DIR}/tractor
 
   export PYTHONPATH=${PYP}
   export PATH
