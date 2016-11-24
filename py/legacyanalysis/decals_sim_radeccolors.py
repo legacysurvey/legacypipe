@@ -172,6 +172,16 @@ def draw_points(radec,ndraws=1,seed=1,outdir='./'):
         T.set(key,arr)
     T.set('seed',np.zeros(ndraws).astype(int)+seed)
     T.writeto(get_fn)
+
+def merge_draws(outdir='./'):
+    '''merges all fits tables created by draw_points()'''
+    fns=glob.glob(os.path.join(outdir,"sample_*.fits"))
+    if not len(fns) > 0: raise ValueError('no fns found')
+    from theValidator.catalogues import CatalogueFuncs
+    T= CatalogueFuncs().stack(fns,textfile=False)
+    name=os.path.join(outdir,'sample_merged.fits')
+    T.writeto(name)
+    print('wrote %s' % name)
        
 
 if __name__ == "__main__":
@@ -210,7 +220,16 @@ if __name__ == "__main__":
             print('skipping, exists: %s' % get_fn(args.outdir,seed))
             cnt+=1
             seed= comm.rank+ comm.size*cnt
-        draw_points(radec,ndraws=args.Nper, seed=seed,outdir=args.outdir)
+        draw_points(radec,ndraws=args.Nper, seed=seed,outdir=args.outdiri)
+        # Gather
+        all_cats = comm.gather( cats, root=0 )
+        if comm.rank == 0:
+            all_cats= merge_tables(all_cats, columns='fillzero')
+            if os.path.exists(opt.outname):
+                os.remove(opt.outname)
+            all_cats.writeto(opt.outname)
+            print('Wrote %s' % opt.outname)
+            print("Done")
         #images_split= np.array_split(images, comm.size)
         # HACK, not sure if need to wait for all proc to finish 
         #confirm_files = comm.gather( images_split[comm.rank], root=0 )
