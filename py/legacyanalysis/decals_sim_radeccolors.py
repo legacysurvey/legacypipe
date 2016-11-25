@@ -14,6 +14,7 @@ import sys
 import pickle
 
 from astrometry.util.fits import fits_table, merge_tables
+from theValidator.catalogues import CatalogueFuncs
 
 ######## 
 ## Ted's
@@ -162,14 +163,25 @@ def get_fn(outdir,seed):
     return os.path.join(outdir,'sample_%d.fits' % seed)        
                     
 def draw_points(radec,ndraws=1,seed=1,outdir='./'):
+	'''writes ra,dec,grz qso,lrg,elg,star to fits file
+	for given seed'''
     random_state= np.random.RandomState(seed)
     ra,dec= get_radec(radec,ndraws=ndraws,random_state=random_state)
-    kde_obj= KDEColors(objtype='star')
-    g,r,z= kde_obj.get_colors(ndraws=ndraws,random_state=random_state)
+	mags={}
+	for typ in ['star','lrg','elg','qso']:
+		kde_obj= KDEColors(objtype=typ)
+		mags['%s_g'%typ],mags['%s_r'%typ],mags['%s_z'%typ]= \
+					kde_obj.get_colors(ndraws=ndraws,random_state=random_state)
     T=fits_table()
-    for key,arr in zip(['ra','dec','g','r','z'],\
-                       [ra,dec,g,r,z]):
-        T.set(key,arr)
+	T.set('ra',ra)
+	T.set('dec',dec)
+    for key in mags.keys():
+        T.set(key,mags[key])
+	# Galaxy Properties
+	T.set('sersicn', random_state.uniform(0.5,0.5, ndraws))
+	T.set('rhalf', rand.uniform(0.5,0.5, ndraws)) #arcsec
+	T.set('ba', rand.uniform(0.2,1.0, ndraws)) #minor to major axis ratio
+	T.set('phi', rand.uniform(0.0, 180.0, ndraws)) #position angle
     T.set('seed',np.zeros(ndraws).astype(int)+seed)
     T.writeto(get_fn)
 
@@ -177,9 +189,13 @@ def merge_draws(outdir='./'):
     '''merges all fits tables created by draw_points()'''
     fns=glob.glob(os.path.join(outdir,"sample_*.fits"))
     if not len(fns) > 0: raise ValueError('no fns found')
-    from theValidator.catalogues import CatalogueFuncs
     T= CatalogueFuncs().stack(fns,textfile=False)
+	# Add unique id column
+	T.set('id',np.arange(len(T))+1)
+	# Save
     name=os.path.join(outdir,'sample_merged.fits')
+	if os.path.exists(name):
+		os.remove(name)
     T.writeto(name)
     print('wrote %s' % name)
        
@@ -193,7 +209,7 @@ if __name__ == "__main__":
     parser.add_argument('--ra2',type=float,action='store',help='bigbox',required=True)
     parser.add_argument('--dec1',type=float,action='store',help='bigbox',required=True)
     parser.add_argument('--dec2',type=float,action='store',help='bigbox',required=True)
-    parser.add_argument('--Nper',type=int,action='store',help='number of draws per mpi task',required=True)
+    parser.add_argument('--ndraws',type=int,action='store',help='number of draws for all mpi tasks',required=True)
     parser.add_argument('--jobid',action='store',help='slurm jobid',default='001',required=False)
     parser.add_argument('--prefix', type=str, default='', help='Prefix to prepend to the output files.')
     parser.add_argument('--outdir', type=str, default='./legacy_zpt_outdir', help='Output directory.')
@@ -205,9 +221,13 @@ if __name__ == "__main__":
     radec['ra2']=args.ra2
     radec['dec1']=args.dec1
     radec['dec2']=args.dec2
- 
-    if args.nproc > 1:
+
+	# Draws per mpi task
+	if args.nproc > 1
         from mpi4py.MPI import COMM_WORLD as comm
+		nper= int(args.ndraws/float(comm.size))
+	else: 
+		nper= args.ndraws
     t0=ptime('parse-args',t0)
 
     if args.nproc > 1:
@@ -220,16 +240,12 @@ if __name__ == "__main__":
             print('skipping, exists: %s' % get_fn(args.outdir,seed))
             cnt+=1
             seed= comm.rank+ comm.size*cnt
-        draw_points(radec,ndraws=args.Nper, seed=seed,outdir=args.outdiri)
+        draw_points(radec,ndraws=nper, seed=seed,outdir=args.outdiri)
         # Gather
-        all_cats = comm.gather( cats, root=0 )
+		junk=[comm.rank]
+        junks = comm.gather(junk, root=0 )
         if comm.rank == 0:
-            all_cats= merge_tables(all_cats, columns='fillzero')
-            if os.path.exists(opt.outname):
-                os.remove(opt.outname)
-            all_cats.writeto(opt.outname)
-            print('Wrote %s' % opt.outname)
-            print("Done")
+            merge_draws(outdir=args.outdir)
         #images_split= np.array_split(images, comm.size)
         # HACK, not sure if need to wait for all proc to finish 
         #confirm_files = comm.gather( images_split[comm.rank], root=0 )
@@ -249,7 +265,9 @@ if __name__ == "__main__":
             cnt+=1
             seed= cnt
         print('working on: %s' % get_fn(args.outdir,seed))
-        draw_points(radec,ndraws=args.Nper, seed=seed,outdir=args.outdir)
+        draw_points(radec,ndraws=nper, seed=seed,outdir=args.outdir)
+		# Gather equivalent
+		merge_draws(outdir=args.outdir)
         ## Create the file
         #t0=ptime('b4-run',t0)
         #runit(image_fn, measureargs,\

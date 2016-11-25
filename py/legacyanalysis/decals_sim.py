@@ -68,6 +68,9 @@ from legacypipe.decam import DecamImage
 from legacypipe.common import LegacySurveyData, wcs_for_brick, ccds_touching_wcs
 import legacyanalysis.decals_sim_priors as priors
 
+from astrometry.util.fits import fits_table, merge_tables
+from theValidator.catalogues import CatalogueFuncs
+
 class SimDecals(LegacySurveyData):
     def __init__(self, survey_dir=None, metacat=None, simcat=None, output_dir=None,\
                        add_sim_noise=False, folding_threshold=1.e-5, image_eq_model=False):
@@ -324,23 +327,21 @@ class BuildStamp():
         return stamp
 
 
-def no_overlapping_radec(ra,dec, bounds, random_state=None, dist=5.0/3600):
-    '''resamples ra,dec where they are within dist of each other 
-    ra,dec -- numpy arrays [degrees]
-    bounds-- list of [ramin,ramax,decmin,decmax]
-    random_state-- np.random.RandomState() object
-    dist-- separation in degrees, 
-           sqrt(x^2+y^2) where x=(dec2-dec1), y=cos(avg(dec2,dec1))*(ra2-ra1)
+#def no_overlapping_radec(ra,dec, bounds, random_state=None, dist=5.0/3600):
+def no_overlapping_radec(Samp, dist=5./3600):
+    '''Samp -- table containing id,ra,dec,colors
+	returns bool indices to cut so not overlapping
     '''
     log = logging.getLogger('decals_sim')
-    if random_state is None:
-        random_state = np.random.RandomState()
+	ra,dec= Samp.get('ra'),Samp.get('dec')
+    #if random_state is None:
+    #    random_state = np.random.RandomState()
     # ra,dec indices of just neighbors within "dist" away, just nerest neighbor of those
     cat1 = SkyCoord(ra=ra*units.degree, dec=dec*units.degree)
     cat2 = SkyCoord(ra=ra*units.degree, dec=dec*units.degree)
-    m2, d2d, d3d = cat1.match_to_catalog_sky(cat2,nthneighbor=2) # don't match to self
-    b= np.array(d2d) <= dist
-    m2= np.array(m2)[b]
+    i2, d2d, d3d = cat1.match_to_catalog_sky(cat2,nthneighbor=2) # don't match to self
+    # Cut to large separations
+	return np.array(d2d) > dist 
 
     cnt = 1
     #log.info("astrom: after iter=%d, have overlapping ra,dec %d/%d", cnt, len(m2),ra.shape[0])
@@ -362,70 +363,81 @@ def no_overlapping_radec(ra,dec, bounds, random_state=None, dist=5.0/3600):
             raise ValueError
     return ra, dec
 
-def build_simcat(nobj=None, brickname=None, brickwcs=None, meta=None, seed=None, noOverlap=True):
+#def build_simcat(nobj=None, brickname=None, brickwcs=None, meta=None, seed=None, noOverlap=True):
+def build_simcat(Samp, meta=None):
     """Build the simulated object catalog, which depends on OBJTYPE."""
     log = logging.getLogger('decals_sim')
 
-    rand = np.random.RandomState(seed)
+    #rand = np.random.RandomState(seed)
 
     # Assign central coordinates uniformly but remove simulated sources which
     # are too near to one another.  Iterate until we have the requisite number
     # of objects.
-    bounds = brickwcs.radec_bounds()
-    ra = rand.uniform(bounds[0], bounds[1], nobj)
-    dec = rand.uniform(bounds[2], bounds[3], nobj)
-    if noOverlap:
-        ra, dec= no_overlapping_radec(ra,dec, bounds,
-                                      random_state=rand,
-                                      dist=5./3600)
-    xxyy = brickwcs.radec2pixelxy(ra, dec)
+    #bounds = brickwcs.radec_bounds()
+    #ra = rand.uniform(bounds[0], bounds[1], nobj)
+    #dec = rand.uniform(bounds[2], bounds[3], nobj)
+    #if noOverlap:
+        #ra, dec= no_overlapping_radec(ra,dec, bounds,
+        #                              random_state=rand,
+        #                              dist=5./3600)
+    # Cut to ra,dec that are sufficiently separated (> 5'' away from each other)
+    I= no_overlapping_radec(Samp,dist=5./3600)
+	skipping_ids= Samp.get('id')[I == False]
+	Samp.cut(I)
+    
+	xxyy = brickwcs.radec2pixelxy(Samp.ra,Samp.dec)
 
     cat = Table()
-    cat['ID'] = Column(np.arange(nobj, dtype='i4'))
-    cat['RA'] = Column(ra, dtype='f8')
-    cat['DEC'] = Column(dec, dtype='f8')
+    cat['ID'] = Column(Samp.get('id'),dtype='i4') #np.arange(nobj, dtype='i4'))
+    cat['RA'] = Column(Samp.ra, dtype='f8')
+    cat['DEC'] = Column(Samp.dec, dtype='f8')
     cat['X'] = Column(xxyy[1][:], dtype='f4')
     cat['Y'] = Column(xxyy[2][:], dtype='f4')
 
-    if meta['OBJTYPE'] == 'STAR':
-        # Read the MoG file and sample from it.
-        #mogfile = resource_filename('legacypipe', os.path.join('data', 'star_colors_mog.fits'))
-        #mog = priors._GaussianMixtureModel.load(mogfile)
-        #grzsample = mog.sample(nobj, random_state=rand)
-        #rz = grzsample[:, 0]
-        #gr = grzsample[:, 1]
-        # KDE
-        kdefn = resource_filename('legacypipe', os.path.join('data', 'star_colors_mog.fits'))
-        #cat['RFLUX'] = 1E9*10**(-0.4*rmag)      # [nanomaggies]
-        #cat['GFLUX'] = 1E9*10**(-0.4*(rmag+gr)) # [nanomaggies]
-        #cat['ZFLUX'] = 1E9*10**(-0.4*(rmag-rz)) # [nanomaggies]
+	typ=meta['OBJTYPE'].lower()
+	# Mags
+	cat['GFLUX'] = 1E9*10**(-0.4*Samp.get('%s_g' % typ)) # [nanomaggies]
+	cat['RFLUX'] = 1E9*10**(-0.4*Samp.get('%s_r' % typ)) # [nanomaggies]
+	cat['ZFLUX'] = 1E9*10**(-0.4*Samp.get('%s_z' % typ)) # [nanomaggies]
+	# Galaxy Properties
+    if meta['OBJTYPE'] in ['ELG','LRG']:
+		cat['SERSICN_1'] = Column(Samp.sersicn, dtype='f4')
+		cat['R50_1'] = Column(Samp.rhalf, dtype='f4')
+		cat['BA_1'] = Column(Samp.ba, dtype='f4')
+		cat['PHI_1'] = Column(Samp.phi, dtype='f4')
+    #if meta['OBJTYPE']  'STAR':
+	#	pass
+    #    # Read the MoG file and sample from it.
+    #    #mogfile = resource_filename('legacypipe', os.path.join('data', 'star_colors_mog.fits'))
+    #    #mog = priors._GaussianMixtureModel.load(mogfile)
+    #    #grzsample = mog.sample(nobj, random_state=rand)
+    #    #rz = grzsample[:, 0]
+    #    #gr = grzsample[:, 1]
+    #elif meta['OBJTYPE'] in ['ELG','LRG']:
+	#	cat['SERSICN_1'] = Column(Samp.sersicn, dtype='f4')
+	#	cat['R50_1'] = Column(Samp.rhalf, dtype='f4')
+	#	cat['BA_1'] = Column(Samp.ba, dtype='f4')
+	#	cat['PHI_1'] = Column(Samp.phi, dtype='f4')
+    #    # Read the MoG file and sample from it.
+    #    #mogfile = resource_filename('legacypipe', os.path.join('data', 'elg_colors_mog.fits'))
+    #    #mog = priors._GaussianMixtureModel.load(mogfile)
+    #    #grzsample = mog.sample(nobj, random_state=rand)
+    #    ## Samples
+    #    #rz = grzsample[:, 0]
+    #    #gr = grzsample[:, 1]
+    #    #sersicn_1 = rand.uniform(0.5,0.5, len(Samp))
+    #    #r50_1 = rand.uniform(0.5,0.5, len(Samp))
+    #    #ba_1 = rand.uniform(0.2,1.0, len(Samp)) #minor to major axis ratio
+    #    #phi_1 = rand.uniform(0.0, 180.0, len(Samp)) #position angle
 
-    elif meta['OBJTYPE'] == 'ELG':
-        # Read the MoG file and sample from it.
-        mogfile = resource_filename('legacypipe', os.path.join('data', 'elg_colors_mog.fits'))
-        mog = priors._GaussianMixtureModel.load(mogfile)
-        grzsample = mog.sample(nobj, random_state=rand)
-        # Samples
-        rz = grzsample[:, 0]
-        gr = grzsample[:, 1]
-        sersicn_1 = rand.uniform(0.5,0.5, nobj)
-        r50_1 = rand.uniform(0.5,0.5, nobj)
-        ba_1 = rand.uniform(0.2,1.0, nobj) #minor to major axis ratio
-        phi_1 = rand.uniform(0.0, 180.0, nobj) #position angle
+    #    ## Bulge parameters
+    #    #bulge_r50_range = [0.1,1.0]
+    #    #bulge_n_range = [3.0,5.0]
+    #    #bdratio_range = [0.0,1.0] # bulge-to-disk ratio
 
-        cat['SERSICN_1'] = Column(sersicn_1, dtype='f4')
-        cat['R50_1'] = Column(r50_1, dtype='f4')
-        cat['BA_1'] = Column(ba_1, dtype='f4')
-        cat['PHI_1'] = Column(phi_1, dtype='f4')
-
-        ## Bulge parameters
-        #bulge_r50_range = [0.1,1.0]
-        #bulge_n_range = [3.0,5.0]
-        #bdratio_range = [0.0,1.0] # bulge-to-disk ratio
-
-    else:
-        log.error('Unrecognized OBJTYPE!')
-        return 0
+    #else:
+    #    log.error('Unrecognized OBJTYPE!')
+    #    return 0
 
     # Store grz fluxes in nanomaggies.
     #rmag_range = np.squeeze(meta['RMAG_RANGE'])
@@ -435,7 +447,7 @@ def build_simcat(nobj=None, brickname=None, brickwcs=None, meta=None, seed=None,
     #cat['GFLUX'] = 1E9*10**(-0.4*(rmag+gr)) # [nanomaggies]
     #cat['ZFLUX'] = 1E9*10**(-0.4*(rmag-rz)) # [nanomaggies]
 
-    return cat
+    return cat, skipping_ids
 
 
 
@@ -445,26 +457,27 @@ def get_parser():
     parser = argparse.ArgumentParser(formatter_class=argparse.
                                      ArgumentDefaultsHelpFormatter,
                                      description='DECaLS simulations.')
-    parser.add_argument('-n', '--nobj', type=long, default=500, metavar='', 
-                        help='number of objects to simulate (required input)')
-    parser.add_argument('-ic', '--ith_chunk', type=long, default=None, metavar='', 
-                        help='run the ith chunk, 0-999')
-    parser.add_argument('-c', '--nchunk', type=long, default=1, metavar='', 
-                        help='run chunks 0 to nchunk')
+    parser.add_argument('-o', '--objtype', type=str, choices=['STAR','ELG', 'LRG', 'QSO', 'LSB'], default='STAR', metavar='', help='insert these into images') 
     parser.add_argument('-b', '--brick', type=str, default='2428p117', metavar='', 
                         help='simulate objects in this brick')
-    parser.add_argument('-o', '--objtype', type=str, choices=['STAR','ELG', 'LRG', 'QSO', 'LSB'], default='STAR', metavar='', 
-                        help='insert these into images') 
+    parser.add_argument('-rs', '--rowstart', type=int, default=0, metavar='', 
+                        help='zero indexed, row of ra,dec,mags table, after it is cut to brick, to start on')
+    parser.add_argument('-n', '--nobj', type=long, default=500, metavar='', 
+                        help='number of objects to simulate (required input)')
+    #parser.add_argument('-ic', '--ith_chunk', type=long, default=None, metavar='', 
+    #                    help='run the ith chunk, 0-999')
+    parser.add_argument('-c', '--nchunk', type=long, default=1, metavar='', 
+                        help='run chunks 0 to nchunk')
     parser.add_argument('-t', '--threads', type=int, default=1, metavar='', 
                         help='number of threads to use when calling The Tractor')
-    parser.add_argument('-s', '--seed', type=long, default=None, metavar='', 
-                        help='random number seed, determines chunk seeds 0-999')
+    #parser.add_argument('-s', '--seed', type=long, default=None, metavar='', 
+    #                    help='random number seed, determines chunk seeds 0-999')
     parser.add_argument('-z', '--zoom', nargs=4, default=(0, 3600, 0, 3600), type=int, metavar='', 
                         help='see runbrick.py; (default is 0 3600 0 3600)')
     parser.add_argument('-survey-dir', '--survey_dir', metavar='', 
                         help='Location of survey-ccds*.fits.gz')
-    parser.add_argument('--rmag-range', nargs=2, type=float, default=(18, 26), metavar='', 
-                        help='r-band magnitude range')
+    #parser.add_argument('--rmag-range', nargs=2, type=float, default=(18, 26), metavar='', 
+    #                    help='r-band magnitude range')
     parser.add_argument('--add_sim_noise', action="store_true", help="set to add noise to simulated sources")
     parser.add_argument('--folding_threshold', type=float,default=1.e-5,action="store", help="for galsim.GSParams")
     parser.add_argument('-testA','--image_eq_model', action="store_true", help="set to set image,inverr by model only (ignore real image,invvar)")
@@ -499,10 +512,10 @@ def create_metadata(kwargs=None):
     metacat['NOBJ'] = kwargs['args'].nobj
     metacat['NCHUNK'] = kwargs['nchunk']
     metacat['ZOOM'] = kwargs['args'].zoom
-    metacat['RMAG_RANGE'] = kwargs['args'].rmag_range
-    if not kwargs['args'].seed:
-        log.info('Random seed = {}'.format(kwargs['args'].seed))
-        metacat['SEED'] = kwargs['args'].seed
+    #metacat['RMAG_RANGE'] = kwargs['args'].rmag_range
+    #if not kwargs['args'].seed:
+    #    log.info('Random seed = {}'.format(kwargs['args'].seed))
+    #    metacat['SEED'] = kwargs['args'].seed
    
     metacat_dir = os.path.join(kwargs['decals_sim_dir'], kwargs['brickname'], kwargs['lobjtype'])    
     if not os.path.exists(metacat_dir): 
@@ -519,25 +532,36 @@ def create_metadata(kwargs=None):
     kwargs['metacat_dir']=metacat_dir
 
 
-def create_ith_simcat(ith_chunk, d=None):
+def create_ith_simcat(rowstart,rowend, d=None):
     '''add simcat, simcat_dir to dict d
     simcat -- contains randomized ra,dec and PDF fluxes etc for ith chunk
     d -- dict returned by get_metadata_others()'''
     assert(d is not None)
     log = logging.getLogger('decals_sim')
-    chunksuffix = '{:02d}'.format(ith_chunk)
+    #chunksuffix = '{:02d}'.format(ith_chunk)
     # Build and write out the simulated object catalog.
-    seed= d['seeds'][ith_chunk]
-    simcat = build_simcat(d['nobj'], d['brickname'], d['brickwcs'], d['metacat'], seed)
-    # Save file
-    simcat_dir = os.path.join(d['metacat_dir'],'%3.3d' % ith_chunk)    
+    #seed= d['seeds'][ith_chunk]
+    #simcat = build_simcat(d['nobj'], d['brickname'], d['brickwcs'], d['metacat'], seed)
+    simcat, skipped_ids = build_simcat(Samp)
+    # Simcat 
+    simcat_dir = os.path.join(d['metacat_dir'],'row%d-%d' % (rowstart,rowend)) #'%3.3d' % ith_chunk)    
     if not os.path.exists(simcat_dir): 
         os.makedirs(simcat_dir)
-    simcatfile = os.path.join(simcat_dir, 'simcat-{}-{}-{}.fits'.format(d['brickname'], d['lobjtype'], chunksuffix))
-    log.info('Writing {}'.format(simcatfile))
+    simcatfile = os.path.join(simcat_dir, 'simcat-{}-{}-row{}-{}.fits'.format(d['brickname'], d['lobjtype'],rowstart,rowend)) # chunksuffix))
     if os.path.isfile(simcatfile):
         os.remove(simcatfile)
     simcat.write(simcatfile)
+    log.info('Wrote {}'.format(simcatfile))
+	# Skipped Ids
+	if len(skipped_ids) > 0:
+		skip_table= fits_table()
+		skip_table.set('ids',skipped_ids)
+		name= os.path.join(simcat_dir,'skippedids-row%d-%d.fits' % (rowstart,rowend))
+		if os.path.exists(name):
+			os.remove(name)
+			log.info('Removed %s' % name)
+		skip_table.writeto(name)
+		log.info('Wrote {}'.format(name))
     # add to dict
     d['simcat']= simcat
     d['simcat_dir']= simcat_dir
@@ -601,11 +625,11 @@ def main(args=None):
     log = logging.getLogger('decals_sim')
     # Sort through args 
     log.info('decals_sim.py args={}'.format(args))
-    max_nobj=500
-    max_nchunk=1000
-    if args.ith_chunk is not None: assert(args.ith_chunk <= max_nchunk-1)
-    assert(args.nchunk <= max_nchunk)
-    assert(args.nobj <= max_nobj)
+    #max_nobj=500
+    #max_nchunk=1000
+    #if args.ith_chunk is not None: assert(args.ith_chunk <= max_nchunk-1)
+    #assert(args.nchunk <= max_nchunk)
+    #assert(args.nobj <= max_nobj)
     if args.ith_chunk is not None: 
         assert(args.nchunk == 1) #if choose a chunk, only doing 1 chunk
     if args.nobj is None:
@@ -616,7 +640,7 @@ def main(args=None):
     objtype = args.objtype.upper()
     lobjtype = objtype.lower()
 
-    for obj in ('LRG', 'LSB', 'QSO'):
+    for obj in ('LSB'):
         if objtype == obj:
             log.warning('{} objtype not yet supported!'.format(objtype))
             return 0
@@ -629,8 +653,8 @@ def main(args=None):
         
     nobj = args.nobj
     nchunk = args.nchunk
-    rand = np.random.RandomState(args.seed) # determines seed for all chunks
-    seeds = rand.random_integers(0,2**18, max_nchunk)
+    #rand = np.random.RandomState(args.seed) # determines seed for all chunks
+    #seeds = rand.random_integers(0,2**18, max_nchunk)
 
     log.info('Object type = {}'.format(objtype))
     log.info('Number of objects = {}'.format(nobj))
@@ -657,13 +681,22 @@ def main(args=None):
     log.info('Brick = {}'.format(brickname))
     
     if args.ith_chunk is not None: 
-        chunk_list= [args.ith_chunk]
+        #chunk_list= [args.ith_chunk]
+        chunk_list= [ (args.rowstart-1)/args.nobj ]
     else: 
         chunk_list= range(nchunk)
 
+	# Ra,dec,mag table
+	Samp= fits_table('sample_merged.fits')
+	# Cut on brick and rows to use 
+	Samp.cut( inbrick )
+	rowst,rowend= args.rowstart,args.rowstart+args.nobj
+	Samp= Samp[args.rowstart:args.rowstart+args.nobj]
+	assert(len(Samp) <= args.nobj)
+
     # Store args in dict for easy func passing
-    kwargs=dict(seeds=seeds,\
-                brickname=brickname, \
+    kwargs=dict(Samp=Samp,\
+				brickname=brickname, \
                 decals_sim_dir= decals_sim_dir,\
                 brickwcs= brickwcs, \
                 objtype=objtype,\
