@@ -99,14 +99,14 @@ class SimImage(DecamImage):
         if tim is None: # this can be None when the edge of a CCD overlaps
             return tim
 
-        # Initialize the object stamp class
+        # Seed
         #if 'SEED' in self.survey.metacat.columns:
         #    seed = self.survey.metacat['SEED']
         #else:
         #    seed = None
 
         objtype = self.survey.metacat.get('objtype')[0]
-        objstamp = BuildStamp(tim, gain=self.t.arawgain, seed=seed, \
+        objstamp = BuildStamp(tim, gain=self.t.arawgain, \
                               folding_threshold=self.survey.folding_threshold)
 
         # Grab the data and inverse variance images [nanomaggies!]
@@ -171,9 +171,9 @@ class SimImage(DecamImage):
         return tim
 
 class BuildStamp():
-    def __init__(self,tim, gain=4.0, seed=None, folding_threshold=1.e-5):
+    def __init__(self,tim, gain=4.0, folding_threshold=1.e-5):
         """Initialize the BuildStamp object with the CCD-level properties we need."""
-        self.band = tim.band.strip().upper()
+        self.band = tim.band.strip()
         # GSParams should be used when galsim object is initialized
         self.gsparams = galsim.GSParams(maximum_fft_size=2L**30L,\
                                         folding_threshold=folding_threshold) 
@@ -205,7 +205,7 @@ class BuildStamp():
     def setlocal(self,obj):
         """Get the pixel positions, local wcs, local PSF.""" 
 
-        xx, yy = self.wcs.positionToPixel(RaDecPos(obj['RA'], obj['DEC']))
+        xx, yy = self.wcs.positionToPixel(RaDecPos(obj.get('ra'), obj.get('dec')))
         self.pos = galsim.PositionD(xx, yy)
         self.xpos = int(self.pos.x)
         self.ypos = int(self.pos.y)
@@ -244,6 +244,11 @@ class BuildStamp():
         objvar.setOrigin(galsim.PositionI(stamp.xmin, stamp.ymin))
 
         # Add Poisson noise
+        raise ValueError('need pass seed from survey.simcat.get("seed") for the given row/object,\
+                         The seed was originally passed to galsim.gsdeviate in BuildStamp\
+                         but the seed should be per object since that is how the ra,dec table is built\
+                         Alternatively could make the seed something else, like the row number of this run...\
+                         so same for all objects')
         stamp.addNoise(galsim.VariableGaussianNoise( # pass the random seed
             self.gsdeviate, objvar))
         varstamp += objvar
@@ -290,7 +295,7 @@ class BuildStamp():
         apy_table = photutils.aperture_photometry(stamp.array, apers)
         apflux= np.array(apy_table['aperture_sum'])[0]
         # Incrase flux so input flux contained in aperture
-        flux = obj[self.band+'FLUX']*(2.-apflux/stamp.added_flux) # [nanomaggies]
+        flux = obj.get(self.band+'flux')*(2.-apflux/stamp.added_flux) # [nanomaggies]
         psf = self.localpsf.withFlux(flux)
         stamp = psf.drawImage(offset=self.offset, wcs=self.localwcs, method='no_pixel')
         # stamp looses less than 0.01% of requested flux
@@ -310,10 +315,10 @@ class BuildStamp():
         """Create an ELG (disk-like) galaxy."""
         # Create localpsf object
         self.setlocal(objinfo)
-        objflux = objinfo[self.band+'flux'] # [nanomaggies]
-        obj = galsim.Sersic(float(objinfo['sersicn']), half_light_radius=float(objinfo['rhalf']),\
+        objflux = obj.get(self.band+'flux') # [nanomaggies]
+        obj = galsim.Sersic(float(objinfo.get('sersicn')), half_light_radius=float(objinfo.get('rhalf')),\
                             flux=objflux, gsparams=self.gsparams)
-        obj = obj.shear(q=float(objinfo['ba']), beta=float(objinfo['phi'])*galsim.degrees)
+        obj = obj.shear(q=float(objinfo.get('ba')), beta=float(objinfo.get('phi'))*galsim.degrees)
         stamp = self.convolve_and_draw(obj)
         return stamp
 
@@ -384,7 +389,7 @@ def build_simcat(Samp=None,brickwcs=None, meta=None):
     #cat['X'] = Column(xxyy[1][:], dtype='f4')
     #cat['Y'] = Column(xxyy[2][:], dtype='f4')
     cat = fits_table()
-    for key in ['id','ra','dec']:
+    for key in ['id','seed','ra','dec']:
         cat.set(key, Samp.get(key))
     cat.set('x', xxyy[1][:])
     cat.set('y', xxyy[2][:])
