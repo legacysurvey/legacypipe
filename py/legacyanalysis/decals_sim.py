@@ -575,7 +575,7 @@ def do_one_chunk(d=None):
         blobxy = zip(d['simcat'].get('x'), d['simcat'].get('y'))
 
     run_brick(d['brickname'], simdecals, threads=d['args'].threads, zoom=d['args'].zoom,
-              wise=False, forceAll=True, writePickles=False, do_calibs=False,
+              wise=False, forceAll=True, writePickles=False, do_calibs=True,
               write_metrics=False, pixPsf=True, blobxy=blobxy, early_coadds=d['args'].early_coadds,
               splinesky=True, ceres=False, stages=[ d['args'].stage ], plots=False,
               plotbase='sim')
