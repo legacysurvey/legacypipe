@@ -694,9 +694,10 @@ class Measurer(object):
             colorterm = np.zeros(nmatch)
         else:
             colorterm = self.colorterm_ps1_to_observed(ps1.median[m2, :], self.band)
-        from legacyanalysis.ps1cat import ps1_to_mosaic,ps1_to_decam
-        stars['mzls_colorterm']= ps1_to_mosaic(ps1.median[m2, :], self.band)
-        stars['decam_colorterm']= ps1_to_decam(ps1.median[m2, :], self.band)
+        #from legacyanalysis.ps1cat import ps1_to_mosaic,ps1_to_decam
+        #stars['mzls_colorterm']= ps1_to_mosaic(ps1.median[m2, :], self.band)
+        #stars['decam_colorterm']= ps1_to_decam(ps1.median[m2, :], self.band)
+        
         # Compute the astrometric residuals relative to PS1.
         #radiff = (stars['ra'] - stars['ps1_ra']) * np.cos(np.deg2rad(ccddec)) * 3600.0
         #decdiff = (stars['dec'] - stars['ps1_dec']) * 3600.0
@@ -727,9 +728,9 @@ class Measurer(object):
         # Get the photometric offset relative to PS1 as the observed PS1
         # magnitude minus the observed / measured magnitude.
 
-        #stars['ps1_mag'] += colorterm
+        stars['ps1_mag'] += colorterm
         #stars['ps1_mag'] += stars['decam_colorterm'] #KJB
-        stars['ps1_mag'] += stars['mzls_colorterm'] 
+        #stars['ps1_mag'] += stars['mzls_colorterm'] 
         #plt.scatter(stars['ps1_gicolor'], stars['apmag']-stars['ps1_mag']) ; plt.show()
         
         # APMAG computed using zp0, which is 2.5log10(1.8) larger for John compared to Arjun
@@ -789,7 +790,8 @@ class Measurer(object):
         return ccds, stars
     
 class DecamMeasurer(Measurer):
-    '''Class to measure a variety of quantities from a single DECam CCD.'''
+    '''Class to measure a variety of quantities from a single DECam CCD.
+    UNITS: ADU/s'''
     def __init__(self, *args, **kwargs):
         super(DecamMeasurer, self).__init__(*args, **kwargs)
 
@@ -826,7 +828,8 @@ class DecamMeasurer(Measurer):
         return img, hdr
 
 class Mosaic3Measurer(Measurer):
-    '''Class to measure a variety of quantities from a single Mosaic3 CCD.'''
+    '''Class to measure a variety of quantities from a single Mosaic3 CCD.
+    UNITS: e-/s'''
     def __init__(self, *args, **kwargs):
         super(Mosaic3Measurer, self).__init__(*args, **kwargs)
 
@@ -836,7 +839,7 @@ class Mosaic3Measurer(Measurer):
         self.ra_bore = hmsstring2ra(self.primhdr['TELRA'])
         self.dec_bore = dmsstring2dec(self.primhdr['TELDEC'])
         #self.gain = self.hdr['GAIN'] # hack! average gain
-        self.gain = 1.8 #Mosstat
+        self.gain = 1.8 #Average raw, see mosstat
 
         print('Hack! Using an average Mosaic3 zeropoint!!')
         #corr = 2.5 * np.log10(self.gain) 
@@ -869,10 +872,12 @@ class Mosaic3Measurer(Measurer):
         return mask
 
 class NinetyPrimeMeasurer(Measurer):
-    '''Class to measure a variety of quantities from a single 90prime CCD.'''
+    '''Class to measure a variety of quantities from a single 90prime CCD.
+    UNITS -- CP e-/s'''
     def __init__(self, *args, **kwargs):
         super(NinetyPrimeMeasurer, self).__init__(*args, **kwargs)
         
+        self.pixscale=0.455 #KJB, fixed
         self.camera = '90prime'
         self.ra_bore = hmsstring2ra(self.primhdr['RA'])
         self.dec_bore = dmsstring2dec(self.primhdr['DEC'])
@@ -882,12 +887,14 @@ class NinetyPrimeMeasurer(Measurer):
         # information should be scraped from the headers, plus we're ignoring
         # the gain variations across amplifiers (on a given CCD).
         gaindict = dict(ccd1 = 1.47, ccd2 = 1.48, ccd3 = 1.42, ccd4 = 1.4275)
-        self.gain = gaindict[self.ccdname.lower()]
+        #self.gain = gaindict[self.ccdname.lower()]
+        self.gain = 1.3 #KJB, average raw see bokstat
 
         # Nominal zeropoints, sky brightness, and extinction values (taken from
         # rapala.ninetyprime.boketc.py).  The sky and zeropoints are both in
         # ADU, so account for the gain here.
-        corr = 2.5 * np.log10(self.gain)
+        #corr = 2.5 * np.log10(self.gain)
+        corr=0.
         self.zp0 = dict(g = 25.55 + corr, r = 25.38 + corr)
         self.sky0 = dict(g = 22.10 + corr, r = 21.07 + corr)
         self.k_ext = dict(g = 0.17, r = 0.10)
