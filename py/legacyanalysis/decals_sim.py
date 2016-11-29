@@ -72,6 +72,15 @@ import legacyanalysis.decals_sim_priors as priors
 from astrometry.util.fits import fits_table, merge_tables
 from theValidator.catalogues import CatalogueFuncs
 
+def get_savedir(**kwargs):
+    return os.path.join(kwargs['decals_sim_dir'],kwargs['objtype'],\
+                        kwargs['brickname'][:3], kwargs['brickname'],\
+                        "rows%d-%d" % (kwargs['rowst'],kwargs['rowend']))    
+
+def get_fnsuffix(**kwargs):
+    return '-{}-{}-{}.fits'.format(kwargs['objtype'], kwargs['brickname'],\
+                                   'rows%d-%d' % (kwargs['rowst'],kwargs['rowend']))
+
 class SimDecals(LegacySurveyData):
     def __init__(self, survey_dir=None, metacat=None, simcat=None, output_dir=None,\
                        add_sim_noise=False, folding_threshold=1.e-5, image_eq_model=False):
@@ -516,11 +525,12 @@ def create_metadata(kwargs=None):
     #    log.info('Random seed = {}'.format(kwargs['args'].seed))
     #    metacat['SEED'] = kwargs['args'].seed
    
-    metacat_dir = os.path.join(kwargs['decals_sim_dir'], kwargs['brickname'], kwargs['objtype'])    
+    #metacat_dir = os.path.join(kwargs['decals_sim_dir'], kwargs['objtype'],kwargs['brickname'][:3],kwargs['brickname'])    
+    metacat_dir = get_savedir(**kwargs)
     if not os.path.exists(metacat_dir): 
         os.makedirs(metacat_dir)
     
-    metafile = os.path.join(metacat_dir, 'metacat-{}-{}.fits'.format(kwargs['brickname'], kwargs['objtype']))
+    metafile = os.path.join(metacat_dir, 'metacat'+get_fnsuffix(**kwargs))
     log.info('Writing {}'.format(metafile))
     if os.path.isfile(metafile):
         os.remove(metafile)
@@ -531,7 +541,7 @@ def create_metadata(kwargs=None):
     kwargs['metacat_dir']=metacat_dir
 
 
-def create_ith_simcat(rowstart,rowend, d=None):
+def create_ith_simcat(d=None):
     '''add simcat, simcat_dir to dict d
     simcat -- contains randomized ra,dec and PDF fluxes etc for ith chunk
     d -- dict returned by get_metadata_others()'''
@@ -543,10 +553,11 @@ def create_ith_simcat(rowstart,rowend, d=None):
     #simcat = build_simcat(d['nobj'], d['brickname'], d['brickwcs'], d['metacat'], seed)
     simcat, skipped_ids = build_simcat(Samp=d['Samp'],brickwcs=d['brickwcs'],meta=d['metacat'])
     # Simcat 
-    simcat_dir = os.path.join(d['metacat_dir'],'row%d-%d' % (rowstart,rowend)) #'%3.3d' % ith_chunk)    
+    simcat_dir = get_savedir(**d) #os.path.join(d['metacat_dir'],'row%d-%d' % (rowstart,rowend)) #'%3.3d' % ith_chunk)    
     if not os.path.exists(simcat_dir): 
         os.makedirs(simcat_dir)
-    simcatfile = os.path.join(simcat_dir, 'simcat-{}-{}-row{}-{}.fits'.format(d['brickname'], d['objtype'],rowstart,rowend)) # chunksuffix))
+    #simcatfile = os.path.join(simcat_dir, 'simcat-{}-{}-row{}-{}.fits'.format(d['brickname'], d['objtype'],rowstart,rowend)) # chunksuffix))
+    simcatfile = os.path.join(simcat_dir, 'simcat'+get_fnsuffix(**d))
     if os.path.isfile(simcatfile):
         os.remove(simcatfile)
     simcat.writeto(simcatfile)
@@ -555,7 +566,7 @@ def create_ith_simcat(rowstart,rowend, d=None):
     if len(skipped_ids) > 0:
         skip_table= fits_table()
         skip_table.set('ids',skipped_ids)
-        name= os.path.join(simcat_dir,'skippedids-row%d-%d.fits' % (rowstart,rowend))
+        name= os.path.join(simcat_dir,'skippedids'+get_fnsuffix(**d))
         if os.path.exists(name):
             os.remove(name)
             log.info('Removed %s' % name)
@@ -585,28 +596,25 @@ def do_one_chunk(d=None):
               splinesky=True, ceres=False, stages=[ d['args'].stage ], plots=False,
               plotbase='sim')
 
-def do_ith_cleanup(ith_chunk=None, d=None):
+def do_ith_cleanup(d=None):
     '''for each chunk that finishes running, 
     Remove unecessary files and give unique names to all others
     d -- dict returned by get_metadata_others() AND added to by get_ith_simcat()'''
     assert(ith_chunk is not None and d is not None) 
     log = logging.getLogger('decals_sim')
     log.info('Cleaning up...')
-    chunksuffix = '{:02d}'.format(ith_chunk)
     brickname= d['brickname']
     output_dir= d['simcat_dir']
     shutil.copy(os.path.join(output_dir, 'tractor', brickname[:3],
                              'tractor-{}.fits'.format(brickname)),
-                os.path.join(output_dir, 'tractor-{}-{}-{}.fits'.format(
-                    brickname, objtype, chunksuffix)))
+                os.path.join(output_dir, 'tractor'+get_fnsuffix(**d)))
     for suffix in ('image', 'model', 'resid', 'simscoadd'):
         shutil.copy(os.path.join(output_dir,'coadd', brickname[:3], brickname,
                                  'legacysurvey-{}-{}.jpg'.format(brickname, suffix)),
-                                 os.path.join(output_dir, 'qa-{}-{}-{}-{}.jpg'.format(
-                                     brickname, objtype, suffix, chunksuffix)))
+                    os.path.join(output_dir, 'qa-'+suffix+ get_fnsuffix(**d)))
     shutil.rmtree(os.path.join(output_dir, 'coadd'))
     shutil.rmtree(os.path.join(output_dir, 'tractor'))
-    log.info("Finished chunk %3.3d" % ith_chunk)
+    log.info("Finished %s" % get_savedir(**d))
 
 
 def main(args=None):
@@ -705,7 +713,9 @@ def main(args=None):
                 objtype=objtype,\
                 nobj=nobj,\
                 nchunk=nchunk,\
-                args=args) 
+                rowst=rowst,\
+                rowend=rowend,\
+                args=args)
 
     # Create simulated catalogues and run Tractor
     create_metadata(kwargs=kwargs)
@@ -713,11 +723,11 @@ def main(args=None):
     for ith_chunk in chunk_list:
         log.info('Working on chunk {:02d}/{:02d}'.format(ith_chunk,kwargs['nchunk']-1))
         # Random ra,dec and source properties
-        create_ith_simcat(rowst,rowend, d=kwargs)
+        create_ith_simcat(d=kwargs)
         # Run tractor
         do_one_chunk(d=kwargs)
         # Clean up output
-        do_ith_cleanup(ith_chunk=ith_chunk, d=kwargs)
+        do_ith_cleanup(d=kwargs)
     log.info('All done!')
      
 if __name__ == '__main__':
