@@ -58,6 +58,7 @@ import matplotlib.pyplot as plt
 import sys
 
 from astrometry.util.fits import fits_table, merge_tables
+from astrometry.util.util import wcs_pv2sip_hdr
 
 ######## 
 ## Ted's
@@ -230,7 +231,7 @@ def _stars_table(nstars=1):
     cols = [('expid', 'S16'), ('filter', 'S1'), ('amplifier', 'i2'), ('x', 'f4'), ('y', 'f4'),
             ('ra', 'f8'), ('dec', 'f8'), ('fwhm', 'f4'), ('apmag', 'f4'),
             ('gaia_ra', 'f8'), ('gaia_dec', 'f8'), ('ps1_mag', 'f4'), ('ps1_gicolor', 'f4'),
-            ('mzls_colorterm','f4'),('decam_colorterm','f4')]
+            ('mzls_colorterm','f4'),('decam_colorterm','f4'),('90prime_colorterm','f4')]
             #('ps1_ra', 'f8'), ('ps1_dec', 'f8'), ('ps1_mag', 'f4'), ('ps1_gicolor', 'f4')]
     stars = Table(np.zeros(nstars, dtype=cols))
 
@@ -264,7 +265,6 @@ class Measurer(object):
         Sky annulus radius in arcsec
 
         '''
-        from astrometry.util.util import wcs_pv2sip_hdr
         
         self.fn = fn
         self.ext = ext
@@ -308,12 +308,12 @@ class Measurer(object):
         #self.image_hdu = np.int(self.ccdnum)
 
         self.expid = '{:08d}-{}'.format(self.expnum, self.ccdname)
-        self.band = self.get_band()
+        #self.band = self.get_band()
 
         self.object = self.primhdr['OBJECT']
 
-        self.wcs = wcs_pv2sip_hdr(self.hdr) # PV distortion
-        self.pixscale = self.wcs.pixel_scale()
+        self.wcs = self.get_wcs()
+        #self.pixscale = self.wcs.pixel_scale()
 
         # Eventually we would like FWHM to not come from SExtractor.
         #self.fwhm = 2.35 * self.primhdr['SEEING'] / self.pixscale  # [FWHM, pixels]
@@ -575,29 +575,39 @@ class Measurer(object):
         bit_ap = CircularAperture((obj['xcentroid'], obj['ycentroid']), 5.)
         bit_phot = aperture_photometry(bitmask, bit_ap)
         bit_flux = bit_phot['aperture_sum'] 
-        # Stars within 10'' of each other? KJB
+        # Stars within 13'' of each other
         minsep = 13. #arcsec, equivalent to: np.around(10./self.pixscale+3./self.pixscale) #see mosstat
         objra, objdec = self.wcs.pixelxy2radec(obj['xcentroid']+1, obj['ycentroid']+1)
         b_isolated= self.isolated_radec(objra,objdec,nn=2,minsep=minsep/3600.)
         # Compute ap mags
         apmags= - 2.5 * np.log10(apflux.data) + zp0 + 2.5 * np.log10(exptime)
-        
         t0= ptime('aperture-photometry',t0)
 
         # Good stars from Mosstat.pro, ignoring aperature errors
         minsep_px = minsep/self.pixscale
-        istar = np.where((apflux > 0)*\
-                         (bit_flux == 0)*\
-                         (b_isolated == True)*\
-                         (apmags > 12.)*\
-                         (apmags < 30.)*\
-                         (obj['xcentroid'] > minsep_px)*\
-                         (obj['xcentroid'] < img.shape[0]-minsep_px)*\
-                         (obj['ycentroid'] > minsep_px)*\
-                         (obj['ycentroid'] < img.shape[1]-minsep_px))[0] #KJB
+        if self.camera == '90prime':
+            #(b_isolated == True)*\
+            istar = np.where((apflux > 0)*\
+                             (bit_flux == 0)*\
+                             (apmags > 12.)*\
+                             (apmags < 30.)*\
+                             (obj['xcentroid'] > minsep_px)*\
+                             (obj['xcentroid'] < img.shape[0]-minsep_px)*\
+                             (obj['ycentroid'] > minsep_px)*\
+                             (obj['ycentroid'] < img.shape[1]-minsep_px))[0] #KJB
+        else:
+            istar = np.where((apflux > 0)*\
+                             (bit_flux == 0)*\
+                             (b_isolated == True)*\
+                             (apmags > 12.)*\
+                             (apmags < 30.)*\
+                             (obj['xcentroid'] > minsep_px)*\
+                             (obj['xcentroid'] < img.shape[0]-minsep_px)*\
+                             (obj['ycentroid'] > minsep_px)*\
+                             (obj['ycentroid'] < img.shape[1]-minsep_px))[0] #KJB
 
         if len(istar) == 0:
-            print('All stars have negative aperture photometry AND/OR contain masked pixels!')
+            print('FAIL: All stars have negative aperture photometry AND/OR contain masked pixels!')
             return ccds, _stars_table()
         obj = obj[istar]
         objra, objdec = self.wcs.pixelxy2radec(obj['xcentroid']+1, obj['ycentroid']+1)
@@ -694,9 +704,10 @@ class Measurer(object):
             colorterm = np.zeros(nmatch)
         else:
             colorterm = self.colorterm_ps1_to_observed(ps1.median[m2, :], self.band)
-        #from legacyanalysis.ps1cat import ps1_to_mosaic,ps1_to_decam
+        from legacyanalysis.ps1cat import ps1_to_mosaic,ps1_to_decam,ps1_to_90prime
         #stars['mzls_colorterm']= ps1_to_mosaic(ps1.median[m2, :], self.band)
-        #stars['decam_colorterm']= ps1_to_decam(ps1.median[m2, :], self.band)
+        stars['decam_colorterm']= ps1_to_decam(ps1.median[m2, :], self.band)
+        stars['90prime_colorterm']= ps1_to_90prime(ps1.median[m2, :], self.band)
         
         # Compute the astrometric residuals relative to PS1.
         #radiff = (stars['ra'] - stars['ps1_ra']) * np.cos(np.deg2rad(ccddec)) * 3600.0
@@ -795,8 +806,10 @@ class DecamMeasurer(Measurer):
     def __init__(self, *args, **kwargs):
         super(DecamMeasurer, self).__init__(*args, **kwargs)
 
+        self.pixscale=0.262 #fixed
         self.camera = 'decam'
         self.ut = self.primhdr['TIME-OBS']
+        self.band = self.get_band()
         self.ra_bore = hmsstring2ra(self.primhdr['TELRA'])
         self.dec_bore = dmsstring2dec(self.primhdr['TELDEC'])
         self.gain = self.hdr['ARAWGAIN'] # hack! average gain [electron/sec]
@@ -826,6 +839,9 @@ class DecamMeasurer(Measurer):
         img *= self.gain
         #img *= self.gain / self.exptime
         return img, hdr
+     
+    def get_wcs(self):
+        return wcs_pv2sip_hdr(self.hdr) # PV distortion
 
 class Mosaic3Measurer(Measurer):
     '''Class to measure a variety of quantities from a single Mosaic3 CCD.
@@ -835,6 +851,7 @@ class Mosaic3Measurer(Measurer):
 
         self.pixscale=0.260 #KJB, see mosstat.pro
         self.camera = 'mosaic3'
+        self.band= self.get_band()
         self.ut = self.primhdr['TIME-OBS']
         self.ra_bore = hmsstring2ra(self.primhdr['TELRA'])
         self.dec_bore = dmsstring2dec(self.primhdr['TELDEC'])
@@ -870,6 +887,9 @@ class Mosaic3Measurer(Measurer):
         fn= self.fn.replace('ooi','ood')
         mask, junk = fitsio.read(fn, ext=self.ext, header=True)
         return mask
+    
+    def get_wcs(self):
+        return wcs_pv2sip_hdr(self.hdr) # PV distortion
 
 class NinetyPrimeMeasurer(Measurer):
     '''Class to measure a variety of quantities from a single 90prime CCD.
@@ -879,6 +899,7 @@ class NinetyPrimeMeasurer(Measurer):
         
         self.pixscale=0.455 #KJB, fixed
         self.camera = '90prime'
+        self.band= self.get_band()
         self.ra_bore = hmsstring2ra(self.primhdr['RA'])
         self.dec_bore = dmsstring2dec(self.primhdr['DEC'])
         self.ut = self.primhdr['UT']
@@ -902,8 +923,7 @@ class NinetyPrimeMeasurer(Measurer):
     def get_band(self):
         band = self.primhdr['FILTER']
         band = band.split()[0]
-        band.replace('bokr', 'r')
-        return band
+        return band.replace('bokr', 'r')
 
     def colorterm_ps1_to_observed(self, ps1stars, band):
         from legacyanalysis.ps1cat import ps1_to_90prime
@@ -923,6 +943,13 @@ class NinetyPrimeMeasurer(Measurer):
         mask, junk = fitsio.read(fn, ext=self.ext, header=True)
         return mask
   
+    def get_wcs(self):
+        # Bok_CP WCS coeffs are unusuable, use TAN for now
+        self.hdr['CTYPE1'] = 'RA---TAN'
+        self.hdr['CTYPE2'] = 'DEC--TAN'
+        return wcs_pv2sip_hdr(self.hdr)
+
+
 def camera_name(primhdr):
     '''
     Returns 'mosaic3', 'decam', or '90prime'
