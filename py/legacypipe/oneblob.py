@@ -687,7 +687,7 @@ class OneBlob(object):
                         modtims.append(tim)
                         mm.append(d)
 
-                print('Mod selection: after second-round opt:', newsrc)
+                #print('Mod selection: after second-round opt:', newsrc)
 
                 if modtims is not None:
                     modtractor = self.tractor(modtims, [newsrc])
@@ -733,10 +733,10 @@ class OneBlob(object):
                 B.all_models[srci][name] = newsrc.copy()
                 assert(B.all_models[srci][name].numberOfParams() == nsrcparams)
 
-                print('Model', name)
-                for nm,p,piv in zip(newsrc.getParamNames(), newsrc.getParams(),
-                                    ivars):
-                    print('  S/N of', nm, '=', p * np.sqrt(piv))
+                # print('Model', name)
+                # for nm,p,piv in zip(newsrc.getParamNames(), newsrc.getParams(),
+                #                     ivars):
+                #     print('  S/N of', nm, '=', p * np.sqrt(piv))
                 
                 # Now revert the ellipses!
                 if isinstance(newsrc, (DevGalaxy, ExpGalaxy)):
