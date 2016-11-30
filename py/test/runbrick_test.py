@@ -10,7 +10,7 @@ if __name__ == '__main__':
 
     travis = 'travis' in sys.argv
 
-    # Test RexGalaxy
+    # demo RexGalaxy, with plots
     if False:
         from legacypipe.survey import RexGalaxy
         from tractor import RaDecPos, NanoMaggies, PixPos
@@ -61,8 +61,6 @@ if __name__ == '__main__':
     print('Types:', T.type)
     assert(T.type[0] == 'REX ')
     
-    sys.exit(0)
-        
     # Test with a Tycho-2 star in the blob.
 
     surveydir = os.path.join(os.path.dirname(__file__), 'testcase6')
