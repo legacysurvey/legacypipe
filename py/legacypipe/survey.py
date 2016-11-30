@@ -47,6 +47,53 @@ class LegacyEllipseWithPriors(EllipseWithPriors):
 from tractor.galaxy import ExpGalaxy
 from tractor.ellipses import EllipseE
 
+class LogRadius(EllipseESoft):
+    ''' Class used during fitting of the RexGalaxy type -- an ellipse
+    type where only the radius is variable, and is represented in log
+    space.'''
+    def __init__(self, *args, **kwargs):
+        super(LogRadius, self).__init__(*args, **kwargs)
+        self.lowers = [None]
+        self.uppers = [None]
+
+    @staticmethod
+    def getName():
+        return 'LogRadius'
+
+    @staticmethod
+    def getNamedParams():
+        # log r: log of effective radius in arcsec
+        return dict(logre=0)
+
+    def __repr__(self):
+        return 'log r_e=%g' % (self.logre)
+
+    @property
+    def theta(self):
+        return 0.
+
+    @property
+    def e(self):
+        return 0.
+
+class RexGalaxy(ExpGalaxy):
+    '''This defines the 'REX' galaxy profile -- an exponential profile
+    that is round (zero ellipticity) with variable radius.
+    It is used to measure marginally-resolved galaxies.
+
+    The real action (what makes it a Rex) happens when it is constructed,
+    via, eg,
+
+        rex = RexGalaxy(position, brightness, LogRadius(0.))
+
+    (which happens in oneblob.py)
+    '''
+    def __init__(self, *args):
+        super(RexGalaxy, self).__init__(*args)
+
+    def getName(self):
+        return 'RexGalaxy'
+
 class SimpleGalaxy(ExpGalaxy):
     '''This defines the 'SIMP' galaxy profile -- an exponential profile
     with a fixed shape of a 0.45 arcsec effective radius and spherical

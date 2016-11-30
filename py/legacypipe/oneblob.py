@@ -14,6 +14,7 @@ from tractor.galaxy import DevGalaxy, ExpGalaxy, FixedCompositeGalaxy, SoftenedF
 from tractor.patch import ModelMask
 
 from legacypipe.survey import (SimpleGalaxy, LegacyEllipseWithPriors, 
+                               RexGalaxy,
                                get_rgb)
 from legacypipe.runbrick import rgbkwargs_resid
 from legacypipe.coadds import quick_coadds
@@ -28,7 +29,7 @@ def one_blob(X):
     if X is None:
         return None
     (nblob, iblob, Isrcs, brickwcs, bx0, by0, blobw, blobh, blobmask, timargs,
-     srcs, bands, plots, ps, simul_opt, use_ceres, hastycho) = X
+     srcs, bands, plots, ps, simul_opt, use_ceres, hastycho, rex) = X
 
     print('Fitting blob number', nblob, 'val', iblob, ':', len(Isrcs),
           'sources, size', blobw, 'x', blobh, len(timargs), 'images')
@@ -62,7 +63,7 @@ def one_blob(X):
     B.blob_nimages= np.zeros(len(B), np.int16) + len(timargs)
     
     ob = OneBlob('%i'%iblob, blobwcs, blobmask, timargs, srcs, bands,
-                 plots, ps, simul_opt, use_ceres, hastycho)
+                 plots, ps, simul_opt, use_ceres, hastycho, rex)
     ob.run(B)
 
     B.blob_totalpix = np.zeros(len(B), np.int32) + ob.total_pix
@@ -89,8 +90,9 @@ def one_blob(X):
 
 class OneBlob(object):
     def __init__(self, name, blobwcs, blobmask, timargs, srcs, bands,
-                 plots, ps, simul_opt, use_ceres, hastycho):
+                 plots, ps, simul_opt, use_ceres, hastycho, rex):
         self.name = name
+        self.rex = rex
         self.blobwcs = blobwcs
         self.blobmask = blobmask
         self.srcs = srcs
@@ -300,7 +302,8 @@ class OneBlob(object):
         #     #print('Simultaneous fit took:', Time()-tfit)
 
         # Compute variances on all parameters for the kept model
-        B.srcinvvars = [[] for i in range(len(B))]
+        #B.srcinvvars = [[] for i in range(len(B))]
+        B.srcinvvars = [None for i in range(len(B))]
         cat.thawAllRecursive()
         cat.freezeAllParams()
         for isub in range(len(B.sources)):
@@ -310,24 +313,14 @@ class OneBlob(object):
                 cat.freezeParam(isub)
                 continue
             # Convert to "vanilla" ellipse parameterization
-            if isinstance(src, (DevGalaxy, ExpGalaxy)):
-                src.shape = src.shape.toEllipseE()
-            elif isinstance(src, FixedCompositeGalaxy):
-                src.shapeExp = src.shapeExp.toEllipseE()
-                src.shapeDev = src.shapeDev.toEllipseE()
-                src.fracDev = FracDev(src.fracDev.clipped())
-    
+            nsrcparams = src.numberOfParams()
+            _convert_ellipses(src)
+            assert(src.numberOfParams() == nsrcparams)
+            # Compute inverse-variances
             allderivs = tr.getDerivs()
-            for iparam,derivs in enumerate(allderivs):
-                chisq = 0
-                for deriv,tim in derivs:
-                    h,w = tim.shape
-                    deriv.clipTo(w,h)
-                    ie = tim.getInvError()
-                    slc = deriv.getSlice(ie)
-                    chi = deriv.patch * ie[slc]
-                    chisq += (chi**2).sum()
-                B.srcinvvars[isub].append(chisq)
+            ivars = _compute_invvars(allderivs)
+            assert(len(ivars) == nsrcparams)
+            B.srcinvvars[isub] = ivars
             assert(len(B.srcinvvars[isub]) == cat[isub].numberOfParams())
             cat.freezeParam(isub)
 
@@ -509,7 +502,7 @@ class OneBlob(object):
             srccat[0] = None
             chisqs_none = _per_band_chisqs(srctractor, self.bands)
     
-            nparams = dict(ptsrc=2, simple=2, exp=5, dev=5, comp=9)
+            nparams = dict(ptsrc=2, simple=2, rex=3, exp=5, dev=5, comp=9)
             # This is our "upgrade" threshold: how much better a galaxy
             # fit has to be versus ptsrc, and comp versus galaxy.
             galaxy_margin = 3.**2 + (nparams['exp'] - nparams['ptsrc'])
@@ -518,9 +511,15 @@ class OneBlob(object):
             # larger is a better fit.
             chisqs = dict(none=0)
     
-            oldmodel, ptsrc, simple, dev, exp, comp = _initialize_models(src)
+            oldmodel, ptsrc, simple, dev, exp, comp = _initialize_models(
+                src, self.rex)
     
-            trymodels = [('ptsrc', ptsrc), ('simple', simple)]
+            if self.rex:
+                simname = 'rex'
+                rex = simple
+            else:
+                simname = 'simple'
+            trymodels = [('ptsrc', ptsrc), (simname, simple)]
     
             if oldmodel == 'ptsrc':
                 # Try galaxy models if simple > ptsrc, or if bright.
@@ -544,7 +543,7 @@ class OneBlob(object):
                 if name == 'gals':
                     # If 'simple' was better than 'ptsrc', or the source is
                     # bright, try the galaxy models.
-                    if ((chisqs['simple'] > chisqs['ptsrc']) or
+                    if ((chisqs[simname] > chisqs['ptsrc']) or
                         (chisqs['ptsrc'] > 400)):
                         if self.hastycho:
                             print('Not computing galaxy models: Tycho-2 star'
@@ -687,7 +686,9 @@ class OneBlob(object):
                         d[newsrc] = ModelMask(mod.x0, mod.y0, mw, mh)
                         modtims.append(tim)
                         mm.append(d)
-    
+
+                print('Mod selection: after second-round opt:', newsrc)
+
                 if modtims is not None:
                     modtractor = self.tractor(modtims, [newsrc])
                     modtractor.setModelMasks(mm)
@@ -709,22 +710,39 @@ class OneBlob(object):
                     # Tycho-2 star; set modtractor = srctractor for the ivars
                     srctractor.setModelMasks(newsrc_mm)
                     modtractor = srctractor
-    
+
                 # Compute inverse-variances for each source.
+                # Convert to "vanilla" ellipse parameterization
+                # (but save old shapes first)
+                # we do this (rather than making a copy) because we want to
+                # use the same modelMask maps.
+                if isinstance(newsrc, (DevGalaxy, ExpGalaxy)):
+                    oldshape = newsrc.shape
+                elif isinstance(newsrc, FixedCompositeGalaxy):
+                    oldshape = (newsrc.shapeExp, newsrc.shapeDev,newsrc.fracDev)
+
+                nsrcparams = newsrc.numberOfParams()
+                _convert_ellipses(newsrc)
+                assert(newsrc.numberOfParams() == nsrcparams)
+                # Compute inverse-variances
                 # This uses the second-round modelMasks.
                 allderivs = modtractor.getDerivs()
-                ivs = np.zeros(newsrc.numberOfParams(), np.float32)
-                for iparam,derivs in enumerate(allderivs):
-                    chisq = 0
-                    for deriv,tim in derivs:
-                        h,w = tim.shape
-                        deriv.clipTo(w,h)
-                        ie = tim.getInvError()
-                        slc = deriv.getSlice(ie)
-                        chi = deriv.patch * ie[slc]
-                        chisq += (chi**2).sum()
-                    ivs[iparam] = chisq
-                B.all_model_ivs[srci][name] = ivs
+                ivars = _compute_invvars(allderivs)
+                assert(len(ivars) == nsrcparams)
+                B.all_model_ivs[srci][name] = np.array(ivars).astype(np.float32)
+                B.all_models[srci][name] = newsrc.copy()
+                assert(B.all_models[srci][name].numberOfParams() == nsrcparams)
+
+                print('Model', name)
+                for nm,p,piv in zip(newsrc.getParamNames(), newsrc.getParams(),
+                                    ivars):
+                    print('  S/N of', nm, '=', p * np.sqrt(piv))
+                
+                # Now revert the ellipses!
+                if isinstance(newsrc, (DevGalaxy, ExpGalaxy)):
+                    newsrc.shape = oldshape
+                elif isinstance(newsrc, FixedCompositeGalaxy):
+                    (newsrc.shapeExp, newsrc.shapeDev,newsrc.fracDev) = oldshape
 
                 # Use the original 'srctractor' here so that the different
                 # models are evaluated on the same pixels.
@@ -733,7 +751,6 @@ class OneBlob(object):
                 srctractor.setModelMasks(newsrc_mm)
                 ch = _per_band_chisqs(srctractor, self.bands)
                 chisqs[name] = _chisq_improvement(newsrc, ch, chisqs_none)
-                B.all_models[srci][name] = newsrc.copy()
                 B.all_model_flags[srci][name] = thisflags
                 cpum1 = time.clock()
                 B.all_model_cpu[srci][name] = cpum1 - cpum0
@@ -742,10 +759,10 @@ class OneBlob(object):
             # Actually select which model to keep.  This "modnames"
             # array determines the order of the elements in the DCHISQ
             # column of the catalog.
-            modnames = ['ptsrc', 'simple', 'dev', 'exp', 'comp']
-            keepmod = _select_model(chisqs, nparams, galaxy_margin)
-            keepsrc = dict(none=None, ptsrc=ptsrc, simple=simple,
-                           dev=dev, exp=exp, comp=comp)[keepmod]
+            modnames = ['ptsrc', simname, 'dev', 'exp', 'comp']
+            keepmod = _select_model(chisqs, nparams, galaxy_margin, self.rex)
+            keepsrc = {'none':None, 'ptsrc':ptsrc, simname:simple,
+                       'dev':dev, 'exp':exp, 'comp':comp}[keepmod]
     
             # This is the model-selection plot
             if self.plots:
@@ -753,7 +770,7 @@ class OneBlob(object):
                 plt.clf()
                 rows,cols = 2, 6
                 mods = OrderedDict([
-                    ('none',None), ('ptsrc',ptsrc), ('simple',simple),
+                    ('none',None), ('ptsrc',ptsrc), (simname,simple),
                     ('dev',dev), ('exp',exp), ('comp',comp)])
                 for imod,modname in enumerate(mods.keys()):
                     if modname != 'none' and not modname in chisqs:
@@ -1216,6 +1233,32 @@ class OneBlob(object):
     #print('Blob variances:', Time()-tlast)
     #tlast = Time()
 
+def _convert_ellipses(src):
+    if isinstance(src, (DevGalaxy, ExpGalaxy)):
+        #print('Converting ellipse for source', src)
+        src.shape = src.shape.toEllipseE()
+        #print('--->', src.shape)
+        if isinstance(src, RexGalaxy):
+            src.shape.freezeParams('e1', 'e2')
+    elif isinstance(src, FixedCompositeGalaxy):
+        src.shapeExp = src.shapeExp.toEllipseE()
+        src.shapeDev = src.shapeDev.toEllipseE()
+        src.fracDev = FracDev(src.fracDev.clipped())
+
+def _compute_invvars(allderivs):
+    ivs = []
+    for iparam,derivs in enumerate(allderivs):
+        chisq = 0
+        for deriv,tim in derivs:
+            h,w = tim.shape
+            deriv.clipTo(w,h)
+            ie = tim.getInvError()
+            slc = deriv.getSlice(ie)
+            chi = deriv.patch * ie[slc]
+            chisq += (chi**2).sum()
+        ivs.append(chisq)
+    return ivs
+    
 def _argsort_by_brightness(cat, bands):
     fluxes = []
     for src in cat:
@@ -1357,10 +1400,16 @@ def _compute_source_metrics(srcs, tims, bands, tr):
     return dict(fracin=fracin, fracflux=fracflux, rchi2=rchi2,
                 fracmasked=fracmasked)
 
-def _initialize_models(src):
+def _initialize_models(src, rex):
     if isinstance(src, PointSource):
         ptsrc = src.copy()
-        simple = SimpleGalaxy(src.getPosition(), src.getBrightness()).copy()
+        if rex:
+            from legacypipe.survey import LogRadius
+            simple = RexGalaxy(src.getPosition(), src.getBrightness(),
+                               LogRadius(-1.)).copy()
+            #print('Created Rex:', simple)
+        else:
+            simple = SimpleGalaxy(src.getPosition(), src.getBrightness()).copy()
         # logr, ee1, ee2
         shape = LegacyEllipseWithPriors(-1., 0., 0.)
         dev = DevGalaxy(src.getPosition(), src.getBrightness(), shape).copy()
@@ -1566,7 +1615,7 @@ FLAG_STEPS_B = 8
 FLAG_TRIED_C = 0x10
 FLAG_CPU_C   = 0x20
 
-def _select_model(chisqs, nparams, galaxy_margin):
+def _select_model(chisqs, nparams, galaxy_margin, rex):
     '''
     Returns keepmod
     '''
@@ -1583,12 +1632,19 @@ def _select_model(chisqs, nparams, galaxy_margin):
         return keepmod
 
     # We're going to keep this source!
-    if chisqs['ptsrc'] > chisqs['simple']:
+    if rex:
+        simname = 'rex'
+    else:
+        simname = 'simple'
+    
+    # Now choose between point source and simple model (SIMP/REX)
+    if chisqs['ptsrc'] > chisqs[simname]:
         #print('Keeping source; PTSRC is better than SIMPLE')
         keepmod = 'ptsrc'
     else:
         #print('Keeping source; SIMPLE is better than PTSRC')
-        keepmod = 'simple'
+        #print('REX is better fit.  Radius', simplemod.shape.re)
+        keepmod = simname
 
     if not 'exp' in chisqs:
         return keepmod
