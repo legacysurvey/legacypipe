@@ -58,7 +58,7 @@ export DECALS_SIM_DIR=$outdir
 srun -n 1 -c $OMP_NUM_THREADS python legacyanalysis/decals_sim.py \
     --objtype $objtype --brick $brick --rowstart $rowstart --threads $OMP_NUM_THREADS
     >> $log 2>&1
-rm $statdir/inq_$brick_$objtype_$rowstart.txt
+rm $statdir/inq_$myrun.txt
 #     --skip \
 #     --checkpoint $outdir/checkpoints/${bri}/${brick}.pickle \
 #     --pickle "$outdir/pickles/${bri}/runbrick-%(brick)s-%%(stage)s.pickle" \

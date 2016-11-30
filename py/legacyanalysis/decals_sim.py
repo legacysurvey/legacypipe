@@ -75,11 +75,11 @@ from theValidator.catalogues import CatalogueFuncs
 def get_savedir(**kwargs):
     return os.path.join(kwargs['decals_sim_dir'],kwargs['objtype'],\
                         kwargs['brickname'][:3], kwargs['brickname'],\
-                        "rows%d-%d" % (kwargs['rowst'],kwargs['rowend']))    
+                        "rowstart%d" % kwargs['rowst'])    
 
 def get_fnsuffix(**kwargs):
     return '-{}-{}-{}.fits'.format(kwargs['objtype'], kwargs['brickname'],\
-                                   'rows%d-%d' % (kwargs['rowst'],kwargs['rowend']))
+                                   'rowstart%d' % kwargs['rowst'])
 
 class SimDecals(LegacySurveyData):
     def __init__(self, survey_dir=None, metacat=None, simcat=None, output_dir=None,\
@@ -475,8 +475,8 @@ def get_parser():
                         help='number of objects to simulate (required input)')
     #parser.add_argument('-ic', '--ith_chunk', type=long, default=None, metavar='', 
     #                    help='run the ith chunk, 0-999')
-    parser.add_argument('-c', '--nchunk', type=long, default=1, metavar='', 
-                        help='run chunks 0 to nchunk')
+    #parser.add_argument('-c', '--nchunk', type=long, default=1, metavar='', 
+    #                    help='run chunks 0 to nchunk')
     parser.add_argument('-t', '--threads', type=int, default=1, metavar='', 
                         help='number of threads to use when calling The Tractor')
     #parser.add_argument('-s', '--seed', type=long, default=None, metavar='', 
@@ -516,7 +516,7 @@ def create_metadata(kwargs=None):
     #    ('RMAG_RANGE', 'f4', (2,))]
     #metacat = Table(np.zeros(1, dtype=metacols))
     metacat = fits_table()
-    for key in ['brickname','objtype','nchunk']:
+    for key in ['brickname','objtype']: #,'nchunk']:
         metacat.set(key, np.array( [kwargs[key]] ))
     metacat.set('nobj', np.array( [kwargs['args'].nobj] ))
     metacat.set('zoom', np.array( [kwargs['args'].zoom] ))
@@ -600,7 +600,7 @@ def do_ith_cleanup(d=None):
     '''for each chunk that finishes running, 
     Remove unecessary files and give unique names to all others
     d -- dict returned by get_metadata_others() AND added to by get_ith_simcat()'''
-    assert(ith_chunk is not None and d is not None) 
+    assert(d is not None) 
     log = logging.getLogger('decals_sim')
     log.info('Cleaning up...')
     brickname= d['brickname']
@@ -611,7 +611,7 @@ def do_ith_cleanup(d=None):
     for suffix in ('image', 'model', 'resid', 'simscoadd'):
         shutil.copy(os.path.join(output_dir,'coadd', brickname[:3], brickname,
                                  'legacysurvey-{}-{}.jpg'.format(brickname, suffix)),
-                    os.path.join(output_dir, 'qa-'+suffix+ get_fnsuffix(**d)))
+                    os.path.join(output_dir, 'qa-'+suffix+ get_fnsuffix(**d).replace('.fits','.jpg')))
     shutil.rmtree(os.path.join(output_dir, 'coadd'))
     shutil.rmtree(os.path.join(output_dir, 'tractor'))
     log.info("Finished %s" % get_savedir(**d))
@@ -644,6 +644,7 @@ def main(args=None):
 
     brickname = args.brick
     objtype = args.objtype
+    maxobjs = args.nobj
 
     for obj in ('LSB'):
         if objtype == obj:
@@ -656,14 +657,13 @@ def main(args=None):
     else:
         decals_sim_dir = '.'
         
-    nobj = args.nobj
-    nchunk = args.nchunk
+    #nchunk = args.nchunk
     #rand = np.random.RandomState(args.seed) # determines seed for all chunks
     #seeds = rand.random_integers(0,2**18, max_nchunk)
 
     log.info('Object type = {}'.format(objtype))
-    log.info('Number of objects = {}'.format(nobj))
-    log.info('Number of chunks = {}'.format(nchunk))
+    #log.info('Number of objects = {}'.format(nobj))
+    #log.info('Number of chunks = {}'.format(nchunk))
 
     # Optionally zoom into a portion of the brick
     survey = LegacySurveyData()
@@ -689,7 +689,7 @@ def main(args=None):
     #    chunk_list= [args.ith_chunk]
     #else: 
     #    chunk_list= range(nchunk)
-    chunk_list= [ int((args.rowstart)/args.nobj) ]
+    #chunk_list= [ int((args.rowstart)/maxobjs) ]
 
     # Ra,dec,mag table
     Samp= fits_table(os.path.join(decals_sim_dir,'sample-merged.fits'))
@@ -699,11 +699,11 @@ def main(args=None):
     print('Sample len=%d' % len(Samp))
     Samp.cut( (Samp.ra >= r0)*(Samp.ra <= r1)*\
               (Samp.dec >= d0)*(Samp.dec <= d1) )
-    print('Sample len cut to brick= %d' % len(Samp))
-    rowst,rowend= args.rowstart,args.rowstart+args.nobj
-    Samp= Samp[args.rowstart:args.rowstart+args.nobj]
-    print('Sample len cut select rows= %d' % len(Samp))
-    assert(len(Samp) <= args.nobj)
+    print('Sample len cut to brick= %d, total number samples= %.1f' % (len(Samp),len(Samp)/float(maxobjs)))
+    rowst,rowend= args.rowstart,args.rowstart+maxobjs
+    Samp= Samp[args.rowstart:args.rowstart+maxobjs]
+    print('Sample len cut nobj or less= %d' % len(Samp))
+    assert(len(Samp) <= maxobjs)
 
     # Store args in dict for easy func passing
     kwargs=dict(Samp=Samp,\
@@ -711,23 +711,30 @@ def main(args=None):
                 decals_sim_dir= decals_sim_dir,\
                 brickwcs= brickwcs, \
                 objtype=objtype,\
-                nobj=nobj,\
-                nchunk=nchunk,\
+                nobj=len(Samp),\
+                maxobjs=maxobjs,\
                 rowst=rowst,\
                 rowend=rowend,\
                 args=args)
 
+    # Stop if starting row exceeds length of radec,color table
+    if len(Samp) == 0:
+        exceed_fn= get_savedir(**kwargs)+'_exceeded.txt'
+        junk= os.system('touch %s' % exceeded_fn)
+        print('Wrote %s' % exceeded_fn)
+        raise ValueError('starting row=%d exceeds number of artificial sources, quit' % rowst)
+    
     # Create simulated catalogues and run Tractor
     create_metadata(kwargs=kwargs)
     # do chunks
-    for ith_chunk in chunk_list:
-        log.info('Working on chunk {:02d}/{:02d}'.format(ith_chunk,kwargs['nchunk']-1))
-        # Random ra,dec and source properties
-        create_ith_simcat(d=kwargs)
-        # Run tractor
-        do_one_chunk(d=kwargs)
-        # Clean up output
-        do_ith_cleanup(d=kwargs)
+    #for ith_chunk in chunk_list:
+    #log.info('Working on chunk {:02d}/{:02d}'.format(ith_chunk,kwargs['nchunk']-1))
+    # Random ra,dec and source properties
+    create_ith_simcat(d=kwargs)
+    # Run tractor
+    do_one_chunk(d=kwargs)
+    # Clean up output
+    do_ith_cleanup(d=kwargs)
     log.info('All done!')
      
 if __name__ == '__main__':

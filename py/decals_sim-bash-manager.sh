@@ -2,7 +2,7 @@
 
 # Run script like this
 # for i in `seq 0 9`;do objtype=STAR;let rowstart=1+$i*500;bash decals_sim-bash-manager.sh $rowstart $objtype;done 
-export rowstart=0
+export rowstart=$1
 export objtype=star
 export outdir=/scratch2/scratchdirs/kaylanb/obiwan
 bricklist=bricks_ndwfs.txt
@@ -27,9 +27,10 @@ fi
 for brick in `cat $bricklist`;do
     export brick="$brick"
     bri=$(echo $brick | head -c 3)
-    let rowend=$rowstart+500
-    tractor_fits=$outdir/$objtype/$bri/$brick/rows$rowstart-$rowend/tractor-$objtype-$brick-rows$rowstart-$rowend.fits
-    myrun=${objtype}_${brick}_rowst${rowstart}
+    #let rowend=$rowstart+500
+    tractor_fits="$outdir/$objtype/$bri/$brick/rowstart$rowstart/tractor-$objtype-$brick-rowstart$rowstart.fits"
+    exceed_rows="$outdir/$objtype/$bri/$brick/rowstart$rowstart_exceeded.txt"
+    export myrun=${objtype}_${brick}_rowst${rowstart}
     if [ -e "$tractor_fits" ]; then
         echo skipping $tractor_fits, its done
         # Remove coadd, checkpoint, pickle files they are huge
@@ -38,9 +39,11 @@ for brick in `cat $bricklist`;do
         #rm $outdir/coadd/${bri}/${brick}/*
     elif [ -e "$statdir/inq_$myrun.txt" ]; then
         echo skipping $myrun, its queued
+    elif [ -e "$exceed_rows" ]; then
+        echo skipping $myrun, it exceeds total number artifical sources/rows
     else
         echo submitting $myrun
-        touch $statdir/inq_$touchnm.txt
-        sbatch ${run_name}.sh --export objtype,rowstart,outdir,statdir,brick,run_name
+        touch $statdir/inq_$myrun.txt
+        sbatch ${run_name}.sh --export objtype,rowstart,outdir,statdir,brick,run_name,myrun
     fi
 done
