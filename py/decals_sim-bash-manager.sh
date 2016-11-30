@@ -29,7 +29,7 @@ for brick in `cat $bricklist`;do
     bri=$(echo $brick | head -c 3)
     #let rowend=$rowstart+500
     tractor_fits="$outdir/$objtype/$bri/$brick/rowstart$rowstart/tractor-$objtype-$brick-rowstart$rowstart.fits"
-    exceed_rows="$outdir/$objtype/$bri/$brick/rowstart$rowstart_exceeded.txt"
+    exceed_rows="$outdir/$objtype/$bri/$brick/rowstart${rowstart}_exceeded.txt"
     export myrun=${objtype}_${brick}_rowst${rowstart}
     if [ -e "$tractor_fits" ]; then
         echo skipping $tractor_fits, its done

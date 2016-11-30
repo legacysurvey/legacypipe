@@ -719,9 +719,9 @@ def main(args=None):
 
     # Stop if starting row exceeds length of radec,color table
     if len(Samp) == 0:
-        exceed_fn= get_savedir(**kwargs)+'_exceeded.txt'
-        junk= os.system('touch %s' % exceeded_fn)
-        print('Wrote %s' % exceeded_fn)
+        fn= get_savedir(**kwargs)+'_exceeded.txt'
+        junk= os.system('touch %s' % fn)
+        print('Wrote %s' % fn)
         raise ValueError('starting row=%d exceeds number of artificial sources, quit' % rowst)
     
     # Create simulated catalogues and run Tractor
