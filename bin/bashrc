@@ -35,7 +35,7 @@ if [ "$NERSC_HOST" == "edison" ]; then
   module load photutils-hpcp
   module load ceres-hpcp
   module load sextractor-hpcp
-  module load psfex
+  #module load psfex
   module load postgresql-hpcp
   module load psycopg2-hpcp
   
