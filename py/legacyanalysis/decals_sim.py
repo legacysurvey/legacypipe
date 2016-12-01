@@ -249,11 +249,11 @@ class BuildStamp():
             
         # Add the variance of the object to the variance image (in electrons).
         stamp *= self.nano2e       # [noiseless stamp, electron]
-        objvar = galsim.Image(np.sqrt(stamp.array**2), scale=stamp.scale) 
+        objvar = galsim.Image(np.sqrt(stamp.array**2), wcs=self.galsim_wcs) 
         objvar.setOrigin(galsim.PositionI(stamp.xmin, stamp.ymin))
 
         # Add Poisson noise
-        raise ValueError('need pass seed from survey.simcat.get("seed") for the given row/object,\
+        print('WARNING:  Nneed pass seed from survey.simcat.get("seed") for the given row/object,\
                          The seed was originally passed to galsim.gsdeviate in BuildStamp\
                          but the seed should be per object since that is how the ra,dec table is built\
                          Alternatively could make the seed something else, like the row number of this run...\
@@ -271,7 +271,7 @@ class BuildStamp():
 
         # Remask pixels that were masked in the original inverse variance stamp.
         ivarstamp *= mask
-
+        raise ValueError
         return stamp, ivarstamp
 
     def convolve_and_draw(self,obj):
