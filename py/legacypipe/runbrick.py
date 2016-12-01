@@ -577,8 +577,7 @@ def stage_image_coadds(survey=None, targetwcs=None, bands=None, tims=None,
     early on, to diagnose problems or just to look at the data.
     '''
     with survey.write_output('ccds-table', brick=brickname) as out:
-        ccds.writeto(out.fn, primheader=version_header)
-        print('Wrote', out.fn)
+        ccds.writeto(None, fits_object=out.fits, primheader=version_header)
             
     C = make_coadds(tims, bands, targetwcs,
                     detmaps=True, ngood=True, lanczos=lanczos,
@@ -598,8 +597,7 @@ def stage_image_coadds(survey=None, targetwcs=None, bands=None, tims=None,
 
     D = _depth_histogram(brick, targetwcs, bands, C.detivs, C.galdetivs)
     with survey.write_output('depth-table', brick=brickname) as out:
-        D.writeto(out.fn)
-        print('Wrote', out.fn)
+        D.writeto(None, fits_object=out.fits)
     del D
 
     #rgbkwargs2 = dict(mnmx=(-3., 3.))
@@ -1280,6 +1278,7 @@ def stage_fitblobs(T=None,
         blobmap[0] = -1
         blobmap[oldblob + 1] = iblob
         blobs = blobmap[blobs+1]
+        del blobmap
 
         # copy version_header before modifying it.
         hdr = fitsio.FITSHDR()
@@ -1294,9 +1293,7 @@ def stage_fitblobs(T=None,
         hdr.add_record(dict(name='EQUINOX', value=2000.))
 
         with survey.write_output('blobmap', brick=brickname) as out:
-            fitsio.write(out.fn, blobs, header=hdr, clobber=True)
-            print('Wrote', out.fn)
-        del blobmap
+            out.fits.write(blobs, header=hdr)
     del iblob, oldblob
     blobs = None
 
@@ -1338,8 +1335,8 @@ def stage_fitblobs(T=None,
                                         comment='NOAO data product type'))
 
             with survey.write_output('all-models', brick=brickname) as out:
-                TT.writeto(out.fn, header=hdr, primheader=primhdr)
-                print('Wrote', out.fn)
+                TT.writeto(None, fits_object=out.fits, header=hdr,
+                           primheader=primhdr)
 
     keys = ['cat', 'invvars', 'T', 'blobs']
     if get_all_models:
@@ -1588,8 +1585,7 @@ def stage_coadds(survey=None, bands=None, version_header=None, targetwcs=None,
     primhdr.add_record(dict(name='PRODTYPE', value='ccdinfo',
                             comment='NOAO data product type'))
     with survey.write_output('ccds-table', brick=brickname) as out:
-        ccds.writeto(out.fn, primheader=primhdr) 
-        print('Wrote', out.fn)
+        ccds.writeto(None, fits_object=out.fits, primheader=primhdr)
 
     tnow = Time()
     print('[serial coadds]:', tnow-tlast)
@@ -1650,8 +1646,7 @@ def stage_coadds(survey=None, bands=None, version_header=None, targetwcs=None,
     # Compute depth histogram
     D = _depth_histogram(brick, targetwcs, bands, C.detivs, C.galdetivs)
     with survey.write_output('depth-table', brick=brickname) as out:
-        D.writeto(out.fn)
-        print('Wrote', out.fn)
+        D.writeto(None, fits_object=out.fits)
     del D
 
     coadd_list= [('image', C.coimgs,   rgbkwargs),
@@ -2096,8 +2091,7 @@ def stage_writecat(
             print('WISE light-curve shapes:', WISE_T.w1_nanomaggies.shape)
 
     with survey.write_output('tractor-intermediate', brick=brickname) as out:
-        T2.writeto(out.fn, primheader=primhdr, header=hdr)
-        print('Wrote', out.fn)
+        T2.writeto(None, fits_object=out.fits, primheader=primhdr, header=hdr)
 
     ### FIXME -- convert intermediate tractor catalog to final, for now...
     ### FIXME -- note that this is now the only place where 'allbands' is used.
@@ -2106,12 +2100,28 @@ def stage_writecat(
 
     from format_catalog import format_catalog
     with survey.write_output('tractor', brick=brickname) as out:
-        format_catalog(T2, hdr, primhdr, allbands, out.fn,flux_prefix='decam_')
-        print('Wrote', out.fn)
-        
+        format_catalog(T2, hdr, primhdr, allbands, None, flux_prefix='decam_',
+                       write_kwargs=dict(fits_object=out.fits))
+
     # produce per-brick sha1sums file
     hashfn = survey.find_file('sha1sum-brick', brick=brickname, output=True)
-    cmd = 'sha1sum -b ' + ' '.join(survey.output_files) + ' > ' + hashfn
+
+    # Start by writing our pre-computed sha1sums and filenames and running
+    # sha1sum -c...
+    f = open(hashfn, 'w')
+    for fn,sha1sum in survey.output_sha1sum_files.items():
+        f.write('%s *%s\n' % (sha1sum, fn))
+    f.close()
+
+    cmd = 'sha1sum -c %s' % hashfn
+    print('Check sha1sums:', cmd)
+    rtn = os.system(cmd)
+    print('Return value:', rtn)
+    assert(rtn == 0)
+
+    # Now compute checksums for the files in our output_files list,
+    # appending it to the list of checksums that we just checked.
+    cmd = 'sha1sum -b ' + ' '.join(survey.output_files) + ' >> ' + hashfn
     print('Checksums:', cmd)
     os.system(cmd)
 
@@ -2120,8 +2130,7 @@ def stage_writecat(
         sims_data = fits_table()
         sims_data.sims_xy = T.sims_xy
         with survey.write_output('galaxy-sims', brick=brickname) as out:
-            sims_data.writeto(out.fn)
-            print('Wrote', out.fn)
+            sims_data.writeto(None, fits_object=out.fits)
 
     return dict(T2=T2)
 

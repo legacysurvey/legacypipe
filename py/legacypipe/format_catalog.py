@@ -37,7 +37,8 @@ def main(args=None):
     print('Wrote', opt.out)
     
 def format_catalog(T, hdr, primhdr, allbands, outfn,
-                   in_flux_prefix='', flux_prefix=''):
+                   in_flux_prefix='', flux_prefix='',
+                   write_kwargs={}):
     
     # Retrieve the bands in this catalog.
     bands = []
@@ -163,8 +164,9 @@ def format_catalog(T, hdr, primhdr, allbands, outfn,
 
     # Reformat as list aligned with cols
     units = [units.get(c, '') for c in cols]
-    
-    T.writeto(outfn, columns=cols, header=hdr, primheader=primhdr, units=units)
+
+    T.writeto(outfn, columns=cols, header=hdr, primheader=primhdr, units=units,
+              **write_kwargs)
         
 if __name__ == '__main__':
     main()

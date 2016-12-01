@@ -476,8 +476,7 @@ def write_coadd_images(band,
                                  comment='Ivar of ABmag=22.5-2.5*log10(nmgy)'))
 
         with survey.write_output(name, brick=brickname, band=band) as out:
-            fitsio.write(out.fn, img, clobber=True, header=hdr2)
-            print('Wrote', out.fn)
+            out.fits.write(img, header=hdr2)
 
 # Pretty much only used for plots; the real deal is make_coadds()
 def quick_coadds(tims, bands, targetwcs, images=None,
