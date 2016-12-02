@@ -39,15 +39,22 @@ def mzls_to_20160315():
     for fn in [outfn]:
         os.system('gzip --best ' + fn)
 
-def mzls_dr4(zpname='arjuns-ccds-mzls-v2thruMarch19.fits'):
+def mzls_dr4(v2=True): 
+    if v2:
+        zpname='arjuns-ccds-mzls-v2thruMarch19.fits'
+        savefn='survey-ccds-mzls-v2thruMarch19.fits.fz'
+    else:
+        zpname='arjuns-ccds-mzls-v3.fits'
+        savefn='survey-ccds-mzls-v3.fits.fz'
     basedir = os.environ['LEGACY_SURVEY_DIR']
     cam = 'mosaic'
     image_basedir = os.path.join(basedir, 'images')
     TT = []
 
+    # mzls_cpdirs_...txt is list of all possible CP directories
     for fn,dirnms in [
         (zpname,
-         list(np.loadtxt('mzls_cpdirs.txt',dtype=str))),
+         list(np.loadtxt('mzls_cpdirs_thruMarch19.txt',dtype=str))),
         ]:
         T = fits_table(fn)
         normalize_zeropoints(fn, dirnms, image_basedir, cam, T=T)
@@ -58,9 +65,8 @@ def mzls_dr4(zpname='arjuns-ccds-mzls-v2thruMarch19.fits'):
     if len(I):
         T.fwhm[I] = T.seeing[I] / 0.262
 
-    outfn = 'survey-ccds-mzls.fits'
-    T.writeto(outfn)
-    print('Wrote', outfn)
+    T.writeto(savefn)
+    print('Wrote', savefn)
 
 
 
@@ -553,11 +559,14 @@ if __name__ == '__main__':
     #mzls_to_20160315()
     #decals_run19()
 
-    #for name in ['90prime','mzls-v2thruMarch19','mzls-v3']:
-    #    gather_arjuns_zpts(cpimage_list='bootes-%s-abspath.txt' % name,\
-    #                       name='arjuns-ccds-%s.fits' % name)
-    #bok_dr4()
-    mzls_dr4()
+    dr4_bootes=True
+    if dr4_bootes:
+        for name in ['90prime','mzls-v2thruMarch19','mzls-v3']:
+            gather_arjuns_zpts(cpimage_list='bootes-%s-abspath.txt' % name,\
+                               name='arjuns-ccds-%s.fits' % name)
+        bok_dr4()
+        mzls_dr4(v2=True)
+        mzls_dr4(v2=False)
     sys.exit(0)
     
     
