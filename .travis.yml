@@ -16,7 +16,9 @@ install:
     - pip install numpydoc -t $HOME/numpydoc
     - pip install --user coveralls
     - pip install --user astropy
-    - pip install --user fitsio
+    # fitsio master version
+    - pip install --upgrade git+https://github.com/esheldon/fitsio.git#egg=fitsio
+    #- pip install --user fitsio
     - pip install --user photutils
     # - easy_install3 --user pip
     # - pip3 install --user numpy==1.11.0
