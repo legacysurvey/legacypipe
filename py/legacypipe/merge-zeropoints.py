@@ -42,10 +42,10 @@ def mzls_to_20160315():
 def mzls_dr4(v2=True): 
     if v2:
         zpname='arjuns-ccds-mzls-v2thruMarch19.fits'
-        savefn='survey-ccds-mzls-v2thruMarch19.fits.fz'
+        savefn='survey-ccds-mzls-v2thruMarch19.fits.gz'
     else:
         zpname='arjuns-ccds-mzls-v3.fits'
-        savefn='survey-ccds-mzls-v3.fits.fz'
+        savefn='survey-ccds-mzls-v3.fits.gz'
     basedir = os.environ['LEGACY_SURVEY_DIR']
     cam = 'mosaic'
     image_basedir = os.path.join(basedir, 'images')
