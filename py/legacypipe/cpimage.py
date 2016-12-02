@@ -92,20 +92,28 @@ class CPImage(LegacySurveyImage):
         assert(e.strip() == self.ccdname.strip())
 
     def get_wcs(self):
-        # Make sure the PV-to-SIP converter samples enough points for small
-        # images
-        stepsize = 0
-        if min(self.width, self.height) < 600:
-            stepsize = min(self.width, self.height) / 10.;
-        hdr = self.read_image_header()
-        wcs = wcs_pv2sip_hdr(hdr, stepsize=stepsize)
-        dra,ddec = self.dradec
-        print('Applying astrometric zeropoint:', (dra,ddec))
-        r,d = wcs.get_crval()
-        wcs.set_crval((r + dra, d + ddec))
-        wcs.version = ''
-        phdr = self.read_image_primary_header()
-        wcs.plver = phdr.get('PLVER', '').strip()
+        if self.camera == '90prime':
+            # WCS is in myriad of formats
+            # Don't support TNX yet, use TAN for now
+            hdr = self.read_image_header()
+            hdr['CTYPE1'] = 'RA---TAN'
+            hdr['CTYPE2'] = 'DEC--TAN'
+            wcs= wcs_pv2sip_hdr(hdr)
+        else:
+            # Make sure the PV-to-SIP converter samples enough points for small
+            # images
+            stepsize = 0
+            if min(self.width, self.height) < 600:
+                stepsize = min(self.width, self.height) / 10.;
+            hdr = self.read_image_header()
+            wcs = wcs_pv2sip_hdr(hdr, stepsize=stepsize)
+            dra,ddec = self.dradec
+            print('Applying astrometric zeropoint:', (dra,ddec))
+            r,d = wcs.get_crval()
+            wcs.set_crval((r + dra, d + ddec))
+            wcs.version = ''
+            phdr = self.read_image_primary_header()
+            wcs.plver = phdr.get('PLVER', '').strip()
         return wcs
 
     def remap_dq_codes(self, dq):

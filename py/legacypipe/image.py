@@ -755,16 +755,12 @@ class CalibMixin(object):
         primhdr = self.read_image_primary_header()
         plver = primhdr.get('PLVER', '')
         verstr = get_git_version()
-        if surveyname == '90prime':
-            cmds = ['psfex %s -c %s -PSF_DIR %s' % \
-                (self.sefn, os.path.join(sedir, surveyname + '.psfex'), os.path.dirname(self.psffn))]
-        else: 
-            cmds = ['psfex -c %s -PSF_DIR %s %s' %
-                    (os.path.join(sedir, surveyname + '.psfex'),
-                     os.path.dirname(self.psffn), self.sefn),
-                    'modhead %s LEGPIPEV %s "legacypipe git version"' %
-                    (self.psffn, verstr),
-                    'modhead %s PLVER %s "CP ver of image file"' % (self.psffn, plver)]
+        cmds = ['psfex -c %s -PSF_DIR %s %s' %
+                (os.path.join(sedir, surveyname + '.psfex'),
+                 os.path.dirname(self.psffn), self.sefn),
+                'modhead %s LEGPIPEV %s "legacypipe git version"' %
+                (self.psffn, verstr),
+                'modhead %s PLVER %s "CP ver of image file"' % (self.psffn, plver)]
         for cmd in cmds:
             print(cmd)
             rtn = os.system(cmd)

@@ -39,6 +39,31 @@ def mzls_to_20160315():
     for fn in [outfn]:
         os.system('gzip --best ' + fn)
 
+def mzls_dr4(zpname='arjuns-ccds-mzls-v2thruMarch19.fits'):
+    basedir = os.environ['LEGACY_SURVEY_DIR']
+    cam = 'mosaic'
+    image_basedir = os.path.join(basedir, 'images')
+    TT = []
+
+    for fn,dirnms in [
+        (zpname,
+         list(np.loadtxt('mzls_cpdirs.txt',dtype=str))),
+        ]:
+        T = fits_table(fn)
+        normalize_zeropoints(fn, dirnms, image_basedir, cam, T=T)
+        TT.append(T)
+    T = merge_tables(TT)
+
+    I = np.flatnonzero(T.fwhm == 0)
+    if len(I):
+        T.fwhm[I] = T.seeing[I] / 0.262
+
+    outfn = 'survey-ccds-mzls.fits'
+    T.writeto(outfn)
+    print('Wrote', outfn)
+
+
+
 # Runs 19 and 20, for adjusting obstatus file...
 def decals_run19():
     basedir = os.environ['LEGACY_SURVEY_DIR']
@@ -339,17 +364,18 @@ def decals_dr3():
 #  
 
 
-def bok_dr4_versionA():
-    basedir = '/scratch1/scratchdirs/desiproc/DRs/dr4-bootes/legacypipe-dir' #os.environ['LEGACY_SURVEY_DIR']
+def bok_dr4():
+    basedir = os.environ['LEGACY_SURVEY_DIR'] #'/scratch1/scratchdirs/desiproc/DRs/dr4-bootes/legacypipe-dir'
     cam = '90prime'
     image_basedir = os.path.join(basedir, 'images')
     
 
     #/scratch1/scratchdirs/desiproc/DRs/cp-images/bootes/project/projectdirs/cosmo/staging/bok/BOK_CP/CP20160703
+    #/scratch2/scratchdirs/arjundey/ForKaylan/zeropoint-ksb_160704_052458_ooi_g_v1.fits
     TT = []
     for fn,dirnms in [
-        ('/scratch2/scratchdirs/arjundey/ForKaylan/zeropoint-ksb_160704_052458_ooi_g_v1.fits',
-         ['CP20160703']),
+        ('arjuns-ccds-90prime.fits',
+         list(np.loadtxt('bok_cpdirs.txt',dtype=str))),
         #(os.path.join(zpdir, 'r/zeropoint-BOK20150413_g.fits'),
         # [os.path.join(zpdir, 'g')]),
         ]:
@@ -367,49 +393,9 @@ def bok_dr4_versionA():
 
         TT.append(T)
     T = merge_tables(TT)
-    outfn = 'bok-zp.fits'
+    outfn = 'survey-ccds-90prime.fits.gz'
     T.writeto(outfn)
     print('Wrote', outfn)
-
-
-def bok_dr4_versionB():
-    basedir = './deep2f3'
-    cam = '90prime'
-    image_basedir = os.path.join(basedir, 'images')
-    TT = []
-    for fn,dirnms in [
-            ('/global/project/projectdirs/cosmo/staging/bok/ccds_files/bass-ccds-idm20160506.fits',
-             ['',]),
-        ]:
-        T = fits_table(fn)
-        T.rename('image_filename', 'filename')
-        T.rename('image_hdu', 'ccdhdunum')
-        T.rename('ra_bore', 'ra')
-        T.rename('dec_bore', 'dec')
-        T.filter = np.array([f.strip() for f in T.filter])
-        
-        T.ccdra  = np.zeros(len(T))
-        T.ccddec = np.zeros(len(T))
-        for i in range(len(T)):
-            from astrometry.util.util import Tan
-            wcs = Tan(*[float(x) for x in [
-                T.crval1[i], T.crval2[i], T.crpix1[i], T.crpix2[i],
-                T.cd1_1[i], T.cd1_2[i], T.cd2_1[i], T.cd2_2[i],
-                T.width[i], T.height[i]]])
-            r,d = wcs.pixelxy2radec(T.width[i]/2.+0.5, T.height[i]/2.+0.5)
-            T.ccdra [i] = r
-            T.ccddec[i] = d
-        
-        T = normalize_zeropoints(fn, dirnms, image_basedir, cam, T=T)
-        TT.append(T)
-    T = merge_tables(TT)
-    #T.fwhm = T.seeing / 0.262
-    #T.ccdname = np.array([n.replace('LBL-0', 'ccd') for n in T.ccdname])
-    outfn = 'zp.fits'
-    T.writeto(outfn)
-    print('Wrote', outfn)
-
-
 
 
 def normalize_zeropoints(fn, dirnms, image_basedir, cam, T=None):
@@ -467,18 +453,19 @@ def normalize_zeropoints(fn, dirnms, image_basedir, cam, T=None):
         fnlist = []
 
         for dirnm in dirnms:
+            if not os.path.exists(dirnm):
+                print('WARNING, creating empty dir: %s' % dirnm)
+                os.makedirs(dirnm)
             pattern = os.path.join(dirnm, fn)
             for afn in allfiles[dirnm]:
                 # check for prefix
                 if pattern in afn:
                     fnlist.append(afn)
                     print('File', fn, 'matched', afn)
-                    
         pattern_string = os.path.join(image_basedir, cam, dirnm, fn + '*')
         if len(dirnms) > 1:
             pattern_string = os.path.join(
                 image_basedir, cam, '{' + ','.join(dirnms) + '}', fn + '*')
-
         # If multiple versions are available, take the one with greatest
         # PLVER community pipeline version.
         if len(fnlist) > 1:
@@ -499,6 +486,7 @@ def normalize_zeropoints(fn, dirnms, image_basedir, cam, T=None):
             print('Latest version:', lastver, 'in file', fnlist[ilast])
             fnlist = [fnlist[ilast]]
             
+        print('LENGTH len(fnlist)=%d' % len(fnlist))       
         if len(fnlist) == 0:
             print('WARNING**', pattern_string, '->', fnlist)
             assert(False)
@@ -529,8 +517,8 @@ def normalize_zeropoints(fn, dirnms, image_basedir, cam, T=None):
     return T
 
 
-def stack_zpts(cpimage_list='bootes-90prime-abspath.txt',
-               name='survey-ccds-90prime.fits.gz'):
+def gather_arjuns_zpts(cpimage_list='bootes-90prime-abspath.txt',
+                       name='arjuns-ccds-90prime.fits'):
     zpdir='/scratch2/scratchdirs/arjundey/ForKaylan'
     # Get list of cpimages want zeropoints files for
     cps=np.loadtxt(cpimage_list,dtype=str)
@@ -564,11 +552,12 @@ if __name__ == '__main__':
     #decals_run16()
     #mzls_to_20160315()
     #decals_run19()
-    #bok_dr4_versionA()
 
-    for name in ['90prime','mzls-v2thruMarch19','mzls-v3']:
-        stack_zpts(cpimage_list='bootes-%s-abspath.txt' % name,\
-                   name='survey-ccds-%s.fits.gz' % name)
+    #for name in ['90prime','mzls-v2thruMarch19','mzls-v3']:
+    #    gather_arjuns_zpts(cpimage_list='bootes-%s-abspath.txt' % name,\
+    #                       name='arjuns-ccds-%s.fits' % name)
+    #bok_dr4()
+    mzls_dr4()
     sys.exit(0)
     
     
