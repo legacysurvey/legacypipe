@@ -142,6 +142,102 @@ def scan_dchisq(seeing, target_dchisq, ps, e1=0.):
 if __name__ == '__main__':
     ps = PlotSequence('morph')
 
+    from glob import glob
+    from astrometry.util.fits import merge_tables, fits_table
+
+    # glob doesn't understand {}
+    #fns = glob('dr3/tractor/011/tractor-011?p0{02,05,07,10}.fits')
+    fns = glob('dr3/tractor/011/tractor-011?p0*.fits')
+    #fns = glob('dr3/metrics/011/all-models-011?p0*.fits')
+    fns = [fn for fn in fns if fn[-7:-5] in ['02','05','07','10']]
+    assert(len(fns) == 16)
+
+    T = merge_tables([fits_table(fn) for fn in fns])
+    print(len(T), 'sources')
+
+    dchipsf  = T.dchisq[:,0]
+    dchisimp = T.dchisq[:,1]
+    dchidev  = T.dchisq[:,2]
+    dchiexp  = T.dchisq[:,3]
+
+    model = np.array(['P' if p > s else 'S' for p,s in zip(dchipsf, dchisimp)])
+    dchi = dchipsf * (model == 'P') + dchisimp * (model == 'S')
+
+    # which sources have galaxy models computed
+    I = np.flatnonzero(dchiexp)
+    print(len(I), 'have EXP,DEV models')
+    
+    galaxy_margin = 12.
+
+    fcut1 = 0.02  * dchipsf
+    fcut2 = 0.008 * dchipsf
+
+    model1 = model.copy()
+    model2 = model.copy()
+
+    dchi1 = dchi.copy()
+    dchi2 = dchi.copy()
+    
+    # Source we're going to convert to galaxy
+    G = I[np.maximum(dchidev, dchiexp)[I] - dchi[I] >
+          np.maximum(galaxy_margin, fcut1[I])]
+    D = G[dchidev[G] > dchiexp[G]]
+    model1[D] = 'D'
+    dchi1 [D] = dchidev[D]
+    E = G[dchiexp[G] >= dchidev[G]]
+    model1[E] = 'E'
+    dchi1 [E] = dchiexp[E]
+
+    G = I[np.maximum(dchidev, dchiexp)[I] - dchi[I] >
+          np.maximum(galaxy_margin, fcut2[I])]
+    D = G[dchidev[G] > dchiexp[G]]
+    model2[D] = 'D'
+    dchi2 [D] = dchidev[D]
+    E = G[dchiexp[G] >= dchidev[G]]
+    model2[E] = 'E'
+    dchi2 [E] = dchiexp[E]
+
+    D = np.flatnonzero(model1 != model2)
+    print(len(D), 'are classified differently')
+
+    plt.clf()
+
+    plt.plot(np.maximum(dchiexp, dchidev)[I] - np.maximum(dchipsf, dchisimp)[I],
+             (np.maximum(dchiexp, dchidev) - np.maximum(dchipsf, dchisimp))[I]/dchipsf[I],
+             'k.', alpha=0.2)
+             
+    
+    keys = ['P','S','D','E']
+    for k1 in keys:
+        J = D[model1[D] == k1]
+        for k2 in keys:
+            K = J[model2[J] == k2]
+            print(len(K), 'switched from', k1, 'to', k2)
+
+            if len(K) == 0:
+                continue
+
+            d1 = dict(P=dchipsf, S=dchisimp, D=dchidev, E=dchiexp)[k1][K]
+            d2 = dict(P=dchipsf, S=dchisimp, D=dchidev, E=dchiexp)[k2][K]
+
+            # For this change in cut, we switch only from P,S to D,E
+            
+            plt.plot(d2 - d1, (d2 - d1)/dchipsf[K], '.',
+                     label='%s to %s' % (k1,k2))
+    plt.xlabel('dchi(EXP or DEV) - dchi(PSF or SIMP)')
+    plt.ylabel('[ dchi(EXP or DEV) - dchi(PSF or SIMP) ] / dchipsf')
+    plt.legend()
+
+    plt.xscale('symlog')
+
+    plt.axis([1e1, 1e7, 0, 0.04])
+    
+    ps.savefig()
+    
+    sys.exit(0)
+
+    
+    # Plots sent to the mailing list 2017-11-28
     dchisq = 1000.
     scan_dchisq(1.5, dchisq, ps)
     scan_dchisq(1.0, dchisq, ps)
