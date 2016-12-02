@@ -405,7 +405,7 @@ class LegacySurveyImage(object):
         pos = tim.wcs.pixelToPosition(x, y)
         gal = SimpleGalaxy(pos, NanoMaggies(**{band:1.}))
         S = 32
-        mm = ModelMask(int(x-S), int(y-S), np.ones((2*S+1, 2*S+1), bool))
+        mm = ModelMask(int(x-S), int(y-S), 2*S+1, 2*S+1)
         galmod = gal.getModelPatch(tim, modelMask=mm).patch
         galmod = np.maximum(0, galmod)
         galmod /= galmod.sum()
