@@ -1904,10 +1904,12 @@ def stage_wise_forced(
             print(len(I), 'sources are within tile', tile)
             if len(I) == 0:
                 continue
-            M = M[yy, xx][I]
+            # Reference the mask image M at yy,xx indices
+            Mi = M[yy[I], xx[I]]
+            # unpack mask bits
             for band in [1,2,3,4]:
-                sd1 = (np.bitwise_and(M, 2**(2*(band-1)  )) != 0).astype(int)
-                sd2 = (np.bitwise_and(M, 2**(2*(band-1)+1)) != 0).astype(int)
+                sd1 = (np.bitwise_and(Mi, 2**(2*(band-1)  )) != 0).astype(int)
+                sd2 = (np.bitwise_and(Mi, 2**(2*(band-1)+1)) != 0).astype(int)
                 WISE.wise_mask[I, band-1] = sd1 + 2*sd2
 
     # Unpack time-resolved results...
