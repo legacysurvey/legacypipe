@@ -1,8 +1,8 @@
 #!/bin/bash -l
 
-#SBATCH -p debug
-#SBATCH -N 1
-#SBATCH -t 00:10:00
+#SBATCH -p shared
+#SBATCH -n 6
+#SBATCH -t 01:00:00
 #SBATCH --account=desi
 #SBATCH -J dr4-bootes
 #SBATCH -o dr4-bootes.o%j
@@ -11,9 +11,8 @@
 #SBATCH -L SCRATCH
 
 
-#-p shared
-#-n 6
-#-t etc
+#-p debug
+#-N 1
 
 #source /scratch1/scratchdirs/desiproc/DRs/dr4/legacypipe-dir/bashrc
 set -x
@@ -47,11 +46,10 @@ echo >> $log
 echo -e "\nStarting on ${NERSC_HOST} $(hostname)\n" >> $log
 echo "-----------------------------------------------------------------------------------------" >> $log
 
-threads=24
+threads=6
 export OMP_NUM_THREADS=$threads
 
 echo outdir="$outdir", brick="$brick"
-module list
 module load psfex-hpcp
 srun -n 1 -c $OMP_NUM_THREADS python legacypipe/runbrick.py \
      --run bootes-$camera \
