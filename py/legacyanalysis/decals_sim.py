@@ -135,11 +135,12 @@ class SimImage(DecamImage):
                 stamp = objstamp.star(obj)
             elif objtype == 'elg':
                 stamp = objstamp.elg(obj)
-            elif objtype == 'qso':
+            elif objtype == 'lrg':
                 stamp = objstamp.lrg(obj)
+            elif objtype == 'qso':
+                stamp = objstamp.qso(obj)
             
             # Make sure the object falls on the image and then add Poisson noise.
-            print('stamp.bounds:',stamp.bounds,'image.bounds:',image.bounds)
             overlap = stamp.bounds & image.bounds
             if (overlap.area() > 0):
                 stamp = stamp[overlap]      
@@ -258,11 +259,11 @@ class BuildStamp():
         objvar.setOrigin(galsim.PositionI(stamp.xmin, stamp.ymin))
 
         # Add Poisson noise
-        print('WARNING:  Nneed pass seed from survey.simcat.get("seed") for the given row/object,\
-                         The seed was originally passed to galsim.gsdeviate in BuildStamp\
-                         but the seed should be per object since that is how the ra,dec table is built\
-                         Alternatively could make the seed something else, like the row number of this run...\
-                         so same for all objects')
+        #WARNING: Nneed pass seed from survey.simcat.get("seed") for the given row/object,\
+        #         The seed was originally passed to galsim.gsdeviate in BuildStamp\
+        #         but the seed should be per object since that is how the ra,dec table is built\
+        #         Alternatively could make the seed something else, like the row number of this run...\
+        #         so same for all objects')
         stamp.addNoise(galsim.VariableGaussianNoise(self.gsdeviate, objvar))
         varstamp += objvar
 
@@ -333,6 +334,15 @@ class BuildStamp():
         galobj = galobj.shear(q=float(obj.get('ba')), beta=float(obj.get('phi'))*galsim.degrees)
         stamp = self.convolve_and_draw(galobj)
         return stamp
+
+    def lrg(self,obj):
+        """Create an LRG just like did for ELG"""
+        return self.elg(obj)
+    
+    def qso(self,obj):
+        """Create a QSO just like a star"""
+        return self.star(obj)
+
 
 #def no_overlapping_radec(ra,dec, bounds, random_state=None, dist=5.0/3600):
 def no_overlapping_radec(Samp, dist=5./3600):
