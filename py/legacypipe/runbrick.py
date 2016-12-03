@@ -1904,7 +1904,7 @@ def stage_wise_forced(
             print(len(I), 'sources are within tile', tile)
             if len(I) == 0:
                 continue
-            M = M[yy, xx]
+            M = M[yy, xx][I]
             for band in [1,2,3,4]:
                 sd1 = (np.bitwise_and(M, 2**(2*(band-1)  )) != 0).astype(int)
                 sd2 = (np.bitwise_and(M, 2**(2*(band-1)+1)) != 0).astype(int)
