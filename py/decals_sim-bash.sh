@@ -56,7 +56,8 @@ echo outdir="$outdir", brick="$brick"
 export LEGACY_SURVEY_DIR=/scratch2/scratchdirs/kaylanb/dr3/desiproc-dr3-template
 export DECALS_SIM_DIR=$outdir
 srun -n 1 -c $OMP_NUM_THREADS python legacyanalysis/decals_sim.py \
-    --objtype $objtype --brick $brick --rowstart $rowstart --threads $OMP_NUM_THREADS
+    --objtype $objtype --brick $brick --rowstart $rowstart \
+    --add_sim_noise --threads $OMP_NUM_THREADS
     >> $log 2>&1
 rm $statdir/inq_$myrun.txt
 #     --skip \

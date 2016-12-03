@@ -139,13 +139,18 @@ class SimImage(DecamImage):
                 stamp = objstamp.lrg(obj)
             
             # Make sure the object falls on the image and then add Poisson noise.
+            print('stamp.bounds:',stamp.bounds,'image.bounds:',image.bounds)
             overlap = stamp.bounds & image.bounds
             if (overlap.area() > 0):
                 stamp = stamp[overlap]      
                 ivarstamp = invvar[overlap]
+                #np.save('stamp.npy',stamp.array)
+                #np.save('ivarstamp.npy',ivarstamp.array)
                 # Add noise to simulated source
                 if self.survey.add_sim_noise:
                     stamp, ivarstamp = objstamp.addnoise(stamp, ivarstamp)
+                #np.save('stamp_wnoise.npy',stamp.array)
+                #np.save('ivarstamp_wnoise.npy',ivarstamp.array)
                 # Only where stamps will in inserted
                 sims_image[overlap] += stamp 
                 sims_ivar[overlap] += ivarstamp
@@ -258,8 +263,7 @@ class BuildStamp():
                          but the seed should be per object since that is how the ra,dec table is built\
                          Alternatively could make the seed something else, like the row number of this run...\
                          so same for all objects')
-        stamp.addNoise(galsim.VariableGaussianNoise( # pass the random seed
-            self.gsdeviate, objvar))
+        stamp.addNoise(galsim.VariableGaussianNoise(self.gsdeviate, objvar))
         varstamp += objvar
 
         # Convert back to [nanomaggies]
@@ -271,7 +275,6 @@ class BuildStamp():
 
         # Remask pixels that were masked in the original inverse variance stamp.
         ivarstamp *= mask
-        raise ValueError
         return stamp, ivarstamp
 
     def convolve_and_draw(self,obj):
@@ -320,15 +323,15 @@ class BuildStamp():
         stamp.setCenter(self.xpos, self.ypos)
         return stamp 
 
-    def elg(self,objinfo):
+    def elg(self,obj):
         """Create an ELG (disk-like) galaxy."""
         # Create localpsf object
-        self.setlocal(objinfo)
+        self.setlocal(obj)
         objflux = obj.get(self.band+'flux') # [nanomaggies]
-        obj = galsim.Sersic(float(objinfo.get('sersicn')), half_light_radius=float(objinfo.get('rhalf')),\
+        galobj = galsim.Sersic(float(obj.get('sersicn')), half_light_radius=float(obj.get('rhalf')),\
                             flux=objflux, gsparams=self.gsparams)
-        obj = obj.shear(q=float(objinfo.get('ba')), beta=float(objinfo.get('phi'))*galsim.degrees)
-        stamp = self.convolve_and_draw(obj)
+        galobj = galobj.shear(q=float(obj.get('ba')), beta=float(obj.get('phi'))*galsim.degrees)
+        stamp = self.convolve_and_draw(galobj)
         return stamp
 
 #def no_overlapping_radec(ra,dec, bounds, random_state=None, dist=5.0/3600):
