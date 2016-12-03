@@ -1,12 +1,22 @@
 #!/bin/bash
 
 # Run script like this
-# for i in `seq 0 9`;do objtype=STAR;let rowstart=1+$i*500;bash decals_sim-bash-manager.sh $rowstart $objtype;done 
-export rowstart=$1
-export objtype=star
-export outdir=/scratch2/scratchdirs/kaylanb/obiwan
-bricklist=bricks_ndwfs.txt
-export run_name=decals_sim-bash
+# for i in `seq 0 9`;do objtype=star;let rowstart=1+$i*500;bash decals_sim-bash-manager.sh $rowstart $objtype;done 
+export rowstart="$1"
+export objtype="$2"
+if [ "$objtype" = "star" ] || [ "$objtype" = "elg" ] || [ "$objtype" = "lrg" ] || [ "$objtype" = "qso" ] ; then
+    echo Script running
+else
+    echo Crashing
+    exit
+fi
+
+
+export outdir=/scratch2/scratchdirs/kaylanb/dr3-bootes
+#export outdir=/scratch2/scratchdirs/kaylanb/obiwan
+#bricklist=bricks_ndwfs.txt
+bricklist=bricks-dr3-bootes.txt
+export run_name=bootes-dr3-obiwan
 export statdir="${outdir}/progress"
 mkdir -p $statdir $outdir
 
@@ -24,7 +34,7 @@ if [ ! -e "$bricklist" ]; then
     exit 999
 fi
 
-for brick in `cat $bricklist`;do
+for brick in `head -n 1 $bricklist`;do
     export brick="$brick"
     bri=$(echo $brick | head -c 3)
     #let rowend=$rowstart+500
@@ -44,6 +54,6 @@ for brick in `cat $bricklist`;do
     else
         echo submitting $myrun
         touch $statdir/inq_$myrun.txt
-        sbatch ${run_name}.sh --export objtype,rowstart,outdir,statdir,brick,run_name,myrun
+        sbatch decals_sim-bash.sh --export objtype,rowstart,outdir,statdir,brick,run_name,myrun
     fi
 done

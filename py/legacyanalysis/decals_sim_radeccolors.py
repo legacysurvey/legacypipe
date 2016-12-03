@@ -106,6 +106,23 @@ def dobash(cmd):
     print('UNIX cmd: %s' % cmd)
     if os.system(cmd): raise ValueError
 
+def get_area(radec):
+    '''returns area on sphere between ra1,ra2,dec2,dec1
+    https://github.com/desihub/imaginglss/model/brick.py#L64, self.area=...
+    '''
+    deg = np.pi / 180.
+    # Wrap around
+    if radec['ra2'] < radec['ra1']:
+        ra2=radec['ra2']+360.
+    else:
+        ra2=radec['ra2']
+    
+    area= (np.sin(radec['dec2']*deg)- np.sin(radec['dec1']*deg)) * \
+          (ra2 - radec['ra1']) * \
+          deg* 129600 / np.pi / (4*np.pi)
+    approx_area= (radec['dec2']-radec['dec1'])*(ra2-radec['ra1'])
+    print('approx area=%.2f deg2, actual area=%.2f deg2' % (approx_area,area))
+    return area
 
 def get_radec(radec,\
               ndraws=1,random_state=np.random.RandomState()):
@@ -210,10 +227,11 @@ if __name__ == "__main__":
     parser.add_argument('--ra2',type=float,action='store',help='bigbox',required=True)
     parser.add_argument('--dec1',type=float,action='store',help='bigbox',required=True)
     parser.add_argument('--dec2',type=float,action='store',help='bigbox',required=True)
-    parser.add_argument('--ndraws',type=int,action='store',help='number of draws for all mpi tasks',required=True)
+    parser.add_argument('--spacing',type=float,action='store',default=10.,help='choosing N radec pionts so points have spacingxspacing arcsec spacing',required=False)
+    parser.add_argument('--ndraws',type=int,action='store',help='default space by 5x5'', number of draws for all mpi tasks',required=False)
     parser.add_argument('--jobid',action='store',help='slurm jobid',default='001',required=False)
     parser.add_argument('--prefix', type=str, default='', help='Prefix to prepend to the output files.')
-    parser.add_argument('--outdir', type=str, default='./legacy_zpt_outdir', help='Output directory.')
+    parser.add_argument('--outdir', type=str, default='./radec_points_dir', help='Output directory.')
     parser.add_argument('--nproc', type=int, default=1, help='Number of CPUs to use.')
     args = parser.parse_args()
 
@@ -222,13 +240,19 @@ if __name__ == "__main__":
     radec['ra2']=args.ra2
     radec['dec1']=args.dec1
     radec['dec2']=args.dec2
+    if args.ndraws is None:
+        # Number that could fill a grid with 5x5 arcsec spacing
+        ndraws= int( get_area(radec)/args.spacing**2 * 3600.**2 ) + 1
+    else:
+        ndraws= args.ndraws
+    print('ndraws= %d' % ndraws)
 
     # Draws per mpi task
     if args.nproc > 1:
         from mpi4py.MPI import COMM_WORLD as comm
-        nper= int(args.ndraws/float(comm.size))
+        nper= int(ndraws/float(comm.size))
     else: 
-        nper= args.ndraws
+        nper= ndraws
     t0=ptime('parse-args',t0)
 
     if args.nproc > 1:
