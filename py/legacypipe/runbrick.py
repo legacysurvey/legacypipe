@@ -2047,6 +2047,8 @@ def stage_writecat(
             primhdr.add_record(dict(
                 name='WISEAB%i' % band, value=vega_to_ab['w%i' % band],
                 comment='WISE Vega to AB conv for band %i' % band))
+
+        T2.wise_coadd_id = WISE.unwise_tile
         for band in [1,2,3,4]:
             dm = vega_to_ab['w%i' % band]
             fluxfactor = 10.** (dm / -2.5)
