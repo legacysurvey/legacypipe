@@ -1,16 +1,22 @@
 #!/bin/bash -l
 
-#SBATCH -p debug
-#SBATCH -N 1
-#SBATCH -t 00:10:00
+#SBATCH -p shared
+#SBATCH -n 12
+#SBATCH -t 01:00:00
 #SBATCH --account=desi
-#SBATCH -J decals_sim-bash
-#SBATCH -o decals_sim-bash.o%j
+#SBATCH -J bootes-dr3-obiwan
+#SBATCH -o bootes-dr3-obiwan.o%j
 #SBATCH --mail-user=kburleigh@lbl.gov
 #SBATCH --mail-type=END,FAIL
 #SBATCH -L SCRATCH
 
-source ~/.bashrc_hpcp
+#-p shared
+#-n 6
+#-p debug
+#-N 1
+
+#source ~/.bashrc_hpcp
+source ~/.bashrc_dr4-bootes
 python -c "import tractor;print(tractor)"
 python -c "import astrometry;print(astrometry)"
 
@@ -48,7 +54,7 @@ echo >> $log
 echo -e "\nStarting on ${NERSC_HOST} $(hostname)\n" >> $log
 echo "-----------------------------------------------------------------------------------------" >> $log
 
-threads=24
+threads=12
 export OMP_NUM_THREADS=$threads
 
 echo outdir="$outdir", brick="$brick"

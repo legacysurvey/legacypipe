@@ -1,7 +1,7 @@
 #!/bin/bash
 
 # Run script like this
-# for i in `seq 0 9`;do objtype=star;let rowstart=1+$i*500;bash decals_sim-bash-manager.sh $rowstart $objtype;done 
+# for objtype in star elg lrg qso;do for rowstart in `seq 0 500 10000`; do bash decals_sim-bash-manager.sh $rowstart $objtype;done;done
 export rowstart="$1"
 export objtype="$2"
 if [ "$objtype" = "star" ] || [ "$objtype" = "elg" ] || [ "$objtype" = "lrg" ] || [ "$objtype" = "qso" ] ; then
@@ -34,7 +34,7 @@ if [ ! -e "$bricklist" ]; then
     exit 999
 fi
 
-for brick in `head -n 1 $bricklist`;do
+for brick in `cat $bricklist`;do
     export brick="$brick"
     bri=$(echo $brick | head -c 3)
     #let rowend=$rowstart+500
