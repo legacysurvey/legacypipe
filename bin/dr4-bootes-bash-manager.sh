@@ -16,7 +16,7 @@ mkdir -p $statdir $outdir
 
 
 # Clean up
-for i in `find . -maxdepth 1 -type f -name "${run_name}.o*"|xargs grep "${run_name} DONE"|cut -d ' ' -f 3|grep "^[0-9]*[0-9]$"`; do mv ${run_name}.o$i $outdir/logs/;done
+for i in `find . -maxdepth 1 -type f -name "dr4-bootes.o*"|xargs grep "${run_name} DONE"|cut -d ' ' -f 3|grep "^[0-9]*[0-9]$"`; do mv dr4-bootes.o$i $outdir/logs/;done
 
 # Cancel ALL jobs and remove all inq.txt files
 #for i in `squeue -u desiproc|grep dr3-mzls-b|cut -c10-18`; do scancel $i;done
@@ -29,7 +29,7 @@ if [ ! -e "$bricklist" ]; then
     exit 999
 fi
 
-for brick in `head -n 1 $bricklist`;do
+for brick in `cat $bricklist`;do
     export brick="$brick"
     bri=$(echo $brick | head -c 3)
     tractor_fits=$outdir/tractor/$bri/tractor-$brick.fits
@@ -38,7 +38,7 @@ for brick in `head -n 1 $bricklist`;do
         # Remove coadd, checkpoint, pickle files they are huge
         rm $outdir/pickles/${bri}/runbrick-${brick}*.pickle
         rm $outdir/checkpoints/${bri}/${brick}*.pickle
-        rm $outdir/coadd/${bri}/${brick}/*
+        #rm $outdir/coadd/${bri}/${brick}/*
     elif [ -e "$statdir/inq_$brick.txt" ]; then
         echo skipping $brick, its queued
     else
