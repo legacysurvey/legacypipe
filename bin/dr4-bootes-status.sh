@@ -80,7 +80,7 @@ do
     fi
 
     # For easy to fix errors write bricknames to txt file
-    if [ "$mem" -gt 0 ]
+    if [ "$mem" -gt 0 ] || [ "$tim" -gt 0 ]
     then
         brick=`awk '/Command-line args:/ { print $7 }' $fn| sed "s/\,//g"|sed "s/'//g"`
         echo $brick >> $resubmitfn
