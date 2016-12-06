@@ -116,7 +116,7 @@ def format_catalog(T, hdr, primhdr, allbands, outfn,
 
     if has_wise:
         cols.extend([
-            'wise_flux', 'wise_flux_ivar', 'wise_mask',
+            'wise_coadd_id', 'wise_flux', 'wise_flux_ivar', 'wise_mask',
             'wise_mw_transmission', 'wise_nobs', 'wise_fracflux','wise_rchi2'])
 
     if has_wise_lc:
