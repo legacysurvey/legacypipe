@@ -5,7 +5,7 @@ from matplotlib import pyplot as plt
 from astroML.decorators import pickle_results
 from astroML.correlation import bootstrap_two_point_angular,two_point_angular
 
-from theValidator import catalogues
+from theValidator.catalogues import CatalogueFuncs,Matcher
 
 # Identical to astroML.correlation.bootstrap_two_point_angular()
 # but for data_R specified 
@@ -123,42 +123,57 @@ def compute_results(data,data_R,\
     return results
 
 
-if __name__ == '__main__':
-    
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description='Generate a legacypipe-compatible CCDs file from a set of reduced imaging.')
-    parser.add_argument('--ra1',type=float,action='store',help='bigbox',required=True)
-    parser.add_argument('--ra2',type=float,action='store',help='bigbox',required=True)
-    parser.add_argument('--dec1',type=float,action='store',help='bigbox',required=True)
-    parser.add_argument('--dec2',type=float,action='store',help='bigbox',required=True)
-    parser.add_argument('--spacing',type=float,action='store',default=10.,help='choosing N radec pionts so points have spacingxspacing arcsec spacing',required=False)
-    parser.add_argument('--ndraws',type=int,action='store',help='default space by 5x5'', number of draws for all mpi tasks',required=False)
-    parser.add_argument('--jobid',action='store',help='slurm jobid',default='001',required=False)
-    parser.add_argument('--prefix', type=str, default='', help='Prefix to prepend to the output files.')
-    parser.add_argument('--outdir', type=str, default='./radec_points_dir', help='Output directory.')
-    parser.add_argument('--nproc', type=int, default=1, help='Number of CPUs to use.')
+    parser.add_argument('--type',choices=['elg','lrg','qso','star'],type=str,action='store',required=True)
+    parser.add_argument('--brick_list',type=str,action='store',help='run on a single bircks data',default=False,required=False)
+    parser.add_argument('--debug',action='store',help='run on a single bircks data',default=False,required=False)
     args = parser.parse_args()
 
-
     # IDEA: recovered ra,dec is the imaging systematic correlation function, we want to remove that
-    # 
+    dr3dir='/global/project/projectdirs/cosmo/data/legacysurvey/dr3.0'
+    basedir='/scratch2/scratchdirs/kaylanb/dr3-bootes'
+    big_geom=fits_table()
+    big_recover=fits_table()
+    if args.debug:
+        bricks=['2191p337']
+    else:
+        bricks=np.loadtxt(args.brick_list,dtype=str)
     for brick in bricks:
-        rand_geom= CatalogueFuncs().stack('simcat-star-2109p335-rowstart0.fits',textfile=False)
-        rand_geom_recover= CatalogueFuncs().stack('tractor-star-2109p335-rowstart0.fits',textfile=False)
-        # remove dr3 tractor from rand_geom_recover
-        dr3= fits_table('tractor-brick.fits')
-        imatch= match(dr3,rand_geom_recover,1./3600)
-        rand_geom_recover.remove(imatch)
-    data= rand_geom_recover
-    data_R= rand_geom 
+        # Get lists of relevant files
+        bri=brick[:3]
+        recovered_fns=glob(os.path.join(basedir,'%s/%s/%s/*/tractor-*.fits' %
+                                (args.type,bri,brick))
+        simcat_fns= np.char.replace(recovered_fns, 'tractor-','simcat-')
+        dr3_fn= os.path.join(dr3dir,'tractor/%s/%s/tractor-%s.fits' % \
+                                (bri,brick,brick))
+        # Combine the simcat and recovered files
+        print('WARNING: these need to agree exactly')
+        rand_geom= CatalogueFuncs().stack(simcat_fns,textfile=False)
+        rand_recover= CatalogueFuncs().stack(recovered_fns,textfile=False)
+        dr3= fits_table(dr3_fn)
+        # Cut to ra,dec cols to reduce file size
+        small_geom=fits_table()
+        small_recover=fits_table()
+        for key in ['ra','dec']:
+            small_geom.set(key, rand_geom.get(key))
+            small_recover.set(key, rand_recover.get(key))
+        # Remove DR3 sources from rand_geom_recover
+        imatch,imiss,d2d= Matcher().match_within(dr3,small_recover,dist=1./3600)
+        rand_recover.remove(imatch['obs'])
+        # Add small to big
+        big_geom= merge_tables([small_geom,big_geom], columns='fillzero')
+        big_recover= merge_tables([small_recover,big_recover], columns='fillzero')
 
-	(bins, corr, corr_err, bootstraps)= compute_results(dr3,obiwan)
+    # Compute corr funcs
+    # data=big_recover, data_R=big_geom
+	(bins, corr, corr_err, bootstraps)= compute_results(big_recover,big_geom)
 	corr= [corr]
 	corr_err=[corr_err]
 	bin_centers = 0.5 * (bins[1:] + bins[:-1])
 
 	# Plot the results
-	labels = 'ELGs: N=%i, R=%i' % (len(data),len(data_R))
+	labels = '%s: N=%i, R=%i' % (args.type,len(big_recover),len(big_geom))
 
 	fig = plt.figure(figsize=(5, 2.5))
 	fig.subplots_adjust(bottom=0.2, top=0.9,
@@ -180,4 +195,4 @@ if __name__ == "__main__":
 			ylab=ax.set_ylabel(r'$\hat{w}(\theta)$')
 	plt.savefig("elg_corr.png",\
 				bbox_extra_artists=[xlab,ylab], bbox_inches='tight',dpi=150)
-	print('Wrote elg_corr.png')
+	print('Wrote %s_corr.png' % args.type)
