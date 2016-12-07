@@ -518,7 +518,7 @@ class ELG(CommonInit):
         return rz,gr,r_nodust,r_wdust
 
     def plot_FDR(self):
-        rz,gr,r= self.get_elgs_FDR_cuts()
+        rz,gr,r_nodust,r_wdust= self.get_elgs_FDR_cuts()
         # Object to add target selection box
         ts= TSBox(src='ELG')
         fig, ax = plt.subplots()
@@ -687,7 +687,8 @@ class LRG(CommonInit):
         ts= TSBox(src='LRG')
         ts.add_ts_box(ax, xlim=xrange,ylim=yrange)
         # Data
-        for cnt,key,rgb in zip(range(4),rz.keys(),rgb_cols):
+        keys= ['star','red_galaxy_lowz','red_galaxy_hiz','blue_galaxy']
+        for cnt,key,rgb in zip(range(4),keys,rgb_cols):
             rgb= (rgb[0]/255.,rgb[1]/255.,rgb[2]/255.)
             ax.scatter(rz[key],rW1[key],c=[rgb],edgecolors='none',marker='o',s=10.,rasterized=True,label=key)
         ax.set_xlim(xrange)
@@ -712,7 +713,8 @@ class LRG(CommonInit):
         fig,ax = plt.subplots(1,4,sharex=True,sharey=True,figsize=(16,4))
         plt.subplots_adjust(wspace=0.1,hspace=0)
         rgb_cols=get_rgb_cols()
-        for cnt,key,rgb in zip(range(4),rz.keys(),rgb_cols):
+        keys= ['star','red_galaxy_lowz','red_galaxy_hiz','blue_galaxy']
+        for cnt,key,rgb in zip(range(4),keys,rgb_cols):
             rgb= (rgb[0]/255.,rgb[1]/255.,rgb[2]/255.)
             ax[cnt].scatter(rz[key],rW1[key],c=[rgb],edgecolors='none',marker='o',s=10.,rasterized=True)#,label=key)
             ti=ax[cnt].set_title(key)
@@ -886,7 +888,7 @@ class STAR(CommonInit):
         elif self.DR == 3:
             raise ValueError()
  
-    def plot(self,savefig):
+    def plot(self):
         self.plot_sweepstars() 
         #plt.plot(self.cat.get('ra'),self.cat.get('dec'))
         #plt.savefig('test.png')
@@ -1008,9 +1010,64 @@ class QSO(CommonInit):
             plt.close()
             print('Wrote {}'.format(name))
 
+    def plot_FDR_multipanel(self):
+        # Data
+        qsos= self.get_qsos()
+        star_obj= STAR(DR=self.DR,savefig=False)
+        stars= star_obj.get_purestars()
+        hiz=2.1
+        index={}
+        index['hiz']= qsos.get('z') > hiz
+        index['loz']= qsos.get('z') <= hiz
+        # Plot
+        fig,ax = plt.subplots(3,2,figsize=(10,12))
+        plt.subplots_adjust(wspace=0.2,hspace=0.1)
+        # Stars top panel
+        ax[0,0].scatter(stars.get('decam_mag_nodust')[:,2]-stars.get('decam_mag_nodust')[:,4],\
+                      stars.get('decam_mag_nodust')[:,1]-stars.get('decam_mag_nodust')[:,2],\
+                      c='b',edgecolors='none',marker='o',s=10.,rasterized=True, label='stars',alpha=self.alpha)
+        W= 0.75*stars.get('wise_mag_nodust')[:,0]+ 0.25*stars.get('wise_mag_nodust')[:,1]
+        ax[0,1].scatter(stars.get('decam_mag_nodust')[:,1]-stars.get('decam_mag_nodust')[:,4],\
+                      stars.get('decam_mag_nodust')[:,2]-W,\
+                      c='b',edgecolors='none',marker='o',s=10.,rasterized=True, label='stars',alpha=self.alpha)
+        # QSOs loz middle, hiz bottom
+        for cnt,key,lab,col in zip([1,2],['loz','hiz'],['(z < 2.1)','(z > 2.1)'],['magenta','red']):
+            i= index[key]
+            ax[cnt,0].scatter(qsos.get('decam_mag_nodust')[:,2][i]-qsos.get('decam_mag_nodust')[:,4][i],\
+                          qsos.get('decam_mag_nodust')[:,1][i]-qsos.get('decam_mag_nodust')[:,2][i],\
+                          c=col,edgecolors='none',marker='o',s=10.,rasterized=True, label='qso '+lab,alpha=self.alpha)
+            W= 0.75*qsos.get('wise_mag_nodust')[:,0]+ 0.25*qsos.get('wise_mag_nodust')[:,1]
+            ax[cnt,1].scatter(qsos.get('decam_mag_nodust')[:,1][i]-qsos.get('decam_mag_nodust')[:,4][i],\
+                          qsos.get('decam_mag_nodust')[:,2][i]-W[i],\
+                          c=col,edgecolors='none',marker='o',s=10.,rasterized=True, label='qso '+lab,alpha=self.alpha)
+        
+        for cnt in range(3):
+            #for xlim,ylim,x_lab,y_lab in ax[0].set_xlim([-0.5,3.])
+            ax[cnt,0].set_xlim(xyrange['x1_qso'])
+            ax[cnt,1].set_xlim(xyrange['x2_qso'])
+            ax[cnt,0].set_ylim(xyrange['y1_qso'])
+            ax[cnt,1].set_ylim(xyrange['y2_qso'])
+            xlab=ax[cnt,0].set_xlabel('r-z')
+            xlab=ax[cnt,1].set_xlabel('g-z')
+            ylab=ax[cnt,0].set_ylabel('g-r')
+            ylab=ax[cnt,1].set_ylabel('r-W')
+        #leg=ax[0,0].legend(loc=(0,1.02),scatterpoints=1,ncol=3,markerscale=2)
+        ## Add box
+        #ts= TSBox(src='LRG')
+        #xrange,yrange= xyrange['x_lrg'],xyrange['y_lrg']
+        #ts.add_ts_box(ax[cnt], xlim=xrange,ylim=yrange)
+        name='dr%d_FDR_QSO_multi.png' % self.DR
+        if self.savefig:
+            plt.savefig(name,\
+                        bbox_extra_artists=[leg,xlab,ylab], bbox_inches='tight',dpi=150)
+            plt.close()
+            print('Wrote {}'.format(name))
+
+
  
     def plot(self):
         self.plot_FDR()
+        self.plot_FDR_multipanel()
 
     def plot_kde(self,loadkde=False,savekde=False):
         qsos= self.get_qsos()
@@ -1051,14 +1108,18 @@ if __name__ == '__main__':
     #gals=GalaxyPrior()
     #gals.plot_all()
     #print "gals.__dict__= ",gals.__dict__
-    kwargs=dict(DR=2,savefig=False,loadkde=True,savekde=False)
+    kwargs=dict(DR=2,savefig=True,loadkde=True,savekde=False,alpha=0.25)
     #star=STAR(**kwargs)
     #star.plot_kde()
-    #qso=QSO(**kwargs)
+    #star.plot()
+    qso=QSO(**kwargs)
     #qso.plot_kde()
+    qso.plot()
     kwargs.update(dict(DR=3, rlimit=23.4+1.))
     #elg= ELG(**kwargs) 
     #elg.plot_kde()
-    kwargs.update(dict(zlimit=20.46+1.))
-    lrg= LRG(**kwargs)
-    lrg.plot_kde()
+    #elg.plot()
+    #kwargs.update(dict(zlimit=20.46+1.))
+    #lrg= LRG(**kwargs)
+    #lrg.plot_kde()
+    #lrg.plot()

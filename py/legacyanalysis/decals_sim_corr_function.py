@@ -140,9 +140,17 @@ if __name__ == "__main__":
     args = parser.parse_args()
 
 
-
-    dr3= CatalogueFuncs().stack(bootes_fns,textfile=False)
-    obiwan= CatalogueFuncs().stack(elg_bootes_fns,textfile=False)
+    # IDEA: recovered ra,dec is the imaging systematic correlation function, we want to remove that
+    # 
+    for brick in bricks:
+        rand_geom= CatalogueFuncs().stack('simcat-star-2109p335-rowstart0.fits',textfile=False)
+        rand_geom_recover= CatalogueFuncs().stack('tractor-star-2109p335-rowstart0.fits',textfile=False)
+        # remove dr3 tractor from rand_geom_recover
+        dr3= fits_table('tractor-brick.fits')
+        imatch= match(dr3,rand_geom_recover,1./3600)
+        rand_geom_recover.remove(imatch)
+    data= rand_geom_recover
+    data_R= rand_geom 
 
 	(bins, corr, corr_err, bootstraps)= compute_results(dr3,obiwan)
 	corr= [corr]
