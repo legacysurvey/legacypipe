@@ -3,6 +3,7 @@ import numpy as np
 from matplotlib import pyplot as plt
 from glob import glob
 import os
+import pickle
 
 from astroML.decorators import pickle_results
 from astroML.correlation import two_point,ra_dec_to_xyz,angular_dist_to_euclidean_dist
@@ -81,22 +82,21 @@ def new_bootstrap_two_point_angular(ra_G,dec_G, bins, method='standard',\
     bootstraps = []
 
     # Bootstrap sample data_R, hold data fixed 
-    R_samples, R_features = data_R.shape
-    for i in range(Nbootstraps):
-        # Sample with replacement
-        #inds= rng.randint(R_samples, size=R_samples) #np.random.randint
-        ind = rng.randint(0, R_samples, R_samples)
-        new_R= data_R[ind]
-        print('WARNING: look in code, is new_R shape correct?')
+    #R_samples, R_features = data_R.shape
+    #for i in range(Nbootstraps):
+    #    # Sample with replacement
+    #    #inds= rng.randint(R_samples, size=R_samples) #np.random.randint
+    #    ind = rng.randint(0, R_samples, R_samples)
+    #    new_R= data_R[ind,:]
+    #    print('WARNING: look in code, is new_R shape correct?')
 
-        bootstraps.append(two_point(data, bins_transform, method=method,
-                                    data_R=new_R, random_state=rng))
+    #    bootstraps.append(two_point(data, bins_transform, method=method,
+    #                                data_R=new_R, random_state=rng))
     # Now, bootstrap sample data, hold data_R 
     for i in range(Nbootstraps):
+        print('Computing bootstrap: %d' % (i+1,))
         ind = rng.randint(0, n_samples, n_samples)
-        new_G= data[ind]
-        print('WARNING: look in code, is new_R shape correct?')
-
+        new_G= data[ind,:]
         bootstraps.append(two_point(new_G, bins_transform, method=method,
                                     data_R=data_R, random_state=rng))
 
@@ -108,22 +108,30 @@ def new_bootstrap_two_point_angular(ra_G,dec_G, bins, method='standard',\
 
 
 
-# Set up correlation function computation
-#  This calculation takes a long time with the bootstrap resampling,
-#  so we'll save the results.
-@pickle_results("correlation_functions.pkl")
 def compute_results(data,data_R,\
-					Nbins=16, Nbootstraps=10,  method='landy-szalay', rseed=0):
-    np.random.seed(rseed)
-    bins = 10 ** np.linspace(np.log10(1. / 60.), np.log10(6), 16)
+					Nbins=16, Nbootstraps=10,  method='landy-szalay', rseed=0,\
+                    fn='correlation_functions.pkl'):
+    if os.path.exists(fn):
+        print('Loading correlation func from: %s' % fn)
+        fin=open(fn,'r')
+        results=pickle.load(fin)
+        fin.close()
+    else: 
+        print('Computing correlation func, saving to: %s' % fn)
+        np.random.seed(rseed)
+        bins = 10 ** np.linspace(np.log10(1. / 60.), np.log10(6), 16)
 
-    results = [bins]
-    results += new_bootstrap_two_point_angular(\
-                        data.ra,data.dec,\
-                        bins=bins,method=method,\
-                        ra_R=data_R.ra,dec_R=data_R.dec,\
-                        Nbootstraps=Nbootstraps)
-
+        results = [bins]
+        results += new_bootstrap_two_point_angular(\
+                            data.ra,data.dec,\
+                            bins=bins,method=method,\
+                            ra_R=data_R.ra,dec_R=data_R.dec,\
+                            Nbootstraps=Nbootstraps)
+        # Save results
+        fout=open(fn,'w')
+        pickle.dump(results,fout)
+        fout.close()
+        print('Wrote %s' % fn)
     return results
 
 
@@ -132,6 +140,7 @@ if __name__ == "__main__":
     parser.add_argument('--type',choices=['elg','lrg','qso','star'],type=str,action='store',required=True)
     parser.add_argument('--brick_list',type=str,action='store',help='run on a single bircks data',default=False,required=True)
     parser.add_argument('--debug',action='store_true',help='run on a single bircks data',default=False,required=False)
+    parser.add_argument('--nboots',type=int,action='store',default=10,help='number of bootstraps',required=False)
     args = parser.parse_args()
 
     # IDEA: recovered ra,dec is the imaging systematic correlation function, we want to remove that
@@ -141,46 +150,93 @@ if __name__ == "__main__":
     big_recover=fits_table()
     if args.debug:
         bricks=['2191p337']
+        radec_fn='junk.pkl'
     else:
         bricks=np.loadtxt(args.brick_list,dtype=str)
-    for brick in bricks:
-        # Get lists of relevant files
-        bri=brick[:3]
-        recovered_fns=glob(os.path.join(basedir,'%s/%s/%s/*/tractor-*.fits' %\
-                                (args.type,bri,brick)))
-        simcat_fns= np.char.replace(recovered_fns, 'tractor-','simcat-')
-        dr3_fn= os.path.join(dr3dir,'tractor/%s/tractor-%s.fits' % \
-                                (bri,brick))
-        # Combine the simcat and recovered files
-        print('Stacking %d simcats' % (len(simcat_fns)))
-        rand_geom= CatalogueFuncs().stack(simcat_fns,textfile=False)
-        print('Stacking %d recovered tractors' % len(recovered_fns))
-        rand_recover= CatalogueFuncs().stack(recovered_fns,textfile=False)
-        dr3= fits_table(dr3_fn)
-        # Cut to ra,dec cols to reduce file size
-        small_geom=fits_table()
-        small_recover=fits_table()
-        for key in ['ra','dec']:
-            small_geom.set(key, rand_geom.get(key))
-            small_recover.set(key, rand_recover.get(key))
-        # Remove DR3 sources from rand_geom_recover
-        imatch,imiss,d2d= Matcher().match_within(dr3,small_recover,dist=1./3600)
-        keep= np.arange(len(small_recover))
-        keep= np.delete(keep,imatch['obs'] )
-        small_recover.cut(keep)
-        # Add small to big
-        big_geom= merge_tables([small_geom,big_geom], columns='fillzero')
-        big_recover= merge_tables([small_recover,big_recover], columns='fillzero')
+        radec_fn='radec-%s.pkl' % args.brick_list
+    # If pkl not exist, compute it
+    if os.path.exists(radec_fn):
+        print('Loading %s' % radec_fn)
+        fin=open(radec_fn,'r')
+        (big_geom,big_recover)=pickle.load(fin)
+        fin.close()
+    else: 
+        print('Creating %s' % radec_fn)
+        for nth,brick in enumerate(bricks):
+            print('Stacking brick %d/%d' % (nth+1,len(bricks)))
+            # Get lists of relevant files
+            bri=brick[:3]
+            recovered_fns=glob(os.path.join(basedir,'%s/%s/%s/*/tractor-*.fits' %\
+                                    (args.type,bri,brick)))
+            if len(recovered_fns) == 0:
+                print('NO TRACTOR CAT, SKIPPING BRICK: %s' % brick)
+                continue
+            simcat_fns= np.char.replace(recovered_fns, 'tractor-','simcat-')
+            dr3_fn= os.path.join(dr3dir,'tractor/%s/tractor-%s.fits' % \
+                                    (bri,brick))
+            # Combine the simcat and recovered files
+            print('Stacking %d simcats' % (len(simcat_fns)))
+            rand_geom= CatalogueFuncs().stack(simcat_fns,textfile=False)
+            print('Stacking %d recovered tractors' % len(recovered_fns))
+            rand_recover= CatalogueFuncs().stack(recovered_fns,textfile=False)
+            dr3= fits_table(dr3_fn)
+            # Cut to ra,dec cols to reduce file size
+            small_geom=fits_table()
+            small_recover=fits_table()
+            for key in ['ra','dec']:
+                small_geom.set(key, rand_geom.get(key))
+                small_recover.set(key, rand_recover.get(key))
+            # Remove DR3 sources from rand_geom_recover
+            imatch,imiss,d2d= Matcher().match_within(dr3,small_recover,dist=1./3600)
+            keep= np.arange(len(small_recover))
+            keep= np.delete(keep,imatch['obs'] )
+            small_recover.cut(keep)
+            # Add small to big
+            big_geom= merge_tables([small_geom,big_geom], columns='fillzero')
+            big_recover= merge_tables([small_recover,big_recover], columns='fillzero')
+        # Save results
+        fout=open(radec_fn,'w')
+        pickle.dump((big_geom,big_recover),fout)
+        fout.close()
+        print('Wrote %s' % radec_fn)
 
     # Compute corr funcs
     # data=big_recover, data_R=big_geom
     print('Computing corr func')
-    (bins, corr, corr_err, bootstraps)= compute_results(big_recover,big_geom)
+    (bins, corr, corr_err, bootstraps)= compute_results(big_recover,big_geom,\
+                                                        Nbootstraps=args.nboots,\
+                                        fn='corfunc-%d-bootes-%s.pickle' % (args.nboots,args.brick_list))
+    print('Plotting')
     corr= [corr]
     corr_err=[corr_err]
     bin_centers = 0.5 * (bins[1:] + bins[:-1])
 
     # Plot the results
+    # Ra,dec distribution
+    ra1,ra2,dec1,dec2=None,None,None,None
+    ra1,dec1= 216.5,33.5
+    ra2,dec2=ra1+1./36,dec1+1./36
+    if ra1 is not None:
+        big_geom.cut( (big_geom.ra >= ra1)*(big_geom.ra <= ra2)*\
+                      (big_geom.dec >= dec1)*(big_geom.dec <= dec2) )
+        big_recover.cut( (big_recover.ra >= ra1)*(big_recover.ra <= ra2)*\
+                      (big_recover.dec >= dec1)*(big_recover.dec <= dec2) )
+    fig,ax= plt.subplots(1,2,figsize=(10,5))
+    plt.subplots_adjust(wspace=0.1)
+    for cnt,cat,name in zip(range(2),[big_geom,big_recover],['Random','Recovered']):
+        ax[cnt].scatter(cat.get('ra'), cat.get('dec'), \
+                        edgecolor='b',c='none',lw=1.)
+        xlab=ax[cnt].set_xlabel('RA')
+        ti=ax[cnt].set_title(name)
+    ylab=ax[0].set_ylabel('DEC')
+    for cnt in range(2):
+        ax[cnt].set_xlim(ax[0].get_xlim())
+    fn="radec-%s-%d-%s.png" % (args.type,args.nboots,args.brick_list)
+    if ra1 is not None:
+        fn=fn.replace('.png','-zoom.png'
+    plt.savefig('%s' % fn,bbox_extra_artists=[xlab,ylab], bbox_inches='tight',dpi=150)
+    plt.close()
+    raise ValueError
     labels = '%s: N=%i, R=%i' % (args.type,len(big_recover),len(big_geom))
 
     fig = plt.figure(figsize=(5, 2.5))
@@ -201,6 +257,7 @@ if __name__ == "__main__":
         xlab=ax.set_xlabel(r'$\theta\ (deg)$')
         if i == 0:
             ylab=ax.set_ylabel(r'$\hat{w}(\theta)$')
-    plt.savefig("elg_corr.png",\
-                bbox_extra_artists=[xlab,ylab], bbox_inches='tight',dpi=150)
-    print('Wrote %s_corr.png' % args.type)
+    fn="corfun-%s-%d-%s.png" % (args.type,args.nboots,args.brick_list)
+    plt.savefig(fn,bbox_extra_artists=[xlab,ylab], bbox_inches='tight',dpi=150)
+    plt.close()
+    print('Wrote %s' % fn)
