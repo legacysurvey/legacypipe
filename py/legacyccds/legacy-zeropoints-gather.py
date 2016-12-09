@@ -32,7 +32,10 @@ if __name__ == "__main__":
         fn_split= np.array_split(fns, comm.size)
         cats=[]
         for fn in fn_split[comm.rank]:
-            cats.append( fits_table(fn) )
+            try:
+                cats.append( fits_table(fn) )
+            except IOError:
+                print('File is bad, skipping: %s' % fn)
         cats= merge_tables(cats, columns='fillzero')
         # Gather
         all_cats = comm.gather( cats, root=0 )
@@ -45,7 +48,8 @@ if __name__ == "__main__":
             print("Done")
     else:
         cats=[]
-        for fn in fns:
+        for cnt,fn in enumerate(fns):
+            print('Reading %d/%d' % (cnt,len(fns)))
             cats.append( fits_table(fn) )
         cats= merge_tables(cats, columns='fillzero')
         if os.path.exists(opt.outname):

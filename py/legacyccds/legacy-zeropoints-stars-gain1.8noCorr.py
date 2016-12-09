@@ -704,10 +704,10 @@ class Measurer(object):
             colorterm = np.zeros(nmatch)
         else:
             colorterm = self.colorterm_ps1_to_observed(ps1.median[m2, :], self.band)
-        from legacyanalysis.ps1cat import ps1_to_mosaic,ps1_to_decam,ps1_to_90prime
+        #from legacyanalysis.ps1cat import ps1_to_mosaic,ps1_to_decam,ps1_to_90prime
         #stars['mzls_colorterm']= ps1_to_mosaic(ps1.median[m2, :], self.band)
-        stars['decam_colorterm']= ps1_to_decam(ps1.median[m2, :], self.band)
-        stars['90prime_colorterm']= ps1_to_90prime(ps1.median[m2, :], self.band)
+        #stars['decam_colorterm']= ps1_to_decam(ps1.median[m2, :], self.band)
+        #stars['90prime_colorterm']= ps1_to_90prime(ps1.median[m2, :], self.band)
         
         # Compute the astrometric residuals relative to PS1.
         #radiff = (stars['ra'] - stars['ps1_ra']) * np.cos(np.deg2rad(ccddec)) * 3600.0
@@ -944,10 +944,11 @@ class NinetyPrimeMeasurer(Measurer):
         return mask
   
     def get_wcs(self):
-        # Bok_CP WCS coeffs are unusuable, use TAN for now
-        self.hdr['CTYPE1'] = 'RA---TAN'
-        self.hdr['CTYPE2'] = 'DEC--TAN'
-        return wcs_pv2sip_hdr(self.hdr)
+        return wcs_pv2sip_hdr(self.hdr) # PV distortion
+    #    # Bok_CP WCS coeffs are unusuable, use TAN for now
+    #    self.hdr['CTYPE1'] = 'RA---TAN'
+    #    self.hdr['CTYPE2'] = 'DEC--TAN'
+    #    return wcs_pv2sip_hdr(self.hdr)
 
 
 def camera_name(primhdr):

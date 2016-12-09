@@ -1,7 +1,7 @@
 #!/bin/bash -l
 
 #SBATCH -p debug
-#SBATCH -N 10
+#SBATCH -N 5
 #SBATCH -t 00:10:00
 #SBATCH -J zpts
 #SBATCH -L SCRATCH,project
@@ -29,20 +29,22 @@ elif [ "$NERSC_HOST" == "edison" ]; then
 fi
 let tasks=${SLURM_JOB_NUM_NODES}*${cores}
 
-#input=validation_zpt_images.txt
-#prefix=stars2
-#code=legacy-zeropoints-stars.py 
+#input=mzls_CP20160202v2.txt
+#prefix=mzls
+input=90prime_CP20160102.txt
+prefix=90prime
 # Make zpts
-#srun -n $tasks -N ${SLURM_JOB_NUM_NODES} -c 1 python legacyccds/$code --prefix $prefix --image_list $input --nproc $tasks
+srun -n $tasks -N ${SLURM_JOB_NUM_NODES} -c 1 python legacyccds/legacy-zeropoints-stars-gain1.8noCorr.py --prefix $prefix --image_list $input --nproc $tasks
 
 # ccd ra,dec only
-#input=bok_images.txt
-#prefix=radec-only
-#code=legacy-zeropoints-stars-gain1.8noCorr.py 
-#srun -n $tasks -N ${SLURM_JOB_NUM_NODES} -c 1 python legacyccds/$code --only_ccd_centers --prefix $prefix --image_list $input --nproc $tasks
+#input=bok_cps.txt
+#input=mzls_files_v2_thruMarch19.txt
+#prefix=v2_thruMarch19
+#srun -n $tasks -N ${SLURM_JOB_NUM_NODES} -c 1 python legacyccds/legacy-zeropoints-stars-gain1.8noCorr.py --only_ccd_centers --prefix $prefix --image_list $input --nproc $tasks
 # Gather into 1 file
-input=boks_to_gather.txt
-srun -n $tasks -N ${SLURM_JOB_NUM_NODES} -c 1 python legacyccds/legacy-zeropoints-gather.py --file_list $input --nproc $tasks --outname gathered_boks.fits
+#input=mzls_zpts_v2thruMarch19.txt 
+#input=bok_zpts.txt
+#srun -n $tasks -N ${SLURM_JOB_NUM_NODES} -c 1 python legacyccds/legacy-zeropoints-gather.py --file_list $input --nproc $tasks --outname gathered_bok_all.fits
 
 #input=bok_zpt_files.txt
 #srun -n $tasks -N ${SLURM_JOB_NUM_NODES} -c 1 python legacyccds/legacy-zeropoints-gather.py --file_list $input --nproc $tasks --outname gathered_all_mpi.fits
