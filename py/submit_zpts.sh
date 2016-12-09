@@ -29,10 +29,10 @@ elif [ "$NERSC_HOST" == "edison" ]; then
 fi
 let tasks=${SLURM_JOB_NUM_NODES}*${cores}
 
-#input=mzls_CP20160202v2.txt
-#prefix=mzls
-input=90prime_CP20160102.txt
-prefix=90prime
+input=mzls_CP20160202v2.txt
+prefix=mzls_no1522magcut
+#input=90prime_CP20160102.txt
+#prefix=90prime
 # Make zpts
 srun -n $tasks -N ${SLURM_JOB_NUM_NODES} -c 1 python legacyccds/legacy-zeropoints-stars-gain1.8noCorr.py --prefix $prefix --image_list $input --nproc $tasks
 

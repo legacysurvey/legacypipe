@@ -36,10 +36,8 @@ class Translator(object):
                 if key not in vals:
                     print '%s' % key
         # Problematic keys
-        self.discrep_keys=['zpt','zptavg',\
-                           'skycounts','skyrms','skymag',\
-                           'transp','phoff','rarms','decrms',\
-                           'raoff','decoff']
+        self.discrep_keys=['raoff','decoff','rarms','decrms','phoff','phrms',\
+                           'nmatch','skyrms','transp',]
                 
     def compare(self):
         # Comparisons
@@ -148,7 +146,9 @@ class Translator(object):
                         bbox_extra_artists=[xlab,ylab], bbox_inches='tight',dpi=150)
             print('Wrote %s' % fn)
  
-    def compare_problematic(self):
+    def compare_problematic(self,keep=None):
+        if keep is None:
+            keep=np.ones(len(self.j)).astype(bool)
         print('comparing problematic')
         # Compare
         panels=len(self.discrep_keys)
@@ -159,20 +159,24 @@ class Translator(object):
             rows=panels/cols+1
         fig,axes= plt.subplots(rows,cols,figsize=(20,10))
         ax=axes.flatten()
-        plt.subplots_adjust(hspace=0.4,wspace=0.3)
+        plt.subplots_adjust(hspace=0.1,wspace=0.1)
         cnt=-1
         for key in self.discrep_keys:
             cnt+=1
-            arjun= self.a.get( self.j2a[key] )
-            john= self.j.get(key)
+            arjun= self.a.get( self.j2a[key] )[keep]
+            john= self.j.get(key)[keep]
             #if key == 'skymag':
             #    arjun=arjun[ self.j.get('exptime') > 50]
             #    john=john[ self.j.get('exptime') > 50]
             ax[cnt].scatter(john,arjun)
             ylab=ax[cnt].set_ylabel('%s (Arjun)' % self.j2a[key],fontsize='large')
             xlab=ax[cnt].set_xlabel('%s (John)' % key,fontsize='large')
+            xandy= min([john.min(),arjun.min()]),max([john.max(),arjun.max()])
+            ax[cnt].set_xlim(xandy)
+            ax[cnt].set_ylim(xandy)
+            ax[cnt].set_aspect('equal')
         if self.savefig:
-            fn="problemkeys_comparison.png"
+            fn="problemkeys_comparison_%dpoints.png" % len(self.j.ra[keep])
             plt.savefig(fn,\
                         bbox_extra_artists=[xlab,ylab], bbox_inches='tight',dpi=150)
             print('Wrote %s' % fn)
@@ -294,6 +298,7 @@ def main(**kwargs):
     savefig= kwargs.get('savefig',True)
     original= kwargs.get('original',False)
     project= kwargs.get('project',False)
+    prefix= kwargs.get('prefix','mzls') #mzls_no1522magcut
  
     # Read in files
     if original:
@@ -320,8 +325,8 @@ def main(**kwargs):
             mydir='/scratch2/scratchdirs/kaylanb/cosmo/staging/mosaicz/MZLS_CP/CP20160202v2/zpts'
             if project:
                 mydir='/global/projecta/projectdirs/cosmo/work/dr4/zpt/mosaic'
-            zpt_fns= glob(os.path.join(mydir,'mzlszeropoint-*v2.fits'))
-            star_fns= glob(os.path.join(mydir,'mzlszeropoint-*v2-stars.fits'))
+            zpt_fns= glob(os.path.join(mydir,'%szeropoint-*v2.fits' % prefix))
+            star_fns= glob(os.path.join(mydir,'%szeropoint-*v2-stars.fits' % prefix))
             # Arjuns
             a=fits_table('~arjundey/ZeroPoints/mzls-v2-zpt-all-2016dec06.fits')
         elif camera == '90prime':
@@ -333,8 +338,11 @@ def main(**kwargs):
             star_fns= glob(os.path.join(mydir,'90primezeropoint-*v1-stars.fits'))
             # Arjuns
             a=fits_table('~arjundey/ZeroPoints/bass-zpt-all-2016dec06.fits')
+        else: raise ValueError('camera=%s not supported' % camera)
         # General to either camera
         assert(len(zpt_fns) > 0 and len(star_fns) > 0)
+        print('reading files like: %s' % zpt_fns[0])
+        zpt_fns= [zpt_fns[0]]
         j= cats.CatalogueFuncs().stack(zpt_fns,textfile=False)    
         #j_stars= cats.CatalogueFuncs().stack(star_fns,textfile=False)   
         # Match Arjun's ALL zpt file to these frames
