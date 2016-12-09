@@ -616,7 +616,7 @@ class Measurer(object):
 
         # Now match against (good) PS1 stars 
         # John cuts to magnitudes between 15 and 22
-        ps1 = ps1cat(ccdwcs=self.wcs).get_stars(magrange=(15, 22))
+        ps1 = ps1cat(ccdwcs=self.wcs).get_stars() #magrange=(15, 22))
         good = (ps1.nmag_ok[:, 0] > 0)*(ps1.nmag_ok[:, 1] > 0)*(ps1.nmag_ok[:, 2] > 0)
         # Get Gaia ra,dec
         gdec=ps1.dec_ok-ps1.ddec/3600000.

@@ -77,12 +77,12 @@ class ps1cat():
         #                      ((allcat.nmag_ok[:,1]>0)*1)*     # r
         #                      ((allcat.nmag_ok[:,3]>0)*1)==1)] # z
         print('Found {} good PS1 stars.'.format(len(cat)))
-        if magrange is not None:
-            keep = np.where((cat.median[:,ps1cat.ps1band[band]]>magrange[0])*
-                            (cat.median[:,ps1cat.ps1band[band]]<magrange[1]))[0]
-            cat = cat[keep]
-            print('Trimming to {} stars with {}=[{},{}]'.
-                  format(len(cat),band,magrange[0],magrange[1]))
+        #if magrange is not None:
+        #    keep = np.where((cat.median[:,ps1cat.ps1band[band]]>magrange[0])*
+        #                    (cat.median[:,ps1cat.ps1band[band]]<magrange[1]))[0]
+        #    cat = cat[keep]
+        #    print('Trimming to {} stars with {}=[{},{}]'.
+        #          format(len(cat),band,magrange[0],magrange[1]))
         return cat
 
 def ps1_to_decam(psmags, band):
