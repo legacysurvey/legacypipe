@@ -228,31 +228,21 @@ def _stars_table(nstars=1):
        detected on the CCD, including the PS1 photometry.
 
     '''
-    cols = [('expid', 'S16'), ('filter', 'S1'), ('amplifier', 'i2'), ('x', 'f4'), ('y', 'f4'),
+    cols = [('image_filename', 'S65'),('expid', 'S16'), ('filter', 'S1'),('nmatch', '>i2'), 
+            ('amplifier', 'i2'), ('x', 'f4'), ('y', 'f4'),
             ('ra', 'f8'), ('dec', 'f8'), ('fwhm', 'f4'), ('apmag', 'f4'),
+            ('radiff', 'f8'), ('decdiff', 'f8'),('radiff_ps1', 'f8'), ('decdiff_ps1', 'f8'),
             ('gaia_ra', 'f8'), ('gaia_dec', 'f8'), ('ps1_mag', 'f4'), ('ps1_gicolor', 'f4'),
-            ('mzls_colorterm','f4'),('decam_colorterm','f4'),('90prime_colorterm','f4')]
-            #('ps1_ra', 'f8'), ('ps1_dec', 'f8'), ('ps1_mag', 'f4'), ('ps1_gicolor', 'f4')]
-    stars = Table(np.zeros(nstars, dtype=cols))
-
-    return stars
-
-def _stars_table2(nstars=1):
-    '''Initialize the stars table, which will contain information on all the stars
-       detected on the CCD, including the PS1 photometry.
-
-    '''
-    cols = [('nmatch', 'i4'),('filename','S32'),('expid', 'S16'), ('ccd_x', 'f4'), ('ccd_y', 'f4'),
-            ('ccd_ra', 'f8'), ('ccd_dec', 'f8'), ('ccd_mag', 'f4'),
-            ('ra_off', 'f8'), ('dec_off', 'f8'), ('gmag', 'f4'), 
-            ('ps1_g', 'f4'), ('ps1_r', 'f4'),('ps1_i', 'f4'),('ps1_z', 'f4')]
+            ('gaia_g','f8'),('ps1_g','f8'),('ps1_r','f8'),('ps1_i','f8'),('ps1_z','f8')]
     stars = Table(np.zeros(nstars, dtype=cols))
     return stars
 
+def getrms(x):
+    return np.sqrt( np.mean( np.power(x,2) ) )
 
 class Measurer(object):
     def __init__(self, fn, ext, aprad=3.5, skyrad_inner=7.0, skyrad_outer=10.0,
-                 sky_global=False, calibrate=False, only_ccd_centers=False):
+                 sky_global=False, calibrate=False, only_ccd_centers=False,prefix=''):
         '''This is the work-horse class which operates on a given image regardless of
         its origin (decam, mosaic, 90prime).
 
@@ -265,7 +255,7 @@ class Measurer(object):
         Sky annulus radius in arcsec
 
         '''
-        
+        self.prefix= prefix
         self.fn = fn
         self.ext = ext
 
@@ -451,7 +441,7 @@ class Measurer(object):
         b= np.array(d2d) >= minsep
         return b
 
-    def run(self):
+    def run(self,doplots=True):
         t0= Time()
         from scipy.stats import sigmaclip
         from legacyanalysis.ps1cat import ps1cat
@@ -639,7 +629,6 @@ class Measurer(object):
             return ccds, _stars_table()
     
         # Match GAIA and Our Data
-        #m1, m2, d12 = match_radec(objra, objdec, ps1.ra, ps1.dec, self.matchradius/3600.0)
         m1, m2, d12 = match_radec(objra, objdec, gra, gdec, self.matchradius/3600.0)
         nmatch = len(m1)
         ccds['nmatch'] = nmatch
@@ -648,54 +637,26 @@ class Measurer(object):
         print('{} GAIA sources match detected sources within {} arcsec.'.format(nmatch, self.matchradius))
         t0= ptime('match-to-gaia-radec',t0)
 
-        # Initialize the stars table and begin populating it.
+        # Stars table 
         print('Add the amplifier number!!!')
-        arjun_names=False
-        if arjun_names:
-            stars = _stars_table2(nmatch)
-            stars['nmatch'] = nmatch
-            stars['filename'] = os.path.basename(self.fn).replace('.fz','')   
-            stars['expid'] = self.expid
-            stars['ccd_x'] = obj['xcentroid'][m1]
-            stars['ccd_y'] = obj['ycentroid'][m1]
-            stars['ccd_ra'] = objra[m1]
-            stars['ccd_dec'] = objdec[m1]
-
-            apflux = apflux[m1] # we need apflux for Tractor, below
-            stars['ccd_mag'] = - 2.5 * np.log10(apflux) + zp0 + 2.5 * np.log10(exptime)
-
-            stars['ra_off'] = (gra[m2] - objra[m1])*np.cos( np.deg2rad(objra[m1]) )*3600.
-            stars['dec_off']= (gdec[m2] - objdec[m1])*3600.
-
-            stars['gmag']= ps1.phot_g_mean_mag[m2]
-            stars['ps1_g']= ps1.median[:,0][m2]
-            stars['ps1_r']= ps1.median[:,1][m2]
-            stars['ps1_i']= ps1.median[:,2][m2]
-            stars['ps1_z']= ps1.median[:,3][m2]
-            return ccds, stars
-        else:
-            stars = _stars_table(nmatch)
-            stars['filter'] = self.band
-            stars['expid'] = self.expid
-            stars['x'] = obj['xcentroid'][m1]
-            stars['y'] = obj['ycentroid'][m1]
-            stars['ra'] = objra[m1]
-            stars['dec'] = objdec[m1]
-
-            apflux = apflux[m1] # we need apflux for Tractor, below
-            stars['apmag'] = - 2.5 * np.log10(apflux) + zp0 + 2.5 * np.log10(exptime)
-
-            #stars['ps1_ra'] = ps1.ra[m2]
-            #stars['ps1_dec'] = ps1.dec[m2]
-            stars['gaia_ra'] = gra[m2]
-            stars['gaia_dec'] = gdec[m2]
-            stars['ps1_gicolor'] = ps1.median[m2, 0] - ps1.median[m2, 2]
-
-            ps1band = ps1cat.ps1band[self.band]
-            stars['ps1_mag'] = ps1.median[m2, ps1band]
-
-        #plt.scatter(stars['ra'], stars['dec'], color='orange') ; plt.scatter(stars['ps1_ra'], stars['ps1_dec'], color='blue') ; plt.show()
-        
+        stars = _stars_table(nmatch)
+        stars['image_filename'] =ccds['image_filename']
+        stars['expid'] = self.expid
+        stars['filter'] = self.band
+        # Matched quantities
+        stars['nmatch'] = nmatch 
+        stars['x'] = obj['xcentroid'][m1]
+        stars['y'] = obj['ycentroid'][m1]
+        stars['ra'] = objra[m1]
+        stars['dec'] = objdec[m1]
+        stars['radiff'] = (gra[m2] - stars['ra']) * np.cos(np.deg2rad(stars['dec'])) * 3600.0
+        stars['decdiff'] = (gdec[m2] - stars['dec']) * 3600.0
+        stars['apmag'] = - 2.5 * np.log10(apflux[m1]) + zp0 + 2.5 * np.log10(exptime)
+        # Add ps1 astrometric residuals for comparison
+        ps1_m1, ps1_m2, ps1_d12 = match_radec(objra, objdec, ps1.ra, ps1.dec, self.matchradius/3600.0)
+        stars['radiff_ps1'] = (ps1.ra[ps1_m2] - objra[ps1_m1]) * np.cos(np.deg2rad(objdec[ps1_m1])) * 3600.0
+        stars['decdiff_ps1'] = (ps1.dec[ps1_m2] - objdec[ps1_m1]) * 3600.0
+        # Photometry
         # Unless we're calibrating the photometric transformation, bring PS1
         # onto the photometric system of this camera (we add the color term
         # below).
@@ -704,69 +665,60 @@ class Measurer(object):
             colorterm = np.zeros(nmatch)
         else:
             colorterm = self.colorterm_ps1_to_observed(ps1.median[m2, :], self.band)
-        #from legacyanalysis.ps1cat import ps1_to_mosaic,ps1_to_decam,ps1_to_90prime
-        #stars['mzls_colorterm']= ps1_to_mosaic(ps1.median[m2, :], self.band)
-        #stars['decam_colorterm']= ps1_to_decam(ps1.median[m2, :], self.band)
-        #stars['90prime_colorterm']= ps1_to_90prime(ps1.median[m2, :], self.band)
+        ps1band = ps1cat.ps1band[self.band]
+        stars['ps1_mag'] = ps1.median[m2, ps1band] + colorterm
+        # Additonal mags for comparison with Arjun's star sample
+        # PS1 Median PSF mag in [g,r,i,z],  Gaia G-band mean magnitude
+        for ps1_band,ps1_index in zip(['g','r','i','z'],[0,1,2,3]):
+            stars['ps1_%s' % ps1_band]= ps1.median[m2, ps1_index]
+        stars['gaia_g']=ps1.phot_g_mean_mag[m2]
         
-        # Compute the astrometric residuals relative to PS1.
-        #radiff = (stars['ra'] - stars['ps1_ra']) * np.cos(np.deg2rad(ccddec)) * 3600.0
-        #decdiff = (stars['dec'] - stars['ps1_dec']) * 3600.0
-        # Negative sign so same sign as mosstat
-        radiff = -(stars['ra'] - stars['gaia_ra']) * np.cos(np.deg2rad(stars['dec'])) * 3600.0
-        #radiff = -(stars['ra'] - stars['gaia_ra']) * np.cos(np.deg2rad(ccddec)) * 3600.0
-        decdiff = -(stars['dec'] - stars['gaia_dec']) * 3600.0
-        ccds['raoff'] = np.median(radiff)
-        ccds['decoff'] = np.median(decdiff)
-        ccds['rarms'] = np.std(radiff)
-        ccds['decrms'] = np.std(decdiff)
-        #print('RA, Dec offsets (arcsec) relative to PS1: {}, {}'.format(ccds['raoff'], ccds['decoff']))
-        #print('RA, Dec rms (arcsec) relative to PS1: {}, {}'.format(ccds['rarms'], ccds['decrms']))
-        print('RA, Dec offsets (arcsec) relative to GAIA: {}, {}'.format(ccds['raoff'], ccds['decoff']))
-        print('RA, Dec rms (arcsec) relative to GAIA: {}, {}'.format(ccds['rarms'], ccds['decrms']))
-
-        # Compute the photometric zeropoint but only use stars with main
-        # sequence g-i colors.
-        print('B4 redundant gicolor cut, len(stars)=%d' % len(stars))
+        # Zeropoint Sample is Main Sequence stars
         print('Computing the photometric zeropoint.')
+        stars['ps1_gicolor'] = ps1.median[m2, 0] - ps1.median[m2, 2]
+        print('Before gicolor cut, len(stars)=%d' % len(stars['ps1_gicolor']))
         mskeep = np.where((stars['ps1_gicolor'] > 0.4) * (stars['ps1_gicolor'] < 2.7))[0]
         if len(mskeep) == 0:
             print('Not enough PS1 stars with main sequence colors.')
             return ccds, stars
         ccds['mdncol'] = np.median(stars['ps1_gicolor'][mskeep]) # median g-i color
-        print('After redundant gicolor cut, len(stars)=%d' % len(stars))
-
-        # Get the photometric offset relative to PS1 as the observed PS1
-        # magnitude minus the observed / measured magnitude.
-
-        stars['ps1_mag'] += colorterm
-        #stars['ps1_mag'] += stars['decam_colorterm'] #KJB
-        #stars['ps1_mag'] += stars['mzls_colorterm'] 
-        #plt.scatter(stars['ps1_gicolor'], stars['apmag']-stars['ps1_mag']) ; plt.show()
+        print('After gicolor cut, len(stars)=%d' % len(mskeep))
         
-        # APMAG computed using zp0, which is 2.5log10(1.8) larger for John compared to Arjun
+        # Compute Zeropoint
         dmagall = stars['ps1_mag'][mskeep] - stars['apmag'][mskeep]
-        _, dmagsig = self.sensible_sigmaclip(dmagall, nsigma=2.5)
-
-        dmag, _, _ = sigmaclip(dmagall, low=3, high=3.0)
+        dmag, _, _ = sigmaclip(dmagall, low=2.5, high=2.5)
         dmagmed = np.median(dmag)
         ndmag = len(dmag)
+        # Std dev
+        #_, dmagsig = self.sensible_sigmaclip(dmagall, nsigma=2.5)
+        dmagsig = np.std(dmag) 
 
         zptmed = zp0 + dmagmed
         transp = 10.**(-0.4 * (zp0 - zptmed - kext * (airmass - 1.0)))
 
-        print('  Mag offset: {:.3f}'.format(dmagmed))
-        print('  Scatter:    {:.3f}'.format(dmagsig))
-        
-        print('  {} stars used for zeropoint median'.format(ndmag))
-        print('  Zeropoint {:.3f}'.format(zptmed))
-        print('  Transparency: {:.3f}'.format(transp))
         t0= ptime('photometry-using-ps1',t0)
-
+        ccds['raoff'] = np.median(stars['radiff'])
+        ccds['decoff'] = np.median(stars['decdiff'])
+        ccds['rarms'] = np.std(stars['radiff'])
+        ccds['decrms'] = np.std(stars['decdiff'])
         ccds['phoff'] = dmagmed
         ccds['phrms'] = dmagsig
         ccds['zpt'] = zptmed
         ccds['transp'] = transp
+
+        print('RA, Dec offsets (arcsec) relative to GAIA: {}, {}'.format(ccds['raoff'], ccds['decoff']))
+        print('RA, Dec rms (arcsec) relative to GAIA: {}, {}'.format(ccds['rarms'], ccds['decrms']))
+        print('  Mag offset: {}'.format(ccds['phoff']))
+        print('  Scatter:    {}'.format(ccds['phrms']))
+        
+        print('  {} stars used for zeropoint median'.format(ndmag))
+        print('  Zeropoint {}'.format(ccds['zpt']))
+        print('  Transparency: {}'.format(ccds['transp']))
+
+        t0= ptime('all-computations-for-this-ccd',t0)
+        if doplots:
+            self.make_plots(stars,dmag,ccds['zpt'],ccds['transp'])
+        t0= ptime('make-plot',t0)
 
         # Fit each star with Tractor.
         # Skip for now, most time consuming part
@@ -800,6 +752,59 @@ class Measurer(object):
         
         return ccds, stars
     
+    def make_plots(self,stars,dmag,zpt,transp):
+        '''stars -- stars table'''
+        suffix='_%s_%s.png' % (stars['image_filename'][0].replace('.fits.fz',''),stars['expid'][0][-4:])
+        fig,ax=plt.subplots(1,2,figsize=(10,4))
+        plt.subplots_adjust(wspace=0.2,bottom=0.2,right=0.8)
+        for key in ['astrom_gaia','photom']:
+        #for key in ['astrom_gaia','astrom_ps1','photom']:
+            if key == 'astrom_gaia':    
+                ax[0].scatter(stars['radiff'],stars['decdiff'])
+                xlab=ax[0].set_xlabel(r'$\Delta Ra$ (Gaia - CCD)')
+                ylab=ax[0].set_ylabel(r'$\Delta Dec$ (Gaia - CCD)')
+            elif key == 'astrom_ps1':  
+                raise ValueError('not needed')  
+                ax.scatter(stars['radiff_ps1'],stars['decdiff_ps1'])
+                ax.set_xlabel(r'$\Delta Ra [arcsec]$ (PS1 - CCD)')
+                ax.set_ylabel(r'$\Delta Dec [arcsec]$ (PS1 - CCD)')
+                ax.text(0.02, 0.95,'Median: %.4f,%.4f' % \
+                          (np.median(stars['radiff_ps1']),np.median(stars['decdiff_ps1'])),\
+                        va='center',ha='left',transform=ax.transAxes,fontsize=20)
+                ax.text(0.02, 0.85,'RMS: %.4f,%.4f' % \
+                          (getrms(stars['radiff_ps1']),getrms(stars['decdiff_ps1'])),\
+                        va='center',ha='left',transform=ax.transAxes,fontsize=20)
+            elif key == 'photom':
+                ax[1].hist(dmag)
+                xlab=ax[1].set_xlabel('PS1 - AP mag (main seq, 2.5 clipping)')
+                ylab=ax[1].set_ylabel('Number of Stars')
+        # List key numbers
+        ax[1].text(1.02, 1.,r'$\Delta$ Ra,Dec',\
+                va='center',ha='left',transform=ax[1].transAxes,fontsize=12)
+        ax[1].text(1.02, 0.9,r'  Median: %.4f,%.4f' % \
+                  (np.median(stars['radiff']),np.median(stars['decdiff'])),\
+                va='center',ha='left',transform=ax[1].transAxes,fontsize=10)
+        ax[1].text(1.02, 0.80,'  RMS: %.4f,%.4f' % \
+                  (getrms(stars['radiff']),getrms(stars['decdiff'])),\
+                va='center',ha='left',transform=ax[1].transAxes,fontsize=10)
+        ax[1].text(1.02, 0.7,'PS1-CCD Mag',\
+                va='center',ha='left',transform=ax[1].transAxes,fontsize=12)
+        ax[1].text(1.02, 0.6,'  Median:%.4f,%.4f' % \
+                  (np.median(dmag),np.std(dmag)),\
+                va='center',ha='left',transform=ax[1].transAxes,fontsize=10)
+        ax[1].text(1.02, 0.5,'  Stars: %d' % len(dmag),\
+                va='center',ha='left',transform=ax[1].transAxes,fontsize=10)
+        ax[1].text(1.02, 0.4,'  Zpt=%.4f' % zpt,\
+                va='center',ha='left',transform=ax[1].transAxes,fontsize=10)
+        ax[1].text(1.02, 0.3,'  Transp=%.4f' % transp,\
+                va='center',ha='left',transform=ax[1].transAxes,fontsize=10)
+        # Save
+        fn='qa'+'_'+self.prefix+suffix
+        plt.savefig(fn,bbox_extra_artists=[xlab,ylab])
+        plt.close()
+        print('Wrote %s' % fn)
+   
+ 
 class DecamMeasurer(Measurer):
     '''Class to measure a variety of quantities from a single DECam CCD.
     UNITS: ADU/s'''
@@ -996,7 +1001,7 @@ def _measure_image(args):
     '''Utility function to wrap measure_image function for multiprocessing map.''' 
     return measure_image(*args)
 
-def measure_image(img_fn, measureargs={}):
+def measure_image(img_fn, measureargs={},prefix=''):
     '''Wrapper on the camera-specific classes to measure the CCD-level data on all
     the FITS extensions for a given set of images.
     '''
@@ -1007,6 +1012,7 @@ def measure_image(img_fn, measureargs={}):
     primhdr = fitsio.read_header(img_fn)
     camera, extlist = camera_name(primhdr)
     nnext = len(extlist)
+    measureargs.update(dict(prefix=prefix))
 
     if camera == 'decam':
         measure = measure_decam
@@ -1043,7 +1049,7 @@ def get_output_fns(img_fn,prefix=''):
     return zptsfile,zptstarsfile
 
 
-def runit(img_fn,measureargs, zptsfile='zpt.fits',zptstarsfile='zptstar.fits'):
+def runit(img_fn,measureargs, zptsfile='zpt.fits',zptstarsfile='zptstar.fits',prefix=''):
     '''Generate a legacypipe-compatible CCDs file for a given image.
 
     '''
@@ -1060,7 +1066,7 @@ def runit(img_fn,measureargs, zptsfile='zpt.fits',zptstarsfile='zptstar.fits'):
         dobash("cp %s %s" % (img_fn.replace('_ooi_','_ood_'),fn_scr.replace('_ooi_','_ood_')))
     t0= ptime('copy-to-scratch',t0)
 
-    ccds, stars= measure_image(fn_scr, measureargs)
+    ccds, stars= measure_image(fn_scr, measureargs,prefix=prefix)
     # If combining ccds from multiple images:
     #allccds = []
     #if len(allccds) == 0:
@@ -1165,7 +1171,7 @@ if __name__ == "__main__":
             # Create the file
             t0=ptime('b4-run',t0)
             runit(image_fn, measureargs,\
-                  zptsfile=zptsfile,zptstarsfile=zptstarsfile)
+                  zptsfile=zptsfile,zptstarsfile=zptstarsfile,prefix=prefix)
             t0=ptime('after-run',t0)
         tnow= Time()
         print("TIMING:total %s" % (tnow-tbegin,))

@@ -4,7 +4,13 @@ import pickle
 import os
 from glob import glob
 
-from astrometry.util.fits import fits_table
+from astrometry.util.fits import fits_table,merge_tables
+
+def bash(cmd):
+    ret= os.system('%s' % cmd)
+    if ret:
+        print 'command failed: %s' % cmd
+        sys.exit() 
 
 class Translator(object):
     def __init__(self,j,a,verbose=True,savefig=True):
@@ -42,7 +48,7 @@ class Translator(object):
     def compare(self):
         # Comparisons
         self.compare_strings()
-        self.compare_floats_ints()
+        self.compare_floats_ints() #printout=True)
             
         
     def map_a2j(self,key):
@@ -113,53 +119,64 @@ class Translator(object):
         for s_key in self.typ['strs']:
             print '%s:%s --> %s:%s' % (s_key, self.j.get(s_key)[0],\
                                        self.j2a[s_key], self.a.get( self.j2a[s_key] )[0])
-            
-    def compare_floats_ints(self):
-        panels=len(self.typ['floats'])+len(self.typ['ints'])
-        cols=3
-        if panels % cols == 0:
-            rows=panels/cols
-        else:
-            rows=panels/cols+1
-        # print cols,rows
-        fig,axes= plt.subplots(rows,cols,figsize=(20,30))
-        ax=axes.flatten()
-        plt.subplots_adjust(hspace=0.4,wspace=0.3)
-        cnt=-1
-        for key in self.typ['floats']+self.typ['ints']:
-            cnt+=1
-            arjun= self.a.get( self.j2a[key] )
-            john= self.j.get(key)
-            #if key in ['transp','raoff','decoff','rarms','decrms',\
-            #           'phrms','phoff','skyrms','skycounts',\
-            #           'nstar','nmatch','width','height','mdncol']:
-            ax[cnt].scatter(arjun,(john-arjun)/arjun) 
-            ylab=ax[cnt].set_ylabel('(John-Arjun)/Arjun',fontsize='small')
-            xlab=ax[cnt].set_xlabel('%s (Arjun)' % self.j2a[key],fontsize='small')
-            #y= (arjun-john)/john
-            #ax[cnt].scatter(john,y) 
-            #ylab=ax[cnt].set_ylabel('(Arjun-John)/John',fontsize='small')
-            #ax[cnt].set_ylim([-0.1,0.1])
-        if self.savefig:
-            fn="float_comparison.png"
-            plt.savefig(fn,\
-                        bbox_extra_artists=[xlab,ylab], bbox_inches='tight',dpi=150)
-            print('Wrote %s' % fn)
+     
+    def compare_floats_ints(self,printout=False):
+        # Plot x vs. (y-x)/x Then x vs. (|y|-|x|)/|x|
+        for doplot in ['usual','abs']:
+            panels=len(self.typ['floats'])+len(self.typ['ints'])
+            if printout:
+                print '----\nString comparison, John --> Arjun\n----'
+                for s_key in self.typ['floats']:
+                    print '%s:%f --> %s:%f' % (s_key, self.j.get(s_key),\
+                                               self.j2a[s_key], self.a.get( self.j2a[s_key] ))
+                for s_key in self.typ['ints']:
+                    print '%s:%d --> %s:%d' % (s_key, self.j.get(s_key),\
+                                               self.j2a[s_key], self.a.get( self.j2a[s_key] ))
+            cols=3
+            if panels % cols == 0:
+                rows=panels/cols
+            else:
+                rows=panels/cols+1
+            # print cols,rows
+            fig,axes= plt.subplots(rows,cols,figsize=(20,30))
+            ax=axes.flatten()
+            plt.subplots_adjust(hspace=0.4,wspace=0.3)
+            cnt=-1
+            for key in self.typ['floats']+self.typ['ints']:
+                cnt+=1
+                arjun= self.a.get( self.j2a[key] )
+                john= self.j.get(key)
+                if doplot == 'usual':
+                    ax[cnt].scatter(arjun,(john-arjun)/arjun) 
+                    ylab=ax[cnt].set_ylabel('(J-A)/A',fontsize='small')
+                    xlab=ax[cnt].set_xlabel('%s (Arjun)' % self.j2a[key],fontsize='small')
+                elif doplot == 'abs':
+                    ax[cnt].scatter(arjun,(np.abs(john)-np.abs(arjun))/arjun) 
+                    ylab=ax[cnt].set_ylabel('(|J|-|A|)/A',fontsize='small')
+                    xlab=ax[cnt].set_xlabel('%s (Arjun)' % self.j2a[key],fontsize='small')
+                else: raise ValueError
+                #if key in ['transp','raoff','decoff','rarms','decrms',\
+                #           'phrms','phoff','skyrms','skycounts',\
+                #           'nstar','nmatch','width','height','mdncol']:
+                #y= (arjun-john)/john
+                #ax[cnt].scatter(john,y) 
+                #ylab=ax[cnt].set_ylabel('(Arjun-John)/John',fontsize='small')
+                #ax[cnt].set_ylim([-0.1,0.1])
+            if self.savefig:
+                fn="float_comparison_%s.png" % doplot
+                plt.savefig(fn,\
+                            bbox_extra_artists=[xlab,ylab], bbox_inches='tight',dpi=150)
+                print('Wrote %s' % fn)
+            plt.close()
  
     def compare_problematic(self,keep=None):
         if keep is None:
             keep=np.ones(len(self.j)).astype(bool)
         print('comparing problematic')
         # Compare
-        panels=len(self.discrep_keys)
-        cols=3
-        if panels % cols == 0:
-            rows=panels/cols
-        else:
-            rows=panels/cols+1
-        fig,axes= plt.subplots(rows,cols,figsize=(20,10))
+        fig,axes= plt.subplots(3,3,figsize=(14,10))
         ax=axes.flatten()
-        plt.subplots_adjust(hspace=0.1,wspace=0.1)
+        plt.subplots_adjust(hspace=0.3,wspace=0.6)
         cnt=-1
         for key in self.discrep_keys:
             cnt+=1
@@ -171,10 +188,14 @@ class Translator(object):
             ax[cnt].scatter(john,arjun)
             ylab=ax[cnt].set_ylabel('%s (Arjun)' % self.j2a[key],fontsize='large')
             xlab=ax[cnt].set_xlabel('%s (John)' % key,fontsize='large')
-            xandy= min([john.min(),arjun.min()]),max([john.max(),arjun.max()])
+            xandy= [min([john.min(),arjun.min()]),max([john.max(),arjun.max()])]
+            if xandy[0] < 0: xandy[0]*=1.02
+            else: xandy[0]*=0.98
+            if xandy[1] < 0: xandy[0]*=0.98
+            else: xandy[1]*=1.02
             ax[cnt].set_xlim(xandy)
             ax[cnt].set_ylim(xandy)
-            ax[cnt].set_aspect('equal')
+            #ax[cnt].set_aspect('equal')
         if self.savefig:
             fn="problemkeys_comparison_%dpoints.png" % len(self.j.ra[keep])
             plt.savefig(fn,\
@@ -323,42 +344,76 @@ def main(**kwargs):
         if camera == 'mosaic':
             aka='mzls'
             mydir='/scratch2/scratchdirs/kaylanb/cosmo/staging/mosaicz/MZLS_CP/CP20160202v2/zpts'
+            arjundir='/scratch2/scratchdirs/arjundey/ZeroPoints_MzLSv2'
             if project:
                 mydir='/global/projecta/projectdirs/cosmo/work/dr4/zpt/mosaic'
             zpt_fns= glob(os.path.join(mydir,'%szeropoint-*v2.fits' % prefix))
-            star_fns= glob(os.path.join(mydir,'%szeropoint-*v2-stars.fits' % prefix))
+            #star_fns= glob(os.path.join(mydir,'%szeropoint-*v2-stars.fits' % prefix))
             # Arjuns
-            a=fits_table('~arjundey/ZeroPoints/mzls-v2-zpt-all-2016dec06.fits')
+            #a=fits_table('~arjundey/ZeroPoints/mzls-v2-zpt-all-2016dec06.fits')
+            #a_stars=fits_table('~arjundey/ZeroPoints/mzls-v2-zpt-all-2016dec06.fits')
         elif camera == '90prime':
             aka='90prime'
             mydir='/scratch2/scratchdirs/kaylanb/cosmo/staging/bok/BOK_CP/CP20160102/zpts'
+            arjundir='/scratch2/scratchdirs/arjundey/ZeroPoints_BASS'
             if project:
                 mydir='/global/projecta/projectdirs/cosmo/work/dr4/zpt/90prime'
             zpt_fns= glob(os.path.join(mydir,'90primezeropoint-*v1.fits'))
-            star_fns= glob(os.path.join(mydir,'90primezeropoint-*v1-stars.fits'))
+            #star_fns= glob(os.path.join(mydir,'90primezeropoint-*v1-stars.fits'))
             # Arjuns
-            a=fits_table('~arjundey/ZeroPoints/bass-zpt-all-2016dec06.fits')
+            #a=fits_table('~arjundey/ZeroPoints/bass-zpt-all-2016dec06.fits')
         else: raise ValueError('camera=%s not supported' % camera)
         # General to either camera
-        assert(len(zpt_fns) > 0 and len(star_fns) > 0)
+        assert(len(zpt_fns) > 0) 
         print('reading files like: %s' % zpt_fns[0])
-        zpt_fns= [zpt_fns[0]]
-        j= cats.CatalogueFuncs().stack(zpt_fns,textfile=False)    
+        # Simultaneously make my, Arjun's table
+        j,j_stars,a,a_stars= [],[],[],[]
+        # k4m_160203_112926_ooi_zd_v2.fits HUGE raoff diff
+        # k4m_160203_075427_ooi_zd_v2.fits matches by 1 part in 10^4
+        keep_star_fns= ['k4m_160203_112926_ooi_zd_v2.fits',\
+                        'k4m_160203_075427_ooi_zd_v2.fits']
+        keep_zpt_fns= keep_star_fns
+        for i,zpt_fn in enumerate(zpt_fns):
+            print('reading %d/%d' % (i+1,len(zpt_fns)))
+            try:
+                if os.path.basename(zpt_fn).replace(prefix+'zeropoint-','') in keep_zpt_fns:
+                    j.append( fits_table(zpt_fn) )
+                    # Arjun's
+                    arjunfn= os.path.join(arjundir, os.path.basename(zpt_fn))
+                    arjunfn= arjunfn.replace(prefix,'')
+                    a.append( fits_table(arjunfn) ) 
+                if os.path.basename(zpt_fn).replace(prefix+'zeropoint-','') in keep_star_fns:
+                    j_stars.append( fits_table(zpt_fn.replace('.fits','-stars.fits')) )
+                    a_stars.append( fits_table(arjunfn.replace('zeropoint-','matches-') ))
+            except IOError:
+                print('WARNING: one of these cannot be read: %s\n%s\n%s\n%s\n' % \
+                     (zpt_fn,zpt_fn.replace('.fits','-stars.fits'),\
+                      arjunfn,arjunfn.replace('zeropoint-','matches-'))
+                     )
+        j= merge_tables(j, columns='fillzero') 
+        j_stars= merge_tables(j_stars, columns='fillzero') 
+        a= merge_tables(a, columns='fillzero') 
+        a_stars= merge_tables(a_stars, columns='fillzero') 
+        # Convert my list to arjun's 
+        #bash("for fn in `cat mzls_CP20160202v2.txt`;do echo /scratch2/scratchdirs/arjundey/ZeroPoints_MzLSv2/zeropoint-$(basename $fn)|sed s/.fz//g >> mzls_CP20160202v2_arjun.txt;done")
+        ##zpt_fns= [zpt_fns[0]]
+        #j= cats.CatalogueFuncs().stack(zpt_fns,textfile=False)    
         #j_stars= cats.CatalogueFuncs().stack(star_fns,textfile=False)   
-        # Match Arjun's ALL zpt file to these frames
-        keep=np.zeros(len(a)).astype(bool)
-        for fn in j.image_filename:
-            keep[ np.where(a.filename == fn.replace('.fz',''))[0] ]=True
-        a.cut(keep)
-        # Same order: filename && ccdname
-        a=a[ np.argsort( np.char.replace(a.filename,"ooi",np.char.lower(a.ccdname)) ) ]
-        j=j[ np.argsort( np.char.replace(j.image_filename,"ooi",np.char.lower(j.ccdname)) ) ]
+        ## Match Arjun's ALL zpt file to these frames
+        #keep=np.zeros(len(a)).astype(bool)
+        #for fn in j.image_filename:
+        #    keep[ np.where(a.filename == fn.replace('.fz',''))[0] ]=True
+        #a.cut(keep)
+        ## Same order: filename && ccdname
+        #a=a[ np.argsort( np.char.replace(a.filename,"ooi",np.char.lower(a.ccdname)) ) ]
+        #j=j[ np.argsort( np.char.replace(j.image_filename,"ooi",np.char.lower(j.ccdname)) ) ]
         print('ARE THESES IN SAME ORDE?')
         print np.char.lower(a.ccdname)[:12]
         print np.char.lower(j.ccdname)[:12]
         #j= j[np.argsort(j.image_filename)]
         #a= a[np.argsort(a.filename)]
         # Quality Cuts
+        print('len a,j,a_stars,j_stars=',len(a),len(j),len(a_stars),len(j_stars))
         keep= np.zeros(len(j)).astype(bool)
         if camera == 'mosaic':
             keep[ (a.exptime > 40.)*(a.ccdnmatch > 50)*(a.ccdzpt > 25.8)*\
@@ -376,7 +431,7 @@ def main(**kwargs):
     trans=Translator(j,a,verbose=True)
     trans.compare()
     trans.compare_problematic()
-    return a,j,trans
+    return a,j,trans,a_stars,j_stars
 
 if __name__ == '__main__':
     import argparse
@@ -390,28 +445,16 @@ if __name__ == '__main__':
 
     kwargs=dict(camera=args.camera,original=args.original,\
                 savefig=args.savefig)
-    a,j,trans=main(**kwargs)
-    raise ValueError
-
-
-#    j_cat,a_cat= [],[]
-#    # mydir='/project/projectdirs/desi/users/burleigh/test_data/old'
-#    mydir='/global/homes/k/kaylanb/repos/thesis_code/zeropoints/data/'
-#    fns=glob.glob(os.path.join(mydir,'original/originalzero*v2.fits'))
-#    for fn in fns:
-#        j_cat.append( fits_table(fn) )
-#        a_fn= os.path.join(os.path.dirname(fn), 'arjun_'+os.path.basename(fn).replace('original',''))
-#        a_cat.append( fits_table(a_fn) )
-#    # fns=glob.glob('/project/projectdirs/desi/users/burleigh/test_data/zeropoint*v2.fits')
-#    # for fn in fns:
-#    #     a_cat.append( fits_table(fn) )
-#    #     j_fn= os.path.join(os.path.dirname(fn), 'units_1arcsec_'+os.path.basename(fn))
-#    #     j_cat.append( fits_table(j_fn) )
-#    j = merge_tables(j_cat, columns='fillzero')
-#    a = merge_tables(a_cat, columns='fillzero')
-#
-#    t=Translator(j,a,verbose=False)
-#    t.compare_problematic()
-#
-#    c=Converter(j,a)    
-
+    a,j,trans,a_stars,j_stars= main(**kwargs)
+    ## Save
+    outfn='aj.pkl'
+    if not os.path.exists(outfn):
+        foo=open(outfn,'w')
+        pickle.dump((a,j,a_stars,j_stars),foo)
+        foo.close() 
+        print('Wrote %s' % outfn)
+    fname= '/global/projecta/projectdirs/cosmo/work/dr4/zpt/mosaic/aj.pkl'
+    if os.path.exists(fname):
+        fin=open(fname,'r')
+        (a,j,a_stars,j_stars)= pickle.load(fin)
+        fin.close()
