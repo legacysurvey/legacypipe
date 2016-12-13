@@ -126,11 +126,12 @@ def main():
         if not args.fpack:
             outim.imgfn = outim.imgfn.replace('.fits.fz', '.fits')
 
-        if bok:
-            outim.whtfn  = outim.whtfn .replace('.wht.fits', '-%s.wht.fits' % im.ccdname)
-            if not args.fpack:
-                outim.whtfn  = outim.whtfn .replace('.fits.fz', '.fits')
-        else:
+        # if bok:
+        #     outim.whtfn  = outim.whtfn .replace('.wht.fits', '-%s.wht.fits' % im.ccdname)
+        #     if not args.fpack:
+        #         outim.whtfn  = outim.whtfn .replace('.fits.fz', '.fits')
+        # else:
+        if True:
             outim.wtfn  = outim.wtfn .replace('.fits', '-%s.fits' % im.ccdname)
             if not args.fpack:
                 outim.wtfn  = outim.wtfn .replace('.fits.fz', '.fits')
@@ -183,12 +184,13 @@ def main():
             subwcs = wcs.get_subimage(ccd.ccd_x0, ccd.ccd_y0, w, h)
             outccds.ra[iccd],outccds.dec[iccd] = subwcs.radec_center()
 
-        if not bok:
+        #if not bok:
+        if True:
             print('Weight filename:', outim.wtfn)
             wfn = outim.wtfn
-        else:
-            print('Weight filename:', outim.whtfn)
-            wfn = outim.whtfn
+        # else:
+        #     print('Weight filename:', outim.whtfn)
+        #     wfn = outim.whtfn
 
         trymakedirs(wfn, dir=True)
 
