@@ -98,12 +98,12 @@ class CPImage(LegacySurveyImage):
         if min(self.width, self.height) < 600:
             stepsize = min(self.width, self.height) / 10.;
         hdr = self.read_image_header()
-        if self.camera == '90prime':
+        #if self.camera == '90prime':
             # WCS is in myriad of formats
             # Don't support TNX yet, use TAN for now
-            hdr = self.read_image_header()
-            hdr['CTYPE1'] = 'RA---TAN'
-            hdr['CTYPE2'] = 'DEC--TAN'
+        #    hdr = self.read_image_header()
+        #    hdr['CTYPE1'] = 'RA---TAN'
+        #    hdr['CTYPE2'] = 'DEC--TAN'
         wcs = wcs_pv2sip_hdr(hdr, stepsize=stepsize)
         # Correctoin: ccd,ccdraoff, decoff from zeropoints file
         dra,ddec = self.dradec

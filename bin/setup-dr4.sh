@@ -9,7 +9,10 @@ mkdir -p $basedir
 export RSYNC_ARGS="-rlpgoD --size-only"
 
 # Bootes
-#for fn in `cat /project/projectdirs/desi/users/burleigh/desiproc-files/bootes-90prime-abspath.txt`;do rsync -Riv -rlpgoD --size-only $(echo $fn|sed 's/ooi/oo*/g') /scratch1/scratchdirs/desiproc/DRs/cp-images/bootes/;done
+# Make file that lists all ooi images then do
+# for fn in `cat bootes-90prime-abspath.txt`;do fns=`find $(echo $fn|sed s/ooi/oo\[idw\]/g)`;rsync -Riv -rlpgoD --size-only $fns /scratch1/scratchdirs/desiproc/DRs/cp-images/bootes-bokTPV/;done
+# OR do get everyting
+# for fn in `find /project/projectdirs/cosmo/staging/bok/BOK_CP/*/ksb_*_oo[idw]_*_v1.fits.fz`;do rsync -Riv -rlpgoD --size-only $fn /scratch1/scratchdirs/desiproc/DRs/cp-images/bootes/;done 
 
 # MZLS v2 -- 2.8T
 #rsync -Riv $RSYNC_ARGS /project/projectdirs/cosmo/staging/mosaicz/MZLS_CP/*v2/k4m_*_oo[iwd]_zd_v2.fits.fz ${basedir}/
