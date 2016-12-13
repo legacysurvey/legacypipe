@@ -320,9 +320,7 @@ class LegacySurveyImage(object):
                       'away from zero!')
 
         # tractor WCS object
-        twcs = ConstantFitsWcs(wcs)
-        if x0 or y0:
-            twcs.setX0Y0(x0,y0)
+        twcs = self.get_tractor_wcs(wcs, x0, y0)
 
         if hybridPsf:
             pixPsf = False
@@ -531,6 +529,12 @@ class LegacySurveyImage(object):
         Reads the inverse-variance (weight) map image.
         '''
         return None
+
+    def get_tractor_wcs(self, wcs, x0, y0):
+        twcs = ConstantFitsWcs(wcs)
+        if x0 or y0:
+            twcs.setX0Y0(x0,y0)
+        return twcs
 
     def get_wcs(self):
         return None

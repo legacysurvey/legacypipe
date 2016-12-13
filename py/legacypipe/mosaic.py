@@ -7,6 +7,8 @@ import numpy as np
 
 from astrometry.util.util import wcs_pv2sip_hdr
 
+from tractor.basics import ConstantFitsWcs
+
 from legacypipe.image import LegacySurveyImage, CalibMixin
 from legacypipe.cpimage import CPImage
 from legacypipe.survey import LegacySurveyData
@@ -99,6 +101,12 @@ class MosaicImage(CPImage, CalibMixin):
         # assume this is going to be masked by the DQ map.
         return invvar
 
+    def get_tractor_wcs(self, wcs, x0, y0):
+        needs_third_pixel_shift = False #...?
+        if not needs_third_pixel_shift:
+            return super(self, MosaicImage).get_tractor_wcs(wcs, x0, y0)
+        return OneThirdPixelShiftWcs(wcs, x0, y0)
+
     def run_calibs(self, psfex=True, funpack=False, git_version=None,
                    force=False, **kwargs):
         print('run_calibs for', self.name, 'kwargs', kwargs)
@@ -131,6 +139,20 @@ class MosaicImage(CPImage, CalibMixin):
 
         for fn in todelete:
             os.unlink(fn)
+
+
+class OneThirdPixelShiftWcs(ConstantFitsWcs):
+    def positionToPixel(self, pos, src=None):
+        '''
+        Converts an :class:`tractor.RaDecPos` to a pixel position.
+        Returns: tuple of floats ``(x, y)``
+        '''
+        x,y = super(OneThirdPixelShiftWcs, self).positionToPixel(pos, src=src)
+        ### FIXME -- is this the right boundary?  Is this the right sign?
+        if (x + self.x0 > 2048):
+            x += 1./3.
+        return x,y
+
 
 def main():
 
