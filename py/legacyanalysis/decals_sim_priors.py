@@ -11,6 +11,8 @@ if __name__ == '__main__':
 import numpy as np
 import matplotlib.pyplot as plt
 from matplotlib.patches import Ellipse
+from mpl_toolkits.axes_grid1 import make_axes_locatable
+import matplotlib as mpl
 from astropy.io import fits
 #from astropy.table import vstack, Table
 from astrometry.util.fits import fits_table, merge_tables
@@ -482,44 +484,62 @@ class CrossValidator():
 		return err,keep_clf
 
 class RedshiftPredictor(CrossValidator):
-	def __init__(self,X=None,y=None):
-		assert(X.shape[1] == 2)
-		self.X=X
-		self.y=y
+    def __init__(self,X=None,y=None):
+        # All NaNs must be removed
+        X,y= self.remove_nans(X,y=y)
+        self.Xtrain= X
+        self.ytrain= y
 
-	def svm(self,kernel='rbf',C=1.,degree=3):
-		self.clf = SVC(kernel=kernel,C=C,degree=degree)
-		self.clf.fit(X, y)
+    def svm(self,kernel='rbf',C=1.,degree=3):
+        self.clf = SVC(kernel=kernel,C=C,degree=degree)
+        self.clf.fit(self.Xtrain, self.ytrain)
 
-	def nn(self,nn=3):
-		self.clf= KNeighborsClassifier(n_neighbors=nn)
-		self.clf.fit(X, y)
+    def nn(self,nn=3):
+        self.clf= KNeighborsClassifier(n_neighbors=nn)
+        self.clf.fit(self.Xtrain, self.ytrain)
 
-	def predict(self,X1):
-		return self.clf.predict(X1)
+    def predict(self,Xtest):
+        Xtest= self.remove_nans(Xtest)
+        return self.clf.predict(Xtest)
 
-	def cross_validate(self,typ='ELG'):
-		k=5
-		Cvals= np.logspace(-1,1,num=5)
-		avgerr= np.zeros(len(Cvals))-1
-		for cnt,C in enumerate(Cvals):
-			print 'kfold cv on C= %g' % C
-			err,junk= self.kfold_cross_val(C=C,kfolds=k)
-			print 'err= ',err
-			avgerr[cnt]= err.mean()
-		print 'avg err= ',avgerr,'C_vals= ',Cvals
-		fout=open('cross_validate_svm_%s.pickle' % typ,'w')
-		pickle.dump((Cvals,avgerr),fout)
-		fout.close()
-		plt.plot(Cvals,avgerr,'k-')
-		plt.scatter(Cvals,avgerr,s=50,color='b')
-		plt.xlabel("C (regularization parameter)")
-		plt.ylabel('Error rate')
-		plt.title('Training')
-		plt.xscale('log')
-		plt.savefig('cross_validate_svm_%s.png' % typ)
-		ibest= np.where(avgerr == avgerr.min())[0][0]
-		print 'lowest cross valid error= ',avgerr[ibest],'for C = ',Cvals[ibest]	
+    def remove_nans(self,X,y=None):
+        sh= X.shape
+        assert(len(sh) == 2)
+        assert(sh[1] == 2)
+        keep= np.isfinite(X[:,0])*np.isfinite(X[:,1])    
+        X= X[keep,:]
+        if X.shape[0] < sh[0]:
+            print('WARNING: %d/%d of X values were NANs, removed these' % \
+                    (sh[0]-X.shape[0],X.shape[0]))
+        if y is not None:
+            y=y[keep]
+            return X,y
+        else:
+            return X
+
+   
+    def cross_validate(self,typ='ELG'):
+        k=5
+        Cvals= np.logspace(-1,1,num=5)
+        avgerr= np.zeros(len(Cvals))-1
+        for cnt,C in enumerate(Cvals):
+            print 'kfold cv on C= %g' % C
+            err,junk= self.kfold_cross_val(C=C,kfolds=k)
+            print 'err= ',err
+            avgerr[cnt]= err.mean()
+        print 'avg err= ',avgerr,'C_vals= ',Cvals
+        fout=open('cross_validate_svm_%s.pickle' % typ,'w')
+        pickle.dump((Cvals,avgerr),fout)
+        fout.close()
+        plt.plot(Cvals,avgerr,'k-')
+        plt.scatter(Cvals,avgerr,s=50,color='b')
+        plt.xlabel("C (regularization parameter)")
+        plt.ylabel('Error rate')
+        plt.title('Training')
+        plt.xscale('log')
+        plt.savefig('cross_validate_svm_%s.png' % typ)
+        ibest= np.where(avgerr == avgerr.min())[0][0]
+        print 'lowest cross valid error= ',avgerr[ibest],'for C = ',Cvals[ibest]	
 
 
 
@@ -530,7 +550,7 @@ class ELG(CommonInit):
         print('ELGs, self.rlimit= ',self.rlimit)
         # KDE params
         self.kdefn= 'elg-kde.pickle'
-    
+
     def get_elgs_FDR_cuts(self):
         '''version 3.0 of data discussed in
         https://desi.lbl.gov/DocDB/cgi-bin/private/RetrieveFile?docid=912'''
@@ -539,7 +559,6 @@ class ELG(CommonInit):
             R_MAG= zcat.get('cfhtls_r')
             rmag_cut= R_MAG<self.rlimit 
         elif self.DR == 3:
-			self.truth_dir='/Users/kaylan1/Downloads/truthdir'
             zcat = self.read_fits(os.path.join(self.truth_dir,'deep2f234-dr3matched.fits'))
             decals = self.read_fits(os.path.join(self.truth_dir,'dr3-deep2f234matched.fits'))
             # Add mag data 
@@ -569,13 +588,13 @@ class ELG(CommonInit):
                                    rmag_cut,\
                                    zcat.get('oii_3727_err')!=-2.0,\
                                    zcat.get('oii_3727')>oiicut1),axis=0)
-		goodz=   np.all((zcat.get('zhelio')>0.8,\
-					     zcat.get('zhelio')<1.4,\
-						 rmag_cut),axis=0)\
-		goodz_oiibright=   np.all((goodz,\
+        goodz=   np.all((zcat.get('zhelio')>0.8,\
+                         zcat.get('zhelio')<1.4,\
+                         rmag_cut),axis=0)
+        goodz_oiibright=   np.all((goodz,\
                                    zcat.get('oii_3727_err')!=-2.0,\
                                    zcat.get('oii_3727')>oiicut1),axis=0)
-		goodz_oiifaint=    np.all((goodz,\
+        goodz_oiifaint=    np.all((goodz,\
                                    zcat.get('oii_3727_err')!=-2.0,\
                                    zcat.get('oii_3727')<oiicut1),axis=0)
 
@@ -590,27 +609,28 @@ class ELG(CommonInit):
             Z_MAG= decals.get('decam_mag_wdust')[:,4]
             R_MAG_nodust= decals.get('decam_mag_nodust')[:,2]
         rz,gr,r_nodust,r_wdust,redshift={},{},{},{},{}
-        for key,cut in zip(['loz','oiifaint','oiibright_loz','oiibright_hiz','med2hiz_oiibright'],\
-                           [loz,oiifaint,oiibright_loz,oiibright_hiz,med2hiz_oiibright]):
+        for key,cut in zip(['loz','oiifaint','oiibright_loz','oiibright_hiz','med2hiz_oiibright',\
+                                'goodz_oiibright','goodz_oiifaint'],\
+                           [loz,oiifaint,oiibright_loz,oiibright_hiz,med2hiz_oiibright,\
+                                goodz_oiibright,goodz_oiifaint]):
             rz[key]= (R_MAG - Z_MAG)[cut]
             gr[key]= (G_MAG - R_MAG)[cut]
             r_wdust[key]= R_MAG[cut]
             r_nodust[key]= R_MAG_nodust[cut]
-			redshift[key]= zcat.zhelio[cut] 
+            redshift[key]= zcat.zhelio[cut] 
         return rz,gr,r_nodust,r_wdust,redshift
 
-	def cross_validate_redshift(self):
+    def cross_validate_redshift(self):
         rz,gr,r_nodust,r_wdust,redshift= self.get_elgs_FDR_cuts()
-		mysvm,mynn,categors={},{}
-		key='goodz_oiibright'\
-		categors= np.zeros(len(redshift[key])).astype(int)
-		zbins=np.linspace(0.8,1.4,num=6)
-		for lft,rt in zip(zbins[:-1],zbins[1:]):
-			categors[key][ (redshift[key] > lft)*(redshift[key] <= rt) ]= cnt+1
-		X= np.array([rz[key],gr[key]]).T
-		obj= RedshiftPredictor(X=X,\
-	                           y=categors[key])
-		obj.cross_validate(typ='ELG'):
+        key='goodz_oiibright'
+        categors= np.zeros(len(redshift[key])).astype(int)
+        zbins=np.linspace(0.8,1.4,num=6)
+        for lft,rt in zip(zbins[:-1],zbins[1:]):
+            categors[key][ (redshift[key] > lft)*(redshift[key] <= rt) ]= cnt+1
+        X= np.array([rz[key],gr[key]]).T
+        obj= RedshiftPredictor(X=X,\
+                               y=categors[key])
+        obj.cross_validate(typ='ELG')
          
 
     def plot_redshift(self):
@@ -619,52 +639,76 @@ class ELG(CommonInit):
         xrange,yrange= xyrange['x_elg'],xyrange['y_elg']
         # Plot
         fig,ax = plt.subplots(3,2,sharex=True,sharey=True,figsize=(10,12))
-        plt.subplots_adjust(wspace=0.1,hspace=0)
-		# Plot data
-		zbins=np.linspace(0.8,1.4,num=6)
-		mysvm,mynn,categors={},{}
-		# Plot, Predict, Predict
-		# Goodz_oiibright
+        plt.subplots_adjust(wspace=0.25,hspace=0.15)
+        # Plot data
+        zbins=np.linspace(0.8,1.4,num=6)
+        mysvm,mynn,categors={},{},{}
+        # Plot, Predict, Predict
+        # Discrete Color Map
+        cmap = mpl.colors.ListedColormap(['m','r', 'y', 'g','b', 'c'])
+        bounds = zbins
+        norm = mpl.colors.BoundaryNorm(bounds, cmap.N)
+        # Make plots
         for cnt,key,ti in zip(range(2),
-						      ['goodz_oiibright','goodz_oiibright'],\
-							  [r'$z=(0.8,1.4) [OII]>8\times10^{-17}$',r'$z=(0.8,1.4) [OII]<8\times10^{-17}$'])
+                              ['goodz_oiibright','goodz_oiifaint'],\
+                              [r'$z=(0.8,1.4) [OII]>8\times10^{-17}$',r'$z=(0.8,1.4) [OII]<8\times10^{-17}$']):
+            print('Learning redshifts for sample=%s' % key)
             # Add box
             ts.add_ts_box(ax[0,cnt], xlim=xrange,ylim=yrange)
             # Scatter
-            axobj= ax[0,cnt].scatter(rz[key],gr[key],c=redshift[key], marker='o',cmap='plasma',vmin=0.8,vmax=1.4)
-            ti=ax[0,cnt].set_title(ti)
-			cbar = fig.colorbar(axobj, orientation='vertical')
-			# Train & Predict
-			categors[key]= np.zeros(len(redshift[key])).astype(int)
-			for lft,rt in zip(zbins[:-1],zbins[1:]):
-				categors[key][ (redshift[key] > lft)*(redshift[key] <= rt) ]= cnt+1
-			X= np.array([rz[key],gr[key]]).T
-			mysvm[key]= RedshiftPredictor(X=X,\
-										  y=categors[key]).svm(kernel='rbf',C=1.,degree=3)
-			# FIX!!!! ADD 5 color color bar, len(zbins)-1, 
-            axobj= ax[1,cnt].scatter(rz[key],gr[key],c=mysvm[key].predict(X1=X),\
-									 marker='o',cmap='plasma',\
-									 vmin=1,vmax=len(zbins)-1)
-			cbar = fig.colorbar(axobj, orientation='vertical')
-			# FIX add lines dividing the two samples, see sklearn doc plot examples
-			# Train & Predict
-			mynn[key]= RedshiftPredictor(X=X,\
-										 y=categors[key]).nn(nn=3)
-			# FIX!!!! ADD 5 color color bar, len(zbins)-1, 
-            axobj= ax[2,cnt].scatter(rz[key],gr[key],c=mynn[key].predict(X1=X),\
-									 marker='o',cmap='plasma',\
-									 vmin=1,vmax=len(zbins)-1)
-			cbar = fig.colorbar(axobj, orientation='vertical')
-		# Finish axes
-		for row in range(3):
-			for col in range(2):
-				ax[row,col].set_xlim(xrange)
-				ax[row,col].set_ylim(yrange)
-			ylab= ax[row,0].set_ylabel('g-r')
-				xlab= ax[2,col].set_xlabel('r-z')
-		# Save
-		name='dr%d_ELG_redshifts.png' % self.DR
-        kwargs= dict(bbox_extra_artists=[cbar,ti_loc,xlab,ylab], bbox_inches='tight',dpi=150)
+            axobj= ax[0,cnt].scatter(rz[key],gr[key],c=redshift[key],marker='o',\
+                                     cmap=cmap,norm=norm,\
+                                     vmin=bounds.min(),vmax=bounds.max())
+            title=ax[0,cnt].set_title(ti)
+            divider3 = make_axes_locatable(ax[0,cnt])
+            cax3 = divider3.append_axes("right", size="5%", pad=0.1)
+            cbar3 = plt.colorbar(axobj, cax=cax3,\
+                                 cmap=cmap, norm=norm, boundaries=bounds, ticks=bounds)
+            cbar3.set_label('redshift')
+            #cbar = fig.colorbar(axobj, orientation='vertical')
+            # Train & Predict
+            categors[key]= np.zeros(len(redshift[key])).astype(int)
+            for ithbin,lft,rt in zip(range(len(zbins)-1),zbins[:-1],zbins[1:]):
+                categors[key][ (redshift[key] > lft)*(redshift[key] <= rt) ]= ithbin+1
+            X= np.array([rz[key],gr[key]]).T
+            mysvm[key]= RedshiftPredictor(X=X, y=categors[key])
+            mysvm[key].svm(kernel='rbf',C=1.,degree=3)
+            # FIX!!!! ADD 5 color color bar, len(zbins)-1, 
+            axobj= ax[1,cnt].scatter(rz[key],gr[key],c=mysvm[key].predict(X),\
+                                     marker='o',\
+                                     cmap=cmap,norm=norm,\
+                                     vmin=bounds.min(),vmax=bounds.max())
+            #cbar = fig.colorbar(axobj, orientation='vertical')
+            divider3 = make_axes_locatable(ax[1,cnt])
+            cax3 = divider3.append_axes("right", size="5%", pad=0.1)
+            cbar3 = plt.colorbar(axobj, cax=cax3,\
+                                 cmap=cmap, norm=norm, boundaries=bounds, ticks=bounds)
+            cbar3.set_label('redshift')
+            # FIX add lines dividing the two samples, see sklearn doc plot examples
+            # Train & Predict
+            mynn[key]= RedshiftPredictor(X=X,y=categors[key])
+            mynn[key].nn(nn=3)
+            # FIX!!!! ADD 5 color color bar, len(zbins)-1, 
+            axobj= ax[2,cnt].scatter(rz[key],gr[key],c=mynn[key].predict(X),\
+                                     marker='o',\
+                                     cmap=cmap,norm=norm,\
+                                     vmin=bounds.min(),vmax=bounds.max())
+            #cbar = fig.colorbar(axobj, orientation='vertical')
+            divider3 = make_axes_locatable(ax[2,cnt])
+            cax3 = divider3.append_axes("right", size="5%", pad=0.1)
+            cbar3 = plt.colorbar(axobj, cax=cax3,\
+                                 cmap=cmap, norm=norm, boundaries=bounds, ticks=bounds)
+            cbar3.set_label('redshift')
+        # Finish axes
+        for row in range(3):
+            ylab= ax[row,0].set_ylabel('g-r')
+            for col in range(2):
+                ax[row,col].set_xlim(xrange)
+                ax[row,col].set_ylim(yrange)
+                xlab= ax[2,col].set_xlabel('r-z')
+        # Save
+        name='dr%d_ELG_redshifts.png' % self.DR
+        kwargs= dict(bbox_extra_artists=[cbar3,title,xlab,ylab]) #, bbox_inches='tight',dpi=150)
         if self.savefig:
             plt.savefig(name, **kwargs)
             plt.close()
@@ -706,7 +750,7 @@ class ELG(CommonInit):
             plt.savefig(name, **kwargs)
             plt.close()
             print('Wrote {}'.format(name))
- 
+
     def plot_FDR_multipanel(self):
         rz,gr,r_nodust,r_wdust,redshift= self.get_elgs_FDR_cuts()
         ts= TSBox(src='ELG')
@@ -1268,12 +1312,12 @@ if __name__ == '__main__':
     #star.plot()
     #qso=QSO(**kwargs)
     #qso.plot_kde()
-    qso.plot()
+    #qso.plot()
     kwargs.update(dict(DR=3, rlimit=23.4+1.))
     elg= ELG(**kwargs)
-	elg.plot_redshift()
-	elg.cross_validate_redshift()
- 
+    elg.plot_redshift()
+    elg.cross_validate_redshift()
+
     #elg.plot_kde()
     #elg.plot()
     #kwargs.update(dict(zlimit=20.46+1.))
