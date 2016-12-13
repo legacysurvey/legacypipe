@@ -139,6 +139,26 @@ def scan_dchisq(seeing, target_dchisq, ps, e1=0.):
     ps.savefig()
 
 
+def stamps(T, I):
+    NR,NC = 8,10
+    for j,i in enumerate(I[:(NR*NC)]):
+        fn = 'stamps/stamp-%.6f-%.6f.jpg' % (T.ra[i], T.dec[i])
+        if not os.path.exists(fn):
+            url = 'http://legacysurvey.org/viewer/jpeg-cutout/?ra=%.6f&dec=%.6f&layer=decals-dr3&size=100' % (T.ra[i], T.dec[i])
+            cmd = 'wget -O %s "%s"' % (fn, url)
+            print(cmd)
+            os.system(cmd)
+        img = plt.imread(fn)
+
+        M = 20
+        img = img[M:-M, M:-M, :]
+        
+        plt.subplot(NR, NC, j+1)
+        plt.imshow(img, interpolation='nearest', origin='lower')
+        plt.xticks([])
+        plt.yticks([])
+
+    
 if __name__ == '__main__':
     ps = PlotSequence('morph')
 
@@ -233,6 +253,101 @@ if __name__ == '__main__':
     plt.axis([1e1, 1e7, 0, 0.04])
     
     ps.savefig()
+
+
+    plt.clf()
+
+    plt.plot(np.maximum(dchiexp, dchidev)[I] - np.maximum(dchipsf, dchisimp)[I],
+             (np.maximum(dchiexp, dchidev) - np.maximum(dchipsf, dchisimp))[I]/dchipsf[I],
+             'k.', alpha=0.2)
+
+    #J = I[np.flatnonzero(np.max(T.decam_anymask[I,:], axis=1))]
+    J = I[np.flatnonzero(np.max(T.decam_anymask[I,:] == 2, axis=1))]
+    plt.plot(np.maximum(dchiexp, dchidev)[J] - np.maximum(dchipsf, dchisimp)[J],
+             (np.maximum(dchiexp, dchidev) - np.maximum(dchipsf, dchisimp))[J]/dchipsf[J],
+             'r.', alpha=0.8)
+    plt.xlabel('dchi(EXP or DEV) - dchi(PSF or SIMP)')
+    plt.ylabel('[ dchi(EXP or DEV) - dchi(PSF or SIMP) ] / dchipsf')
+    plt.xscale('symlog')
+    plt.axis([1e1, 1e7, 0, 0.04])
+    ps.savefig()
+
+    plt.clf()
+    plt.plot(np.maximum(dchipsf, dchisimp)[I],
+             np.maximum(dchiexp, dchidev)[I], 'k.', alpha=0.2)
+    plt.plot(np.maximum(dchipsf, dchisimp)[J],
+             np.maximum(dchiexp, dchidev)[J], 'r.')
+    plt.xlabel('dchi(PSF or SIMP)')
+    plt.ylabel('dchi(EXP or DEV)')
+    plt.xscale('symlog')
+    plt.yscale('symlog')
+    plt.axis([1e1, 1e8, 1e1, 1e8])
+    ps.savefig()
+    
+    
+    d1 = np.maximum(dchipsf, dchisimp)
+    d2 = np.maximum(dchiexp, dchidev)
+    x = d2 - d1
+    y = (d2 - d1) / dchipsf
+    
+    # Stars in right-hand locus
+    I = np.flatnonzero((x > 3e4) * (y > 0.008) * (y < 0.02))
+    T[I].writeto('locus.fits')
+
+    plt.clf()
+    plt.subplots_adjust(hspace=0, wspace=0)
+    stamps(T, I)
+    ps.savefig()
+    
+    T.g = -2.5 * (np.log10(T.decam_flux[:,1]) - 9)
+    T.r = -2.5 * (np.log10(T.decam_flux[:,2]) - 9)
+    T.z = -2.5 * (np.log10(T.decam_flux[:,4]) - 9)
+
+    from astrometry.util.plotutils import loghist
+    
+    plt.clf()
+    ax = [-2,5, -2,4]
+    loghist(T.g - T.r, T.r - T.z, 200, range=((ax[0],ax[1]),(ax[2],ax[3])))
+    plt.plot(T.g[I] - T.r[I], T.r[I] - T.z[I], 'go')
+    plt.xlabel('g - r (mag)')
+    plt.ylabel('r - z (mag)')
+    plt.axis(ax)
+    ps.savefig()
+    
+    # Pushing the cut even further down
+    I = np.flatnonzero((x > 30) * (x < 1000) * (y > 0.002) * (y < 0.008))
+    T[I].writeto('locus2.fits')
+
+    plt.clf()
+    stamps(T, I)
+    ps.savefig()
+    
+    plt.clf()
+    ax = [-2,5, -2,4]
+    loghist(T.g - T.r, T.r - T.z, 200, range=((ax[0],ax[1]),(ax[2],ax[3])))
+    plt.plot(T.g[I] - T.r[I], T.r[I] - T.z[I], 'go')
+    plt.xlabel('g - r (mag)')
+    plt.ylabel('r - z (mag)')
+    plt.axis(ax)
+    ps.savefig()
+
+    # Bottom
+    I = np.flatnonzero((x > 30) * (x < 1000) * (y < 0.001))
+    T[I].writeto('locus3.fits')
+
+    plt.clf()
+    stamps(T, I)
+    ps.savefig()
+    
+    plt.clf()
+    ax = [-2,5, -2,4]
+    loghist(T.g - T.r, T.r - T.z, 200, range=((ax[0],ax[1]),(ax[2],ax[3])))
+    plt.plot(T.g[I] - T.r[I], T.r[I] - T.z[I], 'go')
+    plt.xlabel('g - r (mag)')
+    plt.ylabel('r - z (mag)')
+    plt.axis(ax)
+    ps.savefig()
+
     
     sys.exit(0)
 
