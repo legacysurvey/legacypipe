@@ -320,7 +320,8 @@ class LegacySurveyImage(object):
                       'away from zero!')
 
         # tractor WCS object
-        twcs = self.get_tractor_wcs(wcs, x0, y0)
+        twcs = self.get_tractor_wcs(wcs, x0, y0,
+                                    primhdr=primhdr, imghdr=imghdr)
 
         if hybridPsf:
             pixPsf = False
@@ -530,7 +531,8 @@ class LegacySurveyImage(object):
         '''
         return None
 
-    def get_tractor_wcs(self, wcs, x0, y0):
+    def get_tractor_wcs(self, wcs, x0, y0,
+                        primhdr=None, imghdr=None):
         twcs = ConstantFitsWcs(wcs)
         if x0 or y0:
             twcs.setX0Y0(x0,y0)

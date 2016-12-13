@@ -101,7 +101,8 @@ class MosaicImage(CPImage, CalibMixin):
         # assume this is going to be masked by the DQ map.
         return invvar
 
-    def get_tractor_wcs(self, wcs, x0, y0):
+    def get_tractor_wcs(self, wcs, x0, y0,
+                        primhdr=None, imghdr=None):
         needs_third_pixel_shift = False #...?
         if not needs_third_pixel_shift:
             return super(self, MosaicImage).get_tractor_wcs(wcs, x0, y0)
