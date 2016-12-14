@@ -52,6 +52,7 @@ import argparse
 
 import numpy as np
 from glob import glob
+from scipy.optimize import curve_fit
 
 import fitsio
 from astropy.table import Table, vstack
@@ -65,6 +66,7 @@ import sys
 
 from astrometry.util.fits import fits_table, merge_tables
 from astrometry.util.util import wcs_pv2sip_hdr
+from astrometry.libkd.spherematch import match_radec
 
 ######## 
 ## Ted's
@@ -179,7 +181,7 @@ def _ccds_table(camera='decam'):
         ('ha', 'S13'),             # hour angle (from header)
         ('airmass', '>f4'),        # airmass (from header)
         #('seeing', '>f4'),        # seeing estimate (from header, arcsec)
-        #('fwhm', '>f4'),          # FWHM (pixels)
+        ('fwhm', '>f4'),          # FWHM (pixels)
         #('arawgain', '>f4'),       
         ('gain', '>f4'),           # average gain (camera-specific, e/ADU) -- remove?
         #('avsky', '>f4'),         # average sky value from CP (from header, ADU) -- remove?
@@ -251,6 +253,8 @@ class Compare2Arjuns(object):
         self.getKeyTypes()
         self.compare_alphabetic()
         self.compare_numeric()
+        self.compare_numeric_stars()
+        raise ValueError
 
     def makeBigTable(self,zptfn_list,path_to_arjuns):
         '''combines many zpt files into one table, 
@@ -263,12 +267,15 @@ class Compare2Arjuns(object):
         self.legacy,self.legacy_stars,self.arjun,self.arjun_stars= [],[],[],[]
         # Simultaneously read in arjun's with legacy
         fns= np.loadtxt(zptfn_list,dtype=str)
+        if fns.size == 1:
+            fns= [str(fns)]
         for cnt,fn in enumerate(fns):
-            print('%d/%d' % (cnt+1,len(fns)))
+            print('%d/%d: ' % (cnt+1,len(fns)))
             try:
                 # Legacy zeropoints, use Arjun's naming scheme
                 self.legacy.append( self.read_legacy(fn,reset_names=True) ) 
-                self.legacy_stars.append( fits_table(fn.replace('.fits','-stars.fits')) )
+                fn_stars= fn.replace('.fits','-stars.fits')
+                self.legacy_stars.append( self.read_legacy(fn_stars,reset_names=True,stars=True) )
                 # Corresponding zeropoints from Arjun
                 arjun_fn= os.path.basename(fn)
                 index= arjun_fn.find('zeropoint') # Check for a prefix
@@ -297,45 +304,65 @@ class Compare2Arjuns(object):
         self.arjun.cut(keep)
 
 
-    def read_legacy(self,zptfn,reset_names=True):
+    def read_legacy(self,zptfn,reset_names=True,stars=False):
         '''reads in a legacy zeropoint table as a fits_table() object
         reset_names: 
             True -- rename everything to give it Arjun's naming scheme
             False -- return table as is
+        stars:
+            True -- the input is the stars table that accompanies each
+                    zeropoints table, e.g. instead of the zpt table
+            False -- the input is the zeropoitn table
         '''
-        legacy_missing= ['ccdhdu','seeing','fwhm',\
-                       'ccdnmatcha','ccdnmatchb','ccdnmatchc','ccdnmatchd',\
-                       'ccdzpta','ccdzptb','ccdzptc','ccdzptd',\
-                       'ccdnum',\
-                       'psfab','psfpa','temp','badimg']
-        
-        arjun_missing= ['camera','expid','pixscale']
-        self.missing= legacy_missing + arjun_missing
-       
-        translate= dict(image_filename='filename',\
-                        image_hdu='ccdhdunum',\
-                        gain='arawgain',\
-                        width='naxis1',\
-                        height='naxis2',\
-                        ra='ccdra',\
-                        dec='ccddec',\
-                        ra_bore='ra',\
-                        dec_bore='dec',\
-                        raoff='ccdraoff',\
-                        decoff='ccddecoff',\
-                        rarms='ccdrarms',\
-                        decrms='ccddecrms',\
-                        skycounts='ccdskycounts',\
-                        skymag='ccdskymag',\
-                        skyrms='ccdskyrms',\
-                        nstar='ccdnstar',\
-                        nmatch='ccdnmatch',\
-                        mdncol='ccdmdncol',\
-                        phoff='ccdphoff',\
-                        phrms='ccdphrms',\
-                        transp='ccdtransp',\
-                        zpt='ccdzpt',\
-                        zptavg='zpt')
+        if stars:
+            # Just columns we'll compare
+            translate= dict(ra='ccd_ra',\
+                            dec='ccd_dec',\
+                            apmag='ccd_mag',\
+                            radiff='raoff',\
+                            decdiff='decoff',\
+                            gaia_g='gmag')
+            self.star_keys= []
+            for key in translate.keys():
+                self.star_keys.append( translate[key] ) 
+            # Add ps1_g,r... to compare those too
+            for band in ['g','r','i','z']:
+                self.star_keys.append( 'ps1_%s' % band )
+        else:
+            legacy_missing= ['ccdhdu','seeing',\
+                           'ccdnmatcha','ccdnmatchb','ccdnmatchc','ccdnmatchd',\
+                           'ccdzpta','ccdzptb','ccdzptc','ccdzptd',\
+                           'ccdnum',\
+                           'psfab','psfpa','temp','badimg']
+            
+            arjun_missing= ['camera','expid','pixscale']
+            self.missing= legacy_missing + arjun_missing
+           
+            # All columns without matching name
+            translate= dict(image_filename='filename',\
+                            image_hdu='ccdhdunum',\
+                            gain='arawgain',\
+                            width='naxis1',\
+                            height='naxis2',\
+                            ra='ccdra',\
+                            dec='ccddec',\
+                            ra_bore='ra',\
+                            dec_bore='dec',\
+                            raoff='ccdraoff',\
+                            decoff='ccddecoff',\
+                            rarms='ccdrarms',\
+                            decrms='ccddecrms',\
+                            skycounts='ccdskycounts',\
+                            skymag='ccdskymag',\
+                            skyrms='ccdskyrms',\
+                            nstar='ccdnstar',\
+                            nmatch='ccdnmatch',\
+                            mdncol='ccdmdncol',\
+                            phoff='ccdphoff',\
+                            phrms='ccdphrms',\
+                            transp='ccdtransp',\
+                            zpt='ccdzpt',\
+                            zptavg='zpt')
         
         legacy=fits_table(zptfn)
         if reset_names:
@@ -393,15 +420,15 @@ class Compare2Arjuns(object):
             xlims,ylims= None,None
             for cnt,key in enumerate(self.numeric_keys):
                 x= self.arjun.get(key)
-                ti= 'x-axis: A'
+                ti= 'Labels: x-axis = A, '
                 if doplot == 'dpercent':
                     y= ( self.arjun.get(key) - self.legacy.get(key) ) / \
                        np.abs( self.arjun.get(key) + self.legacy.get(key) )
-                    ti+= ' y-axis: (A - L)/|A + L|'
+                    ti+= ' y-axis = (A - L)/|A + L|'
                     ylims=[-0.1,0.1]
                 elif doplot == 'default':
                     y= self.legacy.get(key)
-                    ti+= ' y-axis: L'
+                    ti+= ' y-axis = L'
                     xlims= [ min([x.min(),y.min()]),max([x.max(),y.max()]) ]
                     if xlims[0] < 0: xlims[0]*=1.02
                     else: xlims[0]*=0.98
@@ -410,7 +437,9 @@ class Compare2Arjuns(object):
                     ylims= xlims
                 else: raise ValueError('%s not allowed' % doplot)
                 ax[cnt].scatter(x,y) 
-                ax[cnt].set_title(key,fontsize=20) 
+                #ax[cnt].set_title(key,fontsize=20) 
+                ax[cnt].text(0.025,0.88,key,\
+                             va='center',ha='left',transform=ax[cnt].transAxes,fontsize=20) 
                 if xlims is not None:
                     ax[cnt].set_xlim(xlims)
                 if ylims is not None:
@@ -421,6 +450,71 @@ class Compare2Arjuns(object):
             plt.savefig(fn) #bbox_extra_artists=[xlab,ylab], bbox_inches='tight',dpi=150)
             print('Wrote %s' % fn)
             plt.close()
+    
+    def compare_numeric_stars(self):
+        '''two plots of everything numberic between legacy Stars and Arjun's Stars
+        1) x vs. y 
+        2) x vs. (y-x)/|y+x|
+        '''
+        # Match
+        m1, m2, d12 = match_radec(self.arjun_stars.ccd_ra, self.arjun_stars.ccd_dec, \
+                                  self.legacy_stars.ccd_ra, self.legacy_stars.ccd_dec, \
+                                1./3600.0)
+        nstars=dict(arjun=len(self.arjun_stars),legacy=len(self.legacy_stars))
+        self.arjun_stars.cut(m1)
+        self.legacy_stars.cut(m2)
+        assert(len(self.arjun_stars) == len(self.legacy_stars))
+        ti_top= 'Matched Stars:%d, Arjun had:%d, Legacy had:%d' % \
+                (len(self.legacy_stars),nstars['arjun'],nstars['legacy'])
+        # Plot
+        for doplot in ['dpercent','default']:
+            panels=len(self.star_keys)
+            cols=3
+            if panels % cols == 0:
+                rows=panels/cols
+            else:
+                rows=panels/cols+1
+            rows=int(rows)
+            fig,axes= plt.subplots(rows,cols,figsize=(20,10))
+            ax=axes.flatten()
+            plt.subplots_adjust(hspace=0.4,wspace=0.3)
+            xlims,ylims= None,None
+            for cnt,key in enumerate(self.star_keys):
+                x= self.arjun_stars.get(key)
+                ti= 'Labels: x-axis = A, '
+                if doplot == 'dpercent':
+                    y= ( self.arjun_stars.get(key) - self.legacy_stars.get(key) ) / \
+                       np.abs( self.arjun_stars.get(key) + self.legacy_stars.get(key) )
+                    ti+= ' y-axis = (A - L)/|A + L|'
+                    ylims=[-0.01,0.01]
+                elif doplot == 'default':
+                    y= self.legacy_stars.get(key)
+                    ti+= 'y-axis = L'
+                    xlims= [ min([x.min(),y.min()]),max([x.max(),y.max()]) ]
+                    if xlims[0] < 0: xlims[0]*=1.02
+                    else: xlims[0]*=0.98
+                    if xlims[1] < 0: xlims[0]*=0.98
+                    else: xlims[1]*=1.02
+                    ylims= xlims
+                else: raise ValueError('%s not allowed' % doplot)
+                ax[cnt].scatter(x,y) 
+                #ax[cnt].set_title(key,fontsize=20) 
+                ax[cnt].text(0.025,0.88,key,\
+                             va='center',ha='left',transform=ax[cnt].transAxes,fontsize=20) 
+                if xlims is not None:
+                    ax[cnt].set_xlim(xlims)
+                if ylims is not None:
+                    ax[cnt].set_ylim(ylims)
+            ax[1].text(0.5,1.5,ti_top,\
+                       va='center',ha='center',transform=ax[1].transAxes,fontsize=20)
+            ax[1].text(0.5,1.3,ti,\
+                       va='center',ha='center',transform=ax[1].transAxes,fontsize=20)
+            fn="numeric_stars_%s.png" % doplot
+            plt.savefig(fn) #bbox_extra_artists=[xlab,ylab], bbox_inches='tight',dpi=150)
+            print('Wrote %s' % fn)
+            plt.close()
+ 
+
  
      
 def _stars_table(nstars=1):
@@ -430,7 +524,7 @@ def _stars_table(nstars=1):
     '''
     cols = [('image_filename', 'S65'),('expid', 'S16'), ('filter', 'S1'),('nmatch', '>i2'), 
             ('amplifier', 'i2'), ('x', 'f4'), ('y', 'f4'),
-            ('ra', 'f8'), ('dec', 'f8'), ('fwhm', 'f4'), ('apmag', 'f4'),
+            ('ra', 'f8'), ('dec', 'f8'), ('apmag', 'f4'),
             ('radiff', 'f8'), ('decdiff', 'f8'),('radiff_ps1', 'f8'), ('decdiff_ps1', 'f8'),
             ('gaia_ra', 'f8'), ('gaia_dec', 'f8'), ('ps1_mag', 'f4'), ('ps1_gicolor', 'f4'),
             ('gaia_g','f8'),('ps1_g','f8'),('ps1_r','f8'),('ps1_i','f8'),('ps1_z','f8')]
@@ -439,6 +533,9 @@ def _stars_table(nstars=1):
 
 def getrms(x):
     return np.sqrt( np.mean( np.power(x,2) ) )
+
+def moffatPSF(x, a, r0, beta):
+    return a*(1. + (x/r0)**2)**(-beta)
 
 class Measurer(object):
     def __init__(self, fn, ext, aprad=3.5, skyrad_inner=7.0, skyrad_outer=10.0,
@@ -645,7 +742,6 @@ class Measurer(object):
         t0= Time()
         from scipy.stats import sigmaclip
         from legacyanalysis.ps1cat import ps1cat
-        from astrometry.libkd.spherematch import match_radec
         from photutils import (CircularAperture, CircularAnnulus,
                                aperture_photometry, daofind)
         t0= ptime('import-statements-in-measure.run',t0)
@@ -771,7 +867,6 @@ class Measurer(object):
         b_isolated= self.isolated_radec(objra,objdec,nn=2,minsep=minsep/3600.)
         # Compute ap mags
         apmags= - 2.5 * np.log10(apflux.data) + zp0 + 2.5 * np.log10(exptime)
-        t0= ptime('aperture-photometry',t0)
 
         # Good stars from Mosstat.pro, ignoring aperature errors
         minsep_px = minsep/self.pixscale
@@ -803,7 +898,50 @@ class Measurer(object):
         objra, objdec = self.wcs.pixelxy2radec(obj['xcentroid']+1, obj['ycentroid']+1)
         apflux = apflux[istar].data
         ccds['nstar'] = len(istar)
+        t0= ptime('aperture-photometry',t0)
 
+        # FWHM: fit moffat profile to 20 brightest stars
+        # annuli 0.5'' --> 3.5''
+        radii = np.linspace(0.5/self.pixscale,self.aprad/self.pixscale, num=10)
+        sbright= []
+        if not self.sky_global:
+            skyap = CircularAnnulus((obj['xcentroid'], obj['ycentroid']),
+                                    r_in=self.skyrad[0] / self.pixscale, 
+                                    r_out=self.skyrad[1] / self.pixscale)
+            skyphot = aperture_photometry(img, skyap)
+        for radius in radii:
+            ap = CircularAperture((obj['xcentroid'], obj['ycentroid']), radius)
+            if self.sky_global:
+                sbright.append( aperture_photometry(img - sky, ap)/ap.aera() )
+            else:
+                apphot = aperture_photometry(img, ap)
+                flux= apphot['aperture_sum'] - skyphot['aperture_sum'] / skyap.area() * ap.area()
+                sbright.append( flux/ap.area() )
+        # Sky subtracted surface brightness (nstars,napertures)
+        surfb= np.zeros( (len(sbright[0].data),len(radii)) )
+        for cnt in range(len(radii)):
+            surfb[:,cnt]= sbright[cnt].data
+        del sbright
+        # 20 brightest or the number left
+        nbright= min(20,len(obj))
+        ibright= np.argsort(surfb[:,0])[::-1][:nbright]
+        surfb= surfb[ibright,:]
+        # Non-linear least squares LM fit to Moffat Profile
+        fwhm= np.zeros(surfb.shape[0])
+        plt.close()
+        for cnt in range(surfb.shape[0]):
+            popt, pcov = curve_fit(moffatPSF, radii, surfb[cnt,:], p0 = [1.5*surfb[cnt,0], 5.,2.])
+            fwhm[cnt]= popt[1]
+            plt.plot(radii,surfb[cnt,:],'ok')
+            plt.plot(np.linspace(0,14,num=20),moffatPSF(np.linspace(0,14,num=20), *popt))
+        ccds['fwhm']= np.median(fwhm) # Pixels
+        plt.xlabel('pixels')
+        plt.savefig('qa-fwhm-%s-ccd%s.png' % \
+                (ccds['image_filename'].data[0].replace('.fits.fz',''),\
+                 ccds['image_hdu'].data[0]))
+        plt.close()
+        t0= ptime('fwhm-calculation',t0)
+        
         # Now match against (good) PS1 stars 
         # John cuts to magnitudes between 15 and 22
         ps1 = ps1cat(ccdwcs=self.wcs).get_stars() #magrange=(15, 22))
