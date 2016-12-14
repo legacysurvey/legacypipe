@@ -94,7 +94,8 @@ class Translator(object):
         if self.verbose:
             print 'John --> Arjun'
             for key in self.j2a.keys():
-                print '%s --> %s' % (key,self.j2a[key])
+                #print '%s --> %s' % (key,self.j2a[key])
+                print "%s='%s',\\" % (key,self.j2a[key])
     
     def float_or_str(self):
         self.typ=dict(floats=[],ints=[],strs=[])
