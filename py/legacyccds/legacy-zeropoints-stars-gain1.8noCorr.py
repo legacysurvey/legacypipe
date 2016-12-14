@@ -233,16 +233,20 @@ def _ccds_table(camera='decam'):
 class Compare2Arjuns(object):
     '''contains the functions to compare every column of legacy ccd_table to 
     that of Arjun's zeropoints files'''
-    def __init__(self,zptfn_list,path_to_arjuns): 
+    def __init__(self,zptfn_list,\
+                 path_to_arjuns='/scratch2/scratchdirs/arjundey/ZeroPoints_MzLSv2',\
+                 camera='mosaic'): 
         '''combines many zpt files into one table, 
         does this for legacy and the corresponding zpt tables from Arjun
         givent the relative path to arjun's zpt tables
         
         zptfn_list: text file listing each legacy zpt file to be used
         path_to_arjuns: relative path to arjun's zpt tables
+        camera: ['mosaic','90prime','decam']
         '''
         # Get legacy zeropoints, and corresponding ones from Arjun
         self.makeBigTable(zptfn_list,path_to_arjuns)
+        self.ccd_cuts(camera)
         # Compare values
         self.getKeyTypes()
         self.compare_alphabetic()
@@ -266,8 +270,10 @@ class Compare2Arjuns(object):
                 self.legacy.append( self.read_legacy(fn,reset_names=True) ) 
                 self.legacy_stars.append( fits_table(fn.replace('.fits','-stars.fits')) )
                 # Corresponding zeropoints from Arjun
-                arjun_fn= os.path.join(path_to_arjuns, os.path.basename(fn))
-                arjun_fn= arjun_fn.replace('legacy-','')
+                arjun_fn= os.path.basename(fn)
+                index= arjun_fn.find('zeropoint') # Check for a prefix
+                if index > 0: arjun_fn= arjun_fn.replace(arjun_fn[:index],'')
+                arjun_fn= os.path.join(path_to_arjuns, arjun_fn)
                 self.arjun.append( fits_table(arjun_fn) ) 
                 self.arjun_stars.append( fits_table(arjun_fn.replace('zeropoint-','matches-') ))
             except IOError:
@@ -280,6 +286,17 @@ class Compare2Arjuns(object):
         self.arjun= merge_tables(self.arjun, columns='fillzero') 
         self.arjun_stars= merge_tables(self.arjun_stars, columns='fillzero')
     
+    def ccd_cuts(self,camera):
+        keep= np.zeros(len(self.legacy)).astype(bool)
+        for tab in [self.legacy,self.arjun]:
+            if camera == 'mosaic':
+                keep[ (tab.exptime > 40.)*(tab.ccdnmatch > 50)*(tab.ccdzpt > 25.8) ] = True
+            elif camera == '90prime':
+                keep[ (tab.ccdzpt >= 20.)*(tab.ccdzpt <= 30.) ] = True
+        self.legacy.cut(keep)
+        self.arjun.cut(keep)
+
+
     def read_legacy(self,zptfn,reset_names=True):
         '''reads in a legacy zeropoint table as a fits_table() object
         reset_names: 
@@ -293,6 +310,7 @@ class Compare2Arjuns(object):
                        'psfab','psfpa','temp','badimg']
         
         arjun_missing= ['camera','expid','pixscale']
+        self.missing= legacy_missing + arjun_missing
        
         translate= dict(image_filename='filename',\
                         image_hdu='ccdhdunum',\
@@ -321,57 +339,54 @@ class Compare2Arjuns(object):
         
         legacy=fits_table(zptfn)
         if reset_names:
-            for key in ccd_tab.keys():
-                if key in translate.keys():
-                    legacy[key --> translate[key]]
-                elif key in legacy_missing:
-                    print('WARNING: legacy is missing: %s' % key)
-                elif key in arjun_missing:
-                    pass
-                #elif key in arjuns.keys():
-                #    pass # same name
-                else: 
-                    pass #raise ValueError('key=%s not supported' % key)
+            for key in translate.keys():
+                legacy.rename(key, translate[key]) #(old,new)
         return legacy
 
 
 
     def getKeyTypes(self):
         '''sorts keys as either numeric or alphabetic'''
-        self.num_keys=[]
+        self.numeric_keys=[]
         self.alpha_keys=[]
-        for key in self.legacy.keys():
+        for key in self.legacy.get_columns():
+            if key in self.missing:
+                continue # Either not in legacy or not in Arjuns
             typ= type(self.legacy.get(key)[0])
             if np.any((typ == np.float32,\
                        typ == np.float64),axis=0):
-                self.num_keys+= [key]
+                self.numeric_keys+= [key]
             elif np.any((typ == np.int16,\
                          typ == np.int32),axis=0):
-                self.num_keys+= [key]
+                self.numeric_keys+= [key]
             elif typ == np.string_:
                 self.alpha_keys+= [key]
             else:
-                print 'WARNING: unknown type for key=%s, ' % key,typ
+                print('WARNING: unknown type for key=%s, ' % key,typ)
 
-    def compare_strings(self):
-        print '-'*20
-        print 'legacy == arjuns:'
+    def compare_alphabetic(self):
+        print('-'*20)
+        print('legacy == arjuns:')
         for key in self.alpha_keys:
             # FIX ME: comparing first row only, not all rows
-            print '%s: ' % key,self.legacy.get(key)[0] == self.arjun.get(key)[0]
+            if key in ['filename']:
+                print('%s: ' % key,self.legacy.get(key)[0].replace('.fits.fz','.fits') == self.arjun.get(key)[0])
+            else:
+                print('%s: ' % key,self.legacy.get(key)[0] == self.arjun.get(key)[0])
 
-     def compare_floats_ints(self):
+    def compare_numeric(self):
         '''two plots of everything numberic between legacy zeropoints and Arjun's
         1) x vs. y 
         2) x vs. (y-x)/|y+x|
         '''
-        for doplot in ['dpercent','usual']:
+        for doplot in ['dpercent','default']:
             panels=len(self.numeric_keys)
             cols=3
             if panels % cols == 0:
                 rows=panels/cols
             else:
                 rows=panels/cols+1
+            rows=int(rows)
             fig,axes= plt.subplots(rows,cols,figsize=(20,30))
             ax=axes.flatten()
             plt.subplots_adjust(hspace=0.4,wspace=0.3)
@@ -380,11 +395,11 @@ class Compare2Arjuns(object):
                 x= self.arjun.get(key)
                 ti= 'x-axis: A'
                 if doplot == 'dpercent':
-                    y= self.arjun.get(key) - self.legacy.get(key)
-                    y/= np.abs( self.arjun.get(key) + self.legacy.get(key) )
+                    y= ( self.arjun.get(key) - self.legacy.get(key) ) / \
+                       np.abs( self.arjun.get(key) + self.legacy.get(key) )
                     ti+= ' y-axis: (A - L)/|A + L|'
                     ylims=[-0.1,0.1]
-                elif doplot == 'usual':
+                elif doplot == 'default':
                     y= self.legacy.get(key)
                     ti+= ' y-axis: L'
                     xlims= [ min([x.min(),y.min()]),max([x.max(),y.max()]) ]
@@ -395,18 +410,18 @@ class Compare2Arjuns(object):
                     ylims= xlims
                 else: raise ValueError('%s not allowed' % doplot)
                 ax[cnt].scatter(x,y) 
-                ax[cnt].set_title(key,fontsize=10) 
+                ax[cnt].set_title(key,fontsize=20) 
                 if xlims is not None:
                     ax[cnt].set_xlim(xlims)
                 if ylims is not None:
                     ax[cnt].set_ylim(ylims)
-            plt.suptitle(ti)
+            ax[1].text(0.5,1.5,ti,\
+                       va='center',ha='center',transform=ax[1].transAxes,fontsize=30)
             fn="numeric_%s.png" % doplot
             plt.savefig(fn) #bbox_extra_artists=[xlab,ylab], bbox_inches='tight',dpi=150)
             print('Wrote %s' % fn)
             plt.close()
  
-   
      
 def _stars_table(nstars=1):
     '''Initialize the stars table, which will contain information on all the stars
@@ -477,7 +492,7 @@ class Measurer(object):
             print('WARNING! no EXPNUM in %s' % self.fn)
             self.expnum = np.int32(os.path.basename(self.fn)[11:17])
 
-        self.ccdname = self.hdr['EXTNAME'].strip().upper()
+        self.ccdname = self.hdr['EXTNAME'].strip()
         self.image_hdu = np.int(self.hdr['CCDNUM'])
         #self.ccdnum = self.hdr['CCDNUM']
         #self.image_hdu = np.int(self.ccdnum)
@@ -1296,9 +1311,18 @@ if __name__ == "__main__":
     parser.add_argument('--sky-global', action='store_true',
                         help='Use a global rather than a local sky-subtraction around the stars.')
     parser.add_argument('--only_ccd_centers', action='store_true', default=False, help='get ccd ra,dec centers only')
+    parser.add_argument('--compare', action='store_true', default=False, help='get ccd ra,dec centers only')
 
     args = parser.parse_args()
-    
+   
+    if args.compare:
+        comp= Compare2Arjuns('testlist.txt',\
+                             path_to_arjuns='/scratch2/scratchdirs/arjundey/ZeroPoints_MzLSv2',\
+                             camera='mosaic')
+    raise ValueError
+ 
+
+ 
     images= read_lines(args.image_list) 
     #images= glob(args.images) 
     
