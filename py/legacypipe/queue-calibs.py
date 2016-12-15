@@ -65,7 +65,7 @@ import pylab as plt
 from astrometry.util.fits import fits_table
 from astrometry.util.file import trymakedirs
 
-from legacypipe.common import LegacySurveyData, wcs_for_brick, ccds_touching_wcs
+from legacypipe.survey import LegacySurveyData, wcs_for_brick, ccds_touching_wcs
 
 from astrometry.libkd.spherematch import match_radec
 
@@ -146,10 +146,9 @@ def main():
         log(len(T), 'CCDs')
     T.index = np.arange(len(T))
 
-    print(len(T), 'CCDs before cuts')
-    #I = survey.photometric_ccds(T)
-    #print(len(I), 'CCDs are photometric')
-    #T.cut(I)
+    I = survey.photometric_ccds(T)
+    print(len(I), 'CCDs are photometric')
+    T.cut(I)
     I = survey.apply_blacklist(T)
     print(len(I), 'CCDs are not blacklisted')
     T.cut(I)
@@ -346,10 +345,6 @@ def main():
     elif opt.region == 'mzls':
         dlo,dhi = 30., 90.
 
-    elif opt.region == 'desi':
-        dlo,dhi = -30, 90.
-        rlo,rhi = 0, 360
-    print('dlo,dhi,rlo,rhi=%f,%f,%f,%f' % (dlo,dhi,rlo,rhi))
         
     if opt.mindec is not None:
         dlo = opt.mindec
@@ -387,10 +382,6 @@ def main():
             keep[j] = True
         T.cut(keep)
         log('Cut to', len(T), 'CCDs near bricks')
-
-    B.writeto('cut_bricks.fits')
-    T.writeto('cut_ccds.fits')
-    sys.exit('early')
 
     # Aside -- how many near DR1=1 CCDs?
     if False:
@@ -438,7 +429,7 @@ def main():
 
     if opt.brickq_deps:
         import qdo
-        from legacypipe.common import on_bricks_dependencies
+        from legacypipe.survey import on_bricks_dependencies
 
         #... find Queue...
         q = qdo.connect(opt.queue, create_ok=True)
