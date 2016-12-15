@@ -1,6 +1,30 @@
 #!/usr/bin/env python
 
-"""Generate a legacypipe-compatible CCD-level zeropoints file for a given set of
+"""
+RUN
+=== 
+1) generate file list of cpimages, e.g. for everything mzls
+find /project/projectdirs/cosmo/staging/mosaicz/MZLS_CP/CP*v2/k4m*ooi*.fits.fz > mosaic_allcp.txt
+2) run legacy-zeropoints.py using batch script submit_zpts.sh and the debug queue
+change SBATCH -N to be as many nodes as will give you mpi tasks = nodes*cores_per_nodes ~ number of cp images
+mpi tasks can be 10,000+ and scaling should be fine, mpi tasks > ~ 1/5 the number of cp images should finish everything in < 30 min...
+sbatch submit_zpts.sh
+Note, --verboseplots will output ALL plost, include Moffat PSF fits to 20 brightest stars for FWHM
+3) Make a file (e.g. zpt_files.txt) listing all the zeropoint files you just made (not includeing the -star.fits ones), then 
+    a) compare legacy zeropoints to Arjuns 
+        run from loggin node: 
+        python legacy-zeropoints.py --image_list zpt_files.txt --compare2arjun
+    b) gather all zeropoint files into one fits table
+        run from loggin node
+            python legacy-zeropoints-gather.py --file_list zpt_files.txt --nproc 1 --outname gathered_zpts.fits
+        OR if that takes too long, runs out of memory, etc, run with mpi tasks
+            uncomment relavent lines of submit_zpts.sh, comment out running legacy-zeropoints.py
+            <= 50 mpi tasks is fine
+            sbatch submit_zpts.sh 
+
+DOC
+===
+Generate a legacypipe-compatible CCD-level zeropoints file for a given set of
 (reduced) BASS, MzLS, or DECaLS imaging.
 
 This script borrows liberally from code written by Ian, Kaylan, Dustin, David
@@ -53,6 +77,8 @@ import argparse
 import numpy as np
 from glob import glob
 from scipy.optimize import curve_fit
+from scipy.stats import sigmaclip
+from scipy.ndimage.filters import median_filter
 
 import fitsio
 from astropy.table import Table, vstack
@@ -64,12 +90,21 @@ import datetime
 import matplotlib.pyplot as plt
 import sys
 
+from photutils import (CircularAperture, CircularAnnulus,
+                       aperture_photometry, daofind)
+
 from astrometry.util.fits import fits_table, merge_tables
 from astrometry.util.util import wcs_pv2sip_hdr
 from astrometry.libkd.spherematch import match_radec
+from astrometry.libkd.spherematch import match_xy
+
+from tractor.splinesky import SplineSky
+
+from legacyanalysis.ps1cat import ps1cat
 
 ######## 
-## Ted's
+# stdouterr_redirected() is from Ted Kisner
+# Every mpi task (zeropoint file) gets its own stdout file
 import time
 from contextlib import contextmanager
 
@@ -140,7 +175,6 @@ def stdouterr_redirected(to=os.devnull, comm=None):
             sys.stderr.flush()
             
     return
-##############
 
 def ptime(text,t0):
     tnow=Time()
@@ -260,7 +294,7 @@ def moffatPSF(x, a, r0, beta):
 
 class Measurer(object):
     def __init__(self, fn, ext, aprad=3.5, skyrad_inner=7.0, skyrad_outer=10.0,
-                 sky_global=False, calibrate=False,prefix=''):
+                 sky_global=False, calibrate=False,**kwargs):
         '''This is the work-horse class which operates on a given image regardless of
         its origin (decam, mosaic, 90prime).
 
@@ -273,7 +307,11 @@ class Measurer(object):
         Sky annulus radius in arcsec
 
         '''
-        self.prefix= prefix
+        # Set extra kwargs
+        self.zptsfile= kwargs.get('zptsfile')
+        self.prefix= kwargs.get('prefix')
+        self.verboseplots= kwargs.get('verboseplots')
+        
         self.fn = fn
         self.ext = ext
 
@@ -286,9 +324,8 @@ class Measurer(object):
         # Set the nominal detection FWHM (in pixels) and detection threshold.
         self.nominal_fwhm = 5.0 # [pixels]
         self.det_thresh = 10    # [S/N] - used to be 20
-        self.stampradius = 15   # stamp radius around each star [pixels]
-
-        self.matchradius = 1. #2.0  # search radius for finding matching PS1 stars [arcsec]
+        #self.stampradius = 15   # tractor fitting no longer done, stamp radius around each star [pixels]
+        self.matchradius = 1. # Matching to PS1 [arcsec]
 
         # Read the primary header and the header for this extension.
         self.primhdr = fitsio.read_header(fn, ext=0)
@@ -301,9 +338,9 @@ class Measurer(object):
         self.mjd_obs = self.primhdr['MJD-OBS']
         self.airmass = self.primhdr['AIRMASS']
         self.ha = self.primhdr['HA']
-        #self.seeing = self.primhdr['SEEING']
-
-        if 'EXPNUM' in self.primhdr: # temporary hack!
+        
+        # FIX ME!, gets unique id for mosaic but not 90prime
+        if 'EXPNUM' in self.primhdr: 
             self.expnum = self.primhdr['EXPNUM']
         else:
             print('WARNING! no EXPNUM in %s' % self.fn)
@@ -311,19 +348,14 @@ class Measurer(object):
 
         self.ccdname = self.hdr['EXTNAME'].strip()
         self.image_hdu = np.int(self.hdr['CCDNUM'])
-        #self.ccdnum = self.hdr['CCDNUM']
-        #self.image_hdu = np.int(self.ccdnum)
 
         self.expid = '{:08d}-{}'.format(self.expnum, self.ccdname)
-        #self.band = self.get_band()
 
         self.object = self.primhdr['OBJECT']
 
         self.wcs = self.get_wcs()
+        # Pixscale is assumed CONSTANT! per camera
         #self.pixscale = self.wcs.pixel_scale()
-
-        # Eventually we would like FWHM to not come from SExtractor.
-        #self.fwhm = 2.35 * self.primhdr['SEEING'] / self.pixscale  # [FWHM, pixels]
 
     def zeropoint(self, band):
         return self.zp0[band]
@@ -339,8 +371,6 @@ class Measurer(object):
         mean(goodpix) +- nsigma * sigma
 
         '''
-        from scipy.stats import sigmaclip
-        
         goodpix, lo, hi = sigmaclip(arr, low=nsigma, high=nsigma)
         meanval = np.mean(goodpix)
         sigma = (meanval - lo) / nsigma
@@ -348,7 +378,6 @@ class Measurer(object):
 
     def get_sky_and_sigma(self, img):
         # Spline sky model to handle (?) ghost / pupil?
-        from tractor.splinesky import SplineSky
 
         #sky, sig1 = self.sensible_sigmaclip(img[1500:2500, 500:1000])
 
@@ -360,7 +389,6 @@ class Measurer(object):
         return skyimg, sig1
 
     def remove_sky_gradients(self, img):
-        from scipy.ndimage.filters import median_filter
         # Ugly removal of sky gradients by subtracting median in first x and then y
         H,W = img.shape
         meds = np.array([np.median(img[:,i]) for i in range(W)])
@@ -371,7 +399,6 @@ class Measurer(object):
         img -= meds[:,np.newaxis]
 
     def match_ps1_stars(self, px, py, fullx, fully, radius, stars):
-        from astrometry.libkd.spherematch import match_xy
         #print('Matching', len(px), 'PS1 and', len(fullx), 'detected stars with radius', radius)
         I,J,d = match_xy(px, py, fullx, fully, radius)
         #print(len(I), 'matches')
@@ -458,21 +485,14 @@ class Measurer(object):
         b= np.array(d2d) >= minsep
         return b
 
-    def run(self,doplots=True):
+    def run(self):
         t0= Time()
-        from scipy.stats import sigmaclip
-        from legacyanalysis.ps1cat import ps1cat
-        from photutils import (CircularAperture, CircularAnnulus,
-                               aperture_photometry, daofind)
         t0= ptime('import-statements-in-measure.run',t0)
 
         # Read the image and header.
         print('Todo: read the ivar image')
         img, hdr = self.read_image()
         bitmask = self.read_bitmask()
-        #fits=fitsio.FITS(fn,mode='r',clobber=False,lower=True)
-        #hdr= fits[0].read_header()
-        #img= fits[ext].read()
 
         # Initialize and begin populating the output CCDs table.
         ccds = _ccds_table(self.camera)
@@ -482,7 +502,6 @@ class Measurer(object):
         ccds['camera'] = self.camera
         ccds['expnum'] = self.expnum
         ccds['ccdname'] = self.ccdname
-        #ccds['ccdnum'] = self.ccdnum
         ccds['expid'] = self.expid
         ccds['object'] = self.object
         ccds['propid'] = self.propid
@@ -495,7 +514,6 @@ class Measurer(object):
         ccds['dec_bore'] = self.dec_bore
         ccds['ha'] = self.ha
         ccds['airmass'] = self.airmass
-        #ccds['fwhm'] = self.fwhm
         ccds['gain'] = self.gain
         ccds['pixscale'] = self.pixscale
 
@@ -528,16 +546,13 @@ class Measurer(object):
         sky, sig1 = self.get_sky_and_sigma(img)
         sky1 = np.median(sky)
         skybr = zp0 - 2.5*np.log10(sky1 / self.pixscale / self.pixscale / exptime)
-        #skybr = zp0 - 2.5*np.log10(sky1 / self.pixscale / self.pixscale)
-
         print('  Sky brightness: {:.3f} mag/arcsec^2'.format(skybr))
         print('  Fiducial:       {:.3f} mag/arcsec^2'.format(sky0))
 
         ccds['skyrms'] = sig1    # [electron/pix]
         ccds['skycounts'] = sky1 # [electron/pix]
         ccds['skymag'] = skybr   # [mag/arcsec^2]
-        # Divide electron/pix by expt to agree with Arjun's
-        ccds['skyrms'] /= exptime   #KJB
+        ccds['skyrms'] /= exptime   
         ccds['skycounts'] /= exptime 
         t0= ptime('measure-sky',t0)
 
@@ -561,7 +576,7 @@ class Measurer(object):
 
         # Do aperture photometry in a fixed aperture but using either local (in
         # an annulus around each star) or global sky-subtraction.
-        print('Performing aperture photometry -- need to include the mask!')
+        print('Performing aperture photometry')
 
         ap = CircularAperture((obj['xcentroid'], obj['ycentroid']), self.aprad / self.pixscale)
         if self.sky_global:
@@ -574,30 +589,20 @@ class Measurer(object):
             apphot = aperture_photometry(img, ap)
             skyphot = aperture_photometry(img, skyap)
             apflux = apphot['aperture_sum'] - skyphot['aperture_sum'] / skyap.area() * ap.area()
-        # Bad pixels within 5 pixels any star? See moststat.pro KJB
+        # Use Bitmask, remove stars if any bitmask within 5 pixels
         bit_ap = CircularAperture((obj['xcentroid'], obj['ycentroid']), 5.)
         bit_phot = aperture_photometry(bitmask, bit_ap)
         bit_flux = bit_phot['aperture_sum'] 
-        # Stars within 13'' of each other
-        minsep = 13. #arcsec, equivalent to: np.around(10./self.pixscale+3./self.pixscale) #see mosstat
+        # No stars within 13''
+        minsep = 13. #arcsec
         objra, objdec = self.wcs.pixelxy2radec(obj['xcentroid']+1, obj['ycentroid']+1)
         b_isolated= self.isolated_radec(objra,objdec,nn=2,minsep=minsep/3600.)
-        # Compute ap mags
+        # Aperture mags
         apmags= - 2.5 * np.log10(apflux.data) + zp0 + 2.5 * np.log10(exptime)
 
-        # Good stars from Mosstat.pro, ignoring aperature errors
+        # Good stars following IDL codes
+        # We are ignoring aperature errors though
         minsep_px = minsep/self.pixscale
-        #if self.camera == '90prime':
-        #    #(b_isolated == True)*\
-        #    istar = np.where((apflux > 0)*\
-        #                     (bit_flux == 0)*\
-        #                     (apmags > 12.)*\
-        #                     (apmags < 30.)*\
-        #                     (obj['xcentroid'] > minsep_px)*\
-        #                     (obj['xcentroid'] < img.shape[0]-minsep_px)*\
-        #                     (obj['ycentroid'] > minsep_px)*\
-        #                     (obj['ycentroid'] < img.shape[1]-minsep_px))[0] #KJB
-        #else:
         istar = np.where((apflux > 0)*\
                          (bit_flux == 0)*\
                          (b_isolated == True)*\
@@ -645,18 +650,23 @@ class Measurer(object):
         surfb= surfb[ibright,:]
         # Non-linear least squares LM fit to Moffat Profile
         fwhm= np.zeros(surfb.shape[0])
-        plt.close()
-        for cnt in range(surfb.shape[0]):
-            popt, pcov = curve_fit(moffatPSF, radii, surfb[cnt,:], p0 = [1.5*surfb[cnt,0], 5.,2.])
-            fwhm[cnt]= popt[1]
-            plt.plot(radii,surfb[cnt,:],'ok')
-            plt.plot(np.linspace(0,14,num=20),moffatPSF(np.linspace(0,14,num=20), *popt))
-        ccds['fwhm']= np.median(fwhm) # Pixels
-        plt.xlabel('pixels')
-        plt.savefig('qa-fwhm-%s-ccd%s.png' % \
-                (ccds['image_filename'].data[0].replace('.fits.fz',''),\
-                 ccds['image_hdu'].data[0]))
-        plt.close()
+        if not self.verboseplots: 
+            for cnt in range(surfb.shape[0]):
+                popt, pcov = curve_fit(moffatPSF, radii, surfb[cnt,:], p0 = [1.5*surfb[cnt,0], 5.,2.])
+                fwhm[cnt]= popt[1]
+        else: 
+            plt.close()
+            for cnt in range(surfb.shape[0]):
+                popt, pcov = curve_fit(moffatPSF, radii, surfb[cnt,:], p0 = [1.5*surfb[cnt,0], 5.,2.])
+                fwhm[cnt]= popt[1]
+                plt.plot(radii,surfb[cnt,:],'ok')
+                plt.plot(np.linspace(0,14,num=20),moffatPSF(np.linspace(0,14,num=20), *popt))
+            plt.xlabel('pixels')
+            fn= self.zptsfile.replace('.fits','_qa_fwhm_ccd%s.png' % ccds['image_hdu'].data[0])
+            plt.savefig(fn)
+            plt.close()
+            print('Wrote %s' % fn)
+        ccds['fwhm']= np.median(fwhm) * self.pixscale # arcsec
         t0= ptime('fwhm-calculation',t0)
         
         # Now match against (good) PS1 stars 
@@ -687,8 +697,6 @@ class Measurer(object):
         m1, m2, d12 = match_radec(objra, objdec, gra, gdec, self.matchradius/3600.0)
         nmatch = len(m1)
         ccds['nmatch'] = nmatch
-        
-        #print('{} PS1 stars match detected sources within {} arcsec.'.format(nmatch, self.matchradius))
         print('{} GAIA sources match detected sources within {} arcsec.'.format(nmatch, self.matchradius))
         t0= ptime('match-to-gaia-radec',t0)
 
@@ -746,7 +754,7 @@ class Measurer(object):
         ndmag = len(dmag)
         # Std dev
         #_, dmagsig = self.sensible_sigmaclip(dmagall, nsigma=2.5)
-        dmagsig = np.std(dmag) 
+        dmagsig = np.std(dmag)  # agrees with IDL codes, they just compute std
 
         zptmed = zp0 + dmagmed
         transp = 10.**(-0.4 * (zp0 - zptmed - kext * (airmass - 1.0)))
@@ -771,10 +779,11 @@ class Measurer(object):
         print('  Transparency: {}'.format(ccds['transp']))
 
         t0= ptime('all-computations-for-this-ccd',t0)
-        if doplots:
-            self.make_plots(stars,dmag,ccds['zpt'],ccds['transp'])
-        t0= ptime('make-plot',t0)
+        # Plots for comparing to Arjuns zeropoints*.ps
+        self.make_plots(stars,dmag,ccds['zpt'],ccds['transp'])
+        t0= ptime('made-plots',t0)
 
+        # No longer neeeded: 
         # Fit each star with Tractor.
         # Skip for now, most time consuming part
         #ivar = np.zeros_like(img) + 1.0/sig1**2
@@ -809,7 +818,7 @@ class Measurer(object):
     
     def make_plots(self,stars,dmag,zpt,transp):
         '''stars -- stars table'''
-        suffix='_%s_%s.png' % (stars['image_filename'][0].replace('.fits.fz',''),stars['expid'][0][-4:])
+        suffix='_qa_%s.png' % stars['expid'][0][-4:]
         fig,ax=plt.subplots(1,2,figsize=(10,4))
         plt.subplots_adjust(wspace=0.2,bottom=0.2,right=0.8)
         for key in ['astrom_gaia','photom']:
@@ -854,7 +863,7 @@ class Measurer(object):
         ax[1].text(1.02, 0.3,'  Transp=%.4f' % transp,\
                 va='center',ha='left',transform=ax[1].transAxes,fontsize=10)
         # Save
-        fn='qa'+'_'+self.prefix+suffix
+        fn= self.zptsfile.replace('.fits',suffix)
         plt.savefig(fn,bbox_extra_artists=[xlab,ylab])
         plt.close()
         print('Wrote %s' % fn)
@@ -1049,7 +1058,7 @@ def _measure_image(args):
     '''Utility function to wrap measure_image function for multiprocessing map.''' 
     return measure_image(*args)
 
-def measure_image(img_fn, measureargs={},prefix=''):
+def measure_image(img_fn, **measureargs): 
     '''Wrapper on the camera-specific classes to measure the CCD-level data on all
     the FITS extensions for a given set of images.
     '''
@@ -1060,7 +1069,6 @@ def measure_image(img_fn, measureargs={},prefix=''):
     primhdr = fitsio.read_header(img_fn)
     camera, extlist = camera_name(primhdr)
     nnext = len(extlist)
-    measureargs.update(dict(prefix=prefix))
 
     if camera == 'decam':
         measure = measure_decam
@@ -1095,10 +1103,13 @@ def get_output_fns(img_fn,prefix=''):
     return zptsfile,zptstarsfile
 
 
-def runit(img_fn,measureargs, zptsfile='zpt.fits',zptstarsfile='zptstar.fits',prefix=''):
+def runit(img_fn, **measureargs):
     '''Generate a legacypipe-compatible CCDs file for a given image.
 
     '''
+    zptsfile= measureargs.get('zptsfile')
+    zptstarsfile= measureargs.get('zptstarsfile')
+
     t0 = Time()
     if not os.path.exists(os.path.dirname(zptsfile)):
         dobash('mkdir -p %s' % os.path.dirname(zptsfile))
@@ -1111,7 +1122,7 @@ def runit(img_fn,measureargs, zptsfile='zpt.fits',zptstarsfile='zptstar.fits',pr
         dobash("cp %s %s" % (img_fn.replace('_ooi_','_ood_'),fn_scr.replace('_ooi_','_ood_')))
     t0= ptime('copy-to-scratch',t0)
 
-    ccds, stars= measure_image(fn_scr, measureargs,prefix=prefix)
+    ccds, stars= measure_image(fn_scr, **measureargs)
     t0= ptime('measure_image',t0)
 
     # Write out.
@@ -1435,6 +1446,8 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser(description='Generate a legacypipe-compatible CCDs file from a set of reduced imaging.')
     parser.add_argument('--image_list',action='store',help='List of images to process, if compare2arjun = True then list of legacy zeropoint files',required=True)
     parser.add_argument('--prefix', type=str, default='', help='Prefix to prepend to the output files.')
+    parser.add_argument('--verboseplots', action='store_true', default=False, help='use to plot FWHM Moffat PSF fits to the 20 brightest stars')
+    parser.add_argument('--compare2arjun', action='store_true', default=False, help='turn this on and give --image-list a list of legacy zeropoint files instead of cp images')
     parser.add_argument('--outdir', type=str, default='./legacy_zpt_outdir', help='Output directory.')
     parser.add_argument('--aprad', type=float, default=3.5, help='Aperture photometry radius (arcsec).')
     parser.add_argument('--skyrad-inner', type=float, default=7.0, help='Radius of inner sky annulus (arcsec).')
@@ -1444,7 +1457,6 @@ if __name__ == "__main__":
                         help='Use this option when deriving the photometric transformation equations.')
     parser.add_argument('--sky-global', action='store_true',
                         help='Use a global rather than a local sky-subtraction around the stars.')
-    parser.add_argument('--compare2arjun', action='store_true', default=False, help='turn this on and give --image-list a list of legacy zeropoint files instead of cp images')
 
     args = parser.parse_args()
    
@@ -1457,12 +1469,11 @@ if __name__ == "__main__":
     
     # Build a dictionary with the optional inputs.
     measureargs = vars(args)
-    if not args.compare:
-        measureargs.pop('compare')
+    if not args.compare2arjun:
+        measureargs.pop('compare2arjun')
     measureargs.pop('image_list')
     nproc = measureargs.pop('nproc')
 
-    prefix = measureargs.pop('prefix')
     outdir = measureargs.pop('outdir')
     if not os.path.exists(outdir):
         os.makedirs(outdir)
@@ -1476,18 +1487,19 @@ if __name__ == "__main__":
         images_split= np.array_split(images, comm.size)
         for image_fn in images_split[comm.rank]:
             # Check if zpt already written
-            zptsfile,zptstarsfile= get_output_fns(image_fn,prefix=prefix)
+            zptsfile,zptstarsfile= get_output_fns(image_fn,prefix=measureargs.get('prefix'))
             if os.path.exists(zptsfile) and os.path.exists(zptstarsfile):
                 print('Skipping b/c exists: %s' % zptsfile)
                 continue  # Already done
+            measureargs.update(dict(zptsfile=zptsfile,\
+                                    zptstarsfile=zptstarsfile))
             # Log to unique file
             outfn=os.path.join(outdir,"std.zpt-%s%s" % \
                         (os.path.basename(image_fn),\
                         datetime.datetime.now().strftime("m%m-d%d-hr%H-min%M")))  
             with stdouterr_redirected(to=outfn, comm=None):  
                 t0=ptime('b4-run',t0)
-                runit(image_fn, measureargs, \
-                      zptsfile=zptsfile,zptstarsfile=zptstarsfile)
+                runit(image_fn, **measureargs)
                 t0=ptime('after-run',t0)
                 # Finish up 
         # Wait for all mpi tasks to finish 
@@ -1502,14 +1514,15 @@ if __name__ == "__main__":
     else:
         for image_fn in images:
             # Check if zpt already written
-            zptsfile,zptstarsfile= get_output_fns(image_fn,prefix=prefix)
+            zptsfile,zptstarsfile= get_output_fns(image_fn,prefix=measureargs.get('prefix'))
             if os.path.exists(zptsfile) and os.path.exists(zptstarsfile):
                 print('continuing'.upper())
                 continue  # Already done
+            measureargs.update(dict(zptsfile=zptsfile,\
+                                    zptstarsfile=zptstarsfile))
             # Create the file
             t0=ptime('b4-run',t0)
-            runit(image_fn, measureargs,\
-                  zptsfile=zptsfile,zptstarsfile=zptstarsfile,prefix=prefix)
+            runit(image_fn, **measureargs)
             t0=ptime('after-run',t0)
         tnow= Time()
         print("TIMING:total %s" % (tnow-tbegin,))
