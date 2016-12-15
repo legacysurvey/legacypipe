@@ -158,6 +158,19 @@ def dobash(cmd):
     print('UNIX cmd: %s' % cmd)
     if os.system(cmd): raise ValueError
 
+
+def extra_ccd_keys(camera='decam'):
+    '''Returns list of camera-specific keywords for the ccd table'''
+    if camera == 'decam':
+        keys= [('ccdzpta', '>f4'), ('ccdzptb','>f4'), ('ccdnmatcha', '>i2'), ('ccdnmatchb', '>i2'),\
+               ('temp', '>f4')]
+    elif camera == 'mosaic':
+        keys=[]
+    elif camera == '90prime':
+        keys=[('ccdzpt1', '>f4'), ('ccdzpt2','>f4'), ('ccdzpt3', '>f4'), ('ccdzpt4','>f4'),\
+              ('ccdnmatcha', '>i2'), ('ccdnmatch2', '>i2'), ('ccdnmatch3', '>i2'), ('ccdnmatch4', '>i2')]
+    return keys 
+
 def _ccds_table(camera='decam'):
     '''Initialize the output CCDs table.  See decstat.pro and merge-zeropoints.py
     for details.
@@ -219,303 +232,11 @@ def _ccds_table(camera='decam'):
         ]
 
     # Add camera-specific keywords to the output table.
-    if camera == 'decam':
-        cols.extend([('ccdzpta', '>f4'), ('ccdzptb','>f4'), ('ccdnmatcha', '>i2'), ('ccdnmatchb', '>i2'),
-                     ('temp', '>f4')])
-    elif camera == 'mosaic':
-        pass
-    elif camera == '90prime':
-        cols.extend([('ccdzpt1', '>f4'), ('ccdzpt2','>f4'), ('ccdzpt3', '>f4'), ('ccdzpt4','>f4'),
-                     ('ccdnmatcha', '>i2'), ('ccdnmatch2', '>i2'), ('ccdnmatch3', '>i2'), ('ccdnmatch4', '>i2')])
-        
+    #cols.extend( extra_ccd_keys(camera=camera) )
+    
     ccds = Table(np.zeros(1, dtype=cols))
     return ccds
 
-
-class Compare2Arjuns(object):
-    '''contains the functions to compare every column of legacy ccd_table to 
-    that of Arjun's zeropoints files'''
-    def __init__(self,zptfn_list,\
-                 path_to_arjuns='/scratch2/scratchdirs/arjundey/ZeroPoints_MzLSv2',\
-                 camera='mosaic'): 
-        '''combines many zpt files into one table, 
-        does this for legacy and the corresponding zpt tables from Arjun
-        givent the relative path to arjun's zpt tables
-        
-        zptfn_list: text file listing each legacy zpt file to be used
-        path_to_arjuns: relative path to arjun's zpt tables
-        camera: ['mosaic','90prime','decam']
-        '''
-        # Get legacy zeropoints, and corresponding ones from Arjun
-        self.makeBigTable(zptfn_list,path_to_arjuns)
-        self.ccd_cuts(camera)
-        # Compare values
-        self.getKeyTypes()
-        self.compare_alphabetic()
-        self.compare_numeric()
-        self.compare_numeric_stars()
-        raise ValueError
-
-    def makeBigTable(self,zptfn_list,path_to_arjuns):
-        '''combines many zpt files into one table, 
-        does this for legacy and the corresponding zpt tables from Arjun
-        givent the relative path to arjun's zpt tables
-        
-        zptfn_list: text file listing each legacy zpt file to be used
-        path_to_arjuns: relative path to arjun's zpt tables
-        '''
-        self.legacy,self.legacy_stars,self.arjun,self.arjun_stars= [],[],[],[]
-        # Simultaneously read in arjun's with legacy
-        fns= np.loadtxt(zptfn_list,dtype=str)
-        if fns.size == 1:
-            fns= [str(fns)]
-        for cnt,fn in enumerate(fns):
-            print('%d/%d: ' % (cnt+1,len(fns)))
-            try:
-                # Legacy zeropoints, use Arjun's naming scheme
-                self.legacy.append( self.read_legacy(fn,reset_names=True) ) 
-                fn_stars= fn.replace('.fits','-stars.fits')
-                self.legacy_stars.append( self.read_legacy(fn_stars,reset_names=True,stars=True) )
-                # Corresponding zeropoints from Arjun
-                arjun_fn= os.path.basename(fn)
-                index= arjun_fn.find('zeropoint') # Check for a prefix
-                if index > 0: arjun_fn= arjun_fn.replace(arjun_fn[:index],'')
-                arjun_fn= os.path.join(path_to_arjuns, arjun_fn)
-                self.arjun.append( fits_table(arjun_fn) ) 
-                self.arjun_stars.append( fits_table(arjun_fn.replace('zeropoint-','matches-') ))
-            except IOError:
-                print('WARNING: one of these cannot be read: %s\n%s\n%s\n%s\n' % \
-                     (fn,fn.replace('.fits','-stars.fits'),\
-                      arjun_fn,arjun_fn.replace('zeropoint-','matches-'))
-                     )
-        self.legacy= merge_tables(self.legacy, columns='fillzero') 
-        self.legacy_stars= merge_tables(self.legacy_stars, columns='fillzero') 
-        self.arjun= merge_tables(self.arjun, columns='fillzero') 
-        self.arjun_stars= merge_tables(self.arjun_stars, columns='fillzero')
-    
-    def ccd_cuts(self,camera):
-        keep= np.zeros(len(self.legacy)).astype(bool)
-        for tab in [self.legacy,self.arjun]:
-            if camera == 'mosaic':
-                keep[ (tab.exptime > 40.)*(tab.ccdnmatch > 50)*(tab.ccdzpt > 25.8) ] = True
-            elif camera == '90prime':
-                keep[ (tab.ccdzpt >= 20.)*(tab.ccdzpt <= 30.) ] = True
-        self.legacy.cut(keep)
-        self.arjun.cut(keep)
-
-
-    def read_legacy(self,zptfn,reset_names=True,stars=False):
-        '''reads in a legacy zeropoint table as a fits_table() object
-        reset_names: 
-            True -- rename everything to give it Arjun's naming scheme
-            False -- return table as is
-        stars:
-            True -- the input is the stars table that accompanies each
-                    zeropoints table, e.g. instead of the zpt table
-            False -- the input is the zeropoitn table
-        '''
-        if stars:
-            # Just columns we'll compare
-            translate= dict(ra='ccd_ra',\
-                            dec='ccd_dec',\
-                            apmag='ccd_mag',\
-                            radiff='raoff',\
-                            decdiff='decoff',\
-                            gaia_g='gmag')
-            self.star_keys= []
-            for key in translate.keys():
-                self.star_keys.append( translate[key] ) 
-            # Add ps1_g,r... to compare those too
-            for band in ['g','r','i','z']:
-                self.star_keys.append( 'ps1_%s' % band )
-        else:
-            legacy_missing= ['ccdhdu','seeing',\
-                           'ccdnmatcha','ccdnmatchb','ccdnmatchc','ccdnmatchd',\
-                           'ccdzpta','ccdzptb','ccdzptc','ccdzptd',\
-                           'ccdnum',\
-                           'psfab','psfpa','temp','badimg']
-            
-            arjun_missing= ['camera','expid','pixscale']
-            self.missing= legacy_missing + arjun_missing
-           
-            # All columns without matching name
-            translate= dict(image_filename='filename',\
-                            image_hdu='ccdhdunum',\
-                            gain='arawgain',\
-                            width='naxis1',\
-                            height='naxis2',\
-                            ra='ccdra',\
-                            dec='ccddec',\
-                            ra_bore='ra',\
-                            dec_bore='dec',\
-                            raoff='ccdraoff',\
-                            decoff='ccddecoff',\
-                            rarms='ccdrarms',\
-                            decrms='ccddecrms',\
-                            skycounts='ccdskycounts',\
-                            skymag='ccdskymag',\
-                            skyrms='ccdskyrms',\
-                            nstar='ccdnstar',\
-                            nmatch='ccdnmatch',\
-                            mdncol='ccdmdncol',\
-                            phoff='ccdphoff',\
-                            phrms='ccdphrms',\
-                            transp='ccdtransp',\
-                            zpt='ccdzpt',\
-                            zptavg='zpt')
-        
-        legacy=fits_table(zptfn)
-        if reset_names:
-            for key in translate.keys():
-                legacy.rename(key, translate[key]) #(old,new)
-        return legacy
-
-
-
-    def getKeyTypes(self):
-        '''sorts keys as either numeric or alphabetic'''
-        self.numeric_keys=[]
-        self.alpha_keys=[]
-        for key in self.legacy.get_columns():
-            if key in self.missing:
-                continue # Either not in legacy or not in Arjuns
-            typ= type(self.legacy.get(key)[0])
-            if np.any((typ == np.float32,\
-                       typ == np.float64),axis=0):
-                self.numeric_keys+= [key]
-            elif np.any((typ == np.int16,\
-                         typ == np.int32),axis=0):
-                self.numeric_keys+= [key]
-            elif typ == np.string_:
-                self.alpha_keys+= [key]
-            else:
-                print('WARNING: unknown type for key=%s, ' % key,typ)
-
-    def compare_alphabetic(self):
-        print('-'*20)
-        print('legacy == arjuns:')
-        for key in self.alpha_keys:
-            # FIX ME: comparing first row only, not all rows
-            if key in ['filename']:
-                print('%s: ' % key,self.legacy.get(key)[0].replace('.fits.fz','.fits') == self.arjun.get(key)[0])
-            else:
-                print('%s: ' % key,self.legacy.get(key)[0] == self.arjun.get(key)[0])
-
-    def compare_numeric(self):
-        '''two plots of everything numberic between legacy zeropoints and Arjun's
-        1) x vs. y 
-        2) x vs. (y-x)/|y+x|
-        '''
-        for doplot in ['dpercent','default']:
-            panels=len(self.numeric_keys)
-            cols=3
-            if panels % cols == 0:
-                rows=panels/cols
-            else:
-                rows=panels/cols+1
-            rows=int(rows)
-            fig,axes= plt.subplots(rows,cols,figsize=(20,30))
-            ax=axes.flatten()
-            plt.subplots_adjust(hspace=0.4,wspace=0.3)
-            xlims,ylims= None,None
-            for cnt,key in enumerate(self.numeric_keys):
-                x= self.arjun.get(key)
-                ti= 'Labels: x-axis = A, '
-                if doplot == 'dpercent':
-                    y= ( self.arjun.get(key) - self.legacy.get(key) ) / \
-                       np.abs( self.arjun.get(key) + self.legacy.get(key) )
-                    ti+= ' y-axis = (A - L)/|A + L|'
-                    ylims=[-0.1,0.1]
-                elif doplot == 'default':
-                    y= self.legacy.get(key)
-                    ti+= ' y-axis = L'
-                    xlims= [ min([x.min(),y.min()]),max([x.max(),y.max()]) ]
-                    if xlims[0] < 0: xlims[0]*=1.02
-                    else: xlims[0]*=0.98
-                    if xlims[1] < 0: xlims[0]*=0.98
-                    else: xlims[1]*=1.02
-                    ylims= xlims
-                else: raise ValueError('%s not allowed' % doplot)
-                ax[cnt].scatter(x,y) 
-                #ax[cnt].set_title(key,fontsize=20) 
-                ax[cnt].text(0.025,0.88,key,\
-                             va='center',ha='left',transform=ax[cnt].transAxes,fontsize=20) 
-                if xlims is not None:
-                    ax[cnt].set_xlim(xlims)
-                if ylims is not None:
-                    ax[cnt].set_ylim(ylims)
-            ax[1].text(0.5,1.5,ti,\
-                       va='center',ha='center',transform=ax[1].transAxes,fontsize=30)
-            fn="numeric_%s.png" % doplot
-            plt.savefig(fn) #bbox_extra_artists=[xlab,ylab], bbox_inches='tight',dpi=150)
-            print('Wrote %s' % fn)
-            plt.close()
-    
-    def compare_numeric_stars(self):
-        '''two plots of everything numberic between legacy Stars and Arjun's Stars
-        1) x vs. y 
-        2) x vs. (y-x)/|y+x|
-        '''
-        # Match
-        m1, m2, d12 = match_radec(self.arjun_stars.ccd_ra, self.arjun_stars.ccd_dec, \
-                                  self.legacy_stars.ccd_ra, self.legacy_stars.ccd_dec, \
-                                1./3600.0)
-        nstars=dict(arjun=len(self.arjun_stars),legacy=len(self.legacy_stars))
-        self.arjun_stars.cut(m1)
-        self.legacy_stars.cut(m2)
-        assert(len(self.arjun_stars) == len(self.legacy_stars))
-        ti_top= 'Matched Stars:%d, Arjun had:%d, Legacy had:%d' % \
-                (len(self.legacy_stars),nstars['arjun'],nstars['legacy'])
-        # Plot
-        for doplot in ['dpercent','default']:
-            panels=len(self.star_keys)
-            cols=3
-            if panels % cols == 0:
-                rows=panels/cols
-            else:
-                rows=panels/cols+1
-            rows=int(rows)
-            fig,axes= plt.subplots(rows,cols,figsize=(20,10))
-            ax=axes.flatten()
-            plt.subplots_adjust(hspace=0.4,wspace=0.3)
-            xlims,ylims= None,None
-            for cnt,key in enumerate(self.star_keys):
-                x= self.arjun_stars.get(key)
-                ti= 'Labels: x-axis = A, '
-                if doplot == 'dpercent':
-                    y= ( self.arjun_stars.get(key) - self.legacy_stars.get(key) ) / \
-                       np.abs( self.arjun_stars.get(key) + self.legacy_stars.get(key) )
-                    ti+= ' y-axis = (A - L)/|A + L|'
-                    ylims=[-0.01,0.01]
-                elif doplot == 'default':
-                    y= self.legacy_stars.get(key)
-                    ti+= 'y-axis = L'
-                    xlims= [ min([x.min(),y.min()]),max([x.max(),y.max()]) ]
-                    if xlims[0] < 0: xlims[0]*=1.02
-                    else: xlims[0]*=0.98
-                    if xlims[1] < 0: xlims[0]*=0.98
-                    else: xlims[1]*=1.02
-                    ylims= xlims
-                else: raise ValueError('%s not allowed' % doplot)
-                ax[cnt].scatter(x,y) 
-                #ax[cnt].set_title(key,fontsize=20) 
-                ax[cnt].text(0.025,0.88,key,\
-                             va='center',ha='left',transform=ax[cnt].transAxes,fontsize=20) 
-                if xlims is not None:
-                    ax[cnt].set_xlim(xlims)
-                if ylims is not None:
-                    ax[cnt].set_ylim(ylims)
-            ax[1].text(0.5,1.5,ti_top,\
-                       va='center',ha='center',transform=ax[1].transAxes,fontsize=20)
-            ax[1].text(0.5,1.3,ti,\
-                       va='center',ha='center',transform=ax[1].transAxes,fontsize=20)
-            fn="numeric_stars_%s.png" % doplot
-            plt.savefig(fn) #bbox_extra_artists=[xlab,ylab], bbox_inches='tight',dpi=150)
-            print('Wrote %s' % fn)
-            plt.close()
- 
-
- 
      
 def _stars_table(nstars=1):
     '''Initialize the stars table, which will contain information on all the stars
@@ -539,7 +260,7 @@ def moffatPSF(x, a, r0, beta):
 
 class Measurer(object):
     def __init__(self, fn, ext, aprad=3.5, skyrad_inner=7.0, skyrad_outer=10.0,
-                 sky_global=False, calibrate=False, only_ccd_centers=False,prefix=''):
+                 sky_global=False, calibrate=False,prefix=''):
         '''This is the work-horse class which operates on a given image regardless of
         its origin (decam, mosaic, 90prime).
 
@@ -558,7 +279,6 @@ class Measurer(object):
 
         self.sky_global = sky_global
         self.calibrate = calibrate
-        self.only_ccd_centers=only_ccd_centers
         
         self.aprad = aprad
         self.skyrad = (skyrad_inner, skyrad_outer)
@@ -797,9 +517,6 @@ class Measurer(object):
         ccds['ra'] = ccdra   # [degree]
         ccds['dec'] = ccddec # [degree]
         t0= ptime('read-image-getheader-info',t0)
-        if self.only_ccd_centers:
-            print('Stopping early, only_ccd_centers=',self.only_ccd_centers)
-            return ccds, _stars_table()
 
         # Measure the sky brightness and (sky) noise level.  Need to capture
         # negative sky.
@@ -870,26 +587,26 @@ class Measurer(object):
 
         # Good stars from Mosstat.pro, ignoring aperature errors
         minsep_px = minsep/self.pixscale
-        if self.camera == '90prime':
-            #(b_isolated == True)*\
-            istar = np.where((apflux > 0)*\
-                             (bit_flux == 0)*\
-                             (apmags > 12.)*\
-                             (apmags < 30.)*\
-                             (obj['xcentroid'] > minsep_px)*\
-                             (obj['xcentroid'] < img.shape[0]-minsep_px)*\
-                             (obj['ycentroid'] > minsep_px)*\
-                             (obj['ycentroid'] < img.shape[1]-minsep_px))[0] #KJB
-        else:
-            istar = np.where((apflux > 0)*\
-                             (bit_flux == 0)*\
-                             (b_isolated == True)*\
-                             (apmags > 12.)*\
-                             (apmags < 30.)*\
-                             (obj['xcentroid'] > minsep_px)*\
-                             (obj['xcentroid'] < img.shape[0]-minsep_px)*\
-                             (obj['ycentroid'] > minsep_px)*\
-                             (obj['ycentroid'] < img.shape[1]-minsep_px))[0] #KJB
+        #if self.camera == '90prime':
+        #    #(b_isolated == True)*\
+        #    istar = np.where((apflux > 0)*\
+        #                     (bit_flux == 0)*\
+        #                     (apmags > 12.)*\
+        #                     (apmags < 30.)*\
+        #                     (obj['xcentroid'] > minsep_px)*\
+        #                     (obj['xcentroid'] < img.shape[0]-minsep_px)*\
+        #                     (obj['ycentroid'] > minsep_px)*\
+        #                     (obj['ycentroid'] < img.shape[1]-minsep_px))[0] #KJB
+        #else:
+        istar = np.where((apflux > 0)*\
+                         (bit_flux == 0)*\
+                         (b_isolated == True)*\
+                         (apmags > 12.)*\
+                         (apmags < 30.)*\
+                         (obj['xcentroid'] > minsep_px)*\
+                         (obj['xcentroid'] < img.shape[0]-minsep_px)*\
+                         (obj['ycentroid'] > minsep_px)*\
+                         (obj['ycentroid'] < img.shape[1]-minsep_px))[0] #KJB
 
         if len(istar) == 0:
             print('FAIL: All stars have negative aperture photometry AND/OR contain masked pixels!')
@@ -1275,9 +992,6 @@ class NinetyPrimeMeasurer(Measurer):
     def read_image(self):
         '''Read the image and header.  Convert image from electrons/sec to electrons.'''
         img, hdr = fitsio.read(self.fn, ext=self.ext, header=True)
-        #fits=fitsio.FITS(fn,mode='r',clobber=False,lower=True)
-        #hdr= fits[0].read_header()
-        #img= fits[ext].read()
         img *= self.exptime
         return img, hdr
     
@@ -1288,10 +1002,6 @@ class NinetyPrimeMeasurer(Measurer):
   
     def get_wcs(self):
         return wcs_pv2sip_hdr(self.hdr) # PV distortion
-    #    # Bok_CP WCS coeffs are unusuable, use TAN for now
-    #    self.hdr['CTYPE1'] = 'RA---TAN'
-    #    self.hdr['CTYPE2'] = 'DEC--TAN'
-    #    return wcs_pv2sip_hdr(self.hdr)
 
 
 def camera_name(primhdr):
@@ -1382,8 +1092,6 @@ def get_output_fns(img_fn,prefix=''):
     zptsfile= os.path.join(zptsfile,'zpts/','%szeropoint-%s' % (prefix,os.path.basename(img_fn)))
     zptsfile= zptsfile.replace('.fz','')
     zptstarsfile = zptsfile.replace('.fits','-stars.fits')
-    #zptsfile = os.path.join(outdir, '{}.fits'.format(prefix))
-    #zptstarsfile = os.path.join(outdir, '{}-stars.fits'.format(prefix))
     return zptsfile,zptstarsfile
 
 
@@ -1394,7 +1102,6 @@ def runit(img_fn,measureargs, zptsfile='zpt.fits',zptstarsfile='zptstar.fits',pr
     t0 = Time()
     if not os.path.exists(os.path.dirname(zptsfile)):
         dobash('mkdir -p %s' % os.path.dirname(zptsfile))
-        #os.makedirs(os.path.dirname(zptsfile))
 
     # Copy to SCRATCH for improved I/O
     fn_scr= img_fn.replace('/project/projectdirs','/scratch2/scratchdirs/kaylanb')
@@ -1405,14 +1112,6 @@ def runit(img_fn,measureargs, zptsfile='zpt.fits',zptstarsfile='zptstar.fits',pr
     t0= ptime('copy-to-scratch',t0)
 
     ccds, stars= measure_image(fn_scr, measureargs,prefix=prefix)
-    # If combining ccds from multiple images:
-    #allccds = []
-    #if len(allccds) == 0:
-    #    allccds = ccds
-    #    allstars = stars
-    #else:
-    #    allccds = vstack((allccds, ccds))
-    #    allstars = vstack((allstars, stars))
     t0= ptime('measure_image',t0)
 
     # Write out.
@@ -1430,14 +1129,311 @@ def runit(img_fn,measureargs, zptsfile='zpt.fits',zptstarsfile='zptstar.fits',pr
         dobash("rm %s" % fn_scr.replace('_ooi_','_ood_'))
         t0= ptime('removed-cp-from-scratch',t0)
     
-                    
+class Compare2Arjuns(object):
+    '''contains the functions to compare every column of legacy ccd_table to 
+    that of Arjun's zeropoints files'''
+    def __init__(self,zptfn_list): 
+        '''combines many zpt files into one table, 
+        does this for legacy and the corresponding zpt tables from Arjun
+        givent the relative path to arjun's zpt tables
+        
+        zptfn_list: text file listing each legacy zpt file to be used
+        camera: ['mosaic','90prime','decam']
+        '''
+        camera= self.get_camera(zptfn_list)
+         
+        if camera == 'mosaic':
+            self.path_to_arjuns= '/scratch2/scratchdirs/arjundey/ZeroPoints_MzLSv2'
+        elif camera == '90prime':
+            self.path_to_arjuns= '/scratch2/scratchdirs/arjundey/ZeroPoints_BASS'
+
+        # Get legacy zeropoints, and corresponding ones from Arjun
+        self.makeBigTable(zptfn_list)
+        self.ccd_cuts(camera)
+        # Compare values
+        self.getKeyTypes()
+        self.compare_alphabetic()
+        self.compare_numeric()
+        self.compare_numeric_stars()
+        raise ValueError
+
+    def get_camera(self,zptfn_list):
+        fns= np.loadtxt(zptfn_list,dtype=str)
+        if fns.size == 1:
+            fns= [str(fns)]
+        fn=fns[0]
+        
+        if 'ksb' in fn:
+            camera='90prime'
+        elif 'k4m' in fn:
+            camera= 'mosaic'
+        elif 'c4d' in fn:
+            camera= 'decam'
+        else: raise ValueError('camera not clear from fn=%s' % tempfn)
+        return camera
+
+    def makeBigTable(self,zptfn_list):
+        '''combines many zpt files into one table, 
+        does this for legacy and the corresponding zpt tables from Arjun
+        givent the relative path to arjun's zpt tables
+        
+        zptfn_list: text file listing each legacy zpt file to be used
+        '''
+        self.legacy,self.legacy_stars,self.arjun,self.arjun_stars= [],[],[],[]
+        # Simultaneously read in arjun's with legacy
+        fns= np.loadtxt(zptfn_list,dtype=str)
+        if fns.size == 1:
+            fns= [str(fns)]
+        for cnt,fn in enumerate(fns):
+            print('%d/%d: ' % (cnt+1,len(fns)))
+            try:
+                # Legacy zeropoints, use Arjun's naming scheme
+                self.legacy.append( self.read_legacy(fn,reset_names=True) ) 
+                fn_stars= fn.replace('.fits','-stars.fits')
+                self.legacy_stars.append( self.read_legacy(fn_stars,reset_names=True,stars=True) )
+                # Corresponding zeropoints from Arjun
+                arjun_fn= os.path.basename(fn)
+                index= arjun_fn.find('zeropoint') # Check for a prefix
+                if index > 0: arjun_fn= arjun_fn.replace(arjun_fn[:index],'')
+                arjun_fn= os.path.join(self.path_to_arjuns, arjun_fn)
+                self.arjun.append( fits_table(arjun_fn) ) 
+                self.arjun_stars.append( fits_table(arjun_fn.replace('zeropoint-','matches-') ))
+            except IOError:
+                print('WARNING: one of these cannot be read: %s\n%s\n%s\n%s\n' % \
+                     (fn,fn.replace('.fits','-stars.fits'),\
+                      arjun_fn,arjun_fn.replace('zeropoint-','matches-'))
+                     )
+        self.legacy= merge_tables(self.legacy, columns='fillzero') 
+        self.legacy_stars= merge_tables(self.legacy_stars, columns='fillzero') 
+        self.arjun= merge_tables(self.arjun, columns='fillzero') 
+        self.arjun_stars= merge_tables(self.arjun_stars, columns='fillzero')
+    
+    def ccd_cuts(self,camera):
+        keep= np.zeros(len(self.legacy)).astype(bool)
+        for tab in [self.legacy,self.arjun]:
+            if camera == 'mosaic':
+                keep[ (tab.exptime > 40.)*(tab.ccdnmatch > 50)*(tab.ccdzpt > 25.8) ] = True
+            elif camera == '90prime':
+                keep[ (tab.ccdzpt >= 20.)*(tab.ccdzpt <= 30.) ] = True
+        self.legacy.cut(keep)
+        self.arjun.cut(keep)
+
+
+    def read_legacy(self,zptfn,reset_names=True,stars=False):
+        '''reads in a legacy zeropoint table as a fits_table() object
+        reset_names: 
+            True -- rename everything to give it Arjun's naming scheme
+            False -- return table as is
+        stars:
+            True -- the input is the stars table that accompanies each
+                    zeropoints table, e.g. instead of the zpt table
+            False -- the input is the zeropoitn table
+        '''
+        if stars:
+            # Just columns we'll compare
+            translate= dict(ra='ccd_ra',\
+                            dec='ccd_dec',\
+                            apmag='ccd_mag',\
+                            radiff='raoff',\
+                            decdiff='decoff',\
+                            gaia_g='gmag')
+            self.star_keys= []
+            for key in translate.keys():
+                self.star_keys.append( translate[key] ) 
+            # Add ps1_g,r... to compare those too
+            for band in ['g','r','i','z']:
+                self.star_keys.append( 'ps1_%s' % band )
+        else:
+            legacy_missing= ['ccdhdu','seeing',\
+                           'ccdnmatcha','ccdnmatchb','ccdnmatchc','ccdnmatchd',\
+                           'ccdzpta','ccdzptb','ccdzptc','ccdzptd',\
+                           'ccdnum',\
+                           'psfab','psfpa','temp','badimg']
+            
+            arjun_missing= ['camera','expid','pixscale']
+            self.missing= legacy_missing + arjun_missing
+           
+            # All columns without matching name
+            translate= dict(image_filename='filename',\
+                            image_hdu='ccdhdunum',\
+                            gain='arawgain',\
+                            width='naxis1',\
+                            height='naxis2',\
+                            ra='ccdra',\
+                            dec='ccddec',\
+                            ra_bore='ra',\
+                            dec_bore='dec',\
+                            raoff='ccdraoff',\
+                            decoff='ccddecoff',\
+                            rarms='ccdrarms',\
+                            decrms='ccddecrms',\
+                            skycounts='ccdskycounts',\
+                            skymag='ccdskymag',\
+                            skyrms='ccdskyrms',\
+                            nstar='ccdnstar',\
+                            nmatch='ccdnmatch',\
+                            mdncol='ccdmdncol',\
+                            phoff='ccdphoff',\
+                            phrms='ccdphrms',\
+                            transp='ccdtransp',\
+                            zpt='ccdzpt',\
+                            zptavg='zpt')
+        
+        legacy=fits_table(zptfn)
+        if reset_names:
+            for key in translate.keys():
+                legacy.rename(key, translate[key]) #(old,new)
+        return legacy
+
+
+
+    def getKeyTypes(self):
+        '''sorts keys as either numeric or alphabetic'''
+        self.numeric_keys=[]
+        self.alpha_keys=[]
+        for key in self.legacy.get_columns():
+            if key in self.missing:
+                continue # Either not in legacy or not in Arjuns
+            typ= type(self.legacy.get(key)[0])
+            if np.any((typ == np.float32,\
+                       typ == np.float64),axis=0):
+                self.numeric_keys+= [key]
+            elif np.any((typ == np.int16,\
+                         typ == np.int32),axis=0):
+                self.numeric_keys+= [key]
+            elif typ == np.string_:
+                self.alpha_keys+= [key]
+            else:
+                print('WARNING: unknown type for key=%s, ' % key,typ)
+
+    def compare_alphabetic(self):
+        print('-'*20)
+        print('legacy == arjuns:')
+        for key in self.alpha_keys:
+            # Simply compare first row only, not all rows
+            if key in ['filename']:
+                print('%s: ' % key,self.legacy.get(key)[0].replace('.fits.fz','.fits') == self.arjun.get(key)[0])
+            else:
+                print('%s: ' % key,self.legacy.get(key)[0] == self.arjun.get(key)[0])
+
+    def compare_numeric(self):
+        '''two plots of everything numberic between legacy zeropoints and Arjun's
+        1) x vs. y 
+        2) x vs. (y-x)/|y+x|
+        '''
+        for doplot in ['dpercent','default']:
+            panels=len(self.numeric_keys)
+            cols=3
+            if panels % cols == 0:
+                rows=panels/cols
+            else:
+                rows=panels/cols+1
+            rows=int(rows)
+            fig,axes= plt.subplots(rows,cols,figsize=(20,30))
+            ax=axes.flatten()
+            plt.subplots_adjust(hspace=0.4,wspace=0.3)
+            xlims,ylims= None,None
+            for cnt,key in enumerate(self.numeric_keys):
+                x= self.arjun.get(key)
+                ti= 'Labels: x-axis = A, '
+                if doplot == 'dpercent':
+                    y= ( self.arjun.get(key) - self.legacy.get(key) ) / \
+                       np.abs( self.arjun.get(key) + self.legacy.get(key) )
+                    ti+= ' y-axis = (A - L)/|A + L|'
+                    ylims=[-0.1,0.1]
+                elif doplot == 'default':
+                    y= self.legacy.get(key)
+                    ti+= ' y-axis = L'
+                    xlims= [ min([x.min(),y.min()]),max([x.max(),y.max()]) ]
+                    if xlims[0] < 0: xlims[0]*=1.02
+                    else: xlims[0]*=0.98
+                    if xlims[1] < 0: xlims[0]*=0.98
+                    else: xlims[1]*=1.02
+                    ylims= xlims
+                else: raise ValueError('%s not allowed' % doplot)
+                ax[cnt].scatter(x,y) 
+                ax[cnt].text(0.025,0.88,key,\
+                             va='center',ha='left',transform=ax[cnt].transAxes,fontsize=20) 
+                if xlims is not None:
+                    ax[cnt].set_xlim(xlims)
+                if ylims is not None:
+                    ax[cnt].set_ylim(ylims)
+            ax[1].text(0.5,1.5,ti,\
+                       va='center',ha='center',transform=ax[1].transAxes,fontsize=30)
+            fn="numeric_%s.png" % doplot
+            plt.savefig(fn) 
+            print('Wrote %s' % fn)
+            plt.close()
+    
+    def compare_numeric_stars(self):
+        '''two plots of everything numberic between legacy Stars and Arjun's Stars
+        1) x vs. y 
+        2) x vs. (y-x)/|y+x|
+        '''
+        # Match
+        m1, m2, d12 = match_radec(self.arjun_stars.ccd_ra, self.arjun_stars.ccd_dec, \
+                                  self.legacy_stars.ccd_ra, self.legacy_stars.ccd_dec, \
+                                1./3600.0)
+        nstars=dict(arjun=len(self.arjun_stars),legacy=len(self.legacy_stars))
+        self.arjun_stars.cut(m1)
+        self.legacy_stars.cut(m2)
+        assert(len(self.arjun_stars) == len(self.legacy_stars))
+        ti_top= 'Matched Stars:%d, Arjun had:%d, Legacy had:%d' % \
+                (len(self.legacy_stars),nstars['arjun'],nstars['legacy'])
+        # Plot
+        for doplot in ['dpercent','default']:
+            panels=len(self.star_keys)
+            cols=3
+            if panels % cols == 0:
+                rows=panels/cols
+            else:
+                rows=panels/cols+1
+            rows=int(rows)
+            fig,axes= plt.subplots(rows,cols,figsize=(20,10))
+            ax=axes.flatten()
+            plt.subplots_adjust(hspace=0.4,wspace=0.3)
+            xlims,ylims= None,None
+            for cnt,key in enumerate(self.star_keys):
+                x= self.arjun_stars.get(key)
+                ti= 'Labels: x-axis = A, '
+                if doplot == 'dpercent':
+                    y= ( self.arjun_stars.get(key) - self.legacy_stars.get(key) ) / \
+                       np.abs( self.arjun_stars.get(key) + self.legacy_stars.get(key) )
+                    ti+= ' y-axis = (A - L)/|A + L|'
+                    ylims=[-0.01,0.01]
+                elif doplot == 'default':
+                    y= self.legacy_stars.get(key)
+                    ti+= 'y-axis = L'
+                    xlims= [ min([x.min(),y.min()]),max([x.max(),y.max()]) ]
+                    if xlims[0] < 0: xlims[0]*=1.02
+                    else: xlims[0]*=0.98
+                    if xlims[1] < 0: xlims[0]*=0.98
+                    else: xlims[1]*=1.02
+                    ylims= xlims
+                else: raise ValueError('%s not allowed' % doplot)
+                ax[cnt].scatter(x,y) 
+                ax[cnt].text(0.025,0.88,key,\
+                             va='center',ha='left',transform=ax[cnt].transAxes,fontsize=20) 
+                if xlims is not None:
+                    ax[cnt].set_xlim(xlims)
+                if ylims is not None:
+                    ax[cnt].set_ylim(ylims)
+            ax[1].text(0.5,1.5,ti_top,\
+                       va='center',ha='center',transform=ax[1].transAxes,fontsize=20)
+            ax[1].text(0.5,1.3,ti,\
+                       va='center',ha='center',transform=ax[1].transAxes,fontsize=20)
+            fn="numeric_stars_%s.png" % doplot
+            plt.savefig(fn) 
+            print('Wrote %s' % fn)
+            plt.close()
+ 
+                
 if __name__ == "__main__":
     t0 = Time()
     tbegin=t0
     print('TIMING:after-imports ',datetime.datetime.now())
     parser = argparse.ArgumentParser(description='Generate a legacypipe-compatible CCDs file from a set of reduced imaging.')
-    parser.add_argument('--image_list',action='store',help='List of images to process',required=True)
-    parser.add_argument('--jobid',action='store',help='slurm jobid',default='001',required=False)
+    parser.add_argument('--image_list',action='store',help='List of images to process, if compare2arjun = True then list of legacy zeropoint files',required=True)
     parser.add_argument('--prefix', type=str, default='', help='Prefix to prepend to the output files.')
     parser.add_argument('--outdir', type=str, default='./legacy_zpt_outdir', help='Output directory.')
     parser.add_argument('--aprad', type=float, default=3.5, help='Aperture photometry radius (arcsec).')
@@ -1448,42 +1444,34 @@ if __name__ == "__main__":
                         help='Use this option when deriving the photometric transformation equations.')
     parser.add_argument('--sky-global', action='store_true',
                         help='Use a global rather than a local sky-subtraction around the stars.')
-    parser.add_argument('--only_ccd_centers', action='store_true', default=False, help='get ccd ra,dec centers only')
-    parser.add_argument('--compare', action='store_true', default=False, help='get ccd ra,dec centers only')
+    parser.add_argument('--compare2arjun', action='store_true', default=False, help='turn this on and give --image-list a list of legacy zeropoint files instead of cp images')
 
     args = parser.parse_args()
    
-    if args.compare:
-        comp= Compare2Arjuns('testlist.txt',\
-                             path_to_arjuns='/scratch2/scratchdirs/arjundey/ZeroPoints_MzLSv2',\
-                             camera='mosaic')
-    raise ValueError
- 
+    if args.compare2arjun:
+        comp= Compare2Arjuns(args.image_list)
+        raise ValueError('Done')
 
  
     images= read_lines(args.image_list) 
-    #images= glob(args.images) 
     
     # Build a dictionary with the optional inputs.
     measureargs = vars(args)
+    if not args.compare:
+        measureargs.pop('compare')
     measureargs.pop('image_list')
-    #images = np.array(measureargs.pop('images'))
     nproc = measureargs.pop('nproc')
 
     prefix = measureargs.pop('prefix')
     outdir = measureargs.pop('outdir')
     if not os.path.exists(outdir):
         os.makedirs(outdir)
-    jobid = measureargs.pop('jobid')
-
-    print("measureargs['only_ccd_centers']= ",measureargs['only_ccd_centers'])
 
     if nproc > 1:
         from mpi4py.MPI import COMM_WORLD as comm
     t0=ptime('parse-args',t0)
 
-    
-    # RUN HERE
+    # MPI4py
     if nproc > 1:
         images_split= np.array_split(images, comm.size)
         for image_fn in images_split[comm.rank]:
@@ -1493,14 +1481,16 @@ if __name__ == "__main__":
                 print('Skipping b/c exists: %s' % zptsfile)
                 continue  # Already done
             # Log to unique file
-            outfn=os.path.join(outdir,"std.zpt%s_jobid%s" % (os.path.basename(image_fn),jobid))  
+            outfn=os.path.join(outdir,"std.zpt-%s%s" % \
+                        (os.path.basename(image_fn),\
+                        datetime.datetime.now().strftime("m%m-d%d-hr%H-min%M")))  
             with stdouterr_redirected(to=outfn, comm=None):  
                 t0=ptime('b4-run',t0)
                 runit(image_fn, measureargs, \
                       zptsfile=zptsfile,zptstarsfile=zptstarsfile)
                 t0=ptime('after-run',t0)
                 # Finish up 
-        # HACK, not sure if need to wait for all proc to finish 
+        # Wait for all mpi tasks to finish 
         confirm_files = comm.gather( images_split[comm.rank], root=0 )
         if comm.rank == 0:
             print('Rank 0 gathered the results:')
@@ -1508,6 +1498,7 @@ if __name__ == "__main__":
             tnow= Time()
             print("TIMING:total %s" % (tnow-tbegin,))
             print("Done")
+    # Serial
     else:
         for image_fn in images:
             # Check if zpt already written
