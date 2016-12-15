@@ -113,6 +113,9 @@ def main():
 
     parser.add_argument('--bricks', help='Set bricks.fits file to load')
     parser.add_argument('--ccds', help='Set ccds.fits file to load')
+    parser.add_argument('--ignore_cuts', action='store_true',default=False,help='no photometric or blacklist cuts')
+    parser.add_argument('--save_to_fits', action='store_true',default=False,help='save cut brick,ccd to fits table')
+    parser.add_argument('--name', action='store',default='dr3',help='save with this suffix, e.g. refers to ccds table')
 
     parser.add_argument('--delete-sky', action='store_true',
                       help='Delete any existing sky calibration files')
@@ -146,12 +149,13 @@ def main():
         log(len(T), 'CCDs')
     T.index = np.arange(len(T))
 
-    I = survey.photometric_ccds(T)
-    print(len(I), 'CCDs are photometric')
-    T.cut(I)
-    I = survey.apply_blacklist(T)
-    print(len(I), 'CCDs are not blacklisted')
-    T.cut(I)
+    if opt.ignore_cuts == False:
+        I = survey.photometric_ccds(T)
+        print(len(I), 'CCDs are photometric')
+        T.cut(I)
+        I = survey.apply_blacklist(T)
+        print(len(I), 'CCDs are not blacklisted')
+        T.cut(I)
     print(len(T), 'CCDs remain')
 
     # I,J,d,counts = match_radec(B.ra, B.dec, T.ra, T.dec, 0.2, nearest=True, count=True)
@@ -344,6 +348,12 @@ def main():
 
     elif opt.region == 'mzls':
         dlo,dhi = 30., 90.
+    elif opt.region == 'dr4-bootes':
+        # https://desi.lbl.gov/trac/wiki/DecamLegacy/DR4sched 
+        #dlo,dhi = 34., 35.
+        #rlo,rhi = 209.5, 210.5
+        dlo,dhi = 33., 36.
+        rlo,rhi = 216.5, 219.5
 
         
     if opt.mindec is not None:
@@ -358,6 +368,9 @@ def main():
         B.cut(np.logical_or(B.ra >= rlo, B.ra <= rhi) *
               (B.dec >= dlo) * (B.dec <= dhi))
     log(len(B), 'bricks in range')
+    for name in B.get('brickname'):
+        print(name)
+    B.writeto('bricks-cut.fits')
 
     I,J,d = match_radec(B.ra, B.dec, T.ra, T.dec, survey.bricksize)
     keep = np.zeros(len(B), bool)
@@ -426,6 +439,32 @@ def main():
                 continue
 
         print(b.brickname)
+
+    if opt.save_to_fits:
+        assert(opt.touching)
+        # Write cut tables to file
+        for tab,typ in zip([B,T],['bricks','ccds']):
+            fn='%s-%s-cut.fits' % (typ,opt.name)
+            if os.path.exists(fn):
+                os.remove(fn)
+            tab.writeto(fn)
+            print('Wrote %s' % fn)
+        # Write text files listing ccd and filename names
+        nm1,nm2= 'ccds-%s.txt'% opt.name,'filenames-%s.txt' % opt.name
+        if os.path.exists(nm1):
+            os.remove(nm1)
+        if os.path.exists(nm2):
+            os.remove(nm2)
+        f1,f2=open(nm1,'w'),open(nm2,'w')
+        fns= list(set(T.get('image_filename')))
+        for fn in fns:
+            f2.write('%s\n' % fn.strip())
+        for ti in T:
+            f1.write('%s\n' % ti.get('image_filename').strip())
+        f1.close()
+        f2.close()
+        print('Wrote *-names.txt')
+    
 
     if opt.brickq_deps:
         import qdo
@@ -620,6 +659,7 @@ def main():
 
         if opt.command:
             s = '%i-%s' % (T.expnum[i], T.ccdname[i])
+            prefix = 'python legacypipe/run-calib.py ' + opt.opt
             #('python legacypipe/run-calib.py --expnum %i --ccdname %s' %
             #     (T.expnum[i], T.ccdname[i]))
         else:
