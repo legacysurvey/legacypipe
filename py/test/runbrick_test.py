@@ -211,11 +211,18 @@ if __name__ == '__main__':
 
     
     # MzLS + BASS data
-    surveydir2 = os.path.join(os.path.dirname(__file__), 'mzlsbass')
-    main(args=['--brick', '3521p002', '--zoom', '2400', '2450', '1200', '1250',
+    # surveydir2 = os.path.join(os.path.dirname(__file__), 'mzlsbass')
+    # main(args=['--brick', '3521p002', '--zoom', '2400', '2450', '1200', '1250',
+    #            '--no-wise', '--force-all', '--no-write',
+    #            '--survey-dir', surveydir2,
+    #            '--outdir', 'out-mzlsbass'])
+
+    # From Kaylan's Bootes pre-DR4 run
+    surveydir2 = os.path.join(os.path.dirname(__file__), 'mzlsbass3')
+    main(args=['--brick', '2173p350', '--zoom', '100', '200', '100', '200',
                '--no-wise', '--force-all', '--no-write',
                '--survey-dir', surveydir2,
-               '--outdir', 'out-mzlsbass'])
+               '--outdir', 'out-mzlsbass3'])
 
     # With plots!
     main(args=['--brick', '2447p120', '--zoom', '1020', '1070', '2775', '2815',
