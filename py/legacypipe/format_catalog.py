@@ -101,6 +101,7 @@ def format_catalog(T, hdr, primhdr, allbands, outfn,
         'cpu_source', 'cpu_blob',
         'blob_width', 'blob_height', 'blob_npix', 'blob_nimages',
         'blob_totalpix',
+        'tai_min', 'tai_max',
         ]
 
     cols.extend([flux_prefix + c for c in ['flux', 'flux_ivar']])
