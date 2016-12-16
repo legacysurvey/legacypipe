@@ -218,6 +218,12 @@ if __name__ == '__main__':
         dchiexp  = T.dchisq[:,3]
 
         T.type0 = np.array([t[0] for t in T.type])
+
+        T.g = -2.5 * (np.log10(T.decam_flux[:,1]) - 9)
+        T.r = -2.5 * (np.log10(T.decam_flux[:,2]) - 9)
+        T.z = -2.5 * (np.log10(T.decam_flux[:,4]) - 9)
+
+        from astrometry.util.plotutils import loghist
         
         model = np.array(['P' if p > s else 'S' for p,s in zip(dchipsf, dchisimp)])
         dchi = dchipsf * (model == 'P') + dchisimp * (model == 'S')
@@ -268,6 +274,11 @@ if __name__ == '__main__':
                  (np.maximum(dchiexp, dchidev) - np.maximum(dchipsf, dchisimp))[J]/dchipsf[J],
                  'o', mec='k', mfc='none', label='Any SAT', alpha=0.2)
 
+        xx = np.logspace(1, 7, 200)
+        div = 0.001 + 1e-6 * xx
+
+        plt.plot(xx, div, 'r--')
+        
         plt.axhline(0.001, color='b', alpha=0.25)
         plt.axhline(0.008, color='b', alpha=0.25)
         plt.axhline(0.02 , color='b', alpha=0.25)
@@ -280,23 +291,43 @@ if __name__ == '__main__':
         ps.savefig()
 
         
+        plt.clf()
+        ax = [-2,5, -2,4]
+        loghist(T.g - T.r, T.r - T.z, 200, range=((ax[0],ax[1]),(ax[2],ax[3])))
+        plt.xlabel('g - r (mag)')
+        plt.ylabel('r - z (mag)')
+        plt.axis(ax)
+        ps.savefig()
+
+        plt.plot(T.g[J] - T.r[J], T.r[J] - T.z[J], 'g.', label='SAT')
+        plt.legend()
+        plt.axis(ax)
+        ps.savefig()
+
+        K = J[T.type0[J] != 'P']
+        P = J[T.type0[J] == 'P']
+        
+        plt.clf()
+        ax = [-2,5, -2,4]
+        loghist(T.g - T.r, T.r - T.z, 200, range=((ax[0],ax[1]),(ax[2],ax[3])))
+        plt.plot(T.g[K] - T.r[K], T.r[K] - T.z[K], 'g.', label='Non-PSF SAT')
+        plt.xlabel('g - r (mag)')
+        plt.ylabel('r - z (mag)')
+        plt.axis(ax)
+        plt.legend()
+        ps.savefig()
+
+        plt.clf()
+        ax = [-2,5, -2,4]
+        loghist(T.g - T.r, T.r - T.z, 200, range=((ax[0],ax[1]),(ax[2],ax[3])))
+        plt.plot(T.g[P] - T.r[P], T.r[P] - T.z[P], 'g.', label='PSF SAT')
+        plt.xlabel('g - r (mag)')
+        plt.ylabel('r - z (mag)')
+        plt.axis(ax)
+        plt.legend()
+        ps.savefig()
 
         
-        # y = (np.maximum(dchiexp, dchidev) - np.maximum(dchipsf, dchisimp))[I]/dchipsf[I]
-        # J = I[y < 0.001]
-        # K = I[y > 0.02]
-        # E = I[T.type[I] == 'EXP '] #shapeexp_r[I] > 0]
-        # 
-        # plt.clf()
-        # ha = dict(histtype='step', bins=100, range=(0,3))
-        # plt.hist(T.shapeexp_r[J], color='b', label='Frac < 0.001', **ha)
-        # plt.hist(T.shapeexp_r[K], color='g', label='Frac > 0.02',  **ha)
-        # plt.hist(T.shapeexp_r[E], color='r', label='All EXP', **ha)
-        # #plt.xlabel('EXP radius for frac < 0.001')
-        # plt.xlabel('EXP radius')
-        # plt.legend()
-        # plt.title(dirnm)
-        # ps.savefig()
         
         
     sys.exit(0)
