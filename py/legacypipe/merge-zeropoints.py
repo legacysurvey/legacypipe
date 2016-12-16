@@ -570,13 +570,13 @@ if __name__ == '__main__':
     #mzls_to_20160315()
     #decals_run19()
 
-    dr4_bootes=False
-    if dr4_bootes:
-        for name in ['90prime','mzls-v2thruMarch19','mzls-v3']:
-            gather_arjuns_zpts(cpimage_list='bootes-%s-abspath.txt' % name,\
-                               name='arjuns-ccds-%s.fits' % name)
-    #bok_dr4()
-    mzls_dr4(v2=True)
+    #dr4_bootes=False
+    #if dr4_bootes:
+    #    for name in ['90prime','mzls-v2thruMarch19','mzls-v3']:
+    #        gather_arjuns_zpts(cpimage_list='bootes-%s-abspath.txt' % name,\
+    #                           name='arjuns-ccds-%s.fits' % name)
+    bok_dr4()
+    #mzls_dr4(v2=True)
     #mzls_dr4(v2=False)
     sys.exit(0)
     
