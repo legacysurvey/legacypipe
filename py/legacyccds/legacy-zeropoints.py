@@ -1158,22 +1158,21 @@ class Compare2Arjuns(object):
         zptfn_list: text file listing each legacy zpt file to be used
         camera: ['mosaic','90prime','decam']
         '''
-        camera= self.get_camera(zptfn_list)
+        self.camera= self.get_camera(zptfn_list)
          
-        if camera == 'mosaic':
+        if self.camera == 'mosaic':
             self.path_to_arjuns= '/scratch2/scratchdirs/arjundey/ZeroPoints_MzLSv2'
-        elif camera == '90prime':
+        elif self.camera == '90prime':
             self.path_to_arjuns= '/scratch2/scratchdirs/arjundey/ZeroPoints_BASS'
 
         # Get legacy zeropoints, and corresponding ones from Arjun
         self.makeBigTable(zptfn_list)
-        self.ccd_cuts(camera)
+        self.ccd_cuts()
         # Compare values
         self.getKeyTypes()
         self.compare_alphabetic()
         self.compare_numeric()
         self.compare_numeric_stars()
-        raise ValueError
 
     def get_camera(self,zptfn_list):
         fns= np.loadtxt(zptfn_list,dtype=str)
@@ -1206,16 +1205,21 @@ class Compare2Arjuns(object):
             print('%d/%d: ' % (cnt+1,len(fns)))
             try:
                 # Legacy zeropoints, use Arjun's naming scheme
-                self.legacy.append( self.read_legacy(fn,reset_names=True) ) 
+                legacy_tb= self.read_legacy(fn,reset_names=True) 
                 fn_stars= fn.replace('.fits','-stars.fits')
-                self.legacy_stars.append( self.read_legacy(fn_stars,reset_names=True,stars=True) )
+                legacy_stars_tb= self.read_legacy(fn_stars,reset_names=True,stars=True)
                 # Corresponding zeropoints from Arjun
                 arjun_fn= os.path.basename(fn)
                 index= arjun_fn.find('zeropoint') # Check for a prefix
                 if index > 0: arjun_fn= arjun_fn.replace(arjun_fn[:index],'')
                 arjun_fn= os.path.join(self.path_to_arjuns, arjun_fn)
-                self.arjun.append( fits_table(arjun_fn) ) 
-                self.arjun_stars.append( fits_table(arjun_fn.replace('zeropoint-','matches-') ))
+                arjun_tb= fits_table(arjun_fn)  
+                arjun_stars_tb= fits_table(arjun_fn.replace('zeropoint-','matches-') )
+                # If here, was able to read all 4 tables, store in Big Table
+                self.legacy.append( legacy_tb ) 
+                self.legacy_stars.append( legacy_stars_tb )
+                self.arjun.append( arjun_tb ) 
+                self.arjun_stars.append( arjun_stars_tb )
             except IOError:
                 print('WARNING: one of these cannot be read: %s\n%s\n%s\n%s\n' % \
                      (fn,fn.replace('.fits','-stars.fits'),\
@@ -1226,12 +1230,12 @@ class Compare2Arjuns(object):
         self.arjun= merge_tables(self.arjun, columns='fillzero') 
         self.arjun_stars= merge_tables(self.arjun_stars, columns='fillzero')
     
-    def ccd_cuts(self,camera):
+    def ccd_cuts(self):
         keep= np.zeros(len(self.legacy)).astype(bool)
         for tab in [self.legacy,self.arjun]:
-            if camera == 'mosaic':
+            if self.camera == 'mosaic':
                 keep[ (tab.exptime > 40.)*(tab.ccdnmatch > 50)*(tab.ccdzpt > 25.8) ] = True
-            elif camera == '90prime':
+            elif self.camera == '90prime':
                 keep[ (tab.ccdzpt >= 20.)*(tab.ccdzpt <= 30.) ] = True
         self.legacy.cut(keep)
         self.arjun.cut(keep)
@@ -1378,7 +1382,7 @@ class Compare2Arjuns(object):
                     ax[cnt].set_ylim(ylims)
             ax[1].text(0.5,1.5,ti,\
                        va='center',ha='center',transform=ax[1].transAxes,fontsize=30)
-            fn="numeric_%s.png" % doplot
+            fn="%s_%s.png" % (self.camera,doplot)
             plt.savefig(fn) 
             print('Wrote %s' % fn)
             plt.close()
@@ -1440,7 +1444,7 @@ class Compare2Arjuns(object):
                        va='center',ha='center',transform=ax[1].transAxes,fontsize=20)
             ax[1].text(0.5,1.3,ti,\
                        va='center',ha='center',transform=ax[1].transAxes,fontsize=20)
-            fn="numeric_stars_%s.png" % doplot
+            fn="%s_stars_%s.png" % (self.camera,doplot)
             plt.savefig(fn) 
             print('Wrote %s' % fn)
             plt.close()
@@ -1469,7 +1473,7 @@ if __name__ == "__main__":
    
     if args.compare2arjun:
         comp= Compare2Arjuns(args.image_list)
-        raise ValueError('Done')
+        sys.exit("Finished compaison to Arjun's zeropoints")
 
  
     images= read_lines(args.image_list) 
