@@ -1323,11 +1323,11 @@ def stage_fitblobs(T=None,
               'blob_nimages', 'blob_totalpix']:
         T.set(k, BB.get(k))
 
-    # Compute TAI_MIN, TAI_MAX
-    T.tai_min = np.empty(len(T), np.float32)
-    T.tai_min[:] = np.inf
-    T.tai_max = np.empty(len(T), np.float32)
-    T.tai_max[:] = -np.inf
+    # Compute MJD_MIN, MJD_MAX
+    T.mjd_min = np.empty(len(T), np.float32)
+    T.mjd_min[:] = np.inf
+    T.mjd_max = np.empty(len(T), np.float32)
+    T.mjd_max[:] = -np.inf
     ra  = np.array([src.getPosition().ra  for src in cat])
     dec = np.array([src.getPosition().dec for src in cat])
     for tim in tims:
@@ -1336,8 +1336,8 @@ def stage_fitblobs(T=None,
         y -= 1
         I = np.flatnonzero(ok * (x >= 0.5) * (x <= W-0.5) *
                            (y >= 0.5) * (y <= H-0.5))
-        T.tai_min[I] = np.minimum(T.tai_min[I], tim.time.getValue())
-        T.tai_max[I] = np.maximum(T.tai_max[I], tim.time.getValue())
+        T.mjd_min[I] = np.minimum(T.mjd_min[I], tim.time.toMjd())
+        T.mjd_max[I] = np.maximum(T.mjd_max[I], tim.time.toMjd())
 
     invvars = np.hstack(BB.srcinvvars)
     assert(cat.numberOfParams() == len(invvars))
