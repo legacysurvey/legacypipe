@@ -165,28 +165,173 @@ if __name__ == '__main__':
     from glob import glob
     from astrometry.util.fits import merge_tables, fits_table
 
-    # glob doesn't understand {}
-    #fns = glob('dr3/tractor/011/tractor-011?p0{02,05,07,10}.fits')
-    fns = glob('dr3/tractor/011/tractor-011?p0*.fits')
-    #fns = glob('dr3/metrics/011/all-models-011?p0*.fits')
-    fns = [fn for fn in fns if fn[-7:-5] in ['02','05','07','10']]
-    assert(len(fns) == 16)
+    if False:
+        # glob doesn't understand {}
+        #fns = glob('dr3/tractor/011/tractor-011?p0{02,05,07,10}.fits')
+        fns = glob('dr3/tractor/011/tractor-011?p0*.fits')
+        fns = [fn for fn in fns if fn[-7:-5] in ['02','05','07','10']]
+        assert(len(fns) == 16)
 
-    T = merge_tables([fits_table(fn) for fn in fns])
-    print(len(T), 'sources')
+    for dirnm in ['cosmos-50', 'cosmos-51', 'cosmos-52']:
+        fns = glob(os.path.join(dirnm, 'metrics', '*', '*', 'all-models-*.fits'))
+        T = merge_tables([fits_table(fn) for fn in fns])
+        print(len(T), 'sources')
 
-    dchipsf  = T.dchisq[:,0]
-    dchisimp = T.dchisq[:,1]
-    dchidev  = T.dchisq[:,2]
-    dchiexp  = T.dchisq[:,3]
+        dchipsf  = T.dchisq[:,0]
+        dchisimp = T.dchisq[:,1]
+        dchidev  = T.dchisq[:,2]
+        dchiexp  = T.dchisq[:,3]
+        T.type0 = np.array([t[0] for t in T.type])
+        # which sources have galaxy models computed
+        I = np.flatnonzero(dchiexp)
 
-    model = np.array(['P' if p > s else 'S' for p,s in zip(dchipsf, dchisimp)])
-    dchi = dchipsf * (model == 'P') + dchisimp * (model == 'S')
+        y = (np.maximum(dchiexp, dchidev) - np.maximum(dchipsf, dchisimp))[I]/dchipsf[I]
+        J = I[y < 0.001]
+        K = I[y > 0.02]
+        E = I[T.type0[I] == 'E']
+        S = I[T.type0[I] == 'S']
+        P = I[T.type0[I] == 'P']
 
-    # which sources have galaxy models computed
-    I = np.flatnonzero(dchiexp)
-    print(len(I), 'have EXP,DEV models')
+        plt.clf()
+        ha = dict(histtype='step', bins=100, range=(0,2))
+        plt.hist(T.exp_shape_r[J], color='k', label='Frac < 0.001', **ha)
+        plt.hist(T.exp_shape_r[K], color='g', label='Frac > 0.02',  **ha)
+        plt.hist(T.exp_shape_r[E], color='r', label='EXP', **ha)
+        plt.hist(T.exp_shape_r[S], color='m', label='SIMP', **ha)
+        plt.hist(T.exp_shape_r[P], color='b', label='PSF', **ha)
+        plt.xlabel('EXP radius')
+        plt.legend()
+        plt.title(dirnm)
+        ps.savefig()
+
+        
+        
+    for dirnm in ['cosmos-50', 'cosmos-51', 'cosmos-52']:
+        fns = glob(os.path.join(dirnm, 'tractor', '*', 'tractor-*.fits'))
+        
+        T = merge_tables([fits_table(fn) for fn in fns])
+        print(len(T), 'sources')
     
+        dchipsf  = T.dchisq[:,0]
+        dchisimp = T.dchisq[:,1]
+        dchidev  = T.dchisq[:,2]
+        dchiexp  = T.dchisq[:,3]
+
+        T.type0 = np.array([t[0] for t in T.type])
+
+        T.g = -2.5 * (np.log10(T.decam_flux[:,1]) - 9)
+        T.r = -2.5 * (np.log10(T.decam_flux[:,2]) - 9)
+        T.z = -2.5 * (np.log10(T.decam_flux[:,4]) - 9)
+
+        from astrometry.util.plotutils import loghist
+        
+        model = np.array(['P' if p > s else 'S' for p,s in zip(dchipsf, dchisimp)])
+        dchi = dchipsf * (model == 'P') + dchisimp * (model == 'S')
+    
+        # which sources have galaxy models computed
+        I = np.flatnonzero(dchiexp)
+        print(len(I), 'have EXP,DEV models')
+
+        # plt.clf()
+        # 
+        # plt.plot(np.maximum(dchiexp, dchidev)[I] - np.maximum(dchipsf, dchisimp)[I],
+        #          (np.maximum(dchiexp, dchidev) - np.maximum(dchipsf, dchisimp))[I]/dchipsf[I],
+        #          'k.', alpha=0.2)
+        # 
+        # # SATUR
+        # J = I[np.flatnonzero(np.max(T.decam_anymask[I,:] == 2, axis=1))]
+        # plt.plot(np.maximum(dchiexp, dchidev)[J] - np.maximum(dchipsf, dchisimp)[J],
+        #          (np.maximum(dchiexp, dchidev) - np.maximum(dchipsf, dchisimp))[J]/dchipsf[J],
+        #          'rx', label='SAT')
+        # 
+        # plt.axhline(0.001, color='b', alpha=0.25)
+        # plt.axhline(0.008, color='b', alpha=0.25)
+        # plt.axhline(0.02 , color='b', alpha=0.25)
+        # 
+        # plt.xlabel('dchi(EXP or DEV) - dchi(PSF or SIMP)')
+        # plt.ylabel('[ dchi(EXP or DEV) - dchi(PSF or SIMP) ] / dchipsf')
+        # plt.legend()
+        # 
+        # plt.xscale('symlog')
+        # 
+        # plt.axis([1e1, 1e7, 0, 0.04])
+        # plt.title(dirnm)
+        # ps.savefig()
+
+
+        plt.clf()
+
+        ccmap = dict(P='b', S='m', E='r', D='c', C='k')
+        for t in ['PSF','SIMP','EXP','DEV','COMP']:
+            J = I[T.type0[I] == t[0]]
+            plt.plot(np.maximum(dchiexp, dchidev)[J] - np.maximum(dchipsf, dchisimp)[J],
+                     (np.maximum(dchiexp, dchidev) - np.maximum(dchipsf, dchisimp))[J]/dchipsf[J],
+                     '.', color=ccmap[t[0]], alpha=0.8, label=t)
+
+        # SATUR
+        J = I[np.flatnonzero(np.max(T.decam_anymask[I,:] == 2, axis=1))]
+        plt.plot(np.maximum(dchiexp, dchidev)[J] - np.maximum(dchipsf, dchisimp)[J],
+                 (np.maximum(dchiexp, dchidev) - np.maximum(dchipsf, dchisimp))[J]/dchipsf[J],
+                 'o', mec='k', mfc='none', label='Any SAT', alpha=0.2)
+
+        xx = np.logspace(1, 7, 200)
+        div = 0.001 + 1e-6 * xx
+
+        plt.plot(xx, div, 'r--')
+        
+        plt.axhline(0.001, color='b', alpha=0.25)
+        plt.axhline(0.008, color='b', alpha=0.25)
+        plt.axhline(0.02 , color='b', alpha=0.25)
+        plt.xlabel('dchi(EXP or DEV) - dchi(PSF or SIMP)')
+        plt.ylabel('[ dchi(EXP or DEV) - dchi(PSF or SIMP) ] / dchipsf')
+        plt.legend()
+        plt.xscale('symlog')
+        plt.axis([1e1, 1e7, 0, 0.04])
+        plt.title(dirnm)
+        ps.savefig()
+
+        
+        plt.clf()
+        ax = [-2,5, -2,4]
+        loghist(T.g - T.r, T.r - T.z, 200, range=((ax[0],ax[1]),(ax[2],ax[3])))
+        plt.xlabel('g - r (mag)')
+        plt.ylabel('r - z (mag)')
+        plt.axis(ax)
+        ps.savefig()
+
+        plt.plot(T.g[J] - T.r[J], T.r[J] - T.z[J], 'g.', label='SAT')
+        plt.legend()
+        plt.axis(ax)
+        ps.savefig()
+
+        K = J[T.type0[J] != 'P']
+        P = J[T.type0[J] == 'P']
+        
+        plt.clf()
+        ax = [-2,5, -2,4]
+        loghist(T.g - T.r, T.r - T.z, 200, range=((ax[0],ax[1]),(ax[2],ax[3])))
+        plt.plot(T.g[K] - T.r[K], T.r[K] - T.z[K], 'g.', label='Non-PSF SAT')
+        plt.xlabel('g - r (mag)')
+        plt.ylabel('r - z (mag)')
+        plt.axis(ax)
+        plt.legend()
+        ps.savefig()
+
+        plt.clf()
+        ax = [-2,5, -2,4]
+        loghist(T.g - T.r, T.r - T.z, 200, range=((ax[0],ax[1]),(ax[2],ax[3])))
+        plt.plot(T.g[P] - T.r[P], T.r[P] - T.z[P], 'g.', label='PSF SAT')
+        plt.xlabel('g - r (mag)')
+        plt.ylabel('r - z (mag)')
+        plt.axis(ax)
+        plt.legend()
+        ps.savefig()
+
+        
+        
+        
+    sys.exit(0)
+
     galaxy_margin = 12.
 
     fcut1 = 0.02  * dchipsf
