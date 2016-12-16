@@ -60,7 +60,7 @@ if __name__ == '__main__':
     assert(len(T) == 2)
     print('Types:', T.type)
     assert(T.type[0] == 'REX ')
-    
+
     # Test with a Tycho-2 star in the blob.
 
     surveydir = os.path.join(os.path.dirname(__file__), 'testcase6')
