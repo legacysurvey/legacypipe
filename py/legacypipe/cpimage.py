@@ -147,7 +147,7 @@ def newWeightMap(wtfn=None,imgfn=None,dqfn=None):
     Returns: new_wtfn
     '''
     from astropy.io import fits
-    newfn= wtfn.replace('oow','oow-wshot')
+    newfn= wtfn.replace('oow','oow_wshot')
     if not os.path.exists(newfn): 
         print('Creating new weightmap: %s' % newfn)
         imgobj= fits.open(imgfn) 
