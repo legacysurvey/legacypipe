@@ -137,4 +137,41 @@ class CPImage(LegacySurveyImage):
         dqbits[dq == 7] |= CP_DQ_BITS['trans']
         dqbits[dq == 8] |= CP_DQ_BITS['trans']
         return dqbits
-    
+
+def newWeightMap(wtfn=None,imgfn=None,dqfn=None):
+    '''MZLS or BASS
+    Converts the oow weight map: 1 / var(sky, read)
+    to a 1 / var(sky, read, astrophysical) weight map,\
+    Creates the new map if it doesn't exist
+
+    Returns: new_wtfn
+    '''
+    from astropy.io import fits
+    newfn= wtfn.replace('oow','oow-wshot')
+    if not os.path.exists(newfn): 
+        print('Creating new weightmap: %s' % newfn)
+        imgobj= fits.open(imgfn) 
+        wtobj = fits.open(wtfn) 
+        dqobj = fits.open(dqfn) 
+        hdr = imgobj[0].header 
+        #read_noise= hdr['RDNOISE'] # e 
+        #gain=1.8 # fixed 
+        const_sky= hdr['SKYADU'] # e/s, Recommended sky level keyword from Frank 
+        expt= hdr['EXPTIME'] # s 
+        for hdu in range(1,len(imgobj)): 
+            cpwt= wtobj[hdu].data # s/e, 1 / [var(sky) + var(read)] 
+            cpimg= imgobj[hdu].data # e/s, img - median bkgrd  - var(sky) - var(read) + const sky 
+            cpbad= dqobj[hdu].data # bitmask, 0 is good 
+            var_SR= 1./cpwt # e/s 
+            var_Astro= np.abs(cpimg - const_sky) / expt # e/s 
+            wt= 1./(var_SR + var_Astro) # s/e 
+            # Zero out NaNs and masked pixels 
+            wt[np.isfinite(wt) == False]= 0. 
+            wt[cpbad != 0]= 0. 
+            # Overwrite w new weight 
+            wtobj[hdu].data= wt 
+        wtobj.writeto(newfn) 
+        print('Wrote new weightmap: %s' % newfn)
+    return newfn
+
+
