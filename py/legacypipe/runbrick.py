@@ -1821,12 +1821,17 @@ def stage_wise_forced(
         src.setBrightness(NanoMaggies(w=1.))
         wcat.append(src)
 
+    # PSF broadening in post-reactivation data, by band.
+    # From Aaron's email to decam-chatter, 2016-12-12.
+    broadening = { 1: 1.0294, 2: 1.0253, 3: None, 4: None }
+
     # Create list of groups-of-tiles to photometer
     args = []
     # Skip if $UNWISE_COADDS_DIR or --unwise-dir not set.
     if unwise_dir is not None:
         for band in [1,2,3,4]:
-            args.append((wcat, tiles, band, roiradec, unwise_dir, use_ceres))
+            args.append((wcat, tiles, band, roiradec, unwise_dir, use_ceres,
+                         broadening[band]))
 
     # Add time-resolved WISE coadds
     # Skip if $UNWISE_COADDS_TIMERESOLVED_DIR or --unwise-tr-dir not set.
@@ -1853,7 +1858,7 @@ def stage_wise_forced(
                 print('Epoch %i: %i tiles:' % (e, len(I)), W.coadd_id[I])
                 edir = os.path.join(tdir, 'e%03i' % e)
                 eargs.append((e,(wcat, tiles[I], band, roiradec, edir,
-                                 use_ceres)))
+                                 use_ceres, broadening[band])))
 
     # Run the forced photometry!
     phots = mp.map(_unwise_phot, args + [a for e,a in eargs])
@@ -1894,10 +1899,10 @@ def stage_wise_forced(
             wcs = Tan(*[float(hdr[k]) for k in
                         ['CRVAL1', 'CRVAL2', 'CRPIX1', 'CRPIX2',
                          'CD1_1', 'CD1_2', 'CD2_1','CD2_2','NAXIS2','NAXIS1']])
-            print('Read WCS header', wcs)
+            #print('Read WCS header', wcs)
             ok,xx,yy = wcs.radec2pixelxy(ra, dec)
             hh,ww = wcs.get_height(), wcs.get_width()
-            print('unWISE image size', hh,ww)
+            #print('unWISE image size', hh,ww)
             xx = np.round(xx - 1).astype(int)
             yy = np.round(yy - 1).astype(int)
             I = np.flatnonzero(ok * (xx >= 0)*(xx < ww) * (yy >= 0)*(yy < hh))
@@ -1937,10 +1942,11 @@ def stage_wise_forced(
 
 def _unwise_phot(X):
     from wise.forcedphot import unwise_forcedphot
-    (wcat, tiles, band, roiradec, unwise_dir, use_ceres) = X
+    (wcat, tiles, band, roiradec, unwise_dir, use_ceres, broadening) = X
     try:
         W = unwise_forcedphot(wcat, tiles, roiradecbox=roiradec, bands=[band],
-                              unwise_dir=unwise_dir, use_ceres=use_ceres)
+            unwise_dir=unwise_dir, use_ceres=use_ceres,
+            psf_broadening=broadening)
     except:
         import traceback
         print('unwise_forcedphot failed:')
@@ -1950,7 +1956,7 @@ def _unwise_phot(X):
             print('Trying without Ceres...')
             W = unwise_forcedphot(wcat, tiles, roiradecbox=roiradec,
                                   bands=[band], unwise_dir=unwise_dir,
-                                  use_ceres=False)
+                                  use_ceres=False, psf_broadening=broadening)
         W = None
     return W
 
