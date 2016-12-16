@@ -5,6 +5,81 @@ import os
 from collections import Counter
 from astrometry.util.fits import fits_table, merge_tables
 
+def mzls_dr4(v2=True): 
+    basedir = os.environ['LEGACY_SURVEY_DIR']
+    cam = 'mosaic'
+    image_basedir = os.path.join(basedir, 'images')
+    if v2:
+        #zpname='arjuns-ccds-mzls-v2thruMarch19.fits'
+        #savefn='survey-ccds-mzls-v2thruMarch19.fits.gz'
+        #cpdirsfn= 'mzls_cpdirs_thruMarch19.txt'
+        zpname='/global/homes/a/arjundey/ZeroPoints/mzls-v2-zpt-all-2016dec06.fits'
+        savefn='survey-ccds-dr4-mzlsv2.fits.gz'
+        # for dr in `find /project/projectdirs/cosmo/staging/mosaicz/MZLS_CP/CP*v2 -maxdepth 0 -type d`;do echo $(basename $dr) >> mzlsv2_cpdirs.txt ;done
+        cpdirsfn= os.path.join(basedir,'mzlsv2_cpdirs.txt')
+    else:
+        #zpname='arjuns-ccds-mzls-v3.fits'
+        #savefn='survey-ccds-mzls-v3.fits.gz'
+        zpname='arjuns-ccds-mzls-v3.fits'
+        savefn='survey-ccds-dr4-mzlsv3.fits.gz'
+        cpdirsfn= os.path.join(basedir,'mzlsv3_cpdirs.txt')
+
+    TT = []
+    # mzls_cpdirs_...txt is list of all possible CP directories
+    for fn,dirnms in [
+        (zpname,
+         list(np.loadtxt(cpdirsfn,dtype=str))),
+        ]:
+        T = fits_table(fn)
+        normalize_zeropoints(fn, dirnms, image_basedir, cam, T=T)
+        TT.append(T)
+    T = merge_tables(TT)
+
+    I = np.flatnonzero(T.fwhm == 0)
+    if len(I):
+        T.fwhm[I] = T.seeing[I] / 0.262
+
+    T.writeto(savefn)
+    print('Wrote', savefn)
+
+
+def bok_dr4():
+    basedir = os.environ['LEGACY_SURVEY_DIR'] 
+    cam = '90prime'
+    image_basedir = os.path.join(basedir, 'images')
+
+    zpname='/global/homes/a/arjundey/ZeroPoints/bass-zpt-all-2016dec06.fits'
+    cpdirsfn= os.path.join(basedir,'bok_cpdirs.txt')
+
+    #/scratch1/scratchdirs/desiproc/DRs/cp-images/bootes/project/projectdirs/cosmo/staging/bok/BOK_CP/CP20160703
+    #/scratch2/scratchdirs/arjundey/ForKaylan/zeropoint-ksb_160704_052458_ooi_g_v1.fits
+    TT = []
+    for fn,dirnms in [
+        (zpname,
+         list(np.loadtxt(cpdirsfn,dtype=str))),
+        #(os.path.join(zpdir, 'r/zeropoint-BOK20150413_g.fits'),
+        # [os.path.join(zpdir, 'g')]),
+        ]:
+        T = normalize_zeropoints(fn, dirnms, image_basedir, cam)
+        # fake up the exposure number
+        T.expnum = (T.mjd_obs * 100000.).astype(int)
+        # compute extension name
+        T.ccdname = np.array(['ccd%i' % n for n in T.ccdnum])
+        # compute FWHM from Seeing
+        pixscale = 0.45
+        T.fwhm = T.seeing / pixscale
+
+        T.expid = np.array(['%10i-%s' % (expnum,extname.strip())
+                            for expnum,extname in zip(T.expnum, T.ccdname)])
+
+        TT.append(T)
+    T = merge_tables(TT)
+    outfn = 'survey-ccds-dr4-90prime.fits.gz'
+    T.writeto(outfn)
+    print('Wrote', outfn)
+
+
+
 def mzls_to_20160315():
     basedir = os.environ['LEGACY_SURVEY_DIR']
     cam = 'mosaic'
@@ -38,36 +113,6 @@ def mzls_to_20160315():
 
     for fn in [outfn]:
         os.system('gzip --best ' + fn)
-
-def mzls_dr4(v2=True): 
-    if v2:
-        zpname='arjuns-ccds-mzls-v2thruMarch19.fits'
-        savefn='survey-ccds-mzls-v2thruMarch19.fits.gz'
-    else:
-        zpname='arjuns-ccds-mzls-v3.fits'
-        savefn='survey-ccds-mzls-v3.fits.gz'
-    basedir = os.environ['LEGACY_SURVEY_DIR']
-    cam = 'mosaic'
-    image_basedir = os.path.join(basedir, 'images')
-    TT = []
-
-    # mzls_cpdirs_...txt is list of all possible CP directories
-    for fn,dirnms in [
-        (zpname,
-         list(np.loadtxt('mzls_cpdirs_thruMarch19.txt',dtype=str))),
-        ]:
-        T = fits_table(fn)
-        normalize_zeropoints(fn, dirnms, image_basedir, cam, T=T)
-        TT.append(T)
-    T = merge_tables(TT)
-
-    I = np.flatnonzero(T.fwhm == 0)
-    if len(I):
-        T.fwhm[I] = T.seeing[I] / 0.262
-
-    T.writeto(savefn)
-    print('Wrote', savefn)
-
 
 
 # Runs 19 and 20, for adjusting obstatus file...
@@ -370,40 +415,6 @@ def decals_dr3():
 #  
 
 
-def bok_dr4():
-    basedir = os.environ['LEGACY_SURVEY_DIR'] #'/scratch1/scratchdirs/desiproc/DRs/dr4-bootes/legacypipe-dir'
-    cam = '90prime'
-    image_basedir = os.path.join(basedir, 'images')
-    
-
-    #/scratch1/scratchdirs/desiproc/DRs/cp-images/bootes/project/projectdirs/cosmo/staging/bok/BOK_CP/CP20160703
-    #/scratch2/scratchdirs/arjundey/ForKaylan/zeropoint-ksb_160704_052458_ooi_g_v1.fits
-    TT = []
-    for fn,dirnms in [
-        ('arjuns-ccds-90prime.fits',
-         list(np.loadtxt('bok_cpdirs.txt',dtype=str))),
-        #(os.path.join(zpdir, 'r/zeropoint-BOK20150413_g.fits'),
-        # [os.path.join(zpdir, 'g')]),
-        ]:
-        T = normalize_zeropoints(fn, dirnms, image_basedir, cam)
-        # fake up the exposure number
-        T.expnum = (T.mjd_obs * 100000.).astype(int)
-        # compute extension name
-        T.ccdname = np.array(['ccd%i' % n for n in T.ccdnum])
-        # compute FWHM from Seeing
-        pixscale = 0.45
-        T.fwhm = T.seeing / pixscale
-
-        T.expid = np.array(['%10i-%s' % (expnum,extname.strip())
-                            for expnum,extname in zip(T.expnum, T.ccdname)])
-
-        TT.append(T)
-    T = merge_tables(TT)
-    outfn = 'survey-ccds-90prime.fits.gz'
-    T.writeto(outfn)
-    print('Wrote', outfn)
-
-
 def normalize_zeropoints(fn, dirnms, image_basedir, cam, T=None):
     if T is None:
         print('Reading', fn)
@@ -559,14 +570,14 @@ if __name__ == '__main__':
     #mzls_to_20160315()
     #decals_run19()
 
-    dr4_bootes=True
+    dr4_bootes=False
     if dr4_bootes:
         for name in ['90prime','mzls-v2thruMarch19','mzls-v3']:
             gather_arjuns_zpts(cpimage_list='bootes-%s-abspath.txt' % name,\
                                name='arjuns-ccds-%s.fits' % name)
-        bok_dr4()
-        mzls_dr4(v2=True)
-        mzls_dr4(v2=False)
+    #bok_dr4()
+    mzls_dr4(v2=True)
+    #mzls_dr4(v2=False)
     sys.exit(0)
     
     
