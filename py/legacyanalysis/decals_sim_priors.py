@@ -18,6 +18,7 @@ from astropy.io import fits
 from astrometry.util.fits import fits_table, merge_tables
 import os
 import sys
+from glob import glob
 from scipy.optimize import newton
 from sklearn.neighbors import KernelDensity
 import pickle
@@ -163,6 +164,39 @@ class KernelOfTruth(object):
             plt.savefig('%sg_kde.png' % prefix,bbox_extra_artists=[xlab], bbox_inches='tight',dpi=150)
             plt.close()
 
+    def plot_galaxy_shapes(self, ndraws=1000,xylims=None,name='kde.png'):
+        '''xylims -- dict of x1,y1,x2,y2,... where x1 is tuple of low,hi for first plot xaxis'''
+        fig,ax= plt.subplots(2,4,figsize=(20,10))
+        plt.subplots_adjust(wspace=0.2,hspace=0.2)
+        samp= self.kde.sample(n_samples=ndraws)
+        # ba can be [1,1.2], reset those values to 1.
+        samp[:,2][ samp[:,2] > 1. ]= 1.
+        # Physical values
+        assert(np.all(samp[:,0] > 0))
+        assert(np.all((samp[:,1] > 0)*\
+                      (samp[:,1] < 10)))
+        assert(np.all((samp[:,2] > 0)*\
+                      (samp[:,2] <= 1.)))
+        assert(np.all((samp[:,3] >= 0)*\
+                      (samp[:,3] <= 180)))
+        # plot
+        for cnt in range(4):
+            # Data
+            ax[0,cnt].hist(self.X[:,cnt],normed=True)
+            # KDE distribution
+            ax[1,cnt].hist(samp[:,cnt],normed=True)
+        # lims
+        for row in range(2):
+            for col in range(4):
+                if xylims is not None:
+                    ax[row,col].set_xlim(xylims['x%s' % str(col+1)])
+                    #ax[cnt,1].set_xlim(xylims['x2'])
+                    #ax[cnt,2].set_xlim(xylims['x3'])
+                    xlab=ax[row,col].set_xlabel(self.labels[col],fontsize='x-large')
+                    #xlab=ax[cnt,1].set_xlabel(self.labels[1],fontsize='x-large')
+        plt.savefig(name,bbox_extra_artists=[xlab], bbox_inches='tight',dpi=150)
+        plt.close()
+        print('Wrote %s' % name)
 
     def save(self,name='kde.pickle'):
         fout=open(name,'w')
@@ -613,6 +647,44 @@ class ELG(CommonInit):
         print('ELGs, self.rlimit= ',self.rlimit)
         # KDE params
         self.kdefn= 'elg-kde.pickle'
+        self.kde_shapes_fn= 'elg-shapes-kde.pickle'
+
+    def get_acs_matched_deep2(self):
+        savedir='/project/projectdirs/desi/users/burleigh/desi/target/analysis/truth'
+        deepfn= os.path.join(savedir,'deep2f1234_acsgcmatched.fits')
+        acsfn= os.path.join(savedir,'acsgc_deep2f1234matched.fits')
+        if os.path.exists(deepfn) and os.path.exists(acsfn):
+            deep2=fits_table(deepfn)
+            acs=fits_table(acsfn)
+        else:
+            # deep2 w/oii
+            from theValidator.catalogues import CatalogueFuncs,Matcher
+            fns=glob('/project/projectdirs/desi/target/analysis/deep2/v3.0/deep2-field*-oii.fits.gz')
+            deep2= CatalogueFuncs().stack(fns,textfile=False)
+            # acs
+            acsfn=os.path.join('/project/projectdirs/desi/users/burleigh/desi/target/analysis/truth','ACS-GC_published_catalogs','acs_public_galfit_catalog_V1.0.fits.gz')
+            acs=fits_table(acsfn)
+            # Match and save
+            print('matching acs,deep2')
+            imatch,imiss,d2d= Matcher().match_within(deep2,acs,dist=1./3600)
+            deep2.cut(imatch['ref'])
+            acs.cut(imatch['obs'])
+            deep2.writeto(deepfn)
+            acs.writeto(acsfn)
+            print('Wrote %s\n%s' % (deepfn,acsfn))
+        # oii cuts
+        R_MAG= deep2.get('cfhtls_r')
+        rmag_cut= R_MAG<self.rlimit 
+        oiicut1 = 8E-17 # [erg/s/cm2]
+        zmin = 0.6
+        keep=   np.all((rmag_cut,\
+                         deep2.get('zhelio')>0.6,\
+                         deep2.get('zhelio')<1.6,\
+                         deep2.get('oii_3727_err')!=-2.0,\
+                         deep2.get('oii_3727')>oiicut1,\
+                         acs.flag_galfit_hi == 0),axis=0)
+        acs.cut(keep) # Flag hi b/c removes ~ 50 less galaxies from sample
+        return acs.re_galfit_hi,acs.n_galfit_hi,acs.ba_galfit_hi,acs.pa_galfit_hi
 
     def get_elgs_FDR_cuts(self):
         '''version 3.0 of data discussed in
@@ -877,6 +949,28 @@ class ELG(CommonInit):
                 os.remove(self.kdefn)
             kde_obj.save(name=self.kdefn)
 
+    def plot_kde_shapes(self):
+        re,n,ba,pa= self.get_acs_matched_deep2()
+        pa+= 90. # 0-180 deg
+        #cut= (np.isfinite(x))* (np.isfinite(y))* (np.isfinite(z))
+        #x,y,z,d4= x[cut],y[cut],z[cut],d4[cut]
+        # ba > 0
+        labels=['re','n','ba','pa']
+        kde_obj= KernelOfTruth([re,n,ba,pa],labels,\
+                               [(0.,100.),(0.,10.),(0.2,0.9),(0.,180.)],\
+                               bandwidth=0.05,kernel='tophat',\
+                               kdefn=self.kde_shapes_fn,loadkde=self.loadkde)
+        xylims=dict(x1=(0,100),\
+                    x2=(0,10),\
+                    x3=(0,1),\
+                    x4=(0,180))
+        #kde_obj.plot_1band_and_color(ndraws=1000,xylims=xylims,prefix='elg_')
+        kde_obj.plot_galaxy_shapes(ndraws=1000,xylims=xylims,name='elg_shapes_kde.png')
+        if self.savekde:
+            if os.path.exists(self.kde_shapes_fn):
+                os.remove(self.kde_shapes_fn)
+            kde_obj.save(name=self.kde_shapes_fn)
+
 
 class LRG(CommonInit):
     def __init__(self,**kwargs):
@@ -894,6 +988,7 @@ class LRG(CommonInit):
             decals=self.read_fits( os.path.join(self.truth_dir,'dr3-cosmoszphotmatched.fits') )
             spec=self.read_fits( os.path.join(self.truth_dir,'cosmos-zphot-dr3matched.fits') )
         # DECaLS
+        raise ValueError
         CatalogueFuncs().set_mags(decals)
         Z_FLUX = decals.get('decam_flux_nodust')[:,4]
         W1_FLUX = decals.get('wise_flux_nodust')[:,0]
@@ -1384,22 +1479,24 @@ if __name__ == '__main__':
     #gals.plot_all()
     #print "gals.__dict__= ",gals.__dict__
     kwargs=dict(DR=2,savefig=True,loadkde=True,savekde=False,alpha=0.25)
-    star=STAR(**kwargs)
-    star.plot_kde()
+    #star=STAR(**kwargs)
+    #star.plot_kde()
     #star.plot()
     kwargs.update(dict(rlimit=22.7+1.))
-    qso=QSO(**kwargs)
-    qso.plot_kde()
+    #qso=QSO(**kwargs)
+    #qso.plot_kde()
     #qso.plot()
     kwargs.update(dict(DR=3, rlimit=23.4+1.))
     elg= ELG(**kwargs)
-    elg.plot_kde()
+    #elg.get_acs_matched_deep2()
+    elg.plot_kde_shapes()
+    #elg.plot_kde()
     #elg.plot_redshift()
     #elg.cross_validate_redshift()
 
     #elg.plot_kde()
     #elg.plot()
     kwargs.update(dict(zlimit=20.46+1.))
-    lrg= LRG(**kwargs)
-    lrg.plot_kde()
+    #lrg= LRG(**kwargs)
+    #lrg.plot_kde()
     #lrg.plot()

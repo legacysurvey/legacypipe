@@ -151,30 +151,61 @@ class KDEColors(object):
         return kde
 
     def get_colors(self,ndraws=1,random_state=np.random.RandomState()):
-        xyz= self.kde.sample(n_samples=ndraws,random_state=random_state)
+        samp= self.kde.sample(n_samples=ndraws,random_state=random_state)
         if self.objtype == 'star':
             #labels=['r wdust','r-z','g-r']
-            r= xyz[:,0]
-            z= r- xyz[:,1]
-            g= r+ xyz[:,2]
+            r= samp[:,0]
+            z= r- samp[:,1]
+            g= r+ samp[:,2]
+            return g,r,z
         elif self.objtype == 'qso':
             #labels=['r wdust','r-z','g-r']
-            r= xyz[:,0]
-            z= r- xyz[:,1]
-            g= r+ xyz[:,2]
+            r= samp[:,0]
+            z= r- samp[:,1]
+            g= r+ samp[:,2]
+            redshift= samp[:,3]
+            return g,r,z,redshift
         elif self.objtype == 'elg':
             #labels=['r wdust','r-z','g-r'] 
-            r= xyz[:,0]
-            z= r- xyz[:,1]
-            g= r+ xyz[:,2]
+            r= samp[:,0]
+            z= r- samp[:,1]
+            g= r+ samp[:,2]
+            redshift= samp[:,3]
+            return g,r,z,redshift
         elif self.objtype == 'lrg':
             #labels=['z wdust','r-z','r-W1','g wdust']
-            z= xyz[:,0]
-            r= z+ xyz[:,1]
-            g= xyz[:,3]
+            z= samp[:,0]
+            r= z+ samp[:,1]
+            redshift= samp[:,3]
+            g= samp[:,4]
+            return g,r,z,redshift
         else: 
             raise ValueError('objecttype= %s, not supported' % self.objtype)
-        return g,r,z
+
+class KDEshapes(object):
+    def __init__(self,objtype='elg',pickle_dir='./'):
+        assert(objtype in ['lrg','elg'])
+        self.objtype= objtype
+        self.kdefn=os.path.join(pickle_dir,'%s-shapes-kde.pickle' % self.objtype)
+        self.kde= self.get_kde()
+
+    def get_kde(self):
+        fout=open(self.kdefn,'r')
+        kde= pickle.load(fout)
+        fout.close()
+        return kde
+
+    def get_shapes(self,ndraws=1,random_state=np.random.RandomState()):
+        samp= self.kde.sample(n_samples=ndraws,random_state=random_state)
+        # Same for elg,lrg
+        re= samp[:,0]
+        n=  samp[:,1]
+        ba= samp[:,2]
+        pa= samp[:,3]
+        # ba can be [1,1.2] due to KDE algorithm, make these 1
+        ba[ ba > 1 ]= 1.
+        return re,n,ba,pa
+ 
             
 def get_fn(outdir,seed):
     return os.path.join(outdir,'sample_%d.fits' % seed)        
@@ -184,22 +215,37 @@ def draw_points(radec,ndraws=1,seed=1,outdir='./'):
     for given seed'''
     random_state= np.random.RandomState(seed)
     ra,dec= get_radec(radec,ndraws=ndraws,random_state=random_state)
+    # Mags
     mags={}
     for typ in ['star','lrg','elg','qso']:
         kde_obj= KDEColors(objtype=typ,pickle_dir=outdir)
-        mags['%s_g'%typ],mags['%s_r'%typ],mags['%s_z'%typ]= \
-                    kde_obj.get_colors(ndraws=ndraws,random_state=random_state)
+        if typ == 'star':
+            mags['%s_g'%typ],mags['%s_r'%typ],mags['%s_z'%typ]= \
+                        kde_obj.get_colors(ndraws=ndraws,random_state=random_state)
+        else:
+            mags['%s_g'%typ],mags['%s_r'%typ],mags['%s_z'%typ],mags['redshift']= \
+                        kde_obj.get_colors(ndraws=ndraws,random_state=random_state)
+    # Shapes
+    gfit={}
+    for typ in ['lrg','elg']:
+        kde_obj= KDEshapes(objtype=typ,pickle_dir=outdir)
+        gfit['%s_re'%typ],gfit['%s_n'%typ],gfit['%s_ba'%typ],gfit['%s_pa'%typ]= \
+                    kde_obj.get_shapes(ndraws=ndraws,random_state=random_state)
+    # Write fits table
     T=fits_table()
+    T.set('id',np.range(ndraws))
+    T.set('seed',np.zeros(ndraws).astype(int)+seed)
     T.set('ra',ra)
     T.set('dec',dec)
     for key in mags.keys():
         T.set(key,mags[key])
+    for key in gfit.keys():
+        T.set(key,gfit[key])
     # Galaxy Properties
-    T.set('sersicn', random_state.uniform(0.5,0.5, ndraws))
-    T.set('rhalf', random_state.uniform(0.5,0.5, ndraws)) #arcsec
-    T.set('ba', random_state.uniform(0.2,1.0, ndraws)) #minor to major axis ratio
-    T.set('phi', random_state.uniform(0.0, 180.0, ndraws)) #position angle
-    T.set('seed',np.zeros(ndraws).astype(int)+seed)
+    #T.set('sersicn', random_state.uniform(0.5,0.5, ndraws))
+    #T.set('rhalf', random_state.uniform(0.5,0.5, ndraws)) #arcsec
+    #T.set('ba', random_state.uniform(0.2,1.0, ndraws)) #minor to major axis ratio
+    #T.set('phi', random_state.uniform(0.0, 180.0, ndraws)) #position angle
     T.writeto( get_fn(outdir,seed) )
 
 def merge_draws(outdir='./'):
