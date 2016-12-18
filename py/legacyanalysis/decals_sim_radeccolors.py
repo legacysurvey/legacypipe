@@ -202,8 +202,19 @@ class KDEshapes(object):
         n=  samp[:,1]
         ba= samp[:,2]
         pa= samp[:,3]
+        # pa ~ flat PDF
+        pa=  random_state.uniform(0., 180., n_samples)
         # ba can be [1,1.2] due to KDE algorithm, make these 1
         ba[ ba > 1 ]= 1.
+        # Sanity Check
+        assert(np.all(re > 0))
+        assert(np.all((n > 0)*\
+                      (n < 10)))
+        assert(np.all((ba > 0)*\
+                      (ba <= 1.)))
+        assert(np.all((pa >= 0)*\
+                      (pa <= 180)))
+        
         return re,n,ba,pa
  
             
@@ -241,11 +252,6 @@ def draw_points(radec,ndraws=1,seed=1,outdir='./'):
         T.set(key,mags[key])
     for key in gfit.keys():
         T.set(key,gfit[key])
-    # Galaxy Properties
-    #T.set('sersicn', random_state.uniform(0.5,0.5, ndraws))
-    #T.set('rhalf', random_state.uniform(0.5,0.5, ndraws)) #arcsec
-    #T.set('ba', random_state.uniform(0.2,1.0, ndraws)) #minor to major axis ratio
-    #T.set('phi', random_state.uniform(0.0, 180.0, ndraws)) #position angle
     T.writeto( get_fn(outdir,seed) )
 
 def merge_draws(outdir='./'):

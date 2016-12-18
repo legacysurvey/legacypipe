@@ -169,8 +169,9 @@ class KernelOfTruth(object):
         fig,ax= plt.subplots(2,4,figsize=(20,10))
         plt.subplots_adjust(wspace=0.2,hspace=0.2)
         samp= self.kde.sample(n_samples=ndraws)
-        # ba can be [1,1.2], reset those values to 1.
+        # ba,pa can be slightly greater 1.,180
         samp[:,2][ samp[:,2] > 1. ]= 1.
+        samp[:,3][ samp[:,3] > 180. ]= 180.
         # Physical values
         assert(np.all(samp[:,0] > 0))
         assert(np.all((samp[:,1] > 0)*\
@@ -181,10 +182,15 @@ class KernelOfTruth(object):
                       (samp[:,3] <= 180)))
         # plot
         for cnt in range(4):
-            # Data
-            ax[0,cnt].hist(self.X[:,cnt],normed=True)
-            # KDE distribution
-            ax[1,cnt].hist(samp[:,cnt],normed=True)
+            if cnt == 0:
+                bins=np.linspace(0,80,num=20)
+                # Data
+                ax[0,cnt].hist(self.X[:,cnt],bins=bins,normed=True)
+                # KDE distribution
+                ax[1,cnt].hist(samp[:,cnt],bins=bins,normed=True)
+            else:
+                ax[0,cnt].hist(self.X[:,cnt],normed=True)
+                ax[1,cnt].hist(samp[:,cnt],normed=True)
         # lims
         for row in range(2):
             for col in range(4):
@@ -979,6 +985,38 @@ class LRG(CommonInit):
         print('LRGs, self.zlimit= ',self.zlimit)
         # KDE params
         self.kdefn= 'lrg-kde.pickle'
+        self.kde_shapes_fn= 'lrg-shapes-kde.pickle'
+
+    def get_acs_matched_cosmoszphot(self):
+        savedir='/project/projectdirs/desi/users/burleigh/desi/target/analysis/truth'
+        cosmosfn= os.path.join(savedir,'cosmos_acsgcmatched.fits')
+        acsfn= os.path.join(savedir,'acsgc_cosmosmatched.fits')
+        if os.path.exists(cosmosfn) and os.path.exists(acsfn):
+            cosmos=fits_table(cosmosfn)
+            acs=fits_table(acsfn)
+        else:
+            # Cosmos zphot
+            from theValidator.catalogues import CatalogueFuncs,Matcher
+            fn='/project/projectdirs/desi/target/analysis/truth/cosmos-zphot.fits.gz'
+            cosmos= fits_table(fn)
+            # acs
+            fn=os.path.join('/project/projectdirs/desi/users/burleigh/desi/target/analysis/truth','ACS-GC_published_catalogs','acs_public_galfit_catalog_V1.0.fits.gz')
+            acs=fits_table(fn)
+            # Match and save
+            print('matching acs,cosmos-zphot')
+            imatch,imiss,d2d= Matcher().match_within(cosmos,acs,dist=1./3600)
+            cosmos.cut(imatch['ref'])
+            acs.cut(imatch['obs'])
+            cosmos.writeto(cosmosfn)
+            acs.writeto(acsfn)
+            print('Wrote %s\n%s' % (cosmosfn,acsfn))
+        # Red galaxy any z
+        keep= np.all((cosmos.get('type') == 0,\
+                      cosmos.get('mod_gal') <= 8,\
+                      acs.flag_galfit_hi == 0),axis=0)
+        acs.cut(keep) # Flag hi keeps most, flag low removes all but 50
+        return acs.re_galfit_hi,acs.n_galfit_hi,acs.ba_galfit_hi,acs.pa_galfit_hi
+        
     
     def get_lrgs_FDR_cuts(self):
         if self.DR == 2:
@@ -1193,6 +1231,31 @@ class LRG(CommonInit):
             if os.path.exists(self.kdefn):
                 os.remove(self.kdefn)
             kde_obj.save(name=self.kdefn)
+
+    
+    def plot_kde_shapes(self):
+        re,n,ba,pa= self.get_acs_matched_cosmoszphot()
+        pa+= 90. # 0-180 deg
+        #cut= (np.isfinite(x))* (np.isfinite(y))* (np.isfinite(z))
+        #x,y,z,d4= x[cut],y[cut],z[cut],d4[cut]
+        # ba > 0
+        labels=['re','n','ba','pa']
+        kde_obj= KernelOfTruth([re,n,ba,pa],labels,\
+                               [(0.,100.),(0.,10.),(0.2,0.9),(0.,180.)],\
+                               bandwidth=0.05,kernel='tophat',\
+                               kdefn=self.kde_shapes_fn,loadkde=self.loadkde)
+        xylims=dict(x1=(-10,100),\
+                    x2=(-2,10),\
+                    x3=(-0.2,1.2),\
+                    x4=(-20,200))
+        #kde_obj.plot_1band_and_color(ndraws=1000,xylims=xylims,prefix='elg_')
+        kde_obj.plot_galaxy_shapes(ndraws=10000,xylims=xylims,name='lrg_shapes_kde.png')
+        if self.savekde:
+            if os.path.exists(self.kde_shapes_fn):
+                os.remove(self.kde_shapes_fn)
+            kde_obj.save(name=self.kde_shapes_fn)
+
+
 
 
 class STAR(CommonInit):
@@ -1489,7 +1552,7 @@ if __name__ == '__main__':
     kwargs.update(dict(DR=3, rlimit=23.4+1.))
     elg= ELG(**kwargs)
     #elg.get_acs_matched_deep2()
-    elg.plot_kde_shapes()
+    #elg.plot_kde_shapes()
     #elg.plot_kde()
     #elg.plot_redshift()
     #elg.cross_validate_redshift()
@@ -1497,6 +1560,7 @@ if __name__ == '__main__':
     #elg.plot_kde()
     #elg.plot()
     kwargs.update(dict(zlimit=20.46+1.))
-    #lrg= LRG(**kwargs)
+    lrg= LRG(**kwargs)
+    lrg.plot_kde_shapes()
     #lrg.plot_kde()
     #lrg.plot()
