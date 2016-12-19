@@ -31,13 +31,19 @@ mp = multiproc(8)
 
 TT = []
 for skycell in range(635, 2643+1):
+    fn = 'ps1skycells-%i.fits' % skycell
+    if os.path.exists(fn):
+        print('Reading cached', fn)
+        TT.append(fits_table(fn))
+        continue
+
     args = []
     for subcell in range(100):
         args.append((skycell, subcell))
     TTi = mp.map(get_cell, args)
 
     Ti = merge_tables(TTi)
-    Ti.writeto('ps1skycells-%i.fits' % skycell)
+    Ti.writeto(fn)
     TT.extend(TTi)
 T = merge_tables(TT)
 T.writeto('ps1skycells.fits')
