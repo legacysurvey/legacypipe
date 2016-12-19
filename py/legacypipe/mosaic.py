@@ -4,6 +4,7 @@ import os
 import fitsio
 
 import numpy as np
+from glob import glob
 
 from astrometry.util.util import wcs_pv2sip_hdr
 
@@ -101,12 +102,61 @@ class MosaicImage(CPImage, CalibMixin):
         # assume this is going to be masked by the DQ map.
         return invvar
 
+    def get_wcs(self):
+        '''cpimage.py get_wcs() but wcs comes from interpolated image if this is an
+        uninterpolated image'''
+        prim= self.read_image_primary_header()
+        if 'YSHIFT' in prim.keys():
+            # Interpolated image, use its wcs
+            hdr = self.read_image_header()
+        else:
+            # Non-interpolated, use WCS of interpolated instead
+            # Temporarily set imgfn to Interpolated image
+            imgfn_backup= self.imgfn
+            dirnm= os.path.dirname(self.imgfn).replace('v3','v2')
+            i=os.path.basename(self.imgfn).find('_ooi_')
+            searchnm= os.path.basename(self.imgfn)[:i+5]+'*.fits.fz'
+            self.imgfn= np.array( glob(os.path.join(dirnm,searchnm)) )
+            assert(self.imgfn.size == 1)
+            self.imgfn= self.imgfn[0]
+            newprim= self.read_image_primary_header()
+            assert('YSHIFT' in newprim.keys())
+            hdr = self.read_image_header()
+            self.imgfn= imgfn_backup
+            # Continue with wcs using the interpolated hdr
+        # First child of MosaicImage is CPImage
+        return super(MosaicImage,self).get_wcs(hdr=hdr)
+        ## Make sure the PV-to-SIP converter samples enough points for small
+        ## images
+        #stepsize = 0
+        #if min(self.width, self.height) < 600:
+        #    stepsize = min(self.width, self.height) / 10.;
+        ##if self.camera == '90prime':
+        #    # WCS is in myriad of formats
+        #    # Don't support TNX yet, use TAN for now
+        ##    hdr = self.read_image_header()
+        ##    hdr['CTYPE1'] = 'RA---TAN'
+        ##    hdr['CTYPE2'] = 'DEC--TAN'
+        #wcs = wcs_pv2sip_hdr(hdr, stepsize=stepsize)
+        ## Correctoin: ccd,ccdraoff, decoff from zeropoints file
+        #dra,ddec = self.dradec
+        #print('Applying astrometric zeropoint:', (dra,ddec))
+        #r,d = wcs.get_crval()
+        #wcs.set_crval((r + dra, d + ddec))
+        #wcs.version = ''
+        #phdr = self.read_image_primary_header()
+        #wcs.plver = phdr.get('PLVER', '').strip()
+        #return wcs
+
     def get_tractor_wcs(self, wcs, x0, y0,
                         primhdr=None, imghdr=None):
-        needs_third_pixel_shift = False #...?
-        if not needs_third_pixel_shift:
+        '''1/3 pixel shift if nont-interpolated image'''
+        hdr= self.read_image_primary_header()
+        if 'YSHIFT' in hdr.keys():
+            # Interpolated image, Default wcs calls
             return super(self, MosaicImage).get_tractor_wcs(wcs, x0, y0)
-        return OneThirdPixelShiftWcs(wcs, x0, y0)
+        else:
+            return OneThirdPixelShiftWcs(x0, y0)
 
     def run_calibs(self, psfex=True, funpack=False, git_version=None,
                    force=False, **kwargs):
@@ -149,9 +199,10 @@ class OneThirdPixelShiftWcs(ConstantFitsWcs):
         Returns: tuple of floats ``(x, y)``
         '''
         x,y = super(OneThirdPixelShiftWcs, self).positionToPixel(pos, src=src)
+        raise ValueError
         ### FIXME -- is this the right boundary?  Is this the right sign?
-        if (x + self.x0 > 2048):
-            x += 1./3.
+        if (y + self.y0 > 2048):
+            y += 1./3
         return x,y
 
 

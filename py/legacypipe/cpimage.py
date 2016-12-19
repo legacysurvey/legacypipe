@@ -91,13 +91,14 @@ class CPImage(LegacySurveyImage):
         e = imghdr['EXTNAME']
         assert(e.strip() == self.ccdname.strip())
 
-    def get_wcs(self):
+    def get_wcs(self,hdr=None):
         # Make sure the PV-to-SIP converter samples enough points for small
         # images
         stepsize = 0
         if min(self.width, self.height) < 600:
             stepsize = min(self.width, self.height) / 10.;
-        hdr = self.read_image_header()
+        if hdr is None:
+            hdr = self.read_image_header()
         #if self.camera == '90prime':
             # WCS is in myriad of formats
             # Don't support TNX yet, use TAN for now

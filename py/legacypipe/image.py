@@ -322,7 +322,6 @@ class LegacySurveyImage(object):
         # tractor WCS object
         twcs = self.get_tractor_wcs(wcs, x0, y0,
                                     primhdr=primhdr, imghdr=imghdr)
-
         if hybridPsf:
             pixPsf = False
         psf = self.read_psf_model(x0, y0, gaussPsf=gaussPsf, pixPsf=pixPsf,
