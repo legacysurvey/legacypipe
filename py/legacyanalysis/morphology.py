@@ -5,6 +5,7 @@ import numpy as np
 import os
 from astrometry.util.plotutils import PlotSequence
 from astrometry.util.util import Tan
+from astrometry.libkd.spherematch import match_radec
 from tractor.galaxy import *
 from tractor import Tractor, Image, PixPos, Flux, PointSource, NullWCS, EllipseE, ConstantFitsWcs, LinearPhotoCal, RaDecPos, NanoMaggies
 from tractor.psf import GaussianMixturePSF
@@ -165,12 +166,73 @@ if __name__ == '__main__':
     from glob import glob
     from astrometry.util.fits import merge_tables, fits_table
 
+
+    # From query of http://vizier.u-strasbg.fr/viz-bin/VizieR-3?-source=J/ApJS/200/9/acs-gc
+    HST = fits_table('acs-gc.fits')
+    print(len(HST), 'ACS sources')
+    HST.cut(HST.imaging == 'COSMOS ')
+    print(len(HST), 'in COSMOS')
+    HST.about()
+    
+    # HST.class is all ""
+    # HST.s_g2, HST.fwhm2 is all zero/nan
+    # HST.s_g1 mostly 0, some 1, some in between.  star=1, gal=0
+    # HST.fwhm1, re_s1,  does not correlate very well with s_g1
+
+    
     if False:
         # glob doesn't understand {}
         #fns = glob('dr3/tractor/011/tractor-011?p0{02,05,07,10}.fits')
         fns = glob('dr3/tractor/011/tractor-011?p0*.fits')
         fns = [fn for fn in fns if fn[-7:-5] in ['02','05','07','10']]
         assert(len(fns) == 16)
+
+    for dirnm in ['cosmos-50', 'cosmos-51', 'cosmos-52']:
+        fns = glob(os.path.join(dirnm, 'tractor', '*', 'tractor-*.fits'))
+        T = merge_tables([fits_table(fn) for fn in fns])
+        print(len(T), 'sources')
+
+        # which sources have galaxy models computed
+        dchiexp  = T.dchisq[:,3]
+        I = np.flatnonzero(dchiexp)
+        T.cut(I)
+
+        dchipsf  = T.dchisq[:,0]
+        dchisimp = T.dchisq[:,1]
+        dchidev  = T.dchisq[:,2]
+        dchiexp  = T.dchisq[:,3]
+        #T.type0 = np.array([t[0] for t in T.type])
+
+        # which sources have galaxy models computed
+        print(len(T), 'have EXP models')
+
+        x = np.maximum(dchiexp, dchidev) - np.maximum(dchipsf, dchisimp)
+        y = x / dchipsf
+
+        HI,HJ,d = match_radec(T.ra, T.dec, HST.raj2000, HST.dej2000, 1./3600.)
+        print(len(HI), 'matched to HST')
+        
+        plt.clf()
+        plt.scatter(x[HI], y[HI], c=HST.s_g1[HJ], edgecolors='none', s=10,
+                    alpha=0.5)
+        plt.xlabel('dchi(EXP or DEV) - dchi(PSF or SIMP)')
+        plt.ylabel('[ dchi(EXP or DEV) - dchi(PSF or SIMP) ] / dchipsf')
+        plt.title(dirnm + ' (color = HST star/gal)')
+        plt.xscale('symlog')
+        plt.axis([1e1, 1e7, 0, 0.04])
+        plt.colorbar()
+
+        xx = np.logspace(1, 7, 200)
+        div = 0.001 + 1e-6 * xx
+        plt.plot(xx, div, 'r--', lw=2)
+
+        div2 = 0.003 + 1e-5 * xx
+        plt.plot(xx, div2, 'r:', lw=2)
+        
+        ps.savefig()
+
+    sys.exit(0)
+
 
     for dirnm in ['cosmos-50', 'cosmos-51', 'cosmos-52']:
         fns = glob(os.path.join(dirnm, 'metrics', '*', '*', 'all-models-*.fits'))
