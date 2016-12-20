@@ -19,17 +19,28 @@ class Dr4Survey(LegacySurveyData):
         return np.flatnonzero(np.logical_or(ccds.camera == 'mosaic',
                                             ccds.camera == '90prime'))
 
-class Dr4(Dr4Survey):
+class Dr4v2(Dr4Survey):
     def filter_ccds_files(self, fns):
          return [fn for fn in fns if
                  ('survey-ccds-dr4-90prime.fits.gz' in fn or
                   'survey-ccds-dr4-mzlsv2.fits.gz' in fn)]
+
+class Dr4v3(Dr4Survey):
+    def filter_ccds_files(self, fns):
+         return [fn for fn in fns if
+                 ('survey-ccds-dr4-90prime.fits.gz' in fn or
+                  'survey-ccds-dr4-mzlsv3.fits.gz' in fn)]
+
 
 class Dr4Mzlsv2(Dr4Survey):
     def filter_ccds_files(self, fns):
          return [fn for fn in fns if
                  ('survey-ccds-dr4-mzlsv2.fits.gz' in fn)]
 
+class Dr4Mzlsv3(Dr4Survey):
+    def filter_ccds_files(self, fns):
+         return [fn for fn in fns if
+                 ('survey-ccds-dr4-mzlsv3-2016feb.fits.gz' in fn)]
 
 class Dr4Bootes(Dr4Survey):
     def filter_ccds_files(self, fns):
@@ -49,8 +60,10 @@ class Dr4BootesMzls(Dr4Survey):
 
 runs = {
     'dr3': Dr3DecalsSurvey,
-    'dr4': Dr4,
+    'dr4v2': Dr4v2,
+    'dr4v3': Dr4v3,
     'dr4-mzlsv2': Dr4Mzlsv2,
+    'dr4-mzlsv3': Dr4Mzlsv3,
     'dr4-bootes': Dr4Bootes,
     'bootes-90prime': Dr4Bootes90Prime,
     'bootes-mzlsv2thruMarch19': Dr4BootesMzls,

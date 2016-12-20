@@ -20,7 +20,9 @@ def mzls_dr4(v2=True):
     else:
         #zpname='arjuns-ccds-mzls-v3.fits'
         #savefn='survey-ccds-mzls-v3.fits.gz'
-        zpname='arjuns-ccds-mzls-v3.fits'
+        #zpname='/global/homes/a/arjundey/ZeroPoints/mzls-zpt-2016feb-v3.fits'
+        #savefn='survey-ccds-dr4-mzlsv3-2016feb.fits.gz'
+        zpname='/global/homes/a/arjundey/ZeroPoints/mzls-v3-zpt-2016dec19.fits'
         savefn='survey-ccds-dr4-mzlsv3.fits.gz'
         cpdirsfn= os.path.join(basedir,'mzlsv3_cpdirs.txt')
 
@@ -61,16 +63,15 @@ def bok_dr4():
         # [os.path.join(zpdir, 'g')]),
         ]:
         T = normalize_zeropoints(fn, dirnms, image_basedir, cam)
-        # fake up the exposure number
-        T.expnum = (T.mjd_obs * 100000.).astype(int)
-        # compute extension name
-        T.ccdname = np.array(['ccd%i' % n for n in T.ccdnum])
-        # compute FWHM from Seeing
-        pixscale = 0.45
+        pixscale = 0.455
         T.fwhm = T.seeing / pixscale
-
-        T.expid = np.array(['%10i-%s' % (expnum,extname.strip())
-                            for expnum,extname in zip(T.expnum, T.ccdname)])
+        # fake up the exposure number
+        #T.expnum = (T.mjd_obs * 100000.).astype(int)
+        # compute extension name
+        #T.ccdname = np.array(['ccd%i' % n for n in T.ccdnum])
+        # compute FWHM from Seeing
+        #T.expid = np.array(['%10i-%s' % (expnum,extname.strip())
+        #                    for expnum,extname in zip(T.expnum, T.ccdname)])
 
         TT.append(T)
     T = merge_tables(TT)
@@ -420,10 +421,21 @@ def normalize_zeropoints(fn, dirnms, image_basedir, cam, T=None):
         print('Reading', fn)
         T = fits_table(fn)
         print('Read', len(T), 'rows')
+    # Remove empty filename rows if exist (90Prime issue)
+    keep= np.char.strip(T.filename) != ''
+    rem= keep == False
+    if np.where(rem)[0].size > 0:
+        print('WARNING: %d rows have empty filename, removing:\n' % np.where(rem)[0].size,np.where(rem)[0])
+        T.cut(keep)
+    
+    if cam == '90prime':
+        # EXPNUM is all 0s, change to some unique number
+        T.expnum = (T.mjd_obs * 100000.).astype(int)
+        # EXTNAME doesn't exist, it is ccdname instead
+        T.set('extname',T.ccdname)
     T.camera = np.array([cam] * len(T))
     T.expid = np.array(['%08i-%s' % (expnum,extname.strip())
                         for expnum,extname in zip(T.expnum, T.ccdname)])
-
     c = Counter(T.expid)
     bad = False
     for k,v in c.most_common():
@@ -575,9 +587,9 @@ if __name__ == '__main__':
     #    for name in ['90prime','mzls-v2thruMarch19','mzls-v3']:
     #        gather_arjuns_zpts(cpimage_list='bootes-%s-abspath.txt' % name,\
     #                           name='arjuns-ccds-%s.fits' % name)
-    bok_dr4()
+    #bok_dr4()
     #mzls_dr4(v2=True)
-    #mzls_dr4(v2=False)
+    mzls_dr4(v2=False)
     sys.exit(0)
     
     
