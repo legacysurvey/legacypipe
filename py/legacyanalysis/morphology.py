@@ -166,6 +166,56 @@ if __name__ == '__main__':
     from glob import glob
     from astrometry.util.fits import merge_tables, fits_table
 
+    for dirnm in ['cosmos-50-rex', 'cosmos-51-rex', 'cosmos-52-rex']:
+        fns = glob(os.path.join(dirnm, 'tractor', '*', 'tractor-*.fits'))
+        T = merge_tables([fits_table(fn) for fn in fns])
+        print(len(T), 'sources')
+
+        print('PSF ', sum(T.type == 'PSF '))
+        print('REX ', sum(T.type == 'REX '))
+        print('EXP ', sum(T.type == 'EXP '))
+        print('DEV ', sum(T.type == 'DEV '))
+        print('COMP', sum(T.type == 'COMP'))
+
+        plt.clf()
+        #plt.subplot(2,1,1)
+        R = np.flatnonzero(T.type == 'REX ')
+        E = np.flatnonzero(T.type == 'EXP ')
+        plt.hist(T.shapeexp_r[R], range=(0,2), bins=100, histtype='step', color='b', label='REX');
+        plt.hist(T.shapeexp_r[E], range=(0,2), bins=100, histtype='step', color='r', label='EXP');
+        plt.xlabel('Radius (arcsec)')
+        plt.legend()
+        plt.title(dirnm)
+        plt.ylim(0, 2700)
+
+        # plt.subplot(2,1,2)
+        # fns = glob(os.path.join(dirnm.replace('-rex',''), 'tractor', '*', 'tractor-*.fits'))
+        # T = merge_tables([fits_table(fn) for fn in fns])
+        # print(len(T), 'sources')
+        # print('PSF ', sum(T.type == 'PSF '))
+        # print('SIMP', sum(T.type == 'SIMP'))
+        # print('EXP ', sum(T.type == 'EXP '))
+        # print('DEV ', sum(T.type == 'DEV '))
+        # print('COMP', sum(T.type == 'COMP'))
+        # 
+        # S = np.flatnonzero(T.type == 'SIMP')
+        # E = np.flatnonzero(T.type == 'EXP ')
+        # plt.hist(T.shapeexp_r[S], range=(0,2), bins=100, histtype='step', color='b', label='SIMP');
+        # plt.hist(T.shapeexp_r[E], range=(0,2), bins=100, histtype='step', color='r', label='EXP');
+        # plt.xlabel('Radius (arcsec)')
+        # plt.legend()
+        # plt.title(dirnm.replace('-rex',''))
+        # #plt.ylim(0, 2700)
+        
+        ps.savefig()
+
+
+
+        
+    sys.exit(0)
+
+        
+    
     if False:
         # glob doesn't understand {}
         #fns = glob('dr3/tractor/011/tractor-011?p0{02,05,07,10}.fits')
