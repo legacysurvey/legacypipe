@@ -113,10 +113,12 @@ class MosaicImage(CPImage, CalibMixin):
             # Non-interpolated, use WCS of interpolated instead
             # Temporarily set imgfn to Interpolated image
             imgfn_backup= self.imgfn
-            dirnm= os.path.dirname(self.imgfn).replace('v3','v2')
-            i=os.path.basename(self.imgfn).find('_ooi_')
-            searchnm= os.path.basename(self.imgfn)[:i+5]+'*.fits.fz'
-            self.imgfn= np.array( glob(os.path.join(dirnm,searchnm)) )
+            # Change CP*v3 --> CP*v2
+            cpdir=os.path.basename(os.path.dirname(imgfn_backup)).replace('v3','v2')
+            dirnm= os.path.dirname(os.path.dirname(imgfn_backup))
+            i=os.path.basename(imgfn_backup).find('_ooi_')
+            searchnm= os.path.basename(imgfn_backup)[:i+5]+'*.fits.fz'
+            self.imgfn= np.array( glob(os.path.join(dirnm,cpdir,searchnm)) )
             assert(self.imgfn.size == 1)
             self.imgfn= self.imgfn[0]
             newprim= self.read_image_primary_header()
@@ -151,12 +153,18 @@ class MosaicImage(CPImage, CalibMixin):
     def get_tractor_wcs(self, wcs, x0, y0,
                         primhdr=None, imghdr=None):
         '''1/3 pixel shift if nont-interpolated image'''
-        hdr= self.read_image_primary_header()
-        if 'YSHIFT' in hdr.keys():
-            # Interpolated image, Default wcs calls
-            return super(self, MosaicImage).get_tractor_wcs(wcs, x0, y0)
+        prim= self.read_image_primary_header()
+        if 'YSHIFT' in prim.keys():
+            # Use Default wcs class, this is an interpolated image
+            return super(MosaicImage, self).get_tractor_wcs(wcs, x0, y0)
         else:
-            return OneThirdPixelShiftWcs(x0, y0)
+            # IDENTICAL to image.py get_tractor_wcs() except uses OneThirdPixelShiftWcs() 
+            # Instead of ConstantFitsWcs()
+            # class OneThirdPixelShiftWcs is a ConstantFitsWcs class with1/3 pixel function
+            twcs= OneThirdPixelShiftWcs(wcs)
+            if x0 or y0:
+                twcs.setX0Y0(x0,y0)
+            return twcs
 
     def run_calibs(self, psfex=True, funpack=False, git_version=None,
                    force=False, **kwargs):
@@ -193,16 +201,19 @@ class MosaicImage(CPImage, CalibMixin):
 
 
 class OneThirdPixelShiftWcs(ConstantFitsWcs):
+    def __init__(self,wcs):
+        super(OneThirdPixelShiftWcs,self).__init__(wcs)
+
     def positionToPixel(self, pos, src=None):
         '''
         Converts an :class:`tractor.RaDecPos` to a pixel position.
         Returns: tuple of floats ``(x, y)``
         '''
         x,y = super(OneThirdPixelShiftWcs, self).positionToPixel(pos, src=src)
-        raise ValueError
-        ### FIXME -- is this the right boundary?  Is this the right sign?
+        # Top half of CCD needs be shifted up by 1./3 pixel
         if (y + self.y0 > 2048):
-            y += 1./3
+            #y += 1./3
+            y -= 1./3
         return x,y
 
 
