@@ -7,7 +7,7 @@ import numpy as np
 from astrometry.util.util import wcs_pv2sip_hdr
 
 from legacypipe.image import LegacySurveyImage, CalibMixin
-from legacypipe.cpimage import CPImage
+from legacypipe.cpimage import CPImage, newWeightMap
 from legacypipe.survey import LegacySurveyData
 #from survey import create_temp
 #from astrometry.util.util import Tan, Sip, anwcs_t
