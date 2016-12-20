@@ -42,6 +42,11 @@ class Dr4Mzlsv3(Dr4Survey):
          return [fn for fn in fns if
                  ('survey-ccds-dr4-mzlsv3-2016feb.fits.gz' in fn)]
 
+class Dr490prime(Dr4Survey):
+    def filter_ccds_files(self, fns):
+         return [fn for fn in fns if
+                 ('survey-ccds-dr4-90prime.fits.gz' in fn)]
+
 class Dr4Bootes(Dr4Survey):
     def filter_ccds_files(self, fns):
          return [fn for fn in fns if
@@ -62,6 +67,7 @@ runs = {
     'dr3': Dr3DecalsSurvey,
     'dr4v2': Dr4v2,
     'dr4v3': Dr4v3,
+    'dr490prime': Dr490prime,
     'dr4-mzlsv2': Dr4Mzlsv2,
     'dr4-mzlsv3': Dr4Mzlsv3,
     'dr4-bootes': Dr4Bootes,

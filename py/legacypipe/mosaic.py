@@ -70,9 +70,9 @@ class MosaicImage(CPImage, CalibMixin):
         '''
         from tractor.sky import ConstantSky
         # Frank reocmmends SKYADU 
-        sky = ConstantSky(imghdr['SKYADU'])
-        sky.version = ''
         phdr = self.read_image_primary_header()
+        sky = ConstantSky(phdr['SKYADU'])
+        sky.version = ''
         sky.plver = phdr.get('PLVER', '').strip()
         return sky
         
@@ -118,28 +118,7 @@ class MosaicImage(CPImage, CalibMixin):
             # Continue with wcs using the interpolated hdr
         # First child of MosaicImage is CPImage
         return super(MosaicImage,self).get_wcs(hdr=hdr)
-        ## Make sure the PV-to-SIP converter samples enough points for small
-        ## images
-        #stepsize = 0
-        #if min(self.width, self.height) < 600:
-        #    stepsize = min(self.width, self.height) / 10.;
-        ##if self.camera == '90prime':
-        #    # WCS is in myriad of formats
-        #    # Don't support TNX yet, use TAN for now
-        ##    hdr = self.read_image_header()
-        ##    hdr['CTYPE1'] = 'RA---TAN'
-        ##    hdr['CTYPE2'] = 'DEC--TAN'
-        #wcs = wcs_pv2sip_hdr(hdr, stepsize=stepsize)
-        ## Correctoin: ccd,ccdraoff, decoff from zeropoints file
-        #dra,ddec = self.dradec
-        #print('Applying astrometric zeropoint:', (dra,ddec))
-        #r,d = wcs.get_crval()
-        #wcs.set_crval((r + dra, d + ddec))
-        #wcs.version = ''
-        #phdr = self.read_image_primary_header()
-        #wcs.plver = phdr.get('PLVER', '').strip()
-        #return wcs
-
+        
     def get_tractor_wcs(self, wcs, x0, y0,
                         primhdr=None, imghdr=None):
         '''1/3 pixel shift if nont-interpolated image'''

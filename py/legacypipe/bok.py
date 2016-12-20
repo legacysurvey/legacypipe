@@ -55,9 +55,9 @@ class BokImage(CPImage, CalibMixin):
         '''
         from tractor.sky import ConstantSky
         # Frank reocmmends SKYADU 
-        sky = ConstantSky(imghdr['SKYADU'])
-        sky.version = ''
         phdr = self.read_image_primary_header()
+        sky = ConstantSky(phdr['SKYADU'])
+        sky.version = ''
         sky.plver = phdr.get('PLVER', '').strip()
         return sky
 
