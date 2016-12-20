@@ -166,6 +166,13 @@ if __name__ == '__main__':
     from glob import glob
     from astrometry.util.fits import merge_tables, fits_table
 
+    if False:
+        # glob doesn't understand {}
+        #fns = glob('dr3/tractor/011/tractor-011?p0{02,05,07,10}.fits')
+        fns = glob('dr3/tractor/011/tractor-011?p0*.fits')
+        fns = [fn for fn in fns if fn[-7:-5] in ['02','05','07','10']]
+        assert(len(fns) == 16)
+
 
     # From query of http://vizier.u-strasbg.fr/viz-bin/VizieR-3?-source=J/ApJS/200/9/acs-gc
     HST = fits_table('acs-gc.fits')
@@ -179,14 +186,6 @@ if __name__ == '__main__':
     # HST.s_g1 mostly 0, some 1, some in between.  star=1, gal=0
     # HST.fwhm1, re_s1,  does not correlate very well with s_g1
 
-    
-    if False:
-        # glob doesn't understand {}
-        #fns = glob('dr3/tractor/011/tractor-011?p0{02,05,07,10}.fits')
-        fns = glob('dr3/tractor/011/tractor-011?p0*.fits')
-        fns = [fn for fn in fns if fn[-7:-5] in ['02','05','07','10']]
-        assert(len(fns) == 16)
-
     for dirnm in ['cosmos-50', 'cosmos-51', 'cosmos-52']:
         fns = glob(os.path.join(dirnm, 'tractor', '*', 'tractor-*.fits'))
         T = merge_tables([fits_table(fn) for fn in fns])
@@ -196,15 +195,13 @@ if __name__ == '__main__':
         dchiexp  = T.dchisq[:,3]
         I = np.flatnonzero(dchiexp)
         T.cut(I)
+        print(len(T), 'have EXP models')
 
         dchipsf  = T.dchisq[:,0]
         dchisimp = T.dchisq[:,1]
         dchidev  = T.dchisq[:,2]
         dchiexp  = T.dchisq[:,3]
         #T.type0 = np.array([t[0] for t in T.type])
-
-        # which sources have galaxy models computed
-        print(len(T), 'have EXP models')
 
         x = np.maximum(dchiexp, dchidev) - np.maximum(dchipsf, dchisimp)
         y = x / dchipsf
@@ -221,6 +218,58 @@ if __name__ == '__main__':
         plt.xscale('symlog')
         plt.axis([1e1, 1e7, 0, 0.04])
         plt.colorbar()
+
+        xx = np.logspace(1, 7, 200)
+        div = 0.001 + 1e-6 * xx
+        plt.plot(xx, div, 'r--', lw=2)
+
+        div2 = 0.003 + 1e-5 * xx
+        plt.plot(xx, div2, 'r:', lw=2)
+        
+        ps.savefig()
+
+    # wget "http://irsa.ipac.caltech.edu/data/COSMOS/tables/photometry/cosmos_acs_iphot_200709.tbl"
+    # astrometry/bin/text2fits -S 124 -f jddddddddddddddddddddjddjjjjjjdddddddddddddddjdddddddsjdddjj -H "number mag_iso magerr_iso mag_isocor magerr_isocor mag_petro magerr_petro petro_radius mag_aper magerr_aper mag_auto magerr_auto mag_best magerr_best flux_auto fluxerr_auto kron_radius background threshold flux_max flux_radius isoarea_image x_image y_image xmin_image ymin_image xmax_image ymax_image xpeak_image ypeak_image alphapeak_j2000 deltapeak_j2000 a_image b_image ra dec theta_image mu_threshold mu_max isoarea_world x_world y_world a_world b_world theta_world flags fwhm_image fwhm_world cxx_image cyy_image cxy_image elongation class_star field mu_class x y z spt_ind cntr" cosmos_acs_iphot_200709.tbl cosmos-acs-iphot-200709.fits
+    # fitscopy cosmos-acs-iphot-200709.fits"[col ra;dec;mu_class]" cosmos-acs-iphot-sub.fits
+    HST = fits_table('cosmos-acs-iphot-sub.fits')
+    print(len(HST), 'ACS sources')
+
+    for dirnm in ['cosmos-50', 'cosmos-51', 'cosmos-52']:
+        fns = glob(os.path.join(dirnm, 'tractor', '*', 'tractor-*.fits'))
+        T = merge_tables([fits_table(fn) for fn in fns])
+        print(len(T), 'sources')
+
+        # which sources have galaxy models computed
+        dchiexp  = T.dchisq[:,3]
+        I = np.flatnonzero(dchiexp)
+        T.cut(I)
+        print(len(T), 'have EXP models')
+
+        dchipsf  = T.dchisq[:,0]
+        dchisimp = T.dchisq[:,1]
+        dchidev  = T.dchisq[:,2]
+        dchiexp  = T.dchisq[:,3]
+
+        x = np.maximum(dchiexp, dchidev) - np.maximum(dchipsf, dchisimp)
+        y = x / dchipsf
+
+        HI,HJ,d = match_radec(T.ra, T.dec, HST.ra, HST.dec, 1./3600.)
+        print(len(HI), 'matched to HST')
+
+        Kgal  = np.flatnonzero(HST.mu_class[HJ] == 1)
+        Kstar = np.flatnonzero(HST.mu_class[HJ] == 2)
+
+        Igal  = HI[Kgal]
+        Istar = HI[Kstar]
+
+        plt.clf()
+        plt.plot(x[Igal],  y[Igal],  'bo', mec='none', mfc='b', ms=3, alpha=0.5)
+        plt.plot(x[Istar], y[Istar], 'ro', mec='none', mfc='r', ms=3, alpha=0.5)
+        plt.xlabel('dchi(EXP or DEV) - dchi(PSF or SIMP)')
+        plt.ylabel('[ dchi(EXP or DEV) - dchi(PSF or SIMP) ] / dchipsf')
+        plt.title(dirnm + ' (color = HST star/gal)')
+        plt.xscale('symlog')
+        plt.axis([1e1, 1e7, 0, 0.04])
 
         xx = np.logspace(1, 7, 200)
         div = 0.001 + 1e-6 * xx
