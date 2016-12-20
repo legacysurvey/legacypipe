@@ -368,8 +368,8 @@ def main():
         B.cut(np.logical_or(B.ra >= rlo, B.ra <= rhi) *
               (B.dec >= dlo) * (B.dec <= dhi))
     log(len(B), 'bricks in range')
-    for name in B.get('brickname'):
-        print(name)
+    #for name in B.get('brickname'):
+        #print(name)
     B.writeto('bricks-cut.fits')
 
     I,J,d = match_radec(B.ra, B.dec, T.ra, T.dec, survey.bricksize)
@@ -438,7 +438,7 @@ def main():
                 print('Exists:', fn, file=sys.stderr)
                 continue
 
-        print(b.brickname)
+        #print(b.brickname)
 
     if opt.save_to_fits:
         assert(opt.touching)

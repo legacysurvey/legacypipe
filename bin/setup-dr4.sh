@@ -15,6 +15,12 @@ export RSYNC_ARGS="-rlpgoD --size-only"
 # for fn in `find /project/projectdirs/cosmo/staging/bok/BOK_CP/*/ksb_*_oo[idw]_*_v1.fits.fz`;do rsync -Riv -rlpgoD --size-only $fn /scratch1/scratchdirs/desiproc/DRs/cp-images/bootes/;done 
 
 # MZLS v2 -- 2.8T
+#ver=2
+#rsync -Riv -rlpgoD --size-only /project/projectdirs/cosmo/staging/mosaicz/MZLS_CP/CP*v${ver}/k4m*oo[idw]*.fits.fz /scratch1/scratchdirs/desiproc/DRs/cp-images/new/mzls_v${ver}/
+#ver=3
+#rsync -Riv -rlpgoD --size-only /project/projectdirs/cosmo/staging/mosaicz/MZLS_CP/CP*v${ver}/k4m*oo[idw]*.fits.fz /scratch1/scratchdirs/desiproc/DRs/cp-images/new/mzls_v${ver}/
+
+# Old sorting out of v2,v3
 #rsync -Riv $RSYNC_ARGS /project/projectdirs/cosmo/staging/mosaicz/MZLS_CP/*v2/k4m_*_oo[iwd]_zd_v2.fits.fz ${basedir}/
 # MZLS v3
 #rsync -Riv $RSYNC_ARGS /project/projectdirs/cosmo/staging/mosaicz/MZLS_CP/*v3/k4m_*_oo[iwd]_zd_v3.fits.fz ${basedir}/
@@ -22,7 +28,7 @@ export RSYNC_ARGS="-rlpgoD --size-only"
 #rsync -Riv $RSYNC_ARGS /project/projectdirs/cosmo/staging/mosaicz/MZLS_CP/*[0-9][0-9]/k4m_*_oo[idw]_zd_v1.fits.fz ${basedir}/
 
 # CP BASS -- 38G
-#rsync -Riv $RSYNC_ARGS /project/projectdirs/cosmo/staging/bok/BOK_CP/CP20160703V0/ksb_*_oo[idw]_[gr]_v0.fits.fz ${basedir}/
+#rsync -Riv -rlpgoD --size-only /project/projectdirs/cosmo/staging/bok/BOK_CP/*/ksb_*_oo[idw]_*_v1.fits.fz /scratch1/scratchdirs/desiproc/DRs/cp-images/new/
 
 # NAOC BASS -- 6.3T
 #rsync -Riv $RSYNC_ARGS /global/projecta/projectdirs/cosmo/staging/bok/reduced/*/*.fits ${basedir}/

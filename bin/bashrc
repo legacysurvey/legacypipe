@@ -82,6 +82,8 @@ if [ "$NERSC_HOST" == "edison" ]; then
   module unload termcap-hpcp
   module unload readline-hpcp
   module unload pkgconfig-hpcp
+  # Keep this one
+  module load psfex-hpcp
 
   export QDO_BATCH_PROFILE=edison
 

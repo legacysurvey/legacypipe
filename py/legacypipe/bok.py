@@ -7,7 +7,7 @@ import numpy as np
 from astrometry.util.util import wcs_pv2sip_hdr
 
 from legacypipe.image import LegacySurveyImage, CalibMixin
-from legacypipe.cpimage import CPImage
+from legacypipe.cpimage import CPImage, newWeightMap
 from legacypipe.survey import LegacySurveyData
 #from survey import create_temp
 #from astrometry.util.util import Tan, Sip, anwcs_t
@@ -42,18 +42,23 @@ class BokImage(CPImage, CalibMixin):
         self.fwhm = t.fwhm
         self.arawgain = t.arawgain
         self.name = self.imgfn
+        # Add poisson noise to weight map
+        self.wtfn= newWeightMap(wtfn=self.wtfn,imgfn=self.imgfn,dqfn=self.dqfn)
         
     def __str__(self):
         return 'Bok ' + self.name
 
-    def read_sky_model(self, **kwargs):
-        ## HACK -- create the sky model on the fly
-        img = self.read_image()
-        sky = np.median(img)
-        print('Median "sky" model:', sky)
-        sky = ConstantSky(sky)
-        sky.version = '0'
-        sky.plver = '0'
+
+    def read_sky_model(self, imghdr=None, **kwargs):
+        ''' Bok CP does same sky subtraction as Mosaic CP, so just
+        use a constant sky level with value from the header.
+        '''
+        from tractor.sky import ConstantSky
+        # Frank reocmmends SKYADU 
+        sky = ConstantSky(imghdr['SKYADU'])
+        sky.version = ''
+        phdr = self.read_image_primary_header()
+        sky.plver = phdr.get('PLVER', '').strip()
         return sky
 
     def read_dq(self, **kwargs):

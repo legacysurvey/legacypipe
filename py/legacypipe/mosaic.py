@@ -11,8 +11,8 @@ from astrometry.util.util import wcs_pv2sip_hdr
 from tractor.basics import ConstantFitsWcs
 
 from legacypipe.image import LegacySurveyImage, CalibMixin
-from legacypipe.cpimage import CPImage
-from legacypipe.survey import LegacySurveyData
+from legacypipe.cpimage import CPImage, newWeightMap
+from legacypipe.survey import LegacySurveyData    
 
 class MosaicImage(CPImage, CalibMixin):
     '''
@@ -59,6 +59,8 @@ class MosaicImage(CPImage, CalibMixin):
 
     def __init__(self, survey, t):
         super(MosaicImage, self).__init__(survey, t)
+        # Add poisson noise to weight map
+        self.wtfn= newWeightMap(wtfn=self.wtfn,imgfn=self.imgfn,dqfn=self.dqfn)
         # convert FWHM into pixel units
         self.fwhm /= self.pixscale
 
@@ -67,7 +69,8 @@ class MosaicImage(CPImage, CalibMixin):
         use a constant sky level with value from the header.
         '''
         from tractor.sky import ConstantSky
-        sky = ConstantSky(imghdr['AVSKY'])
+        # Frank reocmmends SKYADU 
+        sky = ConstantSky(imghdr['SKYADU'])
         sky.version = ''
         phdr = self.read_image_primary_header()
         sky.plver = phdr.get('PLVER', '').strip()
@@ -85,21 +88,8 @@ class MosaicImage(CPImage, CalibMixin):
         '''
         Reads the inverse-variance (weight) map image.
         '''
-        #print('Reading weight map image', self.wtfn, 'ext', self.hdu)
-        #invvar = self._read_fits(self.wtfn, self.hdu, **kwargs)
-        #return invvar
-
-        print('HACK -- not reading weight map, estimating from image')
-        ##### HACK!  No weight-maps available?
-        img = self.read_image(**kwargs)
-        # # Estimate per-pixel noise via Blanton's 5-pixel MAD
-        slice1 = (slice(0,-5,10),slice(0,-5,10))
-        slice2 = (slice(5,None,10),slice(5,None,10))
-        mad = np.median(np.abs(img[slice1] - img[slice2]).ravel())
-        sig1 = 1.4826 * mad / np.sqrt(2.)
-        print('sig1 estimate:', sig1)
-        invvar = np.ones_like(img) / sig1**2
-        # assume this is going to be masked by the DQ map.
+        print('Reading weight map image', self.wtfn, 'ext', self.hdu)
+        invvar = self._read_fits(self.wtfn, self.hdu, **kwargs)
         return invvar
 
     def get_wcs(self):
