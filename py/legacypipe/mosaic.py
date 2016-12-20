@@ -4,8 +4,11 @@ import os
 import fitsio
 
 import numpy as np
+from glob import glob
 
 from astrometry.util.util import wcs_pv2sip_hdr
+
+from tractor.basics import ConstantFitsWcs
 
 from legacypipe.image import LegacySurveyImage, CalibMixin
 from legacypipe.cpimage import CPImage, newWeightMap
@@ -89,18 +92,69 @@ class MosaicImage(CPImage, CalibMixin):
         invvar = self._read_fits(self.wtfn, self.hdu, **kwargs)
         return invvar
 
-        #print('HACK -- not reading weight map, estimating from image')
-        ###### HACK!  No weight-maps available?
-        #img = self.read_image(**kwargs)
-        ## # Estimate per-pixel noise via Blanton's 5-pixel MAD
-        #slice1 = (slice(0,-5,10),slice(0,-5,10))
-        #slice2 = (slice(5,None,10),slice(5,None,10))
-        #mad = np.median(np.abs(img[slice1] - img[slice2]).ravel())
-        #sig1 = 1.4826 * mad / np.sqrt(2.)
-        #print('sig1 estimate:', sig1)
-        #invvar = np.ones_like(img) / sig1**2
-        ## assume this is going to be masked by the DQ map.
-        #return invvar
+    def get_wcs(self):
+        '''cpimage.py get_wcs() but wcs comes from interpolated image if this is an
+        uninterpolated image'''
+        prim= self.read_image_primary_header()
+        if 'YSHIFT' in prim.keys():
+            # Interpolated image, use its wcs
+            hdr = self.read_image_header()
+        else:
+            # Non-interpolated, use WCS of interpolated instead
+            # Temporarily set imgfn to Interpolated image
+            imgfn_backup= self.imgfn
+            # Change CP*v3 --> CP*v2
+            cpdir=os.path.basename(os.path.dirname(imgfn_backup)).replace('v3','v2')
+            dirnm= os.path.dirname(os.path.dirname(imgfn_backup))
+            i=os.path.basename(imgfn_backup).find('_ooi_')
+            searchnm= os.path.basename(imgfn_backup)[:i+5]+'*.fits.fz'
+            self.imgfn= np.array( glob(os.path.join(dirnm,cpdir,searchnm)) )
+            assert(self.imgfn.size == 1)
+            self.imgfn= self.imgfn[0]
+            newprim= self.read_image_primary_header()
+            assert('YSHIFT' in newprim.keys())
+            hdr = self.read_image_header()
+            self.imgfn= imgfn_backup
+            # Continue with wcs using the interpolated hdr
+        # First child of MosaicImage is CPImage
+        return super(MosaicImage,self).get_wcs(hdr=hdr)
+        ## Make sure the PV-to-SIP converter samples enough points for small
+        ## images
+        #stepsize = 0
+        #if min(self.width, self.height) < 600:
+        #    stepsize = min(self.width, self.height) / 10.;
+        ##if self.camera == '90prime':
+        #    # WCS is in myriad of formats
+        #    # Don't support TNX yet, use TAN for now
+        ##    hdr = self.read_image_header()
+        ##    hdr['CTYPE1'] = 'RA---TAN'
+        ##    hdr['CTYPE2'] = 'DEC--TAN'
+        #wcs = wcs_pv2sip_hdr(hdr, stepsize=stepsize)
+        ## Correctoin: ccd,ccdraoff, decoff from zeropoints file
+        #dra,ddec = self.dradec
+        #print('Applying astrometric zeropoint:', (dra,ddec))
+        #r,d = wcs.get_crval()
+        #wcs.set_crval((r + dra, d + ddec))
+        #wcs.version = ''
+        #phdr = self.read_image_primary_header()
+        #wcs.plver = phdr.get('PLVER', '').strip()
+        #return wcs
+
+    def get_tractor_wcs(self, wcs, x0, y0,
+                        primhdr=None, imghdr=None):
+        '''1/3 pixel shift if nont-interpolated image'''
+        prim= self.read_image_primary_header()
+        if 'YSHIFT' in prim.keys():
+            # Use Default wcs class, this is an interpolated image
+            return super(MosaicImage, self).get_tractor_wcs(wcs, x0, y0)
+        else:
+            # IDENTICAL to image.py get_tractor_wcs() except uses OneThirdPixelShiftWcs() 
+            # Instead of ConstantFitsWcs()
+            # class OneThirdPixelShiftWcs is a ConstantFitsWcs class with1/3 pixel function
+            twcs= OneThirdPixelShiftWcs(wcs)
+            if x0 or y0:
+                twcs.setX0Y0(x0,y0)
+            return twcs
 
     def run_calibs(self, psfex=True, funpack=False, git_version=None,
                    force=False, **kwargs):
@@ -134,6 +188,24 @@ class MosaicImage(CPImage, CalibMixin):
 
         for fn in todelete:
             os.unlink(fn)
+
+
+class OneThirdPixelShiftWcs(ConstantFitsWcs):
+    def __init__(self,wcs):
+        super(OneThirdPixelShiftWcs,self).__init__(wcs)
+
+    def positionToPixel(self, pos, src=None):
+        '''
+        Converts an :class:`tractor.RaDecPos` to a pixel position.
+        Returns: tuple of floats ``(x, y)``
+        '''
+        x,y = super(OneThirdPixelShiftWcs, self).positionToPixel(pos, src=src)
+        # Top half of CCD needs be shifted up by 1./3 pixel
+        if (y + self.y0 > 2048):
+            #y += 1./3
+            y -= 1./3
+        return x,y
+
 
 def main():
 
