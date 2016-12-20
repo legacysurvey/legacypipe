@@ -178,7 +178,6 @@ if __name__ == '__main__':
         print('COMP', sum(T.type == 'COMP'))
 
         plt.clf()
-        #plt.subplot(2,1,1)
         R = np.flatnonzero(T.type == 'REX ')
         E = np.flatnonzero(T.type == 'EXP ')
         plt.hist(T.shapeexp_r[R], range=(0,2), bins=100, histtype='step', color='b', label='REX');
@@ -187,30 +186,93 @@ if __name__ == '__main__':
         plt.legend()
         plt.title(dirnm)
         plt.ylim(0, 2700)
-
-        # plt.subplot(2,1,2)
-        # fns = glob(os.path.join(dirnm.replace('-rex',''), 'tractor', '*', 'tractor-*.fits'))
-        # T = merge_tables([fits_table(fn) for fn in fns])
-        # print(len(T), 'sources')
-        # print('PSF ', sum(T.type == 'PSF '))
-        # print('SIMP', sum(T.type == 'SIMP'))
-        # print('EXP ', sum(T.type == 'EXP '))
-        # print('DEV ', sum(T.type == 'DEV '))
-        # print('COMP', sum(T.type == 'COMP'))
-        # 
-        # S = np.flatnonzero(T.type == 'SIMP')
-        # E = np.flatnonzero(T.type == 'EXP ')
-        # plt.hist(T.shapeexp_r[S], range=(0,2), bins=100, histtype='step', color='b', label='SIMP');
-        # plt.hist(T.shapeexp_r[E], range=(0,2), bins=100, histtype='step', color='r', label='EXP');
-        # plt.xlabel('Radius (arcsec)')
-        # plt.legend()
-        # plt.title(dirnm.replace('-rex',''))
-        # #plt.ylim(0, 2700)
-        
         ps.savefig()
 
+        I1 = np.flatnonzero((T.type == 'REX ') * (T.shapeexp_r < 0.1))
+        I2 = np.flatnonzero((T.type == 'REX ') * (T.shapeexp_r > 0.3) *
+                            (T.shapeexp_r < 0.5))
+        I3 = np.flatnonzero(T.type == 'PSF ')
+        I4 = np.flatnonzero((T.type == 'REX ') * (T.shapeexp_r > 0.1) *
+                            (T.shapeexp_r < 0.3))
+        I5 = np.flatnonzero(T.type == 'EXP ')
+        
+        print(len(I1), 'REX with r < 0.1')
+        print(len(I2), 'REX with r between 0.3 and 0.5')
+        print(len(I3), 'PSF')
 
+        lab1 = 'REX r < 0.1'
+        lab4 = 'REX r from 0.1 to 0.3'
+        lab2 = 'REX r from 0.3 to 0.5'
+        lab3 = 'PSF'
+        lab5 = 'EXP'
+        
+        plt.clf()
+        lo,hi = -10,10
+        plt.hist(np.clip(T.dchisq[I1,1] - T.dchisq[I1,0], lo, hi), bins=100, range=(lo,hi), histtype='step', color='b', label=lab1)
+        plt.hist(np.clip(T.dchisq[I4,1] - T.dchisq[I4,0], lo, hi), bins=100, range=(lo,hi), histtype='step', color='m', label=lab4)
+        plt.hist(np.clip(T.dchisq[I2,1] - T.dchisq[I2,0], lo, hi), bins=100, range=(lo,hi), histtype='step', color='r', label=lab2)
+        plt.hist(np.clip(T.dchisq[I3,1] - T.dchisq[I3,0], lo, hi), bins=100, range=(lo,hi), histtype='step', color='g', label=lab3)
+        plt.xlabel('dchisq(REX - PSF)')
+        plt.legend()
+        plt.title(dirnm)
+        plt.xlim(lo,hi)
+        plt.ylim(0,4000)
+        ps.savefig()
 
+        T.rmag = -2.5 * (np.log10(T.decam_flux[:,2]) - 9.)
+        
+        plt.clf()
+        lo,hi = 20,25
+        plt.hist(np.clip(T.rmag[I1], lo, hi), bins=50, range=(lo,hi), histtype='step', color='b', label=lab1)
+        #plt.hist(np.clip(T.rmag[I4], lo, hi), bins=50, range=(lo,hi), histtype='step', color='m', label=lab4)
+        plt.hist(np.clip(T.rmag[I2], lo, hi), bins=50, range=(lo,hi), histtype='step', color='r', label=lab2)
+        plt.hist(np.clip(T.rmag[I3], lo, hi), bins=50, range=(lo,hi), histtype='step', color='g', label=lab3)
+        plt.xlabel('r mag')
+        plt.legend()
+        plt.title(dirnm)
+        plt.xlim(lo,hi)
+        ps.savefig()
+
+        plt.clf()
+        plt.plot(T.rmag[I1], T.dchisq[I1,1] - T.dchisq[I1,0], 'b.', alpha=0.2, label=lab1) 
+        plt.plot(T.rmag[I4], T.dchisq[I4,1] - T.dchisq[I4,0], 'm.', alpha=0.2, label=lab4) 
+        plt.plot(T.rmag[I2], T.dchisq[I2,1] - T.dchisq[I2,0], 'r.', alpha=0.2, label=lab2)
+        plt.plot(T.rmag[I3], T.dchisq[I3,1] - T.dchisq[I3,0], 'g.', alpha=0.2, label=lab3)
+        plt.plot(T.rmag[I5], T.dchisq[I5,1] - T.dchisq[I5,0], 'k.', alpha=0.2, label=lab5)
+        plt.xlabel('r mag')
+        plt.ylabel('dchisq(REX - PSF)')
+        plt.legend()
+        plt.title(dirnm)
+        plt.ylim(-20, 60)
+        plt.xlim(17, 27)
+        ps.savefig()
+
+        plt.clf()
+        plt.plot(T.rmag[I1], T.shapeexp_r[I1], 'b.', alpha=0.2, label=lab1) 
+        plt.plot(T.rmag[I4], T.shapeexp_r[I4], 'm.', alpha=0.2, label=lab4) 
+        plt.plot(T.rmag[I2], T.shapeexp_r[I2], 'r.', alpha=0.2, label=lab2)
+        #plt.plot(T.rmag[I3], T.shapeexp_r[I3], 'g.', alpha=0.2, label='PSF')
+        plt.xlabel('r mag')
+        plt.ylabel('radius (arcsec)')
+        plt.legend()
+        plt.title(dirnm)
+        plt.ylim(0, 0.5)
+        plt.xlim(17, 27)
+        ps.savefig()
+
+        plt.clf()
+        plt.scatter(T.rmag, T.shapeexp_r, c=T.dchisq[:,1] - T.dchisq[:,0], s=5, edgecolor='none',
+                    vmin=-4, vmax=10)
+        plt.xlabel('r mag')
+        plt.ylabel('radius (arcsec)')
+        plt.colorbar()
+        plt.title(dirnm + ': color: dchisq(REX - PSF)')
+        plt.ylim(0, 0.5)
+        plt.xlim(15, 27)
+        ps.savefig()
+
+        
+        
         
     sys.exit(0)
 
