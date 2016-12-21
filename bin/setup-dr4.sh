@@ -10,6 +10,8 @@ export RSYNC_ARGS="-rlpgoD --size-only"
 
 # DECam eBOSS ngc,sgc for image simulations
 #for fn in `cat fns-eboss-ngc_wildcard.txt`; do rsync -Riv -rlpgoD --size-only $fn /scratch1/scratchdirs/desiproc/DRs/cp-images/decam/;done
+# divide filelist into N files each having the next 1000 lines
+#i=0,j=1;for cnt in `seq 0 8`;do let i=1+$cnt*1000; let j=$i+1000;sed -n ${i},${j}p fns-eboss-sgc_wildcard.txt > fns-eboss-sgc_wildcard_${cnt}.txt;done
 
 # Bootes
 # Make file that lists all ooi images then do
@@ -67,3 +69,8 @@ mkdir -p $newdir
 #UNW=/project/projectdirs/cosmo/data/unwise/unwise-coadds/
 #cp $UNW/allsky-atlas.fits $SCRATCH/unwise-coadds
 #rsync -Rv $RSYNC_ARGS $UNW/./*/*/*-w{3,4}-{img-m.fits,invvar-m.fits.gz,n-m.fits.gz,n-u.fits.gz} $SCRATCH/unwise-coadds
+
+
+# Job Accounting commands
+# Completed jobs
+#sacct --jobs=3061287 --format=User,JobID,account,Timelimit,elapsed,ReqMem,MaxRss,ExitCode
