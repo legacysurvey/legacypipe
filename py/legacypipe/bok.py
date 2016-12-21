@@ -41,7 +41,7 @@ class BokImage(CPImage, CalibMixin):
         This recipe is adapted from the DECam one.
         '''
         # From legacy-zeropoints.py
-        z0 = dict(g = 25.55, r = 25.38)
+        z0 = dict(g = 25.74,r = 25.52)
         z0 = np.array([z0[f[0]] for f in ccds.filter])
         good = np.ones(len(ccds), bool)
         n0 = sum(good)
@@ -53,6 +53,10 @@ class BokImage(CPImage, CalibMixin):
             ('ccdnmatch < 20', (ccds.ccdnmatch < 20)),
             ('abs(zpt - ccdzpt) > 0.1',
              (np.abs(ccds.zpt - ccds.ccdzpt) > 0.1))
+            ('zpt < 0.5 mag of nominal',
+             (ccds.zpt < (z0 - 0.5))),
+            ('zpt > 0.18 mag of nominal',
+             (ccds.zpt > (z0 + 0.18))),
         ]:
             good[crit] = False
             #continue as usual
