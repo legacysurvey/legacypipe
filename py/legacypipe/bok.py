@@ -31,6 +31,38 @@ class BokImage(CPImage, CalibMixin):
     Class for handling images from the 90prime camera processed by the
     NOAO Community Pipeline.
     '''
+
+    @classmethod
+    def photometric_ccds(self, survey, ccds):
+        '''
+        Returns an index array for the members of the table 'ccds'
+        that are photometric.
+
+        This recipe is adapted from the DECam one.
+        '''
+        # From legacy-zeropoints.py
+        z0 = dict(g = 25.55, r = 25.38)
+        z0 = np.array([z0[f[0]] for f in ccds.filter])
+        good = np.ones(len(ccds), bool)
+        n0 = sum(good)
+        # This is our list of cuts to remove non-photometric CCD images
+        # These flag too many: ('zpt < 0.5 mag of nominal',(ccds.zpt < (z0 - 0.5))),
+        # And ('zpt > 0.25 mag of nominal', (ccds.zpt > (z0 + 0.25))),
+        for name,crit in [
+            ('exptime < 30 s', (ccds.exptime < 30)),
+            ('ccdnmatch < 20', (ccds.ccdnmatch < 20)),
+            ('abs(zpt - ccdzpt) > 0.1',
+             (np.abs(ccds.zpt - ccds.ccdzpt) > 0.1))
+        ]:
+            good[crit] = False
+            #continue as usual
+            n = sum(good)
+            print('Flagged', n0-n, 'more non-photometric using criterion:',
+                  name)
+            n0 = n
+        return np.flatnonzero(good)
+
+
     def __init__(self, survey, t):
         super(BokImage, self).__init__(survey, t)
         self.pixscale= 0.455

@@ -22,8 +22,8 @@ class MosaicImage(CPImage, CalibMixin):
 
     @classmethod
     def nominal_zeropoints(self):
-        # HACK
-        return dict(z = 26.5)
+        # From legacy-zeropoints.py
+        return dict(z = 26.552)
     
     @classmethod
     def photometric_ccds(self, survey, ccds):
@@ -39,13 +39,12 @@ class MosaicImage(CPImage, CalibMixin):
         good = np.ones(len(ccds), bool)
         n0 = sum(good)
         # This is our list of cuts to remove non-photometric CCD images
+        # flags too many: 13921/67061: ('zpt < 0.5 mag of nominal',(ccds.zpt < (z0 - 0.5))),
         for name,crit in [
             ('exptime < 30 s', (ccds.exptime < 30)),
             ('ccdnmatch < 20', (ccds.ccdnmatch < 20)),
             ('abs(zpt - ccdzpt) > 0.1',
              (np.abs(ccds.zpt - ccds.ccdzpt) > 0.1)),
-            ('zpt < 0.5 mag of nominal',
-             (ccds.zpt < (z0 - 0.5))),
             ('zpt > 0.25 mag of nominal',
              (ccds.zpt > (z0 + 0.25))),
         ]:

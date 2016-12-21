@@ -32,6 +32,19 @@ class Dr4v3(Dr4Survey):
                   'survey-ccds-dr4-mzlsv3.fits.gz' in fn)]
 
 
+class Thirdpixv2(Dr4Survey):
+    def filter_ccds_files(self, fns):
+         return [fn for fn in fns if
+                 ('survey-ccds-thirdpix-v2.fits.gz' in fn)]
+                 #('survey-ccds-thirdpix-len2-v2.fits.gz' in fn)]
+                 #('survey-ccds-dr4-mzlsv2.fits.gz' in fn)]
+
+class Thirdpixv3(Dr4Survey):
+    def filter_ccds_files(self, fns):
+         return [fn for fn in fns if
+                 ('survey-ccds-thirdpix-v3.fits.gz' in fn)]
+                 #('survey-ccds-thirdpix-len2-v3.fits.gz' in fn)]
+
 class Dr4Mzlsv2(Dr4Survey):
     def filter_ccds_files(self, fns):
          return [fn for fn in fns if
@@ -40,7 +53,7 @@ class Dr4Mzlsv2(Dr4Survey):
 class Dr4Mzlsv3(Dr4Survey):
     def filter_ccds_files(self, fns):
          return [fn for fn in fns if
-                 ('survey-ccds-dr4-mzlsv3-2016feb.fits.gz' in fn)]
+                 ('survey-ccds-dr4-mzlsv3.fits.gz' in fn)]
 
 class Dr490prime(Dr4Survey):
     def filter_ccds_files(self, fns):
@@ -65,6 +78,8 @@ class Dr4BootesMzls(Dr4Survey):
 
 runs = {
     'dr3': Dr3DecalsSurvey,
+    'thirdpix-v2': Thirdpixv2,
+    'thirdpix-v3': Thirdpixv3,
     'dr4v2': Dr4v2,
     'dr4v3': Dr4v3,
     'dr490prime': Dr490prime,
