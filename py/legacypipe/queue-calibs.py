@@ -333,18 +333,20 @@ def main():
         rlo,rhi = 147.2, 147.8
         dlo,dhi = -0.4, 0.4
 
-    elif opt.region == 'eboss-elg':
+    elif opt.region == 'eboss-sgc':
+        # generous boundaries to make sure get all relevant images
         # RA -45 to +45
         # Dec -5 to +7
-        rlo,rhi = 315., 45.
-        dlo,dhi = -5., 7.
+        rlo,rhi = 310., 50.
+        dlo,dhi = -6., 6.
 
     elif opt.region == 'eboss-ngc':
+        # generous boundaries to make sure get all relevant images
         # NGC ELGs
         # RA 115 to 175
         # Dec 15 to  30
-        rlo,rhi = 115., 175.
-        dlo,dhi =  15.,  30.
+        rlo,rhi = 122., 177.
+        dlo,dhi =  12.,  32.
 
     elif opt.region == 'mzls':
         dlo,dhi = 30., 90.
@@ -444,13 +446,13 @@ def main():
         assert(opt.touching)
         # Write cut tables to file
         for tab,typ in zip([B,T],['bricks','ccds']):
-            fn='%s-%s-cut.fits' % (typ,opt.name)
+            fn='%s-%s-cut.fits' % (typ,opt.region)
             if os.path.exists(fn):
                 os.remove(fn)
             tab.writeto(fn)
             print('Wrote %s' % fn)
         # Write text files listing ccd and filename names
-        nm1,nm2= 'ccds-%s.txt'% opt.name,'filenames-%s.txt' % opt.name
+        nm1,nm2= 'ccds-%s.txt'% opt.region,'filenames-%s.txt' % opt.region
         if os.path.exists(nm1):
             os.remove(nm1)
         if os.path.exists(nm2):

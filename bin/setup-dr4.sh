@@ -8,6 +8,9 @@ mkdir -p $basedir
 # rsync -a is equivalent to rsync -rlptgoD, want that without -t since $SCRATCH files older than 12 weeks are purged
 export RSYNC_ARGS="-rlpgoD --size-only"
 
+# DECam eBOSS ngc,sgc for image simulations
+#for fn in `cat fns-eboss-ngc_wildcard.txt`; do rsync -Riv -rlpgoD --size-only $fn /scratch1/scratchdirs/desiproc/DRs/cp-images/decam/;done
+
 # Bootes
 # Make file that lists all ooi images then do
 # for fn in `cat bootes-90prime-abspath.txt`;do fns=`find $(echo $fn|sed s/ooi/oo\[idw\]/g)`;rsync -Riv -rlpgoD --size-only $fns /scratch1/scratchdirs/desiproc/DRs/cp-images/bootes-bokTPV/;done
@@ -19,6 +22,8 @@ export RSYNC_ARGS="-rlpgoD --size-only"
 #rsync -Riv -rlpgoD --size-only /project/projectdirs/cosmo/staging/mosaicz/MZLS_CP/CP*v${ver}/k4m*oo[idw]*.fits.fz /scratch1/scratchdirs/desiproc/DRs/cp-images/new/mzls_v${ver}/
 #ver=3
 #rsync -Riv -rlpgoD --size-only /project/projectdirs/cosmo/staging/mosaicz/MZLS_CP/CP*v${ver}/k4m*oo[idw]*.fits.fz /scratch1/scratchdirs/desiproc/DRs/cp-images/new/mzls_v${ver}/
+
+
 
 # Old sorting out of v2,v3
 #rsync -Riv $RSYNC_ARGS /project/projectdirs/cosmo/staging/mosaicz/MZLS_CP/*v2/k4m_*_oo[iwd]_zd_v2.fits.fz ${basedir}/
