@@ -4,6 +4,9 @@
 """
 from __future__ import division, print_function
 
+import matplotlib.pyplot as plt
+import matplotlib as mpl
+from mpl_toolkits.axes_grid1 import make_axes_locatable
 import os
 import argparse
 import numpy as np
@@ -203,8 +206,9 @@ class KDEshapes(object):
         ba= samp[:,2]
         pa= samp[:,3]
         # pa ~ flat PDF
-        pa=  random_state.uniform(0., 180., n_samples)
+        pa=  random_state.uniform(0., 180., ndraws)
         # ba can be [1,1.2] due to KDE algorithm, make these 1
+        ba[ ba < 0.1 ]= 0.1
         ba[ ba > 1 ]= 1.
         # Sanity Check
         assert(np.all(re > 0))
@@ -218,10 +222,13 @@ class KDEshapes(object):
         return re,n,ba,pa
  
             
-def get_fn(outdir,seed):
-    return os.path.join(outdir,'sample_%d.fits' % seed)        
-                    
-def draw_points(radec,ndraws=1,seed=1,outdir='./'):
+def get_fn(outdir,seed,prefix=''):
+    return os.path.join(outdir,'%ssample_%d.fits' % (prefix,seed))        
+
+def get_merge_fn(outdir,prefix=''):
+    return os.path.join(outdir,'%ssample-merged.fits' % prefix)
+                
+def draw_points(radec,ndraws=1,seed=1,outdir='./',prefix=''):
     '''writes ra,dec,grz qso,lrg,elg,star to fits file
     for given seed'''
     random_state= np.random.RandomState(seed)
@@ -234,7 +241,7 @@ def draw_points(radec,ndraws=1,seed=1,outdir='./'):
             mags['%s_g'%typ],mags['%s_r'%typ],mags['%s_z'%typ]= \
                         kde_obj.get_colors(ndraws=ndraws,random_state=random_state)
         else:
-            mags['%s_g'%typ],mags['%s_r'%typ],mags['%s_z'%typ],mags['redshift']= \
+            mags['%s_g'%typ],mags['%s_r'%typ],mags['%s_z'%typ],mags['%s_redshift'%typ]= \
                         kde_obj.get_colors(ndraws=ndraws,random_state=random_state)
     # Shapes
     gfit={}
@@ -244,7 +251,7 @@ def draw_points(radec,ndraws=1,seed=1,outdir='./'):
                     kde_obj.get_shapes(ndraws=ndraws,random_state=random_state)
     # Write fits table
     T=fits_table()
-    T.set('id',np.range(ndraws))
+    T.set('id',np.arange(ndraws))
     T.set('seed',np.zeros(ndraws).astype(int)+seed)
     T.set('ra',ra)
     T.set('dec',dec)
@@ -252,23 +259,235 @@ def draw_points(radec,ndraws=1,seed=1,outdir='./'):
         T.set(key,mags[key])
     for key in gfit.keys():
         T.set(key,gfit[key])
-    T.writeto( get_fn(outdir,seed) )
+    fn= get_fn(outdir,seed,prefix=prefix)
+    T.writeto( fn )
+    print('Wrote %s' % fn)
 
-def merge_draws(outdir='./'):
+def merge_draws(outdir='./',prefix=''):
     '''merges all fits tables created by draw_points()'''
-    fns=glob(os.path.join(outdir,"sample_*.fits"))
+    fns=glob(os.path.join(outdir,"%ssample_*.fits" % prefix))
     if not len(fns) > 0: raise ValueError('no fns found')
     T= CatalogueFuncs().stack(fns,textfile=False)
     # Add unique id column
     T.set('id',np.arange(len(T))+1)
     # Save
-    name=os.path.join(outdir,'sample-merged.fits')
+    name= get_merge_fn(outdir,prefix=prefix)
     if os.path.exists(name):
         os.remove(name)
         print('Making new %s' % name)
     T.writeto(name)
     print('wrote %s' % name)
        
+
+class PlotTable(object):
+    def __init__(self,outdir='./',prefix=''):
+        print('Plotting Tabulated Quantities')
+        self.outdir= outdir
+        self.prefix= prefix
+        # Table 
+        merge_fn= get_merge_fn(self.outdir,prefix=self.prefix) 
+        print('Reading %s' % merge_fn)
+        tab= fits_table( merge_fn )
+        # RA, DEC
+        self.radec(tab)
+        # Source Properties
+        xyrange=dict(x_star=[-0.5,2.2],\
+                 y_star=[-0.3,2.],\
+                 x_elg=[-0.5,2.2],\
+                 y_elg=[-0.3,2.],\
+                 x_lrg= [0, 3.],\
+                 y_lrg= [-2, 6],\
+                 x1_qso= [-0.5,3.],\
+                 y1_qso= [-0.5,2.5],\
+                 x2_qso= [-0.5,4.5],\
+                 y2_qso= [-2.5,3.5])
+        for obj in ['star','lrg','elg','qso']:
+            # Colors, redshift
+            if obj == 'star':
+                x= tab.star_r
+                y= tab.star_r - tab.star_z
+                z= tab.star_g - tab.star_r
+                labels=['r','r-z','g-r']
+                xylims=dict(x1=(15,24),y1=(0,0.3),\
+                            x2=(-1,3.5),y2=(-0.5,2))
+                X= np.array([x,y,z]).T
+            elif obj == 'elg':
+                x= tab.elg_r
+                y= tab.elg_r - tab.elg_z
+                z= tab.elg_g - tab.elg_r
+                d4= tab.elg_redshift
+                labels=['r','r-z','g-r','redshift']
+                xylims=dict(x1=(20.5,25.5),y1=(0,0.8),\
+                            x2=xyrange['x_elg'],y2=xyrange['y_elg'],\
+                            x3=(0.6,1.6),y3=(0.,1.0))
+                X= np.array([x,y,z,d4]).T
+            elif obj == 'lrg':
+                x= tab.lrg_z
+                y= tab.lrg_r - tab.lrg_z
+                z= np.zeros(len(x)) #rW1['red_galaxy']
+                d4= tab.lrg_redshift
+                M= tab.lrg_g
+                labels=['z','r-z','r-W1','redshift','g']
+                xylims=dict(x1=(17.,22.),y1=(0,0.7),\
+                            x2=xyrange['x_lrg'],y2=xyrange['y_lrg'],\
+                            x3=(0.,1.6),y3=(0,1.),\
+                            x4=(17.,29),y4=(0,0.7))
+                X= np.array([x,y,z,d4,M]).T
+            elif obj == 'qso':
+                x= tab.qso_r
+                y= tab.qso_r - tab.qso_z
+                z= tab.qso_g - tab.qso_r
+                d4= tab.qso_redshift
+                labels=['r','r-z','g-r','redshift']
+                hiz=2.1
+                xylims=dict(x1=(15.,24),y1=(0,0.5),\
+                            x2=xyrange['x1_qso'],y2=xyrange['y1_qso'],\
+                            x3=(0.,hiz+0.2),y3=(0.,1.))
+                X= np.array([x,y,z,d4]).T
+ 
+            # Shapes
+            if obj in ['elg','lrg']:
+                re,n,ba,pa= tab.get('%s_re'%obj),tab.get('%s_n'%obj),tab.get('%s_ba'%obj),tab.get('%s_pa'%obj) 
+                shape_labels=['re','n','ba','pa']
+                shape_xylims=dict(x1=(-10,100),\
+                            x2=(-2,10),\
+                            x3=(-0.2,1.2),\
+                            x4=(-20,200))
+                X_shapes= np.array([re,n,ba,pa]).T
+            
+            # Plots
+            if obj == 'star':
+                self.plot_1band_and_color(X,labels,obj=obj,xylims=xylims)
+            elif obj == 'qso':
+                self.plot_1band_color_and_redshift(X,labels,obj=obj,xylims=xylims)
+            elif obj in ['lrg','elg']:
+                self.plot_1band_color_and_redshift(X,labels,obj=obj,xylims=xylims)
+                self.plot_galaxy_shapes(X_shapes,shape_labels,obj=obj,xylims=shape_xylims)
+
+    def radec(self,tab):
+        plt.scatter(tab.ra,tab.dec,\
+                    c='b',edgecolors='none',marker='o',s=1.,rasterized=True,alpha=0.2)
+        xlab=plt.xlabel('RA (deg)')
+        ylab=plt.ylabel('DEC (deg)')
+        fn=os.path.join(self.outdir,'%ssample-merged-radec.png' % (self.prefix))
+        plt.savefig(fn,bbox_extra_artists=[xlab,ylab], bbox_inches='tight',dpi=150)
+        plt.close()
+        print('Wrote %s' % fn)
+
+
+
+    def plot_1band_and_color(self,X,labels,obj='star',xylims=None):
+        '''xylims -- dict of x1,y1,x2,y2,... where x1 is tuple of low,hi for first plot xaxis'''
+        if obj == 'lrg':
+            fig,ax= plt.subplots(1,3,figsize=(15,3))
+        else:
+            fig,ax= plt.subplots(1,2,figsize=(12,5))
+        plt.subplots_adjust(wspace=0.2)
+        # Data
+        ax[0].hist(X[:,0],normed=True)
+        ax[1].scatter(X[:,1],X[:,2],\
+                      c='b',edgecolors='none',marker='o',s=10.,rasterized=True,alpha=0.2)
+        if xylims is not None:
+            ax[0].set_xlim(xylims['x1'])
+            ax[0].set_ylim(xylims['y1'])
+            ax[1].set_xlim(xylims['x2'])
+            ax[1].set_ylim(xylims['y2'])
+        xlab=ax[0].set_xlabel(labels[0],fontsize='x-large')
+        xlab=ax[1].set_xlabel(labels[1],fontsize='x-large')
+        ylab=ax[1].set_ylabel(labels[2],fontsize='x-large')
+        if obj == 'lrg':
+            # G distribution even though no Targeting cuts on g
+            ax[0,2].hist(X[:,3],normed=True)
+            if xylims is not None:
+                ax[2].set_xlim(xylims['x3'])
+                ax[2].set_ylim(xylims['y3'])
+            xlab=ax[2].set_xlabel(labels[3],fontsize='x-large')
+        fn=os.path.join(self.outdir,'%ssample-merged-colors-%s.png' % (self.prefix,obj))
+        plt.savefig(fn,bbox_extra_artists=[xlab], bbox_inches='tight',dpi=150)
+        plt.close()
+        print('Wrote %s' % fn)
+
+    def plot_1band_color_and_redshift(self,X,labels,obj='elg',xylims=None):
+        '''xylims -- dict of x1,y1,x2,y2,... where x1 is tuple of low,hi for first plot xaxis'''
+        # Colormap the color-color plot by redshift
+        cmap = mpl.colors.ListedColormap(['m','r', 'y', 'g','b', 'c'])
+        bounds= np.linspace(xylims['x3'][0],xylims['x3'][1],num=6)
+        norm = mpl.colors.BoundaryNorm(bounds, cmap.N)
+        if obj == 'lrg':
+            fig,ax= plt.subplots(1,4,figsize=(15,3))
+        else:
+            fig,ax= plt.subplots(1,3,figsize=(12,3))
+        plt.subplots_adjust(wspace=0.2)
+        # Data
+        ax[0].hist(X[:,0],normed=True)
+        # color bar with color plot
+        axobj= ax[1].scatter(X[:,1],X[:,2],c=X[:,3],\
+                                 marker='o',s=10.,rasterized=True,lw=0,\
+                                 cmap=cmap,norm=norm,\
+                                 vmin=bounds.min(),vmax=bounds.max())
+        divider3 = make_axes_locatable(ax[1])
+        cax3 = divider3.append_axes("right", size="5%", pad=0.1)
+        cbar3 = plt.colorbar(axobj, cax=cax3,\
+                             cmap=cmap, norm=norm, boundaries=bounds, ticks=bounds)
+        cbar3.set_label('redshift')
+        ax[2].hist(X[:,3],normed=True)
+        if xylims is not None:
+            ax[0].set_xlim(xylims['x1'])
+            ax[0].set_ylim(xylims['y1'])
+            ax[1].set_xlim(xylims['x2'])
+            ax[1].set_ylim(xylims['y2'])
+            ax[2].set_xlim(xylims['x3'])
+            ax[2].set_ylim(xylims['y3'])
+        xlab=ax[0].set_xlabel(labels[0],fontsize='x-large')
+        xlab=ax[1].set_xlabel(labels[1],fontsize='x-large')
+        ylab=ax[1].set_ylabel(labels[2],fontsize='x-large')
+        xlab=ax[2].set_xlabel(labels[3],fontsize='x-large')
+        if obj == 'lrg':
+            # G distribution even though no Targeting cuts on g
+            ax[3].hist(X[:,4],normed=True)
+            if xylims is not None:
+                ax[3].set_xlim(xylims['x4'])
+                ax[3].set_ylim(xylims['y4'])
+            xlab=ax[3].set_xlabel(labels[4],fontsize='x-large')
+        fn=os.path.join(self.outdir,'%ssample-merged-colors-redshift-%s.png' % (self.prefix,obj))
+        plt.savefig(fn,bbox_extra_artists=[xlab], bbox_inches='tight',dpi=150)
+        plt.close()
+        print('Wrote %s' % fn)
+
+
+    def plot_galaxy_shapes(self,X,labels,obj='elg',xylims=None):
+        '''xylims -- dict of x1,y1,x2,y2,... where x1 is tuple of low,hi for first plot xaxis'''
+        fig,ax= plt.subplots(1,4,figsize=(15,3))
+        plt.subplots_adjust(wspace=0.2)
+        # ba,pa can be slightly greater 1.,180
+        assert(np.all(X[:,0] > 0))
+        assert(np.all((X[:,1] > 0)*\
+                      (X[:,1] < 10)))
+        assert(np.all((X[:,2] > 0)*\
+                      (X[:,2] <= 1.)))
+        assert(np.all((X[:,3] >= 0)*\
+                      (X[:,3] <= 180)))
+        # plot
+        for cnt in range(4):
+            # Bin Re
+            if cnt == 0:
+                bins=np.linspace(0,80,num=20)
+                ax[0].hist(X[:,cnt],bins=bins,normed=True)
+            else:
+                ax[cnt].hist(X[:,cnt],normed=True)
+        # lims
+        for col in range(4):
+            if xylims is not None:
+                ax[col].set_xlim(xylims['x%s' % str(col+1)])
+                #ax[cnt,1].set_xlim(xylims['x2'])
+                #ax[cnt,2].set_xlim(xylims['x3'])
+                xlab=ax[col].set_xlabel(labels[col],fontsize='x-large')
+                #xlab=ax[cnt,1].set_xlabel(labels[1],fontsize='x-large')
+        fn=os.path.join(self.outdir,'%ssample-merged-shapes-%s.png' % (self.prefix,obj))
+        plt.savefig(fn,bbox_extra_artists=[xlab], bbox_inches='tight',dpi=150)
+        plt.close()
+        print('Wrote %s' % fn)
+
 
 if __name__ == "__main__":
     t0 = Time()
@@ -280,7 +499,7 @@ if __name__ == "__main__":
     parser.add_argument('--dec1',type=float,action='store',help='bigbox',required=True)
     parser.add_argument('--dec2',type=float,action='store',help='bigbox',required=True)
     parser.add_argument('--spacing',type=float,action='store',default=10.,help='choosing N radec pionts so points have spacingxspacing arcsec spacing',required=False)
-    parser.add_argument('--ndraws',type=int,action='store',help='default space by 5x5'', number of draws for all mpi tasks',required=False)
+    parser.add_argument('--ndraws',type=int,action='store',help='default space by 10x10 arcsec, number of draws for all mpi tasks',required=False)
     parser.add_argument('--jobid',action='store',help='slurm jobid',default='001',required=False)
     parser.add_argument('--prefix', type=str, default='', help='Prefix to prepend to the output files.')
     parser.add_argument('--outdir', type=str, default='./radec_points_dir', help='Output directory.')
@@ -317,12 +536,13 @@ if __name__ == "__main__":
             print('skipping, exists: %s' % get_fn(args.outdir,seed))
             cnt+=1
             seed= comm.rank+ comm.size*cnt
-        draw_points(radec,ndraws=nper, seed=seed,outdir=args.outdir)
+        draw_points(radec,ndraws=nper, seed=seed,outdir=args.outdir,prefix=args.prefix)
         # Gather
         junk=[comm.rank]
         junks = comm.gather(junk, root=0 )
         if comm.rank == 0:
-            merge_draws(outdir=args.outdir)
+            merge_draws(outdir=args.outdir,prefix=args.prefix)
+            #plotobj= PlotTable(outdir=args.outdir,prefix=args.prefix)
         #images_split= np.array_split(images, comm.size)
         # HACK, not sure if need to wait for all proc to finish 
         #confirm_files = comm.gather( images_split[comm.rank], root=0 )
@@ -341,10 +561,12 @@ if __name__ == "__main__":
             print('skipping, exists: %s' % get_fn(args.outdir,seed))
             cnt+=1
             seed= cnt
-        print('working on: %s' % get_fn(args.outdir,seed))
-        draw_points(radec,ndraws=nper, seed=seed,outdir=args.outdir)
+        draw_points(radec,ndraws=nper, seed=seed,outdir=args.outdir,prefix=args.prefix)
         # Gather equivalent
-        merge_draws(outdir=args.outdir)
+        merge_draws(outdir=args.outdir,prefix=args.prefix)
+        #plotobj= PlotTable(outdir=args.outdir,prefix=args.prefix)
+        # Plot table for sanity check
+        
         ## Create the file
         #t0=ptime('b4-run',t0)
         #runit(image_fn, measureargs,\

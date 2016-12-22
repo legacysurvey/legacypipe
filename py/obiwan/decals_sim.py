@@ -70,7 +70,6 @@ from legacypipe.common import LegacySurveyData, wcs_for_brick, ccds_touching_wcs
 import legacyanalysis.decals_sim_priors as priors
 
 from astrometry.util.fits import fits_table, merge_tables
-from theValidator.catalogues import CatalogueFuncs
 
 def get_savedir(**kwargs):
     return os.path.join(kwargs['decals_sim_dir'],kwargs['objtype'],\
@@ -422,8 +421,8 @@ def build_simcat(Samp=None,brickwcs=None, meta=None):
         cat.set('%sflux' % key, 1E9*10**(-0.4*Samp.get('%s_%s' % (typ,key))) ) # [nanomaggies]
     # Galaxy Properties
     if typ in ['elg','lrg']:
-        for key in ['sersicn','rhalf','ba','phi']:
-            cat.set(key, Samp.sersicn)
+        for key,tab_key in zip(['sersicn','rhalf','ba','phi'],['n','re','ba','pa']):
+            cat.set(key, Samp.get('%s_%s'%(typ,key) )
         #cat['R50_1'] = Column(Samp.rhalf, dtype='f4')
         #cat['BA_1'] = Column(Samp.ba, dtype='f4')
         #cat['PHI_1'] = Column(Samp.phi, dtype='f4')
