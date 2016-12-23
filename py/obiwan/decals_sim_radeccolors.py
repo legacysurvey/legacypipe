@@ -222,15 +222,32 @@ class KDEshapes(object):
         return re,n,ba,pa
  
             
-def get_fn(outdir,seed,prefix=''):
-    return os.path.join(outdir,'%ssample_%d.fits' % (prefix,seed))        
+def get_fn4sample(outdir,seed,prefix=''):
+    dr= os.path.join(outdir,'input_sample')
+    if not os.path.exists(dr):
+        os.makedirs(dr)
+    return os.path.join(dr, '%ssample_%d.fits' % (prefix,seed))
 
-def get_merge_fn(outdir,prefix=''):
-    return os.path.join(outdir,'%ssample-merged.fits' % prefix)
-                
-def draw_points(radec,ndraws=1,seed=1,outdir='./',prefix=''):
-    '''writes ra,dec,grz qso,lrg,elg,star to fits file
+def get_fns(outdir,prefix=''):
+    dr= os.path.join(outdir,'input_sample')
+    fn= os.path.join(dr,'%ssample_*.fits' % prefix )
+    fns=glob(fn)
+    if not len(fns) > 0: raise ValueError('no fns found')
+    return fns
+
+def get_fn4brick(brick,outdir,prefix=''):
+    dr= os.path.join(outdir,'input_sample',brick[:3],brick)
+    return os.path.join(dr,'%ssample-merged.fits' % prefix)
+
+def get_bricks(outdir):
+    fn=os.path.join(os.getenv('LEGACY_SURVEY_DIR'),'survey-bricks-5rows-eboss-ngc.fits.gz')
+    return fits_table(fn)
+            
+def draw_points(radec,unique_ids,seed=1,outdir='./',prefix=''):
+    '''unique_ids -- ids assigned to this mpi task
+    writes ra,dec,grz qso,lrg,elg,star to fits file
     for given seed'''
+    ndraws= len(unique_ids)
     random_state= np.random.RandomState(seed)
     ra,dec= get_radec(radec,ndraws=ndraws,random_state=random_state)
     # Mags
@@ -249,9 +266,9 @@ def draw_points(radec,ndraws=1,seed=1,outdir='./',prefix=''):
         kde_obj= KDEshapes(objtype=typ,pickle_dir=outdir)
         gfit['%s_re'%typ],gfit['%s_n'%typ],gfit['%s_ba'%typ],gfit['%s_pa'%typ]= \
                     kde_obj.get_shapes(ndraws=ndraws,random_state=random_state)
-    # Write fits table
+    # Create Sample table
     T=fits_table()
-    T.set('id',np.arange(ndraws))
+    T.set('id',unique_ids)
     T.set('seed',np.zeros(ndraws).astype(int)+seed)
     T.set('ra',ra)
     T.set('dec',dec)
@@ -259,24 +276,50 @@ def draw_points(radec,ndraws=1,seed=1,outdir='./',prefix=''):
         T.set(key,mags[key])
     for key in gfit.keys():
         T.set(key,gfit[key])
-    fn= get_fn(outdir,seed,prefix=prefix)
-    T.writeto( fn )
+    # Save table
+    fn= get_fn4sample(outdir,seed,prefix=prefix)
+    if os.path.exists(fn):
+        os.remove(fn)
+        print('Overwriting %s' % fn)
+    T.writeto(fn)
     print('Wrote %s' % fn)
 
-def merge_draws(outdir='./',prefix=''):
-    '''merges all fits tables created by draw_points()'''
-    fns=glob(os.path.join(outdir,"%ssample_*.fits" % prefix))
-    if not len(fns) > 0: raise ValueError('no fns found')
-    T= CatalogueFuncs().stack(fns,textfile=False)
-    # Add unique id column
-    T.set('id',np.arange(len(T))+1)
-    # Save
-    name= get_merge_fn(outdir,prefix=prefix)
-    if os.path.exists(name):
-        os.remove(name)
-        print('Making new %s' % name)
-    T.writeto(name)
-    print('wrote %s' % name)
+
+def organize_by_brick(btable,outdir='./',prefix=''):
+    '''btable -- 5row survey-bricks table cut to bricks being orgazined by this mpi task'''
+    for brick in btable.brickname:
+        fns= get_fns(outdir,prefix=prefix)
+        cat= []
+        for sample_fn in fns:
+            sample= fits_table(sample_fn)
+            keep=  (sample.ra >= btable.ra1)*(sample.ra <= btable.ra2)*\
+                   (sample.dec >= btable.dec1)*(sample.dec <= btable.dec2)
+            if np.where(keep)[0].size > 0:
+                cat.append( sample.cut(keep) )
+        if len(cat) > 0:
+            savefn= get_fn4brick(brick,outdir,prefix=prefix)
+            if os.path.exists(savefn):
+                os.remove(savefn)
+                print('Overwriting %s' % savefn)
+            cat.writeto(savefn)
+        else: 
+            print('WARNING, no ra,dec samples in brick: %s' % brick)
+
+
+#def merge_draws(outdir='./',prefix=''):
+#    '''merges all fits tables created by draw_points()'''
+#    # Btable has 5 rows: bricks for the run,ra1,ra2,dec1,dec2 
+#    btable= get_bricks_fn(outdir)
+#    print('Merging sample tables for %d brick directories' % len(btable))
+#    for brick in btable.brickname:
+#        T= CatalogueFuncs().stack(fns,textfile=False)
+#        # Save
+#        name= get_merged_fn(brick,outdir,prefix=prefix)
+#        if os.path.exists(name):
+#            os.remove(name)
+#            print('Overwriting %s' % name)
+#        T.writeto(name)
+        print('wrote %s' % name)
        
 
 class PlotTable(object):
@@ -517,13 +560,15 @@ if __name__ == "__main__":
     else:
         ndraws= args.ndraws
     print('ndraws= %d' % ndraws)
+    unique_ids= np.arange(1,ndraws+1)
 
     # Draws per mpi task
     if args.nproc > 1:
         from mpi4py.MPI import COMM_WORLD as comm
-        nper= int(ndraws/float(comm.size))
-    else: 
-        nper= ndraws
+        unique_ids= np.split(unique_ids,comm.size)[comm.rank] 
+        #nper= len(unique_ids) #int(ndraws/float(comm.size))
+    #else: 
+    #    nper= ndraws
     t0=ptime('parse-args',t0)
 
     if args.nproc > 1:
@@ -531,17 +576,27 @@ if __name__ == "__main__":
             if not os.path.exists(args.outdir):
                 os.makedirs(args.outdir)
         seed = comm.rank
-        cnt=0
-        while os.path.exists(get_fn(args.outdir,seed)):
-            print('skipping, exists: %s' % get_fn(args.outdir,seed))
-            cnt+=1
-            seed= comm.rank+ comm.size*cnt
-        draw_points(radec,ndraws=nper, seed=seed,outdir=args.outdir,prefix=args.prefix)
+        #cnt=0
+        #while os.path.exists(get_fn(args.outdir,seed)):
+        #    print('skipping, exists: %s' % get_fn(args.outdir,seed))
+        #    cnt+=1
+        #    seed= comm.rank+ comm.size*cnt
+        # Divide and conquer: each task saves a sample
+        draw_points(radec,unique_ids, seed=seed,outdir=args.outdir,prefix=args.prefix)
         # Gather
         junk=[comm.rank]
         junks = comm.gather(junk, root=0 )
-        if comm.rank == 0:
-            merge_draws(outdir=args.outdir,prefix=args.prefix)
+        # Divide and conquer: each task takes bricks to organize samples into
+        btable= get_bricks_fn(args.outdir)
+        inds= np.arange(len(tab))
+        inds= np.split(inds,comm.size)[comm.rank]
+        btable.cut(inds)
+        organize_by_brick(btable, outdir=args.outdir,prefix=args.prefix)
+        # Gather, done
+        junk=[comm.rank]
+        junks = comm.gather(junk, root=0 )
+        #if comm.rank == 0:
+        #    merge_draws(outdir=args.outdir,prefix=args.prefix)
             #plotobj= PlotTable(outdir=args.outdir,prefix=args.prefix)
         #images_split= np.array_split(images, comm.size)
         # HACK, not sure if need to wait for all proc to finish 
@@ -556,13 +611,16 @@ if __name__ == "__main__":
         if not os.path.exists(args.outdir):
             os.makedirs(args.outdir)
         seed= 1
-        cnt=1
-        while os.path.exists(get_fn(args.outdir,seed)):
-            print('skipping, exists: %s' % get_fn(args.outdir,seed))
-            cnt+=1
-            seed= cnt
-        draw_points(radec,ndraws=nper, seed=seed,outdir=args.outdir,prefix=args.prefix)
-        # Gather equivalent
+        #cnt=1
+        #while os.path.exists(get_fn(args.outdir,seed)):
+        #    print('skipping, exists: %s' % get_fn(args.outdir,seed))
+        #    cnt+=1
+        #    seed= cnt
+        draw_points(radec,unique_ids, seed=seed,outdir=args.outdir,prefix=args.prefix)
+        #
+        btable= get_bricks_fn(args.outdir)
+        organize_by_brick(btable, outdir=args.outdir,prefix=args.prefix)
+        # Gather, done
         merge_draws(outdir=args.outdir,prefix=args.prefix)
         #plotobj= PlotTable(outdir=args.outdir,prefix=args.prefix)
         # Plot table for sanity check

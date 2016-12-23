@@ -1,6 +1,68 @@
 #!/usr/bin/env python
 
-"""Try to hack decals_sim so we don't have to make copies of the data.
+"""
+Running eBOSS NGC, SGC
+python legacypipe/queue-calibs.py --ignore_cuts --touching --save_to_fits --name eboss-sgc --region eboss-sgc --bricks /global/project/projectdirs/cosmo/data/legacysurvey/dr3//survey-bricks-dr3.fits.gz --ccds /scratch1/scratchdirs/desiproc/DRs/dr4-bootes/legacypipe-dir/survey-ccds-decals-extra-nondecals.fits.gz
+
+ngc=fits_table('bricks-eboss-ngc-cut.fits')
+with open('bricks-eboss-ngc.txt','w') as foo:
+    for brick in ngc.brickname:
+        foo.write('%s\n' % brick)
+foo.close()
+
+ccds=fits_table('ccds-eboss-ngc-cut.fits')
+ccds.writeto('survey-ccds-dr3-eboss-ngc.fits.gz')
+ccds.image_filename= np.char.replace(ccds.image_filename,'decam/','')
+fns=np.array( list( set(ccds.image_filename) ) )
+with open('fns-eboss-ngc.txt','w') as foo:
+   for fn in fns:
+       foo.write('%s\n' % fn)
+foo.close()
+
+for fn in `cat fns-eboss-ngc.txt`;do find /project/projectdirs/cosmo/staging/decam -type f -name $(basename $fn) >> full-fns-eboss-ngc.txt ;done
+
+cp full-fns-eboss-ngc.txt full-fns-eboss-ngc_wild.txt
+sed -i s/_ooi_/_*_/g full-fns-eboss-ngc_wild.txt
+sed -i s/_oki_/_*_/g full-fns-eboss-ngc_wild.txt
+
+for fn in `cat full-fns-eboss-ngc_wild.txt`; do rsync -Riv -rlpgoD --size-only $fn /scratch1/scratchdirs/desiproc/DRs/cp-images/decam/;done
+# divide filelist into N files each having the next 1000 lines
+i=0,j=1;for cnt in `seq 0 8`;do let i=1+$cnt*1000; let j=$i+1000;sed -n ${i},${j}p fns-eboss-sgc_wildcard.txt > fns-eboss-sgc_wildcard_${cnt}.txt;done
+
+LEGACY_SURVEY_DIR
+mkdir -p images/decam
+cd images/decam
+for fullnm in `find /scratch1/scratchdirs/desiproc/DRs/cp-images/decam/project/projectdirs/cosmo/staging/decam/DECam_CP -maxdepth 1 -type d`;do ln -s $fullnm $(basename $fullnm);done
+
+Untar DR3 calibs:
+a=fits_table('/scratch1/scratchdirs/desiproc/DRs/dr3-obiwan/legacypipe-dir/survey-ccds-dr3-eboss-ngc.fits.gz')
+b=fits_table('/scratch1/scratchdirs/desiproc/DRs/dr3-obiwan/legacypipe-dir/survey-ccds-dr3-eboss-sgc.fits.gz')
+a=np.array([num[:3] for num in a.expnum.astype(str)])
+b=np.array([num[:3] for num in b.expnum.astype(str)])
+c=set(a).union(set(b))
+with open('calibs_2untar_eboss.txt','w') as foo:
+    for num in list(set(c)):
+        foo.write('%s\n' % num)         
+foo.close()
+
+dir=/global/project/projectdirs/cosmo/data/legacysurvey/dr3/calibs
+for i in `head ../../../calibs_2untar_eboss.txt`;do echo $i; rsync -Lav ${dir}/psfex/legacysurvey_dr3_calib_decam_psfex_00${i}.tgz ./;done
+
+MAKE 5 row survey-bricks table for decals_radeccolors.py
+ngc=fits_table('survey-bricks-eboss-ngc.fits.gz')
+b=fits_table('survey-bricks.fits.gz')
+
+
+TEST
+In [6]: a.brickname[(a.nexp_g == 1)*(a.nexp_r == 1)*(a.nexp_z == 1)]
+Out[6]: 
+array(['1220p282', '1220p287', '1220p237', ..., '1723p260', '1724p202',
+       '1724p200'],
+sbatch submit_obiwan.sh star 1220p282 1
+
+
+
+Try to hack decals_sim so we don't have to make copies of the data.
 
 decals_sim -b 2428p117 -n 2000 --chunksize 500 -o STAR --seed 7618 --threads 15 > ~/2428p117.log 2>&1 & 
 
@@ -422,52 +484,10 @@ def build_simcat(Samp=None,brickwcs=None, meta=None):
     # Galaxy Properties
     if typ in ['elg','lrg']:
         for key,tab_key in zip(['sersicn','rhalf','ba','phi'],['n','re','ba','pa']):
-            cat.set(key, Samp.get('%s_%s'%(typ,key) )
+            cat.set(key, Samp.get('%s_%s'%(typ,key) ))
         #cat['R50_1'] = Column(Samp.rhalf, dtype='f4')
         #cat['BA_1'] = Column(Samp.ba, dtype='f4')
         #cat['PHI_1'] = Column(Samp.phi, dtype='f4')
-    #if meta['OBJTYPE']  'STAR':
-	#	pass
-    #    # Read the MoG file and sample from it.
-    #    #mogfile = resource_filename('legacypipe', os.path.join('data', 'star_colors_mog.fits'))
-    #    #mog = priors._GaussianMixtureModel.load(mogfile)
-    #    #grzsample = mog.sample(nobj, random_state=rand)
-    #    #rz = grzsample[:, 0]
-    #    #gr = grzsample[:, 1]
-    #elif meta['OBJTYPE'] in ['ELG','LRG']:
-	#	cat['SERSICN_1'] = Column(Samp.sersicn, dtype='f4')
-	#	cat['R50_1'] = Column(Samp.rhalf, dtype='f4')
-	#	cat['BA_1'] = Column(Samp.ba, dtype='f4')
-	#	cat['PHI_1'] = Column(Samp.phi, dtype='f4')
-    #    # Read the MoG file and sample from it.
-    #    #mogfile = resource_filename('legacypipe', os.path.join('data', 'elg_colors_mog.fits'))
-    #    #mog = priors._GaussianMixtureModel.load(mogfile)
-    #    #grzsample = mog.sample(nobj, random_state=rand)
-    #    ## Samples
-    #    #rz = grzsample[:, 0]
-    #    #gr = grzsample[:, 1]
-    #    #sersicn_1 = rand.uniform(0.5,0.5, len(Samp))
-    #    #r50_1 = rand.uniform(0.5,0.5, len(Samp))
-    #    #ba_1 = rand.uniform(0.2,1.0, len(Samp)) #minor to major axis ratio
-    #    #phi_1 = rand.uniform(0.0, 180.0, len(Samp)) #position angle
-
-    #    ## Bulge parameters
-    #    #bulge_r50_range = [0.1,1.0]
-    #    #bulge_n_range = [3.0,5.0]
-    #    #bdratio_range = [0.0,1.0] # bulge-to-disk ratio
-
-    #else:
-    #    log.error('Unrecognized OBJTYPE!')
-    #    return 0
-
-    # Store grz fluxes in nanomaggies.
-    #rmag_range = np.squeeze(meta['RMAG_RANGE'])
-    #rmag = rand.uniform(rmag_range[0], rmag_range[1], nobj)
-
-    #cat['RFLUX'] = 1E9*10**(-0.4*rmag)      # [nanomaggies]
-    #cat['GFLUX'] = 1E9*10**(-0.4*(rmag+gr)) # [nanomaggies]
-    #cat['ZFLUX'] = 1E9*10**(-0.4*(rmag-rz)) # [nanomaggies]
-
     return cat, skipping_ids
 
 
@@ -628,6 +648,8 @@ def do_ith_cleanup(d=None):
     shutil.rmtree(os.path.join(output_dir, 'tractor'))
     log.info("Finished %s" % get_savedir(**d))
 
+def get_sample_fn(decals_sim_dir):
+    return os.path.join(decals_sim_dir,'softlinked_table') #'sample-merged.fits')
 
 def main(args=None):
     """Main routine which parses the optional inputs."""
@@ -704,7 +726,8 @@ def main(args=None):
     #chunk_list= [ int((args.rowstart)/maxobjs) ]
 
     # Ra,dec,mag table
-    Samp= fits_table(os.path.join(decals_sim_dir,'sample-merged.fits'))
+    fn= get_sample_fn(decals_sim_dir) 
+    Samp= fits_table(fn)
     # Cut on brick and rows to use 
     r0,r1,d0,d1= brickwcs.radec_bounds()
     print('Brick bounds ra=%f,%f; dec=%f,%f' % (r0,r1,d0,d1))
