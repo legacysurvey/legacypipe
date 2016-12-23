@@ -61,16 +61,25 @@ array(['1220p282', '1220p287', '1220p237', ..., '1723p260', '1724p202',
 Choose to test with brick 1220p282 
 1) python obiwan/decals_sim_radeccolors.py --ra1 121.5 --ra2 122.5 --dec1 27.5 --dec2 28.7 --prefix finaltest --outdir /scratch2/scratchdirs/kaylanb/finaltest
 2) for obj in star qso elg lrg;do sbatch submit_obiwan.sh $obj;done
-e.g. python obiwan/decals_sim.py \
+e.g. 
+export DECALS_SIM_DIR=/scratch2/scratchdirs/kaylanb/finaltest
+python obiwan/decals_sim.py \
         --objtype $objtype --brick $brick --rowstart $rowstart \
         --add_sim_noise --prefix $prefix --threads $OMP_NUM_THREADS 
 3) star,qso finished fine but elg,lrg ran out of memory
+4) 
 
 On desiproc:
+export LEGACY_SURVEY_DIR=/scratch1/scratchdirs/desiproc/DRs/dr3-obiwan/legacypipe-dir
+export DECALS_SIM_DIR=/scratch1/scratchdirs/desiproc/DRs/data-releases/dr3-obiwan/finaltest
 python obiwan/decals_sim_radeccolors.py --ra1 121.5 --ra2 122.5 --dec1 27.5 --dec2 28.7 --prefix finaltest --outdir /scratch1/scratchdirs/desiproc/DRs/data-releases/dr3-obiwan/finaltest
+python obiwan/decals_sim.py --objtype star --brick 1220p282 --rowstart 0 --add_sim_noise --prefix finaltest
 
+TEST dr4:
+export LEGACY_SURVEY_DIR=/scratch1/scratchdirs/desiproc/DRs/dr4-bootes/legacypipe-dir
+python legacypipe/runbrick.py --run dr4v2 --brick 1554p360 --skip --outdir test --nsigma 6
 
-Try to hack decals_sim so we don't have to make copies of the data.
+Tr yto hack decals_sim so we don't have to make copies of the data.
 
 decals_sim -b 2428p117 -n 2000 --chunksize 500 -o STAR --seed 7618 --threads 15 > ~/2428p117.log 2>&1 & 
 
@@ -152,10 +161,11 @@ def get_fnsuffix(**kwargs):
                                    'rowstart%d' % kwargs['rowst'])
 
 class SimDecals(LegacySurveyData):
-    def __init__(self, survey_dir=None, metacat=None, simcat=None, output_dir=None,\
+    def __init__(self, run=None, survey_dir=None, metacat=None, simcat=None, output_dir=None,\
                        add_sim_noise=False, folding_threshold=1.e-5, image_eq_model=False):
         '''folding_threshold -- make smaller to increase stamp_flux/input_flux'''
         super(SimDecals, self).__init__(survey_dir=survey_dir, output_dir=output_dir)
+        self.run= run #None, eboss-ngc, eboss-sgc, etc
         self.metacat = metacat
         self.simcat = simcat
         # Additional options from command line
@@ -166,6 +176,23 @@ class SimDecals(LegacySurveyData):
 
     def get_image_object(self, t):
         return SimImage(self, t)
+
+    def ccds_for_fitting(survey, brick, ccds):
+        return np.flatnonzero(ccds.camera == 'decam')
+
+    def filter_ccds_files(self, fns):
+        if self.run is None:
+            return super(SimDecals,self).filter_ccds_files(fns)
+        elif self.run == 'eboss-ngc':
+            return [fn for fn in fns if
+                 ('survey-ccds-dr3-eboss-ngc.fits.gz' in fn)]
+        elif self.run == 'eboss-sgc':
+            return [fn for fn in fns if
+                 ('survey-ccds-dr3-eboss-sgc.fits.gz' in fn)]
+        else:
+            raise ValueError('run=%s not supported' % self.run)
+
+
 
 
 class SimImage(DecamImage):
@@ -512,8 +539,10 @@ def get_parser():
                         help='simulate objects in this brick')
     parser.add_argument('-rs', '--rowstart', type=int, default=0, metavar='', 
                         help='zero indexed, row of ra,dec,mags table, after it is cut to brick, to start on')
+    parser.add_argument('--run', type=str, default=None, metavar='', 
+                        help='tells which survey-ccds to read')
     parser.add_argument('--prefix', type=str, default='', metavar='', 
-                        help='prefix for sample name')
+                        help='tells which input sample to use')
     parser.add_argument('-n', '--nobj', type=long, default=500, metavar='', 
                         help='number of objects to simulate (required input)')
     #parser.add_argument('-ic', '--ith_chunk', type=long, default=None, metavar='', 
@@ -624,7 +653,8 @@ def do_one_chunk(d=None):
     Can be run as 1) a loop over nchunks or 2) for one chunk
     d -- dict returned by get_metadata_others() AND added to by get_ith_simcat()'''
     assert(d is not None)
-    simdecals = SimDecals(metacat=d['metacat'], simcat=d['simcat'], output_dir=d['simcat_dir'], \
+    simdecals = SimDecals(run=d['run'],\
+                          metacat=d['metacat'], simcat=d['simcat'], output_dir=d['simcat_dir'], \
                           add_sim_noise=d['args'].add_sim_noise, folding_threshold=d['args'].folding_threshold,\
                           image_eq_model=d['args'].image_eq_model)
     # Use Tractor to just process the blobs containing the simulated sources.
@@ -633,6 +663,7 @@ def do_one_chunk(d=None):
     else:
         blobxy = zip(d['simcat'].get('x'), d['simcat'].get('y'))
 
+    # Format: run_brick(brick, survey obj, **kwargs)
     run_brick(d['brickname'], simdecals, threads=d['args'].threads, zoom=d['args'].zoom,
               wise=False, forceAll=True, writePickles=False, do_calibs=True,
               write_metrics=False, pixPsf=True, blobxy=blobxy, early_coadds=d['args'].early_coadds,
@@ -782,6 +813,7 @@ def main(args=None):
     # Random ra,dec and source properties
     create_ith_simcat(d=kwargs)
     # Run tractor
+    kwargs.update( dict(run=args.run) )
     do_one_chunk(d=kwargs)
     # Clean up output
     do_ith_cleanup(d=kwargs)

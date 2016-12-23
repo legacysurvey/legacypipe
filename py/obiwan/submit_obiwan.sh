@@ -1,9 +1,8 @@
 #!/bin/bash -l
 
-#SBATCH -p regular
-#SBATCH --qos=premium
+#SBATCH -p debug
 #SBATCH -N 1
-#SBATCH -t 01:00:00
+#SBATCH -t 00:05:00
 #SBATCH --account=desi
 #SBATCH -J obiwan
 #SBATCH -o obiwan.o%j
@@ -11,12 +10,23 @@
 #SBATCH --mail-type=END,FAIL
 #SBATCH -L SCRATCH
 
+#--qos=premium
 #-p shared
 #-n 6
 #-p debug
 #-N 1
 # Run script like this
 # for objtype in star elg lrg qso;do for rowstart in `seq 0 500 10000`; do bash decals_sim-bash-manager.sh $rowstart $objtype;done;done
+
+# Yu Feng's bcast
+source $CODE_DIR/yu-bcast/activate.sh
+set -x
+export PYTHONPATH=$CODE_DIR/legacypipe/py:${PYTHONPATH}
+pwd
+cd $CODE_DIR/legacypipe/py
+pwd
+python -c "from legacypipe.runbrick import run_brick"
+# Put legacypipe in path
 
 export objtype="$1"
 export brick=1220p282
@@ -31,17 +41,13 @@ else
     exit
 fi
 
-# Yu Feng's bcast
-source /scratch2/scratchdirs/kaylanb/yu-bcase/activate.sh
-# Put legacypipe in path
-export PYTHONPATH=.:${HOME}/repos:${PYTHONPATH}
+
 
 #source ~/.bashrc_dr4-bootes
 #python -c "import tractor;print(tractor)"
 #python -c "import astrometry;print(astrometry)"
 
 #source /scratch1/scratchdirs/desiproc/DRs/dr4/legacypipe-dir/bashrc
-set -x
 # Force MKL single-threaded
 # https://software.intel.com/en-us/articles/using-threaded-intel-mkl-in-multi-thread-application
 export MKL_NUM_THREADS=1
@@ -51,7 +57,7 @@ ulimit -a
 threads=24
 export OMP_NUM_THREADS=$threads
 export LEGACY_SURVEY_DIR=/scratch1/scratchdirs/desiproc/DRs/dr3-obiwan/legacypipe-dir #/scratch2/scratchdirs/kaylanb/dr3-obiwan/legacypipe-dir
-export DECALS_SIM_DIR=/scratch2/scratchdirs/kaylanb/finaltest #obiwan-eboss-ngc
+export DECALS_SIM_DIR=/scratch1/scratchdirs/desiproc/DRs/data-releases/dr3-obiwan/$prefix #obiwan-eboss-ngc
 export outdir=$DECALS_SIM_DIR
 mkdir -p $outdir
 export run_name=obiwan_$objtype_$brick_$rowstart

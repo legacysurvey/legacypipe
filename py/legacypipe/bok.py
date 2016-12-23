@@ -70,6 +70,15 @@ class BokImage(CPImage, CalibMixin):
             n0 = n
         return np.flatnonzero(good)
 
+    @classmethod
+    def bad_exposures(self, survey, ccds):
+        '''
+        Returns an index array for the members of the table 'ccds'
+        that are good exposures (NOT flagged) in the bad_expid file.
+        '''
+        good = np.ones(len(ccds), bool)
+        print('WARNING: camera: %s not using bad_expid file' % '90prime')
+        return np.flatnonzero(good)
 
     def __init__(self, survey, t):
         super(BokImage, self).__init__(survey, t)

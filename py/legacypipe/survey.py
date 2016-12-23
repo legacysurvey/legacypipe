@@ -1247,6 +1247,27 @@ Now using the current directory as LEGACY_SURVEY_DIR, but this is likely to fail
                 good[Icam[Igood]] = True
         return np.flatnonzero(good)
 
+    def bad_exposures(self, ccds):
+        '''
+        Returns an index array for the members of the table 'ccds'
+        that are good exposures (NOT flagged) in the bad_expid file.
+        
+        Default is to return all CCDs.
+        '''
+        cameras = np.unique(ccds.camera)
+        print('Finding bad_expid exposures.  Cameras:', cameras)
+        good = np.zeros(len(ccds), bool)
+        for cam in cameras:
+            imclass = self.image_class_for_camera(cam)
+            Icam = np.flatnonzero(ccds.camera == cam)
+            print('Checking', len(Icam), 'images from camera', cam)
+            Igood = imclass.bad_exposures(self, ccds[Icam])
+            print('Keeping', len(Igood), 'unflagged CCD exposures from camera', cam)
+            if len(Igood):
+                good[Icam[Igood]] = True
+        return np.flatnonzero(good)
+
+
     def apply_blacklist(self, ccds):
         '''
         Returns an index array of CCDs to KEEP; ie, do

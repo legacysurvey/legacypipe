@@ -58,6 +58,28 @@ class MosaicImage(CPImage, CalibMixin):
             n0 = n
         return np.flatnonzero(good)
 
+    @classmethod
+    def bad_exposures(self, survey, ccds):
+        '''
+        Returns an index array for the members of the table 'ccds'
+        that are good exposures (NOT flagged) in the bad_expid file.
+        '''
+        good = np.ones(len(ccds), bool)
+        n0 = sum(good)
+        # Exposure number, leading zeros removed
+        expid=np.array([num.split('-')[0].lstrip('0') for num in ccds.expid]).astype(int)
+        bad= np.loadtxt('legacyccds/bad_expid_mzls.txt',dtype=int,usecols=(0,))
+        flag= set(bad).intersection(set(expid))
+        flag= list(flag)
+        if len(flag) > 0:
+            for id in flag:
+                good[expid == id] = False
+                #continue as usual
+                n = sum(good)
+                print('Flagged', n0-n, 'as Bad Exposures')
+                n0 = n
+        return np.flatnonzero(good)
+
     def __init__(self, survey, t):
         super(MosaicImage, self).__init__(survey, t)
         # Add poisson noise to weight map
