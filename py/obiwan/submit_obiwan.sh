@@ -1,8 +1,9 @@
 #!/bin/bash -l
 
-#SBATCH -p debug
+#SBATCH -p regular
+#SBATCH --qos=premium
 #SBATCH -N 1
-#SBATCH -t 00:30:00
+#SBATCH -t 01:00:00
 #SBATCH --account=desi
 #SBATCH -J obiwan
 #SBATCH -o obiwan.o%j
@@ -18,8 +19,11 @@
 # for objtype in star elg lrg qso;do for rowstart in `seq 0 500 10000`; do bash decals_sim-bash-manager.sh $rowstart $objtype;done;done
 
 export objtype="$1"
-export brick="$2"
-export rowstart="$3"
+export brick=1220p282
+export rowstart=0
+export prefix=finaltest
+#export brick="$2"
+#export rowstart="$3"
 if [ "$objtype" = "star" ] || [ "$objtype" = "elg" ] || [ "$objtype" = "lrg" ] || [ "$objtype" = "qso" ] ; then
     echo Script running
 else
@@ -30,7 +34,7 @@ fi
 # Yu Feng's bcast
 source /scratch2/scratchdirs/kaylanb/yu-bcase/activate.sh
 # Put legacypipe in path
-export PYTHONPATH=.:${PYTHONPATH}
+export PYTHONPATH=.:${HOME}/repos:${PYTHONPATH}
 
 #source ~/.bashrc_dr4-bootes
 #python -c "import tractor;print(tractor)"
@@ -46,8 +50,8 @@ ulimit -a
 
 threads=24
 export OMP_NUM_THREADS=$threads
-export LEGACY_SURVEY_DIR=point at desiproc scratch/scratch2/scratchdirs/kaylanb/dr3/desiproc-dr3-template
-export DECALS_SIM_DIR=/scratch2/scratchdirs/kaylanb/obiwan-eboss-ngc
+export LEGACY_SURVEY_DIR=/scratch1/scratchdirs/desiproc/DRs/dr3-obiwan/legacypipe-dir #/scratch2/scratchdirs/kaylanb/dr3-obiwan/legacypipe-dir
+export DECALS_SIM_DIR=/scratch2/scratchdirs/kaylanb/finaltest #obiwan-eboss-ngc
 export outdir=$DECALS_SIM_DIR
 mkdir -p $outdir
 export run_name=obiwan_$objtype_$brick_$rowstart
@@ -76,7 +80,7 @@ elif [ -e "$exceed_rows" ]; then
     echo skipping $myrun, it exceeds total number artifical sources/rows
 else
     # Main
-    log="$outdir/logs/$bri/$brick/log.objtype$objtype_rowstart$rowstart_$SLURM_JOBID"
+    log="$outdir/logs/$bri/$brick/log.obj${objtype}_rowstart${rowstart}_${SLURM_JOBID}"
     mkdir -p $(dirname $log)
 
     echo Logging to: $log
@@ -98,7 +102,7 @@ else
     echo "-----------------------------------------------------------------------------------------" >> $log
     srun -n $tasks -c $OMP_NUM_THREADS python obiwan/decals_sim.py \
         --objtype $objtype --brick $brick --rowstart $rowstart \
-        --add_sim_noise --threads $OMP_NUM_THREADS
+        --add_sim_noise --prefix $prefix --threads $OMP_NUM_THREADS
         >> $log 2>&1
     #     --skip \
     #     --checkpoint $outdir/checkpoints/${bri}/${brick}.pickle \

@@ -1,8 +1,8 @@
 #!/bin/bash -l
 
 #SBATCH -p debug
-#SBATCH -N 6
-#SBATCH -t 00:10:00
+#SBATCH -N 20
+#SBATCH -t 00:30:00
 #SBATCH --account=desi
 #SBATCH -J bootes-dr3-obiwan
 #SBATCH -o bootes-dr3-obiwan.o%j
@@ -45,23 +45,23 @@ fi
 let tasks=${SLURM_JOB_NUM_NODES}*${cores}
 
 # eBOSS NGC
-prefix=eboss_ngc
+prefix=eboss_ngc_
 ra1=122.
 ra2=177.
 dec1=12.
 dec2=32.
 ## eBOSS SGC
-#prefix=eboss_sgc
+#prefix=eboss_sgc_
 #ra1=310.
 #ra2=50.
 #dec1=-6.
 #dec2=6.
-# Test
-#prefix=test
-#ra1=10.
-#ra2=11.
-#dec1=20.
-#dec2=21.
+# Test brick
+#prefix=brick_1220p282
+#ra1=121.6
+#ra2=122.3
+#dec1=28.
+#dec2=28.5
 
 srun -n $tasks -N ${SLURM_JOB_NUM_NODES} -c 1 python obiwan/decals_sim_radeccolors.py --nproc $tasks --ra1 $ra1 --ra2 $ra2 --dec1 $dec1 --dec2 $dec2 --outdir $outdir --prefix $prefix
 

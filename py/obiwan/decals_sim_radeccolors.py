@@ -19,6 +19,8 @@ import pickle
 from astrometry.util.fits import fits_table, merge_tables
 from theValidator.catalogues import CatalogueFuncs
 
+from legacypipe.common import LegacySurveyData, wcs_for_brick
+
 ######## 
 ## Ted's
 import time
@@ -294,14 +296,21 @@ def draw_points(radec,unique_ids,seed=1,outdir='./',prefix=''):
 
 
 def organize_by_brick(btable,outdir='./',prefix=''):
-    '''btable -- 5row survey-bricks table cut to bricks being orgazined by this mpi task'''
+    '''btable -- survey bricks table cut to radec region
+    each mpi task gets a fraction of the bricks remaining'''
+    survey = LegacySurveyData()
     for btab in btable:
+        # Brick wcs
+        brickinfo = survey.get_brick_by_name(btab.brickname)
+        brickwcs = wcs_for_brick(brickinfo)
+        ra1,ra2,dec1,dec2= brickwcs.radec_bounds()
+        # Loop over sample files
         fns= get_fns(outdir,prefix=prefix)
         cat= []
         for sample_fn in fns:
             sample= fits_table(sample_fn)
-            keep=  (sample.ra >= btab.ra1)*(sample.ra <= btab.ra2)*\
-                   (sample.dec >= btab.dec1)*(sample.dec <= btab.dec2)
+            keep=  (sample.ra >= ra1)*(sample.ra <= ra2)*\
+                   (sample.dec >= dec1)*(sample.dec <= dec2)
             if np.where(keep)[0].size > 0:
                 sample.cut(keep)
                 cat.append( sample )

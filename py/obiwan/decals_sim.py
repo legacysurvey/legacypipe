@@ -484,7 +484,7 @@ def build_simcat(Samp=None,brickwcs=None, meta=None):
     # Galaxy Properties
     if typ in ['elg','lrg']:
         for key,tab_key in zip(['sersicn','rhalf','ba','phi'],['n','re','ba','pa']):
-            cat.set(key, Samp.get('%s_%s'%(typ,key) ))
+            cat.set(key, Samp.get('%s_%s'%(typ,tab_key) ))
         #cat['R50_1'] = Column(Samp.rhalf, dtype='f4')
         #cat['BA_1'] = Column(Samp.ba, dtype='f4')
         #cat['PHI_1'] = Column(Samp.phi, dtype='f4')
@@ -503,6 +503,8 @@ def get_parser():
                         help='simulate objects in this brick')
     parser.add_argument('-rs', '--rowstart', type=int, default=0, metavar='', 
                         help='zero indexed, row of ra,dec,mags table, after it is cut to brick, to start on')
+    parser.add_argument('--prefix', type=str, default='', metavar='', 
+                        help='prefix for sample name')
     parser.add_argument('-n', '--nobj', type=long, default=500, metavar='', 
                         help='number of objects to simulate (required input)')
     #parser.add_argument('-ic', '--ith_chunk', type=long, default=None, metavar='', 
@@ -648,8 +650,10 @@ def do_ith_cleanup(d=None):
     shutil.rmtree(os.path.join(output_dir, 'tractor'))
     log.info("Finished %s" % get_savedir(**d))
 
-def get_sample_fn(decals_sim_dir):
-    return os.path.join(decals_sim_dir,'softlinked_table') #'sample-merged.fits')
+def get_sample_fn(brick,decals_sim_dir,prefix=''):
+    fn= os.path.join(decals_sim_dir,'input_sample','bybrick','%ssample-%s.fits' % (prefix,brick))
+    return fn
+    #return os.path.join(decals_sim_dir,'softlinked_table') #'sample-merged.fits')
 
 def main(args=None):
     """Main routine which parses the optional inputs."""
@@ -726,15 +730,17 @@ def main(args=None):
     #chunk_list= [ int((args.rowstart)/maxobjs) ]
 
     # Ra,dec,mag table
-    fn= get_sample_fn(decals_sim_dir) 
+    fn= get_sample_fn(brickname,decals_sim_dir,prefix=args.prefix)
     Samp= fits_table(fn)
-    # Cut on brick and rows to use 
-    r0,r1,d0,d1= brickwcs.radec_bounds()
-    print('Brick bounds ra=%f,%f; dec=%f,%f' % (r0,r1,d0,d1))
-    print('Sample len=%d' % len(Samp))
-    Samp.cut( (Samp.ra >= r0)*(Samp.ra <= r1)*\
-              (Samp.dec >= d0)*(Samp.dec <= d1) )
-    print('Sample len cut to brick= %d, total number samples= %.1f' % (len(Samp),len(Samp)/float(maxobjs)))
+    print('Reading input sample: %s' % fn)
+    print('%d samples, for brick %s' % (len(Samp),brickname))
+    # Already did these cuts in decals_sim_radeccolors 
+    #r0,r1,d0,d1= brickwcs.radec_bounds()
+    #print('Brick bounds ra=%f,%f; dec=%f,%f' % (r0,r1,d0,d1))
+    #print('Sample len=%d' % len(Samp))
+    #Samp.cut( (Samp.ra >= r0)*(Samp.ra <= r1)*\
+    #          (Samp.dec >= d0)*(Samp.dec <= d1) )
+    #print('Sample len cut to brick= %d, total number samples= %.1f' % (len(Samp),len(Samp)/float(maxobjs)))
     rowst,rowend= args.rowstart,args.rowstart+maxobjs
     Samp= Samp[args.rowstart:args.rowstart+maxobjs]
     print('Sample len cut nobj or less= %d' % len(Samp))
