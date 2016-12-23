@@ -1,8 +1,9 @@
 #!/bin/bash -l
 
-#SBATCH -p debug
+#SBATCH -p regular
+#SBATCH --qos=premium
 #SBATCH -N 1
-#SBATCH -t 00:05:00
+#SBATCH -t 00:30:00
 #SBATCH --account=desi
 #SBATCH -J obiwan
 #SBATCH -o obiwan.o%j
@@ -22,10 +23,11 @@
 source $CODE_DIR/yu-bcast/activate.sh
 set -x
 export PYTHONPATH=$CODE_DIR/legacypipe/py:${PYTHONPATH}
-pwd
+#pwd
 cd $CODE_DIR/legacypipe/py
-pwd
+#pwd
 python -c "from legacypipe.runbrick import run_brick"
+python -c "import sklearn;print(sklearn)"
 # Put legacypipe in path
 
 export objtype="$1"
@@ -108,7 +110,7 @@ else
     echo "-----------------------------------------------------------------------------------------" >> $log
     srun -n $tasks -c $OMP_NUM_THREADS python obiwan/decals_sim.py \
         --objtype $objtype --brick $brick --rowstart $rowstart \
-        --add_sim_noise --prefix $prefix --threads $OMP_NUM_THREADS
+        --add_sim_noise --prefix $prefix --threads $OMP_NUM_THREADS \
         >> $log 2>&1
     #     --skip \
     #     --checkpoint $outdir/checkpoints/${bri}/${brick}.pickle \
