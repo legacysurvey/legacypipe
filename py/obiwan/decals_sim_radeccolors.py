@@ -19,7 +19,7 @@ import pickle
 from astrometry.util.fits import fits_table, merge_tables
 from theValidator.catalogues import CatalogueFuncs
 
-from legacypipe.common import LegacySurveyData, wcs_for_brick
+from legacypipe.survey import LegacySurveyData, wcs_for_brick
 
 ######## 
 ## Ted's

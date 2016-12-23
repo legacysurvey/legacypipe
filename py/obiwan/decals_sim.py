@@ -66,6 +66,10 @@ e.g. python obiwan/decals_sim.py \
         --add_sim_noise --prefix $prefix --threads $OMP_NUM_THREADS 
 3) star,qso finished fine but elg,lrg ran out of memory
 
+On desiproc:
+python obiwan/decals_sim_radeccolors.py --ra1 121.5 --ra2 122.5 --dec1 27.5 --dec2 28.7 --prefix finaltest --outdir /scratch1/scratchdirs/desiproc/DRs/data-releases/dr3-obiwan/finaltest
+
+
 Try to hack decals_sim so we don't have to make copies of the data.
 
 decals_sim -b 2428p117 -n 2000 --chunksize 500 -o STAR --seed 7618 --threads 15 > ~/2428p117.log 2>&1 & 
@@ -132,7 +136,7 @@ from tractor.basics import GaussianMixtureEllipsePSF, RaDecPos
 
 from legacypipe.runbrick import run_brick
 from legacypipe.decam import DecamImage
-from legacypipe.survey import LegacySurveyData, wcs_for_brick, ccds_touching_wcs
+from legacypipe.survey import LegacySurveyData, wcs_for_brick
 
 import obiwan.decals_sim_priors as priors
 

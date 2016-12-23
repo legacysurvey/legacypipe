@@ -108,6 +108,8 @@ if [ "$NERSC_HOST" == "edison" ]; then
   export PATH=${CODE_DIR}/astrometry_kaylanb/lib/python/astrometry:${PATH}
   #PATH=${CODE_DIR}/astrometry_kaylanb/lib/python/astrometry/util:${PATH}
   #PATH=${CODE_DIR}/astrometry_kaylanb/lib/python/astrometry/blind:${PATH}
+  # Other packages
+  export PYTHONPATH=${CODE_DIR}/theValidator:${PYTHONPATH}
 
 fi
 

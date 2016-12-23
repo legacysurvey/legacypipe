@@ -31,6 +31,10 @@ class BokImage(CPImage, CalibMixin):
     Class for handling images from the 90prime camera processed by the
     NOAO Community Pipeline.
     '''
+    @classmethod
+    def nominal_zeropoints(self):
+        return dict(g = 25.74,
+                    r = 25.52,)
 
     @classmethod
     def photometric_ccds(self, survey, ccds):
@@ -40,8 +44,8 @@ class BokImage(CPImage, CalibMixin):
 
         This recipe is adapted from the DECam one.
         '''
-        # From legacy-zeropoints.py
-        z0 = dict(g = 25.74,r = 25.52)
+        # See legacypipe/ccd_cuts.py
+        z0 = self.nominal_zeropoints()
         z0 = np.array([z0[f[0]] for f in ccds.filter])
         good = np.ones(len(ccds), bool)
         n0 = sum(good)
@@ -52,7 +56,7 @@ class BokImage(CPImage, CalibMixin):
             ('exptime < 30 s', (ccds.exptime < 30)),
             ('ccdnmatch < 20', (ccds.ccdnmatch < 20)),
             ('abs(zpt - ccdzpt) > 0.1',
-             (np.abs(ccds.zpt - ccds.ccdzpt) > 0.1))
+             (np.abs(ccds.zpt - ccds.ccdzpt) > 0.1)),
             ('zpt < 0.5 mag of nominal',
              (ccds.zpt < (z0 - 0.5))),
             ('zpt > 0.18 mag of nominal',
