@@ -53,14 +53,18 @@ ngc=fits_table('survey-bricks-eboss-ngc.fits.gz')
 b=fits_table('survey-bricks.fits.gz')
 
 
-TEST
+TEST before and after merge with master
 In [6]: a.brickname[(a.nexp_g == 1)*(a.nexp_r == 1)*(a.nexp_z == 1)]
 Out[6]: 
 array(['1220p282', '1220p287', '1220p237', ..., '1723p260', '1724p202',
        '1724p200'],
-sbatch submit_obiwan.sh star 1220p282 1
-
-
+Choose to test with brick 1220p282 
+1) python obiwan/decals_sim_radeccolors.py --ra1 121.5 --ra2 122.5 --dec1 27.5 --dec2 28.7 --prefix finaltest --outdir /scratch2/scratchdirs/kaylanb/finaltest
+2) for obj in star qso elg lrg;do sbatch submit_obiwan.sh $obj;done
+e.g. python obiwan/decals_sim.py \
+        --objtype $objtype --brick $brick --rowstart $rowstart \
+        --add_sim_noise --prefix $prefix --threads $OMP_NUM_THREADS 
+3) star,qso finished fine but elg,lrg ran out of memory
 
 Try to hack decals_sim so we don't have to make copies of the data.
 
