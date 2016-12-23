@@ -1,0 +1,67 @@
+#!/bin/bash -l
+
+#SBATCH -p debug
+#SBATCH -N 20
+#SBATCH -t 00:30:00
+#SBATCH --account=desi
+#SBATCH -J bootes-dr3-obiwan
+#SBATCH -o bootes-dr3-obiwan.o%j
+#SBATCH --mail-user=kburleigh@lbl.gov
+#SBATCH --mail-type=END,FAIL
+#SBATCH -L SCRATCH
+
+#-p shared
+#-n 6
+#-p debug
+#-N 1
+
+# Yu Feng's bcast
+source /scratch2/scratchdirs/kaylanb/yu-bcase/activate.sh
+# Put legacypipe in path
+export PYTHONPATH=.:/global/homes/k/kaylanb/repos:${PYTHONPATH}
+
+outdir=/scratch2/scratchdirs/kaylanb/obiwan-eboss-ngc
+#cp /project/projectdirs/desi/users/burleigh/obiwan_backup_data/*.pickle $outdir
+
+#source ~/.bashrc_hpcp
+#source ~/.bashrc_dr4-bootes
+python -c "import tractor;print(tractor)"
+python -c "import astrometry;print(astrometry)"
+
+#source /scratch1/scratchdirs/desiproc/DRs/dr4/legacypipe-dir/bashrc
+set -x
+# Force MKL single-threaded
+# https://software.intel.com/en-us/articles/using-threaded-intel-mkl-in-multi-thread-application
+export MKL_NUM_THREADS=1
+# Try limiting memory to avoid killing the whole MPI job...
+ulimit -a
+
+
+if [ "$NERSC_HOST" == "cori" ]; then
+    cores=32
+elif [ "$NERSC_HOST" == "edison" ]; then
+    cores=24
+fi
+let tasks=${SLURM_JOB_NUM_NODES}*${cores}
+
+# eBOSS NGC
+prefix=eboss_ngc_
+ra1=122.
+ra2=177.
+dec1=12.
+dec2=32.
+## eBOSS SGC
+#prefix=eboss_sgc_
+#ra1=310.
+#ra2=50.
+#dec1=-6.
+#dec2=6.
+# Test brick
+#prefix=brick_1220p282
+#ra1=121.6
+#ra2=122.3
+#dec1=28.
+#dec2=28.5
+
+srun -n $tasks -N ${SLURM_JOB_NUM_NODES} -c 1 python obiwan/decals_sim_radeccolors.py --nproc $tasks --ra1 $ra1 --ra2 $ra2 --dec1 $dec1 --dec2 $dec2 --outdir $outdir --prefix $prefix
+
