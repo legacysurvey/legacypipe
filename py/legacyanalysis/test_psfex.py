@@ -6,7 +6,7 @@ from astrometry.util.file import trymakedirs
 
 from tractor import *
 from tractor.psfex import *
-from legacypipe.common import *
+from legacypipe.survey import *
 
 def test_psfex(expnum, ccdname, survey_out_dir):
     survey_out = LegacySurveyData(survey_out_dir)

@@ -26,15 +26,15 @@ def main():
 
     bricks = list_bricks(ns)
 
-    tree, boss = read_boss(ns.boss, ns)
+    tree, nboss = read_boss(ns.boss, ns)
 
     # get the data type of the match
     brickname, path = bricks[0]
     peek = fitsio.read(path, 1, upper=True)
-    matched_catalogue = sharedmem.empty(len(boss), dtype=peek.dtype)
+    matched_catalogue = sharedmem.empty(nboss, dtype=peek.dtype)
 
     matched_catalogue['OBJID'] = -1
-    matched_distance = sharedmem.empty(len(boss), dtype='f4')
+    matched_distance = sharedmem.empty(nboss, dtype='f4')
 
     # convert to radian
     tol = ns.tolerance / (60. * 60.)  * (np.pi / 180)
@@ -133,7 +133,6 @@ def radec2pos(ra, dec):
 def read_boss(filename, ns):
     t0 = time()
     boss = fitsio.FITS(filename, upper=True)[1][:]
-    boss = sharedmem.copy(boss)
 
     if ns.verbose:
         print("reading BOSS catlaogue took %g seconds." % (time() - t0))
@@ -155,6 +154,7 @@ def read_boss(filename, ns):
         raise KeyError("No RA/DEC or PLUG_RA/PLUG_DEC in the BOSS catalogue")
 
     pos = radec2pos(ra, dec)
+    # work around NERSC overcommit issue.
     pos = sharedmem.copy(pos)
 
     tree = KDTree(pos)
@@ -162,7 +162,7 @@ def read_boss(filename, ns):
     if ns.verbose:
         print("Building KD-Tree took %g seconds." % (time() - t0))
 
-    return tree, boss
+    return tree, len(boss)
 
 def list_bricks(ns):
     t0 = time()
@@ -181,7 +181,7 @@ def list_bricks(ns):
     if ns.bricklist is not None:
         bricklist = np.loadtxt(ns.bricklist, dtype='S8')
         # TODO: skip unknown bricks?
-        d = dict([(brickname, d[brickname]) 
+        d = dict([(brickname.decode(), d[brickname]) 
                              for brickname in bricklist])
 
     t0 = time()

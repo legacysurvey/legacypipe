@@ -1,7 +1,7 @@
 from __future__ import print_function
 import pylab as plt
 import numpy as np
-from legacypipe.common import *
+from legacypipe.survey import *
 from astrometry.util.plotutils import *
 from collections import Counter
 

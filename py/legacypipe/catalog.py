@@ -9,9 +9,7 @@ from tractor import PointSource, getParamTypeTree, RaDecPos
 from tractor.galaxy import ExpGalaxy, DevGalaxy, FixedCompositeGalaxy
 from tractor.ellipses import EllipseESoft, EllipseE
 
-from legacypipe.common import SimpleGalaxy
-
-unwise_atlas = 'allsky-atlas.fits'
+from legacypipe.survey import SimpleGalaxy
 
 # FITS catalogs
 fits_typemap = { PointSource: 'PSF', ExpGalaxy: 'EXP', DevGalaxy: 'DEV',
@@ -23,36 +21,13 @@ fits_short_typemap = { PointSource: 'S', ExpGalaxy: 'E', DevGalaxy: 'D',
                        FixedCompositeGalaxy: 'C',
                        SimpleGalaxy: 'G' }
 
-
-def typestring(t):
+def _typestring(t):
     return '%s.%s' % (t.__module__, t.__name__)
     
-ellipse_types = dict([(typestring(t), t) for t in
-                      [ EllipseESoft, EllipseE,
-                        ]])
+ellipse_types = dict([(_typestring(t), t) for t in
+                      [ EllipseESoft, EllipseE, ]])
 
-def unwise_wcs_from_name(name, atlas=unwise_atlas):
-    print('Reading', atlas)
-    T = fits_table(atlas)
-    print('Read', len(T), 'WISE tiles')
-    I = np.flatnonzero(name == T.coadd_id)
-    if len(I) != 1:
-        raise RuntimeError('Failed to find WISE tile "%s"' % name)
-    I = I[0]
-    tra,tdec = T.ra[I],T.dec[I]
-    return unwise_tile_wcs(tra, tdec)
-
-# from unwise_coadd.py : get_coadd_tile_wcs()
-def unwise_tile_wcs(ra, dec, W=2048, H=2048, pixscale=2.75):
-    '''
-    Returns a Tan WCS object at the given RA,Dec center, axis aligned, with the
-    given pixel W,H and pixel scale in arcsec/pixel.
-    '''
-    cowcs = Tan(ra, dec, (W+1)/2., (H+1)/2.,
-                -pixscale/3600., 0., 0., pixscale/3600., W, H)
-    return cowcs
-
-def source_param_types(src):
+def _source_param_types(src):
     def flatten_node(node):
         return reduce(lambda x,y: x+y,
                       [flatten_node(c) for c in node[1:]],
@@ -63,13 +38,15 @@ def source_param_types(src):
     return types
     
 
-def prepare_fits_catalog(cat, invvars, T, hdr, filts, fs, allbands = 'ugrizY',
-                         prefix='', save_invvars=True):
+def prepare_fits_catalog(cat, invvars, T, hdr, filts, fs, allbands=None,
+                         prefix='', save_invvars=True, unpackShape=True):
     if T is None:
         T = fits_table()
     if hdr is None:
         import fitsio
         hdr = fitsio.FITSHDR()
+    if allbands is None:
+        allbands = filts
 
     hdr.add_record(dict(name='TR_VER', value=1, comment='Tractor output format version'))
 
@@ -86,80 +63,101 @@ def prepare_fits_catalog(cat, invvars, T, hdr, filts, fs, allbands = 'ugrizY',
                 hdr.add_record(dict(name='TR_%s_P%i' % (ts, i), value=nm,
                                     comment='Tractor param name'))
 
-            for i,t in enumerate(source_param_types(sc)):
-                t = typestring(t)
+            for i,t in enumerate(_source_param_types(sc)):
+                t = _typestring(t)
                 hdr.add_record(dict(name='TR_%s_T%i' % (ts, i),
                                     value=t, comment='Tractor param type'))
             break
 
     params0 = cat.getParams()
 
-    decam_flux = np.zeros((len(cat), len(allbands)), np.float32)
-    decam_flux_ivar = np.zeros((len(cat), len(allbands)), np.float32)
+    flux = np.zeros((len(cat), len(allbands)), np.float32)
+    flux_ivar = np.zeros((len(cat), len(allbands)), np.float32)
 
     for filt in filts:
-        flux = np.array([src is not None and
-                         sum(b.getFlux(filt) for b in src.getBrightnesses())
-                         for src in cat])
-
-        if invvars is not None:
-            # Oh my, this is tricky... set parameter values to the variance
-            # vector so that we can read off the parameter variances via the
-            # python object apis.
-            cat.setParams(invvars)
-            flux_iv = np.array([src is not None and
-                                sum(b.getFlux(filt) for b in src.getBrightnesses())
-                                for src in cat])
-            cat.setParams(params0)
-        else:
-            flux_iv = np.zeros_like(flux)
-
         i = allbands.index(filt)
-        decam_flux[:,i] = flux.astype(np.float32)
-        decam_flux_ivar[:,i] = flux_iv.astype(np.float32)
+        for j,src in enumerate(cat):
+            if src is not None:
+                flux[j,i] = sum(b.getFlux(filt) for b in src.getBrightnesses())
 
-    T.set('%sdecam_flux' % prefix, decam_flux)
+        if invvars is None:
+            continue
+        # Oh my, this is tricky... set parameter values to the variance
+        # vector so that we can read off the parameter variances via the
+        # python object apis.
+        cat.setParams(invvars)
+
+        for j,src in enumerate(cat):
+            if src is not None:
+                flux_ivar[j,i] = sum(b.getFlux(filt) for b in src.getBrightnesses())
+
+        cat.setParams(params0)
+
+    T.set('%sflux' % prefix, flux)
     if save_invvars:
-        T.set('%sdecam_flux_ivar' % prefix, decam_flux_ivar)
+        T.set('%sflux_ivar' % prefix, flux_ivar)
 
     if fs is not None:
         fskeys = ['prochi2', 'pronpix', 'profracflux', 'proflux', 'npix']
         for k in fskeys:
             x = getattr(fs, k)
             x = np.array(x).astype(np.float32)
-            T.set('%sdecam_%s_%s' % (prefix, tim.filter, k), x.astype(np.float32))
+            T.set('%s%s_%s' % (prefix, tim.filter, k), x.astype(np.float32))
 
-    get_tractor_fits_values(T, cat, '%s%%s' % prefix)
+    _get_tractor_fits_values(T, cat, '%s%%s' % prefix, unpackShape=unpackShape)
 
     if save_invvars:
         if invvars is not None:
             cat.setParams(invvars)
         else:
             cat.setParams(np.zeros(cat.numberOfParams()))
-        get_tractor_fits_values(T, cat, '%s%%s_ivar' % prefix)
+        _get_tractor_fits_values(T, cat, '%s%%s_ivar' % prefix,
+                                 unpackShape=unpackShape)
         # Heh, "no uncertainty here!"
         T.delete_column('%stype_ivar' % prefix)
     cat.setParams(params0)
+
+    # mod
+    ra = T.get('%sra' % prefix)
+    ra += (ra <   0) * 360.
+    ra -= (ra > 360) * 360.
+
+    # Downconvert RA,Dec invvars to float32
+    for c in ['ra','dec']:
+        col = '%s%s_ivar' % (prefix, c)
+        T.set(col, T.get(col).astype(np.float32))
+
+    # Zero out unconstrained values
+    flux = T.get('%s%s' % (prefix, 'flux'))
+    iv = T.get('%s%s' % (prefix, 'flux_ivar'))
+    flux[iv == 0] = 0.
     
     return T, hdr
 
 # We'll want to compute errors in our native representation, so have a
 # FITS output routine that can convert those into output format.
 
-def get_tractor_fits_values(T, cat, pat):
+def _get_tractor_fits_values(T, cat, pat, unpackShape=True):
     typearray = np.array([fits_typemap[type(src)] for src in cat])
     # If there are no "COMP" sources, the type will be 'S3' rather than 'S4'...
     typearray = typearray.astype('S4')
     T.set(pat % 'type', typearray)
 
-    T.set(pat % 'ra',  np.array([src is not None and 
-                                 src.getPosition().ra  for src in cat]))
-    T.set(pat % 'dec', np.array([src is not None and
-                                 src.getPosition().dec for src in cat]))
+    ra,dec = [],[]
+    for src in cat:
+        if src is None:
+            ra.append(0.)
+            dec.append(0.)
+        else:
+            pos = src.getPosition()
+            ra.append(pos.ra)
+            dec.append(pos.dec)
+    T.set(pat % 'ra',  np.array(ra))
+    T.set(pat % 'dec', np.array(dec))
 
-    shapeExp = np.zeros((len(T), 3))
-    shapeDev = np.zeros((len(T), 3))
-    fracDev  = np.zeros(len(T))
+    shapeExp = np.zeros((len(T), 3), np.float32)
+    shapeDev = np.zeros((len(T), 3), np.float32)
+    fracDev  = np.zeros(len(T), np.float32)
 
     for i,src in enumerate(cat):
         if isinstance(src, ExpGalaxy):
@@ -172,17 +170,23 @@ def get_tractor_fits_values(T, cat, pat):
             shapeDev[i,:] = src.shapeDev.getAllParams()
             fracDev[i] = src.fracDev.getValue()
 
-    T.set(pat % 'shapeExp', shapeExp.astype(np.float32))
-    T.set(pat % 'shapeDev', shapeDev.astype(np.float32))
-    T.set(pat % 'fracDev',   fracDev.astype(np.float32))
-    return
+    T.set(pat % 'fracDev',   fracDev)
 
-
+    if unpackShape:
+        T.set(pat % 'shapeExp_r',  shapeExp[:,0])
+        T.set(pat % 'shapeExp_e1', shapeExp[:,1])
+        T.set(pat % 'shapeExp_e2', shapeExp[:,2])
+        T.set(pat % 'shapeDev_r',  shapeDev[:,0])
+        T.set(pat % 'shapeDev_e1', shapeDev[:,1])
+        T.set(pat % 'shapeDev_e2', shapeDev[:,2])
+    else:
+        T.set(pat % 'shapeExp', shapeExp)
+        T.set(pat % 'shapeDev', shapeDev)
 
 
 def read_fits_catalog(T, hdr=None, invvars=False, bands='grz',
-                      allbands = 'ugrizY', ellipseClass=None):
-    from tractor import NanoMaggies
+                      allbands=None, ellipseClass=EllipseE,
+                      unpackShape=True, fluxPrefix='decam_'):
     '''
     This is currently a weird hybrid of dynamic and hard-coded.
 
@@ -190,10 +194,27 @@ def read_fits_catalog(T, hdr=None, invvars=False, bands='grz',
 
     If invvars=True, return sources,invvars
     where invvars is a list matching sources.getParams()
+
+    If *ellipseClass* is set, assume that type for galaxy shapes; if None,
+    read the type from the header.
+
+    If *unpackShapes* is True and *ellipseClass* is EllipseE, read
+    catalog entries "shapeexp_r", "shapeexp_e1", "shapeexp_e2" rather than
+    "shapeExp", and similarly for "dev".
     '''
+    from tractor import NanoMaggies
     if hdr is None:
         hdr = T._header
+    if allbands is None:
+        allbands = bands    
     rev_typemap = dict([(v,k) for k,v in fits_typemap.items()])
+
+    if unpackShape and ellipseClass != EllipseE:
+        print('Not doing unpackShape because ellipseClass != EllipseE.')
+        unpackShape = False
+    if unpackShape:
+        T.shapeexp = np.vstack((T.shapeexp_r, T.shapeexp_e1, T.shapeexp_e2)).T
+        T.shapedev = np.vstack((T.shapedev_r, T.shapedev_e1, T.shapedev_e2)).T
 
     ivbandcols = []
 
@@ -209,7 +230,7 @@ def read_fits_catalog(T, hdr=None, invvars=False, bands='grz',
 
         shorttype = fits_short_typemap[clazz]
 
-        flux = np.atleast_1d(t.decam_flux)
+        flux = np.atleast_1d(t.get(fluxPrefix + 'flux'))
         assert(np.all(np.isfinite(flux[ibands])))
         br = NanoMaggies(order=bands,
                          **dict(zip(bands, flux[ibands])))
@@ -217,10 +238,10 @@ def read_fits_catalog(T, hdr=None, invvars=False, bands='grz',
         if invvars:
             # ASSUME & hard-code that the position and brightness are
             # the first params
-            fluxiv = np.atleast_1d(t.decam_flux_ivar)
+            fluxiv = np.atleast_1d(t.get(fluxPrefix + 'flux_ivar'))
             ivs.extend([t.ra_ivar, t.dec_ivar] +
-                       list(t.decam_flux_iv[ibands]))
-            
+                       list(fluxiv[ibands]))
+
         if issubclass(clazz, (DevGalaxy, ExpGalaxy)):
             if ellipseClass is not None:
                 eclazz = ellipseClass

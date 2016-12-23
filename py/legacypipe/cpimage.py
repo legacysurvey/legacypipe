@@ -8,7 +8,7 @@ import numpy as np
 from astrometry.util.util import wcs_pv2sip_hdr
 
 from legacypipe.image import LegacySurveyImage
-from legacypipe.common import LegacySurveyData
+from legacypipe.survey import LegacySurveyData
 
 # From: http://www.noao.edu/noao/staff/fvaldes/CPDocPrelim/PL201_3.html
 # 1   -- detector bad pixel           InstCal
@@ -107,3 +107,27 @@ class CPImage(LegacySurveyImage):
         phdr = self.read_image_primary_header()
         wcs.plver = phdr.get('PLVER', '').strip()
         return wcs
+
+    def remap_dq_codes(self, dq):
+        # Integer codes, not bit masks.
+        dqbits = np.zeros(dq.shape, np.int16)
+        '''
+        1 = bad
+        2 = no value (for remapped and stacked data)
+        3 = saturated
+        4 = bleed mask
+        5 = cosmic ray
+        6 = low weight
+        7 = diff detect (multi-exposure difference detection from median)
+        8 = long streak (e.g. satellite trail)
+        '''
+        dqbits[dq == 1] |= CP_DQ_BITS['badpix']
+        dqbits[dq == 2] |= CP_DQ_BITS['badpix']
+        dqbits[dq == 3] |= CP_DQ_BITS['satur']
+        dqbits[dq == 4] |= CP_DQ_BITS['bleed']
+        dqbits[dq == 5] |= CP_DQ_BITS['cr']
+        dqbits[dq == 6] |= CP_DQ_BITS['badpix']
+        dqbits[dq == 7] |= CP_DQ_BITS['trans']
+        dqbits[dq == 8] |= CP_DQ_BITS['trans']
+        return dqbits
+    

@@ -4,7 +4,12 @@
 
 export LEGACY_SURVEY_DIR=$SCRATCH/cosmos
 
-export DUST_DIR=/scratch1/scratchdirs/desiproc/dust/v0_0
+#export DUST_DIR=/scratch1/scratchdirs/desiproc/dust/v0_0
+export DUST_DIR=/global/cscratch1/sd/desiproc/dust/v0_0
+
+export UNWISE_COADDS_DIR=/project/projectdirs/cosmo/data/unwise/neo1/unwise-coadds/fulldepth:/project/projectdirs/cosmo/data/unwise/unwise-coadds
+
+export UNWISE_COADDS_TIMERESOLVED_DIR=/global/cscratch1/sd/ameisner/unwise-coadds/time_resolved_dr3
 
 export PYTHONPATH=${PYTHONPATH}:.
 
@@ -21,9 +26,9 @@ subset="$2"
 
 outdir=$SCRATCH/cosmos-$subset
 
-logdir=$(echo $brick | head -c 3)
-mkdir -p $outdir/logs/$logdir
-log="$outdir/logs/$logdir/$brick.log"
+bri=$(echo $brick | head -c 3)
+mkdir -p $outdir/logs/$bri
+log="$outdir/logs/$bri/$brick.log"
 
 echo Logging to: $log
 echo Running on ${NERSC_HOST} $(hostname)
@@ -43,15 +48,26 @@ echo >> $log
 echo -e "\nStarting on ${NERSC_HOST} $(hostname)\n" >> $log
 echo "-----------------------------------------------------------------------------------------" >> $log
 
+CHK=${outdir}/checkpoints/${bri}
+PIC=${outdir}/pickles/${bri}
+mkdir -p $CHK
+mkdir -p $PIC
+
 python -u legacypipe/runcosmos.py \
     --subset $subset \
-    --no-write \
     --pipe \
     --threads 24 \
-    --skip \
     --skip-calibs \
-    --no-wise \
     --brick $brick --outdir $outdir --nsigma 6 \
+     --checkpoint $CHK/checkpoint-${brick}.pickle \
+     --pickle "$PIC/cosmos-%(brick)s-%%(stage)s.pickle" \
+    --skip \
      >> $log 2>&1
+
+
+
+
+#    --no-write \
+#    --no-wise \
 
 # qdo launch cosmos 1 --cores_per_worker 24 --batchqueue regular --walltime 4:00:00 --keep_env --batchopts "-a 0-19 --qos=premium" --script ../bin/pipebrick-cosmos.sh

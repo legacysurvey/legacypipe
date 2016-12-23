@@ -12,7 +12,7 @@ from astrometry.util.file import trymakedirs
 
 from tractor import *
 from tractor.psfex import *
-from legacypipe.common import *
+from legacypipe.survey import *
 
 def main():
     plt.figure(figsize=(4,8))

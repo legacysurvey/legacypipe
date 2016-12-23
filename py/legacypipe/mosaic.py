@@ -9,9 +9,51 @@ from astrometry.util.util import wcs_pv2sip_hdr
 
 from legacypipe.image import LegacySurveyImage, CalibMixin
 from legacypipe.cpimage import CPImage
-from legacypipe.common import LegacySurveyData
+from legacypipe.survey import LegacySurveyData
 
 class MosaicImage(CPImage, CalibMixin):
+    '''
+    Class for handling images from the Mosaic3 camera processed by the
+    NOAO Community Pipeline.
+    '''
+
+    @classmethod
+    def nominal_zeropoints(self):
+        # HACK
+        return dict(z = 26.5)
+    
+    @classmethod
+    def photometric_ccds(self, survey, ccds):
+        '''
+        Returns an index array for the members of the table 'ccds'
+        that are photometric.
+
+        This recipe is adapted from the DECam one.
+        '''
+        # Nominal zeropoints (DECam)
+        z0 = self.nominal_zeropoints()
+        z0 = np.array([z0[f[0]] for f in ccds.filter])
+        good = np.ones(len(ccds), bool)
+        n0 = sum(good)
+        # This is our list of cuts to remove non-photometric CCD images
+        for name,crit in [
+            ('exptime < 30 s', (ccds.exptime < 30)),
+            ('ccdnmatch < 20', (ccds.ccdnmatch < 20)),
+            ('abs(zpt - ccdzpt) > 0.1',
+             (np.abs(ccds.zpt - ccds.ccdzpt) > 0.1)),
+            ('zpt < 0.5 mag of nominal',
+             (ccds.zpt < (z0 - 0.5))),
+            ('zpt > 0.25 mag of nominal',
+             (ccds.zpt > (z0 + 0.25))),
+        ]:
+            good[crit] = False
+            #continue as usual
+            n = sum(good)
+            print('Flagged', n0-n, 'more non-photometric using criterion:',
+                  name)
+            n0 = n
+        return np.flatnonzero(good)
+
     def __init__(self, survey, t):
         super(MosaicImage, self).__init__(survey, t)
         # convert FWHM into pixel units
@@ -93,7 +135,7 @@ class MosaicImage(CPImage, CalibMixin):
 def main():
 
     from astrometry.util.fits import fits_table, merge_tables
-    from legacypipe.common import exposure_metadata
+    from legacypipe.survey import exposure_metadata
     # Fake up a survey-ccds.fits table from MzLS_CP
     from glob import glob
     #fns = glob('/project/projectdirs/cosmo/staging/mosaicz/MZLS_CP/CP20160202/k4m_160203_*oki*')

@@ -1,7 +1,7 @@
 from tractor import *
 
 from legacypipe.runbrick import *
-from legacypipe.common import *
+from legacypipe.survey import *
 
 from astrometry.util.multiproc import *
 

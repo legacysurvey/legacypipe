@@ -6,7 +6,7 @@ from astrometry.util.file import trymakedirs
 from astrometry.util.fits import fits_table
 from legacypipe.image import LegacySurveyImage, CalibMixin
 from legacypipe.cpimage import CPImage, CP_DQ_BITS
-from legacypipe.common import *
+from legacypipe.survey import *
 
 import astropy.time
 
@@ -21,6 +21,9 @@ class DecamImage(CPImage, CalibMixin):
     Camera, DECam, on the Blanco telescope.
 
     '''
+    # this is defined here for testing purposes (to handle small images)
+    splinesky_boxsize = 512
+
     def __init__(self, survey, t):
         super(DecamImage, self).__init__(survey, t)
 
@@ -177,28 +180,7 @@ class DecamImage(CPImage, CalibMixin):
         plver = primhdr['PLVER'].strip()
         plver = plver.replace('V','')
         if StrictVersion(plver) >= StrictVersion('3.5.0'):
-            # Integer codes, not bit masks.
-            dqbits = np.zeros(dq.shape, np.int16)
-            '''
-            1 = bad
-            2 = no value (for remapped and stacked data)
-            3 = saturated
-            4 = bleed mask
-            5 = cosmic ray
-            6 = low weight
-            7 = diff detect (multi-exposure difference detection from median)
-            8 = long streak (e.g. satellite trail)
-            '''
-            dqbits[dq == 1] |= CP_DQ_BITS['badpix']
-            dqbits[dq == 2] |= CP_DQ_BITS['badpix']
-            dqbits[dq == 3] |= CP_DQ_BITS['satur']
-            dqbits[dq == 4] |= CP_DQ_BITS['bleed']
-            dqbits[dq == 5] |= CP_DQ_BITS['cr']
-            dqbits[dq == 6] |= CP_DQ_BITS['badpix']
-            dqbits[dq == 7] |= CP_DQ_BITS['trans']
-            dqbits[dq == 8] |= CP_DQ_BITS['trans']
-
-            dq = dqbits
+            dq = self.remap_dq_codes(dq)
 
         else:
             dq = dq.astype(np.int16)
@@ -244,7 +226,7 @@ class DecamImage(CPImage, CalibMixin):
         just_check: boolean
             If True, returns True if calibs need to be run.
         '''
-        from .common import (create_temp, get_version_header,
+        from .survey import (create_temp, get_version_header,
                              get_git_version)
         
         if psfex and os.path.exists(self.psffn) and (not force):
@@ -316,10 +298,12 @@ class DecamImage(CPImage, CalibMixin):
                 from tractor.splinesky import SplineSky
                 from scipy.ndimage.morphology import binary_dilation
 
+                boxsize = DecamImage.splinesky_boxsize
+                
                 # Start by subtracting the overall median
                 med = np.median(img[wt>0])
                 # Compute initial model...
-                skyobj = SplineSky.BlantonMethod(img - med, wt>0, 512)
+                skyobj = SplineSky.BlantonMethod(img - med, wt>0, boxsize)
                 skymod = np.zeros_like(img)
                 skyobj.addTo(skymod)
                 # Now mask bright objects in (image - initial sky model)
@@ -333,7 +317,7 @@ class DecamImage(CPImage, CalibMixin):
 
                 # Now find the final sky model using that more extensive mask
                 skyobj = SplineSky.BlantonMethod(
-                    img - med, np.logical_not(masked), 512)
+                    img - med, np.logical_not(masked), boxsize)
                 # add the overall median back in
                 skyobj.offset(med)
 

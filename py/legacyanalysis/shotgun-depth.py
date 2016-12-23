@@ -11,7 +11,7 @@ from astrometry.libkd.spherematch import match_radec
 
 from tractor.sfd import SFDMap
 
-from legacypipe.common import *
+from legacypipe.survey import *
 
 def sample_in_radec_box(ralo, rahi, declo, dechi, N,
                         nbatch=1000):

@@ -8,7 +8,7 @@ matplotlib.use('Agg')
 
 from astrometry.util.fits import fits_table, merge_tables
 from astrometry.util.file import trymakedirs
-from legacypipe.common import LegacySurveyData
+from legacypipe.survey import LegacySurveyData
 
 def pad_arrays(A):
     '''

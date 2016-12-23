@@ -5,7 +5,7 @@ import pylab as plt
 import qdo
 import sys
 import argparse
-from legacypipe.common import LegacySurveyData
+from legacypipe.survey import LegacySurveyData
 from astrometry.libkd.spherematch import *
 
 parser = argparse.ArgumentParser()

@@ -9,7 +9,7 @@ from astrometry.util.fits import fits_table
 import sys
 
 # Argh, no relative imports in runnable scripts
-from legacypipe.common import run_calibs, LegacySurveyData
+from legacypipe.survey import run_calibs, LegacySurveyData
 
 def main():
     """Main program.

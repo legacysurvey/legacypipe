@@ -11,10 +11,11 @@ from astrometry.util.plotutils import dimshow
 
 from tractor import Tractor, PointSource, Image, NanoMaggies, Catalog, Patch
 from tractor.galaxy import DevGalaxy, ExpGalaxy, FixedCompositeGalaxy, SoftenedFracDev, FracDev, disable_galaxy_cache, enable_galaxy_cache
+from tractor.patch import ModelMask
 
-from legacypipe.common import (SimpleGalaxy, LegacyEllipseWithPriors, 
+from legacypipe.survey import (SimpleGalaxy, LegacyEllipseWithPriors, 
                                get_rgb)
-from legacypipe.runbrick import tims_compute_resamp, rgbkwargs_resid
+from legacypipe.runbrick import rgbkwargs_resid
 from legacypipe.coadds import quick_coadds
 from legacypipe.runbrick_plots import _plot_mods
 
@@ -24,6 +25,8 @@ def one_blob(X):
     '''
     Fits sources contained within a "blob" of pixels.
     '''
+    if X is None:
+        return None
     (nblob, iblob, Isrcs, brickwcs, bx0, by0, blobw, blobh, blobmask, timargs,
      srcs, bands, plots, ps, simul_opt, use_ceres, hastycho) = X
 
@@ -97,18 +100,13 @@ class OneBlob(object):
         self.simul_opt = simul_opt
         self.use_ceres = use_ceres
         self.hastycho = hastycho
-
         self.deblend = False
-        
         self.tims = self.create_tims(timargs)
         self.total_pix = sum([np.sum(t.getInvError() > 0) for t in self.tims])
-        
         self.plots2 = False
-
         alphas = [0.1, 0.3, 1.0]
         self.optargs = dict(priors=True, shared_params=False, alphas=alphas,
                             print_progress=True)
-                #print_progress=False)
         self.blobh,self.blobw = blobmask.shape
         self.bigblob = (self.blobw * self.blobh) > 100*100
         if self.bigblob:
@@ -138,7 +136,6 @@ class OneBlob(object):
 
         tlast = Time()
         if self.plots:
-            tims_compute_resamp(None, self.tims, self.blobwcs)
             self._initial_plots()
 
         if self.deblend:
@@ -350,7 +347,6 @@ class OneBlob(object):
             B.set(k, v)
             
         print('Blob', self.name, 'finished:', Time()-tlast)
-
         
     def run_model_selection(self, cat, Ibright, B):
 
@@ -417,16 +413,16 @@ class OneBlob(object):
                 insrc = np.zeros((self.blobh,self.blobw), bool)
                 for tim in srctims:
                     try:
-                        Yo,Xo,Yi,Xi,nil = resample_with_wcs(self.blobwcs, tim.subwcs,
-                                                            [],2)
+                        Yo,Xo,Yi,Xi,nil = resample_with_wcs(
+                            self.blobwcs, tim.subwcs, [],2)
                     except:
                         continue
                     insrc[Yo,Xo] |= (tim.inverr[Yi,Xi] > 0)
     
                 if np.sum(insrc) == 0:
-                    # No source pixels touching blob... this can happen when a source
-                    # scatters outside the blob in the fitting stage.
-                    # Drop the source here.
+                    # No source pixels touching blob... this can
+                    # happen when a source scatters outside the blob
+                    # in the fitting stage.  Drop the source here.
                     B.sources[srci] = cat[srci] = None
                     continue
                 yin = np.max(insrc, axis=1)
@@ -452,7 +448,6 @@ class OneBlob(object):
             if self.plots1:
                 # This is a handy blob-coordinates plot of the data
                 # going into the fit.
-                tims_compute_resamp(None, srctims, self.blobwcs)
                 plt.clf()
                 coimgs,cons = quick_coadds(srctims, self.bands, self.blobwcs,
                                              fill_holes=False)
@@ -462,19 +457,16 @@ class OneBlob(object):
             if self.bigblob and self.plots:
                 # This is a local source-WCS plot of the data going into the
                 # fit.
-                tims_compute_resamp(None, srctims, srcwcs, force=True)
                 plt.clf()
                 coimgs,cons = quick_coadds(srctims, self.bands, srcwcs,
                                            fill_holes=False)
                 dimshow(get_rgb(coimgs, self.bands))
                 plt.title('Model selection: stage1 data (srcwcs)')
                 self.ps.savefig()
-                for tim in srctims:
-                    del tim.resamp
                 if self.plots1:
                     srch,srcw = srcwcs.shape
-                    tims_compute_resamp(None, srctims, srcwcs, force=True)
                     _plot_mods(srctims, [list(srctractor.getModelImages())],
+                               self.blobwcs,
                                ['Model selection init'], self.bands, None,None,
                                None, srcw,srch, self.ps, chi_plots=False)
 
@@ -504,7 +496,6 @@ class OneBlob(object):
                 debtractor = self.tractor(debtims, srctractor.catalog)
 
             if self.bigblob and self.plots and self.deblend:
-                tims_compute_resamp(None, debtims, srcwcs, force=True)
                 plt.clf()
                 coimgs,cons = quick_coadds(debtims, self.bands, srcwcs,
                                            fill_holes=False)
@@ -691,7 +682,9 @@ class OneBlob(object):
                                                   tim.getInvError())
                         if mod is None:
                             continue
-                        d[newsrc] = Patch(mod.x0, mod.y0, mod.patch != 0)
+                        #d[newsrc] = ModelMask(mod.x0, mod.y0, mod.patch != 0)
+                        mh,mw = mod.shape
+                        d[newsrc] = ModelMask(mod.x0, mod.y0, mw, mh)
                         modtims.append(tim)
                         mm.append(d)
     
@@ -707,7 +700,6 @@ class OneBlob(object):
                     if self.plots1:
                         plt.clf()
                         modimgs = list(modtractor.getModelImages())
-                        tims_compute_resamp(None, modtims, srcwcs, force=True)
                         comods,nil = quick_coadds(modtims, self.bands, srcwcs,
                                                     images=modimgs)
                         dimshow(get_rgb(comods, self.bands))
@@ -764,7 +756,7 @@ class OneBlob(object):
                     ('none',None), ('ptsrc',ptsrc), ('simple',simple),
                     ('dev',dev), ('exp',exp), ('comp',comp)])
                 for imod,modname in enumerate(mods.keys()):
-                    if mod != 'none' and not modname in chisqs:
+                    if modname != 'none' and not modname in chisqs:
                         continue
                     srccat[0] = mods[modname]
                     srctractor.setModelMasks(None)
@@ -819,7 +811,6 @@ class OneBlob(object):
     
         models.restore_images(self.tims)
         del models
-    
         
     def _get_todepth_subset(self, srctims, srcwcs, srcpix):
         timsubset = set()
@@ -1002,6 +993,7 @@ class OneBlob(object):
                 modelMasks = models.model_masks(srci, src)
     
             srctractor = self.tractor(srctims, [src])
+            print('Setting modelMasks:', modelMasks)
             srctractor.setModelMasks(modelMasks)
             
             # if plots and False:
@@ -1025,8 +1017,6 @@ class OneBlob(object):
             #     spallnames.append('Fit (all)')
             # 
             # if plots and False:
-            #     tims_compute_resamp(None, srctractor.getImages(), brickwcs)
-            #     tims_compute_resamp(None, tims, brickwcs)
             #     plt.figure(1, figsize=(8,6))
             #     plt.subplots_adjust(left=0.01, right=0.99, top=0.95,
             #                         bottom=0.01, hspace=0.1, wspace=0.05)
@@ -1093,9 +1083,10 @@ class OneBlob(object):
         plotmodnames = []
         plotmods.append(list(tr.getModelImages()))
         plotmodnames.append(title)
-        _plot_mods(self.tims, plotmods, plotmodnames, self.bands, None, None, None,
+        _plot_mods(self.tims, plotmods, self.blobwcs, plotmodnames, self.bands,
+                   None, None, None,
                    self.blobw, self.blobh, self.ps, chi_plots=False)
-        
+
     def _initial_plots(self):
         print('Plotting blob image for blob', self.name)
         coimgs,cons = quick_coadds(self.tims, self.bands, self.blobwcs,
@@ -1157,7 +1148,7 @@ class OneBlob(object):
                 # Otherwise, instantiate a (shifted) spatially-varying
                 # PsfEx model.
                 subpsf = psf.getShifted(sx0, sy0)
-    
+
             tim = Image(data=img, inverr=inverr, wcs=twcs,
                         psf=subpsf, photocal=pcal, sky=sky, name=name)
             tim.band = band
@@ -1366,9 +1357,6 @@ def _compute_source_metrics(srcs, tims, bands, tr):
     return dict(fracin=fracin, fracflux=fracflux, rchi2=rchi2,
                 fracmasked=fracmasked)
 
-
-
-
 def _initialize_models(src):
     if isinstance(src, PointSource):
         ptsrc = src.copy()
@@ -1428,7 +1416,7 @@ def _get_subimages(tims, mods, src):
         if mh == 0 or mw == 0:
             continue
         # for modelMasks
-        d = { src: Patch(0, 0, mod.patch != 0) }
+        d = { src: ModelMask(0, 0, mw, mh) } #mod.patch != 0) }
         modelMasks.append(d)
 
         x0,y0 = mod.x0 , mod.y0
@@ -1466,6 +1454,9 @@ class SourceModels(object):
     This class maintains a list of the model patches for a set of sources
     in a set of images.
     '''
+    def __init__(self):
+        self.filledModelMasks = True
+    
     def save_images(self, tims):
         self.orig_images = [tim.getImage() for tim in tims]
         for tim,img in zip(tims, self.orig_images):
@@ -1526,7 +1517,11 @@ class SourceModels(object):
             modelMasks.append(d)
             mod = mods[i]
             if mod is not None:
-                d[src] = Patch(mod.x0, mod.y0, mod.patch != 0)
+                if self.filledModelMasks:
+                    mh,mw = mod.shape
+                    d[src] = ModelMask(mod.x0, mod.y0, mw, mh)
+                else:
+                    d[src] = ModelMask(mod.x0, mod.y0, mod.patch != 0)
         return modelMasks
 
 def remap_modelmask(modelMasks, oldsrc, newsrc):

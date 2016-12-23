@@ -65,7 +65,7 @@ import pylab as plt
 from astrometry.util.fits import fits_table
 from astrometry.util.file import trymakedirs
 
-from legacypipe.common import LegacySurveyData, wcs_for_brick, ccds_touching_wcs
+from legacypipe.survey import LegacySurveyData, wcs_for_brick, ccds_touching_wcs
 
 from astrometry.libkd.spherematch import match_radec
 
@@ -145,6 +145,14 @@ def main():
         T = survey.get_ccds()
         log(len(T), 'CCDs')
     T.index = np.arange(len(T))
+
+    I = survey.photometric_ccds(T)
+    print(len(I), 'CCDs are photometric')
+    T.cut(I)
+    I = survey.apply_blacklist(T)
+    print(len(I), 'CCDs are not blacklisted')
+    T.cut(I)
+    print(len(T), 'CCDs remain')
 
     # I,J,d,counts = match_radec(B.ra, B.dec, T.ra, T.dec, 0.2, nearest=True, count=True)
     # plt.clf()
@@ -333,6 +341,10 @@ def main():
         # Dec 15 to  30
         rlo,rhi = 115., 175.
         dlo,dhi =  15.,  30.
+
+    elif opt.region == 'mzls':
+        dlo,dhi = 30., 90.
+
         
     if opt.mindec is not None:
         dlo = opt.mindec
@@ -397,7 +409,9 @@ def main():
         sys.exit(0)
 
     # sort by dec decreasing
-    B.cut(np.argsort(-B.dec))
+    #B.cut(np.argsort(-B.dec))
+    # RA increasing
+    B.cut(np.argsort(B.ra))
 
     for b in B:
         if opt.check:
@@ -415,7 +429,7 @@ def main():
 
     if opt.brickq_deps:
         import qdo
-        from legacypipe.common import on_bricks_dependencies
+        from legacypipe.survey import on_bricks_dependencies
 
         #... find Queue...
         q = qdo.connect(opt.queue, create_ok=True)
@@ -606,6 +620,7 @@ def main():
 
         if opt.command:
             s = '%i-%s' % (T.expnum[i], T.ccdname[i])
+            prefix = 'python legacypipe/run-calib.py ' + opt.opt
             #('python legacypipe/run-calib.py --expnum %i --ccdname %s' %
             #     (T.expnum[i], T.ccdname[i]))
         else:

@@ -82,7 +82,12 @@ class BrickDuck(object):
     '''A little duck-typing class when running on a custom RA,Dec center
     rather than a brick center.
     '''
-    pass
+    def __init__(self, ra, dec, brickname):
+        self.ra  = ra
+        self.dec = dec
+        self.brickname = brickname
+        self.brickid = -1
+
 
 def get_git_version(dir=None):
     '''
@@ -281,7 +286,7 @@ def get_rgb(imgs, bands, mnmx=None, arcsinh=None, scales=None):
                       z = (0, 0.025),
                       )
 
-    print('get_rgb: bands', bands)
+    # print('get_rgb: bands', bands)
 
     if scales is None:
         if bands == 'grz':
@@ -308,7 +313,7 @@ def get_rgb(imgs, bands, mnmx=None, arcsinh=None, scales=None):
         else:
             scales = grzscales
 
-    print('Using scales:', scales)
+    # print('Using scales:', scales)
         
     h,w = imgs[0].shape
     rgb = np.zeros((h,w,3), np.float32)
@@ -317,7 +322,7 @@ def get_rgb(imgs, bands, mnmx=None, arcsinh=None, scales=None):
             print('Warning: band', band, 'not used in creating RGB image')
             continue
         plane,scale = scales.get(band, (0,1.))
-        print('RGB: band', band, 'in plane', plane, 'scaled by', scale)
+        # print('RGB: band', band, 'in plane', plane, 'scaled by', scale)
         rgb[:,:,plane] = (im / scale).astype(np.float32)
 
     if mnmx is None:
@@ -499,7 +504,7 @@ def bricks_touching_wcs(targetwcs, survey=None, B=None, margin=20):
     ----------
     targetwcs : astrometry.util.Tan object or similar
         The region of sky to search
-    survey : legacypipe.common.LegacySurveyData object
+    survey : legacypipe.survey.LegacySurveyData object
         From which the brick table will be retrieved
     B : FITS table
         The table of brick objects to search
@@ -685,6 +690,19 @@ Now using the current directory as LEGACY_SURVEY_DIR, but this is likely to fail
         assert(version in [None, 'dr2', 'dr1'])
         self.version = version
 
+        # Filename prefix for coadd files
+        self.file_prefix = 'legacysurvey'
+        if self.version in ['dr1','dr2']:
+            self.file_prefix = 'decals'
+
+    def __str__(self):
+        return ('%s: dir %s, out %s' %
+                (type(self).__name__, self.survey_dir, self.output_dir))
+
+    def ccds_for_fitting(self, brick, ccds):
+        # By default, use all.
+        return None
+
     def image_class_for_camera(self, camera):
         # Assert that we have correctly removed trailing spaces
         assert(camera == camera.strip())
@@ -696,6 +714,35 @@ Now using the current directory as LEGACY_SURVEY_DIR, but this is likely to fail
         
     def index_of_band(self, b):
         return self.allbands.index(b)
+
+    def read_intermediate_catalog(self, brick, **kwargs):
+        '''
+        Reads the intermediate tractor catalog for the given brickname.
+
+        *kwargs*: passed to self.find_file()
+        
+        Returns (T, hdr, primhdr)
+        '''
+        fn = self.find_file('tractor-intermediate', brick=brick, **kwargs)
+        T = fits_table(fn)
+        hdr = T.get_header()
+        primhdr = fitsio.read_header(fn)
+
+        in_flux_prefix = ''
+        # Ensure flux arrays are 2d (N x 1)
+        keys = ['flux', 'flux_ivar', 'rchi2', 'fracflux', 'fracmasked',
+                'fracin', 'nobs', 'anymask', 'allmask', 'psfsize', 'depth',
+                'galdepth']
+        for k in keys:
+            incol = '%s%s' % (in_flux_prefix, k)
+            X = T.get(incol)
+            # Hmm, if we need to reshape one of these arrays, we will
+            # need to do all of them.
+            if len(X.shape) == 1:
+                X = X[:, np.newaxis]
+                T.set(incol, X)
+        
+        return T, hdr, primhdr
         
     def find_file(self, filetype, brick=None, brickpre=None, band='%(band)s',
                   output=False):
@@ -729,9 +776,7 @@ Now using the current directory as LEGACY_SURVEY_DIR, but this is likely to fail
         if brick is not None:
             codir = os.path.join(basedir, 'coadd', brickpre, brick)
 
-        sname = 'legacysurvey'
-        if self.version in ['dr1','dr2']:
-            sname = 'decals'
+        sname = self.file_prefix
             
         if filetype == 'bricks':
             fn = 'survey-bricks.fits.gz'
@@ -757,42 +802,41 @@ Now using the current directory as LEGACY_SURVEY_DIR, but this is likely to fail
             return os.path.join(basedir, 'tractor', brickpre,
                                 'tractor-%s.fits' % brick)
         
+        elif filetype == 'tractor-intermediate':
+            return os.path.join(basedir, 'tractor-i', brickpre,
+                                'tractor-%s.fits' % brick)
+
         elif filetype == 'galaxy-sims':
             return os.path.join(basedir, 'tractor', brickpre,
                                 'galaxy-sims-%s.fits' % brick)
 
         elif filetype in ['ccds-table', 'depth-table']:
             ty = filetype.split('-')[0]
-            return os.path.join(codir, 'legacysurvey-%s-%s.fits' % (brick, ty))
+            return os.path.join(codir, '%s-%s-%s.fits' % (sname, brick, ty))
 
         elif filetype in ['image-jpeg', 'model-jpeg', 'resid-jpeg',
                           'imageblob-jpeg', 'simscoadd-jpeg','imagecoadd-jpeg']: 
             ty = filetype.split('-')[0]
-            return os.path.join(codir, 'legacysurvey-%s-%s.jpg' % (brick, ty))
+            return os.path.join(codir, '%s-%s-%s.jpg' % (sname, brick, ty))
 
         elif filetype in ['depth', 'galdepth', 'nexp', 'model']:
             return os.path.join(codir,
                                 '%s-%s-%s-%s.fits.gz' % (sname, brick, filetype, band))
 
         elif filetype in ['invvar', 'chi2', 'image']:
-            if self.version in ['dr1','dr2']:
-                prefix = 'decals'
-            else:
-                prefix = 'legacysurvey'
             return os.path.join(codir, '%s-%s-%s-%s.fits' %
-                                (prefix, brick, filetype,band))
+                                (sname, brick, filetype,band))
 
         elif filetype in ['blobmap']:
-            return os.path.join(basedir, 'metrics', brickpre, brick,
-                                'blobs-%s.fits.gz' % (brick))
+            return os.path.join(basedir, 'metrics', brickpre, 'blobs-%s.fits.gz' % (brick))
         elif filetype in ['all-models']:
-            return os.path.join(basedir, 'metrics', brickpre, brick,
-                                'all-models-%s.fits' % (brick))
+            return os.path.join(basedir, 'metrics', brickpre, 'all-models-%s.fits' % (brick))
 
         elif filetype == 'sha1sum-brick':
             return os.path.join(basedir, 'tractor', brickpre,
                                 'brick-%s.sha1sum' % brick)
         
+        print('Unknown filetype "%s"' % filetype)
         assert(False)
 
     def write_output(self, filetype, **kwargs):
@@ -988,6 +1032,13 @@ Now using the current directory as LEGACY_SURVEY_DIR, but this is likely to fail
             self.ccds = self.get_ccds()
         return self.ccds
 
+    def filter_ccds_files(self, fns):
+        '''
+        When reading the list of CCDs, we find all files named
+        survey-ccds-*.fits.gz, then filter that list using this function.
+        '''
+        return fns
+
     def get_ccds(self):
         '''
         Returns the table of CCDs.
@@ -996,6 +1047,7 @@ Now using the current directory as LEGACY_SURVEY_DIR, but this is likely to fail
 
         fns = self.find_file('ccds')
         fns.sort()
+        fns = self.filter_ccds_files(fns)
         TT = []
         for fn in fns:
             print('Reading CCDs from', fn)
