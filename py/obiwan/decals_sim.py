@@ -668,7 +668,7 @@ def do_one_chunk(d=None):
               wise=False, forceAll=True, writePickles=False, do_calibs=True,
               write_metrics=False, pixPsf=True, blobxy=blobxy, early_coadds=d['args'].early_coadds,
               splinesky=True, ceres=False, stages=[ d['args'].stage ], plots=False,
-              plotbase='sim')
+              plotbase='sim',allbands='ugrizY')
 
 def do_ith_cleanup(d=None):
     '''for each chunk that finishes running, 

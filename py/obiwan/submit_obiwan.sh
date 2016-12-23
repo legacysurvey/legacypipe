@@ -1,9 +1,8 @@
 #!/bin/bash -l
 
-#SBATCH -p regular
-#SBATCH --qos=premium
+#SBATCH -p debug
 #SBATCH -N 1
-#SBATCH -t 00:30:00
+#SBATCH -t 00:05:00
 #SBATCH --account=desi
 #SBATCH -J obiwan
 #SBATCH -o obiwan.o%j
