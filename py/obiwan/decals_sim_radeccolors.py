@@ -236,12 +236,20 @@ def get_fns(outdir,prefix=''):
     return fns
 
 def get_fn4brick(brick,outdir,prefix=''):
-    dr= os.path.join(outdir,'input_sample',brick[:3],brick)
-    return os.path.join(dr,'%ssample-merged.fits' % prefix)
+    dr= os.path.join(outdir,'input_sample','bybrick')
+    if not os.path.exists(dr):
+        os.makedirs(dr)
+    return os.path.join(dr,'%ssample-%s.fits' % (prefix,brick))
 
-def get_bricks(outdir):
-    fn=os.path.join(os.getenv('LEGACY_SURVEY_DIR'),'survey-bricks-5rows-eboss-ngc.fits.gz')
-    return fits_table(fn)
+def survey_bricks_cut2radec(radec):
+    #fn=os.path.join(os.getenv('LEGACY_SURVEY_DIR'),'survey-bricks-5rows-eboss-ngc.fits.gz')
+    fn=os.path.join(os.getenv('LEGACY_SURVEY_DIR'),'survey-bricks.fits.gz')
+    tab= fits_table(fn)
+    tab.cut( (tab.ra >= radec['ra1'])*(tab.ra <= radec['ra2'])*\
+             (tab.dec >= radec['dec1'])*(tab.dec <= radec['dec2'])
+           )
+    print('%d bricks, cutting to radec' % len(tab))
+    return tab
             
 def draw_points(radec,unique_ids,seed=1,outdir='./',prefix=''):
     '''unique_ids -- ids assigned to this mpi task
@@ -287,23 +295,26 @@ def draw_points(radec,unique_ids,seed=1,outdir='./',prefix=''):
 
 def organize_by_brick(btable,outdir='./',prefix=''):
     '''btable -- 5row survey-bricks table cut to bricks being orgazined by this mpi task'''
-    for brick in btable.brickname:
+    for btab in btable:
         fns= get_fns(outdir,prefix=prefix)
         cat= []
         for sample_fn in fns:
             sample= fits_table(sample_fn)
-            keep=  (sample.ra >= btable.ra1)*(sample.ra <= btable.ra2)*\
-                   (sample.dec >= btable.dec1)*(sample.dec <= btable.dec2)
+            keep=  (sample.ra >= btab.ra1)*(sample.ra <= btab.ra2)*\
+                   (sample.dec >= btab.dec1)*(sample.dec <= btab.dec2)
             if np.where(keep)[0].size > 0:
-                cat.append( sample.cut(keep) )
+                sample.cut(keep)
+                cat.append( sample )
         if len(cat) > 0:
-            savefn= get_fn4brick(brick,outdir,prefix=prefix)
+            cat= merge_tables(cat, columns='fillzero')
+            savefn= get_fn4brick(btab.brickname,outdir,prefix=prefix)
             if os.path.exists(savefn):
                 os.remove(savefn)
                 print('Overwriting %s' % savefn)
             cat.writeto(savefn)
+            print('Wrote %s' % savefn)
         else: 
-            print('WARNING, no ra,dec samples in brick: %s' % brick)
+            print('WARNING, no ra,dec samples in brick: %s' % btab.brickname)
 
 
 #def merge_draws(outdir='./',prefix=''):
@@ -319,7 +330,7 @@ def organize_by_brick(btable,outdir='./',prefix=''):
 #            os.remove(name)
 #            print('Overwriting %s' % name)
 #        T.writeto(name)
-        print('wrote %s' % name)
+#        print('wrote %s' % name)
        
 
 class PlotTable(object):
@@ -565,7 +576,7 @@ if __name__ == "__main__":
     # Draws per mpi task
     if args.nproc > 1:
         from mpi4py.MPI import COMM_WORLD as comm
-        unique_ids= np.split(unique_ids,comm.size)[comm.rank] 
+        unique_ids= np.array_split(unique_ids,comm.size)[comm.rank] 
         #nper= len(unique_ids) #int(ndraws/float(comm.size))
     #else: 
     #    nper= ndraws
@@ -586,12 +597,12 @@ if __name__ == "__main__":
         # Gather
         junk=[comm.rank]
         junks = comm.gather(junk, root=0 )
-        # Divide and conquer: each task takes bricks to organize samples into
-        btable= get_bricks_fn(args.outdir)
-        inds= np.arange(len(tab))
-        inds= np.split(inds,comm.size)[comm.rank]
+        # Divide and conquer: 15k bricks in eBOSS NGC, each task takes bricks to organize samples into
+        btable= survey_bricks_cut2radec(radec)
+        inds= np.arange(len(btable))
+        inds= np.array_split(inds,comm.size)[comm.rank]
         btable.cut(inds)
-        organize_by_brick(btable, outdir=args.outdir,prefix=args.prefix)
+        organize_by_brick(btable,outdir=args.outdir,prefix=args.prefix)
         # Gather, done
         junk=[comm.rank]
         junks = comm.gather(junk, root=0 )
@@ -618,10 +629,10 @@ if __name__ == "__main__":
         #    seed= cnt
         draw_points(radec,unique_ids, seed=seed,outdir=args.outdir,prefix=args.prefix)
         #
-        btable= get_bricks_fn(args.outdir)
+        btable= survey_bricks_cut2radec(radec)
         organize_by_brick(btable, outdir=args.outdir,prefix=args.prefix)
         # Gather, done
-        merge_draws(outdir=args.outdir,prefix=args.prefix)
+        #merge_draws(outdir=args.outdir,prefix=args.prefix)
         #plotobj= PlotTable(outdir=args.outdir,prefix=args.prefix)
         # Plot table for sanity check
         
