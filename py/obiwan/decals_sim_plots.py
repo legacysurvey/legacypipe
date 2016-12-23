@@ -16,7 +16,6 @@ Missing object and annotated coadd plots
 python legacyanalysis/decals_sim_plots.py ... --extra_plots
 default is to NOT make them because chunks > 50
 """
-
 from __future__ import division, print_function
 
 import matplotlib
@@ -35,11 +34,18 @@ import numpy as np
 
 from astropy.io import fits
 from astropy.table import vstack, Table
-from astrometry.libkd.spherematch import match_radec
-#from thesis_code import matching
+from astropy import units
+from astropy.coordinates import SkyCoord
+
 # import seaborn as sns
 from PIL import Image, ImageDraw
 import photutils
+
+from theValidator.catalogues import CatalogueFuncs
+
+def flux2mag(nanoflux):
+    '''converts flux in tractor nanomaggie units to AB mag'''
+    return 22.5-2.5*np.log10(nanoflux)
 
 def basic_cut(tractor):
     '''return boolean indices for which to keep and throw out'''
@@ -57,34 +63,34 @@ def bright_dmag_cut(matched_simcat,matched_tractor):
     1) median dmag of bright sources
     2) indices of sources that are bright AND |dmag[band]| -|median_dmag[band]| > 0.005 in ANY band
     3) indices of sources that are bright AND |dmag[band]| -|median_dmag[band]| <= 0.005 in ALL bands'''
-    bright= dict(G=20.,R=19.,Z=18.)
+    bright= dict(g=20.,r=19.,z=18.)
     b_good,junk= basic_cut(matched_tractor)
     # Store median dmag of bright sources
     med,b_bright={},{}
-    for band,iband in zip(['G','R','Z'],[1,2,4]):
+    for band,iband in zip(['g','r','z'],[1,2,4]):
         # Cut to bright and good sources
-        inputflux = matched_simcat[band+'FLUX']
+        inputflux = matched_simcat[band+'flux']
         inputmag = 22.5-2.5*np.log10(inputflux)
         b_bright[band]= inputmag < bright[band]
         b_bright[band]= np.all((b_bright[band],b_good),axis=0)
         #i_bright= np.where(b_bright)[0]
         #print('type(i_bright)= ',type(i_bright),"i_bright=",i_bright)
         # Compute median for each band
-        inputflux = matched_simcat[band+'FLUX'][b_bright[band]]
+        inputflux = matched_simcat[band+'flux'][b_bright[band]]
         tractorflux = matched_tractor['decam_flux'][:, iband][b_bright[band]]
         mag_diff= -2.5*np.log10(tractorflux/inputflux)
         med[band]= np.percentile(mag_diff,q=50)
     # Boolean mask for each band
     b={}
-    for band,iband in zip(['G','R','Z'],[1,2,4]):
-        inputflux = matched_simcat[band+'FLUX']
+    for band,iband in zip(['g','r','z'],[1,2,4]):
+        inputflux = matched_simcat[band+'flux']
         tractorflux = matched_tractor['decam_flux'][:, iband]
         mag_diff= -2.5*np.log10(tractorflux/inputflux)
         b[band]= np.abs(mag_diff) - abs(med[band]) > 0.001
     # total boolean mask
-    b_bright= np.any((b_bright['G'],b_bright['R'],b_bright['Z']),axis=0)
-    b_large_dmag= np.all((b_bright,b_good,b['G'],b['R'],b['Z']),axis=0)
-    b_small_dmag= np.all((b_bright,b_good,b['G']==False,b['R']==False,b['Z']==False),axis=0)
+    b_bright= np.any((b_bright['g'],b_bright['r'],b_bright['z']),axis=0)
+    b_large_dmag= np.all((b_bright,b_good,b['g'],b['r'],b['z']),axis=0)
+    b_small_dmag= np.all((b_bright,b_good,b['g']==False,b['r']==False,b['z']==False),axis=0)
     return med,np.where(b_large_dmag)[0],np.where(b_small_dmag)[0]
  
 def plot_cutouts_by_index(simcat,index, brickname,lobjtype,chunksuffix, \
@@ -161,12 +167,12 @@ def bin_up(data_bin_by,data_for_percentile, bin_minmax=(18.,26.),nbins=20):
     return vals
 
 def plot_injected_mags(allsimcat, log,qafile='test.png'):
-    gr_sim = -2.5*np.log10(allsimcat['GFLUX']/allsimcat['RFLUX'])
-    rz_sim = -2.5*np.log10(allsimcat['RFLUX']/allsimcat['ZFLUX'])
+    gr_sim = -2.5*np.log10(allsimcat['gflux']/allsimcat['rflux'])
+    rz_sim = -2.5*np.log10(allsimcat['rflux']/allsimcat['zflux'])
     grrange = (-0.2, 2.0)
     rzrange = (-0.4, 2.5)
     fig, ax = plt.subplots(2,1,figsize=(6,8))
-    ax[0].hist(22.5-2.5*np.log10(allsimcat['RFLUX']),bins=20,align='mid')
+    ax[0].hist(22.5-2.5*np.log10(allsimcat['rflux']),bins=20,align='mid')
     ax[1].scatter(rz_sim,gr_sim,
                    s=10,edgecolor='b',c='none',lw=1.)
     for i,x_lab,y_lab in zip(range(2),['r AB','r-z'],['N','g-r']):
@@ -180,13 +186,15 @@ def plot_injected_mags(allsimcat, log,qafile='test.png'):
     plt.close()
  
 def plot_good_bad_ugly(allsimcat,bigsimcat,bigsimcat_missing, nmagbin,rminmax, b_good,b_bad, log,qafile='test.png'):
-    #rmaghist, magbins = np.histogram(allsimcat['R'], bins=nmagbin, range=rminmax)
+    #rmaghist, magbins = np.histogram(allsimcat['r'], bins=nmagbin, range=rminmax)
+    bigsimcat_R= flux2mag(bigsimcat['rflux'])
+    bigsimcat_miss_R= flux2mag(bigsimcat_missing['rflux'])
     found=dict(good={},bad={},missed={})
     for index,name in zip([b_good,b_bad],['good','bad']):
         # bin on true r mag of matched objects, count objects in each bin
-        found[name]= bin_up(bigsimcat['R'][index],bigsimcat['R'][index], bin_minmax=rminmax,nbins=nmagbin) # bin_edges=magbins)
+        found[name]= bin_up(bigsimcat_R[index],bigsimcat_R[index], bin_minmax=rminmax,nbins=nmagbin) # bin_edges=magbins)
     name='missed'
-    found[name]= bin_up(bigsimcat_missing['R'],bigsimcat_missing['R'], bin_minmax=rminmax,nbins=nmagbin) #bin_edges=magbins)
+    found[name]= bin_up(bigsimcat_miss_R,bigsimcat_miss_R, bin_minmax=rminmax,nbins=nmagbin) #bin_edges=magbins)
     fig, ax = plt.subplots(1, figsize=(8,6))
     for name,color in zip(['good','bad','missed'],['k','b','r']):
         ax.step(found[name]['binc'],found[name]['n'], c=color,lw=2,label=name)
@@ -202,9 +210,9 @@ def plot_tractor_minus_answer(bigsimcat,bigtractor, b_good,rminmax, log,qafile='
     fig, ax = plt.subplots(3, sharex=True, figsize=(6,8))
 
     col = ['b', 'k', 'c', 'm', 'y', 0.8]
-    rmag = bigsimcat['R']
-    for thisax, thiscolor, band, indx in zip(ax, col, ('G', 'R', 'Z'), (1, 2, 4)):
-        inputflux = bigsimcat[band+'FLUX']
+    rmag = bigsimcat['rflux']
+    for thisax, thiscolor, band, indx in zip(ax, col, ('g','r','z'), (1, 2, 4)):
+        inputflux = bigsimcat[band+'flux']
         tractorflux = bigtractor['decam_flux'][:, indx]
         tractorivar = bigtractor['decam_flux_ivar'][:, indx]
         #import pickle
@@ -242,9 +250,9 @@ def plot_chi(bigsimcat,bigtractor, b_good,rminmax, log,qafile='test.png'):
     col = ['b', 'k', 'c', 'm', 'y', 0.8]
     fig, ax = plt.subplots(3, sharex=True, figsize=(6,8))
 
-    rmag = bigsimcat['R']
-    for thisax, thiscolor, band, indx in zip(ax, col, ('G', 'R', 'Z'), (1, 2, 4)):
-        simflux = bigsimcat[band+'FLUX']
+    rmag = flux2mag(bigsimcat['rflux'])
+    for thisax, thiscolor, band, indx in zip(ax, col, ('g', 'r', 'z'), (1, 2, 4)):
+        simflux = bigsimcat[band+'flux']
         tractorflux = bigtractor['decam_flux'][:, indx]
         tractorivar = bigtractor['decam_flux_ivar'][:, indx]
         #thisax.scatter(rmag[bcut], -2.5*np.log10(tractorflux[bcut]/simflux[bcut]),
@@ -273,9 +281,9 @@ def plot_chi(bigsimcat,bigtractor, b_good,rminmax, log,qafile='test.png'):
 def plot_color_tractor_minus_answer(bigtractor,bigsimcat, rminmax, brickname,lobjtype, log,qafile='test.png'):
     gr_tra = -2.5*np.log10(bigtractor['decam_flux'][:, 1]/bigtractor['decam_flux'][:, 2])
     rz_tra = -2.5*np.log10(bigtractor['decam_flux'][:, 2]/bigtractor['decam_flux'][:, 4])
-    gr_sim = -2.5*np.log10(bigsimcat['GFLUX']/bigsimcat['RFLUX'])
-    rz_sim = -2.5*np.log10(bigsimcat['RFLUX']/bigsimcat['ZFLUX'])
-    rmag = bigsimcat['R']
+    gr_sim = -2.5*np.log10(bigsimcat['gflux']/bigsimcat['rflux'])
+    rz_sim = -2.5*np.log10(bigsimcat['rflux']/bigsimcat['zflux'])
+    rmag = flux2mag(bigsimcat['rflux'])
 
     col = ['b', 'k', 'c', 'm', 'y', 0.8]
     fig, ax = plt.subplots(2,sharex=True,figsize=(6,8))
@@ -297,9 +305,11 @@ def plot_color_tractor_minus_answer(bigtractor,bigsimcat, rminmax, brickname,lob
     plt.close()
 
 def plot_fraction_recovered(allsimcat,bigsimcat, nmagbin,rminmax, brickname, lobjtype, log,qafile='test.png'):
-    rmaghist, magbins = np.histogram(allsimcat['R'], bins=nmagbin, range=rminmax)
+    allsimcat_R= flux2mag(allsimcat['rflux'])
+    bigsimcat_R= flux2mag(bigsimcat['rflux'])
+    rmaghist, magbins = np.histogram(allsimcat_R, bins=nmagbin, range=rminmax)
     cmagbins = (magbins[:-1] + magbins[1:]) / 2.0
-    ymatch, binsmatch = np.histogram(bigsimcat['R'], bins=nmagbin, range=rminmax)
+    ymatch, binsmatch = np.histogram(bigsimcat_R, bins=nmagbin, range=rminmax)
     fig, ax = plt.subplots(1, figsize=(8,6))
     ax.step(cmagbins, 1.0*ymatch/rmaghist, c='k',lw=3,label='All objects')
     #ax.step(cmagbins, 1.0*ymatchgood/rmaghist, lw=3, ls='dashed', label='|$\Delta$m|<0.3')
@@ -314,15 +324,16 @@ def plot_fraction_recovered(allsimcat,bigsimcat, nmagbin,rminmax, brickname, lob
     plt.close()
 
 def plot_sn_recovered(allsimcat,bigsimcat,bigtractor, brickname, lobjtype, log,qafile='test.png'):
+    allsimcat_R= flux2mag(allsimcat['rflux'])
     # min,max mag of all bands
     grrange = (-0.2, 2.0)
     rzrange = (-0.4, 2.5)
-    rmin,rmax= allsimcat['R'].min(), allsimcat['R'].max()
+    rmin,rmax= allsimcat_R.min(), allsimcat_R.max()
     mag_min= np.min((rmin,rmin+grrange[0],rmin-rzrange[1]))
     mag_max= np.max((rmax,rmax+grrange[1],rmax-rzrange[0]))
     s2n=dict(g={},r={},z={})
     for band,ith in zip(['g','r','z'],[1,2,4]):
-        mag= 22.5-2.5*np.log10(bigsimcat[band.upper()+'FLUX'])
+        mag= 22.5-2.5*np.log10(bigsimcat[band+'flux'])
         # HARDCODED mag range
         s2n[band]= bin_up(mag, bigtractor['decam_flux'][:,ith]*np.sqrt(bigtractor['decam_flux_ivar'][:,ith]), \
                           bin_minmax=(18,26),nbins=20) 
@@ -342,15 +353,16 @@ def plot_sn_recovered(allsimcat,bigsimcat,bigtractor, brickname, lobjtype, log,q
     plt.close()
 
 def plot_recovered_types(bigsimcat,bigtractor, nmagbin,rminmax, objtype,log,qafile='test.png'):
+    bigsimcat_R= flux2mag(bigsimcat['rflux'])
     fig = plt.figure(figsize=(8, 6))
     ax = fig.gca()
-    rmaghist, magbins = np.histogram(bigsimcat['R'], bins=nmagbin, range=rminmax)
+    rmaghist, magbins = np.histogram(bigsimcat_R, bins=nmagbin, range=rminmax)
     cmagbins = (magbins[:-1] + magbins[1:]) / 2.0
     tractortype = np.char.strip(bigtractor['type'].data)
     for otype in ['PSF', 'SIMP', 'EXP', 'DEV', 'COMP']:
         these = np.where(tractortype == otype)[0]
         if len(these)>0:
-            yobj, binsobj = np.histogram(bigsimcat['R'][these], bins=nmagbin, range=rminmax)
+            yobj, binsobj = np.histogram(bigsimcat_R[these], bins=nmagbin, range=rminmax)
             #plt.step(cmagbins,1.0*yobj,lw=3,alpha=0.5,label=otype)
             plt.step(cmagbins,1.0*yobj/rmaghist,lw=3,alpha=0.5,label=otype)
     plt.axhline(y=1.0,lw=2,ls='dashed',color='gray')
@@ -435,12 +447,13 @@ def plot_cm_stack(cm_stack,stack_names,all_names, log, qafile='test.png'):
     plt.close()
 
 def make_stacked_cm(bigsimcat,bigtractor, b_good, log,qafile='test.png'):
+    bigsimcat_R= flux2mag(bigsimcat['rflux'])
     types= ['PSF ', 'SIMP', 'EXP ', 'DEV ', 'COMP']
     cm_stack,stack_names=[],[]
     rbins= np.array([18.,20.,22.,23.,24.])
     for rmin,rmax in zip(rbins[:-1],rbins[1:]):
         # master cut
-        br_cut= np.all((bigsimcat['R'] > rmin,bigsimcat['R'] <= rmax, b_good),axis=0)
+        br_cut= np.all((bigsimcat_R > rmin,bigsimcat_R <= rmax, b_good),axis=0)
         stack_names+= ["%d < r <= %d" % (int(rmin),int(rmax))]
         cm,ans_names,all_names= create_confusion_matrix(np.array(['PSF ']*bigtractor['ra'].data[br_cut].shape[0]),
                                                         bigtractor['type'].data[br_cut], \
@@ -455,8 +468,8 @@ def main():
                                      description='DECaLS simulations.')
     parser.add_argument('-b', '--brick', type=str, default='2428p117', metavar='', 
                         help='process this brick (required input)')
-    parser.add_argument('-o', '--objtype', type=str, choices=['STAR', 'ELG', 'LRG', 'BGS'], default='STAR', metavar='', 
-                        help='object type (STAR, ELG, LRG, BGS)') 
+    parser.add_argument('-o', '--objtype', type=str, choices=['star','qso','elg','lrg'], default='star', metavar='', 
+                        help='object type') 
     parser.add_argument('-out', '--output_dir', type=str, default=None, metavar='', 
                         help='relative path to output directory') 
     parser.add_argument('-extra', '--extra_plots', action='store_true', 
@@ -489,9 +502,10 @@ def main():
         decals_sim_dir = os.getenv('DECALS_SIM_DIR')
     else:
         decals_sim_dir = '.'
-    input_dir= os.path.join(decals_sim_dir,brickname,lobjtype)
-    if args.output_dir is None: output_dir= os.path.join(decals_sim_dir,brickname,'qaplots_'+lobjtype)
-    else: output_dir= args.output_dir
+    input_dir= os.path.join(decals_sim_dir,lobjtype,brickname[:3],brickname,'rowstart1')
+    #if args.output_dir is None: output_dir= os.path.join(decals_sim_dir,lobjtype,brickname[:3],brickname,'qaplots_'+lobjtype)
+    output_dir= os.path.join(os.path.dirname(input_dir),'qaplots_'+lobjtype)
+    #else: output_dir= args.output_dir
     if not os.path.exists(output_dir): 
         os.makedirs(output_dir)
     
@@ -501,13 +515,13 @@ def main():
     col = ['b', 'k', 'c', 'm', 'y', 0.8]
     
     # Read metadata catalog.
-    metafile = os.path.join(input_dir, 'metacat-{}-{}.fits'.format(brickname, lobjtype))
+    metafile = os.path.join(input_dir, 'metacat-{}-{}-rowstart1.fits'.format(lobjtype,brickname))
     log.info('Reading {}'.format(metafile))
     meta = fits.getdata(metafile, 1)
     
     # We need this for our histograms below
     magbinsz = 0.2
-    rminmax = np.squeeze(meta['RMAG_RANGE'])
+    rminmax = np.array([15.,24.])  #np.squeeze(meta['RMAG_RANGE'])
     nmagbin = long((rminmax[1]-rminmax[0])/magbinsz)
 
     # Work in chunks.
@@ -515,7 +529,7 @@ def main():
     bigsimcat = []
     bigsimcat_missed = []
     bigtractor = []
-    chunk_dirs= glob.glob(os.path.join(input_dir,'0*'))
+    chunk_dirs= glob.glob(os.path.join(os.path.dirname(input_dir),'rowstart*'))
     nchunk= len(chunk_dirs)
     if nchunk == 0: raise ValueError
     # Loop through chunk dirs 000,001,...,999
@@ -524,21 +538,23 @@ def main():
         log.info('Working on chunk {:02d}/{:02d}'.format(ichunk+1, nchunk))
         
         # Read the simulated object catalog
-        simcatfile = os.path.join(cdir, 'simcat-{}-{}-{:02d}.fits'.format(brickname, lobjtype, int(chunksuffix)))
+        simcatfile = os.path.join(cdir, 'simcat-{}-{}-{}.fits'.format(lobjtype,brickname,chunksuffix))
         log.info('Reading {}'.format(simcatfile))
         simcat = Table(fits.getdata(simcatfile, 1))
 
         # Read Tractor catalog
-        tractorfile = os.path.join(cdir, 'tractor-{}-{}-{:02d}.fits'.format(brickname, lobjtype, int(chunksuffix)))
+        tractorfile = os.path.join(cdir, 'tractor-{}-{}-{}.fits'.format(lobjtype,brickname,chunksuffix))
         log.info('Reading {}'.format(tractorfile))
         tractor = Table(fits.getdata(tractorfile, 1))
         # Match
-        m1, m2, d12 = match_radec(tractor['ra'].copy(), tractor['dec'].copy(),
-                                  simcat['RA'].copy(), simcat['DEC'].copy(), 1.0/3600.0)
-        #m1, m2, d12 = matching.johan_tree(tractor['ra'].copy(), tractor['dec'].copy(),\
-        #                                    simcat['RA'].copy(), simcat['DEC'].copy(), dsmax=1.0/3600.0)
-        print('matched %d/%d' % (len(m2),len(simcat['RA'])))
-
+        cat1 = SkyCoord(ra=tractor['ra']*units.degree, dec=tractor['dec']*units.degree)
+        cat2 = SkyCoord(ra=simcat['ra']*units.degree, dec=simcat['dec']*units.degree)
+        m2, d2d, d3d = cat1.match_to_catalog_3d(cat2)
+        b= np.array(d2d) <= 1./3600
+        m2= np.array(m2)[b]
+        m1= np.arange(len(tractor))[b]
+        print('matched %d/%d' % (len(m2),len(simcat['ra'])))
+        
         missing = np.delete(np.arange(len(simcat)), m2, axis=0)
         log.info('Missing {}/{} sources'.format(len(missing), len(simcat)))
 
@@ -578,10 +594,11 @@ def main():
          
         # Get cutouts of the missing sources in each chunk (if any)
         if len(missing) > 0 and extra_plots:
+            simcat_R= flux2mag(simcat['rflux'])
             for img_name in ['image']: #,'simscoadd']:
                 qafile = os.path.join(output_dir, 'qa-{}-{}-{}-missing-{:02d}.png'.format(\
                                             brickname, lobjtype, img_name, int(chunksuffix)))
-                miss = missing[np.argsort(simcat['R'][missing])]
+                miss = missing[np.argsort(simcat_R[missing])]
                 plot_cutouts_by_index(simcat,miss, brickname,lobjtype,chunksuffix, \
                                       indir=cdir,img_name=img_name,qafile=qafile)
                 log.info('Wrote {}'.format(qafile))
@@ -674,5 +691,5 @@ def main():
         plt.savefig(qafile)
     '''
     
-if __name__ == "__main__":
+if __name__ == "__main__":    
     main()
