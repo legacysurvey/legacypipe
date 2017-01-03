@@ -502,7 +502,7 @@ def main():
         decals_sim_dir = os.getenv('DECALS_SIM_DIR')
     else:
         decals_sim_dir = '.'
-    input_dir= os.path.join(decals_sim_dir,lobjtype,brickname[:3],brickname,'rowstart1')
+    input_dir= os.path.join(decals_sim_dir,lobjtype,brickname[:3],brickname,'rowstart0')
     #if args.output_dir is None: output_dir= os.path.join(decals_sim_dir,lobjtype,brickname[:3],brickname,'qaplots_'+lobjtype)
     output_dir= os.path.join(os.path.dirname(input_dir),'qaplots_'+lobjtype)
     #else: output_dir= args.output_dir
@@ -515,7 +515,7 @@ def main():
     col = ['b', 'k', 'c', 'm', 'y', 0.8]
     
     # Read metadata catalog.
-    metafile = os.path.join(input_dir, 'metacat-{}-{}-rowstart1.fits'.format(lobjtype,brickname))
+    metafile = os.path.join(input_dir, 'metacat-{}-{}-rowstart0.fits'.format(lobjtype,brickname))
     log.info('Reading {}'.format(metafile))
     meta = fits.getdata(metafile, 1)
     

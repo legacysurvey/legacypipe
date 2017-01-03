@@ -222,26 +222,43 @@ class KDEshapes(object):
                       (pa <= 180)))
         
         return re,n,ba,pa
- 
-            
-def get_fn4sample(outdir,seed,prefix=''):
-    dr= os.path.join(outdir,'input_sample')
-    if not os.path.exists(dr):
-        os.makedirs(dr)
-    return os.path.join(dr, '%ssample_%d.fits' % (prefix,seed))
 
-def get_fns(outdir,prefix=''):
-    dr= os.path.join(outdir,'input_sample')
-    fn= os.path.join(dr,'%ssample_*.fits' % prefix )
-    fns=glob(fn)
+def get_sample_dir(outdir=None):
+    return os.path.join(outdir,'input_sample')
+
+def get_bybrick_dir(outdir='.'): 
+    dr= get_sample_dir(outdir=outdir)
+    return os.path.join(dr,'bybrick')
+
+def get_sample_fn(seed=None,prefix=''):
+    return '%ssample_%d.fits' % (prefix,seed)
+
+def get_sample_fns(outdir=None,prefix=''):
+    dr= get_sample_dir(outdir=outdir)
+    fn= get_sample_fn(seed=1,prefix=prefix)
+    fn= fn.replace('sample_1.fits','sample_*.fits')
+    fns=glob(os.path.join(dr,fn) )
     if not len(fns) > 0: raise ValueError('no fns found')
     return fns
 
-def get_fn4brick(brick,outdir,prefix=''):
-    dr= os.path.join(outdir,'input_sample','bybrick')
-    if not os.path.exists(dr):
-        os.makedirs(dr)
-    return os.path.join(dr,'%ssample-%s.fits' % (prefix,brick))
+def get_brick_sample_fn(brickname=None,seed=None,prefix=None):
+    fn= get_sample_fn(seed=seed,prefix=prefix)
+    return fn.replace('sample_','sample_%s_' % brickname)
+
+def get_brick_sample_fns(brickname=None,outdir='./',prefix=None):
+    dr= get_bybrick_dir(outdir=outdir)
+    fn= get_brick_sample_fn(brickname=brickname,seed=1,prefix=prefix)
+    fn= os.path.join(dr,fn.replace('1.fits','*.fits') )
+    fns=glob(fn )
+    if not len(fns) > 0: raise ValueError('no fns found')
+    return fns
+
+def get_brick_merged_fn(brickname=None,outdir='./',prefix=None):
+    dr= get_bybrick_dir(outdir=outdir)
+    fn= get_brick_sample_fn(brickname=brickname,seed=1,prefix=prefix)
+    fn= os.path.join(dr,fn.replace('_1.fits','.fits') )
+    return fn
+
 
 def survey_bricks_cut2radec(radec):
     #fn=os.path.join(os.getenv('LEGACY_SURVEY_DIR'),'survey-bricks-5rows-eboss-ngc.fits.gz')
@@ -287,44 +304,78 @@ def draw_points(radec,unique_ids,seed=1,outdir='./',prefix=''):
     for key in gfit.keys():
         T.set(key,gfit[key])
     # Save table
-    fn= get_fn4sample(outdir,seed,prefix=prefix)
+    fn= os.path.join(get_sample_dir(outdir),get_sample_fn(seed,prefix=prefix) )
     if os.path.exists(fn):
         os.remove(fn)
         print('Overwriting %s' % fn)
     T.writeto(fn)
     print('Wrote %s' % fn)
 
-
-def organize_by_brick(btable,outdir='./',prefix=''):
-    '''btable -- survey bricks table cut to radec region
-    each mpi task gets a fraction of the bricks remaining'''
-    survey = LegacySurveyData()
-    for btab in btable:
-        # Brick wcs
-        brickinfo = survey.get_brick_by_name(btab.brickname)
-        brickwcs = wcs_for_brick(brickinfo)
-        ra1,ra2,dec1,dec2= brickwcs.radec_bounds()
-        # Loop over sample files
-        fns= get_fns(outdir,prefix=prefix)
-        cat= []
-        for sample_fn in fns:
-            sample= fits_table(sample_fn)
+def organize_by_brick(sample_fns,sbricks,outdir=None,seed=None,prefix=None):
+    '''
+    For each sample_fn, split into bricks
+    get  brick sample fn for that brick and sample
+    write it if does not exist
+    sample_fn -- sample_seed.fits file assigned to that mpi task
+    sbricks -- survey bricks table cut to radec region
+    '''
+    dr= get_bybrick_dir(outdir=outdir)
+    for sample_fn in sample_fns:
+        # Skip if already looped over bricks for this sample
+        check_done= os.path.join(dr, get_sample_fn(seed=seed,prefix=prefix) )
+        check_done= check_done.replace('.fits','_done.txt')
+        if os.path.exists(check_done):
+            continue
+        # 
+        sample= fits_table(sample_fn)
+        print('sample min,max ra,dec= %f %f %f %f' % (sample.ra.min(),sample.ra.max(),\
+                                                      sample.dec.min(),sample.dec.max()))
+        # Loop over survey bricks
+        survey = LegacySurveyData()
+        for sbrick in sbricks:
+            # Get output fn for this brick and sample
+            fn= os.path.join(dr, get_brick_sample_fn(brickname=sbrick.brickname,seed=seed,prefix=prefix) )
+            if os.path.exists(fn):
+                continue
+            # Cut sample by brick's bounds
+            brickinfo = survey.get_brick_by_name(sbrick.brickname)
+            brickwcs = wcs_for_brick(brickinfo)
+            ra1,ra2,dec1,dec2= brickwcs.radec_bounds()
             keep=  (sample.ra >= ra1)*(sample.ra <= ra2)*\
                    (sample.dec >= dec1)*(sample.dec <= dec2)
+            sample2= sample.copy()
             if np.where(keep)[0].size > 0:
-                sample.cut(keep)
-                cat.append( sample )
-        if len(cat) > 0:
-            cat= merge_tables(cat, columns='fillzero')
-            savefn= get_fn4brick(btab.brickname,outdir,prefix=prefix)
-            if os.path.exists(savefn):
-                os.remove(savefn)
-                print('Overwriting %s' % savefn)
-            cat.writeto(savefn)
-            print('Wrote %s' % savefn)
-        else: 
-            print('WARNING, no ra,dec samples in brick: %s' % btab.brickname)
+                sample2.cut(keep)
+                sample2.writeto(fn)
+                print('Wrote %s' % fn)
+            else: 
+                print('WARNING: sample=%s has no ra,dec in brick=%s' % (sample_fn,sbrick.brickname))
+        # This sample is done
+        with open(check_done,'w') as foo:
+            foo.write('done')
 
+def merge_bybrick(bricks,outdir='',prefix=''):
+    for brick in bricks:
+        outfn= get_brick_merged_fn(brickname=brick,outdir=outdir,prefix=prefix) 
+        if os.path.exists(outfn):
+            continue
+        fns= get_brick_sample_fns(brickname=brick,outdir=outdir,prefix=prefix)
+        cats=[]
+        for i,fn in enumerate(fns):
+            print('reading %d/%d' % (i+1,len(fns)))
+            try: 
+                tab= fits_table(fn) 
+                cats.append( tab )
+            except IOError:
+                print('Fits file does not exist: %s' % fn)
+        cat= merge_tables(cats, columns='fillzero') 
+        cat.writeto(outfn)
+        print('Wrote %s' % outfn)
+        if os.path.exists(outfn):
+            rm_fns= get_brick_sample_fns(brickname=brick,outdir=outdir,prefix=prefix)
+            for rm_fn in rm_fns: os.remove(rm_fn) 
+        
+        
 
 #def merge_draws(outdir='./',prefix=''):
 #    '''merges all fits tables created by draw_points()'''
@@ -551,12 +602,24 @@ class PlotTable(object):
         plt.close()
         print('Wrote %s' % fn)
 
+def combine(fns):
+    cat=np.array([])
+    for i,fn in enumerate(fns): 
+        print('reading %d/%d' % (i+1,len(fns)))
+        try: 
+            tab= fits_table(fn) 
+            cat= np.concatenate( (cat,tab.id) )
+        except IOError:
+            print('Fits file does not exist: %s' % fn)
+    return cat
+
 
 if __name__ == "__main__":
     t0 = Time()
     tbegin=t0
     print('TIMING:after-imports ',datetime.datetime.now())
     parser = argparse.ArgumentParser(description='Generate a legacypipe-compatible CCDs file from a set of reduced imaging.')
+    parser.add_argument('--dowhat',choices=['sample','bybrick','merge','check'],action='store',help='slurm jobid',default='001',required=True)
     parser.add_argument('--ra1',type=float,action='store',help='bigbox',required=True)
     parser.add_argument('--ra2',type=float,action='store',help='bigbox',required=True)
     parser.add_argument('--dec1',type=float,action='store',help='bigbox',required=True)
@@ -593,6 +656,7 @@ if __name__ == "__main__":
 
     if args.nproc > 1:
         if comm.rank == 0:
+            print('using mpi')
             if not os.path.exists(args.outdir):
                 os.makedirs(args.outdir)
         seed = comm.rank
@@ -602,19 +666,67 @@ if __name__ == "__main__":
         #    cnt+=1
         #    seed= comm.rank+ comm.size*cnt
         # Divide and conquer: each task saves a sample
-        draw_points(radec,unique_ids, seed=seed,outdir=args.outdir,prefix=args.prefix)
-        # Gather
-        junk=[comm.rank]
-        junks = comm.gather(junk, root=0 )
-        # Divide and conquer: 15k bricks in eBOSS NGC, each task takes bricks to organize samples into
-        btable= survey_bricks_cut2radec(radec)
-        inds= np.arange(len(btable))
-        inds= np.array_split(inds,comm.size)[comm.rank]
-        btable.cut(inds)
-        organize_by_brick(btable,outdir=args.outdir,prefix=args.prefix)
-        # Gather, done
-        junk=[comm.rank]
-        junks = comm.gather(junk, root=0 )
+        if args.dowhat == 'sample':
+            # Write {outdir}/input_sample/{prefix}sample_{seed}.fits files
+            # Root 0 makes dirs
+            #if comm.rank == 0:
+            #    dr= get_sample_dir(outdir=args.outdir)
+            #    if not os.path.exists(dr):
+            #        os.makedirs(dr)
+            #    data=dict(dr=dr)
+            #else: 
+            #    data=None
+            # Bcast the dir
+            #comm.bcast(data, root=0)
+            #print('rank=%d, data["dr"]= ' % comm.rank,data['dr'])
+            draw_points(radec,unique_ids, seed=seed,outdir=args.outdir,prefix=args.prefix)
+        elif args.dowhat == 'bybrick':
+            # Write {outdir}/input_sample/bybrick/{prefix}sample_{brick}_{seed}.fits files
+            # Root 0 reads survey bricks, makes dirs
+            #if comm.rank == 0:
+            #    d= dict(btable= survey_bricks_cut2radec(radec) )
+            #    # Root 0 makes all dirs could need    
+            #    dr= get_bybrick_dir(outdir=args.outdir)
+            #    if not os.path.exists(dr):
+            #        os.makedirs(dr)
+            #else:
+            #    d=None
+            # Bcast survey bricks
+            #if comm.rank == 1:
+            #    print('rank 1 before bcast')
+            #comm.bcast(d, root=0)
+            #if comm.rank == 1:
+            #    print('rank 1 after bcast')
+            # All workers
+            # Assign list of samples to each worker
+            sample_fns= get_sample_fns(outdir=args.outdir,prefix=args.prefix)
+            sample_fns= np.array_split(sample_fns,comm.size)[comm.rank] 
+            print('rank %d, sample_fns=' % comm.rank,sample_fns)
+            # Loop over survey bricks, write brick sample files
+            print('before read table: rank=%d' % comm.rank)
+            btable= survey_bricks_cut2radec(radec) 
+            print('after read table: rank=%d' % comm.rank)
+            organize_by_brick(sample_fns,btable,outdir=args.outdir,seed=seed,prefix=args.prefix)
+            # DONE at this point        
+            #Each task gets its sample file
+            ## Divide and conquer: 15k bricks in eBOSS NGC
+            #inds= np.arange(len(btable))
+            #inds= np.array_split(inds,comm.size)[comm.rank]
+            #btable.cut(inds)
+            # Gather, done
+        elif args.dowhat == 'merge':
+            btable= survey_bricks_cut2radec(radec)
+            bricks= np.loadtxt('eboss_ngc_bricks.txt',dtype=str)
+            bricks= np.array_split(bricks,comm.size)[comm.rank] 
+            # Each task gets a list of bricks, merges sample for each brick, removes indiv brick samps 
+            merge_bybrick(bricks,outdir=args.outdir,prefix=args.prefix)
+        elif args.dowhat == 'check':
+            fns=glob('/scratch1/scratchdirs/desiproc/DRs/data-releases/dr3-obiwan/eboss_ngc/input_sample/bybrick/eboss_ngcsample_*.fits')
+            fns= np.array_split(fns,comm.size)[comm.rank] 
+            ids= combine(fns)
+            all_ids= comm.gather(ids, root=0)
+            if comm.rank == 0:
+                print('len(set(all_ids))= %d' % len(set(all_ids)))
         #if comm.rank == 0:
         #    merge_draws(outdir=args.outdir,prefix=args.prefix)
             #plotobj= PlotTable(outdir=args.outdir,prefix=args.prefix)
@@ -636,10 +748,34 @@ if __name__ == "__main__":
         #    print('skipping, exists: %s' % get_fn(args.outdir,seed))
         #    cnt+=1
         #    seed= cnt
-        draw_points(radec,unique_ids, seed=seed,outdir=args.outdir,prefix=args.prefix)
-        #
-        btable= survey_bricks_cut2radec(radec)
-        organize_by_brick(btable, outdir=args.outdir,prefix=args.prefix)
+        if args.dowhat == 'sample':
+            # Write {outdir}/input_sample/{prefix}sample_{seed}.fits files
+            dr= get_sample_dir(outdir=args.outdir)
+            if not os.path.exists(dr):
+                os.makedirs(dr)
+            draw_points(radec,unique_ids, seed=seed,outdir=args.outdir,prefix=args.prefix)
+        elif args.dowhat == 'bybrick':
+            # Write {outdir}/input_sample/bybrick/{prefix}sample_{brick}_{seed}.fits files
+            btable= survey_bricks_cut2radec(radec)
+            with open('eboss_ngc_bricks.txt','w') as foo:
+                for brick in btable.brickname:
+                    foo.write('%s\n' % brick)
+            raise ValueError
+            dr= get_bybrick_dir(outdir=args.outdir)
+            if not os.path.exists(dr):
+                os.makedirs(dr)
+            # split each sample into its bricks
+            sample_fns= get_sample_fns(outdir=args.outdir,prefix=args.prefix)
+            sample_fns= np.array_split(sample_fns,1)[0] 
+            # Loop over survey bricks, write brick sample files
+            organize_by_brick(sample_fns,btable,outdir=args.outdir,seed=seed,prefix=args.prefix)
+        elif args.dowhat == 'merge':
+            btable= survey_bricks_cut2radec(radec)
+            bricks= np.loadtxt('eboss_ngc_bricks.txt',dtype=str)
+            #bricks= np.array_split(bricks,comm.size)[comm.rank] 
+            # Each task gets a list of bricks, merges sample for each brick, removes indiv brick samps 
+            merge_bybrick(bricks,outdir=args.outdir,prefix=args.prefix)
+            
         # Gather, done
         #merge_draws(outdir=args.outdir,prefix=args.prefix)
         #plotobj= PlotTable(outdir=args.outdir,prefix=args.prefix)

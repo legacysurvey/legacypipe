@@ -1,6 +1,7 @@
 #!/bin/bash -l
 
-#SBATCH -p debug
+#SBATCH -p regular
+#SBATCH --qos=premium
 #SBATCH -N 20
 #SBATCH -t 00:30:00
 #SBATCH --account=desi
@@ -16,20 +17,19 @@
 #-N 1
 
 # Yu Feng's bcast
-source /scratch2/scratchdirs/kaylanb/yu-bcase/activate.sh
-# Put legacypipe in path
-export PYTHONPATH=.:/global/homes/k/kaylanb/repos:${PYTHONPATH}
+source $CODE_DIR/yu-bcast_2/activate.sh
 
-outdir=/scratch2/scratchdirs/kaylanb/obiwan-eboss-ngc
+set -x
+export LEGACY_SURVEY_DIR=/scratch2/scratchdirs/kaylanb/dr3-obiwan/legacypipe-dir
+#/scratch1/scratchdirs/desiproc/DRs/dr3-obiwan/legacypipe-dir #/scratch2/scratchdirs/kaylanb/dr3-obiwan/legacypipe-dir
+export PYTHONPATH=$CODE_DIR/legacypipe/py:${PYTHONPATH}
+cd $CODE_DIR/legacypipe/py
+
+prefix=eboss_ngc
+outdir=/scratch1/scratchdirs/desiproc/DRs/data-releases/dr3-obiwan/${prefix}
 #cp /project/projectdirs/desi/users/burleigh/obiwan_backup_data/*.pickle $outdir
 
-#source ~/.bashrc_hpcp
-#source ~/.bashrc_dr4-bootes
-python -c "import tractor;print(tractor)"
-python -c "import astrometry;print(astrometry)"
-
 #source /scratch1/scratchdirs/desiproc/DRs/dr4/legacypipe-dir/bashrc
-set -x
 # Force MKL single-threaded
 # https://software.intel.com/en-us/articles/using-threaded-intel-mkl-in-multi-thread-application
 export MKL_NUM_THREADS=1
@@ -45,7 +45,7 @@ fi
 let tasks=${SLURM_JOB_NUM_NODES}*${cores}
 
 # eBOSS NGC
-prefix=eboss_ngc_
+prefix=eboss_ngc
 ra1=122.
 ra2=177.
 dec1=12.
@@ -57,11 +57,14 @@ dec2=32.
 #dec1=-6.
 #dec2=6.
 # Test brick
-#prefix=brick_1220p282
-#ra1=121.6
-#ra2=122.3
-#dec1=28.
-#dec2=28.5
+#prefix=testmpi
+#ra1=1.
+#ra2=5.
+#dec1=1.
+#dec2=5.
 
-srun -n $tasks -N ${SLURM_JOB_NUM_NODES} -c 1 python obiwan/decals_sim_radeccolors.py --nproc $tasks --ra1 $ra1 --ra2 $ra2 --dec1 $dec1 --dec2 $dec2 --outdir $outdir --prefix $prefix
-
+#dowhat=sample
+#dowhat=bybrick
+#dowhat=merge
+dowhat=check
+srun -n $tasks -N ${SLURM_JOB_NUM_NODES} -c 1 python obiwan/decals_sim_radeccolors.py --dowhat $dowhat --ra1 $ra1 --ra2 $ra2 --dec1 $dec1 --dec2 $dec2 --prefix $prefix --nproc $tasks --outdir /scratch1/scratchdirs/desiproc/DRs/data-releases/dr3-obiwan/eboss_ngc

@@ -2,6 +2,11 @@
 
 """
 Running eBOSS NGC, SGC
+kaylan Edison scratch
+LEGACY_SURVEY_DIR=/scratch2/scratchdirs/kaylanb/dr3-obiwan/legacypipe-dir
+DECALS_SIM_DIR=/scratch2/scratchdirs/kaylanb/obiwan-eboss-ngc
+
+
 python legacypipe/queue-calibs.py --ignore_cuts --touching --save_to_fits --name eboss-sgc --region eboss-sgc --bricks /global/project/projectdirs/cosmo/data/legacysurvey/dr3//survey-bricks-dr3.fits.gz --ccds /scratch1/scratchdirs/desiproc/DRs/dr4-bootes/legacypipe-dir/survey-ccds-decals-extra-nondecals.fits.gz
 
 ngc=fits_table('bricks-eboss-ngc-cut.fits')
