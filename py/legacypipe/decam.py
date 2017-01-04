@@ -81,6 +81,17 @@ class DecamImage(CPImage, CalibMixin):
         return np.flatnonzero(good)
 
     @classmethod
+    def bad_exposures(self, survey, ccds):
+        '''
+        Returns an index array for the members of the table 'ccds'
+        that are good exposures (NOT flagged) in the bad_expid file.
+        '''
+        good = np.ones(len(ccds), bool)
+        print('WARNING: camera: %s not using bad_expid file' % 'decam')
+        return np.flatnonzero(good)
+
+
+    @classmethod
     def apply_blacklist(self, survey, ccds):
         propid_blacklist = [
             '2012B-0003', # labeled as "DES SV", but appears to

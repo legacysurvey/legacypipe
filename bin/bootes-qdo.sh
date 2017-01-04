@@ -1,31 +1,15 @@
-#!/bin/bash -l
+#!/bin/bash 
 
-#SBATCH -p shared
-#SBATCH -n 12
-#SBATCH -t 01:00:00
-#SBATCH --account=desi
-#SBATCH -J bash-bootes
-#SBATCH -o bash-bootes.o%j
-#SBATCH --mail-user=kburleigh@lbl.gov
-#SBATCH --mail-type=END,FAIL
-#SBATCH -L SCRATCH
-
-#-p shared
-#-n 12
-#-p debug
-#-N 1
-
-#source /scratch1/scratchdirs/desiproc/DRs/dr4/legacypipe-dir/bashrc
 set -x
 
-# Yu Feng's bcast
-#source /scratch1/scratchdirs/desiproc/DRs/code/dr4/yu-bcast/activate.sh
-# Put legacypipe in path
-#export PYTHONPATH=.:${PYTHONPATH}
+brick="$1"
+#export run_name=bootes-qdo
+# Bootes
+export outdir=/scratch1/scratchdirs/desiproc/DRs/data-releases/dr4-bootes/90primeTPV_mzlsv2thruMarch19/wisepsf
+run_name=dr4-bootes
+threads=24
+mkdir -p $outdir
 
-
-threads=12
-export OMP_NUM_THREADS=$threads
 
 # Force MKL single-threaded
 # https://software.intel.com/en-us/articles/using-threaded-intel-mkl-in-multi-thread-application
@@ -33,7 +17,6 @@ export MKL_NUM_THREADS=1
 # Try limiting memory to avoid killing the whole MPI job...
 ulimit -a
 
-#outdir,statdir,brick,run_name
 bri="$(echo $brick | head -c 3)"
 
 log="$outdir/logs/$bri/$brick/log.$SLURM_JOBID"
@@ -57,11 +40,12 @@ echo >> $log
 echo -e "\nStarting on ${NERSC_HOST} $(hostname)\n" >> $log
 echo "-----------------------------------------------------------------------------------------" >> $log
 
+export OMP_NUM_THREADS=$threads
 
-echo outdir="$outdir", brick="$brick"
 #module load psfex-hpcp
-srun -n 1 -c $OMP_NUM_THREADS python legacypipe/runbrick.py \
-     --run dr4-bootes \
+#srun -n 1 -c 1 python python_test_qdo.py
+python legacypipe/runbrick.py \
+     --run $run_name \
      --brick $brick \
      --skip \
      --threads $OMP_NUM_THREADS \
@@ -69,9 +53,12 @@ srun -n 1 -c $OMP_NUM_THREADS python legacypipe/runbrick.py \
      >> $log 2>&1
 #--checkpoint $outdir/checkpoints/${bri}/${brick}.pickle \
 #--pickle "$outdir/pickles/${bri}/runbrick-%(brick)s-%%(stage)s.pickle" \
+# Bootes
+#--run dr4-bootes \
+
 #--no-wise \
 #--zoom 1400 1600 1400 1600
-rm $statdir/inq_$brick.txt
+#rm $statdir/inq_$brick.txt
 
 #     --radec $ra $dec
 #    --force-all --no-write \
@@ -79,4 +66,5 @@ rm $statdir/inq_$brick.txt
 #
 echo $run_name DONE $SLURM_JOBID
 
-
+# Bootes
+#for i in `seq 1 131`;do qdo launch dr4Bootes3 1 --cores_per_worker 12 --batchqueue shared --walltime 1:00:00 --keep_env --script ./bootes-qdo.sh;done

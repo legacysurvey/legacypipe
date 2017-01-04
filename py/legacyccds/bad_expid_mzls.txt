@@ -1,0 +1,1559 @@
+#EXPID  Comments
+
+# Bad data from 28/29 Oct 2015
+59957 shifted image, CCD2
+59951 shifted image, CCD2
+59958 shifted image, CCD2 and CCD3
+59961 shifted image, CCD3
+59962 shifted image, CCD2
+59968 shifted image, CCD2 and CCD3
+59970 shifted image, CCD2
+59974 shifted image, CCD2
+59975 shifted image, CCD2
+
+# Bad data from 18/19 Nov 2015
+60211 shifted image
+60214 shifted image
+60224 shifted image
+60236 shifted image
+60244 shifted image
+60252 readout timeout
+60374 trailed image
+60381 very poor seeing
+60385 shifted image
+60395 4MAPS not settled, bad PSF
+60409 trailed
+60423 shifted image
+60436 4MAPS not settled, bad PSF
+60437 4MAPS not settled, bad PSF 
+60437 4MAPS not settled, bad PSF 
+60438 4MAPS not settled, bad PSF 
+60439 4MAPS not settled, bad PSF 
+60440 4MAPS not settled, bad PSF
+60411 shifted image
+60412 shifted image
+60413 shifted image
+60414 shifted image
+60415 shifted image
+60416 shifted image
+60417 shifted image
+60418 shifted image
+60419 shifted image
+60420 shifted image
+60421 shifted image
+60422 shifted image
+60423 shifted image
+60424 shifted image
+60425 shifted image
+60426 shifted image
+60427 shifted image
+60428 shifted image
+60429 shifted image
+60430 shifted image
+60431 shifted image
+60432 shifted image
+60433 shifted image
+60434 shifted image
+60435 shifted image
+60436 shifted image
+60437 shifted image
+60438 shifted image
+60439 shifted image
+60440 shifted image
+60441 shifted image
+60442 shifted image
+60443 shifted image
+60444 shifted image
+60445 shifted image
+60453 shifted image
+60456 shifted image
+
+# Bad data from 19/20 Nov 2015
+60521 shifted image
+60523 shifted image
+60589 4MAPS not settled, bad PSF
+60622 shifted image CCD1
+60635 most are shifted images, do not use
+60636 most are shifted images, do not use
+60637 most are shifted images, do not use
+60638 most are shifted images, do not use
+60639 most are shifted images, do not use
+60640 most are shifted images, do not use
+60671 shifted image CCD4
+60716 4MAPS not settled, trailed
+60752 shifted image CCD2
+60759 junk image
+60762 shifted image CCD2; 4MAPS not settled
+60769 4MAPS not settled, bad PSF
+60772 4MAPS not settled, bad PSF
+
+# Bad data from 20/21 Nov 2015
+60851 shifted image, CCD3
+60929 shifted image, CCD3
+60987 shifted image, CCD4
+61010 shifted image, CCD4
+61041 shifted image, CCD4
+61072 shifted image, CCD1
+61076 junk
+61205 4MAPS not settled, bad PSF
+61206 4MAPS not settled, bad PSF
+61216 4MAPS not settled, bad PSF
+
+# Bad data from 21/22 Nov 2015
+61372 shifted image, CCD3
+61379 shifted image, CCD3
+61387 shifted image, CCD2
+61427 shifted image, CCD1
+61446 shifted image, CCD4
+61452 shifted image, CCD1
+
+# Bad data from 22/23 Nov 2015
+61436 4MAPS not settled, bad PSF
+61452 4MAPS not settled, bad PSF
+61453 4MAPS not settled, bad PSF
+61461 4MAPS not settled, bad PSF
+61466 4MAPS not settled, bad PSF
+61473 bad PSF?
+61505 very high background (~34,000)
+
+# Bad data from 23/24 Nov 2015
+61555 shutter did not open
+61556 shutter did not open
+61557 shutter did not open
+61558 shutter did not open
+61563 bad image, clouds
+61564 bad image, clouds
+61565 bad image, clouds
+61615 first exposure after restart, may be bad
+61660 4MAPS not settled, bad PSF
+61696 4MAPS not settled, bad PSF
+61698 4MAPS not settled, bad PSF
+61699 4MAPS not settled, bad PSF
+61719 4MAPS not settled,bad PSF
+61737 shifted image
+61739 shifted image
+61745 trailed image
+61761 shifted image, CCD3
+
+# Bad data from 11/12 Dec 2015
+62008 CCD locations 1 and 2 swapped
+62009 CCD locations 1 and 2 swapped
+62010 CCD locations 1 and 2 swapped
+62011 CCD locations 1 and 2 swapped
+62012 CCD locations 1 and 2 swapped
+62013 CCD locations 1 and 2 swapped
+62014 CCD locations 1 and 2 swapped
+62015 CCD locations 1 and 2 swapped
+62016 CCD locations 1 and 2 swapped
+62017 CCD locations 1 and 2 swapped
+62018 CCD locations 1 and 2 swapped
+62019 CCD locations 1 and 2 swapped
+62020 CCD locations 1 and 2 swapped
+62021 CCD locations 1 and 2 swapped
+62022 CCD locations 1 and 2 swapped
+62023 CCD locations 1 and 2 swapped
+62024 CCD locations 1 and 2 swapped
+62025 CCD locations 1 and 2 swapped
+62026 CCD locations 1 and 2 swapped
+62027 CCD locations 1 and 2 swapped
+62028 CCD locations 1 and 2 swapped
+62029 CCD locations 1 and 2 swapped
+62030 CCD locations 1 and 2 swapped
+62031 CCD locations 1 and 2 swapped
+62032 CCD locations 1 and 2 swapped
+62033 CCD locations 1 and 2 swapped
+62034 CCD locations 1 and 2 swapped
+62035 CCD locations 1 and 2 swapped
+62036 CCD locations 1 and 2 swapped
+62037 CCD locations 1 and 2 swapped
+62038 CCD locations 1 and 2 swapped
+62039 CCD locations 1 and 2 swapped
+62040 CCD locations 1 and 2 swapped
+62041 CCD locations 1 and 2 swapped
+62042 CCD locations 1 and 2 swapped
+62043 CCD locations 1 and 2 swapped
+62044 CCD locations 1 and 2 swapped
+62045 CCD locations 1 and 2 swapped
+62046 CCD locations 1 and 2 swapped
+62047 CCD locations 1 and 2 swapped
+62048 CCD locations 1 and 2 swapped
+62049 CCD locations 1 and 2 swapped
+62050 CCD locations 1 and 2 swapped
+62051 CCD locations 1 and 2 swapped
+62052 CCD locations 1 and 2 swapped
+62053 CCD locations 1 and 2 swapped
+62054 CCD locations 1 and 2 swapped
+62055 CCD locations 1 and 2 swapped
+62056 CCD locations 1 and 2 swapped
+62057 CCD locations 1 and 2 swapped
+62058 CCD locations 1 and 2 swapped
+62059 CCD locations 1 and 2 swapped
+62060 CCD locations 1 and 2 swapped
+62061 CCD locations 1 and 2 swapped
+62062 CCD locations 1 and 2 swapped
+62063 CCD locations 1 and 2 swapped
+62064 CCD locations 1 and 2 swapped
+62065 CCD locations 1 and 2 swapped
+62066 CCD locations 1 and 2 swapped
+62067 CCD locations 1 and 2 swapped
+62068 CCD locations 1 and 2 swapped
+62069 CCD locations 1 and 2 swapped
+62070 CCD locations 1 and 2 swapped
+62071 CCD locations 1 and 2 swapped
+62072 CCD locations 1 and 2 swapped
+62073 CCD locations 1 and 2 swapped
+62074 CCD locations 1 and 2 swapped
+62075 CCD locations 1 and 2 swapped
+62076 CCD locations 1 and 2 swapped
+62077 CCD locations 1 and 2 swapped
+62078 CCD locations 1 and 2 swapped
+
+# Bad data from 13/14 Dec 2015
+62786 4MAPS not settled, bad PSF
+62817 bad
+62818 bad
+62831 bad
+62850 bad
+62852 bad
+62858 bad
+62883 trailed
+62897 trailed
+62898 trailed
+62900 wind shake
+62950 readout timed out, all zeros
+62955 shifted image
+62959 shifted image
+62976 4MAPS not settled, bad PSF
+62979 4MAPS not settled, bad PSF
+62980 4MAPS not settled, useless
+62981 readout problems
+62982 readout problems
+62983 readout problems
+62985 trailed
+
+# Bad data from 14/15 Dec 2015
+63072 4MAPS not settled, bad
+63079 4MAPS not settled, bad
+63090 4MAPS crashed, bad 
+
+# Bad data from 24/25 Jan 2016
+64118 Very bright sky due to increasing clouds
+64119 Very bright sky due to increasing clouds
+64120 Very bright sky due to increasing clouds
+64121 Very bright sky due to increasing clouds
+64122 Very bright sky due to increasing clouds
+64123 Very bright sky due to increasing clouds
+64124 Very bright sky due to increasing clouds
+64125 Very bright sky due to increasing clouds
+64126 Very bright sky due to increasing clouds
+64127 Very bright sky due to increasing clouds
+64128 Very bright sky due to increasing clouds
+64129 Very bright sky due to increasing clouds
+64130 Very bright sky due to increasing clouds
+64131 Very bright sky due to increasing clouds
+
+# Bad data from 25/26 Jan 2016
+64252 Very bright sky due to increasing clouds
+64253 Very bright sky due to increasing clouds
+64254 Very bright sky due to increasing clouds
+64255 Very bright sky due to increasing clouds
+
+# Bad data from 26/27 Jan 2016
+64261 One amp bad at beginning of night before NOCS restart
+64262 One amp bad at beginning of night before NOCS restart
+64263 One amp bad at beginning of night before NOCS restart
+64406 Duplicate image
+64407 Duplicate image
+64408 Duplicate image
+64409 Duplicate image
+
+# Bad data from 29/30 Jan 2016
+64459 Shifted image (dome flat)
+64497 Shifted image (zero)
+64551 Shifted image (object)
+64554 Shifted image (focus)
+64563 Shifted image (object)
+
+# Bad data from 30/31 Jan 2016
+64586 Shifted image (test)
+
+# Bad data from 2/3 Feb 2016
+64864 Shift in readout of CCD2 (object)
+64892 Shift in readout of CCD1 and CCD2 (object)
+64907 Shift in readout of CCD3 (object)
+64908 Shift in readout of CCD3 (object)
+64919 4MAPS failure and bad image
+64921 4MAPS failure and bad image
+64965 Duplicate of 64959 and should be ignored
+64966 Duplicate of 64960 and should be ignored
+64967 Duplicate of 64961 and should be ignored
+64968 Duplicate of 64962 and should be ignored
+64969 Duplicate of 64963 and should be ignored
+64970 Duplicate of 64964 and should be ignored
+64971 Duplicate of 64959 and should be ignored
+65004 Shift in readout of CCD2 (object)
+65048 Shift in readout of CCD1 (object)
+65076 4MAPS failure and bad image
+65111 Shift in readout (zero)
+
+# Bad data from 3/4 Feb 2016
+65163 Duplicate domeflat image and should be ignored
+65164 Duplicate domeflat image and should be ignored
+65165 Duplicate domeflat image and should be ignored
+65166 Duplicate domeflat image and should be ignored
+65167 Duplicate domeflat image and should be ignored
+65176 Duplicate zero image and should be ignored
+65177 Duplicate zero image and should be ignored
+65198 Duplicate object image and should be ignored
+65199 Duplicate object image and should be ignored
+65200 Duplicate object image and should be ignored
+65201 Duplicate object image and should be ignored
+65202 Duplicate object image and should be ignored
+65203 Duplicate object image and should be ignored
+65205 Shift in readout (zero)
+65251 All zeros in images
+65252 Duplicate of 65246 and should be ignored
+65253 Duplicate of 65247 and should be ignored
+65314 Duplicate to be ignored
+65315 Duplicate to be ignored
+65316 Duplicate to be ignored
+65353 Duplicate to be ignored
+65354 Duplicate to be ignored
+
+# Bad data from 4/5 Feb 2016
+65443 Shift in readout (zero)
+65463 Shift in readout (zero)
+65540 All zeros in images
+65560 All zeros in images
+65570 Shift in readout (object)
+65604 All zeros in images
+65616 Shift in readout (object)
+65630 Duplicate of 65625 to be ignored
+65631 Duplicate of 65626 to be ignored
+65695 Duplicate of 65689 to be ignored
+65696 Aborted exposure, probably screwed up
+65707 shifted image CCD2 (object)
+65735 shifted image CCD3 (object)
+65747 shifted image CCD3 (object)
+65770 4MAPS failure and bad image
+
+# Bad data from 5/6 Feb 2016
+65776 shifted image (zero)
+65814 shifted image (zero)
+65839 shifted image (zero)
+65896 shifted image (zero)
+65897 shifted image (zero)
+65899 shifted image (zero)
+65908 shifted image (zero)
+65920 shifted image (zero)
+65922 shifted image (zero)
+65923 shifted image (zero)
+65925 shifted image (zero)
+65926 shifted image (zero)
+65927 shifted image (zero)
+65955 shifted image CCD4 (object)
+66015 shifted image CCD2 (object)
+66017 shifted image CCD2 (object)
+66027 shifted image CCD2 (object)
+66052 4MAPS not settled, bad PSF
+66113 shifted image CCD2 (object)
+66149 shifted image CCD2 (object)
+66170 shifted image CCD1 (object)
+66182 shifted image CCD2 (dome flat)
+
+# Bad data from 6/7 Feb 2016
+66225 shifted image (zero)
+66245 shifted image CCD4 (object)
+66354 small telescope jump (but may be OK???)
+66428 shifted image CCD4 (object)
+66429 shifted image CCD4 (object)
+66453 shifted image CCD4 (object)
+66472 shifted image (object)
+
+# Bad data from 8/9 Feb 2016
+67186 shifted image CCD4 (object)
+67278 Telescope offset during exposure
+67289 shifted image CCD2 (object)
+67374 Aborted file, all zeros
+
+# Bad data from 9/10 Feb 2016
+67461 shifted image CCD3 (zero)
+67517 Telescope jumped N-S
+67612 Telescope jump?
+67653 shifted image CCD3 (object)
+67740 shifted image CCD1 (object)
+
+# Bad data from 10/11 Feb 2016
+67817 Telescope jumped SE-NW
+67843 No image shows up
+67874 shifted image CCD2 (object)
+67924 Telescope jumped S-N
+67971 shifted image CCD4 (object)
+68116 shifted image (object)
+
+# Bad data from 11/12 Feb 2016
+68143 shifted image (zero)
+68230 shifted image CCD4 (object)
+68236 shifted image CCD1 (object)
+68278 telescope jump
+68416 close shutter as sky is bright
+
+# Bad data from 12/13 Feb 2016
+68424 shift image (zero)
+68474 shift image (object)
+
+# Bad data from 13/14 Feb 2016
+68760 shift image (zero)
+68771 shift image (object)
+68877 shift image (object)
+68898 shift image (object)
+
+# Bad data from 14/15 Feb 2016
+68954 shift image (object)
+69017 shift image (object)
+69170 shift image CCD 1 (object)
+69180 shift image CCD 2 (object)
+
+# Bad data from 15/16 Feb 2016
+69223 shift image (zero)
+69260 shift image (dome flat)
+69261 shift image (dome flat)
+69263 shift image (dome flat)
+69267 shift image (dome flat)
+69357 shift image (object)
+69432 shift image (object)
+69476 shift image CCD2 (object)
+69494 shift image (object)
+69580 shift image CCD3 (object)
+
+# Bad data from 16/17 Feb 2016
+69710 shift image (object)
+69744 shift image (object)
+69809 shift image (object)
+69844 shift image (object)
+
+# Bad data from 17/18 Feb 2016
+70034 shift image (object)
+70141 shift image (object)
+70213 shift image (zero)
+
+# Bad data from 18/19 Feb 2016
+70325 shift image (dome flat)
+
+# Bad data from 19/20 Feb 2016
+70410 saturated (zero)
+70430 saturated bright sky (object)
+70436 saturated bright sky (object)
+70469 shift image (object)
+70470 saturated bright sky (object)
+70484 saturated bright sky (object)
+70485 saturated bright sky (object)
+
+# Bad data from 24/25 Feb 2016
+# Potentially poorly centered (bad?) exposures: 70574-70579
+70528 failed zero
+70529 failed zero
+70530 failed zero
+70531 failed zero
+70532 dome flat (too short exposure)
+70533 dome flat (too short exposure)
+70534 dome flat (too short exposure)
+70571 out of focus
+70572 out of focus
+70573 out of focus
+70580 pointing way off
+70581 pointing way off; odd illumination gradient
+70731 shifted image
+
+# Bad data from 25/26 Feb 2016
+70758 failed zero (detector timeout)
+70759 failed zero (detector timeout)
+70941 shifted image
+71059 shifted image
+71072 shifted image
+71073 shifted image
+
+# Bad data from 26/27 Feb 2016
+71154 shifted image
+71230 detector timeout, all zeros
+71231 all zeros
+71232 all zeros
+71268 shifted image
+71323 shifted image
+71339 saturated in im11
+71340 saturated in im11
+71341 saturated in im11
+71343 all zeros
+71344 all zeros
+
+# Bad data from 27/28 Feb 2016
+71389 TIMEOUT
+71434 stars with tails (moved during exposure?)
+71467 stars with tails
+71481 PIXCNT and shutter didn't open
+71482 shutter didn't open and TIMEOUT, all zeros
+71483 TIMEOUT
+71485 stars with tails
+71513 TIMEOUT, all zeros
+71517 TIMEOUT, all zeros
+71557 PIXCNT
+71569 PIXCNT
+71608 PIXCNT
+71658 PIXCNT
+71670 all zeros
+
+# Bad data from 28/29 Feb 2016
+71692 PIXCNT
+71739 CCD1 PIXCNT
+71760 CCD2 PIXCNT
+71764 CCD4 PIXCNT
+71777 CCD4 PIXCNT
+71827 CCD2 PIXCNT
+71853 nmatched?
+71884 CCD2 PIXCNT
+71885 CCD2 PIXCNT
+71894 PIXCNT
+71899 CCD3 PIXCNT
+71912 CCD2 PIXCNT
+71938 CCD1 PIXCNT
+71955 CCD4 PIXCNT
+72033 all zeros after camera restart
+
+# Bad data from 29 Feb/1 Mar 2016
+72097 CCD1 PIXCNT
+72105 Telescope Jump
+72209 CCD3 PIXCNT
+72285 CCD2 PIXCNT
+72366 CCD3 PIXCNT
+
+# Bad data from 1/2 Mar 2016
+72383 PIXCNT
+72388 all zeros
+72454 PIXCNT
+72564 CCD1 PIXCNT
+72571 telescope jump
+72580 CCD3 PIXCNT
+72609 telescope jump
+72710 CCD3 PIXCNT
+
+# Bad data from 2/3 Mar 2016
+72874 PIXCNT
+72884 PIXCNT
+72917 all zeros after time out
+72973 all zeros after time out
+72988 CCD1 PIXCNT
+73030 CCD4 PIXCNT
+73129 CCD3 PIXCNT
+73138 all zeros
+73139 all zeros
+73142 all zeros
+73144 PIXCNT
+73147 all zeros
+73154 all zeros
+73155 all zeros
+
+# Bad data from 3/4 Mar 2016
+73164 all zeros
+73179 PIXCNT
+73180 PIXCNT
+73346 CCD4 PIXCNT
+73407 CCD4 PIXCNT
+
+# Bad Data from 04/05 March 2016
+73518 shifted image CCD1 PIXCNT
+73589 shifted image CCD4 PIXCNT
+73651 Low Trans
+73652 Low Trans
+73654 Low Trans
+73655 Low Trans
+73656 Low Trans
+73657 Low Trans
+73659 Low Trans
+73662 Low Trans
+73664 Low Trans and stars double peaked, elongated SE-NW direction windshake
+73665 Low Trans and stars double peaked
+73666 Low Trans and stars double peaked
+73667 Low Transparency
+73668 Low Transparency
+73669 Low Transparency
+73670 Low Transparency
+73672 Low Transparency
+73673 Low Transparency
+73674 Low Transparency
+73675 Low Transparency
+73676 Low Transparency
+73677 Low Transparency
+73678 Low Transparency
+73679 Low Transparency
+73680 Low Transparency
+73681 Low Transparency
+73682 Low Transparency
+73683 Low Transparency
+73684 Low Transparency
+73685 Low Transparency
+73686 Low Transparency
+73687 Low Transparency
+73688 Low Transparency
+73689 Low Transparency
+73690 Low Transparency
+73691 Low Transparency
+73692 Low Transparency
+73693 Low Transparency
+73694 shifted image CCD3 PIXCNT
+73694 Low Transparency
+73695 Low Transparency
+73696 Low Transparency
+73697 Low Transparency
+73698 Low Transparency
+73699 Low Transparency
+73700 Low Transparency
+73701 Low Transparency
+73702 Low Transparency
+73703 Low Transparency
+73705 Low Transparency
+73706 Low Transparency
+73707 Low Transparency
+73708 Low Transparency
+73709 Low Transparency
+73710 shifted image CCD2 PIXCNT
+73712 Low Transparency
+73714 Low Transparency
+73715 Low Transparency
+73716 Low Transparency
+73717 Low Transparency
+73718 Low Transparency
+73719 Low Transparency
+73720 Low Transparency
+73721 Low Transparency
+73722 Low Transparency
+73723 Low Transparency
+73724 Low Transparency
+73725 Low Transparency
+73727 Low Transparency
+73728 Low Transparency
+73729 Low Transparency
+73730 Low Transparency
+73731 Low Transparency
+73732 Low Transparency
+73733 Low Transparency
+73734 Low Transparency
+73735 Low Transparency
+73736 Low Transparency
+
+# Bad Data from 05/06 March 2016
+73748 shifted image CCD3
+73852 PIXCNT
+
+# Bad Data from 06/07 March 2016
+73885 PIXCNT
+73963 pixcnt error
+#73988 images elongated due E-W probably windshake just opened louvers slightly, retain anyway -DJS
+#73989 images still elongated E-W windshake, retain anyway -DJS
+#73990 images still elongated E-W closed louvers during this, retain anyway -DJS
+
+# Bad data 08/09 March 2016
+#74059 EW elong. Small HA. Shut lower dome shutter, retain anyway -DJS
+74066 CCD4 shifted image PIXCNT
+74225 CCD2 shifted image PIXCNT
+74253 PIXCNT
+74282 PIXCNT
+
+# Bad data 09/10 March 2016
+74404 PIXCNT
+74480 trailed due to power glitch
+74501 too many clouds?
+74502 too many clouds?
+74503 too many clouds?
+74523 E-W trailed. 
+74559 too many clouds?
+74560 too many clouds?
+74561 too many clouds?
+74562 too many clouds?
+74563 too many clouds? 41%
+74564 too many clouds? 36%
+74565 too many clouds? 
+74566 too many clouds? 
+74567 too many clouds? 
+74568 too many clouds? 
+74569 too many clouds? 29%
+74570 too many clouds? 30%
+
+# Bad data 10/11 March 2016
+74719 PIXCNT CCD1
+74720 PIXCNT CCD1
+74771 PIXCNT CCD4
+74811 bad focus
+74812 bad focus
+74901 PIXCNT CCD4 
+74924 PIXCNT CCD4 also was not proper tile for this time.
+
+# Bad data 11/12 March 2016
+75240 Wind forced us to move dome out of wind during exposure. 
+75265 PIXCNT CCD3
+
+# Bad data 12/13 March 2016
+75390 PIXCNT CCD3
+75425 PIXCNT CCD4
+75426 PIXCNT CCD4
+75571 PIXCNT CCD4
+75617 PIXCNT CCD3
+
+# Bad data 13/14 March 2016
+75780 bad tracking
+75842 PIXCNT CCD3
+75885 PIXCNT CCD2
+75898 PIXCNT CCD2
+76017 PIXCNT CCD1
+
+# Bad data 14/15 March 2016
+76152 PIXCNT CCD1
+76189 PIXCNT CCD2
+76203 PIXCNT CCD3
+76207 PIXCNT CCD4
+76352 PIXCNT CCD3
+
+# Bad data 15/16 March 2016
+76557 PIXCNT CCD4
+76572 PIXCNT CCD2
+76580 PIXCNT CCD3
+76656 PIXCNT CCD4
+76667 PIXCNT CCD1
+76706 PIXCNT CCD4
+76713 PIXCNT CCD3
+
+#Bad data 16/17 March 2016
+76881 PIXCNT CCD1
+76908 PIXCNT CCD2
+76980 PIXCNT CCD1
+77051 PIXCNT
+
+
+#Bad data 17/18 March 2016
+77190 PIXCNT CCD3
+77226 PIXCNT CCD2
+77432 PIXCNT CCD1
+
+#Bad data 18/19 March 2016
+77685 PIXCNT CCD1
+77686 PIXCNT
+77730 PIXCNT CCD4
+77740 PIXCNT CCD3
+
+#Bad data 19/20 March 2016
+78147 PIXCNT CCD4
+78163 PIXCNT CCD2
+
+# Bad data 20/21 March 2016
+# 78320 to 78419 - all frames with bad amps 11 and 12 (frames 78420-78499 - 79 frames - OK)
+78318 frames with bad amps 11 and 12
+78319 frames with bad amps 11 and 12
+78320 frames with bad amps 11 and 12
+78322 frames with bad amps 11 and 12
+78323 frames with bad amps 11 and 12
+78324 frames with bad amps 11 and 12
+78335 frames with bad amps 11 and 12
+78337 frames with bad amps 11 and 12; out of focus
+78338 frames with bad amps 11 and 12; out of focus
+78339 frames with bad amps 11 and 12; out of focus
+78340 frames with bad amps 11 and 12; out of focus
+78342 frames with bad amps 11 and 12
+78343 frames with bad amps 11 and 12
+78344 frames with bad amps 11 and 12
+78345 frames with bad amps 11 and 12
+78346 frames with bad amps 11 and 12
+78347 frames with bad amps 11 and 12
+78348 frames with bad amps 11 and 12
+78349 frames with bad amps 11 and 12
+78350 frames with bad amps 11 and 12
+78351 frames with bad amps 11 and 12
+78352 frames with bad amps 11 and 12
+78353 frames with bad amps 11 and 12
+78354 frames with bad amps 11 and 12
+78355 frames with bad amps 11 and 12
+78356 frames with bad amps 11 and 12
+78357 frames with bad amps 11 and 12
+78358 frames with bad amps 11 and 12
+78359 frames with bad amps 11 and 12
+78360 frames with bad amps 11 and 12
+78361 frames with bad amps 11 and 12
+78362 frames with bad amps 11 and 12
+78363 frames with bad amps 11 and 12
+78364 frames with bad amps 11 and 12
+78365 frames with bad amps 11 and 12
+78366 frames with bad amps 11 and 12
+78367 frames with bad amps 11 and 12
+78368 frames with bad amps 11 and 12
+78369 frames with bad amps 11 and 12
+78370 frames with bad amps 11 and 12
+78371 frames with bad amps 11 and 12
+78372 frames with bad amps 11 and 12
+78373 frames with bad amps 11 and 12
+78374 frames with bad amps 11 and 12
+78375 frames with bad amps 11 and 12
+78376 frames with bad amps 11 and 12
+78377 frames with bad amps 11 and 12
+78378 frames with bad amps 11 and 12
+78379 frames with bad amps 11 and 12
+78380 frames with bad amps 11 and 12
+78381 frames with bad amps 11 and 12; Unidentified ripple-like noise in CCDs 1 and 4
+78382 frames with bad amps 11 and 12
+78383 frames with bad amps 11 and 12
+78384 frames with bad amps 11 and 12
+78385 frames with bad amps 11 and 12
+78386 frames with bad amps 11 and 12
+78387 frames with bad amps 11 and 12
+78388 frames with bad amps 11 and 12
+78389 frames with bad amps 11 and 12
+78390 frames with bad amps 11 and 12
+78391 frames with bad amps 11 and 12
+78392 frames with bad amps 11 and 12
+78393 frames with bad amps 11 and 12
+78394 frames with bad amps 11 and 12
+78395 frames with bad amps 11 and 12
+78396 frames with bad amps 11 and 12
+78397 frames with bad amps 11 and 12
+78398 frames with bad amps 11 and 12
+78399 frames with bad amps 11 and 12
+78400 frames with bad amps 11 and 12
+78401 PIXCNT CCD 4
+78402 frames with bad amps 11 and 12
+78403 frames with bad amps 11 and 12
+78404 frames with bad amps 11 and 12
+78405 frames with bad amps 11 and 12
+78406 frames with bad amps 11 and 12
+78407 frames with bad amps 11 and 12
+78408 frames with bad amps 11 and 12
+78409 frames with bad amps 11 and 12
+78410 frames with bad amps 11 and 12
+78411 frames with bad amps 11 and 12
+78412 frames with bad amps 11 and 12
+78413 frames with bad amps 11 and 12
+78414 frames with bad amps 11 and 12
+78415 frames with bad amps 11 and 12
+78416 frames with bad amps 11 and 12
+78417 frames with bad amps 11 and 12
+78418 frames with bad amps 11 and 12
+78419 frames with bad amps 11 and 12
+
+# Bad data 25/26 March 2016
+78783 Poor Transparency
+78784 Poor Transparency
+78792 Poor Transparency
+78799 Poor Transparency
+78800 Poor Transparency
+78801 Poor Transparency
+
+# Bad data 26/27 March 2016
+78894 PIXCNT CCD3
+79053 PIXCNT CCD1
+79044 PIXCNT CCD1
+79061 Shutter error
+
+# Bad data 27/28 March 2016
+79289 PIXCNT CCD1
+79380 PIXCNT CCD2
+
+# Bad data 28/29 March 2016
+79420 restart after debiasing ccds
+79421 same
+79422 zero after restart
+79423 zero after restart
+79424 zero after restart
+79425 discovered problem with ccd 4 amps 11 and 12 not recording light
+79426 reset ccp
+79427 zero after reset
+79428 zero after reset
+79429 object frame, now ccd 4 amps 10 and 12 not recording light
+79430 same problem with amps 10 and 12
+79431 same problem
+79432 same problem
+79433 same problem. All power off. Went to SE annex and check cables. Power on.
+79434 zero after power back on.
+79435 zero after power back on
+79436 zero after power back on
+79437 zero after power back on
+79438 object, all amps now recording photons
+79439 focus frame
+79484 poor transparency 0.17
+79485 poor transparency
+79486 poor transparency
+79487 poor transparency
+79488 poor transparency
+79489 poor transparency
+
+# Bad data 29/30 March 2016
+79516 dome flat - pupil vignetted by incompletely opened mirror covers
+79517 ditto
+79518 ditto
+79519 ditto
+79520 ditto
+79521 ditto
+79522 ditto
+79523 ditto
+79524 ditto
+79525 ditto
+79526 ditto
+
+# Bad data 30/31 March 2016
+79680 PIXCNT CCD4
+79720 Lost frame (NOCS timeout)
+79734 PIXCNT CCD4
+
+# Bad data 31/1 March/April 2016
+80049 Lost frame (Semaphore faliure)
+80105 PixCnt
+
+# Bad data 01/02 April 2016
+80269 PixCnt CCD4
+80270 all zero, readout time out
+80284 all zero, readout time out
+80318 PixCnt CCD2
+80352 all zero, readout time out
+80436 all zero, readout time out
+80463 PixCnt CCD1
+
+# Bad data 02/03 April 2016
+80563 bad focus image
+80564 bad focus image
+80624 all zero, readout time out
+80777 PixCnt CCD4
+80785 PixCnt CCD4
+
+# Bad data 03/04 April 2016
+81073 PixCnt CCD1
+
+# Bad data 04/05 April 2016
+81226 PixCnt CCD3
+
+# Bad data 08/09 April 2016
+81336 First zero after restart, noise is high
+81349 Test zero after post-dinner restart
+81350 Test zero after post-dinner restart
+81351 Dome flat but lamps turned on during exposure so counts low
+81371 stars double peaked sw-ne direction
+81374 stars elongated sw-ne needed focus change
+81378 stars elongated again made another focus change
+81379 focus questionable elongated
+81380 focus questionable elongated
+81381 focus questionable elongated
+81382 focus questionable elongated
+81383 focus questionable elongated
+81384 focus measurement image
+81392 image elongated sw-ne next one ok
+81409 image badly elongated
+81410 elongated too
+81411 elongated
+81412 elongated but less so
+81416 elongated
+81417 elongated badly stars look like edge on galaxies
+81418 slightly elongated
+81422 elongated
+81423 elongated
+81430 elongated almost doubled
+81431 elongated
+81432 badly elongated
+81440 hugely saturated star in amp 16
+81447 slightly elongated
+81448 badly elongated
+81449 somewhat elongated
+81450 elongated
+81461 elongated
+81465 badly elongated
+81466 badly elongated
+81467 somewhat elongated
+81468 elongated
+81471 badly elongated almost doubled
+81472 somewhat elongated
+81473 elongated
+81474 badly elongated
+81475 elongated
+81478 slightly elongated
+81479 pixcnt error
+81481 elongated
+81481 badly elongated
+81485 terribly elongated
+81486 badly elongated
+81487 somewhat elongated
+81488 badly elongated
+81489 very badly elongated
+81490 very badly elongated
+81493 almost double-peaked images
+81495 elongated
+81497 somewhat elongated
+81500 double peaked and elongated
+81501 double peaked again
+81530 very double peaked
+81531 badly double peaked
+81534 elongated
+81537 double peaked
+81539 elongated
+81542 slightly elongated
+81544 slew to zenith to close dome while exposure in progress
+
+# Bad data 09/10 April 2016
+81591 double peaked
+81592 elongated but not as bad
+81593 badly elongated
+81592 elongated
+81593 elongated
+81594 elongated
+81595 slightly elongated
+81596 slightly elongated
+81597 elongated after reset of 4maps controller
+81599 pixcnt but only slightly elongated
+81608 slightly elongated
+81609 pixcnt but round
+81622 slightly elongated but in a somewhat different direction
+81632 pixcnt error
+81634 transparency dipped to 0.26
+81636 elongated
+81637 slightly elongated
+81649 pixcnt error and transparency 0.25
+81650 transparency 0.28
+81651 transparency 0.17
+81652 transparency 0.14
+81653 transparency 0.23
+81654 pixcnt error transparency 0.28
+81655 transparency 0.16
+81656 transparency 0.19
+81657 transparency 0.19
+81658 slightly elongated
+81659 elongated
+81660 elongated
+81661 elongated
+81662 transparency 0.23
+81663 elongated
+81664 elongated
+81665 elongated
+81666 elongated still following reset of 4maps controller
+81667 elongated
+81668 slightly elongated
+81692 transparency 0.29
+81702 transparency 0.12
+81707 transparency 0.23
+81708 transparency 0.08
+81709 transparency 0.12
+81710 transparency 0.08
+
+# Bad data 11/12 April 2016
+81757 transparency 0.1
+81758 transparency 0.7 but oa closed due to low clouds
+
+# Bad data 12/13 April 2016
+81968 pixcnt flag:  shifted pixels
+82027 pixcnt flag:  shifted pixels
+
+# Bad data 13/14 April 2016
+82111 very elongated images SSW-NNE
+82122 very elongated images SSW-NNE
+82123 images round but seeing 2.0 (~7.8pix)
+82156 pixcnt flag
+82230 pixcnt flag
+
+# Bad data 14/15 April 2016
+82322 time out, all zeroes. This is a zero frame after flats. 
+82356 Pixcnt CCD4, im 9, 11
+82370 Pixcnt CCD3
+82385 elong PA -30 issue? 
+82386 same as 385
+82391 pixcnt CCD1
+82494 pixcnt CCD2
+82510 elongated 30 deg CW from +Y.
+82533 pix cnt CCD4.
+
+# Bad data 15/16 April 2016
+82589 elongated. 4MAPS suspect i11.
+82590 same. 
+82595 blue i11 on 4MAPS. Elong. 
+82601 pixcnt CCD2
+82602 blue i11 Elong. 
+82603 same.
+82607 same.
+82611 same, but not elong much. maybe useful. 
+
+# Bad data 16/17 April 2016
+82663 pixcnt CCD1
+82705 time out. 
+82756 pixcnt CCD2
+82783 time out
+
+#Bad data 17/18 April 2016
+83045 pixcnt CCD2
+83085 pixcnt CCD4
+
+#Bad data 18/19 April 2016
+83240 pixcnt CCD4
+83273 pixcnt CCD1
+
+#Bad data 19/20 April 2016
+83445 saturated background from clouds and moon 
+83446 saturated background from clouds and moon  
+83447 saturated background from clouds and moon 
+83430 Pass1 image taken under non-photometric conditions
+83431 Pass1 image taken under non-photometric conditions
+83432 Pass1 image taken under non-photometric conditions
+83575 pixcnt CCD1
+83612 junk image after Mosaic3 timeout
+83630 no light in image, shutter never opened?
+#
+#Bad data 23/24 April 2016
+84343 low transparency; depth factor <0.3
+84344 low transparency; depth factor <0.3
+84363 pixcnt CCD4
+84375 pixcnt CCD4
+84391 pixcnt CCD1
+84502 pixcnt CCD1
+84582 pixcnt CCD4
+#
+#Bad data 24/25 April 2016
+84641 windshake (M67 pointing)
+84642 windshake (M67 pointing)
+84643 windshake (M67 pointing)
+84644 windshake (M67 pointing)
+84645 windshake (M67 pointing)
+84646 windshake (M67 pointing)
+#
+#Bad data 25/26 April 2016
+84941 pixcnt CCD1
+84990 pixcnt CCD2
+85038 depth factor <0.3
+85039 depth factor <0.3
+85043 mirror cover not fully open, depth factor <0.3
+85044 mirror cover not fully open, depth factor <0.3
+#85045 mirror cover not fully open
+#85046 mirror cover not fully open
+#85047 mirror cover not fully open
+85052 mirror cover not fully open, depth factor <0.3
+85053 mirror cover not fully open, depth factor <0.3
+#85054 mirror cover not fully open
+#85055 mirror cover not fully open
+#85056 mirror cover not fully open
+#85057 mirror cover not fully open
+#85058 mirror cover not fully open
+#85059 mirror cover not fully open
+#85060 mirror cover not fully open
+#85061 mirror cover not fully open
+#85062 mirror cover not fully open
+#
+#Bad data 26/27 April 2016
+85138 pixcnt CCD2
+85230 pixcnt CCD2
+
+#Bad data 27/28 April 2016
+85352 depth factor <0.3 
+85353 depth factor <0.3 
+85358 pixcnt CCD4
+85371 pixcnt CCD4
+85452 pixcnt CCD2
+85546 pixcnt CCD4
+
+#Bad data 28/29 April 2016
+85663 pixcnt CCD2
+
+#Bad data 29/30 April 2016
+85941 pixcnt CCD2
+85962 pixcnt (don't see it on display?)
+86106 pixcnt CCD3
+
+#Bad data 30 April/01 May 2016
+86185 pixcnt CCD1
+86216 pixcnt CCD4
+86257 whoping scattered light? ALF Lyr? mag0 delta scuti
+86266 whoping scattered light? ALF Lyr? mag0 delta scuti
+
+#Bad data 01/02 May 2016
+86332 pixcnt CCD3
+86377 pixcnt CCD3
+86398 pixcnt CCD2
+86445 timeout
+86480 pixcnt CCD2
+
+#Bad data 02/03 May 2016
+86545 pixcnt CCD3 flat image. 
+86610 4maps down, trefoil!
+86665 pixcnt CCD1
+86669 pixcnt CCD4
+86735 pixcnt CCD3
+86767 pixcnt CCD2
+
+# Bad data 03/04 May 2016
+87068 pixcnt CCD3
+
+# Bad data 04/05 May 2016
+87190 pixcnt CCD1
+
+# Bad data 07/08 May 2016
+87468 pixcnt CCD2
+87481 timeout
+87486 nmatched, bad trans
+87490 nmatched
+87493 nmatched
+87494 nmatched
+87498 timeout
+
+# Bad data 08/09 May 2016
+87704 pixcnt CCD3
+
+# Bad data 09/10 May 2016
+87970 has pixcnt issue on CCD2
+87973 has pixcnt issue on CCD2
+87985 has pixcnt issue on CCD4
+87986 has pixcnt issue on CCD4
+88133 sky too bright for pass 1
+
+# Bad data 10/11 May 2016
+88143 bad zero
+88177 Pass1 image in poor seeing
+88190 Pass2 image in >2 arcsec seeing
+88204 Out of focus
+88205 out of focus
+88360 Pass1 image in <90% transparency
+88412 Background too bright, clouds with bright sky
+
+# Bad data 11/12 May 2016
+88465 Pass2 image in poor (Pass3) conditions
+88466 Pass2 image in poor (Pass3) conditions
+88467 Pass2 image in poor (Pass3) conditions
+88468 Pass2 image in poor (Pass3) conditions
+88469 Pass2 image in poor (Pass3) conditions
+88470 Pass2 image in poor (Pass3) conditions
+88471 Pass2 image in poor (Pass3) conditions
+88472 Pass2 image in poor (Pass3) conditions
+88475 Pass2 image in poor (Pass3) conditions
+88476 Pass2 image in poor (Pass3) conditions
+88587 Pass 3 image is just a zero
+88588 Pass 3 image is just a zero
+88591 Pass2 image in poor (Pass3) conditions
+88592 Pass2 image in poor (Pass3) conditions
+88596 Aborted exposure
+
+# Bad date 12/13 May 2016
+88700 pass2 empty image due to time out error 
+88809 bad image no counts
+88819 no counts  
+
+# Bad images 13/14 May 2016
+89014 no counts 
+89117 poor transparency (high rms- <30% transparency)
+89118 poor transparency
+89119 poor transparency
+89120 poor transparency
+89121 poor transparency
+
+#Bad images 14/15 May 2016
+89151 timeout --> no counts
+89204 timeout --> no counts
+89205 zeros after the time out  
+89206 no counts
+
+
+#bad images 15/16 May 2016
+89328 amp6 has a weird reflection pattern- rms of amp 6 is 160 comapred to the rest with rms ~50-60
+
+
+
+#bad images 16/17 M
+89705 terrible focus
+89706 terrible 
+89707 terrible focus
+89738 shifted
+89740 interrupted
+
+#bad images May17th 2016
+89908 underexposed 0.3
+89909 ditto
+88910 ditto
+89944 clouds "nmatched" no standards visible
+89945 ditto
+89946 ditto
+89947 ditto
+89948 ditto
+89949 ditto
+89950 ditto
+89951 ditto
+89952 ditto
+89953 ditto
+89959 underexposed 0.3
+89972 pass1 should have been pass2
+
+#2016-05-19
+90357 underexposed 0.4
+90473 bad amp 11 and scattered light artifact spanning 3 amps looks like shock front
+90474 scattered light from moon reflection inside dome
+90496 ditto
+90499 ditto
+90502 ditto
+90507 ditto
+
+#2016-05-22
+90859 through the clouds
+90860 ditto
+90861 ditto
+90862 ditto
+90863 ditto
+90864 really high background (clouds plus full moon)
+90871 clouds again
+90872 ditto
+90873 the same
+90886 thin clouds
+90902 small cloud passing by (high sky level)
+90903 ditto
+90905 ditto
+90906 ditto
+90907 ditto
+
+#2016-05-24
+
+91455 looks like a zero eventhiugh it should be and object
+91456 readout timeout
+91468 ditto
+
+#2016-06-03
+
+93171   empty due to timeout error
+93289   ditto
+93306   ditto 
+
+#2016-06-04
+
+93479 highly out of focus
+93480 highly out of focus
+
+#2016-06-06
+
+94067 empty due to timeout error
+
+#2016-06-10
+94678 hit by passing clou
+94679 hit by passing cloud
+94680 hit by passing cloud
+
+#2016-06-12
+
+94909   empty due to readout error
+94927   empty due to readout error
+94991   ignore - it's not an MzLS exposure - forgot set project
+
+# 2016-10-15
+99237   empty due to readout error
+99274  empty - timeout error
+99306  empty - timeout
+
+# 2016-10-16
+99498  timeout
+99504  position offset by -62,-10
+99505  position offset by -62,-10
+99506  position offset by -62,-10
+99507  position offset by -62,-10
+99508  position offset by -62,-10
+99537  clouds
+
+# 2016-11-09
+
+# 2016-12-12
+101090 clouds & background
+101091 clouds & background
+101132 clouds & background
+101149 clouds & background
+101162 clouds & background, saturated sky > 40000
+101163 clouds & background
+101164 clouds & background
+101165 clouds & background
+101167 clouds & background
+101169 clouds & background
+101170 clouds & background
+101172 clouds & background
+101173 clouds & background
+101175 clouds & background
+101176 clouds & background
+101177 clouds & background
+101178 clouds & background
+101179 clouds & background
+101180 clouds & background
+101181 clouds & background
+101182 clouds & background
+101185 telescope moved during exposure 
+101235 timeout all zeroes
+101292 timeout all zeroes
+101332 clouds & background
+101333 abort              
+
+# 2016-12-13
+
+101377 depth < 0.3
+101409 depth < 0.3
+101412 short test exposure. 
+101413 short test exposure.
+101414 short test exposure.
+101416 short test exposure.
+101418 short test exposure.
+101420 short test exposure.
+101421 depth < 0.3 
+101422 depth < 0.3 
+101423 depth < 0.3 
+101427 depth < 0.3 
+101435 depth < 0.3 
+101436 depth < 0.3 
+
+#2016-12-14
+101490 depth < 0.3
+101492 depth < 0.3
+101493 depth < 0.3
+101494 depth < 0.3
+101495 depth < 0.3
+101496 depth < 0.3
+101497 depth < 0.3
+101498 depth < 0.3
+101499 depth < 0.3
+101500 depth < 0.3
+101501 depth < 0.3
+101502 depth < 0.3
+101503 depth < 0.3
+101505 depth < 0.3
+101506 depth < 0.3
+101507 depth < 0.3
+101508 depth < 0.3
+101509 depth < 0.3
+101510 depth < 0.3
+101511 depth < 0.3
+101512 depth < 0.3
+101513 depth < 0.3
+101514 depth < 0.3
+101515 depth < 0.3
+101516 depth < 0.3
+101517 depth < 0.3
+101518 depth < 0.3
+101528 went off active optics, crazy PSF
+101530 depth < 0.3
+101531 depth < 0.3
+101532 test image
+101533 test image
+101543 depth < 0.3
+101544 depth=0.31,mosbot had gone to pass 
+101545 depth < 0.3
+101547 depth < 0.3
+101548 depth < 0.3
+101549 depth < 0.3
+101550 depth < 0.3
+101551 depth < 0.3
+101552 depth < 0.3
+101553 depth < 0.3
+101554 depth < 0.3
+101555 depth < 0.3
+101556 depth < 0.3
+101557 test image
+#2016-12-14
+101490 depth < 0.3
+101492 depth < 0.3
+101493 depth < 0.3
+101494 depth < 0.3
+101495 depth < 0.3
+101496 depth < 0.3
+101497 depth < 0.3
+101498 depth < 0.3
+101499 depth < 0.3
+101500 depth < 0.3
+101501 depth < 0.3
+101502 depth < 0.3
+101503 depth < 0.3
+101505 depth < 0.3
+101506 depth < 0.3
+101507 depth < 0.3
+101508 depth < 0.3
+101509 depth < 0.3
+101510 depth < 0.3
+101511 depth < 0.3
+101512 depth < 0.3
+101513 depth < 0.3
+101514 depth < 0.3
+101515 depth < 0.3
+101516 depth < 0.3
+101517 depth < 0.3
+101518 depth < 0.3
+101528 went off active optics, crazy PSF
+101530 depth < 0.3
+101531 depth < 0.3
+101532 test image
+101533 test image
+101543 depth < 0.3
+101544 depth=0.31,mosbot had gone to pass 
+101545 depth < 0.3
+101547 depth < 0.3
+101548 depth < 0.3
+101549 depth < 0.3
+101550 depth < 0.3
+101551 depth < 0.3
+101552 depth < 0.3
+101553 depth < 0.3
+101554 depth < 0.3
+101555 depth < 0.3
+101556 depth < 0.3
+101557 test unage
+#2016-12-14
+101490 depth < 0.3
+101492 depth < 0.3
+101493 depth < 0.3
+101494 depth < 0.3
+101495 depth < 0.3
+101496 depth < 0.3
+101497 depth < 0.3
+101498 depth < 0.3
+101499 depth < 0.3
+101500 depth < 0.3
+101501 depth < 0.3
+101502 depth < 0.3
+101503 depth < 0.3
+101505 depth < 0.3
+101506 depth < 0.3
+101507 depth < 0.3
+101508 depth < 0.3
+101509 depth < 0.3
+101510 depth < 0.3
+101511 depth < 0.3
+101512 depth < 0.3
+101513 depth < 0.3
+101514 depth < 0.3
+101515 depth < 0.3
+101516 depth < 0.3
+101517 depth < 0.3
+101518 depth < 0.3
+101528 went off active optics, crazy PSF
+101530 depth < 0.3
+101531 depth < 0.3
+101532 test image
+101533 test image
+101543 depth < 0.3
+101544 depth=0.31,mosbot had gone to pass 
+101545 depth < 0.3
+101547 depth < 0.3
+101548 depth < 0.3
+101549 depth < 0.3
+101550 depth < 0.3
+101551 depth < 0.3
+101552 depth < 0.3
+101553 depth < 0.3
+101554 depth < 0.3
+101555 depth < 0.3
+101556 depth < 0.3
+101557 test unage
+101558 depth < 0.3
+101559 depth < 0.3
+101560 depth < 0.3
+101561 depth < 0.3
+101562 empty
+101563 test image
+101565 depth < 0.3
+101582 depth < 0.3
+101583 depth < 0.3
+101584 depth < 0.3
+101585 depth < 0.3
+101586 test image
+101601 depth < 0.3
+101602 depth < 0.3
+101606 depth < 0.3 (test image)
+101607 depth < 0.3 (test image)
+101608 depth < 0.3 (test image)
+101609 depth < 0.3 (test image)
+101610 depth < 0.3 (test image)
+101667 pass1 frame under pass3 conditions
+101670 sky too bright, depth < 0.3
