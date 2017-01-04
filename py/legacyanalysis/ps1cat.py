@@ -18,8 +18,10 @@ class ps1cat():
         self.gaiadir = os.getenv('GAIACAT_DIR')
         # PS1 only
         self.ps1dir = os.getenv('PS1CAT_DIR') # PS1 only
-        if self.ps1dir is None or self.gaiadir is None:
-            raise ValueError('You must have the GAIACAT_DIR and PS1CAT_DIR environment variables set to point to right catalogs')
+        if self.ps1dir is None:
+            raise ValueError('Need PS1CAT_DIR environment variable to be set.')
+        if self.gaiadir is None:
+            print('WARNING: GAIACAT_DIR environment variable not set: using Pan-STARRS1 for astrometry')
         self.nside = 32
         if ccdwcs is None:
             from legacypipe.survey import LegacySurveyData
@@ -42,7 +44,7 @@ class ps1cat():
 
         cat = list()
         for ipix in pix:
-            if gaia_ps1:
+            if gaia_ps1 and self.gaiadir is not None:
                 print('reading gaia+ps1 catalog')
                 fname = os.path.join(self.gaiadir,'chunk-'+'{:05d}'.format(ipix)+'.fits')
             else:
