@@ -1215,16 +1215,19 @@ Now using the current directory as LEGACY_SURVEY_DIR, but this is likely to fail
         tims = mp.map(read_one_tim, args)
         return tims
     
-    def find_ccds(self, expnum=None, ccdname=None):
+    def find_ccds(self, expnum=None, ccdname=None, camera=None):
         '''
         Returns a table of CCDs matching the given *expnum* (exposure
-        number, integer) and *ccdname* (string).
+        number, integer), *ccdname* (string), and *camera* (string),
+        if given.
         '''
         T = self.get_ccds_readonly()
         if expnum is not None:
             T = T[T.expnum == expnum]
         if ccdname is not None:
             T = T[T.ccdname == ccdname]
+        if camera is not None:
+            T = T[T.camera == camera]
         return T
 
     def photometric_ccds(self, ccds):
