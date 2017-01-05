@@ -696,7 +696,7 @@ def do_ith_cleanup(d=None):
     log.info("Finished %s" % get_savedir(**d))
 
 def get_sample_fn(brick,decals_sim_dir,prefix=''):
-    fn= os.path.join(decals_sim_dir,'input_sample','bybrick','%ssample-%s.fits' % (prefix,brick))
+    fn= os.path.join(decals_sim_dir,'input_sample','bybrick','%ssample_%s.fits' % (prefix,brick))
     return fn
     #return os.path.join(decals_sim_dir,'softlinked_table') #'sample-merged.fits')
 

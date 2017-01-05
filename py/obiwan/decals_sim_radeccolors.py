@@ -721,7 +721,9 @@ if __name__ == "__main__":
             # Each task gets a list of bricks, merges sample for each brick, removes indiv brick samps 
             merge_bybrick(bricks,outdir=args.outdir,prefix=args.prefix)
         elif args.dowhat == 'check':
-            fns=glob('/scratch1/scratchdirs/desiproc/DRs/data-releases/dr3-obiwan/eboss_ngc/input_sample/bybrick/eboss_ngcsample_*.fits')
+            dr=os.getenv('DECALS_SIM_DIR')
+            fns=glob(os.path.join(dr,'input_sample/bybrick/eboss_ngcsample_*.fits'))
+            if len(fns) == 0: raise ValueError
             fns= np.array_split(fns,comm.size)[comm.rank] 
             ids= combine(fns)
             all_ids= comm.gather(ids, root=0)

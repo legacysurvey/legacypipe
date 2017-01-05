@@ -1,6 +1,10 @@
 #!/bin/bash 
 
 set -x
+
+allthreads=24
+runbrick_threads=6
+export OMP_NUM_THREADS=$runbrick_threads
 export PYTHONPATH=$CODE_DIR/legacypipe/py:${PYTHONPATH}
 cd $CODE_DIR/legacypipe/py
 
@@ -9,7 +13,7 @@ export brick="$2"
 export rowstart="$3"
 
 export therun=eboss-ngc
-export prefix=finaltest
+export prefix=eboss_ngc
 if [ "$objtype" = "star" ] || [ "$objtype" = "elg" ] || [ "$objtype" = "lrg" ] || [ "$objtype" = "qso" ] ; then
     echo Script running
 else
@@ -24,10 +28,8 @@ export MKL_NUM_THREADS=1
 # Try limiting memory to avoid killing the whole MPI job...
 ulimit -a
 
-threads=8
-export OMP_NUM_THREADS=$threads
-export LEGACY_SURVEY_DIR=/scratch1/scratchdirs/desiproc/DRs/dr3-obiwan/legacypipe-dir #/scratch2/scratchdirs/kaylanb/dr3-obiwan/legacypipe-dir
-export DECALS_SIM_DIR=/scratch1/scratchdirs/desiproc/DRs/data-releases/dr3-obiwan/$prefix #obiwan-eboss-ngc
+#export LEGACY_SURVEY_DIR=/scratch1/scratchdirs/desiproc/DRs/dr3-obiwan/legacypipe-dir #/scratch2/scratchdirs/kaylanb/dr3-obiwan/legacypipe-dir
+#export DECALS_SIM_DIR=/scratch1/scratchdirs/desiproc/DRs/data-releases/dr3-obiwan/$prefix #obiwan-eboss-ngc
 export outdir=$DECALS_SIM_DIR
 mkdir -p $outdir
 export run_name=obiwan_$objtype_$brick_$rowstart
@@ -83,3 +85,6 @@ else
 
     echo $run_name DONE $SLURM_JOBID
 fi
+
+# qdo launch DR4 100 --cores_per_worker 24 --batchqueue regular --walltime 00:55:00 --script ./dr4-qdo.sh --keep_env --batchopts "-a 0-11"
+# qdo launch DR4 300 --cores_per_worker 8 --batchqueue regular --walltime 00:55:00 --script ./dr4-qdo-threads8 --keep_env --batchopts "-a 0-11"

@@ -1,10 +1,9 @@
 #!/bin/bash -l
 
-#SBATCH -p regular
-#SBATCH --qos=premium
+#SBATCH -p debug
 #SBATCH -N 20
 #SBATCH -t 00:30:00
-#SBATCH --account=desi
+#SBATCH --account=m2218
 #SBATCH -J bootes-dr3-obiwan
 #SBATCH -o bootes-dr3-obiwan.o%j
 #SBATCH --mail-user=kburleigh@lbl.gov
