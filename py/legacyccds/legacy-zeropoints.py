@@ -893,10 +893,16 @@ class DecamMeasurer(Measurer):
         print('Hack! Using a constant gain!')
         corr = 2.5 * np.log10(self.gain)
         #corr = 2.5 * np.log10(self.gain) - 2.5 * np.log10(self.exptime)
-        self.zp0 = dict(z = 26.552 + corr)
-        self.sky0 = dict(z = 18.46 + corr)
-        self.k_ext = dict(z = 0.06)
-
+        #corr = 0.
+        # From /global/homes/a/arjundey/idl/pro/observing/decstat.pro
+        # 1/6/2017
+        self.zp0 =  dict(g = 26.610,r = 26.818,z = 26.484)
+        self.sky0 = dict(g = 22.04,r = 20.91,z = 18.46)
+        for b in self.zp0.keys():
+            self.zp0[b]-= corr  # decstat.pro
+            #self.sky0[b]+= corr
+        self.k_ext = dict(g = 0.17,r = 0.10,z = 0.06)
+    
     def get_band(self):
         band = self.primhdr['FILTER']
         band = band.split()[0]
@@ -918,6 +924,11 @@ class DecamMeasurer(Measurer):
      
     def get_wcs(self):
         return wcs_pv2sip_hdr(self.hdr) # PV distortion
+    
+    def read_bitmask(self):
+        fn= self.fn.replace('ooi','ood')
+        mask, junk = fitsio.read(fn, ext=self.ext, header=True)
+        return mask
 
 class Mosaic3Measurer(Measurer):
     '''Class to measure a variety of quantities from a single Mosaic3 CCD.
