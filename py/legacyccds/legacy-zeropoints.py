@@ -918,7 +918,7 @@ class DecamMeasurer(Measurer):
         #fits=fitsio.FITS(fn,mode='r',clobber=False,lower=True)
         #hdr= fits[0].read_header()
         #img= fits[ext].read()
-        img *= self.gain
+        #img *= self.gain
         #img *= self.gain / self.exptime
         return img, hdr
      
@@ -1175,15 +1175,18 @@ class Compare2Arjuns(object):
             self.path_to_arjuns= '/scratch2/scratchdirs/arjundey/ZeroPoints_MzLSv2'
         elif self.camera == '90prime':
             self.path_to_arjuns= '/scratch2/scratchdirs/arjundey/ZeroPoints_BASS'
+        elif self.camera == 'decam':
+            self.path_to_arjuns= '/global/project/projectdirs/cosmo/data/legacysurvey/dr3'
 
         # Get legacy zeropoints, and corresponding ones from Arjun
         self.makeBigTable(zptfn_list)
         self.ccd_cuts()
         # Compare values
         self.getKeyTypes()
-        self.compare_alphabetic()
+        #self.compare_alphabetic()
         self.compare_numeric()
-        self.compare_numeric_stars()
+        if self.camera in ['90prime','mosaic']:
+            self.compare_numeric_stars()
 
     def get_camera(self,zptfn_list):
         fns= np.loadtxt(zptfn_list,dtype=str)
@@ -1212,7 +1215,7 @@ class Compare2Arjuns(object):
         fns= np.loadtxt(zptfn_list,dtype=str)
         if fns.size == 1:
             fns= [str(fns)]
-        for cnt,fn in enumerate(fns):
+        for cnt,fn in enumerate(fns[:2]):
             print('%d/%d: ' % (cnt+1,len(fns)))
             try:
                 # Legacy zeropoints, use Arjun's naming scheme
@@ -1220,34 +1223,64 @@ class Compare2Arjuns(object):
                 fn_stars= fn.replace('.fits','-stars.fits')
                 legacy_stars_tb= self.read_legacy(fn_stars,reset_names=True,stars=True)
                 # Corresponding zeropoints from Arjun
-                arjun_fn= os.path.basename(fn)
-                index= arjun_fn.find('zeropoint') # Check for a prefix
-                if index > 0: arjun_fn= arjun_fn.replace(arjun_fn[:index],'')
-                arjun_fn= os.path.join(self.path_to_arjuns, arjun_fn)
-                arjun_tb= fits_table(arjun_fn)  
-                arjun_stars_tb= fits_table(arjun_fn.replace('zeropoint-','matches-') )
+                if self.camera in ['90prime','mosaic']:        
+                    arjun_fn= os.path.basename(fn)
+                    index= arjun_fn.find('zeropoint') # Check for a prefix
+                    if index > 0: arjun_fn= arjun_fn.replace(arjun_fn[:index],'')
+                    arjun_fn= os.path.join(self.path_to_arjuns, arjun_fn)
+                    arjun_tb= fits_table(arjun_fn)  
+                    arjun_stars_tb= fits_table(arjun_fn.replace('zeropoint-','matches-') )
                 # If here, was able to read all 4 tables, store in Big Table
                 self.legacy.append( legacy_tb ) 
                 self.legacy_stars.append( legacy_stars_tb )
-                self.arjun.append( arjun_tb ) 
-                self.arjun_stars.append( arjun_stars_tb )
+                if self.camera in ['90prime','mosaic']:        
+                    self.arjun.append( arjun_tb ) 
+                    self.arjun_stars.append( arjun_stars_tb )
             except IOError:
-                print('WARNING: one of these cannot be read: %s\n%s\n%s\n%s\n' % \
-                     (fn,fn.replace('.fits','-stars.fits'),\
-                      arjun_fn,arjun_fn.replace('zeropoint-','matches-'))
+                print('WARNING: one of these cannot be read: %s\n%s\n' % \
+                     (fn,fn.replace('.fits','-stars.fits'))
                      )
+                if self.camera in ['90prime','mosaic']:        
+                    print('WARNING: one of these cannot be read: %s\n%s\n' % \
+                         (arjun_fn,arjun_fn.replace('zeropoint-','matches-'))
+                         )
         self.legacy= merge_tables(self.legacy, columns='fillzero') 
         self.legacy_stars= merge_tables(self.legacy_stars, columns='fillzero') 
-        self.arjun= merge_tables(self.arjun, columns='fillzero') 
-        self.arjun_stars= merge_tables(self.arjun_stars, columns='fillzero')
+        if self.camera in ['90prime','mosaic']:        
+            self.arjun= merge_tables(self.arjun, columns='fillzero') 
+            self.arjun_stars= merge_tables(self.arjun_stars, columns='fillzero')
+        if self.camera == 'decam':
+            # Get zpts from dr3 ccds file
+            dr3= fits_table(os.path.join(self.path_to_arjuns,'survey-ccds-decals.fits.gz'))
+            # Unique name for later sorting
+            # DR3
+            fns=np.array([os.path.basename(nm) for nm in dr3.image_filename])
+            fns=np.char.strip(fns)
+            unique=np.array([nm.replace('.fits.fz','_')+ccdnm for nm,ccdnm in zip(fns,dr3.ccdname)])
+            dr3.set('unique',unique)
+            # Legacy zeropoints
+            unique=np.array([nm.replace('.fits.fz','_')+ccdnm for nm,ccdnm in zip(self.legacy.filename,self.legacy.ccdname)])
+            self.legacy.set('unique',unique)
+            # Cut to legacy zeropoints images
+            keep= np.zeros(len(dr3)).astype(bool)
+            for fn in self.legacy.filename:
+                keep[fns == fn] = True
+            dr3.cut(keep)
+            # Sort so they match
+            self.legacy= self.legacy[ np.argsort(dr3.unique) ]
+            self.arjun= dr3[ np.argsort(dr3.unique) ]
+            assert(len(self.arjun) == len(self.legacy))
     
     def ccd_cuts(self):
         keep= np.zeros(len(self.legacy)).astype(bool)
         for tab in [self.legacy,self.arjun]:
-            if self.camera == 'mosaic':
-                keep[ (tab.exptime > 40.)*(tab.ccdnmatch > 50)*(tab.ccdzpt > 25.8) ] = True
-            elif self.camera == '90prime':
-                keep[ (tab.ccdzpt >= 20.)*(tab.ccdzpt <= 30.) ] = True
+            #if self.camera == 'mosaic':
+            #    keep[ (tab.exptime > 40.)*(tab.ccdnmatch > 50)*(tab.ccdzpt > 25.8) ] = True
+            #elif self.camera == '90prime':
+            #    keep[ (tab.ccdzpt >= 20.)*(tab.ccdzpt <= 30.) ] = True
+            keep[ (tab.exptime >= 30)*\
+                  (tab.ccdnmatch >= 20)*\
+                  (np.abs(tab.zpt - tab.ccdzpt) <= 0.1) ]= True
         self.legacy.cut(keep)
         self.arjun.cut(keep)
 
@@ -1315,7 +1348,15 @@ class Compare2Arjuns(object):
         legacy=fits_table(zptfn)
         if reset_names:
             for key in translate.keys():
+                # zptavg --> zpt can overwrite zpt if in that order
+                if key in ['zpt','zptavg']:
+                    continue
                 legacy.rename(key, translate[key]) #(old,new)
+        if not stars:
+            for key in ['zpt','zptavg']:
+                if not key in legacy.get_columns():
+                    raise ValueError
+                legacy.rename(key, translate[key])
         return legacy
 
 
@@ -1367,6 +1408,10 @@ class Compare2Arjuns(object):
             plt.subplots_adjust(hspace=0.4,wspace=0.3)
             xlims,ylims= None,None
             for cnt,key in enumerate(self.numeric_keys):
+                if self.camera == 'decam':
+                    if key in ['ccddec','ccdra','ccdhdunum',\
+                               'naxis2','naxis1','ccdrarms','ccddecrms']:
+                        continue
                 x= self.arjun.get(key)
                 ti= 'Labels: x-axis = A, '
                 if doplot == 'dpercent':

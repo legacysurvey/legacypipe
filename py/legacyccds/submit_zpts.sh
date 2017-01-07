@@ -1,8 +1,8 @@
 #!/bin/bash -l
 
 #SBATCH -p debug
-#SBATCH -N 20
-#SBATCH -t 00:30:00
+#SBATCH -N 1
+#SBATCH -t 00:10:00
 #SBATCH -A eboss
 #SBATCH -J zpts
 #SBATCH -L SCRATCH,project
@@ -31,7 +31,7 @@ let tasks=${SLURM_JOB_NUM_NODES}*${cores}
 #input=mosaic_CP20160202v2.txt
 #input=90prime_CP20160202.txt
 input=decam_cplist_CP20141227.txt
-prefix=paper
+prefix=readimg
 # Make zpts
 srun -n $tasks -N ${SLURM_JOB_NUM_NODES} -c 1 python legacyccds/legacy-zeropoints.py --prefix $prefix --image_list $input --nproc $tasks --verboseplots
 # Make zpts VERBOSE
