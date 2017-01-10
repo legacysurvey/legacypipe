@@ -371,9 +371,9 @@ def merge_bybrick(bricks,outdir='',prefix=''):
         cat= merge_tables(cats, columns='fillzero') 
         cat.writeto(outfn)
         print('Wrote %s' % outfn)
-        if os.path.exists(outfn):
-            rm_fns= get_brick_sample_fns(brickname=brick,outdir=outdir,prefix=prefix)
-            for rm_fn in rm_fns: os.remove(rm_fn) 
+        #if os.path.exists(outfn):
+        #    rm_fns= get_brick_sample_fns(brickname=brick,outdir=outdir,prefix=prefix)
+        #    for rm_fn in rm_fns: os.remove(rm_fn) 
         
         
 
@@ -721,14 +721,14 @@ if __name__ == "__main__":
             # Each task gets a list of bricks, merges sample for each brick, removes indiv brick samps 
             merge_bybrick(bricks,outdir=args.outdir,prefix=args.prefix)
         elif args.dowhat == 'check':
-            dr=os.getenv('DECALS_SIM_DIR')
-            fns=glob(os.path.join(dr,'input_sample/bybrick/eboss_ngcsample_*.fits'))
+            fns=glob(os.path.join(args.outdir,'input_sample/bybrick/%ssample_*[0-9][0-9].fits' % args.prefix))
             if len(fns) == 0: raise ValueError
             fns= np.array_split(fns,comm.size)[comm.rank] 
             ids= combine(fns)
             all_ids= comm.gather(ids, root=0)
             if comm.rank == 0:
-                print('len(set(all_ids))= %d' % len(set(all_ids)))
+                print('number of unique ids=%d, total number ra,dec pts=%d' % \
+                        (len(set(all_ids)),len(all_ids)))
         #if comm.rank == 0:
         #    merge_draws(outdir=args.outdir,prefix=args.prefix)
             #plotobj= PlotTable(outdir=args.outdir,prefix=args.prefix)
@@ -762,7 +762,6 @@ if __name__ == "__main__":
             with open('eboss_ngc_bricks.txt','w') as foo:
                 for brick in btable.brickname:
                     foo.write('%s\n' % brick)
-            raise ValueError
             dr= get_bybrick_dir(outdir=args.outdir)
             if not os.path.exists(dr):
                 os.makedirs(dr)
@@ -777,7 +776,15 @@ if __name__ == "__main__":
             #bricks= np.array_split(bricks,comm.size)[comm.rank] 
             # Each task gets a list of bricks, merges sample for each brick, removes indiv brick samps 
             merge_bybrick(bricks,outdir=args.outdir,prefix=args.prefix)
-            
+        elif args.dowhat == 'check':
+            fns=glob(os.path.join(args.outdir,'input_sample/bybrick/%ssample_*[0-9][0-9].fits' % args.prefix))
+            if len(fns) == 0: raise ValueError
+            fns= np.array_split(fns,1)[0]
+            print("len(fns)=",len(fns)) 
+            all_ids= combine(fns)
+            print('number of unique ids=%d, total number ra,dec pts=%d' % \
+                    (len(set(all_ids)),len(all_ids)))
+        #
         # Gather, done
         #merge_draws(outdir=args.outdir,prefix=args.prefix)
         #plotobj= PlotTable(outdir=args.outdir,prefix=args.prefix)

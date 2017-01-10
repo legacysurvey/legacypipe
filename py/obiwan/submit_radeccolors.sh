@@ -1,11 +1,11 @@
 #!/bin/bash -l
 
 #SBATCH -p debug
-#SBATCH -N 20
+#SBATCH -N 10
 #SBATCH -t 00:30:00
-#SBATCH --account=m2218
-#SBATCH -J bootes-dr3-obiwan
-#SBATCH -o bootes-dr3-obiwan.o%j
+#SBATCH --account=desi
+#SBATCH -J INP_SAMPLE
+#SBATCH -o INP_SAMPLE.o%j
 #SBATCH --mail-user=kburleigh@lbl.gov
 #SBATCH --mail-type=END,FAIL
 #SBATCH -L SCRATCH
@@ -16,16 +16,18 @@
 #-N 1
 
 # Yu Feng's bcast
-source $CODE_DIR/yu-bcast_2/activate.sh
+source /scratch1/scratchdirs/desiproc/DRs/code/dr4/yu-bcast_2/activate.sh
 
 set -x
-export LEGACY_SURVEY_DIR=/scratch2/scratchdirs/kaylanb/dr3-obiwan/legacypipe-dir
+#export LEGACY_SURVEY_DIR=/scratch2/scratchdirs/kaylanb/dr3-obiwan/legacypipe-dir
 #/scratch1/scratchdirs/desiproc/DRs/dr3-obiwan/legacypipe-dir #/scratch2/scratchdirs/kaylanb/dr3-obiwan/legacypipe-dir
 export PYTHONPATH=$CODE_DIR/legacypipe/py:${PYTHONPATH}
 cd $CODE_DIR/legacypipe/py
 
-prefix=eboss_ngc
-outdir=/scratch1/scratchdirs/desiproc/DRs/data-releases/dr3-obiwan/${prefix}
+#outdir=/scratch2/scratchdirs/kaylanb/obiwan/testing
+#outdir=/scratch2/scratchdirs/kaylanb/obiwan/eboss_ngc
+outdir=/scratch2/scratchdirs/kaylanb/obiwan/eboss_ngc_good
+
 #cp /project/projectdirs/desi/users/burleigh/obiwan_backup_data/*.pickle $outdir
 
 #source /scratch1/scratchdirs/desiproc/DRs/dr4/legacypipe-dir/bashrc
@@ -62,8 +64,8 @@ dec2=32.
 #dec1=1.
 #dec2=5.
 
-#dowhat=sample
+dowhat=sample
 #dowhat=bybrick
 #dowhat=merge
-dowhat=check
-srun -n $tasks -N ${SLURM_JOB_NUM_NODES} -c 1 python obiwan/decals_sim_radeccolors.py --dowhat $dowhat --ra1 $ra1 --ra2 $ra2 --dec1 $dec1 --dec2 $dec2 --prefix $prefix --nproc $tasks --outdir /scratch1/scratchdirs/desiproc/DRs/data-releases/dr3-obiwan/eboss_ngc
+#dowhat=check
+srun -n $tasks -N ${SLURM_JOB_NUM_NODES} -c 1 python obiwan/decals_sim_radeccolors.py --dowhat $dowhat --ra1 $ra1 --ra2 $ra2 --dec1 $dec1 --dec2 $dec2 --prefix $prefix --nproc $tasks --outdir $outdir

@@ -183,6 +183,51 @@ def stdouterr_redirected(to=os.devnull, comm=None):
             
     return
 
+# From image.py
+# imgfn,maskfn = self.funpack_files(self.imgfn, self.dqfn, self.hdu, todelete)
+#for fn in todelete:
+#   os.unlink(fn)
+def funpack_files(imgfn, maskfn, hdu, todelete):
+    from legacypipe.survey import create_temp
+
+    tmpimgfn = None
+    tmpmaskfn = None
+    # For FITS files that are not actually fpack'ed, funpack -E
+    # fails.  Check whether actually fpacked.
+    fcopy = False
+    hdr = fitsio.read_header(imgfn, ext=hdu)
+    if not ((hdr['XTENSION'] == 'BINTABLE') and hdr.get('ZIMAGE', False)):
+        print('Image %s, HDU %i is not fpacked; just imcopying.' %
+              (imgfn,  hdu))
+        fcopy = True
+
+    tmpimgfn  = create_temp(suffix='.fits')
+    tmpmaskfn = create_temp(suffix='.fits')
+    todelete.append(tmpimgfn)
+    todelete.append(tmpmaskfn)
+
+    if fcopy:
+        cmd = 'imcopy %s"+%i" %s' % (imgfn, hdu, tmpimgfn)
+    else:
+        cmd = 'funpack -E %s -O %s %s' % (hdu, tmpimgfn, imgfn)
+    print(cmd)
+    if os.system(cmd):
+        raise RuntimeError('Command failed: ' + cmd)
+
+    if fcopy:
+        cmd = 'imcopy %s"+%i" %s' % (maskfn, hdu, tmpmaskfn)
+    else:
+        cmd = 'funpack -E %s -O %s %s' % (hdu, tmpmaskfn, maskfn)
+    print(cmd)
+    if os.system(cmd):
+        print('Command failed: ' + cmd)
+        M,hdr = self._read_fits(maskfn, hdu, header=True)
+        print('Read', M.dtype, M.shape)
+        fitsio.write(tmpmaskfn, M, header=hdr, clobber=True)
+
+    return tmpimgfn,tmpmaskfn
+
+
 def ptime(text,t0):
     tnow=Time()
     print('TIMING:%s ' % text,tnow-t0)
@@ -497,9 +542,9 @@ class Measurer(object):
         t0= ptime('import-statements-in-measure.run',t0)
 
         # Read the image and header.
-        print('Todo: read the ivar image')
-        img, hdr = self.read_image()
-        bitmask = self.read_bitmask()
+        hdr, img, bitmask = self.read_image_bitmask(funpack=False) #funpack makes it take longer
+        t0= ptime('read image, bitmask',t0)
+        #bitmask = self.read_bitmask()
 
         # Initialize and begin populating the output CCDs table.
         ccds = _ccds_table(self.camera)
@@ -541,7 +586,7 @@ class Measurer(object):
         ccdra, ccddec = self.wcs.pixelxy2radec((W+1) / 2.0, (H + 1) / 2.0)
         ccds['ra'] = ccdra   # [degree]
         ccds['dec'] = ccddec # [degree]
-        t0= ptime('read-image-getheader-info',t0)
+        t0= ptime('header-info',t0)
 
         # Measure the sky brightness and (sky) noise level.  Need to capture
         # negative sky.
@@ -657,10 +702,16 @@ class Measurer(object):
         surfb= surfb[ibright,:]
         # Non-linear least squares LM fit to Moffat Profile
         fwhm= np.zeros(surfb.shape[0])
-        if not self.verboseplots: 
-            for cnt in range(surfb.shape[0]):
-                popt, pcov = curve_fit(moffatPSF, radii, surfb[cnt,:], p0 = [1.5*surfb[cnt,0], 5.,2.])
-                fwhm[cnt]= popt[1]
+        if not self.verboseplots:
+            try: 
+                for cnt in range(surfb.shape[0]):
+                    popt, pcov = curve_fit(moffatPSF, radii, surfb[cnt,:], p0 = [1.5*surfb[cnt,0], 5.,2.])
+                    fwhm[cnt]= popt[1]
+            except RuntimeError:
+                # Optimal parameters not found for moffat fit
+                with open('zpts_bad_nofwhm.txt','a') as foo:
+                    foo.write('%s %s\n' % (self.fn,self.image_hdu))
+                return ccds, _stars_table()
         else: 
             plt.close()
             for cnt in range(surfb.shape[0]):
@@ -677,8 +728,14 @@ class Measurer(object):
         t0= ptime('fwhm-calculation',t0)
         
         # Now match against (good) PS1 stars 
-        # John cuts to magnitudes between 15 and 22
-        ps1 = ps1cat(ccdwcs=self.wcs).get_stars() #magrange=(15, 22))
+        try: 
+            ps1 = ps1cat(ccdwcs=self.wcs).get_stars() #magrange=(15, 22))
+        except IOError:
+            # The gaia file does not exist:
+            # e.g. /project/projectdirs/cosmo/work/gaia/chunks-ps1-gaia/chunk-*.fits
+            with open('zpts_bad_nogaiachunk.txt','a') as foo:
+                foo.write('%s %s\n' % (self.fn,self.image_hdu))
+            return ccds, _stars_table()
         good = (ps1.nmag_ok[:, 0] > 0)*(ps1.nmag_ok[:, 1] > 0)*(ps1.nmag_ok[:, 2] > 0)
         # Get Gaia ra,dec
         gdec=ps1.dec_ok-ps1.ddec/3600000.
@@ -701,7 +758,8 @@ class Measurer(object):
             return ccds, _stars_table()
     
         # Match GAIA and Our Data
-        m1, m2, d12 = match_radec(objra, objdec, gra, gdec, self.matchradius/3600.0)
+        m1, m2, d12 = match_radec(objra, objdec, gra, gdec, self.matchradius/3600.0,\
+                                  nearest=True)
         nmatch = len(m1)
         ccds['nmatch'] = nmatch
         print('{} GAIA sources match detected sources within {} arcsec.'.format(nmatch, self.matchradius))
@@ -723,9 +781,12 @@ class Measurer(object):
         stars['decdiff'] = (gdec[m2] - stars['dec']) * 3600.0
         stars['apmag'] = - 2.5 * np.log10(apflux[m1]) + zp0 + 2.5 * np.log10(exptime)
         # Add ps1 astrometric residuals for comparison
-        ps1_m1, ps1_m2, ps1_d12 = match_radec(objra, objdec, ps1.ra, ps1.dec, self.matchradius/3600.0)
-        stars['radiff_ps1'] = (ps1.ra[ps1_m2] - objra[ps1_m1]) * np.cos(np.deg2rad(objdec[ps1_m1])) * 3600.0
-        stars['decdiff_ps1'] = (ps1.dec[ps1_m2] - objdec[ps1_m1]) * 3600.0
+        ps1_m1, ps1_m2, ps1_d12 = match_radec(objra, objdec, ps1.ra, ps1.dec, self.matchradius/3600.0,\
+                                              nearest=True)
+        # If different number gaia matches versus ps1 matches, need to handle
+        num_gaia= len(stars['apmag'])
+        stars['radiff_ps1'] = (ps1.ra[ps1_m2][:num_gaia] - objra[ps1_m1][:num_gaia]) * np.cos(np.deg2rad(objdec[ps1_m1][:num_gaia])) * 3600.0
+        stars['decdiff_ps1'] = (ps1.dec[ps1_m2][:num_gaia] - objdec[ps1_m1][:num_gaia]) * 3600.0
         # Photometry
         # Unless we're calibrating the photometric transformation, bring PS1
         # onto the photometric system of this camera (we add the color term
@@ -913,6 +974,25 @@ class DecamMeasurer(Measurer):
         from legacyanalysis.ps1cat import ps1_to_decam
         return ps1_to_decam(ps1stars, band)
 
+    def read_image_bitmask(self,funpack=True):
+        '''funpack, then read'''
+        imgfn= self.fn
+        maskfn= self.fn.replace('ooi','ood')
+        print('Reading %s %s' % (imgfn,maskfn))
+        if funpack:
+            todelete=[]
+            imgfn,maskfn = funpack_files(imgfn, maskfn, self.ext, todelete)
+            # Read
+            img, hdr = fitsio.read(imgfn, ext=self.ext, header=True)
+            mask, junk = fitsio.read(maskfn, ext=self.ext, header=True)
+            for fn in todelete:
+               os.unlink(fn)
+        else:
+            # Read
+            img, hdr = fitsio.read(imgfn, ext=self.ext, header=True)
+            mask, junk = fitsio.read(maskfn, ext=self.ext, header=True)
+        return hdr,img,mask
+    
     def read_image(self):
         '''Read the image and header.  Convert image from ADU to electrons.'''
         img, hdr = fitsio.read(self.fn, ext=self.ext, header=True)
@@ -1085,7 +1165,22 @@ def measure_image(img_fn, **measureargs):
 
     print('Working on image {}'.format(img_fn))
 
-    primhdr = fitsio.read_header(img_fn)
+    # Fitsio can throw error: ValueError: CONTINUE not supported
+    try:
+        primhdr = fitsio.read_header(img_fn)
+    except ValueError:
+        # skip zpt for this image 
+        with open('zpts_bad_headerskipimage.txt','a') as foo:
+            foo.write('%s\n' % (img_fn,))
+        ccds = []
+        stars = []
+        for ext in extlist:
+            ccds.append( _ccds_table() )
+            stars.append( _stars_table() )
+        ccds = vstack(ccds)
+        stars = vstack(stars)
+        return ccds,stars
+    
     camera, extlist = camera_name(primhdr)
     nnext = len(extlist)
 
