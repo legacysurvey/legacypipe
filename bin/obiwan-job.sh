@@ -3,14 +3,15 @@
 #SBATCH -p shared
 #SBATCH --qos=scavenger
 #SBATCH -n 12
-#SBATCH --array=1-490
-#SBATCH -t 01:00:00
+#SBATCH --array=1-2
+#SBATCH -t 00:10:00
 #SBATCH --account=desi
-#SBATCH -J DR4
+#SBATCH -J OBIWAN
 #SBATCH --mail-user=kburleigh@lbl.gov
 #SBATCH --mail-type=END,FAIL
 #SBATCH -L SCRATCH
 
+export runwhat=star
 #-o DR4.o%j
 #-p shared
 #-n 12
@@ -22,9 +23,10 @@
 
 
 # DR4
-
-export outdir=/scratch1/scratchdirs/desiproc/DRs/data-releases/dr4
+#export outdir=/scratch1/scratchdirs/desiproc/DRs/data-releases/dr4
 #export outdir=/scratch2/scratchdirs/kaylanb/dr4
+export outdir=$DECALS_SIM_DIR
+export run_name=obiwan_$objtype_$brick_$rowstart
 qdo_table=dr4v2
 # Override Use dr4 legacypipe-dr
 #export LEGACY_SURVEY_DIR=/scratch1/scratchdirs/desiproc/DRs/dr4-bootes/legacypipe-dir
@@ -32,20 +34,19 @@ qdo_table=dr4v2
 export PYTHONPATH=$CODE_DIR/legacypipe/py:${PYTHONPATH}
 cd $CODE_DIR/legacypipe/py
 
-export run_name=dr4-qdo
 
 # Threads
 usecores=6
 threads=6
 export OMP_NUM_THREADS=$threads
 
-########## GET BRICK
+########## GET OBJTYPE, BRICK, ROWSTART
 export statdir="${outdir}/progress"
-mkdir -p $statdir 
+mkdir -p $statdir $outdir
 
 echo GETTING BRICK
 date
-bricklist=${LEGACY_SURVEY_DIR}/bricks-dr4.txt
+bricklist=${LEGACY_SURVEY_DIR}/eboss-ngc-load-${runwhat}.txt
 if [ ! -e "$bricklist" ]; then
     echo file=$bricklist does not exist, quitting
     exit 999
@@ -53,16 +54,25 @@ fi
 # Start at random line, avoids running same brick
 lns=`wc -l $bricklist |awk '{print $1}'`
 rand=`echo $((1 + RANDOM % $lns))`
-for brick in `sed -n ${rand},${lns}p $bricklist`;do
+sed -n ${rand},${lns}p $bricklist | while read aline; do
+    objtype=`echo $aline|awk '{print $1}'`
+    brick=`echo $aline|awk '{print $2}'`
+    rowstart=`echo $aline|awk '{print $3}'`
+    # Check whether to skip it
     bri=$(echo $brick | head -c 3)
-    tractor_fits=/scratch1/scratchdirs/desiproc/DRs/data-releases/dr4/tractor/$bri/tractor-$brick.fits
+    tractor_fits="$outdir/$objtype/$bri/$brick/rowstart$rowstart/tractor-$objtype-$brick-rowstart$rowstart.fits"
+    exceed_rows="$outdir/$objtype/$bri/$brick/rowstart${rowstart}_exceeded.txt"
     if [ -e "$tractor_fits" ]; then
+        continue
+    elif [ -e "$exceed_rows" ]; then
         continue
     elif [ -e "$statdir/inq_$brick.txt" ]; then
         continue
     else
-        # Found a brick to run
+        # Found something to run
+        export objtype="$objtype"
         export brick="$brick"
+        export rowstart="$rowstart"
         touch $statdir/inq_$brick.txt
         break
     fi
@@ -90,17 +100,12 @@ mkdir -p $(dirname $log)
 echo Logging to: $log
 echo "-----------------------------------------------------------------------------------------" >> $log
 #module load psfex-hpcp
-#srun -n 1 -c 1 python python_test_qdo.py
-srun -n 1 -c $usecores python legacypipe/runbrick.py \
-     --run $qdo_table \
-     --brick $brick \
-     --skip \
-     --threads $OMP_NUM_THREADS \
-     --checkpoint $outdir/checkpoints/${bri}/${brick}.pickle \
-     --pickle "$outdir/pickles/${bri}/runbrick-%(brick)s-%%(stage)s.pickle" \
-     --outdir $outdir --nsigma 6 \
-     --no-write \
-     >> $log 2>&1 
+export therun=eboss-ngc
+export prefix=eboss_ngc
+srun -n 1 -c $usecores python obiwan/decals_sim.py \
+    --run $therun --objtype $objtype --brick $brick --rowstart $rowstart \
+    --add_sim_noise --prefix $prefix --threads $OMP_NUM_THREADS \
+    >> $log 2>&1
 
 rm $statdir/inq_$brick.txt
 # Bootes
