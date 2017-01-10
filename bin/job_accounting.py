@@ -8,12 +8,11 @@ import matplotlib.pyplot as plt
 from astrometry.util.fits import fits_table, merge_tables
 
 parser = argparse.ArgumentParser(description='Generate a legacypipe-compatible CCDs file from a set of reduced imaging.') 
-parser.add_argument('--get_bricks_notdone', action='store_true', default=False) 
-parser.add_argument('--time_per_brick', action='store_true', default=False) 
-parser.add_argument('--nersc_time', action='store_true', default=False) 
+parser.add_argument('--dowhat', choices=['bricks_notdone','time_per_brick','nersc_time'],action='store', default=True) 
+parser.add_argument('--fn', action='store', default=False) 
 args = parser.parse_args() 
 
-if args.get_bricks_notdone:
+if args.dowhat == 'bricks_notdone':
     b=fits_table(os.path.join(os.environ['LEGACY_SURVEY_DIR'],'survey-bricks-dr4.fits.gz'))
     don=np.loadtxt('bricks_done.tmp',dtype=str)
     fout= 'bricks_notdone.tmp'
@@ -32,29 +31,35 @@ if args.get_bricks_notdone:
         for brick in b.brickname:
             fil.write('%s\n' % brick)
     print('Wrote %s' % fout)
-elif args.time_per_brick:
-    fns,start1,start2,end1,end2=np.loadtxt('logs_time.txt',dtype=str,unpack=True)
+elif args.dowhat == 'time_per_brick':
+    fns,start1,start2,end1,end2=np.loadtxt(args.fn,dtype=str,unpack=True)
     # Remove extraneous digits
+    # Handle single log file
+    if type(fns) == np.string_:
+        fns= [fns]
+        start1= [start1]
+        end1= [end1]
+        start2= [start2]
+        end2= [end2]
     start2=np.array([val[:11] for val in start2])
     end2=np.array([val[:11] for val in end2])
-    tot={}
-    for fn,s1,s2,e1,e2 in zip(fns,start1,start2,end1,end2):
-        start=datetime.strptime("%s %s" % (s1,s2), "%Y-%m-%d %H:%M:%S.%f")
-        end=datetime.strptime("%s %s" % (e1,e2), "%Y-%m-%d %H:%M:%S.%f")
-        dt= end - start
-        # Unique brickname, total time
-        brick=os.path.basename( os.path.dirname(fn) )
-        if tot.has_key(brick):
-            tot[brick]+= dt.total_seconds()
-        else:
-            tot[brick]= dt.total_seconds()
-    # Unique Brick list
-    out="bricks_time.txt"
+    sumdt=0
+    out=args.fn.replace('startend.txt','dt.txt')
     with open(out,'w') as foo:
-        for brick in tot.keys():
-            foo.write('%s %s\n' % (brick,tot[brick]) )
+        foo.write('# %s\n' % (os.path.dirname(args.fn),) )
+        for fn,s1,s2,e1,e2 in zip(fns,start1,start2,end1,end2):
+            name=os.path.basename(fn)
+            start=datetime.strptime("%s %s" % (s1,s2), "%Y-%m-%d %H:%M:%S.%f")
+            end=datetime.strptime("%s %s" % (e1,e2), "%Y-%m-%d %H:%M:%S.%f")
+            # Write dt to file
+            dt= end - start
+            dt= dt.total_seconds() / 60.
+            foo.write('%s %s\n' % (name,dt) )
+            # Sum
+            sumdt+= dt
+        foo.write('# Total(min) %.1f\n' % sumdt)
     print('Wrote %s' % out)
-elif args.nersc_time:
+elif args.dowhat == 'nersc_time':
     def time_hist(hrs,name='hist.png'):
         print('Making hist')
         bins=np.linspace(0,2,num=100)

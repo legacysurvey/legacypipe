@@ -1,31 +1,32 @@
 #!/bin/bash
 
-
-# Time spent on each brick
-all=logs.txt
-echo Appending all logs to: $all 
-find /scratch1/scratchdirs/desiproc/DRs/data-releases/dr4/logs/*/*/log.* > $all
-tim=logs_time.txt
-rm $logs_time.txt
-echo Looping through: $all 
-for fn in `cat $all`;do 
-    check=`grep "runbrick.py starting at" $fn|wc -l`
-    if [ "$check" -eq 1 ]; then
-        start=`grep "runbrick.py starting at" $fn|awk '{print $4}'|sed s/T/\ /g`
-        end=`stat $fn|grep Change|awk '{print $2,$3}'`
-        echo $fn $start $end >> $tim
-    else
-        echo "runbrick starting at" either 0 or > 1 times: $fn
-    fi
+# Create as many files as bricks having logs
+#base=/scratch2/scratchdirs/kaylanb/dr4/profiling/mpi_threads8
+base="$1"
+for dr in `find ${base}/logs/[0-9]* -maxdepth 1 -type d`;do 
+    brick=`echo $(basename $dr)`
+    logs=$dr/logs_$brick.txt
+    find $dr/log.*|sort > $logs
+    # Write file with name of each log file and its start, end time
+    delta=$dr/logs_startend.txt
+    rm $delta
+    for fn in `cat $logs`;do 
+        check=`grep "runbrick.py starting at" $fn|wc -l`
+        if [ "$check" -eq 1 ]; then
+            start=`grep "runbrick.py starting at" $fn|awk '{print $4}'|sed s/T/\ /g`
+            end=`stat $fn|grep Change|awk '{print $2,$3}'`
+            echo $fn $start $end >> $delta
+        else
+            echo "runbrick starting at" either 0 or > 1 times: $fn
+        fi
+    done
+    # Difference the start,end datetime, write new file with deltas
+    python job_accounting.py --dowhat time_per_brick --fn $delta   
 done
-out=bricks_time.txt
-rm $out
-# Get time spent on each log file, identified as each brick
-python job_accounting.py --time_per_brick 
 # Sum times for bricks that had to be run again and again
 # Plot histogram of time spent on each brick
 # compute NERSC hours
-python job_accounting.py --nersc_time 
+#python job_accounting.py --nersc_time 
 
 # Any multinode slurm file, why did each node stop?
 #slurm=slurm-3198976.out

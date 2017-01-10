@@ -1,8 +1,8 @@
 #!/bin/bash -l
 
 #SBATCH -p debug
-#SBATCH -N 1
-#SBATCH -t 00:10:00
+#SBATCH -N 30
+#SBATCH -t 00:30:00
 #SBATCH -A eboss
 #SBATCH -J zpts
 #SBATCH -L SCRATCH,project
@@ -30,10 +30,11 @@ let tasks=${SLURM_JOB_NUM_NODES}*${cores}
 #find /project/projectdirs/cosmo/staging/bok/BOK_CP/CP20160202/ksb*ooi*.fits.fz > 90prime_CP20160202.txt
 #input=mosaic_CP20160202v2.txt
 #input=90prime_CP20160202.txt
-input=decam_cplist_CP20141227.txt
-prefix=readimg
+input=decam_cp_all.txt
+#input=mosaic_cp_all.txt
+prefix=paper
 # Make zpts
-srun -n $tasks -N ${SLURM_JOB_NUM_NODES} -c 1 python legacyccds/legacy-zeropoints.py --prefix $prefix --image_list $input --nproc $tasks --verboseplots
+srun -n $tasks -N ${SLURM_JOB_NUM_NODES} -c 1 python legacyccds/legacy-zeropoints.py --prefix $prefix --image_list $input --nproc $tasks
 # Make zpts VERBOSE
 #srun -n $tasks -N ${SLURM_JOB_NUM_NODES} -c 1 python legacyccds/legacy-zeropoints.py --prefix $prefix --image_list $input --nproc $tasks --verboseplots
 
