@@ -787,8 +787,9 @@ class Measurer(object):
 
         t0= ptime('all-computations-for-this-ccd',t0)
         # Plots for comparing to Arjuns zeropoints*.ps
-        self.make_plots(stars,dmag,ccds['zpt'],ccds['transp'])
-        t0= ptime('made-plots',t0)
+        if self.verboseplots:
+            self.make_plots(stars,dmag,ccds['zpt'],ccds['transp'])
+            t0= ptime('made-plots',t0)
 
         # No longer neeeded: 
         # Fit each star with Tractor.

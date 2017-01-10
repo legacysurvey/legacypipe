@@ -1,13 +1,16 @@
 #!/bin/bash -l
 
-#SBATCH -p debug
+#SBATCH -p regular
 #SBATCH -N 30
-#SBATCH -t 00:30:00
+#SBATCH -t 00:55:00
 #SBATCH -A eboss
 #SBATCH -J zpts
 #SBATCH -L SCRATCH,project
 #SBATCH --mail-user=kburleigh@lbl.gov
 #SBATCH --mail-type=END,FAIL
+
+# RUN all decam
+#for i in `find decam_cp_CP*txt`;do export input=$i;sbatch legacyccds/submit_zpts.sh --export input;done
 
 set -x 
 export OMP_NUM_THREADS=1
@@ -30,7 +33,7 @@ let tasks=${SLURM_JOB_NUM_NODES}*${cores}
 #find /project/projectdirs/cosmo/staging/bok/BOK_CP/CP20160202/ksb*ooi*.fits.fz > 90prime_CP20160202.txt
 #input=mosaic_CP20160202v2.txt
 #input=90prime_CP20160202.txt
-input=decam_cp_all.txt
+#input=decam_cp_all.txt
 #input=mosaic_cp_all.txt
 prefix=paper
 # Make zpts
