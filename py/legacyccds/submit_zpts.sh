@@ -2,13 +2,15 @@
 
 #SBATCH -p shared
 #SBATCH -n 2
-#SBATCH -t 01:00:00
+#SBATCH -t 10:00:00
 #SBATCH -A desi
 #SBATCH -J zpts
 #SBATCH -L SCRATCH,project
 #SBATCH --mail-user=kburleigh@lbl.gov
 #SBATCH --mail-type=END,FAIL
 
+# TO RUN shared
+#for i in `find decam_cp_CP*txt`;do export input=$i;echo $input;sbatch legacyccds/submit_zpts.sh --export input;done
 #-p regular
 #-N 30
 # RUN all decam

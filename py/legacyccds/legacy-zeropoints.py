@@ -736,6 +736,11 @@ class Measurer(object):
             with open('zpts_bad_nogaiachunk.txt','a') as foo:
                 foo.write('%s %s\n' % (self.fn,self.image_hdu))
             return ccds, _stars_table()
+        # Are there Good PS1 on this CCD?
+        if len(ps1) == 0:
+            with open('zpts_bad_nops1onccd.txt','a') as foo:
+                foo.write('%s %s\n' % (self.fn,self.image_hdu))
+            return ccds, _stars_table()
         good = (ps1.nmag_ok[:, 0] > 0)*(ps1.nmag_ok[:, 1] > 0)*(ps1.nmag_ok[:, 2] > 0)
         # Get Gaia ra,dec
         gdec=ps1.dec_ok-ps1.ddec/3600000.

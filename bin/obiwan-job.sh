@@ -1,10 +1,8 @@
 #!/bin/bash -l
 
 #SBATCH -p shared
-#SBATCH --qos=scavenger
-#SBATCH -n 12
-#SBATCH --array=1-2
-#SBATCH -t 00:10:00
+#SBATCH -n 2
+#SBATCH -t 00:05:00
 #SBATCH --account=desi
 #SBATCH -J OBIWAN
 #SBATCH --mail-user=kburleigh@lbl.gov
@@ -12,6 +10,8 @@
 #SBATCH -L SCRATCH
 
 export runwhat=star
+#--array=1-2
+#--qos=scavenger
 #-o DR4.o%j
 #-p shared
 #-n 12
@@ -26,19 +26,12 @@ export runwhat=star
 #export outdir=/scratch1/scratchdirs/desiproc/DRs/data-releases/dr4
 #export outdir=/scratch2/scratchdirs/kaylanb/dr4
 export outdir=$DECALS_SIM_DIR
-export run_name=obiwan_$objtype_$brick_$rowstart
 qdo_table=dr4v2
 # Override Use dr4 legacypipe-dr
 #export LEGACY_SURVEY_DIR=/scratch1/scratchdirs/desiproc/DRs/dr4-bootes/legacypipe-dir
 
 export PYTHONPATH=$CODE_DIR/legacypipe/py:${PYTHONPATH}
 cd $CODE_DIR/legacypipe/py
-
-
-# Threads
-usecores=6
-threads=6
-export OMP_NUM_THREADS=$threads
 
 ########## GET OBJTYPE, BRICK, ROWSTART
 export statdir="${outdir}/progress"
@@ -70,22 +63,28 @@ sed -n ${rand},${lns}p $bricklist | while read aline; do
         continue
     else
         # Found something to run
-        export objtype="$objtype"
-        export brick="$brick"
-        export rowstart="$rowstart"
+        #export objtype="$objtype"
+        #export brick="$brick"
+        #export rowstart="$rowstart"
         touch $statdir/inq_$brick.txt
         break
     fi
 done
 
-echo FOUND BRICK
+echo FOUND BRICK: $objtype $brick $rowstart
 date
 ################
 
 set -x
+
+export run_name=obiwan_$objtype_$brick_$rowstart
 #export outdir=/scratch1/scratchdirs/desiproc/DRs/data-releases/dr4-bootes/90primeTPV_mzlsv2thruMarch19/wisepsf
 #qdo_table=dr4-bootes
 
+# Threads
+usecores=6
+threads=6
+export OMP_NUM_THREADS=$threads
 
 # Force MKL single-threaded
 # https://software.intel.com/en-us/articles/using-threaded-intel-mkl-in-multi-thread-application

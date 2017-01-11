@@ -1,16 +1,16 @@
 #!/bin/bash -l
 
 #SBATCH -p shared
-#SBATCH --qos=scavenger
 #SBATCH -n 12
-#SBATCH --array=1-490
-#SBATCH -t 01:00:00
+#SBATCH --array=1-1000
+#SBATCH -t 04:00:00
 #SBATCH --account=desi
 #SBATCH -J DR4
 #SBATCH --mail-user=kburleigh@lbl.gov
 #SBATCH --mail-type=END,FAIL
 #SBATCH -L SCRATCH
 
+#--qos=scavenger
 #-o DR4.o%j
 #-p shared
 #-n 12
@@ -39,70 +39,77 @@ usecores=6
 threads=6
 export OMP_NUM_THREADS=$threads
 
-########## GET BRICK
-export statdir="${outdir}/progress"
-mkdir -p $statdir 
 
-echo GETTING BRICK
-date
-bricklist=${LEGACY_SURVEY_DIR}/bricks-dr4.txt
-if [ ! -e "$bricklist" ]; then
-    echo file=$bricklist does not exist, quitting
-    exit 999
-fi
-# Start at random line, avoids running same brick
-lns=`wc -l $bricklist |awk '{print $1}'`
-rand=`echo $((1 + RANDOM % $lns))`
-for brick in `sed -n ${rand},${lns}p $bricklist`;do
-    bri=$(echo $brick | head -c 3)
-    tractor_fits=/scratch1/scratchdirs/desiproc/DRs/data-releases/dr4/tractor/$bri/tractor-$brick.fits
-    if [ -e "$tractor_fits" ]; then
-        continue
-    elif [ -e "$statdir/inq_$brick.txt" ]; then
-        continue
-    else
-        # Found a brick to run
-        export brick="$brick"
-        touch $statdir/inq_$brick.txt
-        break
+# Run another srun if current brick finishes
+num_runs=0
+while true; do
+    let num_runs=$num_runs+1
+    echo num_runs=$num_runs
+
+    ########## GET BRICK
+    export statdir="${outdir}/progress"
+    mkdir -p $statdir 
+
+    echo GETTING BRICK
+    date
+    bricklist=${LEGACY_SURVEY_DIR}/bricks-dr4.txt
+    if [ ! -e "$bricklist" ]; then
+        echo file=$bricklist does not exist, quitting
+        exit 999
     fi
+    # Start at random line, avoids running same brick
+    lns=`wc -l $bricklist |awk '{print $1}'`
+    rand=`echo $((1 + RANDOM % $lns))`
+    for brick in `sed -n ${rand},${lns}p $bricklist`;do
+        bri=$(echo $brick | head -c 3)
+        tractor_fits=/scratch1/scratchdirs/desiproc/DRs/data-releases/dr4/tractor/$bri/tractor-$brick.fits
+        if [ -e "$tractor_fits" ]; then
+            continue
+        elif [ -e "$statdir/inq_$brick.txt" ]; then
+            continue
+        else
+            # Found a brick to run
+            export brick="$brick"
+            touch $statdir/inq_$brick.txt
+            break
+        fi
+    done
+
+    echo FOUND BRICK
+    date
+    ################
+
+    #export outdir=/scratch1/scratchdirs/desiproc/DRs/data-releases/dr4-bootes/90primeTPV_mzlsv2thruMarch19/wisepsf
+    #qdo_table=dr4-bootes
+
+
+    # Force MKL single-threaded
+    # https://software.intel.com/en-us/articles/using-threaded-intel-mkl-in-multi-thread-application
+    export MKL_NUM_THREADS=1
+    # Try limiting memory to avoid killing the whole MPI job...
+    # 67 kbytes is 64GB (mem of Edison node)
+    #ulimit -S -v 65000000
+    ulimit -a
+
+    log="$outdir/logs/$brick/log.$SLURM_JOBID"
+    mkdir -p $(dirname $log)
+    echo Logging to: $log
+    echo "-----------------------------------------------------------------------------------------" >> $log
+    #module load psfex-hpcp
+    #srun -n 1 -c 1 python python_test_qdo.py
+    #srun -n 1 -c $usecores python legacypipe/runbrick.py \
+    #     --run $qdo_table \
+    #     --brick $brick \
+    #     --skip \
+    #     --threads $OMP_NUM_THREADS \
+    #     --checkpoint $outdir/checkpoints/${bri}/${brick}.pickle \
+    #     --pickle "$outdir/pickles/${bri}/runbrick-%(brick)s-%%(stage)s.pickle" \
+    #     --outdir $outdir --nsigma 6 \
+    #     --no-write \
+    #     >> $log 2>&1 
+
+    rm $statdir/inq_$brick.txt
 done
-
-echo FOUND BRICK
-date
-################
-
-set -x
-#export outdir=/scratch1/scratchdirs/desiproc/DRs/data-releases/dr4-bootes/90primeTPV_mzlsv2thruMarch19/wisepsf
-#qdo_table=dr4-bootes
-
-
-# Force MKL single-threaded
-# https://software.intel.com/en-us/articles/using-threaded-intel-mkl-in-multi-thread-application
-export MKL_NUM_THREADS=1
-# Try limiting memory to avoid killing the whole MPI job...
-# 67 kbytes is 64GB (mem of Edison node)
-#ulimit -S -v 65000000
-ulimit -a
-
-log="$outdir/logs/$brick/log.$SLURM_JOBID"
-mkdir -p $(dirname $log)
-echo Logging to: $log
-echo "-----------------------------------------------------------------------------------------" >> $log
-#module load psfex-hpcp
-#srun -n 1 -c 1 python python_test_qdo.py
-srun -n 1 -c $usecores python legacypipe/runbrick.py \
-     --run $qdo_table \
-     --brick $brick \
-     --skip \
-     --threads $OMP_NUM_THREADS \
-     --checkpoint $outdir/checkpoints/${bri}/${brick}.pickle \
-     --pickle "$outdir/pickles/${bri}/runbrick-%(brick)s-%%(stage)s.pickle" \
-     --outdir $outdir --nsigma 6 \
-     --no-write \
-     >> $log 2>&1 
-
-rm $statdir/inq_$brick.txt
 # Bootes
 #--run dr4-bootes \
 

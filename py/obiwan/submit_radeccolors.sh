@@ -1,7 +1,7 @@
 #!/bin/bash -l
 
 #SBATCH -p debug
-#SBATCH -N 10
+#SBATCH -N 30
 #SBATCH -t 00:30:00
 #SBATCH --account=desi
 #SBATCH -J INP_SAMPLE
@@ -10,6 +10,7 @@
 #SBATCH --mail-type=END,FAIL
 #SBATCH -L SCRATCH
 
+#--qos=premium
 #-p shared
 #-n 6
 #-p debug
@@ -64,8 +65,10 @@ dec2=32.
 #dec1=1.
 #dec2=5.
 
-dowhat=sample
+#dowhat=sample
 #dowhat=bybrick
-#dowhat=merge
+dowhat=merge
 #dowhat=check
+
+mkdir -p $outdir/input_sample/bybrick
 srun -n $tasks -N ${SLURM_JOB_NUM_NODES} -c 1 python obiwan/decals_sim_radeccolors.py --dowhat $dowhat --ra1 $ra1 --ra2 $ra2 --dec1 $dec1 --dec2 $dec2 --prefix $prefix --nproc $tasks --outdir $outdir

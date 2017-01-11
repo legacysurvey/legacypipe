@@ -250,7 +250,11 @@ def get_brick_sample_fns(brickname=None,outdir='./',prefix=None):
     fn= get_brick_sample_fn(brickname=brickname,seed=1,prefix=prefix)
     fn= os.path.join(dr,fn.replace('1.fits','*.fits') )
     fns=glob(fn )
-    if not len(fns) > 0: raise ValueError('no fns found')
+    if not len(fns) > 0: 
+        print('no fns found with wildcard: %s' % fn)
+        with open(os.path.join(outdir,'nofns_wildcard.txt'),'a') as foo:
+            foo.write('%s\n' % fn)
+        return None
     return fns
 
 def get_brick_merged_fn(brickname=None,outdir='./',prefix=None):
@@ -325,6 +329,7 @@ def organize_by_brick(sample_fns,sbricks,outdir=None,seed=None,prefix=None):
         check_done= os.path.join(dr, get_sample_fn(seed=seed,prefix=prefix) )
         check_done= check_done.replace('.fits','_done.txt')
         if os.path.exists(check_done):
+            print('check_done exists: %s' % check_done)
             continue
         # 
         sample= fits_table(sample_fn)
@@ -357,9 +362,13 @@ def organize_by_brick(sample_fns,sbricks,outdir=None,seed=None,prefix=None):
 def merge_bybrick(bricks,outdir='',prefix=''):
     for brick in bricks:
         outfn= get_brick_merged_fn(brickname=brick,outdir=outdir,prefix=prefix) 
+        print('outfn=%s' % outfn)
         if os.path.exists(outfn):
             continue
         fns= get_brick_sample_fns(brickname=brick,outdir=outdir,prefix=prefix)
+        if fns is None:
+            # Wildcard found nothing see outdir/nofns_wildcard.txt
+            continue 
         cats=[]
         for i,fn in enumerate(fns):
             print('reading %d/%d' % (i+1,len(fns)))
@@ -371,9 +380,9 @@ def merge_bybrick(bricks,outdir='',prefix=''):
         cat= merge_tables(cats, columns='fillzero') 
         cat.writeto(outfn)
         print('Wrote %s' % outfn)
-        #if os.path.exists(outfn):
-        #    rm_fns= get_brick_sample_fns(brickname=brick,outdir=outdir,prefix=prefix)
-        #    for rm_fn in rm_fns: os.remove(rm_fn) 
+        if os.path.exists(outfn):
+            rm_fns= get_brick_sample_fns(brickname=brick,outdir=outdir,prefix=prefix)
+            for rm_fn in rm_fns: os.remove(rm_fn) 
         
         
 
@@ -715,9 +724,20 @@ if __name__ == "__main__":
             #btable.cut(inds)
             # Gather, done
         elif args.dowhat == 'merge':
-            btable= survey_bricks_cut2radec(radec)
-            bricks= np.loadtxt('eboss_ngc_bricks.txt',dtype=str)
-            bricks= np.array_split(bricks,comm.size)[comm.rank] 
+            brickfn= os.path.join(args.outdir,'bricks_for_sample.txt')
+            if os.path.exists(brickfn):
+                # Quicker to read 1 column text file
+                bricks= np.loadtxt(brickfn,dtype=str)
+                bricks= np.array_split(bricks,comm.size)[comm.rank] 
+            else:
+                btable= survey_bricks_cut2radec(radec)
+                bricks= np.array_split(btable.brickname,comm.size)[comm.rank]
+                if comm.rank == 0:
+                    if not os.path.exists(brickfn):
+                        with open(brickfn,'w') as foo:
+                            for b in btable.brickname:
+                                foo.write('%s\n' % b)
+                        print('Wrote %s' % brickfn) 
             # Each task gets a list of bricks, merges sample for each brick, removes indiv brick samps 
             merge_bybrick(bricks,outdir=args.outdir,prefix=args.prefix)
         elif args.dowhat == 'check':
@@ -757,23 +777,43 @@ if __name__ == "__main__":
                 os.makedirs(dr)
             draw_points(radec,unique_ids, seed=seed,outdir=args.outdir,prefix=args.prefix)
         elif args.dowhat == 'bybrick':
-            # Write {outdir}/input_sample/bybrick/{prefix}sample_{brick}_{seed}.fits files
-            btable= survey_bricks_cut2radec(radec)
-            with open('eboss_ngc_bricks.txt','w') as foo:
-                for brick in btable.brickname:
-                    foo.write('%s\n' % brick)
-            dr= get_bybrick_dir(outdir=args.outdir)
-            if not os.path.exists(dr):
-                os.makedirs(dr)
-            # split each sample into its bricks
+            # Assign list of samples to each worker
             sample_fns= get_sample_fns(outdir=args.outdir,prefix=args.prefix)
             sample_fns= np.array_split(sample_fns,1)[0] 
+            print('sample_fns=',sample_fns)
             # Loop over survey bricks, write brick sample files
-            organize_by_brick(sample_fns,btable,outdir=args.outdir,seed=seed,prefix=args.prefix)
+            print('before read table:')
+            btable= survey_bricks_cut2radec(radec) 
+            print('after read table:')
+            organize_by_brick(sample_fns,btable,outdir=args.outdir,seed=154,prefix=args.prefix)
+            # DEPRECATED:
+            ## Write {outdir}/input_sample/bybrick/{prefix}sample_{brick}_{seed}.fits files
+            #btable= survey_bricks_cut2radec(radec)
+            #with open('eboss_ngc_bricks.txt','w') as foo:
+            #    for brick in btable.brickname:
+            #        foo.write('%s\n' % brick)
+            #dr= get_bybrick_dir(outdir=args.outdir)
+            #if not os.path.exists(dr):
+            #    os.makedirs(dr)
+            ## split each sample into its bricks
+            #sample_fns= get_sample_fns(outdir=args.outdir,prefix=args.prefix)
+            #sample_fns= np.array_split(sample_fns,1)[0] 
+            ## Loop over survey bricks, write brick sample files
+            #organize_by_brick(sample_fns,btable,outdir=args.outdir,seed=seed,prefix=args.prefix)
         elif args.dowhat == 'merge':
-            btable= survey_bricks_cut2radec(radec)
-            bricks= np.loadtxt('eboss_ngc_bricks.txt',dtype=str)
-            #bricks= np.array_split(bricks,comm.size)[comm.rank] 
+            brickfn= os.path.join(args.outdir,'bricks_for_sample.txt')
+            if os.path.exists(brickfn):
+                # Quicker to read 1 column text file
+                bricks= np.loadtxt(brickfn,dtype=str)
+                bricks= np.array_split(bricks,1)[0] 
+            else:
+                btable= survey_bricks_cut2radec(radec)
+                bricks= np.array_split(btable.brickname,1)[0]
+                if not os.path.exists(brickfn):
+                    with open(brickfn,'w') as foo:
+                        for b in btable.brickname:
+                            foo.write('%s\n' % b)
+                    print('Wrote %s' % brickfn) 
             # Each task gets a list of bricks, merges sample for each brick, removes indiv brick samps 
             merge_bybrick(bricks,outdir=args.outdir,prefix=args.prefix)
         elif args.dowhat == 'check':
