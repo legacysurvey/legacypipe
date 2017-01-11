@@ -1,7 +1,7 @@
 #!/bin/bash -l
 
 #SBATCH -p debug
-#SBATCH -N 30
+#SBATCH -N 10
 #SBATCH -t 00:30:00
 #SBATCH --account=desi
 #SBATCH -J INP_SAMPLE
@@ -10,7 +10,6 @@
 #SBATCH --mail-type=END,FAIL
 #SBATCH -L SCRATCH
 
-#--qos=premium
 #-p shared
 #-n 6
 #-p debug
@@ -67,7 +66,8 @@ dec2=32.
 
 #dowhat=sample
 #dowhat=bybrick
-dowhat=merge
+#dowhat=merge
+dowhat=cleanup
 #dowhat=check
 
 mkdir -p $outdir/input_sample/bybrick
