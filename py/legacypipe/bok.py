@@ -31,6 +31,55 @@ class BokImage(CPImage, CalibMixin):
     Class for handling images from the 90prime camera processed by the
     NOAO Community Pipeline.
     '''
+    @classmethod
+    def nominal_zeropoints(self):
+        return dict(g = 25.74,
+                    r = 25.52,)
+
+    @classmethod
+    def photometric_ccds(self, survey, ccds):
+        '''
+        Returns an index array for the members of the table 'ccds'
+        that are photometric.
+
+        This recipe is adapted from the DECam one.
+        '''
+        # See legacypipe/ccd_cuts.py
+        z0 = self.nominal_zeropoints()
+        z0 = np.array([z0[f[0]] for f in ccds.filter])
+        good = np.ones(len(ccds), bool)
+        n0 = sum(good)
+        # This is our list of cuts to remove non-photometric CCD images
+        # These flag too many: ('zpt < 0.5 mag of nominal',(ccds.zpt < (z0 - 0.5))),
+        # And ('zpt > 0.25 mag of nominal', (ccds.zpt > (z0 + 0.25))),
+        for name,crit in [
+            ('exptime < 30 s', (ccds.exptime < 30)),
+            ('ccdnmatch < 20', (ccds.ccdnmatch < 20)),
+            ('abs(zpt - ccdzpt) > 0.1',
+             (np.abs(ccds.zpt - ccds.ccdzpt) > 0.1)),
+            ('zpt < 0.5 mag of nominal',
+             (ccds.zpt < (z0 - 0.5))),
+            ('zpt > 0.18 mag of nominal',
+             (ccds.zpt > (z0 + 0.18))),
+        ]:
+            good[crit] = False
+            #continue as usual
+            n = sum(good)
+            print('Flagged', n0-n, 'more non-photometric using criterion:',
+                  name)
+            n0 = n
+        return np.flatnonzero(good)
+
+    @classmethod
+    def bad_exposures(self, survey, ccds):
+        '''
+        Returns an index array for the members of the table 'ccds'
+        that are good exposures (NOT flagged) in the bad_expid file.
+        '''
+        good = np.ones(len(ccds), bool)
+        print('WARNING: camera: %s not using bad_expid file' % '90prime')
+        return np.flatnonzero(good)
+
     def __init__(self, survey, t):
         super(BokImage, self).__init__(survey, t)
         self.pixscale= 0.455
@@ -48,14 +97,17 @@ class BokImage(CPImage, CalibMixin):
     def __str__(self):
         return 'Bok ' + self.name
 
-    def read_sky_model(self, **kwargs):
-        ## HACK -- create the sky model on the fly
-        img = self.read_image()
-        sky = np.median(img)
-        print('Median "sky" model:', sky)
-        sky = ConstantSky(sky)
-        sky.version = '0'
-        sky.plver = '0'
+
+    def read_sky_model(self, imghdr=None, **kwargs):
+        ''' Bok CP does same sky subtraction as Mosaic CP, so just
+        use a constant sky level with value from the header.
+        '''
+        from tractor.sky import ConstantSky
+        # Frank reocmmends SKYADU 
+        phdr = self.read_image_primary_header()
+        sky = ConstantSky(phdr['SKYADU'])
+        sky.version = ''
+        sky.plver = phdr.get('PLVER', '').strip()
         return sky
 
     def read_dq(self, **kwargs):

@@ -166,6 +166,98 @@ if __name__ == '__main__':
     from glob import glob
     from astrometry.util.fits import merge_tables, fits_table
 
+    HST = fits_table('acs-gc.fits')
+    print(len(HST), 'ACS sources')
+    HST.cut(HST.imaging == 'COSMOS ')
+    print(len(HST), 'in COSMOS')
+    HST.about()
+
+    for dirnm in ['cosmos-50-rex', 'cosmos-51-rex', 'cosmos-52-rex']:
+        fns = glob(os.path.join(dirnm, 'metrics', '*', 'all-models-*.fits'))
+        T = merge_tables([fits_table(fn) for fn in fns])
+        print(len(T), 'sources')
+        T.about()
+        #T.cut(T.primary)
+        
+        HI,HJ,d = match_radec(T.psf_ra, T.psf_dec, HST.raj2000, HST.dej2000,
+                              1./3600.)
+        print(len(HI), 'matched to HST')
+        
+        plt.clf()
+        for t in ['PSF ', 'REX ', 'EXP ', 'DEV ']:
+            K = np.flatnonzero(T.type[HI] == t)
+            plt.plot(np.clip(T.rex_shapeexp_r[HI[K]], 1e-2, 1e2),
+                     HST.s_g1[HJ[K]], '.', label=t,
+                     alpha=0.1)
+        plt.xlabel('REX radius (arcsec)')
+        plt.ylabel('HST S/G')
+        #plt.xscale('symlog')
+        plt.xscale('log')
+        plt.title(dirnm)
+        plt.legend()
+        ps.savefig()
+
+        plt.clf()
+        lo,hi = 0,1
+        ha = dict(range=(lo,hi), bins=50, histtype='step')
+        plt.subplot(2,1,1)
+        for t in ['PSF ', 'REX ', 'EXP ', 'DEV ']:
+            K = np.flatnonzero((T.type[HI] == t) * (HST.s_g1[HJ] < 0.5))
+            plt.hist(np.clip(T.rex_shapeexp_r[HI[K]], lo, hi), label=t, **ha)
+        plt.legend()
+        plt.xlabel('REX radius (arcsec)')
+        plt.title(dirnm + ': HST s_g1 < 0.5')
+        plt.subplot(2,1,2)
+        for t in ['PSF ', 'REX ', 'EXP ', 'DEV ']:
+            K = np.flatnonzero((T.type[HI] == t) * (HST.s_g1[HJ] > 0.5))
+            plt.hist(np.clip(T.rex_shapeexp_r[HI[K]], lo, hi), label=t, **ha)
+        plt.legend()
+        plt.xlabel('REX radius (arcsec)')
+        plt.title(dirnm + ': HST s_g1 > 0.5')
+        ps.savefig()
+
+
+        plt.clf()
+        #for t in ['PSF ', 'REX ', 'EXP ', 'DEV ']:
+        #K = np.flatnonzero((HST.s_g1[HJ] > 0.5) * (T.type[HI] == t))
+
+        K = np.flatnonzero((HST.s_g1[HJ] < 0.5))
+        plt.plot(np.clip(T.rex_shapeexp_r[HI[K]], 1e-2, 1),
+                 T.dchisq[HI[K],1] - T.dchisq[HI[K],0], 'r.', label='HST s_g1 < 0.5', alpha=0.25)
+
+        K = np.flatnonzero((HST.s_g1[HJ] > 0.5))
+        plt.plot(np.clip(T.rex_shapeexp_r[HI[K]], 1e-2, 1),
+                 T.dchisq[HI[K],1] - T.dchisq[HI[K],0], 'b.', label='HST s_g1 > 0.5', alpha=0.25)
+
+        plt.xlabel('REX radius (arcsec)')
+        plt.ylabel('dchisq(REX - PSF)')
+        plt.legend()
+        plt.title(dirnm)
+        plt.ylim(-5,15)
+        plt.xscale('log')
+        plt.xlim(0.98 * 1e-2, 1)
+        ps.savefig()
+
+        plt.clf()
+        plt.scatter(np.clip(T.rex_shapeexp_r[HI], 1e-2, 1),
+                    T.dchisq[HI,1] - T.dchisq[HI,0],
+                    s=5, c=HST.s_g1[HJ], edgecolor='none')
+        plt.xlabel('REX radius (arcsec)')
+        plt.ylabel('dchisq(REX - PSF)')
+        plt.legend()
+        plt.title(dirnm + ': color = HST s_g1')
+        plt.colorbar()
+        plt.ylim(-5,15)
+        plt.xscale('log')
+        plt.xlim(0.98 * 1e-2, 1)
+        ps.savefig()
+
+        
+    sys.exit(0)
+        
+
+
+    
 
     # From query of http://vizier.u-strasbg.fr/viz-bin/VizieR-3?-source=J/ApJS/200/9/acs-gc
     HST = fits_table('acs-gc.fits')
@@ -179,14 +271,6 @@ if __name__ == '__main__':
     # HST.s_g1 mostly 0, some 1, some in between.  star=1, gal=0
     # HST.fwhm1, re_s1,  does not correlate very well with s_g1
 
-    
-    if False:
-        # glob doesn't understand {}
-        #fns = glob('dr3/tractor/011/tractor-011?p0{02,05,07,10}.fits')
-        fns = glob('dr3/tractor/011/tractor-011?p0*.fits')
-        fns = [fn for fn in fns if fn[-7:-5] in ['02','05','07','10']]
-        assert(len(fns) == 16)
-
     for dirnm in ['cosmos-50', 'cosmos-51', 'cosmos-52']:
         fns = glob(os.path.join(dirnm, 'tractor', '*', 'tractor-*.fits'))
         T = merge_tables([fits_table(fn) for fn in fns])
@@ -196,15 +280,13 @@ if __name__ == '__main__':
         dchiexp  = T.dchisq[:,3]
         I = np.flatnonzero(dchiexp)
         T.cut(I)
+        print(len(T), 'have EXP models')
 
         dchipsf  = T.dchisq[:,0]
         dchisimp = T.dchisq[:,1]
         dchidev  = T.dchisq[:,2]
         dchiexp  = T.dchisq[:,3]
         #T.type0 = np.array([t[0] for t in T.type])
-
-        # which sources have galaxy models computed
-        print(len(T), 'have EXP models')
 
         x = np.maximum(dchiexp, dchidev) - np.maximum(dchipsf, dchisimp)
         y = x / dchipsf
@@ -231,7 +313,242 @@ if __name__ == '__main__':
         
         ps.savefig()
 
+
+
+
+        plt.clf()
+        plt.scatter(x[HI], y[HI], c=HST.re_g1[HJ], edgecolors='none', s=10,
+                    alpha=0.5, vmin=0, vmax=5)
+        plt.xlabel('dchi(EXP or DEV) - dchi(PSF or SIMP)')
+        plt.ylabel('[ dchi(EXP or DEV) - dchi(PSF or SIMP) ] / dchipsf')
+        plt.title(dirnm + ' (color = HST re_g1)')
+        plt.xscale('symlog')
+        plt.axis([1e1, 1e7, 0, 0.04])
+        plt.colorbar()
+        xx = np.logspace(1, 7, 200)
+        div = 0.001 + 1e-6 * xx
+        plt.plot(xx, div, 'r--', lw=2)
+        div2 = 0.003 + 1e-5 * xx
+        plt.plot(xx, div2, 'r:', lw=2)
+        ps.savefig()
+
+        print('FWHM range:', HST.fwhm1[HJ].min(), HST.fwhm1[HJ].max())
+        
+        plt.clf()
+        plt.scatter(x[HI], y[HI], c=HST.fwhm1[HJ], edgecolors='none', s=10,
+                    alpha=0.5, vmin=0, vmax=10)
+        plt.xlabel('dchi(EXP or DEV) - dchi(PSF or SIMP)')
+        plt.ylabel('[ dchi(EXP or DEV) - dchi(PSF or SIMP) ] / dchipsf')
+        plt.title(dirnm + ' (color = HST fwhm1)')
+        plt.xscale('symlog')
+        plt.axis([1e1, 1e7, 0, 0.04])
+        plt.colorbar()
+        xx = np.logspace(1, 7, 200)
+        div = 0.001 + 1e-6 * xx
+        plt.plot(xx, div, 'r--', lw=2)
+        div2 = 0.003 + 1e-5 * xx
+        plt.plot(xx, div2, 'r:', lw=2)
+        ps.savefig()
+
+        plt.clf()
+        plt.scatter(x[HI], y[HI], c=HST.re_s1[HJ], edgecolors='none', s=10,
+                    alpha=0.5, vmin=0, vmax=5)
+        plt.xlabel('dchi(EXP or DEV) - dchi(PSF or SIMP)')
+        plt.ylabel('[ dchi(EXP or DEV) - dchi(PSF or SIMP) ] / dchipsf')
+        plt.title(dirnm + ' (color = HST re_s1)')
+        plt.xscale('symlog')
+        plt.axis([1e1, 1e7, 0, 0.04])
+        plt.colorbar()
+        xx = np.logspace(1, 7, 200)
+        div = 0.001 + 1e-6 * xx
+        plt.plot(xx, div, 'r--', lw=2)
+        div2 = 0.003 + 1e-5 * xx
+        plt.plot(xx, div2, 'r:', lw=2)
+        ps.savefig()
+        
+
+
+
+
+        
     sys.exit(0)
+
+
+
+
+    
+    for dirnm in ['cosmos-50-rex', 'cosmos-51-rex', 'cosmos-52-rex']:
+        fns = glob(os.path.join(dirnm, 'tractor', '*', 'tractor-*.fits'))
+        T = merge_tables([fits_table(fn) for fn in fns])
+        print(len(T), 'sources')
+
+        print('PSF ', sum(T.type == 'PSF '))
+        print('REX ', sum(T.type == 'REX '))
+        print('EXP ', sum(T.type == 'EXP '))
+        print('DEV ', sum(T.type == 'DEV '))
+        print('COMP', sum(T.type == 'COMP'))
+
+        plt.clf()
+        R = np.flatnonzero(T.type == 'REX ')
+        E = np.flatnonzero(T.type == 'EXP ')
+        plt.hist(T.shapeexp_r[R], range=(0,2), bins=100, histtype='step', color='b', label='REX');
+        plt.hist(T.shapeexp_r[E], range=(0,2), bins=100, histtype='step', color='r', label='EXP');
+        plt.xlabel('Radius (arcsec)')
+        plt.legend()
+        plt.title(dirnm)
+        plt.ylim(0, 2700)
+        ps.savefig()
+
+        I1 = np.flatnonzero((T.type == 'REX ') * (T.shapeexp_r < 0.1))
+        I2 = np.flatnonzero((T.type == 'REX ') * (T.shapeexp_r > 0.3) *
+                            (T.shapeexp_r < 0.5))
+        I3 = np.flatnonzero(T.type == 'PSF ')
+        I4 = np.flatnonzero((T.type == 'REX ') * (T.shapeexp_r > 0.1) *
+                            (T.shapeexp_r < 0.3))
+        I5 = np.flatnonzero(T.type == 'EXP ')
+        
+        print(len(I1), 'REX with r < 0.1')
+        print(len(I2), 'REX with r between 0.3 and 0.5')
+        print(len(I3), 'PSF')
+
+        lab1 = 'REX r < 0.1'
+        lab4 = 'REX r from 0.1 to 0.3'
+        lab2 = 'REX r from 0.3 to 0.5'
+        lab3 = 'PSF'
+        lab5 = 'EXP'
+        
+        plt.clf()
+        lo,hi = -10,10
+        plt.hist(np.clip(T.dchisq[I1,1] - T.dchisq[I1,0], lo, hi), bins=100, range=(lo,hi), histtype='step', color='b', label=lab1)
+        plt.hist(np.clip(T.dchisq[I4,1] - T.dchisq[I4,0], lo, hi), bins=100, range=(lo,hi), histtype='step', color='m', label=lab4)
+        plt.hist(np.clip(T.dchisq[I2,1] - T.dchisq[I2,0], lo, hi), bins=100, range=(lo,hi), histtype='step', color='r', label=lab2)
+        plt.hist(np.clip(T.dchisq[I3,1] - T.dchisq[I3,0], lo, hi), bins=100, range=(lo,hi), histtype='step', color='g', label=lab3)
+        plt.xlabel('dchisq(REX - PSF)')
+        plt.legend()
+        plt.title(dirnm)
+        plt.xlim(lo,hi)
+        plt.ylim(0,4000)
+        ps.savefig()
+
+        T.rmag = -2.5 * (np.log10(T.decam_flux[:,2]) - 9.)
+        
+        plt.clf()
+        lo,hi = 20,25
+        plt.hist(np.clip(T.rmag[I1], lo, hi), bins=50, range=(lo,hi), histtype='step', color='b', label=lab1)
+        #plt.hist(np.clip(T.rmag[I4], lo, hi), bins=50, range=(lo,hi), histtype='step', color='m', label=lab4)
+        plt.hist(np.clip(T.rmag[I2], lo, hi), bins=50, range=(lo,hi), histtype='step', color='r', label=lab2)
+        plt.hist(np.clip(T.rmag[I3], lo, hi), bins=50, range=(lo,hi), histtype='step', color='g', label=lab3)
+        plt.xlabel('r mag')
+        plt.legend()
+        plt.title(dirnm)
+        plt.xlim(lo,hi)
+        ps.savefig()
+
+        plt.clf()
+        plt.plot(T.rmag[I1], T.dchisq[I1,1] - T.dchisq[I1,0], 'b.', alpha=0.2, label=lab1) 
+        plt.plot(T.rmag[I4], T.dchisq[I4,1] - T.dchisq[I4,0], 'm.', alpha=0.2, label=lab4) 
+        plt.plot(T.rmag[I2], T.dchisq[I2,1] - T.dchisq[I2,0], 'r.', alpha=0.2, label=lab2)
+        plt.plot(T.rmag[I3], T.dchisq[I3,1] - T.dchisq[I3,0], 'g.', alpha=0.2, label=lab3)
+        plt.plot(T.rmag[I5], T.dchisq[I5,1] - T.dchisq[I5,0], 'k.', alpha=0.2, label=lab5)
+        plt.xlabel('r mag')
+        plt.ylabel('dchisq(REX - PSF)')
+        plt.legend()
+        plt.title(dirnm)
+        plt.ylim(-20, 60)
+        plt.xlim(17, 27)
+        ps.savefig()
+
+        plt.clf()
+        plt.plot(T.rmag[I1], T.shapeexp_r[I1], 'b.', alpha=0.2, label=lab1) 
+        plt.plot(T.rmag[I4], T.shapeexp_r[I4], 'm.', alpha=0.2, label=lab4) 
+        plt.plot(T.rmag[I2], T.shapeexp_r[I2], 'r.', alpha=0.2, label=lab2)
+        #plt.plot(T.rmag[I3], T.shapeexp_r[I3], 'g.', alpha=0.2, label='PSF')
+        plt.xlabel('r mag')
+        plt.ylabel('radius (arcsec)')
+        plt.legend()
+        plt.title(dirnm)
+        plt.ylim(0, 0.5)
+        plt.xlim(17, 27)
+        ps.savefig()
+
+        plt.clf()
+        plt.scatter(T.rmag, T.shapeexp_r, c=T.dchisq[:,1] - T.dchisq[:,0], s=5, edgecolor='none',
+                    vmin=-4, vmax=10)
+        plt.xlabel('r mag')
+        plt.ylabel('radius (arcsec)')
+        plt.colorbar()
+        plt.title(dirnm + ': color: dchisq(REX - PSF)')
+        plt.ylim(0, 0.5)
+        plt.xlim(15, 27)
+        ps.savefig()
+
+        
+        
+    HST = fits_table('cosmos-acs-iphot-sub.fits')
+    print(len(HST), 'ACS sources')
+
+    for dirnm in ['cosmos-50', 'cosmos-51', 'cosmos-52']:
+        fns = glob(os.path.join(dirnm, 'tractor', '*', 'tractor-*.fits'))
+        T = merge_tables([fits_table(fn) for fn in fns])
+        print(len(T), 'sources')
+
+        # which sources have galaxy models computed
+        dchiexp  = T.dchisq[:,3]
+        I = np.flatnonzero(dchiexp)
+        T.cut(I)
+        print(len(T), 'have EXP models')
+
+        dchipsf  = T.dchisq[:,0]
+        dchisimp = T.dchisq[:,1]
+        dchidev  = T.dchisq[:,2]
+        dchiexp  = T.dchisq[:,3]
+
+        x = np.maximum(dchiexp, dchidev) - np.maximum(dchipsf, dchisimp)
+        y = x / dchipsf
+
+        HI,HJ,d = match_radec(T.ra, T.dec, HST.ra, HST.dec, 1./3600.)
+        print(len(HI), 'matched to HST')
+
+        Kgal  = np.flatnonzero(HST.mu_class[HJ] == 1)
+        Kstar = np.flatnonzero(HST.mu_class[HJ] == 2)
+
+        Igal  = HI[Kgal]
+        Istar = HI[Kstar]
+
+        plt.clf()
+        plt.plot(x[Igal],  y[Igal],  'bo', mec='none', mfc='b', ms=3, alpha=0.5)
+        plt.plot(x[Istar], y[Istar], 'ro', mec='none', mfc='r', ms=3, alpha=0.5)
+        plt.xlabel('dchi(EXP or DEV) - dchi(PSF or SIMP)')
+        plt.ylabel('[ dchi(EXP or DEV) - dchi(PSF or SIMP) ] / dchipsf')
+        plt.title(dirnm + ' (color = HST star/gal)')
+        plt.xscale('symlog')
+        plt.axis([1e1, 1e7, 0, 0.04])
+
+        xx = np.logspace(1, 7, 200)
+        div = 0.001 + 1e-6 * xx
+        plt.plot(xx, div, 'r--', lw=2)
+
+        div2 = 0.003 + 1e-5 * xx
+        plt.plot(xx, div2, 'r:', lw=2)
+        
+        ps.savefig()
+        
+    sys.exit(0)
+
+        
+    
+    if False:
+        # glob doesn't understand {}
+        #fns = glob('dr3/tractor/011/tractor-011?p0{02,05,07,10}.fits')
+        fns = glob('dr3/tractor/011/tractor-011?p0*.fits')
+        fns = [fn for fn in fns if fn[-7:-5] in ['02','05','07','10']]
+        assert(len(fns) == 16)
+
+
+
+    # wget "http://irsa.ipac.caltech.edu/data/COSMOS/tables/photometry/cosmos_acs_iphot_200709.tbl"
+    # astrometry/bin/text2fits -S 124 -f jddddddddddddddddddddjddjjjjjjdddddddddddddddjdddddddsjdddjj -H "number mag_iso magerr_iso mag_isocor magerr_isocor mag_petro magerr_petro petro_radius mag_aper magerr_aper mag_auto magerr_auto mag_best magerr_best flux_auto fluxerr_auto kron_radius background threshold flux_max flux_radius isoarea_image x_image y_image xmin_image ymin_image xmax_image ymax_image xpeak_image ypeak_image alphapeak_j2000 deltapeak_j2000 a_image b_image ra dec theta_image mu_threshold mu_max isoarea_world x_world y_world a_world b_world theta_world flags fwhm_image fwhm_world cxx_image cyy_image cxy_image elongation class_star field mu_class x y z spt_ind cntr" cosmos_acs_iphot_200709.tbl cosmos-acs-iphot-200709.fits
+    # fitscopy cosmos-acs-iphot-200709.fits"[col ra;dec;mu_class]" cosmos-acs-iphot-sub.fits
 
 
     for dirnm in ['cosmos-50', 'cosmos-51', 'cosmos-52']:

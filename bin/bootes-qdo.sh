@@ -2,21 +2,12 @@
 
 set -x
 
-allthreads=24
-runbrick_threads=6
-export OMP_NUM_THREADS=$runbrick_threads
-
-export PYTHONPATH=$CODE_DIR/legacypipe/py:${PYTHONPATH}
-cd $CODE_DIR/legacypipe/py
-
 brick="$1"
-export run_name=dr4-qdo
-# DR4
-export outdir=/scratch1/scratchdirs/desiproc/DRs/data-releases/dr4
-qdo_table=dr4v2
+#export run_name=bootes-qdo
 # Bootes
-#export outdir=/scratch1/scratchdirs/desiproc/DRs/data-releases/dr4-bootes/90primeTPV_mzlsv2thruMarch19/wisepsf
-#qdo_table=dr4-bootes
+export outdir=/scratch1/scratchdirs/desiproc/DRs/data-releases/dr4-bootes/90primeTPV_mzlsv2thruMarch19/wisepsf
+run_name=dr4-bootes
+threads=24
 mkdir -p $outdir
 
 
@@ -24,8 +15,6 @@ mkdir -p $outdir
 # https://software.intel.com/en-us/articles/using-threaded-intel-mkl-in-multi-thread-application
 export MKL_NUM_THREADS=1
 # Try limiting memory to avoid killing the whole MPI job...
-# 67 kbytes is 64GB (mem of Edison node)
-ulimit -S -v 65000000
 ulimit -a
 
 bri="$(echo $brick | head -c 3)"
@@ -51,19 +40,19 @@ echo >> $log
 echo -e "\nStarting on ${NERSC_HOST} $(hostname)\n" >> $log
 echo "-----------------------------------------------------------------------------------------" >> $log
 
+export OMP_NUM_THREADS=$threads
 
 #module load psfex-hpcp
 #srun -n 1 -c 1 python python_test_qdo.py
 python legacypipe/runbrick.py \
-     --run $qdo_table \
+     --run $run_name \
      --brick $brick \
      --skip \
      --threads $OMP_NUM_THREADS \
-     --checkpoint $outdir/checkpoints/${bri}/${brick}.pickle \
-     --pickle "$outdir/pickles/${bri}/runbrick-%(brick)s-%%(stage)s.pickle" \
-     --outdir $outdir --nsigma 6 \
-     --no-write \
+     --outdir $outdir --nsigma 6 --force-all \
      >> $log 2>&1
+#--checkpoint $outdir/checkpoints/${bri}/${brick}.pickle \
+#--pickle "$outdir/pickles/${bri}/runbrick-%(brick)s-%%(stage)s.pickle" \
 # Bootes
 #--run dr4-bootes \
 
@@ -77,7 +66,5 @@ python legacypipe/runbrick.py \
 #
 echo $run_name DONE $SLURM_JOBID
 
-# SHARED
-#qdo launch DR4 1 --cores_per_worker 6 --batchqueue shared --walltime 00:55:00 --script ./dr4-qdo.sh --keep_env --batchopts "--mem=16GB --array=0-9"
-# MPI4PY 
-#qdo launch DR4 100 --cores_per_worker 24 --batchqueue regular --walltime 00:55:00 --script ./dr4-qdo.sh --keep_env --batchopts "-a 0-11"
+# Bootes
+#for i in `seq 1 131`;do qdo launch dr4Bootes3 1 --cores_per_worker 12 --batchqueue shared --walltime 1:00:00 --keep_env --script ./bootes-qdo.sh;done

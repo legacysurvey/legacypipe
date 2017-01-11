@@ -10,7 +10,7 @@
 #fi
 
 export run_name=dr4-bootes
-export outdir=/scratch1/scratchdirs/desiproc/DRs/data-releases/dr4-bootes/90primeTPV_mzlsv2thruMarch19
+export outdir=/scratch1/scratchdirs/desiproc/DRs/data-releases/dr4-bootes/90primeTPV_mzlsv2thruMarch19/wisepsf_bash
 export statdir="${outdir}/progress"
 mkdir -p $statdir $outdir
 
@@ -22,14 +22,15 @@ for i in `find . -maxdepth 1 -type f -name "dr4-bootes.o*"|xargs grep "${run_nam
 #rm /scratch1/scratchdirs/desiproc/data-releases/dr3-mzls-bash/progress/*.txt
 
 # Submit jobs
-bricklist=$LEGACY_SURVEY_DIR/bricks-bothcameras.txt
+#bricklist=$LEGACY_SURVEY_DIR/bricks-bothcameras.txt
+bricklist=bootesbricks.txt
 if [ ! -e "$bricklist" ]; then
     echo file=$bricklist does not exist, quitting
     exit 999
 fi
 
-#for brick in `cat $bricklist`;do
-for brick in `cat testbrick.txt`;do
+#for brick in `cat bootesbricks.txt`;do
+for brick in `cat $bricklist`;do
     export brick="$brick"
     bri=$(echo $brick | head -c 3)
     tractor_fits=$outdir/tractor/$bri/tractor-$brick.fits

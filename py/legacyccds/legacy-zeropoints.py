@@ -183,6 +183,51 @@ def stdouterr_redirected(to=os.devnull, comm=None):
             
     return
 
+# From image.py
+# imgfn,maskfn = self.funpack_files(self.imgfn, self.dqfn, self.hdu, todelete)
+#for fn in todelete:
+#   os.unlink(fn)
+def funpack_files(imgfn, maskfn, hdu, todelete):
+    from legacypipe.survey import create_temp
+
+    tmpimgfn = None
+    tmpmaskfn = None
+    # For FITS files that are not actually fpack'ed, funpack -E
+    # fails.  Check whether actually fpacked.
+    fcopy = False
+    hdr = fitsio.read_header(imgfn, ext=hdu)
+    if not ((hdr['XTENSION'] == 'BINTABLE') and hdr.get('ZIMAGE', False)):
+        print('Image %s, HDU %i is not fpacked; just imcopying.' %
+              (imgfn,  hdu))
+        fcopy = True
+
+    tmpimgfn  = create_temp(suffix='.fits')
+    tmpmaskfn = create_temp(suffix='.fits')
+    todelete.append(tmpimgfn)
+    todelete.append(tmpmaskfn)
+
+    if fcopy:
+        cmd = 'imcopy %s"+%i" %s' % (imgfn, hdu, tmpimgfn)
+    else:
+        cmd = 'funpack -E %s -O %s %s' % (hdu, tmpimgfn, imgfn)
+    print(cmd)
+    if os.system(cmd):
+        raise RuntimeError('Command failed: ' + cmd)
+
+    if fcopy:
+        cmd = 'imcopy %s"+%i" %s' % (maskfn, hdu, tmpmaskfn)
+    else:
+        cmd = 'funpack -E %s -O %s %s' % (hdu, tmpmaskfn, maskfn)
+    print(cmd)
+    if os.system(cmd):
+        print('Command failed: ' + cmd)
+        M,hdr = self._read_fits(maskfn, hdu, header=True)
+        print('Read', M.dtype, M.shape)
+        fitsio.write(tmpmaskfn, M, header=hdr, clobber=True)
+
+    return tmpimgfn,tmpmaskfn
+
+
 def ptime(text,t0):
     tnow=Time()
     print('TIMING:%s ' % text,tnow-t0)
@@ -497,9 +542,9 @@ class Measurer(object):
         t0= ptime('import-statements-in-measure.run',t0)
 
         # Read the image and header.
-        print('Todo: read the ivar image')
-        img, hdr = self.read_image()
-        bitmask = self.read_bitmask()
+        hdr, img, bitmask = self.read_image_bitmask(funpack=False) #funpack makes it take longer
+        t0= ptime('read image, bitmask',t0)
+        #bitmask = self.read_bitmask()
 
         # Initialize and begin populating the output CCDs table.
         ccds = _ccds_table(self.camera)
@@ -541,7 +586,7 @@ class Measurer(object):
         ccdra, ccddec = self.wcs.pixelxy2radec((W+1) / 2.0, (H + 1) / 2.0)
         ccds['ra'] = ccdra   # [degree]
         ccds['dec'] = ccddec # [degree]
-        t0= ptime('read-image-getheader-info',t0)
+        t0= ptime('header-info',t0)
 
         # Measure the sky brightness and (sky) noise level.  Need to capture
         # negative sky.
@@ -657,10 +702,16 @@ class Measurer(object):
         surfb= surfb[ibright,:]
         # Non-linear least squares LM fit to Moffat Profile
         fwhm= np.zeros(surfb.shape[0])
-        if not self.verboseplots: 
-            for cnt in range(surfb.shape[0]):
-                popt, pcov = curve_fit(moffatPSF, radii, surfb[cnt,:], p0 = [1.5*surfb[cnt,0], 5.,2.])
-                fwhm[cnt]= popt[1]
+        if not self.verboseplots:
+            try: 
+                for cnt in range(surfb.shape[0]):
+                    popt, pcov = curve_fit(moffatPSF, radii, surfb[cnt,:], p0 = [1.5*surfb[cnt,0], 5.,2.])
+                    fwhm[cnt]= popt[1]
+            except RuntimeError:
+                # Optimal parameters not found for moffat fit
+                with open('zpts_bad_nofwhm.txt','a') as foo:
+                    foo.write('%s %s\n' % (self.fn,self.image_hdu))
+                return ccds, _stars_table()
         else: 
             plt.close()
             for cnt in range(surfb.shape[0]):
@@ -677,8 +728,19 @@ class Measurer(object):
         t0= ptime('fwhm-calculation',t0)
         
         # Now match against (good) PS1 stars 
-        # John cuts to magnitudes between 15 and 22
-        ps1 = ps1cat(ccdwcs=self.wcs).get_stars() #magrange=(15, 22))
+        try: 
+            ps1 = ps1cat(ccdwcs=self.wcs).get_stars() #magrange=(15, 22))
+        except IOError:
+            # The gaia file does not exist:
+            # e.g. /project/projectdirs/cosmo/work/gaia/chunks-ps1-gaia/chunk-*.fits
+            with open('zpts_bad_nogaiachunk.txt','a') as foo:
+                foo.write('%s %s\n' % (self.fn,self.image_hdu))
+            return ccds, _stars_table()
+        # Are there Good PS1 on this CCD?
+        if len(ps1) == 0:
+            with open('zpts_bad_nops1onccd.txt','a') as foo:
+                foo.write('%s %s\n' % (self.fn,self.image_hdu))
+            return ccds, _stars_table()
         good = (ps1.nmag_ok[:, 0] > 0)*(ps1.nmag_ok[:, 1] > 0)*(ps1.nmag_ok[:, 2] > 0)
         # Get Gaia ra,dec
         gdec=ps1.dec_ok-ps1.ddec/3600000.
@@ -701,7 +763,8 @@ class Measurer(object):
             return ccds, _stars_table()
     
         # Match GAIA and Our Data
-        m1, m2, d12 = match_radec(objra, objdec, gra, gdec, self.matchradius/3600.0)
+        m1, m2, d12 = match_radec(objra, objdec, gra, gdec, self.matchradius/3600.0,\
+                                  nearest=True)
         nmatch = len(m1)
         ccds['nmatch'] = nmatch
         print('{} GAIA sources match detected sources within {} arcsec.'.format(nmatch, self.matchradius))
@@ -723,9 +786,12 @@ class Measurer(object):
         stars['decdiff'] = (gdec[m2] - stars['dec']) * 3600.0
         stars['apmag'] = - 2.5 * np.log10(apflux[m1]) + zp0 + 2.5 * np.log10(exptime)
         # Add ps1 astrometric residuals for comparison
-        ps1_m1, ps1_m2, ps1_d12 = match_radec(objra, objdec, ps1.ra, ps1.dec, self.matchradius/3600.0)
-        stars['radiff_ps1'] = (ps1.ra[ps1_m2] - objra[ps1_m1]) * np.cos(np.deg2rad(objdec[ps1_m1])) * 3600.0
-        stars['decdiff_ps1'] = (ps1.dec[ps1_m2] - objdec[ps1_m1]) * 3600.0
+        ps1_m1, ps1_m2, ps1_d12 = match_radec(objra, objdec, ps1.ra, ps1.dec, self.matchradius/3600.0,\
+                                              nearest=True)
+        # If different number gaia matches versus ps1 matches, need to handle
+        num_gaia= len(stars['apmag'])
+        stars['radiff_ps1'] = (ps1.ra[ps1_m2][:num_gaia] - objra[ps1_m1][:num_gaia]) * np.cos(np.deg2rad(objdec[ps1_m1][:num_gaia])) * 3600.0
+        stars['decdiff_ps1'] = (ps1.dec[ps1_m2][:num_gaia] - objdec[ps1_m1][:num_gaia]) * 3600.0
         # Photometry
         # Unless we're calibrating the photometric transformation, bring PS1
         # onto the photometric system of this camera (we add the color term
@@ -787,8 +853,9 @@ class Measurer(object):
 
         t0= ptime('all-computations-for-this-ccd',t0)
         # Plots for comparing to Arjuns zeropoints*.ps
-        self.make_plots(stars,dmag,ccds['zpt'],ccds['transp'])
-        t0= ptime('made-plots',t0)
+        if self.verboseplots:
+            self.make_plots(stars,dmag,ccds['zpt'],ccds['transp'])
+            t0= ptime('made-plots',t0)
 
         # No longer neeeded: 
         # Fit each star with Tractor.
@@ -893,10 +960,16 @@ class DecamMeasurer(Measurer):
         print('Hack! Using a constant gain!')
         corr = 2.5 * np.log10(self.gain)
         #corr = 2.5 * np.log10(self.gain) - 2.5 * np.log10(self.exptime)
-        self.zp0 = dict(z = 26.552 + corr)
-        self.sky0 = dict(z = 18.46 + corr)
-        self.k_ext = dict(z = 0.06)
-
+        #corr = 0.
+        # From /global/homes/a/arjundey/idl/pro/observing/decstat.pro
+        # 1/6/2017
+        self.zp0 =  dict(g = 26.610,r = 26.818,z = 26.484)
+        self.sky0 = dict(g = 22.04,r = 20.91,z = 18.46)
+        for b in self.zp0.keys():
+            self.zp0[b]-= corr  # decstat.pro
+            #self.sky0[b]+= corr
+        self.k_ext = dict(g = 0.17,r = 0.10,z = 0.06)
+    
     def get_band(self):
         band = self.primhdr['FILTER']
         band = band.split()[0]
@@ -906,18 +979,42 @@ class DecamMeasurer(Measurer):
         from legacyanalysis.ps1cat import ps1_to_decam
         return ps1_to_decam(ps1stars, band)
 
+    def read_image_bitmask(self,funpack=True):
+        '''funpack, then read'''
+        imgfn= self.fn
+        maskfn= self.fn.replace('ooi','ood')
+        print('Reading %s %s' % (imgfn,maskfn))
+        if funpack:
+            todelete=[]
+            imgfn,maskfn = funpack_files(imgfn, maskfn, self.ext, todelete)
+            # Read
+            img, hdr = fitsio.read(imgfn, ext=self.ext, header=True)
+            mask, junk = fitsio.read(maskfn, ext=self.ext, header=True)
+            for fn in todelete:
+               os.unlink(fn)
+        else:
+            # Read
+            img, hdr = fitsio.read(imgfn, ext=self.ext, header=True)
+            mask, junk = fitsio.read(maskfn, ext=self.ext, header=True)
+        return hdr,img,mask
+    
     def read_image(self):
         '''Read the image and header.  Convert image from ADU to electrons.'''
         img, hdr = fitsio.read(self.fn, ext=self.ext, header=True)
         #fits=fitsio.FITS(fn,mode='r',clobber=False,lower=True)
         #hdr= fits[0].read_header()
         #img= fits[ext].read()
-        img *= self.gain
+        #img *= self.gain
         #img *= self.gain / self.exptime
         return img, hdr
      
     def get_wcs(self):
         return wcs_pv2sip_hdr(self.hdr) # PV distortion
+    
+    def read_bitmask(self):
+        fn= self.fn.replace('ooi','ood')
+        mask, junk = fitsio.read(fn, ext=self.ext, header=True)
+        return mask
 
 class Mosaic3Measurer(Measurer):
     '''Class to measure a variety of quantities from a single Mosaic3 CCD.
@@ -1073,7 +1170,22 @@ def measure_image(img_fn, **measureargs):
 
     print('Working on image {}'.format(img_fn))
 
-    primhdr = fitsio.read_header(img_fn)
+    # Fitsio can throw error: ValueError: CONTINUE not supported
+    try:
+        primhdr = fitsio.read_header(img_fn)
+    except ValueError:
+        # skip zpt for this image 
+        with open('zpts_bad_headerskipimage.txt','a') as foo:
+            foo.write('%s\n' % (img_fn,))
+        ccds = []
+        stars = []
+        for ext in extlist:
+            ccds.append( _ccds_table() )
+            stars.append( _stars_table() )
+        ccds = vstack(ccds)
+        stars = vstack(stars)
+        return ccds,stars
+    
     camera, extlist = camera_name(primhdr)
     nnext = len(extlist)
 
@@ -1164,15 +1276,18 @@ class Compare2Arjuns(object):
             self.path_to_arjuns= '/scratch2/scratchdirs/arjundey/ZeroPoints_MzLSv2'
         elif self.camera == '90prime':
             self.path_to_arjuns= '/scratch2/scratchdirs/arjundey/ZeroPoints_BASS'
+        elif self.camera == 'decam':
+            self.path_to_arjuns= '/global/project/projectdirs/cosmo/data/legacysurvey/dr3'
 
         # Get legacy zeropoints, and corresponding ones from Arjun
         self.makeBigTable(zptfn_list)
         self.ccd_cuts()
         # Compare values
         self.getKeyTypes()
-        self.compare_alphabetic()
+        #self.compare_alphabetic()
         self.compare_numeric()
-        self.compare_numeric_stars()
+        if self.camera in ['90prime','mosaic']:
+            self.compare_numeric_stars()
 
     def get_camera(self,zptfn_list):
         fns= np.loadtxt(zptfn_list,dtype=str)
@@ -1201,7 +1316,7 @@ class Compare2Arjuns(object):
         fns= np.loadtxt(zptfn_list,dtype=str)
         if fns.size == 1:
             fns= [str(fns)]
-        for cnt,fn in enumerate(fns):
+        for cnt,fn in enumerate(fns[:2]):
             print('%d/%d: ' % (cnt+1,len(fns)))
             try:
                 # Legacy zeropoints, use Arjun's naming scheme
@@ -1209,34 +1324,64 @@ class Compare2Arjuns(object):
                 fn_stars= fn.replace('.fits','-stars.fits')
                 legacy_stars_tb= self.read_legacy(fn_stars,reset_names=True,stars=True)
                 # Corresponding zeropoints from Arjun
-                arjun_fn= os.path.basename(fn)
-                index= arjun_fn.find('zeropoint') # Check for a prefix
-                if index > 0: arjun_fn= arjun_fn.replace(arjun_fn[:index],'')
-                arjun_fn= os.path.join(self.path_to_arjuns, arjun_fn)
-                arjun_tb= fits_table(arjun_fn)  
-                arjun_stars_tb= fits_table(arjun_fn.replace('zeropoint-','matches-') )
+                if self.camera in ['90prime','mosaic']:        
+                    arjun_fn= os.path.basename(fn)
+                    index= arjun_fn.find('zeropoint') # Check for a prefix
+                    if index > 0: arjun_fn= arjun_fn.replace(arjun_fn[:index],'')
+                    arjun_fn= os.path.join(self.path_to_arjuns, arjun_fn)
+                    arjun_tb= fits_table(arjun_fn)  
+                    arjun_stars_tb= fits_table(arjun_fn.replace('zeropoint-','matches-') )
                 # If here, was able to read all 4 tables, store in Big Table
                 self.legacy.append( legacy_tb ) 
                 self.legacy_stars.append( legacy_stars_tb )
-                self.arjun.append( arjun_tb ) 
-                self.arjun_stars.append( arjun_stars_tb )
+                if self.camera in ['90prime','mosaic']:        
+                    self.arjun.append( arjun_tb ) 
+                    self.arjun_stars.append( arjun_stars_tb )
             except IOError:
-                print('WARNING: one of these cannot be read: %s\n%s\n%s\n%s\n' % \
-                     (fn,fn.replace('.fits','-stars.fits'),\
-                      arjun_fn,arjun_fn.replace('zeropoint-','matches-'))
+                print('WARNING: one of these cannot be read: %s\n%s\n' % \
+                     (fn,fn.replace('.fits','-stars.fits'))
                      )
+                if self.camera in ['90prime','mosaic']:        
+                    print('WARNING: one of these cannot be read: %s\n%s\n' % \
+                         (arjun_fn,arjun_fn.replace('zeropoint-','matches-'))
+                         )
         self.legacy= merge_tables(self.legacy, columns='fillzero') 
         self.legacy_stars= merge_tables(self.legacy_stars, columns='fillzero') 
-        self.arjun= merge_tables(self.arjun, columns='fillzero') 
-        self.arjun_stars= merge_tables(self.arjun_stars, columns='fillzero')
+        if self.camera in ['90prime','mosaic']:        
+            self.arjun= merge_tables(self.arjun, columns='fillzero') 
+            self.arjun_stars= merge_tables(self.arjun_stars, columns='fillzero')
+        if self.camera == 'decam':
+            # Get zpts from dr3 ccds file
+            dr3= fits_table(os.path.join(self.path_to_arjuns,'survey-ccds-decals.fits.gz'))
+            # Unique name for later sorting
+            # DR3
+            fns=np.array([os.path.basename(nm) for nm in dr3.image_filename])
+            fns=np.char.strip(fns)
+            unique=np.array([nm.replace('.fits.fz','_')+ccdnm for nm,ccdnm in zip(fns,dr3.ccdname)])
+            dr3.set('unique',unique)
+            # Legacy zeropoints
+            unique=np.array([nm.replace('.fits.fz','_')+ccdnm for nm,ccdnm in zip(self.legacy.filename,self.legacy.ccdname)])
+            self.legacy.set('unique',unique)
+            # Cut to legacy zeropoints images
+            keep= np.zeros(len(dr3)).astype(bool)
+            for fn in self.legacy.filename:
+                keep[fns == fn] = True
+            dr3.cut(keep)
+            # Sort so they match
+            self.legacy= self.legacy[ np.argsort(dr3.unique) ]
+            self.arjun= dr3[ np.argsort(dr3.unique) ]
+            assert(len(self.arjun) == len(self.legacy))
     
     def ccd_cuts(self):
         keep= np.zeros(len(self.legacy)).astype(bool)
         for tab in [self.legacy,self.arjun]:
-            if self.camera == 'mosaic':
-                keep[ (tab.exptime > 40.)*(tab.ccdnmatch > 50)*(tab.ccdzpt > 25.8) ] = True
-            elif self.camera == '90prime':
-                keep[ (tab.ccdzpt >= 20.)*(tab.ccdzpt <= 30.) ] = True
+            #if self.camera == 'mosaic':
+            #    keep[ (tab.exptime > 40.)*(tab.ccdnmatch > 50)*(tab.ccdzpt > 25.8) ] = True
+            #elif self.camera == '90prime':
+            #    keep[ (tab.ccdzpt >= 20.)*(tab.ccdzpt <= 30.) ] = True
+            keep[ (tab.exptime >= 30)*\
+                  (tab.ccdnmatch >= 20)*\
+                  (np.abs(tab.zpt - tab.ccdzpt) <= 0.1) ]= True
         self.legacy.cut(keep)
         self.arjun.cut(keep)
 
@@ -1304,7 +1449,15 @@ class Compare2Arjuns(object):
         legacy=fits_table(zptfn)
         if reset_names:
             for key in translate.keys():
+                # zptavg --> zpt can overwrite zpt if in that order
+                if key in ['zpt','zptavg']:
+                    continue
                 legacy.rename(key, translate[key]) #(old,new)
+        if not stars:
+            for key in ['zpt','zptavg']:
+                if not key in legacy.get_columns():
+                    raise ValueError
+                legacy.rename(key, translate[key])
         return legacy
 
 
@@ -1356,6 +1509,10 @@ class Compare2Arjuns(object):
             plt.subplots_adjust(hspace=0.4,wspace=0.3)
             xlims,ylims= None,None
             for cnt,key in enumerate(self.numeric_keys):
+                if self.camera == 'decam':
+                    if key in ['ccddec','ccdra','ccdhdunum',\
+                               'naxis2','naxis1','ccdrarms','ccddecrms']:
+                        continue
                 x= self.arjun.get(key)
                 ti= 'Labels: x-axis = A, '
                 if doplot == 'dpercent':

@@ -1215,16 +1215,19 @@ Now using the current directory as LEGACY_SURVEY_DIR, but this is likely to fail
         tims = mp.map(read_one_tim, args)
         return tims
     
-    def find_ccds(self, expnum=None, ccdname=None):
+    def find_ccds(self, expnum=None, ccdname=None, camera=None):
         '''
         Returns a table of CCDs matching the given *expnum* (exposure
-        number, integer) and *ccdname* (string).
+        number, integer), *ccdname* (string), and *camera* (string),
+        if given.
         '''
         T = self.get_ccds_readonly()
         if expnum is not None:
             T = T[T.expnum == expnum]
         if ccdname is not None:
             T = T[T.ccdname == ccdname]
+        if camera is not None:
+            T = T[T.camera == camera]
         return T
 
     def photometric_ccds(self, ccds):
@@ -1246,6 +1249,27 @@ Now using the current directory as LEGACY_SURVEY_DIR, but this is likely to fail
             if len(Igood):
                 good[Icam[Igood]] = True
         return np.flatnonzero(good)
+
+    def bad_exposures(self, ccds):
+        '''
+        Returns an index array for the members of the table 'ccds'
+        that are good exposures (NOT flagged) in the bad_expid file.
+        
+        Default is to return all CCDs.
+        '''
+        cameras = np.unique(ccds.camera)
+        print('Finding bad_expid exposures.  Cameras:', cameras)
+        good = np.zeros(len(ccds), bool)
+        for cam in cameras:
+            imclass = self.image_class_for_camera(cam)
+            Icam = np.flatnonzero(ccds.camera == cam)
+            print('Checking', len(Icam), 'images from camera', cam)
+            Igood = imclass.bad_exposures(self, ccds[Icam])
+            print('Keeping', len(Igood), 'unflagged CCD exposures from camera', cam)
+            if len(Igood):
+                good[Icam[Igood]] = True
+        return np.flatnonzero(good)
+
 
     def apply_blacklist(self, ccds):
         '''

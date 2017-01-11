@@ -26,7 +26,7 @@ if [ "$NERSC_HOST" == "edison" ]; then
 
   # NERSC modules
   #  module load tractor-hpcp
-  module load astrometry_net-hpcp
+  # module load astrometry_net-hpcp
   module load astropy-hpcp
   module load scipy-hpcp
   module load matplotlib-hpcp
@@ -38,6 +38,8 @@ if [ "$NERSC_HOST" == "edison" ]; then
   #module load psfex
   module load postgresql-hpcp
   module load psycopg2-hpcp
+  module load ipython-hpcp
+  module load galsim-hpcp
   
   # Needed during building Astrometry.net, but not runtime.
   # module load swig-hpcp
@@ -52,7 +54,7 @@ if [ "$NERSC_HOST" == "edison" ]; then
 
   # unneeded, as far as I know...
   module unload pyyaml-hpcp
-  module unload ipython-hpcp
+  ##module unload ipython-hpcp
   module unload cython-hpcp
   module unload rca
   module unload curl
@@ -71,17 +73,19 @@ if [ "$NERSC_HOST" == "edison" ]; then
   module unload yaml-hpcp
   module unload curl-hpcp
   module unload git-hpcp
-  module unload boost-hpcp
+  ##module unload boost-hpcp # DON'T unload this, breaks galsim
   #module unload swig-hpcp
   module unload cmake-hpcp
   #module unload eigen-hpcp
   module unload sfftw-hpcp
   module unload plplot-hpcp
-  module unload setuptools-hpcp
+  ##module unload setuptools-hpcp # DON'T unload this, breaks galsim
   module unload m4-hpcp
   module unload termcap-hpcp
   module unload readline-hpcp
   module unload pkgconfig-hpcp
+  # Keep this one
+  module load psfex-hpcp
 
   export QDO_BATCH_PROFILE=edison
 
@@ -106,6 +110,10 @@ if [ "$NERSC_HOST" == "edison" ]; then
   export PATH=${CODE_DIR}/astrometry_kaylanb/lib/python/astrometry:${PATH}
   #PATH=${CODE_DIR}/astrometry_kaylanb/lib/python/astrometry/util:${PATH}
   #PATH=${CODE_DIR}/astrometry_kaylanb/lib/python/astrometry/blind:${PATH}
+  # Other packages
+  export PYTHONPATH=${CODE_DIR}/theValidator:${PYTHONPATH}
+  export PYTHONPATH=${CODE_DIR}/scikit-learn-0.18.1/kaylan_install/lib/python2.7/site-packages:$PYTHONPATH
+  export PYTHONPATH=${CODE_DIR}/scikit-image/kaylan_install/lib/python2.7/site-packages:$PYTHONPATH
 
 fi
 
