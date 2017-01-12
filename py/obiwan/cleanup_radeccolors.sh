@@ -4,7 +4,8 @@
 # For each one, it removes: /scratch2/scratchdirs/kaylanb/obiwan/eboss_ngc_good/input_sample/bybrick/eboss_ngcsample_1346p152_*.fits
 echo finding samples
 don=done_samples.txt
-#find /scratch2/scratchdirs/kaylanb/obiwan/eboss_ngc_good/input_sample/bybrick/eboss_ngcsample_*[pm][0-9][0-9][0-9].fits > $donecho removing samples
+find /scratch2/scratchdirs/kaylanb/obiwan/eboss_ngc_good/input_sample/bybrick/eboss_ngcsample_*[pm][0-9][0-9][0-9].fits > $don
+echo removing samples
 wc -l $don
 for fn in `cat $don`;do 
     if [ -e $fn ];then

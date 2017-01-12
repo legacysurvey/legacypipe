@@ -372,7 +372,10 @@ def merge_bybrick(bricks,outdir='',prefix='',cleanup=False):
                 rm_fns= get_brick_sample_fns(brickname=brick,outdir=outdir,prefix=prefix)
                 if not rm_fns is None:
                     print('removing files like: %s' % rm_fns[0])
-                    for rm_fn in rm_fns: os.remove(rm_fn)
+                    try:
+                        for rm_fn in rm_fns: os.remove(rm_fn)
+                    except OSError:
+                        pass
             continue 
         elif os.path.exists(outfn):
             # We are creating outfn, don't spend time deleting
