@@ -3,7 +3,7 @@ from astrometry.util.fits import *
 from astrometry.util.multiproc import *
 
 def get_cell((skycell, subcell)):
-    url = 'http://ps1images.stsci.edu/cgi-bin/ps1filenames.py?skycell=%i.%03i' % (skycell, subcell)
+    url = 'http://ps1images.stsci.edu/cgi-bin/ps1filenames.py?skycell=%i.%03i&type=stack,stack.wt,stack.mask,stack.exp,stack.num,stack.expwt,stack.psf,stack.mdc,stack.cmf' % (skycell, subcell)
     print('Getting', url)
     r = requests.get(url)
     lines = r.text.split('\n')
@@ -14,7 +14,6 @@ def get_cell((skycell, subcell)):
     lines = [l.split() for l in lines]
     T = fits_table()
     types = dict(projcell=np.int16, subcell=np.int16, ra=np.float64, dec=np.float64, mjd=None)
-    types['type'] =None
     for i,col in enumerate(cols.split()):
         tt = types.get(col, str)
         if tt is None:

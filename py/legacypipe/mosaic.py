@@ -87,16 +87,15 @@ class MosaicImage(CPImage, CalibMixin):
         # convert FWHM into pixel units
         self.fwhm /= self.pixscale
 
-    def read_sky_model(self, imghdr=None, **kwargs):
+    def read_sky_model(self, imghdr=None, primhdr=None, **kwargs):
         ''' The Mosaic CP does a good job of sky subtraction, so just
         use a constant sky level with value from the header.
         '''
         from tractor.sky import ConstantSky
         # Frank reocmmends SKYADU 
-        phdr = self.read_image_primary_header()
-        sky = ConstantSky(phdr['SKYADU'])
+        sky = ConstantSky(primhdr['SKYADU'])
         sky.version = ''
-        sky.plver = phdr.get('PLVER', '').strip()
+        sky.plver = primhdr.get('PLVER', '').strip()
         return sky
         
     def read_dq(self, **kwargs):

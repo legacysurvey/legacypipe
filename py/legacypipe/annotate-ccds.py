@@ -86,7 +86,7 @@ def main(outfn='ccds-annotated.fits', ccds=None):
 
     for iccd,ccd in enumerate(ccds):
         im = survey.get_image_object(ccd)
-        print('Reading CCD %i of %i:' % (iccd+1, len(ccds)), im)
+        print('Reading CCD %i of %i:' % (iccd+1, len(ccds)), im, 'file', ccd.image_filename, 'CCD', ccd.ccdname)
 
         X = im.get_good_image_subregion()
         for i,x in enumerate(X):
@@ -95,12 +95,15 @@ def main(outfn='ccds-annotated.fits', ccds=None):
 
         W,H = ccd.width, ccd.height
 
+        kwargs = dict(pixPsf=True, splinesky=True, subsky=False,
+                      pixels=False, dq=False, invvar=False)
+
+
         psf = None
         wcs = None
         sky = None
         try:
-            tim = im.get_tractor_image(pixPsf=True, splinesky=True, subsky=False,
-                                       pixels=False, dq=False, invvar=False)
+            tim = im.get_tractor_image(**kwargs)
 
         except:
             import traceback
