@@ -2,16 +2,32 @@
 
 #SBATCH -p shared
 #SBATCH -n 12
-#SBATCH --qos=scavenger
-#SBATCH --array=1-2000
+#SBATCH --array=1-5
 #SBATCH -t 01:00:00
 #SBATCH --account=desi
-#SBATCH -J OBIWAN
+#SBATCH -J OBIELG
 #SBATCH --mail-user=kburleigh@lbl.gov
 #SBATCH --mail-type=END,FAIL
 #SBATCH -L SCRATCH
 
-export runwhat=star
+#export runwhat=star
+#export runwhat=qso
+export runwhat=elg
+#export runwhat=lrg
+
+if [ "$runwhat" = "star" ]; then
+    export nobj=500
+elif [ "$runwhat" = "qso" ]; then
+    export nobj=500
+elif [ "$runwhat" = "elg" ]; then
+    export nobj=100
+elif [ "$runwhat" = "lrg" ]; then
+    export nobj=100
+else
+    echo runwhat=$runwhat not supported
+    exit
+fi
+
 #--qos=scavenger
 #-o DR4.o%j
 #-p shared
@@ -96,7 +112,7 @@ while true; do
     #qdo_table=dr4-bootes
 
     set -x
-    log="$outdir/logs/$brick/log.${SLURM_JOB_ID}_${SLURM_ARRAY_TASK_ID}"
+    log="$outdir/$objtype/$bri/$brick/rowstart${rowstart}/logs/log.${SLURM_JOB_ID}_${SLURM_ARRAY_TASK_ID}"
     mkdir -p $(dirname $log)
     echo Logging to: $log
     echo "-----------------------------------------------------------------------------------------" >> $log
@@ -106,6 +122,7 @@ while true; do
     date
     srun -n 1 -c $usecores python obiwan/decals_sim.py \
         --run $therun --objtype $objtype --brick $brick --rowstart $rowstart \
+        --nobj $nobj \
         --add_sim_noise --prefix $prefix --threads $OMP_NUM_THREADS \
         >> $log 2>&1 &
     wait
