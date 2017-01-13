@@ -292,7 +292,10 @@ class BuildStamp():
         """Initialize the BuildStamp object with the CCD-level properties we need."""
         self.band = tim.band.strip()
         # GSParams should be used when galsim object is initialized
-        self.gsparams = galsim.GSParams(maximum_fft_size=2L**30L,\
+        # MAX size for sersic: 
+        # https://github.com/GalSim-developers/GalSim/pull/450/commits/755bcfdca25afe42cccfd6a7f8660da5ecda2a65
+        MAX_FFT_SIZE=65536
+        self.gsparams = galsim.GSParams(maximum_fft_size=MAX_FFT_SIZE,\
                                         folding_threshold=folding_threshold) 
         #print('FIX ME!!!!!!!!!!!!!!!!!!!!!!!!!!!!')
         self.gsdeviate = galsim.BaseDeviate()
@@ -431,8 +434,11 @@ class BuildStamp():
         # Create localpsf object
         self.setlocal(obj)
         objflux = obj.get(self.band+'flux') # [nanomaggies]
-        galobj = galsim.Sersic(float(obj.get('sersicn')), half_light_radius=float(obj.get('rhalf')),\
-                            flux=objflux, gsparams=self.gsparams)
+        try:
+            galobj = galsim.Sersic(float(obj.get('sersicn')), half_light_radius=float(obj.get('rhalf')),\
+                                flux=objflux, gsparams=self.gsparams)
+        except:
+            raise ValueError 
         galobj = galobj.shear(q=float(obj.get('ba')), beta=float(obj.get('phi'))*galsim.degrees)
         stamp = self.convolve_and_draw(galobj)
         return stamp
@@ -526,6 +532,13 @@ def build_simcat(Samp=None,brickwcs=None, meta=None):
     if typ in ['elg','lrg']:
         for key,tab_key in zip(['sersicn','rhalf','ba','phi'],['n','re','ba','pa']):
             cat.set(key, Samp.get('%s_%s'%(typ,tab_key) ))
+        # Sersic n: GALSIM n = [0.3,6.2] for numerical stability,see
+        # https://github.com/GalSim-developers/GalSim/issues/{325,450}
+        # I'll use [0.4,6.1]
+        vals= cat.sersicn
+        vals[cat.sersicn < 0.4] = 0.4
+        vals[cat.sersicn > 6.1] = 6.1
+        cat.set('sersicn',vals)
         #cat['R50_1'] = Column(Samp.rhalf, dtype='f4')
         #cat['BA_1'] = Column(Samp.ba, dtype='f4')
         #cat['PHI_1'] = Column(Samp.phi, dtype='f4')
