@@ -247,9 +247,13 @@ def get_brick_sample_fn(brickname=None,seed=None,prefix=None):
 
 def get_brick_sample_fns(brickname=None,outdir='./',prefix=None):
     dr= get_bybrick_dir(outdir=outdir)
-    fn= get_brick_sample_fn(brickname=brickname,seed=1,prefix=prefix)
-    fn= os.path.join(dr,fn.replace('1.fits','*.fits') )
-    fns=glob(fn )
+    fn= get_brick_sample_fn(brickname=brickname,seed=239,prefix=prefix)
+    fn= os.path.join(dr,fn)
+    if os.path.exists(fn):
+        # Haven't been deleted yet, so glob for all of them
+        fn= os.path.join(dr,fn.replace('239.fits','*.fits') )
+        fns=glob(fn )
+    else: return None
     if not len(fns) > 0: 
         print('no fns found with wildcard: %s' % fn)
         with open(os.path.join(outdir,'nofns_wildcard.txt'),'a') as foo:
@@ -359,30 +363,40 @@ def organize_by_brick(sample_fns,sbricks,outdir=None,seed=None,prefix=None):
         with open(check_done,'w') as foo:
             foo.write('done')
 
-def merge_bybrick(bricks,outdir='',prefix=''):
+def merge_bybrick(bricks,outdir='',prefix='',cleanup=False):
     for brick in bricks:
         outfn= get_brick_merged_fn(brickname=brick,outdir=outdir,prefix=prefix) 
-        print('outfn=%s' % outfn)
-        if os.path.exists(outfn):
-            continue
-        fns= get_brick_sample_fns(brickname=brick,outdir=outdir,prefix=prefix)
-        if fns is None:
-            # Wildcard found nothing see outdir/nofns_wildcard.txt
+        if cleanup:
+            if os.path.exists(outfn):
+                # Safe to remove the pieces that went into outfn
+                rm_fns= get_brick_sample_fns(brickname=brick,outdir=outdir,prefix=prefix)
+                if not rm_fns is None:
+                    print('removing files like: %s' % rm_fns[0])
+                    try:
+                        for rm_fn in rm_fns: os.remove(rm_fn)
+                    except OSError:
+                        pass
             continue 
-        cats=[]
-        for i,fn in enumerate(fns):
-            print('reading %d/%d' % (i+1,len(fns)))
-            try: 
-                tab= fits_table(fn) 
-                cats.append( tab )
-            except IOError:
-                print('Fits file does not exist: %s' % fn)
-        cat= merge_tables(cats, columns='fillzero') 
-        cat.writeto(outfn)
-        print('Wrote %s' % outfn)
-        if os.path.exists(outfn):
-            rm_fns= get_brick_sample_fns(brickname=brick,outdir=outdir,prefix=prefix)
-            for rm_fn in rm_fns: os.remove(rm_fn) 
+        elif os.path.exists(outfn):
+            # We are creating outfn, don't spend time deleting
+            continue
+        else:
+            print('outfn=%s' % outfn)
+            fns= get_brick_sample_fns(brickname=brick,outdir=outdir,prefix=prefix)
+            if fns is None:
+                # Wildcard found nothing see outdir/nofns_wildcard.txt
+                continue 
+            cats=[]
+            for i,fn in enumerate(fns):
+                print('reading %d/%d' % (i+1,len(fns)))
+                try: 
+                    tab= fits_table(fn) 
+                    cats.append( tab )
+                except IOError:
+                    print('Fits file does not exist: %s' % fn)
+            cat= merge_tables(cats, columns='fillzero') 
+            cat.writeto(outfn)
+            print('Wrote %s' % outfn)
         
         
 
@@ -628,7 +642,7 @@ if __name__ == "__main__":
     tbegin=t0
     print('TIMING:after-imports ',datetime.datetime.now())
     parser = argparse.ArgumentParser(description='Generate a legacypipe-compatible CCDs file from a set of reduced imaging.')
-    parser.add_argument('--dowhat',choices=['sample','bybrick','merge','check'],action='store',help='slurm jobid',default='001',required=True)
+    parser.add_argument('--dowhat',choices=['sample','bybrick','merge','cleanup','check'],action='store',help='slurm jobid',default='001',required=True)
     parser.add_argument('--ra1',type=float,action='store',help='bigbox',required=True)
     parser.add_argument('--ra2',type=float,action='store',help='bigbox',required=True)
     parser.add_argument('--dec1',type=float,action='store',help='bigbox',required=True)
@@ -723,10 +737,10 @@ if __name__ == "__main__":
             #inds= np.array_split(inds,comm.size)[comm.rank]
             #btable.cut(inds)
             # Gather, done
-        elif args.dowhat == 'merge':
+        elif args.dowhat in ['merge','cleanup']:
             brickfn= os.path.join(args.outdir,'bricks_for_sample.txt')
+            # See if we can read text file as opposed to entire fits table
             if os.path.exists(brickfn):
-                # Quicker to read 1 column text file
                 bricks= np.loadtxt(brickfn,dtype=str)
                 bricks= np.array_split(bricks,comm.size)[comm.rank] 
             else:
@@ -738,8 +752,11 @@ if __name__ == "__main__":
                             for b in btable.brickname:
                                 foo.write('%s\n' % b)
                         print('Wrote %s' % brickfn) 
-            # Each task gets a list of bricks, merges sample for each brick, removes indiv brick samps 
-            merge_bybrick(bricks,outdir=args.outdir,prefix=args.prefix)
+            # Either create brick samples or remove them if all have been created and concatenated
+            cleanup=False 
+            if args.dowhat == 'cleanup':
+                cleanup=True
+            merge_bybrick(bricks,outdir=args.outdir,prefix=args.prefix,cleanup=cleanup)
         elif args.dowhat == 'check':
             fns=glob(os.path.join(args.outdir,'input_sample/bybrick/%ssample_*[0-9][0-9].fits' % args.prefix))
             if len(fns) == 0: raise ValueError
@@ -800,7 +817,7 @@ if __name__ == "__main__":
             #sample_fns= np.array_split(sample_fns,1)[0] 
             ## Loop over survey bricks, write brick sample files
             #organize_by_brick(sample_fns,btable,outdir=args.outdir,seed=seed,prefix=args.prefix)
-        elif args.dowhat == 'merge':
+        elif args.dowhat in ['merge','cleanup']:
             brickfn= os.path.join(args.outdir,'bricks_for_sample.txt')
             if os.path.exists(brickfn):
                 # Quicker to read 1 column text file
@@ -815,7 +832,11 @@ if __name__ == "__main__":
                             foo.write('%s\n' % b)
                     print('Wrote %s' % brickfn) 
             # Each task gets a list of bricks, merges sample for each brick, removes indiv brick samps 
-            merge_bybrick(bricks,outdir=args.outdir,prefix=args.prefix)
+            cleanup=False 
+            if args.dowhat == 'cleanup':
+                cleanup=True
+            print('cleanup=',cleanup)
+            merge_bybrick(bricks,outdir=args.outdir,prefix=args.prefix,cleanup=cleanup)
         elif args.dowhat == 'check':
             fns=glob(os.path.join(args.outdir,'input_sample/bybrick/%ssample_*[0-9][0-9].fits' % args.prefix))
             if len(fns) == 0: raise ValueError

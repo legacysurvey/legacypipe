@@ -2,15 +2,15 @@
 
 #SBATCH -p shared
 #SBATCH -n 12
-#SBATCH --array=1-1000
-#SBATCH -t 04:00:00
+#SBATCH --qos=scavenger
+#SBATCH --array=1-3000
+#SBATCH -t 08:00:00
 #SBATCH --account=desi
 #SBATCH -J DR4
 #SBATCH --mail-user=kburleigh@lbl.gov
 #SBATCH --mail-type=END,FAIL
 #SBATCH -L SCRATCH
 
-#--qos=scavenger
 #-o DR4.o%j
 #-p shared
 #-n 12
@@ -32,13 +32,17 @@ qdo_table=dr4v2
 export PYTHONPATH=$CODE_DIR/legacypipe/py:${PYTHONPATH}
 cd $CODE_DIR/legacypipe/py
 
-export run_name=dr4-qdo
+export slurm_name=dr4-qdo
 
 # Threads
 usecores=6
 threads=6
 export OMP_NUM_THREADS=$threads
 
+export statdir="${outdir}/progress"
+mkdir -p $statdir 
+
+set -x
 
 # Run another srun if current brick finishes
 num_runs=0
@@ -47,9 +51,6 @@ while true; do
     echo num_runs=$num_runs
 
     ########## GET BRICK
-    export statdir="${outdir}/progress"
-    mkdir -p $statdir 
-
     echo GETTING BRICK
     date
     bricklist=${LEGACY_SURVEY_DIR}/bricks-dr4.txt
@@ -60,7 +61,9 @@ while true; do
     # Start at random line, avoids running same brick
     lns=`wc -l $bricklist |awk '{print $1}'`
     rand=`echo $((1 + RANDOM % $lns))`
-    for brick in `sed -n ${rand},${lns}p $bricklist`;do
+    # Use <<< to prevent loop from being subprocess where variables get lost
+    while read aline; do
+        brick="$aline"
         bri=$(echo $brick | head -c 3)
         tractor_fits=/scratch1/scratchdirs/desiproc/DRs/data-releases/dr4/tractor/$bri/tractor-$brick.fits
         if [ -e "$tractor_fits" ]; then
@@ -73,7 +76,7 @@ while true; do
             touch $statdir/inq_$brick.txt
             break
         fi
-    done
+    done <<< "$(sed -n ${rand},${lns}p $bricklist)"
 
     echo FOUND BRICK
     date
@@ -91,24 +94,28 @@ while true; do
     #ulimit -S -v 65000000
     ulimit -a
 
-    log="$outdir/logs/$brick/log.$SLURM_JOBID"
+    log="$outdir/logs/$brick/log.$SLURM_ARRAY_TASK_ID"
     mkdir -p $(dirname $log)
     echo Logging to: $log
     echo "-----------------------------------------------------------------------------------------" >> $log
     #module load psfex-hpcp
     #srun -n 1 -c 1 python python_test_qdo.py
-    #srun -n 1 -c $usecores python legacypipe/runbrick.py \
-    #     --run $qdo_table \
-    #     --brick $brick \
-    #     --skip \
-    #     --threads $OMP_NUM_THREADS \
-    #     --checkpoint $outdir/checkpoints/${bri}/${brick}.pickle \
-    #     --pickle "$outdir/pickles/${bri}/runbrick-%(brick)s-%%(stage)s.pickle" \
-    #     --outdir $outdir --nsigma 6 \
-    #     --no-write \
-    #     >> $log 2>&1 
-
+    echo doing srun
+    date
+    srun -n 1 -c $usecores python legacypipe/runbrick.py \
+         --run $qdo_table \
+         --brick $brick \
+         --skip \
+         --threads $OMP_NUM_THREADS \
+         --checkpoint $outdir/checkpoints/${bri}/${brick}.pickle \
+         --pickle "$outdir/pickles/${bri}/runbrick-%(brick)s-%%(stage)s.pickle" \
+         --outdir $outdir --nsigma 6 \
+         --no-write \
+         >> $log 2>&1 & 
+    wait 
+    date
     rm $statdir/inq_$brick.txt
+
 done
 # Bootes
 #--run dr4-bootes \
@@ -121,7 +128,7 @@ done
 #    --force-all --no-write \
 #    --skip-calibs \
 #
-echo $run_name DONE $SLURM_JOBID
+echo $slurm_name DONE $SLURM_ARRAY_TASK_ID
 
 # 
 # qdo launch DR4 100 --cores_per_worker 24 --batchqueue regular --walltime 00:55:00 --script ./dr4-qdo.sh --keep_env --batchopts "-a 0-11"
