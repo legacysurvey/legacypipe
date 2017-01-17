@@ -95,9 +95,10 @@ def main(outfn='ccds-annotated.fits', ccds=None):
 
         W,H = ccd.width, ccd.height
 
+        has_skygrid = dict(decam=True).get(ccd.camera, False)
+
         kwargs = dict(pixPsf=True, splinesky=True, subsky=False,
                       pixels=False, dq=False, invvar=False)
-
 
         psf = None
         wcs = None
@@ -212,12 +213,19 @@ def main(outfn='ccds-annotated.fits', ccds=None):
         tim.psf = realpsf
         
         # Sky -- evaluate on a grid (every ~10th pixel)
-        skygrid = sky.evaluateGrid(np.linspace(0, ccd.width-1,  int(1+ccd.width/10)),
-                                   np.linspace(0, ccd.height-1, int(1+ccd.height/10)))
-        ccds.meansky[iccd] = np.mean(skygrid)
-        ccds.stdsky[iccd]  = np.std(skygrid)
-        ccds.maxsky[iccd]  = skygrid.max()
-        ccds.minsky[iccd]  = skygrid.min()
+        if has_skygrid:
+            skygrid = sky.evaluateGrid(np.linspace(0, ccd.width-1,  int(1+ccd.width/10)),
+                                       np.linspace(0, ccd.height-1, int(1+ccd.height/10)))
+            ccds.meansky[iccd] = np.mean(skygrid)
+            ccds.stdsky[iccd]  = np.std(skygrid)
+            ccds.maxsky[iccd]  = skygrid.max()
+            ccds.minsky[iccd]  = skygrid.min()
+        else:
+            skyval = sky.getConstant()
+            ccds.meansky[iccd] = skyval
+            ccds.stdsky[iccd]  = 0.
+            ccds.maxsky[iccd]  = skyval
+            ccds.minsky[iccd]  = skyval
 
         # WCS
         ccds.ra0[iccd],ccds.dec0[iccd] = wcs.pixelxy2radec(1, 1)
@@ -300,10 +308,10 @@ def main(outfn='ccds-annotated.fits', ccds=None):
     ccds.writeto(outfn)
 
 
-def _bounce_main((name, i, ccds)):
+def _bounce_main((name, i, ccds, force)):
     try:
         outfn = 'ccds-annotated/ccds-annotated-%s-%03i.fits' % (name, i)
-        if os.path.exists(outfn):
+        if (not force) and os.path.exists(outfn):
             print('Already exists:', outfn)
             return
         main(outfn=outfn, ccds=ccds)
@@ -316,6 +324,8 @@ if __name__ == '__main__':
     import argparse
     parser = argparse.ArgumentParser(description='Produce annotated CCDs file by reading CCDs file + calibration products')
     parser.add_argument('--part', action='append', help='CCDs file to read, survey-ccds-X.fits.gz, default: ["decals","nondecals","extra"].  Can be repeated.', default=[])
+    parser.add_argument('--force', action='store_true', default=False,
+                        help='Ignore ccds-annotated/* files and re-run')
     parser.add_argument('--threads', type=int, help='Run multi-threaded', default=4)
     opt = parser.parse_args()
 
@@ -406,10 +416,10 @@ if __name__ == '__main__':
         while len(ccds):
             c = ccds[:N]
             ccds = ccds[N:]
-            args.append((name, i, c))
+            args.append((name, i, c, opt.force))
             i += 1
         print('Split CCDs file into', len(args), 'pieces')
-        print('sizes:', [len(c) for n,i,c in args])
+        print('sizes:', [len(c) for n,i,c,f in args])
         mp.map(_bounce_main, args)
 
         # reassemble outputs
