@@ -12,14 +12,18 @@ from astrometry.util.miscutils import polygon_area
 from legacypipe.survey import LegacySurveyData
 import tractor
 
-def main(outfn='ccds-annotated.fits', ccds=None):
+def main(outfn='ccds-annotated.fits', ccds=None, mzls=False):
     survey = LegacySurveyData(ccds=ccds)
     if ccds is None:
         ccds = survey.get_ccds()
 
     # File from the "observing" svn repo:
-    # https://desi.lbl.gov/svn/decam/code/observing/trunk
-    tiles = fits_table('decam-tiles_obstatus.fits')
+    if mzls:
+        # https://desi.lbl.gov/svn/decam/code/mosaic3/trunk
+        tiles = fits_table('mosaic-tiles_obstatus.fits')
+    else:
+        # https://desi.lbl.gov/svn/decam/code/observing/trunk
+        tiles = fits_table('decam-tiles_obstatus.fits')
 
     I = survey.photometric_ccds(ccds)
     ccds.photometric = np.zeros(len(ccds), bool)
@@ -135,7 +139,9 @@ def main(outfn='ccds-annotated.fits', ccds=None):
         obj = ccd.object.strip()
         words = obj.split('_')
         tile = None
-        if len(words) == 3 and words[0] == 'DECaLS':
+        if len(words) == 3 and (
+            ((not mzls) and (words[0] == 'DECaLS')) or
+            (     mzls  and (words[0] == 'MzLS'  ))):
             try:
                 tileid = int(words[1])
                 tile = tiles[tileid - 1]
@@ -308,13 +314,13 @@ def main(outfn='ccds-annotated.fits', ccds=None):
     ccds.writeto(outfn)
 
 
-def _bounce_main((name, i, ccds, force)):
+def _bounce_main((name, i, ccds, force, mzls)):
     try:
         outfn = 'ccds-annotated/ccds-annotated-%s-%03i.fits' % (name, i)
         if (not force) and os.path.exists(outfn):
             print('Already exists:', outfn)
             return
-        main(outfn=outfn, ccds=ccds)
+        main(outfn=outfn, ccds=ccds, mzls=mzls)
     except:
         import traceback
         traceback.print_exc()
@@ -324,6 +330,7 @@ if __name__ == '__main__':
     import argparse
     parser = argparse.ArgumentParser(description='Produce annotated CCDs file by reading CCDs file + calibration products')
     parser.add_argument('--part', action='append', help='CCDs file to read, survey-ccds-X.fits.gz, default: ["decals","nondecals","extra"].  Can be repeated.', default=[])
+    parser.add_argument('--mzls', action='store_true', default=False, help='MzLS (default: DECaLS')
     parser.add_argument('--force', action='store_true', default=False,
                         help='Ignore ccds-annotated/* files and re-run')
     parser.add_argument('--threads', type=int, help='Run multi-threaded', default=4)
@@ -416,7 +423,7 @@ if __name__ == '__main__':
         while len(ccds):
             c = ccds[:N]
             ccds = ccds[N:]
-            args.append((name, i, c, opt.force))
+            args.append((name, i, c, opt.force, opt.mzls))
             i += 1
         print('Split CCDs file into', len(args), 'pieces')
         print('sizes:', [len(c) for n,i,c,f in args])
