@@ -426,12 +426,12 @@ if __name__ == '__main__':
             args.append((name, i, c, opt.force, opt.mzls))
             i += 1
         print('Split CCDs file into', len(args), 'pieces')
-        print('sizes:', [len(c) for n,i,c,f in args])
+        print('sizes:', [len(a[2]) for a in args])
         mp.map(_bounce_main, args)
 
         # reassemble outputs
         TT = [fits_table('ccds-annotated/ccds-annotated-%s-%03i.fits' % (name,i))
-              for name,i,nil in args]
+              for name,i,nil,nil,nil in args]
         T = merge_tables(TT)
 
         # expand some columns to make the three files have the same structure.
