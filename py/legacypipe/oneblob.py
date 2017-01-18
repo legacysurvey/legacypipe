@@ -1010,7 +1010,7 @@ class OneBlob(object):
                 modelMasks = models.model_masks(srci, src)
     
             srctractor = self.tractor(srctims, [src])
-            print('Setting modelMasks:', modelMasks)
+            #print('Setting modelMasks:', modelMasks)
             srctractor.setModelMasks(modelMasks)
             
             # if plots and False:

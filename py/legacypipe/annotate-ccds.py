@@ -89,7 +89,15 @@ def main(outfn='ccds-annotated.fits', ccds=None, mzls=False):
     plvers = []
 
     for iccd,ccd in enumerate(ccds):
-        im = survey.get_image_object(ccd)
+        print('Reading CCD %i of %i:' % (iccd+1, len(ccds)), 'file', ccd.image_filename, 'CCD', ccd.expnum, ccd.ccdname)
+        try:
+            im = survey.get_image_object(ccd)
+        except:
+            print('Failed to get_image_object()')
+            import traceback
+            traceback.print_exc()
+            plvers.append('')
+            continue
         print('Reading CCD %i of %i:' % (iccd+1, len(ccds)), im, 'file', ccd.image_filename, 'CCD', ccd.ccdname)
 
         X = im.get_good_image_subregion()
