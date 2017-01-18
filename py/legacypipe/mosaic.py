@@ -92,10 +92,11 @@ class MosaicImage(CPImage, CalibMixin):
         use a constant sky level with value from the header.
         '''
         from tractor.sky import ConstantSky
-        # Frank reocmmends SKYADU 
+        # Frank recommends SKYADU
         sky = ConstantSky(primhdr['SKYADU'])
         sky.version = ''
         sky.plver = primhdr.get('PLVER', '').strip()
+        sky.sig1 = primhdr.get('SKYNOISE', 0.)
         return sky
         
     def read_dq(self, **kwargs):
