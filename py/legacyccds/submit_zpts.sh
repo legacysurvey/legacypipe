@@ -1,14 +1,18 @@
 #!/bin/bash -l
 
-#SBATCH -p regular
-#SBATCH -N 30
-#SBATCH -t 00:55:00
-#SBATCH -A eboss
+#SBATCH -p shared
+#SBATCH -n 2
+#SBATCH -t 10:00:00
+#SBATCH -A desi
 #SBATCH -J zpts
 #SBATCH -L SCRATCH,project
 #SBATCH --mail-user=kburleigh@lbl.gov
 #SBATCH --mail-type=END,FAIL
 
+# TO RUN shared
+#for i in `find decam_cp_CP*txt`;do export input=$i;echo $input;sbatch legacyccds/submit_zpts.sh --export input;done
+#-p regular
+#-N 30
 # RUN all decam
 #for i in `find decam_cp_CP*txt`;do export input=$i;sbatch legacyccds/submit_zpts.sh --export input;done
 
@@ -16,18 +20,17 @@ set -x
 export OMP_NUM_THREADS=1
 
 # Yu Feng's bcast
-#source /scratch2/scratchdirs/kaylanb/yu-bcase/activate.sh
-source /scratch1/scratchdirs/desiproc/DRs/code/dr4/yu-bcast_2/activate.sh
-
-# Put legacypipe in path
-export PYTHONPATH=.:${PYTHONPATH}
-
-if [ "$NERSC_HOST" == "cori" ]; then
-    cores=32
-elif [ "$NERSC_HOST" == "edison" ]; then
-    cores=24
-fi
-let tasks=${SLURM_JOB_NUM_NODES}*${cores}
+#source /scratch1/scratchdirs/desiproc/DRs/code/dr4/yu-bcast_2/activate.sh
+#
+## Put legacypipe in path
+#export PYTHONPATH=.:${PYTHONPATH}
+#
+#if [ "$NERSC_HOST" == "cori" ]; then
+#    cores=32
+#elif [ "$NERSC_HOST" == "edison" ]; then
+#    cores=24
+#fi
+#let tasks=${SLURM_JOB_NUM_NODES}*${cores}
 
 #find /project/projectdirs/cosmo/staging/mosaicz/MZLS_CP/CP20160202v2/k4m*ooi*.fits.fz > mosaic_CP20160202v2.txt
 #find /project/projectdirs/cosmo/staging/bok/BOK_CP/CP20160202/ksb*ooi*.fits.fz > 90prime_CP20160202.txt
@@ -37,7 +40,9 @@ let tasks=${SLURM_JOB_NUM_NODES}*${cores}
 #input=mosaic_cp_all.txt
 prefix=paper
 # Make zpts
-srun -n $tasks -N ${SLURM_JOB_NUM_NODES} -c 1 python legacyccds/legacy-zeropoints.py --prefix $prefix --image_list $input --nproc $tasks
+tasks=1
+srun -n $tasks -c 1 python legacyccds/legacy-zeropoints.py --prefix $prefix --image_list $input --nproc $tasks
+#srun -n $tasks -N ${SLURM_JOB_NUM_NODES} -c 1 python legacyccds/legacy-zeropoints.py --prefix $prefix --image_list $input --nproc $tasks
 # Make zpts VERBOSE
 #srun -n $tasks -N ${SLURM_JOB_NUM_NODES} -c 1 python legacyccds/legacy-zeropoints.py --prefix $prefix --image_list $input --nproc $tasks --verboseplots
 

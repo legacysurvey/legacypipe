@@ -8,14 +8,18 @@ import matplotlib.pyplot as plt
 from astrometry.util.fits import fits_table, merge_tables
 
 parser = argparse.ArgumentParser(description='Generate a legacypipe-compatible CCDs file from a set of reduced imaging.') 
+parser.add_argument('--therun', choices=['dr4','obiwan'],action='store', default=True) 
 parser.add_argument('--dowhat', choices=['bricks_notdone','time_per_brick','nersc_time'],action='store', default=True) 
 parser.add_argument('--fn', action='store', default=False) 
 args = parser.parse_args() 
 
 if args.dowhat == 'bricks_notdone':
-    b=fits_table(os.path.join(os.environ['LEGACY_SURVEY_DIR'],'survey-bricks-dr4.fits.gz'))
-    don=np.loadtxt('bricks_done.tmp',dtype=str)
-    fout= 'bricks_notdone.tmp'
+    if args.therun == 'obiwan':
+        b=fits_table(os.path.join(os.environ['LEGACY_SURVEY_DIR'],'survey-bricks-eboss-ngc.fits.gz'))
+    elif args.therun == 'dr4':
+        b=fits_table(os.path.join(os.environ['LEGACY_SURVEY_DIR'],'survey-bricks-dr4.fits.gz'))
+    don=np.loadtxt(args.fn,dtype=str)
+    fout= args.fn.replace('_done.tmp','_notdone.tmp')
     if os.path.exists(fout):
         os.remove(fout)
     # Bricks not finished
@@ -24,13 +28,13 @@ if args.dowhat == 'bricks_notdone':
             fil.write('%s\n' % brick)
     print('Wrote %s' % fout)
     # All Bricks
-    fout= 'bricks_all.tmp'
-    if os.path.exists(fout):
-        exit()
-    with open(fout,'w') as fil:
-        for brick in b.brickname:
-            fil.write('%s\n' % brick)
-    print('Wrote %s' % fout)
+    #fout= args.fn.replace('.tmp','_all.tmp')
+    #if os.path.exists(fout):
+    #    exit()
+    #with open(fout,'w') as fil:
+    #    for brick in b.brickname:
+    #        fil.write('%s\n' % brick)
+    #print('Wrote %s' % fout)
 elif args.dowhat == 'time_per_brick':
     fns,start1,start2,end1,end2=np.loadtxt(args.fn,dtype=str,unpack=True)
     # Remove extraneous digits

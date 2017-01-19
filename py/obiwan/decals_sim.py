@@ -155,6 +155,15 @@ from legacypipe.survey import LegacySurveyData, wcs_for_brick
 import obiwan.decals_sim_priors as priors
 
 from astrometry.util.fits import fits_table, merge_tables
+from astrometry.util.ttime import Time
+
+def ptime(text,t0):
+    '''Timer'''    
+    tnow=Time()
+    print('TIMING:%s ' % text,tnow-t0)
+    return tnow
+
+
 
 def get_savedir(**kwargs):
     return os.path.join(kwargs['decals_sim_dir'],kwargs['objtype'],\
@@ -233,6 +242,10 @@ class SimImage(DecamImage):
         # Store simulated galaxy images in tim object 
         # Loop on each object.
         for ii, obj in enumerate(self.survey.simcat):
+            t0= Time()
+            strin= 'Drawing 1 %s: sersicn=%.2f, rhalf=%.2f, ba=%.2f, phi=%.2f' % \
+                    (objtype.upper(), obj.sersicn,obj.rhalf,obj.ba,obj.phi)
+            print(strin)
             if objtype == 'star':
                 stamp = objstamp.star(obj)
             elif objtype == 'elg':
@@ -241,7 +254,8 @@ class SimImage(DecamImage):
                 stamp = objstamp.lrg(obj)
             elif objtype == 'qso':
                 stamp = objstamp.qso(obj)
-            
+            t0= ptime(strin.replace('Drawing',''),t0)
+             
             # Make sure the object falls on the image and then add Poisson noise.
             overlap = stamp.bounds & image.bounds
             if (overlap.area() > 0):
@@ -292,7 +306,10 @@ class BuildStamp():
         """Initialize the BuildStamp object with the CCD-level properties we need."""
         self.band = tim.band.strip()
         # GSParams should be used when galsim object is initialized
-        self.gsparams = galsim.GSParams(maximum_fft_size=2L**30L,\
+        # MAX size for sersic: 
+        # https://github.com/GalSim-developers/GalSim/pull/450/commits/755bcfdca25afe42cccfd6a7f8660da5ecda2a65
+        MAX_FFT_SIZE=1048576L #2^16=65536
+        self.gsparams = galsim.GSParams(maximum_fft_size=MAX_FFT_SIZE,\
                                         folding_threshold=folding_threshold) 
         #print('FIX ME!!!!!!!!!!!!!!!!!!!!!!!!!!!!')
         self.gsdeviate = galsim.BaseDeviate()
@@ -431,8 +448,11 @@ class BuildStamp():
         # Create localpsf object
         self.setlocal(obj)
         objflux = obj.get(self.band+'flux') # [nanomaggies]
-        galobj = galsim.Sersic(float(obj.get('sersicn')), half_light_radius=float(obj.get('rhalf')),\
-                            flux=objflux, gsparams=self.gsparams)
+        try:
+            galobj = galsim.Sersic(float(obj.get('sersicn')), half_light_radius=float(obj.get('rhalf')),\
+                                flux=objflux, gsparams=self.gsparams)
+        except:
+            raise ValueError 
         galobj = galobj.shear(q=float(obj.get('ba')), beta=float(obj.get('phi'))*galsim.degrees)
         stamp = self.convolve_and_draw(galobj)
         return stamp
@@ -526,6 +546,13 @@ def build_simcat(Samp=None,brickwcs=None, meta=None):
     if typ in ['elg','lrg']:
         for key,tab_key in zip(['sersicn','rhalf','ba','phi'],['n','re','ba','pa']):
             cat.set(key, Samp.get('%s_%s'%(typ,tab_key) ))
+        # Sersic n: GALSIM n = [0.3,6.2] for numerical stability,see
+        # https://github.com/GalSim-developers/GalSim/issues/{325,450}
+        # I'll use [0.4,6.1]
+        vals= cat.sersicn
+        vals[cat.sersicn < 0.4] = 0.4
+        vals[cat.sersicn > 6.1] = 6.1
+        cat.set('sersicn',vals)
         #cat['R50_1'] = Column(Samp.rhalf, dtype='f4')
         #cat['BA_1'] = Column(Samp.ba, dtype='f4')
         #cat['PHI_1'] = Column(Samp.phi, dtype='f4')
@@ -548,7 +575,7 @@ def get_parser():
                         help='tells which survey-ccds to read')
     parser.add_argument('--prefix', type=str, default='', metavar='', 
                         help='tells which input sample to use')
-    parser.add_argument('-n', '--nobj', type=long, default=500, metavar='', 
+    parser.add_argument('-n', '--nobj', type=int, default=500, metavar='', 
                         help='number of objects to simulate (required input)')
     #parser.add_argument('-ic', '--ith_chunk', type=long, default=None, metavar='', 
     #                    help='run the ith chunk, 0-999')
@@ -702,6 +729,7 @@ def get_sample_fn(brick,decals_sim_dir,prefix=''):
 
 def main(args=None):
     """Main routine which parses the optional inputs."""
+    t0= Time()
     # Command line options
     parser= get_parser()    
     args = parser.parse_args(args=args)
@@ -767,6 +795,7 @@ def main(args=None):
     radec_center = brickwcs.radec_center()
     log.info('RA, Dec center = {}'.format(radec_center))
     log.info('Brick = {}'.format(brickname))
+    t0= ptime('First part of Main()',t0)
 
     #if args.ith_chunk is not None: 
     #    chunk_list= [args.ith_chunk]
@@ -781,15 +810,17 @@ def main(args=None):
     print('%d samples, for brick %s' % (len(Samp),brickname))
     # Already did these cuts in decals_sim_radeccolors 
     #r0,r1,d0,d1= brickwcs.radec_bounds()
-    #print('Brick bounds ra=%f,%f; dec=%f,%f' % (r0,r1,d0,d1))
-    #print('Sample len=%d' % len(Samp))
     #Samp.cut( (Samp.ra >= r0)*(Samp.ra <= r1)*\
     #          (Samp.dec >= d0)*(Samp.dec <= d1) )
-    #print('Sample len cut to brick= %d, total number samples= %.1f' % (len(Samp),len(Samp)/float(maxobjs)))
+    # Sort by Sersic n low -> high (if elg or lrg)
+    if objtype in ['elg','lrg']:
+        Samp=Samp[np.argsort( Samp.get('%s_n' % objtype) )]
+    # Rowstart -> Rowend
     rowst,rowend= args.rowstart,args.rowstart+maxobjs
     Samp= Samp[args.rowstart:args.rowstart+maxobjs]
-    print('Sample len cut nobj or less= %d' % len(Samp))
+    print('Max sample size=%d, actual sample size=%d' % (maxobjs,len(Samp)))
     assert(len(Samp) <= maxobjs)
+    t0= ptime('Got input_sample',t0)
 
     # Store args in dict for easy func passing
     kwargs=dict(Samp=Samp,\
@@ -812,16 +843,20 @@ def main(args=None):
     
     # Create simulated catalogues and run Tractor
     create_metadata(kwargs=kwargs)
+    t0= ptime('create_metadata',t0)
     # do chunks
     #for ith_chunk in chunk_list:
     #log.info('Working on chunk {:02d}/{:02d}'.format(ith_chunk,kwargs['nchunk']-1))
     # Random ra,dec and source properties
     create_ith_simcat(d=kwargs)
+    t0= ptime('create_ith_simcat',t0)
     # Run tractor
     kwargs.update( dict(run=args.run) )
     do_one_chunk(d=kwargs)
+    t0= ptime('do_one_chunk',t0)
     # Clean up output
     do_ith_cleanup(d=kwargs)
+    t0= ptime('do_ith_cleanup',t0)
     log.info('All done!')
      
 if __name__ == '__main__':

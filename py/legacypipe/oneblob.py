@@ -1010,7 +1010,7 @@ class OneBlob(object):
                 modelMasks = models.model_masks(srci, src)
     
             srctractor = self.tractor(srctims, [src])
-            print('Setting modelMasks:', modelMasks)
+            #print('Setting modelMasks:', modelMasks)
             srctractor.setModelMasks(modelMasks)
             
             # if plots and False:
@@ -1391,8 +1391,12 @@ def _compute_source_metrics(srcs, tims, bands, tr):
     rchi2      = rchi2_num      / rchi2_den
     fracmasked = fracmasked_num / fracmasked_den
 
-    #print('Fracflux:', B.fracflux)
-    
+    # Eliminate NaNs (these happen when, eg, we have no coverage in one band but
+    # sources detected in another band, hence denominator is zero)
+    fracflux  [  fracflux_den == 0] = 0.
+    rchi2     [     rchi2_den == 0] = 0.
+    fracmasked[fracmasked_den == 0] = 0.
+
     # fracin_{num,den} are in flux * nimages units
     tinyflux = 1e-9
     fracin     = fracin_num     / np.maximum(tinyflux, fracin_den)

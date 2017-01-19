@@ -19,7 +19,6 @@
 # TO RUN
 # set usecores as desired for more mem and set shared n above to 2*usecores, keep threads=6 so more mem per thread!, then --aray equal to number largemmebricks.txt
 
-
 usecores=6
 echo usecores=$usecores
 #bricklist=${LEGACY_SURVEY_DIR}/bricks-dr4.txt
@@ -113,6 +112,7 @@ while true; do
     
     set -x
     log="$outdir/logs/$bri/log.${brick}_${SLURM_JOB_ID}_${SLURM_ARRAY_TASK_ID}"
+
     mkdir -p $(dirname $log)
     echo Logging to: $log
     echo "-----------------------------------------------------------------------------------------" >> $log

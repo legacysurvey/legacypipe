@@ -228,7 +228,7 @@ class LegacySurveyImage(object):
             self.check_image_header(imghdr)
         else:
             img = np.zeros((imh, imw), np.float32)
-            imghdr = dict()
+            imghdr = self.read_image_header()
             if slc is not None:
                 img = img[slc]
         assert(np.all(np.isfinite(img)))
@@ -259,7 +259,7 @@ class LegacySurveyImage(object):
         psf_fwhm = self.fwhm 
         psf_sigma = psf_fwhm / 2.35
         primhdr = self.read_image_primary_header()
-        
+
         sky = self.read_sky_model(splinesky=splinesky, slc=slc,
                                   primhdr=primhdr, imghdr=imghdr)
         skysig1 = getattr(sky, 'sig1', None)
