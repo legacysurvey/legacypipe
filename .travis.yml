@@ -1,5 +1,11 @@
 # Travis-CI.org build script
 
+# Default environment is Ubuntu 12.04.5 LTS "precise"
+# which is pretty old.
+# "trusty" is Ubuntu 14.04.5 LTS
+# We could try:
+#dist: trusty
+
 # container-based infrastructure
 sudo: false
 
