@@ -242,10 +242,13 @@ class SimImage(DecamImage):
         # Store simulated galaxy images in tim object 
         # Loop on each object.
         for ii, obj in enumerate(self.survey.simcat):
+            # Print timing
             t0= Time()
-            strin= 'Drawing 1 %s: sersicn=%.2f, rhalf=%.2f, ba=%.2f, phi=%.2f' % \
-                    (objtype.upper(), obj.sersicn,obj.rhalf,obj.ba,obj.phi)
-            print(strin)
+            if objtype in ['lrg','elg']:
+                strin= 'Drawing 1 %s: sersicn=%.2f, rhalf=%.2f, ba=%.2f, phi=%.2f' % \
+                        (objtype.upper(), obj.sersicn,obj.rhalf,obj.ba,obj.phi)
+                print(strin)
+            # Draw a single object
             if objtype == 'star':
                 stamp = objstamp.star(obj)
             elif objtype == 'elg':
@@ -254,7 +257,7 @@ class SimImage(DecamImage):
                 stamp = objstamp.lrg(obj)
             elif objtype == 'qso':
                 stamp = objstamp.qso(obj)
-            t0= ptime(strin.replace('Drawing',''),t0)
+            t0= ptime('Drew the %s' % objtype.upper(),t0)
              
             # Make sure the object falls on the image and then add Poisson noise.
             overlap = stamp.bounds & image.bounds
