@@ -84,6 +84,7 @@ def main(survey=None, opt=None):
 
     ps = None
     if opt.plots is not None:
+        import pylab as plt
         from astrometry.util.plotutils import PlotSequence
         ps = PlotSequence(opt.plots)
 
@@ -289,8 +290,11 @@ def main(survey=None, opt=None):
         if opt.plots:
             (data,mod,ie,chi,roi) = R.ims1[0]
 
-            ima = tim.ima
-            imchi = dict(interpolation='nearest', origin='lower', vmin=-5, vmax=5)
+            ima = dict(vmin=-2.*tim.sig1, vmax=5.*tim.sig1,
+                       interpolation='nearest', origin='lower',
+                       cmap='gray')
+            imchi = dict(interpolation='nearest', origin='lower',
+                         vmin=-5, vmax=5, cmap='RdBu')
             plt.clf()
             plt.imshow(data, **ima)
             plt.title('Data: %s' % tim.name)
@@ -305,6 +309,23 @@ def main(survey=None, opt=None):
             plt.imshow(chi, **imchi)
             plt.title('Chi: %s' % tim.name)
             ps.savefig()
+
+            if opt.derivs:
+                trx = Tractor([tim], realsrcs)
+                trx.freezeParam('images')
+
+                modx = trx.getModelImage(0)
+                chix = (data - modx) * tim.getInvError()
+
+                plt.clf()
+                plt.imshow(modx, **ima)
+                plt.title('Model without derivatives: %s' % tim.name)
+                ps.savefig()
+
+                plt.clf()
+                plt.imshow(chix, **imchi)
+                plt.title('Chi without derivatives: %s' % tim.name)
+                ps.savefig()
 
         if opt.derivs:
             cat = realsrcs
