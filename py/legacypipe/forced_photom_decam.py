@@ -457,15 +457,9 @@ class SourceDerivatives(MultiParams, BasicSource):
         # Test...
         self.real.freezeParamsRecursive(*self.freeze)
         self.real.thawParamsRecursive(*self.thaw)
-
+        #
         print('Source derivs: params are:')
         self.real.printThawedParams()
-
-        #self.nparams = self.real.numberOfParams()
-        #self.paramnames = ['d'+p.replace('.','_') for p in
-        #                   self.real.getParamNames()]
-        #print('Param names:', self.paramnames)
-        
         # and revert...
         self.real.freezeParamsRecursive(*self.thaw)
         self.real.thawParamsRecursive(*self.freeze)
@@ -474,42 +468,38 @@ class SourceDerivatives(MultiParams, BasicSource):
     def getNamedParams():
         return dict(dpos0=0, dpos1=1)
         
-    # def numberOfParams(self):
-    #     return self.nparams
-    # 
-    # def getParamNames(self):
-    #     return self.paramnames
-    
     # forced photom calls getUnitFluxModelPatches
     def getUnitFluxModelPatches(self, img, minval=0., modelMask=None):
         self.real.freezeParamsRecursive(*self.freeze)
         self.real.thawParamsRecursive(*self.thaw)
-        #print('SourceDerivatives: source has params:')
-        #self.real.printThawedParams()
+
         # The derivatives will be scaled by the source brightness;
-        # undo that scaling.
-        #print('Brightness:', self.real.brightness)
+        # undo that scaling. (We want derivatives of unit-flux models)
         counts = img.getPhotoCal().brightnessToCounts(self.real.brightness)
         derivs = self.real.getParamDerivatives(img, modelMask=modelMask)
+
+        ## FIXME -- what about using getUnitFluxModelPatch(derivs=True) ?
+        
         #print('SourceDerivs: derivs', derivs)
         for d in derivs:
             if d is not None:
                 d /= counts
-                print('Deriv: abs max', np.abs(d.patch).max(), 'range', d.patch.min(), d.patch.max(), 'sum', d.patch.sum())
+                # print('Deriv: abs max', np.abs(d.patch).max(), 'range', d.patch.min(), d.patch.max(), 'sum', d.patch.sum())
+
+        # RA,Dec
+        assert(len(derivs) == 2)
+
         # and revert...
         self.real.freezeParamsRecursive(*self.thaw)
         self.real.thawParamsRecursive(*self.freeze)
+        # Save these derivatives as our unit-flux models.
         self.umods = derivs
         return derivs
 
     def getModelPatch(self, img, minsb=0., modelMask=None):
         if self.umods is None:
             return None
-        #print('getModelPatch()')
-        #print('modelMask', modelMask)
         pc = img.getPhotoCal()
-        #counts = [pc.brightnessToCounts(b) for b in self.brights]
-        #print('umods', self.umods)
         return (self.umods[0] * pc.brightnessToCounts(self.brights[0]) +
                 self.umods[1] * pc.brightnessToCounts(self.brights[1]))
 
