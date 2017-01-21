@@ -3,9 +3,9 @@
 #SBATCH -p shared
 #SBATCH -n 12
 #SBATCH -t 24:00:00
-#SBATCH --array=1-10
+#SBATCH --array=1-100
 #SBATCH --account=desi
-#SBATCH -J noOMP
+#SBATCH -J prof
 #SBATCH --mail-user=kburleigh@lbl.gov
 #SBATCH --mail-type=END,FAIL
 #SBATCH -L SCRATCH
@@ -19,38 +19,29 @@
 # TO RUN
 # set usecores as desired for more mem and set shared n above to 2*usecores, keep threads=6 so more mem per thread!, then --aray equal to number largemmebricks.txt
 
+
 usecores=6
+threads=$usecores
+# Limit memory to avoid 1 srun killing whole node
+# 62 GB / Edison node = 65000000 kbytes
+maxmem=65000000
+let usemem=${maxmem}*${usecores}/24
+ulimit -S -v $usemem
+ulimit -a
+
 echo usecores=$usecores
+echo threads=$threads
 #bricklist=${LEGACY_SURVEY_DIR}/bricks-dr4.txt
+bricklist=${LEGACY_SURVEY_DIR}/bricks-dr4-edison.txt 
 #bricklist=${LEGACY_SURVEY_DIR}/bricks-dr4-oom-forced.txt
-bricklist=${LEGACY_SURVEY_DIR}/bricks-dr4-oom-fitblobs-coadd.txt
+#bricklist=${LEGACY_SURVEY_DIR}/bricks-dr4-oom-fitblobs-coadd.txt
 echo bricklist=$bricklist
 if [ ! -e "$bricklist" ]; then
     echo file=$bricklist does not exist, quitting
     exit 999
 fi
 
-# Limit memory to avoid 1 srun killing whole node
-if [ "$usecores" -eq 24 ]; then
-    # full node (~ 62 GB)
-    maxmem=65000000
-    threads=6
-elif [ "$usecores" -eq 12 ]; then
-    maxmem=32000000
-    threads=4
-elif [ "$usecores" -eq 6 ]; then
-    maxmem=16000000
-    threads=4
-else
-    echo usecores=$usecores not supported
-    exit
-fi
-ulimit -S -v $maxmem
-ulimit -a
-
-
-echo threads=$threads
-#export OMP_NUM_THREADS=$threads
+export OMP_NUM_THREADS=$threads
 export outdir=/scratch1/scratchdirs/desiproc/DRs/data-releases/dr4
 #export outdir=/scratch1/scratchdirs/desiproc/DRs/data-releases/dr4/large-mem-runs/${usecores}usecores
 export statdir="${outdir}/progress"
@@ -112,7 +103,6 @@ while true; do
     
     set -x
     log="$outdir/logs/$bri/log.${brick}_${SLURM_JOB_ID}_${SLURM_ARRAY_TASK_ID}"
-
     mkdir -p $(dirname $log)
     echo Logging to: $log
     echo "-----------------------------------------------------------------------------------------" >> $log
@@ -121,11 +111,11 @@ while true; do
 
     # Copy checkpoints file to new outdir
     # Only happens if outdir is not dr4/, e.g. if running a test
-    check_name=$outdir/checkpoints/$bri/${brick}.pickle
-    if [ ! -e $check_name ]; then
-        mkdir $outdir/checkpoints/$bri
-        cp /scratch1/scratchdirs/desiproc/DRs/data-releases/dr4/checkpoints/$bri/${brick}.pickle $outdir/checkpoints/$bri/
-    fi 
+    #check_name=$outdir/checkpoints/$bri/${brick}.pickle
+    #if [ ! -e $check_name ]; then
+    #    mkdir $outdir/checkpoints/$bri
+    #    cp /scratch1/scratchdirs/desiproc/DRs/data-releases/dr4/checkpoints/$bri/${brick}.pickle $outdir/checkpoints/$bri/
+    #fi 
     # Print why running this brick
     echo Running b/c: $whyrun
 

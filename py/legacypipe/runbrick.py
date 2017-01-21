@@ -57,6 +57,32 @@ nocache = True
 rgbkwargs = dict(mnmx=(-1,100.), arcsinh=1.)
 rgbkwargs_resid = dict(mnmx=(-5,5))
 
+# Memory Limits
+import resource
+def set_ulimit(gigabytes):
+    rsrc = resource.RLIMIT_AS #used if RLIMIT_VMEM not found
+    #soft, hard = resource.getrlimit(rsrc)
+    soft, hard = resource.getrlimit(rsrc)
+    soft= gigabytes * 1024**3
+    resource.setrlimit(rsrc, (soft,hard))
+
+def get_ulimit():
+    for name, desc in [
+        ('RLIMIT_AS', 'VMEM'),
+        ('RLIMIT_CORE', 'core file size'),
+        ('RLIMIT_CPU',  'CPU time'),
+        ('RLIMIT_FSIZE', 'file size'),
+        ('RLIMIT_DATA', 'heap size'),
+        ('RLIMIT_STACK', 'stack size'),
+        ('RLIMIT_RSS', 'resident set size'),
+        ('RLIMIT_NPROC', 'number of processes'),
+        ('RLIMIT_NOFILE', 'number of open files'),
+        ('RLIMIT_MEMLOCK', 'lockable memory address'),
+        ]:
+        limit_num = getattr(resource, name)
+        soft, hard = resource.getrlimit(limit_num)
+        print('Maximum %-25s (%-15s) : %20s %20s' % (desc, name, soft, hard))
+
 def runbrick_global_init():
     print('Starting process', os.getpid(), Time()-Time())
     if nocache:
@@ -2317,6 +2343,9 @@ def run_brick(brick, survey, radec=None, pixscale=0.262,
         If no CCDs, or no photometric CCDs, overlap the given brick or region.
 
     '''
+    print('Total Memory Available to Job:')
+    get_ulimit()
+
 
     from astrometry.util.stages import CallGlobalTime, runstage
     from astrometry.util.multiproc import multiproc
