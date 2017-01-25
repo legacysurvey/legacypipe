@@ -700,7 +700,7 @@ def do_one_chunk(d=None):
 
     # Format: run_brick(brick, survey obj, **kwargs)
     run_brick(d['brickname'], simdecals, threads=d['args'].threads, zoom=d['args'].zoom,
-              wise=False, forceAll=True, writePickles=False, do_calibs=True,
+              wise=False, forceAll=True, hybridPsf=True, writePickles=False, do_calibs=True,
               write_metrics=False, pixPsf=True, blobxy=blobxy, early_coadds=d['args'].early_coadds,
               splinesky=True, ceres=False, stages=[ d['args'].stage ], plots=False,
               plotbase='sim',allbands='ugrizY')

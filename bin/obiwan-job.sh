@@ -2,14 +2,15 @@
 
 #SBATCH -p shared
 #SBATCH -n 8
-#SBATCH --array=1-30
-#SBATCH -t 24:00:00
+#SBATCH -t 00:10:00
 #SBATCH --account=desi
 #SBATCH -J OBILRG
 #SBATCH --mail-user=kburleigh@lbl.gov
 #SBATCH --mail-type=END,FAIL
 #SBATCH -L SCRATCH
+#SBATCH -C haswell
 
+#--array=1-2
 #--qos=scavenger
 
 
@@ -34,9 +35,15 @@ fi
 usecores=4
 threads=$usecores
 # Limit memory to avoid 1 srun killing whole node
-# 62 GB / Edison node = 65000000 kbytes
-maxmem=65000000
-let usemem=${maxmem}*${usecores}/24
+if [ "$NERSC_HOST" = "edison" ]; then
+    # 62 GB / Edison node = 65000000 kbytes
+    maxmem=65000000
+    let usemem=${maxmem}*${usecores}/24
+else
+    # 128 GB / Edison node = 65000000 kbytes
+    maxmem=134000000
+    let usemem=${maxmem}*${usecores}/32
+fi
 ulimit -S -v $usemem
 ulimit -a
 
