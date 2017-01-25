@@ -9,6 +9,7 @@
 #SBATCH --mail-user=kburleigh@lbl.gov
 #SBATCH --mail-type=END,FAIL
 #SBATCH -L SCRATCH
+#-C haswell
 
 #--qos=scavenger
 #-p shared
@@ -17,22 +18,45 @@
 #-N 1
 
 # TO RUN
+# 1) haswell if Cori
 # set usecores as desired for more mem and set shared n above to 2*usecores, keep threads=6 so more mem per thread!, then --aray equal to number largemmebricks.txt
 
 
 usecores=6
 threads=$usecores
 # Limit memory to avoid 1 srun killing whole node
-# 62 GB / Edison node = 65000000 kbytes
-maxmem=65000000
-let usemem=${maxmem}*${usecores}/24
+if [ "$NERSC_HOST" = "edison" ]; then
+    # 62 GB / Edison node = 65000000 kbytes
+    maxmem=65000000
+    let usemem=${maxmem}*${usecores}/24
+else
+    # 128 GB / Edison node = 65000000 kbytes
+    maxmem=134000000
+    let usemem=${maxmem}*${usecores}/32
+fi
 ulimit -S -v $usemem
 ulimit -a
-
 echo usecores=$usecores
 echo threads=$threads
+
+# Output dir
+if [ "$NERSC_HOST" = "edison" ]; then
+    export outdir=/scratch1/scratchdirs/desiproc/DRs/data-releases/dr4
+else
+    export outdir=/global/cscratch1/sd/desiproc/dr4/data_release/dr4
+fi
+
+# Extra srun options
+if [ "$NERSC_HOST" = "edison" ]; then
+    export extra_opt=""
+else
+    export extra_opt="--stage coadds"
+fi
+
 #bricklist=${LEGACY_SURVEY_DIR}/bricks-dr4.txt
-bricklist=${LEGACY_SURVEY_DIR}/bricks-dr4-edison.txt 
+bricklist=${LEGACY_SURVEY_DIR}/bricks-dr4-${NERSC_HOST}.txt 
+#bricklist=${LEGACY_SURVEY_DIR}/bricks-dr4-edison.txt 
+#bricklist=${LEGACY_SURVEY_DIR}/bricks-dr4-cori.txt 
 #bricklist=${LEGACY_SURVEY_DIR}/bricks-dr4-oom-forced.txt
 #bricklist=${LEGACY_SURVEY_DIR}/bricks-dr4-oom-fitblobs-coadd.txt
 echo bricklist=$bricklist
@@ -42,7 +66,6 @@ if [ ! -e "$bricklist" ]; then
 fi
 
 export OMP_NUM_THREADS=$threads
-export outdir=/scratch1/scratchdirs/desiproc/DRs/data-releases/dr4
 #export outdir=/scratch1/scratchdirs/desiproc/DRs/data-releases/dr4/large-mem-runs/${usecores}usecores
 export statdir="${outdir}/progress"
 mkdir -p $statdir $outdir
@@ -130,7 +153,7 @@ while true; do
          --checkpoint $outdir/checkpoints/${bri}/${brick}.pickle \
          --pickle "$outdir/pickles/${bri}/runbrick-%(brick)s-%%(stage)s.pickle" \
          --outdir $outdir --nsigma 6 \
-         --no-write \
+         --no-write ${extra_opt} \
          >> $log 2>&1 & 
     wait
     date
