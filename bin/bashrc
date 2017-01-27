@@ -129,9 +129,8 @@ if [ "$NERSC_HOST" == "cori" ]; then
   hpcports gnu
 
   module use /project/projectdirs/cosmo/software/modules/${NERSC_HOST}
-  # ON EDISON!!
-  #module load unwise_coadds/fulldepth-scratch
-  #module load unwise_coadds_timeresolved/neo1-edison-scratch
+  module load unwise_coadds/fulldepth-scratch
+  module load unwise_coadds_timeresolved/neo1-cori-scratch
   # These are fine
   module use /project/projectdirs/cosmo/work/decam/modules
   module load legacysurvey/dr4-cori-scratch
