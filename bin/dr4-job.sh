@@ -3,15 +3,15 @@
 #SBATCH -p shared
 #SBATCH -n 12
 #SBATCH -t 24:00:00
-#SBATCH --array=1-100
+#SBATCH --array=1-30
+#SBATCH --qos=scavenger
 #SBATCH --account=desi
-#SBATCH -J prof
+#SBATCH -J dr4
 #SBATCH --mail-user=kburleigh@lbl.gov
 #SBATCH --mail-type=END,FAIL
 #SBATCH -L SCRATCH
 #-C haswell
 
-#--qos=scavenger
 #-p shared
 #-n 24
 #-p regular
@@ -22,8 +22,11 @@
 # set usecores as desired for more mem and set shared n above to 2*usecores, keep threads=6 so more mem per thread!, then --aray equal to number largemmebricks.txt
 
 
+rerun_wise=yes
+
 usecores=6
-threads=$usecores
+#threads=$usecores
+threads=4
 # Limit memory to avoid 1 srun killing whole node
 if [ "$NERSC_HOST" = "edison" ]; then
     # 62 GB / Edison node = 65000000 kbytes
@@ -48,13 +51,20 @@ fi
 
 # Extra srun options
 if [ "$NERSC_HOST" = "edison" ]; then
-    export extra_opt=""
+    if [ "$rerun_wise" = "yes" ]; then
+        export extra_opt=""
+    else
+        export extra_opt="--skip"
+    fi
 else
-    export extra_opt="--stage coadds"
+    export extra_opt="--skip"
 fi
 
 #bricklist=${LEGACY_SURVEY_DIR}/bricks-dr4.txt
 bricklist=${LEGACY_SURVEY_DIR}/bricks-dr4-${NERSC_HOST}.txt 
+if [ "$rerun_wise" = "yes" ]; then
+    bricklist=${LEGACY_SURVEY_DIR}/bricks-dr4-${NERSC_HOST}-nowise.txt 
+fi 
 #bricklist=${LEGACY_SURVEY_DIR}/bricks-dr4-edison.txt 
 #bricklist=${LEGACY_SURVEY_DIR}/bricks-dr4-cori.txt 
 #bricklist=${LEGACY_SURVEY_DIR}/bricks-dr4-oom-forced.txt
@@ -104,16 +114,21 @@ while true; do
         bri=$(echo $brick | head -c 3)
         tractor_fits=$outdir/tractor/$bri/tractor-$brick.fits
         if [ -e "$tractor_fits" ]; then
-            continue
-        elif [ -e "$statdir/inq_$brick.txt" ]; then
-            continue
-        else
-            gotbrick=1
-            # Found a brick to run
-            #export brick="$brick"
-            touch $statdir/inq_$brick.txt
-            break
+            if [ "$rerun_wise" = "yes" ]; then
+                echo rerun_wise ignoring existing tractor.fits
+            else
+                continue
+            fi
         fi
+        if [ -e "$statdir/inq_$brick.txt" ]; then
+            continue
+        fi
+        # If reached this point, run the brick
+        gotbrick=1
+        # Found a brick to run
+        #export brick="$brick"
+        touch $statdir/inq_$brick.txt
+        break
     done <<< "$(sed -n ${rand},${lns}p $bricklist)"
     if [ "$gotbrick" -eq 0 ]; then
         echo Never found a brick, exiting
@@ -148,7 +163,6 @@ while true; do
          --run $qdo_table \
          --brick $brick \
          --hybrid-psf \
-         --skip \
          --threads $threads \
          --checkpoint $outdir/checkpoints/${bri}/${brick}.pickle \
          --pickle "$outdir/pickles/${bri}/runbrick-%(brick)s-%%(stage)s.pickle" \

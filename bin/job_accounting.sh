@@ -115,7 +115,11 @@ elif [ "$dowhat" = "status" ]; then
         logdir=${objtype}_logdir
         logs="$outdir/logs/*/log.*"
     elif [ "$therun" = "dr4" ]; then
-        outdir=/scratch1/scratchdirs/desiproc/DRs/data-releases/dr4
+        if [ "$NERSC_HOST" == "edison" ]; then
+            outdir=/scratch1/scratchdirs/desiproc/DRs/data-releases/dr4
+        else
+            outdir=/global/cscratch1/sd/desiproc/dr4/data_release/dr4
+        fi
         slurmdir=$outdir/slurms
         slurms=dr4_slurm_fils.tmp
         tractors=$outdir/tractor/
@@ -176,8 +180,23 @@ elif [ "$dowhat" = "status" ]; then
     find $tractors -name "tractor-*.fits" > $don_tractor
     awk -F "/" '{print $NF}' ${don_tractor} |sed s/tractor-//g|sed s/.fits//g > $don
     echo Finished Bricks: `wc -l $don`
+    # Some tractor cats do not have "wise_flux", why?
+    # job_accounting.py lists these cats in "sanity_tractors_nowise.txt"
+    # Put the log file for each tractor cat in "sanity_tractors_nowise_logs.txt"
+    tractor_nowise=sanity_tractors_nowise.txt
+    tractor_nowise_logs=sanity_tractors_nowise_logs.txt
+    if [ -e "${tractor_nowise}" ];then
+        # this cmd goes to where the log files exist, and gets the latest log file written
+        echo Getting logs for Tractor Cats w/out "wise_flux"
+        for fn in `cat ${tractor_nowise} |uniq`;do 
+            brick=`echo $fn|awk -F "-" '{print $NF}'|sed s/.fits//g`
+            bri=`echo $brick|head -c 3`
+            echo $brick $bri
+            ls -lrt `find /scratch1/scratchdirs/desiproc/DRs/data-releases/dr4/logs/${bri}/log.${brick}*`|tail -n 1|awk '{print $NF}' >> ${tractor_nowise_logs}
+        done
+    fi
     # Organize slurms by day last modified
-    slurm_dir=/scratch1/scratchdirs/desiproc/DRs/data-releases/dr4/slurms
+    slurm_dir=${outdir}/slurms
     year=`date|awk '{print $NF}'`
     today=`date|awk '{print $3}'`
     month=`date +"%F"|awk -F "-" '{print $2}'`
@@ -190,7 +209,7 @@ elif [ "$dowhat" = "status" ]; then
         cnt=`ls -l --full-time slurm-*.out|grep -e "${year}-${month}-${da}" |awk '{print $NF}' | wc -l`
         if [ "${cnt}" -gt 0 ]; then
             echo Creating ${slurm_dir}/slurms_${year}-${month}-${da}
-            mkdir ${slurm_dir}/slurms_${year}-${month}-${da}
+            mkdir -p ${slurm_dir}/slurms_${year}-${month}-${da}
             mv `ls -l --full-time slurm-*.out|grep -e "${year}-${month}-${da}" |awk '{print $NF}'` ${slurm_dir}/slurms_${year}-${month}-${da}/
             # Make file listing all log.* files in these slurms
             for fn in `find ${slurm_dir}/slurms_${year}-${month}-${da}/slurm-*.out`;do 

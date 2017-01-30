@@ -111,6 +111,7 @@ elif args.dowhat == 'nersc_time':
     print('Done bricks')
     nersc_time(hrs)
 elif args.dowhat == 'sanity_tractors':
+    # RUN: python job_accounting.py --therun dr4 --dowhat sanity_tractors --fn dr4_tractors_done.tmp
     # Read each finished Tractor Catalogue
     # Append name to file if:
     # -- error reading it
