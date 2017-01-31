@@ -822,7 +822,12 @@ def main(args=None):
     #          (Samp.dec >= d0)*(Samp.dec <= d1) )
     # Sort by Sersic n low -> high (if elg or lrg)
     if objtype in ['elg','lrg']:
+        print('Sorting by sersic n')
         Samp=Samp[np.argsort( Samp.get('%s_n' % objtype) )]
+        #if args.early_coadds:
+        #    # Dont sort by sersic n for deeplearning cutouts
+        #    print('NOT sorting by sersic n')
+        #else:
     # Rowstart -> Rowend
     rowst,rowend= args.rowstart,args.rowstart+maxobjs
     Samp= Samp[args.rowstart:args.rowstart+maxobjs]
