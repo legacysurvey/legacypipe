@@ -236,8 +236,10 @@ class SimImage(DecamImage):
         sims_image = image.copy() 
         sims_image.fill(0.0)
         sims_ivar = sims_image.copy()
-        # N sims, 4 box corners (xmin,xmax,ymin,ymax) for each sim
-        tim.sims_xy = np.empty((len(self.survey.simcat),4))+np.nan 
+        # To make cutout for deeplearning
+        tim.sims_xy = np.zeros((len(self.survey.simcat),4))-1 
+        tim.sims_xyc = np.zeros((len(self.survey.simcat),2))-1
+        tim.sims_radec = np.zeros((len(self.survey.simcat),2))-1
 
         # Store simulated galaxy images in tim object 
         # Loop on each object.
@@ -258,7 +260,6 @@ class SimImage(DecamImage):
             elif objtype == 'qso':
                 stamp = objstamp.qso(obj)
             t0= ptime('Drew the %s' % objtype.upper(),t0)
-             
             # Make sure the object falls on the image and then add Poisson noise.
             overlap = stamp.bounds & image.bounds
             if (overlap.area() > 0):
@@ -276,6 +277,8 @@ class SimImage(DecamImage):
                 sims_ivar[overlap] += ivarstamp
                 tim.sims_xy[ii, :] = [overlap.xmin-1, overlap.xmax-1,
                                       overlap.ymin-1, overlap.ymax-1] # galsim 1st index is 1
+                tim.sims_xyc[ii, :] = [overlap.trueCenter().x-1, overlap.trueCenter().y-1]
+                tim.sims_radec[ii, :] = [obj.ra,obj.dec]
 
                 image[overlap] += stamp
                 invvar[overlap] = ivarstamp
@@ -290,6 +293,7 @@ class SimImage(DecamImage):
         tim.sims_image = sims_image.array
         tim.sims_inverr = np.sqrt(sims_ivar.array)
         tim.sims_xy = tim.sims_xy.astype(int)
+        tim.sims_xyc = tim.sims_xyc.astype(int)
         # Can set image=model, ivar=1/model for testing
         if self.survey.image_eq_model:
             tim.data = sims_image.array.copy()

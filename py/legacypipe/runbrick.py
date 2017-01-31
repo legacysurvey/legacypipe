@@ -607,6 +607,57 @@ def stage_image_coadds(survey=None, targetwcs=None, bands=None, tims=None,
     be created (in `stage_coadds`).  But it's handy to have the coadds
     early on, to diagnose problems or just to look at the data.
     '''
+    
+    # If OBIWAN, save cutouts and exit
+    if hasattr(tims[0], 'sims_image'):
+        outdir=survey.output_dir
+        # Single exposure cutouts
+        for tim in tims:
+            for i in range(tim.sims_xy.shape[0]):
+                # Obj overlaps with image
+                if tim.sims_xyc[i,0] >= 0: 
+                    # Save images
+                    x1,x2,y1,y2= tuple(tim.sims_xy[i,:])
+                    xc,yc= tuple(tim.sims_xyc[i,:])
+                    ra,dec= tuple(tim.sims_radec[i,:])
+                    hdr = dict(x1=x1,x2=x2,y1=y1,y2=y2,\
+                               xc=xc,yc=yc,\
+                               ra=ra,dec=dec)
+                    # WARNING: tractor/legacypipe indexes image arrays as [y,x] NOT [x,y]
+                    data=[tim.data[y1:y2+1, x1:x2+1],\
+                          np.power(tim.inverr[y1:y2+1, x1:x2+1],2),\
+                          tim.dq[y1:y2+1, x1:x2+1]]
+                    expid=str(tim.imobj).strip().replace(' ','')
+                    name= 'cutout_%s_%s_obj_%d.fits' % (expid,tim.band,i)
+                    name= os.path.join(outdir,name)
+                    fitsio.write(name,data,names=['img','invvar','dq'], header=hdr, clobber=True)
+                    print('Wrote %s' % name)
+        # Coadds for reference
+        img_coadd, nil = quick_coadds(tims, bands, targetwcs, 
+                                       images=[tim.data for tim in tims])
+        sims_coadd, nil = quick_coadds(tims, bands, targetwcs, 
+                                       images=[tim.sims_image for tim in tims])
+        #coadd_list= [('image',C.coimgs,rgbkwargs),\
+        coadd_list= [('image',img_coadd,rgbkwargs),\
+                     ('simscoadd', sims_coadd, rgbkwargs)]
+        for name,ims,rgbkw in coadd_list:
+            rgb = get_rgb(ims, bands, **rgbkw)
+            kwa = {}
+            if coadd_bw and len(bands) == 1:
+                rgb = rgb.sum(axis=2)
+                kwa = dict(cmap='gray')
+            import pylab as plt
+            pngfn=os.path.join(outdir,name+'.png')
+            jpgfn=os.path.join(outdir,name+'.jpg')
+            plt.imsave(pngfn, rgb, origin='lower',**kwa)
+            cmd = ('pngtopnm %s | pnmtojpeg -quality 90 > %s' % (pngfn, jpgfn))
+            rtn = os.system(cmd)
+            print(cmd, '->', rtn)
+            os.unlink(pngfn)
+        print('Wrote cutouts, now exiting')
+        sys.exit(0)
+    #####
+
     with survey.write_output('ccds-table', brick=brickname) as out:
         ccds.writeto(out.fn, primheader=version_header)
         print('Wrote', out.fn)
