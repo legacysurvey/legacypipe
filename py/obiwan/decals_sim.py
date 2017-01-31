@@ -239,7 +239,7 @@ class SimImage(DecamImage):
         # To make cutout for deeplearning
         tim.sims_xy = np.zeros((len(self.survey.simcat),4))-1 
         tim.sims_xyc = np.zeros((len(self.survey.simcat),2))-1
-        tim.sims_radec = np.zeros((len(self.survey.simcat),2))-1
+        tim.sims_id = np.zeros(len(self.survey.simcat)).astype(np.int32)-1
 
         # Store simulated galaxy images in tim object 
         # Loop on each object.
@@ -278,7 +278,8 @@ class SimImage(DecamImage):
                 tim.sims_xy[ii, :] = [overlap.xmin-1, overlap.xmax-1,
                                       overlap.ymin-1, overlap.ymax-1] # galsim 1st index is 1
                 tim.sims_xyc[ii, :] = [overlap.trueCenter().x-1, overlap.trueCenter().y-1]
-                tim.sims_radec[ii, :] = [obj.ra,obj.dec]
+                #tim.sims_radec[ii, :] = [obj.ra,obj.dec]
+                tim.sims_id[ii] = obj.id
 
                 image[overlap] += stamp
                 invvar[overlap] = ivarstamp

@@ -609,29 +609,45 @@ def stage_image_coadds(survey=None, targetwcs=None, bands=None, tims=None,
     '''
     
     # If OBIWAN, save cutouts and exit
+    #for obj_id in survey.simcat.id:
+    #ids=[tim.sims_id for tim in tims]
+    #fn= os.path.join(outdir,'obj_%d_%s.fits' % (obj_id,brickname))
+    #fits = FITS(fn,'rw')
     if hasattr(tims[0], 'sims_image'):
         outdir=survey.output_dir
-        # Single exposure cutouts
         for tim in tims:
-            for i in range(tim.sims_xy.shape[0]):
-                # Obj overlaps with image
-                if tim.sims_xyc[i,0] >= 0: 
-                    # Save images
+            for i in range(len(tim.sims_id)):
+                ID= tim.sims_id[i]
+                # id not negative, IFF Obj overlaps with this image
+                if ID > -1:
                     x1,x2,y1,y2= tuple(tim.sims_xy[i,:])
                     xc,yc= tuple(tim.sims_xyc[i,:])
-                    ra,dec= tuple(tim.sims_radec[i,:])
-                    hdr = dict(x1=x1,x2=x2,y1=y1,y2=y2,\
-                               xc=xc,yc=yc,\
-                               ra=ra,dec=dec)
                     # WARNING: tractor/legacypipe indexes image arrays as [y,x] NOT [x,y]
                     data=[tim.data[y1:y2+1, x1:x2+1],\
                           np.power(tim.inverr[y1:y2+1, x1:x2+1],2),\
                           tim.dq[y1:y2+1, x1:x2+1]]
                     expid=str(tim.imobj).strip().replace(' ','')
-                    name= 'cutout_%s_%s_obj_%d.fits' % (expid,tim.band,i)
-                    name= os.path.join(outdir,name)
-                    fitsio.write(name,data,names=['img','invvar','dq'], header=hdr, clobber=True)
-                    print('Wrote %s' % name)
+                    fn= 'obj_%d_%s_%s.fits' % (ID,tim.band,expid)
+                    fn= os.path.join(outdir,fn)
+                    # Get input params for this ID
+                    cat =survey.simcat[ survey.simcat.id == ID ]
+                    assert(len(cat.id) == 1)
+                    hdr = dict(x1=x1,x2=x2,y1=y1,y2=y2,\
+                               xc=xc,yc=yc,\
+                               id=cat.id[0],\
+                               seed=cat.seed[0],\
+                               ra=cat.ra[0],\
+                               dec=cat.dec[0],\
+                               x=cat.x[0],\
+                               y=cat.y[0],\
+                               gflux=cat.gflux[0],\
+                               rflux=cat.rflux[0],\
+                               zflux=cat.zflux[0])
+                    # Write to fits
+                    fitsio.write(fn,data,names=['img','invvar','dq'], header=hdr, clobber=True)
+                    print('Wrote %s' % fn)
+                #for i in range(tim.sims_xy.shape[0]):
+                #if tim.sims_xyc[i,0] >= 0: 
         # Coadds for reference
         img_coadd, nil = quick_coadds(tims, bands, targetwcs, 
                                        images=[tim.data for tim in tims])
