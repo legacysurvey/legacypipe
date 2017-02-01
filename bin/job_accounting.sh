@@ -109,123 +109,135 @@ elif [ "$dowhat" = "status" ]; then
         slurmdir=$outdir/$objtype/slurms/
         slurms=${objtype}_slurm_fils.tmp
         tractors=$outdir/$objtype/
+        don_tractor=${objtype}_tractors_done.tmp
         don=${objtype}_done.tmp
         notdon=${objtype}_notdone.tmp
         logdir=${objtype}_logdir
         logs="$outdir/logs/*/log.*"
-        forcedoom_fns=${objtype}_forcedoomfns.tmp
-        coaddsoom_fns=${objtype}_coaddsoomfns.tmp
-        fitoom_fns=${objtype}_fitoomfns.tmp
-        assertoom_fns=${objtype}_assertoomfns.tmp
-        noccds_fns=${objtype}_noccds.tmp
-        missing_fns=${objtype}_missingfns.tmp
-        noreadhdr_fns=${objtype}_noreadhdrfns.tmp
     elif [ "$therun" = "dr4" ]; then
-        outdir=/scratch1/scratchdirs/desiproc/DRs/data-releases/dr4
+        if [ "$NERSC_HOST" == "edison" ]; then
+            outdir=/scratch1/scratchdirs/desiproc/DRs/data-releases/dr4
+        else
+            outdir=/global/cscratch1/sd/desiproc/dr4/data_release/dr4
+        fi
         slurmdir=$outdir/slurms
         slurms=dr4_slurm_fils.tmp
         tractors=$outdir/tractor/
+        don_tractor=dr4_tractors_done.tmp
         don=dr4_bricks_done.tmp
         notdon=dr4_bricks_notdone.tmp
-        logdir=dr4_logdir
+        logdir=dr4_logdir_Jan182017
         logs="$outdir/logs//log.*"
-        forcedoom_fns=dr4_forcedoomfns.tmp
-        coaddsoom_fns=dr4_coaddsoomfns.tmp
-        fitoom_fns=dr4_fitoomfns.tmp
-        assertoom_fns=dr4_assertoomfns.tmp
-        noccds_fns=dr4_noccds.tmp
-        missing_fns=dr4_missingfns.tmp
-        noreadhdr_fns=dr4_noreadhdrfns.tmp
     else
         echo therun=$therun is not supported
     fi
    
     # Move completedd slurm-*.out files to slurmdir
-    echo Moving slurms to: $slurmdir
-    mkdir -p $slurmdir/oom $slurmdir/oot $slurmdir/manybrick
-    if [ "$therun" = "obiwan" ]; then
-        echo not moving slurm files to $slurmdir
+    #echo Moving slurms to: $slurmdir
+    #mkdir -p $slurmdir/oom $slurmdir/oot $slurmdir/manybrick
+    #if [ "$therun" = "obiwan" ]; then
+    #    echo not moving slurm files to $slurmdir
     #else
-        #find . -name "slurm-*.out" > $slurms
-        #echo Moving at most this many slurm logs: `wc -l $slurms`
-        #for fn in `cat $slurms`; do
-        #    mem=`grep "Exceeded job memory" $fn|wc -c`
-        #    val_oot=`grep "CANCELLED AT" $fn|grep "DUE TO TIME LIMIT" |wc -c`
-        #    val_manybrick=`grep "slurmstepd: error:" $fn|grep "CANCELLED AT"|wc -c` 
-        #    val_dr4=`grep "dr4 DONE" $fn |wc -c`
-        #    val_dr4qdo=`grep "dr4-qdo DONE" $fn |wc -c`
-        #    if [ "$mem" -gt 0 ]; then
-        #        mv $fn $slurmdir/oom
-        #    elif [ "$val_oot" -gt 0 ]; then
-        #        mv $fn $slurmdir/oot/
-        #    elif [ "$val_manybrick" -gt 0 ];then
-        #        mv $fn $slurmdir/manybrick/
-        #    elif [ "$val_dr4" -gt 0 ]; then
-        #        mv $fn $slurmdir/
-        #    elif [ "$val_dr4qdo" -gt 0 ]; then
-        #        mv $fn $slurmdir/
-        #    else
-        #        echo this slurm log remains: $fn, is it running?                
-        #    fi
-        #done
-        #echo Number of slurms:
-        #echo clean exit: `ls $slurmdir/slurm*|wc -l`
-        #echo OOM: `ls $slurmdir/oom/slurm*|wc -l`
-        #echo OOT: `ls $slurmdir/oot/slurm*|wc -l`
-        #echo many bricks ran: `ls $slurmdir/manybrick/slurmm*|wc -l`
-        #for fn in `grep "echo dr4-qdo DONE" slurm-*.out |awk -F ":" '{print $1}'`;do 
-        #    echo moving $fn
-        #    mv $fn $slurmdir/
-        #done
-        #echo Found this many slurm logs: `ls $slurmdir|wc -l`
-        ## Repeat b/c echo may not be in every slurm log
-        #for fn in `grep "dr4-qdo DONE" slurm-*.out |awk -F ":" '{print $1}'`;do 
-        #    echo moving $fn
-        #    mv $fn $slurmdir/
-        #done
+    #    find . -name "slurm-*.out" > $slurms
+    #    echo Moving at most this many slurm logs: `wc -l $slurms`
+    #    for fn in `cat $slurms`; do
+    #        mem=`grep "Exceeded job memory" $fn|wc -c`
+    #        val_oot=`grep "CANCELLED AT" $fn|grep "DUE TO TIME LIMIT" |wc -c`
+    #        val_manybrick=`grep "slurmstepd: error:" $fn|grep "CANCELLED AT"|wc -c` 
+    #        val_dr4=`grep "dr4 DONE" $fn |wc -c`
+    #        val_dr4qdo=`grep "dr4-qdo DONE" $fn |wc -c`
+    #        if [ "$mem" -gt 0 ]; then
+    #            mv $fn $slurmdir/oom
+    #        elif [ "$val_oot" -gt 0 ]; then
+    #            mv $fn $slurmdir/oot/
+    #        elif [ "$val_manybrick" -gt 0 ];then
+    #            mv $fn $slurmdir/manybrick/
+    #        elif [ "$val_dr4" -gt 0 ]; then
+    #            mv $fn $slurmdir/
+    #        elif [ "$val_dr4qdo" -gt 0 ]; then
+    #            mv $fn $slurmdir/
+    #        else
+    #            echo this slurm log remains: $fn, is it running?                
+    #        fi
+    #    done
+    #    echo Number of slurms:
+    #    echo clean exit: `ls $slurmdir/slurm*|wc -l`
+    #    echo OOM: `ls $slurmdir/oom/slurm*|wc -l`
+    #    echo OOT: `ls $slurmdir/oot/slurm*|wc -l`
+    #    #echo many bricks ran: `ls $slurmdir/manybrick/slurmm*|wc -l`
+    #    #for fn in `grep "echo dr4-qdo DONE" slurm-*.out |awk -F ":" '{print $1}'`;do 
+    #    #    echo moving $fn
+    #    #    mv $fn $slurmdir/
+    #    #done
+    #    #echo Found this many slurm logs: `ls $slurmdir|wc -l`
+    #    ## Repeat b/c echo may not be in every slurm log
+    #    #for fn in `grep "dr4-qdo DONE" slurm-*.out |awk -F ":" '{print $1}'`;do 
+    #    #    echo moving $fn
+    #    #    mv $fn $slurmdir/
+    #    #done
     fi
-    # Find tractor cats then just leave bricknames
-    find $tractors -name "tractor-*.fits" > $don
-    awk -F "/" '{print $NF}' $don |sed s/tractor-//g|sed s/.fits//g > junk
-    mv junk $don
-    # Reduce to just brick names
-    python job_accounting.py --therun $therun --dowhat bricks_notdone --fn $don  
+    # Finished tractor.fits files and bricknames
+    find $tractors -name "tractor-*.fits" > $don_tractor
+    awk -F "/" '{print $NF}' ${don_tractor} |sed s/tractor-//g|sed s/.fits//g > $don
     echo Finished Bricks: `wc -l $don`
-    echo Unfinished Bricks: `wc -l $notdon`
-    # Put logfiles in single dir
-    mkdir $logdir
-    rm $logdir/*
-    # Bricks with at least one log file
-    # Get list of log files from slurms in current dir
-    echo Looping over all unfinished bricks, grabbing most recent log file if exists
-    if [ "$therun" = "obiwan" ]; then
-        cp $outdir/logs/*/log.* $logdir/
-    else
-        echo WARNING: are there log files here? $outdir/logs/brickname
-        #for brick in `cat $notdon`; do
-        #    bri="$(echo $brick | head -c 3)"
-        #    pth=$outdir/logs/$bri/$brick
-        #    num=`find $pth -name "log.*"|wc -l`
-        #    if [ "$num" -gt 0 ]; then
-        #        fn=`ls -lrt $pth/log.*|tail -n 1|awk '{print $NF}'`
-        #        cp $fn $logdir/
-        #    fi
-        #done
-        for fn in `grep "echo Logging to:" slurm-*.out |awk '{print $NF}'`;do 
-            cp $fn $logdir/
+    # Some tractor cats do not have "wise_flux", why?
+    # job_accounting.py lists these cats in "sanity_tractors_nowise.txt"
+    # Put the log file for each tractor cat in "sanity_tractors_nowise_logs.txt"
+    tractor_nowise=sanity_tractors_nowise.txt
+    tractor_nowise_logs=sanity_tractors_nowise_logs.txt
+    if [ -e "${tractor_nowise}" ];then
+        # this cmd goes to where the log files exist, and gets the latest log file written
+        echo Getting logs for Tractor Cats w/out "wise_flux"
+        for fn in `cat ${tractor_nowise} |uniq`;do 
+            brick=`echo $fn|awk -F "-" '{print $NF}'|sed s/.fits//g`
+            bri=`echo $brick|head -c 3`
+            echo $brick $bri
+            ls -lrt `find /scratch1/scratchdirs/desiproc/DRs/data-releases/dr4/logs/${bri}/log.${brick}*`|tail -n 1|awk '{print $NF}' >> ${tractor_nowise_logs}
         done
-        echo Bricks touched by currnet slurms: `ls $logdir/*|wc -l` 
     fi
-    # Tally
-    #n_don=`wc -l $don |expand|cut -d " " -f 1`
-    #ball=`wc -l ${objtype}_done_all.tmp |expand|cut -d " " -f 1`
-    #n_notdon=`wc -l ${objtype}_notdone.tmp |expand|cut -d " " -f 1`
-    #n_fils=`ls $logdir|wc -l`
-    #echo Brics finished=$n_don, not=$n_notdon
+    # Organize slurms by day last modified
+    slurm_dir=${outdir}/slurms
+    year=`date|awk '{print $NF}'`
+    today=`date|awk '{print $3}'`
+    month=`date +"%F"|awk -F "-" '{print $2}'`
+    # mv slurms if touched 2 days ago (even a 24hr job is done)
+    let two=${today}-2 
+    for day in `seq 1 ${two}`;do 
+        # 0 pad day, 1 --> 01, 10 --> 10
+        da=`echo $day | awk '{printf "%02d", $0;}'`
+        echo year=$year month=$month day=$da
+        cnt=`ls -l --full-time slurm-*.out|grep -e "${year}-${month}-${da}" |awk '{print $NF}' | wc -l`
+        if [ "${cnt}" -gt 0 ]; then
+            echo Creating ${slurm_dir}/slurms_${year}-${month}-${da}
+            mkdir -p ${slurm_dir}/slurms_${year}-${month}-${da}
+            mv `ls -l --full-time slurm-*.out|grep -e "${year}-${month}-${da}" |awk '{print $NF}'` ${slurm_dir}/slurms_${year}-${month}-${da}/
+            # Make file listing all log.* files in these slurms
+            for fn in `find ${slurm_dir}/slurms_${year}-${month}-${da}/slurm-*.out`;do 
+                grep "echo Logging to:" $fn|awk '{print $NF}'|uniq >> ${slurm_dir}/slurms_${year}-${month}-${da}/log_list.txt
+            done
+        fi
+    done
+    # cp slurms if less than 2 days old since jobs may not be done
+    let one=${today}-1
+    slurm_dir=slurms_recent
+    echo Creating ${slurm_dir}
+    mkdir ${slurm_dir}
+    rm ${slurm_dir}/slurms*.out
+    rm ${slurm_dir}/logs*.txt
+    for day in ${one} ${today};do
+        da=`echo $day | awk '{printf "%02d", $0;}'`
+        cp `ls -l --full-time slurm-*.out|grep -e "${year}-${month}-${da}" |awk '{print $NF}'` ${slurm_dir}/
+    done
+    # Make file listing all log.* files in these slurms
+    for fn in `find ${slurm_dir}/slurm-*.out`;do 
+        grep "echo Logging to:" $fn|awk '{print $NF}'|uniq >> ${slurm_dir}/log_list.txt
+    done
+    # Print error from log files in lt 2 day old slurms       
+    #python job_accounting.py --therun $therun --dowhat bricks_notdone --fn $don  
+    #echo Unfinished Bricks: `wc -l $notdon`
     # Errors in log files
     echo ERRORs
-    rm $missing_fns $noreadhdr_fns
-    for fn in `ls $logdir/log.*`; do
+    for fn in `cat ${slurm_dir}/log_list.txt`; do
         forcedoom=`grep "Photometering WISE band 1" $fn -A 10|grep "Exceeded job memory limit"| wc -c`
         forcedoom2=`grep "slurmstepd: error: Exceeded job memory" $fn -A 20|grep "unwise-coadds"| wc -c`
         coaddsoom=`grep "slurmstepd: error: Exceeded job memory" $fn -B 1|grep "Stage coadds finished:"| wc -c`
@@ -239,62 +251,58 @@ elif [ "$dowhat" = "status" ]; then
         gotfitsio=`grep "IOError: FITSIO status" $fn |wc -c`
         notphot=`grep "No photometric CCDs touching brick" $fn |wc -c`
         runt=`grep "RuntimeError" $fn |wc -c`
+        calib=`grep "RuntimeError: Command failed: modhead" $fn |wc -c`
+        # Append Log name for these errors
         if [ "$forcedoom" -gt 0 ]; then
-            echo $fn Forced Photometry OOM: appending to $forcedoom_fns
-            echo $fn >> $forcedoom_fns 
+            echo $fn Forced Photometry OOM
+            echo $fn >> ${slurm_dir}/logs_forcedoom.txt 
         elif [ "$forcedoom2" -gt 0 ]; then
-            echo $fn Forced Photometry OOM: appending to $forcedoom_fns
-            echo $fn >> $forcedoom_fns 
+            echo $fn Forced Photometry OOM
+            echo $fn >> ${slurm_dir}/logs_forcedoom.txt 
         elif [ "$coaddsoom" -gt 0 ]; then
-            echo $fn Coadds OOM: appending to $coaddsoom_fns
-            echo $fn >> $coaddsoom_fns 
+            echo $fn Coadds OOM
+            echo $fn >> ${slurm_dir}/logs_coaddsoom.txt 
         elif [ "$fitoom" -gt 0 ]; then
-            echo $fn Fitblobs OOM: appending to $fitoom_fns
-            echo $fn >> $fitoom_fns 
+            echo $fn Fitblobs OOM
+            echo $fn >> ${slurm_dir}/logs_fitblobsoom.txt 
         elif [ "$assertoom" -gt 0 ]; then
-            echo $fn AssertionError OOM: appending to $assertoom_fns
-            echo $fn >> $assertoom_fns 
+            echo $fn AssertionError OOM
+            echo $fn >> ${slurm_dir}/logs_assertoom.txt 
         elif [ "$missing" -gt 0 ]; then
-            echo $fn File not found:, appended to $missing_fns
-            grep "IOError: File not found:" $fn|awk '{print $5}' >> $missing_fns 
-        elif [ "$mem" -gt 0 ]
-        then
+            echo $fn FILE NOT FOUND
+            grep "IOError: File not found:" $fn|awk '{print $5}' >> ${slurm_dir}/logs_filenotfound.txt 
+        elif [ "$mem" -gt 0 ]; then
             echo $fn Exceeded job memory limit at some point
-        elif [ "$pol" -gt 0 ]
-        then
+            echo $fn >> ${slurm_dir}/logs_generaloom.txt 
+        elif [ "$pol" -gt 0 ]; then
             echo $fn ValueError: unknown record: POLNAME1
-        elif [ "$tim" -gt 0 ]
-        then
+            echo $fn >> ${slurm_dir}/logs_polname1.txt 
+        elif [ "$tim" -gt 0 ]; then
             echo $fn raise TimeoutError
-        elif [ "$goteof" -gt 0 ]
-        then
+            echo $fn >> ${slurm_dir}/logs_timeout.txt 
+        elif [ "$goteof" -gt 0 ]; then
             echo $fn EOFError
-        elif [ "$gotfitsio" -gt 0 ]
-        then
+            echo $fn >> ${slurm_dir}/logs_eoferror.txt 
+        elif [ "$gotfitsio" -gt 0 ]; then
             echo $fn IOError: FITSIO status
             test=`grep "could not interpret primary array header" $fn|wc -c`
             if [ "$test" -gt 0 ];then
-                grep "could not interpret primary array header" $fn -A 1 >> $noreadhdr_fns
+                grep "could not interpret primary array header" $fn -A 1 >> ${slurm_dir}/logs_nohdr.txt
             fi
-        elif [ "$notphot" -gt 0 ]
-        then
+        elif [ "$notphot" -gt 0 ]; then
             echo $fn No photometric CCDs touching brick
             thebrick=`grep "Command-line args" $fn|awk '{print $7}'|sed s/\'//g|sed s/\,//g`
-            echo $thebrick $fn >> $noccds_fns
-        elif [ "$runt" -gt 0 ]
-        then
+            echo $thebrick $fn >> ${slurm_dir}/logs_noccds.txt
+        elif [ "$runt" -gt 0 ]; then
             echo $fn RuntimeError
+            echo $fn >> ${slurm_dir}/logs_runtimeerror.txt
         else 
             echo $fn no error
+            echo $fn >> ${slurm_dir}/logs_noerror.txt
         fi
     done
-    echo ${forcedoom_fns}: `wc -l $forcedoom_fns`
-    echo ${coaddsoom_fns}: `wc -l $coaddsoom_fns`
-    echo ${fitoom_fns}: `wc -l $fitoom_fns`
-    echo ${assertoom_fns}: `wc -l $assertoom_fns`
-    echo ${noccds_fns}: `wc -l $noccds_fns`
-    echo ${missing_fns}: `wc -l $missing_fns`
-    echo ${noreadhdr_fns}: `wc -l $noreadhdr_fns`
+    # Report stats
+    wc -l ${slurm_dir}/logs_*.txt 
 else
     echo bad argument: $dowhat
 fi

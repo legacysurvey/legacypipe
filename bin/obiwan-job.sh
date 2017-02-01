@@ -1,19 +1,23 @@
 #!/bin/bash -l
 
 #SBATCH -p shared
-#SBATCH -n 12
-#SBATCH --array=1-5
-#SBATCH -t 01:00:00
+#SBATCH -n 8
+#SBATCH -t 00:10:00
 #SBATCH --account=desi
-#SBATCH -J OBIELG
+#SBATCH -J OBILRG
 #SBATCH --mail-user=kburleigh@lbl.gov
 #SBATCH --mail-type=END,FAIL
 #SBATCH -L SCRATCH
+#SBATCH -C haswell
+
+#--array=1-2
+#--qos=scavenger
+
 
 #export runwhat=star
 #export runwhat=qso
-export runwhat=elg
-#export runwhat=lrg
+#export runwhat=elg
+export runwhat=lrg
 
 if [ "$runwhat" = "star" ]; then
     export nobj=500
@@ -28,12 +32,25 @@ else
     exit
 fi
 
-#--qos=scavenger
-#-o DR4.o%j
-#-p shared
-#-n 12
-#-p debug
-#-N 1
+usecores=4
+threads=$usecores
+# Limit memory to avoid 1 srun killing whole node
+if [ "$NERSC_HOST" = "edison" ]; then
+    # 62 GB / Edison node = 65000000 kbytes
+    maxmem=65000000
+    let usemem=${maxmem}*${usecores}/24
+else
+    # 128 GB / Edison node = 65000000 kbytes
+    maxmem=134000000
+    let usemem=${maxmem}*${usecores}/32
+fi
+ulimit -S -v $usemem
+ulimit -a
+
+echo usecores=$usecores
+echo threads=$threads
+
+
 
 #bcast
 #source /scratch1/scratchdirs/desiproc/DRs/code/dr4/yu-bcast_2/activate.sh
@@ -54,23 +71,16 @@ cd $CODE_DIR/legacypipe/py
 export statdir="${outdir}/progress"
 mkdir -p $statdir $outdir
 
-# Threads
-usecores=6
-threads=6
 export OMP_NUM_THREADS=$threads
 
 # Force MKL single-threaded
 # https://software.intel.com/en-us/articles/using-threaded-intel-mkl-in-multi-thread-application
 export MKL_NUM_THREADS=1
-# Try limiting memory to avoid killing the whole MPI job...
-# 67 kbytes is 64GB (mem of Edison node)
-#ulimit -S -v 65000000
-ulimit -a
 
 while true; do
     echo GETTING BRICK
     date
-    bricklist=${LEGACY_SURVEY_DIR}/eboss-ngc-load-${runwhat}.txt
+    bricklist=${LEGACY_SURVEY_DIR}/eboss-ngc-load-${runwhat}-${NERSC_HOST}.txt
     if [ ! -e "$bricklist" ]; then
         echo file=$bricklist does not exist, quitting
         exit 999
@@ -112,7 +122,7 @@ while true; do
     #qdo_table=dr4-bootes
 
     set -x
-    log="$outdir/$objtype/$bri/$brick/rowstart${rowstart}/logs/log.${SLURM_JOB_ID}_${SLURM_ARRAY_TASK_ID}"
+    log="$outdir/$objtype/$bri/$brick/logs/log.rowst${rowstart}_${SLURM_JOB_ID}_${SLURM_ARRAY_TASK_ID}"
     mkdir -p $(dirname $log)
     echo Logging to: $log
     echo "-----------------------------------------------------------------------------------------" >> $log
@@ -128,6 +138,7 @@ while true; do
     wait
     date
     rm ${inq}
+    set +x
 done
 # Bootes
 #--run dr4-bootes \
@@ -140,7 +151,7 @@ done
 #    --force-all --no-write \
 #    --skip-calibs \
 #
-echo $inq DONE ${SLURM_JOB_ID}_${SLURM_ARRAY_TASK_ID}
+echo obiwan-${runwhat} DONE 
 
 # 
 # qdo launch DR4 100 --cores_per_worker 24 --batchqueue regular --walltime 00:55:00 --script ./dr4-qdo.sh --keep_env --batchopts "-a 0-11"

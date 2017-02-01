@@ -9,7 +9,7 @@ from astrometry.util.fits import fits_table, merge_tables
 
 parser = argparse.ArgumentParser(description='Generate a legacypipe-compatible CCDs file from a set of reduced imaging.') 
 parser.add_argument('--therun', choices=['dr4','obiwan'],action='store', default=True) 
-parser.add_argument('--dowhat', choices=['bricks_notdone','time_per_brick','nersc_time'],action='store', default=True) 
+parser.add_argument('--dowhat', choices=['bricks_notdone','time_per_brick','nersc_time','sanity_tractors'],action='store', default=True) 
 parser.add_argument('--fn', action='store', default=False) 
 args = parser.parse_args() 
 
@@ -110,4 +110,29 @@ elif args.dowhat == 'nersc_time':
     time_hist(hrs,name='hist_bricks_done.png')
     print('Done bricks')
     nersc_time(hrs)
+elif args.dowhat == 'sanity_tractors':
+    # RUN: python job_accounting.py --therun dr4 --dowhat sanity_tractors --fn dr4_tractors_done.tmp
+    # Read each finished Tractor Catalogue
+    # Append name to file if:
+    # -- error reading it
+    # -- no wise flux
+    fns=np.loadtxt(args.fn,dtype=str)
+    assert(len(fns) > 0)
+    # Remove file lists for clean slate
+    for outfn in ['sanity_tractors_readerr.txt','sanity_tractors_nowise.txt']:
+        if os.path.exists(outfn):
+            os.remove(outfn)
+    # Loop over completed Tractor Cats
+    for fn in fns:
+        try: 
+            t=fits_table(fn)
+            if not 'wise_flux' in t.get_columns():
+                print('wise_flux not in %s' % fn)
+                with open('sanity_tractors_nowise.txt','a') as foo:
+                    foo.write('%s\n' % fn)
+        except:
+            print('error reading %s' % fn)
+            with open('sanity_tractors_readerr.txt','a') as foo:
+                foo.write('%s\n' % fn)
+         
 

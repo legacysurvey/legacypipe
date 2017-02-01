@@ -6,7 +6,7 @@ export TMPDIR=$SCRATCH/tmp
 mkdir -p $TMPDIR
 
 # We copy our code to $SCRATCH for speed; see the update-scratch.sh script.
-export CODE_DIR=$SCRATCH/DRs/code/dr4
+#export CODE_DIR=$SCRATCH/DRs/code/dr4
 
 # Use HPCPorts for packages
 source /project/projectdirs/cmb/modules/hpcports_NERSC.sh
@@ -27,11 +27,11 @@ if [ "$NERSC_HOST" == "edison" ]; then
   # NERSC modules
   #  module load tractor-hpcp
   # module load astrometry_net-hpcp
+  module load wcstools-hpcp
   module load astropy-hpcp
   module load scipy-hpcp
   module load matplotlib-hpcp
   module load fitsio-hpcp
-  module load wcslib-hpcp
   module load photutils-hpcp
   module load ceres-hpcp
   module load sextractor-hpcp
@@ -42,9 +42,15 @@ if [ "$NERSC_HOST" == "edison" ]; then
   module load galsim-hpcp
   
   # Needed during building Astrometry.net, but not runtime.
-  # module load swig-hpcp
+  module load swig-hpcp
+  module load wcslib-hpcp
+  module load pkgconfig-hpcp
+  module load libpng-hpcp
+  module load libjpeg-hpcp
+  module load cfitsio-hpcp
+  module load zlib-hpcp
   # Needed during ceres build
-  # module load eigen-hpcp
+   module load eigen-hpcp
 
   #module load mkl
   module load intel
@@ -53,37 +59,37 @@ if [ "$NERSC_HOST" == "edison" ]; then
   module unload darshan
 
   # unneeded, as far as I know...
-  module unload pyyaml-hpcp
-  ##module unload ipython-hpcp
-  module unload cython-hpcp
-  module unload rca
-  module unload curl
-  module unload zlib
-  module unload bzip2
-  module unload autoconf-hpcp
-  module unload libtool-hpcp
-  module unload automake-hpcp
-  module unload sqlite-hpcp
-  module unload openssl-hpcp
-  module unload libxml2-hpcp
-  module unload openmpi-hpcp
-  module unload nose-hpcp
-  module unload expat-hpcp
-  module unload libyaml-hpcp
-  module unload yaml-hpcp
-  module unload curl-hpcp
-  module unload git-hpcp
-  ##module unload boost-hpcp # DON'T unload this, breaks galsim
-  #module unload swig-hpcp
-  module unload cmake-hpcp
-  #module unload eigen-hpcp
-  module unload sfftw-hpcp
-  module unload plplot-hpcp
-  ##module unload setuptools-hpcp # DON'T unload this, breaks galsim
-  module unload m4-hpcp
-  module unload termcap-hpcp
-  module unload readline-hpcp
-  module unload pkgconfig-hpcp
+  #module unload pyyaml-hpcp
+  ###module unload ipython-hpcp
+  #module unload cython-hpcp
+  #module unload rca
+  #module unload curl
+  #module unload zlib
+  #module unload bzip2
+  #module unload autoconf-hpcp
+  #module unload libtool-hpcp
+  #module unload automake-hpcp
+  #module unload sqlite-hpcp
+  #module unload openssl-hpcp
+  #module unload libxml2-hpcp
+  #module unload openmpi-hpcp
+  #module unload nose-hpcp
+  #module unload expat-hpcp
+  #module unload libyaml-hpcp
+  #module unload yaml-hpcp
+  #module unload curl-hpcp
+  #module unload git-hpcp
+  ###module unload boost-hpcp # DON'T unload this, breaks galsim
+  ##module unload swig-hpcp
+  #module unload cmake-hpcp
+  ##module unload eigen-hpcp
+  #module unload sfftw-hpcp
+  #module unload plplot-hpcp
+  ###module unload setuptools-hpcp # DON'T unload this, breaks galsim
+  #module unload m4-hpcp
+  #module unload termcap-hpcp
+  #module unload readline-hpcp
+  #module unload pkgconfig-hpcp
   # Keep this one
   module load psfex-hpcp
 
@@ -122,41 +128,57 @@ fi
 if [ "$NERSC_HOST" == "cori" ]; then
   hpcports gnu
 
+  module use /project/projectdirs/cosmo/software/modules/${NERSC_HOST}
+  module load unwise_coadds/fulldepth-scratch
+  module load unwise_coadds_timeresolved/neo1-cori-scratch
+  # These are fine
+  module use /project/projectdirs/cosmo/work/decam/modules
+  module load legacysurvey/dr4-cori-scratch
+  module load dust/cori-scratch
+
   # dust
-  module use /project/projectdirs/desi/software/modules/${NERSC_HOST}
+  #module use /project/projectdirs/desi/software/modules/${NERSC_HOST}
 
   # unwise_coadds
-  module use /project/projectdirs/cosmo/software/modules/${NERSC_HOST}
+  #module use /project/projectdirs/cosmo/software/modules/${NERSC_HOST}
 
   #
-  module use /project/projectdirs/cosmo/work/decam/modules
-  module load legacysurvey/dr3-cori-scratch
+  #module use /project/projectdirs/cosmo/work/decam/modules
+  #module load legacysurvey/dr3-cori-scratch
 
-  module load dust/scratch
-  module load unwise_coadds/fulldepth-scratch
+  #module load dust/scratch
+  #module load unwise_coadds/fulldepth-scratch
 
   # module load unwise_coadds_timeresolved/neo1
-  module load unwise_coadds_timeresolved/neo1-cori-scratch
+  #module load unwise_coadds_timeresolved/neo1-cori-scratch
 
-  # module load tractor-hpcp
-  module load astrometry_net-hpcp
+  # NERSC modules
+  #  module load tractor-hpcp
+  # module load astrometry_net-hpcp
+  module load wcstools-hpcp
   module load astropy-hpcp
   module load scipy-hpcp
   module load matplotlib-hpcp
   module load fitsio-hpcp
-  module load wcslib-hpcp
   module load photutils-hpcp
   module load ceres-hpcp
   module load sextractor-hpcp
-
   #module load psfex
-  module load psfex-hpcp
-
   module load postgresql-hpcp
   module load psycopg2-hpcp
+  module load ipython-hpcp
+  module load galsim-hpcp
   
   # Needed during building Astrometry.net, but not runtime.
-  # module load swig-hpcp
+  module load swig-hpcp
+  module load wcslib-hpcp
+  module load pkgconfig-hpcp
+  module load libpng-hpcp
+  module load libjpeg-hpcp
+  module load cfitsio-hpcp
+  module load zlib-hpcp
+  # Needed during ceres build
+  module load eigen-hpcp
 
   #module load mkl
   module load intel
@@ -165,37 +187,39 @@ if [ "$NERSC_HOST" == "cori" ]; then
   module unload darshan
 
   # unneeded, as far as I know...
-  module unload pyyaml-hpcp
-  module unload ipython-hpcp
-  module unload cython-hpcp
-  module unload rca
-  module unload curl
-  module unload zlib
-  module unload bzip2
-  module unload autoconf-hpcp
-  module unload libtool-hpcp
-  module unload automake-hpcp
-  module unload sqlite-hpcp
-  module unload openssl-hpcp
-  module unload libxml2-hpcp
-  module unload openmpi-hpcp
-  module unload nose-hpcp
-  module unload expat-hpcp
-  module unload libyaml-hpcp
-  module unload yaml-hpcp
-  module unload curl-hpcp
-  module unload git-hpcp
-  module unload boost-hpcp
-  module unload swig-hpcp
-  module unload cmake-hpcp
-  module unload eigen-hpcp
-  module unload sfftw-hpcp
-  module unload plplot-hpcp
-  module unload setuptools-hpcp
-  module unload m4-hpcp
-  module unload termcap-hpcp
-  module unload readline-hpcp
-  module unload pkgconfig-hpcp
+  #module unload pyyaml-hpcp
+  ###module unload ipython-hpcp
+  #module unload cython-hpcp
+  #module unload rca
+  #module unload curl
+  #module unload zlib
+  #module unload bzip2
+  #module unload autoconf-hpcp
+  #module unload libtool-hpcp
+  #module unload automake-hpcp
+  #module unload sqlite-hpcp
+  #module unload openssl-hpcp
+  #module unload libxml2-hpcp
+  #module unload openmpi-hpcp
+  #module unload nose-hpcp
+  #module unload expat-hpcp
+  #module unload libyaml-hpcp
+  #module unload yaml-hpcp
+  #module unload curl-hpcp
+  #module unload git-hpcp
+  ###module unload boost-hpcp # DON'T unload this, breaks galsim
+  ##module unload swig-hpcp
+  #module unload cmake-hpcp
+  ##module unload eigen-hpcp
+  #module unload sfftw-hpcp
+  #module unload plplot-hpcp
+  ###module unload setuptools-hpcp # DON'T unload this, breaks galsim
+  #module unload m4-hpcp
+  #module unload termcap-hpcp
+  #module unload readline-hpcp
+  #module unload pkgconfig-hpcp
+  # Keep this one
+  module load psfex-hpcp
 
   export QDO_BATCH_PROFILE=cori
 
@@ -218,6 +242,13 @@ if [ "$NERSC_HOST" == "cori" ]; then
   export PYTHONPATH=${PYP}
   export PATH
   unset PYP
+
+  # local astrometry.net install
+  export PYTHONPATH=${CODE_DIR}/astrometry.net/kaylan_install/lib/python:${PYTHONPATH}
+  export PATH=${CODE_DIR}/astrometry.net/kaylan_install/lib/python/astrometry:${PATH}
+  #PATH=${CODE_DIR}/astrometry_kaylanb/lib/python/astrometry/util:${PATH}
+  #PATH=${CODE_DIR}/astrometry_kaylanb/lib/python/astrometry/blind:${PATH}
+  # Other packages
 
 fi
 
