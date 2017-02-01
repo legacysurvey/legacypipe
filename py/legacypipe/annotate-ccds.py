@@ -25,6 +25,11 @@ def main(outfn='ccds-annotated.fits', ccds=None, mzls=False):
         # https://desi.lbl.gov/svn/decam/code/observing/trunk
         tiles = fits_table('decam-tiles_obstatus.fits')
 
+    # Map tile IDs back to index in the obstatus file.
+    tileid_to_index = np.empty(max(tiles.tileid)+1, int)
+    tileid_to_index[:] = -1
+    tileid_to_index[tiles.tileid] = np.arange(len(tiles))
+
     I = survey.photometric_ccds(ccds)
     ccds.photometric = np.zeros(len(ccds), bool)
     ccds.photometric[I] = True
@@ -32,6 +37,10 @@ def main(outfn='ccds-annotated.fits', ccds=None, mzls=False):
     I = survey.apply_blacklist(ccds)
     ccds.blacklist_ok = np.zeros(len(ccds), bool)
     ccds.blacklist_ok[I] = True
+
+    # Set to True if we successfully read the calibration products and computed
+    # annotated values
+    ccds.annotated = np.zeros(len(ccds), bool)
 
     ccds.good_region = np.empty((len(ccds), 4), np.int16)
     ccds.good_region[:,:] = -1
@@ -152,11 +161,14 @@ def main(outfn='ccds-annotated.fits', ccds=None, mzls=False):
             (     mzls  and (words[0] == 'MzLS'  ))):
             try:
                 tileid = int(words[1])
-                tile = tiles[tileid - 1]
-                if tile.tileid != tileid:
-                    I = np.flatnonzero(tile.tileid == tileid)
-                    tile = tiles[I[0]]
+                tile = tiles[tileid_to_index[tileid]]
+                assert(tile.tileid == tileid)
+                # if tile.tileid != tileid:
+                #     I = np.flatnonzero(tile.tileid == tileid)
+                #     tile = tiles[I[0]]
             except:
+                import traceback
+                traceback.print_ext()
                 pass
 
         if tile is not None:
@@ -281,6 +293,8 @@ def main(outfn='ccds-annotated.fits', ccds=None, mzls=False):
         ccds.pixscale_max[iccd] = max(pixscale)
         ccds.pixscale_std[iccd] = np.std(pixscale)
 
+        ccds.annotated[iccd] = True
+
     ccds.plver = np.array(plvers)
 
     sfd = tractor.sfd.SFDMap()
@@ -289,6 +303,10 @@ def main(outfn='ccds-annotated.fits', ccds=None, mzls=False):
     wisebands = ['WISE W1', 'WISE W2', 'WISE W3', 'WISE W4']
     ebv,ext = sfd.extinction(filts + wisebands, ccds.ra_center,
                              ccds.dec_center, get_ebv=True)
+
+    ext[np.logical_not(ccds.annotated),:] = 0.
+    ebv[np.logical_not(ccds.annotated)] = 0.
+
     ext = ext.astype(np.float32)
     ccds.ebv = ebv.astype(np.float32)
     ccds.decam_extinction = ext[:,:len(allbands)]
@@ -319,6 +337,11 @@ def main(outfn='ccds-annotated.fits', ccds=None, mzls=False):
     # that's flux in nanomaggies -- convert to mag
     ccds.gaussgaldepth = -2.5 * (np.log10(depth) - 9)
 
+
+    # NaN depths -> 0
+    for X in [ccds.psfdepth, ccds.galdepth, ccds.gausspsfdepth, ccds.gaussgaldepth]:
+        X[np.logical_not(np.isfinite(X))] = 0.
+    
     ccds.writeto(outfn)
 
 
