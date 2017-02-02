@@ -43,6 +43,7 @@ class MosaicImage(CPImage, CalibMixin):
         for name,crit in [
             ('exptime < 30 s', (ccds.exptime < 30)),
             ('ccdnmatch < 20', (ccds.ccdnmatch < 20)),
+            ('sky too bright: ccdskycounts >= 150', (ccds.ccdskycounts >= 150)),
             ('abs(zpt - ccdzpt) > 0.1',
              (np.abs(ccds.zpt - ccds.ccdzpt) > 0.1)),
             ('zpt < 0.6 mag of nominal',
