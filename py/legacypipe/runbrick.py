@@ -607,6 +607,73 @@ def stage_image_coadds(survey=None, targetwcs=None, bands=None, tims=None,
     be created (in `stage_coadds`).  But it's handy to have the coadds
     early on, to diagnose problems or just to look at the data.
     '''
+    
+    # If OBIWAN, save cutouts and exit
+    #for obj_id in survey.simcat.id:
+    #ids=[tim.sims_id for tim in tims]
+    #fn= os.path.join(outdir,'obj_%d_%s.fits' % (obj_id,brickname))
+    #fits = FITS(fn,'rw')
+    if hasattr(tims[0], 'sims_image'):
+        outdir=survey.output_dir
+        for tim in tims:
+            for i in range(len(tim.sims_id)):
+                ID= tim.sims_id[i]
+                # id not negative, IFF Obj overlaps with this image
+                if ID > -1:
+                    x1,x2,y1,y2= tuple(tim.sims_xy[i,:])
+                    xc,yc= tuple(tim.sims_xyc[i,:])
+                    # WARNING: tractor/legacypipe indexes image arrays as [y,x] NOT [x,y]
+                    data=[tim.data[y1:y2+1, x1:x2+1],\
+                          np.power(tim.inverr[y1:y2+1, x1:x2+1],2),\
+                          tim.dq[y1:y2+1, x1:x2+1]]
+                    expid=str(tim.imobj).strip().replace(' ','')
+                    fn= 'obj_%d_%s_%s.fits' % (ID,tim.band,expid)
+                    fn= os.path.join(outdir,fn)
+                    # Get input params for this ID
+                    cat =survey.simcat[ survey.simcat.id == ID ]
+                    assert(len(cat.id) == 1)
+                    hdr = dict(x1=x1,x2=x2,y1=y1,y2=y2,\
+                               xc=xc,yc=yc,\
+                               id=cat.id[0],\
+                               seed=cat.seed[0],\
+                               ra=cat.ra[0],\
+                               dec=cat.dec[0],\
+                               x=cat.x[0],\
+                               y=cat.y[0],\
+                               gflux=cat.gflux[0],\
+                               rflux=cat.rflux[0],\
+                               zflux=cat.zflux[0])
+                    # Write to fits
+                    fitsio.write(fn,data,names=['img','invvar','dq'], header=hdr, clobber=True)
+                    print('Wrote %s' % fn)
+                #for i in range(tim.sims_xy.shape[0]):
+                #if tim.sims_xyc[i,0] >= 0: 
+        # Coadds for reference
+        img_coadd, nil = quick_coadds(tims, bands, targetwcs, 
+                                       images=[tim.data for tim in tims])
+        sims_coadd, nil = quick_coadds(tims, bands, targetwcs, 
+                                       images=[tim.sims_image for tim in tims])
+        #coadd_list= [('image',C.coimgs,rgbkwargs),\
+        coadd_list= [('image',img_coadd,rgbkwargs),\
+                     ('simscoadd', sims_coadd, rgbkwargs)]
+        for name,ims,rgbkw in coadd_list:
+            rgb = get_rgb(ims, bands, **rgbkw)
+            kwa = {}
+            if coadd_bw and len(bands) == 1:
+                rgb = rgb.sum(axis=2)
+                kwa = dict(cmap='gray')
+            import pylab as plt
+            pngfn=os.path.join(outdir,name+'.png')
+            jpgfn=os.path.join(outdir,name+'.jpg')
+            plt.imsave(pngfn, rgb, origin='lower',**kwa)
+            cmd = ('pngtopnm %s | pnmtojpeg -quality 90 > %s' % (pngfn, jpgfn))
+            rtn = os.system(cmd)
+            print(cmd, '->', rtn)
+            os.unlink(pngfn)
+        print('Wrote cutouts, now exiting')
+        sys.exit(0)
+    #####
+
     with survey.write_output('ccds-table', brick=brickname) as out:
         ccds.writeto(out.fn, primheader=version_header)
         print('Wrote', out.fn)
