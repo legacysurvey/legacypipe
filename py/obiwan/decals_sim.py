@@ -157,6 +157,42 @@ import obiwan.decals_sim_priors as priors
 from astrometry.util.fits import fits_table, merge_tables
 from astrometry.util.ttime import Time
 
+import csv
+
+def write_dict(fn,d):
+    '''d -- dictionary'''
+    w = csv.writer(open(fn, "w"))
+    for key, val in d.items():
+        w.writerow([key, val])
+
+def read_dict(fn):
+    d = {}
+    for key, val in csv.reader(open(fn)):
+        d[key] = val
+    return d
+
+def imshow_stamp(stamp,fn='test.png',galsimobj=True):
+    if galsimobj:
+        img = stamp.array.copy()
+    else:
+        img= stamp.copy()
+    img=img + abs(img.min())+1 
+    plt.imsave(fn,np.log10(img),origin='lower',cmap='gray')
+    #plt.imshow(np.log10(img),origin='lower',cmap='gray')
+    #plt.savefig(fn)
+    #plt.close()
+    #print('Wrote %s' % fn)
+
+def plot_radial_profs(fn,profs):
+    assert(profs.shape[1] == 3)
+    r=np.arange(profs.shape[0])
+    for i,lab in zip(range(3),['src','srcnoise','srcnoiseimg']):
+        plt.plot(r,profs[:,i],label=lab)
+    plt.legend(loc='lower right')
+    plt.savefig(fn)
+    plt.close()
+
+
 def ptime(text,t0):
     '''Timer'''    
     tnow=Time()
@@ -206,6 +242,19 @@ class SimDecals(LegacySurveyData):
         else:
             raise ValueError('run=%s not supported' % self.run)
 
+def get_srcimg_invvar(stamp_ivar,img_ivar):
+    '''stamp_ivar, img_ivar -- galsim Image objects'''
+    ivar= np.power(stamp_ivar.array.copy(), -1) + np.power(img_ivar.array.copy(), -1) 
+    ivar= np.power(ivar,-1) 
+    keep= np.ones(ivar.shape).astype(bool)
+    keep[ (stamp_ivar.array > 0)*\
+          (img_ivar.array > 0) ] = False
+    ivar[keep] = 0.
+    # 
+    obj_ivar = stamp_ivar.copy()
+    obj_ivar.fill(0.)
+    obj_ivar+= ivar
+    return obj_ivar
 
 
 
@@ -230,16 +279,18 @@ class SimImage(DecamImage):
                               folding_threshold=self.survey.folding_threshold)
 
         # Grab the data and inverse variance images [nanomaggies!]
-        image = galsim.Image(tim.getImage())
-        invvar = galsim.Image(tim.getInvvar())
+        tim_image = galsim.Image(tim.getImage())
+        tim_invvar = galsim.Image(tim.getInvvar())
+        tim_dq = galsim.Image(tim.dq)
         # Also store galaxy sims and sims invvar
-        sims_image = image.copy() 
+        sims_image = tim_image.copy() 
         sims_image.fill(0.0)
         sims_ivar = sims_image.copy()
         # To make cutout for deeplearning
         tim.sims_xy = np.zeros((len(self.survey.simcat),4))-1 
         tim.sims_xyc = np.zeros((len(self.survey.simcat),2))-1
         tim.sims_id = np.zeros(len(self.survey.simcat)).astype(np.int32)-1
+        tim.sims_added_flux = np.zeros(len(self.survey.simcat)).astype(float)-1
 
         # Store simulated galaxy images in tim object 
         # Loop on each object.
@@ -250,7 +301,22 @@ class SimImage(DecamImage):
                 strin= 'Drawing 1 %s: sersicn=%.2f, rhalf=%.2f, ba=%.2f, phi=%.2f' % \
                         (objtype.upper(), obj.sersicn,obj.rhalf,obj.ba,obj.phi)
                 print(strin)
-            # Draw a single object
+            # Before drawing we can check if the obj is near CCD
+            #if self.survey.metacat.cutouts[0]: 
+            #    #draw_it= isNearCCD(tim,obj,
+            #    junk,xx,yy = tim.wcs.wcs.radec2pixelxy(obj.ra,obj.dec)
+            #    xx,yy= int(xx),int(yy)
+            #    min_stamp_pixels= 16  # 200. / 3600. # arcsec -> deg
+            #    obj_bounds= galsim.BoundsI(xmin= xx - min_stamp_pixels/2,\
+            #                            xmax= xx + min_stamp_pixels/2,\
+            #                            ymin= yy - min_stamp_pixels/2,\
+            #                            ymax= yy + min_stamp_pixels/2)
+            #    overlap = obj_bounds & tim_image.bounds
+            #    # Even the SMALLEST stamp fits entirely within image
+            #    # High prob teh full size stamp will  
+            #    draw_it= obj_bounds == overlap
+            #    #x1, y1 = tim.wcs.positionToPixel(RaDecPos(obj.ra-max_stamp_size/2, obj.dec-max_stamp_size/2))
+
             if objtype == 'star':
                 stamp = objstamp.star(obj)
             elif objtype == 'elg':
@@ -260,30 +326,102 @@ class SimImage(DecamImage):
             elif objtype == 'qso':
                 stamp = objstamp.qso(obj)
             t0= ptime('Drew the %s' % objtype.upper(),t0)
-            # Make sure the object falls on the image and then add Poisson noise.
-            overlap = stamp.bounds & image.bounds
-            if (overlap.area() > 0):
+            #print('I predict we draw it',draw_it)
+            # Save radial profiles after draw, addNoise, etc. for unit tests
+            rad_profs=np.zeros((stamp.array.shape[0],3))
+            rad_profs[:,0]= stamp.array.copy()[ stamp.array.shape[0]/2,: ]
+            # Want to save flux actually added too
+            added_flux= stamp.added_flux
+            # Add source if EVEN 1 pix falls on the CCD
+            overlap = stamp.bounds & tim_image.bounds
+            add_source = overlap.area() > 0
+            # For Deep learning: only add source if entire thing fits on image
+            if self.survey.metacat.cutouts[0]:
+                # this is a deep learning run
+                add_source= stamp.bounds == overlap
+            if add_source:
                 stamp = stamp[overlap]      
-                ivarstamp = invvar[overlap]
-                #np.save('stamp.npy',stamp.array)
-                #np.save('ivarstamp.npy',ivarstamp.array)
-                # Add noise to simulated source
+                
                 if self.survey.add_sim_noise:
-                    stamp, ivarstamp = objstamp.addnoise(stamp, ivarstamp)
-                #np.save('stamp_wnoise.npy',stamp.array)
-                #np.save('ivarstamp_wnoise.npy',ivarstamp.array)
-                # Only where stamps will in inserted
-                sims_image[overlap] += stamp 
-                sims_ivar[overlap] += ivarstamp
+                    #stamp2,stamp3= objstamp.addGaussNoise(stamp, ivarstamp)
+                    ivarstamp= objstamp.addGaussNoise(stamp)
+                rad_profs[:,1]= stamp.array.copy()[ stamp.array.shape[0]/2,: ]
+
+                # Zero out invvar where bad pixel mask is flagged (> 0)
+                keep = np.ones(tim_dq[overlap].array.shape)
+                keep[ tim_dq[overlap].array > 0 ] = 0.
+                ivarstamp *= keep
+                tim_invvar[overlap] *= keep 
+
+                # Add stamp to image
+                back= tim_image[overlap].copy()
+                tim_image[overlap] = back.copy() + stamp.copy()
+                # Add variances
+                back_ivar= tim_invvar[overlap].copy()
+                tot_ivar= get_srcimg_invvar(ivarstamp, back_ivar)
+                tim_invvar[overlap] = tot_ivar.copy()
+
+                rad_profs[:,2]= tim_image[overlap].array.copy()[ stamp.array.shape[0]/2,: ]
+                # Save sims info
                 tim.sims_xy[ii, :] = [overlap.xmin-1, overlap.xmax-1,
                                       overlap.ymin-1, overlap.ymax-1] # galsim 1st index is 1
                 tim.sims_xyc[ii, :] = [overlap.trueCenter().x-1, overlap.trueCenter().y-1]
                 #tim.sims_radec[ii, :] = [obj.ra,obj.dec]
                 tim.sims_id[ii] = obj.id
+                tim.sims_added_flux[ii] = added_flux
 
-                image[overlap] += stamp
-                invvar[overlap] = ivarstamp
-
+                # Save Cutouts
+                if self.survey.metacat.cutouts[0]:
+                    # Data for training: src+noise, src+noise invvar, background, background_invvar
+                    data= np.zeros((stamp.array.shape[0],stamp.array.shape[1],6))
+                    data[:,:,0]= stamp.array.copy() # src+noise
+                    data[:,:,1]= ivarstamp.array.copy() # src+noise invvar
+                    data[:,:,2]= back.array.copy() # background
+                    data[:,:,3]= back_ivar.array.copy() # background_invvar
+                    data[:,:,4]= tim_image[overlap].array.copy() # src+noise+background
+                    data[:,:,5]= tim_invvar[overlap].array.copy() # src+noise+background_ nvvar
+                    # Save fn
+                    expid=str(tim.imobj).strip().replace(' ','')
+                    fn= '%s_%d_%s' % (tim.band,obj.id,expid)
+                    fn= os.path.join(self.survey.output_dir,fn)
+                    np.save(fn+'.npy',data,allow_pickle=False)
+                    print('Wrote %s' % (fn+'.npy',))
+                    # Save metadata
+                    x1,x2,y1,y2= tuple(tim.sims_xy[ii,:])
+                    xc,yc= tuple(tim.sims_xyc[ii,:])
+                    d = dict(x1=x1,x2=x2,y1=y1,y2=y2,\
+                             xc=xc,yc=yc,\
+                             band=tim.band,\
+                             addedflux= added_flux,\
+                             id=obj.id,\
+                             ra=obj.ra,\
+                             dec=obj.dec,\
+                             rhalf=obj.rhalf,\
+                             sersicn=obj.sersicn,\
+                             phi=obj.phi,\
+                             ba=obj.ba,\
+                             gflux=obj.gflux,\
+                             rflux=obj.rflux,\
+                             zflux=obj.zflux)
+                    write_dict(fn+'.csv',d)
+                    # Following are Sanity Checks
+                    # ONLY save for ii == 0 out of 256 objects 
+                    if ii == 0:
+                                                # Also write fits file for easier image stretching
+                        fitsio.write(fn+'_src.fits',data[...,0],clobber=True)
+                        fitsio.write(fn+'_src_invvar.fits',data[...,1],clobber=True)
+                        fitsio.write(fn+'_img.fits',data[...,2],clobber=True)
+                        fitsio.write(fn+'_img_invvar.fits',data[...,3],clobber=True)
+                        fitsio.write(fn+'_srcimg.fits',data[...,4],clobber=True)
+                        fitsio.write(fn+'_srcimg_invvar.fits',data[...,5],clobber=True)
+                        # Draw Radial Profiles
+                        plot_radial_profs(fn+'_profiles.png',rad_profs)
+                
+                #Extra
+                sims_image[overlap] += stamp.copy() 
+                sims_ivar[overlap] += ivarstamp.copy()
+                
+                    
                 #print('HACK!!!')
                 #galsim.fits.write(stamp, 'stamp-{:02d}.fits'.format(ii), clobber=True)
                 #galsim.fits.write(ivarstamp, 'ivarstamp-{:02d}.fits'.format(ii), clobber=True)
@@ -301,9 +439,9 @@ class SimImage(DecamImage):
             tim.inverr = np.zeros(tim.data.shape)
             tim.inverr[sims_image.array > 0.] = np.sqrt(1./sims_image.array.copy()[sims_image.array > 0.]) 
         else:
-            tim.data = image.array
-            tim.inverr = np.sqrt(invvar.array)
-        
+            tim.data = tim_image.array
+            tim.inverr = np.sqrt(tim_invvar.array)
+         
         #print('HACK!!!')
         #galsim.fits.write(invvar, 'invvar.fits'.format(ii), clobber=True)
         #import pdb ; pdb.set_trace()
@@ -366,50 +504,84 @@ class BuildStamp():
         self.localpsf = galsim.InterpolatedImage(galsim.Image(psfim), wcs=self.galsim_wcs,\
                                                  gsparams=self.gsparams)
 
-    def addnoise(self, stamp, ivarstamp):
-        """Add noise to the object postage stamp.  Remember that STAMP and IVARSTAMP
-        are in units of nanomaggies and 1/nanomaggies**2, respectively.
-
+    def addGaussNoise(self, stamp):
         """
-        # Get the set of pixels masked in the input inverse variance image/stamp.
-        mask = ivarstamp.copy()
-        mask = mask.array
-        mask[mask != 0] = 1
+        1) Adds gaussian noise to perfect source (in place)
+        2) return invvar for the stamp
+        Remember that STAMP and IVARSTAMP
+        are in units of nanomaggies and 1/nanomaggies**2, respectively.
+        """
+        #stamp= stamp_backup.copy()
+        #ivarstamp= ivarstamp_backup.copy()
+
         
-        varstamp = ivarstamp.copy()
-        varstamp.invertSelf() # input data, convert to variance
-        varstamp *= self.nano2e**2 # [electron^2]
-            
+        #varstamp = ivarstamp.copy()
+        #ivarstamp.invertSelf() # input data, convert to variance
+        #ivarstamp *= self.nano2e**2 # [electron^2]
+             
         # Add the variance of the object to the variance image (in electrons).
         stamp *= self.nano2e       # [noiseless stamp, electron]
-        objvar = galsim.Image(np.sqrt(stamp.array**2), wcs=self.galsim_wcs) 
-        objvar.setOrigin(galsim.PositionI(stamp.xmin, stamp.ymin))
+        stamp_var = galsim.Image(np.sqrt(stamp.array**2), wcs=self.galsim_wcs) 
+        stamp_var.setOrigin(galsim.PositionI(stamp.xmin, stamp.ymin))
 
         # Add Poisson noise
-        #WARNING: Nneed pass seed from survey.simcat.get("seed") for the given row/object,\
-        #         The seed was originally passed to galsim.gsdeviate in BuildStamp\
-        #         but the seed should be per object since that is how the ra,dec table is built\
-        #         Alternatively could make the seed something else, like the row number of this run...\
-        #         so same for all objects')
-        stamp.addNoise(galsim.VariableGaussianNoise(self.gsdeviate, objvar))
-        varstamp += objvar
-
+        noise = galsim.VariableGaussianNoise(self.gsdeviate, stamp_var)
+        #stamp2= stamp.copy()
+        stamp.addNoise(noise)
+        #stamp3= stamp2.copy()
+        #c=np.random.normal(loc=0,scale=np.sqrt(objvar.array),size=objvar.array.shape)
+        #noise = galsim.Image(c, wcs=self.galsim_wcs)
+        #noise.setOrigin(galsim.PositionI(stamp.xmin, stamp.ymin))
+        #stamp3+= noise
+        
+        # Variance of stamp+noise
+        stamp_var = stamp.copy()
+        stamp_var.fill(0.)
+        stamp_var+= np.abs( stamp.array.copy() )
+        
+        #imshow_stamp(stamp,fn='std.png')
+        #imshow_stamp(stamp_backup,'img.png')
+        
+        #b = galsim.Image(np.zeros(stamp.array.shape), wcs=self.galsim_wcs) 
+        #b.array+= stamp.array.copy() 
+        #b.array+= stamp_backup.array.copy() 
+        #b= stamp.array.copy() + stamp_backup.array.copy()
+        #b= stamp.copy()
+        #b.drawImage(stamp_backup.copy(),add_to_image=True)
+        #imshow_stamp(b,fn='std_img.png')
+        # hists
+        #for data,nam in zip([stamp.array.copy(),stamp_backup.array.copy(),b],['std','img','std_img']):
+        #    j=plt.hist(data)
+        #    plt.savefig(nam+'_hist.png')
+        #    plt.close(nam+'_hist.png')
         # Convert back to [nanomaggies]
         stamp /= self.nano2e      
-        varstamp /= self.nano2e**2
+        #stamp2 /= self.nano2e      
+        #stamp3 /= self.nano2e      
+        stamp_var /= self.nano2e**2
 
-        ivarstamp = varstamp.copy()
-        ivarstamp.invertSelf()
-
+        #ivarstamp = varstamp.copy()
+        stamp_var.invertSelf()
         # Remask pixels that were masked in the original inverse variance stamp.
-        ivarstamp *= mask
-        return stamp, ivarstamp
+        #ivarstamp *= mask
+        # This is now inv variance
+        return stamp_var
 
     def convolve_and_draw(self,obj):
         """Convolve the object with the PSF and then draw it."""
         obj = galsim.Convolve([obj, self.localpsf], gsparams=self.gsparams)
         # drawImage() requires local wcs
+        #try:
         stamp = obj.drawImage(offset=self.offset, wcs=self.localwcs,method='no_pixel')
+        #except SystemExit:
+        #except BaseException:
+        #    #logging.error(traceback.format_exc())
+        #    print('got back drawImage!')
+        #    raise ValueError
+        #try: 
+        #except:
+        #    print("Unexpected error:", sys.exc_info()[0])
+        #    raise
         stamp.setCenter(self.xpos, self.ypos)
         return stamp
 
@@ -549,6 +721,8 @@ def build_simcat(Samp=None,brickwcs=None, meta=None):
     typ=meta.get('objtype')[0]
     # Mags
     for key in ['g','r','z']:
+        #print('WARNING: hardcoded mag = 19')
+        #cat.set('%sflux' % key, 1E9*10**(-0.4* np.array([19.]*len(Samp)) ) ) # [nanomaggies]
         cat.set('%sflux' % key, 1E9*10**(-0.4*Samp.get('%s_%s' % (typ,key))) ) # [nanomaggies]
     # Galaxy Properties
     if typ in ['elg','lrg']:
@@ -608,6 +782,10 @@ def get_parser():
                         type=str, default='writecat', metavar='', help='Run up to the given stage')
     parser.add_argument('--early_coadds', action='store_true',
                         help='add this option to make the JPGs before detection/model fitting')
+    parser.add_argument('--cutouts', action='store_true',
+                        help='Stop after stage tims and save .npy cutouts of every simulated source')
+    parser.add_argument('--stamp_size', type=float,action='store',default=50.,\
+                        help='Size of cutout stamps in arcsec')
     parser.add_argument('-v', '--verbose', action='store_true', help='toggle on verbose output')
     return parser
  
@@ -632,6 +810,8 @@ def create_metadata(kwargs=None):
         metacat.set(key, np.array( [kwargs[key]] ))
     metacat.set('nobj', np.array( [kwargs['args'].nobj] ))
     metacat.set('zoom', np.array( [kwargs['args'].zoom] ))
+    metacat.set('cutouts', np.array( [kwargs['args'].cutouts] ))
+    metacat.set('stamp_size', np.array( [kwargs['args'].stamp_size] ))
     #metacat['RMAG_RANGE'] = kwargs['args'].rmag_range
     #if not kwargs['args'].seed:
     #    log.info('Random seed = {}'.format(kwargs['args'].seed))
@@ -741,6 +921,9 @@ def main(args=None):
     # Command line options
     parser= get_parser()    
     args = parser.parse_args(args=args)
+    
+    if args.cutouts:
+        args.stage = 'tims'
     # Setup loggers
     if args.verbose:
         lvl = logging.DEBUG
@@ -804,7 +987,7 @@ def main(args=None):
     log.info('RA, Dec center = {}'.format(radec_center))
     log.info('Brick = {}'.format(brickname))
     t0= ptime('First part of Main()',t0)
-
+    
     #if args.ith_chunk is not None: 
     #    chunk_list= [args.ith_chunk]
     #else: 
@@ -822,14 +1005,36 @@ def main(args=None):
     #          (Samp.dec >= d0)*(Samp.dec <= d1) )
     # Sort by Sersic n low -> high (if elg or lrg)
     if objtype in ['elg','lrg']:
-        print('Sorting by sersic n')
-        Samp=Samp[np.argsort( Samp.get('%s_n' % objtype) )]
-        #if args.early_coadds:
+        if args.cutouts:
+            # rhalf ~ 1-2'' at z ~ 1, n~1 
+            #Samp=Samp[ (Samp.get('%s_re' % objtype) <= 10.)*\
+            #           (Samp.get('%s_n' % objtype) <= 2.) ]
+            Samp.set('%s_re' % objtype, np.array([2.]*len(Samp)))
+            Samp.set('%s_n' % objtype, np.array([1.]*len(Samp)))
+        else:
+            # Usual obiwan
+            print('Sorting by sersic n')
+            Samp=Samp[np.argsort( Samp.get('%s_n' % objtype) )]
         #    # Dont sort by sersic n for deeplearning cutouts
         #    print('NOT sorting by sersic n')
         #else:
-    # Rowstart -> Rowend
     rowst,rowend= args.rowstart,args.rowstart+maxobjs
+    if args.cutouts:
+        # Gridded ra,dec for args.stamp_size x stamp_size postage stamps 
+        # Replace 16x16 rows with gridded radecs, then cut to those rows
+        dd= args.stamp_size / 2. * np.array([1,3,5,7,9,11,13,15]).astype(float) #'' offsect from center
+        dd= np.concatenate((-dd[::-1],dd))
+        dd/= 3600. #arcsec -> deg
+        brickc_ra,brickc_dec= radec_center[0],radec_center[1]
+        dec,ra = np.meshgrid(dd+ brickc_dec, dd+ brickc_ra) 
+        dec= dec.flatten()
+        ra= ra.flatten()
+        assert(len(Samp) >= dec.size)
+        keep= np.arange(dec.size)
+        Samp.cut(keep)
+        Samp.set('ra',ra)
+        Samp.set('dec',dec)
+    # Rowstart -> Rowend
     Samp= Samp[args.rowstart:args.rowstart+maxobjs]
     print('Max sample size=%d, actual sample size=%d' % (maxobjs,len(Samp)))
     assert(len(Samp) <= maxobjs)
@@ -868,8 +1073,9 @@ def main(args=None):
     do_one_chunk(d=kwargs)
     t0= ptime('do_one_chunk',t0)
     # Clean up output
-    do_ith_cleanup(d=kwargs)
-    t0= ptime('do_ith_cleanup',t0)
+    if args.cutouts == False:
+        do_ith_cleanup(d=kwargs)
+        t0= ptime('do_ith_cleanup',t0)
     log.info('All done!')
      
 if __name__ == '__main__':
