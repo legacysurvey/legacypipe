@@ -276,7 +276,8 @@ class SimImage(DecamImage):
 
         objtype = self.survey.metacat.get('objtype')[0]
         objstamp = BuildStamp(tim, gain=self.t.arawgain, \
-                              folding_threshold=self.survey.folding_threshold)
+                              folding_threshold=self.survey.folding_threshold,\
+                              stamp_size= self.survey.metacat.stamp_size)
 
         # Grab the data and inverse variance images [nanomaggies!]
         tim_image = galsim.Image(tim.getImage())
@@ -448,9 +449,11 @@ class SimImage(DecamImage):
         return tim
 
 class BuildStamp():
-    def __init__(self,tim, gain=4.0, folding_threshold=1.e-5):
-        """Initialize the BuildStamp object with the CCD-level properties we need."""
+    def __init__(self,tim, gain=4.0, folding_threshold=1.e-5, stamp_size=None):
+        """Initialize the BuildStamp object with the CCD-level properties we need.
+        stamp_size -- pixels, automatically set if None """
         self.band = tim.band.strip()
+        self.stamp_size = stamp_size
         # GSParams should be used when galsim object is initialized
         # MAX size for sersic: 
         # https://github.com/GalSim-developers/GalSim/pull/450/commits/755bcfdca25afe42cccfd6a7f8660da5ecda2a65
@@ -572,7 +575,12 @@ class BuildStamp():
         obj = galsim.Convolve([obj, self.localpsf], gsparams=self.gsparams)
         # drawImage() requires local wcs
         #try:
-        stamp = obj.drawImage(offset=self.offset, wcs=self.localwcs,method='no_pixel')
+        if self.stamp_size is None:
+            stamp = obj.drawImage(offset=self.offset, wcs=self.localwcs,method='no_pixel')
+        else:
+            stamp = obj.drawImage(offset=self.offset, wcs=self.localwcs,method='no_pixel',\
+                                  nx=self.stamp_size,ny=self.stamp_size)
+        
         #except SystemExit:
         #except BaseException:
         #    #logging.error(traceback.format_exc())
@@ -591,7 +599,11 @@ class BuildStamp():
         # Use input flux as the 7'' aperture flux
         self.setlocal(obj)
         psf = self.localpsf.withFlux(1.)
-        stamp = psf.drawImage(offset=self.offset, wcs=self.localwcs, method='no_pixel')
+        if self.stamp_size is None:
+            stamp = psf.drawImage(offset=self.offset, wcs=self.localwcs, method='no_pixel')
+        else:
+            stamp = psf.drawImage(offset=self.offset, wcs=self.localwcs, method='no_pixel',\
+                                  nx=self.stamp_size,ny=self.stamp_size)
         # Fraction flux in 7'', FIXED pixelscale
         diam = 7/0.262
         # Aperture fits on stamp
@@ -609,7 +621,11 @@ class BuildStamp():
         # Incrase flux so input flux contained in aperture
         flux = obj.get(self.band+'flux')*(2.-apflux/stamp.added_flux) # [nanomaggies]
         psf = self.localpsf.withFlux(flux)
-        stamp = psf.drawImage(offset=self.offset, wcs=self.localwcs, method='no_pixel')
+        if self.stamp_size is None:
+            stamp = psf.drawImage(offset=self.offset, wcs=self.localwcs, method='no_pixel')
+        else:
+            stamp = psf.drawImage(offset=self.offset, wcs=self.localwcs, method='no_pixel',\
+                                  nx=self.stamp_size,ny=self.stamp_size)
         # stamp looses less than 0.01% of requested flux
         if stamp.added_flux/flux <= 0.9999:
             log.warning('stamp lost more than 0.01 percent of requested flux, stamp_flux/flux=%.7f',stamp.added_flux/flux)
@@ -784,8 +800,8 @@ def get_parser():
                         help='add this option to make the JPGs before detection/model fitting')
     parser.add_argument('--cutouts', action='store_true',
                         help='Stop after stage tims and save .npy cutouts of every simulated source')
-    parser.add_argument('--stamp_size', type=float,action='store',default=50.,\
-                        help='Size of cutout stamps in arcsec')
+    parser.add_argument('--stamp_size', type=int,action='store',default=200,\
+                        help='Stamp/Cutout size in pixels')
     parser.add_argument('-v', '--verbose', action='store_true', help='toggle on verbose output')
     return parser
  
@@ -1022,7 +1038,8 @@ def main(args=None):
     if args.cutouts:
         # Gridded ra,dec for args.stamp_size x stamp_size postage stamps 
         # Replace 16x16 rows with gridded radecs, then cut to those rows
-        dd= args.stamp_size / 2. * np.array([1,3,5,7,9,11,13,15]).astype(float) #'' offsect from center
+        size_arcsec= args.stamp_size * 0.262 #arcsec
+        dd= size_arcsec / 2. * np.array([1,3,5,7,9,11,13,15]).astype(float) #'' offsect from center
         dd= np.concatenate((-dd[::-1],dd))
         dd/= 3600. #arcsec -> deg
         brickc_ra,brickc_dec= radec_center[0],radec_center[1]
