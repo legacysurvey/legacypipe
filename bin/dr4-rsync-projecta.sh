@@ -1,0 +1,29 @@
+#!/bin/bash
+
+if [ "$NERSC_HOST" == "edison" ]; then
+    outdir=/scratch1/scratchdirs/desiproc/DRs/data-releases/dr4
+    bricklist=/scratch1/scratchdirs/desiproc/DRs/dr4-bootes/legacypipe-dir/bricks-dr4-${NERSC_HOST}.txt
+else
+    outdir=/global/cscratch1/sd/desiproc/dr4/data_release/dr4
+    bricklist=/global/cscratch1/sd/desiproc/dr4/legacypipe-dir/bricks-dr4-${NERSC_HOST}.txt
+fi
+
+proj_dir=/global/projecta/projectdirs/cosmo/work/dr4
+
+# List all files that exists for each completed brick
+# use projecta/ permissions and group
+args="-aRv --no-p --no-g --chmod=ugo=rwX"
+for brick in `cat $bricklist`;do
+    bri="$(echo $brick | head -c 3)"
+    rsync $args $outdir/checkpoints/$bri/$brick.pickle ${proj_dir}/
+    rsync $args $outdir/coadd/$bri/$brick ${proj_dir}/
+    rsync $args $outdir/metrics/$bri/*${brick}* ${proj_dir}/
+    rsync $args $outdir/tractor/$bri/*${brick}* ${proj_dir}/
+    rsync $args $outdir/tractor-i/$bri/*${brick}* ${proj_dir}/
+done
+#chown -R cosmo ${proj_dir}/
+chgrp -R cosmo ${proj_dir}/
+chmod -R ug=rwx,o=rx ${proj_dir}/
+#find ${proj_dir}/ -type f | xargs chmod -R ug=rw,o=r ${proj_dir}/
+#find ${proj_dir}/ -type d | xargs chmod -R ug=rwx,o=rx ${proj_dir}/
+#chmod -R 775 ${proj_dir}/
