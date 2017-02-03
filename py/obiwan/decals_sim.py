@@ -244,13 +244,19 @@ class SimDecals(LegacySurveyData):
 
 def get_srcimg_invvar(stamp_ivar,img_ivar):
     '''stamp_ivar, img_ivar -- galsim Image objects'''
+    # Use img_ivar when stamp_ivar == 0, both otherwise
+    use_img_ivar= np.ones(img_ivar.array.shape).astype(bool)
+    use_img_ivar[ stamp_ivar.array > 0 ] = False
+    # First compute using both
     ivar= np.power(stamp_ivar.array.copy(), -1) + np.power(img_ivar.array.copy(), -1) 
     ivar= np.power(ivar,-1) 
     keep= np.ones(ivar.shape).astype(bool)
     keep[ (stamp_ivar.array > 0)*\
           (img_ivar.array > 0) ] = False
     ivar[keep] = 0.
-    # 
+    # Now use img_ivar only where need to
+    ivar[ use_img_ivar ] = img_ivar.array.copy()[ use_img_ivar ]
+    # return 
     obj_ivar = stamp_ivar.copy()
     obj_ivar.fill(0.)
     obj_ivar+= ivar
@@ -354,6 +360,13 @@ class SimImage(DecamImage):
                 ivarstamp *= keep
                 tim_invvar[overlap] *= keep 
 
+                # Stamp ivar can get messed up at edges
+                # especially when needed stamp smaller than args.stamp_size
+                cent= ivarstamp.array.shape[0]/2
+                med= np.median(ivarstamp.array[cent-2:cent+2,cent-2:cent+2].flatten() )
+                # 100x median fainter gets majority of star,qso OR elg,lrg profile
+                ivarstamp.array[ ivarstamp.array > 100 * med ] = 0.
+
                 # Add stamp to image
                 back= tim_image[overlap].copy()
                 tim_image[overlap] = back.copy() + stamp.copy()
@@ -397,18 +410,19 @@ class SimImage(DecamImage):
                              id=obj.id,\
                              ra=obj.ra,\
                              dec=obj.dec,\
-                             rhalf=obj.rhalf,\
-                             sersicn=obj.sersicn,\
-                             phi=obj.phi,\
-                             ba=obj.ba,\
                              gflux=obj.gflux,\
                              rflux=obj.rflux,\
                              zflux=obj.zflux)
+                    if objtype in ['lrg','elg']:
+                        d.update(dict(rhalf=obj.rhalf,\
+                                      sersicn=obj.sersicn,\
+                                      phi=obj.phi,\
+                                      ba=obj.ba))
                     write_dict(fn+'.csv',d)
                     # Following are Sanity Checks
                     # ONLY save for ii == 0 out of 256 objects 
-                    if ii == 0:
-                                                # Also write fits file for easier image stretching
+                    if ii < 1000:
+                        # Also write fits file for easier image stretching
                         fitsio.write(fn+'_src.fits',data[...,0],clobber=True)
                         fitsio.write(fn+'_src_invvar.fits',data[...,1],clobber=True)
                         fitsio.write(fn+'_img.fits',data[...,2],clobber=True)
