@@ -421,7 +421,7 @@ class SimImage(DecamImage):
                     write_dict(fn+'.csv',d)
                     # Following are Sanity Checks
                     # ONLY save for ii == 0 out of 256 objects 
-                    if ii < 1000:
+                    if ii == 0:
                         # Also write fits file for easier image stretching
                         fitsio.write(fn+'_src.fits',data[...,0],clobber=True)
                         fitsio.write(fn+'_src_invvar.fits',data[...,1],clobber=True)
