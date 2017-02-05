@@ -1,5 +1,7 @@
 #!/bin/bash
 
+keep_existing=yes
+
 # Htars 1000 brick files to hpss archive
 export backup_dir=htar_backups
 # Find all completed bricks
@@ -15,17 +17,21 @@ year=`date|awk '{print $NF}'`
 today=`date|awk '{print $3}'`
 month=`date +"%F"|awk -F "-" '{print $2}'`
 
-#ontape=bricks_ontape.txt
-#cat $backup_dir/fortape_[0-9][0-9][0-9][0-9][mp][0-9][0-9][0-9].txt > $ontape
-# Remove from list all bricks already on tape
-#echo New bricks
-#don_new=don_new.txt
-#rm $don_new
-#python diff_list.py --completed $don --ontape $ontape --outfn $don_new
-#don_new=don.txt
+if [ "$keep_existing" == "yes" ];then
+    echo bam
+    ontape=dr4_bricks_ontape.tmp
+    cat ${backup_dir}/fortape_*[pm][0-9][0-9][0-9].txt > $ontape
+    # List bricks NOT on tape
+    new=dr4_bricks_new.tmp
+    rm $new
+    python ../bin/diff_list.py --completed $don --ontape $ontape --outfn $new
+    export bricklist=$new
+else
+    export bricklist=$don
+fi
 
 # Every 1000 bricks to new file
-nbricks=`wc -l $don |awk '{print $1}'`
+nbricks=`wc -l $bricklist |awk '{print $1}'`
 let chunks=$nbricks/1000
 echo Every 1000 bricks
 junk=fortape.txt
@@ -36,8 +42,8 @@ for i in `seq 1 $chunks`;do
     let j=$i-1
     let en=1000*$j+1000
     let st=1000*$j+1
-    echo rows $st,$en of $don
-    sed -n ${st},${en}p $don > $junk
+    echo rows $st,$en of $bricklist
+    sed -n ${st},${en}p $bricklist > $junk
     # Give a unique name
     unique=`head -n 1 $junk`
     fortape=fortape_${year}_${month}_${today}_$unique.txt
