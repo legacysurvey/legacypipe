@@ -39,6 +39,7 @@ class GatherTraining(object):
         if os.path.exists(hasgrz_files):
             print('Already exists: %s' % hasgrz_files)
         else:
+            print('Gathering grz sets for %s' % self.obj)
             with open(hasgrz_files,'w') as foo:
                 for cnt,brick,id in zip(range(len(bricks)),bricks,ids):
                     if cnt % 100 == 0:
@@ -118,6 +119,6 @@ if __name__ == '__main__':
     for obj in ['elg','lrg','qso','star']:
         gather[obj]= GatherTraining(obj=obj)
         gather[obj].grzSets()
-        #gather[obj].loadHDF5()
+        gather[obj].loadHDF5()
 
     print('done')
