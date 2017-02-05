@@ -16,20 +16,22 @@ def dobash(cmd):
     if os.system(cmd): raise ValueError
 
 class GatherTraining(object):
-    def __init__(self,obj=None):
-        assert(obj in ['elg','lrg','star','qso'])
-        self.obj= obj
-        self.base= '/global/cscratch1/sd/kaylanb/dr3-obiwan/deeplearning'
-        self.hdf5_fn= os.path.join(self.base,"training_10k.hdf5")
+    def __init__(self,data_dir=None):
+        if data_dir is None:
+            self.data_dir= '/global/cscratch1/sd/kaylanb/dr3-obiwan/deeplearning'
+        else:
+            self.data_dir= data_dir
+        self.hdf5_fn= os.path.join(self.data_dir,"training_10k.hdf5")
 
-    def grzSets(self):
-        all_files= '%s_training.txt' % self.obj
-        uniq_files= '%s_traning_uniqe.txt' % self.obj
-        hasgrz_files= '%s_traning_hasgrz.txt' % self.obj
+    def grzSets(self, obj=None):
+        assert(obj in ['elg','lrg','star','qso'])
+        all_files= '%s_training.txt' % obj
+        uniq_files= '%s_traning_uniqe.txt' % obj
+        hasgrz_files= '%s_traning_hasgrz.txt' % obj
         # List all .npy artificial source array files
         if not os.path.exists(all_files):
             dobash("find %s/%s/122/*/rowstart0/*.npy > %s" % \
-                    (self.base,self.obj,all_files))
+                    (self.data_dir,obj,all_files))
             print('Wrote %s' % all_files)
         # List of unique "brickname ID" pairs
         if not os.path.exists(uniq_files):
@@ -40,14 +42,14 @@ class GatherTraining(object):
         if os.path.exists(hasgrz_files):
             print('Already exists: %s' % hasgrz_files)
         else:
-            print('Gathering grz sets for %s' % self.obj)
+            print('Gathering grz sets for %s' % obj)
             with open(hasgrz_files,'w') as foo:
                 for cnt,brick,id in zip(range(len(bricks)),bricks,ids):
                     if cnt % 100 == 0:
                         print('Uniq brickname,id pair: %d/%d' % (cnt,len(bricks)))
                     fns={}
                     for band in ['g','r','z']:
-                        fn=os.path.join(self.base,self.obj,brick[:3],brick,\
+                        fn=os.path.join(self.data_dir,obj,brick[:3],brick,\
                                         'rowstart0','%s_%s*.npy' % (band,id))
                         fns[band]= np.array( glob(fn) )
                     sz= min([fns['g'].size,\
@@ -61,8 +63,9 @@ class GatherTraining(object):
             print('Wrote: %s' % hasgrz_files)
         self.hasgrz_files= hasgrz_files
        
-    def loadHDF5(self):
-        self.hasgrz_files_10k= '%s_traning_hasgrz_10k.txt' % self.obj 
+    def loadHDF5(self, obj=None):
+        assert(obj in ['elg','lrg','star','qso'])
+        self.hasgrz_files_10k= '%s_traning_hasgrz_10k.txt' % obj 
         dobash('head -n 2000 %s > %s' % (self.hasgrz_files,self.hasgrz_files_10k))
 
         fobj = h5py.File(self.hdf5_fn, "a")
@@ -76,7 +79,7 @@ class GatherTraining(object):
         for cnt,g_fn,r_fn,z_fn in zip(range(len(g_fns)), g_fns,r_fns,z_fns):
             id= os.path.basename(g_fn).split('_')[1]
             #ccdname= os.path.basename(fn).split('_')[2].replace('.npy','')
-            node= "/%s/%s" % (id,self.obj)
+            node= "/%s/%s" % (id,obj)
             # Only load if node doesn't exist
             if not node in fobj:
                 # 200x200x3 array of grz src
@@ -88,12 +91,12 @@ class GatherTraining(object):
                 #for key in d.keys():
                 #    dset.attrs[key]= d[key]
             # Backgrounds same for all sources, so just use elg backgrounds
-            if self.obj == 'elg':
+            if obj == 'elg':
                 node= "/%s/back" % (id,)
                 if not node in fobj:
                     dset = fobj.create_dataset(node, data=data['back'],chunks=True)
             if cnt % 100 == 0:
-                print('%s data set loaded into hdf5: %d/%d' % (self.obj,cnt,len(g_fns)))
+                print('%s data set loaded into hdf5: %d/%d' % (obj,cnt,len(g_fns)))
 
     def read_grz(self,g_fn,r_fn,z_fn):
         ''' data[...,0:2] -- src img,invvar
@@ -118,10 +121,9 @@ class GatherTraining(object):
         return h5py.File(self.hdf5_fn, "r")
 
 if __name__ == '__main__':
-    gather= {}
+    gather= GatherTraining()
     for obj in ['elg','lrg','qso','star']:
-        gather[obj]= GatherTraining(obj=obj)
-        gather[obj].grzSets()
-        gather[obj].loadHDF5()
+        gather.grzSets(obj= obj)
+        gather.loadHDF5(obj= obj)
 
     print('done')
