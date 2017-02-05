@@ -20,6 +20,7 @@ class GatherTraining(object):
         assert(obj in ['elg','lrg','star','qso'])
         self.obj= obj
         self.base= '/global/cscratch1/sd/kaylanb/dr3-obiwan/deeplearning'
+        self.hdf5_fn= os.path.join(self.base,"training_10k.hdf5")
 
     def grzSets(self):
         all_files= '%s_training.txt' % self.obj
@@ -64,7 +65,6 @@ class GatherTraining(object):
         self.hasgrz_files_10k= '%s_traning_hasgrz_10k.txt' % self.obj 
         dobash('head -n 2000 %s > %s' % (self.hasgrz_files,self.hasgrz_files_10k))
 
-        self.hdf5_fn= os.path.join(self.base,"training_10k.hdf5")
         fobj = h5py.File(self.hdf5_fn, "a")
         # Sources
         #for obj in ['star','qso','elg','lrg']:
@@ -112,7 +112,10 @@ class GatherTraining(object):
             grz['src'][:,:,i]= data[...,0] 
             # back grz
             grz['back'][:,:,i]= data[...,2] 
-        return grz   
+        return grz  
+
+    def getHdf5Obj(self):
+        return h5py.File(self.hdf5_fn, "r")
 
 if __name__ == '__main__':
     gather= {}
