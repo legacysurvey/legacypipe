@@ -262,7 +262,20 @@ def get_srcimg_invvar(stamp_ivar,img_ivar):
     obj_ivar+= ivar
     return obj_ivar
 
+def saturation_e(camera):
+	# Saturation limit
+	d=dict(decam=3e4) # e-
+	return d[camera]
 
+def ivar_to_var(ivar,nano2e=None,camera='decam'):
+	assert(nano2e is not None)
+	flag= ivar == 0.
+	var= np.power(ivar, -1)
+	# Set 0 ivar pixels to satuation limit
+	# var * nano2e^2 = e-^2
+	sat= saturation_e[camera] / nano2e**2
+	var[flag]= sat
+	return var 
 
 class SimImage(DecamImage):
     def __init__(self, survey, t):
@@ -358,7 +371,7 @@ class SimImage(DecamImage):
                 keep = np.ones(tim_dq[overlap].array.shape)
                 keep[ tim_dq[overlap].array > 0 ] = 0.
                 ivarstamp *= keep
-                tim_invvar[overlap] *= keep 
+                #tim_invvar[overlap] *= keep # don't modify tim_invvar unless adding stamp ivar
 
                 # Stamp ivar can get messed up at edges
                 # especially when needed stamp smaller than args.stamp_size
@@ -384,35 +397,38 @@ class SimImage(DecamImage):
                 tim.sims_id[ii] = obj.id
                 tim.sims_added_flux[ii] = added_flux
 
-                # Save Cutouts
+                # For cutouts we only care about src, background, var (not ivar)
                 if self.survey.metacat.cutouts[0]:
-                    # Data for training: src+noise, src+noise invvar, background, background_invvar
-                    data= np.zeros((stamp.array.shape[0],stamp.array.shape[1],6))
+                    # Data for training: src+noise (cutout) and backgrn (cutout,var,badpix)
+                    data= np.zeros((stamp.array.shape[0],stamp.array.shape[1],4))
+					# FIX ME, add extra rotations for galaxies?
                     data[:,:,0]= stamp.array.copy() # src+noise
-                    data[:,:,1]= ivarstamp.array.copy() # src+noise invvar
-                    data[:,:,2]= back.array.copy() # background
-                    data[:,:,3]= back_ivar.array.copy() # background_invvar
-                    data[:,:,4]= tim_image[overlap].array.copy() # src+noise+background
-                    data[:,:,5]= tim_invvar[overlap].array.copy() # src+noise+background_ nvvar
+                    #data[:,:,1]= np.sqrt( np.power(stamp.array.copy(),2) )#src+noise var  #ivarstamp.array.copy() 
+                    data[:,:,1]= back.array.copy() # back
+                    data[:,:,2]= ivar_to_var(back_ivar.array.copy(),nano2e=objstamp.nano2e) # back var
+                    data[:,:,3]= tim_dq[overlap].array.copy() # bad pix
+                    #data[:,:,3]= tim_image[overlap].array.copy() # src+noise+background
+                    #data[:,:,4]= tim_invvar[overlap].array.copy() # src+noise+background_ nvvar
                     # Save fn
                     expid=str(tim.imobj).strip().replace(' ','')
                     fn= '%s_%d_%s' % (tim.band,obj.id,expid)
                     fn= os.path.join(self.survey.output_dir,fn)
                     np.save(fn+'.npy',data,allow_pickle=False)
                     print('Wrote %s' % (fn+'.npy',))
-                    # Save metadata
-                    x1,x2,y1,y2= tuple(tim.sims_xy[ii,:])
-                    xc,yc= tuple(tim.sims_xyc[ii,:])
-                    d = dict(x1=x1,x2=x2,y1=y1,y2=y2,\
-                             xc=xc,yc=yc,\
-                             band=tim.band,\
+                    # Save enough metadata to classify image quality later
+                    #x1,x2,y1,y2= tuple(tim.sims_xy[ii,:])
+                    #xc,yc= tuple(tim.sims_xyc[ii,:])
+                    d = dict(band=tim.band,\
+							 expid=expid,\
                              addedflux= added_flux,\
                              id=obj.id,\
                              ra=obj.ra,\
-                             dec=obj.dec,\
-                             gflux=obj.gflux,\
-                             rflux=obj.rflux,\
-                             zflux=obj.zflux)
+                             dec=obj.dec)
+                             #xc=xc,yc=yc,\
+							 #(x1=x1,x2=x2,y1=y1,y2=y2,\
+                             #gflux=obj.gflux,\
+                             #rflux=obj.rflux,\
+                             #zflux=obj.zflux)
                     if objtype in ['lrg','elg']:
                         d.update(dict(rhalf=obj.rhalf,\
                                       sersicn=obj.sersicn,\
@@ -814,7 +830,7 @@ def get_parser():
                         help='add this option to make the JPGs before detection/model fitting')
     parser.add_argument('--cutouts', action='store_true',
                         help='Stop after stage tims and save .npy cutouts of every simulated source')
-    parser.add_argument('--stamp_size', type=int,action='store',default=200,\
+    parser.add_argument('--stamp_size', type=int,action='store',default=64,\
                         help='Stamp/Cutout size in pixels')
     parser.add_argument('-v', '--verbose', action='store_true', help='toggle on verbose output')
     return parser
@@ -1039,7 +1055,7 @@ def main(args=None):
             # rhalf ~ 1-2'' at z ~ 1, n~1 
             #Samp=Samp[ (Samp.get('%s_re' % objtype) <= 10.)*\
             #           (Samp.get('%s_n' % objtype) <= 2.) ]
-            Samp.set('%s_re' % objtype, np.array([2.]*len(Samp)))
+            Samp.set('%s_re' % objtype, np.array([1.5]*len(Samp)))
             Samp.set('%s_n' % objtype, np.array([1.]*len(Samp)))
         else:
             # Usual obiwan
@@ -1051,11 +1067,13 @@ def main(args=None):
     rowst,rowend= args.rowstart,args.rowstart+maxobjs
     if args.cutouts:
         # Gridded ra,dec for args.stamp_size x stamp_size postage stamps 
-        # Replace 16x16 rows with gridded radecs, then cut to those rows
-        size_arcsec= args.stamp_size * 0.262 #arcsec
-        dd= size_arcsec / 2. * np.array([1,3,5,7,9,11,13,15]).astype(float) #'' offsect from center
+        size_arcsec= args.stamp_size * 0.262 * 2 #arcsec, 2 for added buffer
+		# 20x20 grid
+        dd= size_arcsec / 2. * np.arange(1,21,2).astype(float) #'' offsect from center
         dd= np.concatenate((-dd[::-1],dd))
         dd/= 3600. #arcsec -> deg
+		# Don't exceed brick half width - 100''
+		assert(dd.max() <= 0.25/2 - 100./3600)
         brickc_ra,brickc_dec= radec_center[0],radec_center[1]
         dec,ra = np.meshgrid(dd+ brickc_dec, dd+ brickc_ra) 
         dec= dec.flatten()
