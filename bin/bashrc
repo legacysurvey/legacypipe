@@ -8,10 +8,11 @@ mkdir -p $TMPDIR
 # We copy our code to $SCRATCH for speed; see the update-scratch.sh script.
 #export CODE_DIR=$SCRATCH/DRs/code/dr4
 
-# Use HPCPorts for packages
-source /project/projectdirs/cmb/modules/hpcports_NERSC.sh
-
 if [ "$NERSC_HOST" == "edison" ]; then
+  # Use HPCPorts for packages
+  #source /project/projectdirs/cmb/modules/hpcports_NERSC.sh
+  # Simpler via Ted
+  module use /global/common/edison/contrib/hpcosmo/hpcports_gnu-9.0/env/modulefiles
   hpcports shared_gnu
 
   # LegacySurvey modules
@@ -126,6 +127,10 @@ fi
 
 
 if [ "$NERSC_HOST" == "cori" ]; then
+  # Use HPCPorts for packages
+  #source /project/projectdirs/cmb/modules/hpcports_NERSC.sh
+  # Simpler via Ted
+  module use /global/common/cori/contrib/hpcosmo/hpcports_gnu-default/env/modulefiles
   hpcports gnu
 
   module use /project/projectdirs/cosmo/software/modules/${NERSC_HOST}
