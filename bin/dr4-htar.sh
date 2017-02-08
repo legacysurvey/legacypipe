@@ -24,7 +24,7 @@ if [ "$keep_existing" == "yes" ];then
     # List bricks NOT on tape
     new=dr4_bricks_new.tmp
     rm $new
-    python diff_list.py --completed $don --ontape $ontape --outfn $new
+    python ../bin/diff_list.py --completed $don --ontape $ontape --outfn $new
     export bricklist=$new
 else
     export bricklist=$don
