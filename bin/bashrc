@@ -11,9 +11,9 @@ mkdir -p $TMPDIR
 if [ "$NERSC_HOST" == "edison" ]; then
   # Use HPCPorts for packages
   #source /project/projectdirs/cmb/modules/hpcports_NERSC.sh
+  #hpcports shared_gnu
   # Simpler via Ted
   module use /global/common/edison/contrib/hpcosmo/hpcports_gnu-9.0/env/modulefiles
-  hpcports shared_gnu
 
   # LegacySurvey modules
   #older module use /project/projectdirs/desi/software/modules/${NERSC_HOST}
@@ -130,8 +130,8 @@ if [ "$NERSC_HOST" == "cori" ]; then
   # Use HPCPorts for packages
   #source /project/projectdirs/cmb/modules/hpcports_NERSC.sh
   # Simpler via Ted
+  #hpcports gnu
   module use /global/common/cori/contrib/hpcosmo/hpcports_gnu-default/env/modulefiles
-  hpcports gnu
 
   #old module use /project/projectdirs/cosmo/software/modules/${NERSC_HOST}
   module use ${CODE_DIR}/legacypipe/bin/modulefiles/${NERSC_HOST}
