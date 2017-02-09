@@ -1,0 +1,26 @@
+#%Module1.0
+#
+proc ModulesHelp { } {
+    global product version
+    puts stderr "This module adds $product/$version to your environment."
+}
+#
+# Define variables
+#
+set product unwise_coadds_timeresolved
+set version neo1
+conflict $product
+#
+# module-whatis
+#
+module-whatis "Sets up $product/$version in your environment."
+#
+
+#
+# Set environment
+#
+
+set PRODUCT_DIR /project/projectdirs/cosmo/work/wise/outputs/merge
+setenv [string toupper $product]_DIR $PRODUCT_DIR
+setenv unwise_coadds_timeresolved_VERSION $version
+

@@ -16,12 +16,12 @@ if [ "$NERSC_HOST" == "edison" ]; then
   hpcports shared_gnu
 
   # LegacySurvey modules
-  #module use /project/projectdirs/desi/software/modules/${NERSC_HOST}
-  module use /project/projectdirs/cosmo/software/modules/${NERSC_HOST}
+  #older module use /project/projectdirs/desi/software/modules/${NERSC_HOST}
+  #old module use /project/projectdirs/cosmo/software/modules/${NERSC_HOST}
+  module use ${CODE_DIR}/legacypipe/bin/modulefiles/${NERSC_HOST}
   module load unwise_coadds/fulldepth-scratch
   module load unwise_coadds_timeresolved/neo1-edison-scratch
-  module use /project/projectdirs/cosmo/work/decam/modules
-  #module load legacysurvey/dr3-edison-scratch
+  #old module use /project/projectdirs/cosmo/work/decam/modules
   module load legacysurvey/dr4-edison-scratch
   module load dust/scratch
 
@@ -133,11 +133,11 @@ if [ "$NERSC_HOST" == "cori" ]; then
   module use /global/common/cori/contrib/hpcosmo/hpcports_gnu-default/env/modulefiles
   hpcports gnu
 
-  module use /project/projectdirs/cosmo/software/modules/${NERSC_HOST}
+  #old module use /project/projectdirs/cosmo/software/modules/${NERSC_HOST}
+  module use ${CODE_DIR}/legacypipe/bin/modulefiles/${NERSC_HOST}
   module load unwise_coadds/fulldepth-scratch
   module load unwise_coadds_timeresolved/neo1-cori-scratch
-  # These are fine
-  module use /project/projectdirs/cosmo/work/decam/modules
+  #old module use /project/projectdirs/cosmo/work/decam/modules
   module load legacysurvey/dr4-cori-scratch
   module load dust/cori-scratch
 
