@@ -122,6 +122,7 @@ from __future__ import division, print_function
 if __name__ == '__main__':
     import matplotlib
     matplotlib.use('Agg')
+import h5py
 import galsim
 import os
 import sys
@@ -135,6 +136,7 @@ import numpy as np
 import matplotlib.pyplot as plt
 from pkg_resources import resource_filename
 from pickle import dump
+
 
 from astropy.table import Table, Column, vstack
 from astropy.io import fits
@@ -273,7 +275,7 @@ def ivar_to_var(ivar,nano2e=None,camera='decam'):
 	var= np.power(ivar, -1)
 	# Set 0 ivar pixels to satuation limit
 	# var * nano2e^2 = e-^2
-	sat= saturation_e[camera] / nano2e**2
+	sat= saturation_e(camera) / nano2e**2
 	var[flag]= sat
 	return var 
 
@@ -348,10 +350,14 @@ class SimImage(DecamImage):
             t0= ptime('Drew the %s' % objtype.upper(),t0)
             #print('I predict we draw it',draw_it)
             # Save radial profiles after draw, addNoise, etc. for unit tests
-            rad_profs=np.zeros((stamp.array.shape[0],3))
-            rad_profs[:,0]= stamp.array.copy()[ stamp.array.shape[0]/2,: ]
+            #rad_profs=np.zeros((stamp.array.shape[0],3))
+            #rad_profs[:,0]= stamp.array.copy()[ stamp.array.shape[0]/2,: ]
             # Want to save flux actually added too
             added_flux= stamp.added_flux
+            stamp_nonoise= stamp.copy()
+            if self.survey.add_sim_noise:
+                #stamp2,stamp3= objstamp.addGaussNoise(stamp, ivarstamp)
+                ivarstamp= objstamp.addGaussNoise(stamp)
             # Add source if EVEN 1 pix falls on the CCD
             overlap = stamp.bounds & tim_image.bounds
             add_source = overlap.area() > 0
@@ -361,11 +367,10 @@ class SimImage(DecamImage):
                 add_source= stamp.bounds == overlap
             if add_source:
                 stamp = stamp[overlap]      
+                ivarstamp = ivarstamp[overlap]      
+                stamp_nonoise= stamp_nonoise[overlap]
                 
-                if self.survey.add_sim_noise:
-                    #stamp2,stamp3= objstamp.addGaussNoise(stamp, ivarstamp)
-                    ivarstamp= objstamp.addGaussNoise(stamp)
-                rad_profs[:,1]= stamp.array.copy()[ stamp.array.shape[0]/2,: ]
+                #rad_profs[:,1]= stamp.array.copy()[ stamp.array.shape[0]/2,: ]
 
                 # Zero out invvar where bad pixel mask is flagged (> 0)
                 keep = np.ones(tim_dq[overlap].array.shape)
@@ -388,7 +393,7 @@ class SimImage(DecamImage):
                 tot_ivar= get_srcimg_invvar(ivarstamp, back_ivar)
                 tim_invvar[overlap] = tot_ivar.copy()
 
-                rad_profs[:,2]= tim_image[overlap].array.copy()[ stamp.array.shape[0]/2,: ]
+                #rad_profs[:,2]= tim_image[overlap].array.copy()[ stamp.array.shape[0]/2,: ]
                 # Save sims info
                 tim.sims_xy[ii, :] = [overlap.xmin-1, overlap.xmax-1,
                                       overlap.ymin-1, overlap.ymax-1] # galsim 1st index is 1
@@ -405,48 +410,62 @@ class SimImage(DecamImage):
                     data[:,:,0]= stamp.array.copy() # src+noise
                     #data[:,:,1]= np.sqrt( np.power(stamp.array.copy(),2) )#src+noise var  #ivarstamp.array.copy() 
                     data[:,:,1]= back.array.copy() # back
-                    data[:,:,2]= ivar_to_var(back_ivar.array.copy(),nano2e=objstamp.nano2e) # back var
-                    data[:,:,3]= tim_dq[overlap].array.copy() # bad pix
+                    data[:,:,2]= tim_dq[overlap].array.copy() # bad pix
+                    data[:,:,3]= stamp_nonoise.array.copy() # Stamp w/out noise, sanity check
+                    #data[:,:,2]= ivar_to_var(back_ivar.array.copy(),nano2e=objstamp.nano2e) # back var
                     #data[:,:,3]= tim_image[overlap].array.copy() # src+noise+background
                     #data[:,:,4]= tim_invvar[overlap].array.copy() # src+noise+background_ nvvar
                     # Save fn
+                    brick= os.path.basename(os.path.dirname(self.survey.output_dir))
+                    hdf5_fn= '%s_%s.hdf5' % (objtype,brick)  #'%s_%d_%s' % (tim.band,obj.id,expid)
+                    hdf5_fn= os.path.join(self.survey.output_dir,hdf5_fn)
                     expid=str(tim.imobj).strip().replace(' ','')
-                    fn= '%s_%d_%s' % (tim.band,obj.id,expid)
-                    fn= os.path.join(self.survey.output_dir,fn)
-                    np.save(fn+'.npy',data,allow_pickle=False)
-                    print('Wrote %s' % (fn+'.npy',))
+                    node= '%s/%s/%s' % (obj.id,tim.band,expid)
+                    fobj = h5py.File(hdf5_fn, "a")
+                    dset = fobj.create_dataset(node, data=data,chunks=True)
+                    for name,val,dtype in zip(\
+                            ['id','flux_added'],\
+                            [obj.id,added_flux],\
+                            [np.int32,np.float32]):
+                        dset.attrs.create(name,val,dtype=dtype)
+                    #if objtype in ['lrg','elg']:
+                    #    for name,val in zip(\
+                    #            ['rhalf','sersicn','phi','ba'],\
+                    #            [obj.rhalf,obj.sersicn,obj.phi,obj.ba]):
+                    #        dset.attrs.create(name,val,dtype=np.float32)
+                        #d.update(dict(rhalf=obj.rhalf,\
+                        #              sersicn=obj.sersicn,\
+                        #              phi=obj.phi,\
+                        #              ba=obj.ba))
+                    print('Saved %s to %s' % (node,hdf5_fn))
+                    #np.save(fn+'.npy',data,allow_pickle=False)
                     # Save enough metadata to classify image quality later
                     #x1,x2,y1,y2= tuple(tim.sims_xy[ii,:])
                     #xc,yc= tuple(tim.sims_xyc[ii,:])
-                    d = dict(band=tim.band,\
-							 expid=expid,\
-                             addedflux= added_flux,\
-                             id=obj.id,\
-                             ra=obj.ra,\
-                             dec=obj.dec)
+                    #d = dict(band=tim.band,\
+					#		 expid=expid,\
+                    #         addedflux= added_flux,\
+                    #         id=obj.id,\
+                    #         ra=obj.ra,\
+                    #         dec=obj.dec)
                              #xc=xc,yc=yc,\
 							 #(x1=x1,x2=x2,y1=y1,y2=y2,\
                              #gflux=obj.gflux,\
                              #rflux=obj.rflux,\
                              #zflux=obj.zflux)
-                    if objtype in ['lrg','elg']:
-                        d.update(dict(rhalf=obj.rhalf,\
-                                      sersicn=obj.sersicn,\
-                                      phi=obj.phi,\
-                                      ba=obj.ba))
-                    write_dict(fn+'.csv',d)
-                    # Following are Sanity Checks
-                    # ONLY save for ii == 0 out of 256 objects 
-                    if ii == 0:
-                        # Also write fits file for easier image stretching
-                        fitsio.write(fn+'_src.fits',data[...,0],clobber=True)
-                        fitsio.write(fn+'_src_invvar.fits',data[...,1],clobber=True)
-                        fitsio.write(fn+'_img.fits',data[...,2],clobber=True)
-                        fitsio.write(fn+'_img_invvar.fits',data[...,3],clobber=True)
-                        fitsio.write(fn+'_srcimg.fits',data[...,4],clobber=True)
-                        fitsio.write(fn+'_srcimg_invvar.fits',data[...,5],clobber=True)
-                        # Draw Radial Profiles
-                        plot_radial_profs(fn+'_profiles.png',rad_profs)
+                    #write_dict(fn+'.csv',d)
+                    # Write sanity checks if they don't exists
+                    #fns= glob(os.path.join(self.survey.output_dir,'*_src.fits'))
+                    #if len(fns) == 0:
+                    #    # Also write fits file for easier image stretching
+                    #    fitsio.write(fn+'_src.fits',data[...,0],clobber=True)
+                    #    fitsio.write(fn+'_src_invvar.fits',data[...,1],clobber=True)
+                    #    fitsio.write(fn+'_img.fits',data[...,2],clobber=True)
+                    #    fitsio.write(fn+'_img_invvar.fits',data[...,3],clobber=True)
+                    #    fitsio.write(fn+'_srcimg.fits',data[...,4],clobber=True)
+                    #    fitsio.write(fn+'_srcimg_invvar.fits',data[...,5],clobber=True)
+                    #    # Draw Radial Profiles
+                    #    plot_radial_profs(fn+'_profiles.png',rad_profs)
                 
                 #Extra
                 sims_image[overlap] += stamp.copy() 
@@ -832,6 +851,10 @@ def get_parser():
                         help='Stop after stage tims and save .npy cutouts of every simulated source')
     parser.add_argument('--stamp_size', type=int,action='store',default=64,\
                         help='Stamp/Cutout size in pixels')
+    parser.add_argument('--bricklist',action='store',default='bricks-eboss-ngc.txt',\
+                        help='if using mpi4py, $LEGACY_SURVEY_DIR/bricklist')
+    parser.add_argument('--nproc', type=int,action='store',default=1,\
+                        help='if using mpi4py')
     parser.add_argument('-v', '--verbose', action='store_true', help='toggle on verbose output')
     return parser
  
@@ -965,8 +988,12 @@ def main(args=None):
     """Main routine which parses the optional inputs."""
     t0= Time()
     # Command line options
-    parser= get_parser()    
-    args = parser.parse_args(args=args)
+    if hasattr(args,'__class__'):
+        pass #args is probably an argparse.Namespace obj
+    else:
+        # Read a list of args from cmd line
+        parser= get_parser()  
+        args = parser.parse_args(args=args)
     
     if args.cutouts:
         args.stage = 'tims'
@@ -1068,12 +1095,12 @@ def main(args=None):
     if args.cutouts:
         # Gridded ra,dec for args.stamp_size x stamp_size postage stamps 
         size_arcsec= args.stamp_size * 0.262 * 2 #arcsec, 2 for added buffer
-		# 20x20 grid
+        # 20x20 grid
         dd= size_arcsec / 2. * np.arange(1,21,2).astype(float) #'' offsect from center
         dd= np.concatenate((-dd[::-1],dd))
         dd/= 3600. #arcsec -> deg
-		# Don't exceed brick half width - 100''
-		assert(dd.max() <= 0.25/2 - 100./3600)
+        # Don't exceed brick half width - 100''
+        assert(dd.max() <= 0.25/2 - 100./3600)
         brickc_ra,brickc_dec= radec_center[0],radec_center[1]
         dec,ra = np.meshgrid(dd+ brickc_dec, dd+ brickc_ra) 
         dec= dec.flatten()

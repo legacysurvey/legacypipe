@@ -1,16 +1,16 @@
 #!/bin/bash -l
 
-#SBATCH -p shared
-#SBATCH -n 2 
-#SBATCH -t 00:10:00
+#SBATCH -p debug
+#SBATCH -N 1 
+#SBATCH -t 00:05:00
 #SBATCH --account=desi
-#SBATCH --qos=premium
 #SBATCH -J deepELG
 #SBATCH --mail-user=kburleigh@lbl.gov
 #SBATCH --mail-type=END,FAIL
 #SBATCH -L SCRATCH
-#SBATCH -C haswell
 
+#-- -C haswell
+#--qos=premium
 #--array=1-20
 
 #export runwhat=star
@@ -18,7 +18,7 @@
 export runwhat=elg
 #export runwhat=lrg
 
-export nobj=256
+export nobj=400
 export rowstart=0
 export rand_brick=yes
 
