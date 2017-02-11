@@ -786,10 +786,13 @@ def build_simcat(Samp=None,brickwcs=None, meta=None):
     typ=meta.get('objtype')[0]
     # Mags
     for key in ['g','r','z']:
-        #print('WARNING: hardcoded mag = 19')
-        #cat.set('%sflux' % key, 1E9*10**(-0.4* np.array([19.]*len(Samp)) ) ) # [nanomaggies]
-        cat.set('%sflux' % key, 1E9*10**(-0.4*Samp.get('%s_%s' % (typ,key))) ) # [nanomaggies]
-    # Galaxy Properties
+        if (meta.bright_galaxies[0]) and (typ in ['elg','lrg']):
+            # Galaxies get stellar flux, so they are easy to see in images
+            cat.set('%sflux' % key, 1E9*10**(-0.4*Samp.get('%s_%s' % ('star',key))) ) # [nanomaggies]
+        else:
+            # Actual galaxy colors
+            cat.set('%sflux' % key, 1E9*10**(-0.4*Samp.get('%s_%s' % (typ,key))) ) # [nanomaggies]
+        # Galaxy Properties
     if typ in ['elg','lrg']:
         for key,tab_key in zip(['sersicn','rhalf','ba','phi'],['n','re','ba','pa']):
             cat.set(key, Samp.get('%s_%s'%(typ,tab_key) ))
@@ -851,6 +854,8 @@ def get_parser():
                         help='Stop after stage tims and save .npy cutouts of every simulated source')
     parser.add_argument('--stamp_size', type=int,action='store',default=64,\
                         help='Stamp/Cutout size in pixels')
+    parser.add_argument('--bright_galaxies', action='store_true',
+                        help='Galaxies get stellar colors for DEEP Obiwan training')
     parser.add_argument('--bricklist',action='store',default='bricks-eboss-ngc.txt',\
                         help='if using mpi4py, $LEGACY_SURVEY_DIR/bricklist')
     parser.add_argument('--nproc', type=int,action='store',default=1,\
@@ -881,6 +886,7 @@ def create_metadata(kwargs=None):
     metacat.set('zoom', np.array( [kwargs['args'].zoom] ))
     metacat.set('cutouts', np.array( [kwargs['args'].cutouts] ))
     metacat.set('stamp_size', np.array( [kwargs['args'].stamp_size] ))
+    metacat.set('bright_galaxies', np.array( [kwargs['args'].bright_galaxies] ))
     #metacat['RMAG_RANGE'] = kwargs['args'].rmag_range
     #if not kwargs['args'].seed:
     #    log.info('Random seed = {}'.format(kwargs['args'].seed))
@@ -988,12 +994,13 @@ def main(args=None):
     """Main routine which parses the optional inputs."""
     t0= Time()
     # Command line options
-    if hasattr(args,'__class__'):
-        pass #args is probably an argparse.Namespace obj
-    else:
-        # Read a list of args from cmd line
+    if args is None:
+        # Read from cmd line
         parser= get_parser()  
         args = parser.parse_args(args=args)
+    else:
+        # args is already a argparse.Namespace obj
+        pass 
     
     if args.cutouts:
         args.stage = 'tims'

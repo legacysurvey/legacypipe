@@ -18,9 +18,9 @@ export OMP_NUM_THREADS=1
 # Yu Feng's bcast
 source /scratch1/scratchdirs/desiproc/DRs/code/dr4/yu-bcast_2/activate.sh
 
-export runwhat=star
+#export runwhat=star
 #export runwhat=qso
-#export runwhat=elg
+export runwhat=elg
 #export runwhat=lrg
 
 
@@ -28,7 +28,8 @@ export nobj=400
 export rowstart=0
 
 export LEGACY_SURVEY_DIR=/global/cscratch1/sd/kaylanb/dr3-obiwan/legacypipe-dir
-export DECALS_SIM_DIR=/global/cscratch1/sd/kaylanb/dr3-obiwan/deeptraining
+#export DECALS_SIM_DIR=/global/cscratch1/sd/kaylanb/dr3-obiwan/deeptraining
+export DECALS_SIM_DIR=/global/cscratch1/sd/kaylanb/dr3-obiwan/galaxies_starflux
 export outdir=$DECALS_SIM_DIR
 
 # Put legacypipe in path
@@ -55,6 +56,6 @@ srun -n $tasks -c $usecores python obiwan/decals_sim_mpiwrapper.py \
     --run $therun --objtype $runwhat --brick None --rowstart $rowstart \
     --nobj $nobj \
     --add_sim_noise --prefix $prefix --threads $OMP_NUM_THREADS \
-    --cutouts 
+    --cutouts --bright_galaxies 
 date
 
