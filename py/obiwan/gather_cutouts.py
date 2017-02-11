@@ -17,7 +17,7 @@ def dobash(cmd):
 
 class GatherTraining(object):
     '''1 hdf5 with groups /star,qso,elg,lrg,back each being its own data set'''
-    def __init__(self,data_dir=None, rank=None):
+    def __init__(self,data_dir=None, rank=0):
         '''
         rank -- optional, use if mpi4py
         '''
@@ -25,11 +25,10 @@ class GatherTraining(object):
             self.data_dir= os.getenv('DECALS_SIM_DIR')
         else:
             self.data_dir= data_dir
-        #
-        if rank is None:
-            self.hdf5_fn= os.path.join(self.data_dir,"training_gathered.hdf5")
-        else: # mpi4py 
-            self.hdf5_fn= os.path.join(self.data_dir,"training_gathered_%d.hdf5" % rank)
+        # Written by some rank
+        self.hdf5_fn= os.path.join(self.data_dir,"training_gathered_%d.hdf5" % rank)
+        # Final merged product
+        self.hdf5_fn_final= os.path.join(self.data_dir,"training_gathered_all.hdf5")
 
     def get_grzSets(self,fns_dict=None):
         '''
@@ -61,7 +60,7 @@ class GatherTraining(object):
             # Data Arrays
             #print('%s dataset has shape: (%d,64,64,3)' % (obj,n_sets))
             data= [] #np.zeros((n_sets,64,64,3))+np.nan   
-            if obj == 'elg': 
+            if obj == 'star': 
                 data_back= [] #data.copy() 
             # Fill Data Arrays
             num=0L 
@@ -79,15 +78,15 @@ class GatherTraining(object):
                                         len(ccdnames['z'])])
                         for ith_pass in range(num_passes):
                             grz_tmp= np.zeros((64,64,3))+np.nan
-                            if obj == 'elg':
+                            if obj == 'star':
                                 grz_back_tmp = grz_tmp.copy()
                             for iband,band in zip(range(3),['g','r','z']):
                                     dset= f['/%s/%s/%s' % (id,band,ccdnames[band][ith_pass])]
                                     grz_tmp[:,:,iband]= dset[:,:,0] # Stamp
-                                    if obj == 'elg':
+                                    if obj == 'star':
                                         grz_back_tmp[:,:,iband]= dset[:,:,1] # Background
                             data += [grz_tmp]
-                            if obj == 'elg':
+                            if obj == 'star':
                                 data_back += [grz_back_tmp]
                             num += 1
                             if num % 20 == 0:
@@ -95,7 +94,7 @@ class GatherTraining(object):
             # List --> numpy
             data= np.array(data)
             assert(np.all(np.isfinite(data)))
-            if obj == 'elg':
+            if obj == 'star':
                 data_back= np.array(data_back)
                 assert(np.all(np.isfinite(data_back)))
             # 
@@ -103,7 +102,7 @@ class GatherTraining(object):
             # Save
             dset = fobj.create_dataset(write_node, data=data,chunks=True)
             print('Wrote node %s in file %s' % (write_node,self.hdf5_fn)) 
-            if obj == 'elg':
+            if obj == 'star':
                 node= '%s' % 'back'
                 dset = fobj.create_dataset(node, data=data_back,chunks=True)
                 print('Wrote node %s in file %s' % (node,self.hdf5_fn)) 
@@ -113,28 +112,31 @@ class GatherTraining(object):
         read data in all gather_training_%d.hdf5 files, and store in 
         gather_training_all.hdf5
         '''
-        fns= glob( os.path.join(self.data_dir,'training_gathered_*.hdf5') )
-        assert(len(fns) > 0)
-        all_data={}
-        for cnt,fn in enumerate(fns):
-            fobj= h5py.File(fn,'r')
-            for obj in list(fobj.keys()):
-                assert(obj in ['elg','lrg','star','qso','back'])
-            #
-            data={}
-            for obj in list(fobj.keys()):
-                data[obj]= fobj['/%s' % obj]
-                if cnt == 0:
-                    all_data[obj]= data[obj]
-                else:
-                    all_data[obj]= np.concatenate((all_data[obj],data[obj]),axis=0)
-            print('extracted %d/%d' % (cnt+1,len(fns)))
-        # Save 
-        outfn= os.path.join(self.data_dir,'gather_training_all.hdf5')
-        f= h5py.File(outfn,'w')
-        for obj in all_data.keys():
-            dset = fobj.create_dataset(obj, data=all_data[obj],chunks=True)
-        print('Wrote %s' % outfn)
+        if os.path.exists(self.hdf5_fn_final):
+            print('Already exists: %s' % self.hdf5_fn_final)
+        else:
+            fns= glob( os.path.join(self.data_dir,'training_gathered_*.hdf5') )
+            assert(len(fns) > 0)
+            fns= fns[:2]
+            all_data={}
+            for cnt,fn in enumerate(fns):
+                fobj= h5py.File(fn,'r')
+                for obj in list(fobj.keys()):
+                    assert(obj in ['elg','lrg','star','qso','back'])
+                #
+                data={}
+                for obj in list(fobj.keys()):
+                    data[obj]= fobj['/%s' % obj]
+                    if cnt == 0:
+                        all_data[obj]= data[obj]
+                    else:
+                        all_data[obj]= np.concatenate((all_data[obj],data[obj]),axis=0)
+                print('extracted %d/%d' % (cnt+1,len(fns)))
+            # Save 
+            f= h5py.File(self.hdf5_fn_final,'w')
+            for obj in all_data.keys():
+                dset = f.create_dataset(obj, data=all_data[obj],chunks=True)
+            print('Wrote %s' % self.hdf5_fn_final)
  
     def readData(self):
         '''return hdf5 file object containing training data'''
