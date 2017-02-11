@@ -107,6 +107,34 @@ class GatherTraining(object):
                 node= '%s' % 'back'
                 dset = fobj.create_dataset(node, data=data_back,chunks=True)
                 print('Wrote node %s in file %s' % (node,self.hdf5_fn)) 
+
+    def merge_rank_data(self):
+        '''
+        read data in all gather_training_%d.hdf5 files, and store in 
+        gather_training_all.hdf5
+        '''
+        fns= glob( os.path.join(self.data_dir,'training_gathered_*.hdf5') )
+        assert(len(fns) > 0)
+        all_data={}
+        for cnt,fn in enumerate(fns):
+            fobj= h5py.File(fn,'r')
+            for obj in list(fobj.keys()):
+                assert(obj in ['elg','lrg','star','qso','back'])
+            #
+            data={}
+            for obj in list(fobj.keys()):
+                data[obj]= fobj['/%s' % obj]
+                if cnt == 0:
+                    all_data[obj]= data[obj]
+                else:
+                    all_data[obj]= np.concatenate((all_data[obj],data[obj]),axis=0)
+            print('extracted %d/%d' % (cnt+1,len(fns)))
+        # Save 
+        outfn= os.path.join(self.data_dir,'gather_training_all.hdf5')
+        f= h5py.File(outfn,'w')
+        for obj in all_data.keys():
+            dset = fobj.create_dataset(obj, data=all_data[obj],chunks=True)
+        print('Wrote %s' % outfn)
  
     def readData(self):
         '''return hdf5 file object containing training data'''
@@ -115,12 +143,13 @@ class GatherTraining(object):
 if __name__ == '__main__':
     rank=1
     gather= GatherTraining(rank=rank)
-    fns_dict={}
-    for obj in ['elg','star','qso']:
-        fns= glob( os.path.join(gather.data_dir,'%s/*/*/rowstart0/%s*.hdf5' % (obj,obj)) )
-        assert(len(fns) > 0)
-        fns_dict[obj]= fns[:2]
-    gather.get_grzSets(fns_dict=fns_dict)
-    f= gather.readData()
+    #fns_dict={}
+    #for obj in ['elg','star','qso']:
+    #    fns= glob( os.path.join(gather.data_dir,'%s/*/*/rowstart0/%s*.hdf5' % (obj,obj)) )
+    #    assert(len(fns) > 0)
+    #    fns_dict[obj]= fns[:2]
+    #gather.get_grzSets(fns_dict=fns_dict)
+    # 
+    gather.merge_rank_data()
     raise ValueError
     print('done')

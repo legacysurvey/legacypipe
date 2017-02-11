@@ -2,7 +2,7 @@
 
 #SBATCH -p debug
 #SBATCH -N 1 
-#SBATCH -t 00:10:00
+#SBATCH -t 00:15:00
 #SBATCH --account=desi
 #SBATCH -J deepELG
 #SBATCH --mail-user=kburleigh@lbl.gov
@@ -58,6 +58,8 @@ date
 #    --add_sim_noise --prefix $prefix --threads $OMP_NUM_THREADS \
 #    --cutouts --bright_galaxies 
 ## Gather_cutouts.py
-srun -n $tasks python obiwan/gather_cutouts_mpiwrapper.py --nproc $tasks
+#srun -n $tasks python obiwan/gather_cutouts_mpiwrapper.py --nproc $tasks
+# Serial concatenation of hdf5 products
+srun -n 1 -c 24 python obiwan/gather_cutouts.py
 date
 
