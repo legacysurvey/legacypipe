@@ -17,17 +17,10 @@ def dobash(cmd):
 
 class GatherTraining(object):
     '''1 hdf5 with groups /star,qso,elg,lrg,back each being its own data set'''
-    def __init__(self,fns_dict=None,
-                 data_dir=None,rank=None):
+    def __init__(self,data_dir=None, rank=None):
         '''
-        fns_dict -- dict of fn lists for each objtype, e.g. fns_dict['elg']= list of filename
         rank -- optional, use if mpi4py
         '''
-        assert(not fns_dict is None)
-        for obj in fns_dict.keys():
-            assert(obj in ['elg','lrg','star','qso'])
-        self.objs= list(fns_dict.keys())
-        #
         if data_dir is None:
             self.data_dir= os.getenv('DECALS_SIM_DIR')
         else:
@@ -38,7 +31,16 @@ class GatherTraining(object):
         else: # mpi4py 
             self.hdf5_fn= os.path.join(self.data_dir,"training_gathered_%d.hdf5" % rank)
 
-    def get_grzSets(self):
+    def get_grzSets(self,fns_dict=None):
+        '''
+        fns_dict -- dict of fn lists for each objtype, e.g. fns_dict['elg']= list of filename
+        '''
+        assert(not fns_dict is None)
+        for obj in fns_dict.keys():
+            assert(obj in ['elg','lrg','star','qso'])
+        self.objs= list(fns_dict.keys())
+        self.fns_dict= fns_dict
+        # 
         for obj in self.objs:
             self.grzSets(obj=obj)
 
@@ -53,9 +55,8 @@ class GatherTraining(object):
         # Load in the data
         else:
             # Wildcard for: elg/138/1381p122/rowstart0/elg_1381p122.hdf5
-            fns= glob( os.path.join(self.data_dir,'%s/*/*/rowstart0/%s*.hdf5' % (obj,obj)) )
+            fns= self.fns_dict[obj]
             assert(len(fns) > 0)
-            fns= fns[:2] #glob( os.path.join(self.data_dir,'%s/*/*/rowstart0/%s*.hdf5' % (obj,obj)) )
             #n_sets= self.numberGrzSets(fns=fns)
             # Data Arrays
             #print('%s dataset has shape: (%d,64,64,3)' % (obj,n_sets))
@@ -112,8 +113,14 @@ class GatherTraining(object):
         return h5py.File(self.hdf5_fn,'r')
 
 if __name__ == '__main__':
-    gather= GatherTraining()
-    gather.get_grzSets()
+    rank=1
+    gather= GatherTraining(rank=rank)
+    fns_dict={}
+    for obj in ['elg','star','qso']:
+        fns= glob( os.path.join(gather.data_dir,'%s/*/*/rowstart0/%s*.hdf5' % (obj,obj)) )
+        assert(len(fns) > 0)
+        fns_dict[obj]= fns[:2]
+    gather.get_grzSets(fns_dict=fns_dict)
     f= gather.readData()
     raise ValueError
     print('done')

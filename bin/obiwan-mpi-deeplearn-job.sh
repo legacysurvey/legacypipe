@@ -42,8 +42,7 @@ elif [ "$NERSC_HOST" == "edison" ]; then
 fi
 let tasks=${SLURM_JOB_NUM_NODES}*${cores}
 
-usecores=1
-threads=$usecores
+threads=1
 export OMP_NUM_THREADS=$threads
 export MKL_NUM_THREADS=1
 
@@ -51,11 +50,14 @@ export therun=eboss-ngc
 export prefix=eboss_ngc
 bricklist=bricks-eboss-ngc.txt
 date
-srun -n $tasks -c $usecores python obiwan/decals_sim_mpiwrapper.py \
-    --nproc $tasks --bricklist $bricklist \
-    --run $therun --objtype $runwhat --brick None --rowstart $rowstart \
-    --nobj $nobj \
-    --add_sim_noise --prefix $prefix --threads $OMP_NUM_THREADS \
-    --cutouts --bright_galaxies 
+## Decals_sim.py
+#srun -n $tasks python obiwan/decals_sim_mpiwrapper.py \
+#    --nproc $tasks --bricklist $bricklist \
+#    --run $therun --objtype $runwhat --brick None --rowstart $rowstart \
+#    --nobj $nobj \
+#    --add_sim_noise --prefix $prefix --threads $OMP_NUM_THREADS \
+#    --cutouts --bright_galaxies 
+## Gather_cutouts.py
+srun -n $tasks python obiwan/gather_cutouts_mpiwrapper.py --nproc $tasks
 date
 
