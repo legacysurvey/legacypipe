@@ -1089,7 +1089,7 @@ def main(args=None):
             # rhalf ~ 1-2'' at z ~ 1, n~1 
             #Samp=Samp[ (Samp.get('%s_re' % objtype) <= 10.)*\
             #           (Samp.get('%s_n' % objtype) <= 2.) ]
-            Samp.set('%s_re' % objtype, np.array([1.5]*len(Samp)))
+            Samp.set('%s_re' % objtype, np.array([0.5]*len(Samp)))
             Samp.set('%s_n' % objtype, np.array([1.]*len(Samp)))
         else:
             # Usual obiwan
