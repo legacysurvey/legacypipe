@@ -1,8 +1,8 @@
 #!/bin/bash -l
 
-#SBATCH -p shared
-#SBATCH -n 8
-#SBATCH -t 00:30:00
+#SBATCH -p debug
+#SBATCH -N 1
+#SBATCH -t 00:10:00
 #SBATCH --account=desi
 #SBATCH -J dr4
 #SBATCH --mail-user=kburleigh@lbl.gov
