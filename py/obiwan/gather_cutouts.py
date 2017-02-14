@@ -117,7 +117,6 @@ class GatherTraining(object):
         else:
             fns= glob( os.path.join(self.data_dir,'training_gathered_*.hdf5') )
             assert(len(fns) > 0)
-            fns= fns[:2]
             all_data={}
             for cnt,fn in enumerate(fns):
                 fobj= h5py.File(fn,'r')
@@ -141,6 +140,21 @@ class GatherTraining(object):
     def readData(self):
         '''return hdf5 file object containing training data'''
         return h5py.File(self.hdf5_fn,'r')
+
+class LookAtTraining(object):
+    def __init__(self):
+
+    def bright_examples(self):
+        elg['117980298/z/DECam00392483-S20'][...,0].sum()
+        elg['117980298/r/DECam00393622-S35'][...,0].sum()
+        fn='star.fits';data=star['117980298/z/DECam00392483-S20'];hdu = fits.PrimaryHDU(np.transpose(data));hdulist = fits.HDUList([hdu]);hdu.writeto(fn)
+        fn='star_srcback.fits';data=star['117980298/z/DECam00392483-S20'];hdu = fits.PrimaryHDU(data[...,0]+data[...,1]);hdulist = fits.HDUList([hdu]);hdu.writeto(fn)
+    def var_examples(self):
+    def sum_addednoise_zero(self):
+    def starflux_equals_galaxyflux(self):
+    def radial_profiles(self):
+    
+
 
 if __name__ == '__main__':
     rank=1
