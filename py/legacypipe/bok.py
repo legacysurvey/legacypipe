@@ -80,6 +80,15 @@ class BokImage(CPImage, CalibMixin):
         print('WARNING: camera: %s not using bad_expid file' % '90prime')
         return np.flatnonzero(good)
 
+    @classmethod
+    def other_bad_things(self, survey, ccds):
+        '''
+        Nothing. For mosaic this is messed up interpolated images
+        '''
+        good = np.ones(len(ccds), bool)
+        return np.flatnonzero(good)
+
+
     def __init__(self, survey, t):
         super(BokImage, self).__init__(survey, t)
         self.pixscale= 0.455

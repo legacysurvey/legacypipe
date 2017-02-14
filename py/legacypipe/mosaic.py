@@ -81,6 +81,26 @@ class MosaicImage(CPImage, CalibMixin):
                 n0 = n
         return np.flatnonzero(good)
 
+    @classmethod
+    def other_bad_things(self, survey, ccds):
+        '''
+        For mosaic this is messed up interpolated images. Nothing for other cameras
+        '''
+        from astropy.io import fits
+        good = np.ones(len(ccds), bool)
+        n0 = sum(good)
+        # Remove if primary header does NOT have keyword YSHIFT
+        rootdir= os.path.join(os.getenv('LEGACY_SURVEY_DIR'),'images')
+        for i,fn in enumerate(ccds.image_filename):
+            fn= os.path.join(rootdir,fn)
+            hdulist = fits.open(fn)
+            if not 'YSHIFT' in hdulist[0].header:
+                good[i]= False
+        n = sum(good)
+        print('Flagged', n0-n, 'as Other Bad Things (YSHIFT not in prim header)')
+        n0 = n 
+        return np.flatnonzero(good)
+
     def __init__(self, survey, t):
         super(MosaicImage, self).__init__(survey, t)
         # Add poisson noise to weight map
@@ -136,6 +156,9 @@ class MosaicImage(CPImage, CalibMixin):
             assert(self.imgfn.size == 1)
             self.imgfn= self.imgfn[0]
             newprim= self.read_image_primary_header()
+            from astropy.io import fits
+            hdulist = fits.open(self.imgfn)
+            print("'YSHIFT' in hdulist[0].header=",'YSHIFT' in hdulist[0].header)
             assert('YSHIFT' in newprim.keys())
             hdr = self.read_image_header()
             self.imgfn= imgfn_backup

@@ -235,7 +235,13 @@ def stage_tims(W=3600, H=3600, pixscale=0.262, brickname=None,
 
     print('Cutting out bad_expid exporues...')
     I = survey.bad_exposures(ccds)
-    print(len(I), 'of', len(ccds), 'CCDs are photometric')
+    print(len(I), 'of', len(ccds), 'CCDs not flagged in bad_exp file')
+    ccds.cut(I)
+
+
+    print('Cutting out other bad things...')
+    I = survey.other_bad_things(ccds)
+    print(len(I), 'of', len(ccds), 'CCDs dont have other bad things')
     ccds.cut(I)
 
     print('Cutting on CCDs to be used for fitting...')

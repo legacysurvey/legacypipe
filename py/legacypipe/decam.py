@@ -90,6 +90,13 @@ class DecamImage(CPImage, CalibMixin):
         print('WARNING: camera: %s not using bad_expid file' % 'decam')
         return np.flatnonzero(good)
 
+    @classmethod
+    def other_bad_things(self, survey, ccds):
+        '''
+        Nothing. For mosaic this is messed up interpolated images
+        '''
+        good = np.ones(len(ccds), bool)
+        return np.flatnonzero(good)
 
     @classmethod
     def apply_blacklist(self, survey, ccds):
