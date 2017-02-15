@@ -139,7 +139,7 @@ class CPImage(LegacySurveyImage):
         dqbits[dq == 8] |= CP_DQ_BITS['trans']
         return dqbits
 
-def newWeightMap(wtfn=None,imgfn=None,dqfn=None):
+def newWeightMap(wtfn=None,imgfn=None,dqfn=None,clobber=False):
     '''MZLS or BASS
     Converts the oow weight map: 1 / var(sky, read)
     to a 1 / var(sky, read, astrophysical) weight map,\
@@ -149,7 +149,13 @@ def newWeightMap(wtfn=None,imgfn=None,dqfn=None):
     '''
     from astropy.io import fits
     newfn= wtfn.replace('oow','oow_wshot')
-    if not os.path.exists(newfn): 
+    make_wtmap=True
+    # Skip if exists AND has all 4 hdus + primary
+    if os.path.exists(newfn):
+        hdulist = fits.open(newfn) 
+        if len(hdulist) == 5:
+            make_wtmap=False
+    if make_wtmap: 
         print('Creating new weightmap: %s' % newfn)
         imgobj= fits.open(imgfn) 
         wtobj = fits.open(wtfn) 
@@ -171,7 +177,7 @@ def newWeightMap(wtfn=None,imgfn=None,dqfn=None):
             wt[cpbad != 0]= 0. 
             # Overwrite w new weight 
             wtobj[hdu].data= wt 
-        wtobj.writeto(newfn) 
+        wtobj.writeto(newfn,clobber=True) 
         print('Wrote new weightmap: %s' % newfn)
     return newfn
 

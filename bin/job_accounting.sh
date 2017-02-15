@@ -49,6 +49,8 @@ echo Finished Bricks: `wc -l $don`
 # Errors in log files
 echo Gathering log errors
 for fn in `find ${logdir}/log.*`; do
+    bad_wshot=`grep "IOError: extension not found" $fn|wc -c`
+    asserterr=`grep "AssertionError" $fn|wc -c`
     forcedoom=`grep "Photometering WISE band 1" $fn -A 10|grep "Exceeded job memory limit"| wc -c`
     forcedoom2=`grep "slurmstepd: error: Exceeded job memory" $fn -A 20|grep "unwise-coadds"| wc -c`
     coaddsoom=`grep "slurmstepd: error: Exceeded job memory" $fn -B 1|grep "Stage coadds finished:"| wc -c`
@@ -64,7 +66,13 @@ for fn in `find ${logdir}/log.*`; do
     runt=`grep "RuntimeError" $fn |wc -c`
     calib=`grep "RuntimeError: Command failed: modhead" $fn |wc -c`
     # Append Log name for these errors
-    if [ "$forcedoom" -gt 0 ]; then
+    if [ "$bad_wshot" -gt 0 ]; then
+        echo $fn bad wshot
+        echo $fn >> ${err_dir}/badwshot.txt 
+    elif [ "$asserterr" -gt 0 ]; then
+        echo $fn AsssertionError
+        echo $fn >> ${err_dir}/asserterr.txt 
+    elif [ "$forcedoom" -gt 0 ]; then
         echo $fn Forced Photometry OOM
         echo $fn >> ${err_dir}/forcedoom.txt 
     elif [ "$forcedoom2" -gt 0 ]; then
