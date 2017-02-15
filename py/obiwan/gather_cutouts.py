@@ -5,6 +5,11 @@ import numpy as np
 import csv
 import os
 
+from astrometry.util.fits import fits_table, merge_tables
+#from astropy.io import fits
+import fitsio
+import matplotlib.pyplot as plt
+
 def read_dict(fn):
     d = {}
     for key, val in csv.reader(open(fn)):
@@ -142,21 +147,120 @@ class GatherTraining(object):
         return h5py.File(self.hdf5_fn,'r')
 
 class LookAtTraining(object):
-    def __init__(self):
+    def __init__(self,brick=None,train_dir=None):
+        if train_dir is None:
+            self.train_dir= '/global/cscratch1/sd/kaylanb/dr3-obiwan/galaxies_starflux_re0.5'
+        else:
+            self.train_dir= train_dir
+        self.brick= brick
+        self.objs= ['star','elg','qso']
+        # Read simcat catalogue, keep ids appearing in hdf5 file
+        self.basedir,self.f,self.simcat,self.i_sort= {},{},{},{}
+        for obj in self.objs:
+            self.basedir[obj]= os.path.join(self.train_dir,\
+                                            '%s/%s/%s/rowstart0' % (obj,self.brick[:3],self.brick))
+            self.f[obj]= self.get_hdf5(obj= obj)
+            self.simcat[obj]= self.read_simcat(obj=obj)
+            # Indicies of max -> min of gr and z fluxes
+            self.i_sort[obj]= np.argsort(np.max((self.simcat[obj].rflux,\
+                                                 self.simcat[obj].gflux,\
+                                                 self.simcat[obj].zflux),axis=0))[::-1]
 
-    def bright_examples(self):
-        elg['117980298/z/DECam00392483-S20'][...,0].sum()
-        elg['117980298/r/DECam00393622-S35'][...,0].sum()
-        fn='star.fits';data=star['117980298/z/DECam00392483-S20'];hdu = fits.PrimaryHDU(np.transpose(data));hdulist = fits.HDUList([hdu]);hdu.writeto(fn)
-        fn='star_srcback.fits';data=star['117980298/z/DECam00392483-S20'];hdu = fits.PrimaryHDU(data[...,0]+data[...,1]);hdulist = fits.HDUList([hdu]);hdu.writeto(fn)
-    def var_examples(self):
-    def sum_addednoise_zero(self):
-    def starflux_equals_galaxyflux(self):
-    def radial_profiles(self):
+    def write_examples(self):
+        for obj in self.objs:
+            self.write_examples_obj(obj=obj)
+                
+    def write_examples_obj(self,obj=None):
+        print('Writing examples for %s' % obj)
+        # Max, median, min fluxes, 2 examples each
+        i_sort= self.i_sort[obj]
+        simcat= self.simcat[obj]
+        fobj= self.f[obj]
+        
+        top_two= i_sort[:2]
+        mid= len(i_sort)/2
+        med_two= i_sort[ mid-2:mid ]
+        bot_two= i_sort[-2:]
+        
+        for tup,name in zip([top_two,med_two,bot_two],['top','med','bot']):
+            for sort_id in tup:
+                obj_id= simcat[sort_id].id
+                for band in list(fobj['/%d' % obj_id].keys()):
+                    ccd= list(fobj['/%d/%s' % (obj_id,band)].keys())[0]
+                    node= '/%d/%s/%s' % (obj_id,band,ccd) 
+                    data= fobj[node] # 0 stamp, 1 back, 2 dq, 3 nonoise stamp 
+                    dr= os.path.join(self.basedir[obj],'examples')
+                    if not os.path.exists(dr):
+                        os.makedirs(dr)
+                    fn= os.path.join(dr,'%d_%s_%s_' % (obj_id,band,name))
+                    # Fits
+                    fitsio.write(fn+'src.fits',data[...,0],clobber=True)
+                    fitsio.write(fn+'srcimg.fits',data[...,0]+data[...,1],clobber=True)
+                    # Rad Profiles: 0 nonoise stamp, 1 stamp, 2 stamp+back
+                    sz= data[...,0].shape[0]
+                    profs= [ data[...,3][ sz/2,: ],\
+                             data[...,0][ sz/2,: ],\
+                             (data[...,0]+data[...,1])[ sz/2,: ]]
+                    profs= np.array(profs)
+                    assert(profs.shape[0] == 3)
+                    assert(profs.shape[1] == sz)
+                    r=np.arange(sz)
+                    for i,lab in zip(range(3),['srcnonoise','src','srcimg']):
+                        plt.plot(r,profs[i,:],label=lab)
+                    plt.legend(loc='lower right')
+                    plt.savefig(fn+'profiles.png')
+                    plt.close()
+                    print('Wrote examples with prefix: %s' % fn)
+
+    def get_hdf5(self,obj=None):
+        return h5py.File(os.path.join(self.basedir[obj],\
+                                      '%s_%s.hdf5' % (obj,self.brick)),'r')
+
+    def read_simcat(self,obj=None):
+        '''read obj_simcat.fits in outdir and remove ids that were not used'''
+        simcat = fits_table(os.path.join(self.basedir[obj],\
+                            'simcat-%s-%s-rowstart0.fits' % (obj,self.brick)))
+        ids= ids=np.array(list(self.f[obj].keys()),int)
+        no_ids= list( set(simcat.id).difference(set(ids)) )
+        assert(len(no_ids) == len(set(simcat.id)) - len(set(ids)) )
+        keep= np.ones(len(simcat), bool)
+        for id in no_ids:
+            keep[ simcat.id == id ] = False
+        simcat.cut(keep)
+        return simcat
     
-
+#
+#    def bright_examples(self):
+#        '''write fits cutouts for the highest flux sources
+#        use simcat*.fits in outdir'''
+#        # Use simcat grz fluxes --> desired hdf5 node
+#        # Store node of highest to lowest flux for each object,band
+#        node=dict(qso='',\
+#                   star='')
+#                   #elg=0.)
+#        flux= dict(qso=0.,\
+#                   star=0.)
+#        for obj in nodes.keys():
+#            for id in list(self.f.keys()):
+#                for band in list(self.f[id].keys()):
+#                    for ccd in list(self.f['%s/%s' % (id,band)].keys()):
+#                        if self.f['%s/%s/%s' % (id,band,ccd)].attrs['addedflux'] > flux[obj]:
+#                            node[obj]= '%s/%s/%s' % (id,band,ccd)
+#                            flux[obj]= self.f['%s/%s/%s' % (id,band,ccd)].attrs['addedflux']
+#                    
+#        elg['117980298/z/DECam00392483-S20'][...,0].sum()
+#        elg['117980298/r/DECam00393622-S35'][...,0].sum()
+#        fn='star.fits';data=star['117980298/z/DECam00392483-S20'];hdu = fits.PrimaryHDU(np.transpose(data));hdulist = fits.HDUList([hdu]);hdu.writeto(fn)
+#        fn='star_srcback.fits';data=star['117980298/z/DECam00392483-S20'];hdu = fits.PrimaryHDU(data[...,0]+data[...,1]);hdulist = fits.HDUList([hdu]);hdu.writeto(fn)
+    
+    #def var_examples(self):
+    #def sum_addednoise_zero(self):
+    #def starflux_equals_galaxyflux(self):
 
 if __name__ == '__main__':
+    look= LookAtTraining(brick='1428p195')
+    look.write_examples()
+    raise ValueError
     rank=1
     gather= GatherTraining(rank=rank)
     #fns_dict={}
