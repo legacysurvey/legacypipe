@@ -125,7 +125,14 @@ def main():
                     print('cache hit:', val)
                     madu =val['median_adu']
                     if madu is not None:
-                        medians.append(val['median_adu'] - val['skyadu'])
+                        if 'median' in val:
+                            medians.append(val['median'])
+                        else:
+                            from tractor.brightness import NanoMaggies
+                            zpscale = NanoMaggies.zeropointToScale(val['ccdzpt'])
+                            med = (val['median_adu'] - val['skyadu']) / zpscale
+                            print('Computed median diff:', med, 'nmgy')
+                            medians.append(med)
                         medmjds.append(mjd)
 
                         median_adus.append(val['median_adu'])
@@ -165,17 +172,21 @@ def main():
             if madu is None:
                 continue
                 
-            medians.append(val['median_adu'] - val['skyadu'])
+            medians.append(val['median'])
             medmjds.append(mjd)
-
             median_adus.append(val['median_adu'])
             skyadus.append(val['skyadu'])
 
+    median_adus = np.array(median_adus)
+    skyadus = np.array(skyadus)
+    medmjds = np.array(medmjds)
+    medians = np.array(medians)
+
     plt.clf()
-    plt.plot(medmjds, medians, 'b.')
+    plt.plot(medmjds, median_adus - skyadus, 'b.')
     plt.xlabel('MJD')
     #plt.ylabel('Image median after sky subtraction (nmgy)')
-    plt.ylabel('Image median after sky subtraction (ADU)')
+    plt.ylabel('Image median - SKYADU (ADU)')
     #plt.ylim(-0.03, 0.03)
     #plt.ylim(-10, 10)
     plt.ylim(-1, 1)
@@ -183,6 +194,35 @@ def main():
     plt.axhline(0, color='k', lw=2, alpha=0.5)
     ps.savefig()
 
+
+    print('Median pcts:', np.percentile(medians, [0,2,50,98,100]))
+    mlo,mhi = np.percentile(medians, [2, 98])
+    I = np.flatnonzero((medians > mlo) * (medians < mhi))
+
+    d0 = np.mean(medmjds)
+    dmjd = medmjds[I] - d0
+    A = np.zeros((len(dmjd),2))
+    A[:,0] = 1.
+    A[:,1] = dmjd
+    b = np.linalg.lstsq(A, medians[I])[0]
+    print('Lstsq:', b)
+    offset = b[0]
+    slope = b[1]
+    xx = np.array([dmjd.min(), dmjd.max()])
+
+    print('Offset', offset)
+    print('Slope', slope)
+
+    plt.clf()
+    plt.plot(medmjds, medians, 'b.')
+    ax = plt.axis()
+    plt.plot(xx + d0, offset + slope*xx, 'b-')
+    plt.axis(ax)
+    plt.xlabel('MJD')
+    plt.ylabel('Image median after sky subtraction (nmgy)')
+    plt.ylim(-0.03, 0.03)
+    plt.axhline(0, color='k', lw=2, alpha=0.5)
+    ps.savefig()
 
     plt.clf()
     plt.plot(median_adus, skyadus, 'b.')
@@ -196,7 +236,7 @@ def main():
     ps.savefig()
 
     plt.clf()
-    plt.plot(medmjds, np.array(skyadus) / np.array(median_adus), 'b.')
+    plt.plot(medmjds, skyadus / median_adus, 'b.')
     plt.xlabel('MJD')
     plt.ylim(0.98, 1.02)
     plt.axhline(1.0, color='k', alpha=0.5)
