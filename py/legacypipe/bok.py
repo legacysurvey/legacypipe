@@ -89,7 +89,7 @@ class BokImage(CPImage, CalibMixin):
         return np.flatnonzero(good)
 
 
-    def __init__(self, survey, t):
+    def __init__(self, survey, t, makeNewWeightMap=True):
         super(BokImage, self).__init__(survey, t)
         self.pixscale= 0.455
         #self.dqfn= None #self.read_dq() #array of 0s for now
@@ -101,7 +101,8 @@ class BokImage(CPImage, CalibMixin):
         self.arawgain = t.arawgain
         self.name = self.imgfn
         # Add poisson noise to weight map
-        self.wtfn= newWeightMap(wtfn=self.wtfn,imgfn=self.imgfn,dqfn=self.dqfn)
+        self.wtfn= newWeightMap(wtfn=self.wtfn,imgfn=self.imgfn,dqfn=self.dqfn,
+                                create=makeNewWeightMap)
         
     def __str__(self):
         return 'Bok ' + self.name

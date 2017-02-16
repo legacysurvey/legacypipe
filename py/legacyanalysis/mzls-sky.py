@@ -9,6 +9,7 @@ import fitsio
 from astrometry.util.fits import fits_table
 from astrometry.util.plotutils import PlotSequence
 from astrometry.util.multiproc import multiproc
+from astrometry.util.miscutils import estimate_mode
 from legacypipe.survey import *
 from legacypipe.runs import get_survey
 
@@ -28,6 +29,7 @@ def init():
     cache = coll
 
 def read_sky_val((mjd, key, oldvals, ccd)):
+
     try:
         im = survey.get_image_object(ccd)
         print('Reading', im)
@@ -39,9 +41,13 @@ def read_sky_val((mjd, key, oldvals, ccd)):
 
         rawmed = np.median(tim.getImage().ravel())
         skyadu = tim.sky.getValue()
+
+        mode = estimate_mode(tim.getImage().ravel(), raiseOnWarn=True)
+
         print('ADU median:', rawmed, 'vs SKYADU', skyadu, 'zeropoint', ccd.ccdzpt)
 
         oldvals.update(median_adu = float(rawmed),
+                       mode_adu = float(mode),
                        skyadu = float(skyadu),
                        ccdzpt = float(ccd.ccdzpt))
 
@@ -94,11 +100,9 @@ def main():
 
     mp = multiproc(nthreads=8, init=init)
 
-    medians = []
-    medmjds = []
 
-    median_adus = []
-    skyadus = []
+    allvals = []
+    medmjds = []
 
     args = []
 
@@ -121,24 +125,11 @@ def main():
             print('Got', vals.count(), 'cache hits for', key)
             gotone = False
             for val in vals:
-                if 'median_adu' in val:
+                #if 'median_adu' in val:
+                if 'mode_adu' in val:
                     print('cache hit:', val)
-                    madu =val['median_adu']
-                    if madu is not None:
-                        if 'median' in val:
-                            medians.append(val['median'])
-                        else:
-                            from tractor.brightness import NanoMaggies
-                            zpscale = NanoMaggies.zeropointToScale(val['ccdzpt'])
-                            med = (val['median_adu'] - val['skyadu']) / zpscale
-                            print('Computed median diff:', med, 'nmgy')
-                            medians.append(med)
-                        medmjds.append(mjd)
-
-                        median_adus.append(val['median_adu'])
-                        skyadus.append(val['skyadu'])
-                    
-                    
+                    allvals.append(val)
+                    medmjds.append(mjd)
                     gotone = True
                     break
                 else:
@@ -167,17 +158,38 @@ def main():
         for (mjd,key,oldvals,ccd),val in zip(args, meds):
             if val is None:
                 continue
-
-            madu =val['median_adu']
-            if madu is None:
-                continue
-                
-            medians.append(val['median'])
+            allvals.append(val)
             medmjds.append(mjd)
-            median_adus.append(val['median_adu'])
-            skyadus.append(val['skyadu'])
+
+    medians = []
+    median_adus = []
+    mode_adus = []
+    skyadus = []
+    keepmjds = []
+
+    for mjd,val in zip(medmjds, allvals):
+        madu = val['median_adu']
+        if madu is None:
+            continue
+
+        if 'median' in val:
+            medians.append(val['median'])
+        else:
+            from tractor.brightness import NanoMaggies
+            zpscale = NanoMaggies.zeropointToScale(val['ccdzpt'])
+            med = (val['median_adu'] - val['skyadu']) / zpscale
+            print('Computed median diff:', med, 'nmgy')
+            medians.append(med)
+
+        keepmjds.append(mjd)
+        median_adus.append(val['median_adu'])
+        mode_adus.append(val['mode_adu'])
+        skyadus.append(val['skyadu'])
+
+    medmjds = keepmjds
 
     median_adus = np.array(median_adus)
+    mode_adus = np.array(mode_adus)
     skyadus = np.array(skyadus)
     medmjds = np.array(medmjds)
     medians = np.array(medians)
@@ -191,6 +203,15 @@ def main():
     #plt.ylim(-10, 10)
     plt.ylim(-1, 1)
 
+    plt.axhline(0, color='k', lw=2, alpha=0.5)
+    ps.savefig()
+
+
+    plt.clf()
+    plt.plot(medmjds, mode_adus - skyadus, 'b.')
+    plt.xlabel('MJD')
+    plt.ylabel('Image mode - SKYADU (ADU)')
+    plt.ylim(-1, 1)
     plt.axhline(0, color='k', lw=2, alpha=0.5)
     ps.savefig()
 
