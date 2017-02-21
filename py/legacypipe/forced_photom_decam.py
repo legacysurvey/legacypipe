@@ -21,6 +21,8 @@ from tractor.ellipses import EllipseE
 from legacypipe.survey import LegacySurveyData, bricks_touching_wcs, exposure_metadata, get_version_header, apertures_arcsec
 from catalog import read_fits_catalog
 
+import photutils
+
 # python projects/desi/forced-photom-decam.py decals/images/decam/CP20140810_g_v2/c4d_140816_032035_ooi_g_v2.fits.fz 43 DR1 f.fits
 
 def get_parser():

@@ -1165,14 +1165,14 @@ Now using the current directory as LEGACY_SURVEY_DIR, but this is likely to fail
         T = T[I]
         return T
 
-    def get_image_object(self, t):
+    def get_image_object(self, t, **kwargs):
         '''
         Returns a DecamImage or similar object for one row of the CCDs table.
         '''
         # get Image subclass
         imageType = self.image_class_for_camera(t.camera)
         # call Image subclass constructor
-        return imageType(self, t)
+        return imageType(self, t, **kwargs)
 
     def get_approx_wcs(self, ccd):
         W,H = ccd.width,ccd.height
