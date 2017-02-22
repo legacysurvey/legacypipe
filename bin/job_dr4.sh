@@ -1,10 +1,10 @@
 #!/bin/bash -l
 
-#SBATCH -p debug
-#SBATCH -N 1
-#SBATCH -t 00:10:00
+#SBATCH -p shared
+#SBATCH -n 24
+#SBATCH -t 04:00:00
 #SBATCH --account=desi
-#SBATCH -J dr4
+#SBATCH -J trace
 #SBATCH --mail-user=kburleigh@lbl.gov
 #SBATCH --mail-type=END,FAIL
 #SBATCH -L SCRATCH
@@ -31,7 +31,7 @@ echo full_stacktrace:$full_stacktrace
 # set usecores as desired for more mem and set shared n above to 2*usecores, keep threads=6 so more mem per thread!, then --aray equal to number largemmebricks.txt
 
 
-usecores=4
+usecores=12
 #threads=$usecores
 threads=4
 if [ "$full_stacktrace" = "yes" ];then

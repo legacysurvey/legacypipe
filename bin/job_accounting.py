@@ -119,20 +119,28 @@ elif args.dowhat == 'sanity_tractors':
     fns=np.loadtxt(args.fn,dtype=str)
     assert(len(fns) > 0)
     # Remove file lists for clean slate
-    for outfn in ['sanity_tractors_readerr.txt','sanity_tractors_nowise.txt']:
+    fils= dict(readerr='sanity_tractors_readerr.txt',\
+               nowise='sanity_tractors_nowise.txt',\
+               nolc='sanity_tractors_nolc.txt')
+    for outfn in fils.keys():
         if os.path.exists(outfn):
             os.remove(outfn)
     # Loop over completed Tractor Cats
     for fn in fns:
         try: 
             t=fits_table(fn)
+            # No wise info
             if not 'wise_flux' in t.get_columns():
                 print('wise_flux not in %s' % fn)
-                with open('sanity_tractors_nowise.txt','a') as foo:
+                with open(fils['nowise'],'a') as foo:
+                    foo.write('%s\n' % fn)
+            elif not 'wise_lc_flux' in t.get_columns():
+                print('wise LCs not in %s' % fn)
+                with open(fils['nolc'],'a') as foo:
                     foo.write('%s\n' % fn)
         except:
             print('error reading %s' % fn)
-            with open('sanity_tractors_readerr.txt','a') as foo:
+            with open(fils['readerr'],'a') as foo:
                 foo.write('%s\n' % fn)
          
 
