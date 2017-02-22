@@ -1214,6 +1214,18 @@ def measure_image(img_fn, **measureargs):
     return ccds, stars
 
 
+class outputFns(object):
+    def __init__(self,camera=None,image_fn,outdir,prefix=''):
+        assert(not camera is None)
+        img_name= os.path.basename(img_fn).replace('.fits.fz','')
+        #elif camera == 'mosaic':
+        #    img_name= os.path.basename(img_fn).replace('.fits.fz','')
+        #else: 
+        #    raise ValueError('camera=%s not supported' % camera)
+        self.zptfn= os.path.join(outdir,'zpts','%szpt-%s.fits' % (prefix,img_name))
+        self.starfn= os.path.join(outdir,'zpts','%sstar-%s.fits' % (prefix,img_name))
+        self.imgfn= os.path.join(outdir,'images', os.path.basename(img_fn))
+
 def get_output_fns(img_fn,prefix=''):
     zptsfile= os.path.dirname(img_fn).replace('/project/projectdirs','/scratch2/scratchdirs/kaylanb')
     zptsfile= os.path.join(zptsfile,'zpts/','%szeropoint-%s' % (prefix,os.path.basename(img_fn)))
@@ -1226,37 +1238,39 @@ def runit(img_fn, **measureargs):
     '''Generate a legacypipe-compatible CCDs file for a given image.
 
     '''
-    zptsfile= measureargs.get('zptsfile')
-    zptstarsfile= measureargs.get('zptstarsfile')
+    zptfn= measureargs.get('zptfn')
+    starfn= measureargs.get('starfn')
+    imagefn= measureargs.get('imgfn')
 
     t0 = Time()
-    if not os.path.exists(os.path.dirname(zptsfile)):
-        dobash('mkdir -p %s' % os.path.dirname(zptsfile))
+    for mydir in [os.path.dirname(zptfn),\
+                  os.path.dirname(imagefn)):
+        if not os.path.exists(mydir):
+            os.makedirs(mydir)
 
     # Copy to SCRATCH for improved I/O
-    fn_scr= img_fn.replace('/project/projectdirs','/scratch2/scratchdirs/kaylanb')
-    if not os.path.exists(fn_scr): 
-        dobash("cp %s %s" % (img_fn,fn_scr))
-    if not os.path.exists(fn_scr.replace('_ooi_','_ood_')): 
-        dobash("cp %s %s" % (img_fn.replace('_ooi_','_ood_'),fn_scr.replace('_ooi_','_ood_')))
+    if not os.path.exists(imagefn): 
+        dobash("cp %s %s" % (img_fn,imagefn))
+    if not os.path.exists(img_fn.replace('_ooi_','_ood_')): 
+        dobash("cp %s %s" % (img_fn.replace('_ooi_','_ood_'),imagefn.replace('_ooi_','_ood_')))
     t0= ptime('copy-to-scratch',t0)
 
     ccds, stars= measure_image(fn_scr, **measureargs)
     t0= ptime('measure_image',t0)
 
     # Write out.
-    ccds.write(zptsfile)
-    print('Wrote {}'.format(zptsfile))
+    ccds.write(zptfn)
+    print('Wrote {}'.format(zptfn))
     # Also write out the table of stars, although eventually we'll want to only
     # write this out if we're calibrating the photometry (or if the user
     # requests).
-    stars.write(zptstarsfile)
-    print('Wrote {}'.format(zptstarsfile))
+    stars.write(starfn)
+    print('Wrote {}'.format(starfn))
     t0= ptime('write-results-to-fits',t0)
-    if os.path.exists(fn_scr): 
+    if os.path.exists(imagefn): 
         assert(fn_scr.startswith('/scratch2/scratchdirs/kaylanb'))
-        dobash("rm %s" % fn_scr)
-        dobash("rm %s" % fn_scr.replace('_ooi_','_ood_'))
+        dobash("rm %s" % imagefn)
+        dobash("rm %s" % imagefn.replace('_ooi_','_ood_'))
         t0= ptime('removed-cp-from-scratch',t0)
     
 class Compare2Arjuns(object):
@@ -1605,94 +1619,74 @@ class Compare2Arjuns(object):
             plt.savefig(fn) 
             print('Wrote %s' % fn)
             plt.close()
- 
-                
-if __name__ == "__main__":
-    t0 = Time()
-    tbegin=t0
-    print('TIMING:after-imports ',datetime.datetime.now())
-    parser = argparse.ArgumentParser(description='Generate a legacypipe-compatible CCDs file from a set of reduced imaging.')
+
+def get_parser():
+    '''return parser object, tells it what options to look for
+    options can come from a list of strings or command line'''
+    parser = argparse.ArgumentParser(formatter_class=argparse.ArgumentDefaultsHelpFormatter,\
+                                     description='Generate a legacypipe-compatible CCDs file \
+                                                  from a set of reduced imaging.')
     parser.add_argument('--image_list',action='store',help='List of images to process, if compare2arjun = True then list of legacy zeropoint files',required=True)
     parser.add_argument('--prefix', type=str, default='', help='Prefix to prepend to the output files.')
     parser.add_argument('--verboseplots', action='store_true', default=False, help='use to plot FWHM Moffat PSF fits to the 20 brightest stars')
     parser.add_argument('--compare2arjun', action='store_true', default=False, help='turn this on and give --image-list a list of legacy zeropoint files instead of cp images')
-    parser.add_argument('--outdir', type=str, default='./legacy_zpt_outdir', help='Output directory.')
+    parser.add_argument('--outdir', type=str, default='.', help='Where to write zpts/,images/,logs/')
     parser.add_argument('--aprad', type=float, default=3.5, help='Aperture photometry radius (arcsec).')
     parser.add_argument('--skyrad-inner', type=float, default=7.0, help='Radius of inner sky annulus (arcsec).')
     parser.add_argument('--skyrad-outer', type=float, default=10.0, help='Radius of outer sky annulus (arcsec).')
-    parser.add_argument('--nproc', type=int, default=1, help='Number of CPUs to use.')
     parser.add_argument('--calibrate', action='store_true',
                         help='Use this option when deriving the photometric transformation equations.')
     parser.add_argument('--sky-global', action='store_true',
                         help='Use a global rather than a local sky-subtraction around the stars.')
+    parser.add_argument('--nproc', type=int,action='store',default=1,
+                        help='set to > 1 if using legacy-zeropoints-mpiwrapper.py')
+    return parser
 
-    args = parser.parse_args()
-   
+
+def main(image_list=None,args=None): 
+    ''' Produce zeropoints for all CP images in image_list
+    image_list -- iterable list of image filenames
+    args -- parsed argparser objection from get_parser()'''
+    assert(not args is None)
+    assert(not image_list is None)
+    t0 = Time()
+    tbegin=t0
+    
     if args.compare2arjun:
         comp= Compare2Arjuns(args.image_list)
         sys.exit("Finished compaison to Arjun's zeropoints")
 
- 
-    images= read_lines(args.image_list) 
-    
     # Build a dictionary with the optional inputs.
     measureargs = vars(args)
     if not args.compare2arjun:
         measureargs.pop('compare2arjun')
     measureargs.pop('image_list')
-    nproc = measureargs.pop('nproc')
 
     outdir = measureargs.pop('outdir')
     if not os.path.exists(outdir):
         os.makedirs(outdir)
-
-    if nproc > 1:
-        from mpi4py.MPI import COMM_WORLD as comm
     t0=ptime('parse-args',t0)
+    for image_fn in images:
+        # Check if zpt already written
+        F= outputFns(image_fn,outdir,prefix= measureargs.get('prefix'))
+        if os.path.exists(F.zptfn) and os.path.exists(F.starfn):
+            print('continuing'.upper())
+            continue  # Already done
+        measureargs.update(dict(zptfn= F.zptfn,\
+                                starfn= F.starfn,\
+                                imgfn= F.imgfn))
+        # Create the file
+        t0=ptime('b4-run',t0)
+        runit(image_fn, **measureargs)
+        t0=ptime('after-run',t0)
+    tnow= Time()
+    print("TIMING:total %s" % (tnow-tbegin,))
+    print("Done")
+   
+if __name__ == "__main__":
+    parser= get_parser()  
+    args = parser.parse_args(args=args)
+    images= read_lines(args.image_list) 
+    main(image_list=images,args=args)
 
-    # MPI4py
-    if nproc > 1:
-        images_split= np.array_split(images, comm.size)
-        for image_fn in images_split[comm.rank]:
-            # Check if zpt already written
-            zptsfile,zptstarsfile= get_output_fns(image_fn,prefix=measureargs.get('prefix'))
-            if os.path.exists(zptsfile) and os.path.exists(zptstarsfile):
-                print('Skipping b/c exists: %s' % zptsfile)
-                continue  # Already done
-            measureargs.update(dict(zptsfile=zptsfile,\
-                                    zptstarsfile=zptstarsfile))
-            # Log to unique file
-            outfn=os.path.join(outdir,"std.zpt-%s%s" % \
-                        (os.path.basename(image_fn),\
-                        datetime.datetime.now().strftime("m%m-d%d-hr%H-min%M")))  
-            with stdouterr_redirected(to=outfn, comm=None):  
-                t0=ptime('b4-run',t0)
-                runit(image_fn, **measureargs)
-                t0=ptime('after-run',t0)
-                # Finish up 
-        # Wait for all mpi tasks to finish 
-        confirm_files = comm.gather( images_split[comm.rank], root=0 )
-        if comm.rank == 0:
-            print('Rank 0 gathered the results:')
-            print('len(images)=%d, len(gathered)=%d' % (len(images),len(confirm_files)))
-            tnow= Time()
-            print("TIMING:total %s" % (tnow-tbegin,))
-            print("Done")
-    # Serial
-    else:
-        for image_fn in images:
-            # Check if zpt already written
-            zptsfile,zptstarsfile= get_output_fns(image_fn,prefix=measureargs.get('prefix'))
-            if os.path.exists(zptsfile) and os.path.exists(zptstarsfile):
-                print('continuing'.upper())
-                continue  # Already done
-            measureargs.update(dict(zptsfile=zptsfile,\
-                                    zptstarsfile=zptstarsfile))
-            # Create the file
-            t0=ptime('b4-run',t0)
-            runit(image_fn, **measureargs)
-            t0=ptime('after-run',t0)
-        tnow= Time()
-        print("TIMING:total %s" % (tnow-tbegin,))
-        print("Done")
 

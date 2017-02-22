@@ -2,7 +2,7 @@
 
 #SBATCH -p debug
 #SBATCH -N 1 
-#SBATCH -t 00:30:00
+#SBATCH -t 00:05:00
 #SBATCH --account=desi
 #SBATCH -J deepELG
 #SBATCH --mail-user=kburleigh@lbl.gov
@@ -16,7 +16,8 @@
 export OMP_NUM_THREADS=1
 
 # Yu Feng's bcast
-source /scratch1/scratchdirs/desiproc/DRs/code/dr4/yu-bcast_2/activate.sh
+#source /scratch1/scratchdirs/desiproc/DRs/code/dr4/yu-bcast_2/activate.sh
+module load mpi4py-hpcp/2.0.0_70f79779-9.0
 
 #export runwhat=star
 #export runwhat=qso
