@@ -1,4 +1,5 @@
 from __future__ import print_function
+import sys
 import numpy as np
 import os
 import fitsio
@@ -67,13 +68,20 @@ def main():
             fn = im.splineskyfn
             if os.path.exists(fn):
                 print('Reading', fn)
-                T = fits_table(fn)
-                splinesky.append(T)
-                # print(fn)
-                # T.about()
-                hdr = fitsio.read_header(fn)
-                skyhdrvals.append([hdr[k] for k in [
-                            'SKY', 'LEGPIPEV', 'PLVER']] + [expnum, ccd.ccdname])
+                T = None
+                try:
+                    T = fits_table(fn)
+                except KeyboardInterrupt:
+                    raise
+                except:
+                    print('Failed to read file', fn, ':', sys.exc_info()[1])
+                if T is not None:
+                    splinesky.append(T)
+                    # print(fn)
+                    # T.about()
+                    hdr = fitsio.read_header(fn)
+                    skyhdrvals.append([hdr[k] for k in [
+                                'SKY', 'LEGPIPEV', 'PLVER']] + [expnum, ccd.ccdname])
             else:
                 print('File not found:', fn)
 

@@ -1924,7 +1924,7 @@ def stage_wise_forced(
     if WISE is not None:
         for i,p in enumerate(phots[1:len(args)]):
             if p is None:
-                (wcat,tiles,band,nil,nil,nil) = args[i+1]
+                (wcat,tiles,band) = args[i+1][:3]
                 print('"None" result from WISE forced phot:', tiles, band)
                 continue
             WISE.add_columns_from(p)
