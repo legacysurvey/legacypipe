@@ -1,26 +1,39 @@
 #!/bin/bash
 
+# checkpoints  coadd  metrics  tractor  tractor-i
+# ../bin/dr4-rsync-projecta.sh coadd
+# for hello in checkpoints  coadd  metrics  tractor  tractor-i;do nohup ../bin/dr4-rsync-projecta.sh $hello > $hello_rsync.out & done
+whichdir="$1"
+
 if [ "$NERSC_HOST" == "edison" ]; then
     outdir=/scratch1/scratchdirs/desiproc/DRs/data-releases/dr4
-    bricklist=/scratch1/scratchdirs/desiproc/DRs/dr4-bootes/legacypipe-dir/bricks-dr4-${NERSC_HOST}.txt
+    #bricklist=/scratch1/scratchdirs/desiproc/DRs/dr4-bootes/legacypipe-dir/bricks-dr4-${NERSC_HOST}.txt
 else
     outdir=/global/cscratch1/sd/desiproc/dr4/data_release/dr4
-    bricklist=/global/cscratch1/sd/desiproc/dr4/legacypipe-dir/bricks-dr4-${NERSC_HOST}.txt
+    #bricklist=/global/cscratch1/sd/desiproc/dr4/legacypipe-dir/bricks-dr4-${NERSC_HOST}.txt
 fi
 
-proj_dir=/global/projecta/projectdirs/cosmo/work/dr4
+if [ ! -e "$outdir/$whichdir" ]; then
+    echo does not exist: $outdir/$whichdir
+    exit 999
+fi
+
+proj_dir=/global/projecta/projectdirs/cosmo/work/dr4/test
 
 # List all files that exists for each completed brick
 # use projecta/ permissions and group
-args="-aRv --no-p --no-g --chmod=ugo=rwX"
-for brick in `cat $bricklist`;do
-    bri="$(echo $brick | head -c 3)"
-    rsync $args $outdir/checkpoints/$bri/$brick.pickle ${proj_dir}/
-    rsync $args $outdir/coadd/$bri/$brick ${proj_dir}/
-    rsync $args $outdir/metrics/$bri/*${brick}* ${proj_dir}/
-    rsync $args $outdir/tractor/$bri/*${brick}* ${proj_dir}/
-    rsync $args $outdir/tractor-i/$bri/*${brick}* ${proj_dir}/
-done
+#args="-aRv --no-p --no-g --chmod=ugo=rwX"
+args="-av --no-p --no-g --chmod=ugo=rwX"
+echo copying $outdir/$whichdir to $proj_dir
+rsync $args $outdir/$whichdir ${proj_dir}/
+#for brick in `cat $bricklist`;do
+    #bri="$(echo $brick | head -c 3)"
+    #rsync $args $outdir/checkpoints/$bri/$brick.pickle ${proj_dir}/
+    #rsync $args $outdir/coadd/$bri/$brick ${proj_dir}/
+    #rsync $args $outdir/metrics/$bri/*${brick}* ${proj_dir}/
+    #rsync $args $outdir/tractor/$bri/*${brick}* ${proj_dir}/
+    #rsync $args $outdir/tractor-i/$bri/*${brick}* ${proj_dir}/
+#done
 #chown -R cosmo ${proj_dir}/
 chgrp -R cosmo ${proj_dir}/
 chmod -R ug=rwx,o=rx ${proj_dir}/
