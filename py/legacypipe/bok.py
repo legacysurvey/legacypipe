@@ -101,8 +101,7 @@ class BokImage(CPImage, CalibMixin):
         self.arawgain = t.arawgain
         self.name = self.imgfn
         # Add poisson noise to weight map
-        self.wtfn= newWeightMap(wtfn=self.wtfn,imgfn=self.imgfn,dqfn=self.dqfn,
-                                create=makeNewWeightMap)
+        self.wtfn= newWeightMap(wtfn=self.wtfn,imgfn=self.imgfn,dqfn=self.dqfn)
         
     def __str__(self):
         return 'Bok ' + self.name
