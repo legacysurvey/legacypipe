@@ -90,7 +90,7 @@ class MosaicImage(CPImage, CalibMixin):
         good = np.ones(len(ccds), bool)
         n0 = sum(good)
         # Remove if primary header does NOT have keyword YSHIFT
-        rootdir= os.path.join(os.getenv('LEGACY_SURVEY_DIR'),'images')
+        rootdir = survey.get_image_dir()
         for i,fn in enumerate(ccds.image_filename):
             fn= os.path.join(rootdir,fn)
             hdulist = fits.open(fn)

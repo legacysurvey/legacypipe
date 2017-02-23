@@ -1,12 +1,14 @@
 #!/bin/bash 
 
-export overwrite_tractor=no
-export full_stacktrace=yes
+export overwrite_tractor=yes
+export full_stacktrace=no
 
 #bricklist=${LEGACY_SURVEY_DIR}/bricks-dr4-${NERSC_HOST}.txt
-bricklist=${LEGACY_SURVEY_DIR}/bricks-dr4-notdone-${NERSC_HOST}.txt
+#bricklist=${LEGACY_SURVEY_DIR}/bricks-dr4-notdone-${NERSC_HOST}.txt
+bricklist=${LEGACY_SURVEY_DIR}/bricks-dr4-oom-${NERSC_HOST}.txt
+#bricklist=${LEGACY_SURVEY_DIR}/bricks-dr4-rerunpsferr-${NERSC_HOST}.txt
 if [ "$overwrite_tractor" = "yes" ]; then
-    bricklist=${LEGACY_SURVEY_DIR}/aadsfasdf.txt 
+    bricklist=${LEGACY_SURVEY_DIR}/bricks-dr4-nowise-${NERSC_HOST}.txt
 elif [ "$full_stacktrace" = "yes" ]; then
     bricklist=${LEGACY_SURVEY_DIR}/bricks-dr4-full-stacktrace-${NERSC_HOST}.txt 
 fi 
@@ -28,7 +30,8 @@ export statdir="${outdir}/progress"
 mkdir -p $statdir 
 
 # Loop over bricks
-num_bricks=1
+start_brick=1
+end_brick=2000
 cnt=0
 while read aline; do
     export brick=`echo $aline|awk '{print $1}'`
@@ -52,5 +55,5 @@ while read aline; do
     sbatch ../bin/job_dr4.sh --export brick,outdir,overwrite_tractor,full_stacktrace
     touch $stat_file
     let cnt=${cnt}+1
-done <<< "$(sed -n 1,${num_bricks}p $bricklist)"
+done <<< "$(sed -n ${start_brick},${end_brick}p $bricklist)"
 echo submitted $cnt bricks
