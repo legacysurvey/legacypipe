@@ -20,6 +20,16 @@ class MosaicImage(CPImage, CalibMixin):
     NOAO Community Pipeline.
     '''
 
+    # this is defined here for testing purposes (to handle small images)
+    splinesky_boxsize = 512
+
+    def __init__(self, survey, t):
+        super(MosaicImage, self).__init__(survey, t)
+        # Add poisson noise to weight map
+        self.wtfn= newWeightMap(wtfn=self.wtfn,imgfn=self.imgfn,dqfn=self.dqfn)
+        # convert FWHM into pixel units
+        self.fwhm /= self.pixscale
+
     @classmethod
     def nominal_zeropoints(self):
         # See legacypipe/ccd_cuts.py and Photometric cuts email 12/21/2016
@@ -118,26 +128,17 @@ class MosaicImage(CPImage, CalibMixin):
         n0 = n 
         return np.flatnonzero(good)
 
-
-
-    def __init__(self, survey, t):
-        super(MosaicImage, self).__init__(survey, t)
-        # Add poisson noise to weight map
-        self.wtfn= newWeightMap(wtfn=self.wtfn,imgfn=self.imgfn,dqfn=self.dqfn)
-        # convert FWHM into pixel units
-        self.fwhm /= self.pixscale
-
-    def read_sky_model(self, imghdr=None, primhdr=None, **kwargs):
-        ''' The Mosaic CP does a good job of sky subtraction, so just
-        use a constant sky level with value from the header.
-        '''
-        from tractor.sky import ConstantSky
-        # Frank recommends SKYADU
-        sky = ConstantSky(primhdr['SKYADU'])
-        sky.version = ''
-        sky.plver = primhdr.get('PLVER', '').strip()
-        sky.sig1 = primhdr.get('SKYNOISE', 0.)
-        return sky
+#    def read_sky_model(self, imghdr=None, primhdr=None, **kwargs):
+#        ''' The Mosaic CP does a good job of sky subtraction, so just
+#        use a constant sky level with value from the header.
+#        '''
+#        from tractor.sky import ConstantSky
+#        # Frank recommends SKYADU
+#        sky = ConstantSky(primhdr['SKYADU'])
+#        sky.version = ''
+#        sky.plver = primhdr.get('PLVER', '').strip()
+#        sky.sig1 = primhdr.get('SKYNOISE', 0.)
+#        return sky
         
     def read_dq(self, **kwargs):
         '''
@@ -201,9 +202,12 @@ class MosaicImage(CPImage, CalibMixin):
                 twcs.setX0Y0(x0,y0)
             return twcs
 
-    def run_calibs(self, psfex=True, funpack=False, git_version=None,
-                   force=False, **kwargs):
-        print('run_calibs for', self.name, 'kwargs', kwargs)
+    #def run_calibs(self, psfex=True, funpack=False, git_version=None,
+    #              force=False, **kwargs):
+    def run_calibs(self, psfex=True, sky=True, se=False,
+                   funpack=False, fcopy=False, use_mask=True,
+                   force=False, just_check=False, git_version=None,
+                   splinesky=False):
         se = False
         if psfex and os.path.exists(self.psffn) and (not force):
             if self.check_psf(self.psffn):
@@ -253,7 +257,8 @@ class MosaicImage(CPImage, CalibMixin):
 
 
         if sky:
-            self.run_sky('mzls')
+            self.run_sky('mzls', splinesky=splinesky,\
+                         git_version=git_version)
 
 
         for fn in todelete:

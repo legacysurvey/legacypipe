@@ -31,6 +31,28 @@ class BokImage(CPImage, CalibMixin):
     Class for handling images from the 90prime camera processed by the
     NOAO Community Pipeline.
     '''
+
+    # this is defined here for testing purposes (to handle small images)
+    splinesky_boxsize = 256
+
+    def __init__(self, survey, t, makeNewWeightMap=True):
+        super(BokImage, self).__init__(survey, t)
+        self.pixscale= 0.455
+        #self.dqfn= None #self.read_dq() #array of 0s for now
+        #self.whtfn= self.imgfn.replace('.fits','.wht.fits')
+        ##self.skyfn = os.path.join(calibdir, 'sky', self.calname + '.fits')
+        self.dq_saturation_bits = 0 #not used so set to 0
+        
+        self.fwhm = t.fwhm
+        self.arawgain = t.arawgain
+        self.name = self.imgfn
+        # Add poisson noise to weight map
+        self.wtfn= newWeightMap(wtfn=self.wtfn,imgfn=self.imgfn,dqfn=self.dqfn)
+        
+    def __str__(self):
+        return 'Bok ' + self.name
+
+
     @classmethod
     def nominal_zeropoints(self):
         return dict(g = 25.74,
@@ -105,35 +127,17 @@ class BokImage(CPImage, CalibMixin):
         return np.flatnonzero(good)
 
 
-    def __init__(self, survey, t, makeNewWeightMap=True):
-        super(BokImage, self).__init__(survey, t)
-        self.pixscale= 0.455
-        #self.dqfn= None #self.read_dq() #array of 0s for now
-        #self.whtfn= self.imgfn.replace('.fits','.wht.fits')
-        ##self.skyfn = os.path.join(calibdir, 'sky', self.calname + '.fits')
-        self.dq_saturation_bits = 0 #not used so set to 0
-        
-        self.fwhm = t.fwhm
-        self.arawgain = t.arawgain
-        self.name = self.imgfn
-        # Add poisson noise to weight map
-        self.wtfn= newWeightMap(wtfn=self.wtfn,imgfn=self.imgfn,dqfn=self.dqfn)
-        
-    def __str__(self):
-        return 'Bok ' + self.name
-
-
-    def read_sky_model(self, imghdr=None, **kwargs):
-        ''' Bok CP does same sky subtraction as Mosaic CP, so just
-        use a constant sky level with value from the header.
-        '''
-        from tractor.sky import ConstantSky
-        # Frank reocmmends SKYADU 
-        phdr = self.read_image_primary_header()
-        sky = ConstantSky(phdr['SKYADU'])
-        sky.version = ''
-        sky.plver = phdr.get('PLVER', '').strip()
-        return sky
+#    def read_sky_model(self, imghdr=None, **kwargs):
+#        ''' Bok CP does same sky subtraction as Mosaic CP, so just
+#        use a constant sky level with value from the header.
+#        '''
+#        from tractor.sky import ConstantSky
+#        # Frank reocmmends SKYADU 
+#        phdr = self.read_image_primary_header()
+#        sky = ConstantSky(phdr['SKYADU'])
+#        sky.version = ''
+#        sky.plver = phdr.get('PLVER', '').strip()
+#        return sky
 
     def read_dq(self, **kwargs):
         '''
@@ -180,12 +184,15 @@ class BokImage(CPImage, CalibMixin):
     def run_calibs(self, psfex=True, sky=True, se=False,
                    funpack=False, fcopy=False, use_mask=True,
                    force=False, just_check=False, git_version=None,
-                   splinesky=False,**kwargs):
+                   splinesky=False):
+    #def run_calibs(self, psfex=True, sky=True, se=False,
+    #               funpack=False, fcopy=False, use_mask=True,
+    #               force=False, just_check=False, git_version=None,
+    #               splinesky=False,**kwargs):
 
         '''
         Run calibration pre-processing steps.
         '''
-        print('run_calibs for', self.name, 'kwargs', kwargs)
         se = False
         if psfex and os.path.exists(self.psffn) and (not force):
             if self.check_psf(self.psffn):
@@ -235,7 +242,8 @@ class BokImage(CPImage, CalibMixin):
             self.run_psfex('90prime')
 
         if sky:
-            self.run_sky('90prime')
+            self.run_sky('90prime', splinesky=splinesky,\
+                         git_version=git_version)
 
         for fn in todelete:
             os.unlink(fn)

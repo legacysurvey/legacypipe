@@ -7,6 +7,7 @@ from tractor.basics import NanoMaggies, ConstantFitsWcs, LinearPhotoCal
 from tractor.image import Image
 from tractor.tractortime import TAITime
 from .survey import SimpleGalaxy
+from astrometry.util.file import trymakedirs
 
 '''
 Generic image handling code.
@@ -771,18 +772,19 @@ class CalibMixin(object):
                                    (cmd,rtn))
 
 
-    def run_sky(self, surveyname):
+    def run_sky(self, surveyname, \
+                splinesky=False,git_version=None):
         if surveyname == 'decam': 
             # Cut out a good section of image for the whole processing, not just sky
             # Only currently used for cases like half of one of the DECam chips is bad
             slc = self.get_good_image_slice(None)
-            img = self.read_image(slice=slc)
-            wt = self.read_invvar(slice=slc)
         else:
             # Full CCD should be ok for Mosaic/90Prime
-            img = self.read_image()
-            wt = self.read_invvar()
+            slc = None
+        img = self.read_image(slice=slc)
+        wt = self.read_invvar(slice=slc)
 
+        from .survey import get_version_header
         hdr = get_version_header(None, self.survey.get_survey_dir(),
                                  git_version=git_version)
         primhdr = self.read_image_primary_header()
@@ -800,7 +802,7 @@ class CalibMixin(object):
             from tractor.splinesky import SplineSky
             from scipy.ndimage.morphology import binary_dilation
 
-            boxsize = DecamImage.splinesky_boxsize
+            boxsize = self.splinesky_boxsize
             
             # Start by subtracting the overall median
             med = np.median(img[wt>0])

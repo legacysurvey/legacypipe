@@ -303,7 +303,8 @@ class DecamImage(CPImage, CalibMixin):
 
         if sky:
             #print('Fitting sky for', self)
-            self.run_sky('DECaLS')
+            self.run_sky('DECaLS', splinesky=splinesky,\
+                         git_version=git_version)
 
 
         for fn in todelete:
