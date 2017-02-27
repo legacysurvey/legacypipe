@@ -1,11 +1,11 @@
 #!/bin/bash -l
 
-#SBATCH -p shared
-#SBATCH -n 2
-#SBATCH -t 10:00:00
+#SBATCH -p debug
+#SBATCH -N 1
+#SBATCH -t 00:30:00
 #SBATCH -A desi
 #SBATCH -J zpts
-#SBATCH -L SCRATCH,project
+#SBATCH -L SCRATCH,CSCRATCH
 #SBATCH --mail-user=kburleigh@lbl.gov
 #SBATCH --mail-type=END,FAIL
 
@@ -18,6 +18,29 @@
 
 set -x 
 export OMP_NUM_THREADS=1
+
+export camera=mosaicz
+#export camera=decam
+
+export outdir=/global/cscratch1/sd/kaylanb/zeropoints
+export imagelist=${outdir}/${camera}_imagelist.txt
+echo imagelist=$imagelist
+if [ ! -e "$imagelist" ]; then
+    echo file=$imagelist does not exist, quitting
+    exit 999
+fi
+
+yyear=`date|awk '{print $NF}'`
+today=`date|awk '{print $3}'`
+month=`date +"%F"|awk -F "-" '{print $2}'`
+logdir=$outdir/${camera}/logs/${year}_${month}_${today}
+mkdir -p $logdir
+log="$logdir/log.${SLURM_JOB_ID}"
+
+srun -n 1 -c 24 python legacyccds/legacy_zeropoints.py \
+     --image_list ${imagelist} --prefix paper --outdir ${outdir} --nproc 1 \
+     >> $log 2>&1 
+
 
 # Yu Feng's bcast
 #source /scratch1/scratchdirs/desiproc/DRs/code/dr4/yu-bcast_2/activate.sh
@@ -40,8 +63,8 @@ export OMP_NUM_THREADS=1
 #input=mosaic_cp_all.txt
 prefix=paper
 # Make zpts
-tasks=1
-srun -n $tasks -c 1 python legacyccds/legacy-zeropoints.py --prefix $prefix --image_list $input --nproc $tasks
+#tasks=1
+#srun -n $tasks -c 1 python legacyccds/legacy-zeropoints.py --prefix $prefix --image_list $input --nproc $tasks
 #srun -n $tasks -N ${SLURM_JOB_NUM_NODES} -c 1 python legacyccds/legacy-zeropoints.py --prefix $prefix --image_list $input --nproc $tasks
 # Make zpts VERBOSE
 #srun -n $tasks -N ${SLURM_JOB_NUM_NODES} -c 1 python legacyccds/legacy-zeropoints.py --prefix $prefix --image_list $input --nproc $tasks --verboseplots

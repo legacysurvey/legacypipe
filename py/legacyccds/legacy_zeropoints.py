@@ -541,10 +541,14 @@ class Measurer(object):
         t0= Time()
         t0= ptime('import-statements-in-measure.run',t0)
 
-        # Read the image and header.
-        hdr, img, bitmask = self.read_image_bitmask(funpack=False) #funpack makes it take longer
+        if self.camera == 'decam':
+            # Simultaneous image,bitmask read
+            # funpack optional (funpack = slower!)
+            hdr, img, bitmask = self.read_image_and_bitmask(funpack=False)
+        else:
+            img,hdr= self.read_image() 
+            bitmask= self.read_bitmask()
         t0= ptime('read image, bitmask',t0)
-        #bitmask = self.read_bitmask()
 
         # Initialize and begin populating the output CCDs table.
         ccds = _ccds_table(self.camera)
@@ -979,7 +983,7 @@ class DecamMeasurer(Measurer):
         from legacyanalysis.ps1cat import ps1_to_decam
         return ps1_to_decam(ps1stars, band)
 
-    def read_image_bitmask(self,funpack=True):
+    def read_image_and_bitmask(self,funpack=True):
         '''funpack, then read'''
         imgfn= self.fn
         maskfn= self.fn.replace('ooi','ood')
@@ -1215,16 +1219,23 @@ def measure_image(img_fn, **measureargs):
 
 
 class outputFns(object):
-    def __init__(self,camera=None,image_fn,outdir,prefix=''):
-        assert(not camera is None)
-        img_name= os.path.basename(img_fn).replace('.fits.fz','')
-        #elif camera == 'mosaic':
-        #    img_name= os.path.basename(img_fn).replace('.fits.fz','')
-        #else: 
-        #    raise ValueError('camera=%s not supported' % camera)
-        self.zptfn= os.path.join(outdir,'zpts','%szpt-%s.fits' % (prefix,img_name))
-        self.starfn= os.path.join(outdir,'zpts','%sstar-%s.fits' % (prefix,img_name))
-        self.imgfn= os.path.join(outdir,'images', os.path.basename(img_fn))
+    def __init__(self,image_fn,outdir,prefix=''):
+        '''
+        outdir/decam/DECam_CP/CP20151226/img_fn.fits.fz
+        outdir/decam/DECam_CP/CP20151226/img_fn-zpt%s.fits
+        outdir/decam/DECam_CP/CP20151226/img_fn-star%s.fits
+        '''
+        one= os.path.basename( os.path.dirname(image_fn) )
+        two= os.path.basename( os.path.dirname( \
+                                    os.path.dirname(image_fn)))
+        three= os.path.basename( os.path.dirname( \
+                                    os.path.dirname( \
+                                        os.path.dirname(image_fn))))
+        dr= os.path.join(outdir,three,two,one)
+        base= os.path.basename(image_fn).replace('.fits.fz','')
+        self.zptfn= os.path.join(dr,'%s-zpt%s.fits' % (base,prefix))
+        self.starfn= os.path.join(dr,'%s-star%s.fits' % (base,prefix))
+        self.imgfn= os.path.join(dr,'%s.fits.fz' % base)
 
 def get_output_fns(img_fn,prefix=''):
     zptsfile= os.path.dirname(img_fn).replace('/project/projectdirs','/scratch2/scratchdirs/kaylanb')
@@ -1244,18 +1255,18 @@ def runit(img_fn, **measureargs):
 
     t0 = Time()
     for mydir in [os.path.dirname(zptfn),\
-                  os.path.dirname(imagefn)):
+                  os.path.dirname(imagefn)]:
         if not os.path.exists(mydir):
             os.makedirs(mydir)
 
     # Copy to SCRATCH for improved I/O
     if not os.path.exists(imagefn): 
         dobash("cp %s %s" % (img_fn,imagefn))
-    if not os.path.exists(img_fn.replace('_ooi_','_ood_')): 
+    if not os.path.exists(imagefn.replace('_ooi_','_ood_')): 
         dobash("cp %s %s" % (img_fn.replace('_ooi_','_ood_'),imagefn.replace('_ooi_','_ood_')))
     t0= ptime('copy-to-scratch',t0)
 
-    ccds, stars= measure_image(fn_scr, **measureargs)
+    ccds, stars= measure_image(imagefn, **measureargs)
     t0= ptime('measure_image',t0)
 
     # Write out.
@@ -1268,7 +1279,7 @@ def runit(img_fn, **measureargs):
     print('Wrote {}'.format(starfn))
     t0= ptime('write-results-to-fits',t0)
     if os.path.exists(imagefn): 
-        assert(fn_scr.startswith('/scratch2/scratchdirs/kaylanb'))
+        assert(imagefn.startswith('/global/cscratch1/sd/kaylanb'))
         dobash("rm %s" % imagefn)
         dobash("rm %s" % imagefn.replace('_ooi_','_ood_'))
         t0= ptime('removed-cp-from-scratch',t0)
@@ -1666,7 +1677,7 @@ def main(image_list=None,args=None):
     if not os.path.exists(outdir):
         os.makedirs(outdir)
     t0=ptime('parse-args',t0)
-    for image_fn in images:
+    for image_fn in image_list:
         # Check if zpt already written
         F= outputFns(image_fn,outdir,prefix= measureargs.get('prefix'))
         if os.path.exists(F.zptfn) and os.path.exists(F.starfn):
@@ -1685,7 +1696,7 @@ def main(image_list=None,args=None):
    
 if __name__ == "__main__":
     parser= get_parser()  
-    args = parser.parse_args(args=args)
+    args = parser.parse_args()
     images= read_lines(args.image_list) 
     main(image_list=images,args=args)
 

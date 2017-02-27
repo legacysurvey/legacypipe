@@ -10,8 +10,8 @@ import datetime
 import sys
 
 from astrometry.util.ttime import Time
-from legacyccds.legacy-zeropoints import get_parser,ptime,read_lines
-from legacyccds.legacy-zeropoints import main as legacy_main
+from legacyccds.legacy_zeropoints import get_parser,ptime,read_lines
+from legacyccds.legacy_zeropoints import main as legacy_main
 
 ######## 
 # stdouterr_redirected() is from Ted Kisner
@@ -88,6 +88,7 @@ def stdouterr_redirected(to=os.devnull, comm=None):
 
 if __name__ == "__main__":
     t0 = Time()
+    tbegin = t0
     parser = get_parser() 
     args = parser.parse_args()
 
@@ -97,9 +98,9 @@ if __name__ == "__main__":
 
     images= read_lines(args.image_list) 
     if args.nproc > 1:
-        image_split= np.array_split(images, comm.size)[comm.rank]
+        image_list= np.array_split(images, comm.size)[comm.rank]
     else:
-        images_split= np.array_split(images, 1)[0]
+        image_list= np.array_split(images, 1)[0]
     if args.nproc > 1:
         # Log to unique file
         outfn=os.path.join(args.outdir,"logs",\
@@ -107,13 +108,13 @@ if __name__ == "__main__":
                            "log.%d_%s" % datetime.datetime.now().strftime("%H-min%M")) 
         with stdouterr_redirected(to=outfn, comm=None):  
             t0=ptime('before-%s' % brick,t0)
-            legacy_main(image_list=images_split, args=args) 
+            legacy_main(image_list=image_list, args=args) 
             t0=ptime('after-%s' % brick,t0)
     else:
-        legacy_main(image_list=images_split, args=args) 
+        legacy_main(image_list=image_list, args=args) 
     if args.nproc > 1:
         # Wait for all mpi tasks to finish 
-        confirm_files = comm.gather( images_split[comm.rank], root=0 )
+        confirm_files = comm.gather( image_list, root=0 )
         if comm.rank == 0:
             tnow= Time()
             print("Done, total time = %s" % (tnow-tbegin,))
