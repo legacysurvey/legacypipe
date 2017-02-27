@@ -723,7 +723,8 @@ class CalibMixin(object):
         
         sedir = self.survey.get_se_dir()
         trymakedirs(self.sefn, dir=True)
-        raise ValueError
+        if surveyname != '90prime':
+            raise ValueError
         if surveyname == '90prime':
             conv_name= os.path.join(sedir, surveyname + '.conv')
         else:
@@ -768,4 +769,102 @@ class CalibMixin(object):
             if rtn:
                 raise RuntimeError('Command failed: %s: return value: %i' %
                                    (cmd,rtn))
+
+
+    def run_sky(self, surveyname):
+        if surveyname == 'decam': 
+            # Cut out a good section of image for the whole processing, not just sky
+            # Only currently used for cases like half of one of the DECam chips is bad
+            slc = self.get_good_image_slice(None)
+            img = self.read_image(slice=slc)
+            wt = self.read_invvar(slice=slc)
+        else:
+            # Full CCD should be ok for Mosaic/90Prime
+            img = self.read_image()
+            wt = self.read_invvar()
+
+        hdr = get_version_header(None, self.survey.get_survey_dir(),
+                                 git_version=git_version)
+        primhdr = self.read_image_primary_header()
+        plver = primhdr.get('PLVER', '')
+        hdr.delete('PROCTYPE')
+        hdr.add_record(dict(name='PROCTYPE', value='ccd',
+                            comment='NOAO processing type'))
+        hdr.add_record(dict(name='PRODTYPE', value='skymodel',
+                            comment='NOAO product type'))
+        hdr.add_record(dict(name='PLVER', value=plver,
+                            comment='CP ver of image file'))
+
+
+        if splinesky:
+            from tractor.splinesky import SplineSky
+            from scipy.ndimage.morphology import binary_dilation
+
+            boxsize = DecamImage.splinesky_boxsize
+            
+            # Start by subtracting the overall median
+            med = np.median(img[wt>0])
+            # Compute initial model...
+            skyobj = SplineSky.BlantonMethod(img - med, wt>0, boxsize)
+            skymod = np.zeros_like(img)
+            skyobj.addTo(skymod)
+            # Now mask bright objects in (image - initial sky model)
+            sig1 = 1./np.sqrt(np.median(wt[wt>0]))
+            masked = (img - med - skymod) > (5.*sig1)
+            masked = binary_dilation(masked, iterations=3)
+            masked[wt == 0] = True
+
+            sig1b = 1./np.sqrt(np.median(wt[masked == False]))
+            print('Sig1 vs sig1b:', sig1, sig1b)
+
+            # Now find the final sky model using that more extensive mask
+            skyobj = SplineSky.BlantonMethod(
+                img - med, np.logical_not(masked), boxsize)
+            # add the overall median back in
+            skyobj.offset(med)
+
+            if slc is not None:
+                sy,sx = slc
+                y0 = sy.start
+                x0 = sx.start
+                skyobj.shift(-x0, -y0)
+
+            hdr.add_record(dict(name='SIG1', value=sig1,
+                                comment='Median stdev of unmasked pixels'))
+            hdr.add_record(dict(name='SIG1B', value=sig1,
+                                comment='Median stdev of unmasked pixels+'))
+                
+            trymakedirs(self.splineskyfn, dir=True)
+            skyobj.write_fits(self.splineskyfn, primhdr=hdr)
+            print('Wrote sky model', self.splineskyfn)
+
+        else:
+            try:
+                skyval = estimate_mode(img[wt > 0], raiseOnWarn=True)
+                skymeth = 'mode'
+            except:
+                skyval = np.median(img[wt > 0])
+                skymeth = 'median'
+            tsky = ConstantSky(skyval)
+
+            hdr.add_record(dict(name='SKYMETH', value=skymeth,
+                                comment='estimate_mode, or fallback to median?'))
+
+            from scipy.ndimage.morphology import binary_dilation
+            sig1 = 1./np.sqrt(np.median(wt[wt>0]))
+            masked = (img - skyval) > (5.*sig1)
+            masked = binary_dilation(masked, iterations=3)
+            masked[wt == 0] = True
+            sig1b = 1./np.sqrt(np.median(wt[masked == False]))
+            print('Sig1 vs sig1b:', sig1, sig1b)
+
+            hdr.add_record(dict(name='SIG1', value=sig1,
+                                comment='Median stdev of unmasked pixels'))
+            hdr.add_record(dict(name='SIG1B', value=sig1,
+                                comment='Median stdev of unmasked pixels+'))
+            
+            trymakedirs(self.skyfn, dir=True)
+            tsky.write_fits(self.skyfn, hdr=hdr)
+            print('Wrote sky model', self.skyfn)
+
 

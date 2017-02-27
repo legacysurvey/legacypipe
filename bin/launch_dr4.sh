@@ -7,6 +7,10 @@
 #     /scratch1/scratchdirs/desiproc/DRs/code/dr4_fixes/legacypipe
 
 export LEGACY_SURVEY_DIR=/scratch1/scratchdirs/desiproc/DRs/dr4-bootes/dr4_fixes/legacypipe-dir
+export UNWISE_COADDS_DIR=/scratch1/scratchdirs/desiproc/unwise-coadds/fulldepth:/scratch1/scratchdirs/desiproc/unwise-coadds/w3w4
+export UNWISE_COADDS_TIMERESOLVED_DIR=/scratch1/scratchdirs/desiproc/unwise-coadds/time_resolved_neo2
+export UNWISE_COADDS_TIMERESOLVED_INDEX=/scratch1/scratchdirs/desiproc/unwise-coadds/time_resolved_neo2/time_resolved_neo2-atlas.fits
+
 export CODE_DIR=/scratch1/scratchdirs/desiproc/DRs/code/dr4_fixes/legacypipe
 export outdir=/scratch1/scratchdirs/desiproc/DRs/data-releases/dr4_fixes
 #export DUST_DIR=adfa
@@ -41,7 +45,7 @@ mkdir -p $statdir
 
 # Loop over bricks
 start_brick=1
-end_brick=10
+end_brick=1
 cnt=0
 while read aline; do
     export brick=`echo $aline|awk '{print $1}'`

@@ -219,6 +219,26 @@ class MosaicImage(CPImage, CalibMixin):
         if se:
             funpack = True
 
+        if sky and (not force) and (
+            (os.path.exists(self.skyfn) and not splinesky) or
+            (os.path.exists(self.splineskyfn) and splinesky)):
+            fn = self.skyfn
+            if splinesky:
+                fn = self.splineskyfn
+
+            if os.path.exists(fn):
+                try:
+                    hdr = fitsio.read_header(fn)
+                except:
+                    print('Failed to read sky file', fn, '-- deleting')
+                    os.unlink(fn)
+            if os.path.exists(fn):
+                print('File', fn, 'exists -- skipping')
+                sky = False
+
+        if just_check:
+            return (se or psfex or sky)
+
         todelete = []
         if funpack:
             # The image & mask files to process (funpacked if necessary)
@@ -230,6 +250,11 @@ class MosaicImage(CPImage, CalibMixin):
             self.run_se('mzls', imgfn, maskfn)
         if psfex:
             self.run_psfex('mzls')
+
+
+        if sky:
+            self.run_sky('mzls')
+
 
         for fn in todelete:
             os.unlink(fn)

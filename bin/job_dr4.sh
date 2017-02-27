@@ -2,7 +2,7 @@
 
 #SBATCH -p shared
 #SBATCH -n 8
-#SBATCH -t 04:00:00
+#SBATCH -t 00:30:00
 #SBATCH --account=desi
 #SBATCH -J trace
 #SBATCH --mail-user=kburleigh@lbl.gov
@@ -12,6 +12,9 @@
 #--qos=scavenger
 
 export LEGACY_SURVEY_DIR=/scratch1/scratchdirs/desiproc/DRs/dr4-bootes/dr4_fixes/legacypipe-dir
+export UNWISE_COADDS_DIR=/scratch1/scratchdirs/desiproc/unwise-coadds/fulldepth:/scratch1/scratchdirs/desiproc/unwise-coadds/w3w4
+export UNWISE_COADDS_TIMERESOLVED_DIR=/scratch1/scratchdirs/desiproc/unwise-coadds/time_resolved_neo2
+export UNWISE_COADDS_TIMERESOLVED_INDEX=/scratch1/scratchdirs/desiproc/unwise-coadds/time_resolved_neo2/time_resolved_neo2-atlas.fits
 export CODE_DIR=/scratch1/scratchdirs/desiproc/DRs/code/dr4_fixes/legacypipe
 
 #echo LD_LIBRARY_PATH; echo $LD_LIBRARY_PATH | sed -e 's#:#\n#g'
@@ -107,7 +110,7 @@ echo Logging to: $log
 
 echo doing srun
 date
-module load psfex-hpcp
+module load tractor-hpcp
 srun -n 1 -c $usecores python legacypipe/runbrick.py \
      --run $qdo_table \
      --brick $brick \
