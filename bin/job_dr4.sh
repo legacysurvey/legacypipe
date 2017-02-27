@@ -1,7 +1,7 @@
 #!/bin/bash -l
 
 #SBATCH -p shared
-#SBATCH -n 24
+#SBATCH -n 8
 #SBATCH -t 04:00:00
 #SBATCH --account=desi
 #SBATCH -J trace
@@ -10,6 +10,9 @@
 #SBATCH -L SCRATCH
 #-C haswell
 #--qos=scavenger
+
+export LEGACY_SURVEY_DIR=/scratch1/scratchdirs/desiproc/DRs/dr4-bootes/dr4_fixes/legacypipe-dir
+export CODE_DIR=/scratch1/scratchdirs/desiproc/DRs/code/dr4_fixes/legacypipe
 
 #echo LD_LIBRARY_PATH; echo $LD_LIBRARY_PATH | sed -e 's#:#\n#g'
 #echo PYTHONPATH; echo $PYTHONPATH | sed -e 's#:#\n#g'
@@ -20,6 +23,17 @@ echo brick:$brick
 echo outdir:$outdir
 echo overwrite_tractor:$overwrite_tractor
 echo full_stacktrace:$full_stacktrace
+echo early_coadds:$early_coadds
+echo dr4_fixes:$dr4_fixes
+if [ "$dr4_fixes" = "yes" ]; then
+    set -x
+    export LEGACY_SURVEY_DIR=/scratch1/scratchdirs/desiproc/DRs/legacypipe-dir
+    #export DUST_DIR=adfa
+    #export unwise_dir=lakdjf
+    set +x
+fi 
+
+
 
 #-p shared
 #-n 24
@@ -31,7 +45,7 @@ echo full_stacktrace:$full_stacktrace
 # set usecores as desired for more mem and set shared n above to 2*usecores, keep threads=6 so more mem per thread!, then --aray equal to number largemmebricks.txt
 
 
-usecores=12
+usecores=4
 #threads=$usecores
 threads=4
 if [ "$full_stacktrace" = "yes" ];then
@@ -56,6 +70,8 @@ echo threads=$threads
 export extra_opt="--skip"
 if [ "$overwrite_tractor" = "yes" ]; then
     export extra_opt=""
+elif [ "$early_coadds" = "yes" ]; then
+    export extra_opt="--stage image_coadds --early-coadds"
 fi
 
 

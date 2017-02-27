@@ -723,30 +723,26 @@ class CalibMixin(object):
         
         sedir = self.survey.get_se_dir()
         trymakedirs(self.sefn, dir=True)
-        if surveyname != '90prime':
-            cmd = ' '.join([
-                'sex',
-                '-c', os.path.join(sedir, surveyname + '.se'),
-                '-SEEING_FWHM %f' % seeing,
-                '-PARAMETERS_NAME', os.path.join(sedir, surveyname + '.param'),
-                '-STARNNW_NAME', os.path.join(sedir, 'default.nnw'),
-                '-PIXEL_SCALE 0',
-                # SE has a *bizarre* notion of "sigma"
-                '-DETECT_THRESH 1.0',
-                '-ANALYSIS_THRESH 1.0',
-                '-MAG_ZEROPOINT %f' % magzp,
-                '-FLAG_IMAGE %s' % maskfn,
-                '-FILTER_NAME %s' % os.path.join(sedir, 'gauss_5.0_9x9.conv'),
-                '-CATALOG_NAME %s %s' % (self.sefn,imgfn)])
+        raise ValueError
+        if surveyname == '90prime':
+            conv_name= os.path.join(sedir, surveyname + '.conv')
         else:
-            cmd = ' '.join([
-                'sex',
-                '-c', os.path.join(sedir, surveyname + '.se'),
-                '-PARAMETERS_NAME', os.path.join(sedir, surveyname + '.param'),
-                '-STARNNW_NAME', os.path.join(sedir, 'default.nnw'),
-                '-FILTER_NAME %s' % os.path.join(sedir, surveyname + '.conv'),
-                '-PHOT_APERTURES 7.5,15.0,22.0',
-                '-CATALOG_NAME %s %s' % (self.sefn,imgfn)])
+            conv_name= os.path.join(sedir, 'gauss_5.0_9x9.conv')
+        cmd = ' '.join([
+            'sex',
+            '-c', os.path.join(sedir, surveyname + '.se'),
+            '-SEEING_FWHM %f' % seeing,
+            '-PARAMETERS_NAME', os.path.join(sedir, surveyname + '.param'),
+            '-STARNNW_NAME', os.path.join(sedir, 'default.nnw'),
+            '-PIXEL_SCALE 0',
+            # SE has a *bizarre* notion of "sigma"
+            '-DETECT_THRESH 1.0',
+            '-ANALYSIS_THRESH 1.0',
+            '-MAG_ZEROPOINT %f' % magzp,
+            '-FLAG_IMAGE %s' % maskfn,
+            #'-FILTER_NAME %s' % os.path.join(sedir, 'gauss_5.0_9x9.conv'),
+            '-FILTER_NAME %s' % conv_name,
+            '-CATALOG_NAME %s %s' % (self.sefn,imgfn)])
         print(cmd)
  
         if os.system(cmd):
