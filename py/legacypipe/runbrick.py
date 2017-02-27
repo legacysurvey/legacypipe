@@ -239,9 +239,14 @@ def stage_tims(W=3600, H=3600, pixscale=0.262, brickname=None,
     ccds.cut(I)
 
 
-    print('Cutting out other bad things...')
-    I = survey.other_bad_things(ccds)
-    print(len(I), 'of', len(ccds), 'CCDs dont have other bad things')
+    print('Cutting out has_third_pixel...')
+    I = survey.has_third_pixel(ccds)
+    print(len(I), 'of', len(ccds), 'CCDs has_third_pixel')
+    ccds.cut(I)
+
+    print('Cutting out ccdname_hdu_match...')
+    I = survey.ccdname_hdu_match(ccds)
+    print(len(I), 'of', len(ccds), 'CCDs ccdname_hdu_match')
     ccds.cut(I)
 
     print('Cutting on CCDs to be used for fitting...')
