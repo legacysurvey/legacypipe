@@ -1903,7 +1903,7 @@ def stage_wise_forced(
         print('Cut to', len(W), 'time-resolved vs', len(tiles), 'full-depth')
         assert(len(W) == len(tiles))
         # this ought to be enough for anyone =)
-        Nepochs = 5
+        Nepochs = 7
         # Add time-resolved coadds
         for band in [1,2]:
             # W1 is bit 0 (value 0x1), W2 is bit 1 (value 0x2)
