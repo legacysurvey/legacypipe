@@ -122,6 +122,46 @@ def main():
     plt.xlabel(name2)
     ps.savefig()
 
+    plt.clf()
+    I = np.flatnonzero((matched1.type == 'PSF') * (matched2.type == 'PSF'))
+    print(len(I), 'PSF to PSF')
+    plt.plot(matched1.dchisq[I,0] - matched1.dchisq[I,1],
+             matched2.dchisq[I,0] - matched2.dchisq[I,1], 'k.', label='PSF to PSF')
+    I = np.flatnonzero((matched1.type == 'PSF') * (matched2.type == 'SIMP'))
+    print(len(I), 'PSF to SIMP')
+    plt.plot(matched1.dchisq[I,0] - matched1.dchisq[I,1],
+             matched2.dchisq[I,0] - matched2.dchisq[I,1], 'r.', label='PSF to SIMP')
+    I = np.flatnonzero((matched1.type == 'SIMP') * (matched2.type == 'PSF'))
+    print(len(I), 'SIMP to PSF')
+    plt.plot(matched1.dchisq[I,0] - matched1.dchisq[I,1],
+             matched2.dchisq[I,0] - matched2.dchisq[I,1], 'g.', label='SIMP to PSF')
+    I = np.flatnonzero((matched1.type == 'SIMP') * (matched2.type == 'SIMP'))
+    print(len(I), 'SIMP to SIMP')
+    plt.plot(matched1.dchisq[I,0] - matched1.dchisq[I,1],
+             matched2.dchisq[I,0] - matched2.dchisq[I,1], 'b.', label='SIMP to SIMP')
+    plt.xlabel('%s dchisq: PSF - SIMP' % name1)
+    plt.ylabel('%s dchisq: PSF - SIMP' % name2)
+    plt.legend(loc='upper left')
+    #plt.xscale('symlog')
+    #plt.yscale('symlog')
+    plt.plot([-20,20],[-20,20], 'k-', alpha=0.5)
+    plt.axhline(0, color='k', alpha=0.5)
+    plt.axvline(0, color='k', alpha=0.5)
+    plt.axis([-20,20,-20,20])
+    ps.savefig()
+
+
+    plt.clf()
+    I = np.flatnonzero((matched1.type == 'EXP') * (matched2.type == 'EXP'))
+    plt.plot(matched1.shapeexp_r[I], matched2.shapeexp_r[I], 'r.', label='exp')
+    I = np.flatnonzero((matched1.type == 'DEV') * (matched2.type == 'DEV'))
+    plt.plot(matched1.shapedev_r[I], matched2.shapedev_r[I], 'b.', label='dev')
+    plt.xlabel('%s radius (arcsec)' % name1)
+    plt.ylabel('%s radius (arcsec)' % name2)
+    plt.axis([0,4,0,4])
+    plt.legend()
+    ps.savefig()
+
     for iband,band,cc in [(1,'g','g'),(2,'r','r'),(4,'z','m')]:
         K = np.flatnonzero((matched1.decam_flux_ivar[:,iband] > 0) *
                            (matched2.decam_flux_ivar[:,iband] > 0))
