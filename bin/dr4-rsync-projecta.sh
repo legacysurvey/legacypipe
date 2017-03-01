@@ -2,7 +2,13 @@
 
 # checkpoints  coadd  metrics  tractor  tractor-i
 # ../bin/dr4-rsync-projecta.sh coadd
-# for hello in checkpoints  coadd  metrics  tractor  tractor-i;do nohup ../bin/dr4-rsync-projecta.sh $hello > $hello_rsync.out & done
+# checkpoints  coadd  metrics  tractor  tractor-i
+#nohup ../bin/dr4-rsync-projecta.sh checkpoints > checkpoints_rsync.out &
+#nohup ../bin/dr4-rsync-projecta.sh coadd > coadd_rsync.out &
+#nohup ../bin/dr4-rsync-projecta.sh metrics > metrics_rsync.out &
+#nohup ../bin/dr4-rsync-projecta.sh tractor > tractor_rsync.out &
+#nohup ../bin/dr4-rsync-projecta.sh tractor-i > tractor-i_rsync.out &
+
 whichdir="$1"
 
 if [ "$NERSC_HOST" == "edison" ]; then
@@ -18,7 +24,7 @@ if [ ! -e "$outdir/$whichdir" ]; then
     exit 999
 fi
 
-proj_dir=/global/projecta/projectdirs/cosmo/work/dr4/test
+proj_dir=/global/projecta/projectdirs/cosmo/work/dr4
 
 # List all files that exists for each completed brick
 # use projecta/ permissions and group

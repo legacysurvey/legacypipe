@@ -89,7 +89,10 @@ class CPImage(LegacySurveyImage):
     def check_image_header(self, imghdr):
         # check consistency... something of a DR1 hangover
         e = imghdr['EXTNAME']
-        assert(e.strip() == self.ccdname.strip())
+        try: 
+            assert(e.strip() == self.ccdname.strip())
+        except AssertionError:
+            raise ValueError('self.ccdname=%s, self.imgfn=%s' % (self.ccdname,self.imgfn))
 
     def get_wcs(self,hdr=None):
         # Make sure the PV-to-SIP converter samples enough points for small
@@ -139,7 +142,7 @@ class CPImage(LegacySurveyImage):
         dqbits[dq == 8] |= CP_DQ_BITS['trans']
         return dqbits
 
-def newWeightMap(wtfn=None,imgfn=None,dqfn=None,clobber=False, create=True):
+def newWeightMap(wtfn=None,imgfn=None,dqfn=None):
     '''MZLS or BASS
     Converts the oow weight map: 1 / var(sky, read)
     to a 1 / var(sky, read, astrophysical) weight map,\
@@ -149,7 +152,7 @@ def newWeightMap(wtfn=None,imgfn=None,dqfn=None,clobber=False, create=True):
     '''
     from astropy.io import fits
     newfn= wtfn.replace('oow','oow_wshot')
-    make_wtmap=create
+    make_wtmap=True
     # Skip if exists AND has all 4 hdus + primary
     if os.path.exists(newfn):
         hdulist = fits.open(newfn) 

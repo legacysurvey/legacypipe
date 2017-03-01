@@ -81,11 +81,27 @@ class BokImage(CPImage, CalibMixin):
         return np.flatnonzero(good)
 
     @classmethod
-    def other_bad_things(self, survey, ccds):
+    def has_third_pixel(self, survey, ccds):
         '''
-        Nothing. For mosaic this is messed up interpolated images
+        For mosaic only, ensures ccds are 1/3 pixel interpolated. Nothing for other cameras
         '''
         good = np.ones(len(ccds), bool)
+        return np.flatnonzero(good)
+
+    @classmethod
+    def ccdname_hdu_match(self, survey, ccds):
+        '''
+        Mosaic + Bok, ccdname and hdu number must match. If not, IDL zeropoints files has
+        duplicated zeropoint info from one of the other four ccds
+        '''
+        good = np.ones(len(ccds), bool)
+        n0 = sum(good)
+        ccdnum= np.char.replace(ccds.ccdname,'ccd','').astype(ccds.image_hdu.dtype)
+        flag= ccds.image_hdu - ccdnum != 0
+        good[flag]= False
+        n = sum(good)
+        print('Flagged', n0-n, 'ccdname_hdu_match')
+        n0 = n 
         return np.flatnonzero(good)
 
 
@@ -101,8 +117,7 @@ class BokImage(CPImage, CalibMixin):
         self.arawgain = t.arawgain
         self.name = self.imgfn
         # Add poisson noise to weight map
-        self.wtfn= newWeightMap(wtfn=self.wtfn,imgfn=self.imgfn,dqfn=self.dqfn,
-                                create=makeNewWeightMap)
+        self.wtfn= newWeightMap(wtfn=self.wtfn,imgfn=self.imgfn,dqfn=self.dqfn)
         
     def __str__(self):
         return 'Bok ' + self.name

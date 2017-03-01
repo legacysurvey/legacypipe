@@ -91,12 +91,22 @@ class DecamImage(CPImage, CalibMixin):
         return np.flatnonzero(good)
 
     @classmethod
-    def other_bad_things(self, survey, ccds):
+    def has_third_pixel(self, survey, ccds):
         '''
-        Nothing. For mosaic this is messed up interpolated images
+        For mosaic only, ensures ccds are 1/3 pixel interpolated. Nothing for other cameras
         '''
         good = np.ones(len(ccds), bool)
         return np.flatnonzero(good)
+
+    @classmethod
+    def ccdname_hdu_match(self, survey, ccds):
+        '''
+        Mosaic + Bok, ccdname and hdu number must match. If not, IDL zeropoints files has
+        duplicated zeropoint info from one of the other four ccds
+        '''
+        good = np.ones(len(ccds), bool)
+        return np.flatnonzero(good)
+ 
 
     @classmethod
     def apply_blacklist(self, survey, ccds):

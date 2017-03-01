@@ -3,9 +3,40 @@ import argparse
 import os
 import numpy as np
 from datetime import datetime
-import matplotlib
-import matplotlib.pyplot as plt
+#import matplotlib
+#import matplotlib.pyplot as plt
 from astrometry.util.fits import fits_table, merge_tables
+
+def ccd_cuts_inplace(ccds, use_blacklist=True):
+    # coadd/ccd.fits file has extra white space
+    ccds.camera= np.char.strip(ccds.camera)
+    bands= ['g','r','z']
+    # Continue like runbrick
+    from legacypipe.runs import get_survey
+    survey= get_survey('dr4v2',survey_dir=os.getenv('LEGACY_SURVEY_DIR'),output_dir='./')
+
+    if use_blacklist:
+        I = survey.apply_blacklist(ccds)
+        ccds.cut(I)
+
+    # Sort images by band -- this also eliminates images whose
+    # *filter* string is not in *bands*.
+    ccds.cut(np.hstack([np.flatnonzero(ccds.filter==band) for band in bands]))
+
+    I = survey.photometric_ccds(ccds)
+    ccds.cut(I)
+
+    I = survey.bad_exposures(ccds)
+    ccds.cut(I)
+
+
+    I = survey.other_bad_things(ccds)
+    ccds.cut(I)
+
+    I = survey.ccds_for_fitting(brick, ccds)
+    if I is not None:
+        ccds.cut(I) 
+ 
 
 parser = argparse.ArgumentParser(description='Generate a legacypipe-compatible CCDs file from a set of reduced imaging.') 
 parser.add_argument('--therun', choices=['dr4','obiwan'],action='store', default=True) 
@@ -119,20 +150,42 @@ elif args.dowhat == 'sanity_tractors':
     fns=np.loadtxt(args.fn,dtype=str)
     assert(len(fns) > 0)
     # Remove file lists for clean slate
-    for outfn in ['sanity_tractors_readerr.txt','sanity_tractors_nowise.txt']:
+    fils= dict(readerr='sanity_tractors_readerr.txt',\
+               nowise='sanity_tractors_nowise.txt',\
+               nolc='sanity_tractors_nolc.txt',\
+               ccds='sanity_tractors_hascutccds.txt')
+    for outfn in fils.keys():
         if os.path.exists(outfn):
             os.remove(outfn)
     # Loop over completed Tractor Cats
     for fn in fns:
         try: 
             t=fits_table(fn)
-            if not 'wise_flux' in t.get_columns():
-                print('wise_flux not in %s' % fn)
-                with open('sanity_tractors_nowise.txt','a') as foo:
-                    foo.write('%s\n' % fn)
         except:
             print('error reading %s' % fn)
-            with open('sanity_tractors_readerr.txt','a') as foo:
+            with open(fils['readerr'],'a') as foo:
                 foo.write('%s\n' % fn)
-         
+        # No wise info
+        if not 'wise_flux' in t.get_columns():
+            print('wise_flux not in %s' % fn)
+            with open(fils['nowise'],'a') as foo:
+                foo.write('%s\n' % fn)
+        elif not 'wise_lc_flux' in t.get_columns():
+            print('wise LCs not in %s' % fn)
+            with open(fils['nolc'],'a') as foo:
+                foo.write('%s\n' % fn)
+        # No ccds that should have been removed by cuts
+        #tractor/120/tractor-1201p715.fits 
+        #coadd/120/1201p715/legacysurvey-1201p715-ccds.fits
+        brick= os.path.basename(fn).replace('tractor-','').replace('.fits','')
+        ccdfn= os.path.join( os.path.dirname(fn).replace('tractor','coadd'),\
+                             brick, \
+                             'legacysurvey-%s-ccds.fits' % brick )
+        ccds= fits_table(ccdfn)
+        ccds2= ccds.copy()
+        ccd_cuts_inplace(ccds)
+        if len(ccds) != len(ccds2):
+            print('has ccds that should have been removed: %s' % ccdfn)
+            with open(fils['ccds'],'a') as foo:
+                foo.write('%s\n' % ccdfn)
 

@@ -82,24 +82,43 @@ class MosaicImage(CPImage, CalibMixin):
         return np.flatnonzero(good)
 
     @classmethod
-    def other_bad_things(self, survey, ccds):
+    def has_third_pixel(self, survey, ccds):
         '''
-        For mosaic this is messed up interpolated images. Nothing for other cameras
+        For mosaic this is inconsistent YSHIFT header 
+        Ensures that ccds are 1/3 pixel interpolated. Nothing for other cameras
         '''
         from astropy.io import fits
         good = np.ones(len(ccds), bool)
         n0 = sum(good)
         # Remove if primary header does NOT have keyword YSHIFT
-        rootdir= os.path.join(os.getenv('LEGACY_SURVEY_DIR'),'images')
+        rootdir = survey.get_image_dir()
         for i,fn in enumerate(ccds.image_filename):
             fn= os.path.join(rootdir,fn)
             hdulist = fits.open(fn)
             if not 'YSHIFT' in hdulist[0].header:
                 good[i]= False
         n = sum(good)
-        print('Flagged', n0-n, 'as Other Bad Things (YSHIFT not in prim header)')
+        print('Flagged', n0-n, 'has third pixel')
         n0 = n 
         return np.flatnonzero(good)
+
+    @classmethod
+    def ccdname_hdu_match(self, survey, ccds):
+        '''
+        Mosaic + Bok, ccdname and hdu number must match. If not, IDL zeropoints files has
+        duplicated zeropoint info from one of the other four ccds
+        '''
+        good = np.ones(len(ccds), bool)
+        n0 = sum(good)
+        ccdnum= np.char.replace(ccds.ccdname,'ccd','').astype(ccds.image_hdu.dtype)
+        flag= ccds.image_hdu - ccdnum != 0
+        good[flag]= False
+        n = sum(good)
+        print('Flagged', n0-n, 'ccdname_hdu_match')
+        n0 = n 
+        return np.flatnonzero(good)
+
+
 
     def __init__(self, survey, t):
         super(MosaicImage, self).__init__(survey, t)
