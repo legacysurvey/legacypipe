@@ -661,7 +661,9 @@ def main():
 
         if opt.command:
             s = '%i-%s' % (T.expnum[i], T.ccdname[i])
-            prefix = 'python legacypipe/run-calib.py ' + opt.opt
+            prefix = 'python legacypipe/run-calib.py '
+            if opt.opt is not None:
+                prefix = prefix + opt.opt
             #('python legacypipe/run-calib.py --expnum %i --ccdname %s' %
             #     (T.expnum[i], T.ccdname[i]))
         else:
