@@ -237,7 +237,7 @@ class BokImage(CPImage, CalibMixin):
         
         if se:
             # CAREFUL no mask given to SE
-            self.run_se('90prime', imgfn, 'junkname')
+            self.run_se('90prime', imgfn, maskfn) #'junkname')
         if psfex:
             self.run_psfex('90prime')
 
