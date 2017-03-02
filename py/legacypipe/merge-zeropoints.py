@@ -116,6 +116,31 @@ def mzls_to_20160315():
         os.system('gzip --best ' + fn)
 
 
+# Runs 21, 22+23 and 24, for adjusting obstatus file.
+def decals_run21():
+    basedir = os.environ['LEGACY_SURVEY_DIR']
+    cam = 'decam'
+    image_basedir = os.path.join(basedir, 'images')
+    TT = []
+    for fn,dirnms in [
+        ('/global/homes/a/arjundey/ZeroPoints/decals-zpt-20161113.fits',
+         ['CP20161113']),
+        ('/global/homes/a/arjundey/ZeroPoints/decals-zpt-20161220-28.fits',
+         ['CP20161220', 'CP20161227', 'CP20161228']),
+        ('/global/homes/a/arjundey/ZeroPoints/decals-zpt-20170108-10.fits',
+         ['CP20170108', 'CP20170109', 'CP20170110']),
+        ]:
+        T = fits_table(fn)
+        normalize_zeropoints(fn, dirnms, image_basedir, cam, T=T)
+        TT.append(T)
+    T = merge_tables(TT)
+    outfn = 'survey-ccds-run21.fits'
+    T.writeto(outfn)
+    print('Wrote', outfn)
+    for fn in [outfn]:
+        os.system('gzip --best ' + fn)
+
+
 # Runs 19 and 20, for adjusting obstatus file...
 def decals_run19():
     basedir = os.environ['LEGACY_SURVEY_DIR']
@@ -581,6 +606,7 @@ if __name__ == '__main__':
     #decals_run16()
     #mzls_to_20160315()
     #decals_run19()
+    decals_run21()
 
     #dr4_bootes=False
     #if dr4_bootes:
@@ -589,7 +615,7 @@ if __name__ == '__main__':
     #                           name='arjuns-ccds-%s.fits' % name)
     #bok_dr4()
     #mzls_dr4(v2=True)
-    mzls_dr4(v2=False)
+    #mzls_dr4(v2=False)
     sys.exit(0)
     
     
