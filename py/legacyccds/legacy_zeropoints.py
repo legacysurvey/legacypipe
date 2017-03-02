@@ -1681,8 +1681,8 @@ def main(image_list=None,args=None):
         # Check if zpt already written
         F= outputFns(image_fn,outdir,prefix= measureargs.get('prefix'))
         if os.path.exists(F.zptfn) and os.path.exists(F.starfn):
-            print('continuing'.upper())
-            continue  # Already done
+            print('Already finished: %s' % F.zptfn)
+            continue
         measureargs.update(dict(zptfn= F.zptfn,\
                                 starfn= F.starfn,\
                                 imgfn= F.imgfn))

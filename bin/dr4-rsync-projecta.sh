@@ -24,7 +24,7 @@ if [ ! -e "$outdir/$whichdir" ]; then
     exit 999
 fi
 
-proj_dir=/global/projecta/projectdirs/cosmo/work/dr4
+proj_dir=/global/projecta/projectdirs/cosmo/work/dr4-minus
 
 # List all files that exists for each completed brick
 # use projecta/ permissions and group

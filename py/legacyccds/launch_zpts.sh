@@ -1,7 +1,7 @@
 #!/bin/bash 
 
-export camera=mosaicz
-#export camera=decam
+#export camera=mosaicz
+export camera=decam
 
 export outdir=/global/cscratch1/sd/kaylanb/zeropoints
 export imagelist=${outdir}/${camera}_imagelist.txt
