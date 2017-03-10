@@ -431,6 +431,17 @@ def stage_4(resid=None, sky=None, ps=None, tim=None,
                 ra,dec = tim.subwcs.pixelxy2radec(x+1, y+1)
                 plt.text(x, y, '%.1f (%.2f,%.2f)' % (m,ra,dec), color='w', ha='left', fontsize=12)
     
+            ''' evcc.fits:
+
+            https://sites.google.com/site/extendedvcc/
+            wget "https://sites.google.com/site/extendedvcc/table/Table2_2014_8_7.txt?attredirects=0&d=1" -O table2.txt
+            text2fits -S 35 -H "id_evcc id_vcc ngc ra dec ra_fiber dec_fiber delta cz_sdss cz_ned mem_evcc mem_vcc morph_pri morph_sec morph_index morph_vcc u u_err g g_err r r_err i i_err z z_err r_kron r_50" -f sssddddfffssssssffffffffffff table2.txt evcc.fits  -n -
+
+            vcc.fits:
+
+            text2fits -S 27 -H "id_vcc ngc ra dec cz_sdss cz_ned mem morph_vcc u u_err g g_err r r_err i i_err z z_err r_kron r_50" -f ssddffssffffffffffff table3.txt vcc.fits -n -
+            '''
+
             mydir = os.path.dirname(__file__)
             fn = os.path.join(mydir, 'evcc.fits')
             T = fits_table(fn)
