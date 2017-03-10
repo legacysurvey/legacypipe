@@ -13,6 +13,7 @@ import fitsio
 from astrometry.util.fits import *
 from astrometry.util.plotutils import *
 from astrometry.util.ttime import *
+from astrometry.util.util import median_smooth
 
 from tractor import *
 
@@ -120,6 +121,9 @@ def stage_1(expnum=431202, extname='S19', plotprefix='lsb', plots=False,
     
     if plots:
         plt.clf()
+        img = tim.getImage()
+        mn,mx = np.percentile(img.ravel(), [25,99])
+        tim.ima = dict(interpolation='nearest', origin='lower', vmin=mn, vmax=mx)
         plt.imshow(tim.getImage(), **tim.ima)
         plt.title('Orig data')
         ps.savefig()
@@ -427,12 +431,15 @@ def stage_4(resid=None, sky=None, ps=None, tim=None,
                 ra,dec = tim.subwcs.pixelxy2radec(x+1, y+1)
                 plt.text(x, y, '%.1f (%.2f,%.2f)' % (m,ra,dec), color='w', ha='left', fontsize=12)
     
-            T = fits_table('evcc.fits')
+            mydir = os.path.dirname(__file__)
+            fn = os.path.join(mydir, 'evcc.fits')
+            T = fits_table(fn)
             ok,x,y = tim.subwcs.radec2pixelxy(T.ra, T.dec)
             x = x[ok]
             y = y[ok]
             plt.plot(x, y, 'o', mec=(0,1,0), mfc='none', ms=50, mew=5)
-            T = fits_table('vcc.fits')
+            fn = os.path.join(mydir, 'vcc.fits')
+            T = fits_table(fn)
             ok,x,y = tim.subwcs.radec2pixelxy(T.ra, T.dec)
             x = x[ok]
             y = y[ok]
