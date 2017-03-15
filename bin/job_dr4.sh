@@ -1,15 +1,15 @@
 #!/bin/bash -l
 
 #SBATCH -p shared
-#SBATCH -n 8
-#SBATCH -t 00:30:00
+#SBATCH -n 16
+#SBATCH -t 01:00:00
 #SBATCH --account=desi
 #SBATCH -J trace
-#SBATCH --mail-user=kburleigh@lbl.gov
-#SBATCH --mail-type=END,FAIL
 #SBATCH -L SCRATCH
 #-C haswell
 #--qos=scavenger
+#--mail-user=kburleigh@lbl.gov
+#--mail-type=END,FAIL
 
 export LEGACY_SURVEY_DIR=/scratch1/scratchdirs/desiproc/DRs/dr4-bootes/dr4_fixes/legacypipe-dir
 export UNWISE_COADDS_DIR=/scratch1/scratchdirs/desiproc/unwise-coadds/fulldepth:/scratch1/scratchdirs/desiproc/unwise-coadds/w3w4
@@ -27,16 +27,7 @@ echo outdir:$outdir
 echo overwrite_tractor:$overwrite_tractor
 echo full_stacktrace:$full_stacktrace
 echo early_coadds:$early_coadds
-echo dr4_fixes:$dr4_fixes
-if [ "$dr4_fixes" = "yes" ]; then
-    set -x
-    export LEGACY_SURVEY_DIR=/scratch1/scratchdirs/desiproc/DRs/legacypipe-dir
-    #export DUST_DIR=adfa
-    #export unwise_dir=lakdjf
-    set +x
-fi 
-
-
+echo just_calibs:$just_calibs
 
 #-p shared
 #-n 24
@@ -48,7 +39,7 @@ fi
 # set usecores as desired for more mem and set shared n above to 2*usecores, keep threads=6 so more mem per thread!, then --aray equal to number largemmebricks.txt
 
 
-usecores=4
+usecores=8
 #threads=$usecores
 threads=4
 if [ "$full_stacktrace" = "yes" ];then
@@ -75,7 +66,12 @@ if [ "$overwrite_tractor" = "yes" ]; then
     export extra_opt=""
 elif [ "$early_coadds" = "yes" ]; then
     export extra_opt="--stage image_coadds --early-coadds"
+elif [ "$just_calibs" = "yes" ]; then
+    module load tractor-hpcp
+    export extra_opt="--skip --stage tims"
 fi
+
+####### AAHHHHHHHHHH #########
 
 
 export OMP_NUM_THREADS=$threads
@@ -110,7 +106,6 @@ echo Logging to: $log
 
 echo doing srun
 date
-module load tractor-hpcp
 srun -n 1 -c $usecores python legacypipe/runbrick.py \
      --run $qdo_table \
      --brick $brick \

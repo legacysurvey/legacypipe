@@ -4,7 +4,7 @@
 # ../bin/job_accounting.sh /scratch1/scratchdirs/desiproc/DRs/data-releases/dr4/logs/2017_02_10
 # e.g. ../bin/job_accounting.sh /abs/path/to/logdir
 
-second_round=yes
+second_round=no
 
 logdir="$1"
 slurmdir=${logdir}/slurms

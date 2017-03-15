@@ -40,7 +40,7 @@ def ccd_cuts_inplace(ccds, use_blacklist=True):
 
 parser = argparse.ArgumentParser(description='Generate a legacypipe-compatible CCDs file from a set of reduced imaging.') 
 parser.add_argument('--therun', choices=['dr4','obiwan'],action='store', default=True) 
-parser.add_argument('--dowhat', choices=['bricks_notdone','time_per_brick','nersc_time','sanity_tractors'],action='store', default=True) 
+parser.add_argument('--dowhat', choices=['bricks_notdone','time_per_brick','nersc_time','sanity_tractors','num_grz'],action='store', default=True) 
 parser.add_argument('--fn', action='store', default=False) 
 args = parser.parse_args() 
 
@@ -188,4 +188,37 @@ elif args.dowhat == 'sanity_tractors':
             print('has ccds that should have been removed: %s' % ccdfn)
             with open(fils['ccds'],'a') as foo:
                 foo.write('%s\n' % ccdfn)
-
+elif args.dowhat == 'num_grz':
+    # record number of grz for a list of bricks
+    bricklist= np.loadtxt= np.loadtxt(args.fn,dtype=str)
+    nccds= []
+    d={}
+    for i in range(1,10,2):
+        d['%d <= grz' % i]=[]
+    for cnt,brick in enumerate(bricklist):
+        if cnt % 100 == 0:
+            print('Reading %d/%d' % (cnt+1,len(bricklist)))
+        # Try reading
+        try:
+            #fn= "/scratch1/scratchdirs/desiproc/DRs/data-releases/dr4/coadd/%s/%s/legacysurvey-%s-ccds.fits" % (brick[:3],brick,brick)
+            fn= "/scratch1/scratchdirs/desiproc/DRs/data-releases/dr4_fixes/coadd/%s/%s/legacysurvey-%s-ccds.fits" % (brick[:3],brick,brick)
+            a=fits_table(fn)
+        except IOError:
+            print('Cannot find %s' % fn) 
+            continue
+        # Save info
+        nccds.append( len(a) )
+        for i in range(1,10,2):
+            g= np.where(a.filter == 'g')[0].size
+            r= np.where(a.filter == 'r')[0].size
+            z= np.where(a.filter == 'z')[0].size
+            if (g >= i) & (r >= i) & (z >= i):
+                d['%d <= grz' % i].append( brick )
+    # Print
+    for i in range(1,10,2):
+        key= '%d <= grz' % i
+        print('%d bricks with %s' % (len(d[key]),key))
+    nccds= np.array(nccds)
+    inds= np.argsort(nccds)[::-1]
+    for brick,ccd in zip(bricklist[inds][:10],nccds[inds][:10]):
+        print('%d ccds in %s' % (ccd,brick))
