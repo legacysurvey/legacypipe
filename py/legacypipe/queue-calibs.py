@@ -329,6 +329,14 @@ def main():
         rlo,rhi = 182,192
         dlo,dhi =   8, 18
 
+    elif opt.region == 'coma':
+        # van Dokkum et al Coma cluster ultra-diffuse galaxies: 3x3 field centered on Coma cluster
+        rc,dc = 195., 28.
+        dd = 1.5
+        cosdec = np.cos(np.deg2rad(dc))
+        rlo,rhi = rc - dd/cosdec, rc + dd/cosdec
+        dlo,dhi = dc - dd, dc + dd
+
     elif opt.region == 'lsb':
         rlo,rhi = 147.2, 147.8
         dlo,dhi = -0.4, 0.4
@@ -372,7 +380,7 @@ def main():
     log(len(B), 'bricks in range')
     #for name in B.get('brickname'):
         #print(name)
-    B.writeto('bricks-cut.fits')
+    #B.writeto('bricks-cut.fits')
 
     I,J,d = match_radec(B.ra, B.dec, T.ra, T.dec, survey.bricksize)
     keep = np.zeros(len(B), bool)
@@ -381,11 +389,11 @@ def main():
     B.cut(keep)
     log('Cut to', len(B), 'bricks near CCDs')
 
-    plt.clf()
-    plt.plot(B.ra, B.dec, 'b.')
-    plt.title('DR3 bricks')
-    plt.axis([360, 0, np.min(B.dec)-1, np.max(B.dec)+1])
-    plt.savefig('bricks.png')
+    # plt.clf()
+    # plt.plot(B.ra, B.dec, 'b.')
+    # plt.title('DR3 bricks')
+    # plt.axis([360, 0, np.min(B.dec)-1, np.max(B.dec)+1])
+    # plt.savefig('bricks.png')
 
     if opt.brickq is not None:
         B.cut(B.brickq == opt.brickq)
@@ -617,11 +625,10 @@ def main():
             exp = T.expnum[i]
             ext = T.ccdname[i].strip()
             outfn = 'lsb/lsb-%s-%s.fits' % (exp, ext)
-            f.write('python projects/desi/lsb.py --expnum %i --extname %s --out %s -F -n > lsb/lsb-%s-%s.log 2>&1\n' % (exp, ext, outfn, exp, ext))
+            f.write('python legacyanalysis/lsb.py --expnum %i --extname %s --out %s -F -n > lsb/lsb-%s-%s.log 2>&1\n' % (exp, ext, outfn, exp, ext))
         f.close()
         log('Wrote', opt.out)
         sys.exit(0)
-
 
     log('Writing calibs to', opt.out)
     f = open(opt.out,'w')
