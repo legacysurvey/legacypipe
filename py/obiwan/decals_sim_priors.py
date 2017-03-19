@@ -27,6 +27,9 @@ from theValidator.catalogues import CatalogueFuncs
 from sklearn.svm import SVC
 from sklearn.neighbors import KNeighborsClassifier
 
+class EmptyClass(object):
+    pass
+
 class KernelOfTruth(object):
     '''Approximate color distributions with a Gaussian Kernel Density Estimator
     See: http://scikit-learn.org/stable/auto_examples/neighbors/plot_kde_1d.html
@@ -148,8 +151,10 @@ class KernelOfTruth(object):
             xlab=ax[cnt,1].set_xlabel(self.labels[1],fontsize='x-large')
             ylab=ax[cnt,1].set_ylabel(self.labels[2],fontsize='x-large')
             xlab=ax[cnt,2].set_xlabel(self.labels[3],fontsize='x-large')
-        plt.savefig('%skde.png' % prefix,bbox_extra_artists=[xlab], bbox_inches='tight',dpi=150)
+        sname='%skde.png' % prefix
+        plt.savefig(sname,bbox_extra_artists=[xlab], bbox_inches='tight',dpi=150)
         plt.close()
+        print('Wrote %s' % sname)
         if prefix == 'lrg_':
             # plot g band distribution even though no Targeting cuts on g
             fig,ax= plt.subplots(2,1,figsize=(8,10))
@@ -161,8 +166,10 @@ class KernelOfTruth(object):
                     ax[cnt].set_xlim(xylims['x4'])
                     ax[cnt].set_ylim(xylims['y4'])
             xlab=ax[0].set_xlabel(self.labels[4],fontsize='x-large')
-            plt.savefig('%sg_kde.png' % prefix,bbox_extra_artists=[xlab], bbox_inches='tight',dpi=150)
+            sname='%sg_kde.png' % prefix
+            plt.savefig(sname,bbox_extra_artists=[xlab], bbox_inches='tight',dpi=150)
             plt.close()
+            print('Wrote %s' % sname)
 
     def plot_galaxy_shapes(self, ndraws=1000,xylims=None,name='kde.png'):
         '''xylims -- dict of x1,y1,x2,y2,... where x1 is tuple of low,hi for first plot xaxis'''
@@ -654,6 +661,7 @@ class ELG(CommonInit):
         # KDE params
         self.kdefn= 'elg-kde.pickle'
         self.kde_shapes_fn= 'elg-shapes-kde.pickle'
+        self.kde_colors_shapes_fn= 'elg-colors-shapes-kde.pickle'
 
     def get_acs_matched_deep2(self):
         savedir='/project/projectdirs/desi/users/burleigh/desi/target/analysis/truth'
@@ -678,7 +686,7 @@ class ELG(CommonInit):
             deep2.writeto(deepfn)
             acs.writeto(acsfn)
             print('Wrote %s\n%s' % (deepfn,acsfn))
-        # oii cuts
+        # oii cuts 
         R_MAG= deep2.get('cfhtls_r')
         rmag_cut= R_MAG<self.rlimit 
         oiicut1 = 8E-17 # [erg/s/cm2]
@@ -690,7 +698,11 @@ class ELG(CommonInit):
                          deep2.get('oii_3727')>oiicut1,\
                          acs.flag_galfit_hi == 0),axis=0)
         acs.cut(keep) # Flag hi b/c removes ~ 50 less galaxies from sample
-        return acs.re_galfit_hi,acs.n_galfit_hi,acs.ba_galfit_hi,acs.pa_galfit_hi
+        # Repackage just the needed quantities
+        tab= fits_table()
+        for key in ['ra','dec','re_galfit_hi','n_galfit_hi','ba_galfit_hi','pa_galfit_hi']:
+            tab.set(key, acs.get(key))
+        return tab
 
     def get_elgs_FDR_cuts(self):
         '''version 3.0 of data discussed in
@@ -749,18 +761,87 @@ class ELG(CommonInit):
             R_MAG= decals.get('decam_mag_wdust')[:,2]
             Z_MAG= decals.get('decam_mag_wdust')[:,4]
             R_MAG_nodust= decals.get('decam_mag_nodust')[:,2]
-        rz,gr,r_nodust,r_wdust,redshift={},{},{},{},{}
+        # Package into 1 dict
+        data={}
+        for key in ['ra','dec','rz','gr','r_nodust','r_wdust','redshift']:
+            data[key]={}
         for key,cut in zip(['loz','oiifaint','oiibright_loz','oiibright_hiz','med2hiz_oiibright',\
                                 'goodz_oiibright','goodz_oiifaint'],\
                            [loz,oiifaint,oiibright_loz,oiibright_hiz,med2hiz_oiibright,\
                                 goodz_oiibright,goodz_oiifaint]):
-            rz[key]= (R_MAG - Z_MAG)[cut]
-            gr[key]= (G_MAG - R_MAG)[cut]
-            r_wdust[key]= R_MAG[cut]
-            r_nodust[key]= R_MAG_nodust[cut]
-            redshift[key]= zcat.zhelio[cut] 
-        return rz,gr,r_nodust,r_wdust,redshift
+            data['rz'][key]= (R_MAG - Z_MAG)[cut]
+            data['gr'][key]= (G_MAG - R_MAG)[cut]
+            data['r_wdust'][key]= R_MAG[cut]
+            data['r_nodust'][key]= R_MAG_nodust[cut]
+            data['redshift'][key]= zcat.zhelio[cut] 
+            data['ra'][key]= zcat.ra[cut] 
+            data['dec'][key]= zcat.dec[cut]
+        return data
 
+    def get_dr3_acs_deep2(self):
+        sname='elg_dr3_acs_deep2.fits'
+        if not os.path.exists(sname):
+            acs= self.get_acs_matched_deep2()
+            deep2_dict= self.get_elgs_FDR_cuts()
+            # Special handle deep2, only want key 'med2hiz_oiibright'
+            # loop over 'ra','dec','rz','gr', etc.
+            deep2= fits_table()
+            for key in deep2_dict.keys(): 
+                deep2.set(key, np.array( deep2_dict[key]['med2hiz_oiibright'] ))
+            print('size deep2=%d, acs=%d' % (len(deep2),len(acs)))
+            # Match and save
+            print('matching acs,deep2')
+            imatch,imiss,d2d= Matcher().match_within(deep2,acs,dist=1./3600)
+            deep2.cut(imatch['ref'])
+            acs.cut(imatch['obs'])
+            print('size matched deep2,acs=%d' % len(deep2))
+            # Merge
+            both= merge_tables([deep2,acs],columns='fillzero')
+            both.writeto(sname)
+            print('Wrote %s' % sname)
+        data= fits_table(sname)
+        return data
+   
+    def plot_dr3_acs_deep2(self):
+        data= self.get_dr3_acs_deep2()
+        print('dr3_acs_deep2 points: %d' % len(data))
+        # Clean
+        data.pa += 90. # 0-180 deg
+        data.r_wdust= data.r_wdust['med2hiz_oiibright']
+        data.rz= data.rz['med2hiz_oiibright']
+        data.gr= data.gr['med2hiz_oiibright']
+        data.redshift= redshift['med2hiz_oiibright']
+        # Cut bad values
+        keep= ( np.ones(len(data),bool) )
+        for col in data.get_columns():
+            keep *= (np.isfinite(data.get(col)))
+        data.cut(keep)
+        print('dr3_acs_deep2 points after cut bad vales: %d' % len(data))
+        # Fit KDE
+        labels=['r wdust','r-z','g-r','redshift',
+                're','n','ba','pa']
+        lims= [(20.5,25.),(0,2),(-0.5,1.5),(0.6,1.6),
+               (0.,100.),(0.,10.),(0.2,0.9),(0.,180.)]
+        kde_obj= KernelOfTruth([data.r_wdust,data.rz,data.gr,data.redshift,
+                                data.re,data.n,data.ba,data.pa],
+                               labels,lims,\
+                               bandwidth=0.05,kernel='tophat',\
+                               kdefn=self.kde_shapes_fn,loadkde=self.loadkde)
+        xylims=dict(x1=(20.5,25.5),y1=(0,0.8),\
+                    x2=xyrange['x_elg'],y2=xyrange['y_elg'],\
+                    x3=(0.6,1.6),y3=(0.,1.0),
+                    x4=(0,100),\
+                    x5=(0,10),\
+                    x6=(0,1),\
+                    x7=(0,180))
+        #kde_obj.plot_1band_and_color(ndraws=1000,xylims=xylims,prefix='elg_')
+        kde_obj.plot_colors_shapes_z(ndraws=1000,xylims=xylims,name='elg_colors_shapes_z_kde.png')
+        if self.savekde:
+            if os.path.exists(self.kde_colors_shapes_fn):
+                os.remove(self.kde_colors_shapes_fn)
+            kde_obj.save(name=self.kde_colors_shapes_fn)
+
+ 
     def cross_validate_redshift(self):
         rz,gr,r_nodust,r_wdust,redshift= self.get_elgs_FDR_cuts()
         key='goodz_oiibright'
@@ -1541,7 +1622,9 @@ if __name__ == '__main__':
     #gals=GalaxyPrior()
     #gals.plot_all()
     #print "gals.__dict__= ",gals.__dict__
-    kwargs=dict(DR=2,savefig=True,loadkde=True,savekde=False,alpha=0.25)
+    kwargs=dict(DR=2,savefig=True,alpha=0.25,
+                loadkde=False,
+                savekde=True)
     #star=STAR(**kwargs)
     #star.plot_kde()
     #star.plot()
@@ -1551,10 +1634,12 @@ if __name__ == '__main__':
     #qso.plot()
     kwargs.update(dict(DR=3, rlimit=23.4+1.))
     elg= ELG(**kwargs)
-    #elg.get_acs_matched_deep2()
+    elg.get_acs_matched_deep2()
+    elg.plot_dr3_acs_deep2()
+    raise ValueError
     #elg.plot_kde_shapes()
-    #elg.plot_kde()
-    #elg.plot_redshift()
+    elg.plot_kde()
+    elg.plot_redshift()
     #elg.cross_validate_redshift()
 
     #elg.plot_kde()
