@@ -27,6 +27,8 @@ from theValidator.catalogues import CatalogueFuncs
 from sklearn.svm import SVC
 from sklearn.neighbors import KNeighborsClassifier
 
+from theValidator.catalogues import CatalogueFuncs,Matcher
+
 class EmptyClass(object):
     pass
 
@@ -672,7 +674,6 @@ class ELG(CommonInit):
             acs=fits_table(acsfn)
         else:
             # deep2 w/oii
-            from theValidator.catalogues import CatalogueFuncs,Matcher
             fns=glob('/project/projectdirs/desi/target/analysis/deep2/v3.0/deep2-field*-oii.fits.gz')
             deep2= CatalogueFuncs().stack(fns,textfile=False)
             # acs
@@ -761,9 +762,12 @@ class ELG(CommonInit):
             R_MAG= decals.get('decam_mag_wdust')[:,2]
             Z_MAG= decals.get('decam_mag_wdust')[:,4]
             R_MAG_nodust= decals.get('decam_mag_nodust')[:,2]
+            # Don't need w1, but might be useful
+            W1_MAG = decals.get('wise_mag_wdust')[:,0]
         # Package into 1 dict
         data={}
-        for key in ['ra','dec','rz','gr','r_nodust','r_wdust','redshift']:
+        for key in ['ra','dec','rz','gr','r_nodust','r_wdust','redshift',
+                    'rw1']:
             data[key]={}
         for key,cut in zip(['loz','oiifaint','oiibright_loz','oiibright_hiz','med2hiz_oiibright',\
                                 'goodz_oiibright','goodz_oiifaint'],\
@@ -773,6 +777,7 @@ class ELG(CommonInit):
             data['gr'][key]= (G_MAG - R_MAG)[cut]
             data['r_wdust'][key]= R_MAG[cut]
             data['r_nodust'][key]= R_MAG_nodust[cut]
+            data['rw1'][key]= (R_MAG - W1_MAG)[cut] 
             data['redshift'][key]= zcat.zhelio[cut] 
             data['ra'][key]= zcat.ra[cut] 
             data['dec'][key]= zcat.dec[cut]
@@ -783,6 +788,7 @@ class ELG(CommonInit):
         if not os.path.exists(sname):
             acs= self.get_acs_matched_deep2()
             deep2_dict= self.get_elgs_FDR_cuts()
+            raise ValueError
             # Special handle deep2, only want key 'med2hiz_oiibright'
             # loop over 'ra','dec','rz','gr', etc.
             deep2= fits_table()
@@ -799,6 +805,7 @@ class ELG(CommonInit):
             both= merge_tables([deep2,acs],columns='fillzero')
             both.writeto(sname)
             print('Wrote %s' % sname)
+            
         data= fits_table(sname)
         return data
    
@@ -938,7 +945,7 @@ class ELG(CommonInit):
 
 
     def plot_FDR(self):
-        rz,gr,r_nodust,r_wdust,redshift= self.get_elgs_FDR_cuts()
+        dic= self.get_elgs_FDR_cuts()
         # Object to add target selection box
         ts= TSBox(src='ELG')
         fig, ax = plt.subplots()
@@ -947,18 +954,18 @@ class ELG(CommonInit):
         ts.add_ts_box(ax, xlim=xrange,ylim=yrange)
         # Add points
         b= 'loz'
-        ax.scatter(rz[b],gr[b], marker='^', color='magenta', label=r'$z<0.6$')
+        ax.scatter(dic['rz'][b],dic['gr'][b], marker='^', color='magenta', label=r'$z<0.6$')
 
         b='oiifaint'
-        ax.scatter(rz[b],gr[b], marker='s', color='tan',
+        ax.scatter(dic['rz'][b],dic['gr'][b], marker='s', color='tan',
                         label=r'$z>0.6, [OII]<8\times10^{-17}$')
 
         b= 'oiibright_loz'
-        ax.scatter(rz[b],gr[b], marker='o', color='powderblue',
+        ax.scatter(dic['rz'][b],dic['gr'][b], marker='o', color='powderblue',
                         label=r'$z>0.6, [OII]>8\times10^{-17}$')
 
         b='oiibright_hiz'
-        ax.scatter(rz[b],gr[b], marker='o', color='blue',
+        ax.scatter(dic['rz'][b],dic['gr'][b], marker='o', color='blue',
                         label=r'$z>1.0, [OII]>8\times10^{-17}$')
         ax.set_xlim(xrange)
         ax.set_ylim(yrange)
@@ -974,7 +981,7 @@ class ELG(CommonInit):
             print('Wrote {}'.format(name))
 
     def plot_FDR_multipanel(self):
-        rz,gr,r_nodust,r_wdust,redshift= self.get_elgs_FDR_cuts()
+        dic= self.get_elgs_FDR_cuts()
         ts= TSBox(src='ELG')
         xrange,yrange= xyrange['x_elg'],xyrange['y_elg']
         # Plot
@@ -989,13 +996,76 @@ class ELG(CommonInit):
             ts.add_ts_box(ax[cnt], xlim=xrange,ylim=yrange)
             # Add points
             b= key
-            ax[cnt].scatter(rz[b],gr[b], marker=marker,color=col)
+            ax[cnt].scatter(dic['rz'][b],dic['gr'][b], marker=marker,color=col)
             ti_loc=ax[cnt].set_title(ti)
             ax[cnt].set_xlim(xrange)
             ax[cnt].set_ylim(yrange)
             xlab= ax[cnt].set_xlabel('r-z')
             ylab= ax[cnt].set_ylabel('g-r')
             name='dr%d_FDR_ELG_multipanel.png' % self.DR
+        kwargs= dict(bbox_extra_artists=[ti_loc,xlab,ylab], bbox_inches='tight',dpi=150)
+        if self.savefig:
+            plt.savefig(name, **kwargs)
+            plt.close()
+            print('Wrote {}'.format(name))
+
+    def plot_LRG_FDR_wELG_data(self):
+        dic= self.get_elgs_FDR_cuts()
+        ts= TSBox(src='LRG')
+        xrange,yrange= xyrange['x_lrg'],xyrange['y_lrg']
+        # Plot
+        fig,ax = plt.subplots(1,4,sharex=True,sharey=True,figsize=(18,4))
+        plt.subplots_adjust(wspace=0.1,hspace=0)
+        for cnt,key,col,marker,ti in zip(range(4),\
+                               ['loz','oiifaint','oiibright_loz','oiibright_hiz'],\
+                               ['magenta','tan','powderblue','blue'],\
+                               ['^','s','o','o'],\
+                               [r'$z<0.6$',r'$z>0.6, [OII]<8\times10^{-17}$',r'$z>0.6, [OII]>8\times10^{-17}$',r'$z>1.0, [OII]>8\times10^{-17}$']):
+            # Add box
+            ts.add_ts_box(ax[cnt], xlim=xrange,ylim=yrange)
+            # Add points
+            b= key
+            ax[cnt].scatter(dic['rz'][b],dic['rw1'][b], marker=marker,color=col)
+            ti_loc=ax[cnt].set_title(ti)
+            ax[cnt].set_xlim(xrange)
+            ax[cnt].set_ylim(yrange)
+            xlab= ax[cnt].set_xlabel('r-z')
+            ylab= ax[cnt].set_ylabel('r-W1')
+            name='dr%d_LRG_FDR_wELG_data.png' % self.DR
+        kwargs= dict(bbox_extra_artists=[ti_loc,xlab,ylab], bbox_inches='tight',dpi=150)
+        if self.savefig:
+            plt.savefig(name, **kwargs)
+            plt.close()
+            print('Wrote {}'.format(name))
+
+    def plot_ELG_FDR_mag_dist(self):
+        dic= self.get_elgs_FDR_cuts()
+        # Plot
+        fig,ax = plt.subplots(1,4,sharex=True,sharey=True,figsize=(18,4))
+        plt.subplots_adjust(wspace=0.1,hspace=0)
+        for cnt,key,col,marker,ti in zip(range(4),\
+                               ['loz','oiifaint','oiibright_loz','oiibright_hiz'],\
+                               ['magenta','tan','powderblue','blue'],\
+                               ['^','s','o','o'],\
+                               [r'$z<0.6$',r'$z>0.6, [OII]<8\times10^{-17}$',r'$z>0.6, [OII]>8\times10^{-17}$',r'$z>1.0, [OII]>8\times10^{-17}$']):
+            b= key
+            # Mag data
+            mags=dict(r= dic['r_wdust'][b],
+                      g= dic['gr'][b] + dic['r_wdust'][b],
+                      z= dic['r_wdust'][b] - dic['rz'][b]) 
+            for band,color in zip(['g','r','z'],['g','r','m']):
+                # nans present
+                mags[band]= mags[band][ np.isfinite(mags[band]) ]
+                # histograms
+                h,edges= np.histogram(mags[band],bins=40,normed=True)
+                binc= (edges[1:]+edges[:-1])/2.
+                ax[cnt].step(binc,h,where='mid',lw=1,c=color,label='%s' % b)
+            ti_loc=ax[cnt].set_title(ti)
+            ax[cnt].set_xlim([20,26])
+            ax[cnt].set_ylim([0,0.9])
+            xlab= ax[cnt].set_xlabel('AB mag')
+            ylab= ax[cnt].set_ylabel('PDF')
+            name='dr%d_ELG_FDR_mag_dist.png' % self.DR
         kwargs= dict(bbox_extra_artists=[ti_loc,xlab,ylab], bbox_inches='tight',dpi=150)
         if self.savefig:
             plt.savefig(name, **kwargs)
@@ -1096,7 +1166,12 @@ class LRG(CommonInit):
                       cosmos.get('mod_gal') <= 8,\
                       acs.flag_galfit_hi == 0),axis=0)
         acs.cut(keep) # Flag hi keeps most, flag low removes all but 50
-        return acs.re_galfit_hi,acs.n_galfit_hi,acs.ba_galfit_hi,acs.pa_galfit_hi
+        # Repackage only the keys we need
+        tab= fits_table()
+        for key in ['ra','dec',
+                    're_galfit_hi','n_galfit_hi','ba_galfit_hi','pa_galfit_hi']:
+            tab.set(key, acs.get(key))
+        return tab
         
     
     def get_lrgs_FDR_cuts(self):
@@ -1107,7 +1182,6 @@ class LRG(CommonInit):
             decals=self.read_fits( os.path.join(self.truth_dir,'dr3-cosmoszphotmatched.fits') )
             spec=self.read_fits( os.path.join(self.truth_dir,'cosmos-zphot-dr3matched.fits') )
         # DECaLS
-        raise ValueError
         CatalogueFuncs().set_mags(decals)
         Z_FLUX = decals.get('decam_flux_nodust')[:,4]
         W1_FLUX = decals.get('wise_flux_nodust')[:,0]
@@ -1143,23 +1217,27 @@ class LRG(CommonInit):
                 index[key]= np.all((index['decals'],\
                                     spec.get('type') == 0,\
                                     spec.get('mod_gal') <= 8),axis=0)
-        # return Mags
-        rz,rW1,r_nodust,r_wdust,z_nodust,z_wdust,g_wdust={},{},{},{},{},{},{}
-        redshift={}
+        # Store mags in dict
+        data= {}
+        for name in ['ra','dec','rz','rW1','r_nodust','r_wdust',
+                     'z_nodust','z_wdust','g_wdust','redshift']:
+            data[name]={}
         for key in keys:
             cut= index[key]
-            rz[key]= decals.get('decam_mag_wdust')[:,2][cut] - decals.get('decam_mag_wdust')[:,4][cut]
-            rW1[key]= decals.get('decam_mag_wdust')[:,2][cut] - decals.get('wise_mag_wdust')[:,0][cut]
-            r_nodust[key]= decals.get('decam_mag_nodust')[:,2][cut]
-            z_nodust[key]= decals.get('decam_mag_nodust')[:,4][cut]
-            r_wdust[key]= decals.get('decam_mag_wdust')[:,2][cut]
-            z_wdust[key]= decals.get('decam_mag_wdust')[:,4][cut]
-            g_wdust[key]= decals.get('decam_mag_wdust')[:,1][cut]
-            redshift[key]= spec.zp_gal[cut]
-        return rz,rW1,r_nodust,r_wdust,z_nodust,z_wdust,g_wdust,redshift
+            data['rz'][key]= decals.get('decam_mag_wdust')[:,2][cut] - decals.get('decam_mag_wdust')[:,4][cut]
+            data['rW1'][key]= decals.get('decam_mag_wdust')[:,2][cut] - decals.get('wise_mag_wdust')[:,0][cut]
+            data['r_nodust'][key]= decals.get('decam_mag_nodust')[:,2][cut]
+            data['z_nodust'][key]= decals.get('decam_mag_nodust')[:,4][cut]
+            data['r_wdust'][key]= decals.get('decam_mag_wdust')[:,2][cut]
+            data['z_wdust'][key]= decals.get('decam_mag_wdust')[:,4][cut]
+            data['g_wdust'][key]= decals.get('decam_mag_wdust')[:,1][cut]
+            data['redshift'][key]= spec.zp_gal[cut]
+            data['ra'][key]= decals.ra[cut]
+            data['dec'][key]= decals.dec[cut]
+        return data
                                  
     def plot_FDR(self):
-        rz,rW1,r_nodust,r_wdust,z_nodust,z_wdust,g_wdust,redshift= self.get_lrgs_FDR_cuts()
+        data= self.get_lrgs_FDR_cuts()
         fig,ax = plt.subplots()
         rgb_cols=get_rgb_cols()
         xrange,yrange= xyrange['x_lrg'],xyrange['y_lrg']
@@ -1170,7 +1248,8 @@ class LRG(CommonInit):
         keys= ['star','red_galaxy_lowz','red_galaxy_hiz','blue_galaxy']
         for cnt,key,rgb in zip(range(4),keys,rgb_cols):
             rgb= (rgb[0]/255.,rgb[1]/255.,rgb[2]/255.)
-            ax.scatter(rz[key],rW1[key],c=[rgb],edgecolors='none',marker='o',s=10.,rasterized=True,label=key)
+            ax.scatter(data['rz'][key],data['rW1'][key],c=[rgb],
+                       edgecolors='none',marker='o',s=10.,rasterized=True,label=key)
         ax.set_xlim(xrange)
         ax.set_ylim(yrange)
         xlab=ax.set_xlabel('r-z')
@@ -1189,14 +1268,15 @@ class LRG(CommonInit):
             print('Wrote {}'.format(name))
 
     def plot_FDR_multipanel(self):
-        rz,rW1,r_nodust,r_wdust,z_nodust,z_wdust,g_wdust,redshift= self.get_lrgs_FDR_cuts()
+        data= self.get_lrgs_FDR_cuts()
         fig,ax = plt.subplots(1,4,sharex=True,sharey=True,figsize=(16,4))
         plt.subplots_adjust(wspace=0.1,hspace=0)
         rgb_cols=get_rgb_cols()
         keys= ['star','red_galaxy_lowz','red_galaxy_hiz','blue_galaxy']
         for cnt,key,rgb in zip(range(4),keys,rgb_cols):
             rgb= (rgb[0]/255.,rgb[1]/255.,rgb[2]/255.)
-            ax[cnt].scatter(rz[key],rW1[key],c=[rgb],edgecolors='none',marker='o',s=10.,rasterized=True)#,label=key)
+            ax[cnt].scatter(data['rz'][key],data['rW1'][key],c=[rgb],
+                            edgecolors='none',marker='o',s=10.,rasterized=True)#,label=key)
             ti=ax[cnt].set_title(key)
             ax[cnt].set_xlim([0,2.5])
             ax[cnt].set_ylim([-2,6])
@@ -1634,18 +1714,25 @@ if __name__ == '__main__':
     #qso.plot()
     kwargs.update(dict(DR=3, rlimit=23.4+1.))
     elg= ELG(**kwargs)
-    elg.get_acs_matched_deep2()
-    elg.plot_dr3_acs_deep2()
+    elg.plot_ELG_FDR_mag_dist()
+    elg.plot_LRG_FDR_wELG_data()
     raise ValueError
+    elg.plot_FDR()
+    elg.plot_FDR_multipanel()
+    #elg.get_acs_matched_deep2()
+    elg.plot_dr3_acs_deep2()
     #elg.plot_kde_shapes()
-    elg.plot_kde()
-    elg.plot_redshift()
+    #elg.plot_kde()
+    #elg.plot_redshift()
     #elg.cross_validate_redshift()
 
     #elg.plot_kde()
     #elg.plot()
     kwargs.update(dict(zlimit=20.46+1.))
     lrg= LRG(**kwargs)
-    lrg.plot_kde_shapes()
+    lrg.plot_FDR()
+    lrg.plot_FDR_multipanel()
+    raise ValueError
+    #lrg.plot_kde_shapes()
     #lrg.plot_kde()
     #lrg.plot()
