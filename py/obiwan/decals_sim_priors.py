@@ -705,9 +705,10 @@ class ELG(CommonInit):
             tab.set(key, acs.get(key))
         return tab
 
-    def get_elgs_FDR_cuts(self):
+    def get_dr3_deep2(self):
         '''version 3.0 of data discussed in
         https://desi.lbl.gov/DocDB/cgi-bin/private/RetrieveFile?docid=912'''
+        # Cut on DR3 rmag < self.rlimit
         if self.DR == 2:
             zcat = self.read_fits(os.path.join(self.truth_dir,'../deep2/v3.0/','deep2-field1-oii.fits.gz'))
             R_MAG= zcat.get('cfhtls_r')
@@ -719,39 +720,9 @@ class ELG(CommonInit):
             CatalogueFuncs().set_mags(decals)
             rflux= decals.get('decam_flux_nodust')[:,2]
             rmag_cut= rflux > 10**((22.5-self.rlimit)/2.5)
-            rmag_cut*= self.imaging_cut(decals) 
-        # Cuts
-        oiicut1 = 8E-17 # [erg/s/cm2]
-        zmin = 0.6
-        loz = np.all((zcat.get('zhelio')<zmin,\
-                      rmag_cut),axis=0)
-        oiifaint = np.all((zcat.get('zhelio')>zmin,\
-                           rmag_cut,\
-                           zcat.get('oii_3727_err')!=-2.0,\
-                           zcat.get('oii_3727')<oiicut1),axis=0)
-        oiibright_loz = np.all((zcat.get('zhelio')>zmin,\
-                                zcat.get('zhelio')<1.0,\
-                                rmag_cut,\
-                                zcat.get('oii_3727_err')!=-2.0,\
-                                zcat.get('oii_3727')>oiicut1),axis=0)
-        oiibright_hiz = np.all((zcat.get('zhelio')>1.0,\
-                                rmag_cut,\
-                                zcat.get('oii_3727_err')!=-2.0,\
-                                zcat.get('oii_3727')>oiicut1),axis=0)
-        med2hiz_oiibright= np.all((zcat.get('zhelio')>0.6,\
-                                   rmag_cut,\
-                                   zcat.get('oii_3727_err')!=-2.0,\
-                                   zcat.get('oii_3727')>oiicut1),axis=0)
-        goodz=   np.all((zcat.get('zhelio')>0.6,\
-                         zcat.get('zhelio')<1.6,\
-                         rmag_cut),axis=0)
-        goodz_oiibright=   np.all((goodz,\
-                                   zcat.get('oii_3727_err')!=-2.0,\
-                                   zcat.get('oii_3727')>oiicut1),axis=0)
-        goodz_oiifaint=    np.all((goodz,\
-                                   zcat.get('oii_3727_err')!=-2.0,\
-                                   zcat.get('oii_3727')<oiicut1),axis=0)
-
+            rmag_cut*= self.imaging_cut(decals)
+        zcat.cut(rmag_cut) 
+        decals.cut(rmag_cut) 
         # color data
         if self.DR == 2:
             G_MAG= zcat.get('cfhtls_g')
@@ -764,24 +735,21 @@ class ELG(CommonInit):
             R_MAG_nodust= decals.get('decam_mag_nodust')[:,2]
             # Don't need w1, but might be useful
             W1_MAG = decals.get('wise_mag_wdust')[:,0]
-        # Package into 1 dict
-        data={}
-        for key in ['ra','dec','rz','gr','r_nodust','r_wdust','redshift',
-                    'rw1']:
-            data[key]={}
-        for key,cut in zip(['loz','oiifaint','oiibright_loz','oiibright_hiz','med2hiz_oiibright',\
-                                'goodz_oiibright','goodz_oiifaint'],\
-                           [loz,oiifaint,oiibright_loz,oiibright_hiz,med2hiz_oiibright,\
-                                goodz_oiibright,goodz_oiifaint]):
-            data['rz'][key]= (R_MAG - Z_MAG)[cut]
-            data['gr'][key]= (G_MAG - R_MAG)[cut]
-            data['r_wdust'][key]= R_MAG[cut]
-            data['r_nodust'][key]= R_MAG_nodust[cut]
-            data['rw1'][key]= (R_MAG - W1_MAG)[cut] 
-            data['redshift'][key]= zcat.zhelio[cut] 
-            data['ra'][key]= zcat.ra[cut] 
-            data['dec'][key]= zcat.dec[cut]
-        return data
+        # Repackage
+        tab= fits_table()
+        # Deep2
+        tab.set('ra', zcat.ra)
+        tab.set('dec', zcat.dec)
+        tab.set('zhelio', zcat.zhelio)
+        tab.set('oii_3727', zcat.oii_3727)
+        tab.set('oii_3727_err', zcat.oii_3727_err)
+        # Decals
+        tab.set('rz', R_MAG - Z_MAG)
+        tab.set('gr', G_MAG - R_MAG)
+        tab.set('r_wdust', R_MAG)
+        tab.set('r_nodust', R_MAG_nodust)
+        tab.set('rw1', R_MAG - W1_MAG) 
+        return tab
 
     def get_dr3_acs_deep2(self):
         sname='elg_dr3_acs_deep2.fits'
@@ -805,7 +773,6 @@ class ELG(CommonInit):
             both= merge_tables([deep2,acs],columns='fillzero')
             both.writeto(sname)
             print('Wrote %s' % sname)
-            
         data= fits_table(sname)
         return data
    
@@ -943,30 +910,49 @@ class ELG(CommonInit):
             plt.close()
             print('Wrote {}'.format(name))
 
+    def get_FDR_cuts(self,tab):
+        oiicut1 = 8E-17 # [erg/s/cm2]
+        zmin = 0.6
+        keep= {}
+        keep['lowz'] = tab.zhelio < zmin
+        keep['medz_lowO2'] = np.all((tab.zhelio > zmin,\
+                                 tab.oii_3727_err != -2.0,\
+                                 tab.oii_3727 < oiicut1), axis=0)
+        keep['medz_hiO2'] = np.all((tab.zhelio > zmin,\
+                                tab.zhelio < 1.0,\
+                                tab.oii_3727_err != -2.0,\
+                                tab.oii_3727 > oiicut1), axis=0)
+        keep['hiz_hiO2'] = np.all((tab.zhelio > 1.0,\
+                                   tab.oii_3727_err !=-2.0,\
+                               tab.oii_3727 > oiicut1),axis=0)
+        return keep 
+
+    def get_obiwan_cuts(self,tab):
+        return (tab.zhelio >= 0.8) * \
+               (tab.zhelio <= 1.4) * \
+               (tab.oii_3727 >= 0.) * \
+               (tab.oii_3727_err > 0.)
+
 
     def plot_FDR(self):
-        dic= self.get_elgs_FDR_cuts()
-        # Object to add target selection box
-        ts= TSBox(src='ELG')
+        tab= self.get_dr3_deep2()
+        # Cuts 'lowz','medz_lowO2' ...
+        keep= self.get_FDR_cuts(tab)
+        # Plot
         fig, ax = plt.subplots()
         # Add box
+        ts= TSBox(src='ELG')
         xrange,yrange= xyrange['x_elg'],xyrange['y_elg']
         ts.add_ts_box(ax, xlim=xrange,ylim=yrange)
         # Add points
-        b= 'loz'
-        ax.scatter(dic['rz'][b],dic['gr'][b], marker='^', color='magenta', label=r'$z<0.6$')
-
-        b='oiifaint'
-        ax.scatter(dic['rz'][b],dic['gr'][b], marker='s', color='tan',
-                        label=r'$z>0.6, [OII]<8\times10^{-17}$')
-
-        b= 'oiibright_loz'
-        ax.scatter(dic['rz'][b],dic['gr'][b], marker='o', color='powderblue',
-                        label=r'$z>0.6, [OII]>8\times10^{-17}$')
-
-        b='oiibright_hiz'
-        ax.scatter(dic['rz'][b],dic['gr'][b], marker='o', color='blue',
-                        label=r'$z>1.0, [OII]>8\times10^{-17}$')
+        for cut_name,lab,color,marker in zip(['lowz','medz_lowO2','medz_hiO2','hiz_hiO2'],
+                        [r'$z<0.6$',r'$z>0.6, [OII]<8\times10^{-17}$',
+                         r'$z>0.6, [OII]>8\times10^{-17}$',r'$z>1.0, [OII]>8\times10^{-17}$'],
+                                             ['magenta','tan','powderblue','blue'],
+                                             ['^','s','o','o']):
+            cut= keep[cut_name]
+            ax.scatter(tab.rz[cut],tab.gr[cut], 
+                       marker=marker, color=color, label=lab)
         ax.set_xlim(xrange)
         ax.set_ylim(yrange)
         xlab= ax.set_xlabel('r-z')
@@ -980,34 +966,67 @@ class ELG(CommonInit):
             plt.close()
             print('Wrote {}'.format(name))
 
-    def plot_FDR_multipanel(self):
-        dic= self.get_elgs_FDR_cuts()
-        ts= TSBox(src='ELG')
-        xrange,yrange= xyrange['x_elg'],xyrange['y_elg']
+    def plot_FDR_multi(self):
+        tab= self.get_dr3_deep2()
+        # Cuts 'lowz','medz_lowO2' ...
+        keep= self.get_FDR_cuts(tab)
         # Plot
         fig,ax = plt.subplots(1,4,sharex=True,sharey=True,figsize=(18,4))
         plt.subplots_adjust(wspace=0.1,hspace=0)
-        for cnt,key,col,marker,ti in zip(range(4),\
-                               ['loz','oiifaint','oiibright_loz','oiibright_hiz'],\
-                               ['magenta','tan','powderblue','blue'],\
-                               ['^','s','o','o'],\
-                               [r'$z<0.6$',r'$z>0.6, [OII]<8\times10^{-17}$',r'$z>0.6, [OII]>8\times10^{-17}$',r'$z>1.0, [OII]>8\times10^{-17}$']):
+        ts= TSBox(src='ELG')
+        xrange,yrange= xyrange['x_elg'],xyrange['y_elg']
+        for cnt,cut_name,lab,color,marker in zip(range(4),
+                        ['lowz','medz_lowO2','medz_hiO2','hiz_hiO2'],
+                        [r'$z<0.6$',r'$z>0.6, [OII]<8\times10^{-17}$',
+                            r'$z>0.6, [OII]>8\times10^{-17}$',r'$z>1.0, [OII]>8\times10^{-17}$'],
+                        ['magenta','tan','powderblue','blue'],
+                        ['^','s','o','o']):
             # Add box
             ts.add_ts_box(ax[cnt], xlim=xrange,ylim=yrange)
             # Add points
-            b= key
-            ax[cnt].scatter(dic['rz'][b],dic['gr'][b], marker=marker,color=col)
-            ti_loc=ax[cnt].set_title(ti)
+            cut= keep[cut_name]
+            ax[cnt].scatter(tab.rz[cut],tab.gr[cut], marker=marker,color=color)
+            ti_loc=ax[cnt].set_title(lab)
             ax[cnt].set_xlim(xrange)
             ax[cnt].set_ylim(yrange)
             xlab= ax[cnt].set_xlabel('r-z')
             ylab= ax[cnt].set_ylabel('g-r')
-            name='dr%d_FDR_ELG_multipanel.png' % self.DR
+        name='dr%d_ELG_FDR_multi.png' % self.DR
         kwargs= dict(bbox_extra_artists=[ti_loc,xlab,ylab], bbox_inches='tight',dpi=150)
         if self.savefig:
             plt.savefig(name, **kwargs)
             plt.close()
             print('Wrote {}'.format(name))
+
+    def plot_obiwan_multi(self):
+        tab= self.get_dr3_deep2()
+        # Cuts 'lowz','medz_lowO2' ...
+        keep= self.get_obiwan_cuts(tab)
+        # Plot
+        fig,ax = plt.subplots(1,2,sharex=True,sharey=True,figsize=(9,4))
+        plt.subplots_adjust(wspace=0.1,hspace=0)
+        ts= TSBox(src='ELG')
+        xrange,yrange= xyrange['x_elg'],xyrange['y_elg']
+        for cnt,thecut,lab,color in zip(range(2),
+                            [keep, keep == False],
+                            [r'$0.8<z<1.4, [OII] > 0$','Everything else'],
+                            ['b','g']):
+            # Add box
+            ts.add_ts_box(ax[cnt], xlim=xrange,ylim=yrange)
+            # Add points
+            ax[cnt].scatter(tab.rz[thecut],tab.gr[thecut], marker='o',color=color)
+            ti_loc=ax[cnt].set_title(lab)
+            ax[cnt].set_xlim(xrange)
+            ax[cnt].set_ylim(yrange)
+            xlab= ax[cnt].set_xlabel('r-z')
+            ylab= ax[cnt].set_ylabel('g-r')
+        name='dr%d_ELG_obiwan_multi.png' % self.DR
+        kwargs= dict(bbox_extra_artists=[ti_loc,xlab,ylab], bbox_inches='tight',dpi=150)
+        if self.savefig:
+            plt.savefig(name, **kwargs)
+            plt.close()
+            print('Wrote {}'.format(name))
+
 
     def plot_LRG_FDR_wELG_data(self):
         dic= self.get_elgs_FDR_cuts()
@@ -1038,39 +1057,72 @@ class ELG(CommonInit):
             plt.close()
             print('Wrote {}'.format(name))
 
-    def plot_ELG_FDR_mag_dist(self):
-        dic= self.get_elgs_FDR_cuts()
+    def plot_FDR_mag_dist(self):
+        tab= self.get_dr3_deep2()
+        keep= self.get_FDR_cuts(tab)
         # Plot
         fig,ax = plt.subplots(1,4,sharex=True,sharey=True,figsize=(18,4))
         plt.subplots_adjust(wspace=0.1,hspace=0)
-        for cnt,key,col,marker,ti in zip(range(4),\
-                               ['loz','oiifaint','oiibright_loz','oiibright_hiz'],\
-                               ['magenta','tan','powderblue','blue'],\
-                               ['^','s','o','o'],\
-                               [r'$z<0.6$',r'$z>0.6, [OII]<8\times10^{-17}$',r'$z>0.6, [OII]>8\times10^{-17}$',r'$z>1.0, [OII]>8\times10^{-17}$']):
-            b= key
+        for cnt,cut_name,lab in zip(range(4),
+                        ['lowz','medz_lowO2','medz_hiO2','hiz_hiO2'],
+                        [r'$z<0.6$',r'$z>0.6, [OII]<8\times10^{-17}$',
+                            r'$z>0.6, [OII]>8\times10^{-17}$',r'$z>1.0, [OII]>8\times10^{-17}$']):
             # Mag data
-            mags=dict(r= dic['r_wdust'][b],
-                      g= dic['gr'][b] + dic['r_wdust'][b],
-                      z= dic['r_wdust'][b] - dic['rz'][b]) 
+            cut= keep[cut_name]
+            mags=dict(r= tab.r_wdust[cut],
+                      g= tab.gr[cut] + tab.r_wdust[cut],
+                      z= tab.r_wdust[cut] - tab.rz[cut]) 
             for band,color in zip(['g','r','z'],['g','r','m']):
                 # nans present
                 mags[band]= mags[band][ np.isfinite(mags[band]) ]
                 # histograms
                 h,edges= np.histogram(mags[band],bins=40,normed=True)
                 binc= (edges[1:]+edges[:-1])/2.
-                ax[cnt].step(binc,h,where='mid',lw=1,c=color,label='%s' % b)
-            ti_loc=ax[cnt].set_title(ti)
+                ax[cnt].step(binc,h,where='mid',lw=1,c=color,label='%s' % band)
+            ti_loc=ax[cnt].set_title(lab)
             ax[cnt].set_xlim([20,26])
             ax[cnt].set_ylim([0,0.9])
             xlab= ax[cnt].set_xlabel('AB mag')
             ylab= ax[cnt].set_ylabel('PDF')
-            name='dr%d_ELG_FDR_mag_dist.png' % self.DR
+            name='dr%d_ELG_mag_dist_FDR.png' % self.DR
         kwargs= dict(bbox_extra_artists=[ti_loc,xlab,ylab], bbox_inches='tight',dpi=150)
         if self.savefig:
             plt.savefig(name, **kwargs)
             plt.close()
             print('Wrote {}'.format(name))
+
+    def plot_obiwan_mag_dist(self):
+        tab= self.get_dr3_deep2()
+        keep= self.get_obiwan_cuts(tab)
+        # Plot
+        fig,ax = plt.subplots(1,2,sharex=True,sharey=True,figsize=(9,4))
+        plt.subplots_adjust(wspace=0.1,hspace=0)
+        for cnt,thecut,lab in zip(range(4),
+                        [keep, keep == False],
+                        [r'$0.8<z<1.4, [OII] > 0$','Everything else']):
+            # Mag data
+            mags=dict(r= tab.r_wdust[thecut],
+                      g= tab.gr[thecut] + tab.r_wdust[thecut],
+                      z= tab.r_wdust[thecut] - tab.rz[thecut]) 
+            for band,color in zip(['g','r','z'],['g','r','m']):
+                # nans present
+                mags[band]= mags[band][ np.isfinite(mags[band]) ]
+                # histograms
+                h,edges= np.histogram(mags[band],bins=40,normed=True)
+                binc= (edges[1:]+edges[:-1])/2.
+                ax[cnt].step(binc,h,where='mid',lw=1,c=color,label='%s' % band)
+            ti_loc=ax[cnt].set_title(lab)
+            ax[cnt].set_xlim([20,26])
+            ax[cnt].set_ylim([0,0.9])
+            xlab= ax[cnt].set_xlabel('AB mag')
+            ylab= ax[cnt].set_ylabel('PDF')
+            name='dr%d_ELG_mag_dist_obiwan.png' % self.DR
+        kwargs= dict(bbox_extra_artists=[ti_loc,xlab,ylab], bbox_inches='tight',dpi=150)
+        if self.savefig:
+            plt.savefig(name, **kwargs)
+            plt.close()
+            print('Wrote {}'.format(name))
+
 
     def plot(self):
         self.plot_FDR()
@@ -1174,7 +1226,10 @@ class LRG(CommonInit):
         return tab
         
     
-    def get_lrgs_FDR_cuts(self):
+    def get_dr3_cosmos(self):
+        # Cosmos
+        # http://irsa.ipac.caltech.edu/data/COSMOS/gator_docs/cosmos_zphot_mag25_colDescriptions.html
+        # http://irsa.ipac.caltech.edu/data/COSMOS/tables/redshift/cosmos_zphot_mag25.README
         if self.DR == 2:
             decals=self.read_fits( os.path.join(self.truth_dir,'decals-dr2-cosmos-zphot.fits.gz') )
             spec=self.read_fits( os.path.join(self.truth_dir,'cosmos-zphot.fits.gz') )
@@ -1185,71 +1240,69 @@ class LRG(CommonInit):
         CatalogueFuncs().set_mags(decals)
         Z_FLUX = decals.get('decam_flux_nodust')[:,4]
         W1_FLUX = decals.get('wise_flux_nodust')[:,0]
-        index={}
+        # Cuts
         # BUG!!
-        #index['decals']= np.all((Z_FLUX < 10**((22.5-20.46)/2.5),\
-        index['decals']= np.all((Z_FLUX > 10**((22.5-self.zlimit)/2.5),\
-                                 W1_FLUX > 0.),axis=0)
-        index['decals']*= self.imaging_cut(decals)
+        keep= np.all((Z_FLUX > 10**((22.5-self.zlimit)/2.5),\
+                      W1_FLUX > 0.),axis=0)
+        keep *= self.imaging_cut(decals)
+        decals.cut(keep) 
+        spec.cut(keep) 
+        # Repackage
+        tab= fits_table()
         # Cosmos
-        # http://irsa.ipac.caltech.edu/data/COSMOS/gator_docs/cosmos_zphot_mag25_colDescriptions.html
-        # http://irsa.ipac.caltech.edu/data/COSMOS/tables/redshift/cosmos_zphot_mag25.README
-        keys= ['star','red_galaxy_lowz','red_galaxy_hiz','blue_galaxy','red_galaxy']
-        for key in keys:
-            if key == 'star': 
-                index[key]= np.all((index['decals'],\
-                                    spec.get('type') == 1),axis=0)
-            elif key == 'blue_galaxy': 
-                index[key]= np.all((index['decals'],\
-                                    spec.get('type') == 0,\
-                                    spec.get('mod_gal') > 8),axis=0)
-            elif key == 'red_galaxy_lowz': 
-                index[key]= np.all((index['decals'],\
-                                    spec.get('type') == 0,\
-                                    spec.get('mod_gal') <= 8,\
-                                    spec.get('zp_gal') <= 0.6),axis=0)
-            elif key == 'red_galaxy_hiz': 
-                index[key]= np.all((index['decals'],\
-                                    spec.get('type') == 0,\
-                                    spec.get('mod_gal') <= 8,\
-                                    spec.get('zp_gal') > 0.6),axis=0)
-            elif key == 'red_galaxy': 
-                index[key]= np.all((index['decals'],\
-                                    spec.get('type') == 0,\
-                                    spec.get('mod_gal') <= 8),axis=0)
-        # Store mags in dict
-        data= {}
-        for name in ['ra','dec','rz','rW1','r_nodust','r_wdust',
-                     'z_nodust','z_wdust','g_wdust','redshift']:
-            data[name]={}
-        for key in keys:
-            cut= index[key]
-            data['rz'][key]= decals.get('decam_mag_wdust')[:,2][cut] - decals.get('decam_mag_wdust')[:,4][cut]
-            data['rW1'][key]= decals.get('decam_mag_wdust')[:,2][cut] - decals.get('wise_mag_wdust')[:,0][cut]
-            data['r_nodust'][key]= decals.get('decam_mag_nodust')[:,2][cut]
-            data['z_nodust'][key]= decals.get('decam_mag_nodust')[:,4][cut]
-            data['r_wdust'][key]= decals.get('decam_mag_wdust')[:,2][cut]
-            data['z_wdust'][key]= decals.get('decam_mag_wdust')[:,4][cut]
-            data['g_wdust'][key]= decals.get('decam_mag_wdust')[:,1][cut]
-            data['redshift'][key]= spec.zp_gal[cut]
-            data['ra'][key]= decals.ra[cut]
-            data['dec'][key]= decals.dec[cut]
-        return data
+        tab.set('ra', spec.ra)
+        tab.set('dec', spec.dec)
+        tab.set('zp_gal', spec.zp_gal)
+        tab.set('type', spec.type)
+        tab.set('mod_gal', spec.mod_gal)
+        # DR3
+        tab.set('rz', decals.get('decam_mag_wdust')[:,2] - decals.get('decam_mag_wdust')[:,4])
+        tab.set('rW1', decals.get('decam_mag_wdust')[:,2] - decals.get('wise_mag_wdust')[:,0])
+        tab.set('r_nodust', decals.get('decam_mag_nodust')[:,2])
+        tab.set('z_nodust', decals.get('decam_mag_nodust')[:,4])
+        tab.set('r_wdust', decals.get('decam_mag_wdust')[:,2])
+        tab.set('z_wdust', decals.get('decam_mag_wdust')[:,4])
+        tab.set('g_wdust', decals.get('decam_mag_wdust')[:,1])
+        return tab
                                  
+    def get_FDR_cuts(self,tab):
+        keep={}  
+        keep['star']= tab.type == 1
+        keep['blue_galaxy']= (tab.type == 0) *\
+                             (tab.mod_gal > 8)
+        keep['red_galaxy_lowz']= (tab.type == 0) * \
+                                 (tab.mod_gal <= 8) *\
+                                 (tab.zp_gal <= 0.6)
+        keep['red_galaxy_hiz']= (tab.type == 0) * \
+                                 (tab.mod_gal <= 8) *\
+                                 (tab.zp_gal > 0.6)
+        return keep
+
+    def get_obiwan_cuts(self,tab):
+        # No redshift limits, just reddish galaxy
+        return (tab.type == 0) * \
+               (tab.mod_gal <= 8) 
+        return keep
+
+
     def plot_FDR(self):
-        data= self.get_lrgs_FDR_cuts()
+        tab= self.get_dr3_cosmos()
+        keep= self.get_FDR_cuts(tab)
+        # Plot
         fig,ax = plt.subplots()
         rgb_cols=get_rgb_cols()
-        xrange,yrange= xyrange['x_lrg'],xyrange['y_lrg']
         # Add box
         ts= TSBox(src='LRG')
+        xrange,yrange= xyrange['x_lrg'],xyrange['y_lrg']
         ts.add_ts_box(ax, xlim=xrange,ylim=yrange)
         # Data
-        keys= ['star','red_galaxy_lowz','red_galaxy_hiz','blue_galaxy']
-        for cnt,key,rgb in zip(range(4),keys,rgb_cols):
+        for cnt,cut_name,rgb in zip(range(4),
+                        ['star','red_galaxy_lowz','red_galaxy_hiz','blue_galaxy'],
+                                    rgb_cols):
             rgb= (rgb[0]/255.,rgb[1]/255.,rgb[2]/255.)
-            ax.scatter(data['rz'][key],data['rW1'][key],c=[rgb],
-                       edgecolors='none',marker='o',s=10.,rasterized=True,label=key)
+            cut= keep[cut_name]
+            ax.scatter(tab.rz[cut],tab.rW1[cut],c=[rgb],
+                       edgecolors='none',marker='o',s=10.,rasterized=True,label=cut_name)
         ax.set_xlim(xrange)
         ax.set_ylim(yrange)
         xlab=ax.set_xlabel('r-z')
@@ -1267,17 +1320,21 @@ class LRG(CommonInit):
             plt.close()
             print('Wrote {}'.format(name))
 
-    def plot_FDR_multipanel(self):
-        data= self.get_lrgs_FDR_cuts()
+    def plot_FDR_multi(self):
+        tab= self.get_dr3_cosmos()
+        keep= self.get_FDR_cuts(tab)
+        # Plot
         fig,ax = plt.subplots(1,4,sharex=True,sharey=True,figsize=(16,4))
         plt.subplots_adjust(wspace=0.1,hspace=0)
         rgb_cols=get_rgb_cols()
-        keys= ['star','red_galaxy_lowz','red_galaxy_hiz','blue_galaxy']
-        for cnt,key,rgb in zip(range(4),keys,rgb_cols):
+        for cnt,cut_name,rgb in zip(range(4),   
+                       ['star','red_galaxy_lowz','red_galaxy_hiz','blue_galaxy'],
+                                    rgb_cols):
             rgb= (rgb[0]/255.,rgb[1]/255.,rgb[2]/255.)
-            ax[cnt].scatter(data['rz'][key],data['rW1'][key],c=[rgb],
+            cut= keep[cut_name]
+            ax[cnt].scatter(tab.rz[cut],tab.rW1[cut],c=[rgb],
                             edgecolors='none',marker='o',s=10.,rasterized=True)#,label=key)
-            ti=ax[cnt].set_title(key)
+            ti=ax[cnt].set_title(cut_name)
             ax[cnt].set_xlim([0,2.5])
             ax[cnt].set_ylim([-2,6])
             xlab=ax[cnt].set_xlabel('r-z')
@@ -1290,12 +1347,154 @@ class LRG(CommonInit):
         #index=[0,1,2,3]
         #handles,labels= np.array(handles)[index],np.array(labels)[index]
         #leg=ax.legend(handles,labels,loc=(0,1.05),ncol=2,scatterpoints=1,markerscale=2)
-        name='dr%d_FDR_LRG_multi.png' % self.DR
+        name='dr%d_LRG_FDR_multi.png' % self.DR
         if self.savefig:
             plt.savefig(name,\
                         bbox_extra_artists=[ti,xlab,ylab], bbox_inches='tight',dpi=150)
             plt.close()
             print('Wrote {}'.format(name))
+
+    def plot_obiwan_multi(self):
+        tab= self.get_dr3_cosmos()
+        keep= self.get_obiwan_cuts(tab)
+        # Plot
+        fig,ax = plt.subplots(1,2,sharex=True,sharey=True,figsize=(8,4))
+        plt.subplots_adjust(wspace=0.1,hspace=0)
+        rgb_cols=get_rgb_cols()
+        for cnt,thecut,cut_name,rgb in zip(range(2),   
+                                  [keep, keep == False],
+                                  ['red galaxy','everything else'],
+                                  rgb_cols):
+            rgb= (rgb[0]/255.,rgb[1]/255.,rgb[2]/255.)
+            ax[cnt].scatter(tab.rz[thecut],tab.rW1[thecut],c=[rgb],
+                            edgecolors='none',marker='o',s=10.,rasterized=True)#,label=key)
+            ti=ax[cnt].set_title(cut_name)
+            ax[cnt].set_xlim([0,2.5])
+            ax[cnt].set_ylim([-2,6])
+            xlab=ax[cnt].set_xlabel('r-z')
+            # Add box
+            ts= TSBox(src='LRG')
+            xrange,yrange= xyrange['x_lrg'],xyrange['y_lrg']
+            ts.add_ts_box(ax[cnt], xlim=xrange,ylim=yrange)
+            ylab=ax[cnt].set_ylabel('r-W1')
+        #handles,labels = ax.get_legend_handles_labels()
+        #index=[0,1,2,3]
+        #handles,labels= np.array(handles)[index],np.array(labels)[index]
+        #leg=ax.legend(handles,labels,loc=(0,1.05),ncol=2,scatterpoints=1,markerscale=2)
+        name='dr%d_LRG_obiwan_multi.png' % self.DR
+        if self.savefig:
+            plt.savefig(name,\
+                        bbox_extra_artists=[ti,xlab,ylab], bbox_inches='tight',dpi=150)
+            plt.close()
+            print('Wrote {}'.format(name))
+
+
+    def plot_LRGs_in_ELG_FDR(self):
+        data= self.get_lrgs_FDR_cuts()
+        fig,ax = plt.subplots(1,4,sharex=True,sharey=True,figsize=(16,4))
+        plt.subplots_adjust(wspace=0.1,hspace=0)
+        rgb_cols=get_rgb_cols()
+        keys= ['star','red_galaxy_lowz','red_galaxy_hiz','blue_galaxy']
+        for cnt,key,rgb in zip(range(4),keys,rgb_cols):
+            rgb= (rgb[0]/255.,rgb[1]/255.,rgb[2]/255.)
+            ax[cnt].scatter(data['rz'][key],data['g_wdust'][key]-data['r_wdust'][key],c=[rgb],
+                            edgecolors='none',marker='o',s=10.,rasterized=True)#,label=key)
+            ti=ax[cnt].set_title(key)
+            xrange,yrange= xyrange['x_elg'],xyrange['y_elg']
+            ax[cnt].set_xlim(xrange)
+            ax[cnt].set_ylim(yrange)
+            xlab=ax[cnt].set_xlabel('r-z')
+            ylab=ax[cnt].set_ylabel('g-r')
+            # Add box
+            ts= TSBox(src='ELG')
+            ts.add_ts_box(ax[cnt], xlim=xrange,ylim=yrange)
+        #handles,labels = ax.get_legend_handles_labels()
+        #index=[0,1,2,3]
+        #handles,labels= np.array(handles)[index],np.array(labels)[index]
+        #leg=ax.legend(handles,labels,loc=(0,1.05),ncol=2,scatterpoints=1,markerscale=2)
+        name='dr%d_LRGs_in_ELG_FDR.png' % self.DR
+        if self.savefig:
+            plt.savefig(name,\
+                        bbox_extra_artists=[ti,xlab,ylab], bbox_inches='tight',dpi=150)
+            plt.close()
+            print('Wrote {}'.format(name))
+
+    def plot_FDR_mag_dist(self):
+        tab= self.get_dr3_cosmos()
+        keep= self.get_FDR_cuts(tab)
+        fig,ax = plt.subplots(1,4,sharex=True,sharey=True,figsize=(16,4))
+        plt.subplots_adjust(wspace=0.1,hspace=0)
+        rgb_cols=get_rgb_cols()
+        for cnt,cut_name,rgb in zip(range(4),
+                    ['star','red_galaxy_lowz','red_galaxy_hiz','blue_galaxy'],
+                                    rgb_cols):
+            rgb= (rgb[0]/255.,rgb[1]/255.,rgb[2]/255.)
+            # Mag data
+            cut= keep[cut_name]
+            mags=dict(r= tab.r_wdust[cut],
+                      g= tab.g_wdust[cut],
+                      z= tab.z_wdust[cut]) 
+            for band,color in zip(['g','r','z'],['g','r','m']):
+                # nans present
+                mags[band]= mags[band][ np.isfinite(mags[band]) ]
+                # histograms
+                h,edges= np.histogram(mags[band],bins=40,normed=True)
+                binc= (edges[1:]+edges[:-1])/2.
+                ax[cnt].step(binc,h,where='mid',lw=1,c=color,label='%s' % band)
+            ti=ax[cnt].set_title(cut_name)
+            ax[cnt].set_xlim([16,26])
+            ax[cnt].set_ylim([0,0.9])
+            xlab=ax[cnt].set_xlabel('AB mags')
+            ylab=ax[cnt].set_ylabel('PDF')
+        #handles,labels = ax.get_legend_handles_labels()
+        #index=[0,1,2,3]
+        #handles,labels= np.array(handles)[index],np.array(labels)[index]
+        #leg=ax.legend(handles,labels,loc=(0,1.05),ncol=2,scatterpoints=1,markerscale=2)
+        name='dr%d_LRG_mag_dist_FDR.png' % self.DR
+        if self.savefig:
+            plt.savefig(name,\
+                        bbox_extra_artists=[ti,xlab,ylab], bbox_inches='tight',dpi=150)
+            plt.close()
+            print('Wrote {}'.format(name))
+
+    def plot_obiwan_mag_dist(self):
+        tab= self.get_dr3_cosmos()
+        keep= self.get_obiwan_cuts(tab)
+        fig,ax = plt.subplots(1,2,sharex=True,sharey=True,figsize=(8,4))
+        plt.subplots_adjust(wspace=0.1,hspace=0)
+        rgb_cols=get_rgb_cols()
+        for cnt,thecut,lab,rgb in zip(range(2),
+                    [keep, keep == False],
+                    ['red galaxy','everything else'],
+                                    rgb_cols):
+            rgb= (rgb[0]/255.,rgb[1]/255.,rgb[2]/255.)
+            # Mag data
+            mags=dict(r= tab.r_wdust[thecut],
+                      g= tab.g_wdust[thecut],
+                      z= tab.z_wdust[thecut]) 
+            for band,color in zip(['g','r','z'],['g','r','m']):
+                # nans present
+                mags[band]= mags[band][ np.isfinite(mags[band]) ]
+                # histograms
+                h,edges= np.histogram(mags[band],bins=40,normed=True)
+                binc= (edges[1:]+edges[:-1])/2.
+                ax[cnt].step(binc,h,where='mid',lw=1,c=color,label='%s' % band)
+            ti=ax[cnt].set_title(lab)
+            ax[cnt].set_xlim([16,26])
+            ax[cnt].set_ylim([0,0.9])
+            xlab=ax[cnt].set_xlabel('AB mags')
+            ylab=ax[cnt].set_ylabel('PDF')
+        #handles,labels = ax.get_legend_handles_labels()
+        #index=[0,1,2,3]
+        #handles,labels= np.array(handles)[index],np.array(labels)[index]
+        #leg=ax.legend(handles,labels,loc=(0,1.05),ncol=2,scatterpoints=1,markerscale=2)
+        name='dr%d_LRG_mag_dist_obiwan.png' % self.DR
+        if self.savefig:
+            plt.savefig(name,\
+                        bbox_extra_artists=[ti,xlab,ylab], bbox_inches='tight',dpi=150)
+            plt.close()
+            print('Wrote {}'.format(name))
+
 
     def get_vipers(self):
         '''LRGs from VIPERS in CFHTLS W4 field (12 deg2)'''
@@ -1327,7 +1526,10 @@ class LRG(CommonInit):
         rz= decals.get('decam_mag_nodust')[:,2][cut] - decals.get('decam_mag_nodust')[:,4][cut]
         rW1= decals.get('decam_mag_nodust')[:,2][cut] - decals.get('wise_mag_nodust')[:,0][cut]
         return rz,rW1
-    
+   
+
+
+ 
     def plot_vipers(self):
         rz,rW1= self.get_vipers()
         fig,ax = plt.subplots(figsize=(5,4))
@@ -1714,13 +1916,16 @@ if __name__ == '__main__':
     #qso.plot()
     kwargs.update(dict(DR=3, rlimit=23.4+1.))
     elg= ELG(**kwargs)
-    elg.plot_ELG_FDR_mag_dist()
-    elg.plot_LRG_FDR_wELG_data()
-    raise ValueError
-    elg.plot_FDR()
-    elg.plot_FDR_multipanel()
+    #elg.plot_FDR()
+    #elg.plot_FDR_multi()
+    #elg.plot_obiwan_multi()
+    #elg.plot_FDR_mag_dist()
+    #elg.plot_obiwan_mag_dist()
+    #elg.plot_LRG_FDR_wELG_data()
+    #raise ValueError
+    #elg.plot_FDR_multipanel()
     #elg.get_acs_matched_deep2()
-    elg.plot_dr3_acs_deep2()
+    #elg.plot_dr3_acs_deep2()
     #elg.plot_kde_shapes()
     #elg.plot_kde()
     #elg.plot_redshift()
@@ -1730,6 +1935,14 @@ if __name__ == '__main__':
     #elg.plot()
     kwargs.update(dict(zlimit=20.46+1.))
     lrg= LRG(**kwargs)
+    #lrg.plot_FDR()
+    #lrg.plot_FDR_multi()
+    #lrg.plot_obiwan_multi()
+    lrg.plot_FDR_mag_dist()
+    lrg.plot_obiwan_mag_dist()
+    raise ValueError
+    lrg.plot_LRG_FDR_mag_dist()
+    lrg.plot_LRGs_in_ELG_FDR()
     lrg.plot_FDR()
     lrg.plot_FDR_multipanel()
     raise ValueError
