@@ -36,7 +36,7 @@ class KernelOfTruth(object):
     '''Approximate color distributions with a Gaussian Kernel Density Estimator
     See: http://scikit-learn.org/stable/auto_examples/neighbors/plot_kde_1d.html
     '''
-    def __init__(self,array_list,labels,lims,\
+    def __init__(self,data_list,labels,lims,\
                  bandwidth=0.05,kernel='gaussian',\
                  kdefn='kde.pickle',loadkde=False):
         '''
@@ -47,10 +47,10 @@ class KernelOfTruth(object):
         self.loadkde= loadkde
         self.kernel= kernel
         self.bandwidth= bandwidth
-        self.labels=labels
+        self.labels= np.array(labels)
         # Data
-        self.X= np.array(array_list).T
-        assert(self.X.shape[1] == len(array_list))
+        self.X= np.array(data_list).T
+        assert(self.X.shape[1] == len(data_list))
         # Limits
         self.X_plot=[]
         for i in range(len(lims)):
@@ -70,6 +70,111 @@ class KernelOfTruth(object):
         else:
             print('fit kde')
             return KernelDensity(kernel=self.kernel, bandwidth=self.bandwidth).fit(self.X)
+
+    def save(self,name='kde.pickle'):
+        fout=open(name,'w')
+        pickle.dump(self.kde,fout)
+        fout.close()
+        print('Wrote %s' % name)
+
+    # 1D histograms of each dim of KDE
+    def plot_indiv_1d(self,lims=None, ndraws=1000,prefix=''):
+        samp= self.kde.sample(n_samples=ndraws)
+        for i,name in enumerate(self.labels):
+            fig,ax= plt.subplots()
+            # Data
+            h,edges= np.histogram(self.X[:,i],bins=40,normed=True)
+            binc= (edges[1:]+edges[:-1])/2.
+            ax.step(binc,h,where='mid',lw=1,c='k',label='Data')
+            # KDE distribution
+            h,edges= np.histogram(samp[:,i],bins=40,normed=True)
+            binc= (edges[1:]+edges[:-1])/2.
+            ax.step(binc,h,where='mid',lw=1,c='b',label='KDE')
+            xlab=ax.set_xlabel(name,fontsize='x-large')
+            ylab=ax.set_ylabel('PDF')
+            if lims:
+                ax.set_xlim(lims[i])
+            ax.legend(loc='upper right')
+            savenm= 'kde_1d_%s_%s.png' % (prefix,name)
+            plt.savefig(savenm,bbox_extra_artists=[xlab,ylab], bbox_inches='tight',dpi=150)
+            plt.close()
+            print('Wrote %s' % savenm)
+
+    # 2D scatterplot of selected dims of KDE
+    def plot_indiv_2d(self,xy_names,xy_lims=None, ndraws=1000,prefix=''):
+        samp= self.kde.sample(n_samples=ndraws)
+        for i,_ in enumerate(xy_names):
+            xname= xy_names[i][0]
+            yname= xy_names[i][1]
+            ix= np.where(self.labels == xname)[0][0]
+            iy= np.where(self.labels == yname)[0][0]
+            # Plot
+            fig,ax= plt.subplots(1,2,figsize=(8,5))
+            plt.subplots_adjust(wspace=0.2)
+            ax[0].scatter(self.X[:,ix],self.X[:,iy],
+                          c='k',marker='o',s=10.,rasterized=True,label='Data')
+            ax[1].scatter(samp[:,ix],samp[:,iy],
+                          c='b',marker='o',s=10.,rasterized=True,label='KDE')
+            for cnt in range(2):
+                xlab= ax[cnt].set_xlabel(xname)
+                ylab= ax[cnt].set_ylabel(yname)
+                ax[cnt].legend(loc='upper right')
+                if xy_lims:
+                    ax[cnt].set_xlim(xy_lims[i][0])
+                    ax[cnt].set_ylim(xy_lims[i][1])
+            ax[cnt].legend(loc='upper right')
+            savenm= 'kde_2d_%s_%s_%s.png' % (prefix,xname,yname)
+            plt.savefig(savenm,bbox_extra_artists=[xlab,ylab], bbox_inches='tight',dpi=150)
+            plt.close()
+            print('Wrote %s' % savenm)
+
+    def plot_FDR_using_kde(self,obj='LRG',ndraws=1000,prefix=''):
+        assert(obj in ['LRG','ELG'])
+        for use_data in [True,False]:
+            fig,ax = plt.subplots()
+            # Add box
+            ts= TSBox(src=obj)
+            xrange,yrange= xyrange['x_%s' % obj.lower()],xyrange['y_%s' % obj.lower()]
+            ts.add_ts_box(ax, xlim=xrange,ylim=yrange)
+            # xyrange dashed box
+            #for i in range(2):
+            #    ax[i].plot([xrange[i],xrange[i]],yrange,'k--')
+            #    ax[i].plot(xrange,[yrange[i],yrange[i]],'k--')
+            # KDE sample
+            if obj == 'LRG':
+                xname= 'rz'
+                yname= 'rw1'
+            elif obj == 'ELG':
+                xname= 'rz'
+                yname= 'gr'
+            ix= np.where(self.labels == xname)[0][0]
+            iy= np.where(self.labels == yname)[0][0]
+            if use_data:
+                ax.scatter(self.X[:,ix],self.X[:,iy],
+                           c='k',marker='o',s=10.,rasterized=True,label='Data')
+                savenm= 'kde_in_FDR_Data_%s_%s.png' % (prefix,obj)
+            else:
+                samp= self.kde.sample(n_samples=ndraws)
+                ax.scatter(samp[:,ix],samp[:,iy],
+                           c='b',marker='o',s=10.,rasterized=True,label='KDE')
+                savenm= 'kde_in_FDR_KDE_%s_%s.png' % (prefix,obj)
+            # finish
+            #ax.set_xlim(xrange[0]-1,xrange[1]+1)
+            #ax.set_ylim(yrange[0]-1,yrange[1]+1)
+            ax.set_xlim(xrange)
+            ax.set_ylim(yrange)
+            ax.legend(loc='upper right')
+            if obj == 'LRG':
+                xlab=ax.set_xlabel('r-z')
+                ylab=ax.set_ylabel('r-W1')
+            elif obj == 'ELG':
+                xlab=ax.set_xlabel('r-z')
+                ylab=ax.set_ylabel('g-r')
+            ax.set_aspect(1)
+            plt.savefig(savenm,bbox_extra_artists=[xlab,ylab], bbox_inches='tight',dpi=150)
+            plt.close()
+            print('Wrote %s' % savenm)
+
 
     def plot_1band_and_color(self, ndraws=1000,xylims=None,prefix=''):
         '''xylims -- dict of x1,y1,x2,y2,... where x1 is tuple of low,hi for first plot xaxis'''
@@ -212,14 +317,6 @@ class KernelOfTruth(object):
         plt.savefig(name,bbox_extra_artists=[xlab], bbox_inches='tight',dpi=150)
         plt.close()
         print('Wrote %s' % name)
-
-    def save(self,name='kde.pickle'):
-        fout=open(name,'w')
-        pickle.dump(self.kde,fout)
-        fout.close()
-        print('Wrote %s' % name)
-
-
 
 
 
@@ -653,7 +750,27 @@ class RedshiftPredictor(CrossValidator):
         ibest= np.where(avgerr == avgerr.min())[0][0]
         print 'lowest cross valid error= ',avgerr[ibest],'for C = ',Cvals[ibest]	
 
-
+def get_acs_six_col(self):
+    savedir='/project/projectdirs/desi/users/burleigh/desi/target/analysis/truth'
+    savenm= os.path.join(savedir,'acs_six_cols.fits')
+    if os.path.exists(savenm):
+        tab=fits_table(savenm)
+    else:
+        acsfn=os.path.join('/project/projectdirs/desi/users/burleigh/desi/target/analysis/truth','ACS-GC_published_catalogs','acs_public_galfit_catalog_V1.0.fits.gz')
+        acs=fits_table(acsfn) 
+        # Repackage
+        tab= fits_table()
+        for key in ['ra','dec','re_galfit_hi','n_galfit_hi','ba_galfit_hi','pa_galfit_hi']:
+            tab.set(key, acs.get(key))
+        # Cuts & clean
+        tab.cut( tab.flag_galfit_hi == 0 )
+        # -90,+90 --> 0,180 
+        tab.pa_galfit_hi += 90. 
+        # Save
+        tab.writeto(savenm)
+        print('Wrote %s' % savenm)
+    return tab
+ 
 
 class ELG(CommonInit):
     def __init__(self,**kwargs):
@@ -664,46 +781,6 @@ class ELG(CommonInit):
         self.kdefn= 'elg-kde.pickle'
         self.kde_shapes_fn= 'elg-shapes-kde.pickle'
         self.kde_colors_shapes_fn= 'elg-colors-shapes-kde.pickle'
-
-    def get_acs_matched_deep2(self):
-        savedir='/project/projectdirs/desi/users/burleigh/desi/target/analysis/truth'
-        deepfn= os.path.join(savedir,'deep2f1234_acsgcmatched.fits')
-        acsfn= os.path.join(savedir,'acsgc_deep2f1234matched.fits')
-        if os.path.exists(deepfn) and os.path.exists(acsfn):
-            deep2=fits_table(deepfn)
-            acs=fits_table(acsfn)
-        else:
-            # deep2 w/oii
-            fns=glob('/project/projectdirs/desi/target/analysis/deep2/v3.0/deep2-field*-oii.fits.gz')
-            deep2= CatalogueFuncs().stack(fns,textfile=False)
-            # acs
-            acsfn=os.path.join('/project/projectdirs/desi/users/burleigh/desi/target/analysis/truth','ACS-GC_published_catalogs','acs_public_galfit_catalog_V1.0.fits.gz')
-            acs=fits_table(acsfn)
-            # Match and save
-            print('matching acs,deep2')
-            imatch,imiss,d2d= Matcher().match_within(deep2,acs,dist=1./3600)
-            deep2.cut(imatch['ref'])
-            acs.cut(imatch['obs'])
-            deep2.writeto(deepfn)
-            acs.writeto(acsfn)
-            print('Wrote %s\n%s' % (deepfn,acsfn))
-        # oii cuts 
-        R_MAG= deep2.get('cfhtls_r')
-        rmag_cut= R_MAG<self.rlimit 
-        oiicut1 = 8E-17 # [erg/s/cm2]
-        zmin = 0.6
-        keep=   np.all((rmag_cut,\
-                         deep2.get('zhelio')>0.6,\
-                         deep2.get('zhelio')<1.6,\
-                         deep2.get('oii_3727_err')!=-2.0,\
-                         deep2.get('oii_3727')>oiicut1,\
-                         acs.flag_galfit_hi == 0),axis=0)
-        acs.cut(keep) # Flag hi b/c removes ~ 50 less galaxies from sample
-        # Repackage just the needed quantities
-        tab= fits_table()
-        for key in ['ra','dec','re_galfit_hi','n_galfit_hi','ba_galfit_hi','pa_galfit_hi']:
-            tab.set(key, acs.get(key))
-        return tab
 
     def get_dr3_deep2(self):
         '''version 3.0 of data discussed in
@@ -744,72 +821,127 @@ class ELG(CommonInit):
         tab.set('oii_3727', zcat.oii_3727)
         tab.set('oii_3727_err', zcat.oii_3727_err)
         # Decals
-        tab.set('rz', R_MAG - Z_MAG)
-        tab.set('gr', G_MAG - R_MAG)
+        tab.set('g_wdust', G_MAG)
         tab.set('r_wdust', R_MAG)
+        tab.set('z_wdust', Z_MAG)
+        tab.set('w1_wdust', W1_MAG) 
         tab.set('r_nodust', R_MAG_nodust)
-        tab.set('rw1', R_MAG - W1_MAG) 
+        # DR3 shape info
+        for key in ['type','shapeexp_r','shapedev_r']:
+            tab.set(key, decals.get(key))
         return tab
+ 
 
-    def get_dr3_acs_deep2(self):
-        sname='elg_dr3_acs_deep2.fits'
-        if not os.path.exists(sname):
-            acs= self.get_acs_matched_deep2()
-            deep2_dict= self.get_elgs_FDR_cuts()
-            raise ValueError
-            # Special handle deep2, only want key 'med2hiz_oiibright'
-            # loop over 'ra','dec','rz','gr', etc.
-            deep2= fits_table()
-            for key in deep2_dict.keys(): 
-                deep2.set(key, np.array( deep2_dict[key]['med2hiz_oiibright'] ))
-            print('size deep2=%d, acs=%d' % (len(deep2),len(acs)))
-            # Match and save
-            print('matching acs,deep2')
-            imatch,imiss,d2d= Matcher().match_within(deep2,acs,dist=1./3600)
-            deep2.cut(imatch['ref'])
+    def get_FDR_cuts(self,tab):
+        oiicut1 = 8E-17 # [erg/s/cm2]
+        zmin = 0.6
+        keep= {}
+        keep['lowz'] = tab.zhelio < zmin
+        keep['medz_lowO2'] = np.all((tab.zhelio > zmin,\
+                                 tab.oii_3727_err != -2.0,\
+                                 tab.oii_3727 < oiicut1), axis=0)
+        keep['medz_hiO2'] = np.all((tab.zhelio > zmin,\
+                                tab.zhelio < 1.0,\
+                                tab.oii_3727_err != -2.0,\
+                                tab.oii_3727 > oiicut1), axis=0)
+        keep['hiz_hiO2'] = np.all((tab.zhelio > 1.0,\
+                                   tab.oii_3727_err !=-2.0,\
+                               tab.oii_3727 > oiicut1),axis=0)
+        return keep 
+
+    def get_obiwan_cuts(self,tab):
+        return (tab.zhelio >= 0.8) * \
+               (tab.zhelio <= 1.4) * \
+               (tab.oii_3727 >= 0.) * \
+               (tab.oii_3727_err > 0.)
+
+    def fit_kde(self, use_acs=False):
+        # Load Data
+        if use_acs:
+            print('Matching acs to dr3,deep2')
+            deep= self.get_dr3_deep2()
+            acs= get_acs_six_col()
+            imatch,imiss,d2d= Matcher().match_within(deep,acs,dist=1./3600)
+            deep.cut(imatch['ref'])
             acs.cut(imatch['obs'])
-            print('size matched deep2,acs=%d' % len(deep2))
-            # Merge
-            both= merge_tables([deep2,acs],columns='fillzero')
-            both.writeto(sname)
-            print('Wrote %s' % sname)
-        data= fits_table(sname)
-        return data
-   
-    def plot_dr3_acs_deep2(self):
-        data= self.get_dr3_acs_deep2()
-        print('dr3_acs_deep2 points: %d' % len(data))
-        # Clean
-        data.pa += 90. # 0-180 deg
-        data.r_wdust= data.r_wdust['med2hiz_oiibright']
-        data.rz= data.rz['med2hiz_oiibright']
-        data.gr= data.gr['med2hiz_oiibright']
-        data.redshift= redshift['med2hiz_oiibright']
+            # Remove ra,dec from acs, then merge
+            for key in ['ra','dec']:
+                acs.delete_column(key)
+            tab= merge_tables([deep,acs], columns='fillzero')
+        else:
+            tab= self.get_dr3_deep2()
+        print('dr3_deep2 %d' % len(tab))
+        # Add tractor shapes
+        dic= get_tractor_shapes(tab)
+        tab.set('tractor_re', dic['re'])
+        tab.set('tractor_n', dic['n'])
+        # Cuts
+        keep= self.get_obiwan_cuts(tab)
+        tab.cut(keep)
+        print('dr3_deep2, after obiwan cut %d' % len(tab))
         # Cut bad values
-        keep= ( np.ones(len(data),bool) )
-        for col in data.get_columns():
-            keep *= (np.isfinite(data.get(col)))
-        data.cut(keep)
-        print('dr3_acs_deep2 points after cut bad vales: %d' % len(data))
-        # Fit KDE
-        labels=['r wdust','r-z','g-r','redshift',
-                're','n','ba','pa']
-        lims= [(20.5,25.),(0,2),(-0.5,1.5),(0.6,1.6),
-               (0.,100.),(0.,10.),(0.2,0.9),(0.,180.)]
-        kde_obj= KernelOfTruth([data.r_wdust,data.rz,data.gr,data.redshift,
-                                data.re,data.n,data.ba,data.pa],
+        keep= ( np.ones(len(tab),bool) )
+        for col in tab.get_columns():
+            if col == 'type':
+                continue
+            keep *= (np.isfinite(tab.get(col)))
+        tab.cut(keep)
+        print('dr3_deep2, after cut bad vals %d' % len(tab))
+        # Sanity plots
+        plot_tractor_shapes(tab,prefix='ELG_dr3deep2_expdev')
+        print('size %d %d' % (len(tab),len(tab[tab.tractor_re > 0.])))
+        tab.cut( tab.tractor_re > 0. )
+        xy_names= [('tractor_re','zhelio'),
+                   ('tractor_re','g_wdust'),
+                   ('tractor_re','r_wdust'),
+                   ('tractor_re','z_wdust'),
+                   ('zhelio','g_wdust'),
+                   ('zhelio','r_wdust'),
+                   ('zhelio','z_wdust')]
+        #xy_lims= [('tractor_re','zhelio'),
+        #           ('tractor_re','r_wdust'),
+        #           ('tractor_re','g_wdust'),
+        #           ('tractor_re','z_wdust')]
+        plot_indiv_2d(tab,xy_names=xy_names,xy_lims=None, ndraws=1000,prefix='ELG_dr3deep2')
+        # KDE
+        labels=['r_wdust','rz','gr','zhelio','tractor_re']
+                #'re','n','ba','pa']
+        lims= [(20.5,25.),(0,2),(-0.5,1.5),(0.6,1.6),(0.3,1.5)]
+              # (0.,100.),(0.,10.),(0.2,0.9),(0.,180.)]
+        kde_obj= KernelOfTruth([tab.r_wdust, tab.r_wdust - tab.z_wdust,
+                                tab.g_wdust - tab.r_wdust, tab.zhelio,
+                                tab.tractor_re],
                                labels,lims,\
                                bandwidth=0.05,kernel='tophat',\
                                kdefn=self.kde_shapes_fn,loadkde=self.loadkde)
-        xylims=dict(x1=(20.5,25.5),y1=(0,0.8),\
-                    x2=xyrange['x_elg'],y2=xyrange['y_elg'],\
-                    x3=(0.6,1.6),y3=(0.,1.0),
-                    x4=(0,100),\
-                    x5=(0,10),\
-                    x6=(0,1),\
-                    x7=(0,180))
+        xy_names= [('rz','gr'),
+                   ('tractor_re','gr'),
+                   ('tractor_re','r_wdust'),
+                   ('tractor_re','rz'),
+                   ('zhelio','tractor_re'),
+                   ('zhelio','gr'),
+                   ('zhelio','r_wdust'),
+                   ('zhelio','rz')]
+        xy_lims= [([0,2],[-0.5,1.5]),
+                  ([0.,2],[-0.5,1.5]),  
+                  ([0.,2],[20.5,25.]),  
+                  ([0.,2],[0,2]),  
+                  ([0.6,1.6],[0,2]),  
+                  ([0.6,1.6],[-0.5,1.5]),  
+                  ([0.6,1.6],[20.5,25]),  
+                  ([0.6,1.6],[0,2]),  
+                 ]
+        #kde_obj.plot_indiv_2d(xy_names,xy_lims=xy_lims, ndraws=10000,prefix='ELG_dr3deep2')
+        kde_obj.plot_FDR_using_kde(obj='ELG',ndraws=10000,prefix='dr3deep2')
+#        xylims=dict(x1=(20.5,25.5),y1=(0,0.8),\
+#                    x2=xyrange['x_elg'],y2=xyrange['y_elg'],\
+#                    x3=(0.6,1.6),y3=(0.,1.0),
+#                    x4=(0,100),\
+#                    x5=(0,10),\
+#                    x6=(0,1),\
+#                    x7=(0,180))
         #kde_obj.plot_1band_and_color(ndraws=1000,xylims=xylims,prefix='elg_')
-        kde_obj.plot_colors_shapes_z(ndraws=1000,xylims=xylims,name='elg_colors_shapes_z_kde.png')
+        #kde_obj.plot_colors_shapes_z(ndraws=1000,xylims=xylims,name='elg_colors_shapes_z_kde.png')
         if self.savekde:
             if os.path.exists(self.kde_colors_shapes_fn):
                 os.remove(self.kde_colors_shapes_fn)
@@ -909,30 +1041,6 @@ class ELG(CommonInit):
             plt.savefig(name, **kwargs)
             plt.close()
             print('Wrote {}'.format(name))
-
-    def get_FDR_cuts(self,tab):
-        oiicut1 = 8E-17 # [erg/s/cm2]
-        zmin = 0.6
-        keep= {}
-        keep['lowz'] = tab.zhelio < zmin
-        keep['medz_lowO2'] = np.all((tab.zhelio > zmin,\
-                                 tab.oii_3727_err != -2.0,\
-                                 tab.oii_3727 < oiicut1), axis=0)
-        keep['medz_hiO2'] = np.all((tab.zhelio > zmin,\
-                                tab.zhelio < 1.0,\
-                                tab.oii_3727_err != -2.0,\
-                                tab.oii_3727 > oiicut1), axis=0)
-        keep['hiz_hiO2'] = np.all((tab.zhelio > 1.0,\
-                                   tab.oii_3727_err !=-2.0,\
-                               tab.oii_3727 > oiicut1),axis=0)
-        return keep 
-
-    def get_obiwan_cuts(self,tab):
-        return (tab.zhelio >= 0.8) * \
-               (tab.zhelio <= 1.4) * \
-               (tab.oii_3727 >= 0.) * \
-               (tab.oii_3727_err > 0.)
-
 
     def plot_FDR(self):
         tab= self.get_dr3_deep2()
@@ -1180,6 +1288,75 @@ class ELG(CommonInit):
                 os.remove(self.kde_shapes_fn)
             kde_obj.save(name=self.kde_shapes_fn)
 
+# Returns re,n measured by tractor given a Tractor Cataluge
+def get_tractor_shapes(cat):
+    d= {}
+    for key in ['re','n']:
+        d[key]= np.zeros(len(cat))-1
+    # SIMP
+    #keep= (cat.type == 'SIMP') * (cat.shapeexp_r > 0.)
+    #d['re'][keep]= cat.shapeexp_r[keep]
+    #d['n'][keep]= 1.
+    # EXP
+    keep= (cat.type == 'EXP') * (cat.shapeexp_r > 0.)
+    d['re'][keep]= cat.shapeexp_r[keep]
+    d['n'][keep]= 1.
+    # DEV
+    keep= (cat.type == 'DEV') * (cat.shapedev_r > 0.)
+    d['re'][keep]= cat.shapedev_r[keep]
+    d['n'][keep]= 4.
+    return d
+
+def plot_tractor_shapes(cat,prefix=''):
+    for name,rng in zip(['tractor_re','tractor_n'],
+                        [(0,2),(1,4)]):
+        fig,ax= plt.subplots()
+        keep= cat.get(name) > 0.
+        #h,edges= np.histogram(cat.get(name)[keep],bins=40,normed=True)
+        #binc= (edges[1:]+edges[:-1])/2.
+        #ax.step(binc,h,where='mid',lw=1,c='b')
+        _=ax.hist(cat.get(name)[keep],bins=100,normed=True,range=rng)
+        xlab= ax.set_xlabel(name)
+        ylab= ax.set_ylabel('PDF')
+        savenm= 'tractor_%s_%s.png' % (prefix,name)
+        plt.savefig(savenm,bbox_extra_artists=[xlab,ylab], bbox_inches='tight',dpi=150)
+        plt.close()
+        print('Wrote %s' % savenm)
+
+
+def plot_tractor_galfit_shapes(cat,prefix=''):
+    for name in ['re','n']:
+        fig,ax= plt.subplots()
+        keep= cat.get('tractor_'+name) > 0.
+        ax.scatter(cat.get(name)[keep], cat.get('tractor_'+name)[keep],
+                   c='b',marker='o',s=10.,rasterized=True)
+        xlab= ax.set_xlabel('galfit_hi_%s' % name)
+        ylab= ax.set_ylabel('tractor_%s' % name)
+        savenm= 'tractor_galfit_%s_%s.png' % (prefix,name)
+        plt.savefig(savenm,bbox_extra_artists=[xlab,ylab], bbox_inches='tight',dpi=150)
+        plt.close()
+        print('Wrote %s' % savenm)
+ 
+# 2D plots
+def plot_indiv_2d(tab,xy_names=None,xy_lims=None, ndraws=1000,prefix=''):
+    assert(xy_names)
+    for i,_ in enumerate(xy_names):
+        xname= xy_names[i][0]
+        yname= xy_names[i][1]
+        # Plot
+        fig,ax= plt.subplots()
+        ax.scatter(tab.get(xname),tab.get(yname),
+                   c='b',marker='o',s=10.,rasterized=True)
+        xlab= ax.set_xlabel(xname)
+        ylab= ax.set_ylabel(yname)
+        if xy_lims:
+            ax.set_xlim(xy_lims[i][0])
+            ax.set_ylim(xy_lims[i][1])
+        savenm= 'plot_2d_%s_%s_%s.png' % (prefix,xname,yname)
+        plt.savefig(savenm,bbox_extra_artists=[xlab,ylab], bbox_inches='tight',dpi=150)
+        plt.close()
+        print('Wrote %s' % savenm)
+
 
 class LRG(CommonInit):
     def __init__(self,**kwargs):
@@ -1190,42 +1367,6 @@ class LRG(CommonInit):
         self.kdefn= 'lrg-kde.pickle'
         self.kde_shapes_fn= 'lrg-shapes-kde.pickle'
 
-    def get_acs_matched_cosmoszphot(self):
-        savedir='/project/projectdirs/desi/users/burleigh/desi/target/analysis/truth'
-        cosmosfn= os.path.join(savedir,'cosmos_acsgcmatched.fits')
-        acsfn= os.path.join(savedir,'acsgc_cosmosmatched.fits')
-        if os.path.exists(cosmosfn) and os.path.exists(acsfn):
-            cosmos=fits_table(cosmosfn)
-            acs=fits_table(acsfn)
-        else:
-            # Cosmos zphot
-            from theValidator.catalogues import CatalogueFuncs,Matcher
-            fn='/project/projectdirs/desi/target/analysis/truth/cosmos-zphot.fits.gz'
-            cosmos= fits_table(fn)
-            # acs
-            fn=os.path.join('/project/projectdirs/desi/users/burleigh/desi/target/analysis/truth','ACS-GC_published_catalogs','acs_public_galfit_catalog_V1.0.fits.gz')
-            acs=fits_table(fn)
-            # Match and save
-            print('matching acs,cosmos-zphot')
-            imatch,imiss,d2d= Matcher().match_within(cosmos,acs,dist=1./3600)
-            cosmos.cut(imatch['ref'])
-            acs.cut(imatch['obs'])
-            cosmos.writeto(cosmosfn)
-            acs.writeto(acsfn)
-            print('Wrote %s\n%s' % (cosmosfn,acsfn))
-        # Red galaxy any z
-        keep= np.all((cosmos.get('type') == 0,\
-                      cosmos.get('mod_gal') <= 8,\
-                      acs.flag_galfit_hi == 0),axis=0)
-        acs.cut(keep) # Flag hi keeps most, flag low removes all but 50
-        # Repackage only the keys we need
-        tab= fits_table()
-        for key in ['ra','dec',
-                    're_galfit_hi','n_galfit_hi','ba_galfit_hi','pa_galfit_hi']:
-            tab.set(key, acs.get(key))
-        return tab
-        
-    
     def get_dr3_cosmos(self):
         # Cosmos
         # http://irsa.ipac.caltech.edu/data/COSMOS/gator_docs/cosmos_zphot_mag25_colDescriptions.html
@@ -1246,25 +1387,28 @@ class LRG(CommonInit):
                       W1_FLUX > 0.),axis=0)
         keep *= self.imaging_cut(decals)
         decals.cut(keep) 
-        spec.cut(keep) 
+        spec.cut(keep)
         # Repackage
         tab= fits_table()
         # Cosmos
         tab.set('ra', spec.ra)
         tab.set('dec', spec.dec)
         tab.set('zp_gal', spec.zp_gal)
-        tab.set('type', spec.type)
+        tab.set('type_zphotcomos', spec.type)
         tab.set('mod_gal', spec.mod_gal)
         # DR3
-        tab.set('rz', decals.get('decam_mag_wdust')[:,2] - decals.get('decam_mag_wdust')[:,4])
-        tab.set('rW1', decals.get('decam_mag_wdust')[:,2] - decals.get('wise_mag_wdust')[:,0])
-        tab.set('r_nodust', decals.get('decam_mag_nodust')[:,2])
-        tab.set('z_nodust', decals.get('decam_mag_nodust')[:,4])
+        tab.set('g_wdust', decals.get('decam_mag_wdust')[:,1])
         tab.set('r_wdust', decals.get('decam_mag_wdust')[:,2])
         tab.set('z_wdust', decals.get('decam_mag_wdust')[:,4])
-        tab.set('g_wdust', decals.get('decam_mag_wdust')[:,1])
+        tab.set('w1_wdust', decals.get('wise_mag_wdust')[:,0])
+        tab.set('r_nodust', decals.get('decam_mag_nodust')[:,2])
+        tab.set('z_nodust', decals.get('decam_mag_nodust')[:,4])
+        # DR3 shape info
+        for key in ['type','shapeexp_r','shapedev_r']:
+            tab.set(key, decals.get(key))
         return tab
                                  
+    
     def get_FDR_cuts(self,tab):
         keep={}  
         keep['star']= tab.type == 1
@@ -1280,11 +1424,103 @@ class LRG(CommonInit):
 
     def get_obiwan_cuts(self,tab):
         # No redshift limits, just reddish galaxy
-        return (tab.type == 0) * \
+        return (tab.type_zphotcomos == 0) * \
                (tab.mod_gal <= 8) 
         return keep
 
-
+    def fit_kde(self,use_acs=False,
+                loadkde=False,savekde=False):
+        '''No Targeting cuts on g band, but need to fit it so can insert in grz image'''
+        # Load Data
+        if use_acs:
+            print('Matching acs to dr3,cosmos')
+            cosmos= self.get_dr3_cosmos()
+            acs= get_acs_six_col()
+            imatch,imiss,d2d= Matcher().match_within(cosmos,acs,dist=1./3600)
+            cosmos.cut(imatch['ref'])
+            acs.cut(imatch['obs'])
+            # Remove ra,dec from acs, then merge
+            for key in ['ra','dec']:
+                acs.delete_column(key)
+            tab= merge_tables([cosmos,acs], columns='fillzero')
+        else:
+            tab= self.get_dr3_cosmos()
+        print('dr3_cosmos %d' % len(tab))
+        # Add tractor shapes
+        dic= get_tractor_shapes(tab) 
+        tab.set('tractor_re', dic['re'])
+        tab.set('tractor_n', dic['n'])
+        # Cuts
+        keep= self.get_obiwan_cuts(tab)
+        tab.cut(keep)
+        print('dr3_cosmos after obiwan cuts: %d' % len(tab))
+        # 9D space
+        keep= np.ones(len(tab),bool) 
+        #use_cols= ['g_wdust','r_wdust','z_wdust','w1_wdust',
+        #           'zp_gal']
+        for name in tab.get_columns():
+            if name == 'type':
+                continue
+            keep *= (np.isfinite( tab.get(name) ))
+        tab.cut(keep)
+        print('dr3_cosmos after finite cuts: %d' % len(tab))
+        # Redshift > bandwidth
+        bandwidth=0.05
+        tab.cut(tab.zp_gal - bandwidth >= 0.)
+        print('dr3_cosmos after redshift > %f: %d' % (bandwidth,len(tab)))
+        # Sanity plot
+        plot_tractor_shapes(tab,prefix='LRG_dr3cosmos_expdev')
+        print('size %d %d' % (len(tab),len(tab[tab.tractor_re > 0.])))
+        #plot_tractor_galfit_shapes(tab,prefix='LRG_dr3cosmosacs')
+        tab.cut(tab.tractor_re > 0.)
+        xy_names= [('tractor_re','zp_gal'),
+                   ('tractor_re','g_wdust'),
+                   ('tractor_re','r_wdust'),
+                   ('tractor_re','z_wdust')]
+        plot_indiv_2d(tab,xy_names=xy_names, ndraws=1000,prefix='LRG')
+        # KDE
+        names= ['z_wdust','rz','rw1','zp_gal','g_wdust','tractor_re']
+                #'re','n','ba','pa']
+        fitlims= [(17.,22.),(0,2.5),(-2,5.),(0.,1.6),(17.,29),(0.3,1.5)] #,(0.,10.),(0.2,0.9),(0.,180.)]
+        #tab.n, tab.ba, tab.pa
+        kde_obj= KernelOfTruth([tab.z_wdust, tab.r_wdust - tab.z_wdust, 
+                                tab.r_wdust - tab.w1_wdust, tab.zp_gal, 
+                                tab.g_wdust, tab.tractor_re],
+                                names,fitlims,\
+                           bandwidth=bandwidth,kernel='tophat',\
+                           kdefn=self.kdefn,loadkde=self.loadkde)
+        #kde_obj.plot_indiv_1d(lims=plotlims, ndraws=1000,prefix='lrg_dr3cosmosacs')
+        xy_names= [('rz','rw1'),
+                   ('zp_gal','tractor_re'),
+                   ('zp_gal','g_wdust'),
+                   ('zp_gal','rz'),
+                   ('zp_gal','z_wdust'),
+                   ('zp_gal','rw1'),
+                   ('tractor_re','g_wdust'),
+                   ('tractor_re','rz'),
+                   ('tractor_re','z_wdust'),
+                   ('tractor_re','rw1')]
+        xy_lims= [([0,2.5],[-2,5.]),
+                  ([0.,1.6],[0.,2.]),  
+                  ([0.,1.6],[17,29]),  
+                  ([0.,1.6],[0,2.5]),  
+                  ([0.,1.6],[17,22]),  
+                  ([0.,1.6],[-2,5.]),  
+                  ([0.,2.],[17,29]),  
+                  ([0.,2.],[0,2.5]),  
+                  ([0.,2.],[17,22]),  
+                  ([0.,2.],[-2,5]) 
+                 ]
+        kde_obj.plot_indiv_2d(xy_names,xy_lims=xy_lims, ndraws=10000,prefix='lrg_dr3cosmosacs')
+        kde_obj.plot_FDR_using_kde(obj='LRG',ndraws=10000,prefix='dr3cosmos')
+        #plotlims= [(17.,22.),(0,2.5),(-2,5.),(0.,1.6),(17.,29),(-0.5,2.)] #,(-2,10.),(-0.2,1.2),(-20,200)]
+        #kde_obj.plot_1band_and_color(ndraws=1000,xylims=xylims,prefix='lrg_')
+        #kde_obj.plot_1band_color_and_redshift(ndraws=1000,xylims=xylims,prefix='lrg_')
+        if self.savekde:
+            if os.path.exists(self.kdefn):
+                os.remove(self.kdefn)
+            kde_obj.save(name=self.kdefn)
+ 
     def plot_FDR(self):
         tab= self.get_dr3_cosmos()
         keep= self.get_FDR_cuts(tab)
@@ -1619,8 +1855,6 @@ class LRG(CommonInit):
             kde_obj.save(name=self.kde_shapes_fn)
 
 
-
-
 class STAR(CommonInit):
     def __init__(self,**kwargs):
         super(STAR,self).__init__(**kwargs)
@@ -1916,6 +2150,7 @@ if __name__ == '__main__':
     #qso.plot()
     kwargs.update(dict(DR=3, rlimit=23.4+1.))
     elg= ELG(**kwargs)
+    elg.fit_kde(use_acs=False)
     #elg.plot_FDR()
     #elg.plot_FDR_multi()
     #elg.plot_obiwan_multi()
@@ -1935,12 +2170,14 @@ if __name__ == '__main__':
     #elg.plot()
     kwargs.update(dict(zlimit=20.46+1.))
     lrg= LRG(**kwargs)
+    lrg.fit_kde(use_acs=False)
+    raise ValueError
+    #lrg.plot_dr3_cosmos_acs()
     #lrg.plot_FDR()
     #lrg.plot_FDR_multi()
     #lrg.plot_obiwan_multi()
     lrg.plot_FDR_mag_dist()
     lrg.plot_obiwan_mag_dist()
-    raise ValueError
     lrg.plot_LRG_FDR_mag_dist()
     lrg.plot_LRGs_in_ELG_FDR()
     lrg.plot_FDR()
