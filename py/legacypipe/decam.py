@@ -107,6 +107,15 @@ class DecamImage(CPImage, CalibMixin):
         good = np.ones(len(ccds), bool)
         return np.flatnonzero(good)
  
+    @classmethod
+    def bad_astrometry(self, survey, ccds):
+        '''
+        Mosaic and Bok CP can have bad astrometric solution in CP header. Don't know why yet.
+        see email: "3/23/2017: Removing bad WCS data from dr4b"
+        '''
+        good = np.ones(len(ccds), bool)
+        return np.flatnonzero(good)
+ 
 
     @classmethod
     def apply_blacklist(self, survey, ccds):

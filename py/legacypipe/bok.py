@@ -126,6 +126,24 @@ class BokImage(CPImage, CalibMixin):
         n0 = n 
         return np.flatnonzero(good)
 
+    @classmethod
+    def bad_astrometry(self, survey, ccds):
+        '''
+        Mosaic and Bok CP can have bad astrometric solution in CP header. Don't know why yet.
+        see email: "3/23/2017: Removing bad WCS data from dr4b"
+        '''
+        good = np.ones(len(ccds), bool)
+        n0 = sum(good)
+        ccdnum= np.char.replace(ccds.ccdname,'ccd','').astype(ccds.image_hdu.dtype)
+        flag= (np.sqrt(ccds.ccdrarms**2 + ccds.ccddecrms**2) >= 0.1) * \
+              (ccds.ccdphrms >= 0.1)
+        good[flag]= False
+        n = sum(good)
+        print('Flagged', n0-n, 'bad_astrometry')
+        n0 = n 
+        return np.flatnonzero(good)
+
+
 
 #    def read_sky_model(self, imghdr=None, **kwargs):
 #        ''' Bok CP does same sky subtraction as Mosaic CP, so just

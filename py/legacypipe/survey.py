@@ -1305,6 +1305,25 @@ Now using the current directory as LEGACY_SURVEY_DIR, but this is likely to fail
                 good[Icam[Igood]] = True
         return np.flatnonzero(good)
 
+    def bad_astrometry(self, ccds):
+        '''
+        Mosaic and Bok CP can have bad astrometric solution in CP header. Don't know why yet.
+        see email: "3/23/2017: Removing bad WCS data from dr4b"
+        '''
+        cameras = np.unique(ccds.camera)
+        print('Finding other_bad_things.  Cameras:', cameras)
+        good = np.zeros(len(ccds), bool)
+        for cam in cameras:
+            imclass = self.image_class_for_camera(cam)
+            Icam = np.flatnonzero(ccds.camera == cam)
+            print('Checking', len(Icam), 'images from camera', cam)
+            Igood = imclass.ccdname_hdu_match(self, ccds[Icam])
+            print('Keeping', len(Igood), 'unflagged CCD exposures from camera', cam)
+            if len(Igood):
+                good[Icam[Igood]] = True
+        return np.flatnonzero(good)
+
+
 
     def apply_blacklist(self, ccds):
         '''
