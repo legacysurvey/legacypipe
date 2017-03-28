@@ -1275,7 +1275,7 @@ Now using the current directory as LEGACY_SURVEY_DIR, but this is likely to fail
         For mosaic only, ensures ccds are 1/3 pixel interpolated. Nothing for other cameras
         '''
         cameras = np.unique(ccds.camera)
-        print('Finding other_bad_things.  Cameras:', cameras)
+        print('Finding has_third_pixel.  Cameras:', cameras)
         good = np.zeros(len(ccds), bool)
         for cam in cameras:
             imclass = self.image_class_for_camera(cam)
@@ -1293,7 +1293,7 @@ Now using the current directory as LEGACY_SURVEY_DIR, but this is likely to fail
         duplicated zeropoint info from one of the other four ccds
         '''
         cameras = np.unique(ccds.camera)
-        print('Finding other_bad_things.  Cameras:', cameras)
+        print('Finding ccdname_hdu_match.  Cameras:', cameras)
         good = np.zeros(len(ccds), bool)
         for cam in cameras:
             imclass = self.image_class_for_camera(cam)
@@ -1311,13 +1311,13 @@ Now using the current directory as LEGACY_SURVEY_DIR, but this is likely to fail
         see email: "3/23/2017: Removing bad WCS data from dr4b"
         '''
         cameras = np.unique(ccds.camera)
-        print('Finding other_bad_things.  Cameras:', cameras)
+        print('Finding bad_astrometry.  Cameras:', cameras)
         good = np.zeros(len(ccds), bool)
         for cam in cameras:
             imclass = self.image_class_for_camera(cam)
             Icam = np.flatnonzero(ccds.camera == cam)
             print('Checking', len(Icam), 'images from camera', cam)
-            Igood = imclass.ccdname_hdu_match(self, ccds[Icam])
+            Igood = imclass.bad_astrometry(self, ccds[Icam])
             print('Keeping', len(Igood), 'unflagged CCD exposures from camera', cam)
             if len(Igood):
                 good[Icam[Igood]] = True

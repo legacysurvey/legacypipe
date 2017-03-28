@@ -4,21 +4,17 @@
 # ../bin/job_accounting.sh /scratch1/scratchdirs/desiproc/DRs/data-releases/dr4/logs/2017_02_10
 # e.g. ../bin/job_accounting.sh /abs/path/to/logdir
 
-second_round=no
-
 logdir="$1"
 slurmdir=${logdir}/slurms
-if [ "$second_round" == "yes" ];then
-    err_dir=${logdir}/errors_second_round
-else
-    err_dir=${logdir}/errors
-fi
+err_dir=${logdir}/errors
 mkdir -p $slurmdir $err_dir
 
 if [ "$NERSC_HOST" == "edison" ]; then
-    outdir=/scratch1/scratchdirs/desiproc/DRs/data-releases/dr4
+    #outdir=/scratch1/scratchdirs/desiproc/DRs/data-releases/dr4
+    outdir=/scratch1/scratchdirs/desiproc/DRs/data-releases/dr4_fixes
 else
-    outdir=/global/cscratch1/sd/desiproc/dr4/data_release/dr4
+    #outdir=/global/cscratch1/sd/desiproc/dr4/data_release/dr4
+    outdir=/global/cscratch1/sd/desiproc/dr4/data_release/dr4_fixes
 fi
 tractors=$outdir/tractor/
 don_tractor=dr4_tractors_done.tmp
@@ -28,9 +24,9 @@ logs="$logdir/log.*"
 
 # Move slurms to logdir/slurms/
 echo moving slurms to $slurmdir
-#for jobid in `find ${logdir}/log.*|awk -F "_" '{print $NF}'`;do 
-#    mv slurm-${jobid}.out $slurmdir/
-#done
+for jobid in `find ${logdir}/log.*|awk -F "_" '{print $NF}'`;do 
+    mv slurm-${jobid}.out $slurmdir/
+done
 
 # Finished tractor cats
 find $tractors -name "tractor-*.fits" > $don_tractor
@@ -54,107 +50,55 @@ echo Finished Bricks: `wc -l $don`
 
 # Errors in log files
 echo Gathering log errors
-if [ "$second_round" == "yes" ]; then
-    for fn in `find ${logdir}/log.*`; do
-        mem=`grep MemoryError $fn|wc -c`
-        mem2=`grep "exceeded memory limit" $fn|wc -c` 
-        psf=`grep "RuntimeError: Command failed: psfex" $fn |wc -c`
-        psf2=`grep "RuntimeError: Command failed: modhead" $fn |wc -c`
-        noccd=`grep "No CCDs touching brick" $fn |wc -c`
-        noccd2=`grep "No photometric CCDs touching brick" $fn |wc -c`
-        if [ "$mem" -gt 0 ]; then
-            echo $fn >> ${err_dir}/mem.txt 
-        elif [ "$mem2" -gt 0 ]; then
-            echo $fn >> ${err_dir}/mem2.txt 
-        elif [ "$psf" -gt 0 ]; then
-            echo $fn >> ${err_dir}/psf.txt 
-        elif [ "$psf2" -gt 0 ]; then
-            echo $fn >> ${err_dir}/psf2.txt 
-        elif [ "$noccd" -gt 0 ]; then
-            echo $fn >> ${err_dir}/noccd.txt 
-        elif [ "$noccd2" -gt 0 ]; then
-            echo $fn >> ${err_dir}/noccd2.txt 
-        else
-            echo $fn >> ${err_dir}/other.txt 
-        fi
-    done
-else
-    for fn in `find ${logdir}/log.*`; do
-        bad_wshot=`grep "IOError: extension not found" $fn|wc -c`
-        asserterr=`grep "AssertionError" $fn|wc -c`
-        forcedoom=`grep "Photometering WISE band 1" $fn -A 10|grep "Exceeded job memory limit"| wc -c`
-        forcedoom2=`grep "slurmstepd: error: Exceeded job memory" $fn -A 20|grep "unwise-coadds"| wc -c`
-        coaddsoom=`grep "slurmstepd: error: Exceeded job memory" $fn -B 1|grep "Stage coadds finished:"| wc -c`
-        fitoom=`grep "slurmstepd: error: Exceeded job memory" $fn -B 10|grep "Got bad log-prob -inf"| wc -c`
-        assertoom=`grep "slurmstepd: error: Exceeded job memory" $fn -B 1|grep "AssertionError"| wc -c`
-        missing=`grep "IOError: File not found" $fn |wc -c`
-        mem=`grep "Exceeded job memory limit at some point" $fn |wc -c`
-        pol=`grep "ValueError: unknown record: POLNAME1" $fn |wc -c`
-        tim=`grep "raise TimeoutError" $fn |wc -c`
-        goteof=`grep "EOFError" $fn |wc -c`
-        gotfitsio=`grep "IOError: FITSIO status" $fn |wc -c`
-        notphot=`grep "No photometric CCDs touching brick" $fn |wc -c`
-        runt=`grep "RuntimeError" $fn |wc -c`
-        calib=`grep "RuntimeError: Command failed: modhead" $fn |wc -c`
-        # Append Log name for these errors
-        if [ "$bad_wshot" -gt 0 ]; then
-            echo $fn bad wshot
-            echo $fn >> ${err_dir}/badwshot.txt 
-        elif [ "$asserterr" -gt 0 ]; then
-            echo $fn AsssertionError
-            echo $fn >> ${err_dir}/asserterr.txt 
-        elif [ "$forcedoom" -gt 0 ]; then
-            echo $fn Forced Photometry OOM
-            echo $fn >> ${err_dir}/forcedoom.txt 
-        elif [ "$forcedoom2" -gt 0 ]; then
-            echo $fn Forced Photometry OOM
-            echo $fn >> ${err_dir}/forcedoom.txt 
-        elif [ "$coaddsoom" -gt 0 ]; then
-            echo $fn Coadds OOM
-            echo $fn >> ${err_dir}/coaddsoom.txt 
-        elif [ "$fitoom" -gt 0 ]; then
-            echo $fn Fitblobs OOM
-            echo $fn >> ${err_dir}/fitblobsoom.txt 
-        elif [ "$assertoom" -gt 0 ]; then
-            echo $fn AssertionError OOM
-            echo $fn >> ${err_dir}/assertoom.txt 
-        elif [ "$missing" -gt 0 ]; then
-            echo $fn FILE NOT FOUND
-            echo $fn >> ${err_dir}/filenotfound.txt 
-        elif [ "$mem" -gt 0 ]; then
-            echo $fn Exceeded job memory limit at some point
-            echo $fn >> ${err_dir}/generaloom.txt 
-        elif [ "$pol" -gt 0 ]; then
-            echo $fn ValueError: unknown record: POLNAME1
-            echo $fn >> ${err_dir}/polname1.txt 
-        elif [ "$tim" -gt 0 ]; then
-            echo $fn raise TimeoutError
-            echo $fn >> ${err_dir}/timeout.txt 
-        elif [ "$goteof" -gt 0 ]; then
-            echo $fn EOFError
-            echo $fn >> ${err_dir}/eoferror.txt 
-        elif [ "$gotfitsio" -gt 0 ]; then
-            echo $fn IOError: FITSIO status
-            test=`grep "could not interpret primary array header" $fn|wc -c`
-            if [ "$test" -gt 0 ];then
-                echo $fn >> ${err_dir}/nohdr.txt
-            fi
-        elif [ "$notphot" -gt 0 ]; then
-            echo $fn No photometric CCDs touching brick
-            #thebrick=`grep "Command-line args" $fn|awk '{print $7}'|sed s/\'//g|sed s/\,//g`
-            echo $fn >> ${err_dir}/noccds.txt
-        elif [ "$runt" -gt 0 ]; then
-            echo $fn RuntimeError
-            echo $fn >> ${err_dir}/runtimeerror.txt
-        else 
-            echo $fn Unknown
-            echo $fn >> ${err_dir}/unknown.txt
-        #else 
-        #    echo $fn no error
-        #    echo $fn >> ${err_dir}/noerror.txt
-        fi
-    done
-fi
+for fn in `find ${logdir}/log.*`; do
+    # primary catching
+    fin=`grep "Stage writecat finished" $fn|wc -c`
+    mem=`grep MemoryError $fn|wc -c`
+    mem2=`grep "exceeded memory limit" $fn|wc -c` 
+    psf=`grep "RuntimeError: Command failed: psfex" $fn |wc -c`
+    psf2=`grep "RuntimeError: Command failed: modhead" $fn |wc -c`
+    noccd=`grep "No CCDs touching brick" $fn |wc -c`
+    noccd2=`grep "No photometric CCDs touching brick" $fn |wc -c`
+    # other things 
+    asserterr=`grep "AssertionError" $fn|wc -c`
+    missing=`grep "IOError: File not found" $fn |wc -c`
+    pol=`grep "ValueError: unknown record: POLNAME1" $fn |wc -c`
+    timeout=`grep "raise TimeoutError" $fn |wc -c`
+    goteof=`grep "EOFError" $fn |wc -c`
+    gotfitsio=`grep "IOError: FITSIO status" $fn |wc -c`
+    runt=`grep "RuntimeError" $fn |wc -c`
+    if [ "$fin" -gt 0 ]; then
+        echo $fn >> ${err_dir}/fin.txt 
+    elif [ "$mem" -gt 0 ]; then
+        echo $fn >> ${err_dir}/mem.txt 
+    elif [ "$mem2" -gt 0 ]; then
+        echo $fn >> ${err_dir}/mem2.txt 
+    elif [ "$psf" -gt 0 ]; then
+        echo $fn >> ${err_dir}/psf.txt 
+    elif [ "$psf2" -gt 0 ]; then
+        echo $fn >> ${err_dir}/psf2.txt 
+    elif [ "$noccd" -gt 0 ]; then
+        echo $fn >> ${err_dir}/noccd.txt 
+    elif [ "$noccd2" -gt 0 ]; then
+        echo $fn >> ${err_dir}/noccd2.txt 
+    elif [ "$asserterr" -gt 0 ]; then
+        echo $fn >> ${err_dir}/asserterr.txt 
+    elif [ "$missing" -gt 0 ]; then
+        echo $fn >> ${err_dir}/missing.txt 
+    elif [ "$pol" -gt 0 ]; then
+        echo $fn >> ${err_dir}/pol.txt 
+    elif [ "$timeout" -gt 0 ]; then
+        echo $fn >> ${err_dir}/timeout.txt 
+    elif [ "$noccd2" -gt 0 ]; then
+        echo $goteof >> ${err_dir}/goteof.txt 
+    elif [ "$gotfitsio" -gt 0 ]; then
+        echo $fn >> ${err_dir}/gotfitsio.txt 
+    elif [ "$runt" -gt 0 ]; then
+        echo $fn >> ${err_dir}/runt.txt 
+    else
+        echo $fn >> ${err_dir}/other.txt 
+    fi
+done
 # Report stats
 wc -l ${err_dir}/*.txt 
   

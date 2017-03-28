@@ -249,6 +249,11 @@ def stage_tims(W=3600, H=3600, pixscale=0.262, brickname=None,
     print(len(I), 'of', len(ccds), 'CCDs ccdname_hdu_match')
     ccds.cut(I)
 
+    print('Cutting out bad_astrometry...')
+    I = survey.bad_astrometry(ccds)
+    print(len(I), 'of', len(ccds), 'CCDs bad_astrometry')
+    ccds.cut(I)
+
     print('Cutting on CCDs to be used for fitting...')
     I = survey.ccds_for_fitting(brick, ccds)
     if I is not None:

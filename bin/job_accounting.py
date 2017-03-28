@@ -153,6 +153,7 @@ elif args.dowhat == 'sanity_tractors':
     fils= dict(readerr='sanity_tractors_readerr.txt',\
                nowise='sanity_tractors_nowise.txt',\
                nolc='sanity_tractors_nolc.txt',\
+               badastrom='sanity_tractors_badastromccds.txt',\
                ccds='sanity_tractors_hascutccds.txt')
     for outfn in fils.keys():
         if os.path.exists(outfn):
@@ -174,20 +175,25 @@ elif args.dowhat == 'sanity_tractors':
             print('wise LCs not in %s' % fn)
             with open(fils['nolc'],'a') as foo:
                 foo.write('%s\n' % fn)
-        # No ccds that should have been removed by cuts
-        #tractor/120/tractor-1201p715.fits 
-        #coadd/120/1201p715/legacysurvey-1201p715-ccds.fits
+        # CCDs
+        #  tractor/120/tractor-1201p715.fits 
+        #  coadd/120/1201p715/legacysurvey-1201p715-ccds.fits
         brick= os.path.basename(fn).replace('tractor-','').replace('.fits','')
         ccdfn= os.path.join( os.path.dirname(fn).replace('tractor','coadd'),\
                              brick, \
                              'legacysurvey-%s-ccds.fits' % brick )
         ccds= fits_table(ccdfn)
-        ccds2= ccds.copy()
-        ccd_cuts_inplace(ccds)
-        if len(ccds) != len(ccds2):
-            print('has ccds that should have been removed: %s' % ccdfn)
-            with open(fils['ccds'],'a') as foo:
+        # Bad Astrometry
+        flag= (np.sqrt(ccds.ccdrarms**2 + ccds.ccddecrms**2) >= 0.1)*(ccds.ccdphrms >= 0.1)
+        if np.where(flag)[0].size > 0:
+            with open(fils['badastrom'],'a') as foo:
                 foo.write('%s\n' % ccdfn)
+        #ccds2= ccds.copy()
+        #ccd_cuts_inplace(ccds)
+        #if len(ccds) != len(ccds2):
+        #    print('has ccds that should have been removed: %s' % ccdfn)
+        #    with open(fils['ccds'],'a') as foo:
+        #        foo.write('%s\n' % ccdfn)
 elif args.dowhat == 'num_grz':
     # record number of grz for a list of bricks
     bricklist= np.loadtxt= np.loadtxt(args.fn,dtype=str)
@@ -200,8 +206,8 @@ elif args.dowhat == 'num_grz':
             print('Reading %d/%d' % (cnt+1,len(bricklist)))
         # Try reading
         try:
-            #fn= "/scratch1/scratchdirs/desiproc/DRs/data-releases/dr4/coadd/%s/%s/legacysurvey-%s-ccds.fits" % (brick[:3],brick,brick)
-            fn= "/scratch1/scratchdirs/desiproc/DRs/data-releases/dr4_fixes/coadd/%s/%s/legacysurvey-%s-ccds.fits" % (brick[:3],brick,brick)
+            fn= "/scratch1/scratchdirs/desiproc/DRs/data-releases/dr4/coadd/%s/%s/legacysurvey-%s-ccds.fits" % (brick[:3],brick,brick)
+            #fn= "/scratch1/scratchdirs/desiproc/DRs/data-releases/dr4_fixes/coadd/%s/%s/legacysurvey-%s-ccds.fits" % (brick[:3],brick,brick)
             a=fits_table(fn)
         except IOError:
             print('Cannot find %s' % fn) 
@@ -222,3 +228,7 @@ elif args.dowhat == 'num_grz':
     inds= np.argsort(nccds)[::-1]
     for brick,ccd in zip(bricklist[inds][:10],nccds[inds][:10]):
         print('%d ccds in %s' % (ccd,brick))
+    with open('grz_ge_1.txt','w') as foo:
+        for brick in d['1 <= grz']:
+            foo.write('%s\n' % brick)
+    print('wrote %s' % 'grz_ge_1.txt')

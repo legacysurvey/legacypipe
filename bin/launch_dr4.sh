@@ -18,13 +18,18 @@ export outdir=/scratch1/scratchdirs/desiproc/DRs/data-releases/dr4_fixes
 
 export overwrite_tractor=no
 export full_stacktrace=no
-export early_coadds=yes
+export early_coadds=no
 export just_calibs=no
+export bad_astrom=yes
 
 #bricklist=${LEGACY_SURVEY_DIR}/bricks_bootes_W3_deep2_BOSS_5017.txt
-bricklist=${LEGACY_SURVEY_DIR}/bricks_dr4b_oom.txt
+#bricklist=${LEGACY_SURVEY_DIR}/bricks_dr4b_oom.txt
 #bricklist=${LEGACY_SURVEY_DIR}/bricks_dr4b_psf.txt
 #bricklist=${LEGACY_SURVEY_DIR}/bricks_dr4b_all.txt
+#bricklist=${LEGACY_SURVEY_DIR}/bricks_dr4b_olapdr3_grz1.txt
+#bricklist=${LEGACY_SURVEY_DIR}/bricks_dr4b_need_calibs.txt
+bricklist=${LEGACY_SURVEY_DIR}/bricks_dr4b_rerun.txt
+
 
 #bricklist=${LEGACY_SURVEY_DIR}/bricks-dr4-${NERSC_HOST}.txt
 #bricklist=${LEGACY_SURVEY_DIR}/bricks-dr4-notdone-${NERSC_HOST}.txt
@@ -39,6 +44,9 @@ if [ "$overwrite_tractor" = "yes" ]; then
     bricklist=${LEGACY_SURVEY_DIR}/bricks_bootes_W3_deep2_BOSS_5017.txt
 elif [ "$full_stacktrace" = "yes" ]; then
     bricklist=${LEGACY_SURVEY_DIR}/bricks_bootes_W3_deep2_BOSS_5017.txt
+elif [ "$bad_astrom" = "yes" ]; then
+    bricklist=${LEGACY_SURVEY_DIR}/bricks_dr4b_badastrom.txt
+    export outdir=/scratch1/scratchdirs/desiproc/DRs/data-releases/dr4_fixes_badastrom
 fi 
 echo bricklist=$bricklist
 if [ ! -e "$bricklist" ]; then
@@ -51,7 +59,7 @@ mkdir -p $statdir
 
 # Loop over bricks
 start_brick=1
-end_brick=4
+end_brick=9000
 cnt=0
 while read aline; do
     export brick=`echo $aline|awk '{print $1}'`

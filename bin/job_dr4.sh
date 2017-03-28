@@ -1,8 +1,8 @@
 #!/bin/bash -l
 
 #SBATCH -p shared
-#SBATCH -n 16
-#SBATCH -t 01:00:00
+#SBATCH -n 8
+#SBATCH -t 03:00:00
 #SBATCH --account=desi
 #SBATCH -J trace
 #SBATCH -L SCRATCH
@@ -39,7 +39,7 @@ echo just_calibs:$just_calibs
 # set usecores as desired for more mem and set shared n above to 2*usecores, keep threads=6 so more mem per thread!, then --aray equal to number largemmebricks.txt
 
 
-usecores=8
+usecores=4
 #threads=$usecores
 threads=4
 if [ "$full_stacktrace" = "yes" ];then
@@ -96,7 +96,7 @@ set -x
 year=`date|awk '{print $NF}'`
 today=`date|awk '{print $3}'`
 month=`date +"%F"|awk -F "-" '{print $2}'`
-logdir=$outdir/logs/${year}_${month}_${today}
+logdir=$outdir/logs/${year}_${month}_${today}_${NERSC_HOST}
 if [ "$full_stacktrace" = "yes" ];then
     logdir=${logdir}_stacktrace
 fi
