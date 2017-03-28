@@ -312,7 +312,8 @@ def tim_get_resamp(tim, targetwcs):
     resamp = [x.astype(np.int16) for x in (Yo,Xo,Yi,Xi)]
     return resamp
 
-def get_rgb(imgs, bands, mnmx=None, arcsinh=None, scales=None):
+def get_rgb(imgs, bands, mnmx=None, arcsinh=None, scales=None,
+            clip=True):
     '''
     Given a list of images in the given bands, returns a scaled RGB
     image.
@@ -385,8 +386,9 @@ def get_rgb(imgs, bands, mnmx=None, arcsinh=None, scales=None):
         mx = nlmap(mx)
 
     rgb = (rgb - mn) / (mx - mn)
-    return np.clip(rgb, 0., 1.)
-    
+    if clip:
+        return np.clip(rgb, 0., 1.)
+    return rgb
 
 def switch_to_soft_ellipses(cat):
     '''

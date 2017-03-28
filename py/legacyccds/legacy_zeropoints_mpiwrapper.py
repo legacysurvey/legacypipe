@@ -105,11 +105,19 @@ if __name__ == "__main__":
         # Log to unique file
         outfn=os.path.join(args.outdir,"logs",\
                            "%s" % datetime.datetime.now().strftime("%Y-%m-%d"),\
-                           "log.%d_%s" % datetime.datetime.now().strftime("%H-min%M")) 
+                           "log.rank%d_%s" % (comm.rank,datetime.datetime.now().strftime("%H-min%M")),\
+                          )
+        # Have root check for output dir
+        if comm.rank == 0:
+            if not os.path.exists(os.path.dirname(outfn)):
+                os.makedirs(os.path.dirname(outfn))
+        comm.Barrier() 
+        # 
         with stdouterr_redirected(to=outfn, comm=None):  
-            t0=ptime('before-%s' % brick,t0)
+            print('rank %d working on %d images' % (comm.rank,len(image_list)))
+            t0=ptime('before-legacy_main',t0)
             legacy_main(image_list=image_list, args=args) 
-            t0=ptime('after-%s' % brick,t0)
+            t0=ptime('after-legacy_main',t0)
     else:
         legacy_main(image_list=image_list, args=args) 
     if args.nproc > 1:

@@ -27,11 +27,11 @@ mjd_max = 10e10
 mjdw = ''
 if mjd_max != 10e10:
 	mjdw += 'mjdmax'+str(mjd_max)
-#catalogue_name = 'DECaLS_DR3'+mjdw
-catalogue_name = 'DECaLS_DR2'+mjdw
+catalogue_name = 'DECaLS_DR3'+mjdw
+#catalogue_name = 'DECaLS_DR2'+mjdw
 pixoffset = 0 # How many pixels are being removed on the edge of each CCD? 15 for DES.
-#fname = localdir+'ccds-annotated-decals.fits.gz'
-fname = localdir+'decals-ccds-annotated.fits'
+fname = localdir+'ccds-annotated-decals.fits.gz'
+#fname = localdir+'decals-ccds-annotated.fits'
 # Where to write the maps ? Make sure directory exists.
 outroot = localdir
 
@@ -90,10 +90,10 @@ propertiesToKeep = [ 'filter', 'AIRMASS', 'FWHM','mjd_obs'] \
 
 # Create big table with all relevant properties. We will send it to the Quicksip library, which will do its magic.
 #tbdata = np.core.records.fromarrays([tbdata[prop] for prop in propertiesToKeep] + [URAUL, UDECUL, URALR, UDECLR,ivar], names = propertiesToKeep + ['URAUL', 'UDECUL', 'URALR', 'UDECLR', 'ivar'])
-#tbdata = np.core.records.fromarrays([tbdata[prop] for prop in propertiesToKeep] + [ivar], names = propertiesToKeep + [ 'ivar'])
+tbdata = np.core.records.fromarrays([tbdata[prop] for prop in propertiesToKeep] + [ivar], names = propertiesToKeep + [ 'ivar'])
 
 # Do the magic! Read the table, create Healtree, project it into healpix maps, and write these maps.
-#project_and_write_maps(mode, propertiesandoperations, tbdata, catalogue_name, outroot, sample_names, inds, nside, ratiores, pixoffset, nsidesout)
+project_and_write_maps(mode, propertiesandoperations, tbdata, catalogue_name, outroot, sample_names, inds, nside, ratiores, pixoffset, nsidesout)
 #project_and_write_maps_simp(mode, propertiesandoperations, tbdata, catalogue_name, outroot, sample_names, inds, nside)
 
 # ------------------------------------------------------
