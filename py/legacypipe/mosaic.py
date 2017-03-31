@@ -135,15 +135,16 @@ class MosaicImage(CPImage, CalibMixin):
         see email: "3/23/2017: Removing bad WCS data from dr4b"
         '''
         good = np.ones(len(ccds), bool)
-        n0 = sum(good)
-        ccdnum= np.char.replace(ccds.ccdname,'ccd','').astype(ccds.image_hdu.dtype)
-        flag= (np.sqrt(ccds.ccdrarms**2 + ccds.ccddecrms**2) >= 0.1) * \
-              (ccds.ccdphrms >= 0.1)
-        good[flag]= False
-        n = sum(good)
-        print('Flagged', n0-n, 'bad_astrometry')
-        n0 = n 
         return np.flatnonzero(good)
+        #n0 = sum(good)
+        #ccdnum= np.char.replace(ccds.ccdname,'ccd','').astype(ccds.image_hdu.dtype)
+        #flag= (np.sqrt(ccds.ccdrarms**2 + ccds.ccddecrms**2) >= 0.1) * \
+        #      (ccds.ccdphrms >= 0.1)
+        #good[flag]= False
+        #n = sum(good)
+        #print('Flagged', n0-n, 'bad_astrometry')
+        #n0 = n 
+        #return np.flatnonzero(good)
 
 #    def read_sky_model(self, imghdr=None, primhdr=None, **kwargs):
 #        ''' The Mosaic CP does a good job of sky subtraction, so just
