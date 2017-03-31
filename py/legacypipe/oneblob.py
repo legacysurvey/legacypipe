@@ -773,6 +773,54 @@ class OneBlob(object):
                 print('  % -5s' % nm, 'dchisq %12.2f' % c,
                       'delta %12.2f' % (c-bestchi), more)
             print('->', keepmod)
+
+            if self.plots:
+                # DEBUGGING ptsrc vs rex
+                modlist = [('ptsrc',ptsrc),(simname,simple)]
+                modimgs = []
+                for modname,mod in modlist:
+                    srccat[0] = mod
+                    #srctractor.setModelMasks(None)
+                    mm = remap_modelmask(modelMasks, src, mod)
+                    srctractor.setModelMasks(None)
+                    modimgs.append(list(srctractor.getModelImages()))
+
+                nimgs = len(srctractor.getImages())
+                for itim in range(nimgs):
+                    chi2vals = []
+                    mod0 = None
+                    plt.clf()
+                    for imod,(modname,mod) in enumerate(modlist):
+                        modimg = modimgs[imod][itim]
+                        tim = srctractor.getImages()[itim]
+                        plt.subplot(len(modlist), 4, 4*imod+1)
+                        ima = dict(interpolation='nearest', origin='lower',
+                                   vmin=-2.*tim.sig1, vmax=5.*tim.sig1)
+                        tt = modname
+                        if modname == 'rex':
+                            tt = tt + ' re=%.2g' % mod.shape.re
+                        plt.title(tt)
+                        plt.imshow(modimg, **ima)
+                        if imod == 0:
+                            mod0 = modimg
+                        else:
+                            plt.subplot(len(modlist), 4, 4*imod+2)
+                            plt.imshow(modimg - mod0, interpolation='nearest', origin='lower',
+                                       vmin=-1.*tim.sig1, vmax=1.*tim.sig1, cmap='RdBu')
+                            plt.title('mod diff')
+                        plt.subplot(len(modlist), 4, 4*imod+3)
+                        plt.imshow(tim.getImage(), **ima)
+                        plt.subplot(len(modlist), 4, 4*imod+4)
+                        plt.imshow((tim.getImage() - modimg) * tim.getInvError(),
+                                   interpolation='nearest', origin='lower',
+                                   vmin=-3., vmax=+3.)
+                        chi2 = np.sum((tim.getImage() - modimg)**2 * tim.getInvvar())
+                        plt.title('chisq: %.2f' % chi2)
+                        chi2vals.append(chi2)
+                    plt.suptitle('Tim %s; dchisq %.2f' % (tim.name, (chi2vals[0]-chi2vals[1])))
+                    self.ps.savefig()
+                        
+                    
             
             # This is the model-selection plot
             if self.plots:
