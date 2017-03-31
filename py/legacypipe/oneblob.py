@@ -62,7 +62,8 @@ def one_blob(X):
     B.blob_npix   = np.zeros(len(B), np.int32) + np.sum(blobmask)
     B.blob_nimages= np.zeros(len(B), np.int16) + len(timargs)
     
-    ob = OneBlob('%i'%iblob, blobwcs, blobmask, timargs, srcs, bands,
+    ob = OneBlob(#'%i'%iblob,
+                 '%i'%(nblob+1), blobwcs, blobmask, timargs, srcs, bands,
                  plots, ps, simul_opt, use_ceres, hastycho, rex)
     ob.run(B)
 
@@ -338,7 +339,7 @@ class OneBlob(object):
         M = _compute_source_metrics(B.sources, self.tims, self.bands, tr)
         for k,v in M.items():
             B.set(k, v)
-            
+
         print('Blob', self.name, 'finished:', Time()-tlast)
         
     def run_model_selection(self, cat, Ibright, B):
@@ -763,7 +764,16 @@ class OneBlob(object):
             keepmod = _select_model(chisqs, nparams, galaxy_margin, self.rex)
             keepsrc = {'none':None, 'ptsrc':ptsrc, simname:simple,
                        'dev':dev, 'exp':exp, 'comp':comp}[keepmod]
-    
+            bestchi = chisqs.get(keepmod, 0.)
+            for nm in modnames:
+                c = chisqs.get(nm, 0.)
+                more = ''
+                if nm == 'rex':
+                    more = '     re = %.3g' % simple.shape.re
+                print('  % -5s' % nm, 'dchisq %12.2f' % c,
+                      'delta %12.2f' % (c-bestchi), more)
+            print('->', keepmod)
+            
             # This is the model-selection plot
             if self.plots:
                 from collections import OrderedDict
