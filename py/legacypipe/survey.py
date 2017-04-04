@@ -1309,8 +1309,10 @@ Now using the current directory as LEGACY_SURVEY_DIR, but this is likely to fail
 
     def bad_astrometry(self, ccds):
         '''
-        Mosaic and Bok CP can have bad astrometric solution in CP header. Don't know why yet.
-        see email: "3/23/2017: Removing bad WCS data from dr4b"
+        IDL zeropoints have large rarms,decrms,phrms for some CP images that look fine. Legacy
+        zeropoints is okay for majority of these cases. False alarm? Bug in IDL zeropoints? Doing
+        the most conservative thing and dropping these ccds.
+        see email: "3/30/2017: [decam-chatter 5155] Clue to zero-point errors in dr4"
         '''
         cameras = np.unique(ccds.camera)
         print('Finding bad_astrometry.  Cameras:', cameras)

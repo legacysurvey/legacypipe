@@ -130,21 +130,21 @@ class MosaicImage(CPImage, CalibMixin):
 
     @classmethod
     def bad_astrometry(self, survey, ccds):
-        '''
-        Mosaic and Bok CP can have bad astrometric solution in CP header. Don't know why yet.
-        see email: "3/23/2017: Removing bad WCS data from dr4b"
+        ''' 
+        IDL zeropoints have large rarms,decrms,phrms for some CP images that look fine. Legacy
+        zeropoints is okay for majority of these cases. False alarm? Bug in IDL zeropoints? Doing
+        the most conservative thing and dropping these ccds.
+        see email: "3/30/2017: [decam-chatter 5155] Clue to zero-point errors in dr4"
         '''
         good = np.ones(len(ccds), bool)
+        n0 = sum(good)
+        flag= np.any((np.sqrt(ccds.ccdrarms**2 + ccds.ccddecrms**2) > 0.1,
+                      ccds.ccdphrms > 0.2), axis=0)
+        good[flag]= False
+        n = sum(good)
+        print('Flagged', n0-n, 'bad_astrometry')
+        n0 = n 
         return np.flatnonzero(good)
-        #n0 = sum(good)
-        #ccdnum= np.char.replace(ccds.ccdname,'ccd','').astype(ccds.image_hdu.dtype)
-        #flag= (np.sqrt(ccds.ccdrarms**2 + ccds.ccddecrms**2) >= 0.1) * \
-        #      (ccds.ccdphrms >= 0.1)
-        #good[flag]= False
-        #n = sum(good)
-        #print('Flagged', n0-n, 'bad_astrometry')
-        #n0 = n 
-        #return np.flatnonzero(good)
 
 #    def read_sky_model(self, imghdr=None, primhdr=None, **kwargs):
 #        ''' The Mosaic CP does a good job of sky subtraction, so just
