@@ -281,6 +281,7 @@ def _ccds_table(camera='decam'):
         ('airmass', '>f4'),        # airmass (from header)
         #('seeing', '>f4'),        # seeing estimate (from header, arcsec)
         ('fwhm', '>f4'),          # FWHM (pixels)
+        ('fwhm2', '>f4'),          # FWHM (pixels)
         #('arawgain', '>f4'),       
         ('gain', '>f4'),           # average gain (camera-specific, e/ADU) -- remove?
         #('avsky', '>f4'),         # average sky value from CP (from header, ADU) -- remove?
@@ -601,6 +602,7 @@ class Measurer(object):
         print('Computing the sky background.')
         sky, sig1 = self.get_sky_and_sigma(img)
         sky1 = np.median(sky)
+        print('sky from median of image= %.2f' % sky1)
         skybr = zp0 - 2.5*np.log10(sky1 / self.pixscale / self.pixscale / exptime)
         print('  Sky brightness: {:.3f} mag/arcsec^2'.format(skybr))
         print('  Fiducial:       {:.3f} mag/arcsec^2'.format(sky0))
@@ -706,11 +708,13 @@ class Measurer(object):
         surfb= surfb[ibright,:]
         # Non-linear least squares LM fit to Moffat Profile
         fwhm= np.zeros(surfb.shape[0])
+        fwhm2= np.zeros(surfb.shape[0])
         if not self.verboseplots:
             try: 
                 for cnt in range(surfb.shape[0]):
                     popt, pcov = curve_fit(moffatPSF, radii, surfb[cnt,:], p0 = [1.5*surfb[cnt,0], 5.,2.])
                     fwhm[cnt]= popt[1]
+                    fwhm2[cnt]= 2*popt[1]*np.sqrt(2**(1/popt[2]) - 1)
             except RuntimeError:
                 # Optimal parameters not found for moffat fit
                 with open('zpts_bad_nofwhm.txt','a') as foo:
@@ -729,6 +733,7 @@ class Measurer(object):
             plt.close()
             print('Wrote %s' % fn)
         ccds['fwhm']= np.median(fwhm) * self.pixscale # arcsec
+        ccds['fwhm2']= np.median(fwhm2) * self.pixscale # arcsec
         t0= ptime('fwhm-calculation',t0)
         
         # Now match against (good) PS1 stars 
@@ -948,12 +953,16 @@ class Measurer(object):
    
  
 class DecamMeasurer(Measurer):
-    '''Class to measure a variety of quantities from a single DECam CCD.
-    UNITS: ADU/s'''
+    '''DECam CP units: ADU
+    Class to measure a variety of quantities from a single DECam CCD.
+
+    Image read will be converted to e-
+    also zpt to e-
+    '''
     def __init__(self, *args, **kwargs):
         super(DecamMeasurer, self).__init__(*args, **kwargs)
 
-        self.pixscale=0.262 #fixed
+        self.pixscale=0.262 
         self.camera = 'decam'
         self.ut = self.primhdr['TIME-OBS']
         self.band = self.get_band()
@@ -961,18 +970,13 @@ class DecamMeasurer(Measurer):
         self.dec_bore = dmsstring2dec(self.primhdr['TELDEC'])
         self.gain = self.hdr['ARAWGAIN'] # hack! average gain [electron/sec]
 
-        print('Hack! Using a constant gain!')
-        corr = 2.5 * np.log10(self.gain)
-        #corr = 2.5 * np.log10(self.gain) - 2.5 * np.log10(self.exptime)
-        #corr = 0.
-        # From /global/homes/a/arjundey/idl/pro/observing/decstat.pro
-        # 1/6/2017
-        self.zp0 =  dict(g = 26.610,r = 26.818,z = 26.484)
-        self.sky0 = dict(g = 22.04,r = 20.91,z = 18.46)
-        for b in self.zp0.keys():
-            self.zp0[b]-= corr  # decstat.pro
-            #self.sky0[b]+= corr
+        # /global/homes/a/arjundey/idl/pro/observing/decstat.pro
+        self.zp0 =  dict(g = 26.610,r = 26.818,z = 26.484) # ADU/sec
+        self.sky0 = dict(g = 22.04,r = 20.91,z = 18.46) # AB mag/arcsec^2
         self.k_ext = dict(g = 0.17,r = 0.10,z = 0.06)
+        # --> e/sec
+        for b in self.zp0.keys(): 
+            self.zp0[b] += -2.5*np.log10(self.gain)  
     
     def get_band(self):
         band = self.primhdr['FILTER']
@@ -1000,6 +1004,8 @@ class DecamMeasurer(Measurer):
             # Read
             img, hdr = fitsio.read(imgfn, ext=self.ext, header=True)
             mask, junk = fitsio.read(maskfn, ext=self.ext, header=True)
+        # ADU --> e
+        img *= self.gain 
         return hdr,img,mask
     
     def read_image(self):
@@ -1010,6 +1016,7 @@ class DecamMeasurer(Measurer):
         #img= fits[ext].read()
         #img *= self.gain
         #img *= self.gain / self.exptime
+        img *= self.gain 
         return img, hdr
      
     def get_wcs(self):
@@ -1026,21 +1033,21 @@ class Mosaic3Measurer(Measurer):
     def __init__(self, *args, **kwargs):
         super(Mosaic3Measurer, self).__init__(*args, **kwargs)
 
-        self.pixscale=0.260 #KJB, see mosstat.pro
+        self.pixscale=0.262 # 0.260 is right, but mosstat.pro has 0.262
         self.camera = 'mosaic3'
         self.band= self.get_band()
         self.ut = self.primhdr['TIME-OBS']
         self.ra_bore = hmsstring2ra(self.primhdr['TELRA'])
         self.dec_bore = dmsstring2dec(self.primhdr['TELDEC'])
         #self.gain = self.hdr['GAIN'] # hack! average gain
-        self.gain = 1.8 #Average raw, see mosstat
+        self.gain = self.hdr['ARAWGAIN'] #1.8
 
-        print('Hack! Using an average Mosaic3 zeropoint!!')
-        #corr = 2.5 * np.log10(self.gain) 
-        corr = 0. 
-        self.zp0 = dict(z = 26.552 + corr)
-        self.sky0 = dict(z = 18.46 + corr)
+        self.zp0 = dict(z = 26.552)
+        self.sky0 = dict(z = 18.46)
         self.k_ext = dict(z = 0.06)
+        # --> e/sec
+        for b in self.zp0.keys(): 
+            self.zp0[b] += -2.5*np.log10(self.gain)  
 
     def get_band(self):
         band = self.primhdr['FILTER']
@@ -1074,29 +1081,35 @@ class NinetyPrimeMeasurer(Measurer):
     def __init__(self, *args, **kwargs):
         super(NinetyPrimeMeasurer, self).__init__(*args, **kwargs)
         
-        self.pixscale=0.455 #KJB, fixed
+        self.pixscale= 0.470 # 0.455 is correct, but mosstat.pro has 0.470
         self.camera = '90prime'
         self.band= self.get_band()
         self.ra_bore = hmsstring2ra(self.primhdr['RA'])
         self.dec_bore = dmsstring2dec(self.primhdr['DEC'])
         self.ut = self.primhdr['UT']
 
+        # Can't find what people are using for this!
+        # 1.4 is close to average of hdr['GAIN[1-16]']
+        self.gain= 1.4 
         # Average (nominal) gain values.  The gain is sort of a hack since this
         # information should be scraped from the headers, plus we're ignoring
         # the gain variations across amplifiers (on a given CCD).
-        gaindict = dict(ccd1 = 1.47, ccd2 = 1.48, ccd3 = 1.42, ccd4 = 1.4275)
+        #gaindict = dict(ccd1 = 1.47, ccd2 = 1.48, ccd3 = 1.42, ccd4 = 1.4275)
         #self.gain = gaindict[self.ccdname.lower()]
-        self.gain = 1.3 #KJB, average raw see bokstat
 
         # Nominal zeropoints, sky brightness, and extinction values (taken from
         # rapala.ninetyprime.boketc.py).  The sky and zeropoints are both in
         # ADU, so account for the gain here.
         #corr = 2.5 * np.log10(self.gain)
-        corr=0.
-        self.zp0 = dict(g = 25.55 + corr, r = 25.38 + corr)
-        self.sky0 = dict(g = 22.10 + corr, r = 21.07 + corr)
-        self.k_ext = dict(g = 0.17, r = 0.10)
 
+        # /global/homes/a/arjundey/idl/pro/observing/bokstat.pro
+        self.zp0 =  dict(g = 26.93,r = 27.01,z = 26.552) # ADU/sec
+        self.sky0 = dict(g = 22.04,r = 20.91,z = 18.46) # AB mag/arcsec^2
+        self.k_ext = dict(g = 0.17,r = 0.10,z = 0.06)
+        # --> e/sec
+        for b in self.zp0.keys(): 
+            self.zp0[b] += -2.5*np.log10(self.gain)  
+    
     def get_band(self):
         band = self.primhdr['FILTER']
         band = band.split()[0]
@@ -1179,11 +1192,14 @@ def measure_image(img_fn, **measureargs):
         primhdr = fitsio.read_header(img_fn)
     except ValueError:
         # skip zpt for this image 
+        print('Error reading img_fn=%s, see %s' % \
+                (img_fn,'zpts_bad_headerskipimage.txt')) 
         with open('zpts_bad_headerskipimage.txt','a') as foo:
             foo.write('%s\n' % (img_fn,))
         ccds = []
         stars = []
-        for ext in extlist:
+        # FIX ME!! 4 should depend on camera, 60 for decam, 4 for mosaic,bok
+        for cnt in range(4):
             ccds.append( _ccds_table() )
             stars.append( _stars_table() )
         ccds = vstack(ccds)

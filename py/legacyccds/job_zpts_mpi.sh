@@ -2,7 +2,7 @@
 
 #SBATCH -p debug
 #SBATCH -N 1
-#SBATCH -t 00:15:00
+#SBATCH -t 00:10:00
 #SBATCH --account=desi
 #SBATCH -J trace
 #SBATCH --mail-user=kburleigh@lbl.gov

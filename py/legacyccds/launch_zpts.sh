@@ -3,7 +3,8 @@
 #export camera=mosaicz
 export camera=decam
 
-export outdir=/global/cscratch1/sd/kaylanb/zeropoints
+#export outdir=/global/cscratch1/sd/kaylanb/zeropoints
+export outdir=/global/cscratch1/sd/kaylanb/zeropoints_test
 export imagelist=${outdir}/${camera}_imagelist.txt
 echo imagelist=$imagelist
 if [ ! -e "$imagelist" ]; then

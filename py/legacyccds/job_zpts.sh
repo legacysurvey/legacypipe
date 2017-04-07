@@ -1,8 +1,8 @@
 #!/bin/bash -l
 
-#SBATCH -p shared
-#SBATCH -n 4
-#SBATCH -t 01:00:00
+#SBATCH -p debug
+#SBATCH -N 1
+#SBATCH -t 00:30:00
 #SBATCH --account=desi
 #SBATCH -J trace
 #SBATCH --mail-user=kburleigh@lbl.gov
@@ -30,7 +30,7 @@ echo camera:$camera
 # set usecores as desired for more mem and set shared n above to 2*usecores, keep threads=6 so more mem per thread!, then --aray equal to number largemmebricks.txt
 
 
-usecores=2
+usecores=24
 #threads=$usecores
 threads=1
 # Limit memory to avoid 1 srun killing whole node
