@@ -1039,8 +1039,8 @@ class Mosaic3Measurer(Measurer):
         self.ut = self.primhdr['TIME-OBS']
         self.ra_bore = hmsstring2ra(self.primhdr['TELRA'])
         self.dec_bore = dmsstring2dec(self.primhdr['TELDEC'])
-        #self.gain = self.hdr['GAIN'] # hack! average gain
-        self.gain = self.hdr['ARAWGAIN'] #1.8
+        # ARAWGAIN does not exist, 1.8 or 1.94 close
+        self.gain = self.hdr['GAIN']
 
         self.zp0 = dict(z = 26.552)
         self.sky0 = dict(z = 18.46)
@@ -1218,7 +1218,7 @@ def measure_image(img_fn, **measureargs):
 
     ccds = []
     stars = []
-    for ext in extlist:
+    for ext in extlist[:1]:
         ccds1, stars1 = measure(img_fn, ext, **measureargs)
         t0= ptime('measured-ext-%s' % ext,t0)
         ccds.append(ccds1)
