@@ -1653,7 +1653,9 @@ def get_parser():
     parser = argparse.ArgumentParser(formatter_class=argparse.ArgumentDefaultsHelpFormatter,\
                                      description='Generate a legacypipe-compatible CCDs file \
                                                   from a set of reduced imaging.')
-    parser.add_argument('--image_list',action='store',help='List of images to process, if compare2arjun = True then list of legacy zeropoint files',required=True)
+    parser.add_argument('--image_list',action='store',default=None,help='if want to run all images in a text file, Note:if compare2arjun = True then list of legacy zeropoint files',required=False)
+    parser.add_argument('--image',action='store',default=None,help='if want to run a single image',required=False)
+    parser.add_argument('--prefix', type=str, default='', help='Prefix to prepend to the output files.')
     parser.add_argument('--prefix', type=str, default='', help='Prefix to prepend to the output files.')
     parser.add_argument('--verboseplots', action='store_true', default=False, help='use to plot FWHM Moffat PSF fits to the 20 brightest stars')
     parser.add_argument('--compare2arjun', action='store_true', default=False, help='turn this on and give --image-list a list of legacy zeropoint files instead of cp images')
@@ -1688,6 +1690,7 @@ def main(image_list=None,args=None):
     if not args.compare2arjun:
         measureargs.pop('compare2arjun')
     measureargs.pop('image_list')
+    measureargs.pop('image')
 
     outdir = measureargs.pop('outdir')
     if not os.path.exists(outdir):
@@ -1713,7 +1716,10 @@ def main(image_list=None,args=None):
 if __name__ == "__main__":
     parser= get_parser()  
     args = parser.parse_args()
-    images= read_lines(args.image_list) 
+    if args.image_list:
+        images= read_lines(args.image_list) 
+    elif args.image:
+        images= [args.image]
     main(image_list=images,args=args)
 
 
