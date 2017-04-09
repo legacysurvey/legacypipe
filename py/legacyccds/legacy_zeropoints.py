@@ -1706,7 +1706,10 @@ def main(image_list=None,args=None):
                                 imgfn= F.imgfn))
         # Create the file
         t0=ptime('b4-run',t0)
-        runit(image_fn, **measureargs)
+        try: 
+            runit(image_fn, **measureargs)
+        except:
+            print('zpt failed for %s' % image_fn)
         t0=ptime('after-run',t0)
     tnow= Time()
     print("TIMING:total %s" % (tnow-tbegin,))
