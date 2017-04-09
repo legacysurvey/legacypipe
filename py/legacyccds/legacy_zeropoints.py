@@ -1656,7 +1656,6 @@ def get_parser():
     parser.add_argument('--image_list',action='store',default=None,help='if want to run all images in a text file, Note:if compare2arjun = True then list of legacy zeropoint files',required=False)
     parser.add_argument('--image',action='store',default=None,help='if want to run a single image',required=False)
     parser.add_argument('--prefix', type=str, default='', help='Prefix to prepend to the output files.')
-    parser.add_argument('--prefix', type=str, default='', help='Prefix to prepend to the output files.')
     parser.add_argument('--verboseplots', action='store_true', default=False, help='use to plot FWHM Moffat PSF fits to the 20 brightest stars')
     parser.add_argument('--compare2arjun', action='store_true', default=False, help='turn this on and give --image-list a list of legacy zeropoint files instead of cp images')
     parser.add_argument('--outdir', type=str, default='.', help='Where to write zpts/,images/,logs/')

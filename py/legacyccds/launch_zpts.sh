@@ -1,7 +1,7 @@
 #!/bin/bash 
 
 #export camera=mosaic
-camera=decam
+export camera=decam
 export outdir=/global/cscratch1/sd/kaylanb/observing_paper
 
 bricklist=${outdir}/${camera}_list.txt
@@ -27,7 +27,7 @@ while read aline; do
     if [ -e "$stat_file" ]; then
         continue
     fi
-    sbatch legacyccds/job_zpts.sh --export imagefn,outdir,drfn
+    sbatch legacyccds/job_zpts.sh --export imagefn,outdir,drfn,camera
     touch $stat_file
     let cnt=${cnt}+1
 done <<< "$(sed -n ${start_brick},${end_brick}p $bricklist)"

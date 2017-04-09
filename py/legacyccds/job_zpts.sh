@@ -14,7 +14,8 @@
 
 echo imagefn:$imagefn
 echo outdir:$outdir
-echo outdir:$drfn
+echo drfn:$drfn
+echo camera:$camera
 
 usecores=2
 #threads=$usecores
@@ -52,7 +53,7 @@ set -x
 year=`date|awk '{print $NF}'`
 today=`date|awk '{print $3}'`
 month=`date +"%F"|awk -F "-" '{print $2}'`
-logdir=$outdir/logs/${year}_${month}_${today}_${NERSC_HOST}
+logdir=$outdir/logs/${camera}/${year}_${month}_${today}_${NERSC_HOST}
 mkdir -p $logdir
 log="$logdir/log.${drfn}_${SLURM_JOB_ID}"
 echo Logging to: $log
