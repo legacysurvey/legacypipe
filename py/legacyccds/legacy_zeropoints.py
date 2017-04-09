@@ -1218,7 +1218,7 @@ def measure_image(img_fn, **measureargs):
 
     ccds = []
     stars = []
-    for ext in extlist[:1]:
+    for ext in extlist:
         ccds1, stars1 = measure(img_fn, ext, **measureargs)
         t0= ptime('measured-ext-%s' % ext,t0)
         ccds.append(ccds1)
