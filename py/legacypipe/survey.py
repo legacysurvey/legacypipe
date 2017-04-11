@@ -1277,7 +1277,7 @@ Now using the current directory as LEGACY_SURVEY_DIR, but this is likely to fail
         For mosaic only, ensures ccds are 1/3 pixel interpolated. Nothing for other cameras
         '''
         cameras = np.unique(ccds.camera)
-        print('Finding other_bad_things.  Cameras:', cameras)
+        print('Finding has_third_pixel.  Cameras:', cameras)
         good = np.zeros(len(ccds), bool)
         for cam in cameras:
             imclass = self.image_class_for_camera(cam)
@@ -1295,7 +1295,7 @@ Now using the current directory as LEGACY_SURVEY_DIR, but this is likely to fail
         duplicated zeropoint info from one of the other four ccds
         '''
         cameras = np.unique(ccds.camera)
-        print('Finding other_bad_things.  Cameras:', cameras)
+        print('Finding ccdname_hdu_match.  Cameras:', cameras)
         good = np.zeros(len(ccds), bool)
         for cam in cameras:
             imclass = self.image_class_for_camera(cam)
@@ -1306,6 +1306,27 @@ Now using the current directory as LEGACY_SURVEY_DIR, but this is likely to fail
             if len(Igood):
                 good[Icam[Igood]] = True
         return np.flatnonzero(good)
+
+    def bad_astrometry(self, ccds):
+        '''
+        IDL zeropoints have large rarms,decrms,phrms for some CP images that look fine. Legacy
+        zeropoints is okay for majority of these cases. False alarm? Bug in IDL zeropoints? Doing
+        the most conservative thing and dropping these ccds.
+        see email: "3/30/2017: [decam-chatter 5155] Clue to zero-point errors in dr4"
+        '''
+        cameras = np.unique(ccds.camera)
+        print('Finding bad_astrometry.  Cameras:', cameras)
+        good = np.zeros(len(ccds), bool)
+        for cam in cameras:
+            imclass = self.image_class_for_camera(cam)
+            Icam = np.flatnonzero(ccds.camera == cam)
+            print('Checking', len(Icam), 'images from camera', cam)
+            Igood = imclass.bad_astrometry(self, ccds[Icam])
+            print('Keeping', len(Igood), 'unflagged CCD exposures from camera', cam)
+            if len(Igood):
+                good[Icam[Igood]] = True
+        return np.flatnonzero(good)
+
 
 
     def apply_blacklist(self, ccds):

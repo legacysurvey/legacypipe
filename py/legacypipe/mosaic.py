@@ -20,6 +20,16 @@ class MosaicImage(CPImage, CalibMixin):
     NOAO Community Pipeline.
     '''
 
+    # this is defined here for testing purposes (to handle small images)
+    splinesky_boxsize = 512
+
+    def __init__(self, survey, t):
+        super(MosaicImage, self).__init__(survey, t)
+        # Add poisson noise to weight map
+        self.wtfn= newWeightMap(wtfn=self.wtfn,imgfn=self.imgfn,dqfn=self.dqfn)
+        # convert FWHM into pixel units
+        self.fwhm /= self.pixscale
+
     @classmethod
     def nominal_zeropoints(self):
         # See legacypipe/ccd_cuts.py and Photometric cuts email 12/21/2016
@@ -118,26 +128,35 @@ class MosaicImage(CPImage, CalibMixin):
         n0 = n 
         return np.flatnonzero(good)
 
-
-
-    def __init__(self, survey, t):
-        super(MosaicImage, self).__init__(survey, t)
-        # Add poisson noise to weight map
-        self.wtfn= newWeightMap(wtfn=self.wtfn,imgfn=self.imgfn,dqfn=self.dqfn)
-        # convert FWHM into pixel units
-        self.fwhm /= self.pixscale
-
-    def read_sky_model(self, imghdr=None, primhdr=None, **kwargs):
-        ''' The Mosaic CP does a good job of sky subtraction, so just
-        use a constant sky level with value from the header.
+    @classmethod
+    def bad_astrometry(self, survey, ccds):
+        ''' 
+        IDL zeropoints have large rarms,decrms,phrms for some CP images that look fine. Legacy
+        zeropoints is okay for majority of these cases. False alarm? Bug in IDL zeropoints? Doing
+        the most conservative thing and dropping these ccds.
+        see email: "3/30/2017: [decam-chatter 5155] Clue to zero-point errors in dr4"
         '''
-        from tractor.sky import ConstantSky
-        # Frank recommends SKYADU
-        sky = ConstantSky(primhdr['SKYADU'])
-        sky.version = ''
-        sky.plver = primhdr.get('PLVER', '').strip()
-        sky.sig1 = primhdr.get('SKYNOISE', 0.)
-        return sky
+        good = np.ones(len(ccds), bool)
+        n0 = sum(good)
+        flag= np.any((np.sqrt(ccds.ccdrarms**2 + ccds.ccddecrms**2) > 0.1,
+                      ccds.ccdphrms > 0.2), axis=0)
+        good[flag]= False
+        n = sum(good)
+        print('Flagged', n0-n, 'bad_astrometry')
+        n0 = n 
+        return np.flatnonzero(good)
+
+#    def read_sky_model(self, imghdr=None, primhdr=None, **kwargs):
+#        ''' The Mosaic CP does a good job of sky subtraction, so just
+#        use a constant sky level with value from the header.
+#        '''
+#        from tractor.sky import ConstantSky
+#        # Frank recommends SKYADU
+#        sky = ConstantSky(primhdr['SKYADU'])
+#        sky.version = ''
+#        sky.plver = primhdr.get('PLVER', '').strip()
+#        sky.sig1 = primhdr.get('SKYNOISE', 0.)
+#        return sky
         
     def read_dq(self, **kwargs):
         '''
@@ -201,9 +220,12 @@ class MosaicImage(CPImage, CalibMixin):
                 twcs.setX0Y0(x0,y0)
             return twcs
 
-    def run_calibs(self, psfex=True, funpack=False, git_version=None,
-                   force=False, **kwargs):
-        print('run_calibs for', self.name, 'kwargs', kwargs)
+    #def run_calibs(self, psfex=True, funpack=False, git_version=None,
+    #              force=False, **kwargs):
+    def run_calibs(self, psfex=True, sky=True, se=False,
+                   funpack=False, fcopy=False, use_mask=True,
+                   force=False, just_check=False, git_version=None,
+                   splinesky=False):
         se = False
         if psfex and os.path.exists(self.psffn) and (not force):
             if self.check_psf(self.psffn):
@@ -219,6 +241,26 @@ class MosaicImage(CPImage, CalibMixin):
         if se:
             funpack = True
 
+        if sky and (not force) and (
+            (os.path.exists(self.skyfn) and not splinesky) or
+            (os.path.exists(self.splineskyfn) and splinesky)):
+            fn = self.skyfn
+            if splinesky:
+                fn = self.splineskyfn
+
+            if os.path.exists(fn):
+                try:
+                    hdr = fitsio.read_header(fn)
+                except:
+                    print('Failed to read sky file', fn, '-- deleting')
+                    os.unlink(fn)
+            if os.path.exists(fn):
+                print('File', fn, 'exists -- skipping')
+                sky = False
+
+        if just_check:
+            return (se or psfex or sky)
+
         todelete = []
         if funpack:
             # The image & mask files to process (funpacked if necessary)
@@ -230,6 +272,12 @@ class MosaicImage(CPImage, CalibMixin):
             self.run_se('mzls', imgfn, maskfn)
         if psfex:
             self.run_psfex('mzls')
+
+
+        if sky:
+            self.run_sky('mzls', splinesky=splinesky,\
+                         git_version=git_version)
+
 
         for fn in todelete:
             os.unlink(fn)

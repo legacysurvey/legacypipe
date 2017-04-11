@@ -249,6 +249,11 @@ def stage_tims(W=3600, H=3600, pixscale=0.262, brickname=None,
     print(len(I), 'of', len(ccds), 'CCDs ccdname_hdu_match')
     ccds.cut(I)
 
+    print('Cutting out bad_astrometry...')
+    I = survey.bad_astrometry(ccds)
+    print(len(I), 'of', len(ccds), 'CCDs bad_astrometry')
+    ccds.cut(I)
+
     print('Cutting on CCDs to be used for fitting...')
     I = survey.ccds_for_fitting(brick, ccds)
     if I is not None:
@@ -1903,7 +1908,7 @@ def stage_wise_forced(
         print('Cut to', len(W), 'time-resolved vs', len(tiles), 'full-depth')
         assert(len(W) == len(tiles))
         # this ought to be enough for anyone =)
-        Nepochs = 5
+        Nepochs = 7
         # Add time-resolved coadds
         for band in [1,2]:
             # W1 is bit 0 (value 0x1), W2 is bit 1 (value 0x2)

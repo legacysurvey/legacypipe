@@ -14,7 +14,7 @@ def mzls_dr4(v2=True):
         #savefn='survey-ccds-mzls-v2thruMarch19.fits.gz'
         #cpdirsfn= 'mzls_cpdirs_thruMarch19.txt'
         zpname='/global/homes/a/arjundey/ZeroPoints/mzls-v2-zpt-all-2016dec06.fits'
-        savefn='survey-ccds-dr4-mzlsv2.fits.gz'
+        savefn='NEW-survey-ccds-dr4-mzlsv2.fits.gz'
         # for dr in `find /project/projectdirs/cosmo/staging/mosaicz/MZLS_CP/CP*v2 -maxdepth 0 -type d`;do echo $(basename $dr) >> mzlsv2_cpdirs.txt ;done
         cpdirsfn= os.path.join(basedir,'mzlsv2_cpdirs.txt')
     else:
@@ -112,6 +112,33 @@ def mzls_to_20160315():
     T.writeto(outfn)
     print('Wrote', outfn)
 
+    for fn in [outfn]:
+        os.system('gzip --best ' + fn)
+
+# Runs 25+26
+def decals_run25():
+    basedir = os.environ['LEGACY_SURVEY_DIR']
+    cam = 'decam'
+    image_basedir = os.path.join(basedir, 'images')
+    TT = []
+    for fn,dirnms in [
+        ('/global/homes/a/arjundey/ZeroPoints/decals-zpt-20170228-0316.fits',
+         ['CP20170228',
+          'CP20170301',
+          'CP20170302',
+          'CP20170303',
+          'CP20170304',
+          'CP20170305',
+          'CP20170315',
+          'CP20170316',]),
+        ]:
+        T = fits_table(fn)
+        normalize_zeropoints(fn, dirnms, image_basedir, cam, T=T)
+        TT.append(T)
+    T = merge_tables(TT)
+    outfn = 'survey-ccds-run25.fits'
+    T.writeto(outfn)
+    print('Wrote', outfn)
     for fn in [outfn]:
         os.system('gzip --best ' + fn)
 
@@ -606,7 +633,9 @@ if __name__ == '__main__':
     #decals_run16()
     #mzls_to_20160315()
     #decals_run19()
-    decals_run21()
+    #decals_run21()
+
+    decals_run25()
 
     #dr4_bootes=False
     #if dr4_bootes:

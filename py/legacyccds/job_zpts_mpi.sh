@@ -2,7 +2,7 @@
 
 #SBATCH -p debug
 #SBATCH -N 1
-#SBATCH -t 00:15:00
+#SBATCH -t 00:05:00
 #SBATCH --account=desi
 #SBATCH -J trace
 #SBATCH --mail-user=kburleigh@lbl.gov
@@ -15,11 +15,11 @@ module load mpi4py-hpcp
 #bcast
 #source /scratch1/scratchdirs/desiproc/DRs/code/dr4/yu-bcast_2/activate.sh
 
-#export camera=mosaicz
-export camera=decam
+export camera=mosaic
+#export camera=decam
 
-export outdir=/global/cscratch1/sd/kaylanb/zeropoints
-export imagelist=${outdir}/${camera}_imagelist.txt
+export outdir=/global/cscratch1/sd/kaylanb/observing_paper
+export imagelist=${outdir}/${camera}_list.txt
 echo imagelist=$imagelist
 if [ ! -e "$imagelist" ]; then
     echo file=$imagelist does not exist, quitting
@@ -59,7 +59,7 @@ date
 export MKL_NUM_THREADS=1
 export OMP_NUM_THREADS=1
 srun -n $tasks -c 1 python legacyccds/legacy_zeropoints_mpiwrapper.py \
-     --image_list ${imagelist} --prefix paper --outdir ${outdir} --nproc $tasks
+     --image_list ${imagelist} --outdir ${outdir} --nproc $tasks
 date
 
 

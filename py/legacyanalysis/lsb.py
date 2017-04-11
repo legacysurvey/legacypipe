@@ -18,7 +18,7 @@ from astrometry.util.util import median_smooth
 from tractor import *
 
 from legacypipe.survey import *
-from legacypipe.catalog import *
+from legacypipe.catalog import read_fits_catalog
 
 def bin_image(data, S):
     # rebin image data
@@ -67,7 +67,8 @@ def stage_1(expnum=431202, extname='S19', plotprefix='lsb', plots=False,
     #zoomslice = (slice(y0,y1), slice(x0,x1))
     zoomslice = None
     
-    tim = im.get_tractor_image(gaussPsf=True, splinesky=True, slc=zoomslice)
+    #tim = im.get_tractor_image(gaussPsf=True, splinesky=True, slc=zoomslice)
+    tim = im.get_tractor_image(hybridPsf=True, splinesky=True, slc=zoomslice)
     print 'Tim', tim
     
     cats = []
@@ -110,9 +111,10 @@ def stage_1(expnum=431202, extname='S19', plotprefix='lsb', plots=False,
         
         # Cut to compact sources
         T.cut(np.maximum(T.shapeexp_r, T.shapedev_r) < 3.)
-        print 'Cut to', len(T), 'compact'
-        
-        cat = read_fits_catalog(T)
+        print 'Cut to', len(T), 'compact catalog objects'
+
+        cat = read_fits_catalog(T, allbands='ugrizY')
+
     else:
         cat = []
         orig_catalog = fits_table()
@@ -123,6 +125,7 @@ def stage_1(expnum=431202, extname='S19', plotprefix='lsb', plots=False,
         plt.clf()
         img = tim.getImage()
         mn,mx = np.percentile(img.ravel(), [25,99])
+        print('Image plot range:', mn, mx)
         tim.ima = dict(interpolation='nearest', origin='lower', vmin=mn, vmax=mx)
         plt.imshow(tim.getImage(), **tim.ima)
         plt.title('Orig data')
@@ -169,6 +172,13 @@ def stage_1(expnum=431202, extname='S19', plotprefix='lsb', plots=False,
     
     tr = Tractor([tim], cat)
     mod = tr.getModelImage(tim)
+    print('Model range:', mod.min(), mod.max())
+
+    # print('Model counts:', [tim.getPhotoCal().brightnessToCounts(src.getBrightness())
+    #                         for src in cat])
+    # print('Catalog:')
+    # for src in cat[:10]:
+    #     print('  ', src)
     
     if False:
         # OLD DEBUGGING
@@ -185,6 +195,14 @@ def stage_1(expnum=431202, extname='S19', plotprefix='lsb', plots=False,
         plt.imshow(mod, **tim.ima)
         plt.title('Model')
         ps.savefig()
+
+        ax = plt.axis()
+        ok,xx,yy = tim.subwcs.radec2pixelxy([src.getPosition().ra  for src in cat],
+                                            [src.getPosition().dec for src in cat])
+        plt.plot(xx, yy, 'r+')
+        plt.axis(ax)
+        ps.savefig()
+
     
     mod[mask] = 0.
     

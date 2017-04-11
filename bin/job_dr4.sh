@@ -1,15 +1,21 @@
 #!/bin/bash -l
 
 #SBATCH -p shared
-#SBATCH -n 24
-#SBATCH -t 04:00:00
+#SBATCH -n 8
+#SBATCH -t 03:00:00
 #SBATCH --account=desi
 #SBATCH -J trace
-#SBATCH --mail-user=kburleigh@lbl.gov
-#SBATCH --mail-type=END,FAIL
 #SBATCH -L SCRATCH
 #-C haswell
 #--qos=scavenger
+#--mail-user=kburleigh@lbl.gov
+#--mail-type=END,FAIL
+
+export LEGACY_SURVEY_DIR=/scratch1/scratchdirs/desiproc/DRs/dr4-bootes/dr4_fixes/legacypipe-dir
+export UNWISE_COADDS_DIR=/scratch1/scratchdirs/desiproc/unwise-coadds/fulldepth:/scratch1/scratchdirs/desiproc/unwise-coadds/w3w4
+export UNWISE_COADDS_TIMERESOLVED_DIR=/scratch1/scratchdirs/desiproc/unwise-coadds/time_resolved_neo2
+export UNWISE_COADDS_TIMERESOLVED_INDEX=/scratch1/scratchdirs/desiproc/unwise-coadds/time_resolved_neo2/time_resolved_neo2-atlas.fits
+export CODE_DIR=/scratch1/scratchdirs/desiproc/DRs/code/dr4_fixes/legacypipe
 
 #echo LD_LIBRARY_PATH; echo $LD_LIBRARY_PATH | sed -e 's#:#\n#g'
 #echo PYTHONPATH; echo $PYTHONPATH | sed -e 's#:#\n#g'
@@ -20,6 +26,8 @@ echo brick:$brick
 echo outdir:$outdir
 echo overwrite_tractor:$overwrite_tractor
 echo full_stacktrace:$full_stacktrace
+echo early_coadds:$early_coadds
+echo just_calibs:$just_calibs
 
 #-p shared
 #-n 24
@@ -31,7 +39,7 @@ echo full_stacktrace:$full_stacktrace
 # set usecores as desired for more mem and set shared n above to 2*usecores, keep threads=6 so more mem per thread!, then --aray equal to number largemmebricks.txt
 
 
-usecores=12
+usecores=4
 #threads=$usecores
 threads=4
 if [ "$full_stacktrace" = "yes" ];then
@@ -56,7 +64,14 @@ echo threads=$threads
 export extra_opt="--skip"
 if [ "$overwrite_tractor" = "yes" ]; then
     export extra_opt=""
+elif [ "$early_coadds" = "yes" ]; then
+    export extra_opt="--stage image_coadds --early-coadds"
+elif [ "$just_calibs" = "yes" ]; then
+    module load tractor-hpcp
+    export extra_opt="--skip --stage tims"
 fi
+
+####### AAHHHHHHHHHH #########
 
 
 export OMP_NUM_THREADS=$threads
@@ -81,7 +96,7 @@ set -x
 year=`date|awk '{print $NF}'`
 today=`date|awk '{print $3}'`
 month=`date +"%F"|awk -F "-" '{print $2}'`
-logdir=$outdir/logs/${year}_${month}_${today}
+logdir=$outdir/logs/${year}_${month}_${today}_${NERSC_HOST}
 if [ "$full_stacktrace" = "yes" ];then
     logdir=${logdir}_stacktrace
 fi
@@ -91,7 +106,6 @@ echo Logging to: $log
 
 echo doing srun
 date
-module load psfex-hpcp
 srun -n 1 -c $usecores python legacypipe/runbrick.py \
      --run $qdo_table \
      --brick $brick \
