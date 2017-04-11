@@ -115,6 +115,31 @@ def mzls_to_20160315():
     for fn in [outfn]:
         os.system('gzip --best ' + fn)
 
+# Run 27 + DD night Apr 04
+def decals_run27():
+    basedir = os.environ['LEGACY_SURVEY_DIR']
+    cam = 'decam'
+    image_basedir = os.path.join(basedir, 'images')
+    TT = []
+    for fn,dirnms in [
+        ('/global/homes/a/arjundey/ZeroPoints/decals-zpt-20170326-0405.fits',
+         ['CP20170326',
+          'CP20170327',
+          'CP20170328',
+          'CP20170329',
+          'CP20170330',
+          'CP20170331',
+          'CP20170405',])]:
+        T = fits_table(fn)
+        normalize_zeropoints(fn, dirnms, image_basedir, cam, T=T)
+        TT.append(T)
+    T = merge_tables(TT)
+    outfn = 'survey-ccds-run27.fits'
+    T.writeto(outfn)
+    print('Wrote', outfn)
+    for fn in [outfn]:
+        os.system('gzip --best ' + fn)
+
 # Runs 25+26
 def decals_run25():
     basedir = os.environ['LEGACY_SURVEY_DIR']
@@ -634,8 +659,8 @@ if __name__ == '__main__':
     #mzls_to_20160315()
     #decals_run19()
     #decals_run21()
-
-    decals_run25()
+    #decals_run25()
+    decals_run27()
 
     #dr4_bootes=False
     #if dr4_bootes:
