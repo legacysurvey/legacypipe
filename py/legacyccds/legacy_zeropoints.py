@@ -282,6 +282,7 @@ def _ccds_table(camera='decam'):
         #('seeing', '>f4'),        # seeing estimate (from header, arcsec)
         ('fwhm', '>f4'),          # FWHM (pixels)
         ('fwhm2', '>f4'),          # FWHM (pixels)
+        ('fwhmHDR', '>f4'),          # FWHM (pixels)
         #('arawgain', '>f4'),       
         ('gain', '>f4'),           # average gain (camera-specific, e/ADU) -- remove?
         #('avsky', '>f4'),         # average sky value from CP (from header, ADU) -- remove?
@@ -305,6 +306,7 @@ def _ccds_table(camera='decam'):
         ('skymag', '>f4'),    # average sky surface brightness [mag/arcsec^2] [=ccdskymag in decstat]
         ('skycounts', '>f4'), # median sky level [electron/pix]               [=ccdskycounts in decstat]
         ('skyrms', '>f4'),    # sky variance [electron/pix]                   [=ccdskyrms in decstat]
+        ('medskysub', '>f4'),    # sky variance [electron/pix]                   [=ccdskyrms in decstat]
         ('nstar', '>i2'),     # number of detected stars                      [=ccdnstar in decstat]
         ('nmatch', '>i2'),    # number of PS1-matched stars                   [=ccdnmatch in decstat]
         ('mdncol', '>f4'),    # median g-i color of PS1-matched main-sequence stars [=ccdmdncol in decstat]
@@ -574,6 +576,8 @@ class Measurer(object):
         ccds['gain'] = self.gain
         ccds['pixscale'] = self.pixscale
 
+        ccds['fwhmHDR']= hdr['fwhm']
+
         # Copy some header cards directly.
         hdrkey = ('avsky', 'crpix1', 'crpix2', 'crval1', 'crval2', 'cd1_1',
                   'cd1_2', 'cd2_1', 'cd2_2', 'naxis1', 'naxis2')
@@ -611,6 +615,7 @@ class Measurer(object):
         ccds['skycounts'] = sky1 # [electron/pix]
         ccds['skymag'] = skybr   # [mag/arcsec^2]
         ccds['skyrms'] /= exptime   
+        ccds['medskysub'] = np.median(np.abs(img - sky))/exptime   
         ccds['skycounts'] /= exptime 
         t0= ptime('measure-sky',t0)
 
