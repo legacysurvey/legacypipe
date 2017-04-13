@@ -11,11 +11,12 @@ ps = PlotSequence('rex')
 #h,w = 50,50
 h,w = 25,25
 
-import tractor.galaxy
-tractor.galaxy.debug_ps = PlotSequence('gal')
+#import tractor.galaxy
+#tractor.galaxy.debug_ps = PlotSequence('gal')
 
 psfh,psfw = 29,29
-psf_sigma = 2.0
+#psf_sigma = 2.35
+psf_sigma = 3.
 #psfh,psfw = 31,31
 xx,yy = np.meshgrid(np.arange(psfw), np.arange(psfh))
 psfimg = np.exp((-0.5 * ((xx-psfw//2)**2 + (yy-psfh//2)**2) / psf_sigma**2))
@@ -60,7 +61,8 @@ plt.yscale('symlog', linthreshy=1e-10)
 ps.savefig()
 
 #for re in [10., 1, 1e-1, 1e-2, 1e-3, 1e-4, 1e-6, 1e-10]:
-for re in [1e-4]:
+#for re in [2e-3, 1.05e-3, 1e-3, 0.95e-3, 5e-4]:
+for re in np.linspace(0.9e-3, 1.1e-3, 25):
     rex.pos.x = psf.pos.x = 12.
     rex.pos.y = psf.pos.y = 16.
     rex.shape.logre = np.log(re)
@@ -81,22 +83,24 @@ for re in [1e-4]:
     mx = psfmod.max()
     dmx = np.abs(rexmod - psfmod).max()
 
+    dmx2 = np.abs(rexmod2 - psfmod2).max()
+
+    doff = max(dmx, dmx2)
+    
     plt.clf()
     #ima = dict(vmin=-0.1*mx, vmax=mx, ticks=False)
     ima = dict(vmin=-6+np.log10(mx), vmax=np.log10(mx), ticks=False)
     plt.subplot(2,3,1)
     #dimshow(rexmod, **ima)
-    dimshow(np.log10(rexmod), **ima)
+    dimshow(np.log10(rexmod + doff), **ima)
     plt.title('REX (centered)')
     plt.subplot(2,3,2)
     #dimshow(psfmod, **ima)
-    dimshow(np.log10(psfmod), **ima)
+    dimshow(np.log10(psfmod + doff), **ima)
     plt.title('PSF (centered)')
     plt.subplot(2,3,3)
     dimshow(rexmod - psfmod, vmin=-dmx, vmax=dmx, cmap='RdBu', ticks=False)
     plt.title('diff: %.3g' % dmx)
-
-    dmx2 = np.abs(rexmod2 - psfmod2).max()
 
     row = rexmod2[2,:]
     print('REX (shifted) 3rd-bottom:', row[np.argmax(np.abs(row))], row)
@@ -115,11 +119,11 @@ for re in [1e-4]:
 
     plt.subplot(2,3,4)
     #dimshow(rexmod2, **ima)
-    dimshow(np.log10(rexmod2), **ima)
+    dimshow(np.log10(rexmod2 + doff), **ima)
     plt.title('REX (shifted)')
     plt.subplot(2,3,5)
     #dimshow(psfmod2, **ima)
-    dimshow(np.log10(psfmod2), **ima)
+    dimshow(np.log10(psfmod2 + doff), **ima)
     plt.title('PSF (shifted)')
     plt.subplot(2,3,6)
     dimshow(rexmod2 - psfmod2, vmin=-dmx, vmax=dmx, cmap='RdBu', ticks=False)
