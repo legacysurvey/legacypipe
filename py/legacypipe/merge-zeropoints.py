@@ -137,7 +137,7 @@ def decals_nondecals_dr5():
         ('/global/homes/a/arjundey/ZeroPoints/zeropoint-c4d_150214_075931_ooi_g_v1.fits',
          ['NonDECaLS-DR5/*'],),
         ]:
-        normalize_zeropoints(fn, dirnms, image_basedir, cam)
+        T = normalize_zeropoints(fn, dirnms, image_basedir, cam)
         TT.append(T)
 
     T = merge_tables(TT)
