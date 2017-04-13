@@ -60,9 +60,9 @@ for mux in [0.1, 0.25, 0.5]:
 plt.yscale('symlog', linthreshy=1e-10)
 ps.savefig()
 
-#for re in [10., 1, 1e-1, 1e-2, 1e-3, 1e-4, 1e-6, 1e-10]:
+for re in [10., 1, 1e-1, 1e-2, 1e-3, 1e-4, 1e-6, 1e-10]:
 #for re in [2e-3, 1.05e-3, 1e-3, 0.95e-3, 5e-4]:
-for re in np.linspace(0.9e-3, 1.1e-3, 25):
+#for re in np.linspace(0.9e-3, 1.1e-3, 25):
     rex.pos.x = psf.pos.x = 12.
     rex.pos.y = psf.pos.y = 16.
     rex.shape.logre = np.log(re)
