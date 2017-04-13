@@ -62,8 +62,7 @@ def one_blob(X):
     B.blob_npix   = np.zeros(len(B), np.int32) + np.sum(blobmask)
     B.blob_nimages= np.zeros(len(B), np.int16) + len(timargs)
     
-    ob = OneBlob(#'%i'%iblob,
-                 '%i'%(nblob+1), blobwcs, blobmask, timargs, srcs, bands,
+    ob = OneBlob('%i'%(nblob+1), blobwcs, blobmask, timargs, srcs, bands,
                  plots, ps, simul_opt, use_ceres, hastycho, rex)
     ob.run(B)
 
@@ -1700,7 +1699,7 @@ def _select_model(chisqs, nparams, galaxy_margin, rex):
         simname = 'simple'
     
     # Now choose between point source and simple model (SIMP/REX)
-    if chisqs['ptsrc'] > chisqs[simname]:
+    if chisqs['ptsrc'] - nparams['ptsrc'] > chisqs[simname] - nparams[simname]:
         #print('Keeping source; PTSRC is better than SIMPLE')
         keepmod = 'ptsrc'
     else:
