@@ -153,35 +153,39 @@ def newWeightMap(wtfn=None,imgfn=None,dqfn=None):
     from astropy.io import fits
     newfn= wtfn.replace('oow','oow_wshot')
     make_wtmap=True
-    # Skip if exists AND has all 4 hdus + primary
-    if os.path.exists(newfn):
-        hdulist = fits.open(newfn) 
-        if len(hdulist) == 5:
-            make_wtmap=False
-    if make_wtmap: 
-        print('Creating new weightmap: %s' % newfn)
-        imgobj= fits.open(imgfn) 
-        wtobj = fits.open(wtfn) 
-        dqobj = fits.open(dqfn) 
-        hdr = imgobj[0].header 
-        #read_noise= hdr['RDNOISE'] # e 
-        #gain=1.8 # fixed 
-        const_sky= hdr['SKYADU'] # e/s, Recommended sky level keyword from Frank 
-        expt= hdr['EXPTIME'] # s 
-        for hdu in range(1,len(imgobj)): 
-            cpwt= wtobj[hdu].data # s/e, 1 / [var(sky) + var(read)] 
-            cpimg= imgobj[hdu].data # e/s, img - median bkgrd  - var(sky) - var(read) + const sky 
-            cpbad= dqobj[hdu].data # bitmask, 0 is good 
-            var_SR= 1./cpwt # e/s 
-            var_Astro= np.abs(cpimg - const_sky) / expt # e/s 
-            wt= 1./(var_SR + var_Astro) # s/e 
-            # Zero out NaNs and masked pixels 
-            wt[np.isfinite(wt) == False]= 0. 
-            wt[cpbad != 0]= 0. 
-            # Overwrite w new weight 
-            wtobj[hdu].data= wt 
-        wtobj.writeto(newfn,clobber=True) 
-        print('Wrote new weightmap: %s' % newfn)
+    # Rare, but oow_wshot can get messed up
+    try:
+        # Skip if exists AND has all 4 hdus + primary
+        if os.path.exists(newfn):
+            hdulist = fits.open(newfn) 
+            if len(hdulist) == 5:
+                make_wtmap=False
+        if make_wtmap: 
+            print('Creating new weightmap: %s' % newfn)
+            imgobj= fits.open(imgfn) 
+            wtobj = fits.open(wtfn) 
+            dqobj = fits.open(dqfn) 
+            hdr = imgobj[0].header 
+            #read_noise= hdr['RDNOISE'] # e 
+            #gain=1.8 # fixed 
+            const_sky= hdr['SKYADU'] # e/s, Recommended sky level keyword from Frank 
+            expt= hdr['EXPTIME'] # s 
+            for hdu in range(1,len(imgobj)): 
+                cpwt= wtobj[hdu].data # s/e, 1 / [var(sky) + var(read)] 
+                cpimg= imgobj[hdu].data # e/s, img - median bkgrd  - var(sky) - var(read) + const sky 
+                cpbad= dqobj[hdu].data # bitmask, 0 is good 
+                var_SR= 1./cpwt # e/s 
+                var_Astro= np.abs(cpimg - const_sky) / expt # e/s 
+                wt= 1./(var_SR + var_Astro) # s/e 
+                # Zero out NaNs and masked pixels 
+                wt[np.isfinite(wt) == False]= 0. 
+                wt[cpbad != 0]= 0. 
+                # Overwrite w new weight 
+                wtobj[hdu].data= wt 
+            wtobj.writeto(newfn,clobber=True) 
+            print('Wrote new weightmap: %s' % newfn)
+    except IOError:
+        raise IOError('oow_wshot got messed up, delete %s and run again' % newfn)
     return newfn
 
 

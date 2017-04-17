@@ -99,7 +99,17 @@ class BokImage(CPImage, CalibMixin):
         that are good exposures (NOT flagged) in the bad_expid file.
         '''
         good = np.ones(len(ccds), bool)
-        print('WARNING: camera: %s not using bad_expid file' % '90prime')
+        n0 = sum(good)
+        # our made up expnums
+        bad= np.loadtxt('legacyccds/bad_expid_bok.txt',dtype=int,usecols=(0,))
+        if bad.size == 1:
+            bad= [bad]
+        for expnum in list(bad):
+            good[ccds.expnum == expnum] = False
+            #continue as usual
+            n = sum(good)
+            print('Flagged', n0-n, 'as Bad Exposures')
+            n0 = n
         return np.flatnonzero(good)
 
     @classmethod
