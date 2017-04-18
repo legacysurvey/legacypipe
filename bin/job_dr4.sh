@@ -6,16 +6,17 @@
 #SBATCH --account=desi
 #SBATCH -J trace
 #SBATCH -L SCRATCH
-#-C haswell
+#SBATCH -C haswell
 #--qos=scavenger
 #--mail-user=kburleigh@lbl.gov
 #--mail-type=END,FAIL
 
-export LEGACY_SURVEY_DIR=/scratch1/scratchdirs/desiproc/DRs/dr4-bootes/dr4_fixes/legacypipe-dir
-export UNWISE_COADDS_DIR=/scratch1/scratchdirs/desiproc/unwise-coadds/fulldepth:/scratch1/scratchdirs/desiproc/unwise-coadds/w3w4
-export UNWISE_COADDS_TIMERESOLVED_DIR=/scratch1/scratchdirs/desiproc/unwise-coadds/time_resolved_neo2
-export UNWISE_COADDS_TIMERESOLVED_INDEX=/scratch1/scratchdirs/desiproc/unwise-coadds/time_resolved_neo2/time_resolved_neo2-atlas.fits
-export CODE_DIR=/scratch1/scratchdirs/desiproc/DRs/code/dr4_fixes/legacypipe
+export LEGACY_SURVEY_DIR=/global/cscratch1/sd/desiproc/dr4/legacypipe-dir/../dr4_fixes/legacypipe-dir
+#/global/cscratch1/sd/desiproc/dr4/master_wdr4fixes/legacypipe-dir
+export UNWISE_COADDS_DIR=/global/cscratch1/sd/desiproc/dr4/unwise-coadds/fulldepth:/global/cscratch1/sd/desiproc/dr4/unwise-coadds/w3w4
+export UNWISE_COADDS_TIMERESOLVED_DIR=/global/cscratch1/sd/desiproc/dr4/unwise-coadds/time_resolved_neo2
+export UNWISE_COADDS_TIMERESOLVED_INDEX=/global/cscratch1/sd/desiproc/dr4/unwise-coadds/time_resolved_neo2/time_resolved_neo2-atlas.fits
+export CODE_DIR=/global/cscratch1/sd/desiproc/code
 
 #echo LD_LIBRARY_PATH; echo $LD_LIBRARY_PATH | sed -e 's#:#\n#g'
 #echo PYTHONPATH; echo $PYTHONPATH | sed -e 's#:#\n#g'
@@ -28,6 +29,7 @@ echo overwrite_tractor:$overwrite_tractor
 echo full_stacktrace:$full_stacktrace
 echo early_coadds:$early_coadds
 echo just_calibs:$just_calibs
+echo force_all:$force_all
 
 #-p shared
 #-n 24
@@ -69,9 +71,14 @@ elif [ "$early_coadds" = "yes" ]; then
 elif [ "$just_calibs" = "yes" ]; then
     module load tractor-hpcp
     export extra_opt="--skip --stage tims"
+elif [ "$force_all" = "yes" ]; then
+    export extra_opt="--skip --force-all"
 fi
 
-####### AAHHHHHHHHHH #########
+# allow checkpoint
+if [ "$force_all" = "no" ]; then
+    export extra_opt="${extra_opt} --checkpoint ${outdir}/checkpoints/${bri}/${brick}.pickle"
+fi
 
 
 export OMP_NUM_THREADS=$threads
@@ -92,11 +99,16 @@ qdo_table=dr4v2
 export PYTHONPATH=$CODE_DIR/legacypipe/py:${PYTHONPATH}
 cd $CODE_DIR/legacypipe/py
 
+# local tractor and astrometry.net
+export PYTHONPATH=${CODE_DIR}/tractor:${CODE_DIR}/astrometry.net/kaylan_install/lib/python:${PYTHONPATH}
+export PATH=${CODE_DIR}/astrometry.net/kaylan_install/lib/python/astrometry:${PATH}
+
+
 set -x
 year=`date|awk '{print $NF}'`
 today=`date|awk '{print $3}'`
 month=`date +"%F"|awk -F "-" '{print $2}'`
-logdir=$outdir/logs/${year}_${month}_${today}_${NERSC_HOST}
+logdir=$outdir/logs/${year}_${month}_${today}_${NERSC_HOST}_remain
 if [ "$full_stacktrace" = "yes" ];then
     logdir=${logdir}_stacktrace
 fi
@@ -111,7 +123,6 @@ srun -n 1 -c $usecores python legacypipe/runbrick.py \
      --brick $brick \
      --hybrid-psf \
      --threads $threads \
-     --checkpoint $outdir/checkpoints/${bri}/${brick}.pickle \
      --pickle "$outdir/pickles/${bri}/runbrick-%(brick)s-%%(stage)s.pickle" \
      --outdir $outdir --nsigma 6 \
      --no-write ${extra_opt} \
