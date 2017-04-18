@@ -5,6 +5,7 @@ import fitsio
 from tractor.utils import get_class_from_name
 from tractor.basics import NanoMaggies, ConstantFitsWcs, LinearPhotoCal
 from tractor.image import Image
+from tractor.sky import ConstantSky
 from tractor.tractortime import TAITime
 from .survey import SimpleGalaxy
 from astrometry.util.file import trymakedirs
@@ -269,7 +270,6 @@ class LegacySurveyImage(object):
         midsky = 0.
         if subsky:
             print('Instantiating and subtracting sky model')
-            from tractor.sky import ConstantSky
             skymod = np.zeros_like(img)
             sky.addTo(skymod)
             img -= skymod

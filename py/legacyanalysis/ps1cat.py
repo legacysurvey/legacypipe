@@ -92,6 +92,7 @@ def ps1_to_decam(psmags, band):
     psmags: 2-d array (Nstars, Nbands)
     band: [grz]
     '''
+    # https://desi.lbl.gov/trac/wiki/DecamLegacy/Reductions/Photometric
     g_index = ps1cat.ps1band['g']
     i_index = ps1cat.ps1band['i']
     gmag = psmags[:,g_index]

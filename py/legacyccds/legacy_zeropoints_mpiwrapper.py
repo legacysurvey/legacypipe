@@ -96,14 +96,18 @@ if __name__ == "__main__":
         from mpi4py.MPI import COMM_WORLD as comm
     t0=ptime('parse-args',t0)
 
-    images= read_lines(args.image_list) 
+    if args.image_list:
+        images= read_lines(args.image_list) 
+    elif args.image:
+        images= [args.image]
+
     if args.nproc > 1:
         image_list= np.array_split(images, comm.size)[comm.rank]
     else:
         image_list= np.array_split(images, 1)[0]
     if args.nproc > 1:
         # Log to unique file
-        outfn=os.path.join(args.outdir,"logs",\
+        outfn=os.path.join(args.outdir,"logs","mpi",\
                            "%s" % datetime.datetime.now().strftime("%Y-%m-%d"),\
                            "log.rank%d_%s" % (comm.rank,datetime.datetime.now().strftime("%H-min%M")),\
                           )
@@ -113,7 +117,8 @@ if __name__ == "__main__":
                 os.makedirs(os.path.dirname(outfn))
         comm.Barrier() 
         # 
-        with stdouterr_redirected(to=outfn, comm=None):  
+        #with stdouterr_redirected(to=outfn, comm=None):  
+        with stdouterr_redirected(to=outfn, comm=comm):  
             print('rank %d working on %d images' % (comm.rank,len(image_list)))
             t0=ptime('before-legacy_main',t0)
             legacy_main(image_list=image_list, args=args) 

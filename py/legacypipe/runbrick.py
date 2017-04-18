@@ -1545,11 +1545,11 @@ def _blob_iter(blobslices, blobsrcs, blobs, targetwcs, tims, cat, bands,
 
         hastycho = iblob in tychoblobs
 
-        print('Blob', nblob+1, 'of', len(blobslices), ': blob', iblob,
-              len(Isrcs), 'sources, size', blobw, 'x', blobh,
+        print('Blob', nblob+1, 'of', len(blobslices), ': blob id:', iblob,
+              'sources:', len(Isrcs), 'size:', blobw, 'x', blobh,
               #'center', (bx0+bx1)/2, (by0+by1)/2,
-              'brick X %i,%i, Y %i,%i' % (bx0,bx1,by0,by1),
-              'npix', np.sum(blobmask),
+              'brick X: %i,%i, Y: %i,%i' % (bx0,bx1,by0,by1),
+              'npix:', np.sum(blobmask),
               'one pixel:', onex,oney, 'has Tycho-2 star:', hastycho)
 
         # Here we cut out subimages for the blob...
