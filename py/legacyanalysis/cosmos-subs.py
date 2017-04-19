@@ -262,9 +262,41 @@ for iset in xrange(100):
             thisdetiv = 1./(np.hypot(ccds.sig1, ccds.addnoise) /ccds.galnorm)**2
             print('  adding factor %.2f more noise' %
                   (np.mean(ccds.addnoise / ccds.sig1)))
+            #print('  -> should yield noise', np.hypot(ccds.sig1, ccds.addnoise),
+            #      'vs target', targetsig1)
             print('  final detiv: range %g, %g' %
                   (thisdetiv.min(), thisdetiv.max()))
             print('  detivs:', sorted(thisdetiv))
+
+            #print('  -> depths:', -2.5 * (np.log10(5./np.sqrt(thisdetiv)) - 9))
+
+            from legacypipe.runcosmos import CosmosSurvey
+            survey = CosmosSurvey(subset=iset + subset_offset)
+            for c in ccds:
+                c.camera = c.camera + '+noise'
+                print('camera', c.camera)
+                im = survey.get_image_object(c)
+                print('  got image', im)
+                tim = im.get_tractor_image(splinesky=True, pixPsf=True, hybridPsf=True)
+                print('  got tim', tim)
+                print('  sig1', tim.sig1, 'vs target', targetsig1)
+                print('  galnorm', tim.galnorm, 'vs CCDs', c.galnorm)
+
+                # compute galnorm_mean like in annotated_ccds
+                # Instantiate PSF on a grid
+                S = 32
+                H,W = tim.shape
+                xx = np.linspace(1+S, W-S, 5)
+                yy = np.linspace(1+S, H-S, 5)
+                xx,yy = np.meshgrid(xx, yy)
+                galnorms = []
+                for x,y in zip(xx.ravel(), yy.ravel()):
+                    g = im.galaxy_norm(tim, x=x, y=y)
+                    galnorms.append(g)
+                print('  mean galnorm:', np.mean(galnorms))
+
+                print('  depth', -2.5 * (np.log10(5. * tim.sig1 / tim.galnorm) - 9), 'vs target', -2.5 * (np.log10(5./np.sqrt(maxiv)) - 9))
+
             detiv += np.mean(thisdetiv)
             thisset.append(ccds)
             used_expnums.append(exp.expnum)
