@@ -559,6 +559,10 @@ def main():
             brick_to_task.update(dict(zip(B.brickname[I], taskids)))
         
     if not (opt.calibs or opt.forced or opt.lsb):
+
+        for b in B:
+            print(b.brickname)
+
         sys.exit(0)
 
     bands = 'grz'

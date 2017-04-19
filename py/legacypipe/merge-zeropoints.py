@@ -147,6 +147,15 @@ def decals_nondecals_dr5():
     for fn in [outfn]:
         os.system('gzip --best ' + fn)
 
+    c = Counter(T.expid)
+    for k,v in c.most_common():
+        if v == 1:
+            break
+        print('Warning: repeated EXPNUM/CCDNAME:', k, 'appears', v, 'times')
+        I = np.flatnonzero(T.expid == k)
+        print('  filenames:', T.filename[I])
+
+
 # Run 27 + DD night Apr 04
 def decals_run27():
     basedir = os.environ['LEGACY_SURVEY_DIR']
