@@ -40,7 +40,7 @@ def ccd_cuts_inplace(ccds, use_blacklist=True):
 
 parser = argparse.ArgumentParser(description='Generate a legacypipe-compatible CCDs file from a set of reduced imaging.') 
 parser.add_argument('--therun', choices=['dr4','obiwan'],action='store', default=True) 
-parser.add_argument('--dowhat', choices=['bricks_notdone','time_per_brick','nersc_time','sanity_tractors','num_grz'],action='store', default=True) 
+parser.add_argument('--dowhat', choices=['bricks_notdone','time_per_brick','nersc_time','sanity_tractors','num_grz','badastrom','count_objects'],action='store', default=True) 
 parser.add_argument('--fn', action='store', default=False) 
 args = parser.parse_args() 
 
@@ -194,6 +194,60 @@ elif args.dowhat == 'sanity_tractors':
         #    print('has ccds that should have been removed: %s' % ccdfn)
         #    with open(fils['ccds'],'a') as foo:
         #        foo.write('%s\n' % ccdfn)
+elif args.dowhat == 'badastrom':
+    # RUN: python job_accounting.py --therun dr4 --dowhat sanity_tractors --fn dr4_tractors_done.tmp
+    # Read each finished Tractor Catalogue
+    # Append name to file if:
+    # -- error reading it
+    # -- no wise flux
+    bricks=np.loadtxt(args.fn,dtype=str)
+    assert(len(bricks) > 0)
+    # Remove file lists for clean slate
+    fils= dict(readerr='sanity_ccds_readerr.txt',\
+               badastrom='sanity_ccds_have_badastrom.txt')
+    for outfn in fils.keys():
+        if os.path.exists(outfn):
+            os.remove(outfn)
+    for cnt,brick in enumerate(bricks):
+        if cnt % 100 == 0: print('reading %d/%d' % (cnt,len(bricks)))
+        bri= brick[:3]
+        fn= '/scratch1/scratchdirs/desiproc/DRs/data-releases/dr4_fixes/coadd/%s/%s/legacysurvey-%s-ccds.fits' % (bri,brick,brick)
+        try: 
+            ccds=fits_table(fn)
+            # Bad Astrometry
+            flag= np.any((np.sqrt(ccds.ccdrarms**2 + ccds.ccddecrms**2) > 0.1,
+                         ccds.ccdphrms > 0.2), axis=0)
+            if np.where(flag)[0].size > 0:
+                with open(fils['badastrom'],'a') as foo:
+                    foo.write('%s %s\n' % (brick,fn))
+        except:
+            print('error reading %s' % fn)
+            with open(fils['readerr'],'a') as foo:
+                foo.write('%s\n' % fn)
+elif args.dowhat == 'count_objects':
+    # RUN: python job_accounting.py --therun dr4 --dowhat sanity_tractors --fn dr4_tractors_done.tmp
+    # Read each finished Tractor Catalogue
+    # Append name to file if:
+    # -- error reading it
+    # -- no wise flux
+    fns=np.loadtxt(args.fn,dtype=str)
+    assert(len(fns) > 0)
+    # Remove file lists for clean slate
+    fils= dict(readerr='sanity_tractors_readerr.txt',\
+               counts='sanity_tractors_counts.txt')
+    for outfn in fils.keys():
+        if os.path.exists(outfn):
+            os.remove(outfn)
+    # Loop over completed Tractor Cats
+    for fn in fns:
+        try: 
+            t=fits_table(fn)
+        except:
+            print('error reading %s' % fn)
+            with open(fils['readerr'],'a') as foo:
+                foo.write('%s\n' % fn)
+        with open(fils['counts'],'a') as foo:
+            foo.write('%d %s\n' % (len(t),fn))
 elif args.dowhat == 'num_grz':
     # record number of grz for a list of bricks
     bricklist= np.loadtxt= np.loadtxt(args.fn,dtype=str)

@@ -5,6 +5,7 @@ import fitsio
 from tractor.utils import get_class_from_name
 from tractor.basics import NanoMaggies, ConstantFitsWcs, LinearPhotoCal
 from tractor.image import Image
+from tractor.sky import ConstantSky
 from tractor.tractortime import TAITime
 from .survey import SimpleGalaxy
 from astrometry.util.file import trymakedirs
@@ -244,7 +245,8 @@ class LegacySurveyImage(object):
             print('Skipping zero-invvar image')
             return None
         # Negative invvars (from, eg, fpack decompression noise) cause havoc
-        assert(np.all(invvar >= 0.))
+        if not np.all(invvar >= 0.):
+            raise ValueError('not np.all(invvar >= 0.), hdu=%d fn=%s' % (self.hdu,self.wtfn))
 
         # Read data-quality (flags) map and zero out the invvars of masked pixels
         if get_dq:
@@ -268,7 +270,6 @@ class LegacySurveyImage(object):
         midsky = 0.
         if subsky:
             print('Instantiating and subtracting sky model')
-            from tractor.sky import ConstantSky
             skymod = np.zeros_like(img)
             sky.addTo(skymod)
             img -= skymod
@@ -550,7 +551,10 @@ class LegacySurveyImage(object):
             fn = self.splineskyfn
         print('Reading sky model from', fn)
         hdr = fitsio.read_header(fn)
-        skyclass = hdr['SKY']
+        try:
+            skyclass = hdr['SKY']
+        except NameError:
+            raise NameError('SKY not in header: skyfn=%s, imgfn=%s' % (fn,self.imgfn))
         clazz = get_class_from_name(skyclass)
 
         if getattr(clazz, 'from_fits', None) is not None:

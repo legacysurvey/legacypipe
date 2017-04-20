@@ -53,6 +53,12 @@ echo Gathering log errors
 for fn in `find ${logdir}/log.*`; do
     # primary catching
     fin=`grep "Stage writecat finished" $fn|wc -c`
+    nosigsrcs=`grep "No sources passed significance tests" $fn|wc -c`
+    hugefwhm=`grep "WARNING: No source with appropriate FWHM found" $fn|wc -c`
+    badoowshot=`grep "raise IOError('Empty or corrupt FITS file')" $fn|wc -c`
+    oldckpt=`grep "assert(len(R) == len(blobsrcs))" $fn|wc -c`
+    astromgitpull=`grep "IndexError: index" $fn|wc -c`
+    skynothdr=`grep "NameError: global name 'key' is not defined" $fn|wc -c`
     mem=`grep MemoryError $fn|wc -c`
     mem2=`grep "exceeded memory limit" $fn|wc -c` 
     psf=`grep "RuntimeError: Command failed: psfex" $fn |wc -c`
@@ -69,6 +75,18 @@ for fn in `find ${logdir}/log.*`; do
     runt=`grep "RuntimeError" $fn |wc -c`
     if [ "$fin" -gt 0 ]; then
         echo $fn >> ${err_dir}/fin.txt 
+    elif [ "$hugefwhm" -gt 0 ]; then
+        echo $fn >> ${err_dir}/hugefwhm.txt 
+    elif [ "$badoowshot" -gt 0 ]; then
+        echo $fn >> ${err_dir}/badoowshot.txt 
+    elif [ "$oldckpt" -gt 0 ]; then
+        echo $fn >> ${err_dir}/oldckpt.txt 
+    elif [ "$astromgitpull" -gt 0 ]; then
+        echo $fn >> ${err_dir}/astromgitpull.txt 
+    elif [ "$skynothdr" -gt 0 ]; then
+        echo $fn >> ${err_dir}/skynothdr.txt 
+    elif [ "$nosigsrcs" -gt 0 ]; then
+        echo $fn >> ${err_dir}/nosigsrcs.txt 
     elif [ "$mem" -gt 0 ]; then
         echo $fn >> ${err_dir}/mem.txt 
     elif [ "$mem2" -gt 0 ]; then

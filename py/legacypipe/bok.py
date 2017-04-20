@@ -99,7 +99,17 @@ class BokImage(CPImage, CalibMixin):
         that are good exposures (NOT flagged) in the bad_expid file.
         '''
         good = np.ones(len(ccds), bool)
-        print('WARNING: camera: %s not using bad_expid file' % '90prime')
+        n0 = sum(good)
+        # our made up expnums
+        bad= np.loadtxt('legacyccds/bad_expid_bok.txt',dtype=int,usecols=(0,))
+        if bad.size == 1:
+            bad= [bad]
+        for expnum in list(bad):
+            good[ccds.expnum == expnum] = False
+            #continue as usual
+            n = sum(good)
+            print('Flagged', n0-n, 'as Bad Exposures')
+            n0 = n
         return np.flatnonzero(good)
 
     @classmethod
@@ -166,10 +176,19 @@ class BokImage(CPImage, CalibMixin):
         dq = self._read_fits(self.dqfn, self.hdu, **kwargs)
         return dq
 
-    def read_invvar(self, **kwargs):
+    def read_invvar(self, clip=True, clipThresh=0.2, **kwargs):
         print('Reading the 90Prime oow weight map as Inverse Varianc')
-        X = self._read_fits(self.wtfn, self.hdu, **kwargs)
-        return X
+        invvar = self._read_fits(self.wtfn, self.hdu, **kwargs)
+        if clip:
+            # Clamp near-zero (incl negative!) invvars to zero.
+            # These arise due to fpack.
+            if clipThresh > 0.:
+                med = np.median(invvar[invvar > 0])
+                thresh = clipThresh * med
+            else:
+                thresh = 0.
+            invvar[invvar < thresh] = 0
+        return invvar
 
     # read the TPV header, convert it to SIP, and apply an offset from the
     # CCDs table

@@ -400,7 +400,7 @@ if __name__ == '__main__':
             T.galdepth += offset
             T.gausspsfdepth += offset
             T.gaussgaldepth += offset
-    
+
             print('Photometric:', np.unique(T.photometric))
             
             print('After:')
