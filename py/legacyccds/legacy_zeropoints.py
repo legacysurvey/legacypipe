@@ -281,7 +281,8 @@ def _ccds_table(camera='decam'):
         ('airmass', '>f4'),        # airmass (from header)
         #('seeing', '>f4'),        # seeing estimate (from header, arcsec)
         ('fwhm', '>f4'),          # FWHM (pixels)
-        ('fwhm2', '>f4'),          # FWHM (pixels)
+        #('fwhm2', '>f4'),          # FWHM (pixels)
+        #('fwhmHDR', '>f4'),          # FWHM (pixels)
         #('arawgain', '>f4'),       
         ('gain', '>f4'),           # average gain (camera-specific, e/ADU) -- remove?
         #('avsky', '>f4'),         # average sky value from CP (from header, ADU) -- remove?
@@ -305,6 +306,7 @@ def _ccds_table(camera='decam'):
         ('skymag', '>f4'),    # average sky surface brightness [mag/arcsec^2] [=ccdskymag in decstat]
         ('skycounts', '>f4'), # median sky level [electron/pix]               [=ccdskycounts in decstat]
         ('skyrms', '>f4'),    # sky variance [electron/pix]                   [=ccdskyrms in decstat]
+        #('medskysub', '>f4'),    # sky variance [electron/pix]                   [=ccdskyrms in decstat]
         ('nstar', '>i2'),     # number of detected stars                      [=ccdnstar in decstat]
         ('nmatch', '>i2'),    # number of PS1-matched stars                   [=ccdnmatch in decstat]
         ('mdncol', '>f4'),    # median g-i color of PS1-matched main-sequence stars [=ccdmdncol in decstat]
@@ -554,7 +556,7 @@ class Measurer(object):
         # Initialize and begin populating the output CCDs table.
         ccds = _ccds_table(self.camera)
 
-        ccds['image_filename'] = os.path.basename(self.fn)   
+        ccds['image_filename'] = '/'.join( [self.camera] + self.fn.split('/')[-2:] ) #os.path.basename(self.fn)   
         ccds['image_hdu'] = self.image_hdu 
         ccds['camera'] = self.camera
         ccds['expnum'] = self.expnum
@@ -573,6 +575,9 @@ class Measurer(object):
         ccds['airmass'] = self.airmass
         ccds['gain'] = self.gain
         ccds['pixscale'] = self.pixscale
+        # FWHM from CP header
+        hdr_fwhm= hdr['fwhm']
+        ccds['fwhm']= hdr_fwhm
 
         # Copy some header cards directly.
         hdrkey = ('avsky', 'crpix1', 'crpix2', 'crval1', 'crval2', 'cd1_1',
@@ -607,22 +612,23 @@ class Measurer(object):
         print('  Sky brightness: {:.3f} mag/arcsec^2'.format(skybr))
         print('  Fiducial:       {:.3f} mag/arcsec^2'.format(sky0))
 
-        ccds['skyrms'] = sig1    # [electron/pix]
-        ccds['skycounts'] = sky1 # [electron/pix]
+        # Median of absolute deviation (MAD), std dev = 1.4826 * MAD 
+        stddev_mad= 1.4826 * np.median(np.abs(img - sky))
+        ccds['skyrms'] = stddev_mad / exptime
+        #ccds['skyrms'] = sig1    # [electron/pix]
+        ccds['skycounts'] = sky1 / exptime # [electron/pix]
         ccds['skymag'] = skybr   # [mag/arcsec^2]
-        ccds['skyrms'] /= exptime   
-        ccds['skycounts'] /= exptime 
         t0= ptime('measure-sky',t0)
 
         # Detect stars on the image.  
         det_thresh = self.det_thresh
-        obj = daofind(img, fwhm=self.nominal_fwhm,
-                      threshold=det_thresh*sig1,
+        obj = daofind(img, fwhm= hdr_fwhm,
+                      threshold=det_thresh * stddev_mad,
                       exclude_border=True)
         if len(obj) < 20:
             det_thresh = self.det_thresh / 2.0
-            obj = daofind(img, fwhm=self.nominal_fwhm,
-                          threshold=det_thresh*sig1,
+            obj = daofind(img, fwhm= hdr_fwhm,
+                          threshold=det_thresh* stddev_mad,
                           exclude_border=True)
         nobj = len(obj)
         print('{} sources detected with detection threshold {}-sigma'.format(nobj, det_thresh))
@@ -646,13 +652,14 @@ class Measurer(object):
                                     r_out=self.skyrad[1] / self.pixscale)
             apphot = aperture_photometry(img, ap)
             skyphot = aperture_photometry(img, skyap)
-            apflux = apphot['aperture_sum'] - skyphot['aperture_sum'] / skyap.area() * ap.area()
+            apskyflux= skyphot['aperture_sum'] / skyap.area() * ap.area()
+            apflux = apphot['aperture_sum'] - apskyflux
         # Use Bitmask, remove stars if any bitmask within 5 pixels
         bit_ap = CircularAperture((obj['xcentroid'], obj['ycentroid']), 5.)
         bit_phot = aperture_photometry(bitmask, bit_ap)
         bit_flux = bit_phot['aperture_sum'] 
-        # No stars within 13''
-        minsep = 13. #arcsec
+        # No stars within our skyrad_outer (10'')
+        minsep = self.skyrad[1] #arcsec
         objra, objdec = self.wcs.pixelxy2radec(obj['xcentroid']+1, obj['ycentroid']+1)
         b_isolated= self.isolated_radec(objra,objdec,nn=2,minsep=minsep/3600.)
         # Aperture mags
@@ -661,80 +668,83 @@ class Measurer(object):
         # Good stars following IDL codes
         # We are ignoring aperature errors though
         minsep_px = minsep/self.pixscale
-        istar = np.where((apflux > 0)*\
-                         (bit_flux == 0)*\
-                         (b_isolated == True)*\
-                         (apmags > 12.)*\
-                         (apmags < 30.)*\
-                         (obj['xcentroid'] > minsep_px)*\
-                         (obj['xcentroid'] < img.shape[0]-minsep_px)*\
-                         (obj['ycentroid'] > minsep_px)*\
-                         (obj['ycentroid'] < img.shape[1]-minsep_px))[0] #KJB
+        istar =  (apflux > 0)*\
+                 (bit_flux == 0)*\
+                 (b_isolated == True)*\
+                 (apmags > 12.)*\
+                 (apmags < 30.)*\
+                 (obj['xcentroid'] > minsep_px)*\
+                 (obj['xcentroid'] < img.shape[0]-minsep_px)*\
+                 (obj['ycentroid'] > minsep_px)*\
+                 (obj['ycentroid'] < img.shape[1]-minsep_px)
+        print('Stars after IDL cuts: %d' % (np.where(istar)[0].size,))
+        #sn= apflux / np.sqrt(apskyflux)
+        #istar *= (sn >= 10)*(sn <= 100)
+        #print('Stars after SN = [10,100]: %d' % (np.where(istar)[0].size,))
 
-        if len(istar) == 0:
+        if np.where(istar)[0].size == 0:
             print('FAIL: All stars have negative aperture photometry AND/OR contain masked pixels!')
             return ccds, _stars_table()
         obj = obj[istar]
         objra, objdec = self.wcs.pixelxy2radec(obj['xcentroid']+1, obj['ycentroid']+1)
         apflux = apflux[istar].data
+        apskyflux= apskyflux[istar].data
         ccds['nstar'] = len(istar)
         t0= ptime('aperture-photometry',t0)
-
-        # FWHM: fit moffat profile to 20 brightest stars
-        # annuli 0.5'' --> 3.5''
-        radii = np.linspace(0.5/self.pixscale,self.aprad/self.pixscale, num=10)
-        sbright= []
-        if not self.sky_global:
-            skyap = CircularAnnulus((obj['xcentroid'], obj['ycentroid']),
-                                    r_in=self.skyrad[0] / self.pixscale, 
-                                    r_out=self.skyrad[1] / self.pixscale)
-            skyphot = aperture_photometry(img, skyap)
-        for radius in radii:
-            ap = CircularAperture((obj['xcentroid'], obj['ycentroid']), radius)
-            if self.sky_global:
-                sbright.append( aperture_photometry(img - sky, ap)/ap.aera() )
-            else:
-                apphot = aperture_photometry(img, ap)
-                flux= apphot['aperture_sum'] - skyphot['aperture_sum'] / skyap.area() * ap.area()
-                sbright.append( flux/ap.area() )
-        # Sky subtracted surface brightness (nstars,napertures)
-        surfb= np.zeros( (len(sbright[0].data),len(radii)) )
-        for cnt in range(len(radii)):
-            surfb[:,cnt]= sbright[cnt].data
-        del sbright
-        # 20 brightest or the number left
-        nbright= min(20,len(obj))
-        ibright= np.argsort(surfb[:,0])[::-1][:nbright]
-        surfb= surfb[ibright,:]
-        # Non-linear least squares LM fit to Moffat Profile
-        fwhm= np.zeros(surfb.shape[0])
-        fwhm2= np.zeros(surfb.shape[0])
-        if not self.verboseplots:
-            try: 
+           
+        if False: 
+            # FWHM: fit moffat profile to 20 brightest stars
+            # annuli 0.5'' --> 3.5''
+            radii = np.linspace(0.5/self.pixscale,self.aprad/self.pixscale, num=10)
+            sbright= []
+            if not self.sky_global:
+                skyap = CircularAnnulus((obj['xcentroid'][keep], obj['ycentroid'][keep]),
+                                        r_in=self.skyrad[0] / self.pixscale, 
+                                        r_out=self.skyrad[1] / self.pixscale)
+                skyphot = aperture_photometry(img, skyap)
+            for radius in radii:
+                ap = CircularAperture((obj['xcentroid'][keep], obj['ycentroid'][keep]), radius)
+                if self.sky_global:
+                    sbright.append( aperture_photometry(img - sky, ap)/ap.aera() )
+                else:
+                    apphot = aperture_photometry(img, ap)
+                    flux= apphot['aperture_sum'] - skyphot['aperture_sum'] / skyap.area() * ap.area()
+                    sbright.append( flux/ap.area() )
+            # Sky subtracted surface brightness (nstars,napertures)
+            surfb= np.zeros( (len(sbright[0].data),len(radii)) )
+            for cnt in range(len(radii)):
+                surfb[:,cnt]= sbright[cnt].data
+            del sbright
+            # 20 brightest or the number left
+            nbright= min(20,len(obj))
+            ibright= np.argsort(surfb[:,0])[::-1][:nbright]
+            surfb= surfb[ibright,:]
+            # Non-linear least squares LM fit to Moffat Profile
+            fwhm= np.zeros(surfb.shape[0])
+            if not self.verboseplots:
+                try: 
+                    for cnt in range(surfb.shape[0]):
+                        popt, pcov = curve_fit(moffatPSF, radii, surfb[cnt,:], p0 = [1.5*surfb[cnt,0], 5.,2.])
+                        fwhm[cnt]= 2*popt[1]*np.sqrt(2**(1/popt[2]) - 1)
+                except RuntimeError:
+                    # Optimal parameters not found for moffat fit
+                    with open('zpts_bad_nofwhm.txt','a') as foo:
+                        foo.write('%s %s\n' % (self.fn,self.image_hdu))
+                    return ccds, _stars_table()
+            else: 
+                plt.close()
                 for cnt in range(surfb.shape[0]):
                     popt, pcov = curve_fit(moffatPSF, radii, surfb[cnt,:], p0 = [1.5*surfb[cnt,0], 5.,2.])
-                    fwhm[cnt]= popt[1]
-                    fwhm2[cnt]= 2*popt[1]*np.sqrt(2**(1/popt[2]) - 1)
-            except RuntimeError:
-                # Optimal parameters not found for moffat fit
-                with open('zpts_bad_nofwhm.txt','a') as foo:
-                    foo.write('%s %s\n' % (self.fn,self.image_hdu))
-                return ccds, _stars_table()
-        else: 
-            plt.close()
-            for cnt in range(surfb.shape[0]):
-                popt, pcov = curve_fit(moffatPSF, radii, surfb[cnt,:], p0 = [1.5*surfb[cnt,0], 5.,2.])
-                fwhm[cnt]= popt[1]
-                plt.plot(radii,surfb[cnt,:],'ok')
-                plt.plot(np.linspace(0,14,num=20),moffatPSF(np.linspace(0,14,num=20), *popt))
-            plt.xlabel('pixels')
-            fn= self.zptsfile.replace('.fits','_qa_fwhm_ccd%s.png' % ccds['image_hdu'].data[0])
-            plt.savefig(fn)
-            plt.close()
-            print('Wrote %s' % fn)
-        ccds['fwhm']= np.median(fwhm) * self.pixscale # arcsec
-        ccds['fwhm2']= np.median(fwhm2) * self.pixscale # arcsec
-        t0= ptime('fwhm-calculation',t0)
+                    fwhm[cnt]= 2*popt[1]*np.sqrt(2**(1/popt[2]) - 1)
+                    plt.plot(radii,surfb[cnt,:],'ok')
+                    plt.plot(np.linspace(0,14,num=20),moffatPSF(np.linspace(0,14,num=20), *popt))
+                plt.xlabel('pixels')
+                fn= self.zptsfile.replace('.fits','_qa_fwhm_ccd%s.png' % ccds['image_hdu'].data[0])
+                plt.savefig(fn)
+                plt.close()
+                print('Wrote %s' % fn)
+            ccds['fwhm']= np.median(fwhm) * self.pixscale # arcsec
+            t0= ptime('fwhm-calculation',t0)
         
         # Now match against (good) PS1 stars 
         try: 
@@ -975,8 +985,8 @@ class DecamMeasurer(Measurer):
         self.sky0 = dict(g = 22.04,r = 20.91,z = 18.46) # AB mag/arcsec^2
         self.k_ext = dict(g = 0.17,r = 0.10,z = 0.06)
         # --> e/sec
-        for b in self.zp0.keys(): 
-            self.zp0[b] += -2.5*np.log10(self.gain)  
+        #for b in self.zp0.keys(): 
+        #    self.zp0[b] += -2.5*np.log10(self.gain)  
     
     def get_band(self):
         band = self.primhdr['FILTER']
@@ -1046,8 +1056,8 @@ class Mosaic3Measurer(Measurer):
         self.sky0 = dict(z = 18.46)
         self.k_ext = dict(z = 0.06)
         # --> e/sec
-        for b in self.zp0.keys(): 
-            self.zp0[b] += -2.5*np.log10(self.gain)  
+        #for b in self.zp0.keys(): 
+        #    self.zp0[b] += -2.5*np.log10(self.gain)  
 
     def get_band(self):
         band = self.primhdr['FILTER']
@@ -1107,8 +1117,8 @@ class NinetyPrimeMeasurer(Measurer):
         self.sky0 = dict(g = 22.04,r = 20.91,z = 18.46) # AB mag/arcsec^2
         self.k_ext = dict(g = 0.17,r = 0.10,z = 0.06)
         # --> e/sec
-        for b in self.zp0.keys(): 
-            self.zp0[b] += -2.5*np.log10(self.gain)  
+        #for b in self.zp0.keys(): 
+        #    self.zp0[b] += -2.5*np.log10(self.gain)  
     
     def get_band(self):
         band = self.primhdr['FILTER']
@@ -1218,7 +1228,7 @@ def measure_image(img_fn, **measureargs):
 
     ccds = []
     stars = []
-    for ext in extlist:
+    for ext in extlist[:2]:
         ccds1, stars1 = measure(img_fn, ext, **measureargs)
         t0= ptime('measured-ext-%s' % ext,t0)
         ccds.append(ccds1)
@@ -1706,10 +1716,11 @@ def main(image_list=None,args=None):
                                 imgfn= F.imgfn))
         # Create the file
         t0=ptime('b4-run',t0)
-        try: 
-            runit(image_fn, **measureargs)
-        except:
-            print('zpt failed for %s' % image_fn)
+        runit(image_fn, **measureargs)
+        #try: 
+        #    runit(image_fn, **measureargs)
+        #except:
+        #    print('zpt failed for %s' % image_fn)
         t0=ptime('after-run',t0)
     tnow= Time()
     print("TIMING:total %s" % (tnow-tbegin,))

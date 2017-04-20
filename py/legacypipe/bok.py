@@ -176,10 +176,19 @@ class BokImage(CPImage, CalibMixin):
         dq = self._read_fits(self.dqfn, self.hdu, **kwargs)
         return dq
 
-    def read_invvar(self, **kwargs):
+    def read_invvar(self, clip=True, clipThresh=0.2, **kwargs):
         print('Reading the 90Prime oow weight map as Inverse Varianc')
-        X = self._read_fits(self.wtfn, self.hdu, **kwargs)
-        return X
+        invvar = self._read_fits(self.wtfn, self.hdu, **kwargs)
+        if clip:
+            # Clamp near-zero (incl negative!) invvars to zero.
+            # These arise due to fpack.
+            if clipThresh > 0.:
+                med = np.median(invvar[invvar > 0])
+                thresh = clipThresh * med
+            else:
+                thresh = 0.
+            invvar[invvar < thresh] = 0
+        return invvar
 
     # read the TPV header, convert it to SIP, and apply an offset from the
     # CCDs table
