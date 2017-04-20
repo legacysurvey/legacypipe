@@ -186,6 +186,14 @@ def main():
     gpsfsize = []
     rpsfsize = []
     zpsfsize = []
+
+    gpsfdepth = []
+    rpsfdepth = []
+    zpsfdepth = []
+    ggaldepth = []
+    rgaldepth = []
+    zgaldepth = []
+
     ebv = []
     gtrans = []
     rtrans = []
@@ -226,6 +234,7 @@ def main():
             tfn = os.path.join(dirprefix, 'tractor', brick[:3], 'tractor-%s.fits'%brick)
             print('Tractor filename', tfn)
             T = fits_table(tfn, columns=['brick_primary', 'type', 'decam_psfsize',
+                                         'decam_psfdepth', 'decam_galdepth',
                                          'ebv', 'decam_mw_transmission'])
             T.cut(T.brick_primary)
             nsrcs.append(len(T))
@@ -240,6 +249,13 @@ def main():
             gpsfsize.append(np.median(T.decam_psfsize[:,1]))
             rpsfsize.append(np.median(T.decam_psfsize[:,2]))
             zpsfsize.append(np.median(T.decam_psfsize[:,4]))
+
+            gpsfdepth.append(np.median(T.decam_psfdepth[:,1]))
+            rpsfdepth.append(np.median(T.decam_psfdepth[:,2]))
+            zpsfdepth.append(np.median(T.decam_psfdepth[:,4]))
+            ggaldepth.append(np.median(T.decam_galdepth[:,1]))
+            rgaldepth.append(np.median(T.decam_galdepth[:,2]))
+            zgaldepth.append(np.median(T.decam_galdepth[:,4]))
     
             ebv.append(np.median(T.ebv))
             gtrans.append(np.median(T.decam_mw_transmission[:,1]))
@@ -363,6 +379,12 @@ def main():
     T.psfsize_g = np.array(gpsfsize).astype(np.float32)
     T.psfsize_r = np.array(rpsfsize).astype(np.float32)
     T.psfsize_z = np.array(zpsfsize).astype(np.float32)
+    T.psfdepth_g = np.array(gpsfdepth).astype(np.float32)
+    T.psfdepth_r = np.array(rpsfdepth).astype(np.float32)
+    T.psfdepth_z = np.array(zpsfdepth).astype(np.float32)
+    T.galdepth_g = np.array(ggaldepth).astype(np.float32)
+    T.galdepth_r = np.array(rgaldepth).astype(np.float32)
+    T.galdepth_z = np.array(zgaldepth).astype(np.float32)
     T.ebv = np.array(ebv).astype(np.float32)
     T.trans_g = np.array(gtrans).astype(np.float32)
     T.trans_r = np.array(rtrans).astype(np.float32)
