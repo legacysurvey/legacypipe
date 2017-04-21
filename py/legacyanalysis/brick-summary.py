@@ -8,6 +8,8 @@ from astrometry.util.fits import fits_table
 from astrometry.util.util import Tan
 from legacypipe.utils import find_unique_pixels
 
+from legacyanalysis.coverage import cmap_discretize
+
 '''
 This script produces a FITS table that summarizes per-brick
 information about a data release.  It takes on the command-line the
@@ -49,6 +51,10 @@ def plots(opt):
     T = fits_table(opt.files[0])
     import pylab as plt
     import matplotlib
+
+    print('Total sources:', sum(T.nobjs))
+    print('Area:', len(T)/16., 'sq deg')
+    print('g,r,z coverage:', sum((T.nexp_g > 0) * (T.nexp_r > 0) * (T.nexp_z > 0)) / 16.)
     
     # DECam
     #ax = [360, 0, -21, 36]
@@ -97,6 +103,50 @@ def plots(opt):
 
     release = 'MzLS+BASS DR4'
 
+    base_cmap = 'viridis'
+
+    plt.clf()
+    for band in 'grz':
+        depth = T.get('galdepth_%s' % band)
+        ha = dict(histtype='step', 
+                  bins=50, range=(22.0, 24.2))
+        ccmap = dict(g='g', r='r', z='m')
+        plt.hist(depth[depth>0], label='%s band' % band,
+                 color=ccmap[band], **ha)
+    plt.savefig('galdepths.png')
+
+    for band in 'grz':
+        depth = T.get('galdepth_%s' % band)
+        nexp = T.get('nexp_%s' % band)
+        lo,hi = 22.0-0.05, 24.2+0.05
+        ha = dict(histtype='step', 
+                  bins=23, range=(lo,hi))
+        ccmap = dict(g='g', r='r', z='m')
+        area = 0.25**2
+        plt.clf()
+        I = np.flatnonzero((depth > 0) * (nexp == 1))
+        plt.hist(depth[I], label='%s band, 1 exposure' % band,
+                 color=ccmap[band], lw=1,
+                 weights=area * np.ones_like(depth[I]),
+                 **ha)
+        I = np.flatnonzero((depth > 0) * (nexp == 2))
+        plt.hist(depth[I], label='%s band, 1 exposure' % band,
+                 color=ccmap[band], lw=2, alpha=0.5,
+                 weights=area * np.ones_like(depth[I]),
+                 **ha)
+        I = np.flatnonzero((depth > 0) * (nexp >= 3))
+        plt.hist(depth[I], label='%s band, 1 exposure' % band,
+                 color=ccmap[band], lw=3, alpha=0.3,
+                 weights=area * np.ones_like(depth[I]),
+                 **ha)
+        plt.title('%s: galaxy depths, %s band' % (release, band))
+        plt.xlabel('5-sigma galaxy depth (mag)')
+        plt.ylabel('Square degrees')
+        plt.xlim(lo, hi)
+        plt.xticks(np.arange(22, 24.21, 0.2))
+        plt.savefig('depth-hist-%s.png' % band)
+
+    
     for band in 'grz':
         plt.clf()
         desi_map()
@@ -104,8 +154,10 @@ def plots(opt):
         I = np.flatnonzero(N > 0)
         #cm = matplotlib.cm.get_cmap('jet', 6)
         #cm = matplotlib.cm.get_cmap('winter', 5)
-        cm = matplotlib.cm.viridis
-        cm = matplotlib.cm.get_cmap(cm, 5)
+
+        #cm = matplotlib.cm.viridis
+        #cm = matplotlib.cm.get_cmap(cm, 5)
+        cm = cmap_discretize(base_cmap, 5)
         plt.scatter(T.ra[I], T.dec[I], c=N[I], s=3,
                     edgecolors='none',
                     vmin=0.5, vmax=5.5, cmap=cm)
@@ -116,10 +168,11 @@ def plots(opt):
         plt.title('%s: Number of exposures in %s' % (release, band))
         plt.savefig('nexp-%s.png' % band)
 
+        cmap = cmap_discretize(base_cmap, 15)
         plt.clf()
         desi_map()
-        plt.scatter(T.ra, T.dec, c=T.get('nexp_%s' % band), s=3,
-                    edgecolors='none', vmin=0, vmax=2.)
+        plt.scatter(T.ra, T.dec, c=T.get('psfsize_%s' % band), s=3,
+                    edgecolors='none', vmin=0, vmax=3., cmap=cmap)
         radec_plot()
         plt.colorbar()
         plt.title('%s: PSF size, band %s' % (release, band))
@@ -129,14 +182,17 @@ def plots(opt):
         desi_map()
 
         depth = T.get('galdepth_%s' % band)
-        mn,mx = np.percentile(depth, [25,95])
-        plt.scatter(T.ra, T.dec, c=depth, s=3,
-                    edgecolors='none', vmin=mn, vmax=mx)
+        mn,mx = np.percentile(depth[depth > 0], [10,98])
+        mn = np.floor(mn * 10) / 10.
+        mx = np.ceil(mx * 10) / 10.
+        cmap = cmap_discretize(base_cmap, 1+int((mx-mn+0.001)/0.1))
+        I = (depth > 0)
+        plt.scatter(T.ra[I], T.dec[I], c=depth[I], s=3,
+                    edgecolors='none', vmin=mn-0.05, vmax=mx+0.05, cmap=cmap)
         radec_plot()
         plt.colorbar()
         plt.title('%s: galaxy depth, band %s' % (release, band))
         plt.savefig('galdepth-%s.png' % band)
-
 
     for col in ['nobjs', 'npsf', 'nsimp', 'nexp', 'ndev', 'ncomp']:
         plt.clf()
@@ -147,7 +203,10 @@ def plots(opt):
                     edgecolors='none', vmin=0, vmax=mx)
         radec_plot()
         plt.colorbar()
-        plt.title('%s: Number of objects of type %s' % (release, col[1:]))
+        tt = 'of type %s' % col[1:]
+        if col == 'nobjs':
+            tt = 'total'
+        plt.title('%s: Number of objects %s' % (release, tt))
         plt.savefig('nobjs-%s.png' % col[1:])
 
     Ntot = T.nobjs
