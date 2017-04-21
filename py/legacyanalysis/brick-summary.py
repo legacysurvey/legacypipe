@@ -106,7 +106,7 @@ def plots(opt):
         #cm = matplotlib.cm.get_cmap('winter', 5)
         cm = matplotlib.cm.viridis
         cm = matplotlib.cm.get_cmap(cm, 5)
-        plt.scatter(T.ra[I], T.dec[I], c=N[I], s=2,
+        plt.scatter(T.ra[I], T.dec[I], c=N[I], s=3,
                     edgecolors='none',
                     vmin=0.5, vmax=5.5, cmap=cm)
         radec_plot()
@@ -118,19 +118,32 @@ def plots(opt):
 
         plt.clf()
         desi_map()
-        plt.scatter(T.ra, T.dec, c=T.get('nexp_%s' % band), s=2,
+        plt.scatter(T.ra, T.dec, c=T.get('nexp_%s' % band), s=3,
                     edgecolors='none', vmin=0, vmax=2.)
         radec_plot()
         plt.colorbar()
         plt.title('%s: PSF size, band %s' % (release, band))
         plt.savefig('psfsize-%s.png' % band)
 
+        plt.clf()
+        desi_map()
+
+        depth = T.get('galdepth_%s' % band)
+        mn,mx = np.percentile(depth, [25,95])
+        plt.scatter(T.ra, T.dec, c=depth, s=3,
+                    edgecolors='none', vmin=mn, vmax=mx)
+        radec_plot()
+        plt.colorbar()
+        plt.title('%s: galaxy depth, band %s' % (release, band))
+        plt.savefig('galdepth-%s.png' % band)
+
+
     for col in ['nobjs', 'npsf', 'nsimp', 'nexp', 'ndev', 'ncomp']:
         plt.clf()
         desi_map()
         N = T.get(col)
         mx = np.percentile(N, 99.5)
-        plt.scatter(T.ra, T.dec, c=N, s=2,
+        plt.scatter(T.ra, T.dec, c=N, s=3,
                     edgecolors='none', vmin=0, vmax=mx)
         radec_plot()
         plt.colorbar()
@@ -146,7 +159,7 @@ def plots(opt):
         print(col, 'max frac:', N.max())
         mx = np.percentile(N, 99.5)
         print('mx', mx)
-        plt.scatter(T.ra, T.dec, c=N, s=2,
+        plt.scatter(T.ra, T.dec, c=N, s=3,
                     edgecolors='none', vmin=0, vmax=mx)
         radec_plot()
         plt.colorbar()
