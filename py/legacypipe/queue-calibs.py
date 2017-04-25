@@ -65,7 +65,7 @@ import pylab as plt
 from astrometry.util.fits import fits_table
 from astrometry.util.file import trymakedirs
 
-from legacypipe.common import LegacySurveyData, wcs_for_brick, ccds_touching_wcs
+from legacypipe.survey import LegacySurveyData, wcs_for_brick, ccds_touching_wcs
 
 from astrometry.libkd.spherematch import match_radec
 
@@ -113,6 +113,9 @@ def main():
 
     parser.add_argument('--bricks', help='Set bricks.fits file to load')
     parser.add_argument('--ccds', help='Set ccds.fits file to load')
+    parser.add_argument('--ignore_cuts', action='store_true',default=False,help='no photometric or blacklist cuts')
+    parser.add_argument('--save_to_fits', action='store_true',default=False,help='save cut brick,ccd to fits table')
+    parser.add_argument('--name', action='store',default='dr3',help='save with this suffix, e.g. refers to ccds table')
 
     parser.add_argument('--delete-sky', action='store_true',
                       help='Delete any existing sky calibration files')
@@ -146,12 +149,13 @@ def main():
         log(len(T), 'CCDs')
     T.index = np.arange(len(T))
 
-    I = survey.photometric_ccds(T)
-    print(len(I), 'CCDs are photometric')
-    T.cut(I)
-    I = survey.apply_blacklist(T)
-    print(len(I), 'CCDs are not blacklisted')
-    T.cut(I)
+    if opt.ignore_cuts == False:
+        I = survey.photometric_ccds(T)
+        print(len(I), 'CCDs are photometric')
+        T.cut(I)
+        I = survey.apply_blacklist(T)
+        print(len(I), 'CCDs are not blacklisted')
+        T.cut(I)
     print(len(T), 'CCDs remain')
 
     # I,J,d,counts = match_radec(B.ra, B.dec, T.ra, T.dec, 0.2, nearest=True, count=True)
@@ -325,25 +329,41 @@ def main():
         rlo,rhi = 182,192
         dlo,dhi =   8, 18
 
+    elif opt.region == 'coma':
+        # van Dokkum et al Coma cluster ultra-diffuse galaxies: 3x3 field centered on Coma cluster
+        rc,dc = 195., 28.
+        dd = 1.5
+        cosdec = np.cos(np.deg2rad(dc))
+        rlo,rhi = rc - dd/cosdec, rc + dd/cosdec
+        dlo,dhi = dc - dd, dc + dd
+
     elif opt.region == 'lsb':
         rlo,rhi = 147.2, 147.8
         dlo,dhi = -0.4, 0.4
 
-    elif opt.region == 'eboss-elg':
+    elif opt.region == 'eboss-sgc':
+        # generous boundaries to make sure get all relevant images
         # RA -45 to +45
         # Dec -5 to +7
-        rlo,rhi = 315., 45.
-        dlo,dhi = -5., 7.
+        rlo,rhi = 310., 50.
+        dlo,dhi = -6., 6.
 
     elif opt.region == 'eboss-ngc':
+        # generous boundaries to make sure get all relevant images
         # NGC ELGs
         # RA 115 to 175
         # Dec 15 to  30
-        rlo,rhi = 115., 175.
-        dlo,dhi =  15.,  30.
+        rlo,rhi = 122., 177.
+        dlo,dhi =  12.,  32.
 
     elif opt.region == 'mzls':
         dlo,dhi = 30., 90.
+    elif opt.region == 'dr4-bootes':
+        # https://desi.lbl.gov/trac/wiki/DecamLegacy/DR4sched 
+        #dlo,dhi = 34., 35.
+        #rlo,rhi = 209.5, 210.5
+        dlo,dhi = 33., 36.
+        rlo,rhi = 216.5, 219.5
 
         
     if opt.mindec is not None:
@@ -358,6 +378,9 @@ def main():
         B.cut(np.logical_or(B.ra >= rlo, B.ra <= rhi) *
               (B.dec >= dlo) * (B.dec <= dhi))
     log(len(B), 'bricks in range')
+    #for name in B.get('brickname'):
+        #print(name)
+    #B.writeto('bricks-cut.fits')
 
     I,J,d = match_radec(B.ra, B.dec, T.ra, T.dec, survey.bricksize)
     keep = np.zeros(len(B), bool)
@@ -366,11 +389,11 @@ def main():
     B.cut(keep)
     log('Cut to', len(B), 'bricks near CCDs')
 
-    plt.clf()
-    plt.plot(B.ra, B.dec, 'b.')
-    plt.title('DR3 bricks')
-    plt.axis([360, 0, np.min(B.dec)-1, np.max(B.dec)+1])
-    plt.savefig('bricks.png')
+    # plt.clf()
+    # plt.plot(B.ra, B.dec, 'b.')
+    # plt.title('DR3 bricks')
+    # plt.axis([360, 0, np.min(B.dec)-1, np.max(B.dec)+1])
+    # plt.savefig('bricks.png')
 
     if opt.brickq is not None:
         B.cut(B.brickq == opt.brickq)
@@ -425,11 +448,37 @@ def main():
                 print('Exists:', fn, file=sys.stderr)
                 continue
 
-        print(b.brickname)
+        #print(b.brickname)
+
+    if opt.save_to_fits:
+        assert(opt.touching)
+        # Write cut tables to file
+        for tab,typ in zip([B,T],['bricks','ccds']):
+            fn='%s-%s-cut.fits' % (typ,opt.region)
+            if os.path.exists(fn):
+                os.remove(fn)
+            tab.writeto(fn)
+            print('Wrote %s' % fn)
+        # Write text files listing ccd and filename names
+        nm1,nm2= 'ccds-%s.txt'% opt.region,'filenames-%s.txt' % opt.region
+        if os.path.exists(nm1):
+            os.remove(nm1)
+        if os.path.exists(nm2):
+            os.remove(nm2)
+        f1,f2=open(nm1,'w'),open(nm2,'w')
+        fns= list(set(T.get('image_filename')))
+        for fn in fns:
+            f2.write('%s\n' % fn.strip())
+        for ti in T:
+            f1.write('%s\n' % ti.get('image_filename').strip())
+        f1.close()
+        f2.close()
+        print('Wrote *-names.txt')
+    
 
     if opt.brickq_deps:
         import qdo
-        from legacypipe.common import on_bricks_dependencies
+        from legacypipe.survey import on_bricks_dependencies
 
         #... find Queue...
         q = qdo.connect(opt.queue, create_ok=True)
@@ -510,6 +559,10 @@ def main():
             brick_to_task.update(dict(zip(B.brickname[I], taskids)))
         
     if not (opt.calibs or opt.forced or opt.lsb):
+
+        for b in B:
+            print(b.brickname)
+
         sys.exit(0)
 
     bands = 'grz'
@@ -576,11 +629,10 @@ def main():
             exp = T.expnum[i]
             ext = T.ccdname[i].strip()
             outfn = 'lsb/lsb-%s-%s.fits' % (exp, ext)
-            f.write('python projects/desi/lsb.py --expnum %i --extname %s --out %s -F -n > lsb/lsb-%s-%s.log 2>&1\n' % (exp, ext, outfn, exp, ext))
+            f.write('python legacyanalysis/lsb.py --expnum %i --extname %s --out %s -F -n > lsb/lsb-%s-%s.log 2>&1\n' % (exp, ext, outfn, exp, ext))
         f.close()
         log('Wrote', opt.out)
         sys.exit(0)
-
 
     log('Writing calibs to', opt.out)
     f = open(opt.out,'w')
@@ -620,6 +672,9 @@ def main():
 
         if opt.command:
             s = '%i-%s' % (T.expnum[i], T.ccdname[i])
+            prefix = 'python legacypipe/run-calib.py '
+            if opt.opt is not None:
+                prefix = prefix + opt.opt
             #('python legacypipe/run-calib.py --expnum %i --ccdname %s' %
             #     (T.expnum[i], T.ccdname[i]))
         else:

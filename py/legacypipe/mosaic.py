@@ -4,12 +4,15 @@ import os
 import fitsio
 
 import numpy as np
+from glob import glob
 
 from astrometry.util.util import wcs_pv2sip_hdr
 
+from tractor.basics import ConstantFitsWcs
+
 from legacypipe.image import LegacySurveyImage, CalibMixin
-from legacypipe.cpimage import CPImage
-from legacypipe.common import LegacySurveyData
+from legacypipe.cpimage import CPImage, newWeightMap
+from legacypipe.survey import LegacySurveyData    
 
 class MosaicImage(CPImage, CalibMixin):
     '''
@@ -17,10 +20,20 @@ class MosaicImage(CPImage, CalibMixin):
     NOAO Community Pipeline.
     '''
 
+    # this is defined here for testing purposes (to handle small images)
+    splinesky_boxsize = 512
+
+    def __init__(self, survey, t):
+        super(MosaicImage, self).__init__(survey, t)
+        # Add poisson noise to weight map
+        self.wtfn= newWeightMap(wtfn=self.wtfn,imgfn=self.imgfn,dqfn=self.dqfn)
+        # convert FWHM into pixel units
+        self.fwhm /= self.pixscale
+
     @classmethod
     def nominal_zeropoints(self):
-        # HACK
-        return dict(z = 26.5)
+        # See legacypipe/ccd_cuts.py and Photometric cuts email 12/21/2016
+        return dict(z = 26.20)
     
     @classmethod
     def photometric_ccds(self, survey, ccds):
@@ -35,16 +48,18 @@ class MosaicImage(CPImage, CalibMixin):
         z0 = np.array([z0[f[0]] for f in ccds.filter])
         good = np.ones(len(ccds), bool)
         n0 = sum(good)
+        # See Photometric cuts email 12/21/2016
         # This is our list of cuts to remove non-photometric CCD images
         for name,crit in [
             ('exptime < 30 s', (ccds.exptime < 30)),
             ('ccdnmatch < 20', (ccds.ccdnmatch < 20)),
+            ('sky too bright: ccdskycounts >= 150', (ccds.ccdskycounts >= 150)),
             ('abs(zpt - ccdzpt) > 0.1',
              (np.abs(ccds.zpt - ccds.ccdzpt) > 0.1)),
-            ('zpt < 0.5 mag of nominal',
-             (ccds.zpt < (z0 - 0.5))),
-            ('zpt > 0.25 mag of nominal',
-             (ccds.zpt > (z0 + 0.25))),
+            ('zpt < 0.6 mag of nominal',
+             (ccds.zpt < (z0 - 0.6))),
+            ('zpt > 0.6 mag of nominal',
+             (ccds.zpt > (z0 + 0.6))),
         ]:
             good[crit] = False
             #continue as usual
@@ -54,21 +69,94 @@ class MosaicImage(CPImage, CalibMixin):
             n0 = n
         return np.flatnonzero(good)
 
-    def __init__(self, survey, t):
-        super(MosaicImage, self).__init__(survey, t)
-        # convert FWHM into pixel units
-        self.fwhm /= self.pixscale
-
-    def read_sky_model(self, imghdr=None, **kwargs):
-        ''' The Mosaic CP does a good job of sky subtraction, so just
-        use a constant sky level with value from the header.
+    @classmethod
+    def bad_exposures(self, survey, ccds):
         '''
-        from tractor.sky import ConstantSky
-        sky = ConstantSky(imghdr['AVSKY'])
-        sky.version = ''
-        phdr = self.read_image_primary_header()
-        sky.plver = phdr.get('PLVER', '').strip()
-        return sky
+        Returns an index array for the members of the table 'ccds'
+        that are good exposures (NOT flagged) in the bad_expid file.
+        '''
+        good = np.ones(len(ccds), bool)
+        n0 = sum(good)
+        # Exposure number, leading zeros removed
+        expid=np.array([num.split('-')[0].lstrip('0') for num in ccds.expid]).astype(int)
+        bad= np.loadtxt('legacyccds/bad_expid_mzls.txt',dtype=int,usecols=(0,))
+        flag= set(bad).intersection(set(expid))
+        flag= list(flag)
+        if len(flag) > 0:
+            for id in flag:
+                good[expid == id] = False
+                #continue as usual
+                n = sum(good)
+                print('Flagged', n0-n, 'as Bad Exposures')
+                n0 = n
+        return np.flatnonzero(good)
+
+    @classmethod
+    def has_third_pixel(self, survey, ccds):
+        '''
+        For mosaic this is inconsistent YSHIFT header 
+        Ensures that ccds are 1/3 pixel interpolated. Nothing for other cameras
+        '''
+        from astropy.io import fits
+        good = np.ones(len(ccds), bool)
+        n0 = sum(good)
+        # Remove if primary header does NOT have keyword YSHIFT
+        rootdir = survey.get_image_dir()
+        for i,fn in enumerate(ccds.image_filename):
+            fn= os.path.join(rootdir,fn)
+            hdulist = fits.open(fn)
+            if not 'YSHIFT' in hdulist[0].header:
+                good[i]= False
+        n = sum(good)
+        print('Flagged', n0-n, 'has third pixel')
+        n0 = n 
+        return np.flatnonzero(good)
+
+    @classmethod
+    def ccdname_hdu_match(self, survey, ccds):
+        '''
+        Mosaic + Bok, ccdname and hdu number must match. If not, IDL zeropoints files has
+        duplicated zeropoint info from one of the other four ccds
+        '''
+        good = np.ones(len(ccds), bool)
+        n0 = sum(good)
+        ccdnum= np.char.replace(ccds.ccdname,'ccd','').astype(ccds.image_hdu.dtype)
+        flag= ccds.image_hdu - ccdnum != 0
+        good[flag]= False
+        n = sum(good)
+        print('Flagged', n0-n, 'ccdname_hdu_match')
+        n0 = n 
+        return np.flatnonzero(good)
+
+    @classmethod
+    def bad_astrometry(self, survey, ccds):
+        ''' 
+        IDL zeropoints have large rarms,decrms,phrms for some CP images that look fine. Legacy
+        zeropoints is okay for majority of these cases. False alarm? Bug in IDL zeropoints? Doing
+        the most conservative thing and dropping these ccds.
+        see email: "3/30/2017: [decam-chatter 5155] Clue to zero-point errors in dr4"
+        '''
+        good = np.ones(len(ccds), bool)
+        n0 = sum(good)
+        flag= np.any((np.sqrt(ccds.ccdrarms**2 + ccds.ccddecrms**2) > 0.1,
+                      ccds.ccdphrms > 0.2), axis=0)
+        good[flag]= False
+        n = sum(good)
+        print('Flagged', n0-n, 'bad_astrometry')
+        n0 = n 
+        return np.flatnonzero(good)
+
+#    def read_sky_model(self, imghdr=None, primhdr=None, **kwargs):
+#        ''' The Mosaic CP does a good job of sky subtraction, so just
+#        use a constant sky level with value from the header.
+#        '''
+#        from tractor.sky import ConstantSky
+#        # Frank recommends SKYADU
+#        sky = ConstantSky(primhdr['SKYADU'])
+#        sky.version = ''
+#        sky.plver = primhdr.get('PLVER', '').strip()
+#        sky.sig1 = primhdr.get('SKYNOISE', 0.)
+#        return sky
         
     def read_dq(self, **kwargs):
         '''
@@ -82,26 +170,62 @@ class MosaicImage(CPImage, CalibMixin):
         '''
         Reads the inverse-variance (weight) map image.
         '''
-        #print('Reading weight map image', self.wtfn, 'ext', self.hdu)
-        #invvar = self._read_fits(self.wtfn, self.hdu, **kwargs)
-        #return invvar
-
-        print('HACK -- not reading weight map, estimating from image')
-        ##### HACK!  No weight-maps available?
-        img = self.read_image(**kwargs)
-        # # Estimate per-pixel noise via Blanton's 5-pixel MAD
-        slice1 = (slice(0,-5,10),slice(0,-5,10))
-        slice2 = (slice(5,None,10),slice(5,None,10))
-        mad = np.median(np.abs(img[slice1] - img[slice2]).ravel())
-        sig1 = 1.4826 * mad / np.sqrt(2.)
-        print('sig1 estimate:', sig1)
-        invvar = np.ones_like(img) / sig1**2
-        # assume this is going to be masked by the DQ map.
+        print('Reading weight map image', self.wtfn, 'ext', self.hdu)
+        invvar = self._read_fits(self.wtfn, self.hdu, **kwargs)
         return invvar
 
-    def run_calibs(self, psfex=True, funpack=False, git_version=None,
-                   force=False, **kwargs):
-        print('run_calibs for', self.name, 'kwargs', kwargs)
+    def get_wcs(self):
+        '''cpimage.py get_wcs() but wcs comes from interpolated image if this is an
+        uninterpolated image'''
+        prim= self.read_image_primary_header()
+        if 'YSHIFT' in prim.keys():
+            # Interpolated image, use its wcs
+            hdr = self.read_image_header()
+        else:
+            # Non-interpolated, use WCS of interpolated instead
+            # Temporarily set imgfn to Interpolated image
+            imgfn_backup= self.imgfn
+            # Change CP*v3 --> CP*v2
+            cpdir=os.path.basename(os.path.dirname(imgfn_backup)).replace('v3','v2')
+            dirnm= os.path.dirname(os.path.dirname(imgfn_backup))
+            i=os.path.basename(imgfn_backup).find('_ooi_')
+            searchnm= os.path.basename(imgfn_backup)[:i+5]+'*.fits.fz'
+            self.imgfn= np.array( glob(os.path.join(dirnm,cpdir,searchnm)) )
+            assert(self.imgfn.size == 1)
+            self.imgfn= self.imgfn[0]
+            newprim= self.read_image_primary_header()
+            from astropy.io import fits
+            hdulist = fits.open(self.imgfn)
+            print("'YSHIFT' in hdulist[0].header=",'YSHIFT' in hdulist[0].header)
+            assert('YSHIFT' in newprim.keys())
+            hdr = self.read_image_header()
+            self.imgfn= imgfn_backup
+            # Continue with wcs using the interpolated hdr
+        # First child of MosaicImage is CPImage
+        return super(MosaicImage,self).get_wcs(hdr=hdr)
+        
+    def get_tractor_wcs(self, wcs, x0, y0,
+                        primhdr=None, imghdr=None):
+        '''1/3 pixel shift if nont-interpolated image'''
+        prim= self.read_image_primary_header()
+        if 'YSHIFT' in prim.keys():
+            # Use Default wcs class, this is an interpolated image
+            return super(MosaicImage, self).get_tractor_wcs(wcs, x0, y0)
+        else:
+            # IDENTICAL to image.py get_tractor_wcs() except uses OneThirdPixelShiftWcs() 
+            # Instead of ConstantFitsWcs()
+            # class OneThirdPixelShiftWcs is a ConstantFitsWcs class with1/3 pixel function
+            twcs= OneThirdPixelShiftWcs(wcs)
+            if x0 or y0:
+                twcs.setX0Y0(x0,y0)
+            return twcs
+
+    #def run_calibs(self, psfex=True, funpack=False, git_version=None,
+    #              force=False, **kwargs):
+    def run_calibs(self, psfex=True, sky=True, se=False,
+                   funpack=False, fcopy=False, use_mask=True,
+                   force=False, just_check=False, git_version=None,
+                   splinesky=False):
         se = False
         if psfex and os.path.exists(self.psffn) and (not force):
             if self.check_psf(self.psffn):
@@ -117,6 +241,26 @@ class MosaicImage(CPImage, CalibMixin):
         if se:
             funpack = True
 
+        if sky and (not force) and (
+            (os.path.exists(self.skyfn) and not splinesky) or
+            (os.path.exists(self.splineskyfn) and splinesky)):
+            fn = self.skyfn
+            if splinesky:
+                fn = self.splineskyfn
+
+            if os.path.exists(fn):
+                try:
+                    hdr = fitsio.read_header(fn)
+                except:
+                    print('Failed to read sky file', fn, '-- deleting')
+                    os.unlink(fn)
+            if os.path.exists(fn):
+                print('File', fn, 'exists -- skipping')
+                sky = False
+
+        if just_check:
+            return (se or psfex or sky)
+
         todelete = []
         if funpack:
             # The image & mask files to process (funpacked if necessary)
@@ -129,13 +273,37 @@ class MosaicImage(CPImage, CalibMixin):
         if psfex:
             self.run_psfex('mzls')
 
+
+        if sky:
+            self.run_sky('mzls', splinesky=splinesky,\
+                         git_version=git_version)
+
+
         for fn in todelete:
             os.unlink(fn)
+
+
+class OneThirdPixelShiftWcs(ConstantFitsWcs):
+    def __init__(self,wcs):
+        super(OneThirdPixelShiftWcs,self).__init__(wcs)
+
+    def positionToPixel(self, pos, src=None):
+        '''
+        Converts an :class:`tractor.RaDecPos` to a pixel position.
+        Returns: tuple of floats ``(x, y)``
+        '''
+        x,y = super(OneThirdPixelShiftWcs, self).positionToPixel(pos, src=src)
+        # Top half of CCD needs be shifted up by 1./3 pixel
+        if (y + self.y0 > 2048):
+            #y += 1./3
+            y -= 1./3
+        return x,y
+
 
 def main():
 
     from astrometry.util.fits import fits_table, merge_tables
-    from legacypipe.common import exposure_metadata
+    from legacypipe.survey import exposure_metadata
     # Fake up a survey-ccds.fits table from MzLS_CP
     from glob import glob
     #fns = glob('/project/projectdirs/cosmo/staging/mosaicz/MZLS_CP/CP20160202/k4m_160203_*oki*')

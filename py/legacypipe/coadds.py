@@ -3,7 +3,7 @@ import numpy as np
 import fitsio
 from astrometry.util.fits import fits_table
 from legacypipe.cpimage import CP_DQ_BITS
-from legacypipe.common import tim_get_resamp
+from legacypipe.survey import tim_get_resamp
 
 def make_coadds(tims, bands, targetwcs,
                 mods=None, xy=None, apertures=None, apxy=None,
@@ -41,8 +41,6 @@ def make_coadds(tims, bands, targetwcs,
 
     if xy:
         ix,iy = xy
-        print('ix= ',ix)
-        print('iy= ',iy)
         C.T = fits_table()
         C.T.nobs    = np.zeros((len(ix), len(bands)), np.uint8)
         C.T.anymask = np.zeros((len(ix), len(bands)), np.int16)
@@ -154,7 +152,7 @@ def make_coadds(tims, bands, targetwcs,
                 continue
 
             itim,Yo,Xo,iv,im,mo,dq = R
-            print('timiter Yo,Xo,im.shape=',Yo,Xo,im.shape)
+            #print('timiter Yo,Xo,im.shape=',Yo,Xo,im.shape)
 
             tim = tims[itim]
 
@@ -457,7 +455,7 @@ def write_coadd_images(band,
                 ('chi2',     'chi2',     cochi2  ),
                 ])
     for name,prodtype,img in imgs:
-        from legacypipe.common import MyFITSHDR
+        from legacypipe.survey import MyFITSHDR
         hdr2 = MyFITSHDR()
         # Make a copy, because each image has different values for
         # these headers...
@@ -485,8 +483,8 @@ def write_coadd_images(band,
 def quick_coadds(tims, bands, targetwcs, images=None,
                  get_cow=False, get_n2=False, fill_holes=True):
 
-    W = targetwcs.get_width()
-    H = targetwcs.get_height()
+    W = int(targetwcs.get_width())
+    H = int(targetwcs.get_height())
 
     coimgs = []
     cons = []

@@ -24,7 +24,7 @@ from astrometry.util.util import Tan
 from astrometry.util.fits import merge_tables
 
 from legacypipe.runbrick import run_brick
-from legacypipe.common import ccds_touching_wcs, LegacySurveyData
+from legacypipe.survey import ccds_touching_wcs, LegacySurveyData
 
 PIXSCALE = 0.262 # average pixel scale [arcsec/pix]
 

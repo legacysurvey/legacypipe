@@ -4,7 +4,7 @@ import numpy as np
 from astrometry.util.ttime import Time
 from astrometry.util.fits import fits_table
 from tractor.basics import PointSource, RaDecPos, NanoMaggies
-from .common import tim_get_resamp
+from .survey import tim_get_resamp
 
 def _detmap(X):
     from scipy.ndimage.filters import gaussian_filter
@@ -181,8 +181,8 @@ def run_sed_matched_filters(SEDs, bands, detmaps, detivs, omit_xy,
     Tnew = fits_table()
     Tnew.ra  = pr
     Tnew.dec = pd
-    Tnew.tx = peakx
-    Tnew.ty = peaky
+    Tnew.tx = peakx.astype(np.float32)
+    Tnew.ty = peaky.astype(np.float32)
     assert(len(peaksn) == len(Tnew))
     assert(len(apsn) == len(Tnew))
     Tnew.peaksn = np.array(peaksn)

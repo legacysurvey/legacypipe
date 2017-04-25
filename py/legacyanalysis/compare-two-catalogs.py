@@ -1,4 +1,8 @@
 from __future__ import print_function
+
+import matplotlib
+matplotlib.use('Agg')
+
 import pylab as plt
 import numpy as np
 from glob import glob
@@ -23,7 +27,7 @@ def main():
     parser.add_argument('--name2', help='Name for second data set')
     parser.add_argument('--plot-prefix', default='compare',
                         help='Prefix for plot filenames; default "%default"')
-    parser.add_argument('--match', default=1.0,
+    parser.add_argument('--match', default=1.0, type=float,
                         help='Astrometric cross-match distance in arcsec')
     parser.add_argument('dir1', help='First directory to compare')
     parser.add_argument('dir2', help='Second directory to compare')
@@ -67,14 +71,14 @@ def main():
     print('Total of', len(cat1), 'BRICK_PRIMARY from', name1)
     print('Total of', len(cat2), 'BRICK_PRIMARY from', name2)
 
-    cat1.cut((cat1.decam_anymask[:,1] == 0) *
-             (cat1.decam_anymask[:,2] == 0) *
-             (cat1.decam_anymask[:,4] == 0))
-    cat2.cut((cat2.decam_anymask[:,1] == 0) *
-             (cat2.decam_anymask[:,2] == 0) *
-             (cat2.decam_anymask[:,4] == 0))
-    print('Total of', len(cat1), 'unmasked from', name1)
-    print('Total of', len(cat2), 'unmasked from', name2)
+    # cat1.cut((cat1.decam_anymask[:,1] == 0) *
+    #          (cat1.decam_anymask[:,2] == 0) *
+    #          (cat1.decam_anymask[:,4] == 0))
+    # cat2.cut((cat2.decam_anymask[:,1] == 0) *
+    #          (cat2.decam_anymask[:,2] == 0) *
+    #          (cat2.decam_anymask[:,4] == 0))
+    # print('Total of', len(cat1), 'unmasked from', name1)
+    # print('Total of', len(cat2), 'unmasked from', name2)
     
     I,J,d = match_radec(cat1.ra, cat1.dec, cat2.ra, cat2.dec, opt.match/3600.,
                         nearest=True)
@@ -88,6 +92,75 @@ def main():
 
     matched1 = cat1[I]
     matched2 = cat2[J]
+
+    matched1.type = np.array([t.strip() for t in matched1.type])
+    matched2.type = np.array([t.strip() for t in matched2.type])
+    
+    # Confusion matrix for source types
+    types = ['PSF', 'SIMP', 'EXP', 'DEV', 'COMP']
+    confusion = np.zeros((len(types), len(types)))
+    labels = []
+    assert(len(set(np.unique(matched1.type)) - set(types)) == 0)
+    assert(len(set(np.unique(matched2.type)) - set(types)) == 0)
+    for i,t1 in enumerate(types):
+        I = np.flatnonzero(matched1.type == t1)
+        if len(I) == 0:
+            continue
+        for j,t2 in enumerate(types):
+            J = np.flatnonzero(matched2.type[I] == t2)
+            if len(J) == 0:
+                continue
+            confusion[i, j] = float(len(J)) / float(len(I))
+            labels.append((i, j, '%i/%i' % (len(J), len(I))))
+    plt.clf()
+    plt.imshow(confusion, interpolation='nearest', cmap=plt.cm.Blues, vmin=0, vmax=1)
+    for r,c,s in labels:
+        plt.text(c, r, s, color='k', ha='center', fontsize=8)
+    plt.xticks(range(len(types)), types)
+    plt.yticks(range(len(types)), types)
+    plt.ylabel(name1)
+    plt.xlabel(name2)
+    ps.savefig()
+
+    plt.clf()
+    I = np.flatnonzero((matched1.type == 'PSF') * (matched2.type == 'PSF'))
+    print(len(I), 'PSF to PSF')
+    plt.plot(matched1.dchisq[I,0] - matched1.dchisq[I,1],
+             matched2.dchisq[I,0] - matched2.dchisq[I,1], 'k.', label='PSF to PSF')
+    I = np.flatnonzero((matched1.type == 'PSF') * (matched2.type == 'SIMP'))
+    print(len(I), 'PSF to SIMP')
+    plt.plot(matched1.dchisq[I,0] - matched1.dchisq[I,1],
+             matched2.dchisq[I,0] - matched2.dchisq[I,1], 'r.', label='PSF to SIMP')
+    I = np.flatnonzero((matched1.type == 'SIMP') * (matched2.type == 'PSF'))
+    print(len(I), 'SIMP to PSF')
+    plt.plot(matched1.dchisq[I,0] - matched1.dchisq[I,1],
+             matched2.dchisq[I,0] - matched2.dchisq[I,1], 'g.', label='SIMP to PSF')
+    I = np.flatnonzero((matched1.type == 'SIMP') * (matched2.type == 'SIMP'))
+    print(len(I), 'SIMP to SIMP')
+    plt.plot(matched1.dchisq[I,0] - matched1.dchisq[I,1],
+             matched2.dchisq[I,0] - matched2.dchisq[I,1], 'b.', label='SIMP to SIMP')
+    plt.xlabel('%s dchisq: PSF - SIMP' % name1)
+    plt.ylabel('%s dchisq: PSF - SIMP' % name2)
+    plt.legend(loc='upper left')
+    #plt.xscale('symlog')
+    #plt.yscale('symlog')
+    plt.plot([-20,20],[-20,20], 'k-', alpha=0.5)
+    plt.axhline(0, color='k', alpha=0.5)
+    plt.axvline(0, color='k', alpha=0.5)
+    plt.axis([-20,20,-20,20])
+    ps.savefig()
+
+
+    plt.clf()
+    I = np.flatnonzero((matched1.type == 'EXP') * (matched2.type == 'EXP'))
+    plt.plot(matched1.shapeexp_r[I], matched2.shapeexp_r[I], 'r.', label='exp')
+    I = np.flatnonzero((matched1.type == 'DEV') * (matched2.type == 'DEV'))
+    plt.plot(matched1.shapedev_r[I], matched2.shapedev_r[I], 'b.', label='dev')
+    plt.xlabel('%s radius (arcsec)' % name1)
+    plt.ylabel('%s radius (arcsec)' % name2)
+    plt.axis([0,4,0,4])
+    plt.legend()
+    ps.savefig()
 
     for iband,band,cc in [(1,'g','g'),(2,'r','r'),(4,'z','m')]:
         K = np.flatnonzero((matched1.decam_flux_ivar[:,iband] > 0) *

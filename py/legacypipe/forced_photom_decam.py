@@ -18,8 +18,10 @@ from tractor import Tractor
 from tractor.galaxy import disable_galaxy_cache
 from tractor.ellipses import EllipseE
 
-from legacypipe.common import LegacySurveyData, bricks_touching_wcs, exposure_metadata, get_version_header, apertures_arcsec
-from desi_common import read_fits_catalog
+from legacypipe.survey import LegacySurveyData, bricks_touching_wcs, exposure_metadata, get_version_header, apertures_arcsec
+from catalog import read_fits_catalog
+
+import photutils
 
 # python projects/desi/forced-photom-decam.py decals/images/decam/CP20140810_g_v2/c4d_140816_032035_ooi_g_v2.fits.fz 43 DR1 f.fits
 
@@ -38,13 +40,20 @@ def get_parser():
     parser.add_argument('--no-forced', dest='forced', action='store_false',
                       help='Do NOT do regular forced photometry?  Implies --apphot')
 
+    parser.add_argument('--derivs', action='store_true',
+                        help='Include RA,Dec derivatives in forced photometry?')
+    
     parser.add_argument('--constant-invvar', action='store_true',
                         help='Set inverse-variance to a constant across the image?')
+    parser.add_argument('--hybrid-psf', action='store_true',
+                        help='Use hybrid pixelized-MoG PSF model?')
     
     parser.add_argument('--save-model',
                         help='Compute and save model image?')
     parser.add_argument('--save-data',
                         help='Compute and save model image?')
+
+    parser.add_argument('--camera', help='Camera name')
     
     parser.add_argument('filename',help='Filename OR exposure number.')
     parser.add_argument('hdu',help='decam-HDU OR CCD name.')
@@ -77,6 +86,7 @@ def main(survey=None, opt=None):
 
     ps = None
     if opt.plots is not None:
+        import pylab as plt
         from astrometry.util.plotutils import PlotSequence
         ps = PlotSequence(opt.plots)
 
@@ -104,6 +114,16 @@ def main(survey=None, opt=None):
         T = exposure_metadata([opt.filename], hdus=[opt.hdu])
         print('Metadata:')
         T.about()
+
+        if not 'ccdzpt' in T.columns():
+            phdr = fitsio.read_header(opt.filename)
+            #hdr = fitsio.read_header(opt.filename, ext=opt.hdu)
+            T.ccdzpt = np.array([phdr['MAGZERO']])
+            print('WARNING: using header MAGZERO')
+            T.ccdraoff = np.array([0.])
+            T.ccddecoff = np.array([0.])
+            print('WARNING: setting CCDRAOFF, CCDDECOFF to zero.')
+
     else:
         # Read metadata from survey-ccds.fits table
         T = survey.find_ccds(expnum=expnum, ccdname=ccdname)
@@ -114,12 +134,16 @@ def main(survey=None, opt=None):
         if opt.filename is not None:
             T.cut(np.array([f.strip() == opt.filename for f in T.image_filename]))
             print(len(T), 'with filename', opt.filename)
+        if opt.camera is not None:
+            T.cut(T.camera == opt.camera)
+            print(len(T), 'with camera', opt.camera)
         assert(len(T) == 1)
 
     ccd = T[0]
     im = survey.get_image_object(ccd)
     tim = im.get_tractor_image(slc=zoomslice, pixPsf=True, splinesky=True,
-                               constant_invvar=opt.constant_invvar)
+                               constant_invvar=opt.constant_invvar,
+                               hybridPsf=opt.hybrid_psf)
     print('Got tim:', tim)
 
     print('Read image:', Time()-t0)
@@ -189,10 +213,7 @@ def main(survey=None, opt=None):
     surveydir = survey.get_survey_dir()
     del survey
         
-    T.shapeexp = np.vstack((T.shapeexp_r, T.shapeexp_e1, T.shapeexp_e2)).T
-    T.shapedev = np.vstack((T.shapedev_r, T.shapedev_e1, T.shapedev_e2)).T
-
-    cat = read_fits_catalog(T, ellipseClass=EllipseE)
+    cat = read_fits_catalog(T)
     # print('Got cat:', cat)
 
     print('Read catalog:', Time()-t0)
@@ -216,14 +237,35 @@ def main(survey=None, opt=None):
             if h > MAXHALF:
                 print('halfsize', h,'for',src,'-> setting to',MAXHALF)
                 src.halfsize = MAXHALF
-        
-    tr = Tractor([tim], cat, optimizer=opti)
-    tr.freezeParam('images')
-    for src in cat:
+
         src.freezeAllBut('brightness')
         src.getBrightness().freezeAllBut(tim.band)
+
+    if opt.derivs:
+        realsrcs = []
+        derivsrcs = []
+        for src in cat:
+            realsrcs.append(src)
+
+            bright_dra  = src.getBrightness().copy()
+            bright_ddec = src.getBrightness().copy()
+            bright_dra .freezeAllBut(tim.band)
+            bright_ddec.freezeAllBut(tim.band)
+            bright_dra .setParams(np.zeros(bright_dra .numberOfParams()))
+            bright_ddec.setParams(np.zeros(bright_ddec.numberOfParams()))
+
+            dsrc = SourceDerivatives(src, [tim.band], ['pos'],
+                                     [bright_dra, bright_ddec])
+            derivsrcs.append(dsrc)
+
+        # For convenience, put all the real sources at the front of
+        # the list, so we can pull the IVs off the front of the list.
+        cat = realsrcs + derivsrcs
+
+    tr = Tractor([tim], cat, optimizer=opti)
+    tr.freezeParam('images')
     disable_galaxy_cache()
-        
+
     F = fits_table()
     F.brickid   = T.brickid
     F.brickname = T.brickname
@@ -241,14 +283,20 @@ def main(survey=None, opt=None):
         if opt.plots is None:
             forced_kwargs.update(wantims=False)
 
+        # print('Params:')
+        # tr.printThawedParams()
+
         R = tr.optimize_forced_photometry(variance=True, fitstats=True,
                                           shared_params=False, priors=False, **forced_kwargs)
 
         if opt.plots:
             (data,mod,ie,chi,roi) = R.ims1[0]
 
-            ima = tim.ima
-            imchi = dict(interpolation='nearest', origin='lower', vmin=-5, vmax=5)
+            ima = dict(vmin=-2.*tim.sig1, vmax=5.*tim.sig1,
+                       interpolation='nearest', origin='lower',
+                       cmap='gray')
+            imchi = dict(interpolation='nearest', origin='lower',
+                         vmin=-5, vmax=5, cmap='RdBu')
             plt.clf()
             plt.imshow(data, **ima)
             plt.title('Data: %s' % tim.name)
@@ -264,15 +312,42 @@ def main(survey=None, opt=None):
             plt.title('Chi: %s' % tim.name)
             ps.savefig()
 
+            if opt.derivs:
+                trx = Tractor([tim], realsrcs)
+                trx.freezeParam('images')
+
+                modx = trx.getModelImage(0)
+                chix = (data - modx) * tim.getInvError()
+
+                plt.clf()
+                plt.imshow(modx, **ima)
+                plt.title('Model without derivatives: %s' % tim.name)
+                ps.savefig()
+
+                plt.clf()
+                plt.imshow(chix, **imchi)
+                plt.title('Chi without derivatives: %s' % tim.name)
+                ps.savefig()
+
+        if opt.derivs:
+            cat = realsrcs
+
         F.flux = np.array([src.getBrightness().getFlux(tim.band)
                            for src in cat]).astype(np.float32)
-        F.flux_ivar = R.IV.astype(np.float32)
+        N = len(cat)
+        F.flux_ivar = R.IV[:N].astype(np.float32)
 
-        F.fracflux = R.fitstats.profracflux.astype(np.float32)
-        F.rchi2    = R.fitstats.prochi2    .astype(np.float32)
+        F.fracflux = R.fitstats.profracflux[:N].astype(np.float32)
+        F.rchi2    = R.fitstats.prochi2    [:N].astype(np.float32)
+
+        if opt.derivs:
+            F.flux_dra  = np.array([src.getParams()[0] for src in derivsrcs]).astype(np.float32)
+            F.flux_ddec = np.array([src.getParams()[1] for src in derivsrcs]).astype(np.float32)
+
+            F.flux_dra_ivar  = R.IV[N  ::2].astype(np.float32)
+            F.flux_ddec_ivar = R.IV[N+1::2].astype(np.float32)
 
         print('Forced photom:', Time()-t0)
-
         
     if opt.apphot:
         import photutils
@@ -362,6 +437,73 @@ def main(survey=None, opt=None):
     
     print('Finished forced phot:', Time()-t0)
     return 0
+
+### This class was copied from sim-forced-phot.py
+from tractor import MultiParams, BasicSource
+class SourceDerivatives(MultiParams, BasicSource):
+    def __init__(self, real, freeze, thaw, brights):
+        '''
+        *real*: The real source whose derivatives are my profiles.
+        *freeze*: List of parameter names to freeze before taking derivs
+        *thaw*: List of parameter names to thaw before taking derivs
+        '''
+        # This a subclass of MultiParams and we pass the brightnesses
+        # as our params.
+        super(SourceDerivatives,self).__init__(*brights)
+        self.real = real
+        self.freeze = freeze
+        self.thaw = thaw
+        self.brights = brights
+        self.umods = None
+
+        # Test...
+        self.real.freezeParamsRecursive(*self.freeze)
+        self.real.thawParamsRecursive(*self.thaw)
+        #
+        print('Source derivs: params are:')
+        self.real.printThawedParams()
+        # and revert...
+        self.real.freezeParamsRecursive(*self.thaw)
+        self.real.thawParamsRecursive(*self.freeze)
+
+    @staticmethod
+    def getNamedParams():
+        return dict(dpos0=0, dpos1=1)
+        
+    # forced photom calls getUnitFluxModelPatches
+    def getUnitFluxModelPatches(self, img, minval=0., modelMask=None):
+        self.real.freezeParamsRecursive(*self.freeze)
+        self.real.thawParamsRecursive(*self.thaw)
+
+        # The derivatives will be scaled by the source brightness;
+        # undo that scaling. (We want derivatives of unit-flux models)
+        counts = img.getPhotoCal().brightnessToCounts(self.real.brightness)
+        derivs = self.real.getParamDerivatives(img, modelMask=modelMask)
+
+        ## FIXME -- what about using getUnitFluxModelPatch(derivs=True) ?
+        
+        #print('SourceDerivs: derivs', derivs)
+        for d in derivs:
+            if d is not None:
+                d /= counts
+                # print('Deriv: abs max', np.abs(d.patch).max(), 'range', d.patch.min(), d.patch.max(), 'sum', d.patch.sum())
+
+        # RA,Dec
+        assert(len(derivs) == 2)
+
+        # and revert...
+        self.real.freezeParamsRecursive(*self.thaw)
+        self.real.thawParamsRecursive(*self.freeze)
+        # Save these derivatives as our unit-flux models.
+        self.umods = derivs
+        return derivs
+
+    def getModelPatch(self, img, minsb=0., modelMask=None):
+        if self.umods is None:
+            return None
+        pc = img.getPhotoCal()
+        return (self.umods[0] * pc.brightnessToCounts(self.brights[0]) +
+                self.umods[1] * pc.brightnessToCounts(self.brights[1]))
 
 if __name__ == '__main__':
     sys.exit(main())
