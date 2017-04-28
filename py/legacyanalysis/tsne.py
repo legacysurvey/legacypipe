@@ -20,6 +20,12 @@
 #
 # - https://lvdmaaten.github.io/tsne/ , 2017-04-28.
 #
+
+# for x in stamp-0[01]*.png; do pngtopnm $x | pnmquant 256 | ppmtogif > $x.gif; don
+# gifsicle -m -o tsne.gif -d 10 --colors 256 stamp-0[01]*.gif
+# avconv -i stamp-%04d.png -r 10 tsne.mov
+
+
 import numpy as np
 import pylab as plt
 
