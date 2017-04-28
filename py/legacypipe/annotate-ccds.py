@@ -38,6 +38,18 @@ def main(outfn='ccds-annotated.fits', ccds=None, mzls=False):
     ccds.blacklist_ok = np.zeros(len(ccds), bool)
     ccds.blacklist_ok[I] = True
 
+    I = survey.bad_exposures(ccds)
+    ccds.bad_expid = np.zeros(len(ccds), bool)
+    ccds.bad_expid[I] = True
+
+    I = survey.ccdname_hdu_match(ccds)
+    ccds.ccd_hdu_mismatch = np.zeros(len(ccds), bool)
+    ccds.ccd_hdu_mismatch[I] = True
+
+    I = survey.bad_astrometry(ccds)
+    ccds.zpts_bad_astrom = np.zeros(len(ccds), bool)
+    ccds.zpts_bad_astrom[I] = True
+
     # Set to True if we successfully read the calibration products and computed
     # annotated values
     ccds.annotated = np.zeros(len(ccds), bool)

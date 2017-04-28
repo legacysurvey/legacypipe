@@ -307,6 +307,7 @@ def _ccds_table(camera='decam'):
         ('skycounts', '>f4'), # median sky level [electron/pix]               [=ccdskycounts in decstat]
         ('skyrms', '>f4'),    # sky variance [electron/pix]                   [=ccdskyrms in decstat]
         #('medskysub', '>f4'),    # sky variance [electron/pix]                   [=ccdskyrms in decstat]
+        ('nstarfind', '>i2'),    # number of PS1-matched stars                   [=ccdnmatch in decstat]
         ('nstar', '>i2'),     # number of detected stars                      [=ccdnstar in decstat]
         ('nmatch', '>i2'),    # number of PS1-matched stars                   [=ccdnmatch in decstat]
         ('mdncol', '>f4'),    # median g-i color of PS1-matched main-sequence stars [=ccdmdncol in decstat]
@@ -333,8 +334,8 @@ def _stars_table(nstars=1):
 
     '''
     cols = [('image_filename', 'S65'),('expid', 'S16'), ('filter', 'S1'),('nmatch', '>i2'), 
-            ('amplifier', 'i2'), ('x', 'f4'), ('y', 'f4'),
-            ('ra', 'f8'), ('dec', 'f8'), ('apmag', 'f4'),
+            ('amplifier', 'i2'), ('x', 'f4'), ('y', 'f4'),('expnum', '>i4'),
+            ('ra', 'f8'), ('dec', 'f8'), ('apmag', 'f4'),('apflux', 'f4'),('apskyflux', 'f4'),
             ('radiff', 'f8'), ('decdiff', 'f8'),('radiff_ps1', 'f8'), ('decdiff_ps1', 'f8'),
             ('gaia_ra', 'f8'), ('gaia_dec', 'f8'), ('ps1_mag', 'f4'), ('ps1_gicolor', 'f4'),
             ('gaia_g','f8'),('ps1_g','f8'),('ps1_r','f8'),('ps1_i','f8'),('ps1_z','f8')]
@@ -346,6 +347,16 @@ def getrms(x):
 
 def moffatPSF(x, a, r0, beta):
     return a*(1. + (x/r0)**2)**(-beta)
+
+
+def get_bitmask_fn(imgfn):
+    if 'ooi' in imgfn: 
+        fn= imgfn.replace('ooi','ood')
+    elif 'oki' in imgfn: 
+        fn= imgfn.replace('oki','ood')
+    else:
+        raise ValueError('bad imgfn? no ooi or oki: %s' % imgfn)
+    return fn
 
 class Measurer(object):
     def __init__(self, fn, ext, aprad=3.5, skyrad_inner=7.0, skyrad_outer=10.0,
@@ -420,6 +431,11 @@ class Measurer(object):
 
     def extinction(self, band):
         return self.k_ext[band]
+
+    def read_bitmask(self):
+        dqfn= get_bitmask_fn(self.fn)
+        mask, junk = fitsio.read(dqfn, ext=self.ext, header=True)
+        return mask
 
     def sensible_sigmaclip(self, arr, nsigma = 4.0):
         '''sigmaclip returns unclipped pixels, lo,hi, where lo,hi are the
@@ -585,7 +601,13 @@ class Measurer(object):
         ccdskey = ('avsky', 'crpix1', 'crpix2', 'crval1', 'crval2', 'cd1_1',
                    'cd1_2', 'cd2_1', 'cd2_2', 'width', 'height')
         for ckey, hkey in zip(ccdskey, hdrkey):
-            ccds[ckey] = hdr[hkey]
+            try:
+                ccds[ckey] = hdr[hkey]
+            except NameError:
+                if hkey == 'avsky':
+                    print('CP image does not have avsky in hdr: %s' % ccds['image_filename'])
+                else:
+                    raise NameError('key not in header: %s' % hkey)
             
         exptime = ccds['exptime'].data[0]
         airmass = ccds['airmass'].data[0]
@@ -632,6 +654,7 @@ class Measurer(object):
                           exclude_border=True)
         nobj = len(obj)
         print('{} sources detected with detection threshold {}-sigma'.format(nobj, det_thresh))
+        ccds['nstarfind']= nobj
 
         if nobj == 0:
             print('No sources detected!  Giving up.')
@@ -677,19 +700,19 @@ class Measurer(object):
                  (obj['xcentroid'] < img.shape[0]-minsep_px)*\
                  (obj['ycentroid'] > minsep_px)*\
                  (obj['ycentroid'] < img.shape[1]-minsep_px)
-        print('Stars after IDL cuts: %d' % (np.where(istar)[0].size,))
+        ccds['nstar']= np.where(istar)[0].size
+        print('Stars after IDL cuts: %d' % ccds['nstar'])
         #sn= apflux / np.sqrt(apskyflux)
         #istar *= (sn >= 10)*(sn <= 100)
         #print('Stars after SN = [10,100]: %d' % (np.where(istar)[0].size,))
 
-        if np.where(istar)[0].size == 0:
+        if ccds['nstar'] == 0:
             print('FAIL: All stars have negative aperture photometry AND/OR contain masked pixels!')
             return ccds, _stars_table()
         obj = obj[istar]
         objra, objdec = self.wcs.pixelxy2radec(obj['xcentroid']+1, obj['ycentroid']+1)
         apflux = apflux[istar].data
         apskyflux= apskyflux[istar].data
-        ccds['nstar'] = len(istar)
         t0= ptime('aperture-photometry',t0)
            
         if False: 
@@ -769,6 +792,7 @@ class Measurer(object):
         center_ccd = SkyCoord(ra=ccds['ra']*units.degree, dec=ccds['dec']*units.degree)
         ang = gaia_cat.separation(center_ccd) 
         gicolor= ps1.median[:,0] - ps1.median[:,2]
+        # Zeropoint Sample is Main Sequence stars
         good*= (np.array(ang) < 0.50)*(gicolor > 0.4)*(gicolor < 2.7)
         # final cut
         good = np.where(good)[0]
@@ -784,19 +808,19 @@ class Measurer(object):
         # Match GAIA and Our Data
         m1, m2, d12 = match_radec(objra, objdec, gra, gdec, self.matchradius/3600.0,\
                                   nearest=True)
-        nmatch = len(m1)
-        ccds['nmatch'] = nmatch
-        print('{} GAIA sources match detected sources within {} arcsec.'.format(nmatch, self.matchradius))
+        ccds['nmatch'] = len(m1)
+        print('{} GAIA sources match detected sources within {} arcsec.'.format(ccds['nmatch'], self.matchradius))
         t0= ptime('match-to-gaia-radec',t0)
 
         # Stars table 
         print('Add the amplifier number!!!')
-        stars = _stars_table(nmatch)
+        stars = _stars_table(ccds['nmatch'])
         stars['image_filename'] =ccds['image_filename']
+        stars['expnum'] = self.expnum
         stars['expid'] = self.expid
         stars['filter'] = self.band
         # Matched quantities
-        stars['nmatch'] = nmatch 
+        stars['nmatch'] = ccds['nmatch'] 
         stars['x'] = obj['xcentroid'][m1]
         stars['y'] = obj['ycentroid'][m1]
         stars['ra'] = objra[m1]
@@ -804,20 +828,22 @@ class Measurer(object):
         stars['radiff'] = (gra[m2] - stars['ra']) * np.cos(np.deg2rad(stars['dec'])) * 3600.0
         stars['decdiff'] = (gdec[m2] - stars['dec']) * 3600.0
         stars['apmag'] = - 2.5 * np.log10(apflux[m1]) + zp0 + 2.5 * np.log10(exptime)
-        # Add ps1 astrometric residuals for comparison
-        ps1_m1, ps1_m2, ps1_d12 = match_radec(objra, objdec, ps1.ra, ps1.dec, self.matchradius/3600.0,\
-                                              nearest=True)
-        # If different number gaia matches versus ps1 matches, need to handle
-        num_gaia= len(stars['apmag'])
-        stars['radiff_ps1'] = (ps1.ra[ps1_m2][:num_gaia] - objra[ps1_m1][:num_gaia]) * np.cos(np.deg2rad(objdec[ps1_m1][:num_gaia])) * 3600.0
-        stars['decdiff_ps1'] = (ps1.dec[ps1_m2][:num_gaia] - objdec[ps1_m1][:num_gaia]) * 3600.0
+        stars['apflux'] = apflux[m1]
+        stars['apskyflux'] = apskyflux[m1]
+        ## Add ps1 astrometric residuals for comparison
+        #ps1_m1, ps1_m2, ps1_d12 = match_radec(objra, objdec, ps1.ra, ps1.dec, self.matchradius/3600.0,\
+        #                                      nearest=True)
+        ## If different number gaia matches versus ps1 matches, need to handle
+        #num_gaia= len(stars['apmag'])
+        #stars['radiff_ps1'] = (ps1.ra[ps1_m2][:num_gaia] - objra[ps1_m1][:num_gaia]) * np.cos(np.deg2rad(objdec[ps1_m1][:num_gaia])) * 3600.0
+        #stars['decdiff_ps1'] = (ps1.dec[ps1_m2][:num_gaia] - objdec[ps1_m1][:num_gaia]) * 3600.0
         # Photometry
         # Unless we're calibrating the photometric transformation, bring PS1
         # onto the photometric system of this camera (we add the color term
         # below).
         if self.calibrate:
             raise ValueError('not Calibrating PS1 to our Camera, are you sure?')
-            colorterm = np.zeros(nmatch)
+            colorterm = np.zeros(ccds['nmatch'])
         else:
             colorterm = self.colorterm_ps1_to_observed(ps1.median[m2, :], self.band)
         ps1band = ps1cat.ps1band[self.band]
@@ -828,19 +854,20 @@ class Measurer(object):
             stars['ps1_%s' % ps1_band]= ps1.median[m2, ps1_index]
         stars['gaia_g']=ps1.phot_g_mean_mag[m2]
         
-        # Zeropoint Sample is Main Sequence stars
-        print('Computing the photometric zeropoint.')
-        stars['ps1_gicolor'] = ps1.median[m2, 0] - ps1.median[m2, 2]
-        print('Before gicolor cut, len(stars)=%d' % len(stars['ps1_gicolor']))
-        mskeep = np.where((stars['ps1_gicolor'] > 0.4) * (stars['ps1_gicolor'] < 2.7))[0]
-        if len(mskeep) == 0:
-            print('Not enough PS1 stars with main sequence colors.')
-            return ccds, stars
-        ccds['mdncol'] = np.median(stars['ps1_gicolor'][mskeep]) # median g-i color
-        print('After gicolor cut, len(stars)=%d' % len(mskeep))
+        #print('Computing the photometric zeropoint.')
+        #stars['ps1_gicolor'] = ps1.median[m2, 0] - ps1.median[m2, 2]
+        #print('Before gicolor cut, len(stars)=%d' % len(stars['ps1_gicolor']))
+        #mskeep = np.where((stars['ps1_gicolor'] > 0.4) * (stars['ps1_gicolor'] < 2.7))[0]
+        #if len(mskeep) == 0:
+        #    print('Not enough PS1 stars with main sequence colors.')
+        #    return ccds, stars
+        #ccds['mdncol'] = np.median(stars['ps1_gicolor'][mskeep]) # median g-i color
+        #print('After gicolor cut, len(stars)=%d' % len(mskeep))
         
         # Compute Zeropoint
-        dmagall = stars['ps1_mag'][mskeep] - stars['apmag'][mskeep]
+        #dmagall = stars['ps1_mag'][mskeep] - stars['apmag'][mskeep]
+        assert(len(stars['ps1_mag']) == ccds['nmatch'])
+        dmagall = stars['ps1_mag'] - stars['apmag']
         dmag, _, _ = sigmaclip(dmagall, low=2.5, high=2.5)
         dmagmed = np.median(dmag)
         ndmag = len(dmag)
@@ -1000,7 +1027,7 @@ class DecamMeasurer(Measurer):
     def read_image_and_bitmask(self,funpack=True):
         '''funpack, then read'''
         imgfn= self.fn
-        maskfn= self.fn.replace('ooi','ood')
+        maskfn= get_bitmask_fn(self.fn)
         print('Reading %s %s' % (imgfn,maskfn))
         if funpack:
             todelete=[]
@@ -1032,11 +1059,6 @@ class DecamMeasurer(Measurer):
     def get_wcs(self):
         return wcs_pv2sip_hdr(self.hdr) # PV distortion
     
-    def read_bitmask(self):
-        fn= self.fn.replace('ooi','ood')
-        mask, junk = fitsio.read(fn, ext=self.ext, header=True)
-        return mask
-
 class Mosaic3Measurer(Measurer):
     '''Class to measure a variety of quantities from a single Mosaic3 CCD.
     UNITS: e-/s'''
@@ -1077,11 +1099,6 @@ class Mosaic3Measurer(Measurer):
         img *= self.exptime 
         return img, hdr
 
-    def read_bitmask(self):
-        fn= self.fn.replace('ooi','ood')
-        mask, junk = fitsio.read(fn, ext=self.ext, header=True)
-        return mask
-    
     def get_wcs(self):
         return wcs_pv2sip_hdr(self.hdr) # PV distortion
 
@@ -1135,20 +1152,14 @@ class NinetyPrimeMeasurer(Measurer):
         img *= self.exptime
         return img, hdr
     
-    def read_bitmask(self):
-        fn= self.fn.replace('ooi','ood')
-        mask, junk = fitsio.read(fn, ext=self.ext, header=True)
-        return mask
-  
     def get_wcs(self):
         return wcs_pv2sip_hdr(self.hdr) # PV distortion
 
 
-def camera_name(primhdr):
+def get_extlist(camera):
     '''
     Returns 'mosaic3', 'decam', or '90prime'
     '''
-    camera = primhdr.get('INSTRUME','').strip().lower()
     if camera == '90prime':
         extlist = ['CCD1', 'CCD2', 'CCD3', 'CCD4']
     elif camera == 'mosaic3':
@@ -1163,9 +1174,8 @@ def camera_name(primhdr):
                    'N28', 'N29', 'N31']
     else:
         print('Camera {} not recognized!'.format(camera))
-        pdb.set_trace()
-    
-    return camera, extlist
+        pdb.set_trace() 
+    return extlist
     
 def measure_mosaic3(fn, ext='CCD1', **kwargs):
     '''Wrapper function to measure quantities from the Mosaic3 camera.'''
@@ -1216,7 +1226,13 @@ def measure_image(img_fn, **measureargs):
         stars = vstack(stars)
         return ccds,stars
     
-    camera, extlist = camera_name(primhdr)
+    camera = primhdr.get('INSTRUME','').strip().lower()
+    # Names differ a bit here
+    # From cmd line: measureargs['camera'] = 'decam, mosaic, 90prime'
+    # Has to be consistent with hdr: camera = 'decam, mosaic3, 90prime'
+    assert(measureargs['camera'] in camera)
+    
+    extlist = get_extlist(camera)
     nnext = len(extlist)
 
     if camera == 'decam':
@@ -1228,7 +1244,7 @@ def measure_image(img_fn, **measureargs):
 
     ccds = []
     stars = []
-    for ext in extlist[:2]:
+    for ext in extlist:
         ccds1, stars1 = measure(img_fn, ext, **measureargs)
         t0= ptime('measured-ext-%s' % ext,t0)
         ccds.append(ccds1)
@@ -1245,23 +1261,24 @@ def measure_image(img_fn, **measureargs):
 
 
 class outputFns(object):
-    def __init__(self,image_fn,outdir,prefix=''):
+    def __init__(self,imgfn_proj,outdir,prefix=''):
         '''
         outdir/decam/DECam_CP/CP20151226/img_fn.fits.fz
         outdir/decam/DECam_CP/CP20151226/img_fn-zpt%s.fits
         outdir/decam/DECam_CP/CP20151226/img_fn-star%s.fits
         '''
-        one= os.path.basename( os.path.dirname(image_fn) )
+        one= os.path.basename( os.path.dirname(imgfn_proj) )
         two= os.path.basename( os.path.dirname( \
-                                    os.path.dirname(image_fn)))
+                                    os.path.dirname(imgfn_proj)))
         three= os.path.basename( os.path.dirname( \
                                     os.path.dirname( \
-                                        os.path.dirname(image_fn))))
+                                        os.path.dirname(imgfn_proj))))
         dr= os.path.join(outdir,three,two,one)
-        base= os.path.basename(image_fn).replace('.fits.fz','')
+        base= os.path.basename(imgfn_proj).replace('.fits.fz','')
         self.zptfn= os.path.join(dr,'%s-zpt%s.fits' % (base,prefix))
         self.starfn= os.path.join(dr,'%s-star%s.fits' % (base,prefix))
-        self.imgfn= os.path.join(dr,'%s.fits.fz' % base)
+        # Image fn that will be on SCRATCH
+        self.imgfn_scr= os.path.join(dr,'%s.fits.fz' % base)
 
 def get_output_fns(img_fn,prefix=''):
     zptsfile= os.path.dirname(img_fn).replace('/project/projectdirs','/scratch2/scratchdirs/kaylanb')
@@ -1271,28 +1288,30 @@ def get_output_fns(img_fn,prefix=''):
     return zptsfile,zptstarsfile
 
 
-def runit(img_fn, **measureargs):
+def runit(imgfn_proj, **measureargs):
     '''Generate a legacypipe-compatible CCDs file for a given image.
-
     '''
     zptfn= measureargs.get('zptfn')
     starfn= measureargs.get('starfn')
-    imagefn= measureargs.get('imgfn')
+    imgfn_scr= measureargs.get('imgfn_scr')
+    # mask fn
+    dqfn_proj= get_bitmask_fn(imgfn_proj)
+    dqfn_scr= get_bitmask_fn(imgfn_scr)
 
     t0 = Time()
     for mydir in [os.path.dirname(zptfn),\
-                  os.path.dirname(imagefn)]:
+                  os.path.dirname(imgfn_scr)]:
         if not os.path.exists(mydir):
             os.makedirs(mydir)
 
     # Copy to SCRATCH for improved I/O
-    if not os.path.exists(imagefn): 
-        dobash("cp %s %s" % (img_fn,imagefn))
-    if not os.path.exists(imagefn.replace('_ooi_','_ood_')): 
-        dobash("cp %s %s" % (img_fn.replace('_ooi_','_ood_'),imagefn.replace('_ooi_','_ood_')))
+    if not os.path.exists(imgfn_scr): 
+        dobash("cp %s %s" % (imgfn_proj,imgfn_scr))
+    if not os.path.exists(dqfn_scr): 
+        dobash("cp %s %s" % (dqfn_proj, dqfn_scr))
     t0= ptime('copy-to-scratch',t0)
 
-    ccds, stars= measure_image(imagefn, **measureargs)
+    ccds, stars= measure_image(imgfn_scr, **measureargs)
     t0= ptime('measure_image',t0)
 
     # Write out.
@@ -1304,10 +1323,11 @@ def runit(img_fn, **measureargs):
     stars.write(starfn)
     print('Wrote {}'.format(starfn))
     t0= ptime('write-results-to-fits',t0)
-    if os.path.exists(imagefn): 
-        assert(imagefn.startswith('/global/cscratch1/sd/kaylanb'))
-        dobash("rm %s" % imagefn)
-        dobash("rm %s" % imagefn.replace('_ooi_','_ood_'))
+    if os.path.exists(imgfn_scr): 
+        # Safegaurd against removing stuff on /project
+        assert(not 'project' in imgfn_scr)
+        dobash("rm %s" % imgfn_scr)
+        dobash("rm %s" % dqfn_scr)
         t0= ptime('removed-cp-from-scratch',t0)
     
 class Compare2Arjuns(object):
@@ -1663,12 +1683,14 @@ def get_parser():
     parser = argparse.ArgumentParser(formatter_class=argparse.ArgumentDefaultsHelpFormatter,\
                                      description='Generate a legacypipe-compatible CCDs file \
                                                   from a set of reduced imaging.')
-    parser.add_argument('--image_list',action='store',default=None,help='if want to run all images in a text file, Note:if compare2arjun = True then list of legacy zeropoint files',required=False)
+    parser.add_argument('--camera',choices=['decam','mosaic','90prime'],action='store',required=True)
     parser.add_argument('--image',action='store',default=None,help='if want to run a single image',required=False)
+    parser.add_argument('--image_list',action='store',default=None,help='if want to run all images in a text file, Note:if compare2arjun = True then list of legacy zeropoint files',required=False)
     parser.add_argument('--prefix', type=str, default='', help='Prefix to prepend to the output files.')
     parser.add_argument('--verboseplots', action='store_true', default=False, help='use to plot FWHM Moffat PSF fits to the 20 brightest stars')
     parser.add_argument('--compare2arjun', action='store_true', default=False, help='turn this on and give --image-list a list of legacy zeropoint files instead of cp images')
     parser.add_argument('--outdir', type=str, default='.', help='Where to write zpts/,images/,logs/')
+    parser.add_argument('--logdir', type=str, default='.', help='Where to write zpts/,images/,logs/')
     parser.add_argument('--aprad', type=float, default=3.5, help='Aperture photometry radius (arcsec).')
     parser.add_argument('--skyrad-inner', type=float, default=7.0, help='Radius of inner sky annulus (arcsec).')
     parser.add_argument('--skyrad-outer', type=float, default=10.0, help='Radius of outer sky annulus (arcsec).')
@@ -1700,27 +1722,29 @@ def main(image_list=None,args=None):
         measureargs.pop('compare2arjun')
     measureargs.pop('image_list')
     measureargs.pop('image')
+    # Add user specified camera, useful check against primhdr
+    #measureargs.update(dict(camera= args.camera))
 
     outdir = measureargs.pop('outdir')
     if not os.path.exists(outdir):
         os.makedirs(outdir)
     t0=ptime('parse-args',t0)
-    for image_fn in image_list:
+    for imgfn_proj in image_list:
         # Check if zpt already written
-        F= outputFns(image_fn,outdir,prefix= measureargs.get('prefix'))
+        F= outputFns(imgfn_proj,outdir,prefix= measureargs.get('prefix'))
         if os.path.exists(F.zptfn) and os.path.exists(F.starfn):
             print('Already finished: %s' % F.zptfn)
             continue
         measureargs.update(dict(zptfn= F.zptfn,\
                                 starfn= F.starfn,\
-                                imgfn= F.imgfn))
+                                imgfn_scr= F.imgfn_scr))
         # Create the file
         t0=ptime('b4-run',t0)
-        runit(image_fn, **measureargs)
+        runit(imgfn_proj, **measureargs)
         #try: 
-        #    runit(image_fn, **measureargs)
+        #    runit(imgfn_proj, **measureargs)
         #except:
-        #    print('zpt failed for %s' % image_fn)
+        #    print('zpt failed for %s' % imgfn_proj)
         t0=ptime('after-run',t0)
     tnow= Time()
     print("TIMING:total %s" % (tnow-tbegin,))
