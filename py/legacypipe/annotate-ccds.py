@@ -141,7 +141,6 @@ def main(outfn='ccds-annotated.fits', ccds=None, mzls=False):
             import traceback
             traceback.print_exc()
             plvers.append('')
-            raise
             continue
 
         if tim is None:
@@ -370,7 +369,6 @@ def _bounce_main((name, i, ccds, force, mzls)):
     except:
         import traceback
         traceback.print_exc()
-        raise
 
 if __name__ == '__main__':
     import sys
@@ -484,6 +482,23 @@ if __name__ == '__main__':
         # expand some columns to make the three files have the same structure.
         T.object = T.object.astype('S37')
         T.plver  = T.plver.astype('S6')
+
+        if opt.mzls:
+            cols = T.columns()
+            if not 'bad_expid' in cols:
+                I = survey.bad_exposures(T)
+                T.bad_expid = np.zeros(len(T), bool)
+                T.bad_expid[I] = True
+
+            if not 'ccd_hdu_mismatch' in cols:
+                I = survey.ccdname_hdu_match(T)
+                T.ccd_hdu_mismatch = np.zeros(len(T), bool)
+                T.ccd_hdu_mismatch[I] = True
+
+            if not 'bad_astrometry' in cols:
+                I = survey.bad_astrometry(T)
+                T.zpts_bad_astrom = np.zeros(len(T), bool)
+                T.zpts_bad_astrom[I] = True
 
         T.writeto('survey-ccds-annotated-%s.fits' % name)
 
