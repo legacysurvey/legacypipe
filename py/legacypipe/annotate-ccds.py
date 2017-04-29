@@ -128,8 +128,6 @@ def main(outfn='ccds-annotated.fits', ccds=None, mzls=False):
 
         W,H = ccd.width, ccd.height
 
-        has_skygrid = dict(decam=True).get(ccd.camera, False)
-
         kwargs = dict(pixPsf=True, splinesky=True, subsky=False,
                       pixels=False, dq=False, invvar=False)
 
@@ -143,6 +141,7 @@ def main(outfn='ccds-annotated.fits', ccds=None, mzls=False):
             import traceback
             traceback.print_exc()
             plvers.append('')
+            raise
             continue
 
         if tim is None:
@@ -250,6 +249,10 @@ def main(outfn='ccds-annotated.fits', ccds=None, mzls=False):
         gaussgalnorm[iccd] = im.galaxy_norm(tim, x=cx, y=cy)
         tim.psf = realpsf
         
+        #has_skygrid = dict(decam=True).get(ccd.camera, False)
+        has_skygrid = hasattr(sky, 'evaluateGrid')
+
+
         # Sky -- evaluate on a grid (every ~10th pixel)
         if has_skygrid:
             skygrid = sky.evaluateGrid(np.linspace(0, ccd.width-1,  int(1+ccd.width/10)),
