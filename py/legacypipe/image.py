@@ -337,11 +337,14 @@ class LegacySurveyImage(object):
         assert(np.all(np.isfinite(tim.getInvError())))
 
         # PSF norm
+        print('Computing PSF norm')
         psfnorm = self.psf_norm(tim)
 
         # Galaxy-detection norm
+        print('Computing galaxy norm')
         tim.band = band
         galnorm = self.galaxy_norm(tim)
+        print('PSF norm', psfnorm, 'galaxy norm', galnorm)
 
         # CP (DECam) images include DATE-OBS and MJD-OBS, in UTC.
         import astropy.time
