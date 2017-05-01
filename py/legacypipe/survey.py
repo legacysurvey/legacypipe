@@ -725,9 +725,7 @@ Now using the current directory as LEGACY_SURVEY_DIR, but this is likely to fail
         else:
             self.output_dir = output_dir
 
-        self.output_files = []
-        self.output_sha1sum_files = OrderedDict()
-
+        self.output_file_hashes = OrderedDict()
         self.ccds = ccds
         self.bricks = None
 
@@ -892,14 +890,14 @@ Now using the current directory as LEGACY_SURVEY_DIR, but this is likely to fail
         elif filetype in ['all-models']:
             return os.path.join(basedir, 'metrics', brickpre, 'all-models-%s.fits' % (brick))
 
-        elif filetype == 'sha1sum-brick':
+        elif filetype == 'checksums':
             return os.path.join(basedir, 'tractor', brickpre,
-                                'brick-%s.sha1sum' % brick)
+                                'brick-%s.sha256sum' % brick)
 
         print('Unknown filetype "%s"' % filetype)
         assert(False)
 
-    def write_output(self, filetype, **kwargs):
+    def write_output(self, filetype, hashsum=True, **kwargs):
         '''
         Returns a context manager for writing an output file; use like:
 
@@ -908,7 +906,7 @@ Now using the current directory as LEGACY_SURVEY_DIR, but this is likely to fail
 
         For FITS output, out.fits is a fitsio.FITS object.  The file
         contents will actually be written in memory, and then a
-        sha1sum computed before the file contents are written out to
+        sha256sum computed before the file contents are written out to
         the real disk file.  The 'out.fn' member variable is NOT set.
 
         with survey.write_fits_output('ccds', brick=brickname) as out:
@@ -921,10 +919,10 @@ Now using the current directory as LEGACY_SURVEY_DIR, but this is likely to fail
 
         Does the following on exit:
         - moves the ".tmp" to the final filename (to make it atomic)
-        - records the filename for later SHA1 computation
+        - computes the sha256sum
         '''
         class OutputFileContext(object):
-            def __init__(self, fn, survey):
+            def __init__(self, fn, survey, hashsum=True):
                 self.real_fn = fn
                 self.survey = survey
                 self.is_fits = fn.endswith('.fits') or fn.endswith('.fits.gz')
@@ -934,6 +932,7 @@ Now using the current directory as LEGACY_SURVEY_DIR, but this is likely to fail
                     self.fits = fitsio.FITS('mem://', 'rw')
                 else:
                     self.fn = self.tmpfn
+                self.hashsum = hashsum
 
             def __enter__(self):
                 dirnm = os.path.dirname(self.tmpfn)
@@ -949,44 +948,44 @@ Now using the current directory as LEGACY_SURVEY_DIR, but this is likely to fail
                 if exc_type is not None:
                     return
 
-                if self.is_fits:
+                if self.hashsum:
                     import hashlib
+                    hashfunc = hashlib.sha256
+                    sha = hashfunc()
+                if self.is_fits:
                     # Read back the data
                     rawdata = self.fits.read_raw()
                     self.fits.close()
-                    sha = hashlib.sha1()
-                    sha.update(rawdata)
-                    hashcode = sha.hexdigest()
+                    if self.hashsum:
+                        sha.update(rawdata)
                     f = open(self.tmpfn, 'w')
                     f.write(rawdata)
                     f.close()
                     print('Wrote', self.tmpfn)
                     del rawdata
+                else:
+                    f = open(self.tmpfn, 'r')
+                    if self.hashsum:
+                        sha.update(f.read())
+                    f.close()
+                if self.hashsum:
+                    hashcode = sha.hexdigest()
+                    del sha
 
                 os.rename(self.tmpfn, self.real_fn)
 
-                if self.is_fits:
-                    self.survey.add_sha1sum(self.real_fn, hashcode)
-                else:
-                    self.survey.add_output_file(self.real_fn)
+                if self.hashsum:
+                    self.survey.add_hashcode(self.real_fn, hashcode)
 
         fn = self.find_file(filetype, output=True, **kwargs)
-        out = OutputFileContext(fn, self)
+        out = OutputFileContext(fn, self, hashsum=hashsum)
         return out
 
-    def add_sha1sum(self, fn, sha1sum):
+    def add_hashcode(self, fn, hashcode):
         '''
         Callback to be called in the *write_output* routine.
         '''
-        self.output_sha1sum_files[fn] = sha1sum
-
-    def add_output_file(self, fn):
-        '''
-        Intended as a callback to be called in the *write_output* routine.
-        Adds the given filename to the list of files written by the
-        pipeline on this run.
-        '''
-        self.output_files.append(fn)
+        self.output_file_hashes[fn] = hashcode
 
     def __getstate__(self):
         '''

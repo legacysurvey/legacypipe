@@ -2155,35 +2155,19 @@ def stage_writecat(
 
     ### FIXME -- convert intermediate tractor catalog to final, for now...
     ### FIXME -- note that this is now the only place where 'allbands' is used.
-    # Re-read to test round-tripping
-    #T2,hdr,primhdr = survey.read_intermediate_catalog(brickname, output=True)
 
     from format_catalog import format_catalog
     with survey.write_output('tractor', brick=brickname) as out:
-        format_catalog(T2, hdr, primhdr, allbands, None, flux_prefix='decam_',
-                       write_kwargs=dict(fits_object=out.fits))
+        format_catalog(T2, hdr, primhdr, allbands, None,
+                       write_kwargs=dict(fits_object=out.fits), dr4=True)
 
-    # produce per-brick sha1sums file
-    hashfn = survey.find_file('sha1sum-brick', brick=brickname, output=True)
-
-    # Start by writing our pre-computed sha1sums and filenames and running
-    # sha1sum -c...
-    f = open(hashfn, 'w')
-    for fn,sha1sum in survey.output_sha1sum_files.items():
-        f.write('%s *%s\n' % (sha1sum, fn))
-    f.close()
-
-    cmd = 'sha1sum -c %s' % hashfn
-    print('Check sha1sums:', cmd)
-    rtn = os.system(cmd)
-    print('Return value:', rtn)
-    assert(rtn == 0)
-
-    # Now compute checksums for the files in our output_files list,
-    # appending it to the list of checksums that we just checked.
-    cmd = 'sha1sum -b ' + ' '.join(survey.output_files) + ' >> ' + hashfn
-    print('Checksums:', cmd)
-    os.system(cmd)
+    # produce per-brick checksum file.
+    with survey.write_output('checksums', brick=brickname, hashsum=False) as out:
+        f = open(out.fn, 'w')
+        # Write our pre-computed hashcodes.
+        for fn,hashsum in survey.output_file_hashes.items():
+            f.write('%s *%s\n' % (hashsum, fn))
+        f.close()
 
     # write fits file with galaxy-sim stuff (xy bounds of each sim)
     if 'sims_xy' in T.get_columns(): 

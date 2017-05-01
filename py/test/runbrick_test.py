@@ -60,6 +60,11 @@ if __name__ == '__main__':
     assert(len(T) == 2)
     print('Types:', T.type)
     assert(T.type[0] == 'REX ')
+    cmd = 'sha256sum -c %s' % os.path.join(outdir, 'tractor', '110',
+                                           'brick-1102p240.sha256sum')
+    print(cmd)
+    rtn = os.system(cmd)
+    assert(rtn == 0)
 
     # Test with a Tycho-2 star in the blob.
 
