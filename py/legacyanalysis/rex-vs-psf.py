@@ -10,12 +10,38 @@ ps = PlotSequence('rexpsf')
 
 dirnm = 'cosmos-52-rex2'
 #dirnm = 'cosmos-50-rex2'
-allfns = glob(os.path.join(dirnm, 'metrics', '*', 'all-models-*.fits'))
-allfns.sort()
+#allfns = glob(os.path.join(dirnm, 'metrics', '*', 'all-models-*.fits'))
+#allfns.sort()
+#for fn in allfns:
+#    T = fits_table(fn)
+#    print(fn, '->', len(T))
 TT = []
-for fn in allfns:
+for brick in ['1498p017', '1498p020', '1498p022', '1498p025', '1501p017', '1501p020', '1501p022', '1501p025', '1503p017', '1503p020', '1503p022', '1503p025', '1506p017', '1506p020', '1506p022', '1506p025']:
+    fn = os.path.join(dirnm, 'metrics', brick[:3], 'all-models-%s.fits' % brick)
     T = fits_table(fn)
     print(fn, '->', len(T))
+
+    fn = os.path.join(dirnm, 'tractor', brick[:3], 'tractor-%s.fits' % brick)
+    T2 = fits_table(fn)
+    print(fn, '->', len(T2))
+    T.bx = T2.bx
+    T.by = T2.by
+
+    fn = os.path.join(dirnm, 'coadd', brick[:3], brick, 'legacysurvey-%s-image.jpg' % brick)
+    jpg = plt.imread(fn)
+
+    jpg = np.flipud(jpg)
+    T.ix = np.round(T.bx).astype(int)
+    T.iy = np.round(T.by).astype(int)
+    H,W,d = jpg.shape
+    S = 15
+    T.cut((T.ix >= S) * (T.iy >= S) * (T.ix < (W-S)) * (T.iy < (H-S)))
+    stamps = []
+    for i in range(len(T)):
+        stamps.append((jpg[T.iy[i] - S : T.iy[i] + S + 1,
+                           T.ix[i] - S : T.ix[i] + S + 1, :]))
+    T.stamp = stamps
+    
     TT.append(T)
 T = merge_tables(TT)
 print('Total', len(T))
@@ -160,6 +186,30 @@ plt.legend()
 plt.title('1/4 % cut')
 ps.savefig()
 
+
+# Stamps for some objects caught by the 1% cut.
+
+for I,name in [(np.flatnonzero(T.isrex * (T.fcut == False)), '1% cut'),
+               (np.flatnonzero(T.isrex * (T.fcut2 == False)), '1/2 % cut'),
+               (np.flatnonzero(T.isrex * (T.fcut3 == False)), '1/4 % cut'),
+               (np.flatnonzero(T.isrex * (T.fcut == True) * (T.fcut2 == False)), '1/2 % cut but not 1 %'),
+               (np.flatnonzero(T.isrex * (T.fcut2 == True) * (T.fcut3 == False)), '1/4 % cut but not 1/2 %'),
+               ]:
+    k = 0
+    img = []
+    for r in range(10):
+        imrow = []
+        for c in range(15):
+            imrow.append(T.stamp[I[k]])
+            k += 1
+        imrow = np.concatenate(imrow, axis=1)
+        img.append(imrow)
+    img = np.concatenate(img, axis=0)
+    plt.clf()
+    plt.imshow(img, interpolation='nearest', origin='lower')
+    plt.xticks([]); plt.yticks([])
+    plt.title('Cut by %s' % name)
+    ps.savefig()
 
 
 
