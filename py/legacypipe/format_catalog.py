@@ -110,15 +110,17 @@ def format_catalog(T, hdr, primhdr, allbands, outfn,
     trans_cols_opt  = []
     trans_cols_wise = []
     if dr4:
-        for i,b in enumerate(allbands):
-            col = 'mw_transmission_%s' % b
-            T.set(col, 10.**(-decam_ext[:,i] / 2.5))
-            trans_cols_opt.append(col)
-        if has_wise:
-            for i,b in enumerate(wbands):
-                col = 'mw_transmission_%s' % b
-                T.set(col, 10.**(-wise_ext[:,i] / 2.5))
-                trans_cols_wise.append(col)
+        # # No MW_TRANSMISSION_* columns at all
+        # for i,b in enumerate(allbands):
+        #         col = 'mw_transmission_%s' % b
+        #         T.set(col, 10.**(-decam_ext[:,i] / 2.5))
+        #         trans_cols_opt.append(col)
+        #     if has_wise:
+        #         for i,b in enumerate(wbands):
+        #             col = 'mw_transmission_%s' % b
+        #             T.set(col, 10.**(-wise_ext[:,i] / 2.5))
+        #             trans_cols_wise.append(col)
+        pass
     else:
         T.decam_mw_transmission = 10.**(-decam_ext / 2.5)
         trans_cols_opt.append('decam_mw_transmission')
@@ -131,7 +133,8 @@ def format_catalog(T, hdr, primhdr, allbands, outfn,
     cols = []
     if dr4:
         cols.append('release')
-        T.release = np.array(['MzLS+BASS-DR4'] * len(T))
+        #T.release = np.array(['MzLS+BASS-DR4'] * len(T))
+        T.release = np.zeros(len(T), np.int16) + 4000
         
     cols.extend([
         'brickid', 'brickname', 'objid', 'brick_primary', 'blob', 'ninblob',
@@ -143,9 +146,8 @@ def format_catalog(T, hdr, primhdr, allbands, outfn,
     if not dr4:
         cols.extend(['cpu_source', 'cpu_blob',
                      'blob_width', 'blob_height', 'blob_npix', 'blob_nimages',
-                     'blob_totalpix',
-                     'mjd_min', 'mjd_max',
-                     ])
+                     'blob_totalpix',])
+    cols.extend(['mjd_min', 'mjd_max'])
 
     if dr4:
         cc = ['flux', 'flux_ivar']
