@@ -199,8 +199,12 @@ def format_catalog(T, hdr, primhdr, allbands, outfn,
                   'wise_nobs', 'wise_fracflux','wise_rchi2']
             for c in cc:
                 cbare = c.replace('wise_','')
+                thiswbands = wbands
+                if cbare == 'mask':
+                    cbare = 'wisemask'
+                    thiswbands = wbands[:2]
                 X = T.get(c)
-                for i,b in enumerate(wbands):
+                for i,b in enumerate(thiswbands):
                     col = '%s_%s' % (cbare, b)
                     T.set(col, X[:,i])
                     cols.append(col)

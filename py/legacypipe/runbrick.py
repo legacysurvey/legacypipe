@@ -1372,9 +1372,9 @@ def stage_fitblobs(T=None,
         T.set(k, BB.get(k))
 
     # Compute MJD_MIN, MJD_MAX
-    T.mjd_min = np.empty(len(T), np.float32)
+    T.mjd_min = np.empty(len(T), np.float64)
     T.mjd_min[:] = np.inf
-    T.mjd_max = np.empty(len(T), np.float32)
+    T.mjd_max = np.empty(len(T), np.float64)
     T.mjd_max[:] = -np.inf
     ra  = np.array([src.getPosition().ra  for src in cat])
     dec = np.array([src.getPosition().dec for src in cat])
