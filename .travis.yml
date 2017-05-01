@@ -38,14 +38,14 @@ install:
     - export WCSLIB_INC="-I/usr/include/wcslib-4.20"
     - export WCSLIB_LIB="-lwcs"
 
-    - pip install --user numpy==1.11.0
-    - pip install --user matplotlib==1.5.1
+    - pip install numpy==1.11.0
+    - pip install matplotlib==1.5.1
     - pip install numpydoc -t $HOME/numpydoc
-    - pip install --user coveralls
-    - pip install --user astropy
+    - pip install coveralls
+    - pip install astropy
     # fitsio master version
-    - pip install --user --no-deps --upgrade git+https://github.com/esheldon/fitsio.git#egg=fitsio
-    - pip install --user photutils
+    - pip install --no-deps --upgrade git+https://github.com/esheldon/fitsio.git#egg=fitsio
+    - pip install photutils
 
     # - easy_install3 --user pip
     # - pip3 install --user numpy==1.11.0
@@ -152,5 +152,5 @@ cache:
   - $HOME/astrometry.net
   - $HOME/tractor-git
   #- $HOME/fitsio-git
-  - $HOME/.local
+  #- $HOME/.local
   - $HOME/dust
