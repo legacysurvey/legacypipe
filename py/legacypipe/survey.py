@@ -4,6 +4,7 @@ import os
 import tempfile
 import time
 from glob import glob
+from collections import OrderedDict
 
 import numpy as np
 
@@ -725,6 +726,7 @@ Now using the current directory as LEGACY_SURVEY_DIR, but this is likely to fail
             self.output_dir = output_dir
 
         self.output_files = []
+        self.output_sha1sum_files = OrderedDict()
 
         self.ccds = ccds
         self.bricks = None
@@ -893,7 +895,7 @@ Now using the current directory as LEGACY_SURVEY_DIR, but this is likely to fail
         elif filetype == 'sha1sum-brick':
             return os.path.join(basedir, 'tractor', brickpre,
                                 'brick-%s.sha1sum' % brick)
-        
+
         print('Unknown filetype "%s"' % filetype)
         assert(False)
 
@@ -903,6 +905,14 @@ Now using the current directory as LEGACY_SURVEY_DIR, but this is likely to fail
 
         with survey.write_output('ccds', brick=brickname) as out:
             ccds.writeto(out.fn, primheader=primhdr)
+
+        For FITS output, out.fits is a fitsio.FITS object.  The file
+        contents will actually be written in memory, and then a
+        sha1sum computed before the file contents are written out to
+        the real disk file.  The 'out.fn' member variable is NOT set.
+
+        with survey.write_fits_output('ccds', brick=brickname) as out:
+            ccds.writeto(None, fits_object=out.fits, primheader=primhdr)
 
         Does the following on entry:
         - calls self.find_file() to determine which filename to write to
@@ -917,10 +927,16 @@ Now using the current directory as LEGACY_SURVEY_DIR, but this is likely to fail
             def __init__(self, fn, survey):
                 self.real_fn = fn
                 self.survey = survey
-                self.fn = os.path.join(os.path.dirname(fn), 'tmp-'+os.path.basename(fn))
+                self.is_fits = fn.endswith('.fits') or fn.endswith('.fits.gz')
+                self.tmpfn = os.path.join(os.path.dirname(fn), 'tmp-'+os.path.basename(fn))
+                if self.is_fits:
+                    self.is_fits = True
+                    self.fits = fitsio.FITS('mem://', 'rw')
+                else:
+                    self.fn = self.tmpfn
 
             def __enter__(self):
-                dirnm = os.path.dirname(self.fn)
+                dirnm = os.path.dirname(self.tmpfn)
                 if not os.path.exists(dirnm):
                     try:
                         os.makedirs(dirnm)
@@ -930,13 +946,39 @@ Now using the current directory as LEGACY_SURVEY_DIR, but this is likely to fail
 
             def __exit__(self, exc_type, exc_value, traceback):
                 # If no exception was thrown...
-                if exc_type is None:
-                    os.rename(self.fn, self.real_fn)
+                if exc_type is not None:
+                    return
+
+                if self.is_fits:
+                    import hashlib
+                    # Read back the data
+                    rawdata = self.fits.read_raw()
+                    self.fits.close()
+                    sha = hashlib.sha1()
+                    sha.update(rawdata)
+                    hashcode = sha.hexdigest()
+                    f = open(self.tmpfn, 'w')
+                    f.write(rawdata)
+                    f.close()
+                    print('Wrote', self.tmpfn)
+                    del rawdata
+
+                os.rename(self.tmpfn, self.real_fn)
+
+                if self.is_fits:
+                    self.survey.add_sha1sum(self.real_fn, hashcode)
+                else:
                     self.survey.add_output_file(self.real_fn)
 
         fn = self.find_file(filetype, output=True, **kwargs)
         out = OutputFileContext(fn, self)
         return out
+
+    def add_sha1sum(self, fn, sha1sum):
+        '''
+        Callback to be called in the *write_output* routine.
+        '''
+        self.output_sha1sum_files[fn] = sha1sum
 
     def add_output_file(self, fn):
         '''

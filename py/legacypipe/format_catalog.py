@@ -40,8 +40,9 @@ def main(args=None):
     print('Wrote', opt.out)
 
 def format_catalog(T, hdr, primhdr, allbands, outfn,
-                   in_flux_prefix='', flux_prefix='', dr4=False):
-
+                   in_flux_prefix='', flux_prefix='',
+                   dr4=False,
+                   write_kwargs={}):
     # Retrieve the bands in this catalog.
     bands = []
     for i in range(10):
@@ -285,8 +286,9 @@ def format_catalog(T, hdr, primhdr, allbands, outfn,
     
     # Create a list of units aligned with 'cols'
     units = [units.get(c, '') for c in cols]
-    
-    T.writeto(outfn, columns=cols, header=hdr, primheader=primhdr, units=units)
+
+    T.writeto(outfn, columns=cols, header=hdr, primheader=primhdr, units=units,
+              **write_kwargs)
         
 if __name__ == '__main__':
     main()
