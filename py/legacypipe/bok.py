@@ -94,80 +94,12 @@ class BokImage(CPImage, CalibMixin):
         return np.flatnonzero(good)
 
     @classmethod
-    def bad_exposures(self, survey, ccds):
-        '''
-        Returns an index array for the members of the table 'ccds'
-        that are good exposures (NOT flagged) in the bad_expid file.
-        '''
-        good = np.ones(len(ccds), bool)
-        n0 = sum(good)
-        # our made up expnums
-        bad= np.loadtxt('legacyccds/bad_expid_bok.txt',dtype=int,usecols=(0,))
-        if bad.size == 1:
-            bad= [bad]
-        for expnum in list(bad):
-            good[ccds.expnum == expnum] = False
-            #continue as usual
-            n = sum(good)
-            print('Flagged', n0-n, 'as Bad Exposures')
-            n0 = n
-        return np.flatnonzero(good)
-
-    @classmethod
-    def has_third_pixel(self, survey, ccds):
-        '''
-        For mosaic only, ensures ccds are 1/3 pixel interpolated. Nothing for other cameras
-        '''
-        good = np.ones(len(ccds), bool)
-        return np.flatnonzero(good)
-
-    @classmethod
-    def ccdname_hdu_match(self, survey, ccds):
-        '''
-        Mosaic + Bok, ccdname and hdu number must match. If not, IDL zeropoints files has
-        duplicated zeropoint info from one of the other four ccds
-        '''
-        good = np.ones(len(ccds), bool)
-        n0 = sum(good)
-        ccdnum= np.char.replace(ccds.ccdname,'ccd','').astype(ccds.image_hdu.dtype)
-        flag= ccds.image_hdu - ccdnum != 0
-        good[flag]= False
-        n = sum(good)
-        print('Flagged', n0-n, 'ccdname_hdu_match')
-        n0 = n 
-        return np.flatnonzero(good)
-
-    @classmethod
-    def bad_astrometry(self, survey, ccds):
-        '''
-        IDL zeropoints have large rarms,decrms,phrms for some CP images that look fine. Legacy
-        zeropoints is okay for majority of these cases. False alarm? Bug in IDL zeropoints? Doing
-        the most conservative thing and dropping these ccds.
-        see email: "3/30/2017: [decam-chatter 5155] Clue to zero-point errors in dr4"
-        '''
-        good = np.ones(len(ccds), bool)
-        n0 = sum(good)
-        flag= np.any((np.sqrt(ccds.ccdrarms**2 + ccds.ccddecrms**2) > 0.1,
-                      ccds.ccdphrms > 0.2), axis=0)
-        good[flag]= False
-        n = sum(good)
-        print('Flagged', n0-n, 'bad_astrometry')
-        n0 = n 
-        return np.flatnonzero(good)
-
-
-
-#    def read_sky_model(self, imghdr=None, **kwargs):
-#        ''' Bok CP does same sky subtraction as Mosaic CP, so just
-#        use a constant sky level with value from the header.
-#        '''
-#        from tractor.sky import ConstantSky
-#        # Frank reocmmends SKYADU 
-#        phdr = self.read_image_primary_header()
-#        sky = ConstantSky(phdr['SKYADU'])
-#        sky.version = ''
-#        sky.plver = phdr.get('PLVER', '').strip()
-#        return sky
+    def get_bad_expids(self):
+        import legacyccds
+        fn = os.path.join(os.path.dirname(legacyccds.__file__),
+                          'bad_expid_bok.txt')
+        bad_expids = np.loadtxt(fn, dtype=int, usecols=(0,))
+        return bad_expids
 
     def read_dq(self, **kwargs):
         '''
