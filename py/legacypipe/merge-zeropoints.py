@@ -5,6 +5,25 @@ import os
 from collections import Counter
 from astrometry.util.fits import fits_table, merge_tables
 
+def mzls_20160116_to_20170329():
+    basedir = os.environ['LEGACY_SURVEY_DIR']
+    cam = 'mosaic'
+    image_basedir = os.path.join(basedir, 'images')
+    TT = []
+
+    for fn,dirnms in [
+        ('/global/homes/a/arjundey/ZeroPoints/mzls-zpt-20161016-20170329.fits',
+         [''])]:
+        T = normalize_zeropoints(fn, dirnms, image_basedir, cam)
+        TT.append(T)
+    T = merge_tables(TT)
+    outfn = 'survey-ccds-mzls-20160116-to-20170329.fits'
+    T.writeto(outfn)
+    print('Wrote', outfn)
+    for fn in [outfn]:
+        os.system('gzip --best ' + fn)
+
+
 def mzls_dr4(v2=True): 
     basedir = os.environ['LEGACY_SURVEY_DIR']
     cam = 'mosaic'
@@ -556,6 +575,7 @@ def normalize_zeropoints(fn, dirnms, image_basedir, cam, T=None):
                         for expnum,extname in zip(T.expnum, T.ccdname)])
     c = Counter(T.expid)
     bad = False
+    badfilenames = set()
     for k,v in c.most_common():
         if v == 1:
             break
@@ -563,7 +583,15 @@ def normalize_zeropoints(fn, dirnms, image_basedir, cam, T=None):
         I = np.flatnonzero(T.expid == k)
         print('  filenames:', T.filename[I])
         bad = True
+        for i in I:
+            badfilenames.add(T.filename[i])
     #assert(not bad)
+    badfilenames = list(badfilenames)
+    badfilenames.sort()
+    print('Bad filenames:')
+    for fn in badfilenames:
+        print('  ', fn)
+    print()
 
     cols = T.columns()
     if not 'naxis1' in cols:
@@ -692,6 +720,7 @@ def gather_arjuns_zpts(cpimage_list='bootes-90prime-abspath.txt',
 if __name__ == '__main__':
     import sys
 
+
     #decals_dr3()
     #decals_dr3_extra()
     #decals_dr3_dedup()
@@ -704,7 +733,8 @@ if __name__ == '__main__':
     #decals_run21()
     #decals_run25()
     #decals_run27()
-    decals_nondecals_dr5()
+    #decals_nondecals_dr5()
+    mzls_20160116_to_20170329()
 
     #dr4_bootes=False
     #if dr4_bootes:
