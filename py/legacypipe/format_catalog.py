@@ -150,6 +150,23 @@ def format_catalog(T, hdr, primhdr, allbands, outfn,
     cols.extend(['mjd_min', 'mjd_max'])
 
     if dr4:
+        cambits = { 'decam': 0x1,
+                    'mosaic': 0x2,
+                    '90prime': 0x4,
+                    }
+        for b in allbands:
+            cams = 0
+            camstring = primhdr.get('CAMS_%s' % b.upper(), '')
+            camstring.strip()
+            camnames = camstring.split(' ')
+            camnames = [c for c in camnames if len(c)]
+            print('Camera names for', b, '=', camnames)
+            for c in camnames:
+                cams += cambits[c]
+            col = 'camera_%s' % b
+            T.set(col, np.zeros(len(T), np.int32) + cams)
+            cols.append(col)
+    if dr4:
         cc = ['flux', 'flux_ivar']
         if has_ap:
             cc.extend(['apflux', 'apflux_resid','apflux_ivar'])
@@ -232,20 +249,21 @@ def format_catalog(T, hdr, primhdr, allbands, outfn,
     # Units
     deg='deg'
     degiv='1/deg^2'
+    arcsec = 'arcsec'
     flux = 'nanomaggy'
     fluxiv = '1/nanomaggy^2'
     units = dict(
         ra=deg, dec=deg, ra_ivar=degiv, dec_ivar=degiv, ebv='mag',
-        shapeexp_r='arcsec', shapeexp_r_ivar='1/arcsec^2',
-        shapedev_r='arcsec', shapedev_r_ivar='1/arcsec^2')
+        shapeexp_r=arcsec, shapeexp_r_ivar='1/arcsec^2',
+        shapedev_r=arcsec, shapedev_r_ivar='1/arcsec^2')
     # WISE fields
     wunits = dict(flux=flux, flux_ivar=fluxiv,
                   lc_flux=flux, lc_flux_ivar=fluxiv)
-    # Fields that take prefixes
+    # Fields that take prefixes (and have bands)
     funits = dict(
         flux=flux, flux_ivar=fluxiv,
         apflux=flux, apflux_ivar=fluxiv, apflux_resid=flux,
-        depth=fluxiv, galdepth=fluxiv)
+        depth=fluxiv, galdepth=fluxiv, psfsize=arcsec)
     # add prefixes
     units.update([('%s%s' % (flux_prefix, k), v) for k,v in funits.items()])
     # add bands
