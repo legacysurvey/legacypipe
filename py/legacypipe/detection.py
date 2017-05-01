@@ -588,7 +588,6 @@ def segment_and_group_sources(image, T, name=None, ps=None, plots=False):
     *blobs*: image, values -1 = no blob, integer blob indices
     *blobsrcs*: list of np arrays of integers, elements in T within each blob
     *blobslices*: list of slice objects for blob bounding-boxes.
-    
     '''
     from scipy.ndimage.morphology import binary_fill_holes
     from scipy.ndimage.measurements import label, find_objects

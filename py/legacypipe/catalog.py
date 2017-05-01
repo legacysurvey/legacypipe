@@ -236,17 +236,31 @@ def read_fits_catalog(T, hdr=None, invvars=False, bands='grz',
 
         shorttype = fits_short_typemap[clazz]
 
-        flux = np.atleast_1d(t.get(fluxPrefix + 'flux'))
-        assert(np.all(np.isfinite(flux[ibands])))
-        br = NanoMaggies(order=bands,
-                         **dict(zip(bands, flux[ibands])))
+        if fluxPrefix + 'flux' in t.get_columns():
+            flux = np.atleast_1d(t.get(fluxPrefix + 'flux'))
+            assert(np.all(np.isfinite(flux[ibands])))
+            br = NanoMaggies(order=bands,
+                             **dict(zip(bands, flux[ibands])))
+        else:
+            fluxes = {}
+            for b in bands:
+                fluxes[b] = t.get(fluxPrefix + 'flux_' + b)
+                assert(np.all(np.isfinite(fluxes[b])))
+            br = NanoMaggies(order=bands, **fluxes)
+            
         params = [pos, br]
         if invvars:
             # ASSUME & hard-code that the position and brightness are
             # the first params
-            fluxiv = np.atleast_1d(t.get(fluxPrefix + 'flux_ivar'))
-            ivs.extend([t.ra_ivar, t.dec_ivar] +
-                       list(fluxiv[ibands]))
+
+            if fluxPrefix + 'flux_ivar' in t.get_columns():
+                fluxiv = np.atleast_1d(t.get(fluxPrefix + 'flux_ivar'))
+                fluxivs = list(fluxiv[ibands])
+            else:
+                fluxivs = []
+                for b in bands:
+                    fluxivs.append(t.get(fluxPrefix + 'flux_ivar_' + b))
+            ivs.extend([t.ra_ivar, t.dec_ivar] + fluxivs)
 
         if issubclass(clazz, (DevGalaxy, ExpGalaxy)):
             if ellipseClass is not None:

@@ -189,8 +189,9 @@ if __name__ == '__main__':
     
     survey = LegacySurveyData(survey_dir=outdir)
     fn = survey.find_file('tractor', brick='2447p120')
+    print('Checking', fn)
     T = fits_table(fn)
-    cat = read_fits_catalog(T)
+    cat = read_fits_catalog(T, fluxPrefix='')
     print('Read catalog:', cat)
     assert(len(cat) == 2)
     src = cat[0]
