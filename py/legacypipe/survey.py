@@ -657,7 +657,6 @@ def imsave_jpeg(jpegfn, img, **kwargs):
     *jpegfn*: JPEG filename
     *img*: image, in the typical matplotlib formats (see plt.imsave)
     '''
-
     import pylab as plt
     tmpfn = create_temp(suffix='.png')
     plt.imsave(tmpfn, img, **kwargs)
@@ -676,6 +675,16 @@ class LegacySurveyData(object):
     objects (eg, DecamImage objects), which then allow data to be read
     from disk.
     '''
+
+    # Bit codes for why a CCD got cut, used in cut_ccds().
+    ccd_cut_bits = dict(
+        BLACKLIST = 0x1,
+        BAD_EXPID = 0x2,
+        CCDNAME_HDU_MISMATCH = 0x4,
+        BAD_ASTROMETRY = 0x8,
+        THIRD_PIXEL = 0x10, # Mosaic3 one-third-pixel interpolation problem
+        )
+
     def __init__(self, survey_dir=None, output_dir=None, version=None,
                  ccds=None):
         '''Create a LegacySurveyData object using data from the given
@@ -1252,105 +1261,26 @@ Now using the current directory as LEGACY_SURVEY_DIR, but this is likely to fail
                 good[Icam[Igood]] = True
         return np.flatnonzero(good)
 
-    def bad_exposures(self, ccds):
+    def ccd_cuts(self, ccds):
         '''
-        Returns an index array for the members of the table 'ccds'
-        that are good exposures (NOT flagged) in the bad_expid file.
-        
-        Default is to return all CCDs.
+        Returns a bitmask of reasons the given *ccds* would be cut
+        (excluded from legacypipe processing).  These bits are defined
+        in LegacySurveyData.ccd_cut_bits.
+
+        This just delegates to the LegacySurveyImage subclasses based
+        on camera.
         '''
         cameras = np.unique(ccds.camera)
-        print('Finding bad_expid exposures.  Cameras:', cameras)
-        good = np.zeros(len(ccds), bool)
+        print('Computing CCD cuts.  Cameras:', cameras)
+        ccdcuts = np.zeros(len(ccds), np.int32)
         for cam in cameras:
             imclass = self.image_class_for_camera(cam)
             Icam = np.flatnonzero(ccds.camera == cam)
             print('Checking', len(Icam), 'images from camera', cam)
-            Igood = imclass.bad_exposures(self, ccds[Icam])
-            print('Keeping', len(Igood), 'unflagged CCD exposures from camera', cam)
-            if len(Igood):
-                good[Icam[Igood]] = True
-        return np.flatnonzero(good)
-
-    def has_third_pixel(self, ccds):
-        '''
-        For mosaic only, ensures ccds are 1/3 pixel interpolated. Nothing for other cameras
-        '''
-        cameras = np.unique(ccds.camera)
-        print('Finding has_third_pixel.  Cameras:', cameras)
-        good = np.zeros(len(ccds), bool)
-        for cam in cameras:
-            imclass = self.image_class_for_camera(cam)
-            Icam = np.flatnonzero(ccds.camera == cam)
-            print('Checking', len(Icam), 'images from camera', cam)
-            Igood = imclass.has_third_pixel(self, ccds[Icam])
-            print('Keeping', len(Igood), 'unflagged CCD exposures from camera', cam)
-            if len(Igood):
-                good[Icam[Igood]] = True
-        return np.flatnonzero(good)
-
-    def ccdname_hdu_match(self, ccds):
-        '''
-        Mosaic + Bok, ccdname and hdu number must match. If not, IDL zeropoints files has
-        duplicated zeropoint info from one of the other four ccds
-        '''
-        cameras = np.unique(ccds.camera)
-        print('Finding ccdname_hdu_match.  Cameras:', cameras)
-        good = np.zeros(len(ccds), bool)
-        for cam in cameras:
-            imclass = self.image_class_for_camera(cam)
-            Icam = np.flatnonzero(ccds.camera == cam)
-            print('Checking', len(Icam), 'images from camera', cam)
-            Igood = imclass.ccdname_hdu_match(self, ccds[Icam])
-            print('Keeping', len(Igood), 'unflagged CCD exposures from camera', cam)
-            if len(Igood):
-                good[Icam[Igood]] = True
-        return np.flatnonzero(good)
-
-    def bad_astrometry(self, ccds):
-        '''
-        IDL zeropoints have large rarms,decrms,phrms for some CP images that look fine. Legacy
-        zeropoints is okay for majority of these cases. False alarm? Bug in IDL zeropoints? Doing
-        the most conservative thing and dropping these ccds.
-        see email: "3/30/2017: [decam-chatter 5155] Clue to zero-point errors in dr4"
-        '''
-        cameras = np.unique(ccds.camera)
-        print('Finding bad_astrometry.  Cameras:', cameras)
-        good = np.zeros(len(ccds), bool)
-        for cam in cameras:
-            imclass = self.image_class_for_camera(cam)
-            Icam = np.flatnonzero(ccds.camera == cam)
-            print('Checking', len(Icam), 'images from camera', cam)
-            Igood = imclass.bad_astrometry(self, ccds[Icam])
-            print('Keeping', len(Igood), 'unflagged CCD exposures from camera', cam)
-            if len(Igood):
-                good[Icam[Igood]] = True
-        return np.flatnonzero(good)
-
-
-
-    def apply_blacklist(self, ccds):
-        '''
-        Returns an index array of CCDs to KEEP; ie, do
-        ccds = survey.get_ccds()
-        I = survey.apply_blacklist(ccds)
-        ccds.cut(I)
-        '''
-        # Make the blacklist check camera-specific, handled by the
-        # Image subclass.
-        cameras = np.unique(ccds.camera)
-        print('Finding blacklisted CCDs.  Cameras:', cameras)
-        good = np.zeros(len(ccds), bool)
-        for cam in cameras:
-            imclass = self.image_class_for_camera(cam)
-            Icam = np.flatnonzero(ccds.camera == cam)
-            print('Checking', len(Icam), 'images from camera', cam)
-            Igood = imclass.apply_blacklist(self, ccds[Icam])
-            print('Keeping', len(Igood), 'non-blacklisted CCDs from camera',
-                  cam)
-            if len(Igood):
-                good[Icam[Igood]] = True
-        return np.flatnonzero(good)
+            cuts = imclass.ccd_cuts(self, ccds[Icam])
+            ccdcuts[Icam] = cuts
+            print('Keeping', sum(cuts == 0), 'unflagged CCDs from camera', cam)
+        return ccdcuts
 
 def exposure_metadata(filenames, hdus=None, trim=None):
     '''

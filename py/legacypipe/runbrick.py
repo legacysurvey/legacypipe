@@ -217,11 +217,6 @@ def stage_tims(W=3600, H=3600, pixscale=0.262, brickname=None,
         raise NothingToDoError('No CCDs touching brick')
     print(len(ccds), 'CCDs touching target WCS')
 
-    if use_blacklist:
-        I = survey.apply_blacklist(ccds)
-        ccds.cut(I)
-        print(len(ccds), 'CCDs not in blacklist')
-
     # Sort images by band -- this also eliminates images whose
     # *filter* string is not in *bands*.
     print('Unique filters:', np.unique(ccds.filter))
@@ -230,29 +225,20 @@ def stage_tims(W=3600, H=3600, pixscale=0.262, brickname=None,
 
     print('Cutting out non-photometric CCDs...')
     I = survey.photometric_ccds(ccds)
-    print(len(I), 'of', len(ccds), 'CCDs are photometric')
-    ccds.cut(I)
+    if I is None:
+        print('None cut')
+    else:
+        print(len(I), 'of', len(ccds), 'CCDs are photometric')
+        ccds.cut(I)
 
-    print('Cutting out bad_expid exporues...')
-    I = survey.bad_exposures(ccds)
-    print(len(I), 'of', len(ccds), 'CCDs not flagged in bad_exp file')
-    ccds.cut(I)
-
-
-    print('Cutting out has_third_pixel...')
-    I = survey.has_third_pixel(ccds)
-    print(len(I), 'of', len(ccds), 'CCDs has_third_pixel')
-    ccds.cut(I)
-
-    print('Cutting out ccdname_hdu_match...')
-    I = survey.ccdname_hdu_match(ccds)
-    print(len(I), 'of', len(ccds), 'CCDs ccdname_hdu_match')
-    ccds.cut(I)
-
-    print('Cutting out bad_astrometry...')
-    I = survey.bad_astrometry(ccds)
-    print(len(I), 'of', len(ccds), 'CCDs bad_astrometry')
-    ccds.cut(I)
+    print('Applying CCD cuts...')
+    ccds.ccd_cuts = survey.ccd_cuts(ccds)
+    cutvals = ccds.ccd_cuts
+    if use_blacklist:
+        bits = LegacySurveyData.ccd_cut_bits
+        cutvals = cutvals & ~bits['BLACKLIST']
+    ccds.cut(cutvals == 0)
+    print(len(ccds), 'CCDs survive cuts')
 
     print('Cutting on CCDs to be used for fitting...')
     I = survey.ccds_for_fitting(brick, ccds)
@@ -2176,7 +2162,7 @@ def stage_writecat(
     ### FIXME -- convert intermediate tractor catalog to final, for now...
     ### FIXME -- note that this is now the only place where 'allbands' is used.
     # Re-read to test round-tripping
-    T2,hdr,primhdr = survey.read_intermediate_catalog(brickname, output=True)
+    #T2,hdr,primhdr = survey.read_intermediate_catalog(brickname, output=True)
 
     from format_catalog import format_catalog
     with survey.write_output('tractor', brick=brickname) as out:

@@ -81,41 +81,15 @@ class DecamImage(CPImage, CalibMixin):
         return np.flatnonzero(good)
 
     @classmethod
-    def bad_exposures(self, survey, ccds):
-        '''
-        Returns an index array for the members of the table 'ccds'
-        that are good exposures (NOT flagged) in the bad_expid file.
-        '''
-        good = np.ones(len(ccds), bool)
-        print('WARNING: camera: %s not using bad_expid file' % 'decam')
-        return np.flatnonzero(good)
+    def ccd_cuts(self, survey, ccds):
+        ccdcuts = np.zeros(len(ccds), np.int32)
+        #print('Warning: DECam not using bad_expid file')
+        bits = LegacySurveyData.ccd_cut_bits
 
-    @classmethod
-    def has_third_pixel(self, survey, ccds):
-        '''
-        For mosaic only, ensures ccds are 1/3 pixel interpolated. Nothing for other cameras
-        '''
-        good = np.ones(len(ccds), bool)
-        return np.flatnonzero(good)
+        I = self.apply_blacklist(survey, ccds)
+        ccdcuts[I] += bits['BLACKLIST']
 
-    @classmethod
-    def ccdname_hdu_match(self, survey, ccds):
-        '''
-        Mosaic + Bok, ccdname and hdu number must match. If not, IDL zeropoints files has
-        duplicated zeropoint info from one of the other four ccds
-        '''
-        good = np.ones(len(ccds), bool)
-        return np.flatnonzero(good)
- 
-    @classmethod
-    def bad_astrometry(self, survey, ccds):
-        '''
-        Mosaic and Bok CP can have bad astrometric solution in CP header. Don't know why yet.
-        see email: "3/23/2017: Removing bad WCS data from dr4b"
-        '''
-        good = np.ones(len(ccds), bool)
-        return np.flatnonzero(good)
- 
+        return ccdcuts
 
     @classmethod
     def apply_blacklist(self, survey, ccds):
@@ -171,8 +145,8 @@ class DecamImage(CPImage, CalibMixin):
             'DES supernova hex',
             ]
 
-        if survey.version == 'dr1' or survey.version == 'dr2':
-            keep = np.array([(propid not in propid_blacklist) for propid in ccds.propid])
+        if survey.version in ['dr1', 'dr2']:
+            object_blacklist = []
         else:
             keep = np.array([(propid not in propid_blacklist) and
                              not any([obj.startswith(x) 

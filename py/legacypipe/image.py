@@ -95,19 +95,13 @@ class LegacySurveyImage(object):
         Returns an index array for the members of the table 'ccds' that are
         photometric.
 
-        Default is to return all CCDs.
+        Default is to return None, meaning keep all CCDs.
         '''
-        return np.arange(len(ccds))
+        return None
 
     @classmethod
-    def apply_blacklist(self, survey, ccds):
-        '''
-        Returns an index array for the members of the table 'ccds' that are
-        NOT blacklisted.
-
-        Default is to return all CCDs.
-        '''
-        return np.arange(len(ccds))
+    def ccd_cuts(self, survey, ccds):
+        return np.zeros(len(ccds), np.int32)
     
     def get_good_image_slice(self, extent, get_extent=False):
         '''
