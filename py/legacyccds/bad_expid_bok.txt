@@ -1,0 +1,3 @@
+5757520646 #ccdtransp=0.25, seeing>4.2'', psfex no POLNAME column, 90prime/CP20160705/ksb_160706_045718_ooi_g_v1.fits.fz
+5753935701 #ccdtransp=0.26, crashes calibs for hdu4, couldn't resolve, would drop due to transp anyway, 90prime/CP20160530/ksb_160531_083405_ooi_r_v1.fits.fz 
+5753829245 #ccdtransp=0.26, ditto above, 90prime/CP20160529/ksb_160530_070108_ooi_r_v1.fits.fz 

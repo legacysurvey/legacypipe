@@ -482,8 +482,8 @@ def write_coadd_images(band,
 def quick_coadds(tims, bands, targetwcs, images=None,
                  get_cow=False, get_n2=False, fill_holes=True):
 
-    W = targetwcs.get_width()
-    H = targetwcs.get_height()
+    W = int(targetwcs.get_width())
+    H = int(targetwcs.get_height())
 
     coimgs = []
     cons = []

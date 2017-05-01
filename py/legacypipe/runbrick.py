@@ -57,6 +57,32 @@ nocache = True
 rgbkwargs = dict(mnmx=(-1,100.), arcsinh=1.)
 rgbkwargs_resid = dict(mnmx=(-5,5))
 
+# Memory Limits
+import resource
+def set_ulimit(gigabytes):
+    rsrc = resource.RLIMIT_AS #used if RLIMIT_VMEM not found
+    #soft, hard = resource.getrlimit(rsrc)
+    soft, hard = resource.getrlimit(rsrc)
+    soft= gigabytes * 1024**3
+    resource.setrlimit(rsrc, (soft,hard))
+
+def get_ulimit():
+    for name, desc in [
+        ('RLIMIT_AS', 'VMEM'),
+        ('RLIMIT_CORE', 'core file size'),
+        ('RLIMIT_CPU',  'CPU time'),
+        ('RLIMIT_FSIZE', 'file size'),
+        ('RLIMIT_DATA', 'heap size'),
+        ('RLIMIT_STACK', 'stack size'),
+        ('RLIMIT_RSS', 'resident set size'),
+        ('RLIMIT_NPROC', 'number of processes'),
+        ('RLIMIT_NOFILE', 'number of open files'),
+        ('RLIMIT_MEMLOCK', 'lockable memory address'),
+        ]:
+        limit_num = getattr(resource, name)
+        soft, hard = resource.getrlimit(limit_num)
+        print('Maximum %-25s (%-15s) : %20s %20s' % (desc, name, soft, hard))
+
 def runbrick_global_init():
     print('Starting process', os.getpid(), Time()-Time())
     if nocache:
@@ -205,6 +231,27 @@ def stage_tims(W=3600, H=3600, pixscale=0.262, brickname=None,
     print('Cutting out non-photometric CCDs...')
     I = survey.photometric_ccds(ccds)
     print(len(I), 'of', len(ccds), 'CCDs are photometric')
+    ccds.cut(I)
+
+    print('Cutting out bad_expid exporues...')
+    I = survey.bad_exposures(ccds)
+    print(len(I), 'of', len(ccds), 'CCDs not flagged in bad_exp file')
+    ccds.cut(I)
+
+
+    print('Cutting out has_third_pixel...')
+    I = survey.has_third_pixel(ccds)
+    print(len(I), 'of', len(ccds), 'CCDs has_third_pixel')
+    ccds.cut(I)
+
+    print('Cutting out ccdname_hdu_match...')
+    I = survey.ccdname_hdu_match(ccds)
+    print(len(I), 'of', len(ccds), 'CCDs ccdname_hdu_match')
+    ccds.cut(I)
+
+    print('Cutting out bad_astrometry...')
+    I = survey.bad_astrometry(ccds)
+    print(len(I), 'of', len(ccds), 'CCDs bad_astrometry')
     ccds.cut(I)
 
     print('Cutting on CCDs to be used for fitting...')
@@ -576,6 +623,7 @@ def stage_image_coadds(survey=None, targetwcs=None, bands=None, tims=None,
     be created (in `stage_coadds`).  But it's handy to have the coadds
     early on, to diagnose problems or just to look at the data.
     '''
+    
     with survey.write_output('ccds-table', brick=brickname) as out:
         ccds.writeto(None, fits_object=out.fits, primheader=version_header)
             
@@ -1320,6 +1368,22 @@ def stage_fitblobs(T=None,
               'blob_nimages', 'blob_totalpix']:
         T.set(k, BB.get(k))
 
+    # Compute MJD_MIN, MJD_MAX
+    T.mjd_min = np.empty(len(T), np.float64)
+    T.mjd_min[:] = np.inf
+    T.mjd_max = np.empty(len(T), np.float64)
+    T.mjd_max[:] = -np.inf
+    ra  = np.array([src.getPosition().ra  for src in cat])
+    dec = np.array([src.getPosition().dec for src in cat])
+    for tim in tims:
+        ok,x,y = tim.subwcs.radec2pixelxy(ra, dec)
+        x -= 1
+        y -= 1
+        I = np.flatnonzero(ok * (x >= 0.5) * (x <= W-0.5) *
+                           (y >= 0.5) * (y <= H-0.5))
+        T.mjd_min[I] = np.minimum(T.mjd_min[I], tim.time.toMjd())
+        T.mjd_max[I] = np.maximum(T.mjd_max[I], tim.time.toMjd())
+
     invvars = np.hstack(BB.srcinvvars)
     assert(cat.numberOfParams() == len(invvars))
 
@@ -1478,11 +1542,11 @@ def _blob_iter(blobslices, blobsrcs, blobs, targetwcs, tims, cat, bands,
 
         hastycho = iblob in tychoblobs
 
-        print('Blob', nblob+1, 'of', len(blobslices), ': blob', iblob,
-              len(Isrcs), 'sources, size', blobw, 'x', blobh,
+        print('Blob', nblob+1, 'of', len(blobslices), ': blob id:', iblob,
+              'sources:', len(Isrcs), 'size:', blobw, 'x', blobh,
               #'center', (bx0+bx1)/2, (by0+by1)/2,
-              'brick X %i,%i, Y %i,%i' % (bx0,bx1,by0,by1),
-              'npix', np.sum(blobmask),
+              'brick X: %i,%i, Y: %i,%i' % (bx0,bx1,by0,by1),
+              'npix:', np.sum(blobmask),
               'one pixel:', onex,oney, 'has Tycho-2 star:', hastycho)
 
         # Here we cut out subimages for the blob...
@@ -1816,12 +1880,17 @@ def stage_wise_forced(
         src.setBrightness(NanoMaggies(w=1.))
         wcat.append(src)
 
+    # PSF broadening in post-reactivation data, by band.
+    # From Aaron's email to decam-chatter, 2016-12-12.
+    broadening = { 1: 1.0294, 2: 1.0253, 3: None, 4: None }
+
     # Create list of groups-of-tiles to photometer
     args = []
     # Skip if $UNWISE_COADDS_DIR or --unwise-dir not set.
     if unwise_dir is not None:
         for band in [1,2,3,4]:
-            args.append((wcat, tiles, band, roiradec, unwise_dir, use_ceres))
+            args.append((wcat, tiles, band, roiradec, unwise_dir, use_ceres,
+                         broadening[band]))
 
     # Add time-resolved WISE coadds
     # Skip if $UNWISE_COADDS_TIMERESOLVED_DIR or --unwise-tr-dir not set.
@@ -1834,7 +1903,7 @@ def stage_wise_forced(
         print('Cut to', len(W), 'time-resolved vs', len(tiles), 'full-depth')
         assert(len(W) == len(tiles))
         # this ought to be enough for anyone =)
-        Nepochs = 5
+        Nepochs = 7
         # Add time-resolved coadds
         for band in [1,2]:
             # W1 is bit 0 (value 0x1), W2 is bit 1 (value 0x2)
@@ -1848,7 +1917,7 @@ def stage_wise_forced(
                 print('Epoch %i: %i tiles:' % (e, len(I)), W.coadd_id[I])
                 edir = os.path.join(tdir, 'e%03i' % e)
                 eargs.append((e,(wcat, tiles[I], band, roiradec, edir,
-                                 use_ceres)))
+                                 use_ceres, broadening[band])))
 
     # Run the forced photometry!
     phots = mp.map(_unwise_phot, args + [a for e,a in eargs])
@@ -1860,7 +1929,7 @@ def stage_wise_forced(
     if WISE is not None:
         for i,p in enumerate(phots[1:len(args)]):
             if p is None:
-                (wcat,tiles,band,nil,nil,nil) = args[i+1]
+                (wcat,tiles,band) = args[i+1][:3]
                 print('"None" result from WISE forced phot:', tiles, band)
                 continue
             WISE.add_columns_from(p)
@@ -1889,20 +1958,22 @@ def stage_wise_forced(
             wcs = Tan(*[float(hdr[k]) for k in
                         ['CRVAL1', 'CRVAL2', 'CRPIX1', 'CRPIX2',
                          'CD1_1', 'CD1_2', 'CD2_1','CD2_2','NAXIS2','NAXIS1']])
-            print('Read WCS header', wcs)
+            #print('Read WCS header', wcs)
             ok,xx,yy = wcs.radec2pixelxy(ra, dec)
             hh,ww = wcs.get_height(), wcs.get_width()
-            print('unWISE image size', hh,ww)
+            #print('unWISE image size', hh,ww)
             xx = np.round(xx - 1).astype(int)
             yy = np.round(yy - 1).astype(int)
             I = np.flatnonzero(ok * (xx >= 0)*(xx < ww) * (yy >= 0)*(yy < hh))
             print(len(I), 'sources are within tile', tile)
             if len(I) == 0:
                 continue
-            M = M[yy, xx]
+            # Reference the mask image M at yy,xx indices
+            Mi = M[yy[I], xx[I]]
+            # unpack mask bits
             for band in [1,2,3,4]:
-                sd1 = (np.bitwise_and(M, 2**(2*(band-1)  )) != 0).astype(int)
-                sd2 = (np.bitwise_and(M, 2**(2*(band-1)+1)) != 0).astype(int)
+                sd1 = (np.bitwise_and(Mi, 2**(2*(band-1)  )) != 0).astype(int)
+                sd2 = (np.bitwise_and(Mi, 2**(2*(band-1)+1)) != 0).astype(int)
                 WISE.wise_mask[I, band-1] = sd1 + 2*sd2
 
     # Unpack time-resolved results...
@@ -1930,10 +2001,11 @@ def stage_wise_forced(
 
 def _unwise_phot(X):
     from wise.forcedphot import unwise_forcedphot
-    (wcat, tiles, band, roiradec, unwise_dir, use_ceres) = X
+    (wcat, tiles, band, roiradec, unwise_dir, use_ceres, broadening) = X
     try:
         W = unwise_forcedphot(wcat, tiles, roiradecbox=roiradec, bands=[band],
-                              unwise_dir=unwise_dir, use_ceres=use_ceres)
+            unwise_dir=unwise_dir, use_ceres=use_ceres,
+            psf_broadening=broadening)
     except:
         import traceback
         print('unwise_forcedphot failed:')
@@ -1943,7 +2015,7 @@ def _unwise_phot(X):
             print('Trying without Ceres...')
             W = unwise_forcedphot(wcat, tiles, roiradecbox=roiradec,
                                   bands=[band], unwise_dir=unwise_dir,
-                                  use_ceres=False)
+                                  use_ceres=False, psf_broadening=broadening)
         W = None
     return W
 
@@ -2040,6 +2112,8 @@ def stage_writecat(
             primhdr.add_record(dict(
                 name='WISEAB%i' % band, value=vega_to_ab['w%i' % band],
                 comment='WISE Vega to AB conv for band %i' % band))
+
+        T2.wise_coadd_id = WISE.unwise_tile
         for band in [1,2,3,4]:
             dm = vega_to_ab['w%i' % band]
             fluxfactor = 10.** (dm / -2.5)
@@ -2295,6 +2369,9 @@ def run_brick(brick, survey, radec=None, pixscale=0.262,
         If no CCDs, or no photometric CCDs, overlap the given brick or region.
 
     '''
+    print('Total Memory Available to Job:')
+    get_ulimit()
+
 
     from astrometry.util.stages import CallGlobalTime, runstage
     from astrometry.util.multiproc import multiproc

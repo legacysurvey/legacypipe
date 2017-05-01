@@ -313,7 +313,8 @@ def tim_get_resamp(tim, targetwcs):
     resamp = [x.astype(np.int16) for x in (Yo,Xo,Yi,Xi)]
     return resamp
 
-def get_rgb(imgs, bands, mnmx=None, arcsinh=None, scales=None):
+def get_rgb(imgs, bands, mnmx=None, arcsinh=None, scales=None,
+            clip=True):
     '''
     Given a list of images in the given bands, returns a scaled RGB
     image.
@@ -386,8 +387,9 @@ def get_rgb(imgs, bands, mnmx=None, arcsinh=None, scales=None):
         mx = nlmap(mx)
 
     rgb = (rgb - mn) / (mx - mn)
-    return np.clip(rgb, 0., 1.)
-    
+    if clip:
+        return np.clip(rgb, 0., 1.)
+    return rgb
 
 def switch_to_soft_ellipses(cat):
     '''
@@ -1207,14 +1209,14 @@ Now using the current directory as LEGACY_SURVEY_DIR, but this is likely to fail
         T = T[I]
         return T
 
-    def get_image_object(self, t):
+    def get_image_object(self, t, **kwargs):
         '''
         Returns a DecamImage or similar object for one row of the CCDs table.
         '''
         # get Image subclass
         imageType = self.image_class_for_camera(t.camera)
         # call Image subclass constructor
-        return imageType(self, t)
+        return imageType(self, t, **kwargs)
 
     def get_approx_wcs(self, ccd):
         W,H = ccd.width,ccd.height
@@ -1257,16 +1259,19 @@ Now using the current directory as LEGACY_SURVEY_DIR, but this is likely to fail
         tims = mp.map(read_one_tim, args)
         return tims
     
-    def find_ccds(self, expnum=None, ccdname=None):
+    def find_ccds(self, expnum=None, ccdname=None, camera=None):
         '''
         Returns a table of CCDs matching the given *expnum* (exposure
-        number, integer) and *ccdname* (string).
+        number, integer), *ccdname* (string), and *camera* (string),
+        if given.
         '''
         T = self.get_ccds_readonly()
         if expnum is not None:
             T = T[T.expnum == expnum]
         if ccdname is not None:
             T = T[T.ccdname == ccdname]
+        if camera is not None:
+            T = T[T.camera == camera]
         return T
 
     def photometric_ccds(self, ccds):
@@ -1288,6 +1293,83 @@ Now using the current directory as LEGACY_SURVEY_DIR, but this is likely to fail
             if len(Igood):
                 good[Icam[Igood]] = True
         return np.flatnonzero(good)
+
+    def bad_exposures(self, ccds):
+        '''
+        Returns an index array for the members of the table 'ccds'
+        that are good exposures (NOT flagged) in the bad_expid file.
+        
+        Default is to return all CCDs.
+        '''
+        cameras = np.unique(ccds.camera)
+        print('Finding bad_expid exposures.  Cameras:', cameras)
+        good = np.zeros(len(ccds), bool)
+        for cam in cameras:
+            imclass = self.image_class_for_camera(cam)
+            Icam = np.flatnonzero(ccds.camera == cam)
+            print('Checking', len(Icam), 'images from camera', cam)
+            Igood = imclass.bad_exposures(self, ccds[Icam])
+            print('Keeping', len(Igood), 'unflagged CCD exposures from camera', cam)
+            if len(Igood):
+                good[Icam[Igood]] = True
+        return np.flatnonzero(good)
+
+    def has_third_pixel(self, ccds):
+        '''
+        For mosaic only, ensures ccds are 1/3 pixel interpolated. Nothing for other cameras
+        '''
+        cameras = np.unique(ccds.camera)
+        print('Finding has_third_pixel.  Cameras:', cameras)
+        good = np.zeros(len(ccds), bool)
+        for cam in cameras:
+            imclass = self.image_class_for_camera(cam)
+            Icam = np.flatnonzero(ccds.camera == cam)
+            print('Checking', len(Icam), 'images from camera', cam)
+            Igood = imclass.has_third_pixel(self, ccds[Icam])
+            print('Keeping', len(Igood), 'unflagged CCD exposures from camera', cam)
+            if len(Igood):
+                good[Icam[Igood]] = True
+        return np.flatnonzero(good)
+
+    def ccdname_hdu_match(self, ccds):
+        '''
+        Mosaic + Bok, ccdname and hdu number must match. If not, IDL zeropoints files has
+        duplicated zeropoint info from one of the other four ccds
+        '''
+        cameras = np.unique(ccds.camera)
+        print('Finding ccdname_hdu_match.  Cameras:', cameras)
+        good = np.zeros(len(ccds), bool)
+        for cam in cameras:
+            imclass = self.image_class_for_camera(cam)
+            Icam = np.flatnonzero(ccds.camera == cam)
+            print('Checking', len(Icam), 'images from camera', cam)
+            Igood = imclass.ccdname_hdu_match(self, ccds[Icam])
+            print('Keeping', len(Igood), 'unflagged CCD exposures from camera', cam)
+            if len(Igood):
+                good[Icam[Igood]] = True
+        return np.flatnonzero(good)
+
+    def bad_astrometry(self, ccds):
+        '''
+        IDL zeropoints have large rarms,decrms,phrms for some CP images that look fine. Legacy
+        zeropoints is okay for majority of these cases. False alarm? Bug in IDL zeropoints? Doing
+        the most conservative thing and dropping these ccds.
+        see email: "3/30/2017: [decam-chatter 5155] Clue to zero-point errors in dr4"
+        '''
+        cameras = np.unique(ccds.camera)
+        print('Finding bad_astrometry.  Cameras:', cameras)
+        good = np.zeros(len(ccds), bool)
+        for cam in cameras:
+            imclass = self.image_class_for_camera(cam)
+            Icam = np.flatnonzero(ccds.camera == cam)
+            print('Checking', len(Icam), 'images from camera', cam)
+            Igood = imclass.bad_astrometry(self, ccds[Icam])
+            print('Keeping', len(Igood), 'unflagged CCD exposures from camera', cam)
+            if len(Igood):
+                good[Icam[Igood]] = True
+        return np.flatnonzero(good)
+
+
 
     def apply_blacklist(self, ccds):
         '''

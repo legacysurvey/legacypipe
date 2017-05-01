@@ -1,4 +1,5 @@
 from __future__ import print_function
+import sys
 import numpy as np
 import os
 import fitsio
@@ -66,13 +67,21 @@ def main():
 
             fn = im.splineskyfn
             if os.path.exists(fn):
-                T = fits_table(fn)
-                splinesky.append(T)
-                # print(fn)
-                # T.about()
-                hdr = fitsio.read_header(fn)
-                skyhdrvals.append([hdr[k] for k in [
-                            'SKY', 'LEGPIPEV', 'PLVER']] + [expnum, ccd.ccdname])
+                print('Reading', fn)
+                T = None
+                try:
+                    T = fits_table(fn)
+                except KeyboardInterrupt:
+                    raise
+                except:
+                    print('Failed to read file', fn, ':', sys.exc_info()[1])
+                if T is not None:
+                    splinesky.append(T)
+                    # print(fn)
+                    # T.about()
+                    hdr = fitsio.read_header(fn)
+                    skyhdrvals.append([hdr[k] for k in [
+                                'SKY', 'LEGPIPEV', 'PLVER']] + [expnum, ccd.ccdname])
             else:
                 print('File not found:', fn)
 
@@ -96,7 +105,6 @@ def main():
                     T.polscal1 = np.array([1])
                     T.polscal2 = np.array([1])
                     T.poldeg1 = np.array([0])
-                    T.poldeg2 = np.array([0])
                 else:
                     keys.extend([
                             'POLGRP1', 'POLNAME1', 'POLZERO1', 'POLSCAL1',
@@ -104,6 +112,11 @@ def main():
                             'POLDEG1'])
 
                 for k in keys:
+                    try:
+                        v = hdr[k]
+                    except:
+                        print('Did not find key', k, 'in', fn)
+                        sys.exit(-1)
                     T.set(k.lower(), np.array([hdr[k]]))
                 psfex.append(T)
                 #print(fn)

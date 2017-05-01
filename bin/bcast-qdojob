@@ -1,0 +1,48 @@
+#!/bin/bash
+#- generic PBS batch script for qdo jobs
+
+#- Check environment is ready for QDO, if not, load a backup environment
+$QDO_DIR/bin/qdo noop
+if [ $? -ne 0 ] && [ -n ${SREMOTE_BACKUP_ENV} ]
+then
+    echo "Activating backup environment: $SREMOTE_BACKUP_ENV"
+    export QDO_BACKEDUP_PATH=${PATH}
+    source "${SREMOTE_BACKUP_ENV}/bin/activate"
+fi
+
+#- Hello world
+if [ -n "$PBS_O_WORKDIR" ]; then
+  cd $PBS_O_WORKDIR
+fi
+if [ -n "$SLURM_SUBMIT_DIR" ]; then
+  cd $SLURM_SUBMIT_DIR
+fi
+
+echo Starting qdo job on `hostname` at `date`
+
+#- For debugging
+# bcast
+echo QDO_MPIRUN=$QDO_MPIRUN
+source /scratch1/scratchdirs/desiproc/DRs/code/dr4/yu-bcast/activate.sh
+# need QDO 
+export PATH=${PATH}:/scratch1/scratchdirs/desiproc/DRs/code/dr4/qdo/bin
+export PYTHONPATH=${PYTHONPATH}:/scratch1/scratchdirs/desiproc/DRs/code/dr4/qdo 
+echo --------------------
+python -c 'import tractor;print(tractor)'
+python -c 'import astrometry;print(astrometry)'
+python -c 'import legacypipe;print(legacypipe)'
+python -c 'import numpy;print(numpy)'
+echo --------------------
+
+#- Launch qdo workers
+echo QDO_SCRIPT=$QDO_SCRIPT
+echo QDO_NAME=$QDO_NAME 
+echo QDO_OPTS=$QDO_OPTS
+if [ -n "$QDO_SCRIPT" ]; then
+$QDO_MPIRUN $QDO_DIR/bin/qdo do $QDO_NAME $QDO_OPTS --script "$QDO_SCRIPT"
+#$QDO_MPIRUN qdo do $QDO_NAME $QDO_OPTS --script "$QDO_SCRIPT"
+else
+$QDO_MPIRUN $QDO_DIR/bin/qdo do $QDO_NAME $QDO_OPTS
+fi
+
+$QDO_DIR/bin/qdo list

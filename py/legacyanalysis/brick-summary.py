@@ -6,8 +6,34 @@ from glob import glob
 from collections import Counter
 from astrometry.util.fits import fits_table
 from astrometry.util.util import Tan
-#from tractor.sfd import SFDMap
 from legacypipe.utils import find_unique_pixels
+
+from legacyanalysis.coverage import cmap_discretize
+
+'''
+This script produces a FITS table that summarizes per-brick
+information about a data release.  It takes on the command-line the
+list of "*-nexp-BAND.fits.gz" files, pulls the brick names out, and
+reads the corresponding tractor files.  This is kind of an odd way to
+do it, but I'm sure it made sense to me at the time.
+
+This takes long enough to run on a full data release that you might
+want to run multiple threads by hand, eg,
+
+(for B in 30; do python -u legacyanalysis/brick-summary.py -o dr4-brick-summary-$B.fits /global/projecta/projectdirs/cosmo/work/dr4b/coadd/$B*/*/*-nexp-*.fits.gz > bs-$B.log 2>&1; done) &
+
+for a set of B, and then
+
+python legacyanalysis/brick-summary.py --merge -o brick-summary-dr4.fits dr4-brick-summary-*.fits
+
+to merge them into one file, and
+
+python legacyanalysis/brick-summary.py --plot brick-summary-dr4.fits
+
+to make a couple of plots.
+
+'''
+
 
 def colorbar_axes(parent, frac=0.12, pad=0.03, aspect=20):
 	pb = parent.get_position(original=True).frozen()
@@ -20,6 +46,187 @@ def colorbar_axes(parent, frac=0.12, pad=0.03, aspect=20):
 	cax.set_aspect(aspect, anchor=((0.0, 0.5)), adjustable='box')
 	parent.get_figure().sca(parent)
 	return cax
+
+def plots(opt):
+    T = fits_table(opt.files[0])
+    import pylab as plt
+    import matplotlib
+
+    print('Total sources:', sum(T.nobjs))
+    print('Area:', len(T)/16., 'sq deg')
+    print('g,r,z coverage:', sum((T.nexp_g > 0) * (T.nexp_r > 0) * (T.nexp_z > 0)) / 16.)
+    
+    # DECam
+    #ax = [360, 0, -21, 36]
+
+    ax = [310, 90, 30, 80]
+
+    def radec_plot():
+        plt.axis(ax)
+        plt.xlabel('RA (deg)')
+        # DECam
+        #plt.xticks(np.arange(0, 361, 45))
+        plt.xticks(np.arange(90, 311, 30))
+
+        plt.ylabel('Dec (deg)')
+
+        gl = np.arange(361)
+        gb = np.zeros_like(gl)
+        from astrometry.util.starutil_numpy import lbtoradec
+        rr,dd = lbtoradec(gl, gb)
+        plt.plot(rr, dd, 'k-', alpha=0.5, lw=1)
+        rr,dd = lbtoradec(gl, gb+10)
+        plt.plot(rr, dd, 'k-', alpha=0.25, lw=1)
+        rr,dd = lbtoradec(gl, gb-10)
+        plt.plot(rr, dd, 'k-', alpha=0.25, lw=1)
+        
+    plt.figure(figsize=(8,5))
+    plt.subplots_adjust(left=0.1, right=0.98, top=0.93)
+    
+    # Map of the tile centers we want to observe...
+    #O = fits_table('obstatus/decam-tiles_obstatus.fits')
+    O = fits_table('mosaic-tiles_obstatus.fits')
+    O.cut(O.in_desi == 1)
+    rr,dd = np.meshgrid(np.linspace(ax[1],ax[0], 700),
+                        np.linspace(ax[2],ax[3], 200))
+    from astrometry.libkd.spherematch import match_radec
+    I,J,d = match_radec(O.ra, O.dec, rr.ravel(), dd.ravel(), 1.)
+    desimap = np.zeros(rr.shape, bool)
+    desimap.flat[J] = True
+
+    def desi_map():
+        # Show the DESI tile map in the background.
+        from astrometry.util.plotutils import antigray
+        plt.imshow(desimap, origin='lower', interpolation='nearest',
+                   extent=[ax[1],ax[0],ax[2],ax[3]], aspect='auto',
+                   cmap=antigray, vmax=8)
+
+    release = 'MzLS+BASS DR4'
+
+    base_cmap = 'viridis'
+
+    plt.clf()
+    for band in 'grz':
+        depth = T.get('galdepth_%s' % band)
+        ha = dict(histtype='step', 
+                  bins=50, range=(22.0, 24.2))
+        ccmap = dict(g='g', r='r', z='m')
+        plt.hist(depth[depth>0], label='%s band' % band,
+                 color=ccmap[band], **ha)
+    plt.savefig('galdepths.png')
+
+    for band in 'grz':
+        depth = T.get('galdepth_%s' % band)
+        nexp = T.get('nexp_%s' % band)
+        lo,hi = 22.0-0.05, 24.2+0.05
+        ha = dict(histtype='step', 
+                  bins=23, range=(lo,hi))
+        ccmap = dict(g='g', r='r', z='m')
+        area = 0.25**2
+        plt.clf()
+        I = np.flatnonzero((depth > 0) * (nexp == 1))
+        plt.hist(depth[I], label='%s band, 1 exposure' % band,
+                 color=ccmap[band], lw=1,
+                 weights=area * np.ones_like(depth[I]),
+                 **ha)
+        I = np.flatnonzero((depth > 0) * (nexp == 2))
+        plt.hist(depth[I], label='%s band, 1 exposure' % band,
+                 color=ccmap[band], lw=2, alpha=0.5,
+                 weights=area * np.ones_like(depth[I]),
+                 **ha)
+        I = np.flatnonzero((depth > 0) * (nexp >= 3))
+        plt.hist(depth[I], label='%s band, 1 exposure' % band,
+                 color=ccmap[band], lw=3, alpha=0.3,
+                 weights=area * np.ones_like(depth[I]),
+                 **ha)
+        plt.title('%s: galaxy depths, %s band' % (release, band))
+        plt.xlabel('5-sigma galaxy depth (mag)')
+        plt.ylabel('Square degrees')
+        plt.xlim(lo, hi)
+        plt.xticks(np.arange(22, 24.21, 0.2))
+        plt.savefig('depth-hist-%s.png' % band)
+
+    
+    for band in 'grz':
+        plt.clf()
+        desi_map()
+        N = T.get('nexp_%s' % band)
+        I = np.flatnonzero(N > 0)
+        #cm = matplotlib.cm.get_cmap('jet', 6)
+        #cm = matplotlib.cm.get_cmap('winter', 5)
+
+        #cm = matplotlib.cm.viridis
+        #cm = matplotlib.cm.get_cmap(cm, 5)
+        cm = cmap_discretize(base_cmap, 5)
+        plt.scatter(T.ra[I], T.dec[I], c=N[I], s=3,
+                    edgecolors='none',
+                    vmin=0.5, vmax=5.5, cmap=cm)
+        radec_plot()
+        cax = colorbar_axes(plt.gca(), frac=0.06)
+        plt.colorbar(cax=cax, ticks=range(6))
+        #plt.colorbar(ticks=range(6))
+        plt.title('%s: Number of exposures in %s' % (release, band))
+        plt.savefig('nexp-%s.png' % band)
+
+        cmap = cmap_discretize(base_cmap, 15)
+        plt.clf()
+        desi_map()
+        plt.scatter(T.ra, T.dec, c=T.get('psfsize_%s' % band), s=3,
+                    edgecolors='none', vmin=0, vmax=3., cmap=cmap)
+        radec_plot()
+        plt.colorbar()
+        plt.title('%s: PSF size, band %s' % (release, band))
+        plt.savefig('psfsize-%s.png' % band)
+
+        plt.clf()
+        desi_map()
+
+        depth = T.get('galdepth_%s' % band)
+        mn,mx = np.percentile(depth[depth > 0], [10,98])
+        mn = np.floor(mn * 10) / 10.
+        mx = np.ceil(mx * 10) / 10.
+        cmap = cmap_discretize(base_cmap, 1+int((mx-mn+0.001)/0.1))
+        I = (depth > 0)
+        plt.scatter(T.ra[I], T.dec[I], c=depth[I], s=3,
+                    edgecolors='none', vmin=mn-0.05, vmax=mx+0.05, cmap=cmap)
+        radec_plot()
+        plt.colorbar()
+        plt.title('%s: galaxy depth, band %s' % (release, band))
+        plt.savefig('galdepth-%s.png' % band)
+
+    for col in ['nobjs', 'npsf', 'nsimp', 'nexp', 'ndev', 'ncomp']:
+        plt.clf()
+        desi_map()
+        N = T.get(col)
+        mx = np.percentile(N, 99.5)
+        plt.scatter(T.ra, T.dec, c=N, s=3,
+                    edgecolors='none', vmin=0, vmax=mx)
+        radec_plot()
+        plt.colorbar()
+        tt = 'of type %s' % col[1:]
+        if col == 'nobjs':
+            tt = 'total'
+        plt.title('%s: Number of objects %s' % (release, tt))
+        plt.savefig('nobjs-%s.png' % col[1:])
+
+    Ntot = T.nobjs
+    for col in ['npsf', 'nsimp', 'nexp', 'ndev', 'ncomp']:
+        plt.clf()
+        desi_map()
+        N = T.get(col) / (Ntot.astype(np.float32))
+        N[Ntot == 0] = 0.
+        print(col, 'max frac:', N.max())
+        mx = np.percentile(N, 99.5)
+        print('mx', mx)
+        plt.scatter(T.ra, T.dec, c=N, s=3,
+                    edgecolors='none', vmin=0, vmax=mx)
+        radec_plot()
+        plt.colorbar()
+        plt.title('%s: Fraction of objects of type %s' % (release, col[1:]))
+        plt.savefig('fobjs-%s.png' % col[1:])
+
+        
+    return 0
         
 def main():
     import argparse
@@ -32,7 +239,6 @@ def main():
                         help='List of nexp files to process')
 
     opt = parser.parse_args()
-
     fns = opt.files
 
     if opt.merge:
@@ -45,117 +251,12 @@ def main():
         T = merge_tables(TT)
         T.writeto(opt.outfn)
         print('Wrote', opt.outfn)
+        return
 
     if opt.plot:
-        T = fits_table(opt.files[0])
-        import pylab as plt
-        import matplotlib
-        
-        ax = [360, 0, -21, 36]
+        plots(opt)
+        return
 
-        def radec_plot():
-            plt.axis(ax)
-            plt.xlabel('RA (deg)')
-            plt.xticks(np.arange(0, 361, 45))
-            plt.ylabel('Dec (deg)')
-
-            gl = np.arange(361)
-            gb = np.zeros_like(gl)
-            from astrometry.util.starutil_numpy import lbtoradec
-            rr,dd = lbtoradec(gl, gb)
-            plt.plot(rr, dd, 'k-', alpha=0.5, lw=1)
-            rr,dd = lbtoradec(gl, gb+10)
-            plt.plot(rr, dd, 'k-', alpha=0.25, lw=1)
-            rr,dd = lbtoradec(gl, gb-10)
-            plt.plot(rr, dd, 'k-', alpha=0.25, lw=1)
-            
-        plt.figure(figsize=(8,5))
-        plt.subplots_adjust(left=0.1, right=0.98, top=0.93)
-        
-        # Map of the tile centers we want to observe...
-        O = fits_table('obstatus/decam-tiles_obstatus.fits')
-        O.cut(O.in_desi == 1)
-        rr,dd = np.meshgrid(np.linspace(ax[1],ax[0], 700),
-                            np.linspace(ax[2],ax[3], 200))
-        from astrometry.libkd.spherematch import match_radec
-        I,J,d = match_radec(O.ra, O.dec, rr.ravel(), dd.ravel(), 1.)
-        desimap = np.zeros(rr.shape, bool)
-        desimap.flat[J] = True
-
-        def desi_map():
-            # Show the DESI tile map in the background.
-            from astrometry.util.plotutils import antigray
-            plt.imshow(desimap, origin='lower', interpolation='nearest',
-                       extent=[ax[1],ax[0],ax[2],ax[3]], aspect='auto',
-                       cmap=antigray, vmax=8)
-
-        for band in 'grz':
-            plt.clf()
-            desi_map()
-            N = T.get('nexp_%s' % band)
-            I = np.flatnonzero(N > 0)
-            #cm = matplotlib.cm.get_cmap('jet', 6)
-            #cm = matplotlib.cm.get_cmap('winter', 5)
-            cm = matplotlib.cm.viridis
-            cm = matplotlib.cm.get_cmap(cm, 5)
-            plt.scatter(T.ra[I], T.dec[I], c=N[I], s=2,
-                        edgecolors='none',
-                        vmin=0.5, vmax=5.5, cmap=cm)
-            radec_plot()
-            cax = colorbar_axes(plt.gca(), frac=0.06)
-            plt.colorbar(cax=cax, ticks=range(6))
-            #plt.colorbar(ticks=range(6))
-            plt.title('DECaLS DR3: Number of exposures in %s' % band)
-            plt.savefig('nexp-%s.png' % band)
-
-            plt.clf()
-            desi_map()
-            plt.scatter(T.ra, T.dec, c=T.get('nexp_%s' % band), s=2,
-                        edgecolors='none', vmin=0, vmax=2.)
-            radec_plot()
-            plt.colorbar()
-            plt.title('DECaLS DR3: PSF size, band %s' % band)
-            plt.savefig('psfsize-%s.png' % band)
-
-        return 0
-            
-        for col in ['nobjs', 'npsf', 'nsimp', 'nexp', 'ndev', 'ncomp']:
-            plt.clf()
-            desi_map()
-            N = T.get(col)
-            mx = np.percentile(N, 99.5)
-            plt.scatter(T.ra, T.dec, c=N, s=2,
-                        edgecolors='none', vmin=0, vmax=mx)
-            radec_plot()
-            plt.colorbar()
-            plt.title('DECaLS DR3: Number of objects of type %s' % col[1:])
-            plt.savefig('nobjs-%s.png' % col[1:])
-
-        Ntot = T.nobjs
-        for col in ['npsf', 'nsimp', 'nexp', 'ndev', 'ncomp']:
-            plt.clf()
-            desi_map()
-            N = T.get(col) / Ntot.astype(np.float32)
-            mx = np.percentile(N, 99.5)
-            plt.scatter(T.ra, T.dec, c=N, s=2,
-                        edgecolors='none', vmin=0, vmax=mx)
-            radec_plot()
-            plt.colorbar()
-            plt.title('DECaLS DR3: Fraction of objects of type %s' % col[1:])
-            plt.savefig('fobjs-%s.png' % col[1:])
-
-            
-        return 0
-
-    # fnpats = opt.files
-    # fns = []
-    # for pat in fnpats:
-    #     pfns = glob(pat)
-    #     fns.extend(pfns)
-    #     print('Pattern', pat, '->', len(pfns), 'files')
-    #fns = glob('coadd/*/*/*-nexp*')
-    #fns = glob('coadd/000/*/*-nexp*')
-    #fns = glob('coadd/000/0001*/*-nexp*')
     fns.sort()
     print(len(fns), 'nexp files')
     
@@ -186,6 +287,17 @@ def main():
     gpsfsize = []
     rpsfsize = []
     zpsfsize = []
+
+    gpsfdepth = []
+    rpsfdepth = []
+    zpsfdepth = []
+    ggaldepth = []
+    rgaldepth = []
+    zgaldepth = []
+
+    wise_nobs = []
+    wise_trans = []
+    
     ebv = []
     gtrans = []
     rtrans = []
@@ -201,14 +313,14 @@ def main():
     unique = np.ones((H,W), bool)
     tlast = 0
     
-    for fn in fns:
-        print('File', fn)
+    for ifn,fn in enumerate(fns):
+        print('File', (ifn+1), 'of', len(fns), ':', fn)
         words = fn.split('/')
         dirprefix = '/'.join(words[:-4])
-        print('Directory prefix:', dirprefix)
+        #print('Directory prefix:', dirprefix)
         words = words[-4:]
         brick = words[2]
-        print('Brick', brick)
+        #print('Brick', brick)
         if not brick in brickset:
             brickset.add(brick)
             bricklist.append(brick)
@@ -226,7 +338,9 @@ def main():
             tfn = os.path.join(dirprefix, 'tractor', brick[:3], 'tractor-%s.fits'%brick)
             print('Tractor filename', tfn)
             T = fits_table(tfn, columns=['brick_primary', 'type', 'decam_psfsize',
-                                         'ebv', 'decam_mw_transmission'])
+                                         'decam_depth', 'decam_galdepth',
+                                         'ebv', 'decam_mw_transmission',
+                                         'wise_nobs', 'wise_mw_transmission'])
             T.cut(T.brick_primary)
             nsrcs.append(len(T))
             types = Counter([t.strip() for t in T.type])
@@ -240,76 +354,34 @@ def main():
             gpsfsize.append(np.median(T.decam_psfsize[:,1]))
             rpsfsize.append(np.median(T.decam_psfsize[:,2]))
             zpsfsize.append(np.median(T.decam_psfsize[:,4]))
+
+            gpsfdepth.append(np.median(T.decam_depth[:,1]))
+            rpsfdepth.append(np.median(T.decam_depth[:,2]))
+            zpsfdepth.append(np.median(T.decam_depth[:,4]))
+            ggaldepth.append(np.median(T.decam_galdepth[:,1]))
+            rgaldepth.append(np.median(T.decam_galdepth[:,2]))
+            zgaldepth.append(np.median(T.decam_galdepth[:,4]))
     
+            wise_nobs.append(np.median(T.wise_nobs, axis=0))
+            wise_trans.append(np.median(T.wise_mw_transmission, axis=0))
+
             ebv.append(np.median(T.ebv))
             gtrans.append(np.median(T.decam_mw_transmission[:,1]))
             rtrans.append(np.median(T.decam_mw_transmission[:,2]))
             ztrans.append(np.median(T.decam_mw_transmission[:,4]))
     
             br = bricks[ibrick]
-    
-            print('Computing unique brick pixels...')
-            #wcs = Tan(fn, 0)
-            #W,H = int(wcs.get_width()), int(wcs.get_height())
-    
+
+            #print('Computing unique brick pixels...')
             pixscale = 0.262/3600.
             wcs = Tan(br.ra, br.dec, W/2.+0.5, H/2.+0.5,
                       -pixscale, 0., 0., pixscale,
                       float(W), float(H))
-            import time
-    
-            t0 = time.clock()
-    
             unique[:,:] = True
-    
             find_unique_pixels(wcs, W, H, unique,
                                br.ra1, br.ra2, br.dec1, br.dec2)
-    
-            # for i in range(W/2):
-            #     allin = True
-            #     lo,hi = i, W-i-1
-            #     # one slice per side
-            #     side = slice(lo,hi+1)
-            #     top = (lo, side)
-            #     bot = (hi, side)
-            #     left  = (side, lo)
-            #     right = (side, hi)
-            #     for slc in [top, bot, left, right]:
-            #         #print('xx,yy', xx[slc], yy[slc])
-            #         rr,dd = wcs.pixelxy2radec(xx[slc]+1, yy[slc]+1)
-            #         U = (rr >= br.ra1 ) * (rr < br.ra2 ) * (dd >= br.dec1) * (dd < br.dec2)
-            #         #print('Pixel', i, ':', np.sum(U), 'of', len(U), 'pixels are unique')
-            #         allin *= np.all(U)
-            #         unique[slc] = U
-            #     if allin:
-            #         print('Scanned to pixel', i)
-            #         break
-    
-            t1 = time.clock()
             U = np.flatnonzero(unique)
-            t2 = time.clock()
-            print(len(U), 'of', W*H, 'pixels are unique to this brick')
-    
-            # #t3 = time.clock()
-            #rr,dd = wcs.pixelxy2radec(xx+1, yy+1)
-            # #t4 = time.clock()
-            # #u = (rr >= br.ra1 ) * (rr < br.ra2 ) * (dd >= br.dec1) * (dd < br.dec2)
-            # #t5 = time.clock()
-            # #U2 = np.flatnonzero(u)
-            #U2 = np.flatnonzero((rr >= br.ra1 ) * (rr < br.ra2 ) *
-            #                    (dd >= br.dec1) * (dd < br.dec2))
-            #assert(np.all(U == U2))
-            #assert(len(U) == len(U2))
-            # #t6 = time.clock()
-            # print(len(U2), 'of', W*H, 'pixels are unique to this brick')
-            # 
-    
-            #print(t0-tlast, 'other time')
-            #tlast = time.clock() #t2
-            #print('t1:', t1-t0, 't2', t2-t1)
-    
-            # #print('t4:', t4-t3, 't5', t5-t4, 't6', t6-t5)
-            # 
+            #print(len(U), 'of', W*H, 'pixels are unique to this brick')
     
         else:
             index = bricklist.index(brick)
@@ -342,7 +414,7 @@ def main():
     
     ibricks = np.array(ibricks)
     
-    print('Maximum number of sources:', max(nsrcs))
+    #print('Maximum number of sources:', max(nsrcs))
     
     T = fits_table()
     T.brickname = np.array(bricklist)
@@ -363,10 +435,30 @@ def main():
     T.psfsize_g = np.array(gpsfsize).astype(np.float32)
     T.psfsize_r = np.array(rpsfsize).astype(np.float32)
     T.psfsize_z = np.array(zpsfsize).astype(np.float32)
+    with np.errstate(divide='ignore'):
+        T.psfdepth_g = (-2.5*(-9.+np.log10(5.*np.sqrt(1. / np.array(gpsfdepth))))).astype(np.float32)
+        T.psfdepth_r = (-2.5*(-9.+np.log10(5.*np.sqrt(1. / np.array(rpsfdepth))))).astype(np.float32)
+        T.psfdepth_z = (-2.5*(-9.+np.log10(5.*np.sqrt(1. / np.array(zpsfdepth))))).astype(np.float32)
+        T.galdepth_g = (-2.5*(-9.+np.log10(5.*np.sqrt(1. / np.array(ggaldepth))))).astype(np.float32)
+        T.galdepth_r = (-2.5*(-9.+np.log10(5.*np.sqrt(1. / np.array(rgaldepth))))).astype(np.float32)
+        T.galdepth_z = (-2.5*(-9.+np.log10(5.*np.sqrt(1. / np.array(zgaldepth))))).astype(np.float32)
+    for k in ['psfdepth_g', 'psfdepth_r', 'psfdepth_z', 'galdepth_g', 'galdepth_r', 'galdepth_z']:
+        v = T.get(k)
+        v[np.logical_not(np.isfinite(v))] = 0.
     T.ebv = np.array(ebv).astype(np.float32)
     T.trans_g = np.array(gtrans).astype(np.float32)
     T.trans_r = np.array(rtrans).astype(np.float32)
     T.trans_z = np.array(ztrans).astype(np.float32)
+    T.ext_g = -2.5 * np.log10(T.trans_g)
+    T.ext_r = -2.5 * np.log10(T.trans_r)
+    T.ext_z = -2.5 * np.log10(T.trans_z)
+    T.wise_nobs = np.array(wise_nobs).astype(np.int16)
+    T.trans_wise = np.array(wise_trans).astype(np.float32)
+    T.ext_w1 = -2.5 * np.log10(T.trans_wise[:,0])
+    T.ext_w2 = -2.5 * np.log10(T.trans_wise[:,1])
+    T.ext_w3 = -2.5 * np.log10(T.trans_wise[:,2])
+    T.ext_w4 = -2.5 * np.log10(T.trans_wise[:,3])
+
     T.writeto(opt.outfn)
 
 if __name__ == '__main__':
