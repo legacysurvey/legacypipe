@@ -116,6 +116,8 @@ script:
     - python -c "import numpy; print(numpy.__file__)"
     - python -c "import matplotlib; print(matplotlib.__file__)"
     - python -c "import fitsio; print(fitsio.__file__)"
+    - find /home/travis/virtualenv/python2.7.12/lib/python2.7/site-packages/tractor -type f
+    - find /home/travis/virtualenv/python3.6.1/lib/python3.6/site-packages/tractor -type f
     - (cd py && coverage run test/runbrick_test.py travis)
 
 #     - python3 -c "import numpy; print(numpy.__file__)"
