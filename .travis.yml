@@ -100,7 +100,7 @@ before_script:
     #- (cd $HOME/fitsio-git && python setup.py install --home $HOME/fitsio)
     #- ln -s $HOME/fitsio/lib/python/fitsio .
 
-    - ln -s $HOME/astrometry.net astrometry
+    #- ln -s $HOME/astrometry.net astrometry
     - mkdir -p $HOME/dust/maps
     - (cd $HOME/dust/maps && wget -c http://portal.nersc.gov/project/cosmo/temp/dstn/travis-ci/maps/SFD_dust_4096_ngp.fits)
     - (cd $HOME/dust/maps && wget -c http://portal.nersc.gov/project/cosmo/temp/dstn/travis-ci/maps/SFD_dust_4096_sgp.fits)
@@ -108,8 +108,9 @@ before_script:
 
 script:
     # - export PYTHONPATH=${PYTHONPATH}:$(pwd)/py:$(pwd):$HOME/numpydoc
-    - export PYTHONPATH=${PYTHONPATH}:$(pwd)/py
+    - export PYTHONPATH=${PYTHONPATH}:$(pwd)/py:$HOME/astrometry.net
     - ls $HOME
+    - ls $HOME/astrometry.net
     - (cd doc && make)
     - echo $PYTHONPATH
     - python -c "import numpy; print(numpy.__file__)"
