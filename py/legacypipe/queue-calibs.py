@@ -153,9 +153,9 @@ def main():
         I = survey.photometric_ccds(T)
         print(len(I), 'CCDs are photometric')
         T.cut(I)
-        I = survey.apply_blacklist(T)
-        print(len(I), 'CCDs are not blacklisted')
-        T.cut(I)
+        cuts = survey.ccd_cuts(T)
+        print(len(cuts != 0), 'CCDs are subject to cuts')
+        T.cut(cuts == 0)
     print(len(T), 'CCDs remain')
 
     # I,J,d,counts = match_radec(B.ra, B.dec, T.ra, T.dec, 0.2, nearest=True, count=True)

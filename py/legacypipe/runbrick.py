@@ -217,11 +217,6 @@ def stage_tims(W=3600, H=3600, pixscale=0.262, brickname=None,
         raise NothingToDoError('No CCDs touching brick')
     print(len(ccds), 'CCDs touching target WCS')
 
-    if use_blacklist:
-        I = survey.apply_blacklist(ccds)
-        ccds.cut(I)
-        print(len(ccds), 'CCDs not in blacklist')
-
     # Sort images by band -- this also eliminates images whose
     # *filter* string is not in *bands*.
     print('Unique filters:', np.unique(ccds.filter))
@@ -230,29 +225,20 @@ def stage_tims(W=3600, H=3600, pixscale=0.262, brickname=None,
 
     print('Cutting out non-photometric CCDs...')
     I = survey.photometric_ccds(ccds)
-    print(len(I), 'of', len(ccds), 'CCDs are photometric')
-    ccds.cut(I)
+    if I is None:
+        print('None cut')
+    else:
+        print(len(I), 'of', len(ccds), 'CCDs are photometric')
+        ccds.cut(I)
 
-    print('Cutting out bad_expid exporues...')
-    I = survey.bad_exposures(ccds)
-    print(len(I), 'of', len(ccds), 'CCDs not flagged in bad_exp file')
-    ccds.cut(I)
-
-
-    print('Cutting out has_third_pixel...')
-    I = survey.has_third_pixel(ccds)
-    print(len(I), 'of', len(ccds), 'CCDs has_third_pixel')
-    ccds.cut(I)
-
-    print('Cutting out ccdname_hdu_match...')
-    I = survey.ccdname_hdu_match(ccds)
-    print(len(I), 'of', len(ccds), 'CCDs ccdname_hdu_match')
-    ccds.cut(I)
-
-    print('Cutting out bad_astrometry...')
-    I = survey.bad_astrometry(ccds)
-    print(len(I), 'of', len(ccds), 'CCDs bad_astrometry')
-    ccds.cut(I)
+    print('Applying CCD cuts...')
+    ccds.ccd_cuts = survey.ccd_cuts(ccds)
+    cutvals = ccds.ccd_cuts
+    if use_blacklist:
+        bits = LegacySurveyData.ccd_cut_bits
+        cutvals = cutvals & ~bits['BLACKLIST']
+    ccds.cut(cutvals == 0)
+    print(len(ccds), 'CCDs survive cuts')
 
     print('Cutting on CCDs to be used for fitting...')
     I = survey.ccds_for_fitting(brick, ccds)
@@ -329,14 +315,14 @@ def stage_tims(W=3600, H=3600, pixscale=0.262, brickname=None,
                                 splinesky=splinesky,
                                 constant_invvar=constant_invvar))
                                 for im in ims]
-    tims = mp.map(read_one_tim, args)
+    tims = list(mp.map(read_one_tim, args))
 
     tnow = Time()
     print('[parallel tims] Read', len(ccds), 'images:', tnow-tlast)
     tlast = tnow
 
     # Cut the table of CCDs to match the 'tims' list
-    I = np.flatnonzero(np.array([tim is not None for tim in tims]))
+    I = np.array([i for i,tim in enumerate(tims) if tim is not None])
     ccds.cut(I)
     tims = [tim for tim in tims if tim is not None]
     assert(len(ccds) == len(tims))
@@ -492,7 +478,8 @@ def stage_tims(W=3600, H=3600, pixscale=0.262, brickname=None,
     keys = ['version_header', 'targetrd', 'pixscale', 'targetwcs', 'W','H',
             'bands', 'tims', 'ps', 'brickid', 'brickname', 'brick',
             'target_extent', 'ccds', 'bands', 'survey']
-    rtn = dict([(k,locals()[k]) for k in keys])
+    L = locals()
+    rtn = dict([(k,L[k]) for k in keys])
     return rtn
 
 def stage_mask_junk(tims=None, targetwcs=None, W=None, H=None, bands=None,
@@ -625,8 +612,7 @@ def stage_image_coadds(survey=None, targetwcs=None, bands=None, tims=None,
     '''
     
     with survey.write_output('ccds-table', brick=brickname) as out:
-        ccds.writeto(out.fn, primheader=version_header)
-        print('Wrote', out.fn)
+        ccds.writeto(None, fits_object=out.fits, primheader=version_header)
             
     C = make_coadds(tims, bands, targetwcs,
                     detmaps=True, ngood=True, lanczos=lanczos,
@@ -646,8 +632,7 @@ def stage_image_coadds(survey=None, targetwcs=None, bands=None, tims=None,
 
     D = _depth_histogram(brick, targetwcs, bands, C.detivs, C.galdetivs)
     with survey.write_output('depth-table', brick=brickname) as out:
-        D.writeto(out.fn)
-        print('Wrote', out.fn)
+        D.writeto(None, fits_object=out.fits)
     del D
 
     #rgbkwargs2 = dict(mnmx=(-3., 3.))
@@ -821,7 +806,7 @@ def stage_srcs(coimgs=None, cons=None,
         for r,d,m in zip(Tsat.ra, Tsat.dec, Tsat.mag):
             fluxes = dict([(band, NanoMaggies.magToNanomaggies(m))
                            for band in bands])
-            assert(np.all(np.isfinite(fluxes.values())))
+            assert(np.all(np.isfinite(list(fluxes.values()))))
             satcat.append(PointSource(RaDecPos(r, d),
                                       NanoMaggies(order=bands, **fluxes)))
 
@@ -906,7 +891,8 @@ def stage_srcs(coimgs=None, cons=None,
 
     keys = ['T', 'tims', 'blobsrcs', 'blobslices', 'blobs', 'cat',
             'ps', 'tycho']
-    rtn = dict([(k,locals()[k]) for k in keys])
+    L = locals()
+    rtn = dict([(k,L[k]) for k in keys])
     return rtn
 
 def _subtract_onbricks_sources(survey, brick, allow_missing_brickq,
@@ -1119,7 +1105,7 @@ def stage_fitblobs(T=None,
         ok,x,y = targetwcs.radec2pixelxy(rd[:,0], rd[:,1])
         x = (x - 1).astype(int)
         y = (y - 1).astype(int)
-        blobxy = zip(x, y)
+        blobxy = list(zip(x, y))
         print('Blobradec -> blobxy:', len(blobxy), 'points')
 
     if blobxy is not None:
@@ -1328,6 +1314,7 @@ def stage_fitblobs(T=None,
         blobmap[0] = -1
         blobmap[oldblob + 1] = iblob
         blobs = blobmap[blobs+1]
+        del blobmap
 
         # copy version_header before modifying it.
         hdr = fitsio.FITSHDR()
@@ -1342,9 +1329,7 @@ def stage_fitblobs(T=None,
         hdr.add_record(dict(name='EQUINOX', value=2000.))
 
         with survey.write_output('blobmap', brick=brickname) as out:
-            fitsio.write(out.fn, blobs, header=hdr, clobber=True)
-            print('Wrote', out.fn)
-        del blobmap
+            out.fits.write(blobs, header=hdr)
     del iblob, oldblob
     blobs = None
 
@@ -1372,9 +1357,9 @@ def stage_fitblobs(T=None,
         T.set(k, BB.get(k))
 
     # Compute MJD_MIN, MJD_MAX
-    T.mjd_min = np.empty(len(T), np.float32)
+    T.mjd_min = np.empty(len(T), np.float64)
     T.mjd_min[:] = np.inf
-    T.mjd_max = np.empty(len(T), np.float32)
+    T.mjd_max = np.empty(len(T), np.float64)
     T.mjd_max[:] = -np.inf
     ra  = np.array([src.getPosition().ra  for src in cat])
     dec = np.array([src.getPosition().dec for src in cat])
@@ -1402,17 +1387,18 @@ def stage_fitblobs(T=None,
                                         comment='NOAO data product type'))
 
             with survey.write_output('all-models', brick=brickname) as out:
-                TT.writeto(out.fn, header=hdr, primheader=primhdr)
-                print('Wrote', out.fn)
+                TT.writeto(None, fits_object=out.fits, header=hdr,
+                           primheader=primhdr)
 
     keys = ['cat', 'invvars', 'T', 'blobs']
     if get_all_models:
         keys.append('all_models')
-    rtn = dict([(k,locals()[k]) for k in keys])
+    L = locals()
+    rtn = dict([(k,L[k]) for k in keys])
     return rtn
 
 def _format_all_models(T, newcat, BB, bands, rex):
-    from catalog import prepare_fits_catalog, fits_typemap
+    from legacypipe.catalog import prepare_fits_catalog, fits_typemap
     from astrometry.util.file import pickle_to_file
 
     TT = fits_table()
@@ -1594,7 +1580,7 @@ def _bounce_one_blob(X):
     ''' This just wraps the one_blob function, for debugging &
     multiprocessing purposes.
     '''
-    from oneblob import one_blob
+    from legacypipe.oneblob import one_blob
     try:
         return one_blob(X)
     except:
@@ -1652,8 +1638,7 @@ def stage_coadds(survey=None, bands=None, version_header=None, targetwcs=None,
     primhdr.add_record(dict(name='PRODTYPE', value='ccdinfo',
                             comment='NOAO data product type'))
     with survey.write_output('ccds-table', brick=brickname) as out:
-        ccds.writeto(out.fn, primheader=primhdr) 
-        print('Wrote', out.fn)
+        ccds.writeto(None, fits_object=out.fits, primheader=primhdr)
 
     tnow = Time()
     print('[serial coadds]:', tnow-tlast)
@@ -1672,6 +1657,7 @@ def stage_coadds(survey=None, bands=None, version_header=None, targetwcs=None,
     ok,xx,yy = targetwcs.radec2pixelxy(ra, dec)
     
     # Get integer brick pixel coords for each source, for referencing maps
+    from functools import reduce
     T.oob = reduce(np.logical_or, [xx < 0.5, yy < 0.5, xx > W+0.5, yy > H+0.5])
     ix = np.clip(np.round(xx - 1), 0, W-1).astype(int)
     iy = np.clip(np.round(yy - 1), 0, H-1).astype(int)
@@ -1714,8 +1700,7 @@ def stage_coadds(survey=None, bands=None, version_header=None, targetwcs=None,
     # Compute depth histogram
     D = _depth_histogram(brick, targetwcs, bands, C.detivs, C.galdetivs)
     with survey.write_output('depth-table', brick=brickname) as out:
-        D.writeto(out.fn)
-        print('Wrote', out.fn)
+        D.writeto(None, fits_object=out.fits)
     del D
 
     coadd_list= [('image', C.coimgs,   rgbkwargs),
@@ -2046,7 +2031,7 @@ def stage_writecat(
     Final stage in the pipeline: format results for the output
     catalog.
     '''
-    from catalog import prepare_fits_catalog
+    from legacypipe.catalog import prepare_fits_catalog
      
     TT = T.copy()
     for k in ['itx','ity','index','tx','ty']:
@@ -2081,7 +2066,7 @@ def stage_writecat(
                                 comment='Aperture radius, in arcsec'))
 
     # Record the meaning of mask bits
-    bits = CP_DQ_BITS.values()
+    bits = list(CP_DQ_BITS.values())
     bits.sort()
     bitmap = dict((v,k) for k,v in CP_DQ_BITS.items())
     for i in range(16):
@@ -2170,32 +2155,30 @@ def stage_writecat(
             print('WISE light-curve shapes:', WISE_T.w1_nanomaggies.shape)
 
     with survey.write_output('tractor-intermediate', brick=brickname) as out:
-        T2.writeto(out.fn, primheader=primhdr, header=hdr)
-        print('Wrote', out.fn)
+        T2.writeto(None, fits_object=out.fits, primheader=primhdr, header=hdr)
 
     ### FIXME -- convert intermediate tractor catalog to final, for now...
     ### FIXME -- note that this is now the only place where 'allbands' is used.
-    # Re-read to test round-tripping
-    T2,hdr,primhdr = survey.read_intermediate_catalog(brickname, output=True)
 
-    from format_catalog import format_catalog
+    from legacypipe.format_catalog import format_catalog
     with survey.write_output('tractor', brick=brickname) as out:
-        format_catalog(T2, hdr, primhdr, allbands, out.fn,flux_prefix='decam_')
-        print('Wrote', out.fn)
-        
-    # produce per-brick sha1sums file
-    hashfn = survey.find_file('sha1sum-brick', brick=brickname, output=True)
-    cmd = 'sha1sum -b ' + ' '.join(survey.output_files) + ' > ' + hashfn
-    print('Checksums:', cmd)
-    os.system(cmd)
+        format_catalog(T2, hdr, primhdr, allbands, None,
+                       write_kwargs=dict(fits_object=out.fits), dr4=True)
+
+    # produce per-brick checksum file.
+    with survey.write_output('checksums', brick=brickname, hashsum=False) as out:
+        f = open(out.fn, 'w')
+        # Write our pre-computed hashcodes.
+        for fn,hashsum in survey.output_file_hashes.items():
+            f.write('%s *%s\n' % (hashsum, fn))
+        f.close()
 
     # write fits file with galaxy-sim stuff (xy bounds of each sim)
     if 'sims_xy' in T.get_columns(): 
         sims_data = fits_table()
         sims_data.sims_xy = T.sims_xy
         with survey.write_output('galaxy-sims', brick=brickname) as out:
-            sims_data.writeto(out.fn)
-            print('Wrote', out.fn)
+            sims_data.writeto(None, fits_object=out.fits)
 
     return dict(T2=T2)
 
@@ -2440,10 +2423,15 @@ def run_brick(brick, survey, radec=None, pixscale=0.262,
             kwargs.update(checkpoint_period=checkpoint_period)
 
     if threads and threads > 1:
-        from astrometry.util.timingpool import TimingPool, TimingPoolMeas
-        pool = TimingPool(threads, initializer=runbrick_global_init,
-                          initargs=[])
-        Time.add_measurement(TimingPoolMeas(pool, pickleTraffic=False))
+        # py3: TimingPool doesn't work (yet)
+        if sys.version_info[0] >= 3:
+            from multiprocessing.pool import Pool
+            pool = Pool(processes=threads, initializer=runbrick_global_init, initargs=[])
+        else:
+            from astrometry.util.timingpool import TimingPool, TimingPoolMeas
+            pool = TimingPool(threads, initializer=runbrick_global_init,
+                              initargs=[])
+            Time.add_measurement(TimingPoolMeas(pool, pickleTraffic=False))
         mp = MyMultiproc(None, pool=pool)
     else:
         mp = MyMultiproc(init=runbrick_global_init, initargs=[])
@@ -2893,12 +2881,18 @@ def main(args=None):
         run_brick(opt.brick, survey, **kwargs)
     except NothingToDoError as e:
         print()
-        print(e.message)
+        if hasattr(e, 'message'):
+            print(e.message)
+        else:
+            print(e)
         print()
         return 0
     except RunbrickError as e:
         print()
-        print(e.message)
+        if hasattr(e, 'message'):
+            print(e.message)
+        else:
+            print(e)
         print()
         return -1
     return 0

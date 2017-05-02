@@ -31,6 +31,14 @@ class MosaicImage(CPImage, CalibMixin):
         self.fwhm /= self.pixscale
 
     @classmethod
+    def get_bad_expids(self):
+        import legacyccds
+        fn = os.path.join(os.path.dirname(legacyccds.__file__),
+                          'bad_expid_mzls.txt')
+        bad_expids = np.loadtxt(fn, dtype=int, usecols=(0,))
+        return bad_expids
+
+    @classmethod
     def nominal_zeropoints(self):
         # See legacypipe/ccd_cuts.py and Photometric cuts email 12/21/2016
         return dict(z = 26.20)
@@ -70,95 +78,34 @@ class MosaicImage(CPImage, CalibMixin):
         return np.flatnonzero(good)
 
     @classmethod
-    def bad_exposures(self, survey, ccds):
-        '''
-        Returns an index array for the members of the table 'ccds'
-        that are good exposures (NOT flagged) in the bad_expid file.
-        '''
-        good = np.ones(len(ccds), bool)
-        n0 = sum(good)
-        # Exposure number, leading zeros removed
-        expid=np.array([num.split('-')[0].lstrip('0') for num in ccds.expid]).astype(int)
-        bad= np.loadtxt('legacyccds/bad_expid_mzls.txt',dtype=int,usecols=(0,))
-        flag= set(bad).intersection(set(expid))
-        flag= list(flag)
-        if len(flag) > 0:
-            for id in flag:
-                good[expid == id] = False
-                #continue as usual
-                n = sum(good)
-                print('Flagged', n0-n, 'as Bad Exposures')
-                n0 = n
-        return np.flatnonzero(good)
+    def ccd_cuts(self, survey, ccds):
+        ccdcuts = super(MosaicImage, self).ccd_cuts(survey, ccds)
 
+        bits = LegacySurveyData.ccd_cut_bits
+
+        I = self.bad_third_pixel(survey, ccds)
+        ccdcuts[I] += bits['THIRD_PIXEL']
+
+        return ccdcuts
+    
     @classmethod
-    def has_third_pixel(self, survey, ccds):
+    def bad_third_pixel(self, survey, ccds):
         '''
         For mosaic this is inconsistent YSHIFT header 
-        Ensures that ccds are 1/3 pixel interpolated. Nothing for other cameras
+        Ensures that ccds are 1/3 pixel interpolated.
         '''
         from astropy.io import fits
-        good = np.ones(len(ccds), bool)
-        n0 = sum(good)
+        bad = np.zeros(len(ccds), bool)
         # Remove if primary header does NOT have keyword YSHIFT
         rootdir = survey.get_image_dir()
         for i,fn in enumerate(ccds.image_filename):
             fn = fn.strip()
-            fn= os.path.join(rootdir,fn)
+            fn = os.path.join(rootdir,fn)
             hdulist = fits.open(fn)
             if not 'YSHIFT' in hdulist[0].header:
-                good[i]= False
-        n = sum(good)
-        print('Flagged', n0-n, 'has third pixel')
-        n0 = n 
-        return np.flatnonzero(good)
+                bad[i] = True
+        return bad
 
-    @classmethod
-    def ccdname_hdu_match(self, survey, ccds):
-        '''
-        Mosaic + Bok, ccdname and hdu number must match. If not, IDL zeropoints files has
-        duplicated zeropoint info from one of the other four ccds
-        '''
-        good = np.ones(len(ccds), bool)
-        n0 = sum(good)
-        ccdnum= np.char.replace(ccds.ccdname,'ccd','').astype(ccds.image_hdu.dtype)
-        flag= ccds.image_hdu - ccdnum != 0
-        good[flag]= False
-        n = sum(good)
-        print('Flagged', n0-n, 'ccdname_hdu_match')
-        n0 = n 
-        return np.flatnonzero(good)
-
-    @classmethod
-    def bad_astrometry(self, survey, ccds):
-        ''' 
-        IDL zeropoints have large rarms,decrms,phrms for some CP images that look fine. Legacy
-        zeropoints is okay for majority of these cases. False alarm? Bug in IDL zeropoints? Doing
-        the most conservative thing and dropping these ccds.
-        see email: "3/30/2017: [decam-chatter 5155] Clue to zero-point errors in dr4"
-        '''
-        good = np.ones(len(ccds), bool)
-        n0 = sum(good)
-        flag= np.any((np.sqrt(ccds.ccdrarms**2 + ccds.ccddecrms**2) > 0.1,
-                      ccds.ccdphrms > 0.2), axis=0)
-        good[flag]= False
-        n = sum(good)
-        print('Flagged', n0-n, 'bad_astrometry')
-        n0 = n 
-        return np.flatnonzero(good)
-
-#    def read_sky_model(self, imghdr=None, primhdr=None, **kwargs):
-#        ''' The Mosaic CP does a good job of sky subtraction, so just
-#        use a constant sky level with value from the header.
-#        '''
-#        from tractor.sky import ConstantSky
-#        # Frank recommends SKYADU
-#        sky = ConstantSky(primhdr['SKYADU'])
-#        sky.version = ''
-#        sky.plver = primhdr.get('PLVER', '').strip()
-#        sky.sig1 = primhdr.get('SKYNOISE', 0.)
-#        return sky
-        
     def read_dq(self, **kwargs):
         '''
         Reads the Data Quality (DQ) mask image.

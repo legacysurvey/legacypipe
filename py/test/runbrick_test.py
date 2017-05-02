@@ -1,4 +1,7 @@
 from __future__ import print_function
+if __name__ == '__main__':
+    import matplotlib
+    matplotlib.use('Agg')
 import os
 import sys
 import numpy as np
@@ -60,6 +63,11 @@ if __name__ == '__main__':
     assert(len(T) == 2)
     print('Types:', T.type)
     assert(T.type[0] == 'REX ')
+    cmd = 'sha256sum -c %s' % os.path.join(outdir, 'tractor', '110',
+                                           'brick-1102p240.sha256sum')
+    print(cmd)
+    rtn = os.system(cmd)
+    assert(rtn == 0)
 
     # Test with a Tycho-2 star in the blob.
 
@@ -184,8 +192,9 @@ if __name__ == '__main__':
     
     survey = LegacySurveyData(survey_dir=outdir)
     fn = survey.find_file('tractor', brick='2447p120')
+    print('Checking', fn)
     T = fits_table(fn)
-    cat = read_fits_catalog(T)
+    cat = read_fits_catalog(T, fluxPrefix='')
     print('Read catalog:', cat)
     assert(len(cat) == 2)
     src = cat[0]

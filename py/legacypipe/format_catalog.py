@@ -8,7 +8,7 @@ import fitsio
 
 from astrometry.util.fits import fits_table, merge_tables
 
-from catalog import prepare_fits_catalog
+from legacypipe.catalog import prepare_fits_catalog
 
 def main(args=None):
     import argparse
@@ -40,8 +40,9 @@ def main(args=None):
     print('Wrote', opt.out)
 
 def format_catalog(T, hdr, primhdr, allbands, outfn,
-                   in_flux_prefix='', flux_prefix='', dr4=False):
-
+                   in_flux_prefix='', flux_prefix='',
+                   dr4=False,
+                   write_kwargs={}):
     # Retrieve the bands in this catalog.
     bands = []
     for i in range(10):
@@ -199,8 +200,12 @@ def format_catalog(T, hdr, primhdr, allbands, outfn,
                   'wise_nobs', 'wise_fracflux','wise_rchi2']
             for c in cc:
                 cbare = c.replace('wise_','')
+                thiswbands = wbands
+                if cbare == 'mask':
+                    cbare = 'wisemask'
+                    thiswbands = wbands[:2]
                 X = T.get(c)
-                for i,b in enumerate(wbands):
+                for i,b in enumerate(thiswbands):
                     col = '%s_%s' % (cbare, b)
                     T.set(col, X[:,i])
                     cols.append(col)
@@ -281,8 +286,9 @@ def format_catalog(T, hdr, primhdr, allbands, outfn,
     
     # Create a list of units aligned with 'cols'
     units = [units.get(c, '') for c in cols]
-    
-    T.writeto(outfn, columns=cols, header=hdr, primheader=primhdr, units=units)
+
+    T.writeto(outfn, columns=cols, header=hdr, primheader=primhdr, units=units,
+              **write_kwargs)
         
 if __name__ == '__main__':
     main()

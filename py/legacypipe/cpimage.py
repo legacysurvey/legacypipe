@@ -102,14 +102,8 @@ class CPImage(LegacySurveyImage):
             stepsize = min(self.width, self.height) / 10.;
         if hdr is None:
             hdr = self.read_image_header()
-        #if self.camera == '90prime':
-            # WCS is in myriad of formats
-            # Don't support TNX yet, use TAN for now
-        #    hdr = self.read_image_header()
-        #    hdr['CTYPE1'] = 'RA---TAN'
-        #    hdr['CTYPE2'] = 'DEC--TAN'
         wcs = wcs_pv2sip_hdr(hdr, stepsize=stepsize)
-        # Correctoin: ccd,ccdraoff, decoff from zeropoints file
+        # Correction: ccd,ccdraoff, decoff from zeropoints file
         dra,ddec = self.dradec
         print('Applying astrometric zeropoint:', (dra,ddec))
         r,d = wcs.get_crval()
@@ -157,6 +151,60 @@ class CPImage(LegacySurveyImage):
 
         return wt
 
+    @classmethod
+    def ccd_cuts(self, survey, ccds):
+        ccdcuts = super(CPImage, self).ccd_cuts(survey, ccds)
+        bits = LegacySurveyData.ccd_cut_bits
+
+        I = self.bad_exposures(survey, ccds)
+        ccdcuts[I] += bits['BAD_EXPID']
+
+        I = self.ccdname_hdu_mismatch(survey, ccds)
+        ccdcuts[I] += bits['CCDNAME_HDU_MISMATCH']
+
+        I = self.bad_astrometry(survey, ccds)
+        ccdcuts[I] += bits['BAD_ASTROMETRY']
+        
+        return ccdcuts
+    
+    @classmethod
+    def bad_exposures(self, survey, ccds):
+        '''
+        Returns an index array for the members of the table 'ccds'
+        that are good exposures (NOT flagged) in the bad_expid file.
+        '''
+        # Exposure number, leading zeros removed
+        badccds = np.zeros(len(ccds), bool)
+
+        bad = self.get_bad_expids()
+        for expnum in bad:
+            badccds[ccds.expnum == expnum] = True
+        return badccds
+
+    @classmethod
+    def ccdname_hdu_mismatch(self, survey, ccds):
+        '''
+        Mosaic + Bok, ccdname and hdu number must match. If not, IDL
+        zeropoints files has duplicated zeropoint info from one of the
+        other four ccds.
+
+        Returns a boolean array, True for CCDs with this problem.
+        '''
+        ccdnum = np.char.replace(ccds.ccdname,'ccd','').astype(ccds.image_hdu.dtype)
+        return ccds.image_hdu != ccdnum
+
+    @classmethod
+    def bad_astrometry(self, survey, ccds):
+        ''' 
+        IDL zeropoints have large rarms,decrms,phrms for some CP images that look fine. Legacy
+        zeropoints is okay for majority of these cases. False alarm? Bug in IDL zeropoints? Doing
+        the most conservative thing and dropping these ccds.
+        see email: "3/30/2017: [decam-chatter 5155] Clue to zero-point errors in dr4"
+        '''
+        bad = np.logical_or(np.hypot(ccds.ccdrarms, ccds.ccddecrms) > 0.1,
+                            ccds.ccdphrms > 0.2)
+        return bad
+    
 
 def newWeightMap(wtfn=None,imgfn=None,dqfn=None):
     '''MZLS or BASS

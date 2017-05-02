@@ -4,6 +4,7 @@ import os
 import tempfile
 import time
 from glob import glob
+from collections import OrderedDict
 
 import numpy as np
 
@@ -285,7 +286,7 @@ class MyFITSHDR(fitsio.FITSHDR):
 def bin_image(data, invvar, S):
     # rebin image data
     H,W = data.shape
-    sH,sW = (H+S-1)/S, (W+S-1)/S
+    sH,sW = (H+S-1)//S, (W+S-1)//S
     newdata = np.zeros((sH,sW), dtype=data.dtype)
     newiv = np.zeros((sH,sW), dtype=invvar.dtype)
     for i in range(S):
@@ -657,7 +658,6 @@ def imsave_jpeg(jpegfn, img, **kwargs):
     *jpegfn*: JPEG filename
     *img*: image, in the typical matplotlib formats (see plt.imsave)
     '''
-
     import pylab as plt
     tmpfn = create_temp(suffix='.png')
     plt.imsave(tmpfn, img, **kwargs)
@@ -676,6 +676,16 @@ class LegacySurveyData(object):
     objects (eg, DecamImage objects), which then allow data to be read
     from disk.
     '''
+
+    # Bit codes for why a CCD got cut, used in cut_ccds().
+    ccd_cut_bits = dict(
+        BLACKLIST = 0x1,
+        BAD_EXPID = 0x2,
+        CCDNAME_HDU_MISMATCH = 0x4,
+        BAD_ASTROMETRY = 0x8,
+        THIRD_PIXEL = 0x10, # Mosaic3 one-third-pixel interpolation problem
+        )
+
     def __init__(self, survey_dir=None, output_dir=None, version=None,
                  ccds=None):
         '''Create a LegacySurveyData object using data from the given
@@ -715,8 +725,7 @@ Now using the current directory as LEGACY_SURVEY_DIR, but this is likely to fail
         else:
             self.output_dir = output_dir
 
-        self.output_files = []
-
+        self.output_file_hashes = OrderedDict()
         self.ccds = ccds
         self.bricks = None
 
@@ -758,7 +767,7 @@ Now using the current directory as LEGACY_SURVEY_DIR, but this is likely to fail
         return self.image_typemap[camera]
 
     def sed_matched_filters(self, bands):
-        from detection import sed_matched_filters
+        from legacypipe.detection import sed_matched_filters
         return sed_matched_filters(bands)
         
     def index_of_band(self, b):
@@ -881,19 +890,27 @@ Now using the current directory as LEGACY_SURVEY_DIR, but this is likely to fail
         elif filetype in ['all-models']:
             return os.path.join(basedir, 'metrics', brickpre, 'all-models-%s.fits' % (brick))
 
-        elif filetype == 'sha1sum-brick':
+        elif filetype == 'checksums':
             return os.path.join(basedir, 'tractor', brickpre,
-                                'brick-%s.sha1sum' % brick)
-        
+                                'brick-%s.sha256sum' % brick)
+
         print('Unknown filetype "%s"' % filetype)
         assert(False)
 
-    def write_output(self, filetype, **kwargs):
+    def write_output(self, filetype, hashsum=True, **kwargs):
         '''
         Returns a context manager for writing an output file; use like:
 
         with survey.write_output('ccds', brick=brickname) as out:
             ccds.writeto(out.fn, primheader=primhdr)
+
+        For FITS output, out.fits is a fitsio.FITS object.  The file
+        contents will actually be written in memory, and then a
+        sha256sum computed before the file contents are written out to
+        the real disk file.  The 'out.fn' member variable is NOT set.
+
+        with survey.write_fits_output('ccds', brick=brickname) as out:
+            ccds.writeto(None, fits_object=out.fits, primheader=primhdr)
 
         Does the following on entry:
         - calls self.find_file() to determine which filename to write to
@@ -902,16 +919,23 @@ Now using the current directory as LEGACY_SURVEY_DIR, but this is likely to fail
 
         Does the following on exit:
         - moves the ".tmp" to the final filename (to make it atomic)
-        - records the filename for later SHA1 computation
+        - computes the sha256sum
         '''
         class OutputFileContext(object):
-            def __init__(self, fn, survey):
+            def __init__(self, fn, survey, hashsum=True):
                 self.real_fn = fn
                 self.survey = survey
-                self.fn = os.path.join(os.path.dirname(fn), 'tmp-'+os.path.basename(fn))
+                self.is_fits = fn.endswith('.fits') or fn.endswith('.fits.gz')
+                self.tmpfn = os.path.join(os.path.dirname(fn), 'tmp-'+os.path.basename(fn))
+                if self.is_fits:
+                    self.is_fits = True
+                    self.fits = fitsio.FITS('mem://', 'rw')
+                else:
+                    self.fn = self.tmpfn
+                self.hashsum = hashsum
 
             def __enter__(self):
-                dirnm = os.path.dirname(self.fn)
+                dirnm = os.path.dirname(self.tmpfn)
                 if not os.path.exists(dirnm):
                     try:
                         os.makedirs(dirnm)
@@ -921,21 +945,47 @@ Now using the current directory as LEGACY_SURVEY_DIR, but this is likely to fail
 
             def __exit__(self, exc_type, exc_value, traceback):
                 # If no exception was thrown...
-                if exc_type is None:
-                    os.rename(self.fn, self.real_fn)
-                    self.survey.add_output_file(self.real_fn)
+                if exc_type is not None:
+                    return
+
+                if self.hashsum:
+                    import hashlib
+                    hashfunc = hashlib.sha256
+                    sha = hashfunc()
+                if self.is_fits:
+                    # Read back the data
+                    rawdata = self.fits.read_raw()
+                    self.fits.close()
+                    if self.hashsum:
+                        sha.update(rawdata)
+                    f = open(self.tmpfn, 'wb')
+                    f.write(rawdata)
+                    f.close()
+                    print('Wrote', self.tmpfn)
+                    del rawdata
+                else:
+                    f = open(self.tmpfn, 'rb')
+                    if self.hashsum:
+                        sha.update(f.read())
+                    f.close()
+                if self.hashsum:
+                    hashcode = sha.hexdigest()
+                    del sha
+
+                os.rename(self.tmpfn, self.real_fn)
+
+                if self.hashsum:
+                    self.survey.add_hashcode(self.real_fn, hashcode)
 
         fn = self.find_file(filetype, output=True, **kwargs)
-        out = OutputFileContext(fn, self)
+        out = OutputFileContext(fn, self, hashsum=hashsum)
         return out
 
-    def add_output_file(self, fn):
+    def add_hashcode(self, fn, hashcode):
         '''
-        Intended as a callback to be called in the *write_output* routine.
-        Adds the given filename to the list of files written by the
-        pipeline on this run.
+        Callback to be called in the *write_output* routine.
         '''
-        self.output_files.append(fn)
+        self.output_file_hashes[fn] = hashcode
 
     def __getstate__(self):
         '''
@@ -1026,6 +1076,8 @@ Now using the current directory as LEGACY_SURVEY_DIR, but this is likely to fail
         Returns a brick (as one row in a table) by name (string).
         '''
         B = self.get_bricks_readonly()
+        print('brickname:', brickname, type(brickname))
+        print('Bricknames:', B.brickname[0], type(B.brickname[0]))
         I, = np.nonzero(np.array([n == brickname for n in B.brickname]))
         if len(I) == 0:
             return None
@@ -1252,105 +1304,26 @@ Now using the current directory as LEGACY_SURVEY_DIR, but this is likely to fail
                 good[Icam[Igood]] = True
         return np.flatnonzero(good)
 
-    def bad_exposures(self, ccds):
+    def ccd_cuts(self, ccds):
         '''
-        Returns an index array for the members of the table 'ccds'
-        that are good exposures (NOT flagged) in the bad_expid file.
-        
-        Default is to return all CCDs.
+        Returns a bitmask of reasons the given *ccds* would be cut
+        (excluded from legacypipe processing).  These bits are defined
+        in LegacySurveyData.ccd_cut_bits.
+
+        This just delegates to the LegacySurveyImage subclasses based
+        on camera.
         '''
         cameras = np.unique(ccds.camera)
-        print('Finding bad_expid exposures.  Cameras:', cameras)
-        good = np.zeros(len(ccds), bool)
+        print('Computing CCD cuts.  Cameras:', cameras)
+        ccdcuts = np.zeros(len(ccds), np.int32)
         for cam in cameras:
             imclass = self.image_class_for_camera(cam)
             Icam = np.flatnonzero(ccds.camera == cam)
             print('Checking', len(Icam), 'images from camera', cam)
-            Igood = imclass.bad_exposures(self, ccds[Icam])
-            print('Keeping', len(Igood), 'unflagged CCD exposures from camera', cam)
-            if len(Igood):
-                good[Icam[Igood]] = True
-        return np.flatnonzero(good)
-
-    def has_third_pixel(self, ccds):
-        '''
-        For mosaic only, ensures ccds are 1/3 pixel interpolated. Nothing for other cameras
-        '''
-        cameras = np.unique(ccds.camera)
-        print('Finding has_third_pixel.  Cameras:', cameras)
-        good = np.zeros(len(ccds), bool)
-        for cam in cameras:
-            imclass = self.image_class_for_camera(cam)
-            Icam = np.flatnonzero(ccds.camera == cam)
-            print('Checking', len(Icam), 'images from camera', cam)
-            Igood = imclass.has_third_pixel(self, ccds[Icam])
-            print('Keeping', len(Igood), 'unflagged CCD exposures from camera', cam)
-            if len(Igood):
-                good[Icam[Igood]] = True
-        return np.flatnonzero(good)
-
-    def ccdname_hdu_match(self, ccds):
-        '''
-        Mosaic + Bok, ccdname and hdu number must match. If not, IDL zeropoints files has
-        duplicated zeropoint info from one of the other four ccds
-        '''
-        cameras = np.unique(ccds.camera)
-        print('Finding ccdname_hdu_match.  Cameras:', cameras)
-        good = np.zeros(len(ccds), bool)
-        for cam in cameras:
-            imclass = self.image_class_for_camera(cam)
-            Icam = np.flatnonzero(ccds.camera == cam)
-            print('Checking', len(Icam), 'images from camera', cam)
-            Igood = imclass.ccdname_hdu_match(self, ccds[Icam])
-            print('Keeping', len(Igood), 'unflagged CCD exposures from camera', cam)
-            if len(Igood):
-                good[Icam[Igood]] = True
-        return np.flatnonzero(good)
-
-    def bad_astrometry(self, ccds):
-        '''
-        IDL zeropoints have large rarms,decrms,phrms for some CP images that look fine. Legacy
-        zeropoints is okay for majority of these cases. False alarm? Bug in IDL zeropoints? Doing
-        the most conservative thing and dropping these ccds.
-        see email: "3/30/2017: [decam-chatter 5155] Clue to zero-point errors in dr4"
-        '''
-        cameras = np.unique(ccds.camera)
-        print('Finding bad_astrometry.  Cameras:', cameras)
-        good = np.zeros(len(ccds), bool)
-        for cam in cameras:
-            imclass = self.image_class_for_camera(cam)
-            Icam = np.flatnonzero(ccds.camera == cam)
-            print('Checking', len(Icam), 'images from camera', cam)
-            Igood = imclass.bad_astrometry(self, ccds[Icam])
-            print('Keeping', len(Igood), 'unflagged CCD exposures from camera', cam)
-            if len(Igood):
-                good[Icam[Igood]] = True
-        return np.flatnonzero(good)
-
-
-
-    def apply_blacklist(self, ccds):
-        '''
-        Returns an index array of CCDs to KEEP; ie, do
-        ccds = survey.get_ccds()
-        I = survey.apply_blacklist(ccds)
-        ccds.cut(I)
-        '''
-        # Make the blacklist check camera-specific, handled by the
-        # Image subclass.
-        cameras = np.unique(ccds.camera)
-        print('Finding blacklisted CCDs.  Cameras:', cameras)
-        good = np.zeros(len(ccds), bool)
-        for cam in cameras:
-            imclass = self.image_class_for_camera(cam)
-            Icam = np.flatnonzero(ccds.camera == cam)
-            print('Checking', len(Icam), 'images from camera', cam)
-            Igood = imclass.apply_blacklist(self, ccds[Icam])
-            print('Keeping', len(Igood), 'non-blacklisted CCDs from camera',
-                  cam)
-            if len(Igood):
-                good[Icam[Igood]] = True
-        return np.flatnonzero(good)
+            cuts = imclass.ccd_cuts(self, ccds[Icam])
+            ccdcuts[Icam] = cuts
+            print('Keeping', sum(cuts == 0), 'unflagged CCDs from camera', cam)
+        return ccdcuts
 
 def exposure_metadata(filenames, hdus=None, trim=None):
     '''
@@ -1517,7 +1490,7 @@ class SchlegelPsfModel(PsfExModel):
             # Reorder the 'ims' to match the way PsfEx sorts its polynomial terms
 
             # number of terms in polynomial
-            ne = (degree + 1) * (degree + 2) / 2
+            ne = (degree + 1) * (degree + 2) // 2
             print('Number of eigen-PSFs required for degree=', degree, 'is', ne)
 
             self.psfbases = np.zeros((ne, h,w))
@@ -1527,7 +1500,7 @@ class SchlegelPsfModel(PsfExModel):
                 # y polynomial degree = k
                 for j in range(d+1):
                     k = d - j
-                    ii = j + (degree+1) * k - (k * (k-1))/ 2
+                    ii = j + (degree+1) * k - (k * (k-1))// 2
 
                     jj = np.flatnonzero((T.xexp == j) * (T.yexp == k))
                     if len(jj) == 0:
