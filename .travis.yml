@@ -53,7 +53,6 @@ install:
     - pip install --no-deps --upgrade git+https://github.com/esheldon/fitsio.git#egg=fitsio
     - pip install photutils
     - pip install -v --no-deps --upgrade git+https://github.com/dstndstn/tractor.git
-    - python -c "import tractor.emfit"
 
     # - easy_install3 --user pip
     # - pip3 install --user numpy==1.11.0
@@ -117,6 +116,7 @@ script:
     - python -c "import numpy; print(numpy.__file__)"
     - python -c "import matplotlib; print(matplotlib.__file__)"
     - python -c "import fitsio; print(fitsio.__file__)"
+    - python -c "import tractor.emfit"
     - find /home/travis/virtualenv/python2.7.12/lib/python2.7/site-packages/tractor -type f
     - find /home/travis/virtualenv/python3.6.1/lib/python3.6/site-packages/tractor -type f
     - (cd py && coverage run test/runbrick_test.py travis)
