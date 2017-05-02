@@ -103,6 +103,7 @@ class MosaicImage(CPImage, CalibMixin):
         # Remove if primary header does NOT have keyword YSHIFT
         rootdir = survey.get_image_dir()
         for i,fn in enumerate(ccds.image_filename):
+            fn = fn.strip()
             fn= os.path.join(rootdir,fn)
             hdulist = fits.open(fn)
             if not 'YSHIFT' in hdulist[0].header:
@@ -173,6 +174,9 @@ class MosaicImage(CPImage, CalibMixin):
         print('Reading weight map image', self.wtfn, 'ext', self.hdu)
         invvar = self._read_fits(self.wtfn, self.hdu, **kwargs)
         return invvar
+
+    def remap_invvar(self, invvar, primhdr, img, dq):
+        return self.remap_invvar_shotnoise(invvar, primhdr, img, dq)
 
     def get_wcs(self):
         '''cpimage.py get_wcs() but wcs comes from interpolated image if this is an

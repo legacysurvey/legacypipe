@@ -191,6 +191,9 @@ class BokImage(CPImage, CalibMixin):
             invvar[invvar < thresh] = 0
         return invvar
 
+    def remap_invvar(self, invvar, primhdr, img, dq):
+        return self.remap_invvar_shotnoise(invvar, primhdr, img, dq)
+
     # read the TPV header, convert it to SIP, and apply an offset from the
     # CCDs table
 #    def get_wcs(self):

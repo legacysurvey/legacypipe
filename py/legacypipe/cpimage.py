@@ -142,6 +142,22 @@ class CPImage(LegacySurveyImage):
         dqbits[dq == 8] |= CP_DQ_BITS['trans']
         return dqbits
 
+    # A function that can be called by a subclasser's remap_invvar() method
+    def remap_invvar_shotnoise(self, invvar, primhdr, img, dq):
+        const_sky = primhdr['SKYADU'] # e/s, Recommended sky level keyword from Frank 
+        expt = primhdr['EXPTIME'] # s
+
+        var_SR = 1./invvar # e/s 
+        var_Astro = np.abs(img - const_sky) / expt # e/s 
+        wt = 1./(var_SR + var_Astro) # s/e
+
+        # Zero out NaNs and masked pixels 
+        wt[np.isfinite(wt) == False] = 0.
+        wt[dq != 0] = 0.
+
+        return wt
+
+
 def newWeightMap(wtfn=None,imgfn=None,dqfn=None):
     '''MZLS or BASS
     Converts the oow weight map: 1 / var(sky, read)

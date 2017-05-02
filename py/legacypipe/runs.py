@@ -76,6 +76,13 @@ class Dr4BootesMzls(Dr4Survey):
          return [fn for fn in fns if
                  ('survey-ccds-mzlsv2thruMarch19.fits.gz' in fn)]
 
+class Dr4Plus(Dr4Survey):
+    def filter_ccds_files(self, fns):
+         return [fn for fn in fns if
+                 ('survey-ccds-dr4-90prime.fits.gz' in fn or
+                  'survey-ccds-dr4-mzlsv2.fits.gz' in fn or
+                  'survey-ccds-mzls-runs-16-to-21a.fits.gz' in fn)]
+
 runs = {
     'dr3': Dr3DecalsSurvey,
     'thirdpix-v2': Thirdpixv2,
@@ -88,6 +95,7 @@ runs = {
     'dr4-bootes': Dr4Bootes,
     'bootes-90prime': Dr4Bootes90Prime,
     'bootes-mzlsv2thruMarch19': Dr4BootesMzls,
+    'dr4+': Dr4Plus,
     None: LegacySurveyData,
 }
 

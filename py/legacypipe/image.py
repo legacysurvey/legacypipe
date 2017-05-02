@@ -263,6 +263,10 @@ class LegacySurveyImage(object):
         psf_sigma = psf_fwhm / 2.35
         primhdr = self.read_image_primary_header()
 
+        #
+        invvar = self.remap_invvar(invvar, primhdr, img, dq)
+
+
         sky = self.read_sky_model(splinesky=splinesky, slc=slc,
                                   primhdr=primhdr, imghdr=imghdr)
         skysig1 = getattr(sky, 'sig1', None)
@@ -375,6 +379,9 @@ class LegacySurveyImage(object):
         subh,subw = tim.shape
         tim.subwcs = tim.sip_wcs.get_subimage(tim.x0, tim.y0, subw, subh)
         return tim
+
+    def remap_invvar(self, invvar, primhdr, img, dq):
+        return invvar
 
     def check_image_header(self, imghdr):
         pass

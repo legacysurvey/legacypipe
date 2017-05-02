@@ -5,7 +5,33 @@ import os
 from collections import Counter
 from astrometry.util.fits import fits_table, merge_tables
 
-def mzls_20160116_to_20170329():
+def fix_mosaic_expnums(expnum):
+    '''expnum: numpy array, fixed in-place.
+    '''
+    import numpy as np
+    # Fix 6-digit 3xxxxx exposure numbers
+    I = np.flatnonzero((expnum >= 300000) * (expnum < 400000))
+    if len(I):
+        #print('Set range of EXPNUMs', expnum[I].min(), expnum[I].max())
+        expnum[I] -= 300000
+        #print('  to', expnum[I].min(), expnum[I].max())
+
+    # Also, in the mosaic obstatus file, there are some in the range
+    # 260,223 to 260,355
+    I = np.flatnonzero((expnum >= 260000) * (expnum < 270000))
+    if len(I):
+        expnum[I] -= 200000
+        
+    # Fix 7-digit 3xxxxxx exposure numbers
+    I = np.flatnonzero((expnum >= 3000000))
+    if len(I):
+        #print('Set range of EXPNUMs', expnum[I].min(), expnum[I].max())
+        expnum[I] -= 3000000
+        #print('  to', expnum[I].min(), expnum[I].max())
+    return expnum
+
+# date_obs in 2016-10-17 to 2017-03-30 -- runs 16 through first half of 21.
+def mzls_runs_16_to_21a():
     basedir = os.environ['LEGACY_SURVEY_DIR']
     cam = 'mosaic'
     image_basedir = os.path.join(basedir, 'images')
@@ -13,11 +39,26 @@ def mzls_20160116_to_20170329():
 
     for fn,dirnms in [
         ('/global/homes/a/arjundey/ZeroPoints/mzls-zpt-20161016-20170329.fits',
-         [''])]:
+         ['CP20161016v1', 'CP20170102', 'CP20170103', 'CP20170104', 'CP20170107',
+          'CP20170108', 'CP20170117', 'CP20170118', 'CP20170125', 'CP20170126',
+          'CP20170127', 'CP20170128', 'CP20170129', 'CP20170201', 'CP20170202',
+          'CP20170203', 'CP20170204', 'CP20170205', 'CP20170206', 'CP20170207',
+          'CP20170208', 'CP20170209', 'CP20170210', 'CP20170213', 'CP20170214',
+          'CP20170215', 'CP20170216', 'CP20170220', 'CP20170221', 'CP20170222',
+          'CP20170223', 'CP20170224', 'CP20170225', 'CP20170226', 'CP20170228',
+          'CP20170301', 'CP20170302', 'CP20170303', 'CP20170304', 'CP20170305',
+          'CP20170306', 'CP20170307', 'CP20170308', 'CP20170309', 'CP20170310',
+          'CP20170311', 'CP20170312', 'CP20170313', 'CP20170314', 'CP20170315',
+          'CP20170316', 'CP20170317', 'CP20170318', 'CP20170319', 'CP20170320',
+          'CP20170321', 'CP20170322', 'CP20170323', 'CP20170324', 'CP20170325',
+          'CP20170326', 'CP20170327', 'CP20170328', 'CP20170329', ])]:
         T = normalize_zeropoints(fn, dirnms, image_basedir, cam)
         TT.append(T)
     T = merge_tables(TT)
-    outfn = 'survey-ccds-mzls-20160116-to-20170329.fits'
+    print('Expnum range:', T.expnum.min(), T.expnum.max())
+    fix_mosaic_expnums(T.expnum)
+    print('Fixed expnum range:', T.expnum.min(), T.expnum.max())
+    outfn = 'survey-ccds-mzls-runs-16-to-21a.fits'
     T.writeto(outfn)
     print('Wrote', outfn)
     for fn in [outfn]:
@@ -595,8 +636,10 @@ def normalize_zeropoints(fn, dirnms, image_basedir, cam, T=None):
 
     cols = T.columns()
     if not 'naxis1' in cols:
+        print('Warning: setting bogus NAXIS1 values')
         T.naxis1 = np.zeros(len(T), np.int16) + 2046
     if not 'naxis2' in cols:
+        print('Warning: setting bogus NAXIS2 values')
         T.naxis2 = np.zeros(len(T), np.int16) + 4094
 
     # Expand wildcarded directory names
@@ -666,6 +709,10 @@ def normalize_zeropoints(fn, dirnms, image_basedir, cam, T=None):
         print('LENGTH len(fnlist)=%d' % len(fnlist))       
         if len(fnlist) == 0:
             print('WARNING**', pattern_string, '->', fnlist)
+            cmd = ('find /project/projectdirs/cosmo/staging/mosaicz/MZLS_CP/ -name "%s*"'
+                   % fn)
+            print(cmd)
+            os.system(cmd)
             assert(False)
 
         fn = fnlist[0].replace(os.path.join(image_basedir, ''), '')
@@ -734,7 +781,7 @@ if __name__ == '__main__':
     #decals_run25()
     #decals_run27()
     #decals_nondecals_dr5()
-    mzls_20160116_to_20170329()
+    mzls_runs_16_to_21a()
 
     #dr4_bootes=False
     #if dr4_bootes:
