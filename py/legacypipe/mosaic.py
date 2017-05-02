@@ -97,9 +97,13 @@ class MosaicImage(CPImage, CalibMixin):
         bad = np.zeros(len(ccds), bool)
         # Remove if primary header does NOT have keyword YSHIFT
         rootdir = survey.get_image_dir()
-        for i,fn in enumerate(ccds.image_filename):
+        # The 1/3-pixel shift problem was fixed in hardware on MJD 57674,
+        # so only check for problems in data before then.
+        I = np.flatnonzero(ccds.mjd_obs < 57674.)
+        for i in I:
+            fn = ccds.image_filename[i]
             fn = fn.strip()
-            fn = os.path.join(rootdir,fn)
+            fn = os.path.join(rootdir, fn)
             hdulist = fits.open(fn)
             if not 'YSHIFT' in hdulist[0].header:
                 print('Did not find YSHIFT in primary header of', fn)
