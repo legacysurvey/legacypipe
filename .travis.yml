@@ -52,7 +52,7 @@ install:
     # fitsio master version
     - pip install --no-deps --upgrade git+https://github.com/esheldon/fitsio.git#egg=fitsio
     - pip install photutils
-    - pip install --no-deps --upgrade git+https://github.com/dstndstn/tractor.git
+    - pip install -v --no-deps --upgrade git+https://github.com/dstndstn/tractor.git
 
     # - easy_install3 --user pip
     # - pip3 install --user numpy==1.11.0
