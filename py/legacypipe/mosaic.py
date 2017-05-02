@@ -11,7 +11,7 @@ from astrometry.util.util import wcs_pv2sip_hdr
 from tractor.basics import ConstantFitsWcs
 
 from legacypipe.image import LegacySurveyImage, CalibMixin
-from legacypipe.cpimage import CPImage, newWeightMap
+from legacypipe.cpimage import CPImage
 from legacypipe.survey import LegacySurveyData    
 
 class MosaicImage(CPImage, CalibMixin):
@@ -25,8 +25,6 @@ class MosaicImage(CPImage, CalibMixin):
 
     def __init__(self, survey, t):
         super(MosaicImage, self).__init__(survey, t)
-        # Add poisson noise to weight map
-        self.wtfn= newWeightMap(wtfn=self.wtfn,imgfn=self.imgfn,dqfn=self.dqfn)
         # convert FWHM into pixel units
         self.fwhm /= self.pixscale
 
@@ -84,6 +82,7 @@ class MosaicImage(CPImage, CalibMixin):
         bits = LegacySurveyData.ccd_cut_bits
 
         I = self.bad_third_pixel(survey, ccds)
+        print(np.sum(I), 'CCDs have bad THIRD_PIXEL')
         ccdcuts[I] += bits['THIRD_PIXEL']
 
         return ccdcuts
@@ -103,6 +102,7 @@ class MosaicImage(CPImage, CalibMixin):
             fn = os.path.join(rootdir,fn)
             hdulist = fits.open(fn)
             if not 'YSHIFT' in hdulist[0].header:
+                print('Did not find YSHIFT in primary header of', fn)
                 bad[i] = True
         return bad
 
