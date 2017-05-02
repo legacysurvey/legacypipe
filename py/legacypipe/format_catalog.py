@@ -8,7 +8,7 @@ import fitsio
 
 from astrometry.util.fits import fits_table, merge_tables
 
-from catalog import prepare_fits_catalog
+from legacypipe.catalog import prepare_fits_catalog
 
 def main(args=None):
     import argparse

@@ -190,7 +190,7 @@ class LegacySurveyImage(object):
             from astrometry.util.miscutils import clip_polygon
             imgpoly = [(1,1),(1,imh),(imw,imh),(imw,1)]
             ok,tx,ty = wcs.radec2pixelxy(radecpoly[:-1,0], radecpoly[:-1,1])
-            tpoly = zip(tx,ty)
+            tpoly = list(zip(tx,ty))
             clip = clip_polygon(imgpoly, tpoly)
             clip = np.array(clip)
             if len(clip) == 0:
@@ -478,8 +478,8 @@ class LegacySurveyImage(object):
         # Crazily, this can be MUCH faster than letting fitsio do it...
         hdr = fitsio.FITSHDR()
         foundEnd = False
-        ff = open(self.imgfn, 'r')
-        h = ''
+        ff = open(self.imgfn, 'rb')
+        h = b''
         while True:
             h = h + ff.read(32768)
             while True:
@@ -489,14 +489,16 @@ class LegacySurveyImage(object):
                 # HACK -- fitsio apparently can't handle CONTINUE.
                 # It also has issues with slightly malformed cards, like
                 # KEYWORD  =      / no value
-                if line[:8] != 'CONTINUE':
+                if line[:8] != b'CONTINUE':
                     try:
-                        hdr.add_record(line)
+                        hdr.add_record(line.decode())
                     except:
                         print('Warning: failed to parse FITS header line: ' +
                               ('"%s"; skipped' % line.strip()))
+                        import traceback
+                        traceback.print_exc()
                               
-                if line == ('END' + ' '*77):
+                if line == (b'END' + b' '*77):
                     foundEnd = True
                     break
                 if len(h) < 80:

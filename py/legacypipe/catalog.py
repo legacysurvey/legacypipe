@@ -31,6 +31,7 @@ ellipse_types = dict([(_typestring(t), t) for t in
 
 def _source_param_types(src):
     def flatten_node(node):
+        from functools import reduce
         return reduce(lambda x,y: x+y,
                       [flatten_node(c) for c in node[1:]],
                       [node[0]])

@@ -286,7 +286,7 @@ class MyFITSHDR(fitsio.FITSHDR):
 def bin_image(data, invvar, S):
     # rebin image data
     H,W = data.shape
-    sH,sW = (H+S-1)/S, (W+S-1)/S
+    sH,sW = (H+S-1)//S, (W+S-1)//S
     newdata = np.zeros((sH,sW), dtype=data.dtype)
     newiv = np.zeros((sH,sW), dtype=invvar.dtype)
     for i in range(S):
@@ -767,7 +767,7 @@ Now using the current directory as LEGACY_SURVEY_DIR, but this is likely to fail
         return self.image_typemap[camera]
 
     def sed_matched_filters(self, bands):
-        from detection import sed_matched_filters
+        from legacypipe.detection import sed_matched_filters
         return sed_matched_filters(bands)
         
     def index_of_band(self, b):
@@ -958,13 +958,13 @@ Now using the current directory as LEGACY_SURVEY_DIR, but this is likely to fail
                     self.fits.close()
                     if self.hashsum:
                         sha.update(rawdata)
-                    f = open(self.tmpfn, 'w')
+                    f = open(self.tmpfn, 'wb')
                     f.write(rawdata)
                     f.close()
                     print('Wrote', self.tmpfn)
                     del rawdata
                 else:
-                    f = open(self.tmpfn, 'r')
+                    f = open(self.tmpfn, 'rb')
                     if self.hashsum:
                         sha.update(f.read())
                     f.close()
@@ -1076,6 +1076,8 @@ Now using the current directory as LEGACY_SURVEY_DIR, but this is likely to fail
         Returns a brick (as one row in a table) by name (string).
         '''
         B = self.get_bricks_readonly()
+        print('brickname:', brickname, type(brickname))
+        print('Bricknames:', B.brickname[0], type(B.brickname[0]))
         I, = np.nonzero(np.array([n == brickname for n in B.brickname]))
         if len(I) == 0:
             return None
@@ -1488,7 +1490,7 @@ class SchlegelPsfModel(PsfExModel):
             # Reorder the 'ims' to match the way PsfEx sorts its polynomial terms
 
             # number of terms in polynomial
-            ne = (degree + 1) * (degree + 2) / 2
+            ne = (degree + 1) * (degree + 2) // 2
             print('Number of eigen-PSFs required for degree=', degree, 'is', ne)
 
             self.psfbases = np.zeros((ne, h,w))
@@ -1498,7 +1500,7 @@ class SchlegelPsfModel(PsfExModel):
                 # y polynomial degree = k
                 for j in range(d+1):
                     k = d - j
-                    ii = j + (degree+1) * k - (k * (k-1))/ 2
+                    ii = j + (degree+1) * k - (k * (k-1))// 2
 
                     jj = np.flatnonzero((T.xexp == j) * (T.yexp == k))
                     if len(jj) == 0:

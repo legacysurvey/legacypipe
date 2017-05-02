@@ -90,6 +90,8 @@ before_script:
     # - if [ ! -d "$HOME/tractor-git" ]; then (cd $HOME; git clone https://github.com/dstndstn/tractor.git tractor-git); fi
     # - (cd $HOME/tractor-git && git pull) || (rm -Rf $HOME/tractor-git && cd $HOME && git clone https://github.com/dstndstn/tractor.git tractor-git);
     # - (cd $HOME/tractor-git && make)
+    # - ln -s $HOME/tractor-git/tractor .
+    # - ln -s $HOME/tractor-git/wise .
 
     # pip install fitsio instead
     #- if [ ! -d "$HOME/fitsio-git" ]; then (cd $HOME; git clone https://github.com/esheldon/fitsio.git fitsio-git); fi
@@ -99,20 +101,20 @@ before_script:
     #- ln -s $HOME/fitsio/lib/python/fitsio .
 
     - ln -s $HOME/astrometry.net astrometry
-    - ln -s $HOME/tractor-git/tractor .
-    - ln -s $HOME/tractor-git/wise .
     - mkdir -p $HOME/dust/maps
     - (cd $HOME/dust/maps && wget -c http://portal.nersc.gov/project/cosmo/temp/dstn/travis-ci/maps/SFD_dust_4096_ngp.fits)
     - (cd $HOME/dust/maps && wget -c http://portal.nersc.gov/project/cosmo/temp/dstn/travis-ci/maps/SFD_dust_4096_sgp.fits)
     - export DUST_DIR=$HOME/dust
 
 script:
-    - export PYTHONPATH=${PYTHONPATH}:$(pwd)/py:$(pwd):$HOME/numpydoc
+    # - export PYTHONPATH=${PYTHONPATH}:$(pwd)/py:$(pwd):$HOME/numpydoc
+    - export PYTHONPATH=${PYTHONPATH}:$(pwd)/py
+    - ls $HOME
     - (cd doc && make)
     - echo $PYTHONPATH
-    - python -c "import numpy; print numpy.__file__"
-    - python -c "import matplotlib; print matplotlib.__file__"
-    - python -c "import fitsio; print fitsio.__file__"
+    - python -c "import numpy; print(numpy.__file__)"
+    - python -c "import matplotlib; print(matplotlib.__file__)"
+    - python -c "import fitsio; print(fitsio.__file__)"
     - (cd py && coverage run test/runbrick_test.py travis)
 
 #     - python3 -c "import numpy; print(numpy.__file__)"

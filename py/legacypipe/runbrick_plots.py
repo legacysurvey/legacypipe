@@ -1,14 +1,15 @@
+from __future__ import print_function
 import pylab as plt
 from astrometry.util.plotutils import dimshow
-from survey import *
+from legacypipe.survey import *
 
 
 def _psf_check_plots(tims):
     # HACK -- check PSF models
     plt.figure(num=2, figsize=(7,4.08))
     for im,tim in zip(ims,tims):
-        print
-        print 'Image', tim.name
+        print()
+        print('Image', tim.name)
 
         plt.subplots_adjust(left=0, right=1, bottom=0, top=0.95,
                             hspace=0, wspace=0)
@@ -21,12 +22,12 @@ def _psf_check_plots(tims):
 
         tfit = Time()
         psffit2 = GaussianMixtureEllipsePSF.fromStamp(psfim, N=2)
-        print 'Fitting PSF mog:', psfim.shape, Time()-tfit
+        print('Fitting PSF mog:', psfim.shape, Time()-tfit)
 
         psfim = psfim0[5:-5, 5:-5]
         tfit = Time()
         psffit2 = GaussianMixtureEllipsePSF.fromStamp(psfim, N=2)
-        print 'Fitting PSF mog:', psfim.shape, Time()-tfit
+        print('Fitting PSF mog:', psfim.shape, Time()-tfit)
 
         ph,pw = psfim.shape
         psffit = GaussianMixtureEllipsePSF.fromStamp(psfim, N=3)
@@ -65,7 +66,7 @@ def _psf_check_plots(tims):
                     psfimg = psfex.instantiateAt(x, y)
                     # trim
                     psfimg = psfimg[5:-5, 5:-5]
-                    print 'psfimg', psfimg.shape
+                    print('psfimg', psfimg.shape)
                     ph,pw = psfimg.shape
                     psfimg2 = tim.psfex.getPointSourcePatch(x, y, radius=pw/2)
                     mod = np.zeros_like(psfimg)
@@ -76,11 +77,11 @@ def _psf_check_plots(tims):
                     #psfimg2.y0 += h/2
                     psfimg2.x0 = 0
                     psfimg2.y0 = 0
-                    print 'psfimg2:', (psfimg2.x0,psfimg2.y0)
+                    print('psfimg2:', (psfimg2.x0,psfimg2.y0))
                     psfimg2.addTo(mod)
-                    print 'psfimg:', psfimg.min(), psfimg.max(), psfimg.sum()
-                    print 'psfimg2:', psfimg2.patch.min(), psfimg2.patch.max(), psfimg2.patch.sum()
-                    print 'mod:', mod.min(), mod.max(), mod.sum()
+                    print('psfimg:', psfimg.min(), psfimg.max(), psfimg.sum())
+                    print('psfimg2:', psfimg2.patch.min(), psfimg2.patch.max(), psfimg2.patch.sum())
+                    print('mod:', mod.min(), mod.max(), mod.sum())
 
                     #plt.subplot(rows, cols, k)
                     plt.subplot(cols, rows, k)
@@ -107,18 +108,18 @@ def _psf_check_plots(tims):
 def _debug_plots(srctractor, ps):
     thislnp0 = srctractor.getLogProb()
     p0 = np.array(srctractor.getParams())
-    print 'logprob:', p0, '=', thislnp0
+    print('logprob:', p0, '=', thislnp0)
 
-    print 'p0 type:', p0.dtype
+    print('p0 type:', p0.dtype)
     px = p0 + np.zeros_like(p0)
     srctractor.setParams(px)
     lnpx = srctractor.getLogProb()
     assert(lnpx == thislnp0)
-    print 'logprob:', px, '=', lnpx
+    print('logprob:', px, '=', lnpx)
 
     scales = srctractor.getParameterScales()
-    print 'Parameter scales:', scales
-    print 'Parameters:'
+    print('Parameter scales:', scales)
+    print('Parameters:')
     srctractor.printThawedParams()
 
     # getParameterScales better not have changed the params!!
@@ -157,11 +158,11 @@ def _debug_plots(srctractor, ps):
         steps = 1.1 ** np.arange(-20, 21)
         s2 = np.linspace(0, steps[0], 10)[1:-1]
         steps = reduce(np.append, [-steps[::-1], -s2[::-1], 0, s2, steps])
-        print 'Steps:', steps
+        print('Steps:', steps)
 
         plt.plot(p0[i], thislnp0, 'bx', ms=20)
 
-        print 'Stepping in param', pnames[i], '...'
+        print('Stepping in param', pnames[i], '...')
         pp = p0.copy()
         lnps,parms = [],[]
         for s in steps:
@@ -171,13 +172,13 @@ def _debug_plots(srctractor, ps):
             lnp = srctractor.getLogProb()
             parms.append(parm)
             lnps.append(lnp)
-            print 'logprob:', pp, '=', lnp
+            print('logprob:', pp, '=', lnp)
             
         plt.plot(parms, lnps, 'k.-')
         j = np.argmin(np.abs(steps - 1.))
         plt.plot(parms[j], lnps[j], 'ko')
 
-        print 'Stepping in X...'
+        print('Stepping in X...')
         lnps,parms = [],[]
         for s in steps:
             pp = p0 + s * X
@@ -185,18 +186,18 @@ def _debug_plots(srctractor, ps):
             lnp = srctractor.getLogProb()
             parms.append(pp[i])
             lnps.append(lnp)
-            print 'logprob:', pp, '=', lnp
+            print('logprob:', pp, '=', lnp)
 
 
         ##
         s3 = s2[:2]
         ministeps = reduce(np.append, [-s3[::-1], 0, s3])
-        print 'mini steps:', ministeps
+        print('mini steps:', ministeps)
         for s in ministeps:
             pp = p0 + s * X
             srctractor.setParams(pp)
             lnp = srctractor.getLogProb()
-            print 'logprob:', pp, '=', lnp
+            print('logprob:', pp, '=', lnp)
 
         rows = len(ministeps)
         cols = len(srctractor.images)
@@ -210,17 +211,17 @@ def _debug_plots(srctractor, ps):
         for s in ministeps:
             pp = p0 + s * X
             srctractor.setParams(pp)
-            print 'ministep', s
-            print 'log prior', srctractor.getLogPrior()
-            print 'log likelihood', srctractor.getLogLikelihood()
+            print('ministep', s)
+            print('log prior', srctractor.getLogPrior())
+            print('log likelihood', srctractor.getLogLikelihood())
             mods.append(srctractor.getModelImages())
             chis = srctractor.getChiImages()
             # for chi in chis:
             #     plt.subplot(rows, cols, k)
             #     k += 1
             #     dimshow(chi, ticks=False, vmin=-10, vmax=10, cmap='jet')
-            print 'chisqs:', [(chi**2).sum() for chi in chis]
-            print 'sum:', sum([(chi**2).sum() for chi in chis])
+            print('chisqs:', [(chi**2).sum() for chi in chis])
+            print('sum:', sum([(chi**2).sum() for chi in chis]))
 
         mod0 = mods[len(ministeps)/2]
         for modlist in mods:
@@ -236,13 +237,13 @@ def _debug_plots(srctractor, ps):
         
         plt.plot(parms, lnps, 'r.-')
 
-        print 'Stepping in X by alphas...'
+        print('Stepping in X by alphas...')
         lnps = []
         for cc,ss in [('m',0.1), ('m',0.3), ('r',1)]:
             pp = p0 + ss*X
             srctractor.setParams(pp)
             lnp = srctractor.getLogProb()
-            print 'logprob:', pp, '=', lnp
+            print('logprob:', pp, '=', lnp)
 
             plt.plot(p0[i] + ss * X[i], lnp, 'o', color=cc)
             lnps.append(lnp)
@@ -302,7 +303,7 @@ def _plot_mods(tims, mods, blobwcs, titles, bands, coimgs, cons, bslc,
     
     make_coimgs = (coimgs is None)
     if make_coimgs:
-        print '_plot_mods: blob shape', (blobh, blobw)
+        print('_plot_mods: blob shape', (blobh, blobw))
         coimgs = [np.zeros((blobh,blobw)) for b in bands]
         cons   = [np.zeros((blobh,blobw)) for b in bands]
 
@@ -469,23 +470,23 @@ def stage_psfplots(
     tim = tims[0]
     tim.psfex.fitSavedData(*tim.psfex.splinedata)
     spl = tim.psfex.splines[0]
-    print 'Spline:', spl
+    print('Spline:', spl)
     knots = spl.get_knots()
-    print 'knots:', knots
+    print('knots:', knots)
     tx,ty = knots
     k = 3
-    print 'interior knots x:', tx[k+1:-k-1]
-    print 'additional knots x:', tx[:k+1], 'and', tx[-k-1:]
-    print 'interior knots y:', ty[k+1:-k-1]
-    print 'additional knots y:', ty[:k+1], 'and', ty[-k-1:]
+    print('interior knots x:', tx[k+1:-k-1])
+    print('additional knots x:', tx[:k+1], 'and', tx[-k-1:])
+    print('interior knots y:', ty[k+1:-k-1])
+    print('additional knots y:', ty[:k+1], 'and', ty[-k-1:])
 
     for itim,tim in enumerate(tims):
         psfex = tim.psfex
         psfex.fitSavedData(*psfex.splinedata)
         if plots:
-            print
-            print 'Tim', tim
-            print
+            print()
+            print('Tim', tim)
+            print()
             pp,xx,yy = psfex.splinedata
             ny,nx,nparams = pp.shape
             assert(len(xx) == nx)
@@ -497,8 +498,8 @@ def stage_psfplots(
             #xa,ya = np.meshgrid(xa,ya)
             #xa = xa.ravel()
             #ya = ya.ravel()
-            print 'xa', xa
-            print 'ya', ya
+            print('xa', xa)
+            print('ya', ya)
             for i in range(nparams):
                 plt.clf()
                 plt.subplot(1,2,1)
@@ -508,7 +509,7 @@ def stage_psfplots(
                 plt.subplot(1,2,2)
                 sp = psfex.splines[i](xa, ya)
                 sp = sp.T
-                print 'spline shape', sp.shape
+                print('spline shape', sp.shape)
                 assert(sp.shape == (len(ya),len(xa)))
                 dimshow(sp, extent=[xx[0],xx[-1],yy[0],yy[-1]])
                 plt.title('spline')
@@ -526,7 +527,7 @@ def stage_initplots(
     # dimshow(get_rgb(coimgs, bands))
     # ps.savefig()
 
-    print 'T:'
+    print('T:')
     T.about()
 
     # cluster zoom-in
@@ -573,9 +574,9 @@ def stage_initplots(
     scat = Catalog(*[cat[i] for i in np.flatnonzero(T.objid)])
     sedcat = Catalog(*[cat[i] for i in np.flatnonzero(T.objid == 0)])
 
-    print len(cat), 'total sources'
-    print len(scat), 'SDSS sources'
-    print len(sedcat), 'SED-matched sources'
+    print(len(cat), 'total sources')
+    print(len(scat), 'SDSS sources')
+    print(len(sedcat), 'SED-matched sources')
     tr = Tractor(tractor.images, scat)
 
     comods = []
@@ -687,9 +688,9 @@ def sdss_coadd(targetwcs, bands):
     ra,dec = targetwcs.radec_center()
     rad = targetwcs.radius()
     rad = rad + np.hypot(10.,14.)/2./60.
-    print 'Searching for run,camcol,fields with radius', rad, 'deg'
+    print('Searching for run,camcol,fields with radius', rad, 'deg')
     RCF = radec_to_sdss_rcf(ra, dec, radius=rad*60., tablefn=wfn)
-    print 'Found %i fields possibly in range' % len(RCF)
+    print('Found %i fields possibly in range' % len(RCF))
 
     H,W = targetwcs.shape
     sdsscoimgs = [np.zeros((H,W),np.float32) for band in bands]
@@ -699,7 +700,7 @@ def sdss_coadd(targetwcs, bands):
             bandnum = band_index(band)
             sdss.retrieve('frame', run, camcol, field, band)
             frame = sdss.readFrame(run, camcol, field, bandnum)
-            print 'Got frame', frame
+            print('Got frame', frame)
             h,w = frame.getImageShape()
             simg = frame.getImage()
             wcs = AsTransWrapper(frame.astrans, w, h, 0.5, 0.5)
@@ -729,7 +730,7 @@ def stage_fitplots(
     **kwargs):
 
     for tim in tims:
-        print 'Tim', tim, 'PSF', tim.getPsf()
+        print('Tim', tim, 'PSF', tim.getPsf())
         
     writeModels = False
 
@@ -737,7 +738,7 @@ def stage_fitplots(
         t0 = Time()
         # Produce per-band coadds, for plots
         coimgs,cons = compute_coadds(tims, bands, targetwcs)
-        print 'Coadds:', Time()-t0
+        print('Coadds:', Time()-t0)
 
     plt.figure(figsize=(10,10.5))
     #plt.subplots_adjust(left=0.002, right=0.998, bottom=0.002, top=0.998)
@@ -776,11 +777,11 @@ def stage_fitplots(
 
     wcsW = targetwcs.get_width()
     wcsH = targetwcs.get_height()
-    print 'Target WCS shape', wcsW,wcsH
+    print('Target WCS shape', wcsW,wcsH)
 
     t0 = Time()
     mods = _map(_get_mod, [(tim, cat) for tim in tims])
-    print 'Getting model images:', Time()-t0
+    print('Getting model images:', Time()-t0)
 
     orig_wcsxy0 = [tim.wcs.getX0Y0() for tim in tims]
     for iband,band in enumerate(bands):
@@ -854,7 +855,7 @@ def stage_fitplots(
 
             imhdr.add_record(dict(name='EXTTYPE', value='MODEL', comment='This HDU contains a Tractor model image'))
             fits.write(mod, header=imhdr)
-            print 'Wrote image and model to', fn
+            print('Wrote image and model to', fn)
             
         comod  /= np.maximum(cons[iband], 1)
         comod2 /= np.maximum(cons[iband], 1)
@@ -878,7 +879,7 @@ def stage_fitplots(
         for name,img in [('image', coimg), ('model', comod), ('resid', resid), ('chi2', cochi2)]:
             fn = os.path.join(outdir, '%s-coadd-%06i-%s.fits' % (name, brickid, band))
             fitsio.write(fn, img,  **wa)
-            print 'Wrote', fn
+            print('Wrote', fn)
 
     del cons
 

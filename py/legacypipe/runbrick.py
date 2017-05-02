@@ -315,14 +315,14 @@ def stage_tims(W=3600, H=3600, pixscale=0.262, brickname=None,
                                 splinesky=splinesky,
                                 constant_invvar=constant_invvar))
                                 for im in ims]
-    tims = mp.map(read_one_tim, args)
+    tims = list(mp.map(read_one_tim, args))
 
     tnow = Time()
     print('[parallel tims] Read', len(ccds), 'images:', tnow-tlast)
     tlast = tnow
 
     # Cut the table of CCDs to match the 'tims' list
-    I = np.flatnonzero(np.array([tim is not None for tim in tims]))
+    I = np.array([i for i,tim in enumerate(tims) if tim is not None])
     ccds.cut(I)
     tims = [tim for tim in tims if tim is not None]
     assert(len(ccds) == len(tims))
@@ -478,7 +478,8 @@ def stage_tims(W=3600, H=3600, pixscale=0.262, brickname=None,
     keys = ['version_header', 'targetrd', 'pixscale', 'targetwcs', 'W','H',
             'bands', 'tims', 'ps', 'brickid', 'brickname', 'brick',
             'target_extent', 'ccds', 'bands', 'survey']
-    rtn = dict([(k,locals()[k]) for k in keys])
+    L = locals()
+    rtn = dict([(k,L[k]) for k in keys])
     return rtn
 
 def stage_mask_junk(tims=None, targetwcs=None, W=None, H=None, bands=None,
@@ -805,7 +806,7 @@ def stage_srcs(coimgs=None, cons=None,
         for r,d,m in zip(Tsat.ra, Tsat.dec, Tsat.mag):
             fluxes = dict([(band, NanoMaggies.magToNanomaggies(m))
                            for band in bands])
-            assert(np.all(np.isfinite(fluxes.values())))
+            assert(np.all(np.isfinite(list(fluxes.values()))))
             satcat.append(PointSource(RaDecPos(r, d),
                                       NanoMaggies(order=bands, **fluxes)))
 
@@ -890,7 +891,8 @@ def stage_srcs(coimgs=None, cons=None,
 
     keys = ['T', 'tims', 'blobsrcs', 'blobslices', 'blobs', 'cat',
             'ps', 'tycho']
-    rtn = dict([(k,locals()[k]) for k in keys])
+    L = locals()
+    rtn = dict([(k,L[k]) for k in keys])
     return rtn
 
 def _subtract_onbricks_sources(survey, brick, allow_missing_brickq,
@@ -1103,7 +1105,7 @@ def stage_fitblobs(T=None,
         ok,x,y = targetwcs.radec2pixelxy(rd[:,0], rd[:,1])
         x = (x - 1).astype(int)
         y = (y - 1).astype(int)
-        blobxy = zip(x, y)
+        blobxy = list(zip(x, y))
         print('Blobradec -> blobxy:', len(blobxy), 'points')
 
     if blobxy is not None:
@@ -1391,11 +1393,12 @@ def stage_fitblobs(T=None,
     keys = ['cat', 'invvars', 'T', 'blobs']
     if get_all_models:
         keys.append('all_models')
-    rtn = dict([(k,locals()[k]) for k in keys])
+    L = locals()
+    rtn = dict([(k,L[k]) for k in keys])
     return rtn
 
 def _format_all_models(T, newcat, BB, bands, rex):
-    from catalog import prepare_fits_catalog, fits_typemap
+    from legacypipe.catalog import prepare_fits_catalog, fits_typemap
     from astrometry.util.file import pickle_to_file
 
     TT = fits_table()
@@ -1577,7 +1580,7 @@ def _bounce_one_blob(X):
     ''' This just wraps the one_blob function, for debugging &
     multiprocessing purposes.
     '''
-    from oneblob import one_blob
+    from legacypipe.oneblob import one_blob
     try:
         return one_blob(X)
     except:
@@ -1654,6 +1657,7 @@ def stage_coadds(survey=None, bands=None, version_header=None, targetwcs=None,
     ok,xx,yy = targetwcs.radec2pixelxy(ra, dec)
     
     # Get integer brick pixel coords for each source, for referencing maps
+    from functools import reduce
     T.oob = reduce(np.logical_or, [xx < 0.5, yy < 0.5, xx > W+0.5, yy > H+0.5])
     ix = np.clip(np.round(xx - 1), 0, W-1).astype(int)
     iy = np.clip(np.round(yy - 1), 0, H-1).astype(int)
@@ -2027,7 +2031,7 @@ def stage_writecat(
     Final stage in the pipeline: format results for the output
     catalog.
     '''
-    from catalog import prepare_fits_catalog
+    from legacypipe.catalog import prepare_fits_catalog
      
     TT = T.copy()
     for k in ['itx','ity','index','tx','ty']:
@@ -2062,7 +2066,7 @@ def stage_writecat(
                                 comment='Aperture radius, in arcsec'))
 
     # Record the meaning of mask bits
-    bits = CP_DQ_BITS.values()
+    bits = list(CP_DQ_BITS.values())
     bits.sort()
     bitmap = dict((v,k) for k,v in CP_DQ_BITS.items())
     for i in range(16):
@@ -2156,7 +2160,7 @@ def stage_writecat(
     ### FIXME -- convert intermediate tractor catalog to final, for now...
     ### FIXME -- note that this is now the only place where 'allbands' is used.
 
-    from format_catalog import format_catalog
+    from legacypipe.format_catalog import format_catalog
     with survey.write_output('tractor', brick=brickname) as out:
         format_catalog(T2, hdr, primhdr, allbands, None,
                        write_kwargs=dict(fits_object=out.fits), dr4=True)
@@ -2419,10 +2423,15 @@ def run_brick(brick, survey, radec=None, pixscale=0.262,
             kwargs.update(checkpoint_period=checkpoint_period)
 
     if threads and threads > 1:
-        from astrometry.util.timingpool import TimingPool, TimingPoolMeas
-        pool = TimingPool(threads, initializer=runbrick_global_init,
-                          initargs=[])
-        Time.add_measurement(TimingPoolMeas(pool, pickleTraffic=False))
+        # py3: TimingPool doesn't work (yet)
+        if sys.version_info[0] >= 3:
+            from multiprocessing.pool import Pool
+            pool = Pool(processes=threads, initializer=runbrick_global_init, initargs=[])
+        else:
+            from astrometry.util.timingpool import TimingPool, TimingPoolMeas
+            pool = TimingPool(threads, initializer=runbrick_global_init,
+                              initargs=[])
+            Time.add_measurement(TimingPoolMeas(pool, pickleTraffic=False))
         mp = MyMultiproc(None, pool=pool)
     else:
         mp = MyMultiproc(init=runbrick_global_init, initargs=[])
@@ -2872,12 +2881,18 @@ def main(args=None):
         run_brick(opt.brick, survey, **kwargs)
     except NothingToDoError as e:
         print()
-        print(e.message)
+        if hasattr(e, 'message'):
+            print(e.message)
+        else:
+            print(e)
         print()
         return 0
     except RunbrickError as e:
         print()
-        print(e.message)
+        if hasattr(e, 'message'):
+            print(e.message)
+        else:
+            print(e)
         print()
         return -1
     return 0

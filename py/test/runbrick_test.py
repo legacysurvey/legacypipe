@@ -1,4 +1,7 @@
 from __future__ import print_function
+if __name__ == '__main__':
+    import matplotlib
+    matplotlib.use('Agg')
 import os
 import sys
 import numpy as np

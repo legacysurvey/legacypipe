@@ -138,6 +138,7 @@ def make_coadds(tims, bands, targetwcs,
             ormask  = np.zeros((H,W), np.int16)
             # "all" mask
             andmask = np.empty((H,W), np.int16)
+            from functools import reduce
             allbits = reduce(np.bitwise_or, CP_DQ_BITS.values())
             andmask[:,:] = allbits
             # number of observations
@@ -294,7 +295,12 @@ def make_coadds(tims, bands, targetwcs,
             if mods is not None:
                 apres = []
             for irad,rad in enumerate(apertures):
-                (airad, aband, isimg, ap_img, ap_err) = apresults.next()
+                # py2
+                if hasattr(apresults, 'next'):
+                    (airad, aband, isimg, ap_img, ap_err) = apresults.next()
+                # py3
+                else:    
+                    (airad, aband, isimg, ap_img, ap_err) = apresults.__next__()
                 assert(airad == irad)
                 assert(aband == band)
                 assert(isimg)
@@ -302,7 +308,11 @@ def make_coadds(tims, bands, targetwcs,
                 apimgerr.append(ap_err)
     
                 if mods is not None:
-                    (airad, aband, isimg, ap_img, ap_err) = apresults.next()
+                    # py2
+                    if hasattr(apresults, 'next'):
+                        (airad, aband, isimg, ap_img, ap_err) = apresults.next()
+                    else:
+                        (airad, aband, isimg, ap_img, ap_err) = apresults.__next__()
                     assert(airad == irad)
                     assert(aband == band)
                     assert(not isimg)
@@ -325,7 +335,8 @@ def make_coadds(tims, bands, targetwcs,
 
     return C
 
-def _resample_one((itim,tim,mod,lanczos,targetwcs)):
+def _resample_one(args):
+    (itim,tim,mod,lanczos,targetwcs) = args
     from astrometry.util.resample import resample_with_wcs, OverlapError
     if lanczos:
         from astrometry.util.miscutils import patch_image
@@ -369,7 +380,8 @@ def _resample_one((itim,tim,mod,lanczos,targetwcs)):
         dq = tim.dq[Yi,Xi]
     return itim,Yo,Xo,iv,im,mo,dq
 
-def _apphot_one((irad, band, rad, img, sigma, isimage, apxy)):
+def _apphot_one(args):
+    (irad, band, rad, img, sigma, isimage, apxy) = args
     import photutils
     result = [irad, band, isimage]
     aper = photutils.CircularAperture(apxy, rad)

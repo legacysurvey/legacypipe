@@ -79,7 +79,9 @@ class ImapTracker(object):
             print('ImapTracker:')
             traceback.print_exc()
             raise
-
+    # py3
+    __next__ = next
+        
 class MyMultiproc(multiproc):
     def __init__(self, *args, **kwargs):
         super(MyMultiproc, self).__init__(*args, **kwargs)
@@ -143,7 +145,12 @@ class MyMultiproc(multiproc):
             cs = self.map_chunksize
         if self.pool is None:
             import itertools
-            return itertools.imap(func, iterable)
+            if 'imap' in dir(itertools):
+                # py2
+                return itertools.imap(func, iterable)
+            else:
+                # py3
+                return map(func, iterable)
         if wrap or self.wrap_all:
             func = funcwrapper(func)
         res = self.pool.imap_unordered(func, iterable, chunksize=cs)
@@ -219,7 +226,17 @@ class iterwrapper(object):
             print(str(self), 'next()')
             traceback.print_exc()
             raise
-
+    # py3
+    def __next__(self):
+        try:
+            return self.y.__next__()
+        except StopIteration:
+            raise
+        except:
+            import traceback
+            print(str(self), '__next__()')
+            traceback.print_exc()
+            raise
     def __len__(self):
         return self.n
 
@@ -255,7 +272,7 @@ def find_unique_pixels(wcs, W, H, unique, ra1,ra2,dec1,dec2):
     # scan the outer annulus of pixels, and shrink in until all pixels
     # are unique.
     step = 10
-    for i in range(0, W/2, step):
+    for i in range(0, W//2, step):
         nu,ntot = _ring_unique(wcs, W, H, i, unique, ra1,ra2,dec1,dec2)
         #print('Pixel', i, ': nu/ntot', nu, ntot)
         if nu > 0:
@@ -266,7 +283,7 @@ def find_unique_pixels(wcs, W, H, unique, ra1,ra2,dec1,dec2):
         unique[:,:i] = False
         unique[:,W-1-i:] = False
 
-    for j in range(max(i+1, 0), W/2):
+    for j in range(max(i+1, 0), W//2):
         nu,ntot = _ring_unique(wcs, W, H, j, unique, ra1,ra2,dec1,dec2)
         #print('Pixel', j, ': nu/ntot', nu, ntot)
         if nu == ntot:
