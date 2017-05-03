@@ -123,11 +123,11 @@ def format_catalog(T, hdr, primhdr, allbands, outfn,
             col = 'mw_transmission_%s' % b
             T.set(col, 10.**(-decam_ext[:,i] / 2.5))
             trans_cols_opt.append(col)
-            if has_wise:
-                for i,b in enumerate(wbands):
-                    col = 'mw_transmission_%s' % b
-                    T.set(col, 10.**(-wise_ext[:,i] / 2.5))
-                    trans_cols_wise.append(col)
+        if has_wise:
+            for i,b in enumerate(wbands):
+                col = 'mw_transmission_%s' % b
+                T.set(col, 10.**(-wise_ext[:,i] / 2.5))
+                trans_cols_wise.append(col)
     else:
         T.decam_mw_transmission = 10.**(-decam_ext / 2.5)
         trans_cols_opt.append('decam_mw_transmission')
@@ -174,22 +174,32 @@ def format_catalog(T, hdr, primhdr, allbands, outfn,
     #         cols.append(col)
 
     if dr4:
-        cc = ['flux', 'flux_ivar']
-        if has_ap:
-            cc.extend(['apflux', 'apflux_resid','apflux_ivar'])
-        for c in cc:
+        def add_fluxlike(c):
             for b in allbands:
                 cols.append('%s%s_%s' % (flux_prefix, c, b))
+        def add_wiselike(c, bands=wbands):
+            cbare = c.replace('wise_','')
+            X = T.get(c)
+            for i,b in enumerate(bands):
+                col = '%s_%s' % (cbare, b)
+                T.set(col, X[:,i])
+                cols.append(col)
+    else:
+        def add_fluxlike(c):
+            cols.extend([flux_prefix + c for c in ['flux', 'flux_ivar']])
+        def add_wiselike(c, bands=wbands):
+            cols.extend(c)
+
+    if dr4:
+        add_fluxlike('flux')
         if has_wise:
-            cc = ['wise_flux', 'wise_flux_ivar',]
-            for c in cc:
-                cbare = c.replace('wise_','')
-                X = T.get(c)
-                for i,b in enumerate(wbands):
-                    col = '%s_%s' % (cbare, b)
-                    T.set(col, X[:,i])
-                    cols.append(col)
-            
+            add_wiselike('wise_flux')
+        add_fluxlike('flux_ivar')
+        if has_wise:
+            add_wiselike('wise_flux_ivar')
+        if has_ap:
+            for c in ['apflux', 'apflux_resid','apflux_ivar']:
+                add_fluxlike(c)
     else:
         cols.extend([flux_prefix + c for c in ['flux', 'flux_ivar']])
         if has_ap:
@@ -200,7 +210,11 @@ def format_catalog(T, hdr, primhdr, allbands, outfn,
     cols.extend(trans_cols_wise)
 
     if dr4:
-        cc = ['nobs', 'rchi2', 'fracflux', 'fracmasked', 'fracin', 'anymask',
+        for c in ['nobs', 'rchi2', 'fracflux']:
+            add_fluxlike(c)
+            add_wiselike('wise_'+c)
+
+        cc = ['fracmasked', 'fracin', 'anymask',
               'allmask', 'psfsize', 'depth', 'galdepth']
         for c in cc:
             for b in allbands:
@@ -213,22 +227,7 @@ def format_catalog(T, hdr, primhdr, allbands, outfn,
     if has_wise:
         cols.append('wise_coadd_id')
         if dr4:
-            cc = [#'wise_flux', 'wise_flux_ivar',
-                  'wise_mask',
-                  'wise_nobs', 'wise_fracflux', 'wise_rchi2']
-            for c in cc:
-                cbare = c.replace('wise_','')
-                thiswbands = wbands
-                if cbare == 'mask':
-                    cbare = 'wisemask'
-                    thiswbands = wbands[:2]
-                X = T.get(c)
-                for i,b in enumerate(thiswbands):
-                    col = '%s_%s' % (cbare, b)
-                    T.set(col, X[:,i])
-                    cols.append(col)
-            #cols.extend(trans_cols_wise)
-            
+            add_wiselike('wise_mask', bands=wbands[:2])
         else:
             cols.extend(['wise_flux', 'wise_flux_ivar', 'wise_mask'])
             cols.extend(trans_cols_wise)
