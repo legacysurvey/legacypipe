@@ -20,6 +20,8 @@ class MosaicImage(CPImage, CalibMixin):
     NOAO Community Pipeline.
     '''
 
+    mjd_third_pixel_fixed = 57674.
+
     # this is defined here for testing purposes (to handle small images)
     splinesky_boxsize = 512
 
@@ -99,7 +101,7 @@ class MosaicImage(CPImage, CalibMixin):
         rootdir = survey.get_image_dir()
         # The 1/3-pixel shift problem was fixed in hardware on MJD 57674,
         # so only check for problems in data before then.
-        I = np.flatnonzero(ccds.mjd_obs < 57674.)
+        I = np.flatnonzero(ccds.mjd_obs < MosaicImage.mjd_third_pixel_fixed)
         for i in I:
             fn = ccds.image_filename[i]
             fn = fn.strip()
@@ -133,7 +135,7 @@ class MosaicImage(CPImage, CalibMixin):
         '''cpimage.py get_wcs() but wcs comes from interpolated image if this is an
         uninterpolated image'''
         prim= self.read_image_primary_header()
-        if 'YSHIFT' in prim.keys():
+        if 'YSHIFT' in prim.keys() or self.mjdobs > MosaicImage.mjd_third_pixel_fixed:
             # Interpolated image, use its wcs
             hdr = self.read_image_header()
         else:
