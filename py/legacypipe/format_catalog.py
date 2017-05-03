@@ -62,6 +62,8 @@ def format_catalog(T, hdr, primhdr, allbands, outfn,
     # Convert 'nobs' to int16.
     col = '%s%s' % (in_flux_prefix, 'nobs')
     T.set(col, T.get(col).astype(np.int16))
+    if dr4:
+        T.rename('depth', 'psfdepth')
     
     has_wise =    'wise_flux'    in T.columns()
     has_wise_lc = 'wise_lc_flux' in T.columns()
@@ -71,7 +73,13 @@ def format_catalog(T, hdr, primhdr, allbands, outfn,
     # (eg, ugrizY) arrays.
     B = np.array([allbands.index(band) for band in bands])
     keys = ['flux', 'flux_ivar', 'rchi2', 'fracflux', 'fracmasked', 'fracin',
-            'nobs', 'anymask', 'allmask', 'psfsize', 'depth', 'galdepth']
+            'nobs', 'anymask', 'allmask', 'psfsize']
+    if dr4:
+        keys.append('psfdepth')
+    else:
+        keys.append('depth')
+    keys.append('galdepth')
+
     if has_ap:
         keys.extend(['apflux', 'apflux_resid', 'apflux_ivar'])
     for k in keys:
@@ -179,8 +187,11 @@ def format_catalog(T, hdr, primhdr, allbands, outfn,
         def add_fluxlike(c):
             for b in allbands:
                 cols.append('%s%s_%s' % (flux_prefix, c, b))
-        def add_wiselike(c, bands=wbands):
-            cbare = c.replace('wise_','')
+        def add_wiselike(c, bands=wbands, bare=True):
+            if bare:
+                cbare = c.replace('wise_','')
+            else:
+                cbare = c
             X = T.get(c)
             for i,b in enumerate(bands):
                 col = '%s_%s' % (cbare, b)
@@ -216,11 +227,12 @@ def format_catalog(T, hdr, primhdr, allbands, outfn,
             add_fluxlike(c)
             add_wiselike('wise_'+c)
 
-        cc = ['fracmasked', 'fracin', 'anymask',
-              'allmask', 'psfsize', 'depth', 'galdepth']
-        for c in cc:
-            for b in allbands:
-                cols.append('%s%s_%s' % (flux_prefix, c, b))
+        for c in ['fracmasked', 'fracin', 'anymask', 'allmask']:
+            add_fluxlike(c)
+        if has_wise:
+            add_wiselike('wise_mask', bands=wbands[:2], bare=False)
+        for c in ['psfsize', 'psfdepth', 'galdepth']:
+            add_fluxlike(c)
     else:
         cols.extend([flux_prefix + c for c in [
             'nobs', 'rchi2', 'fracflux', 'fracmasked', 'fracin', 'anymask',
@@ -228,9 +240,7 @@ def format_catalog(T, hdr, primhdr, allbands, outfn,
 
     if has_wise:
         cols.append('wise_coadd_id')
-        if dr4:
-            add_wiselike('wise_mask', bands=wbands[:2])
-        else:
+        if not dr4:
             cols.extend(['wise_flux', 'wise_flux_ivar', 'wise_mask'])
             cols.extend(trans_cols_wise)
             cols.extend(['wise_nobs', 'wise_fracflux','wise_rchi2'])
