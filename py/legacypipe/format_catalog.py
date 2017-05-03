@@ -143,11 +143,13 @@ def format_catalog(T, hdr, primhdr, allbands, outfn,
         T.release = np.zeros(len(T), np.int32) + 4000
         
     cols.extend([
-        'brickid', 'brickname', 'objid', 'brick_primary', 'blob', 'ninblob',
-        'tycho2inblob', 'type', 'ra', 'ra_ivar', 'dec', 'dec_ivar',
-        'bx', 'by'])
+        'brickid', 'brickname', 'objid', 'brick_primary', 
+        'type', 'ra', 'dec', 'ra_ivar', 'dec_ivar',
+        'bx', 'by' ])
     if not dr4:
-        cols.extend(['bx0', 'by0', 'left_blob', 'out_of_bounds',])
+        cols.extend(['blob', 'ninblob', 'tycho2inblob',
+                     'bx0', 'by0', 'left_blob', 'out_of_bounds',])
+
     cols.extend(['dchisq', 'ebv',])
     if not dr4:
         cols.extend(['cpu_source', 'cpu_blob',
