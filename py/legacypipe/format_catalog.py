@@ -59,10 +59,14 @@ def format_catalog(T, hdr, primhdr, allbands, outfn,
         primhdr.add_record(dict(name='ALLBANDS', value=allbands,
                                 comment='Band order in array values'))
 
-    # Convert 'nobs' to int16.
-    col = '%s%s' % (in_flux_prefix, 'nobs')
-    T.set(col, T.get(col).astype(np.int16))
     if dr4:
+        # Convert 'nobs' to int16.
+        col = '%s%s' % (in_flux_prefix, 'nobs')
+        T.set(col, T.get(col).astype(np.int16))
+        # MJD_{MIN,MAX} to float64.
+        T.mjd_min = T.mjd_min.astype(np.float64)
+        T.mjd_max = T.mjd_max.astype(np.float64)
+        # depth -> psfdepth
         T.rename('depth', 'psfdepth')
     
     has_wise =    'wise_flux'    in T.columns()
@@ -188,10 +192,7 @@ def format_catalog(T, hdr, primhdr, allbands, outfn,
             for b in allbands:
                 cols.append('%s%s_%s' % (flux_prefix, c, b))
         def add_wiselike(c, bands=wbands, bare=True):
-            if bare:
-                cbare = c.replace('wise_','')
-            else:
-                cbare = c
+            cbare = c.replace('wise_','')
             X = T.get(c)
             for i,b in enumerate(bands):
                 col = '%s_%s' % (cbare, b)
@@ -230,7 +231,10 @@ def format_catalog(T, hdr, primhdr, allbands, outfn,
         for c in ['fracmasked', 'fracin', 'anymask', 'allmask']:
             add_fluxlike(c)
         if has_wise:
-            add_wiselike('wise_mask', bands=wbands[:2], bare=False)
+            for i,b in enumerate(wbands[:2]):
+                col = 'wisemask_%s' % (b)
+                T.set(col, T.wise_mask[:,i])
+                cols.append(col)
         for c in ['psfsize', 'psfdepth', 'galdepth']:
             add_fluxlike(c)
     else:
