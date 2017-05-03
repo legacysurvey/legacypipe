@@ -53,13 +53,20 @@ def format_catalog(T, hdr, primhdr, allbands, outfn,
         bands.append(b)
     print('Bands in this catalog:', bands)
 
-    primhdr.add_record(dict(name='ALLBANDS', value=allbands,
-                            comment='Band order in array values'))
+    if dr4:
+        allbands = ['g','r','z']
+    else:
+        primhdr.add_record(dict(name='ALLBANDS', value=allbands,
+                                comment='Band order in array values'))
 
+    # Convert 'nobs' to int16.
+    col = '%s%s' % (in_flux_prefix, 'nobs')
+    T.set(col, T.get(col).astype(np.int16))
+    
     has_wise =    'wise_flux'    in T.columns()
     has_wise_lc = 'wise_lc_flux' in T.columns()
     has_ap =      'apflux'       in T.columns()
-
+    
     # Expand out FLUX and related fields from grz arrays to 'allbands'
     # (eg, ugrizY) arrays.
     B = np.array([allbands.index(band) for band in bands])
@@ -112,16 +119,15 @@ def format_catalog(T, hdr, primhdr, allbands, outfn,
     trans_cols_wise = []
     if dr4:
         # # No MW_TRANSMISSION_* columns at all
-        # for i,b in enumerate(allbands):
-        #         col = 'mw_transmission_%s' % b
-        #         T.set(col, 10.**(-decam_ext[:,i] / 2.5))
-        #         trans_cols_opt.append(col)
-        #     if has_wise:
-        #         for i,b in enumerate(wbands):
-        #             col = 'mw_transmission_%s' % b
-        #             T.set(col, 10.**(-wise_ext[:,i] / 2.5))
-        #             trans_cols_wise.append(col)
-        pass
+        for i,b in enumerate(allbands):
+            col = 'mw_transmission_%s' % b
+            T.set(col, 10.**(-decam_ext[:,i] / 2.5))
+            trans_cols_opt.append(col)
+            if has_wise:
+                for i,b in enumerate(wbands):
+                    col = 'mw_transmission_%s' % b
+                    T.set(col, 10.**(-wise_ext[:,i] / 2.5))
+                    trans_cols_wise.append(col)
     else:
         T.decam_mw_transmission = 10.**(-decam_ext / 2.5)
         trans_cols_opt.append('decam_mw_transmission')
@@ -134,8 +140,7 @@ def format_catalog(T, hdr, primhdr, allbands, outfn,
     cols = []
     if dr4:
         cols.append('release')
-        #T.release = np.array(['MzLS+BASS-DR4'] * len(T))
-        T.release = np.zeros(len(T), np.int16) + 4000
+        T.release = np.zeros(len(T), np.int32) + 4000
         
     cols.extend([
         'brickid', 'brickname', 'objid', 'brick_primary', 'blob', 'ninblob',
@@ -150,23 +155,24 @@ def format_catalog(T, hdr, primhdr, allbands, outfn,
                      'blob_totalpix',])
     cols.extend(['mjd_min', 'mjd_max'])
 
-    if dr4:
-        cambits = { 'decam': 0x1,
-                    'mosaic': 0x2,
-                    '90prime': 0x4,
-                    }
-        for b in allbands:
-            cams = 0
-            camstring = primhdr.get('CAMS_%s' % b.upper(), '')
-            camstring.strip()
-            camnames = camstring.split(' ')
-            camnames = [c for c in camnames if len(c)]
-            print('Camera names for', b, '=', camnames)
-            for c in camnames:
-                cams += cambits[c]
-            col = 'camera_%s' % b
-            T.set(col, np.zeros(len(T), np.int32) + cams)
-            cols.append(col)
+    # if dr4:
+    #     cambits = { 'decam': 0x1,
+    #                 'mosaic': 0x2,
+    #                 '90prime': 0x4,
+    #                 }
+    #     for b in allbands:
+    #         cams = 0
+    #         camstring = primhdr.get('CAMS_%s' % b.upper(), '')
+    #         camstring.strip()
+    #         camnames = camstring.split(' ')
+    #         camnames = [c for c in camnames if len(c)]
+    #         print('Camera names for', b, '=', camnames)
+    #         for c in camnames:
+    #             cams += cambits[c]
+    #         col = 'camera_%s' % b
+    #         T.set(col, np.zeros(len(T), np.int32) + cams)
+    #         cols.append(col)
+
     if dr4:
         cc = ['flux', 'flux_ivar']
         if has_ap:
@@ -174,6 +180,16 @@ def format_catalog(T, hdr, primhdr, allbands, outfn,
         for c in cc:
             for b in allbands:
                 cols.append('%s%s_%s' % (flux_prefix, c, b))
+        if has_wise:
+            cc = ['wise_flux', 'wise_flux_ivar',]
+            for c in cc:
+                cbare = c.replace('wise_','')
+                X = T.get(c)
+                for i,b in enumerate(wbands):
+                    col = '%s_%s' % (cbare, b)
+                    T.set(col, X[:,i])
+                    cols.append(col)
+            
     else:
         cols.extend([flux_prefix + c for c in ['flux', 'flux_ivar']])
         if has_ap:
@@ -181,6 +197,7 @@ def format_catalog(T, hdr, primhdr, allbands, outfn,
                          ['apflux', 'apflux_resid','apflux_ivar']])
 
     cols.extend(trans_cols_opt)
+    cols.extend(trans_cols_wise)
 
     if dr4:
         cc = ['nobs', 'rchi2', 'fracflux', 'fracmasked', 'fracin', 'anymask',
@@ -196,8 +213,9 @@ def format_catalog(T, hdr, primhdr, allbands, outfn,
     if has_wise:
         cols.append('wise_coadd_id')
         if dr4:
-            cc = ['wise_flux', 'wise_flux_ivar', 'wise_mask',
-                  'wise_nobs', 'wise_fracflux','wise_rchi2']
+            cc = [#'wise_flux', 'wise_flux_ivar',
+                  'wise_mask',
+                  'wise_nobs', 'wise_fracflux', 'wise_rchi2']
             for c in cc:
                 cbare = c.replace('wise_','')
                 thiswbands = wbands
@@ -209,7 +227,7 @@ def format_catalog(T, hdr, primhdr, allbands, outfn,
                     col = '%s_%s' % (cbare, b)
                     T.set(col, X[:,i])
                     cols.append(col)
-            cols.extend(trans_cols_wise)
+            #cols.extend(trans_cols_wise)
             
         else:
             cols.extend(['wise_flux', 'wise_flux_ivar', 'wise_mask'])
