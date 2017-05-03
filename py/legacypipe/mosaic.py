@@ -53,7 +53,7 @@ class MosaicImage(CPImage, CalibMixin):
         '''
         # Nominal zeropoints (DECam)
         z0 = self.nominal_zeropoints()
-        z0 = np.array([z0[f[0]] for f in ccds.filter])
+        z0 = np.array([z0.get(f[0], 0) for f in ccds.filter])
         good = np.ones(len(ccds), bool)
         n0 = sum(good)
         # See Photometric cuts email 12/21/2016
@@ -68,6 +68,8 @@ class MosaicImage(CPImage, CalibMixin):
              (ccds.zpt < (z0 - 0.6))),
             ('zpt > 0.6 mag of nominal',
              (ccds.zpt > (z0 + 0.6))),
+            ('z band',
+             ccds.filter != 'z'),
         ]:
             good[crit] = False
             #continue as usual

@@ -738,6 +738,9 @@ class CalibMixin(object):
             conv_name= os.path.join(sedir, surveyname + '.conv')
         else:
             conv_name= os.path.join(sedir, 'gauss_5.0_9x9.conv')
+
+        tmpfn = os.path.join(os.path.dirname(self.sefn), 'tmp-' + os.path.basename(self.sefn))
+
         cmd = ' '.join([
             'sex',
             '-c', os.path.join(sedir, surveyname + '.se'),
@@ -752,11 +755,14 @@ class CalibMixin(object):
             '-FLAG_IMAGE %s' % maskfn,
             #'-FILTER_NAME %s' % os.path.join(sedir, 'gauss_5.0_9x9.conv'),
             '-FILTER_NAME %s' % conv_name,
-            '-CATALOG_NAME %s %s' % (self.sefn,imgfn)])
+            '-CATALOG_NAME %s' % tmpfn,
+            imgfn])
         print(cmd)
  
-        if os.system(cmd):
+        rtn = os.system(cmd)
+        if rtn:
             raise RuntimeError('Command failed: ' + cmd)
+        os.rename(tmpfn, self.sefn)
 
     def run_psfex(self, surveyname):
         from astrometry.util.file import trymakedirs
@@ -766,9 +772,13 @@ class CalibMixin(object):
         primhdr = self.read_image_primary_header()
         plver = primhdr.get('PLVER', '')
         verstr = get_git_version()
-        cmds = ['psfex -c %s -PSF_DIR %s %s' %
+        # We write the PSF model to a .fits.tmp file, then rename to .fits
+        psfdir = os.path.dirname(self.psffn)
+        psfoutfn = os.path.join(psfdir, os.path.basename(self.sefn).replace('.fits','') + '.fits')
+        cmds = ['psfex -c %s -PSF_DIR %s -PSF_SUFFIX .fits.tmp %s' %
                 (os.path.join(sedir, surveyname + '.psfex'),
-                 os.path.dirname(self.psffn), self.sefn),
+                 psfdir, self.sefn),
+                'mv %s %s' % (psfoutfn + '.tmp', psfoutfn),
                 'modhead %s LEGPIPEV %s "legacypipe git version"' %
                 (self.psffn, verstr),
                 'modhead %s PLVER %s "CP ver of image file"' % (self.psffn, plver)]
