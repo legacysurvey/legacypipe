@@ -226,7 +226,8 @@ def format_catalog(T, hdr, primhdr, allbands, outfn,
     if dr4:
         for c in ['nobs', 'rchi2', 'fracflux']:
             add_fluxlike(c)
-            add_wiselike('wise_'+c)
+            if has_wise:
+                add_wiselike('wise_'+c)
 
         for c in ['fracmasked', 'fracin', 'anymask', 'allmask']:
             add_fluxlike(c)
