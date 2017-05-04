@@ -31,6 +31,12 @@ def get_parser():
     '''
     import argparse
     parser = argparse.ArgumentParser(description=__doc__)
+
+    parser.add_argument('--catalog-dir', help='Set LEGACY_SURVEY_DIR to use to read catalogs')
+
+    parser.add_argument('--skip-calibs', dest='do_calib', default=True, action='store_false',
+                        help='Do not try to run calibrations')
+
     parser.add_argument('--zoom', type=int, nargs=4, help='Set target image extent (default "0 2046 0 4094")')
     parser.add_argument('--no-ceres', action='store_false', dest='ceres', help='Do not use Ceres optimiziation engine (use scipy)')
     parser.add_argument('--plots', default=None, help='Create plots; specify a base filename for the plots')
@@ -116,6 +122,10 @@ def main(survey=None, opt=None):
     if survey is None:
         survey = LegacySurveyData()
 
+    catsurvey = survey
+    if opt.catalog_dir is not None:
+        catsurvey = LegacySurveyData(survey_dir = opt.catalog_dir)
+
     if opt.filename is not None and opt.hdu >= 0:
         # Read metadata from file
         T = exposure_metadata([opt.filename], hdus=[opt.hdu])
@@ -148,6 +158,13 @@ def main(survey=None, opt=None):
 
     ccd = T[0]
     im = survey.get_image_object(ccd)
+
+    if opt.do_calibs:
+        #from legacypipe.survey import run_calibs
+        #kwa = dict(splinesky=True)
+        #run_calibs((im, kwa))
+        im.run_calibs(splinesky=True)
+
     tim = im.get_tractor_image(slc=zoomslice, pixPsf=True, splinesky=True,
                                constant_invvar=opt.constant_invvar,
                                hybridPsf=opt.hybrid_psf)
@@ -160,10 +177,10 @@ def main(survey=None, opt=None):
         margin = 20
         TT = []
         chipwcs = tim.subwcs
-        bricks = bricks_touching_wcs(chipwcs, survey=survey)
+        bricks = bricks_touching_wcs(chipwcs, survey=catsurvey)
         for b in bricks:
             # there is some overlap with this brick... read the catalog.
-            fn = survey.find_file('tractor', brick=b.brickname)
+            fn = catsurvey.find_file('tractor', brick=b.brickname)
             if not os.path.exists(fn):
                 print('WARNING: catalog', fn, 'does not exist.  Skipping!')
                 continue
@@ -188,6 +205,7 @@ def main(survey=None, opt=None):
         T = merge_tables(TT, columns='fillzero')
         T._header = TT[0]._header
         del TT
+        print('Total of', len(T), 'catalog sources')
 
         # Fix up various failure modes:
         # FixedCompositeGalaxy(pos=RaDecPos[240.51147402832561, 10.385488075518923], brightness=NanoMaggies: g=(flux -2.87), r=(flux -5.26), z=(flux -7.65), fracDev=FracDev(0.60177207), shapeExp=re=3.78351e-44, e1=9.30367e-13, e2=1.24392e-16, shapeDev=re=inf, e1=-0, e2=-0)
@@ -199,6 +217,7 @@ def main(survey=None, opt=None):
             print('Converting', len(I), 'bogus COMP galaxies to EXP')
             for i in I:
                 T.type[i] = 'EXP'
+
 
         # Same thing with the exp component.
         # -> convert to DEV
@@ -270,21 +289,32 @@ def main(survey=None, opt=None):
         cat = realsrcs + derivsrcs
 
     if opt.agn:
+        from tractor.galaxy import ExpGalaxy, DevGalaxy, FixedCompositeGalaxy
+        from tractor import PointSource
+        from legacypipe.survey import SimpleGalaxy, RexGalaxy
+
         realsrcs = []
         agnsrcs = []
         iagn = []
         for i,src in enumerate(cat):
             realsrcs.append(src)
+            ## ??
+            if isinstance(src, (SimpleGalaxy, RexGalaxy)):
+                print('Skipping SIMP or REX:', src)
+                continue
             if isinstance(src, (ExpGalaxy, DevGalaxy, FixedCompositeGalaxy)):
                 iagn.append(i)
-                bright = src.getBrightness.copy()
+                bright = src.getBrightness().copy()
                 bright.setParams(np.zeros(bright.numberOfParams()))
                 bright.freezeAllBut(tim.band)
-                src = PointSource(src.position, bright)
-                src.freezeAllBut('brightness')
+                agn = PointSource(src.pos, bright)
+                agn.freezeAllBut('brightness')
+                print('Adding "agn"', agn, 'to', src)
+                print('agn params:', agn.getParamNames())
                 agnsrcs.append(src)
         iagn = np.array(iagn)
         cat = realsrcs + agnsrcs
+        print('Added AGN to', len(iagn), 'galaxies')
 
     tr = Tractor([tim], cat, optimizer=opti)
     tr.freezeParam('images')
@@ -295,6 +325,10 @@ def main(survey=None, opt=None):
     F.brickid   = T.brickid
     F.brickname = T.brickname
     F.objid     = T.objid
+
+    F.camera = np.array([ccd.camera] * len(F))
+    F.expnum = np.array([im.expnum] * len(F)).astype(np.int32)
+    F.ccdname = np.array([im.ccdname] * len(F))
 
     F.filter  = np.array([tim.band]               * len(T))
     F.mjd     = np.array([tim.primhdr['MJD-OBS']] * len(T))

@@ -473,7 +473,7 @@ if __name__ == '__main__':
         T.plver  = T.plver.astype('S6')
 
         # DR4 only
-        if opt.mzls:
+        if False and opt.mzls:
             cols = T.columns()
             if not 'bad_expid' in cols:
                 I = survey.bad_exposures(T)
