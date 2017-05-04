@@ -42,6 +42,9 @@ def get_parser():
 
     parser.add_argument('--derivs', action='store_true',
                         help='Include RA,Dec derivatives in forced photometry?')
+
+    parser.add_argument('--agn', action='store_true',
+                        help='Add a point source to the center of each DEV/EXP/COMP galaxy?')
     
     parser.add_argument('--constant-invvar', action='store_true',
                         help='Set inverse-variance to a constant across the image?')
@@ -76,6 +79,10 @@ def main(survey=None, opt=None):
         print('Ouput file exists:', opt.outfn)
         sys.exit(0)
 
+    if opt.derivs and opt.agn:
+        print('Sorry, can\'t do --derivs AND --agn')
+        sys.exit(0)
+        
     if not opt.forced:
         opt.apphot = True
 
@@ -249,10 +256,10 @@ def main(survey=None, opt=None):
 
             bright_dra  = src.getBrightness().copy()
             bright_ddec = src.getBrightness().copy()
-            bright_dra .freezeAllBut(tim.band)
-            bright_ddec.freezeAllBut(tim.band)
             bright_dra .setParams(np.zeros(bright_dra .numberOfParams()))
             bright_ddec.setParams(np.zeros(bright_ddec.numberOfParams()))
+            bright_dra .freezeAllBut(tim.band)
+            bright_ddec.freezeAllBut(tim.band)
 
             dsrc = SourceDerivatives(src, [tim.band], ['pos'],
                                      [bright_dra, bright_ddec])
@@ -262,11 +269,29 @@ def main(survey=None, opt=None):
         # the list, so we can pull the IVs off the front of the list.
         cat = realsrcs + derivsrcs
 
+    if opt.agn:
+        realsrcs = []
+        agnsrcs = []
+        iagn = []
+        for i,src in enumerate(cat):
+            realsrcs.append(src)
+            if isinstance(src, (ExpGalaxy, DevGalaxy, FixedCompositeGalaxy)):
+                iagn.append(i)
+                bright = src.getBrightness.copy()
+                bright.setParams(np.zeros(bright.numberOfParams()))
+                bright.freezeAllBut(tim.band)
+                src = PointSource(src.position, bright)
+                src.freezeAllBut('brightness')
+                agnsrcs.append(src)
+        iagn = np.array(iagn)
+        cat = realsrcs + agnsrcs
+
     tr = Tractor([tim], cat, optimizer=opti)
     tr.freezeParam('images')
     disable_galaxy_cache()
 
     F = fits_table()
+    #F.release   = T.release
     F.brickid   = T.brickid
     F.brickname = T.brickname
     F.objid     = T.objid
@@ -331,7 +356,9 @@ def main(survey=None, opt=None):
 
         if opt.derivs:
             cat = realsrcs
-
+        if opt.agn:
+            cat = realsrcs
+            
         F.flux = np.array([src.getBrightness().getFlux(tim.band)
                            for src in cat]).astype(np.float32)
         N = len(cat)
@@ -343,10 +370,15 @@ def main(survey=None, opt=None):
         if opt.derivs:
             F.flux_dra  = np.array([src.getParams()[0] for src in derivsrcs]).astype(np.float32)
             F.flux_ddec = np.array([src.getParams()[1] for src in derivsrcs]).astype(np.float32)
-
             F.flux_dra_ivar  = R.IV[N  ::2].astype(np.float32)
             F.flux_ddec_ivar = R.IV[N+1::2].astype(np.float32)
 
+        if opt.agn:
+            F.flux_agn = np.zeros(len(F), np.float32)
+            F.flux_agn_ivar = np.zeros(len(F), np.float32)
+            F.flux_agn[iagn] = np.array([src.getParams()[0] for src in agnsrcs])
+            F.flux_agn_ivar[iagn] = R.IV[N:].astype(np.float32)
+            
         print('Forced photom:', Time()-t0)
         
     if opt.apphot:
