@@ -47,9 +47,6 @@ rgbscales_cfht = dict(g = (2, 0.004),
                       # DECam
                       z = (0, 0.025),
     )
-    
-
-
 
 def make_zeropoints():
     base = 'euclid/images/'
@@ -1694,21 +1691,23 @@ def reduce_acs_image(opt, survey):
                   # euclid-out3
                   #radec = (150.570, 1.779),
                   # euclid-out4
-                  radec = (150.598, 1.767),
-                  width = 540, height=540,
-                  #radec=(ccd.ra, ccd.dec), pixscale=0.1,
-                  #width=200, height=200,
+                  #radec = (150.598, 1.767),
+                  #width = 540, height=540,
+                  radec=(ccd.ra, ccd.dec),
+                  width=ccd.width, height=ccd.height, 
                   forceAll=True, writePickles=False,
-                  #width=ccd.width, height=ccd.height, 
                   #stages=['image_coadds'],
-                  stages=['plot_model'],
+                  #stages=['plot_model'],
                   bands=['I'],
                   threads=opt.threads,
                   wise=False, do_calibs=False,
-                  pixPsf=True, coadd_bw=True, ceres=False,
-                  #blob_image=True,
+                  pixPsf=True, hybridPsf=True,
+                  rex=True,
+                  coadd_bw=True, ceres=False,
+                  blob_image=True,
+                  write_metrics=True,
                   allbands=allbands,
-
+                  checkpoint_filename=os.path.join('checkpoints', 'checkpoint-%s.pickle' % brickname),
                   prereqs_update=prereqs_update,
                   stagefunc=stagefunc)
     #plots=True, plotbase='euclid',
