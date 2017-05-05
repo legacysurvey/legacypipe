@@ -1705,7 +1705,14 @@ def _select_model(chisqs, nparams, galaxy_margin, rex):
     else:
         #print('Keeping source; SIMPLE is better than PTSRC')
         #print('REX is better fit.  Radius', simplemod.shape.re)
+
         keepmod = simname
+        # REX -- also demand a fractionally better fit.
+        if simname == 'rex':
+            dchisq_psf = chisqs['ptsrc']
+            dchisq_rex = chisqs['rex']
+            if (dchisq_rex - dchisq_psf) < 0.0025 * dchisq_psf:
+                keepmod = 'ptsrc'
 
     if not 'exp' in chisqs:
         return keepmod
