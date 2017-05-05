@@ -253,6 +253,7 @@ def main(survey=None, opt=None):
         opti = CeresOptimizer(BW=B, BH=B)
         #forced_kwargs.update(verbose=True)
 
+    nsize = 0
     for src in cat:
         # Limit sizes of huge models
         from tractor.galaxy import ProfileGalaxy
@@ -261,11 +262,13 @@ def main(survey=None, opt=None):
             h = src._getUnitFluxPatchSize(tim, px, py, tim.modelMinval)
             MAXHALF = 128
             if h > MAXHALF:
-                print('halfsize', h,'for',src,'-> setting to',MAXHALF)
+                #print('halfsize', h,'for',src,'-> setting to',MAXHALF)
+                nsize += 1
                 src.halfsize = MAXHALF
 
         src.freezeAllBut('brightness')
         src.getBrightness().freezeAllBut(tim.band)
+    print('Limited the size of', nsize, 'large galaxy models')
 
     if opt.derivs:
         realsrcs = []
@@ -300,7 +303,7 @@ def main(survey=None, opt=None):
             realsrcs.append(src)
             ## ??
             if isinstance(src, (SimpleGalaxy, RexGalaxy)):
-                print('Skipping SIMP or REX:', src)
+                #print('Skipping SIMP or REX:', src)
                 continue
             if isinstance(src, (ExpGalaxy, DevGalaxy, FixedCompositeGalaxy)):
                 iagn.append(i)
@@ -309,8 +312,8 @@ def main(survey=None, opt=None):
                 bright.freezeAllBut(tim.band)
                 agn = PointSource(src.pos, bright)
                 agn.freezeAllBut('brightness')
-                print('Adding "agn"', agn, 'to', src)
-                print('agn params:', agn.getParamNames())
+                #print('Adding "agn"', agn, 'to', src)
+                #print('agn params:', agn.getParamNames())
                 agnsrcs.append(src)
         iagn = np.array(iagn)
         cat = realsrcs + agnsrcs
@@ -434,17 +437,28 @@ def main(survey=None, opt=None):
         apertures = apertures_arcsec / tim.wcs.pixel_scale()
         print('Apertures:', apertures, 'pixels')
 
+        #print('apxy shape', apxy.shape)  # --> (2,N)
+
+        # The aperture photometry routine doesn't like pixel positions outside the image
+        H,W = img.shape
+        Iap = np.flatnonzero((apxy[0,:] >= 0)   * (apxy[1,:] >= 0) *
+                             (apxy[0,:] <= W-1) * (apxy[1,:] <= H-1))
+        print('Aperture photometry for', len(Iap), 'of', len(apxy), 'sources within image bounds')
+
         for rad in apertures:
-            aper = photutils.CircularAperture(apxy, rad)
+            aper = photutils.CircularAperture(apxy[:,Iap], rad)
             p = photutils.aperture_photometry(img, aper, error=imsigma)
             apimg.append(p.field('aperture_sum'))
             apimgerr.append(p.field('aperture_sum_err'))
         ap = np.vstack(apimg).T
         ap[np.logical_not(np.isfinite(ap))] = 0.
-        F.apflux = ap.astype(np.float32)
+        F.apflux = np.zeros((len(F), len(apertures)), np.float32)
+        F.apflux[Iap,:] = ap.astype(np.float32)
+
         ap = 1./(np.vstack(apimgerr).T)**2
         ap[np.logical_not(np.isfinite(ap))] = 0.
-        F.apflux_ivar = ap.astype(np.float32)
+        F.apflux_ivar = np.zeros((len(F), len(apertures)), np.float32)
+        F.apflux_ivar[Iap,:] = ap.astype(np.float32)
         print('Aperture photom:', Time()-t0)
 
     program_name = sys.argv[0]
@@ -522,15 +536,15 @@ class SourceDerivatives(MultiParams, BasicSource):
         self.brights = brights
         self.umods = None
 
-        # Test...
-        self.real.freezeParamsRecursive(*self.freeze)
-        self.real.thawParamsRecursive(*self.thaw)
-        #
-        print('Source derivs: params are:')
-        self.real.printThawedParams()
-        # and revert...
-        self.real.freezeParamsRecursive(*self.thaw)
-        self.real.thawParamsRecursive(*self.freeze)
+        # # Test...
+        # self.real.freezeParamsRecursive(*self.freeze)
+        # self.real.thawParamsRecursive(*self.thaw)
+        # #
+        # #print('Source derivs: params are:')
+        # #self.real.printThawedParams()
+        # # and revert...
+        # self.real.freezeParamsRecursive(*self.thaw)
+        # self.real.thawParamsRecursive(*self.freeze)
 
     @staticmethod
     def getNamedParams():
