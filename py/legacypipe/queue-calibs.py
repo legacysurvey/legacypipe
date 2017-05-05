@@ -365,6 +365,12 @@ def main():
         dlo,dhi = 33., 36.
         rlo,rhi = 216.5, 219.5
 
+    elif opt.region == 'des-sn-x3':
+        #rlo,rhi = 36., 37.
+        #dlo,dhi = -5., -4.
+        rlo,rhi = 36., 36.5
+        dlo,dhi = -4.5, -4.
+
         
     if opt.mindec is not None:
         dlo = opt.mindec
@@ -601,9 +607,6 @@ def main():
         log('Total of', len(allI), 'CCDs')
         for j,i in enumerate(allI):
             expstr = '%08i' % T.expnum[i]
-            outfn = os.path.join('forced', expstr[:5], expstr,
-                                 'decam-%s-%s-forced.fits' %
-                                 (expstr, T.ccdname[i]))
             imgfn = os.path.join(survey.survey_dir, 'images',
                                  T.image_filename[i].strip())
             if (not os.path.exists(imgfn) and
@@ -614,7 +617,16 @@ def main():
             #f.write('python legacypipe/forced_photom_decam.py %s %i DR3 %s\n' %
             #        (imgfn, T.image_hdu[i], outfn))
 
-            f.write('python legacypipe/forced_photom_decam.py --apphot --constant-invvar %i %s DR3 %s\n' %
+            #outfn = os.path.join('forced', expstr[:5], expstr,
+            outfn = os.path.join(expstr[:5], expstr,
+                                 'forced-%s-%s-%s.fits' %
+                                 (T.camera[i].strip(), expstr, T.ccdname[i]))
+
+            f.write('python legacypipe/forced_photom_decam.py --hybrid-psf --apphot --constant-invvar %i %s DR3 forced/vanilla/%s\n' %
+                    (T.expnum[i], T.ccdname[i], outfn))
+            f.write('python legacypipe/forced_photom_decam.py --hybrid-psf --derivs --constant-invvar %i %s DR3 forced/derivs/%s\n' %
+                    (T.expnum[i], T.ccdname[i], outfn))
+            f.write('python legacypipe/forced_photom_decam.py --hybrid-psf --agn --constant-invvar %i %s DR3 forced/agn/%s\n' %
                     (T.expnum[i], T.ccdname[i], outfn))
             
         f.close()

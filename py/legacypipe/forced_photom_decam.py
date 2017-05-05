@@ -159,7 +159,7 @@ def main(survey=None, opt=None):
     ccd = T[0]
     im = survey.get_image_object(ccd)
 
-    if opt.do_calibs:
+    if opt.do_calib:
         #from legacypipe.survey import run_calibs
         #kwa = dict(splinesky=True)
         #run_calibs((im, kwa))
