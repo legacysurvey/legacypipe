@@ -26,6 +26,8 @@ for brick in ['1498p017', '1498p020', '1498p022', '1498p025', '1501p017', '1501p
     print(fn, '->', len(T2))
     T.bx = T2.bx
     T.by = T2.by
+    T.ra  = T2.ra
+    T.dec = T2.dec
 
     fn = os.path.join(dirnm, 'coadd', brick[:3], brick, 'legacysurvey-%s-image.jpg' % brick)
     jpg = plt.imread(fn)
@@ -45,6 +47,7 @@ for brick in ['1498p017', '1498p020', '1498p022', '1498p025', '1501p017', '1501p
     TT.append(T)
 T = merge_tables(TT)
 print('Total', len(T))
+T.about()
 T.ispsf = (T.type == 'PSF ')
 T.isrex = (T.type == 'REX ')
 T.cut(np.logical_or(T.ispsf, T.isrex))
@@ -115,6 +118,58 @@ plt.axhline(1., color='k')
 plt.title('color: REX radius')
 plt.colorbar()
 ps.savefig()
+
+
+
+C = fits_table('/project/projectdirs/cosmo/staging/cosmos/cosmos-acs-iphot.fits',
+               columns=['ra','dec','mu_class','flux_radius','fwhm_world'])
+print(len(C), 'COSMOS sources')
+
+from astrometry.libkd.spherematch import match_radec
+print(len(T), 'tractor sources')
+I,J,d = match_radec(T.ra, T.dec, C.ra, C.dec, 1./3600., nearest=True)
+print('Matched', len(I), 'sources to COSMOS catalog')
+
+TI = T[I]
+C.cut(J)
+
+plt.clf()
+plt.clf()
+I = (C.mu_class == 2)
+plt.plot(TI.dchisq_psf[I], TI.dchisq_rex[I] - TI.dchisq_psf[I], 'b.', alpha=0.5,
+         label='ACS mu_class=2 (stars)')
+I = (C.mu_class == 1)
+plt.plot(TI.dchisq_psf[I], TI.dchisq_rex[I] - TI.dchisq_psf[I], 'r.', alpha=0.5,
+         label='ACS mu_class=1 (galaxies)')
+xx = np.logspace(1, 7, 200)
+plt.plot(xx, xx*0.01, 'k--')
+plt.plot(xx, xx*0.005, 'k:')
+plt.plot(xx, xx*0.0025, 'k-.')
+plt.axvline(1e6, color='k', linestyle='--')
+plt.axis([1e1, 1e7, -1e2, 1e6])
+plt.xscale('log')
+plt.yscale('symlog')
+plt.xlabel('dchisq(PSF)')
+plt.ylabel('dchisq(REX) - dchisq(PSF)')
+plt.axhline(1., color='k')
+plt.legend()
+ps.savefig()
+
+
+plt.plot(T.dchisq_psf[I], T.dchisq_rex[I], 'r.', label='REX')
+I = T.ispsf
+plt.plot(T.dchisq_psf[I], T.dchisq_rex[I], 'b.', label='PSF')
+plt.xlabel('dchisq(PSF)')
+plt.ylabel('dchisq(REX)')
+plt.legend()
+ps.savefig()
+
+
+
+
+
+
+
     
 T.fcut = np.logical_or((T.dchisq_rex - T.dchisq_psf) < (T.dchisq_psf * 0.01),
                        T.dchisq_psf > 1e6)
