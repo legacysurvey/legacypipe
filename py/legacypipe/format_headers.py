@@ -5,6 +5,53 @@ import numpy as np
 import fitsio
 from glob import glob
 
+
+def survey_ccd_bitmask():
+    mzls=fitsio.FITS('survey-ccds-mzls2.fits','rw')
+    hdr= mzls[1].read_header()
+    if not 'BITMASK' in hdr:
+        mzls[1].write_key('PHOTOME','Photometric',comment='True if CCD considered photometric')
+        mzls[1].write_key('BITMASK','Cuts besides Photometric',comment='See below')
+        mzls[1].write_key('BIT1','bad_expid.txt file')
+        mzls[1].write_key('BIT2','ccd_hdu_mismatch')
+        mzls[1].write_key('BIT3','zpts_bad_astrom')
+    mzls.close
+
+def survey_ccd_add_bitmask():
+    mzls=fits_table("survey-ccds-mzls2.fits")
+    bm= np.zeros(len(mzls)).astype(np.uint8)
+    bm[ mzls.bad_expid ]+= 1
+    bm[ mzls.ccd_hdu_mismatch ]+= 2
+    bm[ mzls.zpts_bad_astrom ]+= 4
+    mzls.set('bitmask', bm)
+    for key in ['bad_expid','ccd_hdu_mismatch','zpts_bad_astrom']:
+        mzls.delete(key)
+
+
+def survey_bricks_bitmask
+    b=fitsio.FITS('survey-bricks-dr4.fits.gz','rw')
+    hdr= b[1].read_header()
+    if not 'BITMASK' in hdr:
+        b[1].write_key('BITMASK','All flagged CCDs thrown out in DR4',comment='See below')
+        b[1].write_key('BIT1','dr4',comment='have tractor catalogue')
+        b[1].write_key('BIT2','oom',comment='failed b/c out of memory')
+        b[1].write_key('BIT3','old_chkpt',comment='failed b/c old checkpoint when reran')
+        b[1].write_key('BIT4','no_signif_srcs',comment='failed b/c all detected sources not significant')
+        b[1].write_key('BIT5','no_srcs',comment='failed b/c no sources detected')
+    b.close
+
+def survey_brick_add_bitmask():
+    bricks=fits_table("survey-bricks-dr4.fits.gz")
+    bm= np.zeros(len(bricks)).astype(np.uint8)
+    for key,bitval in zip(['cut_dr4','cut_oom','cut_old_chkpt',
+                           'cut_no_signif_srcs','cut_no_srcs'],
+                          [1,2,4,
+                           8,16]):
+        bm[ bricks.get(key) ]+= bitval
+        bricks.delete(key)
+    bricks.set('bitmask', bm)
+
+
 def bash(cmd):
     print(cmd)
     rtn = os.system(cmd)

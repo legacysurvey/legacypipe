@@ -70,7 +70,7 @@ export PATH=$PATH:$CODE_DIR/qdo/bin
 export PYTHONPATH=$CODE_DIR/qdo:$PYTHONPATH
 export PYTHONPATH=$CODE_DIR/tractor:$PYTHONPATH
 export PYTHONPATH=$CODE_DIR/astrometry.net/kaylans_build/lib/python:$PYTHONPATH
-export PATH=${CODE_DIR}/astrometry.net/kaylans_build/lib2/python/astrometry:$PATH
+export PATH=${CODE_DIR}/astrometry.net/kaylans_build/lib/python/astrometry:$PATH
 # you'll run runbrick.py from legacypipe/py so put in curr directory
 export PYTHONPATH=.:${PYTHONPATH}
  
