@@ -11,9 +11,11 @@ from quicksipManera import *
 
 dir = '$HOME/' # obviously needs to be changed
 inputdir = '/project/projectdirs/cosmo/data/legacysurvey/dr3/' # where I get my data 
+#inputdir= '/global/projecta/projectdirs/cosmo/work/dr4/'
 localdir = '/global/homes/m/manera/DESI/validation-outputs/' #place for local DESI stuff
 
 extmap = np.loadtxt('/global/homes/m/manera/DESI/validation-outputs/healSFD_r_256_fullsky.dat') # extintion map remove it 
+
 
 ### A couple of useful conversions
 
@@ -31,7 +33,7 @@ def Magtonanomaggies(m):
 ### Plotting facilities
 
 
-def plotdepthfromIvar(band,depthmin=23.8,mjdmax='',prop='ivar',op='total',survey='DECaLS_DR3',nside='1024',oversamp='1'):
+def plotdepthfromIvar(band,depthmin=23.8,mjdmax='',prop='ivar',op='total',survey='DECaLS_DR4',nside='1024',oversamp='1'):
 	import fitsio
 	from matplotlib import pyplot as plt
 	import matplotlib.cm as cm
@@ -102,10 +104,16 @@ mjd_max = 10e10
 mjdw = ''
 if mjd_max != 10e10:
 	mjdw += 'mjdmax'+str(mjd_max)
-catalogue_name = 'DECaLS_DR3'+mjdw
 #catalogue_name = 'DECaLS_DR2'+mjdw
+catalogue_name = 'DECaLS_DR3'+mjdw
+#catalogue_name = 'DECaLS_DR4'+mjdw
+#catalogue_name = '90prime_DR4'+mjdw
+#catalogue_name = 'MZLS_DR4'+mjdw
 pixoffset = 0 # How many pixels are being removed on the edge of each CCD? 15 for DES.
 fname = inputdir+'ccds-annotated-decals.fits.gz'
+#fname = inputdir+'ccds-annotated-dr4-90prime.fits.gz'
+#fname = inputdir+'ccds-annotated-dr4-mzls.fits.gz'
+
 #fname = localdir+'decals-ccds-annotated.fits'
 # Where to write the maps ? Make sure directory exists.
 outroot = localdir
@@ -120,13 +128,17 @@ print tbdata.dtype
 nmag = Magtonanomaggies(tbdata['galdepth'])/5.
 ivar = 1./nmag**2.
 # Select the five bands
-#indg = np.where((tbdata['filter'] == 'g') & (tbdata['photometric'] == True) & (tbdata['blacklist_ok'] == True) & (tbdata['mjd_obs'] < mjd_max))# & (tbdata['ra'] < 50.))# & (tbdata['dec'] < 21.))
+indg = np.where((tbdata['filter'] == 'g') & (tbdata['photometric'] == True) & (tbdata['blacklist_ok'] == True)) 
 #indr = np.where((tbdata['filter'] == 'r') & (tbdata['photometric'] == True) & (tbdata['blacklist_ok'] == True))
-indz = np.where((tbdata['filter'] == 'z') & (tbdata['photometric'] == True) & (tbdata['blacklist_ok'] == True))
+#indz = np.where((tbdata['filter'] == 'z') & (tbdata['photometric'] == True) & (tbdata['blacklist_ok'] == True))
 #sample_names = ['band_g', 'band_r', 'band_z']
-sample_names = ['band_z']
+sample_names = ['band_g']
+#sample_names = ['band_r']
+#sample_names = ['band_z']
 #inds = [indg, indr, indz]
-inds = [indz]
+inds = [indg]
+#inds = [indr]
+#inds = [indz]
 
 # What properties do you want mapped?
 # Each each tuple, the first element is the quantity to be projected,
