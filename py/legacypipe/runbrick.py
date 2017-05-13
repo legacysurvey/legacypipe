@@ -2025,7 +2025,7 @@ def stage_writecat(
     brickid=None,
     brick=None,
     invvars=None,
-    allbands=None,
+    allbands='ugrizY',
     **kwargs):
     '''
     Final stage in the pipeline: format results for the output
@@ -2794,7 +2794,6 @@ def get_runbrick_kwargs(opt):
         picklePattern=opt.picklepat,
         checkpoint_filename=opt.checkpoint,
         checkpoint_period=opt.checkpoint_period,
-        allbands='ugrizY',
         )
     return survey, kwa
 

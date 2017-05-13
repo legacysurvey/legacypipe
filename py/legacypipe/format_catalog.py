@@ -54,7 +54,8 @@ def format_catalog(T, hdr, primhdr, allbands, outfn,
     print('Bands in this catalog:', bands)
 
     if dr4:
-        allbands = ['g','r','z']
+        #allbands = ['g','r','z']
+        pass
     else:
         primhdr.add_record(dict(name='ALLBANDS', value=allbands,
                                 comment='Band order in array values'))

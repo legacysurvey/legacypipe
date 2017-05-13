@@ -1666,6 +1666,7 @@ def stage_plot_model(tims=None, bands=None, targetwcs=None,
 
     
 from legacypipe.runbrick import stage_tims, stage_mask_junk
+from legacypipe.runbrick import stage_srcs, stage_fitblobs, stage_coadds, stage_writecat
 
 def reduce_acs_image(opt, survey):
     ccds = survey.get_ccds_readonly()
@@ -1695,7 +1696,8 @@ def reduce_acs_image(opt, survey):
                   #width = 540, height=540,
                   radec=(ccd.ra, ccd.dec),
                   width=ccd.width, height=ccd.height, 
-                  forceAll=True, writePickles=False,
+                  #forceAll=True,
+                  #writePickles=False,
                   #stages=['image_coadds'],
                   #stages=['plot_model'],
                   bands=['I'],

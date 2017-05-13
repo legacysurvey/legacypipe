@@ -384,8 +384,8 @@ def main():
         B.cut(np.logical_or(B.ra >= rlo, B.ra <= rhi) *
               (B.dec >= dlo) * (B.dec <= dhi))
     log(len(B), 'bricks in range')
-    #for name in B.get('brickname'):
-        #print(name)
+    for name in B.get('brickname'):
+        print(name)
     #B.writeto('bricks-cut.fits')
 
     I,J,d = match_radec(B.ra, B.dec, T.ra, T.dec, survey.bricksize)
