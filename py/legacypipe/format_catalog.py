@@ -60,6 +60,22 @@ def format_catalog(T, hdr, primhdr, allbands, outfn,
         primhdr.add_record(dict(name='ALLBANDS', value=allbands,
                                 comment='Band order in array values'))
 
+    # Nans,Infs
+    other_nans= ['dchisq','rchi2','mjd_min','mjd_max']
+    ivar_nans= ['ra_ivar','dec_ivar',
+                'shapeexp_r_ivar','shapeexp_e1_ivar','shapeexp_e2_ivar']
+    
+    # Ivar --> 0
+    for key in ivar_nans:
+        ind= np.isfinite(T.get(key)) == False
+        if np.any(ind):
+            T.get(key)[ind]= 0.
+    # Other --> NaN (PostgreSQL can work with NaNs)
+    for key in other_nans:
+        ind= np.isfinite(T.get(key)) == False
+        if np.any(ind):
+            T.get(key)[ind]= np.nan
+
     if dr4:
         # Convert 'nobs' to int16.
         col = '%s%s' % (in_flux_prefix, 'nobs')
