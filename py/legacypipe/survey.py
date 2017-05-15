@@ -1299,6 +1299,10 @@ Now using the current directory as LEGACY_SURVEY_DIR, but this is likely to fail
             Icam = np.flatnonzero(ccds.camera == cam)
             print('Checking', len(Icam), 'images from camera', cam)
             Igood = imclass.photometric_ccds(self, ccds[Icam])
+            if Igood is None:
+                print('No photometric cut for camera', cam)
+                good[Icam] = True
+                continue
             print('Keeping', len(Igood), 'photometric CCDs from camera', cam)
             if len(Igood):
                 good[Icam[Igood]] = True

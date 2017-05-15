@@ -1,0 +1,14 @@
+Forced photometry of a DES supernova field, given DR3 catalog.
+
+python legacypipe/queue-calibs.py --region des-sn-x3 --forced --touching --write-ccds survey-ccds-forced.fits.gz
+
+LEGACY_SURVERY_DIR=/global/cscratch1/sd/dstn/lpd-forced
+
+Ran vanilla, agn, and derivs flavors, eg:
+
+python legacypipe/forced_photom_decam.py --hybrid-psf --apphot --constant-invvar 139921 S15 DR3 forced/vanilla/00139/00139921/forced-decam-00139921-S15.fits
+python legacypipe/forced_photom_decam.py --hybrid-psf --derivs --constant-invvar 139921 S15 DR3 forced/derivs/00139/00139921/forced-decam-00139921-S15.fits
+python legacypipe/forced_photom_decam.py --hybrid-psf --agn --constant-invvar 139921 S15 DR3 forced/agn/00139/00139921/forced-decam-00139921-S15.fits
+
+results to /global/cscratch1/sd/dstn/forced
+
