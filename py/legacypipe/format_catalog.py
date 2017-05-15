@@ -59,22 +59,36 @@ def format_catalog(T, hdr, primhdr, allbands, outfn,
         primhdr.add_record(dict(name='ALLBANDS', value=allbands,
                                 comment='Band order in array values'))
 
-    # Nans,Infs
-    other_nans= ['dchisq','rchi2','mjd_min','mjd_max']
-    ivar_nans= ['ra_ivar','dec_ivar',
-                'shapeexp_r_ivar','shapeexp_e1_ivar','shapeexp_e2_ivar']
+    has_wise =    'wise_flux'    in T.columns()
+    has_wise_lc = 'wise_lc_flux' in T.columns()
+    has_ap =      'apflux'       in T.columns()
     
-    # Ivar --> 0
+    # Rename
+    if dr4:
+        # depth -> psfdepth
+        T.rename('depth', 'psfdepth')
+    # chi2 -> chisq
+    T.rename('rchi2','rchisq')
+    if has_wise:
+        T.rename('wise_rchi2','wise_rchisq')
+        T.rename('wise_lc_rchi2','wise_lc_rchisq')
+
+    # Nans,Infs
+    # Ivar -> 0
+    ivar_nans= ['ra_ivar','dec_ivar',
+                'shapeexp_r_ivar','shapeexp_e1_ivar','shapeexp_e2_ivar'] 
     for key in ivar_nans:
         ind= np.isfinite(T.get(key)) == False
         if np.any(ind):
             T.get(key)[ind]= 0.
     # Other --> NaN (PostgreSQL can work with NaNs)
+    other_nans= ['dchisq','rchisq','mjd_min','mjd_max']
     for key in other_nans:
         ind= np.isfinite(T.get(key)) == False
         if np.any(ind):
             T.get(key)[ind]= np.nan
 
+    # Precision
     if dr4:
         # Convert 'nobs' to int16.
         col = '%s%s' % (in_flux_prefix, 'nobs')
@@ -82,17 +96,12 @@ def format_catalog(T, hdr, primhdr, allbands, outfn,
         # MJD_{MIN,MAX} to float64.
         T.mjd_min = T.mjd_min.astype(np.float64)
         T.mjd_max = T.mjd_max.astype(np.float64)
-        # depth -> psfdepth
-        T.rename('depth', 'psfdepth')
     
-    has_wise =    'wise_flux'    in T.columns()
-    has_wise_lc = 'wise_lc_flux' in T.columns()
-    has_ap =      'apflux'       in T.columns()
     
     # Expand out FLUX and related fields from grz arrays to 'allbands'
     # (eg, ugrizY) arrays.
     B = np.array([allbands.index(band) for band in bands])
-    keys = ['flux', 'flux_ivar', 'rchi2', 'fracflux', 'fracmasked', 'fracin',
+    keys = ['flux', 'flux_ivar', 'rchisq', 'fracflux', 'fracmasked', 'fracin',
             'nobs', 'anymask', 'allmask', 'psfsize']
     if dr4:
         keys.append('psfdepth')
@@ -240,7 +249,7 @@ def format_catalog(T, hdr, primhdr, allbands, outfn,
     cols.extend(trans_cols_wise)
 
     if dr4:
-        for c in ['nobs', 'rchi2', 'fracflux']:
+        for c in ['nobs', 'rchisq', 'fracflux']:
             add_fluxlike(c)
             if has_wise:
                 add_wiselike('wise_'+c)
@@ -256,7 +265,7 @@ def format_catalog(T, hdr, primhdr, allbands, outfn,
             add_fluxlike(c)
     else:
         cols.extend([flux_prefix + c for c in [
-            'nobs', 'rchi2', 'fracflux', 'fracmasked', 'fracin', 'anymask',
+            'nobs', 'rchisq', 'fracflux', 'fracmasked', 'fracin', 'anymask',
             'allmask', 'psfsize', 'depth', 'galdepth']])
 
     if has_wise:
@@ -264,12 +273,12 @@ def format_catalog(T, hdr, primhdr, allbands, outfn,
         if not dr4:
             cols.extend(['wise_flux', 'wise_flux_ivar', 'wise_mask'])
             cols.extend(trans_cols_wise)
-            cols.extend(['wise_nobs', 'wise_fracflux','wise_rchi2'])
+            cols.extend(['wise_nobs', 'wise_fracflux','wise_rchisq'])
 
     if has_wise_lc:
         if dr4:
             cc = ['wise_lc_flux', 'wise_lc_flux_ivar', 'wise_lc_nobs',
-                  'wise_lc_fracflux', 'wise_lc_rchi2','wise_lc_mjd']
+                  'wise_lc_fracflux', 'wise_lc_rchisq','wise_lc_mjd']
             for c in cc:
                 cbare = c.replace('wise_','')
                 X = T.get(c)
@@ -280,7 +289,7 @@ def format_catalog(T, hdr, primhdr, allbands, outfn,
         else:
             cols.extend([
                 'wise_lc_flux', 'wise_lc_flux_ivar',
-                'wise_lc_nobs', 'wise_lc_fracflux', 'wise_lc_rchi2','wise_lc_mjd'])
+                'wise_lc_nobs', 'wise_lc_fracflux', 'wise_lc_rchisq','wise_lc_mjd'])
 
     cols.extend([
         'fracdev', 'fracdev_ivar', 'shapeexp_r', 'shapeexp_r_ivar',

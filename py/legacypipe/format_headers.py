@@ -2,9 +2,11 @@ from __future__ import print_function
 import sys
 import os
 import numpy as np
-import fitsio
 from glob import glob
 
+from astropy.io import fits
+# sha1sums
+# nohup bash -c 'for num in `cat coadd_match_ep.txt|awk '"'"'{print $1}'"'"'`; do echo $num;find /global/cscratch1/sd/desiproc/dr4/data_release/dr4_fixes/coadd/$num -type f -print0|xargs -0 sha1sum > coadd_${num}_scr.sha1;done' > sha1.out &
 
 def survey_ccd_bitmask():
     mzls=fitsio.FITS('survey-ccds-mzls2.fits','rw')
@@ -28,7 +30,7 @@ def survey_ccd_add_bitmask():
         mzls.delete(key)
 
 
-def survey_bricks_bitmask
+def survey_bricks_bitmask():
     b=fitsio.FITS('survey-bricks-dr4.fits.gz','rw')
     hdr= b[1].read_header()
     if not 'BITMASK' in hdr:
@@ -59,79 +61,140 @@ def bash(cmd):
         raise RuntimeError('Command failed: %s: return value: %i' %
                            (cmd,rtn))
 
+def makedir_for_fn(fn): 
+    try:
+        os.makedirs(os.path.dirname(fn))
+    except OSError:
+        print('no worries, dir already exists %s' % os.path.dirname(fn))
+
+
 
 def get_fns(brick,outdir):
     bri= brick[:3]
-    lis= [os.path.join(outdir,'tractor-i',bri,'tractor-%s.fits' % brick),
-          os.path.join(outdir,'tractor',bri,'tractor-%s.fits' % brick),
-          os.path.join(outdir,'metrics',bri,'all-models-%s.fits' % brick),
-          os.path.join(outdir,'metrics',bri,'blobs-%s.fits.gz' % brick)
-         ]
-    lis2= glob(os.path.join(outdir,'coadd',bri,brick,'legacysurvey-%s-*.fits*' % brick))
-    return lis + lis2
-    #return lis[:2]
+    trac= [os.path.join(outdir,'tractor-i',bri,'tractor-%s.fits' % brick) ]
+    #os.path.join(outdir,'tractor',bri,'tractor-%s.fits' % brick),
+    met= [os.path.join(outdir,'metrics',bri,'all-models-%s.fits' % brick),
+          os.path.join(outdir,'metrics',bri,'blobs-%s.fits.gz' % brick)]
+    coadd= glob(os.path.join(outdir,'coadd',bri,brick,'legacysurvey-%s-*.fits*' % brick))
+    #return trac + met + coadd
+    return trac
+ 
+def get_new_fns(brick,outdir):
+    bri= brick[:3]
+    trac= [os.path.join(outdir,'tractor-i',bri,'tractor-%s.fits' % brick),
+           os.path.join(outdir,'tractor',bri,'tractor-%s.fits' % brick)]
+    met= [os.path.join(outdir,'metrics',bri,'all-models-%s.fits' % brick),
+          os.path.join(outdir,'metrics',bri,'blobs-%s.fits.gz' % brick)]
+    coadd= glob(os.path.join(outdir,'coadd',bri,brick,'legacysurvey-%s-*.fits*' % brick))
+    #return trac + met + coadd
+    return trac 
+ 
+def get_sha_fn(brick,outdir):
+    bri= brick[:3]
+    return os.path.join(outdir,'tractor',bri, 'brick-%s.sha1sum' % brick)
+
+def new_header(orig_fn, new_fn):
+    # Copy dr4b file -> dr4c 
+    # tractor.fits already there
+    if orig_fn != new_fn:
+        makedir_for_fn(new_fn)
+        bash('cp %s %s' % (orig_fn, new_fn))
     
-
-def new_header(fn):
-    is_gzip= 'fits.gz' in fn
-    # Handle gzip
+    # Gunzip
+    is_gzip= 'fits.gz' in new_fn
     if is_gzip:
-        bash('gunzip %s' % fn)
-        fn_gz= fn
-        fn= fn.replace('.gz','')
+        bash('gunzip %s' % new_fn)
+        new_fn= new_fn.replace('.gz','')
 
-    # Fix headers
-    print('Editing %s' % fn)
-    a=fitsio.FITS(fn,'rw')
-    hdr=a[0].read_header()
+    # Header
+    print('Editing %s' % new_fn)
+    #a=fitsio.FITS(new_fn,'rw')
+    #hdr=a[0].read_header()
+    hdulist = fits.open(new_fn, mode='readonly') 
     # Skip if already fixed
-    if 'RELEASE' in hdr:
+    if 'RELEASE' in hdulist[0].header:
         pass
-    elif 'DECALSDR' in hdr:
+    elif 'DECALSDR' in hdulist[0].header:
         # Add
         for key,val,comm in zip(['RELEASE','SURVEYDR','SURVEYDT','SURVEY'],
-                                ['4000','DR4',hdr['DECALSDT'],'BASS MzLS'],
+                                ['4000','DR4',hdulist[0].header['DECALSDT'],'BASS MzLS'],
                                 ['DR number','DR name','runbrick.py run time','Survey name']):
-            a[0].write_key(key,val, comment=comm) 
+            hdulist[0].header.set(key,val,comm) 
         # Git describes: for bounding dates/commits when dr4b ran
-        a[0].write_key('ASTROMVR','0.67-188-gfcdd3c0, 0.67-152-gfa03658',
-                       comment='astrometry_net (3/6-4/15/2017)')
-        a[0].write_key('TRACTOVR','dr4.1-9-gc73f1ab, dr4.1-9-ga5cfaa3',
-                       comment='tractor (2/22-3/31/2017)')
-        a[0].write_key('LEGDIRVR','dr3-17-g645c3ab',
-                       comment= 'legacypipe-dir (3/28/2017)')
-        a[0].write_key('LEGPIPVR','dr3e-834-g419c0ff, dr3e-887-g068df7a',
-                       comment='legacypipe (3/15-4/19/2017)')
+        hdulist[0].header.set('ASTROMVR','0.67-188-gfcdd3c0, 0.67-152-gfa03658',
+                              'astrometry_net (3/6-4/15/2017)')
+        hdulist[0].header.set('TRACTOVR','dr4.1-9-gc73f1ab, dr4.1-9-ga5cfaa3', 
+                              'tractor (2/22-3/31/2017)')
+        hdulist[0].header.set('LEGDIRVR','dr3-17-g645c3ab', 
+                              'legacypipe-dir (3/28/2017)')
+        hdulist[0].header.set('LEGPIPVR','dr3e-834-g419c0ff, dr3e-887-g068df7a',
+                              'legacypipe (3/15-4/19/2017)')
         # Remove
         rem_keys= ['DECALSDR','DECALSDT',
                    'SURVEYV','SURVEYID','DRVERSIO']
         for key in rem_keys:
-            #a[0].delete(key)
-            a[0].write_key(key,'', comment=' ') 
-    # Close
-    a.close()
+            del hdulist[0].header[key]
+        # Write
+        #clob= False
+        #if '/tractor/' in new_fn:
+        #    clob=True
+        clob= True
+        hdulist.writeto(new_fn, clobber=clob)
+        print('Wrote %s' % new_fn)
 
-    # Re-zip if need to
+    # Gzip
     if is_gzip:
-        bash('gzip %s' % fn) 
+        bash('gzip %s' % new_fn) 
+
+
+def tractor_i_fn(dir,brick):
+    bri=brick[:3]
+    return os.path.join(dir,'tractor-i',bri,'tractor-%s.fits' % brick)
+
+def tractor_fn(dir,brick):
+    bri=brick[:3]
+    return os.path.join(dir,'tractor',bri,'tractor-%s.fits' % brick)
 
 def main(args=None):
     import argparse
     parser = argparse.ArgumentParser()
     parser.add_argument('--bricklist', action='store',
                         help='text file listin bricknames to rewrite headers for')
-    parser.add_argument('--outdir', action='store',
-                        help='abs path to data release files')
+    #parser.add_argument('--outdir', action='store',
+    #                    help='abs path to data release files')
     opt = parser.parse_args(args=args)
+
+    dr4b_dir= '/global/projecta/projectdirs/cosmo/work/dr4b'
+    dr4c_dir= '/global/projecta/projectdirs/cosmo/work/dr4c'
 
     bricks= np.loadtxt(opt.bricklist,dtype=str)
     assert(bricks.size > 0)
     if bricks.size == 1:
         bricks= np.array([bricks])
     for brick in bricks:
-        fns= get_fns(brick,outdir=opt.outdir)
+        # New Data Model
+        in_fn= tractor_i_fn(dr4b_dir,brick)
+        out_fn= tractor_fn(dr4c_dir,brick)
+        try:
+            os.makedirs(os.path.dirname(out_fn))
+        except OSError:
+            print('no worries, dir already exists %s' % os.path.dirname(out_fn))
+        bash('python legacypipe/format_catalog.py --in %s --out %s --dr4' % (in_fn,out_fn))
+        
+        # Fix Headers
+        new_header(orig_fn=out_fn, new_fn=out_fn) #orig same as new fn
+        # Everything else
+        fns= get_fns(brick,outdir=dr4b_dir)
         for fn in fns:
-            new_header(fn)
+            new_header(orig_fn=fn, new_fn=fn.replace('dr4b','dr4c')) #orig diff from new fn
+
+        # Sha1sum 
+        fns= get_new_fns(brick=brick, outdir=dr4c_dir)
+        sha_fn= get_sha_fn(brick=brick, outdir=dr4c_dir)
+        lis= ' '.join(fns)
+        bash('echo %s |xargs sha1sum > %s' % (lis,sha_fn))
+        #bash("find /global/cscratch1/sd/desiproc/dr4/data_release/dr4_fixes/coadd/$num -type f -print0|xargs -0 sha1sum > coadd_${num}_scr.sha1")
+        print('Wrote sha_fn=%s' % sha_fn)
 
 if __name__ == '__main__':
     main()
