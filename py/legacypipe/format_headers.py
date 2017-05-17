@@ -4,7 +4,10 @@ import os
 import numpy as np
 from glob import glob
 
+import astropy;print(astropy)
 from astropy.io import fits
+
+from astrometry.util.fits import fits_table, merge_tables
 # sha1sums
 # nohup bash -c 'for num in `cat coadd_match_ep.txt|awk '"'"'{print $1}'"'"'`; do echo $num;find /global/cscratch1/sd/desiproc/dr4/data_release/dr4_fixes/coadd/$num -type f -print0|xargs -0 sha1sum > coadd_${num}_scr.sha1;done' > sha1.out &
 
@@ -32,7 +35,7 @@ def modify_ccd(fn, which):
     if which == 'mzls': 
         keys += ['third_pix']
     for key in keys:
-        a.delete(key)
+        a.delete_column(key)
     a.writeto(fn)
     # Modify header
     hdulist = fits.open(fn, mode='readonly')
@@ -85,22 +88,19 @@ def modify_fits(fn, modify_func, **kwargs):
     '''makes copy of fits file and modifies it
     modify_func -- function that takes hdulist as input, modifies it as desired, and returns it
     '''
-    new_fn= fn.replace('.fits','_new.fits')
-    bash('cp %s %s' % (fn, new_fn))
-
     # Gunzip
-    is_gzip= 'fits.gz' in new_fn
+    is_gzip= 'fits.gz' in fn
     if is_gzip:
-        bash('gunzip %s' % new_fn)
-        new_fn= new_fn.replace('.gz','')
+        bash('gunzip %s' % fn)
+        fn= fn.replace('.gz','')
 
     # Modify
-    print('modifying %s' % new_fn) 
-    modify_func(new_fn, **kwargs) 
+    print('modifying %s' % fn) 
+    modify_func(fn, **kwargs) 
 
     # Gzip
     if is_gzip:
-        bash('gzip %s' % new_fn) 
+        bash('gzip %s' % fn) 
 
 
 def modify_ccd_brick_files():
@@ -108,8 +108,8 @@ def modify_ccd_brick_files():
 	modify_fits('survey-ccds-mzls.fits.gz', modify_func=modify_ccd, **kwargs)
 	kwargs.update( dict(which='bass'))
 	modify_fits('survey-ccds-bass.fits.gz', modify_func=modify_ccd, **kwargs)
-	_= kwargs.pop('which')
-	modify_fits('survey-bricks-dr4.fits.gz', modify_func=modify_bricks, **kwargs)
+	#_= kwargs.pop('which')
+	#modify_fits('survey-bricks-dr4.fits.gz', modify_func=modify_bricks, **kwargs)
 
 
 
@@ -152,13 +152,7 @@ def get_sha_fn(brick,outdir):
     bri= brick[:3]
     return os.path.join(outdir,'tractor',bri, 'brick-%s.sha1sum' % brick)
 
-def new_header(orig_fn, new_fn):
-    # Copy dr4b file -> dr4c 
-    # tractor.fits already there
-    if orig_fn != new_fn:
-        makedir_for_fn(new_fn)
-        bash('cp %s %s' % (orig_fn, new_fn))
-    
+def new_header(new_fn):   
     # Gunzip
     is_gzip= 'fits.gz' in new_fn
     if is_gzip:
@@ -169,7 +163,7 @@ def new_header(orig_fn, new_fn):
     print('Editing %s' % new_fn)
     #a=fitsio.FITS(new_fn,'rw')
     #hdr=a[0].read_header()
-    hdulist = fits.open(new_fn, mode='readonly') 
+    hdulist = fits.open(new_fn, mode='update') 
     # Skip if already fixed
     if 'RELEASE' in hdulist[0].header:
         pass
@@ -197,9 +191,11 @@ def new_header(orig_fn, new_fn):
         #clob= False
         #if '/tractor/' in new_fn:
         #    clob=True
-        clob= True
-        hdulist.writeto(new_fn, clobber=clob, output_verify='fix')
-        print('Wrote %s' % new_fn)
+        #clob= True
+        #hdulist.writeto(new_fn, clobber=clob, output_verify='fix')
+        hdulist.flush()
+        hdulist.close()
+        print('Modified inplace %s' % new_fn)
 
     # Gzip
     if is_gzip:
@@ -230,20 +226,32 @@ def main(args=None):
     '''
     import argparse
     parser = argparse.ArgumentParser()
-    parser.add_argument('--bricklist', action='store',
-                        help='text file listin bricknames to rewrite headers for')
+    parser.add_argument('--bricklist', action='store',default=None,
+                        help='text file listin bricknames to rewrite headers for',
+                        required=False)
+    parser.add_argument('--brick', action='store',default=None,
+                        help='text file listin bricknames to rewrite headers for',
+                        required=False)
     parser.add_argument('--sanitycheck', action='store_true',default=False,
-                        help='set to test integrity of dr4c files')
+                        help='set to test integrity of dr4c files',
+                        required=False)
     opt = parser.parse_args(args=args)
+
+    if opt.bricklist:
+        bricks= np.loadtxt(opt.bricklist,dtype=str)
+        # Handle just 1 brick in bricklist
+        assert(bricks.size > 0)
+        if bricks.size == 1:
+            bricks= np.array([bricks])
+    elif opt.brick:
+        bricks= [opt.brick]
+    else:
+        raise ValueError('must set either --bricklist or --brick')
 
     #dr4b_dir= '/global/projecta/projectdirs/cosmo/work/dr4b'
     dr4b_dir= '/global/cscratch1/sd/desiproc/dr4/data_release/dr4_fixes'
     dr4c_dir= '/global/projecta/projectdirs/cosmo/work/dr4c'
 
-    bricks= np.loadtxt(opt.bricklist,dtype=str)
-    assert(bricks.size > 0)
-    if bricks.size == 1:
-        bricks= np.array([bricks])
     for brick in bricks:
         if opt.sanitycheck:
             do_checks(brick,dr4c_dir=dr4c_dir)
@@ -262,16 +270,24 @@ def main(args=None):
             os.makedirs(os.path.dirname(out_fn))
         except OSError:
             print('no worries, dir already exists %s' % os.path.dirname(out_fn))
+        # format_catalogue being run outside of this code, so in the batch job
         bash('python legacypipe/format_catalog.py --in %s --out %s --dr4' % (in_fn,out_fn))
-        
-        # Fix Headers
-        new_header(orig_fn=out_fn, new_fn=out_fn) #orig same as new fn
-        # Everything else
+        print('du after catalogue') 
+        bash('du -shc %s' % out_fn) 
+        # Modify header in place
+        new_header(new_fn=out_fn) 
+        print('du after header') 
+        bash('du -shc %s' % out_fn) 
+        raise ValueError 
+        # Headers for all other files
         fns= get_fns(brick,outdir=dr4b_dir)
         for fn in fns:
-            new_header(orig_fn=fn, 
-                       new_fn= fn.replace(dr4b_dir,dr4c_dir))
-
+            # Copy to dr4c_dir
+            new_fn= fn.replace(dr4b_dir,dr4c_dir)
+            makedir_for_fn(new_fn)
+            bash('cp %s %s' % (fn, new_fn))
+            # Modify header in place
+            new_header(new_fn= new_fn)
         # Sha1sum 
         fns= get_new_fns(brick=brick, outdir=dr4c_dir)
         sha_fn= get_sha_fn(brick=brick, outdir=dr4c_dir)
