@@ -18,43 +18,43 @@ def bash(cmd):
 
 
 def modify_ccd(fn, which):
-	assert(which in ['mzls','bass'])
-	# Add bitmask
-	a=fits_table(fn)
+    assert(which in ['mzls','bass'])
+    # Add bitmask
+    a=fits_table(fn)
     bm= np.zeros(len(a)).astype(np.uint8)
     bm[ a.bad_expid ]+= 1
     bm[ a.ccd_hdu_mismatch ]+= 2
     bm[ a.zpts_bad_astrom ]+= 4
-	if which == 'mzls':
-		bm[ a.third_pix ]+= 8
+    if which == 'mzls':
+        bm[ a.third_pix ]+= 8
     a.set('bitmask', bm)
     keys= ['bad_expid','ccd_hdu_mismatch','zpts_bad_astrom']
-	if which == 'mzls': 
-		keys += ['third_pix']
+    if which == 'mzls': 
+        keys += ['third_pix']
     for key in keys:
         a.delete(key)
-	a.writeto(fn)
-	# Modify header
+    a.writeto(fn)
+    # Modify header
     hdulist = fits.open(fn, mode='readonly')
-	# Bitmask for
-	# bad_expid,ccd_hdu_mismatch,zpts_bad_astrom,third_pix
-	hdulist[1].header.set('PHOTOME','Photometric','True if CCD considered photometric')
-	hdulist[1].header.set('BITMASK','Cuts besides photometric','See DR4 Docs')
-	# Remove those cols
-	rng= range(63,67)
-	if which == 'bass':
-		rng= range(65,68)
-	for i in rng:
-		del hdulist[1].header['TTYPE' + str(i)]
-		del hdulist[1].header['TFORM' + str(i)]
-	# Write
-	clob= True
-	hdulist.writeto(fn, clobber=clob)
-	print('Wrote %s' % fn)
+    # Bitmask for
+    # bad_expid,ccd_hdu_mismatch,zpts_bad_astrom,third_pix
+    hdulist[1].header.set('PHOTOME','Photometric','True if CCD considered photometric')
+    hdulist[1].header.set('BITMASK','Cuts besides photometric','See DR4 Docs')
+    # Remove those cols
+    rng= range(63,67)
+    if which == 'bass':
+        rng= range(65,68)
+    for i in rng:
+        del hdulist[1].header['TTYPE' + str(i)]
+        del hdulist[1].header['TFORM' + str(i)]
+    # Write
+    clob= True
+    hdulist.writeto(fn, clobber=clob)
+    print('Wrote %s' % fn)
 
 def modify_bricks(fn):
-	# Add bitmask
-	a= fits_table(fn)
+    # Add bitmask
+    a= fits_table(fn)
     bm= np.zeros(len(a)).astype(np.uint8)
     for key,bitval in zip(['cut_dr4','cut_oom','cut_old_chkpt',
                            'cut_no_signif_srcs','cut_no_srcs'],
@@ -63,31 +63,31 @@ def modify_bricks(fn):
         bm[ a.get(key) ]+= bitval
         a.delete(key)
     a.set('bitmask', bm)
-	# Modify header
+    # Modify header
     hdulist = fits.open(fn, mode='readonly')
-	hdulist[1].header.set('BITMASK','All flagged CCDs thrown out in DR4','See DR4 Docs')
-	#b[1].write_key('BIT1','dr4',comment='have tractor catalogue')
-	#b[1].write_key('BIT2','oom',comment='failed b/c out of memory')
-	#b[1].write_key('BIT3','old_chkpt',comment='failed b/c old checkpoint when reran')
-	#b[1].write_key('BIT4','no_signif_srcs',comment='failed b/c all detected sources not significant')
-	#b[1].write_key('BIT5','no_srcs',comment='failed b/c no sources detected')
-	# Remove those cols
-	for i in range(12,17)
-		del hdulist[1].header['TTYPE' + str(i)]
-		del hdulist[1].header['TFORM' + str(i)]
-	# Write
-	clob= True
-	hdulist.writeto(fn, clobber=clob)
-	print('Wrote %s' % fn)
+    hdulist[1].header.set('BITMASK','All flagged CCDs thrown out in DR4','See DR4 Docs')
+    #b[1].write_key('BIT1','dr4',comment='have tractor catalogue')
+    #b[1].write_key('BIT2','oom',comment='failed b/c out of memory')
+    #b[1].write_key('BIT3','old_chkpt',comment='failed b/c old checkpoint when reran')
+    #b[1].write_key('BIT4','no_signif_srcs',comment='failed b/c all detected sources not significant')
+    #b[1].write_key('BIT5','no_srcs',comment='failed b/c no sources detected')
+    # Remove those cols
+    for i in range(12,17):
+        del hdulist[1].header['TTYPE' + str(i)]
+        del hdulist[1].header['TFORM' + str(i)]
+    # Write
+    clob= True
+    hdulist.writeto(fn, clobber=clob)
+    print('Wrote %s' % fn)
     
 
 def modify_fits(fn, modify_func, **kwargs):
-	'''makes copy of fits file and modifies it
-	modify_func -- function that takes hdulist as input, modifies it as desired, and returns it
-	'''
-	new_fn= fn.replace('.fits','_new.fits')
-	bash('cp %s %s' % (fn, new_fn))
-    
+    '''makes copy of fits file and modifies it
+    modify_func -- function that takes hdulist as input, modifies it as desired, and returns it
+    '''
+    new_fn= fn.replace('.fits','_new.fits')
+    bash('cp %s %s' % (fn, new_fn))
+
     # Gunzip
     is_gzip= 'fits.gz' in new_fn
     if is_gzip:
@@ -95,10 +95,10 @@ def modify_fits(fn, modify_func, **kwargs):
         new_fn= new_fn.replace('.gz','')
 
     # Modify
-	print('modifying %s' % new_fn) 
-	modify_func(new_fn, **kwargs) 
+    print('modifying %s' % new_fn) 
+    modify_func(new_fn, **kwargs) 
 
-	# Gzip
+    # Gzip
     if is_gzip:
         bash('gzip %s' % new_fn) 
 
@@ -175,9 +175,9 @@ def new_header(orig_fn, new_fn):
         pass
     elif 'DECALSDR' in hdulist[0].header:
         # Add
-        for key,val,comm in zip(['RELEASE','SURVEYDR','SURVEYDT','SURVEY'],
-                                ['4000','DR4',hdulist[0].header['DECALSDT'],'BASS MzLS'],
-                                ['DR number','DR name','runbrick.py run time','Survey name']):
+        for key,val,comm in zip(['RELEASE','SURVEYDT','SURVEYID','DRVERSIO','WISEVR'],
+                                ['4000',hdulist[0].header['DECALSDT'],'BASS MzLS','4000','neo2-cori-scratch'],
+                                ['DR number','runbrick.py run time','Survey name','Survey data release number','unwise_coadds_timeresolved']):
             hdulist[0].header.set(key,val,comm) 
         # Git describes: for bounding dates/commits when dr4b ran
         hdulist[0].header.set('ASTROMVR','0.67-188-gfcdd3c0, 0.67-152-gfa03658',
@@ -190,7 +190,7 @@ def new_header(orig_fn, new_fn):
                               'legacypipe (3/15-4/19/2017)')
         # Remove
         rem_keys= ['DECALSDR','DECALSDT',
-                   'SURVEYV','SURVEYID','DRVERSIO']
+                   'SURVEYV','SURVEY']
         for key in rem_keys:
             del hdulist[0].header[key]
         # Write
@@ -236,7 +236,8 @@ def main(args=None):
                         help='set to test integrity of dr4c files')
     opt = parser.parse_args(args=args)
 
-    dr4b_dir= '/global/projecta/projectdirs/cosmo/work/dr4b'
+    #dr4b_dir= '/global/projecta/projectdirs/cosmo/work/dr4b'
+    dr4b_dir= '/global/cscratch1/sd/desiproc/dr4/data_release/dr4_fixes'
     dr4c_dir= '/global/projecta/projectdirs/cosmo/work/dr4c'
 
     bricks= np.loadtxt(opt.bricklist,dtype=str)
@@ -248,6 +249,12 @@ def main(args=None):
             do_checks(brick,dr4c_dir=dr4c_dir)
             continue
 
+        # At the end will touch a file so know all this finished
+        touch_fn= get_touch_fn(brick=brick, outdir=dr4c_dir)
+        if os.path.exists(touch_fn):
+            print('skipping brick=%s, touch_fn=%s exists' % (brick,touch_fn))
+            continue
+        
         # New Data Model
         in_fn= tractor_i_fn(dr4b_dir,brick)
         out_fn= tractor_fn(dr4c_dir,brick)
@@ -262,7 +269,8 @@ def main(args=None):
         # Everything else
         fns= get_fns(brick,outdir=dr4b_dir)
         for fn in fns:
-            new_header(orig_fn=fn, new_fn=fn.replace('dr4b','dr4c')) #orig diff from new fn
+            new_header(orig_fn=fn, 
+                       new_fn= fn.replace(dr4b_dir,dr4c_dir))
 
         # Sha1sum 
         fns= get_new_fns(brick=brick, outdir=dr4c_dir)
@@ -273,7 +281,6 @@ def main(args=None):
         print('Wrote sha_fn=%s' % sha_fn)
 
         # Touch a file so know that finished
-        touch_fn= get_touch_fn(brick=brick, outdir=dr4c_dir)
         bash('touch %s' % touch_fn)
         print('Wrote %s' % touch_fn)
     
