@@ -76,8 +76,8 @@ def get_fns(brick,outdir):
     met= [os.path.join(outdir,'metrics',bri,'all-models-%s.fits' % brick),
           os.path.join(outdir,'metrics',bri,'blobs-%s.fits.gz' % brick)]
     coadd= glob(os.path.join(outdir,'coadd',bri,brick,'legacysurvey-%s-*.fits*' % brick))
-    #return trac + met + coadd
-    return trac
+    return trac + met + coadd
+    #return trac
  
 def get_new_fns(brick,outdir):
     bri= brick[:3]
@@ -86,8 +86,15 @@ def get_new_fns(brick,outdir):
     met= [os.path.join(outdir,'metrics',bri,'all-models-%s.fits' % brick),
           os.path.join(outdir,'metrics',bri,'blobs-%s.fits.gz' % brick)]
     coadd= glob(os.path.join(outdir,'coadd',bri,brick,'legacysurvey-%s-*.fits*' % brick))
-    #return trac + met + coadd
-    return trac 
+    return trac + met + coadd
+    #return trac 
+
+def get_touch_fn(brick,outdir):
+    bri= brick[:3]
+    fn= os.path.join(outdir,'touch_files',bri,'done-%s.txt' % brick)
+    makedir_for_fn(fn)
+    return fn
+    
  
 def get_sha_fn(brick,outdir):
     bri= brick[:3]
@@ -139,7 +146,7 @@ def new_header(orig_fn, new_fn):
         #if '/tractor/' in new_fn:
         #    clob=True
         clob= True
-        hdulist.writeto(new_fn, clobber=clob)
+        hdulist.writeto(new_fn, clobber=clob, output_verify='fix')
         print('Wrote %s' % new_fn)
 
     # Gzip
@@ -155,13 +162,26 @@ def tractor_fn(dir,brick):
     bri=brick[:3]
     return os.path.join(dir,'tractor',bri,'tractor-%s.fits' % brick)
 
+def do_checks(brick,dr4c_dir):
+    # Sanity checks on outputs
+    dr4c_fns= get_new_fns(brick,dr4c_dir)
+    #size each file > 0
+    #number files dr4c = dr4b
+    #size dr4c ~ dr4b
+    #number bricks that have nans, which cols nans appear in
+
 def main(args=None):
+    '''new data model catalouge and fix all headers
+    touch a junk_brickname.txt file when done so can see which bricks finished
+    OR 
+    sanity checks on outputs
+    '''
     import argparse
     parser = argparse.ArgumentParser()
     parser.add_argument('--bricklist', action='store',
                         help='text file listin bricknames to rewrite headers for')
-    #parser.add_argument('--outdir', action='store',
-    #                    help='abs path to data release files')
+    parser.add_argument('--sanitycheck', action='store_true',default=False,
+                        help='set to test integrity of dr4c files')
     opt = parser.parse_args(args=args)
 
     dr4b_dir= '/global/projecta/projectdirs/cosmo/work/dr4b'
@@ -172,6 +192,10 @@ def main(args=None):
     if bricks.size == 1:
         bricks= np.array([bricks])
     for brick in bricks:
+        if opt.sanitycheck:
+            do_checks(brick,dr4c_dir=dr4c_dir)
+            continue
+
         # New Data Model
         in_fn= tractor_i_fn(dr4b_dir,brick)
         out_fn= tractor_fn(dr4c_dir,brick)
@@ -196,6 +220,11 @@ def main(args=None):
         #bash("find /global/cscratch1/sd/desiproc/dr4/data_release/dr4_fixes/coadd/$num -type f -print0|xargs -0 sha1sum > coadd_${num}_scr.sha1")
         print('Wrote sha_fn=%s' % sha_fn)
 
+        # Touch a file so know that finished
+        touch_fn= get_touch_fn(brick=brick, outdir=dr4c_dir)
+        bash('touch %s' % touch_fn)
+        print('Wrote %s' % touch_fn)
+    
 if __name__ == '__main__':
     main()
  
