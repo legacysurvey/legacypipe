@@ -11,7 +11,7 @@ from astrometry.libkd.spherematch import match_radec
 from astrometry.util.plotutils import PlotSequence
 
 from legacyanalysis.ps1cat import ps1cat, ps1_to_decam
-from legacypipe.common import *
+from legacypipe.survey import *
 
 
 '''

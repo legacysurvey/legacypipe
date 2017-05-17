@@ -2,12 +2,12 @@ from __future__ import print_function
 import sys
 import os
 
-# YUCK!  scinet bonkers python setup
-paths = os.environ['PYTHONPATH']
-sys.path = paths.split(':') + sys.path
-if __name__ == '__main__':
-    import matplotlib
-    matplotlib.use('Agg')
+# # YUCK!  scinet bonkers python setup
+# paths = os.environ['PYTHONPATH']
+# sys.path = paths.split(':') + sys.path
+# if __name__ == '__main__':
+#     import matplotlib
+#     matplotlib.use('Agg')
 
 import numpy as np
 import pylab as plt
@@ -23,9 +23,9 @@ from astrometry.util.ttime import Time, MemMeas
 from astrometry.util.multiproc import multiproc
 
 from legacypipe.runbrick import run_brick, rgbkwargs, rgbkwargs_resid
-from legacypipe.common import LegacySurveyData, imsave_jpeg, get_rgb
+from legacypipe.survey import LegacySurveyData, imsave_jpeg, get_rgb
 from legacypipe.image import LegacySurveyImage
-from legacypipe.desi_common import read_fits_catalog
+from legacypipe.catalog import read_fits_catalog
 
 from tractor.sky import ConstantSky
 from tractor.sfd import SFDMap
@@ -33,16 +33,163 @@ from tractor import Tractor, NanoMaggies
 from tractor.galaxy import disable_galaxy_cache
 from tractor.ellipses import EllipseE
 
-rgbscales = dict(I=(0, 0.01))
+# For ACS reductions:
+#rgbscales = dict(I=(0, 0.01))
+rgbscales = dict(I=(0, 0.003))
 rgbkwargs      .update(scales=rgbscales)
 rgbkwargs_resid.update(scales=rgbscales)
-
 SFDMap.extinctions.update({'DES I': 1.592})
-
 allbands = 'I'
 
+rgbscales_cfht = dict(g = (2, 0.004),
+                      r = (1, 0.006),
+                      i = (0, 0.02),
+                      # DECam
+                      z = (0, 0.025),
+    )
 
 def make_zeropoints():
+    base = 'euclid/images/'
+
+
+    C = fits_table()
+    C.image_filename = []
+    C.image_hdu = []
+    C.camera = []
+    C.expnum = []
+    C.filter = []
+    C.exptime = []
+    C.crpix1 = []
+    C.crpix2 = []
+    C.crval1 = []
+    C.crval2 = []
+    C.cd1_1 = []
+    C.cd1_2 = []
+    C.cd2_1 = []
+    C.cd2_2 = []
+    C.width = []
+    C.height = []
+    C.ra = []
+    C.dec = []
+    C.ccdzpt = []
+    C.ccdname = []
+    C.ccdraoff = []
+    C.ccddecoff = []
+    C.fwhm = []
+    C.propid = []
+    C.mjd_obs = []
+    fns = glob(base + 'cfhtls/CFHTLS_D25_*_100028p021230_T0007_MEDIAN.fits')
+    fns.sort()
+
+    for fn in fns:
+        psffn = fn.replace('.fits', '_psfex.psf')
+        if not os.path.exists(psffn):
+            print('Missing:', psffn)
+            sys.exit(-1)
+        wtfn = fn.replace('.fits', '_weight.fits')
+        if not os.path.exists(wtfn):
+            print('Missing:', wtfn)
+            sys.exit(-1)
+        dqfn = fn.replace('.fits', '.flg.fits')
+        if not os.path.exists(dqfn):
+            print('Missing:', dqfn)
+            sys.exit(-1)
+
+    extname = 'D25'
+
+    ralo = 360.
+    rahi = 0.
+    declo = 90.
+    dechi = -90.
+
+    for i,fn in enumerate(fns):
+        F = fitsio.FITS(fn)
+        print(len(F), 'FITS extensions in', fn)
+        print(F)
+        phdr = F[0].read_header()
+        # FAKE
+        expnum = 7000 + i+1
+        filt = phdr['FILTER']
+        print('Filter', filt)
+        filt = filt[0]
+        exptime = phdr['EXPTIME']
+
+        psffn = fn.replace('.fits', '_psfex.psf')
+        PF = fitsio.FITS(psffn)
+
+        # Just one big image in the primary HDU.
+        hdr = phdr
+        hdu = 0
+        C.image_filename.append(fn.replace(base,''))
+        C.image_hdu.append(hdu)
+        C.camera.append('cfhtls')
+        C.expnum.append(expnum)
+        C.filter.append(filt)
+        C.exptime.append(exptime)
+        C.ccdzpt.append(hdr['MZP_AB'])
+
+        for k in ['CRPIX1','CRPIX2','CRVAL1','CRVAL2','CD1_1','CD1_2','CD2_1','CD2_2']:
+            C.get(k.lower()).append(hdr[k])
+        W = hdr['NAXIS1']
+        H = hdr['NAXIS2']
+        C.width.append(W)
+        C.height.append(H)
+            
+        wcs = wcs_pv2sip_hdr(hdr)
+        rc,dc = wcs.radec_center()
+        C.ra.append(rc)
+        C.dec.append(dc)
+
+        x,y = np.array([1,1,1,W/2.,W,W,W,W/2.]), np.array([1,H/2.,H,H,H,H/2.,1,1])
+        rr,dd = wcs.pixelxy2radec(x,y)
+        ralo = min(ralo, rr.min())
+        rahi = max(rahi, rr.max())
+        declo = min(declo, dd.min())
+        dechi = max(dechi, dd.max())
+
+        hdu = 1
+        print('Reading PSF from', psffn, 'hdu', hdu)
+        psfhdr = PF[hdu].read_header()
+        fwhm = psfhdr['PSF_FWHM']
+        
+        C.ccdname.append(extname)
+        C.ccdraoff.append(0.)
+        C.ccddecoff.append(0.)
+        C.fwhm.append(fwhm)
+        C.propid.append('0')
+        C.mjd_obs.append(0.)
+        
+    C.to_np_arrays()
+    fn = 'euclid/survey-ccds-cfhtls.fits.gz'
+    C.writeto(fn)
+    print('Wrote', fn)
+
+    print('RA range', ralo, rahi)
+    print('Dec range', declo, dechi)
+
+    r = np.linspace(ralo,  rahi,  21)
+    d = np.linspace(declo, dechi, 21)
+    rr,dd = np.meshgrid(r, d)
+    cols,rows = np.meshgrid(np.arange(len(r)), np.arange(len(d)))
+
+    B = fits_table()
+    B.ra1  = rr[1:,:-1].ravel()
+    B.ra2  = rr[1:, 1:].ravel()
+    B.dec1 = dd[:-1,1:].ravel()
+    B.dec2 = dd[1: ,1:].ravel()
+    B.ra  = (B.ra1  + B.ra2 ) / 2.
+    B.dec = (B.dec1 + B.dec2) / 2.
+    B.brickrow = rows[:-1,:-1].ravel()
+    B.brickcol = cols[:-1,:-1].ravel()
+    B.brickq = (B.brickrow % 2) * 2 + (B.brickcol % 2)
+    B.brickid = 1 + np.arange(len(B))
+    B.brickname = np.array(['%05ip%04i' % (int(100.*r), int(100.*d))
+                            for r,d in zip(B.ra, B.dec)])
+    B.writeto('euclid/survey-bricks.fits.gz')
+
+    return
+
+
     C = fits_table()
     C.image_filename = []
     C.image_hdu = []
@@ -70,7 +217,6 @@ def make_zeropoints():
     C.propid = []
     C.mjd_obs = []
     
-    base = 'euclid/images/'
     for iband,band in enumerate(['Y','J','H']):
         fn = base + 'vista/UVISTA_%s_DR1_CFHT.fits' % band
         hdu = 0
@@ -406,7 +552,6 @@ class MegacamImage(LegacySurveyImage):
         sky = ConstantSky(0.)
         return sky
 
-
 class VistaImage(MegacamImage):
     def __init__(self, *args, **kwargs):
         super(VistaImage, self).__init__(*args, **kwargs)
@@ -437,6 +582,50 @@ class VistaImage(MegacamImage):
         dq -= (dq & 1)
         return dq
 
+
+class CfhtlsImage(VistaImage):
+    def __init__(self, *args, **kwargs):
+        super(CfhtlsImage, self).__init__(*args, **kwargs)
+        self.name = 'CFHTLSImage: %s %s' % (self.ccdname, self.band)
+        self.wtfn = self.wtfn.replace('.weight.fits', '_weight.fits')
+
+    # Use MAD to scale the weight maps...?
+    def read_invvar(self, clip=True, **kwargs):
+        iv = super(CfhtlsImage, self).read_invvar(clip=clip, **kwargs)
+        img = super(CfhtlsImage, self).read_image(header=False, **kwargs)
+        chi = img * np.sqrt(iv)
+        # MAD of chi map...
+        slice1 = (slice(0,-5,10),slice(0,-5,10))
+        slice2 = (slice(5,None,10),slice(5,None,10))
+        diff = np.abs(chi[slice1] - chi[slice2])
+        diff = diff[(iv[slice1] > 0) * (iv[slice2] > 0)]
+        mad = np.median(diff.ravel())
+        sig1 = 1.4826 * mad / np.sqrt(2.)
+        print('MAD of chi map:', sig1)
+        iv /= sig1**2
+        return iv
+
+class CfhtlsSurveyData(LegacySurveyData):
+    def find_file(self, filetype, **kwargs):
+        if filetype == 'ccds':
+            basedir = self.survey_dir
+            return [os.path.join(basedir, 'survey-ccds-cfhtls.fits.gz')]
+        return super(CfhtlsSurveyData, self).find_file(filetype, **kwargs)
+
+    def sed_matched_filters(self, bands):
+        # single-band filters
+        SEDs = []
+        for i,band in enumerate(bands):
+            sed = np.zeros(len(bands))
+            sed[i] = 1.
+            SEDs.append((band, sed))
+        if len(bands) > 1:
+            gri = dict(g=1., r=1., i=1., u=0., z=0.)
+            SEDs.append(('gri', [gri[b] for b in bands]))
+            #red = dict(u=0., g=2.5, r=1., i=0.4, z=0.4)
+            #SEDs.append(('Red', [red[b] for b in bands]))
+        return SEDs
+        
 
 # Hackily defined RA,Dec values that split the ACS 7x7 tiling into
 # distinct 'bricks'
@@ -485,11 +674,12 @@ def read_acs_catalogs():
         T = fits_table(mfn)
     return T
 
-def get_survey():
-    survey = LegacySurveyData(survey_dir='euclid', output_dir='euclid-out')
+def get_survey(survey_dir='euclid', outdir='euclid-out'):
+    survey = LegacySurveyData(survey_dir=survey_dir, output_dir=outdir)
     survey.image_typemap['acs-vis'] = AcsVisImage
     survey.image_typemap['megacam'] = MegacamImage
     survey.image_typemap['vista'] = VistaImage
+    survey.image_typemap['cfhtls'] = CfhtlsImage
     return survey
 
 def get_exposures_in_list(fn):
@@ -844,6 +1034,212 @@ def analyze2(opt):
                 '"Simple" galaxies'))
     plt.axis(ax)
     ps.savefig()
+
+def analyze_vista(opt):
+    # Analyze VISTA forced photometry results
+    ps = PlotSequence('vista')
+
+    survey = get_survey()
+    ccds = survey.get_ccds_readonly()
+    ccds.cut(ccds.camera == 'vista')
+    print(len(ccds), 'VISTA images')
+
+    for ccd in ccds:
+        im = survey.get_image_object(ccd)
+        tim = im.get_tractor_image(pixPsf=True, slc=(slice(0,2000), slice(0,2000)))
+
+        img = tim.getImage()
+        ie = tim.getInvError()
+        sig1 = tim.sig1
+        medians = True
+
+        # plot_correlations from legacyanalysis/check-noise.py
+        
+        corrs = []
+        corrs_x = []
+        corrs_y = []
+        mads = []
+        mads_x = []
+        mads_y = []
+        rcorrs = []
+        rcorrs_x = []
+        rcorrs_y = []
+        dists = np.arange(1, 51)
+        for dist in dists:
+            offset = dist
+            slice1 = (slice(0,-offset,1),slice(0,-offset,1))
+            slice2 = (slice(offset,None,1),slice(offset,None,1))
+    
+            slicex = (slice1[0], slice2[1])
+            slicey = (slice2[0], slice1[1])
+    
+            corr = img[slice1] * img[slice2]
+            corr = corr[(ie[slice1] > 0) * (ie[slice2] > 0)]
+    
+            diff = img[slice1] - img[slice2]
+            diff = diff[(ie[slice1] > 0) * (ie[slice2] > 0)]
+            sig1 = 1.4826 / np.sqrt(2.) * np.median(np.abs(diff).ravel())
+            mads.append(sig1)
+    
+            #print('Dist', dist, '; number of corr pixels', len(corr))
+            #t0 = Time()
+            if medians:
+                rcorr = np.median(corr) / sig1**2
+                rcorrs.append(rcorr)
+            #t1 = Time()
+            corr = np.mean(corr) / sig1**2
+            #t2 = Time()
+            #print('median:', t1-t0)
+            #print('mean  :', t2-t1)
+            corrs.append(corr)
+    
+            corr = img[slice1] * img[slicex]
+            corr = corr[(ie[slice1] > 0) * (ie[slicex] > 0)]
+    
+            diff = img[slice1] - img[slicex]
+            diff = diff[(ie[slice1] > 0) * (ie[slicex] > 0)]
+            sig1 = 1.4826 / np.sqrt(2.) * np.median(np.abs(diff).ravel())
+            mads_x.append(sig1)
+    
+            if medians:
+                rcorr = np.median(corr) / sig1**2
+                rcorrs_x.append(rcorr)
+            corr = np.mean(corr) / sig1**2
+            corrs_x.append(corr)
+    
+            corr = img[slice1] * img[slicey]
+            corr = corr[(ie[slice1] > 0) * (ie[slicey] > 0)]
+    
+            diff = img[slice1] - img[slicey]
+            diff = diff[(ie[slice1] > 0) * (ie[slicey] > 0)]
+            #Nmad = len(diff)
+            sig1 = 1.4826 / np.sqrt(2.) * np.median(np.abs(diff).ravel())
+            mads_y.append(sig1)
+    
+            if medians:
+                rcorr = np.median(corr) / sig1**2
+                rcorrs_y.append(rcorr)
+            corr = np.mean(corr) / sig1**2
+            corrs_y.append(corr)
+    
+            #print('Dist', dist, '-> corr', corr, 'X,Y', corrs_x[-1], corrs_y[-1],
+            #      'robust', rcorrs[-1], 'X,Y', rcorrs_x[-1], rcorrs_y[-1])
+    
+        pix = img[ie > 0].ravel()
+        Nmad = len(pix) / 2
+        P = np.random.permutation(len(pix))[:(Nmad*2)]
+        diff = pix[P[:Nmad]] - pix[P[Nmad:]]
+        mad_random = 1.4826 / np.sqrt(2.) * np.median(np.abs(diff))
+    
+        plt.clf()
+        p1 = plt.plot(dists, corrs, 'b.-')
+        p2 = plt.plot(dists, corrs_x, 'r.-')
+        p3 = plt.plot(dists, corrs_y, 'g.-')
+        if medians:
+            p4 = plt.plot(dists, rcorrs, 'b.--')
+            p5 = plt.plot(dists, rcorrs_x, 'r.--')
+            p6 = plt.plot(dists, rcorrs_y, 'g.--')
+        plt.xlabel('Pixel offset')
+        plt.ylabel('Correlation')
+        plt.axhline(0, color='k', alpha=0.3)
+        plt.legend([p1[0],p2[0],p3[0]], ['Diagonal', 'X', 'Y'], loc='upper right')
+
+        plt.title('VISTA ' + tim.name)
+        ps.savefig()
+
+        plt.clf()
+        p4 = plt.plot(dists, mads, 'b.-')
+        p5 = plt.plot(dists, mads_x, 'r.-')
+        p6 = plt.plot(dists, mads_y, 'g.-')
+        plt.xlabel('Pixel offset')
+        plt.ylabel('MAD error estimate')
+        #plt.axhline(0, color='k', alpha=0.3)
+        p7 = plt.axhline(mad_random, color='k', alpha=0.3)
+        plt.legend([p4[0],p5[0],p6[0], p7], ['Diagonal', 'X', 'Y', 'Random'],
+                   loc='lower right')
+        plt.title('VISTA ' + tim.name)
+        ps.savefig()
+        
+
+
+
+    for band in ['Y','J','H']:
+        forcedfn = 'euclid-out/forced-vista-%s.fits' % band
+        F = fits_table(forcedfn)
+        F.rename('flux_%s' % band.lower(), 'flux')
+        F.rename('flux_ivar_%s' % band.lower(), 'flux_ivar')
+
+        T = read_acs_catalogs()
+        print(len(T), 'ACS catalog entries')
+        objmap = dict([((brickname,objid),i) for i,(brickname,objid) in
+                       enumerate(zip(T.brickname, T.objid))])
+        I = np.array([objmap[(brickname, objid)] for brickname,objid
+                      in zip(F.brickname, F.objid)])
+        F.type = T.type[I]
+        F.acs_flux = T.decam_flux[I]
+        F.ra  = T.ra[I]
+        F.dec = T.dec[I]
+        F.bx  = T.bx[I]
+        F.by  = T.by[I]
+        #F.writeto(forcedfn)
+
+        print(len(F), 'forced photometry measurements')
+    
+        F.fluxsn = F.flux * np.sqrt(F.flux_ivar)
+        F.mag = -2.5 * (np.log10(F.flux) - 9.)
+        
+        I = np.flatnonzero(F.type == 'PSF ')
+        print(len(I), 'PSF')
+    
+        for t in ['SIMP', 'DEV ', 'EXP ', 'COMP']:
+            J = np.flatnonzero(F.type == t)
+            print(len(J), t)
+    
+        S = np.flatnonzero(F.type == 'SIMP')
+        print(len(S), 'SIMP')
+        S = F[S]
+        
+        plt.clf()
+        plt.semilogx(F.fluxsn, F.mag, 'k.', alpha=0.1)
+        plt.semilogx(F.fluxsn[I], F.mag[I], 'r.', alpha=0.1)
+        plt.semilogx(S.fluxsn, S.mag, 'b.', alpha=0.1)
+        plt.xlabel('Vista forced-photometry Flux S/N')
+        plt.ylabel('Vista forced-photometry mag')
+    
+        #plt.xlim(1., 1e5)
+        #plt.ylim(10, 26)
+        plt.xlim(1., 1e4)
+        plt.ylim(18, 28)
+    
+        J = np.flatnonzero((F.fluxsn[I] > 4.5) * (F.fluxsn[I] < 5.5))
+        print(len(J), 'between flux S/N 4.5 and 5.5')
+        J = I[J]
+        medmag = np.median(F.mag[J])
+        print('Median mag', medmag)
+        plt.axvline(5., color='r', alpha=0.5, lw=2)
+        plt.axvline(5., color='k', alpha=0.5)
+        plt.axhline(medmag, color='r', alpha=0.5, lw=2)
+        plt.axhline(medmag, color='k', alpha=0.5)
+    
+        J = np.flatnonzero((S.fluxsn > 4.5) * (S.fluxsn < 5.5))
+        print(len(J), 'SIMP between flux S/N 4.5 and 5.5')
+        medmag = np.median(S.mag[J])
+        print('Median mag', medmag)
+        plt.axhline(medmag, color='b', alpha=0.5, lw=2)
+        plt.axhline(medmag, color='k', alpha=0.5)
+    
+        plt.title('VISTA %s forced-photometered from ACS-VIS' % band)
+    
+        ax = plt.axis()
+        p1 = plt.semilogx([0],[0], 'k.')
+        p2 = plt.semilogx([0], [0], 'r.')
+        p3 = plt.semilogx([0], [0], 'b.')
+        plt.legend((p1[0], p2[0], p3[0]),
+                   ('All sources', 'Point sources',
+                    '"Simple" galaxies'))
+        plt.axis(ax)
+        ps.savefig()
+
 
 def analyze3(opt):
     ps = PlotSequence('euclid')
@@ -1210,6 +1606,68 @@ def geometry():
     decsplits = (decs[:-1] + decs[1:])/2.
     print('Dec boundaries:', decsplits)
 
+def stage_plot_model(tims=None, bands=None, targetwcs=None,
+                     lanczos=None, survey=None, brickname=None, version_header=None,
+                     mp=None, coadd_bw=None, **kwargs):
+    #ACS = read_acs_catalogs()
+    fn = survey.find_file('tractor', brick=brickname, output=True)
+    ACS = fits_table(fn)
+    print('Read', len(ACS), 'ACS catalog entries')
+    ACS.cut(ACS.brick_primary)
+    print('Cut to', len(ACS), 'primary')
+    ACS.cut(ACS.decam_flux_ivar > 0)
+
+    tim = tims[0]
+    #ok,xx,yy = tim.getWcs().wcs.radec2pixelxy(ACS.ra, ACS.dec)
+    ok,xx,yy = tim.subwcs.radec2pixelxy(ACS.ra, ACS.dec)
+    H,W = tim.shape
+    ACS.cut((xx >= 1.) * (xx < W) * (yy >= 1.) * (yy < H))
+    print('Cut to', len(ACS), 'in image')
+
+    print('Creating catalog objects...')
+    cat = read_fits_catalog(ACS, allbands=bands, bands=bands)
+    tr = Tractor(tims, cat)
+
+    # Clip sizes of big models
+    tim = tims[0]
+    for src in cat:
+        from tractor.galaxy import ProfileGalaxy
+        if isinstance(src, ProfileGalaxy):
+            px,py = tim.wcs.positionToPixel(src.getPosition())
+            h = src._getUnitFluxPatchSize(tim, px, py, tim.modelMinval)
+            MAXHALF = 128
+            if h > MAXHALF:
+                print('halfsize', h,'for',src,'-> setting to',MAXHALF)
+                src.halfsize = MAXHALF
+
+
+    print('Rendering mods...')
+    mods = list(tr.getModelImages())
+
+    print('Writing coadds...')
+    from legacypipe.coadds import write_coadd_images, make_coadds
+    C = make_coadds(tims, bands, targetwcs, mods=mods, lanczos=lanczos,
+                    callback=write_coadd_images,
+                    callback_args=(survey, brickname, version_header, tims, targetwcs),
+                    plots=False, mp=mp)
+    coadd_list= [('image',C.coimgs,rgbkwargs),
+                ('model', C.comods,   rgbkwargs),
+                ('resid', C.coresids, rgbkwargs_resid)]
+    for name,ims,rgbkw in coadd_list:
+        rgb = get_rgb(ims, bands, **rgbkw)
+        kwa = {}
+        if coadd_bw and len(bands) == 1:
+            rgb = rgb.sum(axis=2)
+            kwa = dict(cmap='gray')
+        with survey.write_output(name + '-jpeg', brick=brickname) as out:
+            imsave_jpeg(out.fn, rgb, origin='lower', **kwa)
+            print('Wrote', out.fn)
+        del rgb
+
+    
+from legacypipe.runbrick import stage_tims, stage_mask_junk
+from legacypipe.runbrick import stage_srcs, stage_fitblobs, stage_coadds, stage_writecat
+
 def reduce_acs_image(opt, survey):
     ccds = survey.get_ccds_readonly()
     ccds.cut(ccds.camera == 'acs-vis')
@@ -1219,29 +1677,74 @@ def reduce_acs_image(opt, survey):
     print('Cut to', len(ccds), 'with expnum', opt.expnum)
     allccds = ccds
     
+    prereqs_update = {'plot_model': 'mask_junk'}
+    from astrometry.util.stages import CallGlobalTime
+    stagefunc = CallGlobalTime('stage_%s', globals())
+
     for iccd in range(len(allccds)):
         # Process just this single CCD.
         survey.ccds = allccds[np.array([iccd])]
         ccd = survey.ccds[0]
         brickname = 'acsvis-%03i' % ccd.expnum
-        run_brick(brickname, survey, radec=(ccd.ra, ccd.dec), pixscale=0.1,
-                  #width=200, height=200,
+        run_brick(brickname, survey, pixscale=0.1,
+                  # euclid-out2
+                  #radec = (150.588, 1.776),
+                  # euclid-out3
+                  #radec = (150.570, 1.779),
+                  # euclid-out4
+                  #radec = (150.598, 1.767),
+                  #width = 540, height=540,
+                  radec=(ccd.ra, ccd.dec),
                   width=ccd.width, height=ccd.height, 
+                  #forceAll=True,
+                  #writePickles=False,
+                  #stages=['image_coadds'],
+                  #stages=['plot_model'],
                   bands=['I'],
                   threads=opt.threads,
                   wise=False, do_calibs=False,
-                  pixPsf=True, coadd_bw=True, ceres=False,
-                  blob_image=True, allbands=allbands,
-                  forceAll=True, writePickles=False)
+                  pixPsf=True, hybridPsf=True,
+                  rex=True,
+                  coadd_bw=True, ceres=False,
+                  blob_image=True,
+                  write_metrics=True,
+                  allbands=allbands,
+                  checkpoint_filename=os.path.join('checkpoints', 'checkpoint-%s.pickle' % brickname),
+                  prereqs_update=prereqs_update,
+                  stagefunc=stagefunc)
     #plots=True, plotbase='euclid',
     return 0
 
 def package(opt):
-    listfns = glob('euclid/images/megacam/lists/*.lst')
 
-    listnames = [os.path.basename(fn).replace('.lst','') for fn in listfns]
-    explists = [get_exposures_in_list(fn) for fn in listfns]
-    ccds = list(range(36))
+    print('HACK -- fixing up VISTA forced photometry...')
+    # Match VISTA images to the others...
+    ACS = fits_table('euclid-out/forced-r.SNR10-HIQ.fits')
+    imap = dict([((n,o),i) for i,(n,o) in enumerate(zip(ACS.brickname,
+                                                        ACS.objid))])
+    for band in ['Y','J','H']:
+        fn = 'euclid-out/forced-vista-%s.fits' % band
+        T = fits_table(fn)
+        print('Read', len(T), 'from', fn)
+        T.rename('flux_%s' % band.lower(), 'flux')
+        T.rename('flux_ivar_%s' % band.lower(), 'flux_ivar')
+        T.acsindex = np.array([imap.get((n,o), -1)
+                               for n,o in zip(T.brickname, T.objid)])
+        T.cut(T.acsindex >= 0)
+        print('Kept', len(T), 'with a match')
+        
+        ACS.flux = np.zeros(len(ACS), np.float32)
+        ACS.flux_ivar = np.zeros(len(ACS), np.float32)
+        ACS.nexp = np.zeros(len(ACS), np.uint8)
+        ACS.flux[T.acsindex] = T.flux
+        ACS.flux_ivar[T.acsindex] = T.flux_ivar
+        ACS.nexp[T.acsindex] = 1
+
+        fn = 'euclid-out/forced-vista-%s-2.fits' % band
+        ACS.writeto(fn)
+        print('Wrote', fn)
+
+    return 0
 
     ACS = read_acs_catalogs()
     print('Read', len(ACS), 'ACS catalog entries')
@@ -1252,6 +1755,12 @@ def package(opt):
                                                         ACS.objid))])
 
     keepacs = np.zeros(len(ACS), bool)
+
+    listfns = glob('euclid/images/megacam/lists/*.lst')
+
+    listnames = [os.path.basename(fn).replace('.lst','') for fn in listfns]
+    explists = [get_exposures_in_list(fn) for fn in listfns]
+    ccds = list(range(36))
 
     results = []
 
@@ -1290,21 +1799,21 @@ def package(opt):
                                      for n,o in zip(t.brickname, t.objid)])
 
                 # Find sources with existing measurements
-                I = np.flatnonzero((cflux_ivar[acsindex] > 0) * (cflux[acsindex] > 0) * (t.flux > 0))
-                if len(I) > 100:
-                    print(len(I), 'sources have previous measurements')
-                    ai = acsindex[I]
-                    cmag,cmagerr = NanoMaggies.fluxErrorsToMagErrors(
-                        cflux[ai] / np.maximum(cflux_ivar[ai], 1e-16), cflux_ivar[ai])
-                    mag,magerr = NanoMaggies.fluxErrorsToMagErrors(
-                        t.flux[I], t.flux_ivar[I])
-                    var = np.maximum(cmagerr, 0.02)**2 + np.maximum(magerr, 0.02)**2
-                    offset = np.sum((mag - cmag) * 1./var) / np.sum(1./var)
-                    print('Offset of', offset, 'mag')
-                    scale = 10.**(offset / 2.5)
-                    print('Applying scale of', scale, 'to fluxes and ivars')
-                    t.flux *= scale
-                    t.flux_ivar /= (scale**2)
+                # I = np.flatnonzero((cflux_ivar[acsindex] > 0) * (cflux[acsindex] > 0) * (t.flux > 0))
+                # if len(I) > 100:
+                #     print(len(I), 'sources have previous measurements')
+                #     ai = acsindex[I]
+                #     cmag,cmagerr = NanoMaggies.fluxErrorsToMagErrors(
+                #         cflux[ai] / np.maximum(cflux_ivar[ai], 1e-16), cflux_ivar[ai])
+                #     mag,magerr = NanoMaggies.fluxErrorsToMagErrors(
+                #         t.flux[I], t.flux_ivar[I])
+                #     var = np.maximum(cmagerr, 0.02)**2 + np.maximum(magerr, 0.02)**2
+                #     offset = np.sum((mag - cmag) * 1./var) / np.sum(1./var)
+                #     print('Offset of', offset, 'mag')
+                #     scale = 10.**(offset / 2.5)
+                #     print('Applying scale of', scale, 'to fluxes and ivars')
+                #     t.flux *= scale
+                #     t.flux_ivar /= (scale**2)
 
                 cflux     [acsindex] += t.flux * t.flux_ivar
                 cflux_ivar[acsindex] += t.flux_ivar
@@ -1366,6 +1875,11 @@ def main():
     parser.add_argument('--out',
                         help='Filename for forced-photometry output catalog')
 
+    parser.add_argument('--outdir',
+                        default='euclid-out')
+    parser.add_argument('--survey-dir',
+                        default='euclid')
+
     parser.add_argument('--analyze', 
                         help='Analyze forced photometry results for images listed in given image list file')
 
@@ -1378,6 +1892,8 @@ def main():
 
     parser.add_argument('--forced', help='Run forced photometry for given MegaCam CCD index (int) or comma-separated list of indices')
 
+    parser.add_argument('--fits', help='Forced photometry: base filename to write *-model.fits and *-image.fits')
+    
     parser.add_argument('--ceres', action='store_true', help='Use Ceres?')
 
     parser.add_argument(
@@ -1389,7 +1905,13 @@ def main():
 
     parser.add_argument('--skip', action='store_true',
                         help='Skip forced-photometry if output file exists?')
+
+
+    parser.add_argument('--brick', help='Run one brick of CFHTLS reduction')
     
+    parser.add_argument('--wise', action='store_true',
+                        help='Run unWISE forced phot')
+
     opt = parser.parse_args()
 
     Time.add_measurement(MemMeas)
@@ -1411,18 +1933,191 @@ def main():
         #analyze2(opt)
         #analyze3(opt)
         #geometry()
-        analyze4(opt)
+        #analyze4(opt)
+        analyze_vista(opt)
         return 0
 
     if opt.package:
         package(opt)
         return 0
 
+    # Run CFHTLS alone
+    if opt.brick:
+        survey = CfhtlsSurveyData(output_dir='euclid-out/cfhtls')
+        survey.bricksize = 3./60.
+        survey.image_typemap.update({'cfhtls' : CfhtlsImage})
+
+        outfn = survey.find_file('tractor', brick=opt.brick, output=True)
+        print('Checking output file', outfn)
+        if os.path.exists(outfn):
+            print('File exists:', outfn)
+            return 0
+
+        global rgbkwargs, rgbkwargs_resid
+        rgbkwargs      .update(scales=rgbscales_cfht)
+        rgbkwargs_resid.update(scales=rgbscales_cfht)
+
+        checkpointfn = 'checkpoints/checkpoint-%s.pickle' % opt.brick
+
+        return run_brick(opt.brick, survey, pixscale=0.186, width=1000, height=1000,
+                         bands='ugriz', blacklist=False, wise=False, blob_image=True,
+                         ceres=False,
+                         pixPsf=True, constant_invvar=False, threads=opt.threads,
+                         checkpoint_filename=checkpointfn,
+                         checkpoint_period=300,
+                         #stages=['image_coadds'],
+                         #plots=True
+                         )
+
+    if opt.wise:
+        A = fits_table('/project/projectdirs/cosmo/data/unwise/unwise-coadds/allsky-atlas.fits')
+        print(len(A), 'WISE atlas tiles')
+
+        T = read_acs_catalogs()
+        print('Read', len(T), 'ACS catalog entries')
+        T.cut(T.brick_primary)
+        print('Cut to', len(T), 'primary')
+        #T.about()
+
+        print('RA', T.ra.min(), T.ra.max())
+        print('Dec', T.dec.min(), T.dec.max())
+
+        # mag = -2.5 * (np.log10(T.decam_flux) - 9)
+        # mag = mag[np.isfinite(mag)]
+        # mag = mag[(mag > 10) * (mag < 30)]
+        # print(len(mag), 'with good mags')
+        # plt.clf()
+        # plt.hist(mag, 100)
+        # plt.xlabel('ACS mag')
+        # plt.savefig('acs-mags.png')
+        # 
+        # plt.clf()
+        # plt.hist(T.decam_flux_ivar, 100)
+        # plt.xlabel('ACS flux_ivar')
+        # plt.savefig('acs-flux-iv.png')
+
+        T.cut(T.decam_flux_ivar > 0)
+        print('Cut to', len(T), 'with good flux ivar')
+        T.cut(T.decam_flux > 0)
+        print('Cut to', len(T), 'with good flux')
+
+
+        # TEST
+        #T = T[np.arange(0, len(T), 100)]
+
+        from astrometry.libkd.spherematch import match_radec
+        I,J,d = match_radec(A.ra, A.dec, T.ra, T.dec, 1.2, nearest=True)
+        print(len(I), 'atlas tiles possibly within range')
+        A.cut(I)
+
+        from wise.unwise import unwise_tile_wcs
+        from wise.forcedphot import unwise_forcedphot, get_unwise_tractor_image
+
+        unwise_dir = '/project/projectdirs/cosmo/data/unwise/neo1/unwise-coadds/fulldepth/'
+
+        # tim used to limit sizes of huge models
+        tim = get_unwise_tractor_image(unwise_dir, A.coadd_id[0], 1, bandname='w')
+
+        Wall = []
+        for tile in A:
+            print('Tile', tile.coadd_id)
+            wcs = unwise_tile_wcs(tile.ra, tile.dec)
+            ok, T.x, T.y = wcs.radec2pixelxy(T.ra, T.dec)
+            H,W = wcs.shape
+            I = np.flatnonzero((T.x > 1) * (T.x < W) * (T.y > 1) * (T.y < H))
+            print(len(I), 'sources within image')
+
+
+            step = 256
+            margin = 10
+
+            for iy,yp in enumerate(np.arange(1, H, step)):
+                for ix,xp in enumerate(np.arange(1, W, step)):
+
+                    I = np.flatnonzero((T.x > (xp - margin)) * (T.x < (xp + step + margin)) *
+                                       (T.y > (yp - margin)) * (T.y < (yp + step + margin)))
+                    print(len(I), 'sources within sub-image')
+                    if len(I) == 0:
+                        continue
+
+                    outfn = 'euclid-out/grid/forced-unwise-%s-x%i-y%i.fits' % (tile.coadd_id, ix, iy)
+                    print('Output filename', outfn)
+                    if os.path.exists(outfn):
+                        WW = fits_table(outfn)
+                        print('Read', len(WW), 'from', outfn)
+                        Wall.append(WW)
+                        continue
+
+                    bands = ['w']
+                    wcat = read_fits_catalog(T[I], allbands=bands, bands=bands)
+                    for src in wcat:
+                        src.brightness = NanoMaggies(**dict([(b, 1.) for b in bands]))
+                
+                    for src in wcat:
+                        from tractor.galaxy import ProfileGalaxy
+                        if isinstance(src, ProfileGalaxy):
+                            px,py = tim.wcs.positionToPixel(src.getPosition())
+                            h = src._getUnitFluxPatchSize(tim, px, py, tim.modelMinval)
+                            MAXHALF = 32
+                            if h > MAXHALF:
+                                print('halfsize', h,'for',src,'-> setting to',MAXHALF)
+                                src.halfsize = MAXHALF
+                    #wcat = [cat[i] for i in I]
+
+                    tiles = [tile]
+
+                    ra1,dec1 = wcs.pixelxy2radec(xp-margin, yp-margin)
+                    ra2,dec2 = wcs.pixelxy2radec(xp+step+margin, yp+step+margin)
+
+                    roiradec = [min(ra1,ra2), max(ra1,ra2),
+                                min(dec1,dec2), max(dec1,dec2)]
+                    #roiradec = [T.ra.min(), T.ra.max(), T.dec.min(), T.dec.max()]
+                    use_ceres = True
+
+                    WW = []
+                    for band in [1,2]:
+                        Wi = unwise_forcedphot(wcat, tiles, roiradecbox=roiradec, bands=[band],
+                                              unwise_dir=unwise_dir, use_ceres=use_ceres)
+                        #print('Got', Wi)
+                        #Wi.about()
+                        WW.append(Wi)
+                    # Merge W1,W2
+                    W1,W2 = WW
+                    WW = W1
+                    WW.add_columns_from(W2)
+                    WW.brickname = T.brickname[I]
+                    WW.objid = T.objid[I]
+                    WW.ra = T.ra[I]
+                    WW.dec = T.dec[I]
+
+                    WW.primary = ((T.x[I] >= xp) * (T.x[I] < xp+step) *
+                                  (T.y[I] >= yp) * (T.y[I] < yp+step))
+                    WW.bx = T.x[I]
+                    WW.by = T.y[I]
+
+                    # cache
+                    WW.writeto(outfn)
+                    print('Wrote', outfn)
+
+                    Wall.append(WW)
+
+        Wall = merge_tables(Wall)
+        Wall.writeto('euclid-out/forced-unwise.fits')
+
+        return 0
+
     if opt.expnum is None and opt.forced is None:
         print('Need --expnum or --forced')
         return -1
 
-    survey = get_survey()
+    survey = get_survey(opt.survey_dir, opt.outdir)
+
+    ccds = survey.get_ccds_readonly()
+    lastcam = None
+    for i,cam in enumerate(ccds.camera):
+        if cam != lastcam:
+            print('Camera', cam, 'at', i)
+            lastcam = cam
 
     if opt.expnum is not None:
         # Run pipeline on a single ACS image.
@@ -1468,11 +2163,14 @@ def main():
         args = []
         for iy,(yy0,yy1) in enumerate(zip(y0,y1)):
             for ix,(xx0,xx1) in enumerate(zip(x0,x1)):
+                outfn = opt.out.replace('.fits', '-x%02i-y%02i.fits' % (ix,iy))
+                if os.path.exists(outfn):
+                    print('Already exists:', outfn)
+                    continue
                 newopt = argparse.Namespace()
                 for k,v in opt.__dict__.items():
                     setattr(newopt, k, v)
                     print('Setting option', k, '=', v)
-                outfn = opt.out.replace('.fits', '-x%02i-y%02i.fits' % (ix,iy))
                 fns.append((outfn, ix, iy))
                 newopt.out = outfn
                 newopt.zoom = [xx0, xx1, yy0, yy1]
@@ -1484,7 +2182,9 @@ def main():
         print('X cuts:', xcuts)
         print('Y cuts:', ycuts)
 
-        mp = multiproc(8)
+        if opt.threads is None:
+            opt.threads = 1
+        mp = multiproc(opt.threads)
         mp.map(_bounce_forced, args)
 
         TT = []
@@ -1546,9 +2246,6 @@ def forced_photometry(opt, survey):
         B = 8
         opti = CeresOptimizer(BW=B, BH=B)
     
-    T.shapeexp = np.vstack((T.shapeexp_r, T.shapeexp_e1, T.shapeexp_e2)).T
-    T.shapedev = np.vstack((T.shapedev_r, T.shapedev_e1, T.shapedev_e2)).T
-
     ccds = survey.get_ccds_readonly()
     #I = np.flatnonzero(ccds.camera == 'megacam')
     #print(len(I), 'MegaCam CCDs')
@@ -1590,7 +2287,11 @@ def forced_photometry(opt, survey):
         print(len(J), 'sources are within this image')
         keep_sources[J] = True
 
-        tim = im.get_tractor_image(pixPsf=True, slc=slc)
+        tim = im.get_tractor_image(pixPsf=True, slc=slc,
+                                   # DECam
+                                   splinesky=True
+                                   )
+
         print('Tim:', tim)
         tims.append(tim)
 
@@ -1621,8 +2322,7 @@ def forced_photometry(opt, survey):
     # convert to string
     bands = ''.join(bands)
     
-    cat = read_fits_catalog(T, ellipseClass=EllipseE, allbands=bands,
-                            bands=bands)
+    cat = read_fits_catalog(T, allbands=bands, bands=bands)
     for src in cat:
         src.brightness = NanoMaggies(**dict([(b, 1.) for b in bands]))
 
@@ -1676,6 +2376,63 @@ def forced_photometry(opt, survey):
     t2 = Time()
     print('Forced photometry:', t2-t1)
 
+    if opt.fits:
+        tim = tims[0]
+
+        fn = '%s-image.fits' % opt.fits
+        print('Writing image to', fn)
+        fitsio.write(fn, tim.getImage(), clobber=True)
+
+        mod = tr.getModelImage(0)
+
+        fn = '%s-model.fits' % opt.fits
+        print('Writing model to', fn)
+        fitsio.write(fn, mod, clobber=True)
+        
+        rgbkwargs = dict(mnmx=(-1,100.), arcsinh=1.)
+
+        fn = '%s-image.jpg' % opt.fits
+        print('Writing image to', fn)
+        rgb = get_rgb([tim.getImage()], [tim.band], scales=rgbscales_cfht,
+                      **rgbkwargs)
+        for i in range(3):
+            print('range in plane', i, ':', rgb[:,:,i].min(), rgb[:,:,i].max())
+        print('RGB', rgb.shape, rgb.dtype)
+        (plane,scale) = rgbscales_cfht[tim.band]
+        #rgb = rgb.sum(axis=2)
+        rgb = rgb[:,:,plane]
+        print('RGB', rgb.shape)
+        #imsave_jpeg(rgb, fn)
+        plt.imsave(fn, rgb, vmin=0, vmax=1, cmap='gray')
+
+        fn = '%s-model.jpg' % opt.fits
+        print('Writing model to', fn)
+        rgb = get_rgb([mod], [tim.band], scales=rgbscales_cfht,
+                      **rgbkwargs)
+        print('RGB', rgb.shape)
+        #rgb = rgb.sum(axis=2)
+        rgb = rgb[:,:,plane]
+        print('RGB', rgb.shape)
+        #imsave_jpeg(rgb, fn)
+        plt.imsave(fn, rgb, vmin=0, vmax=1, cmap='gray')
+
+        ie = tim.getInvError()
+        noise = np.random.normal(size=ie.shape) * 1./ie
+        noise[ie == 0] = 0.
+        noisymod = mod + noise
+
+        fn = '%s-model+noise.jpg' % opt.fits
+        print('Writing model+noise to', fn)
+        rgb = get_rgb([noisymod], [tim.band], scales=rgbscales_cfht,
+                      **rgbkwargs)
+        rgb = rgb[:,:,plane]
+        #rgb = rgb.sum(axis=2)
+        plt.imsave(fn, rgb, vmin=0, vmax=1, cmap='gray')
+        
+        fn = '%s-cat.fits' % opt.fits
+        print('Writing catalog to', fn)
+        T.writeto(fn)
+        
     units = {'exptime':'sec' }# 'flux':'nanomaggy', 'flux_ivar':'1/nanomaggy^2'}
     for band in bands:
         F.set('flux_%s' % band, np.array([src.getBrightness().getFlux(band)

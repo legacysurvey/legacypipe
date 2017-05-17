@@ -90,8 +90,7 @@ from astrometry.util.miscutils import clip_polygon
 from tractor.splinesky import SplineSky
 
 from legacypipe.runbrick import run_brick
-from legacypipe.common import ccds_touching_wcs, bricks_touching_wcs, LegacySurveyData
-from legacypipe.cpimage import CP_DQ_BITS
+from legacypipe.survey import ccds_touching_wcs, LegacySurveyData
 
 PIXSCALE = 0.262 # average pixel scale [arcsec/pix]
 DIAMFACTOR = 5

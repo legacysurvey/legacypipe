@@ -1,5 +1,5 @@
 from __future__ import print_function
-from legacypipe.common import *
+from legacypipe.survey import *
 from legacypipe.runbrick import run_brick
 from legacyanalysis.ps1cat import ps1cat, ps1_to_decam
 from astrometry.libkd.spherematch import match_radec

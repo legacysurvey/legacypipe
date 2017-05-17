@@ -14,7 +14,7 @@ import pdb
 
 from legacypipe.cpimage import CPImage
 from legacypipe.image import LegacySurveyImage
-from legacypipe.common import LegacySurveyData, wcs_for_brick, ccds_touching_wcs
+from legacypipe.survey import LegacySurveyData, wcs_for_brick, ccds_touching_wcs
 
 def getbrickfiles(brickname=None):
 

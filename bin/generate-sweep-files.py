@@ -50,14 +50,14 @@ def main():
     nobj_tot = np.zeros((), 'i8')
 
     def work(sweep):
-        data, nbricks = make_sweep(sweep, bricks, ns)
+        data, header, nbricks = make_sweep(sweep, bricks, ns)
 
-        header = {
+        header.update({
             'RAMIN'  : sweep[0],
             'DECMIN' : sweep[1],
             'RAMAX'  : sweep[2],
             'DECMAX' : sweep[3],
-            }
+            })
 
         template = "sweep-%(ramin)s%(decmin)s-%(ramax)s%(decmax)s.%(format)s"
 
@@ -112,7 +112,7 @@ def list_bricks(ns):
 
     if ns.bricksdesc is not None:
         bricksdesc = fitsio.read(ns.bricksdesc, 1, upper=True)
-        bricksdesc = dict([(item['BRICKNAME'], item) for item in bricksdesc])
+        bricksdesc = dict([(item['BRICKNAME'].decode(), item) for item in bricksdesc])
     else:
         bricksdesc = None
              
@@ -120,7 +120,7 @@ def list_bricks(ns):
     if ns.bricklist is not None:
         bricklist = np.loadtxt(ns.bricklist, dtype='S8')
         # TODO: skip unknown bricks?
-        d = dict([(brickname, d[brickname]) 
+        d = dict([(brickname.decode(), d[brickname]) 
                              for brickname in bricklist])
 
     t0 = time()
@@ -155,20 +155,34 @@ def sweep_schema_blocks(nra, ndec):
     
     return [(ra[i], dec[j], ra[i+1], dec[j+1]) for i in range(len(ra) - 1) for j in range(len(dec) - 1)]
 
+class NA: pass 
+
 def make_sweep(sweep, bricks, ns):
     data = [np.empty(0, dtype=SWEEP_DTYPE)]
+    header = {}
     ra1, dec1, ra2, dec2 = sweep
-
+    def merge_header(header, header2):
+        for key, value in header2.items():
+            if key not in header:
+                header[key] = value
+            else:
+                if header[key] is NA:
+                    pass
+                else:
+                    if header[key] != value:
+                        header[key] = NA
+        
     with sharedmem.MapReduce(np=0) as pool:
         def filter(brickname, filename, region):
             if not intersect(sweep, region): 
-                return None
+                return None, None
             try:
                 objects = fitsio.read(filename, 1, upper=True)
+                chunkheader = fitsio.read_header(filename, 0, upper=True)
             except:
                 if ns.ignore_errors:
                     print('IO error on %s' % filename)
-                    return
+                    return None, None
                 else:
                     raise
             mask = objects['BRICK_PRIMARY'] != 0
@@ -190,23 +204,30 @@ def make_sweep(sweep, bricks, ns):
                 except ValueError:
                     print('failed on column `%s`' % colname)
                     raise
-                    
-            return chunk
-        def reduce(chunk):
+            chunkheader = dict([(key, chunkheader[key]) for key in chunkheader.keys()])    
+            return chunk, chunkheader
+
+        def reduce(chunk, chunkheader):
             if chunk is not None:
                 data.append(chunk)
-
+                merge_header(header, chunkheader)
         pool.map(filter, bricks, star=True, reduce=reduce)
 
     neff = len(data) - 1
 
     data = np.concatenate(data, axis=0)
-    return data, neff
+    header = dict([(key, value) for key, value in header.items() if value is not NA])
+    return data, header, neff
 
 
 def save_sweep_file(filename, data, header, format):
     if format == 'fits':
-        fitsio.write(filename, data, extname='SWEEP', header=header, clobber=True)
+        header = [dict(name=key, value=header[key]) for key in sorted(header.keys())]
+        with fitsio.FITS(filename, mode='rw', clobber=True) as ff:
+            ff.create_image_hdu()
+            ff[0].write_keys(header)
+            ff.write_table(data, extname='SWEEP', header=header)
+
     elif format == 'hdf5':
         import h5py
         with h5py.File(filename, 'w') as ff:
@@ -242,7 +263,7 @@ def read_region(brickname, filename, bricksdesc):
     return r
 
 SWEEP_DTYPE = np.dtype([
-    ('BRICK_PRIMARY', '?'), 
+#    ('BRICK_PRIMARY', '?'), 
     ('BRICKID', '>i4'), 
     ('BRICKNAME', 'S8'), 
     ('OBJID', '>i4'), 
@@ -275,7 +296,17 @@ SWEEP_DTYPE = np.dtype([
     ('FRACDEV', '>f4'), 
     ('TYCHO2INBLOB', '?'), 
     ('SHAPEDEV_R', '>f4'), 
+    ('SHAPEDEV_R_IVAR', '>f4'), 
+    ('SHAPEDEV_E1', '>f4'), 
+    ('SHAPEDEV_E1_IVAR', '>f4'), 
+    ('SHAPEDEV_E2', '>f4'), 
+    ('SHAPEDEV_E2_IVAR', '>f4'), 
     ('SHAPEEXP_R', '>f4'), 
+    ('SHAPEEXP_R_IVAR', '>f4'), 
+    ('SHAPEEXP_E1', '>f4'), 
+    ('SHAPEEXP_E1_IVAR', '>f4'), 
+    ('SHAPEEXP_E2', '>f4'), 
+    ('SHAPEEXP_E2_IVAR', '>f4'), 
     ('EBV', '>f4')]
 )
 

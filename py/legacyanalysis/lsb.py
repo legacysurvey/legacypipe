@@ -13,11 +13,12 @@ import fitsio
 from astrometry.util.fits import *
 from astrometry.util.plotutils import *
 from astrometry.util.ttime import *
+from astrometry.util.util import median_smooth
 
 from tractor import *
 
-from legacypipe.common import *
-from legacypipe.desi_common import *
+from legacypipe.survey import *
+from legacypipe.catalog import read_fits_catalog
 
 def bin_image(data, S):
     # rebin image data
@@ -66,7 +67,8 @@ def stage_1(expnum=431202, extname='S19', plotprefix='lsb', plots=False,
     #zoomslice = (slice(y0,y1), slice(x0,x1))
     zoomslice = None
     
-    tim = im.get_tractor_image(gaussPsf=True, splinesky=True, slc=zoomslice)
+    #tim = im.get_tractor_image(gaussPsf=True, splinesky=True, slc=zoomslice)
+    tim = im.get_tractor_image(hybridPsf=True, splinesky=True, slc=zoomslice)
     print 'Tim', tim
     
     cats = []
@@ -102,10 +104,6 @@ def stage_1(expnum=431202, extname='S19', plotprefix='lsb', plots=False,
         print 'Cut to', len(T), 'brick_primary'
         T.cut((T.out_of_bounds == False) * (T.left_blob == False))
         print 'Cut to', len(T), 'not out-of-bound or left-blob'
-        
-        T.shapeexp = np.vstack((T.shapeexp_r, T.shapeexp_e1, T.shapeexp_e2)).T
-        T.shapedev = np.vstack((T.shapedev_r, T.shapedev_e1, T.shapedev_e2)).T
-        
         print 'Brightest z-band:', np.max(T.decam_flux[:,4])
         print 'Brightest r-band:', np.max(T.decam_flux[:,2])
     
@@ -113,9 +111,10 @@ def stage_1(expnum=431202, extname='S19', plotprefix='lsb', plots=False,
         
         # Cut to compact sources
         T.cut(np.maximum(T.shapeexp_r, T.shapedev_r) < 3.)
-        print 'Cut to', len(T), 'compact'
-        
-        cat = read_fits_catalog(T)
+        print 'Cut to', len(T), 'compact catalog objects'
+
+        cat = read_fits_catalog(T, allbands='ugrizY')
+
     else:
         cat = []
         orig_catalog = fits_table()
@@ -124,6 +123,10 @@ def stage_1(expnum=431202, extname='S19', plotprefix='lsb', plots=False,
     
     if plots:
         plt.clf()
+        img = tim.getImage()
+        mn,mx = np.percentile(img.ravel(), [25,99])
+        print('Image plot range:', mn, mx)
+        tim.ima = dict(interpolation='nearest', origin='lower', vmin=mn, vmax=mx)
         plt.imshow(tim.getImage(), **tim.ima)
         plt.title('Orig data')
         ps.savefig()
@@ -169,6 +172,13 @@ def stage_1(expnum=431202, extname='S19', plotprefix='lsb', plots=False,
     
     tr = Tractor([tim], cat)
     mod = tr.getModelImage(tim)
+    print('Model range:', mod.min(), mod.max())
+
+    # print('Model counts:', [tim.getPhotoCal().brightnessToCounts(src.getBrightness())
+    #                         for src in cat])
+    # print('Catalog:')
+    # for src in cat[:10]:
+    #     print('  ', src)
     
     if False:
         # OLD DEBUGGING
@@ -185,6 +195,14 @@ def stage_1(expnum=431202, extname='S19', plotprefix='lsb', plots=False,
         plt.imshow(mod, **tim.ima)
         plt.title('Model')
         ps.savefig()
+
+        ax = plt.axis()
+        ok,xx,yy = tim.subwcs.radec2pixelxy([src.getPosition().ra  for src in cat],
+                                            [src.getPosition().dec for src in cat])
+        plt.plot(xx, yy, 'r+')
+        plt.axis(ax)
+        ps.savefig()
+
     
     mod[mask] = 0.
     
@@ -431,12 +449,26 @@ def stage_4(resid=None, sky=None, ps=None, tim=None,
                 ra,dec = tim.subwcs.pixelxy2radec(x+1, y+1)
                 plt.text(x, y, '%.1f (%.2f,%.2f)' % (m,ra,dec), color='w', ha='left', fontsize=12)
     
-            T = fits_table('evcc.fits')
+            ''' evcc.fits:
+
+            https://sites.google.com/site/extendedvcc/
+            wget "https://sites.google.com/site/extendedvcc/table/Table2_2014_8_7.txt?attredirects=0&d=1" -O table2.txt
+            text2fits -S 35 -H "id_evcc id_vcc ngc ra dec ra_fiber dec_fiber delta cz_sdss cz_ned mem_evcc mem_vcc morph_pri morph_sec morph_index morph_vcc u u_err g g_err r r_err i i_err z z_err r_kron r_50" -f sssddddfffssssssffffffffffff table2.txt evcc.fits  -n -
+
+            vcc.fits:
+
+            text2fits -S 27 -H "id_vcc ngc ra dec cz_sdss cz_ned mem morph_vcc u u_err g g_err r r_err i i_err z z_err r_kron r_50" -f ssddffssffffffffffff table3.txt vcc.fits -n -
+            '''
+
+            mydir = os.path.dirname(__file__)
+            fn = os.path.join(mydir, 'evcc.fits')
+            T = fits_table(fn)
             ok,x,y = tim.subwcs.radec2pixelxy(T.ra, T.dec)
             x = x[ok]
             y = y[ok]
             plt.plot(x, y, 'o', mec=(0,1,0), mfc='none', ms=50, mew=5)
-            T = fits_table('vcc.fits')
+            fn = os.path.join(mydir, 'vcc.fits')
+            T = fits_table(fn)
             ok,x,y = tim.subwcs.radec2pixelxy(T.ra, T.dec)
             x = x[ok]
             y = y[ok]

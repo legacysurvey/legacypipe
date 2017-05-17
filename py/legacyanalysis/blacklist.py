@@ -4,7 +4,7 @@ import sys
 from glob import glob
 import pylab as plt
 import numpy as np
-from legacypipe.common import *
+from legacypipe.survey import *
 from astrometry.util.plotutils import *
 
 ps = PlotSequence('black')
