@@ -8,58 +8,110 @@ from astropy.io import fits
 # sha1sums
 # nohup bash -c 'for num in `cat coadd_match_ep.txt|awk '"'"'{print $1}'"'"'`; do echo $num;find /global/cscratch1/sd/desiproc/dr4/data_release/dr4_fixes/coadd/$num -type f -print0|xargs -0 sha1sum > coadd_${num}_scr.sha1;done' > sha1.out &
 
-def survey_ccd_bitmask():
-    mzls=fitsio.FITS('survey-ccds-mzls2.fits','rw')
-    hdr= mzls[1].read_header()
-    if not 'BITMASK' in hdr:
-        mzls[1].write_key('PHOTOME','Photometric',comment='True if CCD considered photometric')
-        mzls[1].write_key('BITMASK','Cuts besides Photometric',comment='See below')
-        mzls[1].write_key('BIT1','bad_expid.txt file')
-        mzls[1].write_key('BIT2','ccd_hdu_mismatch')
-        mzls[1].write_key('BIT3','zpts_bad_astrom')
-    mzls.close
-
-def survey_ccd_add_bitmask():
-    mzls=fits_table("survey-ccds-mzls2.fits")
-    bm= np.zeros(len(mzls)).astype(np.uint8)
-    bm[ mzls.bad_expid ]+= 1
-    bm[ mzls.ccd_hdu_mismatch ]+= 2
-    bm[ mzls.zpts_bad_astrom ]+= 4
-    mzls.set('bitmask', bm)
-    for key in ['bad_expid','ccd_hdu_mismatch','zpts_bad_astrom']:
-        mzls.delete(key)
-
-
-def survey_bricks_bitmask():
-    b=fitsio.FITS('survey-bricks-dr4.fits.gz','rw')
-    hdr= b[1].read_header()
-    if not 'BITMASK' in hdr:
-        b[1].write_key('BITMASK','All flagged CCDs thrown out in DR4',comment='See below')
-        b[1].write_key('BIT1','dr4',comment='have tractor catalogue')
-        b[1].write_key('BIT2','oom',comment='failed b/c out of memory')
-        b[1].write_key('BIT3','old_chkpt',comment='failed b/c old checkpoint when reran')
-        b[1].write_key('BIT4','no_signif_srcs',comment='failed b/c all detected sources not significant')
-        b[1].write_key('BIT5','no_srcs',comment='failed b/c no sources detected')
-    b.close
-
-def survey_brick_add_bitmask():
-    bricks=fits_table("survey-bricks-dr4.fits.gz")
-    bm= np.zeros(len(bricks)).astype(np.uint8)
-    for key,bitval in zip(['cut_dr4','cut_oom','cut_old_chkpt',
-                           'cut_no_signif_srcs','cut_no_srcs'],
-                          [1,2,4,
-                           8,16]):
-        bm[ bricks.get(key) ]+= bitval
-        bricks.delete(key)
-    bricks.set('bitmask', bm)
-
-
 def bash(cmd):
     print(cmd)
     rtn = os.system(cmd)
     if rtn:
         raise RuntimeError('Command failed: %s: return value: %i' %
                            (cmd,rtn))
+
+
+
+def modify_ccd(fn, which):
+	assert(which in ['mzls','bass'])
+	# Add bitmask
+	a=fits_table(fn)
+    bm= np.zeros(len(a)).astype(np.uint8)
+    bm[ a.bad_expid ]+= 1
+    bm[ a.ccd_hdu_mismatch ]+= 2
+    bm[ a.zpts_bad_astrom ]+= 4
+	if which == 'mzls':
+		bm[ a.third_pix ]+= 8
+    a.set('bitmask', bm)
+    keys= ['bad_expid','ccd_hdu_mismatch','zpts_bad_astrom']
+	if which == 'mzls': 
+		keys += ['third_pix']
+    for key in keys:
+        a.delete(key)
+	a.writeto(fn)
+	# Modify header
+    hdulist = fits.open(fn, mode='readonly')
+	# Bitmask for
+	# bad_expid,ccd_hdu_mismatch,zpts_bad_astrom,third_pix
+	hdulist[1].header.set('PHOTOME','Photometric','True if CCD considered photometric')
+	hdulist[1].header.set('BITMASK','Cuts besides photometric','See DR4 Docs')
+	# Remove those cols
+	rng= range(63,67)
+	if which == 'bass':
+		rng= range(65,68)
+	for i in rng:
+		del hdulist[1].header['TTYPE' + str(i)]
+		del hdulist[1].header['TFORM' + str(i)]
+	# Write
+	clob= True
+	hdulist.writeto(fn, clobber=clob)
+	print('Wrote %s' % fn)
+
+def modify_bricks(fn):
+	# Add bitmask
+	a= fits_table(fn)
+    bm= np.zeros(len(a)).astype(np.uint8)
+    for key,bitval in zip(['cut_dr4','cut_oom','cut_old_chkpt',
+                           'cut_no_signif_srcs','cut_no_srcs'],
+                          [1,2,4,
+                           8,16]):
+        bm[ a.get(key) ]+= bitval
+        a.delete(key)
+    a.set('bitmask', bm)
+	# Modify header
+    hdulist = fits.open(fn, mode='readonly')
+	hdulist[1].header.set('BITMASK','All flagged CCDs thrown out in DR4','See DR4 Docs')
+	#b[1].write_key('BIT1','dr4',comment='have tractor catalogue')
+	#b[1].write_key('BIT2','oom',comment='failed b/c out of memory')
+	#b[1].write_key('BIT3','old_chkpt',comment='failed b/c old checkpoint when reran')
+	#b[1].write_key('BIT4','no_signif_srcs',comment='failed b/c all detected sources not significant')
+	#b[1].write_key('BIT5','no_srcs',comment='failed b/c no sources detected')
+	# Remove those cols
+	for i in range(12,17)
+		del hdulist[1].header['TTYPE' + str(i)]
+		del hdulist[1].header['TFORM' + str(i)]
+	# Write
+	clob= True
+	hdulist.writeto(fn, clobber=clob)
+	print('Wrote %s' % fn)
+    
+
+def modify_fits(fn, modify_func, **kwargs):
+	'''makes copy of fits file and modifies it
+	modify_func -- function that takes hdulist as input, modifies it as desired, and returns it
+	'''
+	new_fn= fn.replace('.fits','_new.fits')
+	bash('cp %s %s' % (fn, new_fn))
+    
+    # Gunzip
+    is_gzip= 'fits.gz' in new_fn
+    if is_gzip:
+        bash('gunzip %s' % new_fn)
+        new_fn= new_fn.replace('.gz','')
+
+    # Modify
+	print('modifying %s' % new_fn) 
+	modify_func(new_fn, **kwargs) 
+
+	# Gzip
+    if is_gzip:
+        bash('gzip %s' % new_fn) 
+
+
+def modify_ccd_brick_files():
+	kwargs= dict(which='mzls')
+	modify_fits('survey-ccds-mzls.fits.gz', modify_func=modify_ccd, **kwargs)
+	kwargs.update( dict(which='bass'))
+	modify_fits('survey-ccds-bass.fits.gz', modify_func=modify_ccd, **kwargs)
+	_= kwargs.pop('which')
+	modify_fits('survey-bricks-dr4.fits.gz', modify_func=modify_bricks, **kwargs)
+
+
 
 def makedir_for_fn(fn): 
     try:
@@ -226,5 +278,8 @@ def main(args=None):
         print('Wrote %s' % touch_fn)
     
 if __name__ == '__main__':
+	# New data model and new fits headers for all files for given brick
     main()
+	# OR
+	#modify_ccd_brick_files()
  

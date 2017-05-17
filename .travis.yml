@@ -22,12 +22,12 @@ install:
     - pip install scipy
     - pip install matplotlib
     - pip install numpydoc
+    - pip install astropy
+    - pip install photutils
     - pip install Sphinx
     - pip install coveralls
-    - pip install astropy
     # fitsio master version
     - pip install --no-deps --upgrade git+https://github.com/esheldon/fitsio.git#egg=fitsio
-    - pip install photutils
     - pip install -v --no-deps --upgrade git+https://github.com/dstndstn/tractor.git
 
 before_script:
