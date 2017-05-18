@@ -7,7 +7,7 @@ import numpy as np
 import pylab as plt
 from legacypipe.survey import LegacySurveyData
 
-def make_pickle_file(pfn):
+def make_pickle_file(pfn, derivs=False, agn=False):
     survey = LegacySurveyData()
     ccds = survey.get_ccds()
 
@@ -32,10 +32,11 @@ def make_pickle_file(pfn):
     36.3004172461752        36.5507649513213       -4.37500000000000       -4.12500000000000
     '''
 
-    #rlo,rhi = brick.ra1, brick.ra2
-    #dlo,dhi = brick.dec1, brick.dec2
-    rlo,rhi = 36.4, 36.5
-    dlo,dhi = -4.4, -4.3
+    rlo,rhi = brick.ra1, brick.ra2
+    dlo,dhi = brick.dec1, brick.dec2
+    #rlo,rhi = 36.4, 36.5
+    #dlo,dhi = -4.4, -4.3
+
     ra,dec = (rlo+rhi)/2., (dlo+dhi)/2.
 
     ## optional
@@ -53,22 +54,36 @@ def make_pickle_file(pfn):
     print('Cut to', len(ccds), 'CCDs overlapping brick')
 
     ### HACK
-    #ccds = ccds[:500]
+    #ccds = ccds[:50]
 
     for i,(expnum,ccdname) in enumerate(zip(ccds.expnum, ccds.ccdname)):
         ee = '%08i' % expnum
-        fn = 'forced/vanilla/%s/%s/forced-decam-%s-%s.fits' % (ee[:5], ee, ee, ccdname)
+
+        flavor = 'vanilla'
+        cols = ['brickname','objid','camera','expnum','ccdname','mjd','filter','flux','flux_ivar']
+        if derivs:
+            flavor = 'derivs'
+            cols.extend(['flux_dra','flux_ddec','flux_dra_ivar','flux_ddec_ivar'])
+        if agn:
+            flavor = 'agn'
+            cols.extend(['flux_agn', 'flux_agn_ivar'])
+
+        fn = 'forced/%s/%s/%s/forced-decam-%s-%s.fits' % (flavor, ee[:5], ee, ee, ccdname)
+        if not os.path.exists(fn):
+            print('WARNING: missing:', fn)
+            continue
         T = fits_table(fn)
         print(i+1, 'of', len(ccds), ':', len(T), 'in', fn)
         T.cut(T.brickname == brickname)
         print(len(T), 'in brick', brickname)
         found = 0
-        for oid,expnum,ccdname,mjd,filter,flux,fluxiv in zip(T.objid, T.expnum, T.ccdname, T.mjd, T.filter, T.flux, T.flux_ivar):
-            lc = lightcurves.get((brickname,oid), None)
+        for t in T: #oid,expnum,ccdname,mjd,filter,flux,fluxiv in zip(T.objid, T.expnum, T.ccdname, T.mjd, T.filter, T.flux, T.flux_ivar):
+            lc = lightcurves.get((t.brickname, t.objid), None)
             if lc is None:
                 continue
             found += 1
-            lc.append((expnum, ccdname, mjd, filter, flux, fluxiv))
+            #lc.append((expnum, ccdname, mjd, filter, flux, fluxiv))
+            lc.append([t.get(c) for c in cols])
         print('Matched', found, 'sources to light curves')
 
     #pickle_to_file(lightcurves, pfn)
@@ -78,12 +93,14 @@ def make_pickle_file(pfn):
         if len(v) == 0:
             continue
         T = fits_table()
-        T.expnum = np.array([vv[0] for vv in v])
-        T.ccdname= np.array([vv[1] for vv in v])
-        T.mjd    = np.array([vv[2] for vv in v])
-        T.filter = np.array([vv[3] for vv in v])
-        T.flux   = np.array([vv[4] for vv in v])
-        T.fluxiv = np.array([vv[5] for vv in v])
+        # T.expnum = np.array([vv[0] for vv in v])
+        # T.ccdname= np.array([vv[1] for vv in v])
+        # T.mjd    = np.array([vv[2] for vv in v])
+        # T.filter = np.array([vv[3] for vv in v])
+        # T.flux   = np.array([vv[4] for vv in v])
+        # T.fluxiv = np.array([vv[5] for vv in v])
+        for i,c in enumerate(cols):
+            T.set(c, np.array([vv[i] for vv in v]))
         ll[k] = T
     pickle_to_file(ll, pfn)
 
@@ -170,12 +187,22 @@ def plot_light_curves(pfn):
             mediv = np.median(T.fluxiv[I])
             # cut really noisy ones
             I = I[T.fluxiv[I] > 0.25 * mediv]
+
+            from tractor.brightness import NanoMaggies
             
             #plt.plot(T.mjd[I], T.flux[I], '.-', color=dict(g='g',r='r',z='m')[f])
             # plt.errorbar(T.mjd[I], T.flux[I], yerr=1/np.sqrt(T.fluxiv[I]),
             #              fmt='.-', color=dict(g='g',r='r',z='m')[f])
-            plt.errorbar(T.mjd[I], T.flux[I], yerr=1/np.sqrt(T.fluxiv[I]),
+            #plt.errorbar(T.mjd[I], T.flux[I], yerr=1/np.sqrt(T.fluxiv[I]),
+            #             fmt='.', color=dict(g='g',r='r',z='m')[f])
+
+            mag,dmag = NanoMaggies.fluxErrorsToMagErrors(T.flux[I], T.fluxiv[I])
+            plt.errorbar(T.mjd[I], mag, yerr=dmag,
                          fmt='.', color=dict(g='g',r='r',z='m')[f])
+            yl,yh = plt.ylim()
+            plt.ylim(yh,yl)
+            plt.ylabel(f)
+
             if i+1 < len(filts):
                 plt.xticks([])
             #plt.yscale('symlog')
@@ -191,15 +218,15 @@ def plot_light_curves(pfn):
         h,w,d = pix.shape
         fig = plt.gcf()
 
-        print('fig bbox:', fig.bbox)
-        print('xmax, ymax', fig.bbox.xmax, fig.bbox.ymax)
+        #print('fig bbox:', fig.bbox)
+        #print('xmax, ymax', fig.bbox.xmax, fig.bbox.ymax)
         #plt.figimage(pix, 0, fig.bbox.ymax - h, zorder=10)
         #plt.figimage(pix, 0, fig.bbox.ymax, zorder=10)
         #plt.figimage(pix, fig.bbox.xmax - w, fig.bbox.ymax, zorder=10)
         plt.figimage(pix, fig.bbox.xmax - (w+2), fig.bbox.ymax - (h+2), zorder=10)
 
         plt.suptitle('SDSS spectro object: %s at (%.4f, %.4f)' % (spec.label.strip(), spec.ra, spec.dec))
-        plt.savefig('forced-%i.png' % n)
+        plt.savefig('forced-%i-a.png' % n)
 
         ok,x,y = movie_wcs.radec2pixelxy(spec.ra, spec.dec)
         x = int(np.round(x-1))
@@ -223,7 +250,17 @@ def plot_light_curves(pfn):
 
 if __name__ == '__main__':
     pfn = 'pickles/lightcurves.pickle'
-    if not os.path.exists(pfn):
-        make_pickle_file(pfn)
     plot_light_curves(pfn)
+
+    # pfn = 'pickles/lightcurves-vanilla.pickle'
+    # if not os.path.exists(pfn):
+    #     make_pickle_file(pfn)
+
+    # pfn = 'pickles/lightcurves-derivs.pickle'
+    # if not os.path.exists(pfn):
+    #     make_pickle_file(pfn, derivs=True)
+    
+    # pfn = 'pickles/lightcurves-agn.pickle'
+    # if not os.path.exists(pfn):
+    #     make_pickle_file(pfn, agn=True)
 
