@@ -10,9 +10,9 @@ if [ ! -e "$bricklist" ]; then
 fi
 
 # Loop over a star and end
-step=1
+step=100
 beg=1
-max=1
+max=100
 ###
 cnt=0
 for star in `seq ${beg} ${step} ${max}`;do 

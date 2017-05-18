@@ -232,6 +232,9 @@ def main(args=None):
     parser.add_argument('--brick', action='store',default=None,
                         help='text file listin bricknames to rewrite headers for',
                         required=False)
+    parser.add_argument('--dr4c_dir', action='store',default='/global/projecta/projectdirs/cosmo/work/dr4c',
+                        help='Where to write out the new data model catalouge and files with new headers',
+                        required=False)
     parser.add_argument('--sanitycheck', action='store_true',default=False,
                         help='set to test integrity of dr4c files',
                         required=False)
@@ -250,7 +253,9 @@ def main(args=None):
 
     #dr4b_dir= '/global/projecta/projectdirs/cosmo/work/dr4b'
     dr4b_dir= '/global/cscratch1/sd/desiproc/dr4/data_release/dr4_fixes'
-    dr4c_dir= '/global/projecta/projectdirs/cosmo/work/dr4c'
+    #dr4c_dir= '/global/projecta/projectdirs/cosmo/work/dr4c'
+    #dr4c_dir= '/global/cscratch1/sd/kaylanb/test/legacypipe/py/junk'
+    dr4c_dir= opt.dr4c_dir
 
     for brick in bricks:
         if opt.sanitycheck:
@@ -278,7 +283,6 @@ def main(args=None):
         new_header(new_fn=out_fn) 
         print('du after header') 
         bash('du -shc %s' % out_fn) 
-        raise ValueError 
         # Headers for all other files
         fns= get_fns(brick,outdir=dr4b_dir)
         for fn in fns:
@@ -288,6 +292,8 @@ def main(args=None):
             bash('cp %s %s' % (fn, new_fn))
             # Modify header in place
             new_header(new_fn= new_fn)
+            print('du after header') 
+            bash('du -shc %s' % new_fn) 
         # Sha1sum 
         fns= get_new_fns(brick=brick, outdir=dr4c_dir)
         sha_fn= get_sha_fn(brick=brick, outdir=dr4c_dir)
