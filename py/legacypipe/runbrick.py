@@ -2160,6 +2160,10 @@ def stage_writecat(
     ### FIXME -- convert intermediate tractor catalog to final, for now...
     ### FIXME -- note that this is now the only place where 'allbands' is used.
 
+    # The "format_catalog" code expects all lower-case column names...
+    for c in T2.columns():
+        if c != c.lower():
+            T2.rename(c, c.lower())
     from legacypipe.format_catalog import format_catalog
     with survey.write_output('tractor', brick=brickname) as out:
         format_catalog(T2, hdr, primhdr, allbands, None,
