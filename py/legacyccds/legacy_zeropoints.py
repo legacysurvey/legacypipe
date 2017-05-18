@@ -84,6 +84,7 @@ import argparse
 
 import numpy as np
 from glob import glob
+from pickle import dump
 from scipy.optimize import curve_fit
 from scipy.stats import sigmaclip
 from scipy.ndimage.filters import median_filter
@@ -333,12 +334,15 @@ def _stars_table(nstars=1):
        detected on the CCD, including the PS1 photometry.
 
     '''
-    cols = [('image_filename', 'S65'),('expid', 'S16'), ('filter', 'S1'),('nmatch', '>i2'), 
+    cols = [('image_filename', 'S65'),('image_hdu', '>i2'),
+            ('expid', 'S16'), ('filter', 'S1'),('nmatch', '>i2'), 
             ('amplifier', 'i2'), ('x', 'f4'), ('y', 'f4'),('expnum', '>i4'),
             ('ra', 'f8'), ('dec', 'f8'), ('apmag', 'f4'),('apflux', 'f4'),('apskyflux', 'f4'),
             ('radiff', 'f8'), ('decdiff', 'f8'),('radiff_ps1', 'f8'), ('decdiff_ps1', 'f8'),
             ('gaia_ra', 'f8'), ('gaia_dec', 'f8'), ('ps1_mag', 'f4'), ('ps1_gicolor', 'f4'),
-            ('gaia_g','f8'),('ps1_g','f8'),('ps1_r','f8'),('ps1_i','f8'),('ps1_z','f8')]
+            ('gaia_g','f8'),('ps1_g','f8'),('ps1_r','f8'),('ps1_i','f8'),('ps1_z','f8'),
+            ('daofind_x', 'f4'), ('daofind_y', 'f4'),
+            ('mycuts_x', 'f4'), ('mycuts_y', 'f4')]
     stars = Table(np.zeros(nstars, dtype=cols))
     return stars
 
@@ -558,7 +562,7 @@ class Measurer(object):
 
     def run(self):
         t0= Time()
-        t0= ptime('import-statements-in-measure.run',t0)
+        t0= ptime('Measuring CCD=%s from image=%s' % (self.ccdname,self.fn),t0)
 
         if self.camera == 'decam':
             # Simultaneous image,bitmask read
@@ -571,7 +575,6 @@ class Measurer(object):
 
         # Initialize and begin populating the output CCDs table.
         ccds = _ccds_table(self.camera)
-
         ccds['image_filename'] = '/'.join( [self.camera] + self.fn.split('/')[-2:] ) #os.path.basename(self.fn)   
         ccds['image_hdu'] = self.image_hdu 
         ccds['camera'] = self.camera
@@ -644,9 +647,23 @@ class Measurer(object):
 
         # Detect stars on the image.  
         det_thresh = self.det_thresh
+        #obj = daofind(img, fwhm= hdr_fwhm,
+        #              threshold=det_thresh * stddev_mad,
+        #              sharplo=0.2, sharphi=1.0, roundlo=-1.0, roundhi=1.0,
+        #              exclude_border=True)
+        #print('stars border True: %d' % (len(obj),))
+
         obj = daofind(img, fwhm= hdr_fwhm,
                       threshold=det_thresh * stddev_mad,
-                      exclude_border=True)
+                      sharplo=0.2, sharphi=1.0, roundlo=-1.0, roundhi=1.0,
+                      exclude_border=False)
+        extra= {}
+        extra['proj_fn']= os.path.join('/project/projectdirs/cosmo/staging',
+                                       ccds['image_filename'].data[0].replace('decam/','decam/DECam_CP/'))
+        extra['hdu']= ccds['image_hdu'].data[0]
+        extra['daofind_x']= obj['xcentroid']
+        extra['daofind_y']= obj['ycentroid']
+
         if len(obj) < 20:
             det_thresh = self.det_thresh / 2.0
             obj = daofind(img, fwhm= hdr_fwhm,
@@ -691,15 +708,16 @@ class Measurer(object):
         # Good stars following IDL codes
         # We are ignoring aperature errors though
         minsep_px = minsep/self.pixscale
+        wid,ht= img.shape[1],img.shape[0] #2046,4096 for DECam
         istar =  (apflux > 0)*\
                  (bit_flux == 0)*\
                  (b_isolated == True)*\
                  (apmags > 12.)*\
                  (apmags < 30.)*\
                  (obj['xcentroid'] > minsep_px)*\
-                 (obj['xcentroid'] < img.shape[0]-minsep_px)*\
+                 (obj['xcentroid'] < wid - minsep_px)*\
                  (obj['ycentroid'] > minsep_px)*\
-                 (obj['ycentroid'] < img.shape[1]-minsep_px)
+                 (obj['ycentroid'] < ht - minsep_px)
         ccds['nstar']= np.where(istar)[0].size
         print('Stars after IDL cuts: %d' % ccds['nstar'])
         #sn= apflux / np.sqrt(apskyflux)
@@ -714,6 +732,8 @@ class Measurer(object):
         apflux = apflux[istar].data
         apskyflux= apskyflux[istar].data
         t0= ptime('aperture-photometry',t0)
+        extra['mycuts_x']= obj['xcentroid']
+        extra['mycuts_y']= obj['ycentroid']
            
         if False: 
             # FWHM: fit moffat profile to 20 brightest stars
@@ -816,6 +836,7 @@ class Measurer(object):
         print('Add the amplifier number!!!')
         stars = _stars_table(ccds['nmatch'])
         stars['image_filename'] =ccds['image_filename']
+        stars['image_hdu']= ccds['image_hdu'] 
         stars['expnum'] = self.expnum
         stars['expid'] = self.expid
         stars['filter'] = self.band
@@ -823,6 +844,10 @@ class Measurer(object):
         stars['nmatch'] = ccds['nmatch'] 
         stars['x'] = obj['xcentroid'][m1]
         stars['y'] = obj['ycentroid'][m1]
+        # Additional x,y
+        extra['x'] = stars['x']
+        extra['y'] = stars['y']
+        #
         stars['ra'] = objra[m1]
         stars['dec'] = objdec[m1]
         stars['radiff'] = (gra[m2] - stars['ra']) * np.cos(np.deg2rad(stars['dec'])) * 3600.0
@@ -933,7 +958,16 @@ class Measurer(object):
         ###ccds['fwhm'] = self.fwhm
         ##stars['fwhm'] = np.repeat(ccds['fwhm'].data, len(stars))
         ##pdb.set_trace()
-        
+       
+        # Save extra
+        extra_fn= os.path.basename(ccds['image_filename'].data[0]).replace('.fits.fz','') + \
+                  '-%s-' % extra['hdu'] + 'extra.pkl'
+        extra_fn= os.path.join(os.path.dirname(self.fn),
+                               extra_fn)
+        with open(extra_fn,'w') as foo:
+            dump(extra,foo)
+        print('Wrote %s' % extra_fn)
+ 
         return ccds, stars
     
     def make_plots(self,stars,dmag,zpt,transp):
@@ -1172,6 +1206,8 @@ def get_extlist(camera):
                    'N10', 'N11', 'N12', 'N13', 'N14', 'N15', 'N16', 'N17', 'N18',
                    'N19', 'N20', 'N21', 'N22', 'N23', 'N24', 'N25', 'N26', 'N27',
                    'N28', 'N29', 'N31']
+        # Testing only!
+        extlist = ['N19','N4']
     else:
         print('Camera {} not recognized!'.format(camera))
         pdb.set_trace() 
@@ -1686,11 +1722,11 @@ def get_parser():
     parser.add_argument('--camera',choices=['decam','mosaic','90prime'],action='store',required=True)
     parser.add_argument('--image',action='store',default=None,help='if want to run a single image',required=False)
     parser.add_argument('--image_list',action='store',default=None,help='if want to run all images in a text file, Note:if compare2arjun = True then list of legacy zeropoint files',required=False)
+    parser.add_argument('--outdir', type=str, default='.', help='Where to write zpts/,images/,logs/')
+    parser.add_argument('--logdir', type=str, default='.', help='Where to write zpts/,images/,logs/')
     parser.add_argument('--prefix', type=str, default='', help='Prefix to prepend to the output files.')
     parser.add_argument('--verboseplots', action='store_true', default=False, help='use to plot FWHM Moffat PSF fits to the 20 brightest stars')
     parser.add_argument('--compare2arjun', action='store_true', default=False, help='turn this on and give --image-list a list of legacy zeropoint files instead of cp images')
-    parser.add_argument('--outdir', type=str, default='.', help='Where to write zpts/,images/,logs/')
-    parser.add_argument('--logdir', type=str, default='.', help='Where to write zpts/,images/,logs/')
     parser.add_argument('--aprad', type=float, default=3.5, help='Aperture photometry radius (arcsec).')
     parser.add_argument('--skyrad-inner', type=float, default=7.0, help='Radius of inner sky annulus (arcsec).')
     parser.add_argument('--skyrad-outer', type=float, default=10.0, help='Radius of outer sky annulus (arcsec).')
