@@ -2,10 +2,10 @@
 
 #SBATCH -p shared
 #SBATCH -n 2
-#SBATCH -t 00:05:00
+#SBATCH -t 00:10:00
 #SBATCH --account=desi
 #SBATCH -J repack
-#SBATCH -L SCRATCH,projecta
+#SBATCH -L SCRATCH
 #SBATCH -C haswell
 #--qos=scavenger
 #--mail-user=kburleigh@lbl.gov
@@ -54,24 +54,25 @@ export MKL_NUM_THREADS=1
 #echo Logging to: $log
 
 
-export dr4b_dir=/global/cscratch1/sd/desiproc/dr4/data_release/dr4_fixes
-export dr4c_dir=/global/projecta/projectdirs/cosmo/work/dr4c
+#export dr4b_dir=/global/cscratch1/sd/desiproc/dr4/data_release/dr4_fixes
+#export dr4c_dir=/global/projecta/projectdirs/cosmo/work/dr4c
 
 while read aline; do
     brick=`echo $aline|awk '{print $1}'`
     echo brick=$brick
     #rsync -av /global/cscratch1/sd/desiproc/dr4/data_release/dr4_fixes/coadd/$brick /global/projecta/projectdirs/cosmo/work/dr4b/coadd/
     # New Data Model Catalouge
-    bri=`echo $brick|head -c 3`
-    in_file=${dr4b_dir}/tractor-i/${bri}/tractor-${brick}.fits
-    out_file=${dr4c_dir}/tractor/${bri}/tractor-${brick}.fits
-    mkdir -p $(dirname ${out_file})
-    echo hey1
-    srun -n 1 -c $usecores python legacypipe/format_catalog.py --in ${in_file} --out ${out_file} --dr4 
-    echo hey2
+    #bri=`echo $brick|head -c 3`
+    #in_file=${dr4b_dir}/tractor-i/${bri}/tractor-${brick}.fits
+    #out_file=${dr4c_dir}/tractor/${bri}/tractor-${brick}.fits
+    #mkdir -p $(dirname ${out_file})
+    #echo hey1
+    #srun -n 1 -c $usecores python legacypipe/format_catalog.py --in ${in_file} --out ${out_file} --dr4 
+    #echo hey2
     # New Headers
     srun -n 1 -c $usecores python legacypipe/format_headers.py --brick $brick
-    echo hey3
+    wait
+    #echo hey3
 done <<< "$(sed -n ${start_brick},${end_brick}p $bricklist)"
 
 
