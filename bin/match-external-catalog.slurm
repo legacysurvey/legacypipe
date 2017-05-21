@@ -32,19 +32,17 @@ find $ROOT/tractor -name 'tractor-*.fits' > filelist
 # use python-mpi. 'python' from anaconda fails with libpython.so.0.1 not found
 # error when ran via aprun, at least on ~yfeng1's environments.
 
-#srun -u --cpu_bind=no -n 1 python-mpi generate-sweep-files.py --numproc 64 -F filelist -v -d /project/projectdirs/cosmo/data/legacysurvey/dr1/decals-bricks.fits /project/projectdirs/cosmo/data/legacysurvey/dr1/tractor $SCRATCH/sandbox/sweep-dr1-stripes
-
-export incatfile=/global/projecta/projectdirs/sdss/data/sdss/dr12/boss/qso/DR12Q/DR12Q.fits 
-export outcatfile=$SCRATCH/dr4/external/survey-dr4-dr12Q.fits
+#export incatfile=/global/projecta/projectdirs/sdss/data/sdss/dr12/boss/qso/DR12Q/DR12Q.fits 
+#export outcatfile=$SCRATCH/dr4/external/survey-dr4-dr12Q.fits
 
 #export incatfile=/global/project/projectdirs/desi/users/yfeng1/boss-dr7q/dr7qso.fit.gz
 #export outcatfile=$SCRATCH/dr4/external/survey-dr4-dr7Q.fits
-#
+
 #export incatfile=/global/projecta/projectdirs/sdss/data/sdss/dr12/boss/qso/DR12Q/Superset_DR12Q.fits
 #export outcatfile=$SCRATCH/dr4/external/survey-dr4-superset-dr12Q.fits
-#
-#export incatfile=/global/projecta/projectdirs/sdss/staging/dr13/sdss/spectro/redux/specObj-dr13.fits
-#export outcatfile=$SCRATCH/dr4/external/survey-dr4-specObj-dr13.fits
+
+export incatfile=/global/projecta/projectdirs/sdss/staging/dr13/sdss/spectro/redux/specObj-dr13.fits
+export outcatfile=$SCRATCH/dr4/external/survey-dr4-specObj-dr13.fits
 
 time srun -u --cpu_bind=no -N 1 python-mpi match-external-catalog.py -v \
 --numproc 24 \

@@ -21,7 +21,7 @@ def main():
     ns = parse_args()
         
     if ns.ignore_errors:
-        print("Warning: *** Will ignore broken tractor catalogue files ***")
+        print("Warning: *** Will ignore broken tractor catalog files ***")
         print("         *** Disable -I for final data product.         ***")
 
     bricks = list_bricks(ns)
@@ -31,9 +31,9 @@ def main():
     # get the data type of the match
     brickname, path = bricks[0]
     peek = fitsio.read(path, 1, upper=True)
-    matched_catalogue = sharedmem.empty(nobj, dtype=peek.dtype)
+    matched_catalog = sharedmem.empty(nobj, dtype=peek.dtype)
 
-    matched_catalogue['OBJID'] = -1
+    matched_catalog['OBJID'] = -1
     matched_distance = sharedmem.empty(nobj, dtype='f4')
 
     # convert to radian
@@ -64,7 +64,7 @@ def main():
                 mask = d < matched_distance[i]
                 mask &= objects['BRICK_PRIMARY'] 
                 i = i[mask]
-                matched_catalogue[i] = objects[mask]
+                matched_catalog[i] = objects[mask]
                 matched_distance[i] = d[mask]
             matched = mask.sum()
 
@@ -84,7 +84,7 @@ def main():
 
         pool.map(work, bricks, star=True, reduce=reduce)
 
-        nrealmatched = (matched_catalogue['OBJID'] != -1).sum()
+        nrealmatched = (matched_catalog['OBJID'] != -1).sum()
         if ns.verbose:
             print("Processed %d files, %g / second, matched %d / %d objects into %d slots."
                 % (nprocessed, nprocessed / (time() - t0), 
@@ -103,7 +103,7 @@ def main():
         header['TOL_ARCSEC'] = ns.tolerance
 
         for format in ns.format:
-            save_file(ns.dest, matched_catalogue, header, format)
+            save_file(ns.dest, matched_catalog, header, format)
 
 def save_file(filename, data, header, format):
     basename = os.path.splitext(filename)[0]
@@ -135,7 +135,7 @@ def read_external(filename, ns):
     cat = fitsio.FITS(filename, upper=True)[1][:]
 
     if ns.verbose:
-        print("reading external catlaogue took %g seconds." % (time() - t0))
+        print("reading external catalog took %g seconds." % (time() - t0))
         print("%d objects." % len(cat))
 
     t0 = time()
@@ -151,7 +151,7 @@ def read_external(filename, ns):
                 print('using %s/%s for positions.' % (raname, decname))
             break
     else:
-        raise KeyError("No RA/DEC or PLUG_RA/PLUG_DEC in the external catalogue")
+        raise KeyError("No RA/DEC or PLUG_RA/PLUG_DEC in the external catalog")
 
     pos = radec2pos(ra, dec)
     # work around NERSC overcommit issue.
@@ -196,7 +196,7 @@ def parse_args():
         """
         )
 
-    ap.add_argument("external", help="External catalogue. e.g. /global/project/projectdirs/cosmo/work/sdss/cats/specObj-dr12.fits")
+    ap.add_argument("external", help="External catalog. e.g. /global/project/projectdirs/cosmo/work/sdss/cats/specObj-dr12.fits")
     ap.add_argument("src", help="Path to the root directory of all tractor files")
     ap.add_argument("dest", help="Path to the output file")
 
