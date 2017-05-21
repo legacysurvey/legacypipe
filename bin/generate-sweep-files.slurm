@@ -1,0 +1,47 @@
+#! /bin/bash
+
+#SBATCH -p debug
+#SBATCH -N 1
+#SBATCH -L SCRATCH
+#SBATCH -t 00:30:00
+#SBATCH -o generate-sweep-files.slurm.cori.%j
+#SBATCH --profile=all
+
+set -x
+export ATP_ENABLED=0
+
+# faster python start-up
+module load python/3.5-anaconda
+
+source /usr/common/contrib/bccp/python-mpi-bcast/nersc/activate.sh
+
+# allow the python modules
+export PYTHONPATH=$PWD/../py:$PYTHONPATH
+
+# generate filelist (faster than iterating in python)
+ROOT=/project/projectdirs/cosmo/data/legacysurvey/dr1
+ROOT=/project/projectdirs/desiproc/dr2
+ROOT=/project/projectdirs/desiproc/dr2p
+ROOT=/project/projectdirs/desiproc/dr3
+ROOT=/project/projectdirs/cosmo/work/legacysurvey/dr3
+ROOT=/global/project/projectdirs/desi/users/yfeng1/legacysurvey/dr3.1
+ROOT=/global/projecta/projectdirs/cosmo/work/dr4b
+ROOT=/global/cscratch1/sd/desiproc/dr4/data_release/dr4c
+TRACTOR=$ROOT/tractor
+
+find $TRACTOR -name 'tractor-*.fits' > filelist
+
+# use python-mpi. 'python' from anaconda fails with libpython.so.0.1 not found
+# error when ran via aprun, at least on ~yfeng1's environments.
+
+#srun -u --cpu_bind=no -n 1 python-mpi generate-sweep-files.py --numproc 64 -F filelist -v -d /project/projectdirs/cosmo/data/legacysurvey/dr1/decals-bricks.fits /project/projectdirs/cosmo/data/legacysurvey/dr1/tractor $SCRATCH/sandbox/sweep-dr1-stripes
+
+time srun -u --cpu_bind=no -n 1 python-mpi generate-sweep-files.py -v \
+--numproc 24 \
+-I \
+-f fits \
+-F filelist \
+--schema blocks \
+-d $SCRATCH/legacypipe-dir/survey-bricks-dr4.fits.gz \
+$TRACTOR \
+$SCRATCH/dr4/sweep/
