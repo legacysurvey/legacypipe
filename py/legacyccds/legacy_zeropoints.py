@@ -319,7 +319,9 @@ def _ccds_table(camera='decam'):
         ('raoff', '>f4'),     # median RA offset (arcsec)                     [=ccdraoff in decstat]
         ('decoff', '>f4'),    # median Dec offset (arcsec)                    [=ccddecoff in decstat]
         ('rarms', '>f4'),     # rms RA offset (arcsec)                        [=ccdrarms in decstat]
-        ('decrms', '>f4')     # rms Dec offset (arcsec)                       [=ccddecrms in decstat]
+        ('decrms', '>f4'),     # rms Dec offset (arcsec)                       [=ccddecrms in decstat]
+        ('rastddev', '>f4'),     # std RA offset (arcsec)                        [=ccdrarms in decstat]
+        ('decstddev', '>f4')     # std Dec offset (arcsec)                       [=ccddecrms in decstat]
         ]
 
     # Add camera-specific keywords to the output table.
@@ -393,9 +395,10 @@ class Measurer(object):
 
         # Set the nominal detection FWHM (in pixels) and detection threshold.
         self.nominal_fwhm = 5.0 # [pixels]
-        self.det_thresh = 10    # [S/N] - used to be 20
+        self.det_thresh = 5    # [S/N] - used to be 20
         #self.stampradius = 15   # tractor fitting no longer done, stamp radius around each star [pixels]
-        self.matchradius = 1. # Matching to PS1 [arcsec]
+        self.matchradius = 3. #decstat uses 30'' keeping only those within 3'', so I'll just do 3'' matching
+                              #, I was using 1'' previously # Matching to PS1 [arcsec]
 
         # Read the primary header and the header for this extension.
         self.primhdr = fitsio.read_header(fn, ext=0)
@@ -646,23 +649,29 @@ class Measurer(object):
         t0= ptime('measure-sky',t0)
 
         # Detect stars on the image.  
-        det_thresh = self.det_thresh
         #obj = daofind(img, fwhm= hdr_fwhm,
         #              threshold=det_thresh * stddev_mad,
         #              sharplo=0.2, sharphi=1.0, roundlo=-1.0, roundhi=1.0,
         #              exclude_border=True)
         #print('stars border True: %d' % (len(obj),))
 
-        obj = daofind(img, fwhm= hdr_fwhm,
-                      threshold=det_thresh * stddev_mad,
-                      sharplo=0.2, sharphi=1.0, roundlo=-1.0, roundhi=1.0,
-                      exclude_border=False)
         extra= {}
         extra['proj_fn']= os.path.join('/project/projectdirs/cosmo/staging',
                                        ccds['image_filename'].data[0].replace('decam/','decam/DECam_CP/'))
         extra['hdu']= ccds['image_hdu'].data[0]
-        extra['daofind_x']= obj['xcentroid']
-        extra['daofind_y']= obj['ycentroid']
+
+        # 10 sigma, sharpness, roundness all same as IDL zeropoints (also the defaults)
+        # Exclude_border=True removes the stars with centroid on or out of ccd edge
+        # Good, but we want to remove with aperture touching ccd edge too
+        #for det_thresh in [5,10,20]:
+        det_thresh = 5 #self.det_thresh
+        print('det_thresh = %d' % det_thresh)
+        obj = daofind(img, fwhm= hdr_fwhm,
+                      threshold=det_thresh * stddev_mad,
+                      sharplo=0.2, sharphi=1.0, roundlo=-1.0, roundhi=1.0,
+                      exclude_border=False)
+        extra['dao_x_%d' % det_thresh]= obj['xcentroid']
+        extra['dao_y_%d' % det_thresh]= obj['ycentroid']
 
         if len(obj) < 20:
             det_thresh = self.det_thresh / 2.0
@@ -709,6 +718,18 @@ class Measurer(object):
         # We are ignoring aperature errors though
         minsep_px = minsep/self.pixscale
         wid,ht= img.shape[1],img.shape[0] #2046,4096 for DECam
+        
+        extra['apflux']= apflux > 0
+        extra['bit_flux']= bit_flux == 0
+        extra['b_isolated']= b_isolated == True
+        extra['apmags']= (apmags > 12.)*(apmags < 30.)
+        extra['separation']= (obj['xcentroid'] > minsep_px)*\
+                             (obj['xcentroid'] < wid - minsep_px)*\
+                             (obj['ycentroid'] > minsep_px)*\
+                             (obj['ycentroid'] < ht - minsep_px)
+
+        # In order of biggest affect: 
+        # minsep_px tied with b_isolated, then apmags, apflux, bit_flux
         istar =  (apflux > 0)*\
                  (bit_flux == 0)*\
                  (b_isolated == True)*\
@@ -804,18 +825,18 @@ class Measurer(object):
                 foo.write('%s %s\n' % (self.fn,self.image_hdu))
             return ccds, _stars_table()
         good = (ps1.nmag_ok[:, 0] > 0)*(ps1.nmag_ok[:, 1] > 0)*(ps1.nmag_ok[:, 2] > 0)
-        # Get Gaia ra,dec
-        gdec=ps1.dec_ok-ps1.ddec/3600000.
-        gra=ps1.ra_ok-ps1.dra/3600000./np.cos(np.deg2rad(gdec))
-        # Cut 0.5 deg from CCD center and non star colors
-        gaia_cat = SkyCoord(ra=gra*units.degree, dec=gdec*units.degree)
-        center_ccd = SkyCoord(ra=ccds['ra']*units.degree, dec=ccds['dec']*units.degree)
-        ang = gaia_cat.separation(center_ccd) 
         gicolor= ps1.median[:,0] - ps1.median[:,2]
+        good*= (gicolor > 0.4)*(gicolor < 2.7)
+        # Cut 0.5 deg from CCD center and non star colors
+        #gdec=ps1.dec_ok-ps1.ddec/3600000.
+        #gra=ps1.ra_ok-ps1.dra/3600000./np.cos(np.deg2rad(gdec))
+        #gaia_cat = SkyCoord(ra=gra*units.degree, dec=gdec*units.degree)
+        #center_ccd = SkyCoord(ra=ccds['ra']*units.degree, dec=ccds['dec']*units.degree)
+        #ang = gaia_cat.separation(center_ccd) 
         # Zeropoint Sample is Main Sequence stars
-        good*= (np.array(ang) < 0.50)*(gicolor > 0.4)*(gicolor < 2.7)
+        #good*= (np.array(ang) < 0.50)*(gicolor > 0.4)*(gicolor < 2.7)
         # final cut
-        good = np.where(good)[0]
+        #good = np.where(good)[0]
         ps1.cut(good)
         gdec=ps1.dec_ok-ps1.ddec/3600000.
         gra=ps1.ra_ok-ps1.dra/3600000./np.cos(np.deg2rad(gdec))
@@ -906,21 +927,26 @@ class Measurer(object):
         t0= ptime('photometry-using-ps1',t0)
         ccds['raoff'] = np.median(stars['radiff'])
         ccds['decoff'] = np.median(stars['decdiff'])
-        ccds['rarms'] = np.std(stars['radiff'])
-        ccds['decrms'] = np.std(stars['decdiff'])
+        ccds['rastddev'] = np.std(stars['radiff'])
+        ccds['decstddev'] = np.std(stars['decdiff'])
+        ra_clip, _, _ = sigmaclip(stars['radiff'], low=3., high=3.)
+        ccds['rarms'] = getrms(ra_clip)
+        dec_clip, _, _ = sigmaclip(stars['decdiff'], low=3., high=3.)
+        ccds['decrms'] = getrms(dec_clip)
         ccds['phoff'] = dmagmed
         ccds['phrms'] = dmagsig
         ccds['zpt'] = zptmed
         ccds['transp'] = transp
 
-        print('RA, Dec offsets (arcsec) relative to GAIA: {}, {}'.format(ccds['raoff'], ccds['decoff']))
-        print('RA, Dec rms (arcsec) relative to GAIA: {}, {}'.format(ccds['rarms'], ccds['decrms']))
-        print('  Mag offset: {}'.format(ccds['phoff']))
-        print('  Scatter:    {}'.format(ccds['phrms']))
+        print('RA, Dec offsets (arcsec) relative to GAIA: %.4f, %.4f' % (ccds['raoff'], ccds['decoff']))
+        print('RA, Dec rms (arcsec) relative to GAIA: %.4f, %.4f' % (ccds['rarms'], ccds['decrms']))
+        print('RA, Dec stddev (arcsec) relative to GAIA: %.4f, %.4f' % (ccds['rastddev'], ccds['decstddev']))
+        print('Mag offset: %.4f' % (ccds['phoff'],))
+        print('Scatter: %.4f' % (ccds['phrms'],))
         
-        print('  {} stars used for zeropoint median'.format(ndmag))
-        print('  Zeropoint {}'.format(ccds['zpt']))
-        print('  Transparency: {}'.format(ccds['transp']))
+        print('Number stars used for zeropoint median %d' % ndmag)
+        print('Zeropoint %.4f' % (ccds['zpt'],))
+        print('Transparency %.4f' % (ccds['transp'],))
 
         t0= ptime('all-computations-for-this-ccd',t0)
         # Plots for comparing to Arjuns zeropoints*.ps
@@ -1207,7 +1233,7 @@ def get_extlist(camera):
                    'N19', 'N20', 'N21', 'N22', 'N23', 'N24', 'N25', 'N26', 'N27',
                    'N28', 'N29', 'N31']
         # Testing only!
-        extlist = ['N19','N4']
+        extlist = ['N4','S4', 'S22','N19']
     else:
         print('Camera {} not recognized!'.format(camera))
         pdb.set_trace() 
