@@ -2,6 +2,7 @@
 
 #SBATCH -p debug
 #SBATCH -N 1
+#SBATCH -L SCRATCH
 #SBATCH -t 00:30:00
 #SBATCH -o generate-sweep-files.slurm.cori.%j
 #SBATCH --profile=all
@@ -24,6 +25,8 @@ ROOT=/project/projectdirs/desiproc/dr2p
 ROOT=/project/projectdirs/desiproc/dr3
 ROOT=/project/projectdirs/cosmo/work/legacysurvey/dr3
 ROOT=/global/project/projectdirs/desi/users/yfeng1/legacysurvey/dr3.1
+ROOT=/global/projecta/projectdirs/cosmo/work/dr4b
+ROOT=/global/cscratch1/sd/desiproc/dr4/data_release/dr4c
 TRACTOR=$ROOT/tractor
 
 find $TRACTOR -name 'tractor-*.fits' > filelist
@@ -36,10 +39,9 @@ find $TRACTOR -name 'tractor-*.fits' > filelist
 time srun -u --cpu_bind=no -n 1 python-mpi generate-sweep-files.py -v \
 --numproc 24 \
 -I \
--f fits hdf5 \
+-f fits \
 -F filelist \
 --schema blocks \
--d $ROOT/survey-bricks.fits.gz \
+-d $SCRATCH/legacypipe-dir/survey-bricks-dr4.fits.gz \
 $TRACTOR \
-$SCRATCH/sandbox/decals-dr3.1/sweep/tractor
-
+$SCRATCH/dr4/sweep/
