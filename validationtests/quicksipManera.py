@@ -362,6 +362,17 @@ def computeHPXpix_sequ_new(nside, propertyArray, pixoffset=0, ratiores=4, coadd_
     #plt.plot(img_ras[0],img_decs[0],'k,')
     #plt.show()
     img_ras, img_decs = computeCorners_WCS_TPV(propertyArray, pixoffset)
+     
+    #DEBUGGING - MARC 
+    #print "debugging img_ras img_decs", img_ras
+    #for i in range(0,len(img_ras)):
+    # 	if img_ras[i] > 360.:
+    #		img_ras[i] -= 360.
+    # 	if img_ras[i] < 0.:
+    #		img_ras[i] += 360.
+    #END DEBUGGING MARC BIT 
+
+
     # Coordinates of coadd corners
     # RALL, t.DECLL, t.RAUL, t.DECUL, t.RAUR, t.DECUR, t.RALR, t.DECLR, t.URALL, t.UDECLL, t.URAUR, t.UDECUR
     if coadd_cut:
@@ -378,14 +389,35 @@ def computeHPXpix_sequ_new(nside, propertyArray, pixoffset=0, ratiores=4, coadd_
     #print img_ras
     img_phis = np.multiply(img_ras , np.pi/180)
     img_thetas =  np.pi/2  - np.multiply(img_decs , np.pi/180)
+
+
     img_pix = hp.ang2pix(nside, img_thetas, img_phis, nest=False)
     pix_thetas, pix_phis = hp.pix2ang(nside, img_pix, nest=False)
+
+    # DEBUGGING - MARC
+    #print 'pix_thetas', pix_thetas
+    #print 'pix_phis', pix_phis
+    #sys.exit()
+
     #img_phis = np.mod( img_phis + np.pi, 2*np.pi ) # Enable these two lines to rotate everything by 180 degrees
     #coadd_phis = np.mod( coadd_phis + np.pi, 2*np.pi ) # Enable these two lines to rotate everything by 180 degrees
-    ind_U = 0
-    ind_L = 2
-    ind_R = 3
-    ind_B = 1
+
+    # MARCM patch to correct a bug that didn't get bass and mzls ccds corners rightly oriented. 
+    # This patch is not necesarily comprehensive; also check what hapens around phi=0  
+    if (imag_phis[1].lt.imag_phis[2]): 
+        # this was original bit
+        ind_U = 0
+        ind_L = 2
+        ind_R = 3
+        ind_B = 1
+    else:
+    print "wrong side" 
+    # this is added for BASS and MzLS 
+        ind_U = 3
+        ind_L = 1
+        ind_R = 0
+        ind_B = 2
+
     ipix_list = np.zeros(0, dtype=long)
     weight_list = np.zeros(0, dtype=float)
     # loop over rings until reached bottom
@@ -412,6 +444,8 @@ def computeHPXpix_sequ_new(nside, propertyArray, pixoffset=0, ratiores=4, coadd_
     #subipixs_ring = hp.ang2pix(nside*ratiores, rangepix_thetas, rangepix_phis, nest=False).reshape(-1, nsubpixperpix)
 
     if (pmax - pmin > np.pi) or (np.max(coadd_phis) - np.min(coadd_phis) > np.pi):
+        #DEBUGGING - MARC
+        #print "Eps debugging"
         img_phis= np.mod( img_phis + np.pi, 2*np.pi )
         coadd_phis= np.mod( coadd_phis + np.pi, 2*np.pi )
         rangepix_phis = np.mod( rangepix_phis + np.pi, 2*np.pi )
@@ -419,6 +453,14 @@ def computeHPXpix_sequ_new(nside, propertyArray, pixoffset=0, ratiores=4, coadd_
     subweights = in_region(rangepix_thetas, rangepix_phis,
                                    img_thetas[ind_U], img_phis[ind_U], img_thetas[ind_L], img_phis[ind_L],
                                    img_thetas[ind_R], img_phis[ind_R], img_thetas[ind_B], img_phis[ind_B])
+    # DEBUGGING - MARC
+    #print 'pmax pmin', pmax, pmin
+    #print 'img_thetas again', img_thetas
+    #print 'img_phis again', img_phis
+    #print 'rangepix_phis', rangepix_phis
+    #print 'rangepix_theta', rangepix_thetas
+    #print 'subweights', subweights 
+    
     if coadd_cut:
         subweights_coadd = in_region(rangepix_thetas, rangepix_phis,
                                    coadd_thetas[ind_U], coadd_phis[ind_U], coadd_thetas[ind_L], coadd_phis[ind_L],
@@ -429,6 +471,10 @@ def computeHPXpix_sequ_new(nside, propertyArray, pixoffset=0, ratiores=4, coadd_
 
     sweights = resubweights.sum(axis=1) / float(nsubpixperpix)
     ind = (sweights > 0.0)
+    
+    # DEBUGGING - MARC
+    #print 'ind', ind
+    #print 'ipixs_ring', ipixs_ring
     
     return ipixs_ring[ind], sweights[ind], img_thetas, img_phis, resubweights[ind,:]
 
@@ -779,6 +825,8 @@ def makeHealTree(args):
     for i, propertyArray in enumerate(tbdata):
         count += 1
         start_one = time.time()
+        # DEBUGGING - MARC
+        #print "debugging i ", i
         treemap.addElem(propertyArray, ratiores, pixoffset)
         end_one = time.time()
         duration += float(end_one - start_one)
@@ -830,6 +878,8 @@ class HealTree:
     def addElem(self, propertyArray, ratiores, pixoffset):
         # Retrieve pixel indices
         ipixels, weights, thetas_c, phis_c, subpixrings = computeHPXpix_sequ_new(self.nside, propertyArray, pixoffset=pixoffset, ratiores=ratiores)
+        # DEBUGGING - MARC
+        #print "deguging ipix addElem", ipixels
         # For each pixel, absorb image properties
         for ii, (ipix, weight) in enumerate(zip(ipixels, weights)):
             if self.pixlist[ipix] == 0:
