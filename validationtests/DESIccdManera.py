@@ -42,11 +42,10 @@ def plotPropertyMap(band,vmin=21.0,vmax=24.0,mjdmax='',prop='ivar',op='total',su
 	import healpix
 	
 	from healpix import pix2ang_ring,thphi2radec
-	h = healpix.healpix()
 	import healpy as hp
 
         fname=localdir+survey+mjdmax+'/nside'+nside+'_oversamp'+oversamp+'/'+survey+mjdmax+'_band_'+band+'_nside'+nside+'_oversamp'+oversamp+'_'+prop+'__'+op+'.fits.gz'
-	f = fitsio.read(fname)
+        f = fitsio.read(fname)
 
 	ral = []
 	decl = []
@@ -57,19 +56,25 @@ def plotPropertyMap(band,vmin=21.0,vmax=24.0,mjdmax='',prop='ivar',op='total',su
         if (prop == 'ivar'):
 	    myval = []
             mylabel='depth' 
-            print 'Reading ivar but plotting depth'
-             
-            for i in range(0,len(val)):
-                myval.append(nanomaggiesToMag(sqrt(1./val[i]) * 5.))
+            print 'Converting ivar to depth.'
+            print 'Plotting depth'
             
-                th,phi = hp.pix2ang(int(nside),pix[i])
-	        ra,dec = thphi2radec(th,phi)
-	        ral.append(ra)
-	        decl.append(dec)
+            below=0 
+            for i in range(0,len(val)):
+                depth=nanomaggiesToMag(sqrt(1./val[i]) * 5.)
+                if(depth < vmin):
+                     below=below+1
+                else:
+                    myval.append(depth)
+                    th,phi = hp.pix2ang(int(nside),pix[i])
+	            ra,dec = thphi2radec(th,phi)
+	            ral.append(ra)
+	            decl.append(dec)
 
         npix=len(f)
-        print 'Range of ', mylabel, ' values is ', min(myval), max(myval)
+        print 'Min and Max values of ', mylabel, ' values is ', min(myval), max(myval)
         print 'Number of pixels is ', npix
+        print 'Number of pixels offplot with ', mylabel,' < ', vmin, ' is', below 
         print 'Area is ', npix/(float(nside)**2.*12)*360*360./pi, ' sq. deg.'
 
 
@@ -98,7 +103,6 @@ def depthfromIvar(band,rel='DR3',survey='survename'):
     # Produces depth maps from Dustin's annotated files 
     # ------------------------------------------------------
     
-    prop = 'ivar'
     nside = 1024 # Resolution of output maps
     nsidesout = None # if you want full sky degraded maps to be written
     ratiores = 1 # Superresolution/oversampling ratio, simp mode doesn't allow anything other than 1
@@ -183,113 +187,156 @@ def depthfromIvar(band,rel='DR3',survey='survename'):
     project_and_write_maps(mode, propertiesandoperations, tbdata, catalogue_name, outroot, sample_names, inds, nside, ratiores, pixoffset, nsidesout)
  
     # ----- plot depth map -----
+    prop='ivar'
     plotPropertyMap(band,survey=catalogue_name,prop=prop)
 
     return True
 
 
-def plotMaghist_pred(band,Nexp,ndraw = 1e5,nbin=100,rel='DR3'):
-	#this produces the histogram for Dustin's processed galaxy depth
-	import fitsio
-	from matplotlib import pyplot as plt
-	from numpy import zeros,array
-	from random import random
-	if rel == 'DR2':
-		f = fitsio.read(inputdir+'decals-ccds-annotated.fits')
-	if rel == 'DR3':
-		f = fitsio.read(inputdir+'ccds-annotated-decals.fits.gz')
-        if rel == 'DR4':
-            if (band == 'g' or band == 'r'):
-                f = fitsio.read(inputdir+'ccds-annotated-dr4-90prime.fits.gz')
-            if band == 'z' :
-                f = fitsio.read(inputdir+'ccds-annotated-dr4-mzls.fits.gz') 
-	
-	nl = []
-	nd = 0
-	nbr = 0	
+def plotMaghist_pred(band,Expfrac=[0,0,0,0,0],ndraw = 1e5,nbin=100,rel='DR3'):
+
+    # MARCM Makes histogram of predicted magnitudes 
+    # by MonteCarlo from exposures converving fraction of number of exposures
+    # This produces the histogram for Dustin's processed galaxy depth
+
+    import fitsio
+    from matplotlib import pyplot as plt
+    from numpy import zeros,array
+    from random import random
+
+    # Check fraction of number of exposures adds to 1. 
+    if( abs(total(FracExp) - 1.0) < 1e-4):
+       raise ValueError("Fration of number of exposures don't add to one")
+
+    # Survey inputs
+    mdjw='' 
+    if rel == 'DR2':
+        fname =inputdir+'decals-ccds-annotated.fits'
+        catalogue_name = 'DECaLS_DR2'+mjdw
+
+    if rel == 'DR3':
+        inputdir = '/project/projectdirs/cosmo/data/legacysurvey/dr3/' # where I get my data 
+        fname =inputdir+'ccds-annotated-decals.fits.gz'
+        catalogue_name = 'DECaLS_DR3'+mjdw
+
+    if rel == 'DR4':
+        inputdir= '/global/projecta/projectdirs/cosmo/work/dr4/'
+        if (band == 'g' or band == 'r'):
+            fname=inputdir+'ccds-annotated-dr4-90prime.fits.gz'
+            catalogue_name = '90prime_DR4'+mjdw
+        if band == 'z' :
+            fname = inputdir+'ccds-annotated-dr4-mzls.fits.gz' 
+            catalogue_name = 'MZLS_DR4'+mjdw
 		
-	if band == 'g':
-		be = 1
-		zp0 = 25.08
-		recm = 24.
-	if band == 'r':
-		be = 2
-		zp0 = 25.29
-		recm = 23.4
-	if band == 'z':
-		be = 4
-		zp0 = 24.92
-		recm = 22.5
+    # Bands info 
+    if band == 'g':
+        be = 1
+        zp0 = 25.08
+        recm = 24.
+    if band == 'r':
+        be = 2
+        zp0 = 25.29
+        recm = 23.4
+    if band == 'z':
+        be = 4
+        zp0 = 24.92
+        recm = 22.5
 
-	n = 0
-	for i in range(0,len(f)):
-		DS = 0
-		year = int(f[i]['date_obs'].split('-')[0])
-		if year > 2014:
-			DS = 1 #enforce 2015 data
+    f = fitsio.read(fname)
 
-		if f[i]['filter'] == band:
+    #read in magnitudes including extinction
+    n = 0
+    nl = []
+    for i in range(0,len(f)):
+        DS = 0
+        year = int(f[i]['date_obs'].split('-')[0])
+        if year > 2014:
+            DS = 1 #enforce 2015 data
+
+            if f[i]['filter'] == band:
 			
-			if DS == 1:
-				n += 1				
-				if f[i]['dec'] > -20 and f[i]['photometric'] == True and f[i]['blacklist_ok'] == True :   
-				
-					ext = f[i]['decam_extinction'][be]
-					detsig1 = Magtonanomaggies(f[i]['galdepth'])/5. #total noise
-					signalext = 1./10.**(-ext/2.5)
-					nl.append(detsig1*signalext)
-			
-	print n	
-	print len(nl)
-	ng = len(nl)
-	NTl = []
-	for nd in range(0,int(ndraw)):
-		detsigtoti = 0
-		for i in range(0,Nexp):
-			ind = int(random()*ng)
-			detsig1 = nl[ind]
-			detsigtoti += 1./detsig1**2.
-		detsigtot = sqrt(1./detsigtoti)
-		m = nanomaggiesToMag(detsigtot * 5.)
-		if m > recm: # pass requirement
-			nbr += 1.	
-		NTl.append(m)
-		n += 1.
+                if DS == 1:
+                    n += 1				
+                    if f[i]['dec'] > -20 and f[i]['photometric'] == True and f[i]['blacklist_ok'] == True :   
+		
+                         magext = f[i]['galdepth'] - f[i]['decam_extinction'][be]
+                         nmag = Magtonanomaggies(magext)/5. #total noise
+                         nl.append(nmag)
+
+    ng = len(nl)
+    print "Number of objects with DS=1", n
+    print "Number of objects in the sample", ng 
+
+    #Monte Carlo to predict magnitudes histogram 
+    ndrawn = 0
+    nbr = 0	
+    NTl = []
+    for indx, f in enumerat(FracExp,1) : 
+        Nexp = indx # indx starts at 1 bc argument on enumearate :-), thus is the number of exposures
+        nd = int(round(ndraw * f))
+        ndrawn=ndrawn+nd
+
+        for i in range(0,nd)):
+
+            detsigtoti = 0
+            for j in range(0,Nexp):
+		ind = int(random()*ng)
+		detsig1 = nl[ind]
+		detsigtoti += 1./detsig1**2.
+
+ 	    detsigtot = sqrt(1./detsigtoti)
+	    m = nanomaggiesToMag(detsigtot * 5.)
+	    if m > recm: # pass requirement
+	 	nbr += 1.	
+	    NTl.append(m)
+	    n += 1.
 	
-        minN = min(NTl)
-	maxN = max(NTl)+.0001
-	print minN,maxN
-	hl = zeros((nbin))
-	for i in range(0,len(NTl)):
-		bin = int(nbin*(NTl[i]-minN)/(maxN-minN))
-		hl[bin] += 1
-	Nl = []
-	for i in range(0,len(hl)):
-		Nl.append(minN+i*(maxN-minN)/float(nbin)+0.5*(maxN-minN)/float(nbin))
-	NTl = array(NTl)
+    # Run some statistics 
 
-	mean = sum(NTl)/float(len(NTl))
-	std = sqrt(sum(NTl**2.)/float(len(NTl))-mean**2.)
-	NTl.sort()
-	if len(NTl)/2. != len(NTl)/2:
-		med = NTl[len(NTl)/2+1]
-	else:
-		med = (NTl[len(NTl)/2+1]+NTl[len(NTl)/2])/2.
-	print mean,med,std
+    mean = sum(NTl)/float(len(NTl))
+    std = sqrt(sum(NTl**2.)/float(len(NTl))-mean**2.)
+    NTl.sort()
+    if len(NTl)/2. != len(NTl)/2:
+        med = NTl[len(NTl)/2+1]
+    else:
+        med = (NTl[len(NTl)/2+1]+NTl[len(NTl)/2])/2.
+    print "Mean ", mean
+    print "Median ", med
+    print "Std ", std
+    print 'percentage better than requirements '+str(nbr/float(nd))
 
-	print 'percentage better than requirements '+str(nbr/float(nd))
-	from matplotlib.backends.backend_pdf import PdfPages
-	plt.clf()
-	pp = PdfPages(localdir+'validationplots/'+rel+survey+band+str(Nexp)+'exposures.pdf')	
+    # Prepare historgram 
+    minN = min(NTl)
+    maxN = max(NTl)+.0001
+    hl = zeros((nbin)) # histogram counts
+    for i in range(0,len(NTl)):
+        bin = int(nbin*(NTl[i]-minN)/(maxN-minN))
+        hl[bin] += 1
 
-	plt.plot(Nl,hl,'k-')
-	plt.xlabel(r'5$\sigma$ '+band+ ' depth')
-	plt.ylabel('# of ccds')
-	plt.title('MC '+str(Nexp)+' exposure depth '+str(mean)[:5]+r'$\pm$'+str(std)[:4]+r', $f_{\rm pass}=$'+str(nbr/float(nd))[:5]+'\n '+rel+' '+survey)
-	#plt.xscale('log')
-	pp.savefig()
-	pp.close()
-	return True
+    Nl = []  # x bin centers
+    for i in range(0,len(hl)):
+        Nl.append(minN+i*(maxN-minN)/float(nbin)+0.5*(maxN-minN)/float(nbin))
+    NTl = array(NTl)
+
+    #### Ploting histogram 
+    print "-----"
+    print "Plotting the histogram now"
+    print "min,max depth ",minN, maxN 
+
+    from matplotlib.backends.backend_pdf import PdfPages
+    plt.clf()
+    pp = PdfPages(localdir+'validationplots/'+rel+survey+band+'_pred_exposures.pdf')	
+
+    plt.plot(Nl,hl,'k-')
+    plt.xlabel(r'5$\sigma$ '+band+ ' depth')
+    plt.ylabel('# of images')
+    plt.title('MC combined exposure depth '+str(mean)[:5]+r'$\pm$'+str(std)[:4]+r', $f_{\rm pass}=$'+str(nbr/float(nd))[:5]+'\n '+rel+' '+survey)
+    #plt.xscale('log')
+    pp.savefig()
+    pp.close()
+
+
+return True
 
 
 def depthfromIvarOld():
@@ -580,14 +627,23 @@ def plotMaghist_proc_Nexp(band,Nexp,ndraw = 1e5,nbin=100,rel='DR3',survey='decal
 	return True
 
 # --- run depth maps 
-band='r'
-depthfromIvar(band,rel='DR3',survey='DECals_DR3')
+#band='r'
+#depthfromIvar(band,rel='DR3',survey='DECaLS_DR3')
+#
+#band='g'
+#depthfromIvar(band,rel='DR3',survey='DECaLS_DR3')
+#
+#band='z'
+#depthfromIvar(band,rel='DR3',survey='DECaLS_DR3')
 
-band='g'
-depthfromIvar(band,rel='DR3',survey='DECals_DR3')
+#band='r'
+#depthfromIvar(band,rel='DR4')
 
-band='z'
-depthfromIvar(band,rel='DR3',survey='DECals_DR3')
+#band='g'
+#depthfromIvar(band,rel='DR4')
+
+#band='z'
+#depthfromIvar(band,rel='DR4')
 
 
 # --- run histogram deph peredictions
