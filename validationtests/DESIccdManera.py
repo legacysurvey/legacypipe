@@ -45,31 +45,31 @@ def plotPropertyMap(band,vmin=21.0,vmax=24.0,mjdmax='',prop='ivar',op='total',su
 	h = healpix.healpix()
 	import healpy as hp
 
-	f = fitsio.read(localdir+survey+mjdmax+'/nside'+nside+'_oversamp'+oversamp+'/'+survey+mjdmax+'_band_'+band+'_nside'+nside+'_oversamp'+oversamp+'_'+prop+'__'+op+'.fits.gz')
+        fname=localdir+survey+mjdmax+'/nside'+nside+'_oversamp'+oversamp+'/'+survey+mjdmax+'_band_'+band+'_nside'+nside+'_oversamp'+oversamp+'_'+prop+'__'+op+'.fits.gz'
+	f = fitsio.read(fname)
 
 	ral = []
 	decl = []
 	val = f['SIGNAL']
-        pix = f['pixel']
+        pix = f['PIXEL']
 	
-        # Obtain ra dec pixel coordinates
-        th,phi = hp.pix2ang(int(nside),f[i]['PIXEL'])
-	ra,dec = thphi2radec(th,phi)
-	ral.append(ra)
-	decl.append(dec)
-
         # Obtain values to plot 
-        if(prop='ivar'):
+        if (prop == 'ivar'):
 	    myval = []
             mylabel='depth' 
             print 'Reading ivar but plotting depth'
              
             for i in range(0,len(val)):
-                magval.append(nanomaggiesToMag(sqrt(1./val[i]) * 5.))
+                myval.append(nanomaggiesToMag(sqrt(1./val[i]) * 5.))
+            
+                th,phi = hp.pix2ang(int(nside),pix[i])
+	        ra,dec = thphi2radec(th,phi)
+	        ral.append(ra)
+	        decl.append(dec)
 
         npix=len(f)
-        print 'Range of values to print is ', min(myval), max(myval)
-        print 'Number of pixels to print is', npix
+        print 'Range of ', mylabel, ' values is ', min(myval), max(myval)
+        print 'Number of pixels is ', npix
         print 'Area is ', npix/(float(nside)**2.*12)*360*360./pi, ' sq. deg.'
 
 
@@ -80,7 +80,8 @@ def plotPropertyMap(band,vmin=21.0,vmax=24.0,mjdmax='',prop='ivar',op='total',su
 	plt.title('Map of '+ mylabel +' for '+survey+' '+band+'-band')
 	plt.xlim(0,360)
 	plt.ylim(-30,90)
-	plt.savefig(localdir+mylabel'_'+band+'_'+survey+str(nside)+'.png')
+	plt.savefig(localdir+mylabel+'_'+band+'_'+survey+str(nside)+'.png')
+        plt.close()
 	#plt.show()
 	#cbar.set_label(r'5$\sigma$ galaxy depth', rotation=270,labelpad=1)
     	#plt.xscale('log')
@@ -180,7 +181,7 @@ def depthfromIvar(band,rel='DR3',survey='survename'):
     # Done with Quicksip library, note it has quite a few hardcoded values (use new version by MARCM for BASS and MzLS) 
     # project_and_write_maps_simp(mode, propertiesandoperations, tbdata, catalogue_name, outroot, sample_names, inds, nside)
     project_and_write_maps(mode, propertiesandoperations, tbdata, catalogue_name, outroot, sample_names, inds, nside, ratiores, pixoffset, nsidesout)
-    
+ 
     # ----- plot depth map -----
     plotPropertyMap(band,survey=catalogue_name,prop=prop)
 
@@ -580,8 +581,13 @@ def plotMaghist_proc_Nexp(band,Nexp,ndraw = 1e5,nbin=100,rel='DR3',survey='decal
 
 # --- run depth maps 
 band='r'
-depthfromIvar(band,rel='DR3',survey='DECals_DR3'):
+depthfromIvar(band,rel='DR3',survey='DECals_DR3')
 
+band='g'
+depthfromIvar(band,rel='DR3',survey='DECals_DR3')
+
+band='z'
+depthfromIvar(band,rel='DR3',survey='DECals_DR3')
 
 
 # --- run histogram deph peredictions

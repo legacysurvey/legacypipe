@@ -404,15 +404,15 @@ def computeHPXpix_sequ_new(nside, propertyArray, pixoffset=0, ratiores=4, coadd_
 
     # MARCM patch to correct a bug that didn't get bass and mzls ccds corners rightly oriented. 
     # This patch is not necesarily comprehensive; also check what hapens around phi=0  
-    if (imag_phis[1].lt.imag_phis[2]): 
+    if (img_phis[1] < img_phis[2]): 
         # this was original bit
         ind_U = 0
         ind_L = 2
         ind_R = 3
         ind_B = 1
     else:
-    print "wrong side" 
-    # this is added for BASS and MzLS 
+        print "wrong side" 
+        # this is added for BASS and MzLS 
         ind_U = 3
         ind_L = 1
         ind_R = 0
