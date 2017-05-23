@@ -307,6 +307,7 @@ def _ccds_table(camera='decam'):
         ('skymag', '>f4'),    # average sky surface brightness [mag/arcsec^2] [=ccdskymag in decstat]
         ('skycounts', '>f4'), # median sky level [electron/pix]               [=ccdskycounts in decstat]
         ('skyrms', '>f4'),    # sky variance [electron/pix]                   [=ccdskyrms in decstat]
+        ('skyrms_sigma', '>f4'),    # sky variance [electron/pix]                   [=ccdskyrms in decstat]
         #('medskysub', '>f4'),    # sky variance [electron/pix]                   [=ccdskyrms in decstat]
         ('nstarfind', '>i2'),    # number of PS1-matched stars                   [=ccdnmatch in decstat]
         ('nstar', '>i2'),     # number of detected stars                      [=ccdnstar in decstat]
@@ -339,7 +340,7 @@ def _stars_table(nstars=1):
     cols = [('image_filename', 'S65'),('image_hdu', '>i2'),
             ('expid', 'S16'), ('filter', 'S1'),('nmatch', '>i2'), 
             ('amplifier', 'i2'), ('x', 'f4'), ('y', 'f4'),('expnum', '>i4'),
-            ('ra', 'f8'), ('dec', 'f8'), ('apmag', 'f4'),('apflux', 'f4'),('apskyflux', 'f4'),
+            ('ra', 'f8'), ('dec', 'f8'), ('apmag', 'f4'),('apflux', 'f4'),('apskyflux', 'f4'),('apskyflux_perpix', 'f4'),
             ('radiff', 'f8'), ('decdiff', 'f8'),('radiff_ps1', 'f8'), ('decdiff_ps1', 'f8'),
             ('gaia_ra', 'f8'), ('gaia_dec', 'f8'), ('ps1_mag', 'f4'), ('ps1_gicolor', 'f4'),
             ('gaia_g','f8'),('ps1_g','f8'),('ps1_r','f8'),('ps1_i','f8'),('ps1_z','f8'),
@@ -651,8 +652,8 @@ class Measurer(object):
 
         # Median of absolute deviation (MAD), std dev = 1.4826 * MAD 
         stddev_mad= 1.4826 * np.median(np.abs(img - sky))
-        ccds['skyrms'] = stddev_mad / exptime
-        #ccds['skyrms'] = sig1    # [electron/pix]
+        ccds['skyrms'] = stddev_mad / exptime # e/sec
+        ccds['skyrms_sigma'] = sig1 / exptime    # e/sec
         ccds['skycounts'] = sky1 / exptime # [electron/pix]
         ccds['skymag'] = skybr   # [mag/arcsec^2]
         t0= ptime('measure-sky',t0)
@@ -709,6 +710,7 @@ class Measurer(object):
             apphot = aperture_photometry(img, ap)
             skyphot = aperture_photometry(img, skyap)
             apskyflux= skyphot['aperture_sum'] / skyap.area() * ap.area()
+            apskyflux_perpix= skyphot['aperture_sum'] / skyap.area() 
             apflux = apphot['aperture_sum'] - apskyflux
         # Use Bitmask, remove stars if any bitmask within 5 pixels
         bit_ap = CircularAperture((obj['xcentroid'], obj['ycentroid']), 5.)
@@ -773,6 +775,7 @@ class Measurer(object):
         objra, objdec = self.wcs.pixelxy2radec(obj['xcentroid']+1, obj['ycentroid']+1)
         apflux = apflux[istar].data
         apskyflux= apskyflux[istar].data
+        apskyflux_perpix= apskyflux_perpix[istar].data
         t0= ptime('aperture-photometry',t0)
         extra['mycuts_x']= obj['xcentroid']
         extra['mycuts_y']= obj['ycentroid']
@@ -895,6 +898,7 @@ class Measurer(object):
         stars['apmag'] = - 2.5 * np.log10(apflux[m1]) + zp0 + 2.5 * np.log10(exptime)
         stars['apflux'] = apflux[m1]
         stars['apskyflux'] = apskyflux[m1]
+        stars['apskyflux_perpix'] = apskyflux_perpix[m1]
         # Additional x,y
         #b= np.zeros(len(obj),bool)
         #b[m1]= True
