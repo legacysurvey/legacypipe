@@ -26,14 +26,16 @@ class HealpixedCatalog(object):
         return ipring
 
     def get_healpix_catalog(self, healpix):
+        from astrometry.util.fits import fits_table
         fname = self.fnpattern % dict(hp=healpix)
         return fits_table(fname)
     
     def get_healpix_catalogs(self, healpixes):
+        from astrometry.util.fits import merge_tables
         cats = []
         for hp in healpixes:
             cats.append(self.get_healpix_catalog(hp))
-        return merge_catalog(cats)
+        return merge_tables(cats)
 
     def get_catalog_in_wcs(self, wcs, step=100., margin=10):
         # Grid the CCD in pixel space
@@ -87,33 +89,13 @@ class ps1cat(HealpixedCatalog):
 
     def get_cat(self,ra,dec,gaia_ps1=True):
         """Read the healpixed PS1 catalogs given input ra,dec coordinates."""
-        # # Convert RA,Decs to unique healpixes
-        # ra,dec = wcs.pixelxy2radec(xx.ravel(), yy.ravel())
-        # healpixes = set()
-        # for r,d in zip(ra,dec):
-        #     healpixes.add(self.healpix_for_radec(r, d))
-        # # Read catalog in those healpixes
-        # cat = self.get_healpix_catalogs(healpixes)
-        from astrometry.util.fits import fits_table, merge_tables
-        from astrometry.util.util import radecdegtohealpix, healpix_xy_to_ring
-        ipring = np.empty(len(ra)).astype(int)
-        for iobj, (ra1, dec1) in enumerate(zip(ra,dec)):
-            hpxy = radecdegtohealpix(ra1,dec1,self.nside)
-            ipring[iobj] = healpix_xy_to_ring(hpxy,self.nside)
-        pix = np.unique(ipring)
-
-        cat = list()
-        for ipix in pix:
-            if gaia_ps1 and self.gaiadir is not None:
-                print('reading gaia+ps1 catalog')
-                fname = os.path.join(self.gaiadir,'chunk-'+'{:05d}'.format(ipix)+'.fits')
-            else:
-                print('reading ps1 only catalog')
-                fname = os.path.join(self.ps1dir,'ps1-'+'{:05d}'.format(ipix)+'.fits')
-            print('Reading {}'.format(fname))
-            cat.append(fits_table(fname))
-        cat = merge_tables(cat)
-
+        # Convert RA,Decs to unique healpixes
+        ra,dec = wcs.pixelxy2radec(xx.ravel(), yy.ravel())
+        healpixes = set()
+        for r,d in zip(ra,dec):
+            healpixes.add(self.healpix_for_radec(r, d))
+        # Read catalog in those healpixes
+        cat = self.get_healpix_catalogs(healpixes)
         return cat
 
     def get_stars(self,magrange=None,band='r'):
@@ -121,38 +103,14 @@ class ps1cat(HealpixedCatalog):
         magnitudes. Optionally trim the stars to a desired r-band magnitude
         range.
         """
-        # cat = self.get_catalog_in_wcs()
-        # print('Found {} good PS1 stars'.format(len(cat)))
-        # if magrange is not None:
-        #     keep = np.where((cat.median[:,ps1cat.ps1band[band]]>magrange[0])*
-        #                     (cat.median[:,ps1cat.ps1band[band]]<magrange[1]))[0]
-        #     cat = cat[keep]
-        #     print('Trimming to {} stars with {}=[{},{}]'.
-        #           format(len(cat),band,magrange[0],magrange[1]))
-        bounds = self.ccdwcs.radec_bounds()
-
-        W,H = self.ccdwcs.get_width(), self.ccdwcs.get_height()
-        xx,yy = np.meshgrid(np.linspace(1, W, W/100.),
-                            np.linspace(1, H, H/100.))
-        ra,dec = self.ccdwcs.pixelxy2radec(xx.ravel(), yy.ravel())
-        allcat = self.get_cat(ra, dec)
-
-        #allcat = self.get_cat([bounds[0],bounds[1]],[bounds[2],bounds[3]])
-        ok,xx,yy = self.ccdwcs.radec2pixelxy(allcat.ra, allcat.dec)
-        onccd = np.flatnonzero((xx >= 1.) * (xx <= self.ccdwcs.get_width()) *
-                               (yy >= 1.) * (yy <= self.ccdwcs.get_height()))
-        cat = allcat[onccd]
-        #cat = allcat[np.where((onccd*1)*
-        #                      ((allcat.nmag_ok[:,0]>0)*1)*     # g
-        #                      ((allcat.nmag_ok[:,1]>0)*1)*     # r
-        #                      ((allcat.nmag_ok[:,3]>0)*1)==1)] # z
-        print('Found {} good PS1 stars.'.format(len(cat)))
-        #if magrange is not None:
-        #    keep = np.where((cat.median[:,ps1cat.ps1band[band]]>magrange[0])*
-        #                    (cat.median[:,ps1cat.ps1band[band]]<magrange[1]))[0]
-        #    cat = cat[keep]
-        #    print('Trimming to {} stars with {}=[{},{}]'.
-        #          format(len(cat),band,magrange[0],magrange[1]))
+        cat = self.get_catalog_in_wcs()
+        print('Found {} good PS1 stars'.format(len(cat)))
+        if magrange is not None:
+            keep = np.where((cat.median[:,ps1cat.ps1band[band]]>magrange[0])*
+                            (cat.median[:,ps1cat.ps1band[band]]<magrange[1]))[0]
+            cat = cat[keep]
+            print('Trimming to {} stars with {}=[{},{}]'.
+                  format(len(cat),band,magrange[0],magrange[1]))
         return cat
 
 def ps1_to_decam(psmags, band):
