@@ -402,21 +402,50 @@ def computeHPXpix_sequ_new(nside, propertyArray, pixoffset=0, ratiores=4, coadd_
     #img_phis = np.mod( img_phis + np.pi, 2*np.pi ) # Enable these two lines to rotate everything by 180 degrees
     #coadd_phis = np.mod( coadd_phis + np.pi, 2*np.pi ) # Enable these two lines to rotate everything by 180 degrees
 
-    # MARCM patch to correct a bug that didn't get bass and mzls ccds corners rightly oriented. 
-    # This patch is not necesarily comprehensive; also check what hapens around phi=0  
-    if (img_phis[1] < img_phis[2]): 
-        # this was original bit
+    # MARCM patch to correct a bug from Boris which didn't get bass and mzls ccds corners properly oriented. 
+    # This patch is not necesarily comprehensive; not pairing may not cover all cases
+    # In addition it also needs checking what hapens around phi=0  
+    dph01=abs(img_phis[0]-img_phis[1])
+    dph12=abs(img_phis[1]-img_phis[2])
+
+    if (dph01 < dph12) : 
+        if (img_phis[1] < img_phis[2]): 
+            if(img_thetas[0] < img_thetas[1]):
+                # this was original bit
+                #print "This is DECaLS" 
+                ind_U = 0
+                ind_L = 2
+                ind_R = 3
+                ind_B = 1
+            else:
+                # This is for MzLS (seems to rotate other way)  
+                print "This is MzLS"
+                ind_U = 1 
+                ind_L = 3 
+                ind_R = 2 
+                ind_B = 0
+           #     print "Probably wrong indexing of ccd corner AAA" 
+        else:
+            # This is addes for BASS
+            #print "This is for BASS" 
+            if(img_thetas[0] > img_thetas[1]):
+                ind_U = 2 
+                ind_L = 0
+                ind_R = 1
+                ind_B = 3
+            else:
+                # Few o(100) ccd of DECaLS z-band fall here; not clear what to do on them  
+                ind_U = 3
+                ind_L = 1
+                ind_R = 0
+                ind_B = 2
+    else:
+        print "WARNING: (MARCM:) Current ccd image may have wrong corner assignments in quicksip"
+        #raise ValueError("(MARCM:) probably wrong assignment of corner values in quicksip")
         ind_U = 0
         ind_L = 2
         ind_R = 3
         ind_B = 1
-    else:
-        print "wrong side" 
-        # this is added for BASS and MzLS 
-        ind_U = 3
-        ind_L = 1
-        ind_R = 0
-        ind_B = 2
 
     ipix_list = np.zeros(0, dtype=long)
     weight_list = np.zeros(0, dtype=float)
@@ -549,7 +578,7 @@ def computeCorners_WCS_TPV(propertyArray, pixoffset):
     #y = [1+pixoffset, 1+pixoffset, propertyArray['NAXIS2']-pixoffset, propertyArray['NAXIS2']-pixoffset, 1+pixoffset]
     x = [1+pixoffset, propertyArray['width']-pixoffset, propertyArray['width']-pixoffset, 1+pixoffset, 1+pixoffset]
     y = [1+pixoffset, 1+pixoffset, propertyArray['height']-pixoffset, propertyArray['height']-pixoffset, 1+pixoffset]
-   #ras, decs = xy2radec(x, y, propertyArray)
+    #ras, decs = xy2radec(x, y, propertyArray)
     ras, decs = xy2radec_nopv(x, y, propertyArray)
     return ras, decs
 

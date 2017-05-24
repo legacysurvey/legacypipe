@@ -193,7 +193,7 @@ def depthfromIvar(band,rel='DR3',survey='survename'):
     return True
 
 
-def plotMaghist_pred(band,Expfrac=[0,0,0,0,0],ndraw = 1e5,nbin=100,rel='DR3'):
+def plotMaghist_pred(band,FracExp=[0,0,0,0,0],ndraw = 1e5,nbin=100,rel='DR3',vmin=21.0):
 
     # MARCM Makes histogram of predicted magnitudes 
     # by MonteCarlo from exposures converving fraction of number of exposures
@@ -205,11 +205,12 @@ def plotMaghist_pred(band,Expfrac=[0,0,0,0,0],ndraw = 1e5,nbin=100,rel='DR3'):
     from random import random
 
     # Check fraction of number of exposures adds to 1. 
-    if( abs(total(FracExp) - 1.0) < 1e-4):
+    if( abs(sum(FracExp) - 1.0) > 1e-5 ):
+       print sum(FracExp)
        raise ValueError("Fration of number of exposures don't add to one")
 
     # Survey inputs
-    mdjw='' 
+    mjdw='' 
     if rel == 'DR2':
         fname =inputdir+'decals-ccds-annotated.fits'
         catalogue_name = 'DECaLS_DR2'+mjdw
@@ -264,6 +265,7 @@ def plotMaghist_pred(band,Expfrac=[0,0,0,0,0],ndraw = 1e5,nbin=100,rel='DR3'):
                          nl.append(nmag)
 
     ng = len(nl)
+    print "-----------"
     print "Number of objects with DS=1", n
     print "Number of objects in the sample", ng 
 
@@ -271,12 +273,12 @@ def plotMaghist_pred(band,Expfrac=[0,0,0,0,0],ndraw = 1e5,nbin=100,rel='DR3'):
     ndrawn = 0
     nbr = 0	
     NTl = []
-    for indx, f in enumerat(FracExp,1) : 
+    for indx, f in enumerate(FracExp,1) : 
         Nexp = indx # indx starts at 1 bc argument on enumearate :-), thus is the number of exposures
         nd = int(round(ndraw * f))
         ndrawn=ndrawn+nd
 
-        for i in range(0,nd)):
+        for i in range(0,nd):
 
             detsigtoti = 0
             for j in range(0,Nexp):
@@ -293,6 +295,7 @@ def plotMaghist_pred(band,Expfrac=[0,0,0,0,0],ndraw = 1e5,nbin=100,rel='DR3'):
 	
     # Run some statistics 
 
+    NTl=np.array(NTl)
     mean = sum(NTl)/float(len(NTl))
     std = sqrt(sum(NTl**2.)/float(len(NTl))-mean**2.)
     NTl.sort()
@@ -300,18 +303,23 @@ def plotMaghist_pred(band,Expfrac=[0,0,0,0,0],ndraw = 1e5,nbin=100,rel='DR3'):
         med = NTl[len(NTl)/2+1]
     else:
         med = (NTl[len(NTl)/2+1]+NTl[len(NTl)/2])/2.
+
     print "Mean ", mean
     print "Median ", med
     print "Std ", std
-    print 'percentage better than requirements '+str(nbr/float(nd))
+    print 'percentage better than requirements '+str(nbr/float(ndrawn))
 
     # Prepare historgram 
-    minN = min(NTl)
+    minN = max(min(NTl),vmin)
     maxN = max(NTl)+.0001
     hl = zeros((nbin)) # histogram counts
+    lowcounts=0
     for i in range(0,len(NTl)):
         bin = int(nbin*(NTl[i]-minN)/(maxN-minN))
-        hl[bin] += 1
+        if(bin >= 0) : 
+            hl[bin] += 1
+        else:
+            lowcounts +=1
 
     Nl = []  # x bin centers
     for i in range(0,len(hl)):
@@ -319,24 +327,22 @@ def plotMaghist_pred(band,Expfrac=[0,0,0,0,0],ndraw = 1e5,nbin=100,rel='DR3'):
     NTl = array(NTl)
 
     #### Ploting histogram 
-    print "-----"
     print "Plotting the histogram now"
-    print "min,max depth ",minN, maxN 
+    print "min,max depth ",min(NTl), max(NTl) 
+    print "counts below ", vmin, "are ", lowcounts
 
     from matplotlib.backends.backend_pdf import PdfPages
     plt.clf()
-    pp = PdfPages(localdir+'validationplots/'+rel+survey+band+'_pred_exposures.pdf')	
+    pp = PdfPages(localdir+'validationplots/'+catalogue_name+band+'_pred_exposures.pdf')	
 
     plt.plot(Nl,hl,'k-')
     plt.xlabel(r'5$\sigma$ '+band+ ' depth')
     plt.ylabel('# of images')
-    plt.title('MC combined exposure depth '+str(mean)[:5]+r'$\pm$'+str(std)[:4]+r', $f_{\rm pass}=$'+str(nbr/float(nd))[:5]+'\n '+rel+' '+survey)
+    plt.title('MC combined exposure depth '+str(mean)[:5]+r'$\pm$'+str(std)[:4]+r', $f_{\rm pass}=$'+str(nbr/float(ndrawn))[:5]+'\n '+catalogue_name)
     #plt.xscale('log')
     pp.savefig()
     pp.close()
-
-
-return True
+    return True
 
 
 def depthfromIvarOld():
@@ -624,17 +630,18 @@ def plotMaghist_proc_Nexp(band,Nexp,ndraw = 1e5,nbin=100,rel='DR3',survey='decal
 	#plt.xscale('log')
 	pp.savefig()
 	pp.close()
+        print "----------"
 	return True
 
 # --- run depth maps 
 #band='r'
-#depthfromIvar(band,rel='DR3',survey='DECaLS_DR3')
+#depthfromIvar(band,rel='DR3')
 #
 #band='g'
-#depthfromIvar(band,rel='DR3',survey='DECaLS_DR3')
+#depthfromIvar(band,rel='DR3')
 #
 #band='z'
-#depthfromIvar(band,rel='DR3',survey='DECaLS_DR3')
+#depthfromIvar(band,rel='DR3')
 
 #band='r'
 #depthfromIvar(band,rel='DR4')
@@ -645,6 +652,39 @@ def plotMaghist_proc_Nexp(band,Nexp,ndraw = 1e5,nbin=100,rel='DR3',survey='decal
 #band='z'
 #depthfromIvar(band,rel='DR4')
 
+
+
+# DECALS (DR3) the final survey will be covered by 
+# 1, 2, 3, 4, and 5 exposures in the following fractions: 
+#FracExp=[0.02,0.24,0.50,0.22,0.02]
+
+#print "DECaLS depth histogram r-band"
+#band='r'
+#plotMaghist_pred(band,FracExp=FracExp,ndraw = 1e5,nbin=100,rel='DR3')
+#print "DECaLS depth histogram g-band"
+#band='g'
+#plotMaghist_pred(band,FracExp=FracExp,ndraw = 1e5,nbin=100,rel='DR3')
+#print "DECaLS depth histogram z-band"
+#band='z'
+#plotMaghist_pred(band,FracExp=FracExp,ndraw = 1e5,nbin=100,rel='DR3')
+
+# For BASS (DR4) the coverage fractions for 1,2,3,4,5 exposures are:
+#FracExp=[0.0014,0.0586,0.8124,0.1203,0.0054,0.0019]
+
+#print "BASS depth histogram r-band"
+#band='r'
+#plotMaghist_pred(band,FracExp=FracExp,ndraw = 1e5,nbin=100,rel='DR4')
+#print "BASS depth histogram g-band"
+#band='g'
+#plotMaghist_pred(band,FracExp=FracExp,ndraw = 1e5,nbin=100,rel='DR4')
+
+# For MzLS fill factors of 100% with a coverage of at least 1, 
+# 99.5% with a coverage of at least 2, and 85% with a coverage of 3.
+#FracExp=[0.005,0.145,0.85,0,0]
+
+#print "MzLS depth histogram z-band"
+#band='z'
+#plotMaghist_pred(band,FracExp=FracExp,ndraw = 1e5,nbin=100,rel='DR4')
 
 # --- run histogram deph peredictions
 #Nexp=3
