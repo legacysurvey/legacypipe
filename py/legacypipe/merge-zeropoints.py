@@ -30,13 +30,66 @@ def fix_mosaic_expnums(expnum):
         #print('  to', expnum[I].min(), expnum[I].max())
     return expnum
 
+# 2017-03-31 to 2017-04-30
+def mzls_runs_21b_to_22a():
+    basedir = os.environ['LEGACY_SURVEY_DIR']
+    cam = 'mosaic'
+    image_basedir = os.path.join(basedir, 'images')
+    TT = []
+    for fn,dirnms in [
+        ('/global/homes/a/arjundey/ZeroPoints/mzls-zpt-20170331-20170430.fits',
+         ['CP20170301',
+          'CP20170306',
+          'CP20170326',
+          'CP20170331',
+          'CP20170401',
+          'CP20170402',
+          'CP20170403',
+          'CP20170404',
+          'CP20170405',
+          'CP20170406',
+          'CP20170407',
+          'CP20170408',
+          'CP20170409',
+          'CP20170410',
+          'CP20170411',
+          'CP20170412',
+          'CP20170413',
+          'CP20170414',
+          'CP20170415',
+          'CP20170416',
+          'CP20170418',
+          'CP20170419',
+          'CP20170420',
+          'CP20170421',
+          'CP20170422',
+          'CP20170423',
+          'CP20170425',
+          'CP20170426',
+          'CP20170427',
+          'CP20170428',
+          'CP20170429',
+          'CP20170430',
+          ])]:
+        T = normalize_zeropoints(fn, dirnms, image_basedir, cam)
+        TT.append(T)
+    T = merge_tables(TT)
+    print('Expnum range:', T.expnum.min(), T.expnum.max())
+    fix_mosaic_expnums(T.expnum)
+    print('Fixed expnum range:', T.expnum.min(), T.expnum.max())
+    outfn = 'survey-ccds-mzls-runs-21b-to-22a.fits'
+    T.writeto(outfn)
+    print('Wrote', outfn)
+    for fn in [outfn]:
+        os.system('gzip --best ' + fn)
+
+
 # date_obs in 2016-10-17 to 2017-03-30 -- runs 16 through first half of 21.
 def mzls_runs_16_to_21a():
     basedir = os.environ['LEGACY_SURVEY_DIR']
     cam = 'mosaic'
     image_basedir = os.path.join(basedir, 'images')
     TT = []
-
     for fn,dirnms in [
         ('/global/homes/a/arjundey/ZeroPoints/mzls-zpt-20161016-20170329.fits',
          ['CP20161016v1', 'CP20170102', 'CP20170103', 'CP20170104', 'CP20170107',
@@ -213,7 +266,7 @@ def decals_nondecals_dr5():
             break
         print('Warning: repeated EXPNUM/CCDNAME:', k, 'appears', v, 'times')
         I = np.flatnonzero(T.expid == k)
-        print('  filenames:', T.filename[I])
+        print('  filenames:', ' '.join(np.unique(T.filename[I])))
 
 
 # Run 27 + DD night Apr 04
@@ -622,7 +675,7 @@ def normalize_zeropoints(fn, dirnms, image_basedir, cam, T=None):
             break
         print('Warning: repeated EXPNUM/CCDNAME:', k, 'appears', v, 'times')
         I = np.flatnonzero(T.expid == k)
-        print('  filenames:', T.filename[I])
+        print('  filenames:', ' '.join(np.unique(T.filename[I])))
         bad = True
         for i in I:
             badfilenames.add(T.filename[i])
@@ -781,7 +834,8 @@ if __name__ == '__main__':
     #decals_run25()
     #decals_run27()
     #decals_nondecals_dr5()
-    mzls_runs_16_to_21a()
+    #mzls_runs_16_to_21a()
+    mzls_runs_21b_to_22a()
 
     #dr4_bootes=False
     #if dr4_bootes:

@@ -21,20 +21,20 @@ def main():
     ns = parse_args()
         
     if ns.ignore_errors:
-        print("Warning: *** Will ignore broken tractor catalogue files ***")
+        print("Warning: *** Will ignore broken tractor catalog files ***")
         print("         *** Disable -I for final data product.         ***")
 
     bricks = list_bricks(ns)
 
-    tree, nboss = read_boss(ns.boss, ns)
+    tree, nobj = read_external(ns.external, ns)
 
     # get the data type of the match
     brickname, path = bricks[0]
     peek = fitsio.read(path, 1, upper=True)
-    matched_catalogue = sharedmem.empty(nboss, dtype=peek.dtype)
+    matched_catalog = sharedmem.empty(nobj, dtype=peek.dtype)
 
-    matched_catalogue['OBJID'] = -1
-    matched_distance = sharedmem.empty(nboss, dtype='f4')
+    matched_catalog['OBJID'] = -1
+    matched_distance = sharedmem.empty(nobj, dtype='f4')
 
     # convert to radian
     tol = ns.tolerance / (60. * 60.)  * (np.pi / 180)
@@ -64,7 +64,7 @@ def main():
                 mask = d < matched_distance[i]
                 mask &= objects['BRICK_PRIMARY'] 
                 i = i[mask]
-                matched_catalogue[i] = objects[mask]
+                matched_catalog[i] = objects[mask]
                 matched_distance[i] = d[mask]
             matched = mask.sum()
 
@@ -84,7 +84,7 @@ def main():
 
         pool.map(work, bricks, star=True, reduce=reduce)
 
-        nrealmatched = (matched_catalogue['OBJID'] != -1).sum()
+        nrealmatched = (matched_catalog['OBJID'] != -1).sum()
         if ns.verbose:
             print("Processed %d files, %g / second, matched %d / %d objects into %d slots."
                 % (nprocessed, nprocessed / (time() - t0), 
@@ -103,7 +103,7 @@ def main():
         header['TOL_ARCSEC'] = ns.tolerance
 
         for format in ns.format:
-            save_file(ns.dest, matched_catalogue, header, format)
+            save_file(ns.dest, matched_catalog, header, format)
 
 def save_file(filename, data, header, format):
     basename = os.path.splitext(filename)[0]
@@ -130,28 +130,28 @@ def radec2pos(ra, dec):
     pos[:, 1] *= np.cos(ra / 180. * np.pi)
     return pos
 
-def read_boss(filename, ns):
+def read_external(filename, ns):
     t0 = time()
-    boss = fitsio.FITS(filename, upper=True)[1][:]
+    cat = fitsio.FITS(filename, upper=True)[1][:]
 
     if ns.verbose:
-        print("reading BOSS catlaogue took %g seconds." % (time() - t0))
-        print("%d BOSS objects." % len(boss))
+        print("reading external catalog took %g seconds." % (time() - t0))
+        print("%d objects." % len(cat))
 
     t0 = time()
     for raname, decname in [
             ('RA', 'DEC'), 
             ('PLUG_RA', 'PLUG_DEC')
             ]:
-        if raname in boss.dtype.names \
-        and decname in boss.dtype.names: 
-            ra = boss[raname]
-            dec = boss[decname]
+        if raname in cat.dtype.names \
+        and decname in cat.dtype.names: 
+            ra = cat[raname]
+            dec = cat[decname]
             if ns.verbose:
                 print('using %s/%s for positions.' % (raname, decname))
             break
     else:
-        raise KeyError("No RA/DEC or PLUG_RA/PLUG_DEC in the BOSS catalogue")
+        raise KeyError("No RA/DEC or PLUG_RA/PLUG_DEC in the external catalog")
 
     pos = radec2pos(ra, dec)
     # work around NERSC overcommit issue.
@@ -162,7 +162,7 @@ def read_boss(filename, ns):
     if ns.verbose:
         print("Building KD-Tree took %g seconds." % (time() - t0))
 
-    return tree, len(boss)
+    return tree, len(cat)
 
 def list_bricks(ns):
     t0 = time()
@@ -192,11 +192,11 @@ def list_bricks(ns):
     
 def parse_args():
     ap = argparse.ArgumentParser(
-    description="""Find the DECALS value of corresponding SDSS Objects.
+    description="""Match to an external catalogs.
         """
         )
 
-    ap.add_argument("boss", help="SDSS catalogue. e.g. /global/project/projectdirs/cosmo/work/sdss/cats/specObj-dr12.fits")
+    ap.add_argument("external", help="External catalog. e.g. /global/project/projectdirs/cosmo/work/sdss/cats/specObj-dr12.fits")
     ap.add_argument("src", help="Path to the root directory of all tractor files")
     ap.add_argument("dest", help="Path to the output file")
 
@@ -204,7 +204,7 @@ def parse_args():
         help="Format of the output file")
 
     ap.add_argument('-t', "--tolerance", default=1, type=float,
-        help="Tolerance of the angular distance for a match, in arc-seconds")
+        help="Tolerance of the angular distance for a match, in arcseconds")
 
     ap.add_argument('-F', "--filelist", default=None,
         help="list of tractor brickfiles to use; this will avoid expensive walking of the path.")
@@ -223,7 +223,6 @@ def parse_args():
             Default is to use OMP_NUM_THREADS, or the number of cores on the node.""")
 
     return ap.parse_args()
-   
 
 if __name__ == '__main__':
     main() 

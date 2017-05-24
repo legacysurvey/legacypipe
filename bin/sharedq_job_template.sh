@@ -11,10 +11,6 @@
 #--mail-user=kburleigh@lbl.gov
 #--mail-type=END,FAIL
 
-echo brick:$brick
-echo start_brick=$start_brick
-echo end_brick=$end_brick
-
 usecores=1
 threads=1
 if [ "$full_stacktrace" = "yes" ];then
@@ -56,23 +52,4 @@ export MKL_NUM_THREADS=1
 
 #export dr4b_dir=/global/cscratch1/sd/desiproc/dr4/data_release/dr4_fixes
 #export dr4c_dir=/global/projecta/projectdirs/cosmo/work/dr4c
-
-while read aline; do
-    brick=`echo $aline|awk '{print $1}'`
-    echo brick=$brick
-    #rsync -av /global/cscratch1/sd/desiproc/dr4/data_release/dr4_fixes/coadd/$brick /global/projecta/projectdirs/cosmo/work/dr4b/coadd/
-    # New Data Model Catalouge
-    #bri=`echo $brick|head -c 3`
-    #in_file=${dr4b_dir}/tractor-i/${bri}/tractor-${brick}.fits
-    #out_file=${dr4c_dir}/tractor/${bri}/tractor-${brick}.fits
-    #mkdir -p $(dirname ${out_file})
-    #echo hey1
-    #srun -n 1 -c $usecores python legacypipe/format_catalog.py --in ${in_file} --out ${out_file} --dr4 
-    #echo hey2
-    # New Headers
-    srun -n 1 -c $usecores python legacypipe/format_headers.py --brick $brick
-    wait
-    #echo hey3
-done <<< "$(sed -n ${start_brick},${end_brick}p $bricklist)"
-
 
