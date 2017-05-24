@@ -5,8 +5,10 @@ import fitsio
 from tractor.utils import get_class_from_name
 from tractor.basics import NanoMaggies, ConstantFitsWcs, LinearPhotoCal
 from tractor.image import Image
+from tractor.sky import ConstantSky
 from tractor.tractortime import TAITime
-from .common import SimpleGalaxy
+from .survey import SimpleGalaxy
+from astrometry.util.file import trymakedirs
 
 '''
 Generic image handling code.
@@ -93,19 +95,13 @@ class LegacySurveyImage(object):
         Returns an index array for the members of the table 'ccds' that are
         photometric.
 
-        Default is to return all CCDs.
+        Default is to return None, meaning keep all CCDs.
         '''
-        return np.arange(len(ccds))
+        return None
 
     @classmethod
-    def apply_blacklist(self, survey, ccds):
-        '''
-        Returns an index array for the members of the table 'ccds' that are
-        NOT blacklisted.
-
-        Default is to return all CCDs.
-        '''
-        return np.arange(len(ccds))
+    def ccd_cuts(self, survey, ccds):
+        return np.zeros(len(ccds), np.int32)
     
     def get_good_image_slice(self, extent, get_extent=False):
         '''
@@ -146,7 +142,7 @@ class LegacySurveyImage(object):
         return None,None,None,None
 
     def get_tractor_image(self, slc=None, radecpoly=None,
-                          gaussPsf=False, pixPsf=False,
+                          gaussPsf=False, pixPsf=False, hybridPsf=False,
                           splinesky=False,
                           nanomaggies=True, subsky=True, tiny=10,
                           dq=True, invvar=True, pixels=True,
@@ -163,7 +159,8 @@ class LegacySurveyImage(object):
         Options determining the PSF model to use:
 
         - *gaussPsf*: single circular Gaussian PSF based on header FWHM value.
-        - *pixPsf*: pixelized PsfEx model at image center.
+        - *pixPsf*: pixelized PsfEx model.
+        - *hybridPsf*: combo pixelized PsfEx + Gaussian approx.
 
         Options determining the sky model to use:
         
@@ -178,25 +175,22 @@ class LegacySurveyImage(object):
           leaving a constant zero sky model?
 
         '''
-        from astrometry.util.miscutils import clip_polygon
-
-        #print('being called in IMAGE.py, quitting')
-        #import sys
-        #sys.exit()
         get_dq = dq
         get_invvar = invvar
-        
+
         band = self.band
         imh,imw = self.get_image_shape()
-        
         wcs = self.get_wcs()
         x0,y0 = 0,0
         x1 = x0 + imw
         y1 = y0 + imh
+
+        # Clip to RA,Dec polygon?
         if slc is None and radecpoly is not None:
+            from astrometry.util.miscutils import clip_polygon
             imgpoly = [(1,1),(1,imh),(imw,imh),(imw,1)]
             ok,tx,ty = wcs.radec2pixelxy(radecpoly[:-1,0], radecpoly[:-1,1])
-            tpoly = zip(tx,ty)
+            tpoly = list(zip(tx,ty))
             clip = clip_polygon(imgpoly, tpoly)
             clip = np.array(clip)
             if len(clip) == 0:
@@ -207,11 +201,13 @@ class LegacySurveyImage(object):
             if y1 - y0 < tiny or x1 - x0 < tiny:
                 print('Skipping tiny subimage')
                 return None
+        # Slice?
         if slc is not None:
             sy,sx = slc
             y0,y1 = sy.start, sy.stop
             x0,x1 = sx.start, sx.stop
 
+        # Is part of this image bad?
         old_extent = (x0,x1,y0,y1)
         new_extent = self.get_good_image_slice((x0,x1,y0,y1), get_extent=True)
         if new_extent != old_extent:
@@ -221,38 +217,50 @@ class LegacySurveyImage(object):
                 return None
             slc = slice(y0,y1), slice(x0,x1)
 
+        # Read image pixels
         if pixels:
             print('Reading image slice:', slc)
             img,imghdr = self.read_image(header=True, slice=slc)
             self.check_image_header(imghdr)
         else:
             img = np.zeros((imh, imw), np.float32)
-            imghdr = dict()
+            imghdr = self.read_image_header()
             if slc is not None:
                 img = img[slc]
+        assert(np.all(np.isfinite(img)))
             
+        # Read inverse-variance (weight) map
         if get_invvar:
             invvar = self.read_invvar(slice=slc, clipThresh=0.)
         else:
             invvar = np.ones_like(img)
-            
+        assert(np.all(np.isfinite(invvar)))
+        if np.all(invvar == 0.):
+            print('Skipping zero-invvar image')
+            return None
+        # Negative invvars (from, eg, fpack decompression noise) cause havoc
+        if not np.all(invvar >= 0.):
+            raise ValueError('not np.all(invvar >= 0.), hdu=%d fn=%s' % (self.hdu,self.wtfn))
+
+        # Read data-quality (flags) map and zero out the invvars of masked pixels
         if get_dq:
             dq = self.read_dq(slice=slc)
             if dq is not None:
                 invvar[dq != 0] = 0.
-        if np.all(invvar == 0.):
-            print('Skipping zero-invvar image')
-            return None
-        assert(np.all(np.isfinite(img)))
-        assert(np.all(np.isfinite(invvar)))
-        assert(not(np.all(invvar == 0.)))
+            if np.all(invvar == 0.):
+                print('Skipping zero-invvar image (after DQ masking)')
+                return None
 
         # header 'FWHM' is in pixels
         assert(self.fwhm > 0)
         psf_fwhm = self.fwhm 
         psf_sigma = psf_fwhm / 2.35
         primhdr = self.read_image_primary_header()
-        
+
+        #
+        invvar = self.remap_invvar(invvar, primhdr, img, dq)
+
+
         sky = self.read_sky_model(splinesky=splinesky, slc=slc,
                                   primhdr=primhdr, imghdr=imghdr)
         skysig1 = getattr(sky, 'sig1', None)
@@ -260,7 +268,6 @@ class LegacySurveyImage(object):
         midsky = 0.
         if subsky:
             print('Instantiating and subtracting sky model')
-            from tractor.sky import ConstantSky
             skymod = np.zeros_like(img)
             sky.addTo(skymod)
             img -= skymod
@@ -281,7 +288,7 @@ class LegacySurveyImage(object):
                 sky.scale(1./zpscale)
             zpscale = 1.
 
-        assert(np.sum(invvar > 0) > 0)
+        # Compute 'sig1', scalar typical per-pixel noise
         if get_invvar:
             sig1 = 1./np.sqrt(np.median(invvar[invvar > 0]))
         elif skysig1 is not None:
@@ -297,9 +304,6 @@ class LegacySurveyImage(object):
             sig1 = 1.4826 * mad / np.sqrt(2.)
             print('sig1 estimate:', sig1)
             invvar *= (1. / sig1**2)
-            
-        assert(np.all(np.isfinite(img)))
-        assert(np.all(np.isfinite(invvar)))
         assert(np.isfinite(sig1))
 
         if constant_invvar:
@@ -316,11 +320,12 @@ class LegacySurveyImage(object):
                       'away from zero!')
 
         # tractor WCS object
-        twcs = ConstantFitsWcs(wcs)
-        if x0 or y0:
-            twcs.setX0Y0(x0,y0)
-
+        twcs = self.get_tractor_wcs(wcs, x0, y0,
+                                    primhdr=primhdr, imghdr=imghdr)
+        if hybridPsf:
+            pixPsf = False
         psf = self.read_psf_model(x0, y0, gaussPsf=gaussPsf, pixPsf=pixPsf,
+                                  hybridPsf=hybridPsf,
                                   psf_sigma=psf_sigma,
                                   cx=(x0+x1)/2., cy=(y0+y1)/2.)
 
@@ -330,15 +335,19 @@ class LegacySurveyImage(object):
         assert(np.all(np.isfinite(tim.getInvError())))
 
         # PSF norm
+        print('Computing PSF norm')
         psfnorm = self.psf_norm(tim)
 
         # Galaxy-detection norm
+        print('Computing galaxy norm')
         tim.band = band
         galnorm = self.galaxy_norm(tim)
+        print('PSF norm', psfnorm, 'galaxy norm', galnorm)
 
         # CP (DECam) images include DATE-OBS and MJD-OBS, in UTC.
         import astropy.time
-        mjd_tai = astropy.time.Time(self.mjdobs, format='mjd', scale='utc').tai.mjd
+        mjd_tai = astropy.time.Time(self.mjdobs,
+                                    format='mjd', scale='utc').tai.mjd
         tim.time = TAITime(None, mjd=mjd_tai)
         tim.slice = slc
         tim.zpscale = orig_zpscale
@@ -365,6 +374,9 @@ class LegacySurveyImage(object):
         tim.subwcs = tim.sip_wcs.get_subimage(tim.x0, tim.y0, subw, subh)
         return tim
 
+    def remap_invvar(self, invvar, primhdr, img, dq):
+        return invvar
+
     def check_image_header(self, imghdr):
         pass
     
@@ -387,7 +399,7 @@ class LegacySurveyImage(object):
         # Galaxy-detection norm
         from tractor.galaxy import ExpGalaxy
         from tractor.ellipses import EllipseE
-        from tractor.patch import Patch
+        from tractor.patch import ModelMask
         h,w = tim.shape
         band = tim.band
         if x is None:
@@ -397,7 +409,7 @@ class LegacySurveyImage(object):
         pos = tim.wcs.pixelToPosition(x, y)
         gal = SimpleGalaxy(pos, NanoMaggies(**{band:1.}))
         S = 32
-        mm = Patch(int(x-S), int(y-S), np.ones((2*S+1, 2*S+1), bool))
+        mm = ModelMask(int(x-S), int(y-S), 2*S+1, 2*S+1)
         galmod = gal.getModelPatch(tim, modelMask=mm).patch
         galmod = np.maximum(0, galmod)
         galmod /= galmod.sum()
@@ -473,8 +485,8 @@ class LegacySurveyImage(object):
         # Crazily, this can be MUCH faster than letting fitsio do it...
         hdr = fitsio.FITSHDR()
         foundEnd = False
-        ff = open(self.imgfn, 'r')
-        h = ''
+        ff = open(self.imgfn, 'rb')
+        h = b''
         while True:
             h = h + ff.read(32768)
             while True:
@@ -484,13 +496,16 @@ class LegacySurveyImage(object):
                 # HACK -- fitsio apparently can't handle CONTINUE.
                 # It also has issues with slightly malformed cards, like
                 # KEYWORD  =      / no value
-                if line[:8] != 'CONTINUE':
+                if line[:8] != b'CONTINUE':
                     try:
-                        hdr.add_record(line)
+                        hdr.add_record(line.decode())
                     except:
-                        print('Warning: failed to parse FITS header line: "%s"; skipped' %
-                              line.strip())
-                if line == ('END' + ' '*77):
+                        print('Warning: failed to parse FITS header line: ' +
+                              ('"%s"; skipped' % line.strip()))
+                        import traceback
+                        traceback.print_exc()
+                              
+                if line == (b'END' + b' '*77):
                     foundEnd = True
                     break
                 if len(h) < 80:
@@ -523,6 +538,13 @@ class LegacySurveyImage(object):
         '''
         return None
 
+    def get_tractor_wcs(self, wcs, x0, y0,
+                        primhdr=None, imghdr=None):
+        twcs = ConstantFitsWcs(wcs)
+        if x0 or y0:
+            twcs.setX0Y0(x0,y0)
+        return twcs
+
     def get_wcs(self):
         return None
     
@@ -535,7 +557,10 @@ class LegacySurveyImage(object):
             fn = self.splineskyfn
         print('Reading sky model from', fn)
         hdr = fitsio.read_header(fn)
-        skyclass = hdr['SKY']
+        try:
+            skyclass = hdr['SKY']
+        except NameError:
+            raise NameError('SKY not in header: skyfn=%s, imgfn=%s' % (fn,self.imgfn))
         clazz = get_class_from_name(skyclass)
 
         if getattr(clazz, 'from_fits', None) is not None:
@@ -561,8 +586,10 @@ class LegacySurveyImage(object):
             skyobj.sig1 = sig1
         return skyobj
 
-    def read_psf_model(self, x0, y0, gaussPsf=False, pixPsf=False,
+    def read_psf_model(self, x0, y0,
+                       gaussPsf=False, pixPsf=False, hybridPsf=False,
                        psf_sigma=1., cx=0, cy=0):
+        assert(gaussPsf or pixPsf or hybridPsf)
         psffn = None
         if gaussPsf:
             from tractor.basics import GaussianMixturePSF
@@ -571,15 +598,17 @@ class LegacySurveyImage(object):
             print('WARNING: using mock PSF:', psf)
             psf.version = '0'
             psf.plver = ''
-        elif pixPsf:
+        else:
             # spatially varying pixelized PsfEx
             from tractor.psfex import PixelizedPsfEx
             print('Reading PsfEx model from', self.psffn)
             psf = PixelizedPsfEx(self.psffn)
             psf.shift(x0, y0)
             psffn = self.psffn
-        else:
-            assert(False)
+            if hybridPsf:
+                from tractor.psf import HybridPixelizedPSF
+                psf = HybridPixelizedPSF(psf)
+
         print('Using PSF model', psf)
 
         if psffn is not None:
@@ -616,7 +645,11 @@ class CalibMixin(object):
         # an output file is still written.  Try to detect & fix this
         # case.
         # Check the PsfEx output file for POLNAME1
-        hdr = fitsio.read_header(psffn, ext=1)
+        try:
+            hdr = fitsio.read_header(psffn, ext=1)
+        except:
+            print('Failed to read header from existing PSF model file', psffn)
+            return False
         if hdr.get('POLNAME1', None) is None:
             print('Did not find POLNAME1 in PsfEx header',psffn,'-- deleting')
             os.unlink(psffn)
@@ -645,7 +678,7 @@ class CalibMixin(object):
         return os.path.exists(fn)
 
     def funpack_files(self, imgfn, maskfn, hdu, todelete):
-        from legacypipe.common import create_temp
+        from legacypipe.survey import create_temp
 
         tmpimgfn = None
         tmpmaskfn = None
@@ -701,57 +734,157 @@ class CalibMixin(object):
         
         sedir = self.survey.get_se_dir()
         trymakedirs(self.sefn, dir=True)
-        if surveyname != '90prime':
-            cmd = ' '.join([
-                'sex',
-                '-c', os.path.join(sedir, surveyname + '.se'),
-                '-SEEING_FWHM %f' % seeing,
-                '-PARAMETERS_NAME', os.path.join(sedir, surveyname + '.param'),
-                '-STARNNW_NAME', os.path.join(sedir, 'default.nnw'),
-                '-PIXEL_SCALE 0',
-                # SE has a *bizarre* notion of "sigma"
-                '-DETECT_THRESH 1.0',
-                '-ANALYSIS_THRESH 1.0',
-                '-MAG_ZEROPOINT %f' % magzp,
-                '-FLAG_IMAGE %s' % maskfn,
-                '-FILTER_NAME %s' % os.path.join(sedir, 'gauss_5.0_9x9.conv'),
-                '-CATALOG_NAME %s %s' % (self.sefn,imgfn)])
+        if surveyname == '90prime':
+            conv_name= os.path.join(sedir, surveyname + '.conv')
         else:
-            cmd = ' '.join([
-                'sex',
-                '-c', os.path.join(sedir, surveyname + '.se'),
-                '-PARAMETERS_NAME', os.path.join(sedir, surveyname + '.param'),
-                '-STARNNW_NAME', os.path.join(sedir, 'default.nnw'),
-                '-FILTER_NAME %s' % os.path.join(sedir, surveyname + '.conv'),
-                '-PHOT_APERTURES 7.5,15.0,22.0',
-                '-CATALOG_NAME %s %s' % (self.sefn,imgfn)])
+            conv_name= os.path.join(sedir, 'gauss_5.0_9x9.conv')
+
+        tmpfn = os.path.join(os.path.dirname(self.sefn), 'tmp-' + os.path.basename(self.sefn))
+
+        cmd = ' '.join([
+            'sex',
+            '-c', os.path.join(sedir, surveyname + '.se'),
+            '-SEEING_FWHM %f' % seeing,
+            '-PARAMETERS_NAME', os.path.join(sedir, surveyname + '.param'),
+            '-STARNNW_NAME', os.path.join(sedir, 'default.nnw'),
+            '-PIXEL_SCALE 0',
+            # SE has a *bizarre* notion of "sigma"
+            '-DETECT_THRESH 1.0',
+            '-ANALYSIS_THRESH 1.0',
+            '-MAG_ZEROPOINT %f' % magzp,
+            '-FLAG_IMAGE %s' % maskfn,
+            #'-FILTER_NAME %s' % os.path.join(sedir, 'gauss_5.0_9x9.conv'),
+            '-FILTER_NAME %s' % conv_name,
+            '-CATALOG_NAME %s' % tmpfn,
+            imgfn])
         print(cmd)
  
-        if os.system(cmd):
+        rtn = os.system(cmd)
+        if rtn:
             raise RuntimeError('Command failed: ' + cmd)
+        os.rename(tmpfn, self.sefn)
 
     def run_psfex(self, surveyname):
         from astrometry.util.file import trymakedirs
-        from legacypipe.common import get_git_version
+        from legacypipe.survey import get_git_version
         sedir = self.survey.get_se_dir()
         trymakedirs(self.psffn, dir=True)
         primhdr = self.read_image_primary_header()
         plver = primhdr.get('PLVER', '')
         verstr = get_git_version()
-        if surveyname == '90prime':
-            cmds = ['psfex %s -c %s -PSF_DIR %s' % \
-                (self.sefn, os.path.join(sedir, surveyname + '.psfex'), os.path.dirname(self.psffn))]
-        else: 
-            cmds = ['psfex -c %s -PSF_DIR %s %s' %
-                    (os.path.join(sedir, surveyname + '.psfex'),
-                     os.path.dirname(self.psffn), self.sefn),
-                    'modhead %s LEGPIPEV %s "legacypipe git version"' %
-                    (self.psffn, verstr),
-                    'modhead %s PLVER %s "CP ver of image file"' % (self.psffn, plver)]
+        # We write the PSF model to a .fits.tmp file, then rename to .fits
+        psfdir = os.path.dirname(self.psffn)
+        psfoutfn = os.path.join(psfdir, os.path.basename(self.sefn).replace('.fits','') + '.fits')
+        cmds = ['psfex -c %s -PSF_DIR %s -PSF_SUFFIX .fits.tmp %s' %
+                (os.path.join(sedir, surveyname + '.psfex'),
+                 psfdir, self.sefn),
+                'mv %s %s' % (psfoutfn + '.tmp', psfoutfn),
+                'modhead %s LEGPIPEV %s "legacypipe git version"' %
+                (self.psffn, verstr),
+                'modhead %s PLVER %s "CP ver of image file"' % (self.psffn, plver)]
         for cmd in cmds:
             print(cmd)
             rtn = os.system(cmd)
             if rtn:
                 raise RuntimeError('Command failed: %s: return value: %i' %
                                    (cmd,rtn))
+
+
+    def run_sky(self, surveyname, \
+                splinesky=False,git_version=None):
+        if surveyname == 'decam': 
+            # Cut out a good section of image for the whole processing, not just sky
+            # Only currently used for cases like half of one of the DECam chips is bad
+            slc = self.get_good_image_slice(None)
+        else:
+            # Full CCD should be ok for Mosaic/90Prime
+            slc = None
+        img = self.read_image(slice=slc)
+        wt = self.read_invvar(slice=slc)
+
+        from .survey import get_version_header
+        hdr = get_version_header(None, self.survey.get_survey_dir(),
+                                 git_version=git_version)
+        primhdr = self.read_image_primary_header()
+        plver = primhdr.get('PLVER', '')
+        hdr.delete('PROCTYPE')
+        hdr.add_record(dict(name='PROCTYPE', value='ccd',
+                            comment='NOAO processing type'))
+        hdr.add_record(dict(name='PRODTYPE', value='skymodel',
+                            comment='NOAO product type'))
+        hdr.add_record(dict(name='PLVER', value=plver,
+                            comment='CP ver of image file'))
+
+
+        if splinesky:
+            from tractor.splinesky import SplineSky
+            from scipy.ndimage.morphology import binary_dilation
+
+            boxsize = self.splinesky_boxsize
+            
+            # Start by subtracting the overall median
+            med = np.median(img[wt>0])
+            # Compute initial model...
+            skyobj = SplineSky.BlantonMethod(img - med, wt>0, boxsize)
+            skymod = np.zeros_like(img)
+            skyobj.addTo(skymod)
+            # Now mask bright objects in (image - initial sky model)
+            sig1 = 1./np.sqrt(np.median(wt[wt>0]))
+            masked = (img - med - skymod) > (5.*sig1)
+            masked = binary_dilation(masked, iterations=3)
+            masked[wt == 0] = True
+
+            sig1b = 1./np.sqrt(np.median(wt[masked == False]))
+            print('Sig1 vs sig1b:', sig1, sig1b)
+
+            # Now find the final sky model using that more extensive mask
+            skyobj = SplineSky.BlantonMethod(
+                img - med, np.logical_not(masked), boxsize)
+            # add the overall median back in
+            skyobj.offset(med)
+
+            if slc is not None:
+                sy,sx = slc
+                y0 = sy.start
+                x0 = sx.start
+                skyobj.shift(-x0, -y0)
+
+            hdr.add_record(dict(name='SIG1', value=sig1,
+                                comment='Median stdev of unmasked pixels'))
+            hdr.add_record(dict(name='SIG1B', value=sig1,
+                                comment='Median stdev of unmasked pixels+'))
+                
+            trymakedirs(self.splineskyfn, dir=True)
+            skyobj.write_fits(self.splineskyfn, primhdr=hdr)
+            print('Wrote sky model', self.splineskyfn)
+
+        else:
+            try:
+                skyval = estimate_mode(img[wt > 0], raiseOnWarn=True)
+                skymeth = 'mode'
+            except:
+                skyval = np.median(img[wt > 0])
+                skymeth = 'median'
+            tsky = ConstantSky(skyval)
+
+            hdr.add_record(dict(name='SKYMETH', value=skymeth,
+                                comment='estimate_mode, or fallback to median?'))
+
+            from scipy.ndimage.morphology import binary_dilation
+            sig1 = 1./np.sqrt(np.median(wt[wt>0]))
+            masked = (img - skyval) > (5.*sig1)
+            masked = binary_dilation(masked, iterations=3)
+            masked[wt == 0] = True
+            sig1b = 1./np.sqrt(np.median(wt[masked == False]))
+            print('Sig1 vs sig1b:', sig1, sig1b)
+
+            hdr.add_record(dict(name='SIG1', value=sig1,
+                                comment='Median stdev of unmasked pixels'))
+            hdr.add_record(dict(name='SIG1B', value=sig1,
+                                comment='Median stdev of unmasked pixels+'))
+            
+            trymakedirs(self.skyfn, dir=True)
+            tsky.write_fits(self.skyfn, hdr=hdr)
+            print('Wrote sky model', self.skyfn)
+
 

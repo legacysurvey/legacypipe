@@ -2,12 +2,12 @@ from __future__ import print_function
 import sys
 import os
 
-# YUCK!  scinet bonkers python setup
-paths = os.environ['PYTHONPATH']
-sys.path = paths.split(':') + sys.path
-if __name__ == '__main__':
-    import matplotlib
-    matplotlib.use('Agg')
+# # YUCK!  scinet bonkers python setup
+# paths = os.environ['PYTHONPATH']
+# sys.path = paths.split(':') + sys.path
+# if __name__ == '__main__':
+#     import matplotlib
+#     matplotlib.use('Agg')
 
 import numpy as np
 import pylab as plt
@@ -23,9 +23,9 @@ from astrometry.util.ttime import Time, MemMeas
 from astrometry.util.multiproc import multiproc
 
 from legacypipe.runbrick import run_brick, rgbkwargs, rgbkwargs_resid
-from legacypipe.common import LegacySurveyData, imsave_jpeg, get_rgb
+from legacypipe.survey import LegacySurveyData, imsave_jpeg, get_rgb
 from legacypipe.image import LegacySurveyImage
-from legacypipe.desi_common import read_fits_catalog
+from legacypipe.catalog import read_fits_catalog
 
 from tractor.sky import ConstantSky
 from tractor.sfd import SFDMap
@@ -34,12 +34,19 @@ from tractor.galaxy import disable_galaxy_cache
 from tractor.ellipses import EllipseE
 
 # For ACS reductions:
-# rgbscales = dict(I=(0, 0.01))
-# rgbkwargs      .update(scales=rgbscales)
-# rgbkwargs_resid.update(scales=rgbscales)
-# SFDMap.extinctions.update({'DES I': 1.592})
-# allbands = 'I'
+#rgbscales = dict(I=(0, 0.01))
+rgbscales = dict(I=(0, 0.003))
+rgbkwargs      .update(scales=rgbscales)
+rgbkwargs_resid.update(scales=rgbscales)
+SFDMap.extinctions.update({'DES I': 1.592})
+allbands = 'I'
 
+rgbscales_cfht = dict(g = (2, 0.004),
+                      r = (1, 0.006),
+                      i = (0, 0.02),
+                      # DECam
+                      z = (0, 0.025),
+    )
 
 def make_zeropoints():
     base = 'euclid/images/'
@@ -667,8 +674,8 @@ def read_acs_catalogs():
         T = fits_table(mfn)
     return T
 
-def get_survey():
-    survey = LegacySurveyData(survey_dir='euclid', output_dir='euclid-out')
+def get_survey(survey_dir='euclid', outdir='euclid-out'):
+    survey = LegacySurveyData(survey_dir=survey_dir, output_dir=outdir)
     survey.image_typemap['acs-vis'] = AcsVisImage
     survey.image_typemap['megacam'] = MegacamImage
     survey.image_typemap['vista'] = VistaImage
@@ -1599,6 +1606,68 @@ def geometry():
     decsplits = (decs[:-1] + decs[1:])/2.
     print('Dec boundaries:', decsplits)
 
+def stage_plot_model(tims=None, bands=None, targetwcs=None,
+                     lanczos=None, survey=None, brickname=None, version_header=None,
+                     mp=None, coadd_bw=None, **kwargs):
+    #ACS = read_acs_catalogs()
+    fn = survey.find_file('tractor', brick=brickname, output=True)
+    ACS = fits_table(fn)
+    print('Read', len(ACS), 'ACS catalog entries')
+    ACS.cut(ACS.brick_primary)
+    print('Cut to', len(ACS), 'primary')
+    ACS.cut(ACS.decam_flux_ivar > 0)
+
+    tim = tims[0]
+    #ok,xx,yy = tim.getWcs().wcs.radec2pixelxy(ACS.ra, ACS.dec)
+    ok,xx,yy = tim.subwcs.radec2pixelxy(ACS.ra, ACS.dec)
+    H,W = tim.shape
+    ACS.cut((xx >= 1.) * (xx < W) * (yy >= 1.) * (yy < H))
+    print('Cut to', len(ACS), 'in image')
+
+    print('Creating catalog objects...')
+    cat = read_fits_catalog(ACS, allbands=bands, bands=bands)
+    tr = Tractor(tims, cat)
+
+    # Clip sizes of big models
+    tim = tims[0]
+    for src in cat:
+        from tractor.galaxy import ProfileGalaxy
+        if isinstance(src, ProfileGalaxy):
+            px,py = tim.wcs.positionToPixel(src.getPosition())
+            h = src._getUnitFluxPatchSize(tim, px, py, tim.modelMinval)
+            MAXHALF = 128
+            if h > MAXHALF:
+                print('halfsize', h,'for',src,'-> setting to',MAXHALF)
+                src.halfsize = MAXHALF
+
+
+    print('Rendering mods...')
+    mods = list(tr.getModelImages())
+
+    print('Writing coadds...')
+    from legacypipe.coadds import write_coadd_images, make_coadds
+    C = make_coadds(tims, bands, targetwcs, mods=mods, lanczos=lanczos,
+                    callback=write_coadd_images,
+                    callback_args=(survey, brickname, version_header, tims, targetwcs),
+                    plots=False, mp=mp)
+    coadd_list= [('image',C.coimgs,rgbkwargs),
+                ('model', C.comods,   rgbkwargs),
+                ('resid', C.coresids, rgbkwargs_resid)]
+    for name,ims,rgbkw in coadd_list:
+        rgb = get_rgb(ims, bands, **rgbkw)
+        kwa = {}
+        if coadd_bw and len(bands) == 1:
+            rgb = rgb.sum(axis=2)
+            kwa = dict(cmap='gray')
+        with survey.write_output(name + '-jpeg', brick=brickname) as out:
+            imsave_jpeg(out.fn, rgb, origin='lower', **kwa)
+            print('Wrote', out.fn)
+        del rgb
+
+    
+from legacypipe.runbrick import stage_tims, stage_mask_junk
+from legacypipe.runbrick import stage_srcs, stage_fitblobs, stage_coadds, stage_writecat
+
 def reduce_acs_image(opt, survey):
     ccds = survey.get_ccds_readonly()
     ccds.cut(ccds.camera == 'acs-vis')
@@ -1608,20 +1677,41 @@ def reduce_acs_image(opt, survey):
     print('Cut to', len(ccds), 'with expnum', opt.expnum)
     allccds = ccds
     
+    prereqs_update = {'plot_model': 'mask_junk'}
+    from astrometry.util.stages import CallGlobalTime
+    stagefunc = CallGlobalTime('stage_%s', globals())
+
     for iccd in range(len(allccds)):
         # Process just this single CCD.
         survey.ccds = allccds[np.array([iccd])]
         ccd = survey.ccds[0]
         brickname = 'acsvis-%03i' % ccd.expnum
-        run_brick(brickname, survey, radec=(ccd.ra, ccd.dec), pixscale=0.1,
-                  #width=200, height=200,
+        run_brick(brickname, survey, pixscale=0.1,
+                  # euclid-out2
+                  #radec = (150.588, 1.776),
+                  # euclid-out3
+                  #radec = (150.570, 1.779),
+                  # euclid-out4
+                  #radec = (150.598, 1.767),
+                  #width = 540, height=540,
+                  radec=(ccd.ra, ccd.dec),
                   width=ccd.width, height=ccd.height, 
+                  #forceAll=True,
+                  #writePickles=False,
+                  #stages=['image_coadds'],
+                  #stages=['plot_model'],
                   bands=['I'],
                   threads=opt.threads,
                   wise=False, do_calibs=False,
-                  pixPsf=True, coadd_bw=True, ceres=False,
-                  blob_image=True, allbands=allbands,
-                  forceAll=True, writePickles=False)
+                  pixPsf=True, hybridPsf=True,
+                  rex=True,
+                  coadd_bw=True, ceres=False,
+                  blob_image=True,
+                  write_metrics=True,
+                  allbands=allbands,
+                  checkpoint_filename=os.path.join('checkpoints', 'checkpoint-%s.pickle' % brickname),
+                  prereqs_update=prereqs_update,
+                  stagefunc=stagefunc)
     #plots=True, plotbase='euclid',
     return 0
 
@@ -1785,6 +1875,11 @@ def main():
     parser.add_argument('--out',
                         help='Filename for forced-photometry output catalog')
 
+    parser.add_argument('--outdir',
+                        default='euclid-out')
+    parser.add_argument('--survey-dir',
+                        default='euclid')
+
     parser.add_argument('--analyze', 
                         help='Analyze forced photometry results for images listed in given image list file')
 
@@ -1797,6 +1892,8 @@ def main():
 
     parser.add_argument('--forced', help='Run forced photometry for given MegaCam CCD index (int) or comma-separated list of indices')
 
+    parser.add_argument('--fits', help='Forced photometry: base filename to write *-model.fits and *-image.fits')
+    
     parser.add_argument('--ceres', action='store_true', help='Use Ceres?')
 
     parser.add_argument(
@@ -1857,12 +1954,8 @@ def main():
             return 0
 
         global rgbkwargs, rgbkwargs_resid
-        rgbscales = dict(g = (2, 0.004),
-                         r = (1, 0.006),
-                         i = (0, 0.02),
-                         )
-        rgbkwargs      .update(scales=rgbscales)
-        rgbkwargs_resid.update(scales=rgbscales)
+        rgbkwargs      .update(scales=rgbscales_cfht)
+        rgbkwargs_resid.update(scales=rgbscales_cfht)
 
         checkpointfn = 'checkpoints/checkpoint-%s.pickle' % opt.brick
 
@@ -1885,9 +1978,6 @@ def main():
         T.cut(T.brick_primary)
         print('Cut to', len(T), 'primary')
         #T.about()
-
-        T.shapeexp = np.vstack((T.shapeexp_r, T.shapeexp_e1, T.shapeexp_e2)).T
-        T.shapedev = np.vstack((T.shapedev_r, T.shapedev_e1, T.shapedev_e2)).T
 
         print('RA', T.ra.min(), T.ra.max())
         print('Dec', T.dec.min(), T.dec.max())
@@ -1959,8 +2049,7 @@ def main():
                         continue
 
                     bands = ['w']
-                    wcat = read_fits_catalog(T[I], ellipseClass=EllipseE, allbands=bands,
-                                             bands=bands)
+                    wcat = read_fits_catalog(T[I], allbands=bands, bands=bands)
                     for src in wcat:
                         src.brightness = NanoMaggies(**dict([(b, 1.) for b in bands]))
                 
@@ -2021,7 +2110,7 @@ def main():
         print('Need --expnum or --forced')
         return -1
 
-    survey = get_survey()
+    survey = get_survey(opt.survey_dir, opt.outdir)
 
     ccds = survey.get_ccds_readonly()
     lastcam = None
@@ -2157,9 +2246,6 @@ def forced_photometry(opt, survey):
         B = 8
         opti = CeresOptimizer(BW=B, BH=B)
     
-    T.shapeexp = np.vstack((T.shapeexp_r, T.shapeexp_e1, T.shapeexp_e2)).T
-    T.shapedev = np.vstack((T.shapedev_r, T.shapedev_e1, T.shapedev_e2)).T
-
     ccds = survey.get_ccds_readonly()
     #I = np.flatnonzero(ccds.camera == 'megacam')
     #print(len(I), 'MegaCam CCDs')
@@ -2201,7 +2287,11 @@ def forced_photometry(opt, survey):
         print(len(J), 'sources are within this image')
         keep_sources[J] = True
 
-        tim = im.get_tractor_image(pixPsf=True, slc=slc)
+        tim = im.get_tractor_image(pixPsf=True, slc=slc,
+                                   # DECam
+                                   splinesky=True
+                                   )
+
         print('Tim:', tim)
         tims.append(tim)
 
@@ -2232,8 +2322,7 @@ def forced_photometry(opt, survey):
     # convert to string
     bands = ''.join(bands)
     
-    cat = read_fits_catalog(T, ellipseClass=EllipseE, allbands=bands,
-                            bands=bands)
+    cat = read_fits_catalog(T, allbands=bands, bands=bands)
     for src in cat:
         src.brightness = NanoMaggies(**dict([(b, 1.) for b in bands]))
 
@@ -2287,6 +2376,63 @@ def forced_photometry(opt, survey):
     t2 = Time()
     print('Forced photometry:', t2-t1)
 
+    if opt.fits:
+        tim = tims[0]
+
+        fn = '%s-image.fits' % opt.fits
+        print('Writing image to', fn)
+        fitsio.write(fn, tim.getImage(), clobber=True)
+
+        mod = tr.getModelImage(0)
+
+        fn = '%s-model.fits' % opt.fits
+        print('Writing model to', fn)
+        fitsio.write(fn, mod, clobber=True)
+        
+        rgbkwargs = dict(mnmx=(-1,100.), arcsinh=1.)
+
+        fn = '%s-image.jpg' % opt.fits
+        print('Writing image to', fn)
+        rgb = get_rgb([tim.getImage()], [tim.band], scales=rgbscales_cfht,
+                      **rgbkwargs)
+        for i in range(3):
+            print('range in plane', i, ':', rgb[:,:,i].min(), rgb[:,:,i].max())
+        print('RGB', rgb.shape, rgb.dtype)
+        (plane,scale) = rgbscales_cfht[tim.band]
+        #rgb = rgb.sum(axis=2)
+        rgb = rgb[:,:,plane]
+        print('RGB', rgb.shape)
+        #imsave_jpeg(rgb, fn)
+        plt.imsave(fn, rgb, vmin=0, vmax=1, cmap='gray')
+
+        fn = '%s-model.jpg' % opt.fits
+        print('Writing model to', fn)
+        rgb = get_rgb([mod], [tim.band], scales=rgbscales_cfht,
+                      **rgbkwargs)
+        print('RGB', rgb.shape)
+        #rgb = rgb.sum(axis=2)
+        rgb = rgb[:,:,plane]
+        print('RGB', rgb.shape)
+        #imsave_jpeg(rgb, fn)
+        plt.imsave(fn, rgb, vmin=0, vmax=1, cmap='gray')
+
+        ie = tim.getInvError()
+        noise = np.random.normal(size=ie.shape) * 1./ie
+        noise[ie == 0] = 0.
+        noisymod = mod + noise
+
+        fn = '%s-model+noise.jpg' % opt.fits
+        print('Writing model+noise to', fn)
+        rgb = get_rgb([noisymod], [tim.band], scales=rgbscales_cfht,
+                      **rgbkwargs)
+        rgb = rgb[:,:,plane]
+        #rgb = rgb.sum(axis=2)
+        plt.imsave(fn, rgb, vmin=0, vmax=1, cmap='gray')
+        
+        fn = '%s-cat.fits' % opt.fits
+        print('Writing catalog to', fn)
+        T.writeto(fn)
+        
     units = {'exptime':'sec' }# 'flux':'nanomaggy', 'flux_ivar':'1/nanomaggy^2'}
     for band in bands:
         F.set('flux_%s' % band, np.array([src.getBrightness().getFlux(band)

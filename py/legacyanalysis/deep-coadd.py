@@ -2,7 +2,7 @@ from __future__ import print_function
 import numpy as np
 import fitsio
 from astrometry.util.fits import fits_table
-from legacypipe.common import *
+from legacypipe.survey import *
 from legacypipe.coadds import _resample_one
 from legacypipe.cpimage import CP_DQ_BITS
 from legacypipe.runbrick import rgbkwargs

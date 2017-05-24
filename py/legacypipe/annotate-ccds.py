@@ -9,25 +9,39 @@ from astrometry.util.fits import fits_table, merge_tables
 from astrometry.util.starutil_numpy import degrees_between
 from astrometry.util.util import Tan
 from astrometry.util.miscutils import polygon_area
-from legacypipe.common import LegacySurveyData
+from legacypipe.survey import LegacySurveyData
 import tractor
 
-def main(outfn='ccds-annotated.fits', ccds=None):
+def main(outfn='ccds-annotated.fits', ccds=None, mzls=False):
     survey = LegacySurveyData(ccds=ccds)
     if ccds is None:
         ccds = survey.get_ccds()
 
     # File from the "observing" svn repo:
-    # https://desi.lbl.gov/svn/decam/code/observing/trunk
-    tiles = fits_table('decam-tiles_obstatus.fits')
+    if mzls:
+        # https://desi.lbl.gov/svn/decam/code/mosaic3/trunk
+        tiles = fits_table('mosaic-tiles_obstatus.fits')
+    else:
+        # https://desi.lbl.gov/svn/decam/code/observing/trunk
+        tiles = fits_table('decam-tiles_obstatus.fits')
 
-    I = survey.photometric_ccds(ccds)
+    # Map tile IDs back to index in the obstatus file.
+    tileid_to_index = np.empty(max(tiles.tileid)+1, int)
+    tileid_to_index[:] = -1
+    tileid_to_index[tiles.tileid] = np.arange(len(tiles))
+
     ccds.photometric = np.zeros(len(ccds), bool)
-    ccds.photometric[I] = True
+    I = survey.photometric_ccds(ccds)
+    if I is None:
+        ccds.photometric[:] = True
+    else:
+        ccds.photometric[I] = True
 
-    I = survey.apply_blacklist(ccds)
-    ccds.blacklist_ok = np.zeros(len(ccds), bool)
-    ccds.blacklist_ok[I] = True
+    ccds.ccd_cuts = survey.ccd_cuts(ccds)
+
+    # Set to True if we successfully read the calibration products and computed
+    # annotated values
+    ccds.annotated = np.zeros(len(ccds), bool)
 
     ccds.good_region = np.empty((len(ccds), 4), np.int16)
     ccds.good_region[:,:] = -1
@@ -85,8 +99,16 @@ def main(outfn='ccds-annotated.fits', ccds=None):
     plvers = []
 
     for iccd,ccd in enumerate(ccds):
-        im = survey.get_image_object(ccd)
-        print('Reading CCD %i of %i:' % (iccd+1, len(ccds)), im)
+        print('Reading CCD %i of %i:' % (iccd+1, len(ccds)), 'file', ccd.image_filename, 'CCD', ccd.expnum, ccd.ccdname)
+        try:
+            im = survey.get_image_object(ccd)
+        except:
+            print('Failed to get_image_object()')
+            import traceback
+            traceback.print_exc()
+            plvers.append('')
+            continue
+        print('Reading CCD %i of %i:' % (iccd+1, len(ccds)), im, 'file', ccd.image_filename, 'CCD', ccd.ccdname)
 
         X = im.get_good_image_subregion()
         for i,x in enumerate(X):
@@ -95,12 +117,14 @@ def main(outfn='ccds-annotated.fits', ccds=None):
 
         W,H = ccd.width, ccd.height
 
+        kwargs = dict(pixPsf=True, splinesky=True, subsky=False,
+                      pixels=False, dq=False, invvar=False)
+
         psf = None
         wcs = None
         sky = None
         try:
-            tim = im.get_tractor_image(pixPsf=True, splinesky=True, subsky=False,
-                                       pixels=False, dq=False, invvar=False)
+            tim = im.get_tractor_image(**kwargs)
 
         except:
             import traceback
@@ -131,14 +155,19 @@ def main(outfn='ccds-annotated.fits', ccds=None):
         obj = ccd.object.strip()
         words = obj.split('_')
         tile = None
-        if len(words) == 3 and words[0] == 'DECaLS':
+        if len(words) == 3 and (
+            ((not mzls) and (words[0] == 'DECaLS')) or
+            (     mzls  and (words[0] == 'MzLS'  ))):
             try:
                 tileid = int(words[1])
-                tile = tiles[tileid - 1]
-                if tile.tileid != tileid:
-                    I = np.flatnonzero(tile.tileid == tileid)
-                    tile = tiles[I[0]]
+                tile = tiles[tileid_to_index[tileid]]
+                assert(tile.tileid == tileid)
+                # if tile.tileid != tileid:
+                #     I = np.flatnonzero(tile.tileid == tileid)
+                #     tile = tiles[I[0]]
             except:
+                import traceback
+                traceback.print_ext()
                 pass
 
         if tile is not None:
@@ -208,13 +237,24 @@ def main(outfn='ccds-annotated.fits', ccds=None):
         gaussgalnorm[iccd] = im.galaxy_norm(tim, x=cx, y=cy)
         tim.psf = realpsf
         
+        #has_skygrid = dict(decam=True).get(ccd.camera, False)
+        has_skygrid = hasattr(sky, 'evaluateGrid')
+
+
         # Sky -- evaluate on a grid (every ~10th pixel)
-        skygrid = sky.evaluateGrid(np.linspace(0, ccd.width-1,  int(1+ccd.width/10)),
-                                   np.linspace(0, ccd.height-1, int(1+ccd.height/10)))
-        ccds.meansky[iccd] = np.mean(skygrid)
-        ccds.stdsky[iccd]  = np.std(skygrid)
-        ccds.maxsky[iccd]  = skygrid.max()
-        ccds.minsky[iccd]  = skygrid.min()
+        if has_skygrid:
+            skygrid = sky.evaluateGrid(np.linspace(0, ccd.width-1,  int(1+ccd.width/10)),
+                                       np.linspace(0, ccd.height-1, int(1+ccd.height/10)))
+            ccds.meansky[iccd] = np.mean(skygrid)
+            ccds.stdsky[iccd]  = np.std(skygrid)
+            ccds.maxsky[iccd]  = skygrid.max()
+            ccds.minsky[iccd]  = skygrid.min()
+        else:
+            skyval = sky.getConstant()
+            ccds.meansky[iccd] = skyval
+            ccds.stdsky[iccd]  = 0.
+            ccds.maxsky[iccd]  = skyval
+            ccds.minsky[iccd]  = skyval
 
         # WCS
         ccds.ra0[iccd],ccds.dec0[iccd] = wcs.pixelxy2radec(1, 1)
@@ -256,6 +296,8 @@ def main(outfn='ccds-annotated.fits', ccds=None):
         ccds.pixscale_max[iccd] = max(pixscale)
         ccds.pixscale_std[iccd] = np.std(pixscale)
 
+        ccds.annotated[iccd] = True
+
     ccds.plver = np.array(plvers)
 
     sfd = tractor.sfd.SFDMap()
@@ -264,6 +306,10 @@ def main(outfn='ccds-annotated.fits', ccds=None):
     wisebands = ['WISE W1', 'WISE W2', 'WISE W3', 'WISE W4']
     ebv,ext = sfd.extinction(filts + wisebands, ccds.ra_center,
                              ccds.dec_center, get_ebv=True)
+
+    ext[np.logical_not(ccds.annotated),:] = 0.
+    ebv[np.logical_not(ccds.annotated)] = 0.
+
     ext = ext.astype(np.float32)
     ccds.ebv = ebv.astype(np.float32)
     ccds.decam_extinction = ext[:,:len(allbands)]
@@ -294,16 +340,21 @@ def main(outfn='ccds-annotated.fits', ccds=None):
     # that's flux in nanomaggies -- convert to mag
     ccds.gaussgaldepth = -2.5 * (np.log10(depth) - 9)
 
+
+    # NaN depths -> 0
+    for X in [ccds.psfdepth, ccds.galdepth, ccds.gausspsfdepth, ccds.gaussgaldepth]:
+        X[np.logical_not(np.isfinite(X))] = 0.
+    
     ccds.writeto(outfn)
 
 
-def _bounce_main((name, i, ccds)):
+def _bounce_main((name, i, ccds, force, mzls)):
     try:
         outfn = 'ccds-annotated/ccds-annotated-%s-%03i.fits' % (name, i)
-        if os.path.exists(outfn):
+        if (not force) and os.path.exists(outfn):
             print('Already exists:', outfn)
             return
-        main(outfn=outfn, ccds=ccds)
+        main(outfn=outfn, ccds=ccds, mzls=mzls)
     except:
         import traceback
         traceback.print_exc()
@@ -313,6 +364,9 @@ if __name__ == '__main__':
     import argparse
     parser = argparse.ArgumentParser(description='Produce annotated CCDs file by reading CCDs file + calibration products')
     parser.add_argument('--part', action='append', help='CCDs file to read, survey-ccds-X.fits.gz, default: ["decals","nondecals","extra"].  Can be repeated.', default=[])
+    parser.add_argument('--mzls', action='store_true', default=False, help='MzLS (default: DECaLS')
+    parser.add_argument('--force', action='store_true', default=False,
+                        help='Ignore ccds-annotated/* files and re-run')
     parser.add_argument('--threads', type=int, help='Run multi-threaded', default=4)
     opt = parser.parse_args()
 
@@ -349,7 +403,7 @@ if __name__ == '__main__':
             T.galdepth += offset
             T.gausspsfdepth += offset
             T.gaussgaldepth += offset
-    
+
             print('Photometric:', np.unique(T.photometric))
             
             print('After:')
@@ -403,20 +457,38 @@ if __name__ == '__main__':
         while len(ccds):
             c = ccds[:N]
             ccds = ccds[N:]
-            args.append((name, i, c))
+            args.append((name, i, c, opt.force, opt.mzls))
             i += 1
         print('Split CCDs file into', len(args), 'pieces')
-        print('sizes:', [len(c) for n,i,c in args])
+        print('sizes:', [len(a[2]) for a in args])
         mp.map(_bounce_main, args)
 
         # reassemble outputs
         TT = [fits_table('ccds-annotated/ccds-annotated-%s-%03i.fits' % (name,i))
-              for name,i,nil in args]
+              for name,i,nil,nil,nil in args]
         T = merge_tables(TT)
 
         # expand some columns to make the three files have the same structure.
         T.object = T.object.astype('S37')
         T.plver  = T.plver.astype('S6')
+
+        # DR4 only
+        if False and opt.mzls:
+            cols = T.columns()
+            if not 'bad_expid' in cols:
+                I = survey.bad_exposures(T)
+                T.bad_expid = np.zeros(len(T), bool)
+                T.bad_expid[I] = True
+
+            if not 'ccd_hdu_mismatch' in cols:
+                I = survey.ccdname_hdu_match(T)
+                T.ccd_hdu_mismatch = np.zeros(len(T), bool)
+                T.ccd_hdu_mismatch[I] = True
+
+            if not 'bad_astrometry' in cols:
+                I = survey.bad_astrometry(T)
+                T.zpts_bad_astrom = np.zeros(len(T), bool)
+                T.zpts_bad_astrom[I] = True
 
         T.writeto('survey-ccds-annotated-%s.fits' % name)
 

@@ -79,7 +79,9 @@ class ImapTracker(object):
             print('ImapTracker:')
             traceback.print_exc()
             raise
-
+    # py3
+    __next__ = next
+        
 class MyMultiproc(multiproc):
     def __init__(self, *args, **kwargs):
         super(MyMultiproc, self).__init__(*args, **kwargs)
@@ -94,24 +96,24 @@ class MyMultiproc(multiproc):
         self.serial.append((self.t0, tstart))
         self.t0 = tstart
         self.phases.append((name, self.serial, self.parallel, self.t0))
-        print('Starting subphase', name)
-        print('  pushing serial', self.serial)
-        print('  pushing parallel', self.parallel)
+        # print('Starting subphase', name)
+        # print('  pushing serial', self.serial)
+        # print('  pushing parallel', self.parallel)
         self.serial = []
         self.parallel = []
         
     def finish_subphase(self):
         # pop
         (name, serial, parallel, t0) = self.phases.pop()
-        print('Popping subphase', name)
-        print('  serial elements during subphase:', self.serial)
-        print('  parallel elements during subphase:', self.parallel)
+        # print('Popping subphase', name)
+        # print('  serial elements during subphase:', self.serial)
+        # print('  parallel elements during subphase:', self.parallel)
         serial.extend(self.serial)
         self.serial = serial
         parallel.extend(self.parallel)
         self.parallel = parallel
-        print('  after popping serial', self.serial)
-        print('  after popping parallel', self.parallel)
+        # print('  after popping serial', self.serial)
+        # print('  after popping parallel', self.parallel)
         
     def is_multiproc(self):
         return self.pool is not None
@@ -143,7 +145,12 @@ class MyMultiproc(multiproc):
             cs = self.map_chunksize
         if self.pool is None:
             import itertools
-            return itertools.imap(func, iterable)
+            if 'imap' in dir(itertools):
+                # py2
+                return itertools.imap(func, iterable)
+            else:
+                # py3
+                return map(func, iterable)
         if wrap or self.wrap_all:
             func = funcwrapper(func)
         res = self.pool.imap_unordered(func, iterable, chunksize=cs)
@@ -159,9 +166,9 @@ class MyMultiproc(multiproc):
         # Nasty... peek into Time members
         scpu = 0.
         swall = 0.
-        print('Serial:')
+        #print('Serial:')
         for t0,t1 in self.serial:
-            print(t1-t0)
+            #print(t1-t0)
             for m0,m1 in zip(t0.meas, t1.meas):
                 if isinstance(m0, CpuMeas):
                     scpu  += m1.cpu_seconds_since(m0)
@@ -171,9 +178,9 @@ class MyMultiproc(multiproc):
         pworkerwall = 0.
         pwall = 0.
         pcpu = 0.
-        print('Parallel:')
+        #print('Parallel:')
         for t0,t1 in self.parallel:
-            print(t1-t0)
+            #print(t1-t0)
             for m0,m1 in zip(t0.meas, t1.meas):
                 if isinstance(m0, TimingPoolTimestamp):
                     mt0 = m0.t0
@@ -219,10 +226,69 @@ class iterwrapper(object):
             print(str(self), 'next()')
             traceback.print_exc()
             raise
-
+    # py3
+    def __next__(self):
+        try:
+            return self.y.__next__()
+        except StopIteration:
+            raise
+        except:
+            import traceback
+            print(str(self), '__next__()')
+            traceback.print_exc()
+            raise
     def __len__(self):
         return self.n
 
+def _ring_unique(wcs, W, H, i, unique, ra1,ra2,dec1,dec2):
+    lo, hix, hiy = i, W-i-1, H-i-1
+    # one slice per side; we double-count the last pix of each side.
+    sidex = slice(lo,hix+1)
+    sidey = slice(lo,hiy+1)
+    top = (lo, sidex)
+    bot = (hiy, sidex)
+    left  = (sidey, lo)
+    right = (sidey, hix)
+    xx = np.arange(W)
+    yy = np.arange(H)
+    nu,ntot = 0,0
+    for slc in [top, bot, left, right]:
+        #print('xx,yy', xx[slc], yy[slc])
+        (yslc,xslc) = slc
+        rr,dd = wcs.pixelxy2radec(xx[xslc]+1, yy[yslc]+1)
+        U = (rr >= ra1 ) * (rr < ra2 ) * (dd >= dec1) * (dd < dec2)
+        #print('Pixel', i, ':', np.sum(U), 'of', len(U), 'pixels are unique')
+        unique[slc] = U
+        nu += np.sum(U)
+        ntot += len(U)
+    #if allin:
+    #    print('Scanned to pixel', i)
+    #    break
+    return nu,ntot
+
+def find_unique_pixels(wcs, W, H, unique, ra1,ra2,dec1,dec2):
+    if unique is None:
+        unique = np.ones((H,W), bool)
+    # scan the outer annulus of pixels, and shrink in until all pixels
+    # are unique.
+    step = 10
+    for i in range(0, W//2, step):
+        nu,ntot = _ring_unique(wcs, W, H, i, unique, ra1,ra2,dec1,dec2)
+        #print('Pixel', i, ': nu/ntot', nu, ntot)
+        if nu > 0:
+            i -= step
+            break
+        unique[:i,:] = False
+        unique[H-1-i:,:] = False
+        unique[:,:i] = False
+        unique[:,W-1-i:] = False
+
+    for j in range(max(i+1, 0), W//2):
+        nu,ntot = _ring_unique(wcs, W, H, j, unique, ra1,ra2,dec1,dec2)
+        #print('Pixel', j, ': nu/ntot', nu, ntot)
+        if nu == ntot:
+            break
+    return unique
 
 def run_ps_thread(pid, ppid, fn):
     from astrometry.util.run_command import run_command

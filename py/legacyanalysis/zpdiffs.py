@@ -17,7 +17,7 @@ from astrometry.util.miscutils import *
 from astrometry.util.plotutils import *
 
 from legacyanalysis.ps1cat import *
-from legacypipe.common import *
+from legacypipe.survey import *
 from astrometry.libkd.spherematch import *
 import photutils
 

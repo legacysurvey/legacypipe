@@ -5,7 +5,7 @@ from astrometry.util.fits import fits_table, merge_tables
 import numpy as np
 import pylab as plt
 
-from legacypipe.common import *
+from legacypipe.survey import *
 from legacypipe.decam import DecamImage
 
 from tractor.sfd import SFDMap
@@ -144,8 +144,52 @@ for band in bands:
 #
 #  The 30/31/32 subset differs very slightly (substituted two
 #  exposures) compared to 10/11/12.
+#
+#
+#    30:
+#    g band:
+#    Image 397525 propid 2014B-0146 exptime 180.0 seeing 1.12011
+#    Image 283978 propid 2014A-0073 exptime 90.0 seeing 1.39842
+#    Image 289050 propid 2014A-0608 exptime 160.0 seeing 1.81853
+#    r band:
+#    Image 405290 propid 2014B-0146 exptime 250.0 seeing 1.23424
+#    Image 397551 propid 2014B-0146 exptime 135.0 seeing 1.27619
+#    Image 397523 propid 2014B-0146 exptime 250.0 seeing 1.30939
+#    z band:
+#    Image 180583 propid 2012B-0003 exptime 300.0 seeing 1.17304
+#    Image 180585 propid 2012B-0003 exptime 300.0 seeing 1.31529
+#    Image 193204 propid 2013A-0741 exptime 300.0 seeing 1.55342
+#    
+#    31:
+#    g band:
+#    Image 397526 propid 2014B-0146 exptime 180.0 seeing 1.15631
+#    Image 283979 propid 2014A-0073 exptime 90.0 seeing 1.42818
+#    Image 289196 propid 2014A-0608 exptime 160.0 seeing 1.82579
+#    r band:
+#    Image 397524 propid 2014B-0146 exptime 250.0 seeing 1.23562
+#    Image 397522 propid 2014B-0146 exptime 250.0 seeing 1.28107
+#    Image 405262 propid 2014B-0146 exptime 250.0 seeing 1.31202
+#    z band:
+#    Image 405257 propid 2014B-0146 exptime 300.0 seeing 1.17682
+#    Image 395347 propid 2014B-0146 exptime 300.0 seeing 1.32482
+#    Image 193205 propid 2013A-0741 exptime 300.0 seeing 1.50034
+#    
+#    32:
+#    g band:
+#    Image 511250 propid 2014B-0404 exptime 89.0 seeing 1.16123
+#    Image 283982 propid 2014A-0073 exptime 90.0 seeing 1.42682
+#    Image 289155 propid 2014A-0608 exptime 160.0 seeing 2.07036
+#    r band:
+#    Image 405291 propid 2014B-0146 exptime 250.0 seeing 1.2382
+#    Image 397552 propid 2014B-0146 exptime 135.0 seeing 1.29461
+#    Image 405292 propid 2014B-0146 exptime 250.0 seeing 1.29947
+#    z band:
+#    Image 180582 propid 2012B-0003 exptime 300.0 seeing 1.17815
+#    Image 405254 propid 2014B-0146 exptime 300.0 seeing 1.33786
+#    Image 192768 propid 2013A-0741 exptime 100.0 seeing 1.57756
+#
+#
 ###
-subset_offset = 30
 
 exposures = [397525, 397526, 511250, # g,p1
              283978, 283979, 283982, # g,p2   -- 283979 was 431103
@@ -162,7 +206,11 @@ exposures = [397525, 397526, 511250, # g,p1
 # keep adding the next exposure until we reach the desired depth --
 # here we're setting up the exposure list so that it selects the ones
 # we want.)
-exposures = exposures[::3] + exposures[1::3] + exposures[2::3]
+
+#subset_offset = 30
+#exposures = exposures[::3] + exposures[1::3] + exposures[2::3]
+
+subset_offset = 50
 
 # Pull out our exposures into table E.
 I = []
@@ -214,9 +262,41 @@ for iset in xrange(100):
             thisdetiv = 1./(np.hypot(ccds.sig1, ccds.addnoise) /ccds.galnorm)**2
             print('  adding factor %.2f more noise' %
                   (np.mean(ccds.addnoise / ccds.sig1)))
+            #print('  -> should yield noise', np.hypot(ccds.sig1, ccds.addnoise),
+            #      'vs target', targetsig1)
             print('  final detiv: range %g, %g' %
                   (thisdetiv.min(), thisdetiv.max()))
             print('  detivs:', sorted(thisdetiv))
+
+            #print('  -> depths:', -2.5 * (np.log10(5./np.sqrt(thisdetiv)) - 9))
+
+            from legacypipe.runcosmos import CosmosSurvey
+            survey = CosmosSurvey(subset=iset + subset_offset)
+            for c in ccds:
+                c.camera = c.camera + '+noise'
+                print('camera', c.camera)
+                im = survey.get_image_object(c)
+                print('  got image', im)
+                tim = im.get_tractor_image(splinesky=True, pixPsf=True, hybridPsf=True)
+                print('  got tim', tim)
+                print('  sig1', tim.sig1, 'vs target', targetsig1)
+                print('  galnorm', tim.galnorm, 'vs CCDs', c.galnorm)
+
+                # compute galnorm_mean like in annotated_ccds
+                # Instantiate PSF on a grid
+                S = 32
+                H,W = tim.shape
+                xx = np.linspace(1+S, W-S, 5)
+                yy = np.linspace(1+S, H-S, 5)
+                xx,yy = np.meshgrid(xx, yy)
+                galnorms = []
+                for x,y in zip(xx.ravel(), yy.ravel()):
+                    g = im.galaxy_norm(tim, x=x, y=y)
+                    galnorms.append(g)
+                print('  mean galnorm:', np.mean(galnorms))
+
+                print('  depth', -2.5 * (np.log10(5. * tim.sig1 / tim.galnorm) - 9), 'vs target', -2.5 * (np.log10(5./np.sqrt(maxiv)) - 9))
+
             detiv += np.mean(thisdetiv)
             thisset.append(ccds)
             used_expnums.append(exp.expnum)

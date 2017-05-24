@@ -8,7 +8,7 @@ import numpy as np
 from astrometry.util.util import wcs_pv2sip_hdr
 
 from legacypipe.image import LegacySurveyImage
-from legacypipe.common import LegacySurveyData
+from legacypipe.survey import LegacySurveyData
 
 # From: http://www.noao.edu/noao/staff/fvaldes/CPDocPrelim/PL201_3.html
 # 1   -- detector bad pixel           InstCal
@@ -89,16 +89,21 @@ class CPImage(LegacySurveyImage):
     def check_image_header(self, imghdr):
         # check consistency... something of a DR1 hangover
         e = imghdr['EXTNAME']
-        assert(e.strip() == self.ccdname.strip())
+        try: 
+            assert(e.strip() == self.ccdname.strip())
+        except AssertionError:
+            raise ValueError('self.ccdname=%s, self.imgfn=%s' % (self.ccdname,self.imgfn))
 
-    def get_wcs(self):
+    def get_wcs(self,hdr=None):
         # Make sure the PV-to-SIP converter samples enough points for small
         # images
         stepsize = 0
         if min(self.width, self.height) < 600:
             stepsize = min(self.width, self.height) / 10.;
-        hdr = self.read_image_header()
+        if hdr is None:
+            hdr = self.read_image_header()
         wcs = wcs_pv2sip_hdr(hdr, stepsize=stepsize)
+        # Correction: ccd,ccdraoff, decoff from zeropoints file
         dra,ddec = self.dradec
         print('Applying astrometric zeropoint:', (dra,ddec))
         r,d = wcs.get_crval()
@@ -130,4 +135,78 @@ class CPImage(LegacySurveyImage):
         dqbits[dq == 7] |= CP_DQ_BITS['trans']
         dqbits[dq == 8] |= CP_DQ_BITS['trans']
         return dqbits
+
+    # A function that can be called by a subclasser's remap_invvar() method
+    def remap_invvar_shotnoise(self, invvar, primhdr, img, dq):
+        print('Remapping weight map for', self.name)
+        const_sky = primhdr['SKYADU'] # e/s, Recommended sky level keyword from Frank 
+        expt = primhdr['EXPTIME'] # s
+
+        var_SR = 1./invvar # e/s 
+        var_Astro = np.abs(img - const_sky) / expt # e/s 
+        wt = 1./(var_SR + var_Astro) # s/e
+
+        # Zero out NaNs and masked pixels 
+        wt[np.isfinite(wt) == False] = 0.
+        wt[dq != 0] = 0.
+
+        return wt
+
+    @classmethod
+    def ccd_cuts(self, survey, ccds):
+        ccdcuts = super(CPImage, self).ccd_cuts(survey, ccds)
+        bits = LegacySurveyData.ccd_cut_bits
+
+        I = self.bad_exposures(survey, ccds)
+        print(np.sum(I), 'CCDs have BAD_EXPID')
+        ccdcuts[I] += bits['BAD_EXPID']
+
+        I = self.ccdname_hdu_mismatch(survey, ccds)
+        print(np.sum(I), 'CCDs have CCDNAME_HDU mismatch')
+        ccdcuts[I] += bits['CCDNAME_HDU_MISMATCH']
+
+        I = self.bad_astrometry(survey, ccds)
+        print(np.sum(I), 'CCDs have bad astrometry')
+        ccdcuts[I] += bits['BAD_ASTROMETRY']
+        
+        return ccdcuts
     
+    @classmethod
+    def bad_exposures(self, survey, ccds):
+        '''
+        Returns an index array for the members of the table 'ccds'
+        that are good exposures (NOT flagged) in the bad_expid file.
+        '''
+        # Exposure number, leading zeros removed
+        badccds = np.zeros(len(ccds), bool)
+
+        bad = self.get_bad_expids()
+        for expnum in bad:
+            badccds[ccds.expnum == expnum] = True
+        return badccds
+
+    @classmethod
+    def ccdname_hdu_mismatch(self, survey, ccds):
+        '''
+        Mosaic + Bok, ccdname and hdu number must match. If not, IDL
+        zeropoints files has duplicated zeropoint info from one of the
+        other four ccds.
+
+        Returns a boolean array, True for CCDs with this problem.
+        '''
+        ccdnum = np.char.replace(ccds.ccdname,'ccd','').astype(ccds.image_hdu.dtype)
+        return ccds.image_hdu != ccdnum
+
+    @classmethod
+    def bad_astrometry(self, survey, ccds):
+        ''' 
+        IDL zeropoints have large rarms,decrms,phrms for some CP images that look fine. Legacy
+        zeropoints is okay for majority of these cases. False alarm? Bug in IDL zeropoints? Doing
+        the most conservative thing and dropping these ccds.
+        see email: "3/30/2017: [decam-chatter 5155] Clue to zero-point errors in dr4"
+        '''
+        bad = np.logical_or(np.hypot(ccds.ccdrarms, ccds.ccddecrms) > 0.1,
+                            ccds.ccdphrms > 0.2)
+        return bad
+    
+

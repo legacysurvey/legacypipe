@@ -9,7 +9,7 @@ from astrometry.util.fits import fits_table
 import sys
 
 # Argh, no relative imports in runnable scripts
-from legacypipe.common import run_calibs, LegacySurveyData
+from legacypipe.survey import run_calibs, LegacySurveyData
 
 def main():
     """Main program.
@@ -63,6 +63,8 @@ def main():
             I = np.flatnonzero((T.expnum == expnum) * (T.ccdname == ccdname))
             if len(I) != 1:
                 print('Found', len(I), 'CCDs for expnum', expnum, 'CCDname', ccdname, ':', I)
+                print('WARNING: skipping this expnum,ccdname')
+                continue
             assert(len(I) == 1)
             t = T[I[0]]
         else:
