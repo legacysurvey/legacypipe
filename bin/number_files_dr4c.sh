@@ -1,5 +1,8 @@
 #!/bin/bash
 
+# Run 
+# ../bin/number_files_dr4c.sh 
+
 bricklist=dr4_bricks.txt
 dr=/global/cscratch1/sd/desiproc/dr4/data_release/dr4_fixes
 # Write problems to a file
