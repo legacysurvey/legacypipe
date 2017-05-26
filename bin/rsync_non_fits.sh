@@ -18,10 +18,11 @@ for brick in `sed -n ${start_ln},${end_ln}p $bricklist`;do
     ith=$(($cnt % 100))
     if [ "$ith" == "0" ];then echo $cnt/$n_bricks;fi
     bri=`echo $brick|head -c 3`
-    coadd_fns=`find ${dr}/coadd/$bri/$brick/*.jpg`
-    #chkpt_dr=${dr}/checkpoints
+    # Jpegs in coadd dir
+    #coadd_fns=`find ${dr}/coadd/$bri/$brick/*.jpg`
+    rsync -av ${dr}/coadd/$bri/$brick/*.jpg ${target_dr}/coadd/$bri/$brick/
+    # Chkpts
+    #find ${dr}/checkpoints/${brick}.pickle
+    rsync -av ${dr}/checkpoints/${brick}.pickle ${target_dr}/checkpoints/
     #logs_dr=${dr}/logs
-    #rsync -av $coadd_fns ${target_dr}/coadd/$bri/$brick/
-    find ${dr}/checkpoints/${brick}.pickle
-    #rsync -av ${dr}/checkpoints/${brick}.pickle ${target_dr}/checkpoints/
 done
