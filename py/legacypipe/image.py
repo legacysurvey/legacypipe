@@ -14,52 +14,6 @@ from astrometry.util.file import trymakedirs
 Generic image handling code.
 '''
 
-class MyHybridPsf(HybridPSF):
-    '''
-    This class wraps a pixelized PSF model, adding a Gaussian approximation
-    model.
-    '''
-    def __init__(self, gauss, pix):
-        '''
-        Create a new hybrid PSF model using the given Gaussian approximation
-        *gauss* and pixelized PSF model *pix*.
-        '''
-        super(MyHybridPsf, self).__init__()
-        self.gauss = gauss
-        self.pix = pix
-
-    def __str__(self):
-        return ('MyHybridPsf: Gaussian sigma %.2f, Pix %s' %
-                (np.sqrt(self.gauss.mog.var[0,0,0]), str(self.pix)))
-        
-    def getMixtureOfGaussians(self, **kwargs):
-        return self.gauss.getMixtureOfGaussians(**kwargs)
-
-    def getShifted(self, dx, dy):
-        pix = self.pix.shifted(dx, dy)
-        return MyHybridPsf(self.gauss, pix)
-    
-    def constantPsfAt(self, x, y):
-        pix = self.pix.constantPsfAt(x, y)
-        return MyHybridPsf(self.gauss, pix)
-
-    def __getattr__(self, name):
-        '''Delegate to my pixelized PSF model.'''
-        return getattr(self.pix, name)
-
-    def __setattr__(self, name, val):
-        '''Delegate to my pixelized PSF model.'''
-        if name in ['gauss', 'pix']:
-            return object.__setattr__(self, name, val)
-        setattr(self.__dict__['pix'], name, val)
-
-    # for pickling:
-    def __getstate__(self):
-        return (self.gauss, self.pix)
-     
-    def __setstate__(self, state):
-        self.gauss, self.pix = state
-        
 class LegacySurveyImage(object):
     '''A base class containing common code for the images we handle.
 
@@ -645,6 +599,7 @@ class LegacySurveyImage(object):
             psf.plver = ''
         else:
             # spatially varying pixelized PsfEx
+            from tractor import PixelizedPsfEx
             print('Reading PsfEx model from', self.psffn)
             psf = PixelizedPsfEx(self.psffn)
             psf.shift(x0, y0)

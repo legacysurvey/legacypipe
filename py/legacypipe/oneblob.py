@@ -16,7 +16,7 @@ from tractor.patch import ModelMask
 from legacypipe.survey import (SimpleGalaxy, LegacyEllipseWithPriors, 
                                RexGalaxy,
                                get_rgb)
-from legacypipe.runbrick import rgbkwargs_resid
+from legacypipe.runbrick import rgbkwargs, rgbkwargs_resid
 from legacypipe.coadds import quick_coadds
 from legacypipe.runbrick_plots import _plot_mods
 
@@ -360,7 +360,11 @@ class OneBlob(object):
                 C = int(np.ceil(len(srctims) / float(R)))
                 for i,tim in enumerate(srctims):
                     plt.subplot(R, C, i+1)
-                    dimshow(modelMasks[i][src].patch, vmin=0, vmax=1)
+                    msk = modelMasks[i][src].mask
+                    print('Mask:', msk)
+                    if msk is None:
+                        continue
+                    plt.imshow(msk, interpolation='nearest', origin='lower', vmin=0, vmax=1)
                     plt.title(tim.name)
                 plt.suptitle('Model Masks')
                 self.ps.savefig()
@@ -569,17 +573,18 @@ class OneBlob(object):
     
                 if self.plots1:
                     print('Computing first-round plot for', name)
-                    self._plot_coadd(srctims, self.blobwcs, model=srctractor)
+                    plt.clf()
+                    coimgs,cons = quick_coadds(srctims, self.bands, self.blobwcs, images=list(srctractor.getModelImages()), fill_holes=False)
+                    dimshow(get_rgb(coimgs,self.bands))
                     plt.title('first round: %s' % name)
                     self.ps.savefig()
-    
+
                 disable_galaxy_cache()
 
                 if self.plots1:
                     print('Computing first-round plot (no cache) for', name)
-                    set_ps_debug(self.ps)
-                    self._plot_coadd(srctims, self.blobwcs, model=srctractor)
-                    set_ps_debug(None)
+                    coimgs,cons = quick_coadds(srctims, self.bands, self.blobwcs, images=list(srctractor.getModelImages()), fill_holes=False)
+                    dimshow(get_rgb(coimgs,self.bands))
                     plt.title('first round: %s' % name)
                     self.ps.savefig()
 
@@ -1191,6 +1196,21 @@ class OneBlob(object):
                    None, None, None,
                    self.blobw, self.blobh, self.ps, chi_plots=False)
 
+    def _plot_coadd(self, tims, wcs, model=None, resid=None):
+        if resid is not None:
+            mods = list(resid.getChiImages())
+            coimgs,cons = quick_coadds(tims, self.bands, wcs, images=mods,
+                                       fill_holes=False)
+            dimshow(get_rgb(coimgs,self.bands, **rgbkwargs_resid))
+            return
+            
+        mods = None
+        if model is not None:
+            mods = list(model.getModelImages())
+        coimgs,cons = quick_coadds(tims, self.bands, wcs, images=mods,
+                                   fill_holes=False)
+        dimshow(get_rgb(coimgs,self.bands))
+        
     def _initial_plots(self):
         print('Plotting blob image for blob', self.name)
         coimgs,cons = quick_coadds(self.tims, self.bands, self.blobwcs,
