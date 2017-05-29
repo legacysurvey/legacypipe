@@ -341,6 +341,7 @@ def _stars_table(nstars=1):
             ('expid', 'S16'), ('filter', 'S1'),('nmatch', '>i2'), 
             ('amplifier', 'i2'), ('x', 'f4'), ('y', 'f4'),('expnum', '>i4'),
             ('ra', 'f8'), ('dec', 'f8'), ('apmag', 'f4'),('apflux', 'f4'),('apskyflux', 'f4'),('apskyflux_perpix', 'f4'),
+            ('ap_area', 'f4'),
             ('radiff', 'f8'), ('decdiff', 'f8'),('radiff_ps1', 'f8'), ('decdiff_ps1', 'f8'),
             ('gaia_ra', 'f8'), ('gaia_dec', 'f8'), ('ps1_mag', 'f4'), ('ps1_gicolor', 'f4'),
             ('gaia_g','f8'),('ps1_g','f8'),('ps1_r','f8'),('ps1_i','f8'),('ps1_z','f8'),
@@ -712,6 +713,7 @@ class Measurer(object):
             apskyflux= skyphot['aperture_sum'] / skyap.area() * ap.area()
             apskyflux_perpix= skyphot['aperture_sum'] / skyap.area() 
             apflux = apphot['aperture_sum'] - apskyflux
+            ap_area= ap.area()
         # Use Bitmask, remove stars if any bitmask within 5 pixels
         bit_ap = CircularAperture((obj['xcentroid'], obj['ycentroid']), 5.)
         bit_phot = aperture_photometry(bitmask, bit_ap)
@@ -776,6 +778,7 @@ class Measurer(object):
         apflux = apflux[istar].data
         apskyflux= apskyflux[istar].data
         apskyflux_perpix= apskyflux_perpix[istar].data
+        ap_area= ap_area[istar].data
         t0= ptime('aperture-photometry',t0)
         extra['mycuts_x']= obj['xcentroid']
         extra['mycuts_y']= obj['ycentroid']
@@ -899,6 +902,7 @@ class Measurer(object):
         stars['apflux'] = apflux[m1]
         stars['apskyflux'] = apskyflux[m1]
         stars['apskyflux_perpix'] = apskyflux_perpix[m1]
+        stars['ap_area'] = ap_area[m1]
         # Additional x,y
         #b= np.zeros(len(obj),bool)
         #b[m1]= True
@@ -1098,7 +1102,7 @@ class DecamMeasurer(Measurer):
         self.gain = self.hdr['ARAWGAIN'] # hack! average gain [electron/sec]
 
         # /global/homes/a/arjundey/idl/pro/observing/decstat.pro
-        self.zp0 =  dict(g = 26.610,r = 26.818,z = 26.484) # ADU/sec
+        self.zp0 =  dict(g = 26.610,r = 26.818,z = 26.484) # e/sec
         self.sky0 = dict(g = 22.04,r = 20.91,z = 18.46) # AB mag/arcsec^2
         self.k_ext = dict(g = 0.17,r = 0.10,z = 0.06)
         # --> e/sec
@@ -1263,7 +1267,7 @@ def get_extlist(camera):
                    'N19', 'N20', 'N21', 'N22', 'N23', 'N24', 'N25', 'N26', 'N27',
                    'N28', 'N29', 'N31']
         # Testing only!
-        #extlist = ['N4','S4', 'S22','N19']
+        extlist = ['N4','S4', 'S22','N19']
     else:
         print('Camera {} not recognized!'.format(camera))
         pdb.set_trace() 

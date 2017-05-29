@@ -18,10 +18,28 @@ def bash(cmd):
         raise RuntimeError('Command failed: %s: return value: %i' %
                            (cmd,rtn))
 
+def modify_fits(fn, modify_func, **kwargs):
+    '''makes copy of fits file and modifies it
+    modify_func -- function that takes hdulist as input, modifies it as desired, and returns it
+    '''
+    # Gunzip
+    is_gzip= 'fits.gz' in fn
+    if is_gzip:
+        fn_backup= fn.replace('.fits.gz','_backup.fits.gz')
+        bash('cp %s %s' % (fn,fn_backup))
+        bash('gunzip %s' % fn)
+        fn= fn.replace('.gz','')
 
+    # Modify
+    print('modifying %s' % fn) 
+    modify_func(fn, **kwargs) 
 
-def modify_ccd(fn, which):
-    assert(which in ['mzls','bass'])
+    # Gzip
+    if is_gzip:
+        bash('gzip %s' % fn) 
+
+def modify_survey_ccds(fn, which):
+    assert(which in ['mzls','bass','annot'])
     # Add bitmask
     a=fits_table(fn)
     bm= np.zeros(len(a)).astype(np.uint8)
@@ -41,76 +59,53 @@ def modify_ccd(fn, which):
     hdulist = fits.open(fn, mode='readonly')
     # Bitmask for
     # bad_expid,ccd_hdu_mismatch,zpts_bad_astrom,third_pix
-    hdulist[1].header.set('PHOTOME','Photometric','True if CCD considered photometric')
-    hdulist[1].header.set('BITMASK','Cuts besides photometric','See DR4 Docs')
+    hdulist[1].header.set('PHOTOME','photometric','True if CCD considered photometric')
+    hdulist[1].header.set('BITMASK','bitmask','Additional cuts, See DR4 Docs')
     # Remove those cols
-    rng= range(63,67)
-    if which == 'bass':
-        rng= range(65,68)
-    for i in rng:
-        del hdulist[1].header['TTYPE' + str(i)]
-        del hdulist[1].header['TFORM' + str(i)]
+    #rng= range(63,67)
+    #if which == 'bass':
+    #    rng= range(65,68)
+    #for i in rng:
+    #    del hdulist[1].header['TTYPE' + str(i)]
+    #    del hdulist[1].header['TFORM' + str(i)]
     # Write
     clob= True
     hdulist.writeto(fn, clobber=clob)
     print('Wrote %s' % fn)
 
-def modify_bricks(fn):
+def modify_survey_bricks(fn):
     # Add bitmask
-    a= fits_table(fn)
-    bm= np.zeros(len(a)).astype(np.uint8)
-    for key,bitval in zip(['cut_dr4','cut_oom','cut_old_chkpt',
-                           'cut_no_signif_srcs','cut_no_srcs'],
-                          [1,2,4,
-                           8,16]):
-        bm[ a.get(key) ]+= bitval
-        a.delete(key)
-    a.set('bitmask', bm)
-    # Modify header
-    hdulist = fits.open(fn, mode='readonly')
-    hdulist[1].header.set('BITMASK','All flagged CCDs thrown out in DR4','See DR4 Docs')
-    #b[1].write_key('BIT1','dr4',comment='have tractor catalogue')
-    #b[1].write_key('BIT2','oom',comment='failed b/c out of memory')
-    #b[1].write_key('BIT3','old_chkpt',comment='failed b/c old checkpoint when reran')
-    #b[1].write_key('BIT4','no_signif_srcs',comment='failed b/c all detected sources not significant')
-    #b[1].write_key('BIT5','no_srcs',comment='failed b/c no sources detected')
-    # Remove those cols
-    for i in range(12,17):
-        del hdulist[1].header['TTYPE' + str(i)]
-        del hdulist[1].header['TFORM' + str(i)]
-    # Write
-    clob= True
-    hdulist.writeto(fn, clobber=clob)
-    print('Wrote %s' % fn)
-    
+    b= fits_table(fn)
+    b.cut(b.cut_dr4)
+    for key in ['cut_dr4','cut_oom','cut_old_chkpt','cut_no_signif_srcs','cut_no_srcs']:
+        b.delete_column(key)
+    bash('rm %s' % fn)
+    b.writeto(fn)
+    print('Write %s' % fn)
+   
 
-def modify_fits(fn, modify_func, **kwargs):
-    '''makes copy of fits file and modifies it
-    modify_func -- function that takes hdulist as input, modifies it as desired, and returns it
-    '''
-    # Gunzip
-    is_gzip= 'fits.gz' in fn
-    if is_gzip:
-        bash('gunzip %s' % fn)
-        fn= fn.replace('.gz','')
-
-    # Modify
-    print('modifying %s' % fn) 
-    modify_func(fn, **kwargs) 
-
-    # Gzip
-    if is_gzip:
-        bash('gzip %s' % fn) 
-
-
-def modify_ccd_brick_files():
-	kwargs= dict(which='mzls')
-	modify_fits('survey-ccds-mzls.fits.gz', modify_func=modify_ccd, **kwargs)
-	kwargs.update( dict(which='bass'))
-	modify_fits('survey-ccds-bass.fits.gz', modify_func=modify_ccd, **kwargs)
-	#_= kwargs.pop('which')
-	#modify_fits('survey-bricks-dr4.fits.gz', modify_func=modify_bricks, **kwargs)
-
+def modify_all_ccd_files(file_dr='./',survey_ccds=False,survey_bricks=False,
+                         annot_ccds=False):
+    # Survey CCDs
+    kwargs= dict(which='mzls')
+    if survey_ccds:
+        modify_fits(os.path.join(file_dr,'survey-ccds-mzls.fits.gz'), 
+                    modify_func=modify_survey_ccds, **kwargs)
+        kwargs.update( dict(which='bass'))
+        modify_fits(os.path.join(file_dr,'survey-ccds-bass.fits.gz'), 
+                    modify_func=modify_survey_ccds, **kwargs)
+    # Survey Bricks
+    _=kwargs.pop('which')
+    if survey_bricks:
+        modify_fits(os.path.join(file_dr,'survey-bricks-dr4.fits.gz'), 
+                    modify_func=modify_survey_bricks, **kwargs)
+    # Annotated CCDs
+    kwargs.update(which='annot')
+    if annot_ccds:
+        modify_fits(os.path.join(file_dr,'ccds-annotated-dr4-mzls.fits.gz'), 
+                    modify_func=modify_survey_ccds, **kwargs)
+        modify_fits(os.path.join(file_dr,'ccds-annotated-dr4-90prime.fits.gz'), 
+                    modify_func=modify_survey_ccds, **kwargs)
 
 
 def makedir_for_fn(fn): 
@@ -310,5 +305,5 @@ if __name__ == '__main__':
 	# New data model and new fits headers for all files for given brick
     main()
 	# OR
-	#modify_ccd_brick_files()
+	#modify_all_ccd_files(file_dr='./')
  

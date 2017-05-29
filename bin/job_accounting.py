@@ -36,36 +36,176 @@ def ccd_cuts_inplace(ccds, use_blacklist=True):
     I = survey.ccds_for_fitting(brick, ccds)
     if I is not None:
         ccds.cut(I) 
- 
+
+def get_dr4b_drc4_dicts(rint):
+    '''rint -- randon int betwen 0 and len of tractor catalogue'''
+    #from collections import defaultdict
+    #B= defaultdict(lambda: defaultdict(dict))
+    #C= defaultdict(lambda: defaultdict(dict))
+    B,C= dict(),dict()
+    B['decam_flux']= (1,rint)
+    B['decam_flux_ivar']= (1,rint) 
+    B['decam_rchi2']= (1,rint)
+    B['decam_allmask']= (1,rint)
+    B['decam_depth']= (1,rint)
+    B['wise_flux']= (0,rint)
+    B['wise_flux_ivar']= (0,rint)
+    B['wise_rchi2']= (0,rint)
+    B['wise_mask']= (0,rint)
+    B['decam_apflux']= (1,4,rint) 
+    B['decam_apflux_ivar']= (1,4,rint) 
+    mapper= dict(decam_flux= 'flux_g',
+                 decam_flux_ivar= 'flux_ivar_g',
+                 decam_rchi2= 'rchisq_g',
+                 decam_allmask= 'allmask_g',
+                 decam_depth= 'psfdepth_g',
+                 wise_flux= 'flux_w1',
+                 wise_flux_ivar= 'flux_ivar_w1',
+                 wise_rchi2= 'rchisq_w1',
+                 wise_mask= 'wisemask_w1',
+                 decam_apflux= 'apflux_g',
+                 decam_apflux_ivar= 'apflux_ivar_g'
+                )
+    C['flux_g']= (rint,)
+    C['flux_ivar_g']= (rint,)
+    C['rchisq_g']= (rint,)
+    C['allmask_g']= (rint,)
+    C['psfdepth_g']= (rint,)
+    C['flux_w1']= (rint,)
+    C['flux_ivar_w1']= (rint,)
+    C['rchisq_w1']= (rint,)
+    C['wisemask_w1']= (rint,)
+    C['apflux_g']= (4,rint)
+    C['apflux_ivar_g']= (4,rint)
+    return B,C,mapper
+
+
+def parse_coords(s):
+    '''stackoverflow: 
+    https://stackoverflow.com/questions/9978880/python-argument-parser-list-of-list-or-tuple-of-tuples'''
+    try:
+        x, y = map(int, s.split(','))
+        return x, y
+    except:
+        raise argparse.ArgumentTypeError("Coordinates must be x,y") 
 
 parser = argparse.ArgumentParser(description='Generate a legacypipe-compatible CCDs file from a set of reduced imaging.') 
-parser.add_argument('--therun', choices=['dr4','obiwan'],action='store', default=True) 
-parser.add_argument('--dowhat', choices=['bricks_notdone','time_per_brick','nersc_time','sanity_tractors','num_grz','badastrom','count_objects'],action='store', default=True) 
+parser.add_argument('--dowhat', choices=['sanity_dr4c','dr4c_vs_dr4b','bricks_notdone','time_per_brick','nersc_time','sanity_tractors','num_grz','badastrom','count_objects'],action='store', default=True) 
 parser.add_argument('--fn', action='store', default=False) 
+parser.add_argument('--line_start', type=int,default=None, help='first line in fn list to use')
+parser.add_argument('--line_end', type=int,default=None, help='last line in fn list to use')
 args = parser.parse_args() 
 
-if args.dowhat == 'bricks_notdone':
-    if args.therun == 'obiwan':
-        b=fits_table(os.path.join(os.environ['LEGACY_SURVEY_DIR'],'survey-bricks-eboss-ngc.fits.gz'))
-    elif args.therun == 'dr4':
-        b=fits_table(os.path.join(os.environ['LEGACY_SURVEY_DIR'],'survey-bricks-dr4.fits.gz'))
-    don=np.loadtxt(args.fn,dtype=str)
-    fout= args.fn.replace('_done.tmp','_notdone.tmp')
-    if os.path.exists(fout):
-        os.remove(fout)
-    # Bricks not finished
-    with open(fout,'w') as fil:
-        for brick in list( set(b.brickname).difference( set(don) ) ):
-            fil.write('%s\n' % brick)
-    print('Wrote %s' % fout)
-    # All Bricks
-    #fout= args.fn.replace('.tmp','_all.tmp')
-    #if os.path.exists(fout):
-    #    exit()
-    #with open(fout,'w') as fil:
-    #    for brick in b.brickname:
-    #        fil.write('%s\n' % brick)
-    #print('Wrote %s' % fout)
+if args.dowhat == 'sanity_dr4c':
+    ncols= 165
+    # RUN: python job_accounting.py --dowhat sanity_tractors --fn dr4_tractors_done.tmp
+    fns=np.loadtxt(args.fn,dtype=str)
+    assert(len(fns) > 0)
+    print(args)
+    if args.line_start and args.line_end:
+        fns= fns[args.line_start:args.line_end]
+    # Remove file lists for clean slate
+    fils= dict(readerr='%s_readerr.txt' % args.dowhat,
+               ncolswrong='%s_ncolswrong.txt' % args.dowhat,
+               nancols='%s_nancols.txt' % args.dowhat,
+               unexpectedcol='%s_unexpectedcol.txt' % args.dowhat)
+    for outfn in fils.keys():
+        if os.path.exists(outfn):
+            os.remove(outfn)
+    # Loop over completed Tractor Cats
+    for ith,fn in enumerate(fns):
+        if ith % 100 == 0: print('%d/%d' % (ith+1,len(fns)))
+        try: 
+            t=fits_table(fn)
+        except:
+            # Report any read errors
+            print('error reading %s' % fn)
+            with open(fils['readerr'],'a') as foo:
+                foo.write('%s\n' % fn)
+        # Number of columns
+        if len(t.get_columns()) != ncols:
+            with open(fils['ncolswrong'],'a') as foo:
+                foo.write('%s %d\n' % (fn,len(t.get_columns())))
+        # Any Nans?
+        for col in t.get_columns():
+            try:
+                ind= np.isfinite(t.get(col)) == False
+                # This col has a non-finite value
+                if np.any(ind):
+                    with open(fils['nancols'],'a') as foo:
+                        foo.write('%s %s\n' % (fn,col))
+            except TypeError:
+                # np.isfinite cannot be applied to these data types
+                if col in ['brickname','type','wise_coadd_id']:
+                    pass
+                # report col if this error occurs for a col not in the above
+                else:
+                    with open(fils['unexpectedcol'],'a') as foo:
+                        foo.write('%s %s\n' % (fn,col))
+if args.dowhat == 'dr4c_vs_dr4b':
+    ncols= dict(dr4c=165,dr4b=73)
+    # RUN: python job_accounting.py --dowhat dr4c_vs_dr4b --fn dr4_tractors_done.tmp
+    fns=np.loadtxt(args.fn,dtype=str)
+    assert(len(fns) > 0)
+    print(args)
+    if args.line_start and args.line_end:
+        fns= fns[args.line_start:args.line_end]
+    # Remove file lists for clean slate
+    fils= dict(readerr='%s_readerr.txt' % args.dowhat,
+               ncolswrong='%s_ncolswrong.txt' % args.dowhat,
+               wrongvals='%s_wrongvals.txt' % args.dowhat)
+    if args.line_start and args.line_end:
+        suff= '%d_%d' % (args.line_start, args.line_end)
+        fils= dict(readerr='%s_readerr_%s.txt' % (args.dowhat,suff),
+                   ncolswrong='%s_ncolswrong_%s.txt' % (args.dowhat,suff),
+                   wrongvals='%s_wrongvals_%s.txt' % (args.dowhat,suff))
+    for outfn in fils.keys():
+        if os.path.exists(outfn):
+            os.remove(outfn)
+    # Loop over completed Tractor Cats
+    for ith,fn_c in enumerate(fns):
+        if ith % 100 == 0: print('%d/%d' % (ith+1,len(fns)))
+        try: 
+            c=fits_table(fn_c)
+            fn_b= fn_c.replace('/dr4c/','/dr4_fixes/')
+            b=fits_table(fn_b)
+        except:
+            # Report any read errors
+            print('error reading %s OR %s ' % (fn_c,fn_b))
+            with open(fils['readerr'],'a') as foo:
+                foo.write('%s\n' % fn_c)
+        # Number of columns
+        if len(c.get_columns()) != ncols['dr4c']:
+            with open(fils['ncolswrong'],'a') as foo:
+                foo.write('%s %d\n' % (fn_c,len(c.get_columns())))
+        if len(b.get_columns()) != ncols['dr4b']:
+            with open(fils['ncolswrong'],'a') as foo:
+                foo.write('%s %d\n' % (fn_b,len(b.get_columns())))
+        # Decimal values DR4b to c
+        rint= np.random.randint(low=0,high=len(c),size=1)[0]
+        B,C,mapper= get_dr4b_drc4_dicts(rint)
+        for key in B.keys():
+            # DR4b value
+            tup= B[key]
+            if len(tup) == 2:
+                iband,i= tup
+                data_b= b.get(key)[i,iband]
+            elif len(tup) == 3:
+                iband,iap,i= tup
+                data_b= b.get(key)[i,iband,iap]
+            # DR4c value
+            key_c= mapper[key]
+            tup= C[key_c]
+            if len(tup) == 1:
+                i,= tup
+                data_c= c.get(key_c)[i]
+            elif len(tup) == 2:
+                iap,i= tup
+                data_c= c.get(key_c)[i,iap]
+            #print('%s|%s %.2f|%.2f for index=%d' % (key,key_c,data_b,data_c,rint))
+            if data_b != data_c:
+                with open(fils['wrongvals'],'a') as foo:
+                    foo.write('%f %f %s %s %s %s\n' % (data_b,data_c,key,key_c,fn_b,fn_c))
 elif args.dowhat == 'time_per_brick':
     fns,start1,start2,end1,end2=np.loadtxt(args.fn,dtype=str,unpack=True)
     # Remove extraneous digits
@@ -142,7 +282,7 @@ elif args.dowhat == 'nersc_time':
     print('Done bricks')
     nersc_time(hrs)
 elif args.dowhat == 'sanity_tractors':
-    # RUN: python job_accounting.py --therun dr4 --dowhat sanity_tractors --fn dr4_tractors_done.tmp
+    # RUN: python job_accounting.py --dowhat sanity_tractors --fn dr4_tractors_done.tmp
     # Read each finished Tractor Catalogue
     # Append name to file if:
     # -- error reading it
@@ -195,7 +335,7 @@ elif args.dowhat == 'sanity_tractors':
         #    with open(fils['ccds'],'a') as foo:
         #        foo.write('%s\n' % ccdfn)
 elif args.dowhat == 'badastrom':
-    # RUN: python job_accounting.py --therun dr4 --dowhat sanity_tractors --fn dr4_tractors_done.tmp
+    # RUN: python job_accounting.py --dowhat sanity_tractors --fn dr4_tractors_done.tmp
     # Read each finished Tractor Catalogue
     # Append name to file if:
     # -- error reading it
@@ -225,7 +365,7 @@ elif args.dowhat == 'badastrom':
             with open(fils['readerr'],'a') as foo:
                 foo.write('%s\n' % fn)
 elif args.dowhat == 'count_objects':
-    # RUN: python job_accounting.py --therun dr4 --dowhat sanity_tractors --fn dr4_tractors_done.tmp
+    # RUN: python job_accounting.py --dowhat sanity_tractors --fn dr4_tractors_done.tmp
     # Read each finished Tractor Catalogue
     # Append name to file if:
     # -- error reading it

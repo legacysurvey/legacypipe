@@ -2,7 +2,7 @@
 
 #export bricklist=$SCRATCH/test/legacypipe/py/coadd_dirs.txt
 #export bricklist=/global/cscratch1/sd/kaylanb/test/legacypipe/py/dr4_bricks.txt
-export bricklist=/global/cscratch1/sd/desiproc/test/legacypipe/py/dr4_bricks.txt
+export bricklist=/global/cscratch1/sd/kaylanb/test/legacypipe/py/tractor_fns.txt
 
 echo bricklist=$bricklist
 if [ ! -e "$bricklist" ]; then
