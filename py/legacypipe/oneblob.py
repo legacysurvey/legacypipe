@@ -724,47 +724,8 @@ class OneBlob(object):
                 #
                 # FIXME -- it is not clear that this is what we want!!!
                 #
-                # INDEED -- this causes the galaxy models to be
-                # evaluated on small postage stamps, possibly leading
-                # to wrap-around and such.
-                # Can we evaluate the models on the second-round modelMasks
-                # but only count chi-squared within the original masks?
-                #
-
-                #if modtractor is srctractor:
-                if True:
-                    srctractor.setModelMasks(newsrc_mm)
-                    ch = _per_band_chisqs(srctractor, self.bands)
-                else:
-                    #### HACK -- this is just so ugly!  All this,
-                    #### effectively, to avoid wrap-around.
-                    slices = []
-                    #srctractor.setModelMasks(newsrc_mm)
-                    for tim in modtims:
-                        mm = None
-                        for stim,modelmask in zip(srctims, newsrc_mm):
-                            if stim.name == tim.name:
-                                mm = modelmask[newsrc]
-                                break
-                        print('Found modelMask:', mm, 'in stim', stim.shape,
-                              'with x0,y0', (stim.x0,stim.y0))
-                        print('Modtim is', tim.shape, 'with x0,y0', tim.x0,tim.y0)
-                        if mm is None:
-                            slices.append(None)
-                            continue
-                        
-                        mh,mw = mm.shape
-                        #y0 = mm.y0 - tim.y0
-                        #x0 = mm.x0 - tim.x0
-                        y0 = stim.y0 - tim.y0
-                        x0 = stim.x0 - tim.x0
-                        assert(x0 >= 0)
-                        assert(y0 >= 0)
-                        print('Slice: x0,y0', x0,y0, 'shape', (mh,mw))
-                        slices.append((slice(y0, y0+mh),
-                                       slice(x0, x0+mw)))
-                    ch = _per_band_chisqs(modtractor, self.bands,
-                                          slices=slices)
+                srctractor.setModelMasks(newsrc_mm)
+                ch = _per_band_chisqs(srctractor, self.bands)
                     
                 chisqs[name] = _chisq_improvement(newsrc, ch, chisqs_none)
                 B.all_model_flags[srci][name] = thisflags
@@ -914,10 +875,6 @@ class OneBlob(object):
             cpu1 = time.clock()
             B.cpu_source[srci] += (cpu1 - cpu0)
 
-            ###########
-            # import sys
-            # sys.exit(0)
-            
         models.restore_images(self.tims)
         del models
         
@@ -1828,18 +1785,10 @@ def _chisq_improvement(src, chisqs, chisqs_none):
             dchisq -= np.abs(d)
     return dchisq
 
-def _per_band_chisqs(tractor, bands, slices=None):
+def _per_band_chisqs(tractor, bands):
     chisqs = dict([(b,0) for b in bands])
     for i,img in enumerate(tractor.images):
         chi = tractor.getChiImage(img=img)
-        # CUT...
-        if slices is not None:
-            slc = slices[i]
-            if slc is None:
-                # skip
-                continue
-            chi = chi[slc]
-
         chisqs[img.band] = chisqs[img.band] + (chi ** 2).sum()
     return chisqs
 
