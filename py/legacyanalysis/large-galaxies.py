@@ -2,6 +2,11 @@
 
 """Redo the Tractor photometry of the "large" galaxies in Legacy Survey imaging.
 
+dependencies:
+  pillow
+  photutils
+
+
 rsync -avPn --files-from='/tmp/ccdfiles.txt' nyx:/usr/local/legacysurvey/legacypipe-dir/ /Users/ioannis/repos/git/legacysurvey/legacypipe-dir/
 
 J. Moustakas
@@ -242,7 +247,7 @@ def read_leda(largedir='.', d25min=0.0, d25max=1000.0, decmin=-90.0, decmax=+90.
 def main():
 
     parser = argparse.ArgumentParser()
-    parser.add_argument('--dr', type=str, default='dr2', help='DECaLS Data Release')
+    parser.add_argument('--dr', type=str, default='dr3', help='DECaLS Data Release')
     parser.add_argument('--build-sample', action='store_true', help='Build the sample.')
     parser.add_argument('--viewer-cutouts', action='store_true', help='Get jpg cutouts from the viewer.')
     parser.add_argument('--ccd-cutouts', action='store_true', help='Get CCD cutouts of each galaxy.')
@@ -259,11 +264,11 @@ def main():
     largedir = os.getenv(key)
 
     dr = args.dr.lower()
-    key = 'DECALS_{}_DIR'.format(dr.upper())
-    if key not in os.environ:
-        print('Required ${} environment variable not set'.format(key))
-        return 0
-    drdir = os.getenv(key)
+    #key = 'DECALS_{}_DIR'.format(dr.upper())
+    #if key not in os.environ:
+    #    print('Required ${} environment variable not set'.format(key))
+    #    return 0
+    #drdir = os.getenv(key)
 
     # Some convenience variables.
     objtype = ('PSF', 'SIMP', 'EXP', 'DEV', 'COMP')
@@ -276,11 +281,13 @@ def main():
     samplefile = os.path.join(largedir, 'sample', 'large-galaxies-{}.fits'.format(dr))
     if not args.build_sample:
         sample = fits.getdata(samplefile, 1)
-        sample = sample[np.where(np.char.strip(sample['GALAXY']) == 'UGC04203')]
+        sample = sample[np.where(np.char.strip(sample['GALAXY']) == 'NGC4073')]
+        #sample = sample[np.where(np.char.strip(sample['GALAXY']) == 'UGC04203')]
         #sample = sample[2:3] # Hack!
         #sample = sample[np.where(np.sum((sample['BRICKNAME'] != '')*1, 1) > 1)[0]]
         #pdb.set_trace()
-    survey = LegacySurveyData(version=dr) # update to DR3!
+    survey = LegacySurveyData()
+    #survey = LegacySurveyData(version=dr) # update to DR3!
 
     sns.set(style='white', font_scale=1.2, palette='Set2')
     #sns.set(style='white', font_scale=1.3, palette='Set2')
@@ -298,11 +305,10 @@ def main():
     # Build the sample of large galaxies based on the available imaging.
     if args.build_sample:
         # Read the CCDs file for this DR.
-        if dr == 'dr2':
+        try:
             bricks = survey.get_bricks_dr2()
-        else:
-            print('Data Release {} not yet supported!')
-            sys.exit(1)
+        except:
+            bricks = survey.get_bricks()
         ccdsdir = os.path.join(largedir, 'ccds')
 
         # This is a DR2 hack because the set of blacklisted CCDs has been lost.
