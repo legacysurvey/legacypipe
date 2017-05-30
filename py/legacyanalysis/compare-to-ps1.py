@@ -254,7 +254,6 @@ def star_profiles(ps):
     
         
     
-
 def main():
 
     # ps = PlotSequence('pro')
@@ -428,6 +427,23 @@ def main():
         # plt.title('DR3: EDR region, Forced phot: %s band' % band)
         # ps.savefig()
 
+        # plt.clf()
+        # plt.plot(ccds.avsky[I],
+        #          np.clip(ccds.mdiff[I], mlo,mhi), 'k.', alpha=0.1)
+        # plt.xlabel('avsky')
+        # plt.ylabel('DECaLS PSF - PS1 (mag)')
+        # plt.axhline(0, color='k', alpha=0.2)
+        # plt.title('DR3: EDR region, Forced phot: %s band' % band)
+        # ps.savefig()
+        # 
+        # plt.clf()
+        # plt.plot(ccds.meansky[I],
+        #          np.clip(ccds.mdiff[I], mlo,mhi), 'k.', alpha=0.1)
+        # plt.xlabel('meansky')
+        # plt.ylabel('DECaLS PSF - PS1 (mag)')
+        # plt.axhline(0, color='k', alpha=0.2)
+        # plt.title('DR3: EDR region, Forced phot: %s band' % band)
+        # ps.savefig()
 
         plt.clf()
         lo,hi = (-0.02, 0.05)
