@@ -4,7 +4,7 @@
 # ../bin/number_files_dr4c.sh 
 
 bricklist=dr4_bricks.txt
-dr=/global/cscratch1/sd/desiproc/dr4/data_release/dr4_fixes
+dr=/global/cscratch1/sd/desiproc/dr4/data_release/dr4c
 # Write problems to a file
 output_fn=wrong_number_files.txt
 if [ -e "$output_fn" ];then rm $output_fn;fi

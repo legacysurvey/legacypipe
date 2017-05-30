@@ -12,15 +12,16 @@ fi
 
 #
 export dr4c_dir=/global/cscratch1/sd/desiproc/dr4/data_release/dr4c
-export walltime=03:00:00
+export walltime=01:00:00
+export jobname=dr4cCols
 export usecores=1
 export threads=1
 let hypercores=${usecores}*2
 export hypercores=${hypercores}
 # Loop over a star and end
-step=200
-beg=10001
-max=70000
+step=5000
+beg=1
+max=66000
 ###
 cnt=0
 # Make 1 script for each i of loop
@@ -31,15 +32,20 @@ for star in `seq ${beg} ${step} ${max}`;do
     # Make job script with N = step srun commands
     export fn=../bin/sharedq_job_${start_brick}_${end_brick}.sh
     cp ../bin/sharedq_job_template.sh $fn
-    # Write multiple sruns to 1 job script
-    while read aline; do
-        brick=`echo $aline|awk '{print $1}'`
-        cmd="srun -n 1 -c $usecores python legacypipe/format_headers.py --brick $brick --dr4c_dir ${dr4c_dir}"
-        echo $cmd >> $fn 
-    done <<< "$(sed -n ${start_brick},${end_brick}p $bricklist)"
+    # 2 Options
+    # 1) Multiple sruns, 1 per line in bricklist
+    #while read aline; do
+    #    brick=`echo $aline|awk '{print $1}'`
+    #    cmd="srun -n 1 -c $usecores python legacypipe/format_headers.py --brick $brick --dr4c_dir ${dr4c_dir}"
+    #    echo $cmd >> $fn 
+    #done <<< "$(sed -n ${start_brick},${end_brick}p $bricklist)"
+    # 2) One srun, using args start and end
+    cmd="srun -n 1 -c $usecores python ../bin/job_accounting.py --dowhat dr4c_vs_dr4b --fn ${bricklist} --line_start ${start_brick} --line_end ${end_brick}"
+    echo $cmd >> $fn 
     # Modify N cores, nodes, walltime, etc
     sed -i "s#SBATCH\ -n\ 2#SBATCH\ -n\ ${hypercores}#g" $fn
     sed -i "s#SBATCH\ -t\ 00:10:00#SBATCH\ -t\ ${walltime}#g" $fn
+    sed -i "s#SBATCH\ -J\ repack#SBATCH\ -J\ ${jobname}#g" $fn
     sed -i "s#usecores=1#usecores=${usecores}#g" $fn 
     # Submit script created above
     sbatch $fn 
