@@ -258,6 +258,20 @@ def extra_ccd_keys(camera='decam'):
               ('ccdnmatcha', '>i2'), ('ccdnmatch2', '>i2'), ('ccdnmatch3', '>i2'), ('ccdnmatch4', '>i2')]
     return keys 
 
+def get_units():
+    return dict(
+        ra='deg',dec='deg',exptime='sec',pixscale='arcsec/pix',
+        fwhm='pix',seeing='arcsec',
+        sky0='mag/arcsec^2',skymag='mag/arcsec^2/sec',
+        skycounts='electron/pix/sec',skyrms='electron/pix/sec',
+        apflux='electron/7 arcsec aperture',apskyflux='electron/7 arcsec aperture',
+        apskyflux_perpix='electron/pix',
+        apmags='-2.5log10(electron/sec) + zpt0',
+        raoff='arcsec',decoff='arcsec',rarms='arcsec',decrms='arcsec',
+        phoff='electron/sec',phrms='electron/sec',
+        zpt0='electron/sec',zpt='electron/sec',transp='electron/sec')
+ 
+
 def _ccds_table(camera='decam'):
     '''Initialize the output CCDs table.  See decstat.pro and merge-zeropoints.py
     for details.
@@ -349,6 +363,68 @@ def _stars_table(nstars=1):
             ('mycuts_x', 'f4'), ('mycuts_y', 'f4')]
     stars = Table(np.zeros(nstars, dtype=cols))
     return stars
+
+def legacypipe_table(ccds_fn):
+    '''input _ccds_table fn
+    output a table formatted for legacypipe/runbrick'''
+    # HACK! need func to put in appropriate units e.g. compare to survey-ccds file for decam,mosaic, and bass
+    T = fits_table(ccds_fn)
+    hdr = T.get_header()
+    primhdr = fitsio.read_header(ccds_fn)
+    units= get_units()
+
+    primhdr.add_record(dict(name='ALLBANDS', value=allbands,
+                            comment='Band order in array values'))
+    has_zpt = 'zpt' in T.columns()
+    # Rename
+    rename_keys= [('ccdzpt','zpt'),('ccdraoff','raoff'),('ccddecoff','decoff')]
+    for new,old in rename_keys:
+        T.rename(new, old)
+        units[new]= units.pop(old)
+    # Delete 
+    keep_keys= ['ccdzpt','ccdraoff','ccddecoff',
+                'image_filename','image_hdu','expnum','ccdname',
+                'filter','exptime','camera','width','height',
+                'fwhm','propid','cd1_1','cd2_2','cd1_2','cd2_1','mjd_obs']
+    del_keys= list( set(T.get_columns()).difference(set(keep_keys)) )
+    for key in del_keys:
+        T.delete_column(key)
+        if key in units.keys():
+            _= units.pop(key) 
+    # Align units with 'cols'
+    cols = T.get_columns()
+    units = [units.get(c, '') for c in cols]
+    # Column ordering...
+    #cols = []
+    #if dr4:
+    #    cols.append('release')
+    #    T.release = np.zeros(len(T), np.int32) + 4000
+    outfn=ccds_fn.replace('.fits','legacypipe.fits')
+    T.writeto(outfn, columns=cols, header=hdr, primheader=primhdr, units=units)
+
+class NativeTable(object):
+    def __init__(self,fn,camera='decam',ccd_or_stars='ccds'):
+        '''zpt,stars tables have same units by default (e.g. electron/sec for zpt)
+        This func takes either the ccds or stars table and converts the relavent columns
+        into native units for given camera 
+        e.g. ADU for DECam,  electron/sec for Mosaic/BASS'''
+        assert(camera in ['decam','mosaic','90prime'])
+        assert(ccds_or_stars in ['ccds','stars'])
+        if camera in 'decam':
+            self.Decam(fn,ccds_or_stars=ccds_or_stars)
+        if camera in ['mosaic','90prime']:
+            self.Mosaic90Prime(fn,ccds_or_stars=ccds_or_stars)
+
+    def Decam(self,fn,ccds_or_stars):
+        T = fits_table(fn)
+        hdr = T.get_header()
+        primhdr = fitsio.read_header(ccds_fn)
+        units= get_units()
+        # Convert units
+        #T.set('zpt',T.zpt +- 2.5*np.log10(T.gain * T.exptime)) 
+        # Write
+        outfn=fn.replace('.fits','native.fits')
+        T.writeto(outfn, columns=cols, header=hdr, primheader=primhdr, units=units)
 
 def getrms(x):
     return np.sqrt( np.mean( np.power(x,2) ) )
@@ -611,7 +687,6 @@ class Measurer(object):
         # FWHM from CP header
         hdr_fwhm= hdr['fwhm']
         ccds['fwhm']= hdr_fwhm
-
         # Copy some header cards directly.
         hdrkey = ('avsky', 'crpix1', 'crpix2', 'crval1', 'crval2', 'cd1_1',
                   'cd1_2', 'cd2_1', 'cd2_2', 'naxis1', 'naxis2')
@@ -658,7 +733,6 @@ class Measurer(object):
         ccds['skycounts'] = sky1 / exptime # [electron/pix]
         ccds['skymag'] = skybr   # [mag/arcsec^2]
         t0= ptime('measure-sky',t0)
-
         # Detect stars on the image.  
         #obj = daofind(img, fwhm= hdr_fwhm,
         #              threshold=det_thresh * stddev_mad,
@@ -700,20 +774,28 @@ class Measurer(object):
         # an annulus around each star) or global sky-subtraction.
         print('Performing aperture photometry')
 
+        # Try diff sky photometry
         ap = CircularAperture((obj['xcentroid'], obj['ycentroid']), self.aprad / self.pixscale)
-        if self.sky_global:
-            apphot = aperture_photometry(img - sky, ap)
-            apflux = apphot['aperture_sum']
-        else:
-            skyap = CircularAnnulus((obj['xcentroid'], obj['ycentroid']),
-                                    r_in=self.skyrad[0] / self.pixscale, 
-                                    r_out=self.skyrad[1] / self.pixscale)
-            apphot = aperture_photometry(img, ap)
-            skyphot = aperture_photometry(img, skyap)
-            apskyflux= skyphot['aperture_sum'] / skyap.area() * ap.area()
-            apskyflux_perpix= skyphot['aperture_sum'] / skyap.area() 
-            apflux = apphot['aperture_sum'] - apskyflux
-            ap_area= ap.area()
+        #if self.sky_global:
+        #    apphot = aperture_photometry(img - sky, ap)
+        #    apflux = apphot['aperture_sum']
+        #else:
+        skyap = CircularAnnulus((obj['xcentroid'], obj['ycentroid']),
+                                r_in=self.skyrad[0] / self.pixscale, 
+                                r_out=self.skyrad[1] / self.pixscale)
+        apphot = aperture_photometry(img, ap)
+        skyphot = aperture_photometry(img, skyap)
+        apskyflux= skyphot['aperture_sum'] / skyap.area() * ap.area()
+        apskyflux_perpix= skyphot['aperture_sum'] / skyap.area() 
+        apflux = apphot['aperture_sum'] - apskyflux
+        ap_area= ap.area()
+        # 2nd sky method
+        skymask= np.zeros(img.shape,bool)
+        skymask[bitmask > 0]= True
+        skyphot_2 = aperture_photometry(img, skyap, mask=skymask)
+        apskyflux_2= skyphot_2['aperture_sum'] / skyap.area() * ap.area()
+        raise ValueError
+
         # Use Bitmask, remove stars if any bitmask within 5 pixels
         bit_ap = CircularAperture((obj['xcentroid'], obj['ycentroid']), 5.)
         bit_phot = aperture_photometry(bitmask, bit_ap)
@@ -724,7 +806,6 @@ class Measurer(object):
         b_isolated= self.isolated_radec(objra,objdec,nn=2,minsep=minsep/3600.)
         # Aperture mags
         apmags= - 2.5 * np.log10(apflux.data) + zp0 + 2.5 * np.log10(exptime)
-
         # Good stars following IDL codes
         # We are ignoring aperature errors though
         minsep_px = minsep/self.pixscale
@@ -933,7 +1014,6 @@ class Measurer(object):
         for ps1_band,ps1_index in zip(['g','r','i','z'],[0,1,2,3]):
             stars['ps1_%s' % ps1_band]= ps1.median[m2, ps1_index]
         stars['gaia_g']=ps1.phot_g_mean_mag[m2]
-        
         #print('Computing the photometric zeropoint.')
         #stars['ps1_gicolor'] = ps1.median[m2, 0] - ps1.median[m2, 2]
         #print('Before gicolor cut, len(stars)=%d' % len(stars['ps1_gicolor']))
@@ -970,8 +1050,7 @@ class Measurer(object):
         ccds['phoff'] = dmagmed
         ccds['phrms'] = dmagsig
         ccds['zpt'] = zptmed
-        ccds['transp'] = transp
-
+        ccds['transp'] = transp       
         print('RA, Dec offsets (arcsec) relative to GAIA: %.4f, %.4f' % (ccds['raoff'], ccds['decoff']))
         print('RA, Dec rms (arcsec) relative to GAIA: %.4f, %.4f' % (ccds['rarms'], ccds['decrms']))
         print('RA, Dec stddev (arcsec) relative to GAIA: %.4f, %.4f' % (ccds['rastddev'], ccds['decstddev']))

@@ -90,13 +90,43 @@ def parse_coords(s):
         raise argparse.ArgumentTypeError("Coordinates must be x,y") 
 
 parser = argparse.ArgumentParser(description='Generate a legacypipe-compatible CCDs file from a set of reduced imaging.') 
-parser.add_argument('--dowhat', choices=['sanity_dr4c','dr4c_vs_dr4b','bricks_notdone','time_per_brick','nersc_time','sanity_tractors','num_grz','badastrom','count_objects'],action='store', default=True) 
+parser.add_argument('--dowhat', choices=['blob_size','sanity_dr4c','dr4c_vs_dr4b','bricks_notdone','time_per_brick','nersc_time','sanity_tractors','num_grz','badastrom','count_objects'],action='store', default=True) 
 parser.add_argument('--fn', action='store', default=False) 
 parser.add_argument('--line_start', type=int,default=None, help='first line in fn list to use')
 parser.add_argument('--line_end', type=int,default=None, help='last line in fn list to use')
 args = parser.parse_args() 
 
-if args.dowhat == 'sanity_dr4c':
+if args.dowhat == 'blob_size':
+    # RUN: python job_accounting.py --dowhat sanity_tractors --fn dr4_tractors_done.tmp
+    fns=np.loadtxt(args.fn,dtype=str)
+    assert(len(fns) > 0)
+    print(args)
+    if args.line_start and args.line_end:
+        fns= fns[args.line_start:args.line_end]
+    # Remove file lists for clean slate
+    suff= '%d_%d' % (args.line_start,args.line_end)
+    fils= dict(readerr='%s_readerr_%s.txt' % (args.dowhat,suff),
+               nblobs='%s_nblobs_%s.txt' % (args.dowhat,suff))
+    for outfn in fils.keys():
+        if os.path.exists(outfn):
+            os.remove(outfn)
+    # Loop over completed Tractor Cats
+    for ith,fn in enumerate(fns):
+        if ith % 100 == 0: print('%d/%d' % (ith+1,len(fns)))
+        try: 
+            t=fits_table(fn)
+        except:
+            # Report any read errors
+            print('error reading %s' % fn)
+            with open(fils['readerr'],'a') as foo:
+                foo.write('%s\n' % fn)
+        # Any blobs > 400 pix in X or Y?
+        has_blob= np.any((t.blob_width > 400,t.blob_height > 400),axis=0)
+        num_blobs= np.where(has_blob)[0].size
+        total_blobs= len(t)
+        with open(fils['nblobs'],'a') as foo:
+            foo.write('%s %d/%d\n' % (fn,num_blobs,total_blobs))
+elif args.dowhat == 'sanity_dr4c':
     ncols= 165
     # RUN: python job_accounting.py --dowhat sanity_tractors --fn dr4_tractors_done.tmp
     fns=np.loadtxt(args.fn,dtype=str)
