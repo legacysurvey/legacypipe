@@ -52,4 +52,5 @@ export MKL_NUM_THREADS=1
 
 #export dr4b_dir=/global/cscratch1/sd/desiproc/dr4/data_release/dr4_fixes
 #export dr4c_dir=/global/projecta/projectdirs/cosmo/work/dr4c
+set -x
 
