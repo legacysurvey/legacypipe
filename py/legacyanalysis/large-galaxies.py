@@ -332,8 +332,9 @@ def main():
     objtype = ('PSF', 'SIMP', 'EXP', 'DEV', 'COMP')
     objcolor = ('white', 'red', 'orange', 'cyan', 'yellow')
     thumbsize = 100
-    fonttype = '/usr/share/fonts/gnu-free/FreeSans.ttf'
-    #fonttype = '/Volumes/Macintosh\ HD/Library/Fonts/Georgia.ttf'
+
+    fonttype = os.path.join(os.sep, 'Volumes', 'Macintosh\ HD', 'Library', 'Fonts', 'Georgia.ttf')
+    #fonttype = os.path.join(os.sep, 'usr', 'share', 'fonts', 'gnu-free', 'FreeSans.ttf')
 
     # Read the sample (unless we're building it!)
     samplefile = os.path.join(largedir, 'sample', 'large-galaxies-{}.fits'.format(dr))
