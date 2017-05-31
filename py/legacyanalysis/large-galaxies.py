@@ -111,7 +111,7 @@ def _uniqccds(ccds):
     [ccdfile.append('{}-{}'.format(expnum, ccdname)) for expnum,
      ccdname in zip(ccds.expnum, ccds.ccdname)]
     _, indx = np.unique(ccdfile, return_index=True)
-    return indx
+    return ccds[indx]
 
 def _getfiles(ccdinfo):
     '''Figure out the set of images and calibration files we need to transfer, if any.'''
@@ -144,7 +144,7 @@ def _getfiles(ccdinfo):
         ccdfiles.write(ff+'\n')
     ccdfiles.close()
 
-    cmd = "rsync -avPn --files-from='/tmp/ccdfiles.txt' edison:/global/cscratch1/sd/desiproc/dr3/ /global/work/decam/versions/work/"
+    cmd = "rsync -avPn --files-from='/tmp/ccdfiles.txt' edison:/global/cscratch1/sd/desiproc/dr3/ /global/work/legacysurvey/dr3.1/"
     print('You should run the following command:')
     print('  {}'.format(cmd))
 
@@ -191,25 +191,29 @@ def _build_sample_onegalaxy(args):
     return build_sample_onegalaxy(*args)
 
 def build_sample_onegalaxy(gal, allccds, ccdsdir, bricks, survey):
-    """Wrapper function to find overlapping CCDs for a given galaxy."""
+    """Wrapper function to find overlapping CCDs for a given galaxy.
 
-    # Start with a very small WCS object centered on the galaxy to ensure we
-    # have 3-band coverage throughout the galaxy.
-    galwcs = _galwcs(gal, factor=0.5)
+    First generously find the nearest set of CCDs that are near the galaxy and
+    then demand that there's 3-band coverage in a much smaller region centered
+    on the galaxy.
+
+    """
+    print('Working on {}...'.format(gal['GALAXY'].strip()))
+    
+    galwcs = _galwcs(gal)
     these = ccds_touching_wcs(galwcs, allccds)
 
     if len(these) > 0:
-        ccds1 = allccds[these]
-        ccds1 = ccds1[_uniqccds(ccds1)]
-                
-        if 'g' in ccds1.filter and 'r' in ccds1.filter and 'z' in ccds1.filter:
-            # Now get a wider set of CCDs.
-            galwcs = _galwcs(gal)
-            ccds1 = allccds[ccds_touching_wcs(galwcs, allccds)]
-            ccds1 = ccds1[_uniqccds(ccds1)]
-            
-            print('  Found {} CCDs for {}, (RA, Dec, Radius)=({:.5f}, {:.5f}, {:.4f} arcsec)'.format(
-                len(ccds1), gal['GALAXY'].strip(), gal['RA'], gal['DEC'], gal['RADIUS']))
+        ccds1 = _uniqccds( allccds[these] )
+
+        # Is there 3-band coverage?
+        galwcs_small = _galwcs(gal, factor=0.5)
+        these_small = ccds_touching_wcs(galwcs_small, ccds1)
+        ccds1_small = _uniqccds( ccds1[these_small] )
+
+        if 'g' in ccds1_small.filter and 'r' in ccds1_small.filter and 'z' in ccds1_small.filter:
+            print('...found {} CCDs, RA = {:.5f}, Dec = {:.5f}, Radius={:.4f} arcsec'.format(
+                len(ccds1), gal['RA'], gal['DEC'], gal['RADIUS']))
 
             ccdsfile = os.path.join(ccdsdir, '{}-ccds.fits'.format(gal['GALAXY'].strip().lower()))
             #print('  Writing {}'.format(ccdsfile))
@@ -227,7 +231,9 @@ def build_sample_onegalaxy(gal, allccds, ccdsdir, bricks, survey):
                 pdb.set_trace()
             gal['BRICKNAME'][:len(brickindx)] = bricks.brickname[brickindx]
 
-            return [ccds1, gal]
+            return [gal, ccds1]
+
+    return None
 
 def read_rc3():
     """Read the RC3 catalog and put it in a standard format."""
@@ -263,7 +269,9 @@ def read_rc3():
 
     return outcat
 
-def read_leda(largedir='.', d25min=0.0, d25max=1000.0, decmin=-90.0, decmax=+90.0):
+def read_leda(largedir='.', d25min=0.0, d25max=1000.0,
+              decmin=-90.0, decmax=+90.0,
+              ramin=0.0, ramax=360.0):
     """Read the parent LEDA catalog and put it in a standard format."""
 
     cat = fits.getdata(os.path.join(largedir, 'sample', 'leda-logd25-0.05.fits.gz'), 1)
@@ -282,10 +290,13 @@ def read_leda(largedir='.', d25min=0.0, d25max=1000.0, decmin=-90.0, decmax=+90.
     outcat['IMAG'] = cat['IMAG']
     outcat['VHELIO'] = cat['VHELIO']
 
-    these = np.where((outcat['RADIUS']*2/60.0 < d25max)*
-                     (outcat['RADIUS']*2/60.0 > d25min)*
-                     (outcat['DEC'] < decmax)*
-                     (outcat['DEC'] > decmin))[0]
+    these = np.where((outcat['RADIUS']*2/60.0 <= d25max) *
+                     (outcat['RADIUS']*2/60.0 >= d25min) *
+                     (outcat['DEC'] <= decmax) *
+                     (outcat['DEC'] >= decmin) *
+                     (outcat['RA'] <= ramax) *
+                     (outcat['RA'] >= ramin)
+                     )[0]
     outcat = outcat[these] 
 
     return outcat
@@ -367,12 +378,15 @@ def main():
         #  decam/NonDECaLS/CP20130129/c4d_130202_010119_ooi_g_v1.fits.fz
         #  decam/NonDECaLS/CP20130129/c4d_130202_010119_ooi_r_v1.fits.fz
         #  decam/NonDECaLS/CP20130129/c4d_130202_010119_ooi_z_v1.fits.fz
+
         allccds = survey.get_annotated_ccds()
-        keep = np.where(allccds.blacklist_ok*allccds.photometric)[0]
+        #keep = np.where(allccds.blacklist_ok*allccds.photometric)[0]
+        
         #allccds = survey.get_ccds()
         #keep = np.concatenate((survey.apply_blacklist(allccds),
         #                       survey.photometric_ccds(allccds)))
-        allccds.cut(keep)
+
+        #allccds.cut(keep)
 
         # Now read the parent catalog but remove the very largest galaxies in
         # the sample.  The five galaxies with the largest angular diameters in
@@ -385,14 +399,18 @@ def main():
         #cat = read_leda(largedir=largedir, d25min=0.5, d25max=10.0,
         #                decmax=np.max(allccds.dec)+0.3,
         #                decmin=np.min(allccds.dec)-0.3)
+        d25min, d25max = 1.0, 5.0
         cat = read_leda(largedir=largedir, d25min=1.0, d25max=5.0,
                         decmax=np.max(allccds.dec)+0.3,
-                        decmin=np.min(allccds.dec)-0.3)
+                        decmin=np.min(allccds.dec)-0.3,
+                        ramin=175, ramax=185
+                        )
         ngal = len(cat)
-        print('Found {} galaxies in the parent catalog.'.format(ngal))
+        print('Read {} galaxies in the parent catalog with D25 = {}-{} arcmin.'.format(
+            ngal, d25min, d25max))
         #cat = read_rc3()
-        print('HACK!!!!!!!!!!!!!!!')
-        cat = cat[:10]
+        #print('HACK!!!!!!!!!!!!!!!')
+        #cat = cat[0:20]
         #cat = cat[np.where(np.char.strip(cat['GALAXY'].data) == 'NGC4073')[0]]
         #cat = cat[np.where(np.char.strip(cat['GALAXY'].data) == 'IC0497')[0]]
         #cat = cat[np.where(np.char.strip(cat['GALAXY'].data) == 'NGC0963')[0]]
@@ -413,69 +431,23 @@ def main():
             for args in sampleargs:
                 result.append(_build_sample_onegalaxy(args))
 
-        # Unpack the results removing any possible bricks without targets.
+        # Remove non-matching galaxies, write out the sample, and then determine
+        # the set of files that need to be transferred to nyx.
+        result = list(filter(None, result))
         result = list(zip(*result))
 
-        import pdb ; pdb.set_trace()
+        outcat = vstack(result[0])
+        outccds = merge_tables(result[1])
 
-
-        ccdlist = []
-        outcat = []
-
-        for igal, gal in enumerate(cat):
-            if ((igal + 1) % 100) == 0:
-                print('Working on galaxy {} {:06d}/{:06d}, (RA, Dec, Radius)=({:.5f}, {:.5f}, {:.4f})'.format(
-                  gal['GALAXY'].strip(), igal+1, ngal, gal['RA'], gal['DEC'], gal['RADIUS']))
-
-            # Start with a very small WCS object centered on the galaxy to
-            # ensure we have 3-band coverage throughout the galaxy.
-            galwcs = _galwcs(gal, factor=0.5)
-            these = ccds_touching_wcs(galwcs, allccds)
-            if len(these) > 0:
-                ccds1 = allccds[these]
-                ccds1 = ccds1[_uniqccds(ccds1)]
-                
-                if 'g' in ccds1.filter and 'r' in ccds1.filter and 'z' in ccds1.filter:
-                    # Now get a wider set of CCDs.
-                    galwcs = _galwcs(gal)
-                    ccds1 = allccds[ccds_touching_wcs(galwcs, allccds)]
-                    ccds1 = ccds1[_uniqccds(ccds1)]
-            
-                    print('  Found {} CCDs for {} {:06d}/{:06d}, (RA, Dec, Radius)=({:.5f}, {:.5f}, {:.4f})'.format(
-                        len(ccds1), gal['GALAXY'], igal, ngal, gal['RA'], gal['DEC'], gal['RADIUS']))
-
-                    ccdsfile = os.path.join(ccdsdir, '{}-ccds.fits'.format(gal['GALAXY'].strip().lower()))
-                    #print('  Writing {}'.format(ccdsfile))
-                    if os.path.isfile(ccdsfile):
-                        os.remove(ccdsfile)
-                    ccds1.writeto(ccdsfile)
-                
-                    ccdlist.append(ccds1)
-
-                    # Also get the set of bricks touching this footprint.
-                    rad = 2*gal['RADIUS']/3600 # [degree]
-                    brickindx = survey.bricks_touching_radec_box(bricks,
-                                                                 gal['RA']-rad, gal['RA']+rad,
-                                                                 gal['DEC']-rad, gal['DEC']+rad)
-                    if len(brickindx) == 0 or len(brickindx) > 4:
-                        print('This should not happen!')
-                        pdb.set_trace()
-                    gal['BRICKNAME'][:len(brickindx)] = bricks.brickname[brickindx]
-
-                    if len(outcat) == 0:
-                        outcat = Table(gal)
-                    else:
-                        outcat = vstack((outcat, gal))
-
-        # Write out the final catalog.
+        print(outcat)
         if os.path.isfile(samplefile):
             os.remove(samplefile)
+            
         print('Writing {}'.format(samplefile))
         outcat.write(samplefile)
-        print(outcat)
 
         # Do we need to transfer any of the data to nyx?
-        _getfiles(merge_tables(ccdlist))
+        _getfiles(outccds)
         pdb.set_trace()
 
     # --------------------------------------------------
