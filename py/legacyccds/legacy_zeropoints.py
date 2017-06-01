@@ -531,6 +531,22 @@ class Measurer(object):
         mask, junk = fitsio.read(dqfn, ext=self.ext, header=True)
         return mask
 
+    def get_image_mask(self,img,bitmask):
+        '''img -- oki or ooi
+        bitmask -- ood'''
+        mask = np.zeros(img.shape).astype(np.int8) 
+        # Any flagged pixel
+        mask[bitmask > 0]= 1
+        # Old way of doing things was saturation threshold
+        #if saturated_bitmask:
+        #    if self.camera == 'decam':
+        #        sat_level = 160000. # e-
+        #    else:
+        #        sat_level= 50000. # e- 
+        #    mask[img > sat_level]= 1
+        #    return mask
+        return mask
+
     def sensible_sigmaclip(self, arr, nsigma = 4.0):
         '''sigmaclip returns unclipped pixels, lo,hi, where lo,hi are the
         mean(goodpix) +- nsigma * sigma
@@ -661,7 +677,7 @@ class Measurer(object):
         else:
             img,hdr= self.read_image() 
             bitmask= self.read_bitmask()
-        sat_mask= self.get_saturated_mask(img,bitmask)
+        img_mask= self.get_image_mask(img,bitmask)
         t0= ptime('read image, bitmask',t0)
 
         # Initialize and begin populating the output CCDs table.
@@ -706,13 +722,24 @@ class Measurer(object):
         airmass = ccds['airmass'].data[0]
         print('Band {}, Exptime {}, Airmass {}'.format(self.band, exptime, airmass))
 
-        # Get the ra, dec coordinates at the center of the chip.
+        # WCS: 1-indexed so pixel pixelxy2radec(1,1) corresponds to img[0,0]
         H, W = img.shape
         ccdra, ccddec = self.wcs.pixelxy2radec((W+1) / 2.0, (H + 1) / 2.0)
         ccds['ra'] = ccdra   # [degree]
         ccds['dec'] = ccddec # [degree]
         t0= ptime('header-info',t0)
 
+        # Test WCS again IDL, WCS is 1-indexed
+        #x_pix= [1,img.shape[0]/2,img.shape[0]]
+        #y_pix= [1,img.shape[1]/2,img.shape[1]]
+        #test_wcs= [(_x,_y)+self.wcs.pixelxy2radec(_x,_y) for _x,_y in zip(x_pix,y_pix)]
+        #with open('three_camera_vals.txt','a') as foo:
+        #    foo.write('ccdname=%s, hdu=%d, image=%s\n' % (self.ccdname,self.image_hdu,self.fn))
+        #    foo.write('image shape: x=%d y=%d\n' % (img.shape[0],img.shape[1]))
+        #    for i in test_wcs:
+        #        foo.write('x=%d y=%d ra=%.9f dec=%.9f\n' % (i[0],i[1],i[2],i[3]))
+        #return ccds, _stars_table()
+        
         # Measure the sky brightness and (sky) noise level.  Need to capture
         # negative sky.
         sky0 = self.sky(self.band)
@@ -741,6 +768,16 @@ class Measurer(object):
         #              sharplo=0.2, sharphi=1.0, roundlo=-1.0, roundhi=1.0,
         #              exclude_border=True)
         #print('stars border True: %d' % (len(obj),))
+
+        # Write splinesky subtracted image to fits file for inspection
+        #fn= 'test-%s.fits' % (os.path.basename(self.fn).replace('.fits.fz',''),)
+        #if not os.path.exists(fn):
+        #    # Hack! to fill primary (0th) hdu
+        #    fitsio.write(fn,np.zeros(1),header=self.primhdr)
+        #fitsio.write(fn,img / self.gain,header=hdr,extname='hdu%s_image' % self.image_hdu)
+        #fitsio.write(fn,img_sub_sky / self.gain,header=hdr,extname='hdu%s_image_minus_splinesky' % self.image_hdu)
+        #print('added to %s, gain=%f' % (fn,self.gain))
+        #return ccds, _stars_table()
 
         extra= {}
         extra['proj_fn']= os.path.join('/project/projectdirs/cosmo/staging',
@@ -784,7 +821,7 @@ class Measurer(object):
             # Use skyap to subtractr local sky
             apphot = aperture_photometry(img, ap)
             #skyphot = aperture_photometry(img, skyap)
-            skyphot = aperture_photometry(img, skyap, mask=sat_mask)
+            skyphot = aperture_photometry(img, skyap, mask= img_mask > 0)
             apskyflux= skyphot['aperture_sum'] / skyap.area() * ap.area()
             apskyflux_perpix= skyphot['aperture_sum'] / skyap.area() 
             apflux = apphot['aperture_sum'] - apskyflux
@@ -795,55 +832,68 @@ class Measurer(object):
             apskyflux= apflux.copy()
             apskyflux.fill(0.)
             apskyflux_perpix= apskyflux.copy()
-       # 2nd method
-        #np.save('apflux_orig.npy',apflux.data)
-        #np.save('apskyflux_orig.npy',apskyflux.data)
-        #skyphot = aperture_photometry(img, skyap, mask=sat_mask)
-        #apskyflux= skyphot['aperture_sum'] / skyap.area() * ap.area()
-        #apskyflux_perpix= skyphot['aperture_sum'] / skyap.area() 
-        #apflux = apphot['aperture_sum'] - apskyflux
-        #np.save('apflux_mask.npy',apflux.data)
-        #np.save('apskyflux_mask.npy',apskyflux.data)
-        #raise ValueError
 
         # Remove stars if saturated within 5 pixels of centroid
-        bit_ap = CircularAperture((obj['xcentroid'], obj['ycentroid']), 5.)
-        bit_phot = aperture_photometry(sat_mask, bit_ap)
-        bit_flux = bit_phot['aperture_sum'] 
-        # No stars within our skyrad_outer (10'')
-        minsep = self.skyrad[1] #arcsec
-        objra, objdec = self.wcs.pixelxy2radec(obj['xcentroid']+1, obj['ycentroid']+1)
-        b_isolated= self.isolated_radec(objra,objdec,nn=2,minsep=minsep/3600.)
+        ap_for_mask = CircularAperture((obj['xcentroid'], obj['ycentroid']), 5.)
+        phot_for_mask = aperture_photometry(img_mask, ap_for_mask)
+        flux_for_mask = phot_for_mask['aperture_sum'] 
         # Aperture mags
         apmags= - 2.5 * np.log10(apflux.data) + zp0 + 2.5 * np.log10(exptime)
         # Good stars following IDL codes
         # We are ignoring aperature errors though
+        minsep = self.skyrad[1] #arcsec
         minsep_px = minsep/self.pixscale
         wid,ht= img.shape[1],img.shape[0] #2046,4096 for DECam
-        
-        extra['apflux']= apflux > 0
-        extra['bit_flux']= bit_flux == 0
-        extra['b_isolated']= b_isolated == True
-        extra['apmags']= (apmags > 12.)*(apmags < 30.)
-        extra['separation']= (obj['xcentroid'] > minsep_px)*\
-                             (obj['xcentroid'] < wid - minsep_px)*\
-                             (obj['ycentroid'] > minsep_px)*\
-                             (obj['ycentroid'] < ht - minsep_px)
-
-        # In order of biggest affect: 
-        # minsep_px tied with b_isolated, then apmags, apflux, bit_flux
+       
+        # 1st round of cuts: everythign except isolated 
+        # In order of biggest affect: minsep_px,apmags, apflux, flux_for_mask
         istar =  (apflux > 0)*\
-                 (bit_flux == 0)*\
-                 (b_isolated == True)*\
+                 (flux_for_mask == 0)*\
                  (apmags > 12.)*\
                  (apmags < 30.)*\
                  (obj['xcentroid'] > minsep_px)*\
                  (obj['xcentroid'] < wid - minsep_px)*\
                  (obj['ycentroid'] > minsep_px)*\
                  (obj['ycentroid'] < ht - minsep_px)
-        print('Stars after IDL cuts: %d' % (np.where(istar)[0].size,))
+        print('First round of cuts, nstars=%d' % (np.where(istar)[0].size,))
+        extra['apflux']= apflux > 0
+        extra['flux_for_mask']= flux_for_mask == 0
+        extra['apmags']= (apmags > 12.)*(apmags < 30.)
+        extra['separation']= (obj['xcentroid'] > minsep_px)*\
+                             (obj['xcentroid'] < wid - minsep_px)*\
+                             (obj['ycentroid'] > minsep_px)*\
+                             (obj['ycentroid'] < ht - minsep_px)
+        obj = obj[istar]
+        objra, objdec = self.wcs.pixelxy2radec(obj['xcentroid']+1, obj['ycentroid']+1)
+        apflux = apflux[istar]
+        apskyflux= apskyflux[istar]
+        apskyflux_perpix= apskyflux_perpix[istar]
+        t0= ptime('aperture-photometry',t0)
+        extra['1st_x']= obj['xcentroid']
+        extra['1st_y']= obj['ycentroid']
+        extra['1st_ra'], extra['1st_dec'] = self.wcs.pixelxy2radec(obj['xcentroid']+1, obj['ycentroid']+1)
+        # 2nd round: isolated
+        # If used isolated above thre would be a ton of faint or bad sources that would be...
+        # ...close to and remove bright or good sources 
+        # No stars within our skyrad_outer (10'')
+        objra, objdec = self.wcs.pixelxy2radec(obj['xcentroid']+1, obj['ycentroid']+1)
+        b_isolated= self.isolated_radec(objra,objdec,nn=2,minsep=minsep/3600.)
+         
+        istar =  (b_isolated == True)
+        print('Second round of cuts, nstars=%d' % (np.where(istar)[0].size,))
+        extra['b_isolated']= b_isolated == True
         nidl=np.where(istar)[0].size
-        # SN cut
+
+        obj = obj[istar]
+        objra, objdec = self.wcs.pixelxy2radec(obj['xcentroid']+1, obj['ycentroid']+1)
+        apflux = apflux[istar].data
+        apskyflux= apskyflux[istar].data
+        apskyflux_perpix= apskyflux_perpix[istar].data
+        extra['2nd_x']= obj['xcentroid']
+        extra['2nd_y']= obj['ycentroid']
+        extra['2nd_ra'], extra['2nd_dec'] = self.wcs.pixelxy2radec(obj['xcentroid']+1, obj['ycentroid']+1)
+
+        # 3rd Optional Cut: SN
         if self.sn_min or self.sn_max:
             sn= apflux.data / np.sqrt(apskyflux.data)
             if self.sn_min:
@@ -864,16 +914,7 @@ class Measurer(object):
         if ccds['nstar'] == 0:
             print('FAIL: All stars have negative aperture photometry AND/OR contain masked pixels!')
             return ccds, _stars_table()
-        obj = obj[istar]
-        objra, objdec = self.wcs.pixelxy2radec(obj['xcentroid']+1, obj['ycentroid']+1)
-        apflux = apflux[istar].data
-        apskyflux= apskyflux[istar].data
-        apskyflux_perpix= apskyflux_perpix[istar].data
-        t0= ptime('aperture-photometry',t0)
-        extra['mycuts_x']= obj['xcentroid']
-        extra['mycuts_y']= obj['ycentroid']
-        extra['mycuts_ra'], extra['mycuts_dec'] = self.wcs.pixelxy2radec(obj['xcentroid']+1, obj['ycentroid']+1)
-           
+          
         if False: 
             # FWHM: fit moffat profile to 20 brightest stars
             # annuli 0.5'' --> 3.5''
@@ -1237,14 +1278,6 @@ class DecamMeasurer(Measurer):
         img *= self.gain 
         return img, hdr
     
-
-    def get_saturated_mask(self,img,bitmask):
-        # Not using saturation threshold, the full ood bitmask instead
-        # sat_level = 160000 # e-
-        mask = np.zeros(img.shape,bool) 
-        mask[bitmask > 0]= True
-        return mask
- 
     def get_wcs(self):
         return wcs_pv2sip_hdr(self.hdr) # PV distortion
     
@@ -1287,13 +1320,6 @@ class Mosaic3Measurer(Measurer):
         #img= fits[ext].read()
         img *= self.exptime 
         return img, hdr
-
-    def get_saturated_mask(self,img,bitmask):
-        # Saturation threshold, not using bitmask 
-        sat_level= 50000. # e- 
-        mask = np.zeros(img.shape,bool) 
-        mask[img > sat_level]= True
-        return mask
 
     def get_wcs(self):
         return wcs_pv2sip_hdr(self.hdr) # PV distortion
@@ -1348,13 +1374,6 @@ class NinetyPrimeMeasurer(Measurer):
         img *= self.exptime
         return img, hdr
 
-    def get_saturated_mask(self,img,bitmask):
-        # Saturation threshold, not using bitmask 
-        sat_level= 50000. # e- 
-        mask = np.zeros(img.shape,bool) 
-        mask[img > sat_level]= True
-        return mask
-    
     def get_wcs(self):
         return wcs_pv2sip_hdr(self.hdr) # PV distortion
 
