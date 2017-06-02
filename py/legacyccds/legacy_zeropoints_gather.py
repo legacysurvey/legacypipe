@@ -45,6 +45,8 @@ if __name__ == "__main__":
                 os.remove(opt.outname)
             all_cats.writeto(opt.outname)
             print('Wrote %s' % opt.outname)
+            os.system('gzip --best ' + opt.outname)
+            print('gzipped %s' % opt.outname)
             print("Done")
     else:
         cats=[]
@@ -55,4 +57,7 @@ if __name__ == "__main__":
         if os.path.exists(opt.outname):
             os.remove(opt.outname)
         cats.writeto(opt.outname)
+        print('Wrote %s' % opt.outname)
+        os.system('gzip --best ' + opt.outname)
+        print('gzipped %s' % opt.outname)
 

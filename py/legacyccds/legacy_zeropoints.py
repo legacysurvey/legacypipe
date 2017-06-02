@@ -283,7 +283,7 @@ def _ccds_table(camera='decam'):
         ('camera', 'S7'),          # camera name
         ('expnum', '>i4'),         # unique exposure number
         ('ccdname', 'S4'),         # FITS extension name
-        #('ccdnum', '>i2'),        # CCD number 
+        ('ccdnum', '>i2'),        # CCD number 
         ('expid', 'S16'),          # combination of EXPNUM and CCDNAME
         ('object', 'S35'),         # object (field) name
         ('propid', 'S10'),         # proposal ID
@@ -362,67 +362,112 @@ def _stars_table(nstars=1):
     stars = Table(np.zeros(nstars, dtype=cols))
     return stars
 
-def legacypipe_table(ccds_fn):
+def reduce_survey_ccd_cols(survey_fn,legacy_fn):
+    survey=fits_table(survey_fn)
+    legacy=fits_table(legacy_fn)
+    for col in survey.get_columns():
+        if not col in legacy.get_columns():
+            survey.delete_column(col)
+    assert(len(legacy.get_columns()) == len(survey.get_columns()))
+    for col in survey.get_columns():
+        assert(col in legacy.get_columns())
+    fn=survey_fn.replace('.fits.gz','_reduced.fits.gz')
+    survey.writeto(fn) 
+    print('Wrote %s' % fn)
+     
+        
+
+def run_create_legacypipe_table(zpt_list):
+    fns= np.loadtxt(zpt_list,dtype=str)
+    assert(len(fns) > 1)
+    for fn in fns:
+        create_legacypipe_table(fn)
+        
+
+def create_legacypipe_table(ccds_fn):
     '''input _ccds_table fn
     output a table formatted for legacypipe/runbrick'''
     # HACK! need func to put in appropriate units e.g. compare to survey-ccds file for decam,mosaic, and bass
+    need_arjuns_keys= ['ra','dec','ra_bore','dec_bore',
+                       'image_filename','image_hdu','expnum','ccdname','object',
+                       'filter','exptime','camera','width','height','propid',
+                       'mjd_obs','ccdnmatch',
+                       'fwhm','zpt','ccdzpt','ccdraoff','ccddecoff',
+                       'cd1_1','cd2_2','cd1_2','cd2_1',
+                       'crval1','crval2','crpix1','crpix2']
+    # Load full zpt table
+    assert('-zpt.fits' in ccds_fn)
     T = fits_table(ccds_fn)
-    hdr = T.get_header()
-    primhdr = fitsio.read_header(ccds_fn)
-    units= get_units()
+    #hdr = T.get_header()
+    #primhdr = fitsio.read_header(ccds_fn)
+    #units= get_units()
 
-    primhdr.add_record(dict(name='ALLBANDS', value=allbands,
-                            comment='Band order in array values'))
-    has_zpt = 'zpt' in T.columns()
+    #primhdr.add_record(dict(name='ALLBANDS', value=allbands,
+    #                        comment='Band order in array values'))
+    #has_zpt = 'zpt' in T.columns()
+    # Units
+    # DECAM only
+    T.set('zpt',T.zpt - 2.5*np.log10(T.gain))
+    T.set('zptavg',T.zptavg - 2.5*np.log10(T.gain))
     # Rename
-    rename_keys= [('ccdzpt','zpt'),('ccdraoff','raoff'),('ccddecoff','decoff')]
-    for new,old in rename_keys:
-        T.rename(new, old)
-        units[new]= units.pop(old)
+    rename_keys= [('zpt','ccdzpt'),('zptavg','zpt'),
+                  ('raoff','ccdraoff'),('decoff','ccddecoff'),
+                  ('nmatch','ccdnmatch')]
+    for old,new in rename_keys:
+        T.rename(old,new)
+        #units[new]= units.pop(old)
     # Delete 
-    keep_keys= ['ccdzpt','ccdraoff','ccddecoff',
-                'image_filename','image_hdu','expnum','ccdname',
-                'filter','exptime','camera','width','height',
-                'fwhm','propid','cd1_1','cd2_2','cd1_2','cd2_1','mjd_obs']
-    del_keys= list( set(T.get_columns()).difference(set(keep_keys)) )
+    del_keys= list( set(T.get_columns()).difference(set(need_arjuns_keys)) )
     for key in del_keys:
         T.delete_column(key)
-        if key in units.keys():
-            _= units.pop(key) 
+        #if key in units.keys():
+        #    _= units.pop(key)
+    # legacypipe/merge-zeropoints.py
+    T.set('width', np.zeros(len(T), np.int16) + 2046)
+    T.set('height', np.zeros(len(T), np.int16) + 4094)
+    # precision
+    T.width  = T.width.astype(np.int16)
+    T.height = T.height.astype(np.int16)
+    #T.ccdnum = T.ccdnum.astype(np.int16) #number doesn't follow hdu, not using if possible
+    T.cd1_1 = T.cd1_1.astype(np.float32)
+    T.cd1_2 = T.cd1_2.astype(np.float32)
+    T.cd2_1 = T.cd2_1.astype(np.float32)
+    T.cd2_2 = T.cd2_2.astype(np.float32)
     # Align units with 'cols'
-    cols = T.get_columns()
-    units = [units.get(c, '') for c in cols]
+    #cols = T.get_columns()
+    #units = [units.get(c, '') for c in cols]
     # Column ordering...
     #cols = []
     #if dr4:
     #    cols.append('release')
     #    T.release = np.zeros(len(T), np.int32) + 4000
-    outfn=ccds_fn.replace('.fits','legacypipe.fits')
-    T.writeto(outfn, columns=cols, header=hdr, primheader=primhdr, units=units)
+    outfn=ccds_fn.replace('-zpt.fits','-legacypipe.fits')
+    T.writeto(outfn) #, columns=cols, header=hdr, primheader=primhdr, units=units)
+    print('Wrote %s' % outfn)
 
-class NativeTable(object):
-    def __init__(self,fn,camera='decam',ccd_or_stars='ccds'):
-        '''zpt,stars tables have same units by default (e.g. electron/sec for zpt)
-        This func takes either the ccds or stars table and converts the relavent columns
-        into native units for given camera 
-        e.g. ADU for DECam,  electron/sec for Mosaic/BASS'''
-        assert(camera in ['decam','mosaic','90prime'])
-        assert(ccds_or_stars in ['ccds','stars'])
-        if camera in 'decam':
-            self.Decam(fn,ccds_or_stars=ccds_or_stars)
-        if camera in ['mosaic','90prime']:
-            self.Mosaic90Prime(fn,ccds_or_stars=ccds_or_stars)
-
-    def Decam(self,fn,ccds_or_stars):
-        T = fits_table(fn)
-        hdr = T.get_header()
-        primhdr = fitsio.read_header(ccds_fn)
-        units= get_units()
-        # Convert units
-        #T.set('zpt',T.zpt +- 2.5*np.log10(T.gain * T.exptime)) 
-        # Write
-        outfn=fn.replace('.fits','native.fits')
-        T.writeto(outfn, columns=cols, header=hdr, primheader=primhdr, units=units)
+#class NativeTable(object):
+#    def __init__(self,fn,camera='decam',ccd_or_stars='ccds'):
+#        '''zpt,stars tables have same units by default (e.g. electron/sec for zpt)
+#        This func takes either the ccds or stars table and converts the relavent columns
+#        into native units for given camera 
+#        e.g. ADU for DECam,  electron/sec for Mosaic/BASS'''
+#        assert(camera in ['decam','mosaic','90prime'])
+#        assert(ccds_or_stars in ['ccds','stars'])
+#        if camera in 'decam':
+#            self.Decam(fn,ccds_or_stars=ccds_or_stars)
+#        if camera in ['mosaic','90prime']:
+#            self.Mosaic90Prime(fn,ccds_or_stars=ccds_or_stars)
+#
+#    def Decam(self,fn,ccds_or_stars):
+#        T = fits_table(fn)
+#        hdr = T.get_header()
+#        primhdr = fitsio.read_header(ccds_fn)
+#        units= get_units()
+#        # Convert units
+#        #T.set('zpt',T.zpt +- 2.5*np.log10(T.gain * T.exptime)) 
+#        # Write
+#        outfn=fn.replace('.fits','native.fits')
+#        T.writeto(outfn, columns=cols, header=hdr, primheader=primhdr, units=units)
 
 def getrms(x):
     return np.sqrt( np.mean( np.power(x,2) ) )
@@ -505,11 +550,12 @@ class Measurer(object):
             self.expnum = np.int32(os.path.basename(self.fn)[11:17])
 
         self.ccdname = self.hdr['EXTNAME'].strip()
-        self.image_hdu = np.int(self.hdr['CCDNUM'])
+        self.ccdnum = np.int(self.hdr['CCDNUM']) #1 larger than image_hdu
+        self.image_hdu = self.ccdnum - 1
 
         self.expid = '{:08d}-{}'.format(self.expnum, self.ccdname)
 
-        self.object = self.primhdr['OBJECT']
+        self.obj = self.primhdr['OBJECT']
 
         self.wcs = self.get_wcs()
         # Pixscale is assumed CONSTANT! per camera
@@ -682,11 +728,12 @@ class Measurer(object):
         ccds = _ccds_table(self.camera)
         ccds['image_filename'] = '/'.join( [self.camera] + self.fn.split('/')[-2:] ) #os.path.basename(self.fn)   
         ccds['image_hdu'] = self.image_hdu 
+        ccds['ccdnum'] = self.ccdnum 
         ccds['camera'] = self.camera
         ccds['expnum'] = self.expnum
         ccds['ccdname'] = self.ccdname
         ccds['expid'] = self.expid
-        ccds['object'] = self.object
+        ccds['object'] = self.obj
         ccds['propid'] = self.propid
         ccds['filter'] = self.band
         ccds['exptime'] = self.exptime
@@ -703,8 +750,9 @@ class Measurer(object):
         hdr_fwhm= hdr['fwhm']
         ccds['fwhm_cp']= hdr_fwhm
         # Copy some header cards directly.
+        # ZNAXIS[12] not NAXIS
         hdrkey = ('avsky', 'crpix1', 'crpix2', 'crval1', 'crval2', 'cd1_1',
-                  'cd1_2', 'cd2_1', 'cd2_2', 'naxis1', 'naxis2')
+                  'cd1_2', 'cd2_1', 'cd2_2', 'znaxis1', 'znaxis2')
         ccdskey = ('avsky', 'crpix1', 'crpix2', 'crval1', 'crval2', 'cd1_1',
                    'cd1_2', 'cd2_1', 'cd2_2', 'width', 'height')
         for ckey, hkey in zip(ccdskey, hdrkey):
@@ -1334,7 +1382,8 @@ def get_extlist(camera):
                    'N19', 'N20', 'N21', 'N22', 'N23', 'N24', 'N25', 'N26', 'N27',
                    'N28', 'N29', 'N31']
         # Testing only!
-        extlist = ['N4','S4', 'S22','N19']
+        #extlist = ['N4','S4', 'S22','N19']
+        extlist = ['S4']
     else:
         print('Camera {} not recognized!'.format(camera))
         pdb.set_trace() 
@@ -1485,6 +1534,9 @@ def runit(imgfn_proj, **measureargs):
     # requests).
     stars.write(starfn)
     print('Wrote {}'.format(starfn))
+    # Write legacypipe-specific table
+    create_legacypipe_table(zptfn)
+    # Clean up
     t0= ptime('write-results-to-fits',t0)
     if os.path.exists(imgfn_scr): 
         # Safegaurd against removing stuff on /project
