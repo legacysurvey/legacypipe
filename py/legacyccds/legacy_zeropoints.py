@@ -296,8 +296,7 @@ def _ccds_table(camera='decam'):
         ('airmass', '>f4'),        # airmass (from header)
         #('seeing', '>f4'),        # seeing estimate (from header, arcsec)
         ('fwhm', '>f4'),          # FWHM (pixels)
-        #('fwhm2', '>f4'),          # FWHM (pixels)
-        #('fwhmHDR', '>f4'),          # FWHM (pixels)
+        ('fwhm_cp', '>f4'),          # FWHM (pixels)
         #('arawgain', '>f4'),       
         ('gain', '>f4'),           # average gain (camera-specific, e/ADU) -- remove?
         #('avsky', '>f4'),         # average sky value from CP (from header, ADU) -- remove?
@@ -428,10 +427,6 @@ class NativeTable(object):
 def getrms(x):
     return np.sqrt( np.mean( np.power(x,2) ) )
 
-def moffatPSF(x, a, r0, beta):
-    return a*(1. + (x/r0)**2)**(-beta)
-
-
 def get_bitmask_fn(imgfn):
     if 'ooi' in imgfn: 
         fn= imgfn.replace('ooi','ood')
@@ -482,7 +477,10 @@ class Measurer(object):
         self.match_radius = match_radius 
         self.sn_min = sn_min 
         self.sn_max = sn_max 
-        #self.stampradius = 15   # tractor fitting no longer done, stamp radius around each star [pixels]
+        
+        # Tractor fitting of final star sample
+        self.stampradius= 4. # [arcsec] Should be a bit bigger than radius=3.5'' aperture
+        self.tractor_nstars= 30 # Tractorize at most this many stars, saves CPU time
 
         # Set the nominal detection FWHM (in pixels) and detection threshold.
         # Read the primary header and the header for this extension.
@@ -594,19 +592,19 @@ class Measurer(object):
         H, W = img.shape
 
         fwhms = []
-        stamp = self.stampradius
+        radius_pix = self.stampradius / self.pixscale
                 
         for ii, (xi, yi, fluxi) in enumerate(zip(xstar, ystar, fluxstar)):
             #print('Fitting source', i, 'of', len(Jf))
             ix = int(np.round(xi))
             iy = int(np.round(yi))
-            xlo = max(0, ix-stamp)
-            xhi = min(W, ix+stamp+1)
-            ylo = max(0, iy-stamp)
-            yhi = min(H, iy+stamp+1)
+            xlo = max(0, ix-radius_pix)
+            xhi = min(W, ix+radius_pix+1)
+            ylo = max(0, iy-radius_pix)
+            yhi = min(H, iy+radius_pix+1)
             xx, yy = np.meshgrid(np.arange(xlo, xhi), np.arange(ylo, yhi))
             r2 = (xx - xi)**2 + (yy - yi)**2
-            keep = (r2 < stamp**2)
+            keep = (r2 < radius_pix**2)
             pix = img[ylo:yhi, xlo:xhi].copy()
             ie = ierr[ylo:yhi, xlo:xhi].copy()
             #print('fitting source at', ix,iy)
@@ -703,7 +701,7 @@ class Measurer(object):
         ccds['pixscale'] = self.pixscale
         # FWHM from CP header
         hdr_fwhm= hdr['fwhm']
-        ccds['fwhm']= hdr_fwhm
+        ccds['fwhm_cp']= hdr_fwhm
         # Copy some header cards directly.
         hdrkey = ('avsky', 'crpix1', 'crpix2', 'crval1', 'crval2', 'cd1_1',
                   'cd1_2', 'cd2_1', 'cd2_2', 'naxis1', 'naxis2')
@@ -747,15 +745,15 @@ class Measurer(object):
         kext = self.extinction(self.band)
 
         print('Computing the sky background.')
-        sky, sig1 = self.get_sky_and_sigma(img)
-        sky1 = np.median(sky)
+        sky_img, sig1 = self.get_sky_and_sigma(img)
+        sky1 = np.median(sky_img)
         print('sky from median of image= %.2f' % sky1)
         skybr = zp0 - 2.5*np.log10(sky1 / self.pixscale / self.pixscale / exptime)
         print('  Sky brightness: {:.3f} mag/arcsec^2'.format(skybr))
         print('  Fiducial:       {:.3f} mag/arcsec^2'.format(sky0))
 
         # Median of absolute deviation (MAD), std dev = 1.4826 * MAD
-        img_sub_sky= img - sky 
+        img_sub_sky= img - sky_img 
         stddev_mad= 1.4826 * np.median(np.abs(img_sub_sky))
         ccds['skyrms'] = stddev_mad / exptime # e/sec
         ccds['skyrms_sigma'] = sig1 / exptime    # e/sec
@@ -832,6 +830,7 @@ class Measurer(object):
             apskyflux= apflux.copy()
             apskyflux.fill(0.)
             apskyflux_perpix= apskyflux.copy()
+        t0= ptime('aperture-photometry',t0)
 
         # Remove stars if saturated within 5 pixels of centroid
         ap_for_mask = CircularAperture((obj['xcentroid'], obj['ycentroid']), 5.)
@@ -868,7 +867,6 @@ class Measurer(object):
         apflux = apflux[istar]
         apskyflux= apskyflux[istar]
         apskyflux_perpix= apskyflux_perpix[istar]
-        t0= ptime('aperture-photometry',t0)
         extra['1st_x']= obj['xcentroid']
         extra['1st_y']= obj['ycentroid']
         extra['1st_ra'], extra['1st_dec'] = self.wcs.pixelxy2radec(obj['xcentroid']+1, obj['ycentroid']+1)
@@ -914,60 +912,6 @@ class Measurer(object):
         if ccds['nstar'] == 0:
             print('FAIL: All stars have negative aperture photometry AND/OR contain masked pixels!')
             return ccds, _stars_table()
-          
-        if False: 
-            # FWHM: fit moffat profile to 20 brightest stars
-            # annuli 0.5'' --> 3.5''
-            radii = np.linspace(0.5/self.pixscale,self.aprad/self.pixscale, num=10)
-            sbright= []
-            for radius in radii:
-                ap = CircularAperture((obj['xcentroid'][keep], obj['ycentroid'][keep]), radius)
-                if self.aper_sky_sub:
-                    apphot = aperture_photometry(img, ap)
-                    skyap = CircularAnnulus((obj['xcentroid'][keep], obj['ycentroid'][keep]),
-                                            r_in=self.skyrad[0] / self.pixscale, 
-                                            r_out=self.skyrad[1] / self.pixscale)
-                    skyphot = aperture_photometry(img, skyap)
-     
-                    flux= apphot['aperture_sum'] - skyphot['aperture_sum'] / skyap.area() * ap.area()
-                    sbright.append( flux/ap.area() )
-                else:
-                    sbright.append( aperture_photometry(img_sub_sky, ap)/ap.aera() )
-            # Sky subtracted surface brightness (nstars,napertures)
-            surfb= np.zeros( (len(sbright[0].data),len(radii)) )
-            for cnt in range(len(radii)):
-                surfb[:,cnt]= sbright[cnt].data
-            del sbright
-            # 20 brightest or the number left
-            nbright= min(20,len(obj))
-            ibright= np.argsort(surfb[:,0])[::-1][:nbright]
-            surfb= surfb[ibright,:]
-            # Non-linear least squares LM fit to Moffat Profile
-            fwhm= np.zeros(surfb.shape[0])
-            if not self.verboseplots:
-                try: 
-                    for cnt in range(surfb.shape[0]):
-                        popt, pcov = curve_fit(moffatPSF, radii, surfb[cnt,:], p0 = [1.5*surfb[cnt,0], 5.,2.])
-                        fwhm[cnt]= 2*popt[1]*np.sqrt(2**(1/popt[2]) - 1)
-                except RuntimeError:
-                    # Optimal parameters not found for moffat fit
-                    with open('zpts_bad_nofwhm.txt','a') as foo:
-                        foo.write('%s %s\n' % (self.fn,self.image_hdu))
-                    return ccds, _stars_table()
-            else: 
-                plt.close()
-                for cnt in range(surfb.shape[0]):
-                    popt, pcov = curve_fit(moffatPSF, radii, surfb[cnt,:], p0 = [1.5*surfb[cnt,0], 5.,2.])
-                    fwhm[cnt]= 2*popt[1]*np.sqrt(2**(1/popt[2]) - 1)
-                    plt.plot(radii,surfb[cnt,:],'ok')
-                    plt.plot(np.linspace(0,14,num=20),moffatPSF(np.linspace(0,14,num=20), *popt))
-                plt.xlabel('pixels')
-                fn= self.zptsfile.replace('.fits','_qa_fwhm_ccd%s.png' % ccds['image_hdu'].data[0])
-                plt.savefig(fn)
-                plt.close()
-                print('Wrote %s' % fn)
-            ccds['fwhm']= np.median(fwhm) * self.pixscale # arcsec
-            t0= ptime('fwhm-calculation',t0)
         
         # Now match against (good) PS1 stars 
         try: 
@@ -1040,6 +984,31 @@ class Measurer(object):
         extra['y'] = stars['y']
         extra['ra'], extra['dec'] = stars['ra'].data,stars['dec'].data
         extra['apflux'], extra['apskyflux'] = stars['apflux'].data,stars['apskyflux'].data
+        
+        # FWHM from Tractor
+        # SN from sky_img aperture photometry
+        ap = CircularAperture((stars['x'], stars['y']), self.aprad / self.pixscale)
+        skyphot = aperture_photometry(sky_img, ap)
+        skyflux = skyphot['aperture_sum'].data
+        t0= ptime('sky_img aperture photometry',t0)
+        star_SN= stars['apflux'].data / np.sqrt(stars['apflux'].data + skyflux)
+ 
+        # SN cut because interactive iraf gives best FWHM when star not too bright
+        sn_cut = (star_SN >= 10.)*(star_SN <= 100.)
+        # Only tractoring nstars is approx. random selection of nstars within sn
+        sample=dict(x= stars['x'][sn_cut][:self.tractor_nstars],
+                    y= stars['y'][sn_cut][:self.tractor_nstars],
+                    apflux= stars['apflux'][sn_cut][:self.tractor_nstars],
+                    sn= star_SN[sn_cut][:self.tractor_nstars])
+        #ivar = np.zeros_like(img) + 1.0/sig1**2
+        # Hack! To avoid 1/0 and sqrt(<0) just considering Poisson Stats due to sky
+        ierr = 1.0/np.sqrt(sky_img)
+        fwhms = self.fitstars(img_sub_sky, ierr, sample['x'], sample['y'], sample['apflux'])
+        ccds['fwhm'] = np.median(fwhms) # fwhms= 2.35 * psf.sigmas 
+        print('FWHM med=%f, std=%f, std_med=%f' % (np.median(fwhms),np.std(fwhms),np.std(fwhms)/len(sample['x'])))
+        #ccds['seeing'] = self.pixscale * np.median(fwhms)
+        t0= ptime('Tractor fit FWHM to %d/%d stars' % (len(sample['x']),len(stars)), t0) 
+
         ## Add ps1 astrometric residuals for comparison
         #ps1_m1, ps1_m2, ps1_d12 = match_radec(objra, objdec, ps1.ra, ps1.dec, self.matchradius/3600.0,\
         #                                      nearest=True)
@@ -1116,36 +1085,6 @@ class Measurer(object):
             self.make_plots(stars,dmag,ccds['zpt'],ccds['transp'])
             t0= ptime('made-plots',t0)
 
-        # No longer neeeded: 
-        # Fit each star with Tractor.
-        # Skip for now, most time consuming part
-        #ivar = np.zeros_like(img) + 1.0/sig1**2
-        #ierr = np.sqrt(ivar)
-
-        # Fit the PSF here and write out the pixelized PSF.
-        # Desired inputs: image, ivar, x, y, apflux
-        # Output: 6x64x64
-        # input_image = AstroImage(image, ivar)
-        # psf_fitter = PSFFitter(AstroImage, len(x))
-        # psf_fitter.go(x, y)
-        
-        #print('Fitting stars')
-        #fwhms = self.fitstars(img - sky, ierr, stars['x'], stars['y'], apflux)
-        #t0= ptime('tractor-fitstars',t0)
-
-        #medfwhm = np.median(fwhms)
-        #print('Median FWHM: {:.3f} pixels'.format(medfwhm))
-        #ccds['fwhm'] = medfwhm
-        #stars['fwhm'] = fwhms
-        #pdb.set_trace()
-
-        ## Hack! For now just take the header (SE-measured) values.
-        ## ccds['seeing'] = 2.35 * self.hdr['seeing'] # FWHM [arcsec]
-        ##print('Hack -- assuming fixed FWHM!')
-        ##ccds['fwhm'] = 5.0
-        ###ccds['fwhm'] = self.fwhm
-        ##stars['fwhm'] = np.repeat(ccds['fwhm'].data, len(stars))
-        ##pdb.set_trace()
        
         # Save extra
         extra_fn= os.path.basename(ccds['image_filename'].data[0]).replace('.fits.fz','') + \
@@ -1573,7 +1512,7 @@ def get_parser():
     parser.add_argument('--image',action='store',default=None,help='if want to run a single image',required=False)
     parser.add_argument('--image_list',action='store',default=None,help='if want to run all images in a text file, Note:if compare2arjun = True then list of legacy zeropoint files',required=False)
     parser.add_argument('--outdir', type=str, default='.', help='Where to write zpts/,images/,logs/')
-    parser.add_argument('--det_thresh', type=float, default=5., help='minimum S/N of source for matched filter detections, 5 better astrometric soln than 10, which is what IDL codes used')
+    parser.add_argument('--det_thresh', type=float, default=10., help='source detection, 10-sigam throws out some fainter stars that are decent but this is okay because these fainter ones can be close to brighter ones that we would loose from isolated cut')
     parser.add_argument('--match_radius', type=float, default=1., help='arcsec, matching to gaia/ps1, 1 arcsec better astrometry than 3 arcsec as used by IDL codes')
     parser.add_argument('--sn_min', type=float,default=None, help='min S/N, optional cut on apflux/sqrt(skyflux)')
     parser.add_argument('--sn_max', type=float,default=None, help='max S/N, ditto')
