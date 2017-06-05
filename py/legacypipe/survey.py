@@ -1452,6 +1452,7 @@ def exposure_metadata(filenames, hdus=None, trim=None):
 def run_calibs(X):
     im = X[0]
     kwargs = X[1]
+    noraise = kwargs.pop('noraise', False)
     print('run_calibs for image', im)
     try:
         return im.run_calibs(**kwargs)
@@ -1459,7 +1460,8 @@ def run_calibs(X):
         print('Exception in run_calibs:', im, kwargs)
         import traceback
         traceback.print_exc()
-        raise
+        if not noraise:
+            raise
 
 def read_one_tim(X):
     (im, targetrd, kwargs) = X
