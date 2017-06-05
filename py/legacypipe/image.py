@@ -814,7 +814,6 @@ class LegacySurveyImage(object):
         assert(gaussPsf or pixPsf or hybridPsf)
         psffn = None
         if gaussPsf:
-            from tractor.basics import GaussianMixturePSF
             v = psf_sigma**2
             psf = GaussianMixturePSF(1., 0., 0., v, v, 0.)
             print('WARNING: using mock PSF:', psf)
@@ -822,7 +821,7 @@ class LegacySurveyImage(object):
             psf.plver = ''
         else:
             # spatially varying pixelized PsfEx
-            from tractor.psfex import PixelizedPsfEx
+            from tractor import PixelizedPsfEx
             print('Reading PsfEx model from', self.psffn)
             psf = PixelizedPsfEx(self.psffn)
             psf.shift(x0, y0)
