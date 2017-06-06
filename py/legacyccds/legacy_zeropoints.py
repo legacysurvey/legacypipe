@@ -99,7 +99,7 @@ import datetime
 import sys
 
 from photutils import (CircularAperture, CircularAnnulus,
-                       aperture_photometry, daofind)
+                       aperture_photometry, DAOStarFinder)
 
 from astrometry.util.fits import fits_table, merge_tables
 from astrometry.util.util import wcs_pv2sip_hdr
@@ -373,6 +373,22 @@ def reduce_survey_ccd_cols(survey_fn,legacy_fn):
         assert(col in legacy.get_columns())
     fn=survey_fn.replace('.fits.gz','_reduced.fits.gz')
     survey.writeto(fn) 
+    print('Wrote %s' % fn)
+
+def cuts_for_brick_2016p122(legacy_fn,survey_fn):
+    survey=fits_table(survey_fn)
+    legacy=fits_table(legacy_fn)
+    # cut to same data as survey_fn
+    keep= np.zeros(len(legacy),bool)
+    for sur in survey:
+        ind= (np.char.strip(legacy.image_filename) == sur.image_filename.strip() ) *\
+             (np.char.strip(legacy.ccdname) == sur.ccdname.strip() )
+        keep[ind]= True
+    legacy.cut(keep)
+    print('size legacy=%d' % (len(legacy),))
+    # save
+    fn=legacy_fn.replace('.fits','_wcuts.fits')
+    legacy.writeto(fn) 
     print('Wrote %s' % fn)
      
         
@@ -834,18 +850,25 @@ class Measurer(object):
         # Exclude_border=True removes the stars with centroid on or out of ccd edge
         # Good, but we want to remove with aperture touching ccd edge too
         print('det_thresh = %d' % self.det_thresh)
-        obj = daofind(img, fwhm= hdr_fwhm,
-                      threshold=self.det_thresh * stddev_mad,
-                      sharplo=0.2, sharphi=1.0, roundlo=-1.0, roundhi=1.0,
-                      exclude_border=False)
+        dao = DAOStarFinder(fwhm= hdr_fwhm,
+                            threshold=self.det_thresh * stddev_mad,
+                            sharplo=0.2, sharphi=1.0, roundlo=-1.0, roundhi=1.0,
+                            exclude_border=False)
+        obj= dao(img)
+        #obj = daofind(img, fwhm= hdr_fwhm,
+        #              threshold=self.det_thresh * stddev_mad,
+        #              sharplo=0.2, sharphi=1.0, roundlo=-1.0, roundhi=1.0,
+        #              exclude_border=False)
         extra['dao_x']= obj['xcentroid']
         extra['dao_y']= obj['ycentroid']
         extra['dao_ra'], extra['dao_dec'] = self.wcs.pixelxy2radec(obj['xcentroid']+1, obj['ycentroid']+1)
 
         if len(obj) < 20:
-            obj = daofind(img, fwhm= hdr_fwhm,
-                          threshold=self.det_thresh / 2.* stddev_mad,
-                          exclude_border=False)
+            dao.threshold /= 2.* stddev_mad
+            obj= dao(img)
+            #obj = daofind(img, fwhm= hdr_fwhm,
+            #              threshold=self.det_thresh / 2.* stddev_mad,
+            #              exclude_border=False)
         nobj = len(obj)
         print('{} sources detected with detection threshold {}-sigma'.format(nobj, self.det_thresh))
         ccds['nstarfind']= nobj
@@ -1074,6 +1097,7 @@ class Measurer(object):
         else:
             colorterm = self.colorterm_ps1_to_observed(ps1.median[m2, :], self.band)
         ps1band = ps1cat.ps1band[self.band]
+        # g-band DECAM,MzLS,or BASS = g-band PS1 - poly(gicolor, gcoeff)
         stars['ps1_mag'] = ps1.median[m2, ps1band] + colorterm
         # Additonal mags for comparison with Arjun's star sample
         # PS1 Median PSF mag in [g,r,i,z],  Gaia G-band mean magnitude
@@ -1382,8 +1406,8 @@ def get_extlist(camera):
                    'N19', 'N20', 'N21', 'N22', 'N23', 'N24', 'N25', 'N26', 'N27',
                    'N28', 'N29', 'N31']
         # Testing only!
-        #extlist = ['N4','S4', 'S22','N19']
-        extlist = ['S4']
+        extlist = ['N4'] #,'S4', 'S22','N19']
+        #extlist = ['S10', 'S11', 'S12', 'S16', 'S17', 'S4', 'S5', 'S6']
     else:
         print('Camera {} not recognized!'.format(camera))
         pdb.set_trace() 
