@@ -570,7 +570,7 @@ class Measurer(object):
 
         self.ccdname = self.hdr['EXTNAME'].strip()
         self.ccdnum = np.int(self.hdr['CCDNUM']) #1 larger than image_hdu
-        self.image_hdu = self.ccdnum - 1
+        self.image_hdu = self.ccdnum
 
         self.expid = '{:08d}-{}'.format(self.expnum, self.ccdname)
 
@@ -813,14 +813,24 @@ class Measurer(object):
 
         print('Computing the sky background.')
         sky_img, sig1 = self.get_sky_and_sigma(img)
-        sky1 = np.median(sky_img)
+        img_sub_sky= img - sky_img
+        # Bunch of sky estimates
+        stddev_mad= 1.4826 * np.median(np.abs(img_sub_sky))
+        stddev_mad_sm= 1.4826 * np.median(np.abs(img_sub_sky[1500:2500,500:1500]))
+        stddev_clip,_,_= sigmaclip(img_sub_sky, low=3,high=3)
+        stddev_clip= np.std(stddev_clip)
+        stddev_clip_sm,_,_= sigmaclip(img_sub_sky[1500:2500,500:1500], low=3,high=3)
+        stddev_clip_sm= np.std(stddev_clip_sm)
+        #sky1 = np.median(sky_img)
+        #sky1 = np.median(sky_img[1500:2500,500:1500])
+        sky1_clip,_,_ = sigmaclip(img[1500:2500,500:1500],low=3.,high=3.) #Arjun's prescription
+        sky1= np.median(sky1_clip)
         print('sky from median of image= %.2f' % sky1)
         skybr = zp0 - 2.5*np.log10(sky1 / self.pixscale / self.pixscale / exptime)
         print('  Sky brightness: {:.3f} mag/arcsec^2'.format(skybr))
         print('  Fiducial:       {:.3f} mag/arcsec^2'.format(sky0))
 
         # Median of absolute deviation (MAD), std dev = 1.4826 * MAD
-        img_sub_sky= img - sky_img
         ## Write splinesky subtracted image to fits file for inspection
         #fn= 'img_sub_spline-%s.fits' % (os.path.basename(self.fn).replace('.fits.fz',''),)
         ##if not os.path.exists(fn):
@@ -830,17 +840,12 @@ class Measurer(object):
         #fitsio.write(fn,img_sub_sky / self.gain,header=hdr,extname='hdu%s_image_minus_splinesky' % self.image_hdu)
         #print('added to %s, gain=%f' % (fn,self.gain))
         #return ccds, _stars_table()
-        stddev_mad= 1.4826 * np.median(np.abs(img_sub_sky))
-        stddev_mad_sm= 1.4826 * np.median(np.abs(img_sub_sky[1500:2500,500:1500]))
-        stddev_clip,_,_= sigmaclip(img_sub_sky, low=3,high=3)
-        stddev_clip= np.std(stddev_clip)
-        stddev_clip_sm,_,_= sigmaclip(img_sub_sky[1500:2500,500:1500], low=3,high=3)
-        stddev_clip_sm= np.std(stddev_clip_sm)
-        ccds['skyrms'] = stddev_mad / exptime # e/sec
-        ccds['skyrms_sm'] = stddev_mad_sm / exptime # e/sec
-        ccds['skyrms_sigma'] = sig1 / exptime    # e/sec
-        ccds['skyrms_clip'] = stddev_clip / exptime    # e/sec
-        ccds['skyrms_clip_sm'] = stddev_clip_sm / exptime    # e/sec
+        #ccds['skyrms'] = stddev_mad / exptime # e/sec
+        ccds['skyrms'] = stddev_mad_sm / exptime # e/sec
+        #ccds['skyrms_sm'] = stddev_mad_sm / exptime # e/sec
+        #ccds['skyrms_sigma'] = sig1 / exptime    # e/sec
+        #ccds['skyrms_clip'] = stddev_clip / exptime    # e/sec
+        #ccds['skyrms_clip_sm'] = stddev_clip_sm / exptime    # e/sec
         ccds['skycounts'] = sky1 / exptime # [electron/pix]
         ccds['skymag'] = skybr   # [mag/arcsec^2]
         t0= ptime('measure-sky',t0)
@@ -1262,8 +1267,9 @@ class DecamMeasurer(Measurer):
         self.camera = 'decam'
         self.ut = self.primhdr['TIME-OBS']
         self.band = self.get_band()
-        self.ra_bore = hmsstring2ra(self.primhdr['TELRA'])
-        self.dec_bore = dmsstring2dec(self.primhdr['TELDEC'])
+        # {RA,DEC}: center of exposure, TEL{RA,DEC}: boresight of telescope
+        self.ra_bore = hmsstring2ra(self.primhdr['RA']) 
+        self.dec_bore = dmsstring2dec(self.primhdr['DEC'])
         self.gain = self.hdr['ARAWGAIN'] # hack! average gain [electron/sec]
 
         # /global/homes/a/arjundey/idl/pro/observing/decstat.pro
@@ -1328,8 +1334,9 @@ class Mosaic3Measurer(Measurer):
         self.camera = 'mosaic3'
         self.band= self.get_band()
         self.ut = self.primhdr['TIME-OBS']
-        self.ra_bore = hmsstring2ra(self.primhdr['TELRA'])
-        self.dec_bore = dmsstring2dec(self.primhdr['TELDEC'])
+        # {RA,DEC}: center of exposure, TEL{RA,DEC}: boresight of telescope
+        self.ra_bore = hmsstring2ra(self.primhdr['RA'])
+        self.dec_bore = dmsstring2dec(self.primhdr['DEC'])
         # ARAWGAIN does not exist, 1.8 or 1.94 close
         self.gain = self.hdr['GAIN']
 
@@ -1370,6 +1377,7 @@ class NinetyPrimeMeasurer(Measurer):
         self.pixscale= 0.470 # 0.455 is correct, but mosstat.pro has 0.470
         self.camera = '90prime'
         self.band= self.get_band()
+        # {RA,DEC}: center of exposure, doesn't have TEL{RA,DEC}
         self.ra_bore = hmsstring2ra(self.primhdr['RA'])
         self.dec_bore = dmsstring2dec(self.primhdr['DEC'])
         self.ut = self.primhdr['UT']
