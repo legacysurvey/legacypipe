@@ -320,6 +320,9 @@ def _ccds_table(camera='decam'):
         ('skymag', '>f4'),    # average sky surface brightness [mag/arcsec^2] [=ccdskymag in decstat]
         ('skycounts', '>f4'), # median sky level [electron/pix]               [=ccdskycounts in decstat]
         ('skyrms', '>f4'),    # sky variance [electron/pix]                   [=ccdskyrms in decstat]
+        ('skyrms_sm', '>f4'),    # sky variance [electron/pix]                   [=ccdskyrms in decstat]
+        ('skyrms_clip', '>f4'),    # sky variance [electron/pix]                   [=ccdskyrms in decstat]
+        ('skyrms_clip_sm', '>f4'),    # sky variance [electron/pix]                   [=ccdskyrms in decstat]
         ('skyrms_sigma', '>f4'),    # sky variance [electron/pix]                   [=ccdskyrms in decstat]
         #('medskysub', '>f4'),    # sky variance [electron/pix]                   [=ccdskyrms in decstat]
         ('nstarfind', '>i2'),    # number of PS1-matched stars                   [=ccdnmatch in decstat]
@@ -499,7 +502,7 @@ def get_bitmask_fn(imgfn):
 
 class Measurer(object):
     def __init__(self, fn, ext, aprad=3.5, skyrad_inner=7.0, skyrad_outer=10.0,
-                 det_thresh=10., match_radius=3.,sn_min=None,sn_max=None,
+                 det_thresh=8., match_radius=3.,sn_min=None,sn_max=None,
                  aper_sky_sub=False, calibrate=False,**kwargs):
         '''This is the work-horse class which operates on a given image regardless of
         its origin (decam, mosaic, 90prime).
@@ -512,7 +515,7 @@ class Measurer(object):
         skyrad_{inner,outer}: floats
         Sky annulus radius in arcsec
 
-        det_thresh: minimum S/N for matched filter, 10'' is IDL codes
+        det_thresh: minimum S/N for matched filter, 8 gives daofind agreendment with IDL daofind of 10
         match_radius: arcsec matching to gaia/ps1, 3 arcsec is IDL codes
 
         sn_{min,max}: if not None then then {min,max} S/N will be enforced from 
@@ -626,7 +629,7 @@ class Measurer(object):
         skyimg = np.zeros_like(img)
         splinesky.addTo(skyimg)
 
-        mnsky, sig1 = self.sensible_sigmaclip(img - skyimg)
+        mnsky, sig1 = self.sensible_sigmaclip(img - skyimg,nsigma=3.)
         return skyimg, sig1
 
     def remove_sky_gradients(self, img):
@@ -817,10 +820,27 @@ class Measurer(object):
         print('  Fiducial:       {:.3f} mag/arcsec^2'.format(sky0))
 
         # Median of absolute deviation (MAD), std dev = 1.4826 * MAD
-        img_sub_sky= img - sky_img 
+        img_sub_sky= img - sky_img
+        ## Write splinesky subtracted image to fits file for inspection
+        #fn= 'img_sub_spline-%s.fits' % (os.path.basename(self.fn).replace('.fits.fz',''),)
+        ##if not os.path.exists(fn):
+        ##    # Hack! to fill primary (0th) hdu
+        ##    fitsio.write(fn,np.zeros(1),header=self.primhdr)
+        ##fitsio.write(fn,img / self.gain,header=hdr,extname='hdu%s_image' % self.image_hdu)
+        #fitsio.write(fn,img_sub_sky / self.gain,header=hdr,extname='hdu%s_image_minus_splinesky' % self.image_hdu)
+        #print('added to %s, gain=%f' % (fn,self.gain))
+        #return ccds, _stars_table()
         stddev_mad= 1.4826 * np.median(np.abs(img_sub_sky))
+        stddev_mad_sm= 1.4826 * np.median(np.abs(img_sub_sky[1500:2500,500:1500]))
+        stddev_clip,_,_= sigmaclip(img_sub_sky, low=3,high=3)
+        stddev_clip= np.std(stddev_clip)
+        stddev_clip_sm,_,_= sigmaclip(img_sub_sky[1500:2500,500:1500], low=3,high=3)
+        stddev_clip_sm= np.std(stddev_clip_sm)
         ccds['skyrms'] = stddev_mad / exptime # e/sec
+        ccds['skyrms_sm'] = stddev_mad_sm / exptime # e/sec
         ccds['skyrms_sigma'] = sig1 / exptime    # e/sec
+        ccds['skyrms_clip'] = stddev_clip / exptime    # e/sec
+        ccds['skyrms_clip_sm'] = stddev_clip_sm / exptime    # e/sec
         ccds['skycounts'] = sky1 / exptime # [electron/pix]
         ccds['skymag'] = skybr   # [mag/arcsec^2]
         t0= ptime('measure-sky',t0)
@@ -850,8 +870,9 @@ class Measurer(object):
         # Exclude_border=True removes the stars with centroid on or out of ccd edge
         # Good, but we want to remove with aperture touching ccd edge too
         print('det_thresh = %d' % self.det_thresh)
+        #threshold=self.det_thresh * stddev_mad,
         dao = DAOStarFinder(fwhm= hdr_fwhm,
-                            threshold=self.det_thresh * stddev_mad,
+                            threshold=self.det_thresh * stddev_mad_sm,
                             sharplo=0.2, sharphi=1.0, roundlo=-1.0, roundhi=1.0,
                             exclude_border=False)
         obj= dao(img)
@@ -914,9 +935,12 @@ class Measurer(object):
         minsep = self.skyrad[1] #arcsec
         minsep_px = minsep/self.pixscale
         wid,ht= img.shape[1],img.shape[0] #2046,4096 for DECam
+        # No stars within our skyrad_outer (10'')
+        objra, objdec = self.wcs.pixelxy2radec(obj['xcentroid']+1, obj['ycentroid']+1)
+        b_isolated= self.isolated_radec(objra,objdec,nn=2,minsep=minsep/3600.)
        
-        # 1st round of cuts: everythign except isolated 
-        # In order of biggest affect: minsep_px,apmags, apflux, flux_for_mask
+        # 1st round of cuts:  
+        # In order of biggest affect: isolated,minsep_px,apmags, apflux, flux_for_mask
         istar =  (apflux > 0)*\
                  (flux_for_mask == 0)*\
                  (apmags > 12.)*\
@@ -924,7 +948,8 @@ class Measurer(object):
                  (obj['xcentroid'] > minsep_px)*\
                  (obj['xcentroid'] < wid - minsep_px)*\
                  (obj['ycentroid'] > minsep_px)*\
-                 (obj['ycentroid'] < ht - minsep_px)
+                 (obj['ycentroid'] < ht - minsep_px)*\
+                 (b_isolated == True)
         print('First round of cuts, nstars=%d' % (np.where(istar)[0].size,))
         extra['apflux']= apflux > 0
         extra['flux_for_mask']= flux_for_mask == 0
@@ -933,6 +958,7 @@ class Measurer(object):
                              (obj['xcentroid'] < wid - minsep_px)*\
                              (obj['ycentroid'] > minsep_px)*\
                              (obj['ycentroid'] < ht - minsep_px)
+        extra['b_isolated']= b_isolated == True
         obj = obj[istar]
         objra, objdec = self.wcs.pixelxy2radec(obj['xcentroid']+1, obj['ycentroid']+1)
         apflux = apflux[istar]
@@ -945,22 +971,22 @@ class Measurer(object):
         # If used isolated above thre would be a ton of faint or bad sources that would be...
         # ...close to and remove bright or good sources 
         # No stars within our skyrad_outer (10'')
-        objra, objdec = self.wcs.pixelxy2radec(obj['xcentroid']+1, obj['ycentroid']+1)
-        b_isolated= self.isolated_radec(objra,objdec,nn=2,minsep=minsep/3600.)
-         
-        istar =  (b_isolated == True)
-        print('Second round of cuts, nstars=%d' % (np.where(istar)[0].size,))
-        extra['b_isolated']= b_isolated == True
+        #objra, objdec = self.wcs.pixelxy2radec(obj['xcentroid']+1, obj['ycentroid']+1)
+        #b_isolated= self.isolated_radec(objra,objdec,nn=2,minsep=minsep/3600.)
+        # 
+        #istar =  (b_isolated == True)
+        #print('Second round of cuts, nstars=%d' % (np.where(istar)[0].size,))
+        #extra['b_isolated']= b_isolated == True
         nidl=np.where(istar)[0].size
 
-        obj = obj[istar]
-        objra, objdec = self.wcs.pixelxy2radec(obj['xcentroid']+1, obj['ycentroid']+1)
-        apflux = apflux[istar].data
-        apskyflux= apskyflux[istar].data
-        apskyflux_perpix= apskyflux_perpix[istar].data
-        extra['2nd_x']= obj['xcentroid']
-        extra['2nd_y']= obj['ycentroid']
-        extra['2nd_ra'], extra['2nd_dec'] = self.wcs.pixelxy2radec(obj['xcentroid']+1, obj['ycentroid']+1)
+        #obj = obj[istar]
+        #objra, objdec = self.wcs.pixelxy2radec(obj['xcentroid']+1, obj['ycentroid']+1)
+        #apflux = apflux[istar].data
+        #apskyflux= apskyflux[istar].data
+        #apskyflux_perpix= apskyflux_perpix[istar].data
+        #extra['2nd_x']= obj['xcentroid']
+        #extra['2nd_y']= obj['ycentroid']
+        #extra['2nd_ra'], extra['2nd_dec'] = self.wcs.pixelxy2radec(obj['xcentroid']+1, obj['ycentroid']+1)
 
         # 3rd Optional Cut: SN
         if self.sn_min or self.sn_max:
@@ -1406,7 +1432,8 @@ def get_extlist(camera):
                    'N19', 'N20', 'N21', 'N22', 'N23', 'N24', 'N25', 'N26', 'N27',
                    'N28', 'N29', 'N31']
         # Testing only!
-        extlist = ['N4'] #,'S4', 'S22','N19']
+        extlist = ['N4','S4', 'S22','N19']
+        #extlist = ['S22']
         #extlist = ['S10', 'S11', 'S12', 'S16', 'S17', 'S4', 'S5', 'S6']
     else:
         print('Camera {} not recognized!'.format(camera))
@@ -1588,7 +1615,7 @@ def get_parser():
     parser.add_argument('--image',action='store',default=None,help='if want to run a single image',required=False)
     parser.add_argument('--image_list',action='store',default=None,help='if want to run all images in a text file, Note:if compare2arjun = True then list of legacy zeropoint files',required=False)
     parser.add_argument('--outdir', type=str, default='.', help='Where to write zpts/,images/,logs/')
-    parser.add_argument('--det_thresh', type=float, default=10., help='source detection, 10-sigam throws out some fainter stars that are decent but this is okay because these fainter ones can be close to brighter ones that we would loose from isolated cut')
+    parser.add_argument('--det_thresh', type=float, default=8., help='source detection, 8-sigma gives same detections and IDL daofind with 10-sigam')
     parser.add_argument('--match_radius', type=float, default=1., help='arcsec, matching to gaia/ps1, 1 arcsec better astrometry than 3 arcsec as used by IDL codes')
     parser.add_argument('--sn_min', type=float,default=None, help='min S/N, optional cut on apflux/sqrt(skyflux)')
     parser.add_argument('--sn_max', type=float,default=None, help='max S/N, ditto')
