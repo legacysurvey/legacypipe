@@ -18,6 +18,72 @@ def bash(cmd):
         raise RuntimeError('Command failed: %s: return value: %i' %
                            (cmd,rtn))
 
+# DR4: ccd table differences 90prime & mosaic
+def fix_differences_annotated_ccds(mos_fn,bok_fn,
+                                   return_early=False):
+    m=fits_table(mos_fn)
+    b=fits_table(bok_fn)
+    # mosaic should use bass dtype
+    for col,basstyp in zip (['camera','expid','expnum','propid','ut'],
+                            ['S7','S15','>i8','S12','S12']):
+        m.set(col,m.get(col).astype(basstyp))
+    # vice-versa
+    for col,mostyp in zip (['ha','image_filename'],
+                           ['S12','S55']):
+        b.set(col,b.get(col).astype(mostyp))
+    # remove redundant cols
+    for col in ['extname']:
+        b.delete_column(col)
+    # add extra cols
+    for col in ['telfocus']:
+        m.set(col,np.zeros((len(m),3)).astype(np.float32) - 1)
+        m.get(col).dtype = b.get(col).dtype
+    # deal with blank cols in 90prime
+    for col in ['arawgain']:
+        b.set(col,np.zeros(len(b)).astype(np.float32) - 1)
+        b.get(col).dtype = m.get(col).dtype
+    # Option to not save quite yet
+    if return_early:
+        return m,b
+    # Check
+    assert(len(b.get_columns()) == len(m.get_columns()))
+    emp= set(m.get_columns()).difference(set(b.get_columns()))
+    assert(len(emp) == 0)
+    for col in m.get_columns():
+        if m.get(col).dtype != b.get(col).dtype:
+            print('FAIL: columsn have diff types: ',col,m.get(col).dtype,b.get(col).dtype) 
+    # Save
+    m.writeto(mos_fn.replace('.fits.gz','.fits'))
+    b.writeto(bok_fn.replace('.fits.gz','.fits'))
+    for fn in [mos_fn,bok_fn]:
+        bash('cp %s %s' % (fn,fn.replace('.fits.gz','_backup.fits.gz')))
+        bash('gzip %s' % (fn.replace('.fits.gz','.fits'),))
+    print('finished: fix_differences_annotated_ccds')
+
+def fix_differences_survey_ccds(mos_fn,bok_fn):
+    # Identical to annotated
+    m,b= fix_differences_annotated_ccds(mos_fn,bok_fn,return_early=True)
+    # Except
+    for col,mostyp in zip (['object'],
+                           ['S24']):
+        b.set(col,b.get(col).astype(mostyp))
+    # Check
+    assert(len(b.get_columns()) == len(m.get_columns()))
+    emp= set(m.get_columns()).difference(set(b.get_columns()))
+    assert(len(emp) == 0)
+    for col in m.get_columns():
+        if m.get(col).dtype != b.get(col).dtype:
+            print('FAIL: columsn have diff types: ',col,m.get(col).dtype,b.get(col).dtype) 
+    # Save
+    m.writeto(mos_fn.replace('.fits.gz','.fits'))
+    b.writeto(bok_fn.replace('.fits.gz','.fits'))
+    for fn in [mos_fn,bok_fn]:
+        bash('cp %s %s' % (fn,fn.replace('.fits.gz','_backup.fits.gz')))
+        bash('gzip %s' % (fn.replace('.fits.gz','.fits'),))
+    print('finished: fix_differences_annotated_ccds')
+
+
+
 def modify_fits(fn, modify_func, **kwargs):
     '''makes copy of fits file and modifies it
     modify_func -- function that takes hdulist as input, modifies it as desired, and returns it
