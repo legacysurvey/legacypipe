@@ -814,9 +814,9 @@ class Measurer(object):
         sky_img, sig1 = self.get_sky_and_sigma(img)
         img_sub_sky= img - sky_img
 
-        fn= 'N4.fits' 
-        fitsio.write(fn,img_sub_sky,extname='N4')
-        raise ValueError
+        #fn= 'N4.fits' 
+        #fitsio.write(fn,img_sub_sky,extname='N4')
+        #raise ValueError
         
 
         # Bunch of sky estimates
@@ -830,13 +830,12 @@ class Measurer(object):
         #sky1 = np.median(sky_img[1500:2500,500:1500])
         sky1_clip,_,_ = sigmaclip(img[1500:2500,500:1500],low=3.,high=3.) #Arjun's prescription
         sky1= np.median(sky1_clip)
-        raise ValueError
         # iters clip 
         from astropy.stats import sigma_clip as sigmaclip_astropy
         sky1_masked= sigmaclip_astropy(img[1500:2500,500:1500],sigma=3,iters=20)
         use= sky1_masked.mask == False
         sky1_astropy= np.median(sky1_masked[use])
-        print('################ sk1 - sky1_astropy=%.5f' % (sky1 - sky1_astropy,))
+        #print('################ sk1 - sky1_astropy=%.5f' % (sky1 - sky1_astropy,))
         # 
         print('sky from median of image= %.2f' % sky1)
         skybr = zp0 - 2.5*np.log10(sky1 / self.pixscale / self.pixscale / exptime)
@@ -894,13 +893,6 @@ class Measurer(object):
                             sharplo=0.2, sharphi=1.0, roundlo=-1.0, roundhi=1.0,
                             exclude_border=False)
         obj= dao(img)
-        #obj = daofind(img, fwhm= hdr_fwhm,
-        #              threshold=self.det_thresh * stddev_mad,
-        #              sharplo=0.2, sharphi=1.0, roundlo=-1.0, roundhi=1.0,
-        #              exclude_border=False)
-        extra['dao_x']= obj['xcentroid']
-        extra['dao_y']= obj['ycentroid']
-        extra['dao_ra'], extra['dao_dec'] = self.wcs.pixelxy2radec(obj['xcentroid']+1, obj['ycentroid']+1)
 
         if len(obj) < 20:
             dao.threshold /= 2.* stddev_mad
@@ -916,6 +908,25 @@ class Measurer(object):
             print('No sources detected!  Giving up.')
             return ccds, _stars_table()
         t0= ptime('detect-stars',t0)
+
+        # 1st round of cuts:  
+        # stars too close to CCD edges which can have outlying cnts
+        minsep = 1. + self.skyrad[1] #1'' buffer after 10 arcsec, same as Arjuns
+        minsep_px = minsep/self.pixscale
+        wid,ht= img.shape[1],img.shape[0] #2046,4096 for DECam
+        istar =  (obj['xcentroid'] > minsep_px)*\
+                 (obj['xcentroid'] < wid - minsep_px)*\
+                 (obj['ycentroid'] > minsep_px)*\
+                 (obj['ycentroid'] < ht - minsep_px)
+        obj = obj[istar]
+
+        #obj = daofind(img, fwhm= hdr_fwhm,
+        #              threshold=self.det_thresh * stddev_mad,
+        #              sharplo=0.2, sharphi=1.0, roundlo=-1.0, roundhi=1.0,
+        #              exclude_border=False)
+        extra['dao_x']= obj['xcentroid']
+        extra['dao_y']= obj['ycentroid']
+        extra['dao_ra'], extra['dao_dec'] = self.wcs.pixelxy2radec(obj['xcentroid']+1, obj['ycentroid']+1)
 
         # Do aperture photometry in a fixed aperture but using either local (in
         # an annulus around each star) or global sky-subtraction.
@@ -934,17 +945,18 @@ class Measurer(object):
             apskyflux_perpix= skyphot['aperture_sum'] / skyap.area() 
             apflux = apphot['aperture_sum'] - apskyflux
         else:
-            # Accurate aperture sum for object
-            apphot = aperture_photometry(img_sub_sky, ap)
+            # ON image not sky subtracted image
+            apphot = aperture_photometry(img, ap)
             apflux = apphot['aperture_sum']
             # Placeholders
             #apskyflux= apflux.copy()
             #apskyflux.fill(0.)
             #apskyflux_perpix= apskyflux.copy()
+        t0= ptime('aperture-photometry',t0)
         # Get close enough sky/pixel in sky annulus
         # Take cutout of size ~ rout x rout, use same pixels in this slice for sky level
         rin,rout= self.skyrad[0]/self.pixscale, self.skyrad[1]/self.pixscale
-        rad= int(np.ceil(rout)) + 1 #1 pixel buffer
+        rad= int(np.ceil(rout)) #
         box= 2*rad + 1 # Odd integer so source exactly in center
         use_for_sky= np.zeros((box,box),bool)
         x,y= np.meshgrid(range(box),range(box)) # array valus are the indices
@@ -952,7 +964,7 @@ class Measurer(object):
         r= np.sqrt((x - ind_of_center)**2 + (y - ind_of_center)**2)
         use_for_sky[(r > rin)*(r <= rout)]= True
         # Get cutout around each source
-        local_sky=[]
+        apskyflux,apskyflux_perpix=[],[]
         for x,y in zip(obj['xcentroid'].data,obj['ycentroid'].data):
             xc,yc= int(x),int(y)
             x_sl= slice(xc-rad,xc+rad+1)
@@ -962,10 +974,12 @@ class Measurer(object):
             from astropy.stats import sigma_clipped_stats
             mean, median, std = sigma_clipped_stats(cutout[use_for_sky], sigma=3.0, iters=5)
             mode_est= 3*median - 2*mean
-            local_sky.append( mode_est )
-        local_sky= np.array(local_sky) # cnts / pixel
-        local_sky *= ap.area() # cnts / 7'' aperture
-        t0= ptime('aperture-photometry',t0)
+            apskyflux_perpix.append( mode_est )
+        apskyflux_perpix = np.array(apskyflux_perpix) # cnts / pixel
+        apskyflux= apskyflux_perpix * ap.area() # cnts / 7'' aperture
+        t0= ptime('local-sky-photometry',t0)
+
+        apflux= apflux - apskyflux
 
         # Remove stars if saturated within 5 pixels of centroid
         ap_for_mask = CircularAperture((obj['xcentroid'], obj['ycentroid']), 5.)
@@ -975,32 +989,21 @@ class Measurer(object):
         apmags= - 2.5 * np.log10(apflux.data) + zp0 + 2.5 * np.log10(exptime)
         # Good stars following IDL codes
         # We are ignoring aperature errors though
-        minsep = self.skyrad[1] #arcsec
-        minsep_px = minsep/self.pixscale
-        wid,ht= img.shape[1],img.shape[0] #2046,4096 for DECam
         # No stars within our skyrad_outer (10'')
         objra, objdec = self.wcs.pixelxy2radec(obj['xcentroid']+1, obj['ycentroid']+1)
         b_isolated= self.isolated_radec(objra,objdec,nn=2,minsep=minsep/3600.)
-       
-        # 1st round of cuts:  
-        # In order of biggest affect: isolated,minsep_px,apmags, apflux, flux_for_mask
+      
+        # 2nd round of cuts:  
+        # In order of biggest affect: isolated,apmags, apflux, flux_for_mask
         istar =  (apflux > 0)*\
                  (flux_for_mask == 0)*\
                  (apmags > 12.)*\
                  (apmags < 30.)*\
-                 (obj['xcentroid'] > minsep_px)*\
-                 (obj['xcentroid'] < wid - minsep_px)*\
-                 (obj['ycentroid'] > minsep_px)*\
-                 (obj['ycentroid'] < ht - minsep_px)*\
                  (b_isolated == True)
         print('First round of cuts, nstars=%d' % (np.where(istar)[0].size,))
         extra['apflux']= apflux > 0
         extra['flux_for_mask']= flux_for_mask == 0
         extra['apmags']= (apmags > 12.)*(apmags < 30.)
-        extra['separation']= (obj['xcentroid'] > minsep_px)*\
-                             (obj['xcentroid'] < wid - minsep_px)*\
-                             (obj['ycentroid'] > minsep_px)*\
-                             (obj['ycentroid'] < ht - minsep_px)
         extra['b_isolated']= b_isolated == True
         obj = obj[istar]
         objra, objdec = self.wcs.pixelxy2radec(obj['xcentroid']+1, obj['ycentroid']+1)
@@ -1033,7 +1036,7 @@ class Measurer(object):
 
         # 3rd Optional Cut: SN
         if self.sn_min or self.sn_max:
-            sn= apflux.data / np.sqrt(apskyflux.data)
+            sn= apflux.data / np.sqrt(apskyflux)
             if self.sn_min:
                 above= sn >= self.sn_min
                 istar *= (above)
@@ -1485,8 +1488,8 @@ def get_extlist(camera):
                    'N19', 'N20', 'N21', 'N22', 'N23', 'N24', 'N25', 'N26', 'N27',
                    'N28', 'N29', 'N31']
         # Testing only!
-        #extlist = ['N4','S4', 'S22','N19']
-        extlist = ['N4']
+        extlist = ['N4','S4', 'S22','N19']
+        #extlist = ['N4']
         #extlist = ['S10', 'S11', 'S12', 'S16', 'S17', 'S4', 'S5', 'S6']
     else:
         print('Camera {} not recognized!'.format(camera))
