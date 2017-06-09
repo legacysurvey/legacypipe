@@ -742,7 +742,6 @@ class Measurer(object):
             bitmask= self.read_bitmask()
         img_mask= self.get_image_mask(img,bitmask)
         t0= ptime('read image, bitmask',t0)
-
         # Initialize and begin populating the output CCDs table.
         ccds = _ccds_table(self.camera)
         ccds['image_filename'] = '/'.join( [self.camera] + self.fn.split('/')[-2:] ) #os.path.basename(self.fn)   
@@ -810,10 +809,16 @@ class Measurer(object):
         sky0 = self.sky(self.band)
         zp0 = self.zeropoint(self.band)
         kext = self.extinction(self.band)
-
+        print('$$$ %s: zp0 - 2.5log(gain)= %.6f' % (self.ccdname,zp0 - 2.5*np.log10(self.gain),)) 
         print('Computing the sky background.')
         sky_img, sig1 = self.get_sky_and_sigma(img)
         img_sub_sky= img - sky_img
+
+        fn= 'N4.fits' 
+        fitsio.write(fn,img_sub_sky,extname='N4')
+        raise ValueError
+        
+
         # Bunch of sky estimates
         stddev_mad= 1.4826 * np.median(np.abs(img_sub_sky))
         stddev_mad_sm= 1.4826 * np.median(np.abs(img_sub_sky[1500:2500,500:1500]))
@@ -825,6 +830,14 @@ class Measurer(object):
         #sky1 = np.median(sky_img[1500:2500,500:1500])
         sky1_clip,_,_ = sigmaclip(img[1500:2500,500:1500],low=3.,high=3.) #Arjun's prescription
         sky1= np.median(sky1_clip)
+        raise ValueError
+        # iters clip 
+        from astropy.stats import sigma_clip as sigmaclip_astropy
+        sky1_masked= sigmaclip_astropy(img[1500:2500,500:1500],sigma=3,iters=20)
+        use= sky1_masked.mask == False
+        sky1_astropy= np.median(sky1_masked[use])
+        print('################ sk1 - sky1_astropy=%.5f' % (sky1 - sky1_astropy,))
+        # 
         print('sky from median of image= %.2f' % sky1)
         skybr = zp0 - 2.5*np.log10(sky1 / self.pixscale / self.pixscale / exptime)
         print('  Sky brightness: {:.3f} mag/arcsec^2'.format(skybr))
@@ -921,12 +934,37 @@ class Measurer(object):
             apskyflux_perpix= skyphot['aperture_sum'] / skyap.area() 
             apflux = apphot['aperture_sum'] - apskyflux
         else:
+            # Accurate aperture sum for object
             apphot = aperture_photometry(img_sub_sky, ap)
             apflux = apphot['aperture_sum']
             # Placeholders
-            apskyflux= apflux.copy()
-            apskyflux.fill(0.)
-            apskyflux_perpix= apskyflux.copy()
+            #apskyflux= apflux.copy()
+            #apskyflux.fill(0.)
+            #apskyflux_perpix= apskyflux.copy()
+        # Get close enough sky/pixel in sky annulus
+        # Take cutout of size ~ rout x rout, use same pixels in this slice for sky level
+        rin,rout= self.skyrad[0]/self.pixscale, self.skyrad[1]/self.pixscale
+        rad= int(np.ceil(rout)) + 1 #1 pixel buffer
+        box= 2*rad + 1 # Odd integer so source exactly in center
+        use_for_sky= np.zeros((box,box),bool)
+        x,y= np.meshgrid(range(box),range(box)) # array valus are the indices
+        ind_of_center= rad
+        r= np.sqrt((x - ind_of_center)**2 + (y - ind_of_center)**2)
+        use_for_sky[(r > rin)*(r <= rout)]= True
+        # Get cutout around each source
+        local_sky=[]
+        for x,y in zip(obj['xcentroid'].data,obj['ycentroid'].data):
+            xc,yc= int(x),int(y)
+            x_sl= slice(xc-rad,xc+rad+1)
+            y_sl= slice(yc-rad,yc+rad+1)
+            cutout= img[y_sl,x_sl]
+            assert(cutout.shape == use_for_sky.shape)
+            from astropy.stats import sigma_clipped_stats
+            mean, median, std = sigma_clipped_stats(cutout[use_for_sky], sigma=3.0, iters=5)
+            mode_est= 3*median - 2*mean
+            local_sky.append( mode_est )
+        local_sky= np.array(local_sky) # cnts / pixel
+        local_sky *= ap.area() # cnts / 7'' aperture
         t0= ptime('aperture-photometry',t0)
 
         # Remove stars if saturated within 5 pixels of centroid
@@ -1151,6 +1189,13 @@ class Measurer(object):
         dmagall = stars['ps1_mag'] - stars['apmag']
         dmag, _, _ = sigmaclip(dmagall, low=2.5, high=2.5)
         dmagmed = np.median(dmag)
+        # Compare iters=10 sigma clipped
+        from astropy.stats import sigma_clip as sigmaclip_astropy
+        dmagall_masked= sigmaclip_astropy(dmagall,sigma=3,iters=10)
+        use= dmagall_masked.mask == False
+        dmagmed_astropy= np.median(dmagall_masked[use])
+        print('################ dmagmed - dmagmed_astropy=%.5f' % \
+              (dmagmed - dmagmed_astropy,))
         ndmag = len(dmag)
         # Std dev
         #_, dmagsig = self.sensible_sigmaclip(dmagall, nsigma=2.5)
@@ -1440,8 +1485,8 @@ def get_extlist(camera):
                    'N19', 'N20', 'N21', 'N22', 'N23', 'N24', 'N25', 'N26', 'N27',
                    'N28', 'N29', 'N31']
         # Testing only!
-        extlist = ['N4','S4', 'S22','N19']
-        #extlist = ['S22']
+        #extlist = ['N4','S4', 'S22','N19']
+        extlist = ['N4']
         #extlist = ['S10', 'S11', 'S12', 'S16', 'S17', 'S4', 'S5', 'S6']
     else:
         print('Camera {} not recognized!'.format(camera))

@@ -80,7 +80,32 @@ def fix_differences_survey_ccds(mos_fn,bok_fn):
     for fn in [mos_fn,bok_fn]:
         bash('cp %s %s' % (fn,fn.replace('.fits.gz','_backup.fits.gz')))
         bash('gzip %s' % (fn.replace('.fits.gz','.fits'),))
-    print('finished: fix_differences_annotated_ccds')
+    print('finished: fix_differences_survey_ccds')
+
+def fix_units_survey_ccds(mos_fn,bok_fn):
+    m=fits_table(mos_fn)
+    b=fits_table(bok_fn)
+    mzls_pix= 0.262 #mosstat
+    bass_pix= 0.470 # 0.455 is correct, but mosstat.pro has 0.470
+    # mzls fwhm --> pixels
+    for col,typ in zip(['fwhm'],['>f4']):
+        m.set(col,m.get(col) / mzls_pix)
+        m.set(col,m.get(col).astype(typ))
+    # Check
+    assert(len(b.get_columns()) == len(m.get_columns()))
+    emp= set(m.get_columns()).difference(set(b.get_columns()))
+    assert(len(emp) == 0)
+    for col in m.get_columns():
+        if m.get(col).dtype != b.get(col).dtype:
+            print('FAIL: columsn have diff types: ',col,m.get(col).dtype,b.get(col).dtype) 
+    # Save
+    m.writeto(mos_fn.replace('.fits.gz','.fits'))
+    #b.writeto(bok_fn.replace('.fits.gz','.fits'))
+    for fn in [mos_fn]: #,bok_fn]:
+        bash('cp %s %s' % (fn,fn.replace('.fits.gz','_backup.fits.gz')))
+        bash('gzip %s' % (fn.replace('.fits.gz','.fits'),))
+    print('finished: fix_units_survey_ccds')
+
 
 
 
