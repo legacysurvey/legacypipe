@@ -923,8 +923,9 @@ Now using the current directory as LEGACY_SURVEY_DIR, but this is likely to fail
         - computes the sha256sum
         '''
         class OutputFileContext(object):
-            def __init__(self, fn, survey, hashsum=True):
+            def __init__(self, fn, survey, hashsum=True, relative_fn=None):
                 self.real_fn = fn
+                self.relative_fn = relative_fn
                 self.survey = survey
                 self.is_fits = fn.endswith('.fits') or fn.endswith('.fits.gz')
                 self.tmpfn = os.path.join(os.path.dirname(fn), 'tmp-'+os.path.basename(fn))
@@ -994,10 +995,19 @@ Now using the current directory as LEGACY_SURVEY_DIR, but this is likely to fail
                 print('Renamed to', self.real_fn)
 
                 if self.hashsum:
-                    self.survey.add_hashcode(self.real_fn, hashcode)
+                    # List the relative filename (from output dir) in sha*sum file.
+                    fn = self.relative_fn or self.real_fn
+                    self.survey.add_hashcode(fn, hashcode)
 
         fn = self.find_file(filetype, output=True, **kwargs)
-        out = OutputFileContext(fn, self, hashsum=hashsum)
+
+        relfn = fn
+        if relfn.startswith(self.output_dir):
+            relfn = relfn[len(self.output_dir):]
+            if relfn.startswith('/'):
+                relfn = relfn[1:]
+
+        out = OutputFileContext(fn, self, hashsum=hashsum, relative_fn=relfn)
         return out
 
     def add_hashcode(self, fn, hashcode):
