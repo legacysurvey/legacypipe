@@ -1,9 +1,12 @@
 from __future__ import print_function
+import fitsio
 
 from legacypipe.runbrick import *
 from legacypipe.runbrick import _depth_histogram
 from legacypipe.coadds import write_coadd_images, _resample_one
 from collections import OrderedDict
+
+olddir = '/global/projecta/projectdirs/cosmo/work/dr4c'
 
 def stage_galdepths(survey=None, targetwcs=None, bands=None, tims=None,
                        brickname=None, version_header=None,
@@ -11,6 +14,16 @@ def stage_galdepths(survey=None, targetwcs=None, bands=None, tims=None,
                        brick=None, blobs=None, lanczos=True, ccds=None,
                        mp=None,
                        **kwargs):
+
+    fn = os.path.join(olddir, 'coadd', '%s' % brickname[:3], brickname,
+                      'legacysurvey-%s-ccds.fits' % brickname)
+    hdr = fitsio.read_header(fn)
+    version_header = hdr
+    version_header.add_record(dict(name='DRVERSIO', value='4000',
+                                   comment='Survey data release number'))
+    version_header.add_record(dict(name='RELEASE', value='4000',
+                                   comment='DR number'))
+
     with survey.write_output('ccds-table', brick=brickname) as out:
         ccds.writeto(None, fits_object=out.fits, primheader=version_header)
 
@@ -100,7 +113,6 @@ def stage_galdepths(survey=None, targetwcs=None, bands=None, tims=None,
     del D
 
     # Read and update the sha1sum file.
-    olddir = '/global/projecta/projectdirs/cosmo/work/dr4c'
     fn = os.path.join(olddir, 'tractor', '%s' % brickname[:3],
                       'brick-%s.sha1sum' % brickname)
     print('Reading', fn)

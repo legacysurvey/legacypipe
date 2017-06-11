@@ -199,10 +199,14 @@ def get_version_header(program_name, survey_dir, git_version=None):
                         comment='DECam Legacy Survey'))
 
     # Requested by NOAO
-    hdr.add_record(dict(name='SURVEYID', value='DECam Legacy Survey (DECaLS)',
+    #hdr.add_record(dict(name='SURVEYID', value='DECam Legacy Survey (DECaLS)',
+    #                    comment='Survey name'))
+    hdr.add_record(dict(name='SURVEYID', value='BASS MzLS',
                         comment='Survey name'))
-    hdr.add_record(dict(name='DRVERSIO', value='DR3',
+    hdr.add_record(dict(name='DRVERSIO', value='4000',
                         comment='Survey data release number'))
+    #hdr.add_record(dict(name='DRVERSIO', value='DR3',
+    #                    comment='Survey data release number'))
     hdr.add_record(dict(name='OBSTYPE', value='object',
                         comment='Observation type'))
     hdr.add_record(dict(name='PROCTYPE', value='tile',
