@@ -1220,7 +1220,7 @@ class OneBlob(object):
             I = np.flatnonzero(self.blobmask[Yi,Xi])
             inverr2[Yo[I],Xo[I]] = inverr[Yo[I],Xo[I]]
             inverr = inverr2
-    
+
             # If the subimage (blob) is small enough, instantiate a
             # constant PSF model in the center.
             if sy1-sy0 < 400 and sx1-sx0 < 400:

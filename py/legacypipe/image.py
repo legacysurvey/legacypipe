@@ -339,6 +339,8 @@ class LegacySurveyImage(object):
         tim.band = band
         #print('Computing PSF norm')
 
+        # HACK -- create a local PSF model to instantiate the PsfEx
+        # model, which handles non-unit pixel scaling.
         print('-- creating constant PSF model...')
         fullpsf = tim.psf
         th,tw = tim.shape
@@ -447,8 +449,7 @@ class LegacySurveyImage(object):
         S = 32
         mm = ModelMask(int(x-S), int(y-S), 2*S+1, 2*S+1)
         galmod = gal.getModelPatch(tim, modelMask=mm).patch
-
-        orig_galmod = galmod.copy()
+        #orig_galmod = galmod.copy()
 
         galmod = np.maximum(0, galmod)
         galmod /= galmod.sum()

@@ -468,6 +468,9 @@ def write_coadd_images(band,
                 ])
     for name,prodtype,img in imgs:
         from legacypipe.survey import MyFITSHDR
+        if img is None:
+            print('Image type', prodtype, 'is None -- skipping')
+            continue
         hdr2 = MyFITSHDR()
         # Make a copy, because each image has different values for
         # these headers...
