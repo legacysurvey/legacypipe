@@ -1,6 +1,8 @@
 from __future__ import print_function
 
 from legacypipe.runbrick import *
+from legacypipe.runbrick import _depth_histogram
+from legacypipe.coadds import write_coadd_images, _resample_one
 
 def stage_galdepths(survey=None, targetwcs=None, bands=None, tims=None,
                        brickname=None, version_header=None,
@@ -18,11 +20,10 @@ def stage_galdepths(survey=None, targetwcs=None, bands=None, tims=None,
     #                                targetwcs),
     #                 mp=mp)
 
-    from legacypipe.coadds import write_coadd_images
-    
     detmaps = True
     callback=write_coadd_images
     callback_args=(survey, brickname, version_header, tims, targetwcs)
+    mods = None
     
     # This is an excerpt from coadds.py
     class Duck(object):
@@ -102,6 +103,9 @@ def stage_galdepths(survey=None, targetwcs=None, bands=None, tims=None,
 
 
 def main():
+    from astrometry.util.stages import CallGlobalTime
+    from astrometry.util.multiproc import multiproc
+
     parser = get_parser()
     opt = parser.parse_args()
     if opt.brick is None and opt.radec is None:
@@ -111,14 +115,33 @@ def main():
     if kwargs in [-1, 0]:
         return kwargs
 
-    kwargs.update(bands = ['g','r'],
-                  hybridPsf=True,
+    #stagefunc = CallGlobalTime('stage_%s', globals())
+    kwargs.update(bands = ['g','r','z'],
+                  #hybridPsf=True,
                   splinesky=True,
-                  stages=['galdepths'],
-                  writePickles=False,
-                  prereqs_update=dict(galdepths=tims),)
+                  #stages=['galdepths'],
+                  #writePickles=False,
+                  #prereqs_update={ 'galdepths': 'tims'},
+                  #stagefunc=stagefunc,
+                  read_image_pixels=False,
+                  mp=multiproc(),
+                  )
+
+    for k1,k2 in [('target_extent','zoom'),
+                  ('W', 'width'),
+                  ('H', 'height')]:
+        if k2 in kwargs:
+            kwargs[k1] = kwargs[k2]
     
-    run_brick(opt.brick, survey, **kwargs)
+    #run_brick(opt.brick, survey, **kwargs)
+
+    print('kwargs:', kwargs)
+
+    R = stage_tims(brickname=opt.brick, survey=survey,
+                   **kwargs)
+
+    stage_galdepths(**R)
+
 
 if __name__ == '__main__':
     sys.exit(main())

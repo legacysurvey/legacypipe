@@ -345,7 +345,7 @@ class LegacySurveyImage(object):
         fullpsf = tim.psf
         th,tw = tim.shape
         tim.psf = fullpsf.constantPsfAt(tw//2, th//2)
-        print('-- created constant PSF model...')
+        #print('-- created constant PSF model...')
 
         print('Computing PSF norm...')
         psfnorm = self.psf_norm(tim)
@@ -358,9 +358,11 @@ class LegacySurveyImage(object):
 
         tim.psf = fullpsf
 
-        print('Computing galaxy norm with original PSF')
-        galnorm = self.galaxy_norm(tim)
-        print('PSF norm', psfnorm, 'galaxy norm w/orig PSF', galnorm)
+        # print('Computing galaxy norm with original PSF')
+        # galnorm = self.galaxy_norm(tim)
+        # print('PSF norm', psfnorm, 'galaxy norm w/orig PSF', galnorm)
+
+        assert(galnorm < psfnorm)
 
         # CP (DECam) images include DATE-OBS and MJD-OBS, in UTC.
         import astropy.time

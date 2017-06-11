@@ -99,6 +99,7 @@ def stage_tims(W=3600, H=3600, pixscale=0.262, brickname=None,
                gaussPsf=False, pixPsf=False, hybridPsf=False,
                constant_invvar=False,
                use_blacklist = True,
+               read_image_pixels = True,
                mp=None,
                **kwargs):
     '''
@@ -313,7 +314,8 @@ def stage_tims(W=3600, H=3600, pixscale=0.262, brickname=None,
     args = [(im, targetrd, dict(gaussPsf=gaussPsf, pixPsf=pixPsf,
                                 hybridPsf=hybridPsf,
                                 splinesky=splinesky,
-                                constant_invvar=constant_invvar))
+                                constant_invvar=constant_invvar,
+                                pixels=read_image_pixels))
                                 for im in ims]
     tims = list(mp.map(read_one_tim, args))
 
