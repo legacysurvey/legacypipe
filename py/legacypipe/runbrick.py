@@ -1823,7 +1823,8 @@ def _depth_histogram(brick, targetwcs, bands, detivs, galdetivs):
     for band,detiv,galdetiv in zip(bands,detivs,galdetivs):
         for det,name in [(detiv, 'ptsrc'), (galdetiv, 'gal')]:
             # compute stats for 5-sigma detection
-            depth = 5. / np.sqrt(det)
+            with np.errstate(divide='ignore'):
+                depth = 5. / np.sqrt(det)
             # that's flux in nanomaggies -- convert to mag
             depth = -2.5 * (np.log10(depth) - 9)
             # no coverage -> very bright detection limit

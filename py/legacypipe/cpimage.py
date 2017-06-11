@@ -142,7 +142,8 @@ class CPImage(LegacySurveyImage):
         const_sky = primhdr['SKYADU'] # e/s, Recommended sky level keyword from Frank 
         expt = primhdr['EXPTIME'] # s
 
-        var_SR = 1./invvar # e/s 
+        with np.errstate(divide='ignore'):
+            var_SR = 1./invvar # e/s 
         var_Astro = np.abs(img - const_sky) / expt # e/s 
         wt = 1./(var_SR + var_Astro) # s/e
 
