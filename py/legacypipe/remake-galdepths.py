@@ -3,6 +3,7 @@ from __future__ import print_function
 from legacypipe.runbrick import *
 from legacypipe.runbrick import _depth_histogram
 from legacypipe.coadds import write_coadd_images, _resample_one
+from collections import OrderedDict
 
 def stage_galdepths(survey=None, targetwcs=None, bands=None, tims=None,
                        brickname=None, version_header=None,
@@ -98,12 +99,32 @@ def stage_galdepths(survey=None, targetwcs=None, bands=None, tims=None,
         D.writeto(None, fits_object=out.fits)
     del D
 
+    # Read and update the sha1sum file.
+    olddir = '/global/projecta/projectdirs/cosmo/work/dr4c'
+    fn = os.path.join(olddir, 'tractor', '%s' % brickname[:3],
+                      'brick-%s.sha1sum' % brickname)
+    print('Reading', fn)
+    shasums = OrderedDict()
+    for line in open(fn):
+        words = line.split()
+        val = words[0]
+        key = words[1]
+        key = key.replace('/global/cscratch1/sd/desiproc/dr4/data_release/dr4c/', '')
+        # we shouldn't report absolute paths
+        assert(key[0] != '/')
+        shasums[key] = val
+        print('  ', key, '=', val)
+
+    # Update
+    for fn,hashsum in survey.output_file_hashes.items():
+        shasums[fn] = hashsum
+
     # produce per-brick checksum file.
     with survey.write_output('checksums', brick=brickname, hashsum=False) as out:
         f = open(out.fn, 'w')
         # Write our pre-computed hashcodes.
-        for fn,hashsum in survey.output_file_hashes.items():
-            f.write('%s *%s\n' % (hashsum, fn))
+        for fn,hashsum in shasums.items():
+            f.write('%s %s\n' % (hashsum, fn))
         f.close()
 
 
