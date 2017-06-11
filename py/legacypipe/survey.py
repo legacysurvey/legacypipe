@@ -956,8 +956,24 @@ Now using the current directory as LEGACY_SURVEY_DIR, but this is likely to fail
                     # Read back the data
                     rawdata = self.fits.read_raw()
                     self.fits.close()
+
+                    # Have to actually do the compression to gzip format...
+                    if self.tmpfn.endswith('.gz'):
+                        from cStringIO import StringIO
+                        import gzip
+                        #ulength = len(rawdata)
+                        gzipped = StringIO()
+                        gzf = gzip.GzipFile(self.real_fn, 'wb', 9, gzipped)
+                        gzf.write(rawdata)
+                        gzf.close()
+                        rawdata = gzipped.getvalue()
+                        del gzipped
+                        #clength = len(rawdata)
+                        #print('Gzipped', ulength, 'to', clength)
+
                     if self.hashsum:
                         sha.update(rawdata)
+
                     f = open(self.tmpfn, 'wb')
                     f.write(rawdata)
                     f.close()
@@ -973,6 +989,7 @@ Now using the current directory as LEGACY_SURVEY_DIR, but this is likely to fail
                     del sha
 
                 os.rename(self.tmpfn, self.real_fn)
+                print('Renamed to', self.real_fn)
 
                 if self.hashsum:
                     self.survey.add_hashcode(self.real_fn, hashcode)

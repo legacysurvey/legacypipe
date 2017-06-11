@@ -13,13 +13,6 @@ def stage_galdepths(survey=None, targetwcs=None, bands=None, tims=None,
     with survey.write_output('ccds-table', brick=brickname) as out:
         ccds.writeto(None, fits_object=out.fits, primheader=version_header)
 
-    # C = make_coadds(tims, bands, targetwcs,
-    #                 detmaps=True, ngood=True, lanczos=lanczos,
-    #                 callback=write_coadd_images,
-    #                 callback_args=(survey, brickname, version_header, tims,
-    #                                targetwcs),
-    #                 mp=mp)
-
     detmaps = True
     callback=write_coadd_images
     callback_args=(survey, brickname, version_header, tims, targetwcs)
@@ -101,9 +94,16 @@ def stage_galdepths(survey=None, targetwcs=None, bands=None, tims=None,
         D.writeto(None, fits_object=out.fits)
     del D
 
+    # produce per-brick checksum file.
+    with survey.write_output('checksums', brick=brickname, hashsum=False) as out:
+        f = open(out.fn, 'w')
+        # Write our pre-computed hashcodes.
+        for fn,hashsum in survey.output_file_hashes.items():
+            f.write('%s *%s\n' % (hashsum, fn))
+        f.close()
+
 
 def main():
-    from astrometry.util.stages import CallGlobalTime
     from astrometry.util.multiproc import multiproc
 
     parser = get_parser()
@@ -115,14 +115,8 @@ def main():
     if kwargs in [-1, 0]:
         return kwargs
 
-    #stagefunc = CallGlobalTime('stage_%s', globals())
     kwargs.update(bands = ['g','r','z'],
-                  #hybridPsf=True,
                   splinesky=True,
-                  #stages=['galdepths'],
-                  #writePickles=False,
-                  #prereqs_update={ 'galdepths': 'tims'},
-                  #stagefunc=stagefunc,
                   read_image_pixels=False,
                   mp=multiproc(),
                   )
@@ -132,10 +126,6 @@ def main():
                   ('H', 'height')]:
         if k2 in kwargs:
             kwargs[k1] = kwargs[k2]
-    
-    #run_brick(opt.brick, survey, **kwargs)
-
-    print('kwargs:', kwargs)
 
     R = stage_tims(brickname=opt.brick, survey=survey,
                    **kwargs)
