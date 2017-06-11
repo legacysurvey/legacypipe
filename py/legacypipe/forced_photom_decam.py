@@ -539,10 +539,10 @@ class SourceDerivatives(MultiParams, BasicSource):
         # # Test...
         # self.real.freezeParamsRecursive(*self.freeze)
         # self.real.thawParamsRecursive(*self.thaw)
-        # #
-        # #print('Source derivs: params are:')
-        # #self.real.printThawedParams()
-        # # and revert...
+        # # #
+        # print('Source derivs: params are:')
+        # self.real.printThawedParams()
+        # # # and revert...
         # self.real.freezeParamsRecursive(*self.thaw)
         # self.real.thawParamsRecursive(*self.freeze)
 
@@ -558,7 +558,12 @@ class SourceDerivatives(MultiParams, BasicSource):
         # The derivatives will be scaled by the source brightness;
         # undo that scaling. (We want derivatives of unit-flux models)
         counts = img.getPhotoCal().brightnessToCounts(self.real.brightness)
+
+        #print('SourceDerivatives.getUnitFluxModelPatches: counts=', counts)
+
         derivs = self.real.getParamDerivatives(img, modelMask=modelMask)
+
+        #print('Derivs:', derivs)
 
         ## FIXME -- what about using getUnitFluxModelPatch(derivs=True) ?
         
@@ -581,9 +586,19 @@ class SourceDerivatives(MultiParams, BasicSource):
     def getModelPatch(self, img, minsb=0., modelMask=None):
         if self.umods is None:
             return None
+        if self.umods[0] is None and self.umods[1] is None:
+            return None
         pc = img.getPhotoCal()
-        return (self.umods[0] * pc.brightnessToCounts(self.brights[0]) +
-                self.umods[1] * pc.brightnessToCounts(self.brights[1]))
+        total = None
+        if self.umods[0] is not None:
+            total = self.umods[0] * pc.brightnessToCounts(self.brights[0])
+        if self.umods[1] is not None:
+            um = self.umods[1] * pc.brightnessToCounts(self.brights[1])
+            if total is None:
+                total = um
+            else:
+                total += um
+        return total
 
 if __name__ == '__main__':
     sys.exit(main())
