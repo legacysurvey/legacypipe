@@ -84,6 +84,10 @@ def stage_galdepths(survey=None, targetwcs=None, bands=None, tims=None,
             del Yo,Xo,im,iv
             # END of loop over tims
         if callback is not None:
+
+            # HACK -- don't write out the "depth" files
+            depth = kwargs.pop('detiv')
+
             callback(band, *callback_args, **kwargs)
         # END of loop over bands
 
