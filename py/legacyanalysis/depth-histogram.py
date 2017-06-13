@@ -14,6 +14,93 @@ def brickname_from_filename(fn):
     assert(len(words) == 3)
     return words[1]
 
+def summarize_depths(basedir, outfn, summaryfn):
+    fns = glob(os.path.join(basedir, 'coadd', '*', '*', '*-depth.fits'))
+    fns.sort()
+    print(len(fns), 'depth files')
+    
+    fn = fns.pop(0)
+    print('Reading', fn)
+    # We'll keep all files for merging...
+    TT = []
+
+    T = fits_table(fn)
+    # Create / upgrade the count columns to int64.
+    for band in 'grz':
+        for pro in ['ptsrc', 'gal']:
+            col = 'counts_%s_%s' % (pro, band)
+            if not col in T.columns():
+                v = np.zeros(len(T), np.int64)
+            else:
+                v = T.get(col).astype(np.int64)
+            T.set(col, v)
+    T.brickname = np.array([brickname_from_filename(fn)] * len(T))
+    TT.append(T.copy())
+    
+    for ifn,fn in enumerate(fns):
+        print('Reading', ifn, 'of', len(fns), ':', fn)
+        t = fits_table(fn)
+        if not (np.all(t.depthlo == T.depthlo) and
+                np.all(t.depthhi == T.depthhi)):
+            print('T depthlo', T.depthlo)
+            print('T depthhi', T.depthhi)
+            print('t depthlo', t.depthlo)
+            print('t depthhi', t.depthhi)
+
+            assert(len(t.depthlo) == 50)
+            assert(len(T.depthlo) == 50)
+
+            # if len(t.depthlo) == 52 and len(T.depthlo) == 50:
+            #     # [0,] 20, 20.1, ..., 24.9, [25,] 100
+            #     for band in 'grz':
+            #         for pro in ['ptsrc', 'gal']:
+            #             col = 'counts_%s_%s' % (pro, band)
+            #             if col in t.columns():
+            #                 # merge counts for bin 0-20 into bin 20-20.1
+            #                 counts = t.get(col)
+            #                 counts[1] += counts[0]
+            #                 counts[0] = 0
+            #                 # merge counts for bin 25-100 into bin 24.9-100
+            #                 counts[-2] += counts[-1]
+            #                 counts[-1] = 0
+            #     # change lower limit of bin 1 from 20 to 0
+            #     t.depthlo[1] = t.depthlo[0]
+            #     # change upper limit of bin -2 from 25 to 100
+            #     t.depthhi[-2] = t.depthhi[-1]
+            #     t = t[1:-1]
+            #     
+            #     print('Cut to:')
+            #     print('T depthlo', T.depthlo)
+            #     print('T depthhi', T.depthhi)
+            #     print('t depthlo', t.depthlo)
+            #     print('t depthhi', t.depthhi)
+
+
+        assert(np.all(t.depthlo == T.depthlo))
+        assert(np.all(t.depthhi == T.depthhi))
+        cols = t.get_columns()
+        t.brickname = np.array([brickname_from_filename(fn)] * len(t))
+        for band in 'grz':
+            col = 'counts_ptsrc_%s' % band
+            if not col in cols:
+                continue
+            C = T.get(col)
+            C += t.get(col)
+            col = 'counts_gal_%s' % band
+            C = T.get(col)
+            C += t.get(col)
+        TT.append(t)
+            
+    T.delete_column('brickname')
+    T.writeto(summaryfn)
+    print('Wrote', summaryfn)
+    
+    T = merge_tables(TT, columns='fillzero')
+    T.writeto(outfn)
+    print('Wrote', outfn)
+
+
+
 def summary_plots(summaryfn, ps):
     T = fits_table(summaryfn)
     dlo = T.depthlo.copy()
@@ -71,95 +158,16 @@ def summary_plots(summaryfn, ps):
         ps.savefig()
 
 if __name__ == '__main__':
-    outfn = 'dr3-depth.fits'
-    summaryfn = 'dr3-depth-summary.fits'
+    # outfn = 'dr3-depth.fits'
+    # summaryfn = 'dr3-depth-summary.fits'
+    # basedir = '/project/projectdirs/cosmo/data/legacysurvey/dr3'
+    # summarize_depths(basedir, outfn, summaryfn)
 
-    #ps = PlotSequence('depth')
-    #summary_plots(summaryfn, ps)
-    #sys.exit(0)
-    
-    #fns = glob('/project/projectdirs/cosmo/work/legacysurvey/dr3/coadd/*/*/*-depth.fits')
-    fns = glob('/project/projectdirs/cosmo/data/legacysurvey/dr3/coadd/*/*/*-depth.fits')
-    fns.sort()
-    print(len(fns), 'depth files')
-    
-    fn = fns.pop(0)
-    print('Reading', fn)
-    # We'll keep all files for merging...
-    TT = []
+    outfn = 'dr4-depth.fits'
+    summaryfn = 'dr4-depth-summary.fits'
+    basedir = '/global/cscratch1/sd/dstn/galdepths-dr4'
+    summarize_depths(basedir, outfn, summaryfn)
 
-    T = fits_table(fn)
-    # Create / upgrade the count columns to int64.
-    for band in 'grz':
-        for pro in ['ptsrc', 'gal']:
-            col = 'counts_%s_%s' % (pro, band)
-            if not col in T.columns():
-                v = np.zeros(len(T), np.int64)
-            else:
-                v = T.get(col).astype(np.int64)
-            T.set(col, v)
-    T.brickname = np.array([brickname_from_filename(fn)] * len(T))
-    TT.append(T.copy())
-    
-    for ifn,fn in enumerate(fns):
-        print('Reading', ifn, 'of', len(fns), ':', fn)
-        t = fits_table(fn)
-        if not (np.all(t.depthlo == T.depthlo) and
-                np.all(t.depthhi == T.depthhi)):
-            print('T depthlo', T.depthlo)
-            print('T depthhi', T.depthhi)
-            print('t depthlo', t.depthlo)
-            print('t depthhi', t.depthhi)
-            if len(t.depthlo) == 52 and len(T.depthlo) == 50:
-                # [0,] 20, 20.1, ..., 24.9, [25,] 100
-                for band in 'grz':
-                    for pro in ['ptsrc', 'gal']:
-                        col = 'counts_%s_%s' % (pro, band)
-                        if col in t.columns():
-                            # merge counts for bin 0-20 into bin 20-20.1
-                            counts = t.get(col)
-                            counts[1] += counts[0]
-                            counts[0] = 0
-                            # merge counts for bin 25-100 into bin 24.9-100
-                            counts[-2] += counts[-1]
-                            counts[-1] = 0
-                # change lower limit of bin 1 from 20 to 0
-                t.depthlo[1] = t.depthlo[0]
-                # change upper limit of bin -2 from 25 to 100
-                t.depthhi[-2] = t.depthhi[-1]
-                t = t[1:-1]
-                
-                print('Cut to:')
-                print('T depthlo', T.depthlo)
-                print('T depthhi', T.depthhi)
-                print('t depthlo', t.depthlo)
-                print('t depthhi', t.depthhi)
-
-
-        assert(np.all(t.depthlo == T.depthlo))
-        assert(np.all(t.depthhi == T.depthhi))
-        cols = t.get_columns()
-        t.brickname = np.array([brickname_from_filename(fn)] * len(t))
-        for band in 'grz':
-            col = 'counts_ptsrc_%s' % band
-            if not col in cols:
-                continue
-            C = T.get(col)
-            C += t.get(col)
-            col = 'counts_gal_%s' % band
-            C = T.get(col)
-            C += t.get(col)
-        TT.append(t)
-            
-    T.delete_column('brickname')
-    T.writeto(summaryfn)
-    print('Wrote', summaryfn)
-    
-    T = merge_tables(TT, columns='fillzero')
-    T.writeto(outfn)
-    print('Wrote', outfn)
-
-
-        
-
-    
+    ps = PlotSequence('depth')
+    summary_plots(summaryfn, ps)
+    sys.exit(0)

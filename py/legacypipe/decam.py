@@ -87,6 +87,10 @@ class DecamImage(CPImage, CalibMixin):
         bits = LegacySurveyData.ccd_cut_bits
 
         I = self.apply_blacklist(survey, ccds)
+        # "apply_blacklist" returns indices of CCDs to *keep*.  Invert.
+        toflag = np.ones(len(ccds), bool)
+        toflag[I] = False
+        I = np.flatnonzero(toflag)
         ccdcuts[I] += bits['BLACKLIST']
 
         return ccdcuts
