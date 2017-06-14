@@ -363,14 +363,14 @@ def computeHPXpix_sequ_new(nside, propertyArray, pixoffset=0, ratiores=4, coadd_
     #plt.show()
     img_ras, img_decs = computeCorners_WCS_TPV(propertyArray, pixoffset)
      
-    #DEBUGGING - MARC 
+    #DEBUGGING - MARCM 
     #print "debugging img_ras img_decs", img_ras
     #for i in range(0,len(img_ras)):
     # 	if img_ras[i] > 360.:
     #		img_ras[i] -= 360.
     # 	if img_ras[i] < 0.:
     #		img_ras[i] += 360.
-    #END DEBUGGING MARC BIT 
+    #END DEBUGGING MARCM BIT 
 
 
     # Coordinates of coadd corners
@@ -394,7 +394,7 @@ def computeHPXpix_sequ_new(nside, propertyArray, pixoffset=0, ratiores=4, coadd_
     img_pix = hp.ang2pix(nside, img_thetas, img_phis, nest=False)
     pix_thetas, pix_phis = hp.pix2ang(nside, img_pix, nest=False)
 
-    # DEBUGGING - MARC
+    # DEBUGGING - MARCM
     #print 'pix_thetas', pix_thetas
     #print 'pix_phis', pix_phis
     #sys.exit()
@@ -419,7 +419,7 @@ def computeHPXpix_sequ_new(nside, propertyArray, pixoffset=0, ratiores=4, coadd_
                 ind_B = 1
             else:
                 # This is for MzLS (seems to rotate other way)  
-                print "This is MzLS"
+                #print "This is MzLS"
                 ind_U = 1 
                 ind_L = 3 
                 ind_R = 2 
@@ -473,7 +473,7 @@ def computeHPXpix_sequ_new(nside, propertyArray, pixoffset=0, ratiores=4, coadd_
     #subipixs_ring = hp.ang2pix(nside*ratiores, rangepix_thetas, rangepix_phis, nest=False).reshape(-1, nsubpixperpix)
 
     if (pmax - pmin > np.pi) or (np.max(coadd_phis) - np.min(coadd_phis) > np.pi):
-        #DEBUGGING - MARC
+        #DEBUGGING - MARCM
         #print "Eps debugging"
         img_phis= np.mod( img_phis + np.pi, 2*np.pi )
         coadd_phis= np.mod( coadd_phis + np.pi, 2*np.pi )
@@ -482,7 +482,7 @@ def computeHPXpix_sequ_new(nside, propertyArray, pixoffset=0, ratiores=4, coadd_
     subweights = in_region(rangepix_thetas, rangepix_phis,
                                    img_thetas[ind_U], img_phis[ind_U], img_thetas[ind_L], img_phis[ind_L],
                                    img_thetas[ind_R], img_phis[ind_R], img_thetas[ind_B], img_phis[ind_B])
-    # DEBUGGING - MARC
+    # DEBUGGING - MARCM
     #print 'pmax pmin', pmax, pmin
     #print 'img_thetas again', img_thetas
     #print 'img_phis again', img_phis
@@ -501,7 +501,7 @@ def computeHPXpix_sequ_new(nside, propertyArray, pixoffset=0, ratiores=4, coadd_
     sweights = resubweights.sum(axis=1) / float(nsubpixperpix)
     ind = (sweights > 0.0)
     
-    # DEBUGGING - MARC
+    # DEBUGGING - MARCM
     #print 'ind', ind
     #print 'ipixs_ring', ipixs_ring
     
@@ -854,7 +854,7 @@ def makeHealTree(args):
     for i, propertyArray in enumerate(tbdata):
         count += 1
         start_one = time.time()
-        # DEBUGGING - MARC
+        # DEBUGGING - MARCM
         #print "debugging i ", i
         treemap.addElem(propertyArray, ratiores, pixoffset)
         end_one = time.time()
@@ -907,7 +907,7 @@ class HealTree:
     def addElem(self, propertyArray, ratiores, pixoffset):
         # Retrieve pixel indices
         ipixels, weights, thetas_c, phis_c, subpixrings = computeHPXpix_sequ_new(self.nside, propertyArray, pixoffset=pixoffset, ratiores=ratiores)
-        # DEBUGGING - MARC
+        # DEBUGGING - MARCM
         #print "deguging ipix addElem", ipixels
         # For each pixel, absorb image properties
         for ii, (ipix, weight) in enumerate(zip(ipixels, weights)):
