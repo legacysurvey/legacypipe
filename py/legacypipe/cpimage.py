@@ -76,12 +76,17 @@ class CPImage(LegacySurveyImage):
                     fn = fnother
 
         expstr = '%08i' % self.expnum
-        self.calname = '%s/%s/decam-%s-%s' % (expstr[:5], expstr, expstr, self.ccdname)
+        self.calname = '%s/%s/%s-%s-%s' % (expstr[:5], expstr, self.camera,
+                                           expstr, self.ccdname)
         self.name = '%s-%s' % (expstr, self.ccdname)
 
         calibdir = os.path.join(self.survey.get_calib_dir(), self.camera)
         self.sefn = os.path.join(calibdir, 'sextractor', self.calname + '.fits')
         self.psffn = os.path.join(calibdir, 'psfex', self.calname + '.fits')
+
+        self.merged_psffn = os.path.join(calibdir, 'psfex-summary', expstr[:5],
+                                         '%s-%s.fits' % (self.camera, expstr))
+
         self.skyfn = os.path.join(calibdir, 'sky', self.calname + '.fits')
         self.splineskyfn = os.path.join(calibdir, 'splinesky', self.calname + '.fits')
         self.dq_saturation_bits = CP_DQ_BITS['satur']

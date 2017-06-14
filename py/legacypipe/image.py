@@ -7,8 +7,9 @@ from tractor.basics import NanoMaggies, ConstantFitsWcs, LinearPhotoCal
 from tractor.image import Image
 from tractor.sky import ConstantSky
 from tractor.tractortime import TAITime
-from .survey import SimpleGalaxy
 from astrometry.util.file import trymakedirs
+from astrometry.util.fits import fits_table
+from legacypipe.survey import SimpleGalaxy
 
 '''
 Generic image handling code.
@@ -874,30 +875,42 @@ class LegacySurveyImage(object):
             psf.plver = ''
         else:
             # spatially varying pixelized PsfEx
-            from tractor import PixelizedPsfEx
-            print('Reading PsfEx model from', self.psffn)
-            psf = PixelizedPsfEx(self.psffn)
+            from tractor import PixelizedPsfEx, PsfExModel
+            psf = None
+            if hasattr(self, 'merged_psffn') and self.merged_psffn is not None:
+                try:
+                    print('Reading merged PsfEx models from', self.merged_psffn)
+                    T = fits_table(self.merged_psffn)
+                    I, = np.nonzero((T.expnum == self.expnum) *
+                                    np.array([c.strip() == self.ccdname
+                                              for c in T.ccdname]))
+                    print('Found', len(I), 'matching CCD')
+                    if len(I) == 1:
+                        Ti = T[I[0]]
+                        psfex = PsfExModel(Ti=Ti)
+                        psf = PixelizedPsfEx(None, psfex=psfex)
+                        psf.version = Ti.legpipev.strip()
+                        psf.plver = Ti.plver.strip()
+                except:
+                    import traceback
+                    traceback.print_exc()
+
+            if psf is None:
+                print('Reading PsfEx model from', self.psffn)
+                psf = PixelizedPsfEx(self.psffn)
+
+                hdr = fitsio.read_header(self.psffn)
+                psf.version = hdr.get('LEGSURV', None)
+                if psf.version is None:
+                    psf.version = str(os.stat(self.psffn).st_mtime)
+                psf.plver = hdr.get('PLVER', '').strip()
+
             psf.shift(x0, y0)
-            psffn = self.psffn
             if hybridPsf:
                 from tractor.psf import HybridPixelizedPSF
                 psf = HybridPixelizedPSF(psf, cx=w/2., cy=h/2.)
 
-                # from tractor.psf import GaussianMixturePSF
-                # psfpix = psf.getImage(w/2., h/2.)
-                # print('Gaussian fit at image center would be:',
-                #       GaussianMixturePSF.fromStamp(psfpix, N=2))
-                # print('Pixelized PSF sum:', psfpix.sum())
-                # print('Pixelized PSF size:', psfpix.shape)
-
         print('Using PSF model', psf)
-
-        if psffn is not None:
-            hdr = fitsio.read_header(psffn)
-            psf.version = hdr.get('LEGSURV', None)
-            if psf.version is None:
-                psf.version = str(os.stat(psffn).st_mtime)
-            psf.plver = hdr.get('PLVER', '').strip()
         return psf
 
     def run_calibs(self, **kwargs):
