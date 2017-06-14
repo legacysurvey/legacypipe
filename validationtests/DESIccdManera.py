@@ -33,6 +33,148 @@ def Magtonanomaggies(m):
 
 ### Plotting facilities
 
+
+
+def plotPhotometryMap(band,vmin=0.0,vmax=1.0,mjdmax='',prop='zptvar',op='min',rel='DR0',survey='surveyname',nside='1024',oversamp='1'):
+        import fitsio
+        from matplotlib import pyplot as plt
+        import matplotlib.cm as cm
+        from numpy import zeros,array
+        import healpix
+
+        from healpix import pix2ang_ring,thphi2radec
+        import healpy as hp
+
+        # Survey inputs
+        mjdw=mjdmax
+        if rel == 'DR2':
+            fname =inputdir+'decals-ccds-annotated.fits'
+            catalogue_name = 'DECaLS_DR2'+mjdw
+
+        if rel == 'DR3':
+            inputdir = '/project/projectdirs/cosmo/data/legacysurvey/dr3/' # where I get my data 
+            fname =inputdir+'ccds-annotated-decals.fits.gz'
+            catalogue_name = 'DECaLS_DR3'+mjdw
+
+        if rel == 'DR4':
+            inputdir= '/global/projecta/projectdirs/cosmo/work/dr4/'
+            if (band == 'g' or band == 'r'):
+                fname=inputdir+'ccds-annotated-dr4-90prime.fits.gz'
+                catalogue_name = '90prime_DR4'+mjdw
+            if band == 'z' :
+                fname = inputdir+'ccds-annotated-dr4-mzls.fits.gz' 
+                catalogue_name = 'MZLS_DR4'+mjdw
+
+
+
+	
+        fname=localdir+catalogue_name+'/nside'+nside+'_oversamp'+oversamp+'/'+catalogue_name+'_band_'+band+'_nside'+nside+'_oversamp'+oversamp+'_'+prop+'__'+op+'.fits.gz'
+        f = fitsio.read(fname)
+
+        ral = []
+        decl = []
+        val = f['SIGNAL']
+        pix = f['PIXEL']
+
+        # -------------- plot of values ------------------
+        if( prop=='zptvar' and opt == 'min' ):
+
+            print 'Plotting min zpt rms'
+            myval = []
+	    for i in range(0,len(val)):
+             
+                myval.append(1.086 * np.sqrt(val[i])) #1.086 converts dm into d(flux) 
+                th,phi = hp.pix2ang(int(nside),pix[i])
+	        ra,dec = thphi2radec(th,phi)
+	        ral.append(ra)
+	        decl.append(dec)
+      
+            mylabel = 'min-zpt-rms-flux'
+            vmin = 0.0 #min(myval)
+            vmax = 0.03 #max(myval) 
+            npix = len(myval)
+            below = 0
+            print 'Min and Max values of ', mylabel, ' values is ', min(myval), max(myval)
+            print 'Number of pixels is ', npix
+            print 'Number of pixels offplot with ', mylabel,' < ', vmin, ' is', below
+            print 'Area is ', npix/(float(nside)**2.*12)*360*360./pi, ' sq. deg.'
+
+
+            map = plt.scatter(ral,decl,c=myval, cmap=cm.rainbow,s=2., vmin=vmin, vmax=vmax, lw=0,edgecolors='none')
+            cbar = plt.colorbar(map)
+            plt.xlabel('r.a. (degrees)')
+            plt.ylabel('declination (degrees)')
+            plt.title('Map of '+ mylabel +' for '+catalogue_name+' '+band+'-band')
+            plt.xlim(0,360)
+            plt.ylim(-30,90)
+            plt.savefig(localdir+mylabel+'_'+band+'_'+catalogue_name+str(nside)+'.png')
+            plt.close()
+
+
+        # -------------- plot of status in udgrade maps of 1.406 deg pix size  ------------------
+
+        #Bands inputs
+        if band == 'g':
+            phreq = 0.01
+        if band == 'r':
+            phreq = 0.01
+        if band == 'z':
+            phreq = 0.02
+
+        # Obtain values to plot
+        if( prop=='zptvar' and opt == 'min' ):
+
+            nside2 = 64  # 1.40625 deg per pixel
+            npix2 = hp.nside2npix(nside2)
+            myreq = np.zeros(npix2)  # 0 off footprint, 1 at least one pass requirement, -1 none pass requirement
+            ral = np.zeros(npix2)
+            decl = np.zeros(npix2)
+            mylabel = 'photometric-pixels'
+            print 'Plotting photometric requirement'
+
+
+            for i in range(0,len(val)):
+                th,phi = hp.pix2ang(int(nside),pix[i])
+                ipix = hp.ang2pix(nside2,th,phi)
+                dF= 1.086 * (sqrt(val[i]))   # 1.086 converts d(magnitudes) into d(flux)
+
+                if(dF < phreq):
+                     myreq[ipix]=1
+                else:
+                     if(myreq[ipix] == 0): myreq[ipix]=-1
+
+            for i in range(0,len(myreq)):
+                th,phi = hp.pix2ang(int(nside2),pix[i])
+	        ra,dec = thphi2radec(th,phi)
+	        ral[i] = ra
+	        decl[i] = dec
+
+            #myval = np.zeros(npix2)
+            #mycount = np.zeros(pix2)
+            #myval[ipix] += dF
+            #mycount[ipix] += 1.
+           
+            below=sum( x for x in myreq if x < phreq) 
+            
+            print 'Number of pixels offplot with ', mylabel,' < ', phreq, ' is', below
+
+            vmin = min(myreq)
+            vmax = max(myreq) 
+            map = plt.scatter(ral,decl,c=myreq, cmap=cm.rainbow,s=5., vmin=vmin, vmax=vmax, lw=0,edgecolors='none')
+            cbar = plt.colorbar(map)
+            plt.xlabel('r.a. (degrees)')
+            plt.ylabel('declination (degrees)')
+            plt.title('Map of '+ mylabel +' for '+catalogue_name+' '+band+'-band')
+            plt.xlim(0,360)
+            plt.ylim(-30,90)
+            plt.savefig(localdir+mylabel+'_'+band+'_'+catalogue_name+str(nside)+'.png')
+            plt.close()
+            #plt.show()
+            #cbar.set_label(r'5$\sigma$ galaxy depth', rotation=270,labelpad=1)
+            #plt.xscale('log')
+
+        return True
+
 		
 def plotPropertyMap(band,vmin=21.0,vmax=24.0,mjdmax='',prop='ivar',op='total',survey='surveyname',nside='1024',oversamp='1'):
 	import fitsio
@@ -393,24 +535,32 @@ def photometricReq(band,rel='DR3',survey='survename'):
     # Obtain indices
     if band == 'g':
         sample_names = ['band_g']
-        indg = np.where((tbdata['filter'] == 'g') & (tbdata['photometric'] == True) & (tbdata['blacklist_ok'] == True)) 
+        #indg = np.where((tbdata['filter'] == 'g') & (tbdata['photometric'] == True) & (tbdata['blacklist_ok'] == True)) 
+        indg = np.where((tbdata['filter'] == 'g') & (tbdata['blacklist_ok'] == True)) 
+        #indg = np.where((tbdata['filter'] == 'g') ) 
         inds = indg #redundant
     if band == 'r':
         sample_names = ['band_r']
-        indr = np.where((tbdata['filter'] == 'r') & (tbdata['photometric'] == True) & (tbdata['blacklist_ok'] == True))
+        #indr = np.where((tbdata['filter'] == 'r') & (tbdata['photometric'] == True) & (tbdata['blacklist_ok'] == True))
+        indr = np.where((tbdata['filter'] == 'r') & (tbdata['blacklist_ok'] == True))
+        #indr = np.where((tbdata['filter'] == 'r') )
         inds = indr #redundant
     if band == 'z':
         sample_names = ['band_z']
-        indz = np.where((tbdata['filter'] == 'z') & (tbdata['photometric'] == True) & (tbdata['blacklist_ok'] == True))
+        #indz = np.where((tbdata['filter'] == 'z') & (tbdata['photometric'] == True) & (tbdata['blacklist_ok'] == True))
+        indz = np.where((tbdata['filter'] == 'z') & (tbdata['blacklist_ok'] == True))
+        #indz = np.where((tbdata['filter'] == 'z') )
         inds = indz # redundant
     
     #Read data 
     #obtain invnoisesq here, including extinction 
     zptvar = tbdata['CCDPHRMS']**2/tbdata['CCDNMATCH']
+    zptivar = 1./zptvar
+    nccd = np.ones(len(tbdata))
 
     # What properties do you want mapped?
     # Each each tuple has [(quantity to be projected, weighting scheme, operation),(etc..)] 
-    propertiesandoperations = [ ('zptvar', '', 'total'), ('nccd','','total')]
+    propertiesandoperations = [ ('zptvar', '', 'total') , ('zptvar','','min') , ('nccd','','total') , ('zptivar','','total')]
 
  
     # What properties to keep when reading the images? 
@@ -422,7 +572,7 @@ def photometricReq(band,rel='DR3',survey='survename'):
     
     # Create big table with all relevant properties. 
 
-    tbdata = np.core.records.fromarrays([tbdata[prop] for prop in propertiesToKeep] + [zptvar,nccd], names = propertiesToKeep + [ 'zptvar','nccd'])
+    tbdata = np.core.records.fromarrays([tbdata[prop] for prop in propertiesToKeep] + [zptvar,zptivar,nccd], names = propertiesToKeep + [ 'zptvar','zptivar','nccd'])
     
     # Read the table, create Healtree, project it into healpix maps, and write these maps.
     # Done with Quicksip library, note it has quite a few hardcoded values (use new version by MARCM for BASS and MzLS) 
@@ -496,6 +646,30 @@ def photometricReq(band,rel='DR3',survey='survename'):
 #plotMaghist_pred(band,FracExp=FracExp,ndraw = 1e5,nbin=100,rel='DR4')
 
 # --- run histogram deph peredictions
+# prova
+photometricReq('g',rel='DR3',survey='survename')
+photometricReq('r',rel='DR3',survey='survename')
+photometricReq('z',rel='DR3',survey='survename')
+photometricReq('g',rel='DR4',survey='survename')
+photometricReq('r',rel='DR4',survey='survename')
+photometricReq('z',rel='DR4',survey='survename')
 
-photometricReq('g',rel='DR3',survey='survename'):
+prop = 'zptvar'
+opt  = 'min'
+
+rel  = 'DR3'
+band = 'g'
+plotPhotometryMap(band,prop=prop,op=opt,rel=rel)
+band = 'r'
+plotPhotometryMap(band,prop=prop,op=opt,rel=rel)
+band = 'z'
+plotPhotometryMap(band,prop=prop,op=opt,rel=rel)
+
+rel = 'DR4'
+band = 'g'
+plotPhotometryMap(band,prop=prop,op=opt,rel=rel)
+band = 'r'
+plotPhotometryMap(band,prop=prop,op=opt,rel=rel)
+band = 'z'
+plotPhotometryMap(band,prop=prop,op=opt,rel=rel)
 
