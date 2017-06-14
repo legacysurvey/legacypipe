@@ -84,9 +84,9 @@ class CPImage(LegacySurveyImage):
         self.sefn = os.path.join(calibdir, 'sextractor', self.calname + '.fits')
         self.psffn = os.path.join(calibdir, 'psfex', self.calname + '.fits')
 
-        self.merged_psffn = os.path.join(calibdir, 'psfex-summary', expstr[:5],
+        self.merged_psffn = os.path.join(calibdir, 'psfex-merged', expstr[:5],
                                          '%s-%s.fits' % (self.camera, expstr))
-        self.merged_splineskyfn = os.path.join(calibdir, 'splinesky-summary', expstr[:5],
+        self.merged_splineskyfn = os.path.join(calibdir, 'splinesky-merged', expstr[:5],
                                          '%s-%s.fits' % (self.camera, expstr))
 
         self.skyfn = os.path.join(calibdir, 'sky', self.calname + '.fits')
