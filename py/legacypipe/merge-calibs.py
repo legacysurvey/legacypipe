@@ -38,7 +38,7 @@ def pad_arrays(A):
 def main():
     import argparse
     parser = argparse.ArgumentParser()
-    parser.add_argument('--expnum', type=int, help='Cut to a single exposure')
+    parser.add_argument('--expnum', type=str, help='Run specified exposure numbers (can be comma-separated list')
     opt = parser.parse_args()
 
     survey = LegacySurveyData()
@@ -46,7 +46,7 @@ def main():
     print(len(ccds), 'CCDs')
 
     if opt.expnum is not None:
-        expnums = [opt.expnum]
+        expnums = [int(x, 10) for x in opt.expnum.split(',')]
     else:
         expnums = np.unique(ccds.expnum)
         print(len(expnums), 'unique exposures')
@@ -90,7 +90,8 @@ def main():
                     # T.about()
                     hdr = fitsio.read_header(fn)
                     skyhdrvals.append([hdr[k] for k in [
-                                'SKY', 'LEGPIPEV', 'PLVER']] + [expnum, ccd.ccdname])
+                                'SKY', 'LEGPIPEV', 'PLVER', 'SIG1']] +
+                                      [expnum, ccd.ccdname])
 
 
             if len(splinesky):
@@ -102,9 +103,9 @@ def main():
                 T.gridvals = np.concatenate([[p] for p in padded])
                 padded = pad_arrays([t.xgrid[0] for t in splinesky])
                 T.xgrid = np.concatenate([[p] for p in padded])
-                padded = pad_arrays([t.xgrid[0] for t in splinesky])
+                padded = pad_arrays([t.ygrid[0] for t in splinesky])
                 T.ygrid = np.concatenate([[p] for p in padded])
-        
+
                 cols = splinesky[0].columns()
                 print('Columns:', cols)
                 for c in ['gridvals', 'xgrid', 'ygrid']:
@@ -114,8 +115,9 @@ def main():
                 T.skyclass = np.array([h[0] for h in skyhdrvals])
                 T.legpipev = np.array([h[1] for h in skyhdrvals])
                 T.plver    = np.array([h[2] for h in skyhdrvals])
-                T.expnum   = np.array([h[3] for h in skyhdrvals])
-                T.ccdname  = np.array([h[4] for h in skyhdrvals])
+                T.sig1     = np.array([h[3] for h in skyhdrvals])
+                T.expnum   = np.array([h[4] for h in skyhdrvals])
+                T.ccdname  = np.array([h[5] for h in skyhdrvals])
                 fn = skyoutfn
                 trymakedirs(fn, dir=True)
                 T.writeto(fn)

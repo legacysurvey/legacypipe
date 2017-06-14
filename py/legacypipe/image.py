@@ -828,6 +828,47 @@ class LegacySurveyImage(object):
         '''
         Reads the sky model, returning a Tractor Sky object.
         '''
+        sky = None
+        if splinesky and getattr(self, 'merged_splineskyfn', None) is not None:
+            try:
+                print('Reading merged spline sky models from', self.merged_splineskyfn)
+                T = fits_table(self.merged_splineskyfn)
+                I, = np.nonzero((T.expnum == self.expnum) *
+                                np.array([c.strip() == self.ccdname
+                                          for c in T.ccdname]))
+                print('Found', len(I), 'matching CCD')
+                if len(I) == 1:
+                    Ti = T[I[0]]
+                    # Ti.about()
+                    # print('Spline w,h', Ti.gridw, Ti.gridh)
+                    # print('xgrid:', Ti.xgrid.shape)
+                    # print('ygrid:', Ti.ygrid.shape)
+                    # print('gridvals:', Ti.gridvals.shape)
+
+                    # Remove any padding
+                    h,w = Ti.gridh, Ti.gridw
+                    Ti.gridvals = Ti.gridvals[:h, :w]
+                    Ti.xgrid = Ti.xgrid[:w]
+                    Ti.ygrid = Ti.ygrid[:h]
+
+                    skyclass = Ti.skyclass.strip()
+                    clazz = get_class_from_name(skyclass)
+                    fromfits = getattr(clazz, 'from_fits_row')
+                    sky = fromfits(Ti)
+                    
+                    if slc is not None:
+                        sy,sx = slc
+                        x0,y0 = sx.start,sy.start
+                        sky.shift(x0, y0)
+                    sky.version = Ti.legpipev
+                    sky.plver = Ti.plver
+                    if 'sig1' in Ti.get_columns():
+                        sky.sig1 = Ti.sig1
+                    return sky
+            except:
+                import traceback
+                traceback.print_exc()
+
         fn = self.skyfn
         if splinesky:
             fn = self.splineskyfn
@@ -841,26 +882,26 @@ class LegacySurveyImage(object):
 
         if getattr(clazz, 'from_fits', None) is not None:
             fromfits = getattr(clazz, 'from_fits')
-            skyobj = fromfits(fn, hdr)
+            sky = fromfits(fn, hdr)
         else:
             fromfits = getattr(clazz, 'fromFitsHeader')
-            skyobj = fromfits(hdr, prefix='SKY_')
+            sky = fromfits(hdr, prefix='SKY_')
 
         if slc is not None:
             sy,sx = slc
             x0,y0 = sx.start,sy.start
-            skyobj.shift(x0, y0)
+            sky.shift(x0, y0)
 
-        skyobj.version = hdr.get('LEGPIPEV', '')
-        if len(skyobj.version) == 0:
-            skyobj.version = hdr.get('TRACTORV', '').strip()
-            if len(skyobj.version) == 0:
-                skyobj.version = str(os.stat(fn).st_mtime)
-        skyobj.plver = hdr.get('PLVER', '').strip()
+        sky.version = hdr.get('LEGPIPEV', '')
+        if len(sky.version) == 0:
+            sky.version = hdr.get('TRACTORV', '').strip()
+            if len(sky.version) == 0:
+                sky.version = str(os.stat(fn).st_mtime)
+        sky.plver = hdr.get('PLVER', '').strip()
         sig1 = hdr.get('SIG1', None)
         if sig1 is not None:
-            skyobj.sig1 = sig1
-        return skyobj
+            sky.sig1 = sig1
+        return sky
 
     def read_psf_model(self, x0, y0,
                        gaussPsf=False, pixPsf=False, hybridPsf=False,
@@ -873,42 +914,51 @@ class LegacySurveyImage(object):
             print('WARNING: using mock PSF:', psf)
             psf.version = '0'
             psf.plver = ''
-        else:
-            # spatially varying pixelized PsfEx
-            from tractor import PixelizedPsfEx, PsfExModel
-            psf = None
-            if hasattr(self, 'merged_psffn') and self.merged_psffn is not None:
-                try:
-                    print('Reading merged PsfEx models from', self.merged_psffn)
-                    T = fits_table(self.merged_psffn)
-                    I, = np.nonzero((T.expnum == self.expnum) *
-                                    np.array([c.strip() == self.ccdname
-                                              for c in T.ccdname]))
-                    print('Found', len(I), 'matching CCD')
-                    if len(I) == 1:
-                        Ti = T[I[0]]
-                        psfex = PsfExModel(Ti=Ti)
-                        psf = PixelizedPsfEx(None, psfex=psfex)
-                        psf.version = Ti.legpipev.strip()
-                        psf.plver = Ti.plver.strip()
-                except:
-                    import traceback
-                    traceback.print_exc()
+            return psf
 
-            if psf is None:
-                print('Reading PsfEx model from', self.psffn)
-                psf = PixelizedPsfEx(self.psffn)
+        # spatially varying pixelized PsfEx
+        from tractor import PixelizedPsfEx, PsfExModel
+        psf = None
+        if getattr(self, 'merged_psffn', None) is not None:
+            try:
+                print('Reading merged PsfEx models from', self.merged_psffn)
+                T = fits_table(self.merged_psffn)
+                I, = np.nonzero((T.expnum == self.expnum) *
+                                np.array([c.strip() == self.ccdname
+                                          for c in T.ccdname]))
+                print('Found', len(I), 'matching CCD')
+                if len(I) == 1:
+                    Ti = T[I[0]]
 
-                hdr = fitsio.read_header(self.psffn)
-                psf.version = hdr.get('LEGSURV', None)
-                if psf.version is None:
-                    psf.version = str(os.stat(self.psffn).st_mtime)
-                psf.plver = hdr.get('PLVER', '').strip()
+                    # Remove any padding
+                    degree = Ti.poldeg1
+                    # number of terms in polynomial
+                    ne = (degree + 1) * (degree + 2) / 2
+                    print('PSF_mask shape', Ti.psf_mask.shape)
+                    Ti.psf_mask = Ti.psf_mask[:ne, :Ti.psfaxis1, :Ti.psfaxis2]
 
-            psf.shift(x0, y0)
-            if hybridPsf:
-                from tractor.psf import HybridPixelizedPSF
-                psf = HybridPixelizedPSF(psf, cx=w/2., cy=h/2.)
+                    psfex = PsfExModel(Ti=Ti)
+                    psf = PixelizedPsfEx(None, psfex=psfex)
+                    psf.version = Ti.legpipev.strip()
+                    psf.plver = Ti.plver.strip()
+            except:
+                import traceback
+                traceback.print_exc()
+
+        if psf is None:
+            print('Reading PsfEx model from', self.psffn)
+            psf = PixelizedPsfEx(self.psffn)
+
+            hdr = fitsio.read_header(self.psffn)
+            psf.version = hdr.get('LEGSURV', None)
+            if psf.version is None:
+                psf.version = str(os.stat(self.psffn).st_mtime)
+            psf.plver = hdr.get('PLVER', '').strip()
+
+        psf.shift(x0, y0)
+        if hybridPsf:
+            from tractor.psf import HybridPixelizedPSF
+            psf = HybridPixelizedPSF(psf, cx=w/2., cy=h/2.)
 
         print('Using PSF model', psf)
         return psf
