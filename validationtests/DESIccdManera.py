@@ -647,12 +647,12 @@ def photometricReq(band,rel='DR3',survey='survename'):
 
 # --- run histogram deph peredictions
 # prova
-photometricReq('g',rel='DR3',survey='survename')
-photometricReq('r',rel='DR3',survey='survename')
-photometricReq('z',rel='DR3',survey='survename')
-photometricReq('g',rel='DR4',survey='survename')
-photometricReq('r',rel='DR4',survey='survename')
-photometricReq('z',rel='DR4',survey='survename')
+#photometricReq('g',rel='DR3',survey='survename')
+#photometricReq('r',rel='DR3',survey='survename')
+#photometricReq('z',rel='DR3',survey='survename')
+#photometricReq('g',rel='DR4',survey='survename')
+#photometricReq('r',rel='DR4',survey='survename')
+#photometricReq('z',rel='DR4',survey='survename')
 
 prop = 'zptvar'
 opt  = 'min'
