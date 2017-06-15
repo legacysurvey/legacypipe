@@ -72,6 +72,9 @@ def main(outfn='ccds-annotated.fits', ccds=None, mzls=False):
     ccds.pixscale_max  = np.zeros(len(ccds), np.float32)
     ccds.pixscale_min  = np.zeros(len(ccds), np.float32)
 
+    # DR4
+    ccds.psf_sampling = np.zeros(len(ccds), np.float32)
+
     ccds.psfnorm_mean = np.zeros(len(ccds), np.float32)
     ccds.psfnorm_std  = np.zeros(len(ccds), np.float32)
     ccds.galnorm_mean = np.zeros(len(ccds), np.float32)
@@ -183,10 +186,19 @@ def main(outfn='ccds-annotated.fits', ccds=None, mzls=False):
         psfnorms = []
         galnorms = []
         for x,y in zip(xx.ravel(), yy.ravel()):
+
+            # HACK -- DR4
+            tim.psf = psf.constantPsfAt(x, y)
+
             p = im.psf_norm(tim, x=x, y=y)
             g = im.galaxy_norm(tim, x=x, y=y)
             psfnorms.append(p)
             galnorms.append(g)
+
+        tim.psf = psf
+
+        ccds.psf_sampling[iccd] = tim.psf.psfex.sampling
+
         ccds.psfnorm_mean[iccd] = np.mean(psfnorms)
         ccds.psfnorm_std [iccd] = np.std (psfnorms)
         ccds.galnorm_mean[iccd] = np.mean(galnorms)
@@ -364,6 +376,7 @@ if __name__ == '__main__':
     import argparse
     parser = argparse.ArgumentParser(description='Produce annotated CCDs file by reading CCDs file + calibration products')
     parser.add_argument('--part', action='append', help='CCDs file to read, survey-ccds-X.fits.gz, default: ["decals","nondecals","extra"].  Can be repeated.', default=[])
+    parser.add_argument('--ccds', action='append', help='CCDs file to read; can be repeated', default=[])
     parser.add_argument('--mzls', action='store_true', default=False, help='MzLS (default: DECaLS')
     parser.add_argument('--force', action='store_true', default=False,
                         help='Ignore ccds-annotated/* files and re-run')
@@ -442,18 +455,33 @@ if __name__ == '__main__':
     mp = multiproc(opt.threads)
     N = 1000
     
-    if len(opt.part) == 0:
+    if len(opt.part) == 0 and len(opt.ccds) == 0:
         opt.part.append('decals')
         opt.part.append('nondecals')
         opt.part.append('extra')
 
-    for name in opt.part:
+    ccdfns = opt.ccds
+    for p in opt.part:
+        ccdfns.append(os.path.join(survey.survey_dir, 'survey-ccds-%s.fits.gz' % p))
+
+    for fn in ccdfns:
         print()
-        print('Reading', name)
+        print('Reading', fn)
         print()
+
+        name = os.path.basename(fn)
+        name = name.replace('survey-ccds-', '')
+        name = name.replace('.fits', '')
+        name = name.replace('.gz', '')
+        print('Name', name)
+
         args = []
         i = 0
-        ccds = fits_table(os.path.join(survey.survey_dir, 'survey-ccds-%s.fits.gz' % name))
+        ccds = fits_table(fn)
+        # Remove trailing spaces from 'camera' & 'ccdname' columns.
+        ccds.camera = np.array([c.strip() for c in ccds.camera])
+        ccds.ccdname = np.array([c.strip() for c in ccds.ccdname])
+
         while len(ccds):
             c = ccds[:N]
             ccds = ccds[N:]
