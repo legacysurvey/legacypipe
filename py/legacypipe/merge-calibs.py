@@ -39,10 +39,16 @@ def main():
     import argparse
     parser = argparse.ArgumentParser()
     parser.add_argument('--expnum', type=str, help='Run specified exposure numbers (can be comma-separated list')
+    parser.add_argument('--all-found', action='store_true', default=False, help='Only write output if all required input files are found')
+    parser.add_argument('--ccds', help='Set ccds.fits file to load, default is all')
+
     opt = parser.parse_args()
 
     survey = LegacySurveyData()
-    ccds = survey.get_ccds()
+    if opt.ccds:
+        ccds = fits_table(opt.ccds)
+    else:
+        ccds = survey.get_ccds()
     print(len(ccds), 'CCDs')
 
     if opt.expnum is not None:
@@ -52,14 +58,12 @@ def main():
         print(len(expnums), 'unique exposures')
 
     for expnum in expnums:
-
         expnumstr = '%08i' % expnum
         skyoutfn = os.path.join('splinesky', expnumstr[:5], 'decam-%s.fits' % expnumstr)
         psfoutfn = os.path.join('psfex', expnumstr[:5], 'decam-%s.fits' % expnumstr)
 
         print('Checking for', skyoutfn)
         print('Checking for', psfoutfn)
-
         if os.path.exists(skyoutfn) and os.path.exists(psfoutfn):
             print('Exposure', expnum, 'is done already')
             continue
@@ -68,126 +72,150 @@ def main():
         print(len(C), 'CCDs in expnum', expnum)
 
         if not os.path.exists(skyoutfn):
-            splinesky = []
-            skyhdrvals = []
-            for ccd in C:
-                im = survey.get_image_object(ccd)
-                fn = im.splineskyfn
-                if not os.path.exists(fn):
-                    print('File not found:', fn)
-                    continue
-                print('Reading', fn)
-                T = None
-                try:
-                    T = fits_table(fn)
-                except KeyboardInterrupt:
-                    raise
-                except:
-                    print('Failed to read file', fn, ':', sys.exc_info()[1])
-                if T is not None:
-                    splinesky.append(T)
-                    # print(fn)
-                    # T.about()
-                    hdr = fitsio.read_header(fn)
-                    skyhdrvals.append([hdr[k] for k in [
-                                'SKY', 'LEGPIPEV', 'PLVER', 'SIG1']] +
-                                      [expnum, ccd.ccdname])
-
-
-            if len(splinesky):
-                T = fits_table()
-                T.gridw = np.array([t.gridvals[0].shape[1] for t in splinesky])
-                T.gridh = np.array([t.gridvals[0].shape[0] for t in splinesky])
-    
-                padded = pad_arrays([t.gridvals[0] for t in splinesky])
-                T.gridvals = np.concatenate([[p] for p in padded])
-                padded = pad_arrays([t.xgrid[0] for t in splinesky])
-                T.xgrid = np.concatenate([[p] for p in padded])
-                padded = pad_arrays([t.ygrid[0] for t in splinesky])
-                T.ygrid = np.concatenate([[p] for p in padded])
-
-                cols = splinesky[0].columns()
-                print('Columns:', cols)
-                for c in ['gridvals', 'xgrid', 'ygrid']:
-                    cols.remove(c)
-    
-                T.add_columns_from(merge_tables(splinesky, columns=cols))
-                T.skyclass = np.array([h[0] for h in skyhdrvals])
-                T.legpipev = np.array([h[1] for h in skyhdrvals])
-                T.plver    = np.array([h[2] for h in skyhdrvals])
-                T.sig1     = np.array([h[3] for h in skyhdrvals])
-                T.expnum   = np.array([h[4] for h in skyhdrvals])
-                T.ccdname  = np.array([h[5] for h in skyhdrvals])
-                fn = skyoutfn
-                trymakedirs(fn, dir=True)
-                T.writeto(fn)
-                print('Wrote', fn)
-
+            merge_splinesky(survey, expnum, C, skyoutfn, opt)
 
         if not os.path.exists(psfoutfn):
-            psfex = []
-            psfhdrvals = []
-    
-            for ccd in C:
-                im = survey.get_image_object(ccd)
-                fn = im.psffn
-                if not os.path.exists(fn):
-                    print('File not found:', fn)
-                    continue
-                print('Reading', fn)
-                T = fits_table(fn)
-                hdr = fitsio.read_header(fn, ext=1)
+            merge_psfex(survey, expnum, C, psfoutfn, opt)
 
-                keys = ['LOADED', 'ACCEPTED', 'CHI2', 'POLNAXIS', 
-                        'POLNGRP', 'PSF_FWHM', 'PSF_SAMP', 'PSFNAXIS',
-                        'PSFAXIS1', 'PSFAXIS2', 'PSFAXIS3',]
 
-                if hdr['POLNAXIS'] == 0:
-                    # No polynomials.  Fake it.
-                    T.polgrp1 = np.array([0])
-                    T.polgrp2 = np.array([0])
-                    T.polname1 = np.array(['fake'])
-                    T.polname2 = np.array(['fake'])
-                    T.polzero1 = np.array([0])
-                    T.polzero2 = np.array([0])
-                    T.polscal1 = np.array([1])
-                    T.polscal2 = np.array([1])
-                    T.poldeg1 = np.array([0])
-                else:
-                    keys.extend([
-                            'POLGRP1', 'POLNAME1', 'POLZERO1', 'POLSCAL1',
-                            'POLGRP2', 'POLNAME2', 'POLZERO2', 'POLSCAL2',
-                            'POLDEG1'])
+def merge_psfex(survey, expnum, C, psfoutfn, opt):
+    psfex = []
+    psfhdrvals = []
+    imobjs = []
+    Cgood = []
+    for ccd in C:
+        im = survey.get_image_object(ccd)
+        fn = im.psffn
+        if not os.path.exists(fn):
+            print('File not found:', fn)
+            if opt.all_found:
+                return
+            continue
+        imobjs.append(im)
+        Cgood.append(ccd)
 
-                for k in keys:
-                    try:
-                        v = hdr[k]
-                    except:
-                        print('Did not find key', k, 'in', fn)
-                        sys.exit(-1)
-                    T.set(k.lower(), np.array([hdr[k]]))
-                psfex.append(T)
-                #print(fn)
-                #T.about()
-    
-                hdr = fitsio.read_header(fn)
-                psfhdrvals.append([hdr.get(k,'') for k in [
-                    'LEGPIPEV', 'PLVER']] + [expnum, ccd.ccdname])
+    for ccd,im in zip(Cgood, imobjs):
+        fn = im.psffn
+        print('Reading', fn)
+        T = fits_table(fn)
+        hdr = fitsio.read_header(fn, ext=1)
 
-            if len(psfex):
-                padded = pad_arrays([p.psf_mask[0] for p in psfex])
-                cols = psfex[0].columns()
-                cols.remove('psf_mask')
-                T = merge_tables(psfex, columns=cols)
-                T.psf_mask = np.concatenate([[p] for p in padded])
-                T.legpipev = np.array([h[0] for h in psfhdrvals])
-                T.plver    = np.array([h[1] for h in psfhdrvals])
-                T.expnum   = np.array([h[2] for h in psfhdrvals])
-                T.ccdname  = np.array([h[3] for h in psfhdrvals])
-                fn = psfoutfn
-                trymakedirs(fn, dir=True)
-                T.writeto(fn)
-                print('Wrote', fn)
+        keys = ['LOADED', 'ACCEPTED', 'CHI2', 'POLNAXIS', 
+                'POLNGRP', 'PSF_FWHM', 'PSF_SAMP', 'PSFNAXIS',
+                'PSFAXIS1', 'PSFAXIS2', 'PSFAXIS3',]
+
+        if hdr['POLNAXIS'] == 0:
+            # No polynomials.  Fake it.
+            T.polgrp1 = np.array([0])
+            T.polgrp2 = np.array([0])
+            T.polname1 = np.array(['fake'])
+            T.polname2 = np.array(['fake'])
+            T.polzero1 = np.array([0])
+            T.polzero2 = np.array([0])
+            T.polscal1 = np.array([1])
+            T.polscal2 = np.array([1])
+            T.poldeg1 = np.array([0])
+        else:
+            keys.extend([
+                    'POLGRP1', 'POLNAME1', 'POLZERO1', 'POLSCAL1',
+                    'POLGRP2', 'POLNAME2', 'POLZERO2', 'POLSCAL2',
+                    'POLDEG1'])
+
+        for k in keys:
+            try:
+                v = hdr[k]
+            except:
+                print('Did not find key', k, 'in', fn)
+                sys.exit(-1)
+            T.set(k.lower(), np.array([hdr[k]]))
+        psfex.append(T)
+        #print(fn)
+        #T.about()
+
+        hdr = fitsio.read_header(fn)
+        psfhdrvals.append([hdr.get(k,'') for k in [
+            'LEGPIPEV', 'PLVER']] + [expnum, ccd.ccdname])
+
+    if len(psfex) == 0:
+        return
+    padded = pad_arrays([p.psf_mask[0] for p in psfex])
+    cols = psfex[0].columns()
+    cols.remove('psf_mask')
+    T = merge_tables(psfex, columns=cols)
+    T.psf_mask = np.concatenate([[p] for p in padded])
+    T.legpipev = np.array([h[0] for h in psfhdrvals])
+    T.plver    = np.array([h[1] for h in psfhdrvals])
+    T.expnum   = np.array([h[2] for h in psfhdrvals])
+    T.ccdname  = np.array([h[3] for h in psfhdrvals])
+    fn = psfoutfn
+    trymakedirs(fn, dir=True)
+    T.writeto(fn)
+    print('Wrote', fn)
+
+def merge_splinesky(survey, expnum, C, skyoutfn, opt):
+    splinesky = []
+    skyhdrvals = []
+    imobjs = []
+    Cgood = []
+    for ccd in C:
+        im = survey.get_image_object(ccd)
+        fn = im.splineskyfn
+        if not os.path.exists(fn):
+            print('File not found:', fn)
+            if opt.all_found:
+                return
+            continue
+        imobjs.append(im)
+        Cgood.append(ccd)
+
+    for ccd,im in zip(Cgood, imobjs):
+        fn = im.splineskyfn
+        print('Reading', fn)
+        T = None
+        try:
+            T = fits_table(fn)
+        except KeyboardInterrupt:
+            raise
+        except:
+            print('Failed to read file', fn, ':', sys.exc_info()[1])
+        if T is not None:
+            splinesky.append(T)
+            # print(fn)
+            # T.about()
+            hdr = fitsio.read_header(fn)
+            skyhdrvals.append([hdr[k] for k in [
+                        'SKY', 'LEGPIPEV', 'PLVER', 'SIG1']] +
+                              [expnum, ccd.ccdname])
+
+    if len(splinesky) == 0:
+        return
+    T = fits_table()
+    T.gridw = np.array([t.gridvals[0].shape[1] for t in splinesky])
+    T.gridh = np.array([t.gridvals[0].shape[0] for t in splinesky])
+
+    padded = pad_arrays([t.gridvals[0] for t in splinesky])
+    T.gridvals = np.concatenate([[p] for p in padded])
+    padded = pad_arrays([t.xgrid[0] for t in splinesky])
+    T.xgrid = np.concatenate([[p] for p in padded])
+    padded = pad_arrays([t.ygrid[0] for t in splinesky])
+    T.ygrid = np.concatenate([[p] for p in padded])
+
+    cols = splinesky[0].columns()
+    #print('Columns:', cols)
+    for c in ['gridvals', 'xgrid', 'ygrid']:
+        cols.remove(c)
+
+    T.add_columns_from(merge_tables(splinesky, columns=cols))
+    T.skyclass = np.array([h[0] for h in skyhdrvals])
+    T.legpipev = np.array([h[1] for h in skyhdrvals])
+    T.plver    = np.array([h[2] for h in skyhdrvals])
+    T.sig1     = np.array([h[3] for h in skyhdrvals])
+    T.expnum   = np.array([h[4] for h in skyhdrvals])
+    T.ccdname  = np.array([h[5] for h in skyhdrvals])
+    fn = skyoutfn
+    trymakedirs(fn, dir=True)
+    T.writeto(fn)
+    print('Wrote', fn)
 
 
         
