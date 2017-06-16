@@ -12,6 +12,25 @@ from astrometry.util.miscutils import polygon_area
 from legacypipe.survey import LegacySurveyData
 import tractor
 
+'''
+Note: can parallelize this via:
+
+-create script like mzls.sh:
+
+#! /bin/bash
+export LEGACY_SURVEY_DIR=/global/cscratch1/sd/desiproc/dr4/dr4_fixes/legacypipe-dir/
+python -u legacypipe/annotate-ccds.py --mzls --ccds /global/projecta/projectdirs/cosmo/work/dr4/survey-ccds-mzls.fits.gz --threads 1 --piece $1
+
+- seq 0 805 | qdo load mzls -
+- qdo launch mzls 1 --cores_per_worker=1 --keep_env --batchqueue shared --walltime 4:00:00 --script ./mzls.sh --batchopts "-a 0-31"
+- once finished, run annotate-ccds.py again to merge the files together:
+
+LEGACY_SURVEY_DIR=/global/cscratch1/sd/desiproc/dr4/dr4_fixes/legacypipe-dir/
+python -u legacypipe/annotate-ccds.py --mzls --ccds /global/projecta/projectdirs/cosmo/work/dr4/survey-ccds-mzls.fits.gz --threads 1
+
+
+'''
+
 def main(outfn='ccds-annotated.fits', ccds=None, mzls=False):
     survey = LegacySurveyData(ccds=ccds)
     if ccds is None:
@@ -406,6 +425,10 @@ if __name__ == '__main__':
     parser.add_argument('--force', action='store_true', default=False,
                         help='Ignore ccds-annotated/* files and re-run')
     parser.add_argument('--threads', type=int, help='Run multi-threaded', default=4)
+
+    parser.add_argument('--piece', type=int, help='Run only a single subset of CCDs',
+                        default=None)
+
     opt = parser.parse_args()
 
 
@@ -478,7 +501,7 @@ if __name__ == '__main__':
     from astrometry.util.multiproc import *
     #mp = multiproc(8)
     mp = multiproc(opt.threads)
-    N = 20
+    N = 100
     
     if len(opt.part) == 0 and len(opt.ccds) == 0:
         opt.part.append('decals')
@@ -506,6 +529,12 @@ if __name__ == '__main__':
         # Remove trailing spaces from 'camera' & 'ccdname' columns.
         ccds.camera = np.array([c.strip() for c in ccds.camera])
         ccds.ccdname = np.array([c.strip() for c in ccds.ccdname])
+
+        if opt.piece is not None:
+            c = ccds[opt.piece*N:]
+            c = c[:N]
+            _bounce_main((name, opt.piece, c, opt.force, opt.mzls))
+            sys.exit(0)
 
         while len(ccds):
             c = ccds[:N]
