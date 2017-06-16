@@ -41,6 +41,9 @@ def main():
     parser.add_argument('--expnum', type=str, help='Run specified exposure numbers (can be comma-separated list')
     parser.add_argument('--all-found', action='store_true', default=False, help='Only write output if all required input files are found')
     parser.add_argument('--ccds', help='Set ccds.fits file to load, default is all')
+    parser.add_argument('--continue', dest='con',
+                        help='Continue even if one exposure is bad',
+                        action='store_true', default=False)
 
     opt = parser.parse_args()
 
@@ -72,10 +75,24 @@ def main():
         print(len(C), 'CCDs in expnum', expnum)
 
         if not os.path.exists(skyoutfn):
-            merge_splinesky(survey, expnum, C, skyoutfn, opt)
+            try:
+                merge_splinesky(survey, expnum, C, skyoutfn, opt)
+            except:
+                if not opt.con:
+                    raise
+                import traceback
+                traceback.print_exc()
+                print('Exposure failed:', expnum, '.  Continuing...')
 
         if not os.path.exists(psfoutfn):
-            merge_psfex(survey, expnum, C, psfoutfn, opt)
+            try:
+                merge_psfex(survey, expnum, C, psfoutfn, opt)
+            except:
+                if not opt.con:
+                    raise
+                import traceback
+                traceback.print_exc()
+                print('Exposure failed:', expnum, '.  Continuing...')
 
 
 def merge_psfex(survey, expnum, C, psfoutfn, opt):

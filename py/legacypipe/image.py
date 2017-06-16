@@ -411,7 +411,7 @@ class LegacySurveyImage(object):
             y = h/2.
         patch = psf.getPointSourcePatch(x, y).patch
 
-        print('Before clamping: PSF range', patch.min(), patch.max())
+        #print('Before clamping: PSF range', patch.min(), patch.max())
 
         # Clamp up to zero and normalize before taking the norm
         patch = np.maximum(0, patch)
@@ -435,7 +435,7 @@ class LegacySurveyImage(object):
     def galaxy_norm(self, tim, x=None, y=None):
         # Galaxy-detection norm
 
-        import tractor.galaxy
+        #import tractor.galaxy
         #tractor.galaxy.debug_ps = psgalnorm
 
         from tractor.galaxy import ExpGalaxy
@@ -443,6 +443,8 @@ class LegacySurveyImage(object):
         from tractor.patch import ModelMask
         h,w = tim.shape
         band = tim.band
+
+
         if x is None:
             x = w//2
         if y is None:
@@ -829,7 +831,8 @@ class LegacySurveyImage(object):
         Reads the sky model, returning a Tractor Sky object.
         '''
         sky = None
-        if splinesky and getattr(self, 'merged_splineskyfn', None) is not None:
+        if (splinesky and getattr(self, 'merged_splineskyfn', None) is not None
+            and os.path.exists(self.merged_splineskyfn)):
             try:
                 print('Reading merged spline sky models from', self.merged_splineskyfn)
                 T = fits_table(self.merged_splineskyfn)
@@ -909,6 +912,7 @@ class LegacySurveyImage(object):
         assert(gaussPsf or pixPsf or hybridPsf)
         psffn = None
         if gaussPsf:
+            from tractor import GaussianMixturePSF
             v = psf_sigma**2
             psf = GaussianMixturePSF(1., 0., 0., v, v, 0.)
             print('WARNING: using mock PSF:', psf)
@@ -919,7 +923,8 @@ class LegacySurveyImage(object):
         # spatially varying pixelized PsfEx
         from tractor import PixelizedPsfEx, PsfExModel
         psf = None
-        if getattr(self, 'merged_psffn', None) is not None:
+        if (getattr(self, 'merged_psffn', None) is not None
+            and os.path.exists(self.merged_psffn)):
             try:
                 print('Reading merged PsfEx models from', self.merged_psffn)
                 T = fits_table(self.merged_psffn)

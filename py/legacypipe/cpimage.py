@@ -76,8 +76,12 @@ class CPImage(LegacySurveyImage):
                     fn = fnother
 
         expstr = '%08i' % self.expnum
-        self.calname = '%s/%s/%s-%s-%s' % (expstr[:5], expstr, self.camera,
+        #self.calname = '%s/%s/%s-%s-%s' % (expstr[:5], expstr, self.camera,
+        #                                   expstr, self.ccdname)
+
+        self.calname = '%s/%s/%s-%s-%s' % (expstr[:5], expstr, 'decam',
                                            expstr, self.ccdname)
+
         self.name = '%s-%s' % (expstr, self.ccdname)
 
         calibdir = os.path.join(self.survey.get_calib_dir(), self.camera)

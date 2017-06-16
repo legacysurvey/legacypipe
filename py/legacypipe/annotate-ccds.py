@@ -130,6 +130,7 @@ def main(outfn='ccds-annotated.fits', ccds=None, mzls=False):
             tim = im.get_tractor_image(**kwargs)
 
         except:
+            print('Failed to get_tractor_image')
             import traceback
             traceback.print_exc()
             plvers.append('')
@@ -144,6 +145,11 @@ def main(outfn='ccds-annotated.fits', ccds=None, mzls=False):
         sky = tim.sky
         hdr = tim.primhdr
 
+        print('CCD fwhm:', ccd.fwhm)
+        print('im fwhm:', im.fwhm)
+        print('tim psf_fwhm', tim.psf_fwhm)
+        print('tim psf_sigma:', tim.psf_sigma)
+
         # print('Got PSF', psf)
         # print('Got sky', type(sky))
         # print('Got WCS', wcs)
@@ -153,6 +159,8 @@ def main(outfn='ccds-annotated.fits', ccds=None, mzls=False):
 
         ccds.sig1[iccd] = tim.sig1
         plvers.append(tim.plver)
+
+        print('sig1', tim.sig1)
 
         # parse 'DECaLS_15150_r' to get tile number
         obj = ccd.object.strip()
@@ -204,6 +212,9 @@ def main(outfn='ccds-annotated.fits', ccds=None, mzls=False):
         ccds.galnorm_mean[iccd] = np.mean(galnorms)
         ccds.galnorm_std [iccd] = np.std (galnorms)
 
+        print('psf norm', ccds.psfnorm_mean[iccd])
+        print('gal norm', ccds.galnorm_mean[iccd])
+
         # PSF in center of field
         cx,cy = (W+1)/2., (H+1)/2.
         p = psf.getPointSourcePatch(cx, cy).patch
@@ -244,10 +255,23 @@ def main(outfn='ccds-annotated.fits', ccds=None, mzls=False):
         print('Computing Gaussian approximate PSF quantities...')
         # Galaxy norm using Gaussian approximation of PSF.
         realpsf = tim.psf
+
+        print('FWHM', ccds.fwhm[i])
+        print('-> sigma', ccds.fwhm[i] / 2.35)
+        print('tim.PSF sigma', tim.psf_sigma)
+
         tim.psf = im.read_psf_model(0, 0, gaussPsf=True,
                                     psf_sigma=tim.psf_sigma)
         gaussgalnorm[iccd] = im.galaxy_norm(tim, x=cx, y=cy)
+
+        psfnorm = im.psf_norm(tim)
+        pnorm = 1./(2. * np.sqrt(np.pi) * tim.psf_sigma)
+        print('Gaussian PSF norm:', psfnorm, 'vs analytic', pnorm)
+        print('Gaussian gal norm:', gaussgalnorm[iccd])
+
         tim.psf = realpsf
+
+
         
         #has_skygrid = dict(decam=True).get(ccd.camera, False)
         has_skygrid = hasattr(sky, 'evaluateGrid')
@@ -357,8 +381,9 @@ def main(outfn='ccds-annotated.fits', ccds=None, mzls=False):
     for X in [ccds.psfdepth, ccds.galdepth, ccds.gausspsfdepth, ccds.gaussgaldepth]:
         X[np.logical_not(np.isfinite(X))] = 0.
     
+    print('Writing to', outfn)
     ccds.writeto(outfn)
-
+    print('Wrote', outfn)
 
 def _bounce_main((name, i, ccds, force, mzls)):
     try:
@@ -453,7 +478,7 @@ if __name__ == '__main__':
     from astrometry.util.multiproc import *
     #mp = multiproc(8)
     mp = multiproc(opt.threads)
-    N = 1000
+    N = 20
     
     if len(opt.part) == 0 and len(opt.ccds) == 0:
         opt.part.append('decals')
