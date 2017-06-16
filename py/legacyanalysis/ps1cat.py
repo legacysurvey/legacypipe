@@ -52,8 +52,8 @@ class HealpixedCatalog(object):
         cat = self.get_healpix_catalogs(healpixes)
         # Cut to sources actually within the CCD.
         ok,xx,yy = wcs.radec2pixelxy(cat.ra, cat.dec)
-        cat.x = x
-        cat.y = y
+        cat.x = xx
+        cat.y = yy
         onccd = np.flatnonzero((xx >= 1.-margin) * (xx <= W+margin) *
                                (yy >= 1.-margin) * (yy <= H+margin))
         cat.cut(onccd)
@@ -103,7 +103,7 @@ class ps1cat(HealpixedCatalog):
         magnitudes. Optionally trim the stars to a desired r-band magnitude
         range.
         """
-        cat = self.get_catalog_in_wcs()
+        cat = self.get_catalog_in_wcs(self.ccdwcs)
         print('Found {} good PS1 stars'.format(len(cat)))
         if magrange is not None:
             keep = np.where((cat.median[:,ps1cat.ps1band[band]]>magrange[0])*
