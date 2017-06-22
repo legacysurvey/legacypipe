@@ -366,12 +366,16 @@ def plotMaghist_pred(band,FracExp=[0,0,0,0,0],ndraw = 1e5,nbin=100,rel='DR3',vmi
         catalogue_name = 'DECaLS_DR3'+mjdw
 
     if rel == 'DR4':
-        inputdir= '/global/projecta/projectdirs/cosmo/work/dr4/'
+        #inputdir= '/global/projecta/projectdirs/cosmo/work/dr4/'
+        inputdir='/project/projectdirs/cosmo/data/legacysurvey/dr4'
         if (band == 'g' or band == 'r'):
-            fname=inputdir+'ccds-annotated-dr4-90prime.fits.gz'
-            catalogue_name = '90prime_DR4'+mjdw
+            fname=inputdir+'ccds-annotated-bass.fits.gz'
+            catalogue_name='BASS_DR4'+mjdw
+            #fname=inputdir+'ccds-annotated-dr4-90prime.fits.gz'
+            #catalogue_name = '90prime_DR4'+mjdw
         if band == 'z' :
-            fname = inputdir+'ccds-annotated-dr4-mzls.fits.gz' 
+            #fname = inputdir+'ccds-annotated-dr4-mzls.fits.gz' 
+            fname = inputdir+'ccds-annotated-mzls.fits.gz' 
             catalogue_name = 'MZLS_DR4'+mjdw
 		
     # Bands info 
