@@ -1109,8 +1109,6 @@ Now using the current directory as LEGACY_SURVEY_DIR, but this is likely to fail
         Returns a brick (as one row in a table) by name (string).
         '''
         B = self.get_bricks_readonly()
-        print('brickname:', brickname, type(brickname))
-        print('Bricknames:', B.brickname[0], type(B.brickname[0]))
         I, = np.nonzero(np.array([n == brickname for n in B.brickname]))
         if len(I) == 0:
             return None

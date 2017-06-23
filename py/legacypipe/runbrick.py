@@ -89,7 +89,7 @@ def stage_tims(W=3600, H=3600, pixscale=0.262, brickname=None,
                ra=None, dec=None,
                plots=False, ps=None,
                target_extent=None, program_name='runbrick.py',
-               bands='grz',
+               bands=['g','r','z'],
                do_calibs=True,
                splinesky=True,
                gaussPsf=False, pixPsf=False, hybridPsf=False,
@@ -217,7 +217,7 @@ def stage_tims(W=3600, H=3600, pixscale=0.262, brickname=None,
     # Sort images by band -- this also eliminates images whose
     # *filter* string is not in *bands*.
     print('Unique filters:', np.unique(ccds.filter))
-    ccds.cut(np.hstack([np.flatnonzero(ccds.filter==band) for band in bands]))
+    ccds.cut(np.in1d(ccds.filter, bands))
     print('Cut on filter:', len(ccds), 'CCDs remain.')
 
     print('Cutting out non-photometric CCDs...')
@@ -2684,7 +2684,7 @@ python -u legacypipe/runbrick.py --plots --brick 2440p070 --zoom 1900 2400 450 9
         help='Create grayscale coadds if only one band is available?')
 
     parser.add_argument('--bands', default=None,
-                        help='Limit the bands that are included; default "grz"')
+                        help='Set the list of bands (filters) that are included in processing: comma-separated list, default "g,r,z"')
 
     parser.add_argument(
         '--no-blacklist', dest='blacklist', default=True, action='store_false',
@@ -2769,6 +2769,9 @@ def get_runbrick_kwargs(opt):
         writeStages = opt.write
 
     opt.pixpsf = not opt.gpsf
+
+    if opt.bands is not None:
+        opt.bands = opt.bands.split(',')
 
     kwa.update(
         radec=opt.radec, pixscale=opt.pixscale,
