@@ -50,9 +50,6 @@ from legacypipe.utils import (
     RunbrickError, NothingToDoError, iterwrapper, find_unique_pixels)
 from legacypipe.coadds import make_coadds, write_coadd_images, quick_coadds
 
-# Globals, oh my!
-nocache = True
-
 # RGB image args used in the tile viewer:
 rgbkwargs = dict(mnmx=(-1,100.), arcsinh=1.)
 rgbkwargs_resid = dict(mnmx=(-5,5))
@@ -85,8 +82,7 @@ def get_ulimit():
 
 def runbrick_global_init():
     print('Starting process', os.getpid(), Time()-Time())
-    if nocache:
-        disable_galaxy_cache()
+    disable_galaxy_cache()
 
 def stage_tims(W=3600, H=3600, pixscale=0.262, brickname=None,
                survey=None,
