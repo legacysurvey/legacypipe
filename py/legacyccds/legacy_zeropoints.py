@@ -1671,6 +1671,18 @@ def get_output_fns(img_fn,prefix=''):
     zptstarsfile = zptsfile.replace('.fits','-stars.fits')
     return zptsfile,zptstarsfile
 
+def success(ccds, **measureargs):
+    num_ccds= dict(decam=60,mosaic=4)
+    num_ccds['90prime']=4
+    camera= measureargs.get('camera')
+    if len(ccds) >= num_ccds.get(camera,0):
+        return True
+    elif measureargs.get('debug') and len(ccds) >= 1:
+        # only 1 ccds needs to be done if debuggin
+        return True
+    else:
+        return False
+
 
 def runit(imgfn_proj, **measureargs):
     '''Generate a legacypipe-compatible CCDs file for a given image.
@@ -1697,24 +1709,28 @@ def runit(imgfn_proj, **measureargs):
     ccds, stars, extra_info= measure_image(imgfn_scr, **measureargs)
     t0= ptime('measure_image',t0)
 
-    # Write out.
-    ccds.write(zptfn)
-    # Add header info
-    hdulist = fits_astropy.open(zptfn, mode='update')
-    prihdr = hdulist[0].header
-    for key,val in extra_info.items():
-        prihdr[key] = val
-    hdulist.close() # Save changes
-    print('Wrote {}'.format(zptfn))
-    # zpt --> Legacypipe table
-    create_legacypipe_table(zptfn)
-    # Star table
-    stars.write(starfn)
-    print('Wrote {}'.format(starfn))
-    # star --> Arjun's  matches table
-    create_matches_table(starfn,**extra_info)
-    # Clean up
-    t0= ptime('write-results-to-fits',t0)
+    # Only write if all CCDs are done
+    if success(ccds,**measureargs):
+        # Write out.
+        ccds.write(zptfn)
+        # Add header info
+        hdulist = fits_astropy.open(zptfn, mode='update')
+        prihdr = hdulist[0].header
+        for key,val in extra_info.items():
+            prihdr[key] = val
+        hdulist.close() # Save changes
+        print('Wrote {}'.format(zptfn))
+        # zpt --> Legacypipe table
+        create_legacypipe_table(zptfn)
+        # Star table
+        stars.write(starfn)
+        print('Wrote {}'.format(starfn))
+        # star --> Arjun's  matches table
+        create_matches_table(starfn,**extra_info)
+        # Clean up
+        t0= ptime('write-results-to-fits',t0)
+    else:
+        print('FAILED, only %d CCDs, %s' % (len(ccds),imgfn_proj))
     if os.path.exists(imgfn_scr): 
         # Safegaurd against removing stuff on /project
         assert(not 'project' in imgfn_scr)
