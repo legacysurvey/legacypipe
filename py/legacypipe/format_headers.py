@@ -106,6 +106,27 @@ def fix_units_survey_ccds(mos_fn,bok_fn):
         bash('gzip %s' % (fn.replace('.fits.gz','.fits'),))
     print('finished: fix_units_survey_ccds')
 
+def fix_order_survey_ccds(mos_fn,bok_fn):
+    m=fits_table(mos_fn)
+    b=fits_table(bok_fn)
+    b2=fits_table()
+    # mzls fwhm --> pixels
+    for col in m.get_columns():
+        b2.set(col,b.get(col))
+    # Check
+    assert(len(b2.get_columns()) == len(m.get_columns()))
+    emp= set(b2.get_columns()).difference(set(m.get_columns()))
+    assert(len(emp) == 0)
+    for col in m.get_columns():
+        if m.get(col).dtype != b2.get(col).dtype:
+            print('FAIL: columsn have diff types: ',col,m.get(col).dtype,b.get(col).dtype) 
+    # Save
+    b2.writeto(bok_fn.replace('.fits.gz','.fits'))
+    for fn in [bok_fn]:
+        bash('cp %s %s' % (fn,fn.replace('.fits.gz','_backup.fits.gz')))
+        bash('gzip %s' % (fn.replace('.fits.gz','.fits'),))
+    print('finished: fix_units_survey_ccds')
+
 
 
 
@@ -140,6 +161,17 @@ def modify_survey_ccds(fn, which):
     if which == 'mzls':
         bm[ a.third_pix ]+= 8
     a.set('bitmask', bm)
+    # Can recover the bool arrays with
+#    In [190]: where(bitwise_and(b.bitmask,[0]) > 0)[0].size
+#    In [187]: where(bitwise_and(b.bitmask,[1]) > 0)[0].size
+#    Out[187]: 49020
+#
+#    In [188]: where(bitwise_and(b.bitmask,[2]) > 0)[0].size
+#    Out[188]: 49029
+#
+#    In [189]: where(bitwise_and(b.bitmask,[3]) > 0)[0].size
+#    Out[189]: 49032
+#
     keys= ['bad_expid','ccd_hdu_mismatch','zpts_bad_astrom']
     if which == 'mzls': 
         keys += ['third_pix']
