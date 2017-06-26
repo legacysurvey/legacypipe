@@ -368,6 +368,7 @@ def _stars_table(nstars=1):
     cols = [('image_filename', 'S65'),('image_hdu', '>i2'),
             ('expid', 'S16'), ('filter', 'S1'),('nmatch', '>i2'), 
             ('amplifier', 'i2'), ('x', 'f4'), ('y', 'f4'),('expnum', '>i4'),
+            ('gain', 'f4'),
             ('ra', 'f8'), ('dec', 'f8'), ('apmag', 'f4'),('apflux', 'f4'),('apskyflux', 'f4'),('apskyflux_perpix', 'f4'),
             ('radiff', 'f8'), ('decdiff', 'f8'),('radiff_ps1', 'f8'), ('decdiff_ps1', 'f8'),
             ('gaia_ra', 'f8'), ('gaia_dec', 'f8'), ('ps1_mag', 'f4'), ('ps1_gicolor', 'f4'),
@@ -475,6 +476,54 @@ def create_legacypipe_table(ccds_fn):
     outfn=ccds_fn.replace('-zpt.fits','-legacypipe.fits')
     T.writeto(outfn) #, columns=cols, header=hdr, primheader=primhdr, units=units)
     print('Wrote %s' % outfn)
+
+
+def create_matches_table(stars_fn,**kwargs):
+    '''input _stars_table fn
+    output Arjun's matches table, same column names but units can be different'''
+    # HACK! need func to put in appropriate units e.g. compare to survey-ccds file for decam,mosaic, and bass
+    need_arjuns_keys= ['filename','expnum','extname',
+                       'ccd_x','ccd_y','ccd_ra','ccd_dec',
+                       'ccd_mag','ccd_sky',
+                       'raoff','decoff',
+                       'magoff',
+                       'nmatch',
+                       'gmag','ps1_g','ps1_r','ps1_i','ps1_z']
+    #same_key= ['expnum','nmatch','ps1_g','ps1_r','ps1_i','ps1_z']
+    # Load full zpt table
+    assert('-star.fits' in stars_fn)
+    # HACK: need magoff
+    T = fits_table(stars_fn)
+    extname=[ccdname for _,ccdname in np.char.split(T.expid,'-')]
+    T.set('extname', np.array(extname))
+    # AB mag of stars using fiducial ZP to convert
+    T.set('ccd_mag',-2.5 * np.log10(T.apflux / kwargs.get('exptime')) +  \
+                        kwargs['zp_fid'])
+    # ADU per pixel from sky aperture 
+    area= np.pi*3.5**2/kwargs.get('pixscale')**2
+    T.set('ccd_sky', T.apskyflux / area / T.gain)
+    # Arjuns ccd_sky is ADUs in 7-10 arcsec sky aperture
+    # e.g. sky (total e/pix/sec)= ccd_sky (ADU) * gain / exptime
+    # Rename
+    rename_keys= [('ra','ccd_ra'),('dec','ccd_dec'),('x','ccd_x'),('y','ccd_y'),
+                  ('radiff','raoff'),('decdiff','decoff'),
+                  ('dmagall','magoff'),
+                  ('image_filename','filename'),
+                  ('gaia_g','gmag')]
+    for old,new in rename_keys:
+        T.rename(old,new)
+        #units[new]= units.pop(old)
+    # Delete unneeded keys
+    del_keys= list( set(T.get_columns()).difference(set(need_arjuns_keys)) )
+    for key in del_keys:
+        T.delete_column(key)
+        #if key in units.keys():
+        #    _= units.pop(key)
+    # legacypipe/merge-zeropoints.py
+    outfn=stars_fn.replace('-star.fits','-matches.fits')
+    T.writeto(outfn) #, columns=cols, header=hdr, primheader=primhdr, units=units)
+    print('Wrote %s' % outfn)
+
 
 #class NativeTable(object):
 #    def __init__(self,fn,camera='decam',ccd_or_stars='ccds'):
@@ -1100,6 +1149,7 @@ class Measurer(object):
         stars['expnum'] = self.expnum
         stars['expid'] = self.expid
         stars['filter'] = self.band
+        stars['gain'] = self.gain
         # Matched quantities
         stars['nmatch'] = ccds['nmatch'] 
         stars['x'] = obj['xcentroid'][m1]
@@ -1198,6 +1248,8 @@ class Measurer(object):
 
         zptmed = zp0 + dmagmed
         transp = 10.**(-0.4 * (zp0 - zptmed - kext * (airmass - 1.0)))
+
+        stars['dmagall']= dmagall
 
         t0= ptime('photometry-using-ps1',t0)
         ccds['raoff'] = np.median(stars['radiff'])
@@ -1568,10 +1620,12 @@ def measure_image(img_fn, **measureargs):
         measure = Mosaic3Measurer(img_fn, **measureargs)
     elif camera == '90prime':
         measure = NinetyPrimeMeasurer(img_fn, **measureargs)
-    header_info= dict(zp_fid= measure.zeropoint( measure.band ),
-                      sky_fid= measure.sky( measure.band ),
-                      ext_fid= measure.extinction( measure.band ))
- 
+    extra_info= dict(zp_fid= measure.zeropoint( measure.band ),
+                     sky_fid= measure.sky( measure.band ),
+                     ext_fid= measure.extinction( measure.band ),
+                     exptime= measure.exptime,
+                     pixscale= measure.pixscale)
+    
     ccds = []
     stars = []
     for ext in extlist:
@@ -1587,7 +1641,7 @@ def measure_image(img_fn, **measureargs):
 
     t0= ptime('measure-image-%s' % img_fn,t0)
         
-    return ccds, stars,header_info
+    return ccds, stars,extra_info
 
 
 class outputFns(object):
@@ -1640,7 +1694,7 @@ def runit(imgfn_proj, **measureargs):
         dobash("cp %s %s" % (dqfn_proj, dqfn_scr))
     t0= ptime('copy-to-scratch',t0)
 
-    ccds, stars, header_info= measure_image(imgfn_scr, **measureargs)
+    ccds, stars, extra_info= measure_image(imgfn_scr, **measureargs)
     t0= ptime('measure_image',t0)
 
     # Write out.
@@ -1648,17 +1702,17 @@ def runit(imgfn_proj, **measureargs):
     # Add header info
     hdulist = fits_astropy.open(zptfn, mode='update')
     prihdr = hdulist[0].header
-    for key,val in header_info.items():
+    for key,val in extra_info.items():
         prihdr[key] = val
     hdulist.close() # Save changes
     print('Wrote {}'.format(zptfn))
-    # Also write out the table of stars, although eventually we'll want to only
-    # write this out if we're calibrating the photometry (or if the user
-    # requests).
+    # zpt --> Legacypipe table
+    create_legacypipe_table(zptfn)
+    # Star table
     stars.write(starfn)
     print('Wrote {}'.format(starfn))
-    # Write legacypipe-specific table
-    create_legacypipe_table(zptfn)
+    # star --> Arjun's  matches table
+    create_matches_table(starfn,**extra_info)
     # Clean up
     t0= ptime('write-results-to-fits',t0)
     if os.path.exists(imgfn_scr): 
