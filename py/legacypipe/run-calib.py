@@ -31,6 +31,9 @@ def main():
 
     parser.add_argument('--splinesky', action='store_true', help='Spline sky, not constant')
     parser.add_argument('--threads', type=int, help='Run multi-threaded', default=None)
+    parser.add_argument('--continue', dest='cont', default=False, action='store_true',
+                        help='Continue even if one file fails?')
+
     parser.add_argument('args',nargs=argparse.REMAINDER)
     opt = parser.parse_args()
 
@@ -87,6 +90,9 @@ def main():
             kwargs.update(se=True)
         if opt.splinesky:
             kwargs.update(splinesky=True)
+
+        if opt.cont:
+            kwargs.update(noraise=True)
             
         if opt.threads:
             args.append((im, kwargs))

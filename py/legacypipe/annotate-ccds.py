@@ -12,6 +12,25 @@ from astrometry.util.miscutils import polygon_area
 from legacypipe.survey import LegacySurveyData
 import tractor
 
+'''
+Note: can parallelize this via:
+
+-create script like mzls.sh:
+
+#! /bin/bash
+export LEGACY_SURVEY_DIR=/global/cscratch1/sd/desiproc/dr4/dr4_fixes/legacypipe-dir/
+python -u legacypipe/annotate-ccds.py --mzls --ccds /global/projecta/projectdirs/cosmo/work/dr4/survey-ccds-mzls.fits.gz --threads 1 --piece $1
+
+- seq 0 805 | qdo load mzls -
+- qdo launch mzls 1 --cores_per_worker=1 --keep_env --batchqueue shared --walltime 4:00:00 --script ./mzls.sh --batchopts "-a 0-31"
+- once finished, run annotate-ccds.py again to merge the files together:
+
+LEGACY_SURVEY_DIR=/global/cscratch1/sd/desiproc/dr4/dr4_fixes/legacypipe-dir/
+python -u legacypipe/annotate-ccds.py --mzls --ccds /global/projecta/projectdirs/cosmo/work/dr4/survey-ccds-mzls.fits.gz --threads 1
+
+
+'''
+
 def main(outfn='ccds-annotated.fits', ccds=None, mzls=False):
     survey = LegacySurveyData(ccds=ccds)
     if ccds is None:
@@ -72,6 +91,9 @@ def main(outfn='ccds-annotated.fits', ccds=None, mzls=False):
     ccds.pixscale_max  = np.zeros(len(ccds), np.float32)
     ccds.pixscale_min  = np.zeros(len(ccds), np.float32)
 
+    # DR4
+    ccds.psf_sampling = np.zeros(len(ccds), np.float32)
+
     ccds.psfnorm_mean = np.zeros(len(ccds), np.float32)
     ccds.psfnorm_std  = np.zeros(len(ccds), np.float32)
     ccds.galnorm_mean = np.zeros(len(ccds), np.float32)
@@ -127,6 +149,7 @@ def main(outfn='ccds-annotated.fits', ccds=None, mzls=False):
             tim = im.get_tractor_image(**kwargs)
 
         except:
+            print('Failed to get_tractor_image')
             import traceback
             traceback.print_exc()
             plvers.append('')
@@ -141,6 +164,11 @@ def main(outfn='ccds-annotated.fits', ccds=None, mzls=False):
         sky = tim.sky
         hdr = tim.primhdr
 
+        print('CCD fwhm:', ccd.fwhm)
+        print('im fwhm:', im.fwhm)
+        print('tim psf_fwhm', tim.psf_fwhm)
+        print('tim psf_sigma:', tim.psf_sigma)
+
         # print('Got PSF', psf)
         # print('Got sky', type(sky))
         # print('Got WCS', wcs)
@@ -150,6 +178,8 @@ def main(outfn='ccds-annotated.fits', ccds=None, mzls=False):
 
         ccds.sig1[iccd] = tim.sig1
         plvers.append(tim.plver)
+
+        print('sig1', tim.sig1)
 
         # parse 'DECaLS_15150_r' to get tile number
         obj = ccd.object.strip()
@@ -183,14 +213,26 @@ def main(outfn='ccds-annotated.fits', ccds=None, mzls=False):
         psfnorms = []
         galnorms = []
         for x,y in zip(xx.ravel(), yy.ravel()):
+
+            # HACK -- DR4
+            tim.psf = psf.constantPsfAt(x, y)
+
             p = im.psf_norm(tim, x=x, y=y)
             g = im.galaxy_norm(tim, x=x, y=y)
             psfnorms.append(p)
             galnorms.append(g)
+
+        tim.psf = psf
+
+        ccds.psf_sampling[iccd] = tim.psf.psfex.sampling
+
         ccds.psfnorm_mean[iccd] = np.mean(psfnorms)
         ccds.psfnorm_std [iccd] = np.std (psfnorms)
         ccds.galnorm_mean[iccd] = np.mean(galnorms)
         ccds.galnorm_std [iccd] = np.std (galnorms)
+
+        print('psf norm', ccds.psfnorm_mean[iccd])
+        print('gal norm', ccds.galnorm_mean[iccd])
 
         # PSF in center of field
         cx,cy = (W+1)/2., (H+1)/2.
@@ -232,10 +274,23 @@ def main(outfn='ccds-annotated.fits', ccds=None, mzls=False):
         print('Computing Gaussian approximate PSF quantities...')
         # Galaxy norm using Gaussian approximation of PSF.
         realpsf = tim.psf
+
+        print('FWHM', ccds.fwhm[i])
+        print('-> sigma', ccds.fwhm[i] / 2.35)
+        print('tim.PSF sigma', tim.psf_sigma)
+
         tim.psf = im.read_psf_model(0, 0, gaussPsf=True,
                                     psf_sigma=tim.psf_sigma)
         gaussgalnorm[iccd] = im.galaxy_norm(tim, x=cx, y=cy)
+
+        psfnorm = im.psf_norm(tim)
+        pnorm = 1./(2. * np.sqrt(np.pi) * tim.psf_sigma)
+        print('Gaussian PSF norm:', psfnorm, 'vs analytic', pnorm)
+        print('Gaussian gal norm:', gaussgalnorm[iccd])
+
         tim.psf = realpsf
+
+
         
         #has_skygrid = dict(decam=True).get(ccd.camera, False)
         has_skygrid = hasattr(sky, 'evaluateGrid')
@@ -345,8 +400,9 @@ def main(outfn='ccds-annotated.fits', ccds=None, mzls=False):
     for X in [ccds.psfdepth, ccds.galdepth, ccds.gausspsfdepth, ccds.gaussgaldepth]:
         X[np.logical_not(np.isfinite(X))] = 0.
     
+    print('Writing to', outfn)
     ccds.writeto(outfn)
-
+    print('Wrote', outfn)
 
 def _bounce_main((name, i, ccds, force, mzls)):
     try:
@@ -364,10 +420,15 @@ if __name__ == '__main__':
     import argparse
     parser = argparse.ArgumentParser(description='Produce annotated CCDs file by reading CCDs file + calibration products')
     parser.add_argument('--part', action='append', help='CCDs file to read, survey-ccds-X.fits.gz, default: ["decals","nondecals","extra"].  Can be repeated.', default=[])
+    parser.add_argument('--ccds', action='append', help='CCDs file to read; can be repeated', default=[])
     parser.add_argument('--mzls', action='store_true', default=False, help='MzLS (default: DECaLS')
     parser.add_argument('--force', action='store_true', default=False,
                         help='Ignore ccds-annotated/* files and re-run')
     parser.add_argument('--threads', type=int, help='Run multi-threaded', default=4)
+
+    parser.add_argument('--piece', type=int, help='Run only a single subset of CCDs',
+                        default=None)
+
     opt = parser.parse_args()
 
 
@@ -440,20 +501,41 @@ if __name__ == '__main__':
     from astrometry.util.multiproc import *
     #mp = multiproc(8)
     mp = multiproc(opt.threads)
-    N = 1000
+    N = 100
     
-    if len(opt.part) == 0:
+    if len(opt.part) == 0 and len(opt.ccds) == 0:
         opt.part.append('decals')
         opt.part.append('nondecals')
         opt.part.append('extra')
 
-    for name in opt.part:
+    ccdfns = opt.ccds
+    for p in opt.part:
+        ccdfns.append(os.path.join(survey.survey_dir, 'survey-ccds-%s.fits.gz' % p))
+
+    for fn in ccdfns:
         print()
-        print('Reading', name)
+        print('Reading', fn)
         print()
+
+        name = os.path.basename(fn)
+        name = name.replace('survey-ccds-', '')
+        name = name.replace('.fits', '')
+        name = name.replace('.gz', '')
+        print('Name', name)
+
         args = []
         i = 0
-        ccds = fits_table(os.path.join(survey.survey_dir, 'survey-ccds-%s.fits.gz' % name))
+        ccds = fits_table(fn)
+        # Remove trailing spaces from 'camera' & 'ccdname' columns.
+        ccds.camera = np.array([c.strip() for c in ccds.camera])
+        ccds.ccdname = np.array([c.strip() for c in ccds.ccdname])
+
+        if opt.piece is not None:
+            c = ccds[opt.piece*N:]
+            c = c[:N]
+            _bounce_main((name, opt.piece, c, opt.force, opt.mzls))
+            sys.exit(0)
+
         while len(ccds):
             c = ccds[:N]
             ccds = ccds[N:]

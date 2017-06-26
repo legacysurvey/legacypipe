@@ -28,7 +28,7 @@ class MosaicImage(CPImage, CalibMixin):
     def __init__(self, survey, t):
         super(MosaicImage, self).__init__(survey, t)
         # convert FWHM into pixel units
-        self.fwhm /= self.pixscale
+        #self.fwhm /= self.pixscale
 
     @classmethod
     def get_bad_expids(self):

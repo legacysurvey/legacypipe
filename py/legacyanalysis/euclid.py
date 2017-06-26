@@ -9,6 +9,17 @@ import os
 #     import matplotlib
 #     matplotlib.use('Agg')
 
+'''
+Forced phot of Megacam images:
+
+python legacyanalysis/euclid.py --queue /global/cscratch1/sd/dstn/euclid/images/megacam/lists/i.SNR10-MIQ.lst  > q1
+
+edit q1 ->
+python legacyanalysis/euclid.py --survey-dir euclid-rex --forced 4276 --out euclid-rex/forced/megacam-962810-ccd00.fits
+
+'''
+
+
 import numpy as np
 import pylab as plt
 from glob import glob
@@ -1903,6 +1914,9 @@ def main():
     parser.add_argument('--grid', action='store_true',
                         help='Forced photometry on a grid of subimages?')
 
+    parser.add_argument('--derivs', action='store_true',
+                        help='Astrometric Forced photometry')
+
     parser.add_argument('--skip', action='store_true',
                         help='Skip forced-photometry if output file exists?')
 
@@ -1912,9 +1926,64 @@ def main():
     parser.add_argument('--wise', action='store_true',
                         help='Run unWISE forced phot')
 
+    parser.add_argument('--plot', action='store_true')
+
     opt = parser.parse_args()
 
     Time.add_measurement(MemMeas)
+
+    if opt.plot:
+        from astrometry.util.util import Tan
+        plt.clf()
+        for i in range(25,104+1):
+            fns = glob('euclid-rex/coadd/acs/acsvis-%03i/*-image-I.fits' % i)
+            print(i, '->', fns)
+            if len(fns) == 0:
+                continue
+            fn = fns[0]
+            wcs = Tan(fn, 0)
+            h,w = wcs.shape
+            xx,yy = [1,1,w,w,1], [1,h,h,1,1]
+            rr,dd = wcs.pixelxy2radec(xx, yy)
+            plt.plot(rr, dd)
+            plt.plot(rr[0], dd[0], 'o')
+            plt.plot(rr[1], dd[1], 'x')
+            plt.plot(rr[2], dd[2], 's')
+            plt.text(np.mean(rr), np.mean(dd), '%03i' % i)
+        plt.savefig('acs.png')
+
+        plt.clf()
+        for i in range(25,104+1):
+            fns = glob('euclid-rex/coadd/acs/acsvis-%03i/*-image-I.fits' % i)
+            if len(fns) == 0:
+                continue
+            fn = fns[0]
+            wcs = Tan(fn, 0)
+            h,w = wcs.shape
+            xx,yy = [1,1,w,w,1], [1,h,h,1,1]
+            rr,dd = wcs.pixelxy2radec(xx, yy)
+            plt.plot(rr, dd, 'b-', alpha=0.5)
+
+            if i == 87:
+                xx,yy = [200,200,1200,1200,200], [4750,5750,5750,4750,4750]
+                rr,dd = wcs.pixelxy2radec(xx, yy)
+                plt.plot(rr, dd, 'r-', alpha=0.5)
+
+        fn = 'euclid-rex/images/megacam/962810p.fits'
+        F = fitsio.FITS(fn)
+        for i in range(1, len(F)):
+            hdr = F[i].read_header()
+            wcs = wcs_pv2sip_hdr(hdr)
+            h,w = wcs.shape
+            xx,yy = [1,1,w,w,1], [1,h,h,1,1]
+            rr,dd = wcs.pixelxy2radec(xx, yy)
+            plt.plot(rr, dd, 'b-', alpha=0.5)
+            plt.text(np.mean(rr), np.mean(dd), '%i' % i)
+        plt.savefig('megacam.png')
+            
+
+        return 0
+        
 
     if opt.zeropoints:
         make_zeropoints()
@@ -1982,6 +2051,12 @@ def main():
         print('RA', T.ra.min(), T.ra.max())
         print('Dec', T.dec.min(), T.dec.max())
 
+        # London talk...
+        ra0, ra1, dec0, dec1 = (150.5341329206139, 150.56191295395681, 2.5853063993539656, 2.6130578930632189)
+        margin = 0.001
+        T.cut((T.ra > ra0-margin) * (T.ra < ra1+margin) * (T.dec > dec0-margin) * (T.dec < dec1+margin))
+        print('Cut to', len(T))
+
         # mag = -2.5 * (np.log10(T.decam_flux) - 9)
         # mag = mag[np.isfinite(mag)]
         # mag = mag[(mag > 10) * (mag < 30)]
@@ -2013,7 +2088,17 @@ def main():
         from wise.unwise import unwise_tile_wcs
         from wise.forcedphot import unwise_forcedphot, get_unwise_tractor_image
 
-        unwise_dir = '/project/projectdirs/cosmo/data/unwise/neo1/unwise-coadds/fulldepth/'
+        #unwise_dir = '/project/projectdirs/cosmo/data/unwise/neo1/unwise-coadds/fulldepth/'
+        unwise_dir = '/global/projecta/projectdirs/cosmo/work/wise/outputs/merge/neo2/fulldepth/'
+
+        wcat = read_fits_catalog(T, allbands=['w'], bands=['w'])
+        roiradec = [ra0,ra1,dec0,dec1]
+        W = unwise_forcedphot(wcat, A, roiradecbox=roiradec, bands=[1,2],
+            unwise_dir=unwise_dir, use_ceres=True, save_fits=True)
+        print('WISE forced phot:', W)
+        W.writeto('wise.fits')
+        return
+
 
         # tim used to limit sizes of huge models
         tim = get_unwise_tractor_image(unwise_dir, A.coadd_id[0], 1, bandname='w')
@@ -2040,7 +2125,7 @@ def main():
                     if len(I) == 0:
                         continue
 
-                    outfn = 'euclid-out/grid/forced-unwise-%s-x%i-y%i.fits' % (tile.coadd_id, ix, iy)
+                    outfn = 'euclid-rex/grid/forced-unwise-%s-x%i-y%i.fits' % (tile.coadd_id, ix, iy)
                     print('Output filename', outfn)
                     if os.path.exists(outfn):
                         WW = fits_table(outfn)
@@ -2102,7 +2187,7 @@ def main():
                     Wall.append(WW)
 
         Wall = merge_tables(Wall)
-        Wall.writeto('euclid-out/forced-unwise.fits')
+        Wall.writeto('euclid-rex/forced-unwise.fits')
 
         return 0
 
@@ -2315,7 +2400,7 @@ def forced_photometry(opt, survey):
         # ps.savefig()
         
     T.cut(keep_sources)
-    print('Cut to', len(T), 'sources within at least one')
+    print('Cut to', len(T), 'sources within at least one CCD')
 
     bands = np.unique([tim.band for tim in tims])
     print('Bands:', bands)
@@ -2337,18 +2422,40 @@ def forced_photometry(opt, survey):
             if h > MAXHALF:
                 print('halfsize', h,'for',src,'-> setting to',MAXHALF)
                 src.halfsize = MAXHALF
+
+        #print('Source:', src)
+        #print('Params:', src.getParamNames())
+        src.freezeAllBut('brightness')
+        #src.getBrightness().freezeAllBut(tim.band)
+
+    if opt.derivs:
+        from legacypipe.forced_photom_decam import SourceDerivatives
+        assert(len(bands) == 1)
+        band = bands[0]
+        realsrcs = []
+        derivsrcs = []
+        for src in cat:
+            realsrcs.append(src)
+            bright_dra  = src.getBrightness().copy()
+            bright_ddec = src.getBrightness().copy()
+            bright_dra .setParams(np.zeros(bright_dra .numberOfParams()))
+            bright_ddec.setParams(np.zeros(bright_ddec.numberOfParams()))
+            bright_dra .freezeAllBut(tim.band)
+            bright_ddec.freezeAllBut(tim.band)
+            dsrc = SourceDerivatives(src, [band], ['pos'],
+                                     [bright_dra, bright_ddec])
+            derivsrcs.append(dsrc)
+            if hasattr(src, 'halfsize'):
+                dsrc.halfsize = src.halfsize
+        # For convenience, put all the real sources at the front of
+        # the list, so we can pull the IVs off the front of the list.
+        cat = realsrcs + derivsrcs
         
     tr = Tractor(tims, cat, optimizer=opti)
     tr.freezeParam('images')
 
-    for src in cat:
-        src.freezeAllBut('brightness')
-        #src.getBrightness().freezeAllBut(tim.band)
     disable_galaxy_cache()
-    # Reset fluxes
-    nparams = tr.numberOfParams()
-    tr.setParams(np.zeros(nparams, np.float32))
-        
+
     F = fits_table()
     F.brickid   = T.brickid
     F.brickname = T.brickname
@@ -2369,9 +2476,25 @@ def forced_photometry(opt, survey):
 
     # FIXME -- should we run one band at a time?
 
+    # Reset fluxes
+    nparams = tr.numberOfParams()
+    tr.setParams(np.zeros(nparams, np.float32))
+
+    if opt.derivs:
+        # Set the source fluxes to 1, not zero, so that the derivatives exist.
+        pp = np.zeros(nparams, np.float32)
+        pp[:nparams/3] = 1
+        tr.setParams(pp)
+
+    # print('Fitting params:')
+    # tr.printThawedParams()
+
     R = tr.optimize_forced_photometry(variance=True, fitstats=False, #fitstats=True,
                                       shared_params=False, priors=False,
                                       **forced_kwargs)
+
+    # print('Fitted params:')
+    # tr.printThawedParams()
 
     t2 = Time()
     print('Forced photometry:', t2-t1)
@@ -2435,10 +2558,21 @@ def forced_photometry(opt, survey):
         
     units = {'exptime':'sec' }# 'flux':'nanomaggy', 'flux_ivar':'1/nanomaggy^2'}
     for band in bands:
+
+        if opt.derivs:
+            cat = realsrcs
+        N = len(cat)
+
         F.set('flux_%s' % band, np.array([src.getBrightness().getFlux(band)
                                           for src in cat]).astype(np.float32))
         units.update({'flux_%s' % band:' nanomaggy',
                       'flux_ivar_%s' % band:'1/nanomaggy^2'})
+
+        if opt.derivs:
+            F.flux_dra  = np.array([src.getParams()[0] for src in derivsrcs]).astype(np.float32)
+            F.flux_ddec = np.array([src.getParams()[1] for src in derivsrcs]).astype(np.float32)
+            F.flux_dra_ivar  = R.IV[N  ::2].astype(np.float32)
+            F.flux_ddec_ivar = R.IV[N+1::2].astype(np.float32)
 
     # HACK -- use the parameter-setting machinery to set the source
     # brightnesses to the *inverse-variance* estimates, then read them

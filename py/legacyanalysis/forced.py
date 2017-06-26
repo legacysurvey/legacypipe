@@ -1,4 +1,7 @@
 from __future__ import print_function
+import matplotlib
+matplotlib.use('Agg')
+
 import os
 from astrometry.util.fits import *
 from astrometry.util.file import *
@@ -6,6 +9,7 @@ from astrometry.util.util import Tan
 import numpy as np
 import pylab as plt
 from legacypipe.survey import LegacySurveyData
+from collections import Counter
 
 def make_pickle_file(pfn, derivs=False, agn=False):
     survey = LegacySurveyData()
@@ -105,8 +109,13 @@ def make_pickle_file(pfn, derivs=False, agn=False):
     pickle_to_file(ll, pfn)
 
 
-def plot_light_curves(pfn):
+def plot_light_curves(pfn, ucal=False):
     lightcurves = unpickle_from_file(pfn)
+
+    if ucal:
+        tag = 'ucal-'
+    else:
+        tag = ''
 
     survey = LegacySurveyData()
     brickname = '0364m042'
@@ -127,7 +136,7 @@ def plot_light_curves(pfn):
 
     S = fits_table('specObj-dr12-trim-2.fits')
 
-    from astrometry.libkd.spherematch import *
+    from astrometry.libkd.spherematch import match_radec
     I,J,d = match_radec(S.ra, S.dec, cat.ra, cat.dec, 2./3600.)
     print('Matched', len(I), 'to spectra')
 
@@ -160,7 +169,13 @@ def plot_light_curves(pfn):
 
     plt.figure(figsize=(8,6), dpi=100)
     n = 0
+
+    fluxtags = [('flux','flux_ivar', '', 'a')]
+    if ucal:
+        fluxtags.append(('uflux', 'uflux_ivar', ': ucal', 'b'))
+
     for oid,ii in zip(cat.objid[J], I):
+        print('Objid', oid)
         spec = S[ii]
         k = (brickname, oid)
         v = lightcurves[k]
@@ -171,62 +186,81 @@ def plot_light_curves(pfn):
         plt.clf()
         print('obj', k, 'has', len(v), 'measurements')
         T = v
-        # T = fits_table()
-        # T.mjd    = np.array([vv[0] for vv in v])
-        # T.filter = np.array([vv[1] for vv in v])
-        # T.flux   = np.array([vv[2] for vv in v])
-        # T.fluxiv = np.array([vv[3] for vv in v])
-        #print('filters:', np.unique(T.filter))
-        filts = np.unique(T.filter)
-        for i,f in enumerate(filts):
-            plt.subplot(len(filts),1,i+1)
 
-            I = np.flatnonzero((T.filter == f) * (T.fluxiv > 0))
-            print('  ', len(I), 'in', f, 'band')
-            I = I[np.argsort(T.mjd[I])]
-            mediv = np.median(T.fluxiv[I])
-            # cut really noisy ones
-            I = I[T.fluxiv[I] > 0.25 * mediv]
+        for fluxtag,fluxivtag,fluxname,plottag in fluxtags:
+            plt.clf()
+    
+            filts = np.unique(T.filter)
+            for i,f in enumerate(filts):
+                from tractor.brightness import NanoMaggies
+                
+                plt.subplot(len(filts),1,i+1)
 
-            from tractor.brightness import NanoMaggies
-            
-            #plt.plot(T.mjd[I], T.flux[I], '.-', color=dict(g='g',r='r',z='m')[f])
-            # plt.errorbar(T.mjd[I], T.flux[I], yerr=1/np.sqrt(T.fluxiv[I]),
-            #              fmt='.-', color=dict(g='g',r='r',z='m')[f])
-            #plt.errorbar(T.mjd[I], T.flux[I], yerr=1/np.sqrt(T.fluxiv[I]),
-            #             fmt='.', color=dict(g='g',r='r',z='m')[f])
+                fluxes = np.hstack([T.get(ft[0])[T.filter == f] for ft in fluxtags])
+                fluxes = fluxes[np.isfinite(fluxes
+)]
+                mn,mx = np.percentile(fluxes, [5,95])
+                print('Flux percentiles for filter', f, ':', mn,mx)
+                # note swap
+                mn,mx = NanoMaggies.nanomaggiesToMag(mx),NanoMaggies.nanomaggiesToMag(mn)
+                print('-> mags', mn,mx)
+    
+                cut = (T.filter == f) * (T.flux_ivar > 0)
+                if ucal:
+                    cut *= np.isfinite(T.uflux)
+                I = np.flatnonzero(cut)
+                                  
+                print('  ', len(I), 'in', f, 'band')
+                I = I[np.argsort(T.mjd[I])]
+                mediv = np.median(T.flux_ivar[I])
+                # cut really noisy ones
+                I = I[T.flux_ivar[I] > 0.25 * mediv]
+    
+                #plt.plot(T.mjd[I], T.flux[I], '.-', color=dict(g='g',r='r',z='m')[f])
+                # plt.errorbar(T.mjd[I], T.flux[I], yerr=1/np.sqrt(T.fluxiv[I]),
+                #              fmt='.-', color=dict(g='g',r='r',z='m')[f])
+                #plt.errorbar(T.mjd[I], T.flux[I], yerr=1/np.sqrt(T.fluxiv[I]),
+                #             fmt='.', color=dict(g='g',r='r',z='m')[f])
+    
+                # if ucal:
+                #     mag,dmag = NanoMaggies.fluxErrorsToMagErrors(T.flux[I], T.flux_ivar[I])
+                # else:
+                #     mag,dmag = NanoMaggies.fluxErrorsToMagErrors(T.uflux[I], T.uflux_ivar[I])
+                mag,dmag = NanoMaggies.fluxErrorsToMagErrors(T.get(fluxtag)[I],
+                                                             T.get(fluxivtag)[I])
+    
+                plt.errorbar(T.mjd[I], mag, yerr=dmag,
+                             fmt='.', color=dict(g='g',r='r',z='m')[f])
+                #yl,yh = plt.ylim()
+                #plt.ylim(yh,yl)
+                plt.ylim(mx, mn)
 
-            mag,dmag = NanoMaggies.fluxErrorsToMagErrors(T.flux[I], T.fluxiv[I])
-            plt.errorbar(T.mjd[I], mag, yerr=dmag,
-                         fmt='.', color=dict(g='g',r='r',z='m')[f])
-            yl,yh = plt.ylim()
-            plt.ylim(yh,yl)
-            plt.ylabel(f)
-
-            if i+1 < len(filts):
-                plt.xticks([])
-            #plt.yscale('symlog')
-
-
-        outfn = 'cutout_%.4f_%.4f.jpg' % (spec.ra, spec.dec)
-        if not os.path.exists(outfn):
-            url = 'http://legacysurvey.org/viewer/jpeg-cutout/?ra=%.4f&dec=%.4f&zoom=14&layer=sdssco&size=128' % (spec.ra, spec.dec)
-            cmd = 'wget -O %s "%s"' % (outfn, url)
-            print(cmd)
-            os.system(cmd)
-        pix = plt.imread(outfn)
-        h,w,d = pix.shape
-        fig = plt.gcf()
-
-        #print('fig bbox:', fig.bbox)
-        #print('xmax, ymax', fig.bbox.xmax, fig.bbox.ymax)
-        #plt.figimage(pix, 0, fig.bbox.ymax - h, zorder=10)
-        #plt.figimage(pix, 0, fig.bbox.ymax, zorder=10)
-        #plt.figimage(pix, fig.bbox.xmax - w, fig.bbox.ymax, zorder=10)
-        plt.figimage(pix, fig.bbox.xmax - (w+2), fig.bbox.ymax - (h+2), zorder=10)
-
-        plt.suptitle('SDSS spectro object: %s at (%.4f, %.4f)' % (spec.label.strip(), spec.ra, spec.dec))
-        plt.savefig('forced-%i-a.png' % n)
+                plt.ylabel(f)
+    
+                if i+1 < len(filts):
+                    plt.xticks([])
+                #plt.yscale('symlog')
+    
+    
+            outfn = 'cutout_%.4f_%.4f.jpg' % (spec.ra, spec.dec)
+            if not os.path.exists(outfn):
+                url = 'http://legacysurvey.org/viewer/jpeg-cutout/?ra=%.4f&dec=%.4f&zoom=14&layer=sdssco&size=128' % (spec.ra, spec.dec)
+                cmd = 'wget -O %s "%s"' % (outfn, url)
+                print(cmd)
+                os.system(cmd)
+            pix = plt.imread(outfn)
+            h,w,d = pix.shape
+            fig = plt.gcf()
+    
+            #print('fig bbox:', fig.bbox)
+            #print('xmax, ymax', fig.bbox.xmax, fig.bbox.ymax)
+            #plt.figimage(pix, 0, fig.bbox.ymax - h, zorder=10)
+            #plt.figimage(pix, 0, fig.bbox.ymax, zorder=10)
+            #plt.figimage(pix, fig.bbox.xmax - w, fig.bbox.ymax, zorder=10)
+            plt.figimage(pix, fig.bbox.xmax - (w+2), fig.bbox.ymax - (h+2), zorder=10)
+    
+            plt.suptitle('SDSS spectro object: %s at (%.4f, %.4f)%s' % (spec.label.strip(), spec.ra, spec.dec, fluxname))
+            plt.savefig('forced-%s%i-%s.png' % (tag, n, plottag))
 
         ok,x,y = movie_wcs.radec2pixelxy(spec.ra, spec.dec)
         x = int(np.round(x-1))
@@ -244,13 +278,109 @@ def plot_light_curves(pfn):
             plt.xticks([]); plt.yticks([])
             k += 1
         plt.suptitle('SDSS spectro object: %s at (%.4f, %.4f): DES images' % (spec.label.strip(), spec.ra, spec.dec))
-        plt.savefig('forced-%i-b.png' % n)
+        plt.savefig('forced-%s%i-c.png' % (tag, n))
 
         n += 1
 
+def ubercal(pfn):
+    lightcurves = unpickle_from_file(pfn)
+    print(len(lightcurves), 'light curves')
+    k = lightcurves.keys()[0]
+    print('key:', k)
+    print('value:', lightcurves[k])
+    lightcurves[k].about()
+    keys = lightcurves.keys()
+
+    # medfluxes = {}
+    # nfluxes = []
+    # ccds = set()
+    # for k in keys:
+    #     v = lightcurves[k]
+    #     medfluxes[k] = np.median(v.flux)
+    #     nfluxes.append(len(v))
+    #     ccds = ccds.union(set(zip(v.camera, v.expnum, v.ccdname)))
+    #print('N fluxes: deciles', np.percentile(nfluxes, np.arange(0, 101, 10)))
+    #print('N ccds:', len(ccds))
+
+    #dfluxes = dict([(ccd,[]) for ccd in ccds])
+    dfluxes = {}
+    for j,k in enumerate(keys):
+        if j % 1000 == 1:
+            print('source', j-1)
+        v = lightcurves[k]
+        #dflux = v.flux / medfluxes[k]
+        #dflux = v.flux / np.median(v.flux)
+        meds = dict([(f, np.median(v.flux[v.filter == f])) for f in np.unique(v.filter)])
+        print('medians for', k, ':', meds)
+        for i,ccd in enumerate(zip(v.camera, v.expnum, v.ccdname)):
+            if not ccd in dfluxes:
+                dfluxes[ccd] = []
+            dfluxes[ccd].append(v.flux[i] / meds[v.filter[i]])
+
+    # for i,k in enumerate(dfluxes.keys()[:10]):
+    #     plt.clf()
+    #     df = dfluxes[k]
+    #     df = np.sort(df)
+    #     plt.hist(df, 20, range=np.percentile(df, [2,98]))
+    #     plt.xlabel('flux ratio vs median')
+    #     plt.title('CCD ' + str(k))
+    #     plt.savefig('dflux-%i.png' % i)
+
+    # ubercal flux factor corrections;
+    # factor by which the flux in CCD k exceeds the median flux
+    dflux = dict([(k, np.median(d)) for k,d in dfluxes.items()])
+
+    print('dflux:', dflux)
+
+    df = np.array(dflux.values())
+    df = df[np.isfinite(df)]
+
+    plt.clf()
+    plt.hist(df, 20)
+    plt.xlabel('Flux factors per CCD')
+    plt.savefig('forced-fluxfactor.png')
+
+    plt.clf()
+    df = dfluxes.values()
+    plt.plot([len(d) for d in df], [np.median(d) for d in df], 'b.')
+    plt.xlabel('Number of sources in CCD')
+    plt.ylabel('Flux factor (per CCD)')
+    plt.savefig('forced-fluxfactor2.png')
+
+    for j,k in enumerate(keys):
+        if j % 1000 == 1:
+            print('source', j-1)
+        v = lightcurves[k]
+        # For each object, look up the CCD and apply the flux factor correction
+        df = []
+        for i,ccd in enumerate(zip(v.camera, v.expnum, v.ccdname)):
+            df.append(dflux[ccd])
+        v.dflux = np.array(df)
+        # Correct by 
+        v.uflux = v.flux / v.dflux
+        v.uflux_ivar = v.flux_ivar * v.dflux**2
+
+    outfn = pfn.replace('.pickle', '-ucal.pickle')
+    pickle_to_file(lightcurves, outfn)
+    print('Wrote', outfn)
+
+
 if __name__ == '__main__':
-    pfn = 'pickles/lightcurves.pickle'
-    plot_light_curves(pfn)
+    import sys
+
+    # pfn = 'pickles/lightcurves-vanilla.pickle'
+    # ubercal(pfn)
+
+    pfn = 'pickles/lightcurves-vanilla-ucal.pickle'
+    plot_light_curves(pfn, 'ucal')
+
+    sys.exit(0)
+
+
+
+
+    # pfn = 'pickles/lightcurves.pickle'
+    # plot_light_curves(pfn)
 
     # pfn = 'pickles/lightcurves-vanilla.pickle'
     # if not os.path.exists(pfn):

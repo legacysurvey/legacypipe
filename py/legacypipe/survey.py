@@ -199,10 +199,14 @@ def get_version_header(program_name, survey_dir, git_version=None):
                         comment='DECam Legacy Survey'))
 
     # Requested by NOAO
-    hdr.add_record(dict(name='SURVEYID', value='DECam Legacy Survey (DECaLS)',
+    #hdr.add_record(dict(name='SURVEYID', value='DECam Legacy Survey (DECaLS)',
+    #                    comment='Survey name'))
+    hdr.add_record(dict(name='SURVEYID', value='BASS MzLS',
                         comment='Survey name'))
-    hdr.add_record(dict(name='DRVERSIO', value='DR3',
+    hdr.add_record(dict(name='DRVERSIO', value='4000',
                         comment='Survey data release number'))
+    #hdr.add_record(dict(name='DRVERSIO', value='DR3',
+    #                    comment='Survey data release number'))
     hdr.add_record(dict(name='OBSTYPE', value='object',
                         comment='Observation type'))
     hdr.add_record(dict(name='PROCTYPE', value='tile',
@@ -892,7 +896,8 @@ Now using the current directory as LEGACY_SURVEY_DIR, but this is likely to fail
 
         elif filetype == 'checksums':
             return os.path.join(basedir, 'tractor', brickpre,
-                                'brick-%s.sha256sum' % brick)
+                                #'brick-%s.sha256sum' % brick)
+                                'brick-%s.sha1sum' % brick)
 
         print('Unknown filetype "%s"' % filetype)
         assert(False)
@@ -922,8 +927,9 @@ Now using the current directory as LEGACY_SURVEY_DIR, but this is likely to fail
         - computes the sha256sum
         '''
         class OutputFileContext(object):
-            def __init__(self, fn, survey, hashsum=True):
+            def __init__(self, fn, survey, hashsum=True, relative_fn=None):
                 self.real_fn = fn
+                self.relative_fn = relative_fn
                 self.survey = survey
                 self.is_fits = fn.endswith('.fits') or fn.endswith('.fits.gz')
                 self.tmpfn = os.path.join(os.path.dirname(fn), 'tmp-'+os.path.basename(fn))
@@ -950,14 +956,31 @@ Now using the current directory as LEGACY_SURVEY_DIR, but this is likely to fail
 
                 if self.hashsum:
                     import hashlib
-                    hashfunc = hashlib.sha256
+                    #hashfunc = hashlib.sha256
+                    hashfunc = hashlib.sha1
                     sha = hashfunc()
                 if self.is_fits:
                     # Read back the data
                     rawdata = self.fits.read_raw()
                     self.fits.close()
+
+                    # Have to actually do the compression to gzip format...
+                    if self.tmpfn.endswith('.gz'):
+                        from cStringIO import StringIO
+                        import gzip
+                        #ulength = len(rawdata)
+                        gzipped = StringIO()
+                        gzf = gzip.GzipFile(self.real_fn, 'wb', 9, gzipped)
+                        gzf.write(rawdata)
+                        gzf.close()
+                        rawdata = gzipped.getvalue()
+                        del gzipped
+                        #clength = len(rawdata)
+                        #print('Gzipped', ulength, 'to', clength)
+
                     if self.hashsum:
                         sha.update(rawdata)
+
                     f = open(self.tmpfn, 'wb')
                     f.write(rawdata)
                     f.close()
@@ -973,12 +996,22 @@ Now using the current directory as LEGACY_SURVEY_DIR, but this is likely to fail
                     del sha
 
                 os.rename(self.tmpfn, self.real_fn)
+                print('Renamed to', self.real_fn)
 
                 if self.hashsum:
-                    self.survey.add_hashcode(self.real_fn, hashcode)
+                    # List the relative filename (from output dir) in sha*sum file.
+                    fn = self.relative_fn or self.real_fn
+                    self.survey.add_hashcode(fn, hashcode)
 
         fn = self.find_file(filetype, output=True, **kwargs)
-        out = OutputFileContext(fn, self, hashsum=hashsum)
+
+        relfn = fn
+        if relfn.startswith(self.output_dir):
+            relfn = relfn[len(self.output_dir):]
+            if relfn.startswith('/'):
+                relfn = relfn[1:]
+
+        out = OutputFileContext(fn, self, hashsum=hashsum, relative_fn=relfn)
         return out
 
     def add_hashcode(self, fn, hashcode):
@@ -1452,6 +1485,7 @@ def exposure_metadata(filenames, hdus=None, trim=None):
 def run_calibs(X):
     im = X[0]
     kwargs = X[1]
+    noraise = kwargs.pop('noraise', False)
     print('run_calibs for image', im)
     try:
         return im.run_calibs(**kwargs)
@@ -1459,7 +1493,8 @@ def run_calibs(X):
         print('Exception in run_calibs:', im, kwargs)
         import traceback
         traceback.print_exc()
-        raise
+        if not noraise:
+            raise
 
 def read_one_tim(X):
     (im, targetrd, kwargs) = X

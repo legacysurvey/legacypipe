@@ -7,12 +7,16 @@ from tractor.basics import NanoMaggies, ConstantFitsWcs, LinearPhotoCal
 from tractor.image import Image
 from tractor.sky import ConstantSky
 from tractor.tractortime import TAITime
-from .survey import SimpleGalaxy
 from astrometry.util.file import trymakedirs
+from astrometry.util.fits import fits_table
+from legacypipe.survey import SimpleGalaxy
 
 '''
 Generic image handling code.
 '''
+
+from astrometry.util.plotutils import PlotSequence
+psgalnorm = PlotSequence('norms')
 
 class LegacySurveyImage(object):
     '''A base class containing common code for the images we handle.
@@ -320,14 +324,12 @@ class LegacySurveyImage(object):
                       'away from zero!')
 
         # tractor WCS object
-        twcs = self.get_tractor_wcs(wcs, x0, y0,
-                                    primhdr=primhdr, imghdr=imghdr)
-        if hybridPsf:
-            pixPsf = False
+        twcs = self.get_tractor_wcs(wcs, x0, y0, primhdr=primhdr, imghdr=imghdr)
+                                    
         psf = self.read_psf_model(x0, y0, gaussPsf=gaussPsf, pixPsf=pixPsf,
                                   hybridPsf=hybridPsf,
                                   psf_sigma=psf_sigma,
-                                  cx=(x0+x1)/2., cy=(y0+y1)/2.)
+                                  w=x1 - x0, h=y1 - y0)
 
         tim = Image(img, invvar=invvar, wcs=twcs, psf=psf,
                     photocal=LinearPhotoCal(zpscale, band=band),
@@ -335,14 +337,33 @@ class LegacySurveyImage(object):
         assert(np.all(np.isfinite(tim.getInvError())))
 
         # PSF norm
-        print('Computing PSF norm')
+        tim.band = band
+        #print('Computing PSF norm')
+
+        # HACK -- create a local PSF model to instantiate the PsfEx
+        # model, which handles non-unit pixel scaling.
+        print('-- creating constant PSF model...')
+        fullpsf = tim.psf
+        th,tw = tim.shape
+        tim.psf = fullpsf.constantPsfAt(tw//2, th//2)
+        #print('-- created constant PSF model...')
+
+        print('Computing PSF norm...')
         psfnorm = self.psf_norm(tim)
+        print('Computed PSF norm:', psfnorm)
 
         # Galaxy-detection norm
         print('Computing galaxy norm')
-        tim.band = band
         galnorm = self.galaxy_norm(tim)
         print('PSF norm', psfnorm, 'galaxy norm', galnorm)
+
+        tim.psf = fullpsf
+
+        # print('Computing galaxy norm with original PSF')
+        # galnorm = self.galaxy_norm(tim)
+        # print('PSF norm', psfnorm, 'galaxy norm w/orig PSF', galnorm)
+
+        #assert(galnorm < psfnorm)
 
         # CP (DECam) images include DATE-OBS and MJD-OBS, in UTC.
         import astropy.time
@@ -389,31 +410,288 @@ class LegacySurveyImage(object):
         if y is None:
             y = h/2.
         patch = psf.getPointSourcePatch(x, y).patch
+
+        #print('Before clamping: PSF range', patch.min(), patch.max())
+
         # Clamp up to zero and normalize before taking the norm
         patch = np.maximum(0, patch)
         patch /= patch.sum()
         psfnorm = np.sqrt(np.sum(patch**2))
+
+        # import pylab as plt
+        # plt.clf()
+        # plt.imshow(patch, interpolation='nearest', origin='lower',
+        #            vmin=0, vmax=0.06)
+        # # zoom in on 15x15 center
+        # h,w = patch.shape
+        # plt.axis([w//2-7, w//2+7, h//2-7, h//2+7])
+        # plt.colorbar()
+        # 
+        # plt.title('psfmod: %s expnum %i, band %s, norm %.3f' % (self.camera, self.expnum, tim.band, psfnorm))
+        # psgalnorm.savefig()
+
         return psfnorm
 
     def galaxy_norm(self, tim, x=None, y=None):
         # Galaxy-detection norm
+
+        #import tractor.galaxy
+        #tractor.galaxy.debug_ps = psgalnorm
+
         from tractor.galaxy import ExpGalaxy
         from tractor.ellipses import EllipseE
         from tractor.patch import ModelMask
         h,w = tim.shape
         band = tim.band
+
+
         if x is None:
-            x = w/2.
+            x = w//2
         if y is None:
-            y = h/2.
+            y = h//2
         pos = tim.wcs.pixelToPosition(x, y)
         gal = SimpleGalaxy(pos, NanoMaggies(**{band:1.}))
         S = 32
         mm = ModelMask(int(x-S), int(y-S), 2*S+1, 2*S+1)
         galmod = gal.getModelPatch(tim, modelMask=mm).patch
+
+        #orig_galmod = galmod.copy()
+
         galmod = np.maximum(0, galmod)
         galmod /= galmod.sum()
         galnorm = np.sqrt(np.sum(galmod**2))
+
+        #  h,w = galmod.shape
+        #  import pylab as plt
+        #  # plt.clf()
+        #  # plt.imshow(galmod, interpolation='nearest', origin='lower',
+        #  #            vmin=0, vmax=0.06)
+        #  # # zoom in on 15x15 center
+        #  # plt.axis([w//2-7, w//2+7, h//2-7, h//2+7])
+        #  # plt.colorbar()
+        #  # plt.title('galmod: %s expnum %i, band %s, galnorm %.3f' % (self.camera, self.expnum, tim.band, galnorm))
+        #  # psgalnorm.savefig()
+        #  
+        #  from tractor import PointSource
+        #  
+        #  print('galaxy_norm: getting PointSource patch')
+        #  psf = PointSource(pos, NanoMaggies(**{band:1.}))
+        #  psfmod = psf.getModelPatch(tim, modelMask=mm).patch
+        #  
+        #  orig_psfmod = psfmod.copy()
+        #  
+        #  print('orig galmod range:', orig_galmod.min(), orig_galmod.max())
+        #  print('orig psfmod range:', orig_psfmod.min(), orig_psfmod.max())
+        #  
+        #  print('Orig psfmod sum:', orig_psfmod.sum())
+        #  print('Orig galmod sum:', orig_galmod.sum())
+        #  
+        #  mn = min(np.min(orig_galmod), np.min(orig_psfmod))
+        #  mx = max(np.max(orig_galmod), np.max(orig_psfmod))
+        #  
+        #  psfmod = np.maximum(0, psfmod)
+        #  print('PSF sum after clamping up to zero:', psfmod.sum())
+        #  psfmod /= psfmod.sum()
+        #  psfnorm = np.sqrt(np.sum(psfmod**2))
+        #  
+        #  slc = (slice(h//2-7, h//2+8), slice(w//2-7, w//2+8))
+        #  print('Norm of central galaxy slice:', np.sqrt(np.sum((galmod[slc] / galmod[slc].sum())**2)))
+        #  print('Norm of central PSF slice:', np.sqrt(np.sum((psfmod[slc] / psfmod[slc].sum())**2)))
+        #  
+        #  from scipy.ndimage.filters import gaussian_filter
+        #  psfconv = gaussian_filter(orig_psfmod, 1.2)
+        #  psfconv = np.maximum(0, psfconv)
+        #  print('PSF sum after clamping up to zero:', psfmod.sum())
+        #  psfconv /= psfconv.sum()
+        #  nm = np.sqrt(np.sum(psfconv**2))
+        #  print('Norm of PSF convolved by Gaussian:', nm)
+        #  
+        #  plt.clf()
+        #  plt.subplot(2,2,1)
+        #  plt.imshow(orig_galmod, interpolation='nearest', origin='lower',
+        #             vmin=mn, vmax=mx)
+        #  # zoom in on 15x15 center
+        #  plt.axis([w//2-7, w//2+7, h//2-7, h//2+7])
+        #  plt.title('orig gal: norm %.3f, pk %.3f' % (galnorm, np.max(galmod)))
+        #  plt.subplot(2,2,2)
+        #  plt.imshow(orig_psfmod, interpolation='nearest', origin='lower',
+        #             vmin=mn, vmax=mx)
+        #  # zoom in on 15x15 center
+        #  plt.axis([w//2-7, w//2+7, h//2-7, h//2+7])
+        #  plt.title('orig psf: norm %.3f, pk %.3f' % (psfnorm, np.max(psfmod)))
+        #  plt.subplot(2,2,3)
+        #  diff = orig_galmod - orig_psfmod
+        #  dmx = np.max(np.abs(diff))
+        #  plt.imshow(diff, interpolation='nearest', origin='lower',
+        #             vmin=-dmx, vmax=dmx)
+        #  # zoom in on 15x15 center
+        #  plt.axis([w//2-7, w//2+7, h//2-7, h//2+7])
+        #  plt.title('galmod - psfmod')
+        #  plt.suptitle('%s expnum %i, band %s' % (self.camera, self.expnum, tim.band))
+        #  psgalnorm.savefig()
+        #  
+        #  
+        #  
+        #  plt.clf()
+        #  plt.subplot(2,2,1)
+        #  plt.imshow(orig_galmod, interpolation='nearest', origin='lower',
+        #             vmin=mn, vmax=mx)
+        #  plt.title('orig gal: norm %.3f, pk %.3f' % (galnorm, np.max(galmod)))
+        #  plt.subplot(2,2,2)
+        #  plt.imshow(orig_psfmod, interpolation='nearest', origin='lower',
+        #             vmin=mn, vmax=mx)
+        #  plt.title('orig psf: norm %.3f, pk %.3f' % (psfnorm, np.max(psfmod)))
+        #  plt.subplot(2,2,3)
+        #  diff = orig_galmod - orig_psfmod
+        #  dmx = np.max(np.abs(diff))
+        #  plt.imshow(diff, interpolation='nearest', origin='lower',
+        #             vmin=-dmx, vmax=dmx)
+        #  plt.title('galmod - psfmod')
+        #  plt.suptitle('%s expnum %i, band %s' % (self.camera, self.expnum, tim.band))
+        #  psgalnorm.savefig()
+        #  
+        #  
+        #  mx = max(np.max(galmod), np.max(psfmod))
+        #  
+        #  
+        #  plt.clf()
+        #  plt.subplot(2,2,1)
+        #  plt.imshow(galmod, interpolation='nearest', origin='lower',
+        #             vmin=mn, vmax=mx)
+        #  # zoom in on 15x15 center
+        #  plt.axis([w//2-7, w//2+7, h//2-7, h//2+7])
+        #  plt.title('gal: norm %.3f, pk %.3f' % (galnorm, np.max(galmod)))
+        #  
+        #  plt.subplot(2,2,2)
+        #  plt.imshow(psfmod, interpolation='nearest', origin='lower',
+        #             vmin=mn, vmax=mx)
+        #  # zoom in on 15x15 center
+        #  plt.axis([w//2-7, w//2+7, h//2-7, h//2+7])
+        #  plt.title('psf: norm %.3f, pk %.3f' % (psfnorm, np.max(psfmod)))
+        #  
+        #  plt.subplot(2,2,3)
+        #  diff = galmod - psfmod
+        #  mx = np.max(np.abs(diff))
+        #  plt.imshow(diff, interpolation='nearest', origin='lower',
+        #             vmin=-mx, vmax=mx)
+        #  #plt.colorbar()
+        #  # zoom in on 15x15 center
+        #  plt.axis([w//2-7, w//2+7, h//2-7, h//2+7])
+        #  plt.title('galmod - psfmod')
+        #  
+        #  plt.suptitle('%s expnum %i, band %s' % (self.camera, self.expnum, tim.band))
+        #  
+        #  psgalnorm.savefig()
+        #  
+        #  
+        #  plt.clf()
+        #  plt.subplot(2,2,1)
+        #  plt.imshow(galmod, interpolation='nearest', origin='lower',
+        #             vmin=mn, vmax=mx)
+        #  plt.title('gal: norm %.3f, pk %.3f' % (galnorm, np.max(galmod)))
+        #  plt.subplot(2,2,2)
+        #  plt.imshow(psfmod, interpolation='nearest', origin='lower',
+        #             vmin=mn, vmax=mx)
+        #  plt.title('psf: norm %.3f, pk %.3f' % (psfnorm, np.max(psfmod)))
+        #  plt.subplot(2,2,3)
+        #  diff = galmod - psfmod
+        #  mx = np.max(np.abs(diff))
+        #  plt.imshow(diff, interpolation='nearest', origin='lower',
+        #             vmin=-mx, vmax=mx)
+        #  plt.title('galmod - psfmod')
+        #  plt.suptitle('%s expnum %i, band %s' % (self.camera, self.expnum, tim.band))
+        #  psgalnorm.savefig()
+        #  
+        #  plt.clf()
+        #  import photutils
+        #  apxy = np.array([w//2, h//2])
+        #  galap = []
+        #  psfap = []
+        #  ogalap = []
+        #  opsfap = []
+        #  rads = np.arange(1, w//2)
+        #  pnorm = []
+        #  gnorm = []
+        #  for rad in rads:
+        #      aper = photutils.CircularAperture(apxy, rad)
+        #      p = photutils.aperture_photometry(galmod, aper)
+        #      galap.append(p.field('aperture_sum')[0])
+        #      p = photutils.aperture_photometry(psfmod, aper)
+        #      psfap.append(p.field('aperture_sum')[0])
+        #      p = photutils.aperture_photometry(orig_galmod, aper)
+        #      ogalap.append(p.field('aperture_sum')[0])
+        #      p = photutils.aperture_photometry(orig_psfmod, aper)
+        #      opsfap.append(p.field('aperture_sum')[0])
+        #  
+        #      subimg = galmod[h//2-rad : h//2+rad+1, w//2-rad : w//2+rad+1]
+        #      subimg = subimg / subimg.sum()
+        #      gnorm.append(np.sqrt(np.sum(subimg**2)))
+        #      subimg = psfmod[h//2-rad : h//2+rad+1, w//2-rad : w//2+rad+1]
+        #      subimg = subimg / subimg.sum()
+        #      pnorm.append(np.sqrt(np.sum(subimg**2)))
+        #  
+        #  
+        #  print('rads', rads, 'galap', galap)
+        #  plt.subplot(2,1,1)
+        #  plt.plot(rads, galap, 'r-', label='Galaxy')
+        #  plt.plot(rads, ogalap, 'm-', label='Orig galaxy')
+        #  plt.plot(rads, psfap, 'b-', label='PSF')
+        #  plt.plot(rads, opsfap, 'c-', label='Orig PSF')
+        #  plt.legend(loc='lower right')
+        #  plt.title('%s expnum %i, band %s' % (self.camera, self.expnum, tim.band))
+        #  plt.xlabel('aperture (pix)')
+        #  plt.ylabel('Aperture Flux')
+        #  
+        #  plt.subplot(2,1,2)
+        #  plt.plot(rads, pnorm, 'b-', label='PSF')
+        #  plt.plot(rads, gnorm, 'r-', label='Galaxy')
+        #  plt.legend(loc='upper right')
+        #  plt.xlabel('aperture (pix)')
+        #  plt.ylabel('Norm')
+        #  
+        #  psgalnorm.savefig()
+        #  
+        #  
+        #  
+        #  #ima = dict(interpolation='nearest', origin='lower', vmin=-0.001*mx,
+        #  #           vmax=0.001*mx, cmap='RdBu')
+        #  # ima = dict(interpolation='nearest', origin='lower', vmin=-1,
+        #  #            vmax=1, cmap='RdBu')
+        #  # 
+        #  # plt.clf()
+        #  # plt.subplot(1,2,1)
+        #  # plt.imshow(np.sign(orig_galmod), **ima)
+        #  # plt.title('gal: norm %.3f, pk %.3f' % (galnorm, np.max(galmod)))
+        #  # 
+        #  # plt.subplot(1,2,2)
+        #  # plt.imshow(np.sign(orig_psfmod), **ima)
+        #  # plt.title('psf: norm %.3f, pk %.3f' % (psfnorm, np.max(psfmod)))
+        #  # 
+        #  # plt.suptitle('%s expnum %i, band %s: sign' % (self.camera, self.expnum, tim.band))
+        #  # 
+        #  # psgalnorm.savefig()
+        #  
+        #  
+        #  mx = max(np.max(orig_galmod), np.max(orig_psfmod))
+        #  ima = dict(interpolation='nearest', origin='lower',
+        #             vmin=-6 + np.log10(mx),
+        #             vmax=np.log10(mx))
+        #  
+        #  plt.clf()
+        #  plt.subplot(1,2,1)
+        #  plt.imshow(np.log10(orig_galmod), **ima)
+        #  plt.title('gal: norm %.3f, pk %.3f' % (galnorm, np.max(galmod)))
+        #  
+        #  plt.subplot(1,2,2)
+        #  plt.imshow(np.log10(orig_psfmod), **ima)
+        #  plt.title('psf: norm %.3f, pk %.3f' % (psfnorm, np.max(psfmod)))
+        #  
+        #  plt.suptitle('%s expnum %i, band %s' % (self.camera, self.expnum, tim.band))
+        #  
+        #  psgalnorm.savefig()
+
+
+
         return galnorm
     
     def _read_fits(self, fn, hdu, slice=None, header=None, **kwargs):
@@ -552,6 +830,48 @@ class LegacySurveyImage(object):
         '''
         Reads the sky model, returning a Tractor Sky object.
         '''
+        sky = None
+        if (splinesky and getattr(self, 'merged_splineskyfn', None) is not None
+            and os.path.exists(self.merged_splineskyfn)):
+            try:
+                print('Reading merged spline sky models from', self.merged_splineskyfn)
+                T = fits_table(self.merged_splineskyfn)
+                I, = np.nonzero((T.expnum == self.expnum) *
+                                np.array([c.strip() == self.ccdname
+                                          for c in T.ccdname]))
+                print('Found', len(I), 'matching CCD')
+                if len(I) == 1:
+                    Ti = T[I[0]]
+                    # Ti.about()
+                    # print('Spline w,h', Ti.gridw, Ti.gridh)
+                    # print('xgrid:', Ti.xgrid.shape)
+                    # print('ygrid:', Ti.ygrid.shape)
+                    # print('gridvals:', Ti.gridvals.shape)
+
+                    # Remove any padding
+                    h,w = Ti.gridh, Ti.gridw
+                    Ti.gridvals = Ti.gridvals[:h, :w]
+                    Ti.xgrid = Ti.xgrid[:w]
+                    Ti.ygrid = Ti.ygrid[:h]
+
+                    skyclass = Ti.skyclass.strip()
+                    clazz = get_class_from_name(skyclass)
+                    fromfits = getattr(clazz, 'from_fits_row')
+                    sky = fromfits(Ti)
+                    
+                    if slc is not None:
+                        sy,sx = slc
+                        x0,y0 = sx.start,sy.start
+                        sky.shift(x0, y0)
+                    sky.version = Ti.legpipev
+                    sky.plver = Ti.plver
+                    if 'sig1' in Ti.get_columns():
+                        sky.sig1 = Ti.sig1
+                    return sky
+            except:
+                import traceback
+                traceback.print_exc()
+
         fn = self.skyfn
         if splinesky:
             fn = self.splineskyfn
@@ -565,57 +885,87 @@ class LegacySurveyImage(object):
 
         if getattr(clazz, 'from_fits', None) is not None:
             fromfits = getattr(clazz, 'from_fits')
-            skyobj = fromfits(fn, hdr)
+            sky = fromfits(fn, hdr)
         else:
             fromfits = getattr(clazz, 'fromFitsHeader')
-            skyobj = fromfits(hdr, prefix='SKY_')
+            sky = fromfits(hdr, prefix='SKY_')
 
         if slc is not None:
             sy,sx = slc
             x0,y0 = sx.start,sy.start
-            skyobj.shift(x0, y0)
+            sky.shift(x0, y0)
 
-        skyobj.version = hdr.get('LEGPIPEV', '')
-        if len(skyobj.version) == 0:
-            skyobj.version = hdr.get('TRACTORV', '').strip()
-            if len(skyobj.version) == 0:
-                skyobj.version = str(os.stat(fn).st_mtime)
-        skyobj.plver = hdr.get('PLVER', '').strip()
+        sky.version = hdr.get('LEGPIPEV', '')
+        if len(sky.version) == 0:
+            sky.version = hdr.get('TRACTORV', '').strip()
+            if len(sky.version) == 0:
+                sky.version = str(os.stat(fn).st_mtime)
+        sky.plver = hdr.get('PLVER', '').strip()
         sig1 = hdr.get('SIG1', None)
         if sig1 is not None:
-            skyobj.sig1 = sig1
-        return skyobj
+            sky.sig1 = sig1
+        return sky
 
     def read_psf_model(self, x0, y0,
                        gaussPsf=False, pixPsf=False, hybridPsf=False,
-                       psf_sigma=1., cx=0, cy=0):
+                       psf_sigma=1., w=0, h=0):
         assert(gaussPsf or pixPsf or hybridPsf)
         psffn = None
         if gaussPsf:
+            from tractor import GaussianMixturePSF
             v = psf_sigma**2
             psf = GaussianMixturePSF(1., 0., 0., v, v, 0.)
             print('WARNING: using mock PSF:', psf)
             psf.version = '0'
             psf.plver = ''
-        else:
-            # spatially varying pixelized PsfEx
-            from tractor import PixelizedPsfEx
+            return psf
+
+        # spatially varying pixelized PsfEx
+        from tractor import PixelizedPsfEx, PsfExModel
+        psf = None
+        if (getattr(self, 'merged_psffn', None) is not None
+            and os.path.exists(self.merged_psffn)):
+            try:
+                print('Reading merged PsfEx models from', self.merged_psffn)
+                T = fits_table(self.merged_psffn)
+                I, = np.nonzero((T.expnum == self.expnum) *
+                                np.array([c.strip() == self.ccdname
+                                          for c in T.ccdname]))
+                print('Found', len(I), 'matching CCD')
+                if len(I) == 1:
+                    Ti = T[I[0]]
+
+                    # Remove any padding
+                    degree = Ti.poldeg1
+                    # number of terms in polynomial
+                    ne = (degree + 1) * (degree + 2) / 2
+                    print('PSF_mask shape', Ti.psf_mask.shape)
+                    Ti.psf_mask = Ti.psf_mask[:ne, :Ti.psfaxis1, :Ti.psfaxis2]
+
+                    psfex = PsfExModel(Ti=Ti)
+                    psf = PixelizedPsfEx(None, psfex=psfex)
+                    psf.version = Ti.legpipev.strip()
+                    psf.plver = Ti.plver.strip()
+            except:
+                import traceback
+                traceback.print_exc()
+
+        if psf is None:
             print('Reading PsfEx model from', self.psffn)
             psf = PixelizedPsfEx(self.psffn)
-            psf.shift(x0, y0)
-            psffn = self.psffn
-            if hybridPsf:
-                from tractor.psf import HybridPixelizedPSF
-                psf = HybridPixelizedPSF(psf)
 
-        print('Using PSF model', psf)
-
-        if psffn is not None:
-            hdr = fitsio.read_header(psffn)
+            hdr = fitsio.read_header(self.psffn)
             psf.version = hdr.get('LEGSURV', None)
             if psf.version is None:
-                psf.version = str(os.stat(psffn).st_mtime)
+                psf.version = str(os.stat(self.psffn).st_mtime)
             psf.plver = hdr.get('PLVER', '').strip()
+
+        psf.shift(x0, y0)
+        if hybridPsf:
+            from tractor.psf import HybridPixelizedPSF
+            psf = HybridPixelizedPSF(psf, cx=w/2., cy=h/2.)
+
+        print('Using PSF model', psf)
         return psf
 
     def run_calibs(self, **kwargs):
