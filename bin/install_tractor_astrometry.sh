@@ -68,4 +68,10 @@ cd $REPO_DIR \
     && make install INSTALL_DIR=${CODE_DIR} \
     && cd .. 
 
+export PATH=${CODE_DIR}/bin:${PATH}
+export CPATH=${CODE_DIR}/include:${CPATH}
+export LIBRARY_PATH=${CODE_DIR}/lib:${LIBRARY_PATH}
+export LD_LIBRARY_PATH=${CODE_DIR}/lib:${LD_LIBRARY_PATH}
+export PYTHONPATH=${CODE_DIR}/lib/python2.7/site-packages:${PYTHONPATH}
+
 echo installed astrometry.net and tractor!
