@@ -1645,24 +1645,29 @@ def measure_image(img_fn, **measureargs):
 
 
 class outputFns(object):
-    def __init__(self,imgfn_proj,outdir,prefix=''):
+    def __init__(self,imgfn_proj,outdir,prefix='',**kwargs):
         '''
         outdir/decam/DECam_CP/CP20151226/img_fn.fits.fz
         outdir/decam/DECam_CP/CP20151226/img_fn-zpt%s.fits
         outdir/decam/DECam_CP/CP20151226/img_fn-star%s.fits
         '''
-        one= os.path.basename( os.path.dirname(imgfn_proj) )
-        two= os.path.basename( os.path.dirname( \
-                                    os.path.dirname(imgfn_proj)))
-        three= os.path.basename( os.path.dirname( \
-                                    os.path.dirname( \
-                                        os.path.dirname(imgfn_proj))))
-        dr= os.path.join(outdir,three,two,one)
-        base= os.path.basename(imgfn_proj).replace('.fits.fz','')
-        self.zptfn= os.path.join(dr,'%s-zpt%s.fits' % (base,prefix))
-        self.starfn= os.path.join(dr,'%s-star%s.fits' % (base,prefix))
+        camera= kwargs.get('camera')
+        if camera == 'decam':
+            proj_name= camera
+        elif camera == 'mosaic':
+            proj_name= camera+'z'
+        elif camera == '90prime': 
+            proj_name= 'bok'
+        proj_dir= '/project/projectdirs/cosmo/staging/%s/' % proj_name
+        root= imgfn_proj.replace(proj_dir,'')
+        # Names
+        dr= os.path.join(outdir,camera,root)
         # Image fn that will be on SCRATCH
-        self.imgfn_scr= os.path.join(dr,'%s.fits.fz' % base)
+        self.imgfn_scr= dr #os.path.join(dr,'%s.fits.fz' % base)
+        # zpt filenames
+        base= dr.replace('.fits.fz','')
+        self.zptfn= base + '-zpt.fits' #os.path.join(dr,'%s-zpt%s.fits' % (base,prefix))
+        self.starfn= base + '-star.fits' #os.path.join(dr,'%s-star%s.fits' % (base,prefix))
 
 def get_output_fns(img_fn,prefix=''):
     zptsfile= os.path.dirname(img_fn).replace('/project/projectdirs','/scratch2/scratchdirs/kaylanb')
@@ -1805,7 +1810,7 @@ def main(image_list=None,args=None):
     t0=ptime('parse-args',t0)
     for imgfn_proj in image_list:
         # Check if zpt already written
-        F= outputFns(imgfn_proj,outdir,prefix= measureargs.get('prefix'))
+        F= outputFns(imgfn_proj,outdir,**measureargs)
         if os.path.exists(F.zptfn) and os.path.exists(F.starfn):
             print('Already finished: %s' % F.zptfn)
             continue
