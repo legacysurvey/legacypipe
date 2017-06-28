@@ -243,6 +243,120 @@ def stage_tims(W=3600, H=3600, pixscale=0.262, brickname=None,
         print('Cutting to', len(I), 'of', len(ccds), 'CCDs for fitting.')
         ccds.cut(I)
 
+    ### If we have many images, greedily select images until we have
+    ### reached our target depth
+
+    # FIXME - Sort exposures by depth
+
+    ims = []
+    if True:
+
+        target_depths = dict(g=24.0, r=23.4, z=22.5)
+        target_percentiles = np.array([2, 5, 10])
+        target_ddepths = np.array([-0.6, -0.3, 0.])
+        
+        cH,cW = H//10, W//10
+        coarsewcs = wcs_for_brick(brick, W=cW, H=cH, 
+                                  pixscale=pixscale*10.)
+        #cH,cW = H,W
+        #coarsewcs = targetwcs
+
+        #lastpcts = None
+        last_targetfracs = None
+        
+        for band in bands:
+            depthiv = np.zeros((cH,cW), np.float32)
+            for ccd in ccds:
+                if not ccd.filter == band:
+                    continue
+                im = survey.get_image_object(ccd)
+                # -im.galaxy_norm(
+                # -approximate galaxy norm (from Gaussian approx)?
+                # -ugh PSF norm
+                #psf_sigma = im.psf_fwhm / 2.35
+                #pnorm = 1./(2. * np.sqrt(np.pi) * tim.psf_sigma)
+
+                print('Band', band, 'expnum', im.expnum, 'exptime', im.exptime, 'seeing', im.fwhm*im.pixscale, 'arcsec')
+
+                # Ugh should multi-thread this... per band?
+                # Ugh would rather not read image pixels here
+                # Could we use annotated CCDs file w/ sig1, gaussgalnorm?
+                # (and ra,dec0123)
+                args = (im, targetrd,
+                        dict(gaussPsf=gaussPsf, pixPsf=pixPsf,
+                             hybridPsf=hybridPsf,
+                             splinesky=splinesky,
+                             constant_invvar=constant_invvar,
+                             pixels=read_image_pixels))
+                tim = read_one_tim(args)
+                detiv = 1. / (tim.sig1 / tim.galnorm)**2
+
+                from astrometry.util.resample import resample_with_wcs, OverlapError
+                try:
+                    Yo,Xo,Yi,Xi,nil = resample_with_wcs(
+                        coarsewcs, tim.subwcs)
+                    print(len(Yo), 'of', (cW*cH), 'pixels covered by this image')
+                except OverlapError:
+                    continue
+
+                depthiv[Yo,Xo] += detiv
+                # compute the new depth histogram (percentiles)
+                depthpcts = np.percentile(depthiv, target_percentiles)
+
+                # -> mags
+                depthpcts = 22.5 - 2.5*np.log10(5./np.sqrt(depthpcts))
+
+                print('New depth deciles:', 22.5-2.5*np.log10(5./np.sqrt(np.percentile(depthiv, np.arange(0,101,10)))))
+
+                target = target_depths[band]
+
+                print('New depth percentiles:', depthpcts)
+                print('vs targets', [target + dd for dd in target_ddepths])
+
+                # Actually... maybe we want to count fraction of pixels
+                # that are above each of the target depths?
+
+                ## FIXME -- unique area of this brick?
+                
+                targetfracs = np.array([np.sum(depthiv > tiv) / float(cW*cH)
+                                        for tiv in 1./((10.**((np.array([target + x for x in target_ddepths]) - 22.5)/-2.5))/5.)**2])
+                print('Fractions of pixels above target:', targetfracs)
+
+                keep = False
+                
+                # If all three of the targetfracs are zero, we should
+                # keep this image -- we still need to hit our lowest
+                # depth target (90% cov).
+                if np.all(targetfracs == 0):
+                    keep = True
+                
+                # We want to keep an image if it increases the
+                # targetfrac of at least one of the percentile targets
+                # than was not already above its target coverage
+                # fraction
+                if ((last_targetfracs is None) or 
+                    np.any((targetfracs > last_targetfrac) *
+                           (last_targetfracs < (1.0 - 0.01 * target_percentiles)))):
+                    keep = True
+
+                if not keep:
+                    print('Not keeping this exposure')
+                    depthiv[Yo,Xo] -= detiv
+                    continue
+
+                last_targetfracs = targetfracs
+                
+                # if lastpcts is None:
+                #     lastpcts = depthpcts
+                #     continue
+
+                #(depths[:,2] >= target - 0.6) *
+                #(depths[:,5] >= target - 0.3) *
+                #(depths[:,10] >= target)
+
+
+
+            
     # Create Image objects for each CCD
     ims = []
     for ccd in ccds:
