@@ -896,8 +896,7 @@ Now using the current directory as LEGACY_SURVEY_DIR, but this is likely to fail
 
         elif filetype == 'checksums':
             return os.path.join(basedir, 'tractor', brickpre,
-                                #'brick-%s.sha256sum' % brick)
-                                'brick-%s.sha1sum' % brick)
+                                'brick-%s.sha256sum' % brick)
 
         print('Unknown filetype "%s"' % filetype)
         assert(False)
@@ -956,8 +955,7 @@ Now using the current directory as LEGACY_SURVEY_DIR, but this is likely to fail
 
                 if self.hashsum:
                     import hashlib
-                    #hashfunc = hashlib.sha256
-                    hashfunc = hashlib.sha1
+                    hashfunc = hashlib.sha256
                     sha = hashfunc()
                 if self.is_fits:
                     # Read back the data
