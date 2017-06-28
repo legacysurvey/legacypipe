@@ -23,8 +23,9 @@ install:
     - pip install matplotlib
     - pip install numpydoc
     - pip install astropy
-    - pip install photutils
+    - pip install jinja2
     - pip install Sphinx
+    - pip install photutils
     - pip install coveralls
     # fitsio master version
     - pip install --no-deps --upgrade git+https://github.com/esheldon/fitsio.git#egg=fitsio
