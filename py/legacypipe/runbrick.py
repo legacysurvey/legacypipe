@@ -256,6 +256,8 @@ def stage_tims(W=3600, H=3600, pixscale=0.262, brickname=None,
         #target_percentiles = np.array([2, 5, 10])
         #target_ddepths = np.array([-0.6, -0.3, 0.])
 
+        # List extra (redundant) target percentiles so that increasing the depth at
+        # any of these percentiles causes the image to be kept.
         target_percentiles = np.array(list(range(2, 10)) + list(range(10, 101, 5)))
         target_ddepths = np.zeros(len(target_percentiles), np.float32)
         target_ddepths[target_percentiles <= 5] = -0.3
@@ -265,27 +267,22 @@ def stage_tims(W=3600, H=3600, pixscale=0.262, brickname=None,
         print('Target ddepths:', target_ddepths)
 
         cH,cW = H//10, W//10
-        coarsewcs = wcs_for_brick(brick, W=cW, H=cH, 
-                                  pixscale=pixscale*10.)
-        #cH,cW = H,W
-        #coarsewcs = targetwcs
+        coarsewcs = wcs_for_brick(brick, W=cW, H=cH, pixscale=pixscale*10.)
+
+        # Unique pixels in this brick
+        U = find_unique_pixels(coarsewcs, cW, cH, None,
+                               brick.ra1, brick.ra2, brick.dec1, brick.dec2)
         keep_ccds = []
         
         for band in bands:
-
+            target_depth = target_depths[band]
             depthiv = np.zeros((cH,cW), np.float32)
+            depthmap = np.zeros_like(depthiv)
             last_pcts = None
-
             for iccd,ccd in enumerate(ccds):
                 if not ccd.filter == band:
                     continue
                 im = survey.get_image_object(ccd)
-                # -im.galaxy_norm(
-                # -approximate galaxy norm (from Gaussian approx)?
-                # -ugh PSF norm
-                #psf_sigma = im.psf_fwhm / 2.35
-                #pnorm = 1./(2. * np.sqrt(np.pi) * tim.psf_sigma)
-
                 print('Band', band, 'expnum', im.expnum, 'exptime', im.exptime, 'seeing', im.fwhm*im.pixscale, 'arcsec')
 
                 # Ugh should multi-thread this... per band?
@@ -302,8 +299,7 @@ def stage_tims(W=3600, H=3600, pixscale=0.262, brickname=None,
                 if tim is None:
                     print('Skipping empty tim')
                     continue
-                detiv = 1. / (tim.sig1 / tim.galnorm)**2
-
+                # Add this image the the depth map...
                 from astrometry.util.resample import resample_with_wcs, OverlapError
                 try:
                     Yo,Xo,Yi,Xi,nil = resample_with_wcs(
@@ -312,85 +308,44 @@ def stage_tims(W=3600, H=3600, pixscale=0.262, brickname=None,
                 except OverlapError:
                     continue
 
+                detiv = 1. / (tim.sig1 / tim.galnorm)**2
                 depthiv[Yo,Xo] += detiv
 
-                # # compute the new depth histogram (percentiles)
-                # depthpcts = np.percentile(depthiv, target_percentiles)
-                # 
-                # # -> mags
-                # depthpcts = 22.5 - 2.5*np.log10(5./np.sqrt(depthpcts))
-
-                depthmap = np.zeros_like(depthiv)
+                # compute the new depth histogram (percentiles)
+                depthmap[:,:] = 0.
                 depthmap[depthiv > 0] = 22.5 - 2.5*np.log10(5./np.sqrt(depthiv[depthiv > 0]))
-                depthpcts = np.percentile(depthmap, target_percentiles)
+                depthpcts = np.percentile(depthmap[U], target_percentiles)
 
-                #print('New depth deciles:', 22.5-2.5*np.log10(5./np.sqrt(np.percentile(depthiv, np.arange(0,101,10)))))
-
-                target = target_depths[band]
-
-                # if last_pcts is not None:
-                #     print('Old depth percentiles:', last_pcts)
-                # print('New depth percentiles:', depthpcts)
-                # print('vs targets', target + target_ddepths) #[target + dd for dd in target_ddepths])
-
-                for i,(p,d,t) in enumerate(zip(target_percentiles, depthpcts, target + target_ddepths)):
+                for i,(p,d,t) in enumerate(zip(target_percentiles, depthpcts, target_depth + target_ddepths)):
                     if last_pcts is not None:
                         print('  pct % 3i, prev %5.2f -> %5.2f vs target %5.2f %s' % (p, last_pcts[i], d, t, ('ok' if d >= t else '')))
                     else:
                         print('  pct % 3i, prev          %5.2f vs target %5.2f %s' % (p, d, t, ('ok' if d >= t else '')))
 
-                # Actually... maybe we want to count fraction of pixels
-                # that are above each of the target depths?
-
-                ## FIXME -- unique area of this brick?
-                
-                # targetfracs = np.array([np.sum(depthiv > tiv) / float(cW*cH)
-                #                         for tiv in 1./((10.**((np.array([target + x for x in target_ddepths]) - 22.5)/-2.5))/5.)**2])
-                # print('Fractions of pixels above target:', targetfracs)
-                # print('Goal fractions:                  ', 1.0-0.01*target_percentiles)
-
                 keep = False
-                
-                # # If all three of the targetfracs are zero, we should
-                # # keep this image -- we still need to hit our lowest
-                # # depth target (90% cov).
-                # if np.all(targetfracs == 0):
-                #     keep = True
-                # 
-                # # We want to keep an image if it increases the
-                # # targetfrac of at least one of the percentile targets
-                # # than was not already above its target coverage
-                # # fraction
-                # if ((last_targetfracs is None) or 
-                #     np.any((targetfracs > last_targetfracs) *
-                #            (last_targetfracs < (1.0 - 0.01 * target_percentiles)))):
-                #     keep = True
-
+                # Did we increase the depth of any target percentile that did not already exceed its target depth?
                 if ((last_pcts is None) or 
                     np.any((depthpcts > last_pcts) *
-                           (last_pcts < target + target_ddepths))):
+                           (last_pcts < target_depth + target_ddepths))):
                     keep = True
-
-                depthmap = np.zeros_like(depthiv)
-                depthmap[depthiv > 0] = 22.5-2.5*np.log10(5./np.sqrt(depthiv[depthiv > 0]))
 
                 if plots:
                     plt.clf()
                     plt.subplot(1,2,1)
                     plt.imshow(depthmap, interpolation='nearest', origin='lower',
-                               vmin=target - 2, vmax=target + 0.5)
+                               vmin=target_depth - 2, vmax=target_depth + 0.5)
                     plt.xticks([]); plt.yticks([])
                     plt.colorbar()
                     plt.subplot(1,2,2)
                     ax = plt.gca()
                     ax.yaxis.tick_right()
                     ax.yaxis.set_label_position('right')
-                    plt.plot(target_percentiles, target + target_ddepths, 'ro', label='Target')
-                    plt.plot(target_percentiles, target + target_ddepths, 'r-')
+                    plt.plot(target_percentiles, target_depth + target_ddepths, 'ro', label='Target')
+                    plt.plot(target_percentiles, target_depth + target_ddepths, 'r-')
                     if last_pcts is not None:
                         plt.plot(target_percentiles, last_pcts, 'k-', label='Previous percentiles')
                     plt.plot(target_percentiles, depthpcts, 'b-', label='Depth percentiles')
-                    plt.ylim(target - 2, target + 0.5)
+                    plt.ylim(target_depth - 2, target_depth + 0.5)
                     plt.xscale('log')
                     plt.xlabel('Percentile')
                     plt.ylabel('Depth')
@@ -401,37 +356,20 @@ def stage_tims(W=3600, H=3600, pixscale=0.262, brickname=None,
                         plt.suptitle('Not keeping: ' + imgstr)
                     ps.savefig()
 
-                # if last_targetfracs is not None:
-                #     plt.plot(target_percentiles, last_targetfracs, 'k-', label='Last fractions')
-                # plt.plot(target_percentiles, targetfracs, 'b-', label='Fractions')
-
-
-
                 if not keep:
                     print('Not keeping this exposure')
                     depthiv[Yo,Xo] -= detiv
                     continue
 
                 keep_ccds.append(iccd)
+                last_pcts = depthpcts
 
-                #if np.all(targetfracs > (1.0 - 0.01 * target_percentiles)):
-                if np.all(depthpcts >= target + target_ddepths):
+                if np.all(depthpcts >= target_depth + target_ddepths):
                     print('Reached all target depth percentiles for band', band)
                     break
 
-                #last_targetfracs = targetfracs
-                last_pcts = depthpcts
-                
-                # if lastpcts is None:
-                #     lastpcts = depthpcts
-                #     continue
-
-                #(depths[:,2] >= target - 0.6) *
-                #(depths[:,5] >= target - 0.3) *
-                #(depths[:,10] >= target)
-
-
-
+        ccds.cut(np.array(keep_ccds))
+        print('Cut to', len(ccds), 'CCDs required to reach depth targets')
             
     # Create Image objects for each CCD
     ims = []
