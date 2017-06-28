@@ -658,7 +658,8 @@ class Measurer(object):
         self.ext = ext
         self.hdr = fitsio.read_header(self.fn, ext=ext)
         self.ccdname = self.hdr['EXTNAME'].strip()
-        self.ccdnum = np.int(self.hdr['CCDNUM']) #1 larger than image_hdu
+        assert(self.ext.upper() == self.ccdname.upper())
+        self.ccdnum = np.int(self.hdr['CCDNUM']) 
         self.image_hdu = self.ccdnum
         self.expid = '{:08d}-{}'.format(self.expnum, self.ccdname)
         self.gain= self.get_gain(self.hdr)
@@ -1543,7 +1544,7 @@ def get_extlist(camera):
                    'N28', 'N29', 'N31']
         # Testing only!
         #extlist = ['N4','S4', 'S22','N19']
-        extlist = ['N4']
+        #extlist = ['N4']
         #extlist = ['S10', 'S11', 'S12', 'S16', 'S17', 'S4', 'S5', 'S6']
     else:
         print('Camera {} not recognized!'.format(camera))
