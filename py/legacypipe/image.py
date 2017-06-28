@@ -831,6 +831,11 @@ class LegacySurveyImage(object):
         Reads the sky model, returning a Tractor Sky object.
         '''
         sky = None
+        if splinesky and getattr(self, 'merged_splineskyfn', None) is not None:
+            #print('Checking for merged spline sky model from', self.merged_splineskyfn)
+            if not os.path.exists(self.merged_splineskyfn):
+                print('Merged spline sky model does not exist:', self.merged_splineskyfn)
+
         if (splinesky and getattr(self, 'merged_splineskyfn', None) is not None
             and os.path.exists(self.merged_splineskyfn)):
             try:
@@ -923,6 +928,10 @@ class LegacySurveyImage(object):
         # spatially varying pixelized PsfEx
         from tractor import PixelizedPsfEx, PsfExModel
         psf = None
+        if getattr(self, 'merged_psffn', None) is not None:
+            if not os.path.exists(self.merged_psffn):
+                print('Merged PsfEx model does not exist:', self.merged_psffn)
+
         if (getattr(self, 'merged_psffn', None) is not None
             and os.path.exists(self.merged_psffn)):
             try:
