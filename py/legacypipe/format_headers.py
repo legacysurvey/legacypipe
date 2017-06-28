@@ -162,6 +162,10 @@ def fix_bitmask_dr4(sccd_wbool, sccd_dr4,accd_dr4,which='mzls'):
         savefn= fn.replace('.gz','')
         ccd= fits_table(fn)
         ccd.bitmask= bitmask
+        # Remove an outdated mask too
+        for col in ['ccd_cuts']:
+            if col in ccd.get_columns():
+                ccd.delete_column(col)
         ccd.writeto(savefn)
         print('Wrote %s' % savefn)
         bash('gzip %s' % savefn)
