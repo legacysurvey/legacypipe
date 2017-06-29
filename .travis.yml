@@ -27,6 +27,7 @@ install:
     - pip install numpydoc
     - pip install astropy==2.0rc1
     - pip install Sphinx
+    - pip uninstall typing
     - pip install photutils
     - pip install coveralls
     # fitsio master version
