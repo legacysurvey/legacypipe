@@ -18,12 +18,14 @@ install:
     - export WCSLIB_INC="-I/usr/include/wcslib-4.20"
     - export WCSLIB_LIB="-lwcs"
 
+    - pip install jinja2
+    - python -c "import jinja2"
+    - python -c "from jinja2.utils import Markup"
     - pip install numpy
     - pip install scipy
     - pip install matplotlib
     - pip install numpydoc
     - pip install astropy
-    - pip install jinja2
     - pip install Sphinx
     - pip install photutils
     - pip install coveralls
