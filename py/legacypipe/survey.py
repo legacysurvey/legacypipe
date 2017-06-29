@@ -188,7 +188,7 @@ def get_version_header(program_name, survey_dir, git_version=None):
                         comment='legacypipe git version'))
     hdr.add_record(dict(name='SURVEYV', value=survey_dir,
                         comment='Legacy Survey directory'))
-    hdr.add_record(dict(name='DECALSDR', value='DR3',
+    hdr.add_record(dict(name='DECALSDR', value='DR5',
                         comment='DECaLS release name'))
     surveydir_ver = get_git_version(survey_dir)
     hdr.add_record(dict(name='SURVEYDV', value=surveydir_ver,
@@ -199,14 +199,12 @@ def get_version_header(program_name, survey_dir, git_version=None):
                         comment='DECam Legacy Survey'))
 
     # Requested by NOAO
-    #hdr.add_record(dict(name='SURVEYID', value='DECam Legacy Survey (DECaLS)',
-    #                    comment='Survey name'))
-    hdr.add_record(dict(name='SURVEYID', value='BASS MzLS',
+    hdr.add_record(dict(name='SURVEYID', value='DECam Legacy Survey (DECaLS)',
                         comment='Survey name'))
-    hdr.add_record(dict(name='DRVERSIO', value='4000',
+    #hdr.add_record(dict(name='SURVEYID', value='BASS MzLS',
+    #                    comment='Survey name'))
+    hdr.add_record(dict(name='DRVERSIO', value='5000',
                         comment='Survey data release number'))
-    #hdr.add_record(dict(name='DRVERSIO', value='DR3',
-    #                    comment='Survey data release number'))
     hdr.add_record(dict(name='OBSTYPE', value='object',
                         comment='Observation type'))
     hdr.add_record(dict(name='PROCTYPE', value='tile',
@@ -895,8 +893,7 @@ Now using the current directory as LEGACY_SURVEY_DIR, but this is likely to fail
 
         elif filetype == 'checksums':
             return os.path.join(basedir, 'tractor', brickpre,
-                                #'brick-%s.sha256sum' % brick)
-                                'brick-%s.sha1sum' % brick)
+                                'brick-%s.sha256sum' % brick)
 
         print('Unknown filetype "%s"' % filetype)
         assert(False)
@@ -955,8 +952,7 @@ Now using the current directory as LEGACY_SURVEY_DIR, but this is likely to fail
 
                 if self.hashsum:
                     import hashlib
-                    #hashfunc = hashlib.sha256
-                    hashfunc = hashlib.sha1
+                    hashfunc = hashlib.sha256
                     sha = hashfunc()
                 if self.is_fits:
                     # Read back the data
@@ -965,14 +961,15 @@ Now using the current directory as LEGACY_SURVEY_DIR, but this is likely to fail
 
                     # Have to actually do the compression to gzip format...
                     if self.tmpfn.endswith('.gz'):
-                        from cStringIO import StringIO
+                        from io import BytesIO
                         import gzip
                         #ulength = len(rawdata)
-                        gzipped = StringIO()
+                        gzipped = BytesIO()
                         gzf = gzip.GzipFile(self.real_fn, 'wb', 9, gzipped)
                         gzf.write(rawdata)
                         gzf.close()
                         rawdata = gzipped.getvalue()
+                        gzipped.close()
                         del gzipped
                         #clength = len(rawdata)
                         #print('Gzipped', ulength, 'to', clength)

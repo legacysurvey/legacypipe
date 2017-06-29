@@ -339,7 +339,8 @@ def sed_matched_detection(sedname, sed, detmaps, detivs, bands,
         green = (0,1,0)
 
         def plot_boundary_map(X):
-            bounds = binary_dilation(X) - X
+            #bounds = binary_dilation(X) - X
+            bounds = np.logical_xor(binary_dilation(X), X)
             H,W = X.shape
             rgba = np.zeros((H,W,4), np.uint8)
             rgba[:,:,1] = bounds*255

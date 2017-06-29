@@ -18,6 +18,163 @@ def bash(cmd):
         raise RuntimeError('Command failed: %s: return value: %i' %
                            (cmd,rtn))
 
+def ccds_check_for_differences(mos_fn,bok_fn):
+    '''either survey-ccds or ccds-annotated'''
+    m=fits_table(mos_fn)
+    b=fits_table(bok_fn)
+    # Dtype
+    assert(len(b.get_columns()) == len(m.get_columns()))
+    emp= set(m.get_columns()).difference(set(b.get_columns()))
+    assert(len(emp) == 0)
+    for col in m.get_columns():
+        if m.get(col).dtype != b.get(col).dtype:
+            print('FAIL: columsn have diff types: ',col,m.get(col).dtype,b.get(col).dtype) 
+    print('Done')
+ 
+# DR4: ccd table differences 90prime & mosaic
+def fix_differences_annotated_ccds(mos_fn,bok_fn,
+                                   return_early=False):
+    m=fits_table(mos_fn)
+    b=fits_table(bok_fn)
+    # mosaic should use bass dtype
+    for col,basstyp in zip (['camera','expid','expnum','propid','ut'],
+                            ['S7','S15','>i8','S12','S12']):
+        m.set(col,m.get(col).astype(basstyp))
+    # vice-versa
+    for col,mostyp in zip (['ha','image_filename'],
+                           ['S12','S55']):
+        b.set(col,b.get(col).astype(mostyp))
+    # remove redundant cols
+    for col in ['extname']:
+        b.delete_column(col)
+    # add extra cols
+    for col in ['telfocus']:
+        m.set(col,np.zeros((len(m),3)).astype(np.float32) - 1)
+        m.get(col).dtype = b.get(col).dtype
+    # deal with blank cols in 90prime
+    for col in ['arawgain']:
+        b.set(col,np.zeros(len(b)).astype(np.float32) - 1)
+        b.get(col).dtype = m.get(col).dtype
+    # Option to not save quite yet
+    if return_early:
+        return m,b
+    # Check
+    assert(len(b.get_columns()) == len(m.get_columns()))
+    emp= set(m.get_columns()).difference(set(b.get_columns()))
+    assert(len(emp) == 0)
+    for col in m.get_columns():
+        if m.get(col).dtype != b.get(col).dtype:
+            print('FAIL: columsn have diff types: ',col,m.get(col).dtype,b.get(col).dtype) 
+    # Save
+    m.writeto(mos_fn.replace('.fits.gz','.fits'))
+    b.writeto(bok_fn.replace('.fits.gz','.fits'))
+    for fn in [mos_fn,bok_fn]:
+        bash('cp %s %s' % (fn,fn.replace('.fits.gz','_backup.fits.gz')))
+        bash('gzip %s' % (fn.replace('.fits.gz','.fits'),))
+    print('finished: fix_differences_annotated_ccds')
+
+def fix_differences_survey_ccds(mos_fn,bok_fn):
+    # Identical to annotated
+    m,b= fix_differences_annotated_ccds(mos_fn,bok_fn,return_early=True)
+    # Except
+    for col,mostyp in zip (['object'],
+                           ['S24']):
+        b.set(col,b.get(col).astype(mostyp))
+    # Check
+    assert(len(b.get_columns()) == len(m.get_columns()))
+    emp= set(m.get_columns()).difference(set(b.get_columns()))
+    assert(len(emp) == 0)
+    for col in m.get_columns():
+        if m.get(col).dtype != b.get(col).dtype:
+            print('FAIL: columsn have diff types: ',col,m.get(col).dtype,b.get(col).dtype) 
+    # Save
+    m.writeto(mos_fn.replace('.fits.gz','.fits'))
+    b.writeto(bok_fn.replace('.fits.gz','.fits'))
+    for fn in [mos_fn,bok_fn]:
+        bash('cp %s %s' % (fn,fn.replace('.fits.gz','_backup.fits.gz')))
+        bash('gzip %s' % (fn.replace('.fits.gz','.fits'),))
+    print('finished: fix_differences_survey_ccds')
+
+def fix_units_survey_ccds(mos_fn,bok_fn):
+    m=fits_table(mos_fn)
+    b=fits_table(bok_fn)
+    mzls_pix= 0.262 #mosstat
+    bass_pix= 0.470 # 0.455 is correct, but mosstat.pro has 0.470
+    # mzls fwhm --> pixels
+    for col,typ in zip(['fwhm'],['>f4']):
+        m.set(col,m.get(col) / mzls_pix)
+        m.set(col,m.get(col).astype(typ))
+    # Check
+    assert(len(b.get_columns()) == len(m.get_columns()))
+    emp= set(m.get_columns()).difference(set(b.get_columns()))
+    assert(len(emp) == 0)
+    for col in m.get_columns():
+        if m.get(col).dtype != b.get(col).dtype:
+            print('FAIL: columsn have diff types: ',col,m.get(col).dtype,b.get(col).dtype) 
+    # Save
+    m.writeto(mos_fn.replace('.fits.gz','.fits'))
+    #b.writeto(bok_fn.replace('.fits.gz','.fits'))
+    for fn in [mos_fn]: #,bok_fn]:
+        bash('cp %s %s' % (fn,fn.replace('.fits.gz','_backup.fits.gz')))
+        bash('gzip %s' % (fn.replace('.fits.gz','.fits'),))
+    print('finished: fix_units_survey_ccds')
+
+def fix_order_survey_ccds(mos_fn,bok_fn):
+    m=fits_table(mos_fn)
+    b=fits_table(bok_fn)
+    b2=fits_table()
+    # mzls fwhm --> pixels
+    for col in m.get_columns():
+        b2.set(col,b.get(col))
+    # Check
+    assert(len(b2.get_columns()) == len(m.get_columns()))
+    emp= set(b2.get_columns()).difference(set(m.get_columns()))
+    assert(len(emp) == 0)
+    for col in m.get_columns():
+        if m.get(col).dtype != b2.get(col).dtype:
+            print('FAIL: columsn have diff types: ',col,m.get(col).dtype,b.get(col).dtype) 
+    # Save
+    b2.writeto(bok_fn.replace('.fits.gz','.fits'))
+    for fn in [bok_fn]:
+        bash('cp %s %s' % (fn,fn.replace('.fits.gz','_backup.fits.gz')))
+        bash('gzip %s' % (fn.replace('.fits.gz','.fits'),))
+    print('finished: fix_units_survey_ccds')
+
+def fix_bitmask_dr4(sccd_wbool, sccd_dr4,accd_dr4,which='mzls'):
+    '''WARNING copy files from dr4 first so keep prestine
+    3 files for each mzls,bass
+    sccd_wbool -- survey ccds having original boolean arrays for each cut
+    sccd_dr4 -- survey ccds released with dr4 that has incorrect bitmask
+    accd_dr4 -- annotated ccds released ...
+    '''
+    assert(which in ['mzls','bass'])
+    # Get correct bitmask using sccd_wbool
+    wbool=fits_table(sccd_wbool)
+    bitmask= np.zeros(len(wbool)).astype(np.uint8)
+    # mzls third_pix doesn't flag anything
+    for flag,bitval in zip(['bad_expid','ccd_hdu_mismatch','zpts_bad_astrom'],
+                           [1,2,4]):
+        # a.get(flag) is True where ccd doesn't have this problem
+        i= wbool.get(flag) == False
+        bitmask[i]= bitmask[i]+ bitval
+    # Replace incorrect bitmask
+    for fn in [sccd_dr4,accd_dr4]:
+        savefn= fn.replace('.gz','')
+        ccd= fits_table(fn)
+        ccd.bitmask= bitmask
+        # Remove an outdated mask too
+        for col in ['ccd_cuts']:
+            if col in ccd.get_columns():
+                ccd.delete_column(col)
+        ccd.writeto(savefn)
+        print('Wrote %s' % savefn)
+        bash('gzip %s' % savefn)
+        print('gzipped %s' % savefn)
+    print('Done')
+
+
+
+
 def modify_fits(fn, modify_func, **kwargs):
     '''makes copy of fits file and modifies it
     modify_func -- function that takes hdulist as input, modifies it as desired, and returns it
@@ -40,23 +197,30 @@ def modify_fits(fn, modify_func, **kwargs):
 
 def modify_survey_ccds(fn, which):
     assert(which in ['mzls','bass','annot'])
+    savefn= fn.replace('.gz','')
+    # Modify Binary Table
     # Add bitmask
     a=fits_table(fn)
     bm= np.zeros(len(a)).astype(np.uint8)
-    bm[ a.bad_expid ]+= 1
-    bm[ a.ccd_hdu_mismatch ]+= 2
-    bm[ a.zpts_bad_astrom ]+= 4
-    if which == 'mzls':
-        bm[ a.third_pix ]+= 8
+    # mzls third_pix doesn't flag anything
+    for flag,bitval in zip(['bad_expid','ccd_hdu_mismatch','zpts_bad_astrom'],
+                           [1,2,4]):
+        # a.get(flag) is True where ccd doesn't have this problem
+        i= a.get(flag) == False
+        bm[i]=bm[i]+ bitval
     a.set('bitmask', bm)
+    # Examples for using bitmasks
+    # where bad_expid: np.where(np.bitwise_and(bm,[1]) > 0)
+    # where ccds are all good: bm == 0
     keys= ['bad_expid','ccd_hdu_mismatch','zpts_bad_astrom']
     if which == 'mzls': 
         keys += ['third_pix']
     for key in keys:
         a.delete_column(key)
-    a.writeto(fn)
+    bash('cp %s %s' % (fn,fn.replace('survey-ccds','backup_survey-ccds')))
+    a.writeto(savefn)
     # Modify header
-    hdulist = fits.open(fn, mode='readonly')
+    hdulist = fits.open(savefn, mode='readonly')
     # Bitmask for
     # bad_expid,ccd_hdu_mismatch,zpts_bad_astrom,third_pix
     hdulist[1].header.set('PHOTOME','photometric','True if CCD considered photometric')
@@ -70,8 +234,11 @@ def modify_survey_ccds(fn, which):
     #    del hdulist[1].header['TFORM' + str(i)]
     # Write
     clob= True
-    hdulist.writeto(fn, clobber=clob)
-    print('Wrote %s' % fn)
+    hdulist.writeto(savefn, clobber=clob)
+    print('Wrote %s' % savefn)
+    bash('gzip %s' % savefn)
+    print('gzipped %s' % savefn)
+
 
 def modify_survey_bricks(fn):
     # Add bitmask
