@@ -613,9 +613,25 @@ def ccds_touching_wcs(targetwcs, ccds, ccdrad=0.17, polygons=True):
 
     rad = trad + ccdrad
     r,d = targetwcs.radec_center()
-    I, = np.nonzero(np.abs(ccds.dec - d) < rad)
-    I = I[np.atleast_1d(degrees_between(ccds.ra[I], ccds.dec[I], r, d) < rad)]
-
+    I, = np.where(np.abs(ccds.dec - d) < rad)
+    #I = I[np.atleast_1d(degrees_between(r, d, ccds.ra[I], ccds.dec[I]) < rad)]
+    ccdxyz = np.zeros((len(I),3))
+    rarad = np.deg2rad(ccds.ra[I])
+    decrad = np.deg2rad(ccds.dec[I])
+    ccdxyz[:,0] = np.cos(decrad) * np.cos(rarad)
+    ccdxyz[:,1] = np.cos(decrad) * np.sin(rarad)
+    ccdxyz[:,2] = np.sin(decrad)
+    rarad = np.deg2rad(r)
+    decrad = np.deg2rad(d)
+    xyz = np.array([[np.cos(decrad) * np.cos(rarad),
+                     np.cos(decrad) * np.sin(rarad),
+                     np.sin(decrad)]])
+    from scipy.spatial.distance import cdist
+    from astrometry.util.starutil_numpy import deg2distsq
+    D = cdist(ccdxyz, xyz, 'sqeuclidean')[:,0]
+    print('D', D.shape)
+    I = I[D < deg2distsq(rad)]
+    
     if not polygons:
         return I
     # now check actual polygon intersection
@@ -1247,8 +1263,7 @@ Now using the current directory as LEGACY_SURVEY_DIR, but this is likely to fail
         I = ccds_touching_wcs(wcs, T, **kwargs)
         if len(I) == 0:
             return None
-        T = T[I]
-        return T
+        return T[I]
 
     def get_image_object(self, t, **kwargs):
         '''
