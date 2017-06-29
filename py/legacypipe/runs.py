@@ -83,6 +83,17 @@ class Dr4Plus(Dr4Survey):
                   'survey-ccds-dr4-mzlsv2.fits.gz' in fn or
                   'survey-ccds-mzls-runs-16-to-21a.fits.gz' in fn)]
 
+class Dr5DecalsSurvey(LegacySurveyData):
+    # Do we want/need this cut?
+    def filter_ccds_files(self, fns):
+        return [fn for fn in fns if
+                ('survey-ccds-decals.fits.gz' in fn or
+                 'survey-ccds-nondecals.fits.gz' in fn or
+                 'survey-ccds-extra.fits.gz' in fn)]
+
+    def ccds_for_fitting(self, brick, ccds):
+        return np.flatnonzero(ccds.camera == 'decam')
+
 runs = {
     'dr3': Dr3DecalsSurvey,
     'thirdpix-v2': Thirdpixv2,
@@ -96,6 +107,7 @@ runs = {
     'bootes-90prime': Dr4Bootes90Prime,
     'bootes-mzlsv2thruMarch19': Dr4BootesMzls,
     'dr4+': Dr4Plus,
+    'dr5': Dr5DecalsSurvey,
     None: LegacySurveyData,
 }
 
