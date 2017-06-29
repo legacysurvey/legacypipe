@@ -962,14 +962,15 @@ Now using the current directory as LEGACY_SURVEY_DIR, but this is likely to fail
 
                     # Have to actually do the compression to gzip format...
                     if self.tmpfn.endswith('.gz'):
-                        from cStringIO import StringIO
+                        from io import BytesIO
                         import gzip
                         #ulength = len(rawdata)
-                        gzipped = StringIO()
+                        gzipped = BytesIO()
                         gzf = gzip.GzipFile(self.real_fn, 'wb', 9, gzipped)
                         gzf.write(rawdata)
                         gzf.close()
                         rawdata = gzipped.getvalue()
+                        gzipped.close()
                         del gzipped
                         #clength = len(rawdata)
                         #print('Gzipped', ulength, 'to', clength)
