@@ -249,7 +249,7 @@ def stage_tims(W=3600, H=3600, pixscale=0.262, brickname=None,
     # FIXME - Sort exposures by depth
 
     ims = []
-    if True:
+    if False:
 
         target_depths = dict(g=24.0, r=23.4, z=22.5)
 
