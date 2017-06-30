@@ -10,7 +10,9 @@ proc ModulesHelp { } {
 # Define variables
 #
 set product unwise_coadds
-set version fulldepth-scratch
+#set version fulldepth-dr3
+#set version fulldepth-dr4
+set version fulldepth-dr5
 conflict $product
 #
 # module-whatis
@@ -21,12 +23,13 @@ module-whatis "Sets up $product/$version in your environment."
 #
 # Set environment
 #
-
-# DR3
 # set PRODUCT_DIR /scratch1/scratchdirs/ameisner/unwise-coadds/fulldepth_sv:/scratch1/scratchdirs/desiproc/unwise-coadds
-# DR4
-#set PRODUCT_DIR /scratch1/scratchdirs/desiproc/unwise-coadds/fulldepth:/scratch1/scratchdirs/desiproc/unwise-coadds/w3w4
+#set PRODUCT_DIR /global/cscratch1/sd/desiproc/dr4/unwise-coadds/fulldepth:/global/cscratch1/sd/desiproc/dr4/unwise-coadds/w3w4
 set PRODUCT_DIR /global/cscratch1/sd/desiproc/dr4/unwise-coadds/fulldepth:/global/cscratch1/sd/desiproc/dr4/unwise-coadds/w3w4
 setenv [string toupper $product]_DIR $PRODUCT_DIR
 setenv unwise_coadds_VERSION $version
+
+
+ 
+
 
