@@ -348,7 +348,7 @@ def stage_tims(W=3600, H=3600, pixscale=0.262, brickname=None,
     for tim in tims:
         for cal,ver in [('sky', tim.skyver), ('wcs', tim.wcsver),
                         ('psf', tim.psfver)]:
-            if tim.plver != ver[1]:
+            if tim.plver.strip() != ver[1].strip():
                 print(('Warning: image "%s" PLVER is "%s" but %s calib was run'
                       +' on PLVER "%s"') % (str(tim), tim.plver, cal, ver[1]))
 
@@ -492,6 +492,8 @@ def stage_tims(W=3600, H=3600, pixscale=0.262, brickname=None,
 
 def make_depth_cut(survey, ccds, bands, targetrd, brick, W, H, pixscale,
                    plots, ps, splinesky, gaussPsf, pixPsf):
+    from legacypipe.survey import wcs_for_brick
+
     # Add some margin to our DESI depth requirements
     margin = 0.5
     target_depths = dict(g=24.0 + margin, r=23.4 + margin, z=22.5 + margin)
@@ -520,21 +522,67 @@ def make_depth_cut(survey, ccds, bands, targetrd, brick, W, H, pixscale,
     # Sort CCDs by a fast proxy for depth.
     pixscale = 3600. * np.sqrt(np.abs(ccds.cd1_1*ccds.cd2_2 - ccds.cd1_2*ccds.cd2_1))
     seeing = ccds.fwhm * pixscale
+
+    #ccds.index = np.arange(len(ccds))
+    #ccds.seeing = seeing
+
     # A rough point-source depth proxy would be:
     #I = np.argsort(seeing / np.sqrt(ccds.exptime))
-
     # If we want to put more weight on choosing good-seeing images, we could do:
-    I = np.argsort(seeing**2 / np.sqrt(ccds.exptime))
-    ccds.cut(I)
+    #I = np.argsort(seeing**2 / np.sqrt(ccds.exptime))
+    #ccds.cut(I)
     
     for band in bands:
         target_depth = target_depths[band]
         depthiv = np.zeros((cH,cW), np.float32)
         depthmap = np.zeros_like(depthiv)
         last_pcts = None
-        for iccd,ccd in enumerate(ccds):
-            if not ccd.filter == band:
-                continue
+
+        kept_ras, kept_decs = [],[]
+
+        #bccds = ccds[np.array([(f == band) for f in ccds.filter])]
+        #print(len(bccds), 'CCDs for band', band)
+        #b_inds = list(range(len(bccds)))
+
+        #for iccd,ccd in enumerate(ccds):
+        #    if not ccd.filter == band:
+        #        continue
+
+        b_inds = np.where(ccds.filter == band)[0]
+
+        while len(b_inds):
+            # Choose the next CCD to look at in this band.
+
+            # A rough point-source depth proxy would be:
+            # metric = np.sqrt(ccds.extime[b_inds]) / seeing[b_inds]
+            # If we want to put more weight on choosing good-seeing images, we could do:
+            # This metric is *BIG* for *GOOD* ccds!
+            metric = np.sqrt(ccds.exptime[b_inds]) / seeing[b_inds]**2
+
+            if len(kept_ras):
+                from astrometry.libkd.spherematch import match_radec
+                I,J,d = match_radec(ccds.ra[b_inds], ccds.dec[b_inds],
+                                    np.array(kept_ras), np.array(kept_decs), 1.,
+                                    nearest=True)
+                print('Found nearest match to existing CCDs for', len(I), 'of', len(b_inds), 'CCDs')
+                dists = np.ones(len(b_inds))
+                dists[I] = d
+                # 
+                metric *= dists
+
+            # *ibest* is an index into b_inds!
+            ibest = np.argmax(metric)
+            iccd = b_inds[ibest]
+            ccd = ccds[iccd]
+
+            if len(kept_ras):
+                print('Chose best CCD: seeing', seeing[iccd], 'exptime', ccds.exptime[iccd], 'and distance to existing chips:', dists[ibest])
+            else:
+                print('Chose best CCD: seeing', seeing[iccd], 'exptime', ccds.exptime[iccd])
+
+            b_inds = b_inds[b_inds != iccd]
+
+
             im = survey.get_image_object(ccd)
             print('Band', band, 'expnum', im.expnum, 'exptime', im.exptime, 'seeing', im.fwhm*im.pixscale, 'arcsec')
 
@@ -656,6 +704,9 @@ def make_depth_cut(survey, ccds, bands, targetrd, brick, W, H, pixscale,
 
             keep_ccds.append(iccd)
             last_pcts = depthpcts
+
+            kept_ras.append(ccd.ra)
+            kept_decs.append(ccd.dec)
 
             if np.all(depthpcts >= target_depth + target_ddepths):
                 print('Reached all target depth percentiles for band', band)
