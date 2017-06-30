@@ -95,6 +95,7 @@ def stage_tims(W=3600, H=3600, pixscale=0.262, brickname=None,
                gaussPsf=False, pixPsf=False, hybridPsf=False,
                constant_invvar=False,
                use_blacklist = True,
+               depth_cut = True,
                read_image_pixels = True,
                mp=None,
                **kwargs):
@@ -243,15 +244,14 @@ def stage_tims(W=3600, H=3600, pixscale=0.262, brickname=None,
         print('Cutting to', len(I), 'of', len(ccds), 'CCDs for fitting.')
         ccds.cut(I)
 
-    ### If we have many images, greedily select images until we have
-    ### reached our target depth
+    if depth_cut:
+        # If we have many images, greedily select images until we have
+        # reached our target depth
 
-    # FIXME - Sort exposures by depth
-
-    ims = []
-    if True:
-
-        target_depths = dict(g=24.0, r=23.4, z=22.5)
+        print('Cutting to CCDs required to hit our depth targets')
+        # Add some margin to our DESI depth requirements
+        margin = 0.5
+        target_depths = dict(g=24.0 + margin, r=23.4 + margin, z=22.5 + margin)
 
         #target_percentiles = np.array([2, 5, 10])
         #target_ddepths = np.array([-0.6, -0.3, 0.])
@@ -273,6 +273,16 @@ def stage_tims(W=3600, H=3600, pixscale=0.262, brickname=None,
         U = find_unique_pixels(coarsewcs, cW, cH, None,
                                brick.ra1, brick.ra2, brick.dec1, brick.dec2)
         keep_ccds = []
+
+        # Sort CCDs by a fast proxy for depth.
+        pixscale = 3600. * np.sqrt(np.abs(ccds.cd1_1*ccds.cd2_2 - ccds.cd1_2*ccds.cd2_1))
+        seeing = ccds.fwhm * pixscale
+        # A rough point-source depth proxy would be:
+        #I = np.argsort(seeing / np.sqrt(ccds.exptime))
+
+        # If we want to put more weight on choosing good-seeing images, we could do:
+        I = np.argsort(seeing**2 / np.sqrt(ccds.exptime))
+        ccds.cut(I)
         
         for band in bands:
             target_depth = target_depths[band]
@@ -285,30 +295,70 @@ def stage_tims(W=3600, H=3600, pixscale=0.262, brickname=None,
                 im = survey.get_image_object(ccd)
                 print('Band', band, 'expnum', im.expnum, 'exptime', im.exptime, 'seeing', im.fwhm*im.pixscale, 'arcsec')
 
-                # Ugh should multi-thread this... per band?
-                # Ugh would rather not read image pixels here
-                # Could we use annotated CCDs file w/ sig1, gaussgalnorm?
-                # (and ra,dec0123)
-                args = (im, targetrd,
-                        dict(gaussPsf=gaussPsf, pixPsf=pixPsf,
-                             hybridPsf=hybridPsf,
-                             splinesky=splinesky,
-                             constant_invvar=constant_invvar,
-                             pixels=read_image_pixels))
-                tim = read_one_tim(args)
-                if tim is None:
-                    print('Skipping empty tim')
+                wcs = im.get_wcs()
+                x0,x1,y0,y1,slc = im.get_image_extent(wcs=wcs, radecpoly=targetrd)
+                if x0==x1 or y0==y1:
+                    print('No actual overlap')
                     continue
+                wcs = wcs.get_subimage(x0, y0, x1-x0, y1-y0)
+
+                skysig1 = im.get_sky_sig1(splinesky=splinesky)
+                # skysig1 is in image counts; scale to nanomaggies
+                zpscale = NanoMaggies.zeropointToScale(im.ccdzpt)
+                skysig1 /= zpscale
+
+                psf = im.read_psf_model(x0, y0, gaussPsf=gaussPsf, pixPsf=pixPsf)
+                psf = psf.constantPsfAt((x1-x0)//2, (y1-y0)//2)
+
+                # create a fake tim to compute galnorm
+                from tractor import (PixPos, Flux, ModelMask, LinearPhotoCal, Image,
+                                     NullWCS)
+                from legacypipe.survey import SimpleGalaxy
+
+                h,w = 50,50
+                gal = SimpleGalaxy(PixPos(w//2,h//2), Flux(1.))
+                tim = Image(data=np.zeros((h,w), np.float32),
+                            inverr=np.ones((h,w), np.float32),
+                            psf=psf,
+                            wcs=NullWCS(pixscale=im.pixscale))
+                mm = ModelMask(0, 0, w, h)
+                galmod = gal.getModelPatch(tim, modelMask=mm).patch
+                galmod = np.maximum(0, galmod)
+                galmod /= galmod.sum()
+                galnorm = np.sqrt(np.sum(galmod**2))
+
+                detiv = 1. / (skysig1 / galnorm)**2
+
+                print('Sig1', skysig1, 'Galnorm', galnorm)
+                galdepth = -2.5 * (np.log10(5. * skysig1 / galnorm) - 9.)
+                print('-> depth', galdepth)
+
+                # # Ugh should multi-thread this... per band?
+                # # Ugh would rather not read image pixels here
+                # # Could we use annotated CCDs file w/ sig1, gaussgalnorm?
+                # # (and ra,dec0123)
+                # args = (im, targetrd,
+                #         dict(gaussPsf=gaussPsf, pixPsf=pixPsf,
+                #              hybridPsf=hybridPsf,
+                #              splinesky=splinesky,
+                #              constant_invvar=constant_invvar,
+                #              pixels=read_image_pixels))
+                # tim = read_one_tim(args)
+                # if tim is None:
+                #     print('Skipping empty tim')
+                #     continue
+                # wcs = tim.subwcs
+                #detiv = 1. / (tim.sig1 / tim.galnorm)**2
                 # Add this image the the depth map...
+
                 from astrometry.util.resample import resample_with_wcs, OverlapError
                 try:
                     Yo,Xo,Yi,Xi,nil = resample_with_wcs(
-                        coarsewcs, tim.subwcs)
+                        coarsewcs, wcs)
                     print(len(Yo), 'of', (cW*cH), 'pixels covered by this image')
                 except OverlapError:
                     continue
 
-                detiv = 1. / (tim.sig1 / tim.galnorm)**2
                 depthiv[Yo,Xo] += detiv
 
                 # compute the new depth histogram (percentiles)
@@ -349,7 +399,7 @@ def stage_tims(W=3600, H=3600, pixscale=0.262, brickname=None,
                     plt.xscale('log')
                     plt.xlabel('Percentile')
                     plt.ylabel('Depth')
-                    imgstr = '%s, exptime %.0f, seeing %.2f' % (str(tim), im.exptime, im.pixscale * im.fwhm)
+                    imgstr = '%s %i-%s, exptime %.0f, seeing %.2f' % (im.camera, im.expnum, im.ccdname, im.exptime, im.pixscale * im.fwhm)
                     if keep:
                         plt.suptitle('Keeping: ' + imgstr)
                     else:
@@ -2319,6 +2369,7 @@ def run_brick(brick, survey, radec=None, pixscale=0.262,
               bands=None,
               allbands=None,
               blacklist=True,
+              depth_cut=True,
               nblobs=None, blob=None, blobxy=None, blobradec=None,
               nsigma=6,
               simulOpt=False,
@@ -2814,6 +2865,9 @@ python -u legacypipe/runbrick.py --plots --brick 2440p070 --zoom 1900 2400 450 9
     parser.add_argument('--bands', default=None,
                         help='Set the list of bands (filters) that are included in processing: comma-separated list, default "g,r,z"')
 
+    parser.add_argument('--no-depth-cut', dest='depth_cut', default=True,
+                        action='store_false', help='Do not cut to the set of CCDs required to reach our depth target')
+
     parser.add_argument(
         '--no-blacklist', dest='blacklist', default=True, action='store_false',
         help='Do not blacklist some proposals?')
@@ -2905,6 +2959,7 @@ def get_runbrick_kwargs(opt):
         radec=opt.radec, pixscale=opt.pixscale,
         width=opt.width, height=opt.height, zoom=opt.zoom,
         blacklist=opt.blacklist,
+        depth_cut=opt.depth_cut,
         threads=opt.threads, ceres=opt.ceres,
         do_calibs=opt.do_calibs,
         write_metrics=opt.write_metrics,
