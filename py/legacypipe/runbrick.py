@@ -247,177 +247,9 @@ def stage_tims(W=3600, H=3600, pixscale=0.262, brickname=None,
     if depth_cut:
         # If we have many images, greedily select images until we have
         # reached our target depth
-
         print('Cutting to CCDs required to hit our depth targets')
-        # Add some margin to our DESI depth requirements
-        margin = 0.5
-        target_depths = dict(g=24.0 + margin, r=23.4 + margin, z=22.5 + margin)
-
-        #target_percentiles = np.array([2, 5, 10])
-        #target_ddepths = np.array([-0.6, -0.3, 0.])
-
-        # List extra (redundant) target percentiles so that increasing the depth at
-        # any of these percentiles causes the image to be kept.
-        target_percentiles = np.array(list(range(2, 10)) + list(range(10, 101, 5)))
-        target_ddepths = np.zeros(len(target_percentiles), np.float32)
-        target_ddepths[target_percentiles <= 5] = -0.3
-        target_ddepths[target_percentiles <= 2] = -0.6
-
-        print('Target percentiles:', target_percentiles)
-        print('Target ddepths:', target_ddepths)
-
-        cH,cW = H//10, W//10
-        coarsewcs = wcs_for_brick(brick, W=cW, H=cH, pixscale=pixscale*10.)
-
-        # Unique pixels in this brick
-        U = find_unique_pixels(coarsewcs, cW, cH, None,
-                               brick.ra1, brick.ra2, brick.dec1, brick.dec2)
-        keep_ccds = []
-
-        # Sort CCDs by a fast proxy for depth.
-        pixscale = 3600. * np.sqrt(np.abs(ccds.cd1_1*ccds.cd2_2 - ccds.cd1_2*ccds.cd2_1))
-        seeing = ccds.fwhm * pixscale
-        # A rough point-source depth proxy would be:
-        #I = np.argsort(seeing / np.sqrt(ccds.exptime))
-
-        # If we want to put more weight on choosing good-seeing images, we could do:
-        I = np.argsort(seeing**2 / np.sqrt(ccds.exptime))
-        ccds.cut(I)
-        
-        for band in bands:
-            target_depth = target_depths[band]
-            depthiv = np.zeros((cH,cW), np.float32)
-            depthmap = np.zeros_like(depthiv)
-            last_pcts = None
-            for iccd,ccd in enumerate(ccds):
-                if not ccd.filter == band:
-                    continue
-                im = survey.get_image_object(ccd)
-                print('Band', band, 'expnum', im.expnum, 'exptime', im.exptime, 'seeing', im.fwhm*im.pixscale, 'arcsec')
-
-                wcs = im.get_wcs()
-                x0,x1,y0,y1,slc = im.get_image_extent(wcs=wcs, radecpoly=targetrd)
-                if x0==x1 or y0==y1:
-                    print('No actual overlap')
-                    continue
-                wcs = wcs.get_subimage(x0, y0, x1-x0, y1-y0)
-
-                skysig1 = im.get_sky_sig1(splinesky=splinesky)
-                # skysig1 is in image counts; scale to nanomaggies
-                zpscale = NanoMaggies.zeropointToScale(im.ccdzpt)
-                skysig1 /= zpscale
-
-                psf = im.read_psf_model(x0, y0, gaussPsf=gaussPsf, pixPsf=pixPsf)
-                psf = psf.constantPsfAt((x1-x0)//2, (y1-y0)//2)
-
-                # create a fake tim to compute galnorm
-                from tractor import (PixPos, Flux, ModelMask, LinearPhotoCal, Image,
-                                     NullWCS)
-                from legacypipe.survey import SimpleGalaxy
-
-                h,w = 50,50
-                gal = SimpleGalaxy(PixPos(w//2,h//2), Flux(1.))
-                tim = Image(data=np.zeros((h,w), np.float32),
-                            inverr=np.ones((h,w), np.float32),
-                            psf=psf,
-                            wcs=NullWCS(pixscale=im.pixscale))
-                mm = ModelMask(0, 0, w, h)
-                galmod = gal.getModelPatch(tim, modelMask=mm).patch
-                galmod = np.maximum(0, galmod)
-                galmod /= galmod.sum()
-                galnorm = np.sqrt(np.sum(galmod**2))
-
-                detiv = 1. / (skysig1 / galnorm)**2
-
-                print('Sig1', skysig1, 'Galnorm', galnorm)
-                galdepth = -2.5 * (np.log10(5. * skysig1 / galnorm) - 9.)
-                print('-> depth', galdepth)
-
-                # # Ugh should multi-thread this... per band?
-                # # Ugh would rather not read image pixels here
-                # # Could we use annotated CCDs file w/ sig1, gaussgalnorm?
-                # # (and ra,dec0123)
-                # args = (im, targetrd,
-                #         dict(gaussPsf=gaussPsf, pixPsf=pixPsf,
-                #              hybridPsf=hybridPsf,
-                #              splinesky=splinesky,
-                #              constant_invvar=constant_invvar,
-                #              pixels=read_image_pixels))
-                # tim = read_one_tim(args)
-                # if tim is None:
-                #     print('Skipping empty tim')
-                #     continue
-                # wcs = tim.subwcs
-                #detiv = 1. / (tim.sig1 / tim.galnorm)**2
-                # Add this image the the depth map...
-
-                from astrometry.util.resample import resample_with_wcs, OverlapError
-                try:
-                    Yo,Xo,Yi,Xi,nil = resample_with_wcs(
-                        coarsewcs, wcs)
-                    print(len(Yo), 'of', (cW*cH), 'pixels covered by this image')
-                except OverlapError:
-                    continue
-
-                depthiv[Yo,Xo] += detiv
-
-                # compute the new depth histogram (percentiles)
-                depthmap[:,:] = 0.
-                depthmap[depthiv > 0] = 22.5 - 2.5*np.log10(5./np.sqrt(depthiv[depthiv > 0]))
-                depthpcts = np.percentile(depthmap[U], target_percentiles)
-
-                for i,(p,d,t) in enumerate(zip(target_percentiles, depthpcts, target_depth + target_ddepths)):
-                    if last_pcts is not None:
-                        print('  pct % 3i, prev %5.2f -> %5.2f vs target %5.2f %s' % (p, last_pcts[i], d, t, ('ok' if d >= t else '')))
-                    else:
-                        print('  pct % 3i, prev          %5.2f vs target %5.2f %s' % (p, d, t, ('ok' if d >= t else '')))
-
-                keep = False
-                # Did we increase the depth of any target percentile that did not already exceed its target depth?
-                if ((last_pcts is None) or 
-                    np.any((depthpcts > last_pcts) *
-                           (last_pcts < target_depth + target_ddepths))):
-                    keep = True
-
-                if plots:
-                    plt.clf()
-                    plt.subplot(1,2,1)
-                    plt.imshow(depthmap, interpolation='nearest', origin='lower',
-                               vmin=target_depth - 2, vmax=target_depth + 0.5)
-                    plt.xticks([]); plt.yticks([])
-                    plt.colorbar()
-                    plt.subplot(1,2,2)
-                    ax = plt.gca()
-                    ax.yaxis.tick_right()
-                    ax.yaxis.set_label_position('right')
-                    plt.plot(target_percentiles, target_depth + target_ddepths, 'ro', label='Target')
-                    plt.plot(target_percentiles, target_depth + target_ddepths, 'r-')
-                    if last_pcts is not None:
-                        plt.plot(target_percentiles, last_pcts, 'k-', label='Previous percentiles')
-                    plt.plot(target_percentiles, depthpcts, 'b-', label='Depth percentiles')
-                    plt.ylim(target_depth - 2, target_depth + 0.5)
-                    plt.xscale('log')
-                    plt.xlabel('Percentile')
-                    plt.ylabel('Depth')
-                    imgstr = '%s %i-%s, exptime %.0f, seeing %.2f' % (im.camera, im.expnum, im.ccdname, im.exptime, im.pixscale * im.fwhm)
-                    if keep:
-                        plt.suptitle('Keeping: ' + imgstr)
-                    else:
-                        plt.suptitle('Not keeping: ' + imgstr)
-                    ps.savefig()
-
-                if not keep:
-                    print('Not keeping this exposure')
-                    depthiv[Yo,Xo] -= detiv
-                    continue
-
-                keep_ccds.append(iccd)
-                last_pcts = depthpcts
-
-                if np.all(depthpcts >= target_depth + target_ddepths):
-                    print('Reached all target depth percentiles for band', band)
-                    break
-
+        keep_ccds = make_depth_cut(survey, ccds, bands, targetrd, brick, W, H, pixscale,
+                                   plots, ps, splinesky, gaussPsf, pixPsf)
         ccds.cut(np.array(keep_ccds))
         print('Cut to', len(ccds), 'CCDs required to reach depth targets')
             
@@ -657,6 +489,179 @@ def stage_tims(W=3600, H=3600, pixscale=0.262, brickname=None,
     L = locals()
     rtn = dict([(k,L[k]) for k in keys])
     return rtn
+
+def make_depth_cut(survey, ccds, bands, targetrd, brick, W, H, pixscale,
+                   plots, ps, splinesky, gaussPsf, pixPsf):
+    # Add some margin to our DESI depth requirements
+    margin = 0.5
+    target_depths = dict(g=24.0 + margin, r=23.4 + margin, z=22.5 + margin)
+
+    #target_percentiles = np.array([2, 5, 10])
+    #target_ddepths = np.array([-0.6, -0.3, 0.])
+
+    # List extra (redundant) target percentiles so that increasing the depth at
+    # any of these percentiles causes the image to be kept.
+    target_percentiles = np.array(list(range(2, 10)) + list(range(10, 101, 5)))
+    target_ddepths = np.zeros(len(target_percentiles), np.float32)
+    target_ddepths[target_percentiles <= 5] = -0.3
+    target_ddepths[target_percentiles <= 2] = -0.6
+
+    print('Target percentiles:', target_percentiles)
+    print('Target ddepths:', target_ddepths)
+
+    cH,cW = H//10, W//10
+    coarsewcs = wcs_for_brick(brick, W=cW, H=cH, pixscale=pixscale*10.)
+
+    # Unique pixels in this brick
+    U = find_unique_pixels(coarsewcs, cW, cH, None,
+                           brick.ra1, brick.ra2, brick.dec1, brick.dec2)
+    keep_ccds = []
+
+    # Sort CCDs by a fast proxy for depth.
+    pixscale = 3600. * np.sqrt(np.abs(ccds.cd1_1*ccds.cd2_2 - ccds.cd1_2*ccds.cd2_1))
+    seeing = ccds.fwhm * pixscale
+    # A rough point-source depth proxy would be:
+    #I = np.argsort(seeing / np.sqrt(ccds.exptime))
+
+    # If we want to put more weight on choosing good-seeing images, we could do:
+    I = np.argsort(seeing**2 / np.sqrt(ccds.exptime))
+    ccds.cut(I)
+    
+    for band in bands:
+        target_depth = target_depths[band]
+        depthiv = np.zeros((cH,cW), np.float32)
+        depthmap = np.zeros_like(depthiv)
+        last_pcts = None
+        for iccd,ccd in enumerate(ccds):
+            if not ccd.filter == band:
+                continue
+            im = survey.get_image_object(ccd)
+            print('Band', band, 'expnum', im.expnum, 'exptime', im.exptime, 'seeing', im.fwhm*im.pixscale, 'arcsec')
+
+            wcs = im.get_wcs()
+            x0,x1,y0,y1,slc = im.get_image_extent(wcs=wcs, radecpoly=targetrd)
+            if x0==x1 or y0==y1:
+                print('No actual overlap')
+                continue
+            wcs = wcs.get_subimage(x0, y0, x1-x0, y1-y0)
+
+            skysig1 = im.get_sky_sig1(splinesky=splinesky)
+            # skysig1 is in image counts; scale to nanomaggies
+            zpscale = NanoMaggies.zeropointToScale(im.ccdzpt)
+            skysig1 /= zpscale
+
+            psf = im.read_psf_model(x0, y0, gaussPsf=gaussPsf, pixPsf=pixPsf)
+            psf = psf.constantPsfAt((x1-x0)//2, (y1-y0)//2)
+
+            # create a fake tim to compute galnorm
+            from tractor import (PixPos, Flux, ModelMask, LinearPhotoCal, Image,
+                                 NullWCS)
+            from legacypipe.survey import SimpleGalaxy
+
+            h,w = 50,50
+            gal = SimpleGalaxy(PixPos(w//2,h//2), Flux(1.))
+            tim = Image(data=np.zeros((h,w), np.float32),
+                        #inverr=np.ones((h,w), np.float32),
+                        psf=psf,
+                        wcs=NullWCS(pixscale=im.pixscale))
+            mm = ModelMask(0, 0, w, h)
+            galmod = gal.getModelPatch(tim, modelMask=mm).patch
+            galmod = np.maximum(0, galmod)
+            galmod /= galmod.sum()
+            galnorm = np.sqrt(np.sum(galmod**2))
+
+            detiv = 1. / (skysig1 / galnorm)**2
+
+            print('Sig1', skysig1, 'Galnorm', galnorm)
+            galdepth = -2.5 * (np.log10(5. * skysig1 / galnorm) - 9.)
+            print('-> depth', galdepth)
+
+            # # Ugh should multi-thread this... per band?
+            # # Ugh would rather not read image pixels here
+            # # Could we use annotated CCDs file w/ sig1, gaussgalnorm?
+            # # (and ra,dec0123)
+            # args = (im, targetrd,
+            #         dict(gaussPsf=gaussPsf, pixPsf=pixPsf,
+            #              hybridPsf=hybridPsf,
+            #              splinesky=splinesky,
+            #              constant_invvar=constant_invvar,
+            #              pixels=read_image_pixels))
+            # tim = read_one_tim(args)
+            # if tim is None:
+            #     print('Skipping empty tim')
+            #     continue
+            # wcs = tim.subwcs
+            #detiv = 1. / (tim.sig1 / tim.galnorm)**2
+            # Add this image the the depth map...
+
+            from astrometry.util.resample import resample_with_wcs, OverlapError
+            try:
+                Yo,Xo,Yi,Xi,nil = resample_with_wcs(
+                    coarsewcs, wcs)
+                print(len(Yo), 'of', (cW*cH), 'pixels covered by this image')
+            except OverlapError:
+                continue
+
+            depthiv[Yo,Xo] += detiv
+
+            # compute the new depth histogram (percentiles)
+            depthmap[:,:] = 0.
+            depthmap[depthiv > 0] = 22.5 - 2.5*np.log10(5./np.sqrt(depthiv[depthiv > 0]))
+            depthpcts = np.percentile(depthmap[U], target_percentiles)
+
+            for i,(p,d,t) in enumerate(zip(target_percentiles, depthpcts, target_depth + target_ddepths)):
+                if last_pcts is not None:
+                    print('  pct % 3i, prev %5.2f -> %5.2f vs target %5.2f %s' % (p, last_pcts[i], d, t, ('ok' if d >= t else '')))
+                else:
+                    print('  pct % 3i, prev          %5.2f vs target %5.2f %s' % (p, d, t, ('ok' if d >= t else '')))
+
+            keep = False
+            # Did we increase the depth of any target percentile that did not already exceed its target depth?
+            if ((last_pcts is None) or 
+                np.any((depthpcts > last_pcts) *
+                       (last_pcts < target_depth + target_ddepths))):
+                keep = True
+
+            if plots:
+                plt.clf()
+                plt.subplot(1,2,1)
+                plt.imshow(depthmap, interpolation='nearest', origin='lower',
+                           vmin=target_depth - 2, vmax=target_depth + 0.5)
+                plt.xticks([]); plt.yticks([])
+                plt.colorbar()
+                plt.subplot(1,2,2)
+                ax = plt.gca()
+                ax.yaxis.tick_right()
+                ax.yaxis.set_label_position('right')
+                plt.plot(target_percentiles, target_depth + target_ddepths, 'ro', label='Target')
+                plt.plot(target_percentiles, target_depth + target_ddepths, 'r-')
+                if last_pcts is not None:
+                    plt.plot(target_percentiles, last_pcts, 'k-', label='Previous percentiles')
+                plt.plot(target_percentiles, depthpcts, 'b-', label='Depth percentiles')
+                plt.ylim(target_depth - 2, target_depth + 0.5)
+                plt.xscale('log')
+                plt.xlabel('Percentile')
+                plt.ylabel('Depth')
+                imgstr = '%s %i-%s, exptime %.0f, seeing %.2f' % (im.camera, im.expnum, im.ccdname, im.exptime, im.pixscale * im.fwhm)
+                if keep:
+                    plt.suptitle('Keeping: ' + imgstr)
+                else:
+                    plt.suptitle('Not keeping: ' + imgstr)
+                ps.savefig()
+
+            if not keep:
+                print('Not keeping this exposure')
+                depthiv[Yo,Xo] -= detiv
+                continue
+
+            keep_ccds.append(iccd)
+            last_pcts = depthpcts
+
+            if np.all(depthpcts >= target_depth + target_ddepths):
+                print('Reached all target depth percentiles for band', band)
+                break
+
+    return keep_ccds
 
 def stage_mask_junk(tims=None, targetwcs=None, W=None, H=None, bands=None,
                     mp=None, nsigma=None, plots=None, ps=None, **kwargs):
