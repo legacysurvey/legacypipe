@@ -249,7 +249,8 @@ def stage_tims(W=3600, H=3600, pixscale=0.262, brickname=None,
         # reached our target depth
         print('Cutting to CCDs required to hit our depth targets')
         keep_ccds = make_depth_cut(survey, ccds, bands, targetrd, brick, W, H, pixscale,
-                                   plots, ps, splinesky, gaussPsf, pixPsf)
+                                   plots, ps, splinesky, gaussPsf, pixPsf,
+                                   do_calibs, gitver, targetwcs)
         ccds.cut(np.array(keep_ccds))
         print('Cut to', len(ccds), 'CCDs required to reach depth targets')
             
@@ -491,7 +492,8 @@ def stage_tims(W=3600, H=3600, pixscale=0.262, brickname=None,
     return rtn
 
 def make_depth_cut(survey, ccds, bands, targetrd, brick, W, H, pixscale,
-                   plots, ps, splinesky, gaussPsf, pixPsf):
+                   plots, ps, splinesky, gaussPsf, pixPsf, do_calibs,
+                   gitver, targetwcs):
     from legacypipe.survey import wcs_for_brick
 
     # Add some margin to our DESI depth requirements
@@ -512,7 +514,9 @@ def make_depth_cut(survey, ccds, bands, targetrd, brick, W, H, pixscale,
     print('Target ddepths:', target_ddepths)
 
     cH,cW = H//10, W//10
-    coarsewcs = wcs_for_brick(brick, W=cW, H=cH, pixscale=pixscale*10.)
+    coarsewcs = targetwcs.scale(0.1)
+    coarsewcs.imagew = cW
+    coarsewcs.imageh = cH
 
     # Unique pixels in this brick
     U = find_unique_pixels(coarsewcs, cW, cH, None,
@@ -586,6 +590,14 @@ def make_depth_cut(survey, ccds, bands, targetrd, brick, W, H, pixscale,
             im = survey.get_image_object(ccd)
             print('Band', band, 'expnum', im.expnum, 'exptime', im.exptime, 'seeing', im.fwhm*im.pixscale, 'arcsec')
 
+            if do_calibs:
+                kwa = dict(git_version=gitver)
+                if gaussPsf:
+                    kwa.update(psfex=False)
+                if splinesky:
+                    kwa.update(splinesky=True)
+                im.run_calibs(**kwa)
+            
             wcs = im.get_wcs()
             x0,x1,y0,y1,slc = im.get_image_extent(wcs=wcs, radecpoly=targetrd)
             if x0==x1 or y0==y1:
@@ -628,30 +640,18 @@ def make_depth_cut(survey, ccds, bands, targetrd, brick, W, H, pixscale,
             galdepth = -2.5 * (np.log10(5. * skysig1 / galnorm) - 9.)
             print('-> depth', galdepth)
 
-            # # Ugh should multi-thread this... per band?
-            # # Ugh would rather not read image pixels here
-            # # Could we use annotated CCDs file w/ sig1, gaussgalnorm?
-            # # (and ra,dec0123)
-            # args = (im, targetrd,
-            #         dict(gaussPsf=gaussPsf, pixPsf=pixPsf,
-            #              hybridPsf=hybridPsf,
-            #              splinesky=splinesky,
-            #              constant_invvar=constant_invvar,
-            #              pixels=read_image_pixels))
-            # tim = read_one_tim(args)
-            # if tim is None:
-            #     print('Skipping empty tim')
-            #     continue
-            # wcs = tim.subwcs
-            #detiv = 1. / (tim.sig1 / tim.galnorm)**2
             # Add this image the the depth map...
-
             from astrometry.util.resample import resample_with_wcs, OverlapError
             try:
-                Yo,Xo,Yi,Xi,nil = resample_with_wcs(
-                    coarsewcs, wcs)
+                # w,h = x1-x0, y1-y0
+                # rr,dd = wcs.pixelxy2radec([1,w,w,1], [1,1,h,h])
+                # ok,xx,yy = coarsewcs.radec2pixelxy(rr, dd)
+                # print('Coarse WCS coordinates of corners:', xx, yy)
+                # print('vs shape', coarsewcs.shape)
+                Yo,Xo,Yi,Xi,nil = resample_with_wcs(coarsewcs, wcs)
                 print(len(Yo), 'of', (cW*cH), 'pixels covered by this image')
             except OverlapError:
+                print('No overlap')
                 continue
 
             depthiv[Yo,Xo] += detiv
