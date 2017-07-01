@@ -331,7 +331,12 @@ def _ccds_table(camera='decam'):
         ('dec', '>f8'),       # dec at the center of the CCD
         ('skymag', '>f4'),    # average sky surface brightness [mag/arcsec^2] [=ccdskymag in decstat]
         ('skycounts', '>f4'), # median sky level [electron/pix]               [=ccdskycounts in decstat]
+        ('skycounts_a', '>f4'), # median sky level [electron/pix]               [=ccdskycounts in decstat]
         ('skyrms', '>f4'),    # sky variance [electron/pix]                   [=ccdskyrms in decstat]
+        ('skyrms_a', '>f4'),    # sky variance [electron/pix]                   [=ccdskyrms in decstat]
+        ('skyrms_b', '>f4'),    # sky variance [electron/pix]                   [=ccdskyrms in decstat]
+        ('skyrms_c', '>f4'),    # sky variance [electron/pix]                   [=ccdskyrms in decstat]
+        ('skyrms_d', '>f4'),    # sky variance [electron/pix]                   [=ccdskyrms in decstat]
         ('skyrms_sm', '>f4'),    # sky variance [electron/pix]                   [=ccdskyrms in decstat]
         ('skyrms_clip', '>f4'),    # sky variance [electron/pix]                   [=ccdskyrms in decstat]
         ('skyrms_clip_sm', '>f4'),    # sky variance [electron/pix]                   [=ccdskyrms in decstat]
@@ -427,6 +432,7 @@ def create_legacypipe_table(ccds_fn):
                        'fwhm','zpt','ccdzpt','ccdraoff','ccddecoff',
                        'cd1_1','cd2_2','cd1_2','cd2_1',
                        'crval1','crval2','crpix1','crpix2']
+    dustins_keys= ['skyrms']
     # Load full zpt table
     assert('-zpt.fits' in ccds_fn)
     T = fits_table(ccds_fn)
@@ -449,7 +455,7 @@ def create_legacypipe_table(ccds_fn):
         T.rename(old,new)
         #units[new]= units.pop(old)
     # Delete 
-    del_keys= list( set(T.get_columns()).difference(set(need_arjuns_keys)) )
+    del_keys= list( set(T.get_columns()).difference(set(need_arjuns_keys+dustins_keys)) )
     for key in del_keys:
         T.delete_column(key)
         #if key in units.keys():
@@ -650,17 +656,13 @@ class Measurer(object):
     def extinction(self, band):
         return self.k_ext[band]
 
-    def get_gain(self,hdr):
-        return np.average((hdr['GAINA'],hdr['GAINB']))
-        #return hdr['ARAWGAIN']
-
     def set_hdu(self,ext):
         self.ext = ext
         self.hdr = fitsio.read_header(self.fn, ext=ext)
         self.ccdname = self.hdr['EXTNAME'].strip()
         assert(self.ext.upper() == self.ccdname.upper())
         self.ccdnum = np.int(self.hdr['CCDNUM']) 
-        self.image_hdu = self.ccdnum
+        self.image_hdu = self.ccdnum #header: extnum <--> hduname
         self.expid = '{:08d}-{}'.format(self.expnum, self.ccdname)
         self.gain= self.get_gain(self.hdr)
         # WCS
@@ -699,16 +701,23 @@ class Measurer(object):
         sigma = (meanval - lo) / nsigma
         return meanval, sigma
 
-    def get_sky_and_sigma(self, img):
-        # Spline sky model to handle (?) ghost / pupil?
-
-        #sky, sig1 = self.sensible_sigmaclip(img[1500:2500, 500:1000])
-
-        splinesky = SplineSky.BlantonMethod(img, None, 256)
-        skyimg = np.zeros_like(img)
-        splinesky.addTo(skyimg)
-
-        mnsky, sig1 = self.sensible_sigmaclip(img - skyimg,nsigma=3.)
+    def get_sky_and_sigma(self, img, nsigma=3):
+        '''returns 2d sky image and sky rms'''
+        splinesky= False
+        if splinesky:
+            skyobj = SplineSky.BlantonMethod(img, None, 256)
+            skyimg = np.zeros_like(img)
+            skyobj.addTo(skyimg)
+            mnsky, sig1 = self.sensible_sigmaclip(img - skyimg,nsigma=nsigma)
+        else:
+            #sky, sig1 = self.sensible_sigmaclip(img[1500:2500, 500:1000])
+            if self.camera == 'decam':
+                slc=[slice(1500,2500),slice(500,1500)]
+            elif self.camera in ['mosaic','90prime']:
+                slc=[slice(500,1500),slice(500,1500)]
+            clip_vals,_,_ = sigmaclip(img[slc],low=nsigma,high=nsigma)
+            skyimg= np.zeros(img.shape) + np.median(clip_vals) 
+            sig1= np.std(clip_vals) 
         return skyimg, sig1
 
     def remove_sky_gradients(self, img):
@@ -825,7 +834,8 @@ class Measurer(object):
         t0= ptime('read image, bitmask',t0)
         # Initialize and begin populating the output CCDs table.
         ccds = _ccds_table(self.camera)
-        ccds['image_filename'] = '/'.join( [self.camera] + self.fn.split('/')[-2:] ) #os.path.basename(self.fn)   
+        # starts with the decam/ mosaic/ or 90prime/ dir
+        ccds['image_filename'] = self.fn[self.fn.rfind('/%s/' % self.camera)+1:]
         ccds['image_hdu'] = self.image_hdu 
         ccds['ccdnum'] = self.ccdnum 
         ccds['camera'] = self.camera
@@ -846,7 +856,10 @@ class Measurer(object):
         ccds['gain'] = self.gain
         ccds['pixscale'] = self.pixscale
         # FWHM from CP header
-        hdr_fwhm= hdr['fwhm']
+        if self.camera in ['mosaic','90prime']:
+            hdr_fwhm= hdr['seeingp1'] # pixel seeing so FWHM
+        else:
+            hdr_fwhm= hdr['fwhm']
         ccds['fwhm_cp']= hdr_fwhm
         # Copy some header cards directly.
         # ZNAXIS[12] not NAXIS
@@ -902,15 +915,9 @@ class Measurer(object):
 
         # Bunch of sky estimates
         # Median of absolute deviation (MAD), std dev = 1.4826 * MAD
-        #sky1_mad= 1.4826 * np.median(np.abs(img_sub_sky))
         sky1_mad_sm= 1.4826 * np.median(np.abs(img_sub_sky[1500:2500,500:1500]))
         sky1_clip,_,_ = sigmaclip(img[1500:2500,500:1500],low=3.,high=3.) #Arjun's prescription
         sky1= np.median(sky1_clip)
-        # Astropy IDL's djs_iterstat 
-        #from astropy.stats import sigma_clip as sigmaclip_astropy
-        #sky1_masked= sigmaclip_astropy(img[1500:2500,500:1500],sigma=3,iters=20)
-        #use= sky1_masked.mask == False
-        #sky1_astropy= np.median(sky1_masked[use])
         print('sky from median of image= %.2f' % sky1)
         skybr = zp0 - 2.5*np.log10(sky1 / self.pixscale / self.pixscale / exptime)
         print('  Sky brightness: {:.3f} mag/arcsec^2'.format(skybr))
@@ -922,6 +929,22 @@ class Measurer(object):
         ccds['skycounts'] = sky1 / exptime # [electron/pix]
         ccds['skymag'] = skybr   # [mag/arcsec^2]
         t0= ptime('measure-sky',t0)
+        
+        # TESTING: Additional Sky measures
+        skyclip_std = np.std(sky1_clip)
+        sky1_mad= 1.4826 * np.median(np.abs(img_sub_sky))
+        # Astropy IDL's djs_iterstat 
+        from astropy.stats import sigma_clip as sigmaclip_astropy
+        sky1_masked= sigmaclip_astropy(img[1500:2500,500:1500],sigma=3,iters=20)
+        use= sky1_masked.mask == False
+        sky1_med_astropy= np.median(sky1_masked[use])
+        sky1_std_astropy= np.std(sky1_masked[use])
+        ccds['skyrms_a']= sig1 / exptime
+        ccds['skyrms_b']= skyclip_std / exptime
+        ccds['skyrms_c']= sky1_mad / exptime
+        ccds['skyrms_d']= sky1_std_astropy / exptime
+        ccds['skycounts_a']= sky1_med_astropy / exptime
+        t0= ptime('Additional sky measures',t0)
 
         if self.debug:
             extra= {}
@@ -1379,6 +1402,10 @@ class DecamMeasurer(Measurer):
         band = band.split()[0]
         return band
 
+    def get_gain(self,hdr):
+        return np.average((hdr['GAINA'],hdr['GAINB']))
+        #return hdr['ARAWGAIN']
+
     def colorterm_ps1_to_observed(self, ps1stars, band):
         from legacyanalysis.ps1cat import ps1_to_decam
         return ps1_to_decam(ps1stars, band)
@@ -1425,7 +1452,7 @@ class Mosaic3Measurer(Measurer):
         super(Mosaic3Measurer, self).__init__(*args, **kwargs)
 
         self.pixscale=0.262 # 0.260 is right, but mosstat.pro has 0.262
-        self.camera = 'mosaic3'
+        self.camera = 'mosaic'
         self.band= self.get_band()
         self.ut = self.primhdr['TIME-OBS']
         # {RA,DEC}: center of exposure, TEL{RA,DEC}: boresight of telescope
@@ -1445,6 +1472,11 @@ class Mosaic3Measurer(Measurer):
         band = self.primhdr['FILTER']
         band = band.split()[0][0] # zd --> z
         return band
+
+    def get_gain(self,hdr):
+        return hdr['GAIN']
+        #return np.average((hdr['GAINA'],hdr['GAINB']))
+        #return hdr['ARAWGAIN']
 
     def colorterm_ps1_to_observed(self, ps1stars, band):
         from legacyanalysis.ps1cat import ps1_to_mosaic
@@ -1501,10 +1533,6 @@ class NinetyPrimeMeasurer(Measurer):
         #    self.zp0[b] += -2.5*np.log10(self.gain)  
     
     def get_gain(self,hdr):
-        try:
-            self.gain= super(NinetyPrimeMeasurer, self).get_gain(hdr)
-        except KeyError:
-            self.gain= None 
         self.gain= 1.4 # no GAINA,B
 
     def get_band(self):
@@ -1528,11 +1556,11 @@ class NinetyPrimeMeasurer(Measurer):
 
 def get_extlist(camera):
     '''
-    Returns 'mosaic3', 'decam', or '90prime'
+    Returns 'mosaic', 'decam', or '90prime'
     '''
     if camera == '90prime':
         extlist = ['CCD1', 'CCD2', 'CCD3', 'CCD4']
-    elif camera == 'mosaic3':
+    elif camera == 'mosaic':
         extlist = ['CCD1', 'CCD2', 'CCD3', 'CCD4']
     elif camera == 'decam':
         extlist = ['S29', 'S31', 'S25', 'S26', 'S27', 'S28', 'S20', 'S21', 'S22',
@@ -1543,7 +1571,7 @@ def get_extlist(camera):
                    'N19', 'N20', 'N21', 'N22', 'N23', 'N24', 'N25', 'N26', 'N27',
                    'N28', 'N29', 'N31']
         # Testing only!
-        #extlist = ['N4','S4', 'S22','N19']
+        extlist = ['N4','S4', 'S22','N19']
         #extlist = ['N4']
         #extlist = ['S10', 'S11', 'S12', 'S16', 'S17', 'S4', 'S5', 'S6']
     else:
@@ -1606,18 +1634,17 @@ def measure_image(img_fn, **measureargs):
 #        stars = vstack(stars)
 #        return ccds,stars
     
-    camera = primhdr.get('INSTRUME','').strip().lower()
-    # Names differ a bit here
-    # From cmd line: measureargs['camera'] = 'decam, mosaic, 90prime'
-    # Has to be consistent with hdr: camera = 'decam, mosaic3, 90prime'
-    assert(measureargs['camera'] in camera)
+    camera= measureargs['camera']
+    camera_check = primhdr.get('INSTRUME','').strip().lower()
+    # mosaic listed as mosaic3 in hearder, other combos maybe
+    assert(camera in camera_check or camera_check in camera)
     
     extlist = get_extlist(camera)
     nnext = len(extlist)
 
     if camera == 'decam':
         measure = DecamMeasurer(img_fn, **measureargs)
-    elif camera == 'mosaic3':
+    elif camera == 'mosaic':
         measure = Mosaic3Measurer(img_fn, **measureargs)
     elif camera == '90prime':
         measure = NinetyPrimeMeasurer(img_fn, **measureargs)
