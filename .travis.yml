@@ -18,13 +18,13 @@ install:
     - export WCSLIB_INC="-I/usr/include/wcslib-4.20"
     - export WCSLIB_LIB="-lwcs"
 
+    - pip install Sphinx==1.5.4   # 1.5.6?
     - pip install numpy
     - pip install scipy
     - pip install matplotlib
     - pip install numpydoc
-    - pip install astropy
+    - pip install astropy #==2.0rc1
     - pip install photutils
-    - pip install Sphinx
     - pip install coveralls
     # fitsio master version
     - pip install --no-deps --upgrade git+https://github.com/esheldon/fitsio.git#egg=fitsio
