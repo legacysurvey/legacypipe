@@ -600,10 +600,11 @@ def make_depth_cut(survey, ccds, bands, targetrd, brick, W, H, pixscale,
             
             wcs = im.get_wcs()
             x0,x1,y0,y1,slc = im.get_image_extent(wcs=wcs, radecpoly=targetrd)
+            print('image extent', x0,x1,y0,y1, slc)
             if x0==x1 or y0==y1:
                 print('No actual overlap')
                 continue
-            wcs = wcs.get_subimage(x0, y0, x1-x0, y1-y0)
+            wcs = wcs.get_subimage(int(x0), int(y0), int(x1-x0), int(y1-y0))
 
             skysig1 = im.get_sky_sig1(splinesky=splinesky)
             if skysig1 is None:
