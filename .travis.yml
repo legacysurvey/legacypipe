@@ -65,6 +65,7 @@ script:
     - python -c "import tractor.emfit"
     # - find /home/travis/virtualenv/python2.7.12/lib/python2.7/site-packages/tractor -type f
     # - find /home/travis/virtualenv/python3.6.1/lib/python3.6/site-packages/tractor -type f
+    - (cd py && python test/runbrick_test.py travis)
     - (cd py && coverage run test/runbrick_test.py travis)
 
 after_success:
