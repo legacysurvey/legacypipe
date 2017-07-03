@@ -708,7 +708,8 @@ class Measurer(object):
             skyobj = SplineSky.BlantonMethod(img, None, 256)
             skyimg = np.zeros_like(img)
             skyobj.addTo(skyimg)
-            mnsky, sig1 = self.sensible_sigmaclip(img - skyimg,nsigma=nsigma)
+            mnsky, skystd = self.sensible_sigmaclip(img - skyimg,nsigma=nsigma)
+            skymed= np.median(skyimg)
         else:
             #sky, sig1 = self.sensible_sigmaclip(img[1500:2500, 500:1000])
             if self.camera == 'decam':
@@ -716,9 +717,17 @@ class Measurer(object):
             elif self.camera in ['mosaic','90prime']:
                 slc=[slice(500,1500),slice(500,1500)]
             clip_vals,_,_ = sigmaclip(img[slc],low=nsigma,high=nsigma)
-            skyimg= np.zeros(img.shape) + np.median(clip_vals) 
-            sig1= np.std(clip_vals) 
-        return skyimg, sig1
+            # from astropy.stats import sigma_clip as sigmaclip_astropy
+            #sky_masked= sigmaclip_astropy(img[slc],sigma=nsigma,iters=20)
+            #use= sky1_masked.mask == False
+            #skymed= np.median(sky_masked[use])
+            #sky1std= np.std(sky_masked[use])
+            skymed= np.median(clip_vals) 
+            skystd= np.std(clip_vals) 
+            skyimg= np.zeros(img.shape) + skymed
+            # MAD gives 10% larger value
+            # sig1= 1.4826 * np.median(np.abs(clip_vals))
+        return skyimg, skymed, skystd
 
     def remove_sky_gradients(self, img):
         # Ugly removal of sky gradients by subtracting median in first x and then y
@@ -905,7 +914,7 @@ class Measurer(object):
         zp0 = self.zeropoint(self.band)
         kext = self.extinction(self.band)
         print('Computing the sky background.')
-        sky_img, sig1 = self.get_sky_and_sigma(img)
+        sky_img, skymed, skyrms = self.get_sky_and_sigma(img)
         img_sub_sky= img - sky_img
 
         #fn= 'N4.fits' 
@@ -915,41 +924,20 @@ class Measurer(object):
 
         # Bunch of sky estimates
         # Median of absolute deviation (MAD), std dev = 1.4826 * MAD
-        sky1_mad_sm= 1.4826 * np.median(np.abs(img_sub_sky[1500:2500,500:1500]))
-        sky1_clip,_,_ = sigmaclip(img[1500:2500,500:1500],low=3.,high=3.) #Arjun's prescription
-        sky1= np.median(sky1_clip)
-        print('sky from median of image= %.2f' % sky1)
-        skybr = zp0 - 2.5*np.log10(sky1 / self.pixscale / self.pixscale / exptime)
+        print('sky from median of image= %.2f' % skymed)
+        skybr = zp0 - 2.5*np.log10(skymed / self.pixscale / self.pixscale / exptime)
         print('  Sky brightness: {:.3f} mag/arcsec^2'.format(skybr))
         print('  Fiducial:       {:.3f} mag/arcsec^2'.format(sky0))
 
-        #ccds['skyrms'] = sky1_mad / exptime # e/sec
-        ccds['skyrms'] = sky1_mad_sm / exptime # e/sec
-        #ccds['skyrms'] = sig1 / exptime    # e/sec
-        ccds['skycounts'] = sky1 / exptime # [electron/pix]
+        ccds['skyrms'] = skyrms / exptime # e/sec
+        ccds['skycounts'] = skymed / exptime # [electron/pix]
         ccds['skymag'] = skybr   # [mag/arcsec^2]
         t0= ptime('measure-sky',t0)
         
-        # TESTING: Additional Sky measures
-        skyclip_std = np.std(sky1_clip)
-        sky1_mad= 1.4826 * np.median(np.abs(img_sub_sky))
-        # Astropy IDL's djs_iterstat 
-        from astropy.stats import sigma_clip as sigmaclip_astropy
-        sky1_masked= sigmaclip_astropy(img[1500:2500,500:1500],sigma=3,iters=20)
-        use= sky1_masked.mask == False
-        sky1_med_astropy= np.median(sky1_masked[use])
-        sky1_std_astropy= np.std(sky1_masked[use])
-        ccds['skyrms_a']= sig1 / exptime
-        ccds['skyrms_b']= skyclip_std / exptime
-        ccds['skyrms_c']= sky1_mad / exptime
-        ccds['skyrms_d']= sky1_std_astropy / exptime
-        ccds['skycounts_a']= sky1_med_astropy / exptime
-        t0= ptime('Additional sky measures',t0)
-
         if self.debug:
             extra= {}
             extra['proj_fn']= os.path.join('/project/projectdirs/cosmo/staging',
-                                           ccds['image_filename'].data[0].replace('decam/','decam/DECam_CP/'))
+                                           ccds['image_filename'].data[0])
             extra['hdu']= ccds['image_hdu'].data[0]
 
         # Detect stars on the image.  
@@ -959,7 +947,7 @@ class Measurer(object):
         print('det_thresh = %d' % self.det_thresh)
         #threshold=self.det_thresh * stddev_mad,
         dao = DAOStarFinder(fwhm= hdr_fwhm,
-                            threshold=self.det_thresh * sky1_mad_sm,
+                            threshold=self.det_thresh * skyrms,
                             sharplo=0.2, sharphi=1.0, roundlo=-1.0, roundhi=1.0,
                             exclude_border=False)
         obj= dao(img)
@@ -1260,15 +1248,8 @@ class Measurer(object):
         dmagall = stars['ps1_mag'] - stars['apmag']
         dmag, _, _ = sigmaclip(dmagall, low=2.5, high=2.5)
         dmagmed = np.median(dmag)
-        # Compare iters=10 sigma clipped
-        from astropy.stats import sigma_clip as sigmaclip_astropy
-        dmagall_masked= sigmaclip_astropy(dmagall,sigma=3,iters=10)
-        use= dmagall_masked.mask == False
-        dmagmed_astropy= np.median(dmagall_masked[use])
-        ndmag = len(dmag)
-        # Std dev
-        #_, dmagsig = self.sensible_sigmaclip(dmagall, nsigma=2.5)
         dmagsig = np.std(dmag)  # agrees with IDL codes, they just compute std
+        ndmag = len(dmag)
 
         zptmed = zp0 + dmagmed
         transp = 10.**(-0.4 * (zp0 - zptmed - kext * (airmass - 1.0)))
@@ -1571,7 +1552,7 @@ def get_extlist(camera):
                    'N19', 'N20', 'N21', 'N22', 'N23', 'N24', 'N25', 'N26', 'N27',
                    'N28', 'N29', 'N31']
         # Testing only!
-        extlist = ['N4','S4', 'S22','N19']
+        #extlist = ['N4','S4', 'S22','N19']
         #extlist = ['N4']
         #extlist = ['S10', 'S11', 'S12', 'S16', 'S17', 'S4', 'S5', 'S6']
     else:
@@ -1791,7 +1772,7 @@ def get_parser():
     parser.add_argument('--image_list',action='store',default=None,help='if want to run all images in a text file, Note:if compare2arjun = True then list of legacy zeropoint files',required=False)
     parser.add_argument('--outdir', type=str, default='.', help='Where to write zpts/,images/,logs/')
     parser.add_argument('--debug', action='store_true', default=False, help='Write additional files and plots for debugging')
-    parser.add_argument('--det_thresh', type=float, default=8., help='source detection, 8-sigma gives same detections and IDL daofind with 10-sigam')
+    parser.add_argument('--det_thresh', type=float, default=10., help='source detection, 10x sky sigma')
     parser.add_argument('--match_radius', type=float, default=1., help='arcsec, matching to gaia/ps1, 1 arcsec better astrometry than 3 arcsec as used by IDL codes')
     parser.add_argument('--sn_min', type=float,default=None, help='min S/N, optional cut on apflux/sqrt(skyflux)')
     parser.add_argument('--sn_max', type=float,default=None, help='max S/N, ditto')

@@ -512,7 +512,7 @@ class Legacy_vs_IDL(object):
         self.plots_like_arjuns()
         use_keys= ['zpt'] 
         use_keys=None
-        #self.plot_everything_vs_everything_data(doplot='diff',use_keys=use_keys)
+        self.plot_everything_vs_everything_data(doplot='diff',use_keys=use_keys)
         #self.plot_everything_vs_everything_data(doplot='div',use_keys=use_keys)
         #use_keys= ['ra','dec','obj_Ne_per_sec'] 
         use_keys=None

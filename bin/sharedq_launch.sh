@@ -7,10 +7,17 @@
 #export bricklist=/global/cscratch1/sd/kaylanb/test/legacypipe/py/tractors_proja_dr4c.txt
 #export bricklist=/global/cscratch1/sd/kaylanb/test/legacypipe/py/dr3_bricks.txt
 #export bricklist=/global/projecta/projectdirs/cosmo/work/dr4/dr4_bricks.txt
+
 #export bricklist=/global/cscratch1/sd/kaylanb/test/legacypipe/py/fns_for_25bricks.txt
+#export bricklist=/global/cscratch1/sd/kaylanb/test/legacypipe/py/zpts_remain2.txt
+#export bricklist=/global/cscratch1/sd/kaylanb/test/legacypipe/py/decals_fns.txt
+#export bricklist=/global/cscratch1/sd/kaylanb/test/legacypipe/py/decals_fns_1000.txt
+#export bricklist=/global/cscratch1/sd/kaylanb/test/legacypipe/py/zpts_oom.txt
+export bricklist=/global/cscratch1/sd/kaylanb/test/legacypipe/py/err_timeout.txt
+
 #export bricklist=/global/cscratch1/sd/kaylanb/test/legacypipe/py/fns_for_25bricks_rerun.txt
 #export bricklist=/global/cscratch1/sd/kaylanb/test/legacypipe/py/tractor_fns.txt
-export bricklist=/global/cscratch1/sd/kaylanb/test/legacypipe/py/tractor_i_fns.txt
+#export bricklist=/global/cscratch1/sd/kaylanb/test/legacypipe/py/tractor_i_fns.txt
 
 
 echo bricklist=$bricklist
@@ -22,23 +29,23 @@ fi
 #
 export need_project=yes
 export need_projecta=no
+export set_plus_x=yes
 
 export proj_dir=/global/projecta/projectdirs/cosmo/work/dr4
 export dr4c_dir=/global/cscratch1/sd/desiproc/dr4/data_release/dr4c
 export run=dr3
 #export run=legacy
 export outdir=/global/cscratch1/sd/kaylanb/dr5_zpts
-export walltime=00:30:00
-export jobname=blobs
+export walltime=01:00:00
+export jobname=zpts
 export usecores=1
 export threads=1
 let hypercores=${usecores}*2
 export hypercores=${hypercores}
 # Loop over a star and end
-step=2000
+step=1
 beg=1
 max=`wc -l ${bricklist} |awk '{print $1}'`
-#max=10
 ###
 cnt=0
 # Make 1 script for each i of loop
@@ -51,8 +58,8 @@ for star in `seq ${beg} ${step} ${max}`;do
     cp ../bin/sharedq_job_template.sh $fn
     # 2 Options
     # 1) Multiple sruns, 1 per line in bricklist
-    #while read aline; do
-        #brick=`echo $aline|awk '{print $1}'`
+    while read aline; do
+        brick=`echo $aline|awk '{print $1}'`
         ####
         #cmd="srun -n 1 -c $usecores python legacypipe/format_headers.py --brick $brick --dr4c_dir ${dr4c_dir}"
         #echo $cmd >> $fn 
@@ -66,12 +73,15 @@ for star in `seq ${beg} ${step} ${max}`;do
         #echo "echo $brick \${logfn}" >> $fn
         #echo "cp \${logfn} ${proj_dir}/logs2/${bri}/" >> $fn
         ###
-        #cmd="srun -n 1 -c $usecores python legacyccds/legacy_zeropoints.py --camera decam --image ${brick} --outdir ${outdir}"
-        #echo $cmd >> $fn 
-    #done <<< "$(sed -n ${start_brick},${end_brick}p $bricklist)"
+        export log=`echo $brick|sed s#/project/projectdirs/cosmo/staging#${outdir}#g|sed s#.fits.fz#.log#g`
+        echo "echo Logging to: ${log}" >> $fn
+        echo "mkdir -p $(dirname $log)" >> $fn
+        cmd="srun -n 1 -c $usecores python legacyccds/legacy_zeropoints.py --camera decam --image ${brick} --outdir ${outdir} >> ${log} 2>&1"
+        echo $cmd >> $fn 
+    done <<< "$(sed -n ${start_brick},${end_brick}p $bricklist)"
     # 2) One srun, using args start and end
-    cmd="srun -n 1 -c $usecores python ../bin/job_accounting.py --dowhat blobs --fn ${bricklist} --line_start ${start_brick} --line_end ${end_brick}"
-    echo $cmd >> $fn 
+    #cmd="srun -n 1 -c $usecores python ../bin/job_accounting.py --dowhat blobs --fn ${bricklist} --line_start ${start_brick} --line_end ${end_brick}"
+    #echo $cmd >> $fn 
     # Modify N cores, nodes, walltime, etc
     sed -i "s#SBATCH\ -n\ 2#SBATCH\ -n\ ${hypercores}#g" $fn
     sed -i "s#SBATCH\ -t\ 00:10:00#SBATCH\ -t\ ${walltime}#g" $fn
@@ -85,6 +95,9 @@ for star in `seq ${beg} ${step} ${max}`;do
         sed -i "s#SBATCH\ -L\ SCRATCH#SBATCH\ -L\ SCRATCH,project#g" $fn
     elif [ ${need_projecta} == "yes" ];then
         sed -i "s#SBATCH\ -L\ SCRATCH#SBATCH\ -L\ SCRATCH,projecta#g" $fn
+    fi
+    if [ ${set_plus_x} == "yes" ];then
+        sed -i "s#set\ -x#set\ +x#g" $fn
     fi
     # Submit script created above
     echo Created batch script: $fn 
