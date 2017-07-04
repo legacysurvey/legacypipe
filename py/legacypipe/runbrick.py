@@ -506,7 +506,7 @@ def make_depth_cut(survey, ccds, bands, targetrd, brick, W, H, pixscale,
 
     # Add some margin to our DESI depth requirements
     margin = 0.5
-    target_depths = dict(g=24.0 + margin, r=23.4 + margin, z=22.5 + margin)
+    target_depth_map = dict(g=24.0 + margin, r=23.4 + margin, z=22.5 + margin)
 
     #target_percentiles = np.array([2, 5, 10])
     #target_ddepths = np.array([-0.6, -0.3, 0.])
@@ -527,7 +527,7 @@ def make_depth_cut(survey, ccds, bands, targetrd, brick, W, H, pixscale,
     coarsewcs.imagew = cW
     coarsewcs.imageh = cH
 
-    # Unique pixels in this brick
+    # Unique pixels in this brick (U: cH x cW boolean)
     U = find_unique_pixels(coarsewcs, cW, cH, None,
                            brick.ra1, brick.ra2, brick.dec1, brick.dec2)
     keep_ccds = []
@@ -549,18 +549,23 @@ def make_depth_cut(survey, ccds, bands, targetrd, brick, W, H, pixscale,
         x1 = int(np.round(np.clip(xx.max(), 0, cW-1)))
         if y0 == y1 or x0 == x1:
             slices.append(None)
-        else:
-            slices.append((slice(y0, y1+1), slice(x0, x1+1)))
+            continue
+        # Check whether this CCD overlaps the unique area of this brick...
+        if np.sum(U[y0:y1+1, x0:x1+1]) == 0:
+            print('No overlap with unique area for CCD', ccd.expnum, ccd.ccdname)
+            slices.append(None)
+            continue
+        slices.append((slice(y0, y1+1), slice(x0, x1+1)))
 
     for band in bands:
         # scalar
-        target_depth = target_depths[band]
+        target_depth = target_depth_map[band]
         # vector
         target_depths = target_depth + target_ddepths
 
         depthiv = np.zeros((cH,cW), np.float32)
         depthmap = np.zeros_like(depthiv)
-        last_pcts = None
+        last_pcts = np.zeros_like(target_depths)
         #kept_ras, kept_decs = [],[]
         # indices of CCDs we still want to look at in the current band
         b_inds = np.where(ccds.filter == band)[0]
@@ -597,13 +602,9 @@ def make_depth_cut(survey, ccds, bands, targetrd, brick, W, H, pixscale,
                 # OR, can we try explicitly to include CCDs that cover the shallowest pixels?
                 # Q: what metric to use.  Number of target depths still un-met per pixel?
                 # Depth? What value to use for pixels with no coverage?
-                if last_pcts is not None:
-                    A = (last_pcts < target_depths)
-                    active_depths = target_depths[A]
-                    active_pcts = last_pcts[A]
-                else:
-                    active_depths = target_depths
-                    active_pcts = np.zeros_like(active_depths)
+                A = (last_pcts < target_depths)
+                active_depths = target_depths[A]
+                active_pcts = last_pcts[A]
 
                 # depthvalue = np.zeros(depthmap.shape, np.uint8)
                 # for dd,n in Counter(active_ddepths).most_common():
@@ -615,7 +616,7 @@ def make_depth_cut(survey, ccds, bands, targetrd, brick, W, H, pixscale,
                 depthvalue = np.zeros(depthmap.shape)
                 for d,pct in zip(active_depths, active_pcts):
                     print('target percentile depth', d, 'has depth', pct)
-                    depthvalue += np.maximum(0, d - depthmap)
+                    depthvalue += U * np.maximum(0, d - depthmap)
 
                 ccdvalue = np.zeros(len(b_inds))
                 for j,i in enumerate(b_inds):
@@ -718,16 +719,11 @@ def make_depth_cut(survey, ccds, bands, targetrd, brick, W, H, pixscale,
             depthpcts = np.percentile(depthmap[U], target_percentiles)
 
             for i,(p,d,t) in enumerate(zip(target_percentiles, depthpcts, target_depths)):
-                if last_pcts is not None:
-                    print('  pct % 3i, prev %5.2f -> %5.2f vs target %5.2f %s' % (p, last_pcts[i], d, t, ('ok' if d >= t else '')))
-                else:
-                    print('  pct % 3i, prev          %5.2f vs target %5.2f %s' % (p, d, t, ('ok' if d >= t else '')))
+                print('  pct % 3i, prev %5.2f -> %5.2f vs target %5.2f %s' % (p, last_pcts[i], d, t, ('ok' if d >= t else '')))
 
             keep = False
             # Did we increase the depth of any target percentile that did not already exceed its target depth?
-            if ((last_pcts is None) or 
-                np.any((depthpcts > last_pcts) *
-                       (last_pcts < target_depths)):
+            if np.any((depthpcts > last_pcts) * (last_pcts < target_depths)):
                 keep = True
 
             if plots:
@@ -736,6 +732,7 @@ def make_depth_cut(survey, ccds, bands, targetrd, brick, W, H, pixscale,
                 plt.subplot2grid((2,2),(0,0))
                 plt.imshow(depthvalue, interpolation='nearest', origin='lower',
                            vmin=0)
+                plt.xticks([]); plt.yticks([])
                 plt.colorbar()
                 plt.title('depth value')
 
@@ -756,8 +753,7 @@ def make_depth_cut(survey, ccds, bands, targetrd, brick, W, H, pixscale,
                 #ax.yaxis.set_label_position('right')
                 plt.plot(target_percentiles, target_depths, 'ro', label='Target')
                 plt.plot(target_percentiles, target_depths, 'r-')
-                if last_pcts is not None:
-                    plt.plot(target_percentiles, last_pcts, 'k-', label='Previous percentiles')
+                plt.plot(target_percentiles, last_pcts, 'k-', label='Previous percentiles')
                 plt.plot(target_percentiles, depthpcts, 'b-', label='Depth percentiles')
                 plt.ylim(target_depth - 2, target_depth + 0.5)
                 plt.xscale('log')
@@ -789,6 +785,21 @@ def make_depth_cut(survey, ccds, bands, targetrd, brick, W, H, pixscale,
             if np.all(depthpcts >= target_depths):
                 print('Reached all target depth percentiles for band', band)
                 break
+
+        if plots:
+            I = np.where(ccds.filter == band)[0]
+            plt.clf()
+            plt.plot(seeing[I], ccds.exptime[I], 'k.')
+            # which CCDs from this band are we keeping?
+            kept = np.array(keep_ccds)
+            kept = kept[ccds.filter[kept] == band]
+            plt.plot(seeing[kept], ccds.exptime[kept], 'ro')
+            plt.xlabel('Seeing (arcsec)')
+            plt.ylabel('Exptime (sec)')
+            plt.title('CCDs kept for band %s' % band)
+            yl,yh = plt.ylim()
+            plt.ylim(0, np.max(ccds.exptime[I]) * 1.1)
+            ps.savefig()
 
     return keep_ccds
 
