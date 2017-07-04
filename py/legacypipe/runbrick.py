@@ -566,13 +566,14 @@ def make_depth_cut(survey, ccds, bands, targetrd, brick, W, H, pixscale,
         depthiv = np.zeros((cH,cW), np.float32)
         depthmap = np.zeros_like(depthiv)
         last_pcts = np.zeros_like(target_depths)
-        #kept_ras, kept_decs = [],[]
         # indices of CCDs we still want to look at in the current band
         b_inds = np.where(ccds.filter == band)[0]
         print(len(b_inds), 'CCDs in', band, 'band')
         b_inds = np.array([i for i in b_inds if slices[i] is not None])
         print(len(b_inds), 'CCDs in', band, 'band overlap target')
-
+        # CCDs that we will try before searching for good ones -- CCDs
+        # from the same exposure number as CCDs we have chosen to
+        # take.
         try_ccds = set()
 
         while len(b_inds):
@@ -586,19 +587,6 @@ def make_depth_cut(survey, ccds, bands, targetrd, brick, W, H, pixscale,
                 metric = np.sqrt(ccds.exptime[b_inds]) / seeing[b_inds]**2
                 # This metric is *BIG* for *GOOD* ccds!
     
-                # Look at distances to previously chosen CCDs
-                # if len(kept_ras):
-                #     from astrometry.libkd.spherematch import match_radec
-                #     # Nearest within 1 degree
-                #     I,J,d = match_radec(ccds.ra[b_inds], ccds.dec[b_inds],
-                #                         np.array(kept_ras), np.array(kept_decs), 1.,
-                #                         nearest=True)
-                #     print('Found nearest match to existing CCDs for', len(I), 'of', len(b_inds), 'CCDs')
-                #     dists = np.ones(len(b_inds))
-                #     dists[I] = d
-                #     # 
-                #     metric *= dists
-    
                 # OR, can we try explicitly to include CCDs that cover the shallowest pixels?
                 # Q: what metric to use.  Number of target depths still un-met per pixel?
                 # Depth? What value to use for pixels with no coverage?
@@ -606,22 +594,15 @@ def make_depth_cut(survey, ccds, bands, targetrd, brick, W, H, pixscale,
                 active_depths = target_depths[A]
                 active_pcts = last_pcts[A]
 
-                # depthvalue = np.zeros(depthmap.shape, np.uint8)
-                # for dd,n in Counter(active_ddepths).most_common():
-                #     #print(n, 'targets for depth', target_depth + dd)
-                #     depthvalue += np.uint8(n) * (depthmap < (target_depth + dd))
-                #     print(np.sum(depthmap < (target_depth + dd)), 'pixels < target', target_depth+dd, ' x', n)
-
                 # The value is the depth still required to hit the target, summed over percentiles of interest
-                depthvalue = np.zeros(depthmap.shape)
+                depthvalue = np.zeros(depthmap.shape, np.float32)
                 for d,pct in zip(active_depths, active_pcts):
-                    print('target percentile depth', d, 'has depth', pct)
+                    #print('target percentile depth', d, 'has depth', pct)
                     depthvalue += U * np.maximum(0, d - depthmap)
-
-                ccdvalue = np.zeros(len(b_inds))
+                ccdvalue = np.zeros(len(b_inds), np.float32)
                 for j,i in enumerate(b_inds):
                     ccdvalue[j] = np.sum(depthvalue[slices[i]])
-    
+                del depthvalue
                 metric *= ccdvalue
                     
                 # *ibest* is an index into b_inds
@@ -629,10 +610,6 @@ def make_depth_cut(survey, ccds, bands, targetrd, brick, W, H, pixscale,
                 # *iccd* is an index into ccds.
                 iccd = b_inds[ibest]
                 ccd = ccds[iccd]
-    
-                #if len(kept_ras):
-                #    print('Chose best CCD: seeing', seeing[iccd], 'exptime', ccds.exptime[iccd], 'and distance to existing chips:', dists[ibest])
-                #else:
                 print('Chose best CCD: seeing', seeing[iccd], 'exptime', ccds.exptime[iccd], 'with target value', ccdvalue[ibest])
 
             else:
@@ -656,7 +633,6 @@ def make_depth_cut(survey, ccds, bands, targetrd, brick, W, H, pixscale,
             
             wcs = im.get_wcs()
             x0,x1,y0,y1,slc = im.get_image_extent(wcs=wcs, radecpoly=targetrd)
-            #print('image extent', x0,x1,y0,y1, slc)
             if x0==x1 or y0==y1:
                 print('No actual overlap')
                 continue
@@ -682,7 +658,6 @@ def make_depth_cut(survey, ccds, bands, targetrd, brick, W, H, pixscale,
             h,w = 50,50
             gal = SimpleGalaxy(PixPos(w//2,h//2), Flux(1.))
             tim = Image(data=np.zeros((h,w), np.float32),
-                        #inverr=np.ones((h,w), np.float32),
                         psf=psf,
                         wcs=NullWCS(pixscale=im.pixscale))
             mm = ModelMask(0, 0, w, h)
@@ -700,11 +675,6 @@ def make_depth_cut(survey, ccds, bands, targetrd, brick, W, H, pixscale,
             # Add this image the the depth map...
             from astrometry.util.resample import resample_with_wcs, OverlapError
             try:
-                # w,h = x1-x0, y1-y0
-                # rr,dd = wcs.pixelxy2radec([1,w,w,1], [1,1,h,h])
-                # ok,xx,yy = coarsewcs.radec2pixelxy(rr, dd)
-                # print('Coarse WCS coordinates of corners:', xx, yy)
-                # print('vs shape', coarsewcs.shape)
                 Yo,Xo,Yi,Xi,nil = resample_with_wcs(coarsewcs, wcs)
                 print(len(Yo), 'of', (cW*cH), 'pixels covered by this image')
             except OverlapError:
@@ -749,8 +719,6 @@ def make_depth_cut(survey, ccds, bands, targetrd, brick, W, H, pixscale,
 
                 plt.subplot2grid((2,2),(1,0), colspan=2)
                 ax = plt.gca()
-                #ax.yaxis.tick_right()
-                #ax.yaxis.set_label_position('right')
                 plt.plot(target_percentiles, target_depths, 'ro', label='Target')
                 plt.plot(target_percentiles, target_depths, 'r-')
                 plt.plot(target_percentiles, last_pcts, 'k-', label='Previous percentiles')
@@ -773,9 +741,6 @@ def make_depth_cut(survey, ccds, bands, targetrd, brick, W, H, pixscale,
 
             keep_ccds.append(iccd)
             last_pcts = depthpcts
-
-            #kept_ras.append(ccd.ra)
-            #kept_decs.append(ccd.dec)
 
             # Add any other CCDs from this same expnum to the try_ccds list.
             I = np.where(ccd.expnum == ccds.expnum[b_inds])[0]
