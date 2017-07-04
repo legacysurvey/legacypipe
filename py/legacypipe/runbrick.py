@@ -495,6 +495,7 @@ def make_depth_cut(survey, ccds, bands, targetrd, brick, W, H, pixscale,
                    plots, ps, splinesky, gaussPsf, pixPsf, do_calibs,
                    gitver, targetwcs):
     from legacypipe.survey import wcs_for_brick
+    from collections import Counter
 
     # Add some margin to our DESI depth requirements
     margin = 0.5
@@ -527,55 +528,82 @@ def make_depth_cut(survey, ccds, bands, targetrd, brick, W, H, pixscale,
     pixscale = 3600. * np.sqrt(np.abs(ccds.cd1_1*ccds.cd2_2 - ccds.cd1_2*ccds.cd2_1))
     seeing = ccds.fwhm * pixscale
 
-    #ccds.index = np.arange(len(ccds))
-    #ccds.seeing = seeing
+    # Compute the rectangle in *coarsewcs* covered by each CCD
+    slices = []
+    for iccd,ccd in enumerate(ccds):
+        wcs = survey.get_approx_wcs(ccd)
+        hh,ww = wcs.shape
+        rr,dd = wcs.pixelxy2radec([1,ww,ww,1], [1,1,hh,hh])
+        ok,xx,yy = coarsewcs.radec2pixelxy(rr, dd)
+        y0 = int(np.round(np.clip(yy.min(), 0, cH-1)))
+        y1 = int(np.round(np.clip(yy.max(), 0, cH-1)))
+        x0 = int(np.round(np.clip(xx.min(), 0, cW-1)))
+        x1 = int(np.round(np.clip(xx.max(), 0, cW-1)))
+        if y0 == y1 or x0 == x1:
+            slices[iccd] = None
+            continue
+        slices[iccd] = (slice(y0, y1+1), slice(x0, x1+1))
 
-    # A rough point-source depth proxy would be:
-    #I = np.argsort(seeing / np.sqrt(ccds.exptime))
-    # If we want to put more weight on choosing good-seeing images, we could do:
-    #I = np.argsort(seeing**2 / np.sqrt(ccds.exptime))
-    #ccds.cut(I)
-    
     for band in bands:
         target_depth = target_depths[band]
         depthiv = np.zeros((cH,cW), np.float32)
         depthmap = np.zeros_like(depthiv)
         last_pcts = None
-
         kept_ras, kept_decs = [],[]
-
-        #bccds = ccds[np.array([(f == band) for f in ccds.filter])]
-        #print(len(bccds), 'CCDs for band', band)
-        #b_inds = list(range(len(bccds)))
-
-        #for iccd,ccd in enumerate(ccds):
-        #    if not ccd.filter == band:
-        #        continue
-
+        # indices of CCDs we still want to look at in the current band
         b_inds = np.where(ccds.filter == band)[0]
-
+        print(len(b_inds), 'CCDs in', band, 'band')
+        b_inds = np.array([i for i in b_inds if slices[i] is not None])
+        print(len(b_inds), 'CCDs in', band, 'band overlap target')
+        
         while len(b_inds):
             # Choose the next CCD to look at in this band.
 
             # A rough point-source depth proxy would be:
             # metric = np.sqrt(ccds.extime[b_inds]) / seeing[b_inds]
             # If we want to put more weight on choosing good-seeing images, we could do:
-            # This metric is *BIG* for *GOOD* ccds!
             metric = np.sqrt(ccds.exptime[b_inds]) / seeing[b_inds]**2
+            # This metric is *BIG* for *GOOD* ccds!
 
-            if len(kept_ras):
-                from astrometry.libkd.spherematch import match_radec
-                I,J,d = match_radec(ccds.ra[b_inds], ccds.dec[b_inds],
-                                    np.array(kept_ras), np.array(kept_decs), 1.,
-                                    nearest=True)
-                print('Found nearest match to existing CCDs for', len(I), 'of', len(b_inds), 'CCDs')
-                dists = np.ones(len(b_inds))
-                dists[I] = d
-                # 
-                metric *= dists
+            # Look at distances to previously chosen CCDs
+            # if len(kept_ras):
+            #     from astrometry.libkd.spherematch import match_radec
+            #     # Nearest within 1 degree
+            #     I,J,d = match_radec(ccds.ra[b_inds], ccds.dec[b_inds],
+            #                         np.array(kept_ras), np.array(kept_decs), 1.,
+            #                         nearest=True)
+            #     print('Found nearest match to existing CCDs for', len(I), 'of', len(b_inds), 'CCDs')
+            #     dists = np.ones(len(b_inds))
+            #     dists[I] = d
+            #     # 
+            #     metric *= dists
 
-            # *ibest* is an index into b_inds!
+            # OR, can we try explicitly to include CCDs that cover the shallowest pixels?
+            # Q: what metric to use.  Number of target depths still un-met per pixel?
+            # Depth? What value to use for pixels with no coverage?
+            depthvalue = np.zeros(depthmap.shape, np.uint8)
+            for dd,n in Counter(target_ddepths).most_common():
+                print('n targets for depth', target_depth + dd)
+                depthvalue += n * (depthmap < (target_depth + dd))
+                print(np.sum(depthmap < (target_depth + dd)), 'pixels < target')
+            ccdvalue = np.zeros(len(b_inds))
+            for j,i in enumerate(b_inds):
+                #value[j] = np.sum(depthiv[slices[i]])
+                #value[j] = np.sum(depthiv[slices[i]])
+                ccdvalue[j] = np.sum(depthvalue[slices[i]])
+
+            if plots:
+                plt.clf()
+                plt.imshow(depthvalue, interpolation='nearest', origin='lower')
+                plt.colorbar()
+                plt.title('depth value')
+                ps.savefig()
+                
+            metric *= ccdvalue
+                
+            # *ibest* is an index into b_inds
             ibest = np.argmax(metric)
+            # *iccd* is an index into ccds.
             iccd = b_inds[ibest]
             ccd = ccds[iccd]
 
@@ -583,9 +611,8 @@ def make_depth_cut(survey, ccds, bands, targetrd, brick, W, H, pixscale,
                 print('Chose best CCD: seeing', seeing[iccd], 'exptime', ccds.exptime[iccd], 'and distance to existing chips:', dists[ibest])
             else:
                 print('Chose best CCD: seeing', seeing[iccd], 'exptime', ccds.exptime[iccd])
-
+            # remove *iccd* from b_inds
             b_inds = b_inds[b_inds != iccd]
-
 
             im = survey.get_image_object(ccd)
             print('Band', band, 'expnum', im.expnum, 'exptime', im.exptime, 'seeing', im.fwhm*im.pixscale, 'arcsec')
