@@ -576,8 +576,9 @@ def make_depth_cut(survey, ccds, bands, targetrd, brick, W, H, pixscale,
         # take.
         try_ccds = set()
 
-        while len(b_inds):
+        plot_vals = []
 
+        while len(b_inds):
             if len(try_ccds) == 0:
                 # Choose the next CCD to look at in this band.
     
@@ -587,21 +588,24 @@ def make_depth_cut(survey, ccds, bands, targetrd, brick, W, H, pixscale,
                 metric = np.sqrt(ccds.exptime[b_inds]) / seeing[b_inds]**2
                 # This metric is *BIG* for *GOOD* ccds!
     
-                # OR, can we try explicitly to include CCDs that cover the shallowest pixels?
-                # Q: what metric to use.  Number of target depths still un-met per pixel?
-                # Depth? What value to use for pixels with no coverage?
-                A = (last_pcts < target_depths)
-                active_depths = target_depths[A]
-                active_pcts = last_pcts[A]
-
-                # The value is the depth still required to hit the target, summed over percentiles of interest
+                # Here, we try explicitly to include CCDs that cover
+                # pixels that are still shallow by the largest amount
+                # for the largest number of percentiles of interest;
+                # note that pixels with no coverage get depth 0, so
+                # score high in this metric.
+                #
+                # The value is the depth still required to hit the
+                # target, summed over percentiles of interest
+                # (for pixels unique to this brick)
                 depthvalue = np.zeros(depthmap.shape, np.float32)
-                for d,pct in zip(active_depths, active_pcts):
+                active = (last_pcts < target_depths)
+                for d,pct in zip(target_depths[active], last_pcts[active]):
                     #print('target percentile depth', d, 'has depth', pct)
                     depthvalue += U * np.maximum(0, d - depthmap)
                 ccdvalue = np.zeros(len(b_inds), np.float32)
                 for j,i in enumerate(b_inds):
                     #ccdvalue[j] = np.sum(depthvalue[slices[i]])
+                    # mean -- we want the most bang for the buck per pixel?
                     ccdvalue[j] = np.mean(depthvalue[slices[i]])
                 metric *= ccdvalue
                     
@@ -696,7 +700,20 @@ def make_depth_cut(survey, ccds, bands, targetrd, brick, W, H, pixscale,
             if np.any((depthpcts > last_pcts) * (last_pcts < target_depths)):
                 keep = True
 
+            # Add any other CCDs from this same expnum to the try_ccds list.
+            # (before making the plot)
+            I = np.where(ccd.expnum == ccds.expnum[b_inds])[0]
+            try_ccds.update(b_inds[I])
+            print('Adding', len(I), 'CCDs with the same expnum to try_ccds list')
+
             if plots:
+                cc = '1' if keep else '0'
+                xx = [Xo.min(), Xo.min(), Xo.max(), Xo.max(), Xo.min()]
+                yy = [Yo.min(), Yo.max(), Yo.max(), Yo.min(), Yo.min()]
+                plot_vals.append(((xx,yy,cc),(last_pcts,depthpcts,keep),im.ccdname))
+
+            if plots and (
+                (len(try_ccds) == 0) or np.all(depthpcts >= target_depths)):
                 plt.clf()
 
                 plt.subplot2grid((2,2),(0,0))
@@ -704,34 +721,55 @@ def make_depth_cut(survey, ccds, bands, targetrd, brick, W, H, pixscale,
                            vmin=0)
                 plt.xticks([]); plt.yticks([])
                 plt.colorbar()
-                plt.title('depth value')
+                plt.title('heuristic value')
 
                 plt.subplot2grid((2,2),(0,1))
                 plt.imshow(depthmap, interpolation='nearest', origin='lower',
                            vmin=target_depth - 2, vmax=target_depth + 0.5)
                 ax = plt.axis()
-                plt.plot([Xo.min(), Xo.min(), Xo.max(), Xo.max(), Xo.min()],
-                         [Yo.min(), Yo.max(), Yo.max(), Yo.min(), Yo.min()],
-                         '-', color='1', lw=3)
+                for (xx,yy,cc) in [p[0] for p in plot_vals]:
+                    plt.plot(xx,yy, '-', color=cc, lw=3)
+                # cc = '1' if keep else '0'
+                # plt.plot([Xo.min(), Xo.min(), Xo.max(), Xo.max(), Xo.min()],
+                #          [Yo.min(), Yo.max(), Yo.max(), Yo.min(), Yo.min()],
+                #          '-', color=cc, lw=3)
                 plt.axis(ax)
                 plt.xticks([]); plt.yticks([])
                 plt.colorbar()
+                plt.title('depth map')
 
                 plt.subplot2grid((2,2),(1,0), colspan=2)
                 ax = plt.gca()
                 plt.plot(target_percentiles, target_depths, 'ro', label='Target')
                 plt.plot(target_percentiles, target_depths, 'r-')
-                plt.plot(target_percentiles, last_pcts, 'k-', label='Previous percentiles')
-                plt.plot(target_percentiles, depthpcts, 'b-', label='Depth percentiles')
+                #plt.plot(target_percentiles, last_pcts, 'k-', label='Previous percentiles')
+                #plt.plot(target_percentiles, depthpcts, 'b-', label='Depth percentiles')
+
+                for (lp,dp,k) in [p[1] for p in plot_vals]:
+                    plt.plot(target_percentiles, lp, 'k-',
+                             label='Previous percentiles')
+                for (lp,dp,k) in [p[1] for p in plot_vals]:
+                    cc = 'b' if k else 'r'
+                    plt.plot(target_percentiles, dp, '-', color=cc,
+                             label='Depth percentiles')
+
+                ccdnames = ','.join([p[2] for p in plot_vals])
+
+                plot_vals = []
+
                 plt.ylim(target_depth - 2, target_depth + 0.5)
                 plt.xscale('log')
                 plt.xlabel('Percentile')
                 plt.ylabel('Depth')
-                imgstr = '%s %i-%s, exptime %.0f, seeing %.2f, band %s' % (im.camera, im.expnum, im.ccdname, im.exptime, im.pixscale * im.fwhm, band)
-                if keep:
-                    plt.suptitle('Keeping: ' + imgstr)
-                else:
-                    plt.suptitle('Not keeping: ' + imgstr)
+                plt.title('depth percentiles')
+                # imgstr = '%s %i-%s, exptime %.0f, seeing %.2f, band %s' % (im.camera, im.expnum, im.ccdname, im.exptime, im.pixscale * im.fwhm, band)
+                # if keep:
+                #     plt.suptitle('Keeping: ' + imgstr)
+                # else:
+                #     plt.suptitle('Not keeping: ' + imgstr)
+                imgstr = '%s %i-%s, exptime %.0f, seeing %.2f, band %s' % (im.camera, im.expnum, ccdnames, im.exptime, im.pixscale * im.fwhm, band)
+                plt.suptitle(imgstr)
+
                 ps.savefig()
 
             if not keep:
@@ -741,11 +779,6 @@ def make_depth_cut(survey, ccds, bands, targetrd, brick, W, H, pixscale,
 
             keep_ccds.append(iccd)
             last_pcts = depthpcts
-
-            # Add any other CCDs from this same expnum to the try_ccds list.
-            I = np.where(ccd.expnum == ccds.expnum[b_inds])[0]
-            try_ccds.update(b_inds[I])
-            print('Adding', len(I), 'CCDs with the same expnum to try_ccds list')
 
             if np.all(depthpcts >= target_depths):
                 print('Reached all target depth percentiles for band', band)
@@ -3162,7 +3195,7 @@ def main(args=None):
     Time.add_measurement(MemMeas)
     if opt.plots:
         plt.figure(figsize=(12,9))
-        plt.subplots_adjust(left=0.07, right=0.99, bottom=0.07, top=0.95,
+        plt.subplots_adjust(left=0.07, right=0.99, bottom=0.07, top=0.93,
                             hspace=0.2, wspace=0.05)
 
     if opt.ps is not None:
