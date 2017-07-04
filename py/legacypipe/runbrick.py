@@ -602,7 +602,6 @@ def make_depth_cut(survey, ccds, bands, targetrd, brick, W, H, pixscale,
                 ccdvalue = np.zeros(len(b_inds), np.float32)
                 for j,i in enumerate(b_inds):
                     ccdvalue[j] = np.sum(depthvalue[slices[i]])
-                del depthvalue
                 metric *= ccdvalue
                     
                 # *ibest* is an index into b_inds
