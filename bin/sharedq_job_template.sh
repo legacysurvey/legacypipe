@@ -11,6 +11,8 @@
 #--mail-user=kburleigh@lbl.gov
 #--mail-type=END,FAIL
 
+source ~/.bashrc_desiconda
+
 usecores=1
 threads=1
 if [ "$full_stacktrace" = "yes" ];then

@@ -488,7 +488,7 @@ class OneBlob(object):
                         dev.getShape()).copy()
                 srccat[0] = newsrc
 
-                print('Starting optimization for', name)
+                #print('Starting optimization for', name)
                 
                 # Use the same modelMask shapes as the original source ('src').
                 # Need to create newsrc->mask mappings though:
@@ -524,12 +524,12 @@ class OneBlob(object):
                     dtractor.setModelMasks(dmm)
                     enable_galaxy_cache()
                     cpustep0 = time.clock()
-                    print('Optimizing to-depth first round for', name)
-                    print(newsrc)
+                    #print('Optimizing to-depth first round for', name)
+                    #print(newsrc)
                     dtractor.optimize_loop(**self.optargs)
-                    print('Optimizing to-depth first round took',
-                          time.clock()-cpustep0)
-                    print(newsrc)
+                    #print('Optimizing to-depth first round took',
+                    #      time.clock()-cpustep0)
+                    #print(newsrc)
                     # print('Mod', name, 'round0 opt', Time()-t0)
                     # print('New source (after to-depth round optimization):',
                     #   newsrc)
@@ -558,15 +558,15 @@ class OneBlob(object):
                     
                 # First-round optimization (during model selection)
                 thisflags = 0
-                print('Optimizing: first round for', name, ':', len(srctims))
-                print('  exposure times:',
-                      [(tim.meta.exptime,tim.band) for tim in srctims])
-                print(newsrc)
+                #print('Optimizing: first round for', name, ':', len(srctims))
+                #print('  exposure times:',
+                #      [(tim.meta.exptime,tim.band) for tim in srctims])
+                #print(newsrc)
                 cpustep0 = time.clock()
                 srctractor.optimize_loop(**self.optargs)
-                print('Optimizing first round', name, 'took',
-                      time.clock()-cpustep0)
-                print(newsrc)
+                #print('Optimizing first round', name, 'took',
+                #      time.clock()-cpustep0)
+                #print(newsrc)
 
                 # print('Mod', name, 'round1 opt', Time()-t0)
                 #print('Mod selection: after first-round opt:', newsrc)
@@ -634,20 +634,20 @@ class OneBlob(object):
                 if modtims is not None:
 
                     if self.many_exposures:
-                        print('insubset:', insubset)
+                        #print('insubset:', insubset)
                         mdtims = [tim for tim in modtims if tim.name in dnames]
                         dmm = [m for m,tim in zip(mm,modtims) if tim.name in dnames]
-                        print('Selected mdtims:', [tim.name for tim in mdtims])
+                        #print('Selected mdtims:', [tim.name for tim in mdtims])
                         dtractor = self.tractor(mdtims, [newsrc])
                         dtractor.setModelMasks(dmm)
                         enable_galaxy_cache()
                         cpustep0 = time.clock()
-                        print('Optimizing to-depth second round for', name)
-                        print(newsrc)
+                        #print('Optimizing to-depth second round for', name)
+                        #print(newsrc)
                         dtractor.optimize_loop(**self.optargs)
-                        print('Optimizing to-depth second round', name, 'took',
-                              time.clock()-cpustep0)
-                        print(newsrc)
+                        #print('Optimizing to-depth second round', name, 'took',
+                        #      time.clock()-cpustep0)
+                        #print(newsrc)
 
                         if self.plots:
                             self._plot_coadd(mdtims, self.blobwcs)
@@ -732,7 +732,7 @@ class OneBlob(object):
                 cpum1 = time.clock()
                 B.all_model_cpu[srci][name] = cpum1 - cpum0
                 cputimes[name] = cpum1 - cpum0
-                print('Fitting', name, 'took', cputimes[name])
+                #print('Fitting', name, 'took', cputimes[name])
 
                 if self.plots:
                     print('Plotting model selection evaluated for', name)
@@ -749,14 +749,14 @@ class OneBlob(object):
             keepsrc = {'none':None, 'ptsrc':ptsrc, simname:simple,
                        'dev':dev, 'exp':exp, 'comp':comp}[keepmod]
             bestchi = chisqs.get(keepmod, 0.)
-            for nm in modnames:
-                c = chisqs.get(nm, 0.)
-                more = ''
-                if nm == 'rex':
-                    more = '     re = %.3g' % simple.shape.re
-                print('  % -5s' % nm, 'dchisq %12.2f' % c,
-                      'delta %12.2f' % (c-bestchi), more)
-            print('->', keepmod)
+            # for nm in modnames:
+            #     c = chisqs.get(nm, 0.)
+            #     more = ''
+            #     if nm == 'rex':
+            #         more = '     re = %.3g' % simple.shape.re
+            #     print('  % -5s' % nm, 'dchisq %12.2f' % c,
+            #           'delta %12.2f' % (c-bestchi), more)
+            # print('->', keepmod)
 
             if self.plots:
                 # DEBUGGING ptsrc vs rex
@@ -1798,6 +1798,6 @@ def _limit_galaxy_stamp_size(src, tim, maxhalf=128):
         px,py = tim.wcs.positionToPixel(src.getPosition())
         h = src._getUnitFluxPatchSize(tim, px, py, tim.modelMinval)
         if h > maxhalf:
-            print('halfsize', h, 'for', src, '-> setting to', maxhalf)
+            #print('halfsize', h, 'for', src, '-> setting to', maxhalf)
             src.halfsize = maxhalf
 

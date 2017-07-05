@@ -91,9 +91,6 @@ def main(outfn='ccds-annotated.fits', ccds=None, mzls=False):
     ccds.pixscale_max  = np.zeros(len(ccds), np.float32)
     ccds.pixscale_min  = np.zeros(len(ccds), np.float32)
 
-    # DR4
-    ccds.psf_sampling = np.zeros(len(ccds), np.float32)
-
     ccds.psfnorm_mean = np.zeros(len(ccds), np.float32)
     ccds.psfnorm_std  = np.zeros(len(ccds), np.float32)
     ccds.galnorm_mean = np.zeros(len(ccds), np.float32)
@@ -223,8 +220,6 @@ def main(outfn='ccds-annotated.fits', ccds=None, mzls=False):
             galnorms.append(g)
 
         tim.psf = psf
-
-        ccds.psf_sampling[iccd] = tim.psf.psfex.sampling
 
         ccds.psfnorm_mean[iccd] = np.mean(psfnorms)
         ccds.psfnorm_std [iccd] = np.std (psfnorms)

@@ -8,6 +8,7 @@ from __future__ import division, print_function
 import os
 import argparse
 import numpy as np
+import pickle
 from astrometry.util.fits import fits_table, merge_tables
 
 def read_lines(fn):
@@ -16,6 +17,50 @@ def read_lines(fn):
     fin.close()
     if len(lines) < 1: raise ValueError('lines not read properly from %s' % fn)
     return np.array( list(np.char.strip(lines)) )
+
+def hdu_minus_1(cat):
+    cat.set('image_hdu',cat.image_hdu - 1)
+
+def cut_nans(cat):
+    flag={}
+    for col in cat.get_columns():
+        try:
+            flag[col]= np.isfinite(cat.get(col)) == False
+            print('col=%s has %d NaNs' % (col,np.where(flag[col])[0].size))
+        except TypeError:
+            pass
+    # cut all nans
+    keep= (np.ones(len(cat),bool) )
+    for key in flag.keys():
+        keep *= (flag[key] == False)
+    print('Removing %d NaNs' % (np.where(keep == False)[0].size,))
+    cat2= cat.copy()
+    cat2.cut(keep)
+    print('len cat=%d, cat2=%d' % (len(cat),len(cat2)))
+    return cat,cat2,flag
+
+def write_cat(cat, outname):
+    # needs be fixed better
+    #hdu_minus_1(cat)
+    #
+    cat,cat2,flag= cut_nans(cat)
+    # save
+    outname= outname.replace('.fits','')
+    fn= outname+'_hasnans.fits'
+    fn2= outname+'.fits'
+    fn_flag= outname+'_flag.pickle'
+    for f in [fn,fn2,fn_flag]:
+        if os.path.exists(f):
+            os.remove(f)
+    cat.writeto(fn)
+    cat2.writeto(fn2)
+    with open(fn_flag,'w') as foo:
+        pickle.dump(flag, foo)
+    print('Wrote Files')
+    for f in [fn,fn2]:
+        os.system('gzip --best ' + f)
+    print('gzipped files')
+
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description='Generate a legacypipe-compatible CCDs file from a set of reduced imaging.')
@@ -41,12 +86,7 @@ if __name__ == "__main__":
         all_cats = comm.gather( cats, root=0 )
         if comm.rank == 0:
             all_cats= merge_tables(all_cats, columns='fillzero')
-            if os.path.exists(opt.outname):
-                os.remove(opt.outname)
-            all_cats.writeto(opt.outname)
-            print('Wrote %s' % opt.outname)
-            os.system('gzip --best ' + opt.outname)
-            print('gzipped %s' % opt.outname)
+            write_cat(all_cats,outname=opt.outname)
             print("Done")
     else:
         cats=[]
@@ -54,10 +94,5 @@ if __name__ == "__main__":
             print('Reading %d/%d' % (cnt,len(fns)))
             cats.append( fits_table(fn) )
         cats= merge_tables(cats, columns='fillzero')
-        if os.path.exists(opt.outname):
-            os.remove(opt.outname)
-        cats.writeto(opt.outname)
-        print('Wrote %s' % opt.outname)
-        os.system('gzip --best ' + opt.outname)
-        print('gzipped %s' % opt.outname)
-
+        write_cat(cats, outname=opt.outname)
+        print("Done")
