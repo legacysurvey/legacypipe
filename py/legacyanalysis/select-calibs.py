@@ -11,14 +11,21 @@ if __name__ == '__main__':
     expnums = np.unique(ccds.expnum)
     print(len(expnums), 'unique exposure numbers')
 
+    ####
+    sky = False
+
+
     ###
     #expnums = expnums[expnums < 140000]
     #pat = os.path.join(survey.survey_dir, 'calib', 'decam',
     #                   'psfex-merged', '0013*', '*.fits')
 
     pat = os.path.join(survey.survey_dir, 'calib', 'decam',
-                       #'psfex-merged', '*', '*.fits')
-                       'splinesky-merged', '*', '*.fits')
+                       'psfex-merged', '*', '*.fits')
+
+    if sky:
+        pat.replace('psfex','splinesky')
+
     print('file pattern:', pat)
     got_expnums = set()
     merged_fns = glob(pat)
@@ -38,13 +45,14 @@ if __name__ == '__main__':
 
     for expnum in need_expnums:
         for pat in ['/global/cscratch1/sd/desiproc/dr5/./calib/decam/psfex/%(expnumstr).5s/%(expnumstr)s/decam-%(expnumstr)s-*.fits',
-                    '/global/cscratch1/sd/desiproc/dr3/./calib/decam/psfex/%(expnumstr).5s/%(expnumstr)s/decam-%(expnumstr)s-*.fits',
-                    '/global/cscratch1/sd/dstn/dr5/./calib/decam/psfex/%(expnumstr).5s/%(expnumstr)s/decam-%(expnumstr)s-*.fits',
-                    '/global/cscratch1/sd/dstn/dr3plus/./calib/decam/psfex/%(expnumstr).5s/%(expnumstr)s/decam-%(expnumstr)s-*.fits',
+                    #'/global/cscratch1/sd/desiproc/dr3/./calib/decam/psfex/%(expnumstr).5s/%(expnumstr)s/decam-%(expnumstr)s-*.fits',
+                    #'/global/cscratch1/sd/dstn/dr5/./calib/decam/psfex/%(expnumstr).5s/%(expnumstr)s/decam-%(expnumstr)s-*.fits',
+                    #'/global/cscratch1/sd/dstn/dr3plus/./calib/decam/psfex/%(expnumstr).5s/%(expnumstr)s/decam-%(expnumstr)s-*.fits',
                     ]:
             pat = pat % dict(expnumstr=str('%08i' % expnum))
 
-            pat = pat.replace('psfex', 'splinesky')
+            if sky:
+                pat = pat.replace('psfex', 'splinesky')
 
             fns = glob(pat)
             print('Expnum', expnum, '->', len(fns), 'files in', pat)
