@@ -1,0 +1,86 @@
+# Default configuration file for SExtractor 2.5.0
+# EB 2006-07-14
+#
+ 
+#-------------------------------- Catalog ------------------------------------
+
+# These config entries will be overridden by runbrick.py (common.py actually) :
+CATALOG_NAME     test.cat       # name of the output catalog
+PARAMETERS_NAME  DECaLS.param  # name of the file containing catalog contents
+DETECT_THRESH    1.0            # <sigmas> or <threshold>,<ZP> in mag.arcsec-2
+ANALYSIS_THRESH  1.0            # <sigmas> or <threshold>,<ZP> in mag.arcsec-2
+FILTER_NAME      gauss_5.0_9x9.conv   # name of the file containing the filter
+MAG_ZEROPOINT    30.0           # magnitude zero-point
+PIXEL_SCALE      0              # size of pixel in arcsec (0=use FITS WCS info)
+SEEING_FWHM      1.2            # stellar FWHM in arcsec
+STARNNW_NAME     default.nnw    # Neural-Network_Weight table filename
+
+
+
+#-------------------------------- Catalog ------------------------------------
+
+CATALOG_TYPE     FITS_LDAC     # NONE,ASCII,ASCII_HEAD, ASCII_SKYCAT,
+                                # ASCII_VOTABLE, FITS_1.0 or FITS_LDAC
+ 
+#------------------------------- Extraction ----------------------------------
+ 
+DETECT_TYPE      CCD            # CCD (linear) or PHOTO (with gamma correction)
+DETECT_MINAREA   5              # minimum number of pixels above threshold
+DETECT_MAXAREA   0              # max. # of pixels above threshold (0=unlimited)
+THRESH_TYPE      RELATIVE       # threshold type: RELATIVE (in sigmas)
+                                # or ABSOLUTE (in ADUs)
+ 
+FILTER           Y              # apply filter for detection (Y or N)?
+ 
+DEBLEND_NTHRESH  64             # Number of deblending sub-thresholds
+DEBLEND_MINCONT  0.000015          # Minimum contrast parameter for deblending
+ 
+CLEAN            Y              # Clean spurious detections? (Y or N)?
+CLEAN_PARAM      1.0            # Cleaning efficiency
+ 
+MASK_TYPE        CORRECT        # type of detection MASKing: can be one of
+                                # NONE, BLANK or CORRECT
+
+FITS_UNSIGNED   Y               # Force 16-bit FITS input data to be
+                                # interpreted as unsigned integers
+
+#------------------------------ Photometry -----------------------------------
+
+# corresponding to diameters of [1.5,3,5,7,9,11,13,15] arcsec 
+# assuming 0.262 arcsec pixel scale
+PHOT_APERTURES  5.7251911,11.450382,19.083969,26.717558,34.351147,41.984734,49.618320,57.251911
+
+PHOT_AUTOPARAMS  2.5, 3.5       # MAG_AUTO parameters: <Kron_fact>,<min_radius>
+PHOT_PETROPARAMS 2.0, 3.5       # MAG_PETRO parameters: <Petrosian_fact>,
+                                # <min_radius>
+ 
+SATUR_LEVEL      40000.0        # level (in ADUs) at which arises saturation
+ 
+GAIN             4.0            # detector gain in e-/ADU
+ 
+#------------------------- Star/Galaxy Separation ----------------------------
+ 
+ 
+#------------------------------ Background -----------------------------------
+ 
+BACK_SIZE        64             # Background mesh: <size> or <width>,<height>
+BACK_FILTERSIZE  3              # Background filter: <size> or <width>,<height>
+ 
+BACKPHOTO_TYPE   LOCAL         # can be GLOBAL or LOCAL
+BACKPHOTO_THICK  24            # thickness (pix) of background rectangular aperture for LOCAL
+ 
+#------------------------------ Check Image ----------------------------------
+ 
+CHECKIMAGE_TYPE NONE
+
+#--------------------- Memory (change with caution!) -------------------------
+ 
+MEMORY_OBJSTACK  30000          # number of objects in stack
+MEMORY_PIXSTACK  10000000        # number of pixels in stack 
+MEMORY_BUFSIZE   1024          # number of lines in buffer (set to 16k)
+
+#----------------------------- Miscellaneous ---------------------------------
+ 
+VERBOSE_TYPE     NORMAL         # can be QUIET, NORMAL or FULL
+WRITE_XML        N              # Write XML file (Y/N)?
+XML_NAME         sex.xml        # Filename for XML output
