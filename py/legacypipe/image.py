@@ -183,43 +183,12 @@ class LegacySurveyImage(object):
         get_invvar = invvar
 
         band = self.band
-        imh,imw = self.get_image_shape()
         wcs = self.get_wcs()
-        x0,y0 = 0,0
-        x1 = x0 + imw
-        y1 = y0 + imh
 
-        # Clip to RA,Dec polygon?
-        if slc is None and radecpoly is not None:
-            from astrometry.util.miscutils import clip_polygon
-            imgpoly = [(1,1),(1,imh),(imw,imh),(imw,1)]
-            ok,tx,ty = wcs.radec2pixelxy(radecpoly[:-1,0], radecpoly[:-1,1])
-            tpoly = list(zip(tx,ty))
-            clip = clip_polygon(imgpoly, tpoly)
-            clip = np.array(clip)
-            if len(clip) == 0:
-                return None
-            x0,y0 = np.floor(clip.min(axis=0)).astype(int)
-            x1,y1 = np.ceil (clip.max(axis=0)).astype(int)
-            slc = slice(y0,y1+1), slice(x0,x1+1)
-            if y1 - y0 < tiny or x1 - x0 < tiny:
-                print('Skipping tiny subimage')
-                return None
-        # Slice?
-        if slc is not None:
-            sy,sx = slc
-            y0,y1 = sy.start, sy.stop
-            x0,x1 = sx.start, sx.stop
-
-        # Is part of this image bad?
-        old_extent = (x0,x1,y0,y1)
-        new_extent = self.get_good_image_slice((x0,x1,y0,y1), get_extent=True)
-        if new_extent != old_extent:
-            x0,x1,y0,y1 = new_extent
-            print('Applying good subregion of CCD: slice is', x0,x1,y0,y1)
-            if x0 >= x1 or y0 >= y1:
-                return None
-            slc = slice(y0,y1), slice(x0,x1)
+        x0,x1,y0,y1,slc = self.get_image_extent(wcs=wcs, slc=slc, radecpoly=radecpoly)
+        if y1 - y0 < tiny or x1 - x0 < tiny:
+            print('Skipping tiny subimage')
+            return None
 
         # Read image pixels
         if pixels:
@@ -227,10 +196,8 @@ class LegacySurveyImage(object):
             img,imghdr = self.read_image(header=True, slice=slc)
             self.check_image_header(imghdr)
         else:
-            img = np.zeros((imh, imw), np.float32)
+            img = np.zeros((y1-y0, x1-x0), np.float32)
             imghdr = self.read_image_header()
-            if slc is not None:
-                img = img[slc]
         assert(np.all(np.isfinite(img)))
             
         # Read inverse-variance (weight) map
@@ -394,6 +361,46 @@ class LegacySurveyImage(object):
         subh,subw = tim.shape
         tim.subwcs = tim.sip_wcs.get_subimage(tim.x0, tim.y0, subw, subh)
         return tim
+
+    def get_image_extent(self, wcs=None, slc=None, radecpoly=None):
+        '''
+        Returns x0,x1,y0,y1,slc
+        '''
+        slc = None
+        imh,imw = self.get_image_shape()
+        x0,y0 = 0,0
+        x1 = x0 + imw
+        y1 = y0 + imh
+
+        # Clip to RA,Dec polygon?
+        if slc is None and radecpoly is not None:
+            from astrometry.util.miscutils import clip_polygon
+            imgpoly = [(1,1),(1,imh),(imw,imh),(imw,1)]
+            ok,tx,ty = wcs.radec2pixelxy(radecpoly[:-1,0], radecpoly[:-1,1])
+            tpoly = list(zip(tx,ty))
+            clip = clip_polygon(imgpoly, tpoly)
+            clip = np.array(clip)
+            if len(clip) == 0:
+                return 0,0,0,0,None
+            x0,y0 = np.floor(clip.min(axis=0)).astype(int)
+            x1,y1 = np.ceil (clip.max(axis=0)).astype(int)
+            slc = slice(y0,y1+1), slice(x0,x1+1)
+        # Slice?
+        if slc is not None:
+            sy,sx = slc
+            y0,y1 = sy.start, sy.stop
+            x0,x1 = sx.start, sx.stop
+
+        # Is part of this image bad?
+        old_extent = (x0,x1,y0,y1)
+        new_extent = self.get_good_image_slice((x0,x1,y0,y1), get_extent=True)
+        if new_extent != old_extent:
+            x0,x1,y0,y1 = new_extent
+            print('Applying good subregion of CCD: slice is', x0,x1,y0,y1)
+            if x0 >= x1 or y0 >= y1:
+                return 0,0,0,0,None
+            slc = slice(y0,y1), slice(x0,x1)
+        return x0,x1,y0,y1,slc
 
     def remap_invvar(self, invvar, primhdr, img, dq):
         return invvar
@@ -825,12 +832,49 @@ class LegacySurveyImage(object):
 
     def get_wcs(self):
         return None
-    
+
+    ### Yuck, this is not much better than just doing read_sky_model().sig1 ...
+    def get_sky_sig1(self, splinesky=False):
+        '''
+        Returns the per-pixel noise estimate, which (for historical
+        reasons) is stored in the sky model.  NOTE that this is in
+        image pixel counts, NOT calibrated nanomaggies.
+        '''
+        if splinesky and getattr(self, 'merged_splineskyfn', None) is not None:
+            if not os.path.exists(self.merged_splineskyfn):
+                print('Merged spline sky model does not exist:', self.merged_splineskyfn)
+        if (splinesky and getattr(self, 'merged_splineskyfn', None) is not None
+            and os.path.exists(self.merged_splineskyfn)):
+            try:
+                print('Reading merged spline sky models from', self.merged_splineskyfn)
+                T = fits_table(self.merged_splineskyfn)
+                if 'sig1' in T.get_columns():
+                    I, = np.nonzero((T.expnum == self.expnum) *
+                                    np.array([c.strip() == self.ccdname
+                                              for c in T.ccdname]))
+                    print('Found', len(I), 'matching CCD')
+                    if len(I) >= 1:
+                        return T.sig1[I[0]]
+            except:
+                pass
+        if splinesky:
+            fn = self.splineskyfn
+        else:
+            fn = self.skyfn
+        print('Reading sky model from', fn)
+        hdr = fitsio.read_header(fn)
+        sig1 = hdr.get('SIG1', None)
+        return sig1
+
     def read_sky_model(self, splinesky=False, slc=None, **kwargs):
         '''
         Reads the sky model, returning a Tractor Sky object.
         '''
         sky = None
+        if splinesky and getattr(self, 'merged_splineskyfn', None) is not None:
+            if not os.path.exists(self.merged_splineskyfn):
+                print('Merged spline sky model does not exist:', self.merged_splineskyfn)
+
         if (splinesky and getattr(self, 'merged_splineskyfn', None) is not None
             and os.path.exists(self.merged_splineskyfn)):
             try:
@@ -923,6 +967,10 @@ class LegacySurveyImage(object):
         # spatially varying pixelized PsfEx
         from tractor import PixelizedPsfEx, PsfExModel
         psf = None
+        if getattr(self, 'merged_psffn', None) is not None:
+            if not os.path.exists(self.merged_psffn):
+                print('Merged PsfEx model does not exist:', self.merged_psffn)
+
         if (getattr(self, 'merged_psffn', None) is not None
             and os.path.exists(self.merged_psffn)):
             try:
@@ -939,7 +987,7 @@ class LegacySurveyImage(object):
                     degree = Ti.poldeg1
                     # number of terms in polynomial
                     ne = (degree + 1) * (degree + 2) / 2
-                    print('PSF_mask shape', Ti.psf_mask.shape)
+                    #print('PSF_mask shape', Ti.psf_mask.shape)
                     Ti.psf_mask = Ti.psf_mask[:ne, :Ti.psfaxis1, :Ti.psfaxis2]
 
                     psfex = PsfExModel(Ti=Ti)

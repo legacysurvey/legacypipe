@@ -244,9 +244,18 @@ class DecamImage(CPImage, CalibMixin):
         from .survey import (create_temp, get_version_header,
                              get_git_version)
         
-        if psfex and os.path.exists(self.psffn) and (not force):
-            if self.check_psf(self.psffn):
+        #if psfex and os.path.exists(self.psffn) and (not force):
+        #    if self.check_psf(self.psffn):
+        #        psfex = False
+        if psfex and not force:
+            try:
+                self.read_psf_model(0, 0, pixPsf=True, hybridPsf=True)
                 psfex = False
+            except:
+                import traceback
+                print('Did not find existing PsfEx model for', self, ':')
+                traceback.print_exc()
+                pass
         if psfex:
             se = True
             
@@ -256,22 +265,32 @@ class DecamImage(CPImage, CalibMixin):
         if se:
             funpack = True
 
-        if sky and (not force) and (
-            (os.path.exists(self.skyfn) and not splinesky) or
-            (os.path.exists(self.splineskyfn) and splinesky)):
-            fn = self.skyfn
-            if splinesky:
-                fn = self.splineskyfn
+        # if sky and (not force) and (
+        #     (os.path.exists(self.skyfn) and not splinesky) or
+        #     (os.path.exists(self.splineskyfn) and splinesky)):
+        #     fn = self.skyfn
+        #     if splinesky:
+        #         fn = self.splineskyfn
+        # 
+        #     if os.path.exists(fn):
+        #         try:
+        #             hdr = fitsio.read_header(fn)
+        #         except:
+        #             print('Failed to read sky file', fn, '-- deleting')
+        #             os.unlink(fn)
+        #     if os.path.exists(fn):
+        #         print('File', fn, 'exists -- skipping')
+        #         sky = False
 
-            if os.path.exists(fn):
-                try:
-                    hdr = fitsio.read_header(fn)
-                except:
-                    print('Failed to read sky file', fn, '-- deleting')
-                    os.unlink(fn)
-            if os.path.exists(fn):
-                print('File', fn, 'exists -- skipping')
+        if sky and not force:
+            try:
+                self.read_sky_model(splinesky=splinesky)
                 sky = False
+            except:
+                import traceback
+                print('Did not find existing sky model for', self, ':')
+                traceback.print_exc()
+                pass
 
         if just_check:
             return (se or psfex or sky)

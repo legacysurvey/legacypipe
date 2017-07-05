@@ -1,8 +1,8 @@
 #!/bin/bash -l
 
 #SBATCH -p shared
-#SBATCH -n 8
-#SBATCH -t 03:00:00
+#SBATCH -n 2
+#SBATCH -t 01:00:00
 #SBATCH --account=desi
 #SBATCH -J trace
 #SBATCH -L SCRATCH
@@ -31,6 +31,8 @@ echo early_coadds:$early_coadds
 echo just_calibs:$just_calibs
 echo force_all:$force_all
 
+bri=`echo $brick|head -c 3`
+
 #-p shared
 #-n 24
 #-p regular
@@ -41,9 +43,9 @@ echo force_all:$force_all
 # set usecores as desired for more mem and set shared n above to 2*usecores, keep threads=6 so more mem per thread!, then --aray equal to number largemmebricks.txt
 
 
-usecores=4
+usecores=1
 #threads=$usecores
-threads=4
+threads=1
 if [ "$full_stacktrace" = "yes" ];then
     threads=1
 fi
@@ -75,12 +77,6 @@ elif [ "$force_all" = "yes" ]; then
     export extra_opt="--skip --force-all"
 fi
 
-# allow checkpoint
-if [ "$force_all" = "no" ]; then
-    export extra_opt="${extra_opt} --checkpoint ${outdir}/checkpoints/${bri}/${brick}.pickle"
-fi
-
-
 export OMP_NUM_THREADS=$threads
 #export outdir=/scratch1/scratchdirs/desiproc/DRs/data-releases/dr4/large-mem-runs/${usecores}usecores
 mkdir -p $outdir
@@ -100,15 +96,15 @@ export PYTHONPATH=$CODE_DIR/legacypipe/py:${PYTHONPATH}
 cd $CODE_DIR/legacypipe/py
 
 # local tractor and astrometry.net
-export PYTHONPATH=${CODE_DIR}/tractor:${CODE_DIR}/astrometry.net/kaylan_install/lib/python:${PYTHONPATH}
-export PATH=${CODE_DIR}/astrometry.net/kaylan_install/lib/python/astrometry:${PATH}
+export PYTHONPATH=${CODE_DIR}/tractor:${CODE_DIR}/astrometry.net/kaylan_install2/lib/python:${PYTHONPATH}
+export PATH=${CODE_DIR}/astrometry.net/kaylan_install2/lib/python/astrometry:${PATH}
 
 
 set -x
 year=`date|awk '{print $NF}'`
 today=`date|awk '{print $3}'`
 month=`date +"%F"|awk -F "-" '{print $2}'`
-logdir=$outdir/logs/${year}_${month}_${today}_${NERSC_HOST}_remain
+logdir=$outdir/logs/${year}_${month}_${today}_${NERSC_HOST}
 if [ "$full_stacktrace" = "yes" ];then
     logdir=${logdir}_stacktrace
 fi
@@ -123,6 +119,7 @@ srun -n 1 -c $usecores python legacypipe/runbrick.py \
      --brick $brick \
      --hybrid-psf \
      --threads $threads \
+     --checkpoint ${outdir}/checkpoints/${bri}/${brick}.pickle \
      --pickle "$outdir/pickles/${bri}/runbrick-%(brick)s-%%(stage)s.pickle" \
      --outdir $outdir --nsigma 6 \
      --no-write ${extra_opt} \

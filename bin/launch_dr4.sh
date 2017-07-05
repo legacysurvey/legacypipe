@@ -12,13 +12,15 @@ export UNWISE_COADDS_DIR=/global/cscratch1/sd/desiproc/dr4/unwise-coadds/fulldep
 export UNWISE_COADDS_TIMERESOLVED_DIR=/global/cscratch1/sd/desiproc/dr4/unwise-coadds/time_resolved_neo2
 export UNWISE_COADDS_TIMERESOLVED_INDEX=/global/cscratch1/sd/desiproc/dr4/unwise-coadds/time_resolved_neo2/time_resolved_neo2-atlas.fits
 export CODE_DIR=/global/cscratch1/sd/desiproc/code
-export outdir=/global/cscratch1/sd/desiproc/dr4/data_release/dr4_fixes
+#export outdir=/global/cscratch1/sd/desiproc/dr4/data_release/dr4_fixes
+#export outdir=/global/cscratch1/sd/desiproc/dr4/data_release/dr4_fixes_88
+export outdir=/global/cscratch1/sd/desiproc/dr4/data_release/dr4_fixes_35
 #export DUST_DIR=adfa
 #export unwise_dir=lakdjf
 
 export overwrite_tractor=no
 export full_stacktrace=no
-export early_coadds=no
+export early_coadds=yes
 export just_calibs=no
 export force_all=no
 
@@ -46,7 +48,16 @@ export force_all=no
 #bricklist=${LEGACY_SURVEY_DIR}/bricks_dr4b_remain.txt
 #bricklist=${LEGACY_SURVEY_DIR}/bricks_dr4b_gitpullastrom.txt
 #bricklist=${LEGACY_SURVEY_DIR}/bricks_dr4b_oldckpt.txt
-bricklist=${LEGACY_SURVEY_DIR}/bricks_dr4b_other.txt
+#bricklist=${LEGACY_SURVEY_DIR}/bricks_dr4b_other.txt
+#bricklist=${LEGACY_SURVEY_DIR}/bricks_dr4b_hugefwhm.txt
+#bricklist=${LEGACY_SURVEY_DIR}/missing.txt
+#bricklist=${LEGACY_SURVEY_DIR}/bricks_dr4b_astrom.txt
+#bricklist=${LEGACY_SURVEY_DIR}/bricks_dr4b_extra.txt
+#bricklist=${LEGACY_SURVEY_DIR}/bricks_dr4b_notdone.txt
+#bricklist=${LEGACY_SURVEY_DIR}/bricks_dr4b_88.txt
+#bricklist=${LEGACY_SURVEY_DIR}/bricks_dr4b_88_oot.txt
+#bricklist=${LEGACY_SURVEY_DIR}/bricks_dr4b_88_oom.txt
+bricklist=${LEGACY_SURVEY_DIR}/bricks_dr4b_35.txt
 
 #bricklist=${LEGACY_SURVEY_DIR}/bricks-dr4-${NERSC_HOST}.txt
 #bricklist=${LEGACY_SURVEY_DIR}/bricks-dr4-notdone-${NERSC_HOST}.txt

@@ -518,6 +518,13 @@ if __name__ == '__main__':
         name = name.replace('.gz', '')
         print('Name', name)
 
+        ## Quick check for existing output filename
+        if opt.piece is not None and not opt.force:
+            outfn = 'ccds-annotated/ccds-annotated-%s-%03i.fits' % (name, opt.piece)
+            if os.path.exists(outfn):
+                print('Already exists:', outfn)
+                sys.exit(0)
+
         args = []
         i = 0
         ccds = fits_table(fn)
