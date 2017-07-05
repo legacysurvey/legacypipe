@@ -898,7 +898,7 @@ Now using the current directory as LEGACY_SURVEY_DIR, but this is likely to fail
         print('Unknown filetype "%s"' % filetype)
         assert(False)
 
-    def get_compression_string(filetype, **kwargs):
+    def get_compression_string(self, filetype, **kwargs):
         return None
 
     def write_output(self, filetype, hashsum=True, **kwargs):
