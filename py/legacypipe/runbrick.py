@@ -254,10 +254,6 @@ def stage_tims(W=3600, H=3600, pixscale=0.262, brickname=None,
         ccds.cut(np.array(keep_ccds))
         print('Cut to', len(ccds), 'CCDs required to reach depth targets')
 
-    ## DEBUG -- write this ASAP.
-    with survey.write_output('ccds-table', brick=brickname) as out:
-        ccds.writeto(None, fits_object=out.fits, primheader=version_header)
-            
     # Create Image objects for each CCD
     ims = []
     for ccd in ccds:
@@ -387,10 +383,6 @@ def stage_tims(W=3600, H=3600, pixscale=0.262, brickname=None,
     ccds.skyplver = np.array([tim.skyver[1] for tim in tims])
     ccds.wcsplver = np.array([tim.wcsver[1] for tim in tims])
     ccds.psfplver = np.array([tim.psfver[1] for tim in tims])
-
-    ## DEBUG -- write this ASAP.
-    with survey.write_output('ccds-table', brick=brickname) as out:
-        ccds.writeto(None, fits_object=out.fits, primheader=version_header)
 
     # Cut "bands" down to just the bands for which we have images.
     timbands = [tim.band for tim in tims]
@@ -929,7 +921,6 @@ def stage_image_coadds(survey=None, targetwcs=None, bands=None, tims=None,
     be created (in `stage_coadds`).  But it's handy to have the coadds
     early on, to diagnose problems or just to look at the data.
     '''
-    
     with survey.write_output('ccds-table', brick=brickname) as out:
         ccds.writeto(None, fits_object=out.fits, primheader=version_header)
             
@@ -947,7 +938,6 @@ def stage_image_coadds(survey=None, targetwcs=None, bands=None, tims=None,
         image_coadd,nil = quick_coadds(
             tims, bands, targetwcs, images=[tim.data - tim.sims_image
                                             for tim in tims])
-    ###
 
     D = _depth_histogram(brick, targetwcs, bands, C.detivs, C.galdetivs)
     with survey.write_output('depth-table', brick=brickname) as out:
