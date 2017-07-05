@@ -732,7 +732,7 @@ class OneBlob(object):
                 cpum1 = time.clock()
                 B.all_model_cpu[srci][name] = cpum1 - cpum0
                 cputimes[name] = cpum1 - cpum0
-                print('Fitting', name, 'took', cputimes[name])
+                #print('Fitting', name, 'took', cputimes[name])
 
                 if self.plots:
                     print('Plotting model selection evaluated for', name)

@@ -898,6 +898,9 @@ Now using the current directory as LEGACY_SURVEY_DIR, but this is likely to fail
         print('Unknown filetype "%s"' % filetype)
         assert(False)
 
+    def get_compression_string(filetype, **kwargs):
+        return None
+
     def write_output(self, filetype, hashsum=True, **kwargs):
         '''
         Returns a context manager for writing an output file; use like:
@@ -923,15 +926,23 @@ Now using the current directory as LEGACY_SURVEY_DIR, but this is likely to fail
         - computes the sha256sum
         '''
         class OutputFileContext(object):
-            def __init__(self, fn, survey, hashsum=True, relative_fn=None):
+            def __init__(self, fn, survey, hashsum=True, relative_fn=None,
+                         compression=None):
+                '''
+                *compression*: a CFITSIO compression specification, eg:
+                    "[compress R 100,100; qz -0.05]"
+                '''
                 self.real_fn = fn
                 self.relative_fn = relative_fn
                 self.survey = survey
-                self.is_fits = fn.endswith('.fits') or fn.endswith('.fits.gz')
-                self.tmpfn = os.path.join(os.path.dirname(fn), 'tmp-'+os.path.basename(fn))
+                self.is_fits = (fn.endswith('.fits') or
+                                fn.endswith('.fits.gz') or
+                                fn.endswith('.fits.fz'))
+                self.tmpfn = os.path.join(os.path.dirname(fn),
+                                          'tmp-'+os.path.basename(fn))
                 if self.is_fits:
-                    self.is_fits = True
-                    self.fits = fitsio.FITS('mem://', 'rw')
+                    self.fits = fitsio.FITS('mem://' + (compression or ''),
+                                            'rw')
                 else:
                     self.fn = self.tmpfn
                 self.hashsum = hashsum
@@ -946,7 +957,7 @@ Now using the current directory as LEGACY_SURVEY_DIR, but this is likely to fail
                 return self
 
             def __exit__(self, exc_type, exc_value, traceback):
-                # If no exception was thrown...
+                # If an exception was thrown, bail out
                 if exc_type is not None:
                     return
 
@@ -955,15 +966,20 @@ Now using the current directory as LEGACY_SURVEY_DIR, but this is likely to fail
                     hashfunc = hashlib.sha256
                     sha = hashfunc()
                 if self.is_fits:
-                    # Read back the data
+                    # Read back the data written into memory by the
+                    # fitsio library
                     rawdata = self.fits.read_raw()
+                    # close the fitsio file
                     self.fits.close()
 
-                    # Have to actually do the compression to gzip format...
+                    # If gzip, we now have to actually do the
+                    # compression to gzip format...
                     if self.tmpfn.endswith('.gz'):
                         from io import BytesIO
                         import gzip
                         #ulength = len(rawdata)
+                        # We gzip to a memory file (BytesIO) so we can compute
+                        # the hashcode before writing to disk for real
                         gzipped = BytesIO()
                         gzf = gzip.GzipFile(self.real_fn, 'wb', 9, gzipped)
                         gzf.write(rawdata)
@@ -995,19 +1011,28 @@ Now using the current directory as LEGACY_SURVEY_DIR, but this is likely to fail
                 print('Renamed to', self.real_fn)
 
                 if self.hashsum:
-                    # List the relative filename (from output dir) in sha*sum file.
+                    # List the relative filename (from output dir) in
+                    # shasum file.
                     fn = self.relative_fn or self.real_fn
                     self.survey.add_hashcode(fn, hashcode)
+            # end of OutputFileContext class
 
+
+        # Get the output filename for this filetype
         fn = self.find_file(filetype, output=True, **kwargs)
 
+        compress = self.get_compression_string(filetype, **kwargs)
+
+        # Find the relative path (relative to output_dir), which is the string
+        # we will put in the shasum file.
         relfn = fn
         if relfn.startswith(self.output_dir):
             relfn = relfn[len(self.output_dir):]
             if relfn.startswith('/'):
                 relfn = relfn[1:]
 
-        out = OutputFileContext(fn, self, hashsum=hashsum, relative_fn=relfn)
+        out = OutputFileContext(fn, self, hashsum=hashsum, relative_fn=relfn,
+                                compression=compress)
         return out
 
     def add_hashcode(self, fn, hashcode):
