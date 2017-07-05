@@ -379,6 +379,7 @@ def _stars_table(nstars=1):
             ('gaia_ra', 'f8'), ('gaia_dec', 'f8'), ('ps1_mag', 'f4'), ('ps1_gicolor', 'f4'),
             ('gaia_g','f8'),('ps1_g','f8'),('ps1_r','f8'),('ps1_i','f8'),('ps1_z','f8'),
             ('daofind_x', 'f4'), ('daofind_y', 'f4'),
+            ('exptime', '>f4'),
             ('mycuts_x', 'f4'), ('mycuts_y', 'f4')]
     stars = Table(np.zeros(nstars, dtype=cols))
     return stars
@@ -485,7 +486,8 @@ def create_legacypipe_table(ccds_fn):
 
 
 def create_matches_table(stars_fn,**kwargs):
-    '''input _stars_table fn
+    '''Arjun's "matches-*.fits" stars table
+    input _stars_table fn
     output Arjun's matches table, same column names but units can be different'''
     # HACK! need func to put in appropriate units e.g. compare to survey-ccds file for decam,mosaic, and bass
     need_arjuns_keys= ['filename','expnum','extname',
@@ -495,7 +497,7 @@ def create_matches_table(stars_fn,**kwargs):
                        'magoff',
                        'nmatch',
                        'gmag','ps1_g','ps1_r','ps1_i','ps1_z']
-    #same_key= ['expnum','nmatch','ps1_g','ps1_r','ps1_i','ps1_z']
+    extra_keys= ['image_hdu','filter'] # Check for hdu and band depenent trends
     # Load full zpt table
     assert('-star.fits' in stars_fn)
     # HACK: need magoff
@@ -503,7 +505,7 @@ def create_matches_table(stars_fn,**kwargs):
     extname=[ccdname for _,ccdname in np.char.split(T.expid,'-')]
     T.set('extname', np.array(extname))
     # AB mag of stars using fiducial ZP to convert
-    T.set('ccd_mag',-2.5 * np.log10(T.apflux / kwargs.get('exptime')) +  \
+    T.set('ccd_mag',-2.5 * np.log10(T.apflux / T.exptime) +  \
                         kwargs['zp_fid'])
     # ADU per pixel from sky aperture 
     area= np.pi*3.5**2/kwargs.get('pixscale')**2
@@ -520,7 +522,7 @@ def create_matches_table(stars_fn,**kwargs):
         T.rename(old,new)
         #units[new]= units.pop(old)
     # Delete unneeded keys
-    del_keys= list( set(T.get_columns()).difference(set(need_arjuns_keys)) )
+    del_keys= list( set(T.get_columns()).difference(set(need_arjuns_keys + extra_keys)) )
     for key in del_keys:
         T.delete_column(key)
         #if key in units.keys():
@@ -529,6 +531,65 @@ def create_matches_table(stars_fn,**kwargs):
     outfn=stars_fn.replace('-star.fits','-matches.fits')
     T.writeto(outfn) #, columns=cols, header=hdr, primheader=primhdr, units=units)
     print('Wrote %s' % outfn)
+
+def create_zeropoints_table(zpt_fn):
+    '''Arjun's "zeropoint-*.fits" zpts table
+    input _ccds_table fn
+    output same thing but with Arjun's column names and units'''
+    # HACK! need func to put in appropriate units e.g. compare to survey-ccds file for decam,mosaic, and bass
+    need_arjuns_keys= \
+        ['filename', 'object', 'expnum', 'exptime', 'filter', 'seeing', 'ra', 'dec', 
+         'date_obs', 'mjd_obs', 'ut', 'ha', 'airmass', 'propid', 'zpt', 'avsky', 
+         'arawgain', 'fwhm', 'crpix1', 'crpix2', 'crval1', 'crval2', 'cd1_1', 'cd1_2', 'cd2_1', 'cd2_2', 
+         'naxis1', 'naxis2', 'ccdhdunum', 'ccdnum', 'ccdname', 'ccdra', 'ccddec', 
+         'ccdzpt', 'ccdzpta', 'ccdzptb', 'ccdphoff', 'ccdphrms', 'ccdskyrms', 'ccdskymag', 
+         'ccdskycounts', 'ccdraoff', 'ccddecoff', 'ccdrarms', 'ccddecrms', 'ccdtransp', 
+         'ccdnstarfind', 'ccdnstar', 'ccdnmatch', 'ccdnmatcha', 'ccdnmatchb', 'ccdmdncol', 
+         'temp']
+    ignoring_these= \
+        ['arawgain','ccdhdunum','ccdzpta', 'ccdzptb','ccdnstarfind', 'ccdnstar',
+         'ccdnmatcha', 'ccdnmatchb', 'ccdmdncol','temp']
+    # Load full zpt table
+    assert('-zpt.fits' in zpt_fn)
+    # HACK: need magoff
+    T = fits_table(zpt_fn)
+    # Change units
+    pix= 0.262
+    T.set('fwhm',T.fwhm * pix)
+    T.set('skycounts', T.skycounts * T.exptime / T.gain)
+    T.set('skyrms', T.skycounts * T.exptime / T.gain)
+    T.set('zpt',T.zpt - 2.5*np.log10(T.gain))
+    T.set('zptavg',T.zptavg - 2.5*np.log10(T.gain))
+    # Rename
+    # Append 'ccd' to name
+    app_ccd= ['skycounts','skyrms','skymag',
+              'phoff','raoff','decoff',
+              'phrms','rarms','decrms',
+              'nmatch',
+              'transp'] 
+    for ad_ccd in app_ccd:
+        T.rename(ad_ccd,'ccd'+ad_ccd)
+    # Other
+    rename_keys= [('ra','ccdra'),('dec','ccddec'),
+                  ('ra_bore','ra'),('dec_bore','dec'),
+                  ('fwhm','seeing'),('fwhm_cp','fwhm'),
+                  ('zpt','ccdzpt'),('zptavg','zpt'),
+                  ('width','naxis1'),('height','naxis2'),
+                  ('image_filename','filename')]
+    for old,new in rename_keys:
+        T.rename(old,new)
+    # New columns
+    T.set('avsky', np.zeros(len(T)) + np.mean(T.ccdskycounts))
+    # Delete unneeded keys
+    needed= set(need_arjuns_keys).difference(set(ignoring_these))
+    del_keys= list( set(T.get_columns()).difference(needed) )
+    for key in del_keys:
+        T.delete_column(key)
+    # Write
+    outfn=zpt_fn.replace('-zpt.fits','-zeropoint.fits')
+    T.writeto(outfn) #, columns=cols, header=hdr, primheader=primhdr, units=units)
+    print('Wrote %s' % outfn)
+
 
 
 #class NativeTable(object):
@@ -1162,6 +1223,7 @@ class Measurer(object):
         stars['expid'] = self.expid
         stars['filter'] = self.band
         stars['gain'] = self.gain
+        stars['exptime'] = exptime
         # Matched quantities
         stars['nmatch'] = ccds['nmatch'] 
         stars['x'] = obj['xcentroid'][m1]

@@ -13,7 +13,7 @@ import matplotlib.pyplot as plt
 import os
 import numpy as np
 import pickle
-from sklearn.neighbors import KernelDensity
+#from sklearn.neighbors import KernelDensity
 from collections import defaultdict
 from scipy.stats import sigmaclip
 
@@ -2121,6 +2121,463 @@ class Legacy_vs_IDL(object):
 #                       cat.x+rad, sz[1]-cat.y+rad), outline='yellow') for cat in tab]
 #        # Save
 #        im.save(qafile)
+
+
+class ZeropointResiduals(object):
+    '''
+    use create_zeropoint_table() to convert my -zpt.fits table into 
+        arjuns zeropoint-*.fits table
+    then run this on my converted table versus arjuns
+    '''
+    def __init__(self,legacy_zpt_fn,arjun_zpt_fn):
+        self.legacy= fits_table(legacy_zpt_fn)
+        self.idl= fits_table(arjun_zpt_fn)
+        self.match()
+        self.plot_residuals(doplot='diff')
+
+    def match(self):
+        m1, m2, d12 = match_radec(self.legacy.ccdra,self.legacy.ccddec,
+                                  self.idl.ccdra,self.idl.ccddec,1./3600.0,nearest=True)
+        self.legacy= self.legacy[m1]
+        self.idl= self.idl[m2]
+    
+    def get_numeric_keys(self):
+        idl_keys= \
+             ['exptime','seeing', 'ra', 'dec', 
+              'airmass', 'zpt', 'avsky', 
+              'fwhm', 'crpix1', 'crpix2', 'crval1', 'crval2', 'cd1_1', 'cd1_2', 'cd2_1', 'cd2_2', 
+              'naxis1', 'naxis2', 'ccdnum', 'ccdra', 'ccddec', 
+              'ccdzpt', 'ccdphoff', 'ccdphrms', 'ccdskyrms', 'ccdskymag', 
+              'ccdskycounts', 'ccdraoff', 'ccddecoff', 'ccdrarms', 'ccddecrms', 'ccdtransp', 
+              'ccdnmatch']
+        return idl_keys
+
+    def get_defaultdict_ylim(self,doplot,ylim=None):
+        ylim_dict=defaultdict(lambda: ylim)
+        if doplot == 'diff':
+            ylim_dict['ccdra']= (-1e-8,1e-8)
+            ylim_dict['ccddec']= ylim_dict['ra']
+            ylim_dict['ccdzpt']= (-0.005,0.005)
+        elif doplot == 'div':
+            ylim_dict['ccdzpt']= (0.995,1.005)
+            ylim_dict['ccdskycounts']= (0.99,1.01)
+        else:
+            pass
+        return ylim_dict
+ 
+    def get_defaultdict_xlim(self,doplot,xlim=None):
+        xlim_dict=defaultdict(lambda: xlim)
+        if doplot == 'diff':
+            pass
+        elif doplot == 'div':
+            pass
+        else:
+            pass
+        return xlim_dict      
+
+    def plot_residuals(self,doplot=None,
+                       ms=100,use_keys=None,ylim=None,xlim=None):
+        '''two plots of everything numberic between legacy zeropoints and Arjun's
+        1) x vs. y-x 
+        2) x vs. y/x
+        use_keys= list of legacy_keys to use ONLY
+        '''
+        #raise ValueError
+        assert(doplot in ['diff','div'])
+        # All keys and any ylims to use
+        cols= self.get_numeric_keys()
+        ylim= self.get_defaultdict_ylim(doplot=doplot,ylim=ylim)
+        xlim= self.get_defaultdict_xlim(doplot=doplot,xlim=xlim)
+        # Plot
+        FS=25
+        eFS=FS+5
+        tickFS=FS
+        bands= set(self.legacy.filter)
+        ccdnums= set(self.legacy.ccdnum)
+        for cnt,col in enumerate(cols):
+            if use_keys:
+                if not col in use_keys:
+                    print('skipping col=%s' % col)
+                    continue
+            # Plot
+            fig,ax= plt.subplots(3,1,figsize=(10,15))
+            plt.subplots_adjust(hspace=0.2,wspace=0.)
+            # Loop over bands, hdus
+            for row,band in zip( range(3), bands ):
+                for ccdnum,color in zip(ccdnums,['g','r','m','b','k','y']*12):
+                    keep= (self.legacy.filter == band)*\
+                          (self.legacy.ccdnum == ccdnum)
+                    if np.where(keep)[0].size > 0:
+                        x= self.idl.get( col )[keep]
+                        xlabel= 'IDL'
+                        if doplot == 'diff':
+                            y= self.legacy.get(col)[keep] - self.idl.get(col)[keep]
+                            y_horiz= 0
+                            ylabel= 'Legacy - IDL'
+                        elif doplot == 'div':
+                            y= self.legacy.get(col)[keep] / self.idl.get(col)[keep]
+                            y_horiz= 1
+                            ylabel= 'Legacy / IDL'
+                        myscatter(ax[row],x,y,color=color,m='o',s=ms,alpha=0.75) 
+                        ax[row].axhline(y_horiz,color='k',linestyle='dashed',linewidth=1)
+                        #ax[row].text(0.025,0.88,idl_key,\
+                        #             va='center',ha='left',transform=ax[cnt].transAxes,fontsize=20)
+                        ylab= ax[row].set_ylabel(ylabel,fontsize=FS)
+            xlab = ax[row].set_xlabel(xlabel,fontsize=FS)
+            for row in range(3):
+                ax[row].tick_params(axis='both', labelsize=tickFS)
+                if ylim[col]:
+                    ax[row].set_ylim(ylim[col])
+                if xlim[col]:
+                    ax[row].set_xlim(xlim[col])
+            savefn="zeropointresiduals_%s_%s.png" % (doplot,col)
+            plt.savefig(savefn, bbox_extra_artists=[xlab,ylab], bbox_inches='tight')
+            plt.close() 
+            print "wrote %s" % savefn 
+
+class MatchesResiduals(object):
+    '''
+    use create_matches_table() to convert my -star.fits table into 
+        arjuns matches-*.fits table
+    then run this on my converted table versus arjuns
+    '''
+    def __init__(self,legacy_fn,arjun_fn):
+        self.legacy= fits_table(legacy_fn)
+        self.idl= fits_table(arjun_fn)
+        self.match()
+        self.plot_residuals(doplot='diff')
+
+    def match(self):
+        m1, m2, d12 = match_radec(self.legacy.ccd_ra,self.legacy.ccd_dec,
+                                  self.idl.ccd_ra,self.idl.ccd_dec,1./3600.0,nearest=True)
+        self.legacy= self.legacy[m1]
+        self.idl= self.idl[m2]
+    
+    def get_numeric_keys(self):
+        idl_keys= \
+            ['ccd_x','ccd_y','ccd_ra','ccd_dec',
+             'ccd_mag','ccd_sky',
+             'raoff','decoff',
+             'magoff',
+             'nmatch',
+             'gmag','ps1_g','ps1_r','ps1_i','ps1_z']
+        return idl_keys
+
+    def get_defaultdict_ylim(self,doplot,ylim=None):
+        ylim_dict=defaultdict(lambda: ylim)
+        if doplot == 'diff':
+            ylim_dict['ccd_ra']= (-1e-8,1e-8)
+            ylim_dict['ccd_dec']= ylim_dict['ra']
+        elif doplot == 'div':
+            pass
+        else:
+            pass
+        return ylim_dict
+ 
+    def get_defaultdict_xlim(self,doplot,xlim=None):
+        xlim_dict=defaultdict(lambda: xlim)
+        if doplot == 'diff':
+            pass
+        elif doplot == 'div':
+            pass
+        else:
+            pass
+        return xlim_dict      
+
+    def plot_residuals(self,doplot=None,
+                       ms=100,use_keys=None,ylim=None,xlim=None):
+        '''two plots of everything numberic between legacy zeropoints and Arjun's
+        1) x vs. y-x 
+        2) x vs. y/x
+        use_keys= list of legacy_keys to use ONLY
+        '''
+        #raise ValueError
+        assert(doplot in ['diff','div'])
+        # All keys and any ylims to use
+        cols= self.get_numeric_keys()
+        ylim= self.get_defaultdict_ylim(doplot=doplot,ylim=ylim)
+        xlim= self.get_defaultdict_xlim(doplot=doplot,xlim=xlim)
+        # Plot
+        FS=25
+        eFS=FS+5
+        tickFS=FS
+        bands= set(self.legacy.filter)
+        ccdnums= set(self.legacy.image_hdu)
+        for cnt,col in enumerate(cols):
+            if use_keys:
+                if not col in use_keys:
+                    print('skipping col=%s' % col)
+                    continue
+            # Plot
+            fig,ax= plt.subplots(3,1,figsize=(10,15))
+            plt.subplots_adjust(hspace=0.2,wspace=0.)
+            # Loop over bands, hdus
+            for row,band in zip( range(3), bands ):
+                for ccdnum,color in zip(ccdnums,['g','r','m','b','k','y']*12):
+                    keep= (self.legacy.filter == band)*\
+                          (self.legacy.ccdnum == ccdnum)
+                    if np.where(keep)[0].size > 0:
+                        x= self.idl.get( col )[keep]
+                        xlabel= 'IDL'
+                        if doplot == 'diff':
+                            y= self.legacy.get(col)[keep] - self.idl.get(col)[keep]
+                            y_horiz= 0
+                            ylabel= 'Legacy - IDL'
+                        elif doplot == 'div':
+                            y= self.legacy.get(col)[keep] / self.idl.get(col)[keep]
+                            y_horiz= 1
+                            ylabel= 'Legacy / IDL'
+                        myscatter(ax[row],x,y,color=color,m='o',s=ms,alpha=0.75) 
+                        ax[row].axhline(y_horiz,color='k',linestyle='dashed',linewidth=1)
+                        #ax[row].text(0.025,0.88,idl_key,\
+                        #             va='center',ha='left',transform=ax[cnt].transAxes,fontsize=20)
+                        ylab= ax[row].set_ylabel(ylabel,fontsize=FS)
+            xlab = ax[row].set_xlabel(xlabel,fontsize=FS)
+            for row in range(3):
+                ax[row].tick_params(axis='both', labelsize=tickFS)
+                if ylim[col]:
+                    ax[row].set_ylim(ylim[col])
+                if xlim[col]:
+                    ax[row].set_xlim(xlim[col])
+            savefn="matchesresiduals_%s_%s.png" % (doplot,col)
+            plt.savefig(savefn, bbox_extra_artists=[xlab,ylab], bbox_inches='tight')
+            plt.close() 
+            print "wrote %s" % savefn 
+
+class Depth(object):
+    def __init__(self,skyrms,gain,fwhm,zpt):
+        '''
+        See: observing_paper/depth.py
+        Return depth that agrees with galdepth doing equiv with annotated ccd cols
+        skyrms -- e/s
+        gain -- e/ADU
+        fwhm -- pixels so that gaussian std in pixels = fwhm/2.35
+        zpt -- e/s
+        '''
+        self.skyrms= skyrms
+        self.gain= gain
+        self.fwhm= fwhm
+        self.zpt= zpt
+        # self.get_depth_legacy_zpts(which='gal')
+
+    def get_depth_legacy_zpts(self,which=None):
+        assert(which in ['gal','psf'])
+        self.which= which
+        # 
+        sigma= self.sigma_legacy_zpts() # ADU / sec
+        zpt_units= self.zpt_to_ADU_per_sec()
+        return -2.5*np.log10(5 * sigma) + zpt_units # ADU / sec
+
+    def sigma_legacy_zpts(self):
+        return self.skyrms_to_ADU_per_sec() *np.sqrt(self.neff_empirical())
+
+    def zpt_to_ADU_per_sec(self):
+        return self.zpt - 2.5*np.log10(self.gain)
+
+    def skyrms_to_ADU_per_sec(self):
+        return self.skyrms/self.gain
+
+    def neff_empirical(self):
+        if self.which == 'psf':
+            rhalf=0
+            slope= 1.22 #see observing_paper/depth.py plots
+            yint= 9.77
+        if self.which == 'gal':
+            rhalf=0.45
+            slope= 1.24 #see observing_paper/depth.py plots
+            yint= 46.25
+        return slope * self.neff_15(rhalf=rhalf) + yint
+
+    def neff_15(self,rhalf=0.45,pix=0.262):
+        '''seeing = FWHM/2.35 where FWHM is in units of Pixels'''
+        seeing= self.fwhm / 2.35
+        return 4*np.pi*seeing**2 + 8.91*rhalf**2 + pix**2/12
+
+
+
+class ZeropointHistograms(object):
+    '''Histograms for papers'''
+    def __init__(self,decam_zpts=None,mosaic_zpts=None):
+        self.decam= decam_zpts
+        self.mosaic= mosaic_zpts
+        if self.decam:
+            self.decam= fits_table(self.decam)
+        if self.mosaic:
+            self.mosaic= fits_table(self.mosaic)
+        self.add_keys()
+        self.plot_hist_1d()
+        #self.plot_2d_scatter()
+   
+    def add_keys(self):
+        if self.decam:
+            self.decam.set('seeing',self.decam.fwhm * 0.262)
+            depth_obj= Depth(self.decam.skyrms,self.decam.gain,
+                             self.decam.fwhm,self.decam.zpt)
+            self.decam.set('psfdepth', depth_obj.get_depth_legacy_zpts('psf'))
+            self.decam.set('galdepth', depth_obj.get_depth_legacy_zpts('gal'))
+            # Extinction corrected
+            self.set_Aco_EBV(self.decam,camera='decam')
+            for col in ['psfdepth','galdepth']:
+                self.decam.set(col+'_extcorr', self.decam.get(col) - self.decam.AcoEBV)
+        if self.mosaic:
+            self.mosaic.set('seeing',self.mosaic.fwhm * 0.26)
+ 
+    def set_Aco_EBV(self,tab,camera=None):
+        '''tab -- legacy zeropoints -zpt.fits table'''
+        assert(camera in ['decam','mosaic'])
+        # Look up E(B-V) in SFD map
+        print('Loading SFD maps...')
+        sfd = SFDMap()
+        ebv= sfd.ebv(tab.ra, tab.dec) 
+        data= np.zeros(len(tab))
+        # Aco coeff
+        if camera == 'decam':
+            Aco= dict(g=3.214,r=2.165,z=1.562)
+        elif camera == 'mosaic':
+            Aco= dict(z=1.562)
+        # Ext corr
+        for band in set(tab.filter):
+            keep= tab.filter == band
+            data[keep]= Aco[band] * ebv[keep]
+        assert(np.all(data > 0.))
+        tab.set('AcoEBV',data)
+
+    def get_numeric_keys(self):
+        keys= \
+            ['skymag','skyrms','zpt','airmass','fwhm','gain',
+             'seeing','psfdepth','galdepth','psfdepth_extcorr','galdepth_extcorr']
+        return keys
+
+    def get_defaultdict_ylim(self,ylim=None):
+        ylim_dict=defaultdict(lambda: ylim)
+        ylim_dict['skymag']= (0,2.5)
+        ylim_dict['zpt']= (0,9)
+        ylim_dict['transp']= (0,11)
+        return ylim_dict
+
+    def get_defaultdict_xlim(self,xlim=None):
+        xlim_dict=defaultdict(lambda: xlim)
+        xlim_dict['skymag']= (16,22.5)
+        xlim_dict['zpt']= (25.5,27.2)
+        xlim_dict['airmass']= (0.9,2.5)
+        xlim_dict['transp']= (0.4,1.3)
+        xlim_dict['gain']= (0,5)
+        xlim_dict['seeing']= (0.5,2.4)
+        xlim_dict['fwhm']= (2,10)
+        xlim_dict['psfdepth']= (21,25)
+        xlim_dict['galdepth']= (21,25)
+        xlim_dict['psfdepth_extcorr']= (21,25)
+        xlim_dict['galdepth_extcorr']= (21,25)
+        return xlim_dict      
+
+    def band2color(self,band):
+        d=dict(g='g',r='r',z='m')
+        return d[band]
+
+    def col2plotname(self,key):
+        d= dict(airmass= 'X',
+                fwhm= 'FWHM (pixels)',
+                gain= 'Gain (e/ADU)',
+                skymag= 'Sky (AB mag/arcsec^2)',
+                transp= 'Transparency',
+                zpt= 'Zeropoint (e/s)')
+        return d.get(key,key)
+
+    def plot_hist_1d(self):
+        # All keys and any ylims to use
+        cols= self.get_numeric_keys()
+        ylim= self.get_defaultdict_ylim()
+        xlim= self.get_defaultdict_xlim()
+        # Plot
+        FS=14
+        eFS=FS+5
+        tickFS=FS
+        for key in cols:
+            print('key=%s' % key)
+            fig,ax= plt.subplots(figsize=(7,5))
+            if xlim[key]:
+                bins= np.linspace(xlim[key][0],xlim[key][1],num=40)
+            else:
+                bins=40
+            # decam
+            if self.decam:
+                for band in set(self.decam.filter):
+                    keep= self.decam.filter == band
+                    myhist_step(ax,self.decam.get(key)[keep], bins=bins,normed=True,
+                                color=self.band2color(band),ls='solid',
+                                label='%s (DECam, %d)' % (band,len(self.decam.get(key)[keep])))
+            # mosaic
+            if self.mosaic:
+                for band in set(self.mosaic.filter):
+                    keep= self.mosaic.filter == band
+                    myhist_step(ax,self.mosaic.get(key)[keep], bins=bins,normed=True,
+                                color=self.band2color(band),ls='dashed',
+                                label='%s (Mosaic3, %d)' % (band,len(self.decam.get(key)[keep])))
+            # Label
+            ylab=ax.set_ylabel('PDF',fontsize=FS)
+            ax.tick_params(axis='both', labelsize=tickFS)
+            leg=ax.legend(loc=(0,1.02),ncol=2,fontsize=FS-2)
+            if ylim[key]:
+                ax.set_ylim(ylim[key])
+            if xlim[key]:
+                ax.set_xlim(xlim[key])
+            xlab=ax.set_xlabel(self.col2plotname(key),fontsize=FS) #0.45'' galaxy
+            savefn='hist_1d_%s.png' % key
+            plt.savefig(savefn, bbox_extra_artists=[leg,xlab,ylab], bbox_inches='tight')
+            plt.close() 
+            print "wrote %s" % savefn 
+
+    def get_lim(self,col):
+        d= dict()
+        #d= dict(rarms= (0,0.35),
+        #        decrms= (0,0.35),
+        #        phrms= (0,0.5))
+        return d.get(col,None)
+
+    def plot_2d_scatter(self,prefix=''):
+        # Plot
+        FS=14
+        eFS=FS+5
+        tickFS=FS
+        xy_sets= [('rarms','decrms'),
+                  ('raoff','decoff'),
+                  ('phrms','phoff')]
+        for x_key,y_key in xy_sets:
+            fig,ax= plt.subplots(2,1,figsize=(8,10))
+            plt.subplots_adjust(hspace=0.2,wspace=0)
+            # decam
+            if self.decam:            
+                row=0
+                x,y= self.decam.get(x_key), self.decam.get(y_key)
+                for band in set(self.decam.filter):
+                    keep= self.decam.filter == band
+                    myscatter(ax[row],x[keep],y[keep], 
+                              color=self.band2color(band),s=10.,alpha=0.75,
+                              label='%s (DECam, %d)' % (band,len(x[keep])))
+            # mosaic
+            if self.mosaic:            
+                row=1
+                x,y= self.mosaic.get(x_key), self.mosaic.get(y_key)
+                for band in set(self.mosaic.filter):
+                    keep= self.mosaic.filter == band
+                    myscatter(ax[row],x[keep],y[keep], 
+                              color=self.band2color(band),s=10.,alpha=0.75,
+                              label='%s (Mosaic3, %d)' % (band,len(x[keep])))
+            # Label
+            xlab=ax[1].set_xlabel(self.col2plotname(x_key),fontsize=FS) #0.45'' galaxy
+            for row in range(2):
+                ylab=ax[row].set_ylabel(self.col2plotname(y_key),fontsize=FS)
+                ax[row].tick_params(axis='both', labelsize=tickFS)
+                leg=ax[row].legend(loc='upper right',scatterpoints=1,markerscale=3.,fontsize=FS)
+                if self.get_lim(x_key):
+                    ax[row].set_xlim(self.get_lim(x_key))
+                if self.get_lim(y_key):
+                    ax[row].set_ylim(self.get_lim(y_key))
+            savefn='rms_2panel_%s_%s.png' % (x_key,y_key)
+            plt.savefig(savefn, bbox_extra_artists=[xlab,ylab], bbox_inches='tight')
+            plt.close() 
+            print "wrote %s" % savefn 
+
 
 if __name__ == '__main__':
     import argparse
