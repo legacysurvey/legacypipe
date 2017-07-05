@@ -878,12 +878,12 @@ Now using the current directory as LEGACY_SURVEY_DIR, but this is likely to fail
             ty = filetype.split('-')[0]
             return os.path.join(codir, '%s-%s-%s.jpg' % (sname, brick, ty))
 
-        elif filetype in ['depth', 'galdepth', 'nexp', 'model']:
+        elif filetype in ['depth', 'galdepth', 'nexp']:
             return os.path.join(codir,
                                 '%s-%s-%s-%s.fits.gz' % (sname, brick, filetype, band))
 
-        elif filetype in ['invvar', 'chi2', 'image']:
-            return os.path.join(codir, '%s-%s-%s-%s.fits' %
+        elif filetype in ['invvar', 'chi2', 'image', 'model']:
+            return os.path.join(codir, '%s-%s-%s-%s.fits.fz' %
                                 (sname, brick, filetype,band))
 
         elif filetype in ['blobmap']:
@@ -899,7 +899,14 @@ Now using the current directory as LEGACY_SURVEY_DIR, but this is likely to fail
         assert(False)
 
     def get_compression_string(self, filetype, **kwargs):
-        return None
+        return dict(# g: sigma ~ 0.002.  qz -1e-3: 6 MB, -1e-4: 10 MB
+                    image = '[compress R 100,100; qz -1e-4]',
+                    # g: qz -1e-3: 2 MB, -1e-4: 2.75 MB
+                    model = '[compress R 100,100; qz -1e-4]',
+                    chi2  = '[compress R 100,100; qz -0.1]',
+                    # qz +8: 9 MB, qz +16: 10.5 MB
+                    invvar = '[compress R 100,100; qz 16]',
+            ).get(filetype)
 
     def write_output(self, filetype, hashsum=True, **kwargs):
         '''
