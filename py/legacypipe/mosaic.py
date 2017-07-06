@@ -8,7 +8,7 @@ from glob import glob
 
 from tractor.basics import ConstantFitsWcs
 
-from legacypipe.image import LegacySurveyImage, CalibMixin
+from legacypipe.image import CalibMixin
 from legacypipe.cpimage import CPImage
 from legacypipe.survey import LegacySurveyData    
 
