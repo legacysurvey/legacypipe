@@ -27,6 +27,24 @@ class DecamImage(CPImage, CalibMixin):
     def __init__(self, survey, t):
         super(DecamImage, self).__init__(survey, t)
 
+        # DEBUG
+        if not os.path.exists(self.imgfn):
+            fn = self.imgfn.replace('/decam/', '/decam/DECam_CP/')
+            if os.path.exists(fn):
+                print('Replaced image path', self.imgfn, 'with', fn)
+                self.imgfn = fn
+        if not os.path.exists(self.dqfn):
+            fn = self.dqfn.replace('/decam/', '/decam/DECam_CP/')
+            if os.path.exists(fn):
+                print('Replaced image path', self.dqfn, 'with', fn)
+                self.dqfn = fn
+        if not os.path.exists(self.wtfn):
+            fn = self.wtfn.replace('/decam/', '/decam/DECam_CP/')
+            if os.path.exists(fn):
+                print('Replaced image path', self.wtfn, 'with', fn)
+                self.wtfn = fn
+
+
         # Adjust zeropoint for exposure time
         self.ccdzpt += 2.5 * np.log10(self.exptime)
         
