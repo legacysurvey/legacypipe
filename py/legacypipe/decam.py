@@ -2,11 +2,9 @@ from __future__ import print_function
 import os
 import numpy as np
 import fitsio
-from astrometry.util.file import trymakedirs
-from astrometry.util.fits import fits_table
-from legacypipe.image import LegacySurveyImage, CalibMixin
-from legacypipe.cpimage import CPImage, CP_DQ_BITS
-from legacypipe.survey import *
+from legacypipe.image import CalibMixin
+from legacypipe.cpimage import CPImage
+from legacypipe.survey import LegacySurveyData
 
 import astropy.time
 
@@ -16,16 +14,33 @@ Code specific to images from the Dark Energy Camera (DECam).
 
 class DecamImage(CPImage, CalibMixin):
     '''
-
     A LegacySurveyImage subclass to handle images from the Dark Energy
     Camera, DECam, on the Blanco telescope.
-
     '''
-    # this is defined here for testing purposes (to handle small images)
+    # this is defined here for testing purposes (to handle the small
+    # images used in unit tests)
     splinesky_boxsize = 512
 
     def __init__(self, survey, t):
         super(DecamImage, self).__init__(survey, t)
+
+        # DEBUG
+        if not os.path.exists(self.imgfn):
+            fn = self.imgfn.replace('/decam/', '/decam/DECam_CP/')
+            if os.path.exists(fn):
+                print('Replaced image path', self.imgfn, 'with', fn)
+                self.imgfn = fn
+        if not os.path.exists(self.dqfn):
+            fn = self.dqfn.replace('/decam/', '/decam/DECam_CP/')
+            if os.path.exists(fn):
+                print('Replaced image path', self.dqfn, 'with', fn)
+                self.dqfn = fn
+        if not os.path.exists(self.wtfn):
+            fn = self.wtfn.replace('/decam/', '/decam/DECam_CP/')
+            if os.path.exists(fn):
+                print('Replaced image path', self.wtfn, 'with', fn)
+                self.wtfn = fn
+
 
         # Adjust zeropoint for exposure time
         self.ccdzpt += 2.5 * np.log10(self.exptime)
@@ -85,14 +100,12 @@ class DecamImage(CPImage, CalibMixin):
         ccdcuts = np.zeros(len(ccds), np.int32)
         #print('Warning: DECam not using bad_expid file')
         bits = LegacySurveyData.ccd_cut_bits
-
         I = self.apply_blacklist(survey, ccds)
         # "apply_blacklist" returns indices of CCDs to *keep*.  Invert.
         toflag = np.ones(len(ccds), bool)
         toflag[I] = False
         I = np.flatnonzero(toflag)
         ccdcuts[I] += bits['BLACKLIST']
-
         return ccdcuts
 
     @classmethod
@@ -191,15 +204,14 @@ class DecamImage(CPImage, CalibMixin):
         dq,hdr = self._read_fits(self.dqfn, self.hdu, header=True, **kwargs)
         # The format of the DQ maps changed as of version 3.5.0 of the
         # Community Pipeline.  Handle that here...
-        primhdr = fitsio.read_header(self.dqfn)
+        primhdr = self.read_primary_header(self.dqfn)
         plver = primhdr['PLVER'].strip()
         plver = plver.replace('V','')
         if StrictVersion(plver) >= StrictVersion('3.5.0'):
             dq = self.remap_dq_codes(dq)
-
         else:
+            from legacypipe.cpimage import CP_DQ_BITS
             dq = dq.astype(np.int16)
-
             # Un-set the SATUR flag for pixels that also have BADPIX set.
             both = CP_DQ_BITS['badpix'] | CP_DQ_BITS['satur']
             I = np.flatnonzero((dq & both) == both)
@@ -232,7 +244,6 @@ class DecamImage(CPImage, CalibMixin):
                    funpack=False, fcopy=False, use_mask=True,
                    force=False, just_check=False, git_version=None,
                    splinesky=False):
-
         '''
         Run calibration pre-processing steps.
 
@@ -241,9 +252,6 @@ class DecamImage(CPImage, CalibMixin):
         just_check: boolean
             If True, returns True if calibs need to be run.
         '''
-        from .survey import (create_temp, get_version_header,
-                             get_git_version)
-        
         #if psfex and os.path.exists(self.psffn) and (not force):
         #    if self.check_psf(self.psffn):
         #        psfex = False
@@ -298,20 +306,17 @@ class DecamImage(CPImage, CalibMixin):
         todelete = []
         if funpack:
             # The image & mask files to process (funpacked if necessary)
-            imgfn,maskfn = self.funpack_files(self.imgfn, self.dqfn, self.hdu, todelete)
+            imgfn,maskfn = self.funpack_files(self.imgfn, self.dqfn,
+                                              self.hdu, todelete)
         else:
             imgfn,maskfn = self.imgfn,self.dqfn
     
         if se:
-            self.run_se('DECaLS', imgfn, maskfn)
+            self.run_se('decam', imgfn, maskfn)
         if psfex:
-            self.run_psfex('DECaLS')
-
+            self.run_psfex('decam')
         if sky:
-            #print('Fitting sky for', self)
-            self.run_sky('DECaLS', splinesky=splinesky,\
-                         git_version=git_version)
-
+            self.run_sky('decam', splinesky=splinesky, git_version=git_version)
 
         for fn in todelete:
             os.unlink(fn)
