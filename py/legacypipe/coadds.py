@@ -451,7 +451,7 @@ def write_coadd_images(band,
             )
     if psfdetiv is not None:
         imgs.extend([
-                ('depth', 'psfdepth', detiv   ),
+                ('depth', 'psfdepth', psfdetiv),
                 ])
     if galdetiv is not None:
         imgs.extend([
@@ -459,8 +459,8 @@ def write_coadd_images(band,
                 ])
     if cowmod is not None:
         imgs.extend([
-                ('model',    'model',    cowmod  ),
-                ('chi2',     'chi2',     cochi2  ),
+                ('model', 'model', cowmod),
+                ('chi2',  'chi2',  cochi2),
                 ])
     for name,prodtype,img in imgs:
         from legacypipe.survey import MyFITSHDR

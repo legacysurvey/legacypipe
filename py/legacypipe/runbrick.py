@@ -903,7 +903,7 @@ def stage_image_coadds(survey=None, targetwcs=None, bands=None, tims=None,
             tims, bands, targetwcs, images=[tim.data - tim.sims_image
                                             for tim in tims])
 
-    D = _depth_histogram(brick, targetwcs, bands, C.detivs, C.galdetivs)
+    D = _depth_histogram(brick, targetwcs, bands, C.psfdetivs, C.galdetivs)
     with survey.write_output('depth-table', brick=brickname) as out:
         D.writeto(None, fits_object=out.fits)
     del D
@@ -1971,7 +1971,7 @@ def stage_coadds(survey=None, bands=None, version_header=None, targetwcs=None,
         T.set('sims_xy', C.T.get('sims_xy'))
 
     # Compute depth histogram
-    D = _depth_histogram(brick, targetwcs, bands, C.detivs, C.galdetivs)
+    D = _depth_histogram(brick, targetwcs, bands, C.psfdetivs, C.galdetivs)
     with survey.write_output('depth-table', brick=brickname) as out:
         D.writeto(None, fits_object=out.fits)
     del D
