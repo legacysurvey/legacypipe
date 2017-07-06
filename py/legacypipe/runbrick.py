@@ -1047,15 +1047,17 @@ def stage_srcs(coimgs=None, cons=None,
 
     # Add sources for any remaining saturated blobs
     satyx = center_of_mass(satmap, labels=satblobs, index=np.arange(nsat)+1)
-    if len(satyx):
+    if len(satyx) == 0:
+        Tsat = tycho
+    else:
         Tsat = fits_table()
         # NOTE, satyx is in y,x order (center_of_mass)
         Tsat.ibx = np.array([x for y,x in satyx]).astype(int)
         Tsat.iby = np.array([y for y,x in satyx]).astype(int)
         Tsat.ra,Tsat.dec = targetwcs.pixelxy2radec(Tsat.ibx+1, Tsat.iby+1)
-        print('Adding', len(satx), 'additional saturated stars')
+        print('Adding', len(Tsat), 'additional saturated stars')
         # MAGIC mag for a saturated star
-        Tsat.mag = np.zeros(len(satx)) + 15.
+        Tsat.mag = np.zeros(len(Tsat), np.float32) + 15.
         Tsat = merge_tables([tycho, Tsat], columns='fillzero')
     del satyx
         
