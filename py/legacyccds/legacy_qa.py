@@ -2123,6 +2123,11 @@ class Legacy_vs_IDL(object):
 #        # Save
 #        im.save(qafile)
 
+#######
+# Residual plots of legacy zeropoints - arjuns
+# legacy zeropoints repackaged to arjuns colnames and units
+# -zpt & -star files
+#######
 
 class ZeropointResiduals(object):
     '''
@@ -2345,6 +2350,12 @@ class MatchesResiduals(object):
             plt.close() 
             print "wrote %s" % savefn 
 
+#######
+# Master depth calculator, uses non galdepth columns to get exactly galdepth in annotated-ccds
+#######
+
+
+
 class Depth(object):
     def __init__(self,skyrms,gain,fwhm,zpt):
         '''
@@ -2435,7 +2446,9 @@ def col2plotname(key):
     d['galdepth_extcorr']= r'Galaxy Single Pass Depth (5$\sigma$, ext. corrected)'
     return d.get(key,key)
 
-
+#######
+# Scatter of psf and galdepth from annotated-ccds vs. legacy zeropoints estimations for depth
+#######
 
 class AnnotatedVsLegacy(object): 
     '''depths: annotated ccd vs. legacy'''
@@ -2548,6 +2561,11 @@ class AnnotatedVsLegacy(object):
 
 
  
+#######
+# Histograms of CCD statistics from legacy zeropoints
+# for paper
+#######
+# a= ZeropointHistograms('/path/to/combined/decam-zpt.fits','path/to/mosaics-zpt.fits')
 
 class ZeropointHistograms(object):
     '''Histograms for papers'''
@@ -2787,6 +2805,249 @@ class ZeropointHistograms(object):
             plt.close() 
             print "wrote %s" % savefn 
 
+#######
+# Needed exposure time calculator
+#######
+# compare to obsdb's value
+# zp= ZptsTneed(zpt_fn='/global/cscratch1/sd/kaylanb/publications/observing_paper/neff_empirical/test_1000-zpt.fits.gz',camera=camera)
+# db= LoadDB(camera=camera) 
+# Match
+# m= db.match_to_zeropoints(tab=zp.data)
+
+class CalculateTneed(object):
+    def calc(self,camera,filter_arr,fwhm_pix,transp,airmass,ebv,msky_ab_per_arcsec2):
+        self.fid= get_fiducial(camera=camera)
+        # Obsbot uses Neff_gal not psf
+        neff_fid = self.Neff_gal(self.fid.fwhm0 / self.fid.pixscale)
+        neff     = self.Neff_gal(fwhm_pix)
+        
+        Kco_arr= np.zeros(len(transp))-1
+        Aco_arr= np.zeros(len(transp))-1
+        sky0_arr= np.zeros(len(transp))-1
+        t0_arr= np.zeros(len(transp))-1
+        for band in self.fid.bands:
+            hasband= filter_arr == band
+            Kco_arr[hasband]= self.fid.Kco[band]
+            Aco_arr[hasband]= self.fid.Aco[band]
+            sky0_arr[hasband]= self.fid.sky0[band]
+            t0_arr[hasband]= self.fid.t0[band]
+        #
+        scaling =  1./transp**2 *\
+                   10.**(0.8 * Kco_arr * (airmass - 1.)) *\
+                   10.**(0.8 * Aco_arr * ebv) *\
+                   (neff / neff_fid) *\
+                   10.**(-0.4 * (msky_ab_per_arcsec2 - sky0_arr))
+        assert(np.all(scaling > 0.))
+        return scaling * t0_arr
+
+    def Neff_gal(self,fwhm_pix):
+        r_half = 0.45 #arcsec
+        # magic 2.35: convert seeing FWHM into sigmas in arcsec.
+        return 4. * np.pi * (fwhm_pix / 2.35)**2 +\
+               8.91 * r_half**2 +\
+               self.fid.pixscale**2/12.
+
+
+
+class ZptsTneed(object): 
+    '''depths: annotated ccd vs. legacy'''
+    def __init__(self,zpt_fn=None,camera=None):
+        assert(camera in ['decam','mosaic'])
+        self.camera = camera
+        self.data= fits_table(zpt_fn)
+        # process
+        self.apply_cuts()
+        #self.convert_units()
+        self.add_cols()
+
+    def convert_units(self):
+        if self.camera == 'decam':
+            self.data.set('transp', self.data.transp * 10**(-0.4* 2.5*np.log10(self.data.gain)))
+            self.data.set('skymag', self.data.skymag + 2.5*np.log10(self.data.gain))
+        elif self.camera == 'mosaic':
+            self.data.set('transp', self.data.transp * 10**(-0.4* 2.5*np.log10(self.data.gain)))
+            self.data.set('skymag', self.data.skymag + 2.5*np.log10(self.data.gain))
+    
+    def add_cols(self):
+        # Add EBV
+        sfd = SFDMap()
+        self.data.set('ebv', sfd.ebv(self.data.ra, self.data.dec) )
+        # Add tneed 
+        kwargs= dict(camera= self.camera,
+                     filter_arr= self.data.filter,
+                     fwhm_pix= self.data.fwhm,
+                     transp= self.data.transp,
+                     airmass= self.data.airmass,
+                     ebv= self.data.ebv,
+                     msky_ab_per_arcsec2= self.data.skymag)
+        self.data.set('tneed', CalculateTneed().calc(**kwargs) )
+ 
+    def apply_cuts(self):
+        self.zpt_succeeded()
+        #self.remove_duplicate_expnum()
+
+    def zpt_succeeded(self):
+        keep= (np.isfinite(self.data.zpt))*\
+              (self.data.zpt > 0)*\
+              (self.data.fwhm > 0)
+        print('zpt_succeeded: keeping %d/%d' % \
+               (np.where(keep)[0].size,len(keep)))
+        self.data.cut(keep)
+
+    def remove_duplicate_expnum(self):
+        # Keep everything unless told otherwise
+        keep= np.ones(len(self.data),bool)
+        # Loop over exposures
+        num_dup_exp=0
+        num_dup_ccds=0
+        expnums= set(self.data.expnum)
+        print('Removing duplicates')
+        for cnt,expnum in enumerate(expnums):
+            if cnt % 100 == 0: 
+                print('%d/%d' % (cnt,len(expnums)))
+            exp_inds= self.data.expnum == expnum
+            if self.camera == 'decam':
+                max_sz= 62
+            elif self.camera == 'mosaic':
+                max_sz= 4
+            # Have duplicates?
+            if len(self.data[exp_inds]) > max_sz:
+                print('Found duplicate expnum=%s' % expnum)
+                num_dup_exp += 1
+                for ccdname in set(self.data.ccdname[exp_inds]):
+                    inds= np.where( (exp_inds)*\
+                                    (self.data.ccdname == ccdname) )[0]
+                    # We can delete at least one of these
+                    if inds.size > 1:
+                        num_dup_ccds += inds.size-1
+                        keep[ inds[1:] ] = False
+        print('number duplicate exposures=%d, ccds=%d' % (num_dup_exp,num_dup_ccds))
+        self.data.cut(keep)
+
+ 
+class LoadDB(object):
+    def __init__(self,camera=None):
+        assert(camera in ['decam','mosaic'])
+        self.camera= camera
+        self.fid= get_fiducial(self.camera)
+        self.data= self.load()
+        self.apply_cuts()
+        self.expf_to_tneed()
+
+    def load(self):
+        import sqlite3
+        self.db_dir= os.path.join(os.getenv('CSCRATCH'),'zeropoints/obsbot/obsdb')
+        if self.camera == 'decam':
+            fn= os.path.join(self.db_dir,'decam.sqlite3')
+        elif self.camera == 'mosaic':
+            fn= os.path.join(self.db_dir,'mosaic3.sqlite3')
+        print('Reading sqlite db: %s' % fn)
+        conn = sqlite3.connect(fn)
+        c= conn.cursor() 
+        c.execute("SELECT name FROM sqlite_master WHERE type='table';")   
+        print('Has tables: ',c.fetchall())        
+        c.execute("select * from obsdb_measuredccd")
+        cols= [col[0] for col in c.description] 
+        print('Reading table obsdb_measuredccd, cols are:',cols) 
+        # List of tuples, length = number exposures
+        a=c.fetchall()
+        # List of tuples, length = number cols
+        b=zip(*a) 
+        data=fits_table()   
+        for col in cols:
+            data.set(col, np.array( b[cols.index(col)]) )
+        return data
+
+    def apply_cuts(self): 
+        # Remove whitespaces
+        self.data.set('band', self.data.get('band').astype(np.string_))
+        self.data.set('band', np.char.strip(self.data.band))
+        print('Initially %d' % len(self.data))
+        # obstype: {u'dark', u'dome flat', u'object', u'zero'}
+        # band: {u'', u'VR', u'Y', u'g', u'i', u'r', u'solid', u'u', u'z'}
+        keep= (self.data.obstype == 'object')
+        if self.camera == 'decam':
+            keep *= (np.any([self.data.band == 'g',
+                             self.data.band == 'r',
+                             self.data.band == 'z'],axis=0) )
+        elif self.camera == 'mosaic':
+            keep *= (self.data.band == 'zd')
+        self.data.cut(keep)
+        print('Object and band cuts %d' % len(self.data))
+        # rename_bands:
+        if self.camera == 'mosaic':
+            assert( np.all(self.data.band == 'zd') )
+            self.data.set('band', np.array(['z']*len(self.data)) )
+    
+    def expf_to_tneed(self):
+        tneed= self.data.expfactor
+        for band in set(self.data.band):
+            keep= self.data.band == band 
+            tneed[keep] *= self.fid.t0[band] 
+        #self.data.set('tneed', tneed / 1.1) # expfactor is 1.1x what it should be
+        self.data.set('tneed', tneed)
+
+    def match_to_zeropoints(self,tab):
+        '''tab -- fits_table'''
+        m= defaultdict(list) 
+        expnums= list( set(tab.expnum).intersection(set(self.data.expnum)) )
+        print('%d matching expnums' % len(expnums))
+        for expnum in expnums[:1000]:
+            i_zp= tab.expnum == expnum
+            i_db= self.data.expnum == expnum
+            m['zp_band'].append( tab.filter[i_zp][0] )
+            m['db_band'].append( self.data.band[i_db][0] )
+            assert(m['zp_band'][-1] == m['db_band'][-1])
+            m['zp_tneed_med'].append( np.median(tab.tneed[i_zp]) )
+            m['zp_tneed_std'].append( np.std(tab.tneed[i_zp]) )
+            m['db_expf'].append( self.data.expfactor[i_db][0] )
+            m['db_tneed'].append( self.data.tneed[i_db][0] )
+            m['zp_gain'].append( np.median(tab.gain[i_zp]) )
+            m['zp_mjd'].append( tab.mjd_obs[i_zp][0] )
+            for key,dbkey in zip(['fwhm','skymag','transp','zpt'],
+                                 ['seeing','sky','transparency','zeropoint']):
+                m['zp_'+key].append( np.median(tab.get(key)[i_zp]) ) 
+                m['db_'+dbkey].append( self.data.get(dbkey)[i_db][0] )
+        data= fits_table()
+        for key in m.keys():
+            data.set(key, np.array(m.get(key))) 
+        return data
+
+    def make_tneed_plot(self,tab):
+        '''makes legacy zpts vs. db tneed plots
+        dd -- default dict returned by match_to_zeropoints'''
+        # Plot
+        xlim=None
+        ylim=(-100,100)
+        FS=14
+        eFS=FS+5
+        tickFS=FS
+        fig,ax= plt.subplots(3,1,figsize=(4,9))
+        # Diff
+        resid= tab.zp_tneed_med - tab.db_tneed
+        for row,band in zip([0,1,2],set(tab.zp_band)):
+            keep= tab.zp_band == band
+            if np.where(keep)[0].size > 0:
+                myerrorbar(ax[row],tab.zp_mjd[keep],resid[keep], 
+                           yerr=tab.zp_tneed_std[keep],
+                           color=band2color(band),m='o',s=10.,label=band)
+        # Label
+        xlab=ax[2].set_xlabel('MJD',fontsize=FS) 
+        ylab=ax[1].set_ylabel('tneed (Legacy - Obsbot DB)',fontsize=FS)
+        for row in range(3):
+            ax[row].tick_params(axis='both', labelsize=tickFS)
+            leg=ax[row].legend(loc='upper left',scatterpoints=1,markerscale=1.,fontsize=FS)
+            if xlim:
+                ax[row].set_xlim(xlim)
+            if ylim:
+                ax[row].set_ylim(ylim)
+        savefn='tneed_plot.png' 
+        plt.savefig(savefn, bbox_extra_artists=[xlab,ylab], bbox_inches='tight')
+        plt.close() 
+        print "wrote %s" % savefn 
+
+
+
 
 if __name__ == '__main__':
     import argparse
@@ -2797,7 +3058,18 @@ if __name__ == '__main__':
     parser.add_argument('--leg_dir',action='store',default='/global/cscratch1/sd/kaylanb/kaylan_Test',required=False)
     parser.add_argument('--idl_dir',action='store',default='/global/cscratch1/sd/kaylanb/arjundey_Test/AD_exact_skymed',required=False)
     args = parser.parse_args()
- 
+
+    #######
+    # Needed exposure time calculator
+    # Compare Obsbot DB tneed to legacy zeropoints tneed
+    #######
+    zp= ZptsTneed(zpt_fn='/global/cscratch1/sd/kaylanb/publications/observing_paper/neff_empirical/test_1000-zpt.fits.gz',camera=args.camera)
+    db= LoadDB(camera=args.camera) 
+    # Match
+    m= db.match_to_zeropoints(tab=zp.data)
+    db.make_tneed_plot(tab= m)
+    raise ValueError
+     
     # default plots
     a=Legacy_vs_IDL(camera=args.camera,leg_dir=args.leg_dir,idl_dir=args.idl_dir)
     # oplot stars on ccd
