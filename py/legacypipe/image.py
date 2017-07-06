@@ -1131,10 +1131,7 @@ class CalibMixin(object):
         
         sedir = self.survey.get_se_dir()
         trymakedirs(self.sefn, dir=True)
-        if surveyname == '90prime':
-            conv_name= os.path.join(sedir, surveyname + '.conv')
-        else:
-            conv_name= os.path.join(sedir, 'gauss_5.0_9x9.conv')
+        conv_name= os.path.join(sedir, surveyname + '.conv')
 
         tmpfn = os.path.join(os.path.dirname(self.sefn), 'tmp-' + os.path.basename(self.sefn))
 

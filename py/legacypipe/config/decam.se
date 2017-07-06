@@ -6,10 +6,10 @@
 
 # These config entries will be overridden by runbrick.py (common.py actually) :
 CATALOG_NAME     test.cat       # name of the output catalog
-PARAMETERS_NAME  DECaLS.param  # name of the file containing catalog contents
+PARAMETERS_NAME  decam.param    # name of the file containing catalog contents
 DETECT_THRESH    1.0            # <sigmas> or <threshold>,<ZP> in mag.arcsec-2
 ANALYSIS_THRESH  1.0            # <sigmas> or <threshold>,<ZP> in mag.arcsec-2
-FILTER_NAME      gauss_5.0_9x9.conv   # name of the file containing the filter
+FILTER_NAME      decam.conv     # name of the file containing the filter
 MAG_ZEROPOINT    30.0           # magnitude zero-point
 PIXEL_SCALE      0              # size of pixel in arcsec (0=use FITS WCS info)
 SEEING_FWHM      1.2            # stellar FWHM in arcsec

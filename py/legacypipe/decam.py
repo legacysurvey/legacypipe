@@ -298,20 +298,17 @@ class DecamImage(CPImage, CalibMixin):
         todelete = []
         if funpack:
             # The image & mask files to process (funpacked if necessary)
-            imgfn,maskfn = self.funpack_files(self.imgfn, self.dqfn, self.hdu, todelete)
+            imgfn,maskfn = self.funpack_files(self.imgfn, self.dqfn,
+                                              self.hdu, todelete)
         else:
             imgfn,maskfn = self.imgfn,self.dqfn
     
         if se:
-            self.run_se('DECaLS', imgfn, maskfn)
+            self.run_se('decam', imgfn, maskfn)
         if psfex:
-            self.run_psfex('DECaLS')
-
+            self.run_psfex('decam')
         if sky:
-            #print('Fitting sky for', self)
-            self.run_sky('DECaLS', splinesky=splinesky,\
-                         git_version=git_version)
-
+            self.run_sky('decam', splinesky=splinesky, git_version=git_version)
 
         for fn in todelete:
             os.unlink(fn)
