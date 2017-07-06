@@ -23,6 +23,7 @@ import fitsio
 from astrometry.util.fits import fits_table, merge_tables
 from astrometry.libkd.spherematch import match_radec
 from tractor.sfd import SFDMap
+from tractor.brightness import NanoMaggies
 
 mygray='0.6'
 
@@ -2391,9 +2392,162 @@ class Depth(object):
     def neff_15(self,rhalf=0.45,pix=0.262):
         '''seeing = FWHM/2.35 where FWHM is in units of Pixels'''
         seeing= self.fwhm / 2.35
-        return 4*np.pi*seeing**2 + 8.91*rhalf**2 + pix**2/12
+        return 4*np.pi*seeing**2 + 8.91*rhalf**2 + pix**2/12  
+
+class DepthRequirements(object):
+    def __init__(self):
+        self.desi= self.depth_requirement_dict()
+    
+    def get_single_pass_depth(self,band,which,camera):
+        assert(which in ['gal','psf'])
+        assert(camera in ['decam','mosaic'])
+        # After 1 pass
+        if camera == 'decam':
+            return self.desi[which][band] - 2.5*np.log10(2)
+        elif camera == 'mosaic':
+            return self.desi[which][band] - 2.5*np.log10(3)
+
+    def depth_requirement_dict(self):
+        mags= defaultdict(lambda: defaultdict(dict))
+        mags['gal']['g']= 24.0
+        mags['gal']['r']= 23.4
+        mags['gal']['z']= 22.5
+        mags['psf']['g']= 24.7
+        mags['psf']['r']= 23.9
+        mags['psf']['z']= 23.0
+        return mags
 
 
+def band2color(band):
+    d=dict(g='g',r='r',z='m')
+    return d[band]
+
+def col2plotname(key):
+    d= dict(airmass= 'X',
+            fwhm= 'FWHM (pixels)',
+            gain= 'Gain (e/ADU)',
+            skymag= 'Sky (AB mag/arcsec^2)',
+            transp= 'Transparency',
+            zpt= 'Zeropoint (e/s)',
+            psfdepth= r'Point-source Single Pass Depth (5$\sigma$)',
+            galdepth= r'Galaxy Single Pass Depth (5$\sigma$)')
+    d['psfdepth_extcorr']= r'Point-source Single Pass Depth (5$\sigma$, ext. corrected)'
+    d['galdepth_extcorr']= r'Galaxy Single Pass Depth (5$\sigma$, ext. corrected)'
+    return d.get(key,key)
+
+
+
+class AnnotatedVsLegacy(object): 
+    '''depths: annotated ccd vs. legacy'''
+    def __init__(self,annot_ccds=None,legacy_zpts=None,camera=None):
+        assert(camera in ['decam','mosaic'])
+        self.annot= annot_ccds
+        #
+        self.legacy= legacy_zpts
+        self.camera= camera
+        if self.annot:
+            self.annot= fits_table(self.annot)
+        if self.legacy:
+            self.legacy= fits_table(self.legacy)
+        self.add_keys()
+        self.match()
+        # Plot
+        self.plot_scatter()
+   
+    def match(self):
+        '''
+        ra,dec_center -- annot ccd center
+        ra,dec -- legacy center
+        '''
+        m1, m2, d12 = match_radec(self.legacy.ra,self.legacy.dec, 
+                                  self.annot.ra_center, self.annot.dec_center, 
+                                  1./3600,nearest=True)
+        self.legacy= self.legacy[m1]
+        self.annot= self.annot[m2]
+
+    def add_keys(self):
+        self.add_legacy_keys()
+        self.add_annot_keys()
+    
+    def add_legacy_keys(self):
+        if self.camera == 'decam':
+            depth_obj= Depth(self.legacy.skyrms,self.legacy.gain,
+                             self.legacy.fwhm,self.legacy.zpt)
+            self.legacy.set('psfdepth', depth_obj.get_depth_legacy_zpts('psf'))
+            self.legacy.set('galdepth', depth_obj.get_depth_legacy_zpts('gal'))
+        else:
+            raise ValueError
+ 
+    def add_annot_keys(self):
+        for key in ['psf','gal']:
+            self.annot.set(key+'depth_2', self.get_true_depth(key))
+
+    def get_true_depth(self,which='gal'):
+        '''exactly agrees with listed galdepth or psfdepth value'''
+        sigma= self.sigma_annot_ccds(self.annot.sig1,self.annot.ccdzpt,
+                                     self.get_norm(which=which)) #ADU / sec
+        return -2.5*np.log10(5 * sigma) + self.annot.ccdzpt # ADU / sec
+    
+    def get_norm(self,which=None):
+        assert(which in ['gal','psf'])
+        if which == 'psf':
+            return self.annot.psfnorm_mean
+        elif which == 'gal':
+            return self.annot.galnorm_mean
+  
+    def sig1_to_ADU_per_sec(self,sig1,ccdzpt):
+        '''annotated CCD sig1 for DECam
+        this zeropointToScale() func converts nanomaggies to natual cameras system
+        which for legacypipe.decam.py is ADU/sec'''
+        return sig1 * NanoMaggies.zeropointToScale(ccdzpt) 
+
+    def sigma_annot_ccds(self,sig1,ccdzpt,norm):
+        '''norm is one of: {psf,gal}norm, {psf,gal}norm_mean'''
+        return self.sig1_to_ADU_per_sec(sig1,ccdzpt) / norm
+
+    def plot_scatter(self):
+        # All keys and any ylims to use
+        xlim= (19,25)
+        ylim= (19,25)
+        # Plot
+        FS=14
+        eFS=FS+5
+        tickFS=FS
+        fig,ax= plt.subplots(2,1,figsize=(8,10))
+        plt.subplots_adjust(hspace=0.2,wspace=0)
+        for row,which in zip([0,1],['psf','gal']):
+            col= which+'depth'
+            for band in set(self.legacy.filter):
+                keep= self.legacy.filter == band
+                myscatter(ax[row],self.annot.get(col)[keep],self.legacy.get(col)[keep], 
+                          color=band2color(band),m='o',s=10.,alpha=0.75,
+                          label=band)
+            ax[row].plot(ax[row].get_xlim(),ax[row].get_xlim(),c='k',ls='--',lw=2)
+            # Text
+            ax[row].text(0.05,0.9,r'%s' % col2plotname(col),
+                         fontsize=FS-2,transform=ax[row].transAxes)
+            diff= self.annot.get(col) - self.legacy.get(col) 
+            rms= getrms(diff)
+            q75_25= np.percentile(diff,q=75) - np.percentile(diff,q=25)
+            ax[row].text(0.05,0.8,'rms=%.2f, q75-25=%.2f' % (rms,q75_25),
+                         fontsize=FS-2,transform=ax[row].transAxes)
+            # Legend
+            leg=ax[row].legend(loc=(1.01,0.1),ncol=1,fontsize=FS-2)
+            # Label
+            xlab=ax[row].set_xlabel('Annotated CCDs',fontsize=FS) 
+            ylab=ax[row].set_ylabel('Legacy Zeropoints',fontsize=FS) 
+            ax[row].tick_params(axis='both', labelsize=tickFS)
+            if ylim:
+                ax[row].set_ylim(ylim)
+            if xlim:
+                ax[row].set_xlim(xlim)
+        savefn='annot_legacy_scatter.png'
+        plt.savefig(savefn, bbox_extra_artists=[leg,xlab,ylab], bbox_inches='tight')
+        plt.close() 
+        print "wrote %s" % savefn 
+
+
+ 
 
 class ZeropointHistograms(object):
     '''Histograms for papers'''
@@ -2405,8 +2559,9 @@ class ZeropointHistograms(object):
         if self.mosaic:
             self.mosaic= fits_table(self.mosaic)
         self.add_keys()
-        self.plot_hist_1d()
+        #self.plot_hist_1d()
         #self.plot_2d_scatter()
+        self.plot_hist_depth()
    
     def add_keys(self):
         if self.decam:
@@ -2445,7 +2600,7 @@ class ZeropointHistograms(object):
     def get_numeric_keys(self):
         keys= \
             ['skymag','skyrms','zpt','airmass','fwhm','gain',
-             'seeing','psfdepth','galdepth','psfdepth_extcorr','galdepth_extcorr']
+             'seeing','psfdepth','galdepth']
         return keys
 
     def get_defaultdict_ylim(self,ylim=None):
@@ -2466,22 +2621,7 @@ class ZeropointHistograms(object):
         xlim_dict['fwhm']= (2,10)
         xlim_dict['psfdepth']= (21,25)
         xlim_dict['galdepth']= (21,25)
-        xlim_dict['psfdepth_extcorr']= (21,25)
-        xlim_dict['galdepth_extcorr']= (21,25)
         return xlim_dict      
-
-    def band2color(self,band):
-        d=dict(g='g',r='r',z='m')
-        return d[band]
-
-    def col2plotname(self,key):
-        d= dict(airmass= 'X',
-                fwhm= 'FWHM (pixels)',
-                gain= 'Gain (e/ADU)',
-                skymag= 'Sky (AB mag/arcsec^2)',
-                transp= 'Transparency',
-                zpt= 'Zeropoint (e/s)')
-        return d.get(key,key)
 
     def plot_hist_1d(self):
         # All keys and any ylims to use
@@ -2493,7 +2633,6 @@ class ZeropointHistograms(object):
         eFS=FS+5
         tickFS=FS
         for key in cols:
-            print('key=%s' % key)
             fig,ax= plt.subplots(figsize=(7,5))
             if xlim[key]:
                 bins= np.linspace(xlim[key][0],xlim[key][1],num=40)
@@ -2504,14 +2643,14 @@ class ZeropointHistograms(object):
                 for band in set(self.decam.filter):
                     keep= self.decam.filter == band
                     myhist_step(ax,self.decam.get(key)[keep], bins=bins,normed=True,
-                                color=self.band2color(band),ls='solid',
+                                color=band2color(band),ls='solid',
                                 label='%s (DECam, %d)' % (band,len(self.decam.get(key)[keep])))
             # mosaic
             if self.mosaic:
                 for band in set(self.mosaic.filter):
                     keep= self.mosaic.filter == band
                     myhist_step(ax,self.mosaic.get(key)[keep], bins=bins,normed=True,
-                                color=self.band2color(band),ls='dashed',
+                                color=band2color(band),ls='dashed',
                                 label='%s (Mosaic3, %d)' % (band,len(self.decam.get(key)[keep])))
             # Label
             ylab=ax.set_ylabel('PDF',fontsize=FS)
@@ -2521,11 +2660,81 @@ class ZeropointHistograms(object):
                 ax.set_ylim(ylim[key])
             if xlim[key]:
                 ax.set_xlim(xlim[key])
-            xlab=ax.set_xlabel(self.col2plotname(key),fontsize=FS) #0.45'' galaxy
+            xlab=ax.set_xlabel(col2plotname(key),fontsize=FS) #0.45'' galaxy
             savefn='hist_1d_%s.png' % key
             plt.savefig(savefn, bbox_extra_artists=[leg,xlab,ylab], bbox_inches='tight')
             plt.close() 
             print "wrote %s" % savefn 
+
+    def plot_hist_depth(self):
+        # All keys and any ylims to use
+        cols= ['psfdepth_extcorr','galdepth_extcorr']
+        xlim= (21,24.5)
+        ylim= None
+        # Depths
+        depth_obj= DepthRequirements()
+        # Plot
+        FS=14
+        eFS=FS+5
+        tickFS=FS
+        fig,ax= plt.subplots(2,1,figsize=(8,10))
+        plt.subplots_adjust(hspace=0.2,wspace=0)
+        if xlim:
+            bins= np.linspace(xlim[0],xlim[1],num=40)
+        else:
+            bins=40
+        for row,which in zip([0,1],['psf','gal']):
+            col= which+'depth_extcorr'
+            # decam
+            if self.decam:
+                for band in set(self.decam.filter):
+                    keep= self.decam.filter == band
+                    myhist_step(ax[row],self.decam.get(col)[keep], bins=bins,normed=True,
+                                color=band2color(band),ls='solid',lw=1,
+                                label='%s (DECam)' % band)
+                    # requirements
+                    p1_depth= depth_obj.get_single_pass_depth(band,which,'decam')
+                    ax[row].axvline(p1_depth,
+                                    c=band2color(band),ls='dashed',lw=2,
+                                    label=r'$\mathbf{m_{\rm{DESI}}}$= %.2f' % p1_depth)
+                    # 90% > than requirement
+                    q10= np.percentile(self.decam.get(col)[keep], q=10)
+                    ax[row].axvline(q10,
+                                    c=band2color(band),ls='dotted',lw=2,
+                                    label='q10= %.2f' % q10)
+            # mosaic
+            if self.mosaic:
+                for band in set(self.mosaic.filter):
+                    keep= self.mosaic.filter == band
+                    myhist_step(ax[row],self.mosaic.get(col)[keep], bins=bins,normed=True,
+                                color=band2color(band),ls='solid',lw=1,
+                                label='%s (Mosaic3)' % band)
+                    # requirements
+                    p1_depth= depth_obj.get_single_pass_depth(band,which,'mosaic')
+                    ax[row].axvline(p1_depth,
+                                    c=band2color(band),ls='dashed',lw=2,
+                                    label=r'$\mathbf{m_{\rm{DESI}}}$= %.2f' % p1_depth)
+                    # 90% > than requirement
+                    q10= np.percentile(self.mosaic.get(col)[keep], q=10)
+                    ax[row].axvline(q10,
+                                    c=band2color(band),ls='dotted',lw=2,
+                                    label='q10= %.2f' % q10)
+            # Legend
+            #leg=ax[row].legend(loc=(0,1.02),ncol=2,fontsize=FS-2)
+            leg=ax[row].legend(loc=(1.01,0.1),ncol=1,fontsize=FS-2)
+            # Label
+            xlab=ax[row].set_xlabel(r'%s' % col2plotname(col),fontsize=FS) 
+            ylab=ax[row].set_ylabel('PDF',fontsize=FS)
+            ax[row].tick_params(axis='both', labelsize=tickFS)
+            if ylim:
+                ax[row].set_ylim(ylim)
+            if xlim:
+                ax[row].set_xlim(xlim)
+        savefn='hist_depth.png'
+        plt.savefig(savefn, bbox_extra_artists=[leg,xlab,ylab], bbox_inches='tight')
+        plt.close() 
+        print "wrote %s" % savefn 
+
 
     def get_lim(self,col):
         d= dict()
@@ -2552,7 +2761,7 @@ class ZeropointHistograms(object):
                 for band in set(self.decam.filter):
                     keep= self.decam.filter == band
                     myscatter(ax[row],x[keep],y[keep], 
-                              color=self.band2color(band),s=10.,alpha=0.75,
+                              color=band2color(band),s=10.,alpha=0.75,
                               label='%s (DECam, %d)' % (band,len(x[keep])))
             # mosaic
             if self.mosaic:            
@@ -2561,12 +2770,12 @@ class ZeropointHistograms(object):
                 for band in set(self.mosaic.filter):
                     keep= self.mosaic.filter == band
                     myscatter(ax[row],x[keep],y[keep], 
-                              color=self.band2color(band),s=10.,alpha=0.75,
+                              color=band2color(band),s=10.,alpha=0.75,
                               label='%s (Mosaic3, %d)' % (band,len(x[keep])))
             # Label
-            xlab=ax[1].set_xlabel(self.col2plotname(x_key),fontsize=FS) #0.45'' galaxy
+            xlab=ax[1].set_xlabel(col2plotname(x_key),fontsize=FS) #0.45'' galaxy
             for row in range(2):
-                ylab=ax[row].set_ylabel(self.col2plotname(y_key),fontsize=FS)
+                ylab=ax[row].set_ylabel(col2plotname(y_key),fontsize=FS)
                 ax[row].tick_params(axis='both', labelsize=tickFS)
                 leg=ax[row].legend(loc='upper right',scatterpoints=1,markerscale=3.,fontsize=FS)
                 if self.get_lim(x_key):

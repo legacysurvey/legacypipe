@@ -2,12 +2,11 @@ from __future__ import print_function
 import pylab as plt
 import numpy as np
 from astrometry.util.ttime import Time
-from astrometry.util.fits import fits_table
-from tractor.basics import PointSource, RaDecPos, NanoMaggies
-from .survey import tim_get_resamp
 
 def _detmap(X):
     from scipy.ndimage.filters import gaussian_filter
+    from legacypipe.survey import tim_get_resamp
+
     (tim, targetwcs, H, W) = X
     R = tim_get_resamp(tim, targetwcs)
     if R is None:
@@ -16,11 +15,9 @@ def _detmap(X):
     assert(tim.psf_sigma > 0)
     psfnorm = 1./(2. * np.sqrt(np.pi) * tim.psf_sigma)
     detim = tim.getImage().copy()
-
     detim[ie == 0] = 0.
     # Patch SATURATED pixels with the value saturated pixels would have??
     #detim[(tim.dq & tim.dq_bits['satur']) > 0] = tim.satval
-    
     detim = gaussian_filter(detim, tim.psf_sigma) / psfnorm**2
     detsig1 = tim.sig1 / psfnorm
     subh,subw = tim.shape
@@ -47,7 +44,7 @@ def detection_maps(tims, targetwcs, bands, mp):
         detivs [tim.band][Yo,Xo] += inciv
         if sat is not None:
             satmap       [Yo,Xo] += sat
-        
+
     for band in bands:
         detmaps[band] /= np.maximum(1e-16, detivs[band])
 
@@ -132,6 +129,9 @@ def run_sed_matched_filters(SEDs, bands, detmaps, detivs, omit_xy,
     sed_matched_detection : run a single SED-matched filter.
     
     '''
+    from astrometry.util.fits import fits_table
+    from tractor import PointSource, RaDecPos, NanoMaggies
+
     if omit_xy is not None:
         xx,yy = omit_xy
         n0 = len(xx)
@@ -170,7 +170,6 @@ def run_sed_matched_filters(SEDs, bands, detmaps, detivs, omit_xy,
     # New peaks:
     peakx = xx[n0:]
     peaky = yy[n0:]
-
     if len(peakx) == 0:
         return None,None,None
 
@@ -181,22 +180,18 @@ def run_sed_matched_filters(SEDs, bands, detmaps, detivs, omit_xy,
     Tnew = fits_table()
     Tnew.ra  = pr
     Tnew.dec = pd
-    Tnew.tx = peakx.astype(np.float32)
-    Tnew.ty = peaky.astype(np.float32)
+    Tnew.ibx = peakx
+    Tnew.iby = peaky
     assert(len(peaksn) == len(Tnew))
     assert(len(apsn) == len(Tnew))
     Tnew.peaksn = np.array(peaksn)
     Tnew.apsn = np.array(apsn)
-
-    Tnew.itx = np.clip(np.round(Tnew.tx), 0, W-1).astype(int)
-    Tnew.ity = np.clip(np.round(Tnew.ty), 0, H-1).astype(int)
     newcat = []
     for i,(r,d,x,y) in enumerate(zip(pr,pd,peakx,peaky)):
-        fluxes = dict([(band, detmap[Tnew.ity[i], Tnew.itx[i]])
+        fluxes = dict([(band, detmap[y, x])
                        for band,detmap in zip(bands,detmaps)])
         newcat.append(PointSource(RaDecPos(r,d),
                                   NanoMaggies(order=bands, **fluxes)))
-
     return Tnew, newcat, hot
 
 def sed_matched_detection(sedname, sed, detmaps, detivs, bands,
@@ -580,7 +575,7 @@ def sed_matched_detection(sedname, sed, detmaps, detivs, bands,
 def segment_and_group_sources(image, T, name=None, ps=None, plots=False):
     '''
     *image*: binary image that defines "blobs"
-    *T*: source table; only ".itx" and ".ity" elements are used (x,y integer
+    *T*: source table; only ".ibx" and ".iby" elements are used (x,y integer
         pix pos).  Note: ".blob" field is added.
     *name*: for debugging only
 
@@ -603,7 +598,7 @@ def segment_and_group_sources(image, T, name=None, ps=None, plots=False):
     del image
 
     blobslices = find_objects(blobs)
-    T.blob = blobs[T.ity, T.itx]
+    T.blob = blobs[T.iby, T.ibx]
 
     if plots:
         import pylab as plt
@@ -616,10 +611,12 @@ def segment_and_group_sources(image, T, name=None, ps=None, plots=False):
             by0,by1 = sy.start, sy.stop
             bx0,bx1 = sx.start, sx.stop
             plt.plot([bx0, bx0, bx1, bx1, bx0], [by0, by1, by1, by0, by0], 'r-')
-            plt.text((bx0+bx1)/2., by0, '%i' % (i+1), ha='center', va='bottom', color='r')
-        plt.plot(T.itx, T.ity, 'rx')
+            plt.text((bx0+bx1)/2., by0, '%i' % (i+1),
+                     ha='center', va='bottom', color='r')
+        plt.plot(T.ibx, T.iby, 'rx')
         for i,t in enumerate(T):
-            plt.text(t.itx, t.ity, 'src %i' % i, color='red', ha='left', va='center')
+            plt.text(t.ibx, t.iby, 'src %i' % i, color='red',
+                     ha='left', va='center')
         plt.axis(ax)
         plt.title('Blobs')
         ps.savefig()
@@ -655,8 +652,10 @@ def segment_and_group_sources(image, T, name=None, ps=None, plots=False):
     for ib,i in enumerate(noblobs):
         #S = 3
         S = 5
-        bslc = (slice(np.clip(T.ity[i] - S, 0, H-1), np.clip(T.ity[i] + S+1, 0, H)),
-                slice(np.clip(T.itx[i] - S, 0, W-1), np.clip(T.itx[i] + S+1, 0, W)))
+        bslc = (slice(np.clip(T.iby[i] - S, 0, H-1),
+                      np.clip(T.iby[i] + S+1, 0, H)),
+                slice(np.clip(T.ibx[i] - S, 0, W-1),
+                      np.clip(T.ibx[i] + S+1, 0, W)))
 
         # Does this new blob overlap existing blob(s)?
         oblobs = np.unique(blobs[bslc])
@@ -731,24 +730,25 @@ def segment_and_group_sources(image, T, name=None, ps=None, plots=False):
             by0,by1 = sy.start, sy.stop
             bx0,bx1 = sx.start, sx.stop
             plt.plot([bx0, bx0, bx1, bx1, bx0], [by0, by1, by1, by0, by0], 'r-')
-            plt.text((bx0+bx1)/2., by0, '%i' % (i+1), ha='center', va='bottom', color='r')
-        plt.plot(T.itx, T.ity, 'rx')
+            plt.text((bx0+bx1)/2., by0, '%i' % (i+1),
+                     ha='center', va='bottom', color='r')
+        plt.plot(T.ibx, T.iby, 'rx')
         for i,t in enumerate(T):
-            plt.text(t.itx, t.ity, 'src %i' % i, color='red', ha='left', va='center')
+            plt.text(t.ibx, t.iby, 'src %i' % i, color='red',
+                     ha='left', va='center')
         plt.axis(ax)
         plt.title('Blobs')
         ps.savefig()
 
     for j,Isrcs in enumerate(blobsrcs):
         for i in Isrcs:
-            #assert(blobs[T.ity[i], T.itx[i]] == j)
-            if (blobs[T.ity[i], T.itx[i]] != j):
-                print('---------------------------!!!--------------------------')
+            if (blobs[T.iby[i], T.ibx[i]] != j):
+                print('---------------------------!!!-------------------------')
                 print('Blob', j, 'sources', Isrcs)
-                print('Source', i, 'coords x,y', T.itx[i], T.ity[i])
-                print('Expected blob value', j, 'but got', blobs[T.ity[i], T.itx[i]])
+                print('Source', i, 'coords x,y', T.ibx[i], T.iby[i])
+                print('Expected blob value', j, 'but got',
+                      blobs[T.iby[i], T.ibx[i]])
 
-    T.blob = blobs[T.ity, T.itx]
+    T.blob = blobs[T.iby, T.ibx]
     assert(len(blobsrcs) == len(blobslices))
-
     return blobs, blobsrcs, blobslices
