@@ -3,12 +3,9 @@
 """
 from __future__ import print_function
 import os
-from sys import exit
 import numpy as np
 from astrometry.util.fits import fits_table
-import sys
 
-# Argh, no relative imports in runnable scripts
 from legacypipe.survey import run_calibs, LegacySurveyData
 
 def main():
@@ -81,9 +78,9 @@ def main():
             t = T[i]
 
         #print('CCDnmatch', t.ccdnmatch)
-        if t.ccdnmatch < 20 and not opt.force:
-            print('Skipping ccdnmatch = %i' % t.ccdnmatch)
-            continue
+        #if t.ccdnmatch < 20 and not opt.force:
+        #    print('Skipping ccdnmatch = %i' % t.ccdnmatch)
+        #    continue
             
         im = survey.get_image_object(t)
         print('Running', im.calname)

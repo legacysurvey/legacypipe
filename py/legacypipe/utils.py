@@ -5,10 +5,8 @@ import numpy as np
 from tractor.ellipses import EllipseESoft
 from tractor.utils import _GaussianPriors
 
-from astrometry.util.timingpool import TimingPoolTimestamp
 from astrometry.util.multiproc import multiproc
-from astrometry.util.ttime import Time, CpuMeas
-from astrometry.util.fits import fits_table, merge_tables
+from astrometry.util.ttime import Time
 
 class EllipseWithPriors(EllipseESoft):
     '''
@@ -158,6 +156,9 @@ class MyMultiproc(multiproc):
         return ImapTracker(res, self, tstart)
 
     def report(self, nthreads):
+        from astrometry.util.timingpool import TimingPoolTimestamp
+        from astrometry.util.ttime import CpuMeas
+
         # Tally the serial time up to now
         tend = Time()
         self.serial.append((self.t0, tend))
@@ -292,6 +293,7 @@ def find_unique_pixels(wcs, W, H, unique, ra1,ra2,dec1,dec2):
 
 def run_ps_thread(pid, ppid, fn):
     from astrometry.util.run_command import run_command
+    from astrometry.util.fits import fits_table, merge_tables
     import time
     import re
     import fitsio

@@ -1146,12 +1146,12 @@ class CalibMixin(object):
         cmd = ' '.join([
             'sex',
             '-c', os.path.join(sedir, surveyname + '.se'),
-            '-SEEING_FWHM %f' % seeing,
             '-PARAMETERS_NAME', os.path.join(sedir, surveyname + '.param'),
-            '-MAG_ZEROPOINT %f' % magzp,
-            '-FLAG_IMAGE %s' % maskfn,
             '-FILTER_NAME %s' % os.path.join(sedir, surveyname + '.conv'),
+            '-FLAG_IMAGE %s' % maskfn,
             '-CATALOG_NAME %s' % tmpfn,
+            '-SEEING_FWHM %f' % seeing,
+            '-MAG_ZEROPOINT %f' % magzp,
             imgfn])
         print(cmd)
         rtn = os.system(cmd)
@@ -1184,20 +1184,12 @@ class CalibMixin(object):
                 raise RuntimeError('Command failed: %s: return value: %i' %
                                    (cmd,rtn))
 
+    def run_sky(self, surveyname, splinesky=False, git_version=None):
+        from legacypipe.survey import get_version_header
 
-    def run_sky(self, surveyname, \
-                splinesky=False,git_version=None):
-        if surveyname == 'decam': 
-            # Cut out a good section of image for the whole processing, not just sky
-            # Only currently used for cases like half of one of the DECam chips is bad
-            slc = self.get_good_image_slice(None)
-        else:
-            # Full CCD should be ok for Mosaic/90Prime
-            slc = None
+        slc = self.get_good_image_slice(None)
         img = self.read_image(slice=slc)
         wt = self.read_invvar(slice=slc)
-
-        from .survey import get_version_header
         hdr = get_version_header(None, self.survey.get_survey_dir(),
                                  git_version=git_version)
         primhdr = self.read_image_primary_header()
@@ -1210,7 +1202,6 @@ class CalibMixin(object):
         hdr.add_record(dict(name='PLVER', value=plver,
                             comment='CP ver of image file'))
 
-
         if splinesky:
             from tractor.splinesky import SplineSky
             from scipy.ndimage.morphology import binary_dilation
@@ -1218,13 +1209,16 @@ class CalibMixin(object):
             boxsize = self.splinesky_boxsize
             
             # Start by subtracting the overall median
-            med = np.median(img[wt>0])
+            good = (wt > 0)
+            if np.sum(good) == 0:
+                raise RuntimeError('No pixels with weight > 0 in: ' + str(self))
+            med = np.median(img[good])
             # Compute initial model...
-            skyobj = SplineSky.BlantonMethod(img - med, wt>0, boxsize)
+            skyobj = SplineSky.BlantonMethod(img - med, good, boxsize)
             skymod = np.zeros_like(img)
             skyobj.addTo(skymod)
             # Now mask bright objects in (image - initial sky model)
-            sig1 = 1./np.sqrt(np.median(wt[wt>0]))
+            sig1 = 1./np.sqrt(np.median(wt[good]))
             masked = (img - med - skymod) > (5.*sig1)
             masked = binary_dilation(masked, iterations=3)
             masked[wt == 0] = True
@@ -1265,7 +1259,6 @@ class CalibMixin(object):
             hdr.add_record(dict(name='SKYMETH', value=skymeth,
                                 comment='estimate_mode, or fallback to median?'))
 
-            from scipy.ndimage.morphology import binary_dilation
             sig1 = 1./np.sqrt(np.median(wt[wt>0]))
             masked = (img - skyval) > (5.*sig1)
             masked = binary_dilation(masked, iterations=3)
@@ -1281,5 +1274,3 @@ class CalibMixin(object):
             trymakedirs(self.skyfn, dir=True)
             tsky.write_fits(self.skyfn, hdr=hdr)
             print('Wrote sky model', self.skyfn)
-
-
