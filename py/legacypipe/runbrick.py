@@ -281,42 +281,6 @@ def stage_tims(W=3600, H=3600, pixscale=0.262, brickname=None,
         print('[parallel tims] Calibrations:', tnow-tlast)
         tlast = tnow
 
-    if False and plots:
-        # Here, we read full images (not just subimages) to plot their
-        # pixel distributions
-        sig1s = dict([(b,[]) for b in bands])
-        allpix = []
-        for im in ims:
-            subtim = im.get_tractor_image(splinesky=True, gaussPsf=True,
-                                          subsky=False, radecpoly=targetrd)
-            if subtim is None:
-                continue
-            fulltim = im.get_tractor_image(splinesky=True, gaussPsf=True)
-            sig1s[fulltim.band].append(fulltim.sig1)
-            allpix.append((fulltim.band, fulltim.name, im.exptime,
-                           fulltim.getImage()[fulltim.getInvError() > 0]))
-        sig1s = dict([(b, np.median(sig1s[b])) for b in sig1s.keys()])
-        for b in bands:
-            plt.clf()
-            lp,lt = [],[]
-            s = sig1s[b]
-            for band,name,exptime,pix in allpix:
-                if band != b:
-                    continue
-                # broaden range to encompass most pixels... only req'd
-                # when sky is bad
-                lo,hi = -5.*s, 5.*s
-                lo = min(lo, np.percentile(pix, 5))
-                hi = max(hi, np.percentile(pix, 95))
-                n,bb,p = plt.hist(pix, range=(lo, hi), bins=50,
-                                  histtype='step', alpha=0.5)
-                lp.append(p[0])
-                lt.append('%s: %.0f s' % (name, exptime))
-            plt.legend(lp, lt)
-            plt.xlabel('Pixel values')
-            plt.title('Pixel distributions: %s band' % b)
-            ps.savefig()
-
     # Read Tractor images
     args = [(im, targetrd, dict(gaussPsf=gaussPsf, pixPsf=pixPsf,
                                 hybridPsf=hybridPsf,
@@ -939,17 +903,14 @@ def stage_image_coadds(survey=None, targetwcs=None, bands=None, tims=None,
             tims, bands, targetwcs, images=[tim.data - tim.sims_image
                                             for tim in tims])
 
-    D = _depth_histogram(brick, targetwcs, bands, C.detivs, C.galdetivs)
+    D = _depth_histogram(brick, targetwcs, bands, C.psfdetivs, C.galdetivs)
     with survey.write_output('depth-table', brick=brickname) as out:
         D.writeto(None, fits_object=out.fits)
     del D
 
-    #rgbkwargs2 = dict(mnmx=(-3., 3.))
-    #rgbkwargs2 = dict(mnmx=(-2., 10.))
     coadd_list= [('image',C.coimgs,rgbkwargs)]
-    if 'sims_image' in tims[0].__dict__:
+    if hasattr(tims[0], 'sims_image'):
         coadd_list.append(('simscoadd', sims_coadd, rgbkwargs))
-        #('imagecoadd', image_coadd, rgbkwargs)
 
     for name,ims,rgbkw in coadd_list:
         rgb = get_rgb(ims, bands, **rgbkw)
@@ -1052,65 +1013,58 @@ def stage_srcs(coimgs=None, cons=None,
     # Handle the margin of interpolated (masked) pixels around
     # saturated pixels
     saturated_pix = binary_dilation(satmap > 0, iterations=10)
-
-    # Read Tycho-2 stars
+    
+    # Read Tycho-2 stars and use as saturated sources.
     tycho = fits_table(survey.find_file('tycho2'))
     print('Read', len(tycho), 'Tycho-2 stars')
-    ok,tycho.tx,tycho.ty = targetwcs.radec2pixelxy(tycho.ra, tycho.dec)
-    margin = 100
-    tycho.cut(ok * (tycho.tx > -margin) * (tycho.tx < W+margin) *
-              (tycho.ty > -margin) * (tycho.ty < H+margin))
+    ok,xx,yy = targetwcs.radec2pixelxy(tycho.ra, tycho.dec)
+    ## ibx = integer brick x
+    tycho.ibx = np.round(xx-1.).astype(int)
+    tycho.iby = np.round(yy-1.).astype(int)
+    margin = 10
+    tycho.cut(ok * (tycho.ibx > -margin) * (tycho.ibx < W+margin) *
+              (tycho.iby > -margin) * (tycho.iby < H+margin))
     print('Cut to', len(tycho), 'Tycho-2 stars within brick')
-    del ok
+    tycho.ibx = np.clip(tycho.ibx, 0, W-1)
+    tycho.iby = np.clip(tycho.iby, 0, H-1)
+    del ok,xx,yy
 
-    # Create "Tsat", list of saturated sources -- from Tycho-2
-    if len(tycho):
-        Tsat = tycho
-    else:
-        Tsat = fits_table()
-    
     # Saturated blobs -- create a source for each, except for those
     # that already have a Tycho-2 star
     satblobs,nsat = label(satmap > 0)
-    if len(Tsat):
+    if len(tycho):
         # Build a map from old "satblobs" to new; identity to start
         remap = np.arange(nsat+1)
         # Drop blobs that contain a Tycho-2 star
-        itx = np.clip(np.round(Tsat.tx), 0, W-1).astype(int)
-        ity = np.clip(np.round(Tsat.ty), 0, H-1).astype(int)
-        zeroout = satblobs[ity, itx]
+        zeroout = satblobs[tycho.iby, tycho.ibx]
         remap[zeroout] = 0
         # Renumber them to be contiguous
         I = np.flatnonzero(remap)
         nsat = len(I)
         remap[I] = 1 + np.arange(nsat)
         satblobs = remap[satblobs]
-        del remap, itx, ity, zeroout, I
+        del remap, zeroout, I
 
     # Add sources for any remaining saturated blobs
     satyx = center_of_mass(satmap, labels=satblobs, index=np.arange(nsat)+1)
-    if len(satyx):
+    if len(satyx) == 0:
+        Tsat = tycho
+    else:
+        Tsat = fits_table()
         # NOTE, satyx is in y,x order (center_of_mass)
-        satx = np.array([x for y,x in satyx]).astype(int)
-        saty = np.array([y for y,x in satyx]).astype(int)
-        print('Adding', len(satx), 'additional saturated stars')
-        Tsat2 = fits_table()
-        Tsat2.tx = satx
-        Tsat2.ty = saty
+        Tsat.ibx = np.array([x for y,x in satyx]).astype(int)
+        Tsat.iby = np.array([y for y,x in satyx]).astype(int)
+        Tsat.ra,Tsat.dec = targetwcs.pixelxy2radec(Tsat.ibx+1, Tsat.iby+1)
+        print('Adding', len(Tsat), 'additional saturated stars')
         # MAGIC mag for a saturated star
-        Tsat2.mag = np.zeros(len(satx)) + 15.
-        Tsat = merge_tables([Tsat, Tsat2], columns='fillzero')
-        del Tsat2
-        del satx,saty
+        Tsat.mag = np.zeros(len(Tsat), np.float32) + 15.
+        Tsat = merge_tables([tycho, Tsat], columns='fillzero')
     del satyx
         
     satcat = []
     if len(Tsat):
-        Tsat.ra,Tsat.dec = targetwcs.pixelxy2radec(Tsat.tx+1, Tsat.ty+1)
-        Tsat.itx = np.clip(np.round(Tsat.tx), 0, W-1).astype(int)
-        Tsat.ity = np.clip(np.round(Tsat.ty), 0, H-1).astype(int)
-        avoid_x.extend(Tsat.itx)
-        avoid_y.extend(Tsat.ity)
+        avoid_x.extend(Tsat.ibx)
+        avoid_y.extend(Tsat.iby)
         # Create catalog entries...
         for r,d,m in zip(Tsat.ra, Tsat.dec, Tsat.mag):
             fluxes = dict([(band, NanoMaggies.magToNanomaggies(m))
@@ -1138,7 +1092,7 @@ def stage_srcs(coimgs=None, cons=None,
         dimshow(rgb)
         ax = plt.axis()
         if len(Tsat):
-            plt.plot(Tsat.tx, Tsat.ty, 'ro')
+            plt.plot(Tsat.ibx, Tsat.iby, 'ro')
         plt.axis(ax)
         plt.title('detmaps & saturated')
         ps.savefig()
@@ -1177,8 +1131,8 @@ def stage_srcs(coimgs=None, cons=None,
         plt.title('Catalog + SED-matched detections')
         ps.savefig()
         ax = plt.axis()
-        p1 = plt.plot(T.tx, T.ty, 'r+', **crossa)
-        p2 = plt.plot(Tnew.tx, Tnew.ty, '+', color=(0,1,0), **crossa)
+        p1 = plt.plot(T.ibx, T.iby, 'r+', **crossa)
+        p2 = plt.plot(Tnew.ibx, Tnew.iby, '+', color=(0,1,0), **crossa)
         plt.axis(ax)
         plt.title('Catalog + SED-matched detections')
         plt.figlegend((p1[0], p2[0]), ('SDSS', 'New'), 'upper left')
@@ -1456,18 +1410,17 @@ def stage_fitblobs(T=None,
         blobsrcs   = [blobsrcs  [i] for i in keepblobs]
 
         # one more place where blob numbers are recorded...
-        T.blob = blobs[T.ity, T.itx]
+        T.blob = blobs[T.iby, T.ibx]
 
     # drop any cached data before we start pickling/multiprocessing
     survey.drop_cache()
 
     if plots:
-        ok,tx,ty = targetwcs.radec2pixelxy(tycho.ra, tycho.dec)
         plt.clf()
         dimshow(blobs>=0, vmin=0, vmax=1)
         ax = plt.axis()
-        plt.plot(tx-1, ty-1, 'ro')
-        for x,y,mag in zip(tx,ty,tycho.mag):
+        plt.plot(tycho.ibx, tycho.iby, 'ro')
+        for x,y,mag in zip(tycho.ibx,tycho.iby,tycho.mag):
             plt.text(x, y, '%.1f' % (mag),
                      color='r', fontsize=10,
                      bbox=dict(facecolor='w', alpha=0.5))
@@ -1776,15 +1729,9 @@ def _format_all_models(T, newcat, BB, bands, rex):
 def _blob_iter(blobslices, blobsrcs, blobs, targetwcs, tims, cat, bands,
                plots, ps, simul_opt, use_ceres, tycho, brick, rex,
                skipblobs=[]):
-
-    ok,tx,ty = targetwcs.radec2pixelxy(tycho.ra, tycho.dec)
-    tx = np.round(tx-1).astype(int)
-    ty = np.round(ty-1).astype(int)
-    # FIXME -- Cut or clip to targetwcs region?
+    from collections import Counter
     H,W = targetwcs.shape
-    tx = np.clip(tx, 0, W-1)
-    ty = np.clip(ty, 0, H-1)
-    tychoblobs = set(blobs[ty, tx])
+    tychoblobs = set(blobs[tycho.iby, tycho.ibx])
     # Remove -1 = no blob from set; not strictly necessary, just cosmetic
     try:
         tychoblobs.remove(-1)
@@ -1793,7 +1740,6 @@ def _blob_iter(blobslices, blobsrcs, blobs, targetwcs, tims, cat, bands,
     print('Blobs containing Tycho-2 stars:', tychoblobs)
 
     # sort blobs by size so that larger ones start running first
-    from collections import Counter
     blobvals = Counter(blobs[blobs>=0])
     blob_order = np.array([i for i,npix in blobvals.most_common()])
 
@@ -1938,6 +1884,7 @@ def stage_coadds(survey=None, bands=None, version_header=None, targetwcs=None,
     residuals.  We also perform aperture photometry in this stage.
     '''
     from legacypipe.survey import apertures_arcsec
+    from functools import reduce
     tlast = Time()
 
     # Write per-brick CCDs table
@@ -1966,18 +1913,17 @@ def stage_coadds(survey=None, bands=None, version_header=None, targetwcs=None,
     ok,xx,yy = targetwcs.radec2pixelxy(ra, dec)
     
     # Get integer brick pixel coords for each source, for referencing maps
-    from functools import reduce
-    T.oob = reduce(np.logical_or, [xx < 0.5, yy < 0.5, xx > W+0.5, yy > H+0.5])
-    ix = np.clip(np.round(xx - 1), 0, W-1).astype(int)
-    iy = np.clip(np.round(yy - 1), 0, H-1).astype(int)
-
+    T.out_of_bounds = reduce(np.logical_or, [xx < 0.5, yy < 0.5,
+                                             xx > W+0.5, yy > H+0.5])
+    ixy = (np.clip(np.round(xx - 1), 0, W-1).astype(int),
+           np.clip(np.round(yy - 1), 0, H-1).astype(int))
     # convert apertures to pixels
     apertures = apertures_arcsec / pixscale
     # Aperture photometry locations
     apxy = np.vstack((xx - 1., yy - 1.)).T
     del xx,yy,ok,ra,dec
 
-    C = make_coadds(tims, bands, targetwcs, mods=mods, xy=(ix,iy),
+    C = make_coadds(tims, bands, targetwcs, mods=mods, xy=ixy,
                     ngood=True, detmaps=True, psfsize=True, lanczos=lanczos,
                     apertures=apertures, apxy=apxy,
                     callback=write_coadd_images,
@@ -1986,7 +1932,7 @@ def stage_coadds(survey=None, bands=None, version_header=None, targetwcs=None,
                     plots=False, ps=ps, mp=mp)
     
     # Coadds of galaxy sims only, image only
-    if 'sims_image' in tims[0].__dict__:
+    if hasattr(tims[0], 'sims_image'):
         sims_mods = [tim.sims_image for tim in tims]
         T_sims_coadds = make_coadds(tims, bands, targetwcs, mods=sims_mods,
                                     lanczos=lanczos, mp=mp)
@@ -2000,14 +1946,14 @@ def stage_coadds(survey=None, bands=None, version_header=None, targetwcs=None,
         del T_image_coadds
     ###
 
-    for c in ['nobs', 'anymask', 'allmask', 'psfsize', 'depth', 'galdepth']:
+    for c in ['nobs', 'anymask', 'allmask', 'psfsize', 'psfdepth', 'galdepth']:
         T.set(c, C.T.get(c))
     # store galaxy sim bounding box in Tractor cat
     if 'sims_xy' in C.T.get_columns():
         T.set('sims_xy', C.T.get('sims_xy'))
 
     # Compute depth histogram
-    D = _depth_histogram(brick, targetwcs, bands, C.detivs, C.galdetivs)
+    D = _depth_histogram(brick, targetwcs, bands, C.psfdetivs, C.galdetivs)
     with survey.write_output('depth-table', brick=brickname) as out:
         D.writeto(None, fits_object=out.fits)
     del D
@@ -2015,7 +1961,7 @@ def stage_coadds(survey=None, bands=None, version_header=None, targetwcs=None,
     coadd_list= [('image', C.coimgs,   rgbkwargs),
                  ('model', C.comods,   rgbkwargs),
                  ('resid', C.coresids, rgbkwargs_resid)]
-    if 'sims_image' in tims[0].__dict__:
+    if hasattr(tims[0], 'sims_image'):
         coadd_list.append(('simscoadd', sims_coadd, rgbkwargs))
 
     for name,ims,rgbkw in coadd_list:
@@ -2344,13 +2290,10 @@ def stage_writecat(
     from legacypipe.catalog import prepare_fits_catalog
      
     TT = T.copy()
-    for k in ['itx','ity','index','tx','ty']:
-        if k in TT.get_columns():
-            TT.delete_column(k)
-    TT.rename('oob', 'out_of_bounds')
+    for k in ['ibx','iby']:
+        TT.delete_column(k)
 
     assert(AP is not None)
-    #if AP is not None:
     # How many apertures?
     ap = AP.get('apflux_img_%s' % bands[0])
     n,A = ap.shape
@@ -2477,7 +2420,7 @@ def stage_writecat(
     from legacypipe.format_catalog import format_catalog
     with survey.write_output('tractor', brick=brickname) as out:
         format_catalog(T2, hdr, primhdr, allbands, None,
-                       write_kwargs=dict(fits_object=out.fits), dr4=True)
+                       write_kwargs=dict(fits_object=out.fits))
 
     # produce per-brick checksum file.
     with survey.write_output('checksums', brick=brickname, hashsum=False) as out:
@@ -2658,14 +2601,12 @@ def run_brick(brick, survey, radec=None, pixscale=0.262,
         If no CCDs, or no photometric CCDs, overlap the given brick or region.
 
     '''
-    print('Total Memory Available to Job:')
-    get_ulimit()
-
-
     from astrometry.util.stages import CallGlobalTime, runstage
     from astrometry.util.multiproc import multiproc
-
     from legacypipe.utils import MyMultiproc
+
+    print('Total Memory Available to Job:')
+    get_ulimit()
 
     initargs = {}
     kwargs = {}
@@ -2678,7 +2619,7 @@ def run_brick(brick, survey, radec=None, pixscale=0.262,
 
     if allbands is not None:
         kwargs.update(allbands=allbands)
-        
+
     if radec is not None:
         print('RA,Dec:', radec)
         assert(len(radec) == 2)

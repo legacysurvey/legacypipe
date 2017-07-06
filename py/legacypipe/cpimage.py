@@ -38,7 +38,6 @@ class CPImage(LegacySurveyImage):
         require the inheritance order and order of calling super.__init__()
         to be just right.
         '''
-        
         self.dqfn = self.imgfn.replace('_ooi_', '_ood_').replace(
             '_oki_','_ood_')
         self.wtfn = self.imgfn.replace('_ooi_', '_oow_').replace(

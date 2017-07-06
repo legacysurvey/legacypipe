@@ -2,9 +2,6 @@ from __future__ import print_function
 
 import numpy as np
 
-from astrometry.util.util import Tan
-from astrometry.util.fits import fits_table
-
 from tractor import PointSource, getParamTypeTree, RaDecPos
 from tractor.galaxy import ExpGalaxy, DevGalaxy, FixedCompositeGalaxy
 from tractor.ellipses import EllipseESoft, EllipseE
@@ -12,13 +9,17 @@ from tractor.ellipses import EllipseESoft, EllipseE
 from legacypipe.survey import SimpleGalaxy, RexGalaxy
 
 # FITS catalogs
-fits_typemap = { PointSource: 'PSF', ExpGalaxy: 'EXP', DevGalaxy: 'DEV',
+fits_typemap = { PointSource: 'PSF',
+                 ExpGalaxy: 'EXP',
+                 DevGalaxy: 'DEV',
                  FixedCompositeGalaxy: 'COMP',
                  SimpleGalaxy: 'SIMP',
                  RexGalaxy: 'REX',
                  type(None): 'NONE' }
 
-fits_short_typemap = { PointSource: 'S', ExpGalaxy: 'E', DevGalaxy: 'D',
+fits_short_typemap = { PointSource: 'S',
+                       ExpGalaxy: 'E',
+                       DevGalaxy: 'D',
                        FixedCompositeGalaxy: 'C',
                        SimpleGalaxy: 'G',
                        RexGalaxy: 'R' }
@@ -44,6 +45,7 @@ def _source_param_types(src):
 def prepare_fits_catalog(cat, invvars, T, hdr, filts, fs, allbands=None,
                          prefix='', save_invvars=True, unpackShape=True):
     if T is None:
+        from astrometry.util.fits import fits_table
         T = fits_table()
     if hdr is None:
         import fitsio
@@ -326,11 +328,3 @@ def read_fits_catalog(T, hdr=None, invvars=False, bands='grz',
         return cat, ivs
     return cat
 
-
-
-if __name__ == '__main__':
-    T=fits_table('3524p000-0-12-n16-sdss-cat.fits')
-    cat = read_fits_catalog(T, T.get_header())
-    print('Read catalog:')
-    for src in cat:
-        print(' ', src)
