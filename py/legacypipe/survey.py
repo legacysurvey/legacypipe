@@ -1093,7 +1093,8 @@ Now using the current directory as LEGACY_SURVEY_DIR, but this is likely to fail
         Returns the directory containing SourceExtractor config files,
         used during calibration.
         '''
-        return os.path.join(self.survey_dir, 'calib', 'se-config')
+        from pkg_resources import resource_filename
+        return resource_filename('legacypipe', 'config')
 
     def get_bricks_dr2(self):
         '''
@@ -1384,7 +1385,7 @@ Now using the current directory as LEGACY_SURVEY_DIR, but this is likely to fail
             print('Checking', len(Icam), 'images from camera', cam)
             cuts = imclass.ccd_cuts(self, ccds[Icam])
             ccdcuts[Icam] = cuts
-            print('Keeping', sum(cuts == 0), 'unflagged CCDs from camera', cam)
+            #print('Keeping', sum(cuts==0), 'unflagged CCDs from camera', cam)
         return ccdcuts
 
 def exposure_metadata(filenames, hdus=None, trim=None):
