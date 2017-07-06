@@ -1,7 +1,3 @@
-# Default configuration file for PSFEx 3.17.1
-# EB 2015-03-22
-#
- 
 #-------------------------------- PSF model ----------------------------------
  
 BASIS_TYPE      PIXEL_AUTO      # NONE, PIXEL, GAUSS-LAGUERRE or FILE
@@ -54,7 +50,6 @@ PSF_DIR                         # Where to write PSFs (empty=same as input)
 PSF_SUFFIX      .fits            # Filename extension for output PSF filename
 VERBOSE_TYPE    FULL           # can be QUIET,NORMAL,LOG or FULL
 WRITE_XML       N               # Write XML file (Y/N)?
-XML_NAME        psfex.xml       # Filename for XML output
 NTHREADS        1               # Number of simultaneous threads for
                                 # the SMP version of PSFEx
                                 # 0 = automatic
