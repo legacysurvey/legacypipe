@@ -1385,7 +1385,7 @@ Now using the current directory as LEGACY_SURVEY_DIR, but this is likely to fail
             print('Checking', len(Icam), 'images from camera', cam)
             cuts = imclass.ccd_cuts(self, ccds[Icam])
             ccdcuts[Icam] = cuts
-            print('Keeping', sum(cuts == 0), 'unflagged CCDs from camera', cam)
+            #print('Keeping', sum(cuts==0), 'unflagged CCDs from camera', cam)
         return ccdcuts
 
 def exposure_metadata(filenames, hdus=None, trim=None):

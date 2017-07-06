@@ -82,13 +82,10 @@ class MosaicImage(CPImage, CalibMixin):
     @classmethod
     def ccd_cuts(self, survey, ccds):
         ccdcuts = super(MosaicImage, self).ccd_cuts(survey, ccds)
-
         bits = LegacySurveyData.ccd_cut_bits
-
         I = self.bad_third_pixel(survey, ccds)
         print(np.sum(I), 'CCDs have bad THIRD_PIXEL')
         ccdcuts[I] += bits['THIRD_PIXEL']
-
         return ccdcuts
     
     @classmethod
@@ -165,7 +162,7 @@ class MosaicImage(CPImage, CalibMixin):
         
     def get_tractor_wcs(self, wcs, x0, y0,
                         primhdr=None, imghdr=None):
-        '''1/3 pixel shift if nont-interpolated image'''
+        '''1/3 pixel shift if non-interpolated image'''
         prim= self.read_image_primary_header()
         if 'YSHIFT' in prim.keys():
             # Use Default wcs class, this is an interpolated image
@@ -179,8 +176,6 @@ class MosaicImage(CPImage, CalibMixin):
                 twcs.setX0Y0(x0,y0)
             return twcs
 
-    #def run_calibs(self, psfex=True, funpack=False, git_version=None,
-    #              force=False, **kwargs):
     def run_calibs(self, psfex=True, sky=True, se=False,
                    funpack=False, fcopy=False, use_mask=True,
                    force=False, just_check=False, git_version=None,
@@ -228,15 +223,11 @@ class MosaicImage(CPImage, CalibMixin):
             imgfn,maskfn = self.imgfn,self.dqfn
     
         if se:
-            self.run_se('mzls', imgfn, maskfn)
+            self.run_se('mosaic', imgfn, maskfn)
         if psfex:
-            self.run_psfex('mzls')
-
-
+            self.run_psfex('mosaic')
         if sky:
-            self.run_sky('mzls', splinesky=splinesky,\
-                         git_version=git_version)
-
+            self.run_sky('mosaic', splinesky=splinesky, git_version=git_version)
 
         for fn in todelete:
             os.unlink(fn)
@@ -257,7 +248,6 @@ class OneThirdPixelShiftWcs(ConstantFitsWcs):
             #y += 1./3
             y -= 1./3
         return x,y
-
 
 def main():
 
