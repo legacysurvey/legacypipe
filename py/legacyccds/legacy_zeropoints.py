@@ -413,7 +413,12 @@ def cuts_for_brick_2016p122(legacy_fn,survey_fn):
     legacy.writeto(fn) 
     print('Wrote %s' % fn)
      
-        
+
+def read_prim_header(fn):
+    a= fitsio.FITS(fn)
+    h= a[0].read_header()
+    a.close()
+    return h 
 
 def run_create_legacypipe_table(zpt_list):
     fns= np.loadtxt(zpt_list,dtype=str)
@@ -485,11 +490,13 @@ def create_legacypipe_table(ccds_fn):
     print('Wrote %s' % outfn)
 
 
-def create_matches_table(stars_fn,**kwargs):
+def create_matches_table(stars_fn, zpt_fn):
     '''Arjun's "matches-*.fits" stars table
-    input _stars_table fn
+    input _stars_table fn, zpt_fn for its primary header
     output Arjun's matches table, same column names but units can be different'''
-    # HACK! need func to put in appropriate units e.g. compare to survey-ccds file for decam,mosaic, and bass
+    # fiducials in the zpt header
+    kwargs= read_prim_header(zpt_fn)
+    # carry on 
     need_arjuns_keys= ['filename','expnum','extname',
                        'ccd_x','ccd_y','ccd_ra','ccd_dec',
                        'ccd_mag','ccd_sky',
@@ -508,7 +515,7 @@ def create_matches_table(stars_fn,**kwargs):
     T.set('ccd_mag',-2.5 * np.log10(T.apflux / T.exptime) +  \
                         kwargs['zp_fid'])
     # ADU per pixel from sky aperture 
-    area= np.pi*3.5**2/kwargs.get('pixscale')**2
+    area= np.pi*3.5**2/kwargs['pixscale']**2
     T.set('ccd_sky', T.apskyflux / area / T.gain)
     # Arjuns ccd_sky is ADUs in 7-10 arcsec sky aperture
     # e.g. sky (total e/pix/sec)= ccd_sky (ADU) * gain / exptime
@@ -1789,7 +1796,7 @@ def runit(imgfn_proj, **measureargs):
     if success(ccds,**measureargs):
         # Write out.
         ccds.write(zptfn)
-        # Add header info
+        # Header <-- fiducial zp,sky,ext, also exptime, pixscale
         hdulist = fits_astropy.open(zptfn, mode='update')
         prihdr = hdulist[0].header
         for key,val in extra_info.items():
@@ -1801,8 +1808,6 @@ def runit(imgfn_proj, **measureargs):
         # Star table
         stars.write(starfn)
         print('Wrote {}'.format(starfn))
-        # star --> Arjun's  matches table
-        create_matches_table(starfn,**extra_info)
         # Clean up
         t0= ptime('write-results-to-fits',t0)
     else:
