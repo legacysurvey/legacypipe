@@ -77,4 +77,3 @@ MEMORY_BUFSIZE   1024          # number of lines in buffer (set to 16k)
  
 VERBOSE_TYPE     NORMAL         # can be QUIET, NORMAL or FULL
 WRITE_XML        N              # Write XML file (Y/N)?
-XML_NAME         sex.xml        # Filename for XML output
