@@ -2,12 +2,11 @@ from __future__ import print_function
 import pylab as plt
 import numpy as np
 from astrometry.util.ttime import Time
-from astrometry.util.fits import fits_table
-from tractor.basics import PointSource, RaDecPos, NanoMaggies
-from .survey import tim_get_resamp
 
 def _detmap(X):
     from scipy.ndimage.filters import gaussian_filter
+    from legacypipe.survey import tim_get_resamp
+
     (tim, targetwcs, H, W) = X
     R = tim_get_resamp(tim, targetwcs)
     if R is None:
@@ -16,11 +15,9 @@ def _detmap(X):
     assert(tim.psf_sigma > 0)
     psfnorm = 1./(2. * np.sqrt(np.pi) * tim.psf_sigma)
     detim = tim.getImage().copy()
-
     detim[ie == 0] = 0.
     # Patch SATURATED pixels with the value saturated pixels would have??
     #detim[(tim.dq & tim.dq_bits['satur']) > 0] = tim.satval
-    
     detim = gaussian_filter(detim, tim.psf_sigma) / psfnorm**2
     detsig1 = tim.sig1 / psfnorm
     subh,subw = tim.shape
@@ -132,6 +129,9 @@ def run_sed_matched_filters(SEDs, bands, detmaps, detivs, omit_xy,
     sed_matched_detection : run a single SED-matched filter.
     
     '''
+    from astrometry.util.fits import fits_table
+    from tractor import PointSource, RaDecPos, NanoMaggies
+
     if omit_xy is not None:
         xx,yy = omit_xy
         n0 = len(xx)

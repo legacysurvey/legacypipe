@@ -2,29 +2,19 @@ from __future__ import print_function
 
 import os
 import tempfile
-import time
-from glob import glob
-from collections import OrderedDict
 
 import numpy as np
 
 import fitsio
 
 from astrometry.util.fits import fits_table, merge_tables
-from astrometry.util.file import trymakedirs
-from astrometry.util.util import Tan, Sip, anwcs_t
-from astrometry.util.starutil_numpy import degrees_between, hmsstring2ra, dmsstring2dec
-from astrometry.util.miscutils import polygons_intersect, estimate_mode, clip_polygon, clip_wcs
-from astrometry.util.resample import resample_with_wcs,OverlapError
+from astrometry.util.starutil_numpy import degrees_between
 
-from tractor.basics import ConstantSky, NanoMaggies, ConstantFitsWcs, LinearPhotoCal, PointSource, RaDecPos
-from tractor.engine import Image, Catalog, Patch
-from tractor.galaxy import enable_galaxy_cache, disable_galaxy_cache
-from tractor.utils import get_class_from_name
-from tractor.ellipses import EllipseESoft
-from tractor.sfd import SFDMap
-
+from tractor.ellipses import EllipseESoft, EllipseE
+from tractor.galaxy import ExpGalaxy
 from legacypipe.utils import EllipseWithPriors
+
+release_number = 5000
 
 # search order: $TMPDIR, $TEMP, $TMP, then /tmp, /var/tmp, /usr/tmp
 tempdir = tempfile.gettempdir()
@@ -44,9 +34,6 @@ if 'Mock' in str(type(EllipseWithPriors)):
 class LegacyEllipseWithPriors(EllipseWithPriors):
     # Prior on (softened) ellipticity: Gaussian with this standard deviation
     ellipticityStd = 0.25
-
-from tractor.galaxy import ExpGalaxy
-from tractor.ellipses import EllipseE
 
 class LogRadius(EllipseESoft):
     ''' Class used during fitting of the RexGalaxy type -- an ellipse
@@ -203,7 +190,7 @@ def get_version_header(program_name, survey_dir, git_version=None):
                         comment='Survey name'))
     #hdr.add_record(dict(name='SURVEYID', value='BASS MzLS',
     #                    comment='Survey name'))
-    hdr.add_record(dict(name='DRVERSIO', value='5000',
+    hdr.add_record(dict(name='DRVERSIO', value=release_number,
                         comment='Survey data release number'))
     hdr.add_record(dict(name='OBSTYPE', value='object',
                         comment='Observation type'))
@@ -302,9 +289,10 @@ def bin_image(data, invvar, S):
     return newdata,newiv
 
 def tim_get_resamp(tim, targetwcs):
+    from astrometry.util.resample import resample_with_wcs,OverlapError
+
     if hasattr(tim, 'resamp'):
         return tim.resamp
-
     try:
         Yo,Xo,Yi,Xi,nil = resample_with_wcs(targetwcs, tim.subwcs, [], 2)
     except OverlapError:
@@ -543,6 +531,7 @@ def wcs_for_brick(b, W=3600, H=3600, pixscale=0.262):
 
     Returns: Tan wcs object
     '''
+    from astrometry.util.util import Tan
     pixscale = pixscale / 3600.
     return Tan(b.ra, b.dec, W/2.+0.5, H/2.+0.5,
                -pixscale, 0., 0., pixscale,
@@ -569,6 +558,8 @@ def bricks_touching_wcs(targetwcs, survey=None, B=None, margin=20):
     given WCS region + margin.
     '''
     from astrometry.libkd.spherematch import match_radec
+    from astrometry.util.miscutils import clip_wcs
+
     if B is None:
         assert(survey is not None)
         B = survey.get_bricks_readonly()
@@ -603,6 +594,9 @@ def ccds_touching_wcs(targetwcs, ccds, ccdrad=0.17, polygons=True):
 
     Returns: index array I of CCDs within range.
     '''
+    from astrometry.util.util import Tan
+    from astrometry.util.miscutils import polygons_intersect
+    
     trad = targetwcs.radius()
     if ccdrad is None:
         ccdrad = max(np.sqrt(np.abs(ccds.cd1_1 * ccds.cd2_2 -
@@ -702,10 +696,11 @@ class LegacySurveyData(object):
         output_dir : string
             Base directory for output files; default ".".
         '''
-        from .decam  import DecamImage
-        from .mosaic import MosaicImage
-        from .bok    import BokImage
-        from .ptf    import PtfImage
+        from legacypipe.decam  import DecamImage
+        from legacypipe.mosaic import MosaicImage
+        from legacypipe.bok    import BokImage
+        from legacypipe.ptf    import PtfImage
+        from collections import OrderedDict
 
         if survey_dir is None:
             survey_dir = os.environ.get('LEGACY_SURVEY_DIR')
@@ -821,6 +816,8 @@ Now using the current directory as LEGACY_SURVEY_DIR, but this is likely to fail
 
         Returns: path to the specified file (whether or not it exists).
         '''
+        from glob import glob
+
         if brick is None:
             brick = '%(brick)s'
             brickpre = '%(brick).3s'
@@ -1096,12 +1093,6 @@ Now using the current directory as LEGACY_SURVEY_DIR, but this is likely to fail
         from pkg_resources import resource_filename
         return resource_filename('legacypipe', 'config')
 
-    def get_bricks_dr2(self):
-        '''
-        Returns a table of bricks with DR2 stats.  The caller owns the table.
-        '''
-        return fits_table(os.path.join(self.survey_dir, 'decals-bricks-dr2.fits'))
-
     def get_bricks(self):
         '''
         Returns a table of bricks.  The caller owns the table.
@@ -1204,8 +1195,6 @@ Now using the current directory as LEGACY_SURVEY_DIR, but this is likely to fail
         '''
         Returns the table of CCDs.
         '''
-        from glob import glob
-
         fns = self.find_file('ccds')
         fns.sort()
         fns = self.filter_ccds_files(fns)
@@ -1248,8 +1237,6 @@ Now using the current directory as LEGACY_SURVEY_DIR, but this is likely to fail
         '''
         Returns the annotated table of CCDs.
         '''
-        from glob import glob
-
         fns = self.find_file('annotated-ccds')
         TT = []
         for fn in fns:
@@ -1288,6 +1275,7 @@ Now using the current directory as LEGACY_SURVEY_DIR, but this is likely to fail
         return imageType(self, t, **kwargs)
 
     def get_approx_wcs(self, ccd):
+        from astrometry.util.util import Tan
         W,H = ccd.width,ccd.height
         wcs = Tan(*[float(x) for x in
                     [ccd.crval1, ccd.crval2, ccd.crpix1, ccd.crpix2,
@@ -1407,6 +1395,9 @@ def exposure_metadata(filenames, hdus=None, trim=None):
     -------
     A table that looks like the CCDs table.
     '''
+    from astrometry.util.util import Tan
+    from astrometry.util.starutil_numpy import hmsstring2ra, dmsstring2dec
+
     nan = np.nan
     primkeys = [('FILTER',''),
                 ('RA', nan),

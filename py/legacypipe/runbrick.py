@@ -281,42 +281,6 @@ def stage_tims(W=3600, H=3600, pixscale=0.262, brickname=None,
         print('[parallel tims] Calibrations:', tnow-tlast)
         tlast = tnow
 
-    if False and plots:
-        # Here, we read full images (not just subimages) to plot their
-        # pixel distributions
-        sig1s = dict([(b,[]) for b in bands])
-        allpix = []
-        for im in ims:
-            subtim = im.get_tractor_image(splinesky=True, gaussPsf=True,
-                                          subsky=False, radecpoly=targetrd)
-            if subtim is None:
-                continue
-            fulltim = im.get_tractor_image(splinesky=True, gaussPsf=True)
-            sig1s[fulltim.band].append(fulltim.sig1)
-            allpix.append((fulltim.band, fulltim.name, im.exptime,
-                           fulltim.getImage()[fulltim.getInvError() > 0]))
-        sig1s = dict([(b, np.median(sig1s[b])) for b in sig1s.keys()])
-        for b in bands:
-            plt.clf()
-            lp,lt = [],[]
-            s = sig1s[b]
-            for band,name,exptime,pix in allpix:
-                if band != b:
-                    continue
-                # broaden range to encompass most pixels... only req'd
-                # when sky is bad
-                lo,hi = -5.*s, 5.*s
-                lo = min(lo, np.percentile(pix, 5))
-                hi = max(hi, np.percentile(pix, 95))
-                n,bb,p = plt.hist(pix, range=(lo, hi), bins=50,
-                                  histtype='step', alpha=0.5)
-                lp.append(p[0])
-                lt.append('%s: %.0f s' % (name, exptime))
-            plt.legend(lp, lt)
-            plt.xlabel('Pixel values')
-            plt.title('Pixel distributions: %s band' % b)
-            ps.savefig()
-
     # Read Tractor images
     args = [(im, targetrd, dict(gaussPsf=gaussPsf, pixPsf=pixPsf,
                                 hybridPsf=hybridPsf,
@@ -2000,7 +1964,7 @@ def stage_coadds(survey=None, bands=None, version_header=None, targetwcs=None,
         del T_image_coadds
     ###
 
-    for c in ['nobs', 'anymask', 'allmask', 'psfsize', 'depth', 'galdepth']:
+    for c in ['nobs', 'anymask', 'allmask', 'psfsize', 'psfdepth', 'galdepth']:
         T.set(c, C.T.get(c))
     # store galaxy sim bounding box in Tractor cat
     if 'sims_xy' in C.T.get_columns():
@@ -2477,7 +2441,7 @@ def stage_writecat(
     from legacypipe.format_catalog import format_catalog
     with survey.write_output('tractor', brick=brickname) as out:
         format_catalog(T2, hdr, primhdr, allbands, None,
-                       write_kwargs=dict(fits_object=out.fits), dr4=True)
+                       write_kwargs=dict(fits_object=out.fits))
 
     # produce per-brick checksum file.
     with survey.write_output('checksums', brick=brickname, hashsum=False) as out:
@@ -2658,14 +2622,12 @@ def run_brick(brick, survey, radec=None, pixscale=0.262,
         If no CCDs, or no photometric CCDs, overlap the given brick or region.
 
     '''
-    print('Total Memory Available to Job:')
-    get_ulimit()
-
-
     from astrometry.util.stages import CallGlobalTime, runstage
     from astrometry.util.multiproc import multiproc
-
     from legacypipe.utils import MyMultiproc
+
+    print('Total Memory Available to Job:')
+    get_ulimit()
 
     initargs = {}
     kwargs = {}
@@ -2678,7 +2640,7 @@ def run_brick(brick, survey, radec=None, pixscale=0.262,
 
     if allbands is not None:
         kwargs.update(allbands=allbands)
-        
+
     if radec is not None:
         print('RA,Dec:', radec)
         assert(len(radec) == 2)

@@ -30,7 +30,7 @@ def make_coadds(tims, bands, targetwcs,
     C.coimgs = []
     if detmaps:
         C.galdetivs = []
-        C.detivs = []
+        C.psfdetivs = []
     if mods is not None:
         C.comods = []
         C.coresids = []
@@ -42,13 +42,13 @@ def make_coadds(tims, bands, targetwcs,
     if xy:
         ix,iy = xy
         C.T = fits_table()
-        C.T.nobs    = np.zeros((len(ix), len(bands)), np.uint8)
+        C.T.nobs    = np.zeros((len(ix), len(bands)), np.int16)
         C.T.anymask = np.zeros((len(ix), len(bands)), np.int16)
         C.T.allmask = np.zeros((len(ix), len(bands)), np.int16)
         if psfsize:
             C.T.psfsize = np.zeros((len(ix), len(bands)), np.float32)
         if detmaps:
-            C.T.depth    = np.zeros((len(ix), len(bands)), np.float32)
+            C.T.psfdepth = np.zeros((len(ix), len(bands)), np.float32)
             C.T.galdepth = np.zeros((len(ix), len(bands)), np.float32)
 
     if lanczos:
@@ -93,9 +93,9 @@ def make_coadds(tims, bands, targetwcs,
 
         if detmaps:
             # detection map inverse-variance (depth map)
-            detiv = np.zeros((H,W), np.float32)
-            C.detivs.append(detiv)
-            kwargs.update(detiv=detiv)
+            psfdetiv = np.zeros((H,W), np.float32)
+            C.psfdetivs.append(psfdetiv)
+            kwargs.update(psfdetiv=psfdetiv)
             # galaxy detection map inverse-variance (galdepth map)
             galdetiv = np.zeros((H,W), np.float32)
             C.galdetivs.append(galdetiv)
@@ -115,7 +115,7 @@ def make_coadds(tims, bands, targetwcs,
                 # unweighted model
                 comod  = np.zeros((H,W), np.float32)
             # number of exposures
-            con    = np.zeros((H,W), np.uint8)
+            con    = np.zeros((H,W), np.int16)
             # inverse-variance
             coiv   = np.zeros((H,W), np.float32)
             kwargs.update(coimg=coimg, coiv=coiv)
@@ -129,7 +129,7 @@ def make_coadds(tims, bands, targetwcs,
         # saturated, etc.)
 
         if ngood:
-            congood = np.zeros((H,W), np.uint8)
+            congood = np.zeros((H,W), np.int16)
             kwargs.update(congood=congood)
 
         if xy:
@@ -142,7 +142,7 @@ def make_coadds(tims, bands, targetwcs,
             allbits = reduce(np.bitwise_or, CP_DQ_BITS.values())
             andmask[:,:] = allbits
             # number of observations
-            nobs  = np.zeros((H,W), np.uint8)
+            nobs = np.zeros((H,W), np.int16)
             kwargs.update(ormask=ormask, andmask=andmask, nobs=nobs)
 
         if psfsize:
@@ -151,10 +151,7 @@ def make_coadds(tims, bands, targetwcs,
         for R in timiter:
             if R is None:
                 continue
-
             itim,Yo,Xo,iv,im,mo,dq = R
-            #print('timiter Yo,Xo,im.shape=',Yo,Xo,im.shape)
-
             tim = tims[itim]
 
             # invvar-weighted image
@@ -196,7 +193,7 @@ def make_coadds(tims, bands, targetwcs,
             if detmaps:
                 # point-source depth
                 detsig1 = tim.sig1 / tim.psfnorm
-                detiv[Yo,Xo] += (iv > 0) * (1. / detsig1**2)
+                psfdetiv[Yo,Xo] += (iv > 0) * (1. / detsig1**2)
 
                 # Galaxy detection map
                 gdetsig1 = tim.sig1 / tim.galnorm
@@ -235,14 +232,13 @@ def make_coadds(tims, bands, targetwcs,
                 cowmod[cow == 0] = comod[cow == 0]
 
         if xy:
-            C.T.nobs [:,iband] = nobs[iy,ix]
-            C.T.anymask[:,iband] =  ormask [iy,ix]
-            C.T.allmask[:,iband] =  andmask[iy,ix]
+            C.T.nobs   [:,iband] = nobs   [iy,ix]
+            C.T.anymask[:,iband] = ormask [iy,ix]
+            C.T.allmask[:,iband] = andmask[iy,ix]
             # unless there were no images there...
             C.T.allmask[nobs[iy,ix] == 0, iband] = 0
-
             if detmaps:
-                C.T.depth   [:,iband] =    detiv[iy, ix]
+                C.T.psfdepth[:,iband] = psfdetiv[iy, ix]
                 C.T.galdepth[:,iband] = galdetiv[iy, ix]
         
         if psfsize:
@@ -396,7 +392,7 @@ def _apphot_one(args):
 def write_coadd_images(band,
                        survey, brickname, version_header, tims, targetwcs,
                        cowimg=None, cow=None, cowmod=None, cochi2=None,
-                       detiv=None, galdetiv=None, congood=None, **kwargs):
+                       psfdetiv=None, galdetiv=None, congood=None, **kwargs):
 
     # copy version_header before modifying...
     hdr = fitsio.FITSHDR()
@@ -453,9 +449,9 @@ def write_coadd_images(band,
         imgs.append(
             ('nexp',   'expmap',   congood),
             )
-    if detiv is not None:
+    if psfdetiv is not None:
         imgs.extend([
-                ('depth',    'psfdepth', detiv   ),
+                ('depth', 'psfdepth', detiv   ),
                 ])
     if galdetiv is not None:
         imgs.extend([
@@ -471,10 +467,9 @@ def write_coadd_images(band,
         if img is None:
             print('Image type', prodtype, 'is None -- skipping')
             continue
-        hdr2 = MyFITSHDR()
         # Make a copy, because each image has different values for
         # these headers...
-        #hdr2 = fitsio.FITSHDR()
+        hdr2 = MyFITSHDR()
         for r in hdr.records():
             hdr2.add_record(r)
         hdr2.add_record(dict(name='IMTYPE', value=name,
@@ -486,7 +481,7 @@ def write_coadd_images(band,
                                  comment='Magnitude zeropoint'))
             hdr2.add_record(dict(name='BUNIT', value='nanomaggy',
                                  comment='AB mag = 22.5 - 2.5*log10(nanomaggy)'))
-        if name in ['invvar', 'depth']:
+        if name in ['invvar', 'depth', 'galdepth']:
             hdr2.add_record(dict(name='BUNIT', value='1/nanomaggy^2',
                                  comment='Ivar of ABmag=22.5-2.5*log10(nmgy)'))
 
@@ -510,13 +505,13 @@ def quick_coadds(tims, bands, targetwcs, images=None,
         wimgs = []
 
     for ib,band in enumerate(bands):
-        coimg = np.zeros((H,W), np.float32)
+        coimg  = np.zeros((H,W), np.float32)
         coimg2 = np.zeros((H,W), np.float32)
-        con   = np.zeros((H,W), np.uint8)
-        con2  = np.zeros((H,W), np.uint8)
+        con    = np.zeros((H,W), np.int16)
+        con2   = np.zeros((H,W), np.int16)
         if get_cow:
             cowimg = np.zeros((H,W), np.float32)
-            wimg  = np.zeros((H,W), np.float32)
+            wimg   = np.zeros((H,W), np.float32)
         for itim,tim in enumerate(tims):
             if tim.band != band:
                 continue
