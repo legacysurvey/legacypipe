@@ -1218,13 +1218,16 @@ class CalibMixin(object):
             boxsize = self.splinesky_boxsize
             
             # Start by subtracting the overall median
-            med = np.median(img[wt>0])
+            good = (wt > 0)
+            if np.sum(good) == 0:
+                raise RuntimeError('No pixels with weight > 0 in: ' + str(self))
+            med = np.median(img[good])
             # Compute initial model...
-            skyobj = SplineSky.BlantonMethod(img - med, wt>0, boxsize)
+            skyobj = SplineSky.BlantonMethod(img - med, good, boxsize)
             skymod = np.zeros_like(img)
             skyobj.addTo(skymod)
             # Now mask bright objects in (image - initial sky model)
-            sig1 = 1./np.sqrt(np.median(wt[wt>0]))
+            sig1 = 1./np.sqrt(np.median(wt[good]))
             masked = (img - med - skymod) > (5.*sig1)
             masked = binary_dilation(masked, iterations=3)
             masked[wt == 0] = True
