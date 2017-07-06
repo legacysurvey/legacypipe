@@ -908,12 +908,9 @@ def stage_image_coadds(survey=None, targetwcs=None, bands=None, tims=None,
         D.writeto(None, fits_object=out.fits)
     del D
 
-    #rgbkwargs2 = dict(mnmx=(-3., 3.))
-    #rgbkwargs2 = dict(mnmx=(-2., 10.))
     coadd_list= [('image',C.coimgs,rgbkwargs)]
-    if 'sims_image' in tims[0].__dict__:
+    if hasattr(tims[0], 'sims_image'):
         coadd_list.append(('simscoadd', sims_coadd, rgbkwargs))
-        #('imagecoadd', image_coadd, rgbkwargs)
 
     for name,ims,rgbkw in coadd_list:
         rgb = get_rgb(ims, bands, **rgbkw)
@@ -1916,16 +1913,15 @@ def stage_coadds(survey=None, bands=None, version_header=None, targetwcs=None,
     # Get integer brick pixel coords for each source, for referencing maps
     T.out_of_bounds = reduce(np.logical_or, [xx < 0.5, yy < 0.5,
                                              xx > W+0.5, yy > H+0.5])
-    ix = np.clip(np.round(xx - 1), 0, W-1).astype(int)
-    iy = np.clip(np.round(yy - 1), 0, H-1).astype(int)
-
+    ixy = (np.clip(np.round(xx - 1), 0, W-1).astype(int),
+           np.clip(np.round(yy - 1), 0, H-1).astype(int))
     # convert apertures to pixels
     apertures = apertures_arcsec / pixscale
     # Aperture photometry locations
     apxy = np.vstack((xx - 1., yy - 1.)).T
     del xx,yy,ok,ra,dec
 
-    C = make_coadds(tims, bands, targetwcs, mods=mods, xy=(ix,iy),
+    C = make_coadds(tims, bands, targetwcs, mods=mods, xy=ixy,
                     ngood=True, detmaps=True, psfsize=True, lanczos=lanczos,
                     apertures=apertures, apxy=apxy,
                     callback=write_coadd_images,
@@ -1934,7 +1930,7 @@ def stage_coadds(survey=None, bands=None, version_header=None, targetwcs=None,
                     plots=False, ps=ps, mp=mp)
     
     # Coadds of galaxy sims only, image only
-    if 'sims_image' in tims[0].__dict__:
+    if hasattr(tims[0], 'sims_image'):
         sims_mods = [tim.sims_image for tim in tims]
         T_sims_coadds = make_coadds(tims, bands, targetwcs, mods=sims_mods,
                                     lanczos=lanczos, mp=mp)
@@ -1963,7 +1959,7 @@ def stage_coadds(survey=None, bands=None, version_header=None, targetwcs=None,
     coadd_list= [('image', C.coimgs,   rgbkwargs),
                  ('model', C.comods,   rgbkwargs),
                  ('resid', C.coresids, rgbkwargs_resid)]
-    if 'sims_image' in tims[0].__dict__:
+    if hasattr(tims[0], 'sims_image'):
         coadd_list.append(('simscoadd', sims_coadd, rgbkwargs))
 
     for name,ims,rgbkw in coadd_list:

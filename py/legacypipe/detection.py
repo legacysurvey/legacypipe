@@ -742,11 +742,10 @@ def segment_and_group_sources(image, T, name=None, ps=None, plots=False):
 
     for j,Isrcs in enumerate(blobsrcs):
         for i in Isrcs:
-            #assert(blobs[T.ity[i], T.itx[i]] == j)
             if (blobs[T.iby[i], T.ibx[i]] != j):
                 print('---------------------------!!!-------------------------')
                 print('Blob', j, 'sources', Isrcs)
-                print('Source', i, 'coords x,y', T.itx[i], T.ity[i])
+                print('Source', i, 'coords x,y', T.ibx[i], T.iby[i])
                 print('Expected blob value', j, 'but got',
                       blobs[T.iby[i], T.ibx[i]])
 
