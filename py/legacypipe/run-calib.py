@@ -20,7 +20,7 @@ def main():
                       help='Run calib processes even if files already exist?')
     parser.add_argument('--ccds', help='Set ccds.fits file to load')
 
-    parser.add_argument('--expnum', type=int, help='Cut to a single exposure')
+    parser.add_argument('--expnum', type=str, help='Cut to a single or set of exposures; comma-separated list')
     parser.add_argument('--extname', '--ccdname', help='Cut to a single extension/CCD name')
 
     parser.add_argument('--no-psf', dest='psfex', action='store_false',
@@ -40,6 +40,10 @@ def main():
     survey = LegacySurveyData()
     if opt.ccds is not None:
         T = fits_table(opt.ccds)
+        # Remove trailing spaces from 'camera' & 'ccdname' columns.
+        T.camera = np.array([c.strip() for c in T.camera])
+        T.ccdname = np.array([c.strip() for c in T.ccdname])
+
         print('Read', len(T), 'from', opt.ccds)
     else:
         T = survey.get_ccds()
@@ -47,8 +51,9 @@ def main():
 
     if len(opt.args) == 0:
         if opt.expnum is not None:
-            T.cut(T.expnum == opt.expnum)
-            print('Cut to', len(T), 'with expnum =', opt.expnum)
+            expnums = set([int(e) for e in opt.expnum.split(',')])
+            T.cut(np.array([e in expnums for e in T.expnum]))
+            print('Cut to', len(T), 'with expnum in', expnums)
         if opt.extname is not None:
             T.cut(np.array([(t.strip() == opt.extname) for t in T.ccdname]))
             print('Cut to', len(T), 'with extname =', opt.extname)
@@ -75,7 +80,7 @@ def main():
             print('Index', i)
             t = T[i]
 
-        print('CCDnmatch', t.ccdnmatch)
+        #print('CCDnmatch', t.ccdnmatch)
         if t.ccdnmatch < 20 and not opt.force:
             print('Skipping ccdnmatch = %i' % t.ccdnmatch)
             continue
