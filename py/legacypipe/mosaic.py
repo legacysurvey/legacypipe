@@ -6,8 +6,6 @@ import fitsio
 import numpy as np
 from glob import glob
 
-from astrometry.util.util import wcs_pv2sip_hdr
-
 from tractor.basics import ConstantFitsWcs
 
 from legacypipe.image import LegacySurveyImage, CalibMixin
@@ -131,47 +129,42 @@ class MosaicImage(CPImage, CalibMixin):
         return self.remap_invvar_shotnoise(invvar, primhdr, img, dq)
 
     def get_wcs(self):
-        '''cpimage.py get_wcs() but wcs comes from interpolated image if this is an
-        uninterpolated image'''
-        prim= self.read_image_primary_header()
+        '''cpimage.py get_wcs() but wcs comes from interpolated image
+        if this is an uninterpolated image'''
+        prim = self.read_image_primary_header()
         if 'YSHIFT' in prim.keys() or self.mjdobs > MosaicImage.mjd_third_pixel_fixed:
             # Interpolated image, use its wcs
             hdr = self.read_image_header()
         else:
             # Non-interpolated, use WCS of interpolated instead
-            # Temporarily set imgfn to Interpolated image
-            imgfn_backup= self.imgfn
+
             # Change CP*v3 --> CP*v2
-            cpdir=os.path.basename(os.path.dirname(imgfn_backup)).replace('v3','v2')
-            dirnm= os.path.dirname(os.path.dirname(imgfn_backup))
-            i=os.path.basename(imgfn_backup).find('_ooi_')
-            searchnm= os.path.basename(imgfn_backup)[:i+5]+'*.fits.fz'
-            self.imgfn= np.array( glob(os.path.join(dirnm,cpdir,searchnm)) )
-            assert(self.imgfn.size == 1)
-            self.imgfn= self.imgfn[0]
-            newprim= self.read_image_primary_header()
-            from astropy.io import fits
-            hdulist = fits.open(self.imgfn)
-            print("'YSHIFT' in hdulist[0].header=",'YSHIFT' in hdulist[0].header)
+            cpdir = os.path.basename(os.path.dirname(imgfn_backup)).replace('v3','v2')
+            dirnm = os.path.dirname(os.path.dirname(imgfn_backup))
+            i = os.path.basename(imgfn_backup).find('_ooi_')
+            searchnm = os.path.basename(imgfn_backup)[:i+5] + '*.fits.fz'
+            fns = glob(os.path.join(dirnm, cpdir, searchnm))
+            assert(len(fns) == 1)
+            newimgfn = fns[0]
+            newprim = self.read_primary_header(newimgfn)
             assert('YSHIFT' in newprim.keys())
-            hdr = self.read_image_header()
-            self.imgfn= imgfn_backup
+            hdr = fitsio.read_header(newimgfn, ext=self.hdu)
             # Continue with wcs using the interpolated hdr
-        # First child of MosaicImage is CPImage
+        # This calls the first superclass of MosaicImage, which is CPImage
         return super(MosaicImage,self).get_wcs(hdr=hdr)
         
-    def get_tractor_wcs(self, wcs, x0, y0,
-                        primhdr=None, imghdr=None):
+    def get_tractor_wcs(self, wcs, x0, y0, primhdr=None, imghdr=None):
         '''1/3 pixel shift if non-interpolated image'''
         prim= self.read_image_primary_header()
         if 'YSHIFT' in prim.keys():
             # Use Default wcs class, this is an interpolated image
             return super(MosaicImage, self).get_tractor_wcs(wcs, x0, y0)
         else:
-            # IDENTICAL to image.py get_tractor_wcs() except uses OneThirdPixelShiftWcs() 
-            # Instead of ConstantFitsWcs()
-            # class OneThirdPixelShiftWcs is a ConstantFitsWcs class with1/3 pixel function
-            twcs= OneThirdPixelShiftWcs(wcs)
+            # IDENTICAL to image.py get_tractor_wcs() except uses
+            # OneThirdPixelShiftWcs() Instead of ConstantFitsWcs()
+            # class OneThirdPixelShiftWcs is a ConstantFitsWcs class
+            # with1/3 pixel function
+            twcs = OneThirdPixelShiftWcs(wcs)
             if x0 or y0:
                 twcs.setX0Y0(x0,y0)
             return twcs

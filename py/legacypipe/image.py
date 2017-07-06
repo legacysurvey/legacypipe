@@ -754,7 +754,7 @@ class LegacySurveyImage(object):
         Returns the full shape of the image, (H,W).
         '''
         return self.get_image_shape()
-    
+
     def read_image_primary_header(self, **kwargs):
         '''
         Reads the FITS primary (HDU 0) header from self.imgfn.
@@ -764,13 +764,20 @@ class LegacySurveyImage(object):
         primary_header : fitsio header
             The FITS header
         '''
-        if self.imgfn.endswith('.gz'):
-            return fitsio.read_header(self.imgfn)
+        return self.read_primary_header(self.imgfn)
 
-        # Crazily, this can be MUCH faster than letting fitsio do it...
+    def read_primary_header(self, fn):
+        '''
+        Reads the FITS primary header (HDU 0) from the given filename.
+        This is just a faster version of fitsio.read_header(fn).
+        '''
+        if fn.endswith('.gz'):
+            return fitsio.read_header(self.fn)
+
+        # Weirdly, this can be MUCH faster than letting fitsio do it...
         hdr = fitsio.FITSHDR()
         foundEnd = False
-        ff = open(self.imgfn, 'rb')
+        ff = open(fn, 'rb')
         h = b''
         while True:
             h = h + ff.read(32768)
@@ -799,7 +806,7 @@ class LegacySurveyImage(object):
                 break
         ff.close()
         return hdr
-        
+
     def read_image_header(self, **kwargs):
         '''
         Reads the FITS image header from self.imgfn HDU self.hdu.
