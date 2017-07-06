@@ -1,23 +1,17 @@
-# Default configuration file for SExtractor 2.5.0
-# EB 2006-07-14
-#
- 
-#-------------------------------- Catalog ------------------------------------
+# These config entries will be overridden by runbrick.py (in image.py:run_se())
 
-# These config entries will be overridden by runbrick.py (common.py actually) :
 CATALOG_NAME     test.cat       # name of the output catalog
 PARAMETERS_NAME  decam.param    # name of the file containing catalog contents
-DETECT_THRESH    1.0            # <sigmas> or <threshold>,<ZP> in mag.arcsec-2
-ANALYSIS_THRESH  1.0            # <sigmas> or <threshold>,<ZP> in mag.arcsec-2
 FILTER_NAME      decam.conv     # name of the file containing the filter
 MAG_ZEROPOINT    30.0           # magnitude zero-point
-PIXEL_SCALE      0              # size of pixel in arcsec (0=use FITS WCS info)
 SEEING_FWHM      1.2            # stellar FWHM in arcsec
-STARNNW_NAME     default.nnw    # Neural-Network_Weight table filename
-
-
 
 #-------------------------------- Catalog ------------------------------------
+
+ANALYSIS_THRESH  1.0            # <sigmas> or <threshold>,<ZP> in mag.arcsec-2
+PIXEL_SCALE      0              # size of pixel in arcsec (0=use FITS WCS info)
+# SE has a *bizarre* notion of "sigma"
+DETECT_THRESH    1.0            # <sigmas> or <threshold>,<ZP> in mag.arcsec-2
 
 CATALOG_TYPE     FITS_LDAC     # NONE,ASCII,ASCII_HEAD, ASCII_SKYCAT,
                                 # ASCII_VOTABLE, FITS_1.0 or FITS_LDAC

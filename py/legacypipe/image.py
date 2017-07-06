@@ -1131,28 +1131,22 @@ class CalibMixin(object):
         
         sedir = self.survey.get_se_dir()
         trymakedirs(self.sefn, dir=True)
-        conv_name= os.path.join(sedir, surveyname + '.conv')
 
-        tmpfn = os.path.join(os.path.dirname(self.sefn), 'tmp-' + os.path.basename(self.sefn))
-
+        # We write the SE catalog to a temp file then rename, to avoid
+        # partially-written outputs.
+        tmpfn = os.path.join(os.path.dirname(self.sefn),
+                             'tmp-' + os.path.basename(self.sefn))
         cmd = ' '.join([
             'sex',
             '-c', os.path.join(sedir, surveyname + '.se'),
             '-SEEING_FWHM %f' % seeing,
             '-PARAMETERS_NAME', os.path.join(sedir, surveyname + '.param'),
-            '-STARNNW_NAME', os.path.join(sedir, 'default.nnw'),
-            '-PIXEL_SCALE 0',
-            # SE has a *bizarre* notion of "sigma"
-            '-DETECT_THRESH 1.0',
-            '-ANALYSIS_THRESH 1.0',
             '-MAG_ZEROPOINT %f' % magzp,
             '-FLAG_IMAGE %s' % maskfn,
-            #'-FILTER_NAME %s' % os.path.join(sedir, 'gauss_5.0_9x9.conv'),
-            '-FILTER_NAME %s' % conv_name,
+            '-FILTER_NAME %s' % os.path.join(sedir, surveyname + '.conv'),
             '-CATALOG_NAME %s' % tmpfn,
             imgfn])
         print(cmd)
- 
         rtn = os.system(cmd)
         if rtn:
             raise RuntimeError('Command failed: ' + cmd)

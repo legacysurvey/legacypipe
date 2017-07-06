@@ -13,8 +13,6 @@ FILTER_NAME      mzls.conv      # name of the file containing the filter
 MAG_ZEROPOINT    30.0           # magnitude zero-point
 PIXEL_SCALE      0              # size of pixel in arcsec (0=use FITS WCS info)
 SEEING_FWHM      1.2            # stellar FWHM in arcsec
-STARNNW_NAME     default.nnw    # Neural-Network_Weight table filename
-
 
 #-------------------------------- Catalog ------------------------------------
 
