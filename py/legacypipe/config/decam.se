@@ -1,6 +1,6 @@
 # These config entries will be overridden by runbrick.py (in image.py:run_se())
 
-CATALOG_NAME     test.cat       # name of the output catalog
+CATALOG_NAME     se.fits        # name of the output catalog
 PARAMETERS_NAME  decam.param    # name of the file containing catalog contents
 FILTER_NAME      decam.conv     # name of the file containing the filter
 MAG_ZEROPOINT    30.0           # magnitude zero-point
