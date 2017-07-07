@@ -392,14 +392,13 @@ def main():
         # Now read the parent catalog but remove the very largest galaxies in
         # the sample.  The five galaxies with the largest angular diameters in
         # the LEDA catalog are M31=NGC0224, M33, SMC=NGC0292, the Sagittarius
-        # Dwarf, and ESO056-115, all of which have D(25)>50 arcmin (up to 650
-        # arcmin for ESO056-115).  So for now let's cull the sample to
-        # everything smaller than about 10 arcmin, which spans no more than
-        # two-ish DECam CCDs.  To reduce the size of the sample, also restrict
-        # to things larger than about 30 arcsec (0.5 arcmin) in *diameter*.
-        #cat = read_leda(largedir=largedir, d25min=0.5, d25max=10.0,
-        #                decmax=np.max(allccds.dec)+0.3,
-        #                decmin=np.min(allccds.dec)-0.3)
+        # Dwarf, and LMC=ESO056-115, all of which have D(25)>50 arcmin (up to
+        # 650 arcmin for LMC).  So for now let's cull the sample to everything
+        # smaller than about 10 arcmin, which spans no more than two-ish DECam
+        # CCDs.  To reduce the size of the sample, also restrict to things
+        # larger than about 30 arcsec (0.5 arcmin) in *diameter*.  cat =
+        # read_leda(largedir=largedir, d25min=0.5, d25max=10.0,
+        # decmax=np.max(allccds.dec)+0.3, decmin=np.min(allccds.dec)-0.3)
         d25min, d25max = 1.0, 5.0
         cat = read_leda(largedir=largedir, d25min=1.0, d25max=5.0,
                         decmax=np.max(allccds.dec)+0.3,
