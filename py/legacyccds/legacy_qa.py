@@ -2511,7 +2511,7 @@ class AnnotatedVsLegacy(object):
     def sig1_to_ADU_per_sec(self,sig1,ccdzpt):
         '''annotated CCD sig1 for DECam
         this zeropointToScale() func converts nanomaggies to natual cameras system
-        which for legacypipe.decam.py is ADU/sec'''
+        which for legacpipe.decam.py is ADU/sec'''
         return sig1 * NanoMaggies.zeropointToScale(ccdzpt) 
 
     def sigma_annot_ccds(self,sig1,ccdzpt,norm):
