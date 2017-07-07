@@ -2449,7 +2449,8 @@ def col2plotname(key):
             seeing= 'FWHM (arcsec)',
             gain= 'Gain (e/ADU)',
             skymag= 'Sky (AB mag/arcsec^2)',
-            transp= 'Transparency',
+            skyrms= 'RMS Sky (e/sec/pixel)',
+            transp= 'Atmospheric Transparency',
             zpt= 'Zeropoint (e/s)',
             psfdepth= r'Point-source Single Pass Depth (5$\sigma$)',
             galdepth= r'Galaxy Single Pass Depth (5$\sigma$)')
@@ -2657,7 +2658,7 @@ class ZeropointHistograms(object):
 
     def get_numeric_keys(self):
         keys= \
-            ['skymag','skyrms','zpt','airmass','fwhm','gain',
+            ['skymag','skyrms','zpt','airmass','fwhm','gain','transp',
              'seeing','psfdepth','galdepth']
         return keys
 
@@ -2665,15 +2666,16 @@ class ZeropointHistograms(object):
         ylim_dict=defaultdict(lambda: ylim)
         ylim_dict['skymag']= (0,2.5)
         ylim_dict['zpt']= (0,9)
-        ylim_dict['transp']= (0,11)
+        ylim_dict['transp']= (0,14)
         return ylim_dict
 
     def get_defaultdict_xlim(self,xlim=None):
         xlim_dict=defaultdict(lambda: xlim)
         xlim_dict['skymag']= (16,22.5)
+        xlim_dict['skyrms']= (0,1.5)
         xlim_dict['zpt']= (25.5,27.2)
         xlim_dict['airmass']= (0.9,2.5)
-        xlim_dict['transp']= (0.4,1.3)
+        xlim_dict['transp']= (0.6,1.1)
         xlim_dict['gain']= (0,5)
         xlim_dict['seeing']= (0.5,2.4)
         xlim_dict['fwhm']= (2,10)
@@ -3060,28 +3062,47 @@ class LoadDB(object):
             data.set(key, np.array(m.get(key))) 
         return data
 
-    def make_tneed_plot(self,tab):
+    def make_tneed_plot(self,decam,mosaic=None):
         '''makes legacy zpts vs. db tneed plots
-        dd -- default dict returned by match_to_zeropoints'''
+        decam -- return fits_table from match_zeropoints above (rquired)
+        mosaic -- ditto (optional)
+        '''
         # Plot
         xlim=None
         ylim=(-100,100)
         FS=14
         eFS=FS+5
         tickFS=FS
-        fig,ax= plt.subplots(3,1,figsize=(4,9))
-        # Diff
-        resid= tab.zp_tneed_med - tab.db_tneed
-        for row,band in zip([0,1,2],set(tab.zp_band)):
-            keep= tab.zp_band == band
+        # assume decam_tab always provided
+        if mosaic:
+            fig,ax= plt.subplots(4,1,figsize=(4,12))
+        else:
+            fig,ax= plt.subplots(3,1,figsize=(4,9))
+        # DECam grz Diff
+        resid= decam.zp_tneed_med - decam.db_tneed
+        for row,band in zip([0,1,2],['g','r','z']):
+            keep= decam.zp_band == band
             if np.where(keep)[0].size > 0:
-                myerrorbar(ax[row],tab.zp_mjd[keep],resid[keep], 
-                           yerr=tab.zp_tneed_std[keep],
-                           color=band2color(band),m='o',s=10.,label=band)
+                myerrorbar(ax[row],decam.zp_mjd[keep],resid[keep], 
+                           yerr=decam.zp_tneed_std[keep],
+                           color=band2color(band),m='o',s=10.,label='%s (DECam)' % band)
+        # Mosaic z Diff
+        if mosaic:
+            resid= mosaic.zp_tneed_med - mosaic.db_tneed
+            for row,band in zip([3],['z']):
+                keep= mosaic.zp_band == band
+                if np.where(keep)[0].size > 0:
+                    myerrorbar(ax[row],mosaic.zp_mjd[keep],resid[keep], 
+                               yerr=mosaic.zp_tneed_std[keep],
+                               color=band2color(band),m='o',s=10.,label='%s (Mosaic3)' % band)
         # Label
-        xlab=ax[2].set_xlabel('MJD',fontsize=FS) 
-        ylab=ax[1].set_ylabel('tneed (Legacy - Obsbot DB)',fontsize=FS)
-        for row in range(3):
+        if mosaic:
+            nplots=4
+        else:
+            nplots=3
+        xlab=ax[nplots-1].set_xlabel('MJD',fontsize=FS)
+        ylab=ax[nplots-1].set_ylabel('tneed (Legacy - Obsbot DB)',fontsize=FS)
+        for row in range(nplots):
             ax[row].tick_params(axis='both', labelsize=tickFS)
             leg=ax[row].legend(loc='upper left',scatterpoints=1,markerscale=1.,fontsize=FS)
             if xlim:
@@ -3113,24 +3134,27 @@ if __name__ == '__main__':
     fns['mosaic_a']= '/global/project/projectdirs/cosmo/data/legacysurvey/dr4/ccds-annotated-mzls.fits.gz'
     fns['decam_l']= '/global/cscratch1/sd/kaylanb/publications/observing_paper/neff_empirical/test_1000-zpt.fits.gz'
     fns['mosaic_l']= '/global/cscratch1/sd/kaylanb/publications/observing_paper/neff_empirical/mosaic-zpt.fits.gz'
-    for camera in ['decam','mosaic']:
-        a= AnnotatedVsLegacy(annot_ccds=fns['%s_a' % camera], 
-                             legacy_zpts=fns['%s_l' % camera],
-                             camera='%s' % camera)
+    #for camera in ['decam','mosaic']:
+    #    a= AnnotatedVsLegacy(annot_ccds=fns['%s_a' % camera], 
+    #                         legacy_zpts=fns['%s_l' % camera],
+    #                         camera='%s' % camera)
  
     a= ZeropointHistograms(decam_zpts=fns['decam_l'],
                            mosaic_zpts=fns['mosaic_l'])
-    raise ValueError
+    #raise ValueError
 
     #######
     # Needed exposure time calculator
     # Compare Obsbot DB tneed to legacy zeropoints tneed
     #######
-    zp= ZptsTneed(zpt_fn='/global/cscratch1/sd/kaylanb/publications/observing_paper/neff_empirical/test_1000-zpt.fits.gz',camera=args.camera)
-    db= LoadDB(camera=args.camera) 
-    # Match
-    m= db.match_to_zeropoints(tab=zp.data)
-    db.make_tneed_plot(tab= m)
+    #m={}
+    #for camera in ['mosaic','decam']:
+    #    zp= ZptsTneed(zpt_fn=fns['%s_l' % camera],camera=camera)
+    #    db= LoadDB(camera=camera) 
+    #    # Match
+    #    m[camera]= db.match_to_zeropoints(tab=zp.data)
+    #db.make_tneed_plot(decam=m['decam'])
+    #db.make_tneed_plot(decam=m['decam'],mosaic=m['mosaic'])
     raise ValueError
      
     # default plots
