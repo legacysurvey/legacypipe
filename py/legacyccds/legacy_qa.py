@@ -2357,7 +2357,7 @@ class MatchesResiduals(object):
 
 
 class Depth(object):
-    def __init__(self,skyrms,gain,fwhm,zpt):
+    def __init__(self,camera,skyrms,gain,fwhm,zpt):
         '''
         See: observing_paper/depth.py
         Return depth that agrees with galdepth doing equiv with annotated ccd cols
@@ -2366,38 +2366,48 @@ class Depth(object):
         fwhm -- pixels so that gaussian std in pixels = fwhm/2.35
         zpt -- e/s
         '''
-        self.skyrms= skyrms
-        self.gain= gain
-        self.fwhm= fwhm
-        self.zpt= zpt
+        assert(camera in ['decam','mosaic'])
+        self.camera = camera
+        self.skyrms= skyrms.copy() #Will modify to get in right units
+        self.gain= gain.copy()
+        self.fwhm= fwhm.copy()
+        self.zpt= zpt.copy()
+        if self.camera == 'decam':
+            # natural camera units ADU/sec
+            self.skyrms /= self.gain # e/sec --> ADU/sec
+            self.zpt -= 2.5*np.log10(self.gain) # e/sec --> ADU/sec
+        elif self.camera == 'mosaic':
+            # e/sec are the natual camera units
+            pass
         # self.get_depth_legacy_zpts(which='gal')
 
     def get_depth_legacy_zpts(self,which=None):
         assert(which in ['gal','psf'])
         self.which= which
-        # 
-        sigma= self.sigma_legacy_zpts() # ADU / sec
-        zpt_units= self.zpt_to_ADU_per_sec()
-        return -2.5*np.log10(5 * sigma) + zpt_units # ADU / sec
+        sigma= self.sigma_legacy_zpts() 
+        return -2.5*np.log10(5 * sigma) + self.zpt #natural camera units
 
     def sigma_legacy_zpts(self):
-        return self.skyrms_to_ADU_per_sec() *np.sqrt(self.neff_empirical())
-
-    def zpt_to_ADU_per_sec(self):
-        return self.zpt - 2.5*np.log10(self.gain)
-
-    def skyrms_to_ADU_per_sec(self):
-        return self.skyrms/self.gain
+        return self.skyrms *np.sqrt(self.neff_empirical())
 
     def neff_empirical(self):
+        #see observing_paper/depth.py plots
         if self.which == 'psf':
             rhalf=0
-            slope= 1.22 #see observing_paper/depth.py plots
-            yint= 9.77
-        if self.which == 'gal':
+            if self.camera == 'decam':
+                slope= 1.23 
+                yint= 9.43
+            elif self.camera == 'mosaic':
+                slope= 1.41 
+                yint= 1.58
+        elif self.which == 'gal':
             rhalf=0.45
-            slope= 1.24 #see observing_paper/depth.py plots
-            yint= 46.25
+            if self.camera == 'decam':
+                slope= 1.24 
+                yint= 45.86
+            elif self.camera == 'mosaic':
+                slope= 1.48 
+                yint= 35.78
         return slope * self.neff_15(rhalf=rhalf) + yint
 
     def neff_15(self,rhalf=0.45,pix=0.262):
@@ -2436,6 +2446,7 @@ def band2color(band):
 def col2plotname(key):
     d= dict(airmass= 'X',
             fwhm= 'FWHM (pixels)',
+            seeing= 'FWHM (arcsec)',
             gain= 'Gain (e/ADU)',
             skymag= 'Sky (AB mag/arcsec^2)',
             transp= 'Transparency',
@@ -2454,16 +2465,17 @@ class AnnotatedVsLegacy(object):
     '''depths: annotated ccd vs. legacy'''
     def __init__(self,annot_ccds=None,legacy_zpts=None,camera=None):
         assert(camera in ['decam','mosaic'])
+        self.camera= camera
         self.annot= annot_ccds
         #
         self.legacy= legacy_zpts
-        self.camera= camera
         if self.annot:
             self.annot= fits_table(self.annot)
         if self.legacy:
             self.legacy= fits_table(self.legacy)
         self.add_keys()
         self.match()
+        self.apply_cuts()
         # Plot
         self.plot_scatter()
    
@@ -2478,19 +2490,37 @@ class AnnotatedVsLegacy(object):
         self.legacy= self.legacy[m1]
         self.annot= self.annot[m2]
 
+    def apply_cuts(self):
+        keep= np.ones(len(self.annot),bool)
+        print('Before cuts= %d' % len(self.annot))
+        # Annotated cuts
+        if self.camera == 'decam':
+            keep *= (self.annot.photometric)
+        elif self.camera == 'mosaic':
+            keep *= (self.annot.photometric)*\
+                    (self.annot.bitmask == 0) 
+        # Remove nans
+        keep *= (self.annot.psfnorm_mean > 0)*\
+                (self.annot.galnorm_mean > 0)* \
+                (np.isfinite(self.annot.psfnorm_mean))*\
+                (np.isfinite(self.annot.galnorm_mean))*\
+                (np.isfinite(self.legacy.fwhm))
+        # Cut on both
+        self.annot.cut(keep)
+        self.legacy.cut(keep)
+        print('After cuts= %d' % len(self.annot))
+
     def add_keys(self):
         self.add_legacy_keys()
         self.add_annot_keys()
     
     def add_legacy_keys(self):
-        if self.camera == 'decam':
-            depth_obj= Depth(self.legacy.skyrms,self.legacy.gain,
-                             self.legacy.fwhm,self.legacy.zpt)
-            self.legacy.set('psfdepth', depth_obj.get_depth_legacy_zpts('psf'))
-            self.legacy.set('galdepth', depth_obj.get_depth_legacy_zpts('gal'))
-        else:
-            raise ValueError
- 
+        depth_obj= Depth(self.camera,
+                         self.legacy.skyrms,self.legacy.gain,
+                         self.legacy.fwhm,self.legacy.zpt)
+        self.legacy.set('psfdepth', depth_obj.get_depth_legacy_zpts('psf'))
+        self.legacy.set('galdepth', depth_obj.get_depth_legacy_zpts('gal'))
+
     def add_annot_keys(self):
         for key in ['psf','gal']:
             self.annot.set(key+'depth_2', self.get_true_depth(key))
@@ -2554,7 +2584,7 @@ class AnnotatedVsLegacy(object):
                 ax[row].set_ylim(ylim)
             if xlim:
                 ax[row].set_xlim(xlim)
-        savefn='annot_legacy_scatter.png'
+        savefn='annot_legacy_scatter_%s.png' % self.camera
         plt.savefig(savefn, bbox_extra_artists=[leg,xlab,ylab], bbox_inches='tight')
         plt.close() 
         print "wrote %s" % savefn 
@@ -2577,23 +2607,33 @@ class ZeropointHistograms(object):
         if self.mosaic:
             self.mosaic= fits_table(self.mosaic)
         self.add_keys()
-        #self.plot_hist_1d()
-        #self.plot_2d_scatter()
+        self.plot_hist_1d()
+        self.plot_2d_scatter()
         self.plot_hist_depth()
    
     def add_keys(self):
         if self.decam:
             self.decam.set('seeing',self.decam.fwhm * 0.262)
-            depth_obj= Depth(self.decam.skyrms,self.decam.gain,
+            self.set_Aco_EBV(self.decam,camera='decam')
+            # Depths
+            depth_obj= Depth('decam',
+                             self.decam.skyrms,self.decam.gain,
                              self.decam.fwhm,self.decam.zpt)
             self.decam.set('psfdepth', depth_obj.get_depth_legacy_zpts('psf'))
             self.decam.set('galdepth', depth_obj.get_depth_legacy_zpts('gal'))
-            # Extinction corrected
-            self.set_Aco_EBV(self.decam,camera='decam')
             for col in ['psfdepth','galdepth']:
                 self.decam.set(col+'_extcorr', self.decam.get(col) - self.decam.AcoEBV)
         if self.mosaic:
             self.mosaic.set('seeing',self.mosaic.fwhm * 0.26)
+            self.set_Aco_EBV(self.mosaic,camera='mosaic')
+            # Depths
+            depth_obj= Depth('mosaic',
+                             self.mosaic.skyrms,self.mosaic.gain,
+                             self.mosaic.fwhm,self.mosaic.zpt)
+            self.mosaic.set('psfdepth', depth_obj.get_depth_legacy_zpts('psf'))
+            self.mosaic.set('galdepth', depth_obj.get_depth_legacy_zpts('gal'))
+            for col in ['psfdepth','galdepth']:
+                self.mosaic.set(col+'_extcorr', self.mosaic.get(col) - self.mosaic.AcoEBV)
  
     def set_Aco_EBV(self,tab,camera=None):
         '''tab -- legacy zeropoints -zpt.fits table'''
@@ -2723,19 +2763,20 @@ class ZeropointHistograms(object):
             # mosaic
             if self.mosaic:
                 for band in set(self.mosaic.filter):
+                    mos_color='k'
                     keep= self.mosaic.filter == band
                     myhist_step(ax[row],self.mosaic.get(col)[keep], bins=bins,normed=True,
-                                color=band2color(band),ls='solid',lw=1,
+                                color=mos_color,ls='solid',lw=1,
                                 label='%s (Mosaic3)' % band)
                     # requirements
                     p1_depth= depth_obj.get_single_pass_depth(band,which,'mosaic')
                     ax[row].axvline(p1_depth,
-                                    c=band2color(band),ls='dashed',lw=2,
+                                    c=mos_color,ls='dashed',lw=2,
                                     label=r'$\mathbf{m_{\rm{DESI}}}$= %.2f' % p1_depth)
                     # 90% > than requirement
                     q10= np.percentile(self.mosaic.get(col)[keep], q=10)
                     ax[row].axvline(q10,
-                                    c=band2color(band),ls='dotted',lw=2,
+                                    c=mos_color,ls='dotted',lw=2,
                                     label='q10= %.2f' % q10)
             # Legend
             #leg=ax[row].legend(loc=(0,1.02),ncol=2,fontsize=FS-2)
@@ -2755,10 +2796,12 @@ class ZeropointHistograms(object):
 
 
     def get_lim(self,col):
-        d= dict()
-        #d= dict(rarms= (0,0.35),
-        #        decrms= (0,0.35),
-        #        phrms= (0,0.5))
+        d= dict(rarms= (0,0.5),
+                decrms= (0,0.5),
+                phrms= (0,0.5),
+                raoff= (-0.7,0.7),
+                decoff= (-0.7,0.7),
+                phoff= (-6,6))
         return d.get(col,None)
 
     def plot_2d_scatter(self,prefix=''):
@@ -2790,6 +2833,10 @@ class ZeropointHistograms(object):
                     myscatter(ax[row],x[keep],y[keep], 
                               color=band2color(band),s=10.,alpha=0.75,
                               label='%s (Mosaic3, %d)' % (band,len(x[keep])))
+            # Crosshairs
+            for row in range(2):
+                ax[row].axhline(0,c='k',ls='dashed',lw=1)
+                ax[row].axvline(0,c='k',ls='dashed',lw=1)
             # Label
             xlab=ax[1].set_xlabel(col2plotname(x_key),fontsize=FS) #0.45'' galaxy
             for row in range(2):
@@ -3058,6 +3105,22 @@ if __name__ == '__main__':
     parser.add_argument('--leg_dir',action='store',default='/global/cscratch1/sd/kaylanb/kaylan_Test',required=False)
     parser.add_argument('--idl_dir',action='store',default='/global/cscratch1/sd/kaylanb/arjundey_Test/AD_exact_skymed',required=False)
     args = parser.parse_args()
+
+    ####
+    # Histograms and annotated ccd depth vs. zpt depth
+    fns={}
+    fns['decam_a']= '/global/project/projectdirs/cosmo/data/legacysurvey/dr3/ccds-annotated-decals.fits.gz'
+    fns['mosaic_a']= '/global/project/projectdirs/cosmo/data/legacysurvey/dr4/ccds-annotated-mzls.fits.gz'
+    fns['decam_l']= '/global/cscratch1/sd/kaylanb/publications/observing_paper/neff_empirical/test_1000-zpt.fits.gz'
+    fns['mosaic_l']= '/global/cscratch1/sd/kaylanb/publications/observing_paper/neff_empirical/mosaic-zpt.fits.gz'
+    for camera in ['decam','mosaic']:
+        a= AnnotatedVsLegacy(annot_ccds=fns['%s_a' % camera], 
+                             legacy_zpts=fns['%s_l' % camera],
+                             camera='%s' % camera)
+ 
+    a= ZeropointHistograms(decam_zpts=fns['decam_l'],
+                           mosaic_zpts=fns['mosaic_l'])
+    raise ValueError
 
     #######
     # Needed exposure time calculator
