@@ -3,12 +3,9 @@
 """
 from __future__ import print_function
 import os
-from sys import exit
 import numpy as np
 from astrometry.util.fits import fits_table
-import sys
 
-# Argh, no relative imports in runnable scripts
 from legacypipe.survey import run_calibs, LegacySurveyData
 
 def main():
@@ -20,7 +17,7 @@ def main():
                       help='Run calib processes even if files already exist?')
     parser.add_argument('--ccds', help='Set ccds.fits file to load')
 
-    parser.add_argument('--expnum', type=int, help='Cut to a single exposure')
+    parser.add_argument('--expnum', type=str, help='Cut to a single or set of exposures; comma-separated list')
     parser.add_argument('--extname', '--ccdname', help='Cut to a single extension/CCD name')
 
     parser.add_argument('--no-psf', dest='psfex', action='store_false',
@@ -31,12 +28,19 @@ def main():
 
     parser.add_argument('--splinesky', action='store_true', help='Spline sky, not constant')
     parser.add_argument('--threads', type=int, help='Run multi-threaded', default=None)
+    parser.add_argument('--continue', dest='cont', default=False, action='store_true',
+                        help='Continue even if one file fails?')
+
     parser.add_argument('args',nargs=argparse.REMAINDER)
     opt = parser.parse_args()
 
     survey = LegacySurveyData()
     if opt.ccds is not None:
         T = fits_table(opt.ccds)
+        # Remove trailing spaces from 'camera' & 'ccdname' columns.
+        T.camera = np.array([c.strip() for c in T.camera])
+        T.ccdname = np.array([c.strip() for c in T.ccdname])
+
         print('Read', len(T), 'from', opt.ccds)
     else:
         T = survey.get_ccds()
@@ -44,8 +48,9 @@ def main():
 
     if len(opt.args) == 0:
         if opt.expnum is not None:
-            T.cut(T.expnum == opt.expnum)
-            print('Cut to', len(T), 'with expnum =', opt.expnum)
+            expnums = set([int(e) for e in opt.expnum.split(',')])
+            T.cut(np.array([e in expnums for e in T.expnum]))
+            print('Cut to', len(T), 'with expnum in', expnums)
         if opt.extname is not None:
             T.cut(np.array([(t.strip() == opt.extname) for t in T.ccdname]))
             print('Cut to', len(T), 'with extname =', opt.extname)
@@ -72,10 +77,10 @@ def main():
             print('Index', i)
             t = T[i]
 
-        print('CCDnmatch', t.ccdnmatch)
-        if t.ccdnmatch < 20 and not opt.force:
-            print('Skipping ccdnmatch = %i' % t.ccdnmatch)
-            continue
+        #print('CCDnmatch', t.ccdnmatch)
+        #if t.ccdnmatch < 20 and not opt.force:
+        #    print('Skipping ccdnmatch = %i' % t.ccdnmatch)
+        #    continue
             
         im = survey.get_image_object(t)
         print('Running', im.calname)
@@ -87,6 +92,9 @@ def main():
             kwargs.update(se=True)
         if opt.splinesky:
             kwargs.update(splinesky=True)
+
+        if opt.cont:
+            kwargs.update(noraise=True)
             
         if opt.threads:
             args.append((im, kwargs))

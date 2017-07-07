@@ -11,6 +11,8 @@
 #--mail-user=kburleigh@lbl.gov
 #--mail-type=END,FAIL
 
+source ~/.bashrc_desiconda
+
 usecores=1
 threads=1
 if [ "$full_stacktrace" = "yes" ];then
@@ -52,4 +54,5 @@ export MKL_NUM_THREADS=1
 
 #export dr4b_dir=/global/cscratch1/sd/desiproc/dr4/data_release/dr4_fixes
 #export dr4c_dir=/global/projecta/projectdirs/cosmo/work/dr4c
+set -x
 

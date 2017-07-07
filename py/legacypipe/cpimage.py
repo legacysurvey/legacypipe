@@ -5,8 +5,6 @@ import fitsio
 
 import numpy as np
 
-from astrometry.util.util import wcs_pv2sip_hdr
-
 from legacypipe.image import LegacySurveyImage
 from legacypipe.survey import LegacySurveyData
 
@@ -23,7 +21,6 @@ CP_DQ_BITS = dict(badpix=1, satur=2, interp=4, cr=16, bleed=64,
                   trans=128,
                   edge = 256,
                   edge2 = 512,
-
                   ## masked by stage_mask_junk
                   longthin = 1024,
                   )
@@ -41,7 +38,6 @@ class CPImage(LegacySurveyImage):
         require the inheritance order and order of calling super.__init__()
         to be just right.
         '''
-        
         self.dqfn = self.imgfn.replace('_ooi_', '_ood_').replace(
             '_oki_','_ood_')
         self.wtfn = self.imgfn.replace('_ooi_', '_oow_').replace(
@@ -76,12 +72,19 @@ class CPImage(LegacySurveyImage):
                     fn = fnother
 
         expstr = '%08i' % self.expnum
-        self.calname = '%s/%s/decam-%s-%s' % (expstr[:5], expstr, expstr, self.ccdname)
+        self.calname = '%s/%s/%s-%s-%s' % (expstr[:5], expstr, self.camera,
+                                           expstr, self.ccdname)
         self.name = '%s-%s' % (expstr, self.ccdname)
 
         calibdir = os.path.join(self.survey.get_calib_dir(), self.camera)
-        self.sefn = os.path.join(calibdir, 'sextractor', self.calname + '.fits')
+        self.sefn  = os.path.join(calibdir, 'se',    self.calname + '.fits')
         self.psffn = os.path.join(calibdir, 'psfex', self.calname + '.fits')
+
+        self.merged_psffn = os.path.join(calibdir, 'psfex-merged', expstr[:5],
+                                         '%s-%s.fits' % (self.camera, expstr))
+        self.merged_splineskyfn = os.path.join(calibdir, 'splinesky-merged', expstr[:5],
+                                         '%s-%s.fits' % (self.camera, expstr))
+
         self.skyfn = os.path.join(calibdir, 'sky', self.calname + '.fits')
         self.splineskyfn = os.path.join(calibdir, 'splinesky', self.calname + '.fits')
         self.dq_saturation_bits = CP_DQ_BITS['satur']
@@ -94,7 +97,8 @@ class CPImage(LegacySurveyImage):
         except AssertionError:
             raise ValueError('self.ccdname=%s, self.imgfn=%s' % (self.ccdname,self.imgfn))
 
-    def get_wcs(self,hdr=None):
+    def get_wcs(self, hdr=None):
+        from astrometry.util.util import wcs_pv2sip_hdr
         # Make sure the PV-to-SIP converter samples enough points for small
         # images
         stepsize = 0
@@ -105,7 +109,7 @@ class CPImage(LegacySurveyImage):
         wcs = wcs_pv2sip_hdr(hdr, stepsize=stepsize)
         # Correction: ccd,ccdraoff, decoff from zeropoints file
         dra,ddec = self.dradec
-        print('Applying astrometric zeropoint:', (dra,ddec))
+        # print('Applying astrometric zeropoint:', (dra,ddec))
         r,d = wcs.get_crval()
         wcs.set_crval((r + dra, d + ddec))
         wcs.version = ''
@@ -141,8 +145,8 @@ class CPImage(LegacySurveyImage):
         print('Remapping weight map for', self.name)
         const_sky = primhdr['SKYADU'] # e/s, Recommended sky level keyword from Frank 
         expt = primhdr['EXPTIME'] # s
-
-        var_SR = 1./invvar # e/s 
+        with np.errstate(divide='ignore'):
+            var_SR = 1./invvar # e/s 
         var_Astro = np.abs(img - const_sky) / expt # e/s 
         wt = 1./(var_SR + var_Astro) # s/e
 
@@ -209,4 +213,3 @@ class CPImage(LegacySurveyImage):
                             ccds.ccdphrms > 0.2)
         return bad
     
-

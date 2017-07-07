@@ -50,9 +50,6 @@ from legacypipe.utils import (
     RunbrickError, NothingToDoError, iterwrapper, find_unique_pixels)
 from legacypipe.coadds import make_coadds, write_coadd_images, quick_coadds
 
-# Globals, oh my!
-nocache = True
-
 # RGB image args used in the tile viewer:
 rgbkwargs = dict(mnmx=(-1,100.), arcsinh=1.)
 rgbkwargs_resid = dict(mnmx=(-5,5))
@@ -85,20 +82,21 @@ def get_ulimit():
 
 def runbrick_global_init():
     print('Starting process', os.getpid(), Time()-Time())
-    if nocache:
-        disable_galaxy_cache()
+    disable_galaxy_cache()
 
 def stage_tims(W=3600, H=3600, pixscale=0.262, brickname=None,
                survey=None,
                ra=None, dec=None,
                plots=False, ps=None,
                target_extent=None, program_name='runbrick.py',
-               bands='grz',
+               bands=['g','r','z'],
                do_calibs=True,
                splinesky=True,
                gaussPsf=False, pixPsf=False, hybridPsf=False,
                constant_invvar=False,
                use_blacklist = True,
+               depth_cut = True,
+               read_image_pixels = True,
                mp=None,
                **kwargs):
     '''
@@ -159,8 +157,8 @@ def stage_tims(W=3600, H=3600, pixscale=0.262, brickname=None,
 
     # Create FITS header with version strings
     gitver = get_git_version()
-    version_hdr = get_version_header(program_name, survey.survey_dir,
-                                     git_version=gitver)
+    version_header = get_version_header(program_name, survey.survey_dir,
+                                        git_version=gitver)
     for i,dep in enumerate(['numpy', 'scipy', 'wcslib', 'astropy', 'photutils',
                             'ceres', 'sextractor', 'psfex', 'astrometry_net',
                             'tractor', 'fitsio', 'unwise_coadds', 'python',
@@ -172,43 +170,43 @@ def stage_tims(W=3600, H=3600, pixscale=0.262, brickname=None,
         verstr = os.environ.get('%s_VERSION' % dep, default_ver)
         if verstr == default_ver:
             print('Warning: failed to get version string for "%s"' % dep)
-        version_hdr.add_record(dict(name='DEPNAM%02i' % i, value=dep,
+        version_header.add_record(dict(name='DEPNAM%02i' % i, value=dep,
                                     comment='Name of dependency product'))
-        version_hdr.add_record(dict(name='DEPVER%02i' % i, value=verstr,
+        version_header.add_record(dict(name='DEPVER%02i' % i, value=verstr,
                                     comment='Version of dependency product'))
 
-    version_hdr.add_record(dict(name='BRICKNAM', value=brickname,
+    version_header.add_record(dict(name='BRICKNAM', value=brickname,
                                 comment='LegacySurvey brick RRRr[pm]DDd'))
-    version_hdr.add_record(dict(name='BRICKID' , value=brickid,
+    version_header.add_record(dict(name='BRICKID' , value=brickid,
                                 comment='LegacySurvey brick id'))
-    version_hdr.add_record(dict(name='RAMIN'   , value=brick.ra1,
+    version_header.add_record(dict(name='RAMIN'   , value=brick.ra1,
                                 comment='Brick RA min'))
-    version_hdr.add_record(dict(name='RAMAX'   , value=brick.ra2,
+    version_header.add_record(dict(name='RAMAX'   , value=brick.ra2,
                                 comment='Brick RA max'))
-    version_hdr.add_record(dict(name='DECMIN'  , value=brick.dec1,
+    version_header.add_record(dict(name='DECMIN'  , value=brick.dec1,
                                 comment='Brick Dec min'))
-    version_hdr.add_record(dict(name='DECMAX'  , value=brick.dec2,
+    version_header.add_record(dict(name='DECMAX'  , value=brick.dec2,
                                 comment='Brick Dec max'))
-    version_hdr.add_record(dict(name='BRICKRA' , value=brick.ra,
+    version_header.add_record(dict(name='BRICKRA' , value=brick.ra,
                                 comment='Brick center'))
-    version_hdr.add_record(dict(name='BRICKDEC', value=brick.dec,
+    version_header.add_record(dict(name='BRICKDEC', value=brick.dec,
                                 comment='Brick center'))
 
     # Add NOAO-requested headers
-    version_hdr.add_record(dict(
+    version_header.add_record(dict(
         name='RA', value=ra2hmsstring(brick.ra, separator=':'),
         comment='[h] RA Brick center'))
-    version_hdr.add_record(dict(
+    version_header.add_record(dict(
         name='DEC', value=dec2dmsstring(brick.dec, separator=':'),
         comment='[deg] Dec Brick center'))
-    version_hdr.add_record(dict(
+    version_header.add_record(dict(
         name='CENTRA', value=brick.ra, comment='[deg] Brick center RA'))
-    version_hdr.add_record(dict(
+    version_header.add_record(dict(
         name='CENTDEC', value=brick.dec, comment='[deg] Brick center Dec'))
     for i,(r,d) in enumerate(targetrd[:4]):
-        version_hdr.add_record(dict(
+        version_header.add_record(dict(
             name='CORN%iRA' %(i+1), value=r, comment='[deg] Brick corner RA'))
-        version_hdr.add_record(dict(
+        version_header.add_record(dict(
             name='CORN%iDEC'%(i+1), value=d, comment='[deg] Brick corner Dec'))
 
     # Find CCDs
@@ -220,7 +218,7 @@ def stage_tims(W=3600, H=3600, pixscale=0.262, brickname=None,
     # Sort images by band -- this also eliminates images whose
     # *filter* string is not in *bands*.
     print('Unique filters:', np.unique(ccds.filter))
-    ccds.cut(np.hstack([np.flatnonzero(ccds.filter==band) for band in bands]))
+    ccds.cut(np.in1d(ccds.filter, bands))
     print('Cut on filter:', len(ccds), 'CCDs remain.')
 
     print('Cutting out non-photometric CCDs...')
@@ -245,6 +243,16 @@ def stage_tims(W=3600, H=3600, pixscale=0.262, brickname=None,
     if I is not None:
         print('Cutting to', len(I), 'of', len(ccds), 'CCDs for fitting.')
         ccds.cut(I)
+
+    if depth_cut:
+        # If we have many images, greedily select images until we have
+        # reached our target depth
+        print('Cutting to CCDs required to hit our depth targets')
+        keep_ccds = make_depth_cut(survey, ccds, bands, targetrd, brick, W, H, pixscale,
+                                   plots, ps, splinesky, gaussPsf, pixPsf,
+                                   do_calibs, gitver, targetwcs)
+        ccds.cut(np.array(keep_ccds))
+        print('Cut to', len(ccds), 'CCDs required to reach depth targets')
 
     # Create Image objects for each CCD
     ims = []
@@ -273,47 +281,12 @@ def stage_tims(W=3600, H=3600, pixscale=0.262, brickname=None,
         print('[parallel tims] Calibrations:', tnow-tlast)
         tlast = tnow
 
-    if False and plots:
-        # Here, we read full images (not just subimages) to plot their
-        # pixel distributions
-        sig1s = dict([(b,[]) for b in bands])
-        allpix = []
-        for im in ims:
-            subtim = im.get_tractor_image(splinesky=True, gaussPsf=True,
-                                          subsky=False, radecpoly=targetrd)
-            if subtim is None:
-                continue
-            fulltim = im.get_tractor_image(splinesky=True, gaussPsf=True)
-            sig1s[fulltim.band].append(fulltim.sig1)
-            allpix.append((fulltim.band, fulltim.name, im.exptime,
-                           fulltim.getImage()[fulltim.getInvError() > 0]))
-        sig1s = dict([(b, np.median(sig1s[b])) for b in sig1s.keys()])
-        for b in bands:
-            plt.clf()
-            lp,lt = [],[]
-            s = sig1s[b]
-            for band,name,exptime,pix in allpix:
-                if band != b:
-                    continue
-                # broaden range to encompass most pixels... only req'd
-                # when sky is bad
-                lo,hi = -5.*s, 5.*s
-                lo = min(lo, np.percentile(pix, 5))
-                hi = max(hi, np.percentile(pix, 95))
-                n,bb,p = plt.hist(pix, range=(lo, hi), bins=50,
-                                  histtype='step', alpha=0.5)
-                lp.append(p[0])
-                lt.append('%s: %.0f s' % (name, exptime))
-            plt.legend(lp, lt)
-            plt.xlabel('Pixel values')
-            plt.title('Pixel distributions: %s band' % b)
-            ps.savefig()
-
     # Read Tractor images
     args = [(im, targetrd, dict(gaussPsf=gaussPsf, pixPsf=pixPsf,
                                 hybridPsf=hybridPsf,
                                 splinesky=splinesky,
-                                constant_invvar=constant_invvar))
+                                constant_invvar=constant_invvar,
+                                pixels=read_image_pixels))
                                 for im in ims]
     tims = list(mp.map(read_one_tim, args))
 
@@ -340,7 +313,7 @@ def stage_tims(W=3600, H=3600, pixscale=0.262, brickname=None,
     for tim in tims:
         for cal,ver in [('sky', tim.skyver), ('wcs', tim.wcsver),
                         ('psf', tim.psfver)]:
-            if tim.plver != ver[1]:
+            if tim.plver.strip() != ver[1].strip():
                 print(('Warning: image "%s" PLVER is "%s" but %s calib was run'
                       +' on PLVER "%s"') % (str(tim), tim.plver, cal, ver[1]))
 
@@ -457,23 +430,22 @@ def stage_tims(W=3600, H=3600, pixscale=0.262, brickname=None,
     # Add header cards about which bands and cameras are involved.
     for band in 'grz':
         hasit = band in bands
-        version_hdr.add_record(dict(
+        version_header.add_record(dict(
             name='BRICK_%s' % band.upper(), value=hasit,
             comment='Does band %s touch this brick?' % band))
 
         cams = np.unique([tim.imobj.camera for tim in tims
                           if tim.band == band])
-        version_hdr.add_record(dict(
+        version_header.add_record(dict(
             name='CAMS_%s' % band.upper(), value=' '.join(cams),
             comment='Cameras contributing band %s' % band))
-    version_hdr.add_record(dict(name='BRICKBND', value=''.join(bands),
-                                comment='Bands touching this brick'))
-    version_hdr.add_record(dict(name='NBANDS', value=len(bands),
-                                    comment='Number of bands in this catalog'))
+    version_header.add_record(dict(name='BRICKBND', value=''.join(bands),
+                                   comment='Bands touching this brick'))
+    version_header.add_record(dict(name='NBANDS', value=len(bands),
+                                   comment='Number of bands in this catalog'))
     for i,band in enumerate(bands):
-        version_hdr.add_record(dict(name='BAND%i' % i, value=band,
-                                    comment='Band name in this catalog'))
-    version_header = version_hdr
+        version_header.add_record(dict(name='BAND%i' % i, value=band,
+                                       comment='Band name in this catalog'))
 
     keys = ['version_header', 'targetrd', 'pixscale', 'targetwcs', 'W','H',
             'bands', 'tims', 'ps', 'brickid', 'brickname', 'brick',
@@ -481,6 +453,309 @@ def stage_tims(W=3600, H=3600, pixscale=0.262, brickname=None,
     L = locals()
     rtn = dict([(k,L[k]) for k in keys])
     return rtn
+
+def make_depth_cut(survey, ccds, bands, targetrd, brick, W, H, pixscale,
+                   plots, ps, splinesky, gaussPsf, pixPsf, do_calibs,
+                   gitver, targetwcs):
+    from legacypipe.survey import wcs_for_brick
+    from collections import Counter
+
+    # Add some margin to our DESI depth requirements
+    margin = 0.5
+    target_depth_map = dict(g=24.0 + margin, r=23.4 + margin, z=22.5 + margin)
+
+    #target_percentiles = np.array([2, 5, 10])
+    #target_ddepths = np.array([-0.6, -0.3, 0.])
+
+    # List extra (redundant) target percentiles so that increasing the depth at
+    # any of these percentiles causes the image to be kept.
+    target_percentiles = np.array(list(range(2, 10)) +
+                                  list(range(10, 30, 5)) +
+                                  list(range(30, 101, 10)))
+    target_ddepths = np.zeros(len(target_percentiles), np.float32)
+    target_ddepths[target_percentiles <= 5] = -0.3
+    target_ddepths[target_percentiles <= 2] = -0.6
+    #print('Target percentiles:', target_percentiles)
+    #print('Target ddepths:', target_ddepths)
+
+    cH,cW = H//10, W//10
+    coarsewcs = targetwcs.scale(0.1)
+    coarsewcs.imagew = cW
+    coarsewcs.imageh = cH
+
+    # Unique pixels in this brick (U: cH x cW boolean)
+    U = find_unique_pixels(coarsewcs, cW, cH, None,
+                           brick.ra1, brick.ra2, brick.dec1, brick.dec2)
+    keep_ccds = []
+
+    # Sort CCDs by a fast proxy for depth.
+    pixscale = 3600. * np.sqrt(np.abs(ccds.cd1_1*ccds.cd2_2 - ccds.cd1_2*ccds.cd2_1))
+    seeing = ccds.fwhm * pixscale
+
+    # Compute the rectangle in *coarsewcs* covered by each CCD
+    slices = []
+    for ccd in ccds:
+        wcs = survey.get_approx_wcs(ccd)
+        hh,ww = wcs.shape
+        rr,dd = wcs.pixelxy2radec([1,ww,ww,1], [1,1,hh,hh])
+        ok,xx,yy = coarsewcs.radec2pixelxy(rr, dd)
+        y0 = int(np.round(np.clip(yy.min(), 0, cH-1)))
+        y1 = int(np.round(np.clip(yy.max(), 0, cH-1)))
+        x0 = int(np.round(np.clip(xx.min(), 0, cW-1)))
+        x1 = int(np.round(np.clip(xx.max(), 0, cW-1)))
+        if y0 == y1 or x0 == x1:
+            slices.append(None)
+            continue
+        # Check whether this CCD overlaps the unique area of this brick...
+        if np.sum(U[y0:y1+1, x0:x1+1]) == 0:
+            print('No overlap with unique area for CCD', ccd.expnum, ccd.ccdname)
+            slices.append(None)
+            continue
+        slices.append((slice(y0, y1+1), slice(x0, x1+1)))
+
+    for band in bands:
+        # scalar
+        target_depth = target_depth_map[band]
+        # vector
+        target_depths = target_depth + target_ddepths
+
+        depthiv = np.zeros((cH,cW), np.float32)
+        depthmap = np.zeros_like(depthiv)
+        last_pcts = np.zeros_like(target_depths)
+        # indices of CCDs we still want to look at in the current band
+        b_inds = np.where(ccds.filter == band)[0]
+        print(len(b_inds), 'CCDs in', band, 'band')
+        b_inds = np.array([i for i in b_inds if slices[i] is not None])
+        print(len(b_inds), 'CCDs in', band, 'band overlap target')
+        # CCDs that we will try before searching for good ones -- CCDs
+        # from the same exposure number as CCDs we have chosen to
+        # take.
+        try_ccds = set()
+
+        plot_vals = []
+
+        while len(b_inds):
+            if len(try_ccds) == 0:
+                # Choose the next CCD to look at in this band.
+    
+                # A rough point-source depth proxy would be:
+                # metric = np.sqrt(ccds.extime[b_inds]) / seeing[b_inds]
+                # If we want to put more weight on choosing good-seeing images, we could do:
+                metric = np.sqrt(ccds.exptime[b_inds]) / seeing[b_inds]**2
+                # This metric is *BIG* for *GOOD* ccds!
+    
+                # Here, we try explicitly to include CCDs that cover
+                # pixels that are still shallow by the largest amount
+                # for the largest number of percentiles of interest;
+                # note that pixels with no coverage get depth 0, so
+                # score high in this metric.
+                #
+                # The value is the depth still required to hit the
+                # target, summed over percentiles of interest
+                # (for pixels unique to this brick)
+                depthvalue = np.zeros(depthmap.shape, np.float32)
+                active = (last_pcts < target_depths)
+                for d,pct in zip(target_depths[active], last_pcts[active]):
+                    #print('target percentile depth', d, 'has depth', pct)
+                    depthvalue += U * np.maximum(0, d - depthmap)
+                ccdvalue = np.zeros(len(b_inds), np.float32)
+                for j,i in enumerate(b_inds):
+                    #ccdvalue[j] = np.sum(depthvalue[slices[i]])
+                    # mean -- we want the most bang for the buck per pixel?
+                    ccdvalue[j] = np.mean(depthvalue[slices[i]])
+                metric *= ccdvalue
+                    
+                # *ibest* is an index into b_inds
+                ibest = np.argmax(metric)
+                # *iccd* is an index into ccds.
+                iccd = b_inds[ibest]
+                ccd = ccds[iccd]
+                print('Chose best CCD: seeing', seeing[iccd], 'exptime', ccds.exptime[iccd], 'with target value', ccdvalue[ibest])
+
+            else:
+                iccd = try_ccds.pop()
+                ccd = ccds[iccd]
+                print('Popping CCD from use_ccds list')
+
+            # remove *iccd* from b_inds
+            b_inds = b_inds[b_inds != iccd]
+
+            im = survey.get_image_object(ccd)
+            print('Band', band, 'expnum', im.expnum, 'exptime', im.exptime, 'seeing', im.fwhm*im.pixscale, 'arcsec')
+
+            if do_calibs:
+                kwa = dict(git_version=gitver)
+                if gaussPsf:
+                    kwa.update(psfex=False)
+                if splinesky:
+                    kwa.update(splinesky=True)
+                im.run_calibs(**kwa)
+            
+            wcs = im.get_wcs()
+            x0,x1,y0,y1,slc = im.get_image_extent(wcs=wcs, radecpoly=targetrd)
+            if x0==x1 or y0==y1:
+                print('No actual overlap')
+                continue
+            wcs = wcs.get_subimage(int(x0), int(y0), int(x1-x0), int(y1-y0))
+
+            skysig1 = im.get_sky_sig1(splinesky=splinesky)
+            if skysig1 is None:
+                iv = im.read_invvar(slc=slc)
+                dq = im.read_dq(slc=slc)
+                skysig1 = 1./np.sqrt(np.median(iv[dq == 0]))
+            # skysig1 is in image counts; scale to nanomaggies
+            zpscale = NanoMaggies.zeropointToScale(im.ccdzpt)
+            skysig1 /= zpscale
+
+            psf = im.read_psf_model(x0, y0, gaussPsf=gaussPsf, pixPsf=pixPsf)
+            psf = psf.constantPsfAt((x1-x0)//2, (y1-y0)//2)
+
+            # create a fake tim to compute galnorm
+            from tractor import (PixPos, Flux, ModelMask, LinearPhotoCal, Image,
+                                 NullWCS)
+            from legacypipe.survey import SimpleGalaxy
+
+            h,w = 50,50
+            gal = SimpleGalaxy(PixPos(w//2,h//2), Flux(1.))
+            tim = Image(data=np.zeros((h,w), np.float32),
+                        psf=psf,
+                        wcs=NullWCS(pixscale=im.pixscale))
+            mm = ModelMask(0, 0, w, h)
+            galmod = gal.getModelPatch(tim, modelMask=mm).patch
+            galmod = np.maximum(0, galmod)
+            galmod /= galmod.sum()
+            galnorm = np.sqrt(np.sum(galmod**2))
+
+            detiv = 1. / (skysig1 / galnorm)**2
+
+            #print('Sig1', skysig1, 'Galnorm', galnorm)
+            galdepth = -2.5 * (np.log10(5. * skysig1 / galnorm) - 9.)
+            print('Galdepth for this CCD:', galdepth)
+
+            # Add this image the the depth map...
+            from astrometry.util.resample import resample_with_wcs, OverlapError
+            try:
+                Yo,Xo,Yi,Xi,nil = resample_with_wcs(coarsewcs, wcs)
+                print(len(Yo), 'of', (cW*cH), 'pixels covered by this image')
+            except OverlapError:
+                print('No overlap')
+                continue
+
+            depthiv[Yo,Xo] += detiv
+
+            # compute the new depth histogram (percentiles)
+            depthmap[:,:] = 0.
+            depthmap[depthiv > 0] = 22.5 - 2.5*np.log10(5./np.sqrt(depthiv[depthiv > 0]))
+            depthpcts = np.percentile(depthmap[U], target_percentiles)
+
+            for i,(p,d,t) in enumerate(zip(target_percentiles, depthpcts, target_depths)):
+                print('  pct % 3i, prev %5.2f -> %5.2f vs target %5.2f %s' % (p, last_pcts[i], d, t, ('ok' if d >= t else '')))
+
+            keep = False
+            # Did we increase the depth of any target percentile that did not already exceed its target depth?
+            if np.any((depthpcts > last_pcts) * (last_pcts < target_depths)):
+                keep = True
+
+            # Add any other CCDs from this same expnum to the try_ccds list.
+            # (before making the plot)
+            I = np.where(ccd.expnum == ccds.expnum[b_inds])[0]
+            try_ccds.update(b_inds[I])
+            print('Adding', len(I), 'CCDs with the same expnum to try_ccds list')
+
+            if plots:
+                cc = '1' if keep else '0'
+                xx = [Xo.min(), Xo.min(), Xo.max(), Xo.max(), Xo.min()]
+                yy = [Yo.min(), Yo.max(), Yo.max(), Yo.min(), Yo.min()]
+                plot_vals.append(((xx,yy,cc),(last_pcts,depthpcts,keep),im.ccdname))
+
+            if plots and (
+                (len(try_ccds) == 0) or np.all(depthpcts >= target_depths)):
+                plt.clf()
+
+                plt.subplot2grid((2,2),(0,0))
+                plt.imshow(depthvalue, interpolation='nearest', origin='lower',
+                           vmin=0)
+                plt.xticks([]); plt.yticks([])
+                plt.colorbar()
+                plt.title('heuristic value')
+
+                plt.subplot2grid((2,2),(0,1))
+                plt.imshow(depthmap, interpolation='nearest', origin='lower',
+                           vmin=target_depth - 2, vmax=target_depth + 0.5)
+                ax = plt.axis()
+                for (xx,yy,cc) in [p[0] for p in plot_vals]:
+                    plt.plot(xx,yy, '-', color=cc, lw=3)
+                # cc = '1' if keep else '0'
+                # plt.plot([Xo.min(), Xo.min(), Xo.max(), Xo.max(), Xo.min()],
+                #          [Yo.min(), Yo.max(), Yo.max(), Yo.min(), Yo.min()],
+                #          '-', color=cc, lw=3)
+                plt.axis(ax)
+                plt.xticks([]); plt.yticks([])
+                plt.colorbar()
+                plt.title('depth map')
+
+                plt.subplot2grid((2,2),(1,0), colspan=2)
+                ax = plt.gca()
+                plt.plot(target_percentiles, target_depths, 'ro', label='Target')
+                plt.plot(target_percentiles, target_depths, 'r-')
+                #plt.plot(target_percentiles, last_pcts, 'k-', label='Previous percentiles')
+                #plt.plot(target_percentiles, depthpcts, 'b-', label='Depth percentiles')
+
+                for (lp,dp,k) in [p[1] for p in plot_vals]:
+                    plt.plot(target_percentiles, lp, 'k-',
+                             label='Previous percentiles')
+                for (lp,dp,k) in [p[1] for p in plot_vals]:
+                    cc = 'b' if k else 'r'
+                    plt.plot(target_percentiles, dp, '-', color=cc,
+                             label='Depth percentiles')
+
+                ccdnames = ','.join([p[2] for p in plot_vals])
+
+                plot_vals = []
+
+                plt.ylim(target_depth - 2, target_depth + 0.5)
+                plt.xscale('log')
+                plt.xlabel('Percentile')
+                plt.ylabel('Depth')
+                plt.title('depth percentiles')
+                # imgstr = '%s %i-%s, exptime %.0f, seeing %.2f, band %s' % (im.camera, im.expnum, im.ccdname, im.exptime, im.pixscale * im.fwhm, band)
+                # if keep:
+                #     plt.suptitle('Keeping: ' + imgstr)
+                # else:
+                #     plt.suptitle('Not keeping: ' + imgstr)
+                imgstr = '%s %i-%s, exptime %.0f, seeing %.2f, band %s' % (im.camera, im.expnum, ccdnames, im.exptime, im.pixscale * im.fwhm, band)
+                plt.suptitle(imgstr)
+
+                ps.savefig()
+
+            if not keep:
+                print('Not keeping this exposure')
+                depthiv[Yo,Xo] -= detiv
+                continue
+
+            keep_ccds.append(iccd)
+            last_pcts = depthpcts
+
+            if np.all(depthpcts >= target_depths):
+                print('Reached all target depth percentiles for band', band)
+                break
+
+        if plots:
+            I = np.where(ccds.filter == band)[0]
+            plt.clf()
+            plt.plot(seeing[I], ccds.exptime[I], 'k.')
+            # which CCDs from this band are we keeping?
+            kept = np.array(keep_ccds)
+            kept = kept[ccds.filter[kept] == band]
+            plt.plot(seeing[kept], ccds.exptime[kept], 'ro')
+            plt.xlabel('Seeing (arcsec)')
+            plt.ylabel('Exptime (sec)')
+            plt.title('CCDs kept for band %s' % band)
+            yl,yh = plt.ylim()
+            plt.ylim(0, np.max(ccds.exptime[I]) * 1.1)
+            ps.savefig()
+
+    return keep_ccds
 
 def stage_mask_junk(tims=None, targetwcs=None, W=None, H=None, bands=None,
                     mp=None, nsigma=None, plots=None, ps=None, **kwargs):
@@ -610,7 +885,6 @@ def stage_image_coadds(survey=None, targetwcs=None, bands=None, tims=None,
     be created (in `stage_coadds`).  But it's handy to have the coadds
     early on, to diagnose problems or just to look at the data.
     '''
-    
     with survey.write_output('ccds-table', brick=brickname) as out:
         ccds.writeto(None, fits_object=out.fits, primheader=version_header)
             
@@ -628,19 +902,15 @@ def stage_image_coadds(survey=None, targetwcs=None, bands=None, tims=None,
         image_coadd,nil = quick_coadds(
             tims, bands, targetwcs, images=[tim.data - tim.sims_image
                                             for tim in tims])
-    ###
 
-    D = _depth_histogram(brick, targetwcs, bands, C.detivs, C.galdetivs)
+    D = _depth_histogram(brick, targetwcs, bands, C.psfdetivs, C.galdetivs)
     with survey.write_output('depth-table', brick=brickname) as out:
         D.writeto(None, fits_object=out.fits)
     del D
 
-    #rgbkwargs2 = dict(mnmx=(-3., 3.))
-    #rgbkwargs2 = dict(mnmx=(-2., 10.))
     coadd_list= [('image',C.coimgs,rgbkwargs)]
-    if 'sims_image' in tims[0].__dict__:
+    if hasattr(tims[0], 'sims_image'):
         coadd_list.append(('simscoadd', sims_coadd, rgbkwargs))
-        #('imagecoadd', image_coadd, rgbkwargs)
 
     for name,ims,rgbkw in coadd_list:
         rgb = get_rgb(ims, bands, **rgbkw)
@@ -743,65 +1013,58 @@ def stage_srcs(coimgs=None, cons=None,
     # Handle the margin of interpolated (masked) pixels around
     # saturated pixels
     saturated_pix = binary_dilation(satmap > 0, iterations=10)
-
-    # Read Tycho-2 stars
+    
+    # Read Tycho-2 stars and use as saturated sources.
     tycho = fits_table(survey.find_file('tycho2'))
     print('Read', len(tycho), 'Tycho-2 stars')
-    ok,tycho.tx,tycho.ty = targetwcs.radec2pixelxy(tycho.ra, tycho.dec)
-    margin = 100
-    tycho.cut(ok * (tycho.tx > -margin) * (tycho.tx < W+margin) *
-              (tycho.ty > -margin) * (tycho.ty < H+margin))
+    ok,xx,yy = targetwcs.radec2pixelxy(tycho.ra, tycho.dec)
+    ## ibx = integer brick x
+    tycho.ibx = np.round(xx-1.).astype(int)
+    tycho.iby = np.round(yy-1.).astype(int)
+    margin = 10
+    tycho.cut(ok * (tycho.ibx > -margin) * (tycho.ibx < W+margin) *
+              (tycho.iby > -margin) * (tycho.iby < H+margin))
     print('Cut to', len(tycho), 'Tycho-2 stars within brick')
-    del ok
+    tycho.ibx = np.clip(tycho.ibx, 0, W-1)
+    tycho.iby = np.clip(tycho.iby, 0, H-1)
+    del ok,xx,yy
 
-    # Create "Tsat", list of saturated sources -- from Tycho-2
-    if len(tycho):
-        Tsat = tycho
-    else:
-        Tsat = fits_table()
-    
     # Saturated blobs -- create a source for each, except for those
     # that already have a Tycho-2 star
     satblobs,nsat = label(satmap > 0)
-    if len(Tsat):
+    if len(tycho):
         # Build a map from old "satblobs" to new; identity to start
         remap = np.arange(nsat+1)
         # Drop blobs that contain a Tycho-2 star
-        itx = np.clip(np.round(Tsat.tx), 0, W-1).astype(int)
-        ity = np.clip(np.round(Tsat.ty), 0, H-1).astype(int)
-        zeroout = satblobs[ity, itx]
+        zeroout = satblobs[tycho.iby, tycho.ibx]
         remap[zeroout] = 0
         # Renumber them to be contiguous
         I = np.flatnonzero(remap)
         nsat = len(I)
         remap[I] = 1 + np.arange(nsat)
         satblobs = remap[satblobs]
-        del remap, itx, ity, zeroout, I
+        del remap, zeroout, I
 
     # Add sources for any remaining saturated blobs
     satyx = center_of_mass(satmap, labels=satblobs, index=np.arange(nsat)+1)
-    if len(satyx):
+    if len(satyx) == 0:
+        Tsat = tycho
+    else:
+        Tsat = fits_table()
         # NOTE, satyx is in y,x order (center_of_mass)
-        satx = np.array([x for y,x in satyx]).astype(int)
-        saty = np.array([y for y,x in satyx]).astype(int)
-        print('Adding', len(satx), 'additional saturated stars')
-        Tsat2 = fits_table()
-        Tsat2.tx = satx
-        Tsat2.ty = saty
+        Tsat.ibx = np.array([x for y,x in satyx]).astype(int)
+        Tsat.iby = np.array([y for y,x in satyx]).astype(int)
+        Tsat.ra,Tsat.dec = targetwcs.pixelxy2radec(Tsat.ibx+1, Tsat.iby+1)
+        print('Adding', len(Tsat), 'additional saturated stars')
         # MAGIC mag for a saturated star
-        Tsat2.mag = np.zeros(len(satx)) + 15.
-        Tsat = merge_tables([Tsat, Tsat2], columns='fillzero')
-        del Tsat2
-        del satx,saty
+        Tsat.mag = np.zeros(len(Tsat), np.float32) + 15.
+        Tsat = merge_tables([tycho, Tsat], columns='fillzero')
     del satyx
         
     satcat = []
     if len(Tsat):
-        Tsat.ra,Tsat.dec = targetwcs.pixelxy2radec(Tsat.tx+1, Tsat.ty+1)
-        Tsat.itx = np.clip(np.round(Tsat.tx), 0, W-1).astype(int)
-        Tsat.ity = np.clip(np.round(Tsat.ty), 0, H-1).astype(int)
-        avoid_x.extend(Tsat.itx)
-        avoid_y.extend(Tsat.ity)
+        avoid_x.extend(Tsat.ibx)
+        avoid_y.extend(Tsat.iby)
         # Create catalog entries...
         for r,d,m in zip(Tsat.ra, Tsat.dec, Tsat.mag):
             fluxes = dict([(band, NanoMaggies.magToNanomaggies(m))
@@ -829,7 +1092,7 @@ def stage_srcs(coimgs=None, cons=None,
         dimshow(rgb)
         ax = plt.axis()
         if len(Tsat):
-            plt.plot(Tsat.tx, Tsat.ty, 'ro')
+            plt.plot(Tsat.ibx, Tsat.iby, 'ro')
         plt.axis(ax)
         plt.title('detmaps & saturated')
         ps.savefig()
@@ -868,8 +1131,8 @@ def stage_srcs(coimgs=None, cons=None,
         plt.title('Catalog + SED-matched detections')
         ps.savefig()
         ax = plt.axis()
-        p1 = plt.plot(T.tx, T.ty, 'r+', **crossa)
-        p2 = plt.plot(Tnew.tx, Tnew.ty, '+', color=(0,1,0), **crossa)
+        p1 = plt.plot(T.ibx, T.iby, 'r+', **crossa)
+        p2 = plt.plot(Tnew.ibx, Tnew.iby, '+', color=(0,1,0), **crossa)
         plt.axis(ax)
         plt.title('Catalog + SED-matched detections')
         plt.figlegend((p1[0], p2[0]), ('SDSS', 'New'), 'upper left')
@@ -1147,18 +1410,17 @@ def stage_fitblobs(T=None,
         blobsrcs   = [blobsrcs  [i] for i in keepblobs]
 
         # one more place where blob numbers are recorded...
-        T.blob = blobs[T.ity, T.itx]
+        T.blob = blobs[T.iby, T.ibx]
 
     # drop any cached data before we start pickling/multiprocessing
     survey.drop_cache()
 
     if plots:
-        ok,tx,ty = targetwcs.radec2pixelxy(tycho.ra, tycho.dec)
         plt.clf()
         dimshow(blobs>=0, vmin=0, vmax=1)
         ax = plt.axis()
-        plt.plot(tx-1, ty-1, 'ro')
-        for x,y,mag in zip(tx,ty,tycho.mag):
+        plt.plot(tycho.ibx, tycho.iby, 'ro')
+        for x,y,mag in zip(tycho.ibx,tycho.iby,tycho.mag):
             plt.text(x, y, '%.1f' % (mag),
                      color='r', fontsize=10,
                      bbox=dict(facecolor='w', alpha=0.5))
@@ -1467,15 +1729,9 @@ def _format_all_models(T, newcat, BB, bands, rex):
 def _blob_iter(blobslices, blobsrcs, blobs, targetwcs, tims, cat, bands,
                plots, ps, simul_opt, use_ceres, tycho, brick, rex,
                skipblobs=[]):
-
-    ok,tx,ty = targetwcs.radec2pixelxy(tycho.ra, tycho.dec)
-    tx = np.round(tx-1).astype(int)
-    ty = np.round(ty-1).astype(int)
-    # FIXME -- Cut or clip to targetwcs region?
+    from collections import Counter
     H,W = targetwcs.shape
-    tx = np.clip(tx, 0, W-1)
-    ty = np.clip(ty, 0, H-1)
-    tychoblobs = set(blobs[ty, tx])
+    tychoblobs = set(blobs[tycho.iby, tycho.ibx])
     # Remove -1 = no blob from set; not strictly necessary, just cosmetic
     try:
         tychoblobs.remove(-1)
@@ -1484,7 +1740,6 @@ def _blob_iter(blobslices, blobsrcs, blobs, targetwcs, tims, cat, bands,
     print('Blobs containing Tycho-2 stars:', tychoblobs)
 
     # sort blobs by size so that larger ones start running first
-    from collections import Counter
     blobvals = Counter(blobs[blobs>=0])
     blob_order = np.array([i for i,npix in blobvals.most_common()])
 
@@ -1629,6 +1884,7 @@ def stage_coadds(survey=None, bands=None, version_header=None, targetwcs=None,
     residuals.  We also perform aperture photometry in this stage.
     '''
     from legacypipe.survey import apertures_arcsec
+    from functools import reduce
     tlast = Time()
 
     # Write per-brick CCDs table
@@ -1657,18 +1913,17 @@ def stage_coadds(survey=None, bands=None, version_header=None, targetwcs=None,
     ok,xx,yy = targetwcs.radec2pixelxy(ra, dec)
     
     # Get integer brick pixel coords for each source, for referencing maps
-    from functools import reduce
-    T.oob = reduce(np.logical_or, [xx < 0.5, yy < 0.5, xx > W+0.5, yy > H+0.5])
-    ix = np.clip(np.round(xx - 1), 0, W-1).astype(int)
-    iy = np.clip(np.round(yy - 1), 0, H-1).astype(int)
-
+    T.out_of_bounds = reduce(np.logical_or, [xx < 0.5, yy < 0.5,
+                                             xx > W+0.5, yy > H+0.5])
+    ixy = (np.clip(np.round(xx - 1), 0, W-1).astype(int),
+           np.clip(np.round(yy - 1), 0, H-1).astype(int))
     # convert apertures to pixels
     apertures = apertures_arcsec / pixscale
     # Aperture photometry locations
     apxy = np.vstack((xx - 1., yy - 1.)).T
     del xx,yy,ok,ra,dec
 
-    C = make_coadds(tims, bands, targetwcs, mods=mods, xy=(ix,iy),
+    C = make_coadds(tims, bands, targetwcs, mods=mods, xy=ixy,
                     ngood=True, detmaps=True, psfsize=True, lanczos=lanczos,
                     apertures=apertures, apxy=apxy,
                     callback=write_coadd_images,
@@ -1677,7 +1932,7 @@ def stage_coadds(survey=None, bands=None, version_header=None, targetwcs=None,
                     plots=False, ps=ps, mp=mp)
     
     # Coadds of galaxy sims only, image only
-    if 'sims_image' in tims[0].__dict__:
+    if hasattr(tims[0], 'sims_image'):
         sims_mods = [tim.sims_image for tim in tims]
         T_sims_coadds = make_coadds(tims, bands, targetwcs, mods=sims_mods,
                                     lanczos=lanczos, mp=mp)
@@ -1691,14 +1946,14 @@ def stage_coadds(survey=None, bands=None, version_header=None, targetwcs=None,
         del T_image_coadds
     ###
 
-    for c in ['nobs', 'anymask', 'allmask', 'psfsize', 'depth', 'galdepth']:
+    for c in ['nobs', 'anymask', 'allmask', 'psfsize', 'psfdepth', 'galdepth']:
         T.set(c, C.T.get(c))
     # store galaxy sim bounding box in Tractor cat
     if 'sims_xy' in C.T.get_columns():
         T.set('sims_xy', C.T.get('sims_xy'))
 
     # Compute depth histogram
-    D = _depth_histogram(brick, targetwcs, bands, C.detivs, C.galdetivs)
+    D = _depth_histogram(brick, targetwcs, bands, C.psfdetivs, C.galdetivs)
     with survey.write_output('depth-table', brick=brickname) as out:
         D.writeto(None, fits_object=out.fits)
     del D
@@ -1706,7 +1961,7 @@ def stage_coadds(survey=None, bands=None, version_header=None, targetwcs=None,
     coadd_list= [('image', C.coimgs,   rgbkwargs),
                  ('model', C.comods,   rgbkwargs),
                  ('resid', C.coresids, rgbkwargs_resid)]
-    if 'sims_image' in tims[0].__dict__:
+    if hasattr(tims[0], 'sims_image'):
         coadd_list.append(('simscoadd', sims_coadd, rgbkwargs))
 
     for name,ims,rgbkw in coadd_list:
@@ -1821,7 +2076,8 @@ def _depth_histogram(brick, targetwcs, bands, detivs, galdetivs):
     for band,detiv,galdetiv in zip(bands,detivs,galdetivs):
         for det,name in [(detiv, 'ptsrc'), (galdetiv, 'gal')]:
             # compute stats for 5-sigma detection
-            depth = 5. / np.sqrt(det)
+            with np.errstate(divide='ignore'):
+                depth = 5. / np.sqrt(det)
             # that's flux in nanomaggies -- convert to mag
             depth = -2.5 * (np.log10(depth) - 9)
             # no coverage -> very bright detection limit
@@ -2034,13 +2290,10 @@ def stage_writecat(
     from legacypipe.catalog import prepare_fits_catalog
      
     TT = T.copy()
-    for k in ['itx','ity','index','tx','ty']:
-        if k in TT.get_columns():
-            TT.delete_column(k)
-    TT.rename('oob', 'out_of_bounds')
+    for k in ['ibx','iby']:
+        TT.delete_column(k)
 
     assert(AP is not None)
-    #if AP is not None:
     # How many apertures?
     ap = AP.get('apflux_img_%s' % bands[0])
     n,A = ap.shape
@@ -2167,7 +2420,7 @@ def stage_writecat(
     from legacypipe.format_catalog import format_catalog
     with survey.write_output('tractor', brick=brickname) as out:
         format_catalog(T2, hdr, primhdr, allbands, None,
-                       write_kwargs=dict(fits_object=out.fits), dr4=True)
+                       write_kwargs=dict(fits_object=out.fits))
 
     # produce per-brick checksum file.
     with survey.write_output('checksums', brick=brickname, hashsum=False) as out:
@@ -2192,6 +2445,7 @@ def run_brick(brick, survey, radec=None, pixscale=0.262,
               bands=None,
               allbands=None,
               blacklist=True,
+              depth_cut=True,
               nblobs=None, blob=None, blobxy=None, blobradec=None,
               nsigma=6,
               simulOpt=False,
@@ -2347,14 +2601,12 @@ def run_brick(brick, survey, radec=None, pixscale=0.262,
         If no CCDs, or no photometric CCDs, overlap the given brick or region.
 
     '''
-    print('Total Memory Available to Job:')
-    get_ulimit()
-
-
     from astrometry.util.stages import CallGlobalTime, runstage
     from astrometry.util.multiproc import multiproc
-
     from legacypipe.utils import MyMultiproc
+
+    print('Total Memory Available to Job:')
+    get_ulimit()
 
     initargs = {}
     kwargs = {}
@@ -2367,7 +2619,7 @@ def run_brick(brick, survey, radec=None, pixscale=0.262,
 
     if allbands is not None:
         kwargs.update(allbands=allbands)
-        
+
     if radec is not None:
         print('RA,Dec:', radec)
         assert(len(radec) == 2)
@@ -2408,6 +2660,7 @@ def run_brick(brick, survey, radec=None, pixscale=0.262,
                   rex=rex,
                   constant_invvar=constant_invvar,
                   use_blacklist=blacklist,
+                  depth_cut=depth_cut,
                   splinesky=splinesky,
                   simul_opt=simulOpt,
                   use_ceres=ceres,
@@ -2685,7 +2938,10 @@ python -u legacypipe/runbrick.py --plots --brick 2440p070 --zoom 1900 2400 450 9
         help='Create grayscale coadds if only one band is available?')
 
     parser.add_argument('--bands', default=None,
-                        help='Limit the bands that are included; default "grz"')
+                        help='Set the list of bands (filters) that are included in processing: comma-separated list, default "g,r,z"')
+
+    parser.add_argument('--no-depth-cut', dest='depth_cut', default=True,
+                        action='store_false', help='Do not cut to the set of CCDs required to reach our depth target')
 
     parser.add_argument(
         '--no-blacklist', dest='blacklist', default=True, action='store_false',
@@ -2771,10 +3027,14 @@ def get_runbrick_kwargs(opt):
 
     opt.pixpsf = not opt.gpsf
 
+    if opt.bands is not None:
+        opt.bands = opt.bands.split(',')
+
     kwa.update(
         radec=opt.radec, pixscale=opt.pixscale,
         width=opt.width, height=opt.height, zoom=opt.zoom,
         blacklist=opt.blacklist,
+        depth_cut=opt.depth_cut,
         threads=opt.threads, ceres=opt.ceres,
         do_calibs=opt.do_calibs,
         write_metrics=opt.write_metrics,
@@ -2866,7 +3126,7 @@ def main(args=None):
     Time.add_measurement(MemMeas)
     if opt.plots:
         plt.figure(figsize=(12,9))
-        plt.subplots_adjust(left=0.07, right=0.99, bottom=0.07, top=0.95,
+        plt.subplots_adjust(left=0.07, right=0.99, bottom=0.07, top=0.93,
                             hspace=0.2, wspace=0.05)
 
     if opt.ps is not None:

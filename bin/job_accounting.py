@@ -90,31 +90,38 @@ def parse_coords(s):
         raise argparse.ArgumentTypeError("Coordinates must be x,y") 
 
 parser = argparse.ArgumentParser(description='Generate a legacypipe-compatible CCDs file from a set of reduced imaging.') 
-parser.add_argument('--dowhat', choices=['sanity_dr4c','dr4c_vs_dr4b','bricks_notdone','time_per_brick','nersc_time','sanity_tractors','num_grz','badastrom','count_objects'],action='store', default=True) 
+parser.add_argument('--dowhat', choices=['dr4_stats','blobs','dr4c_vs_dr4b','bricks_notdone','time_per_brick','nersc_time','sanity_tractors','num_grz','badastrom','count_objects'],action='store', default=True) 
 parser.add_argument('--fn', action='store', default=False) 
 parser.add_argument('--line_start', type=int,default=None, help='first line in fn list to use')
 parser.add_argument('--line_end', type=int,default=None, help='last line in fn list to use')
 args = parser.parse_args() 
 
-if args.dowhat == 'sanity_dr4c':
+if args.dowhat == 'dr4_stats':
+    # RUN: python job_accounting.py --dowhat sanity_tractors --fn dr4_tractors_done.tmp
+    #bricks with Inf,Nans (N total, print to file which cols and whether Inf or Nan) 
+    #total number sources, 
+    #N in primary brick, psf, simp, exp, dev, comp
     ncols= 165
     # RUN: python job_accounting.py --dowhat sanity_tractors --fn dr4_tractors_done.tmp
     fns=np.loadtxt(args.fn,dtype=str)
     assert(len(fns) > 0)
     print(args)
     if args.line_start and args.line_end:
-        fns= fns[args.line_start:args.line_end]
+        fns= fns[args.line_start:args.line_end+1]
     # Remove file lists for clean slate
-    fils= dict(readerr='%s_readerr.txt' % args.dowhat,
-               ncolswrong='%s_ncolswrong.txt' % args.dowhat,
-               nancols='%s_nancols.txt' % args.dowhat,
-               unexpectedcol='%s_unexpectedcol.txt' % args.dowhat)
-    for outfn in fils.keys():
+    suff= '%d_%d' % (args.line_start,args.line_end)
+    fils= dict(readerr='%s_readerr_%s.txt' % (args.dowhat,suff),
+               stats='%s_stats_%s.txt' % (args.dowhat,suff),
+               infnan='%s_infnan_%s.txt' % (args.dowhat,suff))
+    for key,outfn in fils.items():
+        print(outfn)
         if os.path.exists(outfn):
             os.remove(outfn)
     # Loop over completed Tractor Cats
     for ith,fn in enumerate(fns):
         if ith % 100 == 0: print('%d/%d' % (ith+1,len(fns)))
+        brick= os.path.basename(fn)
+        brick= brick.replace('tractor-','').replace('.fits','')
         try: 
             t=fits_table(fn)
         except:
@@ -122,18 +129,30 @@ if args.dowhat == 'sanity_dr4c':
             print('error reading %s' % fn)
             with open(fils['readerr'],'a') as foo:
                 foo.write('%s\n' % fn)
-        # Number of columns
-        if len(t.get_columns()) != ncols:
-            with open(fils['ncolswrong'],'a') as foo:
-                foo.write('%s %d\n' % (fn,len(t.get_columns())))
-        # Any Nans?
+        # Book keeping
+        bk={}
+        bk['rows']= len(t)
+        bk['cols']= len(t.get_columns())
+        bk['prim']= len(t[t.brick_primary])
+        typ= np.char.strip(t.type)
+        models= ['psf','simp','exp','dev','comp']
+        for model in models:
+            bk[model]= len(t[typ == model.upper()])
+        # Write: brick, rows, cols, prim, model 1, 2, 3, 4, 5, blobs
+        line= '%s %d %d %d' % (brick,bk['rows'],bk['cols'],bk['prim'])  
+        for model in models:
+            line += ' %d' % bk[model]  
+        line += '\n'  
+        with open(fils['stats'],'a') as foo:
+            foo.write(line)
+        # Write Infs/Nans to file
         for col in t.get_columns():
             try:
                 ind= np.isfinite(t.get(col)) == False
                 # This col has a non-finite value
                 if np.any(ind):
-                    with open(fils['nancols'],'a') as foo:
-                        foo.write('%s %s\n' % (fn,col))
+                    with open(fils['infnan'],'a') as foo:
+                        foo.write('%s %s %f\n' % (brick,col,t.get(col)[ind][0]))
             except TypeError:
                 # np.isfinite cannot be applied to these data types
                 if col in ['brickname','type','wise_coadd_id']:
@@ -141,8 +160,45 @@ if args.dowhat == 'sanity_dr4c':
                 # report col if this error occurs for a col not in the above
                 else:
                     with open(fils['unexpectedcol'],'a') as foo:
-                        foo.write('%s %s\n' % (fn,col))
-if args.dowhat == 'dr4c_vs_dr4b':
+                        foo.write('%s %s\n' % (brick,col))
+elif args.dowhat == 'blobs':
+    # RUN: python job_accounting.py --dowhat sanity_tractors --fn dr4_tractors_done.tmp
+    # %sources affected by galdepth (694 pixels) 
+    fns=np.loadtxt(args.fn,dtype=str)
+    assert(len(fns) > 0)
+    print(args)
+    if args.line_start and args.line_end:
+        fns= fns[args.line_start:args.line_end+1]
+    # Remove file lists for clean slate
+    suff= '%d_%d' % (args.line_start,args.line_end)
+    fils= dict(readerr='%s_readerr_%s.txt' % (args.dowhat,suff),
+               blobs='%s_blobs_%s.txt' % (args.dowhat,suff))
+    for outfn in fils.keys():
+        if os.path.exists(outfn):
+            os.remove(outfn)
+    # Loop over completed Tractor Cats
+    for ith,fn in enumerate(fns):
+        if ith % 100 == 0: print('%d/%d' % (ith+1,len(fns)))
+        brick= os.path.basename(fn)
+        brick= brick.replace('tractor-','').replace('.fits','')
+        try: 
+            t=fits_table(fn)
+        except:
+            # Report any read errors
+            print('error reading %s' % fn)
+            with open(fils['readerr'],'a') as foo:
+                foo.write('%s\n' % fn)
+        # Large blobs
+        SZ= 694
+        has_blob= np.any((t.blob_width > SZ,t.blob_height > SZ),axis=0)
+        nblobs= np.where(has_blob)[0].size
+        # Primary
+        nblobs_prim= np.where( (has_blob)*(t.brick_primary) )[0].size
+        rows= len(t)
+        rows_prim= len(t[t.brick_primary])
+        with open(fils['blobs'],'a') as foo:
+            foo.write('%s %d %d %d %d\n' % (brick,rows_prim,rows,nblobs,nblobs_prim))
+elif args.dowhat == 'dr4c_vs_dr4b':
     ncols= dict(dr4c=165,dr4b=73)
     # RUN: python job_accounting.py --dowhat dr4c_vs_dr4b --fn dr4_tractors_done.tmp
     fns=np.loadtxt(args.fn,dtype=str)
@@ -167,7 +223,8 @@ if args.dowhat == 'dr4c_vs_dr4b':
         if ith % 100 == 0: print('%d/%d' % (ith+1,len(fns)))
         try: 
             c=fits_table(fn_c)
-            fn_b= fn_c.replace('/dr4c/','/dr4_fixes/')
+            fn_b= fn_c.replace('/global/projecta/projectdirs/cosmo/work/dr4c',
+                               '/global/cscratch1/sd/desiproc/dr4/data_release/dr4_fixes')
             b=fits_table(fn_b)
         except:
             # Report any read errors

@@ -2,29 +2,19 @@ from __future__ import print_function
 
 import os
 import tempfile
-import time
-from glob import glob
-from collections import OrderedDict
 
 import numpy as np
 
 import fitsio
 
 from astrometry.util.fits import fits_table, merge_tables
-from astrometry.util.file import trymakedirs
-from astrometry.util.util import Tan, Sip, anwcs_t
-from astrometry.util.starutil_numpy import degrees_between, hmsstring2ra, dmsstring2dec
-from astrometry.util.miscutils import polygons_intersect, estimate_mode, clip_polygon, clip_wcs
-from astrometry.util.resample import resample_with_wcs,OverlapError
+from astrometry.util.starutil_numpy import degrees_between
 
-from tractor.basics import ConstantSky, NanoMaggies, ConstantFitsWcs, LinearPhotoCal, PointSource, RaDecPos
-from tractor.engine import Image, Catalog, Patch
-from tractor.galaxy import enable_galaxy_cache, disable_galaxy_cache
-from tractor.utils import get_class_from_name
-from tractor.ellipses import EllipseESoft
-from tractor.sfd import SFDMap
-
+from tractor.ellipses import EllipseESoft, EllipseE
+from tractor.galaxy import ExpGalaxy
 from legacypipe.utils import EllipseWithPriors
+
+release_number = 5000
 
 # search order: $TMPDIR, $TEMP, $TMP, then /tmp, /var/tmp, /usr/tmp
 tempdir = tempfile.gettempdir()
@@ -44,9 +34,6 @@ if 'Mock' in str(type(EllipseWithPriors)):
 class LegacyEllipseWithPriors(EllipseWithPriors):
     # Prior on (softened) ellipticity: Gaussian with this standard deviation
     ellipticityStd = 0.25
-
-from tractor.galaxy import ExpGalaxy
-from tractor.ellipses import EllipseE
 
 class LogRadius(EllipseESoft):
     ''' Class used during fitting of the RexGalaxy type -- an ellipse
@@ -188,7 +175,7 @@ def get_version_header(program_name, survey_dir, git_version=None):
                         comment='legacypipe git version'))
     hdr.add_record(dict(name='SURVEYV', value=survey_dir,
                         comment='Legacy Survey directory'))
-    hdr.add_record(dict(name='DECALSDR', value='DR3',
+    hdr.add_record(dict(name='DECALSDR', value='DR5',
                         comment='DECaLS release name'))
     surveydir_ver = get_git_version(survey_dir)
     hdr.add_record(dict(name='SURVEYDV', value=surveydir_ver,
@@ -201,7 +188,9 @@ def get_version_header(program_name, survey_dir, git_version=None):
     # Requested by NOAO
     hdr.add_record(dict(name='SURVEYID', value='DECam Legacy Survey (DECaLS)',
                         comment='Survey name'))
-    hdr.add_record(dict(name='DRVERSIO', value='DR3',
+    #hdr.add_record(dict(name='SURVEYID', value='BASS MzLS',
+    #                    comment='Survey name'))
+    hdr.add_record(dict(name='DRVERSIO', value=release_number,
                         comment='Survey data release number'))
     hdr.add_record(dict(name='OBSTYPE', value='object',
                         comment='Observation type'))
@@ -300,9 +289,10 @@ def bin_image(data, invvar, S):
     return newdata,newiv
 
 def tim_get_resamp(tim, targetwcs):
+    from astrometry.util.resample import resample_with_wcs,OverlapError
+
     if hasattr(tim, 'resamp'):
         return tim.resamp
-
     try:
         Yo,Xo,Yi,Xi,nil = resample_with_wcs(targetwcs, tim.subwcs, [], 2)
     except OverlapError:
@@ -541,6 +531,7 @@ def wcs_for_brick(b, W=3600, H=3600, pixscale=0.262):
 
     Returns: Tan wcs object
     '''
+    from astrometry.util.util import Tan
     pixscale = pixscale / 3600.
     return Tan(b.ra, b.dec, W/2.+0.5, H/2.+0.5,
                -pixscale, 0., 0., pixscale,
@@ -567,6 +558,8 @@ def bricks_touching_wcs(targetwcs, survey=None, B=None, margin=20):
     given WCS region + margin.
     '''
     from astrometry.libkd.spherematch import match_radec
+    from astrometry.util.miscutils import clip_wcs
+
     if B is None:
         assert(survey is not None)
         B = survey.get_bricks_readonly()
@@ -601,6 +594,9 @@ def ccds_touching_wcs(targetwcs, ccds, ccdrad=0.17, polygons=True):
 
     Returns: index array I of CCDs within range.
     '''
+    from astrometry.util.util import Tan
+    from astrometry.util.miscutils import polygons_intersect
+    
     trad = targetwcs.radius()
     if ccdrad is None:
         ccdrad = max(np.sqrt(np.abs(ccds.cd1_1 * ccds.cd2_2 -
@@ -609,9 +605,8 @@ def ccds_touching_wcs(targetwcs, ccds, ccdrad=0.17, polygons=True):
 
     rad = trad + ccdrad
     r,d = targetwcs.radec_center()
-    I, = np.nonzero(np.abs(ccds.dec - d) < rad)
-    I = I[np.atleast_1d(degrees_between(ccds.ra[I], ccds.dec[I], r, d) < rad)]
-
+    I, = np.where(np.abs(ccds.dec - d) < rad)
+    I = I[np.where(degrees_between(r, d, ccds.ra[I], ccds.dec[I]) < rad)[0]]
     if not polygons:
         return I
     # now check actual polygon intersection
@@ -701,10 +696,11 @@ class LegacySurveyData(object):
         output_dir : string
             Base directory for output files; default ".".
         '''
-        from .decam  import DecamImage
-        from .mosaic import MosaicImage
-        from .bok    import BokImage
-        from .ptf    import PtfImage
+        from legacypipe.decam  import DecamImage
+        from legacypipe.mosaic import MosaicImage
+        from legacypipe.bok    import BokImage
+        from legacypipe.ptf    import PtfImage
+        from collections import OrderedDict
 
         if survey_dir is None:
             survey_dir = os.environ.get('LEGACY_SURVEY_DIR')
@@ -820,6 +816,8 @@ Now using the current directory as LEGACY_SURVEY_DIR, but this is likely to fail
 
         Returns: path to the specified file (whether or not it exists).
         '''
+        from glob import glob
+
         if brick is None:
             brick = '%(brick)s'
             brickpre = '%(brick).3s'
@@ -877,12 +875,12 @@ Now using the current directory as LEGACY_SURVEY_DIR, but this is likely to fail
             ty = filetype.split('-')[0]
             return os.path.join(codir, '%s-%s-%s.jpg' % (sname, brick, ty))
 
-        elif filetype in ['depth', 'galdepth', 'nexp', 'model']:
+        elif filetype in ['depth', 'galdepth', 'nexp']:
             return os.path.join(codir,
                                 '%s-%s-%s-%s.fits.gz' % (sname, brick, filetype, band))
 
-        elif filetype in ['invvar', 'chi2', 'image']:
-            return os.path.join(codir, '%s-%s-%s-%s.fits' %
+        elif filetype in ['invvar', 'chi2', 'image', 'model']:
+            return os.path.join(codir, '%s-%s-%s-%s.fits.fz' %
                                 (sname, brick, filetype,band))
 
         elif filetype in ['blobmap']:
@@ -896,6 +894,16 @@ Now using the current directory as LEGACY_SURVEY_DIR, but this is likely to fail
 
         print('Unknown filetype "%s"' % filetype)
         assert(False)
+
+    def get_compression_string(self, filetype, **kwargs):
+        return dict(# g: sigma ~ 0.002.  qz -1e-3: 6 MB, -1e-4: 10 MB
+                    image = '[compress R 100,100; qz -1e-4]',
+                    # g: qz -1e-3: 2 MB, -1e-4: 2.75 MB
+                    model = '[compress R 100,100; qz -1e-4]',
+                    chi2  = '[compress R 100,100; qz -0.1]',
+                    # qz +8: 9 MB, qz +16: 10.5 MB
+                    invvar = '[compress R 100,100; qz 16]',
+            ).get(filetype)
 
     def write_output(self, filetype, hashsum=True, **kwargs):
         '''
@@ -922,14 +930,23 @@ Now using the current directory as LEGACY_SURVEY_DIR, but this is likely to fail
         - computes the sha256sum
         '''
         class OutputFileContext(object):
-            def __init__(self, fn, survey, hashsum=True):
+            def __init__(self, fn, survey, hashsum=True, relative_fn=None,
+                         compression=None):
+                '''
+                *compression*: a CFITSIO compression specification, eg:
+                    "[compress R 100,100; qz -0.05]"
+                '''
                 self.real_fn = fn
+                self.relative_fn = relative_fn
                 self.survey = survey
-                self.is_fits = fn.endswith('.fits') or fn.endswith('.fits.gz')
-                self.tmpfn = os.path.join(os.path.dirname(fn), 'tmp-'+os.path.basename(fn))
+                self.is_fits = (fn.endswith('.fits') or
+                                fn.endswith('.fits.gz') or
+                                fn.endswith('.fits.fz'))
+                self.tmpfn = os.path.join(os.path.dirname(fn),
+                                          'tmp-'+os.path.basename(fn))
                 if self.is_fits:
-                    self.is_fits = True
-                    self.fits = fitsio.FITS('mem://', 'rw')
+                    self.fits = fitsio.FITS('mem://' + (compression or ''),
+                                            'rw')
                 else:
                     self.fn = self.tmpfn
                 self.hashsum = hashsum
@@ -944,7 +961,7 @@ Now using the current directory as LEGACY_SURVEY_DIR, but this is likely to fail
                 return self
 
             def __exit__(self, exc_type, exc_value, traceback):
-                # If no exception was thrown...
+                # If an exception was thrown, bail out
                 if exc_type is not None:
                     return
 
@@ -953,11 +970,33 @@ Now using the current directory as LEGACY_SURVEY_DIR, but this is likely to fail
                     hashfunc = hashlib.sha256
                     sha = hashfunc()
                 if self.is_fits:
-                    # Read back the data
+                    # Read back the data written into memory by the
+                    # fitsio library
                     rawdata = self.fits.read_raw()
+                    # close the fitsio file
                     self.fits.close()
+
+                    # If gzip, we now have to actually do the
+                    # compression to gzip format...
+                    if self.tmpfn.endswith('.gz'):
+                        from io import BytesIO
+                        import gzip
+                        #ulength = len(rawdata)
+                        # We gzip to a memory file (BytesIO) so we can compute
+                        # the hashcode before writing to disk for real
+                        gzipped = BytesIO()
+                        gzf = gzip.GzipFile(self.real_fn, 'wb', 9, gzipped)
+                        gzf.write(rawdata)
+                        gzf.close()
+                        rawdata = gzipped.getvalue()
+                        gzipped.close()
+                        del gzipped
+                        #clength = len(rawdata)
+                        #print('Gzipped', ulength, 'to', clength)
+
                     if self.hashsum:
                         sha.update(rawdata)
+
                     f = open(self.tmpfn, 'wb')
                     f.write(rawdata)
                     f.close()
@@ -973,12 +1012,31 @@ Now using the current directory as LEGACY_SURVEY_DIR, but this is likely to fail
                     del sha
 
                 os.rename(self.tmpfn, self.real_fn)
+                print('Renamed to', self.real_fn)
 
                 if self.hashsum:
-                    self.survey.add_hashcode(self.real_fn, hashcode)
+                    # List the relative filename (from output dir) in
+                    # shasum file.
+                    fn = self.relative_fn or self.real_fn
+                    self.survey.add_hashcode(fn, hashcode)
+            # end of OutputFileContext class
 
+
+        # Get the output filename for this filetype
         fn = self.find_file(filetype, output=True, **kwargs)
-        out = OutputFileContext(fn, self, hashsum=hashsum)
+
+        compress = self.get_compression_string(filetype, **kwargs)
+
+        # Find the relative path (relative to output_dir), which is the string
+        # we will put in the shasum file.
+        relfn = fn
+        if relfn.startswith(self.output_dir):
+            relfn = relfn[len(self.output_dir):]
+            if relfn.startswith('/'):
+                relfn = relfn[1:]
+
+        out = OutputFileContext(fn, self, hashsum=hashsum, relative_fn=relfn,
+                                compression=compress)
         return out
 
     def add_hashcode(self, fn, hashcode):
@@ -1032,13 +1090,8 @@ Now using the current directory as LEGACY_SURVEY_DIR, but this is likely to fail
         Returns the directory containing SourceExtractor config files,
         used during calibration.
         '''
-        return os.path.join(self.survey_dir, 'calib', 'se-config')
-
-    def get_bricks_dr2(self):
-        '''
-        Returns a table of bricks with DR2 stats.  The caller owns the table.
-        '''
-        return fits_table(os.path.join(self.survey_dir, 'decals-bricks-dr2.fits'))
+        from pkg_resources import resource_filename
+        return resource_filename('legacypipe', 'config')
 
     def get_bricks(self):
         '''
@@ -1076,8 +1129,6 @@ Now using the current directory as LEGACY_SURVEY_DIR, but this is likely to fail
         Returns a brick (as one row in a table) by name (string).
         '''
         B = self.get_bricks_readonly()
-        print('brickname:', brickname, type(brickname))
-        print('Bricknames:', B.brickname[0], type(B.brickname[0]))
         I, = np.nonzero(np.array([n == brickname for n in B.brickname]))
         if len(I) == 0:
             return None
@@ -1144,8 +1195,6 @@ Now using the current directory as LEGACY_SURVEY_DIR, but this is likely to fail
         '''
         Returns the table of CCDs.
         '''
-        from glob import glob
-
         fns = self.find_file('ccds')
         fns.sort()
         fns = self.filter_ccds_files(fns)
@@ -1188,8 +1237,6 @@ Now using the current directory as LEGACY_SURVEY_DIR, but this is likely to fail
         '''
         Returns the annotated table of CCDs.
         '''
-        from glob import glob
-
         fns = self.find_file('annotated-ccds')
         TT = []
         for fn in fns:
@@ -1216,8 +1263,7 @@ Now using the current directory as LEGACY_SURVEY_DIR, but this is likely to fail
         I = ccds_touching_wcs(wcs, T, **kwargs)
         if len(I) == 0:
             return None
-        T = T[I]
-        return T
+        return T[I]
 
     def get_image_object(self, t, **kwargs):
         '''
@@ -1229,6 +1275,7 @@ Now using the current directory as LEGACY_SURVEY_DIR, but this is likely to fail
         return imageType(self, t, **kwargs)
 
     def get_approx_wcs(self, ccd):
+        from astrometry.util.util import Tan
         W,H = ccd.width,ccd.height
         wcs = Tan(*[float(x) for x in
                     [ccd.crval1, ccd.crval2, ccd.crpix1, ccd.crpix2,
@@ -1326,7 +1373,7 @@ Now using the current directory as LEGACY_SURVEY_DIR, but this is likely to fail
             print('Checking', len(Icam), 'images from camera', cam)
             cuts = imclass.ccd_cuts(self, ccds[Icam])
             ccdcuts[Icam] = cuts
-            print('Keeping', sum(cuts == 0), 'unflagged CCDs from camera', cam)
+            #print('Keeping', sum(cuts==0), 'unflagged CCDs from camera', cam)
         return ccdcuts
 
 def exposure_metadata(filenames, hdus=None, trim=None):
@@ -1348,6 +1395,9 @@ def exposure_metadata(filenames, hdus=None, trim=None):
     -------
     A table that looks like the CCDs table.
     '''
+    from astrometry.util.util import Tan
+    from astrometry.util.starutil_numpy import hmsstring2ra, dmsstring2dec
+
     nan = np.nan
     primkeys = [('FILTER',''),
                 ('RA', nan),
@@ -1452,6 +1502,7 @@ def exposure_metadata(filenames, hdus=None, trim=None):
 def run_calibs(X):
     im = X[0]
     kwargs = X[1]
+    noraise = kwargs.pop('noraise', False)
     print('run_calibs for image', im)
     try:
         return im.run_calibs(**kwargs)
@@ -1459,7 +1510,8 @@ def run_calibs(X):
         print('Exception in run_calibs:', im, kwargs)
         import traceback
         traceback.print_exc()
-        raise
+        if not noraise:
+            raise
 
 def read_one_tim(X):
     (im, targetrd, kwargs) = X

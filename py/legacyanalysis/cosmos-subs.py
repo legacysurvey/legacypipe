@@ -63,6 +63,7 @@ if not os.path.exists(cfn):
     C.writeto(cfn)
     
 else:
+    print('Reading cached CCD list from', cfn)
     C = fits_table(cfn)
 
 plt.clf()

@@ -30,6 +30,40 @@ def fix_mosaic_expnums(expnum):
         #print('  to', expnum[I].min(), expnum[I].max())
     return expnum
 
+# 2017-05-01 to 2017-05-11
+def mzls_run_22b():
+    basedir = os.environ['LEGACY_SURVEY_DIR']
+    cam = 'mosaic'
+    image_basedir = os.path.join(basedir, 'images')
+    TT = []
+    for fn,dirnms in [
+        ('/global/homes/a/arjundey/ZeroPoints/mzls-zpt-20170501-20170511.fits',
+         [
+                'CP20170430',
+                'CP20170501',
+                'CP20170502',
+                'CP20170503',
+                'CP20170504',
+                'CP20170505',
+                'CP20170510',
+                'CP20170511',
+          ])]:
+        T = fits_table(fn)
+        T.cut(T.expnum > 125733)
+        print('Cut to', len(T), 'based on expnum')
+        print('Exposure number range:', T.expnum.min(), T.expnum.max())
+        normalize_zeropoints(fn, dirnms, image_basedir, cam, T=T)
+        TT.append(T)
+    T = merge_tables(TT)
+    print('Expnum range:', T.expnum.min(), T.expnum.max())
+    fix_mosaic_expnums(T.expnum)
+    print('Fixed expnum range:', T.expnum.min(), T.expnum.max())
+    outfn = 'survey-ccds-mzls-run-22b.fits'
+    T.writeto(outfn)
+    print('Wrote', outfn)
+    for fn in [outfn]:
+        os.system('gzip --best ' + fn)
+
 # 2017-03-31 to 2017-04-30
 def mzls_runs_21b_to_22a():
     basedir = os.environ['LEGACY_SURVEY_DIR']
@@ -268,6 +302,37 @@ def decals_nondecals_dr5():
         I = np.flatnonzero(T.expid == k)
         print('  filenames:', ' '.join(np.unique(T.filename[I])))
 
+
+# 
+# Runs 28, 29, and 30
+def decals_run28():
+    basedir = os.environ['LEGACY_SURVEY_DIR']
+    cam = 'decam'
+    image_basedir = os.path.join(basedir, 'images')
+    TT = []
+    for fn,dirnms in [
+        ('/global/homes/a/arjundey/ZeroPoints/decals-zpt-20170418_0522_v2.fits',
+         ['CP20170418',
+          'CP20170420',
+          'CP20170421',
+          'CP20170501',
+          'CP20170502',
+          'CP20170503',
+          'CP20170504',
+          'CP20170513',
+          'CP20170514',
+          'CP20170519',
+          'CP20170520',
+          'CP20170521',
+          'CP20170522',])]:
+        T = normalize_zeropoints(fn, dirnms, image_basedir, cam)
+        TT.append(T)
+    T = merge_tables(TT)
+    outfn = 'survey-ccds-run28.fits'
+    T.writeto(outfn)
+    print('Wrote', outfn)
+    for fn in [outfn]:
+        os.system('gzip --best ' + fn)
 
 # Run 27 + DD night Apr 04
 def decals_run27():
@@ -835,7 +900,9 @@ if __name__ == '__main__':
     #decals_run27()
     #decals_nondecals_dr5()
     #mzls_runs_16_to_21a()
-    mzls_runs_21b_to_22a()
+    #mzls_runs_21b_to_22a()
+    decals_run28()
+    #mzls_run_22b()
 
     #dr4_bootes=False
     #if dr4_bootes:

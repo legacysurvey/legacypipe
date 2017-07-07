@@ -1,16 +1,11 @@
 from __future__ import print_function
-#import sys
 import os
 import fitsio
 import numpy as np
 
-from astrometry.util.util import wcs_pv2sip_hdr
-
-from legacypipe.image import LegacySurveyImage, CalibMixin
+from legacypipe.image import CalibMixin
 from legacypipe.cpimage import CPImage
 from legacypipe.survey import LegacySurveyData
-
-from tractor.sky import ConstantSky
 
 '''
 Code specific to images from the 90prime camera on the Bok telescope.
@@ -26,12 +21,12 @@ class BokImage(CPImage, CalibMixin):
 
     def __init__(self, survey, t):
         super(BokImage, self).__init__(survey, t)
-        self.pixscale= 0.455
+        self.pixscale = 0.455
         self.dq_saturation_bits = 0 #not used so set to 0
         self.fwhm = t.fwhm
         self.arawgain = t.arawgain
         self.name = self.imgfn
-        
+
     def __str__(self):
         return 'Bok ' + self.name
 
@@ -91,7 +86,7 @@ class BokImage(CPImage, CalibMixin):
         return dq
 
     def read_invvar(self, clip=True, clipThresh=0.2, **kwargs):
-        print('Reading the 90Prime oow weight map as Inverse Varianc')
+        print('Reading the 90Prime oow weight map as Inverse Variance')
         invvar = self._read_fits(self.wtfn, self.hdu, **kwargs)
         if clip:
             # Clamp near-zero (incl negative!) invvars to zero.
@@ -107,44 +102,10 @@ class BokImage(CPImage, CalibMixin):
     def remap_invvar(self, invvar, primhdr, img, dq):
         return self.remap_invvar_shotnoise(invvar, primhdr, img, dq)
 
-    # read the TPV header, convert it to SIP, and apply an offset from the
-    # CCDs table
-#    def get_wcs(self):
-#        # Make sure the PV-to-SIP converter samples enough points for small
-#        # images
-#        stepsize = 0
-#        if min(self.width, self.height) < 600:
-#            stepsize = min(self.width, self.height) / 10.
-#        hdr = fitsio.read_header(self.imgfn, self.hdu)
-#
-#        # WORKAROUND bug in astrometry.net when CTYPEx don't have a comment string! Yuk
-#        for r in hdr.records():
-#            if not r['name'] in ['CTYPE1','CTYPE2']:
-#                continue
-#            r['comment'] = 'Hello'
-#            r['card'] = hdr._record2card(r)
-#
-#        wcs = wcs_pv2sip_hdr(hdr, stepsize=stepsize)
-#        print('wcs bounds=:',wcs.radec_bounds())
-#        raise ValueError
-#        dra,ddec = self.dradec
-#        r,d = wcs.get_crval()
-#        print('Applying astrometric zeropoint:', (dra,ddec))
-#        wcs.set_crval((r + dra, d + ddec))
-#        wcs.version = ''
-#        wcs.plver = ''
-#        return wcs
-
-
     def run_calibs(self, psfex=True, sky=True, se=False,
                    funpack=False, fcopy=False, use_mask=True,
                    force=False, just_check=False, git_version=None,
                    splinesky=False):
-    #def run_calibs(self, psfex=True, sky=True, se=False,
-    #               funpack=False, fcopy=False, use_mask=True,
-    #               force=False, just_check=False, git_version=None,
-    #               splinesky=False,**kwargs):
-
         '''
         Run calibration pre-processing steps.
         '''
@@ -192,15 +153,12 @@ class BokImage(CPImage, CalibMixin):
         
         if se:
             # CAREFUL no mask given to SE
-            self.run_se('90prime', imgfn, maskfn) #'junkname')
+            self.run_se('90prime', imgfn, maskfn)
         if psfex:
             self.run_psfex('90prime')
-
         if sky:
-            self.run_sky('90prime', splinesky=splinesky,\
-                         git_version=git_version)
+            self.run_sky('90prime', splinesky=splinesky,git_version=git_version)
 
         for fn in todelete:
             os.unlink(fn)
-
 

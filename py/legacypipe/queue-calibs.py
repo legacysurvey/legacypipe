@@ -388,6 +388,8 @@ def main():
         print(name)
     #B.writeto('bricks-cut.fits')
 
+    print(len(T), 'CCDs')
+    print(len(B), 'Bricks')
     I,J,d = match_radec(B.ra, B.dec, T.ra, T.dec, survey.bricksize)
     keep = np.zeros(len(B), bool)
     for i in I:

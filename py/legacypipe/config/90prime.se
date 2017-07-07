@@ -1,0 +1,68 @@
+# These config entries will be overridden by runbrick.py (in image.py:run_se())
+ 
+CATALOG_NAME     se.fits      # name of the output catalog
+PARAMETERS_NAME  90prime.param  # name of the file containing catalog contents
+FILTER_NAME      90prime.conv   # name of the file containing the filter
+MAG_ZEROPOINT    25.0           # magnitude zero-point
+SEEING_FWHM      1.3            # stellar FWHM in arcsec
+ 
+#------------------------------- Extraction ----------------------------------
+
+CATALOG_TYPE     FITS_LDAC       # NONE,ASCII,ASCII_HEAD, ASCII_SKYCAT,
+                                # ASCII_VOTABLE, FITS_1.0 or FITS_LDAC
+DETECT_TYPE      CCD            # CCD (linear) or PHOTO (with gamma correction)
+DETECT_MINAREA   5             # min. # of pixels above threshold
+DETECT_THRESH    1.0            # <sigmas> or <threshold>,<ZP> in mag.arcsec-2
+ANALYSIS_THRESH  1.0            # <sigmas> or <threshold>,<ZP> in mag.arcsec-2
+FILTER           Y              # apply filter for detection (Y or N)?
+ 
+DEBLEND_NTHRESH  32             # Number of deblending sub-thresholds
+DEBLEND_MINCONT  0.005          # Minimum contrast parameter for deblending
+ 
+CLEAN            Y              # Clean spurious detections? (Y or N)?
+CLEAN_PARAM      1.0            # Cleaning efficiency
+ 
+MASK_TYPE        CORRECT        # type of detection MASKing: can be one of
+                                # NONE, BLANK or CORRECT
+ 
+#------------------------------ Photometry -----------------------------------
+ 
+# corresponding to diameters of [1.5,3,5,7,9,11,13,15] arcsec 
+PHOT_APERTURES  3.19148936,6.38297872,10.63829787,14.89361702,19.14893617,23.40425532,27.65957447,31.91489362
+PHOT_AUTOPARAMS  2.5, 3.5       # MAG_AUTO parameters: <Kron_fact>,<min_radius>
+PHOT_PETROPARAMS 2.0, 3.5       # MAG_PETRO parameters: <Petrosian_fact>,
+                                # <min_radius>
+ 
+SATUR_LEVEL      75000.0        # level (in ADUs) at which arises saturation
+SATUR_KEY        SATUR          # keyword for saturation level (in ADUs)
+ 
+MAG_GAMMA        4.0            # gamma of emulsion (for photographic scans)
+GAIN             1.3            # detector gain in e-/ADU
+GAIN_KEY         GAIN           # keyword for detector gain in e-/ADU
+#PIXEL_SCALE      0.470          # size of pixel in arcsec (0=use FITS WCS info)
+PIXEL_SCALE      0              # size of pixel in arcsec (0=use FITS WCS info)
+ 
+#------------------------------ Background -----------------------------------
+ 
+BACK_SIZE        64             # Background mesh: <size> or <width>,<height>
+BACK_FILTERSIZE  3              # Background filter: <size> or <width>,<height>
+BACKPHOTO_TYPE   GLOBAL         # can be GLOBAL or LOCAL
+ 
+#------------------------------ Check Image ----------------------------------
+ 
+CHECKIMAGE_TYPE  NONE           # can be NONE, BACKGROUND, BACKGROUND_RMS,
+                                # MINIBACKGROUND, MINIBACK_RMS, -BACKGROUND,
+                                # FILTERED, OBJECTS, -OBJECTS, SEGMENTATION,
+                                # or APERTURES
+CHECKIMAGE_NAME  check.fits     # Filename for the check-image
+ 
+#--------------------- Memory (change with caution!) -------------------------
+ 
+MEMORY_OBJSTACK  3000           # number of objects in stack
+MEMORY_PIXSTACK  300000         # number of pixels in stack
+MEMORY_BUFSIZE   1024           # number of lines in buffer
+ 
+#----------------------------- Miscellaneous ---------------------------------
+ 
+VERBOSE_TYPE     NORMAL          # can be QUIET, NORMAL or FULL
+WRITE_XML        N              # Write XML file (Y/N)?
