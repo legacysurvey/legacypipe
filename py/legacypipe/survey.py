@@ -1275,7 +1275,7 @@ Now using the current directory as LEGACY_SURVEY_DIR, but this is likely to fail
             # >> ccds.writeto('/tmp/ccds-dr5.fits')
             # Astrometry.net's 'startree' program:
             # > startree -i /tmp/ccds-dr5.fits -o /tmp/dr5.kd -P -k -n ccds
-            # > fitsgetext -i /tmp/dr5.kd -o /tmp/survey-ccds-dr5-kd.fits -e 0 -e 6 -e 1 -e 2 -e 3 -e 4 -e 5
+            # > fitsgetext -i /tmp/dr5.kd -o /tmp/survey-ccds-dr5.kd.fits -e 0 -e 6 -e 1 -e 2 -e 3 -e 4 -e 5
             from astrometry.libkd.spherematch import tree_open, tree_search_radec
 
             # MAGIC number: we'll search a 1-degree radius for CCDs
