@@ -2452,6 +2452,8 @@ def col2plotname(key):
             skyrms= 'RMS Sky (e/sec/pixel)',
             transp= 'Atmospheric Transparency',
             zpt= 'Zeropoint (e/s)',
+            err_on_radecoff= 'Astrometric Offset Error (Std Err of Median, arcsec)',
+            err_on_phoff= r'Zeropoint Error (Std Err of Median), mag)',
             psfdepth= r'Point-source Single Pass Depth (5$\sigma$)',
             galdepth= r'Galaxy Single Pass Depth (5$\sigma$)')
     d['psfdepth_extcorr']= r'Point-source Single Pass Depth (5$\sigma$, ext. corrected)'
@@ -2598,6 +2600,11 @@ class AnnotatedVsLegacy(object):
 #######
 # a= ZeropointHistograms('/path/to/combined/decam-zpt.fits','path/to/mosaics-zpt.fits')
 
+def err_on_radecoff(rarms,decrms,nmatch):
+    err_raoff= 1.253 * rarms / np.sqrt(nmatch)
+    err_decoff= 1.253 * decrms / np.sqrt(nmatch)
+    return np.sqrt(err_raoff**2 + err_decoff**2)
+
 class ZeropointHistograms(object):
     '''Histograms for papers'''
     def __init__(self,decam_zpts=None,mosaic_zpts=None):
@@ -2608,14 +2615,18 @@ class ZeropointHistograms(object):
         if self.mosaic:
             self.mosaic= fits_table(self.mosaic)
         self.add_keys()
-        self.plot_hist_1d()
-        self.plot_2d_scatter()
-        self.plot_hist_depth()
+        #self.plot_hist_1d()
+        #self.plot_2d_scatter()
+        self.plot_astro_photo_scatter()
+        #self.plot_hist_depth()
    
     def add_keys(self):
         if self.decam:
             self.decam.set('seeing',self.decam.fwhm * 0.262)
             self.set_Aco_EBV(self.decam,camera='decam')
+            self.decam.set('err_on_phoff',1.253 * self.decam.phrms/np.sqrt(self.decam.nmatch)) # error on median
+            self.decam.set('err_on_radecoff',err_on_radecoff(self.decam.rarms,self.decam.decrms,
+                                                             self.decam.nmatch))
             # Depths
             depth_obj= Depth('decam',
                              self.decam.skyrms,self.decam.gain,
@@ -2627,6 +2638,9 @@ class ZeropointHistograms(object):
         if self.mosaic:
             self.mosaic.set('seeing',self.mosaic.fwhm * 0.26)
             self.set_Aco_EBV(self.mosaic,camera='mosaic')
+            self.mosaic.set('err_on_phoff',1.253 * self.mosaic.phrms/np.sqrt(self.mosaic.nmatch)) # error on median
+            self.mosaic.set('err_on_radecoff',err_on_radecoff(self.mosaic.rarms,self.mosaic.decrms,
+                                                              self.mosaic.nmatch))
             # Depths
             depth_obj= Depth('mosaic',
                              self.mosaic.skyrms,self.mosaic.gain,
@@ -2803,7 +2817,9 @@ class ZeropointHistograms(object):
                 phrms= (0,0.5),
                 raoff= (-0.7,0.7),
                 decoff= (-0.7,0.7),
-                phoff= (-6,6))
+                phoff= (-6,6),
+                err_on_phoff= (0,0.08),
+                err_on_radecoff= (0,0.3))
         return d.get(col,None)
 
     def plot_2d_scatter(self,prefix=''):
@@ -2853,6 +2869,64 @@ class ZeropointHistograms(object):
             plt.savefig(savefn, bbox_extra_artists=[xlab,ylab], bbox_inches='tight')
             plt.close() 
             print "wrote %s" % savefn 
+
+    def plot_astro_photo_scatter(self,prefix=''):
+        # Plot
+        FS=14
+        eFS=FS+5
+        tickFS=FS
+        x_key,y_key= 'err_on_radecoff','err_on_phoff'
+        fig,ax= plt.subplots(2,1,figsize=(8,10))
+        plt.subplots_adjust(hspace=0.2,wspace=0)
+        # g,r band
+        row=0
+        if self.decam:            
+            x,y= self.decam.get(x_key), self.decam.get(y_key)
+            for band in ['g','r']:
+                keep= self.decam.filter == band
+                if np.where(keep)[0].size > 0:
+                    myscatter(ax[row],x[keep],y[keep], 
+                              color=band2color(band),s=10.,alpha=0.75,
+                              label='%s (DECam, %d)' % (band,len(x[keep])))
+        # z-band
+        row=1
+        if self.decam:            
+            x,y= self.decam.get(x_key), self.decam.get(y_key)
+            for band in ['z']:
+                keep= self.decam.filter == band
+                if np.where(keep)[0].size > 0:
+                    myscatter(ax[row],x[keep],y[keep], 
+                              color=band2color(band),s=10.,alpha=0.75,
+                              label='%s (DECam, %d)' % (band,len(x[keep])))
+        if self.mosaic:            
+            x,y= self.mosaic.get(x_key), self.mosaic.get(y_key)
+            for band in set(self.mosaic.filter):
+                keep= self.mosaic.filter == band
+                if np.where(keep)[0].size > 0:
+                    myscatter(ax[row],x[keep],y[keep], 
+                              color='k',s=10.,alpha=0.75,
+                              label='%s (Mosaic3, %d)' % (band,len(x[keep])))
+        # Crosshairs
+        ax[0].axhline(0.01,c='k',ls='dashed',lw=1)
+        ax[1].axhline(0.02,c='k',ls='dashed',lw=1)
+        for row in range(2):
+            ax[row].axvline(0.03,c='k',ls='dashed',lw=1)
+        # Label
+        xlab=ax[1].set_xlabel(col2plotname(x_key),fontsize=FS) #0.45'' galaxy
+        for row in range(2):
+            ylab=ax[row].set_ylabel(col2plotname(y_key),fontsize=FS)
+            ax[row].tick_params(axis='both', labelsize=tickFS)
+            leg=ax[row].legend(loc='upper right',scatterpoints=1,markerscale=3.,fontsize=FS)
+            if self.get_lim(x_key):
+                ax[row].set_xlim(self.get_lim(x_key))
+            if self.get_lim(y_key):
+                ax[row].set_ylim(self.get_lim(y_key))
+        savefn='astro_photo_error.png'
+        plt.savefig(savefn, bbox_extra_artists=[xlab,ylab], bbox_inches='tight')
+        plt.close() 
+        print "wrote %s" % savefn 
+
+
 
 #######
 # Needed exposure time calculator

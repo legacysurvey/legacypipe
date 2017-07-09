@@ -1622,7 +1622,7 @@ def get_extlist(camera):
                    'N28', 'N29', 'N31']
         # Testing only!
         #extlist = ['N4','S4', 'S22','N19']
-        extlist = ['N4']
+        #extlist = ['N4']
         #extlist = ['S10', 'S11', 'S12', 'S16', 'S17', 'S4', 'S5', 'S6']
     else:
         print('Camera {} not recognized!'.format(camera))
