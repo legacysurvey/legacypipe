@@ -875,11 +875,7 @@ Now using the current directory as LEGACY_SURVEY_DIR, but this is likely to fail
             ty = filetype.split('-')[0]
             return os.path.join(codir, '%s-%s-%s.jpg' % (sname, brick, ty))
 
-        elif filetype in ['depth', 'galdepth', 'nexp']:
-            return os.path.join(codir,
-                                '%s-%s-%s-%s.fits.gz' % (sname, brick, filetype, band))
-
-        elif filetype in ['invvar', 'chi2', 'image', 'model']:
+        elif filetype in ['invvar', 'chi2', 'image', 'model', 'depth', 'galdepth', 'nexp']:
             return os.path.join(codir, '%s-%s-%s-%s.fits.fz' %
                                 (sname, brick, filetype,band))
 
@@ -903,6 +899,9 @@ Now using the current directory as LEGACY_SURVEY_DIR, but this is likely to fail
                     chi2  = '[compress R 100,100; qz -0.1]',
                     # qz +8: 9 MB, qz +16: 10.5 MB
                     invvar = '[compress R 100,100; qz 16]',
+                    nexp   = '[compress H 100,100]',
+                    depth  = '[compress G 100,100; qz 0]',
+                    galdepth = '[compress G 100,100; qz 0]',
             ).get(filetype)
 
     def write_output(self, filetype, hashsum=True, **kwargs):
