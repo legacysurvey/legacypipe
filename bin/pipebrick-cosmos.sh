@@ -18,7 +18,7 @@ export MKL_NUM_THREADS=1
 brick="$1"
 subset="$2"
 
-outdir=$CSCRATCH/cosmos-${subset}-dr5
+outdir=$CSCRATCH/cosmos-dr5-${subset}
 
 bri=$(echo $brick | head -c 3)
 mkdir -p $outdir/logs/$bri

@@ -232,9 +232,12 @@ def stage_tims(W=3600, H=3600, pixscale=0.262, brickname=None,
     print('Applying CCD cuts...')
     ccds.ccd_cuts = survey.ccd_cuts(ccds)
     cutvals = ccds.ccd_cuts
-    if use_blacklist:
+    print('CCD cut bitmask values:', cutvals)
+    if not use_blacklist:
         bits = LegacySurveyData.ccd_cut_bits
         cutvals = cutvals & ~bits['BLACKLIST']
+        print('Not blacklisting; un-setting bit value', bits['BLACKLIST'],
+              '->', cutvals)
     ccds.cut(cutvals == 0)
     print(len(ccds), 'CCDs survive cuts')
 
