@@ -60,6 +60,8 @@ export MKL_NUM_THREADS=1
 export OMP_NUM_THREADS=1
 srun -n $tasks -c 1 python legacyccds/legacy_zeropoints_mpiwrapper.py \
      --image_list ${imagelist} --outdir ${outdir} --nproc $tasks
+## Up to date working command:
+#srun -n 80 -c 1 python legacyccds/legacy_zeropoints_mpiwrapper.py --camera decam --image_list bricks25_remain.txt --outdir $CSCRATCH/dr5_zpts --nproc 80
 date
 
 

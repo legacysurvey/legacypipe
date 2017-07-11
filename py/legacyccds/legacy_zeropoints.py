@@ -1737,7 +1737,8 @@ class outputFns(object):
         elif camera == '90prime': 
             proj_name= 'bok'
         proj_dir= '/project/projectdirs/cosmo/staging/%s/' % proj_name
-        root= imgfn_proj.replace(proj_dir,'')
+        proja_dir= '/global/projecta/projectdirs/cosmo/staging/%s/' % proj_name
+        root= imgfn_proj.replace(proj_dir,'').replace(proja_dir,'')
         # Names
         dr= os.path.join(outdir,camera,root)
         # Image fn that will be on SCRATCH
@@ -1746,13 +1747,6 @@ class outputFns(object):
         base= dr.replace('.fits.fz','')
         self.zptfn= base + '-zpt.fits' #os.path.join(dr,'%s-zpt%s.fits' % (base,prefix))
         self.starfn= base + '-star.fits' #os.path.join(dr,'%s-star%s.fits' % (base,prefix))
-
-def get_output_fns(img_fn,prefix=''):
-    zptsfile= os.path.dirname(img_fn).replace('/project/projectdirs','/scratch2/scratchdirs/kaylanb')
-    zptsfile= os.path.join(zptsfile,'zpts/','%szeropoint-%s' % (prefix,os.path.basename(img_fn)))
-    zptsfile= zptsfile.replace('.fz','')
-    zptstarsfile = zptsfile.replace('.fits','-stars.fits')
-    return zptsfile,zptstarsfile
 
 def success(ccds, **measureargs):
     num_ccds= dict(decam=60,mosaic=4)
