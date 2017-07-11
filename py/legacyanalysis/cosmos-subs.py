@@ -260,12 +260,18 @@ exposures = [
     524713, 524714, 524716, # z, p2 (seeing 1.26)
     180585, 420730, 395347, # z, p2 (seeing 1.32)
     413981, 395345, 176837, # z, p2 (seeing 1.4)
-    179973, 176845, 193204, # z, p2 (seeing 1.5)
-    193180, 192768, 453883, # z, p2 (seeing 1.6)
-    179975, 413978, 453884, # z, p2 (seeing 1.7)
+    # 179973, 176845, 193204, # z, p2 (seeing 1.5) (old 67)
+    # 193180, 192768, 453883, # z, p2 (seeing 1.6) (old 68)
+    # 179975, 413978, 453884, # z, p2 (seeing 1.7) (old 69)
+    176844, 453882, 176845, # z, p2 (seeing 1.5)   (new 67)
+    193204, 193180, 192768, # z, p2 (seeing 1.6)   (new 68)
+    453883, 413978, 453884, # z, p2 (seeing 1.7)   (new 69)
 
     # z, p3
     ]
+# BAD exposures (nasty background gradient)
+# 179971 through 179975
+
 
 
 # Pull out our exposures into table E.
