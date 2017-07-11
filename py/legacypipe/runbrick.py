@@ -456,7 +456,7 @@ def stage_tims(W=3600, H=3600, pixscale=0.262, brickname=None,
 
 def make_depth_cut(survey, ccds, bands, targetrd, brick, W, H, pixscale,
                    plots, ps, splinesky, gaussPsf, pixPsf, do_calibs,
-                   gitver, targetwcs):
+                   gitver, targetwcs, get_depth_maps=False):
     from legacypipe.survey import wcs_for_brick
     from collections import Counter
 
@@ -492,6 +492,8 @@ def make_depth_cut(survey, ccds, bands, targetrd, brick, W, H, pixscale,
     pixscale = 3600. * np.sqrt(np.abs(ccds.cd1_1*ccds.cd2_2 - ccds.cd1_2*ccds.cd2_1))
     seeing = ccds.fwhm * pixscale
 
+    depthmaps = []
+
     # Compute the rectangle in *coarsewcs* covered by each CCD
     slices = []
     for ccd in ccds:
@@ -521,6 +523,7 @@ def make_depth_cut(survey, ccds, bands, targetrd, brick, W, H, pixscale,
 
         depthiv = np.zeros((cH,cW), np.float32)
         depthmap = np.zeros_like(depthiv)
+        depthvalue = np.zeros_like(depthiv)
         last_pcts = np.zeros_like(target_depths)
         # indices of CCDs we still want to look at in the current band
         b_inds = np.where(ccds.filter == band)[0]
@@ -553,7 +556,7 @@ def make_depth_cut(survey, ccds, bands, targetrd, brick, W, H, pixscale,
                 # The value is the depth still required to hit the
                 # target, summed over percentiles of interest
                 # (for pixels unique to this brick)
-                depthvalue = np.zeros(depthmap.shape, np.float32)
+                depthvalue[:,:] = 0.
                 active = (last_pcts < target_depths)
                 for d,pct in zip(target_depths[active], last_pcts[active]):
                     #print('target percentile depth', d, 'has depth', pct)
@@ -564,7 +567,7 @@ def make_depth_cut(survey, ccds, bands, targetrd, brick, W, H, pixscale,
                     # mean -- we want the most bang for the buck per pixel?
                     ccdvalue[j] = np.mean(depthvalue[slices[i]])
                 metric *= ccdvalue
-                    
+
                 # *ibest* is an index into b_inds
                 ibest = np.argmax(metric)
                 # *iccd* is an index into ccds.
@@ -590,7 +593,7 @@ def make_depth_cut(survey, ccds, bands, targetrd, brick, W, H, pixscale,
                 if splinesky:
                     kwa.update(splinesky=True)
                 im.run_calibs(**kwa)
-            
+
             wcs = im.get_wcs()
             x0,x1,y0,y1,slc = im.get_image_extent(wcs=wcs, radecpoly=targetrd)
             if x0==x1 or y0==y1:
@@ -618,17 +621,13 @@ def make_depth_cut(survey, ccds, bands, targetrd, brick, W, H, pixscale,
             h,w = 50,50
             gal = SimpleGalaxy(PixPos(w//2,h//2), Flux(1.))
             tim = Image(data=np.zeros((h,w), np.float32),
-                        psf=psf,
-                        wcs=NullWCS(pixscale=im.pixscale))
+                        psf=psf, wcs=NullWCS(pixscale=im.pixscale))
             mm = ModelMask(0, 0, w, h)
             galmod = gal.getModelPatch(tim, modelMask=mm).patch
             galmod = np.maximum(0, galmod)
             galmod /= galmod.sum()
             galnorm = np.sqrt(np.sum(galmod**2))
-
             detiv = 1. / (skysig1 / galnorm)**2
-
-            #print('Sig1', skysig1, 'Galnorm', galnorm)
             galdepth = -2.5 * (np.log10(5. * skysig1 / galnorm) - 9.)
             print('Galdepth for this CCD:', galdepth)
 
@@ -640,10 +639,9 @@ def make_depth_cut(survey, ccds, bands, targetrd, brick, W, H, pixscale,
             except OverlapError:
                 print('No overlap')
                 continue
-
             depthiv[Yo,Xo] += detiv
 
-            # compute the new depth histogram (percentiles)
+            # compute the new depth map & percentiles (including the proposed new CCD)
             depthmap[:,:] = 0.
             depthmap[depthiv > 0] = 22.5 - 2.5*np.log10(5./np.sqrt(depthiv[depthiv > 0]))
             depthpcts = np.percentile(depthmap[U], target_percentiles)
@@ -685,10 +683,6 @@ def make_depth_cut(survey, ccds, bands, targetrd, brick, W, H, pixscale,
                 ax = plt.axis()
                 for (xx,yy,cc) in [p[0] for p in plot_vals]:
                     plt.plot(xx,yy, '-', color=cc, lw=3)
-                # cc = '1' if keep else '0'
-                # plt.plot([Xo.min(), Xo.min(), Xo.max(), Xo.max(), Xo.min()],
-                #          [Yo.min(), Yo.max(), Yo.max(), Yo.min(), Yo.min()],
-                #          '-', color=cc, lw=3)
                 plt.axis(ax)
                 plt.xticks([]); plt.yticks([])
                 plt.colorbar()
@@ -698,9 +692,6 @@ def make_depth_cut(survey, ccds, bands, targetrd, brick, W, H, pixscale,
                 ax = plt.gca()
                 plt.plot(target_percentiles, target_depths, 'ro', label='Target')
                 plt.plot(target_percentiles, target_depths, 'r-')
-                #plt.plot(target_percentiles, last_pcts, 'k-', label='Previous percentiles')
-                #plt.plot(target_percentiles, depthpcts, 'b-', label='Depth percentiles')
-
                 for (lp,dp,k) in [p[1] for p in plot_vals]:
                     plt.plot(target_percentiles, lp, 'k-',
                              label='Previous percentiles')
@@ -708,9 +699,7 @@ def make_depth_cut(survey, ccds, bands, targetrd, brick, W, H, pixscale,
                     cc = 'b' if k else 'r'
                     plt.plot(target_percentiles, dp, '-', color=cc,
                              label='Depth percentiles')
-
                 ccdnames = ','.join([p[2] for p in plot_vals])
-
                 plot_vals = []
 
                 plt.ylim(target_depth - 2, target_depth + 0.5)
@@ -718,14 +707,9 @@ def make_depth_cut(survey, ccds, bands, targetrd, brick, W, H, pixscale,
                 plt.xlabel('Percentile')
                 plt.ylabel('Depth')
                 plt.title('depth percentiles')
-                # imgstr = '%s %i-%s, exptime %.0f, seeing %.2f, band %s' % (im.camera, im.expnum, im.ccdname, im.exptime, im.pixscale * im.fwhm, band)
-                # if keep:
-                #     plt.suptitle('Keeping: ' + imgstr)
-                # else:
-                #     plt.suptitle('Not keeping: ' + imgstr)
-                imgstr = '%s %i-%s, exptime %.0f, seeing %.2f, band %s' % (im.camera, im.expnum, ccdnames, im.exptime, im.pixscale * im.fwhm, band)
-                plt.suptitle(imgstr)
-
+                plt.suptitle('%s %i-%s, exptime %.0f, seeing %.2f, band %s' %
+                             (im.camera, im.expnum, ccdnames, im.exptime,
+                              im.pixscale * im.fwhm, band))
                 ps.savefig()
 
             if not keep:
@@ -739,6 +723,13 @@ def make_depth_cut(survey, ccds, bands, targetrd, brick, W, H, pixscale,
             if np.all(depthpcts >= target_depths):
                 print('Reached all target depth percentiles for band', band)
                 break
+
+        if get_depth_maps:
+            if np.any(depthiv > 0):
+                depthmap[:,:] = 0.
+                depthmap[depthiv > 0] = 22.5 -2.5*np.log10(5./np.sqrt(depthiv[depthiv > 0]))
+                depthmap[np.logical_not(U)] = np.nan
+                depthmaps.append((band, depthmap.copy()))
 
         if plots:
             I = np.where(ccds.filter == band)[0]
@@ -755,6 +746,8 @@ def make_depth_cut(survey, ccds, bands, targetrd, brick, W, H, pixscale,
             plt.ylim(0, np.max(ccds.exptime[I]) * 1.1)
             ps.savefig()
 
+    if get_depth_maps:
+        return (keep_ccds, depthmaps)
     return keep_ccds
 
 def stage_mask_junk(tims=None, targetwcs=None, W=None, H=None, bands=None,

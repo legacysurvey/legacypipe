@@ -2,6 +2,7 @@ from __future__ import print_function
 
 import os
 import numpy as np
+import fitsio
 from astrometry.libkd.spherematch import match_radec
 from astrometry.util.multiproc import multiproc
 from legacypipe.survey import LegacySurveyData, get_git_version, wcs_for_brick
@@ -27,9 +28,13 @@ def main():
     bricks.cut(I)
 
     # qdo
+    bb = bricks.brickname
+    while len(bb):
+        print(' '.join(bb[:100]))
+        bb = bb[100:]
     # for b in bricks.brickname:
     #     print(b)
-    # return
+    return
 
     N = len(bricks)
     args = [(brick, i, N) for i,brick in enumerate(bricks)]
@@ -88,9 +93,10 @@ def run_one_brick(X):
     do_calibs = False
 
     try:
-        I = make_depth_cut(survey, bccds, bands, targetrd, brick, W, H, pixscale,
-                           plots, ps, splinesky, gaussPsf, pixPsf, do_calibs,
-                           gitver, targetwcs)
+        I,depthmaps = make_depth_cut(
+            survey, bccds, bands, targetrd, brick, W, H, pixscale,
+            plots, ps, splinesky, gaussPsf, pixPsf, do_calibs,
+            gitver, targetwcs, get_depth_maps=True)
     except:
         print('Failed to make_depth_cut():')
         import traceback
@@ -111,12 +117,70 @@ def run_one_brick(X):
             pass
     bccds.writeto(outfn)
     print('Wrote', outfn)
+
+    for band,depthmap in depthmaps:
+        outfn = os.path.join(dirnm, 'depth-%s-%s.fits' % (brick.brickname, band))
+
+        hdr = fitsio.FITSHDR()
+        # Plug the WCS header cards into these images
+        targetwcs.add_to_header(hdr)
+        hdr.delete('IMAGEW')
+        hdr.delete('IMAGEH')
+        hdr.add_record(dict(name='EQUINOX', value=2000.))
+        hdr.add_record(dict(name='FILTER', value=band))
+
+        fitsio.write(outfn, depthmap, header=hdr)
+        print('Wrote', outfn)
+
     return 0
 
 if __name__ == '__main__':
     print('Starting')
     import sys
     args = sys.argv[1:]
+
+    if len(args) == 1 and args[0] == 'qdo':
+        import qdo
+        #... find Queue...
+        qname = 'depth'
+        q = qdo.connect(qname)
+        print('Connected to QDO queue', qname, q)
+
+        survey = LegacySurveyData()
+
+        while True:
+            task = q.get(timeout=10)
+            if task is None:
+                break
+            try:
+                print('Task:', task.task)
+
+                brickname = task.task
+                print('Checking for existing out file')
+                # shortcut
+                dirnm = os.path.join('depthcuts', brickname[:3])
+                outfn = os.path.join(dirnm, 'ccds-%s.fits' % brickname)
+                if os.path.exists(outfn):
+                    print('Exists:', outfn)
+                    continue
+                print('Getting brick', brickname)
+                brick = survey.get_brick_by_name(brickname)
+                print('Got brick, running depth cut')
+                rtn = run_one_brick((brick, 0, 1))
+                if rtn != 0:
+                    allgood = rtn
+                print('Done, result', rtn)
+                if rtn == 0:
+                    task.set_state(qdo.Task.SUCCEEDED)
+                else:
+                    task.set_state(qdo.Task.FAILED, err=1)
+            except:
+                import traceback
+                traceback.print_exc()
+                task.set_state(qdo.Task.FAILED, err=1)
+        sys.exit(0)
+
+
     if len(args):
         allgood = 0
         print('Creating survey object')
