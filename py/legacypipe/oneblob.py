@@ -1085,7 +1085,102 @@ class OneBlob(object):
             tim.meta = imobj
             tims.append(tim)
         return tims
-    
+
+    def run_deblend(self, cat):
+        ras  = np.array([src.pos.ra  for src in cat])
+        decs = np.array([src.pos.dec for src in cat])
+        ok,x,y = self.blobwcs.radec2pixelxy(ras, decs)
+        x -= 1
+        y -= 1
+        Xi = np.round(x).astype(int)
+        Yi = np.round(y).astype(int)
+
+        # Combine the bands to make a single deblending profile...
+        # What weighting to use though?  Median S/N?
+        # Straight per-pixel weight?  (That's like flat-spectrum assumptn)
+        # (this is like [sed-matched] detection...)
+        coimgs,cons,cowimgs,wimgs = quick_coadds(
+            self.tims, self.bands, self.blobwcs, get_cow=True,
+            fill_holes=False)
+        #wts = [np.median(wt[wt > 0]) for wt in wimgs]
+        #print('Median weights:', wts)
+        bimg = np.zeros_like(cowimgs[0])
+        bwt  = np.zeros_like(cowimgs[0])
+        for im,wt in zip(cowimgs,wimgs):
+            bimg += wt * im
+            bwt  += wt
+        bimg /= np.maximum(1e-16, bwt)
+        sig1 = 1. / np.sqrt(np.median(wt[wt > 0]))
+
+        if self.plots:
+            plt.clf()
+            ima = dict(vmin=-2.*sig1, vmax=5.*sig1)
+            dimshow(bimg, **ima)
+            plt.title('Deblend -- merged bands')
+            self.ps.savefig()
+            ax = plt.axis()
+            plt.plot(Xi, Yi, 'r.')
+            plt.axis(ax)
+            self.ps.savefig()
+            self.deb_ima = ima
+
+        # size of region to use as postage stamp for deblending
+        sz = 32
+        h,w = bimg.shape
+
+        profiles = []
+        allprofiles = np.zeros_like(bimg)
+        for isrc,(xi,yi) in enumerate(zip(Xi,Yi)):
+            dx = min(sz, min(xi, w-1-xi))
+            dy = min(sz, min(yi, h-1-yi))
+            x0,y0 = xi - dx, yi - dy
+            slc = slice(y0, yi + dy+1), slice(x0, xi + dx+1)
+            subimg = bimg[slc]
+            subwt =   bwt[slc]
+            flipped = np.fliplr(np.flipud(subimg))
+            flipwt  = np.fliplr(np.flipud(subwt))
+            minimg = subimg.copy()
+            # Mirror the blob boundaries
+            submask = self.blobmask[slc]
+            flipmask = np.fliplr(np.flipud(submask))
+
+            I = np.flatnonzero((flipwt > 0) * (flipped < subimg))
+            minimg.flat[I] = flipped.flat[I]
+            minimg[flipmask == False] = 0
+
+            # Correct for min() bias for two Gaussians.  This isn't
+            # really the right way to do this
+            minimg[subwt > 0] += 0.545 * np.sqrt(1. / subwt[subwt > 0])
+            # And this is *really* a hack
+            minimg = np.maximum(0, minimg)
+
+            patch = Patch(x0, y0, minimg)
+            profiles.append(patch)
+            patch.addTo(allprofiles)
+
+            # if self.plots:
+            #     plt.clf()
+            #     plt.subplot(2,3,1)
+            #     dimshow(subimg, **ima)
+            #     plt.subplot(2,3,2)
+            #     dimshow(flipped, **ima)
+            #     #plt.subplot(2,3,3)
+            #     #dimshow(goodpix, vmin=0, vmax=1)
+            #     plt.subplot(2,3,4)
+            #     dimshow(minimg, **ima)
+            #     plt.subplot(2,3,5)
+            #     dimshow(allprofiles, **ima)
+            #     self.ps.savefig()
+
+        if self.plots:
+            plt.clf()
+            dimshow(allprofiles, **ima)
+            plt.title('Deblend -- sum of profiles')
+            self.ps.savefig()
+
+        self.deb_profiles = profiles
+        self.deb_prosum = allprofiles
+
     # if plots:
     #         try:
     #             Yo,Xo,Yi,Xi,rims = resample_with_wcs(blobwcs, subwcs,[],2)
@@ -1168,7 +1263,7 @@ def _compute_invvars(allderivs):
             chisq += (chi**2).sum()
         ivs.append(chisq)
     return ivs
-    
+
 def _argsort_by_brightness(cat, bands):
     fluxes = []
     for src in cat:
