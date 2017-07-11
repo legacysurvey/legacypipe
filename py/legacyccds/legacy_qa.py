@@ -2615,10 +2615,12 @@ class ZeropointHistograms(object):
         if self.mosaic:
             self.mosaic= fits_table(self.mosaic)
         self.add_keys()
-        #self.plot_hist_1d()
+        self.plot_hist_1d()
         #self.plot_2d_scatter()
-        self.plot_astro_photo_scatter()
+        #self.plot_astro_photo_scatter()
         #self.plot_hist_depth()
+        self.print_ccds_table()
+        self.print_requirements_table()
    
     def add_keys(self):
         if self.decam:
@@ -2687,7 +2689,7 @@ class ZeropointHistograms(object):
         xlim_dict=defaultdict(lambda: xlim)
         xlim_dict['skymag']= (16,22.5)
         xlim_dict['skyrms']= (0,1.5)
-        xlim_dict['zpt']= (25.5,27.2)
+        xlim_dict['zpt']= (26.,27.)
         xlim_dict['airmass']= (0.9,2.5)
         xlim_dict['transp']= (0.6,1.1)
         xlim_dict['gain']= (0,5)
@@ -2697,11 +2699,28 @@ class ZeropointHistograms(object):
         xlim_dict['galdepth']= (21,25)
         return xlim_dict      
 
+    def get_fiducial(self,key,camera,band):
+        assert(camera in ['decam','mosaic'])
+        d= {}
+        X0, see0= 1.3, 1.3
+        if camera == 'decam':
+            d['zpt']= dict(g=26.610, r=26.818, z=26.484) # e/s
+            d['skymag']= dict(g=22.04, r=20.91, z=18.46)
+            d['airmass']= dict(g=X0,r=X0,z=X0) #arcsec
+            d['seeing']= dict(g=see0,r=see0,z=see0) #arcsec
+        elif camera == 'mosaic':
+            d['zpt']= dict(z=26.552) # e/s
+            d['skymag']= dict(z=18.46)
+            d['airmass']= dict(z=X0) #arcsec
+            d['seeing']= dict(z=see0) #arcsec
+        return d[key][band]
+
     def plot_hist_1d(self):
         # All keys and any ylims to use
         cols= self.get_numeric_keys()
         ylim= self.get_defaultdict_ylim()
         xlim= self.get_defaultdict_xlim()
+        fiducial_keys= ['seeing','zpt','skymag','airmass']
         # Plot
         FS=14
         eFS=FS+5
@@ -2719,6 +2738,10 @@ class ZeropointHistograms(object):
                     myhist_step(ax,self.decam.get(key)[keep], bins=bins,normed=True,
                                 color=band2color(band),ls='solid',
                                 label='%s (DECam, %d)' % (band,len(self.decam.get(key)[keep])))
+                    if key in fiducial_keys:
+                        ax.axvline(self.get_fiducial(key,'decam',band),
+                                   c=band2color(band),ls='dotted',lw=1) 
+                    
             # mosaic
             if self.mosaic:
                 for band in set(self.mosaic.filter):
@@ -2726,6 +2749,12 @@ class ZeropointHistograms(object):
                     myhist_step(ax,self.mosaic.get(key)[keep], bins=bins,normed=True,
                                 color=band2color(band),ls='dashed',
                                 label='%s (Mosaic3, %d)' % (band,len(self.decam.get(key)[keep])))
+                    if key in fiducial_keys:
+                        ls= 'dotted'
+                        if key == 'zpt':
+                            ls= 'dashed'
+                        ax.axvline(self.get_fiducial(key,'mosaic',band),
+                                   c=band2color(band),ls=ls,lw=1) 
             # Label
             ylab=ax.set_ylabel('PDF',fontsize=FS)
             ax.tick_params(axis='both', labelsize=tickFS)
@@ -2925,6 +2954,88 @@ class ZeropointHistograms(object):
         plt.savefig(savefn, bbox_extra_artists=[xlab,ylab], bbox_inches='tight')
         plt.close() 
         print "wrote %s" % savefn 
+
+    def print_ccds_table(self):
+        print('CCDS TABLE')
+        print('statistic & units & DECam g & DECam r & DECam z & Mzls z')
+        for col in ['skycounts','skyrms','skymag','zpt','transp','seeing','airmass','phoff','rarms','decrms']:
+            if col in ['phoff','rarms','decrms']:
+                # has an uncertainty
+                # Assume we have decam
+                text= '& %s & units & %.2f(%.2f) & %.2f(%.2f) & %.2f(%.2f)' % \
+                        (col,np.median( self.decam.get(col)[self.decam.filter == 'g'] ),
+                                np.std( self.decam.get(col)[self.decam.filter == 'g'] ),
+                             np.median( self.decam.get(col)[self.decam.filter == 'r'] ),
+                                np.std( self.decam.get(col)[self.decam.filter == 'r'] ),
+                             np.median( self.decam.get(col)[self.decam.filter == 'z'] ),
+                                np.std( self.decam.get(col)[self.decam.filter == 'z'] )
+                        )
+                if self.mosaic:
+                    text= text + ' & %.2f(%.2f) \\\\' % \
+                            (np.median( self.mosaic.get(col)[self.mosaic.filter == 'z'] ),
+                                np.std( self.mosaic.get(col)[self.mosaic.filter == 'z'] )
+                            )
+                else:
+                    text= text + ' & --(--) \\\\' 
+                print(text)
+            else:
+                # No error computed
+                # Assume we have decam
+                text= '& %s & units & %.2f & %.2f & %.2f' % \
+                        (col,np.median( self.decam.get(col)[self.decam.filter == 'g'] ),
+                             np.median( self.decam.get(col)[self.decam.filter == 'r'] ),
+                             np.median( self.decam.get(col)[self.decam.filter == 'z'] )
+                        )
+                if self.mosaic:
+                    text= text +  ' & %.2f  \\\\' % \
+                            (np.median( self.mosaic.get(col)[self.mosaic.filter == 'z'] ),
+                            )
+                else:
+                    text= text +  ' & --  \\\\'  
+                print(text)
+
+    def print_requirements_table(self):
+        print('DESI REQUIREMENTS TABLE')
+        print('camera & band & q10 & q10 & astrometric offset err & zeropoint err')
+        phrms= dict(g=0.01,r=0.01,z=0.02)
+        depth_obj= DepthRequirements()
+        need_cols= ['psfdepth_extcorr','galdepth_extcorr',
+                    'err_on_radecoff','err_on_phoff']
+        for band in ['g','r','z']:
+            keep= (self.decam.filter == band)
+            for col in need_cols:
+                keep *= (np.isfinite(self.decam.get(col)))
+            p1_depth_psf= depth_obj.get_single_pass_depth(band,'psf','decam')
+            p1_depth_gal= depth_obj.get_single_pass_depth(band,'gal','decam')
+            print('DECam & %s & %.2f | %.2f & %.2f | %.2f & %.3f | %.3f & %.3f | %.3f  \\\\' % \
+                    (band,np.percentile( self.decam.psfdepth_extcorr[keep], q=10),
+                            p1_depth_psf,
+                          np.percentile( self.decam.galdepth_extcorr[keep], q=10),
+                            p1_depth_gal,
+                          np.median( self.decam.err_on_radecoff[keep]),
+                            0.030,
+                          np.median( self.decam.err_on_phoff[keep]),
+                            phrms[band],
+                    ))
+        if self.mosaic:
+            for band in ['z']:
+                keep= self.mosaic.filter == band
+                for col in need_cols:
+                    keep *= (np.isfinite(self.mosaic.get(col)))
+                p1_depth_psf= depth_obj.get_single_pass_depth(band,'psf','mosaic')
+                p1_depth_gal= depth_obj.get_single_pass_depth(band,'gal','mosaic')
+                print('MOSAIC-3 & %s & %.2f | %.2f & %.2f | %.2f & %.3f | %.3f & %.3f | %.3f  \\\\' % \
+                        (band,np.percentile( self.mosaic.psfdepth_extcorr[keep], q=10),
+                                p1_depth_psf,
+                              np.percentile( self.mosaic.galdepth_extcorr[keep], q=10),
+                                p1_depth_gal,
+                              np.median( self.mosaic.err_on_radecoff[keep]),
+                                0.030,
+                              np.median( self.mosaic.err_on_phoff[keep]),
+                                phrms[band],
+                        ))
+
+
 
 
 
