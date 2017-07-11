@@ -473,8 +473,8 @@ def make_depth_cut(survey, ccds, bands, targetrd, brick, W, H, pixscale,
                                   list(range(10, 30, 5)) +
                                   list(range(30, 101, 10)))
     target_ddepths = np.zeros(len(target_percentiles), np.float32)
-    target_ddepths[target_percentiles <= 5] = -0.3
-    target_ddepths[target_percentiles <= 2] = -0.6
+    target_ddepths[target_percentiles < 10] = -0.3
+    target_ddepths[target_percentiles <  5] = -0.6
     #print('Target percentiles:', target_percentiles)
     #print('Target ddepths:', target_ddepths)
 
