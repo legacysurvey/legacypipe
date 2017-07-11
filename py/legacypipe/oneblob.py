@@ -189,7 +189,6 @@ class OneBlob(object):
         #     cat.thawAllParams()
         #     #print('Optimizing:', tr)
         #     #tr.printThawedParams()
-        #     flags |= FLAG_TRIED_C
         #     max_cpu = 300.
         #     cpu0 = time.clock()
         #     for step in range(50):
@@ -197,7 +196,6 @@ class OneBlob(object):
         #         cpu = time.clock()
         #         if cpu-cpu0 > max_cpu:
         #             print('Warning: Exceeded maximum CPU time for source')
-        #             flags |= FLAG_CPU_C
         #             break
         #         if dlnp < 0.1:
         #             break
@@ -263,11 +261,9 @@ class OneBlob(object):
         # print('Subtracting initial models:', Time()-tt)
 
         N = len(cat)
-        B.flags = np.zeros(N, np.uint16)
         B.dchisqs = np.zeros((N, 5), np.float32)
         B.all_models        = np.array([{} for i in range(N)])
         B.all_model_ivs     = np.array([{} for i in range(N)])
-        B.all_model_flags   = np.array([{} for i in range(N)])
         B.all_model_cpu     = np.array([{} for i in range(N)])
             
         # Model selection for sources, in decreasing order of brightness
@@ -446,7 +442,6 @@ class OneBlob(object):
             else:
                 trymodels.extend([('dev', dev), ('exp', exp), ('comp', comp)])
 
-            allflags = {}
             cputimes = {}
             for name,newsrc in trymodels:
                 cpum0 = time.clock()
@@ -514,17 +509,13 @@ class OneBlob(object):
                     self.ps.savefig()
                     
                 # First-round optimization (during model selection)
-                thisflags = 0
                 #print('Optimizing: first round for', name, ':', len(srctims))
-                #print('  exposure times:',
-                #      [(tim.meta.exptime,tim.band) for tim in srctims])
                 #print(newsrc)
                 cpustep0 = time.clock()
                 srctractor.optimize_loop(**self.optargs)
                 #print('Optimizing first round', name, 'took',
                 #      time.clock()-cpustep0)
                 #print(newsrc)
-
                 # print('Mod', name, 'round1 opt', Time()-t0)
                 #print('Mod selection: after first-round opt:', newsrc)
     
@@ -594,7 +585,6 @@ class OneBlob(object):
                     enable_galaxy_cache()
     
                     modtractor.optimize_loop(maxcpu=60., **self.optargs)
-                    # FIXME -- thisflags |= FLAG_STEPS_B
                     #print('Mod selection: after second-round opt:', newsrc)
 
                     if self.plots1:
@@ -658,7 +648,6 @@ class OneBlob(object):
                 ch = _per_band_chisqs(srctractor, self.bands)
                     
                 chisqs[name] = _chisq_improvement(newsrc, ch, chisqs_none)
-                B.all_model_flags[srci][name] = thisflags
                 cpum1 = time.clock()
                 B.all_model_cpu[srci][name] = cpum1 - cpum0
                 cputimes[name] = cpum1 - cpum0
@@ -793,7 +782,6 @@ class OneBlob(object):
                 self.ps.savefig()
     
             B.dchisqs[srci, :] = np.array([chisqs.get(k,0) for k in modnames])
-            B.flags[srci] = allflags.get(keepmod, 0)
             B.sources[srci] = keepsrc
             cat[srci] = keepsrc
     
