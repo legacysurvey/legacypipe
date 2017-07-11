@@ -125,13 +125,6 @@ class OneBlob(object):
         else:
             self.optargs.update(dchisq = 0.1)
 
-        # 50 CCDs is over 90th percentile of bricks in DR2.
-        self.many_exposures = len(timargs) >= 20
-        #self.many_exposures = len(timargs) >= 50
-        #PTF special handling len(timargs) >= 1000
-        if self.many_exposures:
-            print('Many exposures for blob', self.name)
-        
     def run(self, B):
         # Not quite so many plots...
         self.plots1 = self.plots
@@ -196,7 +189,6 @@ class OneBlob(object):
         #     cat.thawAllParams()
         #     #print('Optimizing:', tr)
         #     #tr.printThawedParams()
-        #     flags |= FLAG_TRIED_C
         #     max_cpu = 300.
         #     cpu0 = time.clock()
         #     for step in range(50):
@@ -204,7 +196,6 @@ class OneBlob(object):
         #         cpu = time.clock()
         #         if cpu-cpu0 > max_cpu:
         #             print('Warning: Exceeded maximum CPU time for source')
-        #             flags |= FLAG_CPU_C
         #             break
         #         if dlnp < 0.1:
         #             break
@@ -270,11 +261,9 @@ class OneBlob(object):
         # print('Subtracting initial models:', Time()-tt)
 
         N = len(cat)
-        B.flags = np.zeros(N, np.uint16)
         B.dchisqs = np.zeros((N, 5), np.float32)
         B.all_models        = np.array([{} for i in range(N)])
         B.all_model_ivs     = np.array([{} for i in range(N)])
-        B.all_model_flags   = np.array([{} for i in range(N)])
         B.all_model_cpu     = np.array([{} for i in range(N)])
             
         # Model selection for sources, in decreasing order of brightness
@@ -444,20 +433,15 @@ class OneBlob(object):
             trymodels = [('ptsrc', ptsrc), (simname, simple)]
     
             if oldmodel == 'ptsrc':
-                # Try galaxy models if simple > ptsrc, or if bright.
-                # The 'gals' model is just a marker
-                trymodels.extend([('gals', None)])
+                if self.hastycho:
+                    print('Not computing galaxy models: Tycho-2 star in blob')
+                else:
+                    # Try galaxy models if simple > ptsrc, or if bright.
+                    # The 'gals' model is just a marker
+                    trymodels.extend([('gals', None)])
             else:
                 trymodels.extend([('dev', dev), ('exp', exp), ('comp', comp)])
-    
-            # If lots of exposures, cut to a subset that reach the DECaLS
-            # depth goals and use those in an initial round?
-            if self.many_exposures:
-                dtims,insubset,dnames = self._get_todepth_subset(
-                    srctims, srcwcs, srcpix)
-                print('Many exposures: to-depth subset of', len(dtims),
-                      'images out of', len(srctims))
-            allflags = {}
+
             cputimes = {}
             for name,newsrc in trymodels:
                 cpum0 = time.clock()
@@ -467,14 +451,10 @@ class OneBlob(object):
                     # bright, try the galaxy models.
                     if ((chisqs[simname] > chisqs['ptsrc']) or
                         (chisqs['ptsrc'] > 400)):
-                        if self.hastycho:
-                            print('Not computing galaxy models: Tycho-2 star'
-                                  + ' in blob')
-                            continue
                         trymodels.extend([
                             ('dev', dev), ('exp', exp), ('comp', comp)])
                     continue
-    
+
                 if name == 'comp' and newsrc is None:
                     # Compute the comp model if exp or dev would be accepted
                     if (max(chisqs['dev'], chisqs['exp']) <
@@ -514,34 +494,6 @@ class OneBlob(object):
                 #     plt.title('Initial: ' + name)
                 #     self.ps.savefig()
     
-                if self.many_exposures:
-                    # Run a quick round of optimization with our
-                    # to-depth subset
-                    dmm = [m for m,isin in zip(modelMasks,insubset) if isin]
-                    dmm = remap_modelmask(dmm, src, newsrc)
-    
-                    dtractor = self.tractor(dtims, [newsrc])
-                    dtractor.setModelMasks(dmm)
-                    enable_galaxy_cache()
-                    cpustep0 = time.clock()
-                    #print('Optimizing to-depth first round for', name)
-                    #print(newsrc)
-                    dtractor.optimize_loop(**self.optargs)
-                    #print('Optimizing to-depth first round took',
-                    #      time.clock()-cpustep0)
-                    #print(newsrc)
-                    # print('Mod', name, 'round0 opt', Time()-t0)
-                    # print('New source (after to-depth round optimization):',
-                    #   newsrc)
-                    # if self.plots:
-                    #     plt.clf()
-                    #     modimgs = list(dtractor.getModelImages())
-                    #     comods,nil = quick_coadds(dtims, bands, srcwcs,
-                    #                                 images=modimgs)
-                    #     dimshow(get_rgb(comods, bands))
-                    #     plt.title('To-depth opt: ' + name)
-                    #     self.ps.savefig()
-
                 if self.deblend:
                     debtractor.setModelMasks(mm)
                     enable_galaxy_cache()
@@ -557,17 +509,13 @@ class OneBlob(object):
                     self.ps.savefig()
                     
                 # First-round optimization (during model selection)
-                thisflags = 0
                 #print('Optimizing: first round for', name, ':', len(srctims))
-                #print('  exposure times:',
-                #      [(tim.meta.exptime,tim.band) for tim in srctims])
                 #print(newsrc)
                 cpustep0 = time.clock()
                 srctractor.optimize_loop(**self.optargs)
                 #print('Optimizing first round', name, 'took',
                 #      time.clock()-cpustep0)
                 #print(newsrc)
-
                 # print('Mod', name, 'round1 opt', Time()-t0)
                 #print('Mod selection: after first-round opt:', newsrc)
     
@@ -632,41 +580,13 @@ class OneBlob(object):
                 #print('Mod selection: after second-round opt:', newsrc)
 
                 if modtims is not None:
-
-                    if self.many_exposures:
-                        #print('insubset:', insubset)
-                        mdtims = [tim for tim in modtims if tim.name in dnames]
-                        dmm = [m for m,tim in zip(mm,modtims) if tim.name in dnames]
-                        #print('Selected mdtims:', [tim.name for tim in mdtims])
-                        dtractor = self.tractor(mdtims, [newsrc])
-                        dtractor.setModelMasks(dmm)
-                        enable_galaxy_cache()
-                        cpustep0 = time.clock()
-                        #print('Optimizing to-depth second round for', name)
-                        #print(newsrc)
-                        dtractor.optimize_loop(**self.optargs)
-                        #print('Optimizing to-depth second round', name, 'took',
-                        #      time.clock()-cpustep0)
-                        #print(newsrc)
-
-                        if self.plots:
-                            self._plot_coadd(mdtims, self.blobwcs)
-                            plt.title('second round to-depth')
-                            self.ps.savefig()
-
-                            self._plot_coadd(mdtims, self.blobwcs,
-                                             model=dtractor)
-                            plt.title('second round to-depth: model %s' % name)
-                            self.ps.savefig()
-                    
                     modtractor = self.tractor(modtims, [newsrc])
                     modtractor.setModelMasks(mm)
                     enable_galaxy_cache()
     
                     modtractor.optimize_loop(maxcpu=60., **self.optargs)
-                    # FIXME -- thisflags |= FLAG_STEPS_B
                     #print('Mod selection: after second-round opt:', newsrc)
-                    
+
                     if self.plots1:
                         plt.clf()
                         modimgs = list(modtractor.getModelImages())
@@ -728,7 +648,6 @@ class OneBlob(object):
                 ch = _per_band_chisqs(srctractor, self.bands)
                     
                 chisqs[name] = _chisq_improvement(newsrc, ch, chisqs_none)
-                B.all_model_flags[srci][name] = thisflags
                 cpum1 = time.clock()
                 B.all_model_cpu[srci][name] = cpum1 - cpum0
                 cputimes[name] = cpum1 - cpum0
@@ -863,7 +782,6 @@ class OneBlob(object):
                 self.ps.savefig()
     
             B.dchisqs[srci, :] = np.array([chisqs.get(k,0) for k in modnames])
-            B.flags[srci] = allflags.get(keepmod, 0)
             B.sources[srci] = keepsrc
             cat[srci] = keepsrc
     
@@ -877,91 +795,6 @@ class OneBlob(object):
 
         models.restore_images(self.tims)
         del models
-        
-    def _get_todepth_subset(self, srctims, srcwcs, srcpix):
-        timsubset = set()
-        for band in self.bands:
-            # Order to try them: first, DECaLS data (our propid),
-            # then in point-source depth (* npix?) order.
-            otims = []
-            value = []
-            for tim in srctims:
-                if tim.band != band:
-                    continue
-                otims.append(tim)
-
-                detsig1 = tim.sig1 / tim.meta.galnorm
-                tim.detiv1 = 1./detsig1**2
-                h,w = tim.shape
-                propid = tim.meta.propid
-                value.append((propid == DECALS_PROPID) * 1e12 +
-                             tim.detiv1 * h*w)
-
-            t1,t2,t3 = dict(g=(24.0, 23.7, 23.4),
-                            r=(23.4, 23.1, 22.8),
-                            z=(22.5, 22.2, 21.9))[band]
-            Nsigma = 5.
-            sig = NanoMaggies.magToNanomaggies(t1) / Nsigma
-            target1 = 1./sig**2
-            sig = NanoMaggies.magToNanomaggies(t2) / Nsigma
-            target2 = 1./sig**2
-            sig = NanoMaggies.magToNanomaggies(t3) / Nsigma
-            target3 = 1./sig**2
-
-            detiv = np.zeros(srcwcs.shape, np.float32)
-            I = np.argsort(-np.array(value))
-            for cnt in I:
-                tim = otims[cnt]
-                try:
-                    Yo,Xo,Yi,Xi,nil = resample_with_wcs(
-                        srcwcs, tim.subwcs, [], 2)
-                except:
-                    continue
-                if len(Yo) == 0:
-                    continue
-                detiv[Yo,Xo] += tim.detiv1
-                timsubset.add(tim.name)
-
-                print('Tim:', tim.name, 'exptime', tim.meta.exptime,
-                      'FWHM', tim.meta.fwhm)
-                print('Tim: detiv', tim.detiv1, 'depth mag',
-                      NanoMaggies.nanomaggiesToMag(np.sqrt(1./tim.detiv1)
-                                                   * Nsigma))
-                print('overlapping pixels:', len(Yo))
-
-                # Hit DECaLS depth targets?
-                pctiles = [100-90, 100-95, 100-98]
-                if srcpix is None:
-                    p1,p2,p3 = np.percentile(detiv, pctiles)
-                else:
-                    p1,p2,p3 = np.percentile(detiv[srcpix], pctiles)
-
-                m1 = NanoMaggies.nanomaggiesToMag(np.sqrt(1./p1) * Nsigma)
-                m2 = NanoMaggies.nanomaggiesToMag(np.sqrt(1./p2) * Nsigma)
-                m3 = NanoMaggies.nanomaggiesToMag(np.sqrt(1./p3) * Nsigma)
-                print('Added image', tim.name, 'and got depths (mag)',
-                      '%.2f, %.2f, %.2f' % (m1,m2,m3),
-                      'vs target mags', t1, t2, t3)
-                print('  detivs', p1, p2, p3, 'vs targets',
-                      target1, target2, target3)
-
-                if p1 >= target1 and p2 >= target2 and p3 >= target3:
-                    # Got enough depth, thank you!
-                    print('Reached target depth!')
-                    break
-
-        dtims = [tim for tim in srctims if tim.name in timsubset]
-        insubset = [tim.name in timsubset for tim in srctims]
-
-        if self.plots:
-            plt.clf()
-            coimgs,cons = quick_coadds(dtims, self.bands, srcwcs,
-                                         fill_holes=False)
-            dimshow(get_rgb(coimgs, self.bands))
-            plt.title('To-depth data')
-            self.ps.savefig()
-
-        return dtims, insubset, timsubset
             
     def _optimize_individual_sources(self, tr, cat, Ibright, cputime):
         # Single source (though this is coded to handle multiple sources)
@@ -1239,7 +1072,102 @@ class OneBlob(object):
             tim.meta = imobj
             tims.append(tim)
         return tims
-    
+
+    def run_deblend(self, cat):
+        ras  = np.array([src.pos.ra  for src in cat])
+        decs = np.array([src.pos.dec for src in cat])
+        ok,x,y = self.blobwcs.radec2pixelxy(ras, decs)
+        x -= 1
+        y -= 1
+        Xi = np.round(x).astype(int)
+        Yi = np.round(y).astype(int)
+
+        # Combine the bands to make a single deblending profile...
+        # What weighting to use though?  Median S/N?
+        # Straight per-pixel weight?  (That's like flat-spectrum assumptn)
+        # (this is like [sed-matched] detection...)
+        coimgs,cons,cowimgs,wimgs = quick_coadds(
+            self.tims, self.bands, self.blobwcs, get_cow=True,
+            fill_holes=False)
+        #wts = [np.median(wt[wt > 0]) for wt in wimgs]
+        #print('Median weights:', wts)
+        bimg = np.zeros_like(cowimgs[0])
+        bwt  = np.zeros_like(cowimgs[0])
+        for im,wt in zip(cowimgs,wimgs):
+            bimg += wt * im
+            bwt  += wt
+        bimg /= np.maximum(1e-16, bwt)
+        sig1 = 1. / np.sqrt(np.median(wt[wt > 0]))
+
+        if self.plots:
+            plt.clf()
+            ima = dict(vmin=-2.*sig1, vmax=5.*sig1)
+            dimshow(bimg, **ima)
+            plt.title('Deblend -- merged bands')
+            self.ps.savefig()
+            ax = plt.axis()
+            plt.plot(Xi, Yi, 'r.')
+            plt.axis(ax)
+            self.ps.savefig()
+            self.deb_ima = ima
+
+        # size of region to use as postage stamp for deblending
+        sz = 32
+        h,w = bimg.shape
+
+        profiles = []
+        allprofiles = np.zeros_like(bimg)
+        for isrc,(xi,yi) in enumerate(zip(Xi,Yi)):
+            dx = min(sz, min(xi, w-1-xi))
+            dy = min(sz, min(yi, h-1-yi))
+            x0,y0 = xi - dx, yi - dy
+            slc = slice(y0, yi + dy+1), slice(x0, xi + dx+1)
+            subimg = bimg[slc]
+            subwt =   bwt[slc]
+            flipped = np.fliplr(np.flipud(subimg))
+            flipwt  = np.fliplr(np.flipud(subwt))
+            minimg = subimg.copy()
+            # Mirror the blob boundaries
+            submask = self.blobmask[slc]
+            flipmask = np.fliplr(np.flipud(submask))
+
+            I = np.flatnonzero((flipwt > 0) * (flipped < subimg))
+            minimg.flat[I] = flipped.flat[I]
+            minimg[flipmask == False] = 0
+
+            # Correct for min() bias for two Gaussians.  This isn't
+            # really the right way to do this
+            minimg[subwt > 0] += 0.545 * np.sqrt(1. / subwt[subwt > 0])
+            # And this is *really* a hack
+            minimg = np.maximum(0, minimg)
+
+            patch = Patch(x0, y0, minimg)
+            profiles.append(patch)
+            patch.addTo(allprofiles)
+
+            # if self.plots:
+            #     plt.clf()
+            #     plt.subplot(2,3,1)
+            #     dimshow(subimg, **ima)
+            #     plt.subplot(2,3,2)
+            #     dimshow(flipped, **ima)
+            #     #plt.subplot(2,3,3)
+            #     #dimshow(goodpix, vmin=0, vmax=1)
+            #     plt.subplot(2,3,4)
+            #     dimshow(minimg, **ima)
+            #     plt.subplot(2,3,5)
+            #     dimshow(allprofiles, **ima)
+            #     self.ps.savefig()
+
+        if self.plots:
+            plt.clf()
+            dimshow(allprofiles, **ima)
+            plt.title('Deblend -- sum of profiles')
+            self.ps.savefig()
+
+        self.deb_profiles = profiles
+        self.deb_prosum = allprofiles
+
     # if plots:
     #         try:
     #             Yo,Xo,Yi,Xi,rims = resample_with_wcs(blobwcs, subwcs,[],2)
@@ -1322,7 +1250,7 @@ def _compute_invvars(allderivs):
             chisq += (chi**2).sum()
         ivs.append(chisq)
     return ivs
-    
+
 def _argsort_by_brightness(cat, bands):
     fluxes = []
     for src in cat:
@@ -1712,13 +1640,12 @@ def _select_model(chisqs, nparams, galaxy_margin, rex):
     else:
         #print('Keeping source; SIMPLE is better than PTSRC')
         #print('REX is better fit.  Radius', simplemod.shape.re)
-
         keepmod = simname
-        # REX -- also demand a fractionally better fit.
+        # For REX, we also demand a fractionally better fit
         if simname == 'rex':
             dchisq_psf = chisqs['ptsrc']
             dchisq_rex = chisqs['rex']
-            if (dchisq_rex - dchisq_psf) < 0.0025 * dchisq_psf:
+            if (dchisq_rex - dchisq_psf) < (0.01 * dchisq_psf):
                 keepmod = 'ptsrc'
 
     if not 'exp' in chisqs:
@@ -1729,8 +1656,8 @@ def _select_model(chisqs, nparams, galaxy_margin, rex):
     cut = galaxy_margin
 
     # This is the "fractional" upgrade threshold for ptsrc/simple->dev/exp:
-    # 2% of ptsrc vs nothing
-    fcut = 0.02 * chisqs['ptsrc']
+    # 1% of ptsrc vs nothing
+    fcut = 0.01 * chisqs['ptsrc']
     #print('Cut: max of', cut, 'and', fcut, ' (fraction of chisq_psf=%.1f)'
     # % chisqs['ptsrc'])
     cut = max(cut, fcut)

@@ -1550,7 +1550,6 @@ def stage_fitblobs(T=None,
     ns,nb = BB.dchisqs.shape
     assert(ns == len(cat))
     assert(nb == 5) # ptsrc, simple, dev, exp, comp
-    assert(len(BB.flags) == len(cat))
 
     # Renumber blobs to make them contiguous.
     oldblob = T.blob
@@ -1603,7 +1602,6 @@ def stage_fitblobs(T=None,
     # Copy blob results to table T
     T.tycho2inblob = BB.hastycho
     T.dchisq       = BB.dchisqs.astype(np.float32)
-    T.decam_flags  = BB.flags
     T.left_blob    = np.logical_and(BB.started_in_blob,
                                     np.logical_not(BB.finished_in_blob))
     for k in ['fracflux', 'fracin', 'fracmasked', 'rchi2', 'cpu_source',
@@ -1687,8 +1685,6 @@ def _format_all_models(T, newcat, BB, bands, rex):
         
         TT,hdr = prepare_fits_catalog(xcat, allivs, TT, hdr, bands, None,
                                       prefix=prefix+'_')
-        TT.set('%s_flags' % prefix,
-               np.array([m.get(srctype,0) for m in BB.all_model_flags]))
         TT.set('%s_cpu' % prefix,
                np.array([m.get(srctype,0) 
                          for m in BB.all_model_cpu]).astype(np.float32))
