@@ -437,12 +437,15 @@ class OneBlob(object):
             trymodels = [('ptsrc', ptsrc), (simname, simple)]
     
             if oldmodel == 'ptsrc':
-                # Try galaxy models if simple > ptsrc, or if bright.
-                # The 'gals' model is just a marker
-                trymodels.extend([('gals', None)])
+                if self.hastycho:
+                    print('Not computing galaxy models: Tycho-2 star in blob')
+                else:
+                    # Try galaxy models if simple > ptsrc, or if bright.
+                    # The 'gals' model is just a marker
+                    trymodels.extend([('gals', None)])
             else:
                 trymodels.extend([('dev', dev), ('exp', exp), ('comp', comp)])
-    
+
             allflags = {}
             cputimes = {}
             for name,newsrc in trymodels:
@@ -453,14 +456,10 @@ class OneBlob(object):
                     # bright, try the galaxy models.
                     if ((chisqs[simname] > chisqs['ptsrc']) or
                         (chisqs['ptsrc'] > 400)):
-                        if self.hastycho:
-                            print('Not computing galaxy models: Tycho-2 star'
-                                  + ' in blob')
-                            continue
                         trymodels.extend([
                             ('dev', dev), ('exp', exp), ('comp', comp)])
                     continue
-    
+
                 if name == 'comp' and newsrc is None:
                     # Compute the comp model if exp or dev would be accepted
                     if (max(chisqs['dev'], chisqs['exp']) <
@@ -597,7 +596,7 @@ class OneBlob(object):
                     modtractor.optimize_loop(maxcpu=60., **self.optargs)
                     # FIXME -- thisflags |= FLAG_STEPS_B
                     #print('Mod selection: after second-round opt:', newsrc)
-                    
+
                     if self.plots1:
                         plt.clf()
                         modimgs = list(modtractor.getModelImages())
