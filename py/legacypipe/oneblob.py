@@ -125,13 +125,6 @@ class OneBlob(object):
         else:
             self.optargs.update(dchisq = 0.1)
 
-        # 50 CCDs is over 90th percentile of bricks in DR2.
-        self.many_exposures = len(timargs) >= 20
-        #self.many_exposures = len(timargs) >= 50
-        #PTF special handling len(timargs) >= 1000
-        if self.many_exposures:
-            print('Many exposures for blob', self.name)
-        
     def run(self, B):
         # Not quite so many plots...
         self.plots1 = self.plots
@@ -450,13 +443,6 @@ class OneBlob(object):
             else:
                 trymodels.extend([('dev', dev), ('exp', exp), ('comp', comp)])
     
-            # If lots of exposures, cut to a subset that reach the DECaLS
-            # depth goals and use those in an initial round?
-            if self.many_exposures:
-                dtims,insubset,dnames = self._get_todepth_subset(
-                    srctims, srcwcs, srcpix)
-                print('Many exposures: to-depth subset of', len(dtims),
-                      'images out of', len(srctims))
             allflags = {}
             cputimes = {}
             for name,newsrc in trymodels:
@@ -514,34 +500,6 @@ class OneBlob(object):
                 #     plt.title('Initial: ' + name)
                 #     self.ps.savefig()
     
-                if self.many_exposures:
-                    # Run a quick round of optimization with our
-                    # to-depth subset
-                    dmm = [m for m,isin in zip(modelMasks,insubset) if isin]
-                    dmm = remap_modelmask(dmm, src, newsrc)
-    
-                    dtractor = self.tractor(dtims, [newsrc])
-                    dtractor.setModelMasks(dmm)
-                    enable_galaxy_cache()
-                    cpustep0 = time.clock()
-                    #print('Optimizing to-depth first round for', name)
-                    #print(newsrc)
-                    dtractor.optimize_loop(**self.optargs)
-                    #print('Optimizing to-depth first round took',
-                    #      time.clock()-cpustep0)
-                    #print(newsrc)
-                    # print('Mod', name, 'round0 opt', Time()-t0)
-                    # print('New source (after to-depth round optimization):',
-                    #   newsrc)
-                    # if self.plots:
-                    #     plt.clf()
-                    #     modimgs = list(dtractor.getModelImages())
-                    #     comods,nil = quick_coadds(dtims, bands, srcwcs,
-                    #                                 images=modimgs)
-                    #     dimshow(get_rgb(comods, bands))
-                    #     plt.title('To-depth opt: ' + name)
-                    #     self.ps.savefig()
-
                 if self.deblend:
                     debtractor.setModelMasks(mm)
                     enable_galaxy_cache()
@@ -632,33 +590,6 @@ class OneBlob(object):
                 #print('Mod selection: after second-round opt:', newsrc)
 
                 if modtims is not None:
-
-                    if self.many_exposures:
-                        #print('insubset:', insubset)
-                        mdtims = [tim for tim in modtims if tim.name in dnames]
-                        dmm = [m for m,tim in zip(mm,modtims) if tim.name in dnames]
-                        #print('Selected mdtims:', [tim.name for tim in mdtims])
-                        dtractor = self.tractor(mdtims, [newsrc])
-                        dtractor.setModelMasks(dmm)
-                        enable_galaxy_cache()
-                        cpustep0 = time.clock()
-                        #print('Optimizing to-depth second round for', name)
-                        #print(newsrc)
-                        dtractor.optimize_loop(**self.optargs)
-                        #print('Optimizing to-depth second round', name, 'took',
-                        #      time.clock()-cpustep0)
-                        #print(newsrc)
-
-                        if self.plots:
-                            self._plot_coadd(mdtims, self.blobwcs)
-                            plt.title('second round to-depth')
-                            self.ps.savefig()
-
-                            self._plot_coadd(mdtims, self.blobwcs,
-                                             model=dtractor)
-                            plt.title('second round to-depth: model %s' % name)
-                            self.ps.savefig()
-                    
                     modtractor = self.tractor(modtims, [newsrc])
                     modtractor.setModelMasks(mm)
                     enable_galaxy_cache()
@@ -877,91 +808,6 @@ class OneBlob(object):
 
         models.restore_images(self.tims)
         del models
-        
-    def _get_todepth_subset(self, srctims, srcwcs, srcpix):
-        timsubset = set()
-        for band in self.bands:
-            # Order to try them: first, DECaLS data (our propid),
-            # then in point-source depth (* npix?) order.
-            otims = []
-            value = []
-            for tim in srctims:
-                if tim.band != band:
-                    continue
-                otims.append(tim)
-
-                detsig1 = tim.sig1 / tim.meta.galnorm
-                tim.detiv1 = 1./detsig1**2
-                h,w = tim.shape
-                propid = tim.meta.propid
-                value.append((propid == DECALS_PROPID) * 1e12 +
-                             tim.detiv1 * h*w)
-
-            t1,t2,t3 = dict(g=(24.0, 23.7, 23.4),
-                            r=(23.4, 23.1, 22.8),
-                            z=(22.5, 22.2, 21.9))[band]
-            Nsigma = 5.
-            sig = NanoMaggies.magToNanomaggies(t1) / Nsigma
-            target1 = 1./sig**2
-            sig = NanoMaggies.magToNanomaggies(t2) / Nsigma
-            target2 = 1./sig**2
-            sig = NanoMaggies.magToNanomaggies(t3) / Nsigma
-            target3 = 1./sig**2
-
-            detiv = np.zeros(srcwcs.shape, np.float32)
-            I = np.argsort(-np.array(value))
-            for cnt in I:
-                tim = otims[cnt]
-                try:
-                    Yo,Xo,Yi,Xi,nil = resample_with_wcs(
-                        srcwcs, tim.subwcs, [], 2)
-                except:
-                    continue
-                if len(Yo) == 0:
-                    continue
-                detiv[Yo,Xo] += tim.detiv1
-                timsubset.add(tim.name)
-
-                print('Tim:', tim.name, 'exptime', tim.meta.exptime,
-                      'FWHM', tim.meta.fwhm)
-                print('Tim: detiv', tim.detiv1, 'depth mag',
-                      NanoMaggies.nanomaggiesToMag(np.sqrt(1./tim.detiv1)
-                                                   * Nsigma))
-                print('overlapping pixels:', len(Yo))
-
-                # Hit DECaLS depth targets?
-                pctiles = [100-90, 100-95, 100-98]
-                if srcpix is None:
-                    p1,p2,p3 = np.percentile(detiv, pctiles)
-                else:
-                    p1,p2,p3 = np.percentile(detiv[srcpix], pctiles)
-
-                m1 = NanoMaggies.nanomaggiesToMag(np.sqrt(1./p1) * Nsigma)
-                m2 = NanoMaggies.nanomaggiesToMag(np.sqrt(1./p2) * Nsigma)
-                m3 = NanoMaggies.nanomaggiesToMag(np.sqrt(1./p3) * Nsigma)
-                print('Added image', tim.name, 'and got depths (mag)',
-                      '%.2f, %.2f, %.2f' % (m1,m2,m3),
-                      'vs target mags', t1, t2, t3)
-                print('  detivs', p1, p2, p3, 'vs targets',
-                      target1, target2, target3)
-
-                if p1 >= target1 and p2 >= target2 and p3 >= target3:
-                    # Got enough depth, thank you!
-                    print('Reached target depth!')
-                    break
-
-        dtims = [tim for tim in srctims if tim.name in timsubset]
-        insubset = [tim.name in timsubset for tim in srctims]
-
-        if self.plots:
-            plt.clf()
-            coimgs,cons = quick_coadds(dtims, self.bands, srcwcs,
-                                         fill_holes=False)
-            dimshow(get_rgb(coimgs, self.bands))
-            plt.title('To-depth data')
-            self.ps.savefig()
-
-        return dtims, insubset, timsubset
             
     def _optimize_individual_sources(self, tr, cat, Ibright, cputime):
         # Single source (though this is coded to handle multiple sources)
