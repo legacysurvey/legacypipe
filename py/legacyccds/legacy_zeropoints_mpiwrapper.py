@@ -10,7 +10,7 @@ import datetime
 import sys
 
 from astrometry.util.ttime import Time
-from legacyccds.legacy_zeropoints import get_parser,ptime,read_lines
+from legacyccds.legacy_zeropoints import get_parser,ptime,read_lines,try_mkdir,outputFns
 from legacyccds.legacy_zeropoints import main as legacy_main
 
 ######## 
@@ -84,9 +84,10 @@ def stdouterr_redirected(to=os.devnull, comm=None):
                 print("End log redirection to {} at {}".format(to, time.asctime()))
             sys.stdout.flush()
             sys.stderr.flush()
-            
+
 
 if __name__ == "__main__":
+    import argparse
     t0 = Time()
     tbegin = t0
     parser = get_parser() 
@@ -94,7 +95,7 @@ if __name__ == "__main__":
 
     if args.nproc > 1:
         from mpi4py.MPI import COMM_WORLD as comm
-    t0=ptime('parse-args',t0)
+    #t0=ptime('parse-args',t0)
 
     if args.image_list:
         images= read_lines(args.image_list) 
@@ -105,32 +106,46 @@ if __name__ == "__main__":
         image_list= np.array_split(images, comm.size)[comm.rank]
     else:
         image_list= np.array_split(images, 1)[0]
+    print('comm.rank=%d working on %d/%d images' % (comm.rank, len(image_list),len(images)))
     if args.nproc > 1:
-        # Log to unique file
-        outfn=os.path.join(args.outdir,"logs","mpi",\
-                           "%s" % datetime.datetime.now().strftime("%Y-%m-%d"),\
-                           "log.rank%d_%s" % (comm.rank,datetime.datetime.now().strftime("%H-min%M")),\
-                          )
-        # Have root check for output dir
-        if comm.rank == 0:
-            if not os.path.exists(os.path.dirname(outfn)):
-                os.makedirs(os.path.dirname(outfn))
-        comm.Barrier() 
-        # 
-        #with stdouterr_redirected(to=outfn, comm=None):  
-        with stdouterr_redirected(to=outfn, comm=comm):  
-            print('rank %d working on %d images' % (comm.rank,len(image_list)))
-            t0=ptime('before-legacy_main',t0)
-            legacy_main(image_list=image_list, args=args) 
-            t0=ptime('after-legacy_main',t0)
+        kwargs= dict(camera=args.camera)
+        for projfn in image_list:
+            # args modified by legacy_mean so hand it a copy
+            args_copy= argparse.Namespace(**vars(args))
+            F= outputFns(projfn,args_copy.outdir,**kwargs)
+            logfn= F.zptfn.replace('-zpt.fits','.log')
+            print('rank %d logfn=%s' % (comm.rank,logfn))
+            try_mkdir(os.path.dirname(logfn))    
+            # Log to unique file
+            #outfn=os.path.join(args.outdir,"logs","mpi",\
+            #                   "%s" % datetime.datetime.now().strftime("%Y-%m-%d"),\
+            #                   "log.rank%d_%s" % (comm.rank,datetime.datetime.now().strftime("%H-min%M")),\
+            #                  )
+            # Have root check for output dir
+            #if comm.rank == 0:
+            #    if not os.path.exists(os.path.dirname(outfn)):
+            #        os.makedirs(os.path.dirname(outfn))
+            #comm.Barrier() 
+            # 
+            #with stdouterr_redirected(to=outfn, comm=None):  
+            #print('rank %d running image %s logging to %s' % (comm.rank,projfn,logfn))
+            with stdouterr_redirected(to=logfn, comm=None):  
+                #t0=ptime('before-legacy_main',t0)
+                legacy_main(image_list=[projfn], args=args_copy) 
+                #t0=ptime('after-legacy_main',t0)
     else:
         legacy_main(image_list=image_list, args=args) 
     if args.nproc > 1:
-        # Wait for all mpi tasks to finish 
-        confirm_files = comm.gather( image_list, root=0 )
-        if comm.rank == 0:
-            tnow= Time()
-            print("Done, total time = %s" % (tnow-tbegin,))
+        if False:
+            # Wait for all mpi tasks to finish 
+            confirm_files = comm.gather( image_list, root=0 )
+            if comm.rank == 0:
+                tnow= Time()
+                print("Done, total time = %s" % (tnow-tbegin,))
+        else:
+            # Crash after smallest image_list is finished (conserve cpu time)
+            if comm.rank == 0:
+                print("Done")
     else:
         tnow= Time()
         print("Done, total time = %s" % (tnow-tbegin,))
