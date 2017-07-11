@@ -1652,13 +1652,12 @@ def _select_model(chisqs, nparams, galaxy_margin, rex):
     else:
         #print('Keeping source; SIMPLE is better than PTSRC')
         #print('REX is better fit.  Radius', simplemod.shape.re)
-
         keepmod = simname
-        # REX -- also demand a fractionally better fit.
+        # For REX, we also demand a fractionally better fit
         if simname == 'rex':
             dchisq_psf = chisqs['ptsrc']
             dchisq_rex = chisqs['rex']
-            if (dchisq_rex - dchisq_psf) < 0.0025 * dchisq_psf:
+            if (dchisq_rex - dchisq_psf) < (0.01 * dchisq_psf):
                 keepmod = 'ptsrc'
 
     if not 'exp' in chisqs:
@@ -1669,8 +1668,8 @@ def _select_model(chisqs, nparams, galaxy_margin, rex):
     cut = galaxy_margin
 
     # This is the "fractional" upgrade threshold for ptsrc/simple->dev/exp:
-    # 2% of ptsrc vs nothing
-    fcut = 0.02 * chisqs['ptsrc']
+    # 1% of ptsrc vs nothing
+    fcut = 0.01 * chisqs['ptsrc']
     #print('Cut: max of', cut, 'and', fcut, ' (fraction of chisq_psf=%.1f)'
     # % chisqs['ptsrc'])
     cut = max(cut, fcut)
