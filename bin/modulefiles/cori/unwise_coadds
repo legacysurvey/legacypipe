@@ -24,12 +24,8 @@ module-whatis "Sets up $product/$version in your environment."
 # Set environment
 #
 # set PRODUCT_DIR /scratch1/scratchdirs/ameisner/unwise-coadds/fulldepth_sv:/scratch1/scratchdirs/desiproc/unwise-coadds
-#set PRODUCT_DIR /global/cscratch1/sd/desiproc/dr4/unwise-coadds/fulldepth:/global/cscratch1/sd/desiproc/dr4/unwise-coadds/w3w4
-set PRODUCT_DIR /global/cscratch1/sd/desiproc/dr4/unwise-coadds/fulldepth:/global/cscratch1/sd/desiproc/dr4/unwise-coadds/w3w4
+# set PRODUCT_DIR /global/cscratch1/sd/desiproc/dr4/unwise-coadds/fulldepth:/global/cscratch1/sd/desiproc/dr4/unwise-coadds/w3w4
+# set PRODUCT_DIR /global/cscratch1/sd/desiproc/dr4/unwise-coadds/fulldepth:/global/cscratch1/sd/desiproc/dr4/unwise-coadds/w3w4
+set PRODUCT_DIR /global/cscratch1/sd/desiproc/unwise-coadds/fulldepth:/global/cscratch1/sd/desiproc/unwise-coadds/w3w4
 setenv [string toupper $product]_DIR $PRODUCT_DIR
 setenv unwise_coadds_VERSION $version
-
-
- 
-
-

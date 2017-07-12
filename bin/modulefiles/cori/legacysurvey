@@ -23,5 +23,6 @@ module-whatis "Sets up $product/$version in your environment."
 #set PRODUCT_DIR /global/cscratch1/sd/desiproc/dr3/
 #set PRODUCT_DIR /global/cscratch1/sd/desiproc/dr3-mosaic+bok
 #set PRODUCT_DIR /project/projectdirs/cosmo/work/legacysurvey/dr3
-set PRODUCT_DIR /project/projectdirs/cosmo/work/legacysurvey/dr3
+#set PRODUCT_DIR /project/projectdirs/cosmo/work/legacysurvey/dr3
+set PRODUCT_DIR /global/cscratch1/sd/desiproc/dr5
 setenv LEGACY_SURVEY_DIR $PRODUCT_DIR
