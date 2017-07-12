@@ -2592,6 +2592,58 @@ class AnnotatedVsLegacy(object):
         plt.close() 
         print "wrote %s" % savefn 
 
+    def plot_scatter_2cameras(self,dec_legacy,dec_annot,
+                                   mos_legacy,mos_annot):
+        '''same as plot_scatter() but
+        dec_legacy,dec_annot are the decam self.legacy and self.annot tables
+        mos_legacy,mos_annot are the mosaic...
+        '''
+        # All keys and any ylims to use
+        xlim= (20,28)
+        ylim= (20,25)
+        # Plot
+        FS=14
+        eFS=FS+5
+        tickFS=FS
+        fig,ax= plt.subplots(figsize=(7,5))
+        colors=['m','k','g','r']
+        offsets=[0,1,2,3]
+        i=-1
+        for camera in ['mosaic','decam']:
+            for which in ['psf','gal']:
+                i+=1
+                color= colors[i]
+                offset= offsets[i]
+                col= which+'depth'
+                if camera == 'decam':
+                    x= dec_annot.get(col)
+                    y= dec_legacy.get(col)
+                elif camera == 'mosaic':
+                    x= mos_annot.get(col)
+                    y= mos_legacy.get(col)
+                rms= getrms(x-y)
+                myscatter(ax,x + offset,y, 
+                          color=color,m='o',s=10.,alpha=0.75,
+                          label='%s,%s: RMS=%.2f' % (camera,which,rms))
+                ax.plot(np.array(xlim)+ offset,xlim,c=color,ls='--',lw=2)
+        # Legend
+        leg=ax.legend(loc=(0.,1.02),ncol=2,markerscale=3,fontsize=FS-2)
+        # Label
+        xlab=ax.set_xlabel('Depth (Annotated CCDs) + Offset',fontsize=FS) 
+        ylab=ax.set_ylabel('Depth (Legacy Zeropoints)',fontsize=FS) 
+        ax.tick_params(axis='both', labelsize=tickFS)
+        if ylim:
+            ax.set_ylim(ylim)
+        if xlim:
+            ax.set_xlim(xlim)
+        savefn='annot_legacy_scatter_all.png'
+        plt.savefig(savefn, bbox_extra_artists=[leg,xlab,ylab], bbox_inches='tight')
+        plt.close() 
+        print "wrote %s" % savefn 
+
+
+    
+
 
  
 #######
@@ -3319,10 +3371,15 @@ if __name__ == '__main__':
     fns['mosaic_a']= '/global/project/projectdirs/cosmo/data/legacysurvey/dr4/ccds-annotated-mzls.fits.gz'
     fns['decam_l']= '/global/cscratch1/sd/kaylanb/publications/observing_paper/neff_empirical/test_1000-zpt.fits.gz'
     fns['mosaic_l']= '/global/cscratch1/sd/kaylanb/publications/observing_paper/neff_empirical/mosaic-zpt.fits.gz'
-    #for camera in ['decam','mosaic']:
-    #    a= AnnotatedVsLegacy(annot_ccds=fns['%s_a' % camera], 
-    #                         legacy_zpts=fns['%s_l' % camera],
-    #                         camera='%s' % camera)
+    
+    a={}
+    for camera in ['decam','mosaic']:
+        a[camera]= AnnotatedVsLegacy(annot_ccds=fns['%s_a' % camera], 
+                                     legacy_zpts=fns['%s_l' % camera],
+                                     camera='%s' % camera)
+    a[camera].plot_scatter_2cameras(dec_legacy=a['decam'].legacy, dec_annot=a['decam'].annot,
+                                    mos_legacy=a['mosaic'].legacy, mos_annot=a['mosaic'].annot)
+    raise ValueError
  
     a= ZeropointHistograms(decam_zpts=fns['decam_l'],
                            mosaic_zpts=fns['mosaic_l'])
