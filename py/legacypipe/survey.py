@@ -846,6 +846,9 @@ Now using the current directory as LEGACY_SURVEY_DIR, but this is likely to fail
             else:
                 return glob(os.path.join(basedir, 'survey-ccds-*.fits.gz'))
 
+        elif filetype == 'ccd-kds':
+            return glob(os.path.join(basedir, 'survey-ccds-*.kd.fits'))
+
         elif filetype == 'tycho2':
             return os.path.join(basedir, 'tycho2.fits.gz')
             
@@ -875,11 +878,7 @@ Now using the current directory as LEGACY_SURVEY_DIR, but this is likely to fail
             ty = filetype.split('-')[0]
             return os.path.join(codir, '%s-%s-%s.jpg' % (sname, brick, ty))
 
-        elif filetype in ['depth', 'galdepth', 'nexp']:
-            return os.path.join(codir,
-                                '%s-%s-%s-%s.fits.gz' % (sname, brick, filetype, band))
-
-        elif filetype in ['invvar', 'chi2', 'image', 'model']:
+        elif filetype in ['invvar', 'chi2', 'image', 'model', 'depth', 'galdepth', 'nexp']:
             return os.path.join(codir, '%s-%s-%s-%s.fits.fz' %
                                 (sname, brick, filetype,band))
 
@@ -903,6 +902,9 @@ Now using the current directory as LEGACY_SURVEY_DIR, but this is likely to fail
                     chi2  = '[compress R 100,100; qz -0.1]',
                     # qz +8: 9 MB, qz +16: 10.5 MB
                     invvar = '[compress R 100,100; qz 16]',
+                    nexp   = '[compress H 100,100]',
+                    depth  = '[compress G 100,100; qz 0]',
+                    galdepth = '[compress G 100,100; qz 0]',
             ).get(filetype)
 
     def write_output(self, filetype, hashsum=True, **kwargs):
@@ -1259,11 +1261,45 @@ Now using the current directory as LEGACY_SURVEY_DIR, but this is likely to fail
         '''
         Returns a table of the CCDs touching the given *wcs* region.
         '''
-        T = self.get_ccds_readonly()
-        I = ccds_touching_wcs(wcs, T, **kwargs)
+
+        fns = self.find_file('ccd-kds')
+        if len(fns):
+            # Assume that if >= 1 survey-ccds-*.kd.fits files exist,
+            # then we should read all CCDs from there rather than
+            # survey-ccds-*.fits.gz.
+            # This file was created via:
+            # python>> from legacypipe.survey import *
+            # >> survey=LegacySurveyData(survey_dir='/global/cscratch1/sd/desiproc/dr5')
+            # >> ccds = survey.get_ccds()
+            # >> ccds.writeto('/tmp/ccds-dr5.fits')
+            # Astrometry.net's 'startree' program:
+            # > startree -i /tmp/ccds-dr5.fits -o /tmp/dr5.kd -P -k -n ccds
+            # > fitsgetext -i /tmp/dr5.kd -o /tmp/survey-ccds-dr5.kd.fits -e 0 -e 6 -e 1 -e 2 -e 3 -e 4 -e 5
+            from astrometry.libkd.spherematch import tree_open, tree_search_radec
+
+            # MAGIC number: we'll search a 1-degree radius for CCDs
+            # roughly in range, then refine using the
+            # ccds_touching_wcs() function.
+            radius = 1.
+
+            ra,dec = wcs.radec_center()
+            TT = []
+            for fn in fns:
+                print('Searching', fn)
+                kd = tree_open(fn, 'ccds')
+                I = tree_search_radec(kd, ra, dec, radius)
+                print(len(I), 'CCDs within', radius, 'deg of RA,Dec (%.3f, %.3f)' % (ra,dec))
+                if len(I) == 0:
+                    continue
+                # Read only the CCD-table rows within range.
+                TT.append(fits_table(fn, rows=I))
+            ccds = merge_tables(TT, columns='fillzero')
+        else:
+            ccds = self.get_ccds_readonly()
+        I = ccds_touching_wcs(wcs, ccds, **kwargs)
         if len(I) == 0:
             return None
-        return T[I]
+        return ccds[I]
 
     def get_image_object(self, t, **kwargs):
         '''

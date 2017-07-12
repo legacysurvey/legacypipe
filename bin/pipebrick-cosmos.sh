@@ -2,7 +2,7 @@
 
 # For modules loaded, see "bashrc" in this directory.
 
-export LEGACY_SURVEY_DIR=$SCRATCH/cosmos
+export LEGACY_SURVEY_DIR=$CSCRATCH/dr5-cosmos
 
 export DUST_DIR=/global/cscratch1/sd/desiproc/dust/v0_0
 
@@ -18,7 +18,7 @@ export MKL_NUM_THREADS=1
 brick="$1"
 subset="$2"
 
-outdir=$SCRATCH/cosmos-${subset}-rex2
+outdir=$CSCRATCH/cosmos-dr5-${subset}
 
 bri=$(echo $brick | head -c 3)
 mkdir -p $outdir/logs/$bri
@@ -52,12 +52,13 @@ python -u legacypipe/runcosmos.py \
     --threads 24 \
     --skip-calibs \
     --brick $brick --outdir $outdir --nsigma 6 \
-     --checkpoint $CHK/checkpoint-${brick}.pickle \
-     --pickle "$PIC/cosmos-%(brick)s-%%(stage)s.pickle" \
+    --checkpoint $CHK/checkpoint-${brick}.pickle \
+    --pickle "$PIC/cosmos-%(brick)s-%%(stage)s.pickle" \
     --skip \
     --rex \
     --hybrid-psf \
     --no-wise \
+    --no-depth-cut \
     --no-blacklist \
      >> $log 2>&1
 
