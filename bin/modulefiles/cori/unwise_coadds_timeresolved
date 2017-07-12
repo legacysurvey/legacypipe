@@ -22,10 +22,12 @@ module-whatis "Sets up $product/$version in your environment."
 #
 
 # set PRODUCT_DIR /scratch1/scratchdirs/ameisner/unwise-coadds/time_resolved_dr3
-set PRODUCT_DIR /global/cscratch1/sd/desiproc/dr4/unwise-coadds/time_resolved_neo2
+# set PRODUCT_DIR /global/cscratch1/sd/desiproc/dr4/unwise-coadds/time_resolved_neo2
+set PRODUCT_DIR /global/cscratch1/sd/desiproc/unwise-coadds/time_resolved_neo2
 
 # setenv UNWISE_COADDS_TIMERESOLVED_INDEX /project/projectdirs/cosmo/work/wise/outputs/merge/time_resolved_neo1-atlas.fits
-setenv UNWISE_COADDS_TIMERESOLVED_INDEX /global/cscratch1/sd/desiproc/dr4/unwise-coadds/time_resolved_neo2/time_resolved_neo2-atlas.fits
+# setenv UNWISE_COADDS_TIMERESOLVED_INDEX /global/cscratch1/sd/desiproc/dr4/unwise-coadds/time_resolved_neo2/time_resolved_neo2-atlas.fits
+setenv UNWISE_COADDS_TIMERESOLVED_INDEX /global/cscratch1/sd/desiproc/unwise-coadds/time_resolved_neo2/time_resolved_neo2-atlas.fits
 
 setenv [string toupper $product]_DIR $PRODUCT_DIR
 setenv unwise_coadds_timeresolved_VERSION $version
