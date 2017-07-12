@@ -162,6 +162,7 @@ if __name__ == '__main__':
                 outfn = os.path.join(dirnm, 'ccds-%s.fits' % brickname)
                 if os.path.exists(outfn):
                     print('Exists:', outfn)
+                    task.set_state(qdo.Task.SUCCEEDED)
                     continue
                 print('Getting brick', brickname)
                 brick = survey.get_brick_by_name(brickname)
