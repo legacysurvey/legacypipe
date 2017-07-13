@@ -317,6 +317,7 @@ def main():
     parser.add_argument('--runbrick', action='store_true', help='Run the pipeline.')
     parser.add_argument('--runbrick-cutouts', action='store_true', help='Annotate the jpg cutouts from the custom pipeline.')
     parser.add_argument('--build-webpage', action='store_true', help='(Re)build the web content.')
+    parser.add_argument('--redownload', action='store_true', help='Redownload viewer cutouts, if necessary.')
     parser.add_argument('--nproc', type=int, help='number of concurrent processes to use', default=16)
     args = parser.parse_args()
 
@@ -328,11 +329,12 @@ def main():
     largedir = os.getenv(key)
 
     dr = args.dr.lower()
-    key = 'DECALS_{}_DIR'.format(dr.upper())
+    #key = 'DECALS_{}_DIR'.format(dr.upper())
+    key = 'LEGACY_SURVEY_DIR'
     if key not in os.environ:
         print('Required ${} environment variable not set'.format(key))
         return 0
-    drdir = os.getenv(key)
+    surveydir = os.getenv(key)
 
     # Some convenience variables.
     objtype = ('PSF', 'SIMP', 'EXP', 'DEV', 'COMP')
@@ -348,7 +350,7 @@ def main():
         sample = fits.getdata(samplefile, 1)
         #sample = sample[np.where(np.char.strip(sample['GALAXY']) == 'NGC4073')]
         #sample = sample[np.where(np.char.strip(sample['GALAXY']) == 'UGC04203')]
-        #sample = sample[0:3] # Hack!
+        #sample = sample[:500] # Hack!
         #sample = sample[np.where(np.sum((sample['BRICKNAME'] != '')*1, 1) > 1)[0]]
         #pdb.set_trace()
     survey = LegacySurveyData()
@@ -418,29 +420,32 @@ def main():
         # Do a gross spherematch of the parent sample against the data release
         # to reduce the sample down to a more reasonable size.  match_radec
         # segfaults -- not sure why.
-        
         #m1, m2, d12 = match_radec(allccds.ra, allccds.dec, cat['RA'], cat['DEC'], 0.25, nearest=False)
-        rad = 1.0
-        print('Spherematching parent catalog against CCDs catalog within {} deg...'.format(rad))
-        ccdcoord = SkyCoord(ra=allccds.ra*u.degree, dec=allccds.dec*u.degree)
-        catcoord = SkyCoord(ra=cat['RA']*u.degree, dec=cat['DEC']*u.degree)
-        idx, sep2d, dist3d = catcoord.match_to_catalog_sky(ccdcoord)
-        match = np.where( sep2d < rad*u.degree )[0]
 
-        catindx = np.unique(match)
-        ccdindx = np.unique(idx[match])
-        print('Selecting subset of {}/{} galaxies and {}/{} CCDs.'.format(
-            len(catindx), len(cat), len(ccdindx), len(allccds)))
-        
-        if False:
-            plt.scatter(cat['RA'], cat['DEC'])
-            plt.scatter(cat['RA'][catindx], cat['DEC'][catindx], alpha=0.5, color='blue')
-            plt.scatter(allccds.ra[ccdindx], allccds.dec[ccdindx], alpha=0.5, color='orange', marker='s')
-            plt.show()
-            pdb.set_trace()
-
-        cat = cat[catindx]
-        allccds = allccds[ccdindx]
+        # ----------
+        ## Good code but testing out the KD tree
+        #rad = 1.0
+        #print('Spherematching parent catalog against CCDs catalog within {} deg...'.format(rad))
+        #ccdcoord = SkyCoord(ra=allccds.ra*u.degree, dec=allccds.dec*u.degree)
+        #catcoord = SkyCoord(ra=cat['RA']*u.degree, dec=cat['DEC']*u.degree)
+        #idx, sep2d, dist3d = catcoord.match_to_catalog_sky(ccdcoord)
+        #match = np.where( sep2d < rad*u.degree )[0]
+        #
+        #catindx = np.unique(match)
+        #ccdindx = np.unique(idx[match])
+        #print('Selecting subset of {}/{} galaxies and {}/{} CCDs.'.format(
+        #    len(catindx), len(cat), len(ccdindx), len(allccds)))
+        #
+        #if False:
+        #    plt.scatter(cat['RA'], cat['DEC'])
+        #    plt.scatter(cat['RA'][catindx], cat['DEC'][catindx], alpha=0.5, color='blue')
+        #    plt.scatter(allccds.ra[ccdindx], allccds.dec[ccdindx], alpha=0.5, color='orange', marker='s')
+        #    plt.show()
+        #    pdb.set_trace()
+        #
+        #cat = cat[catindx]
+        #allccds = allccds[ccdindx]
+        # ----------
 
         # Next, create a simple WCS object for each object and find all the CCDs
         # touching that WCS footprint.
@@ -503,57 +508,69 @@ def main():
                 imageurl = 'http://legacysurvey.org/viewer-dev/jpeg-cutout/?ra={:.6f}&dec={:.6f}&pixscale={:.3f}&size={:g}{}'.format(
                     gal['RA'], gal['DEC'], PIXSCALE, size, layer)
                 imagejpg = os.path.join(cutdir, '{}-{}.jpg'.format(galaxy, imtype))
-                #print('Uncomment me to redownload')
+                cmd = 'wget --continue -O {:s} "{:s}"' .format(imagejpg, imageurl)
                 if os.path.isfile(imagejpg):
-                    os.remove(imagejpg)
-                os.system('wget --continue -O {:s} "{:s}"' .format(imagejpg, imageurl))
+                    if args.redownload:
+                        os.remove(imagejpg)
+                        os.system(cmd)
+                    else:
+                        print('Skipping download of existing file {}'.format(imagejpg))
+                else:
+                    os.system(cmd)
 
             # Also get a small thumbnail of just the image.
             thumburl = 'http://legacysurvey.org/viewer-dev/jpeg-cutout/?ra={:.6f}&dec={:.6f}'.format(gal['RA'], gal['DEC'])+\
               '&pixscale={:.3f}&size={:g}'.format(thumbpixscale, thumbsize)
             thumbjpg = os.path.join(cutdir, '{}-image-thumb.jpg'.format(galaxy))
+            cmd = 'wget --continue -O {:s} "{:s}"' .format(thumbjpg, thumburl)
             if os.path.isfile(thumbjpg):
-                os.remove(thumbjpg)
-            os.system('wget --continue -O {:s} "{:s}"' .format(thumbjpg, thumburl))
+                if args.redownload:
+                    os.remove(thumbjpg)
+                    os.system(cmd)
+                else:
+                    print('Skipping download of existing file {}'.format(thumbjpg))
+            else:
+                os.system(cmd)
 
-            rad = 10
-            for imtype in ('image', 'model', 'resid'):
-                imfile = os.path.join(cutdir, '{}-{}.jpg'.format(galaxy, imtype))
-                cutoutfile = os.path.join(cutdir, '{}-{}-runbrick-annot.jpg'.format(galaxy, imtype))
-
-                print('Reading {}'.format(imfile))
-                im = Image.open(imfile)
-                sz = im.size
-                fntsize = np.round(sz[0]/35).astype('int')
-                font = ImageFont.truetype(fonttype, size=fntsize)
-                # Annotate the sources on each cutout.
-                wcscutout = Tan(gal['RA'], gal['DEC'], sz[0]/2+0.5, sz[1]/2+0.5,
-                                -PIXSCALE/3600.0, 0.0, 0.0, PIXSCALE/3600.0, float(sz[0]), float(sz[1]))
-                draw = ImageDraw.Draw(im)
-                for bb, brick in enumerate(gal['BRICKNAME'][np.where(gal['BRICKNAME'] != '')[0]]):
-                    tractorfile = os.path.join(drdir, 'tractor', '{}'.format(brick[:3]),
-                                               'tractor-{}.fits'.format(brick))
-                    print('  Reading {}'.format(tractorfile))
-                    cat = fits.getdata(tractorfile, 1)
-                    cat = cat[np.where(cat['BRICK_PRIMARY']*1)[0]]
-                    for ii, (thistype, thiscolor) in enumerate(zip(objtype, objcolor)):
-                        these = np.where(cat['TYPE'].strip().upper() == thistype)[0]
-                        if len(these) > 0:
-                            for obj in cat[these]:
-                                ok, xx, yy = wcscutout.radec2pixelxy(obj['RA'], obj['DEC'])
-                                xx -= 1 # PIL is zero-indexed
-                                yy -= 1
-                                #print(obj['RA'], obj['DEC'], xx, yy)
-                                draw.ellipse((xx-rad, sz[1]-yy-rad, xx+rad, sz[1]-yy+rad),
-                                             outline=thiscolor)
-
-                        # Add a legend, but just after the first brick.
-                        if bb == 0:
-                            draw.text((20, 20+ii*fntsize*1.2), thistype, font=font, fill=thiscolor)
-                draw.text((sz[0]-fntsize*4, sz[1]-fntsize*2), imtype.upper(), font=font)
-                print('Writing {}'.format(cutoutfile))
-                im.save(cutoutfile)
-                #pdb.set_trace()
+            if args.redownload:
+                rad = 10
+                for imtype in ('image', 'model', 'resid'):
+                    imfile = os.path.join(cutdir, '{}-{}.jpg'.format(galaxy, imtype))
+                    cutoutfile = os.path.join(cutdir, '{}-{}-runbrick-annot.jpg'.format(galaxy, imtype))
+    
+                    print('Reading {}'.format(imfile))
+                    im = Image.open(imfile)
+                    sz = im.size
+                    fntsize = np.round(sz[0]/35).astype('int')
+                    font = ImageFont.truetype(fonttype, size=fntsize)
+                    # Annotate the sources on each cutout.
+                    wcscutout = Tan(gal['RA'], gal['DEC'], sz[0]/2+0.5, sz[1]/2+0.5,
+                                    -PIXSCALE/3600.0, 0.0, 0.0, PIXSCALE/3600.0, float(sz[0]), float(sz[1]))
+                    draw = ImageDraw.Draw(im)
+                    for bb, brick in enumerate(gal['BRICKNAME'][np.where(gal['BRICKNAME'] != '')[0]]):
+                        tractorfile = os.path.join(surveydir, 'tractor', '{}'.format(brick[:3]),
+                                                   'tractor-{}.fits'.format(brick))
+                        print('  Reading {}'.format(tractorfile))
+                        cat = fits.getdata(tractorfile, 1)
+                        cat = cat[np.where(cat['BRICK_PRIMARY']*1)[0]]
+                        for ii, (thistype, thiscolor) in enumerate(zip(objtype, objcolor)):
+                            these = np.where(cat['TYPE'].strip().upper() == thistype)[0]
+                            if len(these) > 0:
+                                for obj in cat[these]:
+                                    ok, xx, yy = wcscutout.radec2pixelxy(obj['RA'], obj['DEC'])
+                                    xx -= 1 # PIL is zero-indexed
+                                    yy -= 1
+                                    #print(obj['RA'], obj['DEC'], xx, yy)
+                                    draw.ellipse((xx-rad, sz[1]-yy-rad, xx+rad, sz[1]-yy+rad),
+                                                 outline=thiscolor)
+    
+                            # Add a legend, but just after the first brick.
+                            if bb == 0:
+                                draw.text((20, 20+ii*fntsize*1.2), thistype, font=font, fill=thiscolor)
+                    draw.text((sz[0]-fntsize*4, sz[1]-fntsize*2), imtype.upper(), font=font)
+                    print('Writing {}'.format(cutoutfile))
+                    im.save(cutoutfile)
+                    #pdb.set_trace()
 
     # --------------------------------------------------
     # Get cutouts and build diagnostic plots of all the CCDs for each galaxy.
@@ -771,7 +788,7 @@ def main():
                 ax[0].legend(frameon=False, loc='upper left')
 
                 ax[1].plot(apphot['RCEN'], apphot['PIPESKYFLUX']/apphot['SKYAREA'], 
-                              label='DR2 Pipeline', color=setcolors[0])
+                              label='DR3 Pipeline', color=setcolors[0])
                 ax[1].plot(apphot['RCEN'], apphot['NEWSKYFLUX']/apphot['SKYAREA'], 
                               label='Large Galaxy Pipeline', color=setcolors[1])
                 #ax[1].scatter(apphot['RCEN'], apphot['PIPESKYFLUX']/apphot['SKYAREA'], 
@@ -984,8 +1001,8 @@ def main():
             html.write('<body>\n')
             html.write('<h1>{}</h1>\n'.format(galaxy.upper()))
             # ----------
-            # DR2 Pipeline cutouts
-            html.write('<h2>DR2 Pipeline (Image, Model, Residuals)</h2>\n')
+            # DR3 Pipeline cutouts
+            html.write('<h2>DR3 Pipeline (Image, Model, Residuals)</h2>\n')
             html.write('<table><tbody>\n')
             html.write('<tr>\n')
             for imtype in ('image', 'model', 'resid'):
