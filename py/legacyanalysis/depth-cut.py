@@ -37,12 +37,12 @@ def main():
     return
 
     N = len(bricks)
-    args = [(brick, i, N) for i,brick in enumerate(bricks)]
+    args = [(brick, i, N, plots) for i,brick in enumerate(bricks)]
     mp.map(run_one_brick, args)
 
 
 def run_one_brick(X):
-    brick, ibrick, nbricks = X
+    brick, ibrick, nbricks, plots = X
 
     survey = LegacySurveyData()
 
@@ -85,8 +85,11 @@ def run_one_brick(X):
         print('No CCDs left')
         return 0
 
-    plots = False
     ps = None
+    if plots:
+        from astrometry.util.plotutils import PlotSequence
+        ps = PlotSequence('depth-%s' % brick.brickname)
+
     splinesky = True
     gaussPsf = False
     pixPsf = True
@@ -137,7 +140,14 @@ def run_one_brick(X):
 if __name__ == '__main__':
     print('Starting')
     import sys
-    args = sys.argv[1:]
+
+    import argparse
+    parser = argparse.ArgumentParser()
+    parser.add_argument('--plots', action='store_true', default=False)
+    parser.add_argument('bricks', nargs='+')
+    args = parser.parse_args()
+    plots = args.plots
+    args = args.bricks
 
     if len(args) == 1 and args[0] == 'qdo':
         import qdo
@@ -167,7 +177,7 @@ if __name__ == '__main__':
                 print('Getting brick', brickname)
                 brick = survey.get_brick_by_name(brickname)
                 print('Got brick, running depth cut')
-                rtn = run_one_brick((brick, 0, 1))
+                rtn = run_one_brick((brick, 0, 1, False))
                 if rtn != 0:
                     allgood = rtn
                 print('Done, result', rtn)
@@ -198,7 +208,7 @@ if __name__ == '__main__':
             print('Getting brick', brickname)
             brick = survey.get_brick_by_name(brickname)
             print('Got brick, running depth cut')
-            rtn = run_one_brick((brick, 0, 1))
+            rtn = run_one_brick((brick, 0, 1, plots))
             if rtn != 0:
                 allgood = rtn
             print('Done, result', rtn)
