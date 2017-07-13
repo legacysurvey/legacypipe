@@ -14,6 +14,7 @@ class DecamImagePlusNoise(DecamImage):
     A DecamImage subclass to add noise to DECam images upon read.
     '''
     def __init__(self, survey, t):
+        t.camera = 'decam'
         super(DecamImagePlusNoise, self).__init__(survey, t)
         self.addnoise = t.addnoise
 
@@ -22,7 +23,8 @@ class DecamImagePlusNoise(DecamImage):
         tim = super(DecamImagePlusNoise, self).get_tractor_image(**kwargs)
         if tim is None:
             return None
-        ie = 1. / (np.hypot(1. / tim.inverr, self.addnoise))
+        with np.errstate(divide='ignore'):
+            ie = 1. / (np.hypot(1. / tim.inverr, self.addnoise))
         ie[tim.inverr == 0] = 0.
         tim.inverr = ie
         tim.data += np.random.normal(size=tim.shape) * self.addnoise

@@ -725,13 +725,17 @@ class Measurer(object):
         return self.k_ext[band]
 
     def set_hdu(self,ext):
-        self.ext = ext
-        self.hdr = fitsio.read_header(self.fn, ext=ext)
-        self.ccdname = self.hdr['EXTNAME'].strip()
-        assert(self.ext.upper() == self.ccdname.upper())
-        self.ccdnum = np.int(self.hdr['CCDNUM']) 
-        self.image_hdu = self.ccdnum #header: extnum <--> hduname
+        self.ext = ext.strip()
+        self.ccdname= ext.strip()
         self.expid = '{:08d}-{}'.format(self.expnum, self.ccdname)
+        hdulist= fitsio.FITS(self.fn)
+        self.image_hdu= hdulist[ext].get_extnum() #NOT ccdnum in header!
+        # Sanity check
+        ccdname = self.hdr['EXTNAME'].strip()
+        assert(self.ccdname.upper() == ccdname.upper())
+        # use header
+        self.hdr = fitsio.read_header(self.fn, ext=ext)
+        self.ccdnum = np.int(self.hdr['CCDNUM']) 
         self.gain= self.get_gain(self.hdr)
         # WCS
         self.wcs = self.get_wcs()

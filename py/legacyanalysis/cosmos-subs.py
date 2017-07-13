@@ -9,6 +9,7 @@ from legacypipe.survey import *
 from legacypipe.decam import DecamImage
 
 from tractor.sfd import SFDMap
+from tractor import NanoMaggies
 
 '''
 This script selects subsets of images covering the COSMOS region, so
@@ -211,7 +212,67 @@ exposures = [397525, 397526, 511250, # g,p1
 #subset_offset = 30
 #exposures = exposures[::3] + exposures[1::3] + exposures[2::3]
 
-subset_offset = 50
+#
+# Subsets 50, 51, and 52 have, respectively, images from pass 1, pass2, and pass 3.
+#
+#subset_offset = 50
+
+#
+# Subsets 60 through 69 have progressively worse seeing (but still pretty good...)
+#
+subset_offset = 60
+
+exposures = [
+    411355, 411305, 411406, # g, p1 (seeing 1.05-1.1)
+    397525, 411808, 397526, # g, p1 (seeing 1.1)
+    511250, 421590, 411456, # g, p1 (seeing 1.2)
+    397527, 410971, 411707, # g, p1 (seeing 1.2)
+    #411758, 411021, 633993, # g, p1 (seeing 1.2)
+
+    288970, 411055, 410915, # g, p2 (seeing 1.3)
+    283978, 431103, 283982, # g, p2 (seeing 1.4)
+    524719, 177358, 524705, # g, p2 (seeing 1.5)
+    177361, 177085, 177088, # g, p2 (seeing 1.6)
+    177092, 289278, 177089, # g, p2 (seeing 1.7)
+    289050, 177091, 289196, # g, p2 (seeing 1.8)
+
+    # g, p3
+
+    421552, 431105, 405290, # r, p1 (seeing 1.2)
+    431108, 397524, 405291, # r, p1 (seeing 1.2)
+    405264, 397553, 405263, # r, p1 (seeing 1.2)
+    397551, 397522, 397552, # r, p1 (seeing 1.3)
+
+    397523, 405262, 431102, # r, p2 (seeing 1.3)
+    420721, 420722, 177363, # r, p2 (seeing 1.4)
+    177346, 177362, 524722, # r, p2 (seeing 1.5)
+    177342, 524707, 177341, # r, p2 (seeing 1.5-1.6)
+    177343, 524706, 177367, # r, p2 (seeing 1.6-1.7)
+    413971, 413972, 413973, # r, p2 (seeing 1.8-1.9)
+
+    # r, p3
+
+    630675, 630928, 431107, # z, p1 (seeing 0.9-1.1)
+    431104, 431101, 180583, # z, p1 (seeing 1.1)
+    405257, 180582, 397532, # z, p1 (seeing 1.2)
+    405256, 397557, 397533, # z, p1 (seeing 1.2)
+
+    524713, 524714, 524716, # z, p2 (seeing 1.26)
+    180585, 420730, 395347, # z, p2 (seeing 1.32)
+    413981, 395345, 176837, # z, p2 (seeing 1.4)
+    # 179973, 176845, 193204, # z, p2 (seeing 1.5) (old 67)
+    # 193180, 192768, 453883, # z, p2 (seeing 1.6) (old 68)
+    # 179975, 413978, 453884, # z, p2 (seeing 1.7) (old 69)
+    176844, 453882, 176845, # z, p2 (seeing 1.5)   (new 67)
+    193204, 193180, 192768, # z, p2 (seeing 1.6)   (new 68)
+    453883, 413978, 453884, # z, p2 (seeing 1.7)   (new 69)
+
+    # z, p3
+    ]
+# BAD exposures (nasty background gradient)
+# 179971 through 179975
+
+
 
 # Pull out our exposures into table E.
 I = []
@@ -271,32 +332,32 @@ for iset in xrange(100):
 
             #print('  -> depths:', -2.5 * (np.log10(5./np.sqrt(thisdetiv)) - 9))
 
-            from legacypipe.runcosmos import CosmosSurvey
-            survey = CosmosSurvey(subset=iset + subset_offset)
-            for c in ccds:
-                c.camera = c.camera + '+noise'
-                print('camera', c.camera)
-                im = survey.get_image_object(c)
-                print('  got image', im)
-                tim = im.get_tractor_image(splinesky=True, pixPsf=True, hybridPsf=True)
-                print('  got tim', tim)
-                print('  sig1', tim.sig1, 'vs target', targetsig1)
-                print('  galnorm', tim.galnorm, 'vs CCDs', c.galnorm)
-
-                # compute galnorm_mean like in annotated_ccds
-                # Instantiate PSF on a grid
-                S = 32
-                H,W = tim.shape
-                xx = np.linspace(1+S, W-S, 5)
-                yy = np.linspace(1+S, H-S, 5)
-                xx,yy = np.meshgrid(xx, yy)
-                galnorms = []
-                for x,y in zip(xx.ravel(), yy.ravel()):
-                    g = im.galaxy_norm(tim, x=x, y=y)
-                    galnorms.append(g)
-                print('  mean galnorm:', np.mean(galnorms))
-
-                print('  depth', -2.5 * (np.log10(5. * tim.sig1 / tim.galnorm) - 9), 'vs target', -2.5 * (np.log10(5./np.sqrt(maxiv)) - 9))
+            # from legacypipe.runcosmos import CosmosSurvey
+            # survey = CosmosSurvey(subset=iset + subset_offset)
+            # for c in ccds:
+            #     #c.camera = c.camera + '+noise'
+            #     print('camera', c.camera)
+            #     im = survey.get_image_object(c)
+            #     print('  got image', im)
+            #     tim = im.get_tractor_image(splinesky=True, pixPsf=True, hybridPsf=True)
+            #     print('  got tim', tim)
+            #     print('  sig1', tim.sig1, 'vs target', targetsig1)
+            #     print('  galnorm', tim.galnorm, 'vs CCDs', c.galnorm)
+            # 
+            #     # compute galnorm_mean like in annotated_ccds
+            #     # Instantiate PSF on a grid
+            #     S = 32
+            #     H,W = tim.shape
+            #     xx = np.linspace(1+S, W-S, 5)
+            #     yy = np.linspace(1+S, H-S, 5)
+            #     xx,yy = np.meshgrid(xx, yy)
+            #     galnorms = []
+            #     for x,y in zip(xx.ravel(), yy.ravel()):
+            #         g = im.galaxy_norm(tim, x=x, y=y)
+            #         galnorms.append(g)
+            #     print('  mean galnorm:', np.mean(galnorms))
+            # 
+            #     print('  depth', -2.5 * (np.log10(5. * tim.sig1 / tim.galnorm) - 9), 'vs target', -2.5 * (np.log10(5./np.sqrt(maxiv)) - 9))
 
             detiv += np.mean(thisdetiv)
             thisset.append(ccds)
