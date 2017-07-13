@@ -589,6 +589,11 @@ def make_depth_cut(survey, ccds, bands, targetrd, brick, W, H, pixscale,
             im = survey.get_image_object(ccd)
             print('Band', band, 'expnum', im.expnum, 'exptime', im.exptime, 'seeing', im.fwhm*im.pixscale, 'arcsec')
 
+            # HACK HACK HACK -- these are missing 2017-07-12
+            if im.expnum in [401266, 400580, 222612]:
+                print('HACK -- skipping expnum', im.expnum)
+                continue
+
             if do_calibs:
                 kwa = dict(git_version=gitver)
                 if gaussPsf:
@@ -597,6 +602,8 @@ def make_depth_cut(survey, ccds, bands, targetrd, brick, W, H, pixscale,
                     kwa.update(splinesky=True)
                 im.run_calibs(**kwa)
 
+            print(im)
+            print('Reading WCS from', im.imgfn, 'HDU', im.hdu)
             wcs = im.get_wcs()
             x0,x1,y0,y1,slc = im.get_image_extent(wcs=wcs, radecpoly=targetrd)
             if x0==x1 or y0==y1:
