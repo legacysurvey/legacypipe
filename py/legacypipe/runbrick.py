@@ -512,7 +512,7 @@ def make_depth_cut(survey, ccds, bands, targetrd, brick, W, H, pixscale,
             slices.append(None)
             continue
         # Check whether this CCD overlaps the unique area of this brick...
-        if np.sum(U[y0:y1+1, x0:x1+1]) == 0:
+        if not np.any(U[y0:y1+1, x0:x1+1]):
             print('No overlap with unique area for CCD', ccd.expnum, ccd.ccdname)
             slices.append(None)
             continue
@@ -539,6 +539,16 @@ def make_depth_cut(survey, ccds, bands, targetrd, brick, W, H, pixscale,
         try_ccds = set()
 
         plot_vals = []
+
+        if plots:
+            plt.clf()
+            for i in b_inds:
+                sy,sx = slices[i]
+                x0,x1 = sx.start, sx.stop
+                y0,y1 = sy.start, sy.stop
+                plt.plot([x0,x0,x1,x1,x0], [y0,y1,y1,y0,y0], 'b-', alpha=0.5)
+            plt.title('CCDs overlapping brick: %i in %s band' % (len(b_inds), band))
+            ps.savefig()
 
         while len(b_inds):
             if len(try_ccds) == 0:
@@ -576,7 +586,7 @@ def make_depth_cut(survey, ccds, bands, targetrd, brick, W, H, pixscale,
                 # *iccd* is an index into ccds.
                 iccd = b_inds[ibest]
                 ccd = ccds[iccd]
-                print('Chose best CCD: seeing', seeing[iccd], 'exptime', ccds.exptime[iccd], 'with target value', ccdvalue[ibest])
+                print('Chose best CCD: seeing', seeing[iccd], 'exptime', ccds.exptime[iccd], 'with value', ccdvalue[ibest])
 
             else:
                 iccd = try_ccds.pop()
@@ -747,8 +757,9 @@ def make_depth_cut(survey, ccds, bands, targetrd, brick, W, H, pixscale,
             plt.plot(seeing[I], ccds.exptime[I], 'k.')
             # which CCDs from this band are we keeping?
             kept = np.array(keep_ccds)
-            kept = kept[ccds.filter[kept] == band]
-            plt.plot(seeing[kept], ccds.exptime[kept], 'ro')
+            if len(kept):
+                kept = kept[ccds.filter[kept] == band]
+                plt.plot(seeing[kept], ccds.exptime[kept], 'ro')
             plt.xlabel('Seeing (arcsec)')
             plt.ylabel('Exptime (sec)')
             plt.title('CCDs kept for band %s' % band)
