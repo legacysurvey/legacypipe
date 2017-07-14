@@ -2444,20 +2444,20 @@ def band2color(band):
     return d[band]
 
 def col2plotname(key):
-    d= dict(airmass= 'X',
+    d= dict(airmass= 'Airmass',
             fwhm= 'FWHM (pixels)',
             seeing= 'FWHM (arcsec)',
             gain= 'Gain (e/ADU)',
-            skymag= 'Sky (AB mag/arcsec^2)',
-            skyrms= 'RMS Sky (e/sec/pixel)',
+            skymag= 'Sky Brightness (AB mag/arcsec^2)',
+            skyrms= 'Sky RMS (e/sec/pixel)',
             transp= 'Atmospheric Transparency',
             zpt= 'Zeropoint (e/s)',
             err_on_radecoff= 'Astrometric Offset Error (Std Err of Median, arcsec)',
             err_on_phoff= r'Zeropoint Error (Std Err of Median), mag)',
             psfdepth= r'Point-source Single Pass Depth (5$\sigma$)',
             galdepth= r'Galaxy Single Pass Depth (5$\sigma$)')
-    d['psfdepth_extcorr']= r'Point-source Single Pass Depth (5$\sigma$, ext. corrected)'
-    d['galdepth_extcorr']= r'Galaxy Single Pass Depth (5$\sigma$, ext. corrected)'
+    d['psfdepth_extcorr']= r'Point-source Depth (5$\sigma$, ext. corrected)'
+    d['galdepth_extcorr']= r'Galaxy Depth (5$\sigma$, ext. corrected)'
     return d.get(key,key)
 
 #######
@@ -2667,7 +2667,8 @@ class ZeropointHistograms(object):
         if self.mosaic:
             self.mosaic= fits_table(self.mosaic)
         self.add_keys()
-        self.plot_hist_1d()
+        self.num_exp= self.store_num_exp()
+        #self.plot_hist_1d()
         #self.plot_2d_scatter()
         #self.plot_astro_photo_scatter()
         #self.plot_hist_depth()
@@ -2704,6 +2705,14 @@ class ZeropointHistograms(object):
             for col in ['psfdepth','galdepth']:
                 self.mosaic.set(col+'_extcorr', self.mosaic.get(col) - self.mosaic.AcoEBV)
  
+    def store_num_exp(self):
+        num={}
+        num['mosaic_z']= len(set(self.mosaic.expnum))
+        for band in ['g','r','z']:
+            keep= self.decam.filter == band
+            num['decam_%s' % band]= len(set(self.decam.expnum[keep]))
+        return num
+
     def set_Aco_EBV(self,tab,camera=None):
         '''tab -- legacy zeropoints -zpt.fits table'''
         assert(camera in ['decam','mosaic'])
@@ -2732,18 +2741,18 @@ class ZeropointHistograms(object):
 
     def get_defaultdict_ylim(self,ylim=None):
         ylim_dict=defaultdict(lambda: ylim)
-        ylim_dict['skymag']= (0,2.5)
-        ylim_dict['zpt']= (0,9)
-        ylim_dict['transp']= (0,14)
+        ylim_dict['skymag']= (0,2.)
+        ylim_dict['zpt']= (0,5.)
+        ylim_dict['transp']= (0,9)
         return ylim_dict
 
     def get_defaultdict_xlim(self,xlim=None):
         xlim_dict=defaultdict(lambda: xlim)
-        xlim_dict['skymag']= (16,22.5)
+        xlim_dict['skymag']= (17,22.5)
         xlim_dict['skyrms']= (0,1.5)
-        xlim_dict['zpt']= (26.,27.)
+        xlim_dict['zpt']= (25.8,27.2)
         xlim_dict['airmass']= (0.9,2.5)
-        xlim_dict['transp']= (0.6,1.1)
+        xlim_dict['transp']= (0.5,1.4)
         xlim_dict['gain']= (0,5)
         xlim_dict['seeing']= (0.5,2.4)
         xlim_dict['fwhm']= (2,10)
@@ -2789,7 +2798,7 @@ class ZeropointHistograms(object):
                     keep= self.decam.filter == band
                     myhist_step(ax,self.decam.get(key)[keep], bins=bins,normed=True,
                                 color=band2color(band),ls='solid',
-                                label='%s (DECam, %d)' % (band,len(self.decam.get(key)[keep])))
+                                label='%s (DECam, %d)' % (band,self.num_exp['decam_'+band]))
                     if key in fiducial_keys:
                         ax.axvline(self.get_fiducial(key,'decam',band),
                                    c=band2color(band),ls='dotted',lw=1) 
@@ -2800,7 +2809,7 @@ class ZeropointHistograms(object):
                     keep= self.mosaic.filter == band
                     myhist_step(ax,self.mosaic.get(key)[keep], bins=bins,normed=True,
                                 color=band2color(band),ls='dashed',
-                                label='%s (Mosaic3, %d)' % (band,len(self.decam.get(key)[keep])))
+                                label='%s (Mosaic3, %d)' % (band,self.num_exp['mosaic_'+band]))
                     if key in fiducial_keys:
                         ls= 'dotted'
                         if key == 'zpt':
@@ -2832,60 +2841,90 @@ class ZeropointHistograms(object):
         FS=14
         eFS=FS+5
         tickFS=FS
-        fig,ax= plt.subplots(2,1,figsize=(8,10))
+        fig,ax= plt.subplots(2,2,figsize=(10,8))
         plt.subplots_adjust(hspace=0.2,wspace=0)
         if xlim:
             bins= np.linspace(xlim[0],xlim[1],num=40)
         else:
             bins=40
-        for row,which in zip([0,1],['psf','gal']):
-            col= which+'depth_extcorr'
+        d_row=dict(decam=0,mosaic=1,bok=1)
+        d_col=dict(psf=0,gal=1)
+        for which in ['psf','gal']:
+            key= which+'depth_extcorr'
             # decam
             if self.decam:
+                row=d_row['decam']
+                col=d_col[which]
                 for band in set(self.decam.filter):
                     keep= self.decam.filter == band
-                    myhist_step(ax[row],self.decam.get(col)[keep], bins=bins,normed=True,
-                                color=band2color(band),ls='solid',lw=1,
-                                label='%s (DECam)' % band)
+                    myh, mybins= myhist_step(ax[row,col],self.decam.get(key)[keep], bins=bins,normed=True,
+                                color=band2color(band),ls='solid',lw=2,
+                                label='%s (DECam)' % band, return_vals=True)
                     # requirements
-                    p1_depth= depth_obj.get_single_pass_depth(band,which,'decam')
-                    ax[row].axvline(p1_depth,
-                                    c=band2color(band),ls='dashed',lw=2,
-                                    label=r'$\mathbf{m_{\rm{DESI}}}$= %.2f' % p1_depth)
-                    # 90% > than requirement
-                    q10= np.percentile(self.decam.get(col)[keep], q=10)
-                    ax[row].axvline(q10,
-                                    c=band2color(band),ls='dotted',lw=2,
-                                    label='q10= %.2f' % q10)
+                    if which == 'gal':
+                        p1_depth= depth_obj.get_single_pass_depth(band,which,'decam')
+                        ax[row,col].axvline(p1_depth,
+                                        c=band2color(band),ls='dashed',lw=1,
+                                        label=r'$\mathbf{m_{\rm{DESI}}}$= %.2f' % p1_depth)
+                        # 90% > than requirement
+                        q10= np.percentile(self.decam.get(key)[keep], q=10)
+                        #ax[row,col].axvline(q10,
+                        #                c=band2color(band),ls='dotted',lw=2,
+                        #                label='q10= %.2f' % q10)
+                        mybins= mybins[:-1]
+                        lasth= myh[mybins <= q10][-1]
+                        myh= np.append(myh[mybins <= q10], lasth)
+                        mybins= np.append(mybins[mybins <= q10], q10)
+                        ax[row,col].fill_between(mybins,[0]*len(myh),myh,
+                                                 where= mybins <= q10, interpolate=True,step='post',
+                                                 color=band2color(band),alpha=0.5)
             # mosaic
             if self.mosaic:
+                row=d_row['mosaic']
+                col=d_col[which]
                 for band in set(self.mosaic.filter):
                     mos_color='k'
                     keep= self.mosaic.filter == band
-                    myhist_step(ax[row],self.mosaic.get(col)[keep], bins=bins,normed=True,
-                                color=mos_color,ls='solid',lw=1,
-                                label='%s (Mosaic3)' % band)
+                    myh, mybins= myhist_step(ax[row,col],self.mosaic.get(key)[keep], bins=bins,normed=True,
+                                color=band2color(band),ls='solid',lw=2,
+                                label='%s (Mosaic3)' % band, return_vals=True)
                     # requirements
-                    p1_depth= depth_obj.get_single_pass_depth(band,which,'mosaic')
-                    ax[row].axvline(p1_depth,
-                                    c=mos_color,ls='dashed',lw=2,
-                                    label=r'$\mathbf{m_{\rm{DESI}}}$= %.2f' % p1_depth)
-                    # 90% > than requirement
-                    q10= np.percentile(self.mosaic.get(col)[keep], q=10)
-                    ax[row].axvline(q10,
-                                    c=mos_color,ls='dotted',lw=2,
-                                    label='q10= %.2f' % q10)
-            # Legend
-            #leg=ax[row].legend(loc=(0,1.02),ncol=2,fontsize=FS-2)
-            leg=ax[row].legend(loc=(1.01,0.1),ncol=1,fontsize=FS-2)
-            # Label
-            xlab=ax[row].set_xlabel(r'%s' % col2plotname(col),fontsize=FS) 
-            ylab=ax[row].set_ylabel('PDF',fontsize=FS)
-            ax[row].tick_params(axis='both', labelsize=tickFS)
-            if ylim:
-                ax[row].set_ylim(ylim)
-            if xlim:
-                ax[row].set_xlim(xlim)
+                    if which == 'gal':
+                        p1_depth= depth_obj.get_single_pass_depth(band,which,'mosaic')
+                        ax[row,col].axvline(p1_depth,
+                                        c=band2color(band),ls='dashed',lw=1,
+                                        label=r'$\mathbf{m_{\rm{DESI}}}$= %.2f' % p1_depth)
+                        # 90% > than requirement
+                        q10= np.percentile(self.mosaic.get(key)[keep], q=10)
+                        #ax[row].axvline(q10,
+                        #                c=mos_color,ls='dotted',lw=2,
+                        #                label='q10= %.2f' % q10)
+                        mybins= mybins[:-1]
+                        lasth= myh[mybins <= q10][-1]
+                        myh= np.append(myh[mybins <= q10], lasth)
+                        mybins= np.append(mybins[mybins <= q10], q10)
+                        ax[row,col].fill_between(mybins,[0]*len(myh),myh,
+                                                 where= mybins <= q10, interpolate=True,step='post',
+                                                 color=band2color(band),alpha=0.5)
+        # Label
+        for row in [1,0]:
+            for col in [0,1]:
+                # Legend
+                leg=ax[row,col].legend(loc=(0.,1.02),ncol=3,fontsize=FS-5)
+                ax[row,col].tick_params(axis='both', labelsize=tickFS)
+                if ylim:
+                    ax[row,col].set_ylim(ylim)
+                if xlim:
+                    ax[row,col].set_xlim(xlim)
+            ylab=ax[row,0].set_ylabel('PDF',fontsize=FS)
+        for col,which in zip([0,1],['psf','gal']): 
+            key= which+'depth_extcorr'
+            xlab=ax[1,col].set_xlabel(r'%s' % col2plotname(key),fontsize=FS) 
+        # Hide axis labels
+        for col in [0,1]: 
+            ax[0,col].set_xticklabels([])
+        for row in [0,1]:
+            ax[row,1].set_yticklabels([])
         savefn='hist_depth.png'
         plt.savefig(savefn, bbox_extra_artists=[leg,xlab,ylab], bbox_inches='tight')
         plt.close() 
@@ -2922,7 +2961,7 @@ class ZeropointHistograms(object):
                     keep= self.decam.filter == band
                     myscatter(ax[row],x[keep],y[keep], 
                               color=band2color(band),s=10.,alpha=0.75,
-                              label='%s (DECam, %d)' % (band,len(x[keep])))
+                              label='%s (DECam, %d)' % (band,self.num_exp['decam_'+band]))
             # mosaic
             if self.mosaic:            
                 row=1
@@ -2931,7 +2970,7 @@ class ZeropointHistograms(object):
                     keep= self.mosaic.filter == band
                     myscatter(ax[row],x[keep],y[keep], 
                               color=band2color(band),s=10.,alpha=0.75,
-                              label='%s (Mosaic3, %d)' % (band,len(x[keep])))
+                              label='%s (Mosaic3, %d)' % (band,self.num_exp['mosaic_'+band]))
             # Crosshairs
             for row in range(2):
                 ax[row].axhline(0,c='k',ls='dashed',lw=1)
@@ -3007,15 +3046,29 @@ class ZeropointHistograms(object):
         plt.close() 
         print "wrote %s" % savefn 
 
+    def col2name(self,col):
+        d=dict(skycounts='Sky Level',
+               skyrms='Sky RMS',
+               skymag='Sky Brightness',
+               zpt='Zeropoint',
+               seeing='Seeing',
+               airmass='Airmass',
+               transp='Atmospheric Transp',
+               phoff='Photometric Offset',
+               raoff='Ra Offset',
+               decoff='Dec Offset')
+        return d[col]
+
     def print_ccds_table(self):
         print('CCDS TABLE')
         print('statistic & units & DECam g & DECam r & DECam z & Mzls z')
-        for col in ['skycounts','skyrms','skymag','zpt','transp','seeing','airmass','phoff','rarms','decrms']:
-            if col in ['phoff','rarms','decrms']:
+        for col in ['skycounts','skyrms','skymag','zpt','seeing','airmass','transp','phoff','raoff','decoff']:
+            if col in ['phoff','raoff','decoff']:
                 # has an uncertainty
                 # Assume we have decam
                 text= '& %s & units & %.2f(%.2f) & %.2f(%.2f) & %.2f(%.2f)' % \
-                        (col,np.median( self.decam.get(col)[self.decam.filter == 'g'] ),
+                        (self.col2name(col),
+                             np.median( self.decam.get(col)[self.decam.filter == 'g'] ),
                                 np.std( self.decam.get(col)[self.decam.filter == 'g'] ),
                              np.median( self.decam.get(col)[self.decam.filter == 'r'] ),
                                 np.std( self.decam.get(col)[self.decam.filter == 'r'] ),
@@ -3034,7 +3087,8 @@ class ZeropointHistograms(object):
                 # No error computed
                 # Assume we have decam
                 text= '& %s & units & %.2f & %.2f & %.2f' % \
-                        (col,np.median( self.decam.get(col)[self.decam.filter == 'g'] ),
+                        (self.col2name(col),
+                             np.median( self.decam.get(col)[self.decam.filter == 'g'] ),
                              np.median( self.decam.get(col)[self.decam.filter == 'r'] ),
                              np.median( self.decam.get(col)[self.decam.filter == 'z'] )
                         )
@@ -3369,17 +3423,18 @@ if __name__ == '__main__':
     fns={}
     fns['decam_a']= '/global/project/projectdirs/cosmo/data/legacysurvey/dr3/ccds-annotated-decals.fits.gz'
     fns['mosaic_a']= '/global/project/projectdirs/cosmo/data/legacysurvey/dr4/ccds-annotated-mzls.fits.gz'
-    fns['decam_l']= '/global/cscratch1/sd/kaylanb/publications/observing_paper/neff_empirical/test_1000-zpt.fits.gz'
-    fns['mosaic_l']= '/global/cscratch1/sd/kaylanb/publications/observing_paper/neff_empirical/mosaic-zpt.fits.gz'
+    #fns['decam_l']= '/global/cscratch1/sd/kaylanb/publications/observing_paper/neff_empirical/test_1000-zpt.fits.gz'
+    fns['decam_l']= '/global/cscratch1/sd/kaylanb/test/legacypipe/py/survey-ccds-decam44k.fits.gz'
+    #fns['mosaic_l']= '/global/cscratch1/sd/kaylanb/publications/observing_paper/neff_empirical/mosaic-zpt.fits.gz'
+    fns['mosaic_l']= '/global/cscratch1/sd/kaylanb/test/legacypipe/py/survey-ccds-mosaic42k.fits.gz'
     
-    a={}
-    for camera in ['decam','mosaic']:
-        a[camera]= AnnotatedVsLegacy(annot_ccds=fns['%s_a' % camera], 
-                                     legacy_zpts=fns['%s_l' % camera],
-                                     camera='%s' % camera)
-    a[camera].plot_scatter_2cameras(dec_legacy=a['decam'].legacy, dec_annot=a['decam'].annot,
-                                    mos_legacy=a['mosaic'].legacy, mos_annot=a['mosaic'].annot)
-    raise ValueError
+    #a={}
+    #for camera in ['decam','mosaic']:
+    #    a[camera]= AnnotatedVsLegacy(annot_ccds=fns['%s_a' % camera], 
+    #                                 legacy_zpts=fns['%s_l' % camera],
+    #                                 camera='%s' % camera)
+    #a[camera].plot_scatter_2cameras(dec_legacy=a['decam'].legacy, dec_annot=a['decam'].annot,
+    #                                mos_legacy=a['mosaic'].legacy, mos_annot=a['mosaic'].annot)
  
     a= ZeropointHistograms(decam_zpts=fns['decam_l'],
                            mosaic_zpts=fns['mosaic_l'])
@@ -3395,7 +3450,7 @@ if __name__ == '__main__':
     #    db= LoadDB(camera=camera) 
     #    # Match
     #    m[camera]= db.match_to_zeropoints(tab=zp.data)
-    #db.make_tneed_plot(decam=m['decam'])
+    ##db.make_tneed_plot(decam=m['decam'])
     #db.make_tneed_plot(decam=m['decam'],mosaic=m['mosaic'])
     raise ValueError
      

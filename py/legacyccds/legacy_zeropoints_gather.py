@@ -65,6 +65,27 @@ def write_cat(cat, outname):
         os.system('gzip --best ' + f)
     print('gzipped files')
 
+def fix_hdu(tab):
+    import fitsio
+    proj= '/project/projectdirs/cosmo/staging'
+    proja= '/global/projecta/projectdirs/cosmo/staging'
+    imgfns=list(set(tab.image_filename))   
+    for cnt,fn in enumerate(imgfns):
+        #if cnt % 10 == 0:
+        #    print('%d/%d' % (cnt,len(imgfns)))
+        keep= tab.image_filename == fn
+        try: 
+            hdulist= fitsio.FITS(os.path.join(proj,fn.strip()))
+        except IOError:
+            try: 
+                hdulist= fitsio.FITS(os.path.join(proja,fn.strip()))
+            except:
+                raise IOError('could not find this fn on proj or proja! %s' % fn.strip())
+        for i,ccdname in enumerate(tab.ccdname[keep]):
+            tab.image_hdu[keep][i]= hdulist[ccdname.strip()].get_extnum()
+    return tab
+            
+        
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description='Generate a legacypipe-compatible CCDs file from a set of reduced imaging.')
@@ -89,6 +110,7 @@ if __name__ == "__main__":
             except IOError:
                 print('File is bad, skipping: %s' % fn)
         cats= merge_tables(cats, columns='fillzero')
+        #cats= fix_hdu(cats)
         # Gather
         all_cats = comm.gather( cats, root=0 )
         if comm.rank == 0:
