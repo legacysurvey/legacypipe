@@ -65,26 +65,47 @@ def write_cat(cat, outname):
         os.system('gzip --best ' + f)
     print('gzipped files')
 
+#def fix_hdu(tab):
+#    import fitsio
+#    proj= '/project/projectdirs/cosmo/staging'
+#    proja= '/global/projecta/projectdirs/cosmo/staging'
+#    imgfns=list(set(tab.image_filename))[:10]   
+#    for cnt,fn in enumerate(imgfns):
+#        if cnt % 10 == 0:
+#            print('%d/%d' % (cnt,len(imgfns)))
+#        keep= tab.image_filename == fn
+#        try: 
+#            hdulist= fitsio.FITS(os.path.join(proj,fn.strip()))
+#        except IOError:
+#            try: 
+#                hdulist= fitsio.FITS(os.path.join(proja,fn.strip()))
+#            except:
+#                raise IOError('could not find this fn on proj or proja! %s' % fn.strip())
+#        for i,ccdname in enumerate(tab.ccdname[keep]):
+#            tab.image_hdu[keep][i]= hdulist[ccdname.strip()].get_extnum()
+#    return tab
+            
 def fix_hdu(tab):
     import fitsio
     proj= '/project/projectdirs/cosmo/staging'
     proja= '/global/projecta/projectdirs/cosmo/staging'
-    imgfns=list(set(tab.image_filename))   
-    for cnt,fn in enumerate(imgfns):
-        #if cnt % 10 == 0:
-        #    print('%d/%d' % (cnt,len(imgfns)))
-        keep= tab.image_filename == fn
+    hdus=[]
+    #tab= tab[:120]
+    for cnt,T in enumerate(tab):
+        if cnt % 100 == 0:
+            print('%d/%d' % (cnt,len(tab)))
+        fn= T.image_filename.strip() 
+        ccdname= T.ccdname.strip().upper()
         try: 
-            hdulist= fitsio.FITS(os.path.join(proj,fn.strip()))
+            hdulist= fitsio.FITS(os.path.join(proj,fn))
         except IOError:
             try: 
-                hdulist= fitsio.FITS(os.path.join(proja,fn.strip()))
+                hdulist= fitsio.FITS(os.path.join(proja,fn))
             except:
-                raise IOError('could not find this fn on proj or proja! %s' % fn.strip())
-        for i,ccdname in enumerate(tab.ccdname[keep]):
-            tab.image_hdu[keep][i]= hdulist[ccdname.strip()].get_extnum()
+                raise IOError('could not find this fn on proj or proja! %s' % fn)
+        hdus.append( hdulist[ccdname].get_extnum() )
+    tab.set('image_hdu', np.array(hdus))
     return tab
-            
         
 
 if __name__ == "__main__":
@@ -92,6 +113,7 @@ if __name__ == "__main__":
     parser.add_argument('--file_list',action='store',help='List of zeropoint fits files to concatenate',required=True)
     parser.add_argument('--nproc',type=int,action='store',default=1,help='number mpi tasks',required=True)
     parser.add_argument('--outname', type=str, default='combined_legacy_zpt.fits', help='Output directory.')
+    parser.add_argument('--fix_hdu', action='store_true',default=False, help='',required=False)
     opt = parser.parse_args()
     
     fns= read_lines(opt.file_list) 
@@ -110,7 +132,9 @@ if __name__ == "__main__":
             except IOError:
                 print('File is bad, skipping: %s' % fn)
         cats= merge_tables(cats, columns='fillzero')
-        #cats= fix_hdu(cats)
+        if opt.fix_hdu:
+            print('fixing hdu')
+            cats= fix_hdu(cats)
         # Gather
         all_cats = comm.gather( cats, root=0 )
         if comm.rank == 0:
@@ -123,5 +147,8 @@ if __name__ == "__main__":
             print('Reading %d/%d' % (cnt,len(fns)))
             cats.append( fits_table(fn) )
         cats= merge_tables(cats, columns='fillzero')
+        if opt.fix_hdu:
+            print('fixing hdu')
+            cats= fix_hdu(cats)
         write_cat(cats, outname=opt.outname)
         print("Done")

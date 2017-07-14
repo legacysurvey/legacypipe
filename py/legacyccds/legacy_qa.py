@@ -2480,7 +2480,8 @@ class AnnotatedVsLegacy(object):
         self.match()
         self.apply_cuts()
         # Plot
-        self.plot_scatter()
+        if 'psfdepth' in self.legacy.get_columns():
+            self.plot_scatter()
    
     def match(self):
         '''
@@ -2518,11 +2519,14 @@ class AnnotatedVsLegacy(object):
         self.add_annot_keys()
     
     def add_legacy_keys(self):
-        depth_obj= Depth(self.camera,
-                         self.legacy.skyrms,self.legacy.gain,
-                         self.legacy.fwhm,self.legacy.zpt)
-        self.legacy.set('psfdepth', depth_obj.get_depth_legacy_zpts('psf'))
-        self.legacy.set('galdepth', depth_obj.get_depth_legacy_zpts('gal'))
+        if not 'gain' in self.legacy.get_columns():
+            print('WARNING: cannot compute depths, not enough info in table')
+        else:
+            depth_obj= Depth(self.camera,
+                             self.legacy.skyrms,self.legacy.gain,
+                             self.legacy.fwhm,self.legacy.zpt)
+            self.legacy.set('psfdepth', depth_obj.get_depth_legacy_zpts('psf'))
+            self.legacy.set('galdepth', depth_obj.get_depth_legacy_zpts('gal'))
 
     def add_annot_keys(self):
         for key in ['psf','gal']:
@@ -2550,6 +2554,30 @@ class AnnotatedVsLegacy(object):
     def sigma_annot_ccds(self,sig1,ccdzpt,norm):
         '''norm is one of: {psf,gal}norm, {psf,gal}norm_mean'''
         return self.sig1_to_ADU_per_sec(sig1,ccdzpt) / norm
+
+    def plot_hdu_diff(self):
+        # Plot
+        FS=14
+        eFS=FS+5
+        tickFS=FS
+        fig,ax= plt.subplots(figsize=(7,5))
+        colors=['g','r','m']
+        for band,color in zip(set(self.legacy.filter),colors):
+            keep = self.legacy.filter == band
+            x= self.annot.image_hdu[keep]
+            y= self.legacy.image_hdu[keep] - x
+            myscatter(ax,x,y, 
+                      color=color,m='o',s=10.,alpha=0.75,label='%s (%d)' % (band,len(x)))
+        # Legend
+        ax.legend(loc=0,fontsize=FS-2)
+        # Label
+        xlab=ax.set_xlabel('image_hdu (Annotated CCDs)',fontsize=FS) 
+        ylab=ax.set_ylabel('Legacy - Annot (image_hdu)',fontsize=FS) 
+        ax.tick_params(axis='both', labelsize=tickFS)
+        savefn='hdu_diff_%s.png' % self.camera
+        plt.savefig(savefn, bbox_extra_artists=[xlab,ylab], bbox_inches='tight')
+        plt.close() 
+        print "wrote %s" % savefn 
 
     def plot_scatter(self):
         # All keys and any ylims to use
@@ -3102,7 +3130,7 @@ class ZeropointHistograms(object):
 
     def print_requirements_table(self):
         print('DESI REQUIREMENTS TABLE')
-        print('camera & band & q10 & q10 & astrometric offset err & zeropoint err')
+        print('camera & band & psfdepth: q10 q50 desi_req & galdepth: q10 q50 desi_req')
         phrms= dict(g=0.01,r=0.01,z=0.02)
         depth_obj= DepthRequirements()
         need_cols= ['psfdepth_extcorr','galdepth_extcorr',
@@ -3113,15 +3141,17 @@ class ZeropointHistograms(object):
                 keep *= (np.isfinite(self.decam.get(col)))
             p1_depth_psf= depth_obj.get_single_pass_depth(band,'psf','decam')
             p1_depth_gal= depth_obj.get_single_pass_depth(band,'gal','decam')
-            print('DECam & %s & %.2f | %.2f & %.2f | %.2f & %.3f | %.3f & %.3f | %.3f  \\\\' % \
+            print('DECam & %s & %.2f | %.2f | %.2f & %.2f | %.2f | %.2f \\\\' % \
                     (band,np.percentile( self.decam.psfdepth_extcorr[keep], q=10),
+                          np.percentile( self.decam.psfdepth_extcorr[keep], q=50),
                             p1_depth_psf,
                           np.percentile( self.decam.galdepth_extcorr[keep], q=10),
+                          np.percentile( self.decam.galdepth_extcorr[keep], q=50),
                             p1_depth_gal,
-                          np.median( self.decam.err_on_radecoff[keep]),
-                            0.030,
-                          np.median( self.decam.err_on_phoff[keep]),
-                            phrms[band],
+                          #np.median( self.decam.err_on_radecoff[keep]),
+                          #  0.030,
+                          #np.median( self.decam.err_on_phoff[keep]),
+                          #  phrms[band],
                     ))
         if self.mosaic:
             for band in ['z']:
@@ -3130,15 +3160,17 @@ class ZeropointHistograms(object):
                     keep *= (np.isfinite(self.mosaic.get(col)))
                 p1_depth_psf= depth_obj.get_single_pass_depth(band,'psf','mosaic')
                 p1_depth_gal= depth_obj.get_single_pass_depth(band,'gal','mosaic')
-                print('MOSAIC-3 & %s & %.2f | %.2f & %.2f | %.2f & %.3f | %.3f & %.3f | %.3f  \\\\' % \
+                print('MOSAIC-3 & %s & %.2f | %.2f | %.2f & %.2f | %.2f | %.2f \\\\' % \
                         (band,np.percentile( self.mosaic.psfdepth_extcorr[keep], q=10),
+                              np.percentile( self.mosaic.psfdepth_extcorr[keep], q=50),
                                 p1_depth_psf,
                               np.percentile( self.mosaic.galdepth_extcorr[keep], q=10),
+                              np.percentile( self.mosaic.galdepth_extcorr[keep], q=50),
                                 p1_depth_gal,
-                              np.median( self.mosaic.err_on_radecoff[keep]),
-                                0.030,
-                              np.median( self.mosaic.err_on_phoff[keep]),
-                                phrms[band],
+                              #np.median( self.mosaic.err_on_radecoff[keep]),
+                              #  0.030,
+                              #np.median( self.mosaic.err_on_phoff[keep]),
+                              #  phrms[band],
                         ))
 
 
@@ -3436,6 +3468,16 @@ if __name__ == '__main__':
     #a[camera].plot_scatter_2cameras(dec_legacy=a['decam'].legacy, dec_annot=a['decam'].annot,
     #                                mos_legacy=a['mosaic'].legacy, mos_annot=a['mosaic'].annot)
  
+    # TEST image_hdu is correct
+    camera='decam'
+    fns['decam_l']= '/global/cscratch1/sd/kaylanb/dr5_zpts/survey-ccds-25bricks-hdufixed.fits.gz'
+    #fns['decam_l']= '/global/cscratch1/sd/kaylanb/test/legacypipe/py/survey-ccds-25bricks-fixed.fits.gz'
+    a= AnnotatedVsLegacy(annot_ccds=fns['%s_a' % camera], 
+                         legacy_zpts=fns['%s_l' % camera],
+                         camera='%s' % camera)
+    a.plot_hdu_diff()
+    raise ValueError
+
     a= ZeropointHistograms(decam_zpts=fns['decam_l'],
                            mosaic_zpts=fns['mosaic_l'])
     #raise ValueError
