@@ -14,6 +14,14 @@ class Dr3DecalsSurvey(LegacySurveyData):
     def ccds_for_fitting(self, brick, ccds):
         return np.flatnonzero(ccds.camera == 'decam')
 
+class Dr3LP25(LegacySurveyData):
+    def filter_ccds_files(self, fns):
+        return [fn for fn in fns if
+                ('survey-ccds-lp25.fits.gz' in fn)]
+
+    def ccds_for_fitting(self, brick, ccds):
+        return np.flatnonzero(ccds.camera == 'decam')
+
 class Dr4Survey(LegacySurveyData):
     def ccds_for_fitting(survey, brick, ccds):
         return np.flatnonzero(np.logical_or(ccds.camera == 'mosaic',
@@ -83,6 +91,25 @@ class Dr4Plus(Dr4Survey):
                   'survey-ccds-dr4-mzlsv2.fits.gz' in fn or
                   'survey-ccds-mzls-runs-16-to-21a.fits.gz' in fn)]
 
+class Dr5DecalsSurvey(LegacySurveyData):
+    # Do we want/need this cut?
+    def filter_ccds_files(self, fns):
+        return [fn for fn in fns if
+                ('survey-ccds-decals.fits.gz' in fn or
+                 'survey-ccds-extra.fits.gz' in fn or
+                 'survey-ccds-nondecals-dr5.fits.gz' in fn or
+                 'survey-ccds-nondecals.fits.gz' in fn or
+                 'survey-ccds-run14.fits.gz' in fn or
+                 'survey-ccds-run16.fits.gz' in fn or
+                 'survey-ccds-run19.fits.gz' in fn or
+                 'survey-ccds-run21.fits.gz' in fn or
+                 'survey-ccds-run25.fits.gz' in fn or
+                 'survey-ccds-run27.fits.gz' in fn or
+                 'survey-ccds-run28.fits.gz' in fn)]
+
+    def ccds_for_fitting(self, brick, ccds):
+        return np.flatnonzero(ccds.camera == 'decam')
+
 runs = {
     'dr3': Dr3DecalsSurvey,
     'thirdpix-v2': Thirdpixv2,
@@ -96,6 +123,8 @@ runs = {
     'bootes-90prime': Dr4Bootes90Prime,
     'bootes-mzlsv2thruMarch19': Dr4BootesMzls,
     'dr4+': Dr4Plus,
+    'dr5': Dr5DecalsSurvey,
+    'dr3lp25': Dr3LP25,
     None: LegacySurveyData,
 }
 
