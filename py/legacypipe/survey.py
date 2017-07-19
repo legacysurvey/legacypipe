@@ -1193,6 +1193,9 @@ Now using the current directory as LEGACY_SURVEY_DIR, but this is likely to fail
         '''
         return fns
 
+    def filter_ccd_kd_files(self, fns):
+        return fns
+
     def get_ccds(self):
         '''
         Returns the table of CCDs.
@@ -1261,8 +1264,8 @@ Now using the current directory as LEGACY_SURVEY_DIR, but this is likely to fail
         '''
         Returns a table of the CCDs touching the given *wcs* region.
         '''
-
         fns = self.find_file('ccd-kds')
+        fns = self.filter_ccd_kd_files(fns)
         if len(fns):
             # Assume that if >= 1 survey-ccds-*.kd.fits files exist,
             # then we should read all CCDs from there rather than

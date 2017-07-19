@@ -14,6 +14,9 @@ class Dr3DecalsSurvey(LegacySurveyData):
     def ccds_for_fitting(self, brick, ccds):
         return np.flatnonzero(ccds.camera == 'decam')
 
+    def filter_ccd_kd_files(self, fns):
+        return []
+
 class Dr4Survey(LegacySurveyData):
     def ccds_for_fitting(survey, brick, ccds):
         return np.flatnonzero(np.logical_or(ccds.camera == 'mosaic',
