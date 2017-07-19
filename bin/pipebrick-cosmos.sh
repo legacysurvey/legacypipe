@@ -49,7 +49,7 @@ mkdir -p $PIC
 
 python -u legacypipe/runcosmos.py \
     --subset $subset \
-    --threads 24 \
+    --threads 32 \
     --skip-calibs \
     --brick $brick --outdir $outdir --nsigma 6 \
     --checkpoint $CHK/checkpoint-${brick}.pickle \
