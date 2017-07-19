@@ -94,7 +94,6 @@ def stage_tims(W=3600, H=3600, pixscale=0.262, brickname=None,
                splinesky=True,
                gaussPsf=False, pixPsf=False, hybridPsf=False,
                constant_invvar=False,
-               use_blacklist = True,
                depth_cut = True,
                read_image_pixels = True,
                mp=None,
@@ -233,11 +232,6 @@ def stage_tims(W=3600, H=3600, pixscale=0.262, brickname=None,
     ccds.ccd_cuts = survey.ccd_cuts(ccds)
     cutvals = ccds.ccd_cuts
     print('CCD cut bitmask values:', cutvals)
-    if not use_blacklist:
-        bits = LegacySurveyData.ccd_cut_bits
-        cutvals = cutvals & ~bits['BLACKLIST']
-        print('Not blacklisting; un-setting bit value', bits['BLACKLIST'],
-              '->', cutvals)
     ccds.cut(cutvals == 0)
     print(len(ccds), 'CCDs survive cuts')
 
@@ -2454,7 +2448,6 @@ def run_brick(brick, survey, radec=None, pixscale=0.262,
               zoom=None,
               bands=None,
               allbands=None,
-              blacklist=True,
               depth_cut=True,
               nblobs=None, blob=None, blobxy=None, blobradec=None,
               nsigma=6,
@@ -2653,8 +2646,7 @@ def run_brick(brick, survey, radec=None, pixscale=0.262,
             brick = ('custom-%06i%s%05i' %
                          (int(1000*ra), 'm' if dec < 0 else 'p',
                           int(1000*np.abs(dec))))
-    initargs.update(brickname=brick,
-                    survey=survey)
+    initargs.update(brickname=brick, survey=survey)
 
     if stagefunc is None:
         stagefunc = CallGlobalTime('stage_%s', globals())
@@ -2672,7 +2664,6 @@ def run_brick(brick, survey, radec=None, pixscale=0.262,
                   gaussPsf=gaussPsf, pixPsf=pixPsf, hybridPsf=hybridPsf,
                   rex=rex,
                   constant_invvar=constant_invvar,
-                  use_blacklist=blacklist,
                   depth_cut=depth_cut,
                   splinesky=splinesky,
                   simul_opt=simulOpt,
@@ -2962,10 +2953,6 @@ python -u legacypipe/runbrick.py --plots --brick 2440p070 --zoom 1900 2400 450 9
                         action='store_false', help='Do not cut to the set of CCDs required to reach our depth target')
 
     parser.add_argument(
-        '--no-blacklist', dest='blacklist', default=True, action='store_false',
-        help='Do not blacklist some proposals?')
-
-    parser.add_argument(
         '--on-bricks', default=False, action='store_true',
         help='Enable Tractor-on-bricks edge handling?')
 
@@ -3051,7 +3038,6 @@ def get_runbrick_kwargs(opt):
     kwa.update(
         radec=opt.radec, pixscale=opt.pixscale,
         width=opt.width, height=opt.height, zoom=opt.zoom,
-        blacklist=opt.blacklist,
         depth_cut=opt.depth_cut,
         threads=opt.threads, ceres=opt.ceres, wise_ceres=opt.wise_ceres,
         do_calibs=opt.do_calibs,
