@@ -730,11 +730,10 @@ class Measurer(object):
         self.expid = '{:08d}-{}'.format(self.expnum, self.ccdname)
         hdulist= fitsio.FITS(self.fn)
         self.image_hdu= hdulist[ext].get_extnum() #NOT ccdnum in header!
-        # Sanity check
-        ccdname = self.hdr['EXTNAME'].strip()
-        assert(self.ccdname.upper() == ccdname.upper())
         # use header
         self.hdr = fitsio.read_header(self.fn, ext=ext)
+        # Sanity check
+        assert(self.ccdname.upper() == self.hdr['EXTNAME'].strip().upper())
         self.ccdnum = np.int(self.hdr['CCDNUM']) 
         self.gain= self.get_gain(self.hdr)
         # WCS

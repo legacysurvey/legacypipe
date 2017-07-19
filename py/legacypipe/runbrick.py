@@ -2111,7 +2111,7 @@ def stage_wise_forced(
     unwise_dir=None,
     unwise_tr_dir=None,
     brick=None,
-    use_ceres=True,
+    wise_ceres=True,
     mp=None,
     **kwargs):
     '''
@@ -2145,7 +2145,7 @@ def stage_wise_forced(
     # Skip if $UNWISE_COADDS_DIR or --unwise-dir not set.
     if unwise_dir is not None:
         for band in [1,2,3,4]:
-            args.append((wcat, tiles, band, roiradec, unwise_dir, use_ceres,
+            args.append((wcat, tiles, band, roiradec, unwise_dir, wise_ceres,
                          broadening[band]))
 
     # Add time-resolved WISE coadds
@@ -2173,7 +2173,7 @@ def stage_wise_forced(
                 print('Epoch %i: %i tiles:' % (e, len(I)), W.coadd_id[I])
                 edir = os.path.join(tdir, 'e%03i' % e)
                 eargs.append((e,(wcat, tiles[I], band, roiradec, edir,
-                                 use_ceres, broadening[band])))
+                                 wise_ceres, broadening[band])))
 
     # Run the forced photometry!
     phots = mp.map(_unwise_phot, args + [a for e,a in eargs])
@@ -2257,17 +2257,17 @@ def stage_wise_forced(
 
 def _unwise_phot(X):
     from wise.forcedphot import unwise_forcedphot
-    (wcat, tiles, band, roiradec, unwise_dir, use_ceres, broadening) = X
+    (wcat, tiles, band, roiradec, unwise_dir, wise_ceres, broadening) = X
     try:
         W = unwise_forcedphot(wcat, tiles, roiradecbox=roiradec, bands=[band],
-            unwise_dir=unwise_dir, use_ceres=use_ceres,
+            unwise_dir=unwise_dir, use_ceres=wise_ceres,
             psf_broadening=broadening)
     except:
         import traceback
         print('unwise_forcedphot failed:')
         traceback.print_exc()
 
-        if use_ceres:
+        if wise_ceres:
             print('Trying without Ceres...')
             W = unwise_forcedphot(wcat, tiles, roiradecbox=roiradec,
                                   bands=[band], unwise_dir=unwise_dir,
@@ -2474,6 +2474,7 @@ def run_brick(brick, survey, radec=None, pixscale=0.262,
               splinesky=False,
               constant_invvar=False,
               ceres=True,
+              wise_ceres=True,
               unwise_dir=None,
               unwise_tr_dir=None,
               threads=None,
@@ -2575,6 +2576,8 @@ def run_brick(brick, survey, radec=None, pixscale=0.262,
 
     - *ceres*: boolean; use Ceres Solver when possible?
 
+    - *wise_ceres*: boolean; use Ceres Solver for unWISE forced photometry?
+
     - *unwise_dir*: string; where to look for unWISE coadd files.
       This may be a colon-separated list of directories to search in
       order.
@@ -2674,6 +2677,7 @@ def run_brick(brick, survey, radec=None, pixscale=0.262,
                   splinesky=splinesky,
                   simul_opt=simulOpt,
                   use_ceres=ceres,
+                  wise_ceres=wise_ceres,
                   do_calibs=do_calibs,
                   write_metrics=write_metrics,
                   lanczos=lanczos,
@@ -2879,7 +2883,11 @@ python -u legacypipe/runbrick.py --plots --brick 2440p070 --zoom 1900 2400 450 9
     #parser.add_argument('--no-ceres', dest='ceres', default=True,
     #                    action='store_false', help='Do not use Ceres Solver')
     parser.add_argument('--ceres', default=False, action='store_true',
-                        help='Use Ceres Solver?')
+                        help='Use Ceres Solver for all optimization?')
+
+    parser.add_argument('--no-wise-ceres', dest='wise_ceres', default=True,
+                        action='store_false',
+                        help='Do not use Ceres Solver for unWISE forced phot')
     
     parser.add_argument('--nblobs', type=int,help='Debugging: only fit N blobs')
     parser.add_argument('--blob', type=int, help='Debugging: start with blob #')
@@ -3045,7 +3053,7 @@ def get_runbrick_kwargs(opt):
         width=opt.width, height=opt.height, zoom=opt.zoom,
         blacklist=opt.blacklist,
         depth_cut=opt.depth_cut,
-        threads=opt.threads, ceres=opt.ceres,
+        threads=opt.threads, ceres=opt.ceres, wise_ceres=opt.wise_ceres,
         do_calibs=opt.do_calibs,
         write_metrics=opt.write_metrics,
         on_bricks=opt.on_bricks,

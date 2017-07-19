@@ -5,6 +5,47 @@ from astrometry.util.fits import *
 
 import sys
 
+# Depth map summaries
+if True:
+
+    args = sys.argv[1:]
+    outfn = args[0]
+    fns = args[1:]
+
+    print('Writing to output:', outfn)
+    print('Input files:', len(fns))
+
+    #fns = glob('depthcuts/*/ccds-*.fits')
+    #fns.sort()
+    #print('Found', len(fns), 'CCDs files')
+
+    pcts = np.arange(0, 101)
+
+    T = fits_table()
+    T.filename = np.array(fns)
+    T.depths_g = np.zeros((len(T), len(pcts)), np.float32)
+    T.depths_r = np.zeros((len(T), len(pcts)), np.float32)
+    T.depths_z = np.zeros((len(T), len(pcts)), np.float32)
+    
+    for ifn,fn in enumerate(fns):
+        print('Brick', (ifn+1), 'of', len(fns), fn)
+        for band,depths in zip(['g','r','z'], (T.depths_g, T.depths_r, T.depths_z)):
+            bfn = fn.replace('ccds-', 'depth-').replace('.fits', '-%s.fits' % band)
+            if not os.path.exists(bfn):
+                continue
+            print('  Reading', bfn)
+            D = fitsio.read(bfn)
+            depths[ifn,:] = np.percentile(D[np.isfinite(D)], pcts)
+
+        #if ifn == 100:
+        #    break
+    #T = T[:100]
+    #T.writeto('depth-cut-percentiles.fits')
+    T.writeto(outfn)
+
+    sys.exit(0)
+
+
 ### Update mistakes
 if True:
     from astrometry.util.fits import *
