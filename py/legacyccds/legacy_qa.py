@@ -137,70 +137,15 @@ def number_matches_by_cut(extra_search,arjun_fn):
         m1, m2, d12 = match_radec(extra['ra'],extra['dec'],arj.ccd_ra,arj.ccd_dec,1./3600.0,nearest=True) 
         print('gaia match', len(m1),len(arj[keep]))
 
-def junk_stars(legacy_fn, arjun_fn=None,
-               xx1=0,xx2=4096-1,yy1=0,yy2=2048-1,
-               img_or_badpix='img'):
-    assert(img_or_badpix in ['img','badpix'])
-    from matplotlib.patches import Circle,Wedge
-    from matplotlib.collections import PatchCollection
-    fig,ax=plt.subplots(figsize=(20,10))
-    extra={}
-    extra['proj_fn']='/project/projectdirs/cosmo/staging/decam/DECam_CP/CP20170326/c4d_170326_233934_oki_z_v1.fits.fz'
-    legacy=fits_table(legacy_fn)
-    arjun=fits_table(arjun_fn)
-    for hdu in set(legacy.image_hdu):
-        # Load CCD
-        if img_or_badpix == 'img':
-            img= fitsio.read(extra['proj_fn'], ext=hdu, header=False)
-            vmin=np.percentile(img,q=0.05);vmax=np.percentile(img,q=99.5)
-        elif img_or_badpix == 'badpix':
-            img= fitsio.read(extra['proj_fn'].replace('oki','ood').replace('ooi','ood'),
-                             ext=hdu, header=False)
-        vmin,vmax = None,None
-        img[img > 0] = 1
-        img[img == 0] = 2
-        img[img == 1] = 0
-        img[img == 2] = 1
-        # HDU in the tables
-        keep_leg= legacy.image_hdu == hdu
-        #assert(hdu) #must be specified to match to ccdname
-        #hdu_to_ccdname= {'35':'N4 ','28':'S4 ','50':'N19','10':'S22'}
-        hdu_to_ccdname= {'34':'N4 ','27':'S4 ','49':'N19','9':'S22'}
-        keep_arj= arjun.extname == hdu_to_ccdname[str(hdu)]
-        #extra['arjun_x']= arjun.ccd_x[keep]
-        #extra['arjun_y']= arjun.ccd_y[keep]
-        #extra['arjun_ra']= arjun.ccd_ra[keep]
-        #extra['arjun_dec']= arjun.ccd_dec[keep]
-        # PLOT
-        ax.imshow(img.T, interpolation='none', origin='lower',cmap='gray',vmin=vmin,vmax=vmax)
-        ax.tick_params(direction='out')
-        aprad_pix= 10/2./0.262
-        drad= aprad_pix / 4
-        for x,y,color,r in [(arjun.ccd_x[keep_arj],arjun.ccd_y[keep_arj],'y',aprad_pix),
-                            (legacy.x[keep_leg],legacy.y[keep_leg],'m',2*aprad_pix)]:
-        #for x,y,color,r in [(extra['1st_x'],extra['1st_y'],'y',aprad_pix),
-        #                    (extra['2nd_x'],extra['2nd_y'],'m',2*aprad_pix)]:
-        #key2,key3 = 'apflux','bit_flux' 
-        #key2,key3 = 'b_isolated','apmags' 
-        #key2,key3 = 'b_isolated','separation' 
-        #for x,y,color,r in [(extra['dao_x_5'],extra['dao_y_5'],'y',aprad_pix),
-        #                    (extra['dao_x_5'][extra[key2]],extra['dao_y_5'][extra[key2]],'b',aprad_pix + 1.25*drad),
-        #                    (extra['dao_x_5'][extra[key3]],extra['dao_y_5'][extra[key3]],'m',aprad_pix + 2.5*drad)]:
-            # img transpose used, so reverse x,y
-            #circles=[ Circle((y1, x1), rad) for x1, y1 in zip(x, y) ]
-            patches=[ Wedge((y1, x1), r + drad, 0, 360,drad) for x1, y1 in zip(x, y) ]
-            coll = PatchCollection(patches, color=color) #,alpha=1)
-            ax.add_collection(coll)
-            #plt.scatter(y,x,facecolors='none',edgecolors=color,marker='o',s=rad,linewidth=5.,rasterized=True)
-        plt.xlim(xx1,xx2)
-        plt.ylim(yy1,yy2)
-        savefn= '%s_%s_x%d-%d_y%d-%d.png' % (img_or_badpix,hdu,xx1,xx2,yy1,yy2)
-        #savefn= '%s_%s.png' % (img_or_badpix,extra['hdu'])
-        plt.savefig(savefn)
-        plt.close()
-        print('Wrote %s' % savefn)
 
-
+def imgs2fits(images,name):
+    '''images -- list of numpy 2D arrays'''
+    assert('.fits' in name)
+    hdu = fitsio.FITS(name,'rw')
+    for image in images:
+        hdu.write(image)
+    hdu.close()
+    print('Wrote %s' % name)
 
 def imshow_stars_on_ccds(extra_fn, arjun_fn=None,
                          xx1=0,xx2=4096-1,yy1=0,yy2=2048-1,
@@ -2493,6 +2438,17 @@ class AnnotatedVsLegacy(object):
                                   1./3600,nearest=True)
         self.legacy= self.legacy[m1]
         self.annot= self.annot[m2]
+        # remove mismatching image_filenames
+        print('looping over, %d' % len(self.legacy))
+        legacy_base= [os.path.basename(fn) for fn in np.char.strip(self.legacy.image_filename)]
+        annot_base= [os.path.basename(fn) for fn in np.char.strip(self.annot.image_filename)]
+        print('looping finished')
+        same= np.array(legacy_base) == \
+              np.array(annot_base)
+        self.legacy.cut(same)
+        self.annot.cut(same)
+        print('removing %d ccds b/c name mismatch, have this many left %d' % \
+                (np.where(same == False)[0].size,len(self.legacy)))
 
     def apply_cuts(self):
         keep= np.ones(len(self.annot),bool)
@@ -2562,12 +2518,18 @@ class AnnotatedVsLegacy(object):
         tickFS=FS
         fig,ax= plt.subplots(figsize=(7,5))
         colors=['g','r','m']
+        x= self.annot.image_hdu
+        y= self.legacy.image_hdu - x
+        is_wrong= np.where(y != 0)[0]
+        print('matched ccds=%d, correct=%d, wrong=%d' % 
+            (len(self.legacy),np.where(y == 0)[0].size,is_wrong.size))
+        print('first 10 wrong hdu images:')
+        for fn in list(set(np.char.strip(self.legacy.image_filename[is_wrong])))[:10]:
+            print('%s' % fn)
         for band,color in zip(set(self.legacy.filter),colors):
             keep = self.legacy.filter == band
-            x= self.annot.image_hdu[keep]
-            y= self.legacy.image_hdu[keep] - x
-            myscatter(ax,x,y, 
-                      color=color,m='o',s=10.,alpha=0.75,label='%s (%d)' % (band,len(x)))
+            myscatter(ax,x[keep],y[keep], 
+                      color=color,m='o',s=10.,alpha=0.75,label='%s (%d)' % (band,len(x[keep])))
         # Legend
         ax.legend(loc=0,fontsize=FS-2)
         # Label
@@ -2699,7 +2661,7 @@ class ZeropointHistograms(object):
         #self.plot_hist_1d()
         #self.plot_2d_scatter()
         #self.plot_astro_photo_scatter()
-        #self.plot_hist_depth()
+        self.plot_hist_depth(legend=False)
         self.print_ccds_table()
         self.print_requirements_table()
    
@@ -2858,7 +2820,7 @@ class ZeropointHistograms(object):
             plt.close() 
             print "wrote %s" % savefn 
 
-    def plot_hist_depth(self):
+    def plot_hist_depth(self,legend=True):
         # All keys and any ylims to use
         cols= ['psfdepth_extcorr','galdepth_extcorr']
         xlim= (21,24.5)
@@ -2870,7 +2832,10 @@ class ZeropointHistograms(object):
         eFS=FS+5
         tickFS=FS
         fig,ax= plt.subplots(2,2,figsize=(10,8))
-        plt.subplots_adjust(hspace=0.2,wspace=0)
+        if legend:
+            plt.subplots_adjust(hspace=0.2,wspace=0)
+        else:
+            plt.subplots_adjust(hspace=0,wspace=0)
         if xlim:
             bins= np.linspace(xlim[0],xlim[1],num=40)
         else:
@@ -2935,16 +2900,19 @@ class ZeropointHistograms(object):
                                                  where= mybins <= q10, interpolate=True,step='post',
                                                  color=band2color(band),alpha=0.5)
         # Label
+        cam={}
+        cam['0']='DECaLS'
+        cam['1']='MzLS'
         for row in [1,0]:
             for col in [0,1]:
-                # Legend
-                leg=ax[row,col].legend(loc=(0.,1.02),ncol=3,fontsize=FS-5)
+                if legend:
+                    leg=ax[row,col].legend(loc=(0.,1.02),ncol=3,fontsize=FS-5)
                 ax[row,col].tick_params(axis='both', labelsize=tickFS)
                 if ylim:
                     ax[row,col].set_ylim(ylim)
                 if xlim:
                     ax[row,col].set_xlim(xlim)
-            ylab=ax[row,0].set_ylabel('PDF',fontsize=FS)
+            ylab=ax[row,0].set_ylabel('PDF (%s)' % cam[str(row)],fontsize=FS)
         for col,which in zip([0,1],['psf','gal']): 
             key= which+'depth_extcorr'
             xlab=ax[1,col].set_xlabel(r'%s' % col2plotname(key),fontsize=FS) 
@@ -2954,7 +2922,10 @@ class ZeropointHistograms(object):
         for row in [0,1]:
             ax[row,1].set_yticklabels([])
         savefn='hist_depth.png'
-        plt.savefig(savefn, bbox_extra_artists=[leg,xlab,ylab], bbox_inches='tight')
+        bbox=[xlab,ylab]
+        if legend:
+            bbox.append(leg)
+        plt.savefig(savefn, bbox_extra_artists=bbox, bbox_inches='tight')
         plt.close() 
         print "wrote %s" % savefn 
 
@@ -3468,15 +3439,20 @@ if __name__ == '__main__':
     #a[camera].plot_scatter_2cameras(dec_legacy=a['decam'].legacy, dec_annot=a['decam'].annot,
     #                                mos_legacy=a['mosaic'].legacy, mos_annot=a['mosaic'].annot)
  
-    # TEST image_hdu is correct
+    ######## 
+    ## TEST image_hdu is correct
     camera='decam'
-    fns['decam_l']= '/global/cscratch1/sd/kaylanb/dr5_zpts/survey-ccds-25bricks-hdufixed.fits.gz'
+    #fns['decam_l']= '/global/cscratch1/sd/kaylanb/dr5_zpts/survey-ccds-25bricks-hdufixed.fits.gz'
+    #fns['decam_l']= '/global/cscratch1/sd/kaylanb/test/legacypipe/py/survey_ccds_lp25_hdufix2.fits.gz'
     #fns['decam_l']= '/global/cscratch1/sd/kaylanb/test/legacypipe/py/survey-ccds-25bricks-fixed.fits.gz'
+    fns['decam_l']= '/global/cscratch1/sd/kaylanb/test/legacypipe/py/legacypipe_decam_all.fits.gz'
+    #fns['decam_l']= '/global/cscratch1/sd/kaylanb/test/legacypipe/py/legacypipe_decam2k.fits.gz'
     a= AnnotatedVsLegacy(annot_ccds=fns['%s_a' % camera], 
                          legacy_zpts=fns['%s_l' % camera],
                          camera='%s' % camera)
     a.plot_hdu_diff()
     raise ValueError
+    ######## 
 
     a= ZeropointHistograms(decam_zpts=fns['decam_l'],
                            mosaic_zpts=fns['mosaic_l'])

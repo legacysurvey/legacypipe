@@ -131,7 +131,10 @@ if __name__ == "__main__":
             #print('rank %d running image %s logging to %s' % (comm.rank,projfn,logfn))
             with stdouterr_redirected(to=logfn, comm=None):  
                 #t0=ptime('before-legacy_main',t0)
-                legacy_main(image_list=[projfn], args=args_copy) 
+                try:
+                    legacy_main(image_list=[projfn], args=args_copy) 
+                except:
+                    print('Failed: %s' % projfn)
                 #t0=ptime('after-legacy_main',t0)
     else:
         legacy_main(image_list=image_list, args=args) 
