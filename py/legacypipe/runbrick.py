@@ -174,6 +174,11 @@ def stage_tims(W=3600, H=3600, pixscale=0.262, brickname=None,
         version_header.add_record(dict(name='DEPVER%02i' % i, value=verstr,
                                     comment='Version of dependency product'))
 
+        print('Version for "%s": "%s"' % (dep, verstr))
+
+    import tractor
+    print('Tractor:', tractor.__file__)
+
     version_header.add_record(dict(name='BRICKNAM', value=brickname,
                                 comment='LegacySurvey brick RRRr[pm]DDd'))
     version_header.add_record(dict(name='BRICKID' , value=brickid,
@@ -3136,16 +3141,19 @@ def main(args=None):
     if opt.ps is not None:
         import threading
         from legacypipe.utils import run_ps_thread
+        ps_shutdown = threading.Event()
         ps_thread = threading.Thread(
             target=run_ps_thread,
-            args=(os.getpid(), os.getppid(), opt.ps),
+            args=(os.getpid(), os.getppid(), opt.ps, ps_shutdown),
             name='run_ps')
-        ps_thread.daemon = True
+        # ps_thread.daemon = True
         print('Starting thread to run "ps"')
         ps_thread.start()
 
+    rtn = -1
     try:
         run_brick(opt.brick, survey, **kwargs)
+        rtn = 0
     except NothingToDoError as e:
         print()
         if hasattr(e, 'message'):
@@ -3153,7 +3161,7 @@ def main(args=None):
         else:
             print(e)
         print()
-        return 0
+        rtn = 0
     except RunbrickError as e:
         print()
         if hasattr(e, 'message'):
@@ -3161,8 +3169,15 @@ def main(args=None):
         else:
             print(e)
         print()
-        return -1
-    return 0
+        rtn = -1
+
+    if opt.ps is not None:
+        # Try to shut down ps thread gracefully
+        ps_shutdown.set()
+        print('Attempting to join the ps thread...')
+        ps_thread.join(1.0)
+
+    return rtn
 
 if __name__ == '__main__':
     sys.exit(main())

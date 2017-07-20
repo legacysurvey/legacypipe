@@ -291,7 +291,7 @@ def find_unique_pixels(wcs, W, H, unique, ra1,ra2,dec1,dec2):
             break
     return unique
 
-def run_ps_thread(pid, ppid, fn):
+def run_ps_thread(pid, ppid, fn, shutdown):
     from astrometry.util.run_command import run_command
     from astrometry.util.fits import fits_table, merge_tables
     import time
@@ -339,7 +339,12 @@ def run_ps_thread(pid, ppid, fn):
         clock_ticks = 100
     
     while True:
-        time.sleep(5)
+        #time.sleep(5)
+        shutdown.wait(5.0)
+        if shutdown.set():
+            print('ps shutdown flag set.  Quitting.')
+            break
+
         step += 1
         #cmd = ('ps ax -o "user pcpu pmem state cputime etime pgid pid ppid ' +
         #       'psr rss session vsize args"')
@@ -352,10 +357,10 @@ def run_ps_thread(pid, ppid, fn):
             print('FAILED to run ps:', rtn, out, err)
             time.sleep(1)
             break
-        print('Got PS output')
-        print(out)
-        print('Err')
-        print(err)
+        # print('Got PS output')
+        # print(out)
+        # print('Err')
+        # print(err)
         if len(err):
             print('Error string from ps:', err)
         lines = out.split('\n')
@@ -363,7 +368,7 @@ def run_ps_thread(pid, ppid, fn):
         cols = hdr.split()
         cols = [c.replace('%','P') for c in cols]
         cols = [c.lower() for c in cols]
-        print('Columns:', cols)
+        #print('Columns:', cols)
         vals = [[] for c in cols]
 
         # maximum length for 'command', command-line args field
@@ -472,8 +477,8 @@ def run_ps_thread(pid, ppid, fn):
         
         TT.append(T)
 
-        #if step % 12 == 0:
-        if True:
+        if step % 12 == 0:
+        #if True:
             # Write out results every ~ minute.
             T = merge_tables(TT, columns='fillzero')
             T.my_pid = (T.ppid == pid)
