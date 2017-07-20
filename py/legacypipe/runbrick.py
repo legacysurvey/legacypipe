@@ -3143,7 +3143,7 @@ def main(args=None):
         ps_thread.daemon = True
         print('Starting thread to run "ps"')
         ps_thread.start()
-        
+
     try:
         run_brick(opt.brick, survey, **kwargs)
     except NothingToDoError as e:
