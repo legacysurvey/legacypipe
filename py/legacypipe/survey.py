@@ -1200,9 +1200,15 @@ Now using the current directory as LEGACY_SURVEY_DIR, but this is likely to fail
         '''
         Returns the table of CCDs.
         '''
-        fns = self.find_file('ccds')
-        fns.sort()
-        fns = self.filter_ccds_files(fns)
+        fns = self.find_file('ccd-kds')
+        fns = self.filter_ccd_kd_files(fns)
+        # If 'ccd-kds' files exist, read the CCDs tables from them!
+        # Otherwise, fall back to survey-ccds-*.fits.gz files.
+        if len(fns) == 0:
+            fns = self.find_file('ccds')
+            fns.sort()
+            fns = self.filter_ccds_files(fns)
+
         TT = []
         for fn in fns:
             print('Reading CCDs from', fn)
