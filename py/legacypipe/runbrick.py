@@ -97,6 +97,7 @@ def stage_tims(W=3600, H=3600, pixscale=0.262, brickname=None,
                depth_cut = True,
                read_image_pixels = True,
                mp=None,
+               record_event=None,
                **kwargs):
     '''
     This is the first stage in the pipeline.  It
@@ -124,6 +125,8 @@ def stage_tims(W=3600, H=3600, pixscale=0.262, brickname=None,
         get_git_version, get_version_header, wcs_for_brick, read_one_tim)
     t0 = tlast = Time()
     assert(survey is not None)
+
+    record_event and record_event('stage_tims: starting')
 
     # Get brick object
     if ra is not None:
@@ -271,6 +274,7 @@ def stage_tims(W=3600, H=3600, pixscale=0.262, brickname=None,
 
     if do_calibs:
         from legacypipe.survey import run_calibs
+        record_event and record_event('stage_tims: starting calibs')
         kwa = dict(git_version=gitver)
         if gaussPsf:
             kwa.update(psfex=False)
@@ -282,6 +286,7 @@ def stage_tims(W=3600, H=3600, pixscale=0.262, brickname=None,
         tnow = Time()
         print('[parallel tims] Calibrations:', tnow-tlast)
         tlast = tnow
+        #record_event and record_event('stage_tims: done calibs')
 
     # Read Tractor images
     args = [(im, targetrd, dict(gaussPsf=gaussPsf, pixPsf=pixPsf,
@@ -290,7 +295,9 @@ def stage_tims(W=3600, H=3600, pixscale=0.262, brickname=None,
                                 constant_invvar=constant_invvar,
                                 pixels=read_image_pixels))
                                 for im in ims]
+    record_event and record_event('stage_tims: starting read_tims')
     tims = list(mp.map(read_one_tim, args))
+    record_event and record_event('stage_tims: done read_tims')
 
     tnow = Time()
     print('[parallel tims] Read', len(ccds), 'images:', tnow-tlast)
@@ -2485,6 +2492,7 @@ def run_brick(brick, survey, radec=None, pixscale=0.262,
               checkpoint_period=None,
               prereqs_update=None,
               stagefunc = None,
+              record_event=None,
               ):
     '''
     Run the full Legacy Survey data reduction pipeline.
@@ -2665,6 +2673,11 @@ def run_brick(brick, survey, radec=None, pixscale=0.262,
     if plotnumber:
         ps.skipto(plotnumber)
 
+    #if record_event is None:
+    #    def print_event(s):
+    #        print('Event:', s)
+    #    record_event = print_event
+
     kwargs.update(ps=ps, nsigma=nsigma,
                   gaussPsf=gaussPsf, pixPsf=pixPsf, hybridPsf=hybridPsf,
                   rex=rex,
@@ -2682,7 +2695,8 @@ def run_brick(brick, survey, radec=None, pixscale=0.262,
                   unwise_dir=unwise_dir,
                   unwise_tr_dir=unwise_tr_dir,
                   plots=plots, plots2=plots2, coadd_bw=coadd_bw,
-                  force=forceStages, write=writePickles)
+                  force=forceStages, write=writePickles,
+                  record_event=record_event)
 
     if checkpoint_filename is not None:
         kwargs.update(checkpoint_filename=checkpoint_filename)
@@ -3140,15 +3154,22 @@ def main(args=None):
 
     if opt.ps is not None:
         import threading
+        from collections import deque
         from legacypipe.utils import run_ps_thread
         ps_shutdown = threading.Event()
+        ps_queue = deque()
         ps_thread = threading.Thread(
             target=run_ps_thread,
-            args=(os.getpid(), os.getppid(), opt.ps, ps_shutdown),
+            args=(os.getpid(), os.getppid(), opt.ps, ps_shutdown, ps_queue),
             name='run_ps')
         # ps_thread.daemon = True
         print('Starting thread to run "ps"')
         ps_thread.start()
+
+        def record_event(msg):
+            from time import time
+            ps_queue.append((time(), msg))
+        kwargs.update(record_event=record_event)
 
     rtn = -1
     try:
@@ -3176,6 +3197,8 @@ def main(args=None):
         ps_shutdown.set()
         print('Attempting to join the ps thread...')
         ps_thread.join(1.0)
+        if ps_thread.isAlive():
+            print('ps thread is still alive.')
 
     return rtn
 

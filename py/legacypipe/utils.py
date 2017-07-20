@@ -291,17 +291,20 @@ def find_unique_pixels(wcs, W, H, unique, ra1,ra2,dec1,dec2):
             break
     return unique
 
-def run_ps_thread(pid, ppid, fn, shutdown):
+def run_ps_thread(pid, ppid, fn, shutdown, event_queue):
     from astrometry.util.run_command import run_command
     from astrometry.util.fits import fits_table, merge_tables
     import time
     import re
     import fitsio
+    from functools import reduce
     
     print('run_ps_thread starting:', pid, ppid, fn)
     print('My pid:', os.getpid())
     TT = []
     step = 0
+
+    events = []
 
     trex = re.compile('(((?P<days>\d*)-)?(?P<hours>\d*):)?(?P<minutes>\d*):(?P<seconds>[\d\.]*)')
     def parse_time_strings(ss):
@@ -339,11 +342,20 @@ def run_ps_thread(pid, ppid, fn, shutdown):
         clock_ticks = 100
     
     while True:
-        #time.sleep(5)
         shutdown.wait(5.0)
-        if shutdown.set():
+        if shutdown.is_set():
             print('ps shutdown flag set.  Quitting.')
             break
+
+        if event_queue is not None:
+            while True:
+                try:
+                    (t,msg) = event_queue.popleft()
+                    events.append((t,msg,step))
+                    print('Popped event', t,msg)
+                except IndexError:
+                    # no events
+                    break
 
         step += 1
         #cmd = ('ps ax -o "user pcpu pmem state cputime etime pgid pid ppid ' +
@@ -415,8 +427,6 @@ def run_ps_thread(pid, ppid, fn, shutdown):
             T.time = np.array(ctime)
         T.rename('time', 'cputime')
 
-        #T.delta_elapsed = np.zeros(len(T), np.float32)
-        #T.delta_cputime = np.zeros(len(T), np.float32)
         # Compute 'instantaneous' (5-sec averaged) %cpu
         # BUT this only counts whole seconds in the 'ps' output.
         T.icpu = np.zeros(len(T), np.float32)
@@ -477,13 +487,21 @@ def run_ps_thread(pid, ppid, fn, shutdown):
         
         TT.append(T)
 
+        print('ps -- step', step)
         if step % 12 == 0:
         #if True:
+            print('ps -- writing', fn)
             # Write out results every ~ minute.
             T = merge_tables(TT, columns='fillzero')
             T.my_pid = (T.ppid == pid)
             tmpfn = os.path.join(os.path.dirname(fn), 'tmp-' + os.path.basename(fn))
             T.writeto(tmpfn, header=fitshdr)
+            if len(events):
+                E = fits_table()
+                E.unixtime = np.array([e[0] for e in events])
+                E.event = np.array([e[1] for e in events])
+                E.step = np.array([e[2] for e in events])
+                E.writeto(tmpfn, append=True)
             os.rename(tmpfn, fn)
             print('Wrote', fn)
             TT = [T]

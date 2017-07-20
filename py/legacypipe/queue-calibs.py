@@ -607,13 +607,24 @@ def main():
             im = survey.get_image_object(T[iccd])
             fns.update([im.imgfn, im.wtfn, im.dqfn, im.psffn, im.merged_psffn,
                    im.merged_splineskyfn, im.splineskyfn])
-        for fn in fns:
+        for i,fn in enumerate(fns):
+            print('File', i+1, 'of', len(fns), ':', fn)
             if not os.path.exists(fn):
                 print('No such file:', fn)
                 continue
-            fn = fn.replace(survey.get_survey_dir(),
-                            survey.get_survey_dir() + '/./')
-            cmd = cmd_pat % (fn, opt.stage)
+            base = survey.get_survey_dir()
+            if base.endswith('/'):
+                base = base[:-1]
+
+            rel = os.path.relpath(fn, base)
+
+            dest = os.path.join(opt.stage, rel)
+            print('Dest:', dest)
+            if os.path.exists(dest):
+                print('Exists:', dest)
+                continue
+
+            cmd = cmd_pat % ('%s/./%s' % (base, rel), opt.stage)
             print(cmd)
             rtn = os.system(cmd)
             assert(rtn == 0)
