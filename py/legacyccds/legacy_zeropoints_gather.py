@@ -19,6 +19,7 @@ def read_lines(fn):
     if len(lines) < 1: raise ValueError('lines not read properly from %s' % fn)
     return np.array( list(np.char.strip(lines)) )
 
+
 def apply_cuts(cat):
     flag= defaultdict(dict)
     # NaN
@@ -65,27 +66,22 @@ def write_cat(cat, outname):
         os.system('gzip --best ' + f)
     print('gzipped files')
 
-#def fix_hdu(tab):
-#    import fitsio
-#    proj= '/project/projectdirs/cosmo/staging'
-#    proja= '/global/projecta/projectdirs/cosmo/staging'
-#    imgfns=list(set(tab.image_filename))[:10]   
-#    for cnt,fn in enumerate(imgfns):
-#        if cnt % 10 == 0:
-#            print('%d/%d' % (cnt,len(imgfns)))
-#        keep= tab.image_filename == fn
-#        try: 
-#            hdulist= fitsio.FITS(os.path.join(proj,fn.strip()))
-#        except IOError:
-#            try: 
-#                hdulist= fitsio.FITS(os.path.join(proja,fn.strip()))
-#            except:
-#                raise IOError('could not find this fn on proj or proja! %s' % fn.strip())
-#        for i,ccdname in enumerate(tab.ccdname[keep]):
-#            tab.image_hdu[keep][i]= hdulist[ccdname.strip()].get_extnum()
-#    return tab
+def fix_hdu_b4merge(zpt_one_exposure):
+    import fitsio
+    proj= '/project/projectdirs/cosmo/staging'
+    proja= '/global/projecta/projectdirs/cosmo/staging'
+    fn= zpt_one_exposure.image_filename[0].strip()
+    if os.path.exists( os.path.join(proj,fn) ):
+        fn= os.path.join(proj,fn)
+    elif os.path.exists( os.path.join(proja,fn) ):
+        fn= os.path.join(proja,fn)
+    else:
+        raise ValueError('could not find this fn on proj or proja! %s' % fn)
+    hdulist= fitsio.FITS(fn)
+    for i,ccdname in enumerate(zpt_one_exposure.ccdname):
+        zpt_one_exposure.image_hdu[i]= hdulist[ccdname.strip()].get_extnum()
             
-def fix_hdu(tab):
+def fix_hdu_post(tab):
     import fitsio
     proj= '/project/projectdirs/cosmo/staging'
     proja= '/global/projecta/projectdirs/cosmo/staging'
@@ -121,20 +117,26 @@ if __name__ == "__main__":
     # RUN HERE
     if opt.nproc > 1:
         from mpi4py.MPI import COMM_WORLD as comm
+        print('rank %d' % comm.rank)
         fn_split= np.array_split(fns, comm.size)
         cats=[]
         for cnt,fn in enumerate( fn_split[comm.rank] ):
             if comm.rank == 0:
-                if cnt % 100 == 0:
-                    print('%d/%d' % (cnt,len(fn_split[comm.rank])))
+                #if cnt % 100 == 0:
+                print('%d/%d' % (cnt,len(fn_split[comm.rank])))
             try:
-                cats.append( fits_table(fn) )
+                if opt.fix_hdu:
+                    T= fits_table(fn)
+                    fix_hdu_b4merge(T)
+                    cats.append( T )
+                else:
+                    cats.append( fits_table(fn) )
             except IOError:
                 print('File is bad, skipping: %s' % fn)
         cats= merge_tables(cats, columns='fillzero')
-        if opt.fix_hdu:
-            print('fixing hdu')
-            cats= fix_hdu(cats)
+        #if opt.fix_hdu:
+        #    print('fixing hdu')
+        #    cats= fix_hdu(cats)
         # Gather
         all_cats = comm.gather( cats, root=0 )
         if comm.rank == 0:
