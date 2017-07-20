@@ -298,8 +298,8 @@ def run_ps_thread(pid, ppid, fn):
     import re
     import fitsio
     
-    #print('run_ps_thread starting:', pid, ppid, fn)
-    #print('My pid:', os.getpid())
+    print('run_ps_thread starting:', pid, ppid, fn)
+    print('My pid:', os.getpid())
     TT = []
     step = 0
 
@@ -314,7 +314,7 @@ def run_ps_thread(pid, ppid, fn):
                 break
             days,hours,mins,secs = m.group('days', 'hours', 'minutes',
                                            'seconds')
-            # print('Elapsed time', s, 'parsed to', days,hours,mins,secs)
+            #print('Elapsed time', s, 'parsed to', days,hours,mins,secs)
             days = int(days, 10) if days is not None else 0
             hours = int(hours, 10) if hours is not None else 0
             mins = int(mins, 10)
@@ -328,6 +328,15 @@ def run_ps_thread(pid, ppid, fn):
 
     fitshdr = fitsio.FITSHDR()
     fitshdr['PPID'] = pid
+
+    last_time = {}
+    last_proc_time = {}
+
+    clock_ticks = os.sysconf('SC_CLK_TCK')
+    print('Clock times:', clock_ticks)
+    if clock_ticks == -1:
+        #print('Failed to get clock times per second; assuming 100')
+        clock_ticks = 100
     
     while True:
         time.sleep(5)
@@ -336,17 +345,17 @@ def run_ps_thread(pid, ppid, fn):
         #       'psr rss session vsize args"')
         # OSX-compatible
         cmd = ('ps ax -o "user pcpu pmem state cputime etime pgid pid ppid ' +
-               'rss vsize command"')
-        #print('Command:', cmd)
+               'rss vsize wchan command"')
+        print('Command:', cmd)
         rtn,out,err = run_command(cmd)
         if rtn:
             print('FAILED to run ps:', rtn, out, err)
             time.sleep(1)
             break
-        #print('Got PS output')
-        #print(out)
-        #print('Err')
-        #print(err)
+        print('Got PS output')
+        print(out)
+        print('Err')
+        print(err)
         if len(err):
             print('Error string from ps:', err)
         lines = out.split('\n')
@@ -354,7 +363,7 @@ def run_ps_thread(pid, ppid, fn):
         cols = hdr.split()
         cols = [c.replace('%','P') for c in cols]
         cols = [c.lower() for c in cols]
-        #print('Columns:', cols)
+        print('Columns:', cols)
         vals = [[] for c in cols]
 
         # maximum length for 'command', command-line args field
@@ -388,17 +397,6 @@ def run_ps_thread(pid, ppid, fn):
                 v = v.astype(tt)
             T.set(c, v)
 
-        # Apply cuts!
-        T.cut(reduce(np.logical_or, [
-            T.pcpu > 5, T.pmem > 5,
-            (T.ppid == pid) * [not c.startswith('ps ax') for c in T.command]]))
-        #print('Cut to', len(T), 'with significant CPU/MEM use or my PPID')
-        if len(T) == 0:
-            continue
-        
-        T.unixtime = np.zeros(len(T), np.float64) + time.time()
-        T.step = np.zeros(len(T), np.int16) + step
-        
         any_failed,etime = parse_time_strings(T.elapsed)
         if any_failed is not None:
             print('Failed to parse elapsed time string:', any_failed)
@@ -411,12 +409,74 @@ def run_ps_thread(pid, ppid, fn):
         else:
             T.time = np.array(ctime)
         T.rename('time', 'cputime')
+
+        #T.delta_elapsed = np.zeros(len(T), np.float32)
+        #T.delta_cputime = np.zeros(len(T), np.float32)
+        # Compute 'instantaneous' (5-sec averaged) %cpu
+        # BUT this only counts whole seconds in the 'ps' output.
+        T.icpu = np.zeros(len(T), np.float32)
+        icpu = T.icpu
+        for i,(pid,etime,ctime) in enumerate(zip(T.pid, T.elapsed, T.cputime)):
+            try:
+                elast,clast = last_time[pid]
+                # new process with an existing PID?
+                if etime > elast:
+                    icpu[i] = 100. * (ctime - clast) / (etime - elast)
+            except:
+                pass
+            last_time[pid] = (etime, ctime)
+            
+        # Apply cuts!
+        T.cut(reduce(np.logical_or, [
+            T.pcpu > 5, T.pmem > 5, T.icpu > 5,
+            (T.ppid == pid) * [not c.startswith('ps ax') for c in T.command]]))
+        print('Cut to', len(T), 'with significant CPU/MEM use or my PPID')
+        if len(T) == 0:
+            continue
+
+        timenow = time.time()
+        T.unixtime = np.zeros(len(T), np.float64) + timenow
+        T.step = np.zeros(len(T), np.int16) + step
+        
+        if os.path.exists('/proc'):
+            # Try to grab higher-precision CPU timing info from /proc/PID/stat
+            T.proc_utime = np.zeros(len(T), np.float32)
+            T.proc_stime = np.zeros(len(T), np.float32)
+            T.processor  = np.zeros(len(T), np.int16)
+            T.proc_icpu  = np.zeros(len(T), np.float32)
+            for i,pid in enumerate(T.pid):
+                try:
+                    procfn = '/proc/%i/stat' % pid
+                    txt = open(procfn).read()
+                    #print('Read', procfn, ':', txt)
+                    words = txt.split()
+                    utime = int(words[13]) / float(clock_ticks)
+                    stime = int(words[14]) / float(clock_ticks)
+                    proc  = int(words[38])
+                    #print('utime', utime, 'stime', stime, 'processor', proc)
+                    ctime = utime + stime
+                    try:
+                        tlast,clast = last_proc_time[pid]
+                        #print('pid', pid, 'Tnow,Cnow', timenow, ctime, 'Tlast,Clast', tlast,clast)
+                        if ctime >= clast:
+                            T.proc_icpu[i] = 100. * (ctime - clast) / float(timenow - tlast)
+                    except:
+                        pass
+                    last_proc_time[pid] = (timenow, ctime)
+
+                    T.proc_utime[i] = utime
+                    T.proc_stime[i] = stime
+                    T.processor [i] = proc
+                except:
+                    pass
         
         TT.append(T)
 
-        if step % 12 == 0:
+        #if step % 12 == 0:
+        if True:
             # Write out results every ~ minute.
             T = merge_tables(TT, columns='fillzero')
+            T.my_pid = (T.ppid == pid)
             tmpfn = os.path.join(os.path.dirname(fn), 'tmp-' + os.path.basename(fn))
             T.writeto(tmpfn, header=fitshdr)
             os.rename(tmpfn, fn)

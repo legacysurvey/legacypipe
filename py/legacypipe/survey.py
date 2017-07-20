@@ -1193,6 +1193,9 @@ Now using the current directory as LEGACY_SURVEY_DIR, but this is likely to fail
         '''
         return fns
 
+    def filter_ccd_kd_files(self, fns):
+        return fns
+
     def get_ccds(self):
         '''
         Returns the table of CCDs.
@@ -1227,12 +1230,7 @@ Now using the current directory as LEGACY_SURVEY_DIR, but this is likely to fail
         if 'cpimage_hdu' in cols and not 'image_hdu' in cols:
             T.image_hdu = T.cpimage_hdu
 
-        # Remove trailing spaces from 'ccdname' column
-        if 'ccdname' in T.columns():
-            # "N4 " -> "N4"
-            T.ccdname = np.array([s.strip() for s in T.ccdname])
-        # Remove trailing spaces from 'camera' column.
-        T.camera = np.array([c.strip() for c in T.camera])
+        T = self.cleanup_ccds_table(T)
         return T
 
     def get_annotated_ccds(self):
@@ -1249,20 +1247,24 @@ Now using the current directory as LEGACY_SURVEY_DIR, but this is likely to fail
         T = merge_tables(TT, columns='fillzero')
         print('Total of', len(T), 'CCDs')
         del TT
-        # Remove trailing spaces from 'ccdname' column
-        if 'ccdname' in T.columns():
-            # "N4 " -> "N4"
-            T.ccdname = np.array([s.strip() for s in T.ccdname])
-        # Remove trailing spaces from 'camera' column.
-        T.camera = np.array([c.strip() for c in T.camera])
+        T = self.cleanup_ccds_table(T)
         return T
+
+    def cleanup_ccds_table(self, ccds):
+        # Remove trailing spaces from 'ccdname' column
+        if 'ccdname' in ccds.columns():
+            # "N4 " -> "N4"
+            ccds.ccdname = np.array([s.strip() for s in ccds.ccdname])
+        # Remove trailing spaces from 'camera' column.
+        ccds.camera = np.array([c.strip() for c in ccds.camera])
+        return ccds
     
     def ccds_touching_wcs(self, wcs, **kwargs):
         '''
         Returns a table of the CCDs touching the given *wcs* region.
         '''
-
         fns = self.find_file('ccd-kds')
+        fns = self.filter_ccd_kd_files(fns)
         if len(fns):
             # Assume that if >= 1 survey-ccds-*.kd.fits files exist,
             # then we should read all CCDs from there rather than
@@ -1294,6 +1296,7 @@ Now using the current directory as LEGACY_SURVEY_DIR, but this is likely to fail
                 # Read only the CCD-table rows within range.
                 TT.append(fits_table(fn, rows=I))
             ccds = merge_tables(TT, columns='fillzero')
+            ccds = self.cleanup_ccds_table(ccds)
         else:
             ccds = self.get_ccds_readonly()
         I = ccds_touching_wcs(wcs, ccds, **kwargs)

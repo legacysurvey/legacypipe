@@ -113,7 +113,7 @@ def main():
 
     parser.add_argument('--bricks', help='Set bricks.fits file to load')
     parser.add_argument('--ccds', help='Set ccds.fits file to load')
-    parser.add_argument('--ignore_cuts', action='store_true',default=False,help='no photometric or blacklist cuts')
+    parser.add_argument('--ignore_cuts', action='store_true',default=False,help='no photometric cuts')
     parser.add_argument('--save_to_fits', action='store_true',default=False,help='save cut brick,ccd to fits table')
     parser.add_argument('--name', action='store',default='dr3',help='save with this suffix, e.g. refers to ccds table')
 
@@ -495,9 +495,6 @@ def main():
 
         I = survey.photometric_ccds(T)
         print(len(I), 'CCDs are photometric')
-        T.cut(I)
-        I = survey.apply_blacklist(T)
-        print(len(I), 'CCDs are not blacklisted')
         T.cut(I)
         print(len(T), 'CCDs remaining')
 

@@ -99,78 +99,8 @@ class DecamImage(CPImage, CalibMixin):
     def ccd_cuts(self, survey, ccds):
         ccdcuts = np.zeros(len(ccds), np.int32)
         #print('Warning: DECam not using bad_expid file')
-        bits = LegacySurveyData.ccd_cut_bits
-        I = self.apply_blacklist(survey, ccds)
-        # "apply_blacklist" returns indices of CCDs to *keep*.  Invert.
-        toflag = np.ones(len(ccds), bool)
-        toflag[I] = False
-        I = np.flatnonzero(toflag)
-        ccdcuts[I] += bits['BLACKLIST']
         return ccdcuts
 
-    @classmethod
-    def apply_blacklist(self, survey, ccds):
-        propid_blacklist = [
-            '2012B-0003', # labeled as "DES SV", but appears to
-                          # exclusively be DES deep fields taken
-                          # during SV, through Jan 2013.
-            '2012B-0624', # 1 field, GAMA09
-            '2012B-0625', # 1 field, NGC2872
-            '2012B-3011', # 1 field
-            '2012B-3012', # 1 field, Pan-STARRS MD01/
-            '2012B-9999', # Engineering?
-
-            '2013A-0351', # lots of deep data on COSMOS
-            '2013A-0360', # 9 fields total
-            '2013A-0529', # 2 fields
-            '2013A-0611', # many 900-sec exposures in EDR region
-            '2013A-0613', # 40 exposures of 600 sec in g,r and nothing else in DR2
-            '2013A-0614', # 2 fields
-            '2013A-0716', # 3 fields
-            '2013A-0717', # 2 fields
-            '2013A-0719', # 8 fields (more in DR3)
-            '2013A-0737', # 10 fields
-            '2013A-9999', # Engineering?
-
-            '2013B-0502', # 3 fields
-            '2013B-0531', # Neptune
-
-            '2014A-0073', # one deep field at (135.8,-4.6), g
-            '2014A-0239', # 1 field (SUDSS X3)
-            '2014A-0313', # 3 fields
-            '2014A-0339', # two strips of sky + one deep field (Her)
-            '2014A-0415', # 4 fields
-            '2014A-0429', # 2 fields
-            '2014A-0632', # 2 fields
-
-            '2014B-0146', # COSMOS + one other field
-            '2014B-0244', # 6 fields
-            '2014B-0608', # 2 fields
-
-            # To bring exposure times below 1 hour:
-            '2014A-0321', # Pal 3+5
-            '2014A-0610', # Pal 3+5
-            '2014A-0611', # Pal 3+5
-            '2014A-0621', # Pal 3+5
-            '2014A-0622', # HCG
-            '2013B-0438', # SHELA
-            '2014A-0608', # Blind 1-hour pointings in g-band
-            '2014A-0386', # A2029
-        ]
-
-        object_blacklist = [
-            'DES supernova hex',
-            ]
-
-        if survey.version in ['dr1', 'dr2']:
-            object_blacklist = []
-        else:
-            keep = np.array([(propid not in propid_blacklist) and
-                             not any([obj.startswith(x) 
-                                      for x in object_blacklist])
-                                      for propid,obj in zip(ccds.propid, ccds.object)])
-        return np.flatnonzero(keep)
-    
     glowmjd = astropy.time.Time('2014-08-01').utc.mjd
 
     def get_good_image_subregion(self):

@@ -94,7 +94,6 @@ def stage_tims(W=3600, H=3600, pixscale=0.262, brickname=None,
                splinesky=True,
                gaussPsf=False, pixPsf=False, hybridPsf=False,
                constant_invvar=False,
-               use_blacklist = True,
                depth_cut = True,
                read_image_pixels = True,
                mp=None,
@@ -233,11 +232,6 @@ def stage_tims(W=3600, H=3600, pixscale=0.262, brickname=None,
     ccds.ccd_cuts = survey.ccd_cuts(ccds)
     cutvals = ccds.ccd_cuts
     print('CCD cut bitmask values:', cutvals)
-    if not use_blacklist:
-        bits = LegacySurveyData.ccd_cut_bits
-        cutvals = cutvals & ~bits['BLACKLIST']
-        print('Not blacklisting; un-setting bit value', bits['BLACKLIST'],
-              '->', cutvals)
     ccds.cut(cutvals == 0)
     print(len(ccds), 'CCDs survive cuts')
 
@@ -2111,7 +2105,7 @@ def stage_wise_forced(
     unwise_dir=None,
     unwise_tr_dir=None,
     brick=None,
-    use_ceres=True,
+    wise_ceres=True,
     mp=None,
     **kwargs):
     '''
@@ -2145,7 +2139,7 @@ def stage_wise_forced(
     # Skip if $UNWISE_COADDS_DIR or --unwise-dir not set.
     if unwise_dir is not None:
         for band in [1,2,3,4]:
-            args.append((wcat, tiles, band, roiradec, unwise_dir, use_ceres,
+            args.append((wcat, tiles, band, roiradec, unwise_dir, wise_ceres,
                          broadening[band]))
 
     # Add time-resolved WISE coadds
@@ -2173,7 +2167,7 @@ def stage_wise_forced(
                 print('Epoch %i: %i tiles:' % (e, len(I)), W.coadd_id[I])
                 edir = os.path.join(tdir, 'e%03i' % e)
                 eargs.append((e,(wcat, tiles[I], band, roiradec, edir,
-                                 use_ceres, broadening[band])))
+                                 wise_ceres, broadening[band])))
 
     # Run the forced photometry!
     phots = mp.map(_unwise_phot, args + [a for e,a in eargs])
@@ -2257,17 +2251,17 @@ def stage_wise_forced(
 
 def _unwise_phot(X):
     from wise.forcedphot import unwise_forcedphot
-    (wcat, tiles, band, roiradec, unwise_dir, use_ceres, broadening) = X
+    (wcat, tiles, band, roiradec, unwise_dir, wise_ceres, broadening) = X
     try:
         W = unwise_forcedphot(wcat, tiles, roiradecbox=roiradec, bands=[band],
-            unwise_dir=unwise_dir, use_ceres=use_ceres,
+            unwise_dir=unwise_dir, use_ceres=wise_ceres,
             psf_broadening=broadening)
     except:
         import traceback
         print('unwise_forcedphot failed:')
         traceback.print_exc()
 
-        if use_ceres:
+        if wise_ceres:
             print('Trying without Ceres...')
             W = unwise_forcedphot(wcat, tiles, roiradecbox=roiradec,
                                   bands=[band], unwise_dir=unwise_dir,
@@ -2454,7 +2448,6 @@ def run_brick(brick, survey, radec=None, pixscale=0.262,
               zoom=None,
               bands=None,
               allbands=None,
-              blacklist=True,
               depth_cut=True,
               nblobs=None, blob=None, blobxy=None, blobradec=None,
               nsigma=6,
@@ -2474,6 +2467,7 @@ def run_brick(brick, survey, radec=None, pixscale=0.262,
               splinesky=False,
               constant_invvar=False,
               ceres=True,
+              wise_ceres=True,
               unwise_dir=None,
               unwise_tr_dir=None,
               threads=None,
@@ -2575,6 +2569,8 @@ def run_brick(brick, survey, radec=None, pixscale=0.262,
 
     - *ceres*: boolean; use Ceres Solver when possible?
 
+    - *wise_ceres*: boolean; use Ceres Solver for unWISE forced photometry?
+
     - *unwise_dir*: string; where to look for unWISE coadd files.
       This may be a colon-separated list of directories to search in
       order.
@@ -2650,8 +2646,7 @@ def run_brick(brick, survey, radec=None, pixscale=0.262,
             brick = ('custom-%06i%s%05i' %
                          (int(1000*ra), 'm' if dec < 0 else 'p',
                           int(1000*np.abs(dec))))
-    initargs.update(brickname=brick,
-                    survey=survey)
+    initargs.update(brickname=brick, survey=survey)
 
     if stagefunc is None:
         stagefunc = CallGlobalTime('stage_%s', globals())
@@ -2669,11 +2664,11 @@ def run_brick(brick, survey, radec=None, pixscale=0.262,
                   gaussPsf=gaussPsf, pixPsf=pixPsf, hybridPsf=hybridPsf,
                   rex=rex,
                   constant_invvar=constant_invvar,
-                  use_blacklist=blacklist,
                   depth_cut=depth_cut,
                   splinesky=splinesky,
                   simul_opt=simulOpt,
                   use_ceres=ceres,
+                  wise_ceres=wise_ceres,
                   do_calibs=do_calibs,
                   write_metrics=write_metrics,
                   lanczos=lanczos,
@@ -2879,7 +2874,11 @@ python -u legacypipe/runbrick.py --plots --brick 2440p070 --zoom 1900 2400 450 9
     #parser.add_argument('--no-ceres', dest='ceres', default=True,
     #                    action='store_false', help='Do not use Ceres Solver')
     parser.add_argument('--ceres', default=False, action='store_true',
-                        help='Use Ceres Solver?')
+                        help='Use Ceres Solver for all optimization?')
+
+    parser.add_argument('--no-wise-ceres', dest='wise_ceres', default=True,
+                        action='store_false',
+                        help='Do not use Ceres Solver for unWISE forced phot')
     
     parser.add_argument('--nblobs', type=int,help='Debugging: only fit N blobs')
     parser.add_argument('--blob', type=int, help='Debugging: start with blob #')
@@ -2952,10 +2951,6 @@ python -u legacypipe/runbrick.py --plots --brick 2440p070 --zoom 1900 2400 450 9
 
     parser.add_argument('--no-depth-cut', dest='depth_cut', default=True,
                         action='store_false', help='Do not cut to the set of CCDs required to reach our depth target')
-
-    parser.add_argument(
-        '--no-blacklist', dest='blacklist', default=True, action='store_false',
-        help='Do not blacklist some proposals?')
 
     parser.add_argument(
         '--on-bricks', default=False, action='store_true',
@@ -3043,9 +3038,8 @@ def get_runbrick_kwargs(opt):
     kwa.update(
         radec=opt.radec, pixscale=opt.pixscale,
         width=opt.width, height=opt.height, zoom=opt.zoom,
-        blacklist=opt.blacklist,
         depth_cut=opt.depth_cut,
-        threads=opt.threads, ceres=opt.ceres,
+        threads=opt.threads, ceres=opt.ceres, wise_ceres=opt.wise_ceres,
         do_calibs=opt.do_calibs,
         write_metrics=opt.write_metrics,
         on_bricks=opt.on_bricks,
@@ -3149,7 +3143,7 @@ def main(args=None):
         ps_thread.daemon = True
         print('Starting thread to run "ps"')
         ps_thread.start()
-        
+
     try:
         run_brick(opt.brick, survey, **kwargs)
     except NothingToDoError as e:
