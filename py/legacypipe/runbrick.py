@@ -2962,12 +2962,17 @@ python -u legacypipe/runbrick.py --plots --brick 2440p070 --zoom 1900 2400 450 9
     parser.add_argument('--gpsf', action='store_true', default=False,
                         help='Use a fixed single-Gaussian PSF')
 
-    parser.add_argument('--hybrid-psf', action='store_true', default=False,
-                        help='Use a hybrid pixelized/Gaussian PSF model')
+    # parser.add_argument('--hybrid-psf', action='store_true', default=False,
+    #                     help='Use a hybrid pixelized/Gaussian PSF model')
+    parser.add_argument('--no-hybrid-psf', dest='hybrid_psf', default=True,
+                        action='store_false',
+                        help="Don't use a hybrid pixelized/Gaussian PSF model")
 
-    parser.add_argument('--rex', action='store_true', default=False,
-                        help='Use REX as simple galaxy models, rather than SIMP')
-    
+    #parser.add_argument('--rex', action='store_true', default=False,
+    #                    help='Use REX as simple galaxy models, rather than SIMP')
+    parser.add_argument('--simp', dest='rex', default=True,
+                        action='store_false',
+                        help='Use SIMP rather than REX')
     parser.add_argument(
         '--coadd-bw', action='store_true', default=False,
         help='Create grayscale coadds if only one band is available?')
@@ -2975,9 +2980,11 @@ python -u legacypipe/runbrick.py --plots --brick 2440p070 --zoom 1900 2400 450 9
     parser.add_argument('--bands', default=None,
                         help='Set the list of bands (filters) that are included in processing: comma-separated list, default "g,r,z"')
 
-    parser.add_argument('--no-depth-cut', dest='depth_cut', default=True,
-                        action='store_false', help='Do not cut to the set of CCDs required to reach our depth target')
-
+    # parser.add_argument('--no-depth-cut', dest='depth_cut', default=True,
+    #                     action='store_false', help='Do not cut to the set of CCDs required to reach our depth target')
+    parser.add_argument('--depth-cut', default=False, action='store_true',
+                        help='Cut to the set of CCDs required to reach our depth target')
+    
     parser.add_argument(
         '--on-bricks', default=False, action='store_true',
         help='Enable Tractor-on-bricks edge handling?')
@@ -2988,27 +2995,37 @@ python -u legacypipe/runbrick.py --plots --brick 2440p070 --zoom 1900 2400 450 9
 
     return parser
 
-def get_runbrick_kwargs(opt):
-    if opt.brick is not None and opt.radec is not None:
+def get_runbrick_kwargs(brick=None,
+                        radec=None,
+                        run=None,
+                        survey_dir=None,
+                        output_dir=None,
+                        cache_dir=None,
+                        check_done=False,
+                        skip=False,
+                        skip_coadd=False,
+                        stage=[],
+                        **opt):
+    if brick is not None and radec is not None:
         print('Only ONE of --brick and --radec may be specified.')
         return None, -1
-
+    
     from legacypipe.runs import get_survey
 
-    survey = get_survey(opt.run,
-                        survey_dir=opt.survey_dir, output_dir=opt.outdir,
-                        cache_dir=opt.cache_dir)
+    survey = get_survey(run,
+                        survey_dir=survey_dir,
+                        output_dir=output_dir,
+                        cache_dir=cache_dir)
     print('Got survey:', survey)
-
-    if opt.check_done or opt.skip or opt.skip_coadd:
-        brickname = opt.brick
-        if opt.skip_coadd:
-            fn = survey.find_file('image-jpeg', output=True, brick=brickname)
+    
+    if check_done or skip or skip_coadd:
+        if skip_coadd:
+            fn = survey.find_file('image-jpeg', output=True, brick=brick)
         else:
-            fn = survey.find_file('tractor', output=True, brick=brickname)
+            fn = survey.find_file('tractor', output=True, brick=brick)
         print('Checking for', fn)
         exists = os.path.exists(fn)
-        if opt.skip_coadd and exists:
+        if skip_coadd and exists:
             return survey,0
         if exists:
             try:
@@ -3020,19 +3037,23 @@ def get_runbrick_kwargs(opt):
                 traceback.print_exc()
                 exists = False
 
-        if opt.skip:
+        if skip:
             if exists:
                 return survey,0
-        elif opt.check_done:
+        elif check_done:
             if not exists:
                 print('Does not exist:', fn)
                 return survey,-1
             print('Found:', fn)
             return survey,0
 
-    if len(opt.stage) == 0:
-        opt.stage.append('writecat')
+    print('Opt:', opt)
+        
+    if len(stage) == 0:
+        stage.append('writecat')
 
+    opt.update(stages=stage)
+        
     kwa = {}
     if opt.nsigma:
         kwa.update(nsigma=opt.nsigma)
@@ -3115,7 +3136,13 @@ def main(args=None):
     if opt.brick is None and opt.radec is None:
         parser.print_help()
         return -1
-    survey, kwargs = get_runbrick_kwargs(opt)
+
+    # convert to dict
+    opt = vars(opt)
+    
+    ps_file = opt.pop('ps', None)
+
+    survey, kwargs = get_runbrick_kwargs(**opt)
     if kwargs in [-1, 0]:
         return kwargs
 
@@ -3160,7 +3187,7 @@ def main(args=None):
         plt.subplots_adjust(left=0.07, right=0.99, bottom=0.07, top=0.93,
                             hspace=0.2, wspace=0.05)
 
-    if opt.ps is not None:
+    if ps_file is not None:
         import threading
         from collections import deque
         from legacypipe.utils import run_ps_thread
@@ -3168,7 +3195,7 @@ def main(args=None):
         ps_queue = deque()
         ps_thread = threading.Thread(
             target=run_ps_thread,
-            args=(os.getpid(), os.getppid(), opt.ps, ps_shutdown, ps_queue),
+            args=(os.getpid(), os.getppid(), ps_file, ps_shutdown, ps_queue),
             name='run_ps')
         # ps_thread.daemon = True
         print('Starting thread to run "ps"')
@@ -3200,7 +3227,7 @@ def main(args=None):
         print()
         rtn = -1
 
-    if opt.ps is not None:
+    if ps_file is not None:
         # Try to shut down ps thread gracefully
         ps_shutdown.set()
         print('Attempting to join the ps thread...')
