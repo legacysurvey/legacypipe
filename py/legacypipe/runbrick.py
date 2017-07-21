@@ -2736,15 +2736,16 @@ def run_brick(brick, survey, radec=None, pixscale=0.262,
             kwargs.update(checkpoint_period=checkpoint_period)
 
     if threads and threads > 1:
-        # py3: TimingPool doesn't work (yet)
+        # py3: imported TimingPool
         if sys.version_info[0] >= 3:
-            from multiprocessing.pool import Pool
-            pool = Pool(processes=threads, initializer=runbrick_global_init, initargs=[])
+            from legacypipe.timingpool import TimingPool, TimingPoolMeas
+            #from multiprocessing.pool import Pool
+            #pool = Pool(processes=threads, initializer=runbrick_global_init, initargs=[])
         else:
             from astrometry.util.timingpool import TimingPool, TimingPoolMeas
-            pool = TimingPool(threads, initializer=runbrick_global_init,
-                              initargs=[])
-            Time.add_measurement(TimingPoolMeas(pool, pickleTraffic=False))
+        pool = TimingPool(threads, initializer=runbrick_global_init,
+                          initargs=[])
+        Time.add_measurement(TimingPoolMeas(pool, pickleTraffic=False))
         mp = MyMultiproc(None, pool=pool)
     else:
         mp = MyMultiproc(init=runbrick_global_init, initargs=[])
@@ -2841,7 +2842,7 @@ def run_brick(brick, survey, radec=None, pixscale=0.262,
         #runstage(stage, picklePattern, stagefunc, prereqs=prereqs,
         runstage(stage, picklePattern, mystagefunc, prereqs=prereqs,
                  initial_args=initargs, **kwargs)
-        
+
     print('All done:', Time()-t0)
     mp.report(threads)
 
