@@ -299,7 +299,8 @@ def run_ps_thread(parent_pid, parent_ppid, fn, shutdown, event_queue):
     import fitsio
     from functools import reduce
     
-    print('run_ps_thread starting: parent PID, my PID', parent_pid, os.getpid(), fn)
+    # my pid = parent pid -- this is a thread.
+    print('run_ps_thread starting: parent PID', parent_pid, ', my PID', os.getpid(), fn)
     TT = []
     step = 0
 
@@ -349,7 +350,7 @@ def run_ps_thread(parent_pid, parent_ppid, fn, shutdown, event_queue):
     last_proc_time = {}
 
     clock_ticks = os.sysconf('SC_CLK_TCK')
-    print('Clock times:', clock_ticks)
+    #print('Clock times:', clock_ticks)
     if clock_ticks == -1:
         #print('Failed to get clock times per second; assuming 100')
         clock_ticks = 100
@@ -365,7 +366,7 @@ def run_ps_thread(parent_pid, parent_ppid, fn, shutdown, event_queue):
                 try:
                     (t,msg) = event_queue.popleft()
                     events.append((t,msg,step))
-                    print('Popped event', t,msg)
+                    #print('Popped event', t,msg)
                 except IndexError:
                     # no events
                     break
@@ -376,7 +377,7 @@ def run_ps_thread(parent_pid, parent_ppid, fn, shutdown, event_queue):
         # OSX-compatible
         cmd = ('ps ax -o "user pcpu pmem state cputime etime pgid pid ppid ' +
                'rss vsize wchan command"')
-        print('Command:', cmd)
+        #print('Command:', cmd)
         rtn,out,err = run_command(cmd)
         if rtn:
             print('FAILED to run ps:', rtn, out, err)
@@ -444,21 +445,46 @@ def run_ps_thread(parent_pid, parent_ppid, fn, shutdown, event_queue):
         # BUT this only counts whole seconds in the 'ps' output.
         T.icpu = np.zeros(len(T), np.float32)
         icpu = T.icpu
-        for i,(pid,etime,ctime) in enumerate(zip(T.pid, T.elapsed, T.cputime)):
+        for i,(p,etime,ctime) in enumerate(zip(T.pid, T.elapsed, T.cputime)):
             try:
-                elast,clast = last_time[pid]
+                elast,clast = last_time[p]
                 # new process with an existing PID?
                 if etime > elast:
                     icpu[i] = 100. * (ctime - clast) / (etime - elast)
             except:
                 pass
-            last_time[pid] = (etime, ctime)
-            
+            last_time[p] = (etime, ctime)
+
+        # print('Processes:')
+        # J = np.argsort(-T.icpu)
+        # for j in J:
+        #     p = T.pid[j]
+        #     pp = T.ppid[j]
+        #     print('  PID', p, '(main)' if p == parent_pid else '',
+        #           '(worker)' if pp == parent_pid else '',
+        #           'pcpu', T.pcpu[j], 'pmem', T.pmem[j], 'icpu', T.icpu[j],
+        #           T.command[j][:20])
+
         # Apply cuts!
         T.cut(reduce(np.logical_or, [
-            T.pcpu > 5, T.pmem > 5, T.icpu > 5,
-            (T.ppid == pid) * [not c.startswith('ps ax') for c in T.command]]))
-        print('Cut to', len(T), 'with significant CPU/MEM use or my PPID')
+            T.pcpu > 5,
+            T.pmem > 5,
+            T.icpu > 5,
+            T.pid == parent_pid,
+            (T.ppid == parent_pid) * np.array([not c.startswith('ps ax') for c in T.command])]))
+        #print('Cut to', len(T), 'with significant CPU/MEM use or my PPID')
+
+        # print('Kept:')
+        # J = np.argsort(-T.icpu)
+        # for j in J:
+        #     p = T.pid[j]
+        #     pp = T.ppid[j]
+        #     print('  PID', p, '(main)' if p == parent_pid else '',
+        #           '(worker)' if pp == parent_pid else '',
+        #           'pcpu', T.pcpu[j], 'pmem', T.pmem[j], 'icpu', T.icpu[j],
+        #           T.command[j][:20])
+
+
         if len(T) == 0:
             continue
 
@@ -472,11 +498,11 @@ def run_ps_thread(parent_pid, parent_ppid, fn, shutdown, event_queue):
             T.proc_stime = np.zeros(len(T), np.float32)
             T.processor  = np.zeros(len(T), np.int16)
             T.proc_icpu  = np.zeros(len(T), np.float32)
-            for i,pid in enumerate(T.pid):
+            for i,p in enumerate(T.pid):
                 try:
                     # See:
                     # http://man7.org/linux/man-pages/man5/proc.5.html
-                    procfn = '/proc/%i/stat' % pid
+                    procfn = '/proc/%i/stat' % p
                     txt = open(procfn).read()
                     #print('Read', procfn, ':', txt)
                     words = txt.split()
@@ -486,13 +512,13 @@ def run_ps_thread(parent_pid, parent_ppid, fn, shutdown, event_queue):
                     #print('utime', utime, 'stime', stime, 'processor', proc)
                     ctime = utime + stime
                     try:
-                        tlast,clast = last_proc_time[pid]
-                        #print('pid', pid, 'Tnow,Cnow', timenow, ctime, 'Tlast,Clast', tlast,clast)
+                        tlast,clast = last_proc_time[p]
+                        #print('pid', p, 'Tnow,Cnow', timenow, ctime, 'Tlast,Clast', tlast,clast)
                         if ctime >= clast:
                             T.proc_icpu[i] = 100. * (ctime - clast) / float(timenow - tlast)
                     except:
                         pass
-                    last_proc_time[pid] = (timenow, ctime)
+                    last_proc_time[p] = (timenow, ctime)
 
                     T.proc_utime[i] = utime
                     T.proc_stime[i] = stime
@@ -502,7 +528,7 @@ def run_ps_thread(parent_pid, parent_ppid, fn, shutdown, event_queue):
         
         TT.append(T)
 
-        print('ps -- step', step)
+        #print('ps -- step', step)
         if step % 12 == 0:
             # Write out results every ~ minute.
             print('ps -- writing', fn)
