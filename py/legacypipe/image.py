@@ -106,7 +106,24 @@ class LegacySurveyImage(object):
     @classmethod
     def ccd_cuts(self, survey, ccds):
         return np.zeros(len(ccds), np.int32)
-    
+
+    def check_for_cached_files(self, survey):
+        for key in self.get_cacheable_filename_variables():
+            fn = getattr(self, key, None)
+            if fn is None:
+                continue
+            cfn = survey.check_cache(fn)
+            print('Checking for cached', key, ':', fn, '->', cfn)
+            if cfn != fn:
+                setattr(self, key, cfn)
+
+    def get_cacheable_filename_variables(self):
+        '''
+        These are names of self.X variables that are filenames that
+        could be cached.
+        '''
+        return ['imgfn']
+
     def get_good_image_slice(self, extent, get_extent=False):
         '''
         extent = None or extent = [x0,x1,y0,y1]
@@ -429,7 +446,6 @@ class LegacySurveyImage(object):
         return galnorm
     
     def _read_fits(self, fn, hdu, slice=None, header=None, **kwargs):
-        fn = self.survey.check_cache(fn)
         if slice is not None:
             f = fitsio.FITS(fn)[hdu]
             img = f[slice]

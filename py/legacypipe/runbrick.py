@@ -263,6 +263,7 @@ def stage_tims(W=3600, H=3600, pixscale=0.262, brickname=None,
     ims = []
     for ccd in ccds:
         im = survey.get_image_object(ccd)
+        im.check_for_cached_files(survey)
         ims.append(im)
         print(im, im.band, 'exptime', im.exptime, 'propid', ccd.propid,
               'seeing %.2f' % (ccd.fwhm*im.pixscale),
@@ -618,6 +619,7 @@ def make_depth_cut(survey, ccds, bands, targetrd, brick, W, H, pixscale,
                     kwa.update(splinesky=True)
                 im.run_calibs(**kwa)
 
+            im.check_for_cached_files(survey)
             print(im)
             print('Reading WCS from', im.imgfn, 'HDU', im.hdu)
             wcs = im.get_wcs()
