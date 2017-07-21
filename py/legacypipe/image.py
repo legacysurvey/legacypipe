@@ -429,6 +429,7 @@ class LegacySurveyImage(object):
         return galnorm
     
     def _read_fits(self, fn, hdu, slice=None, header=None, **kwargs):
+        fn = self.survey.check_cache(fn)
         if slice is not None:
             f = fitsio.FITS(fn)[hdu]
             img = f[slice]
