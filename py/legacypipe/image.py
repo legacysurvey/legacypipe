@@ -310,13 +310,13 @@ class LegacySurveyImage(object):
         fullpsf = tim.psf
         th,tw = tim.shape
         tim.psf = fullpsf.constantPsfAt(tw//2, th//2)
-        psfnorm = self.psf_norm(tim)
-        print('PSF norm:', psfnorm)
+        tim.psfnorm = self.psf_norm(tim)
+        print('PSF norm:', tim.psfnorm)
         # Galaxy-detection norm
-        galnorm = self.galaxy_norm(tim)
-        print('Galaxy norm', galnorm)
+        tim.galnorm = self.galaxy_norm(tim)
+        print('Galaxy norm', tim.galnorm)
+        assert(tim.galnorm < tim.psfnorm)
         tim.psf = fullpsf
-        assert(galnorm < psfnorm)
 
         # CP (DECam) images include DATE-OBS and MJD-OBS, in UTC.
         import astropy.time
@@ -330,8 +330,6 @@ class LegacySurveyImage(object):
         tim.psf_fwhm = psf_fwhm
         tim.psf_sigma = psf_sigma
         tim.propid = self.propid
-        tim.psfnorm = psfnorm
-        tim.galnorm = galnorm
         tim.sip_wcs = wcs
         tim.x0,tim.y0 = int(x0),int(y0)
         tim.imobj = self
