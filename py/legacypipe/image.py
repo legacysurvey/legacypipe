@@ -463,13 +463,6 @@ class LegacySurveyImage(object):
         print('Reading image from', self.imgfn, 'hdu', self.hdu)
         return self._read_fits(self.imgfn, self.hdu, **kwargs)
 
-    def get_image_info(self):
-        '''
-        Reads the FITS image header and returns some summary information
-        as a dictionary (image size, type, etc).
-        '''
-        return fitsio.FITS(self.imgfn)[self.hdu].get_info()
-
     def get_image_shape(self):
         '''
         Returns image shape H,W.
