@@ -291,7 +291,7 @@ def find_unique_pixels(wcs, W, H, unique, ra1,ra2,dec1,dec2):
             break
     return unique
 
-def run_ps_thread(pid, ppid, fn, shutdown, event_queue):
+def run_ps_thread(parent_pid, parent_ppid, fn, shutdown, event_queue):
     from astrometry.util.run_command import run_command
     from astrometry.util.fits import fits_table, merge_tables
     import time
@@ -299,8 +299,7 @@ def run_ps_thread(pid, ppid, fn, shutdown, event_queue):
     import fitsio
     from functools import reduce
     
-    print('run_ps_thread starting:', pid, ppid, fn)
-    print('My pid:', os.getpid())
+    print('run_ps_thread starting: parent PID, my PID', parent_pid, os.getpid(), fn)
     TT = []
     step = 0
 
@@ -329,8 +328,22 @@ def run_ps_thread(pid, ppid, fn, shutdown, event_queue):
             etime.append(tt)
         return any_failed, etime
 
+    def write_results(fn, T, events, hdr):
+        T.mine = np.logical_or(T.pid == parent_pid, T.ppid == parent_pid)
+        T.main = (T.pid == parent_pid)
+        tmpfn = os.path.join(os.path.dirname(fn), 'tmp-' + os.path.basename(fn))
+        T.writeto(tmpfn, header=hdr)
+        if len(events):
+            E = fits_table()
+            E.unixtime = np.array([e[0] for e in events])
+            E.event = np.array([e[1] for e in events])
+            E.step = np.array([e[2] for e in events])
+            E.writeto(tmpfn, append=True)
+        os.rename(tmpfn, fn)
+        print('Wrote', fn)
+
     fitshdr = fitsio.FITSHDR()
-    fitshdr['PPID'] = pid
+    fitshdr['PPID'] = parent_pid
 
     last_time = {}
     last_proc_time = {}
@@ -461,6 +474,8 @@ def run_ps_thread(pid, ppid, fn, shutdown, event_queue):
             T.proc_icpu  = np.zeros(len(T), np.float32)
             for i,pid in enumerate(T.pid):
                 try:
+                    # See:
+                    # http://man7.org/linux/man-pages/man5/proc.5.html
                     procfn = '/proc/%i/stat' % pid
                     txt = open(procfn).read()
                     #print('Read', procfn, ':', txt)
@@ -489,22 +504,16 @@ def run_ps_thread(pid, ppid, fn, shutdown, event_queue):
 
         print('ps -- step', step)
         if step % 12 == 0:
-        #if True:
-            print('ps -- writing', fn)
             # Write out results every ~ minute.
+            print('ps -- writing', fn)
             T = merge_tables(TT, columns='fillzero')
-            T.my_pid = (T.ppid == pid)
-            tmpfn = os.path.join(os.path.dirname(fn), 'tmp-' + os.path.basename(fn))
-            T.writeto(tmpfn, header=fitshdr)
-            if len(events):
-                E = fits_table()
-                E.unixtime = np.array([e[0] for e in events])
-                E.event = np.array([e[1] for e in events])
-                E.step = np.array([e[2] for e in events])
-                E.writeto(tmpfn, append=True)
-            os.rename(tmpfn, fn)
-            print('Wrote', fn)
+            write_results(fn, T, events, fitshdr)
             TT = [T]
+    # Just before returning, write out results.
+    print('ps -- writing', fn)
+    T = merge_tables(TT, columns='fillzero')
+    write_results(fn, T, events, fitshdr)
+
 
 if __name__ == '__main__':
     ep1 = ellipse_with_priors_factory(0.25)
