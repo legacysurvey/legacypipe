@@ -2940,7 +2940,8 @@ python -u legacypipe/runbrick.py --plots --brick 2440p070 --zoom 1900 2400 450 9
         '--simul-opt', action='store_true', default=False,
         help='Do simultaneous optimization after model selection')
 
-    parser.add_argument('--no-wise', action='store_true', default=False,
+    parser.add_argument('--no-wise', dest='wise', default=True,
+                        action='store_false',
                         help='Skip unWISE forced photometry')
 
     parser.add_argument(
@@ -2962,9 +2963,9 @@ python -u legacypipe/runbrick.py --plots --brick 2440p070 --zoom 1900 2400 450 9
     parser.add_argument('--gpsf', action='store_true', default=False,
                         help='Use a fixed single-Gaussian PSF')
 
-    # parser.add_argument('--hybrid-psf', action='store_true', default=False,
+    # parser.add_argument('--hybrid-psf', dest='hybridPsf', action='store_true', default=False,
     #                     help='Use a hybrid pixelized/Gaussian PSF model')
-    parser.add_argument('--no-hybrid-psf', dest='hybrid_psf', default=True,
+    parser.add_argument('--no-hybrid-psf', dest='hybridPsf', default=True,
                         action='store_false',
                         help="Don't use a hybrid pixelized/Gaussian PSF model")
 

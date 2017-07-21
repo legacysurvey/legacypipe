@@ -67,7 +67,7 @@ if __name__ == '__main__':
     outdir = 'out-testcase6-rex'
     main(args=['--brick', '1102p240', '--zoom', '500', '600', '650', '750',
                '--force-all', '--no-write', '--no-wise',
-               '--rex', #'--plots',
+            #'--rex', #'--plots',
                '--survey-dir', surveydir,
                '--outdir', outdir] + extra_args)
     fn = os.path.join(outdir, 'tractor', '110', 'tractor-1102p240.fits')
@@ -90,6 +90,7 @@ if __name__ == '__main__':
                '--force-all', '--no-write', '--no-wise',
                #'--blob-image', '--early-coadds',
                #'--plots',
+               '--simp',
                '--survey-dir', surveydir,
                '--outdir', outdir] + extra_args)
     fn = os.path.join(outdir, 'tractor', '110', 'tractor-1102p240.fits')
@@ -116,7 +117,7 @@ if __name__ == '__main__':
                '--force-all', '--no-write', '--coadd-bw',
                '--unwise-dir', os.path.join(surveydir, 'images', 'unwise'),
                '--unwise-tr-dir', os.path.join(surveydir,'images','unwise-tr'),
-               '--blob-image',
+               '--blob-image', '--no-hybrid-psf',
                '--survey-dir', surveydir,
                '--outdir', outdir] + extra_args)
     print('Checking for calib file', fn)
@@ -129,7 +130,6 @@ if __name__ == '__main__':
     
     main(args=['--brick', '1209p050', '--zoom', '720', '1095', '3220', '3500',
                '--force-all', '--no-write', '--no-wise', #'--plots',
-               '--hybrid-psf',
                '--survey-dir', surveydir,
                '--outdir', outdir] + extra_args)
     
