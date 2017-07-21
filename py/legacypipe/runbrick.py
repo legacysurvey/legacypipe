@@ -2810,7 +2810,7 @@ def run_brick(brick, survey, radec=None, pixscale=0.262,
         #runstage(stage, picklePattern, stagefunc, prereqs=prereqs,
         runstage(stage, picklePattern, mystagefunc, prereqs=prereqs,
                  initial_args=initargs, **kwargs)
-        
+
     print('All done:', Time()-t0)
     mp.report(threads)
 
