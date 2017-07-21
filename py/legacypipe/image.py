@@ -302,35 +302,21 @@ class LegacySurveyImage(object):
                     photocal=LinearPhotoCal(zpscale, band=band),
                     sky=sky, name=self.name + ' ' + band)
         assert(np.all(np.isfinite(tim.getInvError())))
-
-        # PSF norm
         tim.band = band
-        #print('Computing PSF norm')
 
         # HACK -- create a local PSF model to instantiate the PsfEx
         # model, which handles non-unit pixel scaling.
-        print('-- creating constant PSF model...')
+        print('-- creating constant PSF model for norms...')
         fullpsf = tim.psf
         th,tw = tim.shape
         tim.psf = fullpsf.constantPsfAt(tw//2, th//2)
-        #print('-- created constant PSF model...')
-
-        print('Computing PSF norm...')
         psfnorm = self.psf_norm(tim)
-        print('Computed PSF norm:', psfnorm)
-
+        print('PSF norm:', psfnorm)
         # Galaxy-detection norm
-        print('Computing galaxy norm')
         galnorm = self.galaxy_norm(tim)
-        print('PSF norm', psfnorm, 'galaxy norm', galnorm)
-
+        print('Galaxy norm', galnorm)
         tim.psf = fullpsf
-
-        # print('Computing galaxy norm with original PSF')
-        # galnorm = self.galaxy_norm(tim)
-        # print('PSF norm', psfnorm, 'galaxy norm w/orig PSF', galnorm)
-
-        #assert(galnorm < psfnorm)
+        assert(galnorm < psfnorm)
 
         # CP (DECam) images include DATE-OBS and MJD-OBS, in UTC.
         import astropy.time
