@@ -2867,6 +2867,9 @@ python -u legacypipe/runbrick.py --plots --brick 2440p070 --zoom 1900 2400 450 9
         '--survey-dir', type=str, default=None,
         help='Override the $LEGACY_SURVEY_DIR environment variable')
 
+    parser.add_argument('--cache-dir', type=str, default=None,
+                        help='Directory to search for cached files')
+
     parser.add_argument('--threads', type=int, help='Run multi-threaded')
     parser.add_argument('-p', '--plots', dest='plots', action='store_true',
                         help='Per-blob plots?')
@@ -2991,7 +2994,8 @@ def get_runbrick_kwargs(opt):
     from legacypipe.runs import get_survey
 
     survey = get_survey(opt.run,
-                        survey_dir=opt.survey_dir, output_dir=opt.outdir)
+                        survey_dir=opt.survey_dir, output_dir=opt.outdir,
+                        cache_dir=opt.cache_dir)
     print('Got survey:', survey)
 
     if opt.check_done or opt.skip or opt.skip_coadd:

@@ -99,7 +99,7 @@ class SimpleGalaxy(ExpGalaxy):
     def __repr__(self):
         return (self.name + '(pos=' + repr(self.pos) +
                 ', brightness=' + repr(self.brightness) + ')')
-        
+
     @staticmethod
     def getNamedParams():
         return dict(pos=0, brightness=1)
@@ -112,7 +112,7 @@ class SimpleGalaxy(ExpGalaxy):
         if pname == 'shape':
             return True
         return super(SimpleGalaxy, self).isParamFrozen(pname)
-    
+
 class BrickDuck(object):
     '''A little duck-typing class when running on a custom RA,Dec center
     rather than a brick center.
@@ -196,7 +196,7 @@ def get_version_header(program_name, survey_dir, git_version=None):
                         comment='Observation type'))
     hdr.add_record(dict(name='PROCTYPE', value='tile',
                         comment='Processing type'))
-    
+
     import socket
     hdr.add_record(dict(name='HOSTNAME', value=socket.gethostname(),
                         comment='Machine where runbrick.py was run'))
@@ -215,7 +215,7 @@ class MyFITSHDR(fitsio.FITSHDR):
     def clean(self, **kwargs):
         """
         Remove reserved keywords from the header.
-        
+
         These are keywords that the fits writer must write in order
         to maintain consistency between header and data.
         """
@@ -255,7 +255,6 @@ class MyFITSHDR(fitsio.FITSHDR):
             rmnames = ['ZVAL%d' % i for i in xrange(1,znaxis+1)]
             self.delete(rmnames)
 
-        
         r = self._record_map.get('TFIELDS',None)
         if r is not None:
             tfields = int(r['value'])
@@ -353,7 +352,6 @@ def get_rgb(imgs, bands, mnmx=None, arcsinh=None, scales=None,
             scales = grzscales
 
     # print('Using scales:', scales)
-        
     h,w = imgs[0].shape
     rgb = np.zeros((h,w,3), np.float32)
     for im,band in zip(imgs, bands):
@@ -385,7 +383,7 @@ def switch_to_soft_ellipses(cat):
     '''
     Converts our softened-ellipticity EllipseESoft parameters into
     normal EllipseE ellipses.
-    
+
     *cat*: an iterable of tractor Sources, which will be modified
      in-place.
 
@@ -427,12 +425,11 @@ def brick_catalog_for_radec_box(ralo, rahi, declo, dechi,
     No cleverness with RA wrap-around; assumes ralo < rahi.
 
     survey: LegacySurveyData object
-    
+
     bricks: table of bricks, eg from LegacySurveyData.get_bricks()
 
     catpattern: filename pattern of catalog files to read,
         eg "pipebrick-cats/tractor-phot-%06i.its"
-    
     '''
     assert(ralo < rahi)
     assert(declo < dechi)
@@ -463,7 +460,7 @@ def brick_catalog_for_radec_box(ralo, rahi, declo, dechi,
     # arbitrarily keep the first header
     T._header = TT[0]._header
     return T
-    
+
 def ccd_map_image(valmap, empty=0.):
     '''valmap: { 'N7' : 1., 'N8' : 17.8 }
 
@@ -516,7 +513,7 @@ def ccd_map_extent(ccdname, inset=0.):
     x1 += 7
     y0 += 6
     y1 += 6
-    
+
     if inset == 0.:
         return (x0,x1,y0,y1)
     return (x0+inset, x1-inset, y0+inset, y1-inset)
@@ -566,7 +563,7 @@ def bricks_touching_wcs(targetwcs, survey=None, B=None, margin=20):
 
     ra,dec = targetwcs.radec_center()
     radius = targetwcs.radius()
-        
+
     # MAGIC 0.4 degree search radius =
     # DECam hypot(1024,2048)*0.27/3600 + Brick hypot(0.25, 0.25) ~= 0.35 + margin
     I,J,d = match_radec(B.ra, B.dec, ra, dec,
@@ -583,7 +580,6 @@ def bricks_touching_wcs(targetwcs, survey=None, B=None, margin=20):
         keep.append(i)
     return B[np.array(keep)]
 
-        
 def ccds_touching_wcs(targetwcs, ccds, ccdrad=0.17, polygons=True):
     '''
     targetwcs: wcs object describing region of interest
@@ -596,7 +592,7 @@ def ccds_touching_wcs(targetwcs, ccds, ccdrad=0.17, polygons=True):
     '''
     from astrometry.util.util import Tan
     from astrometry.util.miscutils import polygons_intersect
-    
+
     trad = targetwcs.radius()
     if ccdrad is None:
         ccdrad = max(np.sqrt(np.abs(ccds.cd1_1 * ccds.cd2_2 -
@@ -649,7 +645,7 @@ def imsave_jpeg(jpegfn, img, **kwargs):
     '''Saves a image in JPEG format.  Some matplotlib installations
     (notably at NERSC) don't support jpeg, so we write to PNG and then
     convert to JPEG using the venerable netpbm tools.
-    
+
     *jpegfn*: JPEG filename
     *img*: image, in the typical matplotlib formats (see plt.imsave)
     '''
@@ -681,8 +677,8 @@ class LegacySurveyData(object):
         THIRD_PIXEL = 0x10, # Mosaic3 one-third-pixel interpolation problem
         )
 
-    def __init__(self, survey_dir=None, output_dir=None, version=None,
-                 ccds=None):
+    def __init__(self, survey_dir=None, cache_dir=None, output_dir=None,
+                 version=None, ccds=None):
         '''Create a LegacySurveyData object using data from the given
         *survey_dir* directory, or from the $LEGACY_SURVEY_DIR environment
         variable.
@@ -693,6 +689,11 @@ class LegacySurveyData(object):
             Defaults to $LEGACY_SURVEY_DIR environment variable.  Where to look for
             files including calibration files, tables of CCDs and bricks, image data,
             etc.
+
+        cache_dir : string
+            Directory to search for input files before looking in survey_dir.  Useful
+            for, eg, Burst Buffer.
+            
         output_dir : string
             Base directory for output files; default ".".
         '''
@@ -713,8 +714,9 @@ On NERSC, you can do:
 Now using the current directory as LEGACY_SURVEY_DIR, but this is likely to fail.
 ''')
                 survey_dir = os.getcwd()
-                
+
         self.survey_dir = survey_dir
+        self.cache_dir = cache_dir
 
         if output_dir is None:
             self.output_dir = '.'
@@ -765,7 +767,7 @@ Now using the current directory as LEGACY_SURVEY_DIR, but this is likely to fail
     def sed_matched_filters(self, bands):
         from legacypipe.detection import sed_matched_filters
         return sed_matched_filters(bands)
-        
+
     def index_of_band(self, b):
         return self.allbands.index(b)
 
@@ -774,7 +776,7 @@ Now using the current directory as LEGACY_SURVEY_DIR, but this is likely to fail
         Reads the intermediate tractor catalog for the given brickname.
 
         *kwargs*: passed to self.find_file()
-        
+
         Returns (T, hdr, primhdr)
         '''
         fn = self.find_file('tractor-intermediate', brick=brick, **kwargs)
@@ -795,9 +797,8 @@ Now using the current directory as LEGACY_SURVEY_DIR, but this is likely to fail
             if len(X.shape) == 1:
                 X = X[:, np.newaxis]
                 T.set(incol, X)
-        
         return T, hdr, primhdr
-        
+
     def find_file(self, filetype, brick=None, brickpre=None, band='%(band)s',
                   output=False):
         '''
@@ -808,7 +809,7 @@ Now using the current directory as LEGACY_SURVEY_DIR, but this is likely to fail
              "depth"   -- PSF depth maps
              "galdepth" -- Canonical galaxy depth maps
              "nexp" -- number-of-exposure maps
-             
+
         *brick* : string, brick name such as "0001p000"
 
         *output*: True if we are about to write this file; will use self.outdir as
@@ -832,64 +833,93 @@ Now using the current directory as LEGACY_SURVEY_DIR, but this is likely to fail
         if brick is not None:
             codir = os.path.join(basedir, 'coadd', brickpre, brick)
 
+        # Swap in files in the self.cache_dir, if they exist.
+        def swap(fn):
+            if output or self.cache_dir is None:
+                return fn
+            cfn = fn.replace(self.survey_dir, self.cache_dir)
+            if os.path.exists(cfn):
+                return cfn
+            return fn
+        def swaplist(fns):
+            if output or self.cache_dir is None:
+                return fns
+            rtn = []
+            for fn in fns:
+                cfn = fn.replace(self.survey_dir, self.cache_dir)
+                if os.path.exists(cfn):
+                    rtn.append(cfn)
+                else:
+                    rtn.append(cfn)
+            return rtn
+
         sname = self.file_prefix
-            
+
         if filetype == 'bricks':
             fn = 'survey-bricks.fits.gz'
             if self.version in ['dr1','dr2']:
                 fn = 'decals-bricks.fits'
-            return os.path.join(basedir, fn)
+            return swap(os.path.join(basedir, fn))
 
         elif filetype == 'ccds':
             if self.version in ['dr1','dr2']:
-                return [os.path.join(basedir, 'decals-ccds.fits.gz')]
+                return swaplist([os.path.join(basedir, 'decals-ccds.fits.gz')])
             else:
-                return glob(os.path.join(basedir, 'survey-ccds-*.fits.gz'))
+                return swaplist(
+                    glob(os.path.join(basedir, 'survey-ccds-*.fits.gz')))
 
         elif filetype == 'ccd-kds':
-            return glob(os.path.join(basedir, 'survey-ccds-*.kd.fits'))
+            return swaplist(
+                glob(os.path.join(basedir, 'survey-ccds-*.kd.fits')))
 
         elif filetype == 'tycho2':
-            return os.path.join(basedir, 'tycho2.fits.gz')
-            
+            return swap(os.path.join(basedir, 'tycho2.fits.gz'))
+
         elif filetype == 'annotated-ccds':
             if self.version == 'dr2':
-                return glob(os.path.join(basedir, 'decals-ccds-annotated.fits'))
-            return glob(os.path.join(basedir, 'ccds-annotated-*.fits.gz'))
+                return swaplist(
+                    glob(os.path.join(basedir, 'decals-ccds-annotated.fits')))
+            return swaplist(
+                glob(os.path.join(basedir, 'ccds-annotated-*.fits.gz')))
 
         elif filetype == 'tractor':
-            return os.path.join(basedir, 'tractor', brickpre,
-                                'tractor-%s.fits' % brick)
-        
+            return swap(os.path.join(basedir, 'tractor', brickpre,
+                                     'tractor-%s.fits' % brick))
+
         elif filetype == 'tractor-intermediate':
-            return os.path.join(basedir, 'tractor-i', brickpre,
-                                'tractor-%s.fits' % brick)
+            return swap(os.path.join(basedir, 'tractor-i', brickpre,
+                                     'tractor-%s.fits' % brick))
 
         elif filetype == 'galaxy-sims':
-            return os.path.join(basedir, 'tractor', brickpre,
-                                'galaxy-sims-%s.fits' % brick)
+            return swap(os.path.join(basedir, 'tractor', brickpre,
+                                     'galaxy-sims-%s.fits' % brick))
 
         elif filetype in ['ccds-table', 'depth-table']:
             ty = filetype.split('-')[0]
-            return os.path.join(codir, '%s-%s-%s.fits' % (sname, brick, ty))
+            return swap(
+                os.path.join(codir, '%s-%s-%s.fits' % (sname, brick, ty)))
 
         elif filetype in ['image-jpeg', 'model-jpeg', 'resid-jpeg',
                           'imageblob-jpeg', 'simscoadd-jpeg','imagecoadd-jpeg']: 
             ty = filetype.split('-')[0]
-            return os.path.join(codir, '%s-%s-%s.jpg' % (sname, brick, ty))
+            return swap(
+                os.path.join(codir, '%s-%s-%s.jpg' % (sname, brick, ty)))
 
         elif filetype in ['invvar', 'chi2', 'image', 'model', 'depth', 'galdepth', 'nexp']:
-            return os.path.join(codir, '%s-%s-%s-%s.fits.fz' %
-                                (sname, brick, filetype,band))
+            return swap(os.path.join(codir, '%s-%s-%s-%s.fits.fz' %
+                                     (sname, brick, filetype,band)))
 
         elif filetype in ['blobmap']:
-            return os.path.join(basedir, 'metrics', brickpre, 'blobs-%s.fits.gz' % (brick))
+            return swap(os.path.join(basedir, 'metrics', brickpre,
+                                     'blobs-%s.fits.gz' % (brick)))
+
         elif filetype in ['all-models']:
-            return os.path.join(basedir, 'metrics', brickpre, 'all-models-%s.fits' % (brick))
+            return swap(os.path.join(basedir, 'metrics', brickpre,
+                                     'all-models-%s.fits' % (brick)))
 
         elif filetype == 'checksums':
-            return os.path.join(basedir, 'tractor', brickpre,
-                                'brick-%s.sha256sum' % brick)
+            return swap(os.path.join(basedir, 'tractor', brickpre,
+                                     'brick-%s.sha256sum' % brick))
 
         print('Unknown filetype "%s"' % filetype)
         assert(False)
@@ -1169,7 +1199,7 @@ Now using the current directory as LEGACY_SURVEY_DIR, but this is likely to fail
             print('Below RAhi=', rahi, ':', len(np.flatnonzero(bricks.ra1 <= rahi)))
             print('In RA slice:', len(np.nonzero(np.logical_or(bricks.ra2 >= ralo,
                                                                bricks.ra1 <= rahi))))
-                    
+
             I, = np.nonzero(np.logical_or(bricks.ra2 >= ralo, bricks.ra1 <= rahi) *
                             (bricks.dec1 <= dechi) * (bricks.dec2 >= declo))
             print('In RA&Dec slice', len(I))
@@ -1264,7 +1294,7 @@ Now using the current directory as LEGACY_SURVEY_DIR, but this is likely to fail
         # Remove trailing spaces from 'camera' column.
         ccds.camera = np.array([c.strip() for c in ccds.camera])
         return ccds
-    
+
     def ccds_touching_wcs(self, wcs, **kwargs):
         '''
         Returns a table of the CCDs touching the given *wcs* region.
@@ -1326,12 +1356,12 @@ Now using the current directory as LEGACY_SURVEY_DIR, but this is likely to fail
                     [ccd.crval1, ccd.crval2, ccd.crpix1, ccd.crpix2,
                      ccd.cd1_1,  ccd.cd1_2,  ccd.cd2_1, ccd.cd2_2, W, H]])
         return wcs
-    
+
     def tims_touching_wcs(self, targetwcs, mp, bands=None,
                           **kwargs):
         '''Creates tractor.Image objects for CCDs touching the given
         *targetwcs* region.
-        
+
         mp: multiprocessing object
 
         kwargs are passed to LegacySurveyImage.get_tractor_image() and
@@ -1360,7 +1390,7 @@ Now using the current directory as LEGACY_SURVEY_DIR, but this is likely to fail
         args = [(im, targetrd, kwargs) for im in ims]
         tims = mp.map(read_one_tim, args)
         return tims
-    
+
     def find_ccds(self, expnum=None, ccdname=None, camera=None):
         '''
         Returns a table of CCDs matching the given *expnum* (exposure
@@ -1520,10 +1550,9 @@ def exposure_metadata(filenames, hdus=None, trim=None):
     # DECam: INSTRUME = 'DECam'
     T.rename('instrume', 'camera')
     T.camera = np.array([t.lower().strip() for t in T.camera])
-    
     #T.rename('extname', 'ccdname')
     T.ccdname = np.array([t.strip() for t in T.extname])
-    
+
     T.filter = np.array([s.split()[0] for s in T.filter])
     T.ra_bore  = np.array([hmsstring2ra (s) for s in T.ra ])
     T.dec_bore = np.array([dmsstring2dec(s) for s in T.dec])
@@ -1535,7 +1564,6 @@ def exposure_metadata(filenames, hdus=None, trim=None):
 
         wcs = Tan(T.crval1[i], T.crval2[i], T.crpix1[i], T.crpix2[i],
                   T.cd1_1[i], T.cd1_2[i], T.cd2_1[i], T.cd2_2[i], float(W), float(H))
-        
         xc,yc = W/2.+0.5, H/2.+0.5
         rc,dc = wcs.pixelxy2radec(xc,yc)
         T.ra [i] = rc
@@ -1543,7 +1571,6 @@ def exposure_metadata(filenames, hdus=None, trim=None):
 
     return T
 
-            
 def run_calibs(X):
     im = X[0]
     kwargs = X[1]
