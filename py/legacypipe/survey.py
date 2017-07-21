@@ -835,23 +835,13 @@ Now using the current directory as LEGACY_SURVEY_DIR, but this is likely to fail
 
         # Swap in files in the self.cache_dir, if they exist.
         def swap(fn):
-            if output or self.cache_dir is None:
+            if output:
                 return fn
-            cfn = fn.replace(self.survey_dir, self.cache_dir)
-            if os.path.exists(cfn):
-                return cfn
-            return fn
+            return self.check_cache(fn)
         def swaplist(fns):
             if output or self.cache_dir is None:
                 return fns
-            rtn = []
-            for fn in fns:
-                cfn = fn.replace(self.survey_dir, self.cache_dir)
-                if os.path.exists(cfn):
-                    rtn.append(cfn)
-                else:
-                    rtn.append(cfn)
-            return rtn
+            return [self.check_cache(fn) for fn in fns]
 
         sname = self.file_prefix
 
@@ -923,6 +913,14 @@ Now using the current directory as LEGACY_SURVEY_DIR, but this is likely to fail
 
         print('Unknown filetype "%s"' % filetype)
         assert(False)
+
+    def check_cache(self, fn):
+        if self.cache_dir is None:
+            return fn
+        cfn = fn.replace(self.survey_dir, self.cache_dir)
+        if os.path.exists(cfn):
+            return cfn
+        return fn
 
     def get_compression_string(self, filetype, **kwargs):
         return dict(# g: sigma ~ 0.002.  qz -1e-3: 6 MB, -1e-4: 10 MB
