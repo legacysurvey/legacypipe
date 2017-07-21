@@ -841,7 +841,8 @@ def stage_mask_junk(tims=None, targetwcs=None, W=None, H=None, bands=None,
                 # Add to dq mask bits
                 tim.dq[slc] |= CP_DQ_BITS['longthin']
 
-            ra,dec = tim.wcs.pixelToPosition(cx, cy)
+            rd = tim.wcs.pixelToPosition(cx, cy)
+            ra,dec = rd.ra, rd.dec
             ok,bx,by = targetwcs.radec2pixelxy(ra, dec)
             print('Zeroing out a source with major/minor axis', major, '/',
                   minor, 'at centroid RA,Dec=(%.4f,%.4f), brick coords %i,%i'
