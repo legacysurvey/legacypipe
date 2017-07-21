@@ -2933,7 +2933,7 @@ python -u legacypipe/runbrick.py --plots --brick 2440p070 --zoom 1900 2400 450 9
                         action='store_false',
                         help='Do not generate the metrics directory and files')
 
-    parser.add_argument('--nsigma', type=float,
+    parser.add_argument('--nsigma', type=float, default=6.0,
                         help='Set N sigma source detection thresh')
 
     parser.add_argument(
