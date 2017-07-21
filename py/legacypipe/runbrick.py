@@ -778,7 +778,8 @@ def make_depth_cut(survey, ccds, bands, targetrd, brick, W, H, pixscale,
     return keep_ccds
 
 def stage_mask_junk(tims=None, targetwcs=None, W=None, H=None, bands=None,
-                    mp=None, nsigma=None, plots=None, ps=None, **kwargs):
+                    mp=None, nsigma=None, plots=None, ps=None, record_event=None,
+                    **kwargs):
     '''
     This pipeline stage tries to detect artifacts in the individual
     exposures, by running a detection step and removing blobs with
@@ -788,6 +789,8 @@ def stage_mask_junk(tims=None, targetwcs=None, W=None, H=None, bands=None,
     from scipy.ndimage.morphology import binary_fill_holes
     from scipy.ndimage.measurements import label, find_objects, center_of_mass
     from scipy.linalg import svd
+
+    record_event and record_event('stage_mask_junk: starting')
 
     if plots:
         coimgs,cons = quick_coadds(tims, bands, targetwcs, fill_holes=False)
@@ -898,8 +901,9 @@ def stage_image_coadds(survey=None, targetwcs=None, bands=None, tims=None,
                        brickname=None, version_header=None,
                        plots=False, ps=None, coadd_bw=False, W=None, H=None,
                        brick=None, blobs=None, lanczos=True, ccds=None,
-                       mp=None,
+                       mp=None, record_event=None,
                        **kwargs):
+    record_event and record_event('stage_image_coadds: starting')
     '''
     Immediately after reading the images, we can create coadds of just
     the image products.  Later, full coadds including the models will
@@ -908,6 +912,8 @@ def stage_image_coadds(survey=None, targetwcs=None, bands=None, tims=None,
     '''
     with survey.write_output('ccds-table', brick=brickname) as out:
         ccds.writeto(None, fits_object=out.fits, primheader=version_header)
+
+    record_event and record_event('stage_mask_junk: starting')
             
     C = make_coadds(tims, bands, targetwcs,
                     detmaps=True, ngood=True, lanczos=lanczos,
@@ -982,6 +988,7 @@ def stage_srcs(coimgs=None, cons=None,
                on_bricks=False,
                allow_missing_brickq=-1,
                survey=None, brick=None,
+               record_event=None,
                **kwargs):
     '''
     In this stage we run SED-matched detection to find objects in the
@@ -996,6 +1003,8 @@ def stage_srcs(coimgs=None, cons=None,
     from scipy.ndimage.morphology import binary_dilation
     from scipy.ndimage.measurements import label, find_objects, center_of_mass
 
+    record_event and record_event('stage_srcs: starting')
+
     tlast = Time()
 
     # existing sources that should be avoided when detecting new
@@ -1009,11 +1018,13 @@ def stage_srcs(coimgs=None, cons=None,
         if avoid is not None:
             avoid_x,avoid_y = avoid
 
+    record_event and record_event('stage_srcs: detection maps')
     print('Rendering detection maps...')
     detmaps, detivs, satmap = detection_maps(tims, targetwcs, bands, mp)
     tnow = Time()
     print('[parallel srcs] Detmaps:', tnow-tlast)
     tlast = tnow
+    record_event and record_event('stage_srcs: sources')
 
     # Median-smooth detection maps
     binning = 4
@@ -1119,6 +1130,7 @@ def stage_srcs(coimgs=None, cons=None,
         ps.savefig()
 
     # SED-matched detections
+    record_event and record_event('stage_srcs: SED-matched')
     print('Running source detection at', nsigma, 'sigma')
     SEDs = survey.sed_matched_filters(bands)
     Tnew,newcat,hot = run_sed_matched_filters(
@@ -1303,6 +1315,7 @@ def stage_fitblobs(T=None,
                    get_all_models=False,
                    tycho=None,
                    rex=False,
+                   record_event=None,
                    **kwargs):
     '''
     This is where the actual source fitting happens.
@@ -1312,6 +1325,8 @@ def stage_fitblobs(T=None,
     tlast = Time()
     for tim in tims:
         assert(np.all(np.isfinite(tim.getInvError())))
+
+    record_event and record_event('stage_fitblobs: starting')
 
     # How far down to render model profiles
     minsigma = 0.1
@@ -1894,6 +1909,7 @@ def stage_coadds(survey=None, bands=None, version_header=None, targetwcs=None,
                  T=None, cat=None, pixscale=None, plots=False,
                  coadd_bw=False, brick=None, W=None, H=None, lanczos=True,
                  mp=None, on_bricks=None,
+                 record_event=None,
                  **kwargs):
     '''
     After the `stage_fitblobs` fitting stage, we have all the source
@@ -1903,6 +1919,8 @@ def stage_coadds(survey=None, bands=None, version_header=None, targetwcs=None,
     from legacypipe.survey import apertures_arcsec
     from functools import reduce
     tlast = Time()
+
+    record_event and record_event('stage_coadds: starting')
 
     # Write per-brick CCDs table
     primhdr = fitsio.FITSHDR()
@@ -1917,6 +1935,7 @@ def stage_coadds(survey=None, bands=None, version_header=None, targetwcs=None,
     print('[serial coadds]:', tnow-tlast)
     tlast = tnow
     # Render model images...
+    record_event and record_event('stage_coadds: model images')
     mods = mp.map(_get_mod, [(tim, cat) for tim in tims])
 
     tnow = Time()
@@ -1940,6 +1959,7 @@ def stage_coadds(survey=None, bands=None, version_header=None, targetwcs=None,
     apxy = np.vstack((xx - 1., yy - 1.)).T
     del xx,yy,ok,ra,dec
 
+    record_event and record_event('stage_coadds: coadds')
     C = make_coadds(tims, bands, targetwcs, mods=mods, xy=ixy,
                     ngood=True, detmaps=True, psfsize=True, lanczos=lanczos,
                     apertures=apertures, apxy=apxy,
@@ -1947,6 +1967,7 @@ def stage_coadds(survey=None, bands=None, version_header=None, targetwcs=None,
                     callback_args=(survey, brickname, version_header, tims,
                                    targetwcs),
                     plots=False, ps=ps, mp=mp)
+    record_event and record_event('stage_coadds: extras')
     
     # Coadds of galaxy sims only, image only
     if hasattr(tims[0], 'sims_image'):
@@ -2120,12 +2141,15 @@ def stage_wise_forced(
     brick=None,
     wise_ceres=True,
     mp=None,
+    record_event=None,
     **kwargs):
     '''
     After the model fits are finished, we can perform forced
     photometry of the unWISE coadds.
     '''
     from wise.forcedphot import unwise_tiles_touching_wcs
+
+    record_event and record_event('stage_wise_forced: starting')
 
     # Here we assume the targetwcs is axis-aligned and that the
     # edge midpoints yield the RA,Dec limits (true for TAN).
@@ -2183,7 +2207,9 @@ def stage_wise_forced(
                                  wise_ceres, broadening[band])))
 
     # Run the forced photometry!
+    record_event and record_event('stage_wise_forced: photometry')
     phots = mp.map(_unwise_phot, args + [a for e,a in eargs])
+    record_event and record_event('stage_wise_forced: results')
 
     # Unpack results...
     WISE = None
@@ -2299,13 +2325,16 @@ def stage_writecat(
     brick=None,
     invvars=None,
     allbands='ugrizY',
+    record_event=None,
     **kwargs):
     '''
     Final stage in the pipeline: format results for the output
     catalog.
     '''
     from legacypipe.catalog import prepare_fits_catalog
-     
+
+    record_event and record_event('stage_writecat: starting')
+
     TT = T.copy()
     for k in ['ibx','iby']:
         TT.delete_column(k)
@@ -2453,6 +2482,8 @@ def stage_writecat(
         sims_data.sims_xy = T.sims_xy
         with survey.write_output('galaxy-sims', brick=brickname) as out:
             sims_data.writeto(None, fits_object=out.fits)
+
+    record_event and record_event('stage_writecat: done')
 
     return dict(T2=T2)
 
