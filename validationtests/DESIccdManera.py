@@ -8,17 +8,10 @@ mpl.use('Agg')
 import matplotlib.pyplot as plt
 
 from quicksipManera import *
-
-dir = '$HOME/' # obviously needs to be changed
-#inputdir = '/project/projectdirs/cosmo/data/legacysurvey/dr3/' # where I get my data 
-inputdir= '/global/projecta/projectdirs/cosmo/work/dr4/'
-localdir = '/global/homes/m/manera/DESI/validation-outputs/' #place for local DESI stuff
-
-#extmap = np.loadtxt('/global/homes/m/manera/DESI/validation-outputs/healSFD_r_256_fullsky.dat') # extintion map remove it 
+import fitsio
 
 
-
-### A couple of useful conversions
+### ------------ A couple of useful conversions -----------------------
 
 def zeropointToScale(zp):
 	return 10.**((zp - 22.5)/2.5)	
@@ -29,6 +22,237 @@ def nanomaggiesToMag(nm):
 def Magtonanomaggies(m):
 	return 10.**(-m/2.5+9.)
 	#-2.5 * (log(nm,10.) - 9.)
+
+### ------------ SHARED CLASS: HARDCODED INPUTS GO HERE ------------------------
+###    Please, add here your own harcoded values if any, so other may use them 
+
+class mysample(object):
+    """
+    This class mantains the basic information of the sample
+    to minimize hardcoded parameters in the test functions
+
+    Everyone is meant to call mysample to obtain information like 
+         - path to ccd-annotated files   : ccds
+         - zero points                   : zp0
+         - magnitude limits (recm)       : recm
+         - photoz requirements           : phreq
+         - extintion coefficient         : extc
+         - extintion index               : be
+
+    Current Inputs are: survey, DR, band, outpath) 
+    """                                  
+
+    def __init__(self,surevy,DR,band):
+    """ Initialize image survey, data release, band, output path
+        Calculate variables and paths"""   
+        self.survey = survey
+        self.DR     = DR
+        self.band   = band
+        self.outpath = outpath
+     
+        # Check bands
+        if(self.band != 'g' and self.band !='r' and self.band!='z'): 
+            RuntimeError("Band seems wrong options are 'g' 'r' 'z'")        
+              
+        # Check surveys
+        if(self.survey !='DECaLS' and  self.survey !='BASS' and self.survey !='MZLS'):
+            RuntimeError("Survey seems wrong options are 'DECAaLS' 'BASS' MZLS' ")
+
+        # Annotated CCD paths  
+        if(self.DR == 'DR3'):
+            inputdir = '/project/projectdirs/cosmo/data/legacysurvey/dr3/'  
+            self.ccds =inputdir+'ccds-annotated-decals.fits.gz'
+            self.catalog = 'DECaLS_DR3'
+            if(self.survey != 'DECaLS'): RuntimeErrore("Survey name seems inconsistent")
+
+        else if(self.DR == 'DR4'):
+            inputdir= '/global/projecta/projectdirs/cosmo/work/dr4/'
+            if (band == 'g' or .band == 'r'):
+                fname=inputdir+'ccds-annotated-dr4-90prime.fits.gz'
+                self_catalog = 'BASS_DR4'
+                if(self.survey != 'BASS'): RuntimeErrore("Survey name seems inconsistent")
+
+            else if(band == 'z'):
+                fname = inputdir+'ccds-annotated-dr4-mzls.fits.gz'
+                self_catalog = 'MZLS_DR4'
+                if(self.survey != 'MZLS'): RuntimeErrore("Survey name seems inconsistent")
+            else: RuntimeError("Input sample band seems inconsisent")
+
+        else: RuntimeError("Data Realease seems wrong") 
+
+        #Bands inputs
+        if band == 'g':
+            self.be = 1
+            self.extc = 3.303  #/2.751
+            self.zp0 = 25.08
+            self.recm = 24.
+            self.phreq = 0.01
+        if band == 'r':
+            self.be = 2
+            self.extc = 2.285  #/2.751
+            self.zp0 = 25.29
+            self.recm = 23.4
+            self.phreq = 0.01
+        if band == 'z':
+            self.be = 4
+            self.extc = 1.263  #/2.751
+            self.zp0 = 24.92
+            self.recm = 22.5
+            self.phreq = 0.02
+
+# ------------------------------------------------------------------
+
+
+
+
+# ------------------------------------------------------------------
+# ------------ VALIDATION TESTS ------------------------------------
+# ------------------------------------------------------------------
+# Note: part of the name of the function should startw with number valXpX 
+
+def val3p4c_depthfromIvar(sample):    
+    """
+       Requirement V3.4
+       90% filled to g=24, r=23.4 and z=22.5 and 95% and 98% at 0.3/0.6 mag shallower.
+
+       Produces extinction correction magnitude maps for visual inspection
+
+       MARCM stable version, improved from AJR quick hack 
+       This now included extinction from the exposures
+       Uses quicksip subroutines from Boris, corrected 
+       for a bug I found for BASS and MzLS ccd orientation
+    """
+    nside = 1024       # Resolution of output maps
+    nsidesout = None   # if you want full sky degraded maps to be written
+    ratiores = 1       # Superresolution/oversampling ratio, simp mode doesn't allow anything other than 1
+    mode = 1           # 1: fully sequential, 2: parallel then sequential, 3: fully parallel
+    pixoffset = 0      # How many pixels are being removed on the edge of each CCD? 15 for DES.
+    oversamp='1'       # ratiores in string format
+    nsideSTR='1024'    # same as nside but in string format
+    
+    band = sample.band
+    catalogue_name = sample.catalog
+    fname = sample.ccds    
+    localdir = sample.localdir
+    outroot = localdir
+
+    #Read ccd file 
+    tbdata = pyfits.open(fname)[1].data
+    
+    # ------------------------------------------------------
+    # Obtain indices
+    auxstr='band'+band
+    sample_names = [auxstr]
+    inds = np.where((tbdata['filter'] == band) & (tbdata['photometric'] == True) & (tbdata['blacklist_ok'] == True)) 
+    
+    #Read data 
+    #obtain invnoisesq here, including extinction 
+    nmag = Magtonanomaggies(tbdata['galdepth']-extc*tbdata['EBV'])/5.
+    ivar= 1./nmag**2.
+
+    # What properties do you want mapped?
+    # Each each tuple has [(quantity to be projected, weighting scheme, operation),(etc..)] 
+    propertiesandoperations = [ ('ivar', '', 'total'), ]
+
+ 
+    # What properties to keep when reading the images? 
+    # Should at least contain propertiesandoperations and the image corners.
+    # MARCM - actually no need for ra dec image corners.   
+    # Only needs ra0 ra1 ra2 ra3 dec0 dec1 dec2 dec3 only if fast track appropriate quicksip subroutines were implemented 
+    propertiesToKeep = [ 'filter', 'AIRMASS', 'FWHM','mjd_obs'] \
+    	+ ['RA', 'DEC', 'crval1', 'crval2', 'crpix1', 'crpix2', 'cd1_1', 'cd1_2', 'cd2_1', 'cd2_2','width','height']
+    
+    # Create big table with all relevant properties. 
+
+    tbdata = np.core.records.fromarrays([tbdata[prop] for prop in propertiesToKeep] + [ivar], names = propertiesToKeep + [ 'ivar'])
+    
+    # Read the table, create Healtree, project it into healpix maps, and write these maps.
+    # Done with Quicksip library, note it has quite a few hardcoded values (use new version by MARCM for BASS and MzLS) 
+    # project_and_write_maps_simp(mode, propertiesandoperations, tbdata, catalogue_name, outroot, sample_names, inds, nside)
+    project_and_write_maps(mode, propertiesandoperations, tbdata, catalogue_name, outroot, sample_names, inds, nside, ratiores, pixoffset, nsidesout)
+ 
+    # Read Haelpix maps from quicksip  
+    prop='ivar'
+    op='total'
+
+    fname2=localdir+catalogue_name+'/nside'+nsideSTR+'_oversamp'+oversamp+'/'+
+           catalogue_name+'_band_'+band+'_nside'+nsideSTR+'_oversamp'+oversamp+'_'+prop+'__'+op+'.fits.gz'
+    f = fitsio.read(fname2)
+
+    # HEALPIX DEPTH MAPS 
+    # convert ivar to depth 
+    import healpy as hp
+    from healpix import pix2ang_ring,thphi2radec
+
+    ral = []
+    decl = []
+    val = f['SIGNAL']
+    pix = f['PIXEL']
+	
+    # Obtain values to plot 
+    if (prop == 'ivar'):
+        myval = []
+        mylabel='depth' 
+            
+        below=0 
+        for i in range(0,len(val)):
+            depth=nanomaggiesToMag(sqrt(1./val[i]) * 5.)
+            if(depth < vmin):
+                 below=below+1
+            else:
+                myval.append(depth)
+                th,phi = hp.pix2ang(int(nside),pix[i])
+	        ra,dec = thphi2radec(th,phi)
+	        ral.append(ra)
+	        decl.append(dec)
+
+    npix=len(f)
+    print 'Min and Max values of ', mylabel, ' values is ', min(myval), max(myval)
+    print 'Number of pixels is ', npix
+    print 'Number of pixels offplot with ', mylabel,' < ', vmin, ' is', below 
+    print 'Area is ', npix/(float(nside)**2.*12)*360*360./pi, ' sq. deg.'
+
+
+    # Plot depth 
+    from matplotlib import pyplot as plt
+    import matplotlib.cm as cm
+
+    vmin=21.0
+    vmax=24.0
+
+    map = plt.scatter(ral,decl,c=myval, cmap=cm.rainbow,s=2., vmin=vmin, vmax=vmax, lw=0,edgecolors='none')
+    cbar = plt.colorbar(map)
+    plt.xlabel('r.a. (degrees)')
+    plt.ylabel('declination (degrees)')
+    plt.title('Map of '+ mylabel +' for '+catalogue_name+' '+band+'-band')
+    plt.xlim(0,360)
+    plt.ylim(-30,90)
+    plt.savefig(localdir+mylabel+'_'+band+'_'+catalogue_name+str(nside)+'.png')
+    plt.close()
+    #plt.show()
+    #cbar.set_label(r'5$\sigma$ galaxy depth', rotation=270,labelpad=1)
+    #plt.xscale('log')
+
+    return True
+
+
+
+
+
+
+
+
+# -------------------------------------------------------------------
+# -------------------------------------------------------------------
+#         OLD STUFF 
+# -------------------------------------------------------------------
+dir = '$HOME/' # obviously needs to be changed
+#inputdir = '/project/projectdirs/cosmo/data/legacysurvey/dr3/' # where I get my data 
+inputdir= '/global/projecta/projectdirs/cosmo/work/dr4/'
+localdir = '/global/homes/m/manera/DESI/validation-outputs/' #place for local DESI stuff
+
+#extmap = np.loadtxt('/global/homes/m/manera/DESI/validation-outputs/healSFD_r_256_fullsky.dat') # extintion map remove it 
+
 
 
 ### Plotting facilities
