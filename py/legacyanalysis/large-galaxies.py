@@ -2,6 +2,21 @@
 
 """Redo the Tractor photometry of the "large" galaxies in Legacy Survey imaging.
 
+#!/bin/bash
+
+#SBATCH -p regular
+#SBATCH -N 1
+#SBATCH -C knl
+#SBATCH -t 01:00:00
+
+#...
+export NTHREADS=2
+export SLURM_CPU_BIND=verbose
+export KMP_AFFINITY=disabled
+
+srun -n 1 -c ${NTHREADS} python -u legacypipe/runbrick.py --brick 0001p000 --no-depth-cut --skip-calibs --zoom 100 1100 100 1100 --no-write --force-all --outdir out-${NODETYPE}-${NTHREADS} --ps ps-${NODETYPE}-${NTHREADS}.fits --threads ${NTHREADS} > log-${NODETYPE}-${NTHREADS} 2>&1
+
+
 dependencies:
   pillow
   photutils
