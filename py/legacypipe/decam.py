@@ -41,7 +41,6 @@ class DecamImage(CPImage, CalibMixin):
                 print('Replaced image path', self.wtfn, 'with', fn)
                 self.wtfn = fn
 
-
         # Adjust zeropoint for exposure time
         self.ccdzpt += 2.5 * np.log10(self.exptime)
         

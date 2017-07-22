@@ -263,6 +263,7 @@ def stage_tims(W=3600, H=3600, pixscale=0.262, brickname=None,
     ims = []
     for ccd in ccds:
         im = survey.get_image_object(ccd)
+        im.check_for_cached_files(survey)
         ims.append(im)
         print(im, im.band, 'exptime', im.exptime, 'propid', ccd.propid,
               'seeing %.2f' % (ccd.fwhm*im.pixscale),
@@ -618,6 +619,7 @@ def make_depth_cut(survey, ccds, bands, targetrd, brick, W, H, pixscale,
                     kwa.update(splinesky=True)
                 im.run_calibs(**kwa)
 
+            im.check_for_cached_files(survey)
             print(im)
             print('Reading WCS from', im.imgfn, 'HDU', im.hdu)
             wcs = im.get_wcs()
@@ -2495,7 +2497,7 @@ def run_brick(brick, survey, radec=None, pixscale=0.262,
               depth_cut=True,
               nblobs=None, blob=None, blobxy=None, blobradec=None,
               nsigma=6,
-              simulOpt=False,
+              simul_opt=False,
               wise=True,
               lanczos=True,
               early_coadds=False,
@@ -2516,15 +2518,16 @@ def run_brick(brick, survey, radec=None, pixscale=0.262,
               unwise_tr_dir=None,
               threads=None,
               plots=False, plots2=False, coadd_bw=False,
-              plotbase=None, plotnumber=0,
-              picklePattern='pickles/runbrick-%(brick)s-%%(stage)s.pickle',
+              plot_base=None, plot_number=0,
+              record_event=None,
+    # These are for the 'stages' infrastructure
+              pickle_pat='pickles/runbrick-%(brick)s-%%(stage)s.pickle',
               stages=['writecat'],
-              force=[], forceAll=False, writePickles=True,
+              force=[], forceall=False, write_pickles=True,
               checkpoint_filename=None,
               checkpoint_period=None,
               prereqs_update=None,
               stagefunc = None,
-              record_event=None,
               ):
     '''
     Run the full Legacy Survey data reduction pipeline.
@@ -2535,7 +2538,7 @@ def run_brick(brick, survey, radec=None, pixscale=0.262,
     prerequisite pickle file rather than re-running the prerequisite
     stage.  This can yield faster debugging times, but you almost
     certainly want to turn it off (with `writePickles=False,
-    forceAll=True`) in production.
+    forceall=True`) in production.
 
     Parameters
     ----------
@@ -2591,7 +2594,7 @@ def run_brick(brick, survey, radec=None, pixscale=0.262,
 
     - *nsigma*: float; detection threshold in sigmas.
 
-    - *simulOpt*: boolean; during fitting, if a blob contains multiple
+    - *simul_opt*: boolean; during fitting, if a blob contains multiple
       sources, run a step of fitting the sources simultaneously?
 
     - *wise*: boolean; run WISE forced photometry?
@@ -2631,18 +2634,18 @@ def run_brick(brick, survey, radec=None, pixscale=0.262,
     - *coadd_bw*: boolean: if only one band is available, make B&W coadds?
     - *plots*: boolean; make a bunch of plots?
     - *plots2*: boolean; make a bunch more plots?
-    - *plotbase*: string, default brick-BRICK, the plot filename prefix.
-    - *plotnumber*: integer, default 0, starting number for plot filenames.
+    - *plot_base*: string, default brick-BRICK, the plot filename prefix.
+    - *plot_number*: integer, default 0, starting number for plot filenames.
 
     Options regarding the "stages":
 
-    - *picklePattern*: string; filename for 'pickle' files
+    - *pickle_pat*: string; filename for 'pickle' files
     - *stages*: list of strings; stages (functions stage_*) to run.
 
     - *force*: list of strings; prerequisite stages that will be run
       even if pickle files exist.
-    - *forceAll*: boolean; run all stages, ignoring all pickle files.
-    - *writePickles*: boolean; write pickle files after each stage?
+    - *forceall*: boolean; run all stages, ignoring all pickle files.
+    - *write_pickles*: boolean; write pickle files after each stage?
 
     Raises
     ------
@@ -2659,13 +2662,16 @@ def run_brick(brick, survey, radec=None, pixscale=0.262,
     print('Total Memory Available to Job:')
     get_ulimit()
 
+    # *initargs* are passed to the first stage (stage_tims)
+    # so should be quantities that shouldn't get updated from their pickled
+    # values.
     initargs = {}
+    # *kwargs* update the pickled values from previous stages
     kwargs = {}
 
     forceStages = [s for s in stages]
     forceStages.extend(force)
-
-    if forceAll:
+    if forceall:
         kwargs.update(forceall=True)
 
     if allbands is not None:
@@ -2697,18 +2703,12 @@ def run_brick(brick, survey, radec=None, pixscale=0.262,
         stagefunc = CallGlobalTime('stage_%s', globals())
 
     plot_base_default = 'brick-%(brick)s'
-    if plotbase is None:
-        plotbase = plot_base_default
-    ps = PlotSequence(plotbase % dict(brick=brick))
+    if plot_base is None:
+        plot_base = plot_base_default
+    ps = PlotSequence(plot_base % dict(brick=brick))
     initargs.update(ps=ps)
-
-    if plotnumber:
-        ps.skipto(plotnumber)
-
-    #if record_event is None:
-    #    def print_event(s):
-    #        print('Event:', s)
-    #    record_event = print_event
+    if plot_number:
+        ps.skipto(plot_number)
 
     kwargs.update(ps=ps, nsigma=nsigma,
                   gaussPsf=gaussPsf, pixPsf=pixPsf, hybridPsf=hybridPsf,
@@ -2716,7 +2716,7 @@ def run_brick(brick, survey, radec=None, pixscale=0.262,
                   constant_invvar=constant_invvar,
                   depth_cut=depth_cut,
                   splinesky=splinesky,
-                  simul_opt=simulOpt,
+                  simul_opt=simul_opt,
                   use_ceres=ceres,
                   wise_ceres=wise_ceres,
                   do_calibs=do_calibs,
@@ -2727,7 +2727,7 @@ def run_brick(brick, survey, radec=None, pixscale=0.262,
                   unwise_dir=unwise_dir,
                   unwise_tr_dir=unwise_tr_dir,
                   plots=plots, plots2=plots2, coadd_bw=coadd_bw,
-                  force=forceStages, write=writePickles,
+                  force=forceStages, write=write_pickles,
                   record_event=record_event)
 
     if checkpoint_filename is not None:
@@ -2762,7 +2762,7 @@ def run_brick(brick, survey, radec=None, pixscale=0.262,
     if blobradec is not None:
         kwargs.update(blobradec=blobradec)
 
-    picklePattern = picklePattern % dict(brick=brick)
+    pickle_pat = pickle_pat % dict(brick=brick)
 
     prereqs = {
         'tims':None,
@@ -2819,29 +2819,23 @@ def run_brick(brick, survey, radec=None, pixscale=0.262,
     t0 = Time()
     
     def mystagefunc(stage, **kwargs):
-        # Update the (pickled) survey output directory...
+        # Update the (pickled) survey output directory, so that running
+        # with an updated --output-dir overrides the pickle file.
         picsurvey = kwargs.get('survey',None)
         if picsurvey is not None:
             picsurvey.output_dir = survey.output_dir
 
         mp.start_subphase('stage ' + stage)
-        #if pool is not None:
-        #    print('At start of stage', stage, ':')
-        #    print(pool.get_pickle_traffic_string())
         R = stagefunc(stage, **kwargs)
         sys.stdout.flush()
         sys.stderr.flush()
         print('Resources for stage', stage, ':')
         mp.report(threads)
-        #if pool is not None:
-        #    print('At end of stage', stage, ':')
-        #    print(pool.get_pickle_traffic_string())
         mp.finish_subphase()
         return R
     
     for stage in stages:
-        #runstage(stage, picklePattern, stagefunc, prereqs=prereqs,
-        runstage(stage, picklePattern, mystagefunc, prereqs=prereqs,
+        runstage(stage, pickle_pat, mystagefunc, prereqs=prereqs,
                  initial_args=initargs, **kwargs)
 
     print('All done:', Time()-t0)
@@ -2878,8 +2872,9 @@ python -u legacypipe/runbrick.py --plots --brick 2440p070 --zoom 1900 2400 450 9
     parser.add_argument('-v', '--verbose', dest='verbose', action='count',
                         default=0, help='Make more verbose')
 
-    parser.add_argument('--checkpoint', default=None,
-                        help='Write to checkpoint file?')
+    parser.add_argument(
+        '--checkpoint', dest='checkpoint_filename', default=None,
+        help='Write to checkpoint file?')
     parser.add_argument(
         '--checkpoint-period', type=int, default=None,
         help='Period for writing checkpoint files, in seconds; default 600')
@@ -2893,11 +2888,14 @@ python -u legacypipe/runbrick.py --plots --brick 2440p070 --zoom 1900 2400 450 9
     parser.add_argument('--pixscale', type=float, default=0.262,
                         help='Pixel scale of the output coadds (arcsec/pixel)')
 
-    parser.add_argument('-d', '--outdir',
+    parser.add_argument('-d', '--outdir', dest='output_dir',
                         help='Set output base directory, default "."')
     parser.add_argument(
         '--survey-dir', type=str, default=None,
         help='Override the $LEGACY_SURVEY_DIR environment variable')
+
+    parser.add_argument('--cache-dir', type=str, default=None,
+                        help='Directory to search for cached files')
 
     parser.add_argument('--threads', type=int, help='Run multi-threaded')
     parser.add_argument('-p', '--plots', dest='plots', action='store_true',
@@ -2906,7 +2904,7 @@ python -u legacypipe/runbrick.py --plots --brick 2440p070 --zoom 1900 2400 450 9
                         help='More plots?')
 
     parser.add_argument(
-        '-P', '--pickle', dest='picklepat',
+        '-P', '--pickle', dest='pickle_pat',
         help='Pickle filename pattern, default %(default)s',
         default='pickles/runbrick-%(brick)s-%%(stage)s.pickle')
 
@@ -2960,14 +2958,15 @@ python -u legacypipe/runbrick.py --plots --brick 2440p070 --zoom 1900 2400 450 9
                         action='store_false',
                         help='Do not generate the metrics directory and files')
 
-    parser.add_argument('--nsigma', type=float,
+    parser.add_argument('--nsigma', type=float, default=6.0,
                         help='Set N sigma source detection thresh')
 
     parser.add_argument(
         '--simul-opt', action='store_true', default=False,
         help='Do simultaneous optimization after model selection')
 
-    parser.add_argument('--no-wise', action='store_true', default=False,
+    parser.add_argument('--no-wise', dest='wise', default=True,
+                        action='store_false',
                         help='Skip unWISE forced photometry')
 
     parser.add_argument(
@@ -2989,12 +2988,17 @@ python -u legacypipe/runbrick.py --plots --brick 2440p070 --zoom 1900 2400 450 9
     parser.add_argument('--gpsf', action='store_true', default=False,
                         help='Use a fixed single-Gaussian PSF')
 
-    parser.add_argument('--hybrid-psf', action='store_true', default=False,
-                        help='Use a hybrid pixelized/Gaussian PSF model')
+    # parser.add_argument('--hybrid-psf', dest='hybridPsf', action='store_true', default=False,
+    #                     help='Use a hybrid pixelized/Gaussian PSF model')
+    parser.add_argument('--no-hybrid-psf', dest='hybridPsf', default=True,
+                        action='store_false',
+                        help="Don't use a hybrid pixelized/Gaussian PSF model")
 
-    parser.add_argument('--rex', action='store_true', default=False,
-                        help='Use REX as simple galaxy models, rather than SIMP')
-    
+    #parser.add_argument('--rex', action='store_true', default=False,
+    #                    help='Use REX as simple galaxy models, rather than SIMP')
+    parser.add_argument('--simp', dest='rex', default=True,
+                        action='store_false',
+                        help='Use SIMP rather than REX')
     parser.add_argument(
         '--coadd-bw', action='store_true', default=False,
         help='Create grayscale coadds if only one band is available?')
@@ -3002,9 +3006,11 @@ python -u legacypipe/runbrick.py --plots --brick 2440p070 --zoom 1900 2400 450 9
     parser.add_argument('--bands', default=None,
                         help='Set the list of bands (filters) that are included in processing: comma-separated list, default "g,r,z"')
 
-    parser.add_argument('--no-depth-cut', dest='depth_cut', default=True,
-                        action='store_false', help='Do not cut to the set of CCDs required to reach our depth target')
-
+    # parser.add_argument('--no-depth-cut', dest='depth_cut', default=True,
+    #                     action='store_false', help='Do not cut to the set of CCDs required to reach our depth target')
+    parser.add_argument('--depth-cut', default=False, action='store_true',
+                        help='Cut to the set of CCDs required to reach our depth target')
+    
     parser.add_argument(
         '--on-bricks', default=False, action='store_true',
         help='Enable Tractor-on-bricks edge handling?')
@@ -3015,26 +3021,43 @@ python -u legacypipe/runbrick.py --plots --brick 2440p070 --zoom 1900 2400 450 9
 
     return parser
 
-def get_runbrick_kwargs(opt):
-    if opt.brick is not None and opt.radec is not None:
+def get_runbrick_kwargs(brick=None,
+                        radec=None,
+                        run=None,
+                        survey_dir=None,
+                        output_dir=None,
+                        cache_dir=None,
+                        check_done=False,
+                        skip=False,
+                        skip_coadd=False,
+                        stage=[],
+                        unwise_dir=None,
+                        unwise_tr_dir=None,
+                        write_stage=None,
+                        write=True,
+                        gpsf=False,
+                        bands=None,
+                        **opt):
+    if brick is not None and radec is not None:
         print('Only ONE of --brick and --radec may be specified.')
         return None, -1
+    opt.update(radec=radec)
 
     from legacypipe.runs import get_survey
-
-    survey = get_survey(opt.run,
-                        survey_dir=opt.survey_dir, output_dir=opt.outdir)
+    survey = get_survey(run,
+                        survey_dir=survey_dir,
+                        output_dir=output_dir,
+                        cache_dir=cache_dir)
     print('Got survey:', survey)
-
-    if opt.check_done or opt.skip or opt.skip_coadd:
-        brickname = opt.brick
-        if opt.skip_coadd:
-            fn = survey.find_file('image-jpeg', output=True, brick=brickname)
+    
+    if check_done or skip or skip_coadd:
+        if skip_coadd:
+            fn = survey.find_file('image-jpeg', output=True, brick=brick)
         else:
-            fn = survey.find_file('tractor', output=True, brick=brickname)
+            fn = survey.find_file('tractor', output=True, brick=brick)
         print('Checking for', fn)
         exists = os.path.exists(fn)
-        if opt.skip_coadd and exists:
+        if skip_coadd and exists:
             return survey,0
         if exists:
             try:
@@ -3046,77 +3069,48 @@ def get_runbrick_kwargs(opt):
                 traceback.print_exc()
                 exists = False
 
-        if opt.skip:
+        if skip:
             if exists:
                 return survey,0
-        elif opt.check_done:
+        elif check_done:
             if not exists:
                 print('Does not exist:', fn)
                 return survey,-1
             print('Found:', fn)
             return survey,0
 
-    if len(opt.stage) == 0:
-        opt.stage.append('writecat')
+    if len(stage) == 0:
+        stage.append('writecat')
 
-    kwa = {}
-    if opt.nsigma:
-        kwa.update(nsigma=opt.nsigma)
-    if opt.no_wise:
-        kwa.update(wise=False)
-    if opt.early_coadds:
-        kwa.update(early_coadds=True)
-    if opt.blob_image:
-        kwa.update(blob_image=True)
+    opt.update(stages=stage)
 
-    if opt.unwise_dir is None:
-        opt.unwise_dir = os.environ.get('UNWISE_COADDS_DIR', None)
+    # Remove opt values that are None.
+    for k,v in opt.items():
+        if v is None:
+            del opt[k]
 
-    if opt.unwise_tr_dir is None:
-        opt.unwise_tr_dir = os.environ.get('UNWISE_COADDS_TIMERESOLVED_DIR',
-                                           None)
+    if unwise_dir is None:
+        unwise_dir = os.environ.get('UNWISE_COADDS_DIR', None)
+    if unwise_tr_dir is None:
+        unwise_tr_dir = os.environ.get('UNWISE_COADDS_TIMERESOLVED_DIR', None)
+    opt.update(unwise_dir=unwise_dir, unwise_tr_dir=unwise_tr_dir)
 
     # list of strings if -w / --write-stage is given; False if
     # --no-write given; True by default.
-    if opt.write_stage is not None:
-        writeStages = opt.write_stage
+    if write_stage is not None:
+        write_pickles = write_stage
     else:
-        writeStages = opt.write
+        write_pickles = write
+    opt.update(write_pickles=write_pickles)
 
-    opt.pixpsf = not opt.gpsf
+    opt.update(gaussPsf=gpsf,
+               pixPsf=not gpsf)
 
-    if opt.bands is not None:
-        opt.bands = opt.bands.split(',')
-
-    kwa.update(
-        radec=opt.radec, pixscale=opt.pixscale,
-        width=opt.width, height=opt.height, zoom=opt.zoom,
-        depth_cut=opt.depth_cut,
-        threads=opt.threads, ceres=opt.ceres, wise_ceres=opt.wise_ceres,
-        do_calibs=opt.do_calibs,
-        write_metrics=opt.write_metrics,
-        on_bricks=opt.on_bricks,
-        allow_missing_brickq=opt.allow_missing_brickq,
-        gaussPsf=opt.gpsf, pixPsf=opt.pixpsf, hybridPsf=opt.hybrid_psf,
-        rex=opt.rex,
-        splinesky=True,
-        simulOpt=opt.simul_opt,
-        nblobs=opt.nblobs, blob=opt.blob, blobxy=opt.blobxy,
-        blobradec=opt.blobradec,
-        unwise_dir=opt.unwise_dir,
-        unwise_tr_dir=opt.unwise_tr_dir,
-        plots=opt.plots, plots2=opt.plots2,
-        coadd_bw=opt.coadd_bw,
-        bands=opt.bands,
-        lanczos=opt.lanczos,
-        plotbase=opt.plot_base, plotnumber=opt.plot_number,
-        force=opt.force, forceAll=opt.forceall,
-        stages=opt.stage, writePickles=writeStages,
-        picklePattern=opt.picklepat,
-        checkpoint_filename=opt.checkpoint,
-        checkpoint_period=opt.checkpoint_period,
-        )
-    return survey, kwa
+    if bands is not None:
+        bands = bands.split(',')
+    opt.update(bands=bands)
+    opt.update(splinesky=True)
+    return survey, opt
 
 def main(args=None):
     import logging
@@ -3141,11 +3135,16 @@ def main(args=None):
     if opt.brick is None and opt.radec is None:
         parser.print_help()
         return -1
-    survey, kwargs = get_runbrick_kwargs(opt)
+
+    optdict = vars(opt)
+    ps_file = optdict.pop('ps', None)
+    verbose = optdict.pop('verbose')
+    
+    survey, kwargs = get_runbrick_kwargs(**optdict)
     if kwargs in [-1, 0]:
         return kwargs
 
-    if opt.verbose == 0:
+    if verbose == 0:
         lvl = logging.INFO
     else:
         lvl = logging.DEBUG
@@ -3186,7 +3185,7 @@ def main(args=None):
         plt.subplots_adjust(left=0.07, right=0.99, bottom=0.07, top=0.93,
                             hspace=0.2, wspace=0.05)
 
-    if opt.ps is not None:
+    if ps_file is not None:
         import threading
         from collections import deque
         from legacypipe.utils import run_ps_thread
@@ -3194,7 +3193,7 @@ def main(args=None):
         ps_queue = deque()
         ps_thread = threading.Thread(
             target=run_ps_thread,
-            args=(os.getpid(), os.getppid(), opt.ps, ps_shutdown, ps_queue),
+            args=(os.getpid(), os.getppid(), ps_file, ps_shutdown, ps_queue),
             name='run_ps')
         # ps_thread.daemon = True
         print('Starting thread to run "ps"')
@@ -3205,6 +3204,8 @@ def main(args=None):
             ps_queue.append((time(), msg))
         kwargs.update(record_event=record_event)
 
+    print('Got runbrick kwargs:', kwargs)
+        
     rtn = -1
     try:
         run_brick(opt.brick, survey, **kwargs)
@@ -3226,7 +3227,7 @@ def main(args=None):
         print()
         rtn = -1
 
-    if opt.ps is not None:
+    if ps_file is not None:
         # Try to shut down ps thread gracefully
         ps_shutdown.set()
         print('Attempting to join the ps thread...')

@@ -89,6 +89,16 @@ class CPImage(LegacySurveyImage):
         self.splineskyfn = os.path.join(calibdir, 'splinesky', self.calname + '.fits')
         self.dq_saturation_bits = CP_DQ_BITS['satur']
 
+    def get_cacheable_filename_variables(self):
+        '''
+        These are names of self.X variables that are filenames that
+        could be cached.
+        '''
+        keys = super(CPImage, self).get_cacheable_filename_variables()
+        keys.extend(['dqfn', 'wtfn', 'psffn', 'merged_psffn',
+                     'merged_splineskyfn', 'splineskyfn', 'skyfn',])
+        return keys
+
     def check_image_header(self, imghdr):
         # check consistency... something of a DR1 hangover
         e = imghdr['EXTNAME']
