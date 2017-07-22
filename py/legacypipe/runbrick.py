@@ -2488,6 +2488,8 @@ def run_brick(brick, survey, radec=None, pixscale=0.262,
               threads=None,
               plots=False, plots2=False, coadd_bw=False,
               plot_base=None, plot_number=0,
+              record_event=None,
+    # These are for the 'stages' infrastructure
               pickle_pat='pickles/runbrick-%(brick)s-%%(stage)s.pickle',
               stages=['writecat'],
               force=[], forceall=False, write_pickles=True,
@@ -2495,7 +2497,6 @@ def run_brick(brick, survey, radec=None, pixscale=0.262,
               checkpoint_period=None,
               prereqs_update=None,
               stagefunc = None,
-              record_event=None,
               ):
     '''
     Run the full Legacy Survey data reduction pipeline.
@@ -2630,12 +2631,15 @@ def run_brick(brick, survey, radec=None, pixscale=0.262,
     print('Total Memory Available to Job:')
     get_ulimit()
 
+    # *initargs* are passed to the first stage (stage_tims)
+    # so should be quantities that shouldn't get updated from their pickled
+    # values.
     initargs = {}
+    # *kwargs* update the pickled values from previous stages
     kwargs = {}
 
     forceStages = [s for s in stages]
     forceStages.extend(force)
-
     if forceall:
         kwargs.update(forceall=True)
 
@@ -2672,14 +2676,8 @@ def run_brick(brick, survey, radec=None, pixscale=0.262,
         plot_base = plot_base_default
     ps = PlotSequence(plot_base % dict(brick=brick))
     initargs.update(ps=ps)
-
     if plot_number:
         ps.skipto(plot_number)
-
-    #if record_event is None:
-    #    def print_event(s):
-    #        print('Event:', s)
-    #    record_event = print_event
 
     kwargs.update(ps=ps, nsigma=nsigma,
                   gaussPsf=gaussPsf, pixPsf=pixPsf, hybridPsf=hybridPsf,
@@ -2789,23 +2787,18 @@ def run_brick(brick, survey, radec=None, pixscale=0.262,
     t0 = Time()
     
     def mystagefunc(stage, **kwargs):
-        # Update the (pickled) survey output directory...
+        # Update the (pickled) survey output directory, so that running
+        # with an updated --output-dir overrides the pickle file.
         picsurvey = kwargs.get('survey',None)
         if picsurvey is not None:
             picsurvey.output_dir = survey.output_dir
 
         mp.start_subphase('stage ' + stage)
-        #if pool is not None:
-        #    print('At start of stage', stage, ':')
-        #    print(pool.get_pickle_traffic_string())
         R = stagefunc(stage, **kwargs)
         sys.stdout.flush()
         sys.stderr.flush()
         print('Resources for stage', stage, ':')
         mp.report(threads)
-        #if pool is not None:
-        #    print('At end of stage', stage, ':')
-        #    print(pool.get_pickle_traffic_string())
         mp.finish_subphase()
         return R
     
