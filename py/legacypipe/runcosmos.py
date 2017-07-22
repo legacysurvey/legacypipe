@@ -59,9 +59,6 @@ def main():
         parser.print_help()
         return -1
 
-    print('Forcing --no-blacklist')
-    opt.blacklist = False
-
     survey, kwargs = get_runbrick_kwargs(opt)
     if kwargs in [-1,0]:
         return kwargs

@@ -37,9 +37,7 @@ def main():
     survey = LegacySurveyData()
     if opt.ccds is not None:
         T = fits_table(opt.ccds)
-        # Remove trailing spaces from 'camera' & 'ccdname' columns.
-        T.camera = np.array([c.strip() for c in T.camera])
-        T.ccdname = np.array([c.strip() for c in T.ccdname])
+        T = survey.cleanup_ccds_table(T)
 
         print('Read', len(T), 'from', opt.ccds)
     else:

@@ -291,17 +291,20 @@ def find_unique_pixels(wcs, W, H, unique, ra1,ra2,dec1,dec2):
             break
     return unique
 
-def run_ps_thread(pid, ppid, fn):
+def run_ps_thread(parent_pid, parent_ppid, fn, shutdown, event_queue):
     from astrometry.util.run_command import run_command
     from astrometry.util.fits import fits_table, merge_tables
     import time
     import re
     import fitsio
+    from functools import reduce
     
-    #print('run_ps_thread starting:', pid, ppid, fn)
-    #print('My pid:', os.getpid())
+    # my pid = parent pid -- this is a thread.
+    print('run_ps_thread starting: parent PID', parent_pid, ', my PID', os.getpid(), fn)
     TT = []
     step = 0
+
+    events = []
 
     trex = re.compile('(((?P<days>\d*)-)?(?P<hours>\d*):)?(?P<minutes>\d*):(?P<seconds>[\d\.]*)')
     def parse_time_strings(ss):
@@ -314,7 +317,7 @@ def run_ps_thread(pid, ppid, fn):
                 break
             days,hours,mins,secs = m.group('days', 'hours', 'minutes',
                                            'seconds')
-            # print('Elapsed time', s, 'parsed to', days,hours,mins,secs)
+            #print('Elapsed time', s, 'parsed to', days,hours,mins,secs)
             days = int(days, 10) if days is not None else 0
             hours = int(hours, 10) if hours is not None else 0
             mins = int(mins, 10)
@@ -326,27 +329,64 @@ def run_ps_thread(pid, ppid, fn):
             etime.append(tt)
         return any_failed, etime
 
+    def write_results(fn, T, events, hdr):
+        T.mine = np.logical_or(T.pid == parent_pid, T.ppid == parent_pid)
+        T.main = (T.pid == parent_pid)
+        tmpfn = os.path.join(os.path.dirname(fn), 'tmp-' + os.path.basename(fn))
+        T.writeto(tmpfn, header=hdr)
+        if len(events):
+            E = fits_table()
+            E.unixtime = np.array([e[0] for e in events])
+            E.event = np.array([e[1] for e in events])
+            E.step = np.array([e[2] for e in events])
+            E.writeto(tmpfn, append=True)
+        os.rename(tmpfn, fn)
+        print('Wrote', fn)
+
     fitshdr = fitsio.FITSHDR()
-    fitshdr['PPID'] = pid
+    fitshdr['PPID'] = parent_pid
+
+    last_time = {}
+    last_proc_time = {}
+
+    clock_ticks = os.sysconf('SC_CLK_TCK')
+    #print('Clock times:', clock_ticks)
+    if clock_ticks == -1:
+        #print('Failed to get clock times per second; assuming 100')
+        clock_ticks = 100
     
     while True:
-        time.sleep(5)
+        shutdown.wait(5.0)
+        if shutdown.is_set():
+            print('ps shutdown flag set.  Quitting.')
+            break
+
+        if event_queue is not None:
+            while True:
+                try:
+                    (t,msg) = event_queue.popleft()
+                    events.append((t,msg,step))
+                    #print('Popped event', t,msg)
+                except IndexError:
+                    # no events
+                    break
+
         step += 1
         #cmd = ('ps ax -o "user pcpu pmem state cputime etime pgid pid ppid ' +
         #       'psr rss session vsize args"')
         # OSX-compatible
         cmd = ('ps ax -o "user pcpu pmem state cputime etime pgid pid ppid ' +
-               'rss vsize command"')
+               'rss vsize wchan command"')
         #print('Command:', cmd)
         rtn,out,err = run_command(cmd)
         if rtn:
             print('FAILED to run ps:', rtn, out, err)
             time.sleep(1)
             break
-        #print('Got PS output')
-        #print(out)
-        #print('Err')
-        #print(err)
+        # print('Got PS output')
+        # print(out)
+        # print('Err')
+        # print(err)
         if len(err):
             print('Error string from ps:', err)
         lines = out.split('\n')
@@ -388,17 +428,6 @@ def run_ps_thread(pid, ppid, fn):
                 v = v.astype(tt)
             T.set(c, v)
 
-        # Apply cuts!
-        T.cut(reduce(np.logical_or, [
-            T.pcpu > 5, T.pmem > 5,
-            (T.ppid == pid) * [not c.startswith('ps ax') for c in T.command]]))
-        #print('Cut to', len(T), 'with significant CPU/MEM use or my PPID')
-        if len(T) == 0:
-            continue
-        
-        T.unixtime = np.zeros(len(T), np.float64) + time.time()
-        T.step = np.zeros(len(T), np.int16) + step
-        
         any_failed,etime = parse_time_strings(T.elapsed)
         if any_failed is not None:
             print('Failed to parse elapsed time string:', any_failed)
@@ -411,17 +440,106 @@ def run_ps_thread(pid, ppid, fn):
         else:
             T.time = np.array(ctime)
         T.rename('time', 'cputime')
+
+        # Compute 'instantaneous' (5-sec averaged) %cpu
+        # BUT this only counts whole seconds in the 'ps' output.
+        T.icpu = np.zeros(len(T), np.float32)
+        icpu = T.icpu
+        for i,(p,etime,ctime) in enumerate(zip(T.pid, T.elapsed, T.cputime)):
+            try:
+                elast,clast = last_time[p]
+                # new process with an existing PID?
+                if etime > elast:
+                    icpu[i] = 100. * (ctime - clast) / (etime - elast)
+            except:
+                pass
+            last_time[p] = (etime, ctime)
+
+        # print('Processes:')
+        # J = np.argsort(-T.icpu)
+        # for j in J:
+        #     p = T.pid[j]
+        #     pp = T.ppid[j]
+        #     print('  PID', p, '(main)' if p == parent_pid else '',
+        #           '(worker)' if pp == parent_pid else '',
+        #           'pcpu', T.pcpu[j], 'pmem', T.pmem[j], 'icpu', T.icpu[j],
+        #           T.command[j][:20])
+
+        # Apply cuts!
+        T.cut(reduce(np.logical_or, [
+            T.pcpu > 5,
+            T.pmem > 5,
+            T.icpu > 5,
+            T.pid == parent_pid,
+            (T.ppid == parent_pid) * np.array([not c.startswith('ps ax') for c in T.command])]))
+        #print('Cut to', len(T), 'with significant CPU/MEM use or my PPID')
+
+        # print('Kept:')
+        # J = np.argsort(-T.icpu)
+        # for j in J:
+        #     p = T.pid[j]
+        #     pp = T.ppid[j]
+        #     print('  PID', p, '(main)' if p == parent_pid else '',
+        #           '(worker)' if pp == parent_pid else '',
+        #           'pcpu', T.pcpu[j], 'pmem', T.pmem[j], 'icpu', T.icpu[j],
+        #           T.command[j][:20])
+
+
+        if len(T) == 0:
+            continue
+
+        timenow = time.time()
+        T.unixtime = np.zeros(len(T), np.float64) + timenow
+        T.step = np.zeros(len(T), np.int16) + step
+        
+        if os.path.exists('/proc'):
+            # Try to grab higher-precision CPU timing info from /proc/PID/stat
+            T.proc_utime = np.zeros(len(T), np.float32)
+            T.proc_stime = np.zeros(len(T), np.float32)
+            T.processor  = np.zeros(len(T), np.int16)
+            T.proc_icpu  = np.zeros(len(T), np.float32)
+            for i,p in enumerate(T.pid):
+                try:
+                    # See:
+                    # http://man7.org/linux/man-pages/man5/proc.5.html
+                    procfn = '/proc/%i/stat' % p
+                    txt = open(procfn).read()
+                    #print('Read', procfn, ':', txt)
+                    words = txt.split()
+                    utime = int(words[13]) / float(clock_ticks)
+                    stime = int(words[14]) / float(clock_ticks)
+                    proc  = int(words[38])
+                    #print('utime', utime, 'stime', stime, 'processor', proc)
+                    ctime = utime + stime
+                    try:
+                        tlast,clast = last_proc_time[p]
+                        #print('pid', p, 'Tnow,Cnow', timenow, ctime, 'Tlast,Clast', tlast,clast)
+                        if ctime >= clast:
+                            T.proc_icpu[i] = 100. * (ctime - clast) / float(timenow - tlast)
+                    except:
+                        pass
+                    last_proc_time[p] = (timenow, ctime)
+
+                    T.proc_utime[i] = utime
+                    T.proc_stime[i] = stime
+                    T.processor [i] = proc
+                except:
+                    pass
         
         TT.append(T)
 
+        #print('ps -- step', step)
         if step % 12 == 0:
             # Write out results every ~ minute.
+            print('ps -- writing', fn)
             T = merge_tables(TT, columns='fillzero')
-            tmpfn = os.path.join(os.path.dirname(fn), 'tmp-' + os.path.basename(fn))
-            T.writeto(tmpfn, header=fitshdr)
-            os.rename(tmpfn, fn)
-            print('Wrote', fn)
+            write_results(fn, T, events, fitshdr)
             TT = [T]
+    # Just before returning, write out results.
+    print('ps -- writing', fn)
+    T = merge_tables(TT, columns='fillzero')
+    write_results(fn, T, events, fitshdr)
+
 
 if __name__ == '__main__':
     ep1 = ellipse_with_priors_factory(0.25)

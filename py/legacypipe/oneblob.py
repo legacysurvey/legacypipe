@@ -163,13 +163,13 @@ class OneBlob(object):
         if self.plots:
             self._plots(tr, 'After source fitting')
 
-        print('Blob finished fitting:', Time()-tlast)
+        print('Blob', self.name, 'finished initial fitting:', Time()-tlast)
         tlast = Time()
 
         # Next, model selections: point source vs dev/exp vs composite.
         self.run_model_selection(cat, Ibright, B)
 
-        print('Blob finished model selection:', Time()-tlast)
+        print('Blob', self.name, 'finished model selection:', Time()-tlast)
         tlast = Time()
 
         # Cut down to just the kept sources
@@ -270,8 +270,8 @@ class OneBlob(object):
         for numi,srci in enumerate(Ibright):
     
             src = cat[srci]
-            print('Model selection for source %i of %i in blob' %
-                  (numi, len(Ibright)))
+            print('Model selection for source %i of %i in blob %s' %
+                  (numi+1, len(Ibright), self.name))
             cpu0 = time.clock()
     
             # Add this source's initial model back in.
@@ -846,8 +846,8 @@ class OneBlob(object):
         # For sources, in decreasing order of brightness
         for numi,srci in enumerate(Ibright):
             cpu0 = time.clock()
-            print('Fitting source', srci, '(%i of %i in blob)' %
-                  (numi, len(Ibright)))
+            print('Fitting source', srci, '(%i of %i in blob %s)' %
+                  (numi+1, len(Ibright), self.name))
             src = cat[srci]
             # Add this source's initial model back in.
             models.add(srci, self.tims)

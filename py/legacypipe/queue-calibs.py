@@ -91,6 +91,8 @@ def main():
     parser.add_argument('--lsb', action='store_true',
                       help='Output Low-Surface-Brightness commands')
 
+    parser.add_argument('--stage', help='Stage image files to given directory')
+
     parser.add_argument('--touching', action='store_true',
                       help='Cut to only CCDs touching selected bricks')
     parser.add_argument('--near', action='store_true',
@@ -113,7 +115,7 @@ def main():
 
     parser.add_argument('--bricks', help='Set bricks.fits file to load')
     parser.add_argument('--ccds', help='Set ccds.fits file to load')
-    parser.add_argument('--ignore_cuts', action='store_true',default=False,help='no photometric or blacklist cuts')
+    parser.add_argument('--ignore_cuts', action='store_true',default=False,help='no photometric cuts')
     parser.add_argument('--save_to_fits', action='store_true',default=False,help='save cut brick,ccd to fits table')
     parser.add_argument('--name', action='store',default='dr3',help='save with this suffix, e.g. refers to ccds table')
 
@@ -496,9 +498,6 @@ def main():
         I = survey.photometric_ccds(T)
         print(len(I), 'CCDs are photometric')
         T.cut(I)
-        I = survey.apply_blacklist(T)
-        print(len(I), 'CCDs are not blacklisted')
-        T.cut(I)
         print(len(T), 'CCDs remaining')
 
         T.wra = T.ra + (T.ra > 180) * -360
@@ -567,10 +566,8 @@ def main():
             brick_to_task.update(dict(zip(B.brickname[I], taskids)))
         
     if not (opt.calibs or opt.forced or opt.lsb):
-
         for b in B:
             print(b.brickname)
-
         sys.exit(0)
 
     bands = 'grz'
@@ -602,6 +599,36 @@ def main():
 
     ## Be careful here -- T has been cut; we want to write out T.index.
     ## 'allI' contains indices into T.
+
+    if opt.stage is not None:
+        cmd_pat = 'rsync -LRarv %s %s'
+        fns = set()
+        for iccd in allI:
+            im = survey.get_image_object(T[iccd])
+            fns.update([im.imgfn, im.wtfn, im.dqfn, im.psffn, im.merged_psffn,
+                   im.merged_splineskyfn, im.splineskyfn])
+        for i,fn in enumerate(fns):
+            print('File', i+1, 'of', len(fns), ':', fn)
+            if not os.path.exists(fn):
+                print('No such file:', fn)
+                continue
+            base = survey.get_survey_dir()
+            if base.endswith('/'):
+                base = base[:-1]
+
+            rel = os.path.relpath(fn, base)
+
+            dest = os.path.join(opt.stage, rel)
+            print('Dest:', dest)
+            if os.path.exists(dest):
+                print('Exists:', dest)
+                continue
+
+            cmd = cmd_pat % ('%s/./%s' % (base, rel), opt.stage)
+            print(cmd)
+            rtn = os.system(cmd)
+            assert(rtn == 0)
+        sys.exit(0)
 
     if opt.forced:
         log('Writing forced-photometry commands to', opt.out)

@@ -528,9 +528,7 @@ if __name__ == '__main__':
         args = []
         i = 0
         ccds = fits_table(fn)
-        # Remove trailing spaces from 'camera' & 'ccdname' columns.
-        ccds.camera = np.array([c.strip() for c in ccds.camera])
-        ccds.ccdname = np.array([c.strip() for c in ccds.ccdname])
+        ccds = survey.cleanup_ccds_table(ccds)
 
         if opt.piece is not None:
             c = ccds[opt.piece*N:]

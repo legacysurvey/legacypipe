@@ -13,6 +13,19 @@ if __name__ == '__main__':
 
     travis = 'travis' in sys.argv
 
+    extra_args = []
+    if travis:
+        extra_args = ['--no-wise-ceres']
+    
+    if 'ceres' in sys.argv:
+        surveydir = os.path.join(os.path.dirname(__file__), 'testcase3')
+        main(args=['--brick', '2447p120', '--zoom', '1020', '1070', '2775', '2815',
+                   '--no-wise', '--force-all', '--no-write', '--ceres',
+                   '--survey-dir', surveydir,
+                   '--outdir', 'out-testcase3-ceres',
+                   '--no-depth-cut'])
+        sys.exit(0)
+    
     # demo RexGalaxy, with plots
     if False:
         from legacypipe.survey import RexGalaxy
@@ -54,9 +67,9 @@ if __name__ == '__main__':
     outdir = 'out-testcase6-rex'
     main(args=['--brick', '1102p240', '--zoom', '500', '600', '650', '750',
                '--force-all', '--no-write', '--no-wise',
-               '--rex', #'--plots',
+            #'--rex', #'--plots',
                '--survey-dir', surveydir,
-               '--outdir', outdir])
+               '--outdir', outdir] + extra_args)
     fn = os.path.join(outdir, 'tractor', '110', 'tractor-1102p240.fits')
     assert(os.path.exists(fn))
     T = fits_table(fn)
@@ -77,8 +90,9 @@ if __name__ == '__main__':
                '--force-all', '--no-write', '--no-wise',
                #'--blob-image', '--early-coadds',
                #'--plots',
+               '--simp',
                '--survey-dir', surveydir,
-               '--outdir', outdir])
+               '--outdir', outdir] + extra_args)
     fn = os.path.join(outdir, 'tractor', '110', 'tractor-1102p240.fits')
     assert(os.path.exists(fn))
     T = fits_table(fn)
@@ -103,9 +117,9 @@ if __name__ == '__main__':
                '--force-all', '--no-write', '--coadd-bw',
                '--unwise-dir', os.path.join(surveydir, 'images', 'unwise'),
                '--unwise-tr-dir', os.path.join(surveydir,'images','unwise-tr'),
-               '--blob-image',
+               '--blob-image', '--no-hybrid-psf',
                '--survey-dir', surveydir,
-               '--outdir', outdir])
+               '--outdir', outdir] + extra_args)
     print('Checking for calib file', fn)
     assert(os.path.exists(fn))
 
@@ -116,9 +130,8 @@ if __name__ == '__main__':
     
     main(args=['--brick', '1209p050', '--zoom', '720', '1095', '3220', '3500',
                '--force-all', '--no-write', '--no-wise', #'--plots',
-               '--hybrid-psf',
                '--survey-dir', surveydir,
-               '--outdir', outdir])
+               '--outdir', outdir] + extra_args)
     
     # Test with a Tycho-2 star + another saturated star in the blob.
 
@@ -127,7 +140,7 @@ if __name__ == '__main__':
     main(args=['--brick', '1102p240', '--zoom', '250', '350', '1550', '1650',
                '--force-all', '--no-write', '--no-wise', #'--plots',
                '--survey-dir', surveydir,
-               '--outdir', outdir])
+               '--outdir', outdir] + extra_args)
     fn = os.path.join(outdir, 'tractor', '110', 'tractor-1102p240.fits')
     assert(os.path.exists(fn))
     T = fits_table(fn)
@@ -145,7 +158,7 @@ if __name__ == '__main__':
                '--force-all', '--no-write', '--coadd-bw',
                '--survey-dir', surveydir,
                '--early-coadds',
-               '--outdir', outdir])
+               '--outdir', outdir] + extra_args)
 
     assert(os.path.exists(fn))
     T = fits_table(fn)
@@ -164,7 +177,7 @@ if __name__ == '__main__':
                '--force-all', '--no-write', '--no-wise',
                '--blobradec', '186.740369', '25.453855',
                '--survey-dir', surveydir,
-               '--outdir', outdir])
+               '--outdir', outdir] + extra_args)
 
     assert(os.path.exists(fn))
     T = fits_table(fn)
@@ -181,7 +194,7 @@ if __name__ == '__main__':
                '--outdir', outdir,
                '--checkpoint', checkpoint_fn,
                '--checkpoint-period', '1',
-               '--threads', '2'])
+               '--threads', '2'] + extra_args)
 
     # Read catalog into Tractor sources to test read_fits_catalog
     from legacypipe.catalog import read_fits_catalog
@@ -215,7 +228,7 @@ if __name__ == '__main__':
                '--outdir', outdir,
                '--checkpoint', checkpoint_fn,
                '--checkpoint-period', '1',
-               '--threads', '2'])
+               '--threads', '2'] + extra_args)
     # Assert...... something?
 
     
@@ -231,14 +244,14 @@ if __name__ == '__main__':
     main(args=['--brick', '2173p350', '--zoom', '100', '200', '100', '200',
                '--no-wise', '--force-all', '--no-write',
                '--survey-dir', surveydir2,
-               '--outdir', 'out-mzlsbass3'])
+               '--outdir', 'out-mzlsbass3'] + extra_args)
 
     # With plots!
     main(args=['--brick', '2447p120', '--zoom', '1020', '1070', '2775', '2815',
                '--no-wise', '--force-all', '--no-write',
                '--survey-dir', surveydir,
                '--outdir', 'out-testcase3', '--plots',
-               '--nblobs', '1'])
+               '--nblobs', '1'] + extra_args)
 
     # Decals Image Simulations
     # Uncomment WHEN galsim build for Travis
@@ -260,7 +273,7 @@ if __name__ == '__main__':
         main(args=['--brick', '2447p120', '--zoom', '1020', '1070', '2775', '2815',
                    '--no-wise', '--force-all', '--no-write', '--ceres',
                    '--survey-dir', surveydir,
-                   '--outdir', 'out-testcase3-ceres'])
+                   '--outdir', 'out-testcase3-ceres'] + extra_args)
     
 
     

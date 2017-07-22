@@ -699,12 +699,14 @@ class Measurer(object):
         self.exptime = self.primhdr['EXPTIME']
         self.date_obs = self.primhdr['DATE-OBS']
         self.mjd_obs = self.primhdr['MJD-OBS']
-        try:
-            self.airmass = self.primhdr['AIRMASS']
-        except KeyError:
-            self.airmass = -1
-            print('WARNING! no airmass fn=%s' % self.fn) 
-        self.ha = self.primhdr['HA']
+        # Keys may not exist in header
+        for key in ['AIRMASS','HA']:
+            try:
+                val= self.primhdr[key]
+            except KeyError:
+                val= -1
+            setattr(self, key.lower(),val)
+            print('WARNING! not in primhdr %s' % key) 
         
         # FIX ME!, gets unique id for mosaic but not 90prime
         if 'EXPNUM' in self.primhdr: 
@@ -730,11 +732,10 @@ class Measurer(object):
         self.expid = '{:08d}-{}'.format(self.expnum, self.ccdname)
         hdulist= fitsio.FITS(self.fn)
         self.image_hdu= hdulist[ext].get_extnum() #NOT ccdnum in header!
-        # Sanity check
-        ccdname = self.hdr['EXTNAME'].strip()
-        assert(self.ccdname.upper() == ccdname.upper())
         # use header
         self.hdr = fitsio.read_header(self.fn, ext=ext)
+        # Sanity check
+        assert(self.ccdname.upper() == self.hdr['EXTNAME'].strip().upper())
         self.ccdnum = np.int(self.hdr['CCDNUM']) 
         self.gain= self.get_gain(self.hdr)
         # WCS
@@ -938,10 +939,15 @@ class Measurer(object):
         ccds['pixscale'] = self.pixscale
         # FWHM from CP header
         if self.camera in ['mosaic','90prime']:
-            hdr_fwhm= hdr['seeingp1'] # pixel seeing so FWHM
+            fwhm_key= 'seeingp1' # pixel seeing so FWHM
         else:
-            hdr_fwhm= hdr['fwhm']
-        ccds['fwhm_cp']= hdr_fwhm
+            fwhm_key= 'fwhm'
+        if fwhm_key in hdr.keys():
+            hdr_fwhm= hdr[fwhm_key]
+            ccds['fwhm_cp']= hdr_fwhm
+        else:
+            hdr_fwhm= 5. #fallback value for source detection
+            ccds['fwhm_cp']= -1. #flag that didn't find in header
         # Copy some header cards directly.
         # ZNAXIS[12] not NAXIS
         hdrkey = ('avsky', 'crpix1', 'crpix2', 'crval1', 'crval2', 'cd1_1',
@@ -1046,6 +1052,9 @@ class Measurer(object):
                  (obj['ycentroid'] > minsep_px)*\
                  (obj['ycentroid'] < ht - minsep_px)
         obj = obj[istar]
+        if len(obj) == 0:
+            print('No sources away from edges, crash')
+            return ccds, _stars_table()
 
         if self.debug:
             extra['dao_x']= obj['xcentroid']
@@ -1275,9 +1284,12 @@ class Measurer(object):
         #ivar = np.zeros_like(img) + 1.0/sig1**2
         # Hack! To avoid 1/0 and sqrt(<0) just considering Poisson Stats due to sky
         ierr = 1.0/np.sqrt(sky_img)
-        fwhms = self.fitstars(img_sub_sky, ierr, sample['x'], sample['y'], sample['apflux'])
-        ccds['fwhm'] = np.median(fwhms) # fwhms= 2.35 * psf.sigmas 
-        print('FWHM med=%f, std=%f, std_med=%f' % (np.median(fwhms),np.std(fwhms),np.std(fwhms)/len(sample['x'])))
+        try:
+            fwhms = self.fitstars(img_sub_sky, ierr, sample['x'], sample['y'], sample['apflux'])
+            ccds['fwhm'] = np.median(fwhms) # fwhms= 2.35 * psf.sigmas 
+            print('FWHM med=%f, std=%f, std_med=%f' % (np.median(fwhms),np.std(fwhms),np.std(fwhms)/len(sample['x'])))
+        except ValueError:
+            ccds['fwhm'] = -1. 
         #ccds['seeing'] = self.pixscale * np.median(fwhms)
         t0= ptime('Tractor fit FWHM to %d/%d stars' % (len(sample['x']),len(stars)), t0) 
 
@@ -1439,8 +1451,18 @@ class DecamMeasurer(Measurer):
         self.ut = self.primhdr['TIME-OBS']
         self.band = self.get_band()
         # {RA,DEC}: center of exposure, TEL{RA,DEC}: boresight of telescope
-        self.ra_bore = hmsstring2ra(self.primhdr['RA']) 
-        self.dec_bore = dmsstring2dec(self.primhdr['DEC'])
+        # Use center of exposure if possible
+        if 'RA' in self.primhdr.keys():
+            self.ra_bore = self.primhdr['RA']
+            self.dec_bore = self.primhdr['DEC']
+        elif 'TELRA' in self.primhdr.keys():
+            self.ra_bore = self.primhdr['TELRA']
+            self.dec_bore = self.primhdr['TELDEC']
+        else:
+            raise ValueError('Neither RA or TELRA in pimhdr, crash')
+        if type(self.ra_bore) == str:
+            self.ra_bore = hmsstring2ra(self.ra_bore) 
+            self.dec_bore = dmsstring2dec(self.dec_bore)
         #self.gain = self.hdr['ARAWGAIN'] # hack! average gain [electron/sec]
 
         # /global/homes/a/arjundey/idl/pro/observing/decstat.pro
@@ -1479,7 +1501,10 @@ class DecamMeasurer(Measurer):
                os.unlink(fn)
         else:
             # Read
-            img, hdr = fitsio.read(imgfn, ext=self.ext, header=True)
+            try: 
+                img, hdr = fitsio.read(imgfn, ext=self.ext, header=True)
+            except IOError:
+                raise ValueError('error reading ext=%s from imgfn=%s' % (self.ext,imgfn))
             mask, junk = fitsio.read(maskfn, ext=self.ext, header=True)
         # ADU --> e
         img *= self.gain 
@@ -1608,7 +1633,7 @@ class NinetyPrimeMeasurer(Measurer):
         return wcs_pv2sip_hdr(self.hdr) # PV distortion
 
 
-def get_extlist(camera):
+def get_extlist(camera,fn):
     '''
     Returns 'mosaic', 'decam', or '90prime'
     '''
@@ -1617,17 +1642,17 @@ def get_extlist(camera):
     elif camera == 'mosaic':
         extlist = ['CCD1', 'CCD2', 'CCD3', 'CCD4']
     elif camera == 'decam':
-        extlist = ['S29', 'S31', 'S25', 'S26', 'S27', 'S28', 'S20', 'S21', 'S22',
-                   'S23', 'S24', 'S14', 'S15', 'S16', 'S17', 'S18', 'S19', 'S8',
-                   'S9', 'S10', 'S11', 'S12', 'S13', 'S1', 'S2', 'S3', 'S4', 'S5',
-                   'S6', 'S7', 'N1', 'N2', 'N3', 'N4', 'N5', 'N6', 'N7', 'N8', 'N9',
-                   'N10', 'N11', 'N12', 'N13', 'N14', 'N15', 'N16', 'N17', 'N18',
-                   'N19', 'N20', 'N21', 'N22', 'N23', 'N24', 'N25', 'N26', 'N27',
-                   'N28', 'N29', 'N31']
+        hdu= fitsio.FITS(fn)
+        extlist= [hdu[i].get_extname() for i in range(1,len(hdu))]
+        #extlist = ['S29', 'S31', 'S25', 'S26', 'S27', 'S28', 'S20', 'S21', 'S22',
+        #           'S23', 'S24', 'S14', 'S15', 'S16', 'S17', 'S18', 'S19', 'S8',
+        #           'S9', 'S10', 'S11', 'S12', 'S13', 'S1', 'S2', 'S3', 'S4', 'S5',
+        #           'S6', 'S7', 'N1', 'N2', 'N3', 'N4', 'N5', 'N6', 'N7', 'N8', 'N9',
+        #           'N10', 'N11', 'N12', 'N13', 'N14', 'N15', 'N16', 'N17', 'N18',
+        #           'N19', 'N20', 'N21', 'N22', 'N23', 'N24', 'N25', 'N26', 'N27',
+        #           'N28', 'N29', 'N31']
         # Testing only!
         #extlist = ['N4','S4', 'S22','N19']
-        #extlist = ['N4']
-        #extlist = ['S10', 'S11', 'S12', 'S16', 'S17', 'S4', 'S5', 'S6']
     else:
         print('Camera {} not recognized!'.format(camera))
         pdb.set_trace() 
@@ -1693,7 +1718,7 @@ def measure_image(img_fn, **measureargs):
     # mosaic listed as mosaic3 in hearder, other combos maybe
     assert(camera in camera_check or camera_check in camera)
     
-    extlist = get_extlist(camera)
+    extlist = get_extlist(camera,img_fn)
     nnext = len(extlist)
 
     if camera == 'decam':
@@ -1756,7 +1781,10 @@ def success(ccds, **measureargs):
     num_ccds= dict(decam=60,mosaic=4)
     num_ccds['90prime']=4
     camera= measureargs.get('camera')
-    if len(ccds) >= num_ccds.get(camera,0):
+    scr_fn= measureargs.get('imgfn_scr')
+    hdu= fitsio.FITS(scr_fn)
+    #if len(ccds) >= num_ccds.get(camera,0):
+    if len(ccds) == len(hdu)-1:
         return True
     elif measureargs.get('debug') and len(ccds) >= 1:
         # only 1 ccds needs to be done if debuggin
