@@ -3084,9 +3084,9 @@ def get_runbrick_kwargs(brick=None,
     opt.update(stages=stage)
 
     # Remove opt values that are None.
-    for k,v in opt.items():
-        if v is None:
-            del opt[k]
+    toremove = [k for k,v in opt.items() if v is None]
+    for k in toremove:
+        del opt[k]
 
     if unwise_dir is None:
         unwise_dir = os.environ.get('UNWISE_COADDS_DIR', None)
