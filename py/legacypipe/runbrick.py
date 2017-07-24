@@ -3135,6 +3135,10 @@ def main(args=None):
     else:
         print('Args:', args)
     print()
+    print('Slurm cluster:', os.environ.get('SLURM_CLUSTER_NAME', 'none'))
+    print('Job id:', os.environ.get('JOB_ID', 'none'))
+    print('Array task id:', os.environ.get('ARRAY_TASK_ID', 'none'))
+    print()
 
     parser = get_parser()
 
