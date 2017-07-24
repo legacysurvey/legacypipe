@@ -189,8 +189,8 @@ def stage_tims(W=3600, H=3600, pixscale=0.262, brickname=None,
             # Read version numbers
             for line in open(fn):
                 words = line.strip().split('=')
-                if len(words) == 3:
-                    vers[words[0]] == words[1]
+                if len(words) >= 2:
+                    vers[words[0]] = words[1]
 
         for pkg in ['astropy', 'matplotlib', 'mkl', 'numpy', 'python', 'scipy']:
             if pkg in vers:
