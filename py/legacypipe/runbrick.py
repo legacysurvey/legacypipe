@@ -140,6 +140,8 @@ def stage_tims(W=3600, H=3600, pixscale=0.262, brickname=None,
     brickid = brick.brickid
     brickname = brick.brickname
 
+    print('Got brick:', Time()-t0)
+
     # Get WCS object describing brick
     targetwcs = wcs_for_brick(brick, W=W, H=H, pixscale=pixscale)
     if target_extent is not None:
@@ -157,8 +159,12 @@ def stage_tims(W=3600, H=3600, pixscale=0.262, brickname=None,
         nil, brick.dec1 = targetwcs.pixelxy2radec(W/2, 1)
         nil, brick.dec2 = targetwcs.pixelxy2radec(W/2, H)
 
+    print('Got brick wcs:', Time()-t0)
+
     # Create FITS header with version strings
     gitver = get_git_version()
+    print('Got git version:', Time()-t0)
+
     version_header = get_version_header(program_name, survey.survey_dir,
                                         git_version=gitver)
     for i,dep in enumerate(['numpy', 'scipy', 'wcslib', 'astropy', 'photutils',
@@ -178,9 +184,6 @@ def stage_tims(W=3600, H=3600, pixscale=0.262, brickname=None,
                                     comment='Version of dependency product'))
 
         print('Version for "%s": "%s"' % (dep, verstr))
-
-    import tractor
-    print('Tractor:', tractor.__file__)
 
     version_header.add_record(dict(name='BRICKNAM', value=brickname,
                                 comment='LegacySurvey brick RRRr[pm]DDd'))
@@ -216,11 +219,15 @@ def stage_tims(W=3600, H=3600, pixscale=0.262, brickname=None,
         version_header.add_record(dict(
             name='CORN%iDEC'%(i+1), value=d, comment='[deg] Brick corner Dec'))
 
+    print('Got FITS header:', Time()-t0)
+
     # Find CCDs
     ccds = survey.ccds_touching_wcs(targetwcs, ccdrad=None)
     if ccds is None:
         raise NothingToDoError('No CCDs touching brick')
     print(len(ccds), 'CCDs touching target WCS')
+
+    print('Got CCDs:', Time()-t0)
 
     # Sort images by band -- this also eliminates images whose
     # *filter* string is not in *bands*.
@@ -269,6 +276,8 @@ def stage_tims(W=3600, H=3600, pixscale=0.262, brickname=None,
               'seeing %.2f' % (ccd.fwhm*im.pixscale),
               'object', getattr(ccd, 'object', None))
 
+    print('Cut CCDs:', Time()-t0)
+
     tnow = Time()
     print('[serial tims] Finding images touching brick:', tnow-tlast)
     tlast = tnow
@@ -288,6 +297,8 @@ def stage_tims(W=3600, H=3600, pixscale=0.262, brickname=None,
         print('[parallel tims] Calibrations:', tnow-tlast)
         tlast = tnow
         #record_event and record_event('stage_tims: done calibs')
+
+    print('Calibs:', Time()-t0)
 
     # Read Tractor images
     args = [(im, targetrd, dict(gaussPsf=gaussPsf, pixPsf=pixPsf,
