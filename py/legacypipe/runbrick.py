@@ -3145,7 +3145,7 @@ def main(args=None):
     parser.add_argument(
         '--ps', help='Run "ps" and write results to given filename?')
     parser.add_argument(
-        '--ps-t0', type=int, help='Unix-time start for "--ps"')
+        '--ps-t0', type=int, default=0, help='Unix-time start for "--ps"')
 
     opt = parser.parse_args(args=args)
 
