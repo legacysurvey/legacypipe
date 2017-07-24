@@ -193,14 +193,13 @@ def stage_tims(W=3600, H=3600, pixscale=0.262, brickname=None,
                     vers[words[0]] = words[1]
 
         for pkg in ['astropy', 'matplotlib', 'mkl', 'numpy', 'python', 'scipy']:
-            if pkg in vers:
-                verstr = vers[pkg]
-                version_header.add_record(dict(name='DEPNAM%02i' % depnum, value=dep,
-                                               comment='Name of dependency product'))
-                version_header.add_record(dict(name='DEPVER%02i' % depnum, value=verstr,
-                                               comment='Version of dependency product'))
-                depnum += 1
-            else:
+            verstr = vers.get(pkg, default_ver)
+            version_header.add_record(dict(name='DEPNAM%02i' % depnum, value=pkg,
+                                           comment='Name of dependency product'))
+            version_header.add_record(dict(name='DEPVER%02i' % depnum, value=verstr,
+                                           comment='Version of dependency product'))
+            depnum += 1
+            if verstr == default_ver:
                 print('Warning: failed to get version string for "%s"' % pkg)
     # Get additional version strings from modules.
     for dep in ['unwise_coadds', 'unwise_coadds_timeresolved']:
