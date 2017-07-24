@@ -3128,6 +3128,8 @@ def main(args=None):
 
     parser.add_argument(
         '--ps', help='Run "ps" and write results to given filename?')
+    parser.add_argument(
+        '--ps-t0', type=int, help='Unix-time start for "--ps"')
 
     opt = parser.parse_args(args=args)
 
@@ -3137,8 +3139,9 @@ def main(args=None):
 
     optdict = vars(opt)
     ps_file = optdict.pop('ps', None)
+    ps_t0   = optdict.pop('ps_t0', 0)
     verbose = optdict.pop('verbose')
-    
+
     survey, kwargs = get_runbrick_kwargs(**optdict)
     if kwargs in [-1, 0]:
         return kwargs
@@ -3190,6 +3193,13 @@ def main(args=None):
         from legacypipe.utils import run_ps_thread
         ps_shutdown = threading.Event()
         ps_queue = deque()
+        def record_event(msg):
+            from time import time
+            ps_queue.append((time(), msg))
+        kwargs.update(record_event=record_event)
+        if ps_t0 > 0:
+            record_event('start')
+
         ps_thread = threading.Thread(
             target=run_ps_thread,
             args=(os.getpid(), os.getppid(), ps_file, ps_shutdown, ps_queue),
@@ -3197,11 +3207,6 @@ def main(args=None):
         # ps_thread.daemon = True
         print('Starting thread to run "ps"')
         ps_thread.start()
-
-        def record_event(msg):
-            from time import time
-            ps_queue.append((time(), msg))
-        kwargs.update(record_event=record_event)
 
     print('Got runbrick kwargs:', kwargs)
         
