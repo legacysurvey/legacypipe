@@ -167,24 +167,53 @@ def stage_tims(W=3600, H=3600, pixscale=0.262, brickname=None,
 
     version_header = get_version_header(program_name, survey.survey_dir,
                                         git_version=gitver)
-    for i,dep in enumerate([
-        'desiconda', 'unwise_coadds', 'unwise_coadds_timeresolved',]):
+
+    # Get DESICONDA version, and read file $DESICONDA/pkg_list.txt for
+    # other package versions.
+    default_ver = 'UNAVAILABLE'
+    depnum = 0
+    desiconda = os.environ.get('DESICONDA', default_ver)
+    verstr = os.path.basename(desiconda)
+    version_header.add_record(dict(name='DEPNAM%02i' % depnum, value='desiconda',
+                                   comment='Name of dependency product'))
+    version_header.add_record(dict(name='DEPVER%02i' % depnum, value=verstr,
+                                   comment='Version of dependency product'))
+    depnum += 1
+
+    if desiconda != default_ver:
+        fn = os.path.join(desiconda, 'pkg_list.txt')
+        vers = {}
+        if not os.path.exists(fn):
+            print('Warning: expected file $DESICONDA/pkg_list.txt to exist but it does not!')
+        else:
+            # Read version numbers
+            for line in open(fn):
+                words = line.strip().split('=')
+                if len(words) == 3:
+                    vers[words[0]] == words[1]
+
+        for pkg in ['astropy', 'matplotlib', 'mkl', 'numpy', 'python', 'scipy']:
+            if pkg in vers:
+                verstr = vers[pkg]
+                version_header.add_record(dict(name='DEPNAM%02i' % depnum, value=dep,
+                                               comment='Name of dependency product'))
+                version_header.add_record(dict(name='DEPVER%02i' % depnum, value=verstr,
+                                               comment='Version of dependency product'))
+                depnum += 1
+            else:
+                print('Warning: failed to get version string for "%s"' % pkg)
+    # Get additional version strings from modules.
+    for dep in ['unwise_coadds', 'unwise_coadds_timeresolved']:
         # Look in the OS environment variables for modules-style
         # $scipy_VERSION => 0.15.1_5a3d8dfa-7.1
-        default_ver = 'UNAVAILABLE'
-        if dep == 'desiconda':
-            verstr = os.environ.get('DESICONDA', default_ver)
-            verstr = os.path.basename(verstr)
-        else:
-            verstr = os.environ.get('%s_VERSION' % dep, default_ver)
+        verstr = os.environ.get('%s_VERSION' % dep, default_ver)
         if verstr == default_ver:
             print('Warning: failed to get version string for "%s"' % dep)
-        version_header.add_record(dict(name='DEPNAM%02i' % i, value=dep,
+        version_header.add_record(dict(name='DEPNAM%02i' % depnum, value=dep,
                                     comment='Name of dependency product'))
-        version_header.add_record(dict(name='DEPVER%02i' % i, value=verstr,
+        version_header.add_record(dict(name='DEPVER%02i' % depnum, value=verstr,
                                     comment='Version of dependency product'))
-
-        print('Version for "%s": "%s"' % (dep, verstr))
+        depnum += 1
 
     version_header.add_record(dict(name='BRICKNAM', value=brickname,
                                 comment='LegacySurvey brick RRRr[pm]DDd'))
