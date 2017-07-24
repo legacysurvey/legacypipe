@@ -140,6 +140,8 @@ def stage_tims(W=3600, H=3600, pixscale=0.262, brickname=None,
     brickid = brick.brickid
     brickname = brick.brickname
 
+    print('Got brick:', Time()-t0)
+
     # Get WCS object describing brick
     targetwcs = wcs_for_brick(brick, W=W, H=H, pixscale=pixscale)
     if target_extent is not None:
@@ -157,30 +159,60 @@ def stage_tims(W=3600, H=3600, pixscale=0.262, brickname=None,
         nil, brick.dec1 = targetwcs.pixelxy2radec(W/2, 1)
         nil, brick.dec2 = targetwcs.pixelxy2radec(W/2, H)
 
+    print('Got brick wcs:', Time()-t0)
+
     # Create FITS header with version strings
     gitver = get_git_version()
+    print('Got git version:', Time()-t0)
+
     version_header = get_version_header(program_name, survey.survey_dir,
                                         git_version=gitver)
-    for i,dep in enumerate(['numpy', 'scipy', 'wcslib', 'astropy', 'photutils',
-                            'ceres', 'sextractor', 'psfex', 'astrometry_net',
-                            'tractor', 'fitsio', 'unwise_coadds', 'python',
-                            'unwise_coadds_timeresolved', 'legacysurvey',
-                            'legacypipe', 'dust']):
+
+    # Get DESICONDA version, and read file $DESICONDA/pkg_list.txt for
+    # other package versions.
+    default_ver = 'UNAVAILABLE'
+    depnum = 0
+    desiconda = os.environ.get('DESICONDA', default_ver)
+    verstr = os.path.basename(desiconda)
+    version_header.add_record(dict(name='DEPNAM%02i' % depnum, value='desiconda',
+                                   comment='Name of dependency product'))
+    version_header.add_record(dict(name='DEPVER%02i' % depnum, value=verstr,
+                                   comment='Version of dependency product'))
+    depnum += 1
+
+    if desiconda != default_ver:
+        fn = os.path.join(desiconda, 'pkg_list.txt')
+        vers = {}
+        if not os.path.exists(fn):
+            print('Warning: expected file $DESICONDA/pkg_list.txt to exist but it does not!')
+        else:
+            # Read version numbers
+            for line in open(fn):
+                words = line.strip().split('=')
+                if len(words) >= 2:
+                    vers[words[0]] = words[1]
+
+        for pkg in ['astropy', 'matplotlib', 'mkl', 'numpy', 'python', 'scipy']:
+            verstr = vers.get(pkg, default_ver)
+            version_header.add_record(dict(name='DEPNAM%02i' % depnum, value=pkg,
+                                           comment='Name of dependency product'))
+            version_header.add_record(dict(name='DEPVER%02i' % depnum, value=verstr,
+                                           comment='Version of dependency product'))
+            depnum += 1
+            if verstr == default_ver:
+                print('Warning: failed to get version string for "%s"' % pkg)
+    # Get additional version strings from modules.
+    for dep in ['unwise_coadds', 'unwise_coadds_timeresolved']:
         # Look in the OS environment variables for modules-style
         # $scipy_VERSION => 0.15.1_5a3d8dfa-7.1
-        default_ver = 'UNAVAILABLE'
         verstr = os.environ.get('%s_VERSION' % dep, default_ver)
         if verstr == default_ver:
             print('Warning: failed to get version string for "%s"' % dep)
-        version_header.add_record(dict(name='DEPNAM%02i' % i, value=dep,
+        version_header.add_record(dict(name='DEPNAM%02i' % depnum, value=dep,
                                     comment='Name of dependency product'))
-        version_header.add_record(dict(name='DEPVER%02i' % i, value=verstr,
+        version_header.add_record(dict(name='DEPVER%02i' % depnum, value=verstr,
                                     comment='Version of dependency product'))
-
-        print('Version for "%s": "%s"' % (dep, verstr))
-
-    import tractor
-    print('Tractor:', tractor.__file__)
+        depnum += 1
 
     version_header.add_record(dict(name='BRICKNAM', value=brickname,
                                 comment='LegacySurvey brick RRRr[pm]DDd'))
@@ -216,11 +248,15 @@ def stage_tims(W=3600, H=3600, pixscale=0.262, brickname=None,
         version_header.add_record(dict(
             name='CORN%iDEC'%(i+1), value=d, comment='[deg] Brick corner Dec'))
 
+    print('Got FITS header:', Time()-t0)
+
     # Find CCDs
     ccds = survey.ccds_touching_wcs(targetwcs, ccdrad=None)
     if ccds is None:
         raise NothingToDoError('No CCDs touching brick')
     print(len(ccds), 'CCDs touching target WCS')
+
+    print('Got CCDs:', Time()-t0)
 
     # Sort images by band -- this also eliminates images whose
     # *filter* string is not in *bands*.
@@ -263,11 +299,14 @@ def stage_tims(W=3600, H=3600, pixscale=0.262, brickname=None,
     ims = []
     for ccd in ccds:
         im = survey.get_image_object(ccd)
-        im.check_for_cached_files(survey)
+        if survey.cache_dir is not None:
+            im.check_for_cached_files(survey)
         ims.append(im)
         print(im, im.band, 'exptime', im.exptime, 'propid', ccd.propid,
               'seeing %.2f' % (ccd.fwhm*im.pixscale),
               'object', getattr(ccd, 'object', None))
+
+    print('Cut CCDs:', Time()-t0)
 
     tnow = Time()
     print('[serial tims] Finding images touching brick:', tnow-tlast)
@@ -288,6 +327,8 @@ def stage_tims(W=3600, H=3600, pixscale=0.262, brickname=None,
         print('[parallel tims] Calibrations:', tnow-tlast)
         tlast = tnow
         #record_event and record_event('stage_tims: done calibs')
+
+    print('Calibs:', Time()-t0)
 
     # Read Tractor images
     args = [(im, targetrd, dict(gaussPsf=gaussPsf, pixPsf=pixPsf,
@@ -3124,11 +3165,17 @@ def main(args=None):
     else:
         print('Args:', args)
     print()
+    print('Slurm cluster:', os.environ.get('SLURM_CLUSTER_NAME', 'none'))
+    print('Job id:', os.environ.get('JOB_ID', 'none'))
+    print('Array task id:', os.environ.get('ARRAY_TASK_ID', 'none'))
+    print()
 
     parser = get_parser()
 
     parser.add_argument(
         '--ps', help='Run "ps" and write results to given filename?')
+    parser.add_argument(
+        '--ps-t0', type=int, default=0, help='Unix-time start for "--ps"')
 
     opt = parser.parse_args(args=args)
 
@@ -3138,8 +3185,9 @@ def main(args=None):
 
     optdict = vars(opt)
     ps_file = optdict.pop('ps', None)
+    ps_t0   = optdict.pop('ps_t0', 0)
     verbose = optdict.pop('verbose')
-    
+
     survey, kwargs = get_runbrick_kwargs(**optdict)
     if kwargs in [-1, 0]:
         return kwargs
@@ -3191,6 +3239,13 @@ def main(args=None):
         from legacypipe.utils import run_ps_thread
         ps_shutdown = threading.Event()
         ps_queue = deque()
+        def record_event(msg):
+            from time import time
+            ps_queue.append((time(), msg))
+        kwargs.update(record_event=record_event)
+        if ps_t0 > 0:
+            record_event('start')
+
         ps_thread = threading.Thread(
             target=run_ps_thread,
             args=(os.getpid(), os.getppid(), ps_file, ps_shutdown, ps_queue),
@@ -3199,13 +3254,6 @@ def main(args=None):
         print('Starting thread to run "ps"')
         ps_thread.start()
 
-        def record_event(msg):
-            from time import time
-            ps_queue.append((time(), msg))
-        kwargs.update(record_event=record_event)
-
-    print('Got runbrick kwargs:', kwargs)
-        
     rtn = -1
     try:
         run_brick(opt.brick, survey, **kwargs)
