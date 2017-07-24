@@ -167,15 +167,16 @@ def stage_tims(W=3600, H=3600, pixscale=0.262, brickname=None,
 
     version_header = get_version_header(program_name, survey.survey_dir,
                                         git_version=gitver)
-    for i,dep in enumerate(['numpy', 'scipy', 'wcslib', 'astropy', 'photutils',
-                            'ceres', 'sextractor', 'psfex', 'astrometry_net',
-                            'tractor', 'fitsio', 'unwise_coadds', 'python',
-                            'unwise_coadds_timeresolved', 'legacysurvey',
-                            'legacypipe', 'dust']):
+    for i,dep in enumerate([
+        'desiconda', 'unwise_coadds', 'unwise_coadds_timeresolved',]):
         # Look in the OS environment variables for modules-style
         # $scipy_VERSION => 0.15.1_5a3d8dfa-7.1
         default_ver = 'UNAVAILABLE'
-        verstr = os.environ.get('%s_VERSION' % dep, default_ver)
+        if dep == 'desiconda':
+            verstr = os.environ.get('DESICONDA', default_ver)
+            verstr = os.path.basename(verstr)
+        else:
+            verstr = os.environ.get('%s_VERSION' % dep, default_ver)
         if verstr == default_ver:
             print('Warning: failed to get version string for "%s"' % dep)
         version_header.add_record(dict(name='DEPNAM%02i' % i, value=dep,
@@ -3219,8 +3220,6 @@ def main(args=None):
         print('Starting thread to run "ps"')
         ps_thread.start()
 
-    print('Got runbrick kwargs:', kwargs)
-        
     rtn = -1
     try:
         run_brick(opt.brick, survey, **kwargs)
