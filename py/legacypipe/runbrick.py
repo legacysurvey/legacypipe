@@ -1674,11 +1674,11 @@ def stage_fitblobs(T=None,
     del iblob, oldblob
     blobs = None
 
-    T.brickid   = np.zeros(len(T), np.int32) + brickid
+    T.brickid = np.zeros(len(T), np.int32) + brickid
     T.brickname = np.array([brickname] * len(T))
     if len(T.brickname) == 0:
         T.brickname = T.brickname.astype('S8')
-    T.objid     = np.arange(len(T)).astype(np.int32)
+    T.objid = np.arange(len(T)).astype(np.int32)
 
     # How many sources in each blob?
     from collections import Counter
@@ -2495,6 +2495,13 @@ def stage_writecat(
         format_catalog(T2, hdr, primhdr, allbands, None,
                        write_kwargs=dict(fits_object=out.fits))
 
+    # write fits file with galaxy-sim stuff (xy bounds of each sim)
+    if 'sims_xy' in T.get_columns(): 
+        sims_data = fits_table()
+        sims_data.sims_xy = T.sims_xy
+        with survey.write_output('galaxy-sims', brick=brickname) as out:
+            sims_data.writeto(None, fits_object=out.fits)
+
     # produce per-brick checksum file.
     with survey.write_output('checksums', brick=brickname, hashsum=False) as out:
         f = open(out.fn, 'w')
@@ -2502,13 +2509,6 @@ def stage_writecat(
         for fn,hashsum in survey.output_file_hashes.items():
             f.write('%s *%s\n' % (hashsum, fn))
         f.close()
-
-    # write fits file with galaxy-sim stuff (xy bounds of each sim)
-    if 'sims_xy' in T.get_columns(): 
-        sims_data = fits_table()
-        sims_data.sims_xy = T.sims_xy
-        with survey.write_output('galaxy-sims', brick=brickname) as out:
-            sims_data.writeto(None, fits_object=out.fits)
 
     record_event and record_event('stage_writecat: done')
 
