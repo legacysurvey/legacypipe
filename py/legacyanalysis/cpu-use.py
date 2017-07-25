@@ -4,7 +4,8 @@ import numpy as np
 import pylab as plt
 
 for title,tag in [
-    ('Cori Haswell, 64', 'has-64-0001p000'),
+    #('Cori Haswell, 64', 'has-64-0001p000'),
+    ('Cori Haswell, shared(16)', 'has-16-0001p000'),
         # ('Cori Haswell, 8, BB', 'bb-has-8-2420p070'),
         # ('Cori Haswell, 8 threads', 'has-8-0001p000'),
         # ('Cori KNL, 1 thread', 'knl-1'),
