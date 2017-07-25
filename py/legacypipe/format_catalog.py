@@ -52,12 +52,6 @@ def format_catalog(T, hdr, primhdr, allbands, outfn,
     has_wise_lc = 'wise_lc_flux' in T.columns()
     has_ap =      'apflux'       in T.columns()
     
-    # chi2 -> chisq
-    T.rename('rchi2','rchisq')
-    if has_wise:
-        T.rename('wise_rchi2','wise_rchisq')
-        T.rename('wise_lc_rchi2','wise_lc_rchisq')
-
     # Nans,Infs
     # Ivar -> 0
     ivar_nans= ['ra_ivar','dec_ivar',

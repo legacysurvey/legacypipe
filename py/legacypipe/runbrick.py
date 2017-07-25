@@ -1689,7 +1689,7 @@ def stage_fitblobs(T=None,
     # Copy blob results to table T
     T.left_blob    = np.logical_and(BB.started_in_blob,
                                     np.logical_not(BB.finished_in_blob))
-    for k in ['fracflux', 'fracin', 'fracmasked', 'rchi2', 'cpu_source',
+    for k in ['fracflux', 'fracin', 'fracmasked', 'rchisq', 'cpu_source',
               'cpu_blob', 'blob_width', 'blob_height', 'blob_npix',
               'blob_nimages', 'blob_totalpix', 'dchisq', 'tycho2inblob']:
         T.set(k, BB.get(k))
@@ -2453,7 +2453,7 @@ def stage_writecat(
         T2.wise_fracflux = np.vstack([
             WISE.w1_profracflux,WISE.w2_profracflux,
             WISE.w3_profracflux,WISE.w4_profracflux]).T
-        T2.wise_rchi2 = np.vstack([
+        T2.wise_rchisq = np.vstack([
             WISE.w1_prochi2, WISE.w2_prochi2,
             WISE.w3_prochi2, WISE.w4_prochi2]).T
 
@@ -2472,7 +2472,7 @@ def stage_writecat(
             T2.wise_lc_fracflux = np.hstack(
                 (WISE_T.w1_profracflux[:,np.newaxis,:],
                  WISE_T.w2_profracflux[:,np.newaxis,:]))
-            T2.wise_lc_rchi2 = np.hstack(
+            T2.wise_lc_rchisq = np.hstack(
                 (WISE_T.w1_prochi2[:,np.newaxis,:],
                  WISE_T.w2_prochi2[:,np.newaxis,:]))
             T2.wise_lc_mjd = np.hstack(

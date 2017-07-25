@@ -1393,7 +1393,7 @@ def _compute_source_metrics(srcs, tims, bands, tr):
     tinyflux = 1e-9
     fracin     = fracin_num     / np.maximum(tinyflux, fracin_den)
 
-    return dict(fracin=fracin, fracflux=fracflux, rchi2=rchi2,
+    return dict(fracin=fracin, fracflux=fracflux, rchisq=rchi2,
                 fracmasked=fracmasked)
 
 def _initialize_models(src, rex):
