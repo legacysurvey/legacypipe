@@ -77,9 +77,9 @@ def one_blob(X):
     assert(len(B.finished_in_blob) == len(B))
     assert(len(B.finished_in_blob) == len(B.started_in_blob))
 
-    B.hastycho = np.zeros(len(B), bool)
+    B.tycho2inblob = np.zeros(len(B), bool)
     if hastycho:
-        B.hastycho[:] = True
+        B.tycho2inblob[:] = True
 
     B.cpu_blob = np.zeros(len(B), np.float32)
     t1 = time.clock()
@@ -261,10 +261,10 @@ class OneBlob(object):
         # print('Subtracting initial models:', Time()-tt)
 
         N = len(cat)
-        B.dchisqs = np.zeros((N, 5), np.float32)
-        B.all_models        = np.array([{} for i in range(N)])
-        B.all_model_ivs     = np.array([{} for i in range(N)])
-        B.all_model_cpu     = np.array([{} for i in range(N)])
+        B.dchisq = np.zeros((N, 5), np.float32)
+        B.all_models    = np.array([{} for i in range(N)])
+        B.all_model_ivs = np.array([{} for i in range(N)])
+        B.all_model_cpu = np.array([{} for i in range(N)])
             
         # Model selection for sources, in decreasing order of brightness
         for numi,srci in enumerate(Ibright):
@@ -781,7 +781,7 @@ class OneBlob(object):
                              (self.name, srci, keepmod, str(src)), fontsize=10)
                 self.ps.savefig()
     
-            B.dchisqs[srci, :] = np.array([chisqs.get(k,0) for k in modnames])
+            B.dchisq[srci, :] = np.array([chisqs.get(k,0) for k in modnames])
             B.sources[srci] = keepsrc
             cat[srci] = keepsrc
     

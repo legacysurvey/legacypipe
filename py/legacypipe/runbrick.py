@@ -1634,7 +1634,7 @@ def stage_fitblobs(T=None,
     ns,nb = BB.rchi2.shape
     assert(ns == len(cat))
     assert(nb == len(bands))
-    ns,nb = BB.dchisqs.shape
+    ns,nb = BB.dchisq.shape
     assert(ns == len(cat))
     assert(nb == 5) # ptsrc, simple, dev, exp, comp
 
@@ -1687,13 +1687,11 @@ def stage_fitblobs(T=None,
     del ninblob
 
     # Copy blob results to table T
-    T.tycho2inblob = BB.hastycho
-    T.dchisq       = BB.dchisqs.astype(np.float32)
     T.left_blob    = np.logical_and(BB.started_in_blob,
                                     np.logical_not(BB.finished_in_blob))
     for k in ['fracflux', 'fracin', 'fracmasked', 'rchi2', 'cpu_source',
               'cpu_blob', 'blob_width', 'blob_height', 'blob_npix',
-              'blob_nimages', 'blob_totalpix']:
+              'blob_nimages', 'blob_totalpix', 'dchisq', 'tycho2inblob']:
         T.set(k, BB.get(k))
 
     invvars = np.hstack(BB.srcinvvars)

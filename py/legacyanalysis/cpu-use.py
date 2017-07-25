@@ -4,8 +4,9 @@ import numpy as np
 import pylab as plt
 
 for title,tag in [
-        ('Cori Haswell, 8, BB', 'bb-has-8-2420p070'),
-        ('Cori Haswell, 8 threads', 'has-8-0001p000'),
+    ('Cori Haswell, 64', 'has-64-0001p000'),
+        # ('Cori Haswell, 8, BB', 'bb-has-8-2420p070'),
+        # ('Cori Haswell, 8 threads', 'has-8-0001p000'),
         # ('Cori KNL, 1 thread', 'knl-1'),
         # ('Cori KNL, 2 threads', 'knl-2'),
         # ('Cori KNL, 4 threads', 'knl-4'),
@@ -24,7 +25,8 @@ for title,tag in [
         # ('Cori Haswell, 64 threads', 'has-64'),
         ]:
     #fn = 'timing/ps-knl-1.fits'
-    fn = 'timing/ps-%s.fits' % tag
+    #fn = 'timing/ps-%s.fits' % tag
+    fn = 'ps-%s.fits' % tag
     print()
     print('Reading', fn)
     print()
