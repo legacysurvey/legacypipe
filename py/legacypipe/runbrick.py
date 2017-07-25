@@ -1696,22 +1696,6 @@ def stage_fitblobs(T=None,
               'blob_nimages', 'blob_totalpix']:
         T.set(k, BB.get(k))
 
-    # Compute MJD_MIN, MJD_MAX
-    T.mjd_min = np.empty(len(T), np.float64)
-    T.mjd_min[:] = np.inf
-    T.mjd_max = np.empty(len(T), np.float64)
-    T.mjd_max[:] = -np.inf
-    ra  = np.array([src.getPosition().ra  for src in cat])
-    dec = np.array([src.getPosition().dec for src in cat])
-    for tim in tims:
-        ok,x,y = tim.subwcs.radec2pixelxy(ra, dec)
-        x -= 1
-        y -= 1
-        I = np.flatnonzero(ok * (x >= 0.5) * (x <= W-0.5) *
-                           (y >= 0.5) * (y <= H-0.5))
-        T.mjd_min[I] = np.minimum(T.mjd_min[I], tim.time.toMjd())
-        T.mjd_max[I] = np.maximum(T.mjd_max[I], tim.time.toMjd())
-
     invvars = np.hstack(BB.srcinvvars)
     assert(cat.numberOfParams() == len(invvars))
 
@@ -2028,7 +2012,8 @@ def stage_coadds(survey=None, bands=None, version_header=None, targetwcs=None,
         del T_image_coadds
     ###
 
-    for c in ['nobs', 'anymask', 'allmask', 'psfsize', 'psfdepth', 'galdepth']:
+    for c in ['nobs', 'anymask', 'allmask', 'psfsize', 'psfdepth', 'galdepth',
+              'mjd_min', 'mjd_max']:
         T.set(c, C.T.get(c))
     # store galaxy sim bounding box in Tractor cat
     if 'sims_xy' in C.T.get_columns():

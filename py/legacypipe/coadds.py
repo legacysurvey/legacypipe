@@ -13,7 +13,7 @@ def make_coadds(tims, bands, targetwcs,
                 lanczos=True, mp=None):
     from astrometry.util.ttime import Time
     t0 = Time()
-    
+
     class Duck(object):
         pass
     C = Duck()
@@ -26,7 +26,7 @@ def make_coadds(tims, bands, targetwcs,
 
     if not xy:
         psfsize = False
-    
+
     C.coimgs = []
     if detmaps:
         C.galdetivs = []
@@ -34,7 +34,7 @@ def make_coadds(tims, bands, targetwcs,
     if mods is not None:
         C.comods = []
         C.coresids = []
-        
+
     if apertures is not None:
         unweighted = True
         C.AP = fits_table()
@@ -79,11 +79,21 @@ def make_coadds(tims, bands, targetwcs,
 
     # Args for aperture photometry
     apargs = []
-            
+
+    if xy:
+        # To save the memory of 2 x float64 maps, we instead do arg min/max maps
+
+        # append a 0 to the list of mjds so that mjds[-1] gives 0.
+        mjds = np.array([tim.time.toMjd() for tim in tims] + [0])
+        mjd_argmins = np.empty((H,W), np.int16)
+        mjd_argmaxs = np.empty((H,W), np.int16)
+        mjd_argmins[:,:] = -1
+        mjd_argmaxs[:,:] = -1
+
     tinyw = 1e-30
     for iband,(band,timiter) in enumerate(zip(bands, imaps)):
         print('Computing coadd for band', band)
-        
+
         # coadded weight map (moo)
         cow    = np.zeros((H,W), np.float32)
         # coadded weighted image map
@@ -169,17 +179,28 @@ def make_coadds(tims, bands, targetwcs,
                     for bitname in ['badpix', 'cr', 'trans', 'edge', 'edge2']:
                         badbits |= CP_DQ_BITS[bitname]
                     goodpix = ((dq & badbits) == 0)
-                    
+
                 coimg[Yo,Xo] += goodpix * im
                 con  [Yo,Xo] += goodpix
                 coiv [Yo,Xo] += goodpix * 1./(tim.sig1 * tim.sbscale)**2  # ...ish
-                
+
             if xy:
                 if dq is not None:
                     ormask [Yo,Xo] |= dq
                     andmask[Yo,Xo] &= dq
                 # raw exposure count
                 nobs[Yo,Xo] += 1
+
+                # mjd_min/max
+                update = np.logical_or(mjd_argmins[Yo,Xo] == -1,
+                                       (mjd_argmins[Yo,Xo] > -1) *
+                                       (mjds[itim] < mjds[mjd_argmins[Yo,Xo]]))
+                mjd_argmins[Yo[update],Xo[update]] = itim
+                update = np.logical_or(mjd_argmaxs[Yo,Xo] == -1,
+                                       (mjd_argmaxs[Yo,Xo] > -1) *
+                                       (mjds[itim] > mjds[mjd_argmaxs[Yo,Xo]]))
+                mjd_argmaxs[Yo[update],Xo[update]] = itim
+                del update
 
             if psfsize:
                 # psfnorm is in units of 1/pixels.
@@ -189,7 +210,7 @@ def make_coadds(tims, bands, targetwcs,
                 # Narcsec is in arcsec**2
                 narcsec = neff * tim.wcs.pixel_scale()**2
                 psfsizemap[Yo,Xo] += iv * (1. / narcsec)
-                
+
             if detmaps:
                 # point-source depth
                 detsig1 = tim.sig1 / tim.psfnorm
@@ -240,7 +261,7 @@ def make_coadds(tims, bands, targetwcs,
             if detmaps:
                 C.T.psfdepth[:,iband] = psfdetiv[iy, ix]
                 C.T.galdepth[:,iband] = galdetiv[iy, ix]
-        
+
         if psfsize:
             wt = cow[iy,ix]
             # psfsizemap is in units of iv * (1 / arcsec**2)
@@ -276,6 +297,13 @@ def make_coadds(tims, bands, targetwcs,
     t2 = Time()
     print('coadds: images:', t2-t0)
 
+    if xy is not None:
+        print('MJDs type:', mjds.dtype)
+        C.T.mjd_min = mjds[mjd_argmins[iy,ix]]
+        C.T.mjd_max = mjds[mjd_argmaxs[iy,ix]]
+        del mjd_argmins
+        del mjd_argmaxs
+
     if apertures is not None:
         # Aperture phot, in parallel
         if mp is not None:
@@ -284,7 +312,7 @@ def make_coadds(tims, bands, targetwcs,
             apresults = map(_apphot_one, apargs)
         del apargs
         apresults = iter(apresults)
-        
+
         for iband,band in enumerate(bands):
             apimg = []
             apimgerr = []
@@ -295,14 +323,14 @@ def make_coadds(tims, bands, targetwcs,
                 if hasattr(apresults, 'next'):
                     (airad, aband, isimg, ap_img, ap_err) = apresults.next()
                 # py3
-                else:    
+                else:
                     (airad, aband, isimg, ap_img, ap_err) = apresults.__next__()
                 assert(airad == irad)
                 assert(aband == band)
                 assert(isimg)
                 apimg.append(ap_img)
                 apimgerr.append(ap_err)
-    
+
                 if mods is not None:
                     # py2
                     if hasattr(apresults, 'next'):
@@ -314,7 +342,7 @@ def make_coadds(tims, bands, targetwcs,
                     assert(not isimg)
                     apres.append(ap_img)
                     assert(ap_err is None)
-                
+
             ap = np.vstack(apimg).T
             ap[np.logical_not(np.isfinite(ap))] = 0.
             C.AP.set('apflux_img_%s' % band, ap)
