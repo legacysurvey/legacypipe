@@ -69,12 +69,16 @@ def sed_matched_filters(bands):
         sed = np.zeros(len(bands))
         sed[i] = 1.
         SEDs.append((band, sed))
+    # Reverse the order -- run z-band detection filter *first*.
+    SEDs = list(reversed(SEDs))
 
     if len(bands) > 1:
         flat = dict(g=1., r=1., z=1.)
         SEDs.append(('Flat', [flat[b] for b in bands]))
         red = dict(g=2.5, r=1., z=0.4)
         SEDs.append(('Red', [red[b] for b in bands]))
+
+    print('SED-matched filters:', SEDs)
 
     return SEDs
 
