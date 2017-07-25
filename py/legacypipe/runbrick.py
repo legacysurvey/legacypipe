@@ -1474,7 +1474,7 @@ def stage_fitblobs(T=None,
         keepblobs = np.arange(blob0, blob0+nblobs)
 
     # keepblobs can be None or empty list
-    if keepblobs: 
+    if keepblobs is not None and len(keepblobs):
         # 'blobs' is an image with values -1 for no blob, or the index of the
         # blob.  Create a map from old 'blobs+1' to new 'blobs+1'.  +1  so that
         # -1 is a valid index.
