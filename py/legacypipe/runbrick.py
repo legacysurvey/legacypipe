@@ -3250,7 +3250,7 @@ def main(args=None):
             target=run_ps_thread,
             args=(os.getpid(), os.getppid(), ps_file, ps_shutdown, ps_queue),
             name='run_ps')
-        # ps_thread.daemon = True
+        ps_thread.daemon = True
         print('Starting thread to run "ps"')
         ps_thread.start()
 
