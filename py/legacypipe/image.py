@@ -730,7 +730,7 @@ class LegacySurveyImage(object):
                     # Remove any padding
                     degree = Ti.poldeg1
                     # number of terms in polynomial
-                    ne = (degree + 1) * (degree + 2) / 2
+                    ne = (degree + 1) * (degree + 2) // 2
                     #print('PSF_mask shape', Ti.psf_mask.shape)
                     Ti.psf_mask = Ti.psf_mask[:ne, :Ti.psfaxis1, :Ti.psfaxis2]
 
