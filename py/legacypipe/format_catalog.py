@@ -48,10 +48,10 @@ def format_catalog(T, hdr, primhdr, allbands, outfn,
 
     #allbands = ['g','r','z']
 
-    has_wise =    'wise_flux'    in T.columns()
-    has_wise_lc = 'wise_lc_flux' in T.columns()
+    has_wise =    'flux_w1'    in T.columns()
+    has_wise_lc = 'lc_flux_w1' in T.columns()
     has_ap =      'apflux'       in T.columns()
-    
+
     # Nans,Infs
     # Ivar -> 0
     ivar_nans= ['ra_ivar','dec_ivar',
@@ -125,38 +125,26 @@ def format_catalog(T, hdr, primhdr, allbands, outfn,
             T.set(col, 10.**(-wise_ext[:,i] / 2.5))
             trans_cols_wise.append(col)
 
-    # Column ordering...
-    cols = []
-
-    cols.append('release')
     from legacypipe.survey import release_number
     T.release = np.zeros(len(T), np.int16) + release_number
         
-    cols.extend([
-        'brickid', 'brickname', 'objid', 'brick_primary', 
-        'type', 'ra', 'dec', 'ra_ivar', 'dec_ivar',
-        'bx', 'by',
-        'dchisq', 'ebv',
-        'mjd_min', 'mjd_max',
-        ])
-
+    # Column ordering...
+    cols = ['release', 'brickid', 'brickname', 'objid', 'brick_primary', 
+            'type', 'ra', 'dec', 'ra_ivar', 'dec_ivar',
+            'bx', 'by', 'dchisq', 'ebv', 'mjd_min', 'mjd_max', ])
     def add_fluxlike(c):
         for b in allbands:
             cols.append('%s%s_%s' % (flux_prefix, c, b))
-    def add_wiselike(c, bands=wbands, bare=True):
-        cbare = c.replace('wise_','')
-        X = T.get(c)
-        for i,b in enumerate(bands):
-            col = '%s_%s' % (cbare, b)
-            T.set(col, X[:,i])
-            cols.append(col)
-
+    def add_wiselike(c, bands=wbands):
+        for b in bands:
+            cols.append('%s_%s' % (c, b))
+            
     add_fluxlike('flux')
     if has_wise:
-        add_wiselike('wise_flux')
+        add_wiselike('flux')
     add_fluxlike('flux_ivar')
     if has_wise:
-        add_wiselike('wise_flux_ivar')
+        add_wiselike('flux_ivar')
     if has_ap:
         for c in ['apflux', 'apflux_resid','apflux_ivar']:
             add_fluxlike(c)
@@ -167,8 +155,7 @@ def format_catalog(T, hdr, primhdr, allbands, outfn,
     for c in ['nobs', 'rchisq', 'fracflux']:
         add_fluxlike(c)
         if has_wise:
-            add_wiselike('wise_'+c)
-
+            add_wiselike(c)
     for c in ['fracmasked', 'fracin', 'anymask', 'allmask']:
         add_fluxlike(c)
     if has_wise:
@@ -182,16 +169,9 @@ def format_catalog(T, hdr, primhdr, allbands, outfn,
     if has_wise:
         cols.append('wise_coadd_id')
     if has_wise_lc:
-        cc = ['wise_lc_flux', 'wise_lc_flux_ivar', 'wise_lc_nobs',
-              'wise_lc_fracflux', 'wise_lc_rchisq','wise_lc_mjd']
-        for c in cc:
-            cbare = c.replace('wise_','')
-            X = T.get(c)
-            for i,b in enumerate(wbands[:2]):
-                col = '%s_%s' % (cbare, b)
-                T.set(col, X[:,i,:])
-                cols.append(col)
-
+        for c in ['lc_flux', 'lc_flux_ivar', 'lc_nobs', 'lc_fracflux',
+                  'lc_rchisq','lc_mjd']:
+            add_wiselike(c, bands=['w1','w2'])
     cols.extend([
         'fracdev', 'fracdev_ivar',
         'shapeexp_r', 'shapeexp_r_ivar',

@@ -1631,7 +1631,7 @@ def stage_fitblobs(T=None,
     ns,nb = BB.fracin.shape
     assert(ns == len(cat))
     assert(nb == len(bands))
-    ns,nb = BB.rchi2.shape
+    ns,nb = BB.rchisq.shape
     assert(ns == len(cat))
     assert(nb == len(bands))
     ns,nb = BB.dchisq.shape
@@ -2249,7 +2249,7 @@ def stage_wise_forced(
                 print('"None" result from WISE forced phot:', tiles, band)
                 continue
             WISE.add_columns_from(p)
-        WISE.rename('tile', 'unwise_tile')
+        WISE.rename('tile', 'wise_coadd_id')
 
         # Look up mask bits
         ra  = np.array([src.getPosition().ra  for src in cat])
@@ -2429,55 +2429,48 @@ def stage_writecat(
                 name='WISEAB%i' % band, value=vega_to_ab['w%i' % band],
                 comment='WISE Vega to AB conv for band %i' % band))
 
-        T2.wise_coadd_id = WISE.unwise_tile
+        T2.wise_coadd_id = WISE.wise_coadd_id
+        T2.wise_mask = WISE.wise_mask
+
         for band in [1,2,3,4]:
             dm = vega_to_ab['w%i' % band]
             fluxfactor = 10.** (dm / -2.5)
             c = 'w%i_nanomaggies' % band
-            WISE.set(c, WISE.get(c) * fluxfactor)
+            flux = WISE.get(c) * fluxfactor
+            WISE.set(c, flux)
+            t = 'flux_w%i' % band
+            T2.set(t, flux)
             if WISE_T is not None and band <= 2:
-                WISE_T.set(c, WISE_T.get(c) * fluxfactor)
+                flux = WISE_T.get(c) * fluxfactor
+                WISE_T.set(c, flux)
+                t = 'lc_flux_w%i' % band
+                T2.set(t, flux)
+                
             c = 'w%i_nanomaggies_ivar' % band
-            WISE.set(c, WISE.get(c) / fluxfactor**2)
+            flux = WISE.get(c) / fluxfactor**2
+            WISE.set(c, flux)
+            t = 'flux_ivar_w%i' % band
+            T2.set(t, flux)
             if WISE_T is not None and band <= 2:
-                WISE_T.set(c, WISE_T.get(c) / fluxfactor**2)
+                flux = WISE_T.get(c) / fluxfactor**2
+                WISE_T.set(c, flux)
+                t = 'lc_flux_ivar_w%i' % band
+                T2.set(t, flux)
 
-        T2.wise_flux = np.vstack([
-            WISE.w1_nanomaggies, WISE.w2_nanomaggies,
-            WISE.w3_nanomaggies, WISE.w4_nanomaggies]).T
-        T2.wise_flux_ivar = np.vstack([
-            WISE.w1_nanomaggies_ivar, WISE.w2_nanomaggies_ivar,
-            WISE.w3_nanomaggies_ivar, WISE.w4_nanomaggies_ivar]).T
-        T2.wise_nobs = np.vstack([
-            WISE.w1_nexp, WISE.w2_nexp, WISE.w3_nexp, WISE.w4_nexp]).T
-        T2.wise_fracflux = np.vstack([
-            WISE.w1_profracflux,WISE.w2_profracflux,
-            WISE.w3_profracflux,WISE.w4_profracflux]).T
-        T2.wise_rchisq = np.vstack([
-            WISE.w1_prochi2, WISE.w2_prochi2,
-            WISE.w3_prochi2, WISE.w4_prochi2]).T
+        # Rename some WISE columns
+        for cin,cout in [('w%i_nexp',        'nobs_w%i'),
+                         ('w%i_profracflux', 'fracflux_w%i'),
+                         ('w%i_prochi2',     'rchisq_w%i'),]:
+            for band in [1,2,3,4]:
+                T2.set(cout % band, WISE.get(cin % band))
 
-        T2.wise_mask = WISE.wise_mask
-        
         if WISE_T is not None:
-            T2.wise_lc_flux = np.hstack(
-                (WISE_T.w1_nanomaggies[:,np.newaxis,:],
-                 WISE_T.w2_nanomaggies[:,np.newaxis,:]))
-            T2.wise_lc_flux_ivar = np.hstack(
-                (WISE_T.w1_nanomaggies_ivar[:,np.newaxis,:],
-                 WISE_T.w2_nanomaggies_ivar[:,np.newaxis,:]))
-            T2.wise_lc_nobs = np.hstack(
-                (WISE_T.w1_nexp[:,np.newaxis,:],
-                 WISE_T.w2_nexp[:,np.newaxis,:]))
-            T2.wise_lc_fracflux = np.hstack(
-                (WISE_T.w1_profracflux[:,np.newaxis,:],
-                 WISE_T.w2_profracflux[:,np.newaxis,:]))
-            T2.wise_lc_rchisq = np.hstack(
-                (WISE_T.w1_prochi2[:,np.newaxis,:],
-                 WISE_T.w2_prochi2[:,np.newaxis,:]))
-            T2.wise_lc_mjd = np.hstack(
-                (WISE_T.w1_mjd[:,np.newaxis,:],
-                 WISE_T.w2_mjd[:,np.newaxis,:]))
+            for cin,cout in [('w%i_nexp',        'lc_nobs_w%i'),
+                             ('w%i_profracflux', 'lc_fracflux_w%i'),
+                             ('w%i_prochi2',     'lc_rchisq_w%i'),
+                             ('w%i_mjd',         'lc_mjd_w%i'),]:
+                for band in [1,2]:
+                    T2.set(cout % band, WISE_T.get(cin % band))
             print('WISE light-curve shapes:', WISE_T.w1_nanomaggies.shape)
 
     with survey.write_output('tractor-intermediate', brick=brickname) as out:
