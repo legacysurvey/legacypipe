@@ -38,47 +38,55 @@ class mysample(object):
          - photoz requirements           : phreq
          - extintion coefficient         : extc
          - extintion index               : be
-
-    Current Inputs are: survey, DR, band, outpath) 
+         - mask var eqv. to blacklist_ok : maskname
+    Current Inputs are: survey, DR, band, localdir) 
+         survey: DECaLS, MZLS, BASS
+         DR:     DR3, DR4
+         band:   g,r,z
+         localdir: output directory
     """                                  
 
-    def __init__(self,surevy,DR,band):
-    """ Initialize image survey, data release, band, output path
-        Calculate variables and paths"""   
+    def __init__(self,survey,DR,band,localdir):
+        """ 
+        Initialize image survey, data release, band, output path
+        Calculate variables and paths
+        """   
         self.survey = survey
         self.DR     = DR
         self.band   = band
-        self.outpath = outpath
+        self.localdir = localdir 
      
         # Check bands
         if(self.band != 'g' and self.band !='r' and self.band!='z'): 
-            RuntimeError("Band seems wrong options are 'g' 'r' 'z'")        
+            raise RuntimeError("Band seems wrong options are 'g' 'r' 'z'")        
               
         # Check surveys
         if(self.survey !='DECaLS' and  self.survey !='BASS' and self.survey !='MZLS'):
-            RuntimeError("Survey seems wrong options are 'DECAaLS' 'BASS' MZLS' ")
+            raise RuntimeError("Survey seems wrong options are 'DECAaLS' 'BASS' MZLS' ")
 
         # Annotated CCD paths  
         if(self.DR == 'DR3'):
-            inputdir = '/project/projectdirs/cosmo/data/legacysurvey/dr3/'  
+            inputdir = '/global/project/projectdirs/cosmo/data/legacysurvey/dr3/'
             self.ccds =inputdir+'ccds-annotated-decals.fits.gz'
             self.catalog = 'DECaLS_DR3'
-            if(self.survey != 'DECaLS'): RuntimeErrore("Survey name seems inconsistent")
+            if(self.survey != 'DECaLS'): raise RuntimeError("Survey name seems inconsistent")
 
-        else if(self.DR == 'DR4'):
-            inputdir= '/global/projecta/projectdirs/cosmo/work/dr4/'
-            if (band == 'g' or .band == 'r'):
-                fname=inputdir+'ccds-annotated-dr4-90prime.fits.gz'
-                self_catalog = 'BASS_DR4'
-                if(self.survey != 'BASS'): RuntimeErrore("Survey name seems inconsistent")
+        elif(self.DR == 'DR4'):
+            inputdir = '/global/project/projectdirs/cosmo/data/legacysurvey/dr4/'
+            if (band == 'g' or band == 'r'):
+                #self.ccds = inputdir+'ccds-annotated-dr4-90prime.fits.gz'
+                self.ccds = inputdir+'ccds-annotated-bass.fits.gz'
+                self.catalog = 'BASS_DR4'
+                if(self.survey != 'BASS'): raise RuntimeError("Survey name seems inconsistent")
 
-            else if(band == 'z'):
-                fname = inputdir+'ccds-annotated-dr4-mzls.fits.gz'
-                self_catalog = 'MZLS_DR4'
-                if(self.survey != 'MZLS'): RuntimeErrore("Survey name seems inconsistent")
-            else: RuntimeError("Input sample band seems inconsisent")
+            elif(band == 'z'):
+                #self.ccds = inputdir+'ccds-annotated-dr4-mzls.fits.gz'
+                self.ccds = inputdir+'ccds-annotated-mzls.fits.gz'
+                self.catalog = 'MZLS_DR4'
+                if(self.survey != 'MZLS'): raise RuntimeError("Survey name seems inconsistent")
+            else: raise RuntimeError("Input sample band seems inconsisent")
 
-        else: RuntimeError("Data Realease seems wrong") 
+        else: raise RuntimeError("Data Realease seems wrong") 
 
         #Bands inputs
         if band == 'g':
@@ -135,6 +143,7 @@ def val3p4c_depthfromIvar(sample):
     fname = sample.ccds    
     localdir = sample.localdir
     outroot = localdir
+    extc = sample.extc
 
     #Read ccd file 
     tbdata = pyfits.open(fname)[1].data
@@ -143,8 +152,11 @@ def val3p4c_depthfromIvar(sample):
     # Obtain indices
     auxstr='band'+band
     sample_names = [auxstr]
-    inds = np.where((tbdata['filter'] == band) & (tbdata['photometric'] == True) & (tbdata['blacklist_ok'] == True)) 
-    
+    if(sample.DR == 'DR3'):
+        inds = np.where((tbdata['filter'] == band) & (tbdata['photometric'] == True) & (tbdata['blacklist_ok'] == True)) 
+    elif(sample.DR == 'DR4'):
+        inds = np.where((tbdata['filter'] == band) & (tbdata['photometric'] == True) & (tbdata['bitmask'] == 0)) 
+
     #Read data 
     #obtain invnoisesq here, including extinction 
     nmag = Magtonanomaggies(tbdata['galdepth']-extc*tbdata['EBV'])/5.
@@ -174,8 +186,10 @@ def val3p4c_depthfromIvar(sample):
     # Read Haelpix maps from quicksip  
     prop='ivar'
     op='total'
+    vmin=21.0
+    vmax=24.0
 
-    fname2=localdir+catalogue_name+'/nside'+nsideSTR+'_oversamp'+oversamp+'/'+
+    fname2=localdir+catalogue_name+'/nside'+nsideSTR+'_oversamp'+oversamp+'/'+\
            catalogue_name+'_band_'+band+'_nside'+nsideSTR+'_oversamp'+oversamp+'_'+prop+'__'+op+'.fits.gz'
     f = fitsio.read(fname2)
 
@@ -216,9 +230,6 @@ def val3p4c_depthfromIvar(sample):
     # Plot depth 
     from matplotlib import pyplot as plt
     import matplotlib.cm as cm
-
-    vmin=21.0
-    vmax=24.0
 
     map = plt.scatter(ral,decl,c=myval, cmap=cm.rainbow,s=2., vmin=vmin, vmax=vmax, lw=0,edgecolors='none')
     cbar = plt.colorbar(map)
@@ -882,22 +893,22 @@ def photometricReq(band,rel='DR3',survey='survename'):
 #photometricReq('r',rel='DR4',survey='survename')
 #photometricReq('z',rel='DR4',survey='survename')
 
-prop = 'zptvar'
-opt  = 'min'
+#prop = 'zptvar'
+#opt  = 'min'
 
-rel  = 'DR3'
-band = 'g'
-plotPhotometryMap(band,prop=prop,op=opt,rel=rel)
-band = 'r'
-plotPhotometryMap(band,prop=prop,op=opt,rel=rel)
-band = 'z'
-plotPhotometryMap(band,prop=prop,op=opt,rel=rel)
-
-rel = 'DR4'
-band = 'g'
-plotPhotometryMap(band,prop=prop,op=opt,rel=rel)
-band = 'r'
-plotPhotometryMap(band,prop=prop,op=opt,rel=rel)
-band = 'z'
-plotPhotometryMap(band,prop=prop,op=opt,rel=rel)
+#rel  = 'DR3'
+#band = 'g'
+#plotPhotometryMap(band,prop=prop,op=opt,rel=rel)
+#band = 'r'
+#plotPhotometryMap(band,prop=prop,op=opt,rel=rel)
+#band = 'z'
+#plotPhotometryMap(band,prop=prop,op=opt,rel=rel)
+#
+#rel = 'DR4'
+#band = 'g'
+#plotPhotometryMap(band,prop=prop,op=opt,rel=rel)
+#band = 'r'
+#plotPhotometryMap(band,prop=prop,op=opt,rel=rel)
+#band = 'z'
+#plotPhotometryMap(band,prop=prop,op=opt,rel=rel)
 
