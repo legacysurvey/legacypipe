@@ -327,10 +327,10 @@ def val3p4b_maghist_pred(sample,ndraw=1e5, nbin=100, vmin=21.0, vmax=25.0):
 
     ng = len(nl)
     print "-----------"
-    if(verbose) : print "Number of objects", len(f)
-    if(verbose) : print "Counts before or during 2014", counts2014
-    if(verbose) : print "Counts with dec < -20", counts20
-    print "Number of objects in the sample", ng 
+    if(verbose) : print "Number of objects = ", len(f)
+    if(verbose) : print "Counts before or during 2014 = ", counts2014
+    if(verbose) : print "Counts with dec < -20 = ", counts20
+    print "Number of objects in the sample = ", ng 
 
     #Monte Carlo to predict magnitudes histogram 
     ndrawn = 0
@@ -368,11 +368,12 @@ def val3p4b_maghist_pred(sample,ndraw=1e5, nbin=100, vmin=21.0, vmax=25.0):
     else:
         med = (NTl[len(NTl)/2+1]+NTl[len(NTl)/2])/2.
 
+    print "Total images drawn with either 1,2,3,4,5 exposures", ndrawn
     print "Mean = ", mean, "; Median = ", med ,"; Std = ", std
-    print 'percentage better than requirements '+str(nbr/float(ndrawn))
+    print 'percentage better than requirements = '+str(nbr/float(ndrawn))
 
     # Prepare historgram 
-    minN = min(min(NTl),vmin)
+    minN = max(min(NTl),vmin)
     maxN = max(NTl)+.0001
     hl = zeros((nbin)) # histogram counts
     lowcounts=0
@@ -388,8 +389,8 @@ def val3p4b_maghist_pred(sample,ndraw=1e5, nbin=100, vmin=21.0, vmax=25.0):
         Nl.append(minN+i*(maxN-minN)/float(nbin)+0.5*(maxN-minN)/float(nbin))
     NTl = array(NTl)
 
-    print "min,max depth ",min(NTl), max(NTl) 
-    print "counts below ", vmin, "are ", lowcounts
+    print "min,max depth = ",min(NTl), max(NTl) 
+    print "counts below ", minN, " = ", lowcounts
 
 
     #### Ploting histogram 
@@ -405,9 +406,9 @@ def val3p4b_maghist_pred(sample,ndraw=1e5, nbin=100, vmin=21.0, vmax=25.0):
     plt.xlabel(r'5$\sigma$ '+sample.band+ ' depth')
     plt.ylabel('# of images')
     plt.title('MC combined exposure depth '+str(mean)[:5]+r'$\pm$'+str(std)[:4]+r', $f_{\rm pass}=$'+str(nbr/float(ndrawn))[:5]+'\n '+catalogue_name)
-    #plt.xscale('log')
-    pp.savefig()
-    pp.close()
+    #plt.xscale('log')     # --- pdf --- 
+    plt.savefig(fname)       #pp.savefig()
+    plt.close              #pp.close()
     return fname 
 
 
