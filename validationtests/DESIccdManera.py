@@ -39,6 +39,7 @@ class mysample(object):
          - extintion coefficient         : extc
          - extintion index               : be
          - mask var eqv. to blacklist_ok : maskname
+         - predicted frac exposures      : FracExp   
     Current Inputs are: survey, DR, band, localdir) 
          survey: DECaLS, MZLS, BASS
          DR:     DR3, DR4
@@ -46,7 +47,8 @@ class mysample(object):
          localdir: output directory
     """                                  
 
-    def __init__(self,survey,DR,band,localdir):
+
+    def __init__(self,survey,DR,band,localdir,verb):
         """ 
         Initialize image survey, data release, band, output path
         Calculate variables and paths
@@ -55,7 +57,7 @@ class mysample(object):
         self.DR     = DR
         self.band   = band
         self.localdir = localdir 
-     
+        self.verbose =verb
         # Check bands
         if(self.band != 'g' and self.band !='r' and self.band!='z'): 
             raise RuntimeError("Band seems wrong options are 'g' 'r' 'z'")        
@@ -87,6 +89,22 @@ class mysample(object):
             else: raise RuntimeError("Input sample band seems inconsisent")
 
         else: raise RuntimeError("Data Realease seems wrong") 
+
+
+        # Predicted survey exposure fractions 
+        if(self.survey =='DECaLS'):
+             # DECALS final survey will be covered by 
+             # 1, 2, 3, 4, and 5 exposures in the following fractions: 
+             self.FracExp=[0.02,0.24,0.50,0.22,0.02]
+        elif(self.survey == 'BASS'):
+             # BASS coverage fractions for 1,2,3,4,5 exposures are:
+             self.FracExp=[0.0014,0.0586,0.8124,0.1203,0.0054,0.0019]
+        elif(self.survey == 'MZLS'):
+             # For MzLS fill factors of 100% with a coverage of at least 1, 
+             # 99.5% with a coverage of at least 2, and 85% with a coverage of 3.
+             self.FracExp=[0.005,0.145,0.85,0,0]
+        else:
+             raise RuntimeError("Survey seems to have wrong options for fraction of exposures ")
 
         #Bands inputs
         if band == 'g':
@@ -150,7 +168,7 @@ def val3p4c_depthfromIvar(sample):
     
     # ------------------------------------------------------
     # Obtain indices
-    auxstr='band'+band
+    auxstr='band_'+band
     sample_names = [auxstr]
     if(sample.DR == 'DR3'):
         inds = np.where((tbdata['filter'] == band) & (tbdata['photometric'] == True) & (tbdata['blacklist_ok'] == True)) 
@@ -221,10 +239,10 @@ def val3p4c_depthfromIvar(sample):
 	        decl.append(dec)
 
     npix=len(f)
-    print 'Min and Max values of ', mylabel, ' values is ', min(myval), max(myval)
-    print 'Number of pixels is ', npix
-    print 'Number of pixels offplot with ', mylabel,' < ', vmin, ' is', below 
+
     print 'Area is ', npix/(float(nside)**2.*12)*360*360./pi, ' sq. deg.'
+    print  below, 'of ', npix, ' pixels are not plotted as their ', mylabel,' < ', vmin
+    print 'Within the plot, min ', mylabel, '= ', min(myval), ' and max ', mylabel, ' = ', max(myval)
 
 
     # Plot depth 
@@ -238,19 +256,159 @@ def val3p4c_depthfromIvar(sample):
     plt.title('Map of '+ mylabel +' for '+catalogue_name+' '+band+'-band')
     plt.xlim(0,360)
     plt.ylim(-30,90)
-    plt.savefig(localdir+mylabel+'_'+band+'_'+catalogue_name+str(nside)+'.png')
+    mapfile=localdir+mylabel+'_'+band+'_'+catalogue_name+str(nside)+'.png'
+    print 'saving plot to ', mapfile
+    plt.savefig(mapfile)
     plt.close()
     #plt.show()
     #cbar.set_label(r'5$\sigma$ galaxy depth', rotation=270,labelpad=1)
     #plt.xscale('log')
 
-    return True
+    return mapfile 
+
+def val3p4b_maghist_pred(sample,ndraw=1e5, nbin=100, vmin=21.0, vmax=25.0):    
+    """
+       Requirement V3.4
+       90% filled to g=24, r=23.4 and z=22.5 and 95% and 98% at 0.3/0.6 mag shallower.
+
+       MARCM 
+       Makes histogram of predicted magnitudes 
+       by MonteCarlo from exposures converving fraction of number of exposures
+       This produces the histogram for Dustin's processed galaxy depth
+    """
 
 
+    import fitsio
+    from matplotlib import pyplot as plt
+    from numpy import zeros,array
+    from random import random
+
+    # Check fraction of number of exposures adds to 1. 
+    if( abs(sum(sample.FracExp) - 1.0) > 1e-5 ):
+       raise ValueError("Fration of number of exposures don't add to one")
+
+    # Survey inputs
+    rel = sample.DR
+    catalogue_name = sample.catalog
+    band = sample.band
+    be = sample.be
+    zp0 = sample.zp0
+    recm = sample.recm
+    verbose = sample.verbose
+		
+    f = fitsio.read(sample.ccds)
+    
+    #read in magnitudes including extinction
+    counts2014 = 0
+    counts20 = 0
+    nl = []
+    for i in range(0,len(f)):
+        year = int(f[i]['date_obs'].split('-')[0])
+        if (year <= 2014): counts2014 = counts2014 + 1
+        if f[i]['dec'] < -20 : counts20 = counts20 + 1
+			
+
+        if(sample.DR == 'DR3'): 
+
+            if f[i]['filter'] == sample.band and f[i]['photometric'] == True and f[i]['blacklist_ok'] == True :   
+
+                magext = f[i]['galdepth'] - f[i]['decam_extinction'][be]
+                nmag = Magtonanomaggies(magext)/5. #total noise
+                nl.append(nmag)
 
 
+        if(sample.DR == 'DR4'): 
+             if f[i]['filter'] == sample.band and f[i]['photometric'] == True and f[i]['bitmask'] == 0 :   
+
+                 magext = f[i]['galdepth'] - f[i]['decam_extinction'][be]
+                 nmag = Magtonanomaggies(magext)/5. #total noise
+                 nl.append(nmag)
 
 
+    ng = len(nl)
+    print "-----------"
+    if(verbose) : print "Number of objects", len(f)
+    if(verbose) : print "Counts before or during 2014", counts2014
+    if(verbose) : print "Counts with dec < -20", counts20
+    print "Number of objects in the sample", ng 
+
+    #Monte Carlo to predict magnitudes histogram 
+    ndrawn = 0
+    nbr = 0	
+    NTl = []
+    n = 0
+    for indx, f in enumerate(sample.FracExp,1) : 
+        Nexp = indx # indx starts at 1 bc argument on enumearate :-), thus is the number of exposures
+        nd = int(round(ndraw * f))
+        ndrawn=ndrawn+nd
+
+        for i in range(0,nd):
+
+            detsigtoti = 0
+            for j in range(0,Nexp):
+		ind = int(random()*ng)
+		detsig1 = nl[ind]
+		detsigtoti += 1./detsig1**2.
+
+ 	    detsigtot = sqrt(1./detsigtoti)
+	    m = nanomaggiesToMag(detsigtot * 5.)
+	    if m > recm: # pass requirement
+	 	nbr += 1.	
+	    NTl.append(m)
+	    n += 1.
+	
+    # Run some statistics 
+    NTl=np.array(NTl)
+    mean = sum(NTl)/float(len(NTl))
+    std = sqrt(sum(NTl**2.)/float(len(NTl))-mean**2.)
+
+    NTl.sort()
+    if len(NTl)/2. != len(NTl)/2:
+        med = NTl[len(NTl)/2+1]
+    else:
+        med = (NTl[len(NTl)/2+1]+NTl[len(NTl)/2])/2.
+
+    print "Mean = ", mean, "; Median = ", med ,"; Std = ", std
+    print 'percentage better than requirements '+str(nbr/float(ndrawn))
+
+    # Prepare historgram 
+    minN = min(min(NTl),vmin)
+    maxN = max(NTl)+.0001
+    hl = zeros((nbin)) # histogram counts
+    lowcounts=0
+    for i in range(0,len(NTl)):
+        bin = int(nbin*(NTl[i]-minN)/(maxN-minN))
+        if(bin >= 0) : 
+            hl[bin] += 1
+        else:
+            lowcounts +=1
+
+    Nl = []  # x bin centers
+    for i in range(0,len(hl)):
+        Nl.append(minN+i*(maxN-minN)/float(nbin)+0.5*(maxN-minN)/float(nbin))
+    NTl = array(NTl)
+
+    print "min,max depth ",min(NTl), max(NTl) 
+    print "counts below ", vmin, "are ", lowcounts
+
+
+    #### Ploting histogram 
+    fname=sample.localdir+'validationplots/'+sample.catalog+sample.band+'_pred_exposures.png'
+    print "saving histogram plot in", fname 
+
+       #--- pdf version --- 
+       #from matplotlib.backends.backend_pdf import PdfPages
+       #pp = PdfPages(fname)	
+
+    plt.clf()
+    plt.plot(Nl,hl,'k-')
+    plt.xlabel(r'5$\sigma$ '+sample.band+ ' depth')
+    plt.ylabel('# of images')
+    plt.title('MC combined exposure depth '+str(mean)[:5]+r'$\pm$'+str(std)[:4]+r', $f_{\rm pass}=$'+str(nbr/float(ndrawn))[:5]+'\n '+catalogue_name)
+    #plt.xscale('log')
+    pp.savefig()
+    pp.close()
+    return fname 
 
 
 # -------------------------------------------------------------------
@@ -799,6 +957,7 @@ def photometricReq(band,rel='DR3',survey='survename'):
 
     # What properties do you want mapped?
     # Each each tuple has [(quantity to be projected, weighting scheme, operation),(etc..)] 
+    quicksipVerbose(sample.verbose)
     propertiesandoperations = [ ('zptvar', '', 'total') , ('zptvar','','min') , ('nccd','','total') , ('zptivar','','total')]
 
  
