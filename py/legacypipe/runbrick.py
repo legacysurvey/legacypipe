@@ -140,6 +140,8 @@ def stage_tims(W=3600, H=3600, pixscale=0.262, brickname=None,
     brickid = brick.brickid
     brickname = brick.brickname
 
+    print('Got brick:', Time()-t0)
+
     # Get WCS object describing brick
     targetwcs = wcs_for_brick(brick, W=W, H=H, pixscale=pixscale)
     if target_extent is not None:
@@ -157,30 +159,60 @@ def stage_tims(W=3600, H=3600, pixscale=0.262, brickname=None,
         nil, brick.dec1 = targetwcs.pixelxy2radec(W/2, 1)
         nil, brick.dec2 = targetwcs.pixelxy2radec(W/2, H)
 
+    print('Got brick wcs:', Time()-t0)
+
     # Create FITS header with version strings
     gitver = get_git_version()
+    print('Got git version:', Time()-t0)
+
     version_header = get_version_header(program_name, survey.survey_dir,
                                         git_version=gitver)
-    for i,dep in enumerate(['numpy', 'scipy', 'wcslib', 'astropy', 'photutils',
-                            'ceres', 'sextractor', 'psfex', 'astrometry_net',
-                            'tractor', 'fitsio', 'unwise_coadds', 'python',
-                            'unwise_coadds_timeresolved', 'legacysurvey',
-                            'legacypipe', 'dust']):
+
+    # Get DESICONDA version, and read file $DESICONDA/pkg_list.txt for
+    # other package versions.
+    default_ver = 'UNAVAILABLE'
+    depnum = 0
+    desiconda = os.environ.get('DESICONDA', default_ver)
+    verstr = os.path.basename(desiconda)
+    version_header.add_record(dict(name='DEPNAM%02i' % depnum, value='desiconda',
+                                   comment='Name of dependency product'))
+    version_header.add_record(dict(name='DEPVER%02i' % depnum, value=verstr,
+                                   comment='Version of dependency product'))
+    depnum += 1
+
+    if desiconda != default_ver:
+        fn = os.path.join(desiconda, 'pkg_list.txt')
+        vers = {}
+        if not os.path.exists(fn):
+            print('Warning: expected file $DESICONDA/pkg_list.txt to exist but it does not!')
+        else:
+            # Read version numbers
+            for line in open(fn):
+                words = line.strip().split('=')
+                if len(words) >= 2:
+                    vers[words[0]] = words[1]
+
+        for pkg in ['astropy', 'matplotlib', 'mkl', 'numpy', 'python', 'scipy']:
+            verstr = vers.get(pkg, default_ver)
+            version_header.add_record(dict(name='DEPNAM%02i' % depnum, value=pkg,
+                                           comment='Name of dependency product'))
+            version_header.add_record(dict(name='DEPVER%02i' % depnum, value=verstr,
+                                           comment='Version of dependency product'))
+            depnum += 1
+            if verstr == default_ver:
+                print('Warning: failed to get version string for "%s"' % pkg)
+    # Get additional version strings from modules.
+    for dep in ['unwise_coadds', 'unwise_coadds_timeresolved']:
         # Look in the OS environment variables for modules-style
         # $scipy_VERSION => 0.15.1_5a3d8dfa-7.1
-        default_ver = 'UNAVAILABLE'
         verstr = os.environ.get('%s_VERSION' % dep, default_ver)
         if verstr == default_ver:
             print('Warning: failed to get version string for "%s"' % dep)
-        version_header.add_record(dict(name='DEPNAM%02i' % i, value=dep,
+        version_header.add_record(dict(name='DEPNAM%02i' % depnum, value=dep,
                                     comment='Name of dependency product'))
-        version_header.add_record(dict(name='DEPVER%02i' % i, value=verstr,
+        version_header.add_record(dict(name='DEPVER%02i' % depnum, value=verstr,
                                     comment='Version of dependency product'))
-
-        print('Version for "%s": "%s"' % (dep, verstr))
-
-    import tractor
-    print('Tractor:', tractor.__file__)
+        depnum += 1
 
     version_header.add_record(dict(name='BRICKNAM', value=brickname,
                                 comment='LegacySurvey brick RRRr[pm]DDd'))
@@ -216,11 +248,15 @@ def stage_tims(W=3600, H=3600, pixscale=0.262, brickname=None,
         version_header.add_record(dict(
             name='CORN%iDEC'%(i+1), value=d, comment='[deg] Brick corner Dec'))
 
+    print('Got FITS header:', Time()-t0)
+
     # Find CCDs
     ccds = survey.ccds_touching_wcs(targetwcs, ccdrad=None)
     if ccds is None:
         raise NothingToDoError('No CCDs touching brick')
     print(len(ccds), 'CCDs touching target WCS')
+
+    print('Got CCDs:', Time()-t0)
 
     # Sort images by band -- this also eliminates images whose
     # *filter* string is not in *bands*.
@@ -263,11 +299,14 @@ def stage_tims(W=3600, H=3600, pixscale=0.262, brickname=None,
     ims = []
     for ccd in ccds:
         im = survey.get_image_object(ccd)
-        im.check_for_cached_files(survey)
+        if survey.cache_dir is not None:
+            im.check_for_cached_files(survey)
         ims.append(im)
         print(im, im.band, 'exptime', im.exptime, 'propid', ccd.propid,
               'seeing %.2f' % (ccd.fwhm*im.pixscale),
               'object', getattr(ccd, 'object', None))
+
+    print('Cut CCDs:', Time()-t0)
 
     tnow = Time()
     print('[serial tims] Finding images touching brick:', tnow-tlast)
@@ -288,6 +327,8 @@ def stage_tims(W=3600, H=3600, pixscale=0.262, brickname=None,
         print('[parallel tims] Calibrations:', tnow-tlast)
         tlast = tnow
         #record_event and record_event('stage_tims: done calibs')
+
+    print('Calibs:', Time()-t0)
 
     # Read Tractor images
     args = [(im, targetrd, dict(gaussPsf=gaussPsf, pixPsf=pixPsf,
@@ -1432,7 +1473,8 @@ def stage_fitblobs(T=None,
             nblobs = len(blobslices) - blob0
         keepblobs = np.arange(blob0, blob0+nblobs)
 
-    if keepblobs is not None:
+    # keepblobs can be None or empty list
+    if keepblobs is not None and len(keepblobs):
         # 'blobs' is an image with values -1 for no blob, or the index of the
         # blob.  Create a map from old 'blobs+1' to new 'blobs+1'.  +1  so that
         # -1 is a valid index.
@@ -1589,10 +1631,10 @@ def stage_fitblobs(T=None,
     ns,nb = BB.fracin.shape
     assert(ns == len(cat))
     assert(nb == len(bands))
-    ns,nb = BB.rchi2.shape
+    ns,nb = BB.rchisq.shape
     assert(ns == len(cat))
     assert(nb == len(bands))
-    ns,nb = BB.dchisqs.shape
+    ns,nb = BB.dchisq.shape
     assert(ns == len(cat))
     assert(nb == 5) # ptsrc, simple, dev, exp, comp
 
@@ -1632,11 +1674,11 @@ def stage_fitblobs(T=None,
     del iblob, oldblob
     blobs = None
 
-    T.brickid   = np.zeros(len(T), np.int32) + brickid
+    T.brickid = np.zeros(len(T), np.int32) + brickid
     T.brickname = np.array([brickname] * len(T))
     if len(T.brickname) == 0:
         T.brickname = T.brickname.astype('S8')
-    T.objid     = np.arange(len(T)).astype(np.int32)
+    T.objid = np.arange(len(T)).astype(np.int32)
 
     # How many sources in each blob?
     from collections import Counter
@@ -1645,30 +1687,12 @@ def stage_fitblobs(T=None,
     del ninblob
 
     # Copy blob results to table T
-    T.tycho2inblob = BB.hastycho
-    T.dchisq       = BB.dchisqs.astype(np.float32)
     T.left_blob    = np.logical_and(BB.started_in_blob,
                                     np.logical_not(BB.finished_in_blob))
-    for k in ['fracflux', 'fracin', 'fracmasked', 'rchi2', 'cpu_source',
+    for k in ['fracflux', 'fracin', 'fracmasked', 'rchisq', 'cpu_source',
               'cpu_blob', 'blob_width', 'blob_height', 'blob_npix',
-              'blob_nimages', 'blob_totalpix']:
+              'blob_nimages', 'blob_totalpix', 'dchisq', 'tycho2inblob']:
         T.set(k, BB.get(k))
-
-    # Compute MJD_MIN, MJD_MAX
-    T.mjd_min = np.empty(len(T), np.float64)
-    T.mjd_min[:] = np.inf
-    T.mjd_max = np.empty(len(T), np.float64)
-    T.mjd_max[:] = -np.inf
-    ra  = np.array([src.getPosition().ra  for src in cat])
-    dec = np.array([src.getPosition().dec for src in cat])
-    for tim in tims:
-        ok,x,y = tim.subwcs.radec2pixelxy(ra, dec)
-        x -= 1
-        y -= 1
-        I = np.flatnonzero(ok * (x >= 0.5) * (x <= W-0.5) *
-                           (y >= 0.5) * (y <= H-0.5))
-        T.mjd_min[I] = np.minimum(T.mjd_min[I], tim.time.toMjd())
-        T.mjd_max[I] = np.maximum(T.mjd_max[I], tim.time.toMjd())
 
     invvars = np.hstack(BB.srcinvvars)
     assert(cat.numberOfParams() == len(invvars))
@@ -1986,7 +2010,8 @@ def stage_coadds(survey=None, bands=None, version_header=None, targetwcs=None,
         del T_image_coadds
     ###
 
-    for c in ['nobs', 'anymask', 'allmask', 'psfsize', 'psfdepth', 'galdepth']:
+    for c in ['nobs', 'anymask', 'allmask', 'psfsize', 'psfdepth', 'galdepth',
+              'mjd_min', 'mjd_max']:
         T.set(c, C.T.get(c))
     # store galaxy sim bounding box in Tractor cat
     if 'sims_xy' in C.T.get_columns():
@@ -2224,7 +2249,7 @@ def stage_wise_forced(
                 print('"None" result from WISE forced phot:', tiles, band)
                 continue
             WISE.add_columns_from(p)
-        WISE.rename('tile', 'unwise_tile')
+        WISE.rename('tile', 'wise_coadd_id')
 
         # Look up mask bits
         ra  = np.array([src.getPosition().ra  for src in cat])
@@ -2404,55 +2429,48 @@ def stage_writecat(
                 name='WISEAB%i' % band, value=vega_to_ab['w%i' % band],
                 comment='WISE Vega to AB conv for band %i' % band))
 
-        T2.wise_coadd_id = WISE.unwise_tile
+        T2.wise_coadd_id = WISE.wise_coadd_id
+        T2.wise_mask = WISE.wise_mask
+
         for band in [1,2,3,4]:
             dm = vega_to_ab['w%i' % band]
             fluxfactor = 10.** (dm / -2.5)
             c = 'w%i_nanomaggies' % band
-            WISE.set(c, WISE.get(c) * fluxfactor)
+            flux = WISE.get(c) * fluxfactor
+            WISE.set(c, flux)
+            t = 'flux_w%i' % band
+            T2.set(t, flux)
             if WISE_T is not None and band <= 2:
-                WISE_T.set(c, WISE_T.get(c) * fluxfactor)
+                flux = WISE_T.get(c) * fluxfactor
+                WISE_T.set(c, flux)
+                t = 'lc_flux_w%i' % band
+                T2.set(t, flux)
+                
             c = 'w%i_nanomaggies_ivar' % band
-            WISE.set(c, WISE.get(c) / fluxfactor**2)
+            flux = WISE.get(c) / fluxfactor**2
+            WISE.set(c, flux)
+            t = 'flux_ivar_w%i' % band
+            T2.set(t, flux)
             if WISE_T is not None and band <= 2:
-                WISE_T.set(c, WISE_T.get(c) / fluxfactor**2)
+                flux = WISE_T.get(c) / fluxfactor**2
+                WISE_T.set(c, flux)
+                t = 'lc_flux_ivar_w%i' % band
+                T2.set(t, flux)
 
-        T2.wise_flux = np.vstack([
-            WISE.w1_nanomaggies, WISE.w2_nanomaggies,
-            WISE.w3_nanomaggies, WISE.w4_nanomaggies]).T
-        T2.wise_flux_ivar = np.vstack([
-            WISE.w1_nanomaggies_ivar, WISE.w2_nanomaggies_ivar,
-            WISE.w3_nanomaggies_ivar, WISE.w4_nanomaggies_ivar]).T
-        T2.wise_nobs = np.vstack([
-            WISE.w1_nexp, WISE.w2_nexp, WISE.w3_nexp, WISE.w4_nexp]).T
-        T2.wise_fracflux = np.vstack([
-            WISE.w1_profracflux,WISE.w2_profracflux,
-            WISE.w3_profracflux,WISE.w4_profracflux]).T
-        T2.wise_rchi2 = np.vstack([
-            WISE.w1_prochi2, WISE.w2_prochi2,
-            WISE.w3_prochi2, WISE.w4_prochi2]).T
+        # Rename some WISE columns
+        for cin,cout in [('w%i_nexp',        'nobs_w%i'),
+                         ('w%i_profracflux', 'fracflux_w%i'),
+                         ('w%i_prochi2',     'rchisq_w%i'),]:
+            for band in [1,2,3,4]:
+                T2.set(cout % band, WISE.get(cin % band))
 
-        T2.wise_mask = WISE.wise_mask
-        
         if WISE_T is not None:
-            T2.wise_lc_flux = np.hstack(
-                (WISE_T.w1_nanomaggies[:,np.newaxis,:],
-                 WISE_T.w2_nanomaggies[:,np.newaxis,:]))
-            T2.wise_lc_flux_ivar = np.hstack(
-                (WISE_T.w1_nanomaggies_ivar[:,np.newaxis,:],
-                 WISE_T.w2_nanomaggies_ivar[:,np.newaxis,:]))
-            T2.wise_lc_nobs = np.hstack(
-                (WISE_T.w1_nexp[:,np.newaxis,:],
-                 WISE_T.w2_nexp[:,np.newaxis,:]))
-            T2.wise_lc_fracflux = np.hstack(
-                (WISE_T.w1_profracflux[:,np.newaxis,:],
-                 WISE_T.w2_profracflux[:,np.newaxis,:]))
-            T2.wise_lc_rchi2 = np.hstack(
-                (WISE_T.w1_prochi2[:,np.newaxis,:],
-                 WISE_T.w2_prochi2[:,np.newaxis,:]))
-            T2.wise_lc_mjd = np.hstack(
-                (WISE_T.w1_mjd[:,np.newaxis,:],
-                 WISE_T.w2_mjd[:,np.newaxis,:]))
+            for cin,cout in [('w%i_nexp',        'lc_nobs_w%i'),
+                             ('w%i_profracflux', 'lc_fracflux_w%i'),
+                             ('w%i_prochi2',     'lc_rchisq_w%i'),
+                             ('w%i_mjd',         'lc_mjd_w%i'),]:
+                for band in [1,2]:
+                    T2.set(cout % band, WISE_T.get(cin % band))
             print('WISE light-curve shapes:', WISE_T.w1_nanomaggies.shape)
 
     with survey.write_output('tractor-intermediate', brick=brickname) as out:
@@ -2470,6 +2488,13 @@ def stage_writecat(
         format_catalog(T2, hdr, primhdr, allbands, None,
                        write_kwargs=dict(fits_object=out.fits))
 
+    # write fits file with galaxy-sim stuff (xy bounds of each sim)
+    if 'sims_xy' in T.get_columns(): 
+        sims_data = fits_table()
+        sims_data.sims_xy = T.sims_xy
+        with survey.write_output('galaxy-sims', brick=brickname) as out:
+            sims_data.writeto(None, fits_object=out.fits)
+
     # produce per-brick checksum file.
     with survey.write_output('checksums', brick=brickname, hashsum=False) as out:
         f = open(out.fn, 'w')
@@ -2477,13 +2502,6 @@ def stage_writecat(
         for fn,hashsum in survey.output_file_hashes.items():
             f.write('%s *%s\n' % (hashsum, fn))
         f.close()
-
-    # write fits file with galaxy-sim stuff (xy bounds of each sim)
-    if 'sims_xy' in T.get_columns(): 
-        sims_data = fits_table()
-        sims_data.sims_xy = T.sims_xy
-        with survey.write_output('galaxy-sims', brick=brickname) as out:
-            sims_data.writeto(None, fits_object=out.fits)
 
     record_event and record_event('stage_writecat: done')
 
@@ -2738,14 +2756,14 @@ def run_brick(brick, survey, radec=None, pixscale=0.262,
     if threads and threads > 1:
         # py3: imported TimingPool
         if sys.version_info[0] >= 3:
-            #from legacypipe.timingpool import TimingPool, TimingPoolMeas
-            from multiprocessing.pool import Pool
-            pool = Pool(processes=threads, initializer=runbrick_global_init, initargs=[])
+            from legacypipe.timingpool import TimingPool, TimingPoolMeas
+            #from multiprocessing.pool import Pool
+            #pool = Pool(processes=threads, initializer=runbrick_global_init, initargs=[])
         else:
             from astrometry.util.timingpool import TimingPool, TimingPoolMeas
-            pool = TimingPool(threads, initializer=runbrick_global_init,
-                              initargs=[])
-            Time.add_measurement(TimingPoolMeas(pool, pickleTraffic=False))
+        pool = TimingPool(threads, initializer=runbrick_global_init,
+                          initargs=[])
+        Time.add_measurement(TimingPoolMeas(pool, pickleTraffic=False))
         mp = MyMultiproc(None, pool=pool)
     else:
         mp = MyMultiproc(init=runbrick_global_init, initargs=[])
@@ -3123,11 +3141,17 @@ def main(args=None):
     else:
         print('Args:', args)
     print()
+    print('Slurm cluster:', os.environ.get('SLURM_CLUSTER_NAME', 'none'))
+    print('Job id:', os.environ.get('JOB_ID', 'none'))
+    print('Array task id:', os.environ.get('ARRAY_TASK_ID', 'none'))
+    print()
 
     parser = get_parser()
 
     parser.add_argument(
         '--ps', help='Run "ps" and write results to given filename?')
+    parser.add_argument(
+        '--ps-t0', type=int, default=0, help='Unix-time start for "--ps"')
 
     opt = parser.parse_args(args=args)
 
@@ -3137,8 +3161,9 @@ def main(args=None):
 
     optdict = vars(opt)
     ps_file = optdict.pop('ps', None)
+    ps_t0   = optdict.pop('ps_t0', 0)
     verbose = optdict.pop('verbose')
-    
+
     survey, kwargs = get_runbrick_kwargs(**optdict)
     if kwargs in [-1, 0]:
         return kwargs
@@ -3190,21 +3215,21 @@ def main(args=None):
         from legacypipe.utils import run_ps_thread
         ps_shutdown = threading.Event()
         ps_queue = deque()
-        ps_thread = threading.Thread(
-            target=run_ps_thread,
-            args=(os.getpid(), os.getppid(), ps_file, ps_shutdown, ps_queue),
-            name='run_ps')
-        # ps_thread.daemon = True
-        print('Starting thread to run "ps"')
-        ps_thread.start()
-
         def record_event(msg):
             from time import time
             ps_queue.append((time(), msg))
         kwargs.update(record_event=record_event)
+        if ps_t0 > 0:
+            record_event('start')
 
-    print('Got runbrick kwargs:', kwargs)
-        
+        ps_thread = threading.Thread(
+            target=run_ps_thread,
+            args=(os.getpid(), os.getppid(), ps_file, ps_shutdown, ps_queue),
+            name='run_ps')
+        ps_thread.daemon = True
+        print('Starting thread to run "ps"')
+        ps_thread.start()
+
     rtn = -1
     try:
         run_brick(opt.brick, survey, **kwargs)

@@ -529,16 +529,17 @@ def run_ps_thread(parent_pid, parent_ppid, fn, shutdown, event_queue):
         TT.append(T)
 
         #print('ps -- step', step)
-        if step % 12 == 0:
+        if (step % 12 == 0) and len(TT) > 0:
             # Write out results every ~ minute.
             print('ps -- writing', fn)
             T = merge_tables(TT, columns='fillzero')
             write_results(fn, T, events, fitshdr)
             TT = [T]
     # Just before returning, write out results.
-    print('ps -- writing', fn)
-    T = merge_tables(TT, columns='fillzero')
-    write_results(fn, T, events, fitshdr)
+    if len(TT) > 0:
+        print('ps -- writing', fn)
+        T = merge_tables(TT, columns='fillzero')
+        write_results(fn, T, events, fitshdr)
 
 
 if __name__ == '__main__':

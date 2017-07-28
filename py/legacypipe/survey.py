@@ -177,9 +177,6 @@ def get_version_header(program_name, survey_dir, git_version=None):
                         comment='Legacy Survey directory'))
     hdr.add_record(dict(name='DECALSDR', value='DR5',
                         comment='DECaLS release name'))
-    surveydir_ver = get_git_version(survey_dir)
-    hdr.add_record(dict(name='SURVEYDV', value=surveydir_ver,
-                        comment='legacypipe-dir git version'))
     hdr.add_record(dict(name='DECALSDT', value=datetime.datetime.now().isoformat(),
                         comment='%s run time' % program_name))
     hdr.add_record(dict(name='SURVEY', value='DECaLS',
@@ -204,6 +201,11 @@ def get_version_header(program_name, survey_dir, git_version=None):
                         comment='Machine where runbrick.py was run'))
     hdr.add_record(dict(name='NERSC', value=os.environ.get('NERSC_HOST', 'none'),
                         comment='NERSC machine where runbrick.py was run'))
+    hdr.add_record(dict(name='JOB_ID', value=os.environ.get('JOB_ID', 'none'),
+                        comment='SLURM job id'))
+    hdr.add_record(dict(name='ARRAY_ID', value=os.environ.get('ARRAY_TASK_ID', 'none'),
+                        comment='SLURM job array id'))
+
     return hdr
 
 class MyFITSHDR(fitsio.FITSHDR):
