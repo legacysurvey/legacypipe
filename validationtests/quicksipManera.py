@@ -11,8 +11,12 @@ import os, errno
 import subprocess
 twopi = 2.*pi
 piover2 = .5*pi
+verbose = False
 
 # ---------------------------------------------------------------------------------------- #
+def quicksipVerbose(verb=False):
+    global verbose
+    verbose=verb
 
 # Make directory
 def mkdir_p(path):
@@ -850,7 +854,7 @@ def makeHealTree(args):
     count = 0
     start = time.time()
     duration = 0
-    print '>', samplename, ': starting tree making'
+    if(verbose): print '>', samplename, ': starting tree making'
     for i, propertyArray in enumerate(tbdata):
         count += 1
         start_one = time.time()
@@ -860,11 +864,11 @@ def makeHealTree(args):
         end_one = time.time()
         duration += float(end_one - start_one)
         if count == verbcount:
-            print '>', samplename, ': processed images', i-verbcount+1, '-', i+1, '(on '+str(len(tbdata))+') in %.2f' % duration, 'sec (~ %.3f' % (duration/float(verbcount)), 'per image)'
+            if(verbose): print '>', samplename, ': processed images', i-verbcount+1, '-', i+1, '(on '+str(len(tbdata))+') in %.2f' % duration, 'sec (~ %.3f' % (duration/float(verbcount)), 'per image)'
             count = 0
             duration = 0
     end = time.time()
-    print '>', samplename, ': tree making took : %.2f' % float(end - start), 'sec for', len(tbdata), 'images'
+    if(verbose): print '>', samplename, ': tree making took : %.2f' % float(end - start), 'sec for', len(tbdata), 'images'
     return treemap
 
 def makeHealTree_simp(args):
@@ -875,7 +879,7 @@ def makeHealTree_simp(args):
     count = 0
     start = time.time()
     duration = 0
-    print '>', samplename, ': starting tree making'
+    if(verbose): print '>', samplename, ': starting tree making'
     for i, propertyArray in enumerate(tbdata):
         count += 1
         start_one = time.time()
@@ -883,11 +887,11 @@ def makeHealTree_simp(args):
         end_one = time.time()
         duration += float(end_one - start_one)
         if count == verbcount:
-            print '>', samplename, ': processed images', i-verbcount+1, '-', i+1, '(on '+str(len(tbdata))+') in %.2f' % duration, 'sec (~ %.3f' % (duration/float(verbcount)), 'per image)'
+            if(verbose): print '>', samplename, ': processed images', i-verbcount+1, '-', i+1, '(on '+str(len(tbdata))+') in %.2f' % duration, 'sec (~ %.3f' % (duration/float(verbcount)), 'per image)'
             count = 0
             duration = 0
     end = time.time()
-    print '>', samplename, ': tree making took : %.2f' % float(end - start), 'sec for', len(tbdata), 'images'
+    if(verbose): print '>', samplename, ': tree making took : %.2f' % float(end - start), 'sec for', len(tbdata), 'images'
     return treemap
 
 
@@ -948,7 +952,7 @@ class HealTree:
             end_one = time.time()
             duration += float(end_one - start_one)
             if count == verbcount:
-                print '>', property, weights, operation, ': processed pixels', i-verbcount+1, '-', i+1, '(on '+str(pixel.size)+') in %.1e' % duration, 'sec (~ %.1e' % (duration/float(verbcount)), 'per pixel)'
+                if(verbose): print '>', property, weights, operation, ': processed pixels', i-verbcount+1, '-', i+1, '(on '+str(pixel.size)+') in %.1e' % duration, 'sec (~ %.1e' % (duration/float(verbcount)), 'per pixel)'
                 count = 0
                 duration = 0
         end = time.time()
@@ -993,7 +997,7 @@ def addElemHealTree(args):
 def addElem(args):
     iarr, tbdatadtype, propertyArray, nside, propertiesToKeep, ratiores = args
     propertyArray.dtype = tbdatadtype
-    print 'Processing image', iarr, propertyArray['RA']
+    if(verbose): print 'Processing image', iarr, propertyArray['RA']
     # Retrieve pixel indices
     ipixels, weights, thetas_c, phis_c = computeHPXpix_sequ_new(nside, propertyArray, pixoffset=pixoffset, ratiores=ratiores)
     print 'Processing image', iarr, thetas_c, phis_c
