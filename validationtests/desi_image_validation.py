@@ -240,7 +240,7 @@ def val3p4c_depthfromIvar(sample):
 	        ral.append(ra)
 	        decl.append(dec)
 
-    npix=len(f)
+    npix=len(pix)
 
     print 'Area is ', npix/(float(nside)**2.*12)*360*360./pi, ' sq. deg.'
     print  below, 'of ', npix, ' pixels are not plotted as their ', mylabel,' < ', vmin
@@ -550,7 +550,8 @@ def v5p1e_photometricReqPlot(sample):
              if(myreq[ipix] == 0): myreq[ipix]=-1
 
     below=sum( x for x in myreq if x < 0) 
-    print 'Number of udegrade pixels with ', mylabel,' < ', phreq, ' for all subpixels =', below
+    below=-below
+    print 'Number of udegrade pixels with ', mylabel,' > ', phreq, ' for all subpixels =', below
     print 'nside of udgraded pixels is : ', nside2
 
     # get ra dec for nside2 (not needed) 
