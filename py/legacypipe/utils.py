@@ -542,6 +542,46 @@ def run_ps_thread(parent_pid, parent_ppid, fn, shutdown, event_queue):
         write_results(fn, T, events, fitshdr)
 
 
+
+'''
+This is a minor bug-fix replacement for the astrometry.net code in util/miscutils.py
+Used in stage_wise_forced
+'''
+def line_segments_intersect(xy1, xy2, xy3, xy4):
+    from astrometry.util.miscutils import line_intersection
+    '''
+    Determines whether the two given line segments intersect;
+    (x1,y1) to (x2,y2)
+    and
+    (x3,y3) to (x4,y4)
+    '''
+    (x1,y1) = xy1
+    (x2,y2) = xy2
+    (x3,y3) = xy3
+    (x4,y4) = xy4
+    x,y = line_intersection((x1,y1),(x2,y2),(x3,y3),(x4,y4))
+    if x is None:
+        # Parallel lines
+        return False
+    if x1 == x2:
+        p1,p2 = y1,y2
+        p = y
+    else:
+        p1,p2 = x1,x2
+        p = x
+    if not ((p >= min(p1,p2)) and (p <= max(p1,p2))):
+        return False
+    if x3 == x4:
+        p1,p2 = y3,y4
+        p = y
+    else:
+        p1,p2 = x3,x4
+        p = x
+    if not ((p >= min(p1,p2)) and (p <= max(p1,p2))):
+        return False
+    return (x,y)
+
+
 if __name__ == '__main__':
     ep1 = ellipse_with_priors_factory(0.25)
     ep2 = ellipse_with_priors_factory(0.1)

@@ -2176,6 +2176,11 @@ def stage_wise_forced(
     '''
     from wise.forcedphot import unwise_tiles_touching_wcs
 
+    # Override one function in astrometry.net with a bug-fixed version.
+    import legacypipe.utils
+    import astrometry.util.miscutils
+    astrometry.util.miscutils.line_segments_intersect = legacypipe.utils.line_segments_intersect
+
     record_event and record_event('stage_wise_forced: starting')
 
     # Here we assume the targetwcs is axis-aligned and that the

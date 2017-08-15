@@ -409,13 +409,6 @@ def val3p4b_maghist_pred(sample,ndraw=1e5, nbin=100, vmin=21.0, vmax=25.0):
     return fname 
 
 
-
-# -------------------------------------------------------------------
-# -------------------------------------------------------------------
-#         OLD STUFF IT WILL BE EDITED OUT by Marc 
-# -------------------------------------------------------------------
-
-
 def v5p1e_photometricReqPlot(sample):
     """
     No region > 3deg will be based upon non-photometric observations
@@ -554,26 +547,152 @@ def v5p1e_photometricReqPlot(sample):
     print 'Number of udegrade pixels with ', mylabel,' > ', phreq, ' for all subpixels =', below
     print 'nside of udgraded pixels is : ', nside2
 
-    # get ra dec for nside2 (not needed) 
-    #for i in range(0,len(myreq)):
-    #    th,phi = hp.pix2ang(int(nside2),pix[i])
-    #    ra,dec = thphi2radec(th,phi)
-    #    ral[i] = ra
-    #    decl[i] = dec
-           
-    # Convert this plot into a healpix plot if necessary, then return two paths to the two plots  
-    #vmin = min(myreq)
-    #vmax = max(myreq) 
-    #map = plt.scatter(ral,decl,c=myreq, cmap=cm.rainbow,s=5., vmin=vmin, vmax=vmax, lw=0,edgecolors='none')
-    #cbar = plt.colorbar(map)
-    #plt.xlabel('r.a. (degrees)')
-    #plt.ylabel('declination (degrees)')
-    #plt.title('Map of '+ mylabel +' for '+catalogue_name+' '+band+'-band')
-    #plt.xlim(0,360)
-    #plt.ylim(-30,90)
-    #plt.savefig(localdir+mylabel+'_'+band+'_'+catalogue_name+str(nside)+'.png')
-    #plt.close()
-
     return fname 
 
 
+def v3p5_Areas(sample1,sample2):
+    """
+    450 sq deg overlap between all instruments (R3.5) 
+    14000 sq deg filled  (R3.1) 
+
+    MARCM
+    Uses healpix pixels projected from ccd to count standing, join and overlap areas 
+    Produces a map of the overlap     
+    It can be extended to 3 samples if necessary 
+    """
+
+    nside = 1024       # Resolution of output maps
+    nsideSTR = '1024'  # String value for nside
+    nsidesout = None   # if you want full sky degraded maps to be written
+    ratiores = 1       # Superresolution/oversampling ratio, simp mode doesn't allow anything other than 1
+    oversamp = '1'      # string oversaple value
+    mode = 1           # 1: fully sequential, 2: parallel then sequential, 3: fully parallel
+    
+    pixoffset = 0      # How many pixels are being removed on the edge of each CCD
+    mjdw = ''
+ 
+    # ----- sample1 ------ 
+    tbdata = pyfits.open(sample1.ccds)[1].data
+    if(sample1.DR == 'DR3'):
+        inds = np.where((tbdata['filter'] == sample1.band) & (tbdata['blacklist_ok'] == True)) 
+    if(sample1.DR == 'DR4'):    
+        inds = np.where((tbdata['filter'] == sample1.band) & (tbdata['bitmask'] == 0)) 
+
+    #number of ccds at each point 
+    nccd1=np.ones(len(tbdata))
+    catalogue_name=sample1.catalog
+    band = sample1.band
+    sample_names = ['band_'+band]
+    localdir=sample1.localdir
+
+    # What properties do you want mapped?
+    # Each each tuple has [(quantity to be projected, weighting scheme, operation),(etc..)] 
+    quicksipVerbose(sample1.verbose)
+    propertiesandoperations = [('nccd1','','total')]
+ 
+    # What properties to keep when reading the images? 
+    #Should at least contain propertiesandoperations and the image corners.
+    # MARCM - actually no need for ra dec image corners.   
+    # Only needs ra0 ra1 ra2 ra3 dec0 dec1 dec2 dec3 only if fast track appropriate quicksip subroutines were implemented 
+    #propertiesToKeep = [ 'filter', 'AIRMASS', 'FWHM','mjd_obs'] \
+    #	+ ['RA', 'DEC', 'crval1', 'crval2', 'crpix1', 'crpix2', 'cd1_1', 'cd1_2', 'cd2_1', 'cd2_2','width','height']
+    propertiesToKeep = ['RA', 'DEC', 'crval1', 'crval2', 'crpix1', 'crpix2', 'cd1_1', 'cd1_2', 'cd2_1', 'cd2_2','width','height']
+       
+    # Create big table with all relevant properties. 
+    tbdata = np.core.records.fromarrays([tbdata[prop] for prop in propertiesToKeep] + [nccd1], names = propertiesToKeep + [ 'nccd1'])
+    
+    # Read the table, create Healtree, project it into healpix maps, and write these maps.
+    # Done with Quicksip library, note it has quite a few hardcoded values (use new version by MARCM for BASS and MzLS) 
+    # project_and_write_maps_simp(mode, propertiesandoperations, tbdata, catalogue_name, outroot, sample_names, inds, nside)
+    project_and_write_maps(mode, propertiesandoperations, tbdata, catalogue_name, localdir, sample_names, inds, nside, ratiores, pixoffset, nsidesout)
+ 
+    # ----- sample2 ------ 
+    tbdata = pyfits.open(sample2.ccds)[1].data
+    if(sample2.DR == 'DR3'):
+        inds = np.where((tbdata['filter'] == sample2.band) & (tbdata['blacklist_ok'] == True)) 
+    if(sample2.DR == 'DR4'):    
+        inds = np.where((tbdata['filter'] == sample2.band) & (tbdata['bitmask'] == 0)) 
+
+    #number of ccds at each point 
+    nccd2=np.ones(len(tbdata))
+    catalogue_name=sample2.catalog
+    band = sample2.band
+    sample_names = ['band_'+band]
+    localdir=sample2.localdir
+
+    # Quick sip projections 
+    quicksipVerbose(sample2.verbose)
+    propertiesandoperations = [('nccd2','','total')]
+    propertiesToKeep = ['RA', 'DEC', 'crval1', 'crval2', 'crpix1', 'crpix2', 'cd1_1', 'cd1_2', 'cd2_1', 'cd2_2','width','height']
+    tbdata = np.core.records.fromarrays([tbdata[prop] for prop in propertiesToKeep] + [nccd2], names = propertiesToKeep + [ 'nccd2'])
+    project_and_write_maps(mode, propertiesandoperations, tbdata, catalogue_name, localdir, sample_names, inds, nside, ratiores, pixoffset, nsidesout)
+ 
+    # --- read ccd counts per pixel sample 1 ----
+    prop='nccd1'
+    op='total'
+    localdir=sample1.localdir
+    band=sample1.band
+    catalogue_name1=sample1.catalog
+    
+    fname=localdir+catalogue_name1+'/nside'+nsideSTR+'_oversamp'+oversamp+'/'+catalogue_name1+'_band_'+band+'_nside'+nsideSTR+'_oversamp'+oversamp+'_'+prop+'__'+op+'.fits.gz'
+    f = fitsio.read(fname)
+
+    val1 = f['SIGNAL']
+    pix1 = f['PIXEL']
+    npix1 = np.size(pix1)
+    
+    # ---- read ccd counts per pixel sample 2 ----
+    prop='nccd2'
+    opt='total'
+    localdir=sample2.localdir
+    band=sample2.band
+    catalogue_name2=sample2.catalog
+    
+    fname=localdir+catalogue_name2+'/nside'+nsideSTR+'_oversamp'+oversamp+'/'+catalogue_name2+'_band_'+band+'_nside'+nsideSTR+'_oversamp'+oversamp+'_'+prop+'__'+op+'.fits.gz'
+    f = fitsio.read(fname)
+    
+    val2 = f['SIGNAL']
+    pix2 = f['PIXEL']
+    npix2 = np.size(pix2)
+    
+    # ---- compute common healpix pixels               #this is python 2.7 use isin for 3.X
+    commonpix = np.in1d(pix1,pix2,assume_unique=True)  #unique: no pixel indicies are repeated
+    npix=np.sum(commonpix)                             #sum of bolean in array size pix1 
+    
+    area1 = npix1/(float(nside)**2.*12)*360*360./pi
+    area2 = npix2/(float(nside)**2.*12)*360*360./pi
+    area  = npix/(float(nside)**2.*12)*360*360./pi
+    print 'Area of sample', sample1.catalog,' is ', np.round(area1) , ' sq. deg.'
+    print 'Area of sample', sample2.catalog,' is ', np.round(area2) , ' sq. deg.'
+    print 'The total JOINT area is ', np.round(area1+area2-area) ,'sq. deg.'
+    print 'The INTERSECTING area is ', np.round(area) , ' sq. deg.'
+   
+
+
+    # ----- plot join area using infomration from sample1 --- 
+    ral = []
+    decl = []
+    myval = []
+    for i in range(0,len(pix1)):
+        if(commonpix[i]): 
+           th,phi = hp.pix2ang(int(nside),pix1[i])
+           ra,dec = thphi2radec(th,phi)
+           ral.append(ra)
+           decl.append(dec) 
+           myval.append(1) 
+      
+    mylabel = 'join-area' 
+    import matplotlib.cm as cm
+    map = plt.scatter(ral,decl,c=myval, cmap=cm.rainbow,s=2.,lw=0,edgecolors='none')
+    
+    fname = localdir+mylabel+'_'+band+'_'+catalogue_name1+'_'+catalogue_name2+str(nside)+'.png'
+    cbar = plt.colorbar(map)
+    plt.xlabel('r.a. (degrees)')
+    plt.ylabel('declination (degrees)')
+    plt.title('Map of '+ mylabel +' for '+catalogue_name1+' and '+catalogue_name2+' '+band+'-band; Area = '+str(area))
+    plt.xlim(0,360)
+    plt.ylim(-30,90)
+    plt.savefig(fname)
+    plt.close()
+
+    return fname

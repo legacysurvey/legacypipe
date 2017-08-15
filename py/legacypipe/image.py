@@ -332,7 +332,7 @@ class LegacySurveyImage(object):
         # Galaxy-detection norm
         tim.galnorm = self.galaxy_norm(tim)
         print('Galaxy norm', tim.galnorm)
-        assert(tim.galnorm < tim.psfnorm)
+        # assert(tim.galnorm < tim.psfnorm)
         tim.psf = fullpsf
 
         # CP (DECam) images include DATE-OBS and MJD-OBS, in UTC.
@@ -414,10 +414,11 @@ class LegacySurveyImage(object):
         psf = tim.psf
         h,w = tim.shape
         if x is None:
-            x = w/2.
+            x = w//2
         if y is None:
-            y = h/2.
+            y = h//2
         patch = psf.getPointSourcePatch(x, y).patch
+        print('PSF model shape', patch.shape)
         # Clamp up to zero and normalize before taking the norm
         patch = np.maximum(0, patch)
         patch /= patch.sum()
@@ -440,6 +441,7 @@ class LegacySurveyImage(object):
         S = 32
         mm = ModelMask(int(x-S), int(y-S), 2*S+1, 2*S+1)
         galmod = gal.getModelPatch(tim, modelMask=mm).patch
+        print('Galaxy model shape', galmod.shape)
         galmod = np.maximum(0, galmod)
         galmod /= galmod.sum()
         galnorm = np.sqrt(np.sum(galmod**2))
