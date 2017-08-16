@@ -48,52 +48,34 @@ targetwcs = Tan(ra, dec, W/2.+0.5, H/2.+0.5, -pixsc, 0., 0., pixsc,
                 float(W), float(H))
 II = np.lexsort((T.dist, T.passnum))
 
-plot = Plotstuff(outformat='pdf', ra=ra, dec=dec, width=W*pixsc)
-plot.outfn = 'test.pdf'
-plot.size=(W,H)
-print('write')
-plot.color = 'black'
-plot.alpha = 1.
-plot.plot('fill')
-plot.write()
-print('wrote')
+# This is for making the (vector) PDF format tiling images.
+for maxit in [0, 6, 30, 31, 37, 61, 62, 68, 90]:
+    #mx = { 1: 2, 2: 4, 3: 6 }[t.passnum]
+    plot = Plotstuff(outformat='pdf', ra=ra, dec=dec, width=W*pixsc,
+                     size=(W,H), outfn='tile-%02i.pdf' % maxit)
+    plot.color = 'white'
+    plot.alpha = 1.
+    plot.plot('fill')
 
+    out = plot.outline
+    out.fill = True
+    out.stepsize = 1024.
+    plot.color = 'black'
+    plot.alpha = 0.4
+    plot.apply_settings()
 
+    for it,t in enumerate(T[II]):
+        print('Tile', it, 'pass', t.passnum)
+        for w in wcs:
+            w.set_crval((t.ra, t.dec))
+            out.wcs = anwcs_new_sip(w)
+            plot.plot('outline')
+        if it == maxit:
+            print('Writing', it)
+            plot.write()
+            break
 
-#plot = Plotstuff(outformat='png', ra=ra, dec=dec, width=W*pixsc, size=(W,H))
-#plot.wcs = targetwcs
-plot.color = 'white'
-plot.alpha = 1.
-plot.apply_settings()
-plot.plot('fill')
-
-out = plot.outline
-out.fill = True
-plot.color = 'black'
-plot.alpha = 0.2
-#plot.pargs.op = CAIRO_OPERATOR_ADD
-plot.apply_settings()
-
-plot.write('test.pdf')
-
-for it,t in enumerate(T[II]):
-    print('Tile', it, 'pass', t.passnum)
-    for w in wcs:
-        w.set_crval((t.ra, t.dec))
-        out.wcs = anwcs_new_sip(w)
-        plot.plot('outline')
-
-    print('Writing', it)
-    plot.write('tile-%02i.pdf' % it)
-    #plot.write('tile-%02i.png' % it)
-        
-    # if it in [0, 6, 30, 31, 37, 61, 62, 68, 90]:
-    #     mx = { 1: 2, 2: 4, 3: 6 }[t.passnum]
-    #     plot.write('tile-%02i.pdf' % it)
-
-sys.exit(0)
-        
-
+# And this is for PNG-format tiling images and histograms.
 cov = np.zeros((H,W), np.uint8)
 for it,t in enumerate(T[II]):
     print('Tile', it, 'pass', t.passnum)
