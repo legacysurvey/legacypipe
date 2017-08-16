@@ -4,9 +4,15 @@ from astrometry.util.util import wcs_pv2sip_hdr, Tan
 from astrometry.util.resample import *
 from astrometry.libkd.spherematch import match_radec
 from astrometry.util.plotutils import *
+import matplotlib
+matplotlib.rc('text', usetex=True)
+matplotlib.rc('font', family='serif')
 import pylab as plt
 import numpy as np
 import fitsio
+
+from astrometry.blind.plotstuff import *
+from astrometry.util.util import anwcs_new_sip
 
 '''
 cp ~/cosmo/staging/decam/DECam_CP/CP20170731/c4d_170801_080516_oki_g_v1.fits.fz /tmp
@@ -15,6 +21,9 @@ fitsgetext -i /tmp/c4d_170801_080516_oki_g_v1.fits -o decam-%02i.wcs -a -H
 cat decam-??.wcs > decam.wcs
 for ((i=1; i<=61; i++)); do modhead decam.wcs+$i NAXIS2 0; done
 '''
+
+plt.figure(figsize=(4,3))
+plt.subplots_adjust(left=0.15, right=0.99, top=0.99, bottom=0.15)
 
 T = fits_table('obstatus/decam-tiles_obstatus.fits')
 T.rename('pass', 'passnum')
@@ -37,6 +46,39 @@ pixsc = 4./3600.
 targetwcs = Tan(ra, dec, W/2.+0.5, H/2.+0.5, -pixsc, 0., 0., pixsc,
                 float(W), float(H))
 II = np.lexsort((T.dist, T.passnum))
+
+plot = Plotstuff(outformat='pdf', ra=ra, dec=dec, width=W*pixsc, size=(W,H))
+#plot = Plotstuff(outformat='png', ra=ra, dec=dec, width=W*pixsc, size=(W,H))
+#plot.wcs = targetwcs
+plot.color = 'white'
+plot.alpha = 1.
+plot.apply_settings()
+plot.plot('fill')
+out = plot.outline
+out.fill = True
+plot.color = 'black'
+plot.alpha = 0.2
+#plot.pargs.op = CAIRO_OPERATOR_ADD
+plot.apply_settings()
+
+for it,t in enumerate(T[II]):
+    print('Tile', it, 'pass', t.passnum)
+    for w in wcs:
+        w.set_crval((t.ra, t.dec))
+        out.wcs = anwcs_new_sip(w)
+        plot.plot('outline')
+
+    print('Writing', it)
+    plot.write('tile-%02i.pdf' % it)
+    #plot.write('tile-%02i.png' % it)
+        
+    # if it in [0, 6, 30, 31, 37, 61, 62, 68, 90]:
+    #     mx = { 1: 2, 2: 4, 3: 6 }[t.passnum]
+    #     plot.write('tile-%02i.pdf' % it)
+
+sys.exit(0)
+        
+
 cov = np.zeros((H,W), np.uint8)
 for it,t in enumerate(T[II]):
     print('Tile', it, 'pass', t.passnum)
@@ -59,6 +101,7 @@ for it,t in enumerate(T[II]):
         # plt.savefig('tile-%02i.png' % it) 
 
         plt.imsave('tile-%02i.png' % it, cov, origin='lower', vmin=0, vmax=mx, cmap=antigray)
+        #plt.imsave('tile-%02i.pdf' % it, cov, origin='lower', vmin=0, vmax=mx, cmap=antigray, format='pdf')
 
     if it in [30, 61, 90]:
         from collections import Counter
@@ -77,18 +120,19 @@ for it,t in enumerate(T[II]):
                 if nc != ni:
                     if nc > ni+0.03:
                         # If there's room, label the histogram bin above, else below
-                        plt.text((blo+bhi)/2., ni, '%.1f %%' % (100.*ni), ha='center', va='bottom', color='k')
+                        plt.text((blo+bhi)/2., ni, '%.1f \%%' % (100.*ni), ha='center', va='bottom', color='k')
                     else:
-                        plt.text((blo+bhi)/2., ni-0.01, '%.1f %%' % (100.*ni), ha='center', va='top', color='k')
-                plt.text((blo+bhi)/2., nc, '%.1f %%' % (100.*nc), ha='center', va='bottom', color='k')
+                        plt.text((blo+bhi)/2., ni-0.01, '%.1f \%%' % (100.*ni), ha='center', va='top', color='k')
+                plt.text((blo+bhi)/2., nc, '%.1f \%%' % (100.*nc), ha='center', va='bottom', color='k')
 
         plt.plot(xx, yy, 'k-')
 
         plt.xlim(bins.min(), bins.max())
-        plt.ylim(0., 1.05)
+        plt.ylim(0., 1.1)
         plt.xlabel('Number of exposures')
         plt.ylabel('Fraction of sky')
-        plt.title('DECaLS tiling, %i pass%s' % (t.passnum, t.passnum > 1 and 'es' or ''))
-        plt.savefig('hist-%02i.png' % it)
+        #plt.title('DECaLS tiling, %i pass%s' % (t.passnum, t.passnum > 1 and 'es' or ''))
+        #plt.savefig('hist-%02i.png' % it)
+        plt.savefig('hist-%02i.pdf' % it)
         
         
