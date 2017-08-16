@@ -1,16 +1,17 @@
 from __future__ import print_function
-from astrometry.util.fits import *
-from astrometry.util.util import wcs_pv2sip_hdr, Tan
-from astrometry.util.resample import *
-from astrometry.libkd.spherematch import match_radec
-from astrometry.util.plotutils import *
 import matplotlib
+matplotlib.use('Agg')
 matplotlib.rc('text', usetex=True)
 matplotlib.rc('font', family='serif')
 import pylab as plt
 import numpy as np
 import fitsio
 
+from astrometry.util.fits import *
+from astrometry.util.util import wcs_pv2sip_hdr, Tan
+from astrometry.util.resample import *
+from astrometry.libkd.spherematch import match_radec
+from astrometry.util.plotutils import *
 from astrometry.blind.plotstuff import *
 from astrometry.util.util import anwcs_new_sip
 
@@ -47,19 +48,33 @@ targetwcs = Tan(ra, dec, W/2.+0.5, H/2.+0.5, -pixsc, 0., 0., pixsc,
                 float(W), float(H))
 II = np.lexsort((T.dist, T.passnum))
 
-plot = Plotstuff(outformat='pdf', ra=ra, dec=dec, width=W*pixsc, size=(W,H))
+plot = Plotstuff(outformat='pdf', ra=ra, dec=dec, width=W*pixsc)
+plot.outfn = 'test.pdf'
+plot.size=(W,H)
+print('write')
+plot.color = 'black'
+plot.alpha = 1.
+plot.plot('fill')
+plot.write()
+print('wrote')
+
+
+
 #plot = Plotstuff(outformat='png', ra=ra, dec=dec, width=W*pixsc, size=(W,H))
 #plot.wcs = targetwcs
 plot.color = 'white'
 plot.alpha = 1.
 plot.apply_settings()
 plot.plot('fill')
+
 out = plot.outline
 out.fill = True
 plot.color = 'black'
 plot.alpha = 0.2
 #plot.pargs.op = CAIRO_OPERATOR_ADD
 plot.apply_settings()
+
+plot.write('test.pdf')
 
 for it,t in enumerate(T[II]):
     print('Tile', it, 'pass', t.passnum)
