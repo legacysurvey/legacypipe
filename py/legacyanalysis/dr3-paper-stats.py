@@ -1,0 +1,98 @@
+from __future__ import print_function
+import matplotlib
+matplotlib.use('Agg')
+matplotlib.rc('text', usetex=True)
+matplotlib.rc('font', family='serif')
+import pylab as plt
+import numpy as np
+from astrometry.util.fits import *
+import fitsio
+
+T1 = fits_table('ccds-annotated-decals.fits.gz')
+T2 = fits_table('ccds-annotated-extra.fits.gz')
+T3 = fits_table('ccds-annotated-nondecals.fits.gz')
+
+T = merge_tables([T1,T2,T3], columns='fillzero')
+print(len(T), 'CCDs')
+T.cut(T.photometric)
+T.cut(T.blacklist_ok)
+print(len(T), 'good CCDs')
+
+E = T[np.unique(T.expnum, return_index=True)[1]]
+print(len(E), 'exposures')
+
+D = E[E.propid == '2014B-0404']
+print(len(D), 'DECaLS exposures')
+
+ND = E[E.propid != '2014B-0404']
+print(len(ND), 'Non-DECaLS exposures')
+
+dates = np.unique(D.date_obs)
+print('DECaLS date range:', dates[0], dates[-1])
+print('DECaLS expnum range:', D.expnum.min(), D.expnum.max())
+lastexp = D.expnum.max()
+
+obs = fits_table('obstatus/decam-tiles_obstatus.fits')
+print(len(obs), 'tiles')
+obs.cut((obs.in_desi == 1) * (obs.in_des == 0))
+print(len(obs), 'tiles in DESI and in DES')
+print(obs.dec.max(), 'max Dec')
+print(obs.dec.min(), 'min Dec')
+
+print(np.sum((obs.g_done == 1) * (obs.g_expnum > 0) * (obs.g_expnum <= lastexp)), 'g tiles done as of DR3')
+print(np.sum((obs.r_done == 1) * (obs.r_expnum > 0) * (obs.r_expnum <= lastexp)), 'r tiles done as of DR3')
+print(np.sum((obs.z_done == 1) * (obs.z_expnum > 0) * (obs.z_expnum <= lastexp)), 'z tiles done as of DR3')
+
+print('Svn rev 1188 tiles:')
+obs = fits_table('decam-tiles_obstatus-2016-03-02.fits')
+
+obs.plotra = obs.ra + (-360 * (obs.ra > 300))
+
+print(len(obs), 'tiles')
+desobs = obs[(obs.in_desi == 1) * (obs.in_des == 1)]
+obs.cut((obs.in_desi == 1) * (obs.in_des == 0))
+print(len(obs), 'tiles in DESI and in DES')
+print(obs.dec.max(), 'max Dec')
+print(obs.dec.min(), 'min Dec')
+obs.cut(obs.dec < 35.)
+print(len(obs), 'with Dec < 35')
+print(obs.dec.max(), 'max Dec')
+print(np.sum((obs.g_done == 1) * (obs.g_expnum > 0) * (obs.g_expnum <= lastexp)), 'g tiles done as of DR3')
+print(np.sum((obs.r_done == 1) * (obs.r_expnum > 0) * (obs.r_expnum <= lastexp)), 'r tiles done as of DR3')
+print(np.sum((obs.z_done == 1) * (obs.z_expnum > 0) * (obs.z_expnum <= lastexp)), 'z tiles done as of DR3')
+
+print('Largest expnum listed:', max([obs.g_expnum.max(), obs.r_expnum.max(), obs.z_expnum.max()]))
+
+plt.figure(figsize=(4,3))
+plt.subplots_adjust(left=0.15, bottom=0.15, right=0.99, top=0.99)
+
+for passnum in [1,2,3,4]:
+    for band in 'grz':
+        pn = min(3, passnum)
+
+        I = np.flatnonzero(obs.get('pass') == pn)
+        plt.clf()
+        plt.plot(obs.plotra[I], obs.dec[I], 'o', color='k', alpha=0.2,
+                 mec='none', mfc='k', ms=2, label='All tiles')
+        I = np.flatnonzero(desobs.get('pass') == pn)
+        plt.plot(desobs.plotra[I], desobs.dec[I], 'o', color='k', alpha=0.8,
+                 mec='none', mfc='k', ms=2, label='Tiles in DES')
+
+        if passnum < 4:
+            I = np.flatnonzero((obs.get('pass') == passnum) *
+                               (obs.get('%s_done' % band) == 1))
+            plt.plot(obs.plotra[I], obs.dec[I], 'o', mec='k', mfc='k', ms=4,
+                     label='Tiles finished (%s pass %i)' % (band, passnum))
+        else:
+            plt.plot(ND.ra_bore, ND.dec_bore, 'o', mec='k', mfc='k', ms=4,
+                     label='Non-DECaLS %s' % band)
+                
+        plt.xlabel('RA (deg)')
+        plt.ylabel('Dec (deg)')
+        #plt.axis([360,0,-22,36])
+        #plt.xticks(np.arange(0, 361, 60))
+        xt = np.arange(-60, 361, 60)
+        plt.xticks(xt, ['%i' % ((x + 360)%360) for x in xt])
+        plt.axis([300,-60,-22,36])
+        plt.legend(loc='lower left')
+        plt.savefig('done-%s-%i.pdf' % (band, passnum))
