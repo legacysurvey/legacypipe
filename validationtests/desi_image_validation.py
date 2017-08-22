@@ -696,3 +696,374 @@ def v3p5_Areas(sample1,sample2):
     plt.close()
 
     return fname
+
+def val3p4c_seeing(sample,passmin=3,nbin=100,nside=1024):    
+    """
+       Requirement V4.1: z-band image quality will be smaller than 1.3 arcsec FWHM in at least one pass.
+       
+       Produces FWHM maps and histograms for visual inspection
+    
+       H-JS's addition to MARCM stable version.
+       MARCM stable version, improved from AJR quick hack 
+       This now included extinction from the exposures
+       Uses quicksip subroutines from Boris, corrected 
+       for a bug I found for BASS and MzLS ccd orientation
+    """
+    #nside = 1024       # Resolution of output maps
+    nsideSTR=str(nside)
+    #nsideSTR='1024'    # same as nside but in string format
+    nsidesout = None   # if you want full sky degraded maps to be written
+    ratiores = 1       # Superresolution/oversampling ratio, simp mode doesn't allow anything other than 1
+    mode = 1           # 1: fully sequential, 2: parallel then sequential, 3: fully parallel
+    pixoffset = 0      # How many pixels are being removed on the edge of each CCD? 15 for DES.
+    oversamp='1'       # ratiores in string format
+    
+    band = sample.band
+    catalogue_name = sample.catalog
+    fname = sample.ccds    
+    localdir = sample.localdir
+    extc = sample.extc
+
+    #Read ccd file 
+    tbdata = pyfits.open(fname)[1].data
+    
+    # ------------------------------------------------------
+    # Obtain indices
+    auxstr='band_'+band
+    sample_names = [auxstr]
+    if(sample.DR == 'DR3'):
+        inds = np.where((tbdata['filter'] == band) & (tbdata['photometric'] == True) & (tbdata['blacklist_ok'] == True))
+    elif(sample.DR == 'DR4'):
+        inds = np.where((tbdata['filter'] == band) & (tbdata['photometric'] == True) & (tbdata['bitmask'] == 0))
+
+    #Read data 
+    #obtain invnoisesq here, including extinction 
+    nmag = Magtonanomaggies(tbdata['galdepth']-extc*tbdata['EBV'])/5.
+    ivar= 1./nmag**2.
+
+    # What properties do you want mapped?
+    # Each each tuple has [(quantity to be projected, weighting scheme, operation),(etc..)] 
+    propertiesandoperations = [
+    ('FWHM', '', 'min'),
+    ('FWHM', '', 'num')]
+
+    # What properties to keep when reading the images? 
+    # Should at least contain propertiesandoperations and the image corners.
+    # MARCM - actually no need for ra dec image corners.   
+    # Only needs ra0 ra1 ra2 ra3 dec0 dec1 dec2 dec3 only if fast track appropriate quicksip subroutines were implemented 
+    propertiesToKeep = [ 'filter', 'AIRMASS', 'FWHM','mjd_obs'] \
+        + ['RA', 'DEC', 'crval1', 'crval2', 'crpix1', 'crpix2', 'cd1_1', 'cd1_2', 'cd2_1', 'cd2_2','width','height']
+
+    # Create big table with all relevant properties. 
+
+    #tbdata = np.core.records.fromarrays([tbdata[prop] for prop in propertiesToKeep] + [ivar], names = propertiesToKeep + [ 'ivar'])
+    tbdata = np.core.records.fromarrays([tbdata[prop] for prop in propertiesToKeep], names = propertiesToKeep)
+
+    # Read the table, create Healtree, project it into healpix maps, and write these maps.
+    # Done with Quicksip library, note it has quite a few hardcoded values (use new version by MARCM for BASS and MzLS) 
+    # project_and_write_maps_simp(mode, propertiesandoperations, tbdata, catalogue_name, outroot, sample_names, inds, nside)
+    project_and_write_maps(mode, propertiesandoperations, tbdata, catalogue_name, localdir, sample_names, inds, nside, ratiores, pixoffset, nsidesout)
+
+      # Read Haelpix maps from quicksip  
+    prop='FWHM'
+    op='min'
+    vmin=21.0
+    vmax=24.0
+
+    fname2=localdir+catalogue_name+'/nside'+nsideSTR+'_oversamp'+oversamp+'/'+\
+           catalogue_name+'_band_'+band+'_nside'+nsideSTR+'_oversamp'+oversamp+'_'+prop+'__'+op+'.fits.gz'
+    f = fitsio.read(fname2)
+
+    prop='FWHM'
+    op1='num'
+
+    fname2=localdir+catalogue_name+'/nside'+nsideSTR+'_oversamp'+oversamp+'/'+\
+           catalogue_name+'_band_'+band+'_nside'+nsideSTR+'_oversamp'+oversamp+'_'+prop+'__'+op1+'.fits.gz'
+    f1 = fitsio.read(fname2)
+    # HEALPIX DEPTH MAPS 
+    # convert ivar to depth 
+    import healpy as hp
+    from healpix import pix2ang_ring,thphi2radec
+
+    ral = []
+    decl = []
+    valf = []
+    val = f['SIGNAL']
+    npass = f1['SIGNAL']
+    pixelarea = (180./np.pi)**2*4*np.pi/(12*nside**2)
+    pix = f['PIXEL']
+    print min(val),max(val)
+    print min(npass),max(npass)
+    # Obtain values to plot 
+
+    j = 0
+    for i in range(0,len(f)):
+        if (npass[i] >= passmin):
+        #th,phi = pix2ang_ring(4096,f[i]['PIXEL'])
+            th,phi = hp.pix2ang(nside,f[i]['PIXEL'])
+            ra,dec = thphi2radec(th,phi)
+            ral.append(ra)
+            decl.append(dec)
+            valf.append(val[i])
+
+    print len(val),len(valf)
+#   print len(val),len(valf),valf[0],valf[1],valf[len(valf)-1]
+    minv = np.min(valf)
+    maxv = np.max(valf)
+    print minv,maxv
+
+# Draw the map    
+    from matplotlib import pyplot as plt
+    import matplotlib.cm as cm
+
+    mylabel= prop + op
+
+    map = plt.scatter(ral,decl,c=valf, cmap=cm.rainbow,s=2., vmin=minv, vmax=maxv, lw=0,edgecolors='none')
+    cbar = plt.colorbar(map)
+    plt.xlabel('r.a. (degrees)')
+    plt.ylabel('declination (degrees)')
+    plt.title('Map of '+ mylabel +' for '+catalogue_name+' '+band+'-band pass >='+str(passmin))
+    plt.xlim(0,360)
+    plt.ylim(-30,90)
+    mapfile=localdir+mylabel+'pass'+str(passmin)+'_'+band+'_'+catalogue_name+str(nside)+'map.png'
+    print 'saving plot to ', mapfile
+    plt.savefig(mapfile)
+    plt.close()
+    #plt.show()
+    #cbar.set_label(r'5$\sigma$ galaxy depth', rotation=270,labelpad=1)
+    #plt.xscale('log')
+
+
+    npix=len(pix)
+
+    print 'The total area is ', npix/(float(nside)**2.*12)*360*360./pi, ' sq. deg.'
+
+# Draw the histogram
+    minN = minv-0.0001
+    maxN = maxv+.0001
+    hl = np.zeros((nbin))
+    for i in range(0,len(valf)):
+        bin = int(nbin*(valf[i]-minN)/(maxN-minN))
+        hl[bin] += 1
+    Nl = []
+    for i in range(0,len(hl)):
+                Nl.append(minN+i*(maxN-minN)/float(nbin)+0.5*(maxN-minN)/float(nbin))
+#When an array object is printed or converted to a string, it is represented as array(typecode, initializer)
+    NTl = np.array(valf)
+    Nl = np.array(Nl)*0.262 # in arcsec
+    hl = np.array(hl)*pixelarea
+    hlcs = np.sum(hl)-np.cumsum(hl)
+    print "A total of ",np.sum(hl),"squaredegrees with pass >=",str(passmin)
+#    print "#FWHM  Area(>FWHM)"
+#    print np.column_stack((Nl,hlcs))
+    idx = (np.abs(Nl-1.3)).argmin()
+    print "#FWHM  Area(>FWHM) Fractional Area(>FWHM)"
+    print Nl[idx], hlcs[idx], hlcs[idx]/hlcs[0]
+    mean = np.sum(NTl)/float(len(NTl))
+    std = sqrt(np.sum(NTl**2.)/float(len(NTl))-mean**2.)
+    print "#mean  STD"
+    print mean,std
+    plt.plot(Nl,hl,'k-')
+    #plt.xscale('log')
+    plt.xlabel(op+' '+band+ ' seeing (")')
+    plt.ylabel('Area (squaredegrees)')
+    plt.title('Historam of '+mylabel+' for '+catalogue_name+' '+band+'-band: pass >='+str(passmin))
+    ax2 = plt.twinx()
+    ax2.plot(Nl,hlcs,'r')
+    y0 = np.arange(0,10000, 100)
+    x0 = y0*0+1.3
+    shlcs = '%.2f' % (hlcs[idx])
+    shlcsr = '%.2f' % (hlcs[idx]/hlcs[0])
+    print "Area with FWHM greater than 1.3 arcsec fraction"
+    print shlcs, shlcsr
+    ax2.plot(x0,y0,'r--', label = r'$Area_{\rm FWHM > 1.3arcsec}= $'+shlcs+r'$deg^2$ ( $f_{\rm fail}=$'+ shlcsr+')')
+    legend = ax2.legend(loc='upper center', shadow=True)
+    ax2.set_ylabel('Cumulative Area sqdegrees', color='r')
+    #plt.show()
+
+    histofile = localdir+mylabel+'pass'+str(passmin)+'_'+band+'_'+catalogue_name+str(nside)+'histo.png'
+    print 'saving plot to ', histofile
+    plt.savefig(histofile)
+#    fig.savefig(histofile)
+    plt.close()
+
+    return mapfile,histofile
+
+
+def val3p4c_seeingplots(sample,passmin=3,nbin=100,nside=1024):
+    """
+       Requirement V4.1: z-band image quality will be smaller than 1.3 arcsec FWHM in at least one pass.
+       
+       Produces FWHM maps and histograms for visual inspection
+    
+       H-JS's addition to MARCM stable version.
+       MARCM stable version, improved from AJR quick hack 
+       This now included extinction from the exposures
+       Uses quicksip subroutines from Boris, corrected 
+       for a bug I found for BASS and MzLS ccd orientation
+       
+       The same as val3p4c_seeing, but this makes only plots without regenerating input files for the plots
+    """
+    #nside = 1024       # Resolution of output maps
+    nsideSTR=str(nside)
+    #nsideSTR='1024'    # same as nside but in string format
+    nsidesout = None   # if you want full sky degraded maps to be written
+    ratiores = 1       # Superresolution/oversampling ratio, simp mode doesn't allow anything other than 1
+    mode = 1           # 1: fully sequential, 2: parallel then sequential, 3: fully parallel
+    pixoffset = 0      # How many pixels are being removed on the edge of each CCD? 15 for DES.
+    oversamp='1'       # ratiores in string format
+   
+    band = sample.band
+    catalogue_name = sample.catalog
+    fname = sample.ccds
+    localdir = sample.localdir
+    extc = sample.extc
+
+    #Read ccd file 
+    tbdata = pyfits.open(fname)[1].data
+
+  # ------------------------------------------------------
+    # Obtain indices
+    auxstr='band_'+band
+    sample_names = [auxstr]
+    if(sample.DR == 'DR3'):
+        inds = np.where((tbdata['filter'] == band) & (tbdata['photometric'] == True) & (tbdata['blacklist_ok'] == True))
+    elif(sample.DR == 'DR4'):
+        inds = np.where((tbdata['filter'] == band) & (tbdata['photometric'] == True) & (tbdata['bitmask'] == 0))
+
+    #Read data 
+    #obtain invnoisesq here, including extinction 
+    nmag = Magtonanomaggies(tbdata['galdepth']-extc*tbdata['EBV'])/5.
+    ivar= 1./nmag**2.
+
+    # What properties do you want mapped?
+    # Each each tuple has [(quantity to be projected, weighting scheme, operation),(etc..)] 
+    propertiesandoperations = [
+    ('FWHM', '', 'min'),
+    ('FWHM', '', 'num')]
+
+    # Read Haelpix maps from quicksip  
+    print "Generating only plots using the existing intermediate outputs"
+    prop='FWHM'
+    op='min'
+    vmin=21.0
+    vmax=24.0
+
+    fname2=localdir+catalogue_name+'/nside'+nsideSTR+'_oversamp'+oversamp+'/'+\
+           catalogue_name+'_band_'+band+'_nside'+nsideSTR+'_oversamp'+oversamp+'_'+prop+'__'+op+'.fits.gz'
+    f = fitsio.read(fname2)
+
+    prop='FWHM'
+    op1='num'
+
+    fname2=localdir+catalogue_name+'/nside'+nsideSTR+'_oversamp'+oversamp+'/'+\
+           catalogue_name+'_band_'+band+'_nside'+nsideSTR+'_oversamp'+oversamp+'_'+prop+'__'+op1+'.fits.gz'
+    f1 = fitsio.read(fname2)
+    # HEALPIX DEPTH MAPS 
+    # convert ivar to depth 
+    import healpy as hp
+    from healpix import pix2ang_ring,thphi2radec
+
+    ral = []
+    decl = []
+    valf = []
+    val = f['SIGNAL']
+    npass = f1['SIGNAL']
+    pixelarea = (180./np.pi)**2*4*np.pi/(12*nside**2)
+    pix = f['PIXEL']
+    print min(val),max(val)
+    print min(npass),max(npass)
+    # Obtain values to plot 
+
+    j = 0
+    for i in range(0,len(f)):
+        if (npass[i] >= passmin):
+        #th,phi = pix2ang_ring(4096,f[i]['PIXEL'])
+            th,phi = hp.pix2ang(nside,f[i]['PIXEL'])
+            ra,dec = thphi2radec(th,phi)
+            ral.append(ra)
+            decl.append(dec)
+            valf.append(val[i])
+
+    print len(val),len(valf)
+#   print len(val),len(valf),valf[0],valf[1],valf[len(valf)-1]
+    minv = np.min(valf)
+    maxv = np.max(valf)
+    print minv,maxv
+
+# Draw the map    
+    from matplotlib import pyplot as plt
+    import matplotlib.cm as cm
+
+    mylabel= prop + op
+
+    map = plt.scatter(ral,decl,c=valf, cmap=cm.rainbow,s=2., vmin=minv, vmax=maxv, lw=0,edgecolors='none')
+    cbar = plt.colorbar(map)
+    plt.xlabel('r.a. (degrees)')
+    plt.ylabel('declination (degrees)')
+    plt.title('Map of '+ mylabel +' for '+catalogue_name+' '+band+'-band pass >='+str(passmin))
+    plt.xlim(0,360)
+    plt.ylim(-30,90)
+    mapfile=localdir+mylabel+'pass'+str(passmin)+'_'+band+'_'+catalogue_name+str(nside)+'map.png'
+    print 'saving plot to ', mapfile
+    plt.savefig(mapfile)
+    plt.close()
+    #plt.show()
+    #cbar.set_label(r'5$\sigma$ galaxy depth', rotation=270,labelpad=1)
+    #plt.xscale('log')
+
+    npix=len(pix)
+    print 'The total area is ', npix/(float(nside)**2.*12)*360*360./pi, ' sq. deg.'
+
+# Draw the histogram
+    minN = minv-0.0001
+    maxN = maxv+.0001
+    hl = np.zeros((nbin))
+    for i in range(0,len(valf)):
+        bin = int(nbin*(valf[i]-minN)/(maxN-minN))
+        hl[bin] += 1
+    Nl = []
+    for i in range(0,len(hl)):
+                Nl.append(minN+i*(maxN-minN)/float(nbin)+0.5*(maxN-minN)/float(nbin))
+
+#When an array object is printed or converted to a string, it is represented as array(typecode, initializer)
+    NTl = np.array(valf)
+    Nl = np.array(Nl)*0.262 # in arcsec
+    hl = np.array(hl)*pixelarea
+    hlcs = np.sum(hl)-np.cumsum(hl)
+    print "A total of ",np.sum(hl),"squaredegrees with pass >=",str(passmin)
+#    print "#FWHM  Area(>FWHM)"
+#    print np.column_stack((Nl,hlcs))
+    idx = (np.abs(Nl-1.3)).argmin()
+    print "#FWHM  Area(>FWHM) Fractional Area(>FWHM)"
+    print Nl[idx], hlcs[idx], hlcs[idx]/hlcs[0]
+    mean = np.sum(NTl)/float(len(NTl))
+    std = sqrt(np.sum(NTl**2.)/float(len(NTl))-mean**2.)
+    print "#mean  STD"
+    print mean,std
+    plt.plot(Nl,hl,'k-')
+    #plt.xscale('log')
+    plt.xlabel(op+' '+band+ ' seeing (")')
+    plt.ylabel('Area (squaredegrees)')
+    plt.title('Historam of '+mylabel+' for '+catalogue_name+' '+band+'-band: pass >='+str(passmin))
+    ax2 = plt.twinx()
+    ax2.plot(Nl,hlcs,'r')
+    y0 = np.arange(0,10000, 100)
+    x0 = y0*0+1.3
+    shlcs = '%.2f' % (hlcs[idx])
+    shlcsr = '%.2f' % (hlcs[idx]/hlcs[0])
+    print "Area with FWHM greater than 1.3 arcsec  fraction"
+    print shlcs, shlcsr
+    ax2.plot(x0,y0,'r--', label = r'$Area_{\rm FWHM > 1.3arcsec}= $'+shlcs+r'$deg^2$ ( $f_{\rm fail}=$'+ shlcsr+')')
+    legend = ax2.legend(loc='upper center', shadow=True)
+    ax2.set_ylabel('Cumulative Area sqdegrees', color='r')
+    #plt.show()
+#    fig = plt.gcf()
+    histofile = localdir+mylabel+'pass'+str(passmin)+'_'+band+'_'+catalogue_name+str(nside)+'histo.png'
+    print 'saving plot to ', histofile
+    plt.savefig(histofile)
+#    fig.savefig(histofile)
+    plt.close()
+
+    return mapfile,histofile
+
