@@ -513,16 +513,15 @@ def write_coadd_images(band,
             hdr2.add_record(dict(name='BUNIT', value='1/nanomaggy^2',
                                  comment='Ivar of ABmag=22.5-2.5*log10(nmgy)'))
 
-        print('Image type', prodtype, '/', name, ':')
-        print('  ', np.sum(img < 0), 'pixels < 0')
-        print('  ', np.sum(img == 0), 'pixels == 0')
-        print('  ', np.sum(img > 0), 'pixels > 0')
-        print('  ', np.sum(np.isfinite(img)), 'finite pixels')
-
-        import os
-        fn = os.path.join(survey.output_dir, 'brick-%s-%s-%s.fits' % (name, brickname, band))
-        fitsio.write(fn, img)
-        print('Wrote', fn)
+        # print('Image type', prodtype, '/', name, ':')
+        # print('  ', np.sum(img < 0), 'pixels < 0')
+        # print('  ', np.sum(img == 0), 'pixels == 0')
+        # print('  ', np.sum(img > 0), 'pixels > 0')
+        # print('  ', np.sum(np.isfinite(img)), 'finite pixels')
+        # import os
+        # fn = os.path.join(survey.output_dir, 'brick-%s-%s-%s.fits' % (name, brickname, band))
+        # fitsio.write(fn, img)
+        # print('Wrote', fn)
 
         with survey.write_output(name, brick=brickname, band=band) as out:
             out.fits.write(img, header=hdr2)
