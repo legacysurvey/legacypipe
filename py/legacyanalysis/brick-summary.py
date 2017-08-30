@@ -336,6 +336,30 @@ def main():
         brick = words[2]
         #print('Brick', brick)
         if not brick in brickset:
+            try:
+                tfn = os.path.join(dirprefix, 'tractor', brick[:3], 'tractor-%s.fits'%brick)
+                print('Tractor filename', tfn)
+                if opt.dr5:
+                    T = fits_table(tfn, columns=['brick_primary', 'type',
+                                                 'psfsize_g', 'psfsize_r', 'psfsize_z',
+                                                 'psfdepth_g', 'psfdepth_r', 'psfdepth_z',
+                                                 'galdepth_g', 'galdepth_r', 'galdepth_z',
+                                                 'ebv',
+                                                 'mw_transmission_g', 'mw_transmission_r', 'mw_transmission_z',
+                                                 'nobs_w1', 'nobs_w2', 'nobs_w3', 'nobs_w4',
+                                                 'mw_transmission_w1', 'mw_transmission_w2', 'mw_transmission_w3', 'mw_transmission_w4'])
+                else:
+                    T = fits_table(tfn, columns=['brick_primary', 'type', 'decam_psfsize',
+                                             'decam_depth', 'decam_galdepth',
+                                             'ebv', 'decam_mw_transmission',
+                                             'wise_nobs', 'wise_mw_transmission'])
+            except:
+                print('Failed to read FITS table', tfn)
+                import traceback
+                traceback.print_exc()
+                print('Carrying on.')
+                continue
+
             brickset.add(brick)
             bricklist.append(brick)
             gn.append(0)
@@ -349,22 +373,7 @@ def main():
             index = -1
             ibrick = np.nonzero(bricks.brickname == brick)[0][0]
             ibricks.append(ibrick)
-            tfn = os.path.join(dirprefix, 'tractor', brick[:3], 'tractor-%s.fits'%brick)
-            print('Tractor filename', tfn)
-            if opt.dr5:
-                T = fits_table(tfn, columns=['brick_primary', 'type',
-                                             'psfsize_g', 'psfsize_r', 'psfsize_z',
-                                             'psfdepth_g', 'psfdepth_r', 'psfdepth_z',
-                                             'galdepth_g', 'galdepth_r', 'galdepth_z',
-                                             'ebv',
-                                             'mw_transmission_g', 'mw_transmission_r', 'mw_transmission_z',
-                                             'nobs_w1', 'nobs_w2', 'nobs_w3', 'nobs_w4',
-                                             'mw_transmission_w1', 'mw_transmission_w2', 'mw_transmission_w3', 'mw_transmission_w4'])
-            else:
-                T = fits_table(tfn, columns=['brick_primary', 'type', 'decam_psfsize',
-                                         'decam_depth', 'decam_galdepth',
-                                         'ebv', 'decam_mw_transmission',
-                                         'wise_nobs', 'wise_mw_transmission'])
+
             T.cut(T.brick_primary)
             nsrcs.append(len(T))
             types = Counter([t.strip() for t in T.type])
