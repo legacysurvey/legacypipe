@@ -43,7 +43,7 @@ class DecamImage(CPImage, CalibMixin):
 
         # Adjust zeropoint for exposure time
         self.ccdzpt += 2.5 * np.log10(self.exptime)
-        
+
     def __str__(self):
         return 'DECam ' + self.name
 

@@ -29,7 +29,7 @@ ND = E[E.propid != '2014B-0404']
 print(len(ND), 'Non-DECaLS exposures')
 
 plt.figure(figsize=(4,3))
-plt.subplots_adjust(left=0.15, bottom=0.15, right=0.98, top=0.99)
+plt.subplots_adjust(left=0.05, bottom=0.15, right=0.98, top=0.99)
 
 ccmap = dict(g='g', r='r', z='m')
 lwmap = dict(g=1, r=2, z=3)
@@ -90,14 +90,38 @@ for band in 'grz':
     ha = dict(range=(lo,hi), bins=40, histtype='step', normed=True)
     I = np.flatnonzero(E.filter == band)
     iband = dict(g=1, r=2, z=4)[band]
-    plt.hist(E.galdepth[I] - E.decam_extinction[I,iband], color=ccmap[band], lw=lwmap[band], alpha=amap[band], label=band, **ha)
+    n,b,p = plt.hist(E.galdepth[I] - E.decam_extinction[I,iband], color=ccmap[band], lw=lwmap[band], alpha=amap[band], label=band, **ha)
+
+    # NE = len(I)
+    # db = b[1]-b[0]
+    # I = np.flatnonzero(D.filter == band)
+    # ha.update(normed=False, weights=np.ones(len(I), np.float32) / (NE * db))
+    # plt.hist(D.galdepth[I] - D.decam_extinction[I,iband], color=ccmap[band], lw=lwmap[band], alpha=amap[band], linestyle='--', **ha)
+
 plt.legend(loc='upper left')
 #plt.xticks(np.arange(21, 25.1, 0.5))
 plt.yticks([])
 plt.ylabel('Relative frequency')
 plt.xlim(lo,hi)
-plt.xlabel('Depth (5-$\sigma$, galaxy profile, extinction corrected)')
+plt.xlabel('Depth (mag, for $5 \sigma$ galaxy profile, extinction corrected)')
 plt.savefig('depth.pdf')
+
+plt.clf()
+lo,hi = 20.75, 24.75
+for band in 'grz':
+    ha = dict(range=(lo,hi), bins=40, histtype='step', normed=True)
+    iband = dict(g=1, r=2, z=4)[band]
+    I = np.flatnonzero(D.filter == band)
+    plt.hist(D.galdepth[I] - D.decam_extinction[I,iband], color=ccmap[band], lw=lwmap[band], alpha=amap[band], label='%s, DECaLS' % band, **ha)
+
+plt.legend(loc='upper left')
+#plt.xticks(np.arange(21, 25.1, 0.5))
+plt.yticks([])
+plt.ylabel('Relative frequency')
+plt.xlim(lo,hi)
+plt.xlabel('Depth (mag, for $5 \sigma$ galaxy profile, extinction corrected)')
+plt.savefig('depth-decals.pdf')
+
 
 sys.exit(0)
 

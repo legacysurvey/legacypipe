@@ -55,18 +55,27 @@ def plots(opt):
     print('Total sources:', sum(T.nobjs))
     print('Area:', len(T)/16., 'sq deg')
     print('g,r,z coverage:', sum((T.nexp_g > 0) * (T.nexp_r > 0) * (T.nexp_z > 0)) / 16.)
-    
-    # DECam
-    #ax = [360, 0, -21, 36]
 
-    ax = [310, 90, 30, 80]
+    decam = True
+    # vs MzLS+BASS
+    #release = 'MzLS+BASS DR4'
+    release = 'DECaLS DR5'
+
+    
+    if decam:
+        # DECam
+        ax = [360, 0, -21, 36]
+    else:
+        # MzLS+BASS
+        ax = [310, 90, 30, 80]
 
     def radec_plot():
         plt.axis(ax)
         plt.xlabel('RA (deg)')
-        # DECam
-        #plt.xticks(np.arange(0, 361, 45))
-        plt.xticks(np.arange(90, 311, 30))
+        if decam:
+            plt.xticks(np.arange(0, 361, 45))
+        else:
+            plt.xticks(np.arange(90, 311, 30))
 
         plt.ylabel('Dec (deg)')
 
@@ -84,8 +93,10 @@ def plots(opt):
     plt.subplots_adjust(left=0.1, right=0.98, top=0.93)
     
     # Map of the tile centers we want to observe...
-    #O = fits_table('obstatus/decam-tiles_obstatus.fits')
-    O = fits_table('mosaic-tiles_obstatus.fits')
+    if decam:
+        O = fits_table('obstatus/decam-tiles_obstatus.fits')
+    else:
+        O = fits_table('mosaic-tiles_obstatus.fits')
     O.cut(O.in_desi == 1)
     rr,dd = np.meshgrid(np.linspace(ax[1],ax[0], 700),
                         np.linspace(ax[2],ax[3], 200))
@@ -100,8 +111,6 @@ def plots(opt):
         plt.imshow(desimap, origin='lower', interpolation='nearest',
                    extent=[ax[1],ax[0],ax[2],ax[3]], aspect='auto',
                    cmap=antigray, vmax=8)
-
-    release = 'MzLS+BASS DR4'
 
     base_cmap = 'viridis'
 
@@ -194,7 +203,9 @@ def plots(opt):
         plt.title('%s: galaxy depth, band %s' % (release, band))
         plt.savefig('galdepth-%s.png' % band)
 
-    for col in ['nobjs', 'npsf', 'nsimp', 'nexp', 'ndev', 'ncomp']:
+    for col in ['nobjs', 'npsf', 'nsimp', 'nrex', 'nexp', 'ndev', 'ncomp']:
+        if not col in T.get_columns():
+            continue
         plt.clf()
         desi_map()
         N = T.get(col)
@@ -210,7 +221,9 @@ def plots(opt):
         plt.savefig('nobjs-%s.png' % col[1:])
 
     Ntot = T.nobjs
-    for col in ['npsf', 'nsimp', 'nexp', 'ndev', 'ncomp']:
+    for col in ['npsf', 'nsimp', 'nrex', 'nexp', 'ndev', 'ncomp']:
+        if not col in T.get_columns():
+            continue
         plt.clf()
         desi_map()
         N = T.get(col) / (Ntot.astype(np.float32))
@@ -224,7 +237,6 @@ def plots(opt):
         plt.colorbar()
         plt.title('%s: Fraction of objects of type %s' % (release, col[1:]))
         plt.savefig('fobjs-%s.png' % col[1:])
-
         
     return 0
         
@@ -235,9 +247,10 @@ def main():
                       default='TMP/nexp.fits')
     parser.add_argument('--merge', action='store_true', help='Merge sub-tables')
     parser.add_argument('--plot', action='store_true', help='Plot results')
+    parser.add_argument('--dr5', action='store_true', help='DR5 format?')
     parser.add_argument('files', metavar='nexp-file.fits.gz', nargs='+',
                         help='List of nexp files to process')
-
+    
     opt = parser.parse_args()
     fns = opt.files
 
@@ -280,10 +293,11 @@ def main():
     nsrcs = []
     npsf  = []
     nsimp = []
+    nrex = []
     nexp  = []
     ndev  = []
     ncomp = []
-    
+
     gpsfsize = []
     rpsfsize = []
     zpsfsize = []
@@ -337,7 +351,17 @@ def main():
             ibricks.append(ibrick)
             tfn = os.path.join(dirprefix, 'tractor', brick[:3], 'tractor-%s.fits'%brick)
             print('Tractor filename', tfn)
-            T = fits_table(tfn, columns=['brick_primary', 'type', 'decam_psfsize',
+            if opt.dr5:
+                T = fits_table(tfn, columns=['brick_primary', 'type',
+                                             'psfsize_g', 'psfsize_r', 'psfsize_z',
+                                             'psfdepth_g', 'psfdepth_r', 'psfdepth_z',
+                                             'galdepth_g', 'galdepth_r', 'galdepth_z',
+                                             'ebv',
+                                             'mw_transmission_g', 'mw_transmission_r', 'mw_transmission_z',
+                                             'nobs_w1', 'nobs_w2', 'nobs_w3', 'nobs_w4',
+                                             'mw_transmission_w1', 'mw_transmission_w2', 'mw_transmission_w3', 'mw_transmission_w4'])
+            else:
+                T = fits_table(tfn, columns=['brick_primary', 'type', 'decam_psfsize',
                                          'decam_depth', 'decam_galdepth',
                                          'ebv', 'decam_mw_transmission',
                                          'wise_nobs', 'wise_mw_transmission'])
@@ -346,29 +370,60 @@ def main():
             types = Counter([t.strip() for t in T.type])
             npsf.append(types['PSF'])
             nsimp.append(types['SIMP'])
+            nrex.append(types['REX'])
             nexp.append(types['EXP'])
             ndev.append(types['DEV'])
             ncomp.append(types['COMP'])
             print('N sources', nsrcs[-1])
-    
-            gpsfsize.append(np.median(T.decam_psfsize[:,1]))
-            rpsfsize.append(np.median(T.decam_psfsize[:,2]))
-            zpsfsize.append(np.median(T.decam_psfsize[:,4]))
 
-            gpsfdepth.append(np.median(T.decam_depth[:,1]))
-            rpsfdepth.append(np.median(T.decam_depth[:,2]))
-            zpsfdepth.append(np.median(T.decam_depth[:,4]))
-            ggaldepth.append(np.median(T.decam_galdepth[:,1]))
-            rgaldepth.append(np.median(T.decam_galdepth[:,2]))
-            zgaldepth.append(np.median(T.decam_galdepth[:,4]))
-    
-            wise_nobs.append(np.median(T.wise_nobs, axis=0))
-            wise_trans.append(np.median(T.wise_mw_transmission, axis=0))
+            if opt.dr5:
+                gpsfsize.append(np.median(T.psfsize_g))
+                rpsfsize.append(np.median(T.psfsize_r))
+                zpsfsize.append(np.median(T.psfsize_z))
 
+                gpsfdepth.append(np.median(T.psfdepth_g))
+                rpsfdepth.append(np.median(T.psfdepth_r))
+                zpsfdepth.append(np.median(T.psfdepth_z))
+
+                ggaldepth.append(np.median(T.galdepth_g))
+                rgaldepth.append(np.median(T.galdepth_r))
+                zgaldepth.append(np.median(T.galdepth_z))
+
+                wise_nobs.append(np.median(
+                    np.vstack((T.nobs_w1, T.nobs_w2, T.nobs_w3, T.nobs_w4)).T,
+                    axis=0))
+                wise_trans.append(np.median(
+                    np.vstack((T.mw_transmission_w1,
+                               T.mw_transmission_w2,
+                               T.mw_transmission_w3,
+                               T.mw_transmission_w4)).T,
+                               axis=0))
+
+                gtrans.append(np.median(T.mw_transmission_g))
+                rtrans.append(np.median(T.mw_transmission_r))
+                ztrans.append(np.median(T.mw_transmission_z))
+                
+            else:
+                gpsfsize.append(np.median(T.decam_psfsize[:,1]))
+                rpsfsize.append(np.median(T.decam_psfsize[:,2]))
+                zpsfsize.append(np.median(T.decam_psfsize[:,4]))
+
+                gpsfdepth.append(np.median(T.decam_depth[:,1]))
+                rpsfdepth.append(np.median(T.decam_depth[:,2]))
+                zpsfdepth.append(np.median(T.decam_depth[:,4]))
+
+                ggaldepth.append(np.median(T.decam_galdepth[:,1]))
+                rgaldepth.append(np.median(T.decam_galdepth[:,2]))
+                zgaldepth.append(np.median(T.decam_galdepth[:,4]))
+    
+                wise_nobs.append(np.median(T.wise_nobs, axis=0))
+                wise_trans.append(np.median(T.wise_mw_transmission, axis=0))
+
+                gtrans.append(np.median(T.decam_mw_transmission[:,1]))
+                rtrans.append(np.median(T.decam_mw_transmission[:,2]))
+                ztrans.append(np.median(T.decam_mw_transmission[:,4]))
+                
             ebv.append(np.median(T.ebv))
-            gtrans.append(np.median(T.decam_mw_transmission[:,1]))
-            rtrans.append(np.median(T.decam_mw_transmission[:,2]))
-            ztrans.append(np.median(T.decam_mw_transmission[:,4]))
     
             br = bricks[ibrick]
 
@@ -429,6 +484,7 @@ def main():
     T.nobjs  = np.array(nsrcs).astype(np.int16)
     T.npsf   = np.array(npsf ).astype(np.int16)
     T.nsimp  = np.array(nsimp).astype(np.int16)
+    T.nrex   = np.array(nrex ).astype(np.int16)
     T.nexp   = np.array(nexp ).astype(np.int16)
     T.ndev   = np.array(ndev ).astype(np.int16)
     T.ncomp  = np.array(ncomp).astype(np.int16)
