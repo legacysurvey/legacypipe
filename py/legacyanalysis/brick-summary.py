@@ -447,6 +447,7 @@ def main():
     
         filepart = words[-1]
         filepart = filepart.replace('.fits.gz', '')
+        filepart = filepart.replace('.fits.fz', '')
         print('File:', filepart)
         band = filepart[-1]
         assert(band in 'grz')
