@@ -714,7 +714,8 @@ class NDpix_simp:
 			return np.max(vals) - np.min(vals)
 		if operation == 'fracdet':
 			return 1.0
-
+                if operation == 'num':
+                        return len(vals)
 
 
 # Class for a pixel of the map, containing trees of images and values
@@ -796,6 +797,9 @@ class NDpix:
                 return np.max(vals) - np.min(vals)
             if operation == 'fracdet':
                 return 1.0
+            if operation == 'num':
+                return len(vals)
+
 
         # Retrieve property array and apply operation (with super-resolution)
         if property == 'count':
@@ -834,7 +838,8 @@ class NDpix:
         if operation == 'fracdet':
             temp = weightedarray.sum(axis=0)
             return temp[ind].size / float(temp.size)
-
+        if operation == 'num':
+            return len(vals)
 
 # ---------------------------------------------------------------------------------------- #
 
