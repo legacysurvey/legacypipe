@@ -1582,7 +1582,7 @@ def stage_fitblobs(T=None,
                     timeout = max(1, checkpoint_period - dt)
                     r = Riter.next(timeout)
                 else:
-                    r = Riter.next()
+                    r = next(Riter)
                 R.append(r)
             except StopIteration:
                 print('Done')

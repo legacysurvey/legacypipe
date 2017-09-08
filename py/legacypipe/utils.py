@@ -142,6 +142,7 @@ class MyMultiproc(multiproc):
         if cs is None:
             cs = self.map_chunksize
         if self.pool is None:
+            # We're not using multiprocessing -- use builtins
             import itertools
             if 'imap' in dir(itertools):
                 # py2
@@ -149,6 +150,7 @@ class MyMultiproc(multiproc):
             else:
                 # py3
                 return map(func, iterable)
+
         if wrap or self.wrap_all:
             func = funcwrapper(func)
         res = self.pool.imap_unordered(func, iterable, chunksize=cs)
