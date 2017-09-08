@@ -231,6 +231,13 @@ if __name__ == '__main__':
                '--threads', '2'] + extra_args)
     # Assert...... something?
 
+    # Test --checkpoint without --threads
+    main(args=['--brick', '2447p120', '--zoom', '1020', '1070', '2775', '2815',
+               '--no-wise', '--force-all', '--no-write',
+               '--survey-dir', surveydir,
+               '--outdir', outdir,
+               '--checkpoint', checkpoint_fn,
+               '--checkpoint-period', '1' ] + extra_args)
     
     # MzLS + BASS data
     # surveydir2 = os.path.join(os.path.dirname(__file__), 'mzlsbass')
