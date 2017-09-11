@@ -1350,6 +1350,7 @@ def stage_fitblobs(T=None,
                    survey=None,
                    plots=False, plots2=False,
                    nblobs=None, blob0=None, blobxy=None, blobradec=None,
+                   max_blobsize=None,
                    simul_opt=False, use_ceres=True, mp=None,
                    checkpoint_filename=None,
                    checkpoint_period=600,
@@ -1512,7 +1513,7 @@ def stage_fitblobs(T=None,
         # Run one_blob on each blob!
         blobiter = _blob_iter(blobslices, blobsrcs, blobs, targetwcs, tims,
                               cat, bands, plots, ps, simul_opt, use_ceres,
-                              tycho, brick, rex)
+                              tycho, brick, rex, max_blobsize=max_blobsize)
         # to allow timingpool to queue tasks one at a time
         blobiter = iterwrapper(blobiter, len(blobsrcs))
         R = mp.map(_bounce_one_blob, blobiter)
@@ -1548,7 +1549,8 @@ def stage_fitblobs(T=None,
         print('Skipping', len(skipblobs), 'blobs from checkpoint file')
         blobiter = _blob_iter(blobslices, blobsrcs, blobs, targetwcs, tims,
                               cat, bands, plots, ps, simul_opt, use_ceres,
-                              tycho, brick, rex, skipblobs=skipblobs)
+                              tycho, brick, rex, skipblobs=skipblobs,
+                              max_blobsize=max_blobsize)
         # to allow timingpool to queue tasks one at a time
         blobiter = iterwrapper(blobiter, len(blobsrcs))
 
@@ -1786,7 +1788,7 @@ def _format_all_models(T, newcat, BB, bands, rex):
 
 def _blob_iter(blobslices, blobsrcs, blobs, targetwcs, tims, cat, bands,
                plots, ps, simul_opt, use_ceres, tycho, brick, rex,
-               skipblobs=[]):
+               skipblobs=[], max_blobsize=None):
     from collections import Counter
     H,W = targetwcs.shape
     tychoblobs = set(blobs[tycho.iby, tycho.ibx])
@@ -1828,7 +1830,7 @@ def _blob_iter(blobslices, blobsrcs, blobs, targetwcs, tims, cat, bands,
         # If the blob is solely outside the unique region of this brick,
         # skip it!
         if np.all(U[bslc][blobmask] == False):
-            print('This blob is completely outside the unique region of this brick -- skipping')
+            print('Blob', nblob+1, 'is completely outside the unique region of this brick -- skipping')
             yield None
             continue
 
@@ -1844,12 +1846,17 @@ def _blob_iter(blobslices, blobsrcs, blobs, targetwcs, tims, cat, bands,
 
         hastycho = iblob in tychoblobs
 
+        npix = np.sum(blobmask)
         print('Blob', nblob+1, 'of', len(blobslices), ': blob id:', iblob,
               'sources:', len(Isrcs), 'size:', blobw, 'x', blobh,
               #'center', (bx0+bx1)/2, (by0+by1)/2,
               'brick X: %i,%i, Y: %i,%i' % (bx0,bx1,by0,by1),
-              'npix:', np.sum(blobmask),
-              'one pixel:', onex,oney, 'has Tycho-2 star:', hastycho)
+              'npix:', npix, 'one pixel:', onex,oney, 'has Tycho-2 star:', hastycho)
+
+        if max_blobsize is not None and npix > max_blobsize:
+            print('Number of pixels in blob,', npix, ', exceeds max blobsize', max_blobsize)
+            yield None
+            continue
 
         # Here we cut out subimages for the blob...
         rr,dd = targetwcs.pixelxy2radec([bx0,bx0,bx1,bx1],[by0,by1,by1,by0])
@@ -2519,6 +2526,7 @@ def run_brick(brick, survey, radec=None, pixscale=0.262,
               allbands=None,
               depth_cut=True,
               nblobs=None, blob=None, blobxy=None, blobradec=None,
+              max_blobsize=None,
               nsigma=6,
               simul_opt=False,
               wise=True,
@@ -2614,6 +2622,8 @@ def run_brick(brick, survey, radec=None, pixscale=0.262,
       containing these coordinates.
 
     Other options:
+
+    - *max_blobsize*: int; ignore blobs with more than this many pixels
 
     - *nsigma*: float; detection threshold in sigmas.
 
@@ -2783,6 +2793,8 @@ def run_brick(brick, survey, radec=None, pixscale=0.262,
         kwargs.update(blobxy=blobxy)
     if blobradec is not None:
         kwargs.update(blobradec=blobradec)
+    if max_blobsize is not None:
+        kwargs.update(max_blobsize=max_blobsize)
 
     pickle_pat = pickle_pat % dict(brick=brick)
 
@@ -2963,6 +2975,8 @@ python -u legacypipe/runbrick.py --plots --brick 2440p070 --zoom 1900 2400 450 9
         '--blobradec', type=float, nargs=2, default=None, action='append',
         help=('Debugging: run the single blob containing RA,Dec <ra> <dec>; '+
               'this option can be repeated to run multiple blobs.'))
+
+    parser.add_argument('--max-blobsize', type=int, help='Skip blobs containing more than the given number of pixels.')
 
     parser.add_argument(
         '--check-done', default=False, action='store_true',
