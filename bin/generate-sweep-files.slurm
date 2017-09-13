@@ -2,9 +2,10 @@
 
 #SBATCH -p debug
 #SBATCH -N 1
-#SBATCH -L SCRATCH
+#SBATCH -L SCRATCH,project
+#SBATCH -C haswell
 #SBATCH -t 00:30:00
-#SBATCH -o generate-sweep-files.slurm.cori.%j
+#SBATCH -o generate-sweep-files.slurm.%j
 #SBATCH --profile=all
 
 set -x
@@ -19,29 +20,18 @@ source /usr/common/contrib/bccp/python-mpi-bcast/nersc/activate.sh
 export PYTHONPATH=$PWD/../py:$PYTHONPATH
 
 # generate filelist (faster than iterating in python)
-ROOT=/project/projectdirs/cosmo/data/legacysurvey/dr1
-ROOT=/project/projectdirs/desiproc/dr2
-ROOT=/project/projectdirs/desiproc/dr2p
-ROOT=/project/projectdirs/desiproc/dr3
-ROOT=/project/projectdirs/cosmo/work/legacysurvey/dr3
-ROOT=/global/project/projectdirs/desi/users/yfeng1/legacysurvey/dr3.1
-ROOT=/global/projecta/projectdirs/cosmo/work/dr4b
-ROOT=/global/cscratch1/sd/desiproc/dr4/data_release/dr4c
+ROOT=/global/project/projectdirs/cosmo/work/legacysurvey/dr5/DR5_out
 TRACTOR=$ROOT/tractor
-
 find $TRACTOR -name 'tractor-*.fits' > filelist
+
+# define the survey-bricks.fits file (speeds up scanning) and the output directory
+BRICKSFILE=/global/cscratch1/sd/desiproc/dr5/survey-bricks.fits.gz
+
+DESTINATION=$CSCRATCH/sweep
+/usr/bin/mkdir -p $DESTINATION
 
 # use python-mpi. 'python' from anaconda fails with libpython.so.0.1 not found
 # error when ran via aprun, at least on ~yfeng1's environments.
 
-#srun -u --cpu_bind=no -n 1 python-mpi generate-sweep-files.py --numproc 64 -F filelist -v -d /project/projectdirs/cosmo/data/legacysurvey/dr1/decals-bricks.fits /project/projectdirs/cosmo/data/legacysurvey/dr1/tractor $SCRATCH/sandbox/sweep-dr1-stripes
-
-time srun -u --cpu_bind=no -n 1 python-mpi generate-sweep-files.py -v \
---numproc 24 \
--I \
--f fits \
--F filelist \
---schema blocks \
--d $SCRATCH/legacypipe-dir/survey-bricks-dr4.fits.gz \
-$TRACTOR \
-$SCRATCH/dr4/sweep/
+time srun -u --cpu_bind=no -n 1 python-mpi generate-sweep-files.py -v --numproc 24 \
+     -I -f fits -F filelist --schema blocks -d $BRICKSFILE $TRACTOR $DESTINATION
