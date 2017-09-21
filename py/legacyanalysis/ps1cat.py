@@ -62,7 +62,7 @@ class HealpixedCatalog(object):
     
 class ps1cat(HealpixedCatalog):
     ps1band = dict(g=0,r=1,i=2,z=3,Y=4)
-    def __init__(self,expnum=None,ccdname=None,ccdwcs=None):
+    def __init__(self,expnum=None,ccdname=None,ccdwcs=None,prefix='ps1'):
         """Initialize the class with either the exposure number *and* CCD name, or
         directly with the WCS of the CCD of interest.
 
@@ -75,7 +75,7 @@ class ps1cat(HealpixedCatalog):
             raise ValueError('You must have the PS1CAT_DIR environment variable set to point to Pan-STARRS1 catalogs')
         if self.gaiadir is None:
             print('WARNING: GAIACAT_DIR environment variable not set: using Pan-STARRS1 for astrometry')
-        fnpattern = os.path.join(self.ps1dir, 'ps1-%(hp)05d.fits')
+        fnpattern = os.path.join(self.ps1dir, prefix + '-%(hp)05d.fits')
         super(ps1cat, self).__init__(fnpattern)
         
         if ccdwcs is None:
