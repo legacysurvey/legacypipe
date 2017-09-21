@@ -924,6 +924,7 @@ class CalibMixin(object):
 
     def run_sky(self, surveyname, splinesky=False, git_version=None):
         from legacypipe.survey import get_version_header
+        from scipy.ndimage.morphology import binary_dilation
 
         slc = self.get_good_image_slice(None)
         img = self.read_image(slice=slc)
@@ -942,7 +943,6 @@ class CalibMixin(object):
 
         if splinesky:
             from tractor.splinesky import SplineSky
-            from scipy.ndimage.morphology import binary_dilation
 
             boxsize = self.splinesky_boxsize
             
