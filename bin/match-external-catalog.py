@@ -26,14 +26,27 @@ def main():
 
     bricks = list_bricks(ns)
 
-    tree, nobj = read_external(ns.external, ns)
+    tree, nobj, mjd, plate, fiberid = read_external(ns.external, ns)
 
     # get the data type of the match
     brickname, path = bricks[0]
     peek = fitsio.read(path, 1, upper=True)
     matched_catalog = sharedmem.empty(nobj, dtype=peek.dtype)
-
     matched_catalog['OBJID'] = -1
+
+    # Copy over MJD, PLATE, and FIBERID
+    newdtype = np.dtype(matched_catalog.dtype.descr + [('MJD', mjd.dtype),
+                                                       ('PLATE', plate.dtype),
+                                                       ('FIBERID', fiberid.dtype) ])
+    _matched_catalog = np.empty(matched_catalog.shape, dtype=newdtype)
+    for field in matched_catalog.dtype.fields:
+        _matched_catalog[field] = matched_catalog[field]
+    _matched_catalog['MJD'] = mjd
+    _matched_catalog['PLATE'] = plate
+    _matched_catalog['FIBERID'] = fiberid
+    matched_catalog = _matched_catalog
+    del _matched_catalog    
+    
     matched_distance = sharedmem.empty(nobj, dtype='f4')
 
     # convert to radian
@@ -44,7 +57,6 @@ def main():
     nmatched = np.zeros((), dtype='i8')
     ntotal = np.zeros((), dtype='i8')
     t0 = time()
-
 
     with sharedmem.MapReduce(np=ns.numproc) as pool:
         def work(brickname, path):
@@ -109,12 +121,12 @@ def save_file(filename, data, header, format):
     basename = os.path.splitext(filename)[0]
     if format == 'fits':
         filename = basename + '.fits'
-        fitsio.write(filename, data, extname='DECALS-SDSS', header=header, clobber=True)
+        fitsio.write(filename, data, extname='MATCHED', header=header, clobber=True)
     elif format == 'hdf5':
         filename = basename + '.hdf5'
         import h5py
         with h5py.File(filename, 'w') as ff:
-            dset = ff.create_dataset('DECALS-SDSS', data=data)
+            dset = ff.create_dataset('MATCHED', data=data)
             for key in header:
                 dset.attrs[key] = header[key]
     else:
@@ -162,7 +174,24 @@ def read_external(filename, ns):
     if ns.verbose:
         print("Building KD-Tree took %g seconds." % (time() - t0))
 
-    return tree, len(cat)
+    # Retrieve and return the MJD, PLATE, FIBERID
+    plate = cat['PLATE']
+    
+    for mjdcol in ('MJD', 'SMJD'):
+        if mjdcol in cat.dtype.names:
+            mjd = cat[mjdcol]
+            break
+        else:
+            raise KeyError('No known MJD column in the external catalog!')
+        
+    for fibercol in ('FIBERID', 'FIBER'):
+        if fibercol in cat.dtype.names:
+            fiberid = cat[fibercol]
+            break
+        else:
+            raise KeyError('No known FIBERID column in the external catalog!')
+
+    return tree, len(cat), mjd, plate, fiberid
 
 def list_bricks(ns):
     t0 = time()
