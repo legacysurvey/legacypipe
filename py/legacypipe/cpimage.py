@@ -119,11 +119,11 @@ class CPImage(LegacySurveyImage):
         if hdr is None:
             hdr = self.read_image_header()
         wcs = wcs_pv2sip_hdr(hdr, stepsize=stepsize)
-        # Correction: ccd,ccdraoff, decoff from zeropoints file
+        # Correction: ccd ra,dec offsets from zeropoints/CCDs file
         dra,ddec = self.dradec
         # print('Applying astrometric zeropoint:', (dra,ddec))
         r,d = wcs.get_crval()
-        wcs.set_crval((r + dra, d + ddec))
+        wcs.set_crval((r + dra / np.cos(np.deg2rad(d)), d + ddec))
         wcs.version = ''
         phdr = self.read_image_primary_header()
         wcs.plver = phdr.get('PLVER', '').strip()
