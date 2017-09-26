@@ -265,7 +265,7 @@ def read_region(brickname, filename, bricksdesc):
 SWEEP_DTYPE = np.dtype([
 #   ('BRICK_PRIMARY', '?'),
     ('RELEASE', '>i4'), 
-#   ('BRICKID', '>i4'), 
+    ('BRICKID', '>i4'), 
     ('BRICKNAME', 'S8'), 
     ('OBJID', '>i4'), 
     ('TYPE', 'S4'), 
