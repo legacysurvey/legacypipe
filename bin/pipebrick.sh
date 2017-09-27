@@ -13,6 +13,8 @@ export MKL_NUM_THREADS=1
 ulimit -S -v 30000000
 ulimit -a
 
+export LEGACY_SURVEY_DIR=$CSCRATCH/dr5-eboss
+
 outdir=$CSCRATCH/dr5-eboss
 
 brick="$1"
