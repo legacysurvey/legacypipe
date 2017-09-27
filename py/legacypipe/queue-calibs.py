@@ -355,8 +355,10 @@ def main():
         # NGC ELGs
         # RA 115 to 175
         # Dec 15 to  30
-        rlo,rhi = 122., 177.
-        dlo,dhi =  12.,  32.
+        # rlo,rhi = 122., 177.
+        # dlo,dhi =  12.,  32.
+        rlo,rhi = 126., 168.
+        dlo,dhi =  18.,  33.
 
     elif opt.region == 'mzls':
         dlo,dhi = 30., 90.
