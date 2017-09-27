@@ -390,14 +390,15 @@ def main():
         print(name)
     #B.writeto('bricks-cut.fits')
 
+    ## MAGIC number: 1-degree search for bricks near CCDs
     print(len(T), 'CCDs')
     print(len(B), 'Bricks')
-    I,J,d = match_radec(B.ra, B.dec, T.ra, T.dec, survey.bricksize)
+    I,J,d = match_radec(B.ra, B.dec, T.ra, T.dec, 1.)
     keep = np.zeros(len(B), bool)
     for i in I:
         keep[i] = True
     B.cut(keep)
-    log('Cut to', len(B), 'bricks near CCDs')
+    log('Cut to', len(B), 'bricks near CCDs (1-degree search radius)')
 
     # plt.clf()
     # plt.plot(B.ra, B.dec, 'b.')
