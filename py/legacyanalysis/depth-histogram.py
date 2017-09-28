@@ -160,12 +160,13 @@ if __name__ == '__main__':
     # basedir = '/global/cscratch1/sd/dstn/galdepths-dr4'
     # summarize_depths(basedir, outfn, summaryfn)
 
-    outfn = 'dr5-depth.fits'
+    outfn = 'dr5-depth-concat.fits'
     summaryfn = 'dr5-depth-summary.fits'
-    allfn = 'dr5-depth-all.fits'
+    allfn = 'dr5-depth.fits'
     basedir = '/project/projectdirs/cosmo/work/legacysurvey/dr5/DR5_out'
     summarize_depths(basedir, outfn, summaryfn, allfn)
 
     ps = PlotSequence('depth')
     summary_plots(summaryfn, ps)
+    import sys
     sys.exit(0)
