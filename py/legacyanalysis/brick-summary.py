@@ -32,6 +32,12 @@ python legacyanalysis/brick-summary.py --plot brick-summary-dr4.fits
 
 to make a couple of plots.
 
+Or, run this to generate a list of command-lines that you can copy-n-paste:
+
+for ((b=0; b<36; b++)); do B=$(printf %02i $b); echo "python -u legacyanalysis/brick-summary.py --dr5 -o dr5-brick-summary-$B.fits /project/projectdirs/cosmo/work/legacysurvey/dr5/coadd/$B*/*/*-nexp-*.fits.fz > bs-$B.log 2>&1 &"; done
+
+
+
 '''
 
 
