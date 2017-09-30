@@ -753,7 +753,9 @@ class LegacySurveyImage(object):
             if psf.version is None:
                 psf.version = str(os.stat(self.psffn).st_mtime)
             psf.plver = hdr.get('PLVER', '').strip()
-            psf.psf_fwhm = hdr['PSF_FWHM']
+
+            hdr = fitsio.read_header(self.psffn, ext=1)
+            psf.fwhm = hdr['PSF_FWHM']
 
         psf.shift(x0, y0)
         if hybridPsf:
