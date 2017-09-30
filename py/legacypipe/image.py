@@ -734,6 +734,10 @@ class LegacySurveyImage(object):
                     ne = (degree + 1) * (degree + 2) // 2
                     #print('PSF_mask shape', Ti.psf_mask.shape)
                     Ti.psf_mask = Ti.psf_mask[:ne, :Ti.psfaxis1, :Ti.psfaxis2]
+                    # If degree 0, set polname* to avoid assertion error in tractor
+                    if degree == 0:
+                        Ti.polname1 = 'X_IMAGE'
+                        Ti.polname2 = 'Y_IMAGE'
 
                     psfex = PsfExModel(Ti=Ti)
                     psf = PixelizedPsfEx(None, psfex=psfex)
