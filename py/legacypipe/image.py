@@ -739,6 +739,7 @@ class LegacySurveyImage(object):
                     psf = PixelizedPsfEx(None, psfex=psfex)
                     psf.version = Ti.legpipev.strip()
                     psf.plver = Ti.plver.strip()
+                    psf.fwhm = Ti.psf_fwhm
             except:
                 import traceback
                 traceback.print_exc()
@@ -752,6 +753,7 @@ class LegacySurveyImage(object):
             if psf.version is None:
                 psf.version = str(os.stat(self.psffn).st_mtime)
             psf.plver = hdr.get('PLVER', '').strip()
+            psf.psf_fwhm = hdr['PSF_FWHM']
 
         psf.shift(x0, y0)
         if hybridPsf:
