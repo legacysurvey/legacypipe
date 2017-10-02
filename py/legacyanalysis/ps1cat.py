@@ -62,20 +62,26 @@ class HealpixedCatalog(object):
     
 class ps1cat(HealpixedCatalog):
     ps1band = dict(g=0,r=1,i=2,z=3,Y=4)
-    def __init__(self,expnum=None,ccdname=None,ccdwcs=None,prefix='ps1'):
-        """Initialize the class with either the exposure number *and* CCD name, or
-        directly with the WCS of the CCD of interest.
+    def __init__(self,expnum=None,ccdname=None,ccdwcs=None,prefix='ps1',
+                 ps1_or_gaia='ps1'):
+        """Read PS1 or gaia sources for an exposure number + CCD name or CCD WCS
 
+        Note: you need to define env vars PS1CAT_DIR or PS1_GAIA_MATCHES
+
+        Args:
+          prefix: PS1 or gaia catalogues are named '<prefix>-<healpix pixel>.fits'
+          ps1_or_gaia: 'ps1' for PS1CAT_DIR, 'ps1_gaia' for PS1_GAIA_MATCHES 
         """
-        # GAIA and PS1 info, gaia for astrometry, ps1 for photometry
-        self.gaiadir = os.getenv('GAIACAT_DIR')
-        # PS1 only
-        self.ps1dir = os.getenv('PS1CAT_DIR') # PS1 only
-        if self.ps1dir is None:
-            raise ValueError('You must have the PS1CAT_DIR environment variable set to point to Pan-STARRS1 catalogs')
-        if self.gaiadir is None:
-            print('WARNING: GAIACAT_DIR environment variable not set: using Pan-STARRS1 for astrometry')
-        fnpattern = os.path.join(self.ps1dir, prefix + '-%(hp)05d.fits')
+        assert(ps1_or_gaia in ['ps1','ps1_gaia'])
+        if ps1_or_gaia == 'ps1':
+          # PS1 "qz" directory  
+          # e.g. /project/projectdirs/cosmo/work/ps1/cats/chunks-qz-star-v2
+          self.catdir= os.getenv('PS1CAT_DIR')
+        elif ps1_or_gaia == 'ps1_gaia':
+          # PS1-Gaia "qz" matches-only directory
+          # e.g. /project/projectdirs/cosmo/work/gaia/chunks-ps1-gaia
+          self.catdir= os.getenv('PS1_GAIA_MATCHES')
+        fnpattern = os.path.join(self.catdir, prefix + '-%(hp)05d.fits')
         super(ps1cat, self).__init__(fnpattern)
         
         if ccdwcs is None:
@@ -87,19 +93,8 @@ class ps1cat(HealpixedCatalog):
         else:
             self.ccdwcs = ccdwcs
 
-    def get_cat(self,ra,dec,gaia_ps1=True):
-        """Read the healpixed PS1 catalogs given input ra,dec coordinates."""
-        # Convert RA,Decs to unique healpixes
-        ra,dec = wcs.pixelxy2radec(xx.ravel(), yy.ravel())
-        healpixes = set()
-        for r,d in zip(ra,dec):
-            healpixes.add(self.healpix_for_radec(r, d))
-        # Read catalog in those healpixes
-        cat = self.get_healpix_catalogs(healpixes)
-        return cat
-
     def get_stars(self,magrange=None,band='r'):
-        """Return the set of PS1 stars on a given CCD with well-measured grz
+        """Return the set of PS1 or gaia-PS1 matched stars on a given CCD with well-measured grz
         magnitudes. Optionally trim the stars to a desired r-band magnitude
         range.
         """
