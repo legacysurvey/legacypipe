@@ -734,11 +734,16 @@ class LegacySurveyImage(object):
                     ne = (degree + 1) * (degree + 2) // 2
                     #print('PSF_mask shape', Ti.psf_mask.shape)
                     Ti.psf_mask = Ti.psf_mask[:ne, :Ti.psfaxis1, :Ti.psfaxis2]
+                    # If degree 0, set polname* to avoid assertion error in tractor
+                    if degree == 0:
+                        Ti.polname1 = 'X_IMAGE'
+                        Ti.polname2 = 'Y_IMAGE'
 
                     psfex = PsfExModel(Ti=Ti)
                     psf = PixelizedPsfEx(None, psfex=psfex)
                     psf.version = Ti.legpipev.strip()
                     psf.plver = Ti.plver.strip()
+                    psf.fwhm = Ti.psf_fwhm
             except:
                 import traceback
                 traceback.print_exc()
@@ -752,6 +757,9 @@ class LegacySurveyImage(object):
             if psf.version is None:
                 psf.version = str(os.stat(self.psffn).st_mtime)
             psf.plver = hdr.get('PLVER', '').strip()
+
+            hdr = fitsio.read_header(self.psffn, ext=1)
+            psf.fwhm = hdr['PSF_FWHM']
 
         psf.shift(x0, y0)
         if hybridPsf:
