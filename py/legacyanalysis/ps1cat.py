@@ -63,7 +63,7 @@ class HealpixedCatalog(object):
 class ps1cat(HealpixedCatalog):
     ps1band = dict(g=0,r=1,i=2,z=3,Y=4)
     def __init__(self,expnum=None,ccdname=None,ccdwcs=None,
-                 pattern=None):
+                 pattern='/project/projectdirs/cosmo/work/ps1/cats/chunks-qz-star-v3/ps1-%(hp)05d.fits'):
         """Read PS1 or gaia sources for an exposure number + CCD name or CCD WCS
 
         Args:
