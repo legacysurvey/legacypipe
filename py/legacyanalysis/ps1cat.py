@@ -62,27 +62,30 @@ class HealpixedCatalog(object):
     
 class ps1cat(HealpixedCatalog):
     ps1band = dict(g=0,r=1,i=2,z=3,Y=4)
-    def __init__(self,expnum=None,ccdname=None,ccdwcs=None,prefix='ps1',
-                 ps1_or_gaia='ps1'):
+    def __init__(self,expnum=None,ccdname=None,ccdwcs=None,
+                 pattern=None):
         """Read PS1 or gaia sources for an exposure number + CCD name or CCD WCS
 
-        Note: you need to define env vars PS1CAT_DIR or PS1_GAIA_MATCHES
-
         Args:
-          prefix: PS1 or gaia catalogues are named '<prefix>-<healpix pixel>.fits'
-          ps1_or_gaia: 'ps1' for PS1CAT_DIR, 'ps1_gaia' for PS1_GAIA_MATCHES 
+            expnum, ccdname: select catalogue with these
+            ccdwcs: or select catalogue with this
+            pattern: absolute path and wildcard for PS1 or Gaia catalogues
+                dr: /project/projectdirs/cosmo/work/
+                PS1: ${dr}/ps1/cats/chunks-qz-star-v3/ps1-%(hp)05d.fits
+                PS1-Gaia: ${dr}/gaia/chunks-ps1-gaia/chunk-%(hp)05d.fits
         """
-        assert(ps1_or_gaia in ['ps1','ps1_gaia'])
-        if ps1_or_gaia == 'ps1':
-          # PS1 "qz" directory  
-          # e.g. /project/projectdirs/cosmo/work/ps1/cats/chunks-qz-star-v2
-          self.catdir= os.getenv('PS1CAT_DIR')
-        elif ps1_or_gaia == 'ps1_gaia':
-          # PS1-Gaia "qz" matches-only directory
-          # e.g. /project/projectdirs/cosmo/work/gaia/chunks-ps1-gaia
-          self.catdir= os.getenv('PS1_GAIA_MATCHES')
-        fnpattern = os.path.join(self.catdir, prefix + '-%(hp)05d.fits')
-        super(ps1cat, self).__init__(fnpattern)
+        assert('ps1' in pattern or 'gaia' in pattern)
+        #assert(ps1_or_gaia in ['ps1','ps1_gaia'])
+        #if ps1_or_gaia == 'ps1':
+        #  # PS1 "qz" directory  
+        #  # e.g. /project/projectdirs/cosmo/work/ps1/cats/chunks-qz-star-v2
+        #  self.catdir= os.getenv('PS1CAT_DIR')
+        #elif ps1_or_gaia == 'ps1_gaia':
+        #  # PS1-Gaia "qz" matches-only directory
+        #  # e.g. /project/projectdirs/cosmo/work/gaia/chunks-ps1-gaia
+        #  self.catdir= os.getenv('PS1_GAIA_MATCHES')
+        #fnpattern = os.path.join(self.catdir, prefix + '-%(hp)05d.fits')
+        super(ps1cat, self).__init__(pattern)
         
         if ccdwcs is None:
             from legacypipe.survey import LegacySurveyData
