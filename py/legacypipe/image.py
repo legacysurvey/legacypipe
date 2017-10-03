@@ -738,6 +738,9 @@ class LegacySurveyImage(object):
                     if degree == 0:
                         Ti.polname1 = 'X_IMAGE'
                         Ti.polname2 = 'Y_IMAGE'
+                        Ti.polgrp1 = 1
+                        Ti.polgrp2 = 1
+                        Ti.polngrp = 1
 
                     psfex = PsfExModel(Ti=Ti)
                     psf = PixelizedPsfEx(None, psfex=psfex)

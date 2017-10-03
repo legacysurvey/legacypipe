@@ -2867,13 +2867,15 @@ def run_brick(brick, survey, radec=None, pixscale=0.262,
         mp.report(threads)
         mp.finish_subphase()
         return R
-    
+
+    R = None
     for stage in stages:
-        runstage(stage, pickle_pat, mystagefunc, prereqs=prereqs,
-                 initial_args=initargs, **kwargs)
+        R = runstage(stage, pickle_pat, mystagefunc, prereqs=prereqs,
+                     initial_args=initargs, **kwargs)
 
     print('All done:', Time()-t0)
     mp.report(threads)
+    return R
 
 
 def get_parser():
