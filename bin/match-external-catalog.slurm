@@ -39,6 +39,6 @@ time srun -u --cpu_bind=no -N 1 python-mpi $LEGACYPIPE_DIR/bin/match-external-ca
 
 time srun -u --cpu_bind=no -N 1 python-mpi $LEGACYPIPE_DIR/bin/match-external-catalog.py -v --numproc 24 \
      -f fits -F $TRACTOR_FILELIST \
-     /global/projecta/projectdirs/sdss/staging/dr14/sdss/spectro/redux/specObj-dr14.fits \
+     /global/projecta/projectdirs/sdss/data/sdss/dr14/sdss/spectro/redux/specObj-dr14.fits \
      $TRACTOR_INDIR \
      $EXTERNAL_OUTDIR/survey-$dr-specObj-dr14.fits

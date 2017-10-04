@@ -26,7 +26,7 @@ def main():
 
     bricks = list_bricks(ns)
 
-    tree, nobj, mjd, plate, fiberid = read_external(ns.external, ns)
+    tree, nobj, mjd, plate, fiberid, rerun = read_external(ns.external, ns)
 
     # get the data type of the match
     brickname, path = bricks[0]
@@ -34,16 +34,26 @@ def main():
     matched_catalog = sharedmem.empty(nobj, dtype=peek.dtype)
     matched_catalog['OBJID'] = -1
 
-    # Copy over MJD, PLATE, and FIBERID
-    newdtype = np.dtype(matched_catalog.dtype.descr + [('MJD', mjd.dtype),
-                                                       ('PLATE', plate.dtype),
-                                                       ('FIBERID', fiberid.dtype) ])
+    # Copy over MJD, PLATE, FIBERID, and (optionally) RERUN
+    if len(rerun) > 0:
+        newdtype = np.dtype(matched_catalog.dtype.descr + [('MJD', mjd.dtype),
+                                                           ('PLATE', plate.dtype),
+                                                           ('FIBERID', fiberid.dtype),
+                                                           ('RERUN', rerun.dtype) ])
+    else:
+        newdtype = np.dtype(matched_catalog.dtype.descr + [('MJD', mjd.dtype),
+                                                           ('PLATE', plate.dtype),
+                                                           ('FIBERID', fiberid.dtype) ])
+        
+    
     _matched_catalog = np.empty(matched_catalog.shape, dtype=newdtype)
     for field in matched_catalog.dtype.fields:
         _matched_catalog[field] = matched_catalog[field]
     _matched_catalog['MJD'] = mjd
     _matched_catalog['PLATE'] = plate
     _matched_catalog['FIBERID'] = fiberid
+    if len(rerun) > 0:
+        _matched_catalog['RERUN'] = rerun
     matched_catalog = _matched_catalog
     del _matched_catalog    
     
@@ -89,7 +99,7 @@ def main():
             nmatched[...] += matched
             ntotal[...] += total
             if ns.verbose:
-                if nprocessed % 50 == 0:
+                if nprocessed % 1000 == 0:
                     print("Processed %d files, %g / second, matched %d / %d objects."
                         % (nprocessed, nprocessed / (time() - t0), nmatched, ntotal)
                         )
@@ -176,22 +186,30 @@ def read_external(filename, ns):
 
     # Retrieve and return the MJD, PLATE, FIBERID
     plate = cat['PLATE']
-    
+
+    mjd = []
     for mjdcol in ('MJD', 'SMJD'):
         if mjdcol in cat.dtype.names:
             mjd = cat[mjdcol]
             break
-        else:
-            raise KeyError('No known MJD column in the external catalog!')
-        
+    if len(mjd) == 0:
+        raise KeyError('No known MJD column in the external catalog!')
+
+    fiberid = [0]
     for fibercol in ('FIBERID', 'FIBER'):
         if fibercol in cat.dtype.names:
             fiberid = cat[fibercol]
             break
-        else:
-            raise KeyError('No known FIBERID column in the external catalog!')
+    if len(fiberid) == 0:
+        raise KeyError('No known FIBERID column in the external catalog!')
 
-    return tree, len(cat), mjd, plate, fiberid
+    rerun = []
+    for reruncol in ('RERUN', 'RERUN_NUMBER'):
+        if reruncol in cat.dtype.names:
+            rerun = cat[reruncol]
+            break
+
+    return tree, len(cat), mjd, plate, fiberid, rerun
 
 def list_bricks(ns):
     t0 = time()
