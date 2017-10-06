@@ -26,14 +26,14 @@ def main():
 
     bricks = list_bricks(ns)
 
-    tree, nobj = read_external(ns.external, ns)
+    tree, nobj, morecols = read_external(ns.external, ns)
 
     # get the data type of the match
     brickname, path = bricks[0]
     peek = fitsio.read(path, 1, upper=True)
     matched_catalog = sharedmem.empty(nobj, dtype=peek.dtype)
-
     matched_catalog['OBJID'] = -1
+
     matched_distance = sharedmem.empty(nobj, dtype='f4')
 
     # convert to radian
@@ -44,7 +44,6 @@ def main():
     nmatched = np.zeros((), dtype='i8')
     ntotal = np.zeros((), dtype='i8')
     t0 = time()
-
 
     with sharedmem.MapReduce(np=ns.numproc) as pool:
         def work(brickname, path):
@@ -77,7 +76,7 @@ def main():
             nmatched[...] += matched
             ntotal[...] += total
             if ns.verbose:
-                if nprocessed % 50 == 0:
+                if nprocessed % 1000 == 0:
                     print("Processed %d files, %g / second, matched %d / %d objects."
                         % (nprocessed, nprocessed / (time() - t0), nmatched, ntotal)
                         )
@@ -102,6 +101,23 @@ def main():
         header['NCOLLISION'] = nmatched - nrealmatched
         header['TOL_ARCSEC'] = ns.tolerance
 
+        # Optionally add the new columns
+        if len(morecols) > 0:
+            newdtype = matched_catalog.dtype.descr
+    
+            for coldata, col in zip( morecols, ns.copycols ):
+                newdtype = newdtype + [(col, coldata.dtype)]
+            newdtype = np.dtype(newdtype)
+        
+            _matched_catalog = np.empty(matched_catalog.shape, dtype=newdtype)
+            for field in matched_catalog.dtype.fields:
+                _matched_catalog[field] = matched_catalog[field]
+            for coldata, col in zip( morecols, ns.copycols ):
+                _matched_catalog[col] = coldata
+                
+            matched_catalog = _matched_catalog.copy()
+            del _matched_catalog
+
         for format in ns.format:
             save_file(ns.dest, matched_catalog, header, format)
 
@@ -109,12 +125,12 @@ def save_file(filename, data, header, format):
     basename = os.path.splitext(filename)[0]
     if format == 'fits':
         filename = basename + '.fits'
-        fitsio.write(filename, data, extname='DECALS-SDSS', header=header, clobber=True)
+        fitsio.write(filename, data, extname='MATCHED', header=header, clobber=True)
     elif format == 'hdf5':
         filename = basename + '.hdf5'
         import h5py
         with h5py.File(filename, 'w') as ff:
-            dset = ff.create_dataset('DECALS-SDSS', data=data)
+            dset = ff.create_dataset('MATCHED', data=data)
             for key in header:
                 dset.attrs[key] = header[key]
     else:
@@ -162,7 +178,15 @@ def read_external(filename, ns):
     if ns.verbose:
         print("Building KD-Tree took %g seconds." % (time() - t0))
 
-    return tree, len(cat)
+    morecols = []
+    if ns.copycols is not None:
+        for col in np.atleast_1d(ns.copycols):
+            if col not in cat.dtype.names:
+                print('Column {} does not exist in external catalog!'.format(col))
+                raise IOError
+            morecols.append(cat[col])
+
+    return tree, len(cat), morecols
 
 def list_bricks(ns):
     t0 = time()
@@ -221,6 +245,8 @@ def parse_args():
     ap.add_argument("--numproc", type=int, default=None,
         help="""Number of concurrent processes to use. 0 for sequential execution. 
             Default is to use OMP_NUM_THREADS, or the number of cores on the node.""")
+
+    ap.add_argument("--copycols", nargs='*', help="List of columns to copy from external to matched output catalog (e.g., MJD, FIBER, PLATE)", default=None)
 
     return ap.parse_args()
 
