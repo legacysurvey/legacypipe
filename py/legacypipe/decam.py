@@ -79,8 +79,10 @@ class DecamImage(CPImage, CalibMixin):
         for name,crit in [
             ('exptime < 30 s', (ccds.exptime < 30)),
             ('ccdnmatch < 20', (ccds.ccdnmatch < 20)),
-            ('abs(zpt - ccdzpt) > 0.1',
-             (np.abs(ccds.zpt - ccds.ccdzpt) > 0.1)),
+            ('abs(zpt - ccdzpt) > 0.5',
+             (np.abs(ccds.zpt - ccds.ccdzpt) > 0.5)),
+            ('ccdphrms > 0.1',
+             (ccds.ccdphrms > 0.1)),
             ('zpt < 0.5 mag of nominal',
              (ccds.zpt < (z0 - 0.5))),
             ('zpt > 0.25 mag of nominal',

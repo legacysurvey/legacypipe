@@ -14,7 +14,7 @@ from tractor.ellipses import EllipseESoft, EllipseE
 from tractor.galaxy import ExpGalaxy
 from legacypipe.utils import EllipseWithPriors
 
-release_number = 5000
+release_number = 5001
 
 # search order: $TMPDIR, $TEMP, $TMP, then /tmp, /var/tmp, /usr/tmp
 tempdir = tempfile.gettempdir()
