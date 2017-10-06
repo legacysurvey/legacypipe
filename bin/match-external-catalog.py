@@ -26,7 +26,7 @@ def main():
 
     bricks = list_bricks(ns)
 
-    tree, nobj, mjd, plate, fiberid, rerun = read_external(ns.external, ns)
+    tree, nobj, morecols = read_external(ns.external, ns)
 
     # get the data type of the match
     brickname, path = bricks[0]
@@ -34,29 +34,6 @@ def main():
     matched_catalog = sharedmem.empty(nobj, dtype=peek.dtype)
     matched_catalog['OBJID'] = -1
 
-    # Copy over MJD, PLATE, FIBERID, and (optionally) RERUN
-    if len(rerun) > 0:
-        newdtype = np.dtype(matched_catalog.dtype.descr + [('MJD', mjd.dtype),
-                                                           ('PLATE', plate.dtype),
-                                                           ('FIBERID', fiberid.dtype),
-                                                           ('RERUN', rerun.dtype) ])
-    else:
-        newdtype = np.dtype(matched_catalog.dtype.descr + [('MJD', mjd.dtype),
-                                                           ('PLATE', plate.dtype),
-                                                           ('FIBERID', fiberid.dtype) ])
-        
-    
-    _matched_catalog = np.empty(matched_catalog.shape, dtype=newdtype)
-    for field in matched_catalog.dtype.fields:
-        _matched_catalog[field] = matched_catalog[field]
-    _matched_catalog['MJD'] = mjd
-    _matched_catalog['PLATE'] = plate
-    _matched_catalog['FIBERID'] = fiberid
-    if len(rerun) > 0:
-        _matched_catalog['RERUN'] = rerun
-    matched_catalog = _matched_catalog
-    del _matched_catalog    
-    
     matched_distance = sharedmem.empty(nobj, dtype='f4')
 
     # convert to radian
@@ -124,6 +101,23 @@ def main():
         header['NCOLLISION'] = nmatched - nrealmatched
         header['TOL_ARCSEC'] = ns.tolerance
 
+        # Optionally add the new columns
+        if len(morecols) > 0:
+            newdtype = matched_catalog.dtype.descr
+    
+            for coldata, col in zip( morecols, ns.copycols ):
+                newdtype = newdtype + [(col, coldata.dtype)]
+            newdtype = np.dtype(newdtype)
+        
+            _matched_catalog = np.empty(matched_catalog.shape, dtype=newdtype)
+            for field in matched_catalog.dtype.fields:
+                _matched_catalog[field] = matched_catalog[field]
+            for coldata, col in zip( morecols, ns.copycols ):
+                _matched_catalog[col] = coldata
+                
+            matched_catalog = _matched_catalog.copy()
+            del _matched_catalog
+
         for format in ns.format:
             save_file(ns.dest, matched_catalog, header, format)
 
@@ -184,32 +178,15 @@ def read_external(filename, ns):
     if ns.verbose:
         print("Building KD-Tree took %g seconds." % (time() - t0))
 
-    # Retrieve and return the MJD, PLATE, FIBERID
-    plate = cat['PLATE']
+    morecols = []
+    if ns.copycols is not None:
+        for col in np.atleast_1d(ns.copycols):
+            if col not in cat.dtype.names:
+                print('Column {} does not exist in external catalog!'.format(col))
+                raise IOError
+            morecols.append(cat[col])
 
-    mjd = []
-    for mjdcol in ('MJD', 'SMJD'):
-        if mjdcol in cat.dtype.names:
-            mjd = cat[mjdcol]
-            break
-    if len(mjd) == 0:
-        raise KeyError('No known MJD column in the external catalog!')
-
-    fiberid = [0]
-    for fibercol in ('FIBERID', 'FIBER'):
-        if fibercol in cat.dtype.names:
-            fiberid = cat[fibercol]
-            break
-    if len(fiberid) == 0:
-        raise KeyError('No known FIBERID column in the external catalog!')
-
-    rerun = []
-    for reruncol in ('RERUN', 'RERUN_NUMBER'):
-        if reruncol in cat.dtype.names:
-            rerun = cat[reruncol]
-            break
-
-    return tree, len(cat), mjd, plate, fiberid, rerun
+    return tree, len(cat), morecols
 
 def list_bricks(ns):
     t0 = time()
@@ -268,6 +245,8 @@ def parse_args():
     ap.add_argument("--numproc", type=int, default=None,
         help="""Number of concurrent processes to use. 0 for sequential execution. 
             Default is to use OMP_NUM_THREADS, or the number of cores on the node.""")
+
+    ap.add_argument("--copycols", nargs='*', help="List of columns to copy from external to matched output catalog (e.g., MJD, FIBER, PLATE)", default=None)
 
     return ap.parse_args()
 
