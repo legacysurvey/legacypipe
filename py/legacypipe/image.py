@@ -332,7 +332,7 @@ class LegacySurveyImage(object):
         # Galaxy-detection norm
         tim.galnorm = self.galaxy_norm(tim)
         print('Galaxy norm', tim.galnorm)
-        assert(tim.galnorm < tim.psfnorm)
+        #assert(tim.galnorm < tim.psfnorm)
         tim.psf = fullpsf
 
         # CP (DECam) images include DATE-OBS and MJD-OBS, in UTC.
@@ -730,7 +730,7 @@ class LegacySurveyImage(object):
                     # Remove any padding
                     degree = Ti.poldeg1
                     # number of terms in polynomial
-                    ne = (degree + 1) * (degree + 2) / 2
+                    ne = (degree + 1) * (degree + 2) // 2
                     #print('PSF_mask shape', Ti.psf_mask.shape)
                     Ti.psf_mask = Ti.psf_mask[:ne, :Ti.psfaxis1, :Ti.psfaxis2]
 
@@ -887,7 +887,7 @@ class CalibMixin(object):
             '-FILTER_NAME %s' % os.path.join(sedir, surveyname + '.conv'),
             '-FLAG_IMAGE %s' % maskfn,
             '-CATALOG_NAME %s' % tmpfn,
-            '-SEEING_FWHM %f' % seeing,
+            #'-SEEING_FWHM %f' % seeing,
             '-MAG_ZEROPOINT %f' % magzp,
             imgfn])
         print(cmd)
@@ -907,7 +907,7 @@ class CalibMixin(object):
         # We write the PSF model to a .fits.tmp file, then rename to .fits
         psfdir = os.path.dirname(self.psffn)
         psfoutfn = os.path.join(psfdir, os.path.basename(self.sefn).replace('.fits','') + '.fits')
-        cmds = ['psfex -c %s -PSF_DIR %s -PSF_SUFFIX .fits.tmp %s' %
+        cmds = ['psfex -c %s -PSF_DIR %s -PSF_SUFFIX .fits.tmp -NTHREADS 1 %s' %
                 (os.path.join(sedir, surveyname + '.psfex'),
                  psfdir, self.sefn),
                 'mv %s %s' % (psfoutfn + '.tmp', psfoutfn),

@@ -56,6 +56,7 @@ def format_catalog(T, hdr, primhdr, allbands, outfn,
     T.rename('rchi2','rchisq')
     if has_wise:
         T.rename('wise_rchi2','wise_rchisq')
+    if has_wise_lc:
         T.rename('wise_lc_rchi2','wise_lc_rchisq')
 
     # Nans,Infs

@@ -41,11 +41,12 @@ echo >> $log
 echo -e "\nStarting on ${NERSC_HOST} $(hostname)\n" >> $log
 echo "-----------------------------------------------------------------------------------------" >> $log
 
+#    --skip-calibs \
+
 python legacypipe/runbrick.py \
     --force-all --no-write \
     --threads 8 \
     --skip \
-    --skip-calibs \
     --brick $brick --outdir $outdir >> $log 2>&1
 
 # qdo launch dr2n 16 --cores_per_worker 8 --walltime=24:00:00 --script ../bin/pipebrick.sh --batchqueue regular --verbose
