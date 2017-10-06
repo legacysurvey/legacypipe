@@ -764,6 +764,14 @@ class LegacySurveyImage(object):
             hdr = fitsio.read_header(self.psffn, ext=1)
             psf.fwhm = hdr['PSF_FWHM']
 
+        #####
+        print('WARNING: NORMALIZING PSF MODEL')
+        eigenimg = psf.bases()[0]
+        psum = eigenimg.sum()
+        print('PSF eigen-image:', eigenimg.shape, 'sum', psum)
+        psf.psfbases /= psum
+        #####
+        
         psf.shift(x0, y0)
         if hybridPsf:
             from tractor.psf import HybridPixelizedPSF
