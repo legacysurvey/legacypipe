@@ -765,11 +765,13 @@ class LegacySurveyImage(object):
             psf.fwhm = hdr['PSF_FWHM']
 
         #####
+        print('Before normalizing: sum in center', psf.getImage(x0+w/2, y0+h/2).sum())
         print('WARNING: NORMALIZING PSF MODEL')
-        eigenimg = psf.bases()[0]
+        eigenimg = psf.psfex.bases()[0]
         psum = eigenimg.sum()
         print('PSF eigen-image:', eigenimg.shape, 'sum', psum)
-        psf.psfbases /= psum
+        psf.psfex.psfbases /= psum
+        print('After normalizing: sum in center', psf.getImage(x0+w/2, y0+h/2).sum())
         #####
         
         psf.shift(x0, y0)
