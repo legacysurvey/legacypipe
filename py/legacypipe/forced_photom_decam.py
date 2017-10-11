@@ -54,15 +54,16 @@ def get_parser():
     
     parser.add_argument('--constant-invvar', action='store_true',
                         help='Set inverse-variance to a constant across the image?')
-    parser.add_argument('--hybrid-psf', action='store_true',
-                        help='Use hybrid pixelized-MoG PSF model?')
+
+    parser.add_argument('--no-hybrid-psf', dest=hybrid_psf, action='store_false',
+                        help='Do nto use hybrid pixelized-MoG PSF model?')
     
     parser.add_argument('--save-model',
                         help='Compute and save model image?')
     parser.add_argument('--save-data',
                         help='Compute and save model image?')
 
-    parser.add_argument('--camera', help='Camera name')
+    parser.add_argument('--camera', help='Cut to only CCD with given camera name?')
     
     parser.add_argument('filename',help='Filename OR exposure number.')
     parser.add_argument('hdu',help='decam-HDU OR CCD name.')
@@ -172,7 +173,7 @@ def main(survey=None, opt=None):
 
     print('Read image:', Time()-t0)
 
-    if opt.catfn in ['DR1', 'DR2', 'DR3']:
+    if opt.catfn in ['DR1', 'DR2', 'DR3', 'DR5', 'DR']:
 
         margin = 20
         TT = []
@@ -195,8 +196,10 @@ def main(survey=None, opt=None):
             # print('Brick_primary:', np.unique(T.brick_primary))
             T.cut(T.brick_primary)
             print('Cut to', len(T), 'on brick_primary')
-            T.cut((T.out_of_bounds == False) * (T.left_blob == False))
-            print('Cut to', len(T), 'on out_of_bounds and left_blob')
+            for col in ['out_of_bounds', 'left_blob']:
+                if col in T.get_columns():
+                    T.cut(T.get(col) == False)
+                    print('Cut to', len(T), 'on', col)
             if len(T):
                 TT.append(T)
         if len(TT) == 0:
@@ -238,8 +241,12 @@ def main(survey=None, opt=None):
 
     surveydir = survey.get_survey_dir()
     del survey
-        
-    cat = read_fits_catalog(T)
+
+    kwargs = {}
+    cols = T.get_columns()
+    if 'flux_r' in cols and not 'decam_flux_r' in cols:
+        kwargs.update(fluxPrefix='')
+    cat = read_fits_catalog(T, **kwargs)
     # print('Got cat:', cat)
 
     print('Read catalog:', Time()-t0)
