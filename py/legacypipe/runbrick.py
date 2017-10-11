@@ -1,5 +1,5 @@
 '''
-Main "pipeline" script for the Legacy Survey (DECaLS, MzLS)
+Main "pipeline" script for the Legacy Survey (DECaLS, MzLS, BASS)
 data reductions.
 
 For calling from other scripts, see:
@@ -2867,13 +2867,15 @@ def run_brick(brick, survey, radec=None, pixscale=0.262,
         mp.report(threads)
         mp.finish_subphase()
         return R
-    
+
+    R = None
     for stage in stages:
-        runstage(stage, pickle_pat, mystagefunc, prereqs=prereqs,
-                 initial_args=initargs, **kwargs)
+        R = runstage(stage, pickle_pat, mystagefunc, prereqs=prereqs,
+                     initial_args=initargs, **kwargs)
 
     print('All done:', Time()-t0)
     mp.report(threads)
+    return R
 
 
 def get_parser():
@@ -3024,14 +3026,10 @@ python -u legacypipe/runbrick.py --plots --brick 2440p070 --zoom 1900 2400 450 9
     parser.add_argument('--gpsf', action='store_true', default=False,
                         help='Use a fixed single-Gaussian PSF')
 
-    # parser.add_argument('--hybrid-psf', dest='hybridPsf', action='store_true', default=False,
-    #                     help='Use a hybrid pixelized/Gaussian PSF model')
     parser.add_argument('--no-hybrid-psf', dest='hybridPsf', default=True,
                         action='store_false',
                         help="Don't use a hybrid pixelized/Gaussian PSF model")
-
-    #parser.add_argument('--rex', action='store_true', default=False,
-    #                    help='Use REX as simple galaxy models, rather than SIMP')
+    
     parser.add_argument('--simp', dest='rex', default=True,
                         action='store_false',
                         help='Use SIMP rather than REX')
@@ -3042,8 +3040,6 @@ python -u legacypipe/runbrick.py --plots --brick 2440p070 --zoom 1900 2400 450 9
     parser.add_argument('--bands', default=None,
                         help='Set the list of bands (filters) that are included in processing: comma-separated list, default "g,r,z"')
 
-    # parser.add_argument('--no-depth-cut', dest='depth_cut', default=True,
-    #                     action='store_false', help='Do not cut to the set of CCDs required to reach our depth target')
     parser.add_argument('--depth-cut', default=False, action='store_true',
                         help='Cut to the set of CCDs required to reach our depth target')
     

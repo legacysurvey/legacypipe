@@ -108,6 +108,8 @@ def main():
                       help='Write out full command-line to run calib')
     parser.add_argument('--opt', help='With --command, extra options to add')
     
+    parser.add_argument('--maxra', type=float, help='Maximum RA to run')
+    parser.add_argument('--minra', type=float, help='Minimum RA to run')
     parser.add_argument('--maxdec', type=float, help='Maximum Dec to run')
     parser.add_argument('--mindec', type=float, help='Minimum Dec to run')
 
@@ -380,6 +382,10 @@ def main():
         dlo = opt.mindec
     if opt.maxdec is not None:
         dhi = opt.maxdec
+    if opt.minra is not None:
+        rlo = opt.minra
+    if opt.maxra is not None:
+        rhi = opt.maxra
 
     if rlo < rhi:
         B.cut((B.ra >= rlo) * (B.ra <= rhi) *
