@@ -55,7 +55,7 @@ def get_parser():
     parser.add_argument('--constant-invvar', action='store_true',
                         help='Set inverse-variance to a constant across the image?')
 
-    parser.add_argument('--no-hybrid-psf', dest=hybrid_psf, action='store_false',
+    parser.add_argument('--no-hybrid-psf', dest='hybrid_psf', action='store_false',
                         help='Do nto use hybrid pixelized-MoG PSF model?')
     
     parser.add_argument('--save-model',
@@ -252,85 +252,15 @@ def main(survey=None, opt=None):
     print('Read catalog:', Time()-t0)
 
     print('Forced photom...')
-    opti = None
-    forced_kwargs = {}
-    if opt.ceres:
-        from tractor.ceres_optimizer import CeresOptimizer
-        B = 8
-        opti = CeresOptimizer(BW=B, BH=B)
-        #forced_kwargs.update(verbose=True)
-
-    nsize = 0
-    for src in cat:
-        # Limit sizes of huge models
-        from tractor.galaxy import ProfileGalaxy
-        if isinstance(src, ProfileGalaxy):
-            px,py = tim.wcs.positionToPixel(src.getPosition())
-            h = src._getUnitFluxPatchSize(tim, px, py, tim.modelMinval)
-            MAXHALF = 128
-            if h > MAXHALF:
-                #print('halfsize', h,'for',src,'-> setting to',MAXHALF)
-                nsize += 1
-                src.halfsize = MAXHALF
-
-        src.freezeAllBut('brightness')
-        src.getBrightness().freezeAllBut(tim.band)
-    print('Limited the size of', nsize, 'large galaxy models')
-
-    if opt.derivs:
-        realsrcs = []
-        derivsrcs = []
-        for src in cat:
-            realsrcs.append(src)
-
-            bright_dra  = src.getBrightness().copy()
-            bright_ddec = src.getBrightness().copy()
-            bright_dra .setParams(np.zeros(bright_dra .numberOfParams()))
-            bright_ddec.setParams(np.zeros(bright_ddec.numberOfParams()))
-            bright_dra .freezeAllBut(tim.band)
-            bright_ddec.freezeAllBut(tim.band)
-
-            dsrc = SourceDerivatives(src, [tim.band], ['pos'],
-                                     [bright_dra, bright_ddec])
-            derivsrcs.append(dsrc)
-
-        # For convenience, put all the real sources at the front of
-        # the list, so we can pull the IVs off the front of the list.
-        cat = realsrcs + derivsrcs
-
-    if opt.agn:
-        from tractor.galaxy import ExpGalaxy, DevGalaxy, FixedCompositeGalaxy
-        from tractor import PointSource
-        from legacypipe.survey import SimpleGalaxy, RexGalaxy
-
-        realsrcs = []
-        agnsrcs = []
-        iagn = []
-        for i,src in enumerate(cat):
-            realsrcs.append(src)
-            ## ??
-            if isinstance(src, (SimpleGalaxy, RexGalaxy)):
-                #print('Skipping SIMP or REX:', src)
-                continue
-            if isinstance(src, (ExpGalaxy, DevGalaxy, FixedCompositeGalaxy)):
-                iagn.append(i)
-                bright = src.getBrightness().copy()
-                bright.setParams(np.zeros(bright.numberOfParams()))
-                bright.freezeAllBut(tim.band)
-                agn = PointSource(src.pos, bright)
-                agn.freezeAllBut('brightness')
-                #print('Adding "agn"', agn, 'to', src)
-                #print('agn params:', agn.getParamNames())
-                agnsrcs.append(src)
-        iagn = np.array(iagn)
-        cat = realsrcs + agnsrcs
-        print('Added AGN to', len(iagn), 'galaxies')
-
-    tr = Tractor([tim], cat, optimizer=opti)
-    tr.freezeParam('images')
-    disable_galaxy_cache()
-
-    F = fits_table()
+    F = run_forced_phot(cat, tim,
+                        ceres=opt.ceres,
+                        derivs=opt.derivs,
+                        agn=opt.agn,
+                        do_forced=opt.forced,
+                        do_apphot=opt.apphot,
+                        ps=ps)
+    t0 = Time()
+    
     #F.release   = T.release
     F.brickid   = T.brickid
     F.brickname = T.brickname
@@ -348,126 +278,8 @@ def main(survey=None, opt=None):
     F.x = (x-1).astype(np.float32)
     F.y = (y-1).astype(np.float32)
 
-    if opt.forced:
-        if opt.plots is None:
-            forced_kwargs.update(wantims=False)
 
-        # print('Params:')
-        # tr.printThawedParams()
-
-        R = tr.optimize_forced_photometry(variance=True, fitstats=True,
-                                          shared_params=False, priors=False, **forced_kwargs)
-
-        if opt.plots:
-            (data,mod,ie,chi,roi) = R.ims1[0]
-
-            ima = dict(vmin=-2.*tim.sig1, vmax=5.*tim.sig1,
-                       interpolation='nearest', origin='lower',
-                       cmap='gray')
-            imchi = dict(interpolation='nearest', origin='lower',
-                         vmin=-5, vmax=5, cmap='RdBu')
-            plt.clf()
-            plt.imshow(data, **ima)
-            plt.title('Data: %s' % tim.name)
-            ps.savefig()
-
-            plt.clf()
-            plt.imshow(mod, **ima)
-            plt.title('Model: %s' % tim.name)
-            ps.savefig()
-
-            plt.clf()
-            plt.imshow(chi, **imchi)
-            plt.title('Chi: %s' % tim.name)
-            ps.savefig()
-
-            if opt.derivs:
-                trx = Tractor([tim], realsrcs)
-                trx.freezeParam('images')
-
-                modx = trx.getModelImage(0)
-                chix = (data - modx) * tim.getInvError()
-
-                plt.clf()
-                plt.imshow(modx, **ima)
-                plt.title('Model without derivatives: %s' % tim.name)
-                ps.savefig()
-
-                plt.clf()
-                plt.imshow(chix, **imchi)
-                plt.title('Chi without derivatives: %s' % tim.name)
-                ps.savefig()
-
-        if opt.derivs:
-            cat = realsrcs
-        if opt.agn:
-            cat = realsrcs
-            
-        F.flux = np.array([src.getBrightness().getFlux(tim.band)
-                           for src in cat]).astype(np.float32)
-        N = len(cat)
-        F.flux_ivar = R.IV[:N].astype(np.float32)
-
-        F.fracflux = R.fitstats.profracflux[:N].astype(np.float32)
-        F.rchi2    = R.fitstats.prochi2    [:N].astype(np.float32)
-
-        if opt.derivs:
-            F.flux_dra  = np.array([src.getParams()[0] for src in derivsrcs]).astype(np.float32)
-            F.flux_ddec = np.array([src.getParams()[1] for src in derivsrcs]).astype(np.float32)
-            F.flux_dra_ivar  = R.IV[N  ::2].astype(np.float32)
-            F.flux_ddec_ivar = R.IV[N+1::2].astype(np.float32)
-
-        if opt.agn:
-            F.flux_agn = np.zeros(len(F), np.float32)
-            F.flux_agn_ivar = np.zeros(len(F), np.float32)
-            F.flux_agn[iagn] = np.array([src.getParams()[0] for src in agnsrcs])
-            F.flux_agn_ivar[iagn] = R.IV[N:].astype(np.float32)
-            
-        print('Forced photom:', Time()-t0)
         
-    if opt.apphot:
-        import photutils
-
-        img = tim.getImage()
-        ie = tim.getInvError()
-        with np.errstate(divide='ignore'):
-            imsigma = 1. / ie
-        imsigma[ie == 0] = 0.
-
-        apimg = []
-        apimgerr = []
-
-        # Aperture photometry locations
-        xxyy = np.vstack([tim.wcs.positionToPixel(src.getPosition()) for src in cat]).T
-        apxy = xxyy - 1.
-
-        apertures = apertures_arcsec / tim.wcs.pixel_scale()
-        print('Apertures:', apertures, 'pixels')
-
-        #print('apxy shape', apxy.shape)  # --> (2,N)
-
-        # The aperture photometry routine doesn't like pixel positions outside the image
-        H,W = img.shape
-        Iap = np.flatnonzero((apxy[0,:] >= 0)   * (apxy[1,:] >= 0) *
-                             (apxy[0,:] <= W-1) * (apxy[1,:] <= H-1))
-        print('Aperture photometry for', len(Iap), 'of', len(apxy), 'sources within image bounds')
-
-        for rad in apertures:
-            aper = photutils.CircularAperture(apxy[:,Iap], rad)
-            p = photutils.aperture_photometry(img, aper, error=imsigma)
-            apimg.append(p.field('aperture_sum'))
-            apimgerr.append(p.field('aperture_sum_err'))
-        ap = np.vstack(apimg).T
-        ap[np.logical_not(np.isfinite(ap))] = 0.
-        F.apflux = np.zeros((len(F), len(apertures)), np.float32)
-        F.apflux[Iap,:] = ap.astype(np.float32)
-
-        ap = 1./(np.vstack(apimgerr).T)**2
-        ap[np.logical_not(np.isfinite(ap))] = 0.
-        F.apflux_ivar = np.zeros((len(F), len(apertures)), np.float32)
-        F.apflux_ivar[Iap,:] = ap.astype(np.float32)
-        print('Aperture photom:', Time()-t0)
-
     program_name = sys.argv[0]
     version_hdr = get_version_header(program_name, surveydir)
     filename = getattr(ccd, 'image_filename')
@@ -524,6 +336,215 @@ def main(survey=None, opt=None):
     
     print('Finished forced phot:', Time()-t0)
     return 0
+
+    
+def run_forced_phot(cat, tim, ceres=True, derivs=False, agn=False,
+                    do_forced=True, do_apphot=True, ps=None):
+    t0 = Time()
+    if ps is not None:
+        import pylab as plt
+    opti = None
+    forced_kwargs = {}
+    if ceres:
+        from tractor.ceres_optimizer import CeresOptimizer
+        B = 8
+        opti = CeresOptimizer(BW=B, BH=B)
+        #forced_kwargs.update(verbose=True)
+
+    nsize = 0
+    for src in cat:
+        # Limit sizes of huge models
+        from tractor.galaxy import ProfileGalaxy
+        if isinstance(src, ProfileGalaxy):
+            px,py = tim.wcs.positionToPixel(src.getPosition())
+            h = src._getUnitFluxPatchSize(tim, px, py, tim.modelMinval)
+            MAXHALF = 128
+            if h > MAXHALF:
+                #print('halfsize', h,'for',src,'-> setting to',MAXHALF)
+                nsize += 1
+                src.halfsize = MAXHALF
+
+        src.freezeAllBut('brightness')
+        src.getBrightness().freezeAllBut(tim.band)
+    print('Limited the size of', nsize, 'large galaxy models')
+    
+    if derivs:
+        realsrcs = []
+        derivsrcs = []
+        for src in cat:
+            realsrcs.append(src)
+
+            bright_dra  = src.getBrightness().copy()
+            bright_ddec = src.getBrightness().copy()
+            bright_dra .setParams(np.zeros(bright_dra .numberOfParams()))
+            bright_ddec.setParams(np.zeros(bright_ddec.numberOfParams()))
+            bright_dra .freezeAllBut(tim.band)
+            bright_ddec.freezeAllBut(tim.band)
+
+            dsrc = SourceDerivatives(src, [tim.band], ['pos'],
+                                     [bright_dra, bright_ddec])
+            derivsrcs.append(dsrc)
+
+        # For convenience, put all the real sources at the front of
+        # the list, so we can pull the IVs off the front of the list.
+        cat = realsrcs + derivsrcs
+
+    if agn:
+        from tractor.galaxy import ExpGalaxy, DevGalaxy, FixedCompositeGalaxy
+        from tractor import PointSource
+        from legacypipe.survey import SimpleGalaxy, RexGalaxy
+
+        realsrcs = []
+        agnsrcs = []
+        iagn = []
+        for i,src in enumerate(cat):
+            realsrcs.append(src)
+            ## ??
+            if isinstance(src, (SimpleGalaxy, RexGalaxy)):
+                #print('Skipping SIMP or REX:', src)
+                continue
+            if isinstance(src, (ExpGalaxy, DevGalaxy, FixedCompositeGalaxy)):
+                iagn.append(i)
+                bright = src.getBrightness().copy()
+                bright.setParams(np.zeros(bright.numberOfParams()))
+                bright.freezeAllBut(tim.band)
+                agn = PointSource(src.pos, bright)
+                agn.freezeAllBut('brightness')
+                #print('Adding "agn"', agn, 'to', src)
+                #print('agn params:', agn.getParamNames())
+                agnsrcs.append(src)
+        iagn = np.array(iagn)
+        cat = realsrcs + agnsrcs
+        print('Added AGN to', len(iagn), 'galaxies')
+
+    tr = Tractor([tim], cat, optimizer=opti)
+    tr.freezeParam('images')
+    disable_galaxy_cache()
+
+    F = fits_table()
+
+    if do_forced:
+
+        if ps is None:
+            forced_kwargs.update(wantims=False)
+
+        # print('Params:')
+        # tr.printThawedParams()
+
+        R = tr.optimize_forced_photometry(variance=True, fitstats=True,
+                                          shared_params=False, priors=False, **forced_kwargs)
+
+        if ps is not None:
+            (data,mod,ie,chi,roi) = R.ims1[0]
+
+            ima = dict(vmin=-2.*tim.sig1, vmax=5.*tim.sig1,
+                       interpolation='nearest', origin='lower',
+                       cmap='gray')
+            imchi = dict(interpolation='nearest', origin='lower',
+                         vmin=-5, vmax=5, cmap='RdBu')
+            plt.clf()
+            plt.imshow(data, **ima)
+            plt.title('Data: %s' % tim.name)
+            ps.savefig()
+
+            plt.clf()
+            plt.imshow(mod, **ima)
+            plt.title('Model: %s' % tim.name)
+            ps.savefig()
+
+            plt.clf()
+            plt.imshow(chi, **imchi)
+            plt.title('Chi: %s' % tim.name)
+            ps.savefig()
+
+            if derivs:
+                trx = Tractor([tim], realsrcs)
+                trx.freezeParam('images')
+
+                modx = trx.getModelImage(0)
+                chix = (data - modx) * tim.getInvError()
+
+                plt.clf()
+                plt.imshow(modx, **ima)
+                plt.title('Model without derivatives: %s' % tim.name)
+                ps.savefig()
+
+                plt.clf()
+                plt.imshow(chix, **imchi)
+                plt.title('Chi without derivatives: %s' % tim.name)
+                ps.savefig()
+
+        if derivs:
+            cat = realsrcs
+        if agn:
+            cat = realsrcs
+
+        F.flux = np.array([src.getBrightness().getFlux(tim.band)
+                           for src in cat]).astype(np.float32)
+        N = len(cat)
+        F.flux_ivar = R.IV[:N].astype(np.float32)
+
+        F.fracflux = R.fitstats.profracflux[:N].astype(np.float32)
+        F.rchi2    = R.fitstats.prochi2    [:N].astype(np.float32)
+
+        if derivs:
+            F.flux_dra  = np.array([src.getParams()[0] for src in derivsrcs]).astype(np.float32)
+            F.flux_ddec = np.array([src.getParams()[1] for src in derivsrcs]).astype(np.float32)
+            F.flux_dra_ivar  = R.IV[N  ::2].astype(np.float32)
+            F.flux_ddec_ivar = R.IV[N+1::2].astype(np.float32)
+
+        if agn:
+            F.flux_agn = np.zeros(len(F), np.float32)
+            F.flux_agn_ivar = np.zeros(len(F), np.float32)
+            F.flux_agn[iagn] = np.array([src.getParams()[0] for src in agnsrcs])
+            F.flux_agn_ivar[iagn] = R.IV[N:].astype(np.float32)
+            
+        print('Forced photom:', Time()-t0)
+        
+    if do_apphot:
+        import photutils
+
+        img = tim.getImage()
+        ie = tim.getInvError()
+        with np.errstate(divide='ignore'):
+            imsigma = 1. / ie
+        imsigma[ie == 0] = 0.
+
+        apimg = []
+        apimgerr = []
+
+        # Aperture photometry locations
+        xxyy = np.vstack([tim.wcs.positionToPixel(src.getPosition()) for src in cat]).T
+        apxy = xxyy - 1.
+
+        apertures = apertures_arcsec / tim.wcs.pixel_scale()
+        print('Apertures:', apertures, 'pixels')
+
+        #print('apxy shape', apxy.shape)  # --> (2,N)
+
+        # The aperture photometry routine doesn't like pixel positions outside the image
+        H,W = img.shape
+        Iap = np.flatnonzero((apxy[0,:] >= 0)   * (apxy[1,:] >= 0) *
+                             (apxy[0,:] <= W-1) * (apxy[1,:] <= H-1))
+        print('Aperture photometry for', len(Iap), 'of', len(apxy), 'sources within image bounds')
+
+        for rad in apertures:
+            aper = photutils.CircularAperture(apxy[:,Iap], rad)
+            p = photutils.aperture_photometry(img, aper, error=imsigma)
+            apimg.append(p.field('aperture_sum'))
+            apimgerr.append(p.field('aperture_sum_err'))
+        ap = np.vstack(apimg).T
+        ap[np.logical_not(np.isfinite(ap))] = 0.
+        F.apflux = np.zeros((len(F), len(apertures)), np.float32)
+        F.apflux[Iap,:] = ap.astype(np.float32)
+
+        ap = 1./(np.vstack(apimgerr).T)**2
+        ap[np.logical_not(np.isfinite(ap))] = 0.
+        F.apflux_ivar = np.zeros((len(F), len(apertures)), np.float32)
+        F.apflux_ivar[Iap,:] = ap.astype(np.float32)
+        print('Aperture photom:', Time()-t0)
+
+    return F
 
 ### This class was copied from sim-forced-phot.py
 from tractor import MultiParams, BasicSource
