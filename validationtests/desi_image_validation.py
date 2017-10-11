@@ -356,6 +356,9 @@ def val3p4b_maghist_pred(sample,ndraw=1e5, nbin=100, vmin=21.0, vmax=25.0):
 	
     # Run some statistics 
     NTl=np.array(NTl)
+    p90=np.percentile(NTl,10)
+    p95=np.percentile(NTl,5)
+    p98=np.percentile(NTl,2)
     mean = sum(NTl)/float(len(NTl))
     std = sqrt(sum(NTl**2.)/float(len(NTl))-mean**2.)
 
@@ -368,6 +371,10 @@ def val3p4b_maghist_pred(sample,ndraw=1e5, nbin=100, vmin=21.0, vmax=25.0):
     print "Total images drawn with either 1,2,3,4,5 exposures", ndrawn
     print "Mean = ", mean, "; Median = ", med ,"; Std = ", std
     print 'percentage better than requirements = '+str(nbr/float(ndrawn))
+    if(sample.band =='g'): print "Requirements are > 90%, 95% and 98% at 24, 23.7, 23.4"
+    if(sample.band =='r'): print "Requirements are > 90%, 95% and 98% at 23.4, 23.1, 22.8"
+    if(sample.band =='z'): print "Requirements are > 90%, 95% and 98% at 22.5, 22.3, 21"
+    print "Results are: ", p90, p95, p98
 
     # Prepare historgram 
     minN = max(min(NTl),vmin)
