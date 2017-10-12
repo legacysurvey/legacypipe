@@ -14,7 +14,7 @@ from astrometry.util.fits import fits_table, merge_tables
 from astrometry.util.file import trymakedirs
 from astrometry.util.ttime import Time, MemMeas
 
-from tractor import Tractor
+from tractor import Tractor, Catalog
 from tractor.galaxy import disable_galaxy_cache
 from tractor.ellipses import EllipseE
 
@@ -255,13 +255,14 @@ def main(survey=None, opt=None):
     F = run_forced_phot(cat, tim,
                         ceres=opt.ceres,
                         derivs=opt.derivs,
+                        fixed_also=True,
                         agn=opt.agn,
                         do_forced=opt.forced,
                         do_apphot=opt.apphot,
                         ps=ps)
     t0 = Time()
     
-    #F.release   = T.release
+    F.release   = T.release
     F.brickid   = T.brickid
     F.brickname = T.brickname
     F.objid     = T.objid
@@ -270,16 +271,21 @@ def main(survey=None, opt=None):
     F.expnum = np.array([im.expnum] * len(F)).astype(np.int32)
     F.ccdname = np.array([im.ccdname] * len(F))
 
+    # "Denormalizing"
     F.filter  = np.array([tim.band]               * len(T))
     F.mjd     = np.array([tim.primhdr['MJD-OBS']] * len(T))
     F.exptime = np.array([tim.primhdr['EXPTIME']] * len(T)).astype(np.float32)
-
+    F.ra  = T.ra
+    F.dec = T.dec
+    
     ok,x,y = tim.sip_wcs.radec2pixelxy(T.ra, T.dec)
     F.x = (x-1).astype(np.float32)
     F.y = (y-1).astype(np.float32)
 
+    h,w = tim.shape
+    F.mask = tim.dq[np.clip(np.round(F.y).astype(int), 0, h-1),
+                    np.clip(np.round(F.x).astype(int), 0, w-1)]
 
-        
     program_name = sys.argv[0]
     version_hdr = get_version_header(program_name, surveydir)
     filename = getattr(ccd, 'image_filename')
@@ -339,8 +345,15 @@ def main(survey=None, opt=None):
 
     
 def run_forced_phot(cat, tim, ceres=True, derivs=False, agn=False,
-                    do_forced=True, do_apphot=True, ps=None):
-    t0 = Time()
+                    do_forced=True, do_apphot=True, ps=None,
+                    timing=False,
+                    fixed_also=False):
+    '''
+    fixed_also: if derivs=True, also run without derivatives and report
+    that flux too?
+    '''
+    if timing:
+        t0 = Time()
     if ps is not None:
         import pylab as plt
     opti = None
@@ -366,7 +379,7 @@ def run_forced_phot(cat, tim, ceres=True, derivs=False, agn=False,
 
         src.freezeAllBut('brightness')
         src.getBrightness().freezeAllBut(tim.band)
-    print('Limited the size of', nsize, 'large galaxy models')
+    #print('Limited the size of', nsize, 'large galaxy models')
     
     if derivs:
         realsrcs = []
@@ -374,15 +387,15 @@ def run_forced_phot(cat, tim, ceres=True, derivs=False, agn=False,
         for src in cat:
             realsrcs.append(src)
 
-            bright_dra  = src.getBrightness().copy()
-            bright_ddec = src.getBrightness().copy()
-            bright_dra .setParams(np.zeros(bright_dra .numberOfParams()))
-            bright_ddec.setParams(np.zeros(bright_ddec.numberOfParams()))
-            bright_dra .freezeAllBut(tim.band)
-            bright_ddec.freezeAllBut(tim.band)
+            brightness_dra  = src.getBrightness().copy()
+            brightness_ddec = src.getBrightness().copy()
+            brightness_dra .setParams(np.zeros(brightness_dra .numberOfParams()))
+            brightness_ddec.setParams(np.zeros(brightness_ddec.numberOfParams()))
+            brightness_dra .freezeAllBut(tim.band)
+            brightness_ddec.freezeAllBut(tim.band)
 
             dsrc = SourceDerivatives(src, [tim.band], ['pos'],
-                                     [bright_dra, bright_ddec])
+                                     [brightness_dra, brightness_ddec])
             derivsrcs.append(dsrc)
 
         # For convenience, put all the real sources at the front of
@@ -499,8 +512,20 @@ def run_forced_phot(cat, tim, ceres=True, derivs=False, agn=False,
             F.flux_agn[iagn] = np.array([src.getParams()[0] for src in agnsrcs])
             F.flux_agn_ivar[iagn] = R.IV[N:].astype(np.float32)
             
-        print('Forced photom:', Time()-t0)
-        
+        if timing:
+            print('Forced photom:', Time()-t0)
+
+        if derivs and fixed_also:
+            cat = realsrcs
+            tr.setCatalog(Catalog(*cat))
+            R = tr.optimize_forced_photometry(variance=True, fitstats=False,
+                                              shared_params=False, priors=False,
+                                              **forced_kwargs)
+            F.flux_fixed = np.array([src.getBrightness().getFlux(tim.band)
+                                     for src in cat]).astype(np.float32)
+            N = len(cat)
+            F.flux_fixed_ivar = R.IV[:N].astype(np.float32)
+
     if do_apphot:
         import photutils
 
@@ -542,7 +567,8 @@ def run_forced_phot(cat, tim, ceres=True, derivs=False, agn=False,
         ap[np.logical_not(np.isfinite(ap))] = 0.
         F.apflux_ivar = np.zeros((len(F), len(apertures)), np.float32)
         F.apflux_ivar[Iap,:] = ap.astype(np.float32)
-        print('Aperture photom:', Time()-t0)
+        if timing:
+            print('Aperture photom:', Time()-t0)
 
     return F
 
