@@ -136,6 +136,8 @@ class DecamImage(CPImage, CalibMixin):
         primhdr = self.read_primary_header(self.dqfn)
         plver = primhdr['PLVER'].strip()
         plver = plver.replace('V','')
+        plver = plver.replace('DES ', '')
+        plver = plver.replace('+1', 'a1')
         if StrictVersion(plver) >= StrictVersion('3.5.0'):
             dq = self.remap_dq_codes(dq)
         else:
