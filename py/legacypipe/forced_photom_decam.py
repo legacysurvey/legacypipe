@@ -14,7 +14,7 @@ from astrometry.util.fits import fits_table, merge_tables
 from astrometry.util.file import trymakedirs
 from astrometry.util.ttime import Time, MemMeas
 
-from tractor import Tractor, Catalog
+from tractor import Tractor, Catalog, NanoMaggies
 from tractor.galaxy import disable_galaxy_cache
 from tractor.ellipses import EllipseE
 
@@ -247,7 +247,10 @@ def main(survey=None, opt=None):
     if 'flux_r' in cols and not 'decam_flux_r' in cols:
         kwargs.update(fluxPrefix='')
     cat = read_fits_catalog(T, **kwargs)
-    # print('Got cat:', cat)
+    # Replace the brightness (which will be a NanoMaggies with g,r,z)
+    # with a NanoMaggies with this image's band only.
+    for src in cat:
+        src.brightness = NanoMaggies(**{tim.band: 1.})
 
     print('Read catalog:', Time()-t0)
 
