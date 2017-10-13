@@ -2344,7 +2344,8 @@ def _unwise_phot(X):
             W = unwise_forcedphot(wcat, tiles, roiradecbox=roiradec,
                                   bands=[band], unwise_dir=unwise_dir,
                                   use_ceres=False, psf_broadening=broadening)
-        W = None
+        else:
+            W = None
     return W
 
 def stage_writecat(
