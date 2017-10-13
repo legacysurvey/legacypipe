@@ -2307,7 +2307,8 @@ def stage_wise_forced(
     # Unpack time-resolved results...
     WISE_T = None
     if len(phots) > len(args):
-        WISE_T = phots[len(args)]
+        WISE_T = True
+    #print('WISE_T:', WISE_T)
     if WISE_T is not None:
         WISE_T = fits_table()
         phots = phots[len(args):]
@@ -2324,6 +2325,9 @@ def stage_wise_forced(
                     WISE_T.set(c, np.zeros((len(x), Nepochs), x.dtype))
                 X = WISE_T.get(c)
                 X[:,e] = phot.get(c)
+
+    print('Returning: WISE', WISE)
+    print('Returning: WISE_T', WISE_T)
 
     return dict(WISE=WISE, WISE_T=WISE_T)
 
