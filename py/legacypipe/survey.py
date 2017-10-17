@@ -582,13 +582,14 @@ def bricks_touching_wcs(targetwcs, survey=None, B=None, margin=20):
         keep.append(i)
     return B[np.array(keep)]
 
-def ccds_touching_wcs(targetwcs, ccds, ccdrad=0.17, polygons=True):
+def ccds_touching_wcs(targetwcs, ccds, ccdrad=None, polygons=True):
     '''
     targetwcs: wcs object describing region of interest
     ccds: fits_table object of CCDs
 
-    ccdrad: radius of CCDs, in degrees.  Default 0.17 is for DECam.
-    #If None, computed from T.
+    ccdrad: radius of CCDs, in degrees.
+    If None (the default), compute from the CCDs table.
+    (0.17 for DECam)
 
     Returns: index array I of CCDs within range.
     '''
