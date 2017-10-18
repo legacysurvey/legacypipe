@@ -122,13 +122,36 @@ def ps1_to_decam(psmags, band):
     gmag = psmags[:,g_index]
     imag = psmags[:,i_index]
     gi = gmag - imag
-    coeffs = dict(
-        g = [0.0, -0.04709, -0.00084, 0.00340],
-        r = [0.0,  0.09939, -0.04509, 0.01488],
-        z = [0.0,  0.13404, -0.06591, 0.01695])[band]
 
-    colorterm = -(coeffs[0] + coeffs[1]*gi + coeffs[2]*gi**2 + coeffs[3]*gi**3)
-    print('Using DECam ColorTerm')
+    # Eddie says (2017-Feb-14), in
+    # [decam-chatter 4783] DECam grizY color transformations,
+    # if ind EQ 0 then coeff = [ 0.00613, -0.01028, -0.03604, -0.00062] ; g
+    # if ind EQ 1 then coeff = [ 0.01140, -0.03222,  0.08435, -0.00495] ; r
+    # if ind EQ 2 then coeff = [ 0.00829, -0.00566,  0.04171, -0.00904] ; i
+    # if ind EQ 3 then coeff = [ 0.00898, -0.02824,  0.07690, -0.02583] ; z
+    # if ind EQ 4 then coeff = [ 0.00572, -0.02840,  0.05992, -0.02332] ; Y
+    # coeffs = dict(
+    #     g = [ 0.00613, -0.01028, -0.03604, -0.00062],
+    #     r = [ 0.01140, -0.03222,  0.08435, -0.00495],
+    #     i = [ 0.00829, -0.00566,  0.04171, -0.00904],
+    #     z = [ 0.00898, -0.02824,  0.07690, -0.02583],
+    #     Y = [ 0.00572, -0.02840,  0.05992, -0.02332],)[band]
+
+    # But turns out the coeffs are in the opposite order!
+    coeffs = dict(
+        g = [ 0.00062,  0.03604, 0.01028, -0.00613 ],
+        r = [ 0.00495, -0.08435, 0.03222, -0.01140 ],
+        i = [ 0.00904, -0.04171, 0.00566, -0.00829 ],
+        z = [ 0.02583, -0.07690, 0.02824, -0.00898 ],
+        Y = [ 0.02332, -0.05992, 0.02840, -0.00572 ],)[band]
+
+    # Previously, we used: (with an overall negative)
+    # g = [0.0, -0.04709, -0.00084, 0.00340],
+    # r = [0.0,  0.09939, -0.04509, 0.01488],
+    # z = [0.0,  0.13404, -0.06591, 0.01695])[band]
+
+    colorterm = coeffs[0] + coeffs[1]*gi + coeffs[2]*gi**2 + coeffs[3]*gi**3
+    #print('Using DECam ColorTerm')
     return colorterm
     
 def ps1_to_90prime(psmags, band):

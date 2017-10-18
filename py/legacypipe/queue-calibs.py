@@ -596,8 +596,8 @@ def main():
         allI = list(allI)
         allI.sort()
     elif opt.near:
-        # Roughly brick radius + DECam image radius
-        radius = 0.35
+        # A bit more than 0.25-degree brick radius + Bok image radius ~ 0.57
+        radius = 1.05 * np.sqrt(2.) * (0.25 + (0.455 * 4096 / 3600.))/2.
         allI,nil,nil = match_radec(T.ra, T.dec, B.ra, B.dec, radius, nearest=True)
     else:
         allI = np.arange(len(T))
