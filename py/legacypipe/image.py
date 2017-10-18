@@ -908,9 +908,9 @@ class CalibMixin(object):
                 (os.path.join(sedir, surveyname + '.psfex'),
                  psfdir, self.sefn),
                 'mv %s %s' % (psfoutfn + '.tmp', psfoutfn),
-                'modhead %s LEGPIPEV %s "legacypipe git version"' %
+                'modhead %s LEGPIPEV "%s" "legacypipe git version"' %
                 (self.psffn, verstr),
-                'modhead %s PLVER %s "CP ver of image file"' % (self.psffn, plver)]
+                'modhead %s PLVER "%s" "CP ver of image file"' % (self.psffn, plver)]
         for cmd in cmds:
             print(cmd)
             rtn = os.system(cmd)
