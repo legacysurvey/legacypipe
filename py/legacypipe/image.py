@@ -873,17 +873,8 @@ class CalibMixin(object):
 
     def run_se(self, surveyname, imgfn, maskfn):
         from astrometry.util.file import trymakedirs
-        # grab header values...
-        primhdr = self.read_image_primary_header()
-        try:
-            magzp  = float(primhdr['MAGZERO'])
-        except:
-            magzp = 25.
-        print('magzp', magzp)
-        
         sedir = self.survey.get_se_dir()
         trymakedirs(self.sefn, dir=True)
-
         # We write the SE catalog to a temp file then rename, to avoid
         # partially-written outputs.
         tmpfn = os.path.join(os.path.dirname(self.sefn),
@@ -895,7 +886,6 @@ class CalibMixin(object):
             '-FILTER_NAME %s' % os.path.join(sedir, surveyname + '.conv'),
             '-FLAG_IMAGE %s' % maskfn,
             '-CATALOG_NAME %s' % tmpfn,
-            '-MAG_ZEROPOINT %f' % magzp,
             imgfn])
         print(cmd)
         rtn = os.system(cmd)
