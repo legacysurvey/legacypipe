@@ -138,6 +138,12 @@ def main():
     
     opt = parser.parse_args()
 
+
+    want_ccds = (opt.calibs or opt.forced or opt.lsb)
+    want_bricks = not want_ccds
+
+
+
     survey = LegacySurveyData()
     if opt.bricks is not None:
         B = fits_table(opt.bricks)
@@ -155,12 +161,17 @@ def main():
 
     if opt.ignore_cuts == False:
         I = survey.photometric_ccds(T)
-        print(len(I), 'CCDs are photometric')
+        log(len(I), 'CCDs are photometric')
         T.cut(I)
         cuts = survey.ccd_cuts(T)
-        print(len(cuts != 0), 'CCDs are subject to cuts')
+        log(len(cuts != 0), 'CCDs are subject to cuts')
         T.cut(cuts == 0)
-    print(len(T), 'CCDs remain')
+    log(len(T), 'CCDs remain')
+
+    bands = 'grz'
+    log('Filters:', np.unique(T.filter))
+    T.cut(np.flatnonzero(np.array([f in bands for f in T.filter])))
+    log('Cut to', len(T), 'CCDs in filters', bands)
 
     # I,J,d,counts = match_radec(B.ra, B.dec, T.ra, T.dec, 0.2, nearest=True, count=True)
     # plt.clf()
@@ -363,7 +374,8 @@ def main():
         dlo,dhi =  18.,  33.
 
     elif opt.region == 'mzls':
-        dlo,dhi = 30., 90.
+        dlo,dhi = -10., 90. # -10: pull in Stripe 82 data too
+
     elif opt.region == 'dr4-bootes':
         # https://desi.lbl.gov/trac/wiki/DecamLegacy/DR4sched 
         #dlo,dhi = 34., 35.
@@ -394,19 +406,21 @@ def main():
         B.cut(np.logical_or(B.ra >= rlo, B.ra <= rhi) *
               (B.dec >= dlo) * (B.dec <= dhi))
     log(len(B), 'bricks in range')
-    for name in B.get('brickname'):
-        print(name)
+    #for name in B.get('brickname'):
+    #    print(name)
     #B.writeto('bricks-cut.fits')
 
-    ## MAGIC number: 1-degree search for bricks near CCDs
-    print(len(T), 'CCDs')
-    print(len(B), 'Bricks')
-    I,J,d = match_radec(B.ra, B.dec, T.ra, T.dec, 1.)
-    keep = np.zeros(len(B), bool)
-    for i in I:
-        keep[i] = True
-    B.cut(keep)
-    log('Cut to', len(B), 'bricks near CCDs (1-degree search radius)')
+    bricksize = 0.25
+    # A bit more than 0.25-degree brick radius + Bok image radius ~ 0.57
+    search_radius = 1.05 * np.sqrt(2.) * (bricksize +
+                                          (0.455 * 4096 / 3600.))/2.
+
+    log(len(T), 'CCDs')
+    log(len(B), 'Bricks')
+    I,J,d = match_radec(B.ra, B.dec, T.ra, T.dec, search_radius,
+                        nearest=True)
+    B.cut(I)
+    log('Cut to', len(B), 'bricks near CCDs')
 
     # plt.clf()
     # plt.plot(B.ra, B.dec, 'b.')
@@ -419,55 +433,13 @@ def main():
         log('Cut to', len(B), 'with brickq =', opt.brickq)
     
     if opt.touching:
-        keep = np.zeros(len(T), bool)
-        for j in J:
-            keep[j] = True
-        T.cut(keep)
+        I,J,d = match_radec(T.ra, T.dec, B.ra, B.dec, search_radius,
+                            nearest=True)
+        T.cut(I)
         log('Cut to', len(T), 'CCDs near bricks')
 
-    # Aside -- how many near DR1=1 CCDs?
-    if False:
-        T2 = D.get_ccds()
-        log(len(T2), 'CCDs')
-        T2.cut(T2.dr1 == 1)
-        log(len(T2), 'CCDs marked DR1=1')
-        log(len(B), 'bricks in range')
-        I,J,d = match_radec(B.ra, B.dec, T2.ra, T2.dec, survey.bricksize)
-        keep = np.zeros(len(B), bool)
-        for i in I:
-            keep[i] = True
-        B2 = B[keep]
-        log('Total of', len(B2), 'bricks near CCDs with DR1=1')
-        for band in 'grz':
-            Tb = T2[T2.filter == band]
-            log(len(Tb), 'in filter', band)
-            I,J,d = match_radec(B2.ra, B2.dec, Tb.ra, Tb.dec, survey.bricksize)
-            good = np.zeros(len(B2), np.uint8)
-            for i in I:
-                good[i] = 1
-            B2.set('has_' + band, good)
-
-        B2.writeto('survey-bricks-in-dr1.fits')
-        sys.exit(0)
-
-    # sort by dec decreasing
-    #B.cut(np.argsort(-B.dec))
-    # RA increasing
+    # sort by RA increasing
     B.cut(np.argsort(B.ra))
-
-    for b in B:
-        if opt.check:
-            fn = 'dr1n/tractor/%s/tractor-%s.fits' % (b.brickname[:3], b.brickname)
-            if os.path.exists(fn):
-                print('Exists:', fn, file=sys.stderr)
-                continue
-        if opt.check_coadd:
-            fn = 'dr1b/coadd/%s/%s/decals-%s-image.jpg' % (b.brickname[:3], b.brickname, b.brickname)
-            if os.path.exists(fn):
-                print('Exists:', fn, file=sys.stderr)
-                continue
-
-        #print(b.brickname)
 
     if opt.save_to_fits:
         assert(opt.touching)
@@ -477,7 +449,7 @@ def main():
             if os.path.exists(fn):
                 os.remove(fn)
             tab.writeto(fn)
-            print('Wrote %s' % fn)
+            log('Wrote %s' % fn)
         # Write text files listing ccd and filename names
         nm1,nm2= 'ccds-%s.txt'% opt.region,'filenames-%s.txt' % opt.region
         if os.path.exists(nm1):
@@ -492,7 +464,7 @@ def main():
             f1.write('%s\n' % ti.get('image_filename').strip())
         f1.close()
         f2.close()
-        print('Wrote *-names.txt')
+        log('Wrote *-names.txt')
     
 
     if opt.brickq_deps:
@@ -501,13 +473,13 @@ def main():
 
         #... find Queue...
         q = qdo.connect(opt.queue, create_ok=True)
-        print('Connected to QDO queue', opt.queue, q)
+        log('Connected to QDO queue', opt.queue, q)
         brick_to_task = dict()
 
         I = survey.photometric_ccds(T)
-        print(len(I), 'CCDs are photometric')
+        log(len(I), 'CCDs are photometric')
         T.cut(I)
-        print(len(T), 'CCDs remaining')
+        log(len(T), 'CCDs remaining')
 
         T.wra = T.ra + (T.ra > 180) * -360
         wra = rlo - 360
@@ -527,20 +499,20 @@ def main():
         ikeep = []
         for ib,(b,Iccd) in enumerate(zip(B, Iccds)):
             if Iccd is None or len(Iccd) == 0:
-                print('No matched CCDs to brick', b.brickname)
+                log('No matched CCDs to brick', b.brickname)
                 continue
             wcs = wcs_for_brick(b)
             cI = ccds_touching_wcs(wcs, T[np.array(Iccd)])
-            print(len(cI), 'CCDs touching brick', b.brickname)
+            log(len(cI), 'CCDs touching brick', b.brickname)
             if len(cI) == 0:
                 continue
             ikeep.append(ib)
         B.cut(np.array(ikeep))
-        print('Cut to', len(B), 'bricks touched by CCDs')
+        log('Cut to', len(B), 'bricks touched by CCDs')
         
         for brickq in range(4):
             I = np.flatnonzero(B.brickq == brickq)
-            print(len(I), 'bricks with brickq =', brickq)
+            log(len(I), 'bricks with brickq =', brickq)
 
             J = np.flatnonzero(B.brickq < brickq)
             preB = B[J]
@@ -564,47 +536,78 @@ def main():
             plt.savefig('q-bricks-%i.png' % brickq)
             
             # submit to qdo queue
-            print('Queuing', len(B[I]), 'bricks')
+            log('Queuing', len(B[I]), 'bricks')
             if brickq == 0:
                 reqs = None
             else:
                 assert(len(I) == len(reqs))
             taskids = q.add_multiple(B.brickname[I], requires=reqs)
             assert(len(taskids) == len(I))
-            print('Queued', len(taskids), 'bricks')
+            log('Queued', len(taskids), 'bricks')
             brick_to_task.update(dict(zip(B.brickname[I], taskids)))
         
-    if not (opt.calibs or opt.forced or opt.lsb):
-        for b in B:
-            print(b.brickname)
-        sys.exit(0)
-
-    bands = 'grz'
-    log('Filters:', np.unique(T.filter))
-    T.cut(np.flatnonzero(np.array([f in bands for f in T.filter])))
-    log('Cut to', len(T), 'CCDs in filters', bands)
-
     if opt.touching:
-        allI = set()
-        for b in B:
-            wcs = wcs_for_brick(b)
-            I = ccds_touching_wcs(wcs, T)
-            log(len(I), 'CCDs for brick', b.brickid, 'RA,Dec (%.2f, %.2f)' % (b.ra, b.dec))
-            if len(I) == 0:
-                continue
-            allI.update(I)
-        allI = list(allI)
-        allI.sort()
+
+        if want_bricks:
+            # Shortcut the list of bricks that are definitely touching CCDs --
+            # a brick-ccd pair within this radius must be touching.
+            closest_radius = 0.95 * (bricksize + 0.262 * 2048 / 3600.) / 2.
+
+            J1,nil,nil = match_radec(B.ra, B.dec, T.ra, T.dec, closest_radius, nearest=True)
+            log(len(J1), 'of', len(B), 'bricks definitely touch CCDs')
+            tocheck = np.ones(len(B), bool)
+            tocheck[J1] = False
+            J2 = []
+            for j in np.flatnonzero(tocheck):
+                b = B[j]
+                wcs = wcs_for_brick(b)
+                I = ccds_touching_wcs(wcs, T)
+                log(len(I), 'CCDs for brick', b.brickname)
+                if len(I) == 0:
+                    continue
+                J2.append(j)
+            J = np.hstack((J1, J2))
+            J = np.sort(J)
+            B.cut(np.array(J))
+            log('Cut to', len(B), 'bricks touching CCDs')
+
+        else:
+            J = []
+            allI = set()
+            for j,b in enumerate(B):
+                wcs = wcs_for_brick(b)
+                I = ccds_touching_wcs(wcs, T)
+                log(len(I), 'CCDs for brick', b.brickname)
+                if len(I) == 0:
+                    continue
+                allI.update(I)
+                J.append(j)
+            allI = list(allI)
+            allI.sort()
+            B.cut(np.array(J))
+            log('Cut to', len(B), 'bricks touching CCDs')
+
     elif opt.near:
-        # A bit more than 0.25-degree brick radius + Bok image radius ~ 0.57
-        radius = 1.05 * np.sqrt(2.) * (0.25 + (0.455 * 4096 / 3600.))/2.
-        allI,nil,nil = match_radec(T.ra, T.dec, B.ra, B.dec, radius, nearest=True)
+        # Find CCDs near bricks
+        allI,nil,nil = match_radec(T.ra, T.dec, B.ra, B.dec, search_radius, nearest=True)
+        # Find bricks near CCDs
+        J,nil,nil = match_radec(B.ra, B.dec, T.ra, T.dec, search_radius, nearest=True)
+        B.cut(J)
+        log('Cut to', len(B), 'bricks near CCDs')
+
     else:
         allI = np.arange(len(T))
 
     if opt.write_ccds:
         T[allI].writeto(opt.write_ccds)
         log('Wrote', opt.write_ccds)
+
+    if want_bricks:
+        # Print the list of bricks and exit.
+        for b in B:
+            print(b.brickname)
+        if not want_ccds:
+            sys.exit(0)
 
     ## Be careful here -- T has been cut; we want to write out T.index.
     ## 'allI' contains indices into T.
