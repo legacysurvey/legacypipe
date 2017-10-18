@@ -879,10 +879,6 @@ class CalibMixin(object):
             magzp  = float(primhdr['MAGZERO'])
         except:
             magzp = 25.
-        seeing = self.pixscale * self.fwhm
-        print('FWHM', self.fwhm, 'pix')
-        print('pixscale', self.pixscale, 'arcsec/pix')
-        print('Seeing', seeing, 'arcsec')
         print('magzp', magzp)
         
         sedir = self.survey.get_se_dir()
@@ -899,7 +895,6 @@ class CalibMixin(object):
             '-FILTER_NAME %s' % os.path.join(sedir, surveyname + '.conv'),
             '-FLAG_IMAGE %s' % maskfn,
             '-CATALOG_NAME %s' % tmpfn,
-            '-SEEING_FWHM %f' % seeing,
             '-MAG_ZEROPOINT %f' % magzp,
             imgfn])
         print(cmd)
