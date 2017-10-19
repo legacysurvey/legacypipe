@@ -91,6 +91,12 @@ class mysample(object):
                 if(self.survey != 'MZLS'): raise RuntimeError("Survey name seems inconsistent")
             else: raise RuntimeError("Input sample band seems inconsisent")
 
+        if(self.DR == 'DR5'):
+            inputdir = '/global/project/projectdirs/cosmo/data/legacysurvey/dr5/'
+            self.ccds =inputdir+'ccds-annotated-dr5.fits.gz'
+            self.catalog = 'DECaLS_DR5'
+            if(self.survey != 'DECaLS'): raise RuntimeError("Survey name seems inconsistent")
+
         else: raise RuntimeError("Data Realease seems wrong") 
 
 
