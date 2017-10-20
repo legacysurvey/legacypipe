@@ -24,7 +24,7 @@ class BokImage(CPImage, CalibMixin):
         self.pixscale = 0.455
         self.dq_saturation_bits = 0 #not used so set to 0
         self.fwhm = t.fwhm
-        self.arawgain = t.arawgain
+        #self.arawgain = t.arawgain
         self.name = self.imgfn
 
     def __str__(self):
@@ -43,6 +43,10 @@ class BokImage(CPImage, CalibMixin):
 
         This recipe is adapted from the DECam one.
         '''
+
+        print('Nominal zeropoints:', self.nominal_zeropoints())
+        print('ccdzpts:', ccds.ccdzpt)
+
         # See legacypipe/ccd_cuts.py
         z0 = self.nominal_zeropoints()
         z0 = np.array([z0[f[0]] for f in ccds.filter])

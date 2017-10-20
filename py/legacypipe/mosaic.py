@@ -49,9 +49,13 @@ class MosaicImage(CPImage, CalibMixin):
 
         This recipe is adapted from the DECam one.
         '''
-        # Nominal zeropoints (DECam)
+        # Nominal zeropoints
         z0 = self.nominal_zeropoints()
         z0 = np.array([z0.get(f[0], 0) for f in ccds.filter])
+
+        print('Nominal zeropoints:', self.nominal_zeropoints())
+        print('ccdzpts:', ccds.ccdzpt)
+
         good = np.ones(len(ccds), bool)
         n0 = sum(good)
         # See Photometric cuts email 12/21/2016

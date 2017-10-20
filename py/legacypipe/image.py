@@ -315,6 +315,10 @@ class LegacySurveyImage(object):
                                   psf_sigma=psf_sigma,
                                   w=x1 - x0, h=y1 - y0)
 
+        print('NORMALIZING PSF!')
+        psf = NormalizedPSF(psf)
+        print('Wrapped PSF model:', psf)
+
         tim = Image(img, invvar=invvar, wcs=twcs, psf=psf,
                     photocal=LinearPhotoCal(zpscale, band=band),
                     sky=sky, name=self.name + ' ' + band)
@@ -764,16 +768,6 @@ class LegacySurveyImage(object):
             hdr = fitsio.read_header(self.psffn, ext=1)
             psf.fwhm = hdr['PSF_FWHM']
 
-        #####
-        print('Before normalizing: sum in center', psf.getImage(x0+w/2, y0+h/2).sum())
-        print('WARNING: NORMALIZING PSF MODEL')
-        eigenimg = psf.psfex.bases()[0]
-        psum = eigenimg.sum()
-        print('PSF eigen-image:', eigenimg.shape, 'sum', psum)
-        psf.psfex.psfbases /= psum
-        print('After normalizing: sum in center', psf.getImage(x0+w/2, y0+h/2).sum())
-        #####
-        
         psf.shift(x0, y0)
         if hybridPsf:
             from tractor.psf import HybridPixelizedPSF
@@ -789,6 +783,67 @@ class LegacySurveyImage(object):
         print('run_calibs for', self)
         print('(not implemented)')
         pass
+
+
+class NormalizedPSF(object):
+    def __init__(self, real):
+        self.real = real
+
+    def __str__(self):
+        return 'NormalizedPSF(' + str(self.real) + ')'
+
+    def getMixtureOfGaussians(self, **kwargs):
+        mog = self.real.getMixtureOfGaussians(**kwargs)
+        mog.normalize()
+        return mog
+
+    def getFourierTransform(self, px, py, radius):
+        fft, (cx,cy), shape, (v,w) = self.real.getFourierTransform(px, py, radius)
+        print('getFourierTransform: sum', fft.sum())
+        return fft, (cx,cy), shape, (v,w)
+
+    def getImage(self, px, py):
+        img = self.real.getImage(px, py)
+        img /= np.sum(img)
+        return img
+
+    #def getPointSourcePatch(self, px, py, **kwargs):
+    # -> calls getImage()
+
+    def getShifted(self, dx, dy):
+        return NormalizedPSF(self.real.getShifted(dx, dy))
+
+    def constantPsfAt(self, x, y):
+        # FIXME -- could just create a PixelizedPSF with a normalized image!
+        return NormalizedPSF(self.real.constantPsfAt(x, y))
+
+    def __getattr__(self, name):
+        #print('NormalizedPsf: getattr', name)
+        return getattr(self.real, name)
+
+    def __setattr__(self, name, val):
+        if name in ['real']:
+            return object.__setattr__(self, name, val)
+        #print('NormalizedPsf: setattr', name, '=', val)
+        setattr(self.__dict__['real'], name, val)
+
+    # for pickling:
+    def __getstate__(self):
+        return (self.real,)
+
+    def __setstate__(self, state):
+        self.real, = state
+
+
+
+# class NormalizedPsfExModel(PsfExModel):
+#     def at(self, x, y, **kwargs):
+#         img = super(NormalizedPsfExModel, self).at(x, y, **kwargs)
+#         img /= np.sum(img)
+#         return img
+# 
+#     #def fft_at(self, x, y):
+        
 
 class CalibMixin(object):
     '''

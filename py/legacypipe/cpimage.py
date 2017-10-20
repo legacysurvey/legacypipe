@@ -210,7 +210,9 @@ class CPImage(LegacySurveyImage):
 
         Returns a boolean array, True for CCDs with this problem.
         '''
-        ccdnum = np.char.replace(ccds.ccdname,'ccd','').astype(ccds.image_hdu.dtype)
+        ccdnum = np.char.replace(ccds.ccdname,'ccd','')
+        ccdnum = np.char.replace(ccdnum,'CCD','')
+        ccdnum = ccdnum.astype(ccds.image_hdu.dtype)
         return ccds.image_hdu != ccdnum
 
     @classmethod

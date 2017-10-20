@@ -415,7 +415,7 @@ def sed_matched_detection(sedname, sed, detmaps, detivs, bands,
     print('Found', len(px), 'potential peaks')
     #tlast = Time()
     for i,(x,y) in enumerate(zip(px, py)):
-        print('Potential peak at', x,y)
+        #print('Potential peak at', x,y)
 
         if ps is not None:
             plt.clf()
@@ -472,7 +472,7 @@ def sed_matched_detection(sedname, sed, detmaps, detivs, bands,
             ps.savefig()
 
         if vetomap[y,x]:
-            print('  in veto map!')
+            #print('  in veto map!')
             continue
         #t0 = Time()
         #t1 = Time()
