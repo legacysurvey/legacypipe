@@ -2348,7 +2348,6 @@ def _unwise_phot(X):
     return W
 
 def stage_writecat(
-    tims=None,
     survey=None,
     version_header=None,
     T=None,
@@ -2372,18 +2371,6 @@ def stage_writecat(
     catalog.
     '''
     from legacypipe.catalog import prepare_fits_catalog
-
-    X = fits_table()
-    X.ra  = np.array([src.getPosition().ra  for src in cat])
-    X.dec = np.array([src.getPosition().dec for src in cat])
-    for itim,tim in enumerate(tims):
-        print('Tim', tim.name)
-        X.set('flux%i' % itim, np.array([tim.getPhotoCal().brightnessToCounts(src.getBrightness())
-                                         for src in cat]))
-    for b in bands:
-        X.set('mag_%s' % b, np.array([src.getBrightness().getMag(b) for src in cat]))
-    X.writeto('catx.fits')
-
 
     record_event and record_event('stage_writecat: starting')
 
