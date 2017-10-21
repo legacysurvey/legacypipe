@@ -810,11 +810,11 @@ class NormalizedPixelizedPsfEx(PixelizedPsfEx):
         #print('NormalizedPSF: getFourierTransform at', (px,py), ': sum', fft.sum(), 'zeroth element:', fft[0][0], 'max', np.max(np.abs(fft)))
         sum = np.abs(fft[0][0])
         fft /= sum
-        print('NormalizedPixelizedPsfEx: getFourierTransform at', (px,py), ': sum', sum)
+        #print('NormalizedPixelizedPsfEx: getFourierTransform at', (px,py), ': sum', sum)
         return fft, (cx,cy), shape, (v,w)
 
     def getImage(self, px, py):
-        print('NormalizedPixelizedPsfEx: getImage at', px,py)
+        #print('NormalizedPixelizedPsfEx: getImage at', px,py)
         img = super(NormalizedPixelizedPsfEx, self).getImage(px, py)
         img /= np.sum(img)
         return img
@@ -826,7 +826,7 @@ class NormalizedPixelizedPsfEx(PixelizedPsfEx):
     #     return NormalizedPSF(self.real.getShifted(dx, dy))
 
     def constantPsfAt(self, x, y):
-        print('NormalizedPixelizedPsfEx: constantPsf at', x,y)
+        #print('NormalizedPixelizedPsfEx: constantPsf at', x,y)
         pix = self.psfex.at(x, y)
         pix /= pix.sum()
         return PixelizedPSF(pix)

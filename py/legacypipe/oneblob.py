@@ -805,6 +805,8 @@ class OneBlob(object):
         models.create(self.tims, cat)
         enable_galaxy_cache()
 
+        print('optimize_individual_sources: PSFs', [str(t.psf) for t in tr.images])
+
         for numi,i in enumerate(Ibright):
             cpu0 = time.clock()
             #print('Fitting source', i, '(%i of %i in blob)' %
@@ -890,6 +892,14 @@ class OneBlob(object):
             else:
                 srctims = self.tims
                 modelMasks = models.model_masks(srci, src)
+
+
+            print('optimize_individual_sources_subtract: PSFs', [str(t.psf) for t in srctims])
+
+            for t in srctims:
+                p = t.psf.getPointSourcePatch(0., 0.)
+                print('tim', t, 'point source patch: sum', p.patch.sum())
+
     
             srctractor = self.tractor(srctims, [src])
             #print('Setting modelMasks:', modelMasks)
@@ -1038,6 +1048,10 @@ class OneBlob(object):
         tims = []
         for (img, inverr, twcs, wcs, pcal, sky, psf, name, sx0, sx1, sy0, sy1,
              band, sig1, modelMinval, imobj) in timargs:
+
+            from tractor.psf import HybridPSF
+            print('one-blob: image', name, 'PSF:', psf, 'is hybrid:', isinstance(psf, HybridPSF))
+
     
             # Mask out inverr for pixels that are not within the blob.
             subwcs = wcs.get_subimage(int(sx0), int(sy0),
@@ -1058,10 +1072,12 @@ class OneBlob(object):
             # constant PSF model in the center.
             if sy1-sy0 < 400 and sx1-sx0 < 400:
                 subpsf = psf.constantPsfAt((sx0+sx1)/2., (sy0+sy1)/2.)
+                print('Small blob: constant PSF', subpsf)
             else:
                 # Otherwise, instantiate a (shifted) spatially-varying
                 # PsfEx model.
                 subpsf = psf.getShifted(sx0, sy0)
+                print('Large blob: PSF', subpsf)
 
             tim = Image(data=img, inverr=inverr, wcs=twcs,
                         psf=subpsf, photocal=pcal, sky=sky, name=name)
