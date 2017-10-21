@@ -27,7 +27,7 @@ time srun -u --cpu_bind=no -N 1 python-mpi $LEGACYPIPE_DIR/bin/match-external-ca
 
 time srun -u --cpu_bind=no -N 1 python-mpi $LEGACYPIPE_DIR/bin/match-external-catalog.py -v --numproc 24 \
      -f fits -F $TRACTOR_FILELIST \
-     /global/project/projectdirs/desi/users/yfeng1/boss-dr7q/dr7qso.fit.gz \
+     /global/project/projectdirs/cosmo/staging/sdss/dr7/dr7qso.fit.gz \
      $TRACTOR_INDIR \
      $EXTERNAL_OUTDIR/survey-$dr-dr7Q.fits --copycols SMJD PLATE FIBER RERUN 
 
