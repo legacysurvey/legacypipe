@@ -35,7 +35,7 @@ import fitsio
 
 from astrometry.util.fits import fits_table, merge_tables
 from astrometry.util.plotutils import PlotSequence, dimshow
-from astrometry.util.ttime import Time
+from astrometry.util.ttime import Time, CpuMeas, MemMeas
 from astrometry.util.starutil_numpy import ra2hmsstring, dec2dmsstring
 
 from tractor import Tractor, PointSource, Image, NanoMaggies, Catalog, RaDecPos
@@ -1518,7 +1518,6 @@ def stage_fitblobs(T=None,
         blobiter = iterwrapper(blobiter, len(blobsrcs))
         R = mp.map(_bounce_one_blob, blobiter)
     else:
-        from astrometry.util.ttime import CpuMeas
         from astrometry.util.file import pickle_to_file, trymakedirs
 
         # Check for existing checkpoint file.
@@ -3163,7 +3162,6 @@ def get_runbrick_kwargs(brick=None,
 
 def main(args=None):
     import logging
-    from astrometry.util.ttime import MemMeas, CpuMeas
     import datetime
 
     print()
