@@ -2695,7 +2695,6 @@ def run_brick(brick, survey, radec=None, pixscale=0.262,
     '''
     from astrometry.util.stages import CallGlobalTime, runstage
     from astrometry.util.multiproc import multiproc
-    from legacypipe.utils import MyMultiproc
 
     print('Total Memory Available to Job:')
     get_ulimit()
@@ -2783,10 +2782,13 @@ def run_brick(brick, survey, radec=None, pixscale=0.262,
             from astrometry.util.timingpool import TimingPool, TimingPoolMeas
         pool = TimingPool(threads, initializer=runbrick_global_init,
                           initargs=[])
-        Time.add_measurement(TimingPoolMeas(pool, pickleTraffic=False))
-        mp = MyMultiproc(None, pool=pool)
+        poolmeas = TimingPoolMeas(pool, pickleTraffic=False)
+        #Time.add_measurement(poolmeas)
+        StageTime.add_measurement(poolmeas)
+        mp = multiproc(None, pool=pool)
     else:
-        mp = MyMultiproc(init=runbrick_global_init, initargs=[])
+        mp = multiproc(init=runbrick_global_init, initargs=[])
+        StageTime.add_measurement(CpuMeas)
         pool = None
     kwargs.update(mp=mp)
 
@@ -2855,8 +2857,6 @@ def run_brick(brick, survey, radec=None, pixscale=0.262,
     if bands is not None:
         initargs.update(bands=bands)
 
-    t0 = Time()
-    
     def mystagefunc(stage, **kwargs):
         # Update the (pickled) survey output directory, so that running
         # with an updated --output-dir overrides the pickle file.
@@ -2864,24 +2864,36 @@ def run_brick(brick, survey, radec=None, pixscale=0.262,
         if picsurvey is not None:
             picsurvey.output_dir = survey.output_dir
 
-        mp.start_subphase('stage ' + stage)
+        sys.stdout.flush()
+        sys.stderr.flush()
+        staget0 = StageTime()
         R = stagefunc(stage, **kwargs)
         sys.stdout.flush()
         sys.stderr.flush()
         print('Resources for stage', stage, ':')
-        mp.report(threads)
-        mp.finish_subphase()
+        print(StageTime()-staget0)
         return R
 
+    t0 = StageTime()
     R = None
     for stage in stages:
         R = runstage(stage, pickle_pat, mystagefunc, prereqs=prereqs,
                      initial_args=initargs, **kwargs)
 
-    print('All done:', Time()-t0)
-    mp.report(threads)
+    print('All done:', StageTime()-t0)
     return R
 
+class StageTime(Time):
+    '''
+    A Time subclass that reports overall CPU use, assuming multiprocessing.
+    '''
+    measurements = []
+    @classmethod
+    def add_measurement(cls, m):
+        cls.measurements.append(m)
+    def __init__(self):
+        #print('StageTime: measurements', self.measurements)
+        self.meas = [m() for m in self.measurements]
 
 def get_parser():
     import argparse

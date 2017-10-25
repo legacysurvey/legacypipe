@@ -465,24 +465,32 @@ class TimingPoolMeas(object):
     '''
     def __init__(self, pool, pickleTraffic=True):
         self.pool = pool
+        self.nproc = pool._processes
         self.pickleTraffic = pickleTraffic
     def __call__(self):
-        return TimingPoolTimestamp(self.pool, self.pickleTraffic)
+        return TimingPoolTimestamp(self.pool, self.pickleTraffic, self.nproc)
 
 class TimingPoolTimestamp(object):
     '''
     The current resources used by a pool of workers, for
     astrometry.util.ttime
     '''
-    def __init__(self, pool, pickleTraffic):
+    def __init__(self, pool, pickleTraffic, nproc):
         self.pool = pool
-        self.t0 = self.now(pickleTraffic)
+        self.nproc = nproc
+        self.t = self.now(pickleTraffic)
+        self.cpu = CpuMeas()
     def format_diff(self, other):
-        t1 = self.t0
-        t0 = other.t0
-        s = ('%.3f s worker CPU, %.3f s worker Wall' %
-             tuple(t1[k] - t0[k] for k in ['worker_cpu', 'worker_wall']))
-        if 'pickle_objs' in self.t0:
+        t1 = self.t
+        t0 = other.t
+        wall = self.cpu.wall_seconds_since(other.cpu)
+        main_cpu = self.cpu.cpu_seconds_since(other.cpu)
+        worker_cpu = t1['worker_cpu'] - t0['worker_cpu']
+        worker_wall = t1['worker_wall'] - t0['worker_wall']
+        use = (main_cpu + worker_cpu) / wall
+        s = ('%.3f s worker CPU, %.3f s worker Wall, Cores in use: %.2f, Total efficiency (on %i cores): %.1f %%' %
+             (worker_cpu, worker_wall, use, self.nproc, 100.*use / float(self.nproc)))
+        if 'pickle_objs' in self.t:
             s += (', pickled %i/%i objs, %.1f/%.1f MB' %
                   tuple(t1[k] - t0[k] for k in [
                         'pickle_objs', 'unpickle_objs',
