@@ -45,7 +45,7 @@ class mysample(object):
          - predicted frac exposures      : FracExp   
     Current Inputs are: survey, DR, band, localdir) 
          survey: DECaLS, MZLS, BASS
-         DR:     DR3, DR4
+         DR:     DR3, DR4, DR5
          band:   g,r,z
          localdir: output directory
     """                                  
@@ -182,6 +182,8 @@ def val3p4c_depthfromIvar(sample):
         inds = np.where((tbdata['filter'] == band) & (tbdata['photometric'] == True) & (tbdata['blacklist_ok'] == True)) 
     elif(sample.DR == 'DR4'):
         inds = np.where((tbdata['filter'] == band) & (tbdata['photometric'] == True) & (tbdata['bitmask'] == 0)) 
+    elif(sample.DR == 'DR5'):
+        inds = np.where((tbdata['filter'] == band) & (tbdata['photometric'] == True) & (tbdata['blacklist_ok'] == True)) 
 
     #Read data 
     #obtain invnoisesq here, including extinction 
@@ -327,6 +329,13 @@ def val3p4b_maghist_pred(sample,ndraw=1e5, nbin=100, vmin=21.0, vmax=25.0):
                  nmag = Magtonanomaggies(magext)/5. #total noise
                  nl.append(nmag)
 
+        if(sample.DR == 'DR5'): 
+             if f[i]['filter'] == sample.band and f[i]['photometric'] == True and f[i]['blacklist_ok'] == True :   
+
+                 magext = f[i]['galdepth'] - f[i]['decam_extinction'][be]
+                 nmag = Magtonanomaggies(magext)/5. #total noise
+                 nl.append(nmag)
+
 
     ng = len(nl)
     print "-----------"
@@ -454,6 +463,8 @@ def v5p1e_photometricReqPlot(sample):
         inds = np.where((tbdata['filter'] == band) & (tbdata['blacklist_ok'] == True)) 
     if(sample.DR == 'DR4'):    
         inds = np.where((tbdata['filter'] == band) & (tbdata['bitmask'] == 0)) 
+    if(sample.DR == 'DR5'):
+        inds = np.where((tbdata['filter'] == band) & (tbdata['blacklist_ok'] == True)) 
 
     #Read data 
     #obtain invnoisesq here, including extinction 
@@ -590,6 +601,8 @@ def v3p5_Areas(sample1,sample2):
         inds = np.where((tbdata['filter'] == sample1.band) & (tbdata['blacklist_ok'] == True)) 
     if(sample1.DR == 'DR4'):    
         inds = np.where((tbdata['filter'] == sample1.band) & (tbdata['bitmask'] == 0)) 
+    if(sample1.DR == 'DR5'):
+        inds = np.where((tbdata['filter'] == sample1.band) & (tbdata['blacklist_ok'] == True)) 
 
     #number of ccds at each point 
     nccd1=np.ones(len(tbdata))
@@ -625,6 +638,8 @@ def v3p5_Areas(sample1,sample2):
         inds = np.where((tbdata['filter'] == sample2.band) & (tbdata['blacklist_ok'] == True)) 
     if(sample2.DR == 'DR4'):    
         inds = np.where((tbdata['filter'] == sample2.band) & (tbdata['bitmask'] == 0)) 
+    if(sample2.DR == 'DR5'):
+        inds = np.where((tbdata['filter'] == sample2.band) & (tbdata['blacklist_ok'] == True)) 
 
     #number of ccds at each point 
     nccd2=np.ones(len(tbdata))
@@ -748,6 +763,8 @@ def val3p4c_seeing(sample,passmin=3,nbin=100,nside=1024):
         inds = np.where((tbdata['filter'] == band) & (tbdata['photometric'] == True) & (tbdata['blacklist_ok'] == True))
     elif(sample.DR == 'DR4'):
         inds = np.where((tbdata['filter'] == band) & (tbdata['photometric'] == True) & (tbdata['bitmask'] == 0))
+    elif(sample.DR == 'DR5'):
+        inds = np.where((tbdata['filter'] == band) & (tbdata['photometric'] == True) & (tbdata['blacklist_ok'] == True))
 
     #Read data 
     #obtain invnoisesq here, including extinction 
@@ -943,6 +960,8 @@ def val3p4c_seeingplots(sample,passmin=3,nbin=100,nside=1024):
         inds = np.where((tbdata['filter'] == band) & (tbdata['photometric'] == True) & (tbdata['blacklist_ok'] == True))
     elif(sample.DR == 'DR4'):
         inds = np.where((tbdata['filter'] == band) & (tbdata['photometric'] == True) & (tbdata['bitmask'] == 0))
+    elif(sample.DR == 'DR5'):
+        inds = np.where((tbdata['filter'] == band) & (tbdata['photometric'] == True) & (tbdata['blacklist_ok'] == True))
 
     #Read data 
     #obtain invnoisesq here, including extinction 
