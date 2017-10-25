@@ -488,8 +488,8 @@ class TimingPoolTimestamp(object):
         worker_cpu = t1['worker_cpu'] - t0['worker_cpu']
         worker_wall = t1['worker_wall'] - t0['worker_wall']
         use = (main_cpu + worker_cpu) / wall
-        s = ('%.3f s worker CPU, %.3f s worker Wall, Cores in use: %.2f, Total efficiency (on %i cores): %.1f %%' %
-             (worker_cpu, worker_wall, use, self.nproc, 100.*use / float(self.nproc)))
+        s = ('%.3f s worker CPU, %.3f s worker Wall, Wall: %.3f s, Cores in use: %.2f, Total efficiency (on %i cores): %.1f %%' %
+             (worker_cpu, worker_wall, wall, use, self.nproc, 100.*use / float(self.nproc)))
         if 'pickle_objs' in self.t:
             s += (', pickled %i/%i objs, %.1f/%.1f MB' %
                   tuple(t1[k] - t0[k] for k in [
