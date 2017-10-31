@@ -228,7 +228,8 @@ def main():
 
         print('PSF filename:', outim.psffn)
         trymakedirs(outim.psffn, dir=True)
-        psfex.writeto(outim.psffn)
+        print('Writing PsfEx:', outim.psffn, 'with FWHM', tim.psf_fwhm)
+        psfex.writeto(outim.psffn, fwhm=tim.psf_fwhm)
 
         if not bok:
             print('Sky filename:', outim.splineskyfn)
@@ -236,6 +237,19 @@ def main():
             print('Sky:', sky)
             trymakedirs(outim.splineskyfn, dir=True)
             sky.write_fits(outim.splineskyfn)
+
+        # HACK -- check result immediately.
+        outccds.writeto(os.path.join(args.outdir, 'survey-ccds-1.fits.gz'))
+        outsurvey.ccds = None
+        outC = outsurvey.get_ccds_readonly()
+        occd = outC[iccd]
+        outim = outsurvey.get_image_object(occd)
+        print('Got output image:', outim)
+        otim = outim.get_tractor_image(pixPsf=True, splinesky=True,
+                                       hybridPsf=True)
+        print('Got output tim:', otim)
+
+
 
     outccds.writeto(os.path.join(args.outdir, 'survey-ccds-1.fits.gz'))
 
@@ -365,7 +379,8 @@ def main():
     for iccd,ccd in enumerate(outC):
         outim = outsurvey.get_image_object(ccd)
         print('Got output image:', outim)
-        otim = outim.get_tractor_image(pixPsf=True, splinesky=True)
+        otim = outim.get_tractor_image(pixPsf=True, splinesky=True,
+                                       hybridPsf=True)
         print('Got output tim:', otim)
     
 if __name__ == '__main__':
