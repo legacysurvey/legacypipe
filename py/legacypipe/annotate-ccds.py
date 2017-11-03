@@ -28,6 +28,10 @@ python -u legacypipe/annotate-ccds.py --mzls --ccds /global/projecta/projectdirs
 LEGACY_SURVEY_DIR=/global/cscratch1/sd/desiproc/dr4/dr4_fixes/legacypipe-dir/
 python -u legacypipe/annotate-ccds.py --mzls --ccds /global/projecta/projectdirs/cosmo/work/dr4/survey-ccds-mzls.fits.gz --threads 1
 
+Can add kd-tree data structure to this resulting annotated-ccds file like this:
+# Astrometry.net's 'startree' program:
+# > startree -i annotated-ccds.fits -o /tmp/ann.kd -P -k -n ccds
+# > fitsgetext -i /tmp/ann.kd -o annotated-ccds.kd.fits -e 0 -e 6 -e 1 -e 2 -e 3 -e 4 -e 5
 
 '''
 
