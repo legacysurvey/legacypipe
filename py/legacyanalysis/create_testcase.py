@@ -229,7 +229,8 @@ def main():
         print('PSF filename:', outim.psffn)
         trymakedirs(outim.psffn, dir=True)
         print('Writing PsfEx:', outim.psffn, 'with FWHM', tim.psf_fwhm)
-        psfex.writeto(outim.psffn, fwhm=tim.psf_fwhm)
+        psfex.fwhm = tim.psf_fwhm
+        psfex.writeto(outim.psffn) #, fwhm=tim.psf_fwhm)
 
         if not bok:
             print('Sky filename:', outim.splineskyfn)
