@@ -15,16 +15,18 @@
 
 # 1. Brick summary: bricks-summary.fits.gz
 
+# Run 10-degree chunks at a time
 for ((r=0; r<36; r++)); do
     R=$(printf %02d $r);
     python -u legacyanalysis/brick-summary.py -o brick-summary-$R.fits $LEGACY_SURVEY_DIR/coadd/$R*/*/*-nexp-*.fits.gz > brick-summary-$R.log 2>&1 &;
 done
+# Wait for all the 10-degree chunks to finish
 wait
-
+# Consolidate them
 python legacyanalysis/brick-summary.py --merge -o brick-summary.fits brick-summary-??.fits
-
 # Make some plots
 python legacyanalysis/brick-summary.py --plot brick-summary.fits
+
 
 # 2. Depth summary --> to be merged into brick-summary.py
 
