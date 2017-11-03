@@ -517,7 +517,7 @@ class LegacySurveyImage(object):
         This is just a faster version of fitsio.read_header(fn).
         '''
         if fn.endswith('.gz'):
-            return fitsio.read_header(self.fn)
+            return fitsio.read_header(fn)
 
         # Weirdly, this can be MUCH faster than letting fitsio do it...
         hdr = fitsio.FITSHDR()
