@@ -160,13 +160,11 @@ def main():
     T.index = np.arange(len(T))
 
     if opt.ignore_cuts == False:
-        I = survey.photometric_ccds(T)
-        log(len(I), 'CCDs are photometric')
-        T.cut(I)
-        cuts = survey.ccd_cuts(T)
-        log(len(cuts != 0), 'CCDs are subject to cuts')
-        T.cut(cuts == 0)
-    log(len(T), 'CCDs remain')
+        print('Applying CCD cuts...')
+        cutvals = T.ccd_cuts
+        print('CCD cut bitmask values:', cutvals)
+        T.cut(cutvals == 0)
+        print(len(T), 'CCDs survive cuts')
 
     bands = 'grz'
     log('Filters:', np.unique(T.filter))

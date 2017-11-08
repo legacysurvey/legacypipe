@@ -258,22 +258,7 @@ def stage_tims(W=3600, H=3600, pixscale=0.262, brickname=None,
 
     print('Got CCDs:', Time()-t0)
 
-    # Sort images by band -- this also eliminates images whose
-    # *filter* string is not in *bands*.
-    print('Unique filters:', np.unique(ccds.filter))
-    ccds.cut(np.in1d(ccds.filter, bands))
-    print('Cut on filter:', len(ccds), 'CCDs remain.')
-
-    print('Cutting out non-photometric CCDs...')
-    I = survey.photometric_ccds(ccds)
-    if I is None:
-        print('None cut')
-    else:
-        print(len(I), 'of', len(ccds), 'CCDs are photometric')
-        ccds.cut(I)
-
     print('Applying CCD cuts...')
-    ccds.ccd_cuts = survey.ccd_cuts(ccds)
     cutvals = ccds.ccd_cuts
     print('CCD cut bitmask values:', cutvals)
     ccds.cut(cutvals == 0)

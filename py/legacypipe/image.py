@@ -93,20 +93,6 @@ class LegacySurveyImage(object):
     def __repr__(self):
         return str(self)
 
-    @classmethod
-    def photometric_ccds(self, survey, ccds):
-        '''
-        Returns an index array for the members of the table 'ccds' that are
-        photometric.
-
-        Default is to return None, meaning keep all CCDs.
-        '''
-        return None
-
-    @classmethod
-    def ccd_cuts(self, survey, ccds):
-        return np.zeros(len(ccds), np.int32)
-
     def check_for_cached_files(self, survey):
         for key in self.get_cacheable_filename_variables():
             fn = getattr(self, key, None)

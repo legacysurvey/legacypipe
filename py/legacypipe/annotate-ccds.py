@@ -60,7 +60,7 @@ def main(outfn='ccds-annotated.fits', ccds=None, mzls=False):
     else:
         ccds.photometric[I] = True
 
-    ccds.ccd_cuts = survey.ccd_cuts(ccds)
+    assert('ccd_cuts' in ccds.get_columns())
 
     # Set to True if we successfully read the calibration products and computed
     # annotated values
