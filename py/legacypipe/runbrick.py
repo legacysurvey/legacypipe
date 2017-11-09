@@ -258,11 +258,14 @@ def stage_tims(W=3600, H=3600, pixscale=0.262, brickname=None,
 
     print('Got CCDs:', Time()-t0)
 
-    print('Applying CCD cuts...')
-    cutvals = ccds.ccd_cuts
-    print('CCD cut bitmask values:', cutvals)
-    ccds.cut(cutvals == 0)
-    print(len(ccds), 'CCDs survive cuts')
+    if "ccd_cuts" in ccds.get_columns():
+        print('Applying CCD cuts...')
+        cutvals = ccds.ccd_cuts
+        print('CCD cut bitmask values:', cutvals)
+        ccds.cut(cutvals == 0)
+        print(len(ccds), 'CCDs survive cuts')
+    else:
+        print('WARNING: not applying CCD cuts')
 
     print('Cutting on CCDs to be used for fitting...')
     I = survey.ccds_for_fitting(brick, ccds)
