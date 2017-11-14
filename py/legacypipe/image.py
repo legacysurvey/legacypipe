@@ -2,21 +2,11 @@ from __future__ import print_function
 import os
 import numpy as np
 import fitsio
-from tractor.utils import get_class_from_name
-from tractor.basics import NanoMaggies, ConstantFitsWcs, LinearPhotoCal
-from tractor.image import Image
-from tractor.sky import ConstantSky
-from tractor.tractortime import TAITime
-from astrometry.util.file import trymakedirs
 from astrometry.util.fits import fits_table
-from legacypipe.survey import SimpleGalaxy
 
 '''
 Generic image handling code.
 '''
-
-from astrometry.util.plotutils import PlotSequence
-psgalnorm = PlotSequence('norms')
 
 class LegacySurveyImage(object):
     '''A base class containing common code for the images we handle.
@@ -182,6 +172,11 @@ class LegacySurveyImage(object):
           leaving a constant zero sky model?
 
         '''
+        import astropy.time
+        from tractor.tractortime import TAITime
+        from tractor.image import Image
+        from tractor.basics import NanoMaggies, LinearPhotoCal
+
         get_dq = dq
         get_invvar = invvar
 
@@ -234,13 +229,13 @@ class LegacySurveyImage(object):
         #
         invvar = self.remap_invvar(invvar, primhdr, img, dq)
 
-
         sky = self.read_sky_model(splinesky=splinesky, slc=slc,
                                   primhdr=primhdr, imghdr=imghdr)
         skysig1 = getattr(sky, 'sig1', None)
         
         midsky = 0.
         if subsky:
+            from tractor.sky import ConstantSky
             print('Instantiating and subtracting sky model')
             skymod = np.zeros_like(img)
             sky.addTo(skymod)
@@ -276,7 +271,6 @@ class LegacySurveyImage(object):
             slice2 = (slice(5,None,10),slice(5,None,10))
             mad = np.median(np.abs(img[slice1] - img[slice2]).ravel())
             sig1 = 1.4826 * mad / np.sqrt(2.)
-            print('sig1 estimate:', sig1)
             invvar *= (1. / sig1**2)
         assert(np.isfinite(sig1))
 
@@ -309,20 +303,15 @@ class LegacySurveyImage(object):
 
         # HACK -- create a local PSF model to instantiate the PsfEx
         # model, which handles non-unit pixel scaling.
-        print('-- creating constant PSF model for norms...')
         fullpsf = tim.psf
         th,tw = tim.shape
         tim.psf = fullpsf.constantPsfAt(tw//2, th//2)
         tim.psfnorm = self.psf_norm(tim)
-        print('PSF norm:', tim.psfnorm)
         # Galaxy-detection norm
         tim.galnorm = self.galaxy_norm(tim)
-        print('Galaxy norm', tim.galnorm)
-        # assert(tim.galnorm < tim.psfnorm)
         tim.psf = fullpsf
 
-        # CP (DECam) images include DATE-OBS and MJD-OBS, in UTC.
-        import astropy.time
+        # Convert MJD-OBS, in UTC, into TAI
         mjd_tai = astropy.time.Time(self.mjdobs,
                                     format='mjd', scale='utc').tai.mjd
         tim.time = TAITime(None, mjd=mjd_tai)
@@ -403,7 +392,6 @@ class LegacySurveyImage(object):
         if y is None:
             y = h//2
         patch = psf.getPointSourcePatch(x, y).patch
-        print('PSF model shape', patch.shape)
         # Clamp up to zero and normalize before taking the norm
         patch = np.maximum(0, patch)
         patch /= patch.sum()
@@ -412,9 +400,10 @@ class LegacySurveyImage(object):
 
     def galaxy_norm(self, tim, x=None, y=None):
         # Galaxy-detection norm
-        from tractor.galaxy import ExpGalaxy
-        from tractor.ellipses import EllipseE
         from tractor.patch import ModelMask
+        from legacypipe.survey import SimpleGalaxy
+        from tractor.basics import NanoMaggies
+
         h,w = tim.shape
         band = tim.band
         if x is None:
@@ -426,7 +415,6 @@ class LegacySurveyImage(object):
         S = 32
         mm = ModelMask(int(x-S), int(y-S), 2*S+1, 2*S+1)
         galmod = gal.getModelPatch(tim, modelMask=mm).patch
-        print('Galaxy model shape', galmod.shape)
         galmod = np.maximum(0, galmod)
         galmod /= galmod.sum()
         galnorm = np.sqrt(np.sum(galmod**2))
@@ -556,6 +544,7 @@ class LegacySurveyImage(object):
 
     def get_tractor_wcs(self, wcs, x0, y0,
                         primhdr=None, imghdr=None):
+        from tractor.basics import ConstantFitsWcs
         twcs = ConstantFitsWcs(wcs)
         if x0 or y0:
             twcs.setX0Y0(x0,y0)
@@ -601,6 +590,8 @@ class LegacySurveyImage(object):
         '''
         Reads the sky model, returning a Tractor Sky object.
         '''
+        from tractor.utils import get_class_from_name
+
         sky = None
         if splinesky and getattr(self, 'merged_splineskyfn', None) is not None:
             if not os.path.exists(self.merged_splineskyfn):
@@ -614,15 +605,9 @@ class LegacySurveyImage(object):
                 I, = np.nonzero((T.expnum == self.expnum) *
                                 np.array([c.strip() == self.ccdname
                                           for c in T.ccdname]))
-                print('Found', len(I), 'matching CCD')
+                print('Found', len(I), 'matching CCDs')
                 if len(I) == 1:
                     Ti = T[I[0]]
-                    # Ti.about()
-                    # print('Spline w,h', Ti.gridw, Ti.gridh)
-                    # print('xgrid:', Ti.xgrid.shape)
-                    # print('ygrid:', Ti.ygrid.shape)
-                    # print('gridvals:', Ti.gridvals.shape)
-
                     # Remove any padding
                     h,w = Ti.gridh, Ti.gridw
                     Ti.gridvals = Ti.gridvals[:h, :w]
@@ -710,15 +695,13 @@ class LegacySurveyImage(object):
                 I, = np.nonzero((T.expnum == self.expnum) *
                                 np.array([c.strip() == self.ccdname
                                           for c in T.ccdname]))
-                print('Found', len(I), 'matching CCD')
+                print('Found', len(I), 'matching CCDs')
                 if len(I) == 1:
                     Ti = T[I[0]]
-
                     # Remove any padding
                     degree = Ti.poldeg1
                     # number of terms in polynomial
                     ne = (degree + 1) * (degree + 2) // 2
-                    #print('PSF_mask shape', Ti.psf_mask.shape)
                     Ti.psf_mask = Ti.psf_mask[:ne, :Ti.psfaxis1, :Ti.psfaxis2]
                     # If degree 0, set polname* to avoid assertion error in tractor
                     if degree == 0:
@@ -942,9 +925,7 @@ class CalibMixin(object):
             masked = (img - med - skymod) > (5.*sig1)
             masked = binary_dilation(masked, iterations=3)
             masked[wt == 0] = True
-
             sig1b = 1./np.sqrt(np.median(wt[masked == False]))
-            print('Sig1 vs sig1b:', sig1, sig1b)
 
             # Now find the final sky model using that more extensive mask
             skyobj = SplineSky.BlantonMethod(
@@ -968,12 +949,15 @@ class CalibMixin(object):
             print('Wrote sky model', self.splineskyfn)
 
         else:
+            from tractor.sky import ConstantSky
+
             try:
                 skyval = estimate_mode(img[wt > 0], raiseOnWarn=True)
                 skymeth = 'mode'
             except:
                 skyval = np.median(img[wt > 0])
                 skymeth = 'median'
+
             tsky = ConstantSky(skyval)
 
             hdr.add_record(dict(name='SKYMETH', value=skymeth,
@@ -984,7 +968,6 @@ class CalibMixin(object):
             masked = binary_dilation(masked, iterations=3)
             masked[wt == 0] = True
             sig1b = 1./np.sqrt(np.median(wt[masked == False]))
-            print('Sig1 vs sig1b:', sig1, sig1b)
 
             hdr.add_record(dict(name='SIG1', value=sig1,
                                 comment='Median stdev of unmasked pixels'))
