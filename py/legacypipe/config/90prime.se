@@ -64,5 +64,5 @@ MEMORY_BUFSIZE   1024           # number of lines in buffer
  
 #----------------------------- Miscellaneous ---------------------------------
  
-VERBOSE_TYPE     NORMAL          # can be QUIET, NORMAL or FULL
+VERBOSE_TYPE     QUIET          # can be QUIET, NORMAL or FULL
 WRITE_XML        N              # Write XML file (Y/N)?
