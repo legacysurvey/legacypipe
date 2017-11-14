@@ -470,11 +470,6 @@ def main():
         log('Connected to QDO queue', opt.queue, q)
         brick_to_task = dict()
 
-        I = survey.photometric_ccds(T)
-        log(len(I), 'CCDs are photometric')
-        T.cut(I)
-        log(len(T), 'CCDs remaining')
-
         T.wra = T.ra + (T.ra > 180) * -360
         wra = rlo - 360
         plt.clf()

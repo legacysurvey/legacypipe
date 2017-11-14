@@ -1403,30 +1403,6 @@ Now using the current directory as LEGACY_SURVEY_DIR, but this is likely to fail
             T = T[T.camera == camera]
         return T
 
-    def photometric_ccds(self, ccds):
-        '''
-        Returns an index array for the members of the table "ccds" that
-        are photometric.
-        '''
-        # Make the is-photometric check camera-specific, handled by the
-        # Image subclass.
-        cameras = np.unique(ccds.camera)
-        print('Finding photometric CCDs.  Cameras:', cameras)
-        good = np.zeros(len(ccds), bool)
-        for cam in cameras:
-            imclass = self.image_class_for_camera(cam)
-            Icam = np.flatnonzero(ccds.camera == cam)
-            print('Checking', len(Icam), 'images from camera', cam)
-            Igood = imclass.photometric_ccds(self, ccds[Icam])
-            if Igood is None:
-                print('No photometric cut for camera', cam)
-                good[Icam] = True
-                continue
-            print('Keeping', len(Igood), 'photometric CCDs from camera', cam)
-            if len(Igood):
-                good[Icam[Igood]] = True
-        return np.flatnonzero(good)
-
 
 def exposure_metadata(filenames, hdus=None, trim=None):
     '''
