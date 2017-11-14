@@ -125,10 +125,10 @@ class LegacySurveyImage(object):
         calname = '%s/%s/%s-%s-%s' % (expstr[:5], expstr, self.camera, 
                                       expstr, self.ccdname)
         calibdir = os.path.join(self.survey.get_calib_dir(), self.camera)
-        self.sefn  = os.path.join(calibdir, 'se',    self.calname + '.fits')
-        self.psffn = os.path.join(calibdir, 'psfex', self.calname + '.fits')
-        self.skyfn = os.path.join(calibdir, 'sky',   self.calname + '.fits')
-        self.splineskyfn = os.path.join(calibdir, 'splinesky', self.calname + '.fits')
+        self.sefn  = os.path.join(calibdir, 'se',    calname + '.fits')
+        self.psffn = os.path.join(calibdir, 'psfex', calname + '.fits')
+        self.skyfn = os.path.join(calibdir, 'sky',   calname + '.fits')
+        self.splineskyfn = os.path.join(calibdir, 'splinesky', calname + '.fits')
         self.merged_psffn = os.path.join(calibdir, 'psfex-merged', expstr[:5],
                                          '%s-%s.fits' % (self.camera, expstr))
         self.merged_splineskyfn = os.path.join(calibdir, 'splinesky-merged', expstr[:5],
@@ -157,7 +157,7 @@ class LegacySurveyImage(object):
         could be cached.
         '''
         return ['imgfn', 'dqfn', 'wtfn', 'psffn', 'merged_psffn',
-                'merged_splineskyfn', 'splineskyfn', 'skyfn',])
+                'merged_splineskyfn', 'splineskyfn', 'skyfn']
 
     def get_good_image_slice(self, extent, get_extent=False):
         '''
@@ -953,6 +953,7 @@ class LegacySurveyImage(object):
     def run_sky(self, splinesky=False, git_version=None):
         from legacypipe.survey import get_version_header
         from scipy.ndimage.morphology import binary_dilation
+        from astrometry.util.file import trymakedirs
 
         slc = self.get_good_image_slice(None)
         img = self.read_image(slice=slc)

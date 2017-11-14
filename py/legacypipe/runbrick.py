@@ -1497,17 +1497,8 @@ def stage_fitblobs(T=None,
         plt.title('Tycho-2 stars')
         ps.savefig()
 
-    if checkpoint_filename is None:
-        # Run one_blob on each blob!
-        blobiter = _blob_iter(blobslices, blobsrcs, blobs, targetwcs, tims,
-                              cat, bands, plots, ps, simul_opt, use_ceres,
-                              tycho, brick, rex, max_blobsize=max_blobsize)
-        # to allow timingpool to queue tasks one at a time
-        blobiter = iterwrapper(blobiter, len(blobsrcs))
-        R = mp.map(_bounce_one_blob, blobiter)
-    else:
-        from astrometry.util.file import pickle_to_file, trymakedirs
-
+    skipblobs = []
+    if checkpoint_filename is not None:
         # Check for existing checkpoint file.
         R = []
         if os.path.exists(checkpoint_filename):
@@ -1515,12 +1506,28 @@ def stage_fitblobs(T=None,
             print('Reading', checkpoint_filename)
             try:
                 R = unpickle_from_file(checkpoint_filename)
-                print('Read', len(R), 'results from checkpoint file',
+                print('Read', len(R), 'results from checkpoint file', 
                       checkpoint_filename)
             except:
                 import traceback
                 print('Failed to read checkpoint file ' + checkpoint_filename)
                 traceback.print_exc()
+        skipblobs = [blob.iblob for blob in R if blob is not None]
+        R = [r for r in R if r is not None]
+        print('Skipping', len(skipblobs), 'blobs from checkpoint file')
+
+    # Create the iterator over blobs to process
+    blobiter = _blob_iter(blobslices, blobsrcs, blobs, targetwcs, tims,
+                          cat, bands, plots, ps, simul_opt, use_ceres,
+                          tycho, brick, rex, skipblobs=skipblobs,
+                          max_blobsize=max_blobsize)
+    # to allow timingpool to queue tasks one at a time
+    blobiter = iterwrapper(blobiter, len(blobsrcs))
+
+    if checkpoint_filename is None:
+        R = mp.map(_bounce_one_blob, blobiter)
+    else:
+        from astrometry.util.file import pickle_to_file, trymakedirs
 
         def _write_checkpoint(R, checkpoint_filename):
             fn = checkpoint_filename + '.tmp'
@@ -1529,17 +1536,6 @@ def stage_fitblobs(T=None,
             print('Wrote checkpoint to', fn)
             os.rename(fn, checkpoint_filename)
             print('Renamed temp checkpoint', fn, 'to', checkpoint_filename)
-
-        # Create the iterator over blobs to process
-        skipblobs = [B.iblob for B in R if B is not None]
-        R = [r for r in R if r is not None]
-        print('Skipping', len(skipblobs), 'blobs from checkpoint file')
-        blobiter = _blob_iter(blobslices, blobsrcs, blobs, targetwcs, tims,
-                              cat, bands, plots, ps, simul_opt, use_ceres,
-                              tycho, brick, rex, skipblobs=skipblobs,
-                              max_blobsize=max_blobsize)
-        # to allow timingpool to queue tasks one at a time
-        blobiter = iterwrapper(blobiter, len(blobsrcs))
 
         d = os.path.dirname(checkpoint_filename)
         if len(d) and not os.path.exists(d):
