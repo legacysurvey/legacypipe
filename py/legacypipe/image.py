@@ -809,14 +809,15 @@ class LegacySurveyImage(object):
             raise RuntimeError('Command failed: ' + cmd)
         os.rename(tmpfn, self.sefn)
 
-    def run_psfex(self):
+    def run_psfex(self, git_version=None):
         from astrometry.util.file import trymakedirs
         from legacypipe.survey import get_git_version
         sedir = self.survey.get_se_dir()
         trymakedirs(self.psffn, dir=True)
         primhdr = self.read_image_primary_header()
         plver = primhdr.get('PLVER', '')
-        verstr = get_git_version()
+        if git_version is None:
+            git_version = get_git_version()
         # We write the PSF model to a .fits.tmp file, then rename to .fits
         psfdir = os.path.dirname(self.psffn)
         psfoutfn = os.path.join(psfdir, os.path.basename(self.sefn).replace('.fits','') + '.fits')
@@ -825,7 +826,7 @@ class LegacySurveyImage(object):
                  psfdir, self.sefn),
                 'mv %s %s' % (psfoutfn + '.tmp', psfoutfn),
                 'modhead %s LEGPIPEV "%s" "legacypipe git version"' %
-                (self.psffn, verstr),
+                (self.psffn, git_version),
                 'modhead %s PLVER "%s" "CP ver of image file"' % (self.psffn, plver)]
         for cmd in cmds:
             print(cmd)
@@ -963,7 +964,7 @@ class LegacySurveyImage(object):
             for fn in todelete:
                 os.unlink(fn)
         if psfex:
-            self.run_psfex()
+            self.run_psfex(git_version=git_version)
         if sky:
             self.run_sky(splinesky=splinesky, git_version=git_version)
 

@@ -140,9 +140,12 @@ def get_git_version(dir=None):
     '''
     from astrometry.util.run_command import run_command
     cmd = ''
-    if dir is not None:
-        cmd = "cd '%s' && " % dir
-    cmd += 'git describe'
+    if dir is None:
+        # Get the git version of the legacypipe product
+        import legacypipe
+        dir = os.path.dirname(legacypipe.__file__)
+
+    cmd = "cd '%s' && git describe" % dir
     rtn,version,err = run_command(cmd)
     if rtn:
         raise RuntimeError('Failed to get version string (%s): ' % cmd +
