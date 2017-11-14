@@ -798,12 +798,10 @@ class LegacySurveyImage(object):
         # spatially varying pixelized PsfEx
         from tractor import PixelizedPsfEx, PsfExModel
         psf = None
-        if getattr(self, 'merged_psffn', None) is not None:
-            if not os.path.exists(self.merged_psffn):
-                print('Merged PsfEx model does not exist:', self.merged_psffn)
+        if self.merged_psffn is not None and not os.path.exists(self.merged_psffn):
+            print('Merged PsfEx model does not exist:', self.merged_psffn)
 
-        if (getattr(self, 'merged_psffn', None) is not None
-            and os.path.exists(self.merged_psffn)):
+        if self.merged_psffn is not None and os.path.exists(self.merged_psffn):
             try:
                 print('Reading merged PsfEx models from', self.merged_psffn)
                 T = fits_table(self.merged_psffn)
