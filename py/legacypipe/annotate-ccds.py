@@ -53,12 +53,12 @@ def main(outfn='ccds-annotated.fits', ccds=None, mzls=False):
     tileid_to_index[:] = -1
     tileid_to_index[tiles.tileid] = np.arange(len(tiles))
 
-    ccds.photometric = np.zeros(len(ccds), bool)
-    I = survey.photometric_ccds(ccds)
-    if I is None:
-        ccds.photometric[:] = True
-    else:
-        ccds.photometric[I] = True
+    # ccds.photometric = np.zeros(len(ccds), bool)
+    # I = survey.photometric_ccds(ccds)
+    # if I is None:
+    #     ccds.photometric[:] = True
+    # else:
+    #     ccds.photometric[I] = True
 
     assert('ccd_cuts' in ccds.get_columns())
 
