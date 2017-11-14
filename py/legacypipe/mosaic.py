@@ -1,9 +1,8 @@
 from __future__ import print_function
 
-from legacypipe.cpimage import CPImage
-from legacypipe.survey import LegacySurveyData    
+from legacypipe.image import LegacySurveyImage
 
-class MosaicImage(CPImage):
+class MosaicImage(LegacySurveyImage):
     '''
     Class for handling images from the Mosaic3 camera processed by the
     NOAO Community Pipeline.
@@ -11,24 +10,28 @@ class MosaicImage(CPImage):
 
     mjd_third_pixel_fixed = 57674.
 
-    # this is defined here for testing purposes (to handle small images)
-    splinesky_boxsize = 512
+    def __init__(self, survey, t):
+        super(MosaicImage, self).__init__(survey, t)
 
-    def read_dq(self, **kwargs):
-        '''
-        Reads the Data Quality (DQ) mask image.
-        '''
-        print('Reading data quality image', self.dqfn, 'ext', self.hdu)
-        dq = self._read_fits(self.dqfn, self.hdu, **kwargs)
-        return dq
-
-    def read_invvar(self, clip=True, **kwargs):
-        '''
-        Reads the inverse-variance (weight) map image.
-        '''
-        print('Reading weight map image', self.wtfn, 'ext', self.hdu)
-        invvar = self._read_fits(self.wtfn, self.hdu, **kwargs)
-        return invvar
+        for attr in ['imgfn', 'dqfn', 'wtfn']:
+            fn = getattr(self, attr)
+            if os.path.exists(fn):
+                continue
+            # Workaround: exposure numbers 330667 through 330890 at
+            # least have some of the files named "v1" and some named
+            # "v2".  Try both.
+            if 'v1' in fn:
+                fnother = fn.replace('v1', 'v2')
+                if os.path.exists(fnother):
+                    print('Using', fnother, 'rather than', fn)
+                    setattr(self, attr, fnother)
+                    fn = fnother
+            elif 'v2' in fn:
+                fnother = fn.replace('v2', 'v1')
+                if os.path.exists(fnother):
+                    print('Using', fnother, 'rather than', fn)
+                    setattr(self, attr, fnother)
+                    fn = fnother
 
     def remap_invvar(self, invvar, primhdr, img, dq):
         return self.remap_invvar_shotnoise(invvar, primhdr, img, dq)

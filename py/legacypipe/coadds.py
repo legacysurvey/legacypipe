@@ -2,7 +2,7 @@ from __future__ import print_function
 import numpy as np
 import fitsio
 from astrometry.util.fits import fits_table
-from legacypipe.cpimage import CP_DQ_BITS
+from legacypipe.image import CP_DQ_BITS
 from legacypipe.survey import tim_get_resamp
 
 def make_coadds(tims, bands, targetwcs,

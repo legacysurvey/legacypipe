@@ -1,50 +1,26 @@
 from __future__ import print_function
-import os
 import numpy as np
-import fitsio
-from legacypipe.cpimage import CPImage
-from legacypipe.survey import LegacySurveyData
 
 import astropy.time
+
+from legacypipe.image import LegacySurveyImage, CP_DQ_BITS
 
 '''
 Code specific to images from the Dark Energy Camera (DECam).
 '''
 
-class DecamImage(CPImage):
+class DecamImage(LegacySurveyImage):
     '''
     A LegacySurveyImage subclass to handle images from the Dark Energy
     Camera, DECam, on the Blanco telescope.
     '''
-    # this is defined here for testing purposes (to handle the small
-    # images used in unit tests)
-    splinesky_boxsize = 512
-
     def __init__(self, survey, t):
         super(DecamImage, self).__init__(survey, t)
-
-        # DEBUG
-        if not os.path.exists(self.imgfn):
-            fn = self.imgfn.replace('/decam/', '/decam/DECam_CP/')
-            if os.path.exists(fn):
-                print('Replaced image path', self.imgfn, 'with', fn)
-                self.imgfn = fn
-        if not os.path.exists(self.dqfn):
-            fn = self.dqfn.replace('/decam/', '/decam/DECam_CP/')
-            if os.path.exists(fn):
-                print('Replaced image path', self.dqfn, 'with', fn)
-                self.dqfn = fn
-        if not os.path.exists(self.wtfn):
-            fn = self.wtfn.replace('/decam/', '/decam/DECam_CP/')
-            if os.path.exists(fn):
-                print('Replaced image path', self.wtfn, 'with', fn)
-                self.wtfn = fn
-
         # Adjust zeropoint for exposure time
         self.ccdzpt += 2.5 * np.log10(self.exptime)
 
-    def __str__(self):
-        return 'DECam ' + self.name
+    def read_invvar(self, **kwargs):
+        return self.read_invvar_clipped(**kwargs)
 
     glowmjd = astropy.time.Time('2014-08-01').utc.mjd
 
@@ -87,7 +63,7 @@ class DecamImage(CPImage):
         if StrictVersion(plver) >= StrictVersion('3.5.0'):
             dq = self.remap_dq_codes(dq)
         else:
-            from legacypipe.cpimage import CP_DQ_BITS
+            from legacypipe.image import CP_DQ_BITS
             dq = dq.astype(np.int16)
             # Un-set the SATUR flag for pixels that also have BADPIX set.
             both = CP_DQ_BITS['badpix'] | CP_DQ_BITS['satur']
@@ -103,17 +79,30 @@ class DecamImage(CPImage):
         else:
             return dq
 
-    def read_invvar(self, clip=True, clipThresh=0.2, **kwargs):
-        print('Reading inverse-variance from', self.wtfn, 'hdu', self.hdu)
-        invvar = self._read_fits(self.wtfn, self.hdu, **kwargs)
-        if clip:
-            # Clamp near-zero (incl negative!) invvars to zero.
-            # These arise due to fpack.
-            if clipThresh > 0.:
-                med = np.median(invvar[invvar > 0])
-                thresh = clipThresh * med
-            else:
-                thresh = 0.
-            invvar[invvar < thresh] = 0
-        return invvar
-
+    def remap_dq_codes(self, dq):
+        '''
+        Some versions of the CP use integer codes, not bit masks.
+        This converts them.
+        '''
+        from legacypipe.image import CP_DQ_BITS
+        dqbits = np.zeros(dq.shape, np.int16)
+        '''
+        1 = bad
+        2 = no value (for remapped and stacked data)
+        3 = saturated
+        4 = bleed mask
+        5 = cosmic ray
+        6 = low weight
+        7 = diff detect (multi-exposure difference detection from median)
+        8 = long streak (e.g. satellite trail)
+        '''
+        dqbits[dq == 1] |= CP_DQ_BITS['badpix']
+        dqbits[dq == 2] |= CP_DQ_BITS['badpix']
+        dqbits[dq == 3] |= CP_DQ_BITS['satur']
+        dqbits[dq == 4] |= CP_DQ_BITS['bleed']
+        dqbits[dq == 5] |= CP_DQ_BITS['cr']
+        dqbits[dq == 6] |= CP_DQ_BITS['badpix']
+        dqbits[dq == 7] |= CP_DQ_BITS['trans']
+        dqbits[dq == 8] |= CP_DQ_BITS['trans']
+        return dqbits
+    

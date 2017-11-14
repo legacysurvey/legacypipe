@@ -5,8 +5,29 @@ import fitsio
 from astrometry.util.fits import fits_table
 
 '''
-Generic image handling code.
+Base class for handling the images we process.  These are all
+processed by variants of the NOAO Community Pipeline (CP), so this
+base class is pretty specific.
 '''
+
+# From: http://www.noao.edu/noao/staff/fvaldes/CPDocPrelim/PL201_3.html
+# 1   -- detector bad pixel           InstCal
+# 1   -- detector bad pixel/no data   Resampled
+# 1   -- No data                      Stacked
+# 2   -- saturated                    InstCal/Resampled
+# 4   -- interpolated                 InstCal/Resampled
+# 16  -- single exposure cosmic ray   InstCal/Resampled
+# 64  -- bleed trail                  InstCal/Resampled
+# 128 -- multi-exposure transient     InstCal/Resampled 
+CP_DQ_BITS = dict(badpix=1, satur=2, interp=4, cr=16, bleed=64,
+                  trans=128,
+                  edge = 256,
+                  edge2 = 512,
+                  ## masked by stage_mask_junk
+                  longthin = 1024,
+                  )
+
+
 
 class LegacySurveyImage(object):
     '''A base class containing common code for the images we handle.
@@ -19,6 +40,11 @@ class LegacySurveyImage(object):
     in the CCDs table to a tractor Image object.
 
     '''
+
+    # this is defined here for testing purposes (to handle the small
+    # images used in unit tests): box size for SplineSky model
+    splinesky_boxsize = 512
+
 
     def __init__(self, survey, ccd):
         '''
@@ -47,13 +73,29 @@ class LegacySurveyImage(object):
         *get_tractor_image*.
 
         '''
+        super(LegacySurveyImage, self).__init__()
         self.survey = survey
 
         imgfn = ccd.image_filename.strip()
-        if os.path.exists(imgfn):
-            self.imgfn = imgfn
-        else:
-            self.imgfn = os.path.join(self.survey.get_image_dir(), imgfn)
+
+        self.imgfn = os.path.join(self.survey.get_image_dir(), imgfn)
+        # Compute data quality and weight-map filenames
+        self.dqfn = self.imgfn.replace('_ooi_', '_ood_').replace('_oki_','_ood_')
+        self.wtfn = self.imgfn.replace('_ooi_', '_oow_').replace('_oki_','_oow_')
+        assert(self.dqfn != self.imgfn)
+        assert(self.wtfn != self.imgfn)
+
+        for attr in ['imgfn', 'dqfn', 'wtfn']:
+            fn = getattr(self, attr)
+            if os.path.exists(fn):
+                continue
+            if fn.endswith('.fz'):
+                fun = fn[:-3]
+                if os.path.exists(fun):
+                    print('Using      ', fun)
+                    print('rather than', fn)
+                    setattr(self, attr, fun)
+                    fn = fun
 
         self.hdu     = ccd.image_hdu
         self.expnum  = ccd.expnum
@@ -61,21 +103,37 @@ class LegacySurveyImage(object):
         self.band    = ccd.filter.strip()
         self.exptime = ccd.exptime
         self.camera  = ccd.camera.strip()
+        self.fwhm    = ccd.fwhm
+        self.propid  = ccd.propid
+        self.mjdobs = ccd.mjd_obs
+        self.width  = ccd.width
+        self.height = ccd.height
+
+        # Which Data Quality bits mark saturation?
+        self.dq_saturation_bits = CP_DQ_BITS['satur']
 
         # Photometric and astrometric zeropoints
         self.ccdzpt = ccd.ccdzpt
         self.dradec = (ccd.ccdraoff / 3600., ccd.ccddecoff / 3600.)
         
-        self.fwhm    = ccd.fwhm
-        self.propid  = ccd.propid
         # in arcsec/pixel
         self.pixscale = 3600. * np.sqrt(np.abs(ccd.cd1_1 * ccd.cd2_2 -
                                                ccd.cd1_2 * ccd.cd2_1))
-        self.mjdobs = ccd.mjd_obs
-        self.width  = ccd.width
-        self.height = ccd.height
 
-        super(LegacySurveyImage, self).__init__()
+        expstr = '%08i' % self.expnum
+        self.name = '%s-%s-%s' % (self.camera, expstr, self.ccdname)
+        calname = '%s/%s/%s-%s-%s' % (expstr[:5], expstr, self.camera, 
+                                      expstr, self.ccdname)
+        calibdir = os.path.join(self.survey.get_calib_dir(), self.camera)
+        self.sefn  = os.path.join(calibdir, 'se',    self.calname + '.fits')
+        self.psffn = os.path.join(calibdir, 'psfex', self.calname + '.fits')
+        self.skyfn = os.path.join(calibdir, 'sky',   self.calname + '.fits')
+        self.splineskyfn = os.path.join(calibdir, 'splinesky', self.calname + '.fits')
+        self.merged_psffn = os.path.join(calibdir, 'psfex-merged', expstr[:5],
+                                         '%s-%s.fits' % (self.camera, expstr))
+        self.merged_splineskyfn = os.path.join(calibdir, 'splinesky-merged', expstr[:5],
+                                               '%s-%s.fits' % (self.camera, expstr))
+
         
     def __str__(self):
         return self.name
@@ -98,7 +156,8 @@ class LegacySurveyImage(object):
         These are names of self.X variables that are filenames that
         could be cached.
         '''
-        return ['imgfn']
+        return ['imgfn', 'dqfn', 'wtfn', 'psffn', 'merged_psffn',
+                'merged_splineskyfn', 'splineskyfn', 'skyfn',])
 
     def get_good_image_slice(self, extent, get_extent=False):
         '''
@@ -200,7 +259,7 @@ class LegacySurveyImage(object):
             
         # Read inverse-variance (weight) map
         if get_invvar:
-            invvar = self.read_invvar(slice=slc, clipThresh=0.)
+            invvar = self.read_invvar(slice=slc)
         else:
             invvar = np.ones_like(img)
         assert(np.all(np.isfinite(invvar)))
@@ -380,9 +439,29 @@ class LegacySurveyImage(object):
     def remap_invvar(self, invvar, primhdr, img, dq):
         return invvar
 
+    # A function that can be called by a subclasser's remap_invvar() method,
+    # if desired, to include the contribution from the source Poisson fluctuations
+    def remap_invvar_shotnoise(self, invvar, primhdr, img, dq):
+        print('Remapping weight map for', self.name)
+        const_sky = primhdr['SKYADU'] # e/s, Recommended sky level keyword from Frank 
+        expt = primhdr['EXPTIME'] # s
+        with np.errstate(divide='ignore'):
+            var_SR = 1./invvar # e/s 
+        var_Astro = np.abs(img - const_sky) / expt # e/s 
+        wt = 1./(var_SR + var_Astro) # s/e
+
+        # Zero out NaNs and masked pixels 
+        wt[np.isfinite(wt) == False] = 0.
+        wt[dq != 0] = 0.
+
+        return wt
+
     def check_image_header(self, imghdr):
-        pass
-    
+        # check consistency between the CCDs table and the image header
+        e = imghdr['EXTNAME']
+        if e.strip() != self.ccdname.strip():
+            print('WARNING: Expected header EXTNAME="%s" to match self.ccdname="%s", self.imgfn=%s' % (e.strip(), self.ccdname,self.imgfn))
+
     def psf_norm(self, tim, x=None, y=None):
         # PSF norm
         psf = tim.psf
@@ -534,13 +613,32 @@ class LegacySurveyImage(object):
         '''
         Reads the Data Quality (DQ) mask image.
         '''
-        return None
+        print('Reading data quality image', self.dqfn, 'ext', self.hdu)
+        dq = self._read_fits(self.dqfn, self.hdu, **kwargs)
+        return dq
 
-    def read_invvar(self, clip=True, **kwargs):
+    def read_invvar(self, **kwargs):
         '''
         Reads the inverse-variance (weight) map image.
         '''
-        return None
+        print('Reading weight map image', self.wtfn, 'ext', self.hdu)
+        invvar = self._read_fits(self.wtfn, self.hdu, **kwargs)
+        return invvar
+
+    def read_invvar_clipped(self, clip=True, clipThresh=0.01, **kwargs):
+        '''A function that can optionally be called by subclassers for read_invvar,
+        clipping fpack artifacts to zero.'''
+        invvar = self._read_fits(self.wtfn, self.hdu, **kwargs)
+        if clip:
+            # Clamp near-zero (incl negative!) invvars to zero.
+            # These arise due to fpack.
+            if clipThresh > 0.:
+                med = np.median(invvar[invvar > 0])
+                thresh = clipThresh * med
+            else:
+                thresh = 0.
+            invvar[invvar < thresh] = 0
+        return invvar
 
     def get_tractor_wcs(self, wcs, x0, y0,
                         primhdr=None, imghdr=None):
@@ -550,8 +648,25 @@ class LegacySurveyImage(object):
             twcs.setX0Y0(x0,y0)
         return twcs
 
-    def get_wcs(self):
-        return None
+    def get_wcs(self, hdr=None):
+        from astrometry.util.util import wcs_pv2sip_hdr
+        # Make sure the PV-to-SIP converter samples enough points for small
+        # images
+        stepsize = 0
+        if min(self.width, self.height) < 600:
+            stepsize = min(self.width, self.height) / 10.;
+        if hdr is None:
+            hdr = self.read_image_header()
+        wcs = wcs_pv2sip_hdr(hdr, stepsize=stepsize)
+        # Correction: ccd ra,dec offsets from zeropoints/CCDs file
+        dra,ddec = self.dradec
+        # print('Applying astrometric zeropoint:', (dra,ddec))
+        r,d = wcs.get_crval()
+        wcs.set_crval((r + dra / np.cos(np.deg2rad(d)), d + ddec))
+        wcs.version = ''
+        phdr = self.read_image_primary_header()
+        wcs.plver = phdr.get('PLVER', '').strip()
+        return wcs
 
     ### Yuck, this is not much better than just doing read_sky_model().sig1 ...
     def get_sky_sig1(self, splinesky=False):

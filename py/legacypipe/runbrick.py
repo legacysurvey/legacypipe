@@ -45,7 +45,7 @@ from tractor.galaxy import (DevGalaxy, ExpGalaxy, FixedCompositeGalaxy,
 
 from legacypipe.survey import (
     get_rgb, imsave_jpeg, LegacySurveyData, on_bricks_dependencies)
-from legacypipe.cpimage import CP_DQ_BITS
+from legacypipe.image import CP_DQ_BITS
 from legacypipe.utils import (
     RunbrickError, NothingToDoError, iterwrapper, find_unique_pixels)
 from legacypipe.coadds import make_coadds, write_coadd_images, quick_coadds
