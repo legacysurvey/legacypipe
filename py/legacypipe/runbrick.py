@@ -1563,7 +1563,7 @@ def stage_fitblobs(T=None,
                     traceback.print_exc()
             # Wait for results (with timeout)
             try:
-                if mp.is_multiproc():
+                if mp.pool is not None:
                     timeout = max(1, checkpoint_period - dt)
                     r = Riter.next(timeout)
                 else:
@@ -2751,17 +2751,10 @@ def run_brick(brick, survey, radec=None, pixscale=0.262,
             kwargs.update(checkpoint_period=checkpoint_period)
 
     if threads and threads > 1:
-        # py3: imported TimingPool
-        if sys.version_info[0] >= 3:
-            from legacypipe.timingpool import TimingPool, TimingPoolMeas
-            #from multiprocessing.pool import Pool
-            #pool = Pool(processes=threads, initializer=runbrick_global_init, initargs=[])
-        else:
-            from astrometry.util.timingpool import TimingPool, TimingPoolMeas
+        from astrometry.util.timingpool import TimingPool, TimingPoolMeas
         pool = TimingPool(threads, initializer=runbrick_global_init,
                           initargs=[])
         poolmeas = TimingPoolMeas(pool, pickleTraffic=False)
-        #Time.add_measurement(poolmeas)
         StageTime.add_measurement(poolmeas)
         mp = multiproc(None, pool=pool)
     else:
