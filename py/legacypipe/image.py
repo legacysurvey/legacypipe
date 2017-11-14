@@ -745,63 +745,21 @@ class LegacySurveyImage(object):
         '''
         Runs any required calibration processes for this image.
         '''
-        print('run_calibs for', self)
-        print('(not implemented)')
-        pass
+        print('Warning: run_calibs for', self, 'not implemented')
+
 
 class CalibMixin(object):
     '''
     A class to hold common calibration tasks between the different
-    surveys / image subclasses.
+    image subclasses.
     '''
 
     def __init__(self):
         super(CalibMixin, self).__init__()
-    
-    def check_psf(self, psffn):
-        '''
-        Returns True if the PsfEx file is ok.
-        '''
-        # Sometimes SourceExtractor gets interrupted or something and
-        # writes out 0 detections.  Then PsfEx fails but in a way that
-        # an output file is still written.  Try to detect & fix this
-        # case.
-        # Check the PsfEx output file for POLNAME1
-        try:
-            hdr = fitsio.read_header(psffn, ext=1)
-        except:
-            print('Failed to read header from existing PSF model file', psffn)
-            return False
-        if hdr.get('POLNAME1', None) is None:
-            print('Did not find POLNAME1 in PsfEx header',psffn,'-- deleting')
-            os.unlink(psffn)
-            return False
-        return True
-
-    def check_se_cat(self, fn):
-        from astrometry.util.fits import fits_table
-        from astrometry.util.file import file_size
-        # Check SourceExtractor catalog for file size = 0 or FITS table
-        # length = 0
-        if os.path.exists(fn) and file_size(fn) == 0:
-            try:
-                os.unlink(fn)
-            except:
-                pass
-            return False
-        T = fits_table(fn, hdu=2)
-        print('Read', len(T), 'sources from SE catalog', fn)
-        if T is None or len(T) == 0:
-            print('SourceExtractor catalog', fn, 'has no sources -- deleting')
-            try:
-                os.unlink(fn)
-            except:
-                pass
-        return os.path.exists(fn)
 
     def funpack_files(self, imgfn, maskfn, hdu, todelete):
+        ''' Source Extractor can't handle .fz files, so unpack them.'''
         from legacypipe.survey import create_temp
-
         tmpimgfn = None
         tmpmaskfn = None
         # For FITS files that are not actually fpack'ed, funpack -E
@@ -950,30 +908,24 @@ class CalibMixin(object):
 
         else:
             from tractor.sky import ConstantSky
-
             try:
                 skyval = estimate_mode(img[wt > 0], raiseOnWarn=True)
                 skymeth = 'mode'
             except:
                 skyval = np.median(img[wt > 0])
                 skymeth = 'median'
-
             tsky = ConstantSky(skyval)
-
             hdr.add_record(dict(name='SKYMETH', value=skymeth,
                                 comment='estimate_mode, or fallback to median?'))
-
             sig1 = 1./np.sqrt(np.median(wt[wt>0]))
             masked = (img - skyval) > (5.*sig1)
             masked = binary_dilation(masked, iterations=3)
             masked[wt == 0] = True
             sig1b = 1./np.sqrt(np.median(wt[masked == False]))
-
             hdr.add_record(dict(name='SIG1', value=sig1,
                                 comment='Median stdev of unmasked pixels'))
             hdr.add_record(dict(name='SIG1B', value=sig1,
                                 comment='Median stdev of unmasked pixels+'))
-            
             trymakedirs(self.skyfn, dir=True)
             tsky.write_fits(self.skyfn, hdr=hdr)
             print('Wrote sky model', self.skyfn)
