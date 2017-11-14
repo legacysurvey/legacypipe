@@ -4,8 +4,8 @@ import numpy as np
 import pylab as plt
 
 for title,tag in [
-    #('Cori Haswell, 64', 'has-64-0001p000'),
-    ('Cori Haswell, shared(16)', 'has-16-0001p000'),
+        #('Cori Haswell, 64', 'has-64-0001p000'),
+        #('Cori Haswell, shared(16)', 'has-16-0001p000'),
         # ('Cori Haswell, 8, BB', 'bb-has-8-2420p070'),
         # ('Cori Haswell, 8 threads', 'has-8-0001p000'),
         # ('Cori KNL, 1 thread', 'knl-1'),
@@ -21,13 +21,27 @@ for title,tag in [
         # ('Cori Haswell, 2 threads', 'has-2'),
         # ('Cori Haswell, 4 threads', 'has-4'),
         # ('Cori Haswell, 8 threads', 'has-8'),
-        # ('Cori Haswell, 16 threads', 'has-16'),
-        # ('Cori Haswell, 32 threads', 'has-32'),
+        # ('Cori Haswell, 16 threads', 'has-16'), # ('Cori Haswell, 32 threads', 'has-32'),
         # ('Cori Haswell, 64 threads', 'has-64'),
+        # ('KNL vanilla 16', '7a'),
+        # ('KNL vanilla 68', '7b'),
+        # ('KNL fast 16', '7c'),
+        # ('KNL fast 68', '7d'),
+        # ('KNL fast2 16', '7e'),
+        # ('KNL fast2 68', '7f'),
+        # ('KNL fast2 128', '7g'),
+        # ('KNL fast2 256', '7h'),
+        ('KNL vanilla 16', '7m'),
+        ('KNL vanilla 68', '7n'),
+        ('KNL fast 16', '7o'),
+        ('KNL fast 68', '7p'),
+        ('KNL fast 128', '7q'),
+        ('KNL fast 256', '7r'),
         ]:
     #fn = 'timing/ps-knl-1.fits'
     #fn = 'timing/ps-%s.fits' % tag
-    fn = 'ps-%s.fits' % tag
+    #fn = 'ps-%s.fits' % tag
+    fn = '/global/cscratch1/sd/dstn/out-%s/ps.fits' % tag
     print()
     print('Reading', fn)
     print()
