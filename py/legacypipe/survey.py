@@ -671,15 +671,6 @@ class LegacySurveyData(object):
     from disk.
     '''
 
-    # Bit codes for why a CCD got cut, used in cut_ccds().
-    ccd_cut_bits = dict(
-        BLACKLIST = 0x1,
-        BAD_EXPID = 0x2,
-        CCDNAME_HDU_MISMATCH = 0x4,
-        BAD_ASTROMETRY = 0x8,
-        THIRD_PIXEL = 0x10, # Mosaic3 one-third-pixel interpolation problem
-        )
-
     def __init__(self, survey_dir=None, cache_dir=None, output_dir=None,
                  version=None, ccds=None):
         '''Create a LegacySurveyData object using data from the given
@@ -1433,26 +1424,6 @@ Now using the current directory as LEGACY_SURVEY_DIR, but this is likely to fail
                 good[Icam[Igood]] = True
         return np.flatnonzero(good)
 
-    def ccd_cuts(self, ccds):
-        '''
-        Returns a bitmask of reasons the given *ccds* would be cut
-        (excluded from legacypipe processing).  These bits are defined
-        in LegacySurveyData.ccd_cut_bits.
-
-        This just delegates to the LegacySurveyImage subclasses based
-        on camera.
-        '''
-        cameras = np.unique(ccds.camera)
-        print('Computing CCD cuts.  Cameras:', cameras)
-        ccdcuts = np.zeros(len(ccds), np.int32)
-        for cam in cameras:
-            imclass = self.image_class_for_camera(cam)
-            Icam = np.flatnonzero(ccds.camera == cam)
-            print('Checking', len(Icam), 'images from camera', cam)
-            cuts = imclass.ccd_cuts(self, ccds[Icam])
-            ccdcuts[Icam] = cuts
-            #print('Keeping', sum(cuts==0), 'unflagged CCDs from camera', cam)
-        return ccdcuts
 
 def exposure_metadata(filenames, hdus=None, trim=None):
     '''
