@@ -43,7 +43,7 @@ class LegacySurveyImage(object):
 
     # this is defined here for testing purposes (to handle the small
     # images used in unit tests): box size for SplineSky model
-    splinesky_boxsize = 512
+    splinesky_boxsize = 1024
 
 
     def __init__(self, survey, ccd):
@@ -972,9 +972,10 @@ class LegacySurveyImage(object):
 
         if splinesky:
             from tractor.splinesky import SplineSky
+            from scipy.ndimage.filters import uniform_filter
 
             boxsize = self.splinesky_boxsize
-            
+
             # Start by subtracting the overall median
             good = (wt > 0)
             if np.sum(good) == 0:
@@ -984,16 +985,21 @@ class LegacySurveyImage(object):
             skyobj = SplineSky.BlantonMethod(img - med, good, boxsize)
             skymod = np.zeros_like(img)
             skyobj.addTo(skymod)
-            # Now mask bright objects in (image - initial sky model)
+
+            # Now mask bright objects in a boxcar-smoothed (image - initial sky model)
             sig1 = 1./np.sqrt(np.median(wt[good]))
-            masked = (img - med - skymod) > (5.*sig1)
+            # Smooth by a boxcar filter before cutting pixels above threshold --
+            boxcar = 5
+            # Sigma of boxcar-smoothed image
+            bsig1 = sig1 / boxcar
+            masked = np.abs(uniform_filter(img-med-skymod, size=boxcar, mode='constant')
+                            > (3.*bsig1))
             masked = binary_dilation(masked, iterations=3)
-            masked[wt == 0] = True
-            sig1b = 1./np.sqrt(np.median(wt[masked == False]))
+            good[masked] = False
+            sig1b = 1./np.sqrt(np.median(wt[good]))
 
             # Now find the final sky model using that more extensive mask
-            skyobj = SplineSky.BlantonMethod(
-                img - med, np.logical_not(masked), boxsize)
+            skyobj = SplineSky.BlantonMethod(img - med, good, boxsize)
             # add the overall median back in
             skyobj.offset(med)
 
@@ -1035,8 +1041,6 @@ class LegacySurveyImage(object):
             trymakedirs(self.skyfn, dir=True)
             tsky.write_fits(self.skyfn, hdr=hdr)
             print('Wrote sky model', self.skyfn)
-
-
 
     def run_calibs(self, psfex=True, sky=True, se=False,
                    fcopy=False, use_mask=True,
