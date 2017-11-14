@@ -11,6 +11,14 @@ from astrometry.util.fits import fits_table, merge_tables
 from astrometry.util.file import trymakedirs
 from legacypipe.survey import LegacySurveyData
 
+'''
+
+This script is for merging per-CCD calibration files (PsfEx,
+splinesky) into larger per-exposure files.
+
+'''
+
+
 def pad_arrays(A):
     '''
     Given a list of numpy arrays [a0,a1,...], zero-pads them all to be the same shape.
