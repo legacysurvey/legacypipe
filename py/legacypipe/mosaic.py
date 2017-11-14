@@ -6,13 +6,10 @@ import fitsio
 import numpy as np
 from glob import glob
 
-from tractor.basics import ConstantFitsWcs
-
-from legacypipe.image import CalibMixin
 from legacypipe.cpimage import CPImage
 from legacypipe.survey import LegacySurveyData    
 
-class MosaicImage(CPImage, CalibMixin):
+class MosaicImage(CPImage):
     '''
     Class for handling images from the Mosaic3 camera processed by the
     NOAO Community Pipeline.

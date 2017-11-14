@@ -3,14 +3,13 @@ import os
 import fitsio
 import numpy as np
 
-from legacypipe.image import CalibMixin
 from legacypipe.cpimage import CPImage
 from legacypipe.survey import LegacySurveyData
 
 '''
 Code specific to images from the 90prime camera on the Bok telescope.
 '''
-class BokImage(CPImage, CalibMixin):
+class BokImage(CPImage):
     '''
     Class for handling images from the 90prime camera processed by the
     NOAO Community Pipeline.
@@ -63,9 +62,6 @@ class BokImage(CPImage, CalibMixin):
         Run calibration pre-processing steps.
         '''
         se = False
-        if psfex and os.path.exists(self.psffn) and (not force):
-            if self.check_psf(self.psffn):
-                psfex = False
         # dependency
         if psfex:
             se = True

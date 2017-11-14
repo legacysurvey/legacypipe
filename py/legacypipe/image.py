@@ -748,14 +748,8 @@ class LegacySurveyImage(object):
         print('Warning: run_calibs for', self, 'not implemented')
 
 
-class CalibMixin(object):
-    '''
-    A class to hold common calibration tasks between the different
-    image subclasses.
-    '''
+    ######## Calibration tasks ###########
 
-    def __init__(self):
-        super(CalibMixin, self).__init__()
 
     def funpack_files(self, imgfn, maskfn, hdu, todelete):
         ''' Source Extractor can't handle .fz files, so unpack them.'''

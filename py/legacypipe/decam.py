@@ -2,7 +2,6 @@ from __future__ import print_function
 import os
 import numpy as np
 import fitsio
-from legacypipe.image import CalibMixin
 from legacypipe.cpimage import CPImage
 from legacypipe.survey import LegacySurveyData
 
@@ -12,7 +11,7 @@ import astropy.time
 Code specific to images from the Dark Energy Camera (DECam).
 '''
 
-class DecamImage(CPImage, CalibMixin):
+class DecamImage(CPImage):
     '''
     A LegacySurveyImage subclass to handle images from the Dark Energy
     Camera, DECam, on the Blanco telescope.
@@ -130,9 +129,6 @@ class DecamImage(CPImage, CalibMixin):
         just_check: boolean
             If True, returns True if calibs need to be run.
         '''
-        #if psfex and os.path.exists(self.psffn) and (not force):
-        #    if self.check_psf(self.psffn):
-        #        psfex = False
         if psfex and not force:
             try:
                 self.read_psf_model(0, 0, pixPsf=True, hybridPsf=True)
