@@ -57,29 +57,6 @@ class RunbrickError(RuntimeError):
 class NothingToDoError(RunbrickError):
     pass
 
-class ImapTracker(object):
-    def __init__(self, real, mymp, tstart):
-        self.real = real
-        self.mymp = mymp
-        self.tstart = tstart
-
-    def __iter__(self):
-        return self
-        
-    def next(self, *args, **kwargs):
-        try:
-            return self.real.next(*args, **kwargs)
-        except StopIteration:
-            self.mymp._imap_finished(self.tstart)
-            raise
-        except:
-            import traceback
-            print('ImapTracker:')
-            traceback.print_exc()
-            raise
-    # py3
-    __next__ = next
-
 class iterwrapper(object):
     def __init__(self, y, n):
         self.n = n
