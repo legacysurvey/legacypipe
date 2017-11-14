@@ -100,14 +100,10 @@ class CPImage(LegacySurveyImage):
         return keys
 
     def check_image_header(self, imghdr):
-        # check consistency... something of a DR1 hangover
+        # check consistency between the CCDs table and the image header
         e = imghdr['EXTNAME']
         if e.strip() != self.ccdname.strip():
             print('WARNING: Expected header EXTNAME="%s" to match self.ccdname="%s", self.imgfn=%s' % (e.strip(), self.ccdname,self.imgfn))
-        # try:
-        #     assert(e.strip() == self.ccdname.strip())
-        # except AssertionError:
-        #     raise ValueError('Expected header EXTNAME="%s" to match self.ccdname="%s", self.imgfn=%s' % (e.strip(), self.ccdname,self.imgfn))
 
     def get_wcs(self, hdr=None):
         from astrometry.util.util import wcs_pv2sip_hdr

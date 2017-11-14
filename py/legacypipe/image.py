@@ -741,11 +741,6 @@ class LegacySurveyImage(object):
         print('Using PSF model', psf)
         return psf
 
-    def run_calibs(self, **kwargs):
-        '''
-        Runs any required calibration processes for this image.
-        '''
-        print('Warning: run_calibs for', self, 'not implemented')
 
 
     ######## Calibration tasks ###########
@@ -792,7 +787,7 @@ class LegacySurveyImage(object):
 
         return tmpimgfn,tmpmaskfn
 
-    def run_se(self, surveyname, imgfn, maskfn):
+    def run_se(self, imgfn, maskfn):
         from astrometry.util.file import trymakedirs
         sedir = self.survey.get_se_dir()
         trymakedirs(self.sefn, dir=True)
@@ -802,9 +797,9 @@ class LegacySurveyImage(object):
                              'tmp-' + os.path.basename(self.sefn))
         cmd = ' '.join([
             'sex',
-            '-c', os.path.join(sedir, surveyname + '.se'),
-            '-PARAMETERS_NAME', os.path.join(sedir, surveyname + '.param'),
-            '-FILTER_NAME %s' % os.path.join(sedir, surveyname + '.conv'),
+            '-c', os.path.join(sedir, self.camera + '.se'),
+            '-PARAMETERS_NAME', os.path.join(sedir, self.camera + '.param'),
+            '-FILTER_NAME %s' % os.path.join(sedir, self.camera + '.conv'),
             '-FLAG_IMAGE %s' % maskfn,
             '-CATALOG_NAME %s' % tmpfn,
             imgfn])
@@ -814,7 +809,7 @@ class LegacySurveyImage(object):
             raise RuntimeError('Command failed: ' + cmd)
         os.rename(tmpfn, self.sefn)
 
-    def run_psfex(self, surveyname):
+    def run_psfex(self):
         from astrometry.util.file import trymakedirs
         from legacypipe.survey import get_git_version
         sedir = self.survey.get_se_dir()
@@ -826,7 +821,7 @@ class LegacySurveyImage(object):
         psfdir = os.path.dirname(self.psffn)
         psfoutfn = os.path.join(psfdir, os.path.basename(self.sefn).replace('.fits','') + '.fits')
         cmds = ['psfex -c %s -PSF_DIR %s -PSF_SUFFIX .fits.tmp %s' %
-                (os.path.join(sedir, surveyname + '.psfex'),
+                (os.path.join(sedir, self.camera + '.psfex'),
                  psfdir, self.sefn),
                 'mv %s %s' % (psfoutfn + '.tmp', psfoutfn),
                 'modhead %s LEGPIPEV "%s" "legacypipe git version"' %
@@ -839,7 +834,7 @@ class LegacySurveyImage(object):
                 raise RuntimeError('Command failed: %s: return value: %i' %
                                    (cmd,rtn))
 
-    def run_sky(self, surveyname, splinesky=False, git_version=None):
+    def run_sky(self, splinesky=False, git_version=None):
         from legacypipe.survey import get_version_header
         from scipy.ndimage.morphology import binary_dilation
 
@@ -923,3 +918,52 @@ class LegacySurveyImage(object):
             trymakedirs(self.skyfn, dir=True)
             tsky.write_fits(self.skyfn, hdr=hdr)
             print('Wrote sky model', self.skyfn)
+
+
+
+    def run_calibs(self, psfex=True, sky=True, se=False,
+                   fcopy=False, use_mask=True,
+                   force=False, git_version=None,
+                   splinesky=False):
+        '''
+        Run calibration pre-processing steps.
+        '''
+        if psfex and not force:
+            # Check whether PSF model already exists
+            try:
+                self.read_psf_model(0, 0, pixPsf=True, hybridPsf=True)
+                psfex = False
+            except:
+                import traceback
+                print('Did not find existing PsfEx model for', self, ':')
+                traceback.print_exc()
+        if psfex:
+            se = True
+
+        # Don't need to run source extractor if the catalog file already exists
+        if se and os.path.exists(self.sefn) and (not force):
+            se = False
+
+        if sky and not force:
+            # Check whether sky model already exists
+            try:
+                self.read_sky_model(splinesky=splinesky)
+                sky = False
+            except:
+                import traceback
+                print('Did not find existing sky model for', self, ':')
+                traceback.print_exc()
+
+        if se:
+            # The image & mask files to process (funpacked if necessary)
+            todelete = []
+            imgfn,maskfn = self.funpack_files(self.imgfn, self.dqfn,
+                                              self.hdu, todelete)
+            self.run_se(imgfn, maskfn)
+            for fn in todelete:
+                os.unlink(fn)
+        if psfex:
+            self.run_psfex()
+        if sky:
+            self.run_sky(splinesky=splinesky, git_version=git_version)
+

@@ -98,8 +98,6 @@ def main():
     parser.add_argument('--near', action='store_true',
                       help='Quick cut to only CCDs near selected bricks')
 
-    parser.add_argument('--check', action='store_true',
-                      help='Check which calibrations actually need to run.')
     parser.add_argument('--check-coadd', action='store_true',
                       help='Check which caoadds actually need to run.')
     parser.add_argument('--out', help='Output filename for calibs, default %(default)s',
@@ -123,8 +121,6 @@ def main():
 
     parser.add_argument('--delete-sky', action='store_true',
                       help='Delete any existing sky calibration files')
-    parser.add_argument('--delete-pvastrom', action='store_true',
-                      help='Delete any existing PV WCS calibration files')
 
     parser.add_argument('--write-ccds', help='Write CCDs list as FITS table?')
 
@@ -704,22 +700,12 @@ def main():
         
     for j,i in enumerate(allI):
 
-        if opt.delete_sky or opt.delete_pvastrom:
+        if opt.delete_sky:
             log(j+1, 'of', len(allI))
             im = survey.get_image_object(T[i])
             if opt.delete_sky and os.path.exists(im.skyfn):
                 log('  deleting:', im.skyfn)
                 os.unlink(im.skyfn)
-            if opt.delete_pvastrom and os.path.exists(im.pvwcsfn):
-                log('  deleting:', im.pvwcsfn)
-                os.unlink(im.pvwcsfn)
-
-        if opt.check:
-            log(j+1, 'of', len(allI))
-            im = survey.get_image_object(T[i])
-            if not im.run_calibs(im, just_check=True):
-                log('Calibs for', im.expnum, im.ccdname, im.calname, 'already done')
-                continue
 
         if opt.command:
             s = '%i-%s' % (T.expnum[i], T.ccdname[i])
