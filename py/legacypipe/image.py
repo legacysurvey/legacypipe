@@ -123,7 +123,7 @@ class LegacySurveyImage(object):
         expstr = '%08i' % self.expnum
         self.name = '%s-%s-%s' % (self.camera, expstr, self.ccdname)
         calname = '%s/%s/%s-%s-%s' % (expstr[:5], expstr, self.camera, 
-                                      expstr, self.ccdname.lower())
+                                      expstr, self.ccdname)
         calibdir = os.path.join(self.survey.get_calib_dir(), self.camera)
         self.sefn  = os.path.join(calibdir, 'se',    calname + '.fits')
         self.psffn = os.path.join(calibdir, 'psfex', calname + '.fits')
@@ -134,7 +134,6 @@ class LegacySurveyImage(object):
         self.merged_splineskyfn = os.path.join(calibdir, 'splinesky-merged', expstr[:5],
                                                '%s-%s.fits' % (self.camera, expstr))
 
-        
     def __str__(self):
         return self.name
 
