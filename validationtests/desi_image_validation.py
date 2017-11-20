@@ -181,7 +181,8 @@ polyDES = convertCoordsToPoly(polyDEScoord[:,0], polyDEScoord[:,1])
 def InDEShybFootprint(RA,DEC):
     ''' Decides if it is in DES footprint  '''
     # The DES footprint 
-    if(RA > 189) : RA -180
+    if(RA > 180) : RA = RA -180
+    if(DEC < -10) : return False
     return point_in_poly(RA, DEC, polyDES)
 
     # The DES Footprint (Round 82 hybrid; Monitor; Cetus):
@@ -199,7 +200,7 @@ def InDEShybFootprint(RA,DEC):
     #return False 
 
 def InNGCproxyFootprint(RA):
-    if(RA < -180 ) : RA + 180
+    if(RA < -180 ) : RA = RA + 180
     if( 100 <= RA <= 300 ) : return True 
     return False 
 
