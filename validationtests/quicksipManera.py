@@ -438,18 +438,26 @@ def computeHPXpix_sequ_new(nside, propertyArray, pixoffset=0, ratiores=4, coadd_
                 ind_R = 1
                 ind_B = 3
             else:
-                # Few o(100) ccd of DECaLS z-band fall here; not clear what to do on them  
-                ind_U = 3
-                ind_L = 1
-                ind_R = 0
-                ind_B = 2
+                # Few o(100) ccd of DECaLS z-band fall here; not clear what to do on them 
+                #ind_U = 3
+                #ind_L = 1
+                #ind_R = 0
+                #ind_B = 2
+                ind_U = 0
+                ind_L = 2
+                ind_R = 3
+                ind_B = 1
     else:
         print "WARNING: (MARCM:) Current ccd image may have wrong corner assignments in quicksip"
         #raise ValueError("(MARCM:) probably wrong assignment of corner values in quicksip")
-        ind_U = 0
-        ind_L = 2
-        ind_R = 3
-        ind_B = 1
+        #ind_U = 0
+        #ind_L = 2
+        #ind_R = 3
+        #ind_B = 1
+        ind_U = 3
+        ind_L = 1
+        ind_R = 0
+        ind_B = 2
 
     ipix_list = np.zeros(0, dtype=long)
     weight_list = np.zeros(0, dtype=float)
