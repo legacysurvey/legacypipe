@@ -1,4 +1,5 @@
 #
+import os
 import numpy as np
 import healpy as hp
 import astropy.io.fits as pyfits
@@ -134,7 +135,16 @@ class mysample(object):
 
         else: raise RuntimeError("Data Realease seems wrong") 
 
-
+        # Make directory for outputs if it doesn't exist
+        dirplots = localdir + self.catalog
+        try: 
+            os.makedirs(dirplots)
+            print "creating directory for plots", dirplots
+        except OSError:
+            if not os.path.isdir(dirplots):
+                raise
+            
+            
         # Predicted survey exposure fractions 
         if(self.survey =='DECaLS' or self.survey =='DEShyb' or self.survey =='NGCproxy'):
              # DECALS final survey will be covered by 
@@ -181,26 +191,11 @@ polyDES = convertCoordsToPoly(polyDEScoord[:,0], polyDEScoord[:,1])
 def InDEShybFootprint(RA,DEC):
     ''' Decides if it is in DES footprint  '''
     # The DES footprint 
-    if(RA > 180) : RA = RA -180
-    if(DEC < -10) : return False
-    return point_in_poly(RA, DEC, polyDES)
-
-    # The DES Footprint (Round 82 hybrid; Monitor; Cetus):
-    #inside = False 
-    #if(RA > 180 ) : RA - 180
-    #if(( -60 <= RA <= 105 ) and ( -65 <= DEC <= -40 )) : # SPT
-    #    return True   
-    #elif( (-30 <= RA <= 60 ) and (-40 <= DEC <= -25 )) : # Vik
-    #    return  True
-    #elif ((-3 <= RA <= 45) and (-25 <= DEC <= 3)) : # R82 
-    #    return  True
-    #elif  ((-43 <= RA <= -3 ) and (-3 <= DEC <= -3)):  # S82
-    #    return True 
-    #
-    #return False 
+    if(RA > 180) : RA = RA -360
+    return point_in_poly(RA, DEC, polyDES) 
 
 def InNGCproxyFootprint(RA):
-    if(RA < -180 ) : RA = RA + 180
+    if(RA < -180 ) : RA = RA + 360
     if( 100 <= RA <= 300 ) : return True 
     return False 
 
@@ -250,7 +245,7 @@ def val3p4c_depthfromIvar(sample):
         if(sample.survey == 'DECaLS'):
             inds = np.where((tbdata['filter'] == band) & (tbdata['photometric'] == True) & (tbdata['blacklist_ok'] == True)) 
         elif(sample.survey == 'DEShyb'):
-            inds = np.where((tbdata['filter'] == band) & (tbdata['photometric'] == True) & (tbdata['blacklist_ok'] == True) & map(InDEShybFootprint,tbdata['ra'],tbdata['dec']))
+            inds = np.where((tbdata['filter'] == band) & (tbdata['photometric'] == True) & (tbdata['blacklist_ok'] == True) & (map(InDEShybFootprint,tbdata['ra'],tbdata['dec'])))
         elif(sample.survey == 'NGCproxy'):
             inds = np.where((tbdata['filter'] == band) & (tbdata['photometric'] == True) & (tbdata['blacklist_ok'] == True) & (map(InNGCproxyFootprint,tbdata['ra']))) 
 
@@ -288,7 +283,7 @@ def val3p4c_depthfromIvar(sample):
     vmax=24.0
 
     fname2=localdir+catalogue_name+'/nside'+nsideSTR+'_oversamp'+oversamp+'/'+\
-           catalogue_name+'_band_'+band+'_nside'+nsideSTR+'_oversamp'+oversamp+'_'+prop+'__'+op+'.fits.gz'
+    catalogue_name+'_band_'+band+'_nside'+nsideSTR+'_oversamp'+oversamp+'_'+prop+'__'+op+'.fits.gz'
     f = fitsio.read(fname2)
 
     # HEALPIX DEPTH MAPS 
@@ -300,7 +295,7 @@ def val3p4c_depthfromIvar(sample):
     decl = []
     val = f['SIGNAL']
     pix = f['PIXEL']
-	
+ 
     # Obtain values to plot 
     if (prop == 'ivar'):
         myval = []
@@ -310,13 +305,13 @@ def val3p4c_depthfromIvar(sample):
         for i in range(0,len(val)):
             depth=nanomaggiesToMag(sqrt(1./val[i]) * 5.)
             if(depth < vmin):
-                 below=below+1
+                below=below+1
             else:
                 myval.append(depth)
                 th,phi = hp.pix2ang(int(nside),pix[i])
-	        ra,dec = thphi2radec(th,phi)
-	        ral.append(ra)
-	        decl.append(dec)
+                ra,dec = thphi2radec(th,phi)
+                ral.append(ra)
+                decl.append(dec)
 
     npix=len(pix)
 
@@ -370,7 +365,7 @@ def val3p4b_maghist_pred(sample,ndraw=1e5, nbin=100, vmin=21.0, vmax=25.0):
     zp0 = sample.zp0
     recm = sample.recm
     verbose = sample.verbose
-		
+
     f = fitsio.read(sample.ccds)
     
     #read in magnitudes including extinction
@@ -381,7 +376,7 @@ def val3p4b_maghist_pred(sample,ndraw=1e5, nbin=100, vmin=21.0, vmax=25.0):
         year = int(f[i]['date_obs'].split('-')[0])
         if (year <= 2014): counts2014 = counts2014 + 1
         if f[i]['dec'] < -20 : counts20 = counts20 + 1
-			
+
 
         if(sample.DR == 'DR3'): 
 
@@ -437,17 +432,17 @@ def val3p4b_maghist_pred(sample,ndraw=1e5, nbin=100, vmin=21.0, vmax=25.0):
 
             detsigtoti = 0
             for j in range(0,Nexp):
-		ind = int(random()*ng)
-		detsig1 = nl[ind]
-		detsigtoti += 1./detsig1**2.
+                ind = int(random()*ng)
+                detsig1 = nl[ind]
+                detsigtoti += 1./detsig1**2.
 
- 	    detsigtot = sqrt(1./detsigtoti)
-	    m = nanomaggiesToMag(detsigtot * 5.)
-	    if m > recm: # pass requirement
-	 	nbr += 1.	
-	    NTl.append(m)
-	    n += 1.
-	
+            detsigtot = sqrt(1./detsigtoti)
+            m = nanomaggiesToMag(detsigtot * 5.)
+            if m > recm: # pass requirement
+                nbr += 1.	
+            NTl.append(m)
+            n += 1.
+
     # Run some statistics 
     NTl=np.array(NTl)
     p90=np.percentile(NTl,10)
@@ -583,7 +578,7 @@ def v5p1e_photometricReqPlot(sample):
     prop='zptvar'
     op= 'min'
 
-	
+
     fname=localdir+catalogue_name+'/nside'+nsideSTR+'_oversamp'+oversamp+'/'+catalogue_name+'_band_'+band+'_nside'+nsideSTR+'_oversamp'+oversamp+'_'+prop+'__'+op+'.fits.gz'
     f = fitsio.read(fname)
 
