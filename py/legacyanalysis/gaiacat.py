@@ -1,5 +1,5 @@
 import os
-from ps1cat import HealpixedCatalog
+from legacyanalysis.ps1cat import HealpixedCatalog
     
 class GaiaCatalog(HealpixedCatalog):
     def __init__(self):
