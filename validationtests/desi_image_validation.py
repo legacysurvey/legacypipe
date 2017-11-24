@@ -1,4 +1,5 @@
 #
+import os
 import numpy as np
 import healpy as hp
 import astropy.io.fits as pyfits
@@ -26,6 +27,34 @@ def Magtonanomaggies(m):
 
 def thphi2radec(theta,phi):
         return 180./pi*phi,-(180./pi*theta-90)
+
+
+# --------- Definitions for polinomial footprints -------
+
+def convertCoordsToPoly (ra, dec) :
+    poly = []
+    for i in range(0,len(ra)) :
+        poly.append((ra[i], dec[i]))
+    return poly
+
+def point_in_poly(x,y,poly):
+    n = len(poly)
+    inside = False
+
+    p1x,p1y = poly[0]
+    for i in range(n+1):
+        p2x,p2y = poly[i % n]
+        if y > min(p1y,p2y):
+            if y <= max(p1y,p2y):
+                if x <= max(p1x,p2x):
+                    if p1y != p2y:
+                        xints = (y-p1y)*(p2x-p1x)/(p2y-p1y)+p1x
+                    if p1x == p2x or x <= xints:
+                        inside = not inside
+        p1x,p1y = p2x,p2y
+    return inside
+
+
 ### ------------ SHARED CLASS: HARDCODED INPUTS GO HERE ------------------------
 ###    Please, add here your own harcoded values if any, so other may use them 
 
@@ -43,11 +72,13 @@ class mysample(object):
          - extintion index               : be
          - mask var eqv. to blacklist_ok : maskname
          - predicted frac exposures      : FracExp   
+         - footprint poly (in some cases) : polyFoot
     Current Inputs are: survey, DR, band, localdir) 
-         survey: DECaLS, MZLS, BASS
+         survey: DECaLS, MZLS, BASS, DEShyb, NGCproxy
          DR:     DR3, DR4, DR5
          band:   g,r,z
          localdir: output directory
+         (DEShyb is some DES proxy area; NGC is a proxy of North Gal Cap)
     """                                  
 
 
@@ -66,7 +97,7 @@ class mysample(object):
             raise RuntimeError("Band seems wrong options are 'g' 'r' 'z'")        
               
         # Check surveys
-        if(self.survey !='DECaLS' and  self.survey !='BASS' and self.survey !='MZLS'):
+        if(self.survey !='DECaLS' and  self.survey !='BASS' and self.survey !='MZLS' and self.survey !='DEShyb' and self.survey !='NGCproxy'):
             raise RuntimeError("Survey seems wrong options are 'DECAaLS' 'BASS' MZLS' ")
 
         # Annotated CCD paths  
@@ -74,7 +105,7 @@ class mysample(object):
             inputdir = '/global/project/projectdirs/cosmo/data/legacysurvey/dr3/'
             self.ccds =inputdir+'ccds-annotated-decals.fits.gz'
             self.catalog = 'DECaLS_DR3'
-            if(self.survey != 'DECaLS'): raise RuntimeError("Survey name seems inconsistent")
+            if(self.survey != 'DECaLS'): raise RuntimeError("Survey name seems inconsistent; only DECaLS accepted")
 
         elif(self.DR == 'DR4'):
             inputdir = '/global/project/projectdirs/cosmo/data/legacysurvey/dr4/'
@@ -94,14 +125,28 @@ class mysample(object):
         if(self.DR == 'DR5'):
             inputdir = '/global/project/projectdirs/cosmo/data/legacysurvey/dr5/'
             self.ccds =inputdir+'ccds-annotated-dr5.fits.gz'
-            self.catalog = 'DECaLS_DR5'
-            if(self.survey != 'DECaLS'): raise RuntimeError("Survey name seems inconsistent")
+            if(self.survey == 'DECaLS') : 
+                   self.catalog = 'DECaLS_DR5'
+            elif(self.survey == 'DEShyb') :
+                   self.catalog = 'DEShyb_DR5'
+            elif(self.survey == 'NGCproxy' ) :
+                   self.catalog = 'NGCproxy_DR5'
+            else: raise RuntimeError("Survey name seems inconsistent")
 
         else: raise RuntimeError("Data Realease seems wrong") 
 
-
+        # Make directory for outputs if it doesn't exist
+        dirplots = localdir + self.catalog
+        try: 
+            os.makedirs(dirplots)
+            print "creating directory for plots", dirplots
+        except OSError:
+            if not os.path.isdir(dirplots):
+                raise
+            
+            
         # Predicted survey exposure fractions 
-        if(self.survey =='DECaLS'):
+        if(self.survey =='DECaLS' or self.survey =='DEShyb' or self.survey =='NGCproxy'):
              # DECALS final survey will be covered by 
              # 1, 2, 3, 4, and 5 exposures in the following fractions: 
              self.FracExp=[0.02,0.24,0.50,0.22,0.02]
@@ -114,6 +159,7 @@ class mysample(object):
              self.FracExp=[0.005,0.145,0.85,0,0]
         else:
              raise RuntimeError("Survey seems to have wrong options for fraction of exposures ")
+
 
         #Bands inputs
         if band == 'g':
@@ -136,9 +182,22 @@ class mysample(object):
             self.phreq = 0.02
 
 # ------------------------------------------------------------------
+# --- Footprints ----
 
 
+polyDEScoord=np.loadtxt('/global/homes/m/manera/round13-poly-radec.dat')
+polyDES = convertCoordsToPoly(polyDEScoord[:,0], polyDEScoord[:,1])
+        
+def InDEShybFootprint(RA,DEC):
+    ''' Decides if it is in DES footprint  '''
+    # The DES footprint 
+    if(RA > 180) : RA = RA -360
+    return point_in_poly(RA, DEC, polyDES) 
 
+def InNGCproxyFootprint(RA):
+    if(RA < -180 ) : RA = RA + 360
+    if( 100 <= RA <= 300 ) : return True 
+    return False 
 
 # ------------------------------------------------------------------
 # ------------ VALIDATION TESTS ------------------------------------
@@ -183,7 +242,13 @@ def val3p4c_depthfromIvar(sample):
     elif(sample.DR == 'DR4'):
         inds = np.where((tbdata['filter'] == band) & (tbdata['photometric'] == True) & (tbdata['bitmask'] == 0)) 
     elif(sample.DR == 'DR5'):
-        inds = np.where((tbdata['filter'] == band) & (tbdata['photometric'] == True) & (tbdata['blacklist_ok'] == True)) 
+        if(sample.survey == 'DECaLS'):
+            inds = np.where((tbdata['filter'] == band) & (tbdata['photometric'] == True) & (tbdata['blacklist_ok'] == True)) 
+        elif(sample.survey == 'DEShyb'):
+            inds = np.where((tbdata['filter'] == band) & (tbdata['photometric'] == True) & (tbdata['blacklist_ok'] == True) & (map(InDEShybFootprint,tbdata['ra'],tbdata['dec'])))
+        elif(sample.survey == 'NGCproxy'):
+            inds = np.where((tbdata['filter'] == band) & (tbdata['photometric'] == True) & (tbdata['blacklist_ok'] == True) & (map(InNGCproxyFootprint,tbdata['ra']))) 
+
 
     #Read data 
     #obtain invnoisesq here, including extinction 
@@ -218,7 +283,7 @@ def val3p4c_depthfromIvar(sample):
     vmax=24.0
 
     fname2=localdir+catalogue_name+'/nside'+nsideSTR+'_oversamp'+oversamp+'/'+\
-           catalogue_name+'_band_'+band+'_nside'+nsideSTR+'_oversamp'+oversamp+'_'+prop+'__'+op+'.fits.gz'
+    catalogue_name+'_band_'+band+'_nside'+nsideSTR+'_oversamp'+oversamp+'_'+prop+'__'+op+'.fits.gz'
     f = fitsio.read(fname2)
 
     # HEALPIX DEPTH MAPS 
@@ -230,7 +295,7 @@ def val3p4c_depthfromIvar(sample):
     decl = []
     val = f['SIGNAL']
     pix = f['PIXEL']
-	
+ 
     # Obtain values to plot 
     if (prop == 'ivar'):
         myval = []
@@ -240,13 +305,13 @@ def val3p4c_depthfromIvar(sample):
         for i in range(0,len(val)):
             depth=nanomaggiesToMag(sqrt(1./val[i]) * 5.)
             if(depth < vmin):
-                 below=below+1
+                below=below+1
             else:
                 myval.append(depth)
                 th,phi = hp.pix2ang(int(nside),pix[i])
-	        ra,dec = thphi2radec(th,phi)
-	        ral.append(ra)
-	        decl.append(dec)
+                ra,dec = thphi2radec(th,phi)
+                ral.append(ra)
+                decl.append(dec)
 
     npix=len(pix)
 
@@ -259,8 +324,8 @@ def val3p4c_depthfromIvar(sample):
     from matplotlib import pyplot as plt
     import matplotlib.cm as cm
 
-    map = plt.scatter(ral,decl,c=myval, cmap=cm.rainbow,s=2., vmin=vmin, vmax=vmax, lw=0,edgecolors='none')
-    cbar = plt.colorbar(map)
+    mapa = plt.scatter(ral,decl,c=myval, cmap=cm.rainbow,s=2., vmin=vmin, vmax=vmax, lw=0,edgecolors='none')
+    cbar = plt.colorbar(mapa)
     plt.xlabel('r.a. (degrees)')
     plt.ylabel('declination (degrees)')
     plt.title('Map of '+ mylabel +' for '+catalogue_name+' '+band+'-band')
@@ -300,7 +365,7 @@ def val3p4b_maghist_pred(sample,ndraw=1e5, nbin=100, vmin=21.0, vmax=25.0):
     zp0 = sample.zp0
     recm = sample.recm
     verbose = sample.verbose
-		
+
     f = fitsio.read(sample.ccds)
     
     #read in magnitudes including extinction
@@ -311,7 +376,7 @@ def val3p4b_maghist_pred(sample,ndraw=1e5, nbin=100, vmin=21.0, vmax=25.0):
         year = int(f[i]['date_obs'].split('-')[0])
         if (year <= 2014): counts2014 = counts2014 + 1
         if f[i]['dec'] < -20 : counts20 = counts20 + 1
-			
+
 
         if(sample.DR == 'DR3'): 
 
@@ -331,6 +396,15 @@ def val3p4b_maghist_pred(sample,ndraw=1e5, nbin=100, vmin=21.0, vmax=25.0):
 
         if(sample.DR == 'DR5'): 
              if f[i]['filter'] == sample.band and f[i]['photometric'] == True and f[i]['blacklist_ok'] == True :   
+
+                 if(sample.survey == 'DEShyb'):
+                    RA = f[i]['ra']
+                    DEC = f[i]['dec'] # more efficient to put this inside the function directly
+                    if(not InDEShybFootprint(RA,DEC) ): continue   # skip if not in DEShyb
+
+                 if(sample.survey == 'NGCproxy'):
+                    RA = f[i]['ra'] # more efficient to put this inside the function directly
+                    if(not InNGCproxyFootprint(RA) ): continue   # skip if not in NGC 
 
                  magext = f[i]['galdepth'] - f[i]['decam_extinction'][be]
                  nmag = Magtonanomaggies(magext)/5. #total noise
@@ -358,17 +432,17 @@ def val3p4b_maghist_pred(sample,ndraw=1e5, nbin=100, vmin=21.0, vmax=25.0):
 
             detsigtoti = 0
             for j in range(0,Nexp):
-		ind = int(random()*ng)
-		detsig1 = nl[ind]
-		detsigtoti += 1./detsig1**2.
+                ind = int(random()*ng)
+                detsig1 = nl[ind]
+                detsigtoti += 1./detsig1**2.
 
- 	    detsigtot = sqrt(1./detsigtoti)
-	    m = nanomaggiesToMag(detsigtot * 5.)
-	    if m > recm: # pass requirement
-	 	nbr += 1.	
-	    NTl.append(m)
-	    n += 1.
-	
+            detsigtot = sqrt(1./detsigtoti)
+            m = nanomaggiesToMag(detsigtot * 5.)
+            if m > recm: # pass requirement
+                nbr += 1.	
+            NTl.append(m)
+            n += 1.
+
     # Run some statistics 
     NTl=np.array(NTl)
     p90=np.percentile(NTl,10)
@@ -463,8 +537,14 @@ def v5p1e_photometricReqPlot(sample):
         inds = np.where((tbdata['filter'] == band) & (tbdata['blacklist_ok'] == True)) 
     if(sample.DR == 'DR4'):    
         inds = np.where((tbdata['filter'] == band) & (tbdata['bitmask'] == 0)) 
-    if(sample.DR == 'DR5'):
-        inds = np.where((tbdata['filter'] == band) & (tbdata['blacklist_ok'] == True)) 
+    elif(sample.DR == 'DR5'):
+        if(sample.survey == 'DECaLS'):
+            inds = np.where((tbdata['filter'] == band) & (tbdata['blacklist_ok'] == True)) 
+        elif(sample.survey == 'DEShyb'):
+            inds = np.where((tbdata['filter'] == band) & (tbdata['blacklist_ok'] == True) & (map(InDEShybFootprint,tbdata['ra'],tbdata['dec'])))
+        elif(sample.survey == 'NGCproxy'):
+            inds = np.where((tbdata['filter'] == band) & (tbdata['blacklist_ok'] == True) & (map(InNGCproxyFootprint,tbdata['ra']))) 
+
 
     #Read data 
     #obtain invnoisesq here, including extinction 
@@ -498,7 +578,7 @@ def v5p1e_photometricReqPlot(sample):
     prop='zptvar'
     op= 'min'
 
-	
+
     fname=localdir+catalogue_name+'/nside'+nsideSTR+'_oversamp'+oversamp+'/'+catalogue_name+'_band_'+band+'_nside'+nsideSTR+'_oversamp'+oversamp+'_'+prop+'__'+op+'.fits.gz'
     f = fitsio.read(fname)
 
@@ -529,10 +609,10 @@ def v5p1e_photometricReqPlot(sample):
 
 
     import matplotlib.cm as cm
-    map = plt.scatter(ral,decl,c=myval, cmap=cm.rainbow,s=2., vmin=vmin, vmax=vmax, lw=0,edgecolors='none')
+    mapa = plt.scatter(ral,decl,c=myval, cmap=cm.rainbow,s=2., vmin=vmin, vmax=vmax, lw=0,edgecolors='none')
     
     fname = localdir+mylabel+'_'+band+'_'+catalogue_name+str(nside)+'.png'
-    cbar = plt.colorbar(map)
+    cbar = plt.colorbar(mapa)
     plt.xlabel('r.a. (degrees)')
     plt.ylabel('declination (degrees)')
     plt.title('Map of '+ mylabel +' for '+catalogue_name+' '+band+'-band')
@@ -601,9 +681,15 @@ def v3p5_Areas(sample1,sample2):
         inds = np.where((tbdata['filter'] == sample1.band) & (tbdata['blacklist_ok'] == True)) 
     if(sample1.DR == 'DR4'):    
         inds = np.where((tbdata['filter'] == sample1.band) & (tbdata['bitmask'] == 0)) 
-    if(sample1.DR == 'DR5'):
-        inds = np.where((tbdata['filter'] == sample1.band) & (tbdata['blacklist_ok'] == True)) 
+    elif(sample.DR == 'DR5'):
+        if(sample.survey == 'DECaLS'):
+            inds = np.where((tbdata['filter'] == band) & (tbdata['blacklist_ok'] == True)) 
+        elif(sample.survey == 'DEShyb'):
+            inds = np.where((tbdata['filter'] == band) & (tbdata['blacklist_ok'] == True) & (map(InDEShybFootprint,tbdata['ra'],tbdata['dec'])))
+        elif(sample.survey == 'NGCproxy'):
+            inds = np.where((tbdata['filter'] == band) & (tbdata['blacklist_ok'] == True) & (map(InNGCproxyFootprint,tbdata['ra']))) 
 
+  
     #number of ccds at each point 
     nccd1=np.ones(len(tbdata))
     catalogue_name=sample1.catalog
@@ -711,10 +797,10 @@ def v3p5_Areas(sample1,sample2):
       
     mylabel = 'join-area' 
     import matplotlib.cm as cm
-    map = plt.scatter(ral,decl,c=myval, cmap=cm.rainbow,s=2.,lw=0,edgecolors='none')
+    mapa = plt.scatter(ral,decl,c=myval, cmap=cm.rainbow,s=2.,lw=0,edgecolors='none')
     
     fname = localdir+mylabel+'_'+band+'_'+catalogue_name1+'_'+catalogue_name2+str(nside)+'.png'
-    cbar = plt.colorbar(map)
+    cbar = plt.colorbar(mapa)
     plt.xlabel('r.a. (degrees)')
     plt.ylabel('declination (degrees)')
     plt.title('Map of '+ mylabel +' for '+catalogue_name1+' and '+catalogue_name2+' '+band+'-band; Area = '+str(area))
@@ -848,8 +934,8 @@ def val3p4c_seeing(sample,passmin=3,nbin=100,nside=1024):
 
     mylabel= prop + op
 
-    map = plt.scatter(ral,decl,c=valf, cmap=cm.rainbow,s=2., vmin=minv, vmax=maxv, lw=0,edgecolors='none')
-    cbar = plt.colorbar(map)
+    mapa = plt.scatter(ral,decl,c=valf, cmap=cm.rainbow,s=2., vmin=minv, vmax=maxv, lw=0,edgecolors='none')
+    cbar = plt.colorbar(mapa)
     plt.xlabel('r.a. (degrees)')
     plt.ylabel('declination (degrees)')
     plt.title('Map of '+ mylabel +' for '+catalogue_name+' '+band+'-band pass >='+str(passmin))
@@ -961,7 +1047,13 @@ def val3p4c_seeingplots(sample,passmin=3,nbin=100,nside=1024):
     elif(sample.DR == 'DR4'):
         inds = np.where((tbdata['filter'] == band) & (tbdata['photometric'] == True) & (tbdata['bitmask'] == 0))
     elif(sample.DR == 'DR5'):
-        inds = np.where((tbdata['filter'] == band) & (tbdata['photometric'] == True) & (tbdata['blacklist_ok'] == True))
+        if(sample.survey == 'DECaLS'):
+            inds = np.where((tbdata['filter'] == band) & (tbdata['photometric'] == True) & (tbdata['blacklist_ok'] == True)) 
+        elif(sample.survey == 'DEShyb'):
+            inds = np.where((tbdata['filter'] == band) & (tbdata['photometric'] == True) & (tbdata['blacklist_ok'] == True) & (map(InDEShybFootprint,tbdata['ra'],tbdata['dec'])))
+        elif(sample.survey == 'NGCproxy'):
+            inds = np.where((tbdata['filter'] == band) & (tbdata['photometric'] == True) & (tbdata['blacklist_ok'] == True) & (map(InNGCproxyFootprint,tbdata['ra']))) 
+
 
     #Read data 
     #obtain invnoisesq here, including extinction 
@@ -1029,8 +1121,8 @@ def val3p4c_seeingplots(sample,passmin=3,nbin=100,nside=1024):
 
     mylabel= prop + op
 
-    map = plt.scatter(ral,decl,c=valf, cmap=cm.rainbow,s=2., vmin=minv, vmax=maxv, lw=0,edgecolors='none')
-    cbar = plt.colorbar(map)
+    mapa = plt.scatter(ral,decl,c=valf, cmap=cm.rainbow,s=2., vmin=minv, vmax=maxv, lw=0,edgecolors='none')
+    cbar = plt.colorbar(mapa)
     plt.xlabel('r.a. (degrees)')
     plt.ylabel('declination (degrees)')
     plt.title('Map of '+ mylabel +' for '+catalogue_name+' '+band+'-band pass >='+str(passmin))
