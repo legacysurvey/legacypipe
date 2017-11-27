@@ -1982,7 +1982,7 @@ def stage_coadds(survey=None, bands=None, version_header=None, targetwcs=None,
                     callback=write_coadd_images,
                     callback_args=(survey, brickname, version_header, tims,
                                    targetwcs),
-                    plots=False, ps=ps, mp=mp)
+                    plots=plots, ps=ps, mp=mp)
     record_event and record_event('stage_coadds: extras')
     
     # Coadds of galaxy sims only, image only

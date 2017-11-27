@@ -586,6 +586,8 @@ class LegacySurveyImage(object):
                               ('"%s"; skipped' % line.strip()))
                         import traceback
                         traceback.print_exc()
+                        # do again for debugging
+                        #hdr.add_record(line.decode())
                               
                 if line == (b'END' + b' '*77):
                     foundEnd = True

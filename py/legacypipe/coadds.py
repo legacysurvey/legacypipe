@@ -164,6 +164,22 @@ def make_coadds(tims, bands, targetwcs,
             itim,Yo,Xo,iv,im,mo,dq = R
             tim = tims[itim]
 
+            if plots:
+                from legacypipe.runbrick import rgbkwargs
+                from legacypipe.survey import get_rgb
+                import pylab as plt
+                # Make one grayscale, brick-space plot per image
+                thisimg = np.zeros((H,W), np.float32)
+                thisimg[Yo,Xo] = im
+                rgb = get_rgb([thisimg], [band], **rgbkwargs)
+                rgb = rgb.sum(axis=2)
+                fn = ps.getnext()
+                plt.imsave(fn, rgb, origin='lower', cmap='gray')
+                #plt.clf()
+                #plt.imshow(rgb, interpolation='nearest', origin='lower', cmap='gray')
+                #plt.xticks([]); plt.yticks([])
+                #ps.savefig()
+
             # invvar-weighted image
             cowimg[Yo,Xo] += iv * im
             cow   [Yo,Xo] += iv
