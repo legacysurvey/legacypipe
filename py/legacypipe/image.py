@@ -315,13 +315,6 @@ class LegacySurveyImage(object):
                                   psf_sigma=psf_sigma,
                                   w=x1 - x0, h=y1 - y0)
 
-        # print('NORMALIZING PSF!')
-        # if isinstance(psf, HybridPSF):
-        #     psf = NormalizedHybridPSF(psf)
-        # else:
-        #     psf = NormalizedPSF(psf)
-        # print('Wrapped PSF model:', psf)
-
         tim = Image(img, invvar=invvar, wcs=twcs, psf=psf,
                     photocal=LinearPhotoCal(zpscale, band=band),
                     sky=sky, name=self.name + ' ' + band)
