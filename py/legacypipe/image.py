@@ -778,11 +778,6 @@ class LegacySurveyImage(object):
             hdr = fitsio.read_header(self.psffn, ext=1)
             psf.fwhm = hdr['PSF_FWHM']
 
-
-        # print('NORMALIZING PSF!')
-        # psf = NormalizedPSF(psf)
-        # print('Wrapped PSF model:', psf)
-
         psf.shift(x0, y0)
         if hybridPsf:
             from tractor.psf import HybridPixelizedPSF
@@ -819,91 +814,11 @@ class NormalizedPixelizedPsfEx(PixelizedPsfEx):
         img /= np.sum(img)
         return img
 
-    #def getPointSourcePatch(self, px, py, **kwargs):
-    # -> calls getImage()
-
-    # def getShifted(self, dx, dy):
-    #     return NormalizedPSF(self.real.getShifted(dx, dy))
-
     def constantPsfAt(self, x, y):
         #print('NormalizedPixelizedPsfEx: constantPsf at', x,y)
         pix = self.psfex.at(x, y)
         pix /= pix.sum()
         return PixelizedPSF(pix)
-
-
-# class NormalizedPSF(object):
-#     def __init__(self, real):
-#         self.real = real
-# 
-#     def __str__(self):
-#         return 'NormalizedPSF(' + str(self.real) + ')'
-# 
-#     # def getMixtureOfGaussians(self, **kwargs):
-#     #     print('NormalizedPSF: getMixtureOfGaussians')
-#     #     mog = self.real.getMixtureOfGaussians(**kwargs)
-#     #     mog.normalize()
-#     #     return mog
-# 
-#     def getFourierTransform(self, px, py, radius):
-#         fft, (cx,cy), shape, (v,w) = self.real.getFourierTransform(px, py, radius)
-# 
-#         #print('NormalizedPSF: getFourierTransform at', (px,py), ': sum', fft.sum(), 'zeroth element:', fft[0][0], 'max', np.max(np.abs(fft)))
-#         sum = np.abs(fft[0][0])
-#         fft /= sum
-# 
-#         return fft, (cx,cy), shape, (v,w)
-# 
-#     def getImage(self, px, py):
-#         print('NormalizedPSF: getImage at', px,py)
-#         img = self.real.getImage(px, py)
-#         img /= np.sum(img)
-#         return img
-# 
-#     #def getPointSourcePatch(self, px, py, **kwargs):
-#     # -> calls getImage()
-# 
-#     def getShifted(self, dx, dy):
-#         return NormalizedPSF(self.real.getShifted(dx, dy))
-# 
-#     def constantPsfAt(self, x, y):
-#         print('NormalizedPSF: constantPsf at', x,y)
-#         c = NormalizedPSF(self.real.constantPsfAt(x, y))
-#         print('returning constant psf:', c)
-#         return c
-# 
-#     def __getattr__(self, name):
-#         #print('NormalizedPsf: getattr', name)
-#         return getattr(self.real, name)
-# 
-#     def __setattr__(self, name, val):
-#         if name in ['real']:
-#             return object.__setattr__(self, name, val)
-#         #print('NormalizedPsf: setattr', name, '=', val)
-#         setattr(self.__dict__['real'], name, val)
-# 
-#     # for pickling:
-#     def __getstate__(self):
-#         return (self.real,)
-# 
-#     def __setstate__(self, state):
-#         self.real, = state
-
-
-#from tractor.psf import HybridPSF
-#class NormalizedHybridPSF(NormalizedPSF, HybridPSF):
-#    pass
-
-
-
-# class NormalizedPsfExModel(PsfExModel):
-#     def at(self, x, y, **kwargs):
-#         img = super(NormalizedPsfExModel, self).at(x, y, **kwargs)
-#         img /= np.sum(img)
-#         return img
-# 
-#     #def fft_at(self, x, y):
-        
 
 class CalibMixin(object):
     '''
