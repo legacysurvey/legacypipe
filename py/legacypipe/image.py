@@ -198,6 +198,7 @@ class LegacySurveyImage(object):
 
     def get_tractor_image(self, slc=None, radecpoly=None,
                           gaussPsf=False, pixPsf=False, hybridPsf=False,
+                          normalizePsf=False,
                           splinesky=False,
                           nanomaggies=True, subsky=True, tiny=10,
                           dq=True, invvar=True, pixels=True,
@@ -349,7 +350,7 @@ class LegacySurveyImage(object):
         twcs = self.get_tractor_wcs(wcs, x0, y0, primhdr=primhdr, imghdr=imghdr)
                                     
         psf = self.read_psf_model(x0, y0, gaussPsf=gaussPsf, pixPsf=pixPsf,
-                                  hybridPsf=hybridPsf,
+                                  hybridPsf=hybridPsf, normalizePsf=normalizePsf,
                                   psf_sigma=psf_sigma,
                                   w=x1 - x0, h=y1 - y0)
 
@@ -562,7 +563,7 @@ class LegacySurveyImage(object):
         This is just a faster version of fitsio.read_header(fn).
         '''
         if fn.endswith('.gz'):
-            return fitsio.read_header(self.fn)
+            return fitsio.read_header(fn)
 
         # Weirdly, this can be MUCH faster than letting fitsio do it...
         hdr = fitsio.FITSHDR()
@@ -784,6 +785,7 @@ class LegacySurveyImage(object):
 
     def read_psf_model(self, x0, y0,
                        gaussPsf=False, pixPsf=False, hybridPsf=False,
+                       normalizePsf=False,
                        psf_sigma=1., w=0, h=0):
         assert(gaussPsf or pixPsf or hybridPsf)
         psffn = None
@@ -826,7 +828,13 @@ class LegacySurveyImage(object):
                         Ti.polngrp = 1
 
                     psfex = PsfExModel(Ti=Ti)
-                    psf = PixelizedPsfEx(None, psfex=psfex)
+
+                    if normalizePsf:
+                        print('NORMALIZING PSF!')
+                        psf = NormalizedPixelizedPsfEx(None, psfex=psfex)
+                    else:
+                        psf = PixelizedPsfEx(None, psfex=psfex)
+
                     psf.version = Ti.legpipev.strip()
                     psf.plver = Ti.plver.strip()
                     psf.fwhm = Ti.psf_fwhm
@@ -836,7 +844,12 @@ class LegacySurveyImage(object):
 
         if psf is None:
             print('Reading PsfEx model from', self.psffn)
-            psf = PixelizedPsfEx(self.psffn)
+
+            if normalizePsf:
+                print('NORMALIZING PSF!')
+                psf = NormalizedPixelizedPsfEx(self.psffn)
+            else:
+                psf = PixelizedPsfEx(self.psffn)
 
             hdr = fitsio.read_header(self.psffn)
             psf.version = hdr.get('LEGSURV', None)
@@ -854,8 +867,6 @@ class LegacySurveyImage(object):
 
         print('Using PSF model', psf)
         return psf
-
-
 
     ######## Calibration tasks ###########
 
@@ -1086,4 +1097,31 @@ class LegacySurveyImage(object):
             self.run_psfex(git_version=git_version)
         if sky:
             self.run_sky(splinesky=splinesky, git_version=git_version)
+
+
+
+from tractor import PixelizedPsfEx, PixelizedPSF
+class NormalizedPixelizedPsfEx(PixelizedPsfEx):
+    def __str__(self):
+        return 'NormalizedPixelizedPsfEx'
+
+    def getFourierTransform(self, px, py, radius):
+        fft, (cx,cy), shape, (v,w) = super(NormalizedPixelizedPsfEx, self).getFourierTransform(px, py, radius)
+        #print('NormalizedPSF: getFourierTransform at', (px,py), ': sum', fft.sum(), 'zeroth element:', fft[0][0], 'max', np.max(np.abs(fft)))
+        sum = np.abs(fft[0][0])
+        fft /= sum
+        #print('NormalizedPixelizedPsfEx: getFourierTransform at', (px,py), ': sum', sum)
+        return fft, (cx,cy), shape, (v,w)
+
+    def getImage(self, px, py):
+        #print('NormalizedPixelizedPsfEx: getImage at', px,py)
+        img = super(NormalizedPixelizedPsfEx, self).getImage(px, py)
+        img /= np.sum(img)
+        return img
+
+    def constantPsfAt(self, x, y):
+        #print('NormalizedPixelizedPsfEx: constantPsf at', x,y)
+        pix = self.psfex.at(x, y)
+        pix /= pix.sum()
+        return PixelizedPSF(pix)
 

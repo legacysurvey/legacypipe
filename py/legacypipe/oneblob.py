@@ -965,7 +965,8 @@ class OneBlob(object):
             else:
                 srctims = self.tims
                 modelMasks = models.model_masks(srci, src)
-    
+
+
             srctractor = self.tractor(srctims, [src])
             #print('Setting modelMasks:', modelMasks)
             srctractor.setModelMasks(modelMasks)
@@ -1124,7 +1125,6 @@ class OneBlob(object):
         tims = []
         for (img, inverr, twcs, wcs, pcal, sky, psf, name, sx0, sx1, sy0, sy1,
              band, sig1, modelMinval, imobj) in timargs:
-    
             # Mask out inverr for pixels that are not within the blob.
             subwcs = wcs.get_subimage(int(sx0), int(sy0),
                                       int(sx1-sx0), int(sy1-sy0))
