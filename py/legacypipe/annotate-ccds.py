@@ -548,7 +548,7 @@ if __name__ == '__main__':
         while len(ccds):
             c = ccds[:N]
             ccds = ccds[N:]
-            args.append((name, i, c, opt.force, opt.mzls))
+            args.append((name, i, c, opt.force, opt.mzls, opt.normalizePsf))
             i += 1
         print('Split CCDs file into', len(args), 'pieces')
         print('sizes:', [len(a[2]) for a in args])
