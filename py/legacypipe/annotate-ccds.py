@@ -36,7 +36,7 @@ Can add kd-tree data structure to this resulting annotated-ccds file like this:
 
 '''
 
-def main(outfn='ccds-annotated.fits', ccds=None, mzls=False):
+def main(outfn='ccds-annotated.fits', ccds=None, mzls=False, normalizePsf=False):
     survey = LegacySurveyData(ccds=ccds)
     if ccds is None:
         ccds = survey.get_ccds()
@@ -405,13 +405,13 @@ def main(outfn='ccds-annotated.fits', ccds=None, mzls=False):
     print('Wrote', outfn)
 
 def _bounce_main(X):
-    (name, i, ccds, force, mzls) = X
+    (name, i, ccds, force, mzls, normalizePsf) = X
     try:
         outfn = 'ccds-annotated/ccds-annotated-%s-%03i.fits' % (name, i)
         if (not force) and os.path.exists(outfn):
             print('Already exists:', outfn)
             return
-        main(outfn=outfn, ccds=ccds, mzls=mzls)
+        main(outfn=outfn, ccds=ccds, mzls=mzls, normalizePsf=normalizePsf)
     except:
         import traceback
         traceback.print_exc()
@@ -423,6 +423,9 @@ if __name__ == '__main__':
     parser.add_argument('--part', action='append', help='CCDs file to read, survey-ccds-X.fits.gz, default: ["decals","nondecals","extra"].  Can be repeated.', default=[])
     parser.add_argument('--ccds', action='append', help='CCDs file to read; can be repeated', default=[])
     parser.add_argument('--mzls', action='store_true', default=False, help='MzLS (default: DECaLS')
+
+    parser.add_argument('--normalize-psf', dest='normalizePsf', action='store_true', default=False)
+
     parser.add_argument('--force', action='store_true', default=False,
                         help='Ignore ccds-annotated/* files and re-run')
     parser.add_argument('--threads', type=int, help='Run multi-threaded', default=4)
@@ -539,7 +542,7 @@ if __name__ == '__main__':
         if opt.piece is not None:
             c = ccds[opt.piece*N:]
             c = c[:N]
-            _bounce_main((name, opt.piece, c, opt.force, opt.mzls))
+            _bounce_main((name, opt.piece, c, opt.force, opt.mzls, opt.normalizePsf))
             sys.exit(0)
 
         while len(ccds):

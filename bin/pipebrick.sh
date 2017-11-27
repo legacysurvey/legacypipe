@@ -15,14 +15,13 @@ ulimit -a
 
 export LEGACY_SURVEY_DIR=$CSCRATCH/dr5-new
 outdir=$CSCRATCH/dr5-rerun
+#outdir=$LEGACY_SURVEY_DIR
 
 brick="$1"
-
 bri=$(echo $brick | head -c 3)
 
-logdir=$(echo $brick | head -c 3)
-mkdir -p $outdir/logs/$logdir
-log="$outdir/logs/$logdir/$brick.log"
+mkdir -p $outdir/logs/$bri
+log="$outdir/logs/$bri/$brick.log"
 
 echo Logging to: $log
 echo Running on ${NERSC_HOST} $(hostname)
