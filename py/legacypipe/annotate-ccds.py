@@ -11,6 +11,7 @@ from astrometry.util.util import Tan
 from astrometry.util.miscutils import polygon_area
 from legacypipe.survey import LegacySurveyData
 import tractor
+import tractor.sfd
 
 '''
 Note: can parallelize this via:
@@ -403,7 +404,8 @@ def main(outfn='ccds-annotated.fits', ccds=None, mzls=False):
     ccds.writeto(outfn)
     print('Wrote', outfn)
 
-def _bounce_main((name, i, ccds, force, mzls)):
+def _bounce_main(X):
+    (name, i, ccds, force, mzls) = X
     try:
         outfn = 'ccds-annotated/ccds-annotated-%s-%03i.fits' % (name, i)
         if (not force) and os.path.exists(outfn):
