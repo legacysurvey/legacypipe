@@ -164,6 +164,7 @@ class LegacySurveyImage(object):
 
     def get_tractor_image(self, slc=None, radecpoly=None,
                           gaussPsf=False, pixPsf=False, hybridPsf=False,
+                          normalizePsf=False,
                           splinesky=False,
                           nanomaggies=True, subsky=True, tiny=10,
                           dq=True, invvar=True, pixels=True,
@@ -311,7 +312,7 @@ class LegacySurveyImage(object):
         twcs = self.get_tractor_wcs(wcs, x0, y0, primhdr=primhdr, imghdr=imghdr)
                                     
         psf = self.read_psf_model(x0, y0, gaussPsf=gaussPsf, pixPsf=pixPsf,
-                                  hybridPsf=hybridPsf,
+                                  hybridPsf=hybridPsf, normalizePsf=normalizePsf,
                                   psf_sigma=psf_sigma,
                                   w=x1 - x0, h=y1 - y0)
 
@@ -697,6 +698,7 @@ class LegacySurveyImage(object):
 
     def read_psf_model(self, x0, y0,
                        gaussPsf=False, pixPsf=False, hybridPsf=False,
+                       normalizePsf=False,
                        psf_sigma=1., w=0, h=0):
         assert(gaussPsf or pixPsf or hybridPsf)
         psffn = None
@@ -744,9 +746,11 @@ class LegacySurveyImage(object):
 
                     psfex = PsfExModel(Ti=Ti)
 
-                    print('NORMALIZING PSF!')
-                    #psf = PixelizedPsfEx(None, psfex=psfex)
-                    psf = NormalizedPixelizedPsfEx(None, psfex=psfex)
+                    if normalizePsf:
+                        print('NORMALIZING PSF!')
+                        psf = NormalizedPixelizedPsfEx(None, psfex=psfex)
+                    else:
+                        psf = PixelizedPsfEx(None, psfex=psfex)
 
                     psf.version = Ti.legpipev.strip()
                     psf.plver = Ti.plver.strip()
@@ -758,9 +762,11 @@ class LegacySurveyImage(object):
         if psf is None:
             print('Reading PsfEx model from', self.psffn)
 
-            print('NORMALIZING PSF!')
-            #psf = PixelizedPsfEx(self.psffn)
-            psf = NormalizedPixelizedPsfEx(self.psffn)
+            if normalizePsf:
+                print('NORMALIZING PSF!')
+                psf = NormalizedPixelizedPsfEx(self.psffn)
+            else:
+                psf = PixelizedPsfEx(self.psffn)
 
             hdr = fitsio.read_header(self.psffn)
             psf.version = hdr.get('LEGSURV', None)

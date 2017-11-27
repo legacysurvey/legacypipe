@@ -93,6 +93,7 @@ def stage_tims(W=3600, H=3600, pixscale=0.262, brickname=None,
                do_calibs=True,
                splinesky=True,
                gaussPsf=False, pixPsf=False, hybridPsf=False,
+               normalizePsf=False,
                constant_invvar=False,
                depth_cut = True,
                read_image_pixels = True,
@@ -290,7 +291,7 @@ def stage_tims(W=3600, H=3600, pixscale=0.262, brickname=None,
         # reached our target depth
         print('Cutting to CCDs required to hit our depth targets')
         keep_ccds = make_depth_cut(survey, ccds, bands, targetrd, brick, W, H, pixscale,
-                                   plots, ps, splinesky, gaussPsf, pixPsf,
+                                   plots, ps, splinesky, gaussPsf, pixPsf, normalizePsf,
                                    do_calibs, gitver, targetwcs)
         ccds.cut(np.array(keep_ccds))
         print('Cut to', len(ccds), 'CCDs required to reach depth targets')
@@ -332,7 +333,7 @@ def stage_tims(W=3600, H=3600, pixscale=0.262, brickname=None,
 
     # Read Tractor images
     args = [(im, targetrd, dict(gaussPsf=gaussPsf, pixPsf=pixPsf,
-                                hybridPsf=hybridPsf,
+                                hybridPsf=hybridPsf, normalizePsf=normalizePsf,
                                 splinesky=splinesky,
                                 constant_invvar=constant_invvar,
                                 pixels=read_image_pixels))
@@ -506,7 +507,7 @@ def stage_tims(W=3600, H=3600, pixscale=0.262, brickname=None,
     return rtn
 
 def make_depth_cut(survey, ccds, bands, targetrd, brick, W, H, pixscale,
-                   plots, ps, splinesky, gaussPsf, pixPsf, do_calibs,
+                   plots, ps, splinesky, gaussPsf, pixPsf, normalizePsf, do_calibs,
                    gitver, targetwcs, get_depth_maps=False):
     from legacypipe.survey import wcs_for_brick
     from collections import Counter
@@ -679,7 +680,8 @@ def make_depth_cut(survey, ccds, bands, targetrd, brick, W, H, pixscale,
             zpscale = NanoMaggies.zeropointToScale(im.ccdzpt)
             skysig1 /= zpscale
 
-            psf = im.read_psf_model(x0, y0, gaussPsf=gaussPsf, pixPsf=pixPsf)
+            psf = im.read_psf_model(x0, y0, gaussPsf=gaussPsf, pixPsf=pixPsf,
+                                    normalizePsf=normalizePsf)
             psf = psf.constantPsfAt((x1-x0)//2, (y1-y0)//2)
 
             # create a fake tim to compute galnorm
@@ -2540,6 +2542,7 @@ def run_brick(brick, survey, radec=None, pixscale=0.262,
               gaussPsf=False,
               pixPsf=False,
               hybridPsf=False,
+              normalizePsf=False,
               rex=False,
               splinesky=False,
               constant_invvar=False,
@@ -2645,6 +2648,8 @@ def run_brick(brick, survey, radec=None, pixscale=0.262,
     - *pixPsf*: boolean; use the pixelized PsfEx PSF model and FFT convolution?
 
     - *hybridPsf*: boolean; use combo pixelized PsfEx + Gaussian approx model
+
+    - *normalizePsf*: boolean; make PsfEx model have unit flux
     
     - *splinesky*: boolean; use the splined sky model (default is constant)?
 
@@ -2745,6 +2750,7 @@ def run_brick(brick, survey, radec=None, pixscale=0.262,
 
     kwargs.update(ps=ps, nsigma=nsigma,
                   gaussPsf=gaussPsf, pixPsf=pixPsf, hybridPsf=hybridPsf,
+                  normalizePsf=normalizePsf,
                   rex=rex,
                   constant_invvar=constant_invvar,
                   depth_cut=depth_cut,
@@ -3030,6 +3036,10 @@ python -u legacypipe/runbrick.py --plots --brick 2440p070 --zoom 1900 2400 450 9
                         action='store_false',
                         help="Don't use a hybrid pixelized/Gaussian PSF model")
     
+    parser.add_argument('--normalize-psf', dest='normalizePsf', default=False,
+                        action='store_true',
+                        help='Normalize the PSF model to unix flux')
+
     parser.add_argument('--simp', dest='rex', default=True,
                         action='store_false',
                         help='Use SIMP rather than REX')
