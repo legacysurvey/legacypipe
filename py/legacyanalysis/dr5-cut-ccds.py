@@ -17,6 +17,20 @@ annotated values to create a new annotated-CCDs table.
 You should set LEGACY_SURVEY_DIR to the *old* (ie, IDL zeropoints)
 directory; ie, /global/cscratch1/sd/desiproc/dr5.  The results will be
 written to the current directory.
+
+
+Here is the gory story of the DR5 depth cut:
+
+I first ran this code for each brick:
+legacyanalysis/depth-cut.py
+--> generates depthcut/*/ccds-*.fits tables of CCDs that pass the depth cut for that brick
+
+legacyanalysis/check-depth-cut.py
+--> to read the per-brick ccds-* tables and cut to the union of all CCDs that pass depth cut in some brick -> depth-cut-kept-ccds.fits
+
+legacyanalysis/dr5-cut-ccds.py
+--> to read depth-cut-kept-ccds.fits and cut the (already-created) annotated-ccds table and create the .kd.fits version of the CCDs table
+
 '''
 
 survey = LegacySurveyData()
