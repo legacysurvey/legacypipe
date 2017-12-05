@@ -556,7 +556,7 @@ if __name__ == '__main__':
 
         # reassemble outputs
         TT = [fits_table('ccds-annotated/ccds-annotated-%s-%03i.fits' % (name,i))
-              for name,i,nil,nil,nil in args]
+              for name,i,nil,nil,nil,nil in args]
         T = merge_tables(TT)
 
         # expand some columns to make the three files have the same structure.
