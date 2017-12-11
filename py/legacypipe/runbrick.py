@@ -2834,19 +2834,22 @@ def run_brick(brick, survey, radec=None, pixscale=0.262,
     if bands is not None:
         initargs.update(bands=bands)
 
-    def mystagefunc(stage, **kwargs):
+    def mystagefunc(stage, mp=None, **kwargs):
         # Update the (pickled) survey output directory, so that running
         # with an updated --output-dir overrides the pickle file.
         picsurvey = kwargs.get('survey',None)
         if picsurvey is not None:
             picsurvey.output_dir = survey.output_dir
 
-        sys.stdout.flush()
-        sys.stderr.flush()
+        flush()
+        if mp is not None and threads > 1:
+            # flush all workers too
+            mp.map(flush, [[]] * threads)
         staget0 = StageTime()
-        R = stagefunc(stage, **kwargs)
-        sys.stdout.flush()
-        sys.stderr.flush()
+        R = stagefunc(stage, mp=mp, **kwargs)
+        flush()
+        if mp is not None and threads > 1:
+            mp.map(flush, [[]] * threads)
         print('Resources for stage', stage, ':')
         print(StageTime()-staget0)
         return R
@@ -2860,6 +2863,10 @@ def run_brick(brick, survey, radec=None, pixscale=0.262,
     print('All done:', StageTime()-t0)
     return R
 
+def flush(x=None):
+    sys.stdout.flush()
+    sys.stderr.flush()
+
 class StageTime(Time):
     '''
     A Time subclass that reports overall CPU use, assuming multiprocessing.
@@ -2869,7 +2876,6 @@ class StageTime(Time):
     def add_measurement(cls, m):
         cls.measurements.append(m)
     def __init__(self):
-        #print('StageTime: measurements', self.measurements)
         self.meas = [m() for m in self.measurements]
 
 def get_parser():
