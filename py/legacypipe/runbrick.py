@@ -2139,7 +2139,7 @@ def stage_coadds(survey=None, bands=None, version_header=None, targetwcs=None,
         from scipy.ndimage.measurements import label, find_objects, center_of_mass
         from scipy.ndimage.filters import gaussian_filter
         print('Blobs: min', blobs.min(), 'max', blobs.max())
-        sky = (blobs == 0) * (C.goodsky)
+        sky = (blobs == -1) * (C.goodsky)
 
         nerosions = np.zeros(sky.shape, np.int16)
         nerosions += sky
