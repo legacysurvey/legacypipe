@@ -934,6 +934,7 @@ def stage_image_coadds(survey=None, targetwcs=None, bands=None, tims=None,
                        brickname=None, version_header=None,
                        plots=False, ps=None, coadd_bw=False, W=None, H=None,
                        brick=None, blobs=None, lanczos=True, ccds=None,
+                       write_metrics=True,
                        mp=None, record_event=None,
                        **kwargs):
     record_event and record_event('stage_image_coadds: starting')
@@ -999,6 +1000,21 @@ def stage_image_coadds(survey=None, targetwcs=None, bands=None, tims=None,
             with survey.write_output(name+'blob-jpeg', brick=brickname) as out:
                 imsave_jpeg(out.fn, rgb, origin='lower', **kwa)
                 print('Wrote', out.fn)
+
+            # write out blob map
+            if write_metrics:
+                # copy version_header before modifying it.
+                hdr = fitsio.FITSHDR()
+                for r in version_header.records():
+                    hdr.add_record(r)
+                # Plug the WCS header cards into these images
+                targetwcs.add_to_header(hdr)
+                hdr.delete('IMAGEW')
+                hdr.delete('IMAGEH')
+                hdr.add_record(dict(name='IMTYPE', value='blobmap',
+                                    comment='LegacySurvey image type'))
+                with survey.write_output('blobmap', brick=brickname) as out:
+                    out.fits.write(blobs, header=hdr)
         del rgb
     return None
 
