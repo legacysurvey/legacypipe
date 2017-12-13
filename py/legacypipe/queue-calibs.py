@@ -445,20 +445,20 @@ def main():
             tab.writeto(fn)
             log('Wrote %s' % fn)
         # Write text files listing ccd and filename names
-        nm1,nm2= 'ccds-%s.txt'% opt.region,'filenames-%s.txt' % opt.region
-        if os.path.exists(nm1):
-            os.remove(nm1)
-        if os.path.exists(nm2):
-            os.remove(nm2)
-        f1,f2=open(nm1,'w'),open(nm2,'w')
-        fns= list(set(T.get('image_filename')))
-        for fn in fns:
-            f2.write('%s\n' % fn.strip())
-        for ti in T:
-            f1.write('%s\n' % ti.get('image_filename').strip())
-        f1.close()
-        f2.close()
-        log('Wrote *-names.txt')
+        # nm1,nm2= 'ccds-%s.txt'% opt.region,'filenames-%s.txt' % opt.region
+        # if os.path.exists(nm1):
+        #     os.remove(nm1)
+        # if os.path.exists(nm2):
+        #     os.remove(nm2)
+        # f1,f2=open(nm1,'w'),open(nm2,'w')
+        # fns= list(set(T.get('image_filename')))
+        # for fn in fns:
+        #     f2.write('%s\n' % fn.strip())
+        # for ti in T:
+        #     f1.write('%s\n' % ti.get('image_filename').strip())
+        # f1.close()
+        # f2.close()
+        # log('Wrote *-names.txt')
     
 
     if opt.brickq_deps:
@@ -595,6 +595,8 @@ def main():
         # Print the list of bricks and exit.
         for b in B:
             print(b.brickname)
+        if opt.save_to_fits:
+            B.writeto('bricks-%s-touching.fits' % opt.region)
         if not want_ccds:
             sys.exit(0)
 

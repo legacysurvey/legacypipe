@@ -429,7 +429,7 @@ def stage_tims(W=3600, H=3600, pixscale=0.262, brickname=None,
             plt.title('Pixel distributions: %s band' % b)
             ps.savefig()
 
-    if plots and False:
+    if plots:# and False:
         # Plot image pixels, invvars, masks
         for tim in tims:
             plt.clf()
@@ -444,14 +444,13 @@ def stage_tims(W=3600, H=3600, pixscale=0.262, brickname=None,
                 dimshow(tim.dq, vmin=0, vmax=tim.dq.max())
                 plt.title('DQ')
                 plt.subplot(2,2,3)
-                #nil,udq = np.unique(tim.dq, return_inverse=True)
                 dimshow(((tim.dq & tim.dq_saturation_bits) > 0),
                         vmin=0, vmax=1.5, cmap='hot')
                 plt.title('SATUR')
             plt.suptitle(tim.name)
             ps.savefig()
 
-            if tim.dq is not None:
+            if False and tim.dq is not None:
                 plt.clf()
                 bitmap = dict([(v,k) for k,v in CP_DQ_BITS.items()])
                 k = 1

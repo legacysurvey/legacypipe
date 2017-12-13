@@ -416,7 +416,8 @@ def sed_matched_detection(sedname, sed, detmaps, detivs, bands,
     #tlast = Time()
     for i,(x,y) in enumerate(zip(px, py)):
         #print('Potential peak at', x,y)
-        if ps is not None:
+        # These plots are turned off -- one plot per peak is a little excessive!
+        if False and ps is not None:
             plt.clf()
             plt.subplot(2,2,1)
             plt.imshow(vetomap, interpolation='nearest', origin='lower',
@@ -514,7 +515,7 @@ def sed_matched_detection(sedname, sed, detmaps, detivs, bands,
                       (blobs[np.clip(oy,0,h-1), np.clip(ox,0,w-1)] == 
                        thisblob))
 
-        if cut and ps is not None:
+        if False and cut and ps is not None:
             #
             I = np.flatnonzero((ox >= 0) * (ox < w) * (oy >= 0) * (oy < h) *
                                (blobs[np.clip(oy,0,h-1), np.clip(ox,0,w-1)] == 
