@@ -1355,7 +1355,7 @@ def stage_fitblobs(T=None,
                    bands=None, ps=None, tims=None,
                    survey=None,
                    plots=False, plots2=False,
-                   nblobs=None, blob0=None, blobxy=None, blobradec=None,
+                   nblobs=None, blob0=None, blobxy=None, blobradec=None, blobid=None,
                    max_blobsize=None,
                    simul_opt=False, use_ceres=True, mp=None,
                    checkpoint_filename=None,
@@ -1472,6 +1472,10 @@ def stage_fitblobs(T=None,
             else:
                 print('WARNING: blobxy', x,y, 'is not in a blob!')
         keepblobs = np.unique(keepblobs)
+
+    if blobid is not None:
+        # comma-separated list of blob id numbers.
+        keepblobs = np.array([int(b) for b in blobid.split(',')])
 
     if blob0 is not None or (nblobs is not None and nblobs < len(blobslices)):
         if blob0 is None:
@@ -2526,7 +2530,7 @@ def run_brick(brick, survey, radec=None, pixscale=0.262,
               bands=None,
               allbands=None,
               depth_cut=True,
-              nblobs=None, blob=None, blobxy=None, blobradec=None,
+              nblobs=None, blob=None, blobxy=None, blobradec=None, blobid=None,
               max_blobsize=None,
               nsigma=6,
               simul_opt=False,
@@ -2793,6 +2797,8 @@ def run_brick(brick, survey, radec=None, pixscale=0.262,
         kwargs.update(blobxy=blobxy)
     if blobradec is not None:
         kwargs.update(blobradec=blobradec)
+    if blobid is not None:
+        kwargs.update(blobid=blobid)
     if max_blobsize is not None:
         kwargs.update(max_blobsize=max_blobsize)
 
@@ -2979,6 +2985,7 @@ python -u legacypipe/runbrick.py --plots --brick 2440p070 --zoom 1900 2400 450 9
     
     parser.add_argument('--nblobs', type=int,help='Debugging: only fit N blobs')
     parser.add_argument('--blob', type=int, help='Debugging: start with blob #')
+    parser.add_argument('--blobid', help='Debugging: process this list of (comma-separated) blob ids.')
     parser.add_argument(
         '--blobxy', type=int, nargs=2, default=None, action='append',
         help=('Debugging: run the single blob containing pixel <bx> <by>; '+
