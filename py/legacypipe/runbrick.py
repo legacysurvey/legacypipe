@@ -1659,7 +1659,8 @@ def stage_fitblobs(T=None,
         with survey.write_output('blobmap', brick=brickname) as out:
             out.fits.write(blobs, header=hdr)
     del iblob, oldblob
-    blobs = None
+    # Save the 'blobs' map for later (skyfibers)
+    #blobs = None
 
     T.brickid = np.zeros(len(T), np.int32) + brickid
     T.brickname = np.array([brickname] * len(T))
@@ -1926,6 +1927,8 @@ def stage_coadds(survey=None, bands=None, version_header=None, targetwcs=None,
                  tims=None, ps=None, brickname=None, ccds=None,
                  T=None, cat=None, pixscale=None, plots=False,
                  coadd_bw=False, brick=None, W=None, H=None, lanczos=True,
+                 skyfibers=True,
+                 blobs=None,
                  mp=None, on_bricks=None,
                  record_event=None,
                  **kwargs):
@@ -1980,6 +1983,7 @@ def stage_coadds(survey=None, bands=None, version_header=None, targetwcs=None,
     record_event and record_event('stage_coadds: coadds')
     C = make_coadds(tims, bands, targetwcs, mods=mods, xy=ixy,
                     ngood=True, detmaps=True, psfsize=True, lanczos=lanczos,
+                    skymap=skyfibers,
                     apertures=apertures, apxy=apxy,
                     callback=write_coadd_images,
                     callback_args=(survey, brickname, version_header, tims,
@@ -2056,6 +2060,7 @@ def stage_coadds(survey=None, bands=None, version_header=None, targetwcs=None,
             plt.plot([xx0-1,xx1-1], [yy0-1,yy1-1], 'r-')
         plt.plot(x1-1, y1-1, 'r.')
         plt.axis(ax)
+        plt.title('Original to final source positions')
         ps.savefig()
 
         plt.clf()
@@ -2108,6 +2113,134 @@ def stage_coadds(survey=None, bands=None, version_header=None, targetwcs=None,
     tnow = Time()
     print('[serial coadds] Aperture photometry, wrap-up', tnow-tlast)
 
+    if skyfibers:
+        # Select possible locations for sky fibers
+        from scipy.ndimage.morphology import binary_dilation, binary_erosion
+        from scipy.ndimage.measurements import label, find_objects, center_of_mass
+        from scipy.ndimage.filters import gaussian_filter
+        print('Blobs: min', blobs.min(), 'max', blobs.max())
+        sky = (blobs == 0) * (C.goodsky)
+
+        nerosions = np.zeros(sky.shape, np.int16)
+        nerosions += sky
+        element = np.ones((3,3), bool)
+        while True:
+            sky = binary_erosion(sky, structure=element)
+            nerosions += sky
+            print('After erosion,', np.sum(sky), 'sky pixels')
+            if not np.any(sky.ravel()):
+                break
+
+        # This is a hack to break ties in the integer 'nerosions' map.
+        nerosions = gaussian_filter(nerosions.astype(np.float32), 1.0)
+        peaks = (nerosions > 1)
+        H,W = targetwcs.shape
+        # Cut to unique brick area...
+        if hasattr(brick, 'ra1'):
+            U = find_unique_pixels(targetwcs, W, H, None,
+                                   brick.ra1, brick.ra2, brick.dec1, brick.dec2)
+            peaks[U == 0] = 0
+            del U
+
+        # find pixels that are larger than their 8 neighbors
+        peaks[1:-1, 1:-1] &= (nerosions[1:-1,1:-1] >= nerosions[0:-2,1:-1])
+        peaks[1:-1, 1:-1] &= (nerosions[1:-1,1:-1] >= nerosions[2:  ,1:-1])
+        peaks[1:-1, 1:-1] &= (nerosions[1:-1,1:-1] >= nerosions[1:-1,0:-2])
+        peaks[1:-1, 1:-1] &= (nerosions[1:-1,1:-1] >= nerosions[1:-1,2:  ])
+        peaks[1:-1, 1:-1] &= (nerosions[1:-1,1:-1] >= nerosions[0:-2,0:-2])
+        peaks[1:-1, 1:-1] &= (nerosions[1:-1,1:-1] >= nerosions[0:-2,2:  ])
+        peaks[1:-1, 1:-1] &= (nerosions[1:-1,1:-1] >= nerosions[2:  ,0:-2])
+        peaks[1:-1, 1:-1] &= (nerosions[1:-1,1:-1] >= nerosions[2:  ,2:  ])
+
+        # Split the image into 300 x 300-pixel cells, choose the highest peak in each one
+        # (note, this is ignoring the brick-to-brick margin in laying down the grid)
+        sx,sy = [],[]
+        xx = np.round(np.linspace(0, W, 1+np.ceil(W / 300))).astype(int)
+        yy = np.round(np.linspace(0, H, 1+np.ceil(H / 300))).astype(int)
+        for ylo,yhi in zip(yy, yy[1:]):
+            for xlo,xhi in zip(xx, xx[1:]):
+                # Find max pixel in box
+                subne = nerosions[ylo:yhi, xlo:xhi]
+                I = np.argmax(subne)
+                # Find all pixels equal to the max and take the one closest to the center of mass.
+                maxval = subne.flat[I]
+                cy,cx = center_of_mass(subne == maxval)
+                xg = np.arange(xhi-xlo)
+                yg = np.arange(yhi-ylo)
+                dd = np.exp(-((yg[:,np.newaxis] - cy)**2 + (xg[np.newaxis,:] - cx)**2))
+                dd[subne != maxval] = 0
+                I = np.argmax(dd.flat)
+                iy,ix = np.unravel_index(I, subne.shape)
+                sx.append(ix + xlo)
+                sy.append(iy + ylo)
+        skyfibers = fits_table()
+        skyfibers.brickid = np.zeros(len(sx), np.int32) + brick.brickid
+        skyfibers.brickname = np.array([brick.brickname] * len(sx))
+        skyfibers.x = np.array(sx)
+        skyfibers.y = np.array(sy)
+        skyfibers.blobdist = nerosions[sy,sx]
+        skyfibers.ra,skyfibers.dec = targetwcs.pixelxy2radec(skyfibers.x+1,
+                                                             skyfibers.y+1)
+        
+        # Now, do aperture photometry at these points in the coadd images
+        import photutils
+        for band,coimg,cowimg in zip(bands, C.coimgs, C.cowimgs):
+            apflux = np.zeros((len(skyfibers), len(apertures)))
+            apiv   = np.zeros((len(skyfibers), len(apertures)))
+            skyfibers.set('apflux_%s' % band, apflux)
+            skyfibers.set('apflux_ivar_%s' % band, apiv)
+            with np.errstate(divide='ignore'):
+                imsigma = 1./np.sqrt(cowimg)
+                imsigma[cowimg == 0] = 0
+            apxy = np.vstack((skyfibers.x, skyfibers.y)).T
+            for irad,rad in enumerate(apertures):
+                aper = photutils.CircularAperture(apxy, rad)
+                p = photutils.aperture_photometry(coimg, aper, error=imsigma)
+                apflux[:,irad] = p.field('aperture_sum')
+                err = p.field('aperture_sum_err')
+                # print('Aperture error: min', err.min(), 'max', err.max())
+                # print('non-finite:', np.sum(np.logical_not(np.isfinite(err))))
+                apiv  [:,irad] = 1. / err**2
+
+        with survey.write_output('skyfibers', brick=brickname) as out:
+            skyfibers.writeto(None, fits_object=out.fits)
+
+        if plots:
+            rgb = get_rgb(C.coimgs, bands, **rgbkwargs)
+            plt.clf()
+            dimshow(rgb)
+            plt.plot(skyfibers.x, skyfibers.y, 'o', mfc='none', mec='r',
+                     mew=2, ms=10)
+            plt.title('Sky fiber positions')
+            ps.savefig()
+
+            plt.clf()
+            plt.subplots_adjust(hspace=0, wspace=0)
+            SZ = 25
+            N = int(np.ceil(np.sqrt(len(skyfibers))))
+            k = 1
+            for x,y in zip(skyfibers.x, skyfibers.y):
+                if x < SZ or y < SZ or x >= W-SZ or y >= H-SZ:
+                    continue
+                plt.subplot(N,N,k)
+                k += 1
+                dimshow(rgb[y-SZ:y+SZ+1, x-SZ:x+SZ+1, :], ticks=False)
+            plt.suptitle('Sky fiber locations')
+            ps.savefig()
+
+            plt.clf()
+            ccmap = dict(z='m')
+            for band in bands:
+                flux = skyfibers.get('apflux_%s' % band)
+                plt.plot(flux.T, color=ccmap.get(band,band), alpha=0.1)
+            plt.ylim(-10,10)
+            plt.xticks(np.arange(len(apertures_arcsec)),
+                       ['%g' % ap for ap in apertures_arcsec])
+            plt.xlabel('Aperture (arcsec radius)')
+            plt.ylabel('Aperture flux (nanomaggies)')
+            plt.title('Sky fiber: aperture flux')
+            ps.savefig()
+                
     return dict(T=T, AP=C.AP, apertures_pix=apertures,
                 apertures_arcsec=apertures_arcsec)
 
