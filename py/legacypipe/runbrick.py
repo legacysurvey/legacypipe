@@ -2997,13 +2997,13 @@ def run_brick(brick, survey, radec=None, pixscale=0.262,
             picsurvey.output_dir = survey.output_dir
 
         flush()
-        if mp is not None and threads > 1:
+        if mp is not None and threads is not None and threads > 1:
             # flush all workers too
             mp.map(flush, [[]] * threads)
         staget0 = StageTime()
         R = stagefunc(stage, mp=mp, **kwargs)
         flush()
-        if mp is not None and threads > 1:
+        if mp is not None and threads is not None and threads > 1:
             mp.map(flush, [[]] * threads)
         print('Resources for stage', stage, ':')
         print(StageTime()-staget0)
