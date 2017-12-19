@@ -35,7 +35,7 @@ def main(args=None):
 
 def format_catalog(T, hdr, primhdr, allbands, outfn,
                    in_flux_prefix='', flux_prefix='',
-                   write_kwargs={}):
+                   write_kwargs={}, N_wise_epochs=None):
     # Retrieve the bands in this catalog.
     bands = []
     for i in range(10):
@@ -50,7 +50,7 @@ def format_catalog(T, hdr, primhdr, allbands, outfn,
 
     has_wise =    'flux_w1'    in T.columns()
     has_wise_lc = 'lc_flux_w1' in T.columns()
-    has_ap =      'apflux'       in T.columns()
+    has_ap =      'apflux'     in T.columns()
 
     # Nans,Infs
     # Ivar -> 0
@@ -169,9 +169,22 @@ def format_catalog(T, hdr, primhdr, allbands, outfn,
     if has_wise:
         cols.append('wise_coadd_id')
     if has_wise_lc:
-        for c in ['lc_flux', 'lc_flux_ivar', 'lc_nobs', 'lc_fracflux',
-                  'lc_rchisq','lc_mjd']:
+        lc_cols = ['lc_flux', 'lc_flux_ivar', 'lc_nobs', 'lc_fracflux',
+                   'lc_rchisq','lc_mjd']
+        for c in lc_cols:
             add_wiselike(c, bands=['w1','w2'])
+        # Cut down to a fixed number of WISE time-resolved epochs?
+        if N_wise_epochs is not None:
+            for col in lc_cols:
+                for band in ['w1','w2']:
+                    colname = col + '_' + band
+                    # Cut or pad old value to have N_wise_epochs-length arrays
+                    oldval = T.get(colname)
+                    n,ne = oldval.shape
+                    newval = np.zeros((n,N_wise_epochs), oldval.dtype)
+                    ncopy = min(N_wise_epochs,ne)
+                    newval[:, :ncopy] = oldval[:,:ncopy]
+                    T.set(colname, newval)
     cols.extend([
         'fracdev', 'fracdev_ivar',
         'shapeexp_r', 'shapeexp_r_ivar',

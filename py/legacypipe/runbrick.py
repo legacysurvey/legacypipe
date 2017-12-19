@@ -2223,31 +2223,39 @@ def stage_wise_forced(
     eargs = []
     if unwise_tr_dir is not None:
         tdir = unwise_tr_dir
-        W = fits_table(os.path.join(tdir, 'time_resolved_neo1-atlas.fits'))
+        W = fits_table(os.path.join(tdir, 'time_resolved_neo2-atlas.fits'))
         print('Read', len(W), 'time-resolved WISE coadd tiles')
         W.cut(np.array([t in tiles.coadd_id for t in W.coadd_id]))
         print('Cut to', len(W), 'time-resolved vs', len(tiles), 'full-depth')
         assert(len(W) == len(tiles))
-        # this ought to be enough for anyone =)
-        Nepochs = 7
+        # How big do we need to make the WISE time-resolved arrays?
+        print('W epoch_bitmask:', W.epoch_bitmask)
+        Nepochs = max(np.count_nonzero(W.epoch_bitmask, axis=1))
+        nil,ne = W.epoch_bitmask.shape
+        print('Max number of epochs for these tiles:', Nepochs)
+        print('epoch bitmask length:', ne)
         # Add time-resolved coadds
         for band in [1,2]:
             # W1 is bit 0 (value 0x1), W2 is bit 1 (value 0x2)
             bitmask = (1 << (band-1))
-            #ntiles,nepochs = W.epoch_bitmask.shape
-            for e in range(Nepochs):
+            # The epoch_bitmask entries are not *necessarily* contiguous,
+            # so count the entries
+            ie = 0
+            for e in range(ne):
                 # Which tiles have images for this epoch?
                 I = np.flatnonzero(W.epoch_bitmask[:,e] & bitmask)
                 if len(I) == 0:
                     continue
                 print('Epoch %i: %i tiles:' % (e, len(I)), W.coadd_id[I])
                 edir = os.path.join(tdir, 'e%03i' % e)
-                eargs.append((e,(wcat, tiles[I], band, roiradec, edir,
-                                 wise_ceres, broadening[band])))
+                eargs.append((ie,e,(wcat, tiles[I], band, roiradec, edir,
+                                    wise_ceres, broadening[band])))
+                assert(ie < Nepochs)
+                ie += 1
 
     # Run the forced photometry!
     record_event and record_event('stage_wise_forced: photometry')
-    phots = mp.map(_unwise_phot, args + [a for e,a in eargs])
+    phots = mp.map(_unwise_phot, args + [a for ie,e,a in eargs])
     record_event and record_event('stage_wise_forced: results')
 
     # Unpack results...
@@ -2312,11 +2320,12 @@ def stage_wise_forced(
     if WISE_T is not None:
         WISE_T = fits_table()
         phots = phots[len(args):]
-        for (e,a),phot in zip(eargs, phots):
+        for (ie,e,a),phot in zip(eargs, phots):
             print('Epoch', e, 'photometry:')
             if phot is None:
                 print('Failed.')
                 continue
+            assert(ie < Nepochs)
             phot.about()
             phot.delete_column('tile')
             for c in phot.columns():
@@ -2324,7 +2333,7 @@ def stage_wise_forced(
                     x = phot.get(c)
                     WISE_T.set(c, np.zeros((len(x), Nepochs), x.dtype))
                 X = WISE_T.get(c)
-                X[:,e] = phot.get(c)
+                X[:,ie] = phot.get(c)
 
     print('Returning: WISE', WISE)
     print('Returning: WISE_T', WISE_T)
@@ -2503,7 +2512,8 @@ def stage_writecat(
     from legacypipe.format_catalog import format_catalog
     with survey.write_output('tractor', brick=brickname) as out:
         format_catalog(T2, hdr, primhdr, allbands, None,
-                       write_kwargs=dict(fits_object=out.fits))
+                       write_kwargs=dict(fits_object=out.fits),
+                       N_wise_epochs=7)
 
     # write fits file with galaxy-sim stuff (xy bounds of each sim)
     if 'sims_xy' in T.get_columns(): 
