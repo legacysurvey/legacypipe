@@ -49,10 +49,12 @@ class DecamImage(LegacySurveyImage):
 
         return x0,x1,y0,y1
 
-    def read_dq(self, header=False, **kwargs):
+    def remap_dq(self, dq, hdr):
+        '''
+        Called by get_tractor_image() to map the results from read_dq
+        into a bitmask.
+        '''
         from distutils.version import StrictVersion
-        print('Reading data quality from', self.dqfn, 'hdu', self.hdu)
-        dq,hdr = self._read_fits(self.dqfn, self.hdu, header=True, **kwargs)
         # The format of the DQ maps changed as of version 3.5.0 of the
         # Community Pipeline.  Handle that here...
         primhdr = self.read_primary_header(self.dqfn)
@@ -61,48 +63,16 @@ class DecamImage(LegacySurveyImage):
         plver = plver.replace('DES ', '')
         plver = plver.replace('+1', 'a1')
         if StrictVersion(plver) >= StrictVersion('3.5.0'):
-            dq = self.remap_dq_codes(dq)
+            dq = self.remap_dq_cp_codes(dq, hdr)
         else:
             from legacypipe.image import CP_DQ_BITS
             dq = dq.astype(np.int16)
             # Un-set the SATUR flag for pixels that also have BADPIX set.
-            both = CP_DQ_BITS['badpix'] | CP_DQ_BITS['satur']
-            I = np.flatnonzero((dq & both) == both)
+            bothbits = CP_DQ_BITS['badpix'] | CP_DQ_BITS['satur']
+            I = np.flatnonzero((dq & bothbits) == bothbits)
             if len(I):
                 print('Warning: un-setting SATUR for', len(I),
                       'pixels with SATUR and BADPIX set.')
                 dq.flat[I] &= ~CP_DQ_BITS['satur']
-                assert(np.all((dq & both) != both))
-
-        if header:
-            return dq,hdr
-        else:
-            return dq
-
-    def remap_dq_codes(self, dq):
-        '''
-        Some versions of the CP use integer codes, not bit masks.
-        This converts them.
-        '''
-        from legacypipe.image import CP_DQ_BITS
-        dqbits = np.zeros(dq.shape, np.int16)
-        '''
-        1 = bad
-        2 = no value (for remapped and stacked data)
-        3 = saturated
-        4 = bleed mask
-        5 = cosmic ray
-        6 = low weight
-        7 = diff detect (multi-exposure difference detection from median)
-        8 = long streak (e.g. satellite trail)
-        '''
-        dqbits[dq == 1] |= CP_DQ_BITS['badpix']
-        dqbits[dq == 2] |= CP_DQ_BITS['badpix']
-        dqbits[dq == 3] |= CP_DQ_BITS['satur']
-        dqbits[dq == 4] |= CP_DQ_BITS['bleed']
-        dqbits[dq == 5] |= CP_DQ_BITS['cr']
-        dqbits[dq == 6] |= CP_DQ_BITS['badpix']
-        dqbits[dq == 7] |= CP_DQ_BITS['trans']
-        dqbits[dq == 8] |= CP_DQ_BITS['trans']
-        return dqbits
-    
+                assert(np.all((dq & bothbits) != bothbits))
+        return dq

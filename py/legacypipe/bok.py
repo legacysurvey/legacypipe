@@ -13,7 +13,6 @@ class BokImage(LegacySurveyImage):
     '''
     def __init__(self, survey, t):
         super(BokImage, self).__init__(survey, t)
-        self.dq_saturation_bits = 0 #not used so set to 0
 
     def read_invvar(self, **kwargs):
         return self.read_invvar_clipped(**kwargs)

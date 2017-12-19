@@ -272,8 +272,9 @@ class LegacySurveyImage(object):
 
         # Read data-quality (flags) map and zero out the invvars of masked pixels
         if get_dq:
-            dq = self.read_dq(slice=slc)
+            dq,dqhdr = self.read_dq(slice=slc, header=True)
             if dq is not None:
+                dq = self.remap_dq(dq, dqhdr)
                 invvar[dq != 0] = 0.
             if np.all(invvar == 0.):
                 print('Skipping zero-invvar image (after DQ masking)')
@@ -619,6 +620,40 @@ class LegacySurveyImage(object):
         dq = self._read_fits(self.dqfn, self.hdu, **kwargs)
         return dq
 
+    def remap_dq(self, dq, header):
+        '''
+        Called by get_tractor_image() to map the results from read_dq
+        into a bitmask.
+        '''
+        return self.remap_dq_cp_codes(dq, header)
+    
+    def remap_dq_cp_codes(self, dq, header):
+        '''
+        Some versions of the CP use integer codes, not bit masks.
+        This converts them.
+        '''
+        from legacypipe.image import CP_DQ_BITS
+        dqbits = np.zeros(dq.shape, np.int16)
+        '''
+        1 = bad
+        2 = no value (for remapped and stacked data)
+        3 = saturated
+        4 = bleed mask
+        5 = cosmic ray
+        6 = low weight
+        7 = diff detect (multi-exposure difference detection from median)
+        8 = long streak (e.g. satellite trail)
+        '''
+        dqbits[dq == 1] |= CP_DQ_BITS['badpix']
+        dqbits[dq == 2] |= CP_DQ_BITS['badpix']
+        dqbits[dq == 3] |= CP_DQ_BITS['satur']
+        dqbits[dq == 4] |= CP_DQ_BITS['bleed']
+        dqbits[dq == 5] |= CP_DQ_BITS['cr']
+        dqbits[dq == 6] |= CP_DQ_BITS['badpix']
+        dqbits[dq == 7] |= CP_DQ_BITS['trans']
+        dqbits[dq == 8] |= CP_DQ_BITS['trans']
+        return dqbits
+    
     def read_invvar(self, **kwargs):
         '''
         Reads the inverse-variance (weight) map image.
