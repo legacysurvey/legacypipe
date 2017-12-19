@@ -8,7 +8,6 @@ from legacypipe.survey import tim_get_resamp
 def make_coadds(tims, bands, targetwcs,
                 mods=None, xy=None, apertures=None, apxy=None,
                 ngood=False, detmaps=False, psfsize=False,
-                skymap=False,
                 callback=None, callback_args=[],
                 plots=False, ps=None,
                 lanczos=True, mp=None):
@@ -53,9 +52,6 @@ def make_coadds(tims, bands, targetwcs,
         if detmaps:
             C.T.psfdepth = np.zeros((len(ix), len(bands)), np.float32)
             C.T.galdepth = np.zeros((len(ix), len(bands)), np.float32)
-
-    if skymap:
-        C.goodsky = np.ones((H, W), bool)
 
     if lanczos:
         print('Doing Lanczos resampling')
@@ -208,14 +204,6 @@ def make_coadds(tims, bands, targetwcs,
                 con  [Yo,Xo] += goodpix
                 coiv [Yo,Xo] += goodpix * 1./(tim.sig1 * tim.sbscale)**2  # ...ish
 
-            if skymap:
-                # Veto saturated or bleed-trail pixels in any image
-                badbits = 0
-                for bitname in ['satur', 'bleed']:
-                    badbits |= CP_DQ_BITS[bitname]
-                Ibad = ((dq & badbits) != 0)
-                C.goodsky[Yo[Ibad],Xo[Ibad]] = False
-
             if xy:
                 if dq is not None:
                     ormask [Yo,Xo] |= dq
@@ -277,10 +265,6 @@ def make_coadds(tims, bands, targetwcs,
             coresid = cowimg - cowmod
             coresid[cow == 0] = 0.
             C.coresids.append(coresid)
-
-        if skymap:
-            # Veto pixels where we are missing coverage in a band?
-            C.goodsky[con == 0] = False
 
         if unweighted:
             coimg  /= np.maximum(con, 1)
