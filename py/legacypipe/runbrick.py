@@ -2223,7 +2223,7 @@ def stage_wise_forced(
     eargs = []
     if unwise_tr_dir is not None:
         tdir = unwise_tr_dir
-        W = fits_table(os.path.join(tdir, 'time_resolved_neo2-atlas.fits'))
+        W = fits_table(os.path.join(tdir, 'time_resolved_atlas.fits'))
         print('Read', len(W), 'time-resolved WISE coadd tiles')
         W.cut(np.array([t in tiles.coadd_id for t in W.coadd_id]))
         print('Cut to', len(W), 'time-resolved vs', len(tiles), 'full-depth')
