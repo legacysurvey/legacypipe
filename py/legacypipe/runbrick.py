@@ -2230,7 +2230,7 @@ def stage_wise_forced(
         assert(len(W) == len(tiles))
         # How big do we need to make the WISE time-resolved arrays?
         print('W epoch_bitmask:', W.epoch_bitmask)
-        Nepochs = max(np.count_nonzero(W.epoch_bitmask, axis=1))
+        Nepochs = max(np.atleast_1d(np.count_nonzero(W.epoch_bitmask, axis=1)))
         nil,ne = W.epoch_bitmask.shape
         print('Max number of epochs for these tiles:', Nepochs)
         print('epoch bitmask length:', ne)
