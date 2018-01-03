@@ -77,7 +77,12 @@ def make_coadds(tims, bands, targetwcs,
             imaps.append(mp.imap_unordered(_resample_one, args))
         else:
             import itertools
-            imaps.append(itertools.imap(_resample_one, args))
+            if 'imap' in dir(itertools):
+                # py2
+                imaps.append(itertools.imap(_resample_one, args))
+            else:
+                # py3
+                imaps.append(map(_resample_one, args))
 
     # Args for aperture photometry
     apargs = []
