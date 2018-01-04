@@ -473,8 +473,9 @@ class LegacySurveyImage(object):
             y = h//2
         patch = psf.getPointSourcePatch(x, y).patch
         # Clamp up to zero and normalize before taking the norm
-        patch = np.maximum(0, patch)
-        patch /= patch.sum()
+        # (decided that this is a poor idea - eg PSF normalization vs zeropoint)
+        #patch = np.maximum(0, patch)
+        #patch /= patch.sum()
         psfnorm = np.sqrt(np.sum(patch**2))
         return psfnorm
 
@@ -495,8 +496,8 @@ class LegacySurveyImage(object):
         S = 32
         mm = ModelMask(int(x-S), int(y-S), 2*S+1, 2*S+1)
         galmod = gal.getModelPatch(tim, modelMask=mm).patch
-        galmod = np.maximum(0, galmod)
-        galmod /= galmod.sum()
+        #galmod = np.maximum(0, galmod)
+        #galmod /= galmod.sum()
         galnorm = np.sqrt(np.sum(galmod**2))
         return galnorm
     
