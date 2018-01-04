@@ -36,11 +36,7 @@ Can add kd-tree data structure to this resulting annotated-ccds file like this:
 
 '''
 
-def main(outfn='ccds-annotated.fits', ccds=None, mzls=False, normalizePsf=False):
-    survey = LegacySurveyData(ccds=ccds)
-    if ccds is None:
-        ccds = survey.get_ccds()
-
+def annotate(ccds, mzls=False, normalizePsf=False):
     # File from the "observing" svn repo:
     if mzls:
         # https://desi.lbl.gov/svn/decam/code/mosaic3/trunk
@@ -54,73 +50,9 @@ def main(outfn='ccds-annotated.fits', ccds=None, mzls=False, normalizePsf=False)
     tileid_to_index[:] = -1
     tileid_to_index[tiles.tileid] = np.arange(len(tiles))
 
-    # ccds.photometric = np.zeros(len(ccds), bool)
-    # I = survey.photometric_ccds(ccds)
-    # if I is None:
-    #     ccds.photometric[:] = True
-    # else:
-    #     ccds.photometric[I] = True
-
     assert('ccd_cuts' in ccds.get_columns())
 
-    # Set to True if we successfully read the calibration products and computed
-    # annotated values
-    ccds.annotated = np.zeros(len(ccds), bool)
-
-    ccds.good_region = np.empty((len(ccds), 4), np.int16)
-    ccds.good_region[:,:] = -1
-
-    ccds.ra0  = np.zeros(len(ccds), np.float64)
-    ccds.dec0 = np.zeros(len(ccds), np.float64)
-    ccds.ra1  = np.zeros(len(ccds), np.float64)
-    ccds.dec1 = np.zeros(len(ccds), np.float64)
-    ccds.ra2  = np.zeros(len(ccds), np.float64)
-    ccds.dec2 = np.zeros(len(ccds), np.float64)
-    ccds.ra3  = np.zeros(len(ccds), np.float64)
-    ccds.dec3 = np.zeros(len(ccds), np.float64)
-
-    ccds.dra  = np.zeros(len(ccds), np.float32)
-    ccds.ddec = np.zeros(len(ccds), np.float32)
-    ccds.ra_center  = np.zeros(len(ccds), np.float64)
-    ccds.dec_center = np.zeros(len(ccds), np.float64)
-
-    ccds.sig1 = np.zeros(len(ccds), np.float32)
-
-    ccds.meansky = np.zeros(len(ccds), np.float32)
-    ccds.stdsky  = np.zeros(len(ccds), np.float32)
-    ccds.maxsky  = np.zeros(len(ccds), np.float32)
-    ccds.minsky  = np.zeros(len(ccds), np.float32)
-
-    ccds.pixscale_mean = np.zeros(len(ccds), np.float32)
-    ccds.pixscale_std  = np.zeros(len(ccds), np.float32)
-    ccds.pixscale_max  = np.zeros(len(ccds), np.float32)
-    ccds.pixscale_min  = np.zeros(len(ccds), np.float32)
-
-    ccds.psfnorm_mean = np.zeros(len(ccds), np.float32)
-    ccds.psfnorm_std  = np.zeros(len(ccds), np.float32)
-    ccds.galnorm_mean = np.zeros(len(ccds), np.float32)
-    ccds.galnorm_std  = np.zeros(len(ccds), np.float32)
-
     gaussgalnorm = np.zeros(len(ccds), np.float32)
-
-    # 2nd moments
-    ccds.psf_mx2 = np.zeros(len(ccds), np.float32)
-    ccds.psf_my2 = np.zeros(len(ccds), np.float32)
-    ccds.psf_mxy = np.zeros(len(ccds), np.float32)
-    #
-    ccds.psf_a = np.zeros(len(ccds), np.float32)
-    ccds.psf_b = np.zeros(len(ccds), np.float32)
-    ccds.psf_theta = np.zeros(len(ccds), np.float32)
-    ccds.psf_ell   = np.zeros(len(ccds), np.float32)
-
-    ccds.humidity = np.zeros(len(ccds), np.float32)
-    ccds.outtemp  = np.zeros(len(ccds), np.float32)
-
-    ccds.tileid   = np.zeros(len(ccds), np.int32)
-    ccds.tilepass = np.zeros(len(ccds), np.uint8)
-    ccds.tileebv  = np.zeros(len(ccds), np.float32)
-
-    plvers = []
 
     for iccd,ccd in enumerate(ccds):
         print('Reading CCD %i of %i:' % (iccd+1, len(ccds)), 'file', ccd.image_filename, 'CCD', ccd.expnum, ccd.ccdname)
@@ -130,7 +62,6 @@ def main(outfn='ccds-annotated.fits', ccds=None, mzls=False, normalizePsf=False)
             print('Failed to get_image_object()')
             import traceback
             traceback.print_exc()
-            plvers.append('')
             continue
         print('Reading CCD %i of %i:' % (iccd+1, len(ccds)), im, 'file', ccd.image_filename, 'CCD', ccd.ccdname)
 
@@ -142,7 +73,8 @@ def main(outfn='ccds-annotated.fits', ccds=None, mzls=False, normalizePsf=False)
         W,H = ccd.width, ccd.height
 
         kwargs = dict(pixPsf=True, splinesky=True, subsky=False,
-                      pixels=False, dq=False, invvar=False)
+                      pixels=False, dq=False, invvar=False,
+                      normalizePsf=normalizePsf)
 
         psf = None
         wcs = None
@@ -154,11 +86,9 @@ def main(outfn='ccds-annotated.fits', ccds=None, mzls=False, normalizePsf=False)
             print('Failed to get_tractor_image')
             import traceback
             traceback.print_exc()
-            plvers.append('')
             continue
 
         if tim is None:
-            plvers.append('')
             continue
 
         psf = tim.psf
@@ -166,22 +96,20 @@ def main(outfn='ccds-annotated.fits', ccds=None, mzls=False, normalizePsf=False)
         sky = tim.sky
         hdr = tim.primhdr
 
-        print('CCD fwhm:', ccd.fwhm)
-        print('im fwhm:', im.fwhm)
-        print('tim psf_fwhm', tim.psf_fwhm)
-        print('tim psf_sigma:', tim.psf_sigma)
-
+        # print('CCD fwhm:', ccd.fwhm)
+        # print('im fwhm:', im.fwhm)
+        # print('tim psf_fwhm', tim.psf_fwhm)
+        # print('tim psf_sigma:', tim.psf_sigma)
         # print('Got PSF', psf)
         # print('Got sky', type(sky))
         # print('Got WCS', wcs)
+        # print('sig1', tim.sig1)
 
         ccds.humidity[iccd] = hdr.get('HUMIDITY')
         ccds.outtemp[iccd]  = hdr.get('OUTTEMP')
 
         ccds.sig1[iccd] = tim.sig1
-        plvers.append(tim.plver)
-
-        print('sig1', tim.sig1)
+        ccds.plver[iccd] = tim.plver
 
         # parse 'DECaLS_15150_r' to get tile number
         obj = ccd.object.strip()
@@ -189,14 +117,11 @@ def main(outfn='ccds-annotated.fits', ccds=None, mzls=False, normalizePsf=False)
         tile = None
         if len(words) == 3 and (
             ((not mzls) and (words[0] == 'DECaLS')) or
-            (     mzls  and (words[0] == 'MzLS'  ))):
+            (     mzls  and (words[0] in ['MzLS','MOSAIC']))):
             try:
                 tileid = int(words[1])
                 tile = tiles[tileid_to_index[tileid]]
                 assert(tile.tileid == tileid)
-                # if tile.tileid != tileid:
-                #     I = np.flatnonzero(tile.tileid == tileid)
-                #     tile = tiles[I[0]]
             except:
                 import traceback
                 traceback.print_ext()
@@ -216,7 +141,7 @@ def main(outfn='ccds-annotated.fits', ccds=None, mzls=False, normalizePsf=False)
         galnorms = []
         for x,y in zip(xx.ravel(), yy.ravel()):
 
-            # HACK -- DR4
+            # HACK -- DR4 PSF sampling issue
             tim.psf = psf.constantPsfAt(x, y)
 
             p = im.psf_norm(tim, x=x, y=y)
@@ -231,8 +156,8 @@ def main(outfn='ccds-annotated.fits', ccds=None, mzls=False, normalizePsf=False)
         ccds.galnorm_mean[iccd] = np.mean(galnorms)
         ccds.galnorm_std [iccd] = np.std (galnorms)
 
-        print('psf norm', ccds.psfnorm_mean[iccd])
-        print('gal norm', ccds.galnorm_mean[iccd])
+        #print('psf norm', ccds.psfnorm_mean[iccd])
+        #print('gal norm', ccds.galnorm_mean[iccd])
 
         # PSF in center of field
         cx,cy = (W+1)/2., (H+1)/2.
@@ -271,13 +196,13 @@ def main(outfn='ccds-annotated.fits', ccds=None, mzls=False, normalizePsf=False)
         ccds.psf_theta[iccd] = theta
         ccds.psf_ell  [iccd] = ell
 
-        print('Computing Gaussian approximate PSF quantities...')
+        #print('Computing Gaussian approximate PSF quantities...')
         # Galaxy norm using Gaussian approximation of PSF.
         realpsf = tim.psf
 
-        print('FWHM', ccds.fwhm[i])
-        print('-> sigma', ccds.fwhm[i] / 2.35)
-        print('tim.PSF sigma', tim.psf_sigma)
+        #print('FWHM', ccds.fwhm[i])
+        #print('-> sigma', ccds.fwhm[i] / 2.35)
+        #print('tim.PSF sigma', tim.psf_sigma)
 
         tim.psf = im.read_psf_model(0, 0, gaussPsf=True,
                                     psf_sigma=tim.psf_sigma)
@@ -285,16 +210,12 @@ def main(outfn='ccds-annotated.fits', ccds=None, mzls=False, normalizePsf=False)
 
         psfnorm = im.psf_norm(tim)
         pnorm = 1./(2. * np.sqrt(np.pi) * tim.psf_sigma)
-        print('Gaussian PSF norm:', psfnorm, 'vs analytic', pnorm)
-        print('Gaussian gal norm:', gaussgalnorm[iccd])
+        #print('Gaussian PSF norm:', psfnorm, 'vs analytic', pnorm)
+        #print('Gaussian gal norm:', gaussgalnorm[iccd])
 
         tim.psf = realpsf
-
-
         
-        #has_skygrid = dict(decam=True).get(ccd.camera, False)
         has_skygrid = hasattr(sky, 'evaluateGrid')
-
 
         # Sky -- evaluate on a grid (every ~10th pixel)
         if has_skygrid:
@@ -353,8 +274,6 @@ def main(outfn='ccds-annotated.fits', ccds=None, mzls=False, normalizePsf=False)
 
         ccds.annotated[iccd] = True
 
-    ccds.plver = np.array(plvers)
-
     sfd = tractor.sfd.SFDMap()
     allbands = 'ugrizY'
     filts = ['%s %s' % ('DES', f) for f in allbands]
@@ -395,10 +314,76 @@ def main(outfn='ccds-annotated.fits', ccds=None, mzls=False, normalizePsf=False)
     # that's flux in nanomaggies -- convert to mag
     ccds.gaussgaldepth = -2.5 * (np.log10(depth) - 9)
 
-
     # NaN depths -> 0
     for X in [ccds.psfdepth, ccds.galdepth, ccds.gausspsfdepth, ccds.gaussgaldepth]:
         X[np.logical_not(np.isfinite(X))] = 0.
+
+
+def main(outfn='ccds-annotated.fits', ccds=None, **kwargs):
+    survey = LegacySurveyData(ccds=ccds)
+    if ccds is None:
+        ccds = survey.get_ccds()
+
+    # Set to True if we successfully read the calibration products and computed
+    # annotated values
+    ccds.annotated = np.zeros(len(ccds), bool)
+
+    ccds.good_region = np.empty((len(ccds), 4), np.int16)
+    ccds.good_region[:,:] = -1
+
+    ccds.ra0  = np.zeros(len(ccds), np.float64)
+    ccds.dec0 = np.zeros(len(ccds), np.float64)
+    ccds.ra1  = np.zeros(len(ccds), np.float64)
+    ccds.dec1 = np.zeros(len(ccds), np.float64)
+    ccds.ra2  = np.zeros(len(ccds), np.float64)
+    ccds.dec2 = np.zeros(len(ccds), np.float64)
+    ccds.ra3  = np.zeros(len(ccds), np.float64)
+    ccds.dec3 = np.zeros(len(ccds), np.float64)
+
+    ccds.dra  = np.zeros(len(ccds), np.float32)
+    ccds.ddec = np.zeros(len(ccds), np.float32)
+    ccds.ra_center  = np.zeros(len(ccds), np.float64)
+    ccds.dec_center = np.zeros(len(ccds), np.float64)
+
+    ccds.sig1 = np.zeros(len(ccds), np.float32)
+
+    ccds.meansky = np.zeros(len(ccds), np.float32)
+    ccds.stdsky  = np.zeros(len(ccds), np.float32)
+    ccds.maxsky  = np.zeros(len(ccds), np.float32)
+    ccds.minsky  = np.zeros(len(ccds), np.float32)
+
+    ccds.pixscale_mean = np.zeros(len(ccds), np.float32)
+    ccds.pixscale_std  = np.zeros(len(ccds), np.float32)
+    ccds.pixscale_max  = np.zeros(len(ccds), np.float32)
+    ccds.pixscale_min  = np.zeros(len(ccds), np.float32)
+
+    ccds.psfnorm_mean = np.zeros(len(ccds), np.float32)
+    ccds.psfnorm_std  = np.zeros(len(ccds), np.float32)
+    ccds.galnorm_mean = np.zeros(len(ccds), np.float32)
+    ccds.galnorm_std  = np.zeros(len(ccds), np.float32)
+
+    # 2nd moments
+    ccds.psf_mx2 = np.zeros(len(ccds), np.float32)
+    ccds.psf_my2 = np.zeros(len(ccds), np.float32)
+    ccds.psf_mxy = np.zeros(len(ccds), np.float32)
+    #
+    ccds.psf_a = np.zeros(len(ccds), np.float32)
+    ccds.psf_b = np.zeros(len(ccds), np.float32)
+    ccds.psf_theta = np.zeros(len(ccds), np.float32)
+    ccds.psf_ell   = np.zeros(len(ccds), np.float32)
+
+    ccds.humidity = np.zeros(len(ccds), np.float32)
+    ccds.outtemp  = np.zeros(len(ccds), np.float32)
+
+    ccds.tileid   = np.zeros(len(ccds), np.int32)
+    ccds.tilepass = np.zeros(len(ccds), np.uint8)
+    ccds.tileebv  = np.zeros(len(ccds), np.float32)
+
+    ccds.plver = np.array([' '*6] * len(ccds))
+
+
+    annotate(ccds, **kwargs)
+
     
     print('Writing to', outfn)
     ccds.writeto(outfn)
@@ -432,6 +417,8 @@ if __name__ == '__main__':
 
     parser.add_argument('--piece', type=int, help='Run only a single subset of CCDs',
                         default=None)
+    parser.add_argument('--update',
+                        help='Read an existing annotated-CCDs file and update rows where annotated==False')
 
     opt = parser.parse_args()
 
@@ -502,8 +489,24 @@ if __name__ == '__main__':
 
     survey = LegacySurveyData()
 
+    if opt.update is not None:
+        fn = opt.update
+        ccds = fits_table(fn)
+        print('Read', len(ccds), 'from', fn)
+        I = np.flatnonzero(ccds.annotated == False)
+        print(len(I), 'CCDs have annotated==False')
+
+        upccds = ccds[I]
+        annotate(upccds, mzls=opt.mzls, normalizePsf=opt.normalizePsf)
+        ccds[I] = upccds
+
+        fn = 'updated-' + os.path.basename(opt.update)
+        ccds.writeto(fn)
+        print('Wrote', fn)
+
+        sys.exit(0)
+
     from astrometry.util.multiproc import *
-    #mp = multiproc(8)
     mp = multiproc(opt.threads)
     N = 100
     
@@ -559,9 +562,7 @@ if __name__ == '__main__':
               for name,i,nil,nil,nil,nil in args]
         T = merge_tables(TT)
 
-        # expand some columns to make the three files have the same structure.
         T.object = T.object.astype('S37')
-        T.plver  = T.plver.astype('S6')
 
         # DR4 only
         if False and opt.mzls:

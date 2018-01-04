@@ -429,6 +429,16 @@ def main():
     if opt.touching:
         I,J,d = match_radec(T.ra, T.dec, B.ra, B.dec, search_radius,
                             nearest=True)
+        # list the ones that will be cut
+        # drop = np.ones(len(T))
+        # drop[I] = False
+        # for i in np.flatnonzero(drop):
+        #     from astrometry.util.starutil_numpy import degrees_between
+        #     dists = degrees_between(B.ra, B.dec, T.ra[i], T.dec[i])
+        #     mindist = min(dists)
+        #     print('Dropping:', T.ra[i], T.dec[i], 'min dist', mindist, 'search_radius', search_radius)
+
+
         T.cut(I)
         log('Cut to', len(T), 'CCDs near bricks')
 
@@ -726,9 +736,6 @@ def main():
             if len(batch) >= opt.nper:
                 write_batch(f, batch, cmd)
                 batch = []
-
-        if opt.check:
-            f.flush()
 
     if len(batch):
         write_batch(f, batch, cmd)

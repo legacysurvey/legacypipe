@@ -583,13 +583,9 @@ class LegacySurveyImage(object):
                 if line[:8] != b'CONTINUE':
                     try:
                         hdr.add_record(line.decode())
-                    except:
+                    except OSError as err:
                         print('Warning: failed to parse FITS header line: ' +
-                              ('"%s"; skipped' % line.strip()))
-                        import traceback
-                        traceback.print_exc()
-                        # do again for debugging
-                        #hdr.add_record(line.decode())
+                              ('"%s"; error "%s"; skipped' % (line.strip(), str(err))))
                               
                 if line == (b'END' + b' '*77):
                     foundEnd = True
