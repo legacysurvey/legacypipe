@@ -55,45 +55,86 @@ def colorbar_axes(parent, frac=0.12, pad=0.03, aspect=20):
 
 def plots(opt):
     T = fits_table(opt.files[0])
+    print('Read', len(T), 'bricks summarized in', opt.files[0])
     import pylab as plt
     import matplotlib
 
+    B = fits_table('survey-bricks.fits.gz')
+    print('Looking up brick bounds')
+    ibrick = dict([(n,i) for i,n in enumerate(B.brickname)])
+    bi = np.array([ibrick[n] for n in T.brickname])
+    T.ra1 = B.ra1[bi]
+    T.ra2 = B.ra2[bi]
+    T.dec1 = B.dec1[bi]
+    T.dec2 = B.dec2[bi]
+    assert(np.all(T.ra2 > T.ra1))
+    T.area = ((T.ra2 - T.ra1) * (T.dec2 - T.dec1) *
+              np.cos(np.deg2rad((T.dec1 + T.dec2) / 2.)))
+    del B
+    del bi
+    del ibrick
+
     print('Total sources:', sum(T.nobjs))
-    print('Area:', len(T)/16., 'sq deg')
+    print('Approx area:', len(T)/16., 'sq deg')
+    print('Area:', np.sum(T.area))
     print('g,r,z coverage:', sum((T.nexp_g > 0) * (T.nexp_r > 0) * (T.nexp_z > 0)) / 16.)
 
     decam = True
     # vs MzLS+BASS
     #release = 'MzLS+BASS DR4'
-    release = 'DECaLS DR5'
-
+    #release = 'DECaLS DR5'
+    release = 'DECaLS DR3'
     
     if decam:
         # DECam
-        ax = [360, 0, -21, 36]
+        #ax = [360, 0, -21, 36]
+        ax = [300, -60, -21, 36]
+
+        def map_ra(r):
+                return r + (-360 * (r > 300))
+
     else:
         # MzLS+BASS
         ax = [310, 90, 30, 80]
+
+        def map_ra(r):
+                return r
 
     def radec_plot():
         plt.axis(ax)
         plt.xlabel('RA (deg)')
         if decam:
-            plt.xticks(np.arange(0, 361, 45))
+            # plt.xticks(np.arange(0, 361, 45))
+            #tt = np.arange(0, 361, 60)
+            #plt.xticks(tt, map_ra(tt))
+            plt.xticks([-60,0,60,120,180,240,300], [300,0,60,120,180,240,300])
         else:
             plt.xticks(np.arange(90, 311, 30))
 
         plt.ylabel('Dec (deg)')
 
+        def plot_broken(rr, dd, *args, **kwargs):
+            dr = np.abs(np.diff(rr))
+            I = np.flatnonzero(dr > 90)
+            print('breaks:', rr[I])
+            print('breaks:', rr[I+1])
+            if len(I) == 0:
+                plt.plot(rr, dd, *args, **kwargs)
+                return
+            for lo,hi in zip(np.append([0], I+1), np.append(I+1, -1)):
+                print('Cut:', lo, ':', hi, '->', rr[lo], rr[hi-1])
+                plt.plot(rr[lo:hi], dd[lo:hi], *args, **kwargs)
+
+        # Galactic plane lines
         gl = np.arange(361)
         gb = np.zeros_like(gl)
         from astrometry.util.starutil_numpy import lbtoradec
         rr,dd = lbtoradec(gl, gb)
-        plt.plot(rr, dd, 'k-', alpha=0.5, lw=1)
+        plot_broken(map_ra(rr), dd, 'k-', alpha=0.5, lw=1)
         rr,dd = lbtoradec(gl, gb+10)
-        plt.plot(rr, dd, 'k-', alpha=0.25, lw=1)
+        plot_broken(map_ra(rr), dd, 'k-', alpha=0.25, lw=1)
         rr,dd = lbtoradec(gl, gb-10)
-        plt.plot(rr, dd, 'k-', alpha=0.25, lw=1)
+        plot_broken(map_ra(rr), dd, 'k-', alpha=0.25, lw=1)
         
     plt.figure(figsize=(8,5))
     plt.subplots_adjust(left=0.1, right=0.98, top=0.93)
@@ -178,7 +219,7 @@ def plots(opt):
 
         mx = 10
         cm = cmap_discretize(base_cmap, mx)
-        plt.scatter(T.ra[I], T.dec[I], c=N[I], s=3,
+        plt.scatter(map_ra(T.ra[I]), T.dec[I], c=N[I], s=3,
                     edgecolors='none',
                     vmin=0.5, vmax=mx + 0.5, cmap=cm)
         radec_plot()
@@ -193,7 +234,7 @@ def plots(opt):
         desi_map()
         psf = T.get('psfsize_%s' % band)
         I = np.flatnonzero(psf > 0)
-        plt.scatter(T.ra[I], T.dec[I], c=psf[I], s=3,
+        plt.scatter(map_ra(T.ra[I]), T.dec[I], c=psf[I], s=3,
                     edgecolors='none', cmap=cmap,
                     vmin=0.5, vmax=2.5)
         #vmin=0, vmax=3.)
@@ -211,7 +252,7 @@ def plots(opt):
         mx = np.ceil(mx * 10) / 10.
         cmap = cmap_discretize(base_cmap, 1+int((mx-mn+0.001)/0.1))
         I = (depth > 0)
-        plt.scatter(T.ra[I], T.dec[I], c=depth[I], s=3,
+        plt.scatter(map_ra(T.ra[I]), T.dec[I], c=depth[I], s=3,
                     edgecolors='none', vmin=mn-0.05, vmax=mx+0.05, cmap=cmap)
         radec_plot()
         plt.colorbar()
@@ -226,7 +267,7 @@ def plots(opt):
         cmap = 'hot'
         cmap = cmap_discretize(cmap, 10)
         #cmap = cmap_discretize(base_cmap, 1+int((mx-mn+0.001)/0.1))
-        plt.scatter(T.ra, T.dec, c=ext, s=3,
+        plt.scatter(map_ra(T.ra), T.dec, c=ext, s=3,
                     edgecolors='none', vmin=mn, vmax=mx, cmap=cmap)
         radec_plot()
         plt.colorbar()
@@ -239,12 +280,13 @@ def plots(opt):
             continue
         plt.clf()
         desi_map()
-        N = T.get(col)
+        N = T.get(col) / T.area
         mx = np.percentile(N, 99.5)
-        plt.scatter(T.ra, T.dec, c=N, s=3,
+        plt.scatter(map_ra(T.ra), T.dec, c=N, s=3,
                     edgecolors='none', vmin=0, vmax=mx)
         radec_plot()
-        plt.colorbar()
+        cbar = plt.colorbar()
+        cbar.set_label('Objects per square degree')
         tt = 'of type %s' % col[1:]
         if col == 'nobjs':
             tt = 'total'
@@ -262,7 +304,7 @@ def plots(opt):
         print(col, 'max frac:', N.max())
         mx = np.percentile(N, 99.5)
         print('mx', mx)
-        plt.scatter(T.ra, T.dec, c=N, s=3,
+        plt.scatter(map_ra(T.ra), T.dec, c=N, s=3,
                     edgecolors='none', vmin=0, vmax=mx)
         radec_plot()
         plt.colorbar()
