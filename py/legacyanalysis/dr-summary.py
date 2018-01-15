@@ -40,6 +40,17 @@ def main():
     T.mag_r, T.magerr_r = NanoMaggies.fluxErrorsToMagErrors(T.flux_r, T.flux_ivar_r)
     T.mag_z, T.magerr_z = NanoMaggies.fluxErrorsToMagErrors(T.flux_z, T.flux_ivar_z)
 
+    T.deflux_g = T.flux_g / T.decam_mw_transmission[:,1]
+    T.deflux_r = T.flux_r / T.decam_mw_transmission[:,2]
+    T.deflux_z = T.flux_z / T.decam_mw_transmission[:,4]
+    T.deflux_ivar_g = T.flux_ivar_g * T.decam_mw_transmission[:,1]**2
+    T.deflux_ivar_r = T.flux_ivar_r * T.decam_mw_transmission[:,2]**2
+    T.deflux_ivar_z = T.flux_ivar_z * T.decam_mw_transmission[:,4]**2
+
+    T.demag_g, T.demagerr_g = NanoMaggies.fluxErrorsToMagErrors(T.deflux_g, T.deflux_ivar_g)
+    T.demag_r, T.demagerr_r = NanoMaggies.fluxErrorsToMagErrors(T.deflux_r, T.deflux_ivar_r)
+    T.demag_z, T.demagerr_z = NanoMaggies.fluxErrorsToMagErrors(T.deflux_z, T.deflux_ivar_z)
+
     T.typex = np.array([t[0] for t in T.type])
 
     I = np.flatnonzero((T.flux_ivar_g > 0) * (T.flux_ivar_r > 0) * (T.flux_ivar_z > 0))
@@ -59,7 +70,8 @@ def main():
     ha = dict(nbins=200, range=((-0.5, 2.5), (-0.5, 2.5)))
     plt.clf()
     #plothist(T.mag_g[I] - T.mag_r[I], T.mag_r[I] - T.mag_z[I], 200)
-    loghist(T.mag_g[I] - T.mag_r[I], T.mag_r[I] - T.mag_z[I], **ha)
+    #loghist(T.mag_g[I] - T.mag_r[I], T.mag_r[I] - T.mag_z[I], **ha)
+    loghist(T.demag_g[I] - T.demag_r[I], T.demag_r[I] - T.demag_z[I], **ha)
     plt.xlabel('g - r (mag)')
     plt.ylabel('r - z (mag)')
     ps.savefig()
@@ -75,10 +87,20 @@ def main():
 
         plt.clf()
         H,xe,ye = loghist(T.mag_g[I] - T.mag_r[I], T.mag_r[I] - T.mag_z[I], **ha)
-        hists.append(H)
         plt.xlabel('g - r (mag)')
         plt.ylabel('r - z (mag)')
         plt.title('Type = %s' % name)
+        ps.savefig()
+
+        plt.clf()
+        H,xe,ye = loghist(T.demag_g[I] - T.demag_r[I], T.demag_r[I] - T.demag_z[I], **ha)
+
+        # Keeping the dereddened color-color histograms
+        hists.append(H)
+
+        plt.xlabel('g - r (mag)')
+        plt.ylabel('r - z (mag)')
+        plt.title('Type = %s, dereddened' % name)
         ps.savefig()
 
 
@@ -102,6 +124,32 @@ def main():
     plt.title('Red: DeV, Blue: Exp, Green: PSF')
     ps.savefig()
 
+    # For a white-background plot, mix colors like paint
+    hr,hg,hb = (hists[2], hists[0], hists[1])
+    H,W = hr.shape
+    for mapping in [lambda x: x]: #, lambda x: np.sqrt(x), lambda x: x**2]:
+        red = np.ones((H,W,3))
+        red[:,:,1] = 1 - mapping(hr)
+        red[:,:,2] = 1 - mapping(hr)
+        # in matplotlib, 'green'->(0, 0.5, 0)
+        green = np.ones((H,W,3))
+        green[:,:,0] = 1 - mapping(hg)
+        green[:,:,1] = 1 - 0.5*mapping(hg)
+        green[:,:,2] = 1 - mapping(hg)
+        blue = np.ones((H,W,3))
+        blue[:,:,0] = 1 - mapping(hb)
+        blue[:,:,1] = 1 - mapping(hb)
+        plt.clf()
+        plt.imshow(red * green * blue, origin='lower', interpolation='nearest',
+                   extent=[xlo,xhi,ylo,yhi])
+        plt.xlabel('g - r (mag)')
+        plt.ylabel('r - z (mag)')
+        plt.xticks(np.arange(0, 2.1, 0.5))
+        plt.yticks(np.arange(0, 2.1, 0.5))
+        plt.axis([0,2,0,2])
+        plt.title('Red: DeV, Blue: Exp, Green: PSF')
+        ps.savefig()
+
     np.random.seed(42)
 
     T.gr = T.mag_g - T.mag_r
@@ -114,12 +162,30 @@ def main():
                            (T.magerr_g < 0.1) * (T.magerr_r < 0.1) *(T.magerr_z < 0.1) *
                            # Bright cut
                            (T.mag_r > 16.) *
+
+                           # Contamination cut
+                           (T.decam_fracflux[:,2] < 0.5) *
+
+                           # Mag range cut
+                           (T.mag_r > 19.) *
+                           (T.mag_r < 20.) *
+                           
                            (T.typex == tt))
         print(len(I), 'with < 0.1-mag errs and type', name)
 
+        # plt.clf()
+        # ha = dict(histtype='step', range=(16, 24), bins=100)
+        # plt.hist(T.mag_g[I], color='g', **ha)
+        # plt.hist(T.mag_r[I], color='r', **ha)
+        # plt.hist(T.mag_z[I], color='m', **ha)
+        # plt.title('Type %s' % name)
+        # ps.savefig()
+
         J = np.random.permutation(I)
+
         if tt == 'D':
             J = J[T.shapedev_r[J] < 3.]
+
         J = J[:100]
         rzbin = np.argsort(T.rz[J])
         rzblock = (rzbin / 10).astype(int)
@@ -127,6 +193,17 @@ def main():
         print('sorted rzblock', rzblock[K])
         print('sorted rzbin', rzbin[K])
         J = J[K]
+
+        # plt.clf()
+        # plt.hist(T.decam_fracflux[J,2], label='fracflux_r', histtype='step', bins=20)
+        # plt.hist(T.decam_fracmasked[J,2], label='fracmasked_r', histtype='step', bins=20)
+        # plt.legend()
+        # plt.title('Type %s' % name)
+        # ps.savefig()
+
+        #print('fracflux r', T.decam_fracflux[J,2])
+        #print('fracmasked r', T.decam_fracmasked[J,2])
+        #print('anymasked r', T.decam_anymask[J,2])
 
         imgs = []
         imgrow = []
@@ -140,14 +217,15 @@ def main():
                 os.system(cmd)
             img = plt.imread(fn)
             #print('Image', img.shape)
-            if tt == 'P':
-                print(name, 'g/r/z %.2f, %.2f, %.2f' % (T.mag_g[i], T.mag_r[i], T.mag_z[i]))
-            elif tt == 'D':
-                print(name, 'g/r/z %.2f, %.2f, %.2f, shapedev_r %.2f' % (T.mag_g[i], T.mag_r[i], T.mag_z[i], T.shapedev_r[i]))
+            extra = ''
+            if tt == 'D':
+                extra = ', shapedev_r %.2f' % T.shapedev_r[i]
             elif tt == 'E':
-                print(name, 'g/r/z %.2f, %.2f, %.2f, shapeexp_r %.2f' % (T.mag_g[i], T.mag_r[i], T.mag_z[i], T.shapeexp_r[i]))
+                extra = ', shapeexp_r %.2f' % T.shapeexp_r[i]
 
-
+            print(name, 'g/r/z %.2f, %.2f, %.2f, fracflux_r %.3f, fracmasked_r %.3f, anymasked_r %4i%s' % (
+                T.mag_g[i], T.mag_r[i], T.mag_z[i],
+                T.decam_fracflux[i,2], T.decam_fracmasked[i,2], T.decam_anymask[i,2], extra))
 
             imgrow.append(img)
             if len(imgrow) == 10:
