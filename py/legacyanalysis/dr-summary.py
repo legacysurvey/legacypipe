@@ -67,6 +67,11 @@ def main():
                        (T.magerr_g < 0.1) * (T.magerr_r < 0.1) * (T.magerr_z < 0.1))
     print(len(I), 'with < 0.1-mag errs')
 
+    I2 = np.flatnonzero((T.flux_ivar_g > 0) * (T.flux_ivar_r > 0) * (T.flux_ivar_z > 0) *
+                        (T.flux_g > 0) * (T.flux_r > 0) * (T.flux_z > 0) *
+                        (T.magerr_g < 0.05) * (T.magerr_r < 0.05) * (T.magerr_z < 0.05))
+    print(len(I2), 'with < 0.05-mag errs')
+
     ha = dict(nbins=200, range=((-0.5, 2.5), (-0.5, 2.5)))
     plt.clf()
     #plothist(T.mag_g[I] - T.mag_r[I], T.mag_r[I] - T.mag_z[I], 200)
@@ -77,6 +82,7 @@ def main():
     ps.savefig()
 
     hists = []
+    hists2 = []
     for tt,name in [('P', 'PSF'), ('E', 'EXP'), ('D', 'DeV')]:
         I = np.flatnonzero((T.flux_ivar_g > 0) * (T.flux_ivar_r > 0) *
                            (T.flux_ivar_z > 0) *
@@ -85,12 +91,12 @@ def main():
                            (T.typex == tt))
         print(len(I), 'with < 0.1-mag errs and type', name)
 
-        plt.clf()
-        H,xe,ye = loghist(T.mag_g[I] - T.mag_r[I], T.mag_r[I] - T.mag_z[I], **ha)
-        plt.xlabel('g - r (mag)')
-        plt.ylabel('r - z (mag)')
-        plt.title('Type = %s' % name)
-        ps.savefig()
+        # plt.clf()
+        # H,xe,ye = loghist(T.mag_g[I] - T.mag_r[I], T.mag_r[I] - T.mag_z[I], **ha)
+        # plt.xlabel('g - r (mag)')
+        # plt.ylabel('r - z (mag)')
+        # plt.title('Type = %s' % name)
+        # ps.savefig()
 
         plt.clf()
         H,xe,ye = loghist(T.demag_g[I] - T.demag_r[I], T.demag_r[I] - T.demag_z[I], **ha)
@@ -103,6 +109,13 @@ def main():
         plt.title('Type = %s, dereddened' % name)
         ps.savefig()
 
+        plt.clf()
+        H,xe,ye = loghist(T.demag_g[I2] - T.demag_r[I2], T.demag_r[I2] - T.demag_z[I2], **ha)
+        hists2.append(H)
+        plt.xlabel('g - r (mag)')
+        plt.ylabel('r - z (mag)')
+        plt.title('Type = %s, dereddened, 5%% errs' % name)
+        ps.savefig()
 
     for H in hists:
         H /= H.max()
@@ -125,30 +138,31 @@ def main():
     ps.savefig()
 
     # For a white-background plot, mix colors like paint
-    hr,hg,hb = (hists[2], hists[0], hists[1])
-    H,W = hr.shape
-    for mapping in [lambda x: x]: #, lambda x: np.sqrt(x), lambda x: x**2]:
-        red = np.ones((H,W,3))
-        red[:,:,1] = 1 - mapping(hr)
-        red[:,:,2] = 1 - mapping(hr)
-        # in matplotlib, 'green'->(0, 0.5, 0)
-        green = np.ones((H,W,3))
-        green[:,:,0] = 1 - mapping(hg)
-        green[:,:,1] = 1 - 0.5*mapping(hg)
-        green[:,:,2] = 1 - mapping(hg)
-        blue = np.ones((H,W,3))
-        blue[:,:,0] = 1 - mapping(hb)
-        blue[:,:,1] = 1 - mapping(hb)
-        plt.clf()
-        plt.imshow(red * green * blue, origin='lower', interpolation='nearest',
-                   extent=[xlo,xhi,ylo,yhi])
-        plt.xlabel('g - r (mag)')
-        plt.ylabel('r - z (mag)')
-        plt.xticks(np.arange(0, 2.1, 0.5))
-        plt.yticks(np.arange(0, 2.1, 0.5))
-        plt.axis([0,2,0,2])
-        plt.title('Red: DeV, Blue: Exp, Green: PSF')
-        ps.savefig()
+    for hr,hg,hb in [(hists[2], hists[0], hists[1]),
+                     (hists2[2], hists2[0], hists2[1]),]:
+        H,W = hr.shape
+        for mapping in [lambda x: x]: #, lambda x: np.sqrt(x), lambda x: x**2]:
+            red = np.ones((H,W,3))
+            red[:,:,1] = 1 - mapping(hr)
+            red[:,:,2] = 1 - mapping(hr)
+            # in matplotlib, 'green'->(0, 0.5, 0)
+            green = np.ones((H,W,3))
+            green[:,:,0] = 1 - mapping(hg)
+            green[:,:,1] = 1 - 0.5*mapping(hg)
+            green[:,:,2] = 1 - mapping(hg)
+            blue = np.ones((H,W,3))
+            blue[:,:,0] = 1 - mapping(hb)
+            blue[:,:,1] = 1 - mapping(hb)
+            plt.clf()
+            plt.imshow(red * green * blue, origin='lower', interpolation='nearest',
+                       extent=[xlo,xhi,ylo,yhi])
+            plt.xlabel('g - r (mag)')
+            plt.ylabel('r - z (mag)')
+            plt.xticks(np.arange(0, 2.1, 0.5))
+            plt.yticks(np.arange(0, 2.1, 0.5))
+            plt.axis([-0.25,2,0,2])
+            plt.title('Red: DeV, Blue: Exp, Green: PSF')
+            ps.savefig()
 
     np.random.seed(42)
 
