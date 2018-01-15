@@ -4,6 +4,13 @@ import fitsio
 import numpy as np
 from glob import glob
 from collections import Counter
+
+import matplotlib
+matplotlib.use('Agg')
+matplotlib.rc('text', usetex=True)
+matplotlib.rc('font', family='serif')
+import pylab as plt
+
 from astrometry.util.fits import fits_table
 from astrometry.util.util import Tan
 from legacypipe.utils import find_unique_pixels
@@ -54,6 +61,9 @@ def colorbar_axes(parent, frac=0.12, pad=0.03, aspect=20):
 	return cax
 
 def plots(opt):
+    from astrometry.util.plotutils import antigray
+    import tractor.sfd
+
     T = fits_table(opt.files[0])
     print('Read', len(T), 'bricks summarized in', opt.files[0])
     import pylab as plt
@@ -100,6 +110,11 @@ def plots(opt):
         def map_ra(r):
                 return r
 
+    udec = np.unique(T.dec)
+    print('Number of unique Dec values:', len(udec))
+    print('Number of unique Dec values in range', ax[2],ax[3],':',
+          np.sum((udec >= ax[2]) * (udec <= ax[3])))
+        
     def radec_plot():
         plt.axis(ax)
         plt.xlabel('RA (deg)')
@@ -116,13 +131,13 @@ def plots(opt):
         def plot_broken(rr, dd, *args, **kwargs):
             dr = np.abs(np.diff(rr))
             I = np.flatnonzero(dr > 90)
-            print('breaks:', rr[I])
-            print('breaks:', rr[I+1])
+            #print('breaks:', rr[I])
+            #print('breaks:', rr[I+1])
             if len(I) == 0:
                 plt.plot(rr, dd, *args, **kwargs)
                 return
             for lo,hi in zip(np.append([0], I+1), np.append(I+1, -1)):
-                print('Cut:', lo, ':', hi, '->', rr[lo], rr[hi-1])
+                #print('Cut:', lo, ':', hi, '->', rr[lo], rr[hi-1])
                 plt.plot(rr[lo:hi], dd[lo:hi], *args, **kwargs)
 
         # Galactic plane lines
@@ -136,8 +151,13 @@ def plots(opt):
         rr,dd = lbtoradec(gl, gb-10)
         plot_broken(map_ra(rr), dd, 'k-', alpha=0.25, lw=1)
         
-    plt.figure(figsize=(8,5))
+    plt.figure(1, figsize=(8,5))
     plt.subplots_adjust(left=0.1, right=0.98, top=0.93)
+
+    plt.figure(2, figsize=(8,4))
+    #plt.subplots_adjust(left=0.06, right=0.98, top=0.98)
+    plt.subplots_adjust(left=0.08, right=0.98, top=0.98)
+    plt.figure(1)
     
     # Map of the tile centers we want to observe...
     if decam:
@@ -152,15 +172,68 @@ def plots(opt):
     desimap = np.zeros(rr.shape, bool)
     desimap.flat[J] = True
 
+    # Smoothed DESI boundary contours
+    from scipy.ndimage.filters import gaussian_filter
+    from scipy.ndimage.morphology import binary_dilation
+    C = plt.contour(gaussian_filter(
+        binary_dilation(desimap).astype(np.float32), 2),
+        [0.5], extent=[ax[1],ax[0],ax[2],ax[3]])
+    plt.clf()
+    desi_map_boundaries = C.collections[0]
+    def desi_map_outline():
+        segs = desi_map_boundaries.get_segments()
+        for seg in segs:
+            plt.plot(seg[:,0], seg[:,1], 'b-')
+    
     def desi_map():
         # Show the DESI tile map in the background.
-        from astrometry.util.plotutils import antigray
         plt.imshow(desimap, origin='lower', interpolation='nearest',
                    extent=[ax[1],ax[0],ax[2],ax[3]], aspect='auto',
                    cmap=antigray, vmax=8)
 
     base_cmap = 'viridis'
 
+    # Dust map -- B&W version
+    nr,nd = 610,350
+    plt.figure(2)
+    plt.clf()
+    dmap = np.zeros((nd,nr))
+    rr = np.linspace(ax[0], ax[1], nr)
+    dd = np.linspace(ax[2], ax[3], nd)
+    rr = rr[:-1] + 0.5*(rr[1]-rr[0])
+    dd = dd[:-1] + 0.5*(dd[1]-dd[0])
+    rr,dd = np.meshgrid(rr,dd)
+    I,J,d = match_radec(rr.ravel(), dd.ravel(),
+                        O.ra, O.dec, 1.0, nearest=True)
+    iy,ix = np.unravel_index(I, rr.shape)
+    #dmap[iy,ix] = O.ebv_med[J]
+    sfd = tractor.sfd.SFDMap()
+    ebv = sfd.ebv(rr[iy,ix], dd[iy,ix])
+    dmap[iy,ix] = ebv
+    mx = np.percentile(dmap[dmap > 0], 98)
+    plt.imshow(dmap, extent=[ax[0],ax[1],ax[2],ax[3]], interpolation='nearest', origin='lower',
+                   aspect='auto', cmap='Greys', vmin=0, vmax=mx)
+    #desi_map_outline()
+    radec_plot()
+    cax = colorbar_axes(plt.gca(), frac=0.12)        
+    cbar = plt.colorbar(cax=cax)
+    cbar.set_label('Extinction E(B-V)')
+    plt.savefig('ext-bw.pdf')
+    plt.clf()
+    dmap = sfd.ebv(rr.ravel(), dd.ravel()).reshape(rr.shape)
+    plt.imshow(dmap, extent=[ax[0],ax[1],ax[2],ax[3]],
+               interpolation='nearest', origin='lower',
+               aspect='auto', cmap='Greys', vmin=0, vmax=0.25)
+    desi_map_outline()
+    radec_plot()
+    cax = colorbar_axes(plt.gca(), frac=0.12)        
+    cbar = plt.colorbar(cax=cax)
+    cbar.set_label('Extinction E(B-V)')
+    plt.savefig('ext-bw-2.pdf')
+    plt.figure(1)
+
+    sys.exit(0)
+    
     plt.clf()
     depthlo,depthhi = 21.5, 25.5
     for band in 'grz':
@@ -208,7 +281,6 @@ def plots(opt):
         plt.legend(loc='upper right')
         plt.savefig('depth-hist-%s.png' % band)
 
-    
     for band in 'grz':
         plt.clf()
         desi_map()
@@ -223,7 +295,7 @@ def plots(opt):
                     edgecolors='none',
                     vmin=0.5, vmax=mx + 0.5, cmap=cm)
         radec_plot()
-        cax = colorbar_axes(plt.gca(), frac=0.06)
+        cax = colorbar_axes(plt.gca(), frac=0.08)
         plt.colorbar(cax=cax, ticks=range(mx+1))
         plt.title('%s: Number of exposures in %s' % (release, band))
         plt.savefig('nexp-%s.png' % band)
@@ -246,7 +318,7 @@ def plots(opt):
         plt.clf()
         desi_map()
 
-        depth = T.get('galdepth_%s' % band)
+        depth = T.get('galdepth_%s' % band) - T.get('ext_%s' % band)
         mn,mx = np.percentile(depth[depth > 0], [10,98])
         mn = np.floor(mn * 10) / 10.
         mx = np.ceil(mx * 10) / 10.
@@ -256,9 +328,42 @@ def plots(opt):
                     edgecolors='none', vmin=mn-0.05, vmax=mx+0.05, cmap=cmap)
         radec_plot()
         plt.colorbar()
-        plt.title('%s: galaxy depth (median per brick), band %s' % (release, band))
+        plt.title('%s: galaxy depth, band %s, median per brick, extinction-corrected' % (release, band))
         plt.savefig('galdepth-%s.png' % band)
 
+        # B&W version
+        plt.figure(2)
+        plt.clf()
+        mn,mx = np.percentile(depth[depth > 0], [2,98])
+        print('Raw mn,mx', mn,mx)
+        mn = np.floor((mn+0.05) * 10) / 10. - 0.05
+        mx = np.ceil( (mx-0.05) * 10) / 10. + 0.05
+        print('rounded mn,mx', mn,mx)
+        nsteps = int((mx-mn+0.001)/0.1)
+        print('discretizing into', nsteps, 'colormap bins')
+        #nsteps = 1+int((mx-mn+0.001)/0.1)
+        cmap = cmap_discretize(antigray, nsteps)
+        nr,nd = 610,228
+        dmap = np.zeros((nd,nr))
+        rr = np.linspace(ax[0], ax[1], nr)
+        dd = np.linspace(ax[2], ax[3], nd)
+        rr = rr[:-1] + 0.5*(rr[1]-rr[0])
+        dd = dd[:-1] + 0.5*(dd[1]-dd[0])
+        rr,dd = np.meshgrid(rr,dd)
+        I,J,d = match_radec(rr.ravel(), dd.ravel(),
+                            T.ra, T.dec, 0.2, nearest=True)
+        iy,ix = np.unravel_index(I, rr.shape)
+        dmap[iy,ix] = depth[J]
+        plt.imshow(dmap, extent=[ax[0],ax[1],ax[2],ax[3]], interpolation='nearest', origin='lower',
+                   aspect='auto', cmap=cmap, vmin=mn, vmax=mx)
+        desi_map_outline()
+        radec_plot()
+        cax = colorbar_axes(plt.gca(), frac=0.12)        
+        cbar = plt.colorbar(cax=cax, ticks=np.arange(20, 26, 0.5)) #ticks=np.arange(np.floor(mn/5.)*5., 0.1+np.ceil(mx/5.)*5, 0.2))
+        cbar.set_label('Depth (5-sigma, galaxy profile, AB mag)')
+        plt.savefig('galdepth-bw-%s.pdf' % band)
+        plt.figure(1)
+        
         plt.clf()
         desi_map()
         ext = T.get('ext_%s' % band)
@@ -274,8 +379,10 @@ def plots(opt):
         plt.title('%s: extinction, band %s' % (release, band))
         plt.savefig('ext-%s.png' % band)
 
+
+    T.ngal = T.nsimp + T.nrex + T.nexp + T.ndev + T.ncomp
         
-    for col in ['nobjs', 'npsf', 'nsimp', 'nrex', 'nexp', 'ndev', 'ncomp']:
+    for col in ['nobjs', 'npsf', 'nsimp', 'nrex', 'nexp', 'ndev', 'ncomp', 'ngal']:
         if not col in T.get_columns():
             continue
         plt.clf()
@@ -293,8 +400,52 @@ def plots(opt):
         plt.title('%s: Number of objects %s' % (release, tt))
         plt.savefig('nobjs-%s.png' % col[1:])
 
+        # B&W version
+        plt.figure(2)
+        plt.clf()
+        # plt.scatter(map_ra(T.ra), T.dec, c=N, s=3,
+        #             edgecolors='none', vmin=0, vmax=mx, cmap=antigray)
+        # Approximate pixel size in PNG plot
+        # This doesn't work correctly -- we've already binned to brick resolution, so get moire patterns
+        # nobjs,xe,ye = np.histogram2d(map_ra(T.ra), T.dec, weights=T.get(col),
+        #                              bins=(nr,nd), range=((ax[1],ax[0]),(ax[2],ax[3])))
+        # nobjs = nobjs.T
+        # area = np.diff(xe)[np.newaxis,:] * (np.diff(ye) * np.cos(np.deg2rad(ye[:-1])))[:,np.newaxis]
+        # nobjs /= area
+        # plt.imshow(nobjs, extent=[ax[1],ax[0],ax[2],ax[3]], interpolation='nearest', origin='lower',
+        #           aspect='auto')
+        #print('Computing neighbours for nobjs plot...')
+        nr,nd = 610,228
+        nobjs = np.zeros((nd,nr))
+        rr = np.linspace(ax[0], ax[1], nr)
+        dd = np.linspace(ax[2], ax[3], nd)
+        rr = rr[:-1] + 0.5*(rr[1]-rr[0])
+        dd = dd[:-1] + 0.5*(dd[1]-dd[0])
+        rr,dd = np.meshgrid(rr,dd)
+        I,J,d = match_radec(rr.ravel(), dd.ravel(),
+                            T.ra, T.dec, 0.2, nearest=True)
+        iy,ix = np.unravel_index(I, rr.shape)
+        nobjs[iy,ix] = T.get(col)[J] / T.area[J]
+        #print('done')
+
+        #mx = 2. * np.median(nobjs[nobjs > 0])
+        mx = np.percentile(N, 99)
+
+        plt.imshow(nobjs, extent=[ax[0],ax[1],ax[2],ax[3]], interpolation='nearest', origin='lower',
+                   aspect='auto', cmap='Greys', vmin=0, vmax=mx)
+        desi_map_outline()
+        radec_plot()
+        #cax = colorbar_axes(plt.gca(), frac=0.08)
+        cax = colorbar_axes(plt.gca(), frac=0.12)        
+        cbar = plt.colorbar(cax=cax,
+                            format=matplotlib.ticker.FuncFormatter(lambda x, p: format(int(x), ',')))
+        cbar.set_label('Objects per square degree')
+        plt.savefig('nobjs-bw-%s.pdf' % col[1:])
+        #plt.savefig('nobjs-bw-%s.png' % col[1:])
+        plt.figure(1)
+        
     Ntot = T.nobjs
-    for col in ['npsf', 'nsimp', 'nrex', 'nexp', 'ndev', 'ncomp']:
+    for col in ['npsf', 'nsimp', 'nrex', 'nexp', 'ndev', 'ncomp', 'ngal']:
         if not col in T.get_columns():
             continue
         plt.clf()
@@ -310,6 +461,39 @@ def plots(opt):
         plt.colorbar()
         plt.title('%s: Fraction of objects of type %s' % (release, col[1:]))
         plt.savefig('fobjs-%s.png' % col[1:])
+
+        # B&W version
+        plt.figure(2)
+        plt.clf()
+        #plt.scatter(map_ra(T.ra), T.dec, c=N * 100., s=3,
+        #            edgecolors='none', vmin=0, vmax=mx*100., cmap=antigray)
+
+        fobjs = np.zeros((nd,nr))
+        rr = np.linspace(ax[0], ax[1], nr)
+        dd = np.linspace(ax[2], ax[3], nd)
+        rr = rr[:-1] + 0.5*(rr[1]-rr[0])
+        dd = dd[:-1] + 0.5*(dd[1]-dd[0])
+        rr,dd = np.meshgrid(rr,dd)
+        I,J,d = match_radec(rr.ravel(), dd.ravel(),
+                            T.ra, T.dec, 0.2, nearest=True)
+        iy,ix = np.unravel_index(I, rr.shape)
+        fobjs[iy,ix] = N[J] * 100.
+
+        #mx = 2. * np.median(fobjs[fobjs > 0])
+        mx = np.percentile(N * 100., 99)
+
+        plt.imshow(fobjs, extent=[ax[0],ax[1],ax[2],ax[3]], interpolation='nearest', origin='lower',
+                   aspect='auto', cmap='Greys', vmin=0, vmax=mx)
+
+        desi_map_outline()
+        radec_plot()
+        cax = colorbar_axes(plt.gca(), frac=0.12)        
+        cbar = plt.colorbar(cax=cax,
+                            format=matplotlib.ticker.FuncFormatter(lambda x, p: '%.2g' % x))
+        cbar.set_label('Percentage of objects of type %s' % col[1:].upper())
+        plt.savefig('fobjs-bw-%s.pdf' % col[1:])
+        #plt.savefig('fobjs-bw-%s.png' % col[1:])
+        plt.figure(1)
         
     return 0
         
