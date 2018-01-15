@@ -18,7 +18,12 @@ def main():
     ps = PlotSequence('dr3-summary')
 
     #fns = glob('/project/projectdirs/cosmo/data/legacysurvey/dr3.1/sweep/3.1/sweep-*.fits')
-    fns = glob('/project/projectdirs/cosmo/data/legacysurvey/dr3.1/sweep/3.1/sweep-240p005-250p010.fits')
+    #fns = glob('/project/projectdirs/cosmo/data/legacysurvey/dr3.1/sweep/3.1/sweep-240p005-250p010.fits')
+    fns = ['/project/projectdirs/cosmo/data/legacysurvey/dr3.1/sweep/3.1/sweep-240p005-250p010.fits',
+           '/project/projectdirs/cosmo/data/legacysurvey/dr3.1/sweep/3.1/sweep-240p010-250p015.fits',
+           '/project/projectdirs/cosmo/data/legacysurvey/dr3.1/sweep/3.1/sweep-230p005-240p010.fits',
+           '/project/projectdirs/cosmo/data/legacysurvey/dr3.1/sweep/3.1/sweep-230p010-240p015.fits']
+
     TT = []
     for fn in fns:
         T = fits_table(fn)
