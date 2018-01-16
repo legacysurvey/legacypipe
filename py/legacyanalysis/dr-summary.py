@@ -20,9 +20,10 @@ def main():
     #fns = glob('/project/projectdirs/cosmo/data/legacysurvey/dr3.1/sweep/3.1/sweep-*.fits')
     #fns = glob('/project/projectdirs/cosmo/data/legacysurvey/dr3.1/sweep/3.1/sweep-240p005-250p010.fits')
     fns = ['/project/projectdirs/cosmo/data/legacysurvey/dr3.1/sweep/3.1/sweep-240p005-250p010.fits',
-           '/project/projectdirs/cosmo/data/legacysurvey/dr3.1/sweep/3.1/sweep-240p010-250p015.fits',
-           '/project/projectdirs/cosmo/data/legacysurvey/dr3.1/sweep/3.1/sweep-230p005-240p010.fits',
-           '/project/projectdirs/cosmo/data/legacysurvey/dr3.1/sweep/3.1/sweep-230p010-240p015.fits']
+#           '/project/projectdirs/cosmo/data/legacysurvey/dr3.1/sweep/3.1/sweep-240p010-250p015.fits',
+#           '/project/projectdirs/cosmo/data/legacysurvey/dr3.1/sweep/3.1/sweep-230p005-240p010.fits',
+#           '/project/projectdirs/cosmo/data/legacysurvey/dr3.1/sweep/3.1/sweep-230p010-240p015.fits'
+    ]
 
     TT = []
     for fn in fns:
@@ -77,7 +78,8 @@ def main():
                         (T.magerr_g < 0.05) * (T.magerr_r < 0.05) * (T.magerr_z < 0.05))
     print(len(I2), 'with < 0.05-mag errs')
 
-    ha = dict(nbins=200, range=((-0.5, 2.5), (-0.5, 2.5)))
+    #ha = dict(nbins=200, range=((-0.5, 2.5), (-0.5, 2.5)))
+    ha = dict(nbins=400, range=((-0.5, 2.5), (-0.5, 2.5)))
     plt.clf()
     #plothist(T.mag_g[I] - T.mag_r[I], T.mag_r[I] - T.mag_z[I], 200)
     #loghist(T.mag_g[I] - T.mag_r[I], T.mag_r[I] - T.mag_z[I], **ha)
@@ -114,6 +116,15 @@ def main():
         plt.title('Type = %s, dereddened' % name)
         ps.savefig()
 
+        I2 = np.flatnonzero((T.flux_ivar_g > 0) * (T.flux_ivar_r > 0) *
+                            (T.flux_ivar_z > 0) *
+                            (T.flux_g > 0) * (T.flux_r > 0) * (T.flux_z > 0) *
+                            (T.magerr_g < 0.05) *
+                            (T.magerr_r < 0.05) *
+                            (T.magerr_z < 0.05) *
+                            (T.typex == tt))
+        print(len(I2), 'with < 0.05-mag errs and type', name)
+
         plt.clf()
         H,xe,ye = loghist(T.demag_g[I2] - T.demag_r[I2], T.demag_r[I2] - T.demag_z[I2], **ha)
         hists2.append(H)
@@ -124,6 +135,11 @@ def main():
 
     for H in hists:
         H /= H.max()
+    #for H in hists2:
+    #    H /= H.max()
+    #hists2 = [np.clip(H / np.percentile(H.ravel(), 99), 0, 1) for H in hists2]
+    hists2 = [np.clip(H / np.percentile(H.ravel(), 99.9), 0, 1) for H in hists2]
+
     rgbmap = np.dstack((hists[2], hists[0], hists[1]))
     plt.clf()
     ((xlo,xhi),(ylo,yhi)) = ha['range']
@@ -160,7 +176,7 @@ def main():
             blue[:,:,1] = 1 - mapping(hb)
             plt.clf()
             plt.imshow(red * green * blue, origin='lower', interpolation='nearest',
-                       extent=[xlo,xhi,ylo,yhi])
+                       extent=[xlo,xhi,ylo,yhi], aspect='auto')
             plt.xlabel('g - r (mag)')
             plt.ylabel('r - z (mag)')
             plt.xticks(np.arange(0, 2.1, 0.5))
@@ -168,6 +184,7 @@ def main():
             plt.axis([-0.25,2,0,2])
             plt.title('Red: DeV, Blue: Exp, Green: PSF')
             ps.savefig()
+
 
     np.random.seed(42)
 
@@ -209,8 +226,8 @@ def main():
         rzbin = np.argsort(T.rz[J])
         rzblock = (rzbin / 10).astype(int)
         K = np.lexsort((T.gr[J], rzblock))
-        print('sorted rzblock', rzblock[K])
-        print('sorted rzbin', rzbin[K])
+        #print('sorted rzblock', rzblock[K])
+        #print('sorted rzbin', rzbin[K])
         J = J[K]
 
         # plt.clf()
@@ -232,7 +249,7 @@ def main():
             if not os.path.exists(fn):
                 url = 'http://legacysurvey.org/viewer/jpeg-cutout/?layer=decals-dr3&pixscale=0.262&size=25&ra=%f&dec=%f' % (T.ra[i], T.dec[i])
                 print('URL', url)
-                cmd = 'wget -O %s "%s"' % (fn, url)
+                cmd = 'wget -O %s.tmp "%s" && mv %s.tmp %s' % (fn, url, fn, fn)
                 os.system(cmd)
             img = plt.imread(fn)
             #print('Image', img.shape)
@@ -242,8 +259,8 @@ def main():
             elif tt == 'E':
                 extra = ', shapeexp_r %.2f' % T.shapeexp_r[i]
 
-            print(name, 'g/r/z %.2f, %.2f, %.2f, fracflux_r %.3f, fracmasked_r %.3f, anymasked_r %4i%s' % (
-                T.mag_g[i], T.mag_r[i], T.mag_z[i],
+            print(name, 'RA,Dec %.4f,%.4f, g/r/z %.2f, %.2f, %.2f, fracflux_r %.3f, fracmasked_r %.3f, anymasked_r %4i%s' % (
+                T.ra[i], T.dec[i], T.mag_g[i], T.mag_r[i], T.mag_z[i],
                 T.decam_fracflux[i,2], T.decam_fracmasked[i,2], T.decam_anymask[i,2], extra))
 
             imgrow.append(img)
