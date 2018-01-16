@@ -2248,7 +2248,7 @@ def stage_wise_forced(
                     continue
                 print('Epoch %i: %i tiles:' % (e, len(I)), W.coadd_id[I])
                 edir = os.path.join(tdir, 'e%03i' % e)
-                eargs.append((ie,e,(wcat, tiles[I], band, roiradec, edir,
+                eargs.append((ie,e,(wcat, W[I], band, roiradec, edir,
                                     wise_ceres, broadening[band])))
                 assert(ie < Nepochs)
                 ie += 1
