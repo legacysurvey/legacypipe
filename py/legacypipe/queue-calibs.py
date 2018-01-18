@@ -566,8 +566,8 @@ def main():
                     continue
                 J2.append(j)
             J = np.hstack((J1, J2))
-            J = np.sort(J)
-            B.cut(np.array(J))
+            J = np.sort(J).astype(int)
+            B.cut(J)
             log('Cut to', len(B), 'bricks touching CCDs')
 
         else:
