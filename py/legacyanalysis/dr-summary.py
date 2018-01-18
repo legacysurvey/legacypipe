@@ -19,11 +19,16 @@ def main():
 
     #fns = glob('/project/projectdirs/cosmo/data/legacysurvey/dr3.1/sweep/3.1/sweep-*.fits')
     #fns = glob('/project/projectdirs/cosmo/data/legacysurvey/dr3.1/sweep/3.1/sweep-240p005-250p010.fits')
-    fns = ['/project/projectdirs/cosmo/data/legacysurvey/dr3.1/sweep/3.1/sweep-240p005-250p010.fits',
+    fns = ['dr3.1/sweep/3.1/sweep-240p005-250p010.fits',
 #           '/project/projectdirs/cosmo/data/legacysurvey/dr3.1/sweep/3.1/sweep-240p010-250p015.fits',
 #           '/project/projectdirs/cosmo/data/legacysurvey/dr3.1/sweep/3.1/sweep-230p005-240p010.fits',
 #           '/project/projectdirs/cosmo/data/legacysurvey/dr3.1/sweep/3.1/sweep-230p010-240p015.fits'
     ]
+
+    plt.figure(2, figsize=(6,4))
+    plt.subplots_adjust(left=0.1, bottom=0.15, right=0.98, top=0.98)
+    plt.figure(1)
+
 
     TT = []
     for fn in fns:
@@ -184,6 +189,21 @@ def main():
             plt.axis([-0.25,2,0,2])
             plt.title('Red: DeV, Blue: Exp, Green: PSF')
             ps.savefig()
+
+            plt.figure(2)
+            plt.clf()
+            plt.imshow(red * green * blue, origin='lower', interpolation='nearest',
+                       extent=[xlo,xhi,ylo,yhi], aspect='auto')
+            plt.xlabel('g - r (mag)')
+            plt.ylabel('r - z (mag)')
+            plt.xticks(np.arange(0, 2.1, 0.5))
+            plt.yticks(np.arange(0, 2.1, 0.5))
+            plt.axis([-0.25,2,0,2])
+            plt.text(0.1, 0.7, 'PSF', ha='center', va='center', color='k')
+            plt.text(0.5, 0.3, 'EXP', ha='center', va='center', color='k')
+            plt.text(0.6, 1.5, 'DEV', ha='center', va='center', color='k')
+            plt.savefig('color-type.pdf')
+            plt.figure(1)
 
 
     np.random.seed(42)
