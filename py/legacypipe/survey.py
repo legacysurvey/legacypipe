@@ -731,6 +731,7 @@ Now using the current directory as LEGACY_SURVEY_DIR, but this is likely to fail
 
         self.image_typemap = {
             'decam'  : DecamImage,
+            'decam+noise'  : DecamImage,
             'mosaic' : MosaicImage,
             'mosaic3': MosaicImage,
             '90prime': BokImage,
