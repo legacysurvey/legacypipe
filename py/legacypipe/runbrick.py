@@ -2254,7 +2254,8 @@ def stage_wise_forced(
             epochs = np.empty((len(W), Nepochs), int)
             epochs[:,:] = -1
             for i in range(len(W)):
-                epochs[i,:] = np.flatnonzero(W.epoch_bitmask[i,:] & bitmask)
+                ei = np.flatnonzero(W.epoch_bitmask[i,:] & bitmask)
+                epochs[i,:len(ei)] = ei
 
             for ie in range(Nepochs):
                 # Which tiles have images for this epoch?
