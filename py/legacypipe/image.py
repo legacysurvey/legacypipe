@@ -338,6 +338,56 @@ class LegacySurveyImage(object):
             print('Setting constant invvar', 1./sig1**2)
             invvar[invvar > 0] = 1./sig1**2
 
+
+        #apodize = True
+        apodize = False
+        if apodize and slc is not None:
+            print('Slice:', slc)
+            print('Image shape:', self.get_image_shape())
+            sy,sx = slc
+            y0,y1 = sy.start, sy.stop
+            x0,x1 = sx.start, sx.stop
+            #H,W = self.get_image_shape()
+            H,W = invvar.shape
+
+            # Compute apodization ramps
+            xx = np.linspace(-np.pi, np.pi, min(W,100))
+            rampx = np.arctan(xx)
+            rampx = (rampx - rampx.min()) / (rampx.max() - rampx.min())
+            xx = np.linspace(-np.pi, np.pi, min(H,100))
+            rampy = np.arctan(xx)
+            rampy = (rampy - rampy.min()) / (rampy.max() - rampy.min())
+
+            apo = False
+
+            #if y0 == 0:
+            if True:
+                print('Apodize bottom')
+                invvar[:len(rampy),:] *= rampy[:,np.newaxis]
+                apo = True
+            #if x0 == 0:
+            if True:
+                print('Apodize left')
+                invvar[:,:len(rampx)] *= rampx[np.newaxis,:]
+                apo = True
+            #if y1 >= H:
+            if True:
+                print('Apodize top')
+                invvar[-len(rampy):,:] *= rampy[::-1][:,np.newaxis]
+                apo = True
+            #if x1 >= W:
+            if True:
+                print('Apodize right')
+                invvar[:,-len(rampx):] *= rampx[::-1][np.newaxis,:]
+                apo = True
+
+            if apo and False:
+                import pylab as plt
+                plt.clf()
+                plt.imshow(invvar, interpolation='nearest', origin='lower')
+                plt.savefig('apodized-%i-%s.png' % (self.expnum, self.ccdname))
+            
+
         if subsky:
             # Warn if the subtracted sky doesn't seem to work well
             # (can happen, eg, if sky calibration product is inconsistent with
@@ -512,7 +562,7 @@ class LegacySurveyImage(object):
             return img
         return fitsio.read(fn, ext=hdu, header=header, **kwargs)
 
-    def read_image(self, **kwargs):
+    def read_image(self, slice=None, **kwargs):
         '''
         Reads the image file from disk.
 
@@ -533,7 +583,7 @@ class LegacySurveyImage(object):
             If `header = True`.
         '''
         print('Reading image from', self.imgfn, 'hdu', self.hdu)
-        return self._read_fits(self.imgfn, self.hdu, **kwargs)
+        return self._read_fits(self.imgfn, self.hdu, slice=slice, **kwargs)
 
     def get_image_shape(self):
         '''
@@ -1023,6 +1073,11 @@ class LegacySurveyImage(object):
             if np.sum(good) == 0:
                 raise RuntimeError('No pixels with weight > 0 in: ' + str(self))
             med = np.median(img[good])
+
+            # For DECam chips where we drop half the chip, spline becomes underconstrained
+            if min(img.shape) / boxsize < 4:
+                boxsize /= 2
+
             # Compute initial model...
             skyobj = SplineSky.BlantonMethod(img - med, good, boxsize)
             skymod = np.zeros_like(img)

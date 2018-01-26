@@ -37,6 +37,10 @@ def make_coadds(tims, bands, targetwcs,
         C.comods = []
         C.coresids = []
 
+    # apodize = True
+    # if apodize:
+    #     C.apodimgs = []
+
     if apertures is not None:
         unweighted = True
         C.AP = fits_table()
@@ -99,6 +103,10 @@ def make_coadds(tims, bands, targetwcs,
         cow    = np.zeros((H,W), np.float32)
         # coadded weighted image map
         cowimg = np.zeros((H,W), np.float32)
+
+        # if apodize:
+        #     apodw = np.zeros((H,W), np.float32)
+        #     apodimg = np.zeros((H,W), np.float32)
 
         kwargs = dict(cowimg=cowimg, cow=cow)
 
@@ -186,6 +194,15 @@ def make_coadds(tims, bands, targetwcs,
             # invvar-weighted image
             cowimg[Yo,Xo] += iv * im
             cow   [Yo,Xo] += iv
+
+            # if apodize:
+            #     #tim.subwcs, targetwcs
+            #     th,tw = tim.shape
+            #     pass
+            #     # apiv = iv.copy()
+            #     # apiv *= ....
+            #     # apodw  [Yo,Xo] += apiv
+            #     # apodimg[Yo,Xo] += apiv * im
 
             if unweighted:
                 if dq is None:
