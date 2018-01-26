@@ -6,16 +6,26 @@ def main():
 
     drdir = '/project/projectdirs/cosmo/data/legacysurvey/dr5'
 
-    brickname = '1501p020'
-
     W=3600
     H=3600
     pixscale=0.262
     target_extent = None
 
+    #brickname = '1501p020'
+
+    custom = True
+    ra,dec = 216.03, 34.86
+    W,H = 1000,1000
+    brickname = 'custom_%.3f_%.3f' % (ra,dec)
+
     survey = LegacySurveyData()
 
-    brick = survey.get_brick_by_name(brickname)
+    if custom:
+        from legacypipe.survey import BrickDuck
+        # Custom brick; create a fake 'brick' object
+        brick = BrickDuck(ra, dec, brickname)
+    else:
+        brick = survey.get_brick_by_name(brickname)
 
     # Get WCS object describing brick
     targetwcs = wcs_for_brick(brick, W=W, H=H, pixscale=pixscale)
