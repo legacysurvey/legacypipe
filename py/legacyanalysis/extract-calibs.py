@@ -11,12 +11,18 @@ def main():
     pixscale=0.262
     target_extent = None
 
+    do_psf = True
+    do_sky = True
+
     #brickname = '1501p020'
 
     custom = True
-    ra,dec = 216.03, 34.86
-    W,H = 1000,1000
+    #ra,dec = 216.03, 34.86
+    ra,dec = 27.30, -10.43
+    #W,H = 1000,1000
+    W,H = 1500,1500
     brickname = 'custom_%.3f_%.3f' % (ra,dec)
+    do_sky = False
 
     survey = LegacySurveyData()
 
@@ -47,33 +53,35 @@ def main():
 
         expnum = '%08i' % im.expnum
 
-        if os.path.exists(im.psffn) or os.path.exists(im.merged_psffn):
-            print('PSF file exists')
-        else:
-            print('Need PSF', im.psffn, im.merged_psffn)
+        if do_psf:
+            if os.path.exists(im.psffn) or os.path.exists(im.merged_psffn):
+                print('PSF file exists')
+            else:
+                print('Need PSF', im.psffn, im.merged_psffn)
+    
+                tarfn = os.path.join(drdir, 'calib', im.camera, 'psfex-merged',
+                                     'legacysurvey_dr5_calib_decam_psfex-merged_%s.tar.gz' % expnum[:5])
+                print(tarfn)
+                if os.path.exists(tarfn):
+                    outfn = '%s/%s-%s.fits' % (expnum[:5], im.camera, expnum)
+                    cmd = 'cd %s/%s/psfex-merged && tar xvzf %s %s' % (survey.get_calib_dir(), im.camera, tarfn, outfn)
+                    print(cmd)
+                    os.system(cmd)
 
-            tarfn = os.path.join(drdir, 'calib', im.camera, 'psfex-merged',
-                                 'legacysurvey_dr5_calib_decam_psfex-merged_%s.tar.gz' % expnum[:5])
-            print(tarfn)
-            if os.path.exists(tarfn):
-                outfn = '%s/%s-%s.fits' % (expnum[:5], im.camera, expnum)
-                cmd = 'cd %s/%s/psfex-merged && tar xvzf %s %s' % (survey.get_calib_dir(), im.camera, tarfn, outfn)
-                print(cmd)
-                os.system(cmd)
-
-        if os.path.exists(im.splineskyfn) or os.path.exists(im.merged_splineskyfn):
-            print('Sky file exists')
-        else:
-            print('Need sky', im.splineskyfn, im.merged_splineskyfn)
-
-            tarfn = os.path.join(drdir, 'calib', im.camera, 'splinesky-merged',
-                                 'legacysurvey_dr5_calib_decam_splinesky-merged_%s.tar.gz' % expnum[:5])
-            print(tarfn)
-            if os.path.exists(tarfn):
-                outfn = '%s/%s-%s.fits' % (expnum[:5], im.camera, expnum)
-                cmd = 'cd %s/%s/splinesky-merged && tar xvzf %s %s' % (survey.get_calib_dir(), im.camera, tarfn, outfn)
-                print(cmd)
-                os.system(cmd)
+        if do_sky:
+            if os.path.exists(im.splineskyfn) or os.path.exists(im.merged_splineskyfn):
+                print('Sky file exists')
+            else:
+                print('Need sky', im.splineskyfn, im.merged_splineskyfn)
+    
+                tarfn = os.path.join(drdir, 'calib', im.camera, 'splinesky-merged',
+                                     'legacysurvey_dr5_calib_decam_splinesky-merged_%s.tar.gz' % expnum[:5])
+                print(tarfn)
+                if os.path.exists(tarfn):
+                    outfn = '%s/%s-%s.fits' % (expnum[:5], im.camera, expnum)
+                    cmd = 'cd %s/%s/splinesky-merged && tar xvzf %s %s' % (survey.get_calib_dir(), im.camera, tarfn, outfn)
+                    print(cmd)
+                    os.system(cmd)
 
 if __name__ == '__main__':
     main()
