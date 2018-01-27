@@ -914,7 +914,12 @@ Now using the current directory as LEGACY_SURVEY_DIR, but this is likely to fail
     def check_cache(self, fn):
         if self.cache_dir is None:
             return fn
+
+        print('check_cache: survey_dir', self.survey_dir)
+        print('check_cache:  cache_dir', self.cache_dir)
+
         cfn = fn.replace(self.survey_dir, self.cache_dir)
+        print('cache fn', cfn)
         if os.path.exists(cfn):
             return cfn
         return fn

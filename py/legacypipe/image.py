@@ -339,8 +339,8 @@ class LegacySurveyImage(object):
             invvar[invvar > 0] = 1./sig1**2
 
 
-        #apodize = True
-        apodize = False
+        apodize = True
+        #apodize = False
         if apodize and slc is not None:
             print('Slice:', slc)
             print('Image shape:', self.get_image_shape())
