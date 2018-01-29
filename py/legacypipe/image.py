@@ -340,14 +340,12 @@ class LegacySurveyImage(object):
             invvar[invvar > 0] = 1./sig1**2
 
         if apodize and slc is not None:
-            print('Slice:', slc)
-            print('Image shape:', self.get_image_shape())
             sy,sx = slc
             y0,y1 = sy.start, sy.stop
             x0,x1 = sx.start, sx.stop
             H,W = invvar.shape
-
-            # Compute apodization ramps
+            # Compute apodization ramps -- separately for x and y to
+            # handle narrow images
             xx = np.linspace(-np.pi, np.pi, min(W,100))
             rampx = np.arctan(xx)
             rampx = (rampx - rampx.min()) / (rampx.max() - rampx.min())
@@ -356,25 +354,24 @@ class LegacySurveyImage(object):
             rampy = (rampy - rampy.min()) / (rampy.max() - rampy.min())
 
             apo = False
-
             #if y0 == 0:
             if True:
-                print('Apodize bottom')
+                #print('Apodize bottom')
                 invvar[:len(rampy),:] *= rampy[:,np.newaxis]
                 apo = True
             #if x0 == 0:
             if True:
-                print('Apodize left')
+                #print('Apodize left')
                 invvar[:,:len(rampx)] *= rampx[np.newaxis,:]
                 apo = True
             #if y1 >= H:
             if True:
-                print('Apodize top')
+                #print('Apodize top')
                 invvar[-len(rampy):,:] *= rampy[::-1][:,np.newaxis]
                 apo = True
             #if x1 >= W:
             if True:
-                print('Apodize right')
+                #print('Apodize right')
                 invvar[:,-len(rampx):] *= rampx[::-1][np.newaxis,:]
                 apo = True
 
@@ -558,7 +555,7 @@ class LegacySurveyImage(object):
             return img
         return fitsio.read(fn, ext=hdu, header=header, **kwargs)
 
-    def read_image(self, slice=None, **kwargs):
+    def read_image(self, **kwargs):
         '''
         Reads the image file from disk.
 
@@ -579,7 +576,7 @@ class LegacySurveyImage(object):
             If `header = True`.
         '''
         print('Reading image from', self.imgfn, 'hdu', self.hdu)
-        return self._read_fits(self.imgfn, self.hdu, slice=slice, **kwargs)
+        return self._read_fits(self.imgfn, self.hdu, **kwargs)
 
     def get_image_shape(self):
         '''
