@@ -94,6 +94,7 @@ def stage_tims(W=3600, H=3600, pixscale=0.262, brickname=None,
                splinesky=True,
                gaussPsf=False, pixPsf=False, hybridPsf=False,
                normalizePsf=False,
+               apodize=False,
                constant_invvar=False,
                depth_cut = True,
                read_image_pixels = True,
@@ -323,6 +324,7 @@ def stage_tims(W=3600, H=3600, pixscale=0.262, brickname=None,
     args = [(im, targetrd, dict(gaussPsf=gaussPsf, pixPsf=pixPsf,
                                 hybridPsf=hybridPsf, normalizePsf=normalizePsf,
                                 splinesky=splinesky,
+                                apodize=apodize,
                                 constant_invvar=constant_invvar,
                                 pixels=read_image_pixels))
                                 for im in ims]
@@ -973,7 +975,10 @@ def stage_image_coadds(survey=None, targetwcs=None, bands=None, tims=None,
         coadd_list.append(('simscoadd', sims_coadd, rgbkwargs))
 
     for name,ims,rgbkw in coadd_list:
-        rgb = get_rgb(ims, bands, **rgbkw)
+        #rgb = get_rgb(ims, bands, **rgbkw)
+
+        rgb = sdss_rgb(ims, bands, scales=dict(g=6.0, r=3.4, z=2.2), m=0.03)
+
         kwa = {}
         if coadd_bw and len(bands) == 1:
             rgb = rgb.sum(axis=2)
@@ -1016,6 +1021,36 @@ def stage_image_coadds(survey=None, targetwcs=None, bands=None, tims=None,
                     out.fits.write(blobs, header=hdr)
         del rgb
     return None
+
+def sdss_rgb(rimgs, bands, scales=None, m = 0.02):
+    import numpy as np
+    rgbscales = {'u': 1.5, #1.0,
+                 'g': 2.5,
+                 'r': 1.5,
+                 'i': 1.0,
+                 'z': 0.4, #0.3
+                 }
+    if scales is not None:
+        rgbscales.update(scales)
+    b,g,r = [rimg * rgbscales[b] for rimg,b in zip(rimgs, bands)]
+    r = np.maximum(0, r + m)
+    g = np.maximum(0, g + m)
+    b = np.maximum(0, b + m)
+    I = (r+g+b)/3.
+    Q = 20
+    fI = np.arcsinh(Q * I) / np.sqrt(Q)
+    I += (I == 0.) * 1e-6
+    R = fI * r / I
+    G = fI * g / I
+    B = fI * b / I
+    # maxrgb = reduce(np.maximum, [R,G,B])
+    # J = (maxrgb > 1.)
+    # R[J] = R[J]/maxrgb[J]
+    # G[J] = G[J]/maxrgb[J]
+    # B[J] = B[J]/maxrgb[J]
+    rgb = np.dstack((R,G,B))
+    rgb = np.clip(rgb, 0, 1)
+    return rgb
 
 def _median_smooth_detmap(X):
     from scipy.ndimage.filters import median_filter
@@ -2596,6 +2631,7 @@ def run_brick(brick, survey, radec=None, pixscale=0.262,
               pixPsf=False,
               hybridPsf=False,
               normalizePsf=False,
+              apodize=False,
               rex=False,
               splinesky=False,
               constant_invvar=False,
@@ -2803,6 +2839,7 @@ def run_brick(brick, survey, radec=None, pixscale=0.262,
     kwargs.update(ps=ps, nsigma=nsigma,
                   gaussPsf=gaussPsf, pixPsf=pixPsf, hybridPsf=hybridPsf,
                   normalizePsf=normalizePsf,
+                  apodize=apodize,
                   rex=rex,
                   constant_invvar=constant_invvar,
                   depth_cut=depth_cut,
@@ -3106,6 +3143,9 @@ python -u legacypipe/runbrick.py --plots --brick 2440p070 --zoom 1900 2400 450 9
     parser.add_argument('--normalize-psf', dest='normalizePsf', default=False,
                         action='store_true',
                         help='Normalize the PSF model to unix flux')
+
+    parser.add_argument('--apodize', default=False, action='store_true',
+                        help='Apodize image edges for prettier pictures?')
 
     parser.add_argument('--simp', dest='rex', default=True,
                         action='store_false',

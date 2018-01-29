@@ -915,6 +915,7 @@ Now using the current directory as LEGACY_SURVEY_DIR, but this is likely to fail
         if self.cache_dir is None:
             return fn
         cfn = fn.replace(self.survey_dir, self.cache_dir)
+        #print('cache fn', cfn)
         if os.path.exists(cfn):
             return cfn
         return fn

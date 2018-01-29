@@ -200,6 +200,7 @@ class LegacySurveyImage(object):
                           gaussPsf=False, pixPsf=False, hybridPsf=False,
                           normalizePsf=False,
                           splinesky=False,
+                          apodize=False,
                           nanomaggies=True, subsky=True, tiny=10,
                           dq=True, invvar=True, pixels=True,
                           constant_invvar=False):
@@ -337,6 +338,48 @@ class LegacySurveyImage(object):
         if constant_invvar:
             print('Setting constant invvar', 1./sig1**2)
             invvar[invvar > 0] = 1./sig1**2
+
+        if apodize and slc is not None:
+            sy,sx = slc
+            y0,y1 = sy.start, sy.stop
+            x0,x1 = sx.start, sx.stop
+            H,W = invvar.shape
+            # Compute apodization ramps -- separately for x and y to
+            # handle narrow images
+            xx = np.linspace(-np.pi, np.pi, min(W,100))
+            rampx = np.arctan(xx)
+            rampx = (rampx - rampx.min()) / (rampx.max() - rampx.min())
+            xx = np.linspace(-np.pi, np.pi, min(H,100))
+            rampy = np.arctan(xx)
+            rampy = (rampy - rampy.min()) / (rampy.max() - rampy.min())
+
+            apo = False
+            #if y0 == 0:
+            if True:
+                #print('Apodize bottom')
+                invvar[:len(rampy),:] *= rampy[:,np.newaxis]
+                apo = True
+            #if x0 == 0:
+            if True:
+                #print('Apodize left')
+                invvar[:,:len(rampx)] *= rampx[np.newaxis,:]
+                apo = True
+            #if y1 >= H:
+            if True:
+                #print('Apodize top')
+                invvar[-len(rampy):,:] *= rampy[::-1][:,np.newaxis]
+                apo = True
+            #if x1 >= W:
+            if True:
+                #print('Apodize right')
+                invvar[:,-len(rampx):] *= rampx[::-1][np.newaxis,:]
+                apo = True
+
+            if apo and False:
+                import pylab as plt
+                plt.clf()
+                plt.imshow(invvar, interpolation='nearest', origin='lower')
+                plt.savefig('apodized-%i-%s.png' % (self.expnum, self.ccdname))
 
         if subsky:
             # Warn if the subtracted sky doesn't seem to work well
@@ -1023,6 +1066,11 @@ class LegacySurveyImage(object):
             if np.sum(good) == 0:
                 raise RuntimeError('No pixels with weight > 0 in: ' + str(self))
             med = np.median(img[good])
+
+            # For DECam chips where we drop half the chip, spline becomes underconstrained
+            if min(img.shape) / boxsize < 4:
+                boxsize /= 2
+
             # Compute initial model...
             skyobj = SplineSky.BlantonMethod(img - med, good, boxsize)
             skymod = np.zeros_like(img)
