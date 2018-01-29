@@ -3032,14 +3032,6 @@ python -u legacypipe/runbrick.py --plots --brick 2440p070 --zoom 1900 2400 450 9
     parser.add_argument('--depth-cut', default=False, action='store_true',
                         help='Cut to the set of CCDs required to reach our depth target')
     
-    parser.add_argument(
-        '--on-bricks', default=False, action='store_true',
-        help='Enable Tractor-on-bricks edge handling?')
-
-    parser.add_argument(
-        '--allow-missing-brickq', type=int, choices=[0,1,2], default=-1,
-        help='Do not fail if a prerequisite brick of given brickq is missing.')
-
     return parser
 
 def get_runbrick_kwargs(brick=None,
