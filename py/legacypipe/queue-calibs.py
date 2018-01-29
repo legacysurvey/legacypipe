@@ -124,14 +124,6 @@ def main():
 
     parser.add_argument('--write-ccds', help='Write CCDs list as FITS table?')
 
-    parser.add_argument('--brickq', type=int, default=None,
-                        help='Queue only bricks with the given "brickq" value [0 to 3]')
-
-    parser.add_argument('--brickq-deps', action='store_true', default=False,
-                        help='Queue bricks directly using qdo API, setting brickq dependencies')
-    parser.add_argument('--queue', default='bricks',
-                        help='With --brickq-deps, the QDO queue name to use')
-    
     opt = parser.parse_args()
 
 
@@ -422,10 +414,6 @@ def main():
     # plt.axis([360, 0, np.min(B.dec)-1, np.max(B.dec)+1])
     # plt.savefig('bricks.png')
 
-    if opt.brickq is not None:
-        B.cut(B.brickq == opt.brickq)
-        log('Cut to', len(B), 'with brickq =', opt.brickq)
-    
     if opt.touching:
         I,J,d = match_radec(T.ra, T.dec, B.ra, B.dec, search_radius,
                             nearest=True)
@@ -469,81 +457,6 @@ def main():
         # f1.close()
         # f2.close()
         # log('Wrote *-names.txt')
-    
-
-    if opt.brickq_deps:
-        import qdo
-        from legacypipe.survey import on_bricks_dependencies
-
-        #... find Queue...
-        q = qdo.connect(opt.queue, create_ok=True)
-        log('Connected to QDO queue', opt.queue, q)
-        brick_to_task = dict()
-
-        T.wra = T.ra + (T.ra > 180) * -360
-        wra = rlo - 360
-        plt.clf()
-        plt.plot(T.wra, T.dec, 'b.')
-        ax = [wra, rhi, dlo, dhi]
-        plt.axis(ax)
-        plt.title('CCDs')
-        plt.savefig('q-ccds.png')
-
-        B.wra = B.ra + (B.ra > 180) * -360
-
-        # this slight overestimate (for DECam images) is fine
-        radius = 0.3
-        Iccds = match_radec(B.ra, B.dec, T.ra, T.dec, radius,
-                            indexlist=True)
-        ikeep = []
-        for ib,(b,Iccd) in enumerate(zip(B, Iccds)):
-            if Iccd is None or len(Iccd) == 0:
-                log('No matched CCDs to brick', b.brickname)
-                continue
-            wcs = wcs_for_brick(b)
-            cI = ccds_touching_wcs(wcs, T[np.array(Iccd)])
-            log(len(cI), 'CCDs touching brick', b.brickname)
-            if len(cI) == 0:
-                continue
-            ikeep.append(ib)
-        B.cut(np.array(ikeep))
-        log('Cut to', len(B), 'bricks touched by CCDs')
-        
-        for brickq in range(4):
-            I = np.flatnonzero(B.brickq == brickq)
-            log(len(I), 'bricks with brickq =', brickq)
-
-            J = np.flatnonzero(B.brickq < brickq)
-            preB = B[J]
-            reqs = []
-            if brickq > 0:
-                for b in B[I]:
-                    # find brick dependencies
-                    brickdeps = on_bricks_dependencies(b, survey, bricks=preB)
-                    # convert to task ids
-                    taskdeps = [brick_to_task.get(b.brickname,None) for b in brickdeps]
-                    # If we dropped a dependency brick from a previous brickq because
-                    # of no overlapping CCDs, it won't appear in the brick_to_task map.
-                    taskdeps = [t for t in taskdeps if t is not None]
-                    reqs.append(taskdeps)
-
-            plt.clf()
-            plt.plot(B.wra, B.dec, '.', color='0.5')
-            plt.plot(B.wra[I], B.dec[I], 'b.')
-            plt.axis(ax)
-            plt.title('Bricks: brickq=%i' % brickq)
-            plt.savefig('q-bricks-%i.png' % brickq)
-            
-            # submit to qdo queue
-            log('Queuing', len(B[I]), 'bricks')
-            if brickq == 0:
-                reqs = None
-            else:
-                assert(len(I) == len(reqs))
-            taskids = q.add_multiple(B.brickname[I], requires=reqs)
-            assert(len(taskids) == len(I))
-            log('Queued', len(taskids), 'bricks')
-            brick_to_task.update(dict(zip(B.brickname[I], taskids)))
         
     if opt.touching:
 

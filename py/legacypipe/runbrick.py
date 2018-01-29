@@ -44,7 +44,7 @@ from tractor.galaxy import (DevGalaxy, ExpGalaxy, FixedCompositeGalaxy,
                             FracDev, disable_galaxy_cache)
 
 from legacypipe.survey import (
-    get_rgb, imsave_jpeg, LegacySurveyData, on_bricks_dependencies)
+    get_rgb, imsave_jpeg, LegacySurveyData)
 from legacypipe.image import CP_DQ_BITS
 from legacypipe.utils import (
     RunbrickError, NothingToDoError, iterwrapper, find_unique_pixels)
@@ -1068,8 +1068,6 @@ def stage_srcs(coimgs=None, cons=None,
                plots=False, plots2=False,
                brickname=None,
                mp=None, nsigma=None,
-               on_bricks=False,
-               allow_missing_brickq=-1,
                survey=None, brick=None,
                record_event=None,
                **kwargs):
@@ -1089,19 +1087,8 @@ def stage_srcs(coimgs=None, cons=None,
     record_event and record_event('stage_srcs: starting')
 
     tlast = Time()
-
-    # existing sources that should be avoided when detecting new
-    # sources.
-    avoid_x, avoid_y = [],[]
-
-    if on_bricks:
-        avoid = _subtract_onbricks_sources(
-            survey, brick, allow_missing_brickq, targetwcs, tims, bands,
-            plots, ps, mp)
-        if avoid is not None:
-            avoid_x,avoid_y = avoid
-
     record_event and record_event('stage_srcs: detection maps')
+
     print('Rendering detection maps...')
     detmaps, detivs, satmap = detection_maps(tims, targetwcs, bands, mp)
     tnow = Time()
@@ -1176,6 +1163,10 @@ def stage_srcs(coimgs=None, cons=None,
         Tsat = merge_tables([tycho, Tsat], columns='fillzero')
     del satyx
         
+    # existing sources that should be avoided when detecting new
+    # sources.
+    avoid_x, avoid_y = [],[]
+
     satcat = []
     if len(Tsat):
         avoid_x.extend(Tsat.ibx)
@@ -1273,109 +1264,6 @@ def stage_srcs(coimgs=None, cons=None,
     L = locals()
     rtn = dict([(k,L[k]) for k in keys])
     return rtn
-
-def _subtract_onbricks_sources(survey, brick, allow_missing_brickq,
-                               targetwcs, tims, bands, plots, ps, mp):
-    # Check tractor-on-bricks dependencies
-    bricks = on_bricks_dependencies(brick, survey)
-    if len(bricks) == 0:
-        return None
-    from legacypipe.catalog import read_fits_catalog
-    B = []
-    for b in bricks:
-        fn = survey.find_file('tractor', brick=b.brickname)
-        print('Looking for', fn)
-        if not os.path.exists(fn):
-            print('File does not exist:', fn)
-            if b.brickq <= allow_missing_brickq:
-                print(('  (allowing this missing brick (brickq = %i) ' +
-                       'because of --allow-missing-brickq %i)') % 
-                       (b.brickq, allow_missing_brickq))
-                continue
-        B.append(fits_table(fn))
-    del bricks
-    B = [b for b in B if b is not None]
-    if len(B) == 0:
-        return None
-
-    try:
-        B = merge_tables(B)
-    except:
-        print('Error merging brick tables:')
-        import traceback
-        traceback.print_exc()
-        print('Retrying with fillzero...')
-        B = merge_tables(B, columns='fillzero')
-    print('Total of', len(B), 'sources from neighbouring bricks')
-    # Keep only sources that are primary in their own brick
-    B.cut(B.brick_primary)
-    print(len(B), 'are BRICK_PRIMARY')
-    # HACK -- Keep only sources within a margin of this brick
-    ok,B.xx,B.yy = targetwcs.radec2pixelxy(B.ra, B.dec)
-    margin = 20
-    B.cut((B.xx >= 1-margin) * (B.xx < W+margin) *
-          (B.yy >= 1-margin) * (B.yy < H+margin))
-    print(len(B), 'are within this image + margin')
-    B.cut((B.out_of_bounds == False) * (B.left_blob == False))
-    print(len(B), 'do not have out_of_bounds or left_blob set')
-    if len(B) == 0:
-        return None
-
-    # Note that we shouldn't need to drop sources that are within this
-    # current brick's unique area, because we cut to sources that are
-    # BRICK_PRIMARY within their own brick.
-
-    # Create sources for these catalog entries
-    ### see forced-photom-decam.py for some additional patchups?
-
-    bcat = read_fits_catalog(B)
-    print('Created', len(bcat), 'tractor catalog objects')
-
-    # Add the new sources to the 'avoid_[xy]' lists, which are
-    # existing sources that should be avoided when detecting new
-    # faint sources.
-    avoid_x = np.round(B.xx - 1).astype(int)
-    avoid_y = np.round(B.yy - 1).astype(int)
-
-    print('Subtracting tractor-on-bricks sources belonging to other bricks')
-    ## HACK -- note that this is going to screw up fracflux and
-    ## other metrics for sources in this brick that overlap
-    ## subtracted sources.
-    if plots:
-        mods = []
-        # Before...
-        coimgs,cons = quick_coadds(tims, bands, targetwcs)
-        plt.clf()
-        dimshow(get_rgb(coimgs, bands))
-        plt.title('Before subtracting tractor-on-bricks marginal sources')
-        ps.savefig()
-
-    for i,src in enumerate(bcat):
-        print(' ', i, src)
-
-    tlast = Time()
-    mods = mp.map(_get_mod, [(tim, bcat) for tim in tims])
-    tnow = Time()
-    print('[parallel srcs] Getting tractor-on-bricks model images:',tnow-tlast)
-    tlast = tnow
-    for tim,mod in zip(tims, mods):
-        tim.data -= mod
-    if not plots:
-        del mods
-
-    if plots:
-        coimgs,cons = quick_coadds(tims, bands, targetwcs, images=mods)
-        plt.clf()
-        dimshow(get_rgb(coimgs, bands))
-        plt.title('Marginal sources subtracted off')
-        ps.savefig()
-        coimgs,cons = quick_coadds(tims, bands, targetwcs)
-        plt.clf()
-        dimshow(get_rgb(coimgs, bands))
-        plt.title('After subtracting off marginal sources')
-        ps.savefig()
-
-    return avoid_x,avoid_y
 
 def stage_fitblobs(T=None,
                    brickname=None,
@@ -1981,7 +1869,7 @@ def stage_coadds(survey=None, bands=None, version_header=None, targetwcs=None,
                  tims=None, ps=None, brickname=None, ccds=None,
                  T=None, cat=None, pixscale=None, plots=False,
                  coadd_bw=False, brick=None, W=None, H=None, lanczos=True,
-                 mp=None, on_bricks=None,
+                 mp=None,
                  record_event=None,
                  **kwargs):
     '''
@@ -2082,16 +1970,6 @@ def stage_coadds(survey=None, bands=None, version_header=None, targetwcs=None,
         if coadd_bw and len(bands) == 1:
             rgb = rgb.sum(axis=2)
             kwa = dict(cmap='gray')
-
-        if on_bricks and name == 'image':
-            # Do not overwrite the image.jpg file if it exists (eg,
-            # written during image_coadds stage), because in the later
-            # stage_srcs, we subtract the overlapping sources from
-            # other bricks, modifying the images.
-            fn = survey.find_file(name + '-jpeg', brick=brickname, output=True)
-            if os.path.exists(fn):
-                print('Not overwriting existing image %s: on_bricks' % fn)
-                continue
 
         with survey.write_output(name + '-jpeg', brick=brickname) as out:
             imsave_jpeg(out.fn, rgb, origin='lower', **kwa)
@@ -2625,8 +2503,6 @@ def run_brick(brick, survey, radec=None, pixscale=0.262,
               blob_image=False,
               do_calibs=True,
               write_metrics=True,
-              on_bricks=False,
-              allow_missing_brickq=-1,
               gaussPsf=False,
               pixPsf=False,
               hybridPsf=False,
@@ -2729,8 +2605,6 @@ def run_brick(brick, survey, radec=None, pixscale=0.262,
     - *do_calibs*: boolean; run the calibration preprocessing steps?
 
     - *write_metrics*: boolean; write out a variety of useful metrics
-
-    - *on_bricks*: boolean; tractor-on-bricks?
 
     - *gaussPsf*: boolean; use a simpler single-component Gaussian PSF model?
 
@@ -2850,8 +2724,6 @@ def run_brick(brick, survey, radec=None, pixscale=0.262,
                   do_calibs=do_calibs,
                   write_metrics=write_metrics,
                   lanczos=lanczos,
-                  on_bricks=on_bricks,
-                  allow_missing_brickq=allow_missing_brickq,
                   unwise_dir=unwise_dir,
                   unwise_tr_dir=unwise_tr_dir,
                   plots=plots, plots2=plots2, coadd_bw=coadd_bw,
@@ -3305,35 +3177,6 @@ def main(args=None):
         lvl = logging.DEBUG
     logging.basicConfig(level=lvl, format='%(message)s', stream=sys.stdout)
 
-    if opt.on_bricks:
-        # Quickly check for existence of required neighboring catalogs
-        # before starting.
-        brick = survey.get_brick_by_name(opt.brick)
-        bricks = on_bricks_dependencies(brick, survey)
-        print('Checking for catalogs for bricks:',
-              ', '.join([b.brickname for b in bricks]))
-        allexist = True
-        for b in bricks:
-            fn = survey.find_file('tractor', brick=b.brickname)
-            print('File', fn)
-            if not os.path.exists(fn):
-                print('File', fn, 'does not exist (required for --on-bricks)')
-                if b.brickq <= opt.allow_missing_brickq:
-                    print(('  (allowing this missing brick (brickq = %i) ' +
-                           'because of --allow-missing-brickq %i)') % 
-                           (b.brickq, opt.allow_missing_brickq))
-                else:
-                    allexist = False
-                continue
-            try:
-                T = fits_table(fn)
-            except:
-                print('Failed to open file', fn, '(reqd for --on-bricks)')
-                allexist = False
-
-        if not allexist:
-            return -1
-                
     Time.add_measurement(MemMeas)
     if opt.plots:
         plt.figure(figsize=(12,9))
