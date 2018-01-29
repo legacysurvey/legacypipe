@@ -200,6 +200,7 @@ class LegacySurveyImage(object):
                           gaussPsf=False, pixPsf=False, hybridPsf=False,
                           normalizePsf=False,
                           splinesky=False,
+                          apodize=False,
                           nanomaggies=True, subsky=True, tiny=10,
                           dq=True, invvar=True, pixels=True,
                           constant_invvar=False):
@@ -338,16 +339,12 @@ class LegacySurveyImage(object):
             print('Setting constant invvar', 1./sig1**2)
             invvar[invvar > 0] = 1./sig1**2
 
-
-        apodize = True
-        #apodize = False
         if apodize and slc is not None:
             print('Slice:', slc)
             print('Image shape:', self.get_image_shape())
             sy,sx = slc
             y0,y1 = sy.start, sy.stop
             x0,x1 = sx.start, sx.stop
-            #H,W = self.get_image_shape()
             H,W = invvar.shape
 
             # Compute apodization ramps
@@ -386,7 +383,6 @@ class LegacySurveyImage(object):
                 plt.clf()
                 plt.imshow(invvar, interpolation='nearest', origin='lower')
                 plt.savefig('apodized-%i-%s.png' % (self.expnum, self.ccdname))
-            
 
         if subsky:
             # Warn if the subtracted sky doesn't seem to work well
