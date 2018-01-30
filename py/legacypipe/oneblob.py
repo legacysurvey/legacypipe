@@ -716,6 +716,14 @@ class OneBlob(object):
             keepsrc = {'none':None, 'ptsrc':ptsrc, simname:simple,
                        'dev':dev, 'exp':exp, 'comp':comp}[keepmod]
             bestchi = chisqs.get(keepmod, 0.)
+
+            if keepsrc is not None and bestchi == 0.:
+                # Weird edge case, or where some best-fit fluxes go
+                # negative. eg
+                # https://github.com/legacysurvey/legacypipe/issues/174
+                print('Best dchisq is 0 -- dropping source')
+                keepsrc = None
+
             # for nm in modnames:
             #     c = chisqs.get(nm, 0.)
             #     more = ''
