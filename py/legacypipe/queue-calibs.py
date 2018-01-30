@@ -149,10 +149,9 @@ def main():
 
     if opt.ignore_cuts == False:
         print('Applying CCD cuts...')
-        cutvals = T.ccd_cuts
-        print('CCD cut bitmask values:', cutvals)
-        T.cut(cutvals == 0)
-        print(len(T), 'CCDs survive cuts')
+        if 'ccd_cuts' in T.columns():
+            T.cut(T.ccd_cuts == 0)
+            print(len(T), 'CCDs survive cuts')
 
     bands = 'grz'
     log('Filters:', np.unique(T.filter))

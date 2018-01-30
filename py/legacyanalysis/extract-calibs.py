@@ -45,7 +45,7 @@ def main():
 
     #brickname = '1501p020'
 
-    custom = len(opt.radec) == 2
+    custom = (opt.radec is not None)
     #ra,dec = 216.03, 34.86
     if custom:
         ra,dec = opt.radec #27.30, -10.43

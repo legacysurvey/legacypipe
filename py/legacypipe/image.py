@@ -109,6 +109,11 @@ class LegacySurveyImage(object):
         self.width  = ccd.width
         self.height = ccd.height
 
+        if 'sig1' in ccd.columns():
+            self.sig1 = ccd.sig1
+        else:
+            self.sig1 = None
+
         # Which Data Quality bits mark saturation?
         self.dq_saturation_bits = CP_DQ_BITS['satur']
 
@@ -744,6 +749,21 @@ class LegacySurveyImage(object):
         phdr = self.read_image_primary_header()
         wcs.plver = phdr.get('PLVER', '').strip()
         return wcs
+
+    def get_sig1(self, **kwargs):
+        if self.sig1 is not None:
+            # CCDs table sig1 is in nanomaggies
+            return self.sig1
+
+        # these sig1 values are in image counts; scale to nanomaggies
+        zpscale = NanoMaggies.zeropointToScale(self.ccdzpt)
+
+        skysig1 = self.get_sky_sig1(**kwargs)
+        if skysig1 is None:
+            iv = im.read_invvar(**kwargs)
+            dq = im.read_dq(**kwargs)
+            skysig1 = 1./np.sqrt(np.median(iv[dq == 0]))
+        return skysig1 / zpscale
 
     ### Yuck, this is not much better than just doing read_sky_model().sig1 ...
     def get_sky_sig1(self, splinesky=False):

@@ -13,9 +13,8 @@ export MKL_NUM_THREADS=1
 ulimit -S -v 30000000
 ulimit -a
 
-export LEGACY_SURVEY_DIR=$CSCRATCH/dr5-new
-outdir=$CSCRATCH/dr5-rerun
-#outdir=$LEGACY_SURVEY_DIR
+export LEGACY_SURVEY_DIR=$CSCRATCH/dr5-new-sky
+outdir=$LEGACY_SURVEY_DIR
 
 brick="$1"
 bri=$(echo $brick | head -c 3)
@@ -42,15 +41,18 @@ echo -e "\nStarting on ${NERSC_HOST} $(hostname)\n" >> $log
 echo "-----------------------------------------------------------------------------------------" >> $log
 
 python -u legacypipe/runbrick.py \
+    --depth-cut \
     --max-blobsize  250000 \
+    --cache-dir /global/cscratch1/sd/dstn/dr5-new-sky/cache/ \
     --checkpoint $outdir/checkpoints/${bri}/checkpoint-${brick}.pickle \
     --pickle "$outdir/pickles/${bri}/runbrick-%(brick)s-%%(stage)s.pickle" \
-    --write-stage srcs --write-stage coadds \
-    --skip-calibs \
+    --write-stage srcs \
     --threads 8 \
     --brick $brick --outdir $outdir >> $log 2>&1
 
+    #--skip-calibs \
     #--force-all \
+#--write-stage coadds \
 
 # qdo launch dr2n 16 --cores_per_worker 8 --walltime=24:00:00 --script ../bin/pipebrick.sh --batchqueue regular --verbose
 # qdo launch edr0 4 --cores_per_worker 8 --batchqueue regular --walltime 4:00:00 --script ../bin/pipebrick.sh --keep_env --batchopts "--qos=premium -a 0-3"

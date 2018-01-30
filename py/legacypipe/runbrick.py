@@ -660,14 +660,7 @@ def make_depth_cut(survey, ccds, bands, targetrd, brick, W, H, pixscale,
                 continue
             wcs = wcs.get_subimage(int(x0), int(y0), int(x1-x0), int(y1-y0))
 
-            skysig1 = im.get_sky_sig1(splinesky=splinesky)
-            if skysig1 is None:
-                iv = im.read_invvar(slc=slc)
-                dq = im.read_dq(slc=slc)
-                skysig1 = 1./np.sqrt(np.median(iv[dq == 0]))
-            # skysig1 is in image counts; scale to nanomaggies
-            zpscale = NanoMaggies.zeropointToScale(im.ccdzpt)
-            skysig1 /= zpscale
+            skysig1 = im.get_sig1(splinesky=splinesky, slc=slc)
 
             psf = im.read_psf_model(x0, y0, gaussPsf=gaussPsf, pixPsf=pixPsf,
                                     normalizePsf=normalizePsf)
