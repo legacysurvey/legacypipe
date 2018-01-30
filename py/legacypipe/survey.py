@@ -401,25 +401,6 @@ def switch_to_soft_ellipses(cat):
             src.shapeDev = EllipseESoft.fromEllipseE(src.shapeDev)
             src.shapeExp = EllipseESoft.fromEllipseE(src.shapeExp)
 
-def on_bricks_dependencies(brick, survey, bricks=None):
-    # Find nearby bricks from earlier brick phases
-    if bricks is None:
-        bricks = survey.get_bricks_readonly()
-    print(len(bricks), 'bricks')
-    bricks = bricks[bricks.brickq < brick.brickq]
-    print(len(bricks), 'from phases before this brickq:', brick.brickq)
-    if len(bricks) == 0:
-        return []
-    from astrometry.libkd.spherematch import match_radec
-
-    radius = survey.bricksize * np.sqrt(2.) * 1.01
-    bricks.cut(np.abs(brick.dec - bricks.dec) < radius)
-    #print(len(bricks), 'within %.2f degree of Dec' % radius)
-    I,J,d = match_radec(brick.ra, brick.dec, bricks.ra, bricks.dec, radius)
-    bricks.cut(J)
-    print(len(bricks), 'within', radius, 'degrees')
-    return bricks
-
 def brick_catalog_for_radec_box(ralo, rahi, declo, dechi,
                                 survey, catpattern, bricks=None):
     '''
@@ -915,6 +896,7 @@ Now using the current directory as LEGACY_SURVEY_DIR, but this is likely to fail
         if self.cache_dir is None:
             return fn
         cfn = fn.replace(self.survey_dir, self.cache_dir)
+        #print('cache fn', cfn)
         if os.path.exists(cfn):
             return cfn
         return fn
