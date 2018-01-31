@@ -109,10 +109,7 @@ class LegacySurveyImage(object):
         self.width  = ccd.width
         self.height = ccd.height
 
-        if 'sig1' in ccd.columns():
-            self.sig1 = ccd.sig1
-        else:
-            self.sig1 = None
+        self.sig1 = getattr(ccd, 'sig1', None)
 
         # Which Data Quality bits mark saturation?
         self.dq_saturation_bits = CP_DQ_BITS['satur']
@@ -1164,10 +1161,8 @@ class LegacySurveyImage(object):
             try:
                 self.read_psf_model(0, 0, pixPsf=True, hybridPsf=True)
                 psfex = False
-            except:
-                import traceback
-                print('Did not find existing PsfEx model for', self, ':')
-                traceback.print_exc()
+            except Exception as e:
+                print('Did not find existing PsfEx model for', self, ':', e)
         if psfex:
             se = True
 
@@ -1180,10 +1175,8 @@ class LegacySurveyImage(object):
             try:
                 self.read_sky_model(splinesky=splinesky)
                 sky = False
-            except:
-                import traceback
-                print('Did not find existing sky model for', self, ':')
-                traceback.print_exc()
+            except Exception as e:
+                print('Did not find existing sky model for', self, ':', e)
 
         if se:
             # The image & mask files to process (funpacked if necessary)
