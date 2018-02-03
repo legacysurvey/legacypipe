@@ -278,7 +278,7 @@ def val3p4c_depthfromIvar(sample):
     # Should at least contain propertiesandoperations and the image corners.
     # MARCM - actually no need for ra dec image corners.   
     # Only needs ra0 ra1 ra2 ra3 dec0 dec1 dec2 dec3 only if fast track appropriate quicksip subroutines were implemented 
-    propertiesToKeep = [ 'filter', 'AIRMASS', 'FWHM','mjd_obs'] \
+    propertiesToKeep = [ 'filter', 'FWHM','mjd_obs'] \
     	+ ['RA', 'DEC', 'crval1', 'crval2', 'crpix1', 'crpix2', 'cd1_1', 'cd1_2', 'cd2_1', 'cd2_2','width','height']
     
     # Create big table with all relevant properties. 
