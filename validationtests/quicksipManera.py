@@ -66,7 +66,7 @@ def write_partial_map(filename, indices, values, nside, nest=False):
     tbhdu.header['OBJECT'] = 'PARTIAL'
     tbhdu.header['INDXSCHM'] = ('EXPLICIT', 'Indexing: IMPLICIT or EXPLICIT')
     tbhdu.writeto(filename,clobber=True)
-    subprocess.call("gzip "+filename,shell=True)
+    subprocess.call("gzip -f "+filename,shell=True)
 
 # ---------------------------------------------------------------------------------------- #
 
@@ -1057,7 +1057,7 @@ def project_and_write_maps(mode, propertiesweightsoperations, tbdata, catalogue_
                         fname = outroot2 + '_'.join([catalogue_name, sample_name, resol_prefix2, property, weights, operation]) + '.fits'
                         print 'Writing', fname
                         hp.write_map(fname, outmap_lo, nest=True)
-                        subprocess.call("gzip "+fname,shell=True)
+                        subprocess.call("gzip -f "+fname,shell=True)
 
 
     if mode == 3: # Fully parallel
