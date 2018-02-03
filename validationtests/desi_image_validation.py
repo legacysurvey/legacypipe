@@ -373,8 +373,8 @@ def val3p4b_maghist_pred(sample,ndraw=1e5, nbin=100, vmin=21.0, vmax=25.0):
     counts20 = 0
     nl = []
     for i in range(0,len(f)):
-        year = int(f[i]['date_obs'].split('-')[0])
-        if (year <= 2014): counts2014 = counts2014 + 1
+        #year = int(f[i]['date_obs'].split('-')[0])
+        #if (year <= 2014): counts2014 = counts2014 + 1
         if f[i]['dec'] < -20 : counts20 = counts20 + 1
 
 
@@ -414,7 +414,7 @@ def val3p4b_maghist_pred(sample,ndraw=1e5, nbin=100, vmin=21.0, vmax=25.0):
     ng = len(nl)
     print "-----------"
     if(verbose) : print "Number of objects = ", len(f)
-    if(verbose) : print "Counts before or during 2014 = ", counts2014
+    #if(verbose) : print "Counts before or during 2014 = ", counts2014
     if(verbose) : print "Counts with dec < -20 = ", counts20
     print "Number of objects in the sample = ", ng 
 
