@@ -122,7 +122,7 @@ class mysample(object):
                 if(self.survey != 'MZLS'): raise RuntimeError("Survey name seems inconsistent")
             else: raise RuntimeError("Input sample band seems inconsisent")
 
-        if(self.DR == 'DR5'):
+        elif(self.DR == 'DR5'):
             inputdir = '/global/project/projectdirs/cosmo/data/legacysurvey/dr5/'
             self.ccds =inputdir+'ccds-annotated-dr5.fits.gz'
             if(self.survey == 'DECaLS') : 
@@ -132,6 +132,18 @@ class mysample(object):
             elif(self.survey == 'NGCproxy' ) :
                    self.catalog = 'NGCproxy_DR5'
             else: raise RuntimeError("Survey name seems inconsistent")
+
+        elif(self.DR == 'DR6'):
+            inputdir = '/global/cscratch1/sd/dstn/dr6plus/'
+            if (band == 'g' or band == 'r'):
+                self.ccds = inputdir+'ccds-annotated-90prime-g.fits.gz'
+                self.catalog = 'BASS_DR6'
+                if(self.survey != 'BASS'): raise RuntimeError("Survey name seems inconsistent")
+            elif(band == 'z'):
+                self.ccds = inputdir+'ccds-annotated-mosaic-z.fits.gz'
+                self.catalog = 'MZLS_DR6'
+                if(self.survey != 'MZLS'): raise RuntimeError("Survey name seems inconsistent")
+            else: raise RuntimeError("Input sample band seems inconsisent")
 
         else: raise RuntimeError("Data Realease seems wrong") 
 
@@ -248,6 +260,8 @@ def val3p4c_depthfromIvar(sample):
             inds = np.where((tbdata['filter'] == band) & (tbdata['photometric'] == True) & (tbdata['blacklist_ok'] == True) & (map(InDEShybFootprint,tbdata['ra'],tbdata['dec'])))
         elif(sample.survey == 'NGCproxy'):
             inds = np.where((tbdata['filter'] == band) & (tbdata['photometric'] == True) & (tbdata['blacklist_ok'] == True) & (map(InNGCproxyFootprint,tbdata['ra']))) 
+    elif(sample.DR == 'DR6'):
+        inds = np.where((tbdata['filter'] == band)) 
 
 
     #Read data 
@@ -410,6 +424,12 @@ def val3p4b_maghist_pred(sample,ndraw=1e5, nbin=100, vmin=21.0, vmax=25.0):
                  nmag = Magtonanomaggies(magext)/5. #total noise
                  nl.append(nmag)
 
+        if(sample.DR == 'DR6'): 
+             if f[i]['filter'] == sample.band :   
+
+                 magext = f[i]['galdepth'] - f[i]['decam_extinction'][be]
+                 nmag = Magtonanomaggies(magext)/5. #total noise
+                 nl.append(nmag)
 
     ng = len(nl)
     print "-----------"
@@ -544,6 +564,8 @@ def v5p1e_photometricReqPlot(sample):
             inds = np.where((tbdata['filter'] == band) & (tbdata['blacklist_ok'] == True) & (map(InDEShybFootprint,tbdata['ra'],tbdata['dec'])))
         elif(sample.survey == 'NGCproxy'):
             inds = np.where((tbdata['filter'] == band) & (tbdata['blacklist_ok'] == True) & (map(InNGCproxyFootprint,tbdata['ra']))) 
+    if(sample.DR == 'DR6'):    
+        inds = np.where((tbdata['filter'] == band)) 
 
 
     #Read data 
@@ -688,6 +710,8 @@ def v3p5_Areas(sample1,sample2):
             inds = np.where((tbdata['filter'] == band) & (tbdata['blacklist_ok'] == True) & (map(InDEShybFootprint,tbdata['ra'],tbdata['dec'])))
         elif(sample.survey == 'NGCproxy'):
             inds = np.where((tbdata['filter'] == band) & (tbdata['blacklist_ok'] == True) & (map(InNGCproxyFootprint,tbdata['ra']))) 
+    if(sample1.DR == 'DR6'):    
+        inds = np.where((tbdata['filter'] == sample1.band)) 
 
   
     #number of ccds at each point 
@@ -726,6 +750,8 @@ def v3p5_Areas(sample1,sample2):
         inds = np.where((tbdata['filter'] == sample2.band) & (tbdata['bitmask'] == 0)) 
     if(sample2.DR == 'DR5'):
         inds = np.where((tbdata['filter'] == sample2.band) & (tbdata['blacklist_ok'] == True)) 
+    if(sample2.DR == 'DR6'):    
+        inds = np.where((tbdata['filter'] == sample2.band)) 
 
     #number of ccds at each point 
     nccd2=np.ones(len(tbdata))
@@ -851,6 +877,8 @@ def val3p4c_seeing(sample,passmin=3,nbin=100,nside=1024):
         inds = np.where((tbdata['filter'] == band) & (tbdata['photometric'] == True) & (tbdata['bitmask'] == 0))
     elif(sample.DR == 'DR5'):
         inds = np.where((tbdata['filter'] == band) & (tbdata['photometric'] == True) & (tbdata['blacklist_ok'] == True))
+    elif(sample.DR == 'DR6'):
+        inds = np.where((tbdata['filter'] == band))
 
     #Read data 
     #obtain invnoisesq here, including extinction 
@@ -1053,6 +1081,8 @@ def val3p4c_seeingplots(sample,passmin=3,nbin=100,nside=1024):
             inds = np.where((tbdata['filter'] == band) & (tbdata['photometric'] == True) & (tbdata['blacklist_ok'] == True) & (map(InDEShybFootprint,tbdata['ra'],tbdata['dec'])))
         elif(sample.survey == 'NGCproxy'):
             inds = np.where((tbdata['filter'] == band) & (tbdata['photometric'] == True) & (tbdata['blacklist_ok'] == True) & (map(InNGCproxyFootprint,tbdata['ra']))) 
+    elif(sample.DR == 'DR6'):
+        inds = np.where((tbdata['filter'] == band))
 
 
     #Read data 
