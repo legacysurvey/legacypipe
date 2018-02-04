@@ -135,8 +135,12 @@ class mysample(object):
 
         elif(self.DR == 'DR6'):
             inputdir = '/global/cscratch1/sd/dstn/dr6plus/'
-            if (band == 'g' or band == 'r'):
+            if (band == 'g'):
                 self.ccds = inputdir+'ccds-annotated-90prime-g.fits.gz'
+                self.catalog = 'BASS_DR6'
+                if(self.survey != 'BASS'): raise RuntimeError("Survey name seems inconsistent")
+            if (band == 'r'):
+                self.ccds = inputdir+'ccds-annotated-90prime-r.fits.gz'
                 self.catalog = 'BASS_DR6'
                 if(self.survey != 'BASS'): raise RuntimeError("Survey name seems inconsistent")
             elif(band == 'z'):
@@ -278,8 +282,10 @@ def val3p4c_depthfromIvar(sample):
     # Should at least contain propertiesandoperations and the image corners.
     # MARCM - actually no need for ra dec image corners.   
     # Only needs ra0 ra1 ra2 ra3 dec0 dec1 dec2 dec3 only if fast track appropriate quicksip subroutines were implemented 
+    #propertiesToKeep = [ 'filter', 'FWHM','mjd_obs'] \
+    # 	+ ['RA', 'DEC', 'crval1', 'crval2', 'crpix1', 'crpix2', 'cd1_1', 'cd1_2', 'cd2_1', 'cd2_2','width','height']
     propertiesToKeep = [ 'filter', 'FWHM','mjd_obs'] \
-    	+ ['RA', 'DEC', 'crval1', 'crval2', 'crpix1', 'crpix2', 'cd1_1', 'cd1_2', 'cd2_1', 'cd2_2','width','height']
+    	+ ['RA', 'DEC', 'ra0','ra1','ra2','ra3','dec0','dec1','dec2','dec3']
     
     # Create big table with all relevant properties. 
 
@@ -288,7 +294,8 @@ def val3p4c_depthfromIvar(sample):
     # Read the table, create Healtree, project it into healpix maps, and write these maps.
     # Done with Quicksip library, note it has quite a few hardcoded values (use new version by MARCM for BASS and MzLS) 
     # project_and_write_maps_simp(mode, propertiesandoperations, tbdata, catalogue_name, outroot, sample_names, inds, nside)
-    project_and_write_maps(mode, propertiesandoperations, tbdata, catalogue_name, localdir, sample_names, inds, nside, ratiores, pixoffset, nsidesout)
+    #project_and_write_maps(mode, propertiesandoperations, tbdata, catalogue_name, localdir, sample_names, inds, nside, ratiores, pixoffset, nsidesout)
+    project_and_write_maps_simp(mode, propertiesandoperations, tbdata, catalogue_name, localdir, sample_names, inds, nside)
  
     # Read Haelpix maps from quicksip  
     prop='ivar'
