@@ -139,7 +139,7 @@ class mysample(object):
                 self.ccds = inputdir+'ccds-annotated-90prime-g.fits.gz'
                 self.catalog = 'BASS_DR6'
                 if(self.survey != 'BASS'): raise RuntimeError("Survey name seems inconsistent")
-            if (band == 'r'):
+            elif (band == 'r'):
                 self.ccds = inputdir+'ccds-annotated-90prime-r.fits.gz'
                 self.catalog = 'BASS_DR6'
                 if(self.survey != 'BASS'): raise RuntimeError("Survey name seems inconsistent")
@@ -273,9 +273,11 @@ def val3p4c_depthfromIvar(sample):
     nmag = Magtonanomaggies(tbdata['galdepth']-extc*tbdata['EBV'])/5.
     ivar= 1./nmag**2.
 
+    hits=np.ones(np.shape(ivar)) 
+
     # What properties do you want mapped?
     # Each each tuple has [(quantity to be projected, weighting scheme, operation),(etc..)] 
-    propertiesandoperations = [ ('ivar', '', 'total'), ]
+    propertiesandoperations = [ ('ivar', '', 'total'), ('hits','','total') ]
 
  
     # What properties to keep when reading the images? 
@@ -289,7 +291,7 @@ def val3p4c_depthfromIvar(sample):
     
     # Create big table with all relevant properties. 
 
-    tbdata = np.core.records.fromarrays([tbdata[prop] for prop in propertiesToKeep] + [ivar], names = propertiesToKeep + [ 'ivar'])
+    tbdata = np.core.records.fromarrays([tbdata[prop] for prop in propertiesToKeep] + [ivar] + [hits], names = propertiesToKeep + [ 'ivar', 'hits'])
     
     # Read the table, create Healtree, project it into healpix maps, and write these maps.
     # Done with Quicksip library, note it has quite a few hardcoded values (use new version by MARCM for BASS and MzLS) 
@@ -359,6 +361,36 @@ def val3p4c_depthfromIvar(sample):
     #plt.show()
     #cbar.set_label(r'5$\sigma$ galaxy depth', rotation=270,labelpad=1)
     #plt.xscale('log')
+
+
+    # Statistics depths
+
+    deptharr=np.array(myval)
+    p90=np.percentile(deptharr,10)
+    p95=np.percentile(deptharr,5)
+    p98=np.percentile(deptharr,2)
+    med=np.percentile(deptharr,50)
+    mean = sum(deptharr)/float(np.size(deptharr))  # 1M array, too long for precision
+    std = sqrt(sum(deptharr**2.)/float(len(deptharr))-mean**2.)
+
+   
+
+    ndrawn=np.size(deptharr)
+    print "Total pixels", np.size(deptharr), "probably too many for exact mean and std"
+    print "Mean = ", mean, "; Median = ", med ,"; Std = ", std
+    print "Results for 90% 95% and 98% are: ", p90, p95, p98
+
+    # Statistics pases
+    fname2=localdir+catalogue_name+'/nside'+nsideSTR+'_oversamp'+oversamp+'/'+\
+    catalogue_name+'_band_'+band+'_nside'+nsideSTR+'_oversamp'+oversamp+'_'+prop+'__'+op+'.fits.gz'
+    f = fitsio.read(fname2)
+    
+    hitsb=f['SIGNAL']
+    hist, bin_edges =np.histogram(hitsb,bins=[-0.5,0.5,1.5,2.5,3.5,4.5,5.5,6.5,7.5,8.5],density=True)
+    #hist, bin_edges =np.histogram(hitsb,density=True)
+    print "Percentage of hits for 0,1,2.. pases\n", 
+    #print bin_edges 
+    print hist
 
     return mapfile 
 
