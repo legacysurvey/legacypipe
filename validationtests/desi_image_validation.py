@@ -381,16 +381,20 @@ def val3p4c_depthfromIvar(sample):
     print "Results for 90% 95% and 98% are: ", p90, p95, p98
 
     # Statistics pases
+    prop = 'hits'
+    op = 'total'
     fname2=localdir+catalogue_name+'/nside'+nsideSTR+'_oversamp'+oversamp+'/'+\
     catalogue_name+'_band_'+band+'_nside'+nsideSTR+'_oversamp'+oversamp+'_'+prop+'__'+op+'.fits.gz'
     f = fitsio.read(fname2)
     
     hitsb=f['SIGNAL']
-    hist, bin_edges =np.histogram(hitsb,bins=[-0.5,0.5,1.5,2.5,3.5,4.5,5.5,6.5,7.5,8.5],density=True)
+    hist, bin_edges =np.histogram(hitsb,bins=[-0.5,0.5,1.5,2.5,3.5,4.5,5.5,6.5,7.5,8.5,100],density=True)
+    #print hitsb[1000:10015]
     #hist, bin_edges =np.histogram(hitsb,density=True)
-    print "Percentage of hits for 0,1,2.. pases\n", 
+    print "Percentage of hits for 0,1,2., to >7 pases\n", 
     #print bin_edges 
     print hist
+    #print 100*hist
 
     return mapfile 
 
