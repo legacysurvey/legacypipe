@@ -1055,8 +1055,7 @@ def _median_smooth_detmap(X):
     smoo = median_filter(binned, (50,50))
     return smoo
 
-def stage_srcs(coimgs=None, cons=None,
-               targetrd=None, pixscale=None, targetwcs=None,
+def stage_srcs(targetrd=None, pixscale=None, targetwcs=None,
                W=None,H=None,
                bands=None, ps=None, tims=None,
                plots=False, plots2=False,
@@ -1068,10 +1067,9 @@ def stage_srcs(coimgs=None, cons=None,
     '''
     In this stage we run SED-matched detection to find objects in the
     images.  For each object detected, a `tractor` source object is
-    created: a `tractor.PointSource`, `tractor.ExpGalaxy`,
-    `tractor.DevGalaxy`, or `tractor.FixedCompositeGalaxy` object.  In
-    this stage, the sources are also split into "blobs" of overlapping
-    pixels.  Each of these blobs will be processed independently.
+    created, initially a `tractor.PointSource`.  In this stage, the
+    sources are also split into "blobs" of overlapping pixels.  Each
+    of these blobs will be processed independently.
     '''
     from legacypipe.detection import (detection_maps, sed_matched_filters,
                         run_sed_matched_filters, segment_and_group_sources)

@@ -20,8 +20,6 @@ from legacypipe.runbrick import rgbkwargs, rgbkwargs_resid
 from legacypipe.coadds import quick_coadds
 from legacypipe.runbrick_plots import _plot_mods
 
-DECALS_PROPID = '2014B-0404'
-
 def one_blob(X):
     '''
     Fits sources contained within a "blob" of pixels.
@@ -149,8 +147,8 @@ class OneBlob(object):
         if self.plots:
             self._plots(tr, 'Initial models')
 
-        # Optimize individual sources, in order of flux
-        # choose the ordering...
+        # Optimize individual sources, in order of flux.
+        # First, choose the ordering...
         Ibright = _argsort_by_brightness(cat, self.bands)
 
         if len(cat) > 1:
@@ -239,7 +237,6 @@ class OneBlob(object):
         #     #print('Simultaneous fit took:', Time()-tfit)
 
         # Compute variances on all parameters for the kept model
-        #B.srcinvvars = [[] for i in range(len(B))]
         B.srcinvvars = [None for i in range(len(B))]
         cat.thawAllRecursive()
         cat.freezeAllParams()
@@ -264,7 +261,7 @@ class OneBlob(object):
         # Check for sources with zero inverse-variance -- I think these
         # can be generated during the "Simultaneous re-opt" stage above --
         # sources can get scattered outside the blob.
-        # Arbitrarily look at the first element (RA)
+        # Arbitrarily look at the first element (RA) for this cut.
         I = np.flatnonzero(np.array([iv[0] for iv in B.srcinvvars]))
         if len(I) < len(B):
             print('Keeping', len(I), 'of', len(B),'sources with non-zero ivar')
@@ -278,8 +275,8 @@ class OneBlob(object):
         print('Blob', self.name, 'finished:', Time()-tlast)
         
     def run_model_selection(self, cat, Ibright, B):
-
-        # We repeat the "compute & subtract initial models" logic from above.
+        # We compute & subtract initial models for the other sources while
+        # fitting each source:
         # -Remember the original images
         # -Compute initial models for each source (in each tim)
         # -Subtract initial models from images
@@ -1697,13 +1694,6 @@ def _clip_model_to_blob(mod, sh, ie):
     assert(mod.y0 + mh <= ph)
 
     return mod
-
-FLAG_CPU_A   = 1
-FLAG_STEPS_A = 2
-FLAG_CPU_B   = 4
-FLAG_STEPS_B = 8
-FLAG_TRIED_C = 0x10
-FLAG_CPU_C   = 0x20
 
 def _select_model(chisqs, nparams, galaxy_margin, rex):
     '''
