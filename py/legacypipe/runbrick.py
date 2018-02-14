@@ -1129,12 +1129,12 @@ def stage_srcs(targetrd=None, pixscale=None, targetwcs=None,
     avoid_x, avoid_y = [],[]
     
     # Add Gaia stars
-    if gaia_stars: # is not None:
-        #gaia = gaia_stars
+    if gaia_stars:
         from legacyanalysis.gaiacat import GaiaCatalog
         
         g = GaiaCatalog()
         gaia = g.get_catalog_in_wcs(targetwcs)
+        ## FIXME -- cut on excess astrometric error?
         print('Got Gaia stars:', gaia)
         gaia.about()
 
@@ -1155,16 +1155,12 @@ def stage_srcs(targetrd=None, pixscale=None, targetwcs=None,
         avoid_y.extend(gaia.iby)
         # Create catalog entries...
         for g in gaia:
-            ## FIXME -- what kind of Source should Gaia stars be?
-            ## Nailed-down MovingPointSource?  Can we just use
-            ## freezing of params, or special handling?
-            ## oneblob.py does a fair bit of manipulating the freeze state,
-            ## rather indiscriminately.  We also want to fix these sources
-            ## as Point Sources, rather than allowing them to change types,
-            ## so let's make them a special type.
             gaiacat.append(GaiaSource.from_catalog(g, bands))
     else:
         Tgaia = fits_table()
+
+    # FIXME -- we still need to handle sources that appear in both
+    # Gaia and Tycho-2.
 
     # Saturated blobs -- create a source for each, except for those
     # that already have a Tycho-2 (or Gaia) star
@@ -1279,7 +1275,7 @@ def stage_srcs(targetrd=None, pixscale=None, targetwcs=None,
         ax = plt.axis()
         plt.plot(Tsat.ibx, Tsat.iby, '+', color='r',
                  label='Tycho2 + saturated', **crossa)
-        if gaia_stars is not None:
+        if len(Tgaia):
             plt.plot(Tgaia.ibx, Tgaia.iby, '+', color=(0,1,1),
                      label='Gaia', **crossa)
         plt.plot(Tnew.ibx, Tnew.iby, '+', color=(0,1,0),

@@ -12,8 +12,7 @@ from astrometry.util.starutil_numpy import degrees_between
 
 from tractor.ellipses import EllipseESoft, EllipseE
 from tractor.galaxy import ExpGalaxy
-from tractor import PointSource, RaDecPos, NanoMaggies
-#from tractor.motion import MovingPointSource, PMRaDec, Parallax
+from tractor import PointSource, RaDecPos, NanoMaggies, ParamList
 
 from legacypipe.utils import EllipseWithPriors
 
@@ -39,7 +38,6 @@ if 'Mock' in str(type(EllipseWithPriors)):
 # already handle Tycho-2 stars specially, for the remaining Gaia stars
 # we just nail down the positions.
 
-from tractor import ParamList
 class GaiaPosition(ParamList):
     def __init__(self, ra, dec):
         self.ra = ra
@@ -57,10 +55,9 @@ class GaiaPosition(ParamList):
         return '%s: RA, Dec = (%.5f, %.5f)' % (self.getName(),
                                                self.ra, self.dec)
 
-class GaiaSource(PointSource): #MovingPointSource): # ??
+class GaiaSource(PointSource):
     def __init__(self, pos, bright):
         super(GaiaSource, self).__init__(pos, bright)
-        self.pos = pos
 
     @staticmethod
     def getName():
@@ -69,15 +66,8 @@ class GaiaSource(PointSource): #MovingPointSource): # ??
     def getSourceType(self):
         return 'GaiaSource'
     
-    # @staticmethod
-    # def getNamedParams():
-    #     ### Hide the "pos" (and "pm", and "parallax" params)
-    #     return dict(brightness=1)
-
     @classmethod
     def from_catalog(cls, g, bands):
-        #pos = GaiaPosition.from_catalog(g)
-        #pos = RaDecPos(g.ra, g.dec)
         pos = GaiaPosition(g.ra, g.dec)
         #print('Gaia G mags:', g.phot_g_mean_mag)
         # Assume color 0 from Gaia G mag as initial flux
@@ -87,11 +77,12 @@ class GaiaSource(PointSource): #MovingPointSource): # ??
         bright = NanoMaggies(order=bands, **fluxes)
         src = cls(pos, bright)
         print('Created:', src)
-        print('Params:', src.getParams())
-        src.printThawedParams()
-        print('N params:', src.numberOfParams())
-        print('named params:', src.namedparams)
-        print('param names:', src.paramnames)
+        # print('Params:', src.getParams())
+        # src.printThawedParams()
+        # print('N params:', src.numberOfParams())
+        # print('named params:', src.namedparams)
+        # print('param names:', src.paramnames)
+
         # stash these for later...
         # Gaia DR1 ra_error, dec_error are in milli-arcsec.
         # Convert to invvar-degrees
@@ -100,15 +91,8 @@ class GaiaSource(PointSource): #MovingPointSource): # ??
         print('RA,Dec errors (mas):', g.ra_error, g.dec_error)
         src.ra_ivar  = 1. / (g.ra_error  / 1000. / 3600.)**2
         src.dec_ivar = 1. / (g.dec_error / 1000. / 3600.)**2
-
         return src
 
-    # def isParamFrozen(self, pname):
-    #     if pname == 'pos':
-    #         return True
-    #     return super(GaiaSource, self).isParamFrozen(pname)
-
-    
 class LegacyEllipseWithPriors(EllipseWithPriors):
     # Prior on (softened) ellipticity: Gaussian with this standard deviation
     ellipticityStd = 0.25
