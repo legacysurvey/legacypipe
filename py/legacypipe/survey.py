@@ -12,6 +12,9 @@ from astrometry.util.starutil_numpy import degrees_between
 
 from tractor.ellipses import EllipseESoft, EllipseE
 from tractor.galaxy import ExpGalaxy
+from tractor import PointSource, RaDecPos, NanoMaggies
+#from tractor.motion import MovingPointSource, PMRaDec, Parallax
+
 from legacypipe.utils import EllipseWithPriors
 
 release_number = 6000
@@ -31,6 +34,81 @@ if 'Mock' in str(type(EllipseWithPriors)):
         pass
     EllipseWithPriors = duck
 
+# In Gaia DR1, only the Tycho-2 stars have proper motions and
+# parallaxes.  Since these are all saturated in our imaging, and we
+# already handle Tycho-2 stars specially, for the remaining Gaia stars
+# we just nail down the positions.
+
+from tractor import ParamList
+class GaiaPosition(ParamList):
+    def __init__(self, ra, dec):
+        self.ra = ra
+        self.dec = dec
+        super(GaiaPosition, self).__init__()
+
+    def copy(self):
+        return GaiaPosition(self.ra, self.dec)
+        
+    @staticmethod
+    def getName():
+        return 'GaiaPosition'
+
+    def __str__(self):
+        return '%s: RA, Dec = (%.5f, %.5f)' % (self.getName(),
+                                               self.ra, self.dec)
+
+class GaiaSource(PointSource): #MovingPointSource): # ??
+    def __init__(self, pos, bright):
+        super(GaiaSource, self).__init__(pos, bright)
+        self.pos = pos
+
+    @staticmethod
+    def getName():
+        return 'GaiaSource'
+
+    def getSourceType(self):
+        return 'GaiaSource'
+    
+    # @staticmethod
+    # def getNamedParams():
+    #     ### Hide the "pos" (and "pm", and "parallax" params)
+    #     return dict(brightness=1)
+
+    @classmethod
+    def from_catalog(cls, g, bands):
+        #pos = GaiaPosition.from_catalog(g)
+        #pos = RaDecPos(g.ra, g.dec)
+        pos = GaiaPosition(g.ra, g.dec)
+        #print('Gaia G mags:', g.phot_g_mean_mag)
+        # Assume color 0 from Gaia G mag as initial flux
+        m = g.phot_g_mean_mag
+        fluxes = dict([(band, NanoMaggies.magToNanomaggies(m))
+                       for band in bands])
+        bright = NanoMaggies(order=bands, **fluxes)
+        src = cls(pos, bright)
+        print('Created:', src)
+        print('Params:', src.getParams())
+        src.printThawedParams()
+        print('N params:', src.numberOfParams())
+        print('named params:', src.namedparams)
+        print('param names:', src.paramnames)
+        # stash these for later...
+        # Gaia DR1 ra_error, dec_error are in milli-arcsec.
+        # Convert to invvar-degrees
+        ## FIXME -- cos(Dec) terms?
+        ## FIXME -- what units are the chunk files errors in?
+        print('RA,Dec errors (mas):', g.ra_error, g.dec_error)
+        src.ra_ivar  = 1. / (g.ra_error  / 1000. / 3600.)**2
+        src.dec_ivar = 1. / (g.dec_error / 1000. / 3600.)**2
+
+        return src
+
+    # def isParamFrozen(self, pname):
+    #     if pname == 'pos':
+    #         return True
+    #     return super(GaiaSource, self).isParamFrozen(pname)
+
+    
 class LegacyEllipseWithPriors(EllipseWithPriors):
     # Prior on (softened) ellipticity: Gaussian with this standard deviation
     ellipticityStd = 0.25

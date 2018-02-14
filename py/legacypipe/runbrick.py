@@ -44,7 +44,7 @@ from tractor.galaxy import (DevGalaxy, ExpGalaxy, FixedCompositeGalaxy,
                             FracDev, disable_galaxy_cache)
 
 from legacypipe.survey import (
-    get_rgb, imsave_jpeg, LegacySurveyData)
+    get_rgb, imsave_jpeg, LegacySurveyData, GaiaSource)
 from legacypipe.image import CP_DQ_BITS
 from legacypipe.utils import (
     RunbrickError, NothingToDoError, iterwrapper, find_unique_pixels)
@@ -1062,6 +1062,7 @@ def stage_srcs(targetrd=None, pixscale=None, targetwcs=None,
                brickname=None,
                mp=None, nsigma=None,
                survey=None, brick=None,
+               gaia_stars=True,
                record_event=None,
                **kwargs):
     '''
@@ -1123,15 +1124,62 @@ def stage_srcs(targetrd=None, pixscale=None, targetwcs=None,
     tycho.iby = np.clip(tycho.iby, 0, H-1)
     del ok,xx,yy
 
+    # existing sources that should be avoided when detecting new
+    # sources.
+    avoid_x, avoid_y = [],[]
+    
+    # Add Gaia stars
+    if gaia_stars: # is not None:
+        #gaia = gaia_stars
+        from legacyanalysis.gaiacat import GaiaCatalog
+        
+        g = GaiaCatalog()
+        gaia = g.get_catalog_in_wcs(targetwcs)
+        print('Got Gaia stars:', gaia)
+        gaia.about()
+
+        ok,xx,yy = targetwcs.radec2pixelxy(gaia.ra, gaia.dec)
+        gaia.ibx = np.round(xx-1.).astype(int)
+        gaia.iby = np.round(yy-1.).astype(int)
+        margin = 10
+        gaia.cut(ok * (gaia.ibx > -margin) * (gaia.ibx < W+margin) *
+                  (gaia.iby > -margin) * (gaia.iby < H+margin))
+        print('Cut to', len(gaia), 'Gaia stars within brick')
+        del ok,xx,yy
+
+        # Save for later...
+        Tgaia = gaia
+        gaiacat = []
+        
+        avoid_x.extend(gaia.ibx)
+        avoid_y.extend(gaia.iby)
+        # Create catalog entries...
+        for g in gaia:
+            ## FIXME -- what kind of Source should Gaia stars be?
+            ## Nailed-down MovingPointSource?  Can we just use
+            ## freezing of params, or special handling?
+            ## oneblob.py does a fair bit of manipulating the freeze state,
+            ## rather indiscriminately.  We also want to fix these sources
+            ## as Point Sources, rather than allowing them to change types,
+            ## so let's make them a special type.
+            gaiacat.append(GaiaSource.from_catalog(g, bands))
+    else:
+        Tgaia = fits_table()
+
     # Saturated blobs -- create a source for each, except for those
-    # that already have a Tycho-2 star
+    # that already have a Tycho-2 (or Gaia) star
     satblobs,nsat = label(satmap > 0)
-    if len(tycho):
+    if len(tycho) > 0 or len(Tgaia) > 0:
         # Build a map from old "satblobs" to new; identity to start
         remap = np.arange(nsat+1)
-        # Drop blobs that contain a Tycho-2 star
-        zeroout = satblobs[tycho.iby, tycho.ibx]
-        remap[zeroout] = 0
+        if len(tycho):
+            # Drop blobs that contain a Tycho-2 star
+            zeroout = satblobs[tycho.iby, tycho.ibx]
+            remap[zeroout] = 0
+        if len(Tgaia):
+            # Drop blobs that contain a Gaia star
+            zeroout = satblobs[Tgaia.iby, Tgaia.ibx]
+            remap[zeroout] = 0
         # Renumber them to be contiguous
         I = np.flatnonzero(remap)
         nsat = len(I)
@@ -1155,10 +1203,6 @@ def stage_srcs(targetrd=None, pixscale=None, targetwcs=None,
         Tsat = merge_tables([tycho, Tsat], columns='fillzero')
     del satyx
         
-    # existing sources that should be avoided when detecting new
-    # sources.
-    avoid_x, avoid_y = [],[]
-
     satcat = []
     if len(Tsat):
         avoid_x.extend(Tsat.ibx)
@@ -1209,9 +1253,13 @@ def stage_srcs(targetrd=None, pixscale=None, targetwcs=None,
     del detmaps
     del detivs
 
-    # Merge newly detected sources with existing saturated source list
-    T = merge_tables([Tsat, Tnew], columns='fillzero')
-    cat = Catalog(*(satcat + newcat))
+    # Merge newly detected sources with existing (Tycho2 + Gaia) source lists
+    if gaia_stars is not None:
+        T = merge_tables([Tsat, Tgaia, Tnew], columns='fillzero')
+        cat = Catalog(*(satcat + gaiacat + newcat))
+    else:
+        T = merge_tables([Tsat, Tnew], columns='fillzero')
+        cat = Catalog(*(satcat + newcat))
     cat.freezeAllParams()
 
     assert(len(T) > 0)
@@ -1222,25 +1270,24 @@ def stage_srcs(targetrd=None, pixscale=None, targetwcs=None,
     tlast = tnow
 
     if plots:
-        if coimgs is None:
-            coimgs,cons = quick_coadds(tims, bands, targetwcs)
+        coimgs,cons = quick_coadds(tims, bands, targetwcs)
         crossa = dict(ms=10, mew=1.5)
         plt.clf()
         dimshow(get_rgb(coimgs, bands))
-        plt.title('Catalog + SED-matched detections')
+        plt.title('Detections')
         ps.savefig()
         ax = plt.axis()
-        p1 = plt.plot(T.ibx, T.iby, 'r+', **crossa)
-        p2 = plt.plot(Tnew.ibx, Tnew.iby, '+', color=(0,1,0), **crossa)
+        plt.plot(Tsat.ibx, Tsat.iby, '+', color='r',
+                 label='Tycho2 + saturated', **crossa)
+        if gaia_stars is not None:
+            plt.plot(Tgaia.ibx, Tgaia.iby, '+', color=(0,1,1),
+                     label='Gaia', **crossa)
+        plt.plot(Tnew.ibx, Tnew.iby, '+', color=(0,1,0),
+                 label='New SED-matched detections', **crossa)
         plt.axis(ax)
-        plt.title('Catalog + SED-matched detections')
-        plt.figlegend((p1[0], p2[0]), ('SDSS', 'New'), 'upper left')
+        plt.title('Detections')
+        plt.legend(loc='upper left')
         ps.savefig()
-        # for x,y in zip(peakx,peaky):
-        #     plt.text(x+5, y, '%.1f' % (hot[np.clip(int(y),0,H-1),
-        #                                  np.clip(int(x),0,W-1)]), color='r',
-        #              ha='left', va='center')
-        # ps.savefig()
 
     # Segment, and record which sources fall into each blob
     blobs,blobsrcs,blobslices = segment_and_group_sources(
@@ -2337,6 +2384,9 @@ def stage_writecat(
     for k in ['ibx','iby']:
         TT.delete_column(k)
 
+    print('Catalog table contents:')
+    TT.about()
+
     assert(AP is not None)
     # How many apertures?
     ap = AP.get('apflux_img_%s' % bands[0])
@@ -2351,6 +2401,12 @@ def stage_writecat(
 
     hdr = fs = None
     T2,hdr = prepare_fits_catalog(cat, invvars, TT, hdr, bands, fs)
+
+    # For GaiaSources, plug in Gaia's RA,Dec errors.
+    for i,src in enumerate(cat):
+        if isinstance(src, GaiaSource):
+            T2.ra_ivar[i] = src.ra_ivar
+            T2.dec_ivar[i] = src.dec_ivar
 
     primhdr = fitsio.FITSHDR()
     for r in version_header.records():

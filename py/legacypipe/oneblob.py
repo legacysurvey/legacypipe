@@ -13,9 +13,8 @@ from tractor import Tractor, PointSource, Image, NanoMaggies, Catalog, Patch
 from tractor.galaxy import DevGalaxy, ExpGalaxy, FixedCompositeGalaxy, SoftenedFracDev, FracDev, disable_galaxy_cache, enable_galaxy_cache
 from tractor.patch import ModelMask
 
-from legacypipe.survey import (SimpleGalaxy, LegacyEllipseWithPriors, 
-                               RexGalaxy,
-                               get_rgb)
+from legacypipe.survey import (SimpleGalaxy, RexGalaxy, GaiaSource,
+                               LegacyEllipseWithPriors, get_rgb)
 from legacypipe.runbrick import rgbkwargs, rgbkwargs_resid
 from legacypipe.coadds import quick_coadds
 from legacypipe.runbrick_plots import _plot_mods
@@ -250,6 +249,10 @@ class OneBlob(object):
             nsrcparams = src.numberOfParams()
             _convert_ellipses(src)
             assert(src.numberOfParams() == nsrcparams)
+            # For Gaia sources, temporarily convert the GaiaPosition to a
+            # RaDecPos in order to compute the invvar it would have in our
+            # imaging?  Or just plug in the Gaia-measured uncertainties??
+            # (going to implement the latter)
             # Compute inverse-variances
             allderivs = tr.getDerivs()
             ivars = _compute_invvars(allderivs)
@@ -306,6 +309,9 @@ class OneBlob(object):
             src = cat[srci]
             print('Model selection for source %i of %i in blob %s' %
                   (numi+1, len(Ibright), self.name))
+            if isinstance(src, GaiaSource):
+                print('Gaia source', src, '-- not doing model selection.')
+                continue
             cpu0 = time.clock()
     
             # Add this source's initial model back in.
