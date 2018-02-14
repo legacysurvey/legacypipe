@@ -23,8 +23,6 @@ from catalog import read_fits_catalog
 
 import photutils
 
-# python projects/desi/forced-photom-decam.py decals/images/decam/CP20140810_g_v2/c4d_140816_032035_ooi_g_v2.fits.fz 43 DR1 f.fits
-
 def get_parser():
     '''
     Returns the option parser for forced photometry of DECam images
@@ -56,7 +54,7 @@ def get_parser():
                         help='Set inverse-variance to a constant across the image?')
 
     parser.add_argument('--no-hybrid-psf', dest='hybrid_psf', action='store_false',
-                        help='Do nto use hybrid pixelized-MoG PSF model?')
+                        help='Do not use hybrid pixelized-MoG PSF model?')
     
     parser.add_argument('--save-model',
                         help='Compute and save model image?')
@@ -128,7 +126,9 @@ def main(survey=None, opt=None):
         catsurvey = LegacySurveyData(survey_dir = opt.catalog_dir)
 
     if opt.filename is not None and opt.hdu >= 0:
+        # FIXME -- try looking up in CCDs file?
         # Read metadata from file
+        print('Warning: faking metadata from file contents')
         T = exposure_metadata([opt.filename], hdus=[opt.hdu])
         print('Metadata:')
         T.about()
