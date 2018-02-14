@@ -1,6 +1,6 @@
 '''
-This script performs forced photometry of individual DECam images
-given a DECaLS catalog.
+This script performs forced photometry of individual Legacy Survey
+images given a data release catalog.
 '''
 
 from __future__ import print_function
@@ -25,7 +25,7 @@ import photutils
 
 def get_parser():
     '''
-    Returns the option parser for forced photometry of DECam images
+    Returns the option parser for forced photometry of Legacy Survey images
     '''
     import argparse
     parser = argparse.ArgumentParser(description=__doc__)
@@ -63,15 +63,16 @@ def get_parser():
 
     parser.add_argument('--camera', help='Cut to only CCD with given camera name?')
     
-    parser.add_argument('filename',help='Filename OR exposure number.')
-    parser.add_argument('hdu',help='decam-HDU OR CCD name.')
-    parser.add_argument('catfn',help='catalog filename OR "DR1/DR2/DR3".')
-    parser.add_argument('outfn',help='Output catalog filename.')
+    parser.add_argument('filename', help='Filename OR exposure number.')
+    parser.add_argument('hdu', help='Image HDU OR CCD name.')
+    parser.add_argument('catfn', help='Catalog filename OR "DR".')
+    parser.add_argument('outfn', help='Output catalog filename.')
 
     return parser
     
 def main(survey=None, opt=None):
-    '''Driver function for forced photometry of individual DECam images.
+    '''Driver function for forced photometry of individual Legacy
+    Survey images.
     '''
     if opt is None:
         parser = get_parser()
