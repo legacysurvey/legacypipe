@@ -398,6 +398,194 @@ def val3p4c_depthfromIvar(sample):
 
     return mapfile 
 
+
+def val3p4c_depthfromIvar3plus(sample):    
+    """
+       Requirement V3.4
+       90% filled to g=24, r=23.4 and z=22.5 and 95% and 98% at 0.3/0.6 mag shallower.
+
+       Produces extinction correction magnitude maps for visual inspection
+
+       MARCM stable version, improved from AJR quick hack 
+       This now included extinction from the exposures
+       Uses quicksip subroutines from Boris, corrected 
+       for a bug I found for BASS and MzLS ccd orientation
+    """
+    nside = 1024       # Resolution of output maps
+    nsideSTR='1024'    # same as nside but in string format
+    nsidesout = None   # if you want full sky degraded maps to be written
+    ratiores = 1       # Superresolution/oversampling ratio, simp mode doesn't allow anything other than 1
+    mode = 1           # 1: fully sequential, 2: parallel then sequential, 3: fully parallel
+    pixoffset = 0      # How many pixels are being removed on the edge of each CCD? 15 for DES.
+    oversamp='1'       # ratiores in string format
+    
+    band = sample.band
+    catalogue_name = sample.catalog
+    fname = sample.ccds    
+    localdir = sample.localdir
+    extc = sample.extc
+
+    #Read ccd file 
+    tbdata = pyfits.open(fname)[1].data
+    
+    # ------------------------------------------------------
+    # Obtain indices
+    auxstr='band_'+band
+    sample_names = [auxstr]
+    if(sample.DR == 'DR3'):
+        inds = np.where((tbdata['filter'] == band) & (tbdata['photometric'] == True) & (tbdata['blacklist_ok'] == True)) 
+    elif(sample.DR == 'DR4'):
+        inds = np.where((tbdata['filter'] == band) & (tbdata['photometric'] == True) & (tbdata['bitmask'] == 0)) 
+    elif(sample.DR == 'DR5'):
+        if(sample.survey == 'DECaLS'):
+            inds = np.where((tbdata['filter'] == band) & (tbdata['photometric'] == True) & (tbdata['blacklist_ok'] == True)) 
+        elif(sample.survey == 'DEShyb'):
+            inds = np.where((tbdata['filter'] == band) & (tbdata['photometric'] == True) & (tbdata['blacklist_ok'] == True) & (map(InDEShybFootprint,tbdata['ra'],tbdata['dec'])))
+        elif(sample.survey == 'NGCproxy'):
+            inds = np.where((tbdata['filter'] == band) & (tbdata['photometric'] == True) & (tbdata['blacklist_ok'] == True) & (map(InNGCproxyFootprint,tbdata['ra']))) 
+    elif(sample.DR == 'DR6'):
+        inds = np.where((tbdata['filter'] == band)) 
+
+
+    #Read data 
+    #obtain invnoisesq here, including extinction 
+    nmag = Magtonanomaggies(tbdata['galdepth']-extc*tbdata['EBV'])/5.
+    ivar= 1./nmag**2.
+
+    hits=np.ones(np.shape(ivar)) 
+
+    # What properties do you want mapped?
+    # Each each tuple has [(quantity to be projected, weighting scheme, operation),(etc..)] 
+    propertiesandoperations = [ ('ivar', '', 'total'), ('hits','','total') ]
+
+ 
+    # What properties to keep when reading the images? 
+    # Should at least contain propertiesandoperations and the image corners.
+    # MARCM - actually no need for ra dec image corners.   
+    # Only needs ra0 ra1 ra2 ra3 dec0 dec1 dec2 dec3 only if fast track appropriate quicksip subroutines were implemented 
+    #propertiesToKeep = [ 'filter', 'FWHM','mjd_obs'] \
+    # 	+ ['RA', 'DEC', 'crval1', 'crval2', 'crpix1', 'crpix2', 'cd1_1', 'cd1_2', 'cd2_1', 'cd2_2','width','height']
+    propertiesToKeep = [ 'filter', 'FWHM','mjd_obs'] \
+    	+ ['RA', 'DEC', 'ra0','ra1','ra2','ra3','dec0','dec1','dec2','dec3']
+    
+    # Create big table with all relevant properties. 
+
+    tbdata = np.core.records.fromarrays([tbdata[prop] for prop in propertiesToKeep] + [ivar] + [hits], names = propertiesToKeep + [ 'ivar', 'hits'])
+    
+    # Read the table, create Healtree, project it into healpix maps, and write these maps.
+    # Done with Quicksip library, note it has quite a few hardcoded values (use new version by MARCM for BASS and MzLS) 
+    # project_and_write_maps_simp(mode, propertiesandoperations, tbdata, catalogue_name, outroot, sample_names, inds, nside)
+    #project_and_write_maps(mode, propertiesandoperations, tbdata, catalogue_name, localdir, sample_names, inds, nside, ratiores, pixoffset, nsidesout)
+    project_and_write_maps_simp(mode, propertiesandoperations, tbdata, catalogue_name, localdir, sample_names, inds, nside)
+ 
+    # Read Haelpix maps from quicksip  
+    prop='ivar'
+    op='total'
+    vmin=21.0
+    vmax=24.0
+
+    fname2=localdir+catalogue_name+'/nside'+nsideSTR+'_oversamp'+oversamp+'/'+\
+    catalogue_name+'_band_'+band+'_nside'+nsideSTR+'_oversamp'+oversamp+'_'+prop+'__'+op+'.fits.gz'
+    f = fitsio.read(fname2)
+
+    # HEALPIX DEPTH MAPS 
+    # convert ivar to depth 
+    import healpy as hp
+    from healpix import pix2ang_ring,thphi2radec
+
+    ral = []
+    decl = []
+    val = f['SIGNAL']
+    pix = f['PIXEL']
+
+    #get hits
+    prop = 'hits'
+    op = 'total'
+    fname2=localdir+catalogue_name+'/nside'+nsideSTR+'_oversamp'+oversamp+'/'+\
+    catalogue_name+'_band_'+band+'_nside'+nsideSTR+'_oversamp'+oversamp+'_'+prop+'__'+op+'.fits.gz'
+    f = fitsio.read(fname2)
+    hitsb=f['SIGNAL']
+ 
+    # Obtain values to plot 
+    #if (prop == 'ivar'):
+    myval = []
+    mylabel='depth' 
+            
+    below=0 
+    for i in range(0,len(val)):
+       depth=nanomaggiesToMag(sqrt(1./val[i]) * 5.)
+       npases=hitsb[i]
+       if(npases > 2 ):
+           myval.append(depth)
+           th,phi = hp.pix2ang(int(nside),pix[i])
+           ra,dec = thphi2radec(th,phi)
+           ral.append(ra)
+           decl.append(dec)
+           if(depth < vmin):
+              below=below+1
+
+    npix=len(myval)
+
+    print 'Area is ', npix/(float(nside)**2.*12)*360*360./pi, ' sq. deg.'
+    print  below, 'of ', npix, ' pixels are not plotted as their ', mylabel,' < ', vmin
+    print 'Within the plot, min ', mylabel, '= ', min(myval), ' and max ', mylabel, ' = ', max(myval)
+
+
+    # Plot depth 
+    from matplotlib import pyplot as plt
+    import matplotlib.cm as cm
+
+    mapa = plt.scatter(ral,decl,c=myval, cmap=cm.rainbow,s=2., vmin=vmin, vmax=vmax, lw=0,edgecolors='none')
+    cbar = plt.colorbar(mapa)
+    plt.xlabel('r.a. (degrees)')
+    plt.ylabel('declination (degrees)')
+    plt.title('Map of '+ mylabel +' for '+catalogue_name+' '+band+'-band \n with 3 or more exposures')
+    plt.xlim(0,360)
+    plt.ylim(-30,90)
+    mapfile=localdir+mylabel+'_'+band+'_'+catalogue_name+str(nside)+'.png'
+    print 'saving plot to ', mapfile
+    plt.savefig(mapfile)
+    plt.close()
+    #plt.show()
+    #cbar.set_label(r'5$\sigma$ galaxy depth', rotation=270,labelpad=1)
+    #plt.xscale('log')
+
+
+    # Statistics depths
+
+    deptharr=np.array(myval)
+    p90=np.percentile(deptharr,10)
+    p95=np.percentile(deptharr,5)
+    p98=np.percentile(deptharr,2)
+    med=np.percentile(deptharr,50)
+    mean = sum(deptharr)/float(np.size(deptharr))  # 1M array, too long for precision
+    std = sqrt(sum(deptharr**2.)/float(len(deptharr))-mean**2.)
+
+   
+
+    ndrawn=np.size(deptharr)
+    print "Total pixels", np.size(deptharr), "probably too many for exact mean and std"
+    print "Mean = ", mean, "; Median = ", med ,"; Std = ", std
+    print "Results for 90% 95% and 98% are: ", p90, p95, p98
+
+    # Statistics pases
+    #prop = 'hits'
+    #op = 'total'
+    #fname2=localdir+catalogue_name+'/nside'+nsideSTR+'_oversamp'+oversamp+'/'+\
+    #catalogue_name+'_band_'+band+'_nside'+nsideSTR+'_oversamp'+oversamp+'_'+prop+'__'+op+'.fits.gz'
+    #f = fitsio.read(fname2)
+    
+    #hitsb=f['SIGNAL']
+    hist, bin_edges =np.histogram(hitsb,bins=[-0.5,0.5,1.5,2.5,3.5,4.5,5.5,6.5,7.5,8.5,100],density=True)
+    #print hitsb[1000:10015]
+    #hist, bin_edges =np.histogram(hitsb,density=True)
+    print "Percentage of hits for 0,1,2., to >7 pases\n", 
+    #print bin_edges 
+    print hist
+    #print 100*hist
+
+    return mapfile 
+
 def val3p4b_maghist_pred(sample,ndraw=1e5, nbin=100, vmin=21.0, vmax=25.0):    
     """
        Requirement V3.4
