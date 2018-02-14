@@ -1,7 +1,7 @@
 from __future__ import print_function
 import matplotlib
 matplotlib.use('Agg')
-#matplotlib.rc('text', usetex=True)
+matplotlib.rc('text', usetex=True)
 matplotlib.rc('font', family='serif')
 import pylab as plt
 import numpy as np
@@ -64,24 +64,190 @@ def main():
 
     T.typex = np.array([t[0] for t in T.type])
 
-    I = np.flatnonzero((T.flux_ivar_g > 0) * (T.flux_ivar_r > 0) * (T.flux_ivar_z > 0))
-    print(len(I), 'with g,r,z fluxes')
-    I = np.flatnonzero((T.flux_ivar_g > 0) * (T.flux_ivar_r > 0) * (T.flux_ivar_z > 0) *
-                       (T.flux_g > 0) * (T.flux_r > 0) * (T.flux_z > 0))
-    print(len(I), 'with positive g,r,z fluxes')
-    I = np.flatnonzero((T.flux_ivar_g > 0) * (T.flux_ivar_r > 0) * (T.flux_ivar_z > 0) *
-                       (T.flux_g > 0) * (T.flux_r > 0) * (T.flux_z > 0) *
-                       (T.magerr_g < 0.2) * (T.magerr_r < 0.2) * (T.magerr_z < 0.2))
-    print(len(I), 'with < 0.2-mag errs')
-    I = np.flatnonzero((T.flux_ivar_g > 0) * (T.flux_ivar_r > 0) * (T.flux_ivar_z > 0) *
-                       (T.flux_g > 0) * (T.flux_r > 0) * (T.flux_z > 0) *
-                       (T.magerr_g < 0.1) * (T.magerr_r < 0.1) * (T.magerr_z < 0.1))
-    print(len(I), 'with < 0.1-mag errs')
 
-    I2 = np.flatnonzero((T.flux_ivar_g > 0) * (T.flux_ivar_r > 0) * (T.flux_ivar_z > 0) *
+    T.mag_w1, T.magerr_w1 = NanoMaggies.fluxErrorsToMagErrors(
+        T.wise_flux[:,0], T.wise_flux_ivar[:,0])
+    T.mag_w2, T.magerr_w2 = NanoMaggies.fluxErrorsToMagErrors(
+        T.wise_flux[:,1], T.wise_flux_ivar[:,1])
+    tt = 'P'
+    I2 = np.flatnonzero((T.flux_ivar_g > 0) * (T.flux_ivar_r > 0) *
+                        (T.flux_ivar_z > 0) *
                         (T.flux_g > 0) * (T.flux_r > 0) * (T.flux_z > 0) *
-                        (T.magerr_g < 0.05) * (T.magerr_r < 0.05) * (T.magerr_z < 0.05))
-    print(len(I2), 'with < 0.05-mag errs')
+                        (T.magerr_g < 0.05) *
+                        (T.magerr_r < 0.05) *
+                        (T.magerr_z < 0.05) *
+                        (T.typex == tt))
+    print(len(I2), 'with < 0.05-mag errs and type PSF')
+    plt.clf()
+    plt.hist(T.mag_w1[I2], bins=100, range=[12,24], histtype='step', color='b')
+    plt.hist(T.mag_w2[I2], bins=100, range=[12,24], histtype='step', color='g')
+    plt.xlabel('WISE mag')
+    ps.savefig()
+
+    plt.clf()
+    plt.hist(T.magerr_w1[I2], bins=100, range=[0,1], histtype='step', color='b')
+    plt.hist(T.magerr_w2[I2], bins=100, range=[0,1], histtype='step', color='g')
+    plt.xlabel('WISE mag errors')
+    ps.savefig()
+
+    I2 = np.flatnonzero((T.flux_ivar_g > 0) * (T.flux_ivar_r > 0) *
+                        (T.flux_ivar_z > 0) *
+                        (T.flux_g > 0) * (T.flux_r > 0) * (T.flux_z > 0) *
+                        (T.magerr_g < 0.05) *
+                        (T.magerr_r < 0.05) *
+                        (T.magerr_z < 0.05) *
+                        (T.typex == tt) *
+                        (T.magerr_w1 < 0.05))
+    #(T.magerr_w2 < 0.1) *
+    print(len(I2), 'with < 0.05-mag errs and type PSF and W1 errors < 0.1')
+
+    Q1 = fits_table('dr3.1/external/survey-dr3-DR12Q.fits')
+    Q2 = fits_table('dr3.1/external/DR12Q.fits', columns=['z_pipe'])
+    Q1.add_columns_from(Q2)
+    I = np.flatnonzero(Q1.objid >= 0)
+    Q1.cut(I)
+    print(len(Q1), 'sources with DR12Q matches')
+    Q = Q1
+    Q.typex = np.array([t[0] for t in Q.type])
+    Q.mag_w1, Q.magerr_w1 = NanoMaggies.fluxErrorsToMagErrors(
+        Q.wise_flux[:,0], Q.wise_flux_ivar[:,0])
+    Q.mag_w2, Q.magerr_w2 = NanoMaggies.fluxErrorsToMagErrors(
+        Q.wise_flux[:,1], Q.wise_flux_ivar[:,1])
+    Q.flux_g = Q.decam_flux[:,1]
+    Q.flux_r = Q.decam_flux[:,2]
+    Q.flux_z = Q.decam_flux[:,4]
+    Q.flux_ivar_g = Q.decam_flux_ivar[:,1]
+    Q.flux_ivar_r = Q.decam_flux_ivar[:,2]
+    Q.flux_ivar_z = Q.decam_flux_ivar[:,4]
+    Q.deflux_g = Q.flux_g / Q.decam_mw_transmission[:,1]
+    Q.deflux_r = Q.flux_r / Q.decam_mw_transmission[:,2]
+    Q.deflux_z = Q.flux_z / Q.decam_mw_transmission[:,4]
+    Q.deflux_ivar_g = Q.flux_ivar_g * Q.decam_mw_transmission[:,1]**2
+    Q.deflux_ivar_r = Q.flux_ivar_r * Q.decam_mw_transmission[:,2]**2
+    Q.deflux_ivar_z = Q.flux_ivar_z * Q.decam_mw_transmission[:,4]**2
+    Q.demag_g, Q.demagerr_g = NanoMaggies.fluxErrorsToMagErrors(Q.deflux_g, Q.deflux_ivar_g)
+    Q.demag_r, Q.demagerr_r = NanoMaggies.fluxErrorsToMagErrors(Q.deflux_r, Q.deflux_ivar_r)
+    Q.demag_z, Q.demagerr_z = NanoMaggies.fluxErrorsToMagErrors(Q.deflux_z, Q.deflux_ivar_z)
+    I = np.flatnonzero((Q.flux_ivar_g > 0) * (Q.flux_ivar_r > 0) *
+                        (Q.flux_ivar_z > 0) *
+                        (Q.flux_g > 0) * (Q.flux_r > 0) * (Q.flux_z > 0) *
+                        (Q.demagerr_g < 0.05) *
+                        (Q.demagerr_r < 0.05) *
+                        (Q.demagerr_z < 0.05) *
+                        (Q.typex == tt) *
+                        (Q.magerr_w1 < 0.05))    
+    Q.cut(I)
+    print(len(Q), 'DR12Q-matched entries of type PSF with g,r,z,W1 errs < 0.05')
+    
+    plt.clf()
+    loghist(T.demag_g[I2] - T.demag_r[I2], T.demag_z[I2] - T.mag_w1[I2],
+             nbins=200, range=((-0.5,2.0),(-3,4)))
+    plt.xlabel('g - r (mag)')
+    plt.ylabel('z - W1 (mag)')
+    ps.savefig()
+
+    #Q.cut(np.argsort(Q.z_pipe))
+    plt.clf()
+    plt.scatter(Q.demag_g - Q.demag_r, Q.demag_z - Q.mag_w1, c=Q.z_pipe, s=5)
+    plt.colorbar(label='QSO redshift')
+    plt.xlabel('g - r (mag)')
+    plt.ylabel('z - W1 (mag)')
+    ps.savefig()
+
+    plt.figure(2)
+    from scipy.ndimage.filters import gaussian_filter
+    import matplotlib.cm
+    xlo,xhi,ylo,yhi = [-0.25, 1.75, -2.5, 2.5]
+    plt.clf()
+    H,xe,ye = loghist(T.demag_g[I2] - T.demag_r[I2], T.demag_z[I2] - T.mag_w1[I2],
+                      nbins=(400,200), range=((xlo,xhi),(ylo,yhi)), imshowargs=dict(cmap='Greys'),
+                      hot=False, docolorbar=False)
+    I = np.flatnonzero(Q.z_pipe < 10.)
+    QH,nil,nil = np.histogram2d(Q.demag_g[I] - Q.demag_r[I], Q.demag_z[I] - Q.mag_w1[I],
+                       bins=200, range=((xlo,xhi),(ylo,yhi)))
+    QH = gaussian_filter(QH.T, 3.)
+    c = plt.contour(QH, 8, extent=[xe.min(), xe.max(), ye.min(), ye.max()], colors='k')
+    plt.axis([xlo,xhi,ylo,yhi])
+    plt.xlabel('g - r (mag)')
+    plt.ylabel('z - W1 (mag)')
+
+    mx,my,mz = [],[],[]
+    # I = np.argsort(Q.z_pipe)
+    # for i in range(len(Q)/1000):
+    #     J = I[i*1000:][:1000]
+    #     mx.append(np.median(Q.demag_g[J] - Q.demag_r[J]))
+    #     my.append(np.median(Q.demag_z[J] - Q.mag_w1[J]))
+    #     mz.append(np.median(Q.z_pipe[J]))
+    # plt.scatter(mx,my, c=mz)
+    # plt.colorbar(label='QSO Redshift')
+    # ps.savefig()
+
+        
+    zvals = np.arange(0, 3.61, 0.1)
+    for zlo,zhi in zip(zvals, zvals[1:]):
+         J = np.flatnonzero((Q.z_pipe >= zlo) * (Q.z_pipe < zhi))
+         mx.append(np.median(Q.demag_g[J] - Q.demag_r[J]))
+         my.append(np.median(Q.demag_z[J] - Q.mag_w1[J]))
+         mz.append(np.median(Q.z_pipe[J]))
+    # plt.scatter(mx,my, c=mz, marker='o-')
+    # plt.colorbar(label='QSO Redshift')
+    for i in range(len(mx)-1):
+        c = matplotlib.cm.viridis(0.8 * i / (len(mx)-1))
+        plt.plot([mx[i], mx[i+1]], [my[i],my[i+1]], '-', color=c, lw=4)
+    plt.savefig('qso-wise.png')
+    plt.savefig('qso-wise.pdf')
+
+    xlo,xhi,ylo,yhi = [-0.25, 1.75, -0.25, 2.5]
+    plt.clf()
+    H,xe,ye = loghist(T.demag_g[I2] - T.demag_r[I2], T.demag_r[I2] - T.demag_z[I2],
+                      nbins=(400,200), range=((xlo,xhi),(ylo,yhi)), imshowargs=dict(cmap='Greys'),
+                      hot=False, docolorbar=False)
+
+    #I3 = np.random.permutation(I2)[:1000]
+    #plt.plot(T.demag_g[I3] - T.demag_r[I3], T.demag_r[I3] - T.demag_z[I3], 'r.')
+    
+    I = np.flatnonzero(Q.z_pipe < 10.)
+    QH,nil,nil = np.histogram2d(Q.demag_g[I] - Q.demag_r[I], Q.demag_r[I] - Q.demag_z[I],
+                       bins=200, range=((xlo,xhi),(ylo,yhi)))
+    QH = gaussian_filter(QH.T, 3.)
+    c = plt.contour(QH, 8, extent=[xe.min(), xe.max(), ye.min(), ye.max()], colors='k')
+    plt.axis([xlo,xhi,ylo,yhi])
+    plt.xlabel('g - r (mag)')
+    plt.ylabel('r - z (mag)')
+    mx,my,mz = [],[],[]
+    zvals = np.arange(0, 3.61, 0.1)
+    for zlo,zhi in zip(zvals, zvals[1:]):
+         J = np.flatnonzero((Q.z_pipe >= zlo) * (Q.z_pipe < zhi))
+         mx.append(np.median(Q.demag_g[J] - Q.demag_r[J]))
+         my.append(np.median(Q.demag_r[J] - Q.demag_z[J]))
+         mz.append(np.median(Q.z_pipe[J]))
+    for i in range(len(mx)-1):
+        c = matplotlib.cm.viridis(0.8 * i / (len(mx)-1))
+        plt.plot([mx[i], mx[i+1]], [my[i],my[i+1]], '-', color=c, lw=4)
+
+    plt.savefig('qso-optical.png')
+    plt.savefig('qso-optical.pdf')
+    plt.figure(1)
+
+
+    # I = np.flatnonzero((T.flux_ivar_g > 0) * (T.flux_ivar_r > 0) * (T.flux_ivar_z > 0))
+    # print(len(I), 'with g,r,z fluxes')
+    # I = np.flatnonzero((T.flux_ivar_g > 0) * (T.flux_ivar_r > 0) * (T.flux_ivar_z > 0) *
+    #                    (T.flux_g > 0) * (T.flux_r > 0) * (T.flux_z > 0))
+    # print(len(I), 'with positive g,r,z fluxes')
+    # I = np.flatnonzero((T.flux_ivar_g > 0) * (T.flux_ivar_r > 0) * (T.flux_ivar_z > 0) *
+    #                    (T.flux_g > 0) * (T.flux_r > 0) * (T.flux_z > 0) *
+    #                    (T.magerr_g < 0.2) * (T.magerr_r < 0.2) * (T.magerr_z < 0.2))
+    # print(len(I), 'with < 0.2-mag errs')
+    # I = np.flatnonzero((T.flux_ivar_g > 0) * (T.flux_ivar_r > 0) * (T.flux_ivar_z > 0) *
+    #                    (T.flux_g > 0) * (T.flux_r > 0) * (T.flux_z > 0) *
+    #                    (T.magerr_g < 0.1) * (T.magerr_r < 0.1) * (T.magerr_z < 0.1))
+    # print(len(I), 'with < 0.1-mag errs')
+    # 
+    # I2 = np.flatnonzero((T.flux_ivar_g > 0) * (T.flux_ivar_r > 0) * (T.flux_ivar_z > 0) *
+    #                     (T.flux_g > 0) * (T.flux_r > 0) * (T.flux_z > 0) *
+    #                     (T.magerr_g < 0.05) * (T.magerr_r < 0.05) * (T.magerr_z < 0.05))
+    # print(len(I2), 'with < 0.05-mag errs')
 
     #ha = dict(nbins=200, range=((-0.5, 2.5), (-0.5, 2.5)))
     ha = dict(nbins=400, range=((-0.5, 2.5), (-0.5, 2.5)))
@@ -114,7 +280,7 @@ def main():
         H,xe,ye = loghist(T.demag_g[I] - T.demag_r[I], T.demag_r[I] - T.demag_z[I], **ha)
 
         # Keeping the dereddened color-color histograms
-        hists.append(H)
+        hists.append(H.T)
 
         plt.xlabel('g - r (mag)')
         plt.ylabel('r - z (mag)')
@@ -132,7 +298,7 @@ def main():
 
         plt.clf()
         H,xe,ye = loghist(T.demag_g[I2] - T.demag_r[I2], T.demag_r[I2] - T.demag_z[I2], **ha)
-        hists2.append(H)
+        hists2.append(H.T)
         plt.xlabel('g - r (mag)')
         plt.ylabel('r - z (mag)')
         plt.title('Type = %s, dereddened, 5%% errs' % name)
@@ -198,14 +364,16 @@ def main():
             plt.ylabel('r - z (mag)')
             plt.xticks(np.arange(0, 2.1, 0.5))
             plt.yticks(np.arange(0, 2.1, 0.5))
-            plt.axis([-0.25,2,0,2])
-            plt.text(0.1, 0.7, 'PSF', ha='center', va='center', color='k')
-            plt.text(0.5, 0.3, 'EXP', ha='center', va='center', color='k')
-            plt.text(0.6, 1.5, 'DEV', ha='center', va='center', color='k')
+            plt.axis([0,2,-0.25,2])
+            plt.text(0.7, 0.1, 'PSF', ha='center', va='center', color='k')
+            plt.text(0.6, 0.7, 'EXP', ha='center', va='center', color='k')
+            plt.text(1.5, 0.6, 'DEV', ha='center', va='center', color='k')
             plt.savefig('color-type.pdf')
             plt.figure(1)
 
+    sys.exit(0)
 
+            
     np.random.seed(42)
 
     T.gr = T.mag_g - T.mag_r
