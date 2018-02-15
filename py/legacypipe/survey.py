@@ -960,7 +960,9 @@ Now using the current directory as LEGACY_SURVEY_DIR, but this is likely to fail
         cfn = fn.replace(self.survey_dir, self.cache_dir)
         #print('cache fn', cfn)
         if os.path.exists(cfn):
+            print('Cached file hit:', fn, '->', cfn)
             return cfn
+        print('Cached file miss:', fn, '-/->', cfn)
         return fn
 
     def get_compression_string(self, filetype, **kwargs):

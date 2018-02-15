@@ -642,6 +642,9 @@ def make_depth_cut(survey, ccds, bands, targetrd, brick, W, H, pixscale,
                 print('HACK -- skipping expnum', im.expnum)
                 continue
 
+            im.check_for_cached_files(survey)
+            print(im)
+
             if do_calibs:
                 kwa = dict(git_version=gitver)
                 if gaussPsf:
@@ -650,8 +653,6 @@ def make_depth_cut(survey, ccds, bands, targetrd, brick, W, H, pixscale,
                     kwa.update(splinesky=True)
                 im.run_calibs(**kwa)
 
-            im.check_for_cached_files(survey)
-            print(im)
             print('Reading WCS from', im.imgfn, 'HDU', im.hdu)
             wcs = im.get_wcs()
             x0,x1,y0,y1,slc = im.get_image_extent(wcs=wcs, radecpoly=targetrd)
