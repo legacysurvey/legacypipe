@@ -1251,7 +1251,7 @@ def stage_srcs(targetrd=None, pixscale=None, targetwcs=None,
     del detivs
 
     # Merge newly detected sources with existing (Tycho2 + Gaia) source lists
-    if gaia_stars is not None:
+    if gaia_stars:
         T = merge_tables([Tsat, Tgaia, Tnew], columns='fillzero')
         cat = Catalog(*(satcat + gaiacat + newcat))
     else:
