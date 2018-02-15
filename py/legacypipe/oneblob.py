@@ -13,14 +13,11 @@ from tractor import Tractor, PointSource, Image, NanoMaggies, Catalog, Patch
 from tractor.galaxy import DevGalaxy, ExpGalaxy, FixedCompositeGalaxy, SoftenedFracDev, FracDev, disable_galaxy_cache, enable_galaxy_cache
 from tractor.patch import ModelMask
 
-from legacypipe.survey import (SimpleGalaxy, LegacyEllipseWithPriors, 
-                               RexGalaxy,
-                               get_rgb)
+from legacypipe.survey import (SimpleGalaxy, RexGalaxy, GaiaSource,
+                               LegacyEllipseWithPriors, get_rgb)
 from legacypipe.runbrick import rgbkwargs, rgbkwargs_resid
 from legacypipe.coadds import quick_coadds
 from legacypipe.runbrick_plots import _plot_mods
-
-DECALS_PROPID = '2014B-0404'
 
 def one_blob(X):
     '''
@@ -149,8 +146,8 @@ class OneBlob(object):
         if self.plots:
             self._plots(tr, 'Initial models')
 
-        # Optimize individual sources, in order of flux
-        # choose the ordering...
+        # Optimize individual sources, in order of flux.
+        # First, choose the ordering...
         Ibright = _argsort_by_brightness(cat, self.bands)
 
         if len(cat) > 1:
@@ -239,7 +236,6 @@ class OneBlob(object):
         #     #print('Simultaneous fit took:', Time()-tfit)
 
         # Compute variances on all parameters for the kept model
-        #B.srcinvvars = [[] for i in range(len(B))]
         B.srcinvvars = [None for i in range(len(B))]
         cat.thawAllRecursive()
         cat.freezeAllParams()
@@ -253,6 +249,10 @@ class OneBlob(object):
             nsrcparams = src.numberOfParams()
             _convert_ellipses(src)
             assert(src.numberOfParams() == nsrcparams)
+            # For Gaia sources, temporarily convert the GaiaPosition to a
+            # RaDecPos in order to compute the invvar it would have in our
+            # imaging?  Or just plug in the Gaia-measured uncertainties??
+            # (going to implement the latter)
             # Compute inverse-variances
             allderivs = tr.getDerivs()
             ivars = _compute_invvars(allderivs)
@@ -264,7 +264,7 @@ class OneBlob(object):
         # Check for sources with zero inverse-variance -- I think these
         # can be generated during the "Simultaneous re-opt" stage above --
         # sources can get scattered outside the blob.
-        # Arbitrarily look at the first element (RA)
+        # Arbitrarily look at the first element (RA) for this cut.
         I = np.flatnonzero(np.array([iv[0] for iv in B.srcinvvars]))
         if len(I) < len(B):
             print('Keeping', len(I), 'of', len(B),'sources with non-zero ivar')
@@ -278,8 +278,8 @@ class OneBlob(object):
         print('Blob', self.name, 'finished:', Time()-tlast)
         
     def run_model_selection(self, cat, Ibright, B):
-
-        # We repeat the "compute & subtract initial models" logic from above.
+        # We compute & subtract initial models for the other sources while
+        # fitting each source:
         # -Remember the original images
         # -Compute initial models for each source (in each tim)
         # -Subtract initial models from images
@@ -309,6 +309,9 @@ class OneBlob(object):
             src = cat[srci]
             print('Model selection for source %i of %i in blob %s' %
                   (numi+1, len(Ibright), self.name))
+            if isinstance(src, GaiaSource):
+                print('Gaia source', src, '-- not doing model selection.')
+                continue
             cpu0 = time.clock()
     
             # Add this source's initial model back in.
@@ -1697,13 +1700,6 @@ def _clip_model_to_blob(mod, sh, ie):
     assert(mod.y0 + mh <= ph)
 
     return mod
-
-FLAG_CPU_A   = 1
-FLAG_STEPS_A = 2
-FLAG_CPU_B   = 4
-FLAG_STEPS_B = 8
-FLAG_TRIED_C = 0x10
-FLAG_CPU_C   = 0x20
 
 def _select_model(chisqs, nparams, galaxy_margin, rex):
     '''

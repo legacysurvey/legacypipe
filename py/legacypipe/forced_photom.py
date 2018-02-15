@@ -1,6 +1,6 @@
 '''
-This script performs forced photometry of individual DECam images
-given a DECaLS catalog.
+This script performs forced photometry of individual Legacy Survey
+images given a data release catalog.
 '''
 
 from __future__ import print_function
@@ -23,11 +23,9 @@ from catalog import read_fits_catalog
 
 import photutils
 
-# python projects/desi/forced-photom-decam.py decals/images/decam/CP20140810_g_v2/c4d_140816_032035_ooi_g_v2.fits.fz 43 DR1 f.fits
-
 def get_parser():
     '''
-    Returns the option parser for forced photometry of DECam images
+    Returns the option parser for forced photometry of Legacy Survey images
     '''
     import argparse
     parser = argparse.ArgumentParser(description=__doc__)
@@ -56,7 +54,7 @@ def get_parser():
                         help='Set inverse-variance to a constant across the image?')
 
     parser.add_argument('--no-hybrid-psf', dest='hybrid_psf', action='store_false',
-                        help='Do nto use hybrid pixelized-MoG PSF model?')
+                        help='Do not use hybrid pixelized-MoG PSF model?')
     
     parser.add_argument('--save-model',
                         help='Compute and save model image?')
@@ -65,15 +63,16 @@ def get_parser():
 
     parser.add_argument('--camera', help='Cut to only CCD with given camera name?')
     
-    parser.add_argument('filename',help='Filename OR exposure number.')
-    parser.add_argument('hdu',help='decam-HDU OR CCD name.')
-    parser.add_argument('catfn',help='catalog filename OR "DR1/DR2/DR3".')
-    parser.add_argument('outfn',help='Output catalog filename.')
+    parser.add_argument('filename', help='Filename OR exposure number.')
+    parser.add_argument('hdu', help='Image HDU OR CCD name.')
+    parser.add_argument('catfn', help='Catalog filename OR "DR".')
+    parser.add_argument('outfn', help='Output catalog filename.')
 
     return parser
     
 def main(survey=None, opt=None):
-    '''Driver function for forced photometry of individual DECam images.
+    '''Driver function for forced photometry of individual Legacy
+    Survey images.
     '''
     if opt is None:
         parser = get_parser()
@@ -128,7 +127,9 @@ def main(survey=None, opt=None):
         catsurvey = LegacySurveyData(survey_dir = opt.catalog_dir)
 
     if opt.filename is not None and opt.hdu >= 0:
+        # FIXME -- try looking up in CCDs file?
         # Read metadata from file
+        print('Warning: faking metadata from file contents')
         T = exposure_metadata([opt.filename], hdus=[opt.hdu])
         print('Metadata:')
         T.about()
