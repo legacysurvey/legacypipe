@@ -1063,7 +1063,7 @@ def stage_srcs(targetrd=None, pixscale=None, targetwcs=None,
                brickname=None,
                mp=None, nsigma=None,
                survey=None, brick=None,
-               gaia_stars=True,
+               gaia_stars=False,
                record_event=None,
                **kwargs):
     '''
@@ -2556,6 +2556,7 @@ def run_brick(brick, survey, radec=None, pixscale=0.262,
               rex=False,
               splinesky=False,
               constant_invvar=False,
+              gaia_stars=False,
               ceres=True,
               wise_ceres=True,
               unwise_dir=None,
@@ -3076,6 +3077,9 @@ python -u legacypipe/runbrick.py --plots --brick 2440p070 --zoom 1900 2400 450 9
 
     parser.add_argument('--depth-cut', default=False, action='store_true',
                         help='Cut to the set of CCDs required to reach our depth target')
+
+    parser.add_argument('--gaia', dest='gaia_stars', default=False, action='store_true',
+                        help='Use Gaia sources as fixed stars')
     
     return parser
 
