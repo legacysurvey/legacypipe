@@ -901,6 +901,21 @@ Now using the current directory as LEGACY_SURVEY_DIR, but this is likely to fail
             print('Cached file hit:', fn, '->', cfn)
             return cfn
         print('Cached file miss:', fn, '-/->', cfn)
+
+        ### HACK for post-DR5 NonDECaLS reorg / DMD
+        if 'CPHETDEX' in fn:
+            '''
+            Cached file miss:
+            /global/cscratch1/sd/dstn/dr5-new-sky/images/decam/NonDECaLS/CPHETDEX/c4d_130902_082433_oow_g_v1.fits.fz -/-> 
+            /global/cscratch1/sd/dstn/dr5-new-sky/cache/images/decam/NonDECaLS/CPHETDEX/c4d_130902_082433_oow_g_v1.fits.fz
+            '''
+            from glob import glob
+            pat = fn.replace('CPHETDEX', '*')
+            fns = glob(pat)
+            if len(fns) == 1:
+                print('Globbed', pat, '->', fns[0])
+                return fns[0]
+
         return fn
 
     def get_compression_string(self, filetype, **kwargs):

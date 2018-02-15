@@ -36,7 +36,7 @@ Can add kd-tree data structure to this resulting annotated-ccds file like this:
 
 '''
 
-def annotate(ccds, mzls=False, normalizePsf=False):
+def annotate(ccds, survey, mzls=False, normalizePsf=False):
     # File from the "observing" svn repo:
     if mzls:
         # https://desi.lbl.gov/svn/decam/code/mosaic3/trunk
@@ -319,13 +319,7 @@ def annotate(ccds, mzls=False, normalizePsf=False):
         X[np.logical_not(np.isfinite(X))] = 0.
 
 
-def main(outfn='ccds-annotated.fits', ccds=None, **kwargs):
-    survey = LegacySurveyData(ccds=ccds)
-    if ccds is None:
-        ccds = survey.get_ccds()
-
-    # Set to True if we successfully read the calibration products and computed
-    # annotated values
+def init_annotations(ccds):
     ccds.annotated = np.zeros(len(ccds), bool)
 
     ccds.good_region = np.empty((len(ccds), 4), np.int16)
@@ -381,6 +375,15 @@ def main(outfn='ccds-annotated.fits', ccds=None, **kwargs):
 
     ccds.plver = np.array([' '*6] * len(ccds))
 
+
+def main(outfn='ccds-annotated.fits', ccds=None, **kwargs):
+    survey = LegacySurveyData(ccds=ccds)
+    if ccds is None:
+        ccds = survey.get_ccds()
+
+    # Set to True if we successfully read the calibration products and computed
+    # annotated values
+    init_annotations(ccds)
 
     annotate(ccds, **kwargs)
 
