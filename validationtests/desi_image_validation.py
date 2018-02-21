@@ -713,7 +713,7 @@ def val3p4b_maghist_pred(sample,ndraw=1e5, nbin=100, vmin=21.0, vmax=25.0):
     print 'percentage better than requirements = '+str(nbr/float(ndrawn))
     if(sample.band =='g'): print "Requirements are > 90%, 95% and 98% at 24, 23.7, 23.4"
     if(sample.band =='r'): print "Requirements are > 90%, 95% and 98% at 23.4, 23.1, 22.8"
-    if(sample.band =='z'): print "Requirements are > 90%, 95% and 98% at 22.5, 22.3, 21"
+    if(sample.band =='z'): print "Requirements are > 90%, 95% and 98% at 22.5, 22.2, 21.9"
     print "Results are: ", p90, p95, p98
 
     # Prepare historgram 
