@@ -23,6 +23,8 @@ def main():
     parser.add_argument('outdir', help='Output directory name')
     parser.add_argument('brick', help='Brick containing these images')
 
+    parser.add_argument('--cache-dir', type=str, default=None,
+                        help='Directory to search for cached files')
     parser.add_argument('--wise', help='For WISE outputs, give the path to a WCS file describing the sub-brick region of interest, eg, a coadd image')
     parser.add_argument('--fpack', action='store_true', default=False)
     parser.add_argument('--pad', action='store_true', default=False,
@@ -34,7 +36,7 @@ def main():
     print(len(C), 'CCDs in', args.ccds)
     C.camera = np.array([c.strip() for c in C.camera])
     
-    survey = LegacySurveyData()
+    survey = LegacySurveyData(cache_dir=args.cache_dir)
     bricks = survey.get_bricks_readonly()
     outbricks = bricks[np.array([n == args.brick for n in bricks.brickname])]
     assert(len(outbricks) == 1)
@@ -74,6 +76,8 @@ def main():
 
         im = survey.get_image_object(ccd)
         print('Got', im)
+        if survey.cache_dir is not None:
+            im.check_for_cached_files(survey)
         slc = (slice(ccd.ccd_y0, ccd.ccd_y1), slice(ccd.ccd_x0, ccd.ccd_x1))
         tim = im.get_tractor_image(slc, pixPsf=True, splinesky=True,
                                    subsky=False, nanomaggies=False)
