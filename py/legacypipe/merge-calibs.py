@@ -52,26 +52,36 @@ def main():
     parser.add_argument('--continue', dest='con',
                         help='Continue even if one exposure is bad',
                         action='store_true', default=False)
+    parser.add_argument('--outdir', help='Output directory, default %default',
+                        default='calib')
 
     opt = parser.parse_args()
 
     survey = LegacySurveyData()
     if opt.ccds:
         ccds = fits_table(opt.ccds)
+        ccds = survey.cleanup_ccds_table(ccds)
     else:
         ccds = survey.get_ccds()
     print(len(ccds), 'CCDs')
 
     if opt.expnum is not None:
-        expnums = [int(x, 10) for x in opt.expnum.split(',')]
+        expnums = [(None, int(x, 10)) for x in opt.expnum.split(',')]
     else:
-        expnums = np.unique(ccds.expnum)
-        print(len(expnums), 'unique exposures')
+        expnums = set(zip(ccds.camera, ccds.expnum))
+        print(len(expnums), 'unique camera+expnums')
 
-    for expnum in expnums:
+    for i,(camera,expnum) in enumerate(expnums):
+        print()
+        print('Exposure', i+1, 'of', len(expnums), ':', camera, 'expnum', expnum)
+        if camera is None:
+            C = ccds[ccds.expnum == expnum]
+            print(len(C), 'CCDs with expnum', expnum)
+            camera = C.camera[0]
+
         expnumstr = '%08i' % expnum
-        skyoutfn = os.path.join('splinesky', expnumstr[:5], 'decam-%s.fits' % expnumstr)
-        psfoutfn = os.path.join('psfex', expnumstr[:5], 'decam-%s.fits' % expnumstr)
+        skyoutfn = os.path.join(opt.outdir, camera, 'splinesky', expnumstr[:5], '%s-%s.fits' % (camera, expnumstr))
+        psfoutfn = os.path.join(opt.outdir, camera, 'psfex', expnumstr[:5], '%s-%s.fits' % (camera, expnumstr))
 
         print('Checking for', skyoutfn)
         print('Checking for', psfoutfn)
@@ -79,8 +89,9 @@ def main():
             print('Exposure', expnum, 'is done already')
             continue
 
-        C = ccds[ccds.expnum == expnum]
-        print(len(C), 'CCDs in expnum', expnum)
+        if camera is not None:
+            C = ccds[(ccds.expnum == expnum) * (ccds.camera == camera)]
+            print(len(C), 'CCDs with expnum', expnum, 'and camera', camera)
 
         if not os.path.exists(skyoutfn):
             try:
