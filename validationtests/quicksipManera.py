@@ -13,6 +13,7 @@ twopi = 2.*pi
 piover2 = .5*pi
 verbose = False
 
+
 # ---------------------------------------------------------------------------------------- #
 def quicksipVerbose(verb=False):
     global verbose
@@ -30,6 +31,9 @@ def mkdir_p(path):
 # Some unit definitions
 arcsec_to_radians = 0.0000048481368111
 degree_to_arcsec = 3600.0
+
+# MarcM Global variable to debug
+#nwrong = 0
 
 # ---------------------------------------------------------------------------------------- #
 
@@ -66,7 +70,7 @@ def write_partial_map(filename, indices, values, nside, nest=False):
     tbhdu.header['OBJECT'] = 'PARTIAL'
     tbhdu.header['INDXSCHM'] = ('EXPLICIT', 'Indexing: IMPLICIT or EXPLICIT')
     tbhdu.writeto(filename,clobber=True)
-    subprocess.call("gzip "+filename,shell=True)
+    subprocess.call("gzip -f "+filename,shell=True)
 
 # ---------------------------------------------------------------------------------------- #
 
@@ -141,7 +145,7 @@ def ang2pix_ring_ir(nside,ir,phi):
 		if fmod(ir,2)==0.:
 			kshift = 1#;// ! kshift=1 if ir even, 0 otherwise
 		ip = int(floor( ( jp+jm - nside + kshift + 1 ) / 2 ) + 1)#;// ! in {1,4n}
-		if ip>nl4:
+	     	if ip>nl4:
 			ip = ip - nl4
     
 		ipix1 = ncap + nl4*(ir-1) + ip
@@ -254,11 +258,11 @@ def in_ring(nside, iz, phi_low, phi_hi, conservative=True):
         nir = long(ip_hi - ip_low + 1 )
         listir = np.arange(ip_low, nir+ip_low)
     #below added by AJR to address region around ra = 360
-    #if float(listir[-1]-listir[0])/(ipix2-ipix1) > .5:
-    #	listir1 = np.arange(ipix1, listir[0]+1)
-    #	listir2 = np.arange(listir[-1], ipix2+1)
+    if float(listir[-1]-listir[0])/(ipix2-ipix1) > .5:
+    	listir1 = np.arange(ipix1, listir[0]+1)
+        listir2 = np.arange(listir[-1], ipix2+1)
     #	#print listir[-1],listir[0],ipix1,ipix2,len(listir1),len(listir2)
-    #	listir   = np.concatenate( (listir1,listir2  ) )   
+    	listir   = np.concatenate( (listir1,listir2  ) )   
     	#print len(listir)
     return listir
 
@@ -521,10 +525,11 @@ def computeHPXpix_sequ_new(nside, propertyArray, pixoffset=0, ratiores=4, coadd_
 
 def computeHPXpix_sequ_new_simp(nside, propertyArray): 
     #return 'ERROR'
-    #Hack by AJR, just return all of the pixel centers within the ra,dec range
+    #Hack by AJR and MarcM, just return all of the pixel centers within the ra,dec range
     img_ras, img_decs = [propertyArray[v] for v in ['ra0', 'ra1', 'ra2','ra3']],[propertyArray[v] for v in ['dec0', 'dec1', 'dec2','dec3']]
     #print min(img_ras),max(img_ras)
     #more efficient version below failed for some reason
+    #iweird = 0
     for i in range(0,len(img_ras)):
     	if img_ras[i] > 360.:
     		img_ras[i] -= 360.
@@ -555,26 +560,33 @@ def computeHPXpix_sequ_new_simp(nside, propertyArray):
     p2 = pmax
 
     if pmin < .1 and pmax > 1.9*np.pi:
-		#straddling line
-		#img_phis.sort()
-		for i in range(0,len(img_phis)):
-			if img_phis[i] > p1 and img_phis[i] < np.pi:
-				p1 = img_phis[i]
-			if img_phis[i] < p2 and img_phis[i] > np.pi:
-				p2 = img_phis[i]
-		
-		#ipixs_ring1 = np.int64(np.concatenate([in_ring(nside, iring, 0, p1, conservative=False) for iring in range(iring_U, iring_B+1)]))
-		#ipixs_ring2 = np.int64(np.concatenate([in_ring(nside, iring, p2, 2.*np.pi, conservative=False) for iring in range(iring_U, iring_B+1)]))
-# 		ipixs_ring1 = np.int64(np.concatenate([in_ring_simp(nside, iring, 0, p1, conservative=False) for iring in range(iring_U, iring_B+1)]))
-# 		ipixs_ring2 = np.int64(np.concatenate([in_ring_simp(nside, iring, p2, 2.*np.pi, conservative=False) for iring in range(iring_U, iring_B+1)]))
-# 		ipixs_ring = np.concatenate((ipixs_ring1,ipixs_ring2))
-# 		print len(ipixs_ring),len(ipixs_ring1),len(ipixs_ring2),iring_B-iring_U,pmin,pmax,p1,p2
+	#straddling line
+	#img_phis.sort()
+	for i in range(0,len(img_phis)):
+		if img_phis[i] > p1 and img_phis[i] < np.pi:
+			p1 = img_phis[i]
+		if img_phis[i] < p2 and img_phis[i] > np.pi:
+			p2 = img_phis[i]
+        #print 'kaka', img_phis, img_ras
+        #print 'kaka', p1, p2, iring_U, iring_B	
+        ipixs_ring1 = np.int64(np.concatenate([in_ring(nside, iring, 0, p1, conservative=False) for iring in range(iring_U, iring_B+1)]))
+	ipixs_ring2 = np.int64(np.concatenate([in_ring(nside, iring, p2, 2.*np.pi, conservative=False) for iring in range(iring_U, iring_B+1)]))
+ 	#ipixs_ring1 = np.int64(np.concatenate([in_ring_simp(nside, iring, 0, p1, conservative=False) for iring in range(iring_U, iring_B+1)]))
+ 	#ipixs_ring2 = np.int64(np.concatenate([in_ring_simp(nside, iring, p2, 2.*np.pi, conservative=False) for iring in range(iring_U, iring_B+1)]))
+ 	ipixs_ring = np.concatenate((ipixs_ring1,ipixs_ring2))
+# 	print len(ipixs_ring),len(ipixs_ring1),len(ipixs_ring2),iring_B-iring_U,pmin,pmax,p1,p2
 #     	
-#     else:		
-    ipixs_ring = np.int64(np.concatenate([in_ring(nside, iring, p1, p2, conservative=False) for iring in range(iring_U, iring_B+1)]))
+        if len(ipixs_ring1) > 1000: 
+           print 'kaka1', p1, iring_U, iring_B
+        if len(ipixs_ring2) > 1000:
+           print 'kaka2', p2, iring_U, iring_B
+    else:		
+        ipixs_ring = np.int64(np.concatenate([in_ring(nside, iring, p1, p2, conservative=False) for iring in range(iring_U, iring_B+1)]))
 	#ipixs_ring = np.int64(np.concatenate([in_ring_simp(nside, iring, p1, p2, conservative=False) for iring in range(iring_U, iring_B+1)]))
     if len(ipixs_ring) > 1000:
-    	print len(ipixs_ring),iring_B-iring_U,pmin,pmax,p1,p2
+        #print 'hey', img_ras,img_decs 
+    	print 'careful', len(ipixs_ring),iring_B-iring_U,pmin,pmax,p1,p2
+        #nwrong = nwrong +1
     	return [] #temporary fix
     #	print len(ipixs_ring),iring_B-iring_U,pmin,pmax,min(img_ras),max(img_ras)  
     #print len(ipixs_ring),iring_B-iring_U,pmin,pmax,min(img_ras),max(img_ras)
@@ -1057,7 +1069,7 @@ def project_and_write_maps(mode, propertiesweightsoperations, tbdata, catalogue_
                         fname = outroot2 + '_'.join([catalogue_name, sample_name, resol_prefix2, property, weights, operation]) + '.fits'
                         print 'Writing', fname
                         hp.write_map(fname, outmap_lo, nest=True)
-                        subprocess.call("gzip "+fname,shell=True)
+                        subprocess.call("gzip -f "+fname,shell=True)
 
 
     if mode == 3: # Fully parallel
@@ -1095,7 +1107,8 @@ def project_and_write_maps(mode, propertiesweightsoperations, tbdata, catalogue_
                 write_partial_map(fname, cutmap_indices, cutmap_signal, nside, nest=False)
 
 def project_and_write_maps_simp(mode, propertiesweightsoperations, tbdata, catalogue_name, outrootdir, sample_names, inds, nside):
-	#hack by AJR
+	#hack by AJR and MarcM
+        #nwrong = 0 #number of wrong projected pixels
 	resol_prefix = 'nside'+str(nside)+'_oversamp1'
 	outroot = outrootdir + '/' + catalogue_name + '/' + resol_prefix + '/'
 	mkdir_p(outroot)
@@ -1107,7 +1120,7 @@ def project_and_write_maps_simp(mode, propertiesweightsoperations, tbdata, catal
 			print 'Creating and writing', fname
 			write_partial_map(fname, cutmap_indices, cutmap_signal, nside, nest=False)
 
-
+        #print "number of wrong projected ccd-pointings is: ", nwrong 
 
 # ---------------------------------------------------------------------------------------- #
 
