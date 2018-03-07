@@ -2514,7 +2514,7 @@ def stage_writecat(
     with survey.write_output('tractor', brick=brickname) as out:
         format_catalog(T2, hdr, primhdr, allbands, None,
                        write_kwargs=dict(fits_object=out.fits),
-                       N_wise_epochs=7)
+                       N_wise_epochs=9)
 
     # write fits file with galaxy-sim stuff (xy bounds of each sim)
     if 'sims_xy' in T.get_columns(): 
