@@ -969,8 +969,8 @@ def stage_image_coadds(survey=None, targetwcs=None, bands=None, tims=None,
         coadd_list.append(('simscoadd', sims_coadd, rgbkwargs))
 
     for name,ims,rgbkw in coadd_list:
-        rgb = get_rgb(ims, bands, **rgbkw)
-        #rgb = sdss_rgb(ims, bands)
+        #rgb = get_rgb(ims, bands, **rgbkw)
+        rgb = sdss_rgb(ims, bands)
 
         kwa = {}
         if coadd_bw and len(bands) == 1:
@@ -1020,6 +1020,7 @@ def sdss_rgb(imgs, bands, scales=None, m = 0.03):
 
     rgbscales=dict(g=(2, 6.0),
                    r=(1, 3.4),
+                   i=(0, 3.0),
                    z=(0, 2.2))
 
     # rgbscales = {'u': 1.5, #1.0,
@@ -1147,6 +1148,8 @@ def stage_srcs(targetrd=None, pixscale=None, targetwcs=None,
                   (gaia.iby > -margin) * (gaia.iby < H+margin))
         print('Cut to', len(gaia), 'Gaia stars within brick')
         del ok,xx,yy
+        gaia.ibx = np.clip(gaia.ibx, 0, W-1)
+        gaia.iby = np.clip(gaia.iby, 0, H-1)
 
         # Save for later...
         Tgaia = gaia
@@ -2764,6 +2767,7 @@ def run_brick(brick, survey, radec=None, pixscale=0.262,
                   constant_invvar=constant_invvar,
                   depth_cut=depth_cut,
                   splinesky=splinesky,
+                  gaia_stars=gaia_stars,
                   simul_opt=simul_opt,
                   use_ceres=ceres,
                   wise_ceres=wise_ceres,
@@ -3080,7 +3084,7 @@ python -u legacypipe/runbrick.py --plots --brick 2440p070 --zoom 1900 2400 450 9
 
     parser.add_argument('--gaia', dest='gaia_stars', default=False, action='store_true',
                         help='Use Gaia sources as fixed stars')
-    
+
     return parser
 
 def get_runbrick_kwargs(brick=None,
