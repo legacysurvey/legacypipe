@@ -37,10 +37,31 @@ def main():
     C.camera = np.array([c.strip() for c in C.camera])
     
     survey = LegacySurveyData(cache_dir=args.cache_dir)
-    bricks = survey.get_bricks_readonly()
-    outbricks = bricks[np.array([n == args.brick for n in bricks.brickname])]
-    assert(len(outbricks) == 1)
-    
+
+    if ',' in args.brick:
+        ra,dec = args.brick.split(',')
+        ra = float(ra)
+        dec = float(dec)
+        #class duck(object):
+        #    pass
+        #fakebrick = duck()
+        fakebricks = fits_table()
+        fakebricks.brickname = np.array([('custom-%06i%s%05i' %
+                                          (int(1000*ra), 'm' if dec < 0 else 'p',
+                                           int(1000*np.abs(dec))))])
+        fakebricks.ra  = np.array([ra])
+        fakebricks.dec = np.array([dec])
+        bricks = fakebricks
+        outbricks = bricks
+        #outbricks = bricks(np.array([0]))
+        #outbricks = bricks[0]
+        #print('Outbricks:', outbricks)
+        #outbricks.about()
+    else:
+        bricks = survey.get_bricks_readonly()
+        outbricks = bricks[np.array([n == args.brick for n in bricks.brickname])]
+        assert(len(outbricks) == 1)
+
     outsurvey = LegacySurveyData(survey_dir = args.outdir)
     trymakedirs(args.outdir)
     outbricks.writeto(os.path.join(args.outdir, 'survey-bricks.fits.gz'))
