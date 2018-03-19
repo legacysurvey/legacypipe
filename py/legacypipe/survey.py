@@ -40,6 +40,12 @@ if 'Mock' in str(type(EllipseWithPriors)):
 
 class GaiaPosition(ParamList):
     def __init__(self, ra, dec, ref_tai, pmra, pmdec, parallax):
+        '''
+        Units:
+        - matches Gaia DR1
+        - pmra,pmdec are in mas/yr.  pmra is in angular speed (ie, has a cos(dec) factor)
+        - parallax is in mas.
+        '''
         self.ra = ra
         self.dec = dec
         self.ref_tai = ref_tai
@@ -77,21 +83,23 @@ class GaiaPosition(ParamList):
             from astrometry.util.starutil_numpy import radectoxyz, arcsecperrad, axistilt, xyztoradec
             suntheta = tai.getSunTheta()
 
-            xyz = radectoxyz(ra, dec)
-            xyz = xyz[0]
-            #print('RA,Dec -> xyz', xyz)
-
-            dxyz1 = radectoxyz(0., 0.) / arcsecperrad
-            dxyz1 = dxyz1[0]
-
-            dxyz2 = radectoxyz(90., axistilt) / arcsecperrad
-            dxyz2 = dxyz2[0]
-            #print('dxyz', dxyz1, dxyz2)
-            #print('parallax', self.parallax)
-            xyz += (self.parallax / 1000.) * (dxyz1 * np.cos(suntheta) +
-                                              dxyz2 * np.sin(suntheta))
+            # Finite differences on the unit sphere
+            xyz = radectoxyz(ra, dec)[0,:]
+            axis = np.deg2rad(axistilt)
+            scale = self.parallax / 1000. / arcsecperrad
+            xyz[0] += scale * np.cos(suntheta)
+            xyz[1] += scale * np.sin(suntheta) * np.cos(axis)
+            xyz[2] += scale * np.sin(suntheta) * np.sin(axis)
             ra, dec = xyztoradec(xyz)
-            #print('-> ra,dec', ra,dec)
+
+            # Equivalent finite differences, in vector form.
+            # This is from tractor/motion.py
+            #dxyz1 = radectoxyz(0., 0.) / arcsecperrad
+            #dxyz1 = dxyz1[0]
+            #dxyz2 = radectoxyz(90., axistilt) / arcsecperrad
+            #dxyz2 = dxyz2[0]
+            #xyz += (self.parallax / 1000.) * (dxyz1 * np.cos(suntheta) +
+            #                                  dxyz2 * np.sin(suntheta))
 
         pos = RaDecPos(ra, dec)
         self.cached_positions[taival] = pos
