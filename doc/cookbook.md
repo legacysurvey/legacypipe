@@ -140,13 +140,14 @@ Up to DR5, we have been using aperture zeropoints. For DR6, we have used
 instead PSF normalised zeropoints, computed at the same time as the
 calibration files.
 
-NOTE: I haven't run most of this myself. --ML
+Zeropoints
+----------
 
-Aperture zeropoints
--------------------
-
-As of DR6, these are no longer used for tractor processing, although
-they were still computed.
+The same code is used to generate the aperture and PSF-normalized
+zeropoints, depending on the optional flags used. Here, we describe the
+PSF zeropoints which have used since DR6. Since these require the
+calibration files to be computed, given the appropriate flag, the code
+can generate them if it cannot find them.
 
 The first step in generating the zero-points is to make a list of images
 for each camera. This can be done
@@ -156,27 +157,44 @@ for each camera. This can be done
     find /project/projectdirs/cosmo/staging/bok/BOK_CP/CP*/ksb*ooi*.fits.fz
          > 90prime_images.txt
     find /project/projectdirs/cosmo/staging/decam/*/c4d*ooi*.fits.fz
-         > decam_images
+         > decam_images.txt
 
-The image list needs to be trimmed for dates. NOTE: Kaylan wrote an
-ipython notebook, showing how he did this for DR6, but it's broken --ML.
-The image lists can now be converted into a qdo task list:
+The image list needs to be trimmed for dates and possible duplicates
+before they can now be converted into a qdo task list. Note that the
+image list should have the full path to the image starting with, e.g.
+`decam/` with the subdirectories for each camera in the `images`
+directory.
 
-    for camera in 90prime mosaic decam; do
-        python legacyzpts/py/legacyzpts/runmanager/qdo_tasks.py \
-               --camera \
-               --imagelist ${camera}_images.txt
-        qdo load zpts_dr6 ${camera}_tasks.txt
-    done
+    qdo load zpts_dr7 decam_images.txt
 
 To launch, use a local copy of the script
-`zpts_code/legacyzpts/bin/qdo_job.sh` and edit the `name_for_run`
-environment variable (this should be the directory from which jobs are
-launched) and then:
+`zpts_code/legacyzpts/bin/qdo_zpts.sh` and edit the `outdir` and
+`caldir` environment variable (this should be the directory from which
+jobs are launched) and then:
 
     cd rundirectory
-    qdo launch zpts_dr6 320 --cores_per_worker 1 --batchqueue debug --walltime 00:30:00 \
-                            --script fullpathtorundirectory/qdo_job.sh --keep_env
+    qdo launch dr7-zpts 32 --cores_per_worker 1 --batchqueue regular \
+          --keep_env --walltime 04:00:00
+          --script /global/cscratch1/sd/desiproc/dr7_zpts/qdo_zpts_dr7.sh
+
+Note that the files `decam-tiles_obstatus.fits` and
+`obstatus/bad_expid.txt` must be in the running directory as these have
+hard coded paths. The script should appropriately amend the `PYTHONPATH`
+environment variable, as well as the `PATH` if alternate builds to those
+in desiconda are to be used. The main command the the script runs is
+
+    python -u $CSCRATCH/DRcode/legacyzpts/py/legacyzpts/legacy_zeropoints.py \
+            --camera ${camera} --image ${image_fn} --outdir ${out_dir} \
+            --not_on_proj \
+            --calibdir ${cal_dir} --splinesky --psf \
+            --run-calibs \
+            > $log 2>&1
+
+where the `–run-calibs` flag tells the command to run the calibrations
+commands if the appropriate files are not found. The code will look in
+the `cal_dir` directory for the `psfex`, `psfex-merged`, `splinesky` and
+`splinesky-merged` directory and will compute the single-CCD versions
+for those that don't exist in either format.
 
 Once all the zeropoints have been computed, the tables must be merged:
 
@@ -188,24 +206,12 @@ The final merging of the thousands of tables could take a while, so do
 is better to do as a batch job, e.g. with an appropriately edited
 version of legacyzpts `/bin/slurm_job_merge.sh`.
 
-NOTE: the QA python script described in the documentation no longer
-exists. --ML
-
 For DR5, we imposed a depth cut in order to process some bricks with a
-very high number of exposure. The following procedure was used:
-
-    python legacyanalysis/depth-cut.py
-    python legacyanalysis/check-depth-cut.py
-    python legacyanalysis/dr5-cut-ccds.py
-
-The first step is run for each brick and generates
-`depthcut/*/ccds-*.fits` tables of CCDs that pass the depth cut for that
-brick. The second reads the `per-brick ccds-*` tables and cut to the
-union of all CCDs that pass depth cut in some brick and generates the
-`depth-cut-kept-ccds.fits` file. The third step reads
-`depth-cut-kept-ccds.fits` and cut the (already-created) annotated-ccds
-table and create the `.kd.fits` version of the CCDs table. We have found
-that, for DR6, a depth cut was not necessary.
+very high number of exposure. We have found that, for DR6, a depth cut
+was not necessary. For DR7, we will use a differerent scheme in order to
+keep as many images as possible. Other cuts are made, e.g. only CCDs
+whose zeropoints are within a maximum distance from the nominal
+zero-points are kept.
 
 Calibration files
 -----------------
@@ -213,15 +219,18 @@ Calibration files
 Calibration files can be computed on the fly, but it is more efficient
 to compute them in advance. Furthermore, if we want to use PSF
 zeropoints, then we must compute the calibrations in advance because
-they are needed to compute the PSF zeropoints.
-
-The cut on images to be used was performed by the code
-`legacyzpts/py/legacyzpts/compare-psf-ap.py`
+they are needed to compute the PSF zeropoints. The easiest way is to run
+them at the same time as the zeropoints as outlined in the previous
+section.
 
 The procedure is to run the two following scripts:
 
-    python legacypipe/run-calib.py
-    python legacypipe/merge-calibs.py
+    legacypipe/run-calib.py
+    legacypipe/merge-calibs.py
+
+The first is called by `legacyzpts/legacy_zeropoints.py`, but the second
+needs to be called afterwards to merge the calibration file that are
+computed per CCD into files per exposure.
 
 To create the kd-tree version of the zeropoint files,
 
@@ -342,16 +351,60 @@ The first step to compute the top-level depth information.
     python legacypipe/py/legacyanalysis/depth-histogram.py
 
 Prior to running, the hard-coded location of the release directory (the
-place where the coadd directory can be found) must be modified. NOTE: I
-may be missing some things here --ML.
+place where the coadd directory can be found) must be modified.
+
+brick summary
+-------------
+
+The file `survey-bricks-drN.fits.gz ` is generated from the `nexp` files
+found in the coadd subdirectories. It takes a while to run, so it's
+betterto split the work manually and merge the output afterwards. For
+DR6, this procedure took about 1.5hrs on one node using the interactive
+queue on Cori.
+
+    if [ "$NERSC_HOST" == "cori" ]; then
+        builddir=$CSCRATCH/DRcode/build
+    elif [ "$NERSC_HOST" == "edison" ]; then
+        builddir=$SCRATCH/DRcode/build
+    fi
+    export PATH=$builddir/bin:$PATH
+    export PYTHONPATH=$builddir/lib/python3.5/site-packages:$PYTHONPATH
+    export PYTHONPATH=$builddir/lib/python:$PYTHONPATH
+    export PYTHONPATH=/global/cscratch1/sd/desiproc/DRcode/legacypipe/py:$PYTHONPATH
+
+    drdir=/global/projecta/projectdirs/cosmo/work/legacysurvey/dr6/
+    for ((b=0; b<36; b++))
+    do
+        B=$(printf %02i $b)
+        python -u $CSCRATCH/DRcode/legacypipe/py/legacyanalysis/brick-summary.py \
+               --dr5 -o dr6-bricks-summary-$B.fits \
+               $drdir/coadd/$B*/*/*-nexp-*.fits.fz > bs-$B.log 2>&1 &
+    done
+
+The `–dr5` flag is to indicate post DR4 tractor catalogue format. Once
+the jobs are all done, merge and create summary plots:
+
+    python $CSCRATCH/DRcode/legacypipe/py/legacyanalysis/brick-summary.py \
+        --merge -o survey-bricks-dr6.fits dr6-bricks-summary-*.fits
+    module load latex
+    python $CSCRATCH/DRcode/legacypipe/py/legacyanalysis/brick-summary.py \
+        --plot survey-bricks-dr6.fits
+    gzip survey-bricks-dr6.fits
+
+Note that for the plotting to work, the files
+`mosaic-tiles_obstatus.fits`, `bass-tiles_obstatus.fits` and
+`decam-tiles_obstatus.fits` have to be in the directory. They can be
+obtained from the DESI SVN repository.
 
 Sweeps and external matching
 ----------------------------
 
 The next step is to generate the sweep files, which contain a subset of
 the columns of the tractor catalogues and matching to external
-catalogues. For DR1-4, these steps were run by John Moustakas and for
-DR5 by John and Adam Myers.
+catalogues. The `legacypipe/bin` directory contains slurm scripts to
+generate these files. The commands in them clash with the desiproc
+environment. For DR6, the commands were run from the interactive queue
+on Cori; the sweeps and externals took about 30 minutes on one node.
 
 We must first set the location of the input Tractor catalogs and the
 location of the bricks file (which speeds up the process of scanning
@@ -359,41 +412,104 @@ through files) and the name of the environment variable which will hold
 the list of Tractor catalogs, as well as the desired output directories:
 e.g.:
 
-    export TRACTOR_INDIR=/global/project/projectdirs/cosmo/work/legacysurvey/dr5/DR5_out/tractor
-    export BRICKSFILE=/global/cscratch1/sd/desiproc/dr5/survey-bricks.fits.gz
-    export TRACTOR_FILELIST=$CSCRATCH/tractor_filelist
-    export dr=dr5
-    export SWEEP_OUTDIR=$CSCRATCH/$dr/sweep
-    /usr/bin/mkdir -p $SWEEP_OUTDIR}
+    set -x
+    export ATP_ENABLED=0
+
+    outdir=/global/cscratch1/sd/desiproc/dr6-out
+    drdir=/global/projecta/projectdirs/cosmo/work/legacysurvey/dr6
+    export LEGACYPIPE_DIR=/global/cscratch1/sd/desiproc/DRcode/legacypipe
+
+    export TRACTOR_INDIR=$drdir/tractor
+    export BRICKSFILE=$drdir/survey-bricks.fits.gz
+    export TRACTOR_FILELIST=$outdir/tractor_filelist
+    export SWEEP_OUTDIR=$outdir/sweep
+    export PYTHONPATH=$LEGACYPIPE_DIR/py:${PYTHONPATH}
 
 Then, we build the list of tractor files for this data release and
-submit the job using a slurm script to generate the sweeps files:
+submit the job. This can be done on an interactive queue. For DR6, the
+process took about 30 minutes on one Cori Haswell node:
 
     find $TRACTOR_INDIR -name 'tractor-*.fits' > $TRACTOR_FILELIST
-    sbatch $LEGACYPIPE_DIR/bin/generate-sweep-files.slurm
+    time srun -u --cpu_bind=no -n 1 python $LEGACYPIPE_DIR/bin/generate-sweep-files.py \
+              -v --numproc 32 -I -f fits -F $TRACTOR_FILELIST --schema blocks \
+              -d $BRICKSFILE $TRACTOR_INDIR $SWEEP_OUTDIR
 
 The files will be written to `$SWEEP_OUTDIR`.
 
 To generate the \"external files\" matched to other surveys (e.g. see
-​http://legacysurvey.org/dr4/files/), we proceed in a similar fashion:
+​http://legacysurvey.org/dr4/files/), we proceed in a similar fashion.
+With the same definitions as for the sweeps, we add
 
     export EXTERNAL_OUTDIR=$CSCRATCH/$dr/external
     /usr/bin/mkdir -p $EXTERNAL_OUTDIR
-    sbatch $LEGACYPIPE_DIR/bin/match-external-catalog.slurm
+    export SDSSDIR=/global/projecta/projectdirs/sdss/data/sdss
 
-The files will be written to `$EXTERNAL_OUTDIR`.
+The files will be written to `$EXTERNAL_OUTDIR`. For DR6, we matched to
+five external catalogues:
+
+    time srun -u --cpu_bind=no -N 1 python $LEGACYPIPE_DIR/bin/match-external-catalog.py \
+         -v --numproc 32 -f fits -F $TRACTOR_FILELIST \
+         $SDSSDIR/dr12/boss/qso/DR12Q/DR12Q.fits \
+         $TRACTOR_INDIR \
+         $EXTERNAL_OUTDIR/survey-$dr-dr12Q.fits --copycols MJD PLATE FIBERID RERUN_NUMBER
+
+    time srun -u --cpu_bind=no -N 1 python $LEGACYPIPE_DIR/bin/match-external-catalog.py \
+         -v --numproc 32 -f fits -F $TRACTOR_FILELIST \
+         $SDSSDIR/dr7/dr7qso.fit.gz \
+         $TRACTOR_INDIR \
+         $EXTERNAL_OUTDIR/survey-$dr-dr7Q.fits --copycols SMJD PLATE FIBER RERUN
+
+    time srun -u --cpu_bind=no -N 1 python $LEGACYPIPE_DIR/bin/match-external-catalog.py \
+         -v --numproc 32 -f fits -F $TRACTOR_FILELIST \
+         $SDSSDIR/dr12/boss/qso/DR12Q/Superset_DR12Q.fits \
+         $TRACTOR_INDIR \
+         $EXTERNAL_OUTDIR/survey-$dr-superset-dr12Q.fits --copycols MJD PLATE FIBERID
+
+    time srun -u --cpu_bind=no -N 1 python $LEGACYPIPE_DIR/bin/match-external-catalog.py \
+         -v --numproc 32 -f fits -F $TRACTOR_FILELIST \
+         $SDSSDIR/dr14/sdss/spectro/redux/specObj-dr14.fits \
+         $TRACTOR_INDIR \
+         $EXTERNAL_OUTDIR/survey-$dr-specObj-dr14.fits --copycols MJD PLATE FIBERID RUN2D
+
+    time srun -u --cpu_bind=no -N 1 python $LEGACYPIPE_DIR/bin/match-external-catalog.py \
+         -v --numproc 32 -f fits -F $TRACTOR_FILELIST \
+         $SDSSDIR/dr14/eboss/qso/DR14Q/DR14Q_v4_4.fits \
+         $TRACTOR_INDIR \
+         $EXTERNAL_OUTDIR/survey-$dr-dr14Q_v4_4.fits --copycols MJD PLATE FIBERID
+
+Release directory structure and checksum files
+----------------------------------------------
+
+Most of the tractor input and output is already in release form, but
+there are two exceptions:
+
+-   The sweep output is in `sweep/6.0/`, where the number indicates the
+    release, instead of simply `sweep`.
+
+-   The tractor log files are tarred by output subdirectory and gzipped.
+
+The tractor code produces a file for each brick containing the checksums
+for all the output files for that brick. This doesn't follow the
+convention for the naming and location of checksum files for a data
+release, so a first step is to verify that the output files match the
+checksums and re-package them into the appropriate format. The next step
+is to generate the checksums for the rest of the output. This can be
+handled by the following scripts (with directory location appropriately
+amended):
+
+    legacypipe/bin/post-process-qa.py
+    legacypipe/bin/repackchecksum.py
+    legacypipe/bin/checksumming-non-tractor.sh
+    legacypipe/bin/checksumming-calibs.py
 
 Other "after-burner" stages
 ---------------------------
 
--   Load images into the Legacy Survey viewer (Dustin Lang). Note that
-    this is usually done as things progress.
+-   Load images into the Legacy Survey viewer (Dustin Lang).
 
 -   Generate a picture gallery (John Moustakas & Ben Weaver).
 
--   Final vetting and moving into place (Ben Weaver). NOTE: Dustin is
-    putting together some tools to do the vetting, so that it can be
-    done right after completion.
+-   Final vetting and moving into place (Ben Weaver).
 
 -   Documentation (Adam Myers with input from the team).
 
