@@ -1133,12 +1133,18 @@ def stage_srcs(targetrd=None, pixscale=None, targetwcs=None,
     # Add Gaia stars
     if gaia_stars:
         from legacyanalysis.gaiacat import GaiaCatalog
+        from astrometry.libkd.spherematch import match_radec
         
-        g = GaiaCatalog()
-        gaia = g.get_catalog_in_wcs(targetwcs)
-        ## FIXME -- cut on excess astrometric error?
+        gaia = GaiaCatalog().get_catalog_in_wcs(targetwcs)
         print('Got Gaia stars:', gaia)
         gaia.about()
+
+        # DJS, [decam-chatter 5486] Solved! GAIA separation of point sources
+        #   from extended sources
+        gaia.G = gaia.phot_g_mean_mag
+        gaia.pointsource = np.logical_or(
+            (gaia.G <= 18.) * (gaia.astrometric_excess_noise < 10.**0.5),
+            (gaia.G >= 18.) * (gaia.astrometric_excess_noise < 10.**(0.5 + 1.25/4.*(gaia.G-18.))))
 
         ok,xx,yy = targetwcs.radec2pixelxy(gaia.ra, gaia.dec)
         gaia.ibx = np.round(xx-1.).astype(int)
@@ -1151,6 +1157,17 @@ def stage_srcs(targetrd=None, pixscale=None, targetwcs=None,
         gaia.ibx = np.clip(gaia.ibx, 0, W-1)
         gaia.iby = np.clip(gaia.iby, 0, H-1)
 
+        # Handle sources that appear in both Gaia and Tycho-2 by dropping the entry from Tycho-2.
+        if len(gaia) and len(tycho):
+            # FIXME -- apply proper motions to bring them to the same epoch before matching
+            I,J,d = match_radec(tycho.ra, tycho.dec, gaia.ra, gaia.dec, 1./3600.,
+                                nearest=True)
+            print('Matched', len(I), 'Tycho-2 stars to Gaia stars')
+            if len(I):
+                keep = np.ones(len(tycho), bool)
+                keep[I] = False
+                tycho.cut(I)
+
         # Save for later...
         Tgaia = gaia
         gaiacat = []
@@ -1162,9 +1179,6 @@ def stage_srcs(targetrd=None, pixscale=None, targetwcs=None,
             gaiacat.append(GaiaSource.from_catalog(g, bands))
     else:
         Tgaia = fits_table()
-
-    # FIXME -- we still need to handle sources that appear in both
-    # Gaia and Tycho-2.
 
     # Saturated blobs -- create a source for each, except for those
     # that already have a Tycho-2 (or Gaia) star

@@ -310,8 +310,10 @@ class OneBlob(object):
             print('Model selection for source %i of %i in blob %s' %
                   (numi+1, len(Ibright), self.name))
             if isinstance(src, GaiaSource):
-                print('Gaia source', src, '-- not doing model selection.')
-                continue
+                print('Gaia source', src)
+                if src.isForcedPointSource():
+                    print('Gaia source is forced to be a point source -- not doing model selection.')
+                    continue
             cpu0 = time.clock()
     
             # Add this source's initial model back in.

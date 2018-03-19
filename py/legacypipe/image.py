@@ -392,8 +392,13 @@ class LegacySurveyImage(object):
                 print('WARNING: image median', imgmed, 'is more than 1 sigma',
                       'away from zero!')
 
+        # Convert MJD-OBS, in UTC, into TAI
+        mjd_tai = astropy.time.Time(self.mjdobs, format='mjd', scale='utc').tai.mjd
+        tai = TAITime(None, mjd=mjd_tai)
+
         # tractor WCS object
-        twcs = self.get_tractor_wcs(wcs, x0, y0, primhdr=primhdr, imghdr=imghdr)
+        twcs = self.get_tractor_wcs(wcs, x0, y0, primhdr=primhdr, imghdr=imghdr,
+                                    tai=tai)
                                     
         psf = self.read_psf_model(x0, y0, gaussPsf=gaussPsf, pixPsf=pixPsf,
                                   hybridPsf=hybridPsf, normalizePsf=normalizePsf,
@@ -416,10 +421,7 @@ class LegacySurveyImage(object):
         tim.galnorm = self.galaxy_norm(tim)
         tim.psf = fullpsf
 
-        # Convert MJD-OBS, in UTC, into TAI
-        mjd_tai = astropy.time.Time(self.mjdobs,
-                                    format='mjd', scale='utc').tai.mjd
-        tim.time = TAITime(None, mjd=mjd_tai)
+        tim.time = tai
         tim.slice = slc
         tim.zpscale = orig_zpscale
         tim.midsky = midsky
@@ -719,10 +721,12 @@ class LegacySurveyImage(object):
             invvar[invvar < thresh] = 0
         return invvar
 
-    def get_tractor_wcs(self, wcs, x0, y0,
+    def get_tractor_wcs(self, wcs, x0, y0, tai=None,
                         primhdr=None, imghdr=None):
-        from tractor.basics import ConstantFitsWcs
-        twcs = ConstantFitsWcs(wcs)
+        #from tractor.basics import ConstantFitsWcs
+        #twcs = ConstantFitsWcs(wcs)
+        from legacypipe.survey import LegacySurveyWcs
+        twcs = LegacySurveyWcs(wcs, tai)
         if x0 or y0:
             twcs.setX0Y0(x0,y0)
         return twcs

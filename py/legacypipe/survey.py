@@ -12,7 +12,7 @@ from astrometry.util.starutil_numpy import degrees_between
 
 from tractor.ellipses import EllipseESoft, EllipseE
 from tractor.galaxy import ExpGalaxy
-from tractor import PointSource, RaDecPos, NanoMaggies, ParamList
+from tractor import PointSource, RaDecPos, NanoMaggies, ParamList, ConstantFitsWcs
 
 from legacypipe.utils import EllipseWithPriors
 
@@ -33,27 +33,78 @@ if 'Mock' in str(type(EllipseWithPriors)):
         pass
     EllipseWithPriors = duck
 
-# In Gaia DR1, only the Tycho-2 stars have proper motions and
-# parallaxes.  Since these are all saturated in our imaging, and we
-# already handle Tycho-2 stars specially, for the remaining Gaia stars
-# we just nail down the positions.
+
+# Gaia measures positions better than we will, we assume, so the
+# GaiaPosition class pretends that it does not have any parameters
+# that can be optimized; therefore they stay fixed.
 
 class GaiaPosition(ParamList):
-    def __init__(self, ra, dec):
+    def __init__(self, ra, dec, ref_tai, pmra, pmdec, parallax):
         self.ra = ra
         self.dec = dec
+        self.ref_tai = ref_tai
+        self.pmra = pmra
+        self.pmdec = pmdec
+        self.parallax = parallax
         super(GaiaPosition, self).__init__()
+        self.cached_positions = {}
 
     def copy(self):
-        return GaiaPosition(self.ra, self.dec)
-        
+        return GaiaPosition(self.ra, self.dec, self.ref_tai, self.pmra, self.pmdec,
+                            self.parallax)
+
+    def getPositionAtTime(self, tai):
+        taival = tai.getValue()
+        try:
+            return self.cached_positions[taival]
+        except KeyError:
+            # not cached
+            pass
+        if self.pmra == 0. and self.pmdec == 0. and self.parallax == 0.:
+            pos = RaDecPos(self.ra, self.dec)
+            self.cached_positions[taival] = pos
+            return pos
+
+        dt = (tai - self.ref_tai).toYears()
+        #print('getPositionAtTime: tai', tai, '-> dt', dt, 'years')
+        cosdec = np.cos(np.deg2rad(self.dec))
+        # pmra,pmdec are in milli-arcsec per year.
+        dec = self.dec +  dt * self.pmdec / (3600. * 1000.)
+        ra  = self.ra  + (dt * self.pmra  / (3600. * 1000.)) / cosdec
+
+        # parallax
+        if self.parallax != 0.:
+            from astrometry.util.starutil_numpy import radectoxyz, arcsecperrad, axistilt, xyztoradec
+            suntheta = tai.getSunTheta()
+
+            xyz = radectoxyz(ra, dec)
+            xyz = xyz[0]
+            #print('RA,Dec -> xyz', xyz)
+
+            dxyz1 = radectoxyz(0., 0.) / arcsecperrad
+            dxyz1 = dxyz1[0]
+
+            dxyz2 = radectoxyz(90., axistilt) / arcsecperrad
+            dxyz2 = dxyz2[0]
+            #print('dxyz', dxyz1, dxyz2)
+            #print('parallax', self.parallax)
+            xyz += (self.parallax / 1000.) * (dxyz1 * np.cos(suntheta) +
+                                              dxyz2 * np.sin(suntheta))
+            ra, dec = xyztoradec(xyz)
+            #print('-> ra,dec', ra,dec)
+
+        pos = RaDecPos(ra, dec)
+        self.cached_positions[taival] = pos
+        return pos
+
     @staticmethod
     def getName():
         return 'GaiaPosition'
 
     def __str__(self):
-        return '%s: RA, Dec = (%.5f, %.5f)' % (self.getName(),
-                                               self.ra, self.dec)
+        return ('%s: RA, Dec = (%.5f, %.5f), pm (%.1f, %.1f), parallax %.3f' %
+                (self.getName(), self.ra, self.dec, self.pmra, self.pmdec, self.parallax))
+
 
 class GaiaSource(PointSource):
     def __init__(self, pos, bright):
@@ -65,10 +116,37 @@ class GaiaSource(PointSource):
 
     def getSourceType(self):
         return 'GaiaSource'
+
+    def isForcedPointSource(self):
+        return self.forced_point_source
     
     @classmethod
     def from_catalog(cls, g, bands):
-        pos = GaiaPosition(g.ra, g.dec)
+        from tractor.tractortime import TAITime
+
+        # When creating 'tim.time' entries, we do:
+        #import astropy.time
+        # Convert MJD-OBS, in UTC, into TAI
+        #mjd_tai = astropy.time.Time(self.mjdobs,
+        #                            format='mjd', scale='utc').tai.mjd
+
+        # Gaia DR1 ref_epoch is 2015.0, in Julian years.
+        ref_mjd = (float(g.ref_epoch) - 2000.) * TAITime.daysperyear + TAITime.mjd2k
+        #print('Ref MJD:', ref_mjd)
+        ref_tai = TAITime(None, mjd=ref_mjd)
+        #print('Ref TAI:', ref_tai)
+
+        # Gaia has NaN entries when no proper motion or parallax is measured.
+        # Convert to zeros.
+        def nantozero(x):
+            if not np.isfinite(x):
+                return 0.
+            return x
+
+        pos = GaiaPosition(g.ra, g.dec, ref_tai.getValue(),
+                           nantozero(g.pmra),
+                           nantozero(g.pmdec),
+                           nantozero(g.parallax))
         #print('Gaia G mags:', g.phot_g_mean_mag)
         # Assume color 0 from Gaia G mag as initial flux
         m = g.phot_g_mean_mag
@@ -76,22 +154,42 @@ class GaiaSource(PointSource):
                        for band in bands])
         bright = NanoMaggies(order=bands, **fluxes)
         src = cls(pos, bright)
-        print('Created:', src)
+        #print('Created:', src)
         # print('Params:', src.getParams())
         # src.printThawedParams()
         # print('N params:', src.numberOfParams())
         # print('named params:', src.namedparams)
         # print('param names:', src.paramnames)
 
+        src.forced_point_source = g.pointsource
+
         # stash these for later...
         # Gaia DR1 ra_error, dec_error are in milli-arcsec.
         # Convert to invvar-degrees
         ## FIXME -- cos(Dec) terms?
         ## FIXME -- what units are the chunk files errors in?
-        print('RA,Dec errors (mas):', g.ra_error, g.dec_error)
+        #print('RA,Dec errors (mas):', g.ra_error, g.dec_error)
         src.ra_ivar  = 1. / (g.ra_error  / 1000. / 3600.)**2
         src.dec_ivar = 1. / (g.dec_error / 1000. / 3600.)**2
         return src
+
+#
+# We need a subclass of the standand WCS class to handle moving sources.
+#
+
+class LegacySurveyWcs(ConstantFitsWcs):
+    def __init__(self, wcs, tai):
+        super(LegacySurveyWcs, self).__init__(wcs)
+        self.tai = tai
+
+    def copy(self):
+        return LegacySurveyWcs(self.wcs, self.tai)
+
+    def positionToPixel(self, pos, src=None):
+        if isinstance(pos, GaiaPosition):
+            pos = pos.getPositionAtTime(self.tai)
+        return super(LegacySurveyWcs, self).positionToPixel(pos, src=src)
+
 
 class LegacyEllipseWithPriors(EllipseWithPriors):
     # Prior on (softened) ellipticity: Gaussian with this standard deviation
