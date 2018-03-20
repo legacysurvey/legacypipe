@@ -91,6 +91,9 @@ def make_coadds(tims, bands, targetwcs,
         mjd_argmins[:,:] = -1
         mjd_argmaxs[:,:] = -1
 
+    if plots:
+        allresids = []
+
     tinyw = 1e-30
     for iband,(band,timiter) in enumerate(zip(bands, imaps)):
         print('Computing coadd for band', band)
@@ -171,17 +174,46 @@ def make_coadds(tims, bands, targetwcs,
                 from legacypipe.runbrick import rgbkwargs
                 from legacypipe.survey import get_rgb
                 import pylab as plt
-                # Make one grayscale, brick-space plot per image
-                thisimg = np.zeros((H,W), np.float32)
-                thisimg[Yo,Xo] = im
-                rgb = get_rgb([thisimg], [band], **rgbkwargs)
-                rgb = rgb.sum(axis=2)
-                fn = ps.getnext()
-                plt.imsave(fn, rgb, origin='lower', cmap='gray')
+                # # Make one grayscale, brick-space plot per image
+                # thisimg = np.zeros((H,W), np.float32)
+                # thisimg[Yo,Xo] = im
+                # rgb = get_rgb([thisimg], [band], **rgbkwargs)
+                # rgb = rgb.sum(axis=2)
+                # fn = ps.getnext()
+                # plt.imsave(fn, rgb, origin='lower', cmap='gray')
                 #plt.clf()
                 #plt.imshow(rgb, interpolation='nearest', origin='lower', cmap='gray')
                 #plt.xticks([]); plt.yticks([])
                 #ps.savefig()
+                # Image, Model, and Resids
+                plt.clf()
+                plt.subplot(2,2,1)
+                thisimg = np.zeros((H,W), np.float32)
+                thisimg[Yo,Xo] = im
+                rgb = get_rgb([thisimg], [band], **rgbkwargs)
+                iplane = dict(g=2, r=1, z=0)[band]
+                rgbimg = rgb[:,:,iplane]
+                plt.imshow(rgbimg, interpolation='nearest', origin='lower', cmap='gray')
+                plt.xticks([]); plt.yticks([])
+                plt.subplot(2,2,2)
+                thismod = np.zeros((H,W), np.float32)
+                thismod[Yo,Xo] = mo
+                rgb = get_rgb([thismod], [band], **rgbkwargs)
+                rgbmod = rgb[:,:,iplane]
+                plt.imshow(rgbmod, interpolation='nearest', origin='lower', cmap='gray')
+                plt.xticks([]); plt.yticks([])
+                plt.subplot(2,2,3)
+                thisres = np.zeros((H,W), np.float32)
+                thisres[Yo,Xo] = (im - mo) * np.sqrt(iv)
+                plt.imshow(thisres, interpolation='nearest', origin='lower', cmap='gray',
+                           vmin=-20, vmax=20)
+                plt.xticks([]); plt.yticks([])
+                # plt.subplot(2,2,4)
+                # plt.hist(thisres[Yo,Xo], bins=50, range=(-20,20))
+                # plt.xlabel('resids, sigma')
+                plt.suptitle(tim.name + ': %.1f' % (tim.time.toYear()))
+                ps.savefig()
+                allresids.append((tim.time.toYear(), tim.name, rgbimg,rgbmod,thisres))
 
             # invvar-weighted image
             cowimg[Yo,Xo] += iv * im
@@ -316,6 +348,37 @@ def make_coadds(tims, bands, targetwcs,
 
     t2 = Time()
     print('coadds: images:', t2-t0)
+
+    if plots:
+        I = np.argsort([a[0] for a in allresids])
+        cols = int(np.ceil(np.sqrt(len(I))))
+        rows = int(np.ceil(len(I) / float(cols)))
+        allresids = [allresids[i] for i in I]
+        plt.clf()
+        for i,(y,n,img,mod,res) in enumerate(allresids):
+            plt.subplot(rows,cols,i+1)
+            plt.imshow(img, interpolation='nearest', origin='lower', cmap='gray')
+            plt.xticks([]); plt.yticks([])
+            plt.title('%.1f: %s' % (y, n))
+        plt.suptitle('Data')
+        ps.savefig()
+        plt.clf()
+        for i,(y,n,img,mod,res) in enumerate(allresids):
+            plt.subplot(rows,cols,i+1)
+            plt.imshow(mod, interpolation='nearest', origin='lower', cmap='gray')
+            plt.xticks([]); plt.yticks([])
+            plt.title('%.1f: %s' % (y, n))
+        plt.suptitle('Model')
+        ps.savefig()
+        plt.clf()
+        for i,(y,n,img,mod,res) in enumerate(allresids):
+            plt.subplot(rows,cols,i+1)
+            plt.imshow(res, interpolation='nearest', origin='lower', cmap='gray',
+                       vmin=-20, vmax=20)
+            plt.xticks([]); plt.yticks([])
+            plt.title('%.1f: %s' % (y, n))
+        plt.suptitle('Resids')
+        ps.savefig()
 
     if xy is not None:
         print('MJDs type:', mjds.dtype)

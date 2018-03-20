@@ -1168,6 +1168,9 @@ def stage_srcs(targetrd=None, pixscale=None, targetwcs=None,
                 keep[I] = False
                 tycho.cut(I)
 
+        # HACK
+        gaia.writeto('gaia.fits')
+
         # Save for later...
         Tgaia = gaia
         gaiacat = []

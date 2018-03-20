@@ -80,11 +80,13 @@ def main():
     tycho.writeto(os.path.join(args.outdir, 'tycho2.fits.gz'))
     
     outccds = C.copy()
+    cols = outccds.get_columns()
     for c in ['ccd_x0', 'ccd_x1', 'ccd_y0', 'ccd_y1',
               'brick_x0', 'brick_x1', 'brick_y0', 'brick_y1',
               'plver', 'skyver', 'wcsver', 'psfver', 'skyplver', 'wcsplver',
               'psfplver' ]:
-        outccds.delete_column(c)
+        if c in cols:
+            outccds.delete_column(c)
     outccds.image_hdu[:] = 1
 
     # Convert to list to avoid truncating filenames

@@ -42,6 +42,16 @@ tim1 = im1.get_tractor_image(radecpoly=targetrd, pixPsf=True, hybridPsf=True,
                              normalizePsf=True, splinesky=True)
 print('Tim', tim1)
 
+##
+tims = [tim1]
+ccd1.ccd_x0 = np.array([tim.x0 for tim in tims]).astype(np.int16)
+ccd1.ccd_y0 = np.array([tim.y0 for tim in tims]).astype(np.int16)
+ccd1.ccd_x1 = np.array([tim.x0 + tim.shape[1]
+                        for tim in tims]).astype(np.int16)
+ccd1.ccd_y1 = np.array([tim.y0 + tim.shape[0]
+                        for tim in tims]).astype(np.int16)
+ccd1.writeto('ccd1.fits')
+
 
 
 bands = ['g','r','z']
