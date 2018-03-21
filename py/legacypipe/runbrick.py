@@ -1126,6 +1126,11 @@ def stage_srcs(targetrd=None, pixscale=None, targetwcs=None,
     tycho.iby = np.clip(tycho.iby, 0, H-1)
     del ok,xx,yy
 
+    # Keep a copy of all the Tycho-2 stars within the brick, because
+    # we're going to drop Tycho-2 stars that are duplicated in Gaia,
+    # but we still want the Tycho-2 stars for the Tycho2-in-blob logic.
+    alltycho = tycho.copy()
+
     # existing sources that should be avoided when detecting new
     # sources.
     avoid_x, avoid_y = [],[]
@@ -1314,6 +1319,10 @@ def stage_srcs(targetrd=None, pixscale=None, targetwcs=None,
     tnow = Time()
     print('[serial srcs] Blobs:', tnow-tlast)
     tlast = tnow
+
+    # Now that we're done using the cut Tycho-2 list for saturated &
+    # other source detection, revert to the uncut.
+    tycho = alltycho
 
     keys = ['T', 'tims', 'blobsrcs', 'blobslices', 'blobs', 'cat',
             'ps', 'tycho']
