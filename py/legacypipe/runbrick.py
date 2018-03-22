@@ -1112,8 +1112,21 @@ def stage_srcs(targetrd=None, pixscale=None, targetwcs=None,
     saturated_pix = binary_dilation(satmap > 0, iterations=10)
     
     # Read Tycho-2 stars and use as saturated sources.
-    tycho = fits_table(survey.find_file('tycho2'))
-    print('Read', len(tycho), 'Tycho-2 stars')
+    tycho2fn = survey.find_file('tycho2')
+    from astrometry.libkd.spherematch import tree_open, tree_search_radec
+    radius = 1.
+    ra,dec = targetwcs.radec_center()
+    # fitscopy /data2/catalogs-fits/TYCHO2/tycho2.fits"[col tyc1;tyc2;tyc3;ra;dec;sigma_ra;sigma_dec;mean_ra;mean_dec;pm_ra;pm_dec;sigma_pm_ra;sigma_pm_dec;epoch_ra;epoch_dec;mag_bt;mag_vt;mag_hp]" /tmp/tycho2-astrom.fits
+    # startree -i /tmp/tycho2-astrom.fits -o ~/cosmo/work/legacysurvey/dr7/tycho2.kd.fits -P -k -n stars -T
+    kd = tree_open(tycho2fn, 'stars')
+    I = tree_search_radec(kd, ra, dec, radius)
+    print(len(I), 'Tycho-2 stars within', radius, 'deg of RA,Dec (%.3f, %.3f)' % (ra,dec))
+    if len(I) == 0:
+        tycho = []
+    # Read only the rows within range.
+    tycho = fits_table(tycho2fn, rows=I)
+    del kd
+    #print('Read', len(tycho), 'Tycho-2 stars')
     ok,xx,yy = targetwcs.radec2pixelxy(tycho.ra, tycho.dec)
     ## ibx = integer brick x
     tycho.ibx = np.round(xx-1.).astype(int)
@@ -1125,6 +1138,23 @@ def stage_srcs(targetrd=None, pixscale=None, targetwcs=None,
     tycho.ibx = np.clip(tycho.ibx, 0, W-1)
     tycho.iby = np.clip(tycho.iby, 0, H-1)
     del ok,xx,yy
+
+    tycho.ref_cat = np.array(['T2'] * len(tycho))
+    # tyc1: [1,9537], tyc2: [1,12121], tyc3: [1,3]
+    tycho.ref_id = (tycho.tyc1.astype(np.int64)*1000000 +
+                    tycho.tyc2.astype(np.int64)*10 +
+                    tycho.tyc3.astype(np.int64))
+    tycho.pmra_ivar = 1./tycho.sigma_pm_ra**2
+    tycho.pmdec_ivar = 1./tycho.sigma_pm_dec**2
+    tycho.ra_ivar  = 1./(tycho.sigma_ra / np.cos(np.deg2rad(tycho.dec)) / 1000. / 3600.)**2
+    tycho.dec_ivar = 1./(tycho.sigma_dec / 1000. / 3600.)**2
+    tycho.rename('pm_ra', 'pmra')
+    tycho.rename('pm_dec', 'pmdec')
+
+    for c in ['tyc1', 'tyc2', 'tyc3', 'mag_bt', 'mag_vt', 'mag_hp',
+              'mean_ra', 'mean_dec', 'epoch_ra', 'epoch_dec',
+              'sigma_pm_ra', 'sigma_pm_dec', 'sigma_ra', 'sigma_dec']:
+        tycho.delete_column(c)
 
     # Keep a copy of all the Tycho-2 stars within the brick, because
     # we're going to drop Tycho-2 stars that are duplicated in Gaia,
@@ -1172,19 +1202,40 @@ def stage_srcs(targetrd=None, pixscale=None, targetwcs=None,
                 keep = np.ones(len(tycho), bool)
                 keep[I] = False
                 tycho.cut(I)
-
         # HACK
-        gaia.writeto('gaia.fits')
+        #gaia.writeto('gaia.fits')
+
+        # Don't detect new sources where we already have Gaia stars
+        avoid_x.extend(gaia.ibx)
+        avoid_y.extend(gaia.iby)
+        
+        # Gaia DR1
+        gaia_release = 'G1'
+        gaia.ref_cat = np.array([gaia_release] * len(gaia))
+        #print('Gaia.ref_cat:', gaia.ref_cat)
+        gaia.ref_id  = gaia.source_id
+        gaia.pmra_ivar = 1./gaia.pmra_error**2
+        gaia.pmdec_ivar = 1./gaia.pmdec_error**2
+        gaia.parallax_ivar = 1./gaia.parallax_error**2
+        # mas -> deg
+        gaia.ra_ivar  = 1./(gaia.ra_error / np.cos(np.deg2rad(gaia.dec)) / 1000. / 3600.)**2
+        gaia.dec_ivar = 1./(gaia.dec_error         / 1000. / 3600.)**2
+        
+        # print('Gaia ra_error:', gaia.ra_error)
+        # print('Gaia ra_ivar:', gaia.ra_ivar)
+        # print('Gaia dec_error:', gaia.dec_error)
+        # print('Gaia dec_ivar:', gaia.dec_ivar)
+
+        for c in ['ra_error', 'dec_error', 'parallax_error', 'pmra_error', 'pmdec_error']:
+            gaia.delete_column(c)
+        for c in ['pmra', 'pmdec', 'parallax', 'pmra_ivar', 'pmdec_ivar', 'parallax_ivar']:
+            X = gaia.get(c)
+            X[np.logical_not(np.isfinite(X))] = 0.
 
         # Save for later...
         Tgaia = gaia
-        gaiacat = []
-        
-        avoid_x.extend(gaia.ibx)
-        avoid_y.extend(gaia.iby)
-        # Create catalog entries...
-        for g in gaia:
-            gaiacat.append(GaiaSource.from_catalog(g, bands))
+        # Create Tractor sources
+        gaiacat = [GaiaSource.from_catalog(g, bands) for g in gaia]
     else:
         Tgaia = fits_table()
 
@@ -1222,6 +1273,7 @@ def stage_srcs(targetrd=None, pixscale=None, targetwcs=None,
         print('Adding', len(Tsat), 'additional saturated stars')
         # MAGIC mag for a saturated star
         Tsat.mag = np.zeros(len(Tsat), np.float32) + 15.
+        #Tsat.ref_cat = np.array(['  ']*len(Tsat))
         Tsat = merge_tables([tycho, Tsat], columns='fillzero')
     del satyx
         
@@ -1276,6 +1328,7 @@ def stage_srcs(targetrd=None, pixscale=None, targetwcs=None,
     del detivs
 
     # Merge newly detected sources with existing (Tycho2 + Gaia) source lists
+    #Tnew.ref_cat = np.array(['  ']*len(Tnew))
     if gaia_stars:
         T = merge_tables([Tsat, Tgaia, Tnew], columns='fillzero')
         cat = Catalog(*(satcat + gaiacat + newcat))
@@ -1630,7 +1683,7 @@ def stage_fitblobs(T=None,
     assert(nb == len(bands))
     ns,nb = BB.dchisq.shape
     assert(ns == len(cat))
-    assert(nb == 5) # ptsrc, simple, dev, exp, comp
+    assert(nb == 5) # ptsrc, rex, dev, exp, comp
 
     # Renumber blobs to make them contiguous.
     oldblob = T.blob
@@ -1682,8 +1735,8 @@ def stage_fitblobs(T=None,
     del ninblob
 
     # Copy blob results to table T
-    T.left_blob    = np.logical_and(BB.started_in_blob,
-                                    np.logical_not(BB.finished_in_blob))
+    T.left_blob = np.logical_and(BB.started_in_blob,
+                                 np.logical_not(BB.finished_in_blob))
     for k in ['fracflux', 'fracin', 'fracmasked', 'rchisq', 'cpu_source',
               'cpu_blob', 'blob_width', 'blob_height', 'blob_npix',
               'blob_nimages', 'blob_totalpix', 'dchisq', 'tycho2inblob']:
@@ -2428,11 +2481,17 @@ def stage_writecat(
     hdr = fs = None
     T2,hdr = prepare_fits_catalog(cat, invvars, TT, hdr, bands, fs)
 
-    # For GaiaSources, plug in Gaia's RA,Dec errors.
-    for i,src in enumerate(cat):
-        if isinstance(src, GaiaSource):
-            T2.ra_ivar[i] = src.ra_ivar
-            T2.dec_ivar[i] = src.dec_ivar
+    # For Gaia and Tycho-2 sources, plug in the reference-catalog inverse-variances.
+    I = np.flatnonzero(T.ref_id)
+    T2.ra_ivar [I] = T.ra_ivar[I]
+    T2.dec_ivar[I] = T.dec_ivar[I]
+    print('T2 ref_cat:', T2.ref_cat)
+    T2.ref_cat = np.array(['  ' if x=='0.0' else x for x in T2.ref_cat]).astype('U2')
+
+    print('TT:')
+    TT.about()
+    print('T2:')
+    T2.about()
 
     primhdr = fitsio.FITSHDR()
     for r in version_header.records():

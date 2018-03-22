@@ -16,7 +16,7 @@ from tractor import PointSource, RaDecPos, NanoMaggies, ParamList, ConstantFitsW
 
 from legacypipe.utils import EllipseWithPriors
 
-release_number = 6000
+release_number = 7000
 
 # search order: $TMPDIR, $TEMP, $TMP, then /tmp, /var/tmp, /usr/tmp
 tempdir = tempfile.gettempdir()
@@ -168,17 +168,7 @@ class GaiaSource(PointSource):
         # print('N params:', src.numberOfParams())
         # print('named params:', src.namedparams)
         # print('param names:', src.paramnames)
-
         src.forced_point_source = g.pointsource
-
-        # stash these for later...
-        # Gaia DR1 ra_error, dec_error are in milli-arcsec.
-        # Convert to invvar-degrees
-        ## FIXME -- cos(Dec) terms?
-        ## FIXME -- what units are the chunk files errors in?
-        #print('RA,Dec errors (mas):', g.ra_error, g.dec_error)
-        src.ra_ivar  = 1. / (g.ra_error  / 1000. / 3600.)**2
-        src.dec_ivar = 1. / (g.dec_error / 1000. / 3600.)**2
         return src
 
 #
@@ -1009,7 +999,7 @@ Now using the current directory as LEGACY_SURVEY_DIR, but this is likely to fail
                 glob(os.path.join(basedir, 'survey-ccds-*.kd.fits')))
 
         elif filetype == 'tycho2':
-            return swap(os.path.join(basedir, 'tycho2.fits.gz'))
+            return swap(os.path.join(basedir, 'tycho2.kd.fits'))
 
         elif filetype == 'annotated-ccds':
             if self.version == 'dr2':

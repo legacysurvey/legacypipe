@@ -131,7 +131,9 @@ def format_catalog(T, hdr, primhdr, allbands, outfn,
     # Column ordering...
     cols = ['release', 'brickid', 'brickname', 'objid', 'brick_primary', 
             'type', 'ra', 'dec', 'ra_ivar', 'dec_ivar',
-            'bx', 'by', 'dchisq', 'ebv', 'mjd_min', 'mjd_max']
+            'bx', 'by', 'dchisq', 'ebv', 'mjd_min', 'mjd_max',
+            'ref_cat', 'ref_id', 'pmra', 'pmdec', 'parallax',
+            'pmra_ivar', 'pmdec_ivar', 'parallax_ivar', 'ref_epoch', ]
     def add_fluxlike(c):
         for b in allbands:
             cols.append('%s%s_%s' % (flux_prefix, c, b))

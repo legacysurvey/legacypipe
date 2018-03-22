@@ -15,7 +15,8 @@ fits_typemap = { PointSource: 'PSF',
                  FixedCompositeGalaxy: 'COMP',
                  SimpleGalaxy: 'SIMP',
                  RexGalaxy: 'REX',
-                 GaiaSource: 'GAIA',
+                 #GaiaSource: 'GAIA',
+                 GaiaSource: 'PSF',
                  type(None): 'NONE' }
 
 fits_short_typemap = { PointSource: 'P',
