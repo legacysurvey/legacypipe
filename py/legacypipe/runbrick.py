@@ -1155,6 +1155,9 @@ def stage_srcs(targetrd=None, pixscale=None, targetwcs=None,
               'mean_ra', 'mean_dec', 'epoch_ra', 'epoch_dec',
               'sigma_pm_ra', 'sigma_pm_dec', 'sigma_ra', 'sigma_dec']:
         tycho.delete_column(c)
+    for c in ['pmra', 'pmdec', 'pmra_ivar', 'pmdec_ivar']:
+        X = tycho.get(c)
+        X[np.logical_not(np.isfinite(X))] = 0.
 
     # Keep a copy of all the Tycho-2 stars within the brick, because
     # we're going to drop Tycho-2 stars that are duplicated in Gaia,
