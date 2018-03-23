@@ -79,23 +79,7 @@ class LegacySurveyImage(object):
         imgfn = ccd.image_filename.strip()
 
         self.imgfn = os.path.join(self.survey.get_image_dir(), imgfn)
-        # Compute data quality and weight-map filenames
-        self.dqfn = self.imgfn.replace('_ooi_', '_ood_').replace('_oki_','_ood_')
-        self.wtfn = self.imgfn.replace('_ooi_', '_oow_').replace('_oki_','_oow_')
-        assert(self.dqfn != self.imgfn)
-        assert(self.wtfn != self.imgfn)
-
-        for attr in ['imgfn', 'dqfn', 'wtfn']:
-            fn = getattr(self, attr)
-            if os.path.exists(fn):
-                continue
-            if fn.endswith('.fz'):
-                fun = fn[:-3]
-                if os.path.exists(fun):
-                    print('Using      ', fun)
-                    print('rather than', fn)
-                    setattr(self, attr, fun)
-                    fn = fun
+        self.compute_filenames()
 
         self.hdu     = ccd.image_hdu
         self.expnum  = ccd.expnum
@@ -135,6 +119,25 @@ class LegacySurveyImage(object):
                                          '%s-%s.fits' % (self.camera, expstr))
         self.merged_splineskyfn = os.path.join(calibdir, 'splinesky-merged', expstr[:5],
                                                '%s-%s.fits' % (self.camera, expstr))
+
+    def compute_filenames(self):
+        # Compute data quality and weight-map filenames
+        self.dqfn = self.imgfn.replace('_ooi_', '_ood_').replace('_oki_','_ood_')
+        self.wtfn = self.imgfn.replace('_ooi_', '_oow_').replace('_oki_','_oow_')
+        assert(self.dqfn != self.imgfn)
+        assert(self.wtfn != self.imgfn)
+
+        for attr in ['imgfn', 'dqfn', 'wtfn']:
+            fn = getattr(self, attr)
+            if os.path.exists(fn):
+                continue
+            if fn.endswith('.fz'):
+                fun = fn[:-3]
+                if os.path.exists(fun):
+                    print('Using      ', fun)
+                    print('rather than', fn)
+                    setattr(self, attr, fun)
+                    fn = fun
 
     def __str__(self):
         return self.name
