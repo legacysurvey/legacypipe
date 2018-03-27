@@ -211,7 +211,7 @@ def make_coadds(tims, bands, targetwcs,
                 # plt.subplot(2,2,4)
                 # plt.hist(thisres[Yo,Xo], bins=50, range=(-20,20))
                 # plt.xlabel('resids, sigma')
-                plt.suptitle(tim.name + ': %.1f' % (tim.time.toYear()))
+                plt.suptitle(tim.name + ': %.2f' % (tim.time.toYear()))
                 ps.savefig()
                 allresids.append((tim.time.toYear(), tim.name, rgbimg,rgbmod,thisres))
 

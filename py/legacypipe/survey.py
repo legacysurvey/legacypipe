@@ -836,6 +836,7 @@ class LegacySurveyData(object):
         from legacypipe.mosaic import MosaicImage
         from legacypipe.bok    import BokImage
         from legacypipe.ptf    import PtfImage
+        from legacypipe.cfht   import MegaPrimeImage
         from collections import OrderedDict
 
         if survey_dir is None:
@@ -875,6 +876,7 @@ Now using the current directory as LEGACY_SURVEY_DIR, but this is likely to fail
             'mosaic3': MosaicImage,
             '90prime': BokImage,
             'ptf'    : PtfImage,
+            'megaprime': MegaPrimeImage,
             }
 
         self.allbands = 'ugrizY'

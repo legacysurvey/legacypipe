@@ -12,20 +12,31 @@ class MegaPrimeImage(LegacySurveyImage):
         super(MegaPrimeImage, self).__init__(survey, t)
         # Adjust zeropoint for exposure time
         self.ccdzpt += 2.5 * np.log10(self.exptime)
-        print('MegaPrimeImage: CCDs table entry', t)
-        for x in dir(t):
-            if x.startswith('_'):
-                continue
-            print('  ', x, ':', getattr(t,x))
+        # print('MegaPrimeImage: CCDs table entry', t)
+        # for x in dir(t):
+        #     if x.startswith('_'):
+        #         continue
+        #     print('  ', x, ':', getattr(t,x))
 
     def compute_filenames(self):
         self.dqfn = 'cfis/test.mask.0.40.01.fits'
 
-    def read_image(self, **kwargs):
-        img = super(MegaPrimeImage, self).read_image(**kwargs)
+    def remap_dq(self, dq, header):
+        '''
+        Called by get_tractor_image() to map the results from read_dq
+        into a bitmask.
+        '''
+        return (dq == 0) * CP_DQ_BITS['badpix']
+
+    def read_image(self, header=False, **kwargs):
+        img = super(MegaPrimeImage, self).read_image(header=header, **kwargs)
+        if header:
+            img,hdr = img
         img = img.astype(np.float32)
+        if header:
+            return img,hdr
         return img
-        
+
     def read_invvar(self, **kwargs):
         ## FIXME -- at the very least, apply mask
         print('MegaPrimeImage.read_invvar')
@@ -38,8 +49,10 @@ class MegaPrimeImage(LegacySurveyImage):
             sig1 = 1.4826 * mad / np.sqrt(2.)
             self.sig1 = sig1
             print('Computed sig1 by Blanton method:', self.sig1)
+        else:
+            print('sig1 from CCDs file:', self.sig1)
 
-        iv = np.zeros_like(img) + (1./self.sig1**1)
+        iv = np.zeros_like(img) + (1./self.sig1**2)
         return iv
 
 
@@ -57,10 +70,12 @@ class MegaPrimeImage(LegacySurveyImage):
 
         from legacypipe.survey import create_temp
         import fitsio
+
         tmpmaskfn = create_temp(suffix='.fits')
-        # The test.mask file has 1 for good pix, 0 for bad... invert for SE
+        # # The test.mask file has 1 for good pix, 0 for bad... invert for SE
         goodpix = fitsio.read(maskfn)
         fitsio.write(tmpmaskfn, (1-goodpix).astype(np.uint8), clobber=True)
+        #tmpmaskfn = maskfn
 
         tmpfn = os.path.join(os.path.dirname(self.sefn),
                              'tmp-' + os.path.basename(self.sefn))
@@ -73,7 +88,9 @@ class MegaPrimeImage(LegacySurveyImage):
             '-CATALOG_NAME %s' % tmpfn,
             '-SEEING_FWHM %f' % 0.8,
             '-VERBOSE_TYPE FULL',
-            '-PIXEL_SCALE 0.185',
+            '-FITS_UNSIGNED N',
+            #'-PIXEL_SCALE 0.185',
+            #'-SATUR_LEVEL 100000',
             imgfn])
         print(cmd)
         rtn = os.system(cmd)

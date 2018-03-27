@@ -1039,7 +1039,7 @@ class LegacySurveyImage(object):
         sedir = self.survey.get_se_dir()
         trymakedirs(self.psffn, dir=True)
         primhdr = self.read_image_primary_header()
-        plver = primhdr.get('PLVER', '')
+        plver = primhdr.get('PLVER', 'V0.0')
         if git_version is None:
             git_version = get_git_version()
         # We write the PSF model to a .fits.tmp file, then rename to .fits
@@ -1070,7 +1070,7 @@ class LegacySurveyImage(object):
         hdr = get_version_header(None, self.survey.get_survey_dir(),
                                  git_version=git_version)
         primhdr = self.read_image_primary_header()
-        plver = primhdr.get('PLVER', '')
+        plver = primhdr.get('PLVER', 'V0.0')
         hdr.delete('PROCTYPE')
         hdr.add_record(dict(name='PROCTYPE', value='ccd',
                             comment='NOAO processing type'))
