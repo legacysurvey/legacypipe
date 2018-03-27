@@ -269,6 +269,13 @@ def stage_tims(W=3600, H=3600, pixscale=0.262, brickname=None,
     else:
         print('WARNING: not applying CCD cuts')
 
+    # Cut on bands to be used
+    ccds.cut(np.array([b in bands for b in ccds.filter]))
+    print('Cut to', len(ccds), 'CCDs in bands', ','.join(bands))
+
+    ## HACK --
+    #ccds.cut(ccds.expnum == 520611)
+
     print('Cutting on CCDs to be used for fitting...')
     I = survey.ccds_for_fitting(brick, ccds)
     if I is not None:
@@ -2448,6 +2455,7 @@ def stage_writecat(
     brickid=None,
     brick=None,
     invvars=None,
+    gaia_stars=False,
     allbands='ugrizY',
     record_event=None,
     **kwargs):
@@ -2482,11 +2490,12 @@ def stage_writecat(
     T2,hdr = prepare_fits_catalog(cat, invvars, TT, hdr, bands, fs)
 
     # For Gaia and Tycho-2 sources, plug in the reference-catalog inverse-variances.
-    I = np.flatnonzero(T.ref_id)
-    T2.ra_ivar [I] = T.ra_ivar[I]
-    T2.dec_ivar[I] = T.dec_ivar[I]
-    print('T2 ref_cat:', T2.ref_cat)
-    T2.ref_cat = np.array(['  ' if x=='0.0' else x for x in T2.ref_cat]).astype('U2')
+    if 'ref_id' in T.get_columns():
+        I = np.flatnonzero(T.ref_id)
+        T2.ra_ivar [I] = T.ra_ivar[I]
+        T2.dec_ivar[I] = T.dec_ivar[I]
+        print('T2 ref_cat:', T2.ref_cat)
+        T2.ref_cat = np.array(['  ' if x=='0.0' else x for x in T2.ref_cat]).astype('U2')
 
     print('TT:')
     TT.about()
@@ -2599,7 +2608,7 @@ def stage_writecat(
     with survey.write_output('tractor', brick=brickname) as out:
         format_catalog(T2, hdr, primhdr, allbands, None,
                        write_kwargs=dict(fits_object=out.fits),
-                       N_wise_epochs=9)
+                       N_wise_epochs=9, motions=gaia_stars)
 
     # write fits file with galaxy-sim stuff (xy bounds of each sim)
     if 'sims_xy' in T.get_columns(): 

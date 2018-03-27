@@ -35,7 +35,8 @@ def main(args=None):
 
 def format_catalog(T, hdr, primhdr, allbands, outfn,
                    in_flux_prefix='', flux_prefix='',
-                   write_kwargs={}, N_wise_epochs=None):
+                   write_kwargs={}, N_wise_epochs=None,
+                   motions=True):
     # Retrieve the bands in this catalog.
     bands = []
     for i in range(10):
@@ -132,8 +133,10 @@ def format_catalog(T, hdr, primhdr, allbands, outfn,
     cols = ['release', 'brickid', 'brickname', 'objid', 'brick_primary', 
             'type', 'ra', 'dec', 'ra_ivar', 'dec_ivar',
             'bx', 'by', 'dchisq', 'ebv', 'mjd_min', 'mjd_max',
-            'ref_cat', 'ref_id', 'pmra', 'pmdec', 'parallax',
-            'pmra_ivar', 'pmdec_ivar', 'parallax_ivar', 'ref_epoch', ]
+            'ref_cat', 'ref_id']
+    if motions:
+        cols.extend(['pmra', 'pmdec', 'parallax',
+            'pmra_ivar', 'pmdec_ivar', 'parallax_ivar', 'ref_epoch'])
     def add_fluxlike(c):
         for b in allbands:
             cols.append('%s%s_%s' % (flux_prefix, c, b))
