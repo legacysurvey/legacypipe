@@ -114,9 +114,15 @@ class LegacySurveyImage(object):
         # Which Data Quality bits mark saturation?
         self.dq_saturation_bits = CP_DQ_BITS['satur']
 
-        # Photometric and astrometric zeropoints
-        self.ccdzpt = ccd.ccdzpt
-        self.dradec = (ccd.ccdraoff / 3600., ccd.ccddecoff / 3600.)
+        # Photometric and astrometric zeropoints (handle old 'ccd' prefix)
+        try:
+            self.ccdzpt = ccd.zpt
+        except:
+            self.ccdzpt = ccd.ccdzpt
+        try:
+            self.dradec = (ccd.raoff / 3600., ccd.decoff / 3600.)
+        except:
+            self.dradec = (ccd.ccdraoff / 3600., ccd.ccddecoff / 3600.)
         
         # in arcsec/pixel
         self.pixscale = 3600. * np.sqrt(np.abs(ccd.cd1_1 * ccd.cd2_2 -
