@@ -673,7 +673,7 @@ class LegacySurveyImage(object):
         into a bitmask.
         '''
         return self.remap_dq_cp_codes(dq, header)
-    
+
     def remap_dq_cp_codes(self, dq, header):
         '''
         Some versions of the CP use integer codes, not bit masks.
