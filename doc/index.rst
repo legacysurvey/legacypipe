@@ -64,13 +64,6 @@ legacypipe.image module
     :members:
     :show-inheritance:
 
-legacypipe.cpimage module
---------------------------
-
-.. automodule:: legacypipe.cpimage
-    :members:
-    :show-inheritance:
-
 legacypipe.decam module
 -----------------------
 

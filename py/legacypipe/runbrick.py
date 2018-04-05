@@ -936,6 +936,7 @@ def stage_image_coadds(survey=None, targetwcs=None, bands=None, tims=None,
                        brickname=None, version_header=None,
                        plots=False, ps=None, coadd_bw=False, W=None, H=None,
                        brick=None, blobs=None, lanczos=True, ccds=None,
+                       rgb_kwargs=None,
                        write_metrics=True,
                        mp=None, record_event=None,
                        **kwargs):
@@ -971,13 +972,16 @@ def stage_image_coadds(survey=None, targetwcs=None, bands=None, tims=None,
         D.writeto(None, fits_object=out.fits)
     del D
 
-    coadd_list= [('image',C.coimgs,rgbkwargs)]
+    if rgb_kwargs is None:
+        rgb_kwargs = {}
+
+    coadd_list= [('image', C.coimgs, rgb_kwargs)]
     if hasattr(tims[0], 'sims_image'):
-        coadd_list.append(('simscoadd', sims_coadd, rgbkwargs))
+        coadd_list.append(('simscoadd', sims_coadd, rgb_kwargs))
 
     for name,ims,rgbkw in coadd_list:
         #rgb = get_rgb(ims, bands, **rgbkw)
-        rgb = sdss_rgb(ims, bands)
+        rgb = sdss_rgb(ims, bands, **rgbkw)
 
         kwa = {}
         if coadd_bw and len(bands) == 1:
@@ -1022,7 +1026,7 @@ def stage_image_coadds(survey=None, targetwcs=None, bands=None, tims=None,
         del rgb
     return None
 
-def sdss_rgb(imgs, bands, scales=None, m = 0.03):
+def sdss_rgb(imgs, bands, scales=None, m=0.03, Q=20):
     import numpy as np
 
     rgbscales=dict(g=(2, 6.0),
@@ -1045,7 +1049,6 @@ def sdss_rgb(imgs, bands, scales=None, m = 0.03):
         img = np.maximum(0, img * scale + m)
         I = I + img
     I /= len(bands)
-    Q = 20
     fI = np.arcsinh(Q * I) / np.sqrt(Q)
     I += (I == 0.) * 1e-6
     H,W = I.shape
@@ -2653,6 +2656,7 @@ def run_brick(brick, survey, radec=None, pixscale=0.262,
               hybridPsf=False,
               normalizePsf=False,
               apodize=False,
+              rgb_kwargs=None,
               rex=False,
               splinesky=False,
               constant_invvar=False,
@@ -2860,6 +2864,7 @@ def run_brick(brick, survey, radec=None, pixscale=0.262,
                   gaussPsf=gaussPsf, pixPsf=pixPsf, hybridPsf=hybridPsf,
                   normalizePsf=normalizePsf,
                   apodize=apodize,
+                  rgb_kwargs=rgb_kwargs,
                   rex=rex,
                   constant_invvar=constant_invvar,
                   depth_cut=depth_cut,
