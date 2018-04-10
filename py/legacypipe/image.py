@@ -688,6 +688,14 @@ class LegacySurveyImage(object):
         7 = diff detect (multi-exposure difference detection from median)
         8 = long streak (e.g. satellite trail)
         '''
+
+        # Some images (eg, 90prime//CP20160403/ksb_160404_103333_ood_g_v1-CCD1.fits)
+        # around saturated stars have the core with value 3 (satur), surrounded by one
+        # pixel of value 1 (bad), and then more pixels with value 4 (bleed).
+        # Set the BAD ones to SATUR.
+        from scipy.ndimage.morphology import binary_dilation
+        dq[np.logical_and(dq == 1, binary_dilation(dq == 3))] = 3
+
         dqbits[dq == 1] |= CP_DQ_BITS['badpix']
         dqbits[dq == 2] |= CP_DQ_BITS['badpix']
         dqbits[dq == 3] |= CP_DQ_BITS['satur']
