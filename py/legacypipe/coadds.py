@@ -196,23 +196,68 @@ def make_coadds(tims, bands, targetwcs,
                 rgbimg = rgb[:,:,iplane]
                 plt.imshow(rgbimg, interpolation='nearest', origin='lower', cmap='gray')
                 plt.xticks([]); plt.yticks([])
-                plt.subplot(2,2,2)
-                thismod = np.zeros((H,W), np.float32)
-                thismod[Yo,Xo] = mo
-                rgb = get_rgb([thismod], [band], **rgbkwargs)
-                rgbmod = rgb[:,:,iplane]
-                plt.imshow(rgbmod, interpolation='nearest', origin='lower', cmap='gray')
+                if mods is not None:
+                    plt.subplot(2,2,2)
+                    thismod = np.zeros((H,W), np.float32)
+                    thismod[Yo,Xo] = mo
+                    rgb = get_rgb([thismod], [band], **rgbkwargs)
+                    rgbmod = rgb[:,:,iplane]
+                    plt.imshow(rgbmod, interpolation='nearest', origin='lower', cmap='gray')
+                    plt.xticks([]); plt.yticks([])
+                    plt.subplot(2,2,3)
+                    thisres = np.zeros((H,W), np.float32)
+                    thisres[Yo,Xo] = (im - mo) * np.sqrt(iv)
+                    plt.imshow(thisres, interpolation='nearest', origin='lower', cmap='gray',
+                               vmin=-20, vmax=20)
+                    plt.xticks([]); plt.yticks([])
+                else:
+                    if unweighted and (dq is not None):
+
+                        # HACK -- copy-n-pasted code from below.
+                        okbits = 0
+                        #for bitname in ['satur', 'bleed']:
+                        for bitname in ['satur']:
+                            okbits |= CP_DQ_BITS[bitname]
+                        brightpix = ((dq & okbits) != 0)
+                        myim = im.copy()
+                        if satur_val is not None:
+                            # HACK -- force SATUR pix to be bright
+                            myim[brightpix] = satur_val
+                        #for bitname in ['interp']:
+                        for bitname in ['interp', 'bleed']:
+                            okbits |= CP_DQ_BITS[bitname]
+                        goodpix = ((dq & ~okbits) == 0)
+                        thisgood = np.zeros((H,W), np.float32)
+                        thisgood[Yo,Xo] = goodpix
+                        plt.subplot(2,2,2)
+                        plt.imshow(thisgood, interpolation='nearest', origin='lower', cmap='gray', vmin=0, vmax=1)
+                        plt.xticks([]); plt.yticks([])
+                        plt.title('goodpix')
+
+                        thisim = np.zeros((H,W), np.float32)
+                        thisim[Yo,Xo] = goodpix * myim
+                        rgb = get_rgb([thisim], [band], **rgbkwargs)
+                        iplane = dict(g=2, r=1, z=0)[band]
+                        rgbimg = rgb[:,:,iplane]
+                        plt.subplot(2,2,3)
+                        plt.imshow(rgbimg, interpolation='nearest', origin='lower', cmap='gray')
+                        plt.xticks([]); plt.yticks([])
+                        plt.title('goodpix rgb')
+
+
+                    rgbmod=None
+                    thisres=None
+
+                plt.subplot(2,2,4)
+                thisiv = np.zeros((H,W), np.float32)
+                thisiv[Yo,Xo] = iv
+                plt.imshow(thisiv, interpolation='nearest', origin='lower', cmap='gray')
                 plt.xticks([]); plt.yticks([])
-                plt.subplot(2,2,3)
-                thisres = np.zeros((H,W), np.float32)
-                thisres[Yo,Xo] = (im - mo) * np.sqrt(iv)
-                plt.imshow(thisres, interpolation='nearest', origin='lower', cmap='gray',
-                           vmin=-20, vmax=20)
-                plt.xticks([]); plt.yticks([])
-                # plt.subplot(2,2,4)
-                # plt.hist(thisres[Yo,Xo], bins=50, range=(-20,20))
-                # plt.xlabel('resids, sigma')
-                plt.suptitle(tim.name + ': %.1f' % (tim.time.toYear()))
+                plt.title('invvar')
+                #plt.hist(thisres[Yo,Xo], bins=50, range=(-20,20))
+                #plt.xlabel('resids, sigma')
+
+                plt.suptitle(tim.name + ': %.2f' % (tim.time.toYear()))
                 ps.savefig()
                 allresids.append((tim.time.toYear(), tim.name, rgbimg,rgbmod,thisres))
 
@@ -308,6 +353,38 @@ def make_coadds(tims, bands, targetwcs,
         if unweighted:
             coimg  /= np.maximum(con, 1)
             del con
+
+            if plots:
+                plt.clf()
+                plt.subplot(2,2,1)
+                mn,mx = cowimg.min(), cowimg.max()
+                plt.imshow(cowimg, interpolation='nearest', origin='lower', cmap='gray',
+                           vmin=mn, vmax=mx)
+                plt.xticks([]); plt.yticks([])
+                plt.title('weighted img')
+                plt.subplot(2,2,2)
+                mycow = cow.copy()
+                # mark zero as special color
+                #mycow[mycow == 0] = np.nan
+                plt.imshow(mycow, interpolation='nearest', origin='lower', cmap='gray',
+                           vmin=0)
+                plt.xticks([]); plt.yticks([])
+                plt.title('weights')
+                plt.subplot(2,2,3)
+                plt.imshow(coimg, interpolation='nearest', origin='lower', cmap='gray')
+                plt.xticks([]); plt.yticks([])
+                plt.title('unweighted img')
+                mycowimg = cowimg.copy()
+                mycowimg[cow == 0] = coimg[cow == 0]
+                plt.subplot(2,2,4)
+                plt.imshow(mycowimg, interpolation='nearest', origin='lower',
+                           cmap='gray', vmin=mn, vmax=mx)
+                plt.xticks([]); plt.yticks([])
+                plt.title('patched img')
+                plt.suptitle('band %s' % band)
+                ps.savefig()
+
+
             cowimg[cow == 0] = coimg[cow == 0]
             if mods is not None:
                 cowmod[cow == 0] = comod[cow == 0]
@@ -370,23 +447,24 @@ def make_coadds(tims, bands, targetwcs,
             plt.title('%.1f: %s' % (y, n))
         plt.suptitle('Data')
         ps.savefig()
-        plt.clf()
-        for i,(y,n,img,mod,res) in enumerate(allresids):
-            plt.subplot(rows,cols,i+1)
-            plt.imshow(mod, interpolation='nearest', origin='lower', cmap='gray')
-            plt.xticks([]); plt.yticks([])
-            plt.title('%.1f: %s' % (y, n))
-        plt.suptitle('Model')
-        ps.savefig()
-        plt.clf()
-        for i,(y,n,img,mod,res) in enumerate(allresids):
-            plt.subplot(rows,cols,i+1)
-            plt.imshow(res, interpolation='nearest', origin='lower', cmap='gray',
-                       vmin=-20, vmax=20)
-            plt.xticks([]); plt.yticks([])
-            plt.title('%.1f: %s' % (y, n))
-        plt.suptitle('Resids')
-        ps.savefig()
+        if mods is not None:
+            plt.clf()
+            for i,(y,n,img,mod,res) in enumerate(allresids):
+                plt.subplot(rows,cols,i+1)
+                plt.imshow(mod, interpolation='nearest', origin='lower', cmap='gray')
+                plt.xticks([]); plt.yticks([])
+                plt.title('%.1f: %s' % (y, n))
+            plt.suptitle('Model')
+            ps.savefig()
+            plt.clf()
+            for i,(y,n,img,mod,res) in enumerate(allresids):
+                plt.subplot(rows,cols,i+1)
+                plt.imshow(res, interpolation='nearest', origin='lower', cmap='gray',
+                           vmin=-20, vmax=20)
+                plt.xticks([]); plt.yticks([])
+                plt.title('%.1f: %s' % (y, n))
+            plt.suptitle('Resids')
+            ps.savefig()
 
     if xy is not None:
         print('MJDs type:', mjds.dtype)

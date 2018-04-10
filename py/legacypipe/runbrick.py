@@ -956,7 +956,7 @@ def stage_image_coadds(survey=None, targetwcs=None, bands=None, tims=None,
                     callback=write_coadd_images,
                     callback_args=(survey, brickname, version_header, tims,
                                    targetwcs),
-                    mp=mp)
+                    mp=mp, plots=plots, ps=ps)
 
     # Sims: coadds of galaxy sims only, image only
     if hasattr(tims[0], 'sims_image'):
