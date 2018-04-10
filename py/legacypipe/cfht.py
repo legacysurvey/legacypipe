@@ -75,7 +75,6 @@ class MegaPrimeImage(LegacySurveyImage):
         return img
 
     def read_invvar(self, **kwargs):
-        ## FIXME -- at the very least, apply mask
         print('MegaPrimeImage.read_invvar')
         img = self.read_image(**kwargs)
         if self.sig1 is None:
@@ -109,10 +108,9 @@ class MegaPrimeImage(LegacySurveyImage):
         import fitsio
 
         tmpmaskfn = create_temp(suffix='.fits')
-        # # The test.mask file has 1 for good pix, 0 for bad... invert for SE
+        # The test.mask file has 1 for good pix, 0 for bad... invert this for SE
         goodpix = fitsio.read(maskfn)
         fitsio.write(tmpmaskfn, (1-goodpix).astype(np.uint8), clobber=True)
-        #tmpmaskfn = maskfn
 
         tmpfn = os.path.join(os.path.dirname(self.sefn),
                              'tmp-' + os.path.basename(self.sefn))
