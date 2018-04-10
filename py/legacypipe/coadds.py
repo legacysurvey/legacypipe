@@ -10,7 +10,8 @@ def make_coadds(tims, bands, targetwcs,
                 ngood=False, detmaps=False, psfsize=False,
                 callback=None, callback_args=[],
                 plots=False, ps=None,
-                lanczos=True, mp=None):
+                lanczos=True, mp=None,
+                satur_val=10.):
     from astrometry.util.ttime import Time
     t0 = Time()
 
@@ -224,12 +225,19 @@ def make_coadds(tims, bands, targetwcs,
                     goodpix = 1
                 else:
                     # include BLEED, SATUR, INTERP pixels if no other
-                    # pixels exists (do this by eliminating all other CP
-                    # flags)
-                    badbits = 0
-                    for bitname in ['badpix', 'cr', 'trans', 'edge', 'edge2']:
-                        badbits |= CP_DQ_BITS[bitname]
-                    goodpix = ((dq & badbits) == 0)
+                    # pixels exists
+                    okbits = 0
+                    #for bitname in ['satur', 'bleed']:
+                    for bitname in ['satur']:
+                        okbits |= CP_DQ_BITS[bitname]
+                    brightpix = ((dq & okbits) != 0)
+                    if satur_val is not None:
+                        # HACK -- force SATUR pix to be bright
+                        im[brightpix] = satur_val
+                    #for bitname in ['interp']:
+                    for bitname in ['interp', 'bleed']:
+                        okbits |= CP_DQ_BITS[bitname]
+                    goodpix = ((dq & ~okbits) == 0)
 
                 coimg[Yo,Xo] += goodpix * im
                 con  [Yo,Xo] += goodpix
