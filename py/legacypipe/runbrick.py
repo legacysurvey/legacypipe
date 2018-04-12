@@ -120,7 +120,8 @@ def stage_tims(W=3600, H=3600, pixscale=0.262, brickname=None,
     record_event and record_event('stage_tims: starting')
 
     # Get brick object
-    if ra is not None:
+    custom_brick = (ra is not None)
+    if custom_brick:
         from legacypipe.survey import BrickDuck
         # Custom brick; create a fake 'brick' object
         brick = BrickDuck(ra, dec, brickname)
@@ -130,7 +131,6 @@ def stage_tims(W=3600, H=3600, pixscale=0.262, brickname=None,
             raise RunbrickError('No such brick: "%s"' % brickname)
     brickid = brick.brickid
     brickname = brick.brickname
-
     print('Got brick:', Time()-t0)
 
     # Get WCS object describing brick
@@ -144,12 +144,11 @@ def stage_tims(W=3600, H=3600, pixscale=0.262, brickname=None,
     targetrd = np.array([targetwcs.pixelxy2radec(x,y) for x,y in
                          [(1,1),(W,1),(W,H),(1,H),(1,1)]])
     # custom brick -- set RA,Dec bounds
-    if ra is not None:
+    if custom_brick:
         brick.ra1,nil  = targetwcs.pixelxy2radec(W, H/2)
         brick.ra2,nil  = targetwcs.pixelxy2radec(1, H/2)
         nil, brick.dec1 = targetwcs.pixelxy2radec(W/2, 1)
         nil, brick.dec2 = targetwcs.pixelxy2radec(W/2, H)
-
     print('Got brick wcs:', Time()-t0)
 
     # Create FITS header with version strings
@@ -261,9 +260,6 @@ def stage_tims(W=3600, H=3600, pixscale=0.262, brickname=None,
     # Cut on bands to be used
     ccds.cut(np.array([b in bands for b in ccds.filter]))
     print('Cut to', len(ccds), 'CCDs in bands', ','.join(bands))
-
-    ## HACK --
-    #ccds.cut(ccds.expnum == 520611)
 
     print('Cutting on CCDs to be used for fitting...')
     I = survey.ccds_for_fitting(brick, ccds)
@@ -485,7 +481,7 @@ def stage_tims(W=3600, H=3600, pixscale=0.262, brickname=None,
                                        comment='Band name in this catalog'))
 
     keys = ['version_header', 'targetrd', 'pixscale', 'targetwcs', 'W','H',
-            'bands', 'tims', 'ps', 'brickid', 'brickname', 'brick',
+            'bands', 'tims', 'ps', 'brickid', 'brickname', 'brick', 'custom_brick',
             'target_extent', 'ccds', 'bands', 'survey']
     L = locals()
     rtn = dict([(k,L[k]) for k in keys])
@@ -1410,6 +1406,7 @@ def stage_fitblobs(T=None,
                    tycho=None,
                    rex=False,
                    record_event=None,
+                   custom_brick=False,
                    **kwargs):
     '''
     This is where the actual source fitting happens.
@@ -1588,7 +1585,7 @@ def stage_fitblobs(T=None,
     blobiter = _blob_iter(blobslices, blobsrcs, blobs, targetwcs, tims,
                           cat, bands, plots, ps, simul_opt, use_ceres,
                           tycho, brick, rex, skipblobs=skipblobs,
-                          max_blobsize=max_blobsize)
+                          max_blobsize=max_blobsize, custom_brick=custom_brick)
     # to allow timingpool to queue tasks one at a time
     blobiter = iterwrapper(blobiter, len(blobsrcs))
 
@@ -1842,7 +1839,7 @@ def _format_all_models(T, newcat, BB, bands, rex):
 
 def _blob_iter(blobslices, blobsrcs, blobs, targetwcs, tims, cat, bands,
                plots, ps, simul_opt, use_ceres, tycho, brick, rex,
-               skipblobs=[], max_blobsize=None):
+               skipblobs=[], max_blobsize=None, custom_brick=False):
     from collections import Counter
     H,W = targetwcs.shape
     tychoblobs = set(blobs[tycho.iby, tycho.ibx])
@@ -1857,8 +1854,11 @@ def _blob_iter(blobslices, blobsrcs, blobs, targetwcs, tims, cat, bands,
     blobvals = Counter(blobs[blobs>=0])
     blob_order = np.array([i for i,npix in blobvals.most_common()])
 
-    U = find_unique_pixels(targetwcs, W, H, None,
-                           brick.ra1, brick.ra2, brick.dec1, brick.dec2)
+    if custom_brick:
+        U = None
+    else:
+        U = find_unique_pixels(targetwcs, W, H, None,
+                               brick.ra1, brick.ra2, brick.dec1, brick.dec2)
 
     for nblob,iblob in enumerate(blob_order):
         if iblob in skipblobs:
@@ -1881,12 +1881,13 @@ def _blob_iter(blobslices, blobsrcs, blobs, targetwcs, tims, cat, bands,
         # iblob equals the value in the "blobs" map.
         blobmask = (blobs[bslc] == iblob)
 
-        # If the blob is solely outside the unique region of this brick,
-        # skip it!
-        if np.all(U[bslc][blobmask] == False):
-            print('Blob', nblob+1, 'is completely outside the unique region of this brick -- skipping')
-            yield None
-            continue
+        if U is not None:
+            # If the blob is solely outside the unique region of this brick,
+            # skip it!
+            if np.all(U[bslc][blobmask] == False):
+                print('Blob', nblob+1, 'is completely outside the unique region of this brick -- skipping')
+                yield None
+                continue
 
         # find one pixel within the blob, for debugging purposes
         onex = oney = None
