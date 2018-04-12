@@ -8,11 +8,10 @@ import numpy as np
 import fitsio
 
 from astrometry.util.fits import fits_table, merge_tables
-from astrometry.util.starutil_numpy import degrees_between
 
 from tractor.ellipses import EllipseESoft, EllipseE
 from tractor.galaxy import ExpGalaxy
-from tractor import PointSource, RaDecPos, NanoMaggies, ParamList, ConstantFitsWcs
+from tractor import PointSource, ParamList, ConstantFitsWcs
 
 from legacypipe.utils import EllipseWithPriors
 
@@ -60,6 +59,8 @@ class GaiaPosition(ParamList):
                             self.parallax)
 
     def getPositionAtTime(self, tai):
+        from tractor import RaDecPos
+
         taival = tai.getValue()
         try:
             return self.cached_positions[taival]
@@ -131,6 +132,7 @@ class GaiaSource(PointSource):
     @classmethod
     def from_catalog(cls, g, bands):
         from tractor.tractortime import TAITime
+        from tractor import NanoMaggies
 
         # When creating 'tim.time' entries, we do:
         #import astropy.time
@@ -736,6 +738,7 @@ def ccds_touching_wcs(targetwcs, ccds, ccdrad=None, polygons=True):
     '''
     from astrometry.util.util import Tan
     from astrometry.util.miscutils import polygons_intersect
+    from astrometry.util.starutil_numpy import degrees_between
 
     trad = targetwcs.radius()
     if ccdrad is None:
@@ -1327,6 +1330,7 @@ Now using the current directory as LEGACY_SURVEY_DIR, but this is likely to fail
             bricks = self.get_bricks_readonly()
         if self.cache_tree and bricks == self.bricks:
             from astrometry.libkd.spherematch import tree_build_radec, tree_search_radec
+            from astrometry.util.starutil_numpy import degrees_between
             # Use kdtree
             if self.bricktree is None:
                 self.bricktree = tree_build_radec(bricks.ra, bricks.dec)
