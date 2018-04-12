@@ -34,17 +34,10 @@ import numpy as np
 import fitsio
 
 from astrometry.util.fits import fits_table, merge_tables
-from astrometry.util.plotutils import PlotSequence, dimshow
-from astrometry.util.ttime import Time, CpuMeas, MemMeas
-from astrometry.util.starutil_numpy import ra2hmsstring, dec2dmsstring
+from astrometry.util.plotutils import dimshow
+from astrometry.util.ttime import Time
 
-from tractor import Tractor, PointSource, Image, NanoMaggies, Catalog, RaDecPos
-from tractor.ellipses import EllipseE
-from tractor.galaxy import (DevGalaxy, ExpGalaxy, FixedCompositeGalaxy,
-                            FracDev, disable_galaxy_cache)
-
-from legacypipe.survey import (
-    get_rgb, imsave_jpeg, LegacySurveyData, GaiaSource)
+from legacypipe.survey import get_rgb, imsave_jpeg, LegacySurveyData
 from legacypipe.image import CP_DQ_BITS
 from legacypipe.utils import (
     RunbrickError, NothingToDoError, iterwrapper, find_unique_pixels)
@@ -81,6 +74,7 @@ def get_ulimit():
         print('Maximum %-25s (%-15s) : %20s %20s' % (desc, name, soft, hard))
 
 def runbrick_global_init():
+    from tractor.galaxy import disable_galaxy_cache
     print('Starting process', os.getpid(), Time()-Time())
     disable_galaxy_cache()
 
@@ -125,6 +119,8 @@ def stage_tims(W=3600, H=3600, pixscale=0.262, brickname=None,
     '''
     from legacypipe.survey import (
         get_git_version, get_version_header, wcs_for_brick, read_one_tim)
+    from astrometry.util.starutil_numpy import ra2hmsstring, dec2dmsstring
+
     t0 = tlast = Time()
     assert(survey is not None)
 
@@ -1084,10 +1080,12 @@ def stage_srcs(targetrd=None, pixscale=None, targetwcs=None,
     sources are also split into "blobs" of overlapping pixels.  Each
     of these blobs will be processed independently.
     '''
+    from tractor import PointSource, NanoMaggies, RaDecPos, Catalog
     from legacypipe.detection import (detection_maps, sed_matched_filters,
                         run_sed_matched_filters, segment_and_group_sources)
     from scipy.ndimage.morphology import binary_dilation
     from scipy.ndimage.measurements import label, find_objects, center_of_mass
+    from astrometry.libkd.spherematch import tree_open, tree_search_radec
 
     record_event and record_event('stage_srcs: starting')
 
@@ -1123,7 +1121,6 @@ def stage_srcs(targetrd=None, pixscale=None, targetwcs=None,
     
     # Read Tycho-2 stars and use as saturated sources.
     tycho2fn = survey.find_file('tycho2')
-    from astrometry.libkd.spherematch import tree_open, tree_search_radec
     radius = 1.
     ra,dec = targetwcs.radec_center()
     # fitscopy /data2/catalogs-fits/TYCHO2/tycho2.fits"[col tyc1;tyc2;tyc3;ra;dec;sigma_ra;sigma_dec;mean_ra;mean_dec;pm_ra;pm_dec;sigma_pm_ra;sigma_pm_dec;epoch_ra;epoch_dec;mag_bt;mag_vt;mag_hp]" /tmp/tycho2-astrom.fits
@@ -1181,6 +1178,7 @@ def stage_srcs(targetrd=None, pixscale=None, targetwcs=None,
     # Add Gaia stars
     if gaia_stars:
         from legacyanalysis.gaiacat import GaiaCatalog
+        from legacypipe.survey import GaiaSource
         from astrometry.libkd.spherematch import match_radec
         
         gaia = GaiaCatalog().get_catalog_in_wcs(targetwcs)
@@ -1425,6 +1423,8 @@ def stage_fitblobs(T=None,
     The `one_blob` function is called for each "blob" of pixels with
     the sources contained within that blob.
     '''
+    from tractor import Catalog
+
     tlast = Time()
     for tim in tims:
         assert(np.all(np.isfinite(tim.getInvError())))
@@ -1603,6 +1603,7 @@ def stage_fitblobs(T=None,
         R = mp.map(_bounce_one_blob, blobiter)
     else:
         from astrometry.util.file import pickle_to_file, trymakedirs
+        from astrometry.util.ttime import CpuMeas
 
         def _write_checkpoint(R, checkpoint_filename):
             fn = checkpoint_filename + '.tmp'
@@ -1783,6 +1784,7 @@ def stage_fitblobs(T=None,
 def _format_all_models(T, newcat, BB, bands, rex):
     from legacypipe.catalog import prepare_fits_catalog, fits_typemap
     from astrometry.util.file import pickle_to_file
+    from tractor import Catalog
 
     TT = fits_table()
     # Copy only desired columns...
@@ -1971,6 +1973,7 @@ def _bounce_one_blob(X):
         raise
 
 def _get_mod(X):
+    from tractor import Tractor
     (tim, srcs) = X
     t0 = Time()
     tractor = Tractor([tim], srcs)
@@ -2010,6 +2013,7 @@ def stage_coadds(survey=None, bands=None, version_header=None, targetwcs=None,
     '''
     from legacypipe.survey import apertures_arcsec
     from functools import reduce
+
     tlast = Time()
 
     record_event and record_event('stage_coadds: starting')
@@ -2129,6 +2133,9 @@ def stage_coadds(survey=None, bands=None, version_header=None, targetwcs=None,
         ps.savefig()
 
         for i,(src,x,y,rr,dd) in enumerate(zip(cat, x1, y1, ra, dec)):
+            from tractor import PointSource
+            from tractor.galaxy import DevGalaxy, ExpGalaxy, FixedCompositeGalaxy
+
             ee = []
             ec = []
             cc = None
@@ -2231,6 +2238,7 @@ def stage_wise_forced(
     photometry of the unWISE coadds.
     '''
     from wise.forcedphot import unwise_tiles_touching_wcs
+    from tractor import NanoMaggies
 
     record_event and record_event('stage_wise_forced: starting')
 
@@ -2808,6 +2816,7 @@ def run_brick(brick, survey, radec=None, pixscale=0.262,
     '''
     from astrometry.util.stages import CallGlobalTime, runstage
     from astrometry.util.multiproc import multiproc
+    from astrometry.util.plotutils import PlotSequence
 
     print('Total Memory Available to Job:')
     get_ulimit()
@@ -2895,6 +2904,7 @@ def run_brick(brick, survey, radec=None, pixscale=0.262,
         StageTime.add_measurement(poolmeas)
         mp = multiproc(None, pool=pool)
     else:
+        from astrometry.util.ttime import CpuMeas
         mp = multiproc(init=runbrick_global_init, initargs=[])
         StageTime.add_measurement(CpuMeas)
         pool = None
@@ -3283,6 +3293,7 @@ def get_runbrick_kwargs(brick=None,
 def main(args=None):
     import logging
     import datetime
+    from astrometry.util.ttime import MemMeas
 
     print()
     print('runbrick.py starting at', datetime.datetime.now().isoformat())
