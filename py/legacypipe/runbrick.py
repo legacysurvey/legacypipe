@@ -48,15 +48,8 @@ rgbkwargs = dict(mnmx=(-1,100.), arcsinh=1.)
 rgbkwargs_resid = dict(mnmx=(-5,5))
 
 # Memory Limits
-import resource
-def set_ulimit(gigabytes):
-    rsrc = resource.RLIMIT_AS #used if RLIMIT_VMEM not found
-    #soft, hard = resource.getrlimit(rsrc)
-    soft, hard = resource.getrlimit(rsrc)
-    soft= gigabytes * 1024**3
-    resource.setrlimit(rsrc, (soft,hard))
-
 def get_ulimit():
+    import resource
     for name, desc in [
         ('RLIMIT_AS', 'VMEM'),
         ('RLIMIT_CORE', 'core file size'),
