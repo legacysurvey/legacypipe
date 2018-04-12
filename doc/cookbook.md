@@ -198,13 +198,21 @@ for those that don't exist in either format.
 
 Once all the zeropoints have been computed, the tables must be merged:
 
-    find rundirectory/decam -name "*-zpt.fits" > done_zpt.txt
+    find rundirectory/decam -name "*-legacypipe.fits" > done_zpt.txt
     python legacyzpts/py/legacyzpts/legacy_zeropoints_merge.py --file_list done_zpt.txt \
-          --nproc 1 --outname merged_zpt.fits
+          --nproc 0 --cut --cut-expnum --outname merged_zpt.fits
+
+The cut flag imposes several hard-coded cuts and the cut-expnum flag
+ignores CCDs with no sources, that can cause problems downstream. The
+same procedure can be used to merge the other outputs from the code (but
+not the calibrations, which are merged differently: see below); e.g. to
+create the `ccds-annotated.fits` file, to put in the survey and releases
+directories, replace the `“*-legacypipe.fits”` by `“*-annotated.fits”`.
 
 The final merging of the thousands of tables could take a while, so do
 is better to do as a batch job, e.g. with an appropriately edited
-version of legacyzpts `/bin/slurm_job_merge.sh`.
+version of legacyzpts `/bin/slurm_job_merge.sh`. It could also be done
+on the interactive queue: budget two hours per merging.
 
 For DR5, we imposed a depth cut in order to process some bricks with a
 very high number of exposure. We have found that, for DR6, a depth cut
@@ -240,6 +248,9 @@ To create the kd-tree version of the zeropoint files,
     startree -i /tmp/dr6.fits -o /tmp/dr6.kd -P -k -n ccds
     fitsgetext -i /tmp/dr6.kd -o /tmp/survey-ccds-dr6.kd.fits -e 0 -e 6 -e \
            1 -e 2 -e 3 -e 4 -e 5
+
+Obviously, if there is only one `survey-ccds` file, the tabmerge
+commands are not necessary.
 
 Running tractor
 ===============
