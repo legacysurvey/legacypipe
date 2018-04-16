@@ -68,8 +68,16 @@ def main():
 
     targetwcs = wcs_for_brick(outbricks[0])
     H,W = targetwcs.shape
-    
-    tycho = fits_table(os.path.join(survey.get_survey_dir(), 'tycho2.fits.gz'))
+
+    tycho2fn = survey.find_file('tycho2')
+    kd = tree_open(tycho2fn, 'stars')
+    radius = 1.
+    rc,dc = targetwcs.radec_center()
+    I = tree_search_radec(kd, rc, dc, radius)
+    print(len(I), 'Tycho-2 stars within', radius, 'deg of RA,Dec (%.3f, %.3f)' % (ra,dec))
+    # Read only the rows within range.
+    tycho = fits_table(tycho2fn, rows=I)
+    del kd
     print('Read', len(tycho), 'Tycho-2 stars')
     ok,tx,ty = targetwcs.radec2pixelxy(tycho.ra, tycho.dec)
     margin = 100
@@ -77,7 +85,16 @@ def main():
               (ty > -margin) * (ty < H+margin))
     print('Cut to', len(tycho), 'Tycho-2 stars within brick')
     del ok,tx,ty
-    tycho.writeto(os.path.join(args.outdir, 'tycho2.fits.gz'))
+    #tycho.writeto(os.path.join(args.outdir, 'tycho2.fits.gz'))
+    f,tfn = tempfile.mkstemp(suffix='.fits')
+    os.close(f)
+    tycho.writeto(tfn)
+    outfn = os.path.join(args.outdir, 'tycho2.kd.fits')
+    cmd = 'startree -i %s -o %s -P -k -n stars -T' % (tfn, outfn)
+    print(cmd)
+    rtn = os.system(cmd)
+    assert(rtn == 0)
+    os.unlink(tfn)
     
     outccds = C.copy()
     cols = outccds.get_columns()

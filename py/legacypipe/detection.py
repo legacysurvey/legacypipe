@@ -373,10 +373,15 @@ def sed_matched_detection(sedname, sed, detmaps, detivs, bands,
     # level, and drop the source if it is in the same blob as a
     # previously-detected source.
 
+    # We dilate the blobs a bit too, to
+    # catch slight differences in centroid positions.
+    dilate = 1
+    
     # For efficiency, segment at the minimum saddle level to compute
     # slices; the operations described above need only happen within
     # the slice.
     saddlemap = (sedsn > lowest_saddle)
+    saddlemap = binary_dilation(saddlemap, iterations=dilate)
     if saturated_pix is not None:
         saddlemap |= saturated_pix
     allblobs,nblobs = label(saddlemap)
@@ -433,6 +438,7 @@ def sed_matched_detection(sedname, sed, detmaps, detivs, bands,
             level = saddle_level(sedsn[y,x])
             ablob = allblobs[y,x]
             saddlemap = (sedsn > level)
+            saddlemap = binary_dilation(saddlemap, iterations=dilate)
             if saturated_pix is not None:
                 saddlemap |= saturated_pix
             saddlemap *= (allblobs == ablob)
@@ -486,6 +492,7 @@ def sed_matched_detection(sedname, sed, detmaps, detivs, bands,
         #print('  allblobs slice', slc)
 
         saddlemap = (sedsn[slc] > level)
+        saddlemap = binary_dilation(saddlemap, iterations=dilate)
         if saturated_pix is not None:
             saddlemap |= saturated_pix[slc]
         saddlemap *= (allblobs[slc] == ablob)
