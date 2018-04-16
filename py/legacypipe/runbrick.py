@@ -2505,7 +2505,7 @@ def stage_writecat(
         T2.ra_ivar [I] = T.ra_ivar[I]
         T2.dec_ivar[I] = T.dec_ivar[I]
         print('T2 ref_cat:', T2.ref_cat)
-        T2.ref_cat = np.array(['  ' if x=='0.0' else x for x in T2.ref_cat]).astype('U2')
+        T2.ref_cat = np.array(['  ' if x=='0.0' else x for x in T2.ref_cat]).astype('S2')
 
     print('TT:')
     TT.about()
