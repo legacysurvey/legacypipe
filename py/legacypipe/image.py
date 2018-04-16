@@ -464,8 +464,14 @@ class LegacySurveyImage(object):
             clip = np.array(clip)
             if len(clip) == 0:
                 return 0,0,0,0,None
+            # Convert from FITS to python image coords
+            clip -= 1
             x0,y0 = np.floor(clip.min(axis=0)).astype(int)
             x1,y1 = np.ceil (clip.max(axis=0)).astype(int)
+            x0 = min(max(x0, 0), imw-1)
+            y0 = min(max(y0, 0), imh-1)
+            x1 = min(max(x1, 0), imw-1)
+            y1 = min(max(y1, 0), imh-1)
             slc = slice(y0,y1+1), slice(x0,x1+1)
         # Slice?
         if slc is not None:
