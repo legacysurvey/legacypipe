@@ -1146,7 +1146,9 @@ def stage_srcs(targetrd=None, pixscale=None, targetwcs=None,
     tycho.dec_ivar = 1./(tycho.sigma_dec / 1000. / 3600.)**2
     tycho.rename('pm_ra', 'pmra')
     tycho.rename('pm_dec', 'pmdec')
-
+    tycho.mag = tycho.mag_vt
+    tycho.mag[tycho.mag == 0] = tycho.mag_hp[tycho.mag == 0]
+    
     for c in ['tyc1', 'tyc2', 'tyc3', 'mag_bt', 'mag_vt', 'mag_hp',
               'mean_ra', 'mean_dec', 'epoch_ra', 'epoch_dec',
               'sigma_pm_ra', 'sigma_pm_dec', 'sigma_ra', 'sigma_dec']:
