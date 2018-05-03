@@ -342,3 +342,22 @@ plt.ylabel('z - W1 (mag)')
 plt.savefig('cc-unmatched2.pdf')
 print(np.sum((rz>0)*(rz<3)*(zw>0.5)*(zw<2.5)), 'Unmatched')
 
+
+plt.clf()
+ha = dict(nbins=200, range=((-5,10),(13,25)), doclf=False, hot=False, imshowargs=dict(cmap=antigray, vmax=4.))
+I = (ML.is_psf)
+loghist((ML.r - ML.w1)[I], ML.r[I], **ha)
+plt.xlabel('r - W1 (mag)')
+plt.ylabel('r (mag)')
+#plt.title('LegacySurvey PSFs (matched to AllWISE catalog)')
+plt.savefig('cm-matched.pdf')
+
+plt.clf()
+I = (#(L.flux_w1 * np.sqrt(L.flux_ivar_w1) > 3.) *
+     #(L.flux_r  * np.sqrt(L.flux_ivar_r ) > 3.) *
+     #(L.flux_z  * np.sqrt(L.flux_ivar_z ) > 3.) *
+     (L.is_psf))
+loghist((L.r - L.w1)[I], L.r[I], **ha)
+plt.xlabel('r - W1 (mag)')
+plt.ylabel('r (mag)')
+plt.savefig('cm-all.pdf')
