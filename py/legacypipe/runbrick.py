@@ -1171,19 +1171,23 @@ def stage_srcs(targetrd=None, pixscale=None, targetwcs=None,
         from legacyanalysis.gaiacat import GaiaCatalog
         from legacypipe.survey import GaiaSource
         from astrometry.libkd.spherematch import match_radec
-        
+
         gaia = GaiaCatalog().get_catalog_in_wcs(targetwcs)
         print('Got Gaia stars:', gaia)
         gaia.about()
 
         # DJS, [decam-chatter 5486] Solved! GAIA separation of point sources
         #   from extended sources
+        # Updated for Gaia DR2 by Eisenstein,
+        # [decam-data 2770] Re: [desi-milkyway 639] GAIA in DECaLS DR7
+        # But shifted one mag to the right in G.
         gaia.G = gaia.phot_g_mean_mag
         gaia.pointsource = np.logical_or(
-            (gaia.G <= 18.) * (gaia.astrometric_excess_noise < 10.**0.5),
-            (gaia.G >= 18.) * (gaia.astrometric_excess_noise < 10.**(0.5 + 1.25/4.*(gaia.G-18.))))
+            (gaia.G <= 19.) * (gaia.astrometric_excess_noise < 10.**0.5),
+            (gaia.G >= 19.) * (gaia.astrometric_excess_noise < 10.**(0.5 + 0.2*(gaia.G - 19.))))
 
         ok,xx,yy = targetwcs.radec2pixelxy(gaia.ra, gaia.dec)
+        # ibx = integer brick coords
         gaia.ibx = np.round(xx-1.).astype(int)
         gaia.iby = np.round(yy-1.).astype(int)
         margin = 10
@@ -1204,25 +1208,20 @@ def stage_srcs(targetrd=None, pixscale=None, targetwcs=None,
                 keep = np.ones(len(tycho), bool)
                 keep[I] = False
                 tycho.cut(I)
-        # HACK
-        #gaia.writeto('gaia.fits')
-
         # Don't detect new sources where we already have Gaia stars
         avoid_x.extend(gaia.ibx)
         avoid_y.extend(gaia.iby)
         
-        # Gaia DR1
-        gaia_release = 'G1'
+        # Gaia DR2
+        gaia_release = 'G2'
         gaia.ref_cat = np.array([gaia_release] * len(gaia))
-        #print('Gaia.ref_cat:', gaia.ref_cat)
         gaia.ref_id  = gaia.source_id
-        gaia.pmra_ivar = 1./gaia.pmra_error**2
+        gaia.pmra_ivar  = 1./gaia.pmra_error **2
         gaia.pmdec_ivar = 1./gaia.pmdec_error**2
         gaia.parallax_ivar = 1./gaia.parallax_error**2
         # mas -> deg
-        gaia.ra_ivar  = 1./(gaia.ra_error / np.cos(np.deg2rad(gaia.dec)) / 1000. / 3600.)**2
-        gaia.dec_ivar = 1./(gaia.dec_error         / 1000. / 3600.)**2
-        
+        gaia.ra_ivar  = 1./(gaia.ra_error  / np.cos(np.deg2rad(gaia.dec)) / 1000. / 3600.)**2
+        gaia.dec_ivar = 1./(gaia.dec_error / 1000. / 3600.)**2
         # print('Gaia ra_error:', gaia.ra_error)
         # print('Gaia ra_ivar:', gaia.ra_ivar)
         # print('Gaia dec_error:', gaia.dec_error)
