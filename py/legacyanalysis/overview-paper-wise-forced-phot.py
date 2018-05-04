@@ -137,6 +137,43 @@ plt.ylabel('Number of sources')
 plt.savefig('w1-count.pdf')
 
 
+
+
+plt.clf()
+I = (ML.is_psf)
+ha = dict(nbins=100, range=((0,2.5),(0.5,3)), doclf=False, dohot=False, imshowargs=dict(cmap=antigray),
+          docolorbar=False)
+H,xe,ye = plothist((ML.r - ML.z)[I], (ML.z - ML.w1)[I], **ha)
+plt.xlabel('r - z (mag)')
+plt.ylabel('z - W1 (mag)')
+#plt.title('Catalog-matched PSFs')
+plt.savefig('cc-matched.pdf')
+print(np.sum(H), 'matched')
+# rz = (ML.r - ML.z)[I]
+# zw = (ML.z - ML.w1)[I]
+# print(np.sum((rz>0)*(rz<3)*(zw>0.5)*(zw<2.5)), 'Matched')
+
+plt.clf()
+I = ((UL.flux_w1 * np.sqrt(UL.flux_ivar_w1) > 3.) *
+     (UL.flux_r  * np.sqrt(UL.flux_ivar_r ) > 5.) *
+     (UL.flux_z  * np.sqrt(UL.flux_ivar_z ) > 5.) *
+     (UL.is_psf))
+H,xe,ye = plothist((UL.r - UL.z)[I], (UL.z - UL.w1)[I], **ha)
+plt.xlabel('r - z (mag)')
+plt.ylabel('z - W1 (mag)')
+plt.savefig('cc-unmatched.pdf')
+#plt.title('LegacySurvey PSF without AllWISE counterparts')
+#plt.title('Additional faint PSF sources')
+print(np.sum(H), 'matched')
+
+
+# rz = (UL.r - UL.z)[I]
+# zw = (UL.z - UL.w1)[I]
+# print(np.sum((rz>0)*(rz<3)*(zw>0.5)*(zw<2.5)), 'Unmatched')
+# plt.savefig('cc.png')
+
+
+
 # loghist(ML.z - ML.w1, ML.w1 - ML.w2, 200, range=((-1,5),(-1,5)), hot=False, imshowargs=dict(cmap=antigray));
 # plt.xlabel('z - W1 (mag)')
 # plt.ylabel('W1 - W2 (mag)')
@@ -287,60 +324,61 @@ plt.savefig('w1-count.pdf')
 # plt.title('LegacySurvey PSFs (UNmatched to AllWISE catalog)')
 
 #plt.subplot(1,2,1)
-plt.clf()
-ha = dict(nbins=100, range=((-0.5,3),(0,3)), doclf=False, hot=False, imshowargs=dict(cmap=antigray))
-I = (ML.is_psf)
-loghist((ML.r - ML.z)[I], (ML.z - ML.w1)[I], **ha)
-plt.xlabel('r - z (mag)')
-plt.ylabel('z - W1 (mag)')
-#plt.title('LegacySurvey PSFs matched to AllWISE catalog')
-plt.savefig('cc-matched.pdf')
-rz = (ML.r - ML.z)[I]
-zw = (ML.z - ML.w1)[I]
-print(np.sum((rz>0)*(rz<3)*(zw>0.5)*(zw<2.5)), 'Matched')
-
-plt.clf()
-ha.update(imshowargs=dict(cmap=antigray, vmax=np.log10(3000)))
-I = ((UL.flux_w1 * np.sqrt(UL.flux_ivar_w1) > 3.) *
-     (UL.flux_r  * np.sqrt(UL.flux_ivar_r ) > 3.) *
-     (UL.flux_z  * np.sqrt(UL.flux_ivar_z ) > 3.) *
-     (UL.is_psf))
-loghist((UL.r - UL.z)[I], (UL.z - UL.w1)[I], **ha)
-plt.xlabel('r - z (mag)')
-plt.ylabel('z - W1 (mag)')
-#plt.title('LegacySurvey PSFs unmatched to AllWISE catalog')
-plt.savefig('cc-unmatched.pdf')
-rz = (UL.r - UL.z)[I]
-zw = (UL.z - UL.w1)[I]
-print(np.sum((rz>0)*(rz<3)*(zw>0.5)*(zw<2.5)), 'Unmatched')
-
-
-plt.clf()
-ha = dict(nbins=100, range=((-0.5,3),(0,3)), doclf=False, hot=False, imshowargs=dict(cmap=antigray))
-I = (ML.is_psf)
-rz = ((ML.r-ML.e_r) - (ML.z-ML.e_z))[I]
-zw = ((ML.z-ML.e_z) - (ML.w1-ML.e_w1))[I]
-loghist(rz, zw, **ha)
-plt.xlabel('r - z (mag)')
-plt.ylabel('z - W1 (mag)')
-#plt.title('LegacySurvey PSFs matched to AllWISE catalog')
-plt.savefig('cc-matched2.pdf')
-print(np.sum((rz>0)*(rz<3)*(zw>0.5)*(zw<2.5)), 'Matched')
-
-plt.clf()
-ha.update(imshowargs=dict(cmap=antigray, vmax=np.log10(3000)))
-I = ((UL.flux_w1 * np.sqrt(UL.flux_ivar_w1) > 3.) *
-     (UL.flux_r  * np.sqrt(UL.flux_ivar_r ) > 3.) *
-     (UL.flux_z  * np.sqrt(UL.flux_ivar_z ) > 3.) *
-     (UL.is_psf))
-rz = ((UL.r-UL.e_r) - (UL.z-UL.e_z))[I]
-zw = ((UL.z-UL.e_z) - (UL.w1-UL.e_w1))[I]
-loghist(rz, zw, **ha)
-plt.xlabel('r - z (mag)')
-plt.ylabel('z - W1 (mag)')
-#plt.title('LegacySurvey PSFs unmatched to AllWISE catalog')
-plt.savefig('cc-unmatched2.pdf')
-print(np.sum((rz>0)*(rz<3)*(zw>0.5)*(zw<2.5)), 'Unmatched')
+if False:
+    plt.clf()
+    ha = dict(nbins=100, range=((-0.5,3),(0,3)), doclf=False, hot=False, imshowargs=dict(cmap=antigray))
+    I = (ML.is_psf)
+    loghist((ML.r - ML.z)[I], (ML.z - ML.w1)[I], **ha)
+    plt.xlabel('r - z (mag)')
+    plt.ylabel('z - W1 (mag)')
+    #plt.title('LegacySurvey PSFs matched to AllWISE catalog')
+    plt.savefig('cc-matched.pdf')
+    rz = (ML.r - ML.z)[I]
+    zw = (ML.z - ML.w1)[I]
+    print(np.sum((rz>0)*(rz<3)*(zw>0.5)*(zw<2.5)), 'Matched')
+    
+    plt.clf()
+    ha.update(imshowargs=dict(cmap=antigray, vmax=np.log10(3000)))
+    I = ((UL.flux_w1 * np.sqrt(UL.flux_ivar_w1) > 3.) *
+         (UL.flux_r  * np.sqrt(UL.flux_ivar_r ) > 3.) *
+         (UL.flux_z  * np.sqrt(UL.flux_ivar_z ) > 3.) *
+         (UL.is_psf))
+    loghist((UL.r - UL.z)[I], (UL.z - UL.w1)[I], **ha)
+    plt.xlabel('r - z (mag)')
+    plt.ylabel('z - W1 (mag)')
+    #plt.title('LegacySurvey PSFs unmatched to AllWISE catalog')
+    plt.savefig('cc-unmatched.pdf')
+    rz = (UL.r - UL.z)[I]
+    zw = (UL.z - UL.w1)[I]
+    print(np.sum((rz>0)*(rz<3)*(zw>0.5)*(zw<2.5)), 'Unmatched')
+    
+    
+    plt.clf()
+    ha = dict(nbins=100, range=((-0.5,3),(0,3)), doclf=False, hot=False, imshowargs=dict(cmap=antigray))
+    I = (ML.is_psf)
+    rz = ((ML.r-ML.e_r) - (ML.z-ML.e_z))[I]
+    zw = ((ML.z-ML.e_z) - (ML.w1-ML.e_w1))[I]
+    loghist(rz, zw, **ha)
+    plt.xlabel('r - z (mag)')
+    plt.ylabel('z - W1 (mag)')
+    #plt.title('LegacySurvey PSFs matched to AllWISE catalog')
+    plt.savefig('cc-matched2.pdf')
+    print(np.sum((rz>0)*(rz<3)*(zw>0.5)*(zw<2.5)), 'Matched')
+    
+    plt.clf()
+    ha.update(imshowargs=dict(cmap=antigray, vmax=np.log10(3000)))
+    I = ((UL.flux_w1 * np.sqrt(UL.flux_ivar_w1) > 3.) *
+         (UL.flux_r  * np.sqrt(UL.flux_ivar_r ) > 3.) *
+         (UL.flux_z  * np.sqrt(UL.flux_ivar_z ) > 3.) *
+         (UL.is_psf))
+    rz = ((UL.r-UL.e_r) - (UL.z-UL.e_z))[I]
+    zw = ((UL.z-UL.e_z) - (UL.w1-UL.e_w1))[I]
+    loghist(rz, zw, **ha)
+    plt.xlabel('r - z (mag)')
+    plt.ylabel('z - W1 (mag)')
+    #plt.title('LegacySurvey PSFs unmatched to AllWISE catalog')
+    plt.savefig('cc-unmatched2.pdf')
+    print(np.sum((rz>0)*(rz<3)*(zw>0.5)*(zw<2.5)), 'Unmatched')
 
 
 plt.clf()
