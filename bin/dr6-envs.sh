@@ -5,13 +5,17 @@
 # see 
 # https://github.com/legacysurvey/legacypipe/blob/master/doc/cookbook.md#sweeps-and-external-matching
 
+# this file serves as a template; use in the sweep match jobs scripts.
+
+# `source` this file (e.g. source dr6-envs.sh). Do not run it with bash.
+
 set -x
 export ATP_ENABLED=0
 
-outdir=$CSCRATCH/dr6-out
-# for new DRs, this line may need to be changed to the work directory rather than the
+# for new DRs, these lines may need to be changed to the work directory rather than the
 # data dir.
 drdir=/global/projecta/projectdirs/cosmo/data/legacysurvey/dr6
+outdir=$CSCRATCH/dr6-out
 
 export LEGACYPIPE_DIR=/global/cscratch1/sd/desiproc/DRcode/legacypipe
 
