@@ -11,13 +11,19 @@
 set -x
 export ATP_ENABLED=0
 
-# faster python start-up
-module load python/3.5-anaconda
-source /usr/common/contrib/bccp/python-mpi-bcast/nersc/activate.sh
+# FIXME: always update this to the dr being processed.
+source dr6-envs.sh
+
+source /project/projectdirs/desi/software/desi_environment.sh
+
+# avoid potential MKL thread oversubscribing
+export OMP_NUM_THREADS=1
 
 export PYTHONPATH=$LEGACYPIPE_DIR/py:${PYTHONPATH}                                                                                    
+export NUMPROC=$(($SLURM_CPUS_ON_NODE / 2))
 
 # use python-mpi. 'python' from anaconda fails with libpython.so.0.1 not found
 # error when ran via aprun, at least on ~yfeng1's environments.
-time srun -u --cpu_bind=no -n 1 python-mpi $LEGACYPIPE_DIR/bin/generate-sweep-files.py -v --numproc 24 \
+time srun -u --cpu_bind=no -n 1 python $LEGACYPIPE_DIR/bin/generate-sweep-files.py -v \
+        --numproc $NUMPROC \
      -I -f fits -F $TRACTOR_FILELIST --schema blocks -d $BRICKSFILE $TRACTOR_INDIR $SWEEP_OUTDIR
