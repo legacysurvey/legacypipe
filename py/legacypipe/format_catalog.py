@@ -136,7 +136,34 @@ def format_catalog(T, hdr, primhdr, allbands, outfn,
             'ref_cat', 'ref_id']
     if motions:
         cols.extend(['pmra', 'pmdec', 'parallax',
-            'pmra_ivar', 'pmdec_ivar', 'parallax_ivar', 'ref_epoch'])
+            'pmra_ivar', 'pmdec_ivar', 'parallax_ivar', 'ref_epoch',])
+
+    if gaia_tagalong:
+        gaia_cols = [('source_id', np.int64),
+                     ('phot_g_mean_mag', np.float32),
+                     ('phot_g_mean_flux_over_error', np.float32),
+                     ('phot_g_n_obs', np.int16),
+                     ('phot_bp_mean_mag', np.float32),
+                     ('phot_bp_mean_flux_over_error', np.float32),
+                     ('phot_bp_n_obs', np.int16),
+                     ('phot_rp_mean_mag', np.float32),
+                     ('phot_rp_mean_flux_over_error', np.float32),
+                     ('phot_rp_n_obs', np.int16),
+                     ('phot_variable_flag', bool),
+                     ('astrometric_excess_noise', np.float32),
+                     ('astrometric_excess_noise_sig', np.float32),
+                     ('astrometric_n_obs_al', np.int16),
+                     ('astrometric_n_good_obs_al', np.int16),
+                     ('astrometric_weight_al', np.float32),
+                     ('duplicated_source', bool),]
+        tcols = T.get_columns()
+        for c,t in gaia_cols:
+            if not c in tcols:
+                T.set('gaia_'+c, np.zeros(len(T), t))
+            else:
+                T.rename(c, 'gaia_'+c)
+            cols.append(c)
+
     def add_fluxlike(c):
         for b in allbands:
             cols.append('%s%s_%s' % (flux_prefix, c, b))
