@@ -36,7 +36,7 @@ def main(args=None):
 def format_catalog(T, hdr, primhdr, allbands, outfn,
                    in_flux_prefix='', flux_prefix='',
                    write_kwargs={}, N_wise_epochs=None,
-                   motions=True):
+                   motions=True, gaia_tagalong=False):
     # Retrieve the bands in this catalog.
     bands = []
     for i in range(10):
@@ -136,7 +136,35 @@ def format_catalog(T, hdr, primhdr, allbands, outfn,
             'ref_cat', 'ref_id']
     if motions:
         cols.extend(['pmra', 'pmdec', 'parallax',
-            'pmra_ivar', 'pmdec_ivar', 'parallax_ivar', 'ref_epoch'])
+            'pmra_ivar', 'pmdec_ivar', 'parallax_ivar', 'ref_epoch',])
+
+    if gaia_tagalong:
+        gaia_cols = [#('source_id', np.int64),  # already have this in ref_id
+                     ('phot_g_mean_mag', np.float32),
+                     ('phot_g_mean_flux_over_error', np.float32),
+                     ('phot_g_n_obs', np.int16),
+                     ('phot_bp_mean_mag', np.float32),
+                     ('phot_bp_mean_flux_over_error', np.float32),
+                     ('phot_bp_n_obs', np.int16),
+                     ('phot_rp_mean_mag', np.float32),
+                     ('phot_rp_mean_flux_over_error', np.float32),
+                     ('phot_rp_n_obs', np.int16),
+                     ('phot_variable_flag', bool),
+                     ('astrometric_excess_noise', np.float32),
+                     ('astrometric_excess_noise_sig', np.float32),
+                     ('astrometric_n_obs_al', np.int16),
+                     ('astrometric_n_good_obs_al', np.int16),
+                     ('astrometric_weight_al', np.float32),
+                     ('duplicated_source', bool),]
+        tcols = T.get_columns()
+        for c,t in gaia_cols:
+            gc = 'gaia_' + c
+            if not c in tcols:
+                T.set(gc, np.zeros(len(T), t))
+            else:
+                T.rename(c, gc)
+            cols.append(gc)
+
     def add_fluxlike(c):
         for b in allbands:
             cols.append('%s%s_%s' % (flux_prefix, c, b))
