@@ -36,7 +36,7 @@ def main(args=None):
 def format_catalog(T, hdr, primhdr, allbands, outfn,
                    in_flux_prefix='', flux_prefix='',
                    write_kwargs={}, N_wise_epochs=None,
-                   motions=True):
+                   motions=True, gaia_tagalong=False):
     # Retrieve the bands in this catalog.
     bands = []
     for i in range(10):
@@ -139,7 +139,7 @@ def format_catalog(T, hdr, primhdr, allbands, outfn,
             'pmra_ivar', 'pmdec_ivar', 'parallax_ivar', 'ref_epoch',])
 
     if gaia_tagalong:
-        gaia_cols = [('source_id', np.int64),
+        gaia_cols = [#('source_id', np.int64),  # already have this in ref_id
                      ('phot_g_mean_mag', np.float32),
                      ('phot_g_mean_flux_over_error', np.float32),
                      ('phot_g_n_obs', np.int16),
@@ -158,11 +158,12 @@ def format_catalog(T, hdr, primhdr, allbands, outfn,
                      ('duplicated_source', bool),]
         tcols = T.get_columns()
         for c,t in gaia_cols:
+            gc = 'gaia_' + c
             if not c in tcols:
-                T.set('gaia_'+c, np.zeros(len(T), t))
+                T.set(gc, np.zeros(len(T), t))
             else:
-                T.rename(c, 'gaia_'+c)
-            cols.append(c)
+                T.rename(c, gc)
+            cols.append(gc)
 
     def add_fluxlike(c):
         for b in allbands:
