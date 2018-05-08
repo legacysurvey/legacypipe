@@ -9,6 +9,7 @@ import fitsio
 from astrometry.util.fits import fits_table
 from astrometry.util.file import trymakedirs
 from astrometry.util.util import Tan
+from astrometry.libkd.spherematch import tree_open, tree_search_radec
 
 from legacypipe.survey import LegacySurveyData, wcs_for_brick
 
@@ -74,7 +75,7 @@ def main():
     radius = 1.
     rc,dc = targetwcs.radec_center()
     I = tree_search_radec(kd, rc, dc, radius)
-    print(len(I), 'Tycho-2 stars within', radius, 'deg of RA,Dec (%.3f, %.3f)' % (ra,dec))
+    print(len(I), 'Tycho-2 stars within', radius, 'deg of RA,Dec (%.3f, %.3f)' % (rc,dc))
     # Read only the rows within range.
     tycho = fits_table(tycho2fn, rows=I)
     del kd

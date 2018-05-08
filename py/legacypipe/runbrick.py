@@ -966,6 +966,10 @@ def stage_image_coadds(survey=None, targetwcs=None, bands=None, tims=None,
 
     for name,ims,rgbkw in coadd_list:
         #rgb = get_rgb(ims, bands, **rgbkw)
+        # kwargs used for the SDSS layer in the viewer.
+        #sdss_map_kwargs = dict(scales={'g':(2,2.5), 'r':(1,1.5), 'i':(0,1.0),
+        #                               'z':(0,0.4)}, m=0.02)
+        #rgb = sdss_rgb(ims, bands, **sdss_map_kwargs)
         rgb = sdss_rgb(ims, bands, **rgbkw)
 
         kwa = {}
@@ -1212,8 +1216,10 @@ def stage_srcs(targetrd=None, pixscale=None, targetwcs=None,
         avoid_x.extend(gaia.ibx)
         avoid_y.extend(gaia.iby)
         
-        # Gaia DR2
-        gaia_release = 'G2'
+        # Gaia version?
+        gaiaver = int(os.getenv('GAIA_CAT_VER', '1'))
+        print('Assuming Gaia catalog Data Release', gaiaver)
+        gaia_release = 'G%i' % gaiaver
         gaia.ref_cat = np.array([gaia_release] * len(gaia))
         gaia.ref_id  = gaia.source_id
         gaia.pmra_ivar  = 1./gaia.pmra_error **2
