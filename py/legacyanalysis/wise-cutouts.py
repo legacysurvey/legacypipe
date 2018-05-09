@@ -16,13 +16,16 @@ from tractor import Tractor, NanoMaggies
 # UGH, copy-n-pasted below...
 #from decals_web.map.views import _unwise_to_rgb
 
-def wise_cutouts(ra, dec, radius, ps, pixscale=2.75, tractor_base='.',
-                 unwise_dir='unwise-coadds'):
+def wise_cutouts(ra, dec, radius, ps, pixscale=2.75, survey_dir=None,
+                 unwise_dir=None):
     '''
     radius in arcsec.
     pixscale: WISE pixel scale in arcsec/pixel;
         make this smaller than 2.75 to oversample.
     '''
+
+    if unwise_dir is None:
+        unwise_dir = os.environ.get('UNWISE_COADDS_DIR')
 
     npix = int(np.ceil(radius / pixscale))
     print('Image size:', npix)
@@ -30,14 +33,13 @@ def wise_cutouts(ra, dec, radius, ps, pixscale=2.75, tractor_base='.',
     pix = pixscale / 3600.
     wcs = Tan(ra, dec, (W+1)/2., (H+1)/2., -pix, 0., 0., pix,float(W),float(H))
     # Find DECaLS bricks overlapping
-    survey = LegacySurveyData()
+    survey = LegacySurveyData(survey_dir=survey_dir)
     B = bricks_touching_wcs(wcs, survey=survey)
     print('Found', len(B), 'bricks overlapping')
 
     TT = []
     for b in B.brickname:
-        fn = os.path.join(tractor_base, 'tractor', b[:3],
-                          'tractor-%s.fits' % b)
+        fn = survey.find_file('tractor', brick=b)
         T = fits_table(fn)
         print('Read', len(T), 'from', b)
         primhdr = fitsio.read_header(fn)
@@ -61,9 +63,8 @@ def wise_cutouts(ra, dec, radius, ps, pixscale=2.75, tractor_base='.',
     coimgs = [np.zeros((dh,dw,3), np.uint8) for t in tags]
 
     for b in B.brickname:
-        fn = os.path.join(tractor_base, 'coadd', b[:3], b,
-                          'legacysurvey-%s-image-r.fits' % b)
-        bwcs = Tan(fn)
+        fn = survey.find_file('image', brick=b, band='r')
+        bwcs = Tan(fn, 1) # ext 1: .fz
         try:
             Yo,Xo,Yi,Xi,nil = resample_with_wcs(dwcs, bwcs)
         except ResampleError:
@@ -75,8 +76,7 @@ def wise_cutouts(ra, dec, radius, ps, pixscale=2.75, tractor_base='.',
         print('python legacypipe/runbrick.py -b %s --zoom %i %i %i %i --outdir cluster --pixpsf --splinesky --pipe --no-early-coadds' %
               (b, xl-5, xh+5, yl-5, yh+5) + ' -P \'pickles/cluster-%(brick)s-%%(stage)s.pickle\'')
         for i,tag in enumerate(tags):
-            fn = os.path.join(tractor_base, 'coadd', b[:3], b,
-                              'legacysurvey-%s-%s.jpg' % (b, tag))
+            fn = survey.find_file(tag+'-jpeg', brick=b)
             img = plt.imread(fn)
             img = np.flipud(img)
             coimgs[i][Yo,Xo,:] = img[Yi,Xi,:]
@@ -107,7 +107,8 @@ def wise_cutouts(ra, dec, radius, ps, pixscale=2.75, tractor_base='.',
     wanyband = 'w'
 
     for band in wbands:
-        T.wise_flux[:, band-1] *= 10.**(primhdr['WISEAB%i' % band] / 2.5)
+        f = T.get('flux_w%i' % band)
+        f *= 10.**(primhdr['WISEAB%i' % band] / 2.5)
 
     coimgs = [np.zeros((H,W), np.float32) for b in wbands]
     comods = [np.zeros((H,W), np.float32) for b in wbands]
@@ -120,7 +121,7 @@ def wise_cutouts(ra, dec, radius, ps, pixscale=2.75, tractor_base='.',
         for i,src in enumerate(srcs):
             #print('Source', src, 'brightness', src.getBrightness(), 'params', src.getBrightness().getParams())
             #src.getBrightness().setParams([T.wise_flux[i, band-1]])
-            src.setBrightness(NanoMaggies(**{wanyband: T.wise_flux[i, band-1]}))
+            src.setBrightness(NanoMaggies(**{wanyband: T.get('flux_w%i'%band)[i]}))
             # print('Set source brightness:', src.getBrightness())
 
         # The tiles have some overlap, so for each source, keep the
@@ -268,7 +269,7 @@ if __name__ == '__main__':
 
     parser.add_argument('-r', '--ra', type=float,  default=329.0358)
     parser.add_argument('-d', '--dec', type=float, default=  1.3909)
-    parser.add_argument('-t', '--dir', default='dr2p')
+    parser.add_argument('--survey-dir')
 
     opt = parser.parse_args()
 
@@ -286,5 +287,4 @@ if __name__ == '__main__':
 
     wise_cutouts(opt.ra, opt.dec, radius, ps,
                  pixscale=2.75 / 2.,
-                 tractor_base=opt.dir)
-                 #tractor_base='cluster')
+                 survey_dir=opt.survey_dir)
