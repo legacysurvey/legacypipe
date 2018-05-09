@@ -105,7 +105,7 @@ def wise_cutouts(ra, dec, radius, ps, pixscale=2.75, survey_dir=None,
 
     srcs = read_fits_catalog(T)
 
-    wbands = [1,2]
+    wbands = [1,2,3,4]
     wanyband = 'w'
 
     for band in wbands:
@@ -203,20 +203,20 @@ def wise_cutouts(ra, dec, radius, ps, pixscale=2.75, survey_dir=None,
 
     #kwa = dict(mn=-0.1, mx=2., arcsinh = 1.)
     kwa = dict(mn=-0.1, mx=2., arcsinh=None)
-    rgb = _unwise_to_rgb(coimgs, **kwa)
+    rgb = _unwise_to_rgb(coimgs[:2], **kwa)
     plt.clf()
     dimshow(rgb, ticks=False)
     plt.title('WISE W1/W2 Data')
     ps.savefig()
 
-    rgb = _unwise_to_rgb(comods, **kwa)
+    rgb = _unwise_to_rgb(comods[:2], **kwa)
     plt.clf()
     dimshow(rgb, ticks=False)
     plt.title('WISE W1/W2 Model')
     ps.savefig()
 
     kwa = dict(mn=-1, mx=1, arcsinh=None)
-    rgb = _unwise_to_rgb([img-mod for img,mod in zip(coimgs,comods)], **kwa)
+    rgb = _unwise_to_rgb([img-mod for img,mod in list(zip(coimgs,comods))[:2]], **kwa)
     plt.clf()
     dimshow(rgb, ticks=False)
     plt.title('WISE W1/W2 Resid')
