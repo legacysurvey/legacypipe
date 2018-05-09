@@ -11,7 +11,7 @@ from wise.forcedphot import unwise_tiles_touching_wcs
 from wise.unwise import get_unwise_tractor_image
 from legacypipe.catalog import read_fits_catalog
 from tractor.ellipses import EllipseE
-from tractor import Tractor, NanoMaggies
+from tractor import Tractor, NanoMaggies, LinearPhotoCal, ConstantFitsWcs, ConstantSky, NCircularGaussianPSF, NanoMaggies, Image
 
 # UGH, copy-n-pasted below...
 #from decals_web.map.views import _unwise_to_rgb
@@ -55,6 +55,8 @@ def wise_cutouts(ra, dec, radius, ps, pixscale=2.75, survey_dir=None,
     T.cut(I)
     print(len(T), 'within ROI')
 
+    #return wcs,T
+
     # Pull out DECaLS coadds (image, model, resid).
     dwcs = wcs.scale(2. * pixscale / 0.262)
     dh,dw = dwcs.shape
@@ -73,8 +75,8 @@ def wise_cutouts(ra, dec, radius, ps, pixscale=2.75, survey_dir=None,
             continue
         print('Resampling', len(Yo), 'pixels from', b)
         xl,xh,yl,yh = Xi.min(), Xi.max(), Yi.min(), Yi.max()
-        print('python legacypipe/runbrick.py -b %s --zoom %i %i %i %i --outdir cluster --pixpsf --splinesky --pipe --no-early-coadds' %
-              (b, xl-5, xh+5, yl-5, yh+5) + ' -P \'pickles/cluster-%(brick)s-%%(stage)s.pickle\'')
+        #print('python legacypipe/runbrick.py -b %s --zoom %i %i %i %i --outdir cluster --pixpsf --splinesky --pipe --no-early-coadds' %
+        #      (b, xl-5, xh+5, yl-5, yh+5) + ' -P \'pickles/cluster-%(brick)s-%%(stage)s.pickle\'')
         for i,tag in enumerate(tags):
             fn = survey.find_file(tag+'-jpeg', brick=b)
             img = plt.imread(fn)
@@ -220,6 +222,8 @@ def wise_cutouts(ra, dec, radius, ps, pixscale=2.75, survey_dir=None,
     plt.title('WISE W1/W2 Resid')
     ps.savefig()
 
+    return wcs, T
+
 
 def _unwise_to_rgb(imgs, bands=[1,2], mn=-1, mx=100, arcsinh=1.):
     import numpy as np
@@ -263,13 +267,59 @@ def _unwise_to_rgb(imgs, bands=[1,2], mn=-1, mx=100, arcsinh=1.):
 
     return rgb
 
+def ra_ranges_overlap(ralo, rahi, ra1, ra2):
+    import numpy as np
+    x1 = np.cos(np.deg2rad(ralo))
+    y1 = np.sin(np.deg2rad(ralo))
+    x2 = np.cos(np.deg2rad(rahi))
+    y2 = np.sin(np.deg2rad(rahi))
+    x3 = np.cos(np.deg2rad(ra1))
+    y3 = np.sin(np.deg2rad(ra1))
+    x4 = np.cos(np.deg2rad(ra2))
+    y4 = np.sin(np.deg2rad(ra2))
+    cw32 = x2*y3 - x3*y2
+    cw41 = x1*y4 - x4*y1
+    return np.logical_and(cw32 <= 0, cw41 >= 0)
+
+def galex_rgb(imgs, bands, **kwargs):
+    import numpy as np
+    from scipy.ndimage.filters import uniform_filter, gaussian_filter
+    nuv,fuv = imgs
+    h,w = nuv.shape
+    red = nuv * 0.206 * 2297
+    blue = fuv * 1.4 * 1525
+    #blue = uniform_filter(blue, 3)
+    blue = gaussian_filter(blue, 1.)
+    green = (0.2*blue + 0.8*red)
+
+    red   *= 0.085
+    green *= 0.095
+    blue  *= 0.08
+    nonlinearity = 2.5
+    radius = red + green + blue
+    val = np.arcsinh(radius * nonlinearity) / nonlinearity
+    with np.errstate(divide='ignore', invalid='ignore'):
+        red   = red   * val / radius
+        green = green * val / radius
+        blue  = blue  * val / radius
+    mx = np.maximum(red, np.maximum(green, blue))
+    mx = np.maximum(1., mx)
+    red   /= mx
+    green /= mx
+    blue  /= mx
+    rgb = np.clip(np.dstack((red, green, blue)), 0., 1.)
+    return rgb
+
 if __name__ == '__main__':
     import argparse
     parser = argparse.ArgumentParser()
 
     parser.add_argument('-r', '--ra', type=float,  default=329.0358)
     parser.add_argument('-d', '--dec', type=float, default=  1.3909)
-    parser.add_argument('--survey-dir')
+    parser.add_argument('--radius', type=float, default=90., help='Cutout radius (arcsec)')
+    parser.add_argument('--survey-dir', help='Legacy Survey base directory')
+    parser.add_argument('--base', help='Base filename for output plots', default='cutouts')
+    parser.add_argument('--galex-dir', help='Try making GALEX cutouts too?')
 
     opt = parser.parse_args()
 
@@ -278,13 +328,191 @@ if __name__ == '__main__':
     #ra,dec = 244.0424,6.9179
 
     # arcsec
-    radius = 90.
+    radius = opt.radius
 
-    ps = PlotSequence('cluster')
+    ps = PlotSequence(opt.base)
 
     plt.figure(figsize=(4,4))
     plt.subplots_adjust(left=0.005, right=0.995, bottom=0.005, top=0.995)
 
-    wise_cutouts(opt.ra, opt.dec, radius, ps,
-                 pixscale=2.75 / 2.,
-                 survey_dir=opt.survey_dir)
+    wcs,T = wise_cutouts(opt.ra, opt.dec, radius, ps,
+                         pixscale=2.75 / 2.,
+                         survey_dir=opt.survey_dir)
+
+
+    H,W = wcs.shape
+    ralo,declo = wcs.pixelxy2radec(W,1)
+    rahi,dechi = wcs.pixelxy2radec(1,H)
+    print('RA',  ralo,rahi)
+    print('Dec', declo,dechi)
+
+    if opt.galex_dir:
+        fn = os.path.join(opt.galex_dir, 'galex-images.fits')
+        print('Reading', fn)
+        # galex "bricks" (actually just GALEX tiles)
+        galex = fits_table(fn)
+
+        galex.rename('ra_cent', 'ra')
+        galex.rename('dec_cent', 'dec')
+        galex.rename('have_n', 'has_n')
+        galex.rename('have_f', 'has_f')
+        cosd = np.cos(np.deg2rad(galex.dec))
+        galex.ra1 = galex.ra - 3840*1.5/3600./2./cosd
+        galex.ra2 = galex.ra + 3840*1.5/3600./2./cosd
+        galex.dec1 = galex.dec - 3840*1.5/3600./2.
+        galex.dec2 = galex.dec + 3840*1.5/3600./2.
+        bricknames = []
+        for tile,subvis in zip(galex.tilename, galex.subvis):
+            if subvis == -999:
+                bricknames.append(tile.strip())
+            else:
+                bricknames.append('%s_sg%02i' % (tile.strip(), subvis))
+        galex.brickname = np.array(bricknames)
+
+        # bricks_touching_radec_box(self, ralo, rahi, declo, dechi, scale=None):
+        I, = np.nonzero((galex.dec1 <= dechi) * (galex.dec2 >= declo))
+        ok = ra_ranges_overlap(ralo, rahi, galex.ra1[I], galex.ra2[I])
+        I = I[ok]
+        galex.cut(I)
+        print('-> bricks', galex.brickname)
+
+        gbands = ['n','f']
+        coimgs = []
+        comods = []
+
+        srcs = read_fits_catalog(T)
+        for src in srcs:
+            src.freezeAllBut('brightness')
+
+
+        for band in gbands:
+            J = np.flatnonzero(galex.get('has_'+band))
+            print(len(J), 'GALEX tiles have coverage in band', band)
+
+            coimg = np.zeros((H,W), np.float32)
+            comod = np.zeros((H,W), np.float32)
+            cowt  = np.zeros((H,W), np.float32)
+
+            for src in srcs:
+                src.setBrightness(NanoMaggies(**{band: 1}))
+
+            for j in J:
+                brick = galex[j]
+                fn = os.path.join(opt.galex_dir, brick.tilename.strip(),
+                                  '%s-%sd-intbgsub.fits.gz' % (brick.brickname, band))
+                print(fn)
+
+                gwcs = Tan(*[float(f) for f in
+                             [brick.crval1, brick.crval2, brick.crpix1, brick.crpix2,
+                              brick.cdelt1, 0., 0., brick.cdelt2, 3840., 3840.]])
+                img = fitsio.read(fn)
+                print('Read', img.shape)
+
+                try:
+                    Yo,Xo,Yi,Xi,nil = resample_with_wcs(wcs, gwcs, [], 3)
+                except OverlapError:
+                    continue
+
+                K = np.flatnonzero(img[Yi,Xi] != 0.)
+                if len(K) == 0:
+                    continue
+                Yo = Yo[K]
+                Xo = Xo[K]
+                Yi = Yi[K]
+                Xi = Xi[K]
+
+                rimg = np.zeros((H,W), np.float32)
+                rimg[Yo,Xo] = img[Yi,Xi]
+
+                plt.clf()
+                plt.imshow(rimg, interpolation='nearest', origin='lower')
+                ps.savefig()
+
+                wt = brick.get(band + 'exptime')
+                coimg[Yo,Xo] += wt * img[Yi,Xi]
+                cowt [Yo,Xo] += wt
+
+
+                x0 = min(Xi)
+                x1 = max(Xi)
+                y0 = min(Yi)
+                y1 = max(Yi)
+                subwcs = gwcs.get_subimage(x0, y0, x1-x0+1, y1-y0+1)
+                twcs = ConstantFitsWcs(subwcs)
+                timg = img[y0:y1+1, x0:x1+1]
+                tie = np.ones_like(timg)  ## HACK!
+                #hdr = fitsio.read_header(fn)
+                #zp = hdr['
+                zps = dict(n=20.08, f=18.82)
+                zp = zps[band]
+                photocal = LinearPhotoCal(NanoMaggies.zeropointToScale(zp),
+                                          band=band)
+                tsky = ConstantSky(0.)
+
+                # HACK -- circular Gaussian PSF of fixed size...
+                # in arcsec
+                #fwhms = dict(NUV=6.0, FUV=6.0)
+                # -> sigma in pixels
+                #sig = fwhms[band] / 2.35 / twcs.pixel_scale()
+                sig = 6.0 / 2.35 / twcs.pixel_scale()
+                tpsf = NCircularGaussianPSF([sig], [1.])
+
+                tim = Image(data=timg, inverr=tie, psf=tpsf, wcs=twcs,
+                            sky=tsky, photocal=photocal,
+                            name='GALEX ' + band + brick.brickname)
+                tractor = Tractor([tim], srcs)
+                mod = tractor.getModelImage(0)
+
+                print('Tractor image', tim.name)
+                plt.clf()
+                plt.imshow(timg, interpolation='nearest', origin='lower')
+                ps.savefig()
+
+                print('Tractor model', tim.name)
+                plt.clf()
+                plt.imshow(mod, interpolation='nearest', origin='lower')
+                ps.savefig()
+
+                tractor.freezeParam('images')
+
+                print('Params:')
+                tractor.printThawedParams()
+            
+                tractor.optimize_forced_photometry(priors=False, shared_params=False)
+
+                mod = tractor.getModelImage(0)
+
+                print('Tractor model (forced phot)', tim.name)
+                plt.clf()
+                plt.imshow(mod, interpolation='nearest', origin='lower')
+                ps.savefig()
+
+                comod[Yo,Xo] += wt * mod[Yi-y0,Xi-x0]
+
+
+            coimg /= np.maximum(cowt, 1e-18)
+            comod /= np.maximum(cowt, 1e-18)
+            coimgs.append(coimg)
+            comods.append(comod)
+
+            print('Coadded image')
+            plt.clf()
+            plt.imshow(coimg, interpolation='nearest', origin='lower')
+            ps.savefig()
+
+            print('Coadded model')
+            plt.clf()
+            plt.imshow(comod, interpolation='nearest', origin='lower')
+            ps.savefig()
+
+        rgb = galex_rgb(coimgs, gbands)
+        plt.clf()
+        plt.imshow(rgb, interpolation='nearest', origin='lower')
+        ps.savefig()
+
+        print('Model RGB')
+        rgb = galex_rgb(comods, gbands)
+        plt.clf()
+        plt.imshow(rgb, interpolation='nearest', origin='lower')
+        ps.savefig()
+
