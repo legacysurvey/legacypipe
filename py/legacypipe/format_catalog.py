@@ -140,22 +140,23 @@ def format_catalog(T, hdr, primhdr, allbands, outfn,
 
     if gaia_tagalong:
         gaia_cols = [#('source_id', np.int64),  # already have this in ref_id
-                     ('phot_g_mean_mag', np.float32),
-                     ('phot_g_mean_flux_over_error', np.float32),
-                     ('phot_g_n_obs', np.int16),
-                     ('phot_bp_mean_mag', np.float32),
-                     ('phot_bp_mean_flux_over_error', np.float32),
-                     ('phot_bp_n_obs', np.int16),
-                     ('phot_rp_mean_mag', np.float32),
-                     ('phot_rp_mean_flux_over_error', np.float32),
-                     ('phot_rp_n_obs', np.int16),
-                     ('phot_variable_flag', bool),
-                     ('astrometric_excess_noise', np.float32),
-                     ('astrometric_excess_noise_sig', np.float32),
-                     ('astrometric_n_obs_al', np.int16),
-                     ('astrometric_n_good_obs_al', np.int16),
-                     ('astrometric_weight_al', np.float32),
-                     ('duplicated_source', bool),]
+            ('pointsource', bool),  # did we force it to be a point source?
+            ('phot_g_mean_mag', np.float32),
+            ('phot_g_mean_flux_over_error', np.float32),
+            ('phot_g_n_obs', np.int16),
+            ('phot_bp_mean_mag', np.float32),
+            ('phot_bp_mean_flux_over_error', np.float32),
+            ('phot_bp_n_obs', np.int16),
+            ('phot_rp_mean_mag', np.float32),
+            ('phot_rp_mean_flux_over_error', np.float32),
+            ('phot_rp_n_obs', np.int16),
+            ('phot_variable_flag', bool),
+            ('astrometric_excess_noise', np.float32),
+            ('astrometric_excess_noise_sig', np.float32),
+            ('astrometric_n_obs_al', np.int16),
+            ('astrometric_n_good_obs_al', np.int16),
+            ('astrometric_weight_al', np.float32),
+            ('duplicated_source', bool),]
         tcols = T.get_columns()
         for c,t in gaia_cols:
             gc = 'gaia_' + c

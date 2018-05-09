@@ -1385,7 +1385,7 @@ def stage_srcs(targetrd=None, pixscale=None, targetwcs=None,
     tycho = alltycho
 
     keys = ['T', 'tims', 'blobsrcs', 'blobslices', 'blobs', 'cat',
-            'ps', 'tycho']
+            'ps', 'tycho', 'gaia_stars']
     L = locals()
     rtn = dict([(k,L[k]) for k in keys])
     return rtn
