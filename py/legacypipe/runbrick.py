@@ -85,6 +85,7 @@ def stage_tims(W=3600, H=3600, pixscale=0.262, brickname=None,
                constant_invvar=False,
                depth_cut = True,
                read_image_pixels = True,
+               min_mjd=None, max_mjd=None,
                mp=None,
                record_event=None,
                **kwargs):
@@ -267,6 +268,13 @@ def stage_tims(W=3600, H=3600, pixscale=0.262, brickname=None,
         print('Cutting to', len(I), 'of', len(ccds), 'CCDs for fitting.')
         ccds.cut(I)
 
+    if min_mjd is not None:
+        ccds.cut(ccds.mjd_obs >= min_mjd)
+        print('Cut to', len(ccds), 'after MJD', min_mjd)
+    if max_mjd is not None:
+        ccds.cut(ccds.mjd_obs <= max_mjd)
+        print('Cut to', len(ccds), 'before MJD', max_mjd)
+
     if depth_cut:
         # If we have many images, greedily select images until we have
         # reached our target depth
@@ -286,7 +294,7 @@ def stage_tims(W=3600, H=3600, pixscale=0.262, brickname=None,
         ims.append(im)
         print(im, im.band, 'exptime', im.exptime, 'propid', ccd.propid,
               'seeing %.2f' % (ccd.fwhm*im.pixscale),
-              'object', getattr(ccd, 'object', None))
+              'object', getattr(ccd, 'object', None), 'MJD', ccd.mjd_obs)
 
     print('Cut CCDs:', Time()-t0)
 
@@ -2670,6 +2678,7 @@ def run_brick(brick, survey, radec=None, pixscale=0.262,
               splinesky=False,
               constant_invvar=False,
               gaia_stars=False,
+              min_mjd=None, max_mjd=None,
               ceres=True,
               wise_ceres=True,
               unwise_dir=None,
@@ -2880,6 +2889,7 @@ def run_brick(brick, survey, radec=None, pixscale=0.262,
                   depth_cut=depth_cut,
                   splinesky=splinesky,
                   gaia_stars=gaia_stars,
+                  min_mjd=min_mjd, max_mjd=max_mjd,
                   simul_opt=simul_opt,
                   use_ceres=ceres,
                   wise_ceres=wise_ceres,
@@ -2942,6 +2952,9 @@ def run_brick(brick, survey, radec=None, pixscale=0.262,
         'initplots': 'srcs',
 
         }
+
+    if 'image_coadds' in stages:
+        early_coadds = True
 
     if early_coadds:
         if blob_image:
@@ -3197,6 +3210,11 @@ python -u legacypipe/runbrick.py --plots --brick 2440p070 --zoom 1900 2400 450 9
 
     parser.add_argument('--gaia', dest='gaia_stars', default=False, action='store_true',
                         help='Use Gaia sources as fixed stars')
+
+    parser.add_argument('--min-mjd', type=float,
+                        help='Only keep images taken after the given MJD')
+    parser.add_argument('--max-mjd', type=float,
+                        help='Only keep images taken before the given MJD')
 
     return parser
 
