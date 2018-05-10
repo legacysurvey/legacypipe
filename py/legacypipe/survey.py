@@ -1452,9 +1452,11 @@ Now using the current directory as LEGACY_SURVEY_DIR, but this is likely to fail
             # "N4 " -> "N4"
             ccds.ccdname = np.array([s.strip() for s in ccds.ccdname])
         # Remove trailing spaces from 'camera' column.
-        ccds.camera = np.array([c.strip() for c in ccds.camera])
+        if 'camera' in ccds.columns():
+            ccds.camera = np.array([c.strip() for c in ccds.camera])
         # And 'filter' column
-        ccds.filter = np.array([f.strip() for f in ccds.filter])
+        if 'filter' in ccds.columns():
+            ccds.filter = np.array([f.strip() for f in ccds.filter])
         return ccds
 
     def ccds_touching_wcs(self, wcs, **kwargs):
