@@ -1126,6 +1126,7 @@ def stage_srcs(targetrd=None, pixscale=None, targetwcs=None,
     ra,dec = targetwcs.radec_center()
     # fitscopy /data2/catalogs-fits/TYCHO2/tycho2.fits"[col tyc1;tyc2;tyc3;ra;dec;sigma_ra;sigma_dec;mean_ra;mean_dec;pm_ra;pm_dec;sigma_pm_ra;sigma_pm_dec;epoch_ra;epoch_dec;mag_bt;mag_vt;mag_hp]" /tmp/tycho2-astrom.fits
     # startree -i /tmp/tycho2-astrom.fits -o ~/cosmo/work/legacysurvey/dr7/tycho2.kd.fits -P -k -n stars -T
+    # John added the "isgalaxy" flag 2018-05-10, from the Metz & Geffert (04) catalog.
     kd = tree_open(tycho2fn, 'stars')
     I = tree_search_radec(kd, ra, dec, radius)
     print(len(I), 'Tycho-2 stars within', radius, 'deg of RA,Dec (%.3f, %.3f)' % (ra,dec))
@@ -1134,6 +1135,11 @@ def stage_srcs(targetrd=None, pixscale=None, targetwcs=None,
     # Read only the rows within range.
     tycho = fits_table(tycho2fn, rows=I)
     del kd
+    if 'isgalaxy' in tycho.get_columns():
+        tycho.cut(tycho.isgalaxy == 0)
+        print('Cut to', len(tycho), 'Tycho-2 stars on isgalaxy==0')
+    else:
+        print('Warning: no "isgalaxy" column in Tycho-2 catalog')
     #print('Read', len(tycho), 'Tycho-2 stars')
     ok,xx,yy = targetwcs.radec2pixelxy(tycho.ra, tycho.dec)
     ## ibx = integer brick x
