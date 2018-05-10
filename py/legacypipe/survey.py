@@ -864,6 +864,7 @@ Now using the current directory as LEGACY_SURVEY_DIR, but this is likely to fail
         self.output_file_hashes = OrderedDict()
         self.ccds = ccds
         self.bricks = None
+        self.ccds_index = None
 
         # Create and cache a kd-tree for bricks_touching_radec_box ?
         self.cache_tree = False
@@ -1382,7 +1383,7 @@ Now using the current directory as LEGACY_SURVEY_DIR, but this is likely to fail
     def filter_ccd_kd_files(self, fns):
         return fns
 
-    def get_ccds(self):
+    def get_ccds(self, **kwargs):
         '''
         Returns the table of CCDs.
         '''
@@ -1404,10 +1405,13 @@ Now using the current directory as LEGACY_SURVEY_DIR, but this is likely to fail
             #     'ccdnmatch camera image_hdu image_filename width height ' +
             #     'ra dec zpt expnum fwhm mjd_obs').split()
             #T = fits_table(fn, columns=cols)
-            T = fits_table(fn)
+            T = fits_table(fn, **kwargs)
             print('Got', len(T), 'CCDs')
             TT.append(T)
-        T = merge_tables(TT, columns='fillzero')
+        if len(TT) > 1:
+            T = merge_tables(TT, columns='fillzero')
+        else:
+            T = TT[0]
         print('Total of', len(T), 'CCDs')
         del TT
 
@@ -1555,6 +1559,21 @@ Now using the current directory as LEGACY_SURVEY_DIR, but this is likely to fail
         number, integer), *ccdname* (string), and *camera* (string),
         if given.
         '''
+        if expnum is not None and ccdname is not None:
+            # use ccds_index
+            if self.ccds_index is None:
+                if self.ccds is not None:
+                    C = self.ccds
+                else:
+                    C = self.get_ccds(columns=['expnum','ccdname'])
+                self.ccds_index = dict([((e,n),i) for i,(e,n) in
+                                        enumerate(zip(C.expnum, C.ccdname))])
+            row = self.ccds_index[(expnum, ccdname)]
+            if self.ccds is not None:
+                return self.ccds[row]
+            import numpy as np
+            C = self.get_ccds(rows=np.array([row]))
+            return C[0]
         T = self.get_ccds_readonly()
         if expnum is not None:
             T = T[T.expnum == expnum]
