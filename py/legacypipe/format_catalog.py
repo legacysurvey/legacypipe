@@ -47,8 +47,6 @@ def format_catalog(T, hdr, primhdr, allbands, outfn,
         bands.append(b)
     print('Bands in this catalog:', bands)
 
-    #allbands = ['g','r','z']
-
     has_wise =    'flux_w1'    in T.columns()
     has_wise_lc = 'lc_flux_w1' in T.columns()
     has_ap =      'apflux'     in T.columns()

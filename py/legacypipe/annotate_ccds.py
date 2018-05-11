@@ -50,7 +50,7 @@ def annotate(ccds, survey, mzls=False, normalizePsf=False):
     tileid_to_index[:] = -1
     tileid_to_index[tiles.tileid] = np.arange(len(tiles))
 
-    assert('ccd_cuts' in ccds.get_columns())
+    #assert('ccd_cuts' in ccds.get_columns())
 
     gaussgalnorm = np.zeros(len(ccds), np.float32)
 
