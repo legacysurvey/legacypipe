@@ -467,8 +467,14 @@ class LegacySurveyImage(object):
             clip = np.array(clip)
             if len(clip) == 0:
                 return 0,0,0,0,None
+            # Convert from FITS to python image coords
+            clip -= 1
             x0,y0 = np.floor(clip.min(axis=0)).astype(int)
             x1,y1 = np.ceil (clip.max(axis=0)).astype(int)
+            x0 = min(max(x0, 0), imw-1)
+            y0 = min(max(y0, 0), imh-1)
+            x1 = min(max(x1, 0), imw-1)
+            y1 = min(max(y1, 0), imh-1)
             slc = slice(y0,y1+1), slice(x0,x1+1)
         # Slice?
         if slc is not None:
@@ -623,7 +629,12 @@ class LegacySurveyImage(object):
         ff = open(fn, 'rb')
         h = b''
         while True:
-            h = h + ff.read(32768)
+            hnew = ff.read(32768)
+            if len(hnew) == 0:
+                # EOF
+                ff.close()
+                raise RuntimeError('Reached end-of-file in "%s" before finding end of FITS header.' % fn)
+            h = h + hnew
             while True:
                 line = h[:80]
                 h = h[80:]
@@ -691,6 +702,14 @@ class LegacySurveyImage(object):
         7 = diff detect (multi-exposure difference detection from median)
         8 = long streak (e.g. satellite trail)
         '''
+
+        # Some images (eg, 90prime//CP20160403/ksb_160404_103333_ood_g_v1-CCD1.fits)
+        # around saturated stars have the core with value 3 (satur), surrounded by one
+        # pixel of value 1 (bad), and then more pixels with value 4 (bleed).
+        # Set the BAD ones to SATUR.
+        from scipy.ndimage.morphology import binary_dilation
+        dq[np.logical_and(dq == 1, binary_dilation(dq == 3))] = 3
+
         dqbits[dq == 1] |= CP_DQ_BITS['badpix']
         dqbits[dq == 2] |= CP_DQ_BITS['badpix']
         dqbits[dq == 3] |= CP_DQ_BITS['satur']
