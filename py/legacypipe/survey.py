@@ -338,17 +338,17 @@ def get_version_header(program_name, survey_dir, git_version=None):
                         comment='legacypipe git version'))
     hdr.add_record(dict(name='SURVEYV', value=survey_dir,
                         comment='Legacy Survey directory'))
-    hdr.add_record(dict(name='DECALSDR', value='DR6',
+    hdr.add_record(dict(name='DECALSDR', value='DR7',
                         comment='DECaLS release name'))
     hdr.add_record(dict(name='DECALSDT', value=datetime.datetime.now().isoformat(),
                         comment='%s run time' % program_name))
     hdr.add_record(dict(name='SURVEY', value='DECaLS',
                         comment='DECam Legacy Survey'))
     # Requested by NOAO
-    #hdr.add_record(dict(name='SURVEYID', value='DECam Legacy Survey (DECaLS)',
-    #                    comment='Survey name'))
-    hdr.add_record(dict(name='SURVEYID', value='BASS MzLS',
+    hdr.add_record(dict(name='SURVEYID', value='DECam Legacy Survey (DECaLS)',
                         comment='Survey name'))
+    #hdr.add_record(dict(name='SURVEYID', value='BASS MzLS',
+    #                    comment='Survey name'))
     hdr.add_record(dict(name='DRVERSIO', value=release_number,
                         comment='Survey data release number'))
     hdr.add_record(dict(name='OBSTYPE', value='object',
