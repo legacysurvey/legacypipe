@@ -313,13 +313,22 @@ def main():
         # which has_[grz] columns.
         B.cut(np.logical_not((B.has_g == 1) * (B.has_r == 1) * (B.has_z == 1)))
         log('Cut to', len(B), 'bricks withOUT grz coverage')
+
     elif opt.region == 'deep2':
         rlo,rhi = 250,260
         dlo,dhi = 30,35
 
+    elif opt.region == 'deep2f2':
+        rlo,rhi = 251.4, 254.4
+        dlo,dhi =  34.6,  35.3
+
     elif opt.region == 'deep2f3':
         rlo,rhi = 351.25, 353.75
         dlo,dhi = 0, 0.5
+
+    elif opt.region == 'deep3':
+        rlo,rhi = 214,216
+        dlo,dhi = 52.25,53.25
 
     elif opt.region == 'virgo':
         rlo,rhi = 185,190

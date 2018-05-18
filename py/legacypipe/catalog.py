@@ -198,7 +198,7 @@ def _get_tractor_fits_values(T, cat, pat, unpackShape=True):
 
 def read_fits_catalog(T, hdr=None, invvars=False, bands='grz',
                       allbands=None, ellipseClass=EllipseE,
-                      unpackShape=True, fluxPrefix='decam_'):
+                      unpackShape=True, fluxPrefix=''):
     '''
     This is currently a weird hybrid of dynamic and hard-coded.
 
