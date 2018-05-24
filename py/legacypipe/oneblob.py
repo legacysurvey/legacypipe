@@ -487,15 +487,17 @@ class OneBlob(object):
                 rex = simple
             else:
                 simname = 'simple'
-            trymodels = [('ptsrc', ptsrc), (simname, simple)]
-    
+                
+            trymodels = ('ptsrc', ptsrc)
+                
             if oldmodel == 'ptsrc':
                 if self.hastycho:
                     print('Not computing galaxy models: Tycho-2 star in blob')
                 else:
+                    trymodels.append((simname, simple))
                     # Try galaxy models if simple > ptsrc, or if bright.
                     # The 'gals' model is just a marker
-                    trymodels.extend([('gals', None)])
+                    trymodels.append(('gals', None))
             else:
                 trymodels.extend([('dev', dev), ('exp', exp), ('comp', comp)])
 
