@@ -1226,6 +1226,10 @@ def stage_srcs(targetrd=None, pixscale=None, targetwcs=None,
                 keep = np.ones(len(tycho), bool)
                 keep[I] = False
                 tycho.cut(I)
+
+        # FIXME - Append the surviving Tycho2 stars to the "Gaia" catalog.
+
+                
         # Don't detect new sources where we already have Gaia stars
         avoid_x.extend(gaia.ibx)
         avoid_y.extend(gaia.iby)
@@ -1259,6 +1263,10 @@ def stage_srcs(targetrd=None, pixscale=None, targetwcs=None,
         gaiacat = [GaiaSource.from_catalog(g, bands) for g in gaia]
     else:
         Tgaia = fits_table()
+        # FIXME - Create a Gaia-looking catalog.
+
+    # FIXME - Initialize a big-galaxy catalog here--?
+        
 
     # Saturated blobs -- create a source for each, except for those
     # that already have a Tycho-2 (or Gaia) star
@@ -1295,6 +1303,7 @@ def stage_srcs(targetrd=None, pixscale=None, targetwcs=None,
         # MAGIC mag for a saturated star
         Tsat.mag = np.zeros(len(Tsat), np.float32) + 15.
         #Tsat.ref_cat = np.array(['  ']*len(Tsat))
+        # FIXME - don't do this
         Tsat = merge_tables([tycho, Tsat], columns='fillzero')
     del satyx
         

@@ -676,6 +676,8 @@ class LegacySurveyImage(object):
         '''
         print('Reading data quality image', self.dqfn, 'ext', self.hdu)
         dq = self._read_fits(self.dqfn, self.hdu, **kwargs)
+
+        # FIXME - Turn SATUR on edges to EDGE
         return dq
 
     def remap_dq(self, dq, header):
