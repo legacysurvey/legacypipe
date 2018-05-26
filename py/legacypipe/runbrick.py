@@ -1709,6 +1709,18 @@ def stage_fitblobs(T=None,
     newcat = BB.sources
     # ... and make the table T parallel with BB.
     T.cut(II)
+    assert(len(T) == len(BB))
+
+    # Drop sources that exited the blob as a result of fitting.
+    left_blob = np.logical_and(BB.started_in_blob,
+                               np.logical_not(BB.finished_in_blob))
+    I, = np.nonzero(np.logical_not(left_blob))
+    if len(I) < len(BB):
+        print('Dropping', len(BB)-len(I), 'sources that exited their blobs during fitting')
+    BB.cut(I)
+    T.cut(I)
+    newcat = [newcat[i] for i in I]
+    assert(len(T) == len(BB))
 
     assert(len(T) == len(newcat))
     print('Old catalog:', len(cat))
@@ -1781,8 +1793,6 @@ def stage_fitblobs(T=None,
     del ninblob
 
     # Copy blob results to table T
-    T.left_blob = np.logical_and(BB.started_in_blob,
-                                 np.logical_not(BB.finished_in_blob))
     for k in ['fracflux', 'fracin', 'fracmasked', 'rchisq', 'cpu_source',
               'cpu_blob', 'blob_width', 'blob_height', 'blob_npix',
               'blob_nimages', 'blob_totalpix', 'dchisq', 'brightstarinblob']:
