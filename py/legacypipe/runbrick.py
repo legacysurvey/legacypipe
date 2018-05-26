@@ -1084,9 +1084,9 @@ def stage_srcs(targetrd=None, pixscale=None, targetwcs=None,
     from tractor import PointSource, NanoMaggies, RaDecPos, Catalog
     from legacypipe.detection import (detection_maps, sed_matched_filters,
                         run_sed_matched_filters, segment_and_group_sources)
+    from legacypipe.survey import GaiaSource
     from scipy.ndimage.morphology import binary_dilation
     from scipy.ndimage.measurements import label, find_objects, center_of_mass
-    from astrometry.libkd.spherematch import tree_open, tree_search_radec
 
     record_event and record_event('stage_srcs: starting')
 
@@ -1121,6 +1121,253 @@ def stage_srcs(targetrd=None, pixscale=None, targetwcs=None,
     saturated_pix = binary_dilation(satmap > 0, iterations=10)
     
     # Read Tycho-2 stars and use as saturated sources.
+    tycho = read_tycho2(survey, targetwcs)
+    # add Gaia-style columns
+    # No parallaxes in Tycho-2
+    tycho.parallax = np.zeros(len(tycho), np.float32)
+    # Arrgh, Tycho-2 has separate epoch_ra and epoch_dec.
+    # Move source to the mean epoch.
+    # FIXME -- check this!!
+    tycho.ref_epoch = (tycho.epoch_ra + tycho.epoch_dec) / 2.
+    cosdec = np.cos(np.deg2rad(tycho.dec))
+    tycho.ra  += (tycho.ref_epoch - tycho.epoch_ra ) * tycho.pmra  / 3600. / cosdec
+    tycho.dec += (tycho.ref_epoch - tycho.epoch_dec) * tycho.pmdec / 3600.
+    # Tycho-2 proper motions are in arcsec/yr; Gaia are mas/yr.
+    tycho.pmra  *= 1000.
+    tycho.pmdec *= 1000.
+    # We already cut on John's "isgalaxy" flag
+    tycho.pointsource = np.ones(len(tycho), bool)
+    # phot_g_mean_mag -- for initial brightness of source
+    tycho.phot_g_mean_mag = tycho.mag
+    tycho.delete_column('epoch_ra')
+    tycho.delete_column('epoch_dec')
+    tycho.isbright = np.ones(len(tycho), bool)
+    refstars = tycho
+
+    # Add Gaia stars
+    if gaia_stars:
+        from astrometry.libkd.spherematch import match_radec
+        gaia = read_gaia(targetwcs)
+        gaia.isbright = np.zeros(len(gaia), bool)
+        # Handle sources that appear in both Gaia and Tycho-2 by dropping the entry from Tycho-2.
+        if len(gaia) and len(tycho):
+            # FIXME -- apply proper motions to bring them to the same epoch before matching
+            I,J,d = match_radec(tycho.ra, tycho.dec, gaia.ra, gaia.dec, 1./3600.,
+                                nearest=True)
+            print('Matched', len(I), 'Tycho-2 stars to Gaia stars')
+            if len(I):
+                keep = np.ones(len(tycho), bool)
+                keep[I] = False
+                #tycho.cut(I)
+                gaia.isbright[J] = True
+        if len(gaia):
+            refstars = merge_tables([refstars, gaia])
+
+    # Don't detect new sources where we already have reference stars
+    avoid_x = refstars.ibx
+    avoid_y = refstars.iby
+        
+    # Create Tractor sources
+    refstarcat = [GaiaSource.from_catalog(g, bands) for g in refstars]
+
+    # FIXME - Initialize a big-galaxy catalog here--?
+
+    # Saturated blobs -- create a source for each, except for those
+    # that already have a Tycho-2 or Gaia star
+    satblobs,nsat = label(satmap > 0)
+    if len(refstars):
+        # Build a map from old "satblobs" to new; identity to start
+        remap = np.arange(nsat+1)
+        # Drop blobs that contain a reference star
+        zeroout = satblobs[refstars.iby, refstars.ibx]
+        remap[zeroout] = 0
+        # Renumber them to be contiguous
+        I = np.flatnonzero(remap)
+        nsat = len(I)
+        remap[I] = 1 + np.arange(nsat)
+        satblobs = remap[satblobs]
+        del remap, zeroout, I
+
+    # Add sources for any remaining saturated blobs
+    satcat = []
+    sat = fits_table()
+    if nsat:
+        satyx = center_of_mass(satmap, labels=satblobs, index=np.arange(nsat)+1)
+        # NOTE, satyx is in y,x order (center_of_mass)
+        sat.ibx = np.array([x for y,x in satyx]).astype(int)
+        sat.iby = np.array([y for y,x in satyx]).astype(int)
+        sat.ra,sat.dec = targetwcs.pixelxy2radec(sat.ibx+1, sat.iby+1)
+        print('Adding', len(sat), 'additional saturated stars')
+        # MAGIC mag for a saturated star
+        sat.mag = np.zeros(len(sat), np.float32) + 15.
+        #Tsat.ref_cat = np.array(['  ']*len(Tsat))
+        del satyx
+        sat.ref_cat = np.array(['  '] * len(sat))
+        
+        avoid_x = np.append(avoid_x, sat.ibx)
+        avoid_y = np.append(avoid_y, sat.iby)
+        # Create catalog entries...
+        for r,d,m in zip(sat.ra, sat.dec, sat.mag):
+            fluxes = dict([(band, NanoMaggies.magToNanomaggies(m))
+                           for band in bands])
+            assert(np.all(np.isfinite(list(fluxes.values()))))
+            satcat.append(PointSource(RaDecPos(r, d),
+                                      NanoMaggies(order=bands, **fluxes)))
+
+    if plots:
+        plt.clf()
+        dimshow(satmap)
+        plt.title('satmap')
+        ps.savefig()
+
+        rgb = get_rgb(detmaps, bands)
+        plt.clf()
+        dimshow(rgb)
+        plt.title('detmaps')
+        ps.savefig()
+
+        rgb[:,:,0][saturated_pix] = 0
+        rgb[:,:,1][saturated_pix] = 1
+        rgb[:,:,2][saturated_pix] = 0
+        plt.clf()
+        dimshow(rgb)
+        ax = plt.axis()
+        if len(sat):
+            plt.plot(sat.ibx, sat.iby, 'ro')
+        plt.axis(ax)
+        plt.title('detmaps & saturated')
+        ps.savefig()
+
+    # SED-matched detections
+    record_event and record_event('stage_srcs: SED-matched')
+    print('Running source detection at', nsigma, 'sigma')
+    SEDs = survey.sed_matched_filters(bands)
+    Tnew,newcat,hot = run_sed_matched_filters(
+        SEDs, bands, detmaps, detivs, (avoid_x,avoid_y), targetwcs,
+        nsigma=nsigma, saturated_pix=saturated_pix, plots=plots, ps=ps, mp=mp)
+    if Tnew is None:
+        raise NothingToDoError('No sources detected.')
+    Tnew.delete_column('peaksn')
+    Tnew.delete_column('apsn')
+    del detmaps
+    del detivs
+    Tnew.ref_cat = np.array(['  '] * len(Tnew))
+    Tnew.ref_id  = np.zeros(len(Tnew), np.int64)
+
+    # Merge newly detected sources with existing (Tycho2 + Gaia) source lists
+    # and saturated sources
+    cats = newcat
+    tables = [Tnew]
+    if len(sat):
+        tables.append(sat)
+        cats += satcat
+    if len(refstars):
+        tables.append(refstars)
+        cats += refstarcat
+    T = merge_tables(tables, columns='fillzero')
+    cat = Catalog(*cats)
+    cat.freezeAllParams()
+
+    assert(len(T) > 0)
+    assert(len(cat) == len(T))
+    
+    tnow = Time()
+    print('[serial srcs] Peaks:', tnow-tlast)
+    tlast = tnow
+
+    if plots:
+        coimgs,cons = quick_coadds(tims, bands, targetwcs)
+        crossa = dict(ms=10, mew=1.5)
+        plt.clf()
+        dimshow(get_rgb(coimgs, bands))
+        plt.title('Detections')
+        ps.savefig()
+        ax = plt.axis()
+        if len(sat):
+            plt.plot(sat.ibx, sat.iby, '+', color='r',
+                     label='Saturated', **crossa)
+        if len(refstars):
+            I = np.flatnonzero([r[0] == 'T' for r in refstars.ref_cat])
+            if len(I):
+                plt.plot(refstars.ibx[I], refstars.iby[I], '+', color=(0,1,1),
+                         label='Tycho-2', **crossa)
+            I = np.flatnonzero([r[0] == 'G' for r in refstars.ref_cat])
+            if len(I):
+                plt.plot(refstars.ibx[I], refstars.iby[I], '+',
+                         color=(0.2,0.2,1), label='Gaia', **crossa)
+        plt.plot(Tnew.ibx, Tnew.iby, '+', color=(0,1,0),
+                 label='New SED-matched detections', **crossa)
+        plt.axis(ax)
+        plt.title('Detections')
+        plt.legend(loc='upper left')
+        ps.savefig()
+
+    # Segment, and record which sources fall into each blob
+    blobs,blobsrcs,blobslices = segment_and_group_sources(
+        hot, T, name=brickname, ps=ps, plots=plots)
+    del hot
+
+    tnow = Time()
+    print('[serial srcs] Blobs:', tnow-tlast)
+    tlast = tnow
+
+    keys = ['T', 'tims', 'blobsrcs', 'blobslices', 'blobs', 'cat',
+            'ps', 'refstars', 'gaia_stars']
+    L = locals()
+    rtn = dict([(k,L[k]) for k in keys])
+    return rtn
+
+def read_gaia(targetwcs):
+    from legacyanalysis.gaiacat import GaiaCatalog
+    gaia = GaiaCatalog().get_catalog_in_wcs(targetwcs)
+    print('Got Gaia stars:', gaia)
+    gaia.about()
+
+    # DJS, [decam-chatter 5486] Solved! GAIA separation of point sources
+    #   from extended sources
+    # Updated for Gaia DR2 by Eisenstein,
+    # [decam-data 2770] Re: [desi-milkyway 639] GAIA in DECaLS DR7
+    # But shifted one mag to the right in G.
+    gaia.G = gaia.phot_g_mean_mag
+    gaia.pointsource = np.logical_or(
+        (gaia.G <= 19.) * (gaia.astrometric_excess_noise < 10.**0.5),
+        (gaia.G >= 19.) * (gaia.astrometric_excess_noise < 10.**(0.5 + 0.2*(gaia.G - 19.))))
+
+    ok,xx,yy = targetwcs.radec2pixelxy(gaia.ra, gaia.dec)
+    # ibx = integer brick coords
+    gaia.ibx = np.round(xx-1.).astype(int)
+    gaia.iby = np.round(yy-1.).astype(int)
+    margin = 10
+    H,W = targetwcs.shape
+    gaia.cut(ok * (gaia.ibx > -margin) * (gaia.ibx < W+margin) *
+              (gaia.iby > -margin) * (gaia.iby < H+margin))
+    print('Cut to', len(gaia), 'Gaia stars within brick')
+    del ok,xx,yy
+    gaia.ibx = np.clip(gaia.ibx, 0, W-1)
+    gaia.iby = np.clip(gaia.iby, 0, H-1)
+
+    # Gaia version?
+    gaiaver = int(os.getenv('GAIA_CAT_VER', '1'))
+    print('Assuming Gaia catalog Data Release', gaiaver)
+    gaia_release = 'G%i' % gaiaver
+    gaia.ref_cat = np.array([gaia_release] * len(gaia))
+    gaia.ref_id  = gaia.source_id
+    gaia.pmra_ivar  = 1./gaia.pmra_error **2
+    gaia.pmdec_ivar = 1./gaia.pmdec_error**2
+    gaia.parallax_ivar = 1./gaia.parallax_error**2
+    # mas -> deg
+    gaia.ra_ivar  = 1./(gaia.ra_error  / np.cos(np.deg2rad(gaia.dec)) / 1000. / 3600.)**2
+    gaia.dec_ivar = 1./(gaia.dec_error / 1000. / 3600.)**2
+
+    for c in ['ra_error', 'dec_error', 'parallax_error', 'pmra_error', 'pmdec_error']:
+        gaia.delete_column(c)
+    for c in ['pmra', 'pmdec', 'parallax', 'pmra_ivar', 'pmdec_ivar', 'parallax_ivar']:
+        X = gaia.get(c)
+        X[np.logical_not(np.isfinite(X))] = 0.
+    return gaia
+
+def read_tycho2(survey, targetwcs):
+    from astrometry.libkd.spherematch import tree_open, tree_search_radec
     tycho2fn = survey.find_file('tycho2')
     radius = 1.
     ra,dec = targetwcs.radec_center()
@@ -1146,6 +1393,7 @@ def stage_srcs(targetrd=None, pixscale=None, targetwcs=None,
     tycho.ibx = np.round(xx-1.).astype(int)
     tycho.iby = np.round(yy-1.).astype(int)
     margin = 10
+    H,W = targetwcs.shape
     tycho.cut(ok * (tycho.ibx > -margin) * (tycho.ibx < W+margin) *
               (tycho.iby > -margin) * (tycho.iby < H+margin))
     print('Cut to', len(tycho), 'Tycho-2 stars within brick')
@@ -1166,252 +1414,15 @@ def stage_srcs(targetrd=None, pixscale=None, targetwcs=None,
     tycho.rename('pm_dec', 'pmdec')
     tycho.mag = tycho.mag_vt
     tycho.mag[tycho.mag == 0] = tycho.mag_hp[tycho.mag == 0]
-    
+
     for c in ['tyc1', 'tyc2', 'tyc3', 'mag_bt', 'mag_vt', 'mag_hp',
-              'mean_ra', 'mean_dec', 'epoch_ra', 'epoch_dec',
+              'mean_ra', 'mean_dec', #'epoch_ra', 'epoch_dec',
               'sigma_pm_ra', 'sigma_pm_dec', 'sigma_ra', 'sigma_dec']:
         tycho.delete_column(c)
     for c in ['pmra', 'pmdec', 'pmra_ivar', 'pmdec_ivar']:
         X = tycho.get(c)
         X[np.logical_not(np.isfinite(X))] = 0.
-
-    # Keep a copy of all the Tycho-2 stars within the brick, because
-    # we're going to drop Tycho-2 stars that are duplicated in Gaia,
-    # but we still want the Tycho-2 stars for the Tycho2-in-blob logic.
-    alltycho = tycho.copy()
-
-    # existing sources that should be avoided when detecting new
-    # sources.
-    avoid_x, avoid_y = [],[]
-    
-    # Add Gaia stars
-    if gaia_stars:
-        from legacyanalysis.gaiacat import GaiaCatalog
-        from legacypipe.survey import GaiaSource
-        from astrometry.libkd.spherematch import match_radec
-
-        gaia = GaiaCatalog().get_catalog_in_wcs(targetwcs)
-        print('Got Gaia stars:', gaia)
-        gaia.about()
-
-        # DJS, [decam-chatter 5486] Solved! GAIA separation of point sources
-        #   from extended sources
-        # Updated for Gaia DR2 by Eisenstein,
-        # [decam-data 2770] Re: [desi-milkyway 639] GAIA in DECaLS DR7
-        # But shifted one mag to the right in G.
-        gaia.G = gaia.phot_g_mean_mag
-        gaia.pointsource = np.logical_or(
-            (gaia.G <= 19.) * (gaia.astrometric_excess_noise < 10.**0.5),
-            (gaia.G >= 19.) * (gaia.astrometric_excess_noise < 10.**(0.5 + 0.2*(gaia.G - 19.))))
-
-        ok,xx,yy = targetwcs.radec2pixelxy(gaia.ra, gaia.dec)
-        # ibx = integer brick coords
-        gaia.ibx = np.round(xx-1.).astype(int)
-        gaia.iby = np.round(yy-1.).astype(int)
-        margin = 10
-        gaia.cut(ok * (gaia.ibx > -margin) * (gaia.ibx < W+margin) *
-                  (gaia.iby > -margin) * (gaia.iby < H+margin))
-        print('Cut to', len(gaia), 'Gaia stars within brick')
-        del ok,xx,yy
-        gaia.ibx = np.clip(gaia.ibx, 0, W-1)
-        gaia.iby = np.clip(gaia.iby, 0, H-1)
-
-        # Handle sources that appear in both Gaia and Tycho-2 by dropping the entry from Tycho-2.
-        if len(gaia) and len(tycho):
-            # FIXME -- apply proper motions to bring them to the same epoch before matching
-            I,J,d = match_radec(tycho.ra, tycho.dec, gaia.ra, gaia.dec, 1./3600.,
-                                nearest=True)
-            print('Matched', len(I), 'Tycho-2 stars to Gaia stars')
-            if len(I):
-                keep = np.ones(len(tycho), bool)
-                keep[I] = False
-                tycho.cut(I)
-
-        # FIXME - Append the surviving Tycho2 stars to the "Gaia" catalog.
-
-                
-        # Don't detect new sources where we already have Gaia stars
-        avoid_x.extend(gaia.ibx)
-        avoid_y.extend(gaia.iby)
-        
-        # Gaia version?
-        gaiaver = int(os.getenv('GAIA_CAT_VER', '1'))
-        print('Assuming Gaia catalog Data Release', gaiaver)
-        gaia_release = 'G%i' % gaiaver
-        gaia.ref_cat = np.array([gaia_release] * len(gaia))
-        gaia.ref_id  = gaia.source_id
-        gaia.pmra_ivar  = 1./gaia.pmra_error **2
-        gaia.pmdec_ivar = 1./gaia.pmdec_error**2
-        gaia.parallax_ivar = 1./gaia.parallax_error**2
-        # mas -> deg
-        gaia.ra_ivar  = 1./(gaia.ra_error  / np.cos(np.deg2rad(gaia.dec)) / 1000. / 3600.)**2
-        gaia.dec_ivar = 1./(gaia.dec_error / 1000. / 3600.)**2
-        # print('Gaia ra_error:', gaia.ra_error)
-        # print('Gaia ra_ivar:', gaia.ra_ivar)
-        # print('Gaia dec_error:', gaia.dec_error)
-        # print('Gaia dec_ivar:', gaia.dec_ivar)
-
-        for c in ['ra_error', 'dec_error', 'parallax_error', 'pmra_error', 'pmdec_error']:
-            gaia.delete_column(c)
-        for c in ['pmra', 'pmdec', 'parallax', 'pmra_ivar', 'pmdec_ivar', 'parallax_ivar']:
-            X = gaia.get(c)
-            X[np.logical_not(np.isfinite(X))] = 0.
-
-        # Save for later...
-        Tgaia = gaia
-        # Create Tractor sources
-        gaiacat = [GaiaSource.from_catalog(g, bands) for g in gaia]
-    else:
-        Tgaia = fits_table()
-        # FIXME - Create a Gaia-looking catalog.
-
-    # FIXME - Initialize a big-galaxy catalog here--?
-        
-
-    # Saturated blobs -- create a source for each, except for those
-    # that already have a Tycho-2 (or Gaia) star
-    satblobs,nsat = label(satmap > 0)
-    if len(tycho) > 0 or len(Tgaia) > 0:
-        # Build a map from old "satblobs" to new; identity to start
-        remap = np.arange(nsat+1)
-        if len(tycho):
-            # Drop blobs that contain a Tycho-2 star
-            zeroout = satblobs[tycho.iby, tycho.ibx]
-            remap[zeroout] = 0
-        if len(Tgaia):
-            # Drop blobs that contain a Gaia star
-            zeroout = satblobs[Tgaia.iby, Tgaia.ibx]
-            remap[zeroout] = 0
-        # Renumber them to be contiguous
-        I = np.flatnonzero(remap)
-        nsat = len(I)
-        remap[I] = 1 + np.arange(nsat)
-        satblobs = remap[satblobs]
-        del remap, zeroout, I
-
-    # Add sources for any remaining saturated blobs
-    satyx = center_of_mass(satmap, labels=satblobs, index=np.arange(nsat)+1)
-    if len(satyx) == 0:
-        Tsat = tycho
-    else:
-        Tsat = fits_table()
-        # NOTE, satyx is in y,x order (center_of_mass)
-        Tsat.ibx = np.array([x for y,x in satyx]).astype(int)
-        Tsat.iby = np.array([y for y,x in satyx]).astype(int)
-        Tsat.ra,Tsat.dec = targetwcs.pixelxy2radec(Tsat.ibx+1, Tsat.iby+1)
-        print('Adding', len(Tsat), 'additional saturated stars')
-        # MAGIC mag for a saturated star
-        Tsat.mag = np.zeros(len(Tsat), np.float32) + 15.
-        #Tsat.ref_cat = np.array(['  ']*len(Tsat))
-        # FIXME - don't do this
-        Tsat = merge_tables([tycho, Tsat], columns='fillzero')
-    del satyx
-        
-    satcat = []
-    if len(Tsat):
-        avoid_x.extend(Tsat.ibx)
-        avoid_y.extend(Tsat.iby)
-        # Create catalog entries...
-        for r,d,m in zip(Tsat.ra, Tsat.dec, Tsat.mag):
-            fluxes = dict([(band, NanoMaggies.magToNanomaggies(m))
-                           for band in bands])
-            assert(np.all(np.isfinite(list(fluxes.values()))))
-            satcat.append(PointSource(RaDecPos(r, d),
-                                      NanoMaggies(order=bands, **fluxes)))
-
-    if plots:
-        plt.clf()
-        dimshow(satmap)
-        plt.title('satmap')
-        ps.savefig()
-
-        rgb = get_rgb(detmaps, bands)
-        plt.clf()
-        dimshow(rgb)
-        plt.title('detmaps')
-        ps.savefig()
-
-        rgb[:,:,0][saturated_pix] = 0
-        rgb[:,:,1][saturated_pix] = 1
-        rgb[:,:,2][saturated_pix] = 0
-        plt.clf()
-        dimshow(rgb)
-        ax = plt.axis()
-        if len(Tsat):
-            plt.plot(Tsat.ibx, Tsat.iby, 'ro')
-        plt.axis(ax)
-        plt.title('detmaps & saturated')
-        ps.savefig()
-
-    # SED-matched detections
-    record_event and record_event('stage_srcs: SED-matched')
-    print('Running source detection at', nsigma, 'sigma')
-    SEDs = survey.sed_matched_filters(bands)
-    Tnew,newcat,hot = run_sed_matched_filters(
-        SEDs, bands, detmaps, detivs, (avoid_x,avoid_y), targetwcs,
-        nsigma=nsigma, saturated_pix=saturated_pix, plots=plots, ps=ps, mp=mp)
-    if Tnew is None:
-        raise NothingToDoError('No sources detected.')
-    Tnew.delete_column('peaksn')
-    Tnew.delete_column('apsn')
-    del detmaps
-    del detivs
-
-    # Merge newly detected sources with existing (Tycho2 + Gaia) source lists
-    #Tnew.ref_cat = np.array(['  ']*len(Tnew))
-    if gaia_stars:
-        T = merge_tables([Tsat, Tgaia, Tnew], columns='fillzero')
-        cat = Catalog(*(satcat + gaiacat + newcat))
-    else:
-        T = merge_tables([Tsat, Tnew], columns='fillzero')
-        cat = Catalog(*(satcat + newcat))
-    cat.freezeAllParams()
-
-    assert(len(T) > 0)
-    assert(len(cat) == len(T))
-    
-    tnow = Time()
-    print('[serial srcs] Peaks:', tnow-tlast)
-    tlast = tnow
-
-    if plots:
-        coimgs,cons = quick_coadds(tims, bands, targetwcs)
-        crossa = dict(ms=10, mew=1.5)
-        plt.clf()
-        dimshow(get_rgb(coimgs, bands))
-        plt.title('Detections')
-        ps.savefig()
-        ax = plt.axis()
-        plt.plot(Tsat.ibx, Tsat.iby, '+', color='r',
-                 label='Tycho2 + saturated', **crossa)
-        if len(Tgaia):
-            plt.plot(Tgaia.ibx, Tgaia.iby, '+', color=(0,1,1),
-                     label='Gaia', **crossa)
-        plt.plot(Tnew.ibx, Tnew.iby, '+', color=(0,1,0),
-                 label='New SED-matched detections', **crossa)
-        plt.axis(ax)
-        plt.title('Detections')
-        plt.legend(loc='upper left')
-        ps.savefig()
-
-    # Segment, and record which sources fall into each blob
-    blobs,blobsrcs,blobslices = segment_and_group_sources(
-        hot, T, name=brickname, ps=ps, plots=plots)
-    del hot
-
-    tnow = Time()
-    print('[serial srcs] Blobs:', tnow-tlast)
-    tlast = tnow
-
-    # Now that we're done using the cut Tycho-2 list for saturated &
-    # other source detection, revert to the uncut.
-    tycho = alltycho
-
-    keys = ['T', 'tims', 'blobsrcs', 'blobslices', 'blobs', 'cat',
-            'ps', 'tycho', 'gaia_stars']
-    L = locals()
-    rtn = dict([(k,L[k]) for k in keys])
-    return rtn
+    return tycho
 
 def stage_fitblobs(T=None,
                    brickname=None,
@@ -1433,7 +1444,7 @@ def stage_fitblobs(T=None,
                    write_pickle_filename=None,
                    write_metrics=True,
                    get_all_models=False,
-                   tycho=None,
+                   refstars=None,
                    rex=False,
                    record_event=None,
                    custom_brick=False,
@@ -1583,13 +1594,13 @@ def stage_fitblobs(T=None,
         plt.clf()
         dimshow(blobs>=0, vmin=0, vmax=1)
         ax = plt.axis()
-        plt.plot(tycho.ibx, tycho.iby, 'ro')
-        for x,y,mag in zip(tycho.ibx,tycho.iby,tycho.mag):
+        plt.plot(refstars.ibx, refstars.iby, 'ro')
+        for x,y,mag in zip(refstars.ibx,refstars.iby,refstars.mag):
             plt.text(x, y, '%.1f' % (mag),
                      color='r', fontsize=10,
                      bbox=dict(facecolor='w', alpha=0.5))
         plt.axis(ax)
-        plt.title('Tycho-2 stars')
+        plt.title('Reference stars')
         ps.savefig()
 
     skipblobs = []
@@ -1612,9 +1623,10 @@ def stage_fitblobs(T=None,
         print('Skipping', len(skipblobs), 'blobs from checkpoint file')
 
     # Create the iterator over blobs to process
+    brightstars = refstars[refstars.isbright]
     blobiter = _blob_iter(blobslices, blobsrcs, blobs, targetwcs, tims,
                           cat, bands, plots, ps, simul_opt, use_ceres,
-                          tycho, brick, rex, skipblobs=skipblobs,
+                          brightstars, brick, rex, skipblobs=skipblobs,
                           max_blobsize=max_blobsize, custom_brick=custom_brick)
     # to allow timingpool to queue tasks one at a time
     blobiter = iterwrapper(blobiter, len(blobsrcs))
@@ -1773,7 +1785,7 @@ def stage_fitblobs(T=None,
                                  np.logical_not(BB.finished_in_blob))
     for k in ['fracflux', 'fracin', 'fracmasked', 'rchisq', 'cpu_source',
               'cpu_blob', 'blob_width', 'blob_height', 'blob_npix',
-              'blob_nimages', 'blob_totalpix', 'dchisq', 'tycho2inblob']:
+              'blob_nimages', 'blob_totalpix', 'dchisq', 'brightstarinblob']:
         T.set(k, BB.get(k))
 
     invvars = np.hstack(BB.srcinvvars)
@@ -1868,17 +1880,17 @@ def _format_all_models(T, newcat, BB, bands, rex):
     return TT,hdr
 
 def _blob_iter(blobslices, blobsrcs, blobs, targetwcs, tims, cat, bands,
-               plots, ps, simul_opt, use_ceres, tycho, brick, rex,
+               plots, ps, simul_opt, use_ceres, brightstars, brick, rex,
                skipblobs=[], max_blobsize=None, custom_brick=False):
     from collections import Counter
     H,W = targetwcs.shape
-    tychoblobs = set(blobs[tycho.iby, tycho.ibx])
+    brightstarblobs = set(blobs[brightstars.iby, brightstars.ibx])
     # Remove -1 = no blob from set; not strictly necessary, just cosmetic
     try:
-        tychoblobs.remove(-1)
+        brightstarblobs.remove(-1)
     except:
         pass
-    print('Blobs containing Tycho-2 stars:', tychoblobs)
+    print('Blobs containing bright stars:', brightstarblobs)
 
     # sort blobs by size so that larger ones start running first
     blobvals = Counter(blobs[blobs>=0])
@@ -1929,14 +1941,14 @@ def _blob_iter(blobslices, blobsrcs, blobs, targetwcs, tims, cat, bands,
             oney = y
             break
 
-        hastycho = iblob in tychoblobs
+        hasbright = iblob in brightstarblobs
 
         npix = np.sum(blobmask)
         print('Blob', nblob+1, 'of', len(blobslices), ': blob id:', iblob,
               'sources:', len(Isrcs), 'size:', blobw, 'x', blobh,
               #'center', (bx0+bx1)/2, (by0+by1)/2,
               'brick X: %i,%i, Y: %i,%i' % (bx0,bx1,by0,by1),
-              'npix:', npix, 'one pixel:', onex,oney, 'has Tycho-2 star:', hastycho)
+              'npix:', npix, 'one pixel:', onex,oney, 'has bright star:', hasbright)
 
         if max_blobsize is not None and npix > max_blobsize:
             print('Number of pixels in blob,', npix, ', exceeds max blobsize', max_blobsize)
@@ -1979,7 +1991,7 @@ def _blob_iter(blobslices, blobsrcs, blobs, targetwcs, tims, cat, bands,
 
         yield (nblob, iblob, Isrcs, targetwcs, bx0, by0, blobw, blobh,
                blobmask, subtimargs, [cat[i] for i in Isrcs], bands, plots, ps,
-               simul_opt, use_ceres, hastycho, rex)
+               simul_opt, use_ceres, hasbright, rex)
 
 def _bounce_one_blob(X):
     ''' This just wraps the one_blob function, for debugging &
@@ -2527,13 +2539,15 @@ def stage_writecat(
     hdr = fs = None
     T2,hdr = prepare_fits_catalog(cat, invvars, TT, hdr, bands, fs)
 
-    # For Gaia and Tycho-2 sources, plug in the reference-catalog inverse-variances.
-    if 'ref_id' in T.get_columns():
-        I = np.flatnonzero(T.ref_id)
-        T2.ra_ivar [I] = T.ra_ivar[I]
-        T2.dec_ivar[I] = T.dec_ivar[I]
-        print('T2 ref_cat:', T2.ref_cat)
-        T2.ref_cat = np.array(['  ' if x=='0.0' else x for x in T2.ref_cat]).astype('S2')
+    # For reference stars, plug in the reference-catalog inverse-variances.
+    if 'ref_id' in T.get_columns() and 'ra_ivar' in T.get_columns():
+        print('Ref_ids:', T.ref_id)
+        I, = np.nonzero([r != '  ' for r in T.ref_id])
+        if len(I):
+            T2.ra_ivar [I] = T.ra_ivar[I]
+            T2.dec_ivar[I] = T.dec_ivar[I]
+        #print('T2 ref_cat:', T2.ref_cat)
+        #T2.ref_cat = np.array(['  ' if x=='0.0' else x for x in T2.ref_cat]).astype('S2')
 
     print('TT:')
     TT.about()

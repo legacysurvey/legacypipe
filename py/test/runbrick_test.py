@@ -75,7 +75,8 @@ if __name__ == '__main__':
     T = fits_table(fn)
     assert(len(T) == 2)
     print('Types:', T.type)
-    assert(T.type[0] == 'REX ')
+    # Since there is a Tycho-2 star in the blob, forced to be PSF.
+    assert(T.type[0] == 'PSF ')
     cmd = ('(cd %s && sha256sum -c %s)' %
            (outdir, os.path.join('tractor', '110', 'brick-1102p240.sha256sum')))
     print(cmd)
@@ -98,7 +99,8 @@ if __name__ == '__main__':
     T = fits_table(fn)
     assert(len(T) == 2)
     print('Types:', T.type)
-    assert(T.type[0] == 'SIMP')
+    # Since there is a Tycho-2 star in the blob, forced to be PSF.
+    assert(T.type[0] == 'PSF ')
 
     # Test that we can run splinesky calib if required...
     
