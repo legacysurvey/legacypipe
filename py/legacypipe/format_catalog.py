@@ -129,6 +129,7 @@ def format_catalog(T, hdr, primhdr, allbands, outfn,
         
     # Column ordering...
     cols = ['release', 'brickid', 'brickname', 'objid', 'brick_primary', 
+            'brightstarinblob',
             'type', 'ra', 'dec', 'ra_ivar', 'dec_ivar',
             'bx', 'by', 'dchisq', 'ebv', 'mjd_min', 'mjd_max',
             'ref_cat', 'ref_id']
@@ -154,7 +155,10 @@ def format_catalog(T, hdr, primhdr, allbands, outfn,
             ('astrometric_n_obs_al', np.int16),
             ('astrometric_n_good_obs_al', np.int16),
             ('astrometric_weight_al', np.float32),
-            ('duplicated_source', bool),]
+            ('duplicated_source', bool),
+            ('a_g_val', np.float32),
+            ('e_bp_min_rp_val', np.float32),
+        ]
         tcols = T.get_columns()
         for c,t in gaia_cols:
             gc = 'gaia_' + c
