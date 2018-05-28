@@ -1161,7 +1161,7 @@ def stage_srcs(targetrd=None, pixscale=None, targetwcs=None,
                 #tycho.cut(I)
                 gaia.isbright[J] = True
         if len(gaia):
-            refstars = merge_tables([refstars, gaia])
+            refstars = merge_tables([refstars, gaia], columns='fillzero')
 
     # Don't detect new sources where we already have reference stars
     avoid_x = refstars.ibx
