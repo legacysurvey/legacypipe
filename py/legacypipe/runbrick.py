@@ -1131,14 +1131,22 @@ def stage_srcs(targetrd=None, pixscale=None, targetwcs=None,
         gaia.isbright = np.zeros(len(gaia), bool)
         # Handle sources that appear in both Gaia and Tycho-2 by dropping the entry from Tycho-2.
         if len(gaia) and len(tycho):
-            # FIXME -- apply proper motions to bring them to the same epoch before matching
-            I,J,d = match_radec(tycho.ra, tycho.dec, gaia.ra, gaia.dec, 1./3600.,
+            # Before matching, apply proper motions to bring them to
+            # the same epoch.
+            # We want to use the more-accurate Gaia proper motions, so
+            # rewind Gaia positions to the approximate epoch of
+            # Tycho-2: 1991.5.
+            cosdec = np.cos(np.deg2rad(gaia.dec))
+            gra  = gaia.ra +  (1991.5 - gaia.ref_epoch) * gaia.pmra  / (3600.*1000.) / cosdec
+            gdec = gaia.dec + (1991.5 - gaia.ref_epoch) * gaia.pmdec / (3600.*1000.)
+            I,J,d = match_radec(tycho.ra, tycho.dec, gra, gdec, 1./3600.,
                                 nearest=True)
-            print('Matched', len(I), 'Tycho-2 stars to Gaia stars')
+            print('Matched', len(I), 'Tycho-2 stars to Gaia stars.  Dists:', d)
             if len(I):
                 keep = np.ones(len(tycho), bool)
                 keep[I] = False
-                #tycho.cut(I)
+                tycho.cut(keep)
+                print('Cut to', len(tycho), 'Tycho-2 stars that do not match Gaia')
                 gaia.isbright[J] = True
         if len(gaia):
             refstars = merge_tables([refstars, gaia], columns='fillzero')
