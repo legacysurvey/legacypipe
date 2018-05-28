@@ -1408,8 +1408,9 @@ def read_tycho2(survey, targetwcs):
                     tycho.tyc3.astype(np.int64))
     tycho.pmra_ivar = 1./tycho.sigma_pm_ra**2
     tycho.pmdec_ivar = 1./tycho.sigma_pm_dec**2
-    tycho.ra_ivar  = 1./(tycho.sigma_ra / np.cos(np.deg2rad(tycho.dec)) / 1000. / 3600.)**2
-    tycho.dec_ivar = 1./(tycho.sigma_dec / 1000. / 3600.)**2
+    tycho.ra_ivar  = 1./(tycho.sigma_ra / np.cos(np.deg2rad(tycho.dec)))**2
+    tycho.dec_ivar = 1./tycho.sigma_dec**2
+
     tycho.rename('pm_ra', 'pmra')
     tycho.rename('pm_dec', 'pmdec')
     tycho.mag = tycho.mag_vt
