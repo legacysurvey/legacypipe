@@ -18,7 +18,8 @@ from tractor import Tractor, Catalog, NanoMaggies
 from tractor.galaxy import disable_galaxy_cache
 from tractor.ellipses import EllipseE
 
-from legacypipe.survey import LegacySurveyData, bricks_touching_wcs, exposure_metadata, get_version_header, apertures_arcsec
+from legacypipe.survey import LegacySurveyData, bricks_touching_wcs, get_version_header, apertures_arcsec
+#from legacypipe.survey import exposure_metadata
 from catalog import read_fits_catalog
 
 import photutils
@@ -63,8 +64,8 @@ def get_parser():
 
     parser.add_argument('--camera', help='Cut to only CCD with given camera name?')
     
-    parser.add_argument('filename', help='Filename OR exposure number.')
-    parser.add_argument('hdu', help='Image HDU OR CCD name.')
+    parser.add_argument('expnum', help='Filename OR exposure number.')
+    parser.add_argument('ccdname', help='Image HDU OR CCD name.')
     parser.add_argument('catfn', help='Catalog filename OR "DR".')
     parser.add_argument('outfn', help='Output catalog filename.')
 
@@ -105,19 +106,20 @@ def main(survey=None, opt=None):
 
     # Try parsing filename as exposure number.
     try:
-        expnum = int(opt.filename)
-        opt.filename = None
+        expnum = int(opt.expnum)
+        filename = None
     except:
         # make this 'None' for survey.find_ccds()
         expnum = None
+        filename = opt.expnum
 
     # Try parsing HDU number
     try:
-        opt.hdu = int(opt.hdu)
+        hdu = int(opt.ccdname)
         ccdname = None
     except:
-        ccdname = opt.hdu
-        opt.hdu = -1
+        hdu = -1
+        ccdname = opt.ccdname
 
     if survey is None:
         survey = LegacySurveyData()
@@ -126,17 +128,16 @@ def main(survey=None, opt=None):
     if opt.catalog_dir is not None:
         catsurvey = LegacySurveyData(survey_dir = opt.catalog_dir)
 
-    if opt.filename is not None and opt.hdu >= 0:
+    if filename is not None and hdu >= 0:
         # FIXME -- try looking up in CCDs file?
         # Read metadata from file
         print('Warning: faking metadata from file contents')
-        T = exposure_metadata([opt.filename], hdus=[opt.hdu])
+        T = exposure_metadata([filename], hdus=[hdu])
         print('Metadata:')
         T.about()
 
         if not 'ccdzpt' in T.columns():
-            phdr = fitsio.read_header(opt.filename)
-            #hdr = fitsio.read_header(opt.filename, ext=opt.hdu)
+            phdr = fitsio.read_header(filename)
             T.ccdzpt = np.array([phdr['MAGZERO']])
             print('WARNING: using header MAGZERO')
             T.ccdraoff = np.array([0.])
@@ -147,12 +148,12 @@ def main(survey=None, opt=None):
         # Read metadata from survey-ccds.fits table
         T = survey.find_ccds(expnum=expnum, ccdname=ccdname)
         print(len(T), 'with expnum', expnum, 'and CCDname', ccdname)
-        if opt.hdu >= 0:
-            T.cut(T.image_hdu == opt.hdu)
-            print(len(T), 'with HDU', opt.hdu)
-        if opt.filename is not None:
-            T.cut(np.array([f.strip() == opt.filename for f in T.image_filename]))
-            print(len(T), 'with filename', opt.filename)
+        if hdu >= 0:
+            T.cut(T.image_hdu == hdu)
+            print(len(T), 'with HDU', hdu)
+        if filename is not None:
+            T.cut(np.array([f.strip() == filename for f in T.image_filename]))
+            print(len(T), 'with filename', filename)
         if opt.camera is not None:
             T.cut(T.camera == opt.camera)
             print(len(T), 'with camera', opt.camera)
@@ -337,6 +338,7 @@ def main(survey=None, opt=None):
         tim.getWcs().wcs.add_to_header(hdr)
     if opt.save_model:
         print('Getting model image...')
+        tr = Tractor([tim], cat)
         mod = tr.getModelImage(tim)
         fitsio.write(opt.save_model, mod, header=hdr, clobber=True)
         print('Wrote', opt.save_model)
