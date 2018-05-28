@@ -1575,9 +1575,9 @@ Now using the current directory as LEGACY_SURVEY_DIR, but this is likely to fail
             row = self.ccds_index[(expnum, ccdname)]
             if self.ccds is not None:
                 return self.ccds[row]
-            import numpy as np
-            C = self.get_ccds(rows=np.array([row]))
-            return C[0]
+            #import numpy as np
+            #C = self.get_ccds(rows=np.array([row]))
+            #return C[0]
         T = self.get_ccds_readonly()
         if expnum is not None:
             T = T[T.expnum == expnum]
