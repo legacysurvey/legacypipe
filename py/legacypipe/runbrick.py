@@ -2551,13 +2551,10 @@ def stage_writecat(
 
     # For reference stars, plug in the reference-catalog inverse-variances.
     if 'ref_id' in T.get_columns() and 'ra_ivar' in T.get_columns():
-        print('Ref_ids:', T.ref_id)
-        I, = np.nonzero([r != '  ' for r in T.ref_id])
+        I, = np.nonzero(T.ref_id)
         if len(I):
             T2.ra_ivar [I] = T.ra_ivar[I]
             T2.dec_ivar[I] = T.dec_ivar[I]
-        #print('T2 ref_cat:', T2.ref_cat)
-        #T2.ref_cat = np.array(['  ' if x=='0.0' else x for x in T2.ref_cat]).astype('S2')
 
     print('TT:')
     TT.about()
