@@ -1005,6 +1005,11 @@ Now using the current directory as LEGACY_SURVEY_DIR, but this is likely to fail
                 glob(os.path.join(basedir, 'survey-ccds-*.kd.fits')))
 
         elif filetype == 'tycho2':
+            dirnm = os.environ.get('TYCHO2_KD_DIR')
+            if dirnm is not None:
+                fn = os.path.join(dirnm, 'tycho2.kd.fits')
+                if os.path.exists(fn):
+                    return fn
             return swap(os.path.join(basedir, 'tycho2.kd.fits'))
 
         elif filetype == 'annotated-ccds':
