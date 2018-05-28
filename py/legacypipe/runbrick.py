@@ -1122,26 +1122,6 @@ def stage_srcs(targetrd=None, pixscale=None, targetwcs=None,
     
     # Read Tycho-2 stars and use as saturated sources.
     tycho = read_tycho2(survey, targetwcs)
-    # add Gaia-style columns
-    # No parallaxes in Tycho-2
-    tycho.parallax = np.zeros(len(tycho), np.float32)
-    # Arrgh, Tycho-2 has separate epoch_ra and epoch_dec.
-    # Move source to the mean epoch.
-    # FIXME -- check this!!
-    tycho.ref_epoch = (tycho.epoch_ra + tycho.epoch_dec) / 2.
-    cosdec = np.cos(np.deg2rad(tycho.dec))
-    tycho.ra  += (tycho.ref_epoch - tycho.epoch_ra ) * tycho.pmra  / 3600. / cosdec
-    tycho.dec += (tycho.ref_epoch - tycho.epoch_dec) * tycho.pmdec / 3600.
-    # Tycho-2 proper motions are in arcsec/yr; Gaia are mas/yr.
-    tycho.pmra  *= 1000.
-    tycho.pmdec *= 1000.
-    # We already cut on John's "isgalaxy" flag
-    tycho.pointsource = np.ones(len(tycho), bool)
-    # phot_g_mean_mag -- for initial brightness of source
-    tycho.phot_g_mean_mag = tycho.mag
-    tycho.delete_column('epoch_ra')
-    tycho.delete_column('epoch_dec')
-    tycho.isbright = np.ones(len(tycho), bool)
     refstars = tycho
 
     # Add Gaia stars
@@ -1423,6 +1403,28 @@ def read_tycho2(survey, targetwcs):
     for c in ['pmra', 'pmdec', 'pmra_ivar', 'pmdec_ivar']:
         X = tycho.get(c)
         X[np.logical_not(np.isfinite(X))] = 0.
+
+    # add Gaia-style columns
+    # No parallaxes in Tycho-2
+    tycho.parallax = np.zeros(len(tycho), np.float32)
+    # Arrgh, Tycho-2 has separate epoch_ra and epoch_dec.
+    # Move source to the mean epoch.
+    # FIXME -- check this!!
+    tycho.ref_epoch = (tycho.epoch_ra + tycho.epoch_dec) / 2.
+    cosdec = np.cos(np.deg2rad(tycho.dec))
+    tycho.ra  += (tycho.ref_epoch - tycho.epoch_ra ) * tycho.pmra  / 3600. / cosdec
+    tycho.dec += (tycho.ref_epoch - tycho.epoch_dec) * tycho.pmdec / 3600.
+    # Tycho-2 proper motions are in arcsec/yr; Gaia are mas/yr.
+    tycho.pmra  *= 1000.
+    tycho.pmdec *= 1000.
+    # We already cut on John's "isgalaxy" flag
+    tycho.pointsource = np.ones(len(tycho), bool)
+    # phot_g_mean_mag -- for initial brightness of source
+    tycho.phot_g_mean_mag = tycho.mag
+    tycho.delete_column('epoch_ra')
+    tycho.delete_column('epoch_dec')
+    tycho.isbright = np.ones(len(tycho), bool)
+
     return tycho
 
 def stage_fitblobs(T=None,
