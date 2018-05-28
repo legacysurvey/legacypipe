@@ -3222,6 +3222,9 @@ python -u legacypipe/runbrick.py --plots --brick 2440p070 --zoom 1900 2400 450 9
     parser.add_argument('--max-mjd', type=float,
                         help='Only keep images taken before the given MJD')
 
+    parser.add_argument('--no-splinesky', dest='splinesky', default=True,
+                        action='store_false', help='Use constant sky rather than spline.')
+
     return parser
 
 def get_runbrick_kwargs(brick=None,
@@ -3312,7 +3315,7 @@ def get_runbrick_kwargs(brick=None,
     if bands is not None:
         bands = bands.split(',')
     opt.update(bands=bands)
-    opt.update(splinesky=True)
+    #opt.update(splinesky=True)
     return survey, opt
 
 def main(args=None):
