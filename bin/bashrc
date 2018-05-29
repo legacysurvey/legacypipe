@@ -1,5 +1,11 @@
 ## ~/.bashrc file portion for 'desiproc' user @ NERSC.
 
+export NERSC_HOST=`/usr/common/usg/bin/nersc_host`
+
+# Where's the code?
+export LEGACY_PIPE_DIR=/global/cscratch1/sd/desiproc/${NERSC_HOST}-code/legacypipe/
+
+# Where are inputs and outputs going?
 export LEGACY_SURVEY_DIR=/global/cscratch1/sd/desiproc/dr7
 
 export DUST_DIR=/global/cscratch1/sd/desiproc/dust/v0_0
@@ -14,19 +20,12 @@ export GAIA_CAT_VER=2
 export TYCHO2_KD_DIR=/global/project/projectdirs/cosmo/staging/tycho2
 
 
-export NERSC_HOST=`/usr/common/usg/bin/nersc_host`
-
 # desiconda
 module use /global/common/software/desi/$NERSC_HOST
 module load desiconda/20180512-1.2.5-img
 
-export QDO_BATCH_PROFILE=$NERSC_HOST
-export QDO_BACKEND=postgres
-export QDO_DB_NAME=desirun
-export QDO_DB_HOST=nerscdb03.nersc.gov
-export QDO_DB_USER=desirun_admin
-# export QDO_DB_PASS=super-secret
-
+# Add legacypipe directory to python path
+PYTHONPATH=${LEGACY_PIPE_DIR}/py:${PYTHONPATH}
 
 #? export LD_LIBRARY_PATH=${LD_LIBRARY_PATH}:${PYTHON_DIR}/lib
 
@@ -42,3 +41,11 @@ export QDO_DB_USER=desirun_admin
 
 export PYTHONPATH
 export PATH
+
+export QDO_BATCH_PROFILE=$NERSC_HOST
+export QDO_BACKEND=postgres
+export QDO_DB_NAME=desirun
+export QDO_DB_HOST=nerscdb03.nersc.gov
+export QDO_DB_USER=desirun_admin
+# export QDO_DB_PASS=super-secret
+
