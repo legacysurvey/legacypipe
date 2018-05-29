@@ -88,6 +88,8 @@ def stage_tims(W=3600, H=3600, pixscale=0.262, brickname=None,
                min_mjd=None, max_mjd=None,
                mp=None,
                record_event=None,
+               unwise_dir=None,
+               unwise_tr_dir=None,
                **kwargs):
     '''
     This is the first stage in the pipeline.  It
@@ -193,8 +195,7 @@ def stage_tims(W=3600, H=3600, pixscale=0.262, brickname=None,
             if verstr == default_ver:
                 print('Warning: failed to get version string for "%s"' % pkg)
     # Get additional paths from environment variables
-    for dep in ['UNWISE_COADDS', 'UNWISE_COADDS_TIMERESOLVED', 'TYCHO2_KD',
-                'GAIA_CAT']:
+    for dep in ['TYCHO2_KD', 'GAIA_CAT']:
         value = os.environ.get('%s_DIR' % dep, default_ver)
         if value == default_ver:
             print('Warning: failed to get version string for "%s"' % dep)
@@ -204,6 +205,26 @@ def stage_tims(W=3600, H=3600, pixscale=0.262, brickname=None,
         version_header.add_record(dict(name='DEPVER%02i' % depnum, value=value,
                                     comment='Version of dependency product'))
         depnum += 1
+
+    if unwise_dir is not None:
+        dirs = unwise_dir.split(':')
+        for i,d in enumerate(dirs):
+            # Yuck, fitsio does not yet support CONTINUE cards.
+            if len(d) < 68:
+                version_header.add_record(dict(name='UNWISD%i' % (i+1),
+                                               value=d, comment='unWISE dir(s)'))
+            else:
+                # Assume it fits in two lines (one CONTINUE card).
+                version_header.add_record(dict(name='LONGSTRN', value='OGIP 1.0',
+                                               comment='CONTINUE cards are used'))
+                version_header.add_record(dict(name='UNWISD%i' % (i+1),
+                                               value=d[:67] + '&',
+                                               comment='unWISE dir(s)'))
+                version_header.add_record(dict(name='CONTINUE', value="  '%s'"%d[67:]))
+
+    if unwise_tr_dir is not None:
+        version_header.add_record(dict(name='UNWISTD', value=unwise_tr_dir,
+                                       comment='unWISE time-resolved dir'))
 
     version_header.add_record(dict(name='BRICKNAM', value=brickname,
                                 comment='LegacySurvey brick RRRr[pm]DDd'))
