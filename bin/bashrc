@@ -3,7 +3,7 @@
 export NERSC_HOST=`/usr/common/usg/bin/nersc_host`
 
 # Where's the code?
-export LEGACY_PIPE_DIR=/global/cscratch1/sd/desiproc/${NERSC_HOST}-code/legacypipe/
+# export LEGACY_PIPE_DIR=/global/cscratch1/sd/desiproc/${NERSC_HOST}-code/legacypipe/
 
 # Where are inputs and outputs going?
 export LEGACY_SURVEY_DIR=/global/cscratch1/sd/desiproc/dr7
@@ -19,13 +19,14 @@ export GAIA_CAT_VER=2
 
 export TYCHO2_KD_DIR=/global/project/projectdirs/cosmo/staging/tycho2
 
+export PS1CAT_DIR=/global/project/projectdirs/cosmo/work/ps1/cats/chunks-qz-star-v3/
 
 # desiconda
 module use /global/common/software/desi/$NERSC_HOST
 module load desiconda/20180512-1.2.5-img
 
 # Add legacypipe directory to python path
-PYTHONPATH=${LEGACY_PIPE_DIR}/py:${PYTHONPATH}
+# PYTHONPATH=${LEGACY_PIPE_DIR}/py:${PYTHONPATH}
 
 #? export LD_LIBRARY_PATH=${LD_LIBRARY_PATH}:${PYTHON_DIR}/lib
 
