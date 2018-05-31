@@ -17,11 +17,14 @@ class BokImage(LegacySurveyImage):
     def read_invvar(self, **kwargs):
         return self.read_invvar_clipped(**kwargs)
 
-    def read_dq(self, slice=None, **kwargs):
+    def read_dq(self, slice=None, header=False, **kwargs):
         # Add supplemental static mask.
         import os
+        import fitsio
         from pkg_resources import resource_filename
-        dq = super(BokImage, self).read_dq(slice=slice, **kwargs)
+        dq = super(BokImage, self).read_dq(slice=slice, header=header, **kwargs)
+        if header:
+            dq,hdr = dq
         dirname = resource_filename('legacypipe', 'config')
         fn = os.path.join(dirname, 'ksb_staticmask_ood_v1.fits.fz')
         F = fitsio.FITS(fn)[self.hdu]
@@ -32,6 +35,8 @@ class BokImage(LegacySurveyImage):
         # Pixels where the mask==1 that are not already masked get marked
         # with code 1 ("bad").
         dq[(mask == 1) * (dq == 0)] = 1
+        if header:
+            return dq,hdr
         return dq
 
     def remap_invvar(self, invvar, primhdr, img, dq):
