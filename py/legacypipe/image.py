@@ -295,6 +295,60 @@ class LegacySurveyImage(object):
         #
         invvar = self.remap_invvar(invvar, primhdr, img, dq)
 
+        # Ugly: occasionally the CP marks edge pixels with SATUR (and
+        # nearby pixels with BLEED).  Convert connected blobs of
+        # SATUR|BLEED pixels that are touching the left or right (not
+        # top/botom) to EDGE.  An example of this is
+        # mosaic-121450-CCD3-z at RA,Dec (261.4182, 58.8528).  Note
+        # that here we're not demanding it be the full CCD edge; we're
+        # checking our x0,x1 subregion, which is not ideal.
+        # Here we're assuming the bleed direction is vertical.
+        # This step is not redundant with the following trimming of
+        # masked edge pixels because the SATUR|BLEED pixels in these
+        # cases do not fill full columns, so they still cause issues
+        # with source detection.
+        if get_dq:
+            from scipy.ndimage.measurements import label
+            bits = CP_DQ_BITS['satur'] | CP_DQ_BITS['bleed']
+            if np.any(dq[:,0] & bits) or np.any(dq[:,-1] & bits):
+                blobmap,nblobs = label(dq & bits)
+                badblobs = np.unique(np.append(blobmap[:,0], blobmap[:,-1]))
+                badblobs = badblobs[badblobs != 0]
+                #print('Bad blobs:', badblobs)
+                for bad in badblobs:
+                    n = np.sum(blobmap == bad)
+                    print('Setting', n, 'edge SATUR|BLEED pixels to EDGE')
+                    dq[blobmap == bad] = CP_DQ_BITS['edge']
+
+        # Drop rows and columns at the image edges that are all masked.
+        for y0_new in range(y0, y1):
+            if not np.all(invvar[y0_new-y0,:] == 0):
+                break
+        for y1_new in reversed(range(y0, y1)):
+            if not np.all(invvar[y1_new-y0,:] == 0):
+                break
+        for x0_new in range(x0, x1):
+            if not np.all(invvar[:,x0_new-x0] == 0):
+                break
+        for x1_new in reversed(range(x0, x1)):
+            if not np.all(invvar[:,x1_new-x0] == 0):
+                break
+        y1_new += 1
+        x1_new += 1
+        if x0_new != x0 or x1_new != x1 or y0_new != y0 or y1_new != y1:
+            print('Old x0,x1', x0,x1, 'y0,y1', y0,y1)
+            print('New x0,x1', x0_new,x1_new, 'y0,y1', y0_new,y1_new)
+
+            if y1_new - y0_new < tiny or x1_new - x0_new < tiny:
+                print('Skipping tiny subimage (after clipping masked edges)')
+                return None
+
+            img = img[y0_new-y0:1+y1_new-y0, x0_new-x0:1+x1_new-x0]
+            invvar = invvar[y0_new-y0:1+y1_new-y0, x0_new-x0:1+x1_new-x0]
+            if get_dq:
+                dq = dq[y0_new-y0:1+y1_new-y0, x0_new-x0:1+x1_new-x0]
+            x0,x1,y0,y1 = x0_new,x1_new,y0_new,y1_new
+
         sky = self.read_sky_model(splinesky=splinesky, slc=slc,
                                   primhdr=primhdr, imghdr=imghdr)
         skysig1 = getattr(sky, 'sig1', None)
