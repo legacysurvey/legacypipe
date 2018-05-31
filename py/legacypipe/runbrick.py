@@ -2070,6 +2070,7 @@ def _get_mod(X):
 
 def stage_coadds(survey=None, bands=None, version_header=None, targetwcs=None,
                  tims=None, ps=None, brickname=None, ccds=None,
+                 custom_brick=False,
                  T=None, cat=None, pixscale=None, plots=False,
                  coadd_bw=False, brick=None, W=None, H=None, lanczos=True,
                  saturated_pix=None,
@@ -2185,13 +2186,22 @@ def stage_coadds(survey=None, bands=None, version_header=None, targetwcs=None,
 
     maskbits = np.zeros((H,W), np.uint8)
 
+    if custom_brick:
+        U = None
+    else:
+        U = find_unique_pixels(targetwcs, W, H, None,
+                               brick.ra1, brick.ra2, brick.dec1, brick.dec2)
+        maskbits += 1 * np.logical_not(U).astype(np.uint8)
+        del U
+
+
     if brightblobmask is not None:
-        maskbits += 1 * brightblobmask
+        maskbits += 2 * brightblobmask
 
     if saturated_pix is not None:
-        maskbits += 2 * saturated_pix.astype(np.uint8)
+        maskbits += 4 * saturated_pix.astype(np.uint8)
 
-    allmaskvals = dict(g=4, r=8, z=16)
+    allmaskvals = dict(g=8, r=0x10, z=0x20)
     for b,allmask in zip(bands, C.allmasks):
         if not b in allmaskvals:
             continue
@@ -2208,9 +2218,11 @@ def stage_coadds(survey=None, bands=None, version_header=None, targetwcs=None,
     hdr.delete('IMAGEH')
     hdr.add_record(dict(name='IMTYPE', value='maskbits',
                         comment='LegacySurvey image type'))
-    hdr.add_record(dict(name='BRIGHT', value=1,
+    hdr.add_record(dict(name='NPRIMARY', value=1,
+                        comment='Mask value for non-primary brick area'))
+    hdr.add_record(dict(name='BRIGHT', value=2,
                         comment='Mask value for bright star in blob'))
-    hdr.add_record(dict(name='SATUR', value=2,
+    hdr.add_record(dict(name='SATUR', value=4,
                         comment='Mask value for saturated (& nearby) pixels'))
     keys = sorted(allmaskvals.keys())
     for b in keys:
