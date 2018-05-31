@@ -3235,9 +3235,9 @@ python -u legacypipe/runbrick.py --plots --brick 2440p070 --zoom 1900 2400 450 9
                         action='store_false',
                         help="Don't use a hybrid pixelized/Gaussian PSF model")
     
-    parser.add_argument('--normalize-psf', dest='normalizePsf', default=False,
-                        action='store_true',
-                        help='Normalize the PSF model to unix flux')
+    parser.add_argument('--no-normalize-psf', dest='normalizePsf', default=True,
+                        action='store_false',
+                        help='Do not normalize the PSF model to unix flux')
 
     parser.add_argument('--apodize', default=False, action='store_true',
                         help='Apodize image edges for prettier pictures?')
