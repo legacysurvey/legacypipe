@@ -671,7 +671,7 @@ def segment_and_group_sources(image, T, name=None, ps=None, plots=False):
     '''
     *image*: binary image that defines "blobs"
     *T*: source table; only ".ibx" and ".iby" elements are used (x,y integer
-        pix pos).  Note: ".blob" field is added.
+    pix pos).  Note: ".blob" field is added.
     *name*: for debugging only
 
     Returns: (blobs, blobsrcs, blobslices)
