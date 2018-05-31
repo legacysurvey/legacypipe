@@ -1225,6 +1225,7 @@ def stage_srcs(targetrd=None, pixscale=None, targetwcs=None,
         plt.axis(ax)
         plt.title('detmaps & saturated')
         ps.savefig()
+    del satmap
 
     # SED-matched detections
     record_event and record_event('stage_srcs: SED-matched')
@@ -1300,7 +1301,7 @@ def stage_srcs(targetrd=None, pixscale=None, targetwcs=None,
     tlast = tnow
 
     keys = ['T', 'tims', 'blobsrcs', 'blobslices', 'blobs', 'cat',
-            'ps', 'refstars', 'gaia_stars']
+            'ps', 'refstars', 'gaia_stars', 'saturated_pix']
     L = locals()
     rtn = dict([(k,L[k]) for k in keys])
     return rtn
@@ -1797,20 +1798,7 @@ def stage_fitblobs(T=None,
     bbmap = np.zeros(blobs.max()+2, np.uint8)
     bbmap[brightblobs+1] = 1
     brightblobmask = bbmap[blobs+1]
-    # copy version_header before modifying it.
-    hdr = fitsio.FITSHDR()
-    for r in version_header.records():
-        hdr.add_record(r)
-    # Plug the WCS header cards into these images
-    targetwcs.add_to_header(hdr)
-    hdr.delete('IMAGEW')
-    hdr.delete('IMAGEH')
-    hdr.add_record(dict(name='IMTYPE', value='brightblobmap',
-                        comment='LegacySurvey image type'))
-    hdr.add_record(dict(name='EQUINOX', value=2000.))
-    with survey.write_output('brightblobmap', brick=brickname) as out:
-        out.fits.write(brightblobmask, header=hdr)
-    del brightblobs, bbmap, brightblobmask
+    del brightblobs, bbmap
 
     # Comment this out if you need to save the 'blobs' map for later (eg, sky fibers)
     blobs = None
@@ -1851,7 +1839,7 @@ def stage_fitblobs(T=None,
                 TT.writeto(None, fits_object=out.fits, header=hdr,
                            primheader=primhdr)
 
-    keys = ['cat', 'invvars', 'T', 'blobs']
+    keys = ['cat', 'invvars', 'T', 'blobs', 'brightblobmask']
     if get_all_models:
         keys.append('all_models')
     L = locals()
@@ -2084,6 +2072,8 @@ def stage_coadds(survey=None, bands=None, version_header=None, targetwcs=None,
                  tims=None, ps=None, brickname=None, ccds=None,
                  T=None, cat=None, pixscale=None, plots=False,
                  coadd_bw=False, brick=None, W=None, H=None, lanczos=True,
+                 saturated_pix=None,
+                 brightblobmask=None,
                  mp=None,
                  record_event=None,
                  **kwargs):
@@ -2138,7 +2128,8 @@ def stage_coadds(survey=None, bands=None, version_header=None, targetwcs=None,
 
     record_event and record_event('stage_coadds: coadds')
     C = make_coadds(tims, bands, targetwcs, mods=mods, xy=ixy,
-                    ngood=True, detmaps=True, psfsize=True, lanczos=lanczos,
+                    ngood=True, detmaps=True, psfsize=True, allmasks=True,
+                    lanczos=lanczos,
                     apertures=apertures, apxy=apxy,
                     callback=write_coadd_images,
                     callback_args=(survey, brickname, version_header, tims,
@@ -2191,6 +2182,44 @@ def stage_coadds(survey=None, bands=None, version_header=None, targetwcs=None,
             imsave_jpeg(out.fn, rgb, origin='lower', **kwa)
             print('Wrote', out.fn)
         del rgb
+
+    maskbits = np.zeros((H,W), np.uint8)
+
+    if brightblobmask is not None:
+        maskbits += 1 * brightblobmask
+
+    if saturated_pix is not None:
+        maskbits += 2 * saturated_pix.astype(np.uint8)
+
+    allmaskvals = dict(g=4, r=8, z=16)
+    for b,allmask in zip(bands, C.allmasks):
+        if not b in allmaskvals:
+            continue
+        maskbits += allmaskvals[b]* (allmask > 0).astype(np.uint8)
+
+    # copy version_header before modifying it.
+    hdr = fitsio.FITSHDR()
+    for r in version_header.records():
+        hdr.add_record(r)
+    # Plug the WCS header cards into these images
+    targetwcs.add_to_header(hdr)
+    hdr.add_record(dict(name='EQUINOX', value=2000.))
+    hdr.delete('IMAGEW')
+    hdr.delete('IMAGEH')
+    hdr.add_record(dict(name='IMTYPE', value='maskbits',
+                        comment='LegacySurvey image type'))
+    hdr.add_record(dict(name='BRIGHT', value=1,
+                        comment='Mask value for bright star in blob'))
+    hdr.add_record(dict(name='SATUR', value=2,
+                        comment='Mask value for saturated (& nearby) pixels'))
+    keys = sorted(allmaskvals.keys())
+    for b in keys:
+        hdr.add_record(dict(name='ALLM_%s' % b, value=allmaskvals[b],
+                            comment='Mask value for ALLMASK band %s' % b))
+
+    with survey.write_output('maskbits', brick=brickname) as out:
+        out.fits.write(maskbits, header=hdr)
+    del maskbits
 
     if plots:
         plt.clf()

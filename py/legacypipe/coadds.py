@@ -7,7 +7,7 @@ from legacypipe.survey import tim_get_resamp
 
 def make_coadds(tims, bands, targetwcs,
                 mods=None, xy=None, apertures=None, apxy=None,
-                ngood=False, detmaps=False, psfsize=False,
+                ngood=False, detmaps=False, psfsize=False, allmasks=True,
                 callback=None, callback_args=[],
                 plots=False, ps=None,
                 lanczos=True, mp=None,
@@ -37,10 +37,11 @@ def make_coadds(tims, bands, targetwcs,
     if mods is not None:
         C.comods = []
         C.coresids = []
-
     if apertures is not None:
         unweighted = True
         C.AP = fits_table()
+    if allmasks is not None:
+        C.allmasks = []
 
     if xy:
         ix,iy = xy
@@ -149,7 +150,7 @@ def make_coadds(tims, bands, targetwcs,
             congood = np.zeros((H,W), np.int16)
             kwargs.update(congood=congood)
 
-        if xy:
+        if xy or allmasks:
             # These match the type of the "DQ" images.
             # "any" mask
             ormask  = np.zeros((H,W), np.int16)
@@ -158,9 +159,11 @@ def make_coadds(tims, bands, targetwcs,
             from functools import reduce
             allbits = reduce(np.bitwise_or, CP_DQ_BITS.values())
             andmask[:,:] = allbits
+            kwargs.update(ormask=ormask, andmask=andmask)
+        if xy:
             # number of observations
             nobs = np.zeros((H,W), np.int16)
-            kwargs.update(ormask=ormask, andmask=andmask, nobs=nobs)
+            kwargs.update(nobs=nobs)
 
         if psfsize:
             psfsizemap = np.zeros((H,W), np.float32)
@@ -346,6 +349,9 @@ def make_coadds(tims, bands, targetwcs,
             coresid = cowimg - cowmod
             coresid[cow == 0] = 0.
             C.coresids.append(coresid)
+
+        if allmasks:
+            C.allmasks.append(andmask)
 
         if unweighted:
             coimg  /= np.maximum(con, 1)
