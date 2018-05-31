@@ -3255,8 +3255,9 @@ python -u legacypipe/runbrick.py --plots --brick 2440p070 --zoom 1900 2400 450 9
     parser.add_argument('--depth-cut', default=False, action='store_true',
                         help='Cut to the set of CCDs required to reach our depth target')
 
-    parser.add_argument('--gaia', dest='gaia_stars', default=False, action='store_true',
-                        help='Use Gaia sources as fixed stars')
+    parser.add_argument('--no-gaia', dest='gaia_stars', default=True,
+                        action='store_false',
+                        help="Don't use Gaia sources as fixed stars")
 
     parser.add_argument('--min-mjd', type=float,
                         help='Only keep images taken after the given MJD')
