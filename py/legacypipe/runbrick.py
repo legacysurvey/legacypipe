@@ -1788,6 +1788,30 @@ def stage_fitblobs(T=None,
         with survey.write_output('blobmap', brick=brickname) as out:
             out.fits.write(blobs, header=hdr)
     del iblob, oldblob
+
+    # Write out a mask of pixels that share a blob with a bright star,
+    # ie, pixels that would get *brightstarinblob* set if they
+    # contained a source.
+    brightblobs = np.unique(blobs[brightstars.iby, brightstars.ibx])
+    print('Blobs containing bright stars:', brightblobs)
+    bbmap = np.zeros(blobs.max()+2, np.uint8)
+    bbmap[brightblobs+1] = 1
+    brightblobmask = bbmap[blobs+1]
+    # copy version_header before modifying it.
+    hdr = fitsio.FITSHDR()
+    for r in version_header.records():
+        hdr.add_record(r)
+    # Plug the WCS header cards into these images
+    targetwcs.add_to_header(hdr)
+    hdr.delete('IMAGEW')
+    hdr.delete('IMAGEH')
+    hdr.add_record(dict(name='IMTYPE', value='brightblobmap',
+                        comment='LegacySurvey image type'))
+    hdr.add_record(dict(name='EQUINOX', value=2000.))
+    with survey.write_output('brightblobmap', brick=brickname) as out:
+        out.fits.write(brightblobmask, header=hdr)
+    del brightblobs, bbmap, brightblobmask
+
     # Comment this out if you need to save the 'blobs' map for later (eg, sky fibers)
     blobs = None
 
