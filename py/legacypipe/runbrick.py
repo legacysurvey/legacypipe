@@ -1349,8 +1349,7 @@ def read_gaia(targetwcs):
 
     for c in ['ra_error', 'dec_error', 'parallax_error', 'pmra_error', 'pmdec_error']:
         gaia.delete_column(c)
-    for c in ['pmra', 'pmdec', 'parallax', 'pmra_ivar', 'pmdec_ivar', 'parallax_ivar',
-              'a_g_val', 'e_bp_min_rp_val']:
+    for c in ['pmra', 'pmdec', 'parallax', 'pmra_ivar', 'pmdec_ivar', 'parallax_ivar']:
         X = gaia.get(c)
         X[np.logical_not(np.isfinite(X))] = 0.
     return gaia
