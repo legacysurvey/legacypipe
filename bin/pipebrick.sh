@@ -5,7 +5,7 @@
 
 # Assume we are running in the legacypipe/py directory.
 
-source ../bin/bashrc
+source ../bin/legacypipe-env
 
 export PYTHONPATH=${PYTHONPATH}:.
 
