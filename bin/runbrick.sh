@@ -7,8 +7,6 @@
 
 source ../bin/legacypipe-env
 
-export PYTHONPATH=${PYTHONPATH}:.
-
 # Force MKL single-threaded
 # https://software.intel.com/en-us/articles/using-threaded-intel-mkl-in-multi-thread-application
 export MKL_NUM_THREADS=1

@@ -4,8 +4,8 @@ unset PYTHONPATH
 
 export NERSC_HOST=`/usr/common/usg/bin/nersc_host`
 
-# Where's the code?
-# export LEGACYPIPE_DIR=/global/cscratch1/sd/desiproc/${NERSC_HOST}-code/legacypipe/
+# Assume we're running from the legacypipe/py directory:
+export PYTHONPATH=${PYTHONPATH}:.
 
 # Where are inputs and outputs going?
 export LEGACY_SURVEY_DIR=/global/cscratch1/sd/desiproc/dr7
@@ -30,6 +30,8 @@ module load desiconda
 
 # Add legacypipe directory to python path
 # (not required if you're running the code from the legacypipe/py directory)
+# Where's the code?
+# export LEGACYPIPE_DIR=/global/cscratch1/sd/desiproc/${NERSC_HOST}-code/legacypipe/
 # PYTHONPATH=${LEGACYPIPE_DIR}/py:${PYTHONPATH}
 
 # local Tractor install?
