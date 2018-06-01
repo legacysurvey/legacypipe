@@ -127,8 +127,19 @@ class MegaPrimeImage(LegacySurveyImage):
     '''
     def __init__(self, survey, t):
         super(MegaPrimeImage, self).__init__(survey, t)
-        # Adjust zeropoint for exposure time
-        self.ccdzpt += 2.5 * np.log10(self.exptime)
+
+        if self.band == 'u':
+            import fitsio
+            print('u band: plugging in zeropoint from header')
+            hdr = fitsio.read_header(self.imgfn, self.ccdname)
+            zpt = hdr['PHOTZP']
+            print('PHOTZP:', zpt)
+            # PHOTZP already includes exposure time
+            self.ccdzpt = zpt
+        else:
+            # Adjust zeropoint for exposure time
+            self.ccdzpt += 2.5 * np.log10(self.exptime)
+
         # print('MegaPrimeImage: CCDs table entry', t)
         # for x in dir(t):
         #     if x.startswith('_'):
@@ -136,15 +147,31 @@ class MegaPrimeImage(LegacySurveyImage):
         #     print('  ', x, ':', getattr(t,x))
 
     def compute_filenames(self):
-        self.dqfn = 'cfis/test.mask.0.40.01.fits'
+        base = self.imgfn
+        for suf in ['.fz', '.fits']:
+            if base.endswith(suf):
+                base = base[:-len(suf)]
+        flagfn = base + '.flag.fits.fz'
+        print('Checking for', flagfn)
+        if os.path.exists(flagfn):
+            self.dqfn = flagfn
+            self.static_dq = False
+        else:
+            self.dqfn = 'cfis/test.mask.0.40.01.fits'
+            self.static_dq = True
 
     def remap_dq(self, dq, header):
         '''
         Called by get_tractor_image() to map the results from read_dq
         into a bitmask.  We only have a 0/1 bad pixel mask.
         '''
-        dqbits = np.zeros(dq.shape, np.int16)
-        dqbits[dq == 0] = CP_DQ_BITS['badpix']
+        if self.static_dq:
+            dqbits = np.zeros(dq.shape, np.int16)
+            dqbits[dq == 0] = CP_DQ_BITS['badpix']
+        else:
+            dqbits = np.zeros(dq.shape, np.int16)
+            # I don't know what the flag bits mean (yet); zero is good.
+            dqbits[dq != 0] = CP_DQ_BITS['badpix']
         return dqbits
 
     def read_image(self, header=False, **kwargs):
