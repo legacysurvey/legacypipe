@@ -4,6 +4,7 @@ import fitsio
 import numpy as np
 from glob import glob
 from collections import Counter
+#import sys
 
 import matplotlib
 matplotlib.use('Agg')
@@ -92,8 +93,8 @@ def plots(opt):
     decam = True
     # vs MzLS+BASS
     #release = 'MzLS+BASS DR4'
-    #release = 'DECaLS DR5'
-    release = 'DECaLS DR3'
+    release = 'DECaLS DR5'
+    #release = 'DECaLS DR3'
     
     if decam:
         # DECam
@@ -232,7 +233,7 @@ def plots(opt):
     plt.savefig('ext-bw-2.pdf')
     plt.figure(1)
 
-    sys.exit(0)
+    #sys.exit(0)
     
     plt.clf()
     depthlo,depthhi = 21.5, 25.5

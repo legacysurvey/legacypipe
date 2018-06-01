@@ -124,7 +124,7 @@ def annotate(ccds, survey, mzls=False, normalizePsf=False):
                 assert(tile.tileid == tileid)
             except:
                 import traceback
-                traceback.print_ext()
+                traceback.print_exc()
                 pass
 
         if tile is not None:

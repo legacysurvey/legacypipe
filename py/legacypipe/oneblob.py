@@ -26,7 +26,7 @@ def one_blob(X):
     if X is None:
         return None
     (nblob, iblob, Isrcs, brickwcs, bx0, by0, blobw, blobh, blobmask, timargs,
-     srcs, bands, plots, ps, simul_opt, use_ceres, hastycho, rex) = X
+     srcs, bands, plots, ps, simul_opt, use_ceres, hasbright, rex) = X
 
     print('Fitting blob number', nblob, 'val', iblob, ':', len(Isrcs),
           'sources, size', blobw, 'x', blobh, len(timargs), 'images')
@@ -65,7 +65,7 @@ def one_blob(X):
     B.blob_nimages= np.zeros(len(B), np.int16) + len(timargs)
     
     ob = OneBlob('%i'%(nblob+1), blobwcs, blobmask, timargs, srcs, bands,
-                 plots, ps, simul_opt, use_ceres, hastycho, rex)
+                 plots, ps, simul_opt, use_ceres, hasbright, rex)
     ob.run(B)
 
     B.blob_totalpix = np.zeros(len(B), np.int32) + ob.total_pix
@@ -79,9 +79,9 @@ def one_blob(X):
     assert(len(B.finished_in_blob) == len(B))
     assert(len(B.finished_in_blob) == len(B.started_in_blob))
 
-    B.tycho2inblob = np.zeros(len(B), bool)
-    if hastycho:
-        B.tycho2inblob[:] = True
+    B.brightstarinblob = np.zeros(len(B), bool)
+    if hasbright:
+        B.brightstarinblob[:] = True
 
     B.cpu_blob = np.zeros(len(B), np.float32)
     t1 = time.clock()
@@ -92,7 +92,7 @@ def one_blob(X):
 
 class OneBlob(object):
     def __init__(self, name, blobwcs, blobmask, timargs, srcs, bands,
-                 plots, ps, simul_opt, use_ceres, hastycho, rex):
+                 plots, ps, simul_opt, use_ceres, hasbright, rex):
         self.name = name
         self.rex = rex
         self.blobwcs = blobwcs
@@ -103,7 +103,7 @@ class OneBlob(object):
         self.ps = ps
         self.simul_opt = simul_opt
         self.use_ceres = use_ceres
-        self.hastycho = hastycho
+        self.hasbright = hasbright
         self.deblend = False
         self.tims = self.create_tims(timargs)
         self.total_pix = sum([np.sum(t.getInvError() > 0) for t in self.tims])
@@ -309,11 +309,11 @@ class OneBlob(object):
             src = cat[srci]
             print('Model selection for source %i of %i in blob %s' %
                   (numi+1, len(Ibright), self.name))
-            if isinstance(src, GaiaSource):
-                print('Gaia source', src)
-                if src.isForcedPointSource():
-                    print('Gaia source is forced to be a point source -- not doing model selection.')
-                    continue
+            # if isinstance(src, GaiaSource):
+            #     print('Gaia source', src)
+            #     if src.isForcedPointSource():
+            #         print('Gaia source is forced to be a point source -- not doing model selection.')
+            #         continue
             cpu0 = time.clock()
     
             # Add this source's initial model back in.
@@ -487,15 +487,24 @@ class OneBlob(object):
                 rex = simple
             else:
                 simname = 'simple'
-            trymodels = [('ptsrc', ptsrc), (simname, simple)]
-    
+                
+            trymodels = [('ptsrc', ptsrc)]
+
             if oldmodel == 'ptsrc':
-                if self.hastycho:
-                    print('Not computing galaxy models: Tycho-2 star in blob')
+                forced = False
+                if isinstance(src, GaiaSource):
+                    print('Gaia source', src)
+                    if src.isForcedPointSource():
+                        forced = True
+                if forced:
+                    print('Gaia source is forced to be a point source -- not trying other models')
+                elif self.hasbright:
+                    print('Not computing galaxy models: bright star in blob')
                 else:
+                    trymodels.append((simname, simple))
                     # Try galaxy models if simple > ptsrc, or if bright.
                     # The 'gals' model is just a marker
-                    trymodels.extend([('gals', None)])
+                    trymodels.append(('gals', None))
             else:
                 trymodels.extend([('dev', dev), ('exp', exp), ('comp', comp)])
 
@@ -597,7 +606,7 @@ class OneBlob(object):
                 if len(self.tims) > 0:
                     _limit_galaxy_stamp_size(newsrc, self.tims[0])
     
-                if self.hastycho:
+                if self.hasbright:
                     modtims = None
                 elif self.bigblob:
                     mods = []
@@ -654,7 +663,7 @@ class OneBlob(object):
                         # self.ps.savefig()
 
                 else:
-                    # Tycho-2 star; set modtractor = srctractor for the ivars
+                    # Bright star; set modtractor = srctractor for the ivars
                     srctractor.setModelMasks(newsrc_mm)
                     modtractor = srctractor
 
@@ -1718,13 +1727,16 @@ def _select_model(chisqs, nparams, galaxy_margin, rex):
 
     if diff < cut:
         return keepmod
-
     # We're going to keep this source!
+
     if rex:
         simname = 'rex'
     else:
         simname = 'simple'
-    
+
+    if not simname in chisqs:
+        # bright stars / reference stars: we don't test the simple model.
+        return 'ptsrc'
     # Now choose between point source and simple model (SIMP/REX)
     if chisqs['ptsrc'] - nparams['ptsrc'] > chisqs[simname] - nparams[simname]:
         #print('Keeping source; PTSRC is better than SIMPLE')

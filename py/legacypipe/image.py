@@ -295,6 +295,60 @@ class LegacySurveyImage(object):
         #
         invvar = self.remap_invvar(invvar, primhdr, img, dq)
 
+        # Ugly: occasionally the CP marks edge pixels with SATUR (and
+        # nearby pixels with BLEED).  Convert connected blobs of
+        # SATUR|BLEED pixels that are touching the left or right (not
+        # top/botom) to EDGE.  An example of this is
+        # mosaic-121450-CCD3-z at RA,Dec (261.4182, 58.8528).  Note
+        # that here we're not demanding it be the full CCD edge; we're
+        # checking our x0,x1 subregion, which is not ideal.
+        # Here we're assuming the bleed direction is vertical.
+        # This step is not redundant with the following trimming of
+        # masked edge pixels because the SATUR|BLEED pixels in these
+        # cases do not fill full columns, so they still cause issues
+        # with source detection.
+        if get_dq:
+            from scipy.ndimage.measurements import label
+            bits = CP_DQ_BITS['satur'] | CP_DQ_BITS['bleed']
+            if np.any(dq[:,0] & bits) or np.any(dq[:,-1] & bits):
+                blobmap,nblobs = label(dq & bits)
+                badblobs = np.unique(np.append(blobmap[:,0], blobmap[:,-1]))
+                badblobs = badblobs[badblobs != 0]
+                #print('Bad blobs:', badblobs)
+                for bad in badblobs:
+                    n = np.sum(blobmap == bad)
+                    print('Setting', n, 'edge SATUR|BLEED pixels to EDGE')
+                    dq[blobmap == bad] = CP_DQ_BITS['edge']
+
+        # Drop rows and columns at the image edges that are all masked.
+        for y0_new in range(y0, y1):
+            if not np.all(invvar[y0_new-y0,:] == 0):
+                break
+        for y1_new in reversed(range(y0, y1)):
+            if not np.all(invvar[y1_new-y0,:] == 0):
+                break
+        for x0_new in range(x0, x1):
+            if not np.all(invvar[:,x0_new-x0] == 0):
+                break
+        for x1_new in reversed(range(x0, x1)):
+            if not np.all(invvar[:,x1_new-x0] == 0):
+                break
+        y1_new += 1
+        x1_new += 1
+        if x0_new != x0 or x1_new != x1 or y0_new != y0 or y1_new != y1:
+            print('Old x0,x1', x0,x1, 'y0,y1', y0,y1)
+            print('New x0,x1', x0_new,x1_new, 'y0,y1', y0_new,y1_new)
+
+            if y1_new - y0_new < tiny or x1_new - x0_new < tiny:
+                print('Skipping tiny subimage (after clipping masked edges)')
+                return None
+
+            img = img[y0_new-y0:1+y1_new-y0, x0_new-x0:1+x1_new-x0]
+            invvar = invvar[y0_new-y0:1+y1_new-y0, x0_new-x0:1+x1_new-x0]
+            if get_dq:
+                dq = dq[y0_new-y0:1+y1_new-y0, x0_new-x0:1+x1_new-x0]
+            x0,x1,y0,y1 = x0_new,x1_new,y0_new,y1_new
+
         sky = self.read_sky_model(splinesky=splinesky, slc=slc,
                                   primhdr=primhdr, imghdr=imghdr)
         skysig1 = getattr(sky, 'sig1', None)
@@ -467,8 +521,14 @@ class LegacySurveyImage(object):
             clip = np.array(clip)
             if len(clip) == 0:
                 return 0,0,0,0,None
+            # Convert from FITS to python image coords
+            clip -= 1
             x0,y0 = np.floor(clip.min(axis=0)).astype(int)
             x1,y1 = np.ceil (clip.max(axis=0)).astype(int)
+            x0 = min(max(x0, 0), imw-1)
+            y0 = min(max(y0, 0), imh-1)
+            x1 = min(max(x1, 0), imw-1)
+            y1 = min(max(y1, 0), imh-1)
             slc = slice(y0,y1+1), slice(x0,x1+1)
         # Slice?
         if slc is not None:
@@ -623,7 +683,12 @@ class LegacySurveyImage(object):
         ff = open(fn, 'rb')
         h = b''
         while True:
-            h = h + ff.read(32768)
+            hnew = ff.read(32768)
+            if len(hnew) == 0:
+                # EOF
+                ff.close()
+                raise RuntimeError('Reached end-of-file in "%s" before finding end of FITS header.' % fn)
+            h = h + hnew
             while True:
                 line = h[:80]
                 h = h[80:]
@@ -665,6 +730,8 @@ class LegacySurveyImage(object):
         '''
         print('Reading data quality image', self.dqfn, 'ext', self.hdu)
         dq = self._read_fits(self.dqfn, self.hdu, **kwargs)
+
+        # FIXME - Turn SATUR on edges to EDGE
         return dq
 
     def remap_dq(self, dq, header):
@@ -691,6 +758,14 @@ class LegacySurveyImage(object):
         7 = diff detect (multi-exposure difference detection from median)
         8 = long streak (e.g. satellite trail)
         '''
+
+        # Some images (eg, 90prime//CP20160403/ksb_160404_103333_ood_g_v1-CCD1.fits)
+        # around saturated stars have the core with value 3 (satur), surrounded by one
+        # pixel of value 1 (bad), and then more pixels with value 4 (bleed).
+        # Set the BAD ones to SATUR.
+        from scipy.ndimage.morphology import binary_dilation
+        dq[np.logical_and(dq == 1, binary_dilation(dq == 3))] = 3
+
         dqbits[dq == 1] |= CP_DQ_BITS['badpix']
         dqbits[dq == 2] |= CP_DQ_BITS['badpix']
         dqbits[dq == 3] |= CP_DQ_BITS['satur']

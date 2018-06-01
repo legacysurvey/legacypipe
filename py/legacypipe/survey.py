@@ -8,11 +8,10 @@ import numpy as np
 import fitsio
 
 from astrometry.util.fits import fits_table, merge_tables
-from astrometry.util.starutil_numpy import degrees_between
 
 from tractor.ellipses import EllipseESoft, EllipseE
 from tractor.galaxy import ExpGalaxy
-from tractor import PointSource, RaDecPos, NanoMaggies, ParamList, ConstantFitsWcs
+from tractor import PointSource, ParamList, ConstantFitsWcs
 
 from legacypipe.utils import EllipseWithPriors
 
@@ -60,6 +59,8 @@ class GaiaPosition(ParamList):
                             self.parallax)
 
     def getPositionAtTime(self, tai):
+        from tractor import RaDecPos
+
         taival = tai.getValue()
         try:
             return self.cached_positions[taival]
@@ -131,6 +132,7 @@ class GaiaSource(PointSource):
     @classmethod
     def from_catalog(cls, g, bands):
         from tractor.tractortime import TAITime
+        from tractor import NanoMaggies
 
         # When creating 'tim.time' entries, we do:
         #import astropy.time
@@ -336,17 +338,17 @@ def get_version_header(program_name, survey_dir, git_version=None):
                         comment='legacypipe git version'))
     hdr.add_record(dict(name='SURVEYV', value=survey_dir,
                         comment='Legacy Survey directory'))
-    hdr.add_record(dict(name='DECALSDR', value='DR6',
+    hdr.add_record(dict(name='DECALSDR', value='DR7',
                         comment='DECaLS release name'))
     hdr.add_record(dict(name='DECALSDT', value=datetime.datetime.now().isoformat(),
                         comment='%s run time' % program_name))
     hdr.add_record(dict(name='SURVEY', value='DECaLS',
                         comment='DECam Legacy Survey'))
     # Requested by NOAO
-    #hdr.add_record(dict(name='SURVEYID', value='DECam Legacy Survey (DECaLS)',
-    #                    comment='Survey name'))
-    hdr.add_record(dict(name='SURVEYID', value='BASS MzLS',
+    hdr.add_record(dict(name='SURVEYID', value='DECam Legacy Survey (DECaLS)',
                         comment='Survey name'))
+    #hdr.add_record(dict(name='SURVEYID', value='BASS MzLS',
+    #                    comment='Survey name'))
     hdr.add_record(dict(name='DRVERSIO', value=release_number,
                         comment='Survey data release number'))
     hdr.add_record(dict(name='OBSTYPE', value='object',
@@ -736,6 +738,7 @@ def ccds_touching_wcs(targetwcs, ccds, ccdrad=None, polygons=True):
     '''
     from astrometry.util.util import Tan
     from astrometry.util.miscutils import polygons_intersect
+    from astrometry.util.starutil_numpy import degrees_between
 
     trad = targetwcs.radius()
     if ccdrad is None:
@@ -862,6 +865,7 @@ Now using the current directory as LEGACY_SURVEY_DIR, but this is likely to fail
         self.output_file_hashes = OrderedDict()
         self.ccds = ccds
         self.bricks = None
+        self.ccds_index = None
 
         # Create and cache a kd-tree for bricks_touching_radec_box ?
         self.cache_tree = False
@@ -1001,6 +1005,11 @@ Now using the current directory as LEGACY_SURVEY_DIR, but this is likely to fail
                 glob(os.path.join(basedir, 'survey-ccds-*.kd.fits')))
 
         elif filetype == 'tycho2':
+            dirnm = os.environ.get('TYCHO2_KD_DIR')
+            if dirnm is not None:
+                fn = os.path.join(dirnm, 'tycho2.kd.fits')
+                if os.path.exists(fn):
+                    return fn
             return swap(os.path.join(basedir, 'tycho2.kd.fits'))
 
         elif filetype == 'annotated-ccds':
@@ -1329,6 +1338,7 @@ Now using the current directory as LEGACY_SURVEY_DIR, but this is likely to fail
             bricks = self.get_bricks_readonly()
         if self.cache_tree and bricks == self.bricks:
             from astrometry.libkd.spherematch import tree_build_radec, tree_search_radec
+            from astrometry.util.starutil_numpy import degrees_between
             # Use kdtree
             if self.bricktree is None:
                 self.bricktree = tree_build_radec(bricks.ra, bricks.dec)
@@ -1380,7 +1390,7 @@ Now using the current directory as LEGACY_SURVEY_DIR, but this is likely to fail
     def filter_ccd_kd_files(self, fns):
         return fns
 
-    def get_ccds(self):
+    def get_ccds(self, **kwargs):
         '''
         Returns the table of CCDs.
         '''
@@ -1402,10 +1412,13 @@ Now using the current directory as LEGACY_SURVEY_DIR, but this is likely to fail
             #     'ccdnmatch camera image_hdu image_filename width height ' +
             #     'ra dec zpt expnum fwhm mjd_obs').split()
             #T = fits_table(fn, columns=cols)
-            T = fits_table(fn)
+            T = fits_table(fn, **kwargs)
             print('Got', len(T), 'CCDs')
             TT.append(T)
-        T = merge_tables(TT, columns='fillzero')
+        if len(TT) > 1:
+            T = merge_tables(TT, columns='fillzero')
+        else:
+            T = TT[0]
         print('Total of', len(T), 'CCDs')
         del TT
 
@@ -1446,9 +1459,11 @@ Now using the current directory as LEGACY_SURVEY_DIR, but this is likely to fail
             # "N4 " -> "N4"
             ccds.ccdname = np.array([s.strip() for s in ccds.ccdname])
         # Remove trailing spaces from 'camera' column.
-        ccds.camera = np.array([c.strip() for c in ccds.camera])
+        if 'camera' in ccds.columns():
+            ccds.camera = np.array([c.strip() for c in ccds.camera])
         # And 'filter' column
-        ccds.filter = np.array([f.strip() for f in ccds.filter])
+        if 'filter' in ccds.columns():
+            ccds.filter = np.array([f.strip() for f in ccds.filter])
         return ccds
 
     def ccds_touching_wcs(self, wcs, **kwargs):
@@ -1553,6 +1568,21 @@ Now using the current directory as LEGACY_SURVEY_DIR, but this is likely to fail
         number, integer), *ccdname* (string), and *camera* (string),
         if given.
         '''
+        if expnum is not None and ccdname is not None:
+            # use ccds_index
+            if self.ccds_index is None:
+                if self.ccds is not None:
+                    C = self.ccds
+                else:
+                    C = self.get_ccds(columns=['expnum','ccdname'])
+                self.ccds_index = dict([((e,n),i) for i,(e,n) in
+                                        enumerate(zip(C.expnum, C.ccdname))])
+            row = self.ccds_index[(expnum, ccdname)]
+            if self.ccds is not None:
+                return self.ccds[row]
+            #import numpy as np
+            #C = self.get_ccds(rows=np.array([row]))
+            #return C[0]
         T = self.get_ccds_readonly()
         if expnum is not None:
             T = T[T.expnum == expnum]

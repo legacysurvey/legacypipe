@@ -300,8 +300,10 @@ def sed_matched_detection(sedname, sed, detmaps, detivs, bands,
 
     def saddle_level(Y):
         # Require a saddle that drops by (the larger of) "saddle"
-        # sigma, or 20% of the peak height
-        drop = max(saddle, Y * 0.2)
+        # sigma, or 10% of the peak height.
+        # ("saddle" is passed in as an argument to the
+        #  sed_matched_detection function)
+        drop = max(saddle, Y * 0.1)
         return Y - drop
 
     lowest_saddle = nsigma - saddle
@@ -369,17 +371,19 @@ def sed_matched_detection(sedname, sed, detmaps, detivs, bands,
 
     # For each new source, compute the saddle value, segment at that
     # level, and drop the source if it is in the same blob as a
-    # previously-detected source.  We dilate the blobs a bit too, to
-    # catch slight differences in centroid vs SDSS sources.
-    dilate = 2
+    # previously-detected source.
 
+    # We dilate the blobs a bit too, to
+    # catch slight differences in centroid positions.
+    dilate = 1
+    
     # For efficiency, segment at the minimum saddle level to compute
     # slices; the operations described above need only happen within
     # the slice.
     saddlemap = (sedsn > lowest_saddle)
+    saddlemap = binary_dilation(saddlemap, iterations=dilate)
     if saturated_pix is not None:
         saddlemap |= saturated_pix
-    saddlemap = binary_dilation(saddlemap, iterations=dilate)
     allblobs,nblobs = label(saddlemap)
     allslices = find_objects(allblobs)
     ally0 = [sy.start for sy,sx in allslices]
@@ -434,6 +438,7 @@ def sed_matched_detection(sedname, sed, detmaps, detivs, bands,
             level = saddle_level(sedsn[y,x])
             ablob = allblobs[y,x]
             saddlemap = (sedsn > level)
+            saddlemap = binary_dilation(saddlemap, iterations=dilate)
             if saturated_pix is not None:
                 saddlemap |= saturated_pix
             saddlemap *= (allblobs == ablob)
@@ -447,7 +452,6 @@ def sed_matched_detection(sedname, sed, detmaps, detivs, bands,
             
             plt.subplot(2,2,3)
             saddlemap = binary_fill_holes(saddlemap)
-            saddlemap = binary_dilation(saddlemap, iterations=dilate)
             plt.imshow(saddlemap, interpolation='nearest', origin='lower',
                        vmin=0, vmax=1, cmap='gray')
             ax = plt.axis()
@@ -488,14 +492,13 @@ def sed_matched_detection(sedname, sed, detmaps, detivs, bands,
         #print('  allblobs slice', slc)
 
         saddlemap = (sedsn[slc] > level)
+        saddlemap = binary_dilation(saddlemap, iterations=dilate)
         if saturated_pix is not None:
             saddlemap |= saturated_pix[slc]
         saddlemap *= (allblobs[slc] == ablob)
         #print('  saddlemap', Time()-tlast)
         saddlemap = binary_fill_holes(saddlemap)
         #print('  fill holes', Time()-tlast)
-        saddlemap = binary_dilation(saddlemap, iterations=dilate)
-        #print('  dilation', Time()-tlast)
         blobs,nblobs = label(saddlemap)
         #print('  label', Time()-tlast)
         x0,y0 = allx0[index], ally0[index]

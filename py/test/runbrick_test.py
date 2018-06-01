@@ -75,7 +75,8 @@ if __name__ == '__main__':
     T = fits_table(fn)
     assert(len(T) == 2)
     print('Types:', T.type)
-    assert(T.type[0] == 'REX ')
+    # Since there is a Tycho-2 star in the blob, forced to be PSF.
+    assert(T.type[0] == 'PSF ')
     cmd = ('(cd %s && sha256sum -c %s)' %
            (outdir, os.path.join('tractor', '110', 'brick-1102p240.sha256sum')))
     print(cmd)
@@ -98,7 +99,8 @@ if __name__ == '__main__':
     T = fits_table(fn)
     assert(len(T) == 2)
     print('Types:', T.type)
-    assert(T.type[0] == 'SIMP')
+    # Since there is a Tycho-2 star in the blob, forced to be PSF.
+    assert(T.type[0] == 'PSF ')
 
     # Test that we can run splinesky calib if required...
     
@@ -198,7 +200,7 @@ if __name__ == '__main__':
 
     # Read catalog into Tractor sources to test read_fits_catalog
     from legacypipe.catalog import read_fits_catalog
-    from legacypipe.survey import LegacySurveyData
+    from legacypipe.survey import LegacySurveyData, GaiaSource
     from astrometry.util.fits import fits_table
     from tractor.galaxy import DevGalaxy
     from tractor import PointSource
@@ -215,7 +217,8 @@ if __name__ == '__main__':
     assert(np.abs(src.pos.ra  - 244.77975) < 0.00001)
     assert(np.abs(src.pos.dec -  12.07234) < 0.00001)
     src = cat[1]
-    assert(type(src) == PointSource)
+    print('Source', src)
+    assert(type(src) in [PointSource, GaiaSource])
     assert(np.abs(src.pos.ra  - 244.77833) < 0.00001)
     assert(np.abs(src.pos.dec -  12.07252) < 0.00001)
     # DevGalaxy(pos=RaDecPos[244.77975494973529, 12.072348111713127], brightness=NanoMaggies: g=19.2, r=17.9, z=17.1, shape=re=2.09234, e1=-0.198453, e2=0.023652,

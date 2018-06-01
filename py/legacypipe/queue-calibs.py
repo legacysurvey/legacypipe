@@ -124,6 +124,9 @@ def main():
 
     parser.add_argument('--write-ccds', help='Write CCDs list as FITS table?')
 
+    parser.add_argument('--nccds', action='store_true', default=False, help='Prints number of CCDs per brick')
+
+
     opt = parser.parse_args()
 
 
@@ -517,6 +520,42 @@ def main():
 
     else:
         allI = np.arange(len(T))
+
+    if opt.nccds:
+        from queue import Queue
+        from threading import Thread
+        from time import sleep
+
+        log('Checking number of CCDs per brick')
+
+        def worker():
+            while True:
+                i = q.get()
+                if i is None:
+                    break
+                b = B[i]
+                wcs = wcs_for_brick(b)
+                I = ccds_touching_wcs(wcs, T)
+                log(b.brickname, len(I))
+                q.task_done()
+
+        q = Queue()
+        num_threads = 24
+        threads = []
+
+        for i in range(num_threads):
+            t = Thread(target=worker)
+            t.start()
+            threads.append(t)
+
+        for i in range(len(B)):
+            q.put(i)
+
+        q.join()
+        for i in range(num_threads):
+            q.put(None)
+        for t in threads:
+            t.join()
 
     if opt.write_ccds:
         T[allI].writeto(opt.write_ccds)
