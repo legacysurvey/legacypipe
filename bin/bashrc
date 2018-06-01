@@ -1,4 +1,7 @@
-## ~/.bashrc file portion for 'desiproc' user @ NERSC.
+## bashrc snippet for setting up environment for runbrick.py
+
+unset PYTHONPATH
+
 
 export NERSC_HOST=`/usr/common/usg/bin/nersc_host`
 
@@ -22,8 +25,13 @@ export TYCHO2_KD_DIR=/global/project/projectdirs/cosmo/staging/tycho2
 export PS1CAT_DIR=/global/project/projectdirs/cosmo/work/ps1/cats/chunks-qz-star-v3/
 
 # desiconda
-module use /global/common/software/desi/$NERSC_HOST
-module load desiconda/20180512-1.2.5-img
+if [ $NERSC_HOST == "edison" ]; then
+  module use /global/common/software/desi/edison/desiconda/20180512-1.2.5-img/modulefiles
+  module load desiconda/20180512-1.2.5-img
+else # cori
+  module use /global/cscratch1/sd/desiproc/DRcode/desiconda/software/modulefiles
+  module load desiconda/20180511
+fi
 
 # Add legacypipe directory to python path
 # PYTHONPATH=${LEGACY_PIPE_DIR}/py:${PYTHONPATH}
@@ -39,9 +47,6 @@ module load desiconda/20180512-1.2.5-img
 
 # local astrometry.net install?
 # PYTHONPATH=${CODE_DIR}/astrometry/lib/python:${PYTHONPATH}
-
-export PYTHONPATH
-export PATH
 
 export QDO_BATCH_PROFILE=$NERSC_HOST
 export QDO_BACKEND=postgres
