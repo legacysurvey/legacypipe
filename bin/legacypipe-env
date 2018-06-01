@@ -1,20 +1,20 @@
-## bashrc snippet for setting up environment for runbrick.py
+## bash snippet for setting up environment for runbrick.sh / runbrick.py
 
 unset PYTHONPATH
 
 export NERSC_HOST=`/usr/common/usg/bin/nersc_host`
 
 # Where's the code?
-# export LEGACY_PIPE_DIR=/global/cscratch1/sd/desiproc/${NERSC_HOST}-code/legacypipe/
+# export LEGACYPIPE_DIR=/global/cscratch1/sd/desiproc/${NERSC_HOST}-code/legacypipe/
 
 # Where are inputs and outputs going?
 export LEGACY_SURVEY_DIR=/global/cscratch1/sd/desiproc/dr7
 
-export DUST_DIR=/global/cscratch1/sd/desiproc/dust/v0_0
+export DUST_DIR=/global/project/projectdirs/desi/software/${NERSC_HOST}/dust/v0_0/maps
 
 export UNWISE_COADDS_DIR=/global/projecta/projectdirs/cosmo/work/wise/outputs/merge/neo4/fulldepth:/global/project/projectdirs/cosmo/data/unwise/allwise/unwise-coadds/fulldepth
 
-export UNWISE_COADDS_TIMERESOLVED_DIR=/global/projecta/projectdirs/cosmo/work/wise/outputs/merge/neo3
+export UNWISE_COADDS_TIMERESOLVED_DIR=/global/projecta/projectdirs/cosmo/work/wise/outputs/merge/neo4
 
 export GAIA_CAT_DIR=/global/project/projectdirs/cosmo/work/gaia/chunks-gaia-dr2-astrom/
 export GAIA_CAT_VER=2
@@ -30,7 +30,7 @@ module load desiconda
 
 # Add legacypipe directory to python path
 # (not required if you're running the code from the legacypipe/py directory)
-# PYTHONPATH=${LEGACY_PIPE_DIR}/py:${PYTHONPATH}
+# PYTHONPATH=${LEGACYPIPE_DIR}/py:${PYTHONPATH}
 
 # local Tractor install?
 # PYTHONPATH=${CODE_DIR}/tractor:${PYTHONPATH}
