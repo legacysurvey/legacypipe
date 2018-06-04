@@ -2410,16 +2410,16 @@ def stage_wise_forced(
     eargs = []
     if unwise_tr_dir is not None:
         tdir = unwise_tr_dir
-        W = fits_table(os.path.join(tdir, 'time_resolved_atlas.fits'))
-        print('Read', len(W), 'time-resolved WISE coadd tiles')
-        W.cut(np.array([t in tiles.coadd_id for t in W.coadd_id]))
-        print('Cut to', len(W), 'time-resolved vs', len(tiles), 'full-depth')
-        assert(len(W) == len(tiles))
+        TR = fits_table(os.path.join(tdir, 'time_resolved_atlas.fits'))
+        print('Read', len(TR), 'time-resolved WISE coadd tiles')
+        TR.cut(np.array([t in tiles.coadd_id for t in TR.coadd_id]))
+        print('Cut to', len(TR), 'time-resolved vs', len(tiles), 'full-depth')
+        assert(len(TR) == len(tiles))
         # How big do we need to make the WISE time-resolved arrays?
-        print('W epoch_bitmask:', W.epoch_bitmask)
+        print('TR epoch_bitmask:', TR.epoch_bitmask)
         # axis= arg to np.count_nonzero is new in numpy 1.12
-        Nepochs = max(np.atleast_1d([np.count_nonzero(e) for e in W.epoch_bitmask]))
-        nil,ne = W.epoch_bitmask.shape
+        Nepochs = max(np.atleast_1d([np.count_nonzero(e) for e in TR.epoch_bitmask]))
+        nil,ne = TR.epoch_bitmask.shape
         print('Max number of epochs for these tiles:', Nepochs)
         print('epoch bitmask length:', ne)
         # Add time-resolved coadds
@@ -2433,10 +2433,10 @@ def stage_wise_forced(
             # (eg, brick 2437p425 vs coadds 2426p424 & 2447p424 in NEO-2).
 
             # find the non-zero epochs for each overlapping tile
-            epochs = np.empty((len(W), Nepochs), int)
+            epochs = np.empty((len(TR), Nepochs), int)
             epochs[:,:] = -1
-            for i in range(len(W)):
-                ei = np.flatnonzero(W.epoch_bitmask[i,:] & bitmask)
+            for i in range(len(TR)):
+                ei = np.flatnonzero(TR.epoch_bitmask[i,:] & bitmask)
                 epochs[i,:len(ei)] = ei
 
             for ie in range(Nepochs):
@@ -2444,12 +2444,12 @@ def stage_wise_forced(
                 I = np.flatnonzero(epochs[:,ie] >= 0)
                 if len(I) == 0:
                     continue
-                print('Epoch index %i: %i tiles:' % (ie, len(I)), W.coadd_id[I],
+                print('Epoch index %i: %i tiles:' % (ie, len(I)), TR.coadd_id[I],
                       'epoch numbers', epochs[I,ie])
                 eps = np.unique(epochs[I,ie])
                 if len(eps) == 1:
                     edir = os.path.join(tdir, 'e%03i' % eps[0])
-                    eargs.append((ie,(wcat, W[I], band, roiradec, edir,
+                    eargs.append((ie,(wcat, TR[I], band, roiradec, edir,
                                          wise_ceres, broadening[band])))
                 else:
                     import tempfile
@@ -2461,7 +2461,7 @@ def stage_wise_forced(
                     dirname = td.name
                     # Assume UNWISE_COADDS_TIMERESOLVED_DIR is a
                     # single dir (not colon-separated list).
-                    for tile,ep in zip(W[I], epochs[I,ie]):
+                    for tile,ep in zip(TR[I], epochs[I,ie]):
                         tiledir = os.path.join(tdir, 'e%03i' % ep, tile.coadd_id[:3], tile.coadd_id)
                         destdir = os.path.join(dirname, tile.coadd_id[:3])
                         if not os.path.exists(destdir):
@@ -2472,7 +2472,7 @@ def stage_wise_forced(
                         dest = os.path.join(destdir, tile.coadd_id)
                         print('Creating symlink', dest, '->', tiledir)
                         os.symlink(tiledir, dest, target_is_directory=True)
-                    eargs.append((ie,(wcat, W[I], band, roiradec, dirname,
+                    eargs.append((ie,(wcat, TR[I], band, roiradec, dirname,
                                       wise_ceres, broadening[band])))
 
     # Run the forced photometry!
