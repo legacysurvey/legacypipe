@@ -2529,7 +2529,7 @@ def stage_wise_forced(
             # Reference the mask image M at yy,xx indices
             Mi = M[yy[I], xx[I]]
             # unpack mask bits
-            for band in [1,2,3,4]:
+            for band in [1,2]:
                 sd1 = (np.bitwise_and(Mi, 2**(2*(band-1)  )) != 0).astype(int)
                 sd2 = (np.bitwise_and(Mi, 2**(2*(band-1)+1)) != 0).astype(int)
                 WISE.wise_mask[I, band-1] = sd1 + 2*sd2
