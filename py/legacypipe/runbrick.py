@@ -2532,10 +2532,13 @@ def stage_wise_forced(
             # Reference the mask image M at yy,xx indices
             Mi = M[yy[I], xx[I]]
             # unpack mask bits
-            for band in [1,2]:
-                sd1 = (np.bitwise_and(Mi, 2**(2*(band-1)  )) != 0).astype(int)
-                sd2 = (np.bitwise_and(Mi, 2**(2*(band-1)+1)) != 0).astype(int)
-                WISE.wise_mask[I, band-1] = sd1 + 2*sd2
+            # The WISE mask files have:
+            #  bit 0: W1 bright star, south-going scan
+            #  bit 1: W1 bright star, north-going scan
+            #  bit 2: W2 bright star, south-going scan
+            #  bit 3: W2 bright star, north-going scan
+            WISE.wise_mask[I, 0] = ( Mi       & 3)
+            WISE.wise_mask[I, 1] = ((Mi >> 2) & 3)
 
     # Unpack time-resolved results...
     WISE_T = None
