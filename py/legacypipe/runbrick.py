@@ -2230,6 +2230,12 @@ def stage_coadds(survey=None, bands=None, version_header=None, targetwcs=None,
     hdr.delete('IMAGEH')
     hdr.add_record(dict(name='IMTYPE', value='maskbits',
                         comment='LegacySurvey image type'))
+    # NOTE that we pass the "maskbits" and "maskbits_header" variables
+    # on to later stages, because we will add in the WISE mask planes
+    # later (and write the result in the writecat stage. THEREFORE, if
+    # you make changes to the bit mappings here, you MUST also adjust
+    # the header values (and bit mappings for the WISE masks) in
+    # stage_writecat.
     hdr.add_record(dict(name='NPRIMARY', value=1,
                         comment='Mask value for non-primary brick area'))
     hdr.add_record(dict(name='BRIGHT', value=2,
@@ -2240,10 +2246,7 @@ def stage_coadds(survey=None, bands=None, version_header=None, targetwcs=None,
     for b in keys:
         hdr.add_record(dict(name='ALLM_%s' % b, value=allmaskvals[b],
                             comment='Mask value for ALLMASK band %s' % b))
-
-    with survey.write_output('maskbits', brick=brickname) as out:
-        out.fits.write(maskbits, header=hdr)
-    del maskbits
+    maskbits_header = hdr
 
     if plots:
         plt.clf()
@@ -2314,7 +2317,9 @@ def stage_coadds(survey=None, bands=None, version_header=None, targetwcs=None,
     tnow = Time()
     print('[serial coadds] Aperture photometry, wrap-up', tnow-tlast)
     return dict(T=T, AP=C.AP, apertures_pix=apertures,
-                apertures_arcsec=apertures_arcsec)
+                apertures_arcsec=apertures_arcsec,
+                maskbits=maskbits,
+                maskbits_header=maskbits_header)
 
 def _depth_histogram(brick, targetwcs, bands, detivs, galdetivs):
     # Compute the brick's unique pixels.
@@ -2595,6 +2600,9 @@ def stage_writecat(
     T=None,
     WISE=None,
     WISE_T=None,
+    maskbits=None,
+    maskbits_header=None,
+    wise_mask_map=None,
     AP=None,
     apertures_arcsec=None,
     cat=None, pixscale=None, targetwcs=None,
@@ -2616,6 +2624,41 @@ def stage_writecat(
     from legacypipe.catalog import prepare_fits_catalog
 
     record_event and record_event('stage_writecat: starting')
+
+    if maskbits is not None:
+        if wise_mask_map is not None:
+            # Add it in!
+            maskbits += 0x40 * ((wise_mask_map & 1) != 0)
+            maskbits += 0x80 * ((wise_mask_map & 2) != 0)
+
+        hdr = maskbits_header
+        if hdr is not None:
+            hdr.add_record(dict(name='WISEM1', value=0x40,
+                                comment='Mask value for WISE W1 bright-star'))
+            hdr.add_record(dict(name='WISEM2', value=0x80,
+                                comment='Mask value for WISE W2 bright-star'))
+
+        hdr.add_record(dict(name='BITNM0', value='NPRIMARY',
+                            comment='maskbits bit 0: not-brick-primary'))
+        hdr.add_record(dict(name='BITNM1', value='BRIGHT',
+                            comment='maskbits bit 1: bright star in blob'))
+        hdr.add_record(dict(name='BITNM2', value='SATUR',
+                            comment='maskbits bit 2: saturated + margin'))
+        hdr.add_record(dict(name='BITNM3', value='ALLMASK_G',
+                            comment='maskbits bit 3: any ALLMASK_G bit set'))
+        hdr.add_record(dict(name='BITNM4', value='ALLMASK_R',
+                            comment='maskbits bit 4: any ALLMASK_R bit set'))
+        hdr.add_record(dict(name='BITNM5', value='ALLMASK_Z',
+                            comment='maskbits bit 5: any ALLMASK_Z bit set'))
+        hdr.add_record(dict(name='BITNM6', value='WISEM1',
+                            comment='maskbits bit 6: WISE W1 bright star mask'))
+        hdr.add_record(dict(name='BITNM7', value='WISEM2',
+                            comment='maskbits bit 7: WISE W2 bright star mask'))
+
+        with survey.write_output('maskbits', brick=brickname) as out:
+            out.fits.write(maskbits, header=hdr)
+        del maskbits
+        del wise_mask_map
 
     TT = T.copy()
     for k in ['ibx','iby']:
