@@ -136,6 +136,12 @@ def format_catalog(T, hdr, primhdr, allbands, outfn,
     if motions:
         cols.extend(['pmra', 'pmdec', 'parallax',
             'pmra_ivar', 'pmdec_ivar', 'parallax_ivar', 'ref_epoch',])
+        # Add zero columns if these are missing (eg, if there are no
+        # Tycho-2 or Gaia stars in the brick).
+        tcols = T.get_columns()
+        for c in cols:
+            if not c in tcols:
+                T.set(c, np.zeros(len(T), np.float32))
 
     if gaia_tagalong:
         gaia_cols = [#('source_id', np.int64),  # already have this in ref_id
