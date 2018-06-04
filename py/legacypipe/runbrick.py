@@ -2417,7 +2417,6 @@ def stage_wise_forced(
         assert(len(W) == len(tiles))
         # How big do we need to make the WISE time-resolved arrays?
         print('W epoch_bitmask:', W.epoch_bitmask)
-        #Nepochs = max(np.atleast_1d(np.count_nonzero(W.epoch_bitmask, axis=1)))
         # axis= arg to np.count_nonzero is new in numpy 1.12
         Nepochs = max(np.atleast_1d([np.count_nonzero(e) for e in W.epoch_bitmask]))
         nil,ne = W.epoch_bitmask.shape
@@ -2431,7 +2430,7 @@ def stage_wise_forced(
             # necessarily aligned for the set of overlapping tiles.  We will align the
             # non-zero epochs of the tiles.  This may require creating a temp directory
             # and symlink farm for cases where the non-zero epochs are not aligned
-            # (eg, brick 2437p425 vs coadds 2426p424 & 2447p424 in NEO-2.
+            # (eg, brick 2437p425 vs coadds 2426p424 & 2447p424 in NEO-2).
 
             # find the non-zero epochs for each overlapping tile
             epochs = np.empty((len(W), Nepochs), int)
