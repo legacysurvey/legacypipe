@@ -1051,8 +1051,8 @@ Now using the current directory as LEGACY_SURVEY_DIR, but this is likely to fail
                                      'blobs-%s.fits.gz' % (brick)))
 
         elif filetype in ['maskbits']:
-            return swap(os.path.join(basedir, 'metrics', brickpre,
-                                     'maskbits-%s.fits.gz' % (brick)))
+            return swap(os.path.join(codir,
+                                     '%s-%s-%s.fits.gz' % (sname, brick, filetype)))
 
         elif filetype in ['all-models']:
             return swap(os.path.join(basedir, 'metrics', brickpre,
