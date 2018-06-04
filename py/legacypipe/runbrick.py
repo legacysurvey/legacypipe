@@ -2492,7 +2492,15 @@ def stage_wise_forced(
     WISE = None
     if len(phots):
         WISE = phots[0]
+
+    wise_mask_map = None
     if WISE is not None:
+        # While we're here, we'll resample the WISE masks into brick space, for later
+        # packing into the maskbits data product.
+        # Bit 0: OR of the W1 bits
+        # Bit 1: OR of the W2 bits
+        wise_mask_map = np.zeros((H,W), np.uint8)
+
         for i,p in enumerate(phots[1:len(args)]):
             if p is None:
                 (wcat,tiles,band) = args[i+1][:3]
@@ -2507,6 +2515,7 @@ def stage_wise_forced(
         WISE.wise_mask = np.zeros((len(T), 4), np.uint8)
         for tile in tiles.coadd_id:
             from astrometry.util.util import Tan
+            from astrometry.util.resample import resample_with_wcs, OverlapError
             # unwise_dir can be a colon-separated list of paths
             found = False
             for d in unwise_dir.split(':'):
@@ -2532,6 +2541,24 @@ def stage_wise_forced(
             yy = np.round(yy - 1).astype(int)
             I = np.flatnonzero(ok * (xx >= 0)*(xx < ww) * (yy >= 0)*(yy < hh))
             print(len(I), 'sources are within tile', tile)
+
+            try:
+                Yo,Xo,Yi,Xi,nil = resample_with_wcs(targetwcs, wcs)
+                maskvals = M[Yi,Xi]
+                # W1
+                K, = np.nonzero(maskvals & 3)
+                if len(K):
+                    print('Setting', len(K), 'W1 mask bits from tile', tile)
+                    wise_mask_map[Yo[K],Xo[K]] |= 1
+                # W2
+                K, = np.nonzero(maskvals & (3 << 2))
+                if len(K):
+                    print('Setting', len(K), 'W2 mask bits from tile', tile)
+                    wise_mask_map[Yo[K],Xo[K]] |= 2
+            except OverlapError:
+                print('No overlap between WISE tile', tile, 'and brick')
+                pass
+
             if len(I) == 0:
                 continue
             # Reference the mask image M at yy,xx indices
@@ -2571,7 +2598,7 @@ def stage_wise_forced(
     print('Returning: WISE', WISE)
     print('Returning: WISE_T', WISE_T)
 
-    return dict(WISE=WISE, WISE_T=WISE_T)
+    return dict(WISE=WISE, WISE_T=WISE_T, wise_mask_map=wise_mask_map)
 
 def _unwise_phot(X):
     from wise.forcedphot import unwise_forcedphot
