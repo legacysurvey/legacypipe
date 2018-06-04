@@ -1276,11 +1276,11 @@ def stage_srcs(targetrd=None, pixscale=None, targetwcs=None,
             plt.plot(sat.ibx, sat.iby, '+', color='r',
                      label='Saturated', **crossa)
         if len(refstars):
-            I = np.flatnonzero([r[0] == 'T' for r in refstars.ref_cat])
+            I, = np.nonzero([r[0] == 'T' for r in refstars.ref_cat])
             if len(I):
                 plt.plot(refstars.ibx[I], refstars.iby[I], '+', color=(0,1,1),
                          label='Tycho-2', **crossa)
-            I = np.flatnonzero([r[0] == 'G' for r in refstars.ref_cat])
+            I, = np.nonzero([r[0] == 'G' for r in refstars.ref_cat])
             if len(I):
                 plt.plot(refstars.ibx[I], refstars.iby[I], '+',
                          color=(0.2,0.2,1), label='Gaia', **crossa)
@@ -1289,6 +1289,15 @@ def stage_srcs(targetrd=None, pixscale=None, targetwcs=None,
         plt.axis(ax)
         plt.title('Detections')
         plt.legend(loc='upper left')
+        ps.savefig()
+
+        plt.clf()
+        plt.subplot(1,2,1)
+        dimshow(hot, vmin=0, vmax=1, cmap='hot')
+        plt.title('hot')
+        plt.subplot(1,2,2)
+        dimshow(saturated_pix, vmin=0, vmax=1, cmap='hot')
+        plt.title('saturated_pix')
         ps.savefig()
 
     # Segment, and record which sources fall into each blob
