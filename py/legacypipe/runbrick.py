@@ -2193,28 +2193,31 @@ def stage_coadds(survey=None, bands=None, version_header=None, targetwcs=None,
             print('Wrote', out.fn)
         del rgb
 
-    maskbits = np.zeros((H,W), np.uint8)
+    maskbits = np.zeros((H,W), np.int16)
 
+    # !PRIMARY
     if custom_brick:
         U = None
     else:
         U = find_unique_pixels(targetwcs, W, H, None,
                                brick.ra1, brick.ra2, brick.dec1, brick.dec2)
-        maskbits += 1 * np.logical_not(U).astype(np.uint8)
+        maskbits += 1 * np.logical_not(U).astype(np.int16)
         del U
 
-
+    # BRIGHT
     if brightblobmask is not None:
         maskbits += 2 * brightblobmask
 
+    # SATUR
     if saturated_pix is not None:
-        maskbits += 4 * saturated_pix.astype(np.uint8)
+        maskbits += 4 * saturated_pix.astype(np.int16)
 
+    # ALLMASK_{g,r,z}
     allmaskvals = dict(g=8, r=0x10, z=0x20)
     for b,allmask in zip(bands, C.allmasks):
         if not b in allmaskvals:
             continue
-        maskbits += allmaskvals[b]* (allmask > 0).astype(np.uint8)
+        maskbits += allmaskvals[b]* (allmask > 0).astype(np.int16)
 
     # copy version_header before modifying it.
     hdr = fitsio.FITSHDR()
