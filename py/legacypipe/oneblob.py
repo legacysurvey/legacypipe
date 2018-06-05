@@ -259,6 +259,9 @@ class OneBlob(object):
             nsrcparams = src.numberOfParams()
             _convert_ellipses(src)
             assert(src.numberOfParams() == nsrcparams)
+            # print('Computing variances for source', src, ': N params:', nsrcparams)
+            # print('Source params:')
+            # src.printThawedParams()
             # For Gaia sources, temporarily convert the GaiaPosition to a
             # RaDecPos in order to compute the invvar it would have in our
             # imaging?  Or just plug in the Gaia-measured uncertainties??
@@ -267,6 +270,7 @@ class OneBlob(object):
             allderivs = tr.getDerivs()
             ivars = _compute_invvars(allderivs)
             assert(len(ivars) == nsrcparams)
+            #print('Inverse-variances:', ivars)
             B.srcinvvars[isub] = ivars
             assert(len(B.srcinvvars[isub]) == cat[isub].numberOfParams())
             cat.freezeParam(isub)
@@ -274,8 +278,8 @@ class OneBlob(object):
         # Check for sources with zero inverse-variance -- I think these
         # can be generated during the "Simultaneous re-opt" stage above --
         # sources can get scattered outside the blob.
-        # Arbitrarily look at the first element (RA) for this cut.
-        I = np.flatnonzero(np.array([iv[0] for iv in B.srcinvvars]))
+
+        I, = np.nonzero([np.sum(iv) > 0 for iv in B.srcinvvars])
         if len(I) < len(B):
             print('Keeping', len(I), 'of', len(B),'sources with non-zero ivar')
             B.cut(I)
