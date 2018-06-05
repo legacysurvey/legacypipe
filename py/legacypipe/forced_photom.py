@@ -55,7 +55,11 @@ def get_parser():
                         help='Set inverse-variance to a constant across the image?')
 
     parser.add_argument('--no-hybrid-psf', dest='hybrid_psf', action='store_false',
+                        default=True,
                         help='Do not use hybrid pixelized-MoG PSF model?')
+    parser.add_argument('--no-normalize-psf', dest='normalize_psf', action='store_false',
+                        default=True,
+                        help='Do not normalize PSF?')
     
     parser.add_argument('--save-model',
                         help='Compute and save model image?')
@@ -170,7 +174,8 @@ def main(survey=None, opt=None):
 
     tim = im.get_tractor_image(slc=zoomslice, pixPsf=True, splinesky=True,
                                constant_invvar=opt.constant_invvar,
-                               hybridPsf=opt.hybrid_psf)
+                               hybridPsf=opt.hybrid_psf,
+                               normalizePsf=opt.normalize_psf)
     print('Got tim:', tim)
 
     print('Read image:', Time()-t0)
