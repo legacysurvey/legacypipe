@@ -1246,6 +1246,7 @@ def stage_srcs(targetrd=None, pixscale=None, targetwcs=None,
         plt.axis(ax)
         plt.title('detmaps & saturated')
         ps.savefig()
+    del satmap
 
     # SED-matched detections
     record_event and record_event('stage_srcs: SED-matched')
@@ -1296,11 +1297,11 @@ def stage_srcs(targetrd=None, pixscale=None, targetwcs=None,
             plt.plot(sat.ibx, sat.iby, '+', color='r',
                      label='Saturated', **crossa)
         if len(refstars):
-            I = np.flatnonzero([r[0] == 'T' for r in refstars.ref_cat])
+            I, = np.nonzero([r[0] == 'T' for r in refstars.ref_cat])
             if len(I):
                 plt.plot(refstars.ibx[I], refstars.iby[I], '+', color=(0,1,1),
                          label='Tycho-2', **crossa)
-            I = np.flatnonzero([r[0] == 'G' for r in refstars.ref_cat])
+            I, = np.nonzero([r[0] == 'G' for r in refstars.ref_cat])
             if len(I):
                 plt.plot(refstars.ibx[I], refstars.iby[I], '+',
                          color=(0.2,0.2,1), label='Gaia', **crossa)
@@ -1311,9 +1312,18 @@ def stage_srcs(targetrd=None, pixscale=None, targetwcs=None,
         plt.legend(loc='upper left')
         ps.savefig()
 
+        plt.clf()
+        plt.subplot(1,2,1)
+        dimshow(hot, vmin=0, vmax=1, cmap='hot')
+        plt.title('hot')
+        plt.subplot(1,2,2)
+        dimshow(saturated_pix, vmin=0, vmax=1, cmap='hot')
+        plt.title('saturated_pix')
+        ps.savefig()
+
     # Segment, and record which sources fall into each blob
     blobs,blobsrcs,blobslices = segment_and_group_sources(
-        hot, T, name=brickname, ps=ps, plots=plots)
+        np.logical_or(hot, saturated_pix), T, name=brickname, ps=ps, plots=plots)
     del hot
 
     tnow = Time()
@@ -1321,7 +1331,7 @@ def stage_srcs(targetrd=None, pixscale=None, targetwcs=None,
     tlast = tnow
 
     keys = ['T', 'tims', 'blobsrcs', 'blobslices', 'blobs', 'cat',
-            'ps', 'refstars', 'gaia_stars']
+            'ps', 'refstars', 'gaia_stars', 'saturated_pix']
     L = locals()
     rtn = dict([(k,L[k]) for k in keys])
     return rtn
@@ -1809,6 +1819,17 @@ def stage_fitblobs(T=None,
         with survey.write_output('blobmap', brick=brickname) as out:
             out.fits.write(blobs, header=hdr)
     del iblob, oldblob
+
+    # Write out a mask of pixels that share a blob with a bright star,
+    # ie, pixels that would get *brightstarinblob* set if they
+    # contained a source.
+    brightblobs = np.unique(blobs[brightstars.iby, brightstars.ibx])
+    print('Blobs containing bright stars:', brightblobs)
+    bbmap = np.zeros(blobs.max()+2, np.uint8)
+    bbmap[brightblobs+1] = 1
+    brightblobmask = bbmap[blobs+1]
+    del brightblobs, bbmap
+
     # Comment this out if you need to save the 'blobs' map for later (eg, sky fibers)
     blobs = None
 
@@ -1848,7 +1869,7 @@ def stage_fitblobs(T=None,
                 TT.writeto(None, fits_object=out.fits, header=hdr,
                            primheader=primhdr)
 
-    keys = ['cat', 'invvars', 'T', 'blobs']
+    keys = ['cat', 'invvars', 'T', 'blobs', 'brightblobmask']
     if get_all_models:
         keys.append('all_models')
     L = locals()
@@ -2079,8 +2100,11 @@ def _get_mod(X):
 
 def stage_coadds(survey=None, bands=None, version_header=None, targetwcs=None,
                  tims=None, ps=None, brickname=None, ccds=None,
+                 custom_brick=False,
                  T=None, cat=None, pixscale=None, plots=False,
                  coadd_bw=False, brick=None, W=None, H=None, lanczos=True,
+                 saturated_pix=None,
+                 brightblobmask=None,
                  mp=None,
                  record_event=None,
                  **kwargs):
@@ -2135,7 +2159,8 @@ def stage_coadds(survey=None, bands=None, version_header=None, targetwcs=None,
 
     record_event and record_event('stage_coadds: coadds')
     C = make_coadds(tims, bands, targetwcs, mods=mods, xy=ixy,
-                    ngood=True, detmaps=True, psfsize=True, lanczos=lanczos,
+                    ngood=True, detmaps=True, psfsize=True, allmasks=True,
+                    lanczos=lanczos,
                     apertures=apertures, apxy=apxy,
                     callback=write_coadd_images,
                     callback_args=(survey, brickname, version_header, tims,
@@ -2188,6 +2213,61 @@ def stage_coadds(survey=None, bands=None, version_header=None, targetwcs=None,
             imsave_jpeg(out.fn, rgb, origin='lower', **kwa)
             print('Wrote', out.fn)
         del rgb
+
+    maskbits = np.zeros((H,W), np.int16)
+
+    # !PRIMARY
+    if custom_brick:
+        U = None
+    else:
+        U = find_unique_pixels(targetwcs, W, H, None,
+                               brick.ra1, brick.ra2, brick.dec1, brick.dec2)
+        maskbits += 1 * np.logical_not(U).astype(np.int16)
+        del U
+
+    # BRIGHT
+    if brightblobmask is not None:
+        maskbits += 2 * brightblobmask
+
+    # SATUR
+    if saturated_pix is not None:
+        maskbits += 4 * saturated_pix.astype(np.int16)
+
+    # ALLMASK_{g,r,z}
+    allmaskvals = dict(g=8, r=0x10, z=0x20)
+    for b,allmask in zip(bands, C.allmasks):
+        if not b in allmaskvals:
+            continue
+        maskbits += allmaskvals[b]* (allmask > 0).astype(np.int16)
+
+    # copy version_header before modifying it.
+    hdr = fitsio.FITSHDR()
+    for r in version_header.records():
+        hdr.add_record(r)
+    # Plug the WCS header cards into these images
+    targetwcs.add_to_header(hdr)
+    hdr.add_record(dict(name='EQUINOX', value=2000.))
+    hdr.delete('IMAGEW')
+    hdr.delete('IMAGEH')
+    hdr.add_record(dict(name='IMTYPE', value='maskbits',
+                        comment='LegacySurvey image type'))
+    # NOTE that we pass the "maskbits" and "maskbits_header" variables
+    # on to later stages, because we will add in the WISE mask planes
+    # later (and write the result in the writecat stage. THEREFORE, if
+    # you make changes to the bit mappings here, you MUST also adjust
+    # the header values (and bit mappings for the WISE masks) in
+    # stage_writecat.
+    hdr.add_record(dict(name='NPRIMARY', value=1,
+                        comment='Mask value for non-primary brick area'))
+    hdr.add_record(dict(name='BRIGHT', value=2,
+                        comment='Mask value for bright star in blob'))
+    hdr.add_record(dict(name='SATUR', value=4,
+                        comment='Mask value for saturated (& nearby) pixels'))
+    keys = sorted(allmaskvals.keys())
+    for b in keys:
+        hdr.add_record(dict(name='ALLM_%s' % b, value=allmaskvals[b],
+                            comment='Mask value for ALLMASK band %s' % b))
+    maskbits_header = hdr
 
     if plots:
         plt.clf()
@@ -2258,7 +2338,9 @@ def stage_coadds(survey=None, bands=None, version_header=None, targetwcs=None,
     tnow = Time()
     print('[serial coadds] Aperture photometry, wrap-up', tnow-tlast)
     return dict(T=T, AP=C.AP, apertures_pix=apertures,
-                apertures_arcsec=apertures_arcsec)
+                apertures_arcsec=apertures_arcsec,
+                maskbits=maskbits,
+                maskbits_header=maskbits_header)
 
 def _depth_histogram(brick, targetwcs, bands, detivs, galdetivs):
     # Compute the brick's unique pixels.
@@ -2357,17 +2439,16 @@ def stage_wise_forced(
     eargs = []
     if unwise_tr_dir is not None:
         tdir = unwise_tr_dir
-        W = fits_table(os.path.join(tdir, 'time_resolved_atlas.fits'))
-        print('Read', len(W), 'time-resolved WISE coadd tiles')
-        W.cut(np.array([t in tiles.coadd_id for t in W.coadd_id]))
-        print('Cut to', len(W), 'time-resolved vs', len(tiles), 'full-depth')
-        assert(len(W) == len(tiles))
+        TR = fits_table(os.path.join(tdir, 'time_resolved_atlas.fits'))
+        print('Read', len(TR), 'time-resolved WISE coadd tiles')
+        TR.cut(np.array([t in tiles.coadd_id for t in TR.coadd_id]))
+        print('Cut to', len(TR), 'time-resolved vs', len(tiles), 'full-depth')
+        assert(len(TR) == len(tiles))
         # How big do we need to make the WISE time-resolved arrays?
-        print('W epoch_bitmask:', W.epoch_bitmask)
-        #Nepochs = max(np.atleast_1d(np.count_nonzero(W.epoch_bitmask, axis=1)))
+        print('TR epoch_bitmask:', TR.epoch_bitmask)
         # axis= arg to np.count_nonzero is new in numpy 1.12
-        Nepochs = max(np.atleast_1d([np.count_nonzero(e) for e in W.epoch_bitmask]))
-        nil,ne = W.epoch_bitmask.shape
+        Nepochs = max(np.atleast_1d([np.count_nonzero(e) for e in TR.epoch_bitmask]))
+        nil,ne = TR.epoch_bitmask.shape
         print('Max number of epochs for these tiles:', Nepochs)
         print('epoch bitmask length:', ne)
         # Add time-resolved coadds
@@ -2378,13 +2459,13 @@ def stage_wise_forced(
             # necessarily aligned for the set of overlapping tiles.  We will align the
             # non-zero epochs of the tiles.  This may require creating a temp directory
             # and symlink farm for cases where the non-zero epochs are not aligned
-            # (eg, brick 2437p425 vs coadds 2426p424 & 2447p424 in NEO-2.
+            # (eg, brick 2437p425 vs coadds 2426p424 & 2447p424 in NEO-2).
 
             # find the non-zero epochs for each overlapping tile
-            epochs = np.empty((len(W), Nepochs), int)
+            epochs = np.empty((len(TR), Nepochs), int)
             epochs[:,:] = -1
-            for i in range(len(W)):
-                ei = np.flatnonzero(W.epoch_bitmask[i,:] & bitmask)
+            for i in range(len(TR)):
+                ei = np.flatnonzero(TR.epoch_bitmask[i,:] & bitmask)
                 epochs[i,:len(ei)] = ei
 
             for ie in range(Nepochs):
@@ -2392,12 +2473,12 @@ def stage_wise_forced(
                 I = np.flatnonzero(epochs[:,ie] >= 0)
                 if len(I) == 0:
                     continue
-                print('Epoch index %i: %i tiles:' % (ie, len(I)), W.coadd_id[I],
+                print('Epoch index %i: %i tiles:' % (ie, len(I)), TR.coadd_id[I],
                       'epoch numbers', epochs[I,ie])
                 eps = np.unique(epochs[I,ie])
                 if len(eps) == 1:
                     edir = os.path.join(tdir, 'e%03i' % eps[0])
-                    eargs.append((ie,(wcat, W[I], band, roiradec, edir,
+                    eargs.append((ie,(wcat, TR[I], band, roiradec, edir,
                                          wise_ceres, broadening[band])))
                 else:
                     import tempfile
@@ -2409,7 +2490,7 @@ def stage_wise_forced(
                     dirname = td.name
                     # Assume UNWISE_COADDS_TIMERESOLVED_DIR is a
                     # single dir (not colon-separated list).
-                    for tile,ep in zip(W[I], epochs[I,ie]):
+                    for tile,ep in zip(TR[I], epochs[I,ie]):
                         tiledir = os.path.join(tdir, 'e%03i' % ep, tile.coadd_id[:3], tile.coadd_id)
                         destdir = os.path.join(dirname, tile.coadd_id[:3])
                         if not os.path.exists(destdir):
@@ -2420,7 +2501,7 @@ def stage_wise_forced(
                         dest = os.path.join(destdir, tile.coadd_id)
                         print('Creating symlink', dest, '->', tiledir)
                         os.symlink(tiledir, dest, target_is_directory=True)
-                    eargs.append((ie,(wcat, W[I], band, roiradec, dirname,
+                    eargs.append((ie,(wcat, TR[I], band, roiradec, dirname,
                                       wise_ceres, broadening[band])))
 
     # Run the forced photometry!
@@ -2432,7 +2513,15 @@ def stage_wise_forced(
     WISE = None
     if len(phots):
         WISE = phots[0]
+
+    wise_mask_map = None
     if WISE is not None:
+        # While we're here, we'll resample the WISE masks into brick space, for later
+        # packing into the maskbits data product.
+        # Bit 0: OR of the W1 bits
+        # Bit 1: OR of the W2 bits
+        wise_mask_map = np.zeros((H,W), np.uint8)
+
         for i,p in enumerate(phots[1:len(args)]):
             if p is None:
                 (wcat,tiles,band) = args[i+1][:3]
@@ -2447,6 +2536,7 @@ def stage_wise_forced(
         WISE.wise_mask = np.zeros((len(T), 4), np.uint8)
         for tile in tiles.coadd_id:
             from astrometry.util.util import Tan
+            from astrometry.util.resample import resample_with_wcs, OverlapError
             # unwise_dir can be a colon-separated list of paths
             found = False
             for d in unwise_dir.split(':'):
@@ -2472,15 +2562,36 @@ def stage_wise_forced(
             yy = np.round(yy - 1).astype(int)
             I = np.flatnonzero(ok * (xx >= 0)*(xx < ww) * (yy >= 0)*(yy < hh))
             print(len(I), 'sources are within tile', tile)
+
+            try:
+                Yo,Xo,Yi,Xi,nil = resample_with_wcs(targetwcs, wcs)
+                maskvals = M[Yi,Xi]
+                # W1
+                K, = np.nonzero(maskvals & 3)
+                if len(K):
+                    print('Setting', len(K), 'W1 mask bits from tile', tile)
+                    wise_mask_map[Yo[K],Xo[K]] |= 1
+                # W2
+                K, = np.nonzero(maskvals & (3 << 2))
+                if len(K):
+                    print('Setting', len(K), 'W2 mask bits from tile', tile)
+                    wise_mask_map[Yo[K],Xo[K]] |= 2
+            except OverlapError:
+                print('No overlap between WISE tile', tile, 'and brick')
+                pass
+
             if len(I) == 0:
                 continue
             # Reference the mask image M at yy,xx indices
             Mi = M[yy[I], xx[I]]
             # unpack mask bits
-            for band in [1,2,3,4]:
-                sd1 = (np.bitwise_and(Mi, 2**(2*(band-1)  )) != 0).astype(int)
-                sd2 = (np.bitwise_and(Mi, 2**(2*(band-1)+1)) != 0).astype(int)
-                WISE.wise_mask[I, band-1] = sd1 + 2*sd2
+            # The WISE mask files have:
+            #  bit 0: W1 bright star, south-going scan
+            #  bit 1: W1 bright star, north-going scan
+            #  bit 2: W2 bright star, south-going scan
+            #  bit 3: W2 bright star, north-going scan
+            WISE.wise_mask[I, 0] = ( Mi       & 3)
+            WISE.wise_mask[I, 1] = ((Mi >> 2) & 3)
 
     # Unpack time-resolved results...
     WISE_T = None
@@ -2508,7 +2619,7 @@ def stage_wise_forced(
     print('Returning: WISE', WISE)
     print('Returning: WISE_T', WISE_T)
 
-    return dict(WISE=WISE, WISE_T=WISE_T)
+    return dict(WISE=WISE, WISE_T=WISE_T, wise_mask_map=wise_mask_map)
 
 def _unwise_phot(X):
     from wise.forcedphot import unwise_forcedphot
@@ -2537,6 +2648,9 @@ def stage_writecat(
     T=None,
     WISE=None,
     WISE_T=None,
+    maskbits=None,
+    maskbits_header=None,
+    wise_mask_map=None,
     AP=None,
     apertures_arcsec=None,
     cat=None, pixscale=None, targetwcs=None,
@@ -2558,6 +2672,41 @@ def stage_writecat(
     from legacypipe.catalog import prepare_fits_catalog
 
     record_event and record_event('stage_writecat: starting')
+
+    if maskbits is not None:
+        if wise_mask_map is not None:
+            # Add it in!
+            maskbits += 0x40 * ((wise_mask_map & 1) != 0)
+            maskbits += 0x80 * ((wise_mask_map & 2) != 0)
+
+        hdr = maskbits_header
+        if hdr is not None:
+            hdr.add_record(dict(name='WISEM1', value=0x40,
+                                comment='Mask value for WISE W1 bright-star'))
+            hdr.add_record(dict(name='WISEM2', value=0x80,
+                                comment='Mask value for WISE W2 bright-star'))
+
+        hdr.add_record(dict(name='BITNM0', value='NPRIMARY',
+                            comment='maskbits bit 0: not-brick-primary'))
+        hdr.add_record(dict(name='BITNM1', value='BRIGHT',
+                            comment='maskbits bit 1: bright star in blob'))
+        hdr.add_record(dict(name='BITNM2', value='SATUR',
+                            comment='maskbits bit 2: saturated + margin'))
+        hdr.add_record(dict(name='BITNM3', value='ALLMASK_G',
+                            comment='maskbits bit 3: any ALLMASK_G bit set'))
+        hdr.add_record(dict(name='BITNM4', value='ALLMASK_R',
+                            comment='maskbits bit 4: any ALLMASK_R bit set'))
+        hdr.add_record(dict(name='BITNM5', value='ALLMASK_Z',
+                            comment='maskbits bit 5: any ALLMASK_Z bit set'))
+        hdr.add_record(dict(name='BITNM6', value='WISEM1',
+                            comment='maskbits bit 6: WISE W1 bright star mask'))
+        hdr.add_record(dict(name='BITNM7', value='WISEM2',
+                            comment='maskbits bit 7: WISE W2 bright star mask'))
+
+        with survey.write_output('maskbits', brick=brickname) as out:
+            out.fits.write(maskbits, header=hdr)
+        del maskbits
+        del wise_mask_map
 
     TT = T.copy()
     for k in ['ibx','iby']:
