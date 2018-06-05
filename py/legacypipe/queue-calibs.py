@@ -126,6 +126,8 @@ def main():
 
     parser.add_argument('--nccds', action='store_true', default=False, help='Prints number of CCDs per brick')
 
+    parser.add_argument('--bands', default='g,r,z', help='Set bands to keep')
+
 
     opt = parser.parse_args()
 
@@ -156,7 +158,7 @@ def main():
             T.cut(T.ccd_cuts == 0)
             print(len(T), 'CCDs survive cuts')
 
-    bands = 'grz'
+    bands = opt.bands.split(',')
     log('Filters:', np.unique(T.filter))
     T.cut(np.flatnonzero(np.array([f in bands for f in T.filter])))
     log('Cut to', len(T), 'CCDs in filters', bands)
@@ -624,11 +626,14 @@ def main():
                                  'forced-%s-%s-%s.fits' %
                                  (T.camera[i].strip(), expstr, T.ccdname[i]))
 
-            f.write('python legacypipe/forced_photom_decam.py --hybrid-psf --apphot --constant-invvar %i %s DR3 forced/vanilla/%s\n' %
-                    (T.expnum[i], T.ccdname[i], outfn))
-            f.write('python legacypipe/forced_photom_decam.py --hybrid-psf --derivs --constant-invvar %i %s DR3 forced/derivs/%s\n' %
-                    (T.expnum[i], T.ccdname[i], outfn))
-            f.write('python legacypipe/forced_photom_decam.py --hybrid-psf --agn --constant-invvar %i %s DR3 forced/agn/%s\n' %
+            # f.write('python legacypipe/forced_photom_decam.py --hybrid-psf --apphot --constant-invvar %i %s DR3 forced/vanilla/%s\n' %
+            #         (T.expnum[i], T.ccdname[i], outfn))
+            # f.write('python legacypipe/forced_photom_decam.py --hybrid-psf --derivs --constant-invvar %i %s DR3 forced/derivs/%s\n' %
+            #         (T.expnum[i], T.ccdname[i], outfn))
+            # f.write('python legacypipe/forced_photom_decam.py --hybrid-psf --agn --constant-invvar %i %s DR3 forced/agn/%s\n' %
+            #         (T.expnum[i], T.ccdname[i], outfn))
+
+            f.write('python legacypipe/forced_photom.py --apphot --catalog-dir /project/projectdirs/cosmo/data/legacysurvey/dr6/ %i %s DR forced/%s\n' %
                     (T.expnum[i], T.ccdname[i], outfn))
             
         f.close()
