@@ -3332,8 +3332,6 @@ python -u legacypipe/runbrick.py --plots --brick 2440p070 --zoom 1900 2400 450 9
         '--zoom', type=int, nargs=4,
         help='Set target image extent (default "0 3600 0 3600")')
 
-    #parser.add_argument('--no-ceres', dest='ceres', default=True,
-    #                    action='store_false', help='Do not use Ceres Solver')
     parser.add_argument('--ceres', default=False, action='store_true',
                         help='Use Ceres Solver for all optimization?')
 
@@ -3405,9 +3403,9 @@ python -u legacypipe/runbrick.py --plots --brick 2440p070 --zoom 1900 2400 450 9
                         action='store_false',
                         help="Don't use a hybrid pixelized/Gaussian PSF model")
     
-    parser.add_argument('--normalize-psf', dest='normalizePsf', default=False,
-                        action='store_true',
-                        help='Normalize the PSF model to unix flux')
+    parser.add_argument('--no-normalize-psf', dest='normalizePsf', default=True,
+                        action='store_false',
+                        help='Do not normalize the PSF model to unix flux')
 
     parser.add_argument('--apodize', default=False, action='store_true',
                         help='Apodize image edges for prettier pictures?')
@@ -3425,8 +3423,9 @@ python -u legacypipe/runbrick.py --plots --brick 2440p070 --zoom 1900 2400 450 9
     parser.add_argument('--depth-cut', default=False, action='store_true',
                         help='Cut to the set of CCDs required to reach our depth target')
 
-    parser.add_argument('--gaia', dest='gaia_stars', default=False, action='store_true',
-                        help='Use Gaia sources as fixed stars')
+    parser.add_argument('--no-gaia', dest='gaia_stars', default=True,
+                        action='store_false',
+                        help="Don't use Gaia sources as fixed stars")
 
     parser.add_argument('--min-mjd', type=float,
                         help='Only keep images taken after the given MJD')

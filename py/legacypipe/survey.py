@@ -475,7 +475,7 @@ def get_rgb(imgs, bands, mnmx=None, arcsinh=None, scales=None,
     *imgs*  a list of numpy arrays, all the same size, in nanomaggies
     *bands* a list of strings, eg, ['g','r','z']
     *mnmx*  = (min,max), values that will become black/white *after* scaling.
-        Default is (-3,10)
+    Default is (-3,10)
     *arcsinh* use nonlinear scaling as in SDSS
     *scales*
 
