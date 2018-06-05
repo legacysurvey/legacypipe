@@ -27,6 +27,7 @@ if __name__ == '__main__':
     matplotlib.use('Agg')
 import sys
 import os
+from functools import reduce
 
 import pylab as plt
 import numpy as np
@@ -1115,7 +1116,7 @@ def stage_srcs(targetrd=None, pixscale=None, targetwcs=None,
     record_event and record_event('stage_srcs: detection maps')
 
     print('Rendering detection maps...')
-    detmaps, detivs, satmap = detection_maps(tims, targetwcs, bands, mp)
+    detmaps, detivs, satmaps = detection_maps(tims, targetwcs, bands, mp)
     tnow = Time()
     print('[parallel srcs] Detmaps:', tnow-tlast)
     tlast = tnow
@@ -1137,9 +1138,10 @@ def stage_srcs(targetrd=None, pixscale=None, targetwcs=None,
                 sh,sw = detmap[ii::S, jj::S].shape
                 detmap[ii::S, jj::S] -= smoo[:sh,:sw]
 
-    # Handle the margin of interpolated (masked) pixels around
-    # saturated pixels
-    saturated_pix = binary_dilation(satmap > 0, iterations=10)
+    # Expand the mask around saturated pixels to avoid generating
+    # peaks at the edge of the mask.
+    saturated_pix = [binary_dilation(satmap > 0, iterations=4)
+                     for satmap in satmaps]
     
     # Read Tycho-2 stars and use as saturated sources.
     tycho = read_tycho2(survey, targetwcs)
@@ -1176,13 +1178,14 @@ def stage_srcs(targetrd=None, pixscale=None, targetwcs=None,
     avoid_x = refstars.ibx
     avoid_y = refstars.iby
         
-    # Create Tractor sources
+    # Create Tractor sources from reference stars
     refstarcat = [GaiaSource.from_catalog(g, bands) for g in refstars]
 
     # FIXME - Initialize a big-galaxy catalog here--?
 
     # Saturated blobs -- create a source for each, except for those
     # that already have a Tycho-2 or Gaia star
+    satmap = reduce(np.logical_or, satmaps)
     satblobs,nsat = label(satmap > 0)
     if len(refstars):
         # Build a map from old "satblobs" to new; identity to start
@@ -1209,13 +1212,12 @@ def stage_srcs(targetrd=None, pixscale=None, targetwcs=None,
         print('Adding', len(sat), 'additional saturated stars')
         # MAGIC mag for a saturated star
         sat.mag = np.zeros(len(sat), np.float32) + 15.
-        #Tsat.ref_cat = np.array(['  ']*len(Tsat))
-        del satyx
         sat.ref_cat = np.array(['  '] * len(sat))
+        del satyx
         
         avoid_x = np.append(avoid_x, sat.ibx)
         avoid_y = np.append(avoid_y, sat.iby)
-        # Create catalog entries...
+        # Create catalog entries for saturated blobs
         for r,d,m in zip(sat.ra, sat.dec, sat.mag):
             fluxes = dict([(band, NanoMaggies.magToNanomaggies(m))
                            for band in bands])
@@ -1235,9 +1237,8 @@ def stage_srcs(targetrd=None, pixscale=None, targetwcs=None,
         plt.title('detmaps')
         ps.savefig()
 
-        rgb[:,:,0][saturated_pix] = 0
-        rgb[:,:,1][saturated_pix] = 1
-        rgb[:,:,2][saturated_pix] = 0
+        for i,satpix in enumerate(saturated_pix):
+            rgb[:,:,2-i][satpix] = 1
         plt.clf()
         dimshow(rgb)
         ax = plt.axis()
@@ -1317,13 +1318,17 @@ def stage_srcs(targetrd=None, pixscale=None, targetwcs=None,
         dimshow(hot, vmin=0, vmax=1, cmap='hot')
         plt.title('hot')
         plt.subplot(1,2,2)
-        dimshow(saturated_pix, vmin=0, vmax=1, cmap='hot')
+        rgb = np.zeros((H,W,3))
+        for i,satpix in enumerate(saturated_pix):
+            rgb[:,:,2-i] = satpix
+        dimshow(rgb)
         plt.title('saturated_pix')
         ps.savefig()
 
     # Segment, and record which sources fall into each blob
     blobs,blobsrcs,blobslices = segment_and_group_sources(
-        np.logical_or(hot, saturated_pix), T, name=brickname, ps=ps, plots=plots)
+        np.logical_or(hot, reduce(np.logical_or, saturated_pix)),
+        T, name=brickname, ps=ps, plots=plots)
     del hot
 
     tnow = Time()
@@ -2230,11 +2235,13 @@ def stage_coadds(survey=None, bands=None, version_header=None, targetwcs=None,
         maskbits += 2 * brightblobmask
 
     # SATUR
+    saturvals = dict(g=4, r=8, z=0x10)
     if saturated_pix is not None:
-        maskbits += 4 * saturated_pix.astype(np.int16)
+        for b,sat in zip(bands, saturated_pix):
+            maskbits += saturvals[b] * sat.astype(np.int16)
 
     # ALLMASK_{g,r,z}
-    allmaskvals = dict(g=8, r=0x10, z=0x20)
+    allmaskvals = dict(g=0x20, r=0x40, z=0x80)
     for b,allmask in zip(bands, C.allmasks):
         if not b in allmaskvals:
             continue
@@ -2261,8 +2268,10 @@ def stage_coadds(survey=None, bands=None, version_header=None, targetwcs=None,
                         comment='Mask value for non-primary brick area'))
     hdr.add_record(dict(name='BRIGHT', value=2,
                         comment='Mask value for bright star in blob'))
-    hdr.add_record(dict(name='SATUR', value=4,
-                        comment='Mask value for saturated (& nearby) pixels'))
+    keys = sorted(saturvals.keys())
+    for b in keys:
+        hdr.add_record(dict(name='SATUR_%s' % b, value=saturvals[b],
+                            comment='Mask value for saturated (& nearby) pixels in %s band' % b))
     keys = sorted(allmaskvals.keys())
     for b in keys:
         hdr.add_record(dict(name='ALLM_%s' % b, value=allmaskvals[b],
@@ -2674,34 +2683,40 @@ def stage_writecat(
     record_event and record_event('stage_writecat: starting')
 
     if maskbits is not None:
+        w1val = 0x100
+        w2val = 0x200
         if wise_mask_map is not None:
             # Add it in!
-            maskbits += 0x40 * ((wise_mask_map & 1) != 0)
-            maskbits += 0x80 * ((wise_mask_map & 2) != 0)
+            maskbits += w1val * ((wise_mask_map & 1) != 0)
+            maskbits += w2val * ((wise_mask_map & 2) != 0)
 
         hdr = maskbits_header
         if hdr is not None:
-            hdr.add_record(dict(name='WISEM1', value=0x40,
+            hdr.add_record(dict(name='WISEM1', value=w1val,
                                 comment='Mask value for WISE W1 bright-star'))
-            hdr.add_record(dict(name='WISEM2', value=0x80,
+            hdr.add_record(dict(name='WISEM2', value=w2val,
                                 comment='Mask value for WISE W2 bright-star'))
 
         hdr.add_record(dict(name='BITNM0', value='NPRIMARY',
                             comment='maskbits bit 0: not-brick-primary'))
         hdr.add_record(dict(name='BITNM1', value='BRIGHT',
                             comment='maskbits bit 1: bright star in blob'))
-        hdr.add_record(dict(name='BITNM2', value='SATUR',
-                            comment='maskbits bit 2: saturated + margin'))
-        hdr.add_record(dict(name='BITNM3', value='ALLMASK_G',
-                            comment='maskbits bit 3: any ALLMASK_G bit set'))
-        hdr.add_record(dict(name='BITNM4', value='ALLMASK_R',
-                            comment='maskbits bit 4: any ALLMASK_R bit set'))
-        hdr.add_record(dict(name='BITNM5', value='ALLMASK_Z',
-                            comment='maskbits bit 5: any ALLMASK_Z bit set'))
-        hdr.add_record(dict(name='BITNM6', value='WISEM1',
-                            comment='maskbits bit 6: WISE W1 bright star mask'))
-        hdr.add_record(dict(name='BITNM7', value='WISEM2',
-                            comment='maskbits bit 7: WISE W2 bright star mask'))
+        hdr.add_record(dict(name='BITNM2', value='SATUR_G',
+                            comment='maskbits bit 2: g saturated + margin'))
+        hdr.add_record(dict(name='BITNM3', value='SATUR_R',
+                            comment='maskbits bit 3: r saturated + margin'))
+        hdr.add_record(dict(name='BITNM4', value='SATUR_Z',
+                            comment='maskbits bit 4: z saturated + margin'))
+        hdr.add_record(dict(name='BITNM5', value='ALLMASK_G',
+                            comment='maskbits bit 5: any ALLMASK_G bit set'))
+        hdr.add_record(dict(name='BITNM6', value='ALLMASK_R',
+                            comment='maskbits bit 6: any ALLMASK_R bit set'))
+        hdr.add_record(dict(name='BITNM7', value='ALLMASK_Z',
+                            comment='maskbits bit 7: any ALLMASK_Z bit set'))
+        hdr.add_record(dict(name='BITNM8', value='WISEM1',
+                            comment='maskbits bit 8: WISE W1 bright star mask'))
+        hdr.add_record(dict(name='BITNM9', value='WISEM2',
+                            comment='maskbits bit 9: WISE W2 bright star mask'))
 
         with survey.write_output('maskbits', brick=brickname) as out:
             out.fits.write(maskbits, header=hdr)

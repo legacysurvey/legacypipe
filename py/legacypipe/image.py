@@ -96,7 +96,7 @@ class LegacySurveyImage(object):
         self.sig1 = getattr(ccd, 'sig1', None)
 
         # Which Data Quality bits mark saturation?
-        self.dq_saturation_bits = CP_DQ_BITS['satur']
+        self.dq_saturation_bits = CP_DQ_BITS['satur'] | CP_DQ_BITS['bleed']
 
         # Photometric and astrometric zeropoints
         self.ccdzpt = ccd.ccdzpt
