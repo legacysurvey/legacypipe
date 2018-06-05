@@ -15,7 +15,7 @@ if __name__ == '__main__':
 
     extra_args = []
     if travis:
-        extra_args = ['--no-wise-ceres']
+        extra_args = ['--no-wise-ceres --no-gaia']
     
     if 'ceres' in sys.argv:
         surveydir = os.path.join(os.path.dirname(__file__), 'testcase3')
