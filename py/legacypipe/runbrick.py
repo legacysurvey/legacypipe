@@ -1796,6 +1796,8 @@ def stage_fitblobs(T=None,
     del ublob
     assert(len(iblob) == len(T))
     T.blob = iblob.astype(np.int32)
+    # What blob number is not-a-blob?
+    noblob = 0
 
     # write out blob map
     if write_metrics:
@@ -1807,6 +1809,7 @@ def stage_fitblobs(T=None,
         blobmap[0] = -1
         blobmap[oldblob + 1] = iblob
         blobs = blobmap[blobs+1]
+        noblob = -1
         del blobmap
 
         # copy version_header before modifying it.
@@ -1830,6 +1833,8 @@ def stage_fitblobs(T=None,
     # contained a source.
     brightblobs = np.unique(blobs[brightstars.iby, brightstars.ibx])
     print('Blobs containing bright stars:', brightblobs)
+    brightblobs = brightblobs[brightblobs != noblob]
+    print('Blobs containing bright stars (after cutting not-a-blob):', brightblobs)
     bbmap = np.zeros(blobs.max()+2, np.uint8)
     bbmap[brightblobs+1] = 1
     brightblobmask = bbmap[blobs+1]
