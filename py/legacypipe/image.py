@@ -830,13 +830,16 @@ class LegacySurveyImage(object):
         return wcs
 
     def get_sig1(self, **kwargs):
-        if self.sig1 is not None:
-            # CCDs table sig1 is in nanomaggies
-            return self.sig1
-
-        # these sig1 values are in image counts; scale to nanomaggies
+        from tractor.brightness import NanoMaggies
         zpscale = NanoMaggies.zeropointToScale(self.ccdzpt)
 
+        if self.sig1 is not None:
+            # CCDs table sig1 is in nanomaggies
+            #return self.sig1
+            # Oops, nope, the legacyzpts sig1 values are *not*!
+            return self.sig1 / zpscale
+
+        # these sig1 values are in image counts; scale to nanomaggies
         skysig1 = self.get_sky_sig1(**kwargs)
         if skysig1 is None:
             iv = im.read_invvar(**kwargs)

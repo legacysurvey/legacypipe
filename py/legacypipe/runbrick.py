@@ -519,16 +519,12 @@ def stage_tims(W=3600, H=3600, pixscale=0.262, brickname=None,
 
 def make_depth_cut(survey, ccds, bands, targetrd, brick, W, H, pixscale,
                    plots, ps, splinesky, gaussPsf, pixPsf, normalizePsf, do_calibs,
-                   gitver, targetwcs, get_depth_maps=False):
+                   gitver, targetwcs, get_depth_maps=False, margin=0.5):
     from legacypipe.survey import wcs_for_brick
     from collections import Counter
 
     # Add some margin to our DESI depth requirements
-    margin = 0.5
     target_depth_map = dict(g=24.0 + margin, r=23.4 + margin, z=22.5 + margin)
-
-    #target_percentiles = np.array([2, 5, 10])
-    #target_ddepths = np.array([-0.6, -0.3, 0.])
 
     # List extra (redundant) target percentiles so that increasing the depth at
     # any of these percentiles causes the image to be kept.
@@ -609,6 +605,18 @@ def make_depth_cut(survey, ccds, bands, targetrd, brick, W, H, pixscale,
                 plt.plot([x0,x0,x1,x1,x0], [y0,y1,y1,y0,y0], 'b-', alpha=0.5)
             plt.title('CCDs overlapping brick: %i in %s band' % (len(b_inds), band))
             ps.savefig()
+
+            nccds = np.zeros((cH,cW), np.int16)
+            plt.clf()
+            for i in b_inds:
+                nccds[slices[i]] += 1
+            plt.imshow(nccds, interpolation='nearest', origin='lower', vmin=0)
+            plt.colorbar()
+            plt.title('CCDs overlapping brick: %i in %s band (%i / %i / %i)' %
+                      (len(b_inds), band, nccds.min(), np.median(nccds), nccds.max()))
+                
+            ps.savefig()
+            #continue
 
         while len(b_inds):
             if len(try_ccds) == 0:
@@ -704,6 +712,7 @@ def make_depth_cut(survey, ccds, bands, targetrd, brick, W, H, pixscale,
             galmod /= galmod.sum()
             galnorm = np.sqrt(np.sum(galmod**2))
             detiv = 1. / (skysig1 / galnorm)**2
+            print('Galnorm:', galnorm, 'skysig1:', skysig1)
             galdepth = -2.5 * (np.log10(5. * skysig1 / galnorm) - 9.)
             print('Galdepth for this CCD:', galdepth)
 

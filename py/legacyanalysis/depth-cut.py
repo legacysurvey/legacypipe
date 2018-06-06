@@ -37,12 +37,12 @@ def main():
     return
 
     N = len(bricks)
-    args = [(brick, i, N, plots) for i,brick in enumerate(bricks)]
+    args = [(brick, i, N, plots, {}) for i,brick in enumerate(bricks)]
     mp.map(run_one_brick, args)
 
 
 def run_one_brick(X):
-    brick, ibrick, nbricks, plots = X
+    brick, ibrick, nbricks, plots, kwargs = X
 
     survey = LegacySurveyData()
 
@@ -75,13 +75,24 @@ def run_one_brick(X):
     bccds.cut(np.in1d(bccds.filter, bands))
     print('Cut on filter:', len(bccds), 'CCDs remain.')
 
-    I = survey.photometric_ccds(bccds)
-    if I is None:
-        print('None cut')
+    if 'ccd_cuts' in bccds.get_columns():
+        norig = len(bccds)
+        bccds.cut(bccds.ccd_cuts == 0)
+        print(len(bccds), 'of', norig, 'CCDs pass cuts')
     else:
-        print(len(I), 'of', len(bccds), 'CCDs are photometric')
-        bccds.cut(I)
-    if len(I) == 0:
+        print('No CCD cuts')
+
+    # I = survey.photometric_ccds(bccds)
+    # if I is None:
+    #     print('None cut')
+    # else:
+    #     print(len(I), 'of', len(bccds), 'CCDs are photometric')
+    #     bccds.cut(I)
+    # if len(I) == 0:
+    #     print('No CCDs left')
+    #     return 0
+
+    if len(bccds) == 0:
         print('No CCDs left')
         return 0
 
@@ -94,12 +105,13 @@ def run_one_brick(X):
     gaussPsf = False
     pixPsf = True
     do_calibs = False
+    normalizePsf = True
 
     try:
         I,depthmaps = make_depth_cut(
             survey, bccds, bands, targetrd, brick, W, H, pixscale,
-            plots, ps, splinesky, gaussPsf, pixPsf, do_calibs,
-            gitver, targetwcs, get_depth_maps=True)
+            plots, ps, splinesky, gaussPsf, pixPsf, normalizePsf, do_calibs,
+            gitver, targetwcs, get_depth_maps=True, **kwargs)
     except:
         print('Failed to make_depth_cut():')
         import traceback
@@ -143,11 +155,18 @@ if __name__ == '__main__':
 
     import argparse
     parser = argparse.ArgumentParser()
+    parser.add_argument('--margin', type=float, default=None,
+                        help='Set margin, in mags, above the DESI depth requirements.')
     parser.add_argument('--plots', action='store_true', default=False)
     parser.add_argument('bricks', nargs='+')
     args = parser.parse_args()
     plots = args.plots
+    margin = args.margin
     args = args.bricks
+
+    kwargs = {}
+    if margin is not None:
+        kwargs.update(margin=margin)
 
     if len(args) == 1 and args[0] == 'qdo':
         import qdo
@@ -177,7 +196,7 @@ if __name__ == '__main__':
                 print('Getting brick', brickname)
                 brick = survey.get_brick_by_name(brickname)
                 print('Got brick, running depth cut')
-                rtn = run_one_brick((brick, 0, 1, False))
+                rtn = run_one_brick((brick, 0, 1, False, kwargs))
                 if rtn != 0:
                     allgood = rtn
                 print('Done, result', rtn)
@@ -208,7 +227,7 @@ if __name__ == '__main__':
             print('Getting brick', brickname)
             brick = survey.get_brick_by_name(brickname)
             print('Got brick, running depth cut')
-            rtn = run_one_brick((brick, 0, 1, plots))
+            rtn = run_one_brick((brick, 0, 1, plots, kwargs))
             if rtn != 0:
                 allgood = rtn
             print('Done, result', rtn)
