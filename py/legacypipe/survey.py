@@ -1506,6 +1506,8 @@ Now using the current directory as LEGACY_SURVEY_DIR, but this is likely to fail
                     continue
                 # Read only the CCD-table rows within range.
                 TT.append(fits_table(fn, rows=I))
+            if len(TT) == 0:
+                return None
             ccds = merge_tables(TT, columns='fillzero')
             ccds = self.cleanup_ccds_table(ccds)
         else:
