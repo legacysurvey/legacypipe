@@ -420,7 +420,6 @@ def sed_matched_detection(sedname, sed, detmaps, detivs, bands,
     # search within its "allblob", which is defined by the lowest
     # saddle.
     print('Found', len(px), 'potential peaks')
-    #tlast = Time()
     for i,(x,y) in enumerate(zip(px, py)):
         # one plot per peak is a little excessive!
         if False and ps is not None:
@@ -431,10 +430,6 @@ def sed_matched_detection(sedname, sed, detmaps, detivs, bands,
         if vetomap[y,x]:
             #print('  in veto map!')
             continue
-        #t0 = Time()
-        #t1 = Time()
-        #print('Time since last source:', t1-tlast)
-        #tlast = t1
 
         level = saddle_level(sedsn[y,x])
         ablob = allblobs[y,x]
@@ -449,11 +444,8 @@ def sed_matched_detection(sedname, sed, detmaps, detivs, bands,
         if saturated_pix is not None:
             saddlemap |= satur[slc]
         saddlemap *= (allblobs[slc] == ablob)
-        #print('  saddlemap', Time()-tlast)
         saddlemap = binary_fill_holes(saddlemap)
-        #print('  fill holes', Time()-tlast)
         blobs,nblobs = label(saddlemap)
-        #print('  label', Time()-tlast)
         x0,y0 = allx0[index], ally0[index]
         thisblob = blobs[y-y0, x-x0]
 
@@ -477,8 +469,6 @@ def sed_matched_detection(sedname, sed, detmaps, detivs, bands,
         if False and (not cut) and ps is not None:
             _peak_plot_3(sedsn, nsigma, x, y, x0, y0, slc, saddlemap,
                          xomit, yomit, px, py, keep, i, ps)
-        #t1 = Time()
-        #print(t1 - t0)
 
         if cut:
             # in same blob as previously found source.
@@ -504,7 +494,6 @@ def sed_matched_detection(sedname, sed, detmaps, detivs, bands,
         else:
             # fake
             m = -1.
-        #print('  aper', Time()-tlast)
         if cutonaper:
             if sedsn[y,x] - m < nsigma:
                 continue
@@ -553,7 +542,6 @@ def sed_matched_detection(sedname, sed, detmaps, detivs, bands,
         dimshow(vetomap, vmin=0, vmax=1, cmap='hot')
         plt.title('SED %s: veto map' % sedname)
         ps.savefig()
-
 
         plt.clf()
         dimshow(hotblobs, vmin=0, vmax=1, cmap='hot')
