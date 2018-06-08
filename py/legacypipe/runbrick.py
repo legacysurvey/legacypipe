@@ -301,7 +301,7 @@ def stage_tims(W=3600, H=3600, pixscale=0.262, brickname=None,
         # If we have many images, greedily select images until we have
         # reached our target depth
         print('Cutting to CCDs required to hit our depth targets')
-        keep_ccds = make_depth_cut(survey, ccds, bands, targetrd, brick, W, H, pixscale,
+        keep_ccds,overlapping = make_depth_cut(survey, ccds, bands, targetrd, brick, W, H, pixscale,
                                    plots, ps, splinesky, gaussPsf, pixPsf, normalizePsf,
                                    do_calibs, gitver, targetwcs)
         ccds.cut(np.array(keep_ccds))
@@ -545,17 +545,13 @@ def make_depth_cut(survey, ccds, bands, targetrd, brick, W, H, pixscale,
     # Unique pixels in this brick (U: cH x cW boolean)
     U = find_unique_pixels(coarsewcs, cW, cH, None,
                            brick.ra1, brick.ra2, brick.dec1, brick.dec2)
-    keep_ccds = []
-
-    # Sort CCDs by a fast proxy for depth.
     pixscale = 3600. * np.sqrt(np.abs(ccds.cd1_1*ccds.cd2_2 - ccds.cd1_2*ccds.cd2_1))
     seeing = ccds.fwhm * pixscale
 
-    depthmaps = []
-
     # Compute the rectangle in *coarsewcs* covered by each CCD
     slices = []
-    for ccd in ccds:
+    overlapping_ccds = np.zeros(len(ccds), bool)
+    for i,ccd in enumerate(ccds):
         wcs = survey.get_approx_wcs(ccd)
         hh,ww = wcs.shape
         rr,dd = wcs.pixelxy2radec([1,ww,ww,1], [1,1,hh,hh])
@@ -572,7 +568,11 @@ def make_depth_cut(survey, ccds, bands, targetrd, brick, W, H, pixscale,
             print('No overlap with unique area for CCD', ccd.expnum, ccd.ccdname)
             slices.append(None)
             continue
+        overlapping_ccds[i] = True
         slices.append((slice(y0, y1+1), slice(x0, x1+1)))
+
+    keep_ccds = np.zeros(len(ccds), bool)
+    depthmaps = []
 
     for band in bands:
         # scalar
@@ -802,7 +802,7 @@ def make_depth_cut(survey, ccds, bands, targetrd, brick, W, H, pixscale,
                 depthiv[Yo,Xo] -= detiv
                 continue
 
-            keep_ccds.append(iccd)
+            keep_ccds[iccd] = True
             last_pcts = depthpcts
 
             if np.all(depthpcts >= target_depths):
@@ -821,7 +821,7 @@ def make_depth_cut(survey, ccds, bands, targetrd, brick, W, H, pixscale,
             plt.clf()
             plt.plot(seeing[I], ccds.exptime[I], 'k.')
             # which CCDs from this band are we keeping?
-            kept = np.array(keep_ccds)
+            kept, = np.nonzero(keep_ccds)
             if len(kept):
                 kept = kept[ccds.filter[kept] == band]
                 plt.plot(seeing[kept], ccds.exptime[kept], 'ro')
@@ -833,8 +833,8 @@ def make_depth_cut(survey, ccds, bands, targetrd, brick, W, H, pixscale,
             ps.savefig()
 
     if get_depth_maps:
-        return (keep_ccds, depthmaps)
-    return keep_ccds
+        return (keep_ccds, overlapping_ccds, depthmaps)
+    return keep_ccds, overlapping_ccds
 
 def stage_mask_junk(tims=None, targetwcs=None, W=None, H=None, bands=None,
                     mp=None, nsigma=None, plots=None, ps=None, record_event=None,

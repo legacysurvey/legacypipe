@@ -108,7 +108,7 @@ def run_one_brick(X):
     normalizePsf = True
 
     try:
-        I,depthmaps = make_depth_cut(
+        keep,overlapping,depthmaps = make_depth_cut(
             survey, bccds, bands, targetrd, brick, W, H, pixscale,
             plots, ps, splinesky, gaussPsf, pixPsf, normalizePsf, do_calibs,
             gitver, targetwcs, get_depth_maps=True, **kwargs)
@@ -118,11 +118,9 @@ def run_one_brick(X):
         traceback.print_exc()
         return -1
 
-    I = np.array(I)
-    print(len(I), 'CCDs passed depth cut')
-    keep = np.zeros(len(bccds), bool)
-    if len(I):
-        keep[I] = True
+    print(np.sum(overlapping), 'CCDs overlap the brick')
+    print(np.sum(keep), 'CCDs passed depth cut')
+    bccds.overlapping = overlapping
     bccds.passed_depth_cut = keep
 
     if not os.path.exists(dirnm):
