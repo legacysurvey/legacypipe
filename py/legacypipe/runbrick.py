@@ -679,11 +679,6 @@ def make_depth_cut(survey, ccds, bands, targetrd, brick, W, H, pixscale,
             im = survey.get_image_object(ccd)
             print('Band', band, 'expnum', im.expnum, 'exptime', im.exptime, 'seeing', im.fwhm*im.pixscale, 'arcsec')
 
-            # HACK HACK HACK -- these are missing 2017-07-12
-            if im.expnum in [401266, 400580, 222612]:
-                print('HACK -- skipping expnum', im.expnum)
-                continue
-
             im.check_for_cached_files(survey)
             print(im)
 
