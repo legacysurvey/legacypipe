@@ -414,6 +414,9 @@ def sed_matched_detection(sedname, sed, detmaps, detivs, bands,
     # the final word, it is just a quick veto of pixels we know for
     # sure will be vetoed.
     vetomap = np.zeros(sedsn.shape, bool)
+
+    segmentmap = np.zeros(sedsn.shape, np.int16)
+    segmentmap[:,:] = -1
     
     # For each peak, determine whether it is isolated enough --
     # separated by a low enough saddle from other sources.  Need only
