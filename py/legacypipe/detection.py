@@ -353,15 +353,6 @@ def sed_matched_detection(sedname, sed, detmaps, detivs, bands,
         crossa = dict(ms=10, mew=1.5)
         green = (0,1,0)
 
-        def plot_boundary_map(X):
-            #bounds = binary_dilation(X) - X
-            bounds = np.logical_xor(binary_dilation(X), X)
-            H,W = X.shape
-            rgba = np.zeros((H,W,4), np.uint8)
-            rgba[:,:,1] = bounds*255
-            rgba[:,:,3] = bounds*255
-            plt.imshow(rgba, interpolation='nearest', origin='lower')
-
         plt.clf()
         plt.subplot(1,2,2)
         dimshow(sedsn, vmin=-2, vmax=100, cmap='hot', ticks=False)
