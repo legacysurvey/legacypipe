@@ -1727,6 +1727,10 @@ def _get_subimages(tims, mods, src):
         subtim.y0 = y0
         subtim.meta = tim.meta
         subtim.psf_sigma = tim.psf_sigma
+        if tim.dq is not None:
+            subtim.dq = tim.dq[slc]
+        else:
+            subtim.dq = None
         subtims.append(subtim)
         #print('  ', tim.shape, 'to', subtim.shape)
     return subtims, modelMasks
