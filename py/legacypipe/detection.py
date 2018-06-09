@@ -196,6 +196,17 @@ def run_sed_matched_filters(SEDs, bands, detmaps, detivs, omit_xy,
                                   NanoMaggies(order=bands, **fluxes)))
     return Tnew, newcat, hot
 
+def plot_boundary_map(X, rgb=(0,255,0)):
+    from scipy.ndimage.morphology import binary_dilation
+    bounds = np.logical_xor(binary_dilation(X), X)
+    H,W = X.shape
+    rgba = np.zeros((H,W,4), np.uint8)
+    rgba[:,:,0] = bounds*rgb[0]
+    rgba[:,:,1] = bounds*rgb[1]
+    rgba[:,:,2] = bounds*rgb[2]
+    rgba[:,:,3] = bounds*255
+    plt.imshow(rgba, interpolation='nearest', origin='lower')
+
 def sed_matched_detection(sedname, sed, detmaps, detivs, bands,
                           xomit, yomit,
                           nsigma=5.,
