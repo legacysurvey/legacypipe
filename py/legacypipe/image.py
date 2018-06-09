@@ -151,7 +151,7 @@ class LegacySurveyImage(object):
             if fn is None:
                 continue
             cfn = survey.check_cache(fn)
-            print('Checking for cached', key, ':', fn, '->', cfn)
+            #print('Checking for cached', key, ':', fn, '->', cfn)
             if cfn != fn:
                 setattr(self, key, cfn)
 
@@ -836,7 +836,7 @@ class LegacySurveyImage(object):
         if self.sig1 is not None:
             # CCDs table sig1 is in nanomaggies
             #return self.sig1
-            # Oops, nope, the legacyzpts sig1 values are *not*!
+            # Oops, nope, the legacyzpts sig1 values (DR7) are *not*!
             return self.sig1 / zpscale
 
         # these sig1 values are in image counts; scale to nanomaggies

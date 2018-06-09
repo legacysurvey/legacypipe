@@ -594,6 +594,11 @@ def make_depth_cut(survey, ccds, bands, targetrd, brick, W, H, pixscale,
         # take.
         try_ccds = set()
 
+        # Try DECaLS data first!
+
+        try_ccds.update(np.where(ccds.propid == '2014B-0404')[0])
+        print('Added', len(try_ccds), 'DECaLS data to try-list')
+
         plot_vals = []
 
         if plots:
