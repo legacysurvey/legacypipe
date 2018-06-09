@@ -82,16 +82,6 @@ def run_one_brick(X):
     else:
         print('No CCD cuts')
 
-    # I = survey.photometric_ccds(bccds)
-    # if I is None:
-    #     print('None cut')
-    # else:
-    #     print(len(I), 'of', len(bccds), 'CCDs are photometric')
-    #     bccds.cut(I)
-    # if len(I) == 0:
-    #     print('No CCDs left')
-    #     return 0
-
     if len(bccds) == 0:
         print('No CCDs left')
         return 0
@@ -128,12 +118,9 @@ def run_one_brick(X):
             os.makedirs(dirnm)
         except:
             pass
-    bccds.writeto(outfn)
-    print('Wrote', outfn)
 
     for band,depthmap in depthmaps:
         outfn = os.path.join(dirnm, 'depth-%s-%s.fits' % (brick.brickname, band))
-
         hdr = fitsio.FITSHDR()
         # Plug the WCS header cards into these images
         targetwcs.add_to_header(hdr)
@@ -141,9 +128,14 @@ def run_one_brick(X):
         hdr.delete('IMAGEH')
         hdr.add_record(dict(name='EQUINOX', value=2000.))
         hdr.add_record(dict(name='FILTER', value=band))
-
         fitsio.write(outfn, depthmap, header=hdr)
         print('Wrote', outfn)
+
+    #bccds.writeto(outfn)
+    tmpfn = os.path.join(os.path.dirname(outfn), 'tmp-' + os.path.basename(outfn))
+    bccds.writeto(tmpfn)
+    os.rename(tmpfn, outfn)
+    print('Wrote', outfn)
 
     return 0
 
