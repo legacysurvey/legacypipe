@@ -426,6 +426,7 @@ class OneBlob(object):
                 from legacypipe.detection import detection_maps
                 from astrometry.util.multiproc import multiproc
                 from scipy.ndimage.morphology import binary_dilation
+                from scipy.ndimage.measurements import label, find_objects
 
                 mp = multiproc()
                 detmaps,detivs,satmaps = detection_maps(
@@ -448,6 +449,10 @@ class OneBlob(object):
                                              np.flipud(np.fliplr(sn[slc])))
                     # just OR the detection maps per-band...
                     flipblobs |= (flipsn > 5.)
+                blobs,nb = label(flipblobs)
+                goodblob = blobs[iy,ix]
+                if goodblob != 0:
+                    flipblobs = (blobs == goodblob)
                 dilated = binary_dilation(flipblobs, iterations=4)
 
                 saved_srctim_ies = []
