@@ -630,9 +630,16 @@ def make_depth_cut(survey, ccds, bands, targetrd, brick, W, H, pixscale,
                 # A rough point-source depth proxy would be:
                 # metric = np.sqrt(ccds.extime[b_inds]) / seeing[b_inds]
                 # If we want to put more weight on choosing good-seeing images, we could do:
-                metric = np.sqrt(ccds.exptime[b_inds]) / seeing[b_inds]**2
+                #metric = np.sqrt(ccds.exptime[b_inds]) / seeing[b_inds]**2
+
+                # DR7: CCDs sig1 values need to get calibrated to nanomaggies
+                zpscale = 10.**((ccds.ccdzpt[b_inds] - 22.5) / 2.5) * ccds.exptime[b_inds]
+                sig1 = ccds.sig1[b_inds] / zpscale
+                # depth would be ~ 1 / (sig1 * seeing); we privilege good seeing here.
+                metric = 1. / (sig1 * seeing[b_inds]**2)
+
                 # This metric is *BIG* for *GOOD* ccds!
-    
+
                 # Here, we try explicitly to include CCDs that cover
                 # pixels that are still shallow by the largest amount
                 # for the largest number of percentiles of interest;
