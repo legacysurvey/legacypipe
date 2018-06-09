@@ -101,7 +101,7 @@ class OneBlob(object):
         self.bands = bands
         self.plots = plots
 
-        self.plots_per_source = False
+        self.plots_per_source = plots
         # blob-1-data.png, etc
         self.plots_single = False
 
@@ -1193,6 +1193,8 @@ class OneBlob(object):
             tim.modelMinval = modelMinval
             tim.subwcs = subwcs
             tim.meta = imobj
+            tim.psf_sigma = imobj.fwhm / 2.35
+            tim.dq = None
             tims.append(tim)
         return tims
 
@@ -1613,6 +1615,7 @@ def _get_subimages(tims, mods, src):
         subtim.x0 = x0
         subtim.y0 = y0
         subtim.meta = tim.meta
+        subtim.psf_sigma = tim.psf_sigma
         subtims.append(subtim)
         #print('  ', tim.shape, 'to', subtim.shape)
     return subtims, modelMasks
