@@ -519,7 +519,8 @@ def stage_tims(W=3600, H=3600, pixscale=0.262, brickname=None,
 
 def make_depth_cut(survey, ccds, bands, targetrd, brick, W, H, pixscale,
                    plots, ps, splinesky, gaussPsf, pixPsf, normalizePsf, do_calibs,
-                   gitver, targetwcs, get_depth_maps=False, margin=0.5):
+                   gitver, targetwcs, get_depth_maps=False, margin=0.5,
+                   use_approx_wcs=False):
     from legacypipe.survey import wcs_for_brick
     from collections import Counter
 
@@ -587,6 +588,8 @@ def make_depth_cut(survey, ccds, bands, targetrd, brick, W, H, pixscale,
         # indices of CCDs we still want to look at in the current band
         b_inds = np.where(ccds.filter == band)[0]
         print(len(b_inds), 'CCDs in', band, 'band')
+        if len(b_inds) == 0:
+            continue
         b_inds = np.array([i for i in b_inds if slices[i] is not None])
         print(len(b_inds), 'CCDs in', band, 'band overlap target')
         # CCDs that we will try before searching for good ones -- CCDs
@@ -690,8 +693,13 @@ def make_depth_cut(survey, ccds, bands, targetrd, brick, W, H, pixscale,
                     kwa.update(splinesky=True)
                 im.run_calibs(**kwa)
 
-            print('Reading WCS from', im.imgfn, 'HDU', im.hdu)
-            wcs = im.get_wcs()
+            if use_approx_wcs:
+                print('Using approximate (TAN) WCS')
+                wcs = survey.get_approx_wcs(ccd)
+            else:
+                print('Reading WCS from', im.imgfn, 'HDU', im.hdu)
+                wcs = im.get_wcs()
+
             x0,x1,y0,y1,slc = im.get_image_extent(wcs=wcs, radecpoly=targetrd)
             if x0==x1 or y0==y1:
                 print('No actual overlap')
@@ -700,24 +708,27 @@ def make_depth_cut(survey, ccds, bands, targetrd, brick, W, H, pixscale,
 
             skysig1 = im.get_sig1(splinesky=splinesky, slc=slc)
 
-            psf = im.read_psf_model(x0, y0, gaussPsf=gaussPsf, pixPsf=pixPsf,
-                                    normalizePsf=normalizePsf)
-            psf = psf.constantPsfAt((x1-x0)//2, (y1-y0)//2)
-
-            # create a fake tim to compute galnorm
-            from tractor import (PixPos, Flux, ModelMask, LinearPhotoCal, Image,
-                                 NullWCS)
-            from legacypipe.survey import SimpleGalaxy
-
-            h,w = 50,50
-            gal = SimpleGalaxy(PixPos(w//2,h//2), Flux(1.))
-            tim = Image(data=np.zeros((h,w), np.float32),
-                        psf=psf, wcs=NullWCS(pixscale=im.pixscale))
-            mm = ModelMask(0, 0, w, h)
-            galmod = gal.getModelPatch(tim, modelMask=mm).patch
-            galmod = np.maximum(0, galmod)
-            galmod /= galmod.sum()
-            galnorm = np.sqrt(np.sum(galmod**2))
+            if 'galnorm_mean' in ccds.get_columns():
+                galnorm = ccd.galnorm_mean
+                print('Using galnorm_mean from CCDs table:', galnorm)
+            else:
+                psf = im.read_psf_model(x0, y0, gaussPsf=gaussPsf, pixPsf=pixPsf,
+                                        normalizePsf=normalizePsf)
+                psf = psf.constantPsfAt((x1-x0)//2, (y1-y0)//2)
+                # create a fake tim to compute galnorm
+                from tractor import (PixPos, Flux, ModelMask, LinearPhotoCal, Image,
+                                     NullWCS)
+                from legacypipe.survey import SimpleGalaxy
+    
+                h,w = 50,50
+                gal = SimpleGalaxy(PixPos(w//2,h//2), Flux(1.))
+                tim = Image(data=np.zeros((h,w), np.float32),
+                            psf=psf, wcs=NullWCS(pixscale=im.pixscale))
+                mm = ModelMask(0, 0, w, h)
+                galmod = gal.getModelPatch(tim, modelMask=mm).patch
+                galmod = np.maximum(0, galmod)
+                galmod /= galmod.sum()
+                galnorm = np.sqrt(np.sum(galmod**2))
             detiv = 1. / (skysig1 / galnorm)**2
             print('Galnorm:', galnorm, 'skysig1:', skysig1)
             galdepth = -2.5 * (np.log10(5. * skysig1 / galnorm) - 9.)
