@@ -595,8 +595,8 @@ def make_depth_cut(survey, ccds, bands, targetrd, brick, W, H, pixscale,
         try_ccds = set()
 
         # Try DECaLS data first!
+        try_ccds.update(b_inds[ccds.propid[b_inds] == '2014B-0404'])
 
-        try_ccds.update(np.where(ccds.propid == '2014B-0404')[0])
         print('Added', len(try_ccds), 'DECaLS data to try-list')
 
         plot_vals = []
@@ -677,7 +677,7 @@ def make_depth_cut(survey, ccds, bands, targetrd, brick, W, H, pixscale,
             b_inds = b_inds[b_inds != iccd]
 
             im = survey.get_image_object(ccd)
-            print('Band', band, 'expnum', im.expnum, 'exptime', im.exptime, 'seeing', im.fwhm*im.pixscale, 'arcsec')
+            print('Band', im.band, 'expnum', im.expnum, 'exptime', im.exptime, 'seeing', im.fwhm*im.pixscale, 'arcsec, propid', im.propid)
 
             im.check_for_cached_files(survey)
             print(im)
@@ -804,7 +804,9 @@ def make_depth_cut(survey, ccds, bands, targetrd, brick, W, H, pixscale,
                               im.pixscale * im.fwhm, band))
                 ps.savefig()
 
-            if not keep:
+            if keep:
+                print('Keeping this exposure')
+            else:
                 print('Not keeping this exposure')
                 depthiv[Yo,Xo] -= detiv
                 continue
