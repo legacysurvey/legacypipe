@@ -7,4 +7,5 @@ brick="$1"
 bri=$(echo $brick | head -c 3)
 mkdir -p depthcuts/logs/$bri
 
-python legacyanalysis/depth-cut.py --margin 1 $brick > depthcuts/logs/$bri/$brick.log
+python legacyanalysis/depth-cut.py --margin 1 $brick > depthcuts/logs/$bri/$brick.log 2>&1
+

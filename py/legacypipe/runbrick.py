@@ -592,6 +592,8 @@ def make_depth_cut(survey, ccds, bands, targetrd, brick, W, H, pixscale,
             continue
         b_inds = np.array([i for i in b_inds if slices[i] is not None])
         print(len(b_inds), 'CCDs in', band, 'band overlap target')
+        if len(b_inds) == 0:
+            continue
         # CCDs that we will try before searching for good ones -- CCDs
         # from the same exposure number as CCDs we have chosen to
         # take.
@@ -599,7 +601,8 @@ def make_depth_cut(survey, ccds, bands, targetrd, brick, W, H, pixscale,
 
         # Try DECaLS data first!
         Idecals = np.where(ccds.propid[b_inds] == '2014B-0404')[0]
-        try_ccds.update(b_inds[Idecals])
+        if len(Idecals):
+            try_ccds.update(b_inds[Idecals])
         print('Added', len(try_ccds), 'DECaLS CCDs to try-list')
 
         plot_vals = []
