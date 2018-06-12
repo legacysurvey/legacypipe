@@ -120,7 +120,7 @@ def run_one_brick(X):
             pass
 
     for band,depthmap in depthmaps:
-        outfn = os.path.join(dirnm, 'depth-%s-%s.fits' % (brick.brickname, band))
+        doutfn = os.path.join(dirnm, 'depth-%s-%s.fits' % (brick.brickname, band))
         hdr = fitsio.FITSHDR()
         # Plug the WCS header cards into these images
         targetwcs.add_to_header(hdr)
@@ -128,8 +128,8 @@ def run_one_brick(X):
         hdr.delete('IMAGEH')
         hdr.add_record(dict(name='EQUINOX', value=2000.))
         hdr.add_record(dict(name='FILTER', value=band))
-        fitsio.write(outfn, depthmap, header=hdr)
-        print('Wrote', outfn)
+        fitsio.write(doutfn, depthmap, header=hdr)
+        print('Wrote', doutfn)
 
     #bccds.writeto(outfn)
     tmpfn = os.path.join(os.path.dirname(outfn), 'tmp-' + os.path.basename(outfn))
