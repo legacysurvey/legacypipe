@@ -66,23 +66,23 @@ def run_one_brick(X):
                          [(1,1),(W,1),(W,H),(1,H),(1,1)]])
     gitver = get_git_version()
 
-    bccds = survey.ccds_touching_wcs(targetwcs)
-    if bccds is None:
+    ccds = survey.ccds_touching_wcs(targetwcs)
+    if ccds is None:
         print('No CCDs actually touching brick')
         return 0
-    print(len(bccds), 'CCDs actually touching brick')
+    print(len(ccds), 'CCDs actually touching brick')
 
-    bccds.cut(np.in1d(bccds.filter, bands))
-    print('Cut on filter:', len(bccds), 'CCDs remain.')
+    ccds.cut(np.in1d(ccds.filter, bands))
+    print('Cut on filter:', len(ccds), 'CCDs remain.')
 
-    if 'ccd_cuts' in bccds.get_columns():
-        norig = len(bccds)
-        bccds.cut(bccds.ccd_cuts == 0)
-        print(len(bccds), 'of', norig, 'CCDs pass cuts')
+    if 'ccd_cuts' in ccds.get_columns():
+        norig = len(ccds)
+        ccds.cut(ccds.ccd_cuts == 0)
+        print(len(ccds), 'of', norig, 'CCDs pass cuts')
     else:
         print('No CCD cuts')
 
-    if len(bccds) == 0:
+    if len(ccds) == 0:
         print('No CCDs left')
         return 0
 
@@ -101,7 +101,7 @@ def run_one_brick(X):
 
     try:
         D = make_depth_cut(
-            survey, bccds, bands, targetrd, brick, W, H, pixscale,
+            survey, ccds, bands, targetrd, brick, W, H, pixscale,
             plots, ps, splinesky, gaussPsf, pixPsf, normalizePsf, do_calibs,
             gitver, targetwcs, get_depth_maps=get_depth_maps, **kwargs)
         if get_depth_maps:
@@ -116,8 +116,8 @@ def run_one_brick(X):
 
     print(np.sum(overlapping), 'CCDs overlap the brick')
     print(np.sum(keep), 'CCDs passed depth cut')
-    bccds.overlapping = overlapping
-    bccds.passed_depth_cut = keep
+    ccds.overlapping = overlapping
+    ccds.passed_depth_cut = keep
 
     if not os.path.exists(dirnm):
         try:
@@ -139,7 +139,7 @@ def run_one_brick(X):
             print('Wrote', doutfn)
 
     tmpfn = os.path.join(os.path.dirname(outfn), 'tmp-' + os.path.basename(outfn))
-    bccds.writeto(tmpfn)
+    ccds.writeto(tmpfn)
     os.rename(tmpfn, outfn)
     print('Wrote', outfn)
 
