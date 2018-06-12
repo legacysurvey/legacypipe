@@ -598,9 +598,9 @@ def make_depth_cut(survey, ccds, bands, targetrd, brick, W, H, pixscale,
         try_ccds = set()
 
         # Try DECaLS data first!
-        try_ccds.update(b_inds[ccds.propid[b_inds] == '2014B-0404'])
-
-        print('Added', len(try_ccds), 'DECaLS data to try-list')
+        Idecals = np.where(ccds.propid[b_inds] == '2014B-0404')[0]
+        try_ccds.update(b_inds[Idecals])
+        print('Added', len(try_ccds), 'DECaLS CCDs to try-list')
 
         plot_vals = []
 
