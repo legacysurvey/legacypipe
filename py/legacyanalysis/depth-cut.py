@@ -97,11 +97,17 @@ def run_one_brick(X):
     do_calibs = False
     normalizePsf = True
 
+    get_depth_maps = kwargs.pop('get_depth_maps', False)
+
     try:
-        keep,overlapping,depthmaps = make_depth_cut(
+        D = make_depth_cut(
             survey, bccds, bands, targetrd, brick, W, H, pixscale,
             plots, ps, splinesky, gaussPsf, pixPsf, normalizePsf, do_calibs,
-            gitver, targetwcs, get_depth_maps=True, **kwargs)
+            gitver, targetwcs, get_depth_maps=get_depth_maps, **kwargs)
+        if get_depth_maps:
+            keep,overlapping,depthmaps = D
+        else:
+            keep,overlapping = D
     except:
         print('Failed to make_depth_cut():')
         import traceback
@@ -119,19 +125,19 @@ def run_one_brick(X):
         except:
             pass
 
-    for band,depthmap in depthmaps:
-        doutfn = os.path.join(dirnm, 'depth-%s-%s.fits' % (brick.brickname, band))
-        hdr = fitsio.FITSHDR()
-        # Plug the WCS header cards into these images
-        targetwcs.add_to_header(hdr)
-        hdr.delete('IMAGEW')
-        hdr.delete('IMAGEH')
-        hdr.add_record(dict(name='EQUINOX', value=2000.))
-        hdr.add_record(dict(name='FILTER', value=band))
-        fitsio.write(doutfn, depthmap, header=hdr)
-        print('Wrote', doutfn)
+    if get_depth_maps:
+        for band,depthmap in depthmaps:
+            doutfn = os.path.join(dirnm, 'depth-%s-%s.fits' % (brick.brickname, band))
+            hdr = fitsio.FITSHDR()
+            # Plug the WCS header cards into these images
+            targetwcs.add_to_header(hdr)
+            hdr.delete('IMAGEW')
+            hdr.delete('IMAGEH')
+            hdr.add_record(dict(name='EQUINOX', value=2000.))
+            hdr.add_record(dict(name='FILTER', value=band))
+            fitsio.write(doutfn, depthmap, header=hdr)
+            print('Wrote', doutfn)
 
-    #bccds.writeto(outfn)
     tmpfn = os.path.join(os.path.dirname(outfn), 'tmp-' + os.path.basename(outfn))
     bccds.writeto(tmpfn)
     os.rename(tmpfn, outfn)
@@ -147,14 +153,17 @@ if __name__ == '__main__':
     parser = argparse.ArgumentParser()
     parser.add_argument('--margin', type=float, default=None,
                         help='Set margin, in mags, above the DESI depth requirements.')
+    parser.add_argument('--depth-maps', action='store_true', default=False,
+                        help='Write sub-scale depth map images?')
     parser.add_argument('--plots', action='store_true', default=False)
     parser.add_argument('bricks', nargs='+')
     args = parser.parse_args()
     plots = args.plots
     margin = args.margin
+    get_depth_maps = args.depth_maps
     args = args.bricks
 
-    kwargs = {}
+    kwargs = dict(get_depth_maps=get_depth_maps)
     if margin is not None:
         kwargs.update(margin=margin)
 
