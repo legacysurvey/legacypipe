@@ -6,10 +6,14 @@ import astropy.time
 from legacypipe.image import LegacySurveyImage, CP_DQ_BITS
 
 '''
-Code specific to images from the Dark Energy Camera (DECam).
+Code specific to images from the Zwicky Transient Facility (ZTF).
 '''
 
-class DecamImage(LegacySurveyImage):
+def CreateCCDTable():
+
+
+
+class ZtfImage(LegacySurveyImage):
     '''
     A LegacySurveyImage subclass to handle images from the Dark Energy
     Camera, DECam, on the Blanco telescope.
