@@ -301,7 +301,7 @@ def stage_tims(W=3600, H=3600, pixscale=0.262, brickname=None,
         # If we have many images, greedily select images until we have
         # reached our target depth
         print('Cutting to CCDs required to hit our depth targets')
-        keep_ccds = make_depth_cut(survey, ccds, bands, targetrd, brick, W, H, pixscale,
+        keep_ccds,overlapping = make_depth_cut(survey, ccds, bands, targetrd, brick, W, H, pixscale,
                                    plots, ps, splinesky, gaussPsf, pixPsf, normalizePsf,
                                    do_calibs, gitver, targetwcs)
         ccds.cut(np.array(keep_ccds))
@@ -519,7 +519,8 @@ def stage_tims(W=3600, H=3600, pixscale=0.262, brickname=None,
 
 def make_depth_cut(survey, ccds, bands, targetrd, brick, W, H, pixscale,
                    plots, ps, splinesky, gaussPsf, pixPsf, normalizePsf, do_calibs,
-                   gitver, targetwcs, get_depth_maps=False, margin=0.5):
+                   gitver, targetwcs, get_depth_maps=False, margin=0.5,
+                   use_approx_wcs=False):
     from legacypipe.survey import wcs_for_brick
     from collections import Counter
 
@@ -545,17 +546,13 @@ def make_depth_cut(survey, ccds, bands, targetrd, brick, W, H, pixscale,
     # Unique pixels in this brick (U: cH x cW boolean)
     U = find_unique_pixels(coarsewcs, cW, cH, None,
                            brick.ra1, brick.ra2, brick.dec1, brick.dec2)
-    keep_ccds = []
-
-    # Sort CCDs by a fast proxy for depth.
     pixscale = 3600. * np.sqrt(np.abs(ccds.cd1_1*ccds.cd2_2 - ccds.cd1_2*ccds.cd2_1))
     seeing = ccds.fwhm * pixscale
 
-    depthmaps = []
-
     # Compute the rectangle in *coarsewcs* covered by each CCD
     slices = []
-    for ccd in ccds:
+    overlapping_ccds = np.zeros(len(ccds), bool)
+    for i,ccd in enumerate(ccds):
         wcs = survey.get_approx_wcs(ccd)
         hh,ww = wcs.shape
         rr,dd = wcs.pixelxy2radec([1,ww,ww,1], [1,1,hh,hh])
@@ -572,7 +569,11 @@ def make_depth_cut(survey, ccds, bands, targetrd, brick, W, H, pixscale,
             print('No overlap with unique area for CCD', ccd.expnum, ccd.ccdname)
             slices.append(None)
             continue
+        overlapping_ccds[i] = True
         slices.append((slice(y0, y1+1), slice(x0, x1+1)))
+
+    keep_ccds = np.zeros(len(ccds), bool)
+    depthmaps = []
 
     for band in bands:
         # scalar
@@ -587,12 +588,22 @@ def make_depth_cut(survey, ccds, bands, targetrd, brick, W, H, pixscale,
         # indices of CCDs we still want to look at in the current band
         b_inds = np.where(ccds.filter == band)[0]
         print(len(b_inds), 'CCDs in', band, 'band')
+        if len(b_inds) == 0:
+            continue
         b_inds = np.array([i for i in b_inds if slices[i] is not None])
         print(len(b_inds), 'CCDs in', band, 'band overlap target')
+        if len(b_inds) == 0:
+            continue
         # CCDs that we will try before searching for good ones -- CCDs
         # from the same exposure number as CCDs we have chosen to
         # take.
         try_ccds = set()
+
+        # Try DECaLS data first!
+        Idecals = np.where(ccds.propid[b_inds] == '2014B-0404')[0]
+        if len(Idecals):
+            try_ccds.update(b_inds[Idecals])
+        print('Added', len(try_ccds), 'DECaLS CCDs to try-list')
 
         plot_vals = []
 
@@ -625,9 +636,16 @@ def make_depth_cut(survey, ccds, bands, targetrd, brick, W, H, pixscale,
                 # A rough point-source depth proxy would be:
                 # metric = np.sqrt(ccds.extime[b_inds]) / seeing[b_inds]
                 # If we want to put more weight on choosing good-seeing images, we could do:
-                metric = np.sqrt(ccds.exptime[b_inds]) / seeing[b_inds]**2
+                #metric = np.sqrt(ccds.exptime[b_inds]) / seeing[b_inds]**2
+
+                # DR7: CCDs sig1 values need to get calibrated to nanomaggies
+                zpscale = 10.**((ccds.ccdzpt[b_inds] - 22.5) / 2.5) * ccds.exptime[b_inds]
+                sig1 = ccds.sig1[b_inds] / zpscale
+                # depth would be ~ 1 / (sig1 * seeing); we privilege good seeing here.
+                metric = 1. / (sig1 * seeing[b_inds]**2)
+
                 # This metric is *BIG* for *GOOD* ccds!
-    
+
                 # Here, we try explicitly to include CCDs that cover
                 # pixels that are still shallow by the largest amount
                 # for the largest number of percentiles of interest;
@@ -665,12 +683,7 @@ def make_depth_cut(survey, ccds, bands, targetrd, brick, W, H, pixscale,
             b_inds = b_inds[b_inds != iccd]
 
             im = survey.get_image_object(ccd)
-            print('Band', band, 'expnum', im.expnum, 'exptime', im.exptime, 'seeing', im.fwhm*im.pixscale, 'arcsec')
-
-            # HACK HACK HACK -- these are missing 2017-07-12
-            if im.expnum in [401266, 400580, 222612]:
-                print('HACK -- skipping expnum', im.expnum)
-                continue
+            print('Band', im.band, 'expnum', im.expnum, 'exptime', im.exptime, 'seeing', im.fwhm*im.pixscale, 'arcsec, propid', im.propid)
 
             im.check_for_cached_files(survey)
             print(im)
@@ -683,8 +696,13 @@ def make_depth_cut(survey, ccds, bands, targetrd, brick, W, H, pixscale,
                     kwa.update(splinesky=True)
                 im.run_calibs(**kwa)
 
-            print('Reading WCS from', im.imgfn, 'HDU', im.hdu)
-            wcs = im.get_wcs()
+            if use_approx_wcs:
+                print('Using approximate (TAN) WCS')
+                wcs = survey.get_approx_wcs(ccd)
+            else:
+                print('Reading WCS from', im.imgfn, 'HDU', im.hdu)
+                wcs = im.get_wcs()
+
             x0,x1,y0,y1,slc = im.get_image_extent(wcs=wcs, radecpoly=targetrd)
             if x0==x1 or y0==y1:
                 print('No actual overlap')
@@ -693,24 +711,27 @@ def make_depth_cut(survey, ccds, bands, targetrd, brick, W, H, pixscale,
 
             skysig1 = im.get_sig1(splinesky=splinesky, slc=slc)
 
-            psf = im.read_psf_model(x0, y0, gaussPsf=gaussPsf, pixPsf=pixPsf,
-                                    normalizePsf=normalizePsf)
-            psf = psf.constantPsfAt((x1-x0)//2, (y1-y0)//2)
-
-            # create a fake tim to compute galnorm
-            from tractor import (PixPos, Flux, ModelMask, LinearPhotoCal, Image,
-                                 NullWCS)
-            from legacypipe.survey import SimpleGalaxy
-
-            h,w = 50,50
-            gal = SimpleGalaxy(PixPos(w//2,h//2), Flux(1.))
-            tim = Image(data=np.zeros((h,w), np.float32),
-                        psf=psf, wcs=NullWCS(pixscale=im.pixscale))
-            mm = ModelMask(0, 0, w, h)
-            galmod = gal.getModelPatch(tim, modelMask=mm).patch
-            galmod = np.maximum(0, galmod)
-            galmod /= galmod.sum()
-            galnorm = np.sqrt(np.sum(galmod**2))
+            if 'galnorm_mean' in ccds.get_columns():
+                galnorm = ccd.galnorm_mean
+                print('Using galnorm_mean from CCDs table:', galnorm)
+            else:
+                psf = im.read_psf_model(x0, y0, gaussPsf=gaussPsf, pixPsf=pixPsf,
+                                        normalizePsf=normalizePsf)
+                psf = psf.constantPsfAt((x1-x0)//2, (y1-y0)//2)
+                # create a fake tim to compute galnorm
+                from tractor import (PixPos, Flux, ModelMask, LinearPhotoCal, Image,
+                                     NullWCS)
+                from legacypipe.survey import SimpleGalaxy
+    
+                h,w = 50,50
+                gal = SimpleGalaxy(PixPos(w//2,h//2), Flux(1.))
+                tim = Image(data=np.zeros((h,w), np.float32),
+                            psf=psf, wcs=NullWCS(pixscale=im.pixscale))
+                mm = ModelMask(0, 0, w, h)
+                galmod = gal.getModelPatch(tim, modelMask=mm).patch
+                galmod = np.maximum(0, galmod)
+                galmod /= galmod.sum()
+                galnorm = np.sqrt(np.sum(galmod**2))
             detiv = 1. / (skysig1 / galnorm)**2
             print('Galnorm:', galnorm, 'skysig1:', skysig1)
             galdepth = -2.5 * (np.log10(5. * skysig1 / galnorm) - 9.)
@@ -797,12 +818,14 @@ def make_depth_cut(survey, ccds, bands, targetrd, brick, W, H, pixscale,
                               im.pixscale * im.fwhm, band))
                 ps.savefig()
 
-            if not keep:
+            if keep:
+                print('Keeping this exposure')
+            else:
                 print('Not keeping this exposure')
                 depthiv[Yo,Xo] -= detiv
                 continue
 
-            keep_ccds.append(iccd)
+            keep_ccds[iccd] = True
             last_pcts = depthpcts
 
             if np.all(depthpcts >= target_depths):
@@ -821,7 +844,7 @@ def make_depth_cut(survey, ccds, bands, targetrd, brick, W, H, pixscale,
             plt.clf()
             plt.plot(seeing[I], ccds.exptime[I], 'k.')
             # which CCDs from this band are we keeping?
-            kept = np.array(keep_ccds)
+            kept, = np.nonzero(keep_ccds)
             if len(kept):
                 kept = kept[ccds.filter[kept] == band]
                 plt.plot(seeing[kept], ccds.exptime[kept], 'ro')
@@ -833,8 +856,8 @@ def make_depth_cut(survey, ccds, bands, targetrd, brick, W, H, pixscale,
             ps.savefig()
 
     if get_depth_maps:
-        return (keep_ccds, depthmaps)
-    return keep_ccds
+        return (keep_ccds, overlapping_ccds, depthmaps)
+    return keep_ccds, overlapping_ccds
 
 def stage_mask_junk(tims=None, targetwcs=None, W=None, H=None, bands=None,
                     mp=None, nsigma=None, plots=None, ps=None, record_event=None,
