@@ -1046,8 +1046,9 @@ def stage_image_coadds(survey=None, targetwcs=None, bands=None, tims=None,
         # Blob-outlined version
         if blobs is not None:
             from scipy.ndimage.morphology import binary_dilation
-            outline = (binary_dilation(blobs >= 0, structure=np.ones((3,3)))
-                       - (blobs >= 0))
+            outline = np.logical_xor(
+                binary_dilation(blobs >= 0, structure=np.ones((3,3))),
+                (blobs >= 0))
             # coadd_bw
             if len(rgb.shape) == 2:
                 rgb = np.repeat(rgb[:,:,np.newaxis], 3, axis=2)
