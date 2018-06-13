@@ -840,6 +840,7 @@ class LegacySurveyData(object):
         from legacypipe.bok    import BokImage
         from legacypipe.ptf    import PtfImage
         from legacypipe.cfht   import MegaPrimeImage
+        from legacypipe.ztf   import ZtfImage
         from collections import OrderedDict
 
         if survey_dir is None:
@@ -881,6 +882,7 @@ Now using the current directory as LEGACY_SURVEY_DIR, but this is likely to fail
             '90prime': BokImage,
             'ptf'    : PtfImage,
             'megaprime': MegaPrimeImage,
+            'ztf': ZtfImage
             }
 
         self.allbands = 'ugrizY'
