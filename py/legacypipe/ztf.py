@@ -15,11 +15,11 @@ def CreateCCDTable():
 
 class ZtfImage(LegacySurveyImage):
     '''
-    A LegacySurveyImage subclass to handle images from the Dark Energy
-    Camera, DECam, on the Blanco telescope.
+    A LegacySurveyImage subclass to handle images from the 
+    Zwicky Transient Facility (ZTF) at Palomar Observatory.
     '''
     def __init__(self, survey, t):
-        super(DecamImage, self).__init__(survey, t)
+        super(ZtfImage, self).__init__(survey, t)
         # Adjust zeropoint for exposure time
         self.ccdzpt += 2.5 * np.log10(self.exptime)
 
