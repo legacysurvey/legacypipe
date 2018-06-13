@@ -8,34 +8,45 @@ from astrometry.util.multiproc import multiproc
 from legacypipe.survey import LegacySurveyData, get_git_version, wcs_for_brick
 from legacypipe.runbrick import make_depth_cut
 
-def main():
-    mp = multiproc(16)
-    survey = LegacySurveyData()
-    ccds = survey.get_ccds()
-    bricks = survey.get_bricks()
-    print(len(ccds), 'CCDs')
-    print(len(bricks), 'bricks')
+def queue():
+    if False:
+        survey = LegacySurveyData()
+        ccds = survey.get_ccds()
+        bricks = survey.get_bricks()
+        print(len(bricks), 'bricks')
+        print(len(ccds), 'CCDs')
+    
+        bricks.cut((bricks.dec >= -30) * (bricks.dec <= 30))
+        print(len(bricks), 'in Dec [-30, +30]')
+    
+        I = survey.photometric_ccds(ccds)
+        ccds.cut(I)
+        print(len(ccds), 'pass photometric cut')
+    
+        I,J,d = match_radec(bricks.ra, bricks.dec, ccds.ra, ccds.dec, 0.5, nearest=True)
+        print(len(I), 'bricks with CCDs nearby')
+        bricks.cut(I)
+        bricknames = bricks.brickname
 
-    bricks.cut((bricks.dec >= -30) * (bricks.dec <= 30))
-    print(len(bricks), 'in Dec [-30, +30]')
-
-    I = survey.photometric_ccds(ccds)
-    ccds.cut(I)
-    print(len(ccds), 'pass photometric cut')
-
-    I,J,d = match_radec(bricks.ra, bricks.dec, ccds.ra, ccds.dec, 0.5, nearest=True)
-    print(len(I), 'bricks with CCDs nearby')
-    bricks.cut(I)
+    else:
+        # DR7: use Martin's list of bricks w/ CCD coverage
+        f = open('nccds.dat')
+        bricknames = []
+        for line in f.readlines():
+            words = line.strip().split(' ')
+            brick = words[0]
+            nccd = int(words[1])
+            if nccd > 0:
+                bricknames.append(brick)
 
     # qdo
-    bb = bricks.brickname
+    bb = bricknames
     while len(bb):
         print(' '.join(bb[:100]))
         bb = bb[100:]
-    # for b in bricks.brickname:
-    #     print(b)
     return
 
+    mp = multiproc(16)
     N = len(bricks)
     args = [(brick, i, N, plots, {}) for i,brick in enumerate(bricks)]
     mp.map(run_one_brick, args)
@@ -156,21 +167,23 @@ if __name__ == '__main__':
     parser.add_argument('--depth-maps', action='store_true', default=False,
                         help='Write sub-scale depth map images?')
     parser.add_argument('--plots', action='store_true', default=False)
-    parser.add_argument('bricks', nargs='+')
+    parser.add_argument('--threads', type=int, help='"qdo" mode: number of threads')
+    parser.add_argument('--queue', help='"qdo" mode: queue to read', default='depth')
+    parser.add_argument('bricks', nargs='*')
     args = parser.parse_args()
     plots = args.plots
-    margin = args.margin
-    get_depth_maps = args.depth_maps
-    args = args.bricks
+    bricks = args.bricks
 
-    kwargs = dict(get_depth_maps=get_depth_maps)
-    if margin is not None:
-        kwargs.update(margin=margin)
+    kwargs = dict(get_depth_maps=args.depth_maps)
+    if args.margin is not None:
+        kwargs.update(margin=args.margin)
 
-    if len(args) == 1 and args[0] == 'qdo':
+    print('args:', bricks)
+
+    if len(bricks) == 1 and bricks[0] == 'qdo':
         import qdo
         #... find Queue...
-        qname = 'depth'
+        qname = args.queue
         q = qdo.connect(qname)
         print('Connected to QDO queue', qname, q)
 
@@ -210,11 +223,12 @@ if __name__ == '__main__':
         sys.exit(0)
 
 
-    if len(args):
+    if len(bricks):
         allgood = 0
         print('Creating survey object')
+        bargs = []
         survey = LegacySurveyData()
-        for brickname in args:
+        for brickname in bricks:
 
             print('Checking for existing out file')
             # shortcut
@@ -225,12 +239,22 @@ if __name__ == '__main__':
                 continue
             print('Getting brick', brickname)
             brick = survey.get_brick_by_name(brickname)
-            print('Got brick, running depth cut')
-            rtn = run_one_brick((brick, 0, 1, plots, kwargs))
-            if rtn != 0:
-                allgood = rtn
-            print('Done, result', rtn)
+            bargs.append((brick, 0, 1, plots, kwargs))
+
+        if args.threads is not None:
+            mp = multiproc(args.threads)
+            rtns = mp.map(run_one_brick, bargs)
+            for rtn in rtns:
+                if rtn != 0:
+                    allgood = rtn
+        else:
+            for arg in bargs:
+                rtn = run_one_brick(arg)
+                if rtn != 0:
+                    allgood = rtn
+                print('Done, result', rtn)
+
         sys.exit(allgood)
 
     else:
-        main()
+        queue()
