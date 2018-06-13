@@ -4,12 +4,33 @@ import numpy as np
 import astropy.time
 
 from legacypipe.image import LegacySurveyImage, CP_DQ_BITS
+from astropy.io import fits as astro_fits
+import fitsio
+from astrometry.util.file import trymakedirs
+from astrometry.util.fits import fits_table
+from astrometry.util.util import Tan, Sip, anwcs_t
+from tractor.tractortime import TAITime
+
 
 '''
 Code specific to images from the Dark Energy Camera (DECam).
 '''
+def zeropoint_for_ptf(hdr):
+    magzp= hdr['IMAGEZPT'] + 2.5 * np.log10(hdr['EXPTIME'])
+    if isinstance(magzp,str):
+        print('WARNING: no ZeroPoint in header for image: ',tractor_image.imgfn)
+        raise ValueError #magzp= 23.
+    return magzp
 
-class DecamImage(LegacySurveyImage):
+
+def read_image(imgfn,hdu):
+    '''return gain*pixel DN as numpy array'''
+    print('Reading image from', imgfn, 'hdu', hdu)
+    img,hdr= fitsio.read(imgfn, ext=hdu, header=True) 
+    return img,hdr 
+
+
+class ZTFImage(LegacySurveyImage):
     '''
     A LegacySurveyImage subclass to handle images from the Dark Energy
     Camera, DECam, on the Blanco telescope.
