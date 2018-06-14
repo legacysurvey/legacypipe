@@ -2466,8 +2466,8 @@ def stage_wise_forced(
         wcat.append(src)
 
     # PSF broadening in post-reactivation data, by band.
-    # From Aaron's email to decam-chatter, 2016-12-12.
-    broadening = { 1: 1.0294, 2: 1.0253, 3: None, 4: None }
+    # Newer version from Aaron's email to decam-chatter, 2018-06-14.
+    broadening = { 1: 1.0405, 2: 1.0346, 3: None, 4: None }
 
     # Create list of groups-of-tiles to photometer
     args = []
