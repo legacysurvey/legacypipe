@@ -471,6 +471,10 @@ def stage_tims(W=3600, H=3600, pixscale=0.262, brickname=None,
                 dimshow(((tim.dq & tim.dq_saturation_bits) > 0),
                         vmin=0, vmax=1.5, cmap='hot')
                 plt.title('SATUR')
+            plt.subplot(2,2,4)
+            dimshow(tim.getImage() * (tim.getInvError() > 0),
+                    vmin=-3.*tim.sig1, vmax=10.*tim.sig1)
+            plt.title('image (masked)')
             plt.suptitle(tim.name)
             ps.savefig()
 
@@ -873,6 +877,150 @@ def stage_mask_junk(tims=None, targetwcs=None, W=None, H=None, bands=None,
     from scipy.linalg import svd
 
     record_event and record_event('stage_mask_junk: starting')
+
+    if plots:
+        coimgs,cons = quick_coadds(tims, bands, targetwcs, fill_holes=False)
+        plt.clf()
+        dimshow(get_rgb(coimgs, bands))
+        plt.title('Before outliers')
+        ps.savefig()
+
+    for band in bands:
+        btims = [tim for tim in tims if tim.band == band]
+        if len(btims) == 0:
+            continue
+        print(len(btims), 'images for band', band)
+        sigs = np.array([tim.psf_sigma for tim in btims])
+        print('PSF sigmas:', sigs)
+        targetsig = max(sigs) + 0.5
+        addsigs = np.sqrt(targetsig**2 - sigs**2)
+        print('Target sigma:', targetsig)
+        print('Blur sigmas:', addsigs)
+        resams = []
+        coimg = np.zeros((H,W), np.float32)
+        cow   = np.zeros((H,W), np.float32)
+        for tim,sig in zip(btims, addsigs):
+            from astrometry.util.miscutils import patch_image
+            from scipy.ndimage.filters import gaussian_filter
+            from astrometry.util.resample import resample_with_wcs,OverlapError
+            from scipy.ndimage.morphology import binary_dilation
+            patched = tim.getImage().copy()
+            okpix = (tim.getInvError() > 0)
+            patch_image(patched, okpix)
+            del okpix
+            patched = gaussian_filter(patched, sig)
+            try:
+                Yo,Xo,Yi,Xi,[rimg] = resample_with_wcs(
+                    targetwcs, tim.subwcs, [patched], 3)
+            except OverlapError:
+                resams.append(None)
+                continue
+            wt = tim.getInvvar()[Yi,Xi]
+            coimg[Yo,Xo] += rimg * wt
+            cow  [Yo,Xo] += wt
+            resams.append((Yo,Xo,Yi,Xi,rimg))
+
+        for tim,resam in zip(btims, resams):
+            if resam is None:
+                continue
+            (Yo,Xo,Yi,Xi,rimg) = resam
+            wt = tim.getInvvar()[Yi,Xi]
+
+            coall = coimg / np.maximum(cow, 1e-16)
+
+            # Subtract this image from the coadd
+            coimg[Yo,Xo] -= rimg * wt
+            cow  [Yo,Xo] -= wt
+            co = coimg / np.maximum(cow, 1e-16)
+            # Find pixels where this image was the only image overlapping
+            nopix = (cow == 0)
+            # Re-add this image to the coadd.
+            coimg[Yo,Xo] += rimg * wt
+            cow  [Yo,Xo] += wt
+
+            # This image alone
+            thisimg = np.zeros((H,W), np.float32)
+            thisimg[Yo,Xo] = rimg
+            thiswt = np.zeros((H,W), np.float32)
+            thiswt[Yo,Xo] = wt
+            thiswt[nopix] = 0.
+            # This image - coadd
+            resid = (thisimg - co) * np.sqrt(thiswt)
+            # Significant pixels
+            hot = (resid > 5.)
+            if np.any(hot):
+                if plots:
+                    origimg = tim.getImage() * (tim.getInvError() > 0)
+
+                hot = binary_dilation(hot, iterations=1)
+                warm = np.logical_or(hot,
+                                     binary_dilation(hot, iterations=5) *
+                                     (resid > 3.))
+                # dilate to compensate for NN resampling
+                warm = binary_dilation(warm, iterations=1)
+                # Resample masked pixels back to image space.
+                badpix = np.zeros((H,W), bool)
+                badpix[hot ] = True
+                badpix[warm] = True
+                try:
+                    Yo,Xo,Yi,Xi,nil = resample_with_wcs(
+                        tim.subwcs, targetwcs, [], 3)
+                except OverlapError:
+                    continue
+                # Do we want to look at (unblurred) image pixels around masked
+                # pix?
+                Ibad, = np.nonzero(badpix[Yi,Xi])
+                # Zero out the invvar for the bad pixels
+                if len(Ibad):
+                    # FIXME -- update dq map too
+                    tim.getInvError()[Yo[Ibad],Xo[Ibad]] = 0.
+
+            if plots:
+                plt.clf()
+                plt.subplot(2,2,1)
+                ima = dict(interpolation='nearest', origin='lower',
+                           vmin=-0.01, vmax=0.1, cmap='gray')
+                #plt.imshow(coall, **ima)
+                #plt.title('All images in coadd (%s)' % band)
+                plt.imshow(thiswt, interpolation='nearest', origin='lower',
+                           vmin=0, cmap='gray')
+                plt.title('Weight map')
+                plt.subplot(2,2,2)
+                plt.imshow(co, **ima)
+                plt.title('This image subtracted coadd (%s)' % band)
+                plt.subplot(2,2,3)
+                plt.imshow(thisimg, **ima)
+                plt.title('This image')
+                plt.subplot(2,2,4)
+                plt.imshow(resid,
+                           interpolation='nearest', origin='lower',
+                           vmin=-5, vmax=5, cmap='gray')
+                if np.any(hot):
+                    rgb = np.zeros((H,W,4), np.uint8)
+                    rgb[:,:,0][warm] = 255
+                    rgb[:,:,3][warm] = 255
+                    rgb[:,:,0][hot] = 0
+                    rgb[:,:,1][hot] = 255
+                    rgb[:,:,3][hot] = 255
+                    plt.imshow(rgb, interpolation='nearest', origin='lower')
+                plt.title('Resid')
+                ps.savefig()
+
+                if plots and np.any(hot):
+                    plt.clf()
+                    plt.subplot(1,2,1)
+                    plt.imshow(origimg, **ima)
+                    plt.title('Image (orig)')
+                    plt.subplot(1,2,2)
+                    plt.imshow(tim.getImage() * (tim.getInvError() > 0), **ima)
+                    plt.title('Image (masked)')
+                    ps.savefig()
+                    # plt.clf()
+                    # plt.imshow(tim.getImage() * tim.getInvError(),
+                    #            interpolation='nearest', origin='lower',
+                    #            vmin=-1, vmax=10)
+                    # plt.title('S/N')
+                    # ps.savefig()
 
     if plots:
         coimgs,cons = quick_coadds(tims, bands, targetwcs, fill_holes=False)
