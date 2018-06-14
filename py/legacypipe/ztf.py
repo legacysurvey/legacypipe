@@ -27,13 +27,6 @@ def CreateCCDTable(image_list):
 
     for image in image_list:
 
-        with fits.open(image, mode='update') as f:
-            data = f[0].data
-            header = f[0].header
-            header['EXTNAME'] = str(header['EXTNAME'])
-        #     header['XTENSION'] = 'BINTABLE'
-        #     header['FIXAPERS'] = ','.join(['a%s'%f for f in header['FIXAPERS'].split(',')])
-
         if '/' in image:
             image_key = '_'.join(slashsplit(image).split('_')[:7])
             image_fname = slashsplit(image)

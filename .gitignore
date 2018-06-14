@@ -54,4 +54,4 @@ nosetests.xml
 .project
 .pydevproject
 
-#py/test
+py/test
