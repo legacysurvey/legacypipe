@@ -1,0 +1,79 @@
+# These config entries will be overridden by runbrick.py (in image.py:run_se())
+
+CATALOG_NAME     se.fits              # name of the output catalog
+PARAMETERS_NAME  common.param         # name of the file containing catalog contents
+FILTER_NAME      ztf.conv   # name of the file containing the filter
+MAG_ZEROPOINT    30.0                 # magnitude zero-point
+SEEING_FWHM      2.5                  # stellar FWHM in arcsec
+
+#-------------------------------- Catalog ------------------------------------
+
+ANALYSIS_THRESH  1.0            # <sigmas> or <threshold>,<ZP> in mag.arcsec-2
+PIXEL_SCALE      1.01              # size of pixel in arcsec (0=use FITS WCS info)
+# SE has a *bizarre* notion of "sigma"
+DETECT_THRESH    1.0            # <sigmas> or <threshold>,<ZP> in mag.arcsec-2
+
+CATALOG_TYPE     FITS_LDAC     # NONE,ASCII,ASCII_HEAD, ASCII_SKYCAT,
+                                # ASCII_VOTABLE, FITS_1.0 or FITS_LDAC
+ 
+#------------------------------- Extraction ----------------------------------
+ 
+DETECT_TYPE      CCD            # CCD (linear) or PHOTO (with gamma correction)
+DETECT_MINAREA   5              # minimum number of pixels above threshold
+DETECT_MAXAREA   0              # max. # of pixels above threshold (0=unlimited)
+THRESH_TYPE      RELATIVE       # threshold type: RELATIVE (in sigmas)
+                                # or ABSOLUTE (in ADUs)
+ 
+FILTER           Y              # apply filter for detection (Y or N)?
+ 
+DEBLEND_NTHRESH  32             # Number of deblending sub-thresholds
+DEBLEND_MINCONT  0.005          # Minimum contrast parameter for deblending
+ 
+CLEAN            Y              # Clean spurious detections? (Y or N)?
+CLEAN_PARAM      1.0            # Cleaning efficiency
+ 
+MASK_TYPE        CORRECT        # type of detection MASKing: can be one of
+                                # NONE, BLANK or CORRECT
+
+FITS_UNSIGNED   Y               # Force 16-bit FITS input data to be
+                                # interpreted as unsigned integers
+
+#------------------------------ Photometry -----------------------------------
+
+# corresponding to diameters of [1.5,3,5,7,9,11,13,15] arcsec 
+# assuming 1.01 arcsec pixel scale
+PHOT_APERTURES  1.48514851,2.97029703,4.95049505,6.93069307,8.91089109,10.89108911,12.87128713,14.85148515
+
+PHOT_AUTOPARAMS  2.5, 3.5       # MAG_AUTO parameters: <Kron_fact>,<min_radius>
+PHOT_PETROPARAMS 2.0, 3.5       # MAG_PETRO parameters: <Petrosian_fact>,
+                                # <min_radius>
+ 
+SATUR_LEVEL      40000.0        # level (in ADUs) at which arises saturation
+ 
+GAIN             6.2            # detector gain in e-/ADU
+ 
+#------------------------- Star/Galaxy Separation ----------------------------
+ 
+ 
+#------------------------------ Background -----------------------------------
+ 
+BACK_SIZE        128             # Background mesh: <size> or <width>,<height>
+BACK_FILTERSIZE  3              # Background filter: <size> or <width>,<height>
+ 
+BACKPHOTO_TYPE   LOCAL         # can be GLOBAL or LOCAL
+BACKPHOTO_THICK  24            # thickness (pix) of background rectangular aperture for LOCAL
+ 
+#------------------------------ Check Image ----------------------------------
+ 
+CHECKIMAGE_TYPE NONE
+
+#--------------------- Memory (change with caution!) -------------------------
+ 
+MEMORY_OBJSTACK  30000          # number of objects in stack
+MEMORY_PIXSTACK  10000000        # number of pixels in stack 
+MEMORY_BUFSIZE   1024          # number of lines in buffer (set to 16k)
+
+#----------------------------- Miscellaneous ---------------------------------
+ 
+VERBOSE_TYPE     QUIET         # can be QUIET, NORMAL or FULL
+WRITE_XML        N              # Write XML file (Y/N)?
