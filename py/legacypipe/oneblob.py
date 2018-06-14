@@ -434,11 +434,13 @@ class OneBlob(object):
 
                 pos = src.getPosition()
                 ok,x,y = self.blobwcs.radec2pixelxy(pos.ra, pos.dec)
-                ix,iy = int(np.round(x-1)), int(np.round(y-1))
-                
                 bh,bw = self.blobmask.shape
+                ix = int(np.clip(np.round(x-1), 0, bw-1))
+                iy = int(np.clip(np.round(y-1), 0, bh-1))
+                
                 flipw = min(ix, bw-1-ix)
                 fliph = min(iy, bh-1-iy)
+                #print('x,y', x,y, 'ix,iy', ix,iy, 'bw,bh', bw,bh, 'flipw,h', flipw,fliph)
                 flipblobs = np.zeros(self.blobmask.shape, bool)
                 for i,(detmap,detiv) in enumerate(zip(detmaps,detivs)):
                     sn = detmap * np.sqrt(detiv)
