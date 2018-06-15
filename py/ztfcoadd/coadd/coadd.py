@@ -103,7 +103,7 @@ def make_coadd(scie_list, folder, debug):
 	stdout, stderr = utils.execute(cmd)
 
 	# CREATE HEADERS FOR COADD WITH CORRECT ASTOROMETRY
-	utils.print_d("Putting header into coadd ...",args.debug)
+	utils.print_d("Putting header into coadd ...",debug)
 	cmd='%s/swarp -SUBTRACT_BACK N %s'%(utils.CODEPATH,coadd)
 	stdout, stderr = utils.execute(cmd)
 
