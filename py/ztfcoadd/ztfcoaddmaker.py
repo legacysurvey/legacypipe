@@ -80,9 +80,8 @@ def main():
 	stdout, stderr = utils.execute(cmd)
 
 	utils.print_d("Putting header into images ...",args.debug)
-	for scie in scie_list:
-		cmd='%s/swarp -SUBTRACT_BACK N %s'%(utils.CODEPATH,scie)
-		stdout, stderr = utils.execute(cmd)
+	cmd='%s/swarp -SUBTRACT_BACK N @%s/scie.list'%(utils.CODEPATH,args.folder)
+	stdout, stderr = utils.execute(cmd)
 
 	# MAKE A COADD
 	utils.print_d("Selecting images for coadd ...",args.debug)

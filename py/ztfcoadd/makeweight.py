@@ -12,7 +12,7 @@ def make_weights(my_scie_list, debug):
 
         maskname = scie.replace('sciimg', 'mskimg')
         varname = scie.replace('.fits', '.var.fits')
-        weightname = scie.replace('.fits', '.weight.test.fits')
+        weightname = scie.replace('sciimg', 'weight')
 
         with fits.open(varname) as img:
             with fits.open(maskname) as mask:
@@ -21,5 +21,5 @@ def make_weights(my_scie_list, debug):
                 img.writeto(weightname, overwrite=True)
 
         utils.print_d('%i/%i) MakeWeight: %s'%(i+1,len(my_scie_list),utils.trim(scie)),debug)
-        shutil.copy(weightname,scie.replace('sciimg', 'weight'))
+        #shutil.copy(weightname,scie.replace('sciimg', 'weight'))
         
