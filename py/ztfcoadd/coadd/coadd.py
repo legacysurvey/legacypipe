@@ -61,11 +61,6 @@ def select_best_images(image_list, N_images_in_coadd, debug, output=True):
 def make_coadd(scie_list, folder, debug):
 
 	os.chdir(folder)
-
-	# CREATE HEADERS FOR SCIE_FAKE IMAGES FOR COADD CREATION
-	cmd='scamp -c %s/legacypipe/py/coadd/coadd.conf @%s/tempcoadd.cat.list'%(utils.PROJECTPATH,folder)
-	utils.print_d("Creating header files ...",debug)
-	stdout, stderr = utils.execute(cmd)
 	
 	# MAKE THAT COADD!
 	coadd="%s/coadd.fits"%folder
@@ -107,15 +102,10 @@ def make_coadd(scie_list, folder, debug):
 	utils.print_d("Creating coadd header file ...",debug)
 	stdout, stderr = utils.execute(cmd)
 
-	# NEED TO GET CORRECT ASTROMETRIC SOLUTION INTO COADD HEADER
-
-	# with fits.open(coadd) as f:
-	# 	data = f[0].data
-	# 	header = f[0].header
-
-	# head = "%s/coadd.head"%folder
-	# header.update(fits.Header.fromfile(head, sep='\n', endcard=False, padding=False))
-	# utils.update_fits(coadd,data,header)
+	# CREATE HEADERS FOR COADD WITH CORRECT ASTOROMETRY
+	utils.print_d("Putting header into coadd ...",args.debug)
+	cmd='%s/swarp -SUBTRACT_BACK N %s'%(utils.CODEPATH,coadd)
+	stdout, stderr = utils.execute(cmd)
 
 	coadd_fname = '/'.join(scie_list[0].split('/')[:-1])+'/ztf_'+'_'.join(scie_list[0].split('_')[3:7]) + '_coadd.fits'
 	utils.print_d("Changing %sto %s ..."%(coadd,coadd_fname),debug)

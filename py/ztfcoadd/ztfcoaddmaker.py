@@ -155,8 +155,20 @@ def main():
 	# CREATION OF FINAL SEXTRACTOR CATALOGS FOR IMAGES
 	final_sex.create_sex_cats(scie_list, args.debug)
 
-	# NEED TO GET CORRECT ASTROMETRIC SOLUTION INTO IMAGE HEADERS
+	# CREATE HEADERS FOR ALL IMAGES WITH CORRECT ASTOROMETRY
+	cat_list = [scie.replace('.fits','.cat') for scie in scie_list]
+	utils.replace_list(cat_list,args.folder+'/cat.list')
 
+	utils.print_d("Creating headers for all images ...",args.debug)
+	cmd='scamp -c %s/legacypipe/py/coadd/coadd.conf @%s/cat.list'%(utils.PROJECTPATH,args.folder)
+	stdout, stderr = utils.execute(cmd)
+
+	utils.print_d("Putting header into images ...",args.debug)
+	for scie in scie_list:
+		cmd='%s/swarp -SUBTRACT_BACK N %s'%(utils.CODEPATH,scie)
+		stdout, stderr = utils.execute(cmd)
+
+	# MAKE A COADD
 	utils.print_d("Selecting images for reference ...",args.debug)
 	coadd.select_best_images(scie_list, args.images_coadd_num, args.debug)
 	coadd.make_coadd(scie_list, args.folder, args.debug)
