@@ -191,14 +191,14 @@ def update_image_headers(zp, see, lmt_mag, skys, skysigs, scie_list, debug):
 
     for zeropoint, seeing, mag, sky, skysig, image in zip(zp, see, lmt_mag, skys, skysigs, scie_list):
 
-        with fits.open(image) as f:
+        with fits.open(image, mode='update') as f:
             data = f[0].data
             header = f[0].header
 
-        header["C3ZP"] = zeropoint
-        header["C3SEE"] = seeing
-        header["C3LMTMAG"] = mag
-        header["C3SKY"] = sky
-        header["C3SKYSIG"] = skysig
+            header["C3ZP"] = zeropoint
+            header["C3SEE"] = seeing
+            header["C3LMTMAG"] = mag
+            header["C3SKY"] = sky
+            header["C3SKYSIG"] = skysig
 
-        fits.writeto(image,data,header,overwrite=True)
+#        fits.writeto(image,data,header,overwrite=True)

@@ -3,6 +3,7 @@ from __future__ import print_function
 from legacypipe.image import LegacySurveyImage
 import fitsio
 import os
+import numpy as np
 
 '''
 Code specific to images from the Zwicky Transient Facility (ZTF).
@@ -30,6 +31,7 @@ class ZtfImage(LegacySurveyImage):
                 continue
 
     def read_dq(self, **kwargs):
+
         '''return bit mask which Tractor calls "data quality" image
         ZTF DMASK BIT DEFINITIONS
         BIT00 = 0 / AIRCRAFT/SATELLITE TRACK
@@ -49,9 +51,9 @@ class ZtfImage(LegacySurveyImage):
         BIT14 = 14 / RESERVED FOR FUTURE USE
         BIT15 = 15 / RESERVED FOR FUTURE USE
         '''
-        print('Reading data quality image from', dqfn, 'hdu', hdu)
-        mask = fitsio.read(dqfn, ext=hdu, header=False)
+        print('Reading data quality image from', self.dqfn, 'hdu', self.hdu)
+        mask, header = self._read_fits(self.dqfn, self.hdu, **kwargs)
         cond1 = mask & 6141 != 0
         mask[cond1] = 1
         mask[~cond1] = 0
-        return mask.astype(np.int16)
+        return mask.astype(np.int16), header

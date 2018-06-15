@@ -72,9 +72,8 @@ def CreateCCDTable(image_list):
 	for key in table:
 	    f_table.set(key,table[key])
 
-	f_table.write_to(table_name)
-
 	table_name = folder+'/survey-ccds-1.fits'
+	f_table.write_to(table_name)
 
 	if os.path.exists(table_name+'.gz'):
 	    os.remove(table_name+'.gz')

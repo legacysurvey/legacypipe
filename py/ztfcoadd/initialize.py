@@ -16,8 +16,8 @@ def delete_folder_contents(folder, debug):
 
 	utils.print_d("CLEARING FOLDER: %s ..."%(folder),debug)
 
-	keep_files = glob.glob(folder+"/ztf*sciimg.fits")
-	keep_files += glob.glob(folder+"/ztf*mskimg.fits")
+	keep_files = [s for s in glob.glob(folder+"/ztf*sciimg.fits") if not 'coadd' in s]
+	keep_files += [s for s in glob.glob(folder+"/ztf*mskimg.fits") if not 'coadd' in s]
 	keep_files.sort()
 
 	all_files = glob.glob(folder+"/*")
@@ -89,7 +89,7 @@ def edit_fits_headers(scie_list):
 	        header = f[0].header
 	        header['EXTNAME'] = 'CCD0'
 	        header['XTENSION'] = 'C3'
-	        if 'FIXAPER' in header:
+	        if 'FIXAPERS' in header:
 	            try:
 	                a = int(header['FIXAPERS'].split(',')[0])
 	                header['FIXAPERS'] = ','.join(['a%s'%f for f in header['FIXAPERS'].split(',')])

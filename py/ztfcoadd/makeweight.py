@@ -10,6 +10,7 @@ def make_weights(my_scie_list, debug):
 
     for i,scie in enumerate(my_scie_list):
 
+        print(scie)
         maskname = scie.replace('sciimg', 'mskimg')
         varname = scie.replace('.fits', '.var.fits')
         weightname = scie.replace('sciimg', 'weight')
