@@ -14,7 +14,6 @@ from ztfcoadd import zpsee
 def output_image_list(sub_image_list):
 	np.savetxt('scie_coadd.list',sub_image_list,fmt='%s')
 	cat_list = [image.replace('.fits','.cat') for image in sub_image_list]
-	np.savetxt('tempcoadd.cat.list',cat_list,fmt='%s')
 	
 def select_best_images(image_list, N_images_in_coadd, debug, output=True):
 
@@ -59,19 +58,41 @@ def select_best_images(image_list, N_images_in_coadd, debug, output=True):
 	else:
 		return seeing_images
 
+def coadd_makemask(coadd_fname):
+
+	mask_fname = coadd_fname.replace('sciimg','mskimg')
+
+	with fits.open(coadd_fname) as scie:
+		cond = np.abs(scie[0].data) > 0
+		scie[0].data[cond] = 0
+		scie[0].data[~cond] = 1
+		scie.writeto(mask_fname, overwrite=True)
+
+def edit_coadd_header(scie_list, coadd_fname):
+
+	obsmjd_arr = []
+	for scie in scie_list:
+		with fits.open(scie) as f:
+			obsmjd_arr.append(f[0].header['OBSMJD'])
+
+	with fits.open(coadd_fname, mode='update'):
+		f[0].header['OBSMJD'] = np.median(obsmjd_arr)
+
 def make_coadd(scie_list, folder, debug):
 
 	os.chdir(folder)
 	
 	# MAKE THAT COADD!
-	coadd="%s/coadd.fits"%folder
-	weight=coadd.replace('.fits','.weight.fits')
+	coadd="%s/coadd_sciimg.fits"%folder
+	weight=coadd.replace('sciimg','weight')
 	cmd='%s/swarp @%s/scie_coadd.list -c %s/legacypipe/py/coadd/coadd.swarp -IMAGEOUT_NAME %s -WEIGHTOUT_NAME %s -NTHREADS 1'%(utils.CODEPATH,folder,utils.PROJECTPATH,coadd,weight)
 	utils.print_d("Making the coadd ...",debug)
 	stdout, stderr = utils.execute(cmd)
+
+	# MAKE COADD MASK
+	coadd_makemask(coadd)
 	
 	# PRELIM SEXTRACTOR THE COADD
-	coadd="%s/coadd.fits"%folder
 	coaddcat="%s/prelim.coadd.cat"%folder
 	cmd="sex -c %s/legacypipe/py/ztfcoadd/zpsee/zpsee.sex -CHECKIMAGE_TYPE NONE -VERBOSE_TYPE QUIET -CATALOG_NAME %s %s"%(utils.PROJECTPATH,coaddcat,coadd)
 	utils.print_d("Prelim sex the coadd ...",debug)
@@ -90,7 +111,6 @@ def make_coadd(scie_list, folder, debug):
 	zpsee.update_image_headers(zp, see, lmt_mag, skys, skysigs, [coadd], debug)
 	
 	# CREATE FINAL CATALOG WITH CORRECT MAGNITUDES
-	weight = coadd.replace('.fits','.weight.fits')
 	with fits.open(coadd) as f:
 		zp = f[0].header['C3ZP']
 	cat="%s/coadd.cat"%folder
@@ -109,6 +129,7 @@ def make_coadd(scie_list, folder, debug):
 	stdout, stderr = utils.execute(cmd)
 
 	initialize.edit_fits_headers([coadd])
+	edit_coadd_header(scie_list,coadd)
 
 	coadd_fname = '/'.join(scie_list[0].split('/')[:-1])+'/ztf_'+'_'.join(scie_list[0].split('_')[3:7]) + '_coadd.fits'
 	utils.print_d("Changing %s to %s ..."%(coadd,coadd_fname),debug)
