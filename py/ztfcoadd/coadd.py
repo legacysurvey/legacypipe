@@ -65,7 +65,10 @@ def coadd_makemask(coadd_fname):
 	with fits.open(coadd_fname) as scie:
 		cond = np.abs(scie[0].data) > 0
 		scie[0].data[cond] = 0
-		scie[0].data[~cond] = 1
+		scie[0].data[~cond] = 2**10
+		# ZTF DMASK BIT DEFINITIONS
+		# BIT10 = 10 / NAN (not a number)
+		scie[0].data = scie[0].data.astype(np.int16)
 		scie.writeto(mask_fname, overwrite=True)
 
 def edit_coadd_header(scie_list, coadd_fname):
@@ -77,7 +80,7 @@ def edit_coadd_header(scie_list, coadd_fname):
 
 	with fits.open(coadd_fname, mode='update') as f:
 		f[0].header['OBSMJD'] = np.median(obsmjd_arr)
-		f[0].header['EXPID'] = '0'
+		f[0].header['EXPID'] = 0
 
 def make_coadd(scie_list, folder, debug):
 

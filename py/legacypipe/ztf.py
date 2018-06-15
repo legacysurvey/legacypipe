@@ -53,7 +53,29 @@ class ZtfImage(LegacySurveyImage):
         '''
         print('Reading data quality image from', self.dqfn, 'hdu', self.hdu)
         mask, header = self._read_fits(self.dqfn, self.hdu, **kwargs)
-        cond1 = mask & 6141 != 0
-        mask[cond1] = 1
-        mask[~cond1] = 0
         return mask.astype(np.int16), header
+
+    def remap_dq_cp_codes(self, dq, header):
+        '''
+        Some versions of the CP use integer codes, not bit masks.
+        This converts them.
+        '''
+        from legacypipe.image import CP_DQ_BITS
+        dqbits = np.zeros(dq.shape, np.int16)
+
+        dqbits[dq & 2**0 != 0] |= CP_DQ_BITS['trans']
+        dqbits[dq & 2**2 != 0] |= CP_DQ_BITS['badpix']
+        dqbits[dq & 2**3 != 0] |= CP_DQ_BITS['badpix']
+        dqbits[dq & 2**4 != 0] |= CP_DQ_BITS['badpix']
+        dqbits[dq & 2**5 != 0] |= CP_DQ_BITS['badpix']
+        dqbits[dq & 2**6 != 0] |= CP_DQ_BITS['badpix']
+        dqbits[dq & 2**7 != 0] |= CP_DQ_BITS['cr']
+        dqbits[dq & 2**8 != 0] |= CP_DQ_BITS['satur']
+        dqbits[dq & 2**9 != 0] |= CP_DQ_BITS['badpix']
+        dqbits[dq & 2**10 != 0] |= CP_DQ_BITS['badpix']
+        dqbits[dq & 2**12 != 0] |= CP_DQ_BITS['badpix']
+        dqbits[:,0] != CP_DQ_BITS['edge']
+        dqbits[:,-1] != CP_DQ_BITS['edge']
+        dqbits[0,:] != CP_DQ_BITS['edge']
+        dqbits[-1,:] != CP_DQ_BITS['edge']
+        return dqbits
