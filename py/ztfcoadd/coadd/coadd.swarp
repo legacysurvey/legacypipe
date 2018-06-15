@@ -80,7 +80,7 @@ COMBINE_BUFSIZE        8192            # RAM dedicated to co-addition(MB)
 
 DELETE_TMPFILES        Y               # Delete temporary resampled FITS files
                                        # (Y/N)?
-COPY_KEYWORDS          OBJECT, FILTER, MAGERR, OBSDATE          # List of FITS keywords to propagate
+COPY_KEYWORDS          FILTER, FILTERID, PROGRMID          # List of FITS keywords to propagate
                                        # from the input to the output headers
 WRITE_FILEINFO         N               # Write information about each input
                                        # file in the output image header?

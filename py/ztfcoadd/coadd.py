@@ -75,8 +75,9 @@ def edit_coadd_header(scie_list, coadd_fname):
 		with fits.open(scie) as f:
 			obsmjd_arr.append(f[0].header['OBSMJD'])
 
-	with fits.open(coadd_fname, mode='update'):
+	with fits.open(coadd_fname, mode='update') as f:
 		f[0].header['OBSMJD'] = np.median(obsmjd_arr)
+		f[0].header['EXPID'] = '0'
 
 def make_coadd(scie_list, folder, debug):
 
