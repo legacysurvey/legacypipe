@@ -7,8 +7,9 @@ import os
 import shutil
 import numpy as np
 from astropy.io import fits
+from ztfcoadd import initialize
 from ztfcoadd import utils
-from ztfcoadd.zpsee import zpsee
+from ztfcoadd import zpsee
 
 def output_image_list(sub_image_list):
 	np.savetxt('scie_coadd.list',sub_image_list,fmt='%s')
@@ -107,14 +108,16 @@ def make_coadd(scie_list, folder, debug):
 	cmd='%s/swarp -SUBTRACT_BACK N %s'%(utils.CODEPATH,coadd)
 	stdout, stderr = utils.execute(cmd)
 
+	initialize.edit_fits_headers([coadd])
+
 	coadd_fname = '/'.join(scie_list[0].split('/')[:-1])+'/ztf_'+'_'.join(scie_list[0].split('_')[3:7]) + '_coadd.fits'
-	utils.print_d("Changing %sto %s ..."%(coadd,coadd_fname),debug)
+	utils.print_d("Changing %s to %s ..."%(coadd,coadd_fname),debug)
 	if os.path.exists(coadd_fname):
 		os.remove(coadd_fname)
 	shutil.move(coadd,coadd_fname)
 
 	coadd_cat_fname = coadd_fname.replace('.fits','.cat')
-	utils.print_d("Changing %sto %s ..."%(cat,coadd_cat_fname),debug)
+	utils.print_d("Changing %s to %s ..."%(cat,coadd_cat_fname),debug)
 	if os.path.exists(coadd_cat_fname):
 		os.remove(coadd_cat_fname)
 	shutil.move(cat,coadd_cat_fname)
