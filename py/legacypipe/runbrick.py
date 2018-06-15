@@ -2775,10 +2775,14 @@ def stage_writecat(
     TT.apflux       = np.zeros((len(TT), len(bands), A), np.float32)
     TT.apflux_ivar  = np.zeros((len(TT), len(bands), A), np.float32)
     TT.apflux_resid = np.zeros((len(TT), len(bands), A), np.float32)
+    TT.set('fiberflux', np.zeros((len(TT),len(bands)), np.float32))
+    TT.set('fibertotflux', np.zeros((len(TT), len(bands)), np.float32))
     for iband,band in enumerate(bands):
         TT.apflux      [:,iband,:] = AP.get('apflux_img_%s'      % band)
         TT.apflux_ivar [:,iband,:] = AP.get('apflux_img_ivar_%s' % band)
         TT.apflux_resid[:,iband,:] = AP.get('apflux_resid_%s'    % band)
+        TT.fiberflux   [:,iband] = TT.apflux[:,iband,3] # Place holders
+        TT.fibertotflux[:,iband] = TT.apflux[:,iband,3]
 
     hdr = fs = None
     T2,hdr = prepare_fits_catalog(cat, invvars, TT, hdr, bands, fs)

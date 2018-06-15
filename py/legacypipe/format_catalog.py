@@ -73,6 +73,7 @@ def format_catalog(T, hdr, primhdr, allbands, outfn,
             'nobs', 'anymask', 'allmask', 'psfsize', 'psfdepth', 'galdepth']
     if has_ap:
         keys.extend(['apflux', 'apflux_resid', 'apflux_ivar'])
+        keys.extend(['fiberflux', 'fibertotflux'])
 
     for k in keys:
         incol = '%s%s' % (in_flux_prefix, k)
@@ -188,6 +189,8 @@ def format_catalog(T, hdr, primhdr, allbands, outfn,
     if has_ap:
         for c in ['apflux', 'apflux_resid','apflux_ivar']:
             add_fluxlike(c)
+    add_fluxlike('fiberflux')
+    add_fluxlike('fibertotflux')
 
     cols.extend(trans_cols_opt)
     cols.extend(trans_cols_wise)
@@ -262,7 +265,8 @@ def format_catalog(T, hdr, primhdr, allbands, outfn,
     funits = dict(
         flux=flux, flux_ivar=fluxiv,
         apflux=flux, apflux_ivar=fluxiv, apflux_resid=flux,
-        psfdepth=fluxiv, galdepth=fluxiv, psfsize=arcsec)
+        psfdepth=fluxiv, galdepth=fluxiv, psfsize=arcsec,
+        fiberflux=flux, fibertotflux=flux)
     # add prefixes
     units.update([('%s%s' % (flux_prefix, k), v) for k,v in funits.items()])
     # add bands
