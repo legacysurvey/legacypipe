@@ -169,7 +169,7 @@ def main():
 		stdout, stderr = utils.execute(cmd)
 
 	# MAKE A COADD
-	utils.print_d("Selecting images for reference ...",args.debug)
+	utils.print_d("Selecting images for coadd ...",args.debug)
 	coadd.select_best_images(scie_list, args.images_coadd_num, args.debug)
 	coadd.make_coadd(scie_list, args.folder, args.debug)
 
