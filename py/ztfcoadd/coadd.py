@@ -83,14 +83,22 @@ def make_coadd(scie_list, folder, debug):
 	os.chdir(folder)
 	
 	# MAKE THAT COADD!
-	coadd="%s/coadd_sciimg.fits"%folder
-	weight=coadd.replace('sciimg','weight')
-	cmd='%s/swarp @%s/scie_coadd.list -c %s/legacypipe/py/coadd/coadd.swarp -IMAGEOUT_NAME %s -WEIGHTOUT_NAME %s -NTHREADS 1'%(utils.CODEPATH,folder,utils.PROJECTPATH,coadd,weight)
+	coadd = "%s/coadd_sciimg.fits"%folder
+	for scie in scie_list:
+		weight = scie.replace('sciimg','weight')
+		weight_link = scie.replace('.fits','.weight.fits')
+		os.symlink(weight, weight_link)
+	coaddweight = coadd.replace('sciimg','weight')
+	cmd='%s/swarp @%s/scie_coadd.list -c %s/legacypipe/py/ztfcoadd/coadd/coadd.swarp -IMAGEOUT_NAME %s -WEIGHTOUT_NAME %s -NTHREADS 1'%(utils.CODEPATH,folder,utils.PROJECTPATH,coadd,coaddweight)
 	utils.print_d("Making the coadd ...",debug)
 	stdout, stderr = utils.execute(cmd)
+	for scie in scie_list:
+		weight_link = scie.replace('.fits','.weight.fits')
+		os.unlink(weight_link)
 
 	# MAKE COADD MASK
 	coadd_makemask(coadd)
+	coaddmask=coadd.replace('sciimg','mskimg')
 	
 	# PRELIM SEXTRACTOR THE COADD
 	coaddcat="%s/prelim.coadd.cat"%folder
@@ -113,13 +121,13 @@ def make_coadd(scie_list, folder, debug):
 	# CREATE FINAL CATALOG WITH CORRECT MAGNITUDES
 	with fits.open(coadd) as f:
 		zp = f[0].header['C3ZP']
-	cat="%s/coadd.cat"%folder
-	cmd="sex -c %s/legacypipe/py/ztfcoadd/coadd/coadd.sex -WEIGHT_IMAGE %s -MAG_ZEROPOINT %s -VERBOSE_TYPE QUIET -CATALOG_NAME %s %s"%(utils.PROJECTPATH,weight,zp,cat,coadd)
+	coaddcat_final="%s/coadd_sciimg.cat"%folder
+	cmd="sex -c %s/legacypipe/py/ztfcoadd/coadd/coadd.sex -WEIGHT_IMAGE %s -MAG_ZEROPOINT %s -VERBOSE_TYPE QUIET -CATALOG_NAME %s %s"%(utils.PROJECTPATH,coaddweight,zp,coaddcat_final,coadd)
 	utils.print_d("Final sex the coadd ...",debug)
 	stdout, stderr = utils.execute(cmd)
 
 	# CREATE HEADERS FOR COADD
-	cmd='scamp -c %s/legacypipe/py/ztfcoadd/coadd/coadd.conf %s'%(utils.PROJECTPATH,cat)
+	cmd='scamp -c %s/legacypipe/py/ztfcoadd/coadd/coadd.conf %s'%(utils.PROJECTPATH,coaddcat_final)
 	utils.print_d("Creating coadd header file ...",debug)
 	stdout, stderr = utils.execute(cmd)
 
@@ -131,16 +139,28 @@ def make_coadd(scie_list, folder, debug):
 	initialize.edit_fits_headers([coadd])
 	edit_coadd_header(scie_list,coadd)
 
-	coadd_fname = '/'.join(scie_list[0].split('/')[:-1])+'/ztf_'+'_'.join(scie_list[0].split('_')[3:7]) + '_coadd.fits'
+	coadd_fname = '/'.join(scie_list[0].split('/')[:-1]) + '/ztf_coadd_' + '_'.join(scie_list[0].split('_')[3:])
 	utils.print_d("Changing %s to %s ..."%(coadd,coadd_fname),debug)
 	if os.path.exists(coadd_fname):
 		os.remove(coadd_fname)
 	shutil.move(coadd,coadd_fname)
 
 	coadd_cat_fname = coadd_fname.replace('.fits','.cat')
-	utils.print_d("Changing %s to %s ..."%(cat,coadd_cat_fname),debug)
+	utils.print_d("Changing %s to %s ..."%(coaddcat_final,coadd_cat_fname),debug)
 	if os.path.exists(coadd_cat_fname):
 		os.remove(coadd_cat_fname)
-	shutil.move(cat,coadd_cat_fname)
+	shutil.move(coaddcat_final,coadd_cat_fname)
+
+	coadd_weight_fname = coadd_fname.replace('sciimg','weight')
+	utils.print_d("Changing %s to %s ..."%(weight,coadd_weight_fname),debug)
+	if os.path.exists(coadd_weight_fname):
+		os.remove(coadd_weight_fname)
+	shutil.move(coaddweight,coadd_weight_fname)
+
+	coadd_mask_fname = coadd_fname.replace('sciimg','mskimg')
+	utils.print_d("Changing %s to %s ..."%(coaddmask,coadd_mask_fname),debug)
+	if os.path.exists(coadd_mask_fname):
+		os.remove(coadd_mask_fname)
+	shutil.move(coaddmask,coadd_mask_fname)
 
 	utils.print_d("Coadd Making Complete!",debug)
