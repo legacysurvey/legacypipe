@@ -46,6 +46,8 @@ def main():
 	parser.set_defaults(debug=True)
 
 	args = parser.parse_args()
+	if args.folder.endswith('/'):
+		args.folder = args.folder[:-1]
 
 	os.chdir(args.folder)
 
