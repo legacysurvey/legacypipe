@@ -1436,6 +1436,7 @@ def read_tycho2(survey, targetwcs):
     print(len(I), 'Tycho-2 stars within', radius, 'deg of RA,Dec (%.3f, %.3f)' % (ra,dec))
     if len(I) == 0:
         tycho = []
+
     # Read only the rows within range.
     tycho = fits_table(tycho2fn, rows=I)
     del kd

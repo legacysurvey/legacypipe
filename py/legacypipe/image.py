@@ -1173,6 +1173,8 @@ class LegacySurveyImage(object):
             if min(img.shape) / boxsize < 4:
                 boxsize /= 2
 
+            boxsize = int(boxsize)
+
             # Compute initial model...
             skyobj = SplineSky.BlantonMethod(img - med, good, boxsize)
             skymod = np.zeros_like(img)

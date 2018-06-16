@@ -1,0 +1,40 @@
+CATALOG_TYPE    FITS_LDAC      # "ASCII_HEAD","ASCII","FITS_1.0" or "FITS_LDAC"
+DETECT_THRESH    3.0            # <sigmas> or <threshold>,<ZP> in mag.arcsec-2
+ANALYSIS_THRESH  5.0            # <sigmas> or <threshold>,<ZP> in mag.arcsec-2
+DETECT_MINAREA   5            # minimum number of pixels above threshold
+
+DEBLEND_NTHRESH 32              # Number of deblending sub-thresholds
+DEBLEND_MINCONT 0.005           # Minimum contrast parameter for deblending
+
+BACK_SIZE       128              # Background mesh: <size> or <width>,<height>
+BACK_FILTERSIZE 3               # Background filter: <size> or <width>,<height>
+ 
+BACKPHOTO_TYPE  GLOBAL          # can be "GLOBAL" or "LOCAL"
+
+MASK_TYPE        CORRECT        # type of detection MASKing: can be one of
+                                # NONE, BLANK or CORRECT
+ 
+#-------------------------------- WEIGHTing ----------------------------------
+
+WEIGHT_TYPE      MAP_WEIGHT     # type of WEIGHTing: NONE, BACKGROUND,
+                                # MAP_RMS, MAP_VAR or MAP_WEIGHT
+WEIGHT_GAIN      Y              # modulate gain (E/ADU) with weights? (Y/N)
+#WEIGHT_THRESH    0.01            # weight threshold[s] for bad pixels
+
+#------------------------------ Check Image ----------------------------------
+ 
+CHECKIMAGE_TYPE  BACKGROUND_RMS # can be NONE, BACKGROUND, BACKGROUND_RMS,
+                                # MINIBACKGROUND, MINIBACK_RMS, -BACKGROUND,
+                                # FILTERED, OBJECTS, -OBJECTS, SEGMENTATION,
+                                # or APERTURES
+
+PARAMETERS_NAME /project/projectdirs/uLens/ZTF/Tractor/legacypipe/py/ztfcoadd/coadd/coadd.param   # name of the file containing catalog contents
+FILTER_NAME     /project/projectdirs/uLens/ZTF/Tractor/legacypipe/py/ztfcoadd/coadd/coadd.conv    # name of the file containing the filter
+STARNNW_NAME    /project/projectdirs/uLens/ZTF/Tractor/legacypipe/py/ztfcoadd/coadd/coadd.nnw     # Neural-Network_Weight table filename
+
+NTHREADS               1
+
+#------------------------------ PSFex Settings ----------------------------------
+PHOT_APERTURES	5.05
+GAIN_KEY 	GAIN
+SATUR_KEY	SATURVAL

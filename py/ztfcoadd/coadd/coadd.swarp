@@ -1,0 +1,91 @@
+# Configuration file for SWarp 2.17.1
+# EB 2008-08-25
+#
+#----------------------------------- Output -----------------------------------
+
+HEADER_ONLY            N               # Only a header as an output file (Y/N)?
+HEADER_SUFFIX          .head           # Filename extension for additional headers
+
+#------------------------------- Input Weights --------------------------------
+
+WEIGHT_TYPE            MAP_WEIGHT      # BACKGROUND,MAP_RMS,MAP_VARIANCE
+                                       # or MAP_WEIGHT
+WEIGHT_SUFFIX          .weight.fits    # Suffix to use for weight-maps
+                                       # (all or for each weight-map)
+
+
+#------------------------------- Co-addition ----------------------------------
+
+COMBINE                Y               # Combine resampled images (Y/N)?
+COMBINE_TYPE           MEDIAN          # MEDIAN,AVERAGE,MIN,MAX,WEIGHTED,CHI2
+                                       # or SUM
+
+#-------------------------------- Astrometry ----------------------------------
+
+CELESTIAL_TYPE         NATIVE          # NATIVE, PIXEL, EQUATORIAL,
+                                       # GALACTIC,ECLIPTIC, or SUPERGALACTIC
+PROJECTION_TYPE        TAN             # Any WCS projection code or NONE
+PROJECTION_ERR         0.001           # Maximum projection error (in output
+                                       # pixels), or 0 for no approximation
+CENTER_TYPE            ALL # MANUAL, ALL or MOST
+PIXELSCALE_TYPE        MANUAL          # MANUAL,FIT,MIN,MAX or MEDIAN
+PIXEL_SCALE            1.01            # Pixel scale
+IMAGE_SIZE             0               # Image size (0 = AUTOMATIC)
+
+#-------------------------------- Resampling ----------------------------------
+
+RESAMPLE               Y               # Resample input images (Y/N)?
+RESAMPLE_DIR           .               # Directory path for resampled images
+RESAMPLE_SUFFIX        .resamp.fits    # filename extension for resampled images
+
+RESAMPLING_TYPE        LANCZOS4        # NEAREST,BILINEAR,LANCZOS2,LANCZOS3
+                                       # or LANCZOS4 (1 per axis)
+OVERSAMPLING           0               # Oversampling in each dimension
+                                       # (0 = automatic)
+INTERPOLATE            N               # Interpolate bad input pixels (Y/N)?
+                                       # (all or for each image)
+
+FSCALASTRO_TYPE        FIXED           # NONE,FIXED, or VARIABLE
+FSCALE_KEYWORD         FLXSCALE        # FITS keyword for the multiplicative
+                                       # factor applied to each input image
+FSCALE_DEFAULT         1.0             # Default FSCALE value if not in header
+
+GAIN_KEYWORD           GAIN            # FITS keyword for effect. gain (e-/ADU)
+GAIN_DEFAULT           6.2             # Default gain if no FITS keyword found
+
+BLANK_BADPIXELS        Y
+
+#--------------------------- Background subtraction ---------------------------
+
+SUBTRACT_BACK          Y               # Subtraction sky background (Y/N)?
+                                       # (all or for each image)
+
+BACK_TYPE              AUTO            # AUTO or MANUAL
+                                       # (all or for each image)
+BACK_DEFAULT           0.0             # Default background value in MANUAL
+                                       # (all or for each image)
+BACK_SIZE              128             # Background mesh size (pixels)
+                                       # (all or for each image)
+BACK_FILTERSIZE        3               # Background map filter range (meshes)
+                                       # (all or for each image)
+
+#------------------------------ Memory management -----------------------------
+
+VMEM_DIR               .               # Directory path for swap files
+VMEM_MAX               10240           # Maximum amount of virtual memory (MB)
+MEM_MAX                10240           # Maximum amount of usable RAM (MB)
+COMBINE_BUFSIZE        8192            # RAM dedicated to co-addition(MB)
+
+#------------------------------ Miscellaneous ---------------------------------
+
+DELETE_TMPFILES        Y               # Delete temporary resampled FITS files
+                                       # (Y/N)?
+COPY_KEYWORDS          FILTER, FILTERID, PROGRMID          # List of FITS keywords to propagate
+                                       # from the input to the output headers
+WRITE_FILEINFO         N               # Write information about each input
+                                       # file in the output image header?
+WRITE_XML              Y               # Write XML file (Y/N)?
+XML_NAME               swarp.xml       # Filename for XML output
+VERBOSE_TYPE           NORMAL          # QUIET,NORMAL or FULL
+
+NTHREADS               1               # 1 thread

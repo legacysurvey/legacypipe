@@ -626,19 +626,23 @@ def create_zeropoints_table(zpt_fn):
 def getrms(x):
     return np.sqrt( np.mean( np.power(x,2) ) )
 
+# def get_bitmask_fn(imgfn):
+#     if 'ooi' in imgfn: 
+#         fn= imgfn.replace('ooi','ood')
+#     elif 'oki' in imgfn: 
+#         fn= imgfn.replace('oki','ood')
+#     else:
+#         raise ValueError('bad imgfn? no ooi or oki: %s' % imgfn)
+#     return fn
+
 def get_bitmask_fn(imgfn):
-    if 'ooi' in imgfn: 
-        fn= imgfn.replace('ooi','ood')
-    elif 'oki' in imgfn: 
-        fn= imgfn.replace('oki','ood')
-    else:
-        raise ValueError('bad imgfn? no ooi or oki: %s' % imgfn)
-    return fn
+    mask = imgfn.replace('sciimg','mskimg')
+    return mask
 
 class Measurer(object):
     def __init__(self, fn, aprad=3.5, skyrad_inner=7.0, skyrad_outer=10.0,
                  det_thresh=8., match_radius=3.,sn_min=None,sn_max=None,
-                 aper_sky_sub=False, calibrate=False, **kwargs):
+                 aper_sky_sub=False, calibrate=False, ztf=False, **kwargs):
         '''This is the work-horse class which operates on a given image regardless of
         its origin (decam, mosaic, 90prime).
 
@@ -695,27 +699,42 @@ class Measurer(object):
             del tmp
 
         # Camera-agnostic primary header cards
-        self.propid = self.primhdr['PROPID']
+        if not ztf:
+            self.propid = self.primhdr['PROPID']
+            self.date_obs = self.primhdr['DATE-OBS']
+            self.mjd_obs = self.primhdr['MJD-OBS']
+        else:
+            self.propid = self.primhdr['PROGRMID']
+            self.date_obs = self.primhdr['OBSJD']
+            self.mjd_obs = self.primhdr['OBSJD']
         self.exptime = self.primhdr['EXPTIME']
-        self.date_obs = self.primhdr['DATE-OBS']
-        self.mjd_obs = self.primhdr['MJD-OBS']
         # Keys may not exist in header
-        for key in ['AIRMASS','HA']:
+        if not ztf:
+            key_arr = ['AIRMASS','HA']
+        else:
+            key_arr = ['AIRMASS','HOURANGD']
+        for key in key_arr:
             try:
                 val= self.primhdr[key]
             except KeyError:
                 val= -1
+                print('WARNING! not in primhdr %s' % key) 
             setattr(self, key.lower(),val)
-            print('WARNING! not in primhdr %s' % key) 
         
         # FIX ME!, gets unique id for mosaic but not 90prime
-        if 'EXPNUM' in self.primhdr: 
-            self.expnum = self.primhdr['EXPNUM']
+        if not ztf:
+            if 'EXPNUM' in self.primhdr: 
+                self.expnum = self.primhdr['EXPNUM']
+            else:
+                print('WARNING! no EXPNUM in %s' % self.fn)
+                self.expnum = np.int32(os.path.basename(self.fn)[11:17])
         else:
-            print('WARNING! no EXPNUM in %s' % self.fn)
-            self.expnum = np.int32(os.path.basename(self.fn)[11:17])
+            self.expnum = self.primhdr['EXPID']
 
-        self.obj = self.primhdr['OBJECT']
+        if not ztf:
+            self.obj = self.primhdr['OBJECT']
+        else:
+            self.obj = self.primhdr['FIELDID']
 
     def zeropoint(self, band):
         return self.zp0[band]
@@ -731,9 +750,14 @@ class Measurer(object):
         self.ccdname= ext.strip()
         self.expid = '{:08d}-{}'.format(self.expnum, self.ccdname)
         hdulist= fitsio.FITS(self.fn)
-        self.image_hdu= hdulist[ext].get_extnum() #NOT ccdnum in header!
+        if self.camera == 'ztf':
+            self.image_hdu= hdulist[int(ext)].get_extnum() #NOT ccdnum in header!
+            self.hdr = fitsio.read_header(self.fn, ext=int(ext))
+        else:
+            self.image_hdu= hdulist[ext].get_extnum() #NOT ccdnum in header!
+            self.hdr = fitsio.read_header(self.fn, ext=ext)
         # use header
-        self.hdr = fitsio.read_header(self.fn, ext=ext)
+        
         # Sanity check
         assert(self.ccdname.upper() == self.hdr['EXTNAME'].strip().upper())
         self.ccdnum = np.int(self.hdr['CCDNUM']) 
@@ -1435,7 +1459,94 @@ class Measurer(object):
         plt.close()
         print('Wrote %s' % fn)
    
- 
+class ZtfMeasurer(Measurer):
+    '''ZTF CP units: ADU
+    Class to measure a variety of quantities from a single ZTF CCD.
+
+    Image read will be converted to e-
+    also zpt to e-
+    '''
+    def __init__(self, *args, **kwargs):
+        super(ZtfMeasurer, self).__init__(*args, **kwargs)
+
+        self.pixscale=2.02
+        self.camera = 'ztf'
+        self.ut = self.primhdr['SHUTOPEN']
+        self.band = self.get_band()
+        # {RA,DEC}: center of exposure, TEL{RA,DEC}: boresight of telescope
+        # Use center of exposure if possible
+        if 'RA' in self.primhdr.keys():
+            self.ra_bore = self.primhdr['RA']
+            self.dec_bore = self.primhdr['DEC']
+        elif 'TELRA' in self.primhdr.keys():
+            self.ra_bore = self.primhdr['TELRA']
+            self.dec_bore = self.primhdr['TELDEC']
+        else:
+            raise ValueError('Neither RA or TELRA in pimhdr, crash')
+        if type(self.ra_bore) == str:
+            self.ra_bore = hmsstring2ra(self.ra_bore) 
+            self.dec_bore = dmsstring2dec(self.dec_bore)
+        #self.gain = self.hdr['ARAWGAIN'] # hack! average gain [electron/sec]
+
+        # /global/homes/a/arjundey/idl/pro/observing/decstat.pro
+        self.zp0 =  dict(g = 26.610,r = 26.818,z = 26.484) # e/sec
+        self.sky0 = dict(g = 22.04,r = 20.91,z = 18.46) # AB mag/arcsec^2
+        self.k_ext = dict(g = 0.17,r = 0.10,z = 0.06)
+        # --> e/sec
+        #for b in self.zp0.keys(): 
+        #    self.zp0[b] += -2.5*np.log10(self.gain)  
+    
+    def get_band(self):
+        band = self.primhdr['FILTER']
+        band = band.split()[1]
+        return band
+
+    def get_gain(self,hdr):
+        return np.average((hdr['GAINA'],hdr['GAINB']))
+        #return hdr['ARAWGAIN']
+
+    def colorterm_ps1_to_observed(self, ps1stars, band):
+        from legacyanalysis.ps1cat import ps1_to_decam
+        return ps1_to_decam(ps1stars, band)
+
+    def read_image_and_bitmask(self,funpack=True):
+        '''funpack, then read'''
+        imgfn= self.fn
+        maskfn= get_bitmask_fn(self.fn)
+        print('Reading %s %s' % (imgfn,maskfn))
+        if funpack:
+            todelete=[]
+            imgfn,maskfn = funpack_files(imgfn, maskfn, self.ext, todelete)
+            # Read
+            img, hdr = fitsio.read(imgfn, ext=self.ext, header=True)
+            mask, junk = fitsio.read(maskfn, ext=self.ext, header=True)
+            for fn in todelete:
+               os.unlink(fn)
+        else:
+            # Read
+            try: 
+                img, hdr = fitsio.read(imgfn, ext=self.ext, header=True)
+            except IOError:
+                raise ValueError('error reading ext=%s from imgfn=%s' % (self.ext,imgfn))
+            mask, junk = fitsio.read(maskfn, ext=self.ext, header=True)
+        # ADU --> e
+        img *= self.gain 
+        return hdr,img,mask
+    
+    def read_image(self):
+        '''Read the image and header.  Convert image from ADU to electrons.'''
+        img, hdr = fitsio.read(self.fn, ext=self.ext, header=True)
+        #fits=fitsio.FITS(fn,mode='r',clobber=False,lower=True)
+        #hdr= fits[0].read_header()
+        #img= fits[ext].read()
+        #img *= self.gain
+        #img *= self.gain / self.exptime
+        img *= self.gain 
+        return img, hdr
+    
+    def get_wcs(self):
+        return wcs_pv2sip_hdr(self.hdr) # PV distortion
+
 class DecamMeasurer(Measurer):
     '''DECam CP units: ADU
     Class to measure a variety of quantities from a single DECam CCD.
@@ -1653,6 +1764,8 @@ def get_extlist(camera,fn):
         #           'N28', 'N29', 'N31']
         # Testing only!
         #extlist = ['N4','S4', 'S22','N19']
+    elif camera == 'ztf':
+        extlist = ['0']
     else:
         print('Camera {} not recognized!'.format(camera))
         pdb.set_trace() 
@@ -1727,6 +1840,9 @@ def measure_image(img_fn, **measureargs):
         measure = Mosaic3Measurer(img_fn, **measureargs)
     elif camera == '90prime':
         measure = NinetyPrimeMeasurer(img_fn, **measureargs)
+    elif camera == 'ztf':
+        measure = ZtfMeasurer(img_fn, **measureargs)
+
     extra_info= dict(zp_fid= measure.zeropoint( measure.band ),
                      sky_fid= measure.sky( measure.band ),
                      ext_fid= measure.extinction( measure.band ),
@@ -1765,6 +1881,8 @@ class outputFns(object):
             proj_name= camera+'z'
         elif camera == '90prime': 
             proj_name= 'bok'
+        elif camera == 'ztf': 
+            proj_name= camera
         proj_dir= '/project/projectdirs/cosmo/staging/%s/' % proj_name
         proja_dir= '/global/projecta/projectdirs/cosmo/staging/%s/' % proj_name
         root= imgfn_proj.replace(proj_dir,'').replace(proja_dir,'')
@@ -1860,7 +1978,7 @@ def get_parser():
     parser = argparse.ArgumentParser(formatter_class=argparse.ArgumentDefaultsHelpFormatter,\
                                      description='Generate a legacypipe-compatible CCDs file \
                                                   from a set of reduced imaging.')
-    parser.add_argument('--camera',choices=['decam','mosaic','90prime'],action='store',required=True)
+    parser.add_argument('--camera',choices=['decam','mosaic','90prime','ztf'],action='store',required=True)
     parser.add_argument('--image',action='store',default=None,help='if want to run a single image',required=False)
     parser.add_argument('--image_list',action='store',default=None,help='if want to run all images in a text file, Note:if compare2arjun = True then list of legacy zeropoint files',required=False)
     parser.add_argument('--outdir', type=str, default='.', help='Where to write zpts/,images/,logs/')
@@ -1918,7 +2036,8 @@ def main(image_list=None,args=None):
             continue
         measureargs.update(dict(zptfn= F.zptfn,\
                                 starfn= F.starfn,\
-                                imgfn_scr= F.imgfn_scr))
+                                imgfn_scr= F.imgfn_scr,\
+                                ztf=True))
         # Create the file
         t0=ptime('b4-run',t0)
         runit(imgfn_proj, **measureargs)
