@@ -97,8 +97,8 @@ def run_sed_matched_filters(SEDs, bands, detmaps, detivs, omit_xy,
         Detection maps for each of the listed `bands`.
     detivs : numpy array, float
         Inverse-variances of the `detmaps`.
-    omit_xy : None, or (xx,yy) tuple
-        Existing sources to avoid.
+    omit_xy : None, or (xx,yy,rr) tuple
+        Existing sources to avoid: x, y, radius.
     targetwcs : WCS object
         WCS object to use to convert pixel values into RA,Decs for the
         returned Tractor PointSource objects.
@@ -135,10 +135,10 @@ def run_sed_matched_filters(SEDs, bands, detmaps, detivs, omit_xy,
     from tractor import PointSource, RaDecPos, NanoMaggies
 
     if omit_xy is not None:
-        xx,yy = omit_xy
+        xx,yy,rr = omit_xy
         n0 = len(xx)
     else:
-        xx,yy = [],[]
+        xx,yy,rr = [],[],[]
         n0 = 0
 
     H,W = detmaps[0].shape
@@ -155,7 +155,7 @@ def run_sed_matched_filters(SEDs, bands, detmaps, detivs, omit_xy,
             pps = None
         t0 = Time()
         sedhot,px,py,peakval,apval = sed_matched_detection(
-            sedname, sed, detmaps, detivs, bands, xx, yy,
+            sedname, sed, detmaps, detivs, bands, xx, yy, rr,
             nsigma=nsigma, saturated_pix=saturated_pix, ps=pps)
         print('SED took', Time()-t0)
         if sedhot is None:
@@ -208,7 +208,7 @@ def plot_boundary_map(X, rgb=(0,255,0)):
     plt.imshow(rgba, interpolation='nearest', origin='lower')
 
 def sed_matched_detection(sedname, sed, detmaps, detivs, bands,
-                          xomit, yomit,
+                          xomit, yomit, romit,
                           nsigma=5.,
                           saturated_pix=None,
                           saddle=2.,
@@ -232,8 +232,8 @@ def sed_matched_detection(sedname, sed, detmaps, detivs, bands,
         The inverse-variance maps associated with `detmaps`.
     bands : list of strings
         The band names of the `detmaps` and `detivs` images.
-    xomit, yomit : iterables (lists or numpy arrays) of int
-        Previously known sources that are to be avoided.
+    xomit, yomit, romit : iterables (lists or numpy arrays) of int
+        Previously known sources that are to be avoided; x,y +- radius
     nsigma : float, optional
         Detection threshold.
     saturated_pix : None or list of numpy arrays, boolean
@@ -418,9 +418,15 @@ def sed_matched_detection(sedname, sed, detmaps, detivs, bands,
     # sure will be vetoed.
     vetomap = np.zeros(sedsn.shape, bool)
 
-    segmentmap = np.zeros(sedsn.shape, np.int16)
-    segmentmap[:,:] = -1
-    
+    for x,y,r in zip(xomit, yomit, romit):
+        xlo = int(np.clip(np.floor(x - r), 0, W-1))
+        xhi = int(np.clip(np.ceil (x + r), 0, W-1))
+        ylo = int(np.clip(np.floor(y - r), 0, H-1))
+        yhi = int(np.clip(np.ceil (y + r), 0, H-1))
+        vetomap[ylo:yhi+1, xlo:xhi+1] |= (np.hypot(
+            (x - np.arange(xlo, xhi+1))[np.newaxis, :],
+            (y - np.arange(ylo, yhi+1))[:, np.newaxis]) < r)
+
     # For each peak, determine whether it is isolated enough --
     # separated by a low enough saddle from other sources.  Need only
     # search within its "allblob", which is defined by the lowest
