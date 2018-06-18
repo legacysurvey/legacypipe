@@ -420,18 +420,21 @@ class OneBlob(object):
                 plt.title('Model selection: stage1 data')
                 self.ps.savefig()
 
+            # Mask out other sources while fitting this one, by
+            # finding symmetrized blobs of significant pixels
             mask_others = True
-
             if mask_others:
                 from legacypipe.detection import detection_maps
                 from astrometry.util.multiproc import multiproc
                 from scipy.ndimage.morphology import binary_dilation
                 from scipy.ndimage.measurements import label, find_objects
 
+                # Compute per-band detection maps
                 mp = multiproc()
                 detmaps,detivs,satmaps = detection_maps(
                     srctims, self.blobwcs, self.bands, mp)
 
+                # Compute the symmetric area that fits in this 'tim'
                 pos = src.getPosition()
                 ok,x,y = self.blobwcs.radec2pixelxy(pos.ra, pos.dec)
                 bh,bw = self.blobmask.shape
@@ -442,11 +445,13 @@ class OneBlob(object):
                 fliph = min(iy, bh-1-iy)
                 #print('x,y', x,y, 'ix,iy', ix,iy, 'bw,bh', bw,bh, 'flipw,h', flipw,fliph)
                 flipblobs = np.zeros(self.blobmask.shape, bool)
+                # Go through the per-band detection maps, marking significant pixels
                 for i,(detmap,detiv) in enumerate(zip(detmaps,detivs)):
                     sn = detmap * np.sqrt(detiv)
                     slc = (slice(iy-fliph, iy+fliph+1),
                            slice(ix-flipw, ix+flipw+1))
                     flipsn = np.zeros_like(sn)
+                    # Symmetrize
                     flipsn[slc] = np.minimum(sn[slc],
                                              np.flipud(np.fliplr(sn[slc])))
                     # just OR the detection maps per-band...
