@@ -101,7 +101,7 @@ class OneBlob(object):
         self.bands = bands
         self.plots = plots
 
-        self.plots_per_source = False
+        self.plots_per_source = plots
         # blob-1-data.png, etc
         self.plots_single = False
 
@@ -407,12 +407,119 @@ class OneBlob(object):
                 # This is a handy blob-coordinates plot of the data
                 # going into the fit.
                 plt.clf()
-                coimgs,cons = quick_coadds(srctims, self.bands, self.blobwcs,
-                                             fill_holes=False)
+                #coimgs,cons = quick_coadds(srctims, self.bands, self.blobwcs,
+                nil,nil,coimgs,nil = quick_coadds(srctims, self.bands, self.blobwcs,
+                                                  fill_holes=False, get_cow=True)
                 dimshow(get_rgb(coimgs, self.bands))
+                ax = plt.axis()
+                pos = src.getPosition()
+                ok,x,y = self.blobwcs.radec2pixelxy(pos.ra, pos.dec)
+                ix,iy = int(np.round(x-1)), int(np.round(y-1))
+                plt.plot(x-1, y-1, 'r+')
+                plt.axis(ax)
                 plt.title('Model selection: stage1 data')
                 self.ps.savefig()
 
+            mask_others = True
+
+            if mask_others:
+                from legacypipe.detection import detection_maps
+                from astrometry.util.multiproc import multiproc
+                from scipy.ndimage.morphology import binary_dilation
+                from scipy.ndimage.measurements import label, find_objects
+
+                mp = multiproc()
+                detmaps,detivs,satmaps = detection_maps(
+                    srctims, self.blobwcs, self.bands, mp)
+
+                pos = src.getPosition()
+                ok,x,y = self.blobwcs.radec2pixelxy(pos.ra, pos.dec)
+                ix,iy = int(np.round(x-1)), int(np.round(y-1))
+                
+                bh,bw = self.blobmask.shape
+                flipw = min(ix, bw-1-ix)
+                fliph = min(iy, bh-1-iy)
+                flipblobs = np.zeros(self.blobmask.shape, bool)
+                for i,(detmap,detiv) in enumerate(zip(detmaps,detivs)):
+                    sn = detmap * np.sqrt(detiv)
+                    slc = (slice(iy-fliph, iy+fliph+1),
+                           slice(ix-flipw, ix+flipw+1))
+                    flipsn = np.zeros_like(sn)
+                    flipsn[slc] = np.minimum(sn[slc],
+                                             np.flipud(np.fliplr(sn[slc])))
+                    # just OR the detection maps per-band...
+                    flipblobs |= (flipsn > 5.)
+                blobs,nb = label(flipblobs)
+                goodblob = blobs[iy,ix]
+                if goodblob != 0:
+                    flipblobs = (blobs == goodblob)
+                dilated = binary_dilation(flipblobs, iterations=4)
+
+                saved_srctim_ies = []
+                for tim in srctims:
+                    # Zero out inverse-errors for all pixels outside
+                    # 'dilated'.
+                    try:
+                        Yo,Xo,Yi,Xi,nil = resample_with_wcs(
+                            tim.subwcs, self.blobwcs, [], 2)
+                    except:
+                        continue
+                    ie = tim.getInvError()
+                    saved_srctim_ies.append(ie)
+                    newie = np.zeros_like(ie)
+                    good, = np.nonzero(dilated[Yi,Xi])
+                    yy = Yo[good]
+                    xx = Xo[good]
+                    newie[yy,xx] = ie[yy,xx]
+                    tim.inverr = newie
+
+                if self.plots_per_source:
+                    from legacypipe.detection import plot_boundary_map
+                    # I just OR the per-band detmaps here
+                    # blobs = np.zeros(self.blobmask.shape, bool)
+                    # for detmap,detiv in zip(detmaps,detivs):
+                    #     sn = detmap * np.sqrt(detiv)
+                    #     blobs |= (sn > 5.)
+                    # 
+                    # for i,(detmap,detiv) in enumerate(zip(detmaps,detivs)):
+                    #     sn = detmap * np.sqrt(detiv)
+                    #     rgb = np.zeros(3, np.uint8)
+                    #     rgb[2-i] = 255
+                    #     plot_boundary_map(sn > 5, rgb=rgb)
+                    # plot_boundary_map(blobs, rgb=(255,255,255))
+                    # self.ps.savefig()
+                    # plt.clf()
+                    # for i,b in enumerate(self.bands):
+                    #     plt.subplot(1,len(self.bands),i+1)
+                    #     dimshow(detmaps[i] * np.sqrt(detivs[i]),
+                    #             vmin=0, vmax=10)
+                    #     plt.title('band %s' % b)
+                    # self.ps.savefig()
+    
+                    # plt.clf()
+                    # dimshow(blobs, vmin=0, vmax=1)
+                    # plt.title('blobs')
+                    # self.ps.savefig()                
+
+                    plt.clf()
+                    dimshow(get_rgb(coimgs, self.bands))
+                    ax = plt.axis()
+                    plt.plot(x-1, y-1, 'r+')
+                    plt.axis(ax)
+                    plot_boundary_map(flipblobs, rgb=(255,255,255))
+                    plot_boundary_map(dilated, rgb=(0,255,0))
+                    plt.title('symmetrized blobs')
+                    self.ps.savefig()                
+
+                    nil,nil,coimgs,nil = quick_coadds(srctims, self.bands, self.blobwcs,
+                                                      fill_holes=False, get_cow=True)
+                    dimshow(get_rgb(coimgs, self.bands))
+                    ax = plt.axis()
+                    plt.plot(x-1, y-1, 'r+')
+                    plt.axis(ax)
+                    plt.title('Symmetric-blob masked')
+                    self.ps.savefig()
+                
                 # # plot the modelmasks for each tim.
                 # plt.clf()
                 # R = int(np.floor(np.sqrt(len(srctims))))
@@ -734,6 +841,10 @@ class OneBlob(object):
                 #     self._plot_coadd(srctims, self.blobwcs, model=srctractor)
                 #     plt.title('model selection evaluated for %s' % name)
                 #     self.ps.savefig()
+
+            if mask_others:
+                for ie,tim in zip(saved_srctim_ies, srctims):
+                    tim.inverr = ie
                 
             # Actually select which model to keep.  This "modnames"
             # array determines the order of the elements in the DCHISQ
@@ -1193,6 +1304,8 @@ class OneBlob(object):
             tim.modelMinval = modelMinval
             tim.subwcs = subwcs
             tim.meta = imobj
+            tim.psf_sigma = imobj.fwhm / 2.35
+            tim.dq = None
             tims.append(tim)
         return tims
 
@@ -1613,6 +1726,11 @@ def _get_subimages(tims, mods, src):
         subtim.x0 = x0
         subtim.y0 = y0
         subtim.meta = tim.meta
+        subtim.psf_sigma = tim.psf_sigma
+        if tim.dq is not None:
+            subtim.dq = tim.dq[slc]
+        else:
+            subtim.dq = None
         subtims.append(subtim)
         #print('  ', tim.shape, 'to', subtim.shape)
     return subtims, modelMasks
