@@ -41,7 +41,7 @@ echo >> $log
 echo -e "\nStarting on ${NERSC_HOST} $(hostname)\n" >> $log
 echo "-----------------------------------------------------------------------------------------" >> $log
 
-python -u legacypipe/runbrick.py \
+python    legacypipe/runbrick.py \
     --skip-calibs \
     --checkpoint $outdir/checkpoints/${bri}/checkpoint-${brick}.pickle \
     --pickle "$outdir/pickles/${bri}/runbrick-%(brick)s-%%(stage)s.pickle" \
