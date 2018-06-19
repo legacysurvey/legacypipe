@@ -97,8 +97,8 @@ def run_sed_matched_filters(SEDs, bands, detmaps, detivs, omit_xy,
         Detection maps for each of the listed `bands`.
     detivs : numpy array, float
         Inverse-variances of the `detmaps`.
-    omit_xy : None, or (xx,yy) tuple
-        Existing sources to avoid.
+    omit_xy : None, or (xx,yy,rr) tuple
+        Existing sources to avoid: x, y, radius.
     targetwcs : WCS object
         WCS object to use to convert pixel values into RA,Decs for the
         returned Tractor PointSource objects.
@@ -135,10 +135,10 @@ def run_sed_matched_filters(SEDs, bands, detmaps, detivs, omit_xy,
     from tractor import PointSource, RaDecPos, NanoMaggies
 
     if omit_xy is not None:
-        xx,yy = omit_xy
+        xx,yy,rr = omit_xy
         n0 = len(xx)
     else:
-        xx,yy = [],[]
+        xx,yy,rr = [],[],[]
         n0 = 0
 
     H,W = detmaps[0].shape
@@ -155,7 +155,7 @@ def run_sed_matched_filters(SEDs, bands, detmaps, detivs, omit_xy,
             pps = None
         t0 = Time()
         sedhot,px,py,peakval,apval = sed_matched_detection(
-            sedname, sed, detmaps, detivs, bands, xx, yy,
+            sedname, sed, detmaps, detivs, bands, xx, yy, rr,
             nsigma=nsigma, saturated_pix=saturated_pix, ps=pps)
         print('SED took', Time()-t0)
         if sedhot is None:
@@ -208,7 +208,7 @@ def plot_boundary_map(X, rgb=(0,255,0)):
     plt.imshow(rgba, interpolation='nearest', origin='lower')
 
 def sed_matched_detection(sedname, sed, detmaps, detivs, bands,
-                          xomit, yomit,
+                          xomit, yomit, romit,
                           nsigma=5.,
                           saturated_pix=None,
                           saddle=2.,
@@ -232,8 +232,8 @@ def sed_matched_detection(sedname, sed, detmaps, detivs, bands,
         The inverse-variance maps associated with `detmaps`.
     bands : list of strings
         The band names of the `detmaps` and `detivs` images.
-    xomit, yomit : iterables (lists or numpy arrays) of int
-        Previously known sources that are to be avoided.
+    xomit, yomit, romit : iterables (lists or numpy arrays) of int
+        Previously known sources that are to be avoided; x,y +- radius
     nsigma : float, optional
         Detection threshold.
     saturated_pix : None or list of numpy arrays, boolean
@@ -362,6 +362,7 @@ def sed_matched_detection(sedname, sed, detmaps, detivs, bands,
         plot_boundary_map(above)
         ax = plt.axis()
         y,x = np.nonzero(peaks)
+        plt.plot(xomit, yomit, 'm.')
         plt.plot(x, y, 'r+')
         plt.axis(ax)
         plt.title('SED %s: S/N & peaks' % sedname)
@@ -417,9 +418,15 @@ def sed_matched_detection(sedname, sed, detmaps, detivs, bands,
     # sure will be vetoed.
     vetomap = np.zeros(sedsn.shape, bool)
 
-    segmentmap = np.zeros(sedsn.shape, np.int16)
-    segmentmap[:,:] = -1
-    
+    for x,y,r in zip(xomit, yomit, romit):
+        xlo = int(np.clip(np.floor(x - r), 0, W-1))
+        xhi = int(np.clip(np.ceil (x + r), 0, W-1))
+        ylo = int(np.clip(np.floor(y - r), 0, H-1))
+        yhi = int(np.clip(np.ceil (y + r), 0, H-1))
+        vetomap[ylo:yhi+1, xlo:xhi+1] |= (np.hypot(
+            (x - np.arange(xlo, xhi+1))[np.newaxis, :],
+            (y - np.arange(ylo, yhi+1))[:, np.newaxis]) < r)
+
     # For each peak, determine whether it is isolated enough --
     # separated by a low enough saddle from other sources.  Need only
     # search within its "allblob", which is defined by the lowest
@@ -429,8 +436,8 @@ def sed_matched_detection(sedname, sed, detmaps, detivs, bands,
         # one plot per peak is a little excessive!
         if False and ps is not None:
             level = saddle_level(sedsn[y,x])
-            _peak_plot_1(vetomap, x, y, px, keep, i, sedsn, allblobs,
-                         level, dilate, saturated_pix, satur, ablob, ps)
+            _peak_plot_1(vetomap, x, y, px, py, keep, i, xomit, yomit, sedsn, allblobs,
+                         level, dilate, saturated_pix, satur, ps)
 
         if vetomap[y,x]:
             #print('  in veto map!')
@@ -562,58 +569,75 @@ def sed_matched_detection(sedname, sed, detmaps, detivs, bands,
 
     return hotblobs, px, py, aper, peakval
 
-def _peak_plot_1(vetomap, x, y, px, keep, i, sedsn, allblobs,
-                 level, dilate, saturated_pix, satur, ablob, ps):
+def _peak_plot_1(vetomap, x, y, px, py, keep, i, xomit, yomit, sedsn, allblobs,
+                 level, dilate, saturated_pix, satur, ps):
+    from scipy.ndimage.morphology import binary_dilation, binary_fill_holes
+    from scipy.ndimage.measurements import label, find_objects
     plt.clf()
+    plt.suptitle('Peak at %i,%i' % (x,y))
     plt.subplot(2,2,1)
     plt.imshow(vetomap, interpolation='nearest', origin='lower',
                cmap='gray', vmin=0, vmax=1)
     ax = plt.axis()
-    plt.plot(x, y, 'o', mec='r', mfc='r')
     prevx = px[:i][keep[:i]]
     prevy = py[:i][keep[:i]]
     plt.plot(prevx, prevy, 'o', mec='r', mfc='none')
+    plt.plot(xomit, yomit, 'm.')
+    plt.plot(x, y, '+', mec='r', mfc='r')
     plt.axis(ax)
     plt.title('veto map')
 
-    plt.subplot(2,2,2)
-    level = saddle_level(sedsn[y,x])
     ablob = allblobs[y,x]
     saddlemap = (sedsn > level)
     saddlemap = binary_dilation(saddlemap, iterations=dilate)
     if saturated_pix is not None:
         saddlemap |= satur
     saddlemap *= (allblobs == ablob)
-    plt.imshow(saddlemap, interpolation='nearest', origin='lower',
-               vmin=0, vmax=1, cmap='gray')
-    ax = plt.axis()
-    plt.plot(x, y, 'o', mec='r', mfc='r')
-    plt.plot(prevx, prevy, 'o', mec='r', mfc='none')
-    plt.axis(ax)
-    plt.title('saddle map (1)')
+    # plt.subplot(2,2,2)
+    # plt.imshow(saddlemap, interpolation='nearest', origin='lower',
+    #            vmin=0, vmax=1, cmap='gray')
+    # ax = plt.axis()
+    # plt.plot(x, y, '+', mec='r', mfc='r')
+    # plt.plot(prevx, prevy, 'o', mec='r', mfc='none')
+    # plt.plot(xomit, yomit, 'm.')
+    # plt.axis(ax)
+    # plt.title('saddle map (1)')
     
-    plt.subplot(2,2,3)
+    plt.subplot(2,2,2)
     saddlemap = binary_fill_holes(saddlemap)
     plt.imshow(saddlemap, interpolation='nearest', origin='lower',
                vmin=0, vmax=1, cmap='gray')
     ax = plt.axis()
-    plt.plot(x, y, 'o', mec='r', mfc='r')
+    plt.plot(x, y, '+', mec='r', mfc='r')
     plt.plot(prevx, prevy, 'o', mec='r', mfc='none')
+    plt.plot(xomit, yomit, 'm.')
     plt.axis(ax)
-    plt.title('saddle map (2)')
+    plt.title('saddle map (fill holes)')
 
     blobs,nblobs = label(saddlemap)
     thisblob = blobs[y, x]
     saddlemap *= (blobs == thisblob)
 
-    plt.subplot(2,2,4)
+    plt.subplot(2,2,3)
     plt.imshow(saddlemap, interpolation='nearest', origin='lower',
                vmin=0, vmax=1, cmap='gray')
     ax = plt.axis()
-    plt.plot(x, y, 'o', mec='r', mfc='r')
+    plt.plot(x, y, '+', mec='r', mfc='r')
     plt.plot(prevx, prevx, 'o', mec='r', mfc='none')
+    plt.plot(xomit, yomit, 'm.')
     plt.axis(ax)
-    plt.title('saddle map (3)')
+    plt.title('saddle map (this blob)')
+
+    nzy,nzx = np.nonzero(saddlemap)
+
+    plt.subplot(2,2,4)
+    plt.imshow(saddlemap, interpolation='nearest', origin='lower',
+               vmin=0, vmax=1, cmap='gray')
+    plt.plot(x, y, '+', mec='r', mfc='r')
+    plt.plot(prevx, prevx, 'o', mec='r', mfc='none')
+    plt.plot(xomit, yomit, 'm.')
+    plt.axis([min(nzx)-1, max(nzx)+1, min(nzy)-1, max(nzy)+1])
+    plt.title('saddle map (this blob)')
 
     ps.savefig()
 
@@ -634,6 +658,7 @@ def _peak_plot_2(ox, oy, w, h, blobs, thisblob, sedsn, x0, y0,
     dist = max(1, np.hypot(dx, dy))
     ss = []
     steps = int(np.ceil(dist))
+    H,W = sedsn.shape
     for s in range(-3, steps+3):
         ix = int(np.round(x + (dx / dist) * s))
         iy = int(np.round(y + (dy / dist) * s))
@@ -641,17 +666,19 @@ def _peak_plot_2(ox, oy, w, h, blobs, thisblob, sedsn, x0, y0,
     plt.subplot(1,2,2)
     plt.plot(ss)
     plt.axhline(sedsn[y,x], color='k')
-    plt.axhline(sedsn[py[j],px[j]], color='r')
+    plt.axhline(sedsn[oy[j],ox[j]], color='r')
     plt.axhline(level)
     plt.xticks([])
     plt.title('S/N')
     ps.savefig()
 
 def _peak_plot_3(sedsn, nsigma, x, y, x0, y0, slc, saddlemap,
-                 xomit, yomit, px, py, keep, i, ps):
+                 xomit, yomit, px, py, keep, i, cut, ps):
+    green = (0,1,0)
     plt.clf()
     plt.subplot(1,2,1)
-    dimshow(sedsn, vmin=-2, vmax=10, cmap='hot')
+    plt.imshow(sedsn, vmin=-2, vmax=10, cmap='hot', interpolation='nearest',
+               origin='lower')
     plot_boundary_map((sedsn > nsigma))
     ax = plt.axis()
     plt.plot(x, y, 'm+', ms=12, mew=2)
@@ -660,7 +687,7 @@ def _peak_plot_3(sedsn, nsigma, x, y, x0, y0, slc, saddlemap,
     plt.subplot(1,2,2)
     y1,x1 = [s.stop for s in slc]
     ext = [x0,x1,y0,y1]
-    dimshow(saddlemap, extent=ext)
+    plt.imshow(saddlemap, extent=ext, interpolation='nearest', origin='lower')
     #plt.plot([x0,x0,x1,x1,x0], [y0,y1,y1,y0,y0], 'c-')
     #ax = plt.axis()
     #plt.plot(ox+x0, oy+y0, 'rx')

@@ -1286,8 +1286,10 @@ def stage_srcs(targetrd=None, pixscale=None, targetwcs=None,
     record_event and record_event('stage_srcs: SED-matched')
     print('Running source detection at', nsigma, 'sigma')
     SEDs = survey.sed_matched_filters(bands)
+    # Add a ~1" exclusion zone around reference & saturated stars
+    avoid_r = np.zeros_like(avoid_x) + 4
     Tnew,newcat,hot = run_sed_matched_filters(
-        SEDs, bands, detmaps, detivs, (avoid_x,avoid_y), targetwcs,
+        SEDs, bands, detmaps, detivs, (avoid_x,avoid_y,avoid_r), targetwcs,
         nsigma=nsigma, saturated_pix=saturated_pix, plots=plots, ps=ps, mp=mp)
     if Tnew is None:
         raise NothingToDoError('No sources detected.')
