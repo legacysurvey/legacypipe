@@ -70,10 +70,10 @@ def format_catalog(T, hdr, primhdr, allbands, outfn,
     # (eg, ugrizY) arrays.
     B = np.array([allbands.index(band) for band in bands])
     keys = ['flux', 'flux_ivar', 'rchisq', 'fracflux', 'fracmasked', 'fracin',
-            'nobs', 'anymask', 'allmask', 'psfsize', 'psfdepth', 'galdepth']
+            'nobs', 'anymask', 'allmask', 'psfsize', 'psfdepth', 'galdepth',
+            'fiberflux', 'fibertotflux']
     if has_ap:
         keys.extend(['apflux', 'apflux_resid', 'apflux_ivar'])
-        keys.extend(['fiberflux', 'fibertotflux'])
 
     for k in keys:
         incol = '%s%s' % (in_flux_prefix, k)
@@ -186,11 +186,11 @@ def format_catalog(T, hdr, primhdr, allbands, outfn,
     add_fluxlike('flux_ivar')
     if has_wise:
         add_wiselike('flux_ivar')
+    add_fluxlike('fiberflux')
+    add_fluxlike('fibertotflux')
     if has_ap:
         for c in ['apflux', 'apflux_resid','apflux_ivar']:
             add_fluxlike(c)
-    add_fluxlike('fiberflux')
-    add_fluxlike('fibertotflux')
 
     cols.extend(trans_cols_opt)
     cols.extend(trans_cols_wise)
