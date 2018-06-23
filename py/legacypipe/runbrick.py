@@ -1286,8 +1286,10 @@ def stage_srcs(targetrd=None, pixscale=None, targetwcs=None,
     record_event and record_event('stage_srcs: SED-matched')
     print('Running source detection at', nsigma, 'sigma')
     SEDs = survey.sed_matched_filters(bands)
+    # Add a ~1" exclusion zone around reference & saturated stars
+    avoid_r = np.zeros_like(avoid_x) + 4
     Tnew,newcat,hot = run_sed_matched_filters(
-        SEDs, bands, detmaps, detivs, (avoid_x,avoid_y), targetwcs,
+        SEDs, bands, detmaps, detivs, (avoid_x,avoid_y,avoid_r), targetwcs,
         nsigma=nsigma, saturated_pix=saturated_pix, plots=plots, ps=ps, mp=mp)
     if Tnew is None:
         raise NothingToDoError('No sources detected.')
@@ -2257,8 +2259,8 @@ def stage_coadds(survey=None, bands=None, version_header=None, targetwcs=None,
             print('Wrote', out.fn)
         del rgb
 
+    # Construct a mask bits map
     maskbits = np.zeros((H,W), np.int16)
-
     # !PRIMARY
     if custom_brick:
         U = None
@@ -2388,6 +2390,111 @@ def stage_coadds(survey=None, bands=None, version_header=None, targetwcs=None,
                 apertures_arcsec=apertures_arcsec,
                 maskbits=maskbits,
                 maskbits_header=maskbits_header)
+
+def get_fiber_fluxes(cat, T, targetwcs, H, W, pixscale, bands,
+                     fibersize=1.5, seeing=1., year=2020.0,
+                     plots=False, ps=None):
+    from tractor import GaussianMixturePSF
+    from legacypipe.survey import LegacySurveyWcs
+    import astropy.time
+    from tractor.tractortime import TAITime
+    from tractor.image import Image
+    from tractor.basics import NanoMaggies, LinearPhotoCal
+    from astrometry.util.util import Tan
+    import photutils
+
+    # Compute source pixel positions
+    ra  = np.array([src.getPosition().ra  for src in cat])
+    dec = np.array([src.getPosition().dec for src in cat])
+    ok,xx,yy = targetwcs.radec2pixelxy(ra, dec)
+    del ok,ra,dec
+
+    # Create a fake tim for each band to construct the models in 1" seeing
+    # For Gaia stars, we need to give a time for evaluating the models.
+    mjd_tai = astropy.time.Time(year, format='jyear').tai.mjd
+    tai = TAITime(None, mjd=mjd_tai)
+    # 1" FWHM -> pixels FWHM -> pixels sigma -> pixels variance
+    v = ((seeing / pixscale) / 2.35)**2
+    data = np.zeros((H,W), np.float32)
+    inverr = np.ones((H,W), np.float32)
+    psf = GaussianMixturePSF(1., 0., 0., v, v, 0.)
+    wcs = LegacySurveyWcs(targetwcs, tai)
+    faketim = Image(data=data, inverr=inverr, psf=psf,
+                    wcs=wcs, photocal=LinearPhotoCal(1., bands[0]))
+
+    # A model image (containing all sources) for each band
+    modimgs = [np.zeros((H,W), np.float32) for b in bands]
+    # A blank image that we'll use for rendering the flux from a single model
+    onemod = data
+
+    # Results go here!
+    fiberflux    = np.zeros((len(cat),len(bands)), np.float32)
+    fibertotflux = np.zeros((len(cat),len(bands)), np.float32)
+
+    # Fiber diameter in arcsec -> radius in pix
+    fiberrad = (fibersize / pixscale) / 2.
+
+    # For each source, compute and measure its model, and accumulate
+    for isrc,(src,sx,sy) in enumerate(zip(cat, xx-1., yy-1.)):
+        #print('Source', src)
+        # This works even if bands[0] has zero flux (or no overlapping
+        # images)
+        ums = src.getUnitFluxModelPatches(faketim)
+        #print('ums', ums)
+        assert(len(ums) == 1)
+        patch = ums[0]
+        #print('sum', patch.patch.sum())
+        br = src.getBrightness()
+        for iband,(modimg,band) in enumerate(zip(modimgs,bands)):
+            flux = br.getFlux(band)
+            flux_iv = T.flux_ivar[isrc, iband]
+            #print('Band', band, 'flux', flux, 'iv', flux_iv)
+            if flux > 0 and flux_iv > 0:
+                # Accumulate
+                patch.addTo(modimg, scale=flux)
+                # Add to blank image & photometer
+                patch.addTo(onemod, scale=flux)
+                aper = photutils.CircularAperture((sx, sy), fiberrad)
+                p = photutils.aperture_photometry(onemod, aper)
+                f = p.field('aperture_sum')[0]
+                fiberflux[isrc,iband] = f
+                #print('Aperture flux:', f)
+                # Blank out the image again
+                x0,x1,y0,y1 = patch.getExtent()
+                onemod[y0:y1, x0:x1] = 0.
+
+    # Now photometer the accumulated images
+    # Aperture photometry locations
+    apxy = np.vstack((xx - 1., yy - 1.)).T
+    aper = photutils.CircularAperture(apxy, fiberrad)
+    for iband,modimg in enumerate(modimgs):
+        p = photutils.aperture_photometry(modimg, aper)
+        f = p.field('aperture_sum')
+        fibertotflux[:, iband] = f
+
+    if plots:
+        for modimg,band in zip(modimgs, bands):
+            plt.clf()
+            plt.imshow(modimg, interpolation='nearest', origin='lower',
+                       vmin=0, vmax=0.1, cmap='gray')
+            plt.title('Fiberflux model for band %s' % band)
+            ps.savefig()
+
+        for iband,band in enumerate(bands):
+            plt.clf()
+            flux = [src.getBrightness().getFlux(band) for src in cat]
+            plt.plot(flux, fiberflux[:,iband], 'b.', label='FiberFlux')
+            plt.plot(flux, fibertotflux[:,iband], 'gx', label='FiberTotFlux')
+            plt.plot(flux, T.apflux[:,iband, 1], 'r+', label='Apflux(1.5)')
+            plt.legend()
+            plt.xlabel('Catalog total flux')
+            plt.ylabel('Aperture flux')
+            plt.title('Fiberflux: %s band' % band)
+            plt.xscale('symlog')
+            plt.yscale('symlog')
+            ps.savefig()
+
+    return fiberflux, fibertotflux
 
 def _depth_histogram(brick, targetwcs, bands, detivs, galdetivs):
     # Compute the brick's unique pixels.
@@ -2775,17 +2882,17 @@ def stage_writecat(
     TT.apflux       = np.zeros((len(TT), len(bands), A), np.float32)
     TT.apflux_ivar  = np.zeros((len(TT), len(bands), A), np.float32)
     TT.apflux_resid = np.zeros((len(TT), len(bands), A), np.float32)
-    TT.set('fiberflux', np.zeros((len(TT),len(bands)), np.float32))
-    TT.set('fibertotflux', np.zeros((len(TT), len(bands)), np.float32))
     for iband,band in enumerate(bands):
         TT.apflux      [:,iband,:] = AP.get('apflux_img_%s'      % band)
         TT.apflux_ivar [:,iband,:] = AP.get('apflux_img_ivar_%s' % band)
         TT.apflux_resid[:,iband,:] = AP.get('apflux_resid_%s'    % band)
-        TT.fiberflux   [:,iband] = TT.apflux[:,iband,3] # Place holders
-        TT.fibertotflux[:,iband] = TT.apflux[:,iband,3]
 
     hdr = fs = None
     T2,hdr = prepare_fits_catalog(cat, invvars, TT, hdr, bands, fs)
+
+    # Compute fiber fluxes
+    T2.fiberflux, T2.fibertotflux = get_fiber_fluxes(
+        cat, T2, targetwcs, H, W, pixscale, bands, plots=plots, ps=ps)
 
     # For reference stars, plug in the reference-catalog inverse-variances.
     if 'ref_id' in T.get_columns() and 'ra_ivar' in T.get_columns():
@@ -2794,8 +2901,6 @@ def stage_writecat(
             T2.ra_ivar [I] = T.ra_ivar[I]
             T2.dec_ivar[I] = T.dec_ivar[I]
 
-    print('TT:')
-    TT.about()
     print('T2:')
     T2.about()
 
