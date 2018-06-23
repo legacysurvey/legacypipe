@@ -56,8 +56,11 @@ if not os.path.exists(cfn):
     C.cut(C.exptime >= 50.)
     print(len(C), 'with exptime >= 50 sec')
 
-    C.cut(survey.photometric_ccds(C))
-    print(len(C), 'photometric')
+    #C.cut(survey.photometric_ccds(C))
+    #print(len(C), 'photometric')
+    #C.cut(C.ccd_cuts == 0)
+    C.cut((C.ccd_cuts & ~0x4000) == 0)
+    print(len(C), 'pass ccd_cuts==0 or 0x4000')
 
     C.cut(np.lexsort((C.expnum, C.filter)))
     C.writeto(cfn)
@@ -79,8 +82,14 @@ E.index = np.arange(len(E))
 E.passnum = np.zeros(len(E), np.uint8)
 E.depthfraction = np.zeros(len(E), np.float32)
 
+E.seeing = E.pixscale_mean * E.fwhm
+
 # Compute which pass number each exposure would be called.
-zp0 = DecamImage.nominal_zeropoints()
+#zp0 = DecamImage.nominal_zeropoints()
+
+# From eyeballing histograms of DR7 zeropoints
+zp0 = dict(g=25.15, r=25.35, z=25.0)
+
 # HACK -- this is copied from obsbot
 kx = dict(g = 0.178, r = 0.094, z = 0.060,)
 for band in bands:
@@ -95,7 +104,7 @@ for band in bands:
         thisdetiv = 1. / (exp.sig1 / exp.galnorm)**2
         # Which pass number would this image be assigned?
         trans = 10.**(-0.4 * (zp0[band] - exp.ccdzpt
-                              - kx[band]*(exp.airmass - 1.)))
+                              - kx[band]*(max(exp.airmass, 1.) - 1.)))
         seeing_good = exp.seeing < 1.3
         seeing_fair = exp.seeing < 2.0
         trans_good = trans > 0.9
@@ -214,51 +223,84 @@ if region == 'cosmos':
     subset_offset = 60
     
     exposures = [
-        411355, 411305, 411406, # g, p1 (seeing 1.05-1.1)
-        397525, 411808, 397526, # g, p1 (seeing 1.1)
-        511250, 421590, 411456, # g, p1 (seeing 1.2)
-        397527, 410971, 411707, # g, p1 (seeing 1.2)
-        #411758, 411021, 633993, # g, p1 (seeing 1.2)
-    
-        288970, 411055, 410915, # g, p2 (seeing 1.3)
-        283978, 431103, 283982, # g, p2 (seeing 1.4)
-        524719, 177358, 524705, # g, p2 (seeing 1.5)
-        177361, 177085, 177088, # g, p2 (seeing 1.6)
-        177092, 289278, 177089, # g, p2 (seeing 1.7)
-        289050, 177091, 289196, # g, p2 (seeing 1.8)
-    
-        # g, p3
-    
-        421552, 431105, 405290, # r, p1 (seeing 1.2)
-        431108, 397524, 405291, # r, p1 (seeing 1.2)
-        405264, 397553, 405263, # r, p1 (seeing 1.2)
-        397551, 397522, 397552, # r, p1 (seeing 1.3)
-    
-        397523, 405262, 431102, # r, p2 (seeing 1.3)
-        420721, 420722, 177363, # r, p2 (seeing 1.4)
-        177346, 177362, 524722, # r, p2 (seeing 1.5)
-        177342, 524707, 177341, # r, p2 (seeing 1.5-1.6)
-        177343, 524706, 177367, # r, p2 (seeing 1.6-1.7)
-        413971, 413972, 413973, # r, p2 (seeing 1.8-1.9)
-    
+        # 411355, 411305, 411406, # g, p1 (seeing 1.05-1.1)
+        # 397525, 411808, 397526, # g, p1 (seeing 1.1)
+        # 511250, 421590, 411456, # g, p1 (seeing 1.2)
+        # 397527, 410971, 411707, # g, p1 (seeing 1.2)
+        # #411758, 411021, 633993, # g, p1 (seeing 1.2)
+        # 
+        # 288970, 411055, 410915, # g, p2 (seeing 1.3)
+        # 283978, 431103, 283982, # g, p2 (seeing 1.4)
+        # 524719, 177358, 524705, # g, p2 (seeing 1.5)
+        # 177361, 177085, 177088, # g, p2 (seeing 1.6)
+        # 177092, 289278, 177089, # g, p2 (seeing 1.7)
+        # 289050, 177091, 289196, # g, p2 (seeing 1.8)
+
+        # DR7 (without depth cut)
+        411355, 411406, 411305, # g, p1 (seeing 1.05-1.2)
+        397525, 289010, 288970, # g, p1 (seeing 1.2)
+        397526, 411808, 411456, # g, p1 (seeing 1.2)
+        511250, 397527, 421590, # g, p1 (seeing 1.25)
+        411758, 411707, 410971, # g, p1 (seeing 1.3)
+        #289444, 411021, 411055, # g, p2 (seeing 1.3)
+        413680, 289865, 412604, # g, p2 (seeing 1.4)
+        289486, 288929, 289650, # g, p2 (seeing 1.5)
+        524719, 524705, 289691, # g, p2 (seeing 1.6)
+        524704, 289237, 412554, # g, p2 (seeing 1.7)
+        289278, 289907, 289050, # g, p2 (seeing 1.8)
+
+        # 421552, 431105, 405290, # r, p1 (seeing 1.2)
+        # 431108, 397524, 405291, # r, p1 (seeing 1.2)
+        # 405264, 397553, 405263, # r, p1 (seeing 1.2)
+        # 397551, 397522, 397552, # r, p1 (seeing 1.3)
+        # 397523, 405262, 431102, # r, p2 (seeing 1.3)
+        # 420721, 420722, 177363, # r, p2 (seeing 1.4)
+        # 177346, 177362, 524722, # r, p2 (seeing 1.5)
+        # 177342, 524707, 177341, # r, p2 (seeing 1.5-1.6)
+        # 177343, 524706, 177367, # r, p2 (seeing 1.6-1.7)
+        # 413971, 413972, 413973, # r, p2 (seeing 1.8-1.9)
         # r, p3
-    
-        630675, 630928, 431107, # z, p1 (seeing 0.9-1.1)
-        431104, 431101, 180583, # z, p1 (seeing 1.1)
-        405257, 180582, 397532, # z, p1 (seeing 1.2)
-        405256, 397557, 397533, # z, p1 (seeing 1.2)
-    
-        524713, 524714, 524716, # z, p2 (seeing 1.26)
-        180585, 420730, 395347, # z, p2 (seeing 1.32)
-        413981, 395345, 176837, # z, p2 (seeing 1.4)
-        # 179973, 176845, 193204, # z, p2 (seeing 1.5) (old 67)
-        # 193180, 192768, 453883, # z, p2 (seeing 1.6) (old 68)
-        # 179975, 413978, 453884, # z, p2 (seeing 1.7) (old 69)
-        176844, 453882, 176845, # z, p2 (seeing 1.5)   (new 67)
-        193204, 193180, 192768, # z, p2 (seeing 1.6)   (new 68)
-        453883, 413978, 453884, # z, p2 (seeing 1.7)   (new 69)
-    
-        # z, p3
+
+        # DR7
+        421552, 397523, 405290, # r, p1, seeing 1.1
+        397524, 397522, 405291, # r, p1, seeing 1.15
+        405264, 405263, 397553, # r, p1, seeing 1.2
+        397552, 397551, 405292, # r, p1, seeing 1.2
+        405262, 431105, 410865, # r, p1, seeing 1.3
+        420722, 420721, 524708, # r, p2, seeing 1.4
+        431108, 524720, 730075, # r, p2, seeing 1.4
+        524721, 524707, 524722, # r, p2, seeing 1.45
+        420723, 431102, 524706, # r, p2, seeing 1.5
+        413971, 413972, 413973, # r, p2, seeing 2.0
+
+        # 630675, 630928, 431107, # z, p1 (seeing 0.9-1.1)
+        # 431104, 431101, 180583, # z, p1 (seeing 1.1)
+        # 405257, 180582, 397532, # z, p1 (seeing 1.2)
+        # 405256, 397557, 397533, # z, p1 (seeing 1.2)
+        # 
+        # 524713, 524714, 524716, # z, p2 (seeing 1.26)
+        # 180585, 420730, 395347, # z, p2 (seeing 1.32)
+        # 413981, 395345, 176837, # z, p2 (seeing 1.4)
+        # # 179973, 176845, 193204, # z, p2 (seeing 1.5) (old 67)
+        # # 193180, 192768, 453883, # z, p2 (seeing 1.6) (old 68)
+        # # 179975, 413978, 453884, # z, p2 (seeing 1.7) (old 69)
+        # 176844, 453882, 176845, # z, p2 (seeing 1.5)   (new 67)
+        # 193204, 193180, 192768, # z, p2 (seeing 1.6)   (new 68)
+        # 453883, 413978, 453884, # z, p2 (seeing 1.7)   (new 69)
+        # 
+        # # z, p3
+
+        # DR7
+        514592, 630675, 514594, # z, p1, seeing 1.0
+        514294, 630928, 514591, # z, p1, seeing 1.0
+        514889, 514890, 514891, # z, p1, seeing 1.08
+        514894, 397535, 420732, # z, p1, seeing 1.2
+        397534, 395319, 515786, # z, p1, seeing 1.27
+        420730, 431101, 405254, # z, p2, seeing 1.3
+        413979, 514584, 395318, # z, p2, seeing 1.38
+        395345, 514580, 514581, # z, p2, seeing 1.5
+        453882, 413978, 453883, # z, p2, seeing 1.6-1.8
+        453884, 525634, 525633, # z, p3, seeing 1.7-2.0
         ]
     # BAD exposures (nasty background gradient)
     # 179971 through 179975
@@ -274,7 +316,7 @@ if region == 'cosmos':
 
 # Here's the main code that builds the subsets of exposures.
 sets = []
-for iset in xrange(100):
+for iset in range(100):
     print('-------------------------------------------')
 
     thisset = []
