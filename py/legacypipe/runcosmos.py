@@ -43,9 +43,12 @@ class CosmosSurvey(LegacySurveyData):
         self.subset = subset
         self.image_typemap.update({'decam+noise' : DecamImagePlusNoise})
         
-    def get_ccds(self):
-        CCDs = super(CosmosSurvey, self).get_ccds()
+    def get_ccds(self, **kwargs):
+        print('CosmosSurvey.get_ccds()')
+        CCDs = super(CosmosSurvey, self).get_ccds(**kwargs)
+        print('CosmosSurvey: got', len(CCDs), 'CCDs')
         CCDs.cut(CCDs.subset == self.subset)
+        print('After cutting to subset', self.subset, ':', len(CCDs), 'CCDs')
         return CCDs
     
 def main():
@@ -59,12 +62,20 @@ def main():
         parser.print_help()
         return -1
 
-    survey, kwargs = get_runbrick_kwargs(opt)
+    optdict = vars(opt)
+    verbose = optdict.pop('verbose')
+    subset = optdict.pop('subset')
+    survey, kwargs = get_runbrick_kwargs(**optdict)
     if kwargs in [-1,0]:
         return kwargs
 
-    survey = CosmosSurvey(survey_dir=opt.survey_dir, subset=opt.subset,
-                          output_dir=opt.outdir)
+    survey = CosmosSurvey(survey_dir=opt.survey_dir, subset=subset,
+                          output_dir=opt.output_dir)
+    print('Using survey:', survey)
+    #print('with output', survey.output_dir)
+
+    print('opt:', opt)
+    print('kwargs:', kwargs)
 
     run_brick(opt.brick, survey, **kwargs)
     return 0

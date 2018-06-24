@@ -73,6 +73,9 @@ plt.clf()
 plt.plot(C.ra, C.dec, 'bo', alpha=0.2)
 plt.savefig('rd.png')
 
+# Drop the "depthcut" bit from ccd_cuts!
+C.ccd_cuts = (C.ccd_cuts & ~0x4000)
+
 # Find the unique exposures (not CCDs), save as E.
 C.galnorm = C.galnorm_mean
 nil,I = np.unique(C.expnum, return_index=True)
@@ -220,7 +223,10 @@ if region == 'cosmos':
     #
     # Subsets 60 through 69 have progressively worse seeing (but still pretty good...)
     #
-    subset_offset = 60
+    #subset_offset = 60
+
+    # DR7
+    subset_offset = 70
     
     exposures = [
         # 411355, 411305, 411406, # g, p1 (seeing 1.05-1.1)

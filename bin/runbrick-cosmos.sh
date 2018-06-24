@@ -1,24 +1,22 @@
 #! /bin/bash
 
-# For modules loaded, see "bashrc" in this directory.
+brick="$1"
+subset="$2"
 
-export LEGACY_SURVEY_DIR=$CSCRATCH/dr5-cosmos
-
-export DUST_DIR=/global/cscratch1/sd/desiproc/dust/v0_0
-
-#export UNWISE_COADDS_DIR=/scratch1/scratchdirs/desiproc/unwise-coadds/fulldepth:/scratch1/scratchdirs/desiproc/unwise-coadds/w3w4
-#export UNWISE_COADDS_TIMERESOLVED_DIR=/scratch1/scratchdirs/desiproc/unwise-coadds/time_resolved_neo1
+source ../bin/legacypipe-env
 
 export PYTHONPATH=${PYTHONPATH}:.
+
+export LEGACY_SURVEY_DIR=$CSCRATCH/dr7-cosmos
+outdir=$CSCRATCH/cosmos-dr7-${subset}
 
 # Force MKL single-threaded
 # https://software.intel.com/en-us/articles/using-threaded-intel-mkl-in-multi-thread-application
 export MKL_NUM_THREADS=1
+export OMP_NUM_THREADS=1
 
-brick="$1"
-subset="$2"
-
-outdir=$CSCRATCH/cosmos-dr5-${subset}
+# To avoid problems with MPI and Python multiprocessing
+export MPICH_GNI_FORK_MODE=FULLCOPY
 
 bri=$(echo $brick | head -c 3)
 mkdir -p $outdir/logs/$bri
@@ -49,19 +47,17 @@ mkdir -p $PIC
 
 python -u legacypipe/runcosmos.py \
     --subset $subset \
-    --threads 32 \
+    --outdir $outdir \
+    --brick $brick \
     --skip-calibs \
-    --brick $brick --outdir $outdir --nsigma 6 \
+    --threads 32 \
     --checkpoint $CHK/checkpoint-${brick}.pickle \
+    --checkpoint-period 300 \
     --pickle "$PIC/cosmos-%(brick)s-%%(stage)s.pickle" \
-    --skip \
-    --rex \
-    --hybrid-psf \
     --no-wise \
-    --no-depth-cut \
-    --no-blacklist \
      >> $log 2>&1
 
-#    --zoom 500 600 500 600 \
+#    --stage image_coadds \
+#    --force-all \
 
 # qdo launch cosmos 1 --cores_per_worker 24 --batchqueue regular --walltime 4:00:00 --keep_env --batchopts "-a 0-19 --qos=premium" --script ../bin/pipebrick-cosmos.sh
