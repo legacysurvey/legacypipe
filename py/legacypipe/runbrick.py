@@ -2443,6 +2443,8 @@ def get_fiber_fluxes(cat, T, targetwcs, H, W, pixscale, bands,
         #print('ums', ums)
         assert(len(ums) == 1)
         patch = ums[0]
+        if patch is None:
+            continue
         #print('sum', patch.patch.sum())
         br = src.getBrightness()
         for iband,(modimg,band) in enumerate(zip(modimgs,bands)):
