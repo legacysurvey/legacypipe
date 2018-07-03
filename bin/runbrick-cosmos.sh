@@ -50,11 +50,12 @@ python -u legacypipe/runcosmos.py \
     --outdir $outdir \
     --brick $brick \
     --skip-calibs \
-    --threads 32 \
+    --threads 4 \
     --checkpoint $CHK/checkpoint-${brick}.pickle \
     --checkpoint-period 300 \
     --pickle "$PIC/cosmos-%(brick)s-%%(stage)s.pickle" \
     --no-wise \
+    --stage image_coadds --blob-image \
      >> $log 2>&1
 
 #    --stage image_coadds \
