@@ -1038,7 +1038,7 @@ Now using the current directory as LEGACY_SURVEY_DIR, but this is likely to fail
 
         elif filetype in ['image-jpeg', 'model-jpeg', 'resid-jpeg',
                           'imageblob-jpeg', 'simscoadd-jpeg','imagecoadd-jpeg',
-                          'wise-jpeg']:
+                          'wise-jpeg', 'wisemodel-jpeg']:
             ty = filetype.split('-')[0]
             return swap(
                 os.path.join(codir, '%s-%s-%s.jpg' % (sname, brick, ty)))

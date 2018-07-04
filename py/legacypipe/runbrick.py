@@ -2590,7 +2590,7 @@ def stage_wise_forced(
     if unwise_dir is not None:
         for band in [1,2,3,4]:
             args.append((wcat, tiles, band, roiradec, unwise_dir, wise_ceres,
-                         broadening[band]))
+                         broadening[band], unwise_coadds))
 
     # tempfile.TemporaryDirectory objects -- the directories will be deleted when this
     # variable goes out of scope.
@@ -2641,7 +2641,7 @@ def stage_wise_forced(
                 if len(eps) == 1:
                     edir = os.path.join(tdir, 'e%03i' % eps[0])
                     eargs.append((ie,(wcat, TR[I], band, roiradec, edir,
-                                         wise_ceres, broadening[band])))
+                                         wise_ceres, broadening[band], False)))
                 else:
                     import tempfile
                     # Construct a temp symlink farm
@@ -2664,7 +2664,7 @@ def stage_wise_forced(
                         print('Creating symlink', dest, '->', tiledir)
                         os.symlink(tiledir, dest, target_is_directory=True)
                     eargs.append((ie,(wcat, TR[I], band, roiradec, dirname,
-                                      wise_ceres, broadening[band])))
+                                      wise_ceres, broadening[band], False)))
 
     # Run the forced photometry!
     record_event and record_event('stage_wise_forced: photometry')
@@ -2674,13 +2674,19 @@ def stage_wise_forced(
     # Unpack results...
     WISE = None
     if len(phots):
-        WISE = phots[0]
+        if unwise_coadds:
+            WISE,wise_models = phots[0]
+        else:
+            WISE = phots[0]
 
     wise_mask_map = None
     if WISE is not None:
         # The "phot" results for the full-depth coadds are one table per
         # band.  Merge all those columns.
         for i,p in enumerate(phots[1:len(args)]):
+            if unwise_coadds:
+                p,mods = p
+                wise_models.update(mods)
             if p is None:
                 (wcat,tiles,band) = args[i+1][:3]
                 print('"None" result from WISE forced phot:', tiles, band)
@@ -2702,8 +2708,12 @@ def stage_wise_forced(
             wW = int(W * pixscale / wpixscale)
             wH = int(H * pixscale / wpixscale)
             unwise_wcs = wcs_for_brick(brick, W=wW, H=wH, pixscale=wpixscale)
+            # images
             unwise_co  = [np.zeros((wH,wW), np.float32) for band in [1,2,3,4]]
             unwise_con = [np.zeros((wH,wW), np.uint8)   for band in [1,2,3,4]]
+            # models
+            unwise_com  = [np.zeros((wH,wW), np.float32) for band in [1,2,3,4]]
+            unwise_comn = [np.zeros((wH,wW), np.uint8)   for band in [1,2,3,4]]
 
         # Look up mask bits
         ra  = np.array([src.getPosition().ra  for src in cat])
@@ -2797,8 +2807,40 @@ def stage_wise_forced(
                     print('No overlap between WISE tile', tile, 'and brick')
                     pass
 
+                # Now the model images.  The forced-photometry routine returns
+                # sub-images and ROIs for the models.
+                gotbands = []
+                imgs = []
+                roi = None
+                for band in [1,2,3,4]:
+                    if not (tile, band) in wise_models:
+                        print('Tile', tile, 'band', band, '-- model not found')
+                        continue
+                    mod,thisroi = wise_models[(tile,band)]
+                    #print('Tile', tile, 'band', band, 'model', mod.shape, 'roi', thisroi)
+                    gotbands.append(band)
+                    imgs.append(mod)
+                    if roi is None:
+                        roi = thisroi
+                    else:
+                        assert(thisroi == roi)
+                #print('ROI:', roi)
+                try:
+                    # Get WCS for this ROI.
+                    rx0,rx1,ry0,ry1 = roi
+                    roiwcs = wcs.get_subimage(rx0, ry0, rx1-rx0, ry1-ry0)
+                    Yo,Xo,Yi,Xi,rims = resample_with_wcs(unwise_wcs, roiwcs, imgs)
+                    for band,rim in zip(gotbands, rims):
+                        unwise_com [band-1][Yo,Xo] += rim
+                        unwise_comn[band-1][Yo,Xo] += 1
+                except OverlapError:
+                    print('No overlap between WISE model tile', tile, 'and brick')
+                    pass
+
+
         if unwise_coadds:
-            for band,co,n in zip([1,2,3,4], unwise_co, unwise_con):
+            for band,co,n,com,mn in zip([1,2,3,4], unwise_co, unwise_con,
+                                        unwise_com, unwise_comn):
                 hdr = fitsio.FITSHDR()
                 for r in version_header.records():
                     hdr.add_record(r)
@@ -2811,14 +2853,23 @@ def stage_wise_forced(
                 hdr.add_record(dict(name='EQUINOX', value=2000.))
                 hdr.add_record(dict(name='MAGZERO', value=22.5,
                                         comment='Magnitude zeropoint'))
-                co /= np.maximum(n, 1)
+                co  /= np.maximum(n, 1)
+                com /= np.maximum(mn, 1)
                 with survey.write_output('image', brick=brickname, band='W%i' % band) as out:
                     out.fits.write(co, header=hdr)
+                with survey.write_output('model', brick=brickname, band='W%i' % band) as out:
+                    out.fits.write(com, header=hdr)
             del unwise_con
+            del unwise_comn
             # W1/W2 color jpeg
             rgb = _unwise_to_rgb(unwise_co[:2])
             del unwise_co
             with survey.write_output('wise-jpeg', brick=brickname) as out:
+                imsave_jpeg(out.fn, rgb, origin='lower')
+                print('Wrote', out.fn)
+            rgb = _unwise_to_rgb(unwise_com[:2])
+            del unwise_com
+            with survey.write_output('wisemodel-jpeg', brick=brickname) as out:
                 imsave_jpeg(out.fn, rgb, origin='lower')
                 print('Wrote', out.fn)
             del rgb
@@ -2853,11 +2904,14 @@ def stage_wise_forced(
 
 def _unwise_phot(X):
     from wise.forcedphot import unwise_forcedphot
-    (wcat, tiles, band, roiradec, unwise_dir, wise_ceres, broadening) = X
+    (wcat, tiles, band, roiradec, unwise_dir, wise_ceres, broadening, get_mods) = X
+    kwargs = dict(roiradecbox=roiradec, bands=[band],
+                  unwise_dir=unwise_dir, psf_broadening=broadening)
+    if get_mods:
+        # This requires a newer version of the tractor code!
+        kwargs.update(get_models=get_mods)
     try:
-        W = unwise_forcedphot(wcat, tiles, roiradecbox=roiradec, bands=[band],
-            unwise_dir=unwise_dir, use_ceres=wise_ceres,
-            psf_broadening=broadening)
+        W = unwise_forcedphot(wcat, tiles, use_ceres=wise_ceres, **kwargs)
     except:
         import traceback
         print('unwise_forcedphot failed:')
@@ -2865,9 +2919,16 @@ def _unwise_phot(X):
 
         if wise_ceres:
             print('Trying without Ceres...')
-            W = unwise_forcedphot(wcat, tiles, roiradecbox=roiradec,
-                                  bands=[band], unwise_dir=unwise_dir,
-                                  use_ceres=False, psf_broadening=broadening)
+            try:
+                W = unwise_forcedphot(wcat, tiles, use_ceres=False, **kwargs)
+            except:
+                print('unwise_forcedphot failed (2):')
+                traceback.print_exc()
+                if get_mods:
+                    print('--unwise-coadds requires a newer tractor version...')
+                    kwargs.update(get_models=False)
+                    W = unwise_forcedphot(wcat, tiles, use_ceres=False, **kwargs)
+                    W = W,dict()
         else:
             W = None
     return W
