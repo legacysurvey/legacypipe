@@ -437,7 +437,7 @@ SWEEP_DTYPE = np.dtype([
     ('GAIA_ASTROMETRIC_EXCESS_NOISE', '>f4'),
     ('GAIA_DUPLICATED_SOURCE', '>i1'),
     ('PARALLAX', '>f4'),
-    ('PARALLAX_IVAR, '>f4'),
+    ('PARALLAX_IVAR', '>f4'),
     ('PMRA', '>f4'),
     ('PMRA_IVAR', '>f4'),
     ('PMDEC', '>f4'),
