@@ -102,10 +102,10 @@ def stage_1(expnum=431202, extname='S19', plotprefix='lsb', plots=False,
     
         T.cut(T.brick_primary)
         print('Cut to', len(T), 'brick_primary')
-        T.cut((T.out_of_bounds == False) * (T.left_blob == False))
-        print('Cut to', len(T), 'not out-of-bound or left-blob')
-        print('Brightest z-band:', np.max(T.decam_flux[:,4]))
-        print('Brightest r-band:', np.max(T.decam_flux[:,2]))
+        #T.cut((T.out_of_bounds == False) * (T.left_blob == False))
+        #print('Cut to', len(T), 'not out-of-bound or left-blob')
+        print('Brightest z-band:', np.max(T.flux_z))
+        print('Brightest r-band:', np.max(T.flux_r))
     
         orig_catalog = T.copy()
         
