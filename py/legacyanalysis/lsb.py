@@ -38,7 +38,7 @@ def bin_image(data, S):
 def bin_image_2(data, S):
     # rebin image data, padding with zeros
     H,W = data.shape
-    sH,sW = (H+S-1)/S, (W+S-1)/S
+    sH,sW = (H+S-1)//S, (W+S-1)//S
     newdata = np.zeros((sH,sW), dtype=data.dtype)
     for i in range(S):
         for j in range(S):
