@@ -59,9 +59,9 @@ def stage_1(expnum=431202, extname='S19', plotprefix='lsb', plots=False,
 
     survey = LegacySurveyData()
     C = survey.find_ccds(expnum=expnum, ccdname=extname)
-    print len(C), 'CCDs'
+    print(len(C), 'CCDs')
     im = survey.get_image_object(C[0])
-    print 'im', im
+    print('im', im)
     
     #(x0,x1,y0,y1) = opt.zoom
     #zoomslice = (slice(y0,y1), slice(x0,x1))
@@ -69,7 +69,7 @@ def stage_1(expnum=431202, extname='S19', plotprefix='lsb', plots=False,
     
     #tim = im.get_tractor_image(gaussPsf=True, splinesky=True, slc=zoomslice)
     tim = im.get_tractor_image(hybridPsf=True, splinesky=True, slc=zoomslice)
-    print 'Tim', tim
+    print('Tim', tim)
     
     cats = []
     bricks = bricks_touching_wcs(tim.subwcs, survey=survey)
@@ -77,11 +77,11 @@ def stage_1(expnum=431202, extname='S19', plotprefix='lsb', plots=False,
     for b in bricknames:
         fn = survey.find_file('tractor', brick=b)
         if not os.path.exists(fn):
-            print 'WARNING: file does not exist:', fn
+            print('WARNING: file does not exist:', fn)
             continue
-        print 'Reading', fn
+        print('Reading', fn)
         cat = fits_table(fn)
-        print 'Read', len(cat), 'sources'
+        print('Read', len(cat), 'sources')
         if cat is None or len(cat) == 0:
             continue
         cats.append(cat)
@@ -98,20 +98,20 @@ def stage_1(expnum=431202, extname='S19', plotprefix='lsb', plots=False,
         T.y = y
         H,W = tim.shape
         T.cut((x > -M) * (x < (W+M)) * (y > -M) * (y < (H+M)))
-        print 'Cut to', len(T), 'within image bounds'
+        print('Cut to', len(T), 'within image bounds')
     
         T.cut(T.brick_primary)
-        print 'Cut to', len(T), 'brick_primary'
+        print('Cut to', len(T), 'brick_primary')
         T.cut((T.out_of_bounds == False) * (T.left_blob == False))
-        print 'Cut to', len(T), 'not out-of-bound or left-blob'
-        print 'Brightest z-band:', np.max(T.decam_flux[:,4])
-        print 'Brightest r-band:', np.max(T.decam_flux[:,2])
+        print('Cut to', len(T), 'not out-of-bound or left-blob')
+        print('Brightest z-band:', np.max(T.decam_flux[:,4]))
+        print('Brightest r-band:', np.max(T.decam_flux[:,2]))
     
         orig_catalog = T.copy()
         
         # Cut to compact sources
         T.cut(np.maximum(T.shapeexp_r, T.shapedev_r) < 3.)
-        print 'Cut to', len(T), 'compact catalog objects'
+        print('Cut to', len(T), 'compact catalog objects')
 
         cat = read_fits_catalog(T, allbands='ugrizY')
 
@@ -119,13 +119,13 @@ def stage_1(expnum=431202, extname='S19', plotprefix='lsb', plots=False,
         cat = []
         orig_catalog = fits_table()
     
-    print len(cat), 'catalog objects'
+    print(len(cat), 'catalog objects')
     
     if plots:
         plt.clf()
         img = tim.getImage()
         mn,mx = np.percentile(img.ravel(), [25,99])
-        print('Image plot range:', mn, mx)
+        print(('Image plot range:', mn, mx))
         tim.ima = dict(interpolation='nearest', origin='lower', vmin=mn, vmax=mx)
         plt.imshow(tim.getImage(), **tim.ima)
         plt.title('Orig data')
@@ -134,7 +134,7 @@ def stage_1(expnum=431202, extname='S19', plotprefix='lsb', plots=False,
     # Mask out bright pixels.
     mask = np.zeros(tim.shape, np.bool)
     bright = fits_table(brightstars)
-    print 'Read', len(bright), 'SDSS bright stars'
+    print('Read', len(bright), 'SDSS bright stars')
     ok,bx,by = tim.subwcs.radec2pixelxy(bright.ra, bright.dec)
     bx = np.round(bx).astype(int)
     by = np.round(by).astype(int)
@@ -149,7 +149,7 @@ def stage_1(expnum=431202, extname='S19', plotprefix='lsb', plots=False,
         (radius > 0) *
         (bx + radius > 0) * (bx - radius < W) *
         (by + radius > 0) * (by - radius < H))
-    print len(I), 'bright stars are near the image'
+    print(len(I), 'bright stars are near the image')
 
     xx,yy = np.meshgrid(np.arange(W), np.arange(H))
     for x,y,r in zip(bx[I], by[I], radius[I]):
@@ -172,7 +172,7 @@ def stage_1(expnum=431202, extname='S19', plotprefix='lsb', plots=False,
     
     tr = Tractor([tim], cat)
     mod = tr.getModelImage(tim)
-    print('Model range:', mod.min(), mod.max())
+    print(('Model range:', mod.min(), mod.max()))
 
     # print('Model counts:', [tim.getPhotoCal().brightnessToCounts(src.getBrightness())
     #                         for src in cat])
@@ -182,12 +182,12 @@ def stage_1(expnum=431202, extname='S19', plotprefix='lsb', plots=False,
     
     if False:
         # OLD DEBUGGING
-        print 'Model median:', np.median(mod)
+        print('Model median:', np.median(mod))
         rawimg = fitsio.read('decals-lsb/images/decam/CP20150407/c4d_150410_035040_ooi_z_v1.fits.fz', ext=im.hdu)
-        print 'Image median:', np.median(rawimg)
-        print 'mid sky', tim.midsky
+        print('Image median:', np.median(rawimg))
+        print('mid sky', tim.midsky)
         rawmod = mod * tim.zpscale + tim.midsky
-        print 'Model median:', np.median(rawmod)
+        print('Model median:', np.median(rawmod))
         fitsio.write('model.fits', rawmod, clobber=True)
     
     if plots:
@@ -311,7 +311,7 @@ def stage_3(resid=None, sky=None, ps=None, tim=None, mask=None,
 
     for i,r in enumerate(radii_arcsec):
         sigma = r / pixscale
-        print 'Filtering at', r, 'arcsec'
+        print('Filtering at', r, 'arcsec')
         if i and i%2 == 0:
             img = bin_image_2(img, 2)
             binning *= 2
@@ -327,7 +327,7 @@ def stage_3(resid=None, sky=None, ps=None, tim=None, mask=None,
         blurred = spline(np.arange(W), np.arange(H)).T
         knorm =  1./(2. * np.sqrt(np.pi) * sigma)
         sn = blurred / (knorm * tim.sig1)
-        print 'Max S/N:', sn.max()
+        print('Max S/N:', sn.max())
         
         if plots:
             plt.clf()
@@ -379,7 +379,7 @@ def stage_4(resid=None, sky=None, ps=None, tim=None,
 
     hot = (fmax > 10.)
     blobs, nblobs = label(hot)
-    print 'Nblobs', nblobs
+    print('Nblobs', nblobs)
     #print 'blobs max', blobs.max()
     peaks = []
     for blob in range(1, nblobs+1):
@@ -388,10 +388,10 @@ def stage_4(resid=None, sky=None, ps=None, tim=None,
         py,px = np.unravel_index(imax, fmax.shape)
         peaks.append((px,py))
         #print 'blob imax', imax
-        print 'px,py', px,py
-        print 'blob max', fmax.flat[imax]
+        print('px,py', px,py)
+        print('blob max', fmax.flat[imax])
         ifilt = amax.flat[imax]
-        print 'blob argmax', ifilt
+        print('blob argmax', ifilt)
         #print '  =', amax[py,px]
         
         if plots:
@@ -415,11 +415,11 @@ def stage_4(resid=None, sky=None, ps=None, tim=None,
     # fmax is S/N in the amax filter.  Back out...
     fluxes = []
     for x,y in zip(px,py):
-        print 'peak', x,y
+        print('peak', x,y)
         ifilt = amax[y,x]
-        print 'ifilt', ifilt
+        print('ifilt', ifilt)
         sn = fmax[y,x]
-        print 'S/N', sn
+        print('S/N', sn)
         r = radii_arcsec[ifilt]
         sigma = r / pixscale
         knorm = 1./(2. * np.sqrt(np.pi) * sigma)
@@ -535,7 +535,7 @@ def stage_4(resid=None, sky=None, ps=None, tim=None,
 
 def stage_5(LSB=None, resid=None, tim=None, mask=None, ps=None, **kwa):
 
-    print 'resid', resid.dtype
+    print('resid', resid.dtype)
     
     # For each detected LSB source, try to fit it using the tractor...
     orig_image = tim.getImage()
@@ -556,7 +556,7 @@ def stage_5(LSB=None, resid=None, tim=None, mask=None, ps=None, **kwa):
         source = ExpGalaxy(RaDecPos(lsb.ra, lsb.dec),
                            NanoMaggies(**{ tim.band: lsb.flux }),
                            EllipseESoft.fromRAbPhi(lsb.radius * 2.35/2., 1., 0.))
-        print 'Source:', source
+        print('Source:', source)
 
         #EllipseE(lsb.radius * 2.35 / 2., 0., 0.)
 
@@ -573,8 +573,8 @@ def stage_5(LSB=None, resid=None, tim=None, mask=None, ps=None, **kwa):
 
         while True:
             dlnp,X,alpha = tr.optimize(priors=False, shared_params=False)
-            print 'dlnp:', dlnp
-            print 'source:', source
+            print('dlnp:', dlnp)
+            print('source:', source)
             if dlnp < 1e-3:
                 break
 
