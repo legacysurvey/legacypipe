@@ -1528,6 +1528,7 @@ def stage_fitblobs(T=None,
                    get_all_models=False,
                    refstars=None,
                    rex=False,
+                   bailout=False,
                    record_event=None,
                    custom_brick=False,
                    **kwargs):
@@ -1703,6 +1704,26 @@ def stage_fitblobs(T=None,
         skipblobs = [blob.iblob for blob in R if blob is not None]
         R = [r for r in R if r is not None]
         print('Skipping', len(skipblobs), 'blobs from checkpoint file')
+
+    bailout_mask = None
+    if bailout:
+        maxblob = blobs.max()
+        # mark all as bailed out...
+        bmap = np.ones(maxblob+2, bool)
+        # except no-blob
+        bmap[0] = False
+        # and blobs from the checkpoint file
+        for i in skipblobs:
+            bmap[i] = False
+
+        #bailout_mask = np.zeros((H,W), bool)
+        bailout_mask = bmap[blobs+1]
+        print('Bailout mask:', bailout_mask.dtype, bailout_mask.shape)
+        # skip all blobs!
+        skipblobs = np.unique(blobs[blobs>=0])
+        while len(R) < len(blobsrcs):
+            R.append(None)
+            
 
     # Create the iterator over blobs to process
     brightstars = refstars[refstars.isbright]
@@ -1917,6 +1938,8 @@ def stage_fitblobs(T=None,
     keys = ['cat', 'invvars', 'T', 'blobs', 'brightblobmask']
     if get_all_models:
         keys.append('all_models')
+    if bailout:
+        keys.append('bailout_mask')
     L = locals()
     rtn = dict([(k,L[k]) for k in keys])
     return rtn
@@ -2150,6 +2173,7 @@ def stage_coadds(survey=None, bands=None, version_header=None, targetwcs=None,
                  coadd_bw=False, brick=None, W=None, H=None, lanczos=True,
                  saturated_pix=None,
                  brightblobmask=None,
+                 bailout_mask=None,
                  mp=None,
                  record_event=None,
                  **kwargs):
@@ -2287,6 +2311,10 @@ def stage_coadds(survey=None, bands=None, version_header=None, targetwcs=None,
             continue
         maskbits += allmaskvals[b]* (allmask > 0).astype(np.int16)
 
+    # BAILOUT_MASK
+    if bailout_mask is not None:
+        maskbits += 0x400 * bailout_mask.astype(bool)
+
     # copy version_header before modifying it.
     hdr = fitsio.FITSHDR()
     for r in version_header.records():
@@ -2308,6 +2336,8 @@ def stage_coadds(survey=None, bands=None, version_header=None, targetwcs=None,
                         comment='Mask value for non-primary brick area'))
     hdr.add_record(dict(name='BRIGHT', value=2,
                         comment='Mask value for bright star in blob'))
+    hdr.add_record(dict(name='BAILOUT', value=0x400,
+                        comment='Mask value for bailed-out processing'))
     keys = sorted(saturvals.keys())
     for b in keys:
         hdr.add_record(dict(name='SATUR_%s' % b, value=saturvals[b],
@@ -3028,6 +3058,8 @@ def stage_writecat(
                             comment='maskbits bit 8: WISE W1 bright star mask'))
         hdr.add_record(dict(name='BITNM9', value='WISEM2',
                             comment='maskbits bit 9: WISE W2 bright star mask'))
+        hdr.add_record(dict(name='BITNM10', value='BAILOUT',
+                            comment='maskbits bit 10: Bailed out of processing'))
 
         with survey.write_output('maskbits', brick=brickname) as out:
             out.fits.write(maskbits, header=hdr)
@@ -3225,6 +3257,7 @@ def run_brick(brick, survey, radec=None, pixscale=0.262,
               gaia_stars=False,
               min_mjd=None, max_mjd=None,
               unwise_coadds=False,
+              bail_out=False,
               ceres=True,
               wise_ceres=True,
               unwise_dir=None,
@@ -3440,6 +3473,7 @@ def run_brick(brick, survey, radec=None, pixscale=0.262,
                   use_ceres=ceres,
                   wise_ceres=wise_ceres,
                   unwise_coadds=unwise_coadds,
+                  bailout=bail_out,
                   do_calibs=do_calibs,
                   write_metrics=write_metrics,
                   lanczos=lanczos,
@@ -3766,6 +3800,9 @@ python -u legacypipe/runbrick.py --plots --brick 2440p070 --zoom 1900 2400 450 9
                         action='store_false', help='Use constant sky rather than spline.')
     parser.add_argument('--unwise-coadds', default=False,
                         action='store_true', help='Write FITS and JPEG unWISE coadds?')
+
+    parser.add_argument('--bail-out', default=False, action='store_true',
+                        help='Bail out of "fitblobs" processing, writing all blobs from the checkpoint and skipping any remaining ones.')
 
     return parser
 
