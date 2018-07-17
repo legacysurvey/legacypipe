@@ -96,10 +96,12 @@ def main():
 
         yy,xx = np.nonzero(brightedge)
         print(len(yy), 'bright edge pixels')
+        if len(yy) == 0:
+            continue
         rr,dd = nwcs.pixelxy2radec(xx+1, yy+1)
         print('RA range', rr.min(), rr.max(), 'vs brick', brick.ra1, brick.ra2)
         print('Dec range', dd.min(), dd.max(), 'vs brick', brick.dec1, brick.dec2)
-
+        # Find pixels that are within this brick's unique area
         I, = np.nonzero((rr >= brick.ra1) *  (rr <= brick.ra2) *
                         (dd >= brick.dec1) * (dd <= brick.dec2))
 
