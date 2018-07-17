@@ -23,6 +23,20 @@ tempdir = tempfile.gettempdir()
 # The apertures we use in aperture photometry, in ARCSEC radius
 apertures_arcsec = np.array([0.5, 0.75, 1., 1.5, 2., 3.5, 5., 7.])
 
+# Bits in the "maskbits" data product
+MASKBITS = dict(
+    NPRIMARY   = 0x1,   # not PRIMARY
+    BRIGHT     = 0x2,
+    SATUR_G    = 0x4,
+    SATUR_R    = 0x8,
+    SATUR_Z    = 0x10,
+    ALLMASK_G  = 0x20,
+    ALLMASK_R  = 0x40,
+    ALLMASK_Z  = 0x80,
+    WISEM1     = 0x100, # WISE masked
+    WISEM2     = 0x200,
+)
+
 # Ugly hack: for sphinx documentation, the astrometry and tractor (and
 # other) packages are replaced by mock objects.  But you can't
 # subclass a mock object correctly, so we have to un-mock
