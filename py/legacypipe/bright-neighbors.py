@@ -169,6 +169,7 @@ def main():
 
     tfn = insurvey.find_file('tractor', brick=brickname)
     phdr = fitsio.read_header(tfn, ext=0)
+    hdr = fitsio.read_header(tfn, ext=1)
     T = fits_table(tfn)
     print('Read', len(T), 'sources')
     print('Bright:', Counter(T.brightstarinblob))
@@ -178,6 +179,9 @@ def main():
         before = np.flatnonzero(T.brightstarinblob)
     T.brightstarinblob |= touching[iby, ibx]
     print('Bright:', Counter(T.brightstarinblob))
+
+    # yuck -- copy the TUNIT headers from input to output.
+    units = [hdr.get('TUNIT%i'%(i+1), '') for i in range(len(T.get_columns()))]
 
     if plots:
         plt.clf()
@@ -191,7 +195,8 @@ def main():
         ps.savefig()
 
     with outsurvey.write_output('tractor', brick=brickname) as out:
-        T.writeto(None, fits_object=out.fits, primheader=phdr)
+        T.writeto(None, fits_object=out.fits, primheader=phdr, header=hdr,
+                  units=units)
 
     #plt.plot(rr, dd, 'k.', zorder=30)
     #ps.savefig()
