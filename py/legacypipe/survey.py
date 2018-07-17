@@ -1348,6 +1348,25 @@ Now using the current directory as LEGACY_SURVEY_DIR, but this is likely to fail
             return None
         return B[I[0]]
 
+    def get_bricks_near(self, ra, dec, radius):
+        '''
+        Returns a set of bricks near the given RA,Dec and radius (all in degrees).
+        '''
+        bricks = self.get_bricks_readonly()
+        if self.cache_tree:
+            from astrometry.libkd.spherematch import tree_build_radec, tree_search_radec
+            # Use kdtree
+            if self.bricktree is None:
+                self.bricktree = tree_build_radec(bricks.ra, bricks.dec)
+            I = tree_search_radec(self.bricktree, ra, dec, radius)
+        else:
+            from astrometry.util.starutil_numpy import degrees_between
+            d = degrees_between(bricks.ra, bricks.dec, ra, dec)
+            I, = np.nonzero(d < radius)
+        if len(I) == 0:
+            return None
+        return bricks[I]
+
     def bricks_touching_radec_box(self, bricks,
                                   ralo, rahi, declo, dechi):
         '''
