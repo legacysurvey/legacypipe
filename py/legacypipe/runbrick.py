@@ -2311,12 +2311,12 @@ def stage_coadds(survey=None, bands=None, version_header=None, targetwcs=None,
                         comment='Mask value for bright star in blob'))
     keys = sorted(saturvals.keys())
     for b in keys:
-        k = 'SATUR_%s' % b
+        k = 'SATUR_%s' % b.upper()
         hdr.add_record(dict(name=k, value=MASKBITS[k],
                             comment='Mask value for saturated (& nearby) pixels in %s band' % b))
     keys = sorted(allmaskvals.keys())
     for b in keys:
-        hdr.add_record(dict(name='ALLM_%s' % b, value=allmaskvals[b],
+        hdr.add_record(dict(name='ALLM_%s' % b.upper(), value=allmaskvals[b],
                             comment='Mask value for ALLMASK band %s' % b))
     maskbits_header = hdr
 
