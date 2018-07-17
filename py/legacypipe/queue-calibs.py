@@ -388,6 +388,10 @@ def main():
         rlo,rhi = 36., 36.5
         dlo,dhi = -4.5, -4.
 
+    elif opt.region == 'ngc2632':
+        # open cluster
+        rlo,rhi = 129.0, 131.0
+        dlo,dhi = 19.0, 20.5
         
     if opt.mindec is not None:
         dlo = opt.mindec
