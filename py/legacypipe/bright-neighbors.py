@@ -1,3 +1,4 @@
+import os
 from legacypipe.survey import LegacySurveyData, wcs_for_brick, MASKBITS
 import numpy as np
 import fitsio
@@ -32,69 +33,85 @@ def main():
     insurvey = LegacySurveyData(opt.input_dir, cache_dir=opt.survey_dir)
     outsurvey = LegacySurveyData(opt.output_dir, output_dir=opt.output_dir)
 
-    mfn = insurvey.find_file('maskbits', brick=brickname)
-    maskbits = fitsio.read(mfn)
+    bfn = insurvey.find_file('blobmap', brick=brickname)
+    print('Found blob map', bfn)
+    blobs = fitsio.read(bfn)
+    h,w = blobs.shape
 
-    bright = ((maskbits & 0x2) > 0)
-    print(np.sum(bright > 0), 'BRIGHT pixels set')
-    primary = (maskbits & 0x1 == 0)
-    print(np.sum(primary), 'PRIMARY pixels set')
-    edge = binary_dilation(primary, structure=np.ones((3,3), bool))
-    boundary = edge * np.logical_not(primary)
-    brightedge = boundary & bright
-
-    roi = slice(0,1000),slice(0,1000)
+    brick = insurvey.get_brick_by_name(brickname)
+    brickwcs = wcs_for_brick(brick)
+    radius = np.sqrt(2.) * 0.25 * 1.01;
+    neighbors = insurvey.get_bricks_near(brick.ra, brick.dec, radius)
+    print(len(neighbors), 'bricks nearby')
 
     def showbool(X):
         d = downsample_max(X, 8)
         h,w = X.shape
         plt.imshow(d, interpolation='nearest', origin='lower', vmin=0, vmax=1, extent=[0,w,0,h], cmap='gray')
 
-    if plots:
-        plt.clf()
-        showbool(bright)
-        plt.title('bright')
-        ps.savefig()
-
-        plt.clf()
-        showbool(primary)
-        plt.title('PRIMARY')
-        ps.savefig()
-
-        plt.clf()
-        showbool(boundary)
-        plt.title('boundary')
-        ps.savefig()
-
-        plt.clf()
-        showbool(brightedge)
-        #plt.imshow(edge[roi], interpolation='none', origin='lower', vmin=0, vmax=1)
-        plt.title('bright at edge')
-        ps.savefig()
-
-    brick = insurvey.get_brick_by_name(brickname)
-    brickwcs = wcs_for_brick(brick)
-
-    yy,xx = np.nonzero(brightedge)
-    print(len(yy), 'bright edge pixels')
-    rr,dd = brickwcs.pixelxy2radec(xx+1, yy+1)
-    print('RA range', rr.min(), rr.max(), 'vs brick', brick.ra1, brick.ra2)
-    print('Dec range', dd.min(), dd.max(), 'vs brick', brick.dec1, brick.dec2)
-
-    radius = np.sqrt(2.) * 0.25 * 1.01;
-    neighbors = insurvey.get_bricks_near(brick.ra, brick.dec, radius)
-    print(len(neighbors), 'bricks nearby')
-
-    #plt.clf()
+    brightblobs = set()
 
     for nb in neighbors:
         if nb.brickname == brickname:
             # ignore myself!
             continue
         print('Neighbor:', nb.brickname)
-        br = [nb.ra1,nb.ra1,nb.ra2,nb.ra2,nb.ra1]
-        bd = [nb.dec1,nb.dec2,nb.dec2,nb.dec1,nb.dec1]
-        I, = np.nonzero((rr > nb.ra1) * (rr < nb.ra2) * (dd > nb.dec1) * (dd < nb.dec2))
+
+        mfn = insurvey.find_file('maskbits', brick=nb.brickname)
+        if not os.path.exists(mfn):
+            print('No maskbits file:', mfn)
+            continue
+        maskbits = fitsio.read(mfn)
+        bright = ((maskbits & MASKBITS['BRIGHT']) > 0)
+        print(np.sum(bright > 0), 'BRIGHT pixels set')
+        primary = (maskbits & MASKBITS['NPRIMARY'] == 0)
+        print(np.sum(primary), 'PRIMARY pixels set')
+        edge = binary_dilation(primary, structure=np.ones((3,3), bool))
+        edge = edge * np.logical_not(primary)
+        brightedge = edge & bright
+
+        if plots:
+            plt.clf()
+            showbool(bright)
+            plt.title('bright: brick %s' % nb.brickname)
+            ps.savefig()
+
+            # plt.clf()
+            # showbool(primary)
+            # plt.title('PRIMARY, brick %s' % nb.brickname)
+            # ps.savefig()
+            # 
+            # plt.clf()
+            # showbool(edge)
+            # plt.title('boundary, brick %s' % nb.brickname)
+            # ps.savefig()
+
+            plt.clf()
+            showbool(brightedge)
+            plt.title('bright at edge, brick %s' % nb.brickname)
+            ps.savefig()
+
+        nwcs = wcs_for_brick(nb)
+
+        yy,xx = np.nonzero(brightedge)
+        print(len(yy), 'bright edge pixels')
+        rr,dd = nwcs.pixelxy2radec(xx+1, yy+1)
+        print('RA range', rr.min(), rr.max(), 'vs brick', brick.ra1, brick.ra2)
+        print('Dec range', dd.min(), dd.max(), 'vs brick', brick.dec1, brick.dec2)
+
+        I, = np.nonzero((rr >= brick.ra1) *  (rr <= brick.ra2) *
+                        (dd >= brick.dec1) * (dd <= brick.dec2))
+
+        if plots:
+            plt.clf()
+            plt.plot([brick.ra1,brick.ra1,brick.ra2,brick.ra2,brick.ra1],
+                     [brick.dec1,brick.dec2,brick.dec2,brick.dec1,brick.dec1],
+                     'b-')
+            plt.plot(rr, dd, 'k.')
+            plt.plot(rr[I], dd[I], 'r.')
+            plt.title('Bright pixels from %s' % nb.brickname)
+            ps.savefig()
+
         if len(I) == 0:
             print('No edge pixels touch')
             #plt.plot(br,bd, 'b-')
@@ -102,71 +119,67 @@ def main():
         print('Edge pixels touch!')
         #plt.plot(br,bd, 'r-', zorder=20)
 
-        nwcs = wcs_for_brick(nb)
-        ok,x,y = nwcs.radec2pixelxy(rr[I], dd[I])
+        ok,x,y = brickwcs.radec2pixelxy(rr[I], dd[I])
         x = np.round(x).astype(int)-1
         y = np.round(y).astype(int)-1
         print('Pixel ranges X', x.min(), x.max(), 'Y', y.min(), y.max())
-
-        bfn = insurvey.find_file('blobmap', brick=nb.brickname)
-        print('Found blob map', bfn)
-        blobs = fitsio.read(bfn)
-        h,w = blobs.shape
         assert(np.all((x >= 0) * (x < w) * (y >= 0) * (y < h)))
-        blobvals = set(blobs[y, x])
-        print('Blobs touching bright pixels:', blobvals)
-        blobvals.discard(-1)
+        print('Adding blobs:', np.unique(blobs[y,x]))
+        brightblobs.update(blobs[y, x])
+        print('Blobs touching bright pixels:', brightblobs)
 
-        tmap = np.zeros(blobs.max()+2, bool)
-        for b in blobvals:
-            tmap[b+1] = True
-        touching = tmap[blobs+1]
 
-        if plots:
-            plt.clf()
-            showbool(touching)
-            plt.title('Blobs touching, brick %s' % nb.brickname)
-            ps.savefig()
 
-        mfn = insurvey.find_file('maskbits', brick=nb.brickname)
-        maskbits,hdr = fitsio.read(mfn, header=True)
-        maskbits |= (MASKBITS['BRIGHT'] * touching)
+    brightblobs.discard(-1)
+    tmap = np.zeros(blobs.max()+2, bool)
+    for b in brightblobs:
+        tmap[b+1] = True
+    touching = tmap[blobs+1]
 
-        if plots:
-            plt.clf()
-            showbool((maskbits & MASKBITS['BRIGHT']) > 0)
-            plt.title('New maskbits map for BRIGHT, brick %s' % nb.brickname)
-            ps.savefig()
+    if plots:
+        plt.clf()
+        showbool(touching)
+        plt.title('Blobs touching bright, brick %s' % brickname)
+        ps.savefig()
 
-        with outsurvey.write_output('maskbits', brick=nb.brickname) as out:
-            out.fits.write(maskbits, hdr=hdr)
-        
-        tfn = insurvey.find_file('tractor', brick=nb.brickname)
-        phdr = fitsio.read_header(tfn, ext=0)
-        T = fits_table(tfn)
-        print('Read', len(T), 'sources')
-        print('Bright:', Counter(T.brightstarinblob))
-        h,w = touching.shape
-        iby = np.clip(np.round(T.by), 0, h-1).astype(int)
-        ibx = np.clip(np.round(T.bx), 0, w-1).astype(int)
-        if plots:
-            before = np.flatnonzero(T.brightstarinblob)
-        T.brightstarinblob |= touching[iby, ibx]
-        print('Bright:', Counter(T.brightstarinblob))
+    mfn = insurvey.find_file('maskbits', brick=brickname)
+    maskbits,hdr = fitsio.read(mfn, header=True)
+    maskbits |= (MASKBITS['BRIGHT'] * touching)
 
-        if plots:
-            plt.clf()
-            showbool((maskbits & MASKBITS['BRIGHT']) > 0)
-            ax = plt.axis()
-            after = np.flatnonzero(T.brightstarinblob)
-            plt.plot(T.bx[before], T.by[before], 'gx')
-            plt.plot(T.bx[after ], T.by[after ], 'r.')
-            plt.axis(ax)
-            plt.title('sources with brightstarinblob, brick %s' % nb.brickname)
-            ps.savefig()
+    if plots:
+        plt.clf()
+        showbool((maskbits & MASKBITS['BRIGHT']) > 0)
+        plt.title('New maskbits map for BRIGHT, brick %s' % brickname)
+        ps.savefig()
 
-        with outsurvey.write_output('tractor', brick=nb.brickname) as out:
-            T.writeto(None, fits_object=out.fits, primheader=phdr)
+    with outsurvey.write_output('maskbits', brick=brickname) as out:
+        out.fits.write(maskbits, hdr=hdr)
+
+    tfn = insurvey.find_file('tractor', brick=brickname)
+    phdr = fitsio.read_header(tfn, ext=0)
+    T = fits_table(tfn)
+    print('Read', len(T), 'sources')
+    print('Bright:', Counter(T.brightstarinblob))
+    iby = np.clip(np.round(T.by), 0, h-1).astype(int)
+    ibx = np.clip(np.round(T.bx), 0, w-1).astype(int)
+    if plots:
+        before = np.flatnonzero(T.brightstarinblob)
+    T.brightstarinblob |= touching[iby, ibx]
+    print('Bright:', Counter(T.brightstarinblob))
+
+    if plots:
+        plt.clf()
+        showbool((maskbits & MASKBITS['BRIGHT']) > 0)
+        ax = plt.axis()
+        after = np.flatnonzero(T.brightstarinblob)
+        plt.plot(T.bx[before], T.by[before], 'gx')
+        plt.plot(T.bx[after ], T.by[after ], 'r.')
+        plt.axis(ax)
+        plt.title('sources with brightstarinblob, brick %s' % brickname)
+        ps.savefig()
+
+    with outsurvey.write_output('tractor', brick=brickname) as out:
+        T.writeto(None, fits_object=out.fits, primheader=phdr)
 
     #plt.plot(rr, dd, 'k.', zorder=30)
     #ps.savefig()
