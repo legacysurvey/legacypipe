@@ -1714,7 +1714,7 @@ def stage_fitblobs(T=None,
         bmap[0] = False
         # and blobs from the checkpoint file
         for i in skipblobs:
-            bmap[i] = False
+            bmap[i+1] = False
 
         #bailout_mask = np.zeros((H,W), bool)
         bailout_mask = bmap[blobs+1]
