@@ -134,6 +134,11 @@ def main():
 
 
     brightblobs.discard(-1)
+
+    if len(brightblobs) == 0:
+        print('No neighboring bright blobs to update!')
+        return
+
     tmap = np.zeros(blobs.max()+2, bool)
     for b in brightblobs:
         tmap[b+1] = True
