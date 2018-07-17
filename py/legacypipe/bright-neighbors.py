@@ -119,7 +119,7 @@ def main():
             print('No edge pixels touch')
             #plt.plot(br,bd, 'b-')
             continue
-        print('Edge pixels touch!')
+        #print('Edge pixels touch!')
         #plt.plot(br,bd, 'r-', zorder=20)
 
         ok,x,y = brickwcs.radec2pixelxy(rr[I], dd[I])
@@ -132,12 +132,12 @@ def main():
         print('Blobs touching bright pixels:', brightblobs)
 
 
-
+    print()
     brightblobs.discard(-1)
-
     if len(brightblobs) == 0:
         print('No neighboring bright blobs to update!')
         return
+    print('Updating', len(brightblobs), 'blobs:', brightblobs)
 
     tmap = np.zeros(blobs.max()+2, bool)
     for b in brightblobs:
@@ -152,7 +152,11 @@ def main():
 
     mfn = insurvey.find_file('maskbits', brick=brickname)
     maskbits,hdr = fitsio.read(mfn, header=True)
-    maskbits |= (MASKBITS['BRIGHT'] * touching)
+    updated = maskbits | (MASKBITS['BRIGHT'] * touching)
+    if np.all(maskbits == updated):
+        print('No bits updated!  (Bright stars were already masked)')
+        return
+    maskbits = updated
 
     if plots:
         plt.clf()
