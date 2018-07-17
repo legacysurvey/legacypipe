@@ -1715,6 +1715,19 @@ def stage_fitblobs(T=None,
         # and blobs from the checkpoint file
         for i in skipblobs:
             bmap[i+1] = False
+        # and blobs that are completely outside the primary region of this brick.
+        U = find_unique_pixels(targetwcs, W, H, None,
+                               brick.ra1, brick.ra2, brick.dec1, brick.dec2)
+        for iblob in np.unique(blobs):
+            if iblob == -1:
+                continue
+            if iblob in skipblobs:
+                continue
+            bslc  = blobslices[iblob]
+            blobmask = (blobs[bslc] == iblob)
+            if np.all(U[bslc][blobmask] == False):
+                print('Blob', iblob, 'is completely outside the PRIMARY region')
+                bmap[iblob+1] = False
 
         #bailout_mask = np.zeros((H,W), bool)
         bailout_mask = bmap[blobs+1]
