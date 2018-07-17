@@ -23,6 +23,20 @@ tempdir = tempfile.gettempdir()
 # The apertures we use in aperture photometry, in ARCSEC radius
 apertures_arcsec = np.array([0.5, 0.75, 1., 1.5, 2., 3.5, 5., 7.])
 
+# Bits in the "maskbits" data product
+MASKBITS = dict(
+    NPRIMARY   = 0x1,   # not PRIMARY
+    BRIGHT     = 0x2,
+    SATUR_G    = 0x4,
+    SATUR_R    = 0x8,
+    SATUR_Z    = 0x10,
+    ALLMASK_G  = 0x20,
+    ALLMASK_R  = 0x40,
+    ALLMASK_Z  = 0x80,
+    WISEM1     = 0x100, # WISE masked
+    WISEM2     = 0x200,
+)
+
 # Ugly hack: for sphinx documentation, the astrometry and tractor (and
 # other) packages are replaced by mock objects.  But you can't
 # subclass a mock object correctly, so we have to un-mock
@@ -1333,6 +1347,25 @@ Now using the current directory as LEGACY_SURVEY_DIR, but this is likely to fail
         if len(I) == 0:
             return None
         return B[I[0]]
+
+    def get_bricks_near(self, ra, dec, radius):
+        '''
+        Returns a set of bricks near the given RA,Dec and radius (all in degrees).
+        '''
+        bricks = self.get_bricks_readonly()
+        if self.cache_tree:
+            from astrometry.libkd.spherematch import tree_build_radec, tree_search_radec
+            # Use kdtree
+            if self.bricktree is None:
+                self.bricktree = tree_build_radec(bricks.ra, bricks.dec)
+            I = tree_search_radec(self.bricktree, ra, dec, radius)
+        else:
+            from astrometry.util.starutil_numpy import degrees_between
+            d = degrees_between(bricks.ra, bricks.dec, ra, dec)
+            I, = np.nonzero(d < radius)
+        if len(I) == 0:
+            return None
+        return bricks[I]
 
     def bricks_touching_radec_box(self, bricks,
                                   ralo, rahi, declo, dechi):

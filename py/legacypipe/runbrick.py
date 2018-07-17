@@ -38,7 +38,7 @@ from astrometry.util.fits import fits_table, merge_tables
 from astrometry.util.plotutils import dimshow
 from astrometry.util.ttime import Time
 
-from legacypipe.survey import get_rgb, imsave_jpeg, LegacySurveyData
+from legacypipe.survey import get_rgb, imsave_jpeg, LegacySurveyData, MASKBITS
 from legacypipe.image import CP_DQ_BITS
 from legacypipe.utils import (
     RunbrickError, NothingToDoError, iterwrapper, find_unique_pixels)
@@ -2291,21 +2291,22 @@ def stage_coadds(survey=None, bands=None, version_header=None, targetwcs=None,
     else:
         U = find_unique_pixels(targetwcs, W, H, None,
                                brick.ra1, brick.ra2, brick.dec1, brick.dec2)
-        maskbits += 1 * np.logical_not(U).astype(np.int16)
+        maskbits += MASKBITS['NPRIMARY'] * np.logical_not(U).astype(np.int16)
         del U
 
     # BRIGHT
     if brightblobmask is not None:
-        maskbits += 2 * brightblobmask
+        maskbits += MASKBITS['BRIGHT'] * brightblobmask
 
     # SATUR
-    saturvals = dict(g=4, r=8, z=0x10)
+    saturvals = dict(g=MASKBITS['SATUR_G'], r=MASKBITS['SATUR_R'], z=MASKBITS['SATUR_Z'])
     if saturated_pix is not None:
         for b,sat in zip(bands, saturated_pix):
             maskbits += saturvals[b] * sat.astype(np.int16)
 
     # ALLMASK_{g,r,z}
-    allmaskvals = dict(g=0x20, r=0x40, z=0x80)
+    allmaskvals = dict(g=MASKBITS['ALLMASK_G'], r=MASKBITS['ALLMASK_R'],
+                       z=MASKBITS['ALLMASK_Z'])
     for b,allmask in zip(bands, C.allmasks):
         if not b in allmaskvals:
             continue
@@ -2332,15 +2333,16 @@ def stage_coadds(survey=None, bands=None, version_header=None, targetwcs=None,
     # you make changes to the bit mappings here, you MUST also adjust
     # the header values (and bit mappings for the WISE masks) in
     # stage_writecat.
-    hdr.add_record(dict(name='NPRIMARY', value=1,
+    hdr.add_record(dict(name='NPRIMARY', value=MASKBITS['NPRIMARY'],
                         comment='Mask value for non-primary brick area'))
-    hdr.add_record(dict(name='BRIGHT', value=2,
+    hdr.add_record(dict(name='BRIGHT', value=MASKBITS['BRIGHT'],
                         comment='Mask value for bright star in blob'))
     hdr.add_record(dict(name='BAILOUT', value=0x400,
                         comment='Mask value for bailed-out processing'))
     keys = sorted(saturvals.keys())
     for b in keys:
-        hdr.add_record(dict(name='SATUR_%s' % b, value=saturvals[b],
+        k = 'SATUR_%s' % b
+        hdr.add_record(dict(name=k, value=MASKBITS[k],
                             comment='Mask value for saturated (& nearby) pixels in %s band' % b))
     keys = sorted(allmaskvals.keys())
     for b in keys:
@@ -3024,8 +3026,8 @@ def stage_writecat(
     record_event and record_event('stage_writecat: starting')
 
     if maskbits is not None:
-        w1val = 0x100
-        w2val = 0x200
+        w1val = MASKBITS['WISEM1']
+        w2val = MASKBITS['WISEM2']
         if wise_mask_map is not None:
             # Add it in!
             maskbits += w1val * ((wise_mask_map & 1) != 0)
