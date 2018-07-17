@@ -2314,7 +2314,7 @@ def stage_coadds(survey=None, bands=None, version_header=None, targetwcs=None,
 
     # BAILOUT_MASK
     if bailout_mask is not None:
-        maskbits += 0x400 * bailout_mask.astype(bool)
+        maskbits += MASKBITS['BAILOUT'] * bailout_mask.astype(bool)
 
     # copy version_header before modifying it.
     hdr = fitsio.FITSHDR()
@@ -2337,7 +2337,7 @@ def stage_coadds(survey=None, bands=None, version_header=None, targetwcs=None,
                         comment='Mask value for non-primary brick area'))
     hdr.add_record(dict(name='BRIGHT', value=MASKBITS['BRIGHT'],
                         comment='Mask value for bright star in blob'))
-    hdr.add_record(dict(name='BAILOUT', value=0x400,
+    hdr.add_record(dict(name='BAILOUT', value=MASKBITS['BAILOUT'],
                         comment='Mask value for bailed-out processing'))
     keys = sorted(saturvals.keys())
     for b in keys:

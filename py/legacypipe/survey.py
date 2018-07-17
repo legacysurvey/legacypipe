@@ -35,6 +35,7 @@ MASKBITS = dict(
     ALLMASK_Z  = 0x80,
     WISEM1     = 0x100, # WISE masked
     WISEM2     = 0x200,
+    BAILOUT    = 0x400, # bailed out of processing
 )
 
 # Ugly hack: for sphinx documentation, the astrometry and tractor (and
