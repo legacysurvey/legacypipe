@@ -21,20 +21,24 @@ B6.l,B6.b = radectolb(B6.ra, B6.dec)
 ok,B5.x,B5.y = wcs.radec2pixelxy(B5.ra, B5.dec)
 ok,B6.x,B6.y = wcs.radec2pixelxy(B6.ra, B6.dec)
 
-I = np.flatnonzero((B6.b > 0) * (B6.dec > 30))
+B6.cut((B6.b > 0) * (B6.dec > 30))
+
+### subsample
+#B5.cut(np.random.permutation(len(B5))[:int(0.1*len(B5))])
+#B6.cut(np.random.permutation(len(B6))[:int(0.1*len(B6))])
 
 for band in 'grz':
     plt.clf()
-    #plt.plot(B5.x, B5.y, 'k.')
-    #plt.plot(B6.x[I], B6.y[I], 'k.')
 
     lo,hi = { 'g':(23,25), 'r':(22.5,24.5), 'z':(21.5,23.5) }[band]
 
     kw = dict(s=1, vmin=lo, vmax=hi, cmap='summer')    
     plt.scatter(B5.x, B5.y, c=B5.get('galdepth_'+band), **kw)
-    plt.scatter(B6.x[I], B6.y[I], c=B6.get('galdepth_'+band)[I], **kw)
+    plt.scatter(B6.x, B6.y, c=B6.get('galdepth_'+band), **kw)
     c = plt.colorbar(orientation='horizontal')
     c.set_label('%s-band depth (mag)' % band)
+    #plt.plot(B5.x, B5.y, 'k.')
+    #plt.plot(B6.x, B6.y, 'k.')
 
     dec_gridlines = list(range(-30, 90, 10))
     dec_gridlines_ras = np.arange(ra_center-180, ra_center+180, 1)
@@ -70,6 +74,34 @@ for band in 'grz':
     ok,xx,yy = wcs.radec2pixelxy(dec_labels_ra, dec_labels)
     for x,y,v in zip(xx, yy, dec_labels):
         plt.text(x-20, y, '%+i'%v, ha='right', va='center', alpha=0.5)
+
+    # Galactic plane
+    ll = np.linspace(0., 360., 720)
+    bb = np.zeros_like(ll)
+    rr,dd = lbtoradec(ll, bb)
+    ok,xx,yy = wcs.radec2pixelxy(rr, dd)
+    # Plot segments that are above Dec=-30 and not discontinuous
+    d = np.append([0], np.hypot(np.diff(xx), np.diff(yy)))
+    ok = (d < 100) * (dd > -30)
+    istart = 0
+    while istart < len(ok):
+        while istart < len(ok) and ok[istart] == False:
+            istart += 1
+        iend = istart
+        while iend < len(ok) and ok[iend] == True:
+            iend += 1
+        if iend != istart:
+            #print('Plotting from', istart, 'to', iend, 'ok', ok[istart:iend])
+            plt.plot(xx[istart:iend], yy[istart:iend], '-', color='0.6', lw=2)
+        istart = iend
+
+    # Label regions
+    for r,d,n in [(30, 0, 'DES'),
+                  (0, 20, 'DECaLS'),
+                  (180, 10, 'DECaLS'),
+                  (180, 50, 'MzLS+BASS')]:
+        ok,x,y = wcs.radec2pixelxy(r, d)
+        plt.text(x, y, n, fontsize=16, ha='center', va='center')
     
     plt.xticks([])
     plt.yticks([])
