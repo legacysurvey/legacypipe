@@ -1719,28 +1719,32 @@ def stage_fitblobs(T=None,
             for r in R:
                 iblob = r.iblob
                 if iblob >= len(blobsrcs):
-                    print('Checkpointed iblob too large!')
+                    print('Checkpointed iblob', iblob,
+                          'is too large! (>= %i)' % len(blobsrcs))
                     continue
                 if len(blobsrcs[iblob]) != len(r.Isrcs):
-                    print('Checkpointed number of sources in blob', iblob,
-                          'does not match!')
+                    print('Checkpointed number of sources,', len(r.Isrcs),
+                          'does not match expected', len(blobsrcs[iblob]),
+                          'for iblob', iblob)
                     continue
                 sy,sx = blobslices[iblob]
                 by0,by1,bx0,bx1 = sy.start, sy.stop, sx.start, sx.stop
                 if 'blob_x0' in r and 'blob_y0' in r:
                     # check bbox
-                    rx1,ry1 = r.blob_x0 + r.blob_width, r.blob_y0 + r.blob_height
-                    if r.blob_x0 != bx0 or r.blob_y0 != by0 or rx1 != bx1 or ry1 != by1:
-                        print('Checkpointed blob bbox', [r.blob_x0,rx1,r.blob_y0,ry1],
+                    rx0,ry0 = r.blob_x0[0], r.blob_y0[0]
+                    rx1,ry1 = rx0 + r.blob_width[0], ry0 + r.blob_height[0]
+                    if rx0 != bx0 or ry0 != by0 or rx1 != bx1 or ry1 != by1:
+                        print('Checkpointed blob bbox', [rx0,rx1,ry0,ry1],
                               'does not match expected', [bx0,bx1,by0,by1],
                               'for iblob', iblob)
                         continue
                 else:
                     # check size only
-                    if r.blob_width != bx1-bx0 or r.blob_height != by1-by0:
-                        print('Checkpointed blob bbox size',
-                              (r.blob_width, r.blob_height), 'does not match expected',
-                              (bx1-bx0, by1-by0), 'for iblob', iblob)
+                    rw,rh = r.blob_width[0], r.blob_height[0]
+                    if rw != bx1-bx0 or rh != by1-by0:
+                        print('Checkpointed blob bbox size', (rw,rh),
+                              'does not match expected', (bx1-bx0, by1-by0),
+                              'for iblob', iblob)
                         continue
                 keepR.append(r)
             print('Keeping', len(keepR), 'of', len(R), 'checkpointed results')

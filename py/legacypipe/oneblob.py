@@ -48,8 +48,8 @@ def one_blob(X):
     B.sources = srcs
     B.Isrcs = Isrcs
     B.iblob = iblob
-    B.blob_x0 = bx0
-    B.blob_y0 = by0
+    B.blob_x0 = np.zeros(len(B), np.int16) + bx0
+    B.blob_y0 = np.zeros(len(B), np.int16) + by0
 
     # Did sources start within the blob?
     ok,x0,y0 = blobwcs.radec2pixelxy(
