@@ -47,6 +47,9 @@ def one_blob(X):
     B = fits_table()
     B.sources = srcs
     B.Isrcs = Isrcs
+    B.iblob = iblob
+    B.blob_x0 = bx0
+    B.blob_y0 = by0
 
     # Did sources start within the blob?
     ok,x0,y0 = blobwcs.radec2pixelxy(
@@ -87,7 +90,6 @@ def one_blob(X):
     t1 = time.clock()
     B.cpu_blob[:] = t1 - t0
         
-    B.iblob = iblob
     return B
 
 class OneBlob(object):

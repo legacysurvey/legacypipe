@@ -1653,9 +1653,10 @@ def stage_fitblobs(T=None,
 
     # keepblobs can be None or empty list
     if keepblobs is not None and len(keepblobs):
-        # 'blobs' is an image with values -1 for no blob, or the index of the
-        # blob.  Create a map from old 'blobs+1' to new 'blobs+1'.  +1  so that
-        # -1 is a valid index.
+        # 'blobs' is an image with values -1 for no blob, or the index
+        # of the blob.  Create a map from old 'blob number+1' to new
+        # 'blob number', keeping only blobs in the 'keepblobs' list.
+        # The +1 is so that -1 is a valid index in the mapping.
         NB = len(blobslices)
         blobmap = np.empty(NB+1, int)
         blobmap[:] = -1
@@ -1663,7 +1664,8 @@ def stage_fitblobs(T=None,
         # apply the map!
         blobs = blobmap[blobs + 1]
 
-        # 'blobslices' and 'blobsrcs' are lists
+        # 'blobslices' and 'blobsrcs' are lists where the index corresponds to the
+        # value in the 'blobs' map.
         blobslices = [blobslices[i] for i in keepblobs]
         blobsrcs   = [blobsrcs  [i] for i in keepblobs]
 
@@ -1701,6 +1703,49 @@ def stage_fitblobs(T=None,
                 import traceback
                 print('Failed to read checkpoint file ' + checkpoint_filename)
                 traceback.print_exc()
+
+        # Keep only non-None blob results.  This means we will re-run
+        # these blobs, but that's okay because they are mostly ones
+        # that are outside the primary region, thus very fast to run.
+        R = [r for r in R if r is not None]
+
+        if len(R):
+            # Check that checkpointed blobids match our current set of
+            # blobs, based on blob bounding-box and Isrcs.  This can
+            # fail if the code changes between writing & reading the
+            # checkpoint, resulting in a different set of detected
+            # sources.
+            keepR = []
+            for r in R:
+                iblob = r.iblob
+                if iblob >= len(blobsrcs):
+                    print('Checkpointed iblob too large!')
+                    continue
+                if len(blobsrcs[iblob]) != r.Isrcs:
+                    print('Checkpointed number of sources in blob', iblob,
+                          'does not match!')
+                    continue
+                sy,sx = blobslices[iblob]
+                by0,by1,bx0,bx1 = sy.start, sy.stop, sx.start, sx.stop
+                if 'blob_x0' in r and 'blob_y0' in r:
+                    # check bbox
+                    rx1,ry1 = r.blob_x0 + r.blob_width, r.blob_y0 + r.blob_height
+                    if r.blob_x0 != bx0 or r.blob_y0 != by0 or rx1 != bx1 or ry1 != by1:
+                        print('Checkpointed blob bbox', [r.blob_x0,rx1,r.blob_y0,ry1],
+                              'does not match expected', [bx0,bx1,by0,by1],
+                              'for iblob', iblob)
+                        continue
+                else:
+                    # check size only
+                    if r.blob_width != bx1-bx0 or r.blob_height != by1-by0:
+                        print('Checkpointed blob bbox size',
+                              (r.blob_width, r.blob_height), 'does not match expected',
+                              (bx1-bx0, by1-by0), 'for iblob', iblob)
+                        continue
+                keepR.append(r)
+            print('Keeping', len(keepR), 'of', len(R), 'checkpointed results')
+            R = keepR
+
         skipblobs = [blob.iblob for blob in R if blob is not None]
         R = [r for r in R if r is not None]
         print('Skipping', len(skipblobs), 'blobs from checkpoint file')
