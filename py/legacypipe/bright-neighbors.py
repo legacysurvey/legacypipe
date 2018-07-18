@@ -21,7 +21,8 @@ def main():
     parser = argparse.ArgumentParser()
     parser.add_argument('--plots', action='store_true')
     parser.add_argument('--brick', help='Brick name to run')
-    parser.add_argument('--input-dir', default='/global/cscratch1/sd/desiproc/dr7out')
+    parser.add_argument('--input-dir', default='/global/projecta/projectdirs/cosmo/work/legacysurvey/dr7')
+    #/global/cscratch1/sd/desiproc/dr7out')
     parser.add_argument('--survey-dir', default='/global/cscratch1/sd/dstn/dr7-depthcut')
     parser.add_argument('--output-dir', default='/global/cscratch1/sd/dstn/bright')
     opt = parser.parse_args()
@@ -95,10 +96,12 @@ def main():
 
         yy,xx = np.nonzero(brightedge)
         print(len(yy), 'bright edge pixels')
+        if len(yy) == 0:
+            continue
         rr,dd = nwcs.pixelxy2radec(xx+1, yy+1)
         print('RA range', rr.min(), rr.max(), 'vs brick', brick.ra1, brick.ra2)
         print('Dec range', dd.min(), dd.max(), 'vs brick', brick.dec1, brick.dec2)
-
+        # Find pixels that are within this brick's unique area
         I, = np.nonzero((rr >= brick.ra1) *  (rr <= brick.ra2) *
                         (dd >= brick.dec1) * (dd <= brick.dec2))
 
@@ -116,7 +119,7 @@ def main():
             print('No edge pixels touch')
             #plt.plot(br,bd, 'b-')
             continue
-        print('Edge pixels touch!')
+        #print('Edge pixels touch!')
         #plt.plot(br,bd, 'r-', zorder=20)
 
         ok,x,y = brickwcs.radec2pixelxy(rr[I], dd[I])
@@ -129,8 +132,13 @@ def main():
         print('Blobs touching bright pixels:', brightblobs)
 
 
-
+    print()
     brightblobs.discard(-1)
+    if len(brightblobs) == 0:
+        print('No neighboring bright blobs to update!')
+        return
+    print('Updating', len(brightblobs), 'blobs:', brightblobs)
+
     tmap = np.zeros(blobs.max()+2, bool)
     for b in brightblobs:
         tmap[b+1] = True
@@ -144,7 +152,11 @@ def main():
 
     mfn = insurvey.find_file('maskbits', brick=brickname)
     maskbits,hdr = fitsio.read(mfn, header=True)
-    maskbits |= (MASKBITS['BRIGHT'] * touching)
+    updated = maskbits | (MASKBITS['BRIGHT'] * touching)
+    if np.all(maskbits == updated):
+        print('No bits updated!  (Bright stars were already masked)')
+        return
+    maskbits = updated
 
     if plots:
         plt.clf()
@@ -157,6 +169,7 @@ def main():
 
     tfn = insurvey.find_file('tractor', brick=brickname)
     phdr = fitsio.read_header(tfn, ext=0)
+    hdr = fitsio.read_header(tfn, ext=1)
     T = fits_table(tfn)
     print('Read', len(T), 'sources')
     print('Bright:', Counter(T.brightstarinblob))
@@ -166,6 +179,9 @@ def main():
         before = np.flatnonzero(T.brightstarinblob)
     T.brightstarinblob |= touching[iby, ibx]
     print('Bright:', Counter(T.brightstarinblob))
+
+    # yuck -- copy the TUNIT headers from input to output.
+    units = [hdr.get('TUNIT%i'%(i+1), '') for i in range(len(T.get_columns()))]
 
     if plots:
         plt.clf()
@@ -179,7 +195,8 @@ def main():
         ps.savefig()
 
     with outsurvey.write_output('tractor', brick=brickname) as out:
-        T.writeto(None, fits_object=out.fits, primheader=phdr)
+        T.writeto(None, fits_object=out.fits, primheader=phdr, header=hdr,
+                  units=units)
 
     #plt.plot(rr, dd, 'k.', zorder=30)
     #ps.savefig()
