@@ -1721,7 +1721,7 @@ def stage_fitblobs(T=None,
                 if iblob >= len(blobsrcs):
                     print('Checkpointed iblob too large!')
                     continue
-                if len(blobsrcs[iblob]) != r.Isrcs:
+                if len(blobsrcs[iblob]) != len(r.Isrcs):
                     print('Checkpointed number of sources in blob', iblob,
                           'does not match!')
                     continue
