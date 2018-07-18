@@ -3916,9 +3916,11 @@ def main(args=None):
     import logging
     import datetime
     from astrometry.util.ttime import MemMeas
+    from legacypipe.survey import get_git_version
 
     print()
     print('runbrick.py starting at', datetime.datetime.now().isoformat())
+    print('legacypipe git version:', get_git_version())
     if args is None:
         print('Command-line args:', sys.argv)
     else:
