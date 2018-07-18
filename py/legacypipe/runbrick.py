@@ -2870,6 +2870,8 @@ def stage_wise_forced(
                     else:
                         assert(thisroi == roi)
                 #print('ROI:', roi)
+                if roi is None:
+                    continue
                 try:
                     # Get WCS for this ROI.
                     rx0,rx1,ry0,ry1 = roi
