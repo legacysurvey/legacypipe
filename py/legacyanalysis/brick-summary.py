@@ -93,9 +93,8 @@ def plots(opt):
     decam = True
     # vs MzLS+BASS
     #release = 'MzLS+BASS DR4'
-    release = 'DECaLS DR5'
-    #release = 'DECaLS DR3'
-    
+    release = 'DECaLS DR7'
+
     if decam:
         # DECam
         #ax = [360, 0, -21, 36]
