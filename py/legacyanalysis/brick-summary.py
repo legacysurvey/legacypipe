@@ -50,16 +50,16 @@ python legacyanalysis/brick-summary.py --merge -o survey-brick-dr5.fits dr5-bric
 
 
 def colorbar_axes(parent, frac=0.12, pad=0.03, aspect=20):
-	pb = parent.get_position(original=True).frozen()
-	# new parent box, padding, child box
-	(pbnew, padbox, cbox) = pb.splitx(1.0-(frac+pad), 1.0-frac)
-	cbox = cbox.anchored('C', cbox)
-	parent.set_position(pbnew)
-	parent.set_anchor((1.0, 0.5))
-	cax = parent.get_figure().add_axes(cbox)
-	cax.set_aspect(aspect, anchor=((0.0, 0.5)), adjustable='box')
-	parent.get_figure().sca(parent)
-	return cax
+    pb = parent.get_position(original=True).frozen()
+    # new parent box, padding, child box
+    (pbnew, padbox, cbox) = pb.splitx(1.0-(frac+pad), 1.0-frac)
+    cbox = cbox.anchored('C', cbox)
+    parent.set_position(pbnew)
+    parent.set_anchor((1.0, 0.5))
+    cax = parent.get_figure().add_axes(cbox)
+    cax.set_aspect(aspect, anchor=((0.0, 0.5)), adjustable='box')
+    parent.get_figure().sca(parent)
+    return cax
 
 def plots(opt):
     from astrometry.util.plotutils import antigray
@@ -114,7 +114,7 @@ def plots(opt):
     print('Number of unique Dec values:', len(udec))
     print('Number of unique Dec values in range', ax[2],ax[3],':',
           np.sum((udec >= ax[2]) * (udec <= ax[3])))
-        
+
     def radec_plot():
         plt.axis(ax)
         plt.xlabel('RA (deg)')
@@ -150,7 +150,7 @@ def plots(opt):
         plot_broken(map_ra(rr), dd, 'k-', alpha=0.25, lw=1)
         rr,dd = lbtoradec(gl, gb-10)
         plot_broken(map_ra(rr), dd, 'k-', alpha=0.25, lw=1)
-        
+
     plt.figure(1, figsize=(8,5))
     plt.subplots_adjust(left=0.1, right=0.98, top=0.93)
 
@@ -158,7 +158,7 @@ def plots(opt):
     #plt.subplots_adjust(left=0.06, right=0.98, top=0.98)
     plt.subplots_adjust(left=0.08, right=0.98, top=0.98)
     plt.figure(1)
-    
+
     # Map of the tile centers we want to observe...
     if decam:
         O = fits_table('obstatus/decam-tiles_obstatus.fits')
@@ -184,7 +184,7 @@ def plots(opt):
         segs = desi_map_boundaries.get_segments()
         for seg in segs:
             plt.plot(seg[:,0], seg[:,1], 'b-')
-    
+
     def desi_map():
         # Show the DESI tile map in the background.
         plt.imshow(desimap, origin='lower', interpolation='nearest',
@@ -215,7 +215,7 @@ def plots(opt):
                    aspect='auto', cmap='Greys', vmin=0, vmax=mx)
     #desi_map_outline()
     radec_plot()
-    cax = colorbar_axes(plt.gca(), frac=0.12)        
+    cax = colorbar_axes(plt.gca(), frac=0.12)
     cbar = plt.colorbar(cax=cax)
     cbar.set_label('Extinction E(B-V)')
     plt.savefig('ext-bw.pdf')
@@ -226,14 +226,13 @@ def plots(opt):
                aspect='auto', cmap='Greys', vmin=0, vmax=0.25)
     desi_map_outline()
     radec_plot()
-    cax = colorbar_axes(plt.gca(), frac=0.12)        
+    cax = colorbar_axes(plt.gca(), frac=0.12)
     cbar = plt.colorbar(cax=cax)
     cbar.set_label('Extinction E(B-V)')
     plt.savefig('ext-bw-2.pdf')
     plt.figure(1)
 
     #sys.exit(0)
-    
     plt.clf()
     depthlo,depthhi = 21.5, 25.5
     for band in 'grz':
@@ -358,12 +357,12 @@ def plots(opt):
                    aspect='auto', cmap=cmap, vmin=mn, vmax=mx)
         desi_map_outline()
         radec_plot()
-        cax = colorbar_axes(plt.gca(), frac=0.12)        
+        cax = colorbar_axes(plt.gca(), frac=0.12)
         cbar = plt.colorbar(cax=cax, ticks=np.arange(20, 26, 0.5)) #ticks=np.arange(np.floor(mn/5.)*5., 0.1+np.ceil(mx/5.)*5, 0.2))
         cbar.set_label('Depth (5-sigma, galaxy profile, AB mag)')
         plt.savefig('galdepth-bw-%s.pdf' % band)
         plt.figure(1)
-        
+
         plt.clf()
         desi_map()
         ext = T.get('ext_%s' % band)
@@ -381,7 +380,7 @@ def plots(opt):
 
 
     T.ngal = T.nsimp + T.nrex + T.nexp + T.ndev + T.ncomp
-        
+
     for col in ['nobjs', 'npsf', 'nsimp', 'nrex', 'nexp', 'ndev', 'ncomp', 'ngal']:
         if not col in T.get_columns():
             continue
@@ -436,14 +435,14 @@ def plots(opt):
         desi_map_outline()
         radec_plot()
         #cax = colorbar_axes(plt.gca(), frac=0.08)
-        cax = colorbar_axes(plt.gca(), frac=0.12)        
+        cax = colorbar_axes(plt.gca(), frac=0.12)
         cbar = plt.colorbar(cax=cax,
                             format=matplotlib.ticker.FuncFormatter(lambda x, p: format(int(x), ',')))
         cbar.set_label('Objects per square degree')
         plt.savefig('nobjs-bw-%s.pdf' % col[1:])
         #plt.savefig('nobjs-bw-%s.png' % col[1:])
         plt.figure(1)
-        
+
     Ntot = T.nobjs
     for col in ['npsf', 'nsimp', 'nrex', 'nexp', 'ndev', 'ncomp', 'ngal']:
         if not col in T.get_columns():
@@ -487,16 +486,15 @@ def plots(opt):
 
         desi_map_outline()
         radec_plot()
-        cax = colorbar_axes(plt.gca(), frac=0.12)        
+        cax = colorbar_axes(plt.gca(), frac=0.12)
         cbar = plt.colorbar(cax=cax,
                             format=matplotlib.ticker.FuncFormatter(lambda x, p: '%.2g' % x))
         cbar.set_label('Percentage of objects of type %s' % col[1:].upper())
         plt.savefig('fobjs-bw-%s.pdf' % col[1:])
         #plt.savefig('fobjs-bw-%s.png' % col[1:])
         plt.figure(1)
-        
     return 0
-        
+
 def main():
     import argparse
     parser = argparse.ArgumentParser()
@@ -507,7 +505,7 @@ def main():
     parser.add_argument('--dr5', action='store_true', help='DR5 format?')
     parser.add_argument('files', metavar='nexp-file.fits.gz', nargs='+',
                         help='List of nexp files to process')
-    
+
     opt = parser.parse_args()
     fns = opt.files
 
@@ -535,17 +533,17 @@ def main():
     gn = []
     rn = []
     zn = []
-    
+
     gnhist = []
     rnhist = []
     znhist = []
-    
+
     nnhist = 6
-    
+
     gdepth = []
     rdepth = []
     zdepth = []
-    
+
     ibricks = []
     nsrcs = []
     npsf  = []
@@ -568,22 +566,21 @@ def main():
 
     wise_nobs = []
     wise_trans = []
-    
+
     ebv = []
     gtrans = []
     rtrans = []
     ztrans = []
-    
+
     bricks = fits_table('survey-bricks.fits.gz')
-    
+
     #sfd = SFDMap()
-    
+
     W = H = 3600
-    # H=3600
     # xx,yy = np.meshgrid(np.arange(W), np.arange(H))
     unique = np.ones((H,W), bool)
     tlast = 0
-    
+
     for ifn,fn in enumerate(fns):
         print('File', (ifn+1), 'of', len(fns), ':', fn)
         words = fn.split('/')
@@ -622,11 +619,11 @@ def main():
             gn.append(0)
             rn.append(0)
             zn.append(0)
-    
+
             gnhist.append([0 for i in range(nnhist)])
             rnhist.append([0 for i in range(nnhist)])
             znhist.append([0 for i in range(nnhist)])
-    
+
             index = -1
             ibrick = np.nonzero(bricks.brickname == brick)[0][0]
             ibricks.append(ibrick)
@@ -690,7 +687,7 @@ def main():
                 ztrans.append(np.median(T.decam_mw_transmission[:,4]))
                 
             ebv.append(np.median(T.ebv))
-    
+
             br = bricks[ibrick]
 
             #print('Computing unique brick pixels...')
@@ -703,28 +700,28 @@ def main():
                                br.ra1, br.ra2, br.dec1, br.dec2)
             U = np.flatnonzero(unique)
             #print(len(U), 'of', W*H, 'pixels are unique to this brick')
-    
+
         else:
             index = bricklist.index(brick)
             assert(index == len(bricklist)-1)
-    
+
         index = bricklist.index(brick)
         assert(index == len(bricklist)-1)
-    
+
         filepart = words[-1]
         filepart = filepart.replace('.fits.gz', '')
         filepart = filepart.replace('.fits.fz', '')
         print('File:', filepart)
         band = filepart[-1]
         assert(band in 'grz')
-    
+
         nlist,nhist = dict(g=(gn,gnhist), r=(rn,rnhist), z=(zn,znhist))[band]
-    
+
         upix = fitsio.read(fn).flat[U]
         med = np.median(upix)
         print('Band', band, ': Median', med)
         nlist[index] = med
-    
+
         hist = nhist[index]
         for i in range(nnhist):
             if i < nnhist-1:
@@ -733,11 +730,9 @@ def main():
                 hist[i] = np.sum(upix >= i)
         assert(sum(hist) == len(upix))
         print('Number of exposures histogram:', hist)
-    
+
     ibricks = np.array(ibricks)
-    
-    #print('Maximum number of sources:', max(nsrcs))
-    
+
     T = fits_table()
     T.brickname = np.array(bricklist)
     T.ra  = bricks.ra [ibricks]
