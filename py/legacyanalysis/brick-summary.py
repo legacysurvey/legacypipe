@@ -502,7 +502,6 @@ def main():
                       default='TMP/nexp.fits')
     parser.add_argument('--merge', action='store_true', help='Merge sub-tables')
     parser.add_argument('--plot', action='store_true', help='Plot results')
-    parser.add_argument('--dr5', action='store_true', help='DR5 format?')
     parser.add_argument('files', metavar='nexp-file.fits.gz', nargs='+',
                         help='List of nexp files to process')
 
@@ -527,7 +526,11 @@ def main():
 
     fns.sort()
     print(len(fns), 'nexp files')
-    
+    if len(fns) == 1:
+        if not os.path.exists(fns[0]):
+            print('No such file.')
+            return 0
+
     brickset = set()
     bricklist = []
     gn = []
@@ -593,20 +596,14 @@ def main():
             try:
                 tfn = os.path.join(dirprefix, 'tractor', brick[:3], 'tractor-%s.fits'%brick)
                 print('Tractor filename', tfn)
-                if opt.dr5:
-                    T = fits_table(tfn, columns=['brick_primary', 'type',
-                                                 'psfsize_g', 'psfsize_r', 'psfsize_z',
-                                                 'psfdepth_g', 'psfdepth_r', 'psfdepth_z',
-                                                 'galdepth_g', 'galdepth_r', 'galdepth_z',
-                                                 'ebv',
-                                                 'mw_transmission_g', 'mw_transmission_r', 'mw_transmission_z',
-                                                 'nobs_w1', 'nobs_w2', 'nobs_w3', 'nobs_w4',
-                                                 'mw_transmission_w1', 'mw_transmission_w2', 'mw_transmission_w3', 'mw_transmission_w4'])
-                else:
-                    T = fits_table(tfn, columns=['brick_primary', 'type', 'decam_psfsize',
-                                             'decam_depth', 'decam_galdepth',
-                                             'ebv', 'decam_mw_transmission',
-                                             'wise_nobs', 'wise_mw_transmission'])
+                T = fits_table(tfn, columns=['brick_primary', 'type',
+                                             'psfsize_g', 'psfsize_r', 'psfsize_z',
+                                             'psfdepth_g', 'psfdepth_r', 'psfdepth_z',
+                                             'galdepth_g', 'galdepth_r', 'galdepth_z',
+                                             'ebv',
+                                             'mw_transmission_g', 'mw_transmission_r', 'mw_transmission_z',
+                                             'nobs_w1', 'nobs_w2', 'nobs_w3', 'nobs_w4',
+                                             'mw_transmission_w1', 'mw_transmission_w2', 'mw_transmission_w3', 'mw_transmission_w4'])
             except:
                 print('Failed to read FITS table', tfn)
                 import traceback
@@ -639,53 +636,32 @@ def main():
             ncomp.append(types['COMP'])
             print('N sources', nsrcs[-1])
 
-            if opt.dr5:
-                gpsfsize.append(np.median(T.psfsize_g))
-                rpsfsize.append(np.median(T.psfsize_r))
-                zpsfsize.append(np.median(T.psfsize_z))
+            gpsfsize.append(np.median(T.psfsize_g))
+            rpsfsize.append(np.median(T.psfsize_r))
+            zpsfsize.append(np.median(T.psfsize_z))
 
-                gpsfdepth.append(np.median(T.psfdepth_g))
-                rpsfdepth.append(np.median(T.psfdepth_r))
-                zpsfdepth.append(np.median(T.psfdepth_z))
+            gpsfdepth.append(np.median(T.psfdepth_g))
+            rpsfdepth.append(np.median(T.psfdepth_r))
+            zpsfdepth.append(np.median(T.psfdepth_z))
 
-                ggaldepth.append(np.median(T.galdepth_g))
-                rgaldepth.append(np.median(T.galdepth_r))
-                zgaldepth.append(np.median(T.galdepth_z))
+            ggaldepth.append(np.median(T.galdepth_g))
+            rgaldepth.append(np.median(T.galdepth_r))
+            zgaldepth.append(np.median(T.galdepth_z))
 
-                wise_nobs.append(np.median(
-                    np.vstack((T.nobs_w1, T.nobs_w2, T.nobs_w3, T.nobs_w4)).T,
-                    axis=0))
-                wise_trans.append(np.median(
-                    np.vstack((T.mw_transmission_w1,
-                               T.mw_transmission_w2,
-                               T.mw_transmission_w3,
-                               T.mw_transmission_w4)).T,
-                               axis=0))
+            wise_nobs.append(np.median(
+                np.vstack((T.nobs_w1, T.nobs_w2, T.nobs_w3, T.nobs_w4)).T,
+                axis=0))
+            wise_trans.append(np.median(
+                np.vstack((T.mw_transmission_w1,
+                           T.mw_transmission_w2,
+                           T.mw_transmission_w3,
+                           T.mw_transmission_w4)).T,
+                           axis=0))
 
-                gtrans.append(np.median(T.mw_transmission_g))
-                rtrans.append(np.median(T.mw_transmission_r))
-                ztrans.append(np.median(T.mw_transmission_z))
-                
-            else:
-                gpsfsize.append(np.median(T.decam_psfsize[:,1]))
-                rpsfsize.append(np.median(T.decam_psfsize[:,2]))
-                zpsfsize.append(np.median(T.decam_psfsize[:,4]))
+            gtrans.append(np.median(T.mw_transmission_g))
+            rtrans.append(np.median(T.mw_transmission_r))
+            ztrans.append(np.median(T.mw_transmission_z))
 
-                gpsfdepth.append(np.median(T.decam_depth[:,1]))
-                rpsfdepth.append(np.median(T.decam_depth[:,2]))
-                zpsfdepth.append(np.median(T.decam_depth[:,4]))
-
-                ggaldepth.append(np.median(T.decam_galdepth[:,1]))
-                rgaldepth.append(np.median(T.decam_galdepth[:,2]))
-                zgaldepth.append(np.median(T.decam_galdepth[:,4]))
-    
-                wise_nobs.append(np.median(T.wise_nobs, axis=0))
-                wise_trans.append(np.median(T.wise_mw_transmission, axis=0))
-
-                gtrans.append(np.median(T.decam_mw_transmission[:,1]))
-                rtrans.append(np.median(T.decam_mw_transmission[:,2]))
-                ztrans.append(np.median(T.decam_mw_transmission[:,4]))
-                
             ebv.append(np.median(T.ebv))
 
             br = bricks[ibrick]
