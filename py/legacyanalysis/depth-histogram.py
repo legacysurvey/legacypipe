@@ -93,7 +93,7 @@ def summarize_depths(basedir, outfn, summaryfn, allfn):
     depths.writeto(allfn, append=True)
     print('Wrote', allfn)
 
-def summary_plots(summaryfn, ps):
+def summary_plots(summaryfn, ps, drname):
     T = fits_table(summaryfn)
     dlo = T.depthlo.copy()
     dd = dlo[2] - dlo[1]
@@ -111,7 +111,7 @@ def summary_plots(summaryfn, ps):
         plt.xlabel('Depth: %s band' % band)
         #plt.ylabel('Number of pixels')
         plt.ylabel('Area (sq.deg)')
-        plt.title('DECaLS DR3 Depth: Point Sources, %s' % band)
+        plt.title('%s Depth: Point Sources, %s' % (drname, band))
         plt.xlim(21.5, 24.8)
         #plt.xlim(21.5, 25.)
         ps.savefig()
@@ -121,7 +121,7 @@ def summary_plots(summaryfn, ps):
         plt.xlabel('Depth: %s band' % band)
         #plt.ylabel('Number of pixels')
         plt.ylabel('Area (sq.deg)')
-        plt.title('DECaLS DR3 Depth: Canonical Galaxy, %s' % band)
+        plt.title('%s Depth: Galaxy, %s' % (drname, band))
         plt.xlim(21.5, 24.8)
         #plt.xlim(21.5, 25.)
         ps.savefig()
@@ -145,28 +145,18 @@ def summary_plots(summaryfn, ps):
         
         plt.xlabel('Depth: %s band' % band)
         plt.ylabel('Number of pixels')
-        plt.title('Depth: SIMP Galaxy, %s' % band)
+        plt.title('Depth: Galaxy, %s' % band)
 
         ps.savefig()
 
 if __name__ == '__main__':
-    # outfn = 'dr3-depth.fits'
-    # summaryfn = 'dr3-depth-summary.fits'
-    # basedir = '/project/projectdirs/cosmo/data/legacysurvey/dr3'
-    # summarize_depths(basedir, outfn, summaryfn)
-
-    # outfn = 'dr4-depth.fits'
-    # summaryfn = 'dr4-depth-summary.fits'
-    # basedir = '/global/cscratch1/sd/dstn/galdepths-dr4'
-    # summarize_depths(basedir, outfn, summaryfn)
-
-    outfn = 'dr5-depth-concat.fits'
-    summaryfn = 'dr5-depth-summary.fits'
-    allfn = 'dr5-depth.fits'
-    basedir = '/project/projectdirs/cosmo/work/legacysurvey/dr5/DR5_out'
+    outfn = 'dr7-depth-concat.fits'
+    summaryfn = 'dr7-depth-summary.fits'
+    allfn = 'dr7-depth.fits'
+    basedir = '/global/projecta/projectdirs/cosmo/work/legacysurvey/dr7'
     summarize_depths(basedir, outfn, summaryfn, allfn)
 
     ps = PlotSequence('depth')
-    summary_plots(summaryfn, ps)
+    summary_plots(summaryfn, ps, 'DECaLS DR7')
     import sys
     sys.exit(0)

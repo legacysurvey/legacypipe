@@ -1073,7 +1073,8 @@ def stage_image_coadds(survey=None, targetwcs=None, bands=None, tims=None,
                 hdr.delete('IMAGEH')
                 hdr.add_record(dict(name='IMTYPE', value='blobmap',
                                     comment='LegacySurvey image type'))
-                with survey.write_output('blobmap', brick=brickname) as out:
+                with survey.write_output('blobmap', brick=brickname,
+                                         shape=blobs.shape) as out:
                     out.fits.write(blobs, header=hdr)
         del rgb
     return None
@@ -1893,7 +1894,7 @@ def stage_fitblobs(T=None,
                             comment='LegacySurvey image type'))
         hdr.add_record(dict(name='EQUINOX', value=2000.))
 
-        with survey.write_output('blobmap', brick=brickname) as out:
+        with survey.write_output('blobmap', brick=brickname, shape=blobs.shape) as out:
             out.fits.write(blobs, header=hdr)
     del iblob, oldblob
 
@@ -2870,6 +2871,8 @@ def stage_wise_forced(
                     else:
                         assert(thisroi == roi)
                 #print('ROI:', roi)
+                if roi is None:
+                    continue
                 try:
                     # Get WCS for this ROI.
                     rx0,rx1,ry0,ry1 = roi
@@ -2900,9 +2903,11 @@ def stage_wise_forced(
                                         comment='Magnitude zeropoint'))
                 co  /= np.maximum(n, 1)
                 com /= np.maximum(mn, 1)
-                with survey.write_output('image', brick=brickname, band='W%i' % band) as out:
+                with survey.write_output('image', brick=brickname, band='W%i' % band,
+                                         shape=co.shape) as out:
                     out.fits.write(co, header=hdr)
-                with survey.write_output('model', brick=brickname, band='W%i' % band) as out:
+                with survey.write_output('model', brick=brickname, band='W%i' % band,
+                                         shape=com.shape) as out:
                     out.fits.write(com, header=hdr)
             del unwise_con
             del unwise_comn
@@ -3076,7 +3081,7 @@ def stage_writecat(
         hdr.add_record(dict(name='BITNM10', value='BAILOUT',
                             comment='maskbits bit 10: Bailed out of processing'))
 
-        with survey.write_output('maskbits', brick=brickname) as out:
+        with survey.write_output('maskbits', brick=brickname, shape=maskbits.shape) as out:
             out.fits.write(maskbits, header=hdr)
         del maskbits
         del wise_mask_map

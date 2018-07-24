@@ -957,7 +957,7 @@ Now using the current directory as LEGACY_SURVEY_DIR, but this is likely to fail
         return T, hdr, primhdr
 
     def find_file(self, filetype, brick=None, brickpre=None, band='%(band)s',
-                  output=False):
+                  output=False, **kwargs):
         '''
         Returns the filename of a Legacy Survey file.
 
@@ -1107,18 +1107,41 @@ Now using the current directory as LEGACY_SURVEY_DIR, but this is likely to fail
 
         return fn
 
-    def get_compression_string(self, filetype, **kwargs):
-        return dict(# g: sigma ~ 0.002.  qz -1e-3: 6 MB, -1e-4: 10 MB
-                    image = '[compress R 100,100; qz -1e-4]',
-                    # g: qz -1e-3: 2 MB, -1e-4: 2.75 MB
-                    model = '[compress R 100,100; qz -1e-4]',
-                    chi2  = '[compress R 100,100; qz -0.1]',
-                    # qz +8: 9 MB, qz +16: 10.5 MB
-                    invvar = '[compress R 100,100; qz 16]',
-                    nexp   = '[compress H 100,100]',
-                    depth  = '[compress G 100,100; qz 0]',
-                    galdepth = '[compress G 100,100; qz 0]',
-            ).get(filetype)
+    def get_compression_string(self, filetype, shape=None, **kwargs):
+        pat = dict(# g: sigma ~ 0.002.  qz -1e-3: 6 MB, -1e-4: 10 MB
+            image = '[compress R %i,%i; qz -1e-4]',
+            # g: qz -1e-3: 2 MB, -1e-4: 2.75 MB
+            model = '[compress R %i,%i; qz -1e-4]',
+            chi2  = '[compress R %i,%i; qz -0.1]',
+            # qz +8: 9 MB, qz +16: 10.5 MB
+            invvar = '[compress R %i,%i; qz 16]',
+            nexp   = '[compress H %i,%i]',
+            depth  = '[compress G %i,%i; qz 0]',
+            galdepth = '[compress G %i,%i; qz 0]',
+        ).get(filetype)
+        if pat is None:
+            return pat
+
+        # Tile compression size
+        tilew,tileh = 100,100
+        if shape is not None:
+            H,W = shape
+            # CFITSIO's fpack compression can't handle partial tile
+            # sizes < 4 pix.  Select a tile size that works, or don't
+            # compress if we can't find one.
+            if W < 4 or H < 4:
+                return None
+            while tilew < W:
+                remain = W % tilew
+                if remain >= 4:
+                    break
+                tilew += 1
+            while tileh < H:
+                remain = H % tileh
+                if remain >= 4:
+                    break
+                tileh += 1
+        return pat % (tilew,tileh)
 
     def write_output(self, filetype, hashsum=True, **kwargs):
         '''
@@ -1132,7 +1155,7 @@ Now using the current directory as LEGACY_SURVEY_DIR, but this is likely to fail
         sha256sum computed before the file contents are written out to
         the real disk file.  The 'out.fn' member variable is NOT set.
 
-        with survey.write_fits_output('ccds', brick=brickname) as out:
+        with survey.write_output('ccds', brick=brickname) as out:
             ccds.writeto(None, fits_object=out.fits, primheader=primhdr)
 
         Does the following on entry:
