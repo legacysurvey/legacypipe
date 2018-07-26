@@ -93,13 +93,7 @@ def plots(opt):
     decam = True
     # vs MzLS+BASS
     #release = 'MzLS+BASS DR4'
-<<<<<<< HEAD
-    #release = 'DECaLS DR5'
-    #release = 'DECaLS DR3'
-    release = 'DECaLS DR7'    
-=======
     release = 'DECaLS DR7'
->>>>>>> 4d598a294d995d0d138e44008bf762475fcf2294
 
     if decam:
         # DECam

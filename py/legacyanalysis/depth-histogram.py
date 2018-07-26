@@ -111,11 +111,7 @@ def summary_plots(summaryfn, ps, drname):
         plt.xlabel('Depth: %s band' % band)
         #plt.ylabel('Number of pixels')
         plt.ylabel('Area (sq.deg)')
-<<<<<<< HEAD
-        plt.title('DECaLS DR7 Depth: Point Sources, %s' % band)
-=======
         plt.title('%s Depth: Point Sources, %s' % (drname, band))
->>>>>>> 4d598a294d995d0d138e44008bf762475fcf2294
         plt.xlim(21.5, 24.8)
         #plt.xlim(21.5, 25.)
         ps.savefig()
@@ -125,11 +121,7 @@ def summary_plots(summaryfn, ps, drname):
         plt.xlabel('Depth: %s band' % band)
         #plt.ylabel('Number of pixels')
         plt.ylabel('Area (sq.deg)')
-<<<<<<< HEAD
-        plt.title('DECaLS DR7 Depth: Canonical Galaxy, %s' % band)
-=======
         plt.title('%s Depth: Galaxy, %s' % (drname, band))
->>>>>>> 4d598a294d995d0d138e44008bf762475fcf2294
         plt.xlim(21.5, 24.8)
         #plt.xlim(21.5, 25.)
         ps.savefig()
@@ -158,25 +150,6 @@ def summary_plots(summaryfn, ps, drname):
         ps.savefig()
 
 if __name__ == '__main__':
-<<<<<<< HEAD
-    # outfn = 'dr3-depth.fits'
-    # summaryfn = 'dr3-depth-summary.fits'
-    # basedir = '/project/projectdirs/cosmo/data/legacysurvey/dr3'
-    # summarize_depths(basedir, outfn, summaryfn)
-
-    # outfn = 'dr4-depth.fits'
-    # summaryfn = 'dr4-depth-summary.fits'
-    # basedir = '/global/cscratch1/sd/dstn/galdepths-dr4'
-    # summarize_depths(basedir, outfn, summaryfn)
-
-    #outfn = 'dr5-depth-concat.fits'
-    #summaryfn = 'dr5-depth-summary.fits'
-    #allfn = 'dr5-depth.fits'
-    #basedir = '/project/projectdirs/cosmo/work/legacysurvey/dr5/DR5_out'
-    #summarize_depths(basedir, outfn, summaryfn, allfn)
-
-=======
->>>>>>> 4d598a294d995d0d138e44008bf762475fcf2294
     outfn = 'dr7-depth-concat.fits'
     summaryfn = 'dr7-depth-summary.fits'
     allfn = 'dr7-depth.fits'
