@@ -435,13 +435,13 @@ SWEEP_DTYPE = np.dtype([
     ('GAIA_PHOT_RP_MEAN_MAG', '>f4'),
     ('GAIA_PHOT_RP_MEAN_FLUX_OVER_ERROR', '>f4'),
     ('GAIA_ASTROMETRIC_EXCESS_NOISE', '>f4'),
-    ('GAIA_DUPLICATED_SOURCE', '>i1'),
+    ('GAIA_DUPLICATED_SOURCE', '>b1'),
     ('PARALLAX', '>f4'),
     ('PARALLAX_IVAR', '>f4'),
     ('PMRA', '>f4'),
     ('PMRA_IVAR', '>f4'),
     ('PMDEC', '>f4'),
-    ('PMDEC_IVAR' '>f4')]
+    ('PMDEC_IVAR', '>f4')]
 )
 
 def parse_args():
