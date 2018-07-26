@@ -695,7 +695,8 @@ def write_coadd_images(band,
         # fitsio.write(fn, img)
         # print('Wrote', fn)
 
-        with survey.write_output(name, brick=brickname, band=band) as out:
+        with survey.write_output(name, brick=brickname, band=band,
+                                 shape=img.shape) as out:
             out.fits.write(img, header=hdr2)
 
 # Pretty much only used for plots; the real deal is make_coadds()

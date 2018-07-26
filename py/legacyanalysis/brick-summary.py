@@ -50,16 +50,16 @@ python legacyanalysis/brick-summary.py --merge -o survey-brick-dr5.fits dr5-bric
 
 
 def colorbar_axes(parent, frac=0.12, pad=0.03, aspect=20):
-	pb = parent.get_position(original=True).frozen()
-	# new parent box, padding, child box
-	(pbnew, padbox, cbox) = pb.splitx(1.0-(frac+pad), 1.0-frac)
-	cbox = cbox.anchored('C', cbox)
-	parent.set_position(pbnew)
-	parent.set_anchor((1.0, 0.5))
-	cax = parent.get_figure().add_axes(cbox)
-	cax.set_aspect(aspect, anchor=((0.0, 0.5)), adjustable='box')
-	parent.get_figure().sca(parent)
-	return cax
+    pb = parent.get_position(original=True).frozen()
+    # new parent box, padding, child box
+    (pbnew, padbox, cbox) = pb.splitx(1.0-(frac+pad), 1.0-frac)
+    cbox = cbox.anchored('C', cbox)
+    parent.set_position(pbnew)
+    parent.set_anchor((1.0, 0.5))
+    cax = parent.get_figure().add_axes(cbox)
+    cax.set_aspect(aspect, anchor=((0.0, 0.5)), adjustable='box')
+    parent.get_figure().sca(parent)
+    return cax
 
 def plots(opt):
     from astrometry.util.plotutils import antigray
@@ -93,9 +93,13 @@ def plots(opt):
     decam = True
     # vs MzLS+BASS
     #release = 'MzLS+BASS DR4'
+<<<<<<< HEAD
     #release = 'DECaLS DR5'
     #release = 'DECaLS DR3'
     release = 'DECaLS DR7'    
+=======
+    release = 'DECaLS DR7'
+>>>>>>> 4d598a294d995d0d138e44008bf762475fcf2294
 
     if decam:
         # DECam
@@ -116,7 +120,7 @@ def plots(opt):
     print('Number of unique Dec values:', len(udec))
     print('Number of unique Dec values in range', ax[2],ax[3],':',
           np.sum((udec >= ax[2]) * (udec <= ax[3])))
-        
+
     def radec_plot():
         plt.axis(ax)
         plt.xlabel('RA (deg)')
@@ -152,7 +156,7 @@ def plots(opt):
         plot_broken(map_ra(rr), dd, 'k-', alpha=0.25, lw=1)
         rr,dd = lbtoradec(gl, gb-10)
         plot_broken(map_ra(rr), dd, 'k-', alpha=0.25, lw=1)
-        
+
     plt.figure(1, figsize=(8,5))
     plt.subplots_adjust(left=0.1, right=0.98, top=0.93)
 
@@ -160,7 +164,7 @@ def plots(opt):
     #plt.subplots_adjust(left=0.06, right=0.98, top=0.98)
     plt.subplots_adjust(left=0.08, right=0.98, top=0.98)
     plt.figure(1)
-    
+
     # Map of the tile centers we want to observe...
     if decam:
         O = fits_table('obstatus/decam-tiles_obstatus.fits')
@@ -186,7 +190,7 @@ def plots(opt):
         segs = desi_map_boundaries.get_segments()
         for seg in segs:
             plt.plot(seg[:,0], seg[:,1], 'b-')
-    
+
     def desi_map():
         # Show the DESI tile map in the background.
         plt.imshow(desimap, origin='lower', interpolation='nearest',
@@ -217,7 +221,7 @@ def plots(opt):
                    aspect='auto', cmap='Greys', vmin=0, vmax=mx)
     #desi_map_outline()
     radec_plot()
-    cax = colorbar_axes(plt.gca(), frac=0.12)        
+    cax = colorbar_axes(plt.gca(), frac=0.12)
     cbar = plt.colorbar(cax=cax)
     cbar.set_label('Extinction E(B-V)')
     plt.savefig('ext-bw.pdf')
@@ -228,14 +232,13 @@ def plots(opt):
                aspect='auto', cmap='Greys', vmin=0, vmax=0.25)
     desi_map_outline()
     radec_plot()
-    cax = colorbar_axes(plt.gca(), frac=0.12)        
+    cax = colorbar_axes(plt.gca(), frac=0.12)
     cbar = plt.colorbar(cax=cax)
     cbar.set_label('Extinction E(B-V)')
     plt.savefig('ext-bw-2.pdf')
     plt.figure(1)
 
     #sys.exit(0)
-    
     plt.clf()
     depthlo,depthhi = 21.5, 25.5
     for band in 'grz':
@@ -360,12 +363,12 @@ def plots(opt):
                    aspect='auto', cmap=cmap, vmin=mn, vmax=mx)
         desi_map_outline()
         radec_plot()
-        cax = colorbar_axes(plt.gca(), frac=0.12)        
+        cax = colorbar_axes(plt.gca(), frac=0.12)
         cbar = plt.colorbar(cax=cax, ticks=np.arange(20, 26, 0.5)) #ticks=np.arange(np.floor(mn/5.)*5., 0.1+np.ceil(mx/5.)*5, 0.2))
         cbar.set_label('Depth (5-sigma, galaxy profile, AB mag)')
         plt.savefig('galdepth-bw-%s.pdf' % band)
         plt.figure(1)
-        
+
         plt.clf()
         desi_map()
         ext = T.get('ext_%s' % band)
@@ -383,7 +386,7 @@ def plots(opt):
 
 
     T.ngal = T.nsimp + T.nrex + T.nexp + T.ndev + T.ncomp
-        
+
     for col in ['nobjs', 'npsf', 'nsimp', 'nrex', 'nexp', 'ndev', 'ncomp', 'ngal']:
         if not col in T.get_columns():
             continue
@@ -438,14 +441,14 @@ def plots(opt):
         desi_map_outline()
         radec_plot()
         #cax = colorbar_axes(plt.gca(), frac=0.08)
-        cax = colorbar_axes(plt.gca(), frac=0.12)        
+        cax = colorbar_axes(plt.gca(), frac=0.12)
         cbar = plt.colorbar(cax=cax,
                             format=matplotlib.ticker.FuncFormatter(lambda x, p: format(int(x), ',')))
         cbar.set_label('Objects per square degree')
         plt.savefig('nobjs-bw-%s.pdf' % col[1:])
         #plt.savefig('nobjs-bw-%s.png' % col[1:])
         plt.figure(1)
-        
+
     Ntot = T.nobjs
     for col in ['npsf', 'nsimp', 'nrex', 'nexp', 'ndev', 'ncomp', 'ngal']:
         if not col in T.get_columns():
@@ -489,16 +492,15 @@ def plots(opt):
 
         desi_map_outline()
         radec_plot()
-        cax = colorbar_axes(plt.gca(), frac=0.12)        
+        cax = colorbar_axes(plt.gca(), frac=0.12)
         cbar = plt.colorbar(cax=cax,
                             format=matplotlib.ticker.FuncFormatter(lambda x, p: '%.2g' % x))
         cbar.set_label('Percentage of objects of type %s' % col[1:].upper())
         plt.savefig('fobjs-bw-%s.pdf' % col[1:])
         #plt.savefig('fobjs-bw-%s.png' % col[1:])
         plt.figure(1)
-        
     return 0
-        
+
 def main():
     import argparse
     parser = argparse.ArgumentParser()
@@ -506,10 +508,9 @@ def main():
                       default='TMP/nexp.fits')
     parser.add_argument('--merge', action='store_true', help='Merge sub-tables')
     parser.add_argument('--plot', action='store_true', help='Plot results')
-    parser.add_argument('--dr5', action='store_true', help='DR5 format?')
     parser.add_argument('files', metavar='nexp-file.fits.gz', nargs='+',
                         help='List of nexp files to process')
-    
+
     opt = parser.parse_args()
     fns = opt.files
 
@@ -531,23 +532,27 @@ def main():
 
     fns.sort()
     print(len(fns), 'nexp files')
-    
+    if len(fns) == 1:
+        if not os.path.exists(fns[0]):
+            print('No such file.')
+            return 0
+
     brickset = set()
     bricklist = []
     gn = []
     rn = []
     zn = []
-    
+
     gnhist = []
     rnhist = []
     znhist = []
-    
+
     nnhist = 6
-    
+
     gdepth = []
     rdepth = []
     zdepth = []
-    
+
     ibricks = []
     nsrcs = []
     npsf  = []
@@ -570,22 +575,21 @@ def main():
 
     wise_nobs = []
     wise_trans = []
-    
+
     ebv = []
     gtrans = []
     rtrans = []
     ztrans = []
-    
+
     bricks = fits_table('survey-bricks.fits.gz')
-    
+
     #sfd = SFDMap()
-    
+
     W = H = 3600
-    # H=3600
     # xx,yy = np.meshgrid(np.arange(W), np.arange(H))
     unique = np.ones((H,W), bool)
     tlast = 0
-    
+
     for ifn,fn in enumerate(fns):
         print('File', (ifn+1), 'of', len(fns), ':', fn)
         words = fn.split('/')
@@ -598,20 +602,14 @@ def main():
             try:
                 tfn = os.path.join(dirprefix, 'tractor', brick[:3], 'tractor-%s.fits'%brick)
                 print('Tractor filename', tfn)
-                if opt.dr5:
-                    T = fits_table(tfn, columns=['brick_primary', 'type',
-                                                 'psfsize_g', 'psfsize_r', 'psfsize_z',
-                                                 'psfdepth_g', 'psfdepth_r', 'psfdepth_z',
-                                                 'galdepth_g', 'galdepth_r', 'galdepth_z',
-                                                 'ebv',
-                                                 'mw_transmission_g', 'mw_transmission_r', 'mw_transmission_z',
-                                                 'nobs_w1', 'nobs_w2', 'nobs_w3', 'nobs_w4',
-                                                 'mw_transmission_w1', 'mw_transmission_w2', 'mw_transmission_w3', 'mw_transmission_w4'])
-                else:
-                    T = fits_table(tfn, columns=['brick_primary', 'type', 'decam_psfsize',
-                                             'decam_depth', 'decam_galdepth',
-                                             'ebv', 'decam_mw_transmission',
-                                             'wise_nobs', 'wise_mw_transmission'])
+                T = fits_table(tfn, columns=['brick_primary', 'type',
+                                             'psfsize_g', 'psfsize_r', 'psfsize_z',
+                                             'psfdepth_g', 'psfdepth_r', 'psfdepth_z',
+                                             'galdepth_g', 'galdepth_r', 'galdepth_z',
+                                             'ebv',
+                                             'mw_transmission_g', 'mw_transmission_r', 'mw_transmission_z',
+                                             'nobs_w1', 'nobs_w2', 'nobs_w3', 'nobs_w4',
+                                             'mw_transmission_w1', 'mw_transmission_w2', 'mw_transmission_w3', 'mw_transmission_w4'])
             except:
                 print('Failed to read FITS table', tfn)
                 import traceback
@@ -624,11 +622,11 @@ def main():
             gn.append(0)
             rn.append(0)
             zn.append(0)
-    
+
             gnhist.append([0 for i in range(nnhist)])
             rnhist.append([0 for i in range(nnhist)])
             znhist.append([0 for i in range(nnhist)])
-    
+
             index = -1
             ibrick = np.nonzero(bricks.brickname == brick)[0][0]
             ibricks.append(ibrick)
@@ -644,55 +642,34 @@ def main():
             ncomp.append(types['COMP'])
             print('N sources', nsrcs[-1])
 
-            if opt.dr5:
-                gpsfsize.append(np.median(T.psfsize_g))
-                rpsfsize.append(np.median(T.psfsize_r))
-                zpsfsize.append(np.median(T.psfsize_z))
+            gpsfsize.append(np.median(T.psfsize_g))
+            rpsfsize.append(np.median(T.psfsize_r))
+            zpsfsize.append(np.median(T.psfsize_z))
 
-                gpsfdepth.append(np.median(T.psfdepth_g))
-                rpsfdepth.append(np.median(T.psfdepth_r))
-                zpsfdepth.append(np.median(T.psfdepth_z))
+            gpsfdepth.append(np.median(T.psfdepth_g))
+            rpsfdepth.append(np.median(T.psfdepth_r))
+            zpsfdepth.append(np.median(T.psfdepth_z))
 
-                ggaldepth.append(np.median(T.galdepth_g))
-                rgaldepth.append(np.median(T.galdepth_r))
-                zgaldepth.append(np.median(T.galdepth_z))
+            ggaldepth.append(np.median(T.galdepth_g))
+            rgaldepth.append(np.median(T.galdepth_r))
+            zgaldepth.append(np.median(T.galdepth_z))
 
-                wise_nobs.append(np.median(
-                    np.vstack((T.nobs_w1, T.nobs_w2, T.nobs_w3, T.nobs_w4)).T,
-                    axis=0))
-                wise_trans.append(np.median(
-                    np.vstack((T.mw_transmission_w1,
-                               T.mw_transmission_w2,
-                               T.mw_transmission_w3,
-                               T.mw_transmission_w4)).T,
-                               axis=0))
+            wise_nobs.append(np.median(
+                np.vstack((T.nobs_w1, T.nobs_w2, T.nobs_w3, T.nobs_w4)).T,
+                axis=0))
+            wise_trans.append(np.median(
+                np.vstack((T.mw_transmission_w1,
+                           T.mw_transmission_w2,
+                           T.mw_transmission_w3,
+                           T.mw_transmission_w4)).T,
+                           axis=0))
 
-                gtrans.append(np.median(T.mw_transmission_g))
-                rtrans.append(np.median(T.mw_transmission_r))
-                ztrans.append(np.median(T.mw_transmission_z))
-                
-            else:
-                gpsfsize.append(np.median(T.decam_psfsize[:,1]))
-                rpsfsize.append(np.median(T.decam_psfsize[:,2]))
-                zpsfsize.append(np.median(T.decam_psfsize[:,4]))
+            gtrans.append(np.median(T.mw_transmission_g))
+            rtrans.append(np.median(T.mw_transmission_r))
+            ztrans.append(np.median(T.mw_transmission_z))
 
-                gpsfdepth.append(np.median(T.decam_depth[:,1]))
-                rpsfdepth.append(np.median(T.decam_depth[:,2]))
-                zpsfdepth.append(np.median(T.decam_depth[:,4]))
-
-                ggaldepth.append(np.median(T.decam_galdepth[:,1]))
-                rgaldepth.append(np.median(T.decam_galdepth[:,2]))
-                zgaldepth.append(np.median(T.decam_galdepth[:,4]))
-    
-                wise_nobs.append(np.median(T.wise_nobs, axis=0))
-                wise_trans.append(np.median(T.wise_mw_transmission, axis=0))
-
-                gtrans.append(np.median(T.decam_mw_transmission[:,1]))
-                rtrans.append(np.median(T.decam_mw_transmission[:,2]))
-                ztrans.append(np.median(T.decam_mw_transmission[:,4]))
-                
             ebv.append(np.median(T.ebv))
-    
+
             br = bricks[ibrick]
 
             #print('Computing unique brick pixels...')
@@ -705,28 +682,28 @@ def main():
                                br.ra1, br.ra2, br.dec1, br.dec2)
             U = np.flatnonzero(unique)
             #print(len(U), 'of', W*H, 'pixels are unique to this brick')
-    
+
         else:
             index = bricklist.index(brick)
             assert(index == len(bricklist)-1)
-    
+
         index = bricklist.index(brick)
         assert(index == len(bricklist)-1)
-    
+
         filepart = words[-1]
         filepart = filepart.replace('.fits.gz', '')
         filepart = filepart.replace('.fits.fz', '')
         print('File:', filepart)
         band = filepart[-1]
         assert(band in 'grz')
-    
+
         nlist,nhist = dict(g=(gn,gnhist), r=(rn,rnhist), z=(zn,znhist))[band]
-    
+
         upix = fitsio.read(fn).flat[U]
         med = np.median(upix)
         print('Band', band, ': Median', med)
         nlist[index] = med
-    
+
         hist = nhist[index]
         for i in range(nnhist):
             if i < nnhist-1:
@@ -735,11 +712,9 @@ def main():
                 hist[i] = np.sum(upix >= i)
         assert(sum(hist) == len(upix))
         print('Number of exposures histogram:', hist)
-    
+
     ibricks = np.array(ibricks)
-    
-    #print('Maximum number of sources:', max(nsrcs))
-    
+
     T = fits_table()
     T.brickname = np.array(bricklist)
     T.ra  = bricks.ra [ibricks]

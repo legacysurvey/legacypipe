@@ -93,7 +93,7 @@ def summarize_depths(basedir, outfn, summaryfn, allfn):
     depths.writeto(allfn, append=True)
     print('Wrote', allfn)
 
-def summary_plots(summaryfn, ps):
+def summary_plots(summaryfn, ps, drname):
     T = fits_table(summaryfn)
     dlo = T.depthlo.copy()
     dd = dlo[2] - dlo[1]
@@ -111,7 +111,11 @@ def summary_plots(summaryfn, ps):
         plt.xlabel('Depth: %s band' % band)
         #plt.ylabel('Number of pixels')
         plt.ylabel('Area (sq.deg)')
+<<<<<<< HEAD
         plt.title('DECaLS DR7 Depth: Point Sources, %s' % band)
+=======
+        plt.title('%s Depth: Point Sources, %s' % (drname, band))
+>>>>>>> 4d598a294d995d0d138e44008bf762475fcf2294
         plt.xlim(21.5, 24.8)
         #plt.xlim(21.5, 25.)
         ps.savefig()
@@ -121,7 +125,11 @@ def summary_plots(summaryfn, ps):
         plt.xlabel('Depth: %s band' % band)
         #plt.ylabel('Number of pixels')
         plt.ylabel('Area (sq.deg)')
+<<<<<<< HEAD
         plt.title('DECaLS DR7 Depth: Canonical Galaxy, %s' % band)
+=======
+        plt.title('%s Depth: Galaxy, %s' % (drname, band))
+>>>>>>> 4d598a294d995d0d138e44008bf762475fcf2294
         plt.xlim(21.5, 24.8)
         #plt.xlim(21.5, 25.)
         ps.savefig()
@@ -145,11 +153,12 @@ def summary_plots(summaryfn, ps):
         
         plt.xlabel('Depth: %s band' % band)
         plt.ylabel('Number of pixels')
-        plt.title('Depth: SIMP Galaxy, %s' % band)
+        plt.title('Depth: Galaxy, %s' % band)
 
         ps.savefig()
 
 if __name__ == '__main__':
+<<<<<<< HEAD
     # outfn = 'dr3-depth.fits'
     # summaryfn = 'dr3-depth-summary.fits'
     # basedir = '/project/projectdirs/cosmo/data/legacysurvey/dr3'
@@ -166,6 +175,8 @@ if __name__ == '__main__':
     #basedir = '/project/projectdirs/cosmo/work/legacysurvey/dr5/DR5_out'
     #summarize_depths(basedir, outfn, summaryfn, allfn)
 
+=======
+>>>>>>> 4d598a294d995d0d138e44008bf762475fcf2294
     outfn = 'dr7-depth-concat.fits'
     summaryfn = 'dr7-depth-summary.fits'
     allfn = 'dr7-depth.fits'
@@ -173,6 +184,6 @@ if __name__ == '__main__':
     summarize_depths(basedir, outfn, summaryfn, allfn)
 
     ps = PlotSequence('depth')
-    summary_plots(summaryfn, ps)
+    summary_plots(summaryfn, ps, 'DECaLS DR7')
     import sys
     sys.exit(0)
