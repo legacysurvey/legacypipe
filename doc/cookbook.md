@@ -259,7 +259,7 @@ Staging of input data
 ---------------------
 
 For DR1-4, input images were copied from project to Cori or Edison
-scratch; for DR5, this was not done and things worked just fine.
+scratch; for DR5 onwards, this was not done and things worked just fine.
 
 Setting up the task list
 ------------------------
@@ -285,30 +285,29 @@ The script in the example is a local copy of
 to be modified for everything to run:
 
     export PYTHONPATH=$CSCRATCH/DRcode/legacypipe/py:$PYTHONPATH
-    outdir=$CSCRATCH/dr6-out
+    outdir=$CSCRATCH/dr7out
     rundir=$CSCRATCH/DRcode
 
 The arguments to runbrick can be modified in this script. Here is a
 generic call:
 
     python ${rundir}/legacypipe/py/legacypipe/runbrick.py \ 
-          --psf-normalize \
           --skip \ 
           --threads 16 \ 
           --skip-calibs \ 
           --checkpoint ${rundir}/checkpoints/${bri}/checkpoint-${brick}.pickle \ 
           --pickle "${rundir}/pickles/${bri}/runbrick-\%(brick)s-\%\%(stage)s.pickle" \ 
-          --brick $brick --outdir $outdir --nsigma 6 \  
+          --write-stage srcs \
+          --brick $brick --outdir $outdir \  
           >> $log 2>&1 
 
-The flag `psf-normalize` is necessary to use PSF zeropoints, otherwise
-aperture zeropoints are used. The number of threads has to be smaller or
-equal to twice the number of cores per task; skip-calibs assumes all the
-calibration files for this brick have already been generated; skip will
-stop if there is already a tractor catalogue for this brick. The
-checkpoint and pickle flags are optional and the files generated don't
-get erased once the brick has completed and the pickle files can be
-quite large. An easy way to clean up is via the following script:
+The number of threads has to be smaller or equal to twice the number of
+cores per task; skip-calibs assumes all the calibration files for this
+brick have already been generated; skip will stop if there is already a
+tractor catalogue for this brick. The checkpoint and pickle flags are
+optional and the files generated don't get erased once the brick has
+completed and the pickle files can be quite large. An easy way to clean
+up is via the following script:
 
     import qdo
     from utils import removeckpt
@@ -343,16 +342,41 @@ Transfering output
 ------------------
 
 The `coadd`, `tractor` and `metrics` directories are rsynced to
-`/projecta`. The log files, will be tarred by directory and gzipped
-before being transferred (also, log files for bricks that were processed
-partly on both machines need to be concatenated).
+`/projecta` or `/project`. The log files, will be tarred by directory
+and gzipped before being transferred (also, log files for bricks that
+were processed partly on both machines need to be concatenated).
 
 In the same directory, the contents of the `$LEGACY_SURVEY_DIR` (except
 the images directory which contains only symbolic links) are also
 copied.
 
+End game
+--------
+
+There will inevitably come a point where bricks take a long time to
+complete or fail to complete at all due to large blobs. These can be due
+to very bright stars, large galaxies or large artefacts. For DR7, a new
+option to `runbrick.py` was introduced: `--bail-out`. Re-starting the
+remaining bricks from the checkpoints (making a backup might be prudent)
+to finish the bricks can be done mostly on the debug queue.
+
 Post-tractor processing
 =======================
+
+Bright neighbours
+-----------------
+
+For DR7, an extra step in the processing was introduced to go over the
+tractor catalogues and check whether the neighbouring bricks have large
+blobs near their border. This process modifies the\
+`coadd/legacysurvey-<brickname>-maskbits.fits.gz` and tractor
+catalogues. The script\
+`legacypipe/bin/copymaskbits.py` makes a backup of these files. Since we
+archive the tractor-i files, backing up the tractor catalogues is not
+necessary. This step is most efficiently carried out using qdo using the
+script\
+`legacypipe/bin/qdo-post-process.sh`, where the tasks are, like for the
+main processing, the brickname.
 
 Top-level depth files
 ---------------------
@@ -407,6 +431,15 @@ Note that for the plotting to work, the files
 `decam-tiles_obstatus.fits` have to be in the directory. They can be
 obtained from the DESI SVN repository.
 
+For DR7, the number of bricks per 10 degree of RA exceeded the Python
+limit on the number of arguments, so that the procedure outlined above
+doesn't work for DECaLS. Splitting the brick list in bins of 1 degree in
+RA is easy to implement and can be done via qdo on the debug queue in a
+relatively short amount of time with the script
+`legacypipe/bin/qdo-brick-summary.sh` for which the tasks are the
+subdirectory names `000` - `359`. Note that the code will crash if there
+are no bricks in the directory, but this failure is inconsequential.
+
 Sweeps and external matching
 ----------------------------
 
@@ -437,15 +470,16 @@ e.g.:
     export PYTHONPATH=$LEGACYPIPE_DIR/py:${PYTHONPATH}
 
 Then, we build the list of tractor files for this data release and
-submit the job. This can be done on an interactive queue. For DR6, the
-process took about 30 minutes on one Cori Haswell node:
+submit the job. This can be done on an interactive queue. For DR7, the
+process took about 90 minutes on one Cori Haswell node:
 
     find $TRACTOR_INDIR -name 'tractor-*.fits' > $TRACTOR_FILELIST
     time srun -u --cpu_bind=no -n 1 python $LEGACYPIPE_DIR/bin/generate-sweep-files.py \
-              -v --numproc 32 -I -f fits -F $TRACTOR_FILELIST --schema blocks \
+              -v --numproc 16 -I -f fits -F $TRACTOR_FILELIST --schema blocks \
               -d $BRICKSFILE $TRACTOR_INDIR $SWEEP_OUTDIR
 
-The files will be written to `$SWEEP_OUTDIR`.
+The files will be written to `$SWEEP_OUTDIR`. The number of CPUs used
+was reduced by half to 16 for DR7 because of memory failure.
 
 To generate the \"external files\" matched to other surveys (e.g. see
 ​http://legacysurvey.org/dr4/files/), we proceed in a similar fashion.
@@ -488,13 +522,16 @@ five external catalogues:
          $TRACTOR_INDIR \
          $EXTERNAL_OUTDIR/survey-$dr-dr14Q_v4_4.fits --copycols MJD PLATE FIBERID
 
+Note that the script `legacypipe/bin/sweep-external-env.sh` provides a
+template to set all the relevant variables described above.
+
 Release directory structure and checksum files
 ----------------------------------------------
 
 Most of the tractor input and output is already in release form, but
 there are two exceptions:
 
--   The sweep output is in `sweep/6.0/`, where the number indicates the
+-   The sweep output is in `sweep/7.0/`, where the number indicates the
     release, instead of simply `sweep`.
 
 -   The tractor log files are tarred by output subdirectory and gzipped.
@@ -508,6 +545,7 @@ is to generate the checksums for the rest of the output. This can be
 handled by the following scripts (with directory location appropriately
 amended):
 
+    legacypipe/bin/tar-logfiles.py
     legacypipe/bin/post-process-qa.py
     legacypipe/bin/repackchecksum.py
     legacypipe/bin/checksumming-non-tractor.sh
