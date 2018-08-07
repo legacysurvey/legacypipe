@@ -4,7 +4,7 @@ How to run a Legacy Survey data release
 
 Martin Landriau
 
-July 2017 - January 2018
+July 2017 -- July 2018
 
 ------------------------------------------------------------------------
 
@@ -18,29 +18,24 @@ NERSC. Instructions assume code is being run as desiproc.
 Environment
 ===========
 
-The environment is set in the desiproc .bashrc.ext file.
-
-Dust maps, WISE coadds, etc
----------------------------
-
-    module use /global/cscratch1/sd/desiproc/modulefiles
-    module load legacypipe/legacysurvey
-    module load legacypipe/unwise_coadds
-    module load legacypipe/unwise_coadds_timeresolved
-    module load legacypipe/dust
-
-The above module files need to be modified to contain the correct
-information for the current DR. Unless the location of relevant
-quantities has changed, the only thing to update in these module files
-between DRs is `legacysurvey` to indicate the location of the DR
-directory.
+Un to and including DR6, the environment variables were set by loading
+modules in the in the `~/.bashrc.ext` file. From DR7 onwards, the
+environment, except for QDO variables, can be set by sourcing\
+`legacypipe/bin/legacypipe-env` or a local copy. Note that some relevant
+commands may be commented out in this template, which assumes that the
+code is being run from within its base directory. These variables
+provide the location of the codes, dust maps, WISE coadds, Tycho and
+Gaia catalogues, and the data release working directory where the
+calibration files, zero-points and links to the images directories can
+be found.
 
 desiconda
 ---------
 
-Desiconda provides a consistent build for all the dependencies required
-for the Legacy Survey processing. To ensure we use the most up-to-date
-version, we use explicitely the version number instead of the default.
+The above shell script also loads the desiconda module. Desiconda
+provides a consistent build for all the dependencies required for the
+Legacy Survey processing. To ensure we use the most up-to-date version,
+we use explicitely the version number instead of the default.
 
     module use /global/common/${NERSC_HOST}/contrib/desi/desiconda/20170818-1.1.12-img/modulefiles
     module load desiconda
@@ -73,8 +68,9 @@ and Cori, because of compiled components.
     python setup.py install --prefix=/scratch1/scratchdirs/desiproc/DRcode/build/
     cd ..
 
-In the above, the export commands need to be included in any script
-passed to qdo, described in the next section.
+Some of the above export commands (or a template for them) are normally
+commented out from the `legacypipe-env` script and this needs to be
+modified appropriately.
 
 qdo
 ---
@@ -88,6 +84,10 @@ In order to facilitate the launching of jobs, we use qdo.
     export QDO_DB_HOST=nerscdb03.nersc.gov
     export QDO_DB_USER=desirun_admin
     export QDO_DB_PASS= password redacted
+
+These commands are set in the `~/.bashrc.ext` file; however, if the
+`legacypipe-env` script is sourced, we need to rerun the export amending
+the `PYTHONPATH`.
 
 The easiest way to set up a queue is to pass to qdo a list of task as an
 ASCII file:
@@ -356,7 +356,7 @@ End game
 There will inevitably come a point where bricks take a long time to
 complete or fail to complete at all due to large blobs. These can be due
 to very bright stars, large galaxies or large artefacts. For DR7, a new
-option to `runbrick.py` was introduced: `--bail-out`. Re-starting the
+option to `runbrick.py` was introduced: `–bail-out`. Re-starting the
 remaining bricks from the checkpoints (making a backup might be prudent)
 to finish the bricks can be done mostly on the debug queue.
 
