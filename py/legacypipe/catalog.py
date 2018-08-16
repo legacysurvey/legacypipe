@@ -3,7 +3,7 @@ from __future__ import print_function
 import numpy as np
 
 from tractor import PointSource, getParamTypeTree, RaDecPos
-from tractor.galaxy import ExpGalaxy, DevGalaxy, FixedCompositeGalaxy, PSFandExpGalaxy
+from tractor.galaxy import ExpGalaxy, DevGalaxy, FixedCompositeGalaxy, PSFandExpGalaxy_diffcentres
 from tractor.ellipses import EllipseESoft, EllipseE
 
 from legacypipe.survey import SimpleGalaxy, RexGalaxy, GaiaSource
@@ -15,7 +15,7 @@ fits_typemap = { PointSource: 'PSF',
                  FixedCompositeGalaxy: 'COMP',
                  SimpleGalaxy: 'SIMP',
                  RexGalaxy: 'REX',
-                 PSFandExpGalaxy: 'PSFEXP', 
+                 PSFandExpGalaxy_diffcentres: 'PSFEXP', 
                 #GaiaSource: 'GAIA',
                  GaiaSource: 'PSF',
                  type(None): 'NONE' }
@@ -26,7 +26,7 @@ fits_short_typemap = { PointSource: 'P',
                        FixedCompositeGalaxy: 'C',
                        SimpleGalaxy: 'S',
                        RexGalaxy: 'R',
-                       PSFandExpGalaxy: 'A',
+                       PSFandExpGalaxy_diffcentres: 'A',
                        GaiaSource: 'G' }
 
 def _typestring(t):
@@ -168,7 +168,9 @@ def _get_tractor_fits_values(T, cat, pat, unpackShape=True):
     shapeExp = np.zeros((len(T), 3), np.float32)
     shapeDev = np.zeros((len(T), 3), np.float32)
     fracDev  = np.zeros(len(T), np.float32)
-
+    posPoint = np.zeros((len(T),2), np.float32)
+   
+    
     for i,src in enumerate(cat):
         #print('_get_tractor_fits_values for pattern', pat, 'src', src)
         if isinstance(src, RexGalaxy):
@@ -183,11 +185,15 @@ def _get_tractor_fits_values(T, cat, pat, unpackShape=True):
             shapeExp[i,:] = src.shapeExp.getAllParams()
             shapeDev[i,:] = src.shapeDev.getAllParams()
             fracDev[i] = src.fracDev.getValue()
-        elif isinstance(src, PSFandExpGalaxy):
+        elif isinstance(src, PSFandExpGalaxy_diffcentres):
             shapeExp[i,:] = src.shapeExp.getAllParams()
-
+            print('LOOK HERE',src.posPoint.getAllParams())
+            posPoint[i,:] = src.posPoint.getAllParams()
+            
+    T.set(pat % 'raPoint', posPoint[:,0]) 
+    T.set(pat % 'decPoint', posPoint[:,1])
     T.set(pat % 'fracDev',   fracDev)
-
+    #T.set(pat % 'posPoint', posPoint)
     if unpackShape:
         T.set(pat % 'shapeExp_r',  shapeExp[:,0])
         T.set(pat % 'shapeExp_e1', shapeExp[:,1])
@@ -198,7 +204,7 @@ def _get_tractor_fits_values(T, cat, pat, unpackShape=True):
     else:
         T.set(pat % 'shapeExp', shapeExp)
         T.set(pat % 'shapeDev', shapeDev)
-
+    
 
 def read_fits_catalog(T, hdr=None, invvars=False, bands='grz',
                       allbands=None, ellipseClass=EllipseE,
@@ -296,7 +302,7 @@ def read_fits_catalog(T, hdr=None, invvars=False, bands='grz',
                 else:
                     ivs.extend(t.shapeexp_ivar)
             
-        elif issubclass(clazz, PSFandExpGalaxy):
+        elif issubclass(clazz, PSFandExpGalaxy_diffcentres):
             # hard-code knowledge that params are fracDev, shapeE, shapeD
             assert(np.isfinite(t.fracdev))
             params.append(t.fracdev)

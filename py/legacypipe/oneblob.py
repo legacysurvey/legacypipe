@@ -12,7 +12,7 @@ from astrometry.util.plotutils import dimshow
 from tractor import Tractor, PointSource, Image, NanoMaggies, Catalog, Patch
 import tractor
 print(tractor.__file__)
-from tractor.galaxy import DevGalaxy, ExpGalaxy, FixedCompositeGalaxy, PSFandExpGalaxy, SoftenedFracDev, FracDev, disable_galaxy_cache, enable_galaxy_cache
+from tractor.galaxy import DevGalaxy, ExpGalaxy, FixedCompositeGalaxy, PSFandExpGalaxy_diffcentres, SoftenedFracDev, FracDev, disable_galaxy_cache, enable_galaxy_cache
 from tractor.patch import ModelMask
 
 from legacypipe.survey import (SimpleGalaxy, RexGalaxy, GaiaSource,
@@ -486,7 +486,7 @@ class OneBlob(object):
             srccat[0] = None
             chisqs_none = _per_band_chisqs(srctractor, self.bands)
     
-            nparams = dict(ptsrc=2, simple=2, rex=3, exp=5, dev=5, comp=9,psfexp=7)
+            nparams = dict(ptsrc=2, simple=2, rex=3, exp=5, dev=5, comp=9,psfexp=9)
             # This is our "upgrade" threshold: how much better a galaxy
             # fit has to be versus ptsrc, and comp versus galaxy.
             galaxy_margin = 3.**2 + (nparams['exp'] - nparams['ptsrc'])
@@ -551,9 +551,9 @@ class OneBlob(object):
                     #    print('comp not much better than ptsrc, not computing psfexp model.')
                     #    continue
                     print(src)
-                    newsrc = psfexp = PSFandExpGalaxy(
+                    newsrc = psfexp = PSFandExpGalaxy_diffcentres(
                         src.getPosition(), src.getBrightness(), exp.getShape(),
-                        src.getBrightness()).copy()
+                        src.getPosition(),src.getBrightness()).copy()
 
                 
 
@@ -1596,7 +1596,7 @@ def _initialize_models(src, rex):
             shape = src.shapeDev
         exp = ExpGalaxy(src.getPosition(), src.getBrightness(), shape).copy()
         comp = src.copy()
-        psfexp = PSFandExpGalaxy(src.getPosition(),src.getBrightnesses()[0],src.shapeExp,src.getBrightnesses()[1])
+        psfexp = PSFandExpGalaxy_diffcentres(src.getPosition(),src.getBrightnesses()[0],src.shapeExp,src.getPosition(),src.getBrightnesses()[1])
         oldmodel = 'comp'
     elif isinstance(src, PSFandExpGalaxy):
         ptsrc = PointSource(src.getPosition(), src.getBrightness()).copy()
