@@ -37,7 +37,8 @@ import fitsio
 from astrometry.util.fits import fits_table, merge_tables
 from astrometry.util.plotutils import dimshow
 from astrometry.util.ttime import Time
-
+import legacypipe
+print(legacypipe.__file__,'CHECK THIS')
 from legacypipe.survey import get_rgb, imsave_jpeg, LegacySurveyData
 from legacypipe.image import CP_DQ_BITS
 from legacypipe.utils import (
@@ -69,6 +70,8 @@ def get_ulimit():
 
 def runbrick_global_init():
     from tractor.galaxy import disable_galaxy_cache
+    import tractor
+    print('Tractor version location: ', tractor.__file__)
     print('Starting process', os.getpid(), Time()-Time())
     disable_galaxy_cache()
 
@@ -195,7 +198,7 @@ def stage_tims(W=3600, H=3600, pixscale=0.262, brickname=None,
             depnum += 1
             if verstr == default_ver:
                 print('Warning: failed to get version string for "%s"' % pkg)
-    # Get additional paths from environment variables
+        # Get additional paths from environment variables
     for dep in ['TYCHO2_KD', 'GAIA_CAT']:
         value = os.environ.get('%s_DIR' % dep, default_ver)
         if value == default_ver:
@@ -1137,6 +1140,7 @@ def stage_srcs(targetrd=None, pixscale=None, targetwcs=None,
     of these blobs will be processed independently.
     '''
     from tractor import PointSource, NanoMaggies, RaDecPos, Catalog
+    
     from legacypipe.detection import (detection_maps, sed_matched_filters,
                         run_sed_matched_filters, segment_and_group_sources)
     from legacypipe.survey import GaiaSource
@@ -1822,7 +1826,7 @@ def stage_fitblobs(T=None,
     assert(nb == len(bands))
     ns,nb = BB.dchisq.shape
     assert(ns == len(cat))
-    assert(nb == 5) # ptsrc, rex, dev, exp, comp
+    assert(nb == 6) # ptsrc, rex, dev, exp, psfexp, comp
 
     # Renumber blobs to make them contiguous.
     oldblob = T.blob
@@ -1940,7 +1944,7 @@ def _format_all_models(T, newcat, BB, bands, rex):
         simpname = 'rex'
     else:
         simpname = 'simple'
-    srctypes = ['ptsrc', simpname, 'dev','exp','comp']
+    srctypes = ['ptsrc', simpname, 'dev','exp', 'psfexp', 'comp']
 
     for srctype in srctypes:
         # Create catalog with the fit results for each source type
@@ -2105,6 +2109,8 @@ def _bounce_one_blob(X):
     multiprocessing purposes.
     '''
     from legacypipe.oneblob import one_blob
+    import legacypipe
+    print('HERE',legacypipe.__file__)
     try:
         return one_blob(X)
     except:
@@ -3098,7 +3104,8 @@ def run_brick(brick, survey, radec=None, pixscale=0.262,
     from astrometry.util.stages import CallGlobalTime, runstage
     from astrometry.util.multiproc import multiproc
     from astrometry.util.plotutils import PlotSequence
-
+    import legacypipe
+    print(legacypipe.__file__,'RUN_BRICK')
     print('Total Memory Available to Job:')
     get_ulimit()
 
@@ -3586,6 +3593,7 @@ def main(args=None):
     import logging
     import datetime
     from astrometry.util.ttime import MemMeas
+    import legacypipe
 
     print()
     print('runbrick.py starting at', datetime.datetime.now().isoformat())

@@ -976,7 +976,7 @@ Now using the current directory as LEGACY_SURVEY_DIR, but this is likely to fail
 
         if brick is not None:
             codir = os.path.join(basedir, 'coadd', brickpre, brick)
-
+        print(brick,codir)
         # Swap in files in the self.cache_dir, if they exist.
         def swap(fn):
             if output:
@@ -1408,7 +1408,8 @@ Now using the current directory as LEGACY_SURVEY_DIR, but this is likely to fail
             fns = self.find_file('ccds')
             fns.sort()
             fns = self.filter_ccds_files(fns)
-
+	
+        print(fns)
         TT = []
         for fn in fns:
             print('Reading CCDs from', fn)

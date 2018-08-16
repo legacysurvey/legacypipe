@@ -3,7 +3,7 @@ from __future__ import print_function
 import numpy as np
 
 from tractor import PointSource, getParamTypeTree, RaDecPos
-from tractor.galaxy import ExpGalaxy, DevGalaxy, FixedCompositeGalaxy
+from tractor.galaxy import ExpGalaxy, DevGalaxy, FixedCompositeGalaxy, PSFandExpGalaxy
 from tractor.ellipses import EllipseESoft, EllipseE
 
 from legacypipe.survey import SimpleGalaxy, RexGalaxy, GaiaSource
@@ -15,7 +15,8 @@ fits_typemap = { PointSource: 'PSF',
                  FixedCompositeGalaxy: 'COMP',
                  SimpleGalaxy: 'SIMP',
                  RexGalaxy: 'REX',
-                 #GaiaSource: 'GAIA',
+                 PSFandExpGalaxy: 'PSFEXP', 
+                #GaiaSource: 'GAIA',
                  GaiaSource: 'PSF',
                  type(None): 'NONE' }
 
@@ -25,6 +26,7 @@ fits_short_typemap = { PointSource: 'P',
                        FixedCompositeGalaxy: 'C',
                        SimpleGalaxy: 'S',
                        RexGalaxy: 'R',
+                       PSFandExpGalaxy: 'A',
                        GaiaSource: 'G' }
 
 def _typestring(t):
@@ -181,6 +183,8 @@ def _get_tractor_fits_values(T, cat, pat, unpackShape=True):
             shapeExp[i,:] = src.shapeExp.getAllParams()
             shapeDev[i,:] = src.shapeDev.getAllParams()
             fracDev[i] = src.fracDev.getValue()
+        elif isinstance(src, PSFandExpGalaxy):
+            shapeExp[i,:] = src.shapeExp.getAllParams()
 
     T.set(pat % 'fracDev',   fracDev)
 
@@ -292,10 +296,26 @@ def read_fits_catalog(T, hdr=None, invvars=False, bands='grz',
                 else:
                     ivs.extend(t.shapeexp_ivar)
             
-        elif issubclass(clazz, FixedCompositeGalaxy):
+        elif issubclass(clazz, PSFandExpGalaxy):
             # hard-code knowledge that params are fracDev, shapeE, shapeD
             assert(np.isfinite(t.fracdev))
             params.append(t.fracdev)
+            if ellipseClass is not None:
+                expeclazz = ellipseClass
+            else:
+                expeclazz = hdr['TR_%s_T4' % shorttype]
+                expeclazz = expeclazz.replace('"','')
+                expeclazz = ellipse_types[expeclazz]
+            assert(np.all([np.isfinite(x) for x in t.shapeexp]))
+            ee = expeclazz(*t.shapeexp)
+            params.append(ee)
+            if invvars:
+                ivs.extend(t.shapeexp_ivar)
+        
+        elif issubclass(clazz, FixedCompositeGalaxy):
+            # hard-code knowledge that params are fracDev, shapeE, shapeD
+        
+       
             if ellipseClass is not None:
                 expeclazz = deveclazz = ellipseClass
             else:
@@ -316,6 +336,7 @@ def read_fits_catalog(T, hdr=None, invvars=False, bands='grz',
                 ivs.append(t.fracdev_ivar)
                 ivs.extend(t.shapeexp_ivar)
                 ivs.extend(t.shapedev_ivar)
+
 
         elif issubclass(clazz, PointSource):
             pass
