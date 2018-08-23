@@ -636,6 +636,7 @@ class OneBlob(object):
                     print('Not computing galaxy models: bright star in blob')
                 elif self.haslargegal:
                     print('Large galaxy in blob -- limiting everything else to REX')
+                    trymodels.extend([('dev', dev), ('exp', exp), ('comp', comp)])
                 elif self.haslargegal:
                     print('Large galaxy in blob')
                 else:
@@ -1017,7 +1018,6 @@ class OneBlob(object):
     
             # Re-remove the final fit model for this source.
             models.update_and_subtract(srci, keepsrc, self.tims)
-
 
             if self.plots_single:
                 plt.figure(2)
