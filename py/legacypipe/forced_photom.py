@@ -285,6 +285,31 @@ def main(survey=None, opt=None):
     F.filter  = np.array([tim.band]               * len(T))
     F.mjd     = np.array([tim.primhdr['MJD-OBS']] * len(T))
     F.exptime = np.array([tim.primhdr['EXPTIME']] * len(T)).astype(np.float32)
+    F.psfsize = np.array([tim.psf_fwhm * tim.imobj.pixscale] * len(T)).astype(np.float32)
+    #### FIXME -- units?
+    F.sky     = np.array([tim.midsky / tim.zpscale / tim.imobj.pixscale**2] * len(T)).astype(np.float32)
+    F.psfdepth = np.array([-2.5 * (np.log10(5. * tim.sig1 / tim.psfnorm) - 9)] * len(T)).astype(np.float32)
+    F.galdepth = np.array([-2.5 * (np.log10(5. * tim.sig1 / tim.galnorm) - 9)] * len(T)).astype(np.float32)
+
+    # super units questions here
+    if opt.derivs:
+        cosdec = np.cos(np.deg2rad(T.dec))
+        F.dra  = (F.flux_dra  / F.flux) * 3600. / cosdec
+        F.ddec = (F.flux_ddec / F.flux) * 3600.
+        F.dra_ivar  = F.flux_dra_ivar  * (F.flux / 3600. * cosdec)**2
+        F.ddec_ivar = F.flux_ddec_ivar * (F.flux / 3600.)**2
+        F.delete_column('flux_dra')
+        F.delete_column('flux_ddec')
+        F.delete_column('flux_dra_ivar')
+        F.delete_column('flux_ddec_ivar')
+        F.flux = F.flux_fixed
+        F.flux_ivar = F.flux_fixed_ivar
+        F.delete_column('flux_fixed')
+        F.delete_column('flux_fixed_ivar')
+
+        for c in ['dra', 'ddec', 'dra_ivar', 'ddec_ivar', 'flux', 'flux_ivar']:
+            F.set(c, F.get(c).astype(np.float32))
+    
     F.ra  = T.ra
     F.dec = T.dec
     
@@ -510,6 +535,12 @@ def run_forced_phot(cat, tim, ceres=True, derivs=False, agn=False,
 
         F.fracflux = R.fitstats.profracflux[:N].astype(np.float32)
         F.rchi2    = R.fitstats.prochi2    [:N].astype(np.float32)
+        # 1 - 
+        #F.fracmasked = R.fitstats.pronpix  [:N].astype(np.float32)
+        try:
+            F.fracmasked = R.fitstats.promasked[:N].astype(np.float32)
+        except:
+            print('No "fracmasked" available (only in recent Tractor versions)')
 
         if derivs:
             F.flux_dra  = np.array([src.getParams()[0] for src in derivsrcs]).astype(np.float32)
@@ -635,7 +666,7 @@ class SourceDerivatives(MultiParams, BasicSource):
         #print('SourceDerivs: derivs', derivs)
         for d in derivs:
             if d is not None:
-                d /= counts
+                d.patch /= counts
                 # print('Deriv: abs max', np.abs(d.patch).max(), 'range', d.patch.min(), d.patch.max(), 'sum', d.patch.sum())
 
         # RA,Dec
