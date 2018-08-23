@@ -47,6 +47,65 @@ if 'Mock' in str(type(EllipseWithPriors)):
         pass
     EllipseWithPriors = duck
 
+def year_to_mjd(year):
+    # year_to_mjd(2015.5) -> 57205.875
+    from tractor.tractortime import TAITime
+    return (year - 2000.) * TAITime.daysperyear + TAITime.mjd2k
+
+def mjd_to_year(mjd):
+    # mjd_to_year(57205.875) -> 2015.5
+    from tractor.tractortime import TAITime
+    return (mjd - TAITime.mjd2k) / TAITime.daysperyear + 2000.
+
+def radec_at_mjd(ra, dec, ref_year, pmra, pmdec, parallax, mjd):
+    '''
+    Units:
+    - matches Gaia DR1/DR2
+    - pmra,pmdec are in mas/yr.  pmra is in angular speed (ie, has a cos(dec) factor)
+    - parallax is in mas.
+
+
+    NOTE: does not broadcast completely correctly -- all params
+    vectors or all motion params vector + scalar mjd work fine.  Other
+    combos: not certain.
+    '''
+
+    from tractor.tractortime import TAITime
+    from astrometry.util.starutil_numpy import radectoxyz, arcsecperrad, axistilt, xyztoradec
+
+    dt = mjd_to_year(mjd) - ref_year
+    cosdec = np.cos(np.deg2rad(dec))
+
+    dec = dec +  dt * pmdec / (3600. * 1000.)
+    ra  = ra  + (dt * pmra  / (3600. * 1000.)) / cosdec
+
+    parallax = np.atleast_1d(parallax)
+    I = np.flatnonzero(parallax)
+    if len(I):
+        scalar = np.isscalar(ra) and np.isscalar(dec)
+
+        ra = np.atleast_1d(ra)
+        dec = np.atleast_1d(dec)
+
+        suntheta = 2.*np.pi * np.fmod((mjd - TAITime.equinox) / TAITime.daysperyear, 1.0)
+        # Finite differences on the unit sphere -- xyztoradec handles
+        # points that are not exactly on the surface of the sphere.
+        axis = np.deg2rad(axistilt)
+        scale = parallax[I] / 1000. / arcsecperrad
+        xyz = radectoxyz(ra[I], dec[I])
+        xyz[:,0] += scale * np.cos(suntheta)
+        xyz[:,1] += scale * np.sin(suntheta) * np.cos(axis)
+        xyz[:,2] += scale * np.sin(suntheta) * np.sin(axis)
+        r,d = xyztoradec(xyz)
+        ra [I] = r
+        dec[I] = d
+
+        # radectoxyz / xyztoradec do weird broadcasting
+        if scalar:
+            ra  = ra[0]
+            dec = dec[0]
+
+    return ra,dec
 
 # Gaia measures positions better than we will, we assume, so the
 # GaiaPosition class pretends that it does not have any parameters
