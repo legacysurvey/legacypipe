@@ -1129,6 +1129,7 @@ def stage_srcs(targetrd=None, pixscale=None, targetwcs=None,
                survey=None, brick=None,
                gaia_stars=False,
                large_galaxies=False,
+               star_clusters=False,
                record_event=None,
                **kwargs):
     '''
@@ -1215,6 +1216,12 @@ def stage_srcs(targetrd=None, pixscale=None, targetwcs=None,
         
     # Create Tractor sources from reference stars
     refstarcat = [GaiaSource.from_catalog(g, bands) for g in refstars]
+
+    # Read the catalog of star (open and globular) clusters
+    if star_clusters:
+        clusters = read_star_clusters()
+
+        import pdb ; pdb.set_trace()
 
     # Create a large-galaxy source from the input catalog
     # ToDo:
@@ -1421,6 +1428,70 @@ def stage_srcs(targetrd=None, pixscale=None, targetwcs=None,
     L = locals()
     rtn = dict([(k,L[k]) for k in keys])
     return rtn
+
+def read_star_clusters(targetwcs):
+    """
+    Code to regenerate the NGC-star-clusters-fits catalog:
+
+    wget https://raw.githubusercontent.com/mattiaverga/OpenNGC/master/NGC.csv
+
+    import os
+    import numpy as np
+    import numpy.ma as ma
+    from astropy.io import ascii
+    from astrometry.util.starutil_numpy import hmsstring2ra, dmsstring2dec
+    import desimodel.io
+    import desimodel.footprint
+        
+    names = ('name', 'type', 'ra_hms', 'dec_dms', 'const', 'majax', 'minax',
+             'pa', 'bmag', 'vmag', 'jmag', 'hmag', 'kmag', 'sbrightn', 'hubble',
+             'cstarumag', 'cstarbmag', 'cstarvmag', 'messier', 'ngc', 'ic',
+             'cstarnames', 'identifiers', 'commonnames', 'nednotes', 'ongcnotes')
+    NGC = ascii.read('NGC.csv', delimiter=';', names=names)
+  
+    objtype = np.char.strip(ma.getdata(NGC['type']))
+    keeptype = ('PN', 'OCl', 'GCl', 'Cl+N')
+    keep = np.zeros(len(NGC), dtype=bool)
+    for otype in keeptype:
+        ww = [otype == tt for tt in objtype]
+        keep = np.logical_or(keep, ww)
+
+    clusters = NGC[keep]
+
+    ra, dec = [], []
+    for _ra, _dec in zip(ma.getdata(clusters['ra_hms']), ma.getdata(clusters['dec_dms'])):
+        ra.append(hmsstring2ra(_ra.replace('h', ':').replace('m', ':').replace('s','')))
+        dec.append(dmsstring2dec(_dec.replace('d', ':').replace('m', ':').replace('s','')))
+    clusters['ra'] = ra
+    clusters['dec'] = dec
+        
+    tiles = desimodel.io.load_tiles(onlydesi=True)
+    indesi = desimodel.footprint.is_point_in_desi(tiles, ma.getdata(clusters['ra']),
+                                                  ma.getdata(clusters['dec']))
+    print(np.sum(indesi))
+    clusters.write('NGC-star-clusters.fits', overwrite=True)
+
+    """
+    from pkg_resources import resource_filename
+
+    clusterfile = resource_filename('legacypipe', 'data/NGC-star-clusters.fits')
+    print('Reading {}'.format(clusterfile))
+    clusters = fits_table(clusterfile)
+
+    ok, xx, yy = targetwcs.radec2pixelxy(clusters.ra, clusters.dec)
+    # ibx = integer brick coords
+    clusters.ibx = np.round(xx-1.).astype(int)
+    clusters.iby = np.round(yy-1.).astype(int)
+    margin = 10
+    H, W = targetwcs.shape
+    clusters.cut( ok * (clusters.ibx > -margin) * (clusters.ibx < W+margin) *
+                  (clusters.iby > -margin) * (clusters.iby < H+margin) )
+    print('Cut to {} star clusters within brick'.format(len(clusters)))
+    del ok,xx,yy
+    clusters.ibx = np.clip(clusters.ibx, 0, W-1)
+    clusters.iby = np.clip(clusters.iby, 0, H-1)
+
+    return clusters
 
 def read_gaia(targetwcs):
     from legacyanalysis.gaiacat import GaiaCatalog
