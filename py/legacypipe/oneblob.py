@@ -83,9 +83,9 @@ def one_blob(X):
     if hasbright:
         B.brightstarinblob[:] = True
 
-    B.largegalaxyblob = np.zeros(len(B), bool)
+    B.largegalaxyinblob = np.zeros(len(B), bool)
     if haslargegal:
-        B.largegalinblob[:] = True
+        B.largegalaxyinblob[:] = True
 
     B.cpu_blob = np.zeros(len(B), np.float32)
     t1 = time.clock()
@@ -744,9 +744,8 @@ class OneBlob(object):
                 
                 if self.hasbright:
                     modtims = None
-                # JM: ???
-                #elif self.haslargegal:
-                #    modtims = None
+                elif self.haslargegal:
+                    modtims = None # JM: ???
                 elif self.bigblob:
                     mods = []
                     for tim in self.tims:
@@ -802,7 +801,7 @@ class OneBlob(object):
                         # self.ps.savefig()
 
                 else:
-                    # Bright star; set modtractor = srctractor for the ivars
+                    # Bright star or large galaxy; set modtractor = srctractor for the ivars
                     srctractor.setModelMasks(newsrc_mm)
                     modtractor = srctractor
 

@@ -1221,14 +1221,16 @@ def stage_srcs(targetrd=None, pixscale=None, targetwcs=None,
     #   - add hooks to read in the external catalog
     #   - 
     if large_galaxies:
-        from legacypipe.survey import RexGalaxy, LogRadius
+        #from legacypipe.survey import RexGalaxy, LogRadius
+        from legacypipe.survey import LegacyEllipseWithPriors
+        from tractor.galaxy import ExpGalaxy
 
         # Read this catalog and trim to galaxies on this brick!
         largegals = fits_table()
         largegals.ra = np.array([178.2306585])
         largegals.dec = np.array([36.9863456])
         largegals.mag = np.array([11.275])
-        largegals.d25 = np.array([3.50752 * 60]) # [arcsec]
+        largegals.d25 = np.array([3.50752 * 60 / 2]) # [radius, arcsec]
 
         ibx, iby = [], []
         for rr, dd in zip(largegals.ra, largegals.dec):
@@ -1242,17 +1244,18 @@ def stage_srcs(targetrd=None, pixscale=None, targetwcs=None,
         avoid_x = np.append(avoid_x, largegals.ibx)
         avoid_y = np.append(avoid_y, largegals.iby)
 
-        # Instantiate a REX at the position of each galaxy.
+        # Instantiate a galaxy model at the position of each object.
         largecat = []
         for rr, dd, mm, ss in zip(largegals.ra, largegals.dec, largegals.mag, largegals.d25):
-
-            
             fluxes = dict( [(band, NanoMaggies.magToNanomaggies(mm)) for band in bands] )
             assert(np.all(np.isfinite(list(fluxes.values()))))
             largecat.append(
-                RexGalaxy(RaDecPos(rr, dd),
+                ExpGalaxy(RaDecPos(rr, dd),
                           NanoMaggies(order=bands, **fluxes),
-                          LogRadius(np.log(ss)))
+                          LegacyEllipseWithPriors(np.log(ss), 0., 0.))
+                #RexGalaxy(RaDecPos(rr, dd),
+                #          NanoMaggies(order=bands, **fluxes),
+                #          LogRadius(np.log(ss)))
                 )
 
     # Saturated blobs -- create a source for each, except for those
@@ -1969,7 +1972,7 @@ def stage_fitblobs(T=None,
     # Copy blob results to table T
     for k in ['fracflux', 'fracin', 'fracmasked', 'rchisq', 'cpu_source',
               'cpu_blob', 'blob_width', 'blob_height', 'blob_npix',
-              'blob_nimages', 'blob_totalpix', 'dchisq', 'brightstarinblob', 'largegalinblob']:
+              'blob_nimages', 'blob_totalpix', 'dchisq', 'brightstarinblob', 'largegalaxyinblob']:
         T.set(k, BB.get(k))
 
     invvars = np.hstack(BB.srcinvvars)
