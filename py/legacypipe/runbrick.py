@@ -1209,6 +1209,14 @@ def stage_srcs(targetrd=None, pixscale=None, targetwcs=None,
         if len(gaia):
             refstars = merge_tables([refstars, gaia], columns='fillzero')
 
+    # Read the catalog of star (open and globular) clusters and add them to the
+    # set of reference stars (with the isbright bit set).
+    if star_clusters:
+        clusters = read_star_clusters(targetwcs)
+        
+        if len(clusters):
+            refstars = merge_tables([refstars, clusters], columns='fillzero')
+
     # Don't detect new sources where we already have reference stars
     avoid_x = refstars.ibx
     avoid_y = refstars.iby
@@ -1257,6 +1265,8 @@ def stage_srcs(targetrd=None, pixscale=None, targetwcs=None,
                 #          NanoMaggies(order=bands, **fluxes),
                 #          LogRadius(np.log(ss)))
                 )
+    else:
+        largegals = []
 
     # Saturated blobs -- create a source for each, except for those
     # that already have a Tycho-2 or Gaia star
@@ -2131,8 +2141,11 @@ def _blob_iter(blobslices, blobsrcs, blobs, targetwcs, tims, cat, bands,
     print('Blobs containing bright stars:', brightstarblobs)
 
     # Large galaxies
-    largegalsblobs = set(blobs[largegals.iby, largegals.ibx])
-    print('Blobs containing large galaxies:', largegalsblobs)
+    try:
+        largegalsblobs = set(blobs[largegals.iby, largegals.ibx])
+        print('Blobs containing large galaxies:', largegalsblobs)
+    except:
+        largegalsblobs = None
 
     # sort blobs by size so that larger ones start running first
     blobvals = Counter(blobs[blobs>=0])
@@ -2184,7 +2197,10 @@ def _blob_iter(blobslices, blobsrcs, blobs, targetwcs, tims, cat, bands,
             break
 
         hasbright = iblob in brightstarblobs
-        haslargegal = iblob in largegalsblobs
+        if largegalsblobs is not None:
+            haslargegal = iblob in largegalsblobs
+        else:
+            haslargegal = False
 
         npix = np.sum(blobmask)
         print('Blob', nblob+1, 'of', len(blobslices), ': blob id:', iblob,
