@@ -1233,8 +1233,8 @@ def stage_srcs(targetrd=None, pixscale=None, targetwcs=None,
         ibx, iby = [], []
         for rr, dd in zip(largegals.ra, largegals.dec):
             _, _ibx, _iby = targetwcs.radec2pixelxy(rr, dd)            
-            ibx.append(_ibx - 1)
-            iby.append(_iby - 1)
+            ibx.append(np.int(_ibx - 1))
+            iby.append(np.int(_iby - 1))
         largegals.ibx = np.hstack(ibx)
         largegals.iby = np.hstack(iby)
         print('Adding', len(largegals), 'large galaxies')
@@ -1254,10 +1254,6 @@ def stage_srcs(targetrd=None, pixscale=None, targetwcs=None,
                           NanoMaggies(order=bands, **fluxes),
                           LogRadius(np.log(ss)))
                 )
-
-
-
-    import pdb ; pdb.set_trace()
 
     # Saturated blobs -- create a source for each, except for those
     # that already have a Tycho-2 or Gaia star
@@ -1329,7 +1325,8 @@ def stage_srcs(targetrd=None, pixscale=None, targetwcs=None,
     record_event and record_event('stage_srcs: SED-matched')
     print('Running source detection at', nsigma, 'sigma')
     SEDs = survey.sed_matched_filters(bands)
-    # Add a ~1" exclusion zone around reference & saturated stars
+    # Add a ~1" exclusion zone around reference, saturated stars, and large
+    # galaxies.
     avoid_r = np.zeros_like(avoid_x) + 4
     Tnew,newcat,hot = run_sed_matched_filters(
         SEDs, bands, detmaps, detivs, (avoid_x,avoid_y,avoid_r), targetwcs,
@@ -1343,8 +1340,8 @@ def stage_srcs(targetrd=None, pixscale=None, targetwcs=None,
     Tnew.ref_cat = np.array(['  '] * len(Tnew))
     Tnew.ref_id  = np.zeros(len(Tnew), np.int64)
 
-    # Merge newly detected sources with existing (Tycho2 + Gaia) source lists
-    # and saturated sources
+    # Merge newly detected sources with existing (Tycho2 + Gaia) source lists,
+    # saturated sources, and large galaxies.
     cats = newcat
     tables = [Tnew]
     if len(sat):
@@ -1353,6 +1350,9 @@ def stage_srcs(targetrd=None, pixscale=None, targetwcs=None,
     if len(refstars):
         tables.append(refstars)
         cats += refstarcat
+    if len(largegals):
+        tables.append(largegals)
+        cats += largecat
     T = merge_tables(tables, columns='fillzero')
     cat = Catalog(*cats)
     cat.freezeAllParams()
@@ -1414,7 +1414,7 @@ def stage_srcs(targetrd=None, pixscale=None, targetwcs=None,
     tlast = tnow
 
     keys = ['T', 'tims', 'blobsrcs', 'blobslices', 'blobs', 'cat',
-            'ps', 'refstars', 'gaia_stars', 'saturated_pix']
+            'ps', 'refstars', 'gaia_stars', 'saturated_pix', 'largegals']
     L = locals()
     rtn = dict([(k,L[k]) for k in keys])
     return rtn
@@ -1570,6 +1570,7 @@ def stage_fitblobs(T=None,
                    write_metrics=True,
                    get_all_models=False,
                    refstars=None,
+                   largegals=None,
                    rex=False,
                    bailout=False,
                    record_event=None,
@@ -1828,9 +1829,7 @@ def stage_fitblobs(T=None,
         skipblobs = np.unique(blobs[blobs>=0])
         while len(R) < len(blobsrcs):
             R.append(None)
-            
 
-    # Create the iterator over blobs to process
     brightstars = refstars[refstars.isbright]
     blobiter = _blob_iter(blobslices, blobsrcs, blobs, targetwcs, tims,
                           cat, bands, plots, ps, simul_opt, use_ceres,
