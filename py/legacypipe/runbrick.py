@@ -1129,7 +1129,7 @@ def stage_srcs(targetrd=None, pixscale=None, targetwcs=None,
                survey=None, brick=None,
                gaia_stars=False,
                large_galaxies=False,
-               star_clusters=False,
+               star_clusters=True,
                record_event=None,
                **kwargs):
     '''
@@ -1210,18 +1210,20 @@ def stage_srcs(targetrd=None, pixscale=None, targetwcs=None,
         if len(gaia):
             refstars = merge_tables([refstars, gaia], columns='fillzero')
 
+    # Read the catalog of star (open and globular) clusters and add them to the
+    # set of reference stars (with the isbright bit set).
+    if star_clusters:
+        clusters = read_star_clusters(targetwcs)
+        
+        if len(clusters):
+            refstars = merge_tables([refstars, clusters], columns='fillzero')
+
     # Don't detect new sources where we already have reference stars
     avoid_x = refstars.ibx
     avoid_y = refstars.iby
         
     # Create Tractor sources from reference stars
     refstarcat = [GaiaSource.from_catalog(g, bands) for g in refstars]
-
-    # Read the catalog of star (open and globular) clusters
-    if star_clusters:
-        clusters = read_star_clusters()
-
-        import pdb ; pdb.set_trace()
 
     # Create a large-galaxy source from the input catalog
     # ToDo:
@@ -1264,6 +1266,8 @@ def stage_srcs(targetrd=None, pixscale=None, targetwcs=None,
                 #          NanoMaggies(order=bands, **fluxes),
                 #          LogRadius(np.log(ss)))
                 )
+    else:
+        largegals = []
 
     # Saturated blobs -- create a source for each, except for those
     # that already have a Tycho-2 or Gaia star
@@ -1472,6 +1476,7 @@ def read_star_clusters(targetwcs):
     clusters.write('NGC-star-clusters.fits', overwrite=True)
 
     """
+    from legacyanalysis.gaiacat import GaiaCatalog
     from pkg_resources import resource_filename
 
     clusterfile = resource_filename('legacypipe', 'data/NGC-star-clusters.fits')
@@ -1486,11 +1491,31 @@ def read_star_clusters(targetwcs):
     H, W = targetwcs.shape
     clusters.cut( ok * (clusters.ibx > -margin) * (clusters.ibx < W+margin) *
                   (clusters.iby > -margin) * (clusters.iby < H+margin) )
-    print('Cut to {} star clusters within brick'.format(len(clusters)))
-    del ok,xx,yy
-    clusters.ibx = np.clip(clusters.ibx, 0, W-1)
-    clusters.iby = np.clip(clusters.iby, 0, H-1)
+    if len(clusters) > 0:
+        print('Cut to {} star cluster(s) within the brick'.format(len(clusters)))
+        del ok,xx,yy
+        clusters.ibx = np.clip(clusters.ibx, 0, W-1)
+        clusters.iby = np.clip(clusters.iby, 0, H-1)
 
+        # For each cluster, add a single faint star at the same coordinates, but
+        # set the isbright bit so we get all the brightstarinblob logic.
+        clusters.ref_cat = clusters.name
+        clusters.mag = np.array([35])
+
+        # Remove unnecessary columns but then add all the Gaia-style columns we need.
+        for c in ['name', 'type', 'ra_hms', 'dec_dms', 'const', 'majax', 'minax', 'pa',
+                  'bmag', 'vmag', 'jmag', 'hmag', 'kmag', 'sbrightn', 'hubble', 'cstarumag',
+                  'cstarbmag', 'cstarvmag', 'messier', 'ngc', 'ic', 'cstarnames', 'identifiers',
+                  'commonnames', 'nednotes', 'ongcnotes']:
+            clusters.delete_column(c)
+
+        #for c in ['parallax', 'ref_epoch', 
+
+        # Set isbright=True
+        clusters.isbright = np.ones(len(clusters), bool)
+    else:
+        clusters = []
+        
     return clusters
 
 def read_gaia(targetwcs):
@@ -2153,8 +2178,11 @@ def _blob_iter(blobslices, blobsrcs, blobs, targetwcs, tims, cat, bands,
     print('Blobs containing bright stars:', brightstarblobs)
 
     # Large galaxies
-    largegalsblobs = set(blobs[largegals.iby, largegals.ibx])
-    print('Blobs containing large galaxies:', largegalsblobs)
+    try:
+        largegalsblobs = set(blobs[largegals.iby, largegals.ibx])
+        print('Blobs containing large galaxies:', largegalsblobs)
+    except:
+        largegalsblobs = None
 
     # sort blobs by size so that larger ones start running first
     blobvals = Counter(blobs[blobs>=0])
@@ -2206,7 +2234,10 @@ def _blob_iter(blobslices, blobsrcs, blobs, targetwcs, tims, cat, bands,
             break
 
         hasbright = iblob in brightstarblobs
-        haslargegal = iblob in largegalsblobs
+        if largegalsblobs is not None:
+            haslargegal = iblob in largegalsblobs
+        else:
+            haslargegal = False
 
         npix = np.sum(blobmask)
         print('Blob', nblob+1, 'of', len(blobslices), ': blob id:', iblob,
