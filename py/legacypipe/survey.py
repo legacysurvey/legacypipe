@@ -57,6 +57,9 @@ def mjd_to_year(mjd):
     from tractor.tractortime import TAITime
     return (mjd - TAITime.mjd2k) / TAITime.daysperyear + 2000.
 
+def tai_to_mjd(tai):
+    return tai / (24. * 3600.)
+
 def radec_at_mjd(ra, dec, ref_year, pmra, pmdec, parallax, mjd):
     '''
     Units:
@@ -112,16 +115,17 @@ def radec_at_mjd(ra, dec, ref_year, pmra, pmdec, parallax, mjd):
 # that can be optimized; therefore they stay fixed.
 
 class GaiaPosition(ParamList):
-    def __init__(self, ra, dec, ref_tai, pmra, pmdec, parallax):
+    def __init__(self, ra, dec, ref_epoch, pmra, pmdec, parallax):
         '''
         Units:
         - matches Gaia DR1
         - pmra,pmdec are in mas/yr.  pmra is in angular speed (ie, has a cos(dec) factor)
         - parallax is in mas.
+        - ref_epoch: year (eg 2015.5)
         '''
         self.ra = ra
         self.dec = dec
-        self.ref_tai = ref_tai
+        self.ref_epoch = float(ref_epoch)
         self.pmra = pmra
         self.pmdec = pmdec
         self.parallax = parallax
@@ -129,55 +133,26 @@ class GaiaPosition(ParamList):
         self.cached_positions = {}
 
     def copy(self):
-        return GaiaPosition(self.ra, self.dec, self.ref_tai, self.pmra, self.pmdec,
+        return GaiaPosition(self.ra, self.dec, self.ref_epoch, self.pmra, self.pmdec,
                             self.parallax)
 
-    def getPositionAtTime(self, tai):
+    def getPositionAtTime(self, mjd):
         from tractor import RaDecPos
 
-        taival = tai.getValue()
         try:
-            return self.cached_positions[taival]
+            return self.cached_positions[mjd]
         except KeyError:
             # not cached
             pass
         if self.pmra == 0. and self.pmdec == 0. and self.parallax == 0.:
             pos = RaDecPos(self.ra, self.dec)
-            self.cached_positions[taival] = pos
+            self.cached_positions[mjd] = pos
             return pos
 
-        dt = (tai - self.ref_tai).toYears()
-        #print('getPositionAtTime: tai', tai, '-> dt', dt, 'years')
-        cosdec = np.cos(np.deg2rad(self.dec))
-        # pmra,pmdec are in milli-arcsec per year.
-        dec = self.dec +  dt * self.pmdec / (3600. * 1000.)
-        ra  = self.ra  + (dt * self.pmra  / (3600. * 1000.)) / cosdec
-
-        # parallax
-        if self.parallax != 0.:
-            from astrometry.util.starutil_numpy import radectoxyz, arcsecperrad, axistilt, xyztoradec
-            suntheta = tai.getSunTheta()
-
-            # Finite differences on the unit sphere
-            xyz = radectoxyz(ra, dec)[0,:]
-            axis = np.deg2rad(axistilt)
-            scale = self.parallax / 1000. / arcsecperrad
-            xyz[0] += scale * np.cos(suntheta)
-            xyz[1] += scale * np.sin(suntheta) * np.cos(axis)
-            xyz[2] += scale * np.sin(suntheta) * np.sin(axis)
-            ra, dec = xyztoradec(xyz)
-
-            # Equivalent finite differences, in vector form.
-            # This is from tractor/motion.py
-            #dxyz1 = radectoxyz(0., 0.) / arcsecperrad
-            #dxyz1 = dxyz1[0]
-            #dxyz2 = radectoxyz(90., axistilt) / arcsecperrad
-            #dxyz2 = dxyz2[0]
-            #xyz += (self.parallax / 1000.) * (dxyz1 * np.cos(suntheta) +
-            #                                  dxyz2 * np.sin(suntheta))
-
+        ra,dec = radec_at_mjd(self.ra, self.dec, self.ref_epoch,
+                              self.pmra, self.pmdec, self.parallax, mjd)
         pos = RaDecPos(ra, dec)
-        self.cached_positions[taival] = pos
+        self.cached_positions[mjd] = pos
         return pos
 
     @staticmethod
@@ -214,12 +189,6 @@ class GaiaSource(PointSource):
         #mjd_tai = astropy.time.Time(self.mjdobs,
         #                            format='mjd', scale='utc').tai.mjd
 
-        # Gaia DR1 ref_epoch is 2015.0, in Julian years.
-        ref_mjd = (float(g.ref_epoch) - 2000.) * TAITime.daysperyear + TAITime.mjd2k
-        #print('Ref MJD:', ref_mjd)
-        ref_tai = TAITime(None, mjd=ref_mjd)
-        #print('Ref TAI:', ref_tai)
-
         # Gaia has NaN entries when no proper motion or parallax is measured.
         # Convert to zeros.
         def nantozero(x):
@@ -227,7 +196,7 @@ class GaiaSource(PointSource):
                 return 0.
             return x
 
-        pos = GaiaPosition(g.ra, g.dec, ref_tai.getValue(),
+        pos = GaiaPosition(g.ra, g.dec, g.ref_epoch,
                            nantozero(g.pmra),
                            nantozero(g.pmdec),
                            nantozero(g.parallax))
@@ -261,7 +230,7 @@ class LegacySurveyWcs(ConstantFitsWcs):
 
     def positionToPixel(self, pos, src=None):
         if isinstance(pos, GaiaPosition):
-            pos = pos.getPositionAtTime(self.tai)
+            pos = pos.getPositionAtTime(tai_to_mjd(self.tai))
         return super(LegacySurveyWcs, self).positionToPixel(pos, src=src)
 
 
