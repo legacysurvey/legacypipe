@@ -1128,6 +1128,7 @@ def stage_srcs(targetrd=None, pixscale=None, targetwcs=None,
                mp=None, nsigma=None,
                survey=None, brick=None,
                gaia_stars=False,
+               large_galaxies=False,
                record_event=None,
                **kwargs):
     '''
@@ -1215,7 +1216,48 @@ def stage_srcs(targetrd=None, pixscale=None, targetwcs=None,
     # Create Tractor sources from reference stars
     refstarcat = [GaiaSource.from_catalog(g, bands) for g in refstars]
 
-    # FIXME - Initialize a big-galaxy catalog here--?
+    # Create a large-galaxy source from the input catalog
+    # ToDo:
+    #   - add hooks to read in the external catalog
+    #   - 
+    if large_galaxies:
+        from legacypipe.survey import RexGalaxy, LogRadius
+
+        # Read this catalog and trim to galaxies on this brick!
+        largegals = fits_table()
+        largegals.ra = np.array([178.2306585])
+        largegals.dec = np.array([36.9863456])
+        largegals.mag = np.array([11.275])
+        largegals.d25 = np.array([3.50752 * 60]) # [arcsec]
+
+        ibx, iby = [], []
+        for rr, dd in zip(largegals.ra, largegals.dec):
+            _, _ibx, _iby = targetwcs.radec2pixelxy(rr, dd)            
+            ibx.append(_ibx - 1)
+            iby.append(_iby - 1)
+        largegals.ibx = np.hstack(ibx)
+        largegals.iby = np.hstack(iby)
+        print('Adding', len(largegals), 'large galaxies')
+
+        avoid_x = np.append(avoid_x, largegals.ibx)
+        avoid_y = np.append(avoid_y, largegals.iby)
+
+        # Instantiate a REX at the position of each galaxy.
+        largecat = []
+        for rr, dd, mm, ss in zip(largegals.ra, largegals.dec, largegals.mag, largegals.d25):
+
+            
+            fluxes = dict( [(band, NanoMaggies.magToNanomaggies(mm)) for band in bands] )
+            assert(np.all(np.isfinite(list(fluxes.values()))))
+            largecat.append(
+                RexGalaxy(RaDecPos(rr, dd),
+                          NanoMaggies(order=bands, **fluxes),
+                          LogRadius(np.log(ss)))
+                )
+
+
+
+    import pdb ; pdb.set_trace()
 
     # Saturated blobs -- create a source for each, except for those
     # that already have a Tycho-2 or Gaia star
@@ -3324,6 +3366,7 @@ def run_brick(brick, survey, radec=None, pixscale=0.262,
               splinesky=True,
               constant_invvar=False,
               gaia_stars=False,
+              large_galaxies=False,
               min_mjd=None, max_mjd=None,
               unwise_coadds=False,
               bail_out=False,
@@ -3537,6 +3580,7 @@ def run_brick(brick, survey, radec=None, pixscale=0.262,
                   depth_cut=depth_cut,
                   splinesky=splinesky,
                   gaia_stars=gaia_stars,
+                  large_galaxies=large_galaxies,
                   min_mjd=min_mjd, max_mjd=max_mjd,
                   simul_opt=simul_opt,
                   use_ceres=ceres,
@@ -3859,6 +3903,9 @@ python -u legacypipe/runbrick.py --plots --brick 2440p070 --zoom 1900 2400 450 9
     parser.add_argument('--no-gaia', dest='gaia_stars', default=True,
                         action='store_false',
                         help="Don't use Gaia sources as fixed stars")
+
+    parser.add_argument('--large-galaxies', dest='large_galaxies', default=False,
+                        action='store_true', help="Do some large-galaxy magic.")
 
     parser.add_argument('--min-mjd', type=float,
                         help='Only keep images taken after the given MJD')
