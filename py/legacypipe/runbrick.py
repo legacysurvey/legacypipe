@@ -1784,7 +1784,7 @@ def stage_fitblobs(T=None,
     brightstars = refstars[refstars.isbright]
     blobiter = _blob_iter(blobslices, blobsrcs, blobs, targetwcs, tims,
                           cat, bands, plots, ps, simul_opt, use_ceres,
-                          brightstars, brick, rex, skipblobs=skipblobs,
+                          brightstars, largegals, brick, rex, skipblobs=skipblobs,
                           max_blobsize=max_blobsize, custom_brick=custom_brick)
     # to allow timingpool to queue tasks one at a time
     blobiter = iterwrapper(blobiter, len(blobsrcs))
@@ -1969,7 +1969,7 @@ def stage_fitblobs(T=None,
     # Copy blob results to table T
     for k in ['fracflux', 'fracin', 'fracmasked', 'rchisq', 'cpu_source',
               'cpu_blob', 'blob_width', 'blob_height', 'blob_npix',
-              'blob_nimages', 'blob_totalpix', 'dchisq', 'brightstarinblob']:
+              'blob_nimages', 'blob_totalpix', 'dchisq', 'brightstarinblob', 'largegalinblob']:
         T.set(k, BB.get(k))
 
     invvars = np.hstack(BB.srcinvvars)
@@ -2066,7 +2066,7 @@ def _format_all_models(T, newcat, BB, bands, rex):
     return TT,hdr
 
 def _blob_iter(blobslices, blobsrcs, blobs, targetwcs, tims, cat, bands,
-               plots, ps, simul_opt, use_ceres, brightstars, brick, rex,
+               plots, ps, simul_opt, use_ceres, brightstars, largegals, brick, rex,
                skipblobs=[], max_blobsize=None, custom_brick=False):
     from collections import Counter
     H,W = targetwcs.shape
@@ -2077,6 +2077,10 @@ def _blob_iter(blobslices, blobsrcs, blobs, targetwcs, tims, cat, bands,
     except:
         pass
     print('Blobs containing bright stars:', brightstarblobs)
+
+    # Large galaxies
+    largegalsblobs = set(blobs[largegals.iby, largegals.ibx])
+    print('Blobs containing large galaxies:', largegalsblobs)
 
     # sort blobs by size so that larger ones start running first
     blobvals = Counter(blobs[blobs>=0])
@@ -2128,13 +2132,15 @@ def _blob_iter(blobslices, blobsrcs, blobs, targetwcs, tims, cat, bands,
             break
 
         hasbright = iblob in brightstarblobs
+        haslargegal = iblob in largegalsblobs
 
         npix = np.sum(blobmask)
         print('Blob', nblob+1, 'of', len(blobslices), ': blob id:', iblob,
               'sources:', len(Isrcs), 'size:', blobw, 'x', blobh,
               #'center', (bx0+bx1)/2, (by0+by1)/2,
               'brick X: %i,%i, Y: %i,%i' % (bx0,bx1,by0,by1),
-              'npix:', npix, 'one pixel:', onex,oney, 'has bright star:', hasbright)
+              'npix:', npix, 'one pixel:', onex,oney, 'has bright star:', hasbright,
+              'has large galaxy:', haslargegal)
 
         if max_blobsize is not None and npix > max_blobsize:
             print('Number of pixels in blob,', npix, ', exceeds max blobsize', max_blobsize)
@@ -2177,7 +2183,7 @@ def _blob_iter(blobslices, blobsrcs, blobs, targetwcs, tims, cat, bands,
 
         yield (nblob, iblob, Isrcs, targetwcs, bx0, by0, blobw, blobh,
                blobmask, subtimargs, [cat[i] for i in Isrcs], bands, plots, ps,
-               simul_opt, use_ceres, hasbright, rex)
+               simul_opt, use_ceres, hasbright, haslargegal, rex)
 
 def _bounce_one_blob(X):
     ''' This just wraps the one_blob function, for debugging &

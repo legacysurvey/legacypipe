@@ -26,7 +26,7 @@ def one_blob(X):
     if X is None:
         return None
     (nblob, iblob, Isrcs, brickwcs, bx0, by0, blobw, blobh, blobmask, timargs,
-     srcs, bands, plots, ps, simul_opt, use_ceres, hasbright, rex) = X
+     srcs, bands, plots, ps, simul_opt, use_ceres, hasbright, haslargegal, rex) = X
 
     print('Fitting blob number', nblob, 'val', iblob, ':', len(Isrcs),
           'sources, size', blobw, 'x', blobh, len(timargs), 'images')
@@ -65,7 +65,7 @@ def one_blob(X):
     B.blob_nimages= np.zeros(len(B), np.int16) + len(timargs)
     
     ob = OneBlob('%i'%(nblob+1), blobwcs, blobmask, timargs, srcs, bands,
-                 plots, ps, simul_opt, use_ceres, hasbright, rex)
+                 plots, ps, simul_opt, use_ceres, hasbright, haslargegal, rex)
     ob.run(B)
 
     B.blob_totalpix = np.zeros(len(B), np.int32) + ob.total_pix
@@ -83,6 +83,10 @@ def one_blob(X):
     if hasbright:
         B.brightstarinblob[:] = True
 
+    B.largegalaxyblob = np.zeros(len(B), bool)
+    if haslargegal:
+        B.largegalinblob[:] = True
+
     B.cpu_blob = np.zeros(len(B), np.float32)
     t1 = time.clock()
     B.cpu_blob[:] = t1 - t0
@@ -92,7 +96,7 @@ def one_blob(X):
 
 class OneBlob(object):
     def __init__(self, name, blobwcs, blobmask, timargs, srcs, bands,
-                 plots, ps, simul_opt, use_ceres, hasbright, rex):
+                 plots, ps, simul_opt, use_ceres, hasbright, haslargegal, rex):
         self.name = name
         self.rex = rex
         self.blobwcs = blobwcs
@@ -109,6 +113,7 @@ class OneBlob(object):
         self.simul_opt = simul_opt
         self.use_ceres = use_ceres
         self.hasbright = hasbright
+        self.haslargegal = haslargegal
         self.deblend = False
         self.tims = self.create_tims(timargs)
         self.total_pix = sum([np.sum(t.getInvError() > 0) for t in self.tims])
@@ -627,6 +632,10 @@ class OneBlob(object):
                     print('Gaia source is forced to be a point source -- not trying other models')
                 elif self.hasbright:
                     print('Not computing galaxy models: bright star in blob')
+                elif self.haslargegal:
+                    print('Large galaxy in blob -- limiting everything else to REX')
+                elif self.haslargegal:
+                    print('Large galaxy in blob')
                 else:
                     trymodels.append((simname, simple))
                     # Try galaxy models if simple > ptsrc, or if bright.
@@ -732,9 +741,12 @@ class OneBlob(object):
                 # Limit sizes of huge models
                 if len(self.tims) > 0:
                     _limit_galaxy_stamp_size(newsrc, self.tims[0])
-    
+                
                 if self.hasbright:
                     modtims = None
+                # JM: ???
+                #elif self.haslargegal:
+                #    modtims = None
                 elif self.bigblob:
                     mods = []
                     for tim in self.tims:
