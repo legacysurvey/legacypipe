@@ -13,15 +13,19 @@ W,H = 1000,500
 ra_center = 265.
 wcs = anwcs_create_hammer_aitoff(ra_center, 0., zoom, W, H, False)
 
-B5 = fits_table('~/legacypipe/py/survey-bricks-dr5.fits.gz')
+#B5 = fits_table('~/legacypipe/py/survey-bricks-dr5.fits.gz')
+B5 = fits_table('~/legacypipe/py/survey-bricks-dr7.fits.gz')
 B6 = fits_table('~/legacypipe/py/survey-bricks-dr6.fits.gz')
 
+B5.l,B5.b = radectolb(B5.ra, B5.dec)
 B6.l,B6.b = radectolb(B6.ra, B6.dec)
 
 ok,B5.x,B5.y = wcs.radec2pixelxy(B5.ra, B5.dec)
 ok,B6.x,B6.y = wcs.radec2pixelxy(B6.ra, B6.dec)
 
-B6.cut((B6.b > 0) * (B6.dec > 30))
+B6.cut((B6.b > 0) * (B6.dec >= 32))
+
+B5.cut(np.logical_or(B5.l <= 0, (B5.l > 0) * (B5.dec <= 32)))
 
 ### subsample
 #B5.cut(np.random.permutation(len(B5))[:int(0.1*len(B5))])
@@ -33,8 +37,8 @@ for band in 'grz':
     lo,hi = { 'g':(23,25), 'r':(22.5,24.5), 'z':(21.5,23.5) }[band]
 
     kw = dict(s=1, vmin=lo, vmax=hi, cmap='summer')    
-    plt.scatter(B5.x, B5.y, c=B5.get('galdepth_'+band), **kw)
     plt.scatter(B6.x, B6.y, c=B6.get('galdepth_'+band), **kw)
+    plt.scatter(B5.x, B5.y, c=B5.get('galdepth_'+band), **kw)
     c = plt.colorbar(orientation='horizontal')
     c.set_label('%s-band depth (mag)' % band)
     #plt.plot(B5.x, B5.y, 'k.')
