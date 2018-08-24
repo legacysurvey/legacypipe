@@ -948,20 +948,34 @@ def stage_mask_junk(tims=None, targetwcs=None, W=None, H=None, bands=None,
             resid = (thisimg - co) * np.sqrt(thiswt)
             # Significant pixels
             hot = (resid > 5.)
+            warm = np.zeros_like(hot)
+            lukewarm = np.zeros_like(hot)
+
+            if plots:
+                origimg = tim.getImage() * (tim.getInvError() > 0)
+            
             if np.any(hot):
-                if plots:
-                    origimg = tim.getImage() * (tim.getInvError() > 0)
 
                 hot = binary_dilation(hot, iterations=1)
                 warm = np.logical_or(hot,
                                      binary_dilation(hot, iterations=5) *
                                      (resid > 3.))
+
                 # dilate to compensate for NN resampling
                 warm = binary_dilation(warm, iterations=1)
+
+                lukewarm = np.logical_or(warm,
+                                         binary_dilation(warm, iterations=5) *
+                                         (resid > 2.))
+                #lukewarm = binary_dilation(lukewarm, iterations=1)
+                lukewarm = binary_dilation(lukewarm, iterations=3)
+
                 # Resample masked pixels back to image space.
                 badpix = np.zeros((H,W), bool)
                 badpix[hot ] = True
                 badpix[warm] = True
+                badpix[lukewarm] = True
+
                 try:
                     Yo,Xo,Yi,Xi,nil = resample_with_wcs(
                         tim.subwcs, targetwcs, [], 3)
@@ -977,19 +991,32 @@ def stage_mask_junk(tims=None, targetwcs=None, W=None, H=None, bands=None,
 
             if plots:
                 plt.clf()
-                plt.subplot(2,2,1)
                 ima = dict(interpolation='nearest', origin='lower',
                            vmin=-0.01, vmax=0.1, cmap='gray')
                 #plt.imshow(coall, **ima)
                 #plt.title('All images in coadd (%s)' % band)
-                plt.imshow(thiswt, interpolation='nearest', origin='lower',
-                           vmin=0, cmap='gray')
-                plt.title('Weight map')
+
+                #plt.subplot(2,2,1)
+                #plt.imshow(thiswt, interpolation='nearest', origin='lower',
+                #           vmin=0, cmap='gray')
+                #plt.title('Weight map')
+
+                #maskedimg = thisimg.copy()
+                # maskedimg[thiswt == 0] = 0
+                # maskedimg[hot] = 0
+                # maskedimg[warm] = 0
+                # maskedimg[lukewarm] = 0
+                #maskedimg = origimg.copy()
+                #maskedimg[badpix] = 0
+                plt.subplot(2,2,1)
+                plt.imshow((tim.getImage() * (tim.getInvError() > 0)).T, **ima)
+                plt.title('Masked image')
+
                 plt.subplot(2,2,2)
                 plt.imshow(co, **ima)
-                plt.title('This image subtracted coadd (%s)' % band)
+                plt.title('This image subtracted from coadd (%s)' % band)
                 plt.subplot(2,2,3)
-                plt.imshow(thisimg, **ima)
+                plt.imshow(thisimg * (thiswt > 0), **ima)
                 plt.title('This image')
                 plt.subplot(2,2,4)
                 plt.imshow(resid,
@@ -997,10 +1024,19 @@ def stage_mask_junk(tims=None, targetwcs=None, W=None, H=None, bands=None,
                            vmin=-5, vmax=5, cmap='gray')
                 if np.any(hot):
                     rgb = np.zeros((H,W,4), np.uint8)
+                    rgb[:,:,0][lukewarm] = 0
+                    rgb[:,:,1][lukewarm] = 255
+                    rgb[:,:,2][lukewarm] = 255
+                    rgb[:,:,3][lukewarm] = 255
+
                     rgb[:,:,0][warm] = 255
+                    rgb[:,:,1][warm] = 0
+                    rgb[:,:,2][warm] = 0
                     rgb[:,:,3][warm] = 255
+
                     rgb[:,:,0][hot] = 0
                     rgb[:,:,1][hot] = 255
+                    rgb[:,:,2][hot] = 0
                     rgb[:,:,3][hot] = 255
                     plt.imshow(rgb, interpolation='nearest', origin='lower')
                 plt.title('Resid')
@@ -1104,6 +1140,12 @@ def stage_mask_junk(tims=None, targetwcs=None, W=None, H=None, bands=None,
         dimshow(get_rgb(coimgs, bands))
         plt.title('After mask_junk')
         ps.savefig()
+
+        for b,n in zip(bands, cons):
+            plt.clf()
+            dimshow(n)
+            plt.title('n %s' % b)
+            ps.savefig()
 
         allss = np.array(allss)
         mx = max(allss.max(), 100) * 1.1
