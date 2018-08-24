@@ -19,7 +19,6 @@ from tractor.galaxy import disable_galaxy_cache
 from tractor.ellipses import EllipseE
 
 from legacypipe.survey import LegacySurveyData, bricks_touching_wcs, get_version_header, apertures_arcsec
-#from legacypipe.survey import exposure_metadata
 from catalog import read_fits_catalog
 
 import photutils
@@ -60,6 +59,9 @@ def get_parser():
     parser.add_argument('--no-normalize-psf', dest='normalize_psf', action='store_false',
                         default=True,
                         help='Do not normalize PSF?')
+
+    parser.add_argument('--no-move-gaia', dest='move_gaia', action='store_false',
+                        default=True, help='Do not move Gaia stars to image epoch?')
     
     parser.add_argument('--save-model',
                         help='Compute and save model image?')
@@ -180,8 +182,7 @@ def main(survey=None, opt=None):
 
     print('Read image:', Time()-t0)
 
-    if opt.catfn in ['DR1', 'DR2', 'DR3', 'DR5', 'DR']:
-
+    if opt.catfn in ['DR']:
         margin = 20
         TT = []
         chipwcs = tim.subwcs
@@ -200,7 +201,6 @@ def main(survey=None, opt=None):
                                (yy >= -margin) * (yy <= (H+margin)))
             T.cut(I)
             print('Cut to', len(T), 'sources within image + margin')
-            # print('Brick_primary:', np.unique(T.brick_primary))
             T.cut(T.brick_primary)
             print('Cut to', len(T), 'on brick_primary')
             for col in ['out_of_bounds', 'left_blob']:
@@ -228,7 +228,6 @@ def main(survey=None, opt=None):
             for i in I:
                 T.type[i] = 'EXP'
 
-
         # Same thing with the exp component.
         # -> convert to DEV
         I = np.flatnonzero(np.array([((t.type == 'COMP') and
@@ -248,6 +247,21 @@ def main(survey=None, opt=None):
 
     surveydir = survey.get_survey_dir()
     del survey
+
+    if opt.move_gaia:
+        # Gaia stars: move RA,Dec to the epoch of this image.
+        I = np.flatnonzero(T.ref_epoch > 0)
+        if len(I):
+            from legacypipe.survey import radec_at_mjd
+            orig_ra = T.ra.copy()
+            orig_dec = T.dec.copy()
+    
+            print('Moving', len(I), 'Gaia stars to MJD', tim.time.toMjd())
+            ra,dec = radec_at_mjd(T.ra[I], T.dec[I], T.ref_epoch[I].astype(float),
+                                  T.pmra[I], T.pmdec[I], T.parallax[I],
+                                  tim.time.toMjd())
+            T.ra [I] = ra
+            T.dec[I] = dec
 
     kwargs = {}
     cols = T.get_columns()
@@ -277,14 +291,40 @@ def main(survey=None, opt=None):
     F.brickname = T.brickname
     F.objid     = T.objid
 
-    F.camera = np.array([ccd.camera] * len(F))
-    F.expnum = np.array([im.expnum] * len(F)).astype(np.int32)
+    F.camera  = np.array([ccd.camera] * len(F))
+    F.expnum  = np.array([im.expnum]  * len(F)).astype(np.int32)
     F.ccdname = np.array([im.ccdname] * len(F))
 
     # "Denormalizing"
-    F.filter  = np.array([tim.band]               * len(T))
-    F.mjd     = np.array([tim.primhdr['MJD-OBS']] * len(T))
-    F.exptime = np.array([tim.primhdr['EXPTIME']] * len(T)).astype(np.float32)
+    F.filter  = np.array([tim.band]               * len(F))
+    F.mjd     = np.array([tim.primhdr['MJD-OBS']] * len(F))
+    F.exptime = np.array([tim.primhdr['EXPTIME']] * len(F)).astype(np.float32)
+    F.psfsize = np.array([tim.psf_fwhm * tim.imobj.pixscale] * len(F)).astype(np.float32)
+    #### FIXME -- units?
+    ### --> also add units to the dict below so the FITS headers have units
+    F.sky     = np.array([tim.midsky / tim.zpscale / tim.imobj.pixscale**2] * len(F)).astype(np.float32)
+    F.psfdepth = np.array([-2.5 * (np.log10(5. * tim.sig1 / tim.psfnorm) - 9)] * len(F)).astype(np.float32)
+    F.galdepth = np.array([-2.5 * (np.log10(5. * tim.sig1 / tim.galnorm) - 9)] * len(F)).astype(np.float32)
+
+    # super units questions here
+    if opt.derivs:
+        cosdec = np.cos(np.deg2rad(T.dec))
+        F.dra  = (F.flux_dra  / F.flux) * 3600. / cosdec
+        F.ddec = (F.flux_ddec / F.flux) * 3600.
+        F.dra_ivar  = F.flux_dra_ivar  * (F.flux / 3600. * cosdec)**2
+        F.ddec_ivar = F.flux_ddec_ivar * (F.flux / 3600.)**2
+        F.delete_column('flux_dra')
+        F.delete_column('flux_ddec')
+        F.delete_column('flux_dra_ivar')
+        F.delete_column('flux_ddec_ivar')
+        F.flux = F.flux_fixed
+        F.flux_ivar = F.flux_fixed_ivar
+        F.delete_column('flux_fixed')
+        F.delete_column('flux_fixed_ivar')
+
+        for c in ['dra', 'ddec', 'dra_ivar', 'ddec_ivar', 'flux', 'flux_ivar']:
+            F.set(c, F.get(c).astype(np.float32))
+    
     F.ra  = T.ra
     F.dec = T.dec
     
@@ -510,6 +550,12 @@ def run_forced_phot(cat, tim, ceres=True, derivs=False, agn=False,
 
         F.fracflux = R.fitstats.profracflux[:N].astype(np.float32)
         F.rchi2    = R.fitstats.prochi2    [:N].astype(np.float32)
+        # 1 - 
+        #F.fracmasked = R.fitstats.pronpix  [:N].astype(np.float32)
+        try:
+            F.fracmasked = R.fitstats.promasked[:N].astype(np.float32)
+        except:
+            print('No "fracmasked" available (only in recent Tractor versions)')
 
         if derivs:
             F.flux_dra  = np.array([src.getParams()[0] for src in derivsrcs]).astype(np.float32)
@@ -635,7 +681,7 @@ class SourceDerivatives(MultiParams, BasicSource):
         #print('SourceDerivs: derivs', derivs)
         for d in derivs:
             if d is not None:
-                d /= counts
+                d.patch /= counts
                 # print('Deriv: abs max', np.abs(d.patch).max(), 'range', d.patch.min(), d.patch.max(), 'sum', d.patch.sum())
 
         # RA,Dec
