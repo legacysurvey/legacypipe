@@ -14,8 +14,8 @@ class EllipseWithPriors(EllipseESoft):
     over softened ellipticity parameters.  This class is used during
     fitting.
     
-    We ALSO place a prior on log-radius, forcing it to be < +5 (r_e =
-    148").
+    We ALSO place a prior on log-radius, forcing it to be < +6.5 (r_e =
+    665"=11 arcmin).
 
     To use this class, subclass it and set the 'ellipticityStd' class
     member.

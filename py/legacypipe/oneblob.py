@@ -619,8 +619,11 @@ class OneBlob(object):
                 rex = simple
             else:
                 simname = 'simple'
-                
-            trymodels = [('ptsrc', ptsrc)]
+
+            if hasattr(src, 'isForcedLargeGalaxy') and src.isForcedLargeGalaxy:
+                trymodels = []
+            else:
+                trymodels = [('ptsrc', ptsrc)]
 
             if oldmodel == 'ptsrc':
                 forced = False
@@ -633,8 +636,7 @@ class OneBlob(object):
                 elif self.hasbright:
                     print('Not computing galaxy models: bright star in blob')
                 elif self.haslargegal:
-                    print('Large galaxy in blob -- limiting everything else to REX')
-                    trymodels.extend([('dev', dev), ('exp', exp), ('comp', comp)])
+                    print('Large galaxy in blob -- only trying galaxy models.')
                 elif self.haslargegal:
                     print('Large galaxy in blob')
                 else:
@@ -660,11 +662,12 @@ class OneBlob(object):
 
                 if name == 'comp' and newsrc is None:
                     # Compute the comp model if exp or dev would be accepted
-                    if (max(chisqs['dev'], chisqs['exp']) <
-                        (chisqs['ptsrc'] + galaxy_margin)):
-                        #print('dev/exp not much better than ptsrc;
-                        #not computing comp model.')
-                        continue
+                    if 'ptsrc' in chisqs.keys(): # not true for isLargeGalaxy
+                        if (max(chisqs['dev'], chisqs['exp']) <
+                            (chisqs['ptsrc'] + galaxy_margin)):
+                            #print('dev/exp not much better than ptsrc;
+                            #not computing comp model.')
+                            continue
                     newsrc = comp = FixedCompositeGalaxy(
                         src.getPosition(), src.getBrightness(),
                         SoftenedFracDev(0.5), exp.getShape(),

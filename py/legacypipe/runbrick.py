@@ -1258,14 +1258,11 @@ def stage_srcs(targetrd=None, pixscale=None, targetwcs=None,
         for rr, dd, mm, ss in zip(largegals.ra, largegals.dec, largegals.mag, largegals.d25):
             fluxes = dict( [(band, NanoMaggies.magToNanomaggies(mm)) for band in bands] )
             assert(np.all(np.isfinite(list(fluxes.values()))))
-            largecat.append(
-                ExpGalaxy(RaDecPos(rr, dd),
-                          NanoMaggies(order=bands, **fluxes),
-                          LegacyEllipseWithPriors(np.log(ss), 0., 0.))
-                #RexGalaxy(RaDecPos(rr, dd),
-                #          NanoMaggies(order=bands, **fluxes),
-                #          LogRadius(np.log(ss)))
-                )
+            gal = ExpGalaxy(RaDecPos(rr, dd),
+                            NanoMaggies(order=bands, **fluxes),
+                            LegacyEllipseWithPriors(np.log(ss), 0., 0.))
+            gal.isForcedLargeGalaxy = True
+            largecat.append(gal)
     else:
         largegals = []
 
@@ -2169,6 +2166,8 @@ def _blob_iter(blobslices, blobsrcs, blobs, targetwcs, tims, cat, bands,
                skipblobs=[], max_blobsize=None, custom_brick=False):
     from collections import Counter
     H,W = targetwcs.shape
+    # TODO @dstndstn 
+    # Dustin WTF FIXME
     brightstarblobs = set(blobs[brightstars.iby, brightstars.ibx])
     # Remove -1 = no blob from set; not strictly necessary, just cosmetic
     try:
