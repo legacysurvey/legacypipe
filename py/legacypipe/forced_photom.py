@@ -285,9 +285,14 @@ def main(survey=None, opt=None):
                         agn=opt.agn,
                         do_forced=opt.forced,
                         do_apphot=opt.apphot,
+                        get_model=opt.save_model,
                         ps=ps)
     t0 = Time()
-    
+
+    if opt.save_model:
+        # unpack results
+        F,model_img = F
+
     F.release   = T.release
     F.brickid   = T.brickid
     F.brickname = T.brickname
@@ -326,10 +331,10 @@ def main(survey=None, opt=None):
 
         for c in ['dra', 'ddec', 'dra_ivar', 'ddec_ivar', 'flux', 'flux_ivar']:
             F.set(c, F.get(c).astype(np.float32))
-    
+
     F.ra  = T.ra
     F.dec = T.dec
-    
+
     ok,x,y = tim.sip_wcs.radec2pixelxy(T.ra, T.dec)
     F.x = (x-1).astype(np.float32)
     F.y = (y-1).astype(np.float32)
@@ -379,26 +384,22 @@ def main(survey=None, opt=None):
     fitsio.write(opt.outfn, None, header=version_hdr, clobber=True)
     F.writeto(opt.outfn, header=hdr, append=True)
     print('Wrote', opt.outfn)
-    
+
     if opt.save_model or opt.save_data:
         hdr = fitsio.FITSHDR()
         tim.getWcs().wcs.add_to_header(hdr)
     if opt.save_model:
-        print('Getting model image...')
-        tr = Tractor([tim], cat)
-        mod = tr.getModelImage(tim)
-        fitsio.write(opt.save_model, mod, header=hdr, clobber=True)
+        fitsio.write(opt.save_model, model_img, header=hdr, clobber=True)
         print('Wrote', opt.save_model)
     if opt.save_data:
         fitsio.write(opt.save_data, tim.getImage(), header=hdr, clobber=True)
         print('Wrote', opt.save_data)
-    
+
     print('Finished forced phot:', Time()-t0)
     return 0
 
-    
 def run_forced_phot(cat, tim, ceres=True, derivs=False, agn=False,
-                    do_forced=True, do_apphot=True, ps=None,
+                    do_forced=True, do_apphot=True, get_model=False, ps=None,
                     timing=False,
                     fixed_also=False):
     '''
@@ -433,7 +434,7 @@ def run_forced_phot(cat, tim, ceres=True, derivs=False, agn=False,
         src.freezeAllBut('brightness')
         src.getBrightness().freezeAllBut(tim.band)
     #print('Limited the size of', nsize, 'large galaxy models')
-    
+
     if derivs:
         realsrcs = []
         derivsrcs = []
@@ -491,18 +492,17 @@ def run_forced_phot(cat, tim, ceres=True, derivs=False, agn=False,
 
     if do_forced:
 
-        if ps is None:
+        if ps is None and not get_model:
             forced_kwargs.update(wantims=False)
 
-        # print('Params:')
-        # tr.printThawedParams()
-
         R = tr.optimize_forced_photometry(variance=True, fitstats=True,
-                                          shared_params=False, priors=False, **forced_kwargs)
+                                          shared_params=False, priors=False,
+                                          **forced_kwargs)
 
-        if ps is not None:
+        if ps is not None or get_model:
             (data,mod,ie,chi,roi) = R.ims1[0]
 
+        if ps is not None:
             ima = dict(vmin=-2.*tim.sig1, vmax=5.*tim.sig1,
                        interpolation='nearest', origin='lower',
                        cmap='gray')
