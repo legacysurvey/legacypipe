@@ -34,6 +34,8 @@ def get_parser():
 
     parser.add_argument('--skip-calibs', dest='do_calib', default=True, action='store_false',
                         help='Do not try to run calibrations')
+    parser.add_argument('--skip', dest='skip', default=False, action='store_true',
+                        help='Exit if the output file already exists')
 
     parser.add_argument('--zoom', type=int, nargs=4, help='Set target image extent (default "0 2046 0 4094")')
     parser.add_argument('--no-ceres', action='store_false', dest='ceres', help='Do not use Ceres optimiziation engine (use scipy)')
@@ -49,7 +51,7 @@ def get_parser():
 
     parser.add_argument('--agn', action='store_true',
                         help='Add a point source to the center of each DEV/EXP/COMP galaxy?')
-    
+
     parser.add_argument('--constant-invvar', action='store_true',
                         help='Set inverse-variance to a constant across the image?')
 
@@ -62,21 +64,21 @@ def get_parser():
 
     parser.add_argument('--no-move-gaia', dest='move_gaia', action='store_false',
                         default=True, help='Do not move Gaia stars to image epoch?')
-    
+
     parser.add_argument('--save-model',
                         help='Compute and save model image?')
     parser.add_argument('--save-data',
                         help='Compute and save model image?')
 
     parser.add_argument('--camera', help='Cut to only CCD with given camera name?')
-    
+
     parser.add_argument('expnum', help='Filename OR exposure number.')
     parser.add_argument('ccdname', help='Image HDU OR CCD name.')
     parser.add_argument('catfn', help='Catalog filename OR "DR".')
     parser.add_argument('outfn', help='Output catalog filename.')
 
     return parser
-    
+
 def main(survey=None, opt=None):
     '''Driver function for forced photometry of individual Legacy
     Survey images.
@@ -88,14 +90,14 @@ def main(survey=None, opt=None):
     Time.add_measurement(MemMeas)
     t0 = Time()
 
-    if os.path.exists(opt.outfn):
+    if opt.skip and os.path.exists(opt.outfn):
         print('Ouput file exists:', opt.outfn)
         sys.exit(0)
 
     if opt.derivs and opt.agn:
         print('Sorry, can\'t do --derivs AND --agn')
         sys.exit(0)
-        
+
     if not opt.forced:
         opt.apphot = True
 
