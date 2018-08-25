@@ -1916,7 +1916,7 @@ def _select_model(chisqs, nparams, galaxy_margin, rex):
 
     # This is the "fractional" upgrade threshold for ptsrc/simple->dev/exp:
     # 1% of ptsrc vs nothing
-    fcut = 0.01 * chisqs['ptsrc']
+    fcut = 0.01 * chisqs.get('ptsrc', 0.)
     #print('Cut: max of', cut, 'and', fcut, ' (fraction of chisq_psf=%.1f)'
     # % chisqs['ptsrc'])
     cut = max(cut, fcut)
@@ -1943,6 +1943,8 @@ def _select_model(chisqs, nparams, galaxy_margin, rex):
 
     diff = chisqs['comp'] - chisqs[keepmod]
     #print('Comparing', keepmod, 'to comp.  cut:', cut, 'comp:', diff)
+    fcut = 0.01 * chisqs[keepmod]
+    cut = max(cut, fcut)
     if diff < cut:
         return keepmod
 
