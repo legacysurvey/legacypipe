@@ -1870,7 +1870,7 @@ def _clip_model_to_blob(mod, sh, ie):
 
 def _select_model(chisqs, nparams, galaxy_margin, rex):
     '''
-    Returns keepmod
+    Returns keepmod (string), the name of the preferred model.
     '''
     keepmod = 'none'
 
@@ -1882,31 +1882,32 @@ def _select_model(chisqs, nparams, galaxy_margin, rex):
                 if name != 'none'])
 
     if diff < cut:
+        # Drop this source
         return keepmod
-    # We're going to keep this source!
 
+    # Now choose between point source and simple model (SIMP/REX)
     if rex:
         simname = 'rex'
     else:
         simname = 'simple'
 
-    if not simname in chisqs:
+    if 'ptsrc' in chisqs and not simname in chisqs:
         # bright stars / reference stars: we don't test the simple model.
         return 'ptsrc'
-    # Now choose between point source and simple model (SIMP/REX)
-    if chisqs['ptsrc'] - nparams['ptsrc'] > chisqs[simname] - nparams[simname]:
-        #print('Keeping source; PTSRC is better than SIMPLE')
-        keepmod = 'ptsrc'
-    else:
-        #print('Keeping source; SIMPLE is better than PTSRC')
-        #print('REX is better fit.  Radius', simplemod.shape.re)
-        keepmod = simname
-        # For REX, we also demand a fractionally better fit
-        if simname == 'rex':
-            dchisq_psf = chisqs['ptsrc']
-            dchisq_rex = chisqs['rex']
-            if (dchisq_rex - dchisq_psf) < (0.01 * dchisq_psf):
-                keepmod = 'ptsrc'
+    if 'ptsrc' in chisqs and simname in chisqs:
+        if (chisqs['ptsrc'] - nparams['ptsrc'] >
+            chisqs[simname] - nparams[simname]):
+            #print('Keeping source; PTSRC is better than SIMPLE')
+            keepmod = 'ptsrc'
+        else:
+            #print('REX is better fit.  Radius', simplemod.shape.re)
+            keepmod = simname
+            # For REX, we also demand a fractionally better fit
+            if simname == 'rex':
+                dchisq_psf = chisqs['ptsrc']
+                dchisq_rex = chisqs['rex']
+                if (dchisq_rex - dchisq_psf) < (0.01 * dchisq_psf):
+                    keepmod = 'ptsrc'
 
     if not 'exp' in chisqs:
         return keepmod
