@@ -230,7 +230,7 @@ class LegacySurveyWcs(ConstantFitsWcs):
 
     def positionToPixel(self, pos, src=None):
         if isinstance(pos, GaiaPosition):
-            pos = pos.getPositionAtTime(tai_to_mjd(self.tai))
+            pos = pos.getPositionAtTime(tai_to_mjd(self.tai.getValue()))
         return super(LegacySurveyWcs, self).positionToPixel(pos, src=src)
 
 
