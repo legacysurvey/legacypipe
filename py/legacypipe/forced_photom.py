@@ -21,8 +21,6 @@ from tractor.ellipses import EllipseE
 from legacypipe.survey import LegacySurveyData, bricks_touching_wcs, get_version_header, apertures_arcsec
 from catalog import read_fits_catalog
 
-import photutils
-
 def get_parser():
     '''
     Returns the option parser for forced photometry of Legacy Survey images
@@ -257,7 +255,7 @@ def main(survey=None, opt=None):
             from legacypipe.survey import radec_at_mjd
             orig_ra = T.ra.copy()
             orig_dec = T.dec.copy()
-    
+
             print('Moving', len(I), 'Gaia stars to MJD', tim.time.toMjd())
             ra,dec = radec_at_mjd(T.ra[I], T.dec[I], T.ref_epoch[I].astype(float),
                                   T.pmra[I], T.pmdec[I], T.parallax[I],
@@ -448,8 +446,8 @@ def run_forced_phot(cat, tim, ceres=True, derivs=False, agn=False,
             brightness_dra .freezeAllBut(tim.band)
             brightness_ddec.freezeAllBut(tim.band)
 
-            dsrc = SourceDerivatives(src, [tim.band], ['pos'],
-                                     [brightness_dra, brightness_ddec])
+            dsrc = SourceDerivatives(src, [brightness_dra, brightness_ddec],
+                                     tim, ps)
             derivsrcs.append(dsrc)
 
         # For convenience, put all the real sources at the front of
@@ -570,7 +568,7 @@ def run_forced_phot(cat, tim, ceres=True, derivs=False, agn=False,
             F.flux_agn_ivar = np.zeros(len(F), np.float32)
             F.flux_agn[iagn] = np.array([src.getParams()[0] for src in agnsrcs])
             F.flux_agn_ivar[iagn] = R.IV[N:].astype(np.float32)
-            
+
         if timing:
             print('Forced photom:', Time()-t0)
 
@@ -629,89 +627,84 @@ def run_forced_phot(cat, tim, ceres=True, derivs=False, agn=False,
         if timing:
             print('Aperture photom:', Time()-t0)
 
+    if get_model:
+        return F,mod
     return F
 
-### This class was copied from sim-forced-phot.py
 from tractor import MultiParams, BasicSource
 class SourceDerivatives(MultiParams, BasicSource):
-    def __init__(self, real, freeze, thaw, brights):
+    def __init__(self, real, brights, tim, ps):
+        from tractor.patch import Patch
         '''
         *real*: The real source whose derivatives are my profiles.
-        *freeze*: List of parameter names to freeze before taking derivs
-        *thaw*: List of parameter names to thaw before taking derivs
         '''
         # This a subclass of MultiParams and we pass the brightnesses
         # as our params.
         super(SourceDerivatives,self).__init__(*brights)
         self.real = real
-        self.freeze = freeze
-        self.thaw = thaw
         self.brights = brights
         self.umods = None
 
-        # # Test...
-        # self.real.freezeParamsRecursive(*self.freeze)
-        # self.real.thawParamsRecursive(*self.thaw)
-        # # #
-        # print('Source derivs: params are:')
-        # self.real.printThawedParams()
-        # # # and revert...
-        # self.real.freezeParamsRecursive(*self.thaw)
-        # self.real.thawParamsRecursive(*self.freeze)
+        # Get the current source profile and take pixel-space
+        # derivatives by hand, for speed and to get symmetric
+        # derivatives.
+        realmod = real.getUnitFluxModelPatch(tim)
+        p = realmod.patch
+        dx = np.zeros_like(p)
+        dy = np.zeros_like(p)
+        # Omit a boundary of 1 pixel on all sides in both derivatives
+        dx[1:-1, 1:-1] = (p[1:-1, :-2] - p[1:-1, 2:]) / 2.
+        dy[1:-1, 1:-1] = (p[:-2, 1:-1] - p[2:, 1:-1]) / 2.
+        # Convert from pixel-space to RA,Dec derivatives via CD matrix
+        px, py = tim.getWcs().positionToPixel(real.pos, real)
+        cdi = tim.getWcs().cdInverseAtPixel(px, py)
+        dra  = dx * cdi[0, 0] + dy * cdi[1, 0]
+        ddec = dx * cdi[0, 1] + dy * cdi[1, 1]
+
+        if ps is not None:
+            import pylab as plt
+            mx = p.max()
+            plt.clf()
+            plt.subplot(2,3,1)
+            plt.imshow(p, interpolation='nearest', origin='lower',
+                       vmin=0, vmax=mx)
+            mx *= 0.25
+            plt.subplot(2,3,2)
+            plt.imshow(dx, interpolation='nearest', origin='lower',
+                       vmin=-mx, vmax=mx)
+            plt.title('dx')
+            plt.subplot(2,3,3)
+            plt.imshow(dy, interpolation='nearest', origin='lower',
+                       vmin=-mx, vmax=mx)
+            plt.title('dy')
+            plt.subplot(2,3,5)
+            sc = 3600/0.262
+            plt.imshow(dra/sc, interpolation='nearest', origin='lower',
+                       vmin=-mx, vmax=mx)
+            plt.title('dra')
+            plt.subplot(2,3,6)
+            plt.imshow(ddec/sc, interpolation='nearest', origin='lower',
+                       vmin=-mx, vmax=mx)
+            plt.title('ddec')
+            ps.savefig()
+        # These are our "unit-flux" models
+        self.umods = [Patch(realmod.x0, realmod.y0, dra),
+                      Patch(realmod.x0, realmod.y0, ddec)]
 
     @staticmethod
     def getNamedParams():
-        return dict(dpos0=0, dpos1=1)
-        
+        return dict(dra=0, ddec=1)
+
     # forced photom calls getUnitFluxModelPatches
     def getUnitFluxModelPatches(self, img, minval=0., modelMask=None):
-        self.real.freezeParamsRecursive(*self.freeze)
-        self.real.thawParamsRecursive(*self.thaw)
-
-        # The derivatives will be scaled by the source brightness;
-        # undo that scaling. (We want derivatives of unit-flux models)
-        counts = img.getPhotoCal().brightnessToCounts(self.real.brightness)
-
-        #print('SourceDerivatives.getUnitFluxModelPatches: counts=', counts)
-
-        derivs = self.real.getParamDerivatives(img, modelMask=modelMask)
-
-        #print('Derivs:', derivs)
-
-        ## FIXME -- what about using getUnitFluxModelPatch(derivs=True) ?
-        
-        #print('SourceDerivs: derivs', derivs)
-        for d in derivs:
-            if d is not None:
-                d.patch /= counts
-                # print('Deriv: abs max', np.abs(d.patch).max(), 'range', d.patch.min(), d.patch.max(), 'sum', d.patch.sum())
-
-        # RA,Dec
-        assert(len(derivs) == 2)
-
-        # and revert...
-        self.real.freezeParamsRecursive(*self.thaw)
-        self.real.thawParamsRecursive(*self.freeze)
-        # Save these derivatives as our unit-flux models.
-        self.umods = derivs
-        return derivs
+        return self.umods
 
     def getModelPatch(self, img, minsb=0., modelMask=None):
-        if self.umods is None:
-            return None
-        if self.umods[0] is None and self.umods[1] is None:
-            return None
+        from tractor.patch import add_patches
         pc = img.getPhotoCal()
-        total = None
-        if self.umods[0] is not None:
-            total = self.umods[0] * pc.brightnessToCounts(self.brights[0])
-        if self.umods[1] is not None:
-            um = self.umods[1] * pc.brightnessToCounts(self.brights[1])
-            if total is None:
-                total = um
-            else:
-                total += um
-        return total
+        p1 = self.umods[0] * pc.brightnessToCounts(self.brights[0])
+        p2 = self.umods[1] * pc.brightnessToCounts(self.brights[1])
+        return add_patches(p1, p2)
 
 if __name__ == '__main__':
     sys.exit(main())
