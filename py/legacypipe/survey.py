@@ -1660,6 +1660,16 @@ Now using the current directory as LEGACY_SURVEY_DIR, but this is likely to fail
         number, integer), *ccdname* (string), and *camera* (string),
         if given.
         '''
+
+        if expnum is not None:
+            C = self.try_expnum_kdtree(expnum)
+            if C is not None:
+                if ccdname is not None:
+                    C = C[C.ccdname == ccdname]
+                if camera is not None:
+                    C = C[C.camera == camera]
+                return C
+
         if expnum is not None and ccdname is not None:
             # use ccds_index
             if self.ccds_index is None:
@@ -1683,6 +1693,48 @@ Now using the current directory as LEGACY_SURVEY_DIR, but this is likely to fail
         if camera is not None:
             T = T[T.camera == camera]
         return T
+
+    def try_expnum_kdtree(self, expnum):
+        '''
+        # By creating a kd-tree from the 'expnum' column, search for expnums
+        # can be sped up:
+        from astrometry.libkd.spherematch import *
+        from astrometry.util.fits import fits_table
+        T=fits_table('/global/cscratch1/sd/dstn/dr7-depthcut/survey-ccds-dr7.kd.fits',
+            columns=['expnum'])
+        ekd = tree_build(np.atleast_2d(T.expnum.copy()).T.astype(float),
+                         nleaf=60, bbox=False, split=True)
+        ekd.set_name('expnum')
+        ekd.write('ekd.fits')
+        
+        > fitsgetext -i $CSCRATCH/dr7-depthcut/survey-ccds-dr7.kd.fits -o dr7-%02i -a -M
+        > fitsgetext -i ekd.fits -o ekd-%02i -a -M
+        > cat dr7-0* ekd-0[123456] > $CSCRATCH/dr7-depthcut+/survey-ccds-dr7.kd.fits
+        '''
+        fns = self.find_file('ccd-kds')
+        fns = self.filter_ccd_kd_files(fns)
+        if len(fns) == 0:
+            return None
+        from astrometry.libkd.spherematch import tree_open
+        TT = []
+        for fn in fns:
+            print('Searching', fn)
+            kd = tree_open(fn, 'expnum')
+            if kd is None:
+                return None
+            I = kd.search(np.array([expnum]), 0.5, 0, 0)
+            print(len(I), 'CCDs with expnum', expnum, 'in', fn)
+            if len(I) == 0:
+                continue
+            # Read only the CCD-table rows within range.
+            TT.append(fits_table(fn, rows=I))
+        if len(TT) == 0:
+            ##??
+            return fits_table()
+        ccds = merge_tables(TT, columns='fillzero')
+        ccds = self.cleanup_ccds_table(ccds)
+        return ccds
+
 
 def run_calibs(X):
     im = X[0]
