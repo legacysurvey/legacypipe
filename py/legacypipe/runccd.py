@@ -8,7 +8,17 @@ import numpy as np
 from legacypipe.survey import LegacySurveyData
 from legacypipe.runbrick import get_parser, get_runbrick_kwargs, run_brick
 
+class FakeLegacySurveyData(LegacySurveyData):
+    def filter_ccd_kd_files(self, fns):
+        if self.no_kd:
+            return []
+        return fns
+
 def main():
+    from astrometry.util.ttime import Time
+
+    t0 = Time()
+
     parser = get_parser()
     parser.set_defaults(wise=False)
 
@@ -27,14 +37,20 @@ def main():
     
     #print('optdict:', optdict)
     
-    survey = LegacySurveyData(survey_dir=opt.survey_dir,
-                              output_dir=opt.output_dir,
-                              cache_dir=opt.cache_dir)
+    survey = FakeLegacySurveyData(survey_dir=opt.survey_dir,
+                                  output_dir=opt.output_dir,
+                                  cache_dir=opt.cache_dir)
+    survey.no_kd = False
 
     ccds = survey.find_ccds(expnum=expnum, ccdname=ccdname)
     if len(ccds) == 0:
         print('Did not find EXPNUM', expnum, 'CCDNAME', ccdname)
         return -1
+
+    # Force the CCDs
+    survey.ccds = ccds
+    survey.no_kd = True
+
     ccd = ccds[0]
     print('Found CCD', ccd)
 
@@ -66,6 +82,7 @@ def main():
     #hybridPsf=True, normalizePsf=True, rex=True, splinesky=True,
     #gaia_stars=True, wise=False, ceres=False,
 
+    print('Finished:', Time()-t0)
 
 if __name__ == '__main__':
     main()
