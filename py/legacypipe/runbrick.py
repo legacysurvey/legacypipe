@@ -3875,7 +3875,8 @@ python -u legacypipe/runbrick.py --plots --brick 2440p070 --zoom 1900 2400 450 9
 
     return parser
 
-def get_runbrick_kwargs(brick=None,
+def get_runbrick_kwargs(survey=None,
+                        brick=None,
                         radec=None,
                         run=None,
                         survey_dir=None,
@@ -3897,12 +3898,13 @@ def get_runbrick_kwargs(brick=None,
         return None, -1
     opt.update(radec=radec)
 
-    from legacypipe.runs import get_survey
-    survey = get_survey(run,
-                        survey_dir=survey_dir,
-                        output_dir=output_dir,
-                        cache_dir=cache_dir)
-    print('Got survey:', survey)
+    if survey is None:
+        from legacypipe.runs import get_survey
+        survey = get_survey(run,
+                            survey_dir=survey_dir,
+                            output_dir=output_dir,
+                            cache_dir=cache_dir)
+        print('Got survey:', survey)
     
     if check_done or skip or skip_coadd:
         if skip_coadd:
