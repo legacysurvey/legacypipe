@@ -22,3 +22,18 @@ class GaiaCatalog(HealpixedCatalog):
         cat.cut((cat.ra  >= ralo ) * (cat.ra  <= rahi) *
                 (cat.dec >= declo) * (cat.dec <= dechi))
         return cat
+
+
+
+    @staticmethod
+    def catalog_nantozero(gaia):
+        gaia.pmra = nantozero(gaia.pmra)
+        gaia.pmdec = nantozero(gaia.pmdec)
+        gaia.parallax = nantozero(gaia.parallax)
+        return gaia
+
+def nantozero(x):
+    import numpy as np
+    x = x.copy()
+    x[np.logical_not(np.isfinite(x))] = 0.
+    return x
