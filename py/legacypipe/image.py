@@ -27,7 +27,40 @@ CP_DQ_BITS = dict(badpix=1, satur=2, interp=4, cr=16, bleed=64,
                   longthin = 1024,
                   )
 
+def remap_dq_cp_codes(dq):
+    '''
+    Some versions of the CP use integer codes, not bit masks.
+    This converts them.
+    '''
+    from legacypipe.image import CP_DQ_BITS
+    dqbits = np.zeros(dq.shape, np.int16)
+    '''
+    1 = bad
+    2 = no value (for remapped and stacked data)
+    3 = saturated
+    4 = bleed mask
+    5 = cosmic ray
+    6 = low weight
+    7 = diff detect (multi-exposure difference detection from median)
+    8 = long streak (e.g. satellite trail)
+    '''
 
+    # Some images (eg, 90prime//CP20160403/ksb_160404_103333_ood_g_v1-CCD1.fits)
+    # around saturated stars have the core with value 3 (satur), surrounded by one
+    # pixel of value 1 (bad), and then more pixels with value 4 (bleed).
+    # Set the BAD ones to SATUR.
+    from scipy.ndimage.morphology import binary_dilation
+    dq[np.logical_and(dq == 1, binary_dilation(dq == 3))] = 3
+
+    dqbits[dq == 1] |= CP_DQ_BITS['badpix']
+    dqbits[dq == 2] |= CP_DQ_BITS['badpix']
+    dqbits[dq == 3] |= CP_DQ_BITS['satur']
+    dqbits[dq == 4] |= CP_DQ_BITS['bleed']
+    dqbits[dq == 5] |= CP_DQ_BITS['cr']
+    dqbits[dq == 6] |= CP_DQ_BITS['badpix']
+    dqbits[dq == 7] |= CP_DQ_BITS['trans']
+    dqbits[dq == 8] |= CP_DQ_BITS['trans']
+    return dqbits
 
 class LegacySurveyImage(object):
     '''A base class containing common code for the images we handle.
@@ -742,39 +775,7 @@ class LegacySurveyImage(object):
         return self.remap_dq_cp_codes(dq, header)
 
     def remap_dq_cp_codes(self, dq, header):
-        '''
-        Some versions of the CP use integer codes, not bit masks.
-        This converts them.
-        '''
-        from legacypipe.image import CP_DQ_BITS
-        dqbits = np.zeros(dq.shape, np.int16)
-        '''
-        1 = bad
-        2 = no value (for remapped and stacked data)
-        3 = saturated
-        4 = bleed mask
-        5 = cosmic ray
-        6 = low weight
-        7 = diff detect (multi-exposure difference detection from median)
-        8 = long streak (e.g. satellite trail)
-        '''
-
-        # Some images (eg, 90prime//CP20160403/ksb_160404_103333_ood_g_v1-CCD1.fits)
-        # around saturated stars have the core with value 3 (satur), surrounded by one
-        # pixel of value 1 (bad), and then more pixels with value 4 (bleed).
-        # Set the BAD ones to SATUR.
-        from scipy.ndimage.morphology import binary_dilation
-        dq[np.logical_and(dq == 1, binary_dilation(dq == 3))] = 3
-
-        dqbits[dq == 1] |= CP_DQ_BITS['badpix']
-        dqbits[dq == 2] |= CP_DQ_BITS['badpix']
-        dqbits[dq == 3] |= CP_DQ_BITS['satur']
-        dqbits[dq == 4] |= CP_DQ_BITS['bleed']
-        dqbits[dq == 5] |= CP_DQ_BITS['cr']
-        dqbits[dq == 6] |= CP_DQ_BITS['badpix']
-        dqbits[dq == 7] |= CP_DQ_BITS['trans']
-        dqbits[dq == 8] |= CP_DQ_BITS['trans']
-        return dqbits
+        return remap_dq_cp_codes(dq)
     
     def read_invvar(self, **kwargs):
         '''
