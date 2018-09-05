@@ -622,24 +622,13 @@ def main():
                 os.path.exists(imgfn[:-3])):
                 imgfn = imgfn[:-3]
 
-            #f.write('python legacypipe/forced_photom_decam.py %s %i DR3 %s\n' %
-            #        (imgfn, T.image_hdu[i], outfn))
-
-            #outfn = os.path.join('forced', expstr[:5], expstr,
             outfn = os.path.join(expstr[:5], expstr,
                                  'forced-%s-%s-%s.fits' %
                                  (T.camera[i].strip(), expstr, T.ccdname[i]))
 
-            # f.write('python legacypipe/forced_photom_decam.py --hybrid-psf --apphot --constant-invvar %i %s DR3 forced/vanilla/%s\n' %
-            #         (T.expnum[i], T.ccdname[i], outfn))
-            # f.write('python legacypipe/forced_photom_decam.py --hybrid-psf --derivs --constant-invvar %i %s DR3 forced/derivs/%s\n' %
-            #         (T.expnum[i], T.ccdname[i], outfn))
-            # f.write('python legacypipe/forced_photom_decam.py --hybrid-psf --agn --constant-invvar %i %s DR3 forced/agn/%s\n' %
-            #         (T.expnum[i], T.ccdname[i], outfn))
+            f.write('python legacypipe/forced_photom.py --apphot --derivs --catalog-dir /project/projectdirs/cosmo/data/legacysurvey/dr7/ %i %s forced/%s/%s\n' %
+                    (T.expnum[i], T.ccdname[i], expstr[:-3], outfn))
 
-            f.write('python legacypipe/forced_photom.py --apphot --catalog-dir /project/projectdirs/cosmo/data/legacysurvey/dr6/ %i %s DR forced/%s\n' %
-                    (T.expnum[i], T.ccdname[i], outfn))
-            
         f.close()
         log('Wrote', opt.out)
         sys.exit(0)
