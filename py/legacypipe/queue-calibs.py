@@ -626,8 +626,8 @@ def main():
                                  'forced-%s-%s-%s.fits' %
                                  (T.camera[i].strip(), expstr, T.ccdname[i]))
 
-            f.write('python legacypipe/forced_photom.py --apphot --derivs --catalog-dir /project/projectdirs/cosmo/data/legacysurvey/dr7/ %i %s forced/%s/%s\n' %
-                    (T.expnum[i], T.ccdname[i], expstr[:-3], outfn))
+            f.write('python legacypipe/forced_photom.py --apphot --derivs --catalog-dir /project/projectdirs/cosmo/data/legacysurvey/dr7/ %i %s forced/%s\n' %
+                    (T.expnum[i], T.ccdname[i], outfn))
 
         f.close()
         log('Wrote', opt.out)
