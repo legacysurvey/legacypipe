@@ -308,8 +308,11 @@ def main(survey=None, opt=None):
     #### FIXME -- units?
     ### --> also add units to the dict below so the FITS headers have units
     F.sky     = np.array([tim.midsky / tim.zpscale / tim.imobj.pixscale**2] * len(F)).astype(np.float32)
-    F.psfdepth = np.array([-2.5 * (np.log10(5. * tim.sig1 / tim.psfnorm) - 9)] * len(F)).astype(np.float32)
-    F.galdepth = np.array([-2.5 * (np.log10(5. * tim.sig1 / tim.galnorm) - 9)] * len(F)).astype(np.float32)
+    # in the same units as the depth maps -- flux inverse-variance.
+    F.psfdepth = np.array([(1. / (tim.sig1 / tim.psfnorm)**2)] * len(F)).astype(np.float32)
+    F.galdepth = np.array([(1. / (tim.sig1 / tim.galnorm)**2)] * len(F)).astype(np.float32)
+    # F.psfdepth = np.array([-2.5 * (np.log10(5. * tim.sig1 / tim.psfnorm) - 9)] * len(F)).astype(np.float32)
+    # F.galdepth = np.array([-2.5 * (np.log10(5. * tim.sig1 / tim.galnorm) - 9)] * len(F)).astype(np.float32)
 
     # super units questions here
     if opt.derivs:
