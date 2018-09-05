@@ -1,6 +1,6 @@
 import os
-from legacyanalysis.ps1cat import HealpixedCatalog
-    
+from legacypipe.ps1cat import HealpixedCatalog
+
 class GaiaCatalog(HealpixedCatalog):
     def __init__(self):
         self.gaiadir = os.getenv('GAIA_CAT_DIR')
