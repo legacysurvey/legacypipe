@@ -377,8 +377,8 @@ def main(survey=None, opt=None):
              'psfdepth':'1/nanomaggy^2', 'galdepth':'1/nanomaggy^2',
              'psfsize':'arcsec' }
     if opt.derivs:
-        units.update('dra':'arcsec', 'ddec':'arcsec',
-                     'dra_ivar':'1/arcsec^2', 'ddec_ivar':'1/arcsec^2')
+        units.update({'dra':'arcsec', 'ddec':'arcsec',
+                      'dra_ivar':'1/arcsec^2', 'ddec_ivar':'1/arcsec^2'})
     columns = F.get_columns()
     for i,col in enumerate(columns):
         if col in units:
