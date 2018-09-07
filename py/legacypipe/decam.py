@@ -54,15 +54,9 @@ class DecamImage(LegacySurveyImage):
         Called by get_tractor_image() to map the results from read_dq
         into a bitmask.
         '''
-        from distutils.version import StrictVersion
-        # The format of the DQ maps changed as of version 3.5.0 of the
-        # Community Pipeline.  Handle that here...
         primhdr = self.read_primary_header(self.dqfn)
-        plver = primhdr['PLVER'].strip()
-        plver = plver.replace('V','')
-        plver = plver.replace('DES ', '')
-        plver = plver.replace('+1', 'a1')
-        if StrictVersion(plver) >= StrictVersion('3.5.0'):
+        plver = primhdr['PLVER']
+        if decam_has_dq_codes(plver):
             dq = self.remap_dq_cp_codes(dq, hdr)
         else:
             from legacypipe.image import CP_DQ_BITS
@@ -76,3 +70,14 @@ class DecamImage(LegacySurveyImage):
                 dq.flat[I] &= ~CP_DQ_BITS['satur']
                 assert(np.all((dq & bothbits) != bothbits))
         return dq
+
+def decam_has_dq_codes(plver):
+    from distutils.version import StrictVersion
+    # The format of the DQ maps changed as of version 3.5.0 of the
+    # Community Pipeline.  Handle that here...
+    plver = plver.strip()
+    plver = plver.replace('V','')
+    plver = plver.replace('DES ', '')
+    plver = plver.replace('+1', 'a1')
+    return StrictVersion(plver) >= StrictVersion('3.5.0')
+

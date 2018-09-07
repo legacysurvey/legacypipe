@@ -1378,7 +1378,7 @@ def stage_srcs(targetrd=None, pixscale=None, targetwcs=None,
     return rtn
 
 def read_gaia(targetwcs):
-    from legacyanalysis.gaiacat import GaiaCatalog
+    from legacypipe.gaiacat import GaiaCatalog
     gaia = GaiaCatalog().get_catalog_in_wcs(targetwcs)
     print('Got Gaia stars:', gaia)
     gaia.about()

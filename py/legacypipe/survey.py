@@ -71,6 +71,9 @@ def radec_at_mjd(ra, dec, ref_year, pmra, pmdec, parallax, mjd):
     NOTE: does not broadcast completely correctly -- all params
     vectors or all motion params vector + scalar mjd work fine.  Other
     combos: not certain.
+
+    Returns RA,Dec
+
     '''
 
     from tractor.tractortime import TAITime

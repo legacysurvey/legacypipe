@@ -30,6 +30,8 @@ def get_parser():
 
     parser.add_argument('--catalog-dir', help='Set LEGACY_SURVEY_DIR to use to read catalogs')
 
+    parser.add_argument('--catalog', help='Use the given FITS catalog file, rather than reading from a data release directory')
+
     parser.add_argument('--skip-calibs', dest='do_calib', default=True, action='store_false',
                         help='Do not try to run calibrations')
     parser.add_argument('--skip', dest='skip', default=False, action='store_true',
@@ -70,9 +72,8 @@ def get_parser():
 
     parser.add_argument('--camera', help='Cut to only CCD with given camera name?')
 
-    parser.add_argument('expnum', help='Filename OR exposure number.')
+    parser.add_argument('expnum', help='Exposure number')
     parser.add_argument('ccdname', help='Image HDU OR CCD name.')
-    parser.add_argument('catfn', help='Catalog filename OR "DR".')
     parser.add_argument('outfn', help='Output catalog filename.')
 
     return parser
@@ -182,7 +183,9 @@ def main(survey=None, opt=None):
 
     print('Read image:', Time()-t0)
 
-    if opt.catfn in ['DR']:
+    if opt.catalog:
+        T = fits_table(opt.catalog)
+    else:
         margin = 20
         TT = []
         chipwcs = tim.subwcs
@@ -241,9 +244,6 @@ def main(survey=None, opt=None):
         if opt.write_cat:
             T.writeto(opt.write_cat)
             print('Wrote catalog to', opt.write_cat)
-
-    else:
-        T = fits_table(opt.catfn)
 
     surveydir = survey.get_survey_dir()
     del survey
@@ -373,7 +373,12 @@ def main(survey=None, opt=None):
             version_hdr.add_record(dict(name=key, value=tim.primhdr[key]))
 
     hdr = fitsio.FITSHDR()
-    units = {'exptime':'sec', 'flux':'nanomaggy', 'flux_ivar':'1/nanomaggy^2'}
+    units = {'exptime':'sec', 'flux':'nanomaggy', 'flux_ivar':'1/nanomaggy^2',
+             'psfdepth':'1/nanomaggy^2', 'galdepth':'1/nanomaggy^2',
+             'psfsize':'arcsec' }
+    if opt.derivs:
+        units.update({'dra':'arcsec', 'ddec':'arcsec',
+                      'dra_ivar':'1/arcsec^2', 'ddec_ivar':'1/arcsec^2'})
     columns = F.get_columns()
     for i,col in enumerate(columns):
         if col in units:
