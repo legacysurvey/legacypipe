@@ -126,7 +126,7 @@ def main():
 
     parser.add_argument('--nccds', action='store_true', default=False, help='Prints number of CCDs per brick')
 
-    parser.add_argument('--bands', default='g,r,z', help='Set bands to keep')
+    parser.add_argument('--bands', default='g,r,z', help='Set bands to keep: comma-separated list.')
 
 
     opt = parser.parse_args()
@@ -631,6 +631,11 @@ def main():
 
         f.close()
         log('Wrote', opt.out)
+
+        fn = 'forced-ccds.fits'
+        T[allI].writeto(fn)
+        print('Wrote', fn)
+
         sys.exit(0)
 
     if opt.lsb:
