@@ -111,7 +111,6 @@ class OneBlob(object):
         self.simul_opt = simul_opt
         self.use_ceres = use_ceres
         self.hasbright = hasbright
-        self.deblend = False
         self.tims = self.create_tims(timargs)
         self.total_pix = sum([np.sum(t.getInvError() > 0) for t in self.tims])
         self.plots2 = False
@@ -142,10 +141,6 @@ class OneBlob(object):
         tlast = Time()
         if self.plots:
             self._initial_plots()
-
-        if self.deblend:
-            ### Test bogus deblending
-            self.run_deblend(cat)
 
         self._fit_fluxes(cat, self.tims, self.bands)
         tr = self.tractor(self.tims, cat)
@@ -321,7 +316,7 @@ class OneBlob(object):
             
         # Model selection for sources, in decreasing order of brightness
         for numi,srci in enumerate(Ibright):
-    
+
             src = cat[srci]
             print('Model selection for source %i of %i in blob %s' %
                   (numi+1, len(Ibright), self.name))
@@ -504,7 +499,6 @@ class OneBlob(object):
                     #             vmin=0, vmax=10)
                     #     plt.title('band %s' % b)
                     # self.ps.savefig()
-    
                     # plt.clf()
                     # dimshow(blobs, vmin=0, vmax=1)
                     # plt.title('blobs')
@@ -560,39 +554,6 @@ class OneBlob(object):
                 #            ['Model selection init'], self.bands, None,None,
                 #            None, srcw,srch, self.ps, chi_plots=False)
 
-            if self.deblend:
-                # Create tims with the deblending-weighted pixels.
-                debtims = [Image(data=np.zeros_like(tim.data),
-                               inverr=tim.getInvError(),
-                               wcs=tim.wcs, psf=tim.psf, photocal=tim.photocal,
-                               sky=tim.sky, name=tim.name) for tim in srctims]
-                for dtim,tim in zip(debtims,srctims):
-                    dtim.band = tim.band
-                    dtim.subwcs = tim.subwcs
-                    # Resample the deb weights from blob space to tim space
-                    try:
-                        Yo,Xo,Yi,Xi,nil = resample_with_wcs(
-                            tim.subwcs, self.blobwcs, [], 2)
-                    except:
-                        continue
-                    dpatch = self.deb_profiles[srci]
-                    ph,pw = dpatch.shape
-                    K = np.flatnonzero((Yi >= dpatch.y0) * (Xi >= dpatch.x0) *
-                                       (Yi < (dpatch.y0+ph)) *
-                                       (Xi < (dpatch.x0+pw)))
-                    dtim.data[Yo[K],Xo[K]] = (tim.data[Yo[K], Xo[K]] *
-                        dpatch.patch[Yi[K]-dpatch.y0, Xi[K]-dpatch.x0] /
-                        np.maximum(self.deb_prosum[Yi[K], Xi[K]], 1e-16))
-                debtractor = self.tractor(debtims, srctractor.catalog)
-
-            if self.bigblob and self.plots and self.deblend:
-                plt.clf()
-                coimgs,cons = quick_coadds(debtims, self.bands, srcwcs,
-                                           fill_holes=False)
-                dimshow(get_rgb(coimgs, self.bands))
-                plt.title('Deblend-weighted data')
-                self.ps.savefig()
-                    
             srccat = srctractor.getCatalog()
 
             # Compute the log-likehood without a source here.
@@ -689,20 +650,6 @@ class OneBlob(object):
                 #     plt.title('Initial: ' + name)
                 #     self.ps.savefig()
     
-                if self.deblend:
-                    debtractor.setModelMasks(mm)
-                    enable_galaxy_cache()
-                    debtractor.optimize_loop(**self.optargs)
-
-                if self.deblend and self.plots1:
-                    plt.clf()
-                    modimgs = list(debtractor.getModelImages())
-                    comods,nil = quick_coadds(
-                        debtims, self.bands, srcwcs, images=modimgs)
-                    dimshow(get_rgb(comods, self.bands))
-                    plt.title('Deblended opt: ' + name)
-                    self.ps.savefig()
-                    
                 # First-round optimization (during model selection)
                 #print('Optimizing: first round for', name, ':', len(srctims))
                 #print(newsrc)
@@ -1317,158 +1264,6 @@ class OneBlob(object):
             tim.dq = None
             tims.append(tim)
         return tims
-
-    def run_deblend(self, cat):
-        ras  = np.array([src.pos.ra  for src in cat])
-        decs = np.array([src.pos.dec for src in cat])
-        ok,x,y = self.blobwcs.radec2pixelxy(ras, decs)
-        x -= 1
-        y -= 1
-        Xi = np.round(x).astype(int)
-        Yi = np.round(y).astype(int)
-
-        # Combine the bands to make a single deblending profile...
-        # What weighting to use though?  Median S/N?
-        # Straight per-pixel weight?  (That's like flat-spectrum assumptn)
-        # (this is like [sed-matched] detection...)
-        coimgs,cons,cowimgs,wimgs = quick_coadds(
-            self.tims, self.bands, self.blobwcs, get_cow=True,
-            fill_holes=False)
-        #wts = [np.median(wt[wt > 0]) for wt in wimgs]
-        #print('Median weights:', wts)
-        bimg = np.zeros_like(cowimgs[0])
-        bwt  = np.zeros_like(cowimgs[0])
-        for im,wt in zip(cowimgs,wimgs):
-            bimg += wt * im
-            bwt  += wt
-        bimg /= np.maximum(1e-16, bwt)
-        sig1 = 1. / np.sqrt(np.median(wt[wt > 0]))
-
-        if self.plots:
-            plt.clf()
-            ima = dict(vmin=-2.*sig1, vmax=5.*sig1)
-            dimshow(bimg, **ima)
-            plt.title('Deblend -- merged bands')
-            self.ps.savefig()
-            ax = plt.axis()
-            plt.plot(Xi, Yi, 'r.')
-            plt.axis(ax)
-            self.ps.savefig()
-            self.deb_ima = ima
-
-        # size of region to use as postage stamp for deblending
-        sz = 32
-        h,w = bimg.shape
-
-        profiles = []
-        allprofiles = np.zeros_like(bimg)
-        for isrc,(xi,yi) in enumerate(zip(Xi,Yi)):
-            dx = min(sz, min(xi, w-1-xi))
-            dy = min(sz, min(yi, h-1-yi))
-            x0,y0 = xi - dx, yi - dy
-            slc = slice(y0, yi + dy+1), slice(x0, xi + dx+1)
-            subimg = bimg[slc]
-            subwt =   bwt[slc]
-            flipped = np.fliplr(np.flipud(subimg))
-            flipwt  = np.fliplr(np.flipud(subwt))
-            minimg = subimg.copy()
-            # Mirror the blob boundaries
-            submask = self.blobmask[slc]
-            flipmask = np.fliplr(np.flipud(submask))
-
-            I = np.flatnonzero((flipwt > 0) * (flipped < subimg))
-            minimg.flat[I] = flipped.flat[I]
-            minimg[flipmask == False] = 0
-
-            # Correct for min() bias for two Gaussians.  This isn't
-            # really the right way to do this
-            minimg[subwt > 0] += 0.545 * np.sqrt(1. / subwt[subwt > 0])
-            # And this is *really* a hack
-            minimg = np.maximum(0, minimg)
-
-            patch = Patch(x0, y0, minimg)
-            profiles.append(patch)
-            patch.addTo(allprofiles)
-
-            # if self.plots:
-            #     plt.clf()
-            #     plt.subplot(2,3,1)
-            #     dimshow(subimg, **ima)
-            #     plt.subplot(2,3,2)
-            #     dimshow(flipped, **ima)
-            #     #plt.subplot(2,3,3)
-            #     #dimshow(goodpix, vmin=0, vmax=1)
-            #     plt.subplot(2,3,4)
-            #     dimshow(minimg, **ima)
-            #     plt.subplot(2,3,5)
-            #     dimshow(allprofiles, **ima)
-            #     self.ps.savefig()
-
-        if self.plots:
-            plt.clf()
-            dimshow(allprofiles, **ima)
-            plt.title('Deblend -- sum of profiles')
-            self.ps.savefig()
-
-        self.deb_profiles = profiles
-        self.deb_prosum = allprofiles
-
-    # if plots:
-    #         try:
-    #             Yo,Xo,Yi,Xi,rims = resample_with_wcs(blobwcs, subwcs,[],2)
-    #         except OverlapError:
-    #             continue
-    #         tim.resamp = (Yo, Xo, Yi, Xi)
-    #         if False:
-    #             plt.clf()
-    #             plt.subplot(1,2,1)
-    #             dimshow(img, vmin=-2.*sig1, vmax=5.*sig1)
-    #             plt.subplot(1,2,2)
-    #             dimshow(inverr, vmin=0, vmax=1.1/sig1)
-    #             plt.suptitle('Subimage: ' + name)
-    #             self.ps.savefig()
-    # 
-    # if plots and False:
-    #     plotmods.append(list(tr.getModelImages()))
-    #     plotmodnames.append('Per Source')
-
-    # if plots and False:
-    #     plotmods.append(list(tr.getModelImages()))
-    #     plotmodnames.append('All Sources')
-    # if plots and False:
-    #     _plot_mods(tims, plotmods, plotmodnames, bands, None, None,
-    #            bslc, blobw, blobh, ps)
-
-    # if plots:
-    #     plt.clf()
-    #     dimshow(get_rgb(coimgs, bands))
-    #     ok,sx,sy = blobwcs.radec2pixelxy(
-    #         np.array([src.getPosition().ra  for src in srcs]),
-    #         np.array([src.getPosition().dec for src in srcs]))
-    #     plt.plot(sx, sy, 'r.')
-    #     plt.title('after source fitting')
-    #     self.ps.savefig()
-
-    # FIXME -- render initial models and find significant flux overlap
-    # (product)??  (Could use the same logic above!)  This would give
-    # families of sources to fit simultaneously.  (The
-    # not-friends-of-friends version of blobs!)
-
-
-    # if plots:
-    #     plotmods, plotmodnames = [],[]
-    #     plotmods.append(list(tr.getModelImages()))
-    #     plotmodnames.append('All model selection')
-    #     _plot_mods(tims, plotmods, plotmodnames, bands, None, None, bslc,
-    #                blobw, blobh, ps)
-
-
-    # print('After cutting sources:')
-    # for src,dchi in zip(B.sources, B.dchisqs):
-    #     print('  source', src, 'max dchisq', max(dchi), 'dchisqs', dchi)
-
-    #print('Blob variances:', Time()-tlast)
-    #tlast = Time()
 
 def _convert_ellipses(src):
     if isinstance(src, (DevGalaxy, ExpGalaxy)):
