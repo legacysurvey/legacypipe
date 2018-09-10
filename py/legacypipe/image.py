@@ -241,6 +241,7 @@ class LegacySurveyImage(object):
                           apodize=False,
                           nanomaggies=True, subsky=True, tiny=10,
                           dq=True, invvar=True, pixels=True,
+                          no_remap_invvar=False,
                           constant_invvar=False):
         '''
         Returns a tractor.Image ("tim") object for this image.
@@ -325,8 +326,9 @@ class LegacySurveyImage(object):
         psf_sigma = psf_fwhm / 2.35
         primhdr = self.read_image_primary_header()
 
-        #
-        invvar = self.remap_invvar(invvar, primhdr, img, dq)
+        # for create_testcase: omit remappings.
+        if not no_remap_invvar:
+            invvar = self.remap_invvar(invvar, primhdr, img, dq)
 
         # Ugly: occasionally the CP marks edge pixels with SATUR (and
         # nearby pixels with BLEED).  Convert connected blobs of

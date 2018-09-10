@@ -121,7 +121,8 @@ def main():
             im.check_for_cached_files(survey)
         slc = (slice(ccd.ccd_y0, ccd.ccd_y1), slice(ccd.ccd_x0, ccd.ccd_x1))
         tim = im.get_tractor_image(slc, pixPsf=True, splinesky=True,
-                                   subsky=False, nanomaggies=False)
+                                   subsky=False, nanomaggies=False,
+                                   no_remap_invvar=True)
         print('Tim:', tim.shape)
 
         psf = tim.getPsf()
