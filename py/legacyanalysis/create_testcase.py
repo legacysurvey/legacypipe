@@ -44,9 +44,6 @@ def main():
         ra,dec = args.brick.split(',')
         ra = float(ra)
         dec = float(dec)
-        #class duck(object):
-        #    pass
-        #fakebrick = duck()
         fakebricks = fits_table()
         fakebricks.brickname = np.array([('custom-%06i%s%05i' %
                                           (int(1000*ra), 'm' if dec < 0 else 'p',
@@ -55,10 +52,6 @@ def main():
         fakebricks.dec = np.array([dec])
         bricks = fakebricks
         outbricks = bricks
-        #outbricks = bricks(np.array([0]))
-        #outbricks = bricks[0]
-        #print('Outbricks:', outbricks)
-        #outbricks.about()
     else:
         bricks = survey.get_bricks_readonly()
         outbricks = bricks[np.array([n == args.brick for n in bricks.brickname])]
@@ -141,8 +134,8 @@ def main():
         print('PsfEx:', psfex)
 
         if args.pad:
-            primhdr = fitsio.read_header(imgfn)
-            imghdr = fitsio.read_headedr(imgfn, hdu=ccd.image_hdu)
+            primhdr = fitsio.read_header(im.imgfn)
+            imghdr = fitsio.read_header(im.imgfn, hdu=im.hdu)
             sky = im.read_sky_model(splinesky=True, primhdr=primhdr, imghdr=imghdr)
         else:
             sky = tim.getSky()
@@ -191,20 +184,20 @@ def main():
         if not args.fpack:
             outim.imgfn = outim.imgfn.replace('.fits.fz', '.fits')
         if args.gzip:
-            outim.imgfn = outimg.imgfn.replace('.fits', '.fits.gz')
+            outim.imgfn = outim.imgfn.replace('.fits', '.fits.gz')
 
-        outim.wtfn  = outim.wtfn .replace('.fits', '-%s.fits' % im.ccdname)
+        outim.wtfn  = outim.wtfn.replace('.fits', '-%s.fits' % im.ccdname)
         if not args.fpack:
-            outim.wtfn  = outim.wtfn .replace('.fits.fz', '.fits')
+            outim.wtfn  = outim.wtfn.replace('.fits.fz', '.fits')
         if args.gzip:
-            outim.wtfn = outimg.wtfn.replace('.fits', '.fits.gz')
+            outim.wtfn = outim.wtfn.replace('.fits', '.fits.gz')
 
         if outim.dqfn is not None:
-            outim.dqfn  = outim.dqfn .replace('.fits', '-%s.fits' % im.ccdname)
+            outim.dqfn  = outim.dqfn.replace('.fits', '-%s.fits' % im.ccdname)
             if not args.fpack:
-                outim.dqfn  = outim.dqfn .replace('.fits.fz', '.fits')
+                outim.dqfn  = outim.dqfn.replace('.fits.fz', '.fits')
             if args.gzip:
-                outim.dqfn = outimg.dqfn.replace('.fits', '.fits.gz')
+                outim.dqfn = outim.dqfn.replace('.fits', '.fits.gz')
 
         if bok:
             outim.psffn = outim.psffn.replace('.psf', '-%s.psf' % im.ccdname)
@@ -223,8 +216,10 @@ def main():
         if args.fpack:
             f,ofn = tempfile.mkstemp(suffix='.fits')
             os.close(f)
-        fitsio.write(ofn, None, header=tim.primhdr, clobber=True)
-        fitsio.write(ofn, imgdata, header=tim.hdr, extname=ccd.ccdname)
+        fits = fitsio.FITS(ofn, 'rw', clobber=True)
+        fits.write(None, header=tim.primhdr)
+        fits.write(imgdata, header=tim.hdr, extname=ccd.ccdname)
+        fits.close()
 
         if args.fpack:
             cmd = 'fpack -qz 8 -S %s > %s && rm %s' % (ofn, outim.imgfn, ofn)
@@ -258,8 +253,10 @@ def main():
             f,ofn = tempfile.mkstemp(suffix='.fits')
             os.close(f)
 
-        fitsio.write(ofn, None, header=tim.primhdr, clobber=True)
-        fitsio.write(ofn, ivdata, header=tim.hdr, extname=ccd.ccdname)
+        fits = fitsio.FITS(ofn, 'rw', clobber=True)
+        fits.write(None, header=tim.primhdr)
+        fits.write(ivdata, header=tim.hdr, extname=ccd.ccdname)
+        fits.close()
 
         if args.fpack:
             cmd = 'fpack -qz 8 -S %s > %s && rm %s' % (ofn, wfn, ofn)
@@ -276,8 +273,10 @@ def main():
                 f,ofn = tempfile.mkstemp(suffix='.fits')
                 os.close(f)
 
-            fitsio.write(ofn, None, header=tim.primhdr, clobber=True)
-            fitsio.write(ofn, dqdata, header=tim.hdr, extname=ccd.ccdname)
+            fits = fitsio.FITS(ofn, 'rw', clobber=True)
+            fits.write(None, header=tim.primhdr)
+            fits.write(dqdata, header=tim.hdr, extname=ccd.ccdname)
+            fits.close()
 
             if args.fpack:
                 cmd = 'fpack -g -q 0 -S %s > %s && rm %s' % (ofn, outim.dqfn, ofn)
