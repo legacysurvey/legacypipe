@@ -120,15 +120,32 @@ def main():
         if survey.cache_dir is not None:
             im.check_for_cached_files(survey)
         slc = (slice(ccd.ccd_y0, ccd.ccd_y1), slice(ccd.ccd_x0, ccd.ccd_x1))
+
+        psfkwargs = dict(pixPsf=True, gaussPsf=False, hybridPsf=False,
+                         normalizePsf=False)
+
         tim = im.get_tractor_image(slc, pixPsf=True, splinesky=True,
                                    subsky=False, nanomaggies=False,
                                    no_remap_invvar=True)
         print('Tim:', tim.shape)
 
-        psf = tim.getPsf()
+        if args.pad:
+            psf = im.read_psf_model(0, 0, w=im.width, h=im.height, **psfkwargs)
+            psfex = psf.psfex
+        else:
+            psf = tim.getPsf()
+            psfex = psf.psfex
+        psfex.fwhm = tim.psf_fwhm
         print('PSF:', psf)
-        psfex = psf.psfex
         print('PsfEx:', psfex)
+
+        if args.pad:
+            primhdr = fitsio.read_header(imgfn)
+            imghdr = fitsio.read_headedr(imgfn, hdu=ccd.image_hdu)
+            sky = im.read_sky_model(splinesky=True, primhdr=primhdr, imghdr=imghdr)
+        else:
+            sky = tim.getSky()
+        print('Sky:', sky)
 
         outim = outsurvey.get_image_object(ccd)
         print('Output image:', outim)
@@ -263,13 +280,10 @@ def main():
 
         print('PSF filename:', outim.psffn)
         trymakedirs(outim.psffn, dir=True)
-        print('Writing PsfEx:', outim.psffn, 'with FWHM', tim.psf_fwhm)
-        psfex.fwhm = tim.psf_fwhm
-        psfex.writeto(outim.psffn) #, fwhm=tim.psf_fwhm)
+        print('Writing PsfEx:', outim.psffn)
+        psfex.writeto(outim.psffn)
 
         print('Sky filename:', outim.splineskyfn)
-        sky = tim.getSky()
-        print('Sky:', sky)
         trymakedirs(outim.splineskyfn, dir=True)
         sky.write_fits(outim.splineskyfn)
 
