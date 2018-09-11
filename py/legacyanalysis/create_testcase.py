@@ -28,6 +28,7 @@ def main():
                         help='Directory to search for cached files')
     parser.add_argument('--wise', help='For WISE outputs, give the path to a WCS file describing the sub-brick region of interest, eg, a coadd image')
     parser.add_argument('--fpack', action='store_true', default=False)
+    parser.add_argument('--gzip', action='store_true', default=False)
     parser.add_argument('--pad', action='store_true', default=False,
                         help='Keep original image size, but zero out pixels outside ROI')
     
@@ -189,21 +190,27 @@ def main():
         outim.imgfn = outim.imgfn.replace('.fits', '-%s.fits' % im.ccdname)
         if not args.fpack:
             outim.imgfn = outim.imgfn.replace('.fits.fz', '.fits')
+        if args.gzip:
+            outim.imgfn = outimg.imgfn.replace('.fits', '.fits.gz')
 
         outim.wtfn  = outim.wtfn .replace('.fits', '-%s.fits' % im.ccdname)
         if not args.fpack:
             outim.wtfn  = outim.wtfn .replace('.fits.fz', '.fits')
+        if args.gzip:
+            outim.wtfn = outimg.wtfn.replace('.fits', '.fits.gz')
 
         if outim.dqfn is not None:
             outim.dqfn  = outim.dqfn .replace('.fits', '-%s.fits' % im.ccdname)
             if not args.fpack:
                 outim.dqfn  = outim.dqfn .replace('.fits.fz', '.fits')
+            if args.gzip:
+                outim.dqfn = outimg.dqfn.replace('.fits', '.fits.gz')
 
         if bok:
             outim.psffn = outim.psffn.replace('.psf', '-%s.psf' % im.ccdname)
 
         ccdfn = outim.imgfn
-        ccdfn = ccdfn.replace(outsurvey.get_image_dir(),'')
+        ccdfn = ccdfn.replace(outsurvey.get_image_dir(), '')
         if ccdfn.startswith('/'):
             ccdfn = ccdfn[1:]
         outccds.image_filename[iccd] = ccdfn
@@ -297,8 +304,6 @@ def main():
         otim = outim.get_tractor_image(pixPsf=True, splinesky=True,
                                        hybridPsf=True)
         print('Got output tim:', otim)
-
-
 
     outccds.writeto(os.path.join(args.outdir, 'survey-ccds-1.fits.gz'))
 
