@@ -493,7 +493,18 @@ class OneBlob(object):
                 plt.axis(ax)
                 plt.title('Symmetric-blob masked')
                 self.ps.savefig()
-            
+
+                plt.clf()
+                for tim in srctims:
+                    ie = tim.getInvError()
+                    sigmas = (tim.getImage() * ie)[ie > 0]
+                    plt.hist(sigmas, range=(-5,5), bins=21, histtype='step')
+                    plt.axvline(np.mean(sigmas), alpha=0.5)
+                plt.axvline(0., color='k', lw=3, alpha=0.5)
+                plt.xlabel('Image pixels (sigma)')
+                plt.title('Symmetrized pixel values')
+                self.ps.savefig()
+                
             # # plot the modelmasks for each tim.
             # plt.clf()
             # R = int(np.floor(np.sqrt(len(srctims))))
