@@ -8,6 +8,17 @@ logmsg  = print
 
 class ConstrainedOptimizer(LsqrOptimizer):
 
+    def optimize_loop(self, tractor, dchisq=0., steps=50, **kwargs):
+        R = {}
+        self.hitLimit = False
+        for step in range(steps):
+            dlnp, X, alpha = self.optimize(tractor, **kwargs)
+            if dlnp <= dchisq:
+                break
+        R.update(steps=step)
+        R.update(hit_limit=self.hitLimit)
+        return R
+    
     def tryUpdates(self, tractor, X, alphas=None):
         if alphas is None:
             # 1/1024 to 1 in factors of 2, + sqrt(2.) + 2.
@@ -49,10 +60,19 @@ class ConstrainedOptimizer(LsqrOptimizer):
                           'and update', X[i], 'would hit upper limit', u,
                           'with alpha', alpha, '; max alpha', a)
                     maxalpha = min(maxalpha, a)
+
+            if maxalpha < 1e-8:
+                print('Tiny maxalpha; bailing out without parameter update')
+                self.hitLimit = True
+                break
+                    
             if maxalpha < alpha:
                 alpha = maxalpha
                 bailout = True
-                ## FIXME -- set flag
+                # Here, we "want" to hit the limit, but we won't necessarily
+                # accept the update that hits the limit.  Still want this flag
+                # set, or wait to check whether it improves the log-prob?
+                self.hitLimit = True
                 # We could just multiply by alpha, but in case of numerical
                 # instability, clip values right to limits.
                 pa = []
@@ -63,11 +83,11 @@ class ConstrainedOptimizer(LsqrOptimizer):
                     if u is not None and x > u:
                         x = u
                     pa.append(x)
-                print('Clipping parameter update to', pa)
-                tractor.setParams(pa)
-                lp = tractor.getLogPrior()
-                print('Log prior:', lp)
-                
+                # print('Clipping parameter update to', pa)
+                # tractor.setParams(pa)
+                # lp = tractor.getLogPrior()
+                # print('Log prior:', lp)
+
             tractor.setParams(pa)
             pAfter = tractor.getLogProb()
             logverb('  Log-prob after:', pAfter)

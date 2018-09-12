@@ -665,12 +665,14 @@ class OneBlob(object):
             #print('Optimizing: first round for', name, ':', len(srctims))
             #print(newsrc)
             cpustep0 = time.clock()
-            srctractor.optimize_loop(**self.optargs)
+            R = srctractor.optimize_loop(**self.optargs)
             #print('Optimizing first round', name, 'took',
             #      time.clock()-cpustep0)
             print('First round fit result:', newsrc)
+            if R.get('hit_limit', False):
+                print('Hit parameter limit')
             srctractor.printThawedParams()
-
+            
             disable_galaxy_cache()
 
             # if self.plots1:
@@ -728,11 +730,13 @@ class OneBlob(object):
                     for tim in modtims:
                         tim.freezeAllBut('sky')
 
-                modtractor.optimize_loop(maxcpu=60., **self.optargs)
+                R = modtractor.optimize_loop(maxcpu=60., **self.optargs)
                 #print('Mod selection: after second-round opt:', newsrc)
 
                 if fit_background:
                     print('Second round fit result:', newsrc)
+                    if R.get('hit_limit', False):
+                        print('Hit parameter limit')
                     modtractor.printThawedParams()
 
                 if self.plots_per_model:
