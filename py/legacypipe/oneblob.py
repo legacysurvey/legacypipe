@@ -1495,43 +1495,48 @@ def _get_subimages(tims, mods, src):
         if mh == 0 or mw == 0:
             continue
         # for modelMasks
-        d = { src: ModelMask(0, 0, mw, mh) } #mod.patch != 0) }
+        d = { src: ModelMask(0, 0, mw, mh) }
         modelMasks.append(d)
 
         x0,y0 = mod.x0 , mod.y0
         x1,y1 = x0 + mw, y0 + mh
-        slc = slice(y0,y1), slice(x0, x1)
 
-        subimg = tim.getImage()[slc]
-        if subimg.shape != (mh,mw):
-            print('Subimage shape:', subimg.shape, 'image shape',
-                  tim.getImage().shape, 'slice y', y0,y1, 'x', x0,x1,
-                  'mod shape', mh,mw)
-        # print('  subtim: x0,y0', x0,y0, 'shape', (y1-y0,x1-x0))
-        subpsf = tim.psf.constantPsfAt((x0+x1)/2., (y0+y1)/2.)
-        subtim = Image(data=subimg,
-                       inverr=tim.getInvError()[slc],
-                       wcs=tim.wcs.shifted(x0, y0),
-                       psf=subpsf,
-                       photocal=tim.getPhotoCal(),
-                       sky=tim.sky.shifted(x0, y0),
-                       name=tim.name)
-        sh,sw = subtim.shape
-        subtim.subwcs = tim.subwcs.get_subimage(x0, y0, sw, sh)
-        subtim.band = tim.band
-        subtim.sig1 = tim.sig1
-        subtim.modelMinval = tim.modelMinval
-        subtim.x0 = x0
-        subtim.y0 = y0
-        subtim.meta = tim.meta
-        subtim.psf_sigma = tim.psf_sigma
-        if tim.dq is not None:
-            subtim.dq = tim.dq[slc]
-        else:
-            subtim.dq = None
+        subtim = _get_subtim(tim, x0, x1, y0, y1)
+
+        if subtim.shape != (mh,mw):
+            print('Subtim was not the shape expected:', subtim.shape,
+                  'image shape', tim.getImage().shape, 'slice y', y0,y1,
+                  'x', x0,x1, 'mod shape', mh,mw)
+
         subtims.append(subtim)
-        #print('  ', tim.shape, 'to', subtim.shape)
     return subtims, modelMasks
+
+def _get_subtim(tim, x0, x1, y0, y1):
+    slc = slice(y0,y1), slice(x0, x1)
+    subimg = tim.getImage()[slc]
+    subpsf = tim.psf.constantPsfAt((x0+x1)/2., (y0+y1)/2.)
+    subtim = Image(data=subimg,
+                   inverr=tim.getInvError()[slc],
+                   wcs=tim.wcs.shifted(x0, y0),
+                   psf=subpsf,
+                   photocal=tim.getPhotoCal(),
+                   sky=tim.sky.shifted(x0, y0),
+                   name=tim.name)
+    sh,sw = subtim.shape
+    subtim.subwcs = tim.subwcs.get_subimage(x0, y0, sw, sh)
+    subtim.band = tim.band
+    subtim.sig1 = tim.sig1
+    subtim.modelMinval = tim.modelMinval
+    subtim.x0 = x0
+    subtim.y0 = y0
+    subtim.meta = tim.meta
+    subtim.psf_sigma = tim.psf_sigma
+    if tim.dq is not None:
+        subtim.dq = tim.dq[slc]
+    else:
+        subtim.dq = None
+    return subtim
+
 
 class SourceModels(object):
     '''
