@@ -104,6 +104,7 @@ class OneBlob(object):
         self.plots = plots
 
         self.plots_per_source = plots
+        self.plots_per_model = False
         # blob-1-data.png, etc
         self.plots_single = False
 
@@ -529,7 +530,7 @@ class OneBlob(object):
             dimshow(get_rgb(coimgs, self.bands))
             plt.title('Model selection: stage1 data (srcwcs)')
             self.ps.savefig()
-            self._plots(srctractor, 'Model selection init')
+            #self._plots(srctractor, 'Model selection init')
 
         srccat = srctractor.getCatalog()
 
@@ -691,7 +692,7 @@ class OneBlob(object):
                 modtractor.optimize_loop(maxcpu=60., **self.optargs)
                 #print('Mod selection: after second-round opt:', newsrc)
 
-                if self.plots_per_source:
+                if self.plots_per_model:
                     plt.clf()
                     modimgs = list(modtractor.getModelImages())
                     comods,nil = quick_coadds(modtims, self.bands, srcwcs,
