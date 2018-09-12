@@ -673,18 +673,28 @@ class OneBlob(object):
 
             if name == 'comp' and newsrc is None:
                 # Compute the comp model if exp or dev would be accepted
-                if (max(chisqs['dev'], chisqs['exp']) <
-                    (chisqs['ptsrc'] + galaxy_margin)):
-                    #print('dev/exp not much better than ptsrc;
-                    #not computing comp model.')
-                    continue
 
-                if True:
-                    better = max(chisqs['dev'], chisqs['exp'])
-                    print('DeV or Exp', better,
-                          'is better than PSF', chisqs['ptsrc'],
-                          'by', better-chisqs['ptsrc'], 'vs margin',
-                          galaxy_margin, 'so fitting COMP')
+                smod = _select_model(chisqs, nparams, galaxy_margin,
+                                     self.rex)
+                if smod not in ['dev', 'exp']:
+                    continue
+                # if (max(chisqs['dev'], chisqs['exp']) <
+                #     (chisqs['ptsrc'] + galaxy_margin)):
+                #     #print('dev/exp not much better than ptsrc;
+                #     #not computing comp model.')
+                #     continue
+                # 
+                # if True:
+                #     better = max(chisqs['dev'], chisqs['exp'])
+                #     print('DeV or Exp', better,
+                #           'is better than PSF', chisqs['ptsrc'],
+                #           'by', better-chisqs['ptsrc'], 'vs margin',
+                #           galaxy_margin, 'so fitting COMP')
+                # 
+                #     smod = _select_model(chisqs, nparams, galaxy_margin,
+                #                          self.rex)
+                #     print('Using _select_model:', smod)
+                    
                 newsrc = comp = FixedCompositeGalaxy(
                     src.getPosition(), src.getBrightness(),
                     SoftenedFracDev(0.5), exp.getShape(),
