@@ -322,8 +322,8 @@ class OneBlob(object):
         for numi,srci in enumerate(Ibright):
 
             src = cat[srci]
-            print('Model selection for source %i of %i in blob %s' %
-                  (numi+1, len(Ibright), self.name))
+            print('Model selection for source %i of %i in blob %s; sourcei %i' %
+                  (numi+1, len(Ibright), self.name, srci))
             cpu0 = time.clock()
     
             # Add this source's initial model back in.
@@ -393,36 +393,28 @@ class OneBlob(object):
             yl,yh = np.flatnonzero(yin)[np.array([0,-1])]
             xl,xh = np.flatnonzero(xin)[np.array([0,-1])]
             srcwcs = self.blobwcs.get_subimage(xl, yl, 1+xh-xl, 1+yh-yl)
-            srcbounds = [xl, xh, yl, yh]
+
+            srcwcs_x0y0 = (xl, yl)
+
+            #srcbounds = [xl, xh, yl, yh]
             # A mask for which pixels in the 'srcwcs' square are occupied.
-            srcpix = insrc[yl:yh+1, xl:xh+1]
+            #srcpix = insrc[yl:yh+1, xl:xh+1]
+            srcblobmask = self.blobmask[yl:yh+1, xl:xh+1]
+
             del insrc
         else:
             modelMasks = models.model_masks(srci, src)
             srctims = self.tims
             srcwcs = self.blobwcs
-            srcpix = None
-
-        srctractor = self.tractor(srctims, [src])
-        srctractor.setModelMasks(modelMasks)
-
-        if fit_background:
-            for tim in srctims:
-                #print('Tim', tim, 'sky:', tim.getSky())
-                #tim.getSky().thawAllParams()
-                tim.freezeAllBut('sky')
-            srctractor.thawParam('images')
-
-            print('Fitting sky:')
-            srctractor.printThawedParams()
-            
-        enable_galaxy_cache()
+            srcwcs_x0y0 = (0, 0)
+            #srcpix = None
+            srcblobmask = self.blobmask
 
         if self.plots_per_source:
             # This is a handy blob-coordinates plot of the data
             # going into the fit.
             plt.clf()
-            nil,nil,coimgs,nil = quick_coadds(srctims, self.bands, self.blobwcs,
+            nil,nil,coimgs,nil = quick_coadds(srctims, self.bands,self.blobwcs,
                                               fill_holes=False, get_cow=True)
             dimshow(get_rgb(coimgs, self.bands))
             ax = plt.axis()
@@ -446,18 +438,18 @@ class OneBlob(object):
             # Compute per-band detection maps
             mp = multiproc()
             detmaps,detivs,satmaps = detection_maps(
-                srctims, self.blobwcs, self.bands, mp)
+                srctims, srcwcs, self.bands, mp)
 
             # Compute the symmetric area that fits in this 'tim'
             pos = src.getPosition()
-            ok,x,y = self.blobwcs.radec2pixelxy(pos.ra, pos.dec)
-            bh,bw = self.blobmask.shape
-            ix = int(np.clip(np.round(x-1), 0, bw-1))
-            iy = int(np.clip(np.round(y-1), 0, bh-1))
+            ok,xx,yy = srcwcs.radec2pixelxy(pos.ra, pos.dec)
+            bh,bw = srcblobmask.shape
+            ix = int(np.clip(np.round(xx-1), 0, bw-1))
+            iy = int(np.clip(np.round(yy-1), 0, bh-1))
             
             flipw = min(ix, bw-1-ix)
             fliph = min(iy, bh-1-iy)
-            flipblobs = np.zeros(self.blobmask.shape, bool)
+            flipblobs = np.zeros(srcblobmask.shape, bool)
             # Go through the per-band detection maps, marking significant pixels
             for i,(detmap,detiv) in enumerate(zip(detmaps,detivs)):
                 sn = detmap * np.sqrt(detiv)
@@ -475,24 +467,71 @@ class OneBlob(object):
                 flipblobs = (blobs == goodblob)
             dilated = binary_dilation(flipblobs, iterations=4)
 
+            yin = np.max(dilated, axis=1)
+            xin = np.max(dilated, axis=0)
+            yl,yh = np.flatnonzero(yin)[np.array([0,-1])]
+            xl,xh = np.flatnonzero(xin)[np.array([0,-1])]
+            print('Dilated: good bounds x', xl,xh, 'y', yl,yh)
+
+            oldshape = srcwcs.shape
+            (oldx0,oldy0) = srcwcs_x0y0
+            srcwcs = srcwcs.get_subimage(xl, yl, 1+xh-xl, 1+yh-yl)
+            srcwcs_x0y0 = (oldx0 + xl, oldy0 + yl)
+            srcblobmask = srcblobmask[yl:yh+1, xl:xh+1]
+            print('Cut srcwcs from', oldshape, 'to', srcwcs.shape)
+            dilated = dilated[yl:yh+1, xl:xh+1]
+            flipblobs = flipblobs[yl:yh+1, xl:xh+1]
+            
             saved_srctim_ies = []
+            keep_srctims = []
+            mm = []
             for tim in srctims:
                 # Zero out inverse-errors for all pixels outside
                 # 'dilated'.
                 try:
                     Yo,Xo,Yi,Xi,nil = resample_with_wcs(
-                        tim.subwcs, self.blobwcs, [], 2)
+                        tim.subwcs, srcwcs, [], 2)
                 except:
                     continue
                 ie = tim.getInvError()
-                saved_srctim_ies.append(ie)
                 newie = np.zeros_like(ie)
                 good, = np.nonzero(dilated[Yi,Xi])
+                #print(len(good), 'inverr pixels in the "dilated" region')
+
                 yy = Yo[good]
                 xx = Xo[good]
                 newie[yy,xx] = ie[yy,xx]
-                tim.inverr = newie
+                if np.max(newie) == 0:
+                    print('Tim has inverr all == 0')
+                    continue
 
+                # FIXME -- here, could use modelMasks or create sub-tims
+                # for just the non-zero IE region.
+                yin = np.max((newie > 0), axis=1)
+                xin = np.max((newie > 0), axis=0)
+                yl,yh = np.flatnonzero(yin)[np.array([0,-1])]
+                xl,xh = np.flatnonzero(xin)[np.array([0,-1])]
+                # print('Newie shape:', newie.shape, 'non-zero shape',
+                #         (1+yh-yl, 1+xh-xl), 'non-zero x', xl,xh, 'y', yl,yh)
+
+                good2, = np.nonzero(dilated[Yi,Xi] * (ie[Yo,Xo] > 0))
+                #print(len(good2), 'good inverr pixels in the "dilated" region')
+                yy2 = Yo[good2]
+                xx2 = Xo[good2]
+                print('good2 limits', xx2.min(), xx2.max(), yy2.min(), yy2.max(), 'vs', xl,xh,yl,yh)
+                assert((xx2.min(), xx2.max(), yy2.min(), yy2.max()) == (xl,xh,yl,yh))
+                
+                d = { src: ModelMask(xl, yl, 1+xh-xl, 1+yh-yl) }
+                mm.append(d)
+                
+                saved_srctim_ies.append(ie)
+                tim.inverr = newie
+                keep_srctims.append(tim)
+            
+            srctims = keep_srctims
+            modelMasks = mm
+            
+            
             if self.plots_per_source:
                 from legacypipe.detection import plot_boundary_map
                 plt.clf()
@@ -555,15 +594,29 @@ class OneBlob(object):
             self.ps.savefig()
             #self._plots(srctractor, 'Model selection init')
 
+        srctractor = self.tractor(srctims, [src])
+        srctractor.setModelMasks(modelMasks)
         srccat = srctractor.getCatalog()
 
+        if fit_background:
+            for tim in srctims:
+                tim.freezeAllBut('sky')
+            srctractor.thawParam('images')
+
+            skyparams = srctractor.images.getParams()
+            
+            print('Fitting sky')
+            #srctractor.printThawedParams()
+            
+        enable_galaxy_cache()
+            
         # Compute the log-likehood without a source here.
         srccat[0] = None
 
         if fit_background:
-            print('No source: fit params:')
+            print('Fitting no-source model (sky)')
             srctractor.optimize_loop(**self.optargs)
-            srctractor.images.printThawedParams()
+            #srctractor.images.printThawedParams()
 
         chisqs_none = _per_band_chisqs(srctractor, self.bands)
 
@@ -664,6 +717,10 @@ class OneBlob(object):
             #     plt.title('Initial: ' + name)
             #     self.ps.savefig()
 
+            if fit_background:
+                #print('Resetting sky params.')
+                srctractor.images.setParams(skyparams)
+            
             # First-round optimization (during model selection)
             #print('Optimizing: first round for', name, ':', len(srctims))
             #print(newsrc)
@@ -674,7 +731,7 @@ class OneBlob(object):
             print('First round fit result:', newsrc)
             if R.get('hit_limit', False):
                 print('Hit parameter limit')
-            srctractor.printThawedParams()
+            #srctractor.printThawedParams()
             
             disable_galaxy_cache()
 
@@ -740,7 +797,7 @@ class OneBlob(object):
                     print('Second round fit result:', newsrc)
                     if R.get('hit_limit', False):
                         print('Hit parameter limit')
-                    modtractor.printThawedParams()
+                    #modtractor.printThawedParams()
 
                 if self.plots_per_model:
                     plt.clf()
