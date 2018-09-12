@@ -495,31 +495,16 @@ class OneBlob(object):
                     continue
                 ie = tim.getInvError()
                 newie = np.zeros_like(ie)
-                good, = np.nonzero(dilated[Yi,Xi])
-                #print(len(good), 'inverr pixels in the "dilated" region')
 
+                good, = np.nonzero(dilated[Yi,Xi] * (ie[Yo,Xo] > 0))
+                if len(good) == 0:
+                    print('Tim has inverr all == 0')
+                    continue
                 yy = Yo[good]
                 xx = Xo[good]
                 newie[yy,xx] = ie[yy,xx]
-                if np.max(newie) == 0:
-                    print('Tim has inverr all == 0')
-                    continue
-
-                # FIXME -- here, could use modelMasks or create sub-tims
-                # for just the non-zero IE region.
-                yin = np.max((newie > 0), axis=1)
-                xin = np.max((newie > 0), axis=0)
-                yl,yh = np.flatnonzero(yin)[np.array([0,-1])]
-                xl,xh = np.flatnonzero(xin)[np.array([0,-1])]
-                # print('Newie shape:', newie.shape, 'non-zero shape',
-                #         (1+yh-yl, 1+xh-xl), 'non-zero x', xl,xh, 'y', yl,yh)
-
-                good2, = np.nonzero(dilated[Yi,Xi] * (ie[Yo,Xo] > 0))
-                #print(len(good2), 'good inverr pixels in the "dilated" region')
-                yy2 = Yo[good2]
-                xx2 = Xo[good2]
-                print('good2 limits', xx2.min(), xx2.max(), yy2.min(), yy2.max(), 'vs', xl,xh,yl,yh)
-                assert((xx2.min(), xx2.max(), yy2.min(), yy2.max()) == (xl,xh,yl,yh))
+                xl,xh = xx.min(), xx.max()
+                yl,yh = yy.min(), yy.max()
                 
                 d = { src: ModelMask(xl, yl, 1+xh-xl, 1+yh-yl) }
                 mm.append(d)
