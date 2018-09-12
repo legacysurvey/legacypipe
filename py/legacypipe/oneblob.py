@@ -26,7 +26,8 @@ def one_blob(X):
     if X is None:
         return None
     (nblob, iblob, Isrcs, brickwcs, bx0, by0, blobw, blobh, blobmask, timargs,
-     srcs, bands, plots, ps, simul_opt, use_ceres, hasbright, rex) = X
+     srcs, bands, plots, ps, simul_opt, use_ceres, hasbright, hasmedium,
+     rex) = X
 
     print('Fitting blob number', nblob, 'val', iblob, ':', len(Isrcs),
           'sources, size', blobw, 'x', blobh, len(timargs), 'images')
@@ -68,7 +69,7 @@ def one_blob(X):
     B.blob_nimages= np.zeros(len(B), np.int16) + len(timargs)
     
     ob = OneBlob('%i'%(nblob+1), blobwcs, blobmask, timargs, srcs, bands,
-                 plots, ps, simul_opt, use_ceres, hasbright, rex)
+                 plots, ps, simul_opt, use_ceres, hasbright, hasmedium, rex)
     ob.run(B)
 
     B.blob_totalpix = np.zeros(len(B), np.int32) + ob.total_pix
@@ -94,7 +95,7 @@ def one_blob(X):
 
 class OneBlob(object):
     def __init__(self, name, blobwcs, blobmask, timargs, srcs, bands,
-                 plots, ps, simul_opt, use_ceres, hasbright, rex):
+                 plots, ps, simul_opt, use_ceres, hasbright, hasmedium, rex):
         self.name = name
         self.rex = rex
         self.blobwcs = blobwcs
@@ -112,6 +113,7 @@ class OneBlob(object):
         self.simul_opt = simul_opt
         self.use_ceres = use_ceres
         self.hasbright = hasbright
+        self.hasmedium = hasmedium
         self.tims = self.create_tims(timargs)
         self.total_pix = sum([np.sum(t.getInvError() > 0) for t in self.tims])
         self.plots2 = False
@@ -365,7 +367,7 @@ class OneBlob(object):
     def model_selection_one_source(self, src, srci, models, B):
 
         # FIXME -- set this for source in bright-ish blobs
-        fit_background = True
+        fit_background = self.hasmedium
 
         if self.bigblob:
             mods = [mod[srci] for mod in models.models]
