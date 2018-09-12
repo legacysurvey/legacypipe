@@ -358,6 +358,10 @@ class OneBlob(object):
         del models
 
     def model_selection_one_source(self, src, srci, models, B):
+
+        # FIXME -- set this for source in bright-ish blobs
+        fit_background = True
+
         if self.bigblob:
             mods = [mod[srci] for mod in models.models]
             srctims,modelMasks = _get_subimages(self.tims, mods, src)
@@ -396,6 +400,17 @@ class OneBlob(object):
 
         srctractor = self.tractor(srctims, [src])
         srctractor.setModelMasks(modelMasks)
+
+        if fit_background:
+            for tim in srctims:
+                #print('Tim', tim, 'sky:', tim.getSky())
+                #tim.getSky().thawAllParams()
+                tim.freezeAllBut('sky')
+            srctractor.thawParam('images')
+
+            print('Fitting sky:')
+            srctractor.printThawedParams()
+            
         enable_galaxy_cache()
 
         if self.plots_per_source:
@@ -536,6 +551,12 @@ class OneBlob(object):
 
         # Compute the log-likehood without a source here.
         srccat[0] = None
+
+        if fit_background:
+            print('No source: fit params:')
+            srctractor.optimize_loop(**self.optargs)
+            srctractor.images.printThawedParams()
+
         chisqs_none = _per_band_chisqs(srctractor, self.bands)
 
         nparams = dict(ptsrc=2, simple=2, rex=3, exp=5, dev=5, comp=9)
@@ -596,13 +617,20 @@ class OneBlob(object):
                     #print('dev/exp not much better than ptsrc;
                     #not computing comp model.')
                     continue
+
+                if True:
+                    better = max(chisqs['dev'], chisqs['exp'])
+                    print('DeV or Exp', better,
+                          'is better than PSF', chisqs['ptsrc'],
+                          'by', better-chisqs['ptsrc'], 'vs margin',
+                          galaxy_margin, 'so fitting COMP')
                 newsrc = comp = FixedCompositeGalaxy(
                     src.getPosition(), src.getBrightness(),
                     SoftenedFracDev(0.5), exp.getShape(),
                     dev.getShape()).copy()
             srccat[0] = newsrc
 
-            #print('Starting optimization for', name)
+            print('Starting optimization for', name)
             
             # Use the same modelMask shapes as the original source ('src').
             # Need to create newsrc->mask mappings though:
@@ -635,7 +663,8 @@ class OneBlob(object):
             srctractor.optimize_loop(**self.optargs)
             #print('Optimizing first round', name, 'took',
             #      time.clock()-cpustep0)
-            #print(newsrc)
+            print('First round fit result:', newsrc)
+            srctractor.printThawedParams()
 
             disable_galaxy_cache()
 
@@ -689,8 +718,17 @@ class OneBlob(object):
                 modtractor.setModelMasks(mm)
                 enable_galaxy_cache()
 
+                if fit_background:
+                    modtractor.thawParam('images')
+                    for tim in modtims:
+                        tim.freezeAllBut('sky')
+
                 modtractor.optimize_loop(maxcpu=60., **self.optargs)
                 #print('Mod selection: after second-round opt:', newsrc)
+
+                if fit_background:
+                    print('Second round fit result:', newsrc)
+                    modtractor.printThawedParams()
 
                 if self.plots_per_model:
                     plt.clf()
@@ -720,6 +758,9 @@ class OneBlob(object):
             elif isinstance(newsrc, FixedCompositeGalaxy):
                 oldshape = (newsrc.shapeExp, newsrc.shapeDev,newsrc.fracDev)
 
+            if fit_background:
+                modtractor.freezeParam('images')
+                
             nsrcparams = newsrc.numberOfParams()
             _convert_ellipses(newsrc)
             assert(newsrc.numberOfParams() == nsrcparams)
