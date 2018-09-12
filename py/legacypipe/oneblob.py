@@ -535,23 +535,23 @@ class OneBlob(object):
                 nil,nil,coimgs,nil = quick_coadds(
                     srctims, self.bands, self.blobwcs,
                     fill_holes=False, get_cow=True)
-                dimshow(get_rgb(coimgs, self.bands))
-                ax = plt.axis()
-                plt.plot(x-1, y-1, 'r+')
-                plt.axis(ax)
-                plt.title('Symmetric-blob masked')
-                self.ps.savefig()
+                # dimshow(get_rgb(coimgs, self.bands))
+                # ax = plt.axis()
+                # plt.plot(x-1, y-1, 'r+')
+                # plt.axis(ax)
+                # plt.title('Symmetric-blob masked')
+                # self.ps.savefig()
 
-                plt.clf()
-                for tim in srctims:
-                    ie = tim.getInvError()
-                    sigmas = (tim.getImage() * ie)[ie > 0]
-                    plt.hist(sigmas, range=(-5,5), bins=21, histtype='step')
-                    plt.axvline(np.mean(sigmas), alpha=0.5)
-                plt.axvline(0., color='k', lw=3, alpha=0.5)
-                plt.xlabel('Image pixels (sigma)')
-                plt.title('Symmetrized pixel values')
-                self.ps.savefig()
+                # plt.clf()
+                # for tim in srctims:
+                #     ie = tim.getInvError()
+                #     sigmas = (tim.getImage() * ie)[ie > 0]
+                #     plt.hist(sigmas, range=(-5,5), bins=21, histtype='step')
+                #     plt.axvline(np.mean(sigmas), alpha=0.5)
+                # plt.axvline(0., color='k', lw=3, alpha=0.5)
+                # plt.xlabel('Image pixels (sigma)')
+                # plt.title('Symmetrized pixel values')
+                # self.ps.savefig()
                 
             # # plot the modelmasks for each tim.
             # plt.clf()
@@ -737,79 +737,82 @@ class OneBlob(object):
             #     plt.title('first round: %s' % name)
             #     self.ps.savefig()
 
-            srctractor.setModelMasks(None)
-
-            # Recompute modelMasks in the original tims
-
-            # Limit sizes of huge models
-            if len(self.tims) > 0:
-                _limit_galaxy_stamp_size(newsrc, self.tims[0])
-
-            if self.hasbright:
-                modtims = None
-            elif self.bigblob:
-                mods = []
-                for tim in self.tims:
-                    mod = newsrc.getModelPatch(tim)
-                    if mod is not None:
-                        h,w = tim.shape
-                        mod.clipTo(w,h)
-                        if mod.patch is None:
-                            mod = None
-                    mods.append(mod)
-                modtims,mm = _get_subimages(self.tims, mods, newsrc)
+            if False:
+                srctractor.setModelMasks(None)
+    
+                # Recompute modelMasks in the original tims
+    
+                # Limit sizes of huge models
+                if len(self.tims) > 0:
+                    _limit_galaxy_stamp_size(newsrc, self.tims[0])
+    
+                if self.hasbright:
+                    modtims = None
+                elif self.bigblob:
+                    mods = []
+                    for tim in self.tims:
+                        mod = newsrc.getModelPatch(tim)
+                        if mod is not None:
+                            h,w = tim.shape
+                            mod.clipTo(w,h)
+                            if mod.patch is None:
+                                mod = None
+                        mods.append(mod)
+                    modtims,mm = _get_subimages(self.tims, mods, newsrc)
+                else:
+                    mm = []
+                    modtims = []
+                    for tim in self.tims:
+                        d = dict()
+                        mod = newsrc.getModelPatch(tim)
+                        if mod is None:
+                            continue
+                        mod = _clip_model_to_blob(mod, tim.shape,
+                                                  tim.getInvError())
+                        if mod is None:
+                            continue
+                        mh,mw = mod.shape
+                        d[newsrc] = ModelMask(mod.x0, mod.y0, mw, mh)
+                        modtims.append(tim)
+                        mm.append(d)
+    
+                if modtims is not None:
+                    modtractor = self.tractor(modtims, [newsrc])
+                    modtractor.setModelMasks(mm)
+                    enable_galaxy_cache()
+    
+                    if fit_background:
+                        modtractor.thawParam('images')
+                        for tim in modtims:
+                            tim.freezeAllBut('sky')
+    
+                    R = modtractor.optimize_loop(maxcpu=60., **self.optargs)
+                    #print('Mod selection: after second-round opt:', newsrc)
+    
+                    if fit_background:
+                        print('Second round fit result:', newsrc)
+                        if R.get('hit_limit', False):
+                            print('Hit parameter limit')
+                        #modtractor.printThawedParams()
+    
+                    if self.plots_per_model:
+                        plt.clf()
+                        modimgs = list(modtractor.getModelImages())
+                        comods,nil = quick_coadds(modtims, self.bands, srcwcs,
+                                                    images=modimgs)
+                        dimshow(get_rgb(comods, self.bands))
+                        plt.title('After second-round opt: ' + name)
+                        self.ps.savefig()
+    
+                        # self._plot_coadd(modtims, self.blobwcs,resid=modtractor)
+                        # plt.title('second round: resid %s' % name)
+                        # self.ps.savefig()
+    
+                else:
+                    # Bright star; set modtractor = srctractor for the ivars
+                    srctractor.setModelMasks(newsrc_mm)
+                    modtractor = srctractor
             else:
-                mm = []
-                modtims = []
-                for tim in self.tims:
-                    d = dict()
-                    mod = newsrc.getModelPatch(tim)
-                    if mod is None:
-                        continue
-                    mod = _clip_model_to_blob(mod, tim.shape,
-                                              tim.getInvError())
-                    if mod is None:
-                        continue
-                    mh,mw = mod.shape
-                    d[newsrc] = ModelMask(mod.x0, mod.y0, mw, mh)
-                    modtims.append(tim)
-                    mm.append(d)
-
-            if modtims is not None:
-                modtractor = self.tractor(modtims, [newsrc])
-                modtractor.setModelMasks(mm)
-                enable_galaxy_cache()
-
-                if fit_background:
-                    modtractor.thawParam('images')
-                    for tim in modtims:
-                        tim.freezeAllBut('sky')
-
-                R = modtractor.optimize_loop(maxcpu=60., **self.optargs)
-                #print('Mod selection: after second-round opt:', newsrc)
-
-                if fit_background:
-                    print('Second round fit result:', newsrc)
-                    if R.get('hit_limit', False):
-                        print('Hit parameter limit')
-                    #modtractor.printThawedParams()
-
-                if self.plots_per_model:
-                    plt.clf()
-                    modimgs = list(modtractor.getModelImages())
-                    comods,nil = quick_coadds(modtims, self.bands, srcwcs,
-                                                images=modimgs)
-                    dimshow(get_rgb(comods, self.bands))
-                    plt.title('After second-round opt: ' + name)
-                    self.ps.savefig()
-
-                    # self._plot_coadd(modtims, self.blobwcs,resid=modtractor)
-                    # plt.title('second round: resid %s' % name)
-                    # self.ps.savefig()
-
-            else:
-                # Bright star; set modtractor = srctractor for the ivars
-                srctractor.setModelMasks(newsrc_mm)
                 modtractor = srctractor
 
             # Compute inverse-variances for each source.
