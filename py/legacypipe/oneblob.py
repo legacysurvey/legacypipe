@@ -500,8 +500,11 @@ class OneBlob(object):
                 ax = plt.axis()
                 plt.plot(x-1, y-1, 'r+')
                 plt.axis(ax)
-                plot_boundary_map(flipblobs, rgb=(255,255,255))
-                plot_boundary_map(dilated, rgb=(0,255,0))
+                sx0,sy0 = srcwcs_x0y0
+                sh,sw = srcwcs.shape
+                ext = [sx0, sx0+sw, sy0, sy0+sh]
+                plot_boundary_map(flipblobs, rgb=(255,255,255), extent=ext)
+                plot_boundary_map(dilated, rgb=(0,255,0), extent=ext)
                 plt.title('symmetrized blobs')
                 self.ps.savefig()                
 
