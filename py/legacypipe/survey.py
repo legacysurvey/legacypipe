@@ -251,7 +251,7 @@ class LogRadius(EllipseESoft):
         self.uppers = [5.]
 
     def isLegal(self):
-        return self.logre < self.uppers[0]
+        return self.logre <= self.uppers[0]
 
     @staticmethod
     def getName():

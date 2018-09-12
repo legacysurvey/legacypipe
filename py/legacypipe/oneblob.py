@@ -124,15 +124,20 @@ class OneBlob(object):
             print('Big blob:', name)
         self.trargs = dict()
     
-        if use_ceres:
-            from tractor.ceres_optimizer import CeresOptimizer
-            ceres_optimizer = CeresOptimizer()
-            self.optargs.update(scale_columns=False,
-                                scaled=False,
-                                dynamic_scale=False)
-            self.trargs.update(optimizer=ceres_optimizer)
-        else:
-            self.optargs.update(dchisq = 0.1)
+        # if use_ceres:
+        #     from tractor.ceres_optimizer import CeresOptimizer
+        #     ceres_optimizer = CeresOptimizer()
+        #     self.optargs.update(scale_columns=False,
+        #                         scaled=False,
+        #                         dynamic_scale=False)
+        #     self.trargs.update(optimizer=ceres_optimizer)
+        # else:
+        #     self.optargs.update(dchisq = 0.1)
+
+        from legacypipe.constrained_optimizer import ConstrainedOptimizer
+        self.trargs.update(optimizer=ConstrainedOptimizer())
+        self.optargs.update(dchisq = 0.1)
+        
 
     def run(self, B):
         # Not quite so many plots...
