@@ -25,19 +25,19 @@ class ConstrainedOptimizer(LsqrOptimizer):
             alphas = np.append(2.**np.arange(-10, 1), [np.sqrt(2.), 2.])
 
         pBefore = tractor.getLogProb()
-        logverb('  log-prob before:', pBefore)
+        #logverb('  log-prob before:', pBefore)
         pBest = pBefore
         alphaBest = None
         p0 = tractor.getParams()
 
         lowers = tractor.getLowerBounds()
         uppers = tractor.getUpperBounds()
-        print('Parameters:', tractor.getParamNames())
-        print('  lower bounds:', lowers)
-        print('  upper bounds:', uppers)
+        # print('Parameters:', tractor.getParamNames())
+        # print('  lower bounds:', lowers)
+        # print('  upper bounds:', uppers)
         
         for alpha in alphas:
-            logverb('  Stepping with alpha =', alpha)
+            #logverb('  Stepping with alpha =', alpha)
             pa = [p + alpha * d for p, d in zip(p0, X)]
 
             # Check parameter limits
@@ -90,8 +90,8 @@ class ConstrainedOptimizer(LsqrOptimizer):
 
             tractor.setParams(pa)
             pAfter = tractor.getLogProb()
-            logverb('  Log-prob after:', pAfter)
-            logverb('  delta log-prob:', pAfter - pBefore)
+            #logverb('  Log-prob after:', pAfter)
+            #logverb('  delta log-prob:', pAfter - pBefore)
 
             #print('Step', alpha, 'p', pAfter, 'dlnp', pAfter-pBefore)
             
@@ -119,8 +119,8 @@ class ConstrainedOptimizer(LsqrOptimizer):
             tractor.setParams(p0)
             return 0, 0.
 
-        logverb('  Stepping by', alphaBest,
-                'for delta-logprob', pBest - pBefore)
+        #logverb('  Stepping by', alphaBest,
+        #        'for delta-logprob', pBest - pBefore)
         pa = [p + alphaBest * d for p, d in zip(p0, X)]
         tractor.setParams(pa)
         return pBest - pBefore, alphaBest
