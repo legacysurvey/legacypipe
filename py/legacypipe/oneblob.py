@@ -67,7 +67,11 @@ def one_blob(X):
     B.blob_height = np.zeros(len(B), np.int16) + blobh
     B.blob_npix   = np.zeros(len(B), np.int32) + np.sum(blobmask)
     B.blob_nimages= np.zeros(len(B), np.int16) + len(timargs)
-    
+    B.blob_symm_width   = np.zeros(len(B), np.int16)
+    B.blob_symm_height  = np.zeros(len(B), np.int16)
+    B.blob_symm_npix    = np.zeros(len(B), np.int32)
+    B.blob_symm_nimages = np.zeros(len(B), np.int16)
+
     ob = OneBlob('%i'%(nblob+1), blobwcs, blobmask, timargs, srcs, bands,
                  plots, ps, simul_opt, use_ceres, hasbright, hasmedium, rex)
     ob.run(B)
@@ -394,22 +398,17 @@ class OneBlob(object):
             xin = np.max(insrc, axis=0)
             yl,yh = np.flatnonzero(yin)[np.array([0,-1])]
             xl,xh = np.flatnonzero(xin)[np.array([0,-1])]
-            srcwcs = self.blobwcs.get_subimage(xl, yl, 1+xh-xl, 1+yh-yl)
-
-            srcwcs_x0y0 = (xl, yl)
-
-            #srcbounds = [xl, xh, yl, yh]
-            # A mask for which pixels in the 'srcwcs' square are occupied.
-            #srcpix = insrc[yl:yh+1, xl:xh+1]
-            srcblobmask = self.blobmask[yl:yh+1, xl:xh+1]
-
             del insrc
+
+            srcwcs = self.blobwcs.get_subimage(xl, yl, 1+xh-xl, 1+yh-yl)
+            srcwcs_x0y0 = (xl, yl)
+            # A mask for which pixels in the 'srcwcs' square are occupied.
+            srcblobmask = self.blobmask[yl:yh+1, xl:xh+1]
         else:
             modelMasks = models.model_masks(srci, src)
             srctims = self.tims
             srcwcs = self.blobwcs
             srcwcs_x0y0 = (0, 0)
-            #srcpix = None
             srcblobmask = self.blobmask
 
         if self.plots_per_source:
@@ -436,19 +435,16 @@ class OneBlob(object):
             from astrometry.util.multiproc import multiproc
             from scipy.ndimage.morphology import binary_dilation
             from scipy.ndimage.measurements import label, find_objects
-
             # Compute per-band detection maps
             mp = multiproc()
             detmaps,detivs,satmaps = detection_maps(
                 srctims, srcwcs, self.bands, mp)
-
             # Compute the symmetric area that fits in this 'tim'
             pos = src.getPosition()
             ok,xx,yy = srcwcs.radec2pixelxy(pos.ra, pos.dec)
             bh,bw = srcblobmask.shape
             ix = int(np.clip(np.round(xx-1), 0, bw-1))
             iy = int(np.clip(np.round(yy-1), 0, bh-1))
-            
             flipw = min(ix, bw-1-ix)
             fliph = min(iy, bh-1-iy)
             flipblobs = np.zeros(srcblobmask.shape, bool)
@@ -471,25 +467,24 @@ class OneBlob(object):
             if not np.any(dilated):
                 print('No pixels in dilated symmetric mask')
                 return None
-
             yin = np.max(dilated, axis=1)
             xin = np.max(dilated, axis=0)
             yl,yh = np.flatnonzero(yin)[np.array([0,-1])]
             xl,xh = np.flatnonzero(xin)[np.array([0,-1])]
-            print('Dilated: good bounds x', xl,xh, 'y', yl,yh)
-
-            oldshape = srcwcs.shape
+            #print('Dilated: good bounds x', xl,xh, 'y', yl,yh)
+            #oldshape = srcwcs.shape
             (oldx0,oldy0) = srcwcs_x0y0
             srcwcs = srcwcs.get_subimage(xl, yl, 1+xh-xl, 1+yh-yl)
             srcwcs_x0y0 = (oldx0 + xl, oldy0 + yl)
             srcblobmask = srcblobmask[yl:yh+1, xl:xh+1]
-            print('Cut srcwcs from', oldshape, 'to', srcwcs.shape)
+            #print('Cut srcwcs from', oldshape, 'to', srcwcs.shape)
             dilated = dilated[yl:yh+1, xl:xh+1]
             flipblobs = flipblobs[yl:yh+1, xl:xh+1]
-            
+
             saved_srctim_ies = []
             keep_srctims = []
             mm = []
+            totalpix = 0
             for tim in srctims:
                 # Zero out inverse-errors for all pixels outside
                 # 'dilated'.
@@ -510,6 +505,7 @@ class OneBlob(object):
                 newie[yy,xx] = ie[yy,xx]
                 xl,xh = xx.min(), xx.max()
                 yl,yh = yy.min(), yy.max()
+                totalpix += len(xx)
                 
                 d = { src: ModelMask(xl, yl, 1+xh-xl, 1+yh-yl) }
                 mm.append(d)
@@ -520,7 +516,12 @@ class OneBlob(object):
             
             srctims = keep_srctims
             modelMasks = mm
-            
+
+            B.blob_symm_nimages[srci] = len(srctims)
+            B.blob_symm_npix[srci] = totalpix
+            sh,sw = srcwcs.shape
+            B.blob_symm_width [srci] = sw
+            B.blob_symm_height[srci] = sh
             
             if self.plots_per_source:
                 from legacypipe.detection import plot_boundary_map
