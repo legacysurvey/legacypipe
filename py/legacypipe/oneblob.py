@@ -72,6 +72,8 @@ def one_blob(X):
     B.blob_symm_npix    = np.zeros(len(B), np.int32)
     B.blob_symm_nimages = np.zeros(len(B), np.int16)
 
+    B.hit_limit = np.zeros(len(B), bool)
+
     ob = OneBlob('%i'%(nblob+1), blobwcs, blobmask, timargs, srcs, bands,
                  plots, ps, simul_opt, use_ceres, hasbright, hasmedium, rex)
     ob.run(B)
@@ -323,6 +325,7 @@ class OneBlob(object):
         B.all_models    = np.array([{} for i in range(N)])
         B.all_model_ivs = np.array([{} for i in range(N)])
         B.all_model_cpu = np.array([{} for i in range(N)])
+        B.all_model_hit_limit = np.array([{} for i in range(N)])
 
         # Model selection for sources, in decreasing order of brightness
         for numi,srci in enumerate(Ibright):
@@ -730,7 +733,8 @@ class OneBlob(object):
             #print('Optimizing first round', name, 'took',
             #      time.clock()-cpustep0)
             print('First round fit result:', newsrc)
-            if R.get('hit_limit', False):
+            hit_limit = R.get('hit_limit', False)
+            if hit_limit:
                 print('Hit parameter limit')
             #srctractor.printThawedParams()
             
@@ -781,6 +785,8 @@ class OneBlob(object):
             B.all_model_cpu[srci][name] = cpum1 - cpum0
             cputimes[name] = cpum1 - cpum0
 
+            B.all_model_hit_limit[srci][name] = hit_limit
+
         if mask_others:
             for ie,tim in zip(saved_srctim_ies, srctims):
                 tim.inverr = ie
@@ -802,7 +808,9 @@ class OneBlob(object):
             # https://github.com/legacysurvey/legacypipe/issues/174
             print('Best dchisq is 0 -- dropping source')
             keepsrc = None
-                    
+
+        B.hit_limit[srci] = B.all_model_hit_limit[srci][keepmod]
+
         # This is the model-selection plot
         if self.plots_per_source:
             from collections import OrderedDict

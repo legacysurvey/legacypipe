@@ -1981,7 +1981,10 @@ def stage_fitblobs(T=None,
     # Copy blob results to table T
     for k in ['fracflux', 'fracin', 'fracmasked', 'rchisq', 'cpu_source',
               'cpu_blob', 'blob_width', 'blob_height', 'blob_npix',
-              'blob_nimages', 'blob_totalpix', 'dchisq', 'brightstarinblob']:
+              'blob_nimages', 'blob_totalpix',
+              'blob_symm_width', 'blob_symm_height',
+              'blob_symm_npix', 'blob_symm_nimages',
+              'hit_limit', 'dchisq', 'brightstarinblob']:
         T.set(k, BB.get(k))
 
     invvars = np.hstack(BB.srcinvvars)
@@ -2019,9 +2022,13 @@ def _format_all_models(T, newcat, BB, bands, rex):
     TT = fits_table()
     # Copy only desired columns...
     for k in ['blob', 'brickid', 'brickname', 'dchisq', 'objid',
+              'ra','dec','bx','by',
               'cpu_source', 'cpu_blob', 'ninblob',
               'blob_width', 'blob_height', 'blob_npix', 'blob_nimages',
-              'blob_totalpix']:
+              'blob_totalpix',
+              'blob_symm_width', 'blob_symm_height',
+              'blob_symm_npix', 'blob_symm_nimages',
+              'hit_limit']:
         TT.set(k, T.get(k))
     TT.type = np.array([fits_typemap[type(src)] for src in newcat])
 
@@ -2050,6 +2057,9 @@ def _format_all_models(T, newcat, BB, bands, rex):
         TT.set('%s_cpu' % prefix,
                np.array([m.get(srctype,0) 
                          for m in BB.all_model_cpu]).astype(np.float32))
+        TT.set('%s_hit_limit' % prefix,
+               np.array([m.get(srctype,0)
+                         for m in BB.all_model_hit_limit]).astype(bool))
 
     # remove silly columns
     for col in TT.columns():
