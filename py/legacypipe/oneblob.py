@@ -736,91 +736,6 @@ class OneBlob(object):
             
             disable_galaxy_cache()
 
-            # if self.plots1:
-            #     plt.clf()
-            #     coimgs,cons = quick_coadds(srctims, self.bands, srcwcs, images=list(srctractor.getModelImages()), fill_holes=False)
-            #     dimshow(get_rgb(coimgs,self.bands))
-            #     plt.title('first round: %s' % name)
-            #     self.ps.savefig()
-
-            if False:
-                srctractor.setModelMasks(None)
-    
-                # Recompute modelMasks in the original tims
-    
-                # Limit sizes of huge models
-                if len(self.tims) > 0:
-                    _limit_galaxy_stamp_size(newsrc, self.tims[0])
-    
-                if self.hasbright:
-                    modtims = None
-                elif self.bigblob:
-                    mods = []
-                    for tim in self.tims:
-                        mod = newsrc.getModelPatch(tim)
-                        if mod is not None:
-                            h,w = tim.shape
-                            mod.clipTo(w,h)
-                            if mod.patch is None:
-                                mod = None
-                        mods.append(mod)
-                    modtims,mm = _get_subimages(self.tims, mods, newsrc)
-                else:
-                    mm = []
-                    modtims = []
-                    for tim in self.tims:
-                        d = dict()
-                        mod = newsrc.getModelPatch(tim)
-                        if mod is None:
-                            continue
-                        mod = _clip_model_to_blob(mod, tim.shape,
-                                                  tim.getInvError())
-                        if mod is None:
-                            continue
-                        mh,mw = mod.shape
-                        d[newsrc] = ModelMask(mod.x0, mod.y0, mw, mh)
-                        modtims.append(tim)
-                        mm.append(d)
-    
-                if modtims is not None:
-                    modtractor = self.tractor(modtims, [newsrc])
-                    modtractor.setModelMasks(mm)
-                    enable_galaxy_cache()
-    
-                    if fit_background:
-                        modtractor.thawParam('images')
-                        for tim in modtims:
-                            tim.freezeAllBut('sky')
-    
-                    R = modtractor.optimize_loop(maxcpu=60., **self.optargs)
-                    #print('Mod selection: after second-round opt:', newsrc)
-    
-                    if fit_background:
-                        print('Second round fit result:', newsrc)
-                        if R.get('hit_limit', False):
-                            print('Hit parameter limit')
-                        #modtractor.printThawedParams()
-    
-                    if self.plots_per_model:
-                        plt.clf()
-                        modimgs = list(modtractor.getModelImages())
-                        comods,nil = quick_coadds(modtims, self.bands, srcwcs,
-                                                    images=modimgs)
-                        dimshow(get_rgb(comods, self.bands))
-                        plt.title('After second-round opt: ' + name)
-                        self.ps.savefig()
-    
-                        # self._plot_coadd(modtims, self.blobwcs,resid=modtractor)
-                        # plt.title('second round: resid %s' % name)
-                        # self.ps.savefig()
-    
-                else:
-                    # Bright star; set modtractor = srctractor for the ivars
-                    srctractor.setModelMasks(newsrc_mm)
-                    modtractor = srctractor
-            else:
-                modtractor = srctractor
-
             # Compute inverse-variances for each source.
             # Convert to "vanilla" ellipse parameterization
             # (but save old shapes first)
@@ -832,14 +747,14 @@ class OneBlob(object):
                 oldshape = (newsrc.shapeExp, newsrc.shapeDev,newsrc.fracDev)
 
             if fit_background:
-                modtractor.freezeParam('images')
+                srctractor.freezeParam('images')
                 
             nsrcparams = newsrc.numberOfParams()
             _convert_ellipses(newsrc)
             assert(newsrc.numberOfParams() == nsrcparams)
             # Compute inverse-variances
             # This uses the second-round modelMasks.
-            allderivs = modtractor.getDerivs()
+            allderivs = srctractor.getDerivs()
             ivars = _compute_invvars(allderivs)
             assert(len(ivars) == nsrcparams)
             B.all_model_ivs[srci][name] = np.array(ivars).astype(np.float32)
