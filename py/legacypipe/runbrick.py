@@ -2022,7 +2022,7 @@ def _format_all_models(T, newcat, BB, bands, rex):
     TT = fits_table()
     # Copy only desired columns...
     for k in ['blob', 'brickid', 'brickname', 'dchisq', 'objid',
-              'ra','dec','bx','by',
+              'ra','dec',
               'cpu_source', 'cpu_blob', 'ninblob',
               'blob_width', 'blob_height', 'blob_npix', 'blob_nimages',
               'blob_totalpix',
