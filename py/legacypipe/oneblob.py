@@ -809,7 +809,7 @@ class OneBlob(object):
             print('Best dchisq is 0 -- dropping source')
             keepsrc = None
 
-        B.hit_limit[srci] = B.all_model_hit_limit[srci][keepmod]
+        B.hit_limit[srci] = B.all_model_hit_limit[srci].get(keepmod, False)
 
         # This is the model-selection plot
         if self.plots_per_source:
