@@ -468,6 +468,9 @@ class OneBlob(object):
             if goodblob != 0:
                 flipblobs = (blobs == goodblob)
             dilated = binary_dilation(flipblobs, iterations=4)
+            if not np.any(dilated):
+                print('No pixels in dilated symmetric mask')
+                return None
 
             yin = np.max(dilated, axis=1)
             xin = np.max(dilated, axis=0)
