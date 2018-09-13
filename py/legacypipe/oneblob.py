@@ -105,6 +105,7 @@ class OneBlob(object):
         self.name = name
         self.rex = rex
         self.blobwcs = blobwcs
+        self.pixscale = self.blobwcs.pixel_scale()
         self.blobmask = blobmask
         self.srcs = srcs
         self.bands = bands
@@ -674,8 +675,19 @@ class OneBlob(object):
                     dev.getShape()).copy()
             srccat[0] = newsrc
 
-            print('Starting optimization for', name)
-            
+            #print('Starting optimization for', name)
+
+            # Set maximum galaxy model sizes
+            # FIXME -- could use different fractions for deV vs exp (or comp)
+            fblob = 0.8
+            sh,sw = srcwcs.shape
+            rmax = fblob * max(sh, sw) * self.pixscale
+            if name in ['exp', 'rex', 'dev']:
+                newsrc.shape.setMaxRadius(rmax)
+            elif name in ['comp']:
+                newsrc.shapeExp.setMaxRadius(rmax)
+                newsrc.shapeDev.setMaxRadius(rmax)
+
             # Use the same modelMask shapes as the original source ('src').
             # Need to create newsrc->mask mappings though:
             mm = remap_modelmask(modelMasks, src, newsrc)
