@@ -131,7 +131,7 @@ class OneBlob(object):
         if self.bigblob:
             print('Big blob:', name)
         self.trargs = dict()
-    
+
         # if use_ceres:
         #     from tractor.ceres_optimizer import CeresOptimizer
         #     ceres_optimizer = CeresOptimizer()
@@ -145,7 +145,7 @@ class OneBlob(object):
         from legacypipe.constrained_optimizer import ConstrainedOptimizer
         self.trargs.update(optimizer=ConstrainedOptimizer())
         self.optargs.update(dchisq = 0.1)
-        
+
 
     def run(self, B):
         # Not quite so many plots...
@@ -372,8 +372,8 @@ class OneBlob(object):
         del models
 
     def model_selection_one_source(self, src, srci, models, B):
-
-        # FIXME -- set this for source in bright-ish blobs
+        # Fit local constant sky background levels if we're in the
+        # same blob as a medium-brightness star.
         fit_background = self.hasmedium
 
         if self.bigblob:
@@ -596,10 +596,8 @@ class OneBlob(object):
             for tim in srctims:
                 tim.freezeAllBut('sky')
             srctractor.thawParam('images')
-
             skyparams = srctractor.images.getParams()
-            
-            print('Fitting sky')
+            #print('Fitting sky')
             #srctractor.printThawedParams()
             
         enable_galaxy_cache()
@@ -608,7 +606,7 @@ class OneBlob(object):
         srccat[0] = None
 
         if fit_background:
-            print('Fitting no-source model (sky)')
+            #print('Fitting no-source model (sky)')
             srctractor.optimize_loop(**self.optargs)
             #srctractor.images.printThawedParams()
 
@@ -667,28 +665,9 @@ class OneBlob(object):
 
             if name == 'comp' and newsrc is None:
                 # Compute the comp model if exp or dev would be accepted
-
-                smod = _select_model(chisqs, nparams, galaxy_margin,
-                                     self.rex)
+                smod = _select_model(chisqs, nparams, galaxy_margin, self.rex)
                 if smod not in ['dev', 'exp']:
                     continue
-                # if (max(chisqs['dev'], chisqs['exp']) <
-                #     (chisqs['ptsrc'] + galaxy_margin)):
-                #     #print('dev/exp not much better than ptsrc;
-                #     #not computing comp model.')
-                #     continue
-                # 
-                # if True:
-                #     better = max(chisqs['dev'], chisqs['exp'])
-                #     print('DeV or Exp', better,
-                #           'is better than PSF', chisqs['ptsrc'],
-                #           'by', better-chisqs['ptsrc'], 'vs margin',
-                #           galaxy_margin, 'so fitting COMP')
-                # 
-                #     smod = _select_model(chisqs, nparams, galaxy_margin,
-                #                          self.rex)
-                #     print('Using _select_model:', smod)
-                    
                 newsrc = comp = FixedCompositeGalaxy(
                     src.getPosition(), src.getBrightness(),
                     SoftenedFracDev(0.5), exp.getShape(),
@@ -732,12 +711,12 @@ class OneBlob(object):
             R = srctractor.optimize_loop(**self.optargs)
             #print('Optimizing first round', name, 'took',
             #      time.clock()-cpustep0)
-            print('First round fit result:', newsrc)
+            print('Fit result:', newsrc)
             hit_limit = R.get('hit_limit', False)
-            if hit_limit:
-                print('Hit parameter limit')
+            #if hit_limit:
+            #    print('Hit parameter limit')
             #srctractor.printThawedParams()
-            
+
             disable_galaxy_cache()
 
             # Compute inverse-variances for each source.
@@ -774,8 +753,6 @@ class OneBlob(object):
             # Use the original 'srctractor' here so that the different
             # models are evaluated on the same pixels.
             # ---> AND with the same modelMasks as the original source...
-            #
-            # FIXME -- it is not clear that this is what we want!!!
             #
             srctractor.setModelMasks(newsrc_mm)
             ch = _per_band_chisqs(srctractor, self.bands)
