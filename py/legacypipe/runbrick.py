@@ -1186,6 +1186,7 @@ def stage_srcs(targetrd=None, pixscale=None, targetwcs=None,
         from astrometry.libkd.spherematch import match_radec
         gaia = read_gaia(targetwcs)
         gaia.isbright = np.zeros(len(gaia), bool)
+        gaia.ismedium = np.ones(len(gaia), bool)
         # Handle sources that appear in both Gaia and Tycho-2 by dropping the entry from Tycho-2.
         if len(gaia) and len(tycho):
             # Before matching, apply proper motions to bring them to
@@ -1504,6 +1505,7 @@ def read_tycho2(survey, targetwcs):
     tycho.delete_column('epoch_ra')
     tycho.delete_column('epoch_dec')
     tycho.isbright = np.ones(len(tycho), bool)
+    tycho.ismedium = np.ones(len(tycho), bool)
 
     return tycho
 
@@ -1790,9 +1792,11 @@ def stage_fitblobs(T=None,
 
     # Create the iterator over blobs to process
     brightstars = refstars[refstars.isbright]
+    mediumstars = refstars[refstars.ismedium]
     blobiter = _blob_iter(blobslices, blobsrcs, blobs, targetwcs, tims,
                           cat, bands, plots, ps, simul_opt, use_ceres,
-                          brightstars, brick, rex, skipblobs=skipblobs,
+                          brightstars, mediumstars, brick, rex,
+                          skipblobs=skipblobs,
                           max_blobsize=max_blobsize, custom_brick=custom_brick)
     # to allow timingpool to queue tasks one at a time
     blobiter = iterwrapper(blobiter, len(blobsrcs))
@@ -1977,7 +1981,10 @@ def stage_fitblobs(T=None,
     # Copy blob results to table T
     for k in ['fracflux', 'fracin', 'fracmasked', 'rchisq', 'cpu_source',
               'cpu_blob', 'blob_width', 'blob_height', 'blob_npix',
-              'blob_nimages', 'blob_totalpix', 'dchisq', 'brightstarinblob']:
+              'blob_nimages', 'blob_totalpix',
+              'blob_symm_width', 'blob_symm_height',
+              'blob_symm_npix', 'blob_symm_nimages',
+              'hit_limit', 'dchisq', 'brightstarinblob']:
         T.set(k, BB.get(k))
 
     invvars = np.hstack(BB.srcinvvars)
@@ -2015,9 +2022,13 @@ def _format_all_models(T, newcat, BB, bands, rex):
     TT = fits_table()
     # Copy only desired columns...
     for k in ['blob', 'brickid', 'brickname', 'dchisq', 'objid',
+              'ra','dec',
               'cpu_source', 'cpu_blob', 'ninblob',
               'blob_width', 'blob_height', 'blob_npix', 'blob_nimages',
-              'blob_totalpix']:
+              'blob_totalpix',
+              'blob_symm_width', 'blob_symm_height',
+              'blob_symm_npix', 'blob_symm_nimages',
+              'hit_limit']:
         TT.set(k, T.get(k))
     TT.type = np.array([fits_typemap[type(src)] for src in newcat])
 
@@ -2046,6 +2057,9 @@ def _format_all_models(T, newcat, BB, bands, rex):
         TT.set('%s_cpu' % prefix,
                np.array([m.get(srctype,0) 
                          for m in BB.all_model_cpu]).astype(np.float32))
+        TT.set('%s_hit_limit' % prefix,
+               np.array([m.get(srctype,0)
+                         for m in BB.all_model_hit_limit]).astype(bool))
 
     # remove silly columns
     for col in TT.columns():
@@ -2074,17 +2088,24 @@ def _format_all_models(T, newcat, BB, bands, rex):
     return TT,hdr
 
 def _blob_iter(blobslices, blobsrcs, blobs, targetwcs, tims, cat, bands,
-               plots, ps, simul_opt, use_ceres, brightstars, brick, rex,
+               plots, ps, simul_opt, use_ceres, brightstars, mediumstars,
+               brick, rex,
                skipblobs=[], max_blobsize=None, custom_brick=False):
     from collections import Counter
     H,W = targetwcs.shape
     brightstarblobs = set(blobs[brightstars.iby, brightstars.ibx])
+    mediumstarblobs = set(blobs[mediumstars.iby, mediumstars.ibx])
     # Remove -1 = no blob from set; not strictly necessary, just cosmetic
     try:
         brightstarblobs.remove(-1)
     except:
         pass
+    try:
+        mediumstarblobs.remove(-1)
+    except:
+        pass
     print('Blobs containing bright stars:', brightstarblobs)
+    print('Blobs containing medium stars:', mediumstarblobs)
 
     # sort blobs by size so that larger ones start running first
     blobvals = Counter(blobs[blobs>=0])
@@ -2136,13 +2157,14 @@ def _blob_iter(blobslices, blobsrcs, blobs, targetwcs, tims, cat, bands,
             break
 
         hasbright = iblob in brightstarblobs
+        hasmedium = iblob in mediumstarblobs
 
         npix = np.sum(blobmask)
         print('Blob', nblob+1, 'of', len(blobslices), ': blob id:', iblob,
               'sources:', len(Isrcs), 'size:', blobw, 'x', blobh,
               #'center', (bx0+bx1)/2, (by0+by1)/2,
               'brick X: %i,%i, Y: %i,%i' % (bx0,bx1,by0,by1),
-              'npix:', npix, 'one pixel:', onex,oney, 'has bright star:', hasbright)
+              'npix:', npix, 'one pixel:', onex,oney, 'has bright star:', hasbright, 'has medium-bright star:', hasmedium)
 
         if max_blobsize is not None and npix > max_blobsize:
             print('Number of pixels in blob,', npix, ', exceeds max blobsize', max_blobsize)
@@ -2185,7 +2207,7 @@ def _blob_iter(blobslices, blobsrcs, blobs, targetwcs, tims, cat, bands,
 
         yield (nblob, iblob, Isrcs, targetwcs, bx0, by0, blobw, blobh,
                blobmask, subtimargs, [cat[i] for i in Isrcs], bands, plots, ps,
-               simul_opt, use_ceres, hasbright, rex)
+               simul_opt, use_ceres, hasbright, hasmedium, rex)
 
 def _bounce_one_blob(X):
     ''' This just wraps the one_blob function, for debugging &

@@ -248,7 +248,13 @@ class LogRadius(EllipseESoft):
     def __init__(self, *args, **kwargs):
         super(LogRadius, self).__init__(*args, **kwargs)
         self.lowers = [None]
-        self.uppers = [None]
+        self.uppers = [5.]
+
+    def isLegal(self):
+        return self.logre <= self.uppers[0]
+
+    def setMaxLogRadius(self, rmax):
+        self.uppers[0] = rmax
 
     @staticmethod
     def getName():
