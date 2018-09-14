@@ -665,7 +665,7 @@ class OneBlob(object):
             if name == 'gals':
                 # If 'simple' was better than 'ptsrc', or the source is
                 # bright, try the galaxy models.
-                if ((chisqs[simname] > chisqs['ptsrc']) or
+                if ((chisqs.get(simname,0) > chisqs['ptsrc']) or
                     (chisqs['ptsrc'] > 400)):
                     trymodels.extend([
                         ('dev', dev), ('exp', exp), ('comp', comp)])
@@ -748,7 +748,8 @@ class OneBlob(object):
                                             newsrc.getPosition().dec)
             ix = int(ix-1)
             iy = int(iy-1)
-            if not srcblobmask[iy,ix]:
+            sh,sw = srcblobmask.shape
+            if ix < 0 or iy < 0 or ix >= sw or iy >= sh or not srcblobmask[iy,ix]:
                 # Exited blob!
                 print('Source exited sub-blob!')
                 # FIXME -- do we want to save any of the fitting results?
