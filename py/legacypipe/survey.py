@@ -253,7 +253,7 @@ class LogRadius(EllipseESoft):
     def isLegal(self):
         return self.logre <= self.uppers[0]
 
-    def setMaxRadius(self, rmax):
+    def setMaxLogRadius(self, rmax):
         self.uppers[0] = rmax
 
     @staticmethod

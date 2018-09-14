@@ -681,12 +681,14 @@ class OneBlob(object):
             # FIXME -- could use different fractions for deV vs exp (or comp)
             fblob = 0.8
             sh,sw = srcwcs.shape
-            rmax = fblob * max(sh, sw) * self.pixscale
+            rmax = np.log(fblob * max(sh, sw) * self.pixscale)
             if name in ['exp', 'rex', 'dev']:
-                newsrc.shape.setMaxRadius(rmax)
+                newsrc.shape.setMaxLogRadius(rmax)
             elif name in ['comp']:
-                newsrc.shapeExp.setMaxRadius(rmax)
-                newsrc.shapeDev.setMaxRadius(rmax)
+                newsrc.shapeExp.setMaxLogRadius(rmax)
+                newsrc.shapeDev.setMaxLogRadius(rmax)
+
+            ### FIXME -- also set model rendering limits here??
 
             # Use the same modelMask shapes as the original source ('src').
             # Need to create newsrc->mask mappings though:
@@ -725,8 +727,14 @@ class OneBlob(object):
             #      time.clock()-cpustep0)
             print('Fit result:', newsrc)
             hit_limit = R.get('hit_limit', False)
-            #if hit_limit:
-            #    print('Hit parameter limit')
+            if hit_limit:
+                if name in ['exp', 'rex', 'dev']:
+                    print('Hit limit: r %.2f vs %.2f' %
+                          (newsrc.shape.re, np.exp(rmax)))
+                elif name in ['comp']:
+                    print('Hit limit: r %.2f, %.2f vs %.2f' %
+                          (newsrc.shapeExp.re, newsrc.shapeDev.re,
+                           np.exp(rmax)))
             #srctractor.printThawedParams()
 
             disable_galaxy_cache()
