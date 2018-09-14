@@ -1177,15 +1177,21 @@ def stage_srcs(targetrd=None, pixscale=None, targetwcs=None,
     # peaks at the edge of the mask.
     saturated_pix = [binary_dilation(satmap > 0, iterations=4)
                      for satmap in satmaps]
-    
+
+    # How big of a margin to search for bright stars -- this should be
+    # based on the maximum "radius" they are considered to affect.
+    ref_margin = 0.125
+    mpix = int(np.ceil(ref_margin * 3600. / pixscale))
+    marginwcs = targetwcs.get_subimage(-mpix, -mpix, W+2*mpix, H+2*mpix)
+    print('Enlarged target WCS from', targetwcs, 'to', marginwcs, 'for ref stars')
     # Read Tycho-2 stars and use as saturated sources.
-    tycho = read_tycho2(survey, targetwcs)
+    tycho = read_tycho2(survey, marginwcs)
     refstars = tycho
 
     # Add Gaia stars
     if gaia_stars:
         from astrometry.libkd.spherematch import match_radec
-        gaia = read_gaia(targetwcs)
+        gaia = read_gaia(marginwcs)
         gaia.isbright = np.zeros(len(gaia), bool)
         gaia.ismedium = np.ones(len(gaia), bool)
         # Handle sources that appear in both Gaia and Tycho-2 by dropping the entry from Tycho-2.
@@ -1213,29 +1219,38 @@ def stage_srcs(targetrd=None, pixscale=None, targetwcs=None,
     # Read the catalog of star (open and globular) clusters and add them to the
     # set of reference stars (with the isbright bit set).
     if star_clusters:
-        clusters = read_star_clusters(targetwcs)
-        
+        clusters = read_star_clusters(marginwcs)
+        print('Found', len(clusters), 'star clusters nearby')
         if len(clusters):
             refstars = merge_tables([refstars, clusters], columns='fillzero')
 
-    # Don't detect new sources where we already have reference stars
-    avoid_x = refstars.ibx
-    avoid_y = refstars.iby
-        
-    # Create Tractor sources from reference stars
-    refstarcat = [GaiaSource.from_catalog(g, bands) for g in refstars]
-
     # FIXME - Initialize a big-galaxy catalog here--?
 
+    # Grab subset of reference stars that are actually *within* the
+    # brick.  Recompute "ibx", "iby" using *targetwcs* not *marginwcs*.
+    ok,xx,yy = targetwcs.radec2pixelxy(refstars.ra, refstars.dec)
+    # ibx = integer brick coords
+    refstars.ibx = np.round(xx-1.).astype(int)
+    refstars.iby = np.round(yy-1.).astype(int)
+
+    refstars_in = refstars[(refstars.ibx >= 0) * (refstars.ibx < W) *
+                           (refstars.iby >= 0) * (refstars.iby < H)]
+    # Create Tractor sources from reference stars
+    refstarcat = [GaiaSource.from_catalog(g, bands) for g in refstars_in]
+
+    # Don't detect new sources where we already have reference stars
+    avoid_x = refstars_in.ibx
+    avoid_y = refstars_in.iby
+    
     # Saturated blobs -- create a source for each, except for those
     # that already have a Tycho-2 or Gaia star
     satmap = reduce(np.logical_or, satmaps)
     satblobs,nsat = label(satmap > 0)
-    if len(refstars):
+    if len(refstars_in):
         # Build a map from old "satblobs" to new; identity to start
         remap = np.arange(nsat+1)
         # Drop blobs that contain a reference star
-        zeroout = satblobs[refstars.iby, refstars.ibx]
+        zeroout = satblobs[refstars_in.iby, refstars_in.ibx]
         remap[zeroout] = 0
         # Renumber them to be contiguous
         I = np.flatnonzero(remap)
@@ -1318,8 +1333,8 @@ def stage_srcs(targetrd=None, pixscale=None, targetwcs=None,
     if len(sat):
         tables.append(sat)
         cats += satcat
-    if len(refstars):
-        tables.append(refstars)
+    if len(refstars_in):
+        tables.append(refstars_in)
         cats += refstarcat
     T = merge_tables(tables, columns='fillzero')
     cat = Catalog(*cats)
@@ -1437,23 +1452,22 @@ def read_star_clusters(targetwcs):
     clusters = fits_table(clusterfile)
 
     ok, xx, yy = targetwcs.radec2pixelxy(clusters.ra, clusters.dec)
-    # ibx = integer brick coords
-    clusters.ibx = np.round(xx-1.).astype(int)
-    clusters.iby = np.round(yy-1.).astype(int)
     margin = 10
     H, W = targetwcs.shape
-    clusters.cut( ok * (clusters.ibx > -margin) * (clusters.ibx < W+margin) *
-                  (clusters.iby > -margin) * (clusters.iby < H+margin) )
+    clusters.cut( ok * (xx > -margin) * (xx < W+margin) *
+                  (yy > -margin) * (yy < H+margin) )
     if len(clusters) > 0:
         print('Cut to {} star cluster(s) within the brick'.format(len(clusters)))
         del ok,xx,yy
-        clusters.ibx = np.clip(clusters.ibx, 0, W-1)
-        clusters.iby = np.clip(clusters.iby, 0, H-1)
 
         # For each cluster, add a single faint star at the same coordinates, but
         # set the isbright bit so we get all the brightstarinblob logic.
         clusters.ref_cat = clusters.name
         clusters.mag = np.array([35])
+
+        # Radius in degrees (from "majax" in arcmin)
+        clusters.radius = clusters.majax / 60.
+        clusters.radius[np.logical_not(np.isfinite(clusters.radius))] = 1./60.
 
         # Remove unnecessary columns but then add all the Gaia-style columns we need.
         for c in ['name', 'type', 'ra_hms', 'dec_dms', 'const', 'majax', 'minax', 'pa',
@@ -1470,6 +1484,9 @@ def read_star_clusters(targetwcs):
     return clusters
 
 def read_gaia(targetwcs):
+    '''
+    *margin* in degrees
+    '''
     from legacypipe.gaiacat import GaiaCatalog
     gaia = GaiaCatalog().get_catalog_in_wcs(targetwcs)
     print('Got Gaia stars:', gaia)
@@ -1486,17 +1503,12 @@ def read_gaia(targetwcs):
         (gaia.G >= 19.) * (gaia.astrometric_excess_noise < 10.**(0.5 + 0.2*(gaia.G - 19.))))
 
     ok,xx,yy = targetwcs.radec2pixelxy(gaia.ra, gaia.dec)
-    # ibx = integer brick coords
-    gaia.ibx = np.round(xx-1.).astype(int)
-    gaia.iby = np.round(yy-1.).astype(int)
     margin = 10
     H,W = targetwcs.shape
-    gaia.cut(ok * (gaia.ibx > -margin) * (gaia.ibx < W+margin) *
-              (gaia.iby > -margin) * (gaia.iby < H+margin))
+    gaia.cut(ok * (xx > -margin) * (xx < W+margin) *
+              (yy > -margin) * (yy < H+margin))
     print('Cut to', len(gaia), 'Gaia stars within brick')
     del ok,xx,yy
-    gaia.ibx = np.clip(gaia.ibx, 0, W-1)
-    gaia.iby = np.clip(gaia.iby, 0, H-1)
 
     # Gaia version?
     gaiaver = int(os.getenv('GAIA_CAT_VER', '1'))
@@ -1516,6 +1528,14 @@ def read_gaia(targetwcs):
     for c in ['pmra', 'pmdec', 'parallax', 'pmra_ivar', 'pmdec_ivar', 'parallax_ivar']:
         X = gaia.get(c)
         X[np.logical_not(np.isfinite(X))] = 0.
+
+    # radius to consider affected by this star --
+    # FIXME -- want something more sophisticated here!
+    # (also see tycho.radius below)
+    gaia.radius = np.zeros(len(gaia), np.float32)
+    # first in pixels
+    gaia.radius = np.minimum(1800., 150. * 2.5**((11. - gaia.G)/4.)) * 0.262/3600.
+
     return gaia
 
 def read_tycho2(survey, targetwcs):
@@ -1541,16 +1561,11 @@ def read_tycho2(survey, targetwcs):
         print('Warning: no "isgalaxy" column in Tycho-2 catalog')
     #print('Read', len(tycho), 'Tycho-2 stars')
     ok,xx,yy = targetwcs.radec2pixelxy(tycho.ra, tycho.dec)
-    ## ibx = integer brick x
-    tycho.ibx = np.round(xx-1.).astype(int)
-    tycho.iby = np.round(yy-1.).astype(int)
     margin = 10
     H,W = targetwcs.shape
-    tycho.cut(ok * (tycho.ibx > -margin) * (tycho.ibx < W+margin) *
-              (tycho.iby > -margin) * (tycho.iby < H+margin))
+    tycho.cut(ok * (xx > -margin) * (xx < W+margin) *
+              (yy > -margin) * (yy < H+margin))
     print('Cut to', len(tycho), 'Tycho-2 stars within brick')
-    tycho.ibx = np.clip(tycho.ibx, 0, W-1)
-    tycho.iby = np.clip(tycho.iby, 0, H-1)
     del ok,xx,yy
 
     tycho.ref_cat = np.array(['T2'] * len(tycho))
@@ -1568,6 +1583,9 @@ def read_tycho2(survey, targetwcs):
     tycho.mag = tycho.mag_vt
     tycho.mag[tycho.mag == 0] = tycho.mag_hp[tycho.mag == 0]
 
+    ## FIXME -- want something better here!!
+    tycho.radius = np.minimum(1800., 150. * 2.5**((11. - tycho.mag)/4.)) * 0.262/3600.
+    
     for c in ['tyc1', 'tyc2', 'tyc3', 'mag_bt', 'mag_vt', 'mag_hp',
               'mean_ra', 'mean_dec', #'epoch_ra', 'epoch_dec',
               'sigma_pm_ra', 'sigma_pm_dec', 'sigma_ra', 'sigma_dec']:
