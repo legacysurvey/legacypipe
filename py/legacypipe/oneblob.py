@@ -840,6 +840,7 @@ class OneBlob(object):
                     continue
                 srccat[0] = mods[modname]
                 srctractor.setModelMasks(None)
+                axes = []
                 plt.subplot(rows, cols, imod+1)
                 if modname == 'none':
                     # In the first panel, we show a coadd of the data
@@ -848,6 +849,7 @@ class OneBlob(object):
                     rgb = get_rgb(coimgs, self.bands)
                     dimshow(rgb, ticks=False)
                     subplots.append(('data', rgb))
+                    axes.append(plt.gca())
                     ax = plt.axis()
                     ok,x,y = srcwcs.radec2pixelxy(
                         src.getPosition().ra, src.getPosition().dec)
@@ -864,6 +866,7 @@ class OneBlob(object):
                     rgbims = comods
                     rgb = get_rgb(comods, self.bands)
                     dimshow(rgb, ticks=False)
+                    axes.append(plt.gca())
                     subplots.append(('mod'+modname, rgb))
                     tt = modname #+ '\n(%.0f s)' % cputimes[modname]
                     chis = [((tim.getImage() - mod) * tim.getInvError())**2
@@ -874,6 +877,7 @@ class OneBlob(object):
                 # Second row: same rgb image with arcsinh stretch
                 plt.subplot(rows, cols, imod+1+cols)
                 dimshow(get_rgb(rgbims, self.bands, **rgbkwargs), ticks=False)
+                axes.append(plt.gca())
                 plt.title(tt)
 
                 # residuals
@@ -882,8 +886,16 @@ class OneBlob(object):
                 plt.subplot(rows, cols, imod+1+2*cols)
                 rgb = get_rgb(coresids, self.bands, **rgbkwargs_resid)
                 dimshow(rgb, ticks=False)
+                axes.append(plt.gca())
                 subplots.append(('res'+modname, rgb))
                 plt.title('chisq %.0f' % chisqs[modname], fontsize=8)
+
+                # Highlight the model to be kept
+                if modname == keepmod:
+                    for ax in axes:
+                        for spine in ax.spines.values():
+                            spine.set_edgecolor('red')
+                            spine.set_linewidth(2)
             plt.suptitle('Blob %s, source %i: keeping %s\nwas: %s' %
                          (self.name, srci, keepmod, str(src)), fontsize=10)
             self.ps.savefig()
