@@ -593,6 +593,13 @@ class OneBlob(object):
         srctractor.setModelMasks(modelMasks)
         srccat = srctractor.getCatalog()
 
+        ok,ix,iy = srcwcs.radec2pixelxy(src.getPosition().ra,
+                                        src.getPosition().dec)
+        ix = int(ix-1)
+        iy = int(iy-1)
+        # Start in blob
+        assert(srcblobmask[iy,ix])
+
         if fit_background:
             for tim in srctims:
                 tim.freezeAllBut('sky')
@@ -736,6 +743,17 @@ class OneBlob(object):
                           (newsrc.shapeExp.re, newsrc.shapeDev.re,
                            np.exp(rmax)))
             #srctractor.printThawedParams()
+
+            ok,ix,iy = srcwcs.radec2pixelxy(newsrc.getPosition().ra,
+                                            newsrc.getPosition().dec)
+            ix = int(ix-1)
+            iy = int(iy-1)
+            if not srcblobmask[iy,ix]:
+                # Exited blob!
+                print('Source exited sub-blob!')
+                # FIXME -- do we want to save any of the fitting results?
+                # Or flag this??
+                continue
 
             disable_galaxy_cache()
 
