@@ -1429,7 +1429,6 @@ def read_star_clusters(targetwcs):
     clusters.write('NGC-star-clusters.fits', overwrite=True)
 
     """
-    from legacyanalysis.gaiacat import GaiaCatalog
     from pkg_resources import resource_filename
 
     clusterfile = resource_filename('legacypipe', 'data/NGC-star-clusters.fits')
@@ -1461,8 +1460,6 @@ def read_star_clusters(targetwcs):
                   'cstarbmag', 'cstarvmag', 'messier', 'ngc', 'ic', 'cstarnames', 'identifiers',
                   'commonnames', 'nednotes', 'ongcnotes']:
             clusters.delete_column(c)
-
-        #for c in ['parallax', 'ref_epoch', 
 
         # Set isbright=True
         clusters.isbright = np.ones(len(clusters), bool)
