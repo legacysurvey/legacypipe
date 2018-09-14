@@ -26,7 +26,7 @@ def one_blob(X):
     if X is None:
         return None
     (nblob, iblob, Isrcs, brickwcs, bx0, by0, blobw, blobh, blobmask, timargs,
-     srcs, bands, plots, ps, simul_opt, use_ceres, hasbright, rex) = X
+     srcs, bands, plots, ps, simul_opt, use_ceres, hasbright, haslargegal, rex) = X
 
     print('Fitting blob number', nblob, 'val', iblob, ':', len(Isrcs),
           'sources, size', blobw, 'x', blobh, len(timargs), 'images')
@@ -68,7 +68,7 @@ def one_blob(X):
     B.blob_nimages= np.zeros(len(B), np.int16) + len(timargs)
     
     ob = OneBlob('%i'%(nblob+1), blobwcs, blobmask, timargs, srcs, bands,
-                 plots, ps, simul_opt, use_ceres, hasbright, rex)
+                 plots, ps, simul_opt, use_ceres, hasbright, haslargegal, rex)
     ob.run(B)
 
     B.blob_totalpix = np.zeros(len(B), np.int32) + ob.total_pix
@@ -86,6 +86,10 @@ def one_blob(X):
     if hasbright:
         B.brightstarinblob[:] = True
 
+    B.largegalaxyinblob = np.zeros(len(B), bool)
+    if haslargegal:
+        B.largegalaxyinblob[:] = True
+
     B.cpu_blob = np.zeros(len(B), np.float32)
     t1 = time.clock()
     B.cpu_blob[:] = t1 - t0
@@ -94,7 +98,7 @@ def one_blob(X):
 
 class OneBlob(object):
     def __init__(self, name, blobwcs, blobmask, timargs, srcs, bands,
-                 plots, ps, simul_opt, use_ceres, hasbright, rex):
+                 plots, ps, simul_opt, use_ceres, hasbright, haslargegal, rex):
         self.name = name
         self.rex = rex
         self.blobwcs = blobwcs
@@ -111,6 +115,7 @@ class OneBlob(object):
         self.simul_opt = simul_opt
         self.use_ceres = use_ceres
         self.hasbright = hasbright
+        self.haslargegal = haslargegal
         self.deblend = False
         self.tims = self.create_tims(timargs)
         self.total_pix = sum([np.sum(t.getInvError() > 0) for t in self.tims])
@@ -616,8 +621,11 @@ class OneBlob(object):
                 rex = simple
             else:
                 simname = 'simple'
-                
-            trymodels = [('ptsrc', ptsrc)]
+
+            if hasattr(src, 'isForcedLargeGalaxy') and src.isForcedLargeGalaxy:
+                trymodels = []
+            else:
+                trymodels = [('ptsrc', ptsrc)]
 
             if oldmodel == 'ptsrc':
                 forced = False
@@ -629,6 +637,10 @@ class OneBlob(object):
                     print('Gaia source is forced to be a point source -- not trying other models')
                 elif self.hasbright:
                     print('Not computing galaxy models: bright star in blob')
+                elif self.haslargegal:
+                    print('Large galaxy in blob -- only trying galaxy models.')
+                elif self.haslargegal:
+                    print('Large galaxy in blob')
                 else:
                     trymodels.append((simname, simple))
                     # Try galaxy models if simple > ptsrc, or if bright.
@@ -652,11 +664,12 @@ class OneBlob(object):
 
                 if name == 'comp' and newsrc is None:
                     # Compute the comp model if exp or dev would be accepted
-                    if (max(chisqs['dev'], chisqs['exp']) <
-                        (chisqs['ptsrc'] + galaxy_margin)):
-                        #print('dev/exp not much better than ptsrc;
-                        #not computing comp model.')
-                        continue
+                    if 'ptsrc' in chisqs.keys(): # not true for isLargeGalaxy
+                        if (max(chisqs['dev'], chisqs['exp']) <
+                            (chisqs['ptsrc'] + galaxy_margin)):
+                            #print('dev/exp not much better than ptsrc;
+                            #not computing comp model.')
+                            continue
                     newsrc = comp = FixedCompositeGalaxy(
                         src.getPosition(), src.getBrightness(),
                         SoftenedFracDev(0.5), exp.getShape(),
@@ -734,9 +747,11 @@ class OneBlob(object):
                 # Limit sizes of huge models
                 if len(self.tims) > 0:
                     _limit_galaxy_stamp_size(newsrc, self.tims[0])
-    
+                
                 if self.hasbright:
                     modtims = None
+                elif self.haslargegal:
+                    modtims = None # JM: ???
                 elif self.bigblob:
                     mods = []
                     for tim in self.tims:
@@ -792,7 +807,7 @@ class OneBlob(object):
                         # self.ps.savefig()
 
                 else:
-                    # Bright star; set modtractor = srctractor for the ivars
+                    # Bright star or large galaxy; set modtractor = srctractor for the ivars
                     srctractor.setModelMasks(newsrc_mm)
                     modtractor = srctractor
 
@@ -1006,7 +1021,6 @@ class OneBlob(object):
     
             # Re-remove the final fit model for this source.
             models.update_and_subtract(srci, keepsrc, self.tims)
-
 
             if self.plots_single:
                 plt.figure(2)
@@ -1856,7 +1870,7 @@ def _clip_model_to_blob(mod, sh, ie):
 
 def _select_model(chisqs, nparams, galaxy_margin, rex):
     '''
-    Returns keepmod
+    Returns keepmod (string), the name of the preferred model.
     '''
     keepmod = 'none'
 
@@ -1868,31 +1882,32 @@ def _select_model(chisqs, nparams, galaxy_margin, rex):
                 if name != 'none'])
 
     if diff < cut:
+        # Drop this source
         return keepmod
-    # We're going to keep this source!
 
+    # Now choose between point source and simple model (SIMP/REX)
     if rex:
         simname = 'rex'
     else:
         simname = 'simple'
 
-    if not simname in chisqs:
+    if 'ptsrc' in chisqs and not simname in chisqs:
         # bright stars / reference stars: we don't test the simple model.
         return 'ptsrc'
-    # Now choose between point source and simple model (SIMP/REX)
-    if chisqs['ptsrc'] - nparams['ptsrc'] > chisqs[simname] - nparams[simname]:
-        #print('Keeping source; PTSRC is better than SIMPLE')
-        keepmod = 'ptsrc'
-    else:
-        #print('Keeping source; SIMPLE is better than PTSRC')
-        #print('REX is better fit.  Radius', simplemod.shape.re)
-        keepmod = simname
-        # For REX, we also demand a fractionally better fit
-        if simname == 'rex':
-            dchisq_psf = chisqs['ptsrc']
-            dchisq_rex = chisqs['rex']
-            if (dchisq_rex - dchisq_psf) < (0.01 * dchisq_psf):
-                keepmod = 'ptsrc'
+    if 'ptsrc' in chisqs and simname in chisqs:
+        if (chisqs['ptsrc'] - nparams['ptsrc'] >
+            chisqs[simname] - nparams[simname]):
+            #print('Keeping source; PTSRC is better than SIMPLE')
+            keepmod = 'ptsrc'
+        else:
+            #print('REX is better fit.  Radius', simplemod.shape.re)
+            keepmod = simname
+            # For REX, we also demand a fractionally better fit
+            if simname == 'rex':
+                dchisq_psf = chisqs['ptsrc']
+                dchisq_rex = chisqs['rex']
+                if (dchisq_rex - dchisq_psf) < (0.01 * dchisq_psf):
+                    keepmod = 'ptsrc'
 
     if not 'exp' in chisqs:
         return keepmod
@@ -1903,7 +1918,7 @@ def _select_model(chisqs, nparams, galaxy_margin, rex):
 
     # This is the "fractional" upgrade threshold for ptsrc/simple->dev/exp:
     # 1% of ptsrc vs nothing
-    fcut = 0.01 * chisqs['ptsrc']
+    fcut = 0.01 * chisqs.get('ptsrc', 0.)
     #print('Cut: max of', cut, 'and', fcut, ' (fraction of chisq_psf=%.1f)'
     # % chisqs['ptsrc'])
     cut = max(cut, fcut)
@@ -1930,6 +1945,8 @@ def _select_model(chisqs, nparams, galaxy_margin, rex):
 
     diff = chisqs['comp'] - chisqs[keepmod]
     #print('Comparing', keepmod, 'to comp.  cut:', cut, 'comp:', diff)
+    fcut = 0.01 * chisqs[keepmod]
+    cut = max(cut, fcut)
     if diff < cut:
         return keepmod
 
