@@ -11,6 +11,13 @@ class GaiaCatalog(HealpixedCatalog):
 
     def get_catalog_radec_box(self, ralo, rahi, declo, dechi):
         import numpy as np
+
+        wrap = False
+        if rahi < ralo:
+            # wrap-around?
+            rahi += 360.
+            wrap = True
+
         # Prepare RA,Dec grid to pick up overlapping healpixes
         rr,dd = np.meshgrid(np.linspace(ralo,  rahi,  2+( rahi- ralo)/0.1),
                             np.linspace(declo, dechi, 2+(dechi-declo)/0.1))
@@ -19,11 +26,12 @@ class GaiaCatalog(HealpixedCatalog):
             healpixes.add(self.healpix_for_radec(r, d))
         # Read catalog in those healpixes
         cat = self.get_healpix_catalogs(healpixes)
-        cat.cut((cat.ra  >= ralo ) * (cat.ra  <= rahi) *
-                (cat.dec >= declo) * (cat.dec <= dechi))
+        cat.cut((cat.dec >= declo) * (cat.dec <= dechi))
+        if wrap:
+            cat.cut(np.logical_or(cat.ra <= ralo, cat.ra >= (rahi - 360.)))
+        else:
+            cat.cut((cat.ra  >= ralo ) * (cat.ra  <= rahi))
         return cat
-
-
 
     @staticmethod
     def catalog_nantozero(gaia):
