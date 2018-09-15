@@ -38,6 +38,13 @@ MASKBITS = dict(
     BAILOUT    = 0x400, # bailed out of processing
 )
 
+# Bits in the "brightblob" bitmask
+IN_BLOB = dict(
+    BRIGHT = 0x1,
+    MEDIUM = 0x2,
+    CLUSTER = 0x4,
+)
+
 # Ugly hack: for sphinx documentation, the astrometry and tractor (and
 # other) packages are replaced by mock objects.  But you can't
 # subclass a mock object correctly, so we have to un-mock

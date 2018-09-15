@@ -1480,6 +1480,7 @@ def read_star_clusters(targetwcs):
 
         # Set isbright=True
         clusters.isbright = np.ones(len(clusters), bool)
+        clusters.iscluster = np.ones(len(clusters), bool)
     else:
         clusters = []
         
@@ -2095,7 +2096,7 @@ def stage_fitblobs(T=None,
               'blob_nimages', 'blob_totalpix',
               'blob_symm_width', 'blob_symm_height',
               'blob_symm_npix', 'blob_symm_nimages',
-              'hit_limit', 'dchisq', 'brightstarinblob']:
+              'hit_limit', 'dchisq', 'brightblob']:
         T.set(k, BB.get(k))
 
     invvars = np.hstack(BB.srcinvvars)
