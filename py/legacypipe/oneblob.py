@@ -26,14 +26,16 @@ def one_blob(X):
     if X is None:
         return None
     (nblob, iblob, Isrcs, brickwcs, bx0, by0, blobw, blobh, blobmask, timargs,
-     srcs, bands, plots, ps, simul_opt, use_ceres, hasbright, hasmedium,
-     rex) = X
+     srcs, bands, plots, ps, simul_opt, use_ceres, rex, refs) = X
 
     print('Fitting blob number', nblob, 'val', iblob, ':', len(Isrcs),
           'sources, size', blobw, 'x', blobh, len(timargs), 'images')
 
     if len(timargs) == 0:
         return None
+
+    hasbright = refs is not None and np.any(refs.isbright)
+    hasmedium = refs is not None and np.any(refs.ismedium * refs.in_bounds)
 
     if plots:
         plt.figure(2, figsize=(3,3))

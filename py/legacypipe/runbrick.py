@@ -2202,6 +2202,9 @@ def _blob_iter(blobslices, blobsrcs, blobs, targetwcs, tims, cat, bands,
                plots, ps, simul_opt, use_ceres, refstars,
                brick, rex,
                skipblobs=[], max_blobsize=None, custom_brick=False):
+    '''
+    *blobs*: map, with -1 indicating no-blob, other values indexing *blobslices*,*blobsrcs*.
+    '''
     from collections import Counter
     H,W = targetwcs.shape
 
@@ -2232,27 +2235,40 @@ def _blob_iter(blobslices, blobsrcs, blobs, targetwcs, tims, cat, bands,
         U = find_unique_pixels(targetwcs, W, H, None,
                                brick.ra1, brick.ra2, brick.dec1, brick.dec2)
 
+    # mapping from blob id to list of reference stars within or touching.
+    blob_refstars = {}
+
+    refstars.radius_pix = np.ceil(refstars.radius * 3600. / targetwcs.pixel_scale()).astype(int)
+
+    refstars_in = refstars[refstars.in_bounds]
+    for i,ref in enumerate(refstars_in):
+        b = blobs[ref.iby, ref.ibx]
+        if b == -1:
+            # shouldn't happen...
+            continue
+        # ugh, create a one-row table to allow merge_tables later.
+        ref_t = refstars_in[np.array([i])]
+        if b in blob_refstars:
+            blob_refstars[b].append(ref_t)
+        else:
+            blob_refstars[b] = [ref_t]
+    del refstars_in
+
+ 
     refstars_out = refstars[np.logical_not(refstars.in_bounds)]
     print(len(refstars_out), 'reference stars outside the image')
     if len(refstars_out):
-        refstars_out.min_dx = np.maximum(
+        min_dx = np.maximum(
             np.maximum(0 - refstars_out.ibx, 0),
             np.maximum(refstars_out.ibx - (W-1), 0))
-        refstars_out.min_dy = np.maximum(
+        min_dy = np.maximum(
             np.maximum(0 - refstars_out.iby, 0),
             np.maximum(refstars_out.iby - (H-1), 0))
-        minrad = np.hypot(refstars_out.min_dx, refstars_out.min_dy)
-        refstars_out.radius_pix = np.ceil(
-            refstars_out.radius * 3600. / targetwcs.pixel_scale()).astype(int)
+        minrad = np.hypot(min_dx, min_dy)
         keep = np.flatnonzero(minrad < refstars_out.radius_pix)
         print(len(keep), 'ref stars are close enough to the boundary')
         refstars_out.cut(keep)
-    #xx,yy = np.meshgrid(np.arange(W), np.arange(H))
-    for ref in refstars_out:
-        #rr = (xx - ref.ibx)**2 + (yy - ref.iby)**2
-        #rr = np.hypot(xx - ref.ibx, yy - ref.iby)
-        #rr *= targetwcs.pixel_scale() / 3600.
-        #neary,nearx = np.nonzero(rr < ref.radius)
+    for i,ref in enumerate(refstars_out):
         xlo = np.clip(ref.ibx - ref.radius_pix, 0, W-1)
         xhi = np.clip(ref.ibx + ref.radius_pix, 0, W-1)
         ylo = np.clip(ref.iby - ref.radius_pix, 0, H-1)
@@ -2266,7 +2282,36 @@ def _blob_iter(blobslices, blobsrcs, blobs, targetwcs, tims, cat, bands,
         print(len(nearx), 'pixels are near ref star')
         nearblobs = np.unique(blobs[ylo+neary, xlo+nearx])
         print('Near blobs:', nearblobs)
-        
+
+        # ugh, create a one-row table to allow merge_tables later.
+        ref_t = refstars_out[np.array([i])]
+        for b in nearblobs:
+            if b == -1:
+                continue
+            if b in blob_refstars:
+                blob_refstars[b].append(ref_t)
+            else:
+                blob_refstars[b] = [ref_t]
+
+
+    for b in iter(blob_refstars):
+        blob_refstars[b] = merge_tables(blob_refstars[b])
+
+    if plots:
+        plt.clf()
+        closeblobs = (blobs > -1).astype(int)
+        for b,r in blob_refstars.items():
+            print('Blob', b, ': refstars', len(r))
+            closeblobs[blobs == b] += 1
+        plt.imshow(closeblobs, interpolation='nearest', origin='lower')
+        plt.plot(refstars_out.ibx, refstars_out.iby, 'ro')
+        angles = np.linspace(0, 2.*np.pi, 200)
+        for ref in refstars_out:
+            plt.plot(ref.ibx + ref.radius_pix*np.cos(angles),
+                     ref.iby + ref.radius_pix*np.sin(angles), 'r-')
+        ps.savefig()
+        del closeblobs
+
     for nblob,iblob in enumerate(blob_order):
         if iblob in skipblobs:
             print('Skipping blob', iblob)
@@ -2309,12 +2354,17 @@ def _blob_iter(blobslices, blobsrcs, blobs, targetwcs, tims, cat, bands,
         hasbright = iblob in brightstarblobs
         hasmedium = iblob in mediumstarblobs
 
+        refs = blob_refstars.get(iblob, None)
+
+        hasbright = refs is not None and np.any(refs.isbright)
+        hasmedium = refs is not None and np.any(refs.ismedium * refs.in_bounds)
+
         npix = np.sum(blobmask)
-        print('Blob', nblob+1, 'of', len(blobslices), ': blob id:', iblob,
-              'sources:', len(Isrcs), 'size:', blobw, 'x', blobh,
-              #'center', (bx0+bx1)/2, (by0+by1)/2,
-              'brick X: %i,%i, Y: %i,%i' % (bx0,bx1,by0,by1),
-              'npix:', npix, 'one pixel:', onex,oney, 'has bright star:', hasbright, 'has medium-bright star:', hasmedium)
+        print(('Blob %i of %i, id: %i, sources: %i, size: %ix%i, npix %i, brick X: %i,%i, ' +
+               'Y: %i,%i, one pixel: %i %i, ref stars: %i, bright: %s, medium: %s') %
+              (nblob+1, len(blobslices), iblob, len(Isrcs), blobw, blobh, npix,
+               bx0,bx1,by0,by1, onex,oney, int(refs is not None and len(refs)), hasbright,
+               hasmedium))
 
         if max_blobsize is not None and npix > max_blobsize:
             print('Number of pixels in blob,', npix, ', exceeds max blobsize', max_blobsize)
@@ -2357,7 +2407,7 @@ def _blob_iter(blobslices, blobsrcs, blobs, targetwcs, tims, cat, bands,
 
         yield (nblob, iblob, Isrcs, targetwcs, bx0, by0, blobw, blobh,
                blobmask, subtimargs, [cat[i] for i in Isrcs], bands, plots, ps,
-               simul_opt, use_ceres, hasbright, hasmedium, rex)
+               simul_opt, use_ceres, rex, refs)
 
 def _bounce_one_blob(X):
     ''' This just wraps the one_blob function, for debugging &
