@@ -1233,8 +1233,10 @@ def stage_srcs(targetrd=None, pixscale=None, targetwcs=None,
     refstars.ibx = np.round(xx-1.).astype(int)
     refstars.iby = np.round(yy-1.).astype(int)
 
-    refstars_in = refstars[(refstars.ibx >= 0) * (refstars.ibx < W) *
-                           (refstars.iby >= 0) * (refstars.iby < H)]
+    refstars.in_bounds = ((refstars.ibx >= 0) * (refstars.ibx < W) *
+                          (refstars.iby >= 0) * (refstars.iby < H))
+    
+    refstars_in = refstars[refstars.in_bounds]
     # Create Tractor sources from reference stars
     refstarcat = [GaiaSource.from_catalog(g, bands) for g in refstars_in]
 
@@ -1900,11 +1902,9 @@ def stage_fitblobs(T=None,
             
 
     # Create the iterator over blobs to process
-    brightstars = refstars[refstars.isbright]
-    mediumstars = refstars[refstars.ismedium]
     blobiter = _blob_iter(blobslices, blobsrcs, blobs, targetwcs, tims,
                           cat, bands, plots, ps, simul_opt, use_ceres,
-                          brightstars, mediumstars, brick, rex,
+                          refstars, brick, rex,
                           skipblobs=skipblobs,
                           max_blobsize=max_blobsize, custom_brick=custom_brick)
     # to allow timingpool to queue tasks one at a time
@@ -2063,6 +2063,8 @@ def stage_fitblobs(T=None,
     # Write out a mask of pixels that share a blob with a bright star,
     # ie, pixels that would get *brightstarinblob* set if they
     # contained a source.
+    brightstars = refstars[refstars.isbright * refstars.in_bounds]
+
     brightblobs = np.unique(blobs[brightstars.iby, brightstars.ibx])
     print('Blobs containing bright stars:', brightblobs)
     brightblobs = brightblobs[brightblobs != noblob]
@@ -2197,11 +2199,15 @@ def _format_all_models(T, newcat, BB, bands, rex):
     return TT,hdr
 
 def _blob_iter(blobslices, blobsrcs, blobs, targetwcs, tims, cat, bands,
-               plots, ps, simul_opt, use_ceres, brightstars, mediumstars,
+               plots, ps, simul_opt, use_ceres, refstars,
                brick, rex,
                skipblobs=[], max_blobsize=None, custom_brick=False):
     from collections import Counter
     H,W = targetwcs.shape
+
+    brightstars = refstars[refstars.isbright * refstars.in_bounds]
+    mediumstars = refstars[refstars.ismedium * refstars.in_bounds]
+
     brightstarblobs = set(blobs[brightstars.iby, brightstars.ibx])
     mediumstarblobs = set(blobs[mediumstars.iby, mediumstars.ibx])
     # Remove -1 = no blob from set; not strictly necessary, just cosmetic
@@ -2226,6 +2232,41 @@ def _blob_iter(blobslices, blobsrcs, blobs, targetwcs, tims, cat, bands,
         U = find_unique_pixels(targetwcs, W, H, None,
                                brick.ra1, brick.ra2, brick.dec1, brick.dec2)
 
+    refstars_out = refstars[np.logical_not(refstars.in_bounds)]
+    print(len(refstars_out), 'reference stars outside the image')
+    if len(refstars_out):
+        refstars_out.min_dx = np.maximum(
+            np.maximum(0 - refstars_out.ibx, 0),
+            np.maximum(refstars_out.ibx - (W-1), 0))
+        refstars_out.min_dy = np.maximum(
+            np.maximum(0 - refstars_out.iby, 0),
+            np.maximum(refstars_out.iby - (H-1), 0))
+        minrad = np.hypot(refstars_out.min_dx, refstars_out.min_dy)
+        refstars_out.radius_pix = np.ceil(
+            refstars_out.radius * 3600. / targetwcs.pixel_scale()).astype(int)
+        keep = np.flatnonzero(minrad < refstars_out.radius_pix)
+        print(len(keep), 'ref stars are close enough to the boundary')
+        refstars_out.cut(keep)
+    #xx,yy = np.meshgrid(np.arange(W), np.arange(H))
+    for ref in refstars_out:
+        #rr = (xx - ref.ibx)**2 + (yy - ref.iby)**2
+        #rr = np.hypot(xx - ref.ibx, yy - ref.iby)
+        #rr *= targetwcs.pixel_scale() / 3600.
+        #neary,nearx = np.nonzero(rr < ref.radius)
+        xlo = np.clip(ref.ibx - ref.radius_pix, 0, W-1)
+        xhi = np.clip(ref.ibx + ref.radius_pix, 0, W-1)
+        ylo = np.clip(ref.iby - ref.radius_pix, 0, H-1)
+        yhi = np.clip(ref.iby + ref.radius_pix, 0, H-1)
+        xx,yy = np.arange(xlo, xhi+1), np.arange(ylo, yhi+1)
+        rr = np.hypot((xx - ref.ibx)[np.newaxis,:],
+                      (yy - ref.iby)[:,np.newaxis])
+        neary,nearx = np.nonzero(rr < ref.radius_pix)
+        if len(nearx) == 0:
+            continue
+        print(len(nearx), 'pixels are near ref star')
+        nearblobs = np.unique(blobs[ylo+neary, xlo+nearx])
+        print('Near blobs:', nearblobs)
+        
     for nblob,iblob in enumerate(blob_order):
         if iblob in skipblobs:
             print('Skipping blob', iblob)
