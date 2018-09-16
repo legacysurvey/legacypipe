@@ -36,6 +36,7 @@ MASKBITS = dict(
     WISEM1     = 0x100, # WISE masked
     WISEM2     = 0x200,
     BAILOUT    = 0x400, # bailed out of processing
+    MEDIUM     = 0x800, # medium-bright star
 )
 
 # Bits in the "brightblob" bitmask

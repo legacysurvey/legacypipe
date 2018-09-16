@@ -1653,6 +1653,7 @@ def stage_fitblobs(T=None,
     the sources contained within that blob.
     '''
     from tractor import Catalog
+    from legacypipe.survey import IN_BLOB
 
     tlast = Time()
     for tim in tims:
@@ -1900,12 +1901,14 @@ def stage_fitblobs(T=None,
         skipblobs = np.unique(blobs[blobs>=0])
         while len(R) < len(blobsrcs):
             R.append(None)
-            
+
+    # Mapping from blob to reference stars it contains (or is near to)
+    blob_refstars = _refstars_in_blob(refstars, targetwcs, blobs)
 
     # Create the iterator over blobs to process
     blobiter = _blob_iter(blobslices, blobsrcs, blobs, targetwcs, tims,
                           cat, bands, plots, ps, simul_opt, use_ceres,
-                          refstars, brick, rex,
+                          blob_refstars, brick, rex,
                           skipblobs=skipblobs,
                           max_blobsize=max_blobsize, custom_brick=custom_brick)
     # to allow timingpool to queue tasks one at a time
@@ -2061,23 +2064,6 @@ def stage_fitblobs(T=None,
             out.fits.write(blobs, header=hdr)
     del iblob, oldblob
 
-    # Write out a mask of pixels that share a blob with a bright star,
-    # ie, pixels that would get *brightstarinblob* set if they
-    # contained a source.
-    brightstars = refstars[refstars.isbright * refstars.in_bounds]
-
-    brightblobs = np.unique(blobs[brightstars.iby, brightstars.ibx])
-    print('Blobs containing bright stars:', brightblobs)
-    brightblobs = brightblobs[brightblobs != noblob]
-    print('Blobs containing bright stars (after cutting not-a-blob):', brightblobs)
-    bbmap = np.zeros(blobs.max()+2, np.uint8)
-    bbmap[brightblobs+1] = 1
-    brightblobmask = bbmap[blobs+1]
-    del brightblobs, bbmap
-
-    # Comment this out if you need to save the 'blobs' map for later (eg, sky fibers)
-    blobs = None
-
     T.brickid = np.zeros(len(T), np.int32) + brickid
     T.brickname = np.array([brickname] * len(T))
     if len(T.brickname) == 0:
@@ -2098,6 +2084,29 @@ def stage_fitblobs(T=None,
               'blob_symm_npix', 'blob_symm_nimages',
               'hit_limit', 'dchisq', 'brightblob']:
         T.set(k, BB.get(k))
+
+    # compute the pixel-space mask for *brightblob* values
+    brightblobmask = np.zeros(blobs.shape, np.uint8)
+    for k,bitval in IN_BLOB:
+        print('Computing mask for', k)
+        tb = T[(T.brightblob & bitval) > 0]
+        print('Mask set for', len(tb), 'sources')
+        if len(tb) == 0:
+            continue
+        bb = np.unique(tb.blob)
+        print('Blobs:', bb)
+        for b in bb:
+            brightblobmask[blobs == b] |= bitval
+
+        if plots:
+            plt.clf()
+            plt.imshow(brightblobmask & bitval, interpolation='nearest',
+                       origin='lower', cmap='gray', vmin=0, vmax=1)
+            plt.title('Mask for %s' % k)
+            ps.savefig()
+        
+    # Comment this out if you need to save the 'blobs' map for later (eg, sky fibers)
+    blobs = None
 
     invvars = np.hstack(BB.srcinvvars)
     assert(cat.numberOfParams() == len(invvars))
@@ -2199,26 +2208,7 @@ def _format_all_models(T, newcat, BB, bands, rex):
         TT.delete_column('rex_shapeExp_e2_ivar')
     return TT,hdr
 
-def _blob_iter(blobslices, blobsrcs, blobs, targetwcs, tims, cat, bands,
-               plots, ps, simul_opt, use_ceres, refstars,
-               brick, rex,
-               skipblobs=[], max_blobsize=None, custom_brick=False):
-    '''
-    *blobs*: map, with -1 indicating no-blob, other values indexing *blobslices*,*blobsrcs*.
-    '''
-    from collections import Counter
-    H,W = targetwcs.shape
-
-    # sort blobs by size so that larger ones start running first
-    blobvals = Counter(blobs[blobs>=0])
-    blob_order = np.array([i for i,npix in blobvals.most_common()])
-
-    if custom_brick:
-        U = None
-    else:
-        U = find_unique_pixels(targetwcs, W, H, None,
-                               brick.ra1, brick.ra2, brick.dec1, brick.dec2)
-
+def _refstars_in_blobs(refstars, targetwcs, blobs):
     # mapping from blob id to list of reference stars within or touching.
     blob_refstars = {}
 
@@ -2277,10 +2267,31 @@ def _blob_iter(blobslices, blobsrcs, blobs, targetwcs, tims, cat, bands,
                 blob_refstars[b].append(ref_t)
             else:
                 blob_refstars[b] = [ref_t]
-
     # Gather up the reference stars (in & out) near each blob.
     for b in iter(blob_refstars):
         blob_refstars[b] = merge_tables(blob_refstars[b])
+    return blob_refstars
+
+def _blob_iter(blobslices, blobsrcs, blobs, targetwcs, tims, cat, bands,
+               plots, ps, simul_opt, use_ceres, blob_refstars,
+               brick, rex,
+               skipblobs=[], max_blobsize=None, custom_brick=False):
+    '''
+    *blobs*: map, with -1 indicating no-blob, other values indexing *blobslices*,*blobsrcs*.
+    '''
+    from collections import Counter
+    H,W = targetwcs.shape
+
+    # sort blobs by size so that larger ones start running first
+    blobvals = Counter(blobs[blobs>=0])
+    blob_order = np.array([i for i,npix in blobvals.most_common()])
+    del blobvals
+    
+    if custom_brick:
+        U = None
+    else:
+        U = find_unique_pixels(targetwcs, W, H, None,
+                               brick.ra1, brick.ra2, brick.dec1, brick.dec2)
 
     if plots:
         plt.clf()
@@ -2289,6 +2300,8 @@ def _blob_iter(blobslices, blobsrcs, blobs, targetwcs, tims, cat, bands,
             print('Blob', b, ': refstars', len(r))
             closeblobs[blobs == b] += 1
         plt.imshow(closeblobs, interpolation='nearest', origin='lower')
+        refstars = merge_tables(blob_refstars.values())
+        refstars_out = refstars[np.logical_not(refstars.in_bounds)]
         plt.plot(refstars_out.ibx, refstars_out.iby, 'ro')
         angles = np.linspace(0, 2.*np.pi, 200)
         for ref in refstars_out:
@@ -2296,6 +2309,7 @@ def _blob_iter(blobslices, blobsrcs, blobs, targetwcs, tims, cat, bands,
                      ref.iby + ref.radius_pix*np.sin(angles), 'r-')
         ps.savefig()
         del closeblobs
+        del refstars, refstars_out
 
     for nblob,iblob in enumerate(blob_order):
         if iblob in skipblobs:
@@ -2449,7 +2463,7 @@ def stage_coadds(survey=None, bands=None, version_header=None, targetwcs=None,
     model fits, and we can create coadds of the images, model, and
     residuals.  We also perform aperture photometry in this stage.
     '''
-    from legacypipe.survey import apertures_arcsec
+    from legacypipe.survey import apertures_arcsec, IN_BLOB
     from functools import reduce
 
     tlast = Time()
@@ -2563,7 +2577,8 @@ def stage_coadds(survey=None, bands=None, version_header=None, targetwcs=None,
 
     # BRIGHT
     if brightblobmask is not None:
-        maskbits += MASKBITS['BRIGHT'] * brightblobmask
+        maskbits += MASKBITS['BRIGHT'] * ((brightblobmask & IN_BLOB['BRIGHT']) > 0)
+        maskbits += MASKBITS['MEDIUM'] * ((brightblobmask & IN_BLOB['MEDIUM']) > 0)
 
     # SATUR
     saturvals = dict(g=MASKBITS['SATUR_G'], r=MASKBITS['SATUR_R'], z=MASKBITS['SATUR_Z'])
@@ -2606,6 +2621,8 @@ def stage_coadds(survey=None, bands=None, version_header=None, targetwcs=None,
                         comment='Mask value for bright star in blob'))
     hdr.add_record(dict(name='BAILOUT', value=MASKBITS['BAILOUT'],
                         comment='Mask value for bailed-out processing'))
+    hdr.add_record(dict(name='MEDIUM', value=MASKBITS['MEDIUM'],
+                        comment='Mask value for medium-bright star in blob'))
     keys = sorted(saturvals.keys())
     for b in keys:
         k = 'SATUR_%s' % b.upper()
