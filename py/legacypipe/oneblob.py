@@ -1610,7 +1610,7 @@ def _select_model(chisqs, nparams, galaxy_margin, rex):
     cut = 5.**2
     # Take the best of all models computed
     diff = max([chisqs[name] - nparams[name] for name in chisqs.keys()
-                if name != 'none'])
+                if name != 'none'] + [-1])
 
     if diff < cut:
         return keepmod
