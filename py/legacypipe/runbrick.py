@@ -2301,13 +2301,15 @@ def _blob_iter(blobslices, blobsrcs, blobs, targetwcs, tims, cat, bands,
             print('Blob', b, ': refstars', len(r))
             closeblobs[blobs == b] += 1
         plt.imshow(closeblobs, interpolation='nearest', origin='lower')
-        refstars = merge_tables(list(blob_refstars.values()))
-        refstars_out = refstars[np.logical_not(refstars.in_bounds)]
-        plt.plot(refstars_out.ibx, refstars_out.iby, 'ro')
-        angles = np.linspace(0, 2.*np.pi, 200)
-        for ref in refstars_out:
-            plt.plot(ref.ibx + ref.radius_pix*np.cos(angles),
-                     ref.iby + ref.radius_pix*np.sin(angles), 'r-')
+        refstars = list(blob_refstars.values())
+        if len(refstars):
+            refstars = merge_tables(refstars)
+            refstars_out = refstars[np.logical_not(refstars.in_bounds)]
+            plt.plot(refstars_out.ibx, refstars_out.iby, 'ro')
+            angles = np.linspace(0, 2.*np.pi, 200)
+            for ref in refstars_out:
+                plt.plot(ref.ibx + ref.radius_pix*np.cos(angles),
+                         ref.iby + ref.radius_pix*np.sin(angles), 'r-')
         ps.savefig()
         del closeblobs
         del refstars, refstars_out
