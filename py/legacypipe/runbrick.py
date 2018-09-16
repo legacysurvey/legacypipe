@@ -1177,15 +1177,21 @@ def stage_srcs(targetrd=None, pixscale=None, targetwcs=None,
     # peaks at the edge of the mask.
     saturated_pix = [binary_dilation(satmap > 0, iterations=4)
                      for satmap in satmaps]
-    
+
+    # How big of a margin to search for bright stars -- this should be
+    # based on the maximum "radius" they are considered to affect.
+    ref_margin = 0.125
+    mpix = int(np.ceil(ref_margin * 3600. / pixscale))
+    marginwcs = targetwcs.get_subimage(-mpix, -mpix, W+2*mpix, H+2*mpix)
+    print('Enlarged target WCS from', targetwcs, 'to', marginwcs, 'for ref stars')
     # Read Tycho-2 stars and use as saturated sources.
-    tycho = read_tycho2(survey, targetwcs)
+    tycho = read_tycho2(survey, marginwcs)
     refstars = tycho
 
     # Add Gaia stars
     if gaia_stars:
         from astrometry.libkd.spherematch import match_radec
-        gaia = read_gaia(targetwcs)
+        gaia = read_gaia(marginwcs)
         gaia.isbright = np.zeros(len(gaia), bool)
         gaia.ismedium = np.ones(len(gaia), bool)
         # Handle sources that appear in both Gaia and Tycho-2 by dropping the entry from Tycho-2.
@@ -1213,29 +1219,40 @@ def stage_srcs(targetrd=None, pixscale=None, targetwcs=None,
     # Read the catalog of star (open and globular) clusters and add them to the
     # set of reference stars (with the isbright bit set).
     if star_clusters:
-        clusters = read_star_clusters(targetwcs)
-        
+        clusters = read_star_clusters(marginwcs)
+        print('Found', len(clusters), 'star clusters nearby')
         if len(clusters):
             refstars = merge_tables([refstars, clusters], columns='fillzero')
 
-    # Don't detect new sources where we already have reference stars
-    avoid_x = refstars.ibx
-    avoid_y = refstars.iby
-        
-    # Create Tractor sources from reference stars
-    refstarcat = [GaiaSource.from_catalog(g, bands) for g in refstars]
-
     # FIXME - Initialize a big-galaxy catalog here--?
 
+    # Grab subset of reference stars that are actually *within* the
+    # brick.  Recompute "ibx", "iby" using *targetwcs* not *marginwcs*.
+    ok,xx,yy = targetwcs.radec2pixelxy(refstars.ra, refstars.dec)
+    # ibx = integer brick coords
+    refstars.ibx = np.round(xx-1.).astype(int)
+    refstars.iby = np.round(yy-1.).astype(int)
+
+    refstars.in_bounds = ((refstars.ibx >= 0) * (refstars.ibx < W) *
+                          (refstars.iby >= 0) * (refstars.iby < H))
+    
+    refstars_in = refstars[refstars.in_bounds]
+    # Create Tractor sources from reference stars
+    refstarcat = [GaiaSource.from_catalog(g, bands) for g in refstars_in]
+
+    # Don't detect new sources where we already have reference stars
+    avoid_x = refstars_in.ibx
+    avoid_y = refstars_in.iby
+    
     # Saturated blobs -- create a source for each, except for those
     # that already have a Tycho-2 or Gaia star
     satmap = reduce(np.logical_or, satmaps)
     satblobs,nsat = label(satmap > 0)
-    if len(refstars):
+    if len(refstars_in):
         # Build a map from old "satblobs" to new; identity to start
         remap = np.arange(nsat+1)
         # Drop blobs that contain a reference star
-        zeroout = satblobs[refstars.iby, refstars.ibx]
+        zeroout = satblobs[refstars_in.iby, refstars_in.ibx]
         remap[zeroout] = 0
         # Renumber them to be contiguous
         I = np.flatnonzero(remap)
@@ -1318,8 +1335,8 @@ def stage_srcs(targetrd=None, pixscale=None, targetwcs=None,
     if len(sat):
         tables.append(sat)
         cats += satcat
-    if len(refstars):
-        tables.append(refstars)
+    if len(refstars_in):
+        tables.append(refstars_in)
         cats += refstarcat
     T = merge_tables(tables, columns='fillzero')
     cat = Catalog(*cats)
@@ -1437,23 +1454,22 @@ def read_star_clusters(targetwcs):
     clusters = fits_table(clusterfile)
 
     ok, xx, yy = targetwcs.radec2pixelxy(clusters.ra, clusters.dec)
-    # ibx = integer brick coords
-    clusters.ibx = np.round(xx-1.).astype(int)
-    clusters.iby = np.round(yy-1.).astype(int)
     margin = 10
     H, W = targetwcs.shape
-    clusters.cut( ok * (clusters.ibx > -margin) * (clusters.ibx < W+margin) *
-                  (clusters.iby > -margin) * (clusters.iby < H+margin) )
+    clusters.cut( ok * (xx > -margin) * (xx < W+margin) *
+                  (yy > -margin) * (yy < H+margin) )
     if len(clusters) > 0:
         print('Cut to {} star cluster(s) within the brick'.format(len(clusters)))
         del ok,xx,yy
-        clusters.ibx = np.clip(clusters.ibx, 0, W-1)
-        clusters.iby = np.clip(clusters.iby, 0, H-1)
 
         # For each cluster, add a single faint star at the same coordinates, but
         # set the isbright bit so we get all the brightstarinblob logic.
         clusters.ref_cat = clusters.name
         clusters.mag = np.array([35])
+
+        # Radius in degrees (from "majax" in arcmin)
+        clusters.radius = clusters.majax / 60.
+        clusters.radius[np.logical_not(np.isfinite(clusters.radius))] = 1./60.
 
         # Remove unnecessary columns but then add all the Gaia-style columns we need.
         for c in ['name', 'type', 'ra_hms', 'dec_dms', 'const', 'majax', 'minax', 'pa',
@@ -1464,12 +1480,16 @@ def read_star_clusters(targetwcs):
 
         # Set isbright=True
         clusters.isbright = np.ones(len(clusters), bool)
+        clusters.iscluster = np.ones(len(clusters), bool)
     else:
         clusters = []
         
     return clusters
 
 def read_gaia(targetwcs):
+    '''
+    *margin* in degrees
+    '''
     from legacypipe.gaiacat import GaiaCatalog
     gaia = GaiaCatalog().get_catalog_in_wcs(targetwcs)
     print('Got Gaia stars:', gaia)
@@ -1486,17 +1506,12 @@ def read_gaia(targetwcs):
         (gaia.G >= 19.) * (gaia.astrometric_excess_noise < 10.**(0.5 + 0.2*(gaia.G - 19.))))
 
     ok,xx,yy = targetwcs.radec2pixelxy(gaia.ra, gaia.dec)
-    # ibx = integer brick coords
-    gaia.ibx = np.round(xx-1.).astype(int)
-    gaia.iby = np.round(yy-1.).astype(int)
     margin = 10
     H,W = targetwcs.shape
-    gaia.cut(ok * (gaia.ibx > -margin) * (gaia.ibx < W+margin) *
-              (gaia.iby > -margin) * (gaia.iby < H+margin))
+    gaia.cut(ok * (xx > -margin) * (xx < W+margin) *
+              (yy > -margin) * (yy < H+margin))
     print('Cut to', len(gaia), 'Gaia stars within brick')
     del ok,xx,yy
-    gaia.ibx = np.clip(gaia.ibx, 0, W-1)
-    gaia.iby = np.clip(gaia.iby, 0, H-1)
 
     # Gaia version?
     gaiaver = int(os.getenv('GAIA_CAT_VER', '1'))
@@ -1516,6 +1531,14 @@ def read_gaia(targetwcs):
     for c in ['pmra', 'pmdec', 'parallax', 'pmra_ivar', 'pmdec_ivar', 'parallax_ivar']:
         X = gaia.get(c)
         X[np.logical_not(np.isfinite(X))] = 0.
+
+    # radius to consider affected by this star --
+    # FIXME -- want something more sophisticated here!
+    # (also see tycho.radius below)
+    gaia.radius = np.zeros(len(gaia), np.float32)
+    # first in pixels
+    gaia.radius = np.minimum(1800., 150. * 2.5**((11. - gaia.G)/4.)) * 0.262/3600.
+
     return gaia
 
 def read_tycho2(survey, targetwcs):
@@ -1541,16 +1564,11 @@ def read_tycho2(survey, targetwcs):
         print('Warning: no "isgalaxy" column in Tycho-2 catalog')
     #print('Read', len(tycho), 'Tycho-2 stars')
     ok,xx,yy = targetwcs.radec2pixelxy(tycho.ra, tycho.dec)
-    ## ibx = integer brick x
-    tycho.ibx = np.round(xx-1.).astype(int)
-    tycho.iby = np.round(yy-1.).astype(int)
     margin = 10
     H,W = targetwcs.shape
-    tycho.cut(ok * (tycho.ibx > -margin) * (tycho.ibx < W+margin) *
-              (tycho.iby > -margin) * (tycho.iby < H+margin))
+    tycho.cut(ok * (xx > -margin) * (xx < W+margin) *
+              (yy > -margin) * (yy < H+margin))
     print('Cut to', len(tycho), 'Tycho-2 stars within brick')
-    tycho.ibx = np.clip(tycho.ibx, 0, W-1)
-    tycho.iby = np.clip(tycho.iby, 0, H-1)
     del ok,xx,yy
 
     tycho.ref_cat = np.array(['T2'] * len(tycho))
@@ -1568,6 +1586,9 @@ def read_tycho2(survey, targetwcs):
     tycho.mag = tycho.mag_vt
     tycho.mag[tycho.mag == 0] = tycho.mag_hp[tycho.mag == 0]
 
+    ## FIXME -- want something better here!!
+    tycho.radius = np.minimum(1800., 150. * 2.5**((11. - tycho.mag)/4.)) * 0.262/3600.
+    
     for c in ['tyc1', 'tyc2', 'tyc3', 'mag_bt', 'mag_vt', 'mag_hp',
               'mean_ra', 'mean_dec', #'epoch_ra', 'epoch_dec',
               'sigma_pm_ra', 'sigma_pm_dec', 'sigma_ra', 'sigma_dec']:
@@ -1632,6 +1653,7 @@ def stage_fitblobs(T=None,
     the sources contained within that blob.
     '''
     from tractor import Catalog
+    from legacypipe.survey import IN_BLOB
 
     tlast = Time()
     for tim in tims:
@@ -1879,14 +1901,14 @@ def stage_fitblobs(T=None,
         skipblobs = np.unique(blobs[blobs>=0])
         while len(R) < len(blobsrcs):
             R.append(None)
-            
+
+    # Mapping from blob to reference stars it contains (or is near to)
+    blob_refstars = _refstars_in_blobs(refstars, targetwcs, blobs)
 
     # Create the iterator over blobs to process
-    brightstars = refstars[refstars.isbright]
-    mediumstars = refstars[refstars.ismedium]
     blobiter = _blob_iter(blobslices, blobsrcs, blobs, targetwcs, tims,
                           cat, bands, plots, ps, simul_opt, use_ceres,
-                          brightstars, mediumstars, brick, rex,
+                          blob_refstars, brick, rex,
                           skipblobs=skipblobs,
                           max_blobsize=max_blobsize, custom_brick=custom_brick)
     # to allow timingpool to queue tasks one at a time
@@ -2042,21 +2064,6 @@ def stage_fitblobs(T=None,
             out.fits.write(blobs, header=hdr)
     del iblob, oldblob
 
-    # Write out a mask of pixels that share a blob with a bright star,
-    # ie, pixels that would get *brightstarinblob* set if they
-    # contained a source.
-    brightblobs = np.unique(blobs[brightstars.iby, brightstars.ibx])
-    print('Blobs containing bright stars:', brightblobs)
-    brightblobs = brightblobs[brightblobs != noblob]
-    print('Blobs containing bright stars (after cutting not-a-blob):', brightblobs)
-    bbmap = np.zeros(blobs.max()+2, np.uint8)
-    bbmap[brightblobs+1] = 1
-    brightblobmask = bbmap[blobs+1]
-    del brightblobs, bbmap
-
-    # Comment this out if you need to save the 'blobs' map for later (eg, sky fibers)
-    blobs = None
-
     T.brickid = np.zeros(len(T), np.int32) + brickid
     T.brickname = np.array([brickname] * len(T))
     if len(T.brickname) == 0:
@@ -2075,8 +2082,31 @@ def stage_fitblobs(T=None,
               'blob_nimages', 'blob_totalpix',
               'blob_symm_width', 'blob_symm_height',
               'blob_symm_npix', 'blob_symm_nimages',
-              'hit_limit', 'dchisq', 'brightstarinblob']:
+              'hit_limit', 'dchisq', 'brightblob']:
         T.set(k, BB.get(k))
+
+    # compute the pixel-space mask for *brightblob* values
+    brightblobmask = np.zeros(blobs.shape, np.uint8)
+    for k,bitval in IN_BLOB.items():
+        print('Computing mask for', k)
+        tb = T[(T.brightblob & bitval) > 0]
+        print('Mask set for', len(tb), 'sources')
+        if len(tb) == 0:
+            continue
+        bb = np.unique(tb.blob)
+        print('Blobs:', bb)
+        for b in bb:
+            brightblobmask[blobs == b] |= bitval
+
+        if plots:
+            plt.clf()
+            plt.imshow(brightblobmask & bitval, interpolation='nearest',
+                       origin='lower', cmap='gray', vmin=0, vmax=1)
+            plt.title('Mask for %s' % k)
+            ps.savefig()
+        
+    # Comment this out if you need to save the 'blobs' map for later (eg, sky fibers)
+    blobs = None
 
     invvars = np.hstack(BB.srcinvvars)
     assert(cat.numberOfParams() == len(invvars))
@@ -2178,35 +2208,111 @@ def _format_all_models(T, newcat, BB, bands, rex):
         TT.delete_column('rex_shapeExp_e2_ivar')
     return TT,hdr
 
+def _refstars_in_blobs(refstars, targetwcs, blobs):
+    # mapping from blob id to list of reference stars within or touching.
+    blob_refstars = {}
+
+    H,W = targetwcs.shape
+    refstars.radius_pix = np.ceil(refstars.radius * 3600. / targetwcs.pixel_scale()).astype(int)
+
+    # Reference stars that are inside the brick
+    refstars_in = refstars[refstars.in_bounds]
+    for i,ref in enumerate(refstars_in):
+        b = blobs[ref.iby, ref.ibx]
+        if b == -1:
+            # shouldn't happen...
+            continue
+        # ugh, create a one-row table to allow merge_tables later.
+        ref_t = refstars_in[np.array([i])]
+        if b in blob_refstars:
+            blob_refstars[b].append(ref_t)
+        else:
+            blob_refstars[b] = [ref_t]
+    del refstars_in
+
+    # Reference stars that are outside our brick, but maybe close enough
+    # to matter
+    refstars_out = refstars[np.logical_not(refstars.in_bounds)]
+    print(len(refstars_out), 'reference stars outside the image')
+    if len(refstars_out):
+        min_dx = np.maximum(
+            np.maximum(0 - refstars_out.ibx, 0),
+            np.maximum(refstars_out.ibx - (W-1), 0))
+        min_dy = np.maximum(
+            np.maximum(0 - refstars_out.iby, 0),
+            np.maximum(refstars_out.iby - (H-1), 0))
+        minrad = np.hypot(min_dx, min_dy)
+        keep = np.flatnonzero(minrad < refstars_out.radius_pix)
+        print(len(keep), 'ref stars are close enough to the boundary')
+        refstars_out.cut(keep)
+    for i,ref in enumerate(refstars_out):
+        xlo = np.clip(ref.ibx - ref.radius_pix, 0, W-1)
+        xhi = np.clip(ref.ibx + ref.radius_pix, 0, W-1)
+        ylo = np.clip(ref.iby - ref.radius_pix, 0, H-1)
+        yhi = np.clip(ref.iby + ref.radius_pix, 0, H-1)
+        xx,yy = np.arange(xlo, xhi+1), np.arange(ylo, yhi+1)
+        rr = np.hypot((xx - ref.ibx)[np.newaxis,:],
+                      (yy - ref.iby)[:,np.newaxis])
+        neary,nearx = np.nonzero(rr < ref.radius_pix)
+        if len(nearx) == 0:
+            continue
+        #print(len(nearx), 'pixels are near ref star')
+        nearblobs = np.unique(blobs[ylo+neary, xlo+nearx])
+        print('Ref star near blobs:', nearblobs)
+        # ugh, create a one-row table to allow merge_tables later.
+        ref_t = refstars_out[np.array([i])]
+        for b in nearblobs:
+            if b == -1:
+                continue
+            if b in blob_refstars:
+                blob_refstars[b].append(ref_t)
+            else:
+                blob_refstars[b] = [ref_t]
+    # Gather up the reference stars (in & out) near each blob.
+    for b in iter(blob_refstars):
+        blob_refstars[b] = merge_tables(blob_refstars[b])
+    return blob_refstars
+
 def _blob_iter(blobslices, blobsrcs, blobs, targetwcs, tims, cat, bands,
-               plots, ps, simul_opt, use_ceres, brightstars, mediumstars,
+               plots, ps, simul_opt, use_ceres, blob_refstars,
                brick, rex,
                skipblobs=[], max_blobsize=None, custom_brick=False):
+    '''
+    *blobs*: map, with -1 indicating no-blob, other values indexing *blobslices*,*blobsrcs*.
+    '''
     from collections import Counter
     H,W = targetwcs.shape
-    brightstarblobs = set(blobs[brightstars.iby, brightstars.ibx])
-    mediumstarblobs = set(blobs[mediumstars.iby, mediumstars.ibx])
-    # Remove -1 = no blob from set; not strictly necessary, just cosmetic
-    try:
-        brightstarblobs.remove(-1)
-    except:
-        pass
-    try:
-        mediumstarblobs.remove(-1)
-    except:
-        pass
-    print('Blobs containing bright stars:', brightstarblobs)
-    print('Blobs containing medium stars:', mediumstarblobs)
 
     # sort blobs by size so that larger ones start running first
     blobvals = Counter(blobs[blobs>=0])
     blob_order = np.array([i for i,npix in blobvals.most_common()])
-
+    del blobvals
+    
     if custom_brick:
         U = None
     else:
         U = find_unique_pixels(targetwcs, W, H, None,
                                brick.ra1, brick.ra2, brick.dec1, brick.dec2)
+
+    if plots:
+        plt.clf()
+        closeblobs = (blobs > -1).astype(int)
+        for b,r in blob_refstars.items():
+            print('Blob', b, ': refstars', len(r))
+            closeblobs[blobs == b] += 1
+        plt.imshow(closeblobs, interpolation='nearest', origin='lower')
+        refstars = list(blob_refstars.values())
+        if len(refstars):
+            refstars = merge_tables(refstars)
+            refstars_out = refstars[np.logical_not(refstars.in_bounds)]
+            plt.plot(refstars_out.ibx, refstars_out.iby, 'ro')
+            angles = np.linspace(0, 2.*np.pi, 200)
+            for ref in refstars_out:
+                plt.plot(ref.ibx + ref.radius_pix*np.cos(angles),
+                         ref.iby + ref.radius_pix*np.sin(angles), 'r-')
+            del refstars_out
+        ps.savefig()
+        del refstars, closeblobs
 
     for nblob,iblob in enumerate(blob_order):
         if iblob in skipblobs:
@@ -2247,15 +2353,17 @@ def _blob_iter(blobslices, blobsrcs, blobs, targetwcs, tims, cat, bands,
             oney = y
             break
 
-        hasbright = iblob in brightstarblobs
-        hasmedium = iblob in mediumstarblobs
+        refs = blob_refstars.get(iblob, None)
+
+        hasbright = refs is not None and np.any(refs.isbright)
+        hasmedium = refs is not None and np.any(refs.ismedium)
 
         npix = np.sum(blobmask)
-        print('Blob', nblob+1, 'of', len(blobslices), ': blob id:', iblob,
-              'sources:', len(Isrcs), 'size:', blobw, 'x', blobh,
-              #'center', (bx0+bx1)/2, (by0+by1)/2,
-              'brick X: %i,%i, Y: %i,%i' % (bx0,bx1,by0,by1),
-              'npix:', npix, 'one pixel:', onex,oney, 'has bright star:', hasbright, 'has medium-bright star:', hasmedium)
+        print(('Blob %i of %i, id: %i, sources: %i, size: %ix%i, npix %i, brick X: %i,%i, ' +
+               'Y: %i,%i, one pixel: %i %i, ref stars: %i, bright: %s, medium: %s') %
+              (nblob+1, len(blobslices), iblob, len(Isrcs), blobw, blobh, npix,
+               bx0,bx1,by0,by1, onex,oney, int(refs is not None and len(refs)), hasbright,
+               hasmedium))
 
         if max_blobsize is not None and npix > max_blobsize:
             print('Number of pixels in blob,', npix, ', exceeds max blobsize', max_blobsize)
@@ -2298,7 +2406,7 @@ def _blob_iter(blobslices, blobsrcs, blobs, targetwcs, tims, cat, bands,
 
         yield (nblob, iblob, Isrcs, targetwcs, bx0, by0, blobw, blobh,
                blobmask, subtimargs, [cat[i] for i in Isrcs], bands, plots, ps,
-               simul_opt, use_ceres, hasbright, hasmedium, rex)
+               simul_opt, use_ceres, rex, refs)
 
 def _bounce_one_blob(X):
     ''' This just wraps the one_blob function, for debugging &
@@ -2358,7 +2466,7 @@ def stage_coadds(survey=None, bands=None, version_header=None, targetwcs=None,
     model fits, and we can create coadds of the images, model, and
     residuals.  We also perform aperture photometry in this stage.
     '''
-    from legacypipe.survey import apertures_arcsec
+    from legacypipe.survey import apertures_arcsec, IN_BLOB
     from functools import reduce
 
     tlast = Time()
@@ -2472,7 +2580,8 @@ def stage_coadds(survey=None, bands=None, version_header=None, targetwcs=None,
 
     # BRIGHT
     if brightblobmask is not None:
-        maskbits += MASKBITS['BRIGHT'] * brightblobmask
+        maskbits += MASKBITS['BRIGHT'] * ((brightblobmask & IN_BLOB['BRIGHT']) > 0)
+        maskbits += MASKBITS['MEDIUM'] * ((brightblobmask & IN_BLOB['MEDIUM']) > 0)
 
     # SATUR
     saturvals = dict(g=MASKBITS['SATUR_G'], r=MASKBITS['SATUR_R'], z=MASKBITS['SATUR_Z'])
@@ -2515,6 +2624,8 @@ def stage_coadds(survey=None, bands=None, version_header=None, targetwcs=None,
                         comment='Mask value for bright star in blob'))
     hdr.add_record(dict(name='BAILOUT', value=MASKBITS['BAILOUT'],
                         comment='Mask value for bailed-out processing'))
+    hdr.add_record(dict(name='MEDIUM', value=MASKBITS['MEDIUM'],
+                        comment='Mask value for medium-bright star in blob'))
     keys = sorted(saturvals.keys())
     for b in keys:
         k = 'SATUR_%s' % b.upper()

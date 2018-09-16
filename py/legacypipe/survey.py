@@ -36,6 +36,14 @@ MASKBITS = dict(
     WISEM1     = 0x100, # WISE masked
     WISEM2     = 0x200,
     BAILOUT    = 0x400, # bailed out of processing
+    MEDIUM     = 0x800, # medium-bright star
+)
+
+# Bits in the "brightblob" bitmask
+IN_BLOB = dict(
+    BRIGHT = 0x1,
+    MEDIUM = 0x2,
+    CLUSTER = 0x4,
 )
 
 # Ugly hack: for sphinx documentation, the astrometry and tractor (and

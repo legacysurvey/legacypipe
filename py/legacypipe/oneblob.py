@@ -14,7 +14,7 @@ from tractor.galaxy import DevGalaxy, ExpGalaxy, FixedCompositeGalaxy, SoftenedF
 from tractor.patch import ModelMask
 
 from legacypipe.survey import (SimpleGalaxy, RexGalaxy, GaiaSource,
-                               LegacyEllipseWithPriors, get_rgb)
+                               LegacyEllipseWithPriors, get_rgb, IN_BLOB)
 from legacypipe.runbrick import rgbkwargs, rgbkwargs_resid
 from legacypipe.coadds import quick_coadds
 from legacypipe.runbrick_plots import _plot_mods
@@ -26,14 +26,16 @@ def one_blob(X):
     if X is None:
         return None
     (nblob, iblob, Isrcs, brickwcs, bx0, by0, blobw, blobh, blobmask, timargs,
-     srcs, bands, plots, ps, simul_opt, use_ceres, hasbright, hasmedium,
-     rex) = X
+     srcs, bands, plots, ps, simul_opt, use_ceres, rex, refs) = X
 
     print('Fitting blob number', nblob, 'val', iblob, ':', len(Isrcs),
           'sources, size', blobw, 'x', blobh, len(timargs), 'images')
 
     if len(timargs) == 0:
         return None
+
+    hasbright = refs is not None and np.any(refs.isbright)
+    hasmedium = refs is not None and np.any(refs.ismedium)
 
     if plots:
         plt.figure(2, figsize=(3,3))
@@ -89,9 +91,13 @@ def one_blob(X):
     assert(len(B.finished_in_blob) == len(B))
     assert(len(B.finished_in_blob) == len(B.started_in_blob))
 
-    B.brightstarinblob = np.zeros(len(B), bool)
+    B.brightblob = np.zeros(len(B), np.int16)
     if hasbright:
-        B.brightstarinblob[:] = True
+        B.brightblob += IN_BLOB['BRIGHT']
+    if hasmedium:
+        B.brightblob += IN_BLOB['MEDIUM']
+    if refs is not None and 'iscluster' in refs.get_columns() and np.any(refs.iscluster):
+        B.brightblob += IN_BLOB['CLUSTER']
 
     B.cpu_blob = np.zeros(len(B), np.float32)
     t1 = time.clock()
@@ -1604,7 +1610,7 @@ def _select_model(chisqs, nparams, galaxy_margin, rex):
     cut = 5.**2
     # Take the best of all models computed
     diff = max([chisqs[name] - nparams[name] for name in chisqs.keys()
-                if name != 'none'])
+                if name != 'none'] + [-1])
 
     if diff < cut:
         return keepmod
