@@ -2310,9 +2310,9 @@ def _blob_iter(blobslices, blobsrcs, blobs, targetwcs, tims, cat, bands,
             for ref in refstars_out:
                 plt.plot(ref.ibx + ref.radius_pix*np.cos(angles),
                          ref.iby + ref.radius_pix*np.sin(angles), 'r-')
+            del refstars_out
         ps.savefig()
-        del closeblobs
-        del refstars, refstars_out
+        del refstars, closeblobs
 
     for nblob,iblob in enumerate(blob_order):
         if iblob in skipblobs:
