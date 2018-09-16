@@ -1903,7 +1903,7 @@ def stage_fitblobs(T=None,
             R.append(None)
 
     # Mapping from blob to reference stars it contains (or is near to)
-    blob_refstars = _refstars_in_blob(refstars, targetwcs, blobs)
+    blob_refstars = _refstars_in_blobs(refstars, targetwcs, blobs)
 
     # Create the iterator over blobs to process
     blobiter = _blob_iter(blobslices, blobsrcs, blobs, targetwcs, tims,
@@ -2087,7 +2087,7 @@ def stage_fitblobs(T=None,
 
     # compute the pixel-space mask for *brightblob* values
     brightblobmask = np.zeros(blobs.shape, np.uint8)
-    for k,bitval in IN_BLOB:
+    for k,bitval in IN_BLOB.items():
         print('Computing mask for', k)
         tb = T[(T.brightblob & bitval) > 0]
         print('Mask set for', len(tb), 'sources')
@@ -2212,6 +2212,7 @@ def _refstars_in_blobs(refstars, targetwcs, blobs):
     # mapping from blob id to list of reference stars within or touching.
     blob_refstars = {}
 
+    H,W = targetwcs.shape
     refstars.radius_pix = np.ceil(refstars.radius * 3600. / targetwcs.pixel_scale()).astype(int)
 
     # Reference stars that are inside the brick
@@ -2300,7 +2301,7 @@ def _blob_iter(blobslices, blobsrcs, blobs, targetwcs, tims, cat, bands,
             print('Blob', b, ': refstars', len(r))
             closeblobs[blobs == b] += 1
         plt.imshow(closeblobs, interpolation='nearest', origin='lower')
-        refstars = merge_tables(blob_refstars.values())
+        refstars = merge_tables(list(blob_refstars.values()))
         refstars_out = refstars[np.logical_not(refstars.in_bounds)]
         plt.plot(refstars_out.ibx, refstars_out.iby, 'ro')
         angles = np.linspace(0, 2.*np.pi, 200)
