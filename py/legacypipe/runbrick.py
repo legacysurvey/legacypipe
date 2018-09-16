@@ -2339,7 +2339,7 @@ def _blob_iter(blobslices, blobsrcs, blobs, targetwcs, tims, cat, bands,
         refs = blob_refstars.get(iblob, None)
 
         hasbright = refs is not None and np.any(refs.isbright)
-        hasmedium = refs is not None and np.any(refs.ismedium * refs.in_bounds)
+        hasmedium = refs is not None and np.any(refs.ismedium)
 
         npix = np.sum(blobmask)
         print(('Blob %i of %i, id: %i, sources: %i, size: %ix%i, npix %i, brick X: %i,%i, ' +
