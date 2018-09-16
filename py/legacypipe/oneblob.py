@@ -35,7 +35,7 @@ def one_blob(X):
         return None
 
     hasbright = refs is not None and np.any(refs.isbright)
-    hasmedium = refs is not None and np.any(refs.ismedium * refs.in_bounds)
+    hasmedium = refs is not None and np.any(refs.ismedium)
 
     if plots:
         plt.figure(2, figsize=(3,3))
