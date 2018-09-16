@@ -2209,23 +2209,6 @@ def _blob_iter(blobslices, blobsrcs, blobs, targetwcs, tims, cat, bands,
     from collections import Counter
     H,W = targetwcs.shape
 
-    brightstars = refstars[refstars.isbright * refstars.in_bounds]
-    mediumstars = refstars[refstars.ismedium * refstars.in_bounds]
-
-    brightstarblobs = set(blobs[brightstars.iby, brightstars.ibx])
-    mediumstarblobs = set(blobs[mediumstars.iby, mediumstars.ibx])
-    # Remove -1 = no blob from set; not strictly necessary, just cosmetic
-    try:
-        brightstarblobs.remove(-1)
-    except:
-        pass
-    try:
-        mediumstarblobs.remove(-1)
-    except:
-        pass
-    print('Blobs containing bright stars:', brightstarblobs)
-    print('Blobs containing medium stars:', mediumstarblobs)
-
     # sort blobs by size so that larger ones start running first
     blobvals = Counter(blobs[blobs>=0])
     blob_order = np.array([i for i,npix in blobvals.most_common()])
@@ -2241,6 +2224,7 @@ def _blob_iter(blobslices, blobsrcs, blobs, targetwcs, tims, cat, bands,
 
     refstars.radius_pix = np.ceil(refstars.radius * 3600. / targetwcs.pixel_scale()).astype(int)
 
+    # Reference stars that are inside the brick
     refstars_in = refstars[refstars.in_bounds]
     for i,ref in enumerate(refstars_in):
         b = blobs[ref.iby, ref.ibx]
@@ -2255,7 +2239,8 @@ def _blob_iter(blobslices, blobsrcs, blobs, targetwcs, tims, cat, bands,
             blob_refstars[b] = [ref_t]
     del refstars_in
 
- 
+    # Reference stars that are outside our brick, but maybe close enough
+    # to matter
     refstars_out = refstars[np.logical_not(refstars.in_bounds)]
     print(len(refstars_out), 'reference stars outside the image')
     if len(refstars_out):
@@ -2280,10 +2265,9 @@ def _blob_iter(blobslices, blobsrcs, blobs, targetwcs, tims, cat, bands,
         neary,nearx = np.nonzero(rr < ref.radius_pix)
         if len(nearx) == 0:
             continue
-        print(len(nearx), 'pixels are near ref star')
+        #print(len(nearx), 'pixels are near ref star')
         nearblobs = np.unique(blobs[ylo+neary, xlo+nearx])
-        print('Near blobs:', nearblobs)
-
+        print('Ref star near blobs:', nearblobs)
         # ugh, create a one-row table to allow merge_tables later.
         ref_t = refstars_out[np.array([i])]
         for b in nearblobs:
@@ -2294,7 +2278,7 @@ def _blob_iter(blobslices, blobsrcs, blobs, targetwcs, tims, cat, bands,
             else:
                 blob_refstars[b] = [ref_t]
 
-
+    # Gather up the reference stars (in & out) near each blob.
     for b in iter(blob_refstars):
         blob_refstars[b] = merge_tables(blob_refstars[b])
 
@@ -2351,9 +2335,6 @@ def _blob_iter(blobslices, blobsrcs, blobs, targetwcs, tims, cat, bands,
             onex = bx0 + ii[0]
             oney = y
             break
-
-        hasbright = iblob in brightstarblobs
-        hasmedium = iblob in mediumstarblobs
 
         refs = blob_refstars.get(iblob, None)
 
