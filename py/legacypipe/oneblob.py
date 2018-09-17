@@ -671,8 +671,9 @@ class OneBlob(object):
             if name == 'gals':
                 # If 'simple' was better than 'ptsrc', or the source is
                 # bright, try the galaxy models.
-                if ((chisqs.get(simname,0) > chisqs['ptsrc']) or
-                    (chisqs['ptsrc'] > 400)):
+                chi_sim = chisqs.get(simname, 0)
+                chi_psf = chisqs.get('ptsrc', 0)
+                if chi_sim > chi_psf or max(chi_psf, chi_sim) > 400:
                     trymodels.extend([
                         ('dev', dev), ('exp', exp), ('comp', comp)])
                 continue

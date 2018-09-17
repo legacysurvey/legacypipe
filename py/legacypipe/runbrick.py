@@ -2413,6 +2413,8 @@ def _bounce_one_blob(X):
     multiprocessing purposes.
     '''
     from legacypipe.oneblob import one_blob
+
+    return one_blob(X)
     try:
         return one_blob(X)
     except:
