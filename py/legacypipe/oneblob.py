@@ -102,7 +102,7 @@ def one_blob(X):
     B.cpu_blob = np.zeros(len(B), np.float32)
     t1 = time.clock()
     B.cpu_blob[:] = t1 - t0
-        
+
     return B
 
 class OneBlob(object):

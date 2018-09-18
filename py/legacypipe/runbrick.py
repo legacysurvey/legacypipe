@@ -1838,11 +1838,11 @@ def stage_fitblobs(T=None,
                     print('Checkpointed iblob', iblob,
                           'is too large! (>= %i)' % len(blobsrcs))
                     continue
-                if len(blobsrcs[iblob]) != len(r.Isrcs):
-                    print('Checkpointed number of sources,', len(r.Isrcs),
-                          'does not match expected', len(blobsrcs[iblob]),
-                          'for iblob', iblob)
-                    continue
+                # if len(blobsrcs[iblob]) != len(r.Isrcs):
+                #     print('Checkpointed number of sources,', len(r.Isrcs),
+                #           'does not match expected', len(blobsrcs[iblob]),
+                #           'for iblob', iblob)
+                #     continue
                 sy,sx = blobslices[iblob]
                 by0,by1,bx0,bx1 = sy.start, sy.stop, sx.start, sx.stop
                 if 'blob_x0' in r and 'blob_y0' in r:
