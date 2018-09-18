@@ -1845,6 +1845,9 @@ def stage_fitblobs(T=None,
                 #     continue
                 sy,sx = blobslices[iblob]
                 by0,by1,bx0,bx1 = sy.start, sy.stop, sx.start, sx.stop
+                if len(r) == 0:
+                    keepR.append(r)
+                    continue
                 if 'blob_x0' in r and 'blob_y0' in r:
                     # check bbox
                     rx0,ry0 = r.blob_x0[0], r.blob_y0[0]
