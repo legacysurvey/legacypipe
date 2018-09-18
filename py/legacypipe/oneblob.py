@@ -604,7 +604,10 @@ class OneBlob(object):
         ix = int(ix-1)
         iy = int(iy-1)
         # Start in blob
-        assert(srcblobmask[iy,ix])
+        sh,sw = srcwcs.shape
+        if ix < 0 or iy < 0 or ix >= sw or iy >= sh or not srcblobmask[iy,ix]:
+            print('Source is starting outside blob -- skipping.')
+            return None
 
         if fit_background:
             for tim in srctims:
