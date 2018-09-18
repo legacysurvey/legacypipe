@@ -1657,8 +1657,8 @@ def _select_model(chisqs, nparams, galaxy_margin, rex):
     # % chisqs['ptsrc'])
     cut = max(cut, fcut)
 
-    expdiff = chisqs['exp'] - chisqs[keepmod]
-    devdiff = chisqs['dev'] - chisqs[keepmod]
+    expdiff = chisqs.get('exp', 0) - chisqs[keepmod]
+    devdiff = chisqs.get('dev', 0) - chisqs[keepmod]
 
     #print('EXP vs', keepmod, ':', expdiff)
     #print('DEV vs', keepmod, ':', devdiff)
