@@ -331,9 +331,11 @@ def stage_tims(W=3600, H=3600, pixscale=0.262, brickname=None,
         from legacypipe.survey import run_calibs
         record_event and record_event('stage_tims: starting calibs')
         kwa = dict(git_version=gitver)
+        #splinesky=False
         if gaussPsf:
             kwa.update(psfex=False)
         if splinesky:
+            print('updating spinesky')
             kwa.update(splinesky=True)
         # Run calibrations
         args = [(im, kwa) for im in ims]
@@ -431,11 +433,12 @@ def stage_tims(W=3600, H=3600, pixscale=0.262, brickname=None,
                 # broaden range to encompass most pixels... only req'd
                 # when sky is bad
                 lo,hi = -5.*sig1, 5.*sig1
-                pix = tim.getImage()[tim.getInvError() > 0]
+                pix = tim.getImage()#[tim.getInvError() > 0]
                 lo = min(lo, np.percentile(pix, 5))
                 hi = max(hi, np.percentile(pix, 95))
                 plt.hist(pix, range=(lo, hi), bins=50, histtype='step',
                          alpha=0.5, label=tim.name)
+                plt.axvline(np.median(pix),alpha=0.2)
             plt.legend()
             plt.xlabel('Pixel values')
             plt.title('Pixel distributions: %s band' % b)
@@ -474,6 +477,9 @@ def stage_tims(W=3600, H=3600, pixscale=0.262, brickname=None,
                 dimshow(((tim.dq & tim.dq_saturation_bits) > 0),
                         vmin=0, vmax=1.5, cmap='hot')
                 plt.title('SATUR')
+            
+            plt.subplot(2,2,4)
+            dimshow(tim.sky)
             plt.suptitle(tim.name)
             ps.savefig()
 
@@ -2952,7 +2958,7 @@ def run_brick(brick, survey, radec=None, pixscale=0.262,
               apodize=False,
               rgb_kwargs=None,
               rex=False,
-              splinesky=False,
+              splinesky=True,
               constant_invvar=False,
               gaia_stars=False,
               min_mjd=None, max_mjd=None,

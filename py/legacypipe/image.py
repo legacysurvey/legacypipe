@@ -204,7 +204,7 @@ class LegacySurveyImage(object):
     def get_tractor_image(self, slc=None, radecpoly=None,
                           gaussPsf=False, pixPsf=False, hybridPsf=False,
                           normalizePsf=False,
-                          splinesky=False,
+                          splinesky=True,
                           apodize=False,
                           nanomaggies=True, subsky=True, tiny=10,
                           dq=True, invvar=True, pixels=True,
@@ -359,7 +359,25 @@ class LegacySurveyImage(object):
             print('Instantiating and subtracting sky model')
             skymod = np.zeros_like(img)
             sky.addTo(skymod)
+            
+            lo,hi = np.percentile(img, [20,80])
+            ima = dict(vmin=lo, vmax=hi, interpolation='nearest', origin='lower', cmap='gray')
+            import matplotlib.pyplot as plt
+            plt.clf()
+            plt.imshow(img, **ima)
+            plt.savefig('before_subtraction_1024'+self.name+'.png')
+
+
             img -= skymod
+            
+            lo,hi = np.percentile(img, [20,80])
+            ima = dict(vmin=lo, vmax=hi, interpolation='nearest', origin='lower', cmap='gray')
+            plt.clf()
+            plt.imshow(img, **ima)
+            plt.savefig('after_subtraction_1024'+self.name+'.png')
+
+
+            
             midsky = np.median(skymod)
             zsky = ConstantSky(0.)
             zsky.version = getattr(sky, 'version', '')
@@ -848,7 +866,7 @@ class LegacySurveyImage(object):
         return skysig1 / zpscale
 
     ### Yuck, this is not much better than just doing read_sky_model().sig1 ...
-    def get_sky_sig1(self, splinesky=False):
+    def get_sky_sig1(self, splinesky=True):
         '''
         Returns the per-pixel noise estimate, which (for historical
         reasons) is stored in the sky model.  NOTE that this is in
@@ -880,7 +898,7 @@ class LegacySurveyImage(object):
         sig1 = hdr.get('SIG1', None)
         return sig1
 
-    def read_sky_model(self, splinesky=False, slc=None, **kwargs):
+    def read_sky_model(self, splinesky=True, slc=None, **kwargs):
         '''
         Reads the sky model, returning a Tractor Sky object.
         '''
@@ -1137,11 +1155,11 @@ class LegacySurveyImage(object):
                 raise RuntimeError('Command failed: %s: return value: %i' %
                                    (cmd,rtn))
 
-    def run_sky(self, splinesky=False, git_version=None):
+    def run_sky(self, splinesky=True, git_version=None):
         from legacypipe.survey import get_version_header
         from scipy.ndimage.morphology import binary_dilation
         from astrometry.util.file import trymakedirs
-
+        print('RUNNING SKY')
         slc = self.get_good_image_slice(None)
         img = self.read_image(slice=slc)
         wt = self.read_invvar(slice=slc)
@@ -1168,7 +1186,7 @@ class LegacySurveyImage(object):
             if np.sum(good) == 0:
                 raise RuntimeError('No pixels with weight > 0 in: ' + str(self))
             med = np.median(img[good])
-
+            print('median is',med)
             # For DECam chips where we drop half the chip, spline becomes underconstrained
             if min(img.shape) / boxsize < 4:
                 boxsize /= 2
@@ -1202,7 +1220,7 @@ class LegacySurveyImage(object):
                 y0 = sy.start
                 x0 = sx.start
                 skyobj.shift(-x0, -y0)
-
+            print('Median stdev of unmasked pixels',sig1)
             hdr.add_record(dict(name='SIG1', value=sig1,
                                 comment='Median stdev of unmasked pixels'))
             hdr.add_record(dict(name='SIG1B', value=sig1,
@@ -1214,6 +1232,7 @@ class LegacySurveyImage(object):
 
         else:
             from tractor.sky import ConstantSky
+            
             try:
                 skyval = estimate_mode(img[wt > 0], raiseOnWarn=True)
                 skymeth = 'mode'
