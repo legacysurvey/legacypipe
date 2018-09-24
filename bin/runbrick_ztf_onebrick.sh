@@ -18,11 +18,12 @@ export LEGACY_SURVEY_DIR=/project/projectdirs/uLens/ZTF/Tractor/data/ZTF18aakxvx
 
 #export PYTHONPATH=/project/projectdirs/uLens/ZTF/Tractor/legacypipe/py:$PYTHONPATH
 #export PYTHONPATH=/global/homes/c/cwar4677:$PYTHONPATH
-export outdir=/global/homes/c/cwar4677/output_oneblob
+export outdir=/global/homes/c/cwar4677/output_individual
 export PYTHONPATH=$PROJECTPATH/legacypipe/py:$PYTHONPATH
 export PYTHONPATH=$PROJECTPATH:$PYTHONPATH
-#python $PROJECTPATH/legacypipe/py/ztfcoadd/ztfCCDtablemaker.py $LEGACY_SURVEY_DIR $outdir
+python $PROJECTPATH/legacypipe/py/ztfcoadd/ztfCCDtablemaker.py $LEGACY_SURVEY_DIR $outdir
 
-python $PROJECTPATH/legacypipe/py/legacypipe/runbrick.py --outdir=$outdir --pixscale=1.01 --no-wise --stage=fitblobs --brick=2395p525 --nblobs=40 --blob=750 --threads=32
+python $PROJECTPATH/legacypipe/py/legacypipe/runbrick.py --outdir=$outdir --pixscale=1.01 --no-wise --stage fit-blobs --brick=2395p525 --nblobs=40 --blob=750 --threads=32 --coadd-bw
+
 #--radec=239.858822,52.209818
 #--nblobs=50 --blob=750 --brick=2395p525 
