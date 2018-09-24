@@ -17,8 +17,8 @@ __author__ = 'Michael Medford <MichaelMedford@berkeley.edu>'
 
 def CreateCCDTable(folder,outfolder):
 
-	image_list = glob.glob(folder+'/images/*sciimg.fits')
-
+	image_list = glob.glob(folder+'images/*sciimg.fits')
+	#image_list = np.loadtxt('/project/projectdirs/uLens/ZTF/Tractor/data/ZTF18aakxvxm/G_small/scie.list',dtype=str)
 	filter_tbl = {1: 'g',
 	              2: 'r',
 	              3: 'i'}
@@ -70,21 +70,21 @@ def CreateCCDTable(folder,outfolder):
 		table['skyrms'].append(0)
 		table['sig1'].append(header['C3SKYSIG'])
 		table['ccdzpt'].append(header['C3ZP'])
-		table['zpt'].append(0)		
-		table['ccdraoff'].append(0)
-		table['ccddecoff'].append(0)
-		table['ccdskycounts'].append(0)
-		table['ccdrarms'].append(0)
-		table['ccddecrms'].append(0)
-		table['ccdphrms'].append(0)
-		table['ccdnmatch'].append(0)
-		table['ccd_cuts'].append(0)
+		#table['zpt'].append(0)		
+		#table['ccdraoff'].append(0)
+		#table['ccddecoff'].append(0)
+		#table['ccdskycounts'].append(0)
+		#table['ccdrarms'].append(0)
+		#table['ccddecrms'].append(0)
+		#table['ccdphrms'].append(0)
+		#table['ccdnmatch'].append(0)
+		#table['ccd_cuts'].append(0)
 
 	f_table = fits_table()
 	for key in table:
 	    f_table.set(key,table[key])
 
-	table_name = outfolder+'/survey-ccds-ztfmerge.fits'
+	table_name = outfolder+'/survey-ccds-ztf.fits'
 	f_table.write_to(table_name)
 
 	if os.path.exists(table_name+'.gz'):

@@ -48,7 +48,7 @@ def main():
 	args = parser.parse_args()
 	if args.folder.endswith('/'):
 		args.folder = args.folder[:-1]
-
+	cwd=os.getcwd()
 	os.chdir(args.folder)
 
 	initialize.delete_folder_contents(args.folder, args.debug)
@@ -89,7 +89,7 @@ def main():
 	utils.print_d("Selecting images for coadd ...",args.debug)
 	coadd.select_best_images(scie_list, args.images_coadd_num, args.debug)
 	coadd.make_coadd(scie_list, args.folder, args.debug)
-
+	os.chdir(cwd)
 if __name__ == '__main__':
 
 	main()
