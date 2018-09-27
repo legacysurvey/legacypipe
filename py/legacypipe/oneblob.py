@@ -163,7 +163,9 @@ class OneBlob(object):
         if self.plots:
             self._initial_plots()
 
-        self._fit_fluxes(cat, self.tims, self.bands)
+        if not self.bigblob:
+            print('Fitting just fluxes using initial models...')
+            self._fit_fluxes(cat, self.tims, self.bands)
         tr = self.tractor(self.tims, cat)
 
         if self.plots:
