@@ -1631,7 +1631,7 @@ def _select_model(chisqs, nparams, galaxy_margin, rex):
         # bright stars / reference stars: we don't test the simple model.
         return 'ptsrc'
     # Now choose between point source and simple model (SIMP/REX)
-    if chisqs['ptsrc'] - nparams['ptsrc'] > chisqs[simname] - nparams[simname]:
+    if chisqs.get('ptsrc',0)-nparams['ptsrc'] > chisqs.get(simname,0)-nparams[simname]:
         #print('Keeping source; PTSRC is better than SIMPLE')
         keepmod = 'ptsrc'
     else:
@@ -1640,12 +1640,12 @@ def _select_model(chisqs, nparams, galaxy_margin, rex):
         keepmod = simname
         # For REX, we also demand a fractionally better fit
         if simname == 'rex':
-            dchisq_psf = chisqs['ptsrc']
-            dchisq_rex = chisqs['rex']
-            if (dchisq_rex - dchisq_psf) < (0.01 * dchisq_psf):
+            dchisq_psf = chisqs.get('ptsrc',0)
+            dchisq_rex = chisqs.get('rex',0)
+            if dchisq_psf > 0 and (dchisq_rex - dchisq_psf) < (0.01 * dchisq_psf):
                 keepmod = 'ptsrc'
 
-    if not 'exp' in chisqs:
+    if not ('exp' in chisqs or 'dev' in chisqs):
         return keepmod
 
     # This is our "upgrade" threshold: how much better a galaxy
@@ -1654,7 +1654,7 @@ def _select_model(chisqs, nparams, galaxy_margin, rex):
 
     # This is the "fractional" upgrade threshold for ptsrc/simple->dev/exp:
     # 1% of ptsrc vs nothing
-    fcut = 0.01 * chisqs['ptsrc']
+    fcut = 0.01 * chisqs.get('ptsrc', 0)
     #print('Cut: max of', cut, 'and', fcut, ' (fraction of chisq_psf=%.1f)'
     # % chisqs['ptsrc'])
     cut = max(cut, fcut)
