@@ -1535,8 +1535,10 @@ def read_gaia(targetwcs):
     # radius to consider affected by this star --
     # FIXME -- want something more sophisticated here!
     # (also see tycho.radius below)
-    gaia.radius = np.zeros(len(gaia), np.float32)
-    # first in pixels
+
+    # This is in degrees and the magic 0.262 (indeed the whole
+    # relation) is from eyeballing a radius-vs-mag plot that was in
+    # pixels; that is unrelated to the present targetwcs pixel scale.
     gaia.radius = np.minimum(1800., 150. * 2.5**((11. - gaia.G)/4.)) * 0.262/3600.
 
     return gaia
@@ -1587,6 +1589,10 @@ def read_tycho2(survey, targetwcs):
     tycho.mag[tycho.mag == 0] = tycho.mag_hp[tycho.mag == 0]
 
     ## FIXME -- want something better here!!
+    #
+
+    # See note on gaia.radius above -- don't change the 0.262 to
+    # targetwcs.pixel_scale()!
     tycho.radius = np.minimum(1800., 150. * 2.5**((11. - tycho.mag)/4.)) * 0.262/3600.
     
     for c in ['tyc1', 'tyc2', 'tyc3', 'mag_bt', 'mag_vt', 'mag_hp',
