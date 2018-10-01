@@ -1736,7 +1736,13 @@ Now using the current directory as LEGACY_SURVEY_DIR, but this is likely to fail
         TT = []
         for fn in fns:
             print('Searching', fn)
-            kd = tree_open(fn, 'expnum')
+            try:
+                kd = tree_open(fn, 'expnum')
+            except:
+                print('Failed to open', fn, ':')
+                import traceback
+                traceback.print_exc()
+                continue
             if kd is None:
                 return None
             I = kd.search(np.array([expnum]), 0.5, 0, 0)
