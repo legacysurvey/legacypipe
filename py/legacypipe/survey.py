@@ -1661,19 +1661,16 @@ Now using the current directory as LEGACY_SURVEY_DIR, but this is likely to fail
 
         * gaussPsf
         * pixPsf
-
         '''
         # Read images
         C = self.ccds_touching_wcs(targetwcs)
         # Sort by band
         if bands is not None:
-            C.cut(np.hstack([np.nonzero(C.filter == band)[0]
-                             for band in bands]))
+            C.cut(np.array([b in bands for b in C.filter]))
         ims = []
         for t in C:
-            print()
-            print('Image file', t.image_filename, 'hdu', t.image_hdu)
-            im = DecamImage(self, t)
+            self.debug('Image file', t.image_filename, 'hdu', t.image_hdu)
+            im = self.get_image_object(self, t)
             ims.append(im)
         # Read images, clip to ROI
         W,H = targetwcs.get_width(), targetwcs.get_height()
