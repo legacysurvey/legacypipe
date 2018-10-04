@@ -3250,6 +3250,7 @@ def collapse_unwise_bitmask(bitmask, band):
     # 2^7 = geometric diffraction spike
     '''
     assert((band == 1) or (band == 2))
+    from collections import OrderedDict
 
     bits_w1 = OrderedDict([('core_wings', 2**0 + 2**1),
                            ('psf_spike', 2**27),
@@ -3274,7 +3275,7 @@ def collapse_unwise_bitmask(bitmask, band):
     # hack to handle both scalar and array inputs
     result = 0*bitmask
     for i, feat in enumerate(bits.keys()):
-        result += (2**i)*(np.bitwise_and(bitmask, bits[feat]) != 0)
+        result += ((2**i)*(np.bitwise_and(bitmask, bits[feat]) != 0)).astype(np.uint8)
     return result.astype('uint8')
 
 def _unwise_phot(X):
@@ -3432,7 +3433,7 @@ def stage_writecat(
                 out.fits.write(wise_mask_maps[0], header=wisehdr)
                 out.fits.write(wise_mask_maps[1], header=wisehdr)
         del maskbits
-        del wise_mask_map
+        del wise_mask_maps
 
     TT = T.copy()
     for k in ['ibx','iby']:

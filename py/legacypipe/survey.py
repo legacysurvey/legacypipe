@@ -1346,6 +1346,7 @@ Now using the current directory as LEGACY_SURVEY_DIR, but this is likely to fail
         d['ccds'] = None
         d['bricks'] = None
         d['bricktree'] = None
+        d['ccd_kdtrees'] = None
         return d
 
     def drop_cache(self):
