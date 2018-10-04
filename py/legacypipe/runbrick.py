@@ -1183,7 +1183,7 @@ def stage_srcs(targetrd=None, pixscale=None, targetwcs=None,
     ref_margin = 0.125
     mpix = int(np.ceil(ref_margin * 3600. / pixscale))
     marginwcs = targetwcs.get_subimage(-mpix, -mpix, W+2*mpix, H+2*mpix)
-    print('Enlarged target WCS from', targetwcs, 'to', marginwcs, 'for ref stars')
+    #print('Enlarged target WCS from', targetwcs, 'to', marginwcs, 'for ref stars')
     # Read Tycho-2 stars and use as saturated sources.
     tycho = read_tycho2(survey, marginwcs)
     refstars = tycho
@@ -1206,12 +1206,12 @@ def stage_srcs(targetrd=None, pixscale=None, targetwcs=None,
             gdec = gaia.dec + (1991.5 - gaia.ref_epoch) * gaia.pmdec / (3600.*1000.)
             I,J,d = match_radec(tycho.ra, tycho.dec, gra, gdec, 1./3600.,
                                 nearest=True)
-            print('Matched', len(I), 'Tycho-2 stars to Gaia stars.  Dists:', d)
+            #print('Matched', len(I), 'Tycho-2 stars to Gaia stars.')
             if len(I):
                 keep = np.ones(len(tycho), bool)
                 keep[I] = False
                 tycho.cut(keep)
-                print('Cut to', len(tycho), 'Tycho-2 stars that do not match Gaia')
+                #print('Cut to', len(tycho), 'Tycho-2 stars that do not match Gaia')
                 gaia.isbright[J] = True
         if len(gaia):
             refstars = merge_tables([refstars, gaia], columns='fillzero')
@@ -1523,7 +1523,7 @@ def read_gaia(targetwcs):
     gaia.pmdec_ivar = 1./gaia.pmdec_error**2
     gaia.parallax_ivar = 1./gaia.parallax_error**2
     # mas -> deg
-    gaia.ra_ivar  = 1./(gaia.ra_error  / np.cos(np.deg2rad(gaia.dec)) / 1000. / 3600.)**2
+    gaia.ra_ivar  = 1./(gaia.ra_error  / 1000. / 3600.)**2
     gaia.dec_ivar = 1./(gaia.dec_error / 1000. / 3600.)**2
 
     for c in ['ra_error', 'dec_error', 'parallax_error', 'pmra_error', 'pmdec_error']:
@@ -1580,7 +1580,7 @@ def read_tycho2(survey, targetwcs):
                     tycho.tyc3.astype(np.int64))
     tycho.pmra_ivar = 1./tycho.sigma_pm_ra**2
     tycho.pmdec_ivar = 1./tycho.sigma_pm_dec**2
-    tycho.ra_ivar  = 1./(tycho.sigma_ra / np.cos(np.deg2rad(tycho.dec)))**2
+    tycho.ra_ivar  = 1./tycho.sigma_ra **2
     tycho.dec_ivar = 1./tycho.sigma_dec**2
 
     tycho.rename('pm_ra', 'pmra')
@@ -3456,6 +3456,13 @@ def stage_writecat(
     hdr = fs = None
     T2,hdr = prepare_fits_catalog(cat, invvars, TT, hdr, bands, fs)
 
+    # The "ra_ivar" values coming out of the tractor fits do *not*
+    # have a cos(Dec) term -- ie, they give the inverse-variance on
+    # the numerical value of RA -- so we want to make the ra_sigma
+    #  values smaller by multiplying by cos(Dec); so invvars are /=
+    #  cosdec^2
+    T2.ra_ivar /= np.cos(np.deg2rad(T2.dec))**2
+    
     # Compute fiber fluxes
     T2.fiberflux, T2.fibertotflux = get_fiber_fluxes(
         cat, T2, targetwcs, H, W, pixscale, bands, plots=plots, ps=ps)
