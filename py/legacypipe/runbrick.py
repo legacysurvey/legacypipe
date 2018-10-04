@@ -3024,11 +3024,10 @@ def stage_wise_forced(
             WISE.add_columns_from(p)
         WISE.rename('tile', 'wise_coadd_id')
 
-        # While we're here, we'll resample the WISE masks into brick space, for later
-        # packing into the maskbits data product.
-        # Bit 0: OR of the W1 bits
-        # Bit 1: OR of the W2 bits
-        wise_mask_map = np.zeros((H,W), np.uint8)
+        # While we're here, we'll resample the WISE masks into brick
+        # space, for later packing into the maskbits data product.
+        wise_mask_maps = [np.zeros((H,W), np.uint8),
+                          np.zeros((H,W), np.uint8)]
 
         if unwise_coadds:
             from legacypipe.survey import wcs_for_brick
@@ -3069,40 +3068,37 @@ def stage_wise_forced(
             wcs = Tan(*[float(hdr[k]) for k in
                         ['CRVAL1', 'CRVAL2', 'CRPIX1', 'CRPIX2',
                          'CD1_1', 'CD1_2', 'CD2_1','CD2_2','NAXIS2','NAXIS1']])
-            #print('Read WCS header', wcs)
             ok,xx,yy = wcs.radec2pixelxy(ra, dec)
             hh,ww = wcs.get_height(), wcs.get_width()
-            #print('unWISE image size', hh,ww)
             xx = np.round(xx - 1).astype(int)
             yy = np.round(yy - 1).astype(int)
             I = np.flatnonzero(ok * (xx >= 0)*(xx < ww) * (yy >= 0)*(yy < hh))
-            print(len(I), 'sources are within tile', tile)
+            #print(len(I), 'sources are within tile', tile)
             if len(I):
-                # Reference the mask image M at yy,xx indices
+                # Reference the mask image M at yy,xx indices (source positions)
                 Mi = M[yy[I], xx[I]]
                 # unpack mask bits
-                # The WISE mask files have:
-                #  bit 0: W1 bright star, south-going scan
-                #  bit 1: W1 bright star, north-going scan
-                #  bit 2: W2 bright star, south-going scan
-                #  bit 3: W2 bright star, north-going scan
-                WISE.wise_mask[I, 0] = ( Mi       & 3)
-                WISE.wise_mask[I, 1] = ((Mi >> 2) & 3)
+                WISE.wise_mask[I, 0] = collapse_unwise_bitmask(Mi, 1)
+                WISE.wise_mask[I, 1] = collapse_unwise_bitmask(Mi, 2)
 
-            # Resample to brick coordinates for the "maskbits" data product.
+            # Resample the whole WISE map to brick coordinates for the
+            # "maskbits" data product.
             try:
                 Yo,Xo,Yi,Xi,nil = resample_with_wcs(targetwcs, wcs)
                 maskvals = M[Yi,Xi]
-                # W1
-                K, = np.nonzero(maskvals & 3)
+                # Cut to just pixels with masks set.
+                K = np.nonzero(maskvals)
+                print('Setting', len(K), 'WISE mask bits from tile', tile)
                 if len(K):
-                    print('Setting', len(K), 'W1 mask bits from tile', tile)
-                    wise_mask_map[Yo[K],Xo[K]] |= 1
-                # W2
-                K, = np.nonzero(maskvals & (3 << 2))
-                if len(K):
-                    print('Setting', len(K), 'W2 mask bits from tile', tile)
-                    wise_mask_map[Yo[K],Xo[K]] |= 2
+                    Yo = Yo[K]
+                    Xo = Xo[K]
+                    maskvals = maskvals[K]
+
+                    w1mask = collapse_unwise_bitmask(maskvals, 1)
+                    w2mask = collapse_unwise_bitmask(maskvals, 2)
+
+                    wise_mask_maps[0][Yo,Xo] |= w1mask
+                    wise_mask_maps[1][Yo,Xo] |= w2mask
             except OverlapError:
                 print('No overlap between WISE tile', tile, 'and brick')
                 pass
@@ -3234,7 +3230,52 @@ def stage_wise_forced(
     print('Returning: WISE', WISE)
     print('Returning: WISE_T', WISE_T)
 
-    return dict(WISE=WISE, WISE_T=WISE_T, wise_mask_map=wise_mask_map)
+    return dict(WISE=WISE, WISE_T=WISE_T, wise_mask_maps=wise_mask_maps)
+
+
+def collapse_unwise_bitmask(bitmask, band):
+    '''
+    Converts WISE mask bits (in the unWISE data products) into the
+    more compact codes reported in the tractor files as
+    WISEMASK_W[12], and the "maskbits" WISE extensions.
+
+    output bits :
+    # 2^0 = bright star core and wings
+    # 2^1 = PSF-based diffraction spike
+    # 2^2 = optical ghost
+    # 2^3 = first latent
+    # 2^4 = second latent
+    # 2^5 = AllWISE-like circular halo
+    # 2^6 = bright star saturation
+    # 2^7 = geometric diffraction spike
+    '''
+    assert((band == 1) or (band == 2))
+
+    bits_w1 = OrderedDict([('core_wings', 2**0 + 2**1),
+                           ('psf_spike', 2**27),
+                           ('ghost', 2**25 + 2**26),
+                           ('first_latent', 2**13 + 2**14),
+                           ('second_latent', 2**17 + 2**18),
+                           ('circular_halo', 2**23),
+                           ('saturation', 2**4),
+                           ('geom_spike', 2**29)])
+
+    bits_w2 = OrderedDict([('core_wings', 2**2 + 2**3),
+                           ('psf_spike', 2**28),
+                           ('ghost', 2**11 + 2**12),
+                           ('first_latent', 2**15 + 2**16),
+                           ('second_latent', 2**19 + 2**20),
+                           ('circular_halo', 2**24),
+                           ('saturation', 2**5),
+                           ('geom_spike', 2**30)])
+
+    bits = (bits_w1 if (band == 1) else bits_w2)
+
+    # hack to handle both scalar and array inputs
+    result = 0*bitmask
+    for i, feat in enumerate(bits.keys()):
+        result += (2**i)*(np.bitwise_and(bitmask, bits[feat]) != 0)
+    return result.astype('uint8')
 
 def _unwise_phot(X):
     from wise.forcedphot import unwise_forcedphot
@@ -3304,7 +3345,7 @@ def stage_writecat(
     WISE_T=None,
     maskbits=None,
     maskbits_header=None,
-    wise_mask_map=None,
+    wise_mask_maps=None,
     AP=None,
     apertures_arcsec=None,
     cat=None, pixscale=None, targetwcs=None,
@@ -3330,17 +3371,18 @@ def stage_writecat(
     if maskbits is not None:
         w1val = MASKBITS['WISEM1']
         w2val = MASKBITS['WISEM2']
-        if wise_mask_map is not None:
-            # Add it in!
-            maskbits += w1val * ((wise_mask_map & 1) != 0)
-            maskbits += w2val * ((wise_mask_map & 2) != 0)
+
+        if wise_mask_maps is not None:
+            # Add the WISE masks in!
+            maskbits += w1val * (wise_mask_maps[0] != 0)
+            maskbits += w2val * (wise_mask_maps[1] != 0)
 
         hdr = maskbits_header
         if hdr is not None:
             hdr.add_record(dict(name='WISEM1', value=w1val,
-                                comment='Mask value for WISE W1 bright-star'))
+                                comment='Mask value for WISE W1 (all masks)'))
             hdr.add_record(dict(name='WISEM2', value=w2val,
-                                comment='Mask value for WISE W2 bright-star'))
+                                comment='Mask value for WISE W2 (all masks)'))
 
         hdr.add_record(dict(name='BITNM0', value='NPRIMARY',
                             comment='maskbits bit 0: not-brick-primary'))
