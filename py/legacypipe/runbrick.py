@@ -3407,8 +3407,30 @@ def stage_writecat(
         hdr.add_record(dict(name='BITNM10', value='BAILOUT',
                             comment='maskbits bit 10: Bailed out of processing'))
 
+        if wise_mask_maps is not None:
+            wisehdr = fitsio.FITSHDR()
+            wisehdr.add_record(dict(name='WBITNM0', value='BRIGHT',
+                                    comment='Bright star core and wings'))
+            wisehdr.add_record(dict(name='WBITNM1', value='SPIKE',
+                                    comment='PSF-based diffraction spike'))
+            wisehdr.add_record(dict(name='WBITNM2', value='GHOST',
+                                    commet='Optical ghost'))
+            wisehdr.add_record(dict(name='WBITNM3', value='LATENT',
+                                    comment='First latent'))
+            wisehdr.add_record(dict(name='WBITNM4', value='LATENT2',
+                                    comment='Second latent image'))
+            wisehdr.add_record(dict(name='WBITNM5', value='HALO',
+                                    comment='AllWISE-like circular halo'))
+            wisehdr.add_record(dict(name='WBITNM6', value='SATUR',
+                                    comment='Bright star saturation'))
+            wisehdr.add_record(dict(name='WBITNM7', value='SPIKE2',
+                                    comment='Geometric diffraction spike'))
+
         with survey.write_output('maskbits', brick=brickname, shape=maskbits.shape) as out:
             out.fits.write(maskbits, header=hdr)
+            if wise_mask_maps is not None:
+                out.fits.write(wise_mask_maps[0], header=wisehdr)
+                out.fits.write(wise_mask_maps[1], header=wisehdr)
         del maskbits
         del wise_mask_map
 
