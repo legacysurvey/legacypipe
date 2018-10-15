@@ -852,16 +852,16 @@ def segment_and_group_sources(image, T, name=None, ps=None, plots=False):
     bm[0] = -1
 
     # DEBUG
-    if plots:
-        import fitsio
-        fitsio.write('blobs-before-%s.fits' % name, blobs, clobber=True)
+    # if plots:
+    #     import fitsio
+    #     fitsio.write('blobs-before-%s.fits' % name, blobs, clobber=True)
 
     # Remap blob numbers
     blobs = bm[blobs]
 
-    if plots:
-        import fitsio
-        fitsio.write('blobs-after-%s.fits' % name, blobs, clobber=True)
+    # if plots:
+    #     import fitsio
+    #     fitsio.write('blobs-after-%s.fits' % name, blobs, clobber=True)
 
     if plots:
         import pylab as plt
