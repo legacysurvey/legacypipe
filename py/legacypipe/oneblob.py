@@ -1417,8 +1417,12 @@ def _initialize_models(src, rex):
         oldmodel = 'ptsrc'
 
     elif isinstance(src, DevGalaxy):
-        ptsrc = PointSource(src.getPosition(), src.getBrightness()).copy()
-        simple = SimpleGalaxy(src.getPosition(), src.getBrightness()).copy()
+        if rex:
+            from legacypipe.survey import LogRadius
+            simple = RexGalaxy(src.getPosition(), src.getBrightness(),
+                               LogRadius(np.log(src.getShape().re))).copy()
+        else:
+            simple = SimpleGalaxy(src.getPosition(), src.getBrightness()).copy()
         dev = src.copy()
         exp = ExpGalaxy(src.getPosition(), src.getBrightness(),
                         src.getShape()).copy()
@@ -1427,7 +1431,12 @@ def _initialize_models(src, rex):
 
     elif isinstance(src, ExpGalaxy):
         ptsrc = PointSource(src.getPosition(), src.getBrightness()).copy()
-        simple = SimpleGalaxy(src.getPosition(), src.getBrightness()).copy()
+        if rex:
+            from legacypipe.survey import LogRadius
+            simple = RexGalaxy(src.getPosition(), src.getBrightness(),
+                               LogRadius(np.log(src.getShape().re))).copy()
+        else:
+            simple = SimpleGalaxy(src.getPosition(), src.getBrightness()).copy()
         dev = DevGalaxy(src.getPosition(), src.getBrightness(),
                         src.getShape()).copy()
         exp = src.copy()
@@ -1436,12 +1445,19 @@ def _initialize_models(src, rex):
 
     elif isinstance(src, FixedCompositeGalaxy):
         ptsrc = PointSource(src.getPosition(), src.getBrightness()).copy()
-        simple = SimpleGalaxy(src.getPosition(), src.getBrightness()).copy()
         frac = src.fracDev.clipped()
-        if frac > 0:
+        if frac > 0.5:
             shape = src.shapeDev
         else:
             shape = src.shapeExp
+
+        if rex:
+            from legacypipe.survey import LogRadius
+            simple = RexGalaxy(src.getPosition(), src.getBrightness(),
+                               LogRadius(np.log(shape.re))).copy()
+        else:
+            simple = SimpleGalaxy(src.getPosition(), src.getBrightness()).copy()
+
         dev = DevGalaxy(src.getPosition(), src.getBrightness(), shape).copy()
         if frac < 1:
             shape = src.shapeExp
