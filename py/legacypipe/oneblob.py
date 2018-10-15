@@ -36,8 +36,8 @@ def one_blob(X):
 
     hasbright = refs is not None and np.any(refs.isbright)
     hasmedium = refs is not None and np.any(refs.ismedium)
-    hasgalaxy = refs is not None and 'islargegalaxy' in refs.get_columns() and np.any(refs.islargegalaxy)
-    hascluster = refs is not None and 'iscluster' in refs.get_columns() and np.any(refs.iscluster)
+    hasgalaxy = refs is not None and np.any(refs.islargegalaxy)
+    hascluster = refs is not None and np.any(refs.iscluster)
 
     print('Has bright star:', hasbright, 'medium:', hasmedium, 'large galaxy:', hasgalaxy)
     

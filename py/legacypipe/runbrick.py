@@ -1303,6 +1303,11 @@ def stage_srcs(targetrd=None, pixscale=None, targetwcs=None,
     else:
         largegals = []
 
+    if not 'islargegalaxy' in refstars.get_columns():
+        refstars.islargegalaxy = np.zeros(len(refstars), bool)
+    if not 'iscluster' in refstars.get_columns():
+        refstars.iscluster = np.zeros(len(refstars), bool)
+
     # Saturated blobs -- create a source for each, except for those
     # that already have a Tycho-2 or Gaia star
     satmap = reduce(np.logical_or, satmaps)
@@ -2450,7 +2455,6 @@ def _blob_iter(blobslices, blobsrcs, blobs, targetwcs, tims, cat, bands,
 
         hasbright = refs is not None and np.any(refs.isbright)
         hasmedium = refs is not None and np.any(refs.ismedium)
-        #haslargegal = iblob in galblobs
         haslargegal = refs is not None and np.any(refs.islargegalaxy)
 
         npix = np.sum(blobmask)
