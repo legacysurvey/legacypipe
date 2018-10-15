@@ -36,6 +36,15 @@ MASKBITS = dict(
     WISEM1     = 0x100, # WISE masked
     WISEM2     = 0x200,
     BAILOUT    = 0x400, # bailed out of processing
+    MEDIUM     = 0x800, # medium-bright star
+)
+
+# Bits in the "brightblob" bitmask
+IN_BLOB = dict(
+    BRIGHT = 0x1,
+    MEDIUM = 0x2,
+    CLUSTER = 0x4,
+    GALAXY = 0x8,
 )
 
 # Ugly hack: for sphinx documentation, the astrometry and tractor (and
@@ -248,7 +257,13 @@ class LogRadius(EllipseESoft):
     def __init__(self, *args, **kwargs):
         super(LogRadius, self).__init__(*args, **kwargs)
         self.lowers = [None]
-        self.uppers = [None]
+        self.uppers = [5.]
+
+    def isLegal(self):
+        return self.logre <= self.uppers[0]
+
+    def setMaxLogRadius(self, rmax):
+        self.uppers[0] = rmax
 
     @staticmethod
     def getName():
@@ -862,7 +877,7 @@ class LegacySurveyData(object):
     '''
 
     def __init__(self, survey_dir=None, cache_dir=None, output_dir=None,
-                 version=None, ccds=None):
+                 version=None, ccds=None, verbose=False):
         '''Create a LegacySurveyData object using data from the given
         *survey_dir* directory, or from the $LEGACY_SURVEY_DIR environment
         variable.
@@ -919,6 +934,10 @@ Now using the current directory as LEGACY_SURVEY_DIR, but this is likely to fail
         ### HACK! Hard-coded brick edge size, in degrees!
         self.bricksize = 0.25
 
+        # Cached CCD kd-tree --
+        # - initially None, then a list of (fn, kd)
+        self.ccd_kdtrees = None
+
         self.image_typemap = {
             'decam'  : DecamImage,
             'decam+noise'  : DecamImage,
@@ -934,6 +953,8 @@ Now using the current directory as LEGACY_SURVEY_DIR, but this is likely to fail
         assert(version in [None, 'dr2', 'dr1'])
         self.version = version
 
+        self.verbose = verbose
+
         # Filename prefix for coadd files
         self.file_prefix = 'legacysurvey'
         if self.version in ['dr1','dr2']:
@@ -942,6 +963,10 @@ Now using the current directory as LEGACY_SURVEY_DIR, but this is likely to fail
     def __str__(self):
         return ('%s: dir %s, out %s' %
                 (type(self).__name__, self.survey_dir, self.output_dir))
+
+    def debug(self, *args):
+        if self.verbose:
+            print(*args)
 
     def ccds_for_fitting(self, brick, ccds):
         # By default, use all.
@@ -1057,6 +1082,15 @@ Now using the current directory as LEGACY_SURVEY_DIR, but this is likely to fail
                 if os.path.exists(fn):
                     return fn
             return swap(os.path.join(basedir, 'tycho2.kd.fits'))
+
+        elif filetype == 'large-galaxies':
+            dirnm = os.environ.get('LARGEGALAXIES_DIR')
+            fn = 'LSLGA-v1.0.kd.fits'
+            if dirnm is not None:
+                fn = os.path.join(dirnm, fn)
+                if os.path.exists(fn):
+                    return fn
+            return swap(os.path.join(basedir, fn))
 
         elif filetype == 'annotated-ccds':
             if self.version == 'dr2':
@@ -1322,6 +1356,7 @@ Now using the current directory as LEGACY_SURVEY_DIR, but this is likely to fail
         d['ccds'] = None
         d['bricks'] = None
         d['bricktree'] = None
+        d['ccd_kdtrees'] = None
         return d
 
     def drop_cache(self):
@@ -1563,34 +1598,20 @@ Now using the current directory as LEGACY_SURVEY_DIR, but this is likely to fail
         '''
         Returns a table of the CCDs touching the given *wcs* region.
         '''
-        fns = self.find_file('ccd-kds')
-        fns = self.filter_ccd_kd_files(fns)
-        if len(fns):
-            # Assume that if >= 1 survey-ccds-*.kd.fits files exist,
-            # then we should read all CCDs from there rather than
-            # survey-ccds-*.fits.gz.
-            # This file was created via:
-            # python>> from legacypipe.survey import *
-            # >> survey=LegacySurveyData(survey_dir='/global/cscratch1/sd/desiproc/dr5')
-            # >> ccds = survey.get_ccds()
-            # >> ccds.writeto('/tmp/ccds-dr5.fits')
-            # Astrometry.net's 'startree' program:
-            # > startree -i /tmp/ccds-dr5.fits -o /tmp/dr5.kd -P -k -n ccds
-            # > fitsgetext -i /tmp/dr5.kd -o /tmp/survey-ccds-dr5.kd.fits -e 0 -e 6 -e 1 -e 2 -e 3 -e 4 -e 5
-            from astrometry.libkd.spherematch import tree_open, tree_search_radec
+        kdfns = self.get_ccd_kdtrees()
 
+        if len(kdfns):
+            from astrometry.libkd.spherematch import tree_search_radec
             # MAGIC number: we'll search a 1-degree radius for CCDs
             # roughly in range, then refine using the
             # ccds_touching_wcs() function.
             radius = 1.
-
             ra,dec = wcs.radec_center()
             TT = []
-            for fn in fns:
-                print('Searching', fn)
-                kd = tree_open(fn, 'ccds')
+            for fn,kd in kdfns:
                 I = tree_search_radec(kd, ra, dec, radius)
-                print(len(I), 'CCDs within', radius, 'deg of RA,Dec (%.3f, %.3f)' % (ra,dec))
+                self.debug(len(I), 'CCDs within', radius, 'deg of RA,Dec',
+                           '(%.3f, %.3f)' % (ra,dec))
                 if len(I) == 0:
                     continue
                 # Read only the CCD-table rows within range.
@@ -1605,6 +1626,22 @@ Now using the current directory as LEGACY_SURVEY_DIR, but this is likely to fail
         if len(I) == 0:
             return None
         return ccds[I]
+
+    def get_ccd_kdtrees(self):
+        # check cache...
+        if self.ccd_kdtrees is not None:
+            return self.ccd_kdtrees
+        
+        fns = self.find_file('ccd-kds')
+        fns = self.filter_ccd_kd_files(fns)
+
+        from astrometry.libkd.spherematch import tree_open
+        self.ccd_kdtrees = []
+        for fn in fns:
+            self.debug('Opening kd-tree', fn)
+            kd = tree_open(fn, 'ccds')
+            self.ccd_kdtrees.append((fn, kd))
+        return self.ccd_kdtrees
 
     def get_image_object(self, t, **kwargs):
         '''
@@ -1635,19 +1672,16 @@ Now using the current directory as LEGACY_SURVEY_DIR, but this is likely to fail
 
         * gaussPsf
         * pixPsf
-
         '''
         # Read images
         C = self.ccds_touching_wcs(targetwcs)
         # Sort by band
         if bands is not None:
-            C.cut(np.hstack([np.nonzero(C.filter == band)[0]
-                             for band in bands]))
+            C.cut(np.array([b in bands for b in C.filter]))
         ims = []
         for t in C:
-            print()
-            print('Image file', t.image_filename, 'hdu', t.image_hdu)
-            im = DecamImage(self, t)
+            self.debug('Image file', t.image_filename, 'hdu', t.image_hdu)
+            im = self.get_image_object(self, t)
             ims.append(im)
         # Read images, clip to ROI
         W,H = targetwcs.get_width(), targetwcs.get_height()
@@ -1722,7 +1756,13 @@ Now using the current directory as LEGACY_SURVEY_DIR, but this is likely to fail
         TT = []
         for fn in fns:
             print('Searching', fn)
-            kd = tree_open(fn, 'expnum')
+            try:
+                kd = tree_open(fn, 'expnum')
+            except:
+                print('Failed to open', fn, ':')
+                import traceback
+                traceback.print_exc()
+                continue
             if kd is None:
                 return None
             I = kd.search(np.array([expnum]), 0.5, 0, 0)
