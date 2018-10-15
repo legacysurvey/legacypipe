@@ -3084,7 +3084,7 @@ def stage_wise_forced(
         else:
             WISE = phots[0]
 
-    wise_mask_map = None
+    wise_mask_maps = None
     if WISE is not None:
         # The "phot" results for the full-depth coadds are one table per
         # band.  Merge all those columns.
