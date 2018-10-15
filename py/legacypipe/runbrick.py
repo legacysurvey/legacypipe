@@ -1223,6 +1223,7 @@ def stage_srcs(targetrd=None, pixscale=None, targetwcs=None,
         clusters = read_star_clusters(marginwcs)
         print('Found', len(clusters), 'star clusters nearby')
         if len(clusters):
+            clusters.iscluster = np.ones(len(clusters), bool)
             refstars = merge_tables([refstars, clusters], columns='fillzero')
 
     # Grab subset of reference stars that are actually *within* the
@@ -1287,15 +1288,18 @@ def stage_srcs(targetrd=None, pixscale=None, targetwcs=None,
             fluxes = dict([(band, NanoMaggies.magToNanomaggies(g.mag)) for band in bands])
             assert(np.all(np.isfinite(list(fluxes.values()))))
             ss = g.d25 * 60. / 2.
-            gal = ExpGalaxy(RaDecPos(gal.ra, gal.dec),
+            gal = ExpGalaxy(RaDecPos(g.ra, g.dec),
                             NanoMaggies(order=bands, **fluxes),
                             LegacyEllipseWithPriors(np.log(ss), 0., 0.))
             gal.isForcedLargeGalaxy = True
             largecat.append(gal)
         if len(largegals):
+            largegals.radius = largegals.d25 / 2. / 60.
             largegals.delete_column('d25')
-            largegals.rename_column('lslga_id', 'ref_id')
+            largegals.rename('lslga_id', 'ref_id')
             largegals.ref_cat = np.array(['L1'] * len(largegals))
+            largegals.islargegalaxy = np.ones(len(largegals), bool)
+            refstars = merge_tables([refstars, largegals], columns='fillzero')
     else:
         largegals = []
 
@@ -1428,6 +1432,10 @@ def stage_srcs(targetrd=None, pixscale=None, targetwcs=None,
             if len(I):
                 plt.plot(refstars.ibx[I], refstars.iby[I], '+',
                          color=(0.2,0.2,1), label='Gaia', **crossa)
+            I, = np.nonzero([r == 'L1' for r in refstars.ref_cat])
+            if len(I):
+                plt.plot(refstars.ibx[I], refstars.iby[I], '+',
+                         color=(0.6,0.6,0.2), label='Large Galaxy', **crossa)
         plt.plot(Tnew.ibx, Tnew.iby, '+', color=(0,1,0),
                  label='New SED-matched detections', **crossa)
         plt.axis(ax)
@@ -2353,6 +2361,8 @@ def _blob_iter(blobslices, blobsrcs, blobs, targetwcs, tims, cat, bands,
     H,W = targetwcs.shape
 
     # Large galaxies
+    if len(largegals) == 0:
+        largegals = None
     if largegals is None:
         galblobs = set()
     else:
@@ -2440,7 +2450,8 @@ def _blob_iter(blobslices, blobsrcs, blobs, targetwcs, tims, cat, bands,
 
         hasbright = refs is not None and np.any(refs.isbright)
         hasmedium = refs is not None and np.any(refs.ismedium)
-        haslargegal = iblob in largegalsblobs
+        #haslargegal = iblob in galblobs
+        haslargegal = refs is not None and np.any(refs.islargegalaxy)
 
         npix = np.sum(blobmask)
         print(('Blob %i of %i, id: %i, sources: %i, size: %ix%i, npix %i, brick X: %i,%i, ' +

@@ -28,15 +28,16 @@ def one_blob(X):
     (nblob, iblob, Isrcs, brickwcs, bx0, by0, blobw, blobh, blobmask, timargs,
      srcs, bands, plots, ps, simul_opt, use_ceres, rex, refs) = X
 
-    print('Fitting blob number', nblob, 'val', iblob, ':', len(Isrcs),
-          'sources, size', blobw, 'x', blobh, len(timargs), 'images')
+    print('Fitting blob number %i: blobid %i, nsources %i, size %i x %i, %i images' %
+          (nblob, iblob, len(Isrcs), blobw, blobh, len(timargs)))
 
     if len(timargs) == 0:
         return None
 
     hasbright = refs is not None and np.any(refs.isbright)
     hasmedium = refs is not None and np.any(refs.ismedium)
-    hasgalaxy = refs is not None and np.any(refs.isgalaxy)
+    hasgalaxy = refs is not None and 'islargegalaxy' in refs.get_columns() and np.any(refs.islargegalaxy)
+    hascluster = refs is not None and 'iscluster' in refs.get_columns() and np.any(refs.iscluster)
 
     print('Has bright star:', hasbright, 'medium:', hasmedium, 'large galaxy:', hasgalaxy)
     
@@ -100,7 +101,7 @@ def one_blob(X):
         B.brightblob += IN_BLOB['BRIGHT']
     if hasmedium:
         B.brightblob += IN_BLOB['MEDIUM']
-    if refs is not None and 'iscluster' in refs.get_columns() and np.any(refs.iscluster):
+    if hascluster:
         B.brightblob += IN_BLOB['CLUSTER']
     if hasgalaxy:
         B.brightblob += IN_BLOB['GALAXY']

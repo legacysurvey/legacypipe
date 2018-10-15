@@ -9,13 +9,12 @@ from astrometry.util.multiproc import multiproc
 from astrometry.util.ttime import Time
 
 class EllipseWithPriors(EllipseESoft):
-    '''
-    An ellipse (used to represent galaxy shapes) with Gaussian priors
+    '''An ellipse (used to represent galaxy shapes) with Gaussian priors
     over softened ellipticity parameters.  This class is used during
     fitting.
     
-    We ALSO place a prior on log-radius, forcing it to be < +6.5 (r_e =
-    665"=11 arcmin).
+    We ALSO place a prior on log-radius, forcing it to be < +5 (in
+    log-arcsec); though this gets dynamically adjusted in the oneblob.py code.
 
     To use this class, subclass it and set the 'ellipticityStd' class
     member.
