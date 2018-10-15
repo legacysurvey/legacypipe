@@ -1223,6 +1223,7 @@ def stage_srcs(targetrd=None, pixscale=None, targetwcs=None,
         clusters = read_star_clusters(marginwcs)
         print('Found', len(clusters), 'star clusters nearby')
         if len(clusters):
+            clusters.iscluster = np.ones(len(clusters), bool)
             refstars = merge_tables([refstars, clusters], columns='fillzero')
 
     # Grab subset of reference stars that are actually *within* the
@@ -1287,17 +1288,25 @@ def stage_srcs(targetrd=None, pixscale=None, targetwcs=None,
             fluxes = dict([(band, NanoMaggies.magToNanomaggies(g.mag)) for band in bands])
             assert(np.all(np.isfinite(list(fluxes.values()))))
             ss = g.d25 * 60. / 2.
-            gal = ExpGalaxy(RaDecPos(gal.ra, gal.dec),
+            gal = ExpGalaxy(RaDecPos(g.ra, g.dec),
                             NanoMaggies(order=bands, **fluxes),
                             LegacyEllipseWithPriors(np.log(ss), 0., 0.))
             gal.isForcedLargeGalaxy = True
             largecat.append(gal)
         if len(largegals):
+            largegals.radius = largegals.d25 / 2. / 60.
             largegals.delete_column('d25')
-            largegals.rename_column('lslga_id', 'ref_id')
+            largegals.rename('lslga_id', 'ref_id')
             largegals.ref_cat = np.array(['L1'] * len(largegals))
+            largegals.islargegalaxy = np.ones(len(largegals), bool)
+            refstars = merge_tables([refstars, largegals], columns='fillzero')
     else:
         largegals = []
+
+    if not 'islargegalaxy' in refstars.get_columns():
+        refstars.islargegalaxy = np.zeros(len(refstars), bool)
+    if not 'iscluster' in refstars.get_columns():
+        refstars.iscluster = np.zeros(len(refstars), bool)
 
     # Saturated blobs -- create a source for each, except for those
     # that already have a Tycho-2 or Gaia star
@@ -1428,6 +1437,10 @@ def stage_srcs(targetrd=None, pixscale=None, targetwcs=None,
             if len(I):
                 plt.plot(refstars.ibx[I], refstars.iby[I], '+',
                          color=(0.2,0.2,1), label='Gaia', **crossa)
+            I, = np.nonzero([r == 'L1' for r in refstars.ref_cat])
+            if len(I):
+                plt.plot(refstars.ibx[I], refstars.iby[I], '+',
+                         color=(0.6,0.6,0.2), label='Large Galaxy', **crossa)
         plt.plot(Tnew.ibx, Tnew.iby, '+', color=(0,1,0),
                  label='New SED-matched detections', **crossa)
         plt.axis(ax)
@@ -1977,7 +1990,7 @@ def stage_fitblobs(T=None,
     # Create the iterator over blobs to process
     blobiter = _blob_iter(blobslices, blobsrcs, blobs, targetwcs, tims,
                           cat, bands, plots, ps, simul_opt, use_ceres,
-                          blob_refstars, largegals, brick, rex,
+                          blob_refstars, brick, rex,
                           skipblobs=skipblobs,
                           max_blobsize=max_blobsize, custom_brick=custom_brick)
     # to allow timingpool to queue tasks one at a time
@@ -2343,7 +2356,7 @@ def _refstars_in_blobs(refstars, targetwcs, blobs):
     return blob_refstars
 
 def _blob_iter(blobslices, blobsrcs, blobs, targetwcs, tims, cat, bands,
-               plots, ps, simul_opt, use_ceres, blob_refstars, largegals,
+               plots, ps, simul_opt, use_ceres, blob_refstars,
                brick, rex,
                skipblobs=[], max_blobsize=None, custom_brick=False):
     '''
@@ -2351,20 +2364,6 @@ def _blob_iter(blobslices, blobsrcs, blobs, targetwcs, tims, cat, bands,
     '''
     from collections import Counter
     H,W = targetwcs.shape
-
-    # Large galaxies
-    if largegals is None:
-        galblobs = set()
-    else:
-        # FIXME -- what about galaxies outside the blob but touching?
-        # Mirror the treatment in _refstars_in_blobs ??
-        galblobs = set(blobs[largegals.iby, largegals.ibx])
-        # Remove -1 = no blob from set; not strictly necessary, just cosmetic
-        try:
-            galblobs.remove(-1)
-        except:
-            pass
-        print('Blobs containing large galaxies:', galblobs)
 
     # sort blobs by size so that larger ones start running first
     blobvals = Counter(blobs[blobs>=0])
@@ -2440,7 +2439,7 @@ def _blob_iter(blobslices, blobsrcs, blobs, targetwcs, tims, cat, bands,
 
         hasbright = refs is not None and np.any(refs.isbright)
         hasmedium = refs is not None and np.any(refs.ismedium)
-        haslargegal = iblob in largegalsblobs
+        haslargegal = refs is not None and np.any(refs.islargegalaxy)
 
         npix = np.sum(blobmask)
         print(('Blob %i of %i, id: %i, sources: %i, size: %ix%i, npix %i, brick X: %i,%i, ' +

@@ -740,7 +740,9 @@ def segment_and_group_sources(image, T, name=None, ps=None, plots=False):
     del image
 
     blobslices = find_objects(blobs)
-    T.blob = blobs[T.iby, T.ibx]
+    clipx = np.clip(T.ibx, 0, W-1)
+    clipy = np.clip(T.iby, 0, H-1)
+    T.blob = blobs[clipy, clipx]
 
     if plots:
         import pylab as plt
@@ -850,16 +852,16 @@ def segment_and_group_sources(image, T, name=None, ps=None, plots=False):
     bm[0] = -1
 
     # DEBUG
-    if plots:
-        import fitsio
-        fitsio.write('blobs-before-%s.fits' % name, blobs, clobber=True)
+    # if plots:
+    #     import fitsio
+    #     fitsio.write('blobs-before-%s.fits' % name, blobs, clobber=True)
 
     # Remap blob numbers
     blobs = bm[blobs]
 
-    if plots:
-        import fitsio
-        fitsio.write('blobs-after-%s.fits' % name, blobs, clobber=True)
+    # if plots:
+    #     import fitsio
+    #     fitsio.write('blobs-after-%s.fits' % name, blobs, clobber=True)
 
     if plots:
         import pylab as plt
@@ -884,13 +886,13 @@ def segment_and_group_sources(image, T, name=None, ps=None, plots=False):
 
     for j,Isrcs in enumerate(blobsrcs):
         for i in Isrcs:
-            if (blobs[T.iby[i], T.ibx[i]] != j):
+            if (blobs[clipy[i], clipx[i]] != j):
                 print('---------------------------!!!-------------------------')
                 print('Blob', j, 'sources', Isrcs)
                 print('Source', i, 'coords x,y', T.ibx[i], T.iby[i])
                 print('Expected blob value', j, 'but got',
-                      blobs[T.iby[i], T.ibx[i]])
+                      blobs[clipy[i], clipx[i]])
 
-    T.blob = blobs[T.iby, T.ibx]
+    T.blob = blobs[clipy, clipx]
     assert(len(blobsrcs) == len(blobslices))
     return blobs, blobsrcs, blobslices
