@@ -1990,7 +1990,7 @@ def stage_fitblobs(T=None,
     # Create the iterator over blobs to process
     blobiter = _blob_iter(blobslices, blobsrcs, blobs, targetwcs, tims,
                           cat, bands, plots, ps, simul_opt, use_ceres,
-                          blob_refstars, largegals, brick, rex,
+                          blob_refstars, brick, rex,
                           skipblobs=skipblobs,
                           max_blobsize=max_blobsize, custom_brick=custom_brick)
     # to allow timingpool to queue tasks one at a time
@@ -2356,7 +2356,7 @@ def _refstars_in_blobs(refstars, targetwcs, blobs):
     return blob_refstars
 
 def _blob_iter(blobslices, blobsrcs, blobs, targetwcs, tims, cat, bands,
-               plots, ps, simul_opt, use_ceres, blob_refstars, largegals,
+               plots, ps, simul_opt, use_ceres, blob_refstars,
                brick, rex,
                skipblobs=[], max_blobsize=None, custom_brick=False):
     '''
@@ -2364,22 +2364,6 @@ def _blob_iter(blobslices, blobsrcs, blobs, targetwcs, tims, cat, bands,
     '''
     from collections import Counter
     H,W = targetwcs.shape
-
-    # Large galaxies
-    if len(largegals) == 0:
-        largegals = None
-    if largegals is None:
-        galblobs = set()
-    else:
-        # FIXME -- what about galaxies outside the blob but touching?
-        # Mirror the treatment in _refstars_in_blobs ??
-        galblobs = set(blobs[largegals.iby, largegals.ibx])
-        # Remove -1 = no blob from set; not strictly necessary, just cosmetic
-        try:
-            galblobs.remove(-1)
-        except:
-            pass
-        print('Blobs containing large galaxies:', galblobs)
 
     # sort blobs by size so that larger ones start running first
     blobvals = Counter(blobs[blobs>=0])
