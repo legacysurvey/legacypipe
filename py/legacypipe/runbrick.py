@@ -1040,6 +1040,7 @@ def stage_mask_junk(tims=None, targetwcs=None, W=None, H=None, bands=None,
                     rgb[:,:,3][hot] = 255
                     plt.imshow(rgb, interpolation='nearest', origin='lower')
                 plt.title('Resid')
+                plt.suptitle(tim.name)
                 ps.savefig()
 
                 if plots and np.any(hot):
@@ -1050,6 +1051,7 @@ def stage_mask_junk(tims=None, targetwcs=None, W=None, H=None, bands=None,
                     plt.subplot(1,2,2)
                     plt.imshow(tim.getImage() * (tim.getInvError() > 0), **ima)
                     plt.title('Image (masked)')
+                    plt.suptitle(tim.name)
                     ps.savefig()
                     # plt.clf()
                     # plt.imshow(tim.getImage() * tim.getInvError(),
@@ -1057,6 +1059,38 @@ def stage_mask_junk(tims=None, targetwcs=None, W=None, H=None, bands=None,
                     #            vmin=-1, vmax=10)
                     # plt.title('S/N')
                     # ps.savefig()
+
+                if plots:
+                    # Segment
+                    blobs,nblobs = label(lukewarm)
+                    slices = find_objects(blobs)
+                    for s in slices:
+                        sy,sx = s
+                        y0,y1 = sy.start, sy.stop
+                        x0,x1 = sx.start, sx.stop
+                        axis = [x0-10, x1+10, y0-10, y1+10]
+                        plt.clf()
+                        ima = dict(interpolation='nearest', origin='lower',
+                                   vmin=-0.01, vmax=0.1, cmap='gray')
+                        plt.subplot(2,2,2)
+                        plt.imshow(co, **ima)
+                        plt.axis(axis)
+                        plt.title('This image subtracted from coadd (%s)' % band)
+                        plt.subplot(2,2,3)
+                        plt.imshow(thisimg * (thiswt > 0), **ima)
+                        plt.axis(axis)
+                        plt.title('This image')
+                        plt.subplot(2,2,4)
+                        plt.imshow(resid,
+                                   interpolation='nearest', origin='lower',
+                                   vmin=-5, vmax=5, cmap='gray')
+                        plt.subplot(2,2,1)
+                        plt.imshow(rgb, interpolation='nearest', origin='lower')
+                        plt.axis(axis)
+                        plt.title('Resid')
+                        plt.suptitle(tim.name)
+                        ps.savefig()
+
 
     if plots:
         coimgs,cons = quick_coadds(tims, bands, targetwcs, fill_holes=False)
