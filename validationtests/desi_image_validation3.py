@@ -253,7 +253,7 @@ def plot_magdepth2D(sample,ral,decl,depth,mapfile,mytitle):
     ralB = [ ra-360 if ra > 300 else ra for ra in ral ]
     vmax = sample.recm + 2.0 
     vmin = sample.recm - 2.0
-    #mapa = plt.scatter(ralB,decl,c=depth, cmap=cm.gnuplot,s=2., vmin=vmin, vmax=vmax, lw=0,edgecolors='none')
+    ##mapa = plt.scatter(ralB,decl,c=depth, cmap=cm.gnuplot,s=2., vmin=vmin, vmax=vmax, lw=0,edgecolors='none')
     mapa = plt.scatter(ralB,decl,c=depth, cmap=cm.RdYlBu_r,s=2., vmin=vmin, vmax=vmax, lw=0,edgecolors='none')
     mapa.cmap.set_over('lawngreen')
     cbar = plt.colorbar(mapa,extend='both')
