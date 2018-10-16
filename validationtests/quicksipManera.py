@@ -122,7 +122,7 @@ def ang2pix_ring_ir(nside,ir,phi):
 #   c     gives the pixel number ipix (RING) 
 #    c     corresponding to angles theta and phi
 #    c=======================================================================
-  	z = ring2z (nside, ir)
+	z = ring2z (nside, ir)
 	z0=2.0/3.0
 	za = fabs(z)
 	if phi >= twopi:
@@ -145,7 +145,7 @@ def ang2pix_ring_ir(nside,ir,phi):
 		if fmod(ir,2)==0.:
 			kshift = 1#;// ! kshift=1 if ir even, 0 otherwise
 		ip = int(floor( ( jp+jm - nside + kshift + 1 ) / 2 ) + 1)#;// ! in {1,4n}
-	     	if ip>nl4:
+		if ip>nl4:
 			ip = ip - nl4
     
 		ipix1 = ncap + nl4*(ir-1) + ip
@@ -260,7 +260,7 @@ def in_ring(nside, iz, phi_low, phi_hi, conservative=True):
     #below added by AJR to address region around ra = 360
     if float(listir[-1]-listir[0])/(ipix2-ipix1) > .5:
     	listir1 = np.arange(ipix1, listir[0]+1)
-        listir2 = np.arange(listir[-1], ipix2+1)
+    	listir2 = np.arange(listir[-1], ipix2+1)
     #	#print listir[-1],listir[0],ipix1,ipix2,len(listir1),len(listir2)
     	listir   = np.concatenate( (listir1,listir2  ) )   
     	#print len(listir)
