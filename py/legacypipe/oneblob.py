@@ -162,6 +162,12 @@ class OneBlob(object):
         self.trargs.update(optimizer=ConstrainedOptimizer())
         self.optargs.update(dchisq = 0.1)
 
+        # Fitting rules:
+        # Force all other objects to be point sources?
+        self.force_pointsources = self.hasbright
+        # Fit local constant sky background levels?
+        self.fit_background = self.hasmedium or self.hasgalaxy
+
 
     def run(self, B):
         # Not quite so many plots...
@@ -390,10 +396,6 @@ class OneBlob(object):
         del models
 
     def model_selection_one_source(self, src, srci, models, B):
-        # Fit local constant sky background levels if we're in the
-        # same blob as a medium-brightness star.
-        fit_background = self.hasmedium
-
         if self.bigblob:
             mods = [mod[srci] for mod in models.models]
             srctims,modelMasks = _get_subimages(self.tims, mods, src)
@@ -620,7 +622,7 @@ class OneBlob(object):
             print('Source is starting outside blob -- skipping.')
             return None
 
-        if fit_background:
+        if self.fit_background:
             for tim in srctims:
                 tim.freezeAllBut('sky')
             srctractor.thawParam('images')
@@ -633,7 +635,7 @@ class OneBlob(object):
         # Compute the log-likehood without a source here.
         srccat[0] = None
 
-        if fit_background:
+        if self.fit_background:
             #print('Fitting no-source model (sky)')
             srctractor.optimize_loop(**self.optargs)
             #srctractor.images.printThawedParams()
@@ -668,10 +670,8 @@ class OneBlob(object):
                     forced = True
             if forced:
                 print('Gaia source is forced to be a point source -- not trying other models')
-            elif self.hasbright:
-                print('Not computing galaxy models: bright star in blob')
-            elif self.hasgalaxy:
-                print('Not computing galaxy models: large galaxy in blob')
+            elif self.force_pointsources:
+                print('Not computing galaxy models due to objects in blob')
             else:
                 trymodels.append((simname, simple))
                 # Try galaxy models if simple > ptsrc, or if bright.
@@ -746,7 +746,7 @@ class OneBlob(object):
             #     plt.title('Initial: ' + name)
             #     self.ps.savefig()
 
-            if fit_background:
+            if self.fit_background:
                 #print('Resetting sky params.')
                 srctractor.images.setParams(skyparams)
             
@@ -793,7 +793,7 @@ class OneBlob(object):
             elif isinstance(newsrc, FixedCompositeGalaxy):
                 oldshape = (newsrc.shapeExp, newsrc.shapeDev,newsrc.fracDev)
 
-            if fit_background:
+            if self.fit_background:
                 srctractor.freezeParam('images')
                 
             nsrcparams = newsrc.numberOfParams()
