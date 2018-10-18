@@ -383,6 +383,7 @@ class LegacySurveyImage(object):
             if get_dq:
                 dq = dq[y0_new-y0:1+y1_new-y0, x0_new-x0:1+x1_new-x0]
             x0,x1,y0,y1 = x0_new,x1_new,y0_new,y1_new
+            slc = slice(y0,y1), slice(x0,x1)
 
         sky = self.read_sky_model(splinesky=splinesky, slc=slc,
                                   primhdr=primhdr, imghdr=imghdr)
