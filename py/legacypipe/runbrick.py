@@ -80,6 +80,7 @@ def stage_tims(W=3600, H=3600, pixscale=0.262, brickname=None,
                bands=['g','r','z'],
                do_calibs=True,
                splinesky=True,
+               subsky=True,
                gaussPsf=False, pixPsf=False, hybridPsf=False,
                normalizePsf=False,
                apodize=False,
@@ -112,7 +113,8 @@ def stage_tims(W=3600, H=3600, pixscale=0.262, brickname=None,
     Sky:
 
     - *splinesky*: boolean.  Use SplineSky model, rather than ConstantSky?
-
+    - *subsky*: boolean.  Subtract sky model from tims?
+    
     '''
     from legacypipe.survey import (
         get_git_version, get_version_header, wcs_for_brick, read_one_tim)
@@ -346,6 +348,7 @@ def stage_tims(W=3600, H=3600, pixscale=0.262, brickname=None,
     args = [(im, targetrd, dict(gaussPsf=gaussPsf, pixPsf=pixPsf,
                                 hybridPsf=hybridPsf, normalizePsf=normalizePsf,
                                 splinesky=splinesky,
+                                subsky=subsky,
                                 apodize=apodize,
                                 constant_invvar=constant_invvar,
                                 pixels=read_image_pixels))
@@ -3629,6 +3632,7 @@ def run_brick(brick, survey, radec=None, pixscale=0.262,
               rgb_kwargs=None,
               rex=False,
               splinesky=True,
+              subsky=True,
               constant_invvar=False,
               gaia_stars=False,
               min_mjd=None, max_mjd=None,
@@ -3739,6 +3743,8 @@ def run_brick(brick, survey, radec=None, pixscale=0.262,
     
     - *splinesky*: boolean; use the splined sky model (default is constant)?
 
+    - *subsky*: boolean; subtract the sky model when reading in tims (tractor images)?
+    
     - *ceres*: boolean; use Ceres Solver when possible?
 
     - *wise_ceres*: boolean; use Ceres Solver for unWISE forced photometry?
@@ -3843,6 +3849,7 @@ def run_brick(brick, survey, radec=None, pixscale=0.262,
                   constant_invvar=constant_invvar,
                   depth_cut=depth_cut,
                   splinesky=splinesky,
+                  subsky=subsky,
                   gaia_stars=gaia_stars,
                   min_mjd=min_mjd, max_mjd=max_mjd,
                   simul_opt=simul_opt,
