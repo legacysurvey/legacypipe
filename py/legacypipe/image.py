@@ -389,14 +389,13 @@ class LegacySurveyImage(object):
                                   primhdr=primhdr, imghdr=imghdr)
         skysig1 = getattr(sky, 'sig1', None)
         
-        midsky = 0.
+        skymod = np.zeros_like(img)
+        sky.addTo(skymod)
+        midsky = np.median(skymod)
         if subsky:
             from tractor.sky import ConstantSky
             print('Instantiating and subtracting sky model')
-            skymod = np.zeros_like(img)
-            sky.addTo(skymod)
             img -= skymod
-            midsky = np.median(skymod)
             zsky = ConstantSky(0.)
             zsky.version = getattr(sky, 'version', '')
             zsky.plver = getattr(sky, 'plver', '')
