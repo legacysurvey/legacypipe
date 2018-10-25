@@ -15,6 +15,7 @@ def _detmap(X):
     assert(tim.psf_sigma > 0)
     psfnorm = 1./(2. * np.sqrt(np.pi) * tim.psf_sigma)
     detim = tim.getImage().copy()
+    tim.getSky().addTo(detim, scale=-1.)
     detim[ie == 0] = 0.
     # Patch SATURATED pixels with the value saturated pixels would have??
     #detim[(tim.dq & tim.dq_bits['satur']) > 0] = tim.satval
