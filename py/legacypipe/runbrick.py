@@ -433,7 +433,7 @@ def stage_tims(W=3600, H=3600, pixscale=0.262, brickname=None,
                 # broaden range to encompass most pixels... only req'd
                 # when sky is bad
                 lo,hi = -5.*sig1, 5.*sig1
-                pix = tim.getImage()#[tim.getInvError() > 0]
+                pix = tim.getImage()[tim.getInvError() > 0]
                 lo = min(lo, np.percentile(pix, 5))
                 hi = max(hi, np.percentile(pix, 95))
                 plt.hist(pix, range=(lo, hi), bins=50, histtype='step',
@@ -2116,7 +2116,7 @@ def _bounce_one_blob(X):
     '''
     from legacypipe.oneblob import one_blob
     import legacypipe
-    print('HERE',legacypipe.__file__)
+    #print('HERE',legacypipe.__file__)
     try:
         return one_blob(X)
     except:
