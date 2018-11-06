@@ -143,6 +143,11 @@ def main():
         print('Reading data quality from', im.dqfn, 'hdu', im.hdu)
         dqdata = im._read_fits(im.dqfn, im.hdu, slice=tim.slice)
 
+        from collections import Counter
+        dqvals = Counter(dqdata.ravel())
+        print('DQ pixel counts:')
+        for k,n in dqvals.most_common():
+            print('  0x%x' % k, ':', n)
 
         if args.pad:
             # Create zero image of full size, copy in data.
@@ -172,14 +177,14 @@ def main():
         if not args.fpack:
             outim.imgfn = outim.imgfn.replace('.fits.fz', '.fits')
 
-        outim.wtfn  = outim.wtfn .replace('.fits', '-%s.fits' % im.ccdname)
+        outim.wtfn  = outim.wtfn.replace('.fits', '-%s.fits' % im.ccdname)
         if not args.fpack:
-            outim.wtfn  = outim.wtfn .replace('.fits.fz', '.fits')
+            outim.wtfn  = outim.wtfn.replace('.fits.fz', '.fits')
 
         if outim.dqfn is not None:
-            outim.dqfn  = outim.dqfn .replace('.fits', '-%s.fits' % im.ccdname)
+            outim.dqfn  = outim.dqfn.replace('.fits', '-%s.fits' % im.ccdname)
             if not args.fpack:
-                outim.dqfn  = outim.dqfn .replace('.fits.fz', '.fits')
+                outim.dqfn  = outim.dqfn.replace('.fits.fz', '.fits')
 
         if bok:
             outim.psffn = outim.psffn.replace('.psf', '-%s.psf' % im.ccdname)
