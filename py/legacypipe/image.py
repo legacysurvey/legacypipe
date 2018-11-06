@@ -25,6 +25,7 @@ CP_DQ_BITS = dict(badpix=1, satur=2, interp=4, cr=16, bleed=64,
                   edge2 = 512,
                   ## masked by stage_mask_junk
                   longthin = 1024,
+                  outlier = 2048,
                   )
 
 
