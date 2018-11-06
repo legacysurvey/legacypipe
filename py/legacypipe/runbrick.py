@@ -885,6 +885,7 @@ def stage_mask_junk(tims=None, targetwcs=None, W=None, H=None, bands=None,
         plt.title('Before outliers')
         ps.savefig()
 
+    from scipy.ndimage.morphology import binary_dilation
     for band in bands:
         btims = [tim for tim in tims if tim.band == band]
         if len(btims) == 0:
@@ -899,13 +900,14 @@ def stage_mask_junk(tims=None, targetwcs=None, W=None, H=None, bands=None,
         resams = []
         coimg = np.zeros((H,W), np.float32)
         cow   = np.zeros((H,W), np.float32)
+        masks = np.zeros((H,W), np.int16)
         for tim,sig in zip(btims, addsigs):
             from astrometry.util.miscutils import patch_image
             from scipy.ndimage.filters import gaussian_filter
             from astrometry.util.resample import resample_with_wcs,OverlapError
-            from scipy.ndimage.morphology import binary_dilation
             patched = tim.getImage().copy()
             okpix = (tim.getInvError() > 0)
+            # ??? or try to patch from other images??
             patch_image(patched, okpix)
             del okpix
             patched = gaussian_filter(patched, sig)
@@ -918,15 +920,27 @@ def stage_mask_junk(tims=None, targetwcs=None, W=None, H=None, bands=None,
             wt = tim.getInvvar()[Yi,Xi]
             coimg[Yo,Xo] += rimg * wt
             cow  [Yo,Xo] += wt
-            resams.append((Yo,Xo,Yi,Xi,rimg))
+            masks[Yo,Xo] |= (tim.dq[Yi,Xi])
+            resams.append((Yo,Xo,Yi,Xi,rimg,wt))
+
+        #
+        veto = np.logical_or(
+            binary_dilation(masks & CP_DQ_BITS['bleed'], iterations=3),
+            binary_dilation(masks & CP_DQ_BITS['satur'], iterations=10))
+
+        if plots:
+            plt.clf()
+            plt.imshow(veto, interpolation='nearest', origin='lower',
+                       cmap='gray')
+            plt.title('SATUR, BLEED veto')
+            ps.savefig()
 
         for tim,resam in zip(btims, resams):
             if resam is None:
                 continue
-            (Yo,Xo,Yi,Xi,rimg) = resam
-            wt = tim.getInvvar()[Yi,Xi]
+            (Yo,Xo,Yi,Xi,rimg,wt) = resam
 
-            coall = coimg / np.maximum(cow, 1e-16)
+            #coall = coimg / np.maximum(cow, 1e-16)
 
             # Subtract this image from the coadd
             coimg[Yo,Xo] -= rimg * wt
@@ -944,16 +958,21 @@ def stage_mask_junk(tims=None, targetwcs=None, W=None, H=None, bands=None,
             thiswt = np.zeros((H,W), np.float32)
             thiswt[Yo,Xo] = wt
             thiswt[nopix] = 0.
+            thiswt[veto]  = 0.
+
+            ## FIXME -- this image edges??
+            
             # This image - coadd
             resid = (thisimg - co) * np.sqrt(thiswt)
+
             # Significant pixels
-            hot = (resid > 5.)
+            hot = ((resid > 5.) * ((thisimg - co) > (0.5*co)))
             warm = np.zeros_like(hot)
             lukewarm = np.zeros_like(hot)
 
             if plots:
                 origimg = tim.getImage() * (tim.getInvError() > 0)
-            
+
             if np.any(hot):
 
                 hot = binary_dilation(hot, iterations=1)
@@ -977,17 +996,17 @@ def stage_mask_junk(tims=None, targetwcs=None, W=None, H=None, bands=None,
                 badpix[lukewarm] = True
 
                 try:
-                    Yo,Xo,Yi,Xi,nil = resample_with_wcs(
+                    mYo,mXo,mYi,mXi,nil = resample_with_wcs(
                         tim.subwcs, targetwcs, [], 3)
                 except OverlapError:
                     continue
                 # Do we want to look at (unblurred) image pixels around masked
                 # pix?
-                Ibad, = np.nonzero(badpix[Yi,Xi])
+                Ibad, = np.nonzero(badpix[mYi,mXi])
                 # Zero out the invvar for the bad pixels
                 if len(Ibad):
                     # FIXME -- update dq map too
-                    tim.getInvError()[Yo[Ibad],Xo[Ibad]] = 0.
+                    tim.getInvError()[mYo[Ibad],mXo[Ibad]] = 0.
 
             if plots:
                 plt.clf()
@@ -1012,6 +1031,15 @@ def stage_mask_junk(tims=None, targetwcs=None, W=None, H=None, bands=None,
                 plt.imshow((tim.getImage() * (tim.getInvError() > 0)).T, **ima)
                 plt.title('Masked image')
 
+                # Overlay SATUR mask in green
+                th,tw = tim.shape
+                # NOTE transposed
+                maskrgb = np.zeros((tw,th,4), np.uint8)
+                sat = ((tim.dq & CP_DQ_BITS['satur']) > 0).T
+                maskrgb[:,:,1][sat] = 255
+                maskrgb[:,:,3][sat] = 255
+                plt.imshow(maskrgb, interpolation='nearest', origin='lower')
+                
                 plt.subplot(2,2,2)
                 plt.imshow(co, **ima)
                 plt.title('This image subtracted from coadd (%s)' % band)
@@ -1045,13 +1073,14 @@ def stage_mask_junk(tims=None, targetwcs=None, W=None, H=None, bands=None,
 
                 if plots and np.any(hot):
                     plt.clf()
-                    plt.subplot(1,2,1)
+                    #plt.subplot(1,2,1)
                     plt.imshow(origimg, **ima)
                     plt.title('Image (orig)')
-                    plt.subplot(1,2,2)
+                    ps.savefig()
+                    #plt.subplot(1,2,2)
                     plt.imshow(tim.getImage() * (tim.getInvError() > 0), **ima)
                     plt.title('Image (masked)')
-                    plt.suptitle(tim.name)
+                    #plt.suptitle(tim.name)
                     ps.savefig()
                     # plt.clf()
                     # plt.imshow(tim.getImage() * tim.getInvError(),
@@ -1068,26 +1097,54 @@ def stage_mask_junk(tims=None, targetwcs=None, W=None, H=None, bands=None,
                         sy,sx = s
                         y0,y1 = sy.start, sy.stop
                         x0,x1 = sx.start, sx.stop
-                        axis = [x0-10, x1+10, y0-10, y1+10]
+                        m = 20
+                        axis = [x0-m, x1+m, y0-m, y1+m]
                         plt.clf()
                         ima = dict(interpolation='nearest', origin='lower',
                                    vmin=-0.01, vmax=0.1, cmap='gray')
-                        plt.subplot(2,2,2)
-                        plt.imshow(co, **ima)
+                        plt.subplot(2,3,1)
+                        plt.imshow(rgb, interpolation='nearest', origin='lower')
                         plt.axis(axis)
-                        plt.title('This image subtracted from coadd (%s)' % band)
-                        plt.subplot(2,2,3)
-                        plt.imshow(thisimg * (thiswt > 0), **ima)
-                        plt.axis(axis)
-                        plt.title('This image')
-                        plt.subplot(2,2,4)
+                        plt.title('Masked')
+
+                        plt.subplot(2,3,2)
                         plt.imshow(resid,
                                    interpolation='nearest', origin='lower',
                                    vmin=-5, vmax=5, cmap='gray')
-                        plt.subplot(2,2,1)
-                        plt.imshow(rgb, interpolation='nearest', origin='lower')
                         plt.axis(axis)
                         plt.title('Resid')
+
+                        rorig = np.zeros((H,W), np.float32)
+                        rorig[Yo,Xo] = origimg[Yi,Xi]
+                        plt.subplot(2,3,3)
+                        plt.imshow(rorig, **ima)
+                        plt.axis(axis)
+                        plt.title('Unblurred image')
+
+
+                        mn = min(co.min(), thisimg.min())
+                        mx = max(co.max(), thisimg.max())
+                        ima2 = dict(interpolation='nearest', origin='lower',
+                                   vmin=mn, vmax=mx, cmap='gray')
+                        
+                        plt.subplot(2,3,4)
+                        plt.imshow(co, **ima2)
+                        plt.axis(axis)
+                        plt.title('This image subtracted from coadd (%s)' % band)
+                        plt.subplot(2,3,5)
+                        plt.imshow(thisimg * (thiswt > 0), **ima2)
+                        plt.axis(axis)
+                        plt.title('This image')
+
+                        plt.subplot(2,3,6)
+                        plt.imshow(resid,
+                                   interpolation='nearest', origin='lower',
+                                   vmin=-5, vmax=5, cmap='gray')
+                        ax = plt.axis()
+                        plt.plot([x0-m, x0-m, x1+m, x1+m, x0-m],
+                                 [y0-m, y1+m, y1+m, y0-m, y0-m], 'r-')
+                        plt.axis(ax)
+                        plt.title('Whole resid')
                         plt.suptitle(tim.name)
                         ps.savefig()
 
