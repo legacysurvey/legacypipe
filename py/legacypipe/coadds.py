@@ -700,7 +700,7 @@ def write_coadd_images(band,
 
 # Pretty much only used for plots; the real deal is make_coadds()
 def quick_coadds(tims, bands, targetwcs, images=None,
-                 get_cow=False, get_n2=False, fill_holes=True):
+                 get_cow=False, get_n2=False, fill_holes=True, get_max=False):
 
     W = int(targetwcs.get_width())
     H = int(targetwcs.get_height())
@@ -713,6 +713,8 @@ def quick_coadds(tims, bands, targetwcs, images=None,
         # moo
         cowimgs = []
         wimgs = []
+    if get_max:
+        maximgs = []
 
     for ib,band in enumerate(bands):
         coimg  = np.zeros((H,W), np.float32)
@@ -722,6 +724,9 @@ def quick_coadds(tims, bands, targetwcs, images=None,
         if get_cow:
             cowimg = np.zeros((H,W), np.float32)
             wimg   = np.zeros((H,W), np.float32)
+        if get_max:
+            maximg = np.zeros((H,W), np.float32)
+
         for itim,tim in enumerate(tims):
             if tim.band != band:
                 continue
@@ -733,9 +738,13 @@ def quick_coadds(tims, bands, targetwcs, images=None,
             if images is None:
                 coimg [Yo,Xo] += tim.getImage()[Yi,Xi] * nn
                 coimg2[Yo,Xo] += tim.getImage()[Yi,Xi]
+                if get_max:
+                    maximg[Yo,Xo] = np.maximum(maximg[Yo,Xo], tim.getImage()[Yi,Xi] * nn)
             else:
                 coimg [Yo,Xo] += images[itim][Yi,Xi] * nn
                 coimg2[Yo,Xo] += images[itim][Yi,Xi]
+                if get_max:
+                    maximg[Yo,Xo] = np.maximum(maximg[Yo,Xo], images[itim][Yi,Xi] * nn)
             con   [Yo,Xo] += nn
             if get_cow:
                 cowimg[Yo,Xo] += tim.getInvvar()[Yi,Xi] * tim.getImage()[Yi,Xi]
@@ -749,6 +758,8 @@ def quick_coadds(tims, bands, targetwcs, images=None,
             cowimg[wimg == 0] = coimg[wimg == 0]
             cowimgs.append(cowimg)
             wimgs.append(wimg)
+        if get_max:
+            maximgs.append(maximg)
         coimgs.append(coimg)
         cons.append(con)
         if get_n2:
@@ -759,5 +770,7 @@ def quick_coadds(tims, bands, targetwcs, images=None,
         rtn.extend([cowimgs, wimgs])
     if get_n2:
         rtn.append(cons2)
+    if get_max:
+        rtn.append(maximgs)
     return rtn
 
