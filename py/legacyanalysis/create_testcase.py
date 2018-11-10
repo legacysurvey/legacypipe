@@ -143,6 +143,9 @@ def main():
         print('Reading data quality from', im.dqfn, 'hdu', im.hdu)
         dqdata = im._read_fits(im.dqfn, im.hdu, slice=tim.slice)
 
+        print('Tim shape:', tim.shape, 'Slice', tim.slice)
+        print('image shape:', imgdata.shape, 'iv', ivdata.shape, 'DQ', dqdata.shape)
+
         from collections import Counter
         dqvals = Counter(dqdata.ravel())
         print('DQ pixel counts:')
