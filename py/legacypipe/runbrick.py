@@ -865,6 +865,7 @@ def make_depth_cut(survey, ccds, bands, targetrd, brick, W, H, pixscale,
 
 def stage_mask_junk(tims=None, targetwcs=None, W=None, H=None, bands=None,
                     mp=None, nsigma=None, plots=None, ps=None, record_event=None,
+                    survey=None, brickname=None,
                     **kwargs):
     '''
     This pipeline stage tries to detect artifacts in the individual
@@ -873,9 +874,10 @@ def stage_mask_junk(tims=None, targetwcs=None, W=None, H=None, bands=None,
     '''
     from scipy.ndimage.filters import gaussian_filter
     from scipy.ndimage.morphology import binary_fill_holes
-    from scipy.ndimage.measurements import label, find_objects, center_of_mass
-    from scipy.linalg import svd
+    from scipy.ndimage.measurements import label, find_objects
 
+    from legacypipe.survey import imsave_jpeg
+    
     record_event and record_event('stage_mask_junk: starting')
 
     if plots:
@@ -889,7 +891,17 @@ def stage_mask_junk(tims=None, targetwcs=None, W=None, H=None, bands=None,
         dimshow(get_rgb(maximgs, bands))
         plt.title('Before outliers: Max')
         ps.savefig()
-        
+    if True:
+        coimgs,cons,maximgs = quick_coadds(tims, bands, targetwcs, fill_holes=False, get_max=True)
+        outdir = os.path.join(survey.output_dir, 'metrics', brickname[:3])
+        from astrometry.util.file import trymakedirs
+        trymakedirs(outdir)
+        outfn = os.path.join(outdir, 'outliers-pre-%s.jpg' % brickname)
+        imsave_jpeg(outfn, get_rgb(coimgs, bands))
+        outfn = os.path.join(outdir, 'outliers-maxpre-%s.jpg' % brickname)
+        imsave_jpeg(outfn, get_rgb(maximgs, bands))
+
+
     badcoadds = []
     realbadcoadds = []
 
@@ -1119,7 +1131,8 @@ def stage_mask_junk(tims=None, targetwcs=None, W=None, H=None, bands=None,
             if not np.any(hot):
                 continue
 
-            if plots:
+            #if plots:
+            if True:
                 # Segment
                 blobs,nblobs = label(lukewarm)
                 slices = find_objects(blobs)
@@ -1373,6 +1386,15 @@ def stage_mask_junk(tims=None, targetwcs=None, W=None, H=None, bands=None,
         plt.title('Masked pixels')
         ps.savefig()
 
+    if True:
+        coimgs,cons,maximgs = quick_coadds(tims, bands, targetwcs, fill_holes=False, get_max=True)
+        outfn = os.path.join(outdir, 'outliers-post-%s.jpg' % brickname)
+        imsave_jpeg(outfn, get_rgb(coimgs, bands))
+        outfn = os.path.join(outdir, 'outliers-maxpost-%s.jpg' % brickname)
+        imsave_jpeg(outfn, get_rgb(maximgs, bands))
+        outfn = os.path.join(outdir, 'outliers-masked-%s.jpg' % brickname)
+        imsave_jpeg(outfn, get_rgb(realbadcoadds, bands))
+        
     return dict(tims=tims)
 
 def stage_image_coadds(survey=None, targetwcs=None, bands=None, tims=None,
