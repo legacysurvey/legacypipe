@@ -378,10 +378,10 @@ class LegacySurveyImage(object):
                 print('Skipping tiny subimage (after clipping masked edges)')
                 return None
 
-            img = img[y0_new-y0:1+y1_new-y0, x0_new-x0:1+x1_new-x0]
-            invvar = invvar[y0_new-y0:1+y1_new-y0, x0_new-x0:1+x1_new-x0]
+            img    = img   [y0_new-y0 : y1_new-y0, x0_new-x0 : x1_new-x0]
+            invvar = invvar[y0_new-y0 : y1_new-y0, x0_new-x0 : x1_new-x0]
             if get_dq:
-                dq = dq[y0_new-y0:1+y1_new-y0, x0_new-x0:1+x1_new-x0]
+                dq = dq[y0_new-y0 : y1_new-y0, x0_new-x0 : x1_new-x0]
             x0,x1,y0,y1 = x0_new,x1_new,y0_new,y1_new
             slc = slice(y0,y1), slice(x0,x1)
 
