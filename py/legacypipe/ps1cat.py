@@ -181,7 +181,8 @@ def ps1_to_90prime(psmags, band):
         #Even older version.
         #g = [0.0, +0.08612, -0.00392, -0.00393],
         #r = [0.0, -0.07831, +0.03304, -0.01027])[band]
-    colorterm = (coeffs[0] + coeffs[1]*gi + coeffs[2]*gi**2 + coeffs[3]*gi**3)
+        # Note older versions used opposite sign.
+    colorterm = -(coeffs[0] + coeffs[1]*gi + coeffs[2]*gi**2 + coeffs[3]*gi**3)
     print('Using 90prime ColorTerm')
     return colorterm
     
