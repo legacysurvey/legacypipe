@@ -1200,7 +1200,7 @@ Now using the current directory as LEGACY_SURVEY_DIR, but this is likely to fail
 
         elif filetype in ['maskbits']:
             return swap(os.path.join(codir,
-                                     '%s-%s-%s.fits.gz' % (sname, brick, filetype)))
+                                     '%s-%s-%s.fits.fz' % (sname, brick, filetype)))
 
         elif filetype in ['all-models']:
             return swap(os.path.join(basedir, 'metrics', brickpre,
@@ -1248,6 +1248,7 @@ Now using the current directory as LEGACY_SURVEY_DIR, but this is likely to fail
             # qz +8: 9 MB, qz +16: 10.5 MB
             invvar = '[compress R %i,%i; qz 16]',
             nexp   = '[compress H %i,%i]',
+            maskbits = '[compress H %i,%i]',
             depth  = '[compress G %i,%i; qz 0]',
             galdepth = '[compress G %i,%i; qz 0]',
         ).get(filetype)
