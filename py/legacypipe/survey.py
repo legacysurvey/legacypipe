@@ -488,16 +488,17 @@ def get_dependency_versions(unwise_dir, unwise_tr_dir):
         # this is assumed to be only a single directory
         headers.append(('UNWISTD', unwise_tr_dir, 'unWISE time-resolved dir'))
 
-    bool added_long = False
+    added_long = False
     for i,(name,value) in enumerate(depvers):
         headers.append(('DEPNAM%02i' % i, name, 'Dependency name'))
-        if len(value) < 68:
+        if len(value) > 68:
             headers.append(('DEPVER%02i' % i, value[:67] + '&',
                             'Dependency version'))
             while len(value):
                 value = value[67:]
-                headers.append(('CONTINUE', "  '%s%s'" %
-                                (value[:67], '&' if len(value) > 67 else '')))
+                headers.append(('CONTINUE',
+                                "  '%s%s'" % (value[:67], '&' if len(value) > 67 else ''),
+                                None))
         else:
             headers.append(('DEPVER%02i' % i, value, 'Dependency version'))
             added_long = True
