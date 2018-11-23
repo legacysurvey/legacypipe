@@ -430,6 +430,83 @@ def get_version_header(program_name, survey_dir, git_version=None):
 
     return hdr
 
+def get_dependency_versions(unwise_dir, unwise_tr_dir):
+    depvers = []
+    headers = []
+    # Get DESICONDA version, and read file $DESICONDA/pkg_list.txt for
+    # other package versions.
+    default_ver = 'UNAVAILABLE'
+    depnum = 0
+    desiconda = os.environ.get('DESICONDA', default_ver)
+    # DESICONDA like .../edison/desiconda/20180512-1.2.5-img/conda
+    verstr = os.path.basename(os.path.dirname(desiconda))
+    depvers.append(('desiconda', verstr))
+
+    if desiconda != default_ver:
+        fn = os.path.join(desiconda, 'pkg_list.txt')
+        vers = {}
+        if not os.path.exists(fn):
+            print('Warning: expected file $DESICONDA/pkg_list.txt to exist but it does not!')
+        else:
+            # Read version numbers
+            for line in open(fn):
+                words = line.strip().split('=')
+                if len(words) >= 2:
+                    vers[words[0]] = words[1]
+
+        for pkg in ['astropy', 'matplotlib', 'mkl', 'numpy', 'python', 'scipy']:
+            verstr = vers.get(pkg, default_ver)
+            if verstr == default_ver:
+                print('Warning: failed to get version string for "%s"' % pkg)
+            else:
+                depvers.append((pkg, verstr))
+
+    # Store paths to astrometry and tractor packages.
+    import astrometry
+    depvers.append(('astrometry', os.path.dirname(astrometry.__file__)))
+    import tractor
+    depvers.append(('tractor', os.path.dirname(tractor.__file__)))
+    import fitsio
+    depvers.append(('fitsio', os.path.dirname(fitsio.__file__)))
+
+    # Get additional paths from environment variables
+    for dep in ['TYCHO2_KD', 'GAIA_CAT']:
+        value = os.environ.get('%s_DIR' % dep, default_ver)
+        if value == default_ver:
+            print('Warning: failed to get version string for "%s"' % dep)
+        else:
+            depvers.append((dep, value))
+
+    if unwise_dir is not None:
+        dirs = unwise_dir.split(':')
+        depvers.append(('unwise', unwise_dir))
+        for i,d in enumerate(dirs):
+            headers.append(('UNWISD%i' % (i+1), d, 'unWISE dir(s)'))
+
+    if unwise_tr_dir is not None:
+        depvers.append(('unwise_tr', unwise_tr_dir))
+        # this is assumed to be only a single directory
+        headers.append(('UNWISTD', unwise_tr_dir, 'unWISE time-resolved dir'))
+
+    bool added_long = False
+    for i,(name,value) in enumerate(depvers):
+        headers.append(('DEPNAM%02i' % i, name, 'Dependency name'))
+        if len(value) < 68:
+            headers.append(('DEPVER%02i' % i, value[:67] + '&',
+                            'Dependency version'))
+            while len(value):
+                value = value[67:]
+                headers.append(('CONTINUE', "  '%s%s'" %
+                                (value[:67], '&' if len(value) > 67 else '')))
+        else:
+            headers.append(('DEPVER%02i' % i, value, 'Dependency version'))
+            added_long = True
+
+    if added_long:
+        headers = [('LONGSTRN', 'OGIP 1.0','CONTINUE cards are used')] + headers
+
+    return headers
+
 class MyFITSHDR(fitsio.FITSHDR):
     '''
     This is copied straight from fitsio, simply removing "BUNIT" from

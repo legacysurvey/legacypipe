@@ -117,7 +117,8 @@ def stage_tims(W=3600, H=3600, pixscale=0.262, brickname=None,
     
     '''
     from legacypipe.survey import (
-        get_git_version, get_version_header, wcs_for_brick, read_one_tim)
+        get_git_version, get_version_header, get_dependency_versions,
+        wcs_for_brick, read_one_tim)
     from astrometry.util.starutil_numpy import ra2hmsstring, dec2dmsstring
 
     t0 = tlast = Time()
@@ -164,70 +165,9 @@ def stage_tims(W=3600, H=3600, pixscale=0.262, brickname=None,
     version_header = get_version_header(program_name, survey.survey_dir,
                                         git_version=gitver)
 
-    # Get DESICONDA version, and read file $DESICONDA/pkg_list.txt for
-    # other package versions.
-    default_ver = 'UNAVAILABLE'
-    depnum = 0
-    desiconda = os.environ.get('DESICONDA', default_ver)
-    verstr = os.path.basename(desiconda)
-    version_header.add_record(dict(name='DEPNAM%02i' % depnum, value='desiconda',
-                                   comment='Name of dependency product'))
-    version_header.add_record(dict(name='DEPVER%02i' % depnum, value=verstr,
-                                   comment='Version of dependency product'))
-    depnum += 1
-
-    if desiconda != default_ver:
-        fn = os.path.join(desiconda, 'pkg_list.txt')
-        vers = {}
-        if not os.path.exists(fn):
-            print('Warning: expected file $DESICONDA/pkg_list.txt to exist but it does not!')
-        else:
-            # Read version numbers
-            for line in open(fn):
-                words = line.strip().split('=')
-                if len(words) >= 2:
-                    vers[words[0]] = words[1]
-
-        for pkg in ['astropy', 'matplotlib', 'mkl', 'numpy', 'python', 'scipy']:
-            verstr = vers.get(pkg, default_ver)
-            version_header.add_record(dict(name='DEPNAM%02i' % depnum, value=pkg,
-                                           comment='Name of product (in desiconda)'))
-            version_header.add_record(dict(name='DEPVER%02i' % depnum, value=verstr,
-                                           comment='Version of dependency product'))
-            depnum += 1
-            if verstr == default_ver:
-                print('Warning: failed to get version string for "%s"' % pkg)
-    # Get additional paths from environment variables
-    for dep in ['TYCHO2_KD', 'GAIA_CAT']:
-        value = os.environ.get('%s_DIR' % dep, default_ver)
-        if value == default_ver:
-            print('Warning: failed to get version string for "%s"' % dep)
-        print('String:', value)
-        version_header.add_record(dict(name='DEPNAM%02i' % depnum, value=dep,
-                                    comment='Name of dependency product'))
-        version_header.add_record(dict(name='DEPVER%02i' % depnum, value=value,
-                                    comment='Version of dependency product'))
-        depnum += 1
-
-    if unwise_dir is not None:
-        dirs = unwise_dir.split(':')
-        for i,d in enumerate(dirs):
-            # Yuck, fitsio does not yet support CONTINUE cards.
-            if len(d) < 68:
-                version_header.add_record(dict(name='UNWISD%i' % (i+1),
-                                               value=d, comment='unWISE dir(s)'))
-            else:
-                # Assume it fits in two lines (one CONTINUE card).
-                version_header.add_record(dict(name='LONGSTRN', value='OGIP 1.0',
-                                               comment='CONTINUE cards are used'))
-                version_header.add_record(dict(name='UNWISD%i' % (i+1),
-                                               value=d[:67] + '&',
-                                               comment='unWISE dir(s)'))
-                version_header.add_record(dict(name='CONTINUE', value="  '%s'"%d[67:]))
-
-    if unwise_tr_dir is not None:
-        version_header.add_record(dict(name='UNWISTD', value=unwise_tr_dir,
-                                       comment='unWISE time-resolved dir'))
+    deps = get_dependency_versions(unwise_dir, unwise_tr_dir)
+    for name,value,comment in deps:
+        version_header.add_record(dict(name=name, value=value, comment=comment))
 
     version_header.add_record(dict(name='BRICKNAM', value=brickname,
                                 comment='LegacySurvey brick RRRr[pm]DDd'))
