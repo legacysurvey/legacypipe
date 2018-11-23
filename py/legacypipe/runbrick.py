@@ -3032,25 +3032,18 @@ def stage_wise_forced(
         wise_mask_maps = [np.zeros((H,W), np.uint8),
                           np.zeros((H,W), np.uint8)]
 
-        if unwise_coadds:
-            from legacypipe.survey import wcs_for_brick
-            # Create the WCS into which we'll resample the tiles.  Same center as
-            # "targetwcs" but bigger pixel scale.
-            wpixscale = 2.75
-            wW = int(W * pixscale / wpixscale)
-            wH = int(H * pixscale / wpixscale)
-            unwise_wcs = wcs_for_brick(brick, W=wW, H=wH, pixscale=wpixscale)
-            # images
-            unwise_co  = [np.zeros((wH,wW), np.float32) for band in [1,2,3,4]]
-            unwise_con = [np.zeros((wH,wW), np.uint8)   for band in [1,2,3,4]]
-            # models
-            unwise_com  = [np.zeros((wH,wW), np.float32) for band in [1,2,3,4]]
-            unwise_comn = [np.zeros((wH,wW), np.uint8)   for band in [1,2,3,4]]
+        # In order to handle WISE tile overlaps, keep track of the distance
+        # to the tile center of the current sample values in wise_mask_maps.
+        tiledists = np.empty((H,W), np.float32)
+        tiledists[:,:] = 1e30
 
-        # Look up mask bits
-        ra  = np.array([src.getPosition().ra  for src in cat])
-        dec = np.array([src.getPosition().dec for src in cat])
-        WISE.wise_mask = np.zeros((len(T), 4), np.uint8)
+        if unwise_coadds:
+            from legacypipe.coadds import UnwiseCoadd
+            # Create the WCS into which we'll resample the tiles.
+            # Same center as "targetwcs" but bigger pixel scale.
+            wpixscale = 2.75
+            wcoadds = UnwiseCoadd(brick, W, H, pixscale, wpixscale)
+
         for tile in tiles.coadd_id:
             from astrometry.util.util import Tan
             from astrometry.util.resample import resample_with_wcs, OverlapError
@@ -3068,144 +3061,52 @@ def stage_wise_forced(
                 continue
             # read header to pull out WCS (because it's compressed)
             M,hdr = fitsio.read(fn, header=True)
-            wcs = Tan(*[float(hdr[k]) for k in
+            tilewcs = Tan(*[float(hdr[k]) for k in
                         ['CRVAL1', 'CRVAL2', 'CRPIX1', 'CRPIX2',
                          'CD1_1', 'CD1_2', 'CD2_1','CD2_2','NAXIS2','NAXIS1']])
-            ok,xx,yy = wcs.radec2pixelxy(ra, dec)
-            hh,ww = wcs.get_height(), wcs.get_width()
-            xx = np.round(xx - 1).astype(int)
-            yy = np.round(yy - 1).astype(int)
-            I = np.flatnonzero(ok * (xx >= 0)*(xx < ww) * (yy >= 0)*(yy < hh))
-            #print(len(I), 'sources are within tile', tile)
-            if len(I):
-                # Reference the mask image M at yy,xx indices (source positions)
-                Mi = M[yy[I], xx[I]]
-                # unpack mask bits
-                WISE.wise_mask[I, 0] = collapse_unwise_bitmask(Mi, 1)
-                WISE.wise_mask[I, 1] = collapse_unwise_bitmask(Mi, 2)
-
-            # Resample the whole WISE map to brick coordinates for the
+            # Resample the WISE map to brick coordinates for the
             # "maskbits" data product.
             try:
-                Yo,Xo,Yi,Xi,nil = resample_with_wcs(targetwcs, wcs)
+                Yo,Xo,Yi,Xi,nil = resample_with_wcs(targetwcs, tilewcs)
+                # Compute L_inf distances to tile center
+                cx, cy = tilewcs.crpix
+                dists = np.maximum(np.abs(Xi - (cx-1)), np.abs(Yi - (cy-1)))
+                # Keep pixels with closer distances to their tile centers
+                keep = (dists < tiledists[Yo,Xo])
+                if np.sum(keep) == 0:
+                    raise OverlapError()
+                Yo = Yo[keep]
+                Xo = Xo[keep]
+                Yi = Yi[keep]
+                Xi = Xi[keep]
+                tiledists[Yo,Xo] = dists[keep]
                 maskvals = M[Yi,Xi]
-                # Cut to just pixels with masks set.
-                K = np.nonzero(maskvals)
-                print('Setting', len(K), 'WISE mask bits from tile', tile)
-                if len(K):
-                    Yo = Yo[K]
-                    Xo = Xo[K]
-                    maskvals = maskvals[K]
-
-                    w1mask = collapse_unwise_bitmask(maskvals, 1)
-                    w2mask = collapse_unwise_bitmask(maskvals, 2)
-
-                    wise_mask_maps[0][Yo,Xo] |= w1mask
-                    wise_mask_maps[1][Yo,Xo] |= w2mask
+                print('Setting', len(Yo), 'WISE maskbits pixels from tile',tile)
+                w1mask = collapse_unwise_bitmask(maskvals, 1)
+                w2mask = collapse_unwise_bitmask(maskvals, 2)
+                wise_mask_maps[0][Yo,Xo] = w1mask
+                wise_mask_maps[1][Yo,Xo] = w2mask
             except OverlapError:
                 print('No overlap between WISE tile', tile, 'and brick')
                 pass
 
             if unwise_coadds:
-                gotbands = []
-                imgs = []
-                for band in [1,2,3,4]:
-                    # unwise_dir can be a colon-separated list of paths
-                    found = False
-                    for d in unwise_dir.split(':'):
-                        fn = os.path.join(d, tile[:3], tile,
-                                          'unwise-%s-w%i-img-m.fits' % (tile, band))
-                        print('Looking for unWISE image file', fn)
-                        if os.path.exists(fn):
-                            found = True
-                            break
-                    if not found:
-                        print('unWISE image file for tile', tile, 'does not exist')
-                        continue
-                    imgs.append(fitsio.read(fn))
-                    gotbands.append(band)
-
-                try:
-                    # We're re-using the WCS from the mask file; all the coadd data
-                    # products have identical WCS headers.
-                    Yo,Xo,Yi,Xi,rims = resample_with_wcs(unwise_wcs, wcs, imgs)
-                    for band,rim in zip(gotbands, rims):
-                        unwise_co [band-1][Yo,Xo] += rim
-                        unwise_con[band-1][Yo,Xo] += 1
-                except OverlapError:
-                    print('No overlap between WISE tile', tile, 'and brick')
-                    pass
-
-                # Now the model images.  The forced-photometry routine returns
-                # sub-images and ROIs for the models.
-                gotbands = []
-                imgs = []
-                roi = None
-                for band in [1,2,3,4]:
-                    if not (tile, band) in wise_models:
-                        print('Tile', tile, 'band', band, '-- model not found')
-                        continue
-                    mod,thisroi = wise_models[(tile,band)]
-                    #print('Tile', tile, 'band', band, 'model', mod.shape, 'roi', thisroi)
-                    gotbands.append(band)
-                    imgs.append(mod)
-                    if roi is None:
-                        roi = thisroi
-                    else:
-                        assert(thisroi == roi)
-                #print('ROI:', roi)
-                if roi is None:
-                    continue
-                try:
-                    # Get WCS for this ROI.
-                    rx0,rx1,ry0,ry1 = roi
-                    roiwcs = wcs.get_subimage(rx0, ry0, rx1-rx0, ry1-ry0)
-                    Yo,Xo,Yi,Xi,rims = resample_with_wcs(unwise_wcs, roiwcs, imgs)
-                    for band,rim in zip(gotbands, rims):
-                        unwise_com [band-1][Yo,Xo] += rim
-                        unwise_comn[band-1][Yo,Xo] += 1
-                except OverlapError:
-                    print('No overlap between WISE model tile', tile, 'and brick')
-                    pass
-
+                wcoadds.add(tile, unwise_dir, tilewcs, wise_models)
 
         if unwise_coadds:
-            for band,co,n,com,mn in zip([1,2,3,4], unwise_co, unwise_con,
-                                        unwise_com, unwise_comn):
-                hdr = fitsio.FITSHDR()
-                for r in version_header.records():
-                    hdr.add_record(r)
-                hdr.add_record(dict(name='TELESCOP', value='WISE'))
-                hdr.add_record(dict(name='FILTER', value='W%i' % band,
-                                        comment='WISE band'))
-                unwise_wcs.add_to_header(hdr)
-                hdr.delete('IMAGEW')
-                hdr.delete('IMAGEH')
-                hdr.add_record(dict(name='EQUINOX', value=2000.))
-                hdr.add_record(dict(name='MAGZERO', value=22.5,
-                                        comment='Magnitude zeropoint'))
-                co  /= np.maximum(n, 1)
-                com /= np.maximum(mn, 1)
-                with survey.write_output('image', brick=brickname, band='W%i' % band,
-                                         shape=co.shape) as out:
-                    out.fits.write(co, header=hdr)
-                with survey.write_output('model', brick=brickname, band='W%i' % band,
-                                         shape=com.shape) as out:
-                    out.fits.write(com, header=hdr)
-            del unwise_con
-            del unwise_comn
-            # W1/W2 color jpeg
-            rgb = _unwise_to_rgb(unwise_co[:2])
-            del unwise_co
-            with survey.write_output('wise-jpeg', brick=brickname) as out:
-                imsave_jpeg(out.fn, rgb, origin='lower')
-                print('Wrote', out.fn)
-            rgb = _unwise_to_rgb(unwise_com[:2])
-            del unwise_com
-            with survey.write_output('wisemodel-jpeg', brick=brickname) as out:
-                imsave_jpeg(out.fn, rgb, origin='lower')
-                print('Wrote', out.fn)
-            del rgb
+            wcoadds.finish(survey, brickname, version_header)
+
+        # Look up mask values for sources
+        WISE.wise_mask = np.zeros((len(cat), 4), np.uint8)
+        ra  = np.array([src.getPosition().ra  for src in cat])
+        dec = np.array([src.getPosition().dec for src in cat])
+        ok,xx,yy = targetwcs.radec2pixelxy(ra, dec)
+        xx = np.round(xx - 1).astype(int)
+        yy = np.round(yy - 1).astype(int)
+        I = np.flatnonzero(ok * (xx >= 0)*(xx < W) * (yy >= 0)*(yy < H))
+        if len(I):
+            WISE.wise_mask[I,0] = wise_mask_maps[0][yy[I], xx[I]]
+            WISE.wise_mask[I,1] = wise_mask_maps[1][yy[I], xx[I]]
 
     # Unpack time-resolved results...
     WISE_T = None

@@ -5,6 +5,123 @@ from astrometry.util.fits import fits_table
 from legacypipe.image import CP_DQ_BITS
 from legacypipe.survey import tim_get_resamp
 
+class UnwiseCoadd(object):
+    def __init__(self, brick, W, H, pixscale, wpixscale):
+        from legacypipe.survey import wcs_for_brick
+        self.wW = int(W * pixscale / wpixscale)
+        self.wH = int(H * pixscale / wpixscale)
+        self.unwise_wcs = wcs_for_brick(brick, W=self.wW, H=self.wH,
+                                        pixscale=wpixscale)
+        # images
+        self.unwise_co  = [np.zeros((self.wH,self.wW), np.float32)
+                           for band in [1,2,3,4]]
+        self.unwise_con = [np.zeros((self.wH,self.wW), np.uint16)
+                           for band in [1,2,3,4]]
+        # models
+        self.unwise_com  = [np.zeros((self.wH,self.wW), np.float32)
+                            for band in [1,2,3,4]]
+        self.unwise_comn = [np.zeros((self.wH,self.wW), np.uint16)
+                            for band in [1,2,3,4]]
+
+    def add(self, tile, unwise_dir, tilewcs, wise_models):
+        gotbands = []
+        imgs = []
+        for band in [1,2,3,4]:
+            # unwise_dir can be a colon-separated list of paths
+            found = False
+            for d in unwise_dir.split(':'):
+                fn = os.path.join(d, tile[:3], tile,
+                                  'unwise-%s-w%i-img-m.fits' % (tile, band))
+                print('Looking for unWISE image file', fn)
+                if os.path.exists(fn):
+                    found = True
+                    break
+            if not found:
+                print('unWISE image file for tile', tile, 'does not exist')
+                continue
+            imgs.append(fitsio.read(fn))
+            gotbands.append(band)
+        try:
+            # We're re-using the WCS from the mask file; all the coadd data
+            # products have identical WCS headers.
+            Yo,Xo,Yi,Xi,rims = resample_with_wcs(self.unwise_wcs, tilewcs, imgs)
+            for band,rim in zip(gotbands, rims):
+                self.unwise_co [band-1][Yo,Xo] += rim
+                self.unwise_con[band-1][Yo,Xo] += 1
+        except OverlapError:
+            print('No overlap between WISE tile', tile, 'and brick')
+            pass
+        # Now the model images.  The forced-photometry routine returns
+        # sub-images and ROIs for the models.
+        gotbands = []
+        imgs = []
+        roi = None
+        for band in [1,2,3,4]:
+            if not (tile, band) in wise_models:
+                print('Tile', tile, 'band', band, '-- model not found')
+                continue
+            mod,thisroi = wise_models[(tile,band)]
+            #print('Tile', tile, 'band', band, 'model', mod.shape, 'roi', thisroi)
+            gotbands.append(band)
+            imgs.append(mod)
+            if roi is None:
+                roi = thisroi
+            else:
+                assert(thisroi == roi)
+        #print('ROI:', roi)
+        if roi is None:
+            continue
+        try:
+            # Get WCS for this ROI.
+            rx0,rx1,ry0,ry1 = roi
+            roiwcs = tilewcs.get_subimage(rx0, ry0, rx1-rx0, ry1-ry0)
+            Yo,Xo,Yi,Xi,rims = resample_with_wcs(self.unwise_wcs, roiwcs, imgs)
+            for band,rim in zip(gotbands, rims):
+                self.unwise_com [band-1][Yo,Xo] += rim
+                self.unwise_comn[band-1][Yo,Xo] += 1
+        except OverlapError:
+            print('No overlap between WISE model tile', tile, 'and brick')
+            pass
+
+    def finish(self, survey, brickname, version_header):
+        for band,co,n,com,mn in zip([1,2,3,4],
+                                    self.unwise_co,  self.unwise_con,
+                                    self.unwise_com, self.unwise_comn):
+            hdr = fitsio.FITSHDR()
+            for r in version_header.records():
+                hdr.add_record(r)
+            hdr.add_record(dict(name='TELESCOP', value='WISE'))
+            hdr.add_record(dict(name='FILTER', value='W%i' % band,
+                                    comment='WISE band'))
+            unwise_wcs.add_to_header(hdr)
+            hdr.delete('IMAGEW')
+            hdr.delete('IMAGEH')
+            hdr.add_record(dict(name='EQUINOX', value=2000.))
+            hdr.add_record(dict(name='MAGZERO', value=22.5,
+                                    comment='Magnitude zeropoint'))
+            co  /= np.maximum(n, 1)
+            com /= np.maximum(mn, 1)
+            with survey.write_output('image', brick=brickname, band='W%i' % band,
+                                     shape=co.shape) as out:
+                out.fits.write(co, header=hdr)
+            with survey.write_output('model', brick=brickname, band='W%i' % band,
+                                     shape=com.shape) as out:
+                out.fits.write(com, header=hdr)
+        del unwise_con
+        del unwise_comn
+        # W1/W2 color jpeg
+        rgb = _unwise_to_rgb(unwise_co[:2])
+        del unwise_co
+        with survey.write_output('wise-jpeg', brick=brickname) as out:
+            imsave_jpeg(out.fn, rgb, origin='lower')
+            print('Wrote', out.fn)
+        rgb = _unwise_to_rgb(unwise_com[:2])
+        del unwise_com
+        with survey.write_output('wisemodel-jpeg', brick=brickname) as out:
+            imsave_jpeg(out.fn, rgb, origin='lower')
+            print('Wrote', out.fn)
+        del rgb
+
 def make_coadds(tims, bands, targetwcs,
                 mods=None, xy=None, apertures=None, apxy=None,
                 ngood=False, detmaps=False, psfsize=False, allmasks=True,
