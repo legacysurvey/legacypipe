@@ -1,7 +1,9 @@
 from __future__ import print_function
+import os
 import numpy as np
 import fitsio
 from astrometry.util.fits import fits_table
+from astrometry.util.resample import resample_with_wcs, OverlapError
 from legacypipe.image import CP_DQ_BITS
 from legacypipe.survey import tim_get_resamp
 
@@ -50,7 +52,7 @@ class UnwiseCoadd(object):
                 self.unwise_con[band-1][Yo,Xo] += 1
         except OverlapError:
             print('No overlap between WISE tile', tile, 'and brick')
-            pass
+            return
         # Now the model images.  The forced-photometry routine returns
         # sub-images and ROIs for the models.
         gotbands = []
@@ -70,7 +72,7 @@ class UnwiseCoadd(object):
                 assert(thisroi == roi)
         #print('ROI:', roi)
         if roi is None:
-            continue
+            return
         try:
             # Get WCS for this ROI.
             rx0,rx1,ry0,ry1 = roi
@@ -84,6 +86,7 @@ class UnwiseCoadd(object):
             pass
 
     def finish(self, survey, brickname, version_header):
+        from legacypipe.survey import imsave_jpeg
         for band,co,n,com,mn in zip([1,2,3,4],
                                     self.unwise_co,  self.unwise_con,
                                     self.unwise_com, self.unwise_comn):
@@ -93,7 +96,7 @@ class UnwiseCoadd(object):
             hdr.add_record(dict(name='TELESCOP', value='WISE'))
             hdr.add_record(dict(name='FILTER', value='W%i' % band,
                                     comment='WISE band'))
-            unwise_wcs.add_to_header(hdr)
+            self.unwise_wcs.add_to_header(hdr)
             hdr.delete('IMAGEW')
             hdr.delete('IMAGEH')
             hdr.add_record(dict(name='EQUINOX', value=2000.))
@@ -107,20 +110,44 @@ class UnwiseCoadd(object):
             with survey.write_output('model', brick=brickname, band='W%i' % band,
                                      shape=com.shape) as out:
                 out.fits.write(com, header=hdr)
-        del unwise_con
-        del unwise_comn
         # W1/W2 color jpeg
-        rgb = _unwise_to_rgb(unwise_co[:2])
-        del unwise_co
+        rgb = _unwise_to_rgb(self.unwise_co[:2])
         with survey.write_output('wise-jpeg', brick=brickname) as out:
             imsave_jpeg(out.fn, rgb, origin='lower')
             print('Wrote', out.fn)
-        rgb = _unwise_to_rgb(unwise_com[:2])
-        del unwise_com
+        rgb = _unwise_to_rgb(self.unwise_com[:2])
         with survey.write_output('wisemodel-jpeg', brick=brickname) as out:
             imsave_jpeg(out.fn, rgb, origin='lower')
             print('Wrote', out.fn)
-        del rgb
+
+def _unwise_to_rgb(imgs):
+    import numpy as np
+    img = imgs[0]
+    H,W = img.shape
+    ## FIXME
+    w1,w2 = imgs
+    rgb = np.zeros((H, W, 3), np.uint8)
+    scale1 = 50.
+    scale2 = 50.
+    mn,mx = -1.,100.
+    arcsinh = 1.
+    img1 = w1 / scale1
+    img2 = w2 / scale2
+    if arcsinh is not None:
+        def nlmap(x):
+            return np.arcsinh(x * arcsinh) / np.sqrt(arcsinh)
+        mean = (img1 + img2) / 2.
+        I = nlmap(mean)
+        img1 = img1 / mean * I
+        img2 = img2 / mean * I
+        mn = nlmap(mn)
+        mx = nlmap(mx)
+    img1 = (img1 - mn) / (mx - mn)
+    img2 = (img2 - mn) / (mx - mn)
+    rgb[:,:,2] = (np.clip(img1, 0., 1.) * 255).astype(np.uint8)
+    rgb[:,:,0] = (np.clip(img2, 0., 1.) * 255).astype(np.uint8)
+    rgb[:,:,1] = rgb[:,:,0]/2 + rgb[:,:,2]/2
+    return rgb
 
 def make_coadds(tims, bands, targetwcs,
                 mods=None, xy=None, apertures=None, apxy=None,

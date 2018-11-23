@@ -3153,35 +3153,6 @@ def _unwise_phot(X):
             W = None
     return W
 
-def _unwise_to_rgb(imgs):
-    import numpy as np
-    img = imgs[0]
-    H,W = img.shape
-    ## FIXME
-    w1,w2 = imgs
-    rgb = np.zeros((H, W, 3), np.uint8)
-    scale1 = 50.
-    scale2 = 50.
-    mn,mx = -1.,100.
-    arcsinh = 1.
-    img1 = w1 / scale1
-    img2 = w2 / scale2
-    if arcsinh is not None:
-        def nlmap(x):
-            return np.arcsinh(x * arcsinh) / np.sqrt(arcsinh)
-        mean = (img1 + img2) / 2.
-        I = nlmap(mean)
-        img1 = img1 / mean * I
-        img2 = img2 / mean * I
-        mn = nlmap(mn)
-        mx = nlmap(mx)
-    img1 = (img1 - mn) / (mx - mn)
-    img2 = (img2 - mn) / (mx - mn)
-    rgb[:,:,2] = (np.clip(img1, 0., 1.) * 255).astype(np.uint8)
-    rgb[:,:,0] = (np.clip(img2, 0., 1.) * 255).astype(np.uint8)
-    rgb[:,:,1] = rgb[:,:,0]/2 + rgb[:,:,2]/2
-    return rgb
-
 def stage_writecat(
     survey=None,
     version_header=None,
