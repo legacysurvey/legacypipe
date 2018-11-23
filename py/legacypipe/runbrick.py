@@ -2982,7 +2982,7 @@ def stage_wise_forced(
             # Create the WCS into which we'll resample the tiles.
             # Same center as "targetwcs" but bigger pixel scale.
             wpixscale = 2.75
-            wcoadds = UnwiseCoadd(brick, W, H, pixscale, wpixscale)
+            wcoadds = UnwiseCoadd(targetwcs, W, H, pixscale, wpixscale)
 
         for tile in tiles.coadd_id:
             from astrometry.util.util import Tan
@@ -3003,7 +3003,7 @@ def stage_wise_forced(
             M,hdr = fitsio.read(fn, header=True)
             tilewcs = Tan(*[float(hdr[k]) for k in
                         ['CRVAL1', 'CRVAL2', 'CRPIX1', 'CRPIX2',
-                         'CD1_1', 'CD1_2', 'CD2_1','CD2_2','NAXIS2','NAXIS1']])
+                         'CD1_1', 'CD1_2', 'CD2_1','CD2_2','NAXIS1','NAXIS2']])
             # Resample the WISE map to brick coordinates for the
             # "maskbits" data product.
             try:
@@ -3130,6 +3130,7 @@ def _unwise_phot(X):
     if get_mods:
         # This requires a newer version of the tractor code!
         kwargs.update(get_models=get_mods)
+
     try:
         W = unwise_forcedphot(wcat, tiles, use_ceres=wise_ceres, **kwargs)
     except:
