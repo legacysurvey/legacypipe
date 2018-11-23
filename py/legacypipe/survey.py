@@ -496,6 +496,8 @@ def get_dependency_versions(unwise_dir, unwise_tr_dir):
                             'Dependency version'))
             while len(value):
                 value = value[67:]
+                if len(value) == 0:
+                    break
                 headers.append(('CONTINUE',
                                 "  '%s%s'" % (value[:67], '&' if len(value) > 67 else ''),
                                 None))
