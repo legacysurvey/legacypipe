@@ -44,6 +44,7 @@ IN_BLOB = dict(
     BRIGHT = 0x1,
     MEDIUM = 0x2,
     CLUSTER = 0x4,
+    GALAXY = 0x8,
 )
 
 # Ugly hack: for sphinx documentation, the astrometry and tractor (and
@@ -1161,6 +1162,15 @@ Now using the current directory as LEGACY_SURVEY_DIR, but this is likely to fail
                 if os.path.exists(fn):
                     return fn
             return swap(os.path.join(basedir, 'tycho2.kd.fits'))
+
+        elif filetype == 'large-galaxies':
+            dirnm = os.environ.get('LARGEGALAXIES_DIR')
+            fn = 'LSLGA-v1.0.kd.fits'
+            if dirnm is not None:
+                fn = os.path.join(dirnm, fn)
+                if os.path.exists(fn):
+                    return fn
+            return swap(os.path.join(basedir, fn))
 
         elif filetype == 'annotated-ccds':
             if self.version == 'dr2':

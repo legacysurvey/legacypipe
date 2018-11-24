@@ -1071,6 +1071,7 @@ def stage_srcs(targetrd=None, pixscale=None, targetwcs=None,
                mp=None, nsigma=None,
                survey=None, brick=None,
                gaia_stars=False,
+               large_galaxies=False,
                star_clusters=True,
                record_event=None,
                **kwargs):
@@ -1165,9 +1166,8 @@ def stage_srcs(targetrd=None, pixscale=None, targetwcs=None,
         clusters = read_star_clusters(marginwcs)
         print('Found', len(clusters), 'star clusters nearby')
         if len(clusters):
+            clusters.iscluster = np.ones(len(clusters), bool)
             refstars = merge_tables([refstars, clusters], columns='fillzero')
-
-    # FIXME - Initialize a big-galaxy catalog here--?
 
     # Grab subset of reference stars that are actually *within* the
     # brick.  Recompute "ibx", "iby" using *targetwcs* not *marginwcs*.
@@ -1175,7 +1175,6 @@ def stage_srcs(targetrd=None, pixscale=None, targetwcs=None,
     # ibx = integer brick coords
     refstars.ibx = np.round(xx-1.).astype(int)
     refstars.iby = np.round(yy-1.).astype(int)
-
     refstars.in_bounds = ((refstars.ibx >= 0) * (refstars.ibx < W) *
                           (refstars.iby >= 0) * (refstars.iby < H))
     
@@ -1187,6 +1186,71 @@ def stage_srcs(targetrd=None, pixscale=None, targetwcs=None,
     avoid_x = refstars_in.ibx
     avoid_y = refstars_in.iby
     
+    # Read large galaxies nearby.
+    if large_galaxies:
+        #from legacypipe.survey import RexGalaxy, LogRadius
+        from legacypipe.survey import LegacyEllipseWithPriors
+        from tractor.galaxy import ExpGalaxy
+
+        # Read this catalog and trim to galaxies on this brick!
+        from astrometry.libkd.spherematch import tree_open, tree_search_radec
+        galfn = survey.find_file('large-galaxies')
+        radius = 1.
+        rc,dc = targetwcs.radec_center()
+
+        kd = tree_open(galfn, 'largegals')
+        I = tree_search_radec(kd, rc, dc, radius)
+        print(len(I), 'large galaxies within', radius, 'deg of RA,Dec (%.3f, %.3f)' % (rc,dc))
+        if len(I) == 0:
+            gals = []
+        else:
+            # Read only the rows within range.
+            gals = fits_table(galfn, rows=I, columns=['ra', 'dec', 'd25', 'mag', 'lslga_id'])
+        del kd
+
+        if len(gals):
+            ok,xx,yy = targetwcs.radec2pixelxy(gals.ra, gals.dec)
+            H,W = targetwcs.shape
+            # D25 is diameter in arcmin
+            pixsizes = gals.d25 * (60./2.) / targetwcs.pixel_scale()
+            gals.ibx = (xx - 1.).astype(int)
+            gals.iby = (yy - 1.).astype(int)
+            gals.cut(ok * (xx > -pixsizes) * (xx < W+pixsizes) *
+                     (yy > -pixsizes) * (yy < H+pixsizes))
+            print('Cut to', len(gals), 'large galaxies touching brick')
+            del ok,xx,yy,pixsizes
+
+        if len(gals):
+            avoid_x = np.append(avoid_x, gals.ibx)
+            avoid_y = np.append(avoid_y, gals.iby)
+
+        # Instantiate a galaxy model at the position of each object.
+        largegals = gals
+        largecat = []
+        for g in gals:
+            fluxes = dict([(band, NanoMaggies.magToNanomaggies(g.mag)) for band in bands])
+            assert(np.all(np.isfinite(list(fluxes.values()))))
+            ss = g.d25 * 60. / 2.
+            gal = ExpGalaxy(RaDecPos(g.ra, g.dec),
+                            NanoMaggies(order=bands, **fluxes),
+                            LegacyEllipseWithPriors(np.log(ss), 0., 0.))
+            gal.isForcedLargeGalaxy = True
+            largecat.append(gal)
+        if len(largegals):
+            largegals.radius = largegals.d25 / 2. / 60.
+            largegals.delete_column('d25')
+            largegals.rename('lslga_id', 'ref_id')
+            largegals.ref_cat = np.array(['L1'] * len(largegals))
+            largegals.islargegalaxy = np.ones(len(largegals), bool)
+            refstars = merge_tables([refstars, largegals], columns='fillzero')
+    else:
+        largegals = []
+
+    if not 'islargegalaxy' in refstars.get_columns():
+        refstars.islargegalaxy = np.zeros(len(refstars), bool)
+    if not 'iscluster' in refstars.get_columns():
+        refstars.iscluster = np.zeros(len(refstars), bool)
+
     # Saturated blobs -- create a source for each, except for those
     # that already have a Tycho-2 or Gaia star
     satmap = reduce(np.logical_or, satmaps)
@@ -1257,7 +1321,8 @@ def stage_srcs(targetrd=None, pixscale=None, targetwcs=None,
     record_event and record_event('stage_srcs: SED-matched')
     print('Running source detection at', nsigma, 'sigma')
     SEDs = survey.sed_matched_filters(bands)
-    # Add a ~1" exclusion zone around reference & saturated stars
+    # Add a ~1" exclusion zone around reference, saturated stars, and large
+    # galaxies.
     avoid_r = np.zeros_like(avoid_x) + 4
     Tnew,newcat,hot = run_sed_matched_filters(
         SEDs, bands, detmaps, detivs, (avoid_x,avoid_y,avoid_r), targetwcs,
@@ -1271,8 +1336,8 @@ def stage_srcs(targetrd=None, pixscale=None, targetwcs=None,
     Tnew.ref_cat = np.array(['  '] * len(Tnew))
     Tnew.ref_id  = np.zeros(len(Tnew), np.int64)
 
-    # Merge newly detected sources with existing (Tycho2 + Gaia) source lists
-    # and saturated sources
+    # Merge newly detected sources with existing (Tycho2 + Gaia) source lists,
+    # saturated sources, and large galaxies.
     cats = newcat
     tables = [Tnew]
     if len(sat):
@@ -1281,6 +1346,9 @@ def stage_srcs(targetrd=None, pixscale=None, targetwcs=None,
     if len(refstars_in):
         tables.append(refstars_in)
         cats += refstarcat
+    if len(largegals):
+        tables.append(largegals)
+        cats += largecat
     T = merge_tables(tables, columns='fillzero')
     cat = Catalog(*cats)
     cat.freezeAllParams()
@@ -1312,6 +1380,10 @@ def stage_srcs(targetrd=None, pixscale=None, targetwcs=None,
             if len(I):
                 plt.plot(refstars.ibx[I], refstars.iby[I], '+',
                          color=(0.2,0.2,1), label='Gaia', **crossa)
+            I, = np.nonzero([r == 'L1' for r in refstars.ref_cat])
+            if len(I):
+                plt.plot(refstars.ibx[I], refstars.iby[I], '+',
+                         color=(0.6,0.6,0.2), label='Large Galaxy', **crossa)
         plt.plot(Tnew.ibx, Tnew.iby, '+', color=(0,1,0),
                  label='New SED-matched detections', **crossa)
         plt.axis(ax)
@@ -1342,7 +1414,7 @@ def stage_srcs(targetrd=None, pixscale=None, targetwcs=None,
     tlast = tnow
 
     keys = ['T', 'tims', 'blobsrcs', 'blobslices', 'blobs', 'cat',
-            'ps', 'refstars', 'gaia_stars', 'saturated_pix']
+            'ps', 'refstars', 'gaia_stars', 'saturated_pix', 'largegals']
     L = locals()
     rtn = dict([(k,L[k]) for k in keys])
     return rtn
@@ -1591,6 +1663,7 @@ def stage_fitblobs(T=None,
                    write_metrics=True,
                    get_all_models=False,
                    refstars=None,
+                   largegals=None,
                    rex=False,
                    bailout=False,
                    record_event=None,
@@ -2309,13 +2382,14 @@ def _blob_iter(blobslices, blobsrcs, blobs, targetwcs, tims, cat, bands,
 
         hasbright = refs is not None and np.any(refs.isbright)
         hasmedium = refs is not None and np.any(refs.ismedium)
+        haslargegal = refs is not None and np.any(refs.islargegalaxy)
 
         npix = np.sum(blobmask)
         print(('Blob %i of %i, id: %i, sources: %i, size: %ix%i, npix %i, brick X: %i,%i, ' +
-               'Y: %i,%i, one pixel: %i %i, ref stars: %i, bright: %s, medium: %s') %
+               'Y: %i,%i, one pixel: %i %i, ref stars: %i, bright: %s, medium: %s, large galaxy: %s') %
               (nblob+1, len(blobslices), iblob, len(Isrcs), blobw, blobh, npix,
                bx0,bx1,by0,by1, onex,oney, int(refs is not None and len(refs)), hasbright,
-               hasmedium))
+               hasmedium, haslargegal))
 
         if max_blobsize is not None and npix > max_blobsize:
             print('Number of pixels in blob,', npix, ', exceeds max blobsize', max_blobsize)
@@ -3459,6 +3533,7 @@ def run_brick(brick, survey, radec=None, pixscale=0.262,
               subsky=True,
               constant_invvar=False,
               gaia_stars=False,
+              large_galaxies=False,
               min_mjd=None, max_mjd=None,
               unwise_coadds=False,
               bail_out=False,
@@ -3675,6 +3750,7 @@ def run_brick(brick, survey, radec=None, pixscale=0.262,
                   splinesky=splinesky,
                   subsky=subsky,
                   gaia_stars=gaia_stars,
+                  large_galaxies=large_galaxies,
                   min_mjd=min_mjd, max_mjd=max_mjd,
                   simul_opt=simul_opt,
                   use_ceres=ceres,
@@ -3997,6 +4073,9 @@ python -u legacypipe/runbrick.py --plots --brick 2440p070 --zoom 1900 2400 450 9
     parser.add_argument('--no-gaia', dest='gaia_stars', default=True,
                         action='store_false',
                         help="Don't use Gaia sources as fixed stars")
+
+    parser.add_argument('--large-galaxies', dest='large_galaxies', default=False,
+                        action='store_true', help="Do some large-galaxy magic.")
 
     parser.add_argument('--min-mjd', type=float,
                         help='Only keep images taken after the given MJD')

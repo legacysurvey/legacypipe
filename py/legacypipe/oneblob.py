@@ -28,15 +28,19 @@ def one_blob(X):
     (nblob, iblob, Isrcs, brickwcs, bx0, by0, blobw, blobh, blobmask, timargs,
      srcs, bands, plots, ps, simul_opt, use_ceres, rex, refs) = X
 
-    print('Fitting blob number', nblob, 'val', iblob, ':', len(Isrcs),
-          'sources, size', blobw, 'x', blobh, len(timargs), 'images')
+    print('Fitting blob number %i: blobid %i, nsources %i, size %i x %i, %i images' %
+          (nblob, iblob, len(Isrcs), blobw, blobh, len(timargs)))
 
     if len(timargs) == 0:
         return None
 
     hasbright = refs is not None and np.any(refs.isbright)
     hasmedium = refs is not None and np.any(refs.ismedium)
+    hasgalaxy = refs is not None and np.any(refs.islargegalaxy)
+    hascluster = refs is not None and np.any(refs.iscluster)
 
+    print('Has bright star:', hasbright, 'medium:', hasmedium, 'large galaxy:', hasgalaxy)
+    
     if plots:
         plt.figure(2, figsize=(3,3))
         plt.subplots_adjust(left=0.01, right=0.99, bottom=0.01, top=0.99)
@@ -77,7 +81,8 @@ def one_blob(X):
     B.hit_limit = np.zeros(len(B), bool)
 
     ob = OneBlob('%i'%(nblob+1), blobwcs, blobmask, timargs, srcs, bands,
-                 plots, ps, simul_opt, use_ceres, hasbright, hasmedium, rex)
+                 plots, ps, simul_opt, use_ceres, hasbright, hasmedium,
+                 hasgalaxy, rex)
     ob.run(B)
 
     B.blob_totalpix = np.zeros(len(B), np.int32) + ob.total_pix
@@ -96,8 +101,10 @@ def one_blob(X):
         B.brightblob += IN_BLOB['BRIGHT']
     if hasmedium:
         B.brightblob += IN_BLOB['MEDIUM']
-    if refs is not None and 'iscluster' in refs.get_columns() and np.any(refs.iscluster):
+    if hascluster:
         B.brightblob += IN_BLOB['CLUSTER']
+    if hasgalaxy:
+        B.brightblob += IN_BLOB['GALAXY']
 
     B.cpu_blob = np.zeros(len(B), np.float32)
     t1 = time.clock()
@@ -107,7 +114,7 @@ def one_blob(X):
 
 class OneBlob(object):
     def __init__(self, name, blobwcs, blobmask, timargs, srcs, bands,
-                 plots, ps, simul_opt, use_ceres, hasbright, hasmedium, rex):
+                 plots, ps, simul_opt, use_ceres, hasbright, hasmedium, hasgalaxy, rex):
         self.name = name
         self.rex = rex
         self.blobwcs = blobwcs
@@ -127,6 +134,8 @@ class OneBlob(object):
         self.use_ceres = use_ceres
         self.hasbright = hasbright
         self.hasmedium = hasmedium
+        self.hasgalaxy = hasgalaxy
+        self.deblend = False
         self.tims = self.create_tims(timargs)
         self.total_pix = sum([np.sum(t.getInvError() > 0) for t in self.tims])
         self.plots2 = False
@@ -152,6 +161,12 @@ class OneBlob(object):
         from legacypipe.constrained_optimizer import ConstrainedOptimizer
         self.trargs.update(optimizer=ConstrainedOptimizer())
         self.optargs.update(dchisq = 0.1)
+
+        # Fitting rules:
+        # Force all other objects to be point sources?
+        self.force_pointsources = self.hasbright
+        # Fit local constant sky background levels?
+        self.fit_background = self.hasmedium or self.hasgalaxy
 
 
     def run(self, B):
@@ -381,10 +396,6 @@ class OneBlob(object):
         del models
 
     def model_selection_one_source(self, src, srci, models, B):
-        # Fit local constant sky background levels if we're in the
-        # same blob as a medium-brightness star.
-        fit_background = self.hasmedium
-
         if self.bigblob:
             mods = [mod[srci] for mod in models.models]
             srctims,modelMasks = _get_subimages(self.tims, mods, src)
@@ -611,7 +622,7 @@ class OneBlob(object):
             print('Source is starting outside blob -- skipping.')
             return None
 
-        if fit_background:
+        if self.fit_background:
             for tim in srctims:
                 tim.freezeAllBut('sky')
             srctractor.thawParam('images')
@@ -622,7 +633,7 @@ class OneBlob(object):
         # Compute the log-likehood without a source here.
         srccat[0] = None
 
-        if fit_background:
+        if self.fit_background:
             #print('Fitting no-source model (sky)')
             srctractor.optimize_loop(**self.optargs)
             #srctractor.images.printThawedParams()
@@ -657,15 +668,17 @@ class OneBlob(object):
                     forced = True
             if forced:
                 print('Gaia source is forced to be a point source -- not trying other models')
-            elif self.hasbright:
-                print('Not computing galaxy models: bright star in blob')
+            elif self.force_pointsources:
+                print('Not computing galaxy models due to objects in blob')
             else:
                 trymodels.append((simname, simple))
                 # Try galaxy models if simple > ptsrc, or if bright.
                 # The 'gals' model is just a marker
                 trymodels.append(('gals', None))
         else:
-            trymodels.extend([('dev', dev), ('exp', exp), ('comp', comp)])
+            #if hasattr(src, 'isForcedLargeGalaxy') and src.isForcedLargeGalaxy:
+            trymodels.extend([(simname, simple),
+                              ('dev', dev), ('exp', exp), ('comp', comp)])
 
         cputimes = {}
         for name,newsrc in trymodels:
@@ -731,7 +744,7 @@ class OneBlob(object):
             #     plt.title('Initial: ' + name)
             #     self.ps.savefig()
 
-            if fit_background:
+            if self.fit_background:
                 #print('Resetting sky params.')
                 srctractor.images.setParams(skyparams)
                 srctractor.thawParam('images')
@@ -779,7 +792,7 @@ class OneBlob(object):
             elif isinstance(newsrc, FixedCompositeGalaxy):
                 oldshape = (newsrc.shapeExp, newsrc.shapeDev,newsrc.fracDev)
 
-            if fit_background:
+            if self.fit_background:
                 # We have to freeze the sky here before computing
                 # uncertainties
                 srctractor.freezeParam('images')
@@ -813,7 +826,6 @@ class OneBlob(object):
             cpum1 = time.clock()
             B.all_model_cpu[srci][name] = cpum1 - cpum0
             cputimes[name] = cpum1 - cpum0
-
             B.all_model_hit_limit[srci][name] = hit_limit
 
         if mask_others:
@@ -1411,8 +1423,12 @@ def _initialize_models(src, rex):
         oldmodel = 'ptsrc'
 
     elif isinstance(src, DevGalaxy):
-        ptsrc = PointSource(src.getPosition(), src.getBrightness()).copy()
-        simple = SimpleGalaxy(src.getPosition(), src.getBrightness()).copy()
+        if rex:
+            from legacypipe.survey import LogRadius
+            simple = RexGalaxy(src.getPosition(), src.getBrightness(),
+                               LogRadius(np.log(src.getShape().re))).copy()
+        else:
+            simple = SimpleGalaxy(src.getPosition(), src.getBrightness()).copy()
         dev = src.copy()
         exp = ExpGalaxy(src.getPosition(), src.getBrightness(),
                         src.getShape()).copy()
@@ -1421,7 +1437,12 @@ def _initialize_models(src, rex):
 
     elif isinstance(src, ExpGalaxy):
         ptsrc = PointSource(src.getPosition(), src.getBrightness()).copy()
-        simple = SimpleGalaxy(src.getPosition(), src.getBrightness()).copy()
+        if rex:
+            from legacypipe.survey import LogRadius
+            simple = RexGalaxy(src.getPosition(), src.getBrightness(),
+                               LogRadius(np.log(src.getShape().re))).copy()
+        else:
+            simple = SimpleGalaxy(src.getPosition(), src.getBrightness()).copy()
         dev = DevGalaxy(src.getPosition(), src.getBrightness(),
                         src.getShape()).copy()
         exp = src.copy()
@@ -1430,12 +1451,19 @@ def _initialize_models(src, rex):
 
     elif isinstance(src, FixedCompositeGalaxy):
         ptsrc = PointSource(src.getPosition(), src.getBrightness()).copy()
-        simple = SimpleGalaxy(src.getPosition(), src.getBrightness()).copy()
         frac = src.fracDev.clipped()
-        if frac > 0:
+        if frac > 0.5:
             shape = src.shapeDev
         else:
             shape = src.shapeExp
+
+        if rex:
+            from legacypipe.survey import LogRadius
+            simple = RexGalaxy(src.getPosition(), src.getBrightness(),
+                               LogRadius(np.log(shape.re))).copy()
+        else:
+            simple = SimpleGalaxy(src.getPosition(), src.getBrightness()).copy()
+
         dev = DevGalaxy(src.getPosition(), src.getBrightness(), shape).copy()
         if frac < 1:
             shape = src.shapeExp
@@ -1613,7 +1641,7 @@ def _clip_model_to_blob(mod, sh, ie):
 
 def _select_model(chisqs, nparams, galaxy_margin, rex):
     '''
-    Returns keepmod
+    Returns keepmod (string), the name of the preferred model.
     '''
     keepmod = 'none'
 
@@ -1625,15 +1653,16 @@ def _select_model(chisqs, nparams, galaxy_margin, rex):
                 if name != 'none'] + [-1])
 
     if diff < cut:
+        # Drop this source
         return keepmod
-    # We're going to keep this source!
 
+    # Now choose between point source and simple model (SIMP/REX)
     if rex:
         simname = 'rex'
     else:
         simname = 'simple'
 
-    if not simname in chisqs:
+    if 'ptsrc' in chisqs and not simname in chisqs:
         # bright stars / reference stars: we don't test the simple model.
         return 'ptsrc'
     # Now choose between point source and simple model (SIMP/REX)
@@ -1660,7 +1689,7 @@ def _select_model(chisqs, nparams, galaxy_margin, rex):
 
     # This is the "fractional" upgrade threshold for ptsrc/simple->dev/exp:
     # 1% of ptsrc vs nothing
-    fcut = 0.01 * chisqs.get('ptsrc', 0)
+    fcut = 0.01 * chisqs.get('ptsrc', 0.)
     #print('Cut: max of', cut, 'and', fcut, ' (fraction of chisq_psf=%.1f)'
     # % chisqs['ptsrc'])
     cut = max(cut, fcut)
@@ -1687,6 +1716,8 @@ def _select_model(chisqs, nparams, galaxy_margin, rex):
 
     diff = chisqs['comp'] - chisqs[keepmod]
     #print('Comparing', keepmod, 'to comp.  cut:', cut, 'comp:', diff)
+    fcut = 0.01 * chisqs[keepmod]
+    cut = max(cut, fcut)
     if diff < cut:
         return keepmod
 
