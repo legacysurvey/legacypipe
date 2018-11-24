@@ -8,10 +8,14 @@ from legacypipe.image import CP_DQ_BITS
 from legacypipe.survey import tim_get_resamp
 
 class UnwiseCoadd(object):
-    def __init__(self, brick, W, H, pixscale, wpixscale):
-        from legacypipe.survey import wcs_for_brick
+    def __init__(self, targetwcs, W, H, pixscale, wpixscale):
+        from legacypipe.survey import wcs_for_brick, BrickDuck
+
         self.wW = int(W * pixscale / wpixscale)
         self.wH = int(H * pixscale / wpixscale)
+        rc,dc = targetwcs.radec_center()
+        # quack
+        brick = BrickDuck(rc, dc, 'quack')
         self.unwise_wcs = wcs_for_brick(brick, W=self.wW, H=self.wH,
                                         pixscale=wpixscale)
         # images
@@ -41,15 +45,22 @@ class UnwiseCoadd(object):
             if not found:
                 print('unWISE image file for tile', tile, 'does not exist')
                 continue
-            imgs.append(fitsio.read(fn))
+            img = fitsio.read(fn)
+            assert(tilewcs.shape == img.shape)
+            imgs.append(img)
             gotbands.append(band)
         try:
             # We're re-using the WCS from the mask file; all the coadd data
             # products have identical WCS headers.
             Yo,Xo,Yi,Xi,rims = resample_with_wcs(self.unwise_wcs, tilewcs, imgs)
+            print('Adding', len(Yo), 'pixels from tile', tile, 'to coadd')
             for band,rim in zip(gotbands, rims):
                 self.unwise_co [band-1][Yo,Xo] += rim
                 self.unwise_con[band-1][Yo,Xo] += 1
+
+                print('Band', band, ': now', np.sum(self.unwise_con[band-1]>0), 'pixels are set in image coadd')
+                print('Average value:', np.mean((self.unwise_co[band-1] / np.maximum(self.unwise_con[band-1], 1))[self.unwise_con[band-1]>0]))
+
         except OverlapError:
             print('No overlap between WISE tile', tile, 'and brick')
             return
@@ -63,24 +74,30 @@ class UnwiseCoadd(object):
                 print('Tile', tile, 'band', band, '-- model not found')
                 continue
             mod,thisroi = wise_models[(tile,band)]
-            #print('Tile', tile, 'band', band, 'model', mod.shape, 'roi', thisroi)
+            print('Tile', tile, 'band', band, 'model', mod.shape,
+                  'roi', thisroi)
             gotbands.append(band)
             imgs.append(mod)
             if roi is None:
                 roi = thisroi
             else:
                 assert(thisroi == roi)
-        #print('ROI:', roi)
         if roi is None:
             return
         try:
             # Get WCS for this ROI.
             rx0,rx1,ry0,ry1 = roi
             roiwcs = tilewcs.get_subimage(rx0, ry0, rx1-rx0, ry1-ry0)
+            print('ROI WCS shape:', roiwcs.shape)
+            print('Image shapes:', [img.shape for img in imgs])
             Yo,Xo,Yi,Xi,rims = resample_with_wcs(self.unwise_wcs, roiwcs, imgs)
             for band,rim in zip(gotbands, rims):
                 self.unwise_com [band-1][Yo,Xo] += rim
                 self.unwise_comn[band-1][Yo,Xo] += 1
+
+                print('Band', band, ': now', np.sum(self.unwise_comn[band-1]>0), 'pixels are set in model coadd')
+                print('Average value:', np.mean((self.unwise_com[band-1] / np.maximum(self.unwise_comn[band-1], 1))[self.unwise_comn[band-1]>0]))
+
         except OverlapError:
             print('No overlap between WISE model tile', tile, 'and brick')
             pass
@@ -104,6 +121,9 @@ class UnwiseCoadd(object):
                                     comment='Magnitude zeropoint'))
             co  /= np.maximum(n, 1)
             com /= np.maximum(mn, 1)
+            print('Coadd band', band, ': average image', np.mean(co))
+            print('Coadd band', band, ': average model', np.mean(com))
+
             with survey.write_output('image', brick=brickname, band='W%i' % band,
                                      shape=co.shape) as out:
                 out.fits.write(co, header=hdr)
