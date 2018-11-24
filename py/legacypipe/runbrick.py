@@ -2857,13 +2857,16 @@ def stage_wise_forced(
     # Newer version from Aaron's email to decam-chatter, 2018-06-14.
     broadening = { 1: 1.0405, 2: 1.0346, 3: None, 4: None }
 
+    # use Aaron's WISE pixelized PSF model?
+    wpixpsf = True
+    
     # Create list of groups-of-tiles to photometer
     args = []
     # Skip if $UNWISE_COADDS_DIR or --unwise-dir not set.
     if unwise_dir is not None:
         for band in [1,2,3,4]:
             args.append((wcat, tiles, band, roiradec, unwise_dir, wise_ceres,
-                         broadening[band], unwise_coadds))
+                         broadening[band], wpixpsf, unwise_coadds))
 
     # tempfile.TemporaryDirectory objects -- the directories will be deleted when this
     # variable goes out of scope.
@@ -2914,7 +2917,8 @@ def stage_wise_forced(
                 if len(eps) == 1:
                     edir = os.path.join(tdir, 'e%03i' % eps[0])
                     eargs.append((ie,(wcat, TR[I], band, roiradec, edir,
-                                         wise_ceres, broadening[band], False)))
+                                         wise_ceres, broadening[band],
+                                         wpixpsf, False)))
                 else:
                     import tempfile
                     # Construct a temp symlink farm
@@ -2937,7 +2941,8 @@ def stage_wise_forced(
                         print('Creating symlink', dest, '->', tiledir)
                         os.symlink(tiledir, dest, target_is_directory=True)
                     eargs.append((ie,(wcat, TR[I], band, roiradec, dirname,
-                                      wise_ceres, broadening[band], False)))
+                                      wise_ceres, broadening[band], wpixpsf,
+                                      False)))
 
     # Run the forced photometry!
     record_event and record_event('stage_wise_forced: photometry')
@@ -2982,6 +2987,7 @@ def stage_wise_forced(
             # Create the WCS into which we'll resample the tiles.
             # Same center as "targetwcs" but bigger pixel scale.
             wpixscale = 2.75
+            #wpixscale = pixscale
             wcoadds = UnwiseCoadd(targetwcs, W, H, pixscale, wpixscale)
 
         for tile in tiles.coadd_id:
@@ -3124,12 +3130,17 @@ def collapse_unwise_bitmask(bitmask, band):
 
 def _unwise_phot(X):
     from wise.forcedphot import unwise_forcedphot
-    (wcat, tiles, band, roiradec, unwise_dir, wise_ceres, broadening, get_mods) = X
+    (wcat, tiles, band, roiradec, unwise_dir, wise_ceres, broadening,
+    pixelized_psf, get_mods) = X
     kwargs = dict(roiradecbox=roiradec, bands=[band],
-                  unwise_dir=unwise_dir, psf_broadening=broadening)
+                  unwise_dir=unwise_dir, psf_broadening=broadening,
+                  pixelized_psf=pixelized_psf)
     if get_mods:
         # This requires a newer version of the tractor code!
         kwargs.update(get_models=get_mods)
+
+    ### FIXME
+    #kwargs.update(save_fits=True)
 
     try:
         W = unwise_forcedphot(wcat, tiles, use_ceres=wise_ceres, **kwargs)
