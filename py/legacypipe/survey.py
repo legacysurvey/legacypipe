@@ -471,7 +471,7 @@ def get_dependency_versions(unwise_dir, unwise_tr_dir):
     depvers.append(('fitsio', os.path.dirname(fitsio.__file__)))
 
     # Get additional paths from environment variables
-    for dep in ['TYCHO2_KD', 'GAIA_CAT']:
+    for dep in ['TYCHO2_KD', 'GAIA_CAT', 'LARGEGALAXIES']:
         value = os.environ.get('%s_DIR' % dep, default_ver)
         if value == default_ver:
             print('Warning: failed to get version string for "%s"' % dep)
@@ -1165,7 +1165,7 @@ Now using the current directory as LEGACY_SURVEY_DIR, but this is likely to fail
 
         elif filetype == 'large-galaxies':
             dirnm = os.environ.get('LARGEGALAXIES_DIR')
-            fn = 'LSLGA-v1.0.kd.fits'
+            fn = 'v2.0/LSLGA-v2.0.kd.fits'
             if dirnm is not None:
                 fn = os.path.join(dirnm, fn)
                 if os.path.exists(fn):
