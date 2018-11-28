@@ -2905,7 +2905,7 @@ def stage_wise_forced(
     photometry of the unWISE coadds.
     '''
     from wise.unwise import unwise_tiles_touching_wcs
-    from legacypipe.unwise import *
+    from legacypipe.unwise import unwise_phot, collapse_unwise_bitmask
     from tractor import NanoMaggies
     print('unWISE coadds:', unwise_coadds)
 
