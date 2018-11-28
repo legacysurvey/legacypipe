@@ -36,19 +36,22 @@ Can add kd-tree data structure to this resulting annotated-ccds file like this:
 
 '''
 
-def annotate(ccds, survey, mzls=False, normalizePsf=False):
+def annotate(ccds, survey, mzls=False, bass=False, normalizePsf=False):
     # File from the "observing" svn repo:
     if mzls:
         # https://desi.lbl.gov/svn/decam/code/mosaic3/trunk
         tiles = fits_table('mosaic-tiles_obstatus.fits')
+    elif bass:
+        tiles = None
     else:
         # https://desi.lbl.gov/svn/decam/code/observing/trunk
         tiles = fits_table('decam-tiles_obstatus.fits')
 
-    # Map tile IDs back to index in the obstatus file.
-    tileid_to_index = np.empty(max(tiles.tileid)+1, int)
-    tileid_to_index[:] = -1
-    tileid_to_index[tiles.tileid] = np.arange(len(tiles))
+    if tiles is not None:
+        # Map tile IDs back to index in the obstatus file.
+        tileid_to_index = np.empty(max(tiles.tileid)+1, int)
+        tileid_to_index[:] = -1
+        tileid_to_index[tiles.tileid] = np.arange(len(tiles))
 
     #assert('ccd_cuts' in ccds.get_columns())
 
@@ -387,19 +390,19 @@ def main(outfn='ccds-annotated.fits', ccds=None, **kwargs):
 
     annotate(ccds, **kwargs)
 
-    
     print('Writing to', outfn)
     ccds.writeto(outfn)
     print('Wrote', outfn)
 
 def _bounce_main(X):
-    (name, i, ccds, force, mzls, normalizePsf) = X
+    (name, i, ccds, force, mzls, bass, normalizePsf) = X
     try:
         outfn = 'ccds-annotated/ccds-annotated-%s-%03i.fits' % (name, i)
         if (not force) and os.path.exists(outfn):
             print('Already exists:', outfn)
             return
-        main(outfn=outfn, ccds=ccds, mzls=mzls, normalizePsf=normalizePsf)
+        main(outfn=outfn, ccds=ccds, mzls=mzls, bass=bass,
+             normalizePsf=normalizePsf)
     except:
         import traceback
         traceback.print_exc()
@@ -411,6 +414,7 @@ if __name__ == '__main__':
     parser.add_argument('--part', action='append', help='CCDs file to read, survey-ccds-X.fits.gz, default: ["decals","nondecals","extra"].  Can be repeated.', default=[])
     parser.add_argument('--ccds', action='append', help='CCDs file to read; can be repeated', default=[])
     parser.add_argument('--mzls', action='store_true', default=False, help='MzLS (default: DECaLS')
+    parser.add_argument('--bass', action='store_true', default=False, help='BASS (default: DECaLS')
 
     parser.add_argument('--normalize-psf', dest='normalizePsf', action='store_true', default=False)
 
@@ -434,7 +438,8 @@ if __name__ == '__main__':
         print(len(I), 'CCDs have annotated==False')
 
         upccds = ccds[I]
-        annotate(upccds, mzls=opt.mzls, normalizePsf=opt.normalizePsf)
+        annotate(upccds, mzls=opt.mzls, bass=opt.bass,
+                 normalizePsf=opt.normalizePsf)
         ccds[I] = upccds
 
         fn = 'updated-' + os.path.basename(opt.update)
@@ -482,13 +487,15 @@ if __name__ == '__main__':
         if opt.piece is not None:
             c = ccds[opt.piece*N:]
             c = c[:N]
-            _bounce_main((name, opt.piece, c, opt.force, opt.mzls, opt.normalizePsf))
+            _bounce_main((name, opt.piece, c, opt.force, opt.mzls, opt.bass,
+                          opt.normalizePsf))
             sys.exit(0)
 
         while len(ccds):
             c = ccds[:N]
             ccds = ccds[N:]
-            args.append((name, i, c, opt.force, opt.mzls, opt.normalizePsf))
+            args.append((name, i, c, opt.force, opt.mzls, opt.bass,
+                         opt.normalizePsf))
             i += 1
         print('Split CCDs file into', len(args), 'pieces')
         print('sizes:', [len(a[2]) for a in args])
