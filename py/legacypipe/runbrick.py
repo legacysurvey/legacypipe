@@ -2904,9 +2904,9 @@ def stage_wise_forced(
     After the model fits are finished, we can perform forced
     photometry of the unWISE coadds.
     '''
-    from wise.forcedphot import unwise_tiles_touching_wcs
+    from wise.unwise import unwise_tiles_touching_wcs
+    from legacypipe.unwise import *
     from tractor import NanoMaggies
-
     print('unWISE coadds:', unwise_coadds)
 
     record_event and record_event('stage_wise_forced: starting')
@@ -2942,8 +2942,8 @@ def stage_wise_forced(
             args.append((wcat, tiles, band, roiradec, unwise_dir, wise_ceres,
                          broadening[band], wpixpsf, unwise_coadds))
 
-    # tempfile.TemporaryDirectory objects -- the directories will be deleted when this
-    # variable goes out of scope.
+    # tempfile.TemporaryDirectory objects -- the directories will be
+    # deleted when this variable goes out of scope.
     tempdirs = []
 
     # Add time-resolved WISE coadds
@@ -2959,7 +2959,8 @@ def stage_wise_forced(
         # How big do we need to make the WISE time-resolved arrays?
         print('TR epoch_bitmask:', TR.epoch_bitmask)
         # axis= arg to np.count_nonzero is new in numpy 1.12
-        Nepochs = max(np.atleast_1d([np.count_nonzero(e) for e in TR.epoch_bitmask]))
+        Nepochs = max(np.atleast_1d([np.count_nonzero(e)
+                                     for e in TR.epoch_bitmask]))
         nil,ne = TR.epoch_bitmask.shape
         print('Max number of epochs for these tiles:', Nepochs)
         print('epoch bitmask length:', ne)
@@ -2967,11 +2968,13 @@ def stage_wise_forced(
         for band in [1,2]:
             # W1 is bit 0 (value 0x1), W2 is bit 1 (value 0x2)
             bitmask = (1 << (band-1))
-            # The epoch_bitmask entries are not *necessarily* contiguous, and not
-            # necessarily aligned for the set of overlapping tiles.  We will align the
-            # non-zero epochs of the tiles.  This may require creating a temp directory
-            # and symlink farm for cases where the non-zero epochs are not aligned
-            # (eg, brick 2437p425 vs coadds 2426p424 & 2447p424 in NEO-2).
+            # The epoch_bitmask entries are not *necessarily*
+            # contiguous, and not necessarily aligned for the set of
+            # overlapping tiles.  We will align the non-zero epochs of
+            # the tiles.  This may require creating a temp directory
+            # and symlink farm for cases where the non-zero epochs are
+            # not aligned (eg, brick 2437p425 vs coadds 2426p424 &
+            # 2447p424 in NEO-2).
 
             # find the non-zero epochs for each overlapping tile
             epochs = np.empty((len(TR), Nepochs), int)
@@ -3020,7 +3023,7 @@ def stage_wise_forced(
 
     # Run the forced photometry!
     record_event and record_event('stage_wise_forced: photometry')
-    phots = mp.map(_unwise_phot, args + [a for ie,a in eargs])
+    phots = mp.map(unwise_phot, args + [a for ie,a in eargs])
     record_event and record_event('stage_wise_forced: results')
 
     # Unpack results...
@@ -3155,89 +3158,6 @@ def stage_wise_forced(
     print('Returning: WISE_T', WISE_T)
 
     return dict(WISE=WISE, WISE_T=WISE_T, wise_mask_maps=wise_mask_maps)
-
-
-def collapse_unwise_bitmask(bitmask, band):
-    '''
-    Converts WISE mask bits (in the unWISE data products) into the
-    more compact codes reported in the tractor files as
-    WISEMASK_W[12], and the "maskbits" WISE extensions.
-
-    output bits :
-    # 2^0 = bright star core and wings
-    # 2^1 = PSF-based diffraction spike
-    # 2^2 = optical ghost
-    # 2^3 = first latent
-    # 2^4 = second latent
-    # 2^5 = AllWISE-like circular halo
-    # 2^6 = bright star saturation
-    # 2^7 = geometric diffraction spike
-    '''
-    assert((band == 1) or (band == 2))
-    from collections import OrderedDict
-
-    bits_w1 = OrderedDict([('core_wings', 2**0 + 2**1),
-                           ('psf_spike', 2**27),
-                           ('ghost', 2**25 + 2**26),
-                           ('first_latent', 2**13 + 2**14),
-                           ('second_latent', 2**17 + 2**18),
-                           ('circular_halo', 2**23),
-                           ('saturation', 2**4),
-                           ('geom_spike', 2**29)])
-
-    bits_w2 = OrderedDict([('core_wings', 2**2 + 2**3),
-                           ('psf_spike', 2**28),
-                           ('ghost', 2**11 + 2**12),
-                           ('first_latent', 2**15 + 2**16),
-                           ('second_latent', 2**19 + 2**20),
-                           ('circular_halo', 2**24),
-                           ('saturation', 2**5),
-                           ('geom_spike', 2**30)])
-
-    bits = (bits_w1 if (band == 1) else bits_w2)
-
-    # hack to handle both scalar and array inputs
-    result = 0*bitmask
-    for i, feat in enumerate(bits.keys()):
-        result += ((2**i)*(np.bitwise_and(bitmask, bits[feat]) != 0)).astype(np.uint8)
-    return result.astype('uint8')
-
-def _unwise_phot(X):
-    from wise.forcedphot import unwise_forcedphot
-    (wcat, tiles, band, roiradec, unwise_dir, wise_ceres, broadening,
-    pixelized_psf, get_mods) = X
-    kwargs = dict(roiradecbox=roiradec, bands=[band],
-                  unwise_dir=unwise_dir, psf_broadening=broadening,
-                  pixelized_psf=pixelized_psf)
-    if get_mods:
-        # This requires a newer version of the tractor code!
-        kwargs.update(get_models=get_mods)
-
-    ### FIXME
-    #kwargs.update(save_fits=True)
-
-    try:
-        W = unwise_forcedphot(wcat, tiles, use_ceres=wise_ceres, **kwargs)
-    except:
-        import traceback
-        print('unwise_forcedphot failed:')
-        traceback.print_exc()
-
-        if wise_ceres:
-            print('Trying without Ceres...')
-            try:
-                W = unwise_forcedphot(wcat, tiles, use_ceres=False, **kwargs)
-            except:
-                print('unwise_forcedphot failed (2):')
-                traceback.print_exc()
-                if get_mods:
-                    print('--unwise-coadds requires a newer tractor version...')
-                    kwargs.update(get_models=False)
-                    W = unwise_forcedphot(wcat, tiles, use_ceres=False, **kwargs)
-                    W = W,dict()
-        else:
-            W = None
-    return W
 
 def stage_writecat(
     survey=None,
