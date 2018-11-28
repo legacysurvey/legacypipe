@@ -279,6 +279,23 @@ def unwise_forcedphot(cat, tiles, band=1, roiradecbox=None,
             fitsio.write('%s-chi.fits' % tag,  chi,
                          clobber=True, header=wcshdr)
 
+    # Create models for just the brightest sources
+    bright_cat = [src for src in cat
+                  if src.getBrightness().getBand(wanyband) > 1000]
+    print('Bright soures:', len(bright_cat))
+    btr = Tractor(tims, bright_cat)
+    for tim in tims:
+        mod = btr.getModelImage(tim)
+        tile = tim.tile
+        tag = '%s W%i' % (tile.coadd_id, band)
+        sig1 = tim.sig1
+        plt.clf()
+        plt.imshow(mod, interpolation='nearest', origin='lower',
+                   cmap='gray', vmin=-3 * sig1, vmax=25 * sig1)
+        plt.colorbar()
+        plt.title('%s: bright-star models' % tag)
+        ps.savefig()
+
     if get_models:
         for i,tim in enumerate(tims):
             tile = tim.tile
@@ -295,14 +312,14 @@ def unwise_forcedphot(cat, tiles, band=1, roiradecbox=None,
             sig1 = tim.sig1
             plt.clf()
             plt.imshow(dat, interpolation='nearest', origin='lower',
-                       cmap='gray', vmin=-3 * sig1, vmax=10 * sig1)
+                       cmap='gray', vmin=-3 * sig1, vmax=25 * sig1)
             plt.colorbar()
             plt.title('%s: data' % tag)
             ps.savefig()
 
             plt.clf()
             plt.imshow(mod, interpolation='nearest', origin='lower',
-                       cmap='gray', vmin=-3 * sig1, vmax=10 * sig1)
+                       cmap='gray', vmin=-3 * sig1, vmax=25 * sig1)
             plt.colorbar()
             plt.title('%s: model' % tag)
             ps.savefig()
