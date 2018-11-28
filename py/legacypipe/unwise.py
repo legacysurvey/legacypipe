@@ -26,16 +26,16 @@ def unwise_forcedphot(cat, tiles, band=1, roiradecbox=None,
     runs forced photometry, returning a FITS table the same length as *cat*.
     '''
 
-    # # Severely limit sizes of models
-    for src in cat:
-        if isinstance(src, PointSource):
-            src.fixedRadius = 20
-        else:
-            src.halfsize = 20
-
+    from astrometry.util.plotutils import PlotSequence
+    ps = PlotSequence('wise-forced-w%i' % band)
+    plots = (ps is not None)
+    if plots:
+        import pylab as plt
+    
     from collections import Counter
-    print('Source types:', Counter([type(src) for src in cat]))
-            
+    count_types = Counter([type(src) for src in cat])
+    print('Source types:', count_types)
+        
     wantims = ((ps is not None) or save_fits or get_models)
     wanyband = 'w'
     if get_models:
@@ -54,12 +54,6 @@ def unwise_forcedphot(cat, tiles, band=1, roiradecbox=None,
     print('Photometering WISE band', band)
     wband = 'w%i' % band
 
-    #- central pixel <= 1000: 19x19 pix box size
-    #- central pixel in 1000 - 20000: 59x59 box size
-    #- central pixel > 20000 or saturated: 149x149 box size
-    #- object near "bright star": 299x299 box size 
-    #flux_invvars = np.zeros(Nsrcs, np.float32)
-
     nexp = np.zeros(Nsrcs, np.int16)
     mjd = np.zeros(Nsrcs, np.float64)
 
@@ -77,6 +71,23 @@ def unwise_forcedphot(cat, tiles, band=1, roiradecbox=None,
             print('Actually, no overlap with tile', tile.coadd_id)
             continue
 
+        if plots:
+            sig1 = tim.sig1
+            plt.clf()
+            plt.imshow(tim.getImage(), interpolation='nearest', origin='lower',
+                       cmap='gray', vmin=-3 * sig1, vmax=10 * sig1)
+            plt.colorbar()
+            tag = '%s W%i' % (tile.coadd_id, band)
+            plt.title('%s: tim data' % tag)
+            ps.savefig()
+
+            plt.clf()
+            plt.hist((tim.getImage() * tim.inverr)[tim.inverr > 0].ravel(),
+                     range=(-5,10), bins=100)
+            plt.xlabel('Per-pixel intensity (Sigma)')
+            plt.title(tag)
+            ps.savefig()
+            
         # The tiles have some overlap, so zero out pixels outside the
         # tile's unique area.
         th,tw = tim.shape
@@ -94,6 +105,17 @@ def unwise_forcedphot(cat, tiles, band=1, roiradecbox=None,
         print(np.sum(unique), 'of', (th*tw), 'pixels in this tile are unique')
         tim.inverr[unique == False] = 0.
 
+        if plots:
+            sig1 = tim.sig1
+            plt.clf()
+            plt.imshow(tim.getImage() * (tim.inverr > 0),
+                       interpolation='nearest', origin='lower',
+                       cmap='gray', vmin=-3 * sig1, vmax=10 * sig1)
+            plt.colorbar()
+            tag = '%s W%i' % (tile.coadd_id, band)
+            plt.title('%s: tim data (unique)' % tag)
+            ps.savefig()
+        
         del xx,yy,rr,dd
         wcs = tim.wcs.wcs
         ok,x,y = wcs.radec2pixelxy(ra, dec)
@@ -124,7 +146,6 @@ def unwise_forcedphot(cat, tiles, band=1, roiradecbox=None,
                 cx = np.sum(psfimg * px)
                 cy = np.sum(psfimg * py)
                 print('PSF center of mass: %.2f, %.2f' % (cx, cy))
-    
                 for sz in range(1, 11):
                     middle = pw//2
                     sub = (slice(middle-sz, middle+sz+1),
@@ -132,7 +153,6 @@ def unwise_forcedphot(cat, tiles, band=1, roiradecbox=None,
                     cx = np.sum((psfimg * px)[sub]) / np.sum(psfimg[sub])
                     cy = np.sum((psfimg * py)[sub]) / np.sum(psfimg[sub])
                     print('Size', sz, ': PSF center of mass: %.2f, %.2f' % (cx, cy))
-                
                 import fitsio
                 fitsio.write('psfimg-%s-w%i.fits' % (tile.coadd_id, band), psfimg,
                          clobber=True)
@@ -161,16 +181,53 @@ def unwise_forcedphot(cat, tiles, band=1, roiradecbox=None,
 
         print('unWISE tile', tile.coadd_id, ': read image with shape', tim.shape)
 
+        print('tim ROI:', tim.roi)
+
+        ### FIXME -- read msk file here? (for saturation)
+        
         tim.tile = tile
         tims.append(tim)
 
     print('Central flux: max', central_flux.max(), 'median',
           np.median(central_flux))
-        
+
+    if plots:
+        plt.clf()
+        mn,mx = 0.1, 20000
+        plt.hist(np.log10(np.clip(central_flux, mn, mx)), bins=100, range=(np.log10(mn), np.log10(mx)))
+        logt = np.arange(0, 5)
+        plt.xticks(logt, ['%i' % i for i in 10.**logt])
+        plt.title('Central fluxes (W%i)' % band)
+        plt.axvline(np.log10(20000), color='k')
+        plt.axvline(np.log10(1000), color='k')
+        ps.savefig()
+
+    # Eddie's non-secret recipe:
+    #- central pixel <= 1000: 19x19 pix box size
+    #- central pixel in 1000 - 20000: 59x59 box size
+    #- central pixel > 20000 or saturated: 149x149 box size
+    #- object near "bright star": 299x299 box size 
+    nbig = nmedium = nsmall = 0
+    for src,cflux in zip(cat, central_flux):
+        ### FIXME -- sizes for galaxies..... can we set PSF size separately?
+        if cflux > 20000:
+            R = 100
+            nbig += 1
+        elif cflux > 1000:
+            R = 30
+            nmedium += 1
+        else:
+            R = 15
+            nsmall += 1
+        if isinstance(src, PointSource):
+            src.fixedRadius = R
+        else:
+            src.halfsize = R
+
+    print('Set source sizes:', nbig, 'big', nmedium, 'medium', nsmall, 'small')
+            
     minsb = 0.
     fitsky = False
-
-    # FIXME -- Look in image and set source radius based on peak height??
 
     tractor = Tractor(tims, cat)
     if use_ceres:
@@ -201,14 +258,11 @@ def unwise_forcedphot(cat, tiles, band=1, roiradecbox=None,
     if wantims:
         ims0 = R.ims0
         ims1 = R.ims1
-    #IV, fs = R.IV, R.fitstats
     flux_invvars = R.IV
     if R.fitstats is not None:
         for k in fskeys:
             x = getattr(R.fitstats, k)
             fitstats[k] = np.array(x).astype(np.float32)
-        
-    #fs = R.fitstats
 
     if save_fits:
         import fitsio
@@ -217,7 +271,6 @@ def unwise_forcedphot(cat, tiles, band=1, roiradecbox=None,
             (dat, mod, ie, chi, roi) = ims1[i]
             wcshdr = fitsio.FITSHDR()
             tim.wcs.wcs.add_to_header(wcshdr)
-
             tag = 'fit-%s-w%i' % (tile.coadd_id, band)
             fitsio.write('%s-data.fits' %
                          tag, dat, clobber=True, header=wcshdr)
