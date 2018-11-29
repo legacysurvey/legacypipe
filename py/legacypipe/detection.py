@@ -33,6 +33,7 @@ def _detmap(X):
 def detection_maps(tims, targetwcs, bands, mp):
     # Render the detection maps
     H,W = targetwcs.shape
+    H,W = np.int(H), np.int(W)
     ibands = dict([(b,i) for i,b in enumerate(bands)])
 
     detmaps = [np.zeros((H,W), np.float32) for b in bands]
