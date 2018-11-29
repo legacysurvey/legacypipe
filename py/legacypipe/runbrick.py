@@ -2521,15 +2521,15 @@ def _get_mod(X):
         # this doesn't really help when using pixelized PSFs / FFTs
         tim.modelMinval = minval = tim.sig * 0.1
 
-    for src in srcs:
-        from tractor.galaxy import ProfileGalaxy
-        if not isinstance(src, ProfileGalaxy):
-            continue
-        px,py = tim.wcs.positionToPixel(src.getPosition())
-        h = src._getUnitFluxPatchSize(tim, px, py, minval)
-        if h > 512:
-            print('halfsize', h, 'for', src)
-            src.halfsize = 512
+    #for src in srcs:
+    #    from tractor.galaxy import ProfileGalaxy
+    #    if not isinstance(src, ProfileGalaxy):
+    #        continue
+    #    px,py = tim.wcs.positionToPixel(src.getPosition())
+    #    h = src._getUnitFluxPatchSize(tim, px, py, minval)
+    #    if h > 512:
+    #        print('halfsize', h, 'for', src)
+    #        src.halfsize = 512
 
     mod = tractor.getModelImage(0)
     print('Getting model for', tim, ':', Time()-t0)
