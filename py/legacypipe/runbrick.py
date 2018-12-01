@@ -2950,6 +2950,12 @@ def stage_wise_forced(
         TR.cut(np.array([t in tiles.coadd_id for t in TR.coadd_id]))
         print('Cut to', len(TR), 'time-resolved vs', len(tiles), 'full-depth')
         assert(len(TR) == len(tiles))
+        # Ugly -- we need to look up the "{ra,dec}[12]" fields from the non-TR
+        # table to support unique areas of tiles.
+        imap = dict((c,i) for i,c in enumerate(tiles.coadd_id))
+        I = np.array([imap[c] for c in TR.coadd_id])
+        for c in ['ra1','ra2','dec1','dec2']:
+            TR.set(c, tiles.get(c)[I])
         # How big do we need to make the WISE time-resolved arrays?
         print('TR epoch_bitmask:', TR.epoch_bitmask)
         # axis= arg to np.count_nonzero is new in numpy 1.12
@@ -2965,9 +2971,7 @@ def stage_wise_forced(
             # The epoch_bitmask entries are not *necessarily*
             # contiguous, and not necessarily aligned for the set of
             # overlapping tiles.  We will align the non-zero epochs of
-            # the tiles.  This may require creating a temp directory
-            # and symlink farm for cases where the non-zero epochs are
-            # not aligned (eg, brick 2437p425 vs coadds 2426p424 &
+            # the tiles.  (eg, brick 2437p425 vs coadds 2426p424 &
             # 2447p424 in NEO-2).
 
             # find the non-zero epochs for each overlapping tile
@@ -2987,7 +2991,7 @@ def stage_wise_forced(
                 eptiles = TR[I]
                 eptiles.unwise_dir = np.array([os.path.join(tdir, 'e%03i'%ep)
                                               for ep in epochs[I,ie]])
-                eargs.append((ie,(wcat, etiles, band, roiradec,
+                eargs.append((ie,(wcat, eptiles, band, roiradec,
                                   wise_ceres, wpixpsf, False)))
 
     # Run the forced photometry!

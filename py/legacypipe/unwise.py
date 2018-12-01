@@ -5,8 +5,6 @@ from astrometry.util.fits import fits_table
 from astrometry.util.ttime import Time
 
 from wise.unwise import get_unwise_tractor_image
-#unwise_tile_wcs,
-#unwise_tiles_touching_wcs,
 
 '''
 This function was imported whole from the tractor repo:
