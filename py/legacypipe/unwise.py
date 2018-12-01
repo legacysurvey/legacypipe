@@ -15,7 +15,6 @@ LegacySurvey-specific stuff in it that it was time to just import it
 and edit it rather than build elaborate options.
 '''
 def unwise_forcedphot(cat, tiles, band=1, roiradecbox=None,
-                      unwise_dir='.',
                       use_ceres=True, ceres_block=8,
                       save_fits=False, get_models=False, ps=None,
                       psf_broadening=None,
@@ -26,6 +25,10 @@ def unwise_forcedphot(cat, tiles, band=1, roiradecbox=None,
     runs forced photometry, returning a FITS table the same length as *cat*.
     '''
 
+    # PSF broadening in post-reactivation data, by band.
+    # Newer version from Aaron's email to decam-chatter, 2018-06-14.
+    broadening = { 1: 1.0405, 2: 1.0346, 3: None, 4: None }
+    
     from astrometry.util.plotutils import PlotSequence
     ps = PlotSequence('wise-forced-w%i' % band)
     plots = (ps is not None)
@@ -65,7 +68,7 @@ def unwise_forcedphot(cat, tiles, band=1, roiradecbox=None,
     for tile in tiles:
         print('Reading tile', tile.coadd_id)
 
-        tim = get_unwise_tractor_image(unwise_dir, tile.coadd_id, band,
+        tim = get_unwise_tractor_image(tile.unwise_dir, tile.coadd_id, band,
                                        bandname=wanyband, roiradecbox=roiradecbox)
         if tim is None:
             print('Actually, no overlap with tile', tile.coadd_id)
@@ -391,13 +394,9 @@ def unwise_phot(X):
     '''
     This is the entry-point from runbrick.py, called via mp.map()
     '''
-    (wcat, tiles, band, roiradec, unwise_dir, wise_ceres, broadening,
-    pixelized_psf, get_mods) = X
-    kwargs = dict(roiradecbox=roiradec, band=band,
-                  unwise_dir=unwise_dir, psf_broadening=broadening,
-                  pixelized_psf=pixelized_psf)
+    (wcat, tiles, band, roiradec, wise_ceres, pixelized_psf, get_mods) = X
+    kwargs = dict(roiradecbox=roiradec, band=band, pixelized_psf=pixelized_psf)
     if get_mods:
-        # This requires a newer version of the tractor code!
         kwargs.update(get_models=get_mods)
 
     ### FIXME
@@ -409,7 +408,6 @@ def unwise_phot(X):
         import traceback
         print('unwise_forcedphot failed:')
         traceback.print_exc()
-
         if wise_ceres:
             print('Trying without Ceres...')
             try:
@@ -417,11 +415,6 @@ def unwise_phot(X):
             except:
                 print('unwise_forcedphot failed (2):')
                 traceback.print_exc()
-                if get_mods:
-                    print('--unwise-coadds requires a newer tractor version...')
-                    kwargs.update(get_models=False)
-                    W = unwise_forcedphot(wcat, tiles, use_ceres=False, **kwargs)
-                    W = W,dict()
         else:
             W = None
     return W

@@ -2927,10 +2927,6 @@ def stage_wise_forced(
         src.setBrightness(NanoMaggies(w=1.))
         wcat.append(src)
 
-    # PSF broadening in post-reactivation data, by band.
-    # Newer version from Aaron's email to decam-chatter, 2018-06-14.
-    broadening = { 1: 1.0405, 2: 1.0346, 3: None, 4: None }
-
     # use Aaron's WISE pixelized PSF model?
     wpixpsf = True
     
@@ -2938,13 +2934,11 @@ def stage_wise_forced(
     args = []
     # Skip if $UNWISE_COADDS_DIR or --unwise-dir not set.
     if unwise_dir is not None:
+        wtiles = tiles.copy()
+        wtiles.unwise_dir = np.array([unwise_dir]*len(tiles))
         for band in [1,2,3,4]:
-            args.append((wcat, tiles, band, roiradec, unwise_dir, wise_ceres,
-                         broadening[band], wpixpsf, unwise_coadds))
-
-    # tempfile.TemporaryDirectory objects -- the directories will be
-    # deleted when this variable goes out of scope.
-    tempdirs = []
+            args.append((wcat, wtiles, band, roiradec,
+                         wise_ceres, wpixpsf, unwise_coadds))
 
     # Add time-resolved WISE coadds
     # Skip if $UNWISE_COADDS_TIMERESOLVED_DIR or --unwise-tr-dir not set.
@@ -2990,36 +2984,11 @@ def stage_wise_forced(
                     continue
                 print('Epoch index %i: %i tiles:' % (ie, len(I)), TR.coadd_id[I],
                       'epoch numbers', epochs[I,ie])
-                eps = np.unique(epochs[I,ie])
-                if len(eps) == 1:
-                    edir = os.path.join(tdir, 'e%03i' % eps[0])
-                    eargs.append((ie,(wcat, TR[I], band, roiradec, edir,
-                                         wise_ceres, broadening[band],
-                                         wpixpsf, False)))
-                else:
-                    import tempfile
-                    # Construct a temp symlink farm
-                    # FIXME for DR7 - modify unwise_forcedphot() signature to allow
-                    # setting a per-tile base directory for data.
-                    td = tempfile.TemporaryDirectory()
-                    tempdirs.append(td)
-                    dirname = td.name
-                    # Assume UNWISE_COADDS_TIMERESOLVED_DIR is a
-                    # single dir (not colon-separated list).
-                    for tile,ep in zip(TR[I], epochs[I,ie]):
-                        tiledir = os.path.join(tdir, 'e%03i' % ep, tile.coadd_id[:3], tile.coadd_id)
-                        destdir = os.path.join(dirname, tile.coadd_id[:3])
-                        if not os.path.exists(destdir):
-                            try:
-                                os.makedirs(destdir)
-                            except:
-                                pass
-                        dest = os.path.join(destdir, tile.coadd_id)
-                        print('Creating symlink', dest, '->', tiledir)
-                        os.symlink(tiledir, dest, target_is_directory=True)
-                    eargs.append((ie,(wcat, TR[I], band, roiradec, dirname,
-                                      wise_ceres, broadening[band], wpixpsf,
-                                      False)))
+                eptiles = TR[I]
+                eptiles.unwise_dir = np.array([os.path.join(tdir, 'e%03i'%ep)
+                                              for ep in epochs[I,ie]])
+                eargs.append((ie,(wcat, etiles, band, roiradec,
+                                  wise_ceres, wpixpsf, False)))
 
     # Run the forced photometry!
     record_event and record_event('stage_wise_forced: photometry')
