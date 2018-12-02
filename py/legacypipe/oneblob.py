@@ -246,19 +246,26 @@ class OneBlob(object):
                 # print('Wrote', fn)
                 
                 refmap = get_inblob_map(self.blobwcs, self.refs)
-                for name,val in IN_BLOB.items():
-                    bitset = ((refmap & val) != 0)
-                    print('Map', name, ':', np.sum(bitset), 'pixels set')
-                    plt.clf()
-                    dimshow(self.rgb)
-                    bh,bw = self.blobwcs.shape
-                    rgbbits = np.zeros((bh,bw,4), np.uint8)
-                    rgbbits[:,:,1] = rgbbits[:,:,3] = bitset * 255
-                    plt.imshow(rgbbits, interpolation='nearest', origin='lower')
-                    #plt.imshow(bitset, interpolation='nearest', origin='lower',
-                    #           vmin=0, vmax=1, cmap='gray')
-                    plt.title(name)
-                    self.ps.savefig()
+                from legacypipe.detection import plot_boundary_map
+                plt.clf()
+                dimshow(self.rgb)
+                ax = plt.axis()
+                bitset = ((refmap & IN_BLOB['MEDIUM']) != 0)
+                plot_boundary_map(bitset, rgb=(255,0,0), iterations=2)
+                bitset = ((refmap & IN_BLOB['BRIGHT']) != 0)
+                plot_boundary_map(bitset, rgb=(200,200,0), iterations=2)
+                bitset = ((refmap & IN_BLOB['GALAXY']) != 0)
+                plot_boundary_map(bitset, rgb=(0,255,0), iterations=2)
+                plt.axis(ax)
+                #bh,bw = self.blobwcs.shape
+                #rgbbits = np.zeros((bh,bw,4), np.uint8)
+                #rgbbits[:,:,1] = rgbbits[:,:,3] = bitset * 255
+                # for name,val in IN_BLOB.items():
+                #     bitset = ((refmap & val) != 0)
+                #     print('Map', name, ':', np.sum(bitset), 'pixels set')
+                #plt.imshow(rgbbits, interpolation='nearest', origin='lower')
+                plt.title('Reference-source Masks')
+                self.ps.savefig()
             
         if not self.bigblob:
             print('Fitting just fluxes using initial models...')

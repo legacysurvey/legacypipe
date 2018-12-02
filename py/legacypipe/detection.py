@@ -197,26 +197,27 @@ def run_sed_matched_filters(SEDs, bands, detmaps, detivs, omit_xy,
                                   NanoMaggies(order=bands, **fluxes)))
     return Tnew, newcat, hot
 
-def plot_boundary_map(X, rgb=(0,255,0), extent=None):
+def plot_boundary_map(X, rgb=(0,255,0), extent=None, iterations=1):
     from scipy.ndimage.morphology import binary_dilation
 
     H,W = X.shape
 
+    it = iterations
     #bounds = np.logical_xor(binary_dilation(X), X)
-    padded = np.zeros((H+2, W+2), bool)
-    padded[1:-1, 1:-1] = X.astype(bool)
+    padded = np.zeros((H+2*it, W+2*it), bool)
+    padded[it:-it, it:-it] = X.astype(bool)
     bounds = np.logical_xor(binary_dilation(padded), padded)
     #rgba = np.zeros((H,W,4), np.uint8)
-    rgba = np.zeros((H+2,W+2,4), np.uint8)
+    rgba = np.zeros((H+2*it,W+2*it,4), np.uint8)
     rgba[:,:,0] = bounds*rgb[0]
     rgba[:,:,1] = bounds*rgb[1]
     rgba[:,:,2] = bounds*rgb[2]
     rgba[:,:,3] = bounds*255
     if extent is None:
-        extent = [-1, W+1, -1, H+1]
+        extent = [-it, W+it, -it, H+it]
     else:
         x0,x1,y0,y1 = extent
-        extent = [x0-1, x1+1, y0-1, y1+1]
+        extent = [x0-it, x1+it, y0-it, y1+it]
 
     plt.imshow(rgba, interpolation='nearest', origin='lower', extent=extent)
 
