@@ -1245,61 +1245,15 @@ def stage_srcs(targetrd=None, pixscale=None, targetwcs=None,
     
     # Read large galaxies nearby.
     if large_galaxies:
-        #from legacypipe.survey import RexGalaxy, LogRadius
-        from legacypipe.survey import LegacyEllipseWithPriors
-        from tractor.galaxy import ExpGalaxy
-
-        # Read this catalog and trim to galaxies on this brick!
-        from astrometry.libkd.spherematch import tree_open, tree_search_radec
-        galfn = survey.find_file('large-galaxies')
-        radius = 1.
-        rc,dc = targetwcs.radec_center()
-
-        kd = tree_open(galfn, 'largegals')
-        I = tree_search_radec(kd, rc, dc, radius)
-        print(len(I), 'large galaxies within', radius, 'deg of RA,Dec (%.3f, %.3f)' % (rc,dc))
-        if len(I) == 0:
-            gals = []
-        else:
-            # Read only the rows within range.
-            gals = fits_table(galfn, rows=I, columns=['ra', 'dec', 'd25', 'mag', 'lslga_id'])
-        del kd
-
-        if len(gals):
-            ok,xx,yy = targetwcs.radec2pixelxy(gals.ra, gals.dec)
-            H,W = targetwcs.shape
-            # D25 is diameter in arcmin
-            pixsizes = gals.d25 * (60./2.) / targetwcs.pixel_scale()
-            gals.ibx = (xx - 1.).astype(int)
-            gals.iby = (yy - 1.).astype(int)
-            gals.cut(ok * (xx > -pixsizes) * (xx < W+pixsizes) *
-                     (yy > -pixsizes) * (yy < H+pixsizes))
-            print('Cut to', len(gals), 'large galaxies touching brick')
-            del ok,xx,yy,pixsizes
-
-        if len(gals):
-            avoid_x = np.append(avoid_x, gals.ibx)
-            avoid_y = np.append(avoid_y, gals.iby)
-
-        # Instantiate a galaxy model at the position of each object.
-        largegals = gals
-        largecat = []
-        for g in gals:
-            fluxes = dict([(band, NanoMaggies.magToNanomaggies(g.mag)) for band in bands])
-            assert(np.all(np.isfinite(list(fluxes.values()))))
-            ss = g.d25 * 60. / 2.
-            gal = ExpGalaxy(RaDecPos(g.ra, g.dec),
-                            NanoMaggies(order=bands, **fluxes),
-                            LegacyEllipseWithPriors(np.log(ss), 0., 0.))
-            gal.isForcedLargeGalaxy = True
-            largecat.append(gal)
-        if len(largegals):
-            largegals.radius = largegals.d25 / 2. / 60.
-            largegals.delete_column('d25')
-            largegals.rename('lslga_id', 'ref_id')
-            largegals.ref_cat = np.array(['L1'] * len(largegals))
-            largegals.islargegalaxy = np.ones(len(largegals), bool)
+        largegals,largecat = read_large_galaxies(survey, targetwcs, bands)
+        if largegals is not None:
             refstars = merge_tables([refstars, largegals], columns='fillzero')
+            avoid_x = np.append(avoid_x, largegals.ibx)
+            avoid_y = np.append(avoid_y, largegals.iby)
+
+            #print('Largegals catalog:')
+            #largegals.about()
+            #print('Refstars:', refstars.about())
     else:
         largegals = []
 
@@ -1475,6 +1429,55 @@ def stage_srcs(targetrd=None, pixscale=None, targetwcs=None,
     L = locals()
     rtn = dict([(k,L[k]) for k in keys])
     return rtn
+
+def read_large_galaxies(survey, targetwcs, bands):
+    from legacypipe.survey import LegacyEllipseWithPriors
+    from tractor.galaxy import ExpGalaxy
+    from tractor import NanoMaggies, RaDecPos
+    from astrometry.libkd.spherematch import tree_open, tree_search_radec
+
+    galfn = survey.find_file('large-galaxies')
+    radius = 1.
+    rc,dc = targetwcs.radec_center()
+
+    kd = tree_open(galfn, 'largegals')
+    I = tree_search_radec(kd, rc, dc, radius)
+    print(len(I), 'large galaxies within', radius, 'deg of RA,Dec (%.3f, %.3f)' % (rc,dc))
+    if len(I) == 0:
+        return None,None
+    # Read only the rows within range.
+    gals = fits_table(galfn, rows=I, columns=['ra', 'dec', 'd25', 'mag', 'lslga_id', 'ba', 'pa'])
+    del kd
+    ok,xx,yy = targetwcs.radec2pixelxy(gals.ra, gals.dec)
+    H,W = targetwcs.shape
+    # D25 is diameter in arcmin
+    pixsizes = gals.d25 * (60./2.) / targetwcs.pixel_scale()
+    gals.ibx = (xx - 1.).astype(int)
+    gals.iby = (yy - 1.).astype(int)
+    gals.cut(ok * (xx > -pixsizes) * (xx < W+pixsizes) *
+             (yy > -pixsizes) * (yy < H+pixsizes))
+    print('Cut to', len(gals), 'large galaxies touching brick')
+    del ok,xx,yy,pixsizes
+    if len(gals) == 0:
+        return None,None
+        
+    # Instantiate a galaxy model at the position of each object.
+    largecat = []
+    for g in gals:
+        fluxes = dict([(band, NanoMaggies.magToNanomaggies(g.mag)) for band in bands])
+        assert(np.all(np.isfinite(list(fluxes.values()))))
+        ss = g.d25 * 60. / 2.
+        gal = ExpGalaxy(RaDecPos(g.ra, g.dec),
+                        NanoMaggies(order=bands, **fluxes),
+                        LegacyEllipseWithPriors(np.log(ss), 0., 0.))
+        gal.isForcedLargeGalaxy = True
+        largecat.append(gal)
+    gals.radius = gals.d25 / 2. / 60.
+    gals.delete_column('d25')
+    gals.rename('lslga_id', 'ref_id')
+    gals.ref_cat = np.array(['L2'] * len(gals))
+    gals.islargegalaxy = np.ones(len(gals), bool)
+    return gals, largecat
 
 def read_star_clusters(targetwcs):
     """
