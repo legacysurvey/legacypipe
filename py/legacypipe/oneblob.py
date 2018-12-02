@@ -19,6 +19,60 @@ from legacypipe.runbrick import rgbkwargs, rgbkwargs_resid
 from legacypipe.coadds import quick_coadds
 from legacypipe.runbrick_plots import _plot_mods
 
+def get_inblob_map(blobwcs, refs):
+    bh,bw = blobwcs.shape
+    blobmap = np.zeros((bh,bw), np.uint8)
+    # circular regions:
+    for col,bit,ellipse in [('isbright', 'BRIGHT', False),
+                            ('ismedium', 'MEDIUM', False),
+                            ('iscluster', 'CLUSTER', False),
+                            ('islargegalaxy', 'GALAXY', True),]:
+        isit = refs.get(col)
+        if not np.any(isit):
+            print('None marked', col)
+            continue
+        I = np.flatnonzero(isit)
+        print(len(I), 'with', col, 'set')
+        if len(I) == 0:
+            continue
+
+        thisrefs = refs[I]
+        ok,xx,yy = blobwcs.radec2pixelxy(thisrefs.ra, thisrefs.dec)
+        for x,y,ref in zip(xx,yy,thisrefs):
+            # Cut to L1 rectangle
+            xlo = int(np.clip(np.floor(x-1 - ref.radius_pix), 0, bw))
+            xhi = int(np.clip(np.ceil (x   + ref.radius_pix), 0, bw))
+            ylo = int(np.clip(np.floor(y-1 - ref.radius_pix), 0, bh))
+            yhi = int(np.clip(np.ceil (y   + ref.radius_pix), 0, bh))
+            #print('x range', xlo,xhi, 'y range', ylo,yhi)
+            if xlo == xhi or ylo == yhi:
+                continue
+
+            bitval = np.uint8(IN_BLOB[bit])
+            if not ellipse:
+                rr = ((np.arange(ylo,yhi)[:,np.newaxis] - (y-1))**2 +
+                      (np.arange(xlo,xhi)[np.newaxis,:] - (x-1))**2)
+                masked = (rr <= ref.radius_pix)
+            else:
+                # *should* have ba and pa if we got here...
+                xgrid,ygrid = np.meshgrid(np.arange(xlo,xhi), np.arange(ylo,yhi))
+                dx = xgrid - (x-1)
+                dy = ygrid - (y-1)
+                print('PA', ref.pa)
+                print('BA', ref.ba)
+                v1x = -np.sin(np.deg2rad(ref.pa))
+                v1y =  np.cos(np.deg2rad(ref.pa))
+                v2x =  v1y
+                v2y = -v1x
+                dot1 = dx * v1x + dy * v1y
+                dot2 = dx * v2x + dy * v2y
+                r1 = ref.radius_pix
+                r2 = ref.radius_pix * ref.ba
+                masked = (dot1**2 / r1**2 + dot2**2 / r2**2 < 1.)
+
+            blobmap[ylo:yhi, xlo:xhi] |= (bitval * masked)
+    return blobmap
+
 def one_blob(X):
     '''
     Fits sources contained within a "blob" of pixels.
@@ -33,6 +87,10 @@ def one_blob(X):
 
     if len(timargs) == 0:
         return None
+
+    #print('Reference sources:')
+    #refs.about()
+    #refs.writeto('refs-%03i.fits' % iblob)
 
     hasbright = refs is not None and np.any(refs.isbright)
     hasmedium = refs is not None and np.any(refs.ismedium)
@@ -82,7 +140,7 @@ def one_blob(X):
 
     ob = OneBlob('%i'%(nblob+1), blobwcs, blobmask, timargs, srcs, bands,
                  plots, ps, simul_opt, use_ceres, hasbright, hasmedium,
-                 hasgalaxy, rex)
+                 hasgalaxy, rex, refs)
     ob.run(B)
 
     B.blob_totalpix = np.zeros(len(B), np.int32) + ob.total_pix
@@ -114,7 +172,7 @@ def one_blob(X):
 
 class OneBlob(object):
     def __init__(self, name, blobwcs, blobmask, timargs, srcs, bands,
-                 plots, ps, simul_opt, use_ceres, hasbright, hasmedium, hasgalaxy, rex):
+                 plots, ps, simul_opt, use_ceres, hasbright, hasmedium, hasgalaxy, rex, refs):
         self.name = name
         self.rex = rex
         self.blobwcs = blobwcs
@@ -123,6 +181,8 @@ class OneBlob(object):
         self.srcs = srcs
         self.bands = bands
         self.plots = plots
+
+        self.refs = refs
 
         self.plots_per_source = plots
         self.plots_per_model = False
@@ -177,7 +237,29 @@ class OneBlob(object):
         tlast = Time()
         if self.plots:
             self._initial_plots()
+            if self.refs is not None:
 
+                # print('Refs:')
+                # self.refs.about()
+                # fn = 'ref-%s.fits' % self.name
+                # self.refs.writeto(fn)
+                # print('Wrote', fn)
+                
+                refmap = get_inblob_map(self.blobwcs, self.refs)
+                for name,val in IN_BLOB.items():
+                    bitset = ((refmap & val) != 0)
+                    print('Map', name, ':', np.sum(bitset), 'pixels set')
+                    plt.clf()
+                    dimshow(self.rgb)
+                    bh,bw = self.blobwcs.shape
+                    rgbbits = np.zeros((bh,bw,4), np.uint8)
+                    rgbbits[:,:,1] = rgbbits[:,:,3] = bitset * 255
+                    plt.imshow(rgbbits, interpolation='nearest', origin='lower')
+                    #plt.imshow(bitset, interpolation='nearest', origin='lower',
+                    #           vmin=0, vmax=1, cmap='gray')
+                    plt.title(name)
+                    self.ps.savefig()
+            
         if not self.bigblob:
             print('Fitting just fluxes using initial models...')
             self._fit_fluxes(cat, self.tims, self.bands)
