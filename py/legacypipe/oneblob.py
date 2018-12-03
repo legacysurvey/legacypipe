@@ -224,9 +224,9 @@ class OneBlob(object):
 
         # Fitting rules:
         # Force all other objects to be point sources?
-        self.force_pointsources = self.hasbright
+        #self.force_pointsources = self.hasbright
         # Fit local constant sky background levels?
-        self.fit_background = self.hasmedium or self.hasgalaxy
+        #self.fit_background = self.hasmedium or self.hasgalaxy
 
 
     def run(self, B):
@@ -234,36 +234,26 @@ class OneBlob(object):
         self.plots1 = self.plots
         cat = Catalog(*self.srcs)
 
+        if self.refs is not None:
+            self.refmap = get_inblob_map(self.blobwcs, self.refs)
+        else:
+            self.refmap = None
+
         tlast = Time()
         if self.plots:
             self._initial_plots()
             if self.refs is not None:
-
-                # print('Refs:')
-                # self.refs.about()
-                # fn = 'ref-%s.fits' % self.name
-                # self.refs.writeto(fn)
-                # print('Wrote', fn)
-                
-                refmap = get_inblob_map(self.blobwcs, self.refs)
                 from legacypipe.detection import plot_boundary_map
                 plt.clf()
                 dimshow(self.rgb)
                 ax = plt.axis()
-                bitset = ((refmap & IN_BLOB['MEDIUM']) != 0)
+                bitset = ((self.refmap & IN_BLOB['MEDIUM']) != 0)
                 plot_boundary_map(bitset, rgb=(255,0,0), iterations=2)
-                bitset = ((refmap & IN_BLOB['BRIGHT']) != 0)
+                bitset = ((self.refmap & IN_BLOB['BRIGHT']) != 0)
                 plot_boundary_map(bitset, rgb=(200,200,0), iterations=2)
-                bitset = ((refmap & IN_BLOB['GALAXY']) != 0)
+                bitset = ((self.refmap & IN_BLOB['GALAXY']) != 0)
                 plot_boundary_map(bitset, rgb=(0,255,0), iterations=2)
                 plt.axis(ax)
-                #bh,bw = self.blobwcs.shape
-                #rgbbits = np.zeros((bh,bw,4), np.uint8)
-                #rgbbits[:,:,1] = rgbbits[:,:,3] = bitset * 255
-                # for name,val in IN_BLOB.items():
-                #     bitset = ((refmap & val) != 0)
-                #     print('Map', name, ':', np.sum(bitset), 'pixels set')
-                #plt.imshow(rgbbits, interpolation='nearest', origin='lower')
                 plt.title('Reference-source Masks')
                 self.ps.savefig()
             
@@ -485,6 +475,7 @@ class OneBlob(object):
         del models
 
     def model_selection_one_source(self, src, srci, models, B):
+
         if self.bigblob:
             mods = [mod[srci] for mod in models.models]
             srctims,modelMasks = _get_subimages(self.tims, mods, src)
@@ -711,7 +702,19 @@ class OneBlob(object):
             print('Source is starting outside blob -- skipping.')
             return None
 
-        if self.fit_background:
+        # blob-wide
+        #force_pointsource = self.force_pointsource
+        #fit_background = self.fit_background
+        # geometric
+        force_pointsource = False
+        fit_background = False
+        if self.refmap is not None:
+            x0,y0 = srcwcs_x0y0
+            force_pointsource = (self.refmap[y0+iy,x0+ix] & (IN_BLOB['BRIGHT'] | IN_BLOB['GALAXY'])) > 0
+            fit_background = (self.refmap[y0+iy,x0+ix] & (IN_BLOB['MEDIUM'] | IN_BLOB['GALAXY'])) > 0
+            print('Source at blob coordinates', x0+ix, y0+iy, '- forcing pointsource?', force_pointsource, ', fitting sky background:', fit_background)
+        
+        if fit_background:
             for tim in srctims:
                 tim.freezeAllBut('sky')
             srctractor.thawParam('images')
@@ -724,7 +727,7 @@ class OneBlob(object):
         # Compute the log-likehood without a source here.
         srccat[0] = None
 
-        if self.fit_background:
+        if fit_background:
             #print('Fitting no-source model (sky)')
             srctractor.optimize_loop(**self.optargs)
             #srctractor.images.printThawedParams()
@@ -759,7 +762,7 @@ class OneBlob(object):
                     forced = True
             if forced:
                 print('Gaia source is forced to be a point source -- not trying other models')
-            elif self.force_pointsources:
+            elif force_pointsource:
                 print('Not computing galaxy models due to objects in blob')
             else:
                 trymodels.append((simname, simple))
@@ -835,7 +838,7 @@ class OneBlob(object):
             #     plt.title('Initial: ' + name)
             #     self.ps.savefig()
 
-            if self.fit_background:
+            if fit_background:
                 #print('Resetting sky params.')
                 srctractor.images.setParams(skyparams)
             
@@ -882,7 +885,7 @@ class OneBlob(object):
             elif isinstance(newsrc, FixedCompositeGalaxy):
                 oldshape = (newsrc.shapeExp, newsrc.shapeDev,newsrc.fracDev)
 
-            if self.fit_background:
+            if fit_background:
                 srctractor.freezeParam('images')
                 
             nsrcparams = newsrc.numberOfParams()
