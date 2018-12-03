@@ -22,7 +22,7 @@ from legacypipe.runbrick_plots import _plot_mods
 def get_inblob_map(blobwcs, refs):
     bh,bw = blobwcs.shape
     blobmap = np.zeros((bh,bw), np.uint8)
-    # circular regions:
+    # circular/elliptical regions:
     for col,bit,ellipse in [('isbright', 'BRIGHT', False),
                             ('ismedium', 'MEDIUM', False),
                             ('iscluster', 'CLUSTER', False),
@@ -80,7 +80,7 @@ def one_blob(X):
     if X is None:
         return None
     (nblob, iblob, Isrcs, brickwcs, bx0, by0, blobw, blobh, blobmask, timargs,
-     srcs, bands, plots, ps, simul_opt, use_ceres, rex, refs) = X
+     srcs, bands, plots, ps, simul_opt, use_ceres, rex, refs, refmap) = X
 
     print('Fitting blob number %i: blobid %i, nsources %i, size %i x %i, %i images' %
           (nblob, iblob, len(Isrcs), blobw, blobh, len(timargs)))
@@ -140,7 +140,7 @@ def one_blob(X):
 
     ob = OneBlob('%i'%(nblob+1), blobwcs, blobmask, timargs, srcs, bands,
                  plots, ps, simul_opt, use_ceres, hasbright, hasmedium,
-                 hasgalaxy, rex, refs)
+                 hasgalaxy, rex, refs, refmap)
     ob.run(B)
 
     B.blob_totalpix = np.zeros(len(B), np.int32) + ob.total_pix
@@ -172,7 +172,7 @@ def one_blob(X):
 
 class OneBlob(object):
     def __init__(self, name, blobwcs, blobmask, timargs, srcs, bands,
-                 plots, ps, simul_opt, use_ceres, hasbright, hasmedium, hasgalaxy, rex, refs):
+                 plots, ps, simul_opt, use_ceres, hasbright, hasmedium, hasgalaxy, rex, refs, refmap):
         self.name = name
         self.rex = rex
         self.blobwcs = blobwcs
@@ -183,6 +183,7 @@ class OneBlob(object):
         self.plots = plots
 
         self.refs = refs
+        self.refmap = refmap
 
         self.plots_per_source = plots
         self.plots_per_model = False
@@ -234,10 +235,10 @@ class OneBlob(object):
         self.plots1 = self.plots
         cat = Catalog(*self.srcs)
 
-        if self.refs is not None:
-            self.refmap = get_inblob_map(self.blobwcs, self.refs)
-        else:
-            self.refmap = None
+        # if self.refs is not None:
+        #     self.refmap = get_inblob_map(self.blobwcs, self.refs)
+        # else:
+        #     self.refmap = None
 
         tlast = Time()
         if self.plots:

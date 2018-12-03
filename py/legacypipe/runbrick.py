@@ -1990,10 +1990,13 @@ def stage_fitblobs(T=None,
     # Mapping from blob to reference stars it contains (or is near to)
     blob_refstars = _refstars_in_blobs(refstars, targetwcs, blobs)
 
+    from oneblob import get_inblob_map
+    refmap = get_inblob_map(targetwcs, refstars)
+    
     # Create the iterator over blobs to process
     blobiter = _blob_iter(blobslices, blobsrcs, blobs, targetwcs, tims,
                           cat, bands, plots, ps, simul_opt, use_ceres,
-                          blob_refstars, brick, rex,
+                          blob_refstars, refmap, brick, rex,
                           skipblobs=skipblobs,
                           max_blobsize=max_blobsize, custom_brick=custom_brick)
     # to allow timingpool to queue tasks one at a time
@@ -2359,7 +2362,7 @@ def _refstars_in_blobs(refstars, targetwcs, blobs):
     return blob_refstars
 
 def _blob_iter(blobslices, blobsrcs, blobs, targetwcs, tims, cat, bands,
-               plots, ps, simul_opt, use_ceres, blob_refstars,
+               plots, ps, simul_opt, use_ceres, blob_refstars, refmap,
                brick, rex,
                skipblobs=[], max_blobsize=None, custom_brick=False):
     '''
@@ -2492,7 +2495,7 @@ def _blob_iter(blobslices, blobsrcs, blobs, targetwcs, tims, cat, bands,
 
         yield (nblob, iblob, Isrcs, targetwcs, bx0, by0, blobw, blobh,
                blobmask, subtimargs, [cat[i] for i in Isrcs], bands, plots, ps,
-               simul_opt, use_ceres, rex, refs)
+               simul_opt, use_ceres, rex, refs, refmap[bslc])
 
 def _bounce_one_blob(X):
     ''' This just wraps the one_blob function, for debugging &
