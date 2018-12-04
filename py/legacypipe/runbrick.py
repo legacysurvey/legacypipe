@@ -2562,6 +2562,7 @@ def stage_coadds(survey=None, bands=None, version_header=None, targetwcs=None,
     if brightblobmask is not None:
         maskbits += MASKBITS['BRIGHT'] * ((brightblobmask & IN_BLOB['BRIGHT']) > 0)
         maskbits += MASKBITS['MEDIUM'] * ((brightblobmask & IN_BLOB['MEDIUM']) > 0)
+        maskbits += MASKBITS['GALAXY'] * ((brightblobmask & IN_BLOB['GALAXY']) > 0)
 
     # SATUR
     saturvals = dict(g=MASKBITS['SATUR_G'], r=MASKBITS['SATUR_R'], z=MASKBITS['SATUR_Z'])
@@ -2606,6 +2607,8 @@ def stage_coadds(survey=None, bands=None, version_header=None, targetwcs=None,
                         comment='Mask value for bailed-out processing'))
     hdr.add_record(dict(name='MEDIUM', value=MASKBITS['MEDIUM'],
                         comment='Mask value for medium-bright star in blob'))
+    hdr.add_record(dict(name='GALAXY', value=MASKBITS['GALAXY'],
+                        comment='Mask value for LSLGA large galaxy'))
     keys = sorted(saturvals.keys())
     for b in keys:
         k = 'SATUR_%s' % b.upper()
@@ -3376,7 +3379,11 @@ def stage_writecat(
                             comment='maskbits bit 9: WISE W2 bright star mask'))
         hdr.add_record(dict(name='BITNM10', value='BAILOUT',
                             comment='maskbits bit 10: Bailed out of processing'))
-
+        hdr.add_record(dict(name='BITNM11', value='MEDIUM',
+                            comment='maskbits bit 11: Medium-bright star'))
+        hdr.add_record(dict(name='BITNM12', value='GALAXY',
+                            comment='maskbits bit 12: LSLGA large galaxy'))
+        
         if wise_mask_maps is not None:
             wisehdr = fitsio.FITSHDR()
             wisehdr.add_record(dict(name='WBITNM0', value='BRIGHT',

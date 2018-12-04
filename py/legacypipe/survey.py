@@ -37,6 +37,7 @@ MASKBITS = dict(
     WISEM2     = 0x200,
     BAILOUT    = 0x400, # bailed out of processing
     MEDIUM     = 0x800, # medium-bright star
+    GALAXY     = 0x1000, # LSLGA large galaxy
 )
 
 # Bits in the "brightblob" bitmask
