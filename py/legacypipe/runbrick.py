@@ -2441,18 +2441,11 @@ def _blob_iter(blobslices, blobsrcs, blobs, targetwcs, tims, cat, bands,
             oney = y
             break
 
-        refs = blob_refstars.get(iblob, None)
-
-        hasbright = refs is not None and np.any(refs.isbright)
-        hasmedium = refs is not None and np.any(refs.ismedium)
-        haslargegal = refs is not None and np.any(refs.islargegalaxy)
-
         npix = np.sum(blobmask)
         print(('Blob %i of %i, id: %i, sources: %i, size: %ix%i, npix %i, brick X: %i,%i, ' +
-               'Y: %i,%i, one pixel: %i %i, ref stars: %i, bright: %s, medium: %s, large galaxy: %s') %
+               'Y: %i,%i, one pixel: %i %i') %
               (nblob+1, len(blobslices), iblob, len(Isrcs), blobw, blobh, npix,
-               bx0,bx1,by0,by1, onex,oney, int(refs is not None and len(refs)), hasbright,
-               hasmedium, haslargegal))
+               bx0,bx1,by0,by1, onex,oney))
 
         if max_blobsize is not None and npix > max_blobsize:
             print('Number of pixels in blob,', npix, ', exceeds max blobsize', max_blobsize)
@@ -2495,7 +2488,7 @@ def _blob_iter(blobslices, blobsrcs, blobs, targetwcs, tims, cat, bands,
 
         yield (nblob, iblob, Isrcs, targetwcs, bx0, by0, blobw, blobh,
                blobmask, subtimargs, [cat[i] for i in Isrcs], bands, plots, ps,
-               simul_opt, use_ceres, rex, refs, refmap[bslc])
+               simul_opt, use_ceres, rex, refmap[bslc])
 
 def _bounce_one_blob(X):
     ''' This just wraps the one_blob function, for debugging &

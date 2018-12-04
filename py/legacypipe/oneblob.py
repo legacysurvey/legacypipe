@@ -80,7 +80,7 @@ def one_blob(X):
     if X is None:
         return None
     (nblob, iblob, Isrcs, brickwcs, bx0, by0, blobw, blobh, blobmask, timargs,
-     srcs, bands, plots, ps, simul_opt, use_ceres, rex, refs, refmap) = X
+     srcs, bands, plots, ps, simul_opt, use_ceres, rex, refmap) = X
 
     print('Fitting blob number %i: blobid %i, nsources %i, size %i x %i, %i images' %
           (nblob, iblob, len(Isrcs), blobw, blobh, len(timargs)))
@@ -88,17 +88,6 @@ def one_blob(X):
     if len(timargs) == 0:
         return None
 
-    #print('Reference sources:')
-    #refs.about()
-    #refs.writeto('refs-%03i.fits' % iblob)
-
-    hasbright = refs is not None and np.any(refs.isbright)
-    hasmedium = refs is not None and np.any(refs.ismedium)
-    hasgalaxy = refs is not None and np.any(refs.islargegalaxy)
-    hascluster = refs is not None and np.any(refs.iscluster)
-
-    print('Has bright star:', hasbright, 'medium:', hasmedium, 'large galaxy:', hasgalaxy)
-    
     if plots:
         plt.figure(2, figsize=(3,3))
         plt.subplots_adjust(left=0.01, right=0.99, bottom=0.01, top=0.99)
@@ -120,10 +109,13 @@ def one_blob(X):
     ok,x0,y0 = blobwcs.radec2pixelxy(
         np.array([src.getPosition().ra  for src in srcs]),
         np.array([src.getPosition().dec for src in srcs]))
+    safe_x0 = np.clip(np.round(x0-1).astype(int), 0,blobw-1)
+    safe_y0 = np.clip(np.round(y0-1).astype(int), 0,blobh-1)
+    B.started_in_blob = blobmask[safe_y0, safe_x0]
 
-    B.started_in_blob = blobmask[
-        np.clip(np.round(y0-1).astype(int), 0,blobh-1),
-        np.clip(np.round(x0-1).astype(int), 0,blobw-1)]
+    # This uses 'initial' pixel positions, because that's what determines
+    # the fitting behaviors.
+    B.brightblob = refmap[safe_y0, safe_x0].astype(np.int16)
 
     B.cpu_source = np.zeros(len(B), np.float32)
 
@@ -139,8 +131,7 @@ def one_blob(X):
     B.hit_limit = np.zeros(len(B), bool)
 
     ob = OneBlob('%i'%(nblob+1), blobwcs, blobmask, timargs, srcs, bands,
-                 plots, ps, simul_opt, use_ceres, hasbright, hasmedium,
-                 hasgalaxy, rex, refs, refmap)
+                 plots, ps, simul_opt, use_ceres, rex, refmap)
     ob.run(B)
 
     B.blob_totalpix = np.zeros(len(B), np.int32) + ob.total_pix
@@ -154,16 +145,6 @@ def one_blob(X):
     assert(len(B.finished_in_blob) == len(B))
     assert(len(B.finished_in_blob) == len(B.started_in_blob))
 
-    B.brightblob = np.zeros(len(B), np.int16)
-    if hasbright:
-        B.brightblob += IN_BLOB['BRIGHT']
-    if hasmedium:
-        B.brightblob += IN_BLOB['MEDIUM']
-    if hascluster:
-        B.brightblob += IN_BLOB['CLUSTER']
-    if hasgalaxy:
-        B.brightblob += IN_BLOB['GALAXY']
-
     B.cpu_blob = np.zeros(len(B), np.float32)
     t1 = time.clock()
     B.cpu_blob[:] = t1 - t0
@@ -172,7 +153,7 @@ def one_blob(X):
 
 class OneBlob(object):
     def __init__(self, name, blobwcs, blobmask, timargs, srcs, bands,
-                 plots, ps, simul_opt, use_ceres, hasbright, hasmedium, hasgalaxy, rex, refs, refmap):
+                 plots, ps, simul_opt, use_ceres, rex, refmap):
         self.name = name
         self.rex = rex
         self.blobwcs = blobwcs
@@ -182,7 +163,6 @@ class OneBlob(object):
         self.bands = bands
         self.plots = plots
 
-        self.refs = refs
         self.refmap = refmap
 
         self.plots_per_source = plots
@@ -193,9 +173,6 @@ class OneBlob(object):
         self.ps = ps
         self.simul_opt = simul_opt
         self.use_ceres = use_ceres
-        self.hasbright = hasbright
-        self.hasmedium = hasmedium
-        self.hasgalaxy = hasgalaxy
         self.deblend = False
         self.tims = self.create_tims(timargs)
         self.total_pix = sum([np.sum(t.getInvError() > 0) for t in self.tims])
@@ -223,41 +200,28 @@ class OneBlob(object):
         self.trargs.update(optimizer=ConstrainedOptimizer())
         self.optargs.update(dchisq = 0.1)
 
-        # Fitting rules:
-        # Force all other objects to be point sources?
-        #self.force_pointsources = self.hasbright
-        # Fit local constant sky background levels?
-        #self.fit_background = self.hasmedium or self.hasgalaxy
-
-
     def run(self, B):
         # Not quite so many plots...
         self.plots1 = self.plots
         cat = Catalog(*self.srcs)
 
-        # if self.refs is not None:
-        #     self.refmap = get_inblob_map(self.blobwcs, self.refs)
-        # else:
-        #     self.refmap = None
-
         tlast = Time()
         if self.plots:
             self._initial_plots()
-            if self.refs is not None:
-                from legacypipe.detection import plot_boundary_map
-                plt.clf()
-                dimshow(self.rgb)
-                ax = plt.axis()
-                bitset = ((self.refmap & IN_BLOB['MEDIUM']) != 0)
-                plot_boundary_map(bitset, rgb=(255,0,0), iterations=2)
-                bitset = ((self.refmap & IN_BLOB['BRIGHT']) != 0)
-                plot_boundary_map(bitset, rgb=(200,200,0), iterations=2)
-                bitset = ((self.refmap & IN_BLOB['GALAXY']) != 0)
-                plot_boundary_map(bitset, rgb=(0,255,0), iterations=2)
-                plt.axis(ax)
-                plt.title('Reference-source Masks')
-                self.ps.savefig()
-            
+            from legacypipe.detection import plot_boundary_map
+            plt.clf()
+            dimshow(self.rgb)
+            ax = plt.axis()
+            bitset = ((self.refmap & IN_BLOB['MEDIUM']) != 0)
+            plot_boundary_map(bitset, rgb=(255,0,0), iterations=2)
+            bitset = ((self.refmap & IN_BLOB['BRIGHT']) != 0)
+            plot_boundary_map(bitset, rgb=(200,200,0), iterations=2)
+            bitset = ((self.refmap & IN_BLOB['GALAXY']) != 0)
+            plot_boundary_map(bitset, rgb=(0,255,0), iterations=2)
+            plt.axis(ax)
+            plt.title('Reference-source Masks')
+            self.ps.savefig()
+
         if not self.bigblob:
             print('Fitting just fluxes using initial models...')
             self._fit_fluxes(cat, self.tims, self.bands)
@@ -707,13 +671,12 @@ class OneBlob(object):
         #force_pointsource = self.force_pointsource
         #fit_background = self.fit_background
         # geometric
-        force_pointsource = False
-        fit_background = False
-        if self.refmap is not None:
-            x0,y0 = srcwcs_x0y0
-            force_pointsource = (self.refmap[y0+iy,x0+ix] & (IN_BLOB['BRIGHT'] | IN_BLOB['GALAXY'])) > 0
-            fit_background = (self.refmap[y0+iy,x0+ix] & (IN_BLOB['MEDIUM'] | IN_BLOB['GALAXY'])) > 0
-            print('Source at blob coordinates', x0+ix, y0+iy, '- forcing pointsource?', force_pointsource, ', fitting sky background:', fit_background)
+        x0,y0 = srcwcs_x0y0
+        force_pointsource = (self.refmap[y0+iy,x0+ix] &
+                             (IN_BLOB['BRIGHT'] | IN_BLOB['GALAXY'])) > 0
+        fit_background = (self.refmap[y0+iy,x0+ix] &
+                          (IN_BLOB['MEDIUM'] | IN_BLOB['GALAXY'])) > 0
+        print('Source at blob coordinates', x0+ix, y0+iy, '- forcing pointsource?', force_pointsource, ', fitting sky background:', fit_background)
         
         if fit_background:
             for tim in srctims:
@@ -729,9 +692,7 @@ class OneBlob(object):
         srccat[0] = None
 
         if fit_background:
-            #print('Fitting no-source model (sky)')
             srctractor.optimize_loop(**self.optargs)
-            #srctractor.images.printThawedParams()
 
         chisqs_none = _per_band_chisqs(srctractor, self.bands)
 
