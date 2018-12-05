@@ -1434,6 +1434,7 @@ def read_large_galaxies(survey, targetwcs, bands):
     from legacypipe.survey import LegacyEllipseWithPriors
     from tractor.galaxy import ExpGalaxy
     from tractor import NanoMaggies, RaDecPos
+    from tractor.ellipses import EllipseESoft
     from astrometry.libkd.spherematch import tree_open, tree_search_radec
 
     galfn = survey.find_file('large-galaxies')
@@ -1467,9 +1468,10 @@ def read_large_galaxies(survey, targetwcs, bands):
         fluxes = dict([(band, NanoMaggies.magToNanomaggies(g.mag)) for band in bands])
         assert(np.all(np.isfinite(list(fluxes.values()))))
         ss = g.d25 * 60. / 2.
+        logr, ee1, ee2 = EllipseESoft.rAbPhiToESoft(ss, g.ba, -g.pa)
         gal = ExpGalaxy(RaDecPos(g.ra, g.dec),
                         NanoMaggies(order=bands, **fluxes),
-                        LegacyEllipseWithPriors(np.log(ss), 0., 0.))
+                        LegacyEllipseWithPriors(logr, ee1, ee2))
         gal.isForcedLargeGalaxy = True
         largecat.append(gal)
     gals.radius = gals.d25 / 2. / 60.
