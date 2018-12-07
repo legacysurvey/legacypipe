@@ -1,6 +1,5 @@
 import numpy as np
 
-from tractor import NanoMaggies, PointSource, Tractor
 from astrometry.util.fits import fits_table
 from astrometry.util.ttime import Time
 
@@ -22,6 +21,7 @@ def unwise_forcedphot(cat, tiles, band=1, roiradecbox=None,
     and a list of unWISE tiles *tiles* (a fits_table with RA,Dec,coadd_id)
     runs forced photometry, returning a FITS table the same length as *cat*.
     '''
+    from tractor import NanoMaggies, PointSource, Tractor, ExpGalaxy, DevGalaxy, FixedCompositeGalaxy
 
     # PSF broadening in post-reactivation data, by band.
     # Newer version from Aaron's email to decam-chatter, 2018-06-14.
@@ -223,7 +223,14 @@ def unwise_forcedphot(cat, tiles, band=1, roiradecbox=None,
         if isinstance(src, PointSource):
             src.fixedRadius = R
         else:
-            src.halfsize = R
+            # RexGalaxy is a subclass of ExpGalaxy
+            galrad = 0
+            if isinstance(src, [ExpGalaxy, DevGalaxy]):
+                galrad = src.shape.re
+            elif isinstance(src, FixedCompositeGalaxy):
+                galrad = max(src.shapeExp.re, src.shapeDev.re)
+            pixscale = 2.75
+            src.halfsize = int(np.hypot(R, galrad * 5 / pixscale))
 
     print('Set source sizes:', nbig, 'big', nmedium, 'medium', nsmall, 'small')
             
