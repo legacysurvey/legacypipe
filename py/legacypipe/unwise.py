@@ -225,7 +225,7 @@ def unwise_forcedphot(cat, tiles, band=1, roiradecbox=None,
         else:
             # RexGalaxy is a subclass of ExpGalaxy
             galrad = 0
-            if isinstance(src, [ExpGalaxy, DevGalaxy]):
+            if isinstance(src, (ExpGalaxy, DevGalaxy)):
                 galrad = src.shape.re
             elif isinstance(src, FixedCompositeGalaxy):
                 galrad = max(src.shapeExp.re, src.shapeDev.re)
