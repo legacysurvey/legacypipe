@@ -3234,8 +3234,7 @@ def stage_wise_forced(
     After the model fits are finished, we can perform forced
     photometry of the unWISE coadds.
     '''
-    from wise.unwise import unwise_tiles_touching_wcs
-    from legacypipe.unwise import unwise_phot, collapse_unwise_bitmask
+    from legacypipe.unwise import unwise_phot, collapse_unwise_bitmask, unwise_tiles_touching_wcs
     from tractor import NanoMaggies
     print('unWISE coadds:', unwise_coadds)
 

@@ -462,3 +462,61 @@ def collapse_unwise_bitmask(bitmask, band):
         result += ((2**i)*(np.bitwise_and(bitmask, bits[feat]) != 0)).astype(np.uint8)
     return result.astype('uint8')
 
+###
+# This is taken directly from tractor/wise.py, replacing only the filename.
+###
+def unwise_tiles_touching_wcs(wcs, polygons=True):
+    '''
+    Returns a FITS table (with RA,Dec,coadd_id) of unWISE tiles
+    '''
+    from pkg_resources import resource_filename
+    atlasfn = resource_filename('legacypipe', 'data/wise-tiles.fits')
+
+    T = fits_table(atlasfn)
+    trad = wcs.radius()
+    wrad = np.sqrt(2.) / 2. * 2048 * 2.75 / 3600.
+    rad = trad + wrad
+    r, d = wcs.radec_center()
+    I, = np.nonzero(np.abs(T.dec - d) < rad)
+    I = I[degrees_between(T.ra[I], T.dec[I], r, d) < rad]
+
+    if not polygons:
+        return T[I]
+    # now check actual polygon intersection
+    tw, th = wcs.imagew, wcs.imageh
+    targetpoly = [(0.5, 0.5), (tw + 0.5, 0.5),
+                  (tw + 0.5, th + 0.5), (0.5, th + 0.5)]
+    cd = wcs.get_cd()
+    tdet = cd[0] * cd[3] - cd[1] * cd[2]
+    if tdet > 0:
+        targetpoly = list(reversed(targetpoly))
+    targetpoly = np.array(targetpoly)
+    keep = []
+    for i in I:
+        wwcs = unwise_tile_wcs(T.ra[i], T.dec[i])
+        cd = wwcs.get_cd()
+        wdet = cd[0] * cd[3] - cd[1] * cd[2]
+        H, W = wwcs.shape
+        poly = []
+        for x, y in [(0.5, 0.5), (W + 0.5, 0.5), (W + 0.5, H + 0.5), (0.5, H + 0.5)]:
+            rr, dd = wwcs.pixelxy2radec(x, y)
+            ok, xx, yy = wcs.radec2pixelxy(rr, dd)
+            poly.append((xx, yy))
+        if wdet > 0:
+            poly = list(reversed(poly))
+        poly = np.array(poly)
+        if polygons_intersect(targetpoly, poly):
+            keep.append(i)
+    I = np.array(keep)
+    return T[I]
+
+### Also direct from tractor/wise.py
+def unwise_tile_wcs(ra, dec, W=2048, H=2048, pixscale=2.75):
+    from astrometry.util.util import Tan
+    '''
+    Returns a Tan WCS object at the given RA,Dec center, axis aligned, with the
+    given pixel W,H and pixel scale in arcsec/pixel.
+    '''
+    cowcs = Tan(ra, dec, (W + 1) / 2., (H + 1) / 2.,
+                -pixscale / 3600., 0., 0., pixscale / 3600., W, H)
+    return cowcs
