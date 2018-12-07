@@ -1094,6 +1094,7 @@ Now using the current directory as LEGACY_SURVEY_DIR, but this is likely to fail
         return T, hdr, primhdr
 
     def find_file(self, filetype, brick=None, brickpre=None, band='%(band)s',
+                  camera=None, expnum=None, ccdname=None,
                   output=False, **kwargs):
         '''
         Returns the filename of a Legacy Survey file.
@@ -1223,6 +1224,9 @@ Now using the current directory as LEGACY_SURVEY_DIR, but this is likely to fail
         elif filetype == 'checksums':
             return swap(os.path.join(basedir, 'tractor', brickpre,
                                      'brick-%s.sha256sum' % brick))
+        elif filetype == 'outliers_mask':
+            return swap(os.path.join(basedir, 'metrics', brickpre, brick,
+                                     'outlier-mask-%s-%s-%s.fits.fz' % (camera, expnum, ccdname)))
 
         print('Unknown filetype "%s"' % filetype)
         assert(False)
@@ -1265,6 +1269,7 @@ Now using the current directory as LEGACY_SURVEY_DIR, but this is likely to fail
             maskbits = '[compress H %i,%i]',
             depth  = '[compress G %i,%i; qz 0]',
             galdepth = '[compress G %i,%i; qz 0]',
+            outliers_mask = '[compress H %i,%i]',
         ).get(filetype)
         if pat is None:
             return pat

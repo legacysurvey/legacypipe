@@ -811,7 +811,7 @@ def make_depth_cut(survey, ccds, bands, targetrd, brick, W, H, pixscale,
 
 def stage_mask_junk(tims=None, targetwcs=None, W=None, H=None, bands=None,
                     mp=None, nsigma=None, plots=None, ps=None, record_event=None,
-                    survey=None, brickname=None,
+                    survey=None, brickname=None, version_header=None,
                     **kwargs):
     '''
     This pipeline stage tries to detect artifacts in the individual
@@ -1281,6 +1281,28 @@ def stage_mask_junk(tims=None, targetwcs=None, W=None, H=None, bands=None,
                 tim.getInvError()[mYo[Ibad],mXo[Ibad]] = 0.
                 # Also update DQ mask.
                 tim.dq[mYo[Ibad],mXo[Ibad]] |= CP_DQ_BITS['outlier']
+
+                # Write out a mask file.
+                maskedpix = np.zeros(tim.shape, np.uint8)
+                maskedpix[mYo[Ibad], mXo[Ibad]] = 1
+                # copy version_header before modifying it.
+                hdr = fitsio.FITSHDR()
+                for r in version_header.records():
+                    hdr.add_record(r)
+                # Plug in the tim WCS header
+                tim.subwcs.add_to_header(hdr)
+                hdr.delete('IMAGEW')
+                hdr.delete('IMAGEH')
+                hdr.add_record(dict(name='IMTYPE', value='outlier_mask',
+                                    comment='LegacySurvey image type'))
+                hdr.add_record(dict(name='CAMERA', value=tim.imobj.camera))
+                hdr.add_record(dict(name='EXPNUM', value=tim.imobj.expnum))
+                hdr.add_record(dict(name='CCDNAME', value=tim.imobj.ccdname))
+                hdr.add_record(dict(name='X0', value=tim.x0))
+                hdr.add_record(dict(name='Y0', value=tim.y0))
+                with survey.write_output('outliers_mask', brick=brickname,
+                                         camera=tim.imobj.camera, expnum=tim.imobj.expnum, ccdname=tim.imobj.ccdname) as out:
+                    out.fits.write(maskedpix, header=hdr)
 
         badcoadds.append(badcoadd / np.maximum(badcon, 1))
         realbadcoadds.append(realbadcoadd / np.maximum(realbadcon, 1))
