@@ -7,7 +7,7 @@ def _detmap(X):
     from scipy.ndimage.filters import gaussian_filter
     from legacypipe.survey import tim_get_resamp
 
-    (tim, targetwcs, H, W) = X
+    (tim, targetwcs, H, W, apodize) = X
     R = tim_get_resamp(tim, targetwcs)
     if R is None:
         return None,None,None,None,None
@@ -23,6 +23,19 @@ def _detmap(X):
     subh,subw = tim.shape
     detiv = np.zeros((subh,subw), np.float32) + (1. / detsig1**2)
     detiv[ie == 0] = 0.
+    detiv = gaussian_filter(detiv, tim.psf_sigma)
+
+    if apodize:
+        apodize = int(apodize)
+        ramp = np.arctan(np.linspace(-np.pi, np.pi, apodize+2))
+        ramp = (ramp - ramp.min()) / (ramp.max()-ramp.min())
+        # drop first and last (= 0 and 1)
+        ramp = ramp[1:-1]
+        detiv[:len(ramp),:] *= ramp[:,np.newaxis]
+        detiv[:,:len(ramp)] *= ramp[np.newaxis,:]
+        detiv[-len(ramp):,:] *= ramp[::-1][:,np.newaxis]
+        detiv[:,-len(ramp):] *= ramp[::-1][np.newaxis,:]
+
     (Yo,Xo,Yi,Xi) = R
     if tim.dq is None:
         sat = None
@@ -30,7 +43,7 @@ def _detmap(X):
         sat = ((tim.dq[Yi,Xi] & tim.dq_saturation_bits) > 0)
     return Yo, Xo, detim[Yi,Xi], detiv[Yi,Xi], sat
 
-def detection_maps(tims, targetwcs, bands, mp):
+def detection_maps(tims, targetwcs, bands, mp, apodize=None):
     # Render the detection maps
     H,W = targetwcs.shape
     H,W = np.int(H), np.int(W)
@@ -40,7 +53,7 @@ def detection_maps(tims, targetwcs, bands, mp):
     detivs  = [np.zeros((H,W), np.float32) for b in bands]
     satmaps = [np.zeros((H,W), bool)       for b in bands]
     for tim, (Yo,Xo,incmap,inciv,sat) in zip(
-        tims, mp.map(_detmap, [(tim, targetwcs, H, W) for tim in tims])):
+        tims, mp.map(_detmap, [(tim, targetwcs, H, W, apodize) for tim in tims])):
         if Yo is None:
             continue
         ib = ibands[tim.band]
