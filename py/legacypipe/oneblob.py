@@ -960,7 +960,7 @@ class OneBlob(object):
 
         # After model selection, revert the sky
         # (srctims=tims when not bigblob)
-        if self.fit_background:
+        if fit_background:
             srctractor.images.setParams(skyparams)
 
         # Actually select which model to keep.  This "modnames"
