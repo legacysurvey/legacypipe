@@ -469,6 +469,10 @@ def unwise_tiles_touching_wcs(wcs, polygons=True):
     '''
     Returns a FITS table (with RA,Dec,coadd_id) of unWISE tiles
     '''
+    from astrometry.util.miscutils import polygons_intersect
+    from astrometry.util.fits import fits_table
+    from astrometry.util.starutil_numpy import degrees_between
+
     from pkg_resources import resource_filename
     atlasfn = resource_filename('legacypipe', 'data/wise-tiles.fits')
 
