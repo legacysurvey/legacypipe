@@ -25,6 +25,7 @@ CP_DQ_BITS = dict(badpix=1, satur=2, interp=4, cr=16, bleed=64,
                   edge2 = 512,
                   ## masked by stage_mask_junk
                   longthin = 1024,
+                  outlier = 2048,
                   )
 
 def remap_dq_cp_codes(dq):
@@ -378,11 +379,12 @@ class LegacySurveyImage(object):
                 print('Skipping tiny subimage (after clipping masked edges)')
                 return None
 
-            img = img[y0_new-y0:1+y1_new-y0, x0_new-x0:1+x1_new-x0]
-            invvar = invvar[y0_new-y0:1+y1_new-y0, x0_new-x0:1+x1_new-x0]
+            img    = img   [y0_new-y0 : y1_new-y0, x0_new-x0 : x1_new-x0]
+            invvar = invvar[y0_new-y0 : y1_new-y0, x0_new-x0 : x1_new-x0]
             if get_dq:
-                dq = dq[y0_new-y0:1+y1_new-y0, x0_new-x0:1+x1_new-x0]
+                dq = dq[y0_new-y0 : y1_new-y0, x0_new-x0 : x1_new-x0]
             x0,x1,y0,y1 = x0_new,x1_new,y0_new,y1_new
+            slc = slice(y0,y1), slice(x0,x1)
 
         sky = self.read_sky_model(splinesky=splinesky, slc=slc,
                                   primhdr=primhdr, imghdr=imghdr)
