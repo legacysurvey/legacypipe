@@ -811,6 +811,7 @@ def make_depth_cut(survey, ccds, bands, targetrd, brick, W, H, pixscale,
 
 def stage_mask_junk(tims=None, targetwcs=None, W=None, H=None, bands=None,
                     mp=None, nsigma=None, plots=None, ps=None, record_event=None,
+                    survey=None, brickname=None,
                     **kwargs):
     '''
     This pipeline stage tries to detect artifacts in the individual
@@ -819,10 +820,10 @@ def stage_mask_junk(tims=None, targetwcs=None, W=None, H=None, bands=None,
     '''
     from scipy.ndimage.filters import gaussian_filter
     from scipy.ndimage.morphology import binary_fill_holes
-    from scipy.ndimage.measurements import label, find_objects, center_of_mass
-    from scipy.linalg import svd
+    from scipy.ndimage.measurements import label, find_objects
     from astrometry.util.resample import resample_with_wcs, OverlapError
-
+    from legacypipe.survey import imsave_jpeg
+    
     record_event and record_event('stage_mask_junk: starting')
 
     # Patch individual-CCD masked pixels from a coadd
@@ -856,7 +857,17 @@ def stage_mask_junk(tims=None, targetwcs=None, W=None, H=None, bands=None,
         dimshow(get_rgb(maximgs, bands))
         plt.title('Before outliers: Max')
         ps.savefig()
-        
+
+    if True:
+        coimgs,cons,maximgs = quick_coadds(tims, bands, targetwcs, fill_holes=False, get_max=True)
+        outdir = os.path.join(survey.output_dir, 'metrics', brickname[:3])
+        from astrometry.util.file import trymakedirs
+        trymakedirs(outdir)
+        outfn = os.path.join(outdir, 'outliers-pre-%s.jpg' % brickname)
+        imsave_jpeg(outfn, get_rgb(coimgs, bands))
+        outfn = os.path.join(outdir, 'outliers-maxpre-%s.jpg' % brickname)
+        imsave_jpeg(outfn, get_rgb(maximgs, bands))
+
     badcoadds = []
     realbadcoadds = []
     
@@ -1079,7 +1090,8 @@ def stage_mask_junk(tims=None, targetwcs=None, W=None, H=None, bands=None,
             if not np.any(hot):
                 continue
 
-            if plots:
+            #if plots:
+            if True:
                 # Segment
                 blobs,nblobs = label(lukewarm)
                 slices = find_objects(blobs)
@@ -1324,115 +1336,21 @@ def stage_mask_junk(tims=None, targetwcs=None, W=None, H=None, bands=None,
         dimshow(get_rgb(maximgs, bands))
         plt.title('After outliers: Max')
         ps.savefig()
-        
                 
         plt.clf()
         dimshow(get_rgb(realbadcoadds, bands))
         plt.title('Masked pixels')
         ps.savefig()
+
+    if True:
+        coimgs,cons,maximgs = quick_coadds(tims, bands, targetwcs, fill_holes=False, get_max=True)
+        outfn = os.path.join(outdir, 'outliers-post-%s.jpg' % brickname)
+        imsave_jpeg(outfn, get_rgb(coimgs, bands))
+        outfn = os.path.join(outdir, 'outliers-maxpost-%s.jpg' % brickname)
+        imsave_jpeg(outfn, get_rgb(maximgs, bands))
+        outfn = os.path.join(outdir, 'outliers-masked-%s.jpg' % brickname)
+        imsave_jpeg(outfn, get_rgb(realbadcoadds, bands))
         
-    allss = []
-    for tim in tims:
-        # Create a detection map for this image and detect blobs
-        det = tim.data * (tim.inverr > 0)
-        det = gaussian_filter(det, tim.psf_sigma) / tim.psfnorm**2
-        detsig1 = tim.sig1 / tim.psfnorm
-        det = (det > (nsigma * detsig1))
-        det = binary_fill_holes(det)
-        timblobs,timnblobs = label(det)
-        timslices = find_objects(timblobs)
-
-        if plots:
-            zeroed = np.zeros(tim.shape, bool)
-
-        for i,slc in enumerate(timslices):
-            # Compute moments for each blob
-            inblob = timblobs[slc]
-            inblob = (inblob == (i+1))
-            cy,cx = center_of_mass(inblob)
-            bh,bw = inblob.shape
-            xx = np.arange(bw)
-            yy = np.arange(bh)
-            ninblob = float(np.sum(inblob))
-            cxx = np.sum(((xx - cx)**2)[np.newaxis,:] * inblob) / ninblob
-            cyy = np.sum(((yy - cy)**2)[:,np.newaxis] * inblob) / ninblob
-            cxy = np.sum((yy - cy)[:,np.newaxis] *
-                         (xx - cx)[np.newaxis,:] * inblob) / ninblob
-            C = np.array([[cxx, cxy],[cxy, cyy]])
-            u,s,v = svd(C)
-            allss.append(np.sqrt(np.abs(s)))
-
-            # For an ellipse, this gives the major and minor axes
-            # (ie, end to end, not semi-major/minor)
-            ss = np.sqrt(s)
-            major = 4. * ss[0]
-            minor = 4. * ss[1]
-            # Remove only long, thin objects.
-            if not (major > 200 and minor/major < 0.1):
-                continue
-            # Zero it out!
-            tim.inverr[slc] *= np.logical_not(inblob)
-            if tim.dq is not None:
-                # Add to dq mask bits
-                tim.dq[slc] |= CP_DQ_BITS['longthin']
-
-            rd = tim.wcs.pixelToPosition(cx, cy)
-            ra,dec = rd.ra, rd.dec
-            ok,bx,by = targetwcs.radec2pixelxy(ra, dec)
-            print('Zeroing out a source with major/minor axis', major, '/',
-                  minor, 'at centroid RA,Dec=(%.4f,%.4f), brick coords %i,%i'
-                  % (ra, dec, bx, by))
-
-            if plots:
-                zeroed[slc] = np.logical_not(inblob)
-
-        if plots:
-            if np.sum(zeroed) > 0:
-                plt.clf()
-                from scipy.ndimage.morphology import binary_dilation
-                zout = (binary_dilation(zeroed, structure=np.ones((3,3)))
-                        - zeroed)
-                dimshow(tim.getImage(), vmin=-3.*tim.sig1, vmax=10.*tim.sig1)
-                outline = np.zeros(zout.shape+(4,), np.uint8)
-                outline[:,:,1] = zout*255
-                outline[:,:,3] = zout*255
-                dimshow(outline)
-                plt.title('Masked: ' + tim.name)
-                ps.savefig()
-
-    if plots:
-        coimgs,cons = quick_coadds(tims, bands, targetwcs, fill_holes=False)
-        plt.clf()
-        dimshow(get_rgb(coimgs, bands))
-        plt.title('After mask_junk')
-        ps.savefig()
-
-        for b,n in zip(bands, cons):
-            plt.clf()
-            dimshow(n)
-            plt.title('n %s' % b)
-            ps.savefig()
-
-        allss = np.array(allss)
-        mx = max(allss.max(), 100) * 1.1
-        plt.clf()
-        plt.plot([0, mx], [0, mx], 'k-', alpha=0.2)
-        plt.plot(allss[:,1], allss[:,0], 'b.')
-        plt.ylabel('Major axis size (pixels)')
-        plt.xlabel('Minor axis size (pixels)')
-        plt.axis('scaled')
-        plt.axis([0, mx, 0, mx])
-        ps.savefig()
-
-        plt.clf()
-        plt.plot(allss[:,0], (allss[:,1]+1.) / (allss[:,0]+1.), 'b.')
-        plt.xlabel('Major axis size (pixels)')
-        plt.ylabel('Axis ratio')
-        plt.axis([0, mx, 0, 1])
-        plt.axhline(0.1, color='r', alpha=0.2)
-        plt.axvline(200, color='r', alpha=0.2)
-        ps.savefig()
-
     return dict(tims=tims)
 
 def stage_image_coadds(survey=None, targetwcs=None, bands=None, tims=None,
