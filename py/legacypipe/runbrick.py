@@ -874,24 +874,27 @@ def stage_mask_junk(tims=None, targetwcs=None, W=None, H=None, bands=None,
     from scipy.ndimage.morphology import binary_fill_holes
     from scipy.ndimage.measurements import label, find_objects, center_of_mass
     from scipy.linalg import svd
+    from astrometry.util.resample import resample_with_wcs, OverlapError
 
     record_event and record_event('stage_mask_junk: starting')
 
     # Patch individual-CCD masked pixels from a coadd
-    C = make_coadds(tims, bands, targetwcs)
+    C = make_coadds(tims, bands, targetwcs, mp=mp)
+    coimgs = C.coimgs
+    #coimgs,_ = quick_coadds(tims, bands, targetwcs, mp=mp)
     ibands = dict([(b,i) for i,b in enumerate(bands)])
     for tim in tims:
         ie = tim.getInvvar()
         img = tim.getImage()
         if np.any(ie == 0):
             # Patch from the coadd
-            co = C.coimgs[iband[tim.band]]
+            co = C.coimgs[ibands[tim.band]]
             # resample from coadd to img -- nearest-neighbour
             try:
                 yo,xo,yi,xi,nil = resample_with_wcs(tim.subwcs, targetwcs, [])
                 I, = np.nonzero(ie[yo,xo] == 0)
                 if len(I):
-                    img[yo[I],xo[I]] = coimg[yi[I],xi[I]]
+                    img[yo[I],xo[I]] = coimgs[ibands[tim.band]][yi[I],xi[I]]
             except OverlapError:
                 print('No overlap')
 
@@ -1465,7 +1468,10 @@ def read_large_galaxies(survey, targetwcs, bands):
         fluxes = dict([(band, NanoMaggies.magToNanomaggies(g.mag)) for band in bands])
         assert(np.all(np.isfinite(list(fluxes.values()))))
         ss = g.d25 * 60. / 2.
-        logr, ee1, ee2 = EllipseESoft.rAbPhiToESoft(ss, g.ba, -g.pa)
+        pa = g.pa
+        if not np.isfinite(pa):
+            pa = 0.
+        logr, ee1, ee2 = EllipseESoft.rAbPhiToESoft(ss, g.ba, pa)
         gal = ExpGalaxy(RaDecPos(g.ra, g.dec),
                         NanoMaggies(order=bands, **fluxes),
                         LegacyEllipseWithPriors(logr, ee1, ee2))
@@ -2390,8 +2396,6 @@ def _bounce_one_blob(X):
     multiprocessing purposes.
     '''
     from legacypipe.oneblob import one_blob
-
-    return one_blob(X)
     try:
         return one_blob(X)
     except:

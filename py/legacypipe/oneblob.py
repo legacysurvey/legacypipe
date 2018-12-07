@@ -88,6 +88,11 @@ def one_blob(X):
     if len(timargs) == 0:
         return None
 
+    for src in srcs:
+        from tractor import Galaxy
+        if isinstance(src, Galaxy):
+            print('Source:', src)
+
     if plots:
         plt.figure(2, figsize=(3,3))
         plt.subplots_adjust(left=0.01, right=0.99, bottom=0.01, top=0.99)
