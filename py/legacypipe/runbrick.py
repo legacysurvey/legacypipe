@@ -1159,22 +1159,49 @@ def stage_srcs(targetrd=None, pixscale=None, targetwcs=None,
     tlast = tnow
     record_event and record_event('stage_srcs: sources')
 
-    # Median-smooth detection maps
-    binning = 4
-    smoos = mp.map(_median_smooth_detmap,
-                   [(m,iv,binning) for m,iv in zip(detmaps, detivs)])
-    tnow = Time()
-    print('[parallel srcs] Median-filter detmaps:', tnow-tlast)
-    tlast = tnow
-
-    for i,(detmap,detiv,smoo) in enumerate(zip(detmaps, detivs, smoos)):
-        # Subtract binned median image.
-        S = binning
-        for ii in range(S):
-            for jj in range(S):
-                sh,sw = detmap[ii::S, jj::S].shape
-                detmap[ii::S, jj::S] -= smoo[:sh,:sw]
-
+    # # Median-smooth detection maps
+    # binning = 4
+    # smoos = mp.map(_median_smooth_detmap,
+    #                [(m,iv,binning) for m,iv in zip(detmaps, detivs)])
+    # tnow = Time()
+    # print('[parallel srcs] Median-filter detmaps:', tnow-tlast)
+    # tlast = tnow
+    # 
+    # for i,(detmap,detiv,smoo) in enumerate(zip(detmaps, detivs, smoos)):
+    #     # Subtract binned median image.
+    #     S = binning
+    # 
+    #     if plots:
+    #         plt.clf()
+    #         dimshow(np.log10(np.maximum(1, detmap * np.sqrt(detiv))))
+    #         plt.title('Det S/N %s' % bands[i])
+    #         ps.savefig()
+    # 
+    #         plt.clf()
+    #         dimshow(np.log10(np.maximum(1, smoo * np.median(np.sqrt(detiv)))))
+    #         plt.title('Median-filt ~S/N %s' % bands[i])
+    #         ps.savefig()
+    # 
+    #     for ii in range(S):
+    #         for jj in range(S):
+    #             sh,sw = detmap[ii::S, jj::S].shape
+    #             detmap[ii::S, jj::S] -= smoo[:sh,:sw]
+    # 
+    #     if plots:
+    #         plt.clf()
+    #         dimshow(np.log10(np.maximum(1, detmap * np.sqrt(detiv))))
+    #         plt.title('Det S/N %s' % bands[i])
+    #         ps.savefig()
+    #         plt.clf()
+    #         sn = detmap * np.sqrt(detiv)
+    #         plt.plot(sn[200,:], 'k-')
+    #         plt.plot(sn[250,:], 'r-')
+    #         plt.plot(sn[300,:], 'b-')
+    #         plt.title('Det S/N slices %s' % bands[i])
+    #         plt.yscale('symlog')
+    #         plt.axhline(6., color='k')
+    #         ps.savefig()
+                
     # Expand the mask around saturated pixels to avoid generating
     # peaks at the edge of the mask.
     saturated_pix = [binary_dilation(satmap > 0, iterations=4)
