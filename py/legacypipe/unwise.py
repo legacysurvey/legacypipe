@@ -399,7 +399,7 @@ def unwise_phot(X):
 
     ### FIXME
     #kwargs.update(save_fits=True)
-
+    W = None
     try:
         W = unwise_forcedphot(wcat, tiles, use_ceres=wise_ceres, **kwargs)
     except:
@@ -413,8 +413,6 @@ def unwise_phot(X):
             except:
                 print('unwise_forcedphot failed (2):')
                 traceback.print_exc()
-        else:
-            W = None
     return W
 
 def collapse_unwise_bitmask(bitmask, band):
