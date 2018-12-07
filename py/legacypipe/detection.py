@@ -6,16 +6,26 @@ from astrometry.util.ttime import Time
 def _detmap(X):
     from scipy.ndimage.filters import gaussian_filter
     from legacypipe.survey import tim_get_resamp
-
-    (tim, targetwcs, H, W, apodize) = X
+    from astrometry.util.resample import resample_with_wcs, OverlapError
+    (tim, targetwcs, H, W, apodize, coimg) = X
     R = tim_get_resamp(tim, targetwcs)
     if R is None:
         return None,None,None,None,None
-    ie = tim.getInvvar()
     assert(tim.psf_sigma > 0)
     psfnorm = 1./(2. * np.sqrt(np.pi) * tim.psf_sigma)
+    ie = tim.getInvvar()
     detim = tim.getImage().copy()
     detim[ie == 0] = 0.
+    if np.any(ie == 0):
+        # Patch from the coadd
+        # resample from coadd to img -- nearest-neighbour
+        try:
+            yo,xo,yi,xi,nil = resample_with_wcs(tim.subwcs, targetwcs, [])
+            I, = np.nonzero(ie[yo,xo] == 0)
+            if len(I):
+                detim[yo[I],xo[I]] = coimg[yi[I],xi[I]]
+        except OverlapError:
+            print('No overlap')
     # Patch SATURATED pixels with the value saturated pixels would have??
     #detim[(tim.dq & tim.dq_bits['satur']) > 0] = tim.satval
     detim = gaussian_filter(detim, tim.psf_sigma) / psfnorm**2
@@ -44,16 +54,20 @@ def _detmap(X):
     return Yo, Xo, detim[Yi,Xi], detiv[Yi,Xi], sat
 
 def detection_maps(tims, targetwcs, bands, mp, apodize=None):
+    from coadds import make_coadds
     # Render the detection maps
     H,W = targetwcs.shape
     H,W = np.int(H), np.int(W)
     ibands = dict([(b,i) for i,b in enumerate(bands)])
 
+    # Patch images from the coadd
+    C = make_coadds(tims, bands, targetwcs)
+
     detmaps = [np.zeros((H,W), np.float32) for b in bands]
     detivs  = [np.zeros((H,W), np.float32) for b in bands]
     satmaps = [np.zeros((H,W), bool)       for b in bands]
     for tim, (Yo,Xo,incmap,inciv,sat) in zip(
-        tims, mp.map(_detmap, [(tim, targetwcs, H, W, apodize) for tim in tims])):
+        tims, mp.map(_detmap, [(tim, targetwcs, H, W, apodize, C.coimgs[ibands[tim.band]]) for tim in tims])):
         if Yo is None:
             continue
         ib = ibands[tim.band]
