@@ -57,6 +57,10 @@ class DecamImage(LegacySurveyImage):
         primhdr = self.read_primary_header(self.dqfn)
         plver = primhdr['PLVER']
         if decam_has_dq_codes(plver):
+            # IGNORE SATELLITE MASKER
+            print('Remapping DQ bits for', str(self))
+            print('', np.sum(dq == 8), 'pixels have code 8 set')
+            dq[dq == 8] = 0
             dq = self.remap_dq_cp_codes(dq, hdr)
         else:
             from legacypipe.image import CP_DQ_BITS
