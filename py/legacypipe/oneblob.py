@@ -731,8 +731,6 @@ class OneBlob(object):
                 tim.freezeAllBut('sky')
             srctractor.thawParam('images')
             skyparams = srctractor.images.getParams()
-            #print('Fitting sky')
-            #srctractor.printThawedParams()
 
         enable_galaxy_cache()
             
@@ -864,7 +862,8 @@ class OneBlob(object):
             if fit_background:
                 #print('Resetting sky params.')
                 srctractor.images.setParams(skyparams)
-            
+                srctractor.thawParam('images')
+
             # First-round optimization (during model selection)
             #print('Optimizing: first round for', name, ':', len(srctims))
             #print(newsrc)
@@ -920,6 +919,8 @@ class OneBlob(object):
                 oldshape = (newsrc.shapeExp, newsrc.shapeDev,newsrc.fracDev)
 
             if fit_background:
+                # We have to freeze the sky here before computing
+                # uncertainties
                 srctractor.freezeParam('images')
                 
             nsrcparams = newsrc.numberOfParams()
@@ -956,7 +957,12 @@ class OneBlob(object):
         if mask_others:
             for ie,tim in zip(saved_srctim_ies, srctims):
                 tim.inverr = ie
-            
+
+        # After model selection, revert the sky
+        # (srctims=tims when not bigblob)
+        if self.fit_background:
+            srctractor.images.setParams(skyparams)
+
         # Actually select which model to keep.  This "modnames"
         # array determines the order of the elements in the DCHISQ
         # column of the catalog.

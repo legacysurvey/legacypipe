@@ -83,6 +83,7 @@ def stage_tims(W=3600, H=3600, pixscale=0.262, brickname=None,
                bands=['g','r','z'],
                do_calibs=True,
                splinesky=True,
+               subsky=True,
                gaussPsf=False, pixPsf=False, hybridPsf=False,
                normalizePsf=False,
                apodize=False,
@@ -115,10 +116,12 @@ def stage_tims(W=3600, H=3600, pixscale=0.262, brickname=None,
     Sky:
 
     - *splinesky*: boolean.  Use SplineSky model, rather than ConstantSky?
-
+    - *subsky*: boolean.  Subtract sky model from tims?
+    
     '''
     from legacypipe.survey import (
-        get_git_version, get_version_header, wcs_for_brick, read_one_tim)
+        get_git_version, get_version_header, get_dependency_versions,
+        wcs_for_brick, read_one_tim)
     from astrometry.util.starutil_numpy import ra2hmsstring, dec2dmsstring
 
     t0 = tlast = Time()
@@ -165,70 +168,9 @@ def stage_tims(W=3600, H=3600, pixscale=0.262, brickname=None,
     version_header = get_version_header(program_name, survey.survey_dir,
                                         git_version=gitver)
 
-    # Get DESICONDA version, and read file $DESICONDA/pkg_list.txt for
-    # other package versions.
-    default_ver = 'UNAVAILABLE'
-    depnum = 0
-    desiconda = os.environ.get('DESICONDA', default_ver)
-    verstr = os.path.basename(desiconda)
-    version_header.add_record(dict(name='DEPNAM%02i' % depnum, value='desiconda',
-                                   comment='Name of dependency product'))
-    version_header.add_record(dict(name='DEPVER%02i' % depnum, value=verstr,
-                                   comment='Version of dependency product'))
-    depnum += 1
-
-    if desiconda != default_ver:
-        fn = os.path.join(desiconda, 'pkg_list.txt')
-        vers = {}
-        if not os.path.exists(fn):
-            print('Warning: expected file $DESICONDA/pkg_list.txt to exist but it does not!')
-        else:
-            # Read version numbers
-            for line in open(fn):
-                words = line.strip().split('=')
-                if len(words) >= 2:
-                    vers[words[0]] = words[1]
-
-        for pkg in ['astropy', 'matplotlib', 'mkl', 'numpy', 'python', 'scipy']:
-            verstr = vers.get(pkg, default_ver)
-            version_header.add_record(dict(name='DEPNAM%02i' % depnum, value=pkg,
-                                           comment='Name of product (in desiconda)'))
-            version_header.add_record(dict(name='DEPVER%02i' % depnum, value=verstr,
-                                           comment='Version of dependency product'))
-            depnum += 1
-            if verstr == default_ver:
-                print('Warning: failed to get version string for "%s"' % pkg)
-    # Get additional paths from environment variables
-    for dep in ['TYCHO2_KD', 'GAIA_CAT', 'LARGEGALAXIES']:
-        value = os.environ.get('%s_DIR' % dep, default_ver)
-        if value == default_ver:
-            print('Warning: failed to get version string for "%s"' % dep)
-        print('String:', value)
-        version_header.add_record(dict(name='DEPNAM%02i' % depnum, value=dep,
-                                    comment='Name of dependency product'))
-        version_header.add_record(dict(name='DEPVER%02i' % depnum, value=value,
-                                    comment='Version of dependency product'))
-        depnum += 1
-
-    if unwise_dir is not None:
-        dirs = unwise_dir.split(':')
-        for i,d in enumerate(dirs):
-            # Yuck, fitsio does not yet support CONTINUE cards.
-            if len(d) < 68:
-                version_header.add_record(dict(name='UNWISD%i' % (i+1),
-                                               value=d, comment='unWISE dir(s)'))
-            else:
-                # Assume it fits in two lines (one CONTINUE card).
-                version_header.add_record(dict(name='LONGSTRN', value='OGIP 1.0',
-                                               comment='CONTINUE cards are used'))
-                version_header.add_record(dict(name='UNWISD%i' % (i+1),
-                                               value=d[:67] + '&',
-                                               comment='unWISE dir(s)'))
-                version_header.add_record(dict(name='CONTINUE', value="  '%s'"%d[67:]))
-
-    if unwise_tr_dir is not None:
-        version_header.add_record(dict(name='UNWISTD', value=unwise_tr_dir,
-                                       comment='unWISE time-resolved dir'))
+    deps = get_dependency_versions(unwise_dir, unwise_tr_dir)
+    for name,value,comment in deps:
+        version_header.add_record(dict(name=name, value=value, comment=comment))
 
     version_header.add_record(dict(name='BRICKNAM', value=brickname,
                                 comment='LegacySurvey brick RRRr[pm]DDd'))
@@ -349,6 +291,7 @@ def stage_tims(W=3600, H=3600, pixscale=0.262, brickname=None,
     args = [(im, targetrd, dict(gaussPsf=gaussPsf, pixPsf=pixPsf,
                                 hybridPsf=hybridPsf, normalizePsf=normalizePsf,
                                 splinesky=splinesky,
+                                subsky=subsky,
                                 apodize=apodize,
                                 constant_invvar=constant_invvar,
                                 pixels=read_image_pixels))
@@ -3361,9 +3304,9 @@ def stage_wise_forced(
     After the model fits are finished, we can perform forced
     photometry of the unWISE coadds.
     '''
-    from wise.forcedphot import unwise_tiles_touching_wcs
+    from wise.unwise import unwise_tiles_touching_wcs
+    from legacypipe.unwise import unwise_phot, collapse_unwise_bitmask
     from tractor import NanoMaggies
-
     print('unWISE coadds:', unwise_coadds)
 
     record_event and record_event('stage_wise_forced: starting')
@@ -3384,21 +3327,18 @@ def stage_wise_forced(
         src.setBrightness(NanoMaggies(w=1.))
         wcat.append(src)
 
-    # PSF broadening in post-reactivation data, by band.
-    # Newer version from Aaron's email to decam-chatter, 2018-06-14.
-    broadening = { 1: 1.0405, 2: 1.0346, 3: None, 4: None }
-
+    # use Aaron's WISE pixelized PSF model?
+    wpixpsf = True
+    
     # Create list of groups-of-tiles to photometer
     args = []
     # Skip if $UNWISE_COADDS_DIR or --unwise-dir not set.
     if unwise_dir is not None:
+        wtiles = tiles.copy()
+        wtiles.unwise_dir = np.array([unwise_dir]*len(tiles))
         for band in [1,2,3,4]:
-            args.append((wcat, tiles, band, roiradec, unwise_dir, wise_ceres,
-                         broadening[band], unwise_coadds))
-
-    # tempfile.TemporaryDirectory objects -- the directories will be deleted when this
-    # variable goes out of scope.
-    tempdirs = []
+            args.append((wcat, wtiles, band, roiradec,
+                         wise_ceres, wpixpsf, unwise_coadds))
 
     # Add time-resolved WISE coadds
     # Skip if $UNWISE_COADDS_TIMERESOLVED_DIR or --unwise-tr-dir not set.
@@ -3410,10 +3350,17 @@ def stage_wise_forced(
         TR.cut(np.array([t in tiles.coadd_id for t in TR.coadd_id]))
         print('Cut to', len(TR), 'time-resolved vs', len(tiles), 'full-depth')
         assert(len(TR) == len(tiles))
+        # Ugly -- we need to look up the "{ra,dec}[12]" fields from the non-TR
+        # table to support unique areas of tiles.
+        imap = dict((c,i) for i,c in enumerate(tiles.coadd_id))
+        I = np.array([imap[c] for c in TR.coadd_id])
+        for c in ['ra1','ra2','dec1','dec2']:
+            TR.set(c, tiles.get(c)[I])
         # How big do we need to make the WISE time-resolved arrays?
         print('TR epoch_bitmask:', TR.epoch_bitmask)
         # axis= arg to np.count_nonzero is new in numpy 1.12
-        Nepochs = max(np.atleast_1d([np.count_nonzero(e) for e in TR.epoch_bitmask]))
+        Nepochs = max(np.atleast_1d([np.count_nonzero(e)
+                                     for e in TR.epoch_bitmask]))
         nil,ne = TR.epoch_bitmask.shape
         print('Max number of epochs for these tiles:', Nepochs)
         print('epoch bitmask length:', ne)
@@ -3421,11 +3368,11 @@ def stage_wise_forced(
         for band in [1,2]:
             # W1 is bit 0 (value 0x1), W2 is bit 1 (value 0x2)
             bitmask = (1 << (band-1))
-            # The epoch_bitmask entries are not *necessarily* contiguous, and not
-            # necessarily aligned for the set of overlapping tiles.  We will align the
-            # non-zero epochs of the tiles.  This may require creating a temp directory
-            # and symlink farm for cases where the non-zero epochs are not aligned
-            # (eg, brick 2437p425 vs coadds 2426p424 & 2447p424 in NEO-2).
+            # The epoch_bitmask entries are not *necessarily*
+            # contiguous, and not necessarily aligned for the set of
+            # overlapping tiles.  We will align the non-zero epochs of
+            # the tiles.  (eg, brick 2437p425 vs coadds 2426p424 &
+            # 2447p424 in NEO-2).
 
             # find the non-zero epochs for each overlapping tile
             epochs = np.empty((len(TR), Nepochs), int)
@@ -3441,38 +3388,15 @@ def stage_wise_forced(
                     continue
                 print('Epoch index %i: %i tiles:' % (ie, len(I)), TR.coadd_id[I],
                       'epoch numbers', epochs[I,ie])
-                eps = np.unique(epochs[I,ie])
-                if len(eps) == 1:
-                    edir = os.path.join(tdir, 'e%03i' % eps[0])
-                    eargs.append((ie,(wcat, TR[I], band, roiradec, edir,
-                                         wise_ceres, broadening[band], False)))
-                else:
-                    import tempfile
-                    # Construct a temp symlink farm
-                    # FIXME for DR7 - modify unwise_forcedphot() signature to allow
-                    # setting a per-tile base directory for data.
-                    td = tempfile.TemporaryDirectory()
-                    tempdirs.append(td)
-                    dirname = td.name
-                    # Assume UNWISE_COADDS_TIMERESOLVED_DIR is a
-                    # single dir (not colon-separated list).
-                    for tile,ep in zip(TR[I], epochs[I,ie]):
-                        tiledir = os.path.join(tdir, 'e%03i' % ep, tile.coadd_id[:3], tile.coadd_id)
-                        destdir = os.path.join(dirname, tile.coadd_id[:3])
-                        if not os.path.exists(destdir):
-                            try:
-                                os.makedirs(destdir)
-                            except:
-                                pass
-                        dest = os.path.join(destdir, tile.coadd_id)
-                        print('Creating symlink', dest, '->', tiledir)
-                        os.symlink(tiledir, dest, target_is_directory=True)
-                    eargs.append((ie,(wcat, TR[I], band, roiradec, dirname,
-                                      wise_ceres, broadening[band], False)))
+                eptiles = TR[I]
+                eptiles.unwise_dir = np.array([os.path.join(tdir, 'e%03i'%ep)
+                                              for ep in epochs[I,ie]])
+                eargs.append((ie,(wcat, eptiles, band, roiradec,
+                                  wise_ceres, wpixpsf, False)))
 
     # Run the forced photometry!
     record_event and record_event('stage_wise_forced: photometry')
-    phots = mp.map(_unwise_phot, args + [a for ie,a in eargs])
+    phots = mp.map(unwise_phot, args + [a for ie,a in eargs])
     record_event and record_event('stage_wise_forced: results')
 
     # Unpack results...
@@ -3503,25 +3427,19 @@ def stage_wise_forced(
         wise_mask_maps = [np.zeros((H,W), np.uint8),
                           np.zeros((H,W), np.uint8)]
 
-        if unwise_coadds:
-            from legacypipe.survey import wcs_for_brick
-            # Create the WCS into which we'll resample the tiles.  Same center as
-            # "targetwcs" but bigger pixel scale.
-            wpixscale = 2.75
-            wW = int(W * pixscale / wpixscale)
-            wH = int(H * pixscale / wpixscale)
-            unwise_wcs = wcs_for_brick(brick, W=wW, H=wH, pixscale=wpixscale)
-            # images
-            unwise_co  = [np.zeros((wH,wW), np.float32) for band in [1,2,3,4]]
-            unwise_con = [np.zeros((wH,wW), np.uint8)   for band in [1,2,3,4]]
-            # models
-            unwise_com  = [np.zeros((wH,wW), np.float32) for band in [1,2,3,4]]
-            unwise_comn = [np.zeros((wH,wW), np.uint8)   for band in [1,2,3,4]]
+        # In order to handle WISE tile overlaps, keep track of the distance
+        # to the tile center of the current sample values in wise_mask_maps.
+        tiledists = np.empty((H,W), np.float32)
+        tiledists[:,:] = 1e30
 
-        # Look up mask bits
-        ra  = np.array([src.getPosition().ra  for src in cat])
-        dec = np.array([src.getPosition().dec for src in cat])
-        WISE.wise_mask = np.zeros((len(T), 4), np.uint8)
+        if unwise_coadds:
+            from legacypipe.coadds import UnwiseCoadd
+            # Create the WCS into which we'll resample the tiles.
+            # Same center as "targetwcs" but bigger pixel scale.
+            wpixscale = 2.75
+            #wpixscale = pixscale
+            wcoadds = UnwiseCoadd(targetwcs, W, H, pixscale, wpixscale)
+
         for tile in tiles.coadd_id:
             from astrometry.util.util import Tan
             from astrometry.util.resample import resample_with_wcs, OverlapError
@@ -3539,144 +3457,52 @@ def stage_wise_forced(
                 continue
             # read header to pull out WCS (because it's compressed)
             M,hdr = fitsio.read(fn, header=True)
-            wcs = Tan(*[float(hdr[k]) for k in
+            tilewcs = Tan(*[float(hdr[k]) for k in
                         ['CRVAL1', 'CRVAL2', 'CRPIX1', 'CRPIX2',
-                         'CD1_1', 'CD1_2', 'CD2_1','CD2_2','NAXIS2','NAXIS1']])
-            ok,xx,yy = wcs.radec2pixelxy(ra, dec)
-            hh,ww = wcs.get_height(), wcs.get_width()
-            xx = np.round(xx - 1).astype(int)
-            yy = np.round(yy - 1).astype(int)
-            I = np.flatnonzero(ok * (xx >= 0)*(xx < ww) * (yy >= 0)*(yy < hh))
-            #print(len(I), 'sources are within tile', tile)
-            if len(I):
-                # Reference the mask image M at yy,xx indices (source positions)
-                Mi = M[yy[I], xx[I]]
-                # unpack mask bits
-                WISE.wise_mask[I, 0] = collapse_unwise_bitmask(Mi, 1)
-                WISE.wise_mask[I, 1] = collapse_unwise_bitmask(Mi, 2)
-
-            # Resample the whole WISE map to brick coordinates for the
+                         'CD1_1', 'CD1_2', 'CD2_1','CD2_2','NAXIS1','NAXIS2']])
+            # Resample the WISE map to brick coordinates for the
             # "maskbits" data product.
             try:
-                Yo,Xo,Yi,Xi,nil = resample_with_wcs(targetwcs, wcs)
+                Yo,Xo,Yi,Xi,nil = resample_with_wcs(targetwcs, tilewcs)
+                # Compute L_inf distances to tile center
+                cx, cy = tilewcs.crpix
+                dists = np.maximum(np.abs(Xi - (cx-1)), np.abs(Yi - (cy-1)))
+                # Keep pixels with closer distances to their tile centers
+                keep = (dists < tiledists[Yo,Xo])
+                if np.sum(keep) == 0:
+                    raise OverlapError()
+                Yo = Yo[keep]
+                Xo = Xo[keep]
+                Yi = Yi[keep]
+                Xi = Xi[keep]
+                tiledists[Yo,Xo] = dists[keep]
                 maskvals = M[Yi,Xi]
-                # Cut to just pixels with masks set.
-                K = np.nonzero(maskvals)
-                print('Setting', len(K), 'WISE mask bits from tile', tile)
-                if len(K):
-                    Yo = Yo[K]
-                    Xo = Xo[K]
-                    maskvals = maskvals[K]
-
-                    w1mask = collapse_unwise_bitmask(maskvals, 1)
-                    w2mask = collapse_unwise_bitmask(maskvals, 2)
-
-                    wise_mask_maps[0][Yo,Xo] |= w1mask
-                    wise_mask_maps[1][Yo,Xo] |= w2mask
+                print('Setting', len(Yo), 'WISE maskbits pixels from tile',tile)
+                w1mask = collapse_unwise_bitmask(maskvals, 1)
+                w2mask = collapse_unwise_bitmask(maskvals, 2)
+                wise_mask_maps[0][Yo,Xo] = w1mask
+                wise_mask_maps[1][Yo,Xo] = w2mask
             except OverlapError:
                 print('No overlap between WISE tile', tile, 'and brick')
                 pass
 
             if unwise_coadds:
-                gotbands = []
-                imgs = []
-                for band in [1,2,3,4]:
-                    # unwise_dir can be a colon-separated list of paths
-                    found = False
-                    for d in unwise_dir.split(':'):
-                        fn = os.path.join(d, tile[:3], tile,
-                                          'unwise-%s-w%i-img-m.fits' % (tile, band))
-                        print('Looking for unWISE image file', fn)
-                        if os.path.exists(fn):
-                            found = True
-                            break
-                    if not found:
-                        print('unWISE image file for tile', tile, 'does not exist')
-                        continue
-                    imgs.append(fitsio.read(fn))
-                    gotbands.append(band)
-
-                try:
-                    # We're re-using the WCS from the mask file; all the coadd data
-                    # products have identical WCS headers.
-                    Yo,Xo,Yi,Xi,rims = resample_with_wcs(unwise_wcs, wcs, imgs)
-                    for band,rim in zip(gotbands, rims):
-                        unwise_co [band-1][Yo,Xo] += rim
-                        unwise_con[band-1][Yo,Xo] += 1
-                except OverlapError:
-                    print('No overlap between WISE tile', tile, 'and brick')
-                    pass
-
-                # Now the model images.  The forced-photometry routine returns
-                # sub-images and ROIs for the models.
-                gotbands = []
-                imgs = []
-                roi = None
-                for band in [1,2,3,4]:
-                    if not (tile, band) in wise_models:
-                        print('Tile', tile, 'band', band, '-- model not found')
-                        continue
-                    mod,thisroi = wise_models[(tile,band)]
-                    #print('Tile', tile, 'band', band, 'model', mod.shape, 'roi', thisroi)
-                    gotbands.append(band)
-                    imgs.append(mod)
-                    if roi is None:
-                        roi = thisroi
-                    else:
-                        assert(thisroi == roi)
-                #print('ROI:', roi)
-                if roi is None:
-                    continue
-                try:
-                    # Get WCS for this ROI.
-                    rx0,rx1,ry0,ry1 = roi
-                    roiwcs = wcs.get_subimage(rx0, ry0, rx1-rx0, ry1-ry0)
-                    Yo,Xo,Yi,Xi,rims = resample_with_wcs(unwise_wcs, roiwcs, imgs)
-                    for band,rim in zip(gotbands, rims):
-                        unwise_com [band-1][Yo,Xo] += rim
-                        unwise_comn[band-1][Yo,Xo] += 1
-                except OverlapError:
-                    print('No overlap between WISE model tile', tile, 'and brick')
-                    pass
-
+                wcoadds.add(tile, unwise_dir, tilewcs, wise_models)
 
         if unwise_coadds:
-            for band,co,n,com,mn in zip([1,2,3,4], unwise_co, unwise_con,
-                                        unwise_com, unwise_comn):
-                hdr = fitsio.FITSHDR()
-                for r in version_header.records():
-                    hdr.add_record(r)
-                hdr.add_record(dict(name='TELESCOP', value='WISE'))
-                hdr.add_record(dict(name='FILTER', value='W%i' % band,
-                                        comment='WISE band'))
-                unwise_wcs.add_to_header(hdr)
-                hdr.delete('IMAGEW')
-                hdr.delete('IMAGEH')
-                hdr.add_record(dict(name='EQUINOX', value=2000.))
-                hdr.add_record(dict(name='MAGZERO', value=22.5,
-                                        comment='Magnitude zeropoint'))
-                co  /= np.maximum(n, 1)
-                com /= np.maximum(mn, 1)
-                with survey.write_output('image', brick=brickname, band='W%i' % band,
-                                         shape=co.shape) as out:
-                    out.fits.write(co, header=hdr)
-                with survey.write_output('model', brick=brickname, band='W%i' % band,
-                                         shape=com.shape) as out:
-                    out.fits.write(com, header=hdr)
-            del unwise_con
-            del unwise_comn
-            # W1/W2 color jpeg
-            rgb = _unwise_to_rgb(unwise_co[:2])
-            del unwise_co
-            with survey.write_output('wise-jpeg', brick=brickname) as out:
-                imsave_jpeg(out.fn, rgb, origin='lower')
-                print('Wrote', out.fn)
-            rgb = _unwise_to_rgb(unwise_com[:2])
-            del unwise_com
-            with survey.write_output('wisemodel-jpeg', brick=brickname) as out:
-                imsave_jpeg(out.fn, rgb, origin='lower')
-                print('Wrote', out.fn)
-            del rgb
+            wcoadds.finish(survey, brickname, version_header)
+
+        # Look up mask values for sources
+        WISE.wise_mask = np.zeros((len(cat), 4), np.uint8)
+        ra  = np.array([src.getPosition().ra  for src in cat])
+        dec = np.array([src.getPosition().dec for src in cat])
+        ok,xx,yy = targetwcs.radec2pixelxy(ra, dec)
+        xx = np.round(xx - 1).astype(int)
+        yy = np.round(yy - 1).astype(int)
+        I = np.flatnonzero(ok * (xx >= 0)*(xx < W) * (yy >= 0)*(yy < H))
+        if len(I):
+            WISE.wise_mask[I,0] = wise_mask_maps[0][yy[I], xx[I]]
+            WISE.wise_mask[I,1] = wise_mask_maps[1][yy[I], xx[I]]
 
     # Unpack time-resolved results...
     WISE_T = None
@@ -3705,112 +3531,6 @@ def stage_wise_forced(
     print('Returning: WISE_T', WISE_T)
 
     return dict(WISE=WISE, WISE_T=WISE_T, wise_mask_maps=wise_mask_maps)
-
-
-def collapse_unwise_bitmask(bitmask, band):
-    '''
-    Converts WISE mask bits (in the unWISE data products) into the
-    more compact codes reported in the tractor files as
-    WISEMASK_W[12], and the "maskbits" WISE extensions.
-
-    output bits :
-    # 2^0 = bright star core and wings
-    # 2^1 = PSF-based diffraction spike
-    # 2^2 = optical ghost
-    # 2^3 = first latent
-    # 2^4 = second latent
-    # 2^5 = AllWISE-like circular halo
-    # 2^6 = bright star saturation
-    # 2^7 = geometric diffraction spike
-    '''
-    assert((band == 1) or (band == 2))
-    from collections import OrderedDict
-
-    bits_w1 = OrderedDict([('core_wings', 2**0 + 2**1),
-                           ('psf_spike', 2**27),
-                           ('ghost', 2**25 + 2**26),
-                           ('first_latent', 2**13 + 2**14),
-                           ('second_latent', 2**17 + 2**18),
-                           ('circular_halo', 2**23),
-                           ('saturation', 2**4),
-                           ('geom_spike', 2**29)])
-
-    bits_w2 = OrderedDict([('core_wings', 2**2 + 2**3),
-                           ('psf_spike', 2**28),
-                           ('ghost', 2**11 + 2**12),
-                           ('first_latent', 2**15 + 2**16),
-                           ('second_latent', 2**19 + 2**20),
-                           ('circular_halo', 2**24),
-                           ('saturation', 2**5),
-                           ('geom_spike', 2**30)])
-
-    bits = (bits_w1 if (band == 1) else bits_w2)
-
-    # hack to handle both scalar and array inputs
-    result = 0*bitmask
-    for i, feat in enumerate(bits.keys()):
-        result += ((2**i)*(np.bitwise_and(bitmask, bits[feat]) != 0)).astype(np.uint8)
-    return result.astype('uint8')
-
-def _unwise_phot(X):
-    from wise.forcedphot import unwise_forcedphot
-    (wcat, tiles, band, roiradec, unwise_dir, wise_ceres, broadening, get_mods) = X
-    kwargs = dict(roiradecbox=roiradec, bands=[band],
-                  unwise_dir=unwise_dir, psf_broadening=broadening)
-    if get_mods:
-        # This requires a newer version of the tractor code!
-        kwargs.update(get_models=get_mods)
-    try:
-        W = unwise_forcedphot(wcat, tiles, use_ceres=wise_ceres, **kwargs)
-    except:
-        import traceback
-        print('unwise_forcedphot failed:')
-        traceback.print_exc()
-
-        if wise_ceres:
-            print('Trying without Ceres...')
-            try:
-                W = unwise_forcedphot(wcat, tiles, use_ceres=False, **kwargs)
-            except:
-                print('unwise_forcedphot failed (2):')
-                traceback.print_exc()
-                if get_mods:
-                    print('--unwise-coadds requires a newer tractor version...')
-                    kwargs.update(get_models=False)
-                    W = unwise_forcedphot(wcat, tiles, use_ceres=False, **kwargs)
-                    W = W,dict()
-        else:
-            W = None
-    return W
-
-def _unwise_to_rgb(imgs):
-    import numpy as np
-    img = imgs[0]
-    H,W = img.shape
-    ## FIXME
-    w1,w2 = imgs
-    rgb = np.zeros((H, W, 3), np.uint8)
-    scale1 = 50.
-    scale2 = 50.
-    mn,mx = -1.,100.
-    arcsinh = 1.
-    img1 = w1 / scale1
-    img2 = w2 / scale2
-    if arcsinh is not None:
-        def nlmap(x):
-            return np.arcsinh(x * arcsinh) / np.sqrt(arcsinh)
-        mean = (img1 + img2) / 2.
-        I = nlmap(mean)
-        img1 = img1 / mean * I
-        img2 = img2 / mean * I
-        mn = nlmap(mn)
-        mx = nlmap(mx)
-    img1 = (img1 - mn) / (mx - mn)
-    img2 = (img2 - mn) / (mx - mn)
-    rgb[:,:,2] = (np.clip(img1, 0., 1.) * 255).astype(np.uint8)
-    rgb[:,:,0] = (np.clip(img2, 0., 1.) * 255).astype(np.uint8)
-    rgb[:,:,1] = rgb[:,:,0]/2 + rgb[:,:,2]/2
-    return rgb
 
 def stage_writecat(
     survey=None,
@@ -4107,6 +3827,7 @@ def run_brick(brick, survey, radec=None, pixscale=0.262,
               rgb_kwargs=None,
               rex=False,
               splinesky=True,
+              subsky=True,
               constant_invvar=False,
               gaia_stars=False,
               large_galaxies=False,
@@ -4218,6 +3939,8 @@ def run_brick(brick, survey, radec=None, pixscale=0.262,
     
     - *splinesky*: boolean; use the splined sky model (default is constant)?
 
+    - *subsky*: boolean; subtract the sky model when reading in tims (tractor images)?
+    
     - *ceres*: boolean; use Ceres Solver when possible?
 
     - *wise_ceres*: boolean; use Ceres Solver for unWISE forced photometry?
@@ -4322,6 +4045,7 @@ def run_brick(brick, survey, radec=None, pixscale=0.262,
                   constant_invvar=constant_invvar,
                   depth_cut=depth_cut,
                   splinesky=splinesky,
+                  subsky=subsky,
                   gaia_stars=gaia_stars,
                   large_galaxies=large_galaxies,
                   min_mjd=min_mjd, max_mjd=max_mjd,

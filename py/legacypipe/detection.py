@@ -15,6 +15,7 @@ def _detmap(X):
     psfnorm = 1./(2. * np.sqrt(np.pi) * tim.psf_sigma)
     ie = tim.getInvvar()
     detim = tim.getImage().copy()
+    tim.getSky().addTo(detim, scale=-1.)
     detim = gaussian_filter(detim, tim.psf_sigma) / psfnorm**2
     detsig1 = tim.sig1 / psfnorm
     subh,subw = tim.shape

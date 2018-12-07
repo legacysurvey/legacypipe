@@ -168,14 +168,21 @@ def ps1_to_90prime(psmags, band):
     gmag = psmags[:, g_index]
     imag = psmags[:, i_index]
     gi = gmag - imag
-    # July 22, 2016
-    # https://desi.lbl.gov/trac/wiki/BokLegacy/Photometric
+    # 15 Nov 2018
+    # https://desi.lbl.gov/trac/wiki/ImagingStandardBandpass
     coeffs = dict(
-        g = [0.0, +0.06630, +0.00958, -0.00672],
-        r = [0.0, -0.04836, +0.01100, -0.00563])[band]
+        g = [-0.00464, -0.08672,  0.00668,  0.00255],
+        r = [-0.00110,  0.06875, -0.02480,  0.00855])[band]
+        # Old version, from
+        # July 22, 2016
+        # https://desi.lbl.gov/trac/wiki/BokLegacy/Photometric
+        #g = [0.0, +0.06630, +0.00958, -0.00672],
+        #r = [0.0, -0.04836, +0.01100, -0.00563])[band]
+        #Even older version.
         #g = [0.0, +0.08612, -0.00392, -0.00393],
         #r = [0.0, -0.07831, +0.03304, -0.01027])[band]
-    colorterm = (coeffs[0] + coeffs[1]*gi + coeffs[2]*gi**2 + coeffs[3]*gi**3)
+        # Note older versions used opposite sign.
+    colorterm = -(coeffs[0] + coeffs[1]*gi + coeffs[2]*gi**2 + coeffs[3]*gi**3)
     print('Using 90prime ColorTerm')
     return colorterm
     
@@ -189,9 +196,13 @@ def ps1_to_mosaic(psmags, band):
     gmag = psmags[:, g_index]
     imag = psmags[:, i_index]
     gi = gmag - imag
-    # Average color term for Mosaic3 
+    # Average color term for Mosaic3
+    # 15 Nov 2018
+    # https://desi.lbl.gov/trac/wiki/ImagingStandardBandpass
+    coeffs = dict(z = [-0.03664,  0.11084, -0.04477,  0.01223])[band]
+    # Old version from
     # https://desi.lbl.gov/trac/wiki/MayallZbandLegacy/CPReductions
-    coeffs = dict(z = [0.0, 0.121315, -0.046082623, 0.011642475])[band]
+    #coeffs = dict(z = [0.0, 0.121315, -0.046082623, 0.011642475])[band]
 
     colorterm = -(coeffs[0] + coeffs[1]*gi + coeffs[2]*gi**2 + coeffs[3]*gi**3)
     print('Using Mosaic3 ColorTerm')
