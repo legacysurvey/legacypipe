@@ -1205,7 +1205,7 @@ Now using the current directory as LEGACY_SURVEY_DIR, but this is likely to fail
             return swap(
                 os.path.join(codir, '%s-%s-%s.jpg' % (sname, brick, ty)))
 
-        elif filetype in ['invvar', 'chi2', 'image', 'model', 'depth', 'galdepth', 'nexp']:
+        elif filetype in ['invvar', 'chi2', 'image', 'model', 'depth', 'galdepth', 'nexp', 'psfsize']:
             return swap(os.path.join(codir, '%s-%s-%s-%s.fits.fz' %
                                      (sname, brick, filetype,band)))
 

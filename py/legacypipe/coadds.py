@@ -189,9 +189,6 @@ def make_coadds(tims, bands, targetwcs,
     # always, for patching SATUR, etc pixels?
     unweighted=True
 
-    if not xy:
-        psfsize = False
-
     C.coimgs = []
     # the pixelwise inverse-variances (weights) of the "coimgs".
     C.cowimgs = []
@@ -331,6 +328,7 @@ def make_coadds(tims, bands, targetwcs,
 
         if psfsize:
             psfsizemap = np.zeros((H,W), np.float32)
+            kwargs.update(psfsize=psfsizemap)
 
         for R in timiter:
             if R is None:
@@ -580,7 +578,6 @@ def make_coadds(tims, bands, targetwcs,
             # Conversion factor to FWHM (2.35)
             sz *= 2. * np.sqrt(2. * np.log(2.))
             C.T.psfsize[:,iband] = sz
-            del psfsizemap
 
         if apertures is not None:
             # Aperture photometry, using the unweighted "coimg" and
@@ -756,7 +753,8 @@ def _apphot_one(args):
 def write_coadd_images(band,
                        survey, brickname, version_header, tims, targetwcs,
                        cowimg=None, cow=None, cowmod=None, cochi2=None,
-                       psfdetiv=None, galdetiv=None, congood=None, **kwargs):
+                       psfdetiv=None, galdetiv=None, congood=None,
+                       psfsize=None, **kwargs):
 
     # copy version_header before modifying...
     hdr = fitsio.FITSHDR()
@@ -810,17 +808,13 @@ def write_coadd_images(band,
         ('invvar', 'wtmap', cow   ),
         ]
     if congood is not None:
-        imgs.append(
-            ('nexp',   'expmap',   congood),
-            )
+        imgs.append(('nexp',   'expmap',   congood))
     if psfdetiv is not None:
-        imgs.extend([
-                ('depth', 'psfdepth', psfdetiv),
-                ])
+        imgs.append(('depth', 'psfdepth', psfdetiv))
     if galdetiv is not None:
-        imgs.extend([
-                ('galdepth', 'galdepth', galdetiv),
-                ])
+        imgs.append(('galdepth', 'galdepth', galdetiv))
+    if psfsize is not None:
+        imgs.append(('psfsize', 'psfsize', psfsize))
     if cowmod is not None:
         imgs.extend([
                 ('model', 'model', cowmod),
@@ -848,6 +842,9 @@ def write_coadd_images(band,
         if name in ['invvar', 'depth', 'galdepth']:
             hdr2.add_record(dict(name='BUNIT', value='1/nanomaggy^2',
                                  comment='Ivar of ABmag=22.5-2.5*log10(nmgy)'))
+        if name in ['psfsize']:
+            hdr2.add_record(dict(name='BUNIT', value='arcsec',
+                                 comment='Effective PSF size'))
 
         # print('Image type', prodtype, '/', name, ':')
         # print('  ', np.sum(img < 0), 'pixels < 0')
