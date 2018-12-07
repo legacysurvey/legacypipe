@@ -859,8 +859,6 @@ def stage_mask_junk(tims=None, targetwcs=None, W=None, H=None, bands=None,
         
     badcoadds = []
     realbadcoadds = []
-
-    #per_band_summary = []
     
     from scipy.ndimage.morphology import binary_dilation
     for iband,band in enumerate(bands):
@@ -888,19 +886,14 @@ def stage_mask_junk(tims=None, targetwcs=None, W=None, H=None, bands=None,
             from astrometry.util.miscutils import patch_image
             from scipy.ndimage.filters import gaussian_filter
             from astrometry.util.resample import resample_with_wcs,OverlapError
-            patched = tim.getImage().copy()
-            okpix = (tim.getInvError() > 0)
-            # ??? or try to patch from other images??
-            patch_image(patched, okpix)
-            del okpix
-            patched = gaussian_filter(patched, sig)
+            img = gaussian_filter(tim.getImage(), sig)
             try:
                 Yo,Xo,Yi,Xi,[rimg] = resample_with_wcs(
-                    targetwcs, tim.subwcs, [patched], 3)
+                    targetwcs, tim.subwcs, [img], 3)
             except OverlapError:
                 resams.append(None)
                 continue
-
+            del img
             wt = tim.getInvvar()[Yi,Xi]
             blurnorm = 1./(2. * np.sqrt(np.pi) * sig)
             print('Blurring "psf" norm', blurnorm)
@@ -1280,10 +1273,7 @@ def stage_mask_junk(tims=None, targetwcs=None, W=None, H=None, bands=None,
         badcoadds.append(badcoadd / np.maximum(badcon, 1))
         realbadcoadds.append(realbadcoadd / np.maximum(realbadcon, 1))
 
-        #per_band_summary.append((band, maxsns, maxrels, outlier_slices))
-        #for iband,(band,maxsns,maxrels,outlier_slices) in enumerate(per_band_summary):
         if plots:
-
             for zoom in [False, True]:
                 plt.clf()
                 plt.plot(maxsns, np.abs(maxrels), 'b.')
