@@ -877,6 +877,24 @@ def stage_mask_junk(tims=None, targetwcs=None, W=None, H=None, bands=None,
 
     record_event and record_event('stage_mask_junk: starting')
 
+    # Patch individual-CCD masked pixels from a coadd
+    C = make_coadds(tims, bands, targetwcs)
+    ibands = dict([(b,i) for i,b in enumerate(bands)])
+    for tim in tims:
+        ie = tim.getInvvar()
+        img = tim.getImage()
+        if np.any(ie == 0):
+            # Patch from the coadd
+            co = C.coimgs[iband[tim.band]]
+            # resample from coadd to img -- nearest-neighbour
+            try:
+                yo,xo,yi,xi,nil = resample_with_wcs(tim.subwcs, targetwcs, [])
+                I, = np.nonzero(ie[yo,xo] == 0)
+                if len(I):
+                    img[yo[I],xo[I]] = coimg[yi[I],xi[I]]
+            except OverlapError:
+                print('No overlap')
+
     if plots:
         coimgs,cons = quick_coadds(tims, bands, targetwcs, fill_holes=False)
         plt.clf()
