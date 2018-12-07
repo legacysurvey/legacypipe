@@ -60,9 +60,6 @@ def detection_maps(tims, targetwcs, bands, mp, apodize=None):
     H,W = np.int(H), np.int(W)
     ibands = dict([(b,i) for i,b in enumerate(bands)])
 
-    #from astrometry.util.plotutils import PlotSequence, dimshow
-    #psb = dict([(b, PlotSequence('detmap-%s' % b)) for b in bands])
-
     # Patch images from the coadd
     C = make_coadds(tims, bands, targetwcs)
 
@@ -78,58 +75,8 @@ def detection_maps(tims, targetwcs, bands, mp, apodize=None):
         detivs [ib][Yo,Xo] += inciv
         if sat is not None:
             satmaps[ib][Yo,Xo] |= sat
-
-        # plotmap = np.zeros_like(detmaps[0])
-        # plotmap[Yo,Xo] = incmap
-        # plotiv = np.zeros_like(detmaps[0])
-        # plotiv[Yo,Xo] = inciv
-        # plt.clf()
-        # plt.subplot(2,3,1)
-        # dimshow(plotmap, vmin=-0.1, vmax=10)
-        # plt.subplot(2,3,2)
-        # dimshow(plotiv, vmin=0)
-        # plt.subplot(2,3,4)
-        # dm = detmaps[ib] / np.maximum(1e-16, detivs[ib])
-        # #dimshow(dm, vmin=-0.1, vmax=10)
-        # dimshow(np.log10(np.maximum(0.1, dm)))
-        # plt.title('acc signal')
-        # plt.subplot(2,3,5)
-        # dimshow(detivs[ib], vmin=0)
-        # plt.title('acc weight')
-        # plt.subplot(2,3,6)
-        # dimshow(np.log10(np.maximum(1, dm * np.sqrt(np.maximum(1e-16, detivs[ib]))))) #, vmin=0, vmax=10)
-        # plt.title('acc S/N')
-        # plt.suptitle(tim.name)
-        # psb[tim.band].savefig()
-
     for i,(detmap,detiv) in enumerate(zip(detmaps, detivs)):
         detmap /= np.maximum(1e-16, detiv)
-
-        # plt.clf()
-        # dimshow(np.log10(np.maximum(1, detmap)))
-        # plt.title('Detmap %s' % bands[i])
-        # psb[bands[i]].savefig()
-        # 
-        # plt.clf()
-        # dimshow(detiv)
-        # plt.title('Detiv %s' % bands[i])
-        # psb[bands[i]].savefig()
-        # 
-        # plt.clf()
-        # dimshow(np.log10(np.maximum(1, detmap * np.sqrt(detiv))))
-        # plt.title('Det S/N %s' % bands[i])
-        # psb[bands[i]].savefig()
-        # 
-        # plt.clf()
-        # sn = detmap * np.sqrt(detiv)
-        # plt.plot(sn[200,:], 'k-')
-        # plt.plot(sn[250,:], 'r-')
-        # plt.plot(sn[300,:], 'b-')
-        # plt.title('Det S/N slices %s' % bands[i])
-        # plt.yscale('symlog')
-        # plt.axhline(6., color='k')
-        # psb[bands[i]].savefig()
-
     return detmaps, detivs, satmaps
 
 def sed_matched_filters(bands):
