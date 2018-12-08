@@ -1301,7 +1301,7 @@ def stage_mask_junk(tims=None, targetwcs=None, W=None, H=None, bands=None,
                 hdr.add_record(dict(name='X0', value=tim.x0))
                 hdr.add_record(dict(name='Y0', value=tim.y0))
                 with survey.write_output('outliers_mask', brick=brickname,
-                                         camera=tim.imobj.camera, expnum=tim.imobj.expnum, ccdname=tim.imobj.ccdname) as out:
+                                              camera=tim.imobj.camera.strip(), expnum=tim.imobj.expnum, ccdname=tim.imobj.ccdname.strip()) as out:
                     out.fits.write(maskedpix, header=hdr)
 
         badcoadds.append(badcoadd / np.maximum(badcon, 1))
