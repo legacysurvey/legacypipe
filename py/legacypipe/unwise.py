@@ -88,7 +88,25 @@ def unwise_forcedphot(cat, tiles, band=1, roiradecbox=None,
             plt.xlabel('Per-pixel intensity (Sigma)')
             plt.title(tag)
             ps.savefig()
-            
+
+        # Floor the per-pixel variances
+        if band in [1,2]:
+            # in Vega nanomaggies per pixel
+            floor_sigma = {1: 0.5, 2: 2.0}
+            with np.errstate(divide='ignore'):
+                new_ie = 1. / np.sqrt((1./tim.inverr)**2 + floor_sigma[band]**2)
+            new_ie[tim.inverr == 0] = 0.
+
+            if plots:
+                plt.clf()
+                plt.plot(tim.inverr.ravel(), new_ie.ravel(), 'b.')
+                plt.title('unWISE Inverse-error: %s band %i' % (tile.coadd_id, band))
+                plt.xlabel('original')
+                plt.ylabel('floored')
+                ps.savefig()
+
+            tim.inverr = new_ie
+
         # The tiles have some overlap, so zero out pixels outside the
         # tile's unique area.
         th,tw = tim.shape
