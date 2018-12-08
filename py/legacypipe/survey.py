@@ -1173,6 +1173,7 @@ Now using the current directory as LEGACY_SURVEY_DIR, but this is likely to fail
             nexp   = '[compress H %i,%i]',
             depth  = '[compress G %i,%i; qz 0]',
             galdepth = '[compress G %i,%i; qz 0]',
+            psfsize = '[compress G %i,%i; qz 0]',
         ).get(filetype)
         if pat is None:
             return pat
