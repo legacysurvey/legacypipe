@@ -328,6 +328,9 @@ def make_coadds(tims, bands, targetwcs,
 
         if psfsize:
             psfsizemap = np.zeros((H,W), np.float32)
+            # like "cow", but constant invvar per-CCD;
+            # only required for psfsizemap
+            flatcow = np.zeros((H,W), np.float32)
             kwargs.update(psfsize=psfsizemap)
 
         for R in timiter:
@@ -475,7 +478,12 @@ def make_coadds(tims, bands, targetwcs,
                 neff = 1./tim.psfnorm**2
                 # Narcsec is in arcsec**2
                 narcsec = neff * tim.wcs.pixel_scale()**2
-                psfsizemap[Yo,Xo] += iv * (1. / narcsec)
+                # Make smooth maps -- don't ignore CRs, saturated pix, etc
+                #psfsizemap[Yo,Xo] += (iv>0) * (1/tim.sig1**2) * (1. / narcsec)
+                #flatcow[Yo,Xo] += (iv>0) * (1/tim.sig1**2)
+                iv1 = 1./tim.sig1**2
+                psfsizemap[Yo,Xo] += iv1 * (1. / narcsec)
+                flatcow   [Yo,Xo] += iv1
 
             if detmaps:
                 # point-source depth
@@ -565,19 +573,18 @@ def make_coadds(tims, bands, targetwcs,
                 C.T.galdepth[:,iband] = galdetiv[iy, ix]
 
         if psfsize:
-            wt = cow[iy,ix]
-            # psfsizemap is in units of iv * (1 / arcsec**2)
-            sz = psfsizemap[iy,ix]
-            sz /= np.maximum(wt, tinyw)
-            sz[wt == 0] = 0.
-            # Back to units of linear arcsec.
-            sz = 1. / np.sqrt(sz)
-            sz[wt == 0] = 0.
+            # psfsizemap is accumulated in units of iv * (1 / arcsec**2)
+            # take out the weighting
+            psfsizemap /= np.maximum(flatcow, tinyw)
             # Correction factor to get back to equivalent of Gaussian sigma
-            sz /= (2. * np.sqrt(np.pi))
+            tosigma = 1./(2. * np.sqrt(np.pi))
             # Conversion factor to FWHM (2.35)
-            sz *= 2. * np.sqrt(2. * np.log(2.))
-            C.T.psfsize[:,iband] = sz
+            tofwhm = 2. * np.sqrt(2. * np.log(2.))
+            # Scale back to units of linear arcsec.
+            psfsizemap[:,:] = (1. / np.sqrt(psfsizemap)) * tosigma * tofwhm
+            psfsizemap[flatcow == 0] = 0.
+            if xy:
+                C.T.psfsize[:,iband] = psfsizemap[iy,ix]
 
         if apertures is not None:
             # Aperture photometry, using the unweighted "coimg" and
