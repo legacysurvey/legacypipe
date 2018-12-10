@@ -1,5 +1,6 @@
+import os
 import numpy as np
-
+import fitsio
 from astrometry.util.fits import fits_table
 from astrometry.util.ttime import Time
 
@@ -47,7 +48,7 @@ def unwise_forcedphot(cat, tiles, band=1, roiradecbox=None,
 
     Nsrcs = len(cat)
     phot = fits_table()
-    phot.tile = np.array(['        '] * Nsrcs)
+    phot.wise_coadd_id = np.array(['        '] * Nsrcs)
 
     ra  = np.array([src.getPosition().ra  for src in cat])
     dec = np.array([src.getPosition().dec for src in cat])
@@ -120,7 +121,8 @@ def unwise_forcedphot(cat, tiles, band=1, roiradecbox=None,
                                   'unwise-%s-msk.fits.gz' % tile.coadd_id)
                 print('Looking for unWISE mask file', fn)
                 if os.path.exists(fn):
-                    tilemask = fitsio.FITS(fn)[tim.roi]
+                    x0,x1,y0,y1 = tim.roi
+                    tilemask = fitsio.FITS(fn)[0][y0:y1,x0:x1]
                     break
             if tilemask is None:
                 print('unWISE mask file for tile', tile.coadd_id, 'does not exist')
@@ -175,7 +177,7 @@ def unwise_forcedphot(cat, tiles, band=1, roiradecbox=None,
         nexp[I] = tim.nuims[y[I], x[I]]
         if hasattr(tim, 'mjdmin') and hasattr(tim, 'mjdmax'):
             mjd[I] = (tim.mjdmin + tim.mjdmax) / 2.
-        phot.tile[I] = tim.tile
+        phot.wise_coadd_id[I] = tile.coadd_id
         central_flux[I] = tim.getImage()[y[I], x[I]]
         del x,y,good,usrc
         
@@ -297,7 +299,6 @@ def unwise_forcedphot(cat, tiles, band=1, roiradecbox=None,
             fitstats[k] = np.array(x).astype(np.float32)
 
     if save_fits:
-        import fitsio
         for i,tim in enumerate(tims):
             tile = tim.tile
             (dat, mod, ie, chi, roi) = ims1[i]
@@ -401,7 +402,7 @@ def unwise_forcedphot(cat, tiles, band=1, roiradecbox=None,
     if get_models:
         rtn.models = models
     if get_masks:
-        rtn.maskmap = masks
+        rtn.maskmap = maskmap
     return rtn
 
 class wphotduck(object):

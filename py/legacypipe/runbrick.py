@@ -3327,27 +3327,24 @@ def stage_wise_forced(
 
     # Unpack results...
     WISE = None
-    if len(phots):
-        if unwise_coadds:
-            WISE,wise_models = phots[0]
-        else:
-            WISE = phots[0]
-
     wise_mask_maps = None
-    if WISE is not None:
+    if len(phots):
         # The "phot" results for the full-depth coadds are one table per
         # band.  Merge all those columns.
-        for i,p in enumerate(phots[1:len(args)]):
+        wise_models = {}
+        for i,p in enumerate(phots[:len(args)]):
             if p is None:
                 (wcat,tiles,band) = args[i+1][:3]
                 print('"None" result from WISE forced phot:', tiles, band)
                 continue
             if unwise_coadds:
                 wise_models.update(p.models)
-            if rtn.maskmap is not None:
+            if p.maskmap is not None:
                 wise_mask_maps = p.maskmap
-            WISE.add_columns_from(p.phot)
-        WISE.rename('tile', 'wise_coadd_id')
+            if WISE is None:
+                WISE = p.phot
+            else:
+                WISE.add_columns_from(p.phot)
 
         if wise_mask_maps is not None:
             wise_mask_maps = [
@@ -3383,14 +3380,15 @@ def stage_wise_forced(
     if WISE_T is not None:
         WISE_T = fits_table()
         phots = phots[len(args):]
-        for (ie,a),phot in zip(eargs, phots):
+        for (ie,a),r in zip(eargs, phots):
             print('Epoch', ie, 'photometry:')
-            if phot is None:
+            if r is None:
                 print('Failed.')
                 continue
             assert(ie < Nepochs)
+            phot = r.phot
             phot.about()
-            phot.delete_column('tile')
+            phot.delete_column('wise_coadd_id')
             for c in phot.columns():
                 if not c in WISE_T.columns():
                     x = phot.get(c)
