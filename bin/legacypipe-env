@@ -22,6 +22,10 @@ export GAIA_CAT_VER=2
 export TYCHO2_KD_DIR=/global/project/projectdirs/cosmo/staging/tycho2
 export LARGEGALAXIES_DIR=/global/project/projectdirs/cosmo/staging/largegalaxies/v2.0
 
+UNWISE_PSF_DIR=/global/project/projectdirs/cosmo/staging/unwise_psf/2018-11-25
+export WISE_PSF_DIR=${UNWISE_PSF_DIR}/etc
+export PYTHONPATH=${PYTHONPATH}:${UNWISE_PSF_DIR}/py
+
 export PS1CAT_DIR=/global/project/projectdirs/cosmo/work/ps1/cats/chunks-qz-star-v3/
 
 # desiconda
