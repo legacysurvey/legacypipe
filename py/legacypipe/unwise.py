@@ -94,13 +94,13 @@ def unwise_forcedphot(cat, tiles, band=1, roiradecbox=None,
             # in Vega nanomaggies per pixel
             floor_sigma = {1: 0.5, 2: 2.0}
             with np.errstate(divide='ignore'):
-                new_ie = 1. / np.sqrt((1./tim.inverr)**2 + floor_sigma[band]**2)
+                new_ie = 1. / np.hypot(1./tim.inverr, floor_sigma[band])
             new_ie[tim.inverr == 0] = 0.
 
             if plots:
                 plt.clf()
-                plt.plot(tim.inverr.ravel(), new_ie.ravel(), 'b.')
-                plt.title('unWISE Inverse-error: %s band %i' % (tile.coadd_id, band))
+                plt.plot((1. / tim.inverr[tim.inverr>0]).ravel(), (1./new_ie[tim.inverr>0]).ravel(), 'b.')
+                plt.title('unWISE per-pixel error: %s band %i' % (tile.coadd_id, band))
                 plt.xlabel('original')
                 plt.ylabel('floored')
                 ps.savefig()
