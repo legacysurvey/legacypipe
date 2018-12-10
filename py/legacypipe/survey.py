@@ -472,7 +472,7 @@ def get_dependency_versions(unwise_dir, unwise_tr_dir):
     depvers.append(('fitsio', os.path.dirname(fitsio.__file__)))
 
     # Get additional paths from environment variables
-    for dep in ['TYCHO2_KD', 'GAIA_CAT', 'LARGEGALAXIES']:
+    for dep in ['TYCHO2_KD', 'GAIA_CAT', 'LARGEGALAXIES', 'WISE_PSF']:
         value = os.environ.get('%s_DIR' % dep, default_ver)
         if value == default_ver:
             print('Warning: failed to get version string for "%s"' % dep)
