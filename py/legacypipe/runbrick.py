@@ -3240,15 +3240,11 @@ def stage_wise_forced(
 
     record_event and record_event('stage_wise_forced: starting')
 
-    # Here we assume the targetwcs is axis-aligned and that the
-    # edge midpoints yield the RA,Dec limits (true for TAN).
-    r,d = targetwcs.pixelxy2radec(np.array([1,   W,   W/2, W/2]),
-                                  np.array([H/2, H/2, 1,   H  ]))
-    # the way the roiradec box is used, the min/max order doesn't matter
-    roiradec = [r[0], r[1], d[2], d[3]]
-
     tiles = unwise_tiles_touching_wcs(targetwcs)
     print('Cut to', len(tiles), 'unWISE tiles')
+
+    # the way the roiradec box is used, the min/max order doesn't matter
+    roiradec = [brick.ra1, brick.ra2, brick.dec1, brick.dec2]
 
     wcat = []
     for src in cat:
@@ -3256,7 +3252,7 @@ def stage_wise_forced(
         src.setBrightness(NanoMaggies(w=1.))
         wcat.append(src)
 
-    # use Aaron's WISE pixelized PSF model?
+    # use Aaron's WISE pixelized PSF model (unwise_psf repository)?
     wpixpsf = True
     
     # Create list of groups-of-tiles to photometer
@@ -3266,8 +3262,9 @@ def stage_wise_forced(
         wtiles = tiles.copy()
         wtiles.unwise_dir = np.array([unwise_dir]*len(tiles))
         for band in [1,2,3,4]:
+            get_masks = targetwcs if (band == 1) else None
             args.append((wcat, wtiles, band, roiradec,
-                         wise_ceres, wpixpsf, unwise_coadds))
+                         wise_ceres, wpixpsf, unwise_coadds, get_masks))
 
     # Add time-resolved WISE coadds
     # Skip if $UNWISE_COADDS_TIMERESOLVED_DIR or --unwise-tr-dir not set.
@@ -3321,7 +3318,7 @@ def stage_wise_forced(
                 eptiles.unwise_dir = np.array([os.path.join(tdir, 'e%03i'%ep)
                                               for ep in epochs[I,ie]])
                 eargs.append((ie,(wcat, eptiles, band, roiradec,
-                                  wise_ceres, wpixpsf, False)))
+                                  wise_ceres, wpixpsf, False, None)))
 
     # Run the forced photometry!
     record_event and record_event('stage_wise_forced: photometry')
@@ -3341,88 +3338,34 @@ def stage_wise_forced(
         # The "phot" results for the full-depth coadds are one table per
         # band.  Merge all those columns.
         for i,p in enumerate(phots[1:len(args)]):
-            if unwise_coadds:
-                p,mods = p
-                wise_models.update(mods)
             if p is None:
                 (wcat,tiles,band) = args[i+1][:3]
                 print('"None" result from WISE forced phot:', tiles, band)
                 continue
-            WISE.add_columns_from(p)
+            if unwise_coadds:
+                wise_models.update(p.models)
+            if rtn.maskmap is not None:
+                wise_mask_maps = p.maskmap
+            WISE.add_columns_from(p.phot)
         WISE.rename('tile', 'wise_coadd_id')
 
-        # While we're here, we'll resample the WISE masks into brick
-        # space, for later packing into the maskbits data product.
-        wise_mask_maps = [np.zeros((H,W), np.uint8),
-                          np.zeros((H,W), np.uint8)]
-
-        # In order to handle WISE tile overlaps, keep track of the distance
-        # to the tile center of the current sample values in wise_mask_maps.
-        tiledists = np.empty((H,W), np.float32)
-        tiledists[:,:] = 1e30
+        if wise_mask_maps is not None:
+            wise_mask_maps = [
+                collapse_unwise_bitmask(wise_mask_maps, 1),
+                collapse_unwise_bitmask(wise_mask_maps, 2)]
 
         if unwise_coadds:
             from legacypipe.coadds import UnwiseCoadd
             # Create the WCS into which we'll resample the tiles.
             # Same center as "targetwcs" but bigger pixel scale.
             wpixscale = 2.75
-            #wpixscale = pixscale
             wcoadds = UnwiseCoadd(targetwcs, W, H, pixscale, wpixscale)
-
-        for tile in tiles.coadd_id:
-            from astrometry.util.util import Tan
-            from astrometry.util.resample import resample_with_wcs, OverlapError
-            # unwise_dir can be a colon-separated list of paths
-            found = False
-            for d in unwise_dir.split(':'):
-                fn = os.path.join(d, tile[:3], tile,
-                                  'unwise-%s-msk.fits.gz' % tile)
-                print('Looking for unWISE mask file', fn)
-                if os.path.exists(fn):
-                    found = True
-                    break
-            if not found:
-                print('unWISE mask file for tile', tile, 'does not exist')
-                continue
-            # read header to pull out WCS (because it's compressed)
-            M,hdr = fitsio.read(fn, header=True)
-            tilewcs = Tan(*[float(hdr[k]) for k in
-                        ['CRVAL1', 'CRVAL2', 'CRPIX1', 'CRPIX2',
-                         'CD1_1', 'CD1_2', 'CD2_1','CD2_2','NAXIS1','NAXIS2']])
-            # Resample the WISE map to brick coordinates for the
-            # "maskbits" data product.
-            try:
-                Yo,Xo,Yi,Xi,nil = resample_with_wcs(targetwcs, tilewcs)
-                # Compute L_inf distances to tile center
-                cx, cy = tilewcs.crpix
-                dists = np.maximum(np.abs(Xi - (cx-1)), np.abs(Yi - (cy-1)))
-                # Keep pixels with closer distances to their tile centers
-                keep = (dists < tiledists[Yo,Xo])
-                if np.sum(keep) == 0:
-                    raise OverlapError()
-                Yo = Yo[keep]
-                Xo = Xo[keep]
-                Yi = Yi[keep]
-                Xi = Xi[keep]
-                tiledists[Yo,Xo] = dists[keep]
-                maskvals = M[Yi,Xi]
-                print('Setting', len(Yo), 'WISE maskbits pixels from tile',tile)
-                w1mask = collapse_unwise_bitmask(maskvals, 1)
-                w2mask = collapse_unwise_bitmask(maskvals, 2)
-                wise_mask_maps[0][Yo,Xo] = w1mask
-                wise_mask_maps[1][Yo,Xo] = w2mask
-            except OverlapError:
-                print('No overlap between WISE tile', tile, 'and brick')
-                pass
-
-            if unwise_coadds:
-                wcoadds.add(tile, unwise_dir, tilewcs, wise_models)
-
-        if unwise_coadds:
+            for tile in tiles.coadd_id:
+                wcoadds.add(tile, wise_models)
             wcoadds.finish(survey, brickname, version_header)
 
         # Look up mask values for sources
-        WISE.wise_mask = np.zeros((len(cat), 4), np.uint8)
+        WISE.wise_mask = np.zeros((len(cat), 2), np.uint8)
         ra  = np.array([src.getPosition().ra  for src in cat])
         dec = np.array([src.getPosition().dec for src in cat])
         ok,xx,yy = targetwcs.radec2pixelxy(ra, dec)
@@ -3437,7 +3380,6 @@ def stage_wise_forced(
     WISE_T = None
     if len(phots) > len(args):
         WISE_T = True
-    #print('WISE_T:', WISE_T)
     if WISE_T is not None:
         WISE_T = fits_table()
         phots = phots[len(args):]

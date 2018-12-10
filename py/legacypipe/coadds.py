@@ -26,87 +26,44 @@ class UnwiseCoadd(object):
         # models
         self.unwise_com  = [np.zeros((self.wH,self.wW), np.float32)
                             for band in [1,2,3,4]]
-        self.unwise_comn = [np.zeros((self.wH,self.wW), np.uint16)
-                            for band in [1,2,3,4]]
 
-    def add(self, tile, unwise_dir, tilewcs, wise_models):
+    def add(self, tile, wise_models):
         gotbands = []
         imgs = []
-        for band in [1,2,3,4]:
-            # unwise_dir can be a colon-separated list of paths
-            found = False
-            for d in unwise_dir.split(':'):
-                fn = os.path.join(d, tile[:3], tile,
-                                  'unwise-%s-w%i-img-m.fits' % (tile, band))
-                print('Looking for unWISE image file', fn)
-                if os.path.exists(fn):
-                    found = True
-                    break
-            if not found:
-                print('unWISE image file for tile', tile, 'does not exist')
-                continue
-            img = fitsio.read(fn)
-            assert(tilewcs.shape == img.shape)
-            imgs.append(img)
-            gotbands.append(band)
-        try:
-            # We're re-using the WCS from the mask file; all the coadd data
-            # products have identical WCS headers.
-            Yo,Xo,Yi,Xi,rims = resample_with_wcs(self.unwise_wcs, tilewcs, imgs)
-            print('Adding', len(Yo), 'pixels from tile', tile, 'to coadd')
-            for band,rim in zip(gotbands, rims):
-                self.unwise_co [band-1][Yo,Xo] += rim
-                self.unwise_con[band-1][Yo,Xo] += 1
-
-                print('Band', band, ': now', np.sum(self.unwise_con[band-1]>0), 'pixels are set in image coadd')
-                print('Average value:', np.mean((self.unwise_co[band-1] / np.maximum(self.unwise_con[band-1], 1))[self.unwise_con[band-1]>0]))
-
-        except OverlapError:
-            print('No overlap between WISE tile', tile, 'and brick')
-            return
-        # Now the model images.  The forced-photometry routine returns
-        # sub-images and ROIs for the models.
-        gotbands = []
-        imgs = []
-        roi = None
+        mods = []
+        tilewcs = None
         for band in [1,2,3,4]:
             if not (tile, band) in wise_models:
                 print('Tile', tile, 'band', band, '-- model not found')
                 continue
-            mod,thisroi = wise_models[(tile,band)]
-            print('Tile', tile, 'band', band, 'model', mod.shape,
-                  'roi', thisroi)
+
+            # In order to only call resample_with_wcs once, we're going to assume the
+            # WCSes for all bands are equal.
+            (mod, img, roi, wcs) = wise_models[(tile, band)]
+            imgs.append(img)
+            mods.append(mod)
             gotbands.append(band)
-            imgs.append(mod)
-            if roi is None:
-                roi = thisroi
-            else:
-                assert(thisroi == roi)
-        if roi is None:
-            return
+            tilewcs = wcs
+
         try:
-            # Get WCS for this ROI.
-            rx0,rx1,ry0,ry1 = roi
-            roiwcs = tilewcs.get_subimage(rx0, ry0, rx1-rx0, ry1-ry0)
-            print('ROI WCS shape:', roiwcs.shape)
-            print('Image shapes:', [img.shape for img in imgs])
-            Yo,Xo,Yi,Xi,rims = resample_with_wcs(self.unwise_wcs, roiwcs, imgs)
-            for band,rim in zip(gotbands, rims):
-                self.unwise_com [band-1][Yo,Xo] += rim
-                self.unwise_comn[band-1][Yo,Xo] += 1
+            Yo,Xo,Yi,Xi,resam = resample_with_wcs(self.unwise_wcs, tilewcs, imgs + mods)
+            rimgs = resam[:len(gotbands)]
+            rmods = resam[len(gotbands):]
 
-                print('Band', band, ': now', np.sum(self.unwise_comn[band-1]>0), 'pixels are set in model coadd')
-                print('Average value:', np.mean((self.unwise_com[band-1] / np.maximum(self.unwise_comn[band-1], 1))[self.unwise_comn[band-1]>0]))
-
+            print('Adding', len(Yo), 'pixels from tile', tile, 'to coadd')
+            for band,rim,rmod in zip(gotbands, rimgs, rmods):
+                self.unwise_co [band-1][Yo,Xo] += rim
+                self.unwise_com[band-1][Yo,Xo] += rmod
+                self.unwise_con[band-1][Yo,Xo] += 1
+                print('Band', band, ': now', np.sum(self.unwise_con[band-1]>0), 'pixels are set in image coadd')
         except OverlapError:
             print('No overlap between WISE model tile', tile, 'and brick')
             pass
 
     def finish(self, survey, brickname, version_header):
         from legacypipe.survey import imsave_jpeg
-        for band,co,n,com,mn in zip([1,2,3,4],
-                                    self.unwise_co,  self.unwise_con,
-                                    self.unwise_com, self.unwise_comn):
+        for band,co,n,com in zip([1,2,3,4],
+                                 self.unwise_co,  self.unwise_con, self.unwise_com):
             hdr = fitsio.FITSHDR()
             for r in version_header.records():
                 hdr.add_record(r)
@@ -120,7 +77,7 @@ class UnwiseCoadd(object):
             hdr.add_record(dict(name='MAGZERO', value=22.5,
                                     comment='Magnitude zeropoint'))
             co  /= np.maximum(n, 1)
-            com /= np.maximum(mn, 1)
+            com /= np.maximum(n, 1)
             print('Coadd band', band, ': average image', np.mean(co))
             print('Coadd band', band, ': average model', np.mean(com))
 
