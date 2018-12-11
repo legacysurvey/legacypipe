@@ -2365,7 +2365,7 @@ def stage_fitblobs(T=None,
             R.append(None)
 
     refstars.radius_pix = np.ceil(refstars.radius * 3600. / targetwcs.pixel_scale()).astype(int)
-    from oneblob import get_inblob_map
+    from legacypipe.oneblob import get_inblob_map
     refmap = get_inblob_map(targetwcs, refstars)
     
     # Create the iterator over blobs to process
