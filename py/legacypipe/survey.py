@@ -15,7 +15,7 @@ from tractor import PointSource, ParamList, ConstantFitsWcs
 
 from legacypipe.utils import EllipseWithPriors
 
-release_number = 7000
+release_number = 7999
 
 # search order: $TMPDIR, $TEMP, $TMP, then /tmp, /var/tmp, /usr/tmp
 tempdir = tempfile.gettempdir()
@@ -400,17 +400,17 @@ def get_version_header(program_name, survey_dir, git_version=None):
                         comment='legacypipe git version'))
     hdr.add_record(dict(name='SURVEYV', value=survey_dir,
                         comment='Legacy Survey directory'))
-    hdr.add_record(dict(name='DECALSDR', value='DR7',
+    hdr.add_record(dict(name='DECALSDR', value='DR8',
                         comment='DECaLS release name'))
     hdr.add_record(dict(name='DECALSDT', value=datetime.datetime.now().isoformat(),
                         comment='%s run time' % program_name))
-    hdr.add_record(dict(name='SURVEY', value='DECaLS',
-                        comment='DECam Legacy Survey'))
+    hdr.add_record(dict(name='SURVEY', value='DECaLS+MzLS+BASS',
+                        comment='Legacy Surveys'))
     # Requested by NOAO
-    hdr.add_record(dict(name='SURVEYID', value='DECam Legacy Survey (DECaLS)',
+    hdr.add_record(dict(name='SURVEYID', value='DECaLS BASS MzLS'
                         comment='Survey name'))
+    #hdr.add_record(dict(name='SURVEYID', value='DECam Legacy Survey (DECaLS)',
     #hdr.add_record(dict(name='SURVEYID', value='BASS MzLS',
-    #                    comment='Survey name'))
     hdr.add_record(dict(name='DRVERSIO', value=release_number,
                         comment='Survey data release number'))
     hdr.add_record(dict(name='OBSTYPE', value='object',
