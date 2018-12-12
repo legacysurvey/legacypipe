@@ -1301,7 +1301,7 @@ def stage_mask_junk(tims=None, targetwcs=None, W=None, H=None, bands=None,
                 hdr.add_record(dict(name='X0', value=tim.x0))
                 hdr.add_record(dict(name='Y0', value=tim.y0))
                 with survey.write_output('outliers_mask', brick=brickname,
-                                              camera=tim.imobj.camera.strip(), expnum=tim.imobj.expnum, ccdname=tim.imobj.ccdname.strip()) as out:
+                                              camera=tim.imobj.camera.strip(), expnum=tim.imobj.expnum, ccdname=tim.imobj.ccdname.strip(), shape=maskedpix.shape) as out:
                     out.fits.write(maskedpix, header=hdr)
 
         badcoadds.append(badcoadd / np.maximum(badcon, 1))
@@ -1393,8 +1393,6 @@ def stage_image_coadds(survey=None, targetwcs=None, bands=None, tims=None,
     with survey.write_output('ccds-table', brick=brickname) as out:
         ccds.writeto(None, fits_object=out.fits, primheader=version_header)
 
-    record_event and record_event('stage_mask_junk: starting')
-            
     C = make_coadds(tims, bands, targetwcs,
                     detmaps=True, ngood=True, lanczos=lanczos,
                     callback=write_coadd_images,
@@ -1626,6 +1624,8 @@ def stage_srcs(targetrd=None, pixscale=None, targetwcs=None,
             #print('Largegals catalog:')
             #largegals.about()
             #print('Refstars:', refstars.about())
+        else:
+            largegals = []
     else:
         largegals = []
 
@@ -4371,7 +4371,6 @@ def main(args=None):
     print()
 
     parser = get_parser()
-
     parser.add_argument(
         '--ps', help='Run "ps" and write results to given filename?')
     parser.add_argument(
