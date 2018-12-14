@@ -1274,8 +1274,6 @@ Now using the current directory as LEGACY_SURVEY_DIR, but this is likely to fail
         ).get(filetype)
         if pat is None:
             return pat
-
-        print('get_compression_string:', filetype, 'shape=', shape)
         # Tile compression size
         tilew,tileh = 100,100
         if shape is not None:
@@ -1287,17 +1285,14 @@ Now using the current directory as LEGACY_SURVEY_DIR, but this is likely to fail
                 return None
             while tilew <= W:
                 remain = W % tilew
-                print('  tilew =', tilew, ': remainder', remain)
                 if remain == 0 or remain >= 4:
                     break
                 tilew += 1
             while tileh <= H:
                 remain = H % tileh
-                print('  tileh =', tileh, ': remainder', remain)
                 if remain == 0 or remain >= 4:
                     break
                 tileh += 1
-        print('get_compression_string:', filetype, 'shape=', shape, 'tilesize', tilew, tileh)
         return pat % (tilew,tileh)
 
     def write_output(self, filetype, hashsum=True, **kwargs):
