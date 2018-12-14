@@ -845,6 +845,7 @@ def stage_mask_junk(tims=None, targetwcs=None, W=None, H=None, bands=None,
                     img[yo[I],xo[I]] = coimgs[ibands[tim.band]][yi[I],xi[I]]
             except OverlapError:
                 print('No overlap')
+    del C,coimgs
 
     if plots:
         coimgs,cons,maximgs = quick_coadds(tims, bands, targetwcs, fill_holes=False, get_max=True)
@@ -852,11 +853,11 @@ def stage_mask_junk(tims=None, targetwcs=None, W=None, H=None, bands=None,
         dimshow(get_rgb(coimgs, bands))
         plt.title('Before outliers')
         ps.savefig()
-
         plt.clf()
         dimshow(get_rgb(maximgs, bands))
         plt.title('Before outliers: Max')
         ps.savefig()
+        del coimgs,cons,maximgs
 
     if True:
         coimgs,cons,maximgs = quick_coadds(tims, bands, targetwcs, fill_holes=False, get_max=True)
@@ -867,9 +868,9 @@ def stage_mask_junk(tims=None, targetwcs=None, W=None, H=None, bands=None,
         imsave_jpeg(outfn, get_rgb(coimgs, bands))
         outfn = os.path.join(outdir, 'outliers-maxpre-%s.jpg' % brickname)
         imsave_jpeg(outfn, get_rgb(maximgs, bands))
+        del coimgs,cons,maximgs
 
     badcoadds = []
-    realbadcoadds = []
     
     from scipy.ndimage.morphology import binary_dilation
     for iband,band in enumerate(bands):
@@ -888,11 +889,6 @@ def stage_mask_junk(tims=None, targetwcs=None, W=None, H=None, bands=None,
         cow   = np.zeros((H,W), np.float32)
         masks = np.zeros((H,W), np.int16)
 
-        badcoadd = np.zeros((H,W), np.float32)
-        badcon   = np.zeros((H,W), np.int16)
-        realbadcoadd = np.zeros((H,W), np.float32)
-        realbadcon   = np.zeros((H,W), np.int16)
-        
         for tim,sig in zip(btims, addsigs):
             from astrometry.util.miscutils import patch_image
             from scipy.ndimage.filters import gaussian_filter
@@ -905,31 +901,20 @@ def stage_mask_junk(tims=None, targetwcs=None, W=None, H=None, bands=None,
                 resams.append(None)
                 continue
             del img
-            wt = tim.getInvvar()[Yi,Xi]
             blurnorm = 1./(2. * np.sqrt(np.pi) * sig)
             print('Blurring "psf" norm', blurnorm)
-
-            if False:
-                plt.clf()
-                plt.hist((tim.getImage()[Yi,Xi] * np.sqrt(wt)), range=(-5, 5), bins=50)
-                plt.title('Unblurred image')
-                ps.savefig()
-                plt.clf()
-                plt.hist((rimg * np.sqrt(wt) / blurnorm), range=(-5, 5), bins=50)
-                plt.title('Blurred image / blurnorm')
-                ps.savefig()
-
-            wt /= (blurnorm**2)
-                
+            wt = tim.getInvvar()[Yi,Xi] / (blurnorm**2)
             coimg[Yo,Xo] += rimg * wt
             cow  [Yo,Xo] += wt
             masks[Yo,Xo] |= (tim.dq[Yi,Xi])
-            resams.append((Yo,Xo,Yi,Xi,rimg,wt))
+            print('rimg,wt types', rimg.dtype, wt.dtype)
+            resams.append([x.astype(np.int16) for x in [Yo,Xo,Yi,Xi]] + [rimg,wt])
 
         #
         veto = np.logical_or(
             binary_dilation(masks & CP_DQ_BITS['bleed'], iterations=3),
             binary_dilation(masks & CP_DQ_BITS['satur'], iterations=10))
+        del masks
 
         if False and plots:
             plt.clf()
@@ -938,334 +923,67 @@ def stage_mask_junk(tims=None, targetwcs=None, W=None, H=None, bands=None,
             plt.title('SATUR, BLEED veto (%s band)' % band)
             ps.savefig()
 
-        maxsns = []
-        maxrels = []
-        outlier_slices = []
+        badcoadd = np.zeros((H,W), np.float32)
+        badcon   = np.zeros((H,W), np.int16)
 
         for tim,resam in zip(btims, resams):
             if resam is None:
                 continue
             (Yo,Xo,Yi,Xi,rimg,wt) = resam
 
-            # coimg[Yo,Xo] -= rimg * wt
-            # cow  [Yo,Xo] -= wt
-            # co = coimg / np.maximum(cow, 1e-16)
-            # # Find pixels where this image was the only image overlapping
-            # nopix = (cow == 0)
-            # # Re-add this image to the coadd.
-            # coimg[Yo,Xo] += rimg * wt
-            # cow  [Yo,Xo] += wt
-
-            # This image alone
-            thisimg = np.zeros((H,W), np.float32)
-            thisimg[Yo,Xo] = rimg
-            thiswt = np.zeros((H,W), np.float32)
-            thiswt[Yo,Xo] = wt
-
-            this_sig1 = 1./np.sqrt(np.median(wt[wt>0]))
-            
             # Subtract this image from the coadd
-            #otherwt = cow[Yo,Xo] - wt
+            otherwt = cow[Yo,Xo] - wt
             #otherco = coimg[Yo,Xo] - rimg*wt
-            otherwt = cow - thiswt
-            otherco = coimg - thisimg * thiswt
-            otherimg = otherco / np.maximum(otherwt, 1e-16)
-
-            # Find pixels where this image was the only image overlapping
-            #nopix = (cow[Yo,Xo] == wt)
-            nopix = (otherwt < 1e-16)
-            print('This is the only image for', np.sum(nopix), 'pixels')
-
-            if np.sum(nopix):
-                otherimg[nopix] = 0.
-                otherwt[nopix] = 0.
-                thiswt[nopix] = 0.
-
-            thiswt[veto]  = 0.
+            #otherimg = otherco / np.maximum(otherwt, 1e-16)
+            otherimg = (coimg[Yo,Xo] - rimg*wt) / np.maximum(otherwt, 1e-16)
+            this_sig1 = 1./np.sqrt(np.median(wt[wt>0]))
 
             ## FIXME -- this image edges??
 
-
             # Compute the error on our estimate of (thisimg - co) =
             # sum in quadrature of the errors on thisimg and co.
-
             with np.errstate(divide='ignore'):
-                diffvar = 1./thiswt + 1./otherwt
-                sndiff = (thisimg - otherimg) / np.sqrt(diffvar)
-            sndiff[thiswt  == 0] = 0.
-            sndiff[otherwt == 0] = 0.
+                diffvar = 1./wt + 1./otherwt
+                sndiff = (rimg - otherimg) / np.sqrt(diffvar)
 
             with np.errstate(divide='ignore'):
                 reldiff = ((thisimg - otherimg) /
                            np.maximum(otherimg, this_sig1))
-            reldiff[thiswt  == 0] = 0.
-            reldiff[otherwt == 0] = 0.
+
+            del otherimg
 
             # Significant pixels
-            hot = (sndiff > 5.) * (reldiff > 2.)
-            warm = np.zeros_like(hot)
-            lukewarm = np.zeros_like(hot)
+            hotpix = ((sndiff > 5.) * (reldiff > 2.) * (otherwt > 1e-16) * (wt > 0.) *
+                      (veto[Yo,Xo] == False))
 
-            if np.any(hot):
-                hot = binary_dilation(hot, iterations=1)
-                warm = np.logical_or(hot,
-                                     binary_dilation(hot, iterations=5) *
-                                     (sndiff > 3.))
-                # dilate to compensate for NN resampling
-                warm = binary_dilation(warm, iterations=1)
+            del reldiff, otherwt
 
-                lukewarm = np.logical_or(warm,
-                                         binary_dilation(warm, iterations=5) *
-                                         (sndiff > 2.))
-                lukewarm = binary_dilation(lukewarm, iterations=3)
-
-                # Resample masked pixels back to image space.
-                badpix = np.zeros((H,W), bool)
-                badpix[hot] = True
-                badpix[warm] = True
-                badpix[lukewarm] = True
-
-            if plots:
-                origimg = tim.getImage() * (tim.getInvError() > 0)
-                ima = dict(interpolation='nearest', origin='lower',
-                           vmin=-0.01, vmax=0.1, cmap='gray')
-                if np.any(hot):
-                    try:
-                        mYo,mXo,mYi,mXi,nil = resample_with_wcs(
-                            tim.subwcs, targetwcs, [], 3)
-                    except OverlapError:
-                        pass
-                    Ibad, = np.nonzero(badpix[mYi,mXi])
-                    tomask = np.zeros(tim.shape, bool)
-                    tomask[mYo[Ibad], mXo[Ibad]] = True
-
-                    rgb = np.zeros((H,W,4), np.uint8)
-                    rgb[:,:,0][lukewarm] = 0
-                    rgb[:,:,1][lukewarm] = 255
-                    rgb[:,:,2][lukewarm] = 255
-                    rgb[:,:,3][lukewarm] = 255
-
-                    rgb[:,:,0][warm] = 255
-                    rgb[:,:,1][warm] = 0
-                    rgb[:,:,2][warm] = 0
-                    rgb[:,:,3][warm] = 255
-
-                    rgb[:,:,0][hot] = 0
-                    rgb[:,:,1][hot] = 255
-                    rgb[:,:,2][hot] = 0
-                    rgb[:,:,3][hot] = 255
-
-            if False and plots:
-
-                plt.clf()
-                plt.subplot(2,2,1)
-                plt.imshow(origimg.T, **ima)
-                plt.title('Masked image')
-                # Overlay SATUR mask in green
-                th,tw = tim.shape
-                # NOTE transposed
-                maskrgb = np.zeros((tw,th,4), np.uint8)
-                sat = ((tim.dq & CP_DQ_BITS['satur']) > 0).T
-                maskrgb[:,:,1][sat] = 255
-                maskrgb[:,:,3][sat] = 255
-                plt.imshow(maskrgb, interpolation='nearest', origin='lower')
-                plt.subplot(2,2,2)
-                plt.imshow(otherimg, **ima)
-                plt.title('Other images')
-                plt.subplot(2,2,3)
-                plt.imshow(thisimg * (thiswt > 0), **ima)
-                plt.title('This image')
-                plt.subplot(2,2,4)
-                plt.imshow(sndiff,
-                           interpolation='nearest', origin='lower',
-                           vmin=-5, vmax=5, cmap='gray')
-                if np.any(hot):
-                    plt.imshow(rgb, interpolation='nearest', origin='lower')
-                plt.title('S/N diff')
-                plt.suptitle(tim.name)
-                ps.savefig()
-
-
-            # No outlier pixels -- carry on!
-            if not np.any(hot):
+            if not np.any(hotpix):
                 continue
 
-            #if plots:
-            if True:
-                # Segment
-                blobs,nblobs = label(lukewarm)
-                slices = find_objects(blobs)
-                for iblob,s in enumerate(slices):
-                    sy,sx = s
-                    y0,y1 = sy.start, sy.stop
-                    x0,x1 = sx.start, sx.stop
-                    m = 20
-                    aslc = (slice(max(y0-m,0), y1+m),
-                            slice(max(x0-m,0), x1+m))
+            hot = np.zeros((H,W), bool)
+            hot[Yo,Xo] = hotpix
 
-                    sn = sndiff[aslc] * (blobs[aslc] == iblob+1)
-                    rel = reldiff[aslc] * (blobs[aslc] == iblob+1)
+            del hotpix
 
-                    m = 5
-                    oslc = (slice(max(y0-m,0), y1+m),
-                            slice(max(x0-m,0), x1+m))
+            snmap = np.zeros((H,W), np.float32)
+            snmap[Yo,Xo] = sndiff
 
-                    maxsn = sn.max()
-                    maxrel = rel.max()
+            hot = binary_dilation(hot, iterations=1)
+            # "warm"
+            hot = np.logical_or(hot,
+                                binary_dilation(hot, iterations=5) * (snmap > 3.))
+            hot = binary_dilation(hot, iterations=1)
+            # "lukewarm"
+            hot = np.logical_or(hot,
+                                binary_dilation(hot, iterations=5) * (snmap > 2.))
+            hot = binary_dilation(hot, iterations=3)
 
-                    maxsns.append(maxsn)
-                    maxrels.append(maxrel)
-                    outlier_slices.append(oslc)
+            del snmap
 
-                    rorig = np.zeros((H,W), np.float32)
-                    rorig[Yo,Xo] = tim.getImage()[Yi,Xi]
-                    badcoadd[oslc] += rorig[oslc]
-                    badcon[oslc] += 1
-
-                    realbadcoadd[oslc] += rorig[oslc] * (blobs[oslc] == iblob+1)
-                    realbadcon[oslc] += (blobs[oslc] == iblob+1)
-
-                    
-            if False and plots:
-            #if plots and maxrel < 10:
-                plt.clf()
-                plt.imshow(origimg, **ima)
-                plt.title('Image (orig)')
-                ps.savefig()
-
-                timh,timw = tim.shape
-                red = np.zeros((timh,timw,4), np.uint8)
-                red[:,:,0][tomask] = 255
-                red[:,:,3][tomask] = 255
-                
-                plt.imshow(origimg, **ima)
-                plt.imshow(red, interpolation='nearest', origin='lower')
-                plt.title('Image (masked)')
-                ps.savefig()
-                # plt.clf()
-                # plt.imshow(tim.getImage() * tim.getInvError(),
-                #            interpolation='nearest', origin='lower',
-                #            vmin=-1, vmax=10)
-                # plt.title('S/N')
-                # ps.savefig()
-
-            if plots:
-                # Segment
-                blobs,nblobs = label(lukewarm)
-                slices = find_objects(blobs)
-                for iblob,s in enumerate(slices):
-                    sy,sx = s
-                    y0,y1 = sy.start, sy.stop
-                    x0,x1 = sx.start, sx.stop
-                    m = 20
-                    axis = [x0-m, x1+m, y0-m, y1+m]
-                    aslc = (slice(max(y0-m,0), y1+m),
-                            slice(max(x0-m,0), x1+m))
-
-                    rel = reldiff[aslc] * (blobs[aslc] == iblob+1)
-                    if rel.max() > 10:
-                        continue
-
-                    plt.clf()
-                    ima = dict(interpolation='nearest', origin='lower',
-                               vmin=-0.01, vmax=0.1, cmap='gray')
-                    plt.subplot(2,4,1)
-                    plt.imshow(rgb, interpolation='nearest', origin='lower')
-                    plt.axis(axis)
-                    plt.title('Masked')
-
-                    plt.subplot(2,4,2)
-                    plt.imshow(sndiff,
-                               interpolation='nearest', origin='lower',
-                               vmin=-5, vmax=5, cmap='gray')
-                    plt.axis(axis)
-                    plt.title('S/N Resid (%g)' % sndiff[aslc][hot[aslc]].max())
-                    rorig = np.zeros((H,W), np.float32)
-                    rorig[Yo,Xo] = origimg[Yi,Xi]
-                    maskrgb = np.zeros((H,W,4), np.uint8)
-                    masked = (tim.dq[Yi,Xi] != 0)
-                    maskrgb[Yo,Xo,0][masked] = 255
-                    maskrgb[Yo,Xo,3][masked] = 255
-                    plt.subplot(2,4,3)
-                    plt.imshow(rorig, **ima)
-                    plt.imshow(maskrgb, interpolation='nearest', origin='lower')
-                    plt.axis(axis)
-                    plt.title('Unblurred image')
-
-                    plt.subplot(2,4,8)
-                    #rel = (thisimg - co) / np.maximum(co, 5.*tim.sig1)
-                    plt.imshow(reldiff, interpolation='nearest', origin='lower',
-                               vmin=-2, vmax=20, cmap='jet')
-                    plt.axis(axis)
-                    plt.colorbar()
-                    plt.title('Relative diff (%g)' % (reldiff[aslc][hot[aslc]].max()))
-
-                    print('Max difference: relative', reldiff[aslc][hot[aslc]].max(),
-                          'S/N', sndiff[aslc][hot[aslc]].max())
-
-                    bmasked = (blobs[aslc] == iblob+1)
-
-                    mn = min(otherimg[aslc][bmasked].min(),
-                             thisimg [aslc][bmasked].min())
-                    mx = max(otherimg[aslc][bmasked].max(),
-                             thisimg [aslc][bmasked].max())
-                    ima2 = dict(interpolation='nearest', origin='lower',
-                               vmin=mn, vmax=mx, cmap='gray')
-                    
-                    plt.subplot(2,4,4)
-                    plt.imshow(otherimg, **ima2)
-                    plt.axis(axis)
-                    plt.title('Coadd - This')
-                    plt.subplot(2,4,5)
-                    plt.imshow(thisimg * (thiswt > 0), **ima2)
-                    plt.axis(axis)
-                    plt.title('This image')
-
-                    plt.subplot(2,4,6)
-                    plt.imshow(sndiff,
-                               interpolation='nearest', origin='lower',
-                               vmin=-5, vmax=5, cmap='gray')
-                    ax = plt.axis()
-                    plt.plot([x0-m, x0-m, x1+m, x1+m, x0-m],
-                             [y0-m, y1+m, y1+m, y0-m, y0-m], 'r-')
-                    plt.axis(ax)
-                    plt.title('Whole resid')
-                    plt.suptitle(tim.name)
-                    ps.savefig()
-
-                    # all epochs at this location
-                    epochs = []
-                    for otim,oresam in zip(btims, resams):
-                        if oresam is None:
-                            continue
-                        (oYo,oXo,oYi,oXi,orimg,owt) = oresam
-                        if ((oYo.min() > y1) or (oYo.max() < y0) or
-                            (oXo.min() > x1) or (oXo.max() < x0)):
-                            continue
-                        e = np.zeros((H,W), np.float32)
-                        e[oYo,oXo] = otim.getImage()[oYi,oXi]
-                        m = np.zeros((H,W), bool)
-                        m[oYo,oXo] = (otim.dq[oYi,oXi] != 0)
-                        epochs.append((e[aslc],m[aslc],otim.name))
-                    epix = np.hstack([e.ravel() for e,m,n in epochs])
-                    mn = epix.min()
-                    mx = epix.max()
-                    N = len(epochs)
-                    C = int(np.ceil(np.sqrt(N)))
-                    R = int(np.ceil(N / C))
-                    plt.clf()
-                    for i,(e,m,name) in enumerate(epochs):
-                        plt.subplot(R, C, i+1)
-                        plt.imshow(e, interpolation='nearest', origin='lower',
-                                   vmin=mn, vmax=mx, cmap='gray')
-                        mh,mw = m.shape
-                        maskrgb = np.zeros((mh,mw,4), np.uint8)
-                        maskrgb[:,:,0][m] = 255
-                        maskrgb[:,:,3][m] = 255
-                        plt.imshow(maskrgb, interpolation='nearest', origin='lower')
-                        plt.xticks([]); plt.yticks([])
-                        plt.title(name)
-                    ps.savefig()
+            bad, = np.nonzero(hot[Yo,Xo])
+            badcoadd[Yo[bad],Xo[bad]] += tim.getImage()[Yi[bad],Xi[bad]]
+            badcon[Yo[bad],Xo[bad]] += 1
 
             # Actually do the masking!
             try:
@@ -1273,9 +991,7 @@ def stage_mask_junk(tims=None, targetwcs=None, W=None, H=None, bands=None,
                     tim.subwcs, targetwcs, [], 3)
             except OverlapError:
                 continue
-            # Do we want to look at (unblurred) image pixels around masked
-            # pix?
-            Ibad, = np.nonzero(badpix[mYi,mXi])
+            Ibad, = np.nonzero(bad[mYi,mXi])
             # Zero out the invvar for the bad pixels
             if len(Ibad):
                 tim.getInvError()[mYo[Ibad],mXo[Ibad]] = 0.
@@ -1305,47 +1021,6 @@ def stage_mask_junk(tims=None, targetwcs=None, W=None, H=None, bands=None,
                     out.fits.write(maskedpix, header=hdr)
 
         badcoadds.append(badcoadd / np.maximum(badcon, 1))
-        realbadcoadds.append(realbadcoadd / np.maximum(realbadcon, 1))
-
-        if plots:
-            for zoom in [False, True]:
-                plt.clf()
-                plt.plot(maxsns, np.abs(maxrels), 'b.')
-                plt.title('Outliers: %s band' % band)
-                plt.xlabel('S/N')
-                plt.ylabel('Relative flux')
-                plt.yscale('log')
-                plt.xscale('log')
-                if not zoom:
-                    ps.savefig()
-                if zoom:
-                    plt.axis([5, 10, 1, 10])
-            
-                [min_sn, max_sn, min_rel, max_rel] = plt.axis()
-    
-                # RGB image, swapping in the bad pixels in this band only
-                bcoimgs = [co for co in coimgs]
-                bcoimgs[iband] = badcoadds[iband]
-                #rgbco = get_rgb(coimgs, bands)
-                rgbco = get_rgb(bcoimgs, bands)
-    
-                print('RGB shape', rgbco.shape)
-                ax1 = plt.gca()
-                (px0,py0,px1,py1) = ax1.get_position().bounds
-                #print('first axis bounds:', px0,px1,py0,py1)
-                fig = plt.gcf()
-                for sn,rel,aslc in zip(maxsns, np.abs(maxrels), outlier_slices):
-                    x = np.log(sn / min_sn) / np.log(max_sn / min_sn)
-                    y = np.log(rel / min_rel) / np.log(max_rel / min_rel)
-                    #print('x,y', x,y)
-                    x = px0 + x * (px1-px0)
-                    y = py0 + y * (py1-py0)
-                    #print('-> ', x,y)
-                    ax = fig.add_axes([x, y, 0.1, 0.1])
-                    sy,sx = aslc
-                    ax.imshow(rgbco[sy,sx,:], interpolation='nearest', origin='lower')
-                    ax.set_xticks([]); ax.set_yticks([])
-                ps.savefig()
 
     if plots:
         coimgs,cons,maximgs = quick_coadds(tims, bands, targetwcs, fill_holes=False, get_max=True)
@@ -1353,14 +1028,12 @@ def stage_mask_junk(tims=None, targetwcs=None, W=None, H=None, bands=None,
         dimshow(get_rgb(coimgs, bands))
         plt.title('After outliers')
         ps.savefig()
-
         plt.clf()
         dimshow(get_rgb(maximgs, bands))
         plt.title('After outliers: Max')
         ps.savefig()
-                
         plt.clf()
-        dimshow(get_rgb(realbadcoadds, bands))
+        dimshow(get_rgb(badcoadds, bands))
         plt.title('Masked pixels')
         ps.savefig()
 
@@ -1371,7 +1044,7 @@ def stage_mask_junk(tims=None, targetwcs=None, W=None, H=None, bands=None,
         outfn = os.path.join(outdir, 'outliers-maxpost-%s.jpg' % brickname)
         imsave_jpeg(outfn, get_rgb(maximgs, bands))
         outfn = os.path.join(outdir, 'outliers-masked-%s.jpg' % brickname)
-        imsave_jpeg(outfn, get_rgb(realbadcoadds, bands))
+        imsave_jpeg(outfn, get_rgb(badcoadds, bands))
         
     return dict(tims=tims)
 
