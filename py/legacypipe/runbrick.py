@@ -2387,9 +2387,8 @@ def stage_fitblobs(T=None,
             fn = checkpoint_filename + '.tmp'
             print('Writing checkpoint', fn)
             pickle_to_file(R, fn)
-            print('Wrote checkpoint to', fn)
             os.rename(fn, checkpoint_filename)
-            print('Renamed temp checkpoint', fn, 'to', checkpoint_filename)
+            print('Wrote checkpoint to', checkpoint_filename)
 
         d = os.path.dirname(checkpoint_filename)
         if len(d) and not os.path.exists(d):
@@ -2399,20 +2398,23 @@ def stage_fitblobs(T=None,
         Riter = mp.imap_unordered(_bounce_one_blob, blobiter)
         # measure wall time and write out checkpoint file periodically.
         last_checkpoint = CpuMeas()
+        n_finished = 0
+        n_finished_total = 0
         while True:
             import multiprocessing
-            # Time to write a checkpoint file?
+            # Time to write a checkpoint file? (And have something to write?)
             tnow = CpuMeas()
             dt = tnow.wall_seconds_since(last_checkpoint)
-            if dt >= checkpoint_period:
+            if dt >= checkpoint_period and n_finished > 0:
                 # Write checkpoint!
+                print('Writing', n_finished, 'new results; total for this run', n_finished_total)
                 try:
                     _write_checkpoint(R, checkpoint_filename)
                     last_checkpoint = tnow
                     dt = 0.
+                    n_finished = 0
                 except:
-                    print('Failed to rename checkpoint file',
-                          checkpoint_filename)
+                    print('Failed to rename checkpoint file', checkpoint_filename)
                     import traceback
                     traceback.print_exc()
             # Wait for results (with timeout)
@@ -2423,6 +2425,8 @@ def stage_fitblobs(T=None,
                 else:
                     r = next(Riter)
                 R.append(r)
+                n_finished += 1
+                n_finished_total += 1
             except StopIteration:
                 print('Done')
                 break
