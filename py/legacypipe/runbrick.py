@@ -902,12 +902,11 @@ def stage_mask_junk(tims=None, targetwcs=None, W=None, H=None, bands=None,
                 continue
             del img
             blurnorm = 1./(2. * np.sqrt(np.pi) * sig)
-            print('Blurring "psf" norm', blurnorm)
+            #print('Blurring "psf" norm', blurnorm)
             wt = tim.getInvvar()[Yi,Xi] / (blurnorm**2)
             coimg[Yo,Xo] += rimg * wt
             cow  [Yo,Xo] += wt
             masks[Yo,Xo] |= (tim.dq[Yi,Xi])
-            print('rimg,wt types', rimg.dtype, wt.dtype)
             resams.append([x.astype(np.int16) for x in [Yo,Xo,Yi,Xi]] + [rimg,wt])
 
         #
@@ -916,10 +915,9 @@ def stage_mask_junk(tims=None, targetwcs=None, W=None, H=None, bands=None,
             binary_dilation(masks & CP_DQ_BITS['satur'], iterations=10))
         del masks
 
-        if False and plots:
+        if plots:
             plt.clf()
-            plt.imshow(veto, interpolation='nearest', origin='lower',
-                       cmap='gray')
+            plt.imshow(veto, interpolation='nearest', origin='lower', cmap='gray')
             plt.title('SATUR, BLEED veto (%s band)' % band)
             ps.savefig()
 
@@ -933,8 +931,6 @@ def stage_mask_junk(tims=None, targetwcs=None, W=None, H=None, bands=None,
 
             # Subtract this image from the coadd
             otherwt = cow[Yo,Xo] - wt
-            #otherco = coimg[Yo,Xo] - rimg*wt
-            #otherimg = otherco / np.maximum(otherwt, 1e-16)
             otherimg = (coimg[Yo,Xo] - rimg*wt) / np.maximum(otherwt, 1e-16)
             this_sig1 = 1./np.sqrt(np.median(wt[wt>0]))
 
@@ -948,6 +944,39 @@ def stage_mask_junk(tims=None, targetwcs=None, W=None, H=None, bands=None,
 
             with np.errstate(divide='ignore'):
                 reldiff = ((rimg - otherimg) / np.maximum(otherimg, this_sig1))
+
+            if plots:
+                plt.clf()
+                showimg = np.zeros((H,W),np.float32)
+                showimg[Yo,Xo] = otherimg
+                plt.subplot(2,3,1)
+                plt.imshow(showimg, interpolation='nearest', origin='lower', vmin=-0.01, vmax=0.1,
+                           cmap='gray')
+                plt.title('other images')
+                showimg[Yo,Xo] = otherwt
+                plt.subplot(2,3,2)
+                plt.imshow(showimg, interpolation='nearest', origin='lower', vmin=0)
+                plt.title('other wt')
+                showimg[Yo,Xo] = sndiff
+                plt.subplot(2,3,3)
+                plt.imshow(showimg, interpolation='nearest', origin='lower', vmin=0, vmax=10)
+                plt.title('S/N diff')
+                showimg[Yo,Xo] = rimg
+                plt.subplot(2,3,4)
+                plt.imshow(showimg, interpolation='nearest', origin='lower', vmin=-0.01, vmax=0.1,
+                           cmap='gray')
+                plt.title('this image')
+                showimg[Yo,Xo] = wt
+                plt.subplot(2,3,5)
+                plt.imshow(showimg, interpolation='nearest', origin='lower', vmin=0)
+                plt.title('this wt')
+                plt.suptitle(tim.name)
+                showimg[Yo,Xo] = reldiff
+                plt.subplot(2,3,6)
+                plt.imshow(showimg, interpolation='nearest', origin='lower', vmin=0, vmax=4)
+                plt.title('rel diff')
+                ps.savefig()
+                
 
             del otherimg
 
@@ -969,14 +998,26 @@ def stage_mask_junk(tims=None, targetwcs=None, W=None, H=None, bands=None,
             snmap[Yo,Xo] = sndiff
 
             hot = binary_dilation(hot, iterations=1)
+            if plots:
+                heat = hot.astype(np.uint8)
             # "warm"
             hot = np.logical_or(hot,
                                 binary_dilation(hot, iterations=5) * (snmap > 3.))
             hot = binary_dilation(hot, iterations=1)
+            if plots:
+                heat += hot
             # "lukewarm"
             hot = np.logical_or(hot,
                                 binary_dilation(hot, iterations=5) * (snmap > 2.))
             hot = binary_dilation(hot, iterations=3)
+
+            if plots:
+                heat += hot
+                plt.clf()
+                plt.imshow(heat, interpolation='nearest', origin='lower', cmap='hot')
+                plt.title(tim.name + ': outliers')
+                ps.savefig()
+                del heat
 
             del snmap
 
@@ -1616,6 +1657,9 @@ def read_gaia(targetwcs):
     *margin* in degrees
     '''
     from legacypipe.gaiacat import GaiaCatalog
+
+    ##### FIXME! -- Need stars outside the WCS!
+
     gaia = GaiaCatalog().get_catalog_in_wcs(targetwcs)
     print('Got Gaia stars:', gaia)
     gaia.about()
