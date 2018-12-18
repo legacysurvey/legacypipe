@@ -947,8 +947,7 @@ def stage_mask_junk(tims=None, targetwcs=None, W=None, H=None, bands=None,
                 sndiff = (rimg - otherimg) / np.sqrt(diffvar)
 
             with np.errstate(divide='ignore'):
-                reldiff = ((thisimg - otherimg) /
-                           np.maximum(otherimg, this_sig1))
+                reldiff = ((rimg - otherimg) / np.maximum(otherimg, this_sig1))
 
             del otherimg
 
@@ -986,12 +985,13 @@ def stage_mask_junk(tims=None, targetwcs=None, W=None, H=None, bands=None,
             badcon[Yo[bad],Xo[bad]] += 1
 
             # Actually do the masking!
+            # Resample "hot" (in brick coords) back to tim coords.
             try:
                 mYo,mXo,mYi,mXi,nil = resample_with_wcs(
                     tim.subwcs, targetwcs, [], 3)
             except OverlapError:
                 continue
-            Ibad, = np.nonzero(bad[mYi,mXi])
+            Ibad, = np.nonzero(hot[mYi,mXi])
             # Zero out the invvar for the bad pixels
             if len(Ibad):
                 tim.getInvError()[mYo[Ibad],mXo[Ibad]] = 0.
