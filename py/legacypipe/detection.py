@@ -457,6 +457,9 @@ def sed_matched_detection(sedname, sed, detmaps, detivs, bands,
     # search within its "allblob", which is defined by the lowest
     # saddle.
     print('Found', len(px), 'potential peaks')
+    nveto = 0
+    nsaddle = 0
+    naper = 0
     for i,(x,y) in enumerate(zip(px, py)):
         # one plot per peak is a little excessive!
         if False and ps is not None:
@@ -466,6 +469,7 @@ def sed_matched_detection(sedname, sed, detmaps, detivs, bands,
 
         if vetomap[y,x]:
             #print('  in veto map!')
+            nveto += 1
             continue
 
         level = saddle_level(sedsn[y,x])
@@ -512,6 +516,7 @@ def sed_matched_detection(sedname, sed, detmaps, detivs, bands,
             #print('  cut')
             # update vetomap
             vetomap[slc] |= saddlemap
+            nsaddle += 1
             #print('Added to vetomap:', np.sum(saddlemap), 'pixels set; now total of', np.sum(vetomap), 'pixels set')
             continue
 
@@ -533,6 +538,7 @@ def sed_matched_detection(sedname, sed, detmaps, detivs, bands,
             m = -1.
         if cutonaper:
             if sedsn[y,x] - m < nsigma:
+                naper += 1
                 continue
 
         aper.append(m)
@@ -553,6 +559,9 @@ def sed_matched_detection(sedname, sed, detmaps, detivs, bands,
                     extent=[apx0,apx0+apw,apy0,apy0+aph])
             plt.suptitle('peak %.1f vs ap %.1f' % (sedsn[y,x], m))
             ps.savefig()
+
+    print('Of', len(px), 'potential peaks:', nveto, 'in veto map,', nsaddle, 'cut by saddle test,',
+          naper, 'cut by aper test,', np.sum(keep), 'kept')
 
     print('New sources:', Time()-t0)
     t0 = Time()

@@ -391,18 +391,17 @@ def make_coadds(tims, bands, targetwcs,
                 if dq is None:
                     goodpix = 1
                 else:
-                    # include BLEED, SATUR, INTERP pixels if no other
+                    # include SATUR pixels if no other
                     # pixels exists
                     okbits = 0
-                    #for bitname in ['satur', 'bleed']:
                     for bitname in ['satur']:
                         okbits |= CP_DQ_BITS[bitname]
                     brightpix = ((dq & okbits) != 0)
                     if satur_val is not None:
                         # HACK -- force SATUR pix to be bright
                         im[brightpix] = satur_val
-                    #for bitname in ['interp']:
-                    for bitname in ['interp', 'bleed']:
+                    # Include these pixels if none other exist??
+                    for bitname in ['interp']: #, 'bleed']:
                         okbits |= CP_DQ_BITS[bitname]
                     goodpix = ((dq & ~okbits) == 0)
 

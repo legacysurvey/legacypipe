@@ -372,8 +372,8 @@ class LegacySurveyImage(object):
         y1_new += 1
         x1_new += 1
         if x0_new != x0 or x1_new != x1 or y0_new != y0 or y1_new != y1:
-            print('Old x0,x1', x0,x1, 'y0,y1', y0,y1)
-            print('New x0,x1', x0_new,x1_new, 'y0,y1', y0_new,y1_new)
+            #print('Old x0,x1', x0,x1, 'y0,y1', y0,y1)
+            #print('New x0,x1', x0_new,x1_new, 'y0,y1', y0_new,y1_new)
 
             if y1_new - y0_new < tiny or x1_new - x0_new < tiny:
                 print('Skipping tiny subimage (after clipping masked edges)')
