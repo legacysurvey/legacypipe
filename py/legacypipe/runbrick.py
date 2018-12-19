@@ -288,6 +288,7 @@ def stage_tims(W=3600, H=3600, pixscale=0.262, brickname=None,
     print('Calibs:', Time()-t0)
 
     # Read Tractor images
+
     args = [(im, targetrd, dict(gaussPsf=gaussPsf, pixPsf=pixPsf,
                                 hybridPsf=hybridPsf, normalizePsf=normalizePsf,
                                 splinesky=splinesky,
@@ -299,6 +300,33 @@ def stage_tims(W=3600, H=3600, pixscale=0.262, brickname=None,
     record_event and record_event('stage_tims: starting read_tims')
     tims = list(mp.map(read_one_tim, args))
     record_event and record_event('stage_tims: done read_tims')
+
+    # print('FIXME -- hacking sky')
+    # args = [(im, targetrd, dict(gaussPsf=gaussPsf, pixPsf=pixPsf,
+    #                             hybridPsf=hybridPsf, normalizePsf=normalizePsf,
+    #                             splinesky=True,
+    #                             subsky=False,
+    #                             apodize=apodize,
+    #                             constant_invvar=constant_invvar,
+    #                             pixels=read_image_pixels))
+    #                             for im in ims]
+    # record_event and record_event('stage_tims: starting read_tims')
+    # tims = list(mp.map(read_one_tim, args))
+    # record_event and record_event('stage_tims: done read_tims')
+    # from tractor import ConstantSky
+    # for tim in tims:
+    #     spl = tim.getSky()
+    #     med = np.median(spl.vals)
+    #     print('Splinesky: min', spl.vals.min(), 'max', spl.vals.max(), 'med', med)
+    #     img = tim.getImage()
+    #     print('Before subtracting: pix median', np.median(tim.getImage()), 'vs sig1', tim.sig1)
+    #     #print('zpscale:', tim.zpscale, '1/zpscale', 1/tim.zpscale)
+    #     # scale sky to nanomaggies to match the image pixels
+    #     # (nope, that was already done)
+    #     #img -= (med / tim.zpscale)
+    #     img -= med
+    #     tim.sky = ConstantSky(0.)
+    #     print('After subtracting: pix median', np.median(tim.getImage()), 'vs sig1', tim.sig1)
 
     tnow = Time()
     print('[parallel tims] Read', len(ccds), 'images:', tnow-tlast)
@@ -1412,7 +1440,145 @@ def stage_srcs(targetrd=None, pixscale=None, targetwcs=None,
         plt.axis(ax)
         plt.title('detmaps & saturated')
         ps.savefig()
+
+        coimgs,cons = quick_coadds(tims, bands, targetwcs, fill_holes=False)
+        plt.clf()
+        dimshow(get_rgb(coimgs, bands))
+        ax = plt.axis()
+        lp,lt = [],[]
+        if len(tycho):
+            ok,ix,iy = targetwcs.radec2pixelxy(tycho.ra, tycho.dec)
+            p = plt.plot(ix-1, iy-1, 'o', mew=3, ms=10, mec='r', mfc='none')
+            lp.append(p)
+            lt.append('Tycho-2 only')
+        if gaia_stars and len(gaia):
+            ok,ix,iy = targetwcs.radec2pixelxy(gaia.ra, gaia.dec)
+            p = plt.plot(ix-1, iy-1, 'o', mew=3, ms=10, mec='c', mfc='none')
+            lp.append(p)
+            lt.append('Gaia')
+        # star_clusters?
+        if large_galaxies and len(largegals):
+            ok,ix,iy = targetwcs.radec2pixelxy(largegals.ra, largegals.dec)
+            p = plt.plot(ix-1, iy-1, 'o', mew=3, ms=10, mec='g', mfc='none')
+            lp.append(p)
+            lt.append('Galaxies')
+        plt.axis(ax)
+        plt.title('Ref sources')
+        plt.figlegend(lt, lp)
+        ps.savefig()
+
+        if gaia_stars and len(gaia):
+            ok,ix,iy = targetwcs.radec2pixelxy(gaia.ra, gaia.dec)
+            for x,y,g in zip(ix,iy,gaia.G):
+                plt.text(x, y, '%.1f' % g, color='k',
+                         bbox=dict(facecolor='w', alpha=0.5))
+            plt.axis(ax)
+            ps.savefig()
+
     del satmap
+
+    #print('Gaia sources:')
+    #gaia.about()
+    if plots and gaia_stars and len(gaia):
+        iw = 0
+        I = np.argsort(gaia.G)
+        for i in I:
+            g = gaia[i]
+
+            ok,xx,yy = targetwcs.radec2pixelxy(g.ra, g.dec)
+            if xx <= 0 or yy <= 0 or xx > W or yy > H:
+                continue
+
+            radii = np.arange(0, 301, 1)
+            maxr = int(radii[-1])
+
+            plots = []
+            for band in bands:
+                for tim in tims:
+                    if tim.band != band:
+                        continue
+                    ok,x,y = tim.subwcs.radec2pixelxy(g.ra, g.dec)
+                    ix = int(x-1)
+                    iy = int(y-1)
+                    th,tw = tim.shape
+                    # for simplicity, only in-bounds
+                    if ix < 0 or iy < 0 or ix >= tw or iy >= th:
+                        continue
+                    ylo,yhi = max(0,iy-maxr), min(th,iy+maxr+1)
+                    xlo,xhi = max(0,ix-maxr), min(tw,ix+maxr+1)
+                    rr = ((np.arange(ylo, yhi)[:,np.newaxis] - iy)**2 +
+                          (np.arange(xlo, xhi)[np.newaxis,:] - ix)**2)
+                    meds = []
+                    dmeds = []
+                    Nseg = 12
+                    segments = (Nseg * (np.arctan2(np.arange(ylo,yhi)[:,np.newaxis]-iy,
+                                                  np.arange(xlo,xhi)[np.newaxis,:]-ix) - -np.pi) / (2.*np.pi)).astype(int)
+                    for rlo,rhi in zip(radii, radii[1:]):
+                        IY,IX = np.nonzero((rr >= rlo**2) * (rr < rhi**2))
+                        ie = tim.getInvError()[IY+ylo, IX+xlo]
+                        img = tim.getImage()[IY+ylo, IX+xlo]
+                        if rlo > 2*Nseg:
+                            seg = []
+                            for s in range(Nseg):
+                                seg.append(np.median(img[(ie > 0) * (segments[IY,IX] == s)]))
+                            seg = np.array(seg)
+                            seg = seg[np.isfinite(seg)]
+                            if len(seg) == 0:
+                                meds.append(np.nan)
+                                dmeds.append(0)
+                            else:
+                                lo,m,hi = np.percentile(seg, [25, 50, 75])
+                                meds.append(m)
+                                dmeds.append((hi - lo)/2.)
+                        else:
+                            meds.append(np.median(img[ie > 0]))
+                            dmeds.append(0.)
+                    plots.append(((radii[:-1]+radii[1:])/2., meds, dmeds, band))
+
+
+            import matplotlib.gridspec as gridspec
+            plt.clf()
+            fig = plt.gcf()
+            gs = gridspec.GridSpec(2, 2)
+            ax = fig.add_subplot(gs[0, 0])
+            for rr,mm,dm,band in plots:
+                cc = dict(z='m').get(band,band)
+                plt.plot(rr, mm, '-',color=cc)
+                plt.errorbar(rr, mm, yerr=dm, color=cc)
+            plt.xlabel('Radius (pix)')
+            plt.ylabel('Surface brightness')
+            plt.xlim(0, 100)
+            ax = fig.add_subplot(gs[0, 1])
+            for rr,mm,dm,band in plots:
+                cc = dict(z='m').get(band,band)
+                plt.plot(rr, mm, '-',color=cc)
+                plt.errorbar(rr, mm, yerr=dm, color=cc)
+            plt.xscale('log')
+            plt.yscale('log')
+            plt.xlabel('Radius (pix)')
+            plt.xlim(10, 200)
+            plt.ylim(1e-2, 5e1)
+            ax = fig.add_subplot(gs[1, :])
+            #plt.subplot(2,1,2)
+            for rr,mm,dm,band in plots:
+                cc = dict(z='m').get(band,band)
+                plt.plot(rr, mm, '-',color=cc)
+                plt.errorbar(rr, mm, yerr=dm, color=cc)
+            plt.yscale('log')
+            plt.xlabel('Radius (pix)')
+            plt.ylabel('Surface brightness')
+            plt.suptitle('Gaia star: G=%.1f' % g.G)
+            ps.savefig()
+
+            t = fits_table()
+            t.rr = np.array([p[0] for p in plots])
+            t.mm = np.array([p[1] for p in plots])
+            t.dm = np.array([p[2] for p in plots])
+            t.band = np.array([p[3] for p in plots])
+            t.writeto('flux-%03i.fits' % iw)
+            iw += 1
+
+
 
     # SED-matched detections
     record_event and record_event('stage_srcs: SED-matched')
