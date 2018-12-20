@@ -1424,7 +1424,7 @@ def stage_srcs(targetrd=None, pixscale=None, targetwcs=None,
         plt.title('satmap')
         ps.savefig()
 
-        rgb = get_rgb(detmaps, bands)
+        rgb = get_rgb(detmaps, bands, **rgbkwargs)
         plt.clf()
         dimshow(rgb)
         plt.title('detmaps')
@@ -1481,9 +1481,9 @@ def stage_srcs(targetrd=None, pixscale=None, targetwcs=None,
     #gaia.about()
     if plots and gaia_stars and len(gaia):
         iw = 0
-        I = np.argsort(gaia.G)
-        I = I[gaia.G[I] < 15.]
-        print(len(I), 'stars with G<15')
+        Igaia = np.argsort(gaia.G)
+        Igaia = Igaia[gaia.G[Igaia] < 15.]
+        print(len(Igaia), 'stars with G<15')
 
         coimgs,cons = quick_coadds(tims, bands, targetwcs)
 
@@ -1497,13 +1497,25 @@ def stage_srcs(targetrd=None, pixscale=None, targetwcs=None,
 
         residimgs = [co.copy() for co in coimgs]
 
-        for i in I:
+        round1fits = []
+
+        keepI = []
+        for i in Igaia:
+            g = gaia[i]
+            # FIXME -- should do stars outside but touching the brick too!
+            ok,x,y = targetwcs.radec2pixelxy(g.ra, g.dec)
+            if x <= 0 or y <= 0 or x > W or y > H:
+                continue
+            keepI.append(i)
+        Igaia = np.array(keepI)
+        for i in Igaia:
             g = gaia[i]
             print('Star w/ G=', g.G)
             # FIXME -- should do stars outside the brick too!
             ok,x,y = targetwcs.radec2pixelxy(g.ra, g.dec)
             if x <= 0 or y <= 0 or x > W or y > H:
                 continue
+
             x -= 1.
             y -= 1.
             ix = int(np.round(x))
@@ -1515,6 +1527,9 @@ def stage_srcs(targetrd=None, pixscale=None, targetwcs=None,
             maxr = int(radii[-1])
             apr = maxr*0.8
 
+            # percentile to fit
+            segpct = 10
+            
             ylo,yhi = max(0,iy-maxr), min(H,iy+maxr+1)
             xlo,xhi = max(0,ix-maxr), min(W,ix+maxr+1)
             if yhi-ylo <= 1 or xhi-xlo <= 1:
@@ -1548,10 +1563,10 @@ def stage_srcs(targetrd=None, pixscale=None, targetwcs=None,
             plt.title('zoom')
             ps.savefig()
 
-            plt.clf()
-            dimshow(get_rgb(symms, bands, **rgbkwargs))
-            plt.title('symm')
-            ps.savefig()
+            # plt.clf()
+            # dimshow(get_rgb(symms, bands, **rgbkwargs))
+            # plt.title('symm')
+            # ps.savefig()
 
             r2 = ((np.arange(ylo, yhi)[:,np.newaxis] - y)**2 +
                   (np.arange(xlo, xhi)[np.newaxis,:] - x)**2)
@@ -1571,8 +1586,9 @@ def stage_srcs(targetrd=None, pixscale=None, targetwcs=None,
 
             fits = []
 
-            fixed_alpha = -2.7
-
+            #fixed_alpha = -2.7
+            fixed_alpha = -3.0
+            
             for iband,band in enumerate(bands):
                 symm = symms[iband]
                 rsymm = rsymms[iband]
@@ -1625,7 +1641,7 @@ def stage_srcs(targetrd=None, pixscale=None, targetwcs=None,
                     seg = np.array(seg)
                     seg = seg[np.isfinite(seg)]
                     if len(seg):
-                        mn,lo,m,hi = np.percentile(seg, [0, 25, 50, 75])
+                        mn,lo,m,hi = np.percentile(seg, [0, segpct, 50, 75])
                         pro[IY,IX] = m
                         minpro[IY,IX] = lo
 
@@ -1634,9 +1650,9 @@ def stage_srcs(targetrd=None, pixscale=None, targetwcs=None,
                         dm.append(((m-mn)/2.))
 
                     rseg = np.array(rseg)
-                    rseg = seg[np.isfinite(rseg)]
+                    rseg = rseg[np.isfinite(rseg)]
                     if len(rseg):
-                        mn,lo,m,hi = np.percentile(rseg, [0, 25, 50, 75])
+                        mn,lo,m,hi = np.percentile(rseg, [0, segpct, 50, 75])
                         rpro[IY,IX] = lo
                         r_rr.append((rlo+rhi)/2.)
                         r_mm.append(lo)
@@ -1708,13 +1724,13 @@ def stage_srcs(targetrd=None, pixscale=None, targetwcs=None,
                 (F3,) = M3.x
 
                 mod3 = powerlaw_model(0., F3, fixed_alpha, rads)
-                fitpro3[K] += mod2[K]
+                fitpro3[K] += mod3[K]
                 rhaloimgs[iband][ylo:yhi, xlo:xhi] += K * mod3 * apodize
 
-            plt.clf()
-            dimshow(get_rgb(segpros, bands, **rgbkwargs))
-            plt.title('seg')
-            ps.savefig()
+            # plt.clf()
+            # dimshow(get_rgb(segpros, bands, **rgbkwargs))
+            # plt.title('seg')
+            # ps.savefig()
 
             # plt.clf()
             # dimshow(get_rgb(profiles, bands, **rgbkwargs))
@@ -1723,13 +1739,13 @@ def stage_srcs(targetrd=None, pixscale=None, targetwcs=None,
 
             plt.clf()
             dimshow(get_rgb(minprofiles, bands, **rgbkwargs))
-            plt.title('25th pct profile')
+            plt.title('%ith pct profile' % segpct)
             ps.savefig()
 
-            plt.clf()
-            dimshow(get_rgb(fitpros, bands, **rgbkwargs))
-            plt.title('fit profile')
-            ps.savefig()
+            # plt.clf()
+            # dimshow(get_rgb(fitpros, bands, **rgbkwargs))
+            # plt.title('fit profile')
+            # ps.savefig()
 
             plt.clf()
             dimshow(get_rgb(fitpros2, bands, **rgbkwargs))
@@ -1774,12 +1790,13 @@ def stage_srcs(targetrd=None, pixscale=None, targetwcs=None,
 
             plt.clf()
             dimshow(get_rgb([co[ylo:yhi,xlo:xhi] - f for co,f in zip(residimgs,fitpros3)], bands, **rgbkwargs))
-            plt.title('resid data - fit (fixed)')
+            plt.title('data - r fit (fixed)')
             ps.savefig()
 
-            for co,fit in zip(residimgs,fitpros3):
-                co[ylo:yhi, xlo:xhi] -= fit
+            for res,fit in zip(residimgs,fitpros3):
+                res[ylo:yhi, xlo:xhi] -= fit
 
+            round1fits.append((ylo,yhi,xlo,xhi,fitpros3))
 
         plt.clf()
         dimshow(get_rgb(coimgs, bands, **rgbkwargs))
@@ -1826,7 +1843,116 @@ def stage_srcs(targetrd=None, pixscale=None, targetwcs=None,
         plt.title('data - r fit profiles')
         ps.savefig()
 
+        rhaloimgs = [np.zeros((H,W),np.float32) for b in bands]
 
+        for j,i in enumerate(Igaia):
+            g = gaia[i]
+        
+            ylo,yhi,xlo,xhi,fits = round1fits[j]
+            # Add round 1 fit back in
+            for res,fit in zip(residimgs,fits):
+                res[ylo:yhi, xlo:xhi] += fit
+        
+            ok,x,y = targetwcs.radec2pixelxy(g.ra, g.dec)
+            x -= 1.
+            y -= 1.
+            ix = int(np.round(x))
+            iy = int(np.round(y))
+
+            r2 = ((np.arange(ylo, yhi)[:,np.newaxis] - y)**2 +
+                  (np.arange(xlo, xhi)[np.newaxis,:] - x)**2)
+            rads = np.sqrt(r2)
+            # 
+            apodize = np.clip((rads - maxr) / (apr - maxr), 0., 1.)
+            Nseg = 12
+            segments = (Nseg * (np.arctan2(np.arange(ylo,yhi)[:,np.newaxis]-y,
+                                           np.arange(xlo,xhi)[np.newaxis,:]-x)
+                                           - -np.pi) / (2.*np.pi)).astype(int)
+            
+            rsymms = []
+            fitpros3 = []
+            rsegpros = []
+            
+            for iband,band in enumerate(bands):
+                rsymm = residimgs[iband][ylo:yhi, xlo:xhi].copy()
+                rsymms.append(rsymm)
+            
+                r_rr = []
+                r_mm = []
+                r_dm = []
+
+                fitpro3 = np.zeros_like(rsymm)
+                rsegpro = np.zeros_like(rsymm)
+                rpro = np.zeros_like(rsymm)
+                fitpros3.append(fitpro3)
+                rsegpros.append(rsegpro)
+                rprofiles.append(rpro)
+                
+                for rlo,rhi in zip(radii, radii[1:]):
+                    IY,IX = np.nonzero((r2 >= rlo**2) * (r2 < rhi**2))
+                    ie = cons[iband][IY+ylo, IX+xlo]
+                    rseg = []
+                    for s in range(Nseg):
+                        K = (ie > 0) * (segments[IY,IX] == s)
+                        ### FIXME -- sum(K) > N pixels??
+                        if np.sum(K):
+                            rm = np.median(rsymm[IY[K],IX[K]])
+                            rsegpro[IY[K],IX[K]] = rm
+                            rseg.append(rm)
+                    rseg = np.array(rseg)
+                    rseg = rseg[np.isfinite(rseg)]
+                    if len(rseg):
+                        mn,lo,m,hi = np.percentile(rseg, [0, segpct, 50, 75])
+                        rpro[IY,IX] = lo
+                        r_rr.append((rlo+rhi)/2.)
+                        r_mm.append(lo)
+                        r_dm.append(((m-mn)/2.))
+        
+                rr = np.array(r_rr)
+                mm = np.array(r_mm)
+                dm = np.array(r_dm)
+                dm = np.maximum(dm, 0.1*mm)
+                I = np.flatnonzero((rr < fitr))
+                def powerlaw_obj3(X):
+                    (F,) = X
+                    offset = 0.
+                    alpha = fixed_alpha
+                    return powerlaw_lnp(rr[I], mm[I], dm[I], offset, F, alpha)
+                M3 = minimize(powerlaw_obj3, [100.])
+                (F3,) = M3.x
+                K = (r2 >= minr**2) * (r2 <= maxr**2)
+                mod3 = powerlaw_model(0., F3, fixed_alpha, rads)
+                fitpro3[K] += mod3[K]
+                rhaloimgs[iband][ylo:yhi, xlo:xhi] += K * mod3 * apodize
+
+            plt.clf()
+            dimshow(get_rgb(fits, bands, **rgbkwargs))
+            plt.title('r fit 1')
+            ps.savefig()
+
+            plt.clf()
+            dimshow(get_rgb(fitpros3, bands, **rgbkwargs))
+            plt.title('r fit 2')
+            ps.savefig()
+                
+            for res,fit in zip(residimgs,fitpros3):
+                res[ylo:yhi, xlo:xhi] -= fit
+
+        plt.clf()
+        dimshow(get_rgb(coimgs, bands, **rgbkwargs))
+        plt.title('data')
+        ps.savefig()
+
+        plt.clf()
+        dimshow(get_rgb(rhaloimgs, bands, **rgbkwargs))
+        plt.title('r fit profiles 2')
+        ps.savefig()
+
+        plt.clf()
+        dimshow(get_rgb([c-h for c,h in zip(coimgs,rhaloimgs)], bands, **rgbkwargs))
+        plt.title('data - r fit profiles 2')
+        ps.savefig()
+                
 
         halomaps = dict([(b, np.zeros((H,W), np.float32)) for b in bands])
 
