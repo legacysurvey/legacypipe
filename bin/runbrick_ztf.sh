@@ -22,13 +22,15 @@ export PYTHONPATH=$PROJECTPATH/legacypipe/py:$PYTHONPATH
 export PYTHONPATH=$PROJECTPATH:$PYTHONPATH
 
 export outdir=/global/homes/c/cwar4677/output_individual
-rm $outdir/tractor*/*/*
-rm $outdir/coadd/*/*/*
+#rm $outdir/tractor*/*/*
+#rm $outdir/coadd/*/*/*
 
 #python $PROJECTPATH/legacypipe/py/ztfcoadd/ztfcoaddmaker.py --folder=$LEGACY_SURVEY_DIR  
-rm $LEGACY_SURVEY_DIR/survey-ccds-ztf.fits
-python $PROJECTPATH/legacypipe/py/ztfcoadd/ztfCCDtablemaker.py $LEGACY_SURVEY_DIR $LEGACY_SURVEY_DIR
-python $PROJECTPATH/legacypipe/py/legacypipe/runbrick.py --outdir=$outdir --pixscale=1.01 --no-wise --brick=2395p525 --force-all # --nblobs=100 --blob=750 
+#rm $LEGACY_SURVEY_DIR/survey-ccds-ztf.fits
+#python $PROJECTPATH/legacypipe/py/ztfcoadd/ztfCCDtablemaker.py $LEGACY_SURVEY_DIR $LEGACY_SURVEY_DIR
+#rm -r $LEGACY_SURVEY_DIR/calib/
+python $PROJECTPATH/legacypipe/py/legacypipe/runbrick.py --outdir=$outdir --no-wise --brick=2395p525  --coadd-bw --stage fit-blobs --blob 274 -nblobs=1
 # --threads=32
 #--radec=239.858822,52.209818
 #--nblobs=100 --blob=750 --brick=2395p525 
+#--stage fit-blobs

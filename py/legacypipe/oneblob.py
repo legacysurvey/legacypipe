@@ -1622,6 +1622,7 @@ def _get_subimages(tims, mods, src):
         if mod is None:
             continue
         mh,mw = mod.shape
+        print('MOD SHAPE',mh,mw)
         if mh == 0 or mw == 0:
             continue
         # for modelMasks
