@@ -65,6 +65,8 @@ def fit_halos(coimgs, cons, H, W, bands, gaia, plots, ps):
 
         #fixed_alpha = -2.7
         fixed_alpha = -3.0
+
+        fit_fluxes = []
         
         for iband,band in enumerate(bands):
             rsymm = rsymms[iband]
@@ -128,7 +130,8 @@ def fit_halos(coimgs, cons, H, W, bands, gaia, plots, ps):
             fitpro3[K] += mod3[K]
             rhaloimgs[iband][ylo:yhi, xlo:xhi] += K * mod3 * apodize
 
-            fitvalues.append((F3, fixed_alpha, minr, maxr, apr)
+            fit_fluxes.append(F3)
+        fitvalues.append((fit_fluxes, fixed_alpha, minr, maxr, apr))
             
         if False and plots:
             plt.clf()
