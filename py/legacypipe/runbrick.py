@@ -1537,7 +1537,7 @@ def stage_srcs(targetrd=None, pixscale=None, targetwcs=None,
             for iband,band in enumerate(bands):
                 rsymms.append(residimgs[iband][ylo:yhi, xlo:xhi].copy())
 
-            if plots:
+            if False and plots:
                 plt.clf()
                 dimshow(get_rgb([co[ylo:yhi,xlo:xhi] for co in coimgs], bands, **rgbkwargs))
                 ax = plt.axis()
@@ -1547,7 +1547,7 @@ def stage_srcs(targetrd=None, pixscale=None, targetwcs=None,
                 plt.title('zoom')
                 ps.savefig()
 
-             r2 = ((np.arange(ylo, yhi)[:,np.newaxis] - y)**2 +
+            r2 = ((np.arange(ylo, yhi)[:,np.newaxis] - y)**2 +
                   (np.arange(xlo, xhi)[np.newaxis,:] - x)**2)
             rads = np.sqrt(r2)
             # 
@@ -1564,9 +1564,9 @@ def stage_srcs(targetrd=None, pixscale=None, targetwcs=None,
             
             for iband,band in enumerate(bands):
                 rsymm = rsymms[iband]
-                fitpro3 = np.zeros_like(symm)
-                rpro = np.zeros_like(symm)
-                rsegpro = np.zeros_like(symm)
+                fitpro3 = np.zeros_like(rsymm)
+                rpro = np.zeros_like(rsymm)
+                rsegpro = np.zeros_like(rsymm)
 
                 rsegpros.append(rsegpro)
                 fitpros3.append(fitpro3)
@@ -1617,10 +1617,11 @@ def stage_srcs(targetrd=None, pixscale=None, targetwcs=None,
                     offset = 0.
                     alpha = fixed_alpha
                     return powerlaw_lnp(rr[I], mm[I], dm[I], offset, F, alpha)
-                M3 = minimize(powerlaw_obj3, [F1])
+                M3 = minimize(powerlaw_obj3, [1.])
                 (F3,) = M3.x
 
                 mod3 = powerlaw_model(0., F3, fixed_alpha, rads)
+                K = (r2 >= minr**2) * (r2 <= maxr**2)
                 fitpro3[K] += mod3[K]
                 rhaloimgs[iband][ylo:yhi, xlo:xhi] += K * mod3 * apodize
 
