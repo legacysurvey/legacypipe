@@ -1,6 +1,7 @@
 import numpy as np
 
-def fit_halos(coimgs, cons, H, W, bands, gaia, plots, ps):
+def fit_halos(coimgs, cons, H, W, targetwcs, pixscale,
+              bands, gaia, plots, ps):
     rhaloimgs = [np.zeros((H,W),np.float32) for b in bands]
     residimgs = [co.copy() for co in coimgs]
 
@@ -172,7 +173,6 @@ def fit_halos(coimgs, cons, H, W, bands, gaia, plots, ps):
             
         for res,fit in zip(residimgs,fitpros3):
             res[ylo:yhi, xlo:xhi] -= fit
-        round1fits.append((ylo,yhi,xlo,xhi,fitpros3))
 
     return fitvalues,rhaloimgs
     
