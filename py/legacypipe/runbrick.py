@@ -1554,19 +1554,20 @@ def stage_srcs(targetrd=None, pixscale=None, targetwcs=None,
 
                 rsymms.append(residimgs[iband][ylo:yhi, xlo:xhi].copy())
 
-            plt.clf()
-            dimshow(get_rgb([co[ylo:yhi,xlo:xhi] for co in coimgs], bands, **rgbkwargs))
-            ax = plt.axis()
-            plt.plot((ix-xlo)+flipw*np.array([-1,1,1,-1,-1]),
-                     (iy-ylo)+fliph*np.array([-1,-1,1,1,-1]), 'r-')
-            plt.axis(ax)
-            plt.title('zoom')
-            ps.savefig()
+            if plots:
+                plt.clf()
+                dimshow(get_rgb([co[ylo:yhi,xlo:xhi] for co in coimgs], bands, **rgbkwargs))
+                ax = plt.axis()
+                plt.plot((ix-xlo)+flipw*np.array([-1,1,1,-1,-1]),
+                         (iy-ylo)+fliph*np.array([-1,-1,1,1,-1]), 'r-')
+                plt.axis(ax)
+                plt.title('zoom')
+                ps.savefig()
 
-            # plt.clf()
-            # dimshow(get_rgb(symms, bands, **rgbkwargs))
-            # plt.title('symm')
-            # ps.savefig()
+                # plt.clf()
+                # dimshow(get_rgb(symms, bands, **rgbkwargs))
+                # plt.title('symm')
+                # ps.savefig()
 
             r2 = ((np.arange(ylo, yhi)[:,np.newaxis] - y)**2 +
                   (np.arange(xlo, xhi)[np.newaxis,:] - x)**2)
@@ -1727,121 +1728,122 @@ def stage_srcs(targetrd=None, pixscale=None, targetwcs=None,
                 fitpro3[K] += mod3[K]
                 rhaloimgs[iband][ylo:yhi, xlo:xhi] += K * mod3 * apodize
 
-            # plt.clf()
-            # dimshow(get_rgb(segpros, bands, **rgbkwargs))
-            # plt.title('seg')
-            # ps.savefig()
+            if plots:
+                # plt.clf()
+                # dimshow(get_rgb(segpros, bands, **rgbkwargs))
+                # plt.title('seg')
+                # ps.savefig()
+    
+                # plt.clf()
+                # dimshow(get_rgb(profiles, bands, **rgbkwargs))
+                # plt.title('profile')
+                # ps.savefig()
+    
+                plt.clf()
+                dimshow(get_rgb(minprofiles, bands, **rgbkwargs))
+                plt.title('%ith pct profile' % segpct)
+                ps.savefig()
+    
+                # plt.clf()
+                # dimshow(get_rgb(fitpros, bands, **rgbkwargs))
+                # plt.title('fit profile')
+                # ps.savefig()
+    
+                plt.clf()
+                dimshow(get_rgb(fitpros2, bands, **rgbkwargs))
+                plt.title('fit profile (fixed alpha)')
+                ps.savefig()
+    
+                plt.clf()
+                dimshow(get_rgb([co[ylo:yhi,xlo:xhi] - f for co,f in zip(coimgs,fitpros2)], bands, **rgbkwargs))
+                plt.title('data - fit (fixed)')
+                ps.savefig()
 
-            # plt.clf()
-            # dimshow(get_rgb(profiles, bands, **rgbkwargs))
-            # plt.title('profile')
-            # ps.savefig()
-
-            plt.clf()
-            dimshow(get_rgb(minprofiles, bands, **rgbkwargs))
-            plt.title('%ith pct profile' % segpct)
-            ps.savefig()
-
-            # plt.clf()
-            # dimshow(get_rgb(fitpros, bands, **rgbkwargs))
-            # plt.title('fit profile')
-            # ps.savefig()
-
-            plt.clf()
-            dimshow(get_rgb(fitpros2, bands, **rgbkwargs))
-            plt.title('fit profile (fixed alpha)')
-            ps.savefig()
-
-            plt.clf()
-            dimshow(get_rgb([co[ylo:yhi,xlo:xhi] - f for co,f in zip(coimgs,fitpros2)], bands, **rgbkwargs))
-            plt.title('data - fit (fixed)')
-            ps.savefig()
-
-            plt.clf()
-            for band,fit in zip(bands,fits):
-                (F2,), rr, mm, dm, I,(F1,alpha1) = fit
-                cc = dict(z='m').get(band,band)
-                plt.loglog(rr, mm, '-', color=cc)
-                plt.errorbar(rr, mm, yerr=dm, color=cc, fmt='.')
-                #plt.plot(rr, powerlaw_model(offset, F, alpha, rr), '-', color=cc, lw=2, alpha=0.5)
-                plt.plot(rr, powerlaw_model(0., F2, fixed_alpha, rr), '-', color=cc, lw=2, alpha=0.5)
-                plt.plot(rr, powerlaw_model(0., F1, alpha1, rr), '-', color=cc, lw=3, alpha=0.3)
-            ps.savefig()
-
-            plt.clf()
-            dimshow(get_rgb(rsymms, bands, **rgbkwargs))
-            plt.title('rsymm')
-            ps.savefig()
-
-            plt.clf()
-            dimshow(get_rgb(rsegpros, bands, **rgbkwargs))
-            plt.title('rseg')
-            ps.savefig()
-
-            plt.clf()
-            dimshow(get_rgb(rprofiles, bands, **rgbkwargs))
-            plt.title('rpro')
-            ps.savefig()
-
-            plt.clf()
-            dimshow(get_rgb(fitpros3, bands, **rgbkwargs))
-            plt.title('r fit')
-            ps.savefig()
-
-            plt.clf()
-            dimshow(get_rgb([co[ylo:yhi,xlo:xhi] - f for co,f in zip(residimgs,fitpros3)], bands, **rgbkwargs))
-            plt.title('data - r fit (fixed)')
-            ps.savefig()
-
+                plt.clf()
+                for band,fit in zip(bands,fits):
+                    (F2,), rr, mm, dm, I,(F1,alpha1) = fit
+                    cc = dict(z='m').get(band,band)
+                    plt.loglog(rr, mm, '-', color=cc)
+                    plt.errorbar(rr, mm, yerr=dm, color=cc, fmt='.')
+                    #plt.plot(rr, powerlaw_model(offset, F, alpha, rr), '-', color=cc, lw=2, alpha=0.5)
+                    plt.plot(rr, powerlaw_model(0., F2, fixed_alpha, rr), '-', color=cc, lw=2, alpha=0.5)
+                    plt.plot(rr, powerlaw_model(0., F1, alpha1, rr), '-', color=cc, lw=3, alpha=0.3)
+                ps.savefig()
+                
+                plt.clf()
+                dimshow(get_rgb(rsymms, bands, **rgbkwargs))
+                plt.title('rsymm')
+                ps.savefig()
+                
+                plt.clf()
+                dimshow(get_rgb(rsegpros, bands, **rgbkwargs))
+                plt.title('rseg')
+                ps.savefig()
+                
+                plt.clf()
+                dimshow(get_rgb(rprofiles, bands, **rgbkwargs))
+                plt.title('rpro')
+                ps.savefig()
+                
+                plt.clf()
+                dimshow(get_rgb(fitpros3, bands, **rgbkwargs))
+                plt.title('r fit')
+                ps.savefig()
+                
+                plt.clf()
+                dimshow(get_rgb([co[ylo:yhi,xlo:xhi] - f for co,f in zip(residimgs,fitpros3)], bands, **rgbkwargs))
+                plt.title('data - r fit (fixed)')
+                ps.savefig()
+                
             for res,fit in zip(residimgs,fitpros3):
                 res[ylo:yhi, xlo:xhi] -= fit
-
             round1fits.append((ylo,yhi,xlo,xhi,fitpros3))
 
-        plt.clf()
-        dimshow(get_rgb(coimgs, bands, **rgbkwargs))
-        plt.title('data')
-        ps.savefig()
-
-        plt.clf()
-        dimshow(get_rgb(haloimgs, bands, **rgbkwargs))
-        plt.title('fit profiles')
-        ps.savefig()
-
-        plt.clf()
-        dimshow(get_rgb([c-h for c,h in zip(coimgs,haloimgs)], bands, **rgbkwargs))
-        plt.title('data - fit profiles')
-        ps.savefig()
-
-        plt.clf()
-        dimshow(get_rgb(maxhaloimgs, bands, **rgbkwargs))
-        plt.title('max of fit profiles')
-        ps.savefig()
-
-        plt.clf()
-        dimshow(get_rgb([c-h for c,h in zip(coimgs,maxhaloimgs)], bands, **rgbkwargs))
-        plt.title('data - max fit profiles')
-        ps.savefig()
-
-        plt.clf()
-        dimshow(get_rgb(maxhaloimgs2, bands, **rgbkwargs))
-        plt.title('max of fit profiles (fixed)')
-        ps.savefig()
-
-        plt.clf()
-        dimshow(get_rgb([c-h for c,h in zip(coimgs,maxhaloimgs2)], bands, **rgbkwargs))
-        plt.title('data - max fit profiles (fixed)')
-        ps.savefig()
-
-        plt.clf()
-        dimshow(get_rgb(rhaloimgs, bands, **rgbkwargs))
-        plt.title('r fit profiles')
-        ps.savefig()
-
-        plt.clf()
-        dimshow(get_rgb([c-h for c,h in zip(coimgs,rhaloimgs)], bands, **rgbkwargs))
-        plt.title('data - r fit profiles')
-        ps.savefig()
+        if plots:
+            plt.clf()
+            dimshow(get_rgb(coimgs, bands, **rgbkwargs))
+            plt.title('data')
+            ps.savefig()
+    
+            plt.clf()
+            dimshow(get_rgb(haloimgs, bands, **rgbkwargs))
+            plt.title('fit profiles')
+            ps.savefig()
+    
+            plt.clf()
+            dimshow(get_rgb([c-h for c,h in zip(coimgs,haloimgs)], bands, **rgbkwargs))
+            plt.title('data - fit profiles')
+            ps.savefig()
+    
+            plt.clf()
+            dimshow(get_rgb(maxhaloimgs, bands, **rgbkwargs))
+            plt.title('max of fit profiles')
+            ps.savefig()
+    
+            plt.clf()
+            dimshow(get_rgb([c-h for c,h in zip(coimgs,maxhaloimgs)], bands, **rgbkwargs))
+            plt.title('data - max fit profiles')
+            ps.savefig()
+    
+            plt.clf()
+            dimshow(get_rgb(maxhaloimgs2, bands, **rgbkwargs))
+            plt.title('max of fit profiles (fixed)')
+            ps.savefig()
+    
+            plt.clf()
+            dimshow(get_rgb([c-h for c,h in zip(coimgs,maxhaloimgs2)], bands, **rgbkwargs))
+            plt.title('data - max fit profiles (fixed)')
+            ps.savefig()
+    
+            plt.clf()
+            dimshow(get_rgb(rhaloimgs, bands, **rgbkwargs))
+            plt.title('r fit profiles')
+            ps.savefig()
+    
+            plt.clf()
+            dimshow(get_rgb([c-h for c,h in zip(coimgs,rhaloimgs)], bands, **rgbkwargs))
+            plt.title('data - r fit profiles')
+            ps.savefig()
 
         rhaloimgs = [np.zeros((H,W),np.float32) for b in bands]
 
@@ -1925,33 +1927,35 @@ def stage_srcs(targetrd=None, pixscale=None, targetwcs=None,
                 fitpro3[K] += mod3[K]
                 rhaloimgs[iband][ylo:yhi, xlo:xhi] += K * mod3 * apodize
 
-            plt.clf()
-            dimshow(get_rgb(fits, bands, **rgbkwargs))
-            plt.title('r fit 1')
-            ps.savefig()
-
-            plt.clf()
-            dimshow(get_rgb(fitpros3, bands, **rgbkwargs))
-            plt.title('r fit 2')
-            ps.savefig()
+            if plots:
+                plt.clf()
+                dimshow(get_rgb(fits, bands, **rgbkwargs))
+                plt.title('r fit 1')
+                ps.savefig()
+    
+                plt.clf()
+                dimshow(get_rgb(fitpros3, bands, **rgbkwargs))
+                plt.title('r fit 2')
+                ps.savefig()
                 
             for res,fit in zip(residimgs,fitpros3):
                 res[ylo:yhi, xlo:xhi] -= fit
 
-        plt.clf()
-        dimshow(get_rgb(coimgs, bands, **rgbkwargs))
-        plt.title('data')
-        ps.savefig()
-
-        plt.clf()
-        dimshow(get_rgb(rhaloimgs, bands, **rgbkwargs))
-        plt.title('r fit profiles 2')
-        ps.savefig()
-
-        plt.clf()
-        dimshow(get_rgb([c-h for c,h in zip(coimgs,rhaloimgs)], bands, **rgbkwargs))
-        plt.title('data - r fit profiles 2')
-        ps.savefig()
+        if plots:
+            plt.clf()
+            dimshow(get_rgb(coimgs, bands, **rgbkwargs))
+            plt.title('data')
+            ps.savefig()
+    
+            plt.clf()
+            dimshow(get_rgb(rhaloimgs, bands, **rgbkwargs))
+            plt.title('r fit profiles 2')
+            ps.savefig()
+    
+            plt.clf()
+            dimshow(get_rgb([c-h for c,h in zip(coimgs,rhaloimgs)], bands, **rgbkwargs))
+            plt.title('data - r fit profiles 2')
+            ps.savefig()
                 
 
         halomaps = dict([(b, np.zeros((H,W), np.float32)) for b in bands])
@@ -2063,93 +2067,92 @@ def stage_srcs(targetrd=None, pixscale=None, targetwcs=None,
                 sh,sw = rr.shape
                 halomaps[band][ylo:ylo+sh, xlo:xlo+sw] += powerlaw_model(Fs[band],alphas[band],rr) * (rr >= minr) * (rr <= maxr)
 
-            print('Plotting')
-            plt.clf()
-            dimshow(get_rgb([halomaps[b] for b in bands], bands, **rgbkwargs))
-            ps.savefig()
+            if plots:
+                print('Plotting')
+                plt.clf()
+                dimshow(get_rgb([halomaps[b] for b in bands], bands, **rgbkwargs))
+                ps.savefig()
+    
+                coimgs,cons = quick_coadds(tims, bands, targetwcs)
+                plt.clf()
+                dimshow(get_rgb([c-h for c,h in zip(coimgs, [halomaps[b] for b in bands])], bands,
+                                **rgbkwargs))
+                ps.savefig()
 
-            coimgs,cons = quick_coadds(tims, bands, targetwcs)
-            plt.clf()
-            dimshow(get_rgb([c-h for c,h in zip(coimgs, [halomaps[b] for b in bands])], bands,
-                            **rgbkwargs))
-            ps.savefig()
-
-            import matplotlib.gridspec as gridspec
-            plt.clf()
-            fig = plt.gcf()
-            gs = gridspec.GridSpec(2, 2)
-            ax = fig.add_subplot(gs[0, 0])
-            for rr,mm,dm,band in plots:
-                cc = dict(z='m').get(band,band)
-                plt.plot(rr, mm, '-',color=cc)
-                plt.errorbar(rr, mm, yerr=dm, color=cc)
-            ax = plt.axis()
-            for band in bands:
-                rr = np.arange(10, 200)
-                mm = powerlaw_model(Fs[band], alphas[band], rr)
-                plt.plot(rr, mm, 'k-', alpha=0.5)
-            plt.axis(ax)
-                
-            plt.xlabel('Radius (pix)')
-            plt.ylabel('Surface brightness')
-            plt.xlim(0, 100)
-            ax = fig.add_subplot(gs[0, 1])
-            for rr,mm,dm,band in plots:
-                cc = dict(z='m').get(band,band)
-                plt.plot(rr, mm, '-',color=cc)
-                plt.errorbar(rr, mm, yerr=dm, color=cc)
-
-            ax = plt.axis()
-            for band in bands:
-                rr = np.arange(10, 200)
-                mm = powerlaw_model(Fs[band], alphas[band], rr)
-                plt.plot(rr, mm, 'k-', alpha=0.5)
-            plt.axis(ax)
-
-            plt.xscale('log')
-            plt.yscale('log')
-            plt.xlabel('Radius (pix)')
-            plt.xlim(10, 200)
-            plt.ylim(1e-2, 5e1)
-            ax = fig.add_subplot(gs[1, :])
-            #plt.subplot(2,1,2)
-            for rr,mm,dm,band in plots:
-                cc = dict(z='m').get(band,band)
-                plt.plot(rr, mm, '-',color=cc)
-                plt.errorbar(rr, mm, yerr=dm, color=cc)
-
-            #ax = plt.axis()
-            for band in bands:
-                rr = np.arange(10, 200)
-                mm = powerlaw_model(Fs[band], alphas[band], rr)
-                plt.plot(rr, mm, 'k-', alpha=0.5)
-            #plt.axis(ax)
-
-            plt.yscale('log')
-            plt.xlabel('Radius (pix)')
-            plt.ylabel('Surface brightness')
-            plt.suptitle('Gaia star: G=%.1f' % g.G)
-            ps.savefig()
-
-            print('Writing FITS table...')
-            t = fits_table()
-            t.rr = np.array([p[0] for p in plots])
-            t.mm = np.array([p[1] for p in plots])
-            t.dm = np.array([p[2] for p in plots])
-            t.band = np.array([p[3] for p in plots])
-            t.gmag = np.array([g.G] * len(plots))
-
-            print('t.rr:', t.rr)
-            print('t.mm:', t.mm)
-            print('t.dm:', t.dm)
-            print('t.band:', t.band)
-            print('t.gmag:', t.gmag)
-
-            t.writeto('flux-%03i.fits' % iw)
-            iw += 1
-            print('Wrote FITS table')
-
-
+                import matplotlib.gridspec as gridspec
+                plt.clf()
+                fig = plt.gcf()
+                gs = gridspec.GridSpec(2, 2)
+                ax = fig.add_subplot(gs[0, 0])
+                for rr,mm,dm,band in plots:
+                    cc = dict(z='m').get(band,band)
+                    plt.plot(rr, mm, '-',color=cc)
+                    plt.errorbar(rr, mm, yerr=dm, color=cc)
+                ax = plt.axis()
+                for band in bands:
+                    rr = np.arange(10, 200)
+                    mm = powerlaw_model(Fs[band], alphas[band], rr)
+                    plt.plot(rr, mm, 'k-', alpha=0.5)
+                plt.axis(ax)
+                    
+                plt.xlabel('Radius (pix)')
+                plt.ylabel('Surface brightness')
+                plt.xlim(0, 100)
+                ax = fig.add_subplot(gs[0, 1])
+                for rr,mm,dm,band in plots:
+                    cc = dict(z='m').get(band,band)
+                    plt.plot(rr, mm, '-',color=cc)
+                    plt.errorbar(rr, mm, yerr=dm, color=cc)
+    
+                ax = plt.axis()
+                for band in bands:
+                    rr = np.arange(10, 200)
+                    mm = powerlaw_model(Fs[band], alphas[band], rr)
+                    plt.plot(rr, mm, 'k-', alpha=0.5)
+                plt.axis(ax)
+    
+                plt.xscale('log')
+                plt.yscale('log')
+                plt.xlabel('Radius (pix)')
+                plt.xlim(10, 200)
+                plt.ylim(1e-2, 5e1)
+                ax = fig.add_subplot(gs[1, :])
+                #plt.subplot(2,1,2)
+                for rr,mm,dm,band in plots:
+                    cc = dict(z='m').get(band,band)
+                    plt.plot(rr, mm, '-',color=cc)
+                    plt.errorbar(rr, mm, yerr=dm, color=cc)
+    
+                #ax = plt.axis()
+                for band in bands:
+                    rr = np.arange(10, 200)
+                    mm = powerlaw_model(Fs[band], alphas[band], rr)
+                    plt.plot(rr, mm, 'k-', alpha=0.5)
+                #plt.axis(ax)
+    
+                plt.yscale('log')
+                plt.xlabel('Radius (pix)')
+                plt.ylabel('Surface brightness')
+                plt.suptitle('Gaia star: G=%.1f' % g.G)
+                ps.savefig()
+    
+                print('Writing FITS table...')
+                t = fits_table()
+                t.rr = np.array([p[0] for p in plots])
+                t.mm = np.array([p[1] for p in plots])
+                t.dm = np.array([p[2] for p in plots])
+                t.band = np.array([p[3] for p in plots])
+                t.gmag = np.array([g.G] * len(plots))
+    
+                print('t.rr:', t.rr)
+                print('t.mm:', t.mm)
+                print('t.dm:', t.dm)
+                print('t.band:', t.band)
+                print('t.gmag:', t.gmag)
+    
+                t.writeto('flux-%03i.fits' % iw)
+                iw += 1
+                print('Wrote FITS table')
 
     # SED-matched detections
     record_event and record_event('stage_srcs: SED-matched')
@@ -2445,7 +2448,8 @@ def read_gaia(targetwcs):
     # This is in degrees and the magic 0.262 (indeed the whole
     # relation) is from eyeballing a radius-vs-mag plot that was in
     # pixels; that is unrelated to the present targetwcs pixel scale.
-    gaia.radius = np.minimum(1800., 150. * 2.5**((11. - gaia.G)/4.)) * 0.262/3600.
+    #gaia.radius = np.minimum(1800., 150. * 2.5**((11. - gaia.G)/4.)) * 0.262/3600.
+    gaia.radius = np.minimum(1800., 150. * 2.5**((11. - gaia.G)/3.)) * 0.262/3600.
 
     return gaia
 
@@ -2499,7 +2503,8 @@ def read_tycho2(survey, targetwcs):
 
     # See note on gaia.radius above -- don't change the 0.262 to
     # targetwcs.pixel_scale()!
-    tycho.radius = np.minimum(1800., 150. * 2.5**((11. - tycho.mag)/4.)) * 0.262/3600.
+    #tycho.radius = np.minimum(1800., 150. * 2.5**((11. - tycho.mag)/4.)) * 0.262/3600.
+    tycho.radius = np.minimum(1800., 150. * 2.5**((11. - tycho.mag)/3.)) * 0.262/3600.
     
     for c in ['tyc1', 'tyc2', 'tyc3', 'mag_bt', 'mag_vt', 'mag_hp',
               'mean_ra', 'mean_dec', #'epoch_ra', 'epoch_dec',
