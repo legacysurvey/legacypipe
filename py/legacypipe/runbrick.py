@@ -1487,12 +1487,6 @@ def stage_srcs(targetrd=None, pixscale=None, targetwcs=None,
 
         coimgs,cons = quick_coadds(tims, bands, targetwcs)
 
-        # model patches for each band*star
-        #patches = dict([(b,[]) for b in bands])
-
-        haloimgs = [np.zeros((H,W),np.float32) for b in bands]
-        maxhaloimgs = [np.zeros((H,W),np.float32) for b in bands]
-        maxhaloimgs2 = [np.zeros((H,W),np.float32) for b in bands]
         rhaloimgs = [np.zeros((H,W),np.float32) for b in bands]
 
         residimgs = [co.copy() for co in coimgs]
@@ -1539,19 +1533,8 @@ def stage_srcs(targetrd=None, pixscale=None, targetwcs=None,
             fliph = min(iy-ylo, yhi-1-iy)
             slc = (slice(iy-ylo-fliph, iy-ylo+fliph+1),
                    slice(ix-xlo-flipw, ix-xlo+flipw+1))
-            symms = []
             rsymms = []
             for iband,band in enumerate(bands):
-                symm = coimgs[iband][ylo:yhi, xlo:xhi].copy()
-                wt = coimgs[iband][ylo:yhi, xlo:xhi]
-                # fill empty pixels with symmetric data
-                swt = np.flipud(np.fliplr(wt[slc]))
-                flipped = np.flipud(np.fliplr(symm[slc]))
-                fill = (wt[slc] == 0) * (swt > 0)
-                symm[slc][fill] = flipped[fill]
-                symm[slc] = np.minimum(symm[slc], flipped)
-                symms.append(symm)
-
                 rsymms.append(residimgs[iband][ylo:yhi, xlo:xhi].copy())
 
             if plots:
@@ -1564,24 +1547,13 @@ def stage_srcs(targetrd=None, pixscale=None, targetwcs=None,
                 plt.title('zoom')
                 ps.savefig()
 
-                # plt.clf()
-                # dimshow(get_rgb(symms, bands, **rgbkwargs))
-                # plt.title('symm')
-                # ps.savefig()
-
-            r2 = ((np.arange(ylo, yhi)[:,np.newaxis] - y)**2 +
+             r2 = ((np.arange(ylo, yhi)[:,np.newaxis] - y)**2 +
                   (np.arange(xlo, xhi)[np.newaxis,:] - x)**2)
             rads = np.sqrt(r2)
             # 
             apodize = np.clip((rads - maxr) / (apr - maxr), 0., 1.)
 
-            segpros = []
             rsegpros = []
-            profiles = []
-            minprofiles = []
-            fitpros = []
-            fitpros2 = []
-
             rprofiles = []
             fitpros3 = []
 
@@ -1591,34 +1563,18 @@ def stage_srcs(targetrd=None, pixscale=None, targetwcs=None,
             fixed_alpha = -3.0
             
             for iband,band in enumerate(bands):
-                symm = symms[iband]
                 rsymm = rsymms[iband]
-
-                pro = np.zeros_like(symm)
-                minpro = np.zeros_like(symm)
-                segpro = np.zeros_like(symm)
-                fitpro = np.zeros_like(symm)
-                fitpro2 = np.zeros_like(symm)
                 fitpro3 = np.zeros_like(symm)
                 rpro = np.zeros_like(symm)
                 rsegpro = np.zeros_like(symm)
 
-                segpros.append(segpro)
                 rsegpros.append(rsegpro)
-                profiles.append(pro)
-                minprofiles.append(minpro)
-                fitpros.append(fitpro)
-                fitpros2.append(fitpro2)
                 fitpros3.append(fitpro3)
                 rprofiles.append(rpro)
 
                 Nseg = 12
                 segments = (Nseg * (np.arctan2(np.arange(ylo,yhi)[:,np.newaxis]-y,
                                                np.arange(xlo,xhi)[np.newaxis,:]-x) - -np.pi) / (2.*np.pi)).astype(int)
-
-                rr = []
-                mm = []
-                dm = []
 
                 r_rr = []
                 r_mm = []
@@ -1627,29 +1583,13 @@ def stage_srcs(targetrd=None, pixscale=None, targetwcs=None,
                 for rlo,rhi in zip(radii, radii[1:]):
                     IY,IX = np.nonzero((r2 >= rlo**2) * (r2 < rhi**2))
                     ie = cons[iband][IY+ylo, IX+xlo]
-                    seg = []
                     rseg = []
                     for s in range(Nseg):
                         K = (ie > 0) * (segments[IY,IX] == s)
                         if np.sum(K):
-                            m = np.median(symm[IY[K],IX[K]])
-                            segpro[IY[K],IX[K]] = m
-                            seg.append(m)
-
                             rm = np.median(rsymm[IY[K],IX[K]])
                             rsegpro[IY[K],IX[K]] = rm
                             rseg.append(rm)
-                    seg = np.array(seg)
-                    seg = seg[np.isfinite(seg)]
-                    if len(seg):
-                        mn,lo,m,hi = np.percentile(seg, [0, segpct, 50, 75])
-                        pro[IY,IX] = m
-                        minpro[IY,IX] = lo
-
-                        rr.append((rlo+rhi)/2.)
-                        mm.append(lo)
-                        dm.append(((m-mn)/2.))
-
                     rseg = np.array(rseg)
                     rseg = rseg[np.isfinite(rseg)]
                     if len(rseg):
@@ -1666,50 +1606,6 @@ def stage_srcs(targetrd=None, pixscale=None, targetwcs=None,
                 def powerlaw_lnp(r, f, df, offset, F, alpha):
                     mod = powerlaw_model(offset, F, alpha, r)
                     return np.sum(((f - mod) / df)**2)
-                    #return np.sum(np.abs((f - mod) / df))
-
-                rr = np.array(rr)
-                mm = np.array(mm)
-                dm = np.array(dm)
-                dm = np.maximum(dm, 0.1*mm)
-                I = np.flatnonzero((rr < fitr))
-
-                def powerlaw_obj1(X):
-                    (F,alpha) = X
-                    offset = 0.
-                    return powerlaw_lnp(rr[I], mm[I], dm[I], offset, F, alpha)
-                M1 = minimize(powerlaw_obj1, [100., -2.7])
-                F1,alpha1 = M1.x
-                #print(M1)
-
-                def powerlaw_obj2(X):
-                    (F,) = X
-                    offset = 0.
-                    alpha = fixed_alpha
-                    return powerlaw_lnp(rr[I], mm[I], dm[I], offset, F, alpha)
-                M2 = minimize(powerlaw_obj2, [F1])
-                (F2,) = M2.x
-
-                fits.append((M2.x, rr, mm, dm, I, M1.x))
-
-                # def powerlaw_obj(X):
-                #     (offset,F,alpha) = X
-                #     r = powerlaw_lnp(rr[I], mm[I], dm[I], offset, F, alpha)
-                #     #print('obj: offset=%.1f, F=%.2f, alpha=%.3f ==> r = %.2f' % (offset, F, alpha, r))
-                #     return r
-                # M = minimize(powerlaw_obj, [0., F1, alpha1])
-                # print(M)
-
-                K = (r2 >= minr**2) * (r2 <= maxr**2)
-                mod = powerlaw_model(0., F1, alpha1, rads)
-                fitpro[K] += mod[K]
-
-                mod2 = powerlaw_model(0., F2, fixed_alpha, rads)
-                fitpro2[K] += mod2[K]
-
-                haloimgs[iband][ylo:yhi, xlo:xhi] += K * mod * apodize
-                maxhaloimgs[iband][ylo:yhi, xlo:xhi] = np.maximum(maxhaloimgs[iband][ylo:yhi, xlo:xhi], K * mod * apodize)
-                maxhaloimgs2[iband][ylo:yhi, xlo:xhi] = np.maximum(maxhaloimgs2[iband][ylo:yhi, xlo:xhi], K * mod2 * apodize)
 
                 rr = np.array(r_rr)
                 mm = np.array(r_mm)
@@ -1728,37 +1624,7 @@ def stage_srcs(targetrd=None, pixscale=None, targetwcs=None,
                 fitpro3[K] += mod3[K]
                 rhaloimgs[iband][ylo:yhi, xlo:xhi] += K * mod3 * apodize
 
-            if plots:
-                # plt.clf()
-                # dimshow(get_rgb(segpros, bands, **rgbkwargs))
-                # plt.title('seg')
-                # ps.savefig()
-    
-                # plt.clf()
-                # dimshow(get_rgb(profiles, bands, **rgbkwargs))
-                # plt.title('profile')
-                # ps.savefig()
-    
-                plt.clf()
-                dimshow(get_rgb(minprofiles, bands, **rgbkwargs))
-                plt.title('%ith pct profile' % segpct)
-                ps.savefig()
-    
-                # plt.clf()
-                # dimshow(get_rgb(fitpros, bands, **rgbkwargs))
-                # plt.title('fit profile')
-                # ps.savefig()
-    
-                plt.clf()
-                dimshow(get_rgb(fitpros2, bands, **rgbkwargs))
-                plt.title('fit profile (fixed alpha)')
-                ps.savefig()
-    
-                plt.clf()
-                dimshow(get_rgb([co[ylo:yhi,xlo:xhi] - f for co,f in zip(coimgs,fitpros2)], bands, **rgbkwargs))
-                plt.title('data - fit (fixed)')
-                ps.savefig()
-
+            if False and plots:
                 plt.clf()
                 for band,fit in zip(bands,fits):
                     (F2,), rr, mm, dm, I,(F1,alpha1) = fit
@@ -1769,7 +1635,7 @@ def stage_srcs(targetrd=None, pixscale=None, targetwcs=None,
                     plt.plot(rr, powerlaw_model(0., F2, fixed_alpha, rr), '-', color=cc, lw=2, alpha=0.5)
                     plt.plot(rr, powerlaw_model(0., F1, alpha1, rr), '-', color=cc, lw=3, alpha=0.3)
                 ps.savefig()
-                
+
                 plt.clf()
                 dimshow(get_rgb(rsymms, bands, **rgbkwargs))
                 plt.title('rsymm')
@@ -1806,353 +1672,14 @@ def stage_srcs(targetrd=None, pixscale=None, targetwcs=None,
             ps.savefig()
     
             plt.clf()
-            dimshow(get_rgb(haloimgs, bands, **rgbkwargs))
+            dimshow(get_rgb(rhaloimgs, bands, **rgbkwargs))
             plt.title('fit profiles')
             ps.savefig()
     
             plt.clf()
-            dimshow(get_rgb([c-h for c,h in zip(coimgs,haloimgs)], bands, **rgbkwargs))
+            dimshow(get_rgb([c-h for c,h in zip(coimgs,rhaloimgs)], bands, **rgbkwargs))
             plt.title('data - fit profiles')
             ps.savefig()
-    
-            plt.clf()
-            dimshow(get_rgb(maxhaloimgs, bands, **rgbkwargs))
-            plt.title('max of fit profiles')
-            ps.savefig()
-    
-            plt.clf()
-            dimshow(get_rgb([c-h for c,h in zip(coimgs,maxhaloimgs)], bands, **rgbkwargs))
-            plt.title('data - max fit profiles')
-            ps.savefig()
-    
-            plt.clf()
-            dimshow(get_rgb(maxhaloimgs2, bands, **rgbkwargs))
-            plt.title('max of fit profiles (fixed)')
-            ps.savefig()
-    
-            plt.clf()
-            dimshow(get_rgb([c-h for c,h in zip(coimgs,maxhaloimgs2)], bands, **rgbkwargs))
-            plt.title('data - max fit profiles (fixed)')
-            ps.savefig()
-    
-            plt.clf()
-            dimshow(get_rgb(rhaloimgs, bands, **rgbkwargs))
-            plt.title('r fit profiles')
-            ps.savefig()
-    
-            plt.clf()
-            dimshow(get_rgb([c-h for c,h in zip(coimgs,rhaloimgs)], bands, **rgbkwargs))
-            plt.title('data - r fit profiles')
-            ps.savefig()
-
-        rhaloimgs = [np.zeros((H,W),np.float32) for b in bands]
-
-        for j,i in enumerate(Igaia):
-            g = gaia[i]
-        
-            ylo,yhi,xlo,xhi,fits = round1fits[j]
-            # Add round 1 fit back in
-            for res,fit in zip(residimgs,fits):
-                res[ylo:yhi, xlo:xhi] += fit
-        
-            ok,x,y = targetwcs.radec2pixelxy(g.ra, g.dec)
-            x -= 1.
-            y -= 1.
-            ix = int(np.round(x))
-            iy = int(np.round(y))
-
-            r2 = ((np.arange(ylo, yhi)[:,np.newaxis] - y)**2 +
-                  (np.arange(xlo, xhi)[np.newaxis,:] - x)**2)
-            rads = np.sqrt(r2)
-            # 
-            apodize = np.clip((rads - maxr) / (apr - maxr), 0., 1.)
-            Nseg = 12
-            segments = (Nseg * (np.arctan2(np.arange(ylo,yhi)[:,np.newaxis]-y,
-                                           np.arange(xlo,xhi)[np.newaxis,:]-x)
-                                           - -np.pi) / (2.*np.pi)).astype(int)
-            
-            rsymms = []
-            fitpros3 = []
-            rsegpros = []
-            
-            for iband,band in enumerate(bands):
-                rsymm = residimgs[iband][ylo:yhi, xlo:xhi].copy()
-                rsymms.append(rsymm)
-            
-                r_rr = []
-                r_mm = []
-                r_dm = []
-
-                fitpro3 = np.zeros_like(rsymm)
-                rsegpro = np.zeros_like(rsymm)
-                rpro = np.zeros_like(rsymm)
-                fitpros3.append(fitpro3)
-                rsegpros.append(rsegpro)
-                rprofiles.append(rpro)
-                
-                for rlo,rhi in zip(radii, radii[1:]):
-                    IY,IX = np.nonzero((r2 >= rlo**2) * (r2 < rhi**2))
-                    ie = cons[iband][IY+ylo, IX+xlo]
-                    rseg = []
-                    for s in range(Nseg):
-                        K = (ie > 0) * (segments[IY,IX] == s)
-                        ### FIXME -- sum(K) > N pixels??
-                        if np.sum(K):
-                            rm = np.median(rsymm[IY[K],IX[K]])
-                            rsegpro[IY[K],IX[K]] = rm
-                            rseg.append(rm)
-                    rseg = np.array(rseg)
-                    rseg = rseg[np.isfinite(rseg)]
-                    if len(rseg):
-                        mn,lo,m,hi = np.percentile(rseg, [0, segpct, 50, 75])
-                        rpro[IY,IX] = lo
-                        r_rr.append((rlo+rhi)/2.)
-                        r_mm.append(lo)
-                        r_dm.append(((m-mn)/2.))
-        
-                rr = np.array(r_rr)
-                mm = np.array(r_mm)
-                dm = np.array(r_dm)
-                dm = np.maximum(dm, 0.1*mm)
-                I = np.flatnonzero((rr < fitr))
-                def powerlaw_obj3(X):
-                    (F,) = X
-                    offset = 0.
-                    alpha = fixed_alpha
-                    return powerlaw_lnp(rr[I], mm[I], dm[I], offset, F, alpha)
-                M3 = minimize(powerlaw_obj3, [100.])
-                (F3,) = M3.x
-                K = (r2 >= minr**2) * (r2 <= maxr**2)
-                mod3 = powerlaw_model(0., F3, fixed_alpha, rads)
-                fitpro3[K] += mod3[K]
-                rhaloimgs[iband][ylo:yhi, xlo:xhi] += K * mod3 * apodize
-
-            if plots:
-                plt.clf()
-                dimshow(get_rgb(fits, bands, **rgbkwargs))
-                plt.title('r fit 1')
-                ps.savefig()
-    
-                plt.clf()
-                dimshow(get_rgb(fitpros3, bands, **rgbkwargs))
-                plt.title('r fit 2')
-                ps.savefig()
-                
-            for res,fit in zip(residimgs,fitpros3):
-                res[ylo:yhi, xlo:xhi] -= fit
-
-        if plots:
-            plt.clf()
-            dimshow(get_rgb(coimgs, bands, **rgbkwargs))
-            plt.title('data')
-            ps.savefig()
-    
-            plt.clf()
-            dimshow(get_rgb(rhaloimgs, bands, **rgbkwargs))
-            plt.title('r fit profiles 2')
-            ps.savefig()
-    
-            plt.clf()
-            dimshow(get_rgb([c-h for c,h in zip(coimgs,rhaloimgs)], bands, **rgbkwargs))
-            plt.title('data - r fit profiles 2')
-            ps.savefig()
-                
-
-        halomaps = dict([(b, np.zeros((H,W), np.float32)) for b in bands])
-
-        for i in I:
-            g = gaia[i]
-            print('Star w/ G=', g.G)
-
-            # FIXME -- should do stars outside the brick too!
-            ok,xx,yy = targetwcs.radec2pixelxy(g.ra, g.dec)
-            if xx <= 0 or yy <= 0 or xx > W or yy > H:
-                continue
-
-            radii = np.arange(25, 201, 1)
-            minr = int(radii[0])
-            maxr = int(radii[-1])
-
-            plots = []
-            for band in bands:
-                for tim in tims:
-                    if tim.band != band:
-                        continue
-                    print('Star', g.G, 'tim', tim.name)
-                    ok,x,y = tim.subwcs.radec2pixelxy(g.ra, g.dec)
-                    x -= 1.
-                    y -= 1.
-                    ix = int(np.round(x))
-                    iy = int(np.round(y))
-                    th,tw = tim.shape
-                    # for simplicity, only in-bounds
-                    #if ix < 0 or iy < 0 or ix >= tw or iy >= th:
-                    #    continue
-                    ylo,yhi = max(0,iy-maxr), min(th,iy+maxr+1)
-                    xlo,xhi = max(0,ix-maxr), min(tw,ix+maxr+1)
-                    if yhi-ylo <= 1 or xhi-xlo <= 1:
-                        # no overlap
-                        continue
-                    r2 = ((np.arange(ylo, yhi)[:,np.newaxis] - y)**2 +
-                          (np.arange(xlo, xhi)[np.newaxis,:] - x)**2)
-                    rads = []
-                    meds = []
-                    dmeds = []
-                    Nseg = 12
-                    segments = (Nseg * (np.arctan2(np.arange(ylo,yhi)[:,np.newaxis]-y,
-                                                   np.arange(xlo,xhi)[np.newaxis,:]-x) - -np.pi) / (2.*np.pi)).astype(int)
-                    for rlo,rhi in zip(radii, radii[1:]):
-                        IY,IX = np.nonzero((r2 >= rlo**2) * (r2 < rhi**2))
-                        ie = tim.getInvError()[IY+ylo, IX+xlo]
-                        img = tim.getImage()[IY+ylo, IX+xlo]
-                        #if rlo > 2*Nseg:
-                        if True:
-                            seg = []
-                            for s in range(Nseg):
-                                K = (ie > 0) * (segments[IY,IX] == s)
-                                if np.sum(K):
-                                    seg.append(np.median(img[K]))
-                            seg = np.array(seg)
-                            seg = seg[np.isfinite(seg)]
-                            if len(seg):
-                                rads.append((rlo + rhi)/2.)
-                                lo,m,hi = np.percentile(seg, [25, 50, 75])
-                                meds.append(m)
-                                dmeds.append((hi - lo)/2.)
-                        else:
-                            meds.append(np.median(img[ie > 0]))
-                            dmeds.append(0.)
-                    if len(rads):
-                        plots.append((np.array(rads), np.array(meds), np.array(dmeds), band))
-
-            # Power-law fits??
-            from scipy.optimize import minimize
-            def powerlaw_model(F, alpha, r):
-                return F * r**alpha
-            def powerlaw_chisq(r, f, df, F, alpha):
-                mod = powerlaw_model(F, alpha, r)
-                return np.sum(((f - mod) / df)**2)
-
-            print('Star', g.G, 'fitting power laws')
-            Fs = {}
-            alphas = {}
-            for band in bands:
-                t = fits_table()
-                t.rr = np.hstack([p[0] for p in plots if p[3] == band])
-                t.mm = np.hstack([p[1] for p in plots if p[3] == band])
-                t.dm = np.hstack([p[2] for p in plots if p[3] == band])
-                t.cut((t.rr <= 100) * (t.dm > 0))
-                def powerlaw_obj(X):
-                    (F,alpha) = X
-                    return powerlaw_chisq(t.rr, t.mm, t.dm, F, alpha)
-                M = minimize(powerlaw_obj, [100., -2.7])
-                print(M)
-                Fs[band] = M.x[0]
-                alphas[band] = M.x[1]
-
-                print('Band', band, 'Flux', Fs[band], 'alpha', alphas[band])
-
-                ok,x,y = targetwcs.radec2pixelxy(g.ra, g.dec)
-                x -= 1.
-                y -= 1.
-                ix = int(np.round(x))
-                iy = int(np.round(y))
-                ylo,yhi = max(0,iy-maxr), min(H,iy+maxr+1)
-                xlo,xhi = max(0,ix-maxr), min(W,ix+maxr+1)
-                if yhi-ylo <= 1 or xhi-xlo <= 1:
-                    # no overlap
-                    continue
-                rr = np.hypot(np.arange(ylo, yhi)[:,np.newaxis] - y,
-                              np.arange(xlo, xhi)[np.newaxis,:] - x)
-                sh,sw = rr.shape
-                halomaps[band][ylo:ylo+sh, xlo:xlo+sw] += powerlaw_model(Fs[band],alphas[band],rr) * (rr >= minr) * (rr <= maxr)
-
-            if plots:
-                print('Plotting')
-                plt.clf()
-                dimshow(get_rgb([halomaps[b] for b in bands], bands, **rgbkwargs))
-                ps.savefig()
-    
-                coimgs,cons = quick_coadds(tims, bands, targetwcs)
-                plt.clf()
-                dimshow(get_rgb([c-h for c,h in zip(coimgs, [halomaps[b] for b in bands])], bands,
-                                **rgbkwargs))
-                ps.savefig()
-
-                import matplotlib.gridspec as gridspec
-                plt.clf()
-                fig = plt.gcf()
-                gs = gridspec.GridSpec(2, 2)
-                ax = fig.add_subplot(gs[0, 0])
-                for rr,mm,dm,band in plots:
-                    cc = dict(z='m').get(band,band)
-                    plt.plot(rr, mm, '-',color=cc)
-                    plt.errorbar(rr, mm, yerr=dm, color=cc)
-                ax = plt.axis()
-                for band in bands:
-                    rr = np.arange(10, 200)
-                    mm = powerlaw_model(Fs[band], alphas[band], rr)
-                    plt.plot(rr, mm, 'k-', alpha=0.5)
-                plt.axis(ax)
-                    
-                plt.xlabel('Radius (pix)')
-                plt.ylabel('Surface brightness')
-                plt.xlim(0, 100)
-                ax = fig.add_subplot(gs[0, 1])
-                for rr,mm,dm,band in plots:
-                    cc = dict(z='m').get(band,band)
-                    plt.plot(rr, mm, '-',color=cc)
-                    plt.errorbar(rr, mm, yerr=dm, color=cc)
-    
-                ax = plt.axis()
-                for band in bands:
-                    rr = np.arange(10, 200)
-                    mm = powerlaw_model(Fs[band], alphas[band], rr)
-                    plt.plot(rr, mm, 'k-', alpha=0.5)
-                plt.axis(ax)
-    
-                plt.xscale('log')
-                plt.yscale('log')
-                plt.xlabel('Radius (pix)')
-                plt.xlim(10, 200)
-                plt.ylim(1e-2, 5e1)
-                ax = fig.add_subplot(gs[1, :])
-                #plt.subplot(2,1,2)
-                for rr,mm,dm,band in plots:
-                    cc = dict(z='m').get(band,band)
-                    plt.plot(rr, mm, '-',color=cc)
-                    plt.errorbar(rr, mm, yerr=dm, color=cc)
-    
-                #ax = plt.axis()
-                for band in bands:
-                    rr = np.arange(10, 200)
-                    mm = powerlaw_model(Fs[band], alphas[band], rr)
-                    plt.plot(rr, mm, 'k-', alpha=0.5)
-                #plt.axis(ax)
-    
-                plt.yscale('log')
-                plt.xlabel('Radius (pix)')
-                plt.ylabel('Surface brightness')
-                plt.suptitle('Gaia star: G=%.1f' % g.G)
-                ps.savefig()
-    
-                print('Writing FITS table...')
-                t = fits_table()
-                t.rr = np.array([p[0] for p in plots])
-                t.mm = np.array([p[1] for p in plots])
-                t.dm = np.array([p[2] for p in plots])
-                t.band = np.array([p[3] for p in plots])
-                t.gmag = np.array([g.G] * len(plots))
-    
-                print('t.rr:', t.rr)
-                print('t.mm:', t.mm)
-                print('t.dm:', t.dm)
-                print('t.band:', t.band)
-                print('t.gmag:', t.gmag)
-    
-                t.writeto('flux-%03i.fits' % iw)
-                iw += 1
-                print('Wrote FITS table')
 
     # SED-matched detections
     record_event and record_event('stage_srcs: SED-matched')
