@@ -3,7 +3,6 @@ import numpy as np
 def fit_halos(coimgs, cons, H, W, targetwcs, pixscale,
               bands, gaia, plots, ps):
     rhaloimgs = [np.zeros((H,W),np.float32) for b in bands]
-    residimgs = [co.copy() for co in coimgs]
 
     fitvalues = []
     
@@ -25,7 +24,7 @@ def fit_halos(coimgs, cons, H, W, targetwcs, pixscale,
         radii = np.arange(15, pixrad, 5)
         minr = int(radii[0])
         maxr = int(radii[-1])
-        fitr = minr
+        fitr = maxr
         #fitr = 100.
         # Apodization fraction
         apr = maxr*0.8
@@ -38,9 +37,6 @@ def fit_halos(coimgs, cons, H, W, targetwcs, pixscale,
         if yhi-ylo <= 1 or xhi-xlo <= 1:
             # no overlap
             continue
-        rsymms = []
-        for iband,band in enumerate(bands):
-            rsymms.append(residimgs[iband][ylo:yhi, xlo:xhi].copy())
 
         if False and plots:
             plt.clf()
@@ -69,8 +65,12 @@ def fit_halos(coimgs, cons, H, W, targetwcs, pixscale,
 
         fit_fluxes = []
         
+        rsymms = []
         for iband,band in enumerate(bands):
-            rsymm = rsymms[iband]
+            rsymm = (coimgs[iband][ylo:yhi, xlo:xhi] -
+                     rhaloimgs[iband][ylo:yhi, xlo:xhi])
+            rsymms.append(rsymm)
+
             fitpro3 = np.zeros_like(rsymm)
             rpro = np.zeros_like(rsymm)
             rsegpro = np.zeros_like(rsymm)
@@ -126,6 +126,8 @@ def fit_halos(coimgs, cons, H, W, targetwcs, pixscale,
             M3 = minimize(powerlaw_obj3, [1.])
             (F3,) = M3.x
 
+            print('Fit flux:', band, '=', F3)
+
             mod3 = powerlaw_model(0., F3, fixed_alpha, rads)
             K = (r2 >= minr**2) * (r2 <= maxr**2)
             fitpro3[K] += mod3[K]
@@ -171,9 +173,6 @@ def fit_halos(coimgs, cons, H, W, targetwcs, pixscale,
             plt.title('data - r fit (fixed)')
             ps.savefig()
             
-        for res,fit in zip(residimgs,fitpros3):
-            res[ylo:yhi, xlo:xhi] -= fit
-
     return fitvalues,rhaloimgs
     
     
