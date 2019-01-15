@@ -1176,17 +1176,49 @@ class LegacySurveyImage(object):
         hdr.add_record(dict(name='IMGDSUM', value=datasum,
                             comment='DATASUM of image file'))
 
+        good = (wt > 0)
+        if np.sum(good) == 0:
+            raise RuntimeError('No pixels with weight > 0 in: ' + str(self))
+
+        # Do a few different scalar sky estimates
+        try:
+            from astrometry.util.miscutils import estimate_mode
+            sky_mode = estimate_mode(img[good], raiseOnWarn=True)
+        except:
+            sky_mode = 0.
+
+        sky_median = np.median(img[good])
+
         if splinesky:
             from tractor.splinesky import SplineSky
             from scipy.ndimage.filters import uniform_filter
+            from scipy.stats import sigmaclip
+
+            sig1 = 1./np.sqrt(np.median(wt[good]))
+
+            cimage,_,_ = sigmaclip(img[good], low=2.0, high=2.0)
+            sky_clipped_median = np.median(cimage)
+
+            # from John (adapted):
+            # Smooth by a boxcar filter before cutting pixels above threshold --
+            boxcar = 5
+            # Sigma of boxcar-smoothed image
+            bsig1 = sig1 / boxcar
+            masked = np.abs(uniform_filter(img - sky_clipped_median, size=boxcar,
+                                           mode='constant')
+                            > (3.*bsig1))
+            masked = binary_dilation(masked, iterations=3)
+
+            cimage, _, _ = sigmaclip(img[good * (masked==False)], low=2.0, high=2.0)
+            sky_john = np.median(cimage)
+            del cimage
+
+
 
             boxsize = self.splinesky_boxsize
 
             # Start by subtracting the overall median
-            good = (wt > 0)
-            if np.sum(good) == 0:
-                raise RuntimeError('No pixels with weight > 0 in: ' + str(self))
-            med = np.median(img[good])
+            med = sky_median
 
             # For DECam chips where we drop half the chip, spline becomes underconstrained
             if min(img.shape) / boxsize < 4:
@@ -1198,7 +1230,6 @@ class LegacySurveyImage(object):
             skyobj.addTo(skymod)
 
             # Now mask bright objects in a boxcar-smoothed (image - initial sky model)
-            sig1 = 1./np.sqrt(np.median(wt[good]))
             # Smooth by a boxcar filter before cutting pixels above threshold --
             boxcar = 5
             # Sigma of boxcar-smoothed image
@@ -1224,6 +1255,15 @@ class LegacySurveyImage(object):
                                 comment='Median stdev of unmasked pixels'))
             hdr.add_record(dict(name='SIG1B', value=sig1,
                                 comment='Median stdev of unmasked pixels+'))
+
+            hdr.add_record(dict(name='S_MODE', value=sky_mode,
+                                comment='Sky estimate: mode'))
+            hdr.add_record(dict(name='S_MED', value=sky_median,
+                                comment='Sky estimate: median'))
+            hdr.add_record(dict(name='S_CMED', value=sky_clipped_median,
+                                comment='Sky estimate: clipped median'))
+            hdr.add_record(dict(name='S_JOHN', value=sky_john,
+                                comment='Sky estimate: John'))
                 
             trymakedirs(self.splineskyfn, dir=True)
             skyobj.write_fits(self.splineskyfn, primhdr=hdr)
@@ -1231,12 +1271,14 @@ class LegacySurveyImage(object):
 
         else:
             from tractor.sky import ConstantSky
-            try:
-                skyval = estimate_mode(img[wt > 0], raiseOnWarn=True)
+
+            if sky_mode != 0.:
+                skyval = sky_mode
                 skymeth = 'mode'
-            except:
-                skyval = np.median(img[wt > 0])
+            else:
+                skyval = sky_median
                 skymeth = 'median'
+
             tsky = ConstantSky(skyval)
             hdr.add_record(dict(name='SKYMETH', value=skymeth,
                                 comment='estimate_mode, or fallback to median?'))

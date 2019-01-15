@@ -220,8 +220,9 @@ def merge_splinesky(survey, expnum, C, skyoutfn, opt):
             # print(fn)
             # T.about()
             hdr = fitsio.read_header(fn)
-            skyhdrvals.append([hdr[k] for k in [
-                        'SKY', 'LEGPIPEV', 'PLVER', 'IMGDSUM', 'SIG1']] +
+            skyhdrvals.append([hdr.get(k, '') for k in [
+                'SKY', 'LEGPIPEV', 'PLVER', 'IMGDSUM', 'SIG1',
+                'S_MODE', 'S_MED', 'S_CMED', 'S_JOHN']] +
                               [expnum, ccd.ccdname])
 
     if len(splinesky) == 0:
@@ -248,8 +249,12 @@ def merge_splinesky(survey, expnum, C, skyoutfn, opt):
     T.plver    = np.array([h[2] for h in skyhdrvals])
     T.imgdsum  = np.array([h[3] for h in skyhdrvals])
     T.sig1     = np.array([h[4] for h in skyhdrvals])
-    T.expnum   = np.array([h[5] for h in skyhdrvals])
-    T.ccdname  = np.array([h[6] for h in skyhdrvals])
+    T.sky_mode = np.array([h[5] for h in skyhdrvals])
+    T.sky_med  = np.array([h[6] for h in skyhdrvals])
+    T.sky_cmed = np.array([h[7] for h in skyhdrvals])
+    T.sky_john = np.array([h[8] for h in skyhdrvals])
+    T.expnum   = np.array([h[9] for h in skyhdrvals])
+    T.ccdname  = np.array([h[10] for h in skyhdrvals])
     fn = skyoutfn
     trymakedirs(fn, dir=True)
     T.writeto(fn)
