@@ -1128,7 +1128,7 @@ class LegacySurveyImage(object):
         primhdr = self.read_image_primary_header()
         plver = primhdr.get('PLVER', 'V0.0')
         imghdr = self.read_image_header()
-        datasum = imghdr['DATASUM'].strip()
+        datasum = imghdr['DATASUM']
         if git_version is None:
             git_version = get_git_version()
         # We write the PSF model to a .fits.tmp file, then rename to .fits
@@ -1140,9 +1140,10 @@ class LegacySurveyImage(object):
                 'mv %s %s' % (psfoutfn + '.tmp', psfoutfn),
                 'modhead %s LEGPIPEV "%s" "legacypipe git version"' %
                 (self.psffn, git_version),
-                'modhead %s PLVER "%s" "CP ver of image file"' % (self.psffn, plver)]
-                (self.psffn, datasum),
-                'modhead %s IMGDSUM "%s" "DATASUM of image file"' % (self.psffn, datasum)]
+                'modhead %s PLVER "%s" "CP ver of image file"' %
+                (self.psffn, plver),
+                'modhead %s IMGDSUM "%s" "DATASUM of image file"' %
+                (self.psffn, datasum)]
         for cmd in cmds:
             print(cmd)
             rtn = os.system(cmd)
@@ -1163,7 +1164,7 @@ class LegacySurveyImage(object):
         primhdr = self.read_image_primary_header()
         plver = primhdr.get('PLVER', 'V0.0')
         imghdr = self.read_image_header()
-        datasum = imghdr['DATASUM'].strip()
+        datasum = imghdr['DATASUM']
 
         hdr.delete('PROCTYPE')
         hdr.add_record(dict(name='PROCTYPE', value='ccd',
