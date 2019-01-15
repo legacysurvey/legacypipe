@@ -1384,9 +1384,15 @@ def stage_srcs(targetrd=None, pixscale=None, targetwcs=None,
         Igaia = np.array(keepI)
 
         from legacypipe.halos import fit_halos
+        # Round 1
         fluxes,rhaloimgs = fit_halos(coimgs, cons, H, W, targetwcs,
                                      pixscale, bands, gaia[Igaia],
                                      plots, ps)
+
+        fluxes2,rhaloimgs2 = fit_halos([co-halo for co,halo in zip(coimgs,rhaloimgs)],
+                                       cons, H, W, targetwcs,
+                                       pixscale, bands, gaia[Igaia],
+                                       plots, ps)
 
         if plots:
             plt.clf()
@@ -1403,6 +1409,17 @@ def stage_srcs(targetrd=None, pixscale=None, targetwcs=None,
             dimshow(get_rgb([c-h for c,h in zip(coimgs,rhaloimgs)], bands, **rgbkwargs))
             plt.title('data - fit profiles')
             ps.savefig()
+
+            plt.clf()
+            dimshow(get_rgb(rhaloimgs2, bands, **rgbkwargs))
+            plt.title('second-round fit profiles')
+            ps.savefig()
+    
+            plt.clf()
+            dimshow(get_rgb([c-h-h2 for c,h,h2 in zip(coimgs,rhaloimgs,rhaloimgs2)], bands, **rgbkwargs))
+            plt.title('second-round data - fit profiles')
+            ps.savefig()
+
 
     record_event and record_event('stage_srcs: detection maps')
 

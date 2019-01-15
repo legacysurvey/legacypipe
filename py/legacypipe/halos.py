@@ -169,7 +169,7 @@ def fit_halos(coimgs, cons, H, W, targetwcs, pixscale,
             ps.savefig()
             
             plt.clf()
-            dimshow(get_rgb([co[ylo:yhi,xlo:xhi] - f for co,f in zip(residimgs,fitpros3)], bands, **rgbkwargs))
+            dimshow(get_rgb([co[ylo:yhi,xlo:xhi] - halo[ylo:yhi,xlo:xhi] for co,halo in zip(residimgs,rhaloimgs)], bands, **rgbkwargs))
             plt.title('data - r fit (fixed)')
             ps.savefig()
             
