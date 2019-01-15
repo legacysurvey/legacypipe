@@ -530,6 +530,7 @@ class LegacySurveyImage(object):
         tim.skyver = (getattr(sky, 'version', ''), getattr(sky, 'plver', ''))
         tim.wcsver = (getattr(wcs, 'version', ''), getattr(wcs, 'plver', ''))
         tim.psfver = (getattr(psf, 'version', ''), getattr(psf, 'plver', ''))
+        tim.datasum = imghdr.get('DATASUM')
         if get_dq:
             tim.dq = dq
         tim.dq_saturation_bits = self.dq_saturation_bits
@@ -924,6 +925,8 @@ class LegacySurveyImage(object):
                     sky.plver = Ti.plver
                     if 'sig1' in Ti.get_columns():
                         sky.sig1 = Ti.sig1
+                    if 'imgdsum' in Ti.get_columns():
+                        sky.datasum = Ti.datasum.strip()
                     return sky
             except:
                 import traceback
@@ -961,6 +964,7 @@ class LegacySurveyImage(object):
         sig1 = hdr.get('SIG1', None)
         if sig1 is not None:
             sky.sig1 = sig1
+        sky.datasum = hdr.get('IMGDSUM', '').strip()
         return sky
 
     def read_psf_model(self, x0, y0,
@@ -1017,6 +1021,8 @@ class LegacySurveyImage(object):
 
                     psf.version = Ti.legpipev.strip()
                     psf.plver = Ti.plver.strip()
+                    if 'imgdsum' in Ti.get_columns():
+                        psf.datasum = Ti.datasum.strip()
                     psf.fwhm = Ti.psf_fwhm
             except:
                 import traceback
@@ -1036,7 +1042,7 @@ class LegacySurveyImage(object):
             if psf.version is None:
                 psf.version = str(os.stat(self.psffn).st_mtime)
             psf.plver = hdr.get('PLVER', '').strip()
-
+            psf.datasum = hdr.get('IMGDSUM', '').strip()
             hdr = fitsio.read_header(self.psffn, ext=1)
             psf.fwhm = hdr['PSF_FWHM']
 
@@ -1121,6 +1127,8 @@ class LegacySurveyImage(object):
         trymakedirs(self.psffn, dir=True)
         primhdr = self.read_image_primary_header()
         plver = primhdr.get('PLVER', 'V0.0')
+        imghdr = self.read_image_header()
+        datasum = imghdr['DATASUM'].strip()
         if git_version is None:
             git_version = get_git_version()
         # We write the PSF model to a .fits.tmp file, then rename to .fits
@@ -1133,6 +1141,8 @@ class LegacySurveyImage(object):
                 'modhead %s LEGPIPEV "%s" "legacypipe git version"' %
                 (self.psffn, git_version),
                 'modhead %s PLVER "%s" "CP ver of image file"' % (self.psffn, plver)]
+                (self.psffn, datasum),
+                'modhead %s IMGDSUM "%s" "DATASUM of image file"' % (self.psffn, datasum)]
         for cmd in cmds:
             print(cmd)
             rtn = os.system(cmd)
@@ -1152,6 +1162,9 @@ class LegacySurveyImage(object):
                                  git_version=git_version)
         primhdr = self.read_image_primary_header()
         plver = primhdr.get('PLVER', 'V0.0')
+        imghdr = self.read_image_header()
+        datasum = imghdr['DATASUM'].strip()
+
         hdr.delete('PROCTYPE')
         hdr.add_record(dict(name='PROCTYPE', value='ccd',
                             comment='NOAO processing type'))
@@ -1159,6 +1172,8 @@ class LegacySurveyImage(object):
                             comment='NOAO product type'))
         hdr.add_record(dict(name='PLVER', value=plver,
                             comment='CP ver of image file'))
+        hdr.add_record(dict(name='IMGDSUM', value=datasum,
+                            comment='DATASUM of image file'))
 
         if splinesky:
             from tractor.splinesky import SplineSky
