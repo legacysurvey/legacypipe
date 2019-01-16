@@ -3066,6 +3066,7 @@ def stage_wise_forced(
     cat=None,
     T=None,
     targetwcs=None,
+    targetrd=None,
     W=None, H=None,
     pixscale=None,
     brickname=None,
@@ -3092,7 +3093,7 @@ def stage_wise_forced(
     print('Cut to', len(tiles), 'unWISE tiles')
 
     # the way the roiradec box is used, the min/max order doesn't matter
-    roiradec = [brick.ra1, brick.ra2, brick.dec1, brick.dec2]
+    roiradec = [targetrd[0,0], targetrd[2,0], targetrd[0,1], targetrd[2,1]]
 
     wcat = []
     for src in cat:
