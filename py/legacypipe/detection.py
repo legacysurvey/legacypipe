@@ -44,6 +44,7 @@ def _detmap(X):
 def detection_maps(tims, targetwcs, bands, mp, apodize=None):
     from legacypipe.coadds import make_coadds
     # Render the detection maps
+
     H,W = targetwcs.shape
     H,W = np.int(H), np.int(W)
     ibands = dict([(b,i) for i,b in enumerate(bands)])
