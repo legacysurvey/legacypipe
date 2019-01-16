@@ -192,12 +192,15 @@ def unwise_forcedphot(cat, tiles, band=1, roiradecbox=None,
                 ph,pw = psfimg.shape
                 subpsf = np.zeros((ph*2-1, pw*2-1), np.float32)
                 from astrometry.util.util import lanczos3_interpolate
-                xx,yy = np.meshgrid(np.arange(0., pw-0.51, 0.5),
-                                    np.arange(0., ph-0.51, 0.5))
-                ix = xx.ravel().astype(np.int32)
-                iy = yy.ravel().astype(np.int32)
-                dx = xx - ix
-                dy = yy - iy
+                xx,yy = np.meshgrid(np.arange(0., pw-0.51, 0.5, dtype=np.float32),
+                                    np.arange(0., ph-0.51, 0.5, dtype=np.float32))
+                xx = xx.ravel()
+                yy = yy.ravel()
+                ix = xx.astype(np.int32)
+                iy = yy.astype(np.int32)
+                dx = (xx - ix).astype(np.float32)
+                dy = (yy - iy).astype(np.float32)
+                psfimg = psfimg.astype(np.float32)
                 rtn = lanczos3_interpolate(ix, iy, dx, dy, [subpsf.flat], [psfimg])
                 print('Lanczo3_interpolate result:', rtn)
 
@@ -211,6 +214,9 @@ def unwise_forcedphot(cat, tiles, band=1, roiradecbox=None,
                     plt.imshow(subpsf, interpolation='nearest', origin='lower')
                     plt.title('Subsampled PSF model')
                     ps.savefig()
+
+                psfimg = subpsf
+                del xx, yy, ix, iy, dx, dy
 
             from tractor.psf import PixelizedPSF
             psfimg /= psfimg.sum()
