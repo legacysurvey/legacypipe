@@ -1276,21 +1276,6 @@ def stage_srcs(targetrd=None, pixscale=None, targetwcs=None,
     record_event and record_event('stage_srcs: starting')
 
     tlast = Time()
-    record_event and record_event('stage_srcs: detection maps')
-
-    print('Rendering detection maps...')
-    detmaps, detivs, satmaps = detection_maps(tims, targetwcs, bands, mp,
-                                              apodize=10)
-    tnow = Time()
-    print('[parallel srcs] Detmaps:', tnow-tlast)
-    tlast = tnow
-    record_event and record_event('stage_srcs: sources')
-
-    # Expand the mask around saturated pixels to avoid generating
-    # peaks at the edge of the mask.
-    saturated_pix = [binary_dilation(satmap > 0, iterations=4)
-                     for satmap in satmaps]
-
     # How big of a margin to search for bright stars -- this should be
     # based on the maximum "radius" they are considered to affect.
     ref_margin = 0.125
@@ -1375,6 +1360,82 @@ def stage_srcs(targetrd=None, pixscale=None, targetwcs=None,
         refstars.islargegalaxy = np.zeros(len(refstars), bool)
     if not 'iscluster' in refstars.get_columns():
         refstars.iscluster = np.zeros(len(refstars), bool)
+
+    #print('Gaia sources:')
+    #gaia.about()
+    if gaia_stars and len(gaia):
+        iw = 0
+        Igaia = np.argsort(gaia.G)
+        Igaia = Igaia[gaia.G[Igaia] < 15.]
+        print(len(Igaia), 'stars with G<15')
+
+        coimgs,cons = quick_coadds(tims, bands, targetwcs)
+
+        round1fits = []
+
+        keepI = []
+        for i in Igaia:
+            g = gaia[i]
+            # FIXME -- should do stars outside but touching the brick too!
+            ok,x,y = targetwcs.radec2pixelxy(g.ra, g.dec)
+            if x <= 0 or y <= 0 or x > W or y > H:
+                continue
+            keepI.append(i)
+        Igaia = np.array(keepI)
+
+        from legacypipe.halos import fit_halos
+        # Round 1
+        fluxes,rhaloimgs = fit_halos(coimgs, cons, H, W, targetwcs,
+                                     pixscale, bands, gaia[Igaia],
+                                     plots, ps)
+
+        fluxes2,rhaloimgs2 = fit_halos([co-halo for co,halo in zip(coimgs,rhaloimgs)],
+                                       cons, H, W, targetwcs,
+                                       pixscale, bands, gaia[Igaia],
+                                       plots, ps)
+
+        if plots:
+            plt.clf()
+            dimshow(get_rgb(coimgs, bands, **rgbkwargs))
+            plt.title('data')
+            ps.savefig()
+    
+            plt.clf()
+            dimshow(get_rgb(rhaloimgs, bands, **rgbkwargs))
+            plt.title('fit profiles')
+            ps.savefig()
+    
+            plt.clf()
+            dimshow(get_rgb([c-h for c,h in zip(coimgs,rhaloimgs)], bands, **rgbkwargs))
+            plt.title('data - fit profiles')
+            ps.savefig()
+
+            plt.clf()
+            dimshow(get_rgb(rhaloimgs2, bands, **rgbkwargs))
+            plt.title('second-round fit profiles')
+            ps.savefig()
+    
+            plt.clf()
+            dimshow(get_rgb([c-h-h2 for c,h,h2 in zip(coimgs,rhaloimgs,rhaloimgs2)], bands, **rgbkwargs))
+            plt.title('second-round data - fit profiles')
+            ps.savefig()
+
+
+    record_event and record_event('stage_srcs: detection maps')
+
+    tnow = Time()
+    print('Rendering detection maps...')
+    detmaps, detivs, satmaps = detection_maps(tims, targetwcs, bands, mp,
+                                              apodize=10)
+    tnow = Time()
+    print('[parallel srcs] Detmaps:', tnow-tlast)
+    tlast = tnow
+    record_event and record_event('stage_srcs: sources')
+
+    # Expand the mask around saturated pixels to avoid generating
+    # peaks at the edge of the mask.
+    saturated_pix = [binary_dilation(satmap > 0, iterations=4)
+                     for satmap in satmaps]
 
     # Saturated blobs -- create a source for each, except for those
     # that already have a Tycho-2 or Gaia star
@@ -1477,47 +1538,6 @@ def stage_srcs(targetrd=None, pixscale=None, targetwcs=None,
 
     del satmap
 
-    #print('Gaia sources:')
-    #gaia.about()
-    if gaia_stars and len(gaia):
-        iw = 0
-        Igaia = np.argsort(gaia.G)
-        Igaia = Igaia[gaia.G[Igaia] < 15.]
-        print(len(Igaia), 'stars with G<15')
-
-        coimgs,cons = quick_coadds(tims, bands, targetwcs)
-
-        round1fits = []
-
-        keepI = []
-        for i in Igaia:
-            g = gaia[i]
-            # FIXME -- should do stars outside but touching the brick too!
-            ok,x,y = targetwcs.radec2pixelxy(g.ra, g.dec)
-            if x <= 0 or y <= 0 or x > W or y > H:
-                continue
-            keepI.append(i)
-        Igaia = np.array(keepI)
-
-        from legacypipe.halos import fit_halos
-        fluxes,rhaloimgs = fit_halos(coimgs, cons, H, W, bands, gaia[Igaia],
-                                     plots, ps)
-
-        if plots:
-            plt.clf()
-            dimshow(get_rgb(coimgs, bands, **rgbkwargs))
-            plt.title('data')
-            ps.savefig()
-    
-            plt.clf()
-            dimshow(get_rgb(rhaloimgs, bands, **rgbkwargs))
-            plt.title('fit profiles')
-            ps.savefig()
-    
-            plt.clf()
-            dimshow(get_rgb([c-h for c,h in zip(coimgs,rhaloimgs)], bands, **rgbkwargs))
-            plt.title('data - fit profiles')
-            ps.savefig()
 
     # SED-matched detections
     record_event and record_event('stage_srcs: SED-matched')
