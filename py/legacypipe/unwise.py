@@ -185,6 +185,33 @@ def unwise_forcedphot(cat, tiles, band=1, roiradecbox=None,
             import unwise_psf
             psfimg = unwise_psf.get_unwise_psf(band, tile.coadd_id)
             #print('PSF postage stamp', psfimg.shape, 'sum', psfimg.sum())
+
+            if band == 4:
+                # oversample (the unwise_psf models are at native W4 5.5"/pix,
+                # while the unWISE coadds are made at 2.75"/pix.
+                ph,pw = psfimg.shape
+                subpsf = np.zeros((ph*2-1, pw*2-1), np.float32)
+                from astrometry.util.util import lanczos3_interpolate
+                xx,yy = np.meshgrid(np.arange(0., pw-0.51, 0.5),
+                                    np.arange(0., ph-0.51, 0.5))
+                ix = xx.ravel().astype(np.int32)
+                iy = yy.ravel().astype(np.int32)
+                dx = xx - ix
+                dy = yy - iy
+                rtn = lanczos3_interpolate(ix, iy, dx, dy, [subpsf.flat], [psfimg])
+                print('Lanczo3_interpolate result:', rtn)
+
+                if plots:
+                    plt.clf()
+                    plt.imshow(psfimg, interpolation='nearest', origin='lower')
+                    plt.title('Original PSF model')
+                    ps.savefig()
+
+                    plt.clf()
+                    plt.imshow(subpsf, interpolation='nearest', origin='lower')
+                    plt.title('Subsampled PSF model')
+                    ps.savefig()
+
             from tractor.psf import PixelizedPSF
             psfimg /= psfimg.sum()
             tim.psf = PixelizedPSF(psfimg)
