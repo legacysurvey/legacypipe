@@ -4,7 +4,7 @@
 from __future__ import print_function
 import os
 import numpy as np
-from astrometry.util.fits import fits_table
+from astrometry.util.fits import fits_table, merge_tables
 
 from legacypipe.survey import run_calibs, LegacySurveyData
 
@@ -30,30 +30,38 @@ def main():
     parser.add_argument('--threads', type=int, help='Run multi-threaded', default=None)
     parser.add_argument('--continue', dest='cont', default=False, action='store_true',
                         help='Continue even if one file fails?')
+    parser.add_argument('--plot-base', help='Make plots with this base filename')
 
     parser.add_argument('args',nargs=argparse.REMAINDER)
     opt = parser.parse_args()
 
     survey = LegacySurveyData()
+    T = None
     if opt.ccds is not None:
         T = fits_table(opt.ccds)
         T = survey.cleanup_ccds_table(T)
 
         print('Read', len(T), 'from', opt.ccds)
-    else:
-        T = survey.get_ccds()
-        #print len(T), 'CCDs'
+    #else:
+    #    T = survey.get_ccds()
+    #    #print len(T), 'CCDs'
 
     if len(opt.args) == 0:
         if opt.expnum is not None:
             expnums = set([int(e) for e in opt.expnum.split(',')])
-            T.cut(np.array([e in expnums for e in T.expnum]))
-            print('Cut to', len(T), 'with expnum in', expnums)
-        if opt.extname is not None:
-            T.cut(np.array([(t.strip() == opt.extname) for t in T.ccdname]))
-            print('Cut to', len(T), 'with extname =', opt.extname)
+            #T.cut(np.array([e in expnums for e in T.expnum]))
+            T = merge_tables([survey.find_ccds(expnum=e, ccdname=opt.extname) for e in expnums])
+            print('Cut to', len(T), 'with expnum in', expnums, 'and extname', opt.extname)
+        #if opt.extname is not None:
+        #    T.cut(np.array([(t.strip() == opt.extname) for t in T.ccdname]))
+        #    print('Cut to', len(T), 'with extname =', opt.extname)
 
         opt.args = range(len(T))
+
+    ps = None
+    if opt.plot_base is not None:
+        from astrometry.util.plotutils import PlotSequence
+        ps = PlotSequence(opt.plot_base)
 
     args = []
     for a in opt.args:
@@ -83,7 +91,7 @@ def main():
         im = survey.get_image_object(t)
         print('Running', im.name)
         
-        kwargs = dict(psfex=opt.psfex, sky=opt.sky)
+        kwargs = dict(psfex=opt.psfex, sky=opt.sky, ps=ps)
         if opt.force:
             kwargs.update(force=True)
         if opt.run_se:

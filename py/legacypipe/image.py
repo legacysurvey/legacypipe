@@ -1120,7 +1120,7 @@ class LegacySurveyImage(object):
             raise RuntimeError('Command failed: ' + cmd)
         os.rename(tmpfn, self.sefn)
 
-    def run_psfex(self, git_version=None):
+    def run_psfex(self, git_version=None, ps=None):
         from astrometry.util.file import trymakedirs
         from legacypipe.survey import get_git_version
         sedir = self.survey.get_se_dir()
@@ -1151,10 +1151,12 @@ class LegacySurveyImage(object):
                 raise RuntimeError('Command failed: %s: return value: %i' %
                                    (cmd,rtn))
 
-    def run_sky(self, splinesky=False, git_version=None):
+    def run_sky(self, splinesky=False, git_version=None, ps=None):
         from legacypipe.survey import get_version_header
         from scipy.ndimage.morphology import binary_dilation
         from astrometry.util.file import trymakedirs
+
+        plots = (ps is not None)
 
         slc = self.get_good_image_slice(None)
         img = self.read_image(slice=slc)
@@ -1245,6 +1247,51 @@ class LegacySurveyImage(object):
             # add the overall median back in
             skyobj.offset(med)
 
+            if plots:
+                from legacypipe.detection import plot_boundary_map
+                import pylab as plt
+
+                #
+                wcs = self.get_wcs(hdr=imghdr)
+                from legacypipe.runbrick import read_gaia
+                gaia = read_gaia(wcs)
+                print(len(gaia), 'Gaia stars nearby')
+
+
+                ima = dict(interpolation='nearest', origin='lower', vmin=med-2.*sig1,
+                           vmax=med+5.*sig1, cmap='gray')
+
+                plt.clf()
+                plt.imshow(img.T, **ima)
+                #plot_boundary_map(np.logical_not(good.T))
+                plt.title('Image')
+                ps.savefig()
+
+                plt.clf()
+                plt.imshow((img.T - med)*good.T + med, **ima)
+                plt.title('Image (boxcar masked)')
+                ps.savefig()
+
+                skypix = np.zeros_like(img)
+                skyobj.addTo(skypix)
+                plt.clf()
+                plt.imshow(skypix.T, **ima)
+                plt.title('Sky model')
+                ps.savefig()
+
+                plt.clf()
+                plt.imshow((img.T - skypix.T)*good.T + med, **ima)
+                plt.title('Masked resids')
+                ps.savefig()
+
+                # plt.clf()
+                # plt.imshow(good.T, interpolation='nearest', origin='lower')
+                # plt.title('Good pix (for sky bg est)')
+                # ps.savefig()
+
+
+
+
             if slc is not None:
                 sy,sx = slc
                 y0 = sy.start
@@ -1298,7 +1345,7 @@ class LegacySurveyImage(object):
     def run_calibs(self, psfex=True, sky=True, se=False,
                    fcopy=False, use_mask=True,
                    force=False, git_version=None,
-                   splinesky=False):
+                   splinesky=False, ps=None):
         '''
         Run calibration pre-processing steps.
         '''
@@ -1333,9 +1380,9 @@ class LegacySurveyImage(object):
             for fn in todelete:
                 os.unlink(fn)
         if psfex:
-            self.run_psfex(git_version=git_version)
+            self.run_psfex(git_version=git_version, ps=ps)
         if sky:
-            self.run_sky(splinesky=splinesky, git_version=git_version)
+            self.run_sky(splinesky=splinesky, git_version=git_version, ps=ps)
 
 
 
