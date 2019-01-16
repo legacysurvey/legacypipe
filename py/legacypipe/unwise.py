@@ -457,8 +457,9 @@ def unwise_phot(X):
     '''
     This is the entry-point from runbrick.py, called via mp.map()
     '''
-    (wcat, tiles, band, roiradec, wise_ceres, pixelized_psf, get_mods, get_masks) = X
-    kwargs = dict(roiradecbox=roiradec, band=band, pixelized_psf=pixelized_psf, get_masks=get_masks)
+    (wcat, tiles, band, roiradec, wise_ceres, pixelized_psf, get_mods, get_masks, ps) = X
+    kwargs = dict(roiradecbox=roiradec, band=band, pixelized_psf=pixelized_psf,
+                  get_masks=get_masks, ps=ps)
     if get_mods:
         kwargs.update(get_models=get_mods)
 
