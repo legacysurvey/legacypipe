@@ -1036,130 +1036,45 @@ def stage_srcs(targetrd=None, pixscale=None, targetwcs=None,
     from scipy.ndimage.morphology import binary_dilation
     from scipy.ndimage.measurements import label, find_objects, center_of_mass
 
-    from legacypipe.reference import read_gaia, read_tycho2, read_large_galaxies, read_star_clusters
+    from legacypipe.reference import get_reference_sources
 
     record_event and record_event('stage_srcs: starting')
 
     tlast = Time()
-    # How big of a margin to search for bright stars -- this should be
-    # based on the maximum "radius" they are considered to affect.
-    ref_margin = 0.125
-    mpix = int(np.ceil(ref_margin * 3600. / pixscale))
-    marginwcs = targetwcs.get_subimage(-mpix, -mpix, W+2*mpix, H+2*mpix)
-    #print('Enlarged target WCS from', targetwcs, 'to', marginwcs, 'for ref stars')
-    # Read Tycho-2 stars and use as saturated sources.
-    tycho = read_tycho2(survey, marginwcs)
-    refstars = tycho
 
-    # Add Gaia stars
-    if gaia_stars:
-        from astrometry.libkd.spherematch import match_radec
-        gaia = read_gaia(marginwcs)
-        gaia.isbright = np.zeros(len(gaia), bool)
-        gaia.ismedium = np.ones(len(gaia), bool)
-        # Handle sources that appear in both Gaia and Tycho-2 by dropping the entry from Tycho-2.
-        if len(gaia) and len(tycho):
-            # Before matching, apply proper motions to bring them to
-            # the same epoch.
-            # We want to use the more-accurate Gaia proper motions, so
-            # rewind Gaia positions to the approximate epoch of
-            # Tycho-2: 1991.5.
-            cosdec = np.cos(np.deg2rad(gaia.dec))
-            gra  = gaia.ra +  (1991.5 - gaia.ref_epoch) * gaia.pmra  / (3600.*1000.) / cosdec
-            gdec = gaia.dec + (1991.5 - gaia.ref_epoch) * gaia.pmdec / (3600.*1000.)
-            I,J,d = match_radec(tycho.ra, tycho.dec, gra, gdec, 1./3600.,
-                                nearest=True)
-            #print('Matched', len(I), 'Tycho-2 stars to Gaia stars.')
-            if len(I):
-                keep = np.ones(len(tycho), bool)
-                keep[I] = False
-                tycho.cut(keep)
-                #print('Cut to', len(tycho), 'Tycho-2 stars that do not match Gaia')
-                gaia.isbright[J] = True
-        if len(gaia):
-            refstars = merge_tables([refstars, gaia], columns='fillzero')
-
-    # Read the catalog of star (open and globular) clusters and add them to the
-    # set of reference stars (with the isbright bit set).
-    if star_clusters:
-        clusters = read_star_clusters(marginwcs)
-        print('Found', len(clusters), 'star clusters nearby')
-        if len(clusters):
-            clusters.iscluster = np.ones(len(clusters), bool)
-            refstars = merge_tables([refstars, clusters], columns='fillzero')
-
-    # Grab subset of reference stars that are actually *within* the
-    # brick.  Recompute "ibx", "iby" using *targetwcs* not *marginwcs*.
-    ok,xx,yy = targetwcs.radec2pixelxy(refstars.ra, refstars.dec)
-    # ibx = integer brick coords
-    refstars.ibx = np.round(xx-1.).astype(int)
-    refstars.iby = np.round(yy-1.).astype(int)
-    refstars.in_bounds = ((refstars.ibx >= 0) * (refstars.ibx < W) *
-                          (refstars.iby >= 0) * (refstars.iby < H))
-    
-    refstars_in = refstars[refstars.in_bounds]
-    # Create Tractor sources from reference stars
-    refstarcat = [GaiaSource.from_catalog(g, bands) for g in refstars_in]
+    refstars,refcat = get_reference_sources(survey, targetwcs, pixscale, bands,
+                                            gaia_stars, large_galaxies, star_clusters)
 
     # Don't detect new sources where we already have reference stars
-    avoid_x = refstars_in.ibx
-    avoid_y = refstars_in.iby
-    
-    # Read large galaxies nearby.
-    if large_galaxies:
-        largegals,largecat = read_large_galaxies(survey, targetwcs, bands)
-        if largegals is not None:
-            refstars = merge_tables([refstars, largegals], columns='fillzero')
-            avoid_x = np.append(avoid_x, largegals.ibx)
-            avoid_y = np.append(avoid_y, largegals.iby)
+    avoid_x = refstars.ibx[refstars.in_bounds]
+    avoid_y = refstars.iby[refstars.in_bounds]
 
-            #print('Largegals catalog:')
-            #largegals.about()
-            #print('Refstars:', refstars.about())
-        else:
-            largegals = []
-    else:
-        largegals = []
-
-    if not 'islargegalaxy' in refstars.get_columns():
-        refstars.islargegalaxy = np.zeros(len(refstars), bool)
-    if not 'iscluster' in refstars.get_columns():
-        refstars.iscluster = np.zeros(len(refstars), bool)
-
-    refstars.radius_pix = np.ceil(refstars.radius * 3600. / targetwcs.pixel_scale()).astype(int)
-
-    #print('Gaia sources:')
-    #gaia.about()
-    if gaia_stars and len(gaia):
-        iw = 0
-        Igaia = np.argsort(gaia.G)
-        Igaia = Igaia[gaia.G[Igaia] < 15.]
-        print(len(Igaia), 'stars with G<15')
-
+    # Subtract star halos?
+    Igaia = []
+    if gaia_stars:
+        gaia = refstars[np.logical_or(refstars.isbright, refstars.ismedium) *
+                        np.logical_not(refstars.iscluster)]
+        if len(gaia):
+            Igaia = np.argsort(gaia.G)
+            Igaia = Igaia[gaia.G[Igaia] < 15.]
+            print(len(Igaia), 'stars with G<15')
+    if len(Igaia):
+        from legacypipe.halos import fit_halos
+        # FIXME -- again...?
         coimgs,cons = quick_coadds(tims, bands, targetwcs)
 
-        round1fits = []
-
-        keepI = []
-        for i in Igaia:
-            g = gaia[i]
-            # FIXME -- should do stars outside but touching the brick too!
-            ok,x,y = targetwcs.radec2pixelxy(g.ra, g.dec)
-            if x <= 0 or y <= 0 or x > W or y > H:
-                continue
-            keepI.append(i)
-        Igaia = np.array(keepI)
-
-        from legacypipe.halos import fit_halos
-        # Round 1
         fluxes,rhaloimgs = fit_halos(coimgs, cons, H, W, targetwcs,
                                      pixscale, bands, gaia[Igaia],
                                      plots, ps)
 
-        fluxes2,rhaloimgs2 = fit_halos([co-halo for co,halo in zip(coimgs,rhaloimgs)],
-                                       cons, H, W, targetwcs,
-                                       pixscale, bands, gaia[Igaia],
-                                       plots, ps)
+        ## FIXME -- run a round 2?  (Need to add the round-1 models back in first though!)
+        # fluxes2,rhaloimgs2 = fit_halos([co-halo for co,halo in zip(coimgs,rhaloimgs)],
+        #                                cons, H, W, targetwcs,
+        #                                pixscale, bands, gaia[Igaia],
+        #                                plots, ps)
+
+        ## FIXME -- must write out some data product with these fit values!!
+        ## FIXME -- also a map of where we have subtracted the halo?  (splice with PSF model??)
 
         if plots:
             plt.clf()
@@ -1177,16 +1092,15 @@ def stage_srcs(targetrd=None, pixscale=None, targetwcs=None,
             plt.title('data - fit profiles')
             ps.savefig()
 
-            plt.clf()
-            dimshow(get_rgb(rhaloimgs2, bands, **rgbkwargs))
-            plt.title('second-round fit profiles')
-            ps.savefig()
-    
-            plt.clf()
-            dimshow(get_rgb([c-h-h2 for c,h,h2 in zip(coimgs,rhaloimgs,rhaloimgs2)], bands, **rgbkwargs))
-            plt.title('second-round data - fit profiles')
-            ps.savefig()
-
+            # plt.clf()
+            # dimshow(get_rgb(rhaloimgs2, bands, **rgbkwargs))
+            # plt.title('second-round fit profiles')
+            # ps.savefig()
+            # 
+            # plt.clf()
+            # dimshow(get_rgb([c-h-h2 for c,h,h2 in zip(coimgs,rhaloimgs,rhaloimgs2)], bands, **rgbkwargs))
+            # plt.title('second-round data - fit profiles')
+            # ps.savefig()
 
     record_event and record_event('stage_srcs: detection maps')
 
@@ -1208,11 +1122,11 @@ def stage_srcs(targetrd=None, pixscale=None, targetwcs=None,
     # that already have a Tycho-2 or Gaia star
     satmap = reduce(np.logical_or, satmaps)
     satblobs,nsat = label(satmap > 0)
-    if len(refstars_in):
+    if len(refstars):
         # Build a map from old "satblobs" to new; identity to start
         remap = np.arange(nsat+1)
         # Drop blobs that contain a reference star
-        zeroout = satblobs[refstars_in.iby, refstars_in.ibx]
+        zeroout = satblobs[refstars.iby, refstars.ibx]
         remap[zeroout] = 0
         # Renumber them to be contiguous
         I = np.flatnonzero(remap)
@@ -1274,19 +1188,24 @@ def stage_srcs(targetrd=None, pixscale=None, targetwcs=None,
         dimshow(get_rgb(coimgs, bands, **rgbkwargs))
         ax = plt.axis()
         lp,lt = [],[]
+        tycho = refstars[refstars.isbright]
         if len(tycho):
             ok,ix,iy = targetwcs.radec2pixelxy(tycho.ra, tycho.dec)
             p = plt.plot(ix-1, iy-1, 'o', mew=3, ms=10, mec='r', mfc='none')
             lp.append(p)
             lt.append('Tycho-2 only')
+        if gaia_stars:
+            gaia = refstars[refstars.ismedium]
         if gaia_stars and len(gaia):
             ok,ix,iy = targetwcs.radec2pixelxy(gaia.ra, gaia.dec)
             p = plt.plot(ix-1, iy-1, 'o', mew=3, ms=10, mec='c', mfc='none')
             lp.append(p)
             lt.append('Gaia')
         # star_clusters?
-        if large_galaxies and len(largegals):
-            ok,ix,iy = targetwcs.radec2pixelxy(largegals.ra, largegals.dec)
+        if large_galaxies:
+            galaxies = refstars[refstars.islargegalaxy]
+        if large_galaxies and len(galaxies):
+            ok,ix,iy = targetwcs.radec2pixelxy(galaxies.ra, galaxies.dec)
             p = plt.plot(ix-1, iy-1, 'o', mew=3, ms=10, mec='g', mfc='none')
             lp.append(p)
             lt.append('Galaxies')
@@ -1332,12 +1251,9 @@ def stage_srcs(targetrd=None, pixscale=None, targetwcs=None,
     if len(sat):
         tables.append(sat)
         cats += satcat
-    if len(refstars_in):
-        tables.append(refstars_in)
-        cats += refstarcat
-    if len(largegals):
-        tables.append(largegals)
-        cats += largecat
+    if len(refstars):
+        tables.append(refstars)
+        cats += refcat
     T = merge_tables(tables, columns='fillzero')
     cat = Catalog(*cats)
     cat.freezeAllParams()
@@ -1369,7 +1285,7 @@ def stage_srcs(targetrd=None, pixscale=None, targetwcs=None,
             if len(I):
                 plt.plot(refstars.ibx[I], refstars.iby[I], '+',
                          color=(0.2,0.2,1), label='Gaia', **crossa)
-            I, = np.nonzero([r == 'L1' for r in refstars.ref_cat])
+            I, = np.nonzero([r[0] == 'L' for r in refstars.ref_cat])
             if len(I):
                 plt.plot(refstars.ibx[I], refstars.iby[I], '+',
                          color=(0.6,0.6,0.2), label='Large Galaxy', **crossa)
@@ -1403,7 +1319,7 @@ def stage_srcs(targetrd=None, pixscale=None, targetwcs=None,
     tlast = tnow
 
     keys = ['T', 'tims', 'blobsrcs', 'blobslices', 'blobs', 'cat',
-            'ps', 'refstars', 'gaia_stars', 'saturated_pix', 'largegals']
+            'ps', 'refstars', 'gaia_stars', 'saturated_pix']
     L = locals()
     rtn = dict([(k,L[k]) for k in keys])
     return rtn
@@ -1429,7 +1345,6 @@ def stage_fitblobs(T=None,
                    write_metrics=True,
                    get_all_models=False,
                    refstars=None,
-                   largegals=None,
                    rex=False,
                    bailout=False,
                    record_event=None,
