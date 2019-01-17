@@ -329,7 +329,8 @@ def read_star_clusters(targetwcs):
 
     clusterfile = resource_filename('legacypipe', 'data/NGC-star-clusters.fits')
     print('Reading {}'.format(clusterfile))
-    clusters = fits_table(clusterfile)
+    clusters = fits_table(clusterfile, columns=['ra', 'dec', 'majax'])
+    clusters.ref_id = np.arange(len(clusters))
 
     radius = 1.
     rc,dc = targetwcs.radec_center()
@@ -342,7 +343,8 @@ def read_star_clusters(targetwcs):
 
     # For each cluster, add a single faint star at the same coordinates, but
     # set the isbright bit so we get all the brightstarinblob logic.
-    clusters.ref_cat = clusters.name
+    #clusters.ref_cat = clusters.name
+    clusters.ref_cat = np.array(['CL'] * len(clusters))
     clusters.mag = np.array([35])
 
     # Radius in degrees (from "majax" in arcmin)
@@ -350,11 +352,11 @@ def read_star_clusters(targetwcs):
     clusters.radius[np.logical_not(np.isfinite(clusters.radius))] = 1./60.
 
     # Remove unnecessary columns but then add all the Gaia-style columns we need.
-    for c in ['name', 'type', 'ra_hms', 'dec_dms', 'const', 'majax', 'minax', 'pa',
-              'bmag', 'vmag', 'jmag', 'hmag', 'kmag', 'sbrightn', 'hubble', 'cstarumag',
-              'cstarbmag', 'cstarvmag', 'messier', 'ngc', 'ic', 'cstarnames', 'identifiers',
-              'commonnames', 'nednotes', 'ongcnotes']:
-        clusters.delete_column(c)
+    # for c in ['name', 'type', 'ra_hms', 'dec_dms', 'const', 'majax', 'minax', 'pa',
+    #           'bmag', 'vmag', 'jmag', 'hmag', 'kmag', 'sbrightn', 'hubble', 'cstarumag',
+    #           'cstarbmag', 'cstarvmag', 'messier', 'ngc', 'ic', 'cstarnames', 'identifiers',
+    #           'commonnames', 'nednotes', 'ongcnotes']:
+    #     clusters.delete_column(c)
 
     # Set isbright=True
     clusters.isbright = np.ones(len(clusters), bool)
