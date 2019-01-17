@@ -54,14 +54,15 @@ def get_inblob_map(blobwcs, refs):
             if not ellipse:
                 rr = ((np.arange(ylo,yhi)[:,np.newaxis] - (y-1))**2 +
                       (np.arange(xlo,xhi)[np.newaxis,:] - (x-1))**2)
-                masked = (rr <= ref.radius_pix)
+                masked = (rr <= ref.radius_pix**2)
             else:
                 # *should* have ba and pa if we got here...
                 xgrid,ygrid = np.meshgrid(np.arange(xlo,xhi), np.arange(ylo,yhi))
                 dx = xgrid - (x-1)
                 dy = ygrid - (y-1)
-                print('PA', ref.pa)
-                print('BA', ref.ba)
+                print('Galaxy: PA', ref.pa, 'BA', ref.ba, 'Radius', ref.radius, 'pix', ref.radius_pix)
+                if not np.isfinite(ref.pa):
+                    ref.pa = 0.
                 v1x = -np.sin(np.deg2rad(ref.pa))
                 v1y =  np.cos(np.deg2rad(ref.pa))
                 v2x =  v1y
