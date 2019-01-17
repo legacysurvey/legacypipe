@@ -843,278 +843,40 @@ def stage_mask_junk(tims=None, targetwcs=None, W=None, H=None, bands=None,
                     **kwargs):
     '''
     This pipeline stage tries to detect artifacts in the individual
-    exposures, by running a detection step and removing blobs with
-    large axis ratio (long, thin objects, often satellite trails).
+    exposures, by blurring all images in the same band to the same PSF size,
+    then searching for outliers.
     '''
-    from scipy.ndimage.filters import gaussian_filter
-    from scipy.ndimage.morphology import binary_fill_holes
-    from scipy.ndimage.measurements import label, find_objects
-    from astrometry.util.resample import resample_with_wcs, OverlapError
-    from legacypipe.survey import imsave_jpeg
-    
+    from legacypipe.outliers import patch_from_coadd, mask_outlier_pixels
+
     record_event and record_event('stage_mask_junk: starting')
 
     # Patch individual-CCD masked pixels from a coadd
-    C = make_coadds(tims, bands, targetwcs, mp=mp)
-    coimgs = C.coimgs
-    #coimgs,_ = quick_coadds(tims, bands, targetwcs, mp=mp)
-    ibands = dict([(b,i) for i,b in enumerate(bands)])
-    for tim in tims:
-        ie = tim.getInvvar()
-        img = tim.getImage()
-        if np.any(ie == 0):
-            # Patch from the coadd
-            co = C.coimgs[ibands[tim.band]]
-            # resample from coadd to img -- nearest-neighbour
-            try:
-                yo,xo,yi,xi,nil = resample_with_wcs(tim.subwcs, targetwcs, [])
-                I, = np.nonzero(ie[yo,xo] == 0)
-                if len(I):
-                    img[yo[I],xo[I]] = coimgs[ibands[tim.band]][yi[I],xi[I]]
-            except OverlapError:
-                print('No overlap')
-    del C,coimgs
-
-    if plots:
-        coimgs,cons,maximgs = quick_coadds(tims, bands, targetwcs, fill_holes=False, get_max=True)
-        plt.clf()
-        dimshow(get_rgb(coimgs, bands))
-        plt.title('Before outliers')
-        ps.savefig()
-        plt.clf()
-        dimshow(get_rgb(maximgs, bands))
-        plt.title('Before outliers: Max')
-        ps.savefig()
-        del coimgs,cons,maximgs
+    C = make_coadds(tims, bands, targetwcs, mp=mp, max=True, sbscale=False)
+    patch_from_coadd(C.coimgs, targetwcs, bands, tims, mp=mp)
 
     if True:
-        coimgs,cons,maximgs = quick_coadds(tims, bands, targetwcs, fill_holes=False, get_max=True)
         outdir = os.path.join(survey.output_dir, 'metrics', brickname[:3])
         from astrometry.util.file import trymakedirs
         trymakedirs(outdir)
         outfn = os.path.join(outdir, 'outliers-pre-%s.jpg' % brickname)
-        imsave_jpeg(outfn, get_rgb(coimgs, bands))
+        imsave_jpeg(outfn, get_rgb(C.coimgs, bands))
         outfn = os.path.join(outdir, 'outliers-maxpre-%s.jpg' % brickname)
-        imsave_jpeg(outfn, get_rgb(maximgs, bands))
-        del coimgs,cons,maximgs
+        imsave_jpeg(outfn, get_rgb(C.maximgs, bands))
+    del C
 
-    badcoadds = []
-    
-    from scipy.ndimage.morphology import binary_dilation
-    for iband,band in enumerate(bands):
-        btims = [tim for tim in tims if tim.band == band]
-        if len(btims) == 0:
-            continue
-        print(len(btims), 'images for band', band)
-        sigs = np.array([tim.psf_sigma for tim in btims])
-        print('PSF sigmas:', sigs)
-        targetsig = max(sigs) + 0.5
-        addsigs = np.sqrt(targetsig**2 - sigs**2)
-        print('Target sigma:', targetsig)
-        print('Blur sigmas:', addsigs)
-        resams = []
-        coimg = np.zeros((H,W), np.float32)
-        cow   = np.zeros((H,W), np.float32)
-        masks = np.zeros((H,W), np.int16)
-
-        for tim,sig in zip(btims, addsigs):
-            from astrometry.util.miscutils import patch_image
-            from scipy.ndimage.filters import gaussian_filter
-            from astrometry.util.resample import resample_with_wcs,OverlapError
-            img = gaussian_filter(tim.getImage(), sig)
-            try:
-                Yo,Xo,Yi,Xi,[rimg] = resample_with_wcs(
-                    targetwcs, tim.subwcs, [img], 3)
-            except OverlapError:
-                resams.append(None)
-                continue
-            del img
-            blurnorm = 1./(2. * np.sqrt(np.pi) * sig)
-            #print('Blurring "psf" norm', blurnorm)
-            wt = tim.getInvvar()[Yi,Xi] / (blurnorm**2)
-            coimg[Yo,Xo] += rimg * wt
-            cow  [Yo,Xo] += wt
-            masks[Yo,Xo] |= (tim.dq[Yi,Xi])
-            resams.append([x.astype(np.int16) for x in [Yo,Xo,Yi,Xi]] + [rimg,wt])
-
-        #
-        veto = np.logical_or(
-            binary_dilation(masks & CP_DQ_BITS['bleed'], iterations=3),
-            binary_dilation(masks & CP_DQ_BITS['satur'], iterations=10))
-        del masks
-
-        if plots:
-            plt.clf()
-            plt.imshow(veto, interpolation='nearest', origin='lower', cmap='gray')
-            plt.title('SATUR, BLEED veto (%s band)' % band)
-            ps.savefig()
-
-        badcoadd = np.zeros((H,W), np.float32)
-        badcon   = np.zeros((H,W), np.int16)
-
-        for tim,resam in zip(btims, resams):
-            if resam is None:
-                continue
-            (Yo,Xo,Yi,Xi,rimg,wt) = resam
-
-            # Subtract this image from the coadd
-            otherwt = cow[Yo,Xo] - wt
-            otherimg = (coimg[Yo,Xo] - rimg*wt) / np.maximum(otherwt, 1e-16)
-            this_sig1 = 1./np.sqrt(np.median(wt[wt>0]))
-
-            ## FIXME -- this image edges??
-
-            # Compute the error on our estimate of (thisimg - co) =
-            # sum in quadrature of the errors on thisimg and co.
-            with np.errstate(divide='ignore'):
-                diffvar = 1./wt + 1./otherwt
-                sndiff = (rimg - otherimg) / np.sqrt(diffvar)
-
-            with np.errstate(divide='ignore'):
-                reldiff = ((rimg - otherimg) / np.maximum(otherimg, this_sig1))
-
-            if plots:
-                plt.clf()
-                showimg = np.zeros((H,W),np.float32)
-                showimg[Yo,Xo] = otherimg
-                plt.subplot(2,3,1)
-                plt.imshow(showimg, interpolation='nearest', origin='lower', vmin=-0.01, vmax=0.1,
-                           cmap='gray')
-                plt.title('other images')
-                showimg[Yo,Xo] = otherwt
-                plt.subplot(2,3,2)
-                plt.imshow(showimg, interpolation='nearest', origin='lower', vmin=0)
-                plt.title('other wt')
-                showimg[Yo,Xo] = sndiff
-                plt.subplot(2,3,3)
-                plt.imshow(showimg, interpolation='nearest', origin='lower', vmin=0, vmax=10)
-                plt.title('S/N diff')
-                showimg[Yo,Xo] = rimg
-                plt.subplot(2,3,4)
-                plt.imshow(showimg, interpolation='nearest', origin='lower', vmin=-0.01, vmax=0.1,
-                           cmap='gray')
-                plt.title('this image')
-                showimg[Yo,Xo] = wt
-                plt.subplot(2,3,5)
-                plt.imshow(showimg, interpolation='nearest', origin='lower', vmin=0)
-                plt.title('this wt')
-                plt.suptitle(tim.name)
-                showimg[Yo,Xo] = reldiff
-                plt.subplot(2,3,6)
-                plt.imshow(showimg, interpolation='nearest', origin='lower', vmin=0, vmax=4)
-                plt.title('rel diff')
-                ps.savefig()
-                
-
-            del otherimg
-
-            # Significant pixels
-            hotpix = ((sndiff > 5.) * (reldiff > 2.) * (otherwt > 1e-16) * (wt > 0.) *
-                      (veto[Yo,Xo] == False))
-
-            del reldiff, otherwt
-
-            if not np.any(hotpix):
-                continue
-
-            hot = np.zeros((H,W), bool)
-            hot[Yo,Xo] = hotpix
-
-            del hotpix
-
-            snmap = np.zeros((H,W), np.float32)
-            snmap[Yo,Xo] = sndiff
-
-            hot = binary_dilation(hot, iterations=1)
-            if plots:
-                heat = hot.astype(np.uint8)
-            # "warm"
-            hot = np.logical_or(hot,
-                                binary_dilation(hot, iterations=5) * (snmap > 3.))
-            hot = binary_dilation(hot, iterations=1)
-            if plots:
-                heat += hot
-            # "lukewarm"
-            hot = np.logical_or(hot,
-                                binary_dilation(hot, iterations=5) * (snmap > 2.))
-            hot = binary_dilation(hot, iterations=3)
-
-            if plots:
-                heat += hot
-                plt.clf()
-                plt.imshow(heat, interpolation='nearest', origin='lower', cmap='hot')
-                plt.title(tim.name + ': outliers')
-                ps.savefig()
-                del heat
-
-            del snmap
-
-            bad, = np.nonzero(hot[Yo,Xo])
-            badcoadd[Yo[bad],Xo[bad]] += tim.getImage()[Yi[bad],Xi[bad]]
-            badcon[Yo[bad],Xo[bad]] += 1
-
-            # Actually do the masking!
-            # Resample "hot" (in brick coords) back to tim coords.
-            try:
-                mYo,mXo,mYi,mXi,nil = resample_with_wcs(
-                    tim.subwcs, targetwcs, [], 3)
-            except OverlapError:
-                continue
-            Ibad, = np.nonzero(hot[mYi,mXi])
-            # Zero out the invvar for the bad pixels
-            if len(Ibad):
-                tim.getInvError()[mYo[Ibad],mXo[Ibad]] = 0.
-                # Also update DQ mask.
-                tim.dq[mYo[Ibad],mXo[Ibad]] |= CP_DQ_BITS['outlier']
-
-                # Write out a mask file.
-                maskedpix = np.zeros(tim.shape, np.uint8)
-                maskedpix[mYo[Ibad], mXo[Ibad]] = 1
-                # copy version_header before modifying it.
-                hdr = fitsio.FITSHDR()
-                for r in version_header.records():
-                    hdr.add_record(r)
-                # Plug in the tim WCS header
-                tim.subwcs.add_to_header(hdr)
-                hdr.delete('IMAGEW')
-                hdr.delete('IMAGEH')
-                hdr.add_record(dict(name='IMTYPE', value='outlier_mask',
-                                    comment='LegacySurvey image type'))
-                hdr.add_record(dict(name='CAMERA', value=tim.imobj.camera))
-                hdr.add_record(dict(name='EXPNUM', value=tim.imobj.expnum))
-                hdr.add_record(dict(name='CCDNAME', value=tim.imobj.ccdname))
-                hdr.add_record(dict(name='X0', value=tim.x0))
-                hdr.add_record(dict(name='Y0', value=tim.y0))
-                with survey.write_output('outliers_mask', brick=brickname,
-                                              camera=tim.imobj.camera.strip(), expnum=tim.imobj.expnum, ccdname=tim.imobj.ccdname.strip(), shape=maskedpix.shape) as out:
-                    out.fits.write(maskedpix, header=hdr)
-
-        badcoadds.append(badcoadd / np.maximum(badcon, 1))
-
-    if plots:
-        coimgs,cons,maximgs = quick_coadds(tims, bands, targetwcs, fill_holes=False, get_max=True)
-        plt.clf()
-        dimshow(get_rgb(coimgs, bands))
-        plt.title('After outliers')
-        ps.savefig()
-        plt.clf()
-        dimshow(get_rgb(maximgs, bands))
-        plt.title('After outliers: Max')
-        ps.savefig()
-        plt.clf()
-        dimshow(get_rgb(badcoadds, bands))
-        plt.title('Masked pixels')
-        ps.savefig()
+    badcoadds = mask_outlier_pixels(survey, tims, bands, targetwcs, brickname, version_header,
+                                    mp=mp, plots=plots, ps=ps)
 
     if True:
-        coimgs,cons,maximgs = quick_coadds(tims, bands, targetwcs, fill_holes=False, get_max=True)
+        #coimgs,cons,maximgs = quick_coadds(tims, bands, targetwcs, fill_holes=False, get_max=True)
+        C = make_coadds(tims, bands, targetwcs, mp=mp, max=True, sbscale=False)
         outfn = os.path.join(outdir, 'outliers-post-%s.jpg' % brickname)
-        imsave_jpeg(outfn, get_rgb(coimgs, bands))
+        imsave_jpeg(outfn, get_rgb(C.coimgs, bands))
         outfn = os.path.join(outdir, 'outliers-maxpost-%s.jpg' % brickname)
-        imsave_jpeg(outfn, get_rgb(maximgs, bands))
+        imsave_jpeg(outfn, get_rgb(C.maximgs, bands))
         outfn = os.path.join(outdir, 'outliers-masked-%s.jpg' % brickname)
         imsave_jpeg(outfn, get_rgb(badcoadds, bands))
-        
+
     return dict(tims=tims)
 
 def stage_image_coadds(survey=None, targetwcs=None, bands=None, tims=None,
