@@ -129,6 +129,7 @@ def _unwise_to_rgb(imgs):
 def make_coadds(tims, bands, targetwcs,
                 mods=None, xy=None, apertures=None, apxy=None,
                 ngood=False, detmaps=False, psfsize=False, allmasks=True,
+                max=False, sbscale=True,
                 callback=None, callback_args=[],
                 plots=False, ps=None,
                 lanczos=True, mp=None,
@@ -160,6 +161,8 @@ def make_coadds(tims, bands, targetwcs,
         C.AP = fits_table()
     if allmasks is not None:
         C.allmasks = []
+    if max:
+        C.maximgs = []
 
     if xy:
         ix,iy = xy
@@ -192,7 +195,7 @@ def make_coadds(tims, bands, targetwcs,
                 mo = None
             else:
                 mo = mods[itim]
-            args.append((itim,tim,mo,lanczos,targetwcs))
+            args.append((itim,tim,mo,lanczos,targetwcs,sbscale))
         if mp is not None:
             imaps.append(mp.imap_unordered(_resample_one, args))
         else:
@@ -289,6 +292,10 @@ def make_coadds(tims, bands, targetwcs,
             # only required for psfsizemap
             flatcow = np.zeros((H,W), np.float32)
             kwargs.update(psfsize=psfsizemap)
+
+        if max:
+            maximg = np.zeros((H,W), np.float32)
+            C.maximgs.append(maximg)
 
         for R in timiter:
             if R is None:
@@ -462,6 +469,9 @@ def make_coadds(tims, bands, targetwcs,
                 cochi2[Yo,Xo] += iv * (im - mo)**2
                 del mo
                 del goodpix
+
+            if max:
+                maximg[Yo,Xo] = np.maximum(maximg[Yo,Xo], im * (iv>0))
 
             del Yo,Xo,im,iv
             # END of loop over tims
@@ -656,7 +666,7 @@ def make_coadds(tims, bands, targetwcs,
     return C
 
 def _resample_one(args):
-    (itim,tim,mod,lanczos,targetwcs) = args
+    (itim,tim,mod,lanczos,targetwcs,sbscale) = args
     from astrometry.util.resample import resample_with_wcs, OverlapError
     if lanczos:
         from astrometry.util.miscutils import patch_image
@@ -688,12 +698,13 @@ def _resample_one(args):
         if mod is not None:
             mo = mods[itim][Yi,Xi]
     iv = tim.getInvvar()[Yi,Xi]
-    fscale = tim.sbscale
-    print('Applying surface-brightness scaling of %.3f to' % fscale, tim.name)
-    im *=  fscale
-    iv /= (fscale**2)
-    if mod is not None:
-        mo *= fscale
+    if sbscale:
+        fscale = tim.sbscale
+        print('Applying surface-brightness scaling of %.3f to' % fscale, tim.name)
+        im *=  fscale
+        iv /= (fscale**2)
+        if mod is not None:
+            mo *= fscale
     if tim.dq is None:
         dq = None
     else:
