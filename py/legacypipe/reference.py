@@ -5,6 +5,10 @@ from astrometry.util.fits import fits_table, merge_tables
 def get_reference_sources(survey, targetwcs, pixscale, bands,
                           gaia_stars, large_galaxies, star_clusters):
     from legacypipe.survey import GaiaSource
+    from legacypipe.survey import LegacyEllipseWithPriors
+    from tractor import PointSource, NanoMaggies, RaDecPos
+    from tractor.galaxy import ExpGalaxy
+    from tractor.ellipses import EllipseESoft
 
     H,W = targetwcs.shape
     H,W = int(H),int(W)
@@ -245,10 +249,6 @@ def read_tycho2(survey, targetwcs):
     return tycho
 
 def read_large_galaxies(survey, targetwcs):
-    from legacypipe.survey import LegacyEllipseWithPriors
-    from tractor.galaxy import ExpGalaxy
-    from tractor import NanoMaggies, RaDecPos
-    from tractor.ellipses import EllipseESoft
     from astrometry.libkd.spherematch import tree_open, tree_search_radec
 
     galfn = survey.find_file('large-galaxies')
