@@ -4,7 +4,11 @@ from astrometry.util.fits import fits_table, merge_tables
 
 def get_reference_sources(survey, targetwcs, pixscale, bands,
                           gaia_stars, large_galaxies, star_clusters):
+    from legacypipe.survey import GaiaSource
+
     H,W = targetwcs.shape
+    H,W = int(H),int(W)
+            
     # How big of a margin to search for bright stars -- this should be
     # based on the maximum radius they are considered to affect.
     ref_margin = 0.125
@@ -57,13 +61,13 @@ def get_reference_sources(survey, targetwcs, pixscale, bands,
 
     # Read large galaxies nearby.
     if large_galaxies:
-        galaxies = read_large_galaxies(survey, targetwcs, bands)
+        galaxies = read_large_galaxies(survey, targetwcs)
         if galaxies is not None:
             refs.append(galaxies)
 
     refs = merge_tables([r for r in refs if r is not None], columns='fillzero')
 
-    refs.radius_pix = np.ceil(refs.radius * 3600. / targetwcs.pixel_scale()).astype(int)
+    refs.radius_pix = np.ceil(refs.radius * 3600. / pixscale).astype(int)
 
     ok,xx,yy = targetwcs.radec2pixelxy(refs.ra, refs.dec)
     # ibx = integer brick coords
@@ -240,7 +244,7 @@ def read_tycho2(survey, targetwcs):
 
     return tycho
 
-def read_large_galaxies(survey, targetwcs, bands):
+def read_large_galaxies(survey, targetwcs):
     from legacypipe.survey import LegacyEllipseWithPriors
     from tractor.galaxy import ExpGalaxy
     from tractor import NanoMaggies, RaDecPos

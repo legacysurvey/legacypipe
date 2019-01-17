@@ -1250,65 +1250,26 @@ class LegacySurveyImage(object):
             good[masked] = False
             sig1b = 1./np.sqrt(np.median(wt[good]))
 
+            # Also mask based on reference stars and galaxies.
+            from legacypipe.reference import get_reference_sources
+            from legacypipe.oneblob import get_inblob_map
+            wcs = self.get_wcs(hdr=imghdr)
+            pixscale = wcs.pixel_scale()
+            # only used to create galaxy objects (which we will discard)
+            fakebands = ['r']
+            refs,_ = get_reference_sources(survey, wcs, pixscale, fakebands,
+                                           True, True, False)
+            stargood = (get_inblob_map(wcs, refs) == 0)
+
+
             # Now find the final sky model using that more extensive mask
-            skyobj = SplineSky.BlantonMethod(img - med, good, boxsize)
+            skyobj = SplineSky.BlantonMethod(img - med, good * stargood, boxsize)
             # add the overall median back in
             skyobj.offset(med)
 
             if plots:
                 from legacypipe.detection import plot_boundary_map
                 import pylab as plt
-
-                #
-                wcs = self.get_wcs(hdr=imghdr)
-                from legacypipe.runbrick import read_gaia, read_large_galaxies
-                gaia = read_gaia(wcs)
-                print(len(gaia), 'Gaia stars nearby')
-
-                #gaia.isbright = np.zeros(len(gaia), bool)
-                # HACK -- in runbrick we match to Tycho-2
-                gaia.isbright = (gaia.G < 12)
-                gaia.ismedium = np.ones(len(gaia), bool)
-                gaia.iscluster = np.zeros(len(gaia), bool)
-                gaia.islargegalaxy = np.zeros(len(gaia), bool)
-
-                # sort by brightness
-                gaia.cut(np.argsort(gaia.G))
-                print('Gaia brightest G:', gaia.G[:3])
-                print('Gaia radii (deg):', gaia.radius[:3])
-                #print('Gaia radii (pix):', gaia.radius_pix[:3])
-
-                # only used to create galaxy objects (which we will discard)
-                fakebands = ['r']
-                galaxies,_ = read_large_galaxies(survey, wcs, fakebands)
-
-                from astrometry.util.fits import merge_tables
-                refs = merge_tables([x for x in [gaia, galaxies] if x is not None],
-                                    columns='fillzero')
-                refs.radius_pix = np.ceil(refs.radius * 3600. / wcs.pixel_scale()).astype(int)
-
-                from legacypipe.oneblob import get_inblob_map
-                nearby = get_inblob_map(wcs, refs)
-                stargood = (nearby == 0)
-
-
-                # Find splinesky with combined star/gal & boxcar masks
-                skyobj2 = SplineSky.BlantonMethod(img - med, good * stargood, boxsize)
-                # add the overall median back in
-                skyobj2.offset(med)
-
-                boxcar2 = 20
-                # Sigma of boxcar-smoothed image
-                bsig2 = sig1 / boxcar2
-                masked = np.abs(uniform_filter(img-med-skymod, size=boxcar2, mode='constant')
-                                > (3.*bsig2))
-                masked = binary_dilation(masked, iterations=3)
-                good2 = good.copy()
-                good2[masked] = False
-                # Now find the final sky model using that more extensive mask
-                skyobj3 = SplineSky.BlantonMethod(img - med, good2, boxsize)
-                # add the overall median back in
-                skyobj3.offset(med)
 
                 ima = dict(interpolation='nearest', origin='lower', vmin=med-2.*sig1,
                            vmax=med+5.*sig1, cmap='gray')
@@ -1317,18 +1278,12 @@ class LegacySurveyImage(object):
 
                 plt.clf()
                 plt.imshow(img.T, **ima)
-                #plot_boundary_map(np.logical_not(good.T))
                 plt.title('Image %s-%i-%s %s' % (self.camera, self.expnum, self.ccdname, self.band))
                 ps.savefig()
 
                 plt.clf()
                 plt.imshow((img.T - med)*good.T + med, **ima)
                 plt.title('Image (boxcar masked)')
-                ps.savefig()
-
-                plt.clf()
-                plt.imshow((img.T - med)*good2.T + med, **ima)
-                plt.title('Image (big boxcar masked)')
                 ps.savefig()
 
                 plt.clf()
@@ -1345,39 +1300,8 @@ class LegacySurveyImage(object):
                 skyobj.addTo(skypix)
                 plt.clf()
                 plt.imshow(skypix.T, **ima2)
-                plt.title('Sky model (boxcar)')
-                ps.savefig()
-
-                skypix3 = np.zeros_like(img)
-                skyobj3.addTo(skypix3)
-                plt.clf()
-                plt.imshow(skypix3.T, **ima2)
-                plt.title('Sky model (big boxcar)')
-                ps.savefig()
-
-                skypix2 = np.zeros_like(img)
-                skyobj2.addTo(skypix2)
-                plt.clf()
-                plt.imshow(skypix2.T, **ima2)
                 plt.title('Sky model (boxcar & star)')
                 ps.savefig()
-
-                # plt.clf()
-                # plt.imshow((img.T - skypix.T)*good.T + med, **ima)
-                # plt.title('Masked resids (boxcar)')
-                # ps.savefig()
-                # 
-                # plt.clf()
-                # plt.imshow((img.T - skypix2.T)*(good * stargood).T + med, **ima)
-                # plt.title('Masked resids (boxcar & star)')
-                # ps.savefig()
-                #
-                # plt.clf()
-                # plt.imshow(good.T, interpolation='nearest', origin='lower')
-                # plt.title('Good pix (for sky bg est)')
-                # ps.savefig()
-
-
 
 
             if slc is not None:
