@@ -1267,6 +1267,24 @@ class LegacySurveyImage(object):
             # add the overall median back in
             skyobj.offset(med)
 
+            # Compute stats on sky
+            skypix = np.zeros_like(img)
+            skyobj.addTo(skypix)
+
+            pcts = [0,10,20,30,40,50,60,70,80,90,100]
+            pctvals = np.percentile((img - skypix)[good * stargood], pcts)
+                                    
+            H,W = img.shape
+            fmasked = float(np.sum((good * stargood) == 0)) / (H*W)
+
+            # DEBUG -- compute a splinesky on a finer grid and compare it.
+            fineskyobj = SplineSky.BlantonMethod(img - med, good * stargood, boxsize//2)
+            # add the overall median back in
+            fineskyobj.offset(med)
+            fineskyobj.addTo(skypix, -1.)
+            fine_rms = np.sqrt(np.mean(skypix**2))
+
+
             if plots:
                 from legacypipe.detection import plot_boundary_map
                 import pylab as plt
@@ -1323,6 +1341,14 @@ class LegacySurveyImage(object):
                                 comment='Sky estimate: clipped median'))
             hdr.add_record(dict(name='S_JOHN', value=sky_john,
                                 comment='Sky estimate: John'))
+
+            for p,v in zip(pcts, pctvals):
+                hdr.add_record(dict(name='S_P%i' % p, value=v,
+                                    comment='Sky residual: percentile %i' % p))
+            hdr.add_record(dict(name='S_FMASKED', value=fmasked,
+                                comment='Sky: fraction masked'))
+            hdr.add_record(dict(name='S_FINE', value=fine_rms,
+                                comment='Sky: RMS resid fine - splinesky'))
                 
             trymakedirs(self.splineskyfn, dir=True)
             skyobj.write_fits(self.splineskyfn, primhdr=hdr)
