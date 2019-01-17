@@ -91,7 +91,7 @@ def main():
         im = survey.get_image_object(t)
         print('Running', im.name)
         
-        kwargs = dict(psfex=opt.psfex, sky=opt.sky, ps=ps)
+        kwargs = dict(psfex=opt.psfex, sky=opt.sky, ps=ps, survey=survey)
         if opt.force:
             kwargs.update(force=True)
         if opt.run_se:

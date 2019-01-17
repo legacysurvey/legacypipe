@@ -1361,6 +1361,8 @@ def stage_srcs(targetrd=None, pixscale=None, targetwcs=None,
     if not 'iscluster' in refstars.get_columns():
         refstars.iscluster = np.zeros(len(refstars), bool)
 
+    refstars.radius_pix = np.ceil(refstars.radius * 3600. / targetwcs.pixel_scale()).astype(int)
+
     #print('Gaia sources:')
     #gaia.about()
     if gaia_stars and len(gaia):

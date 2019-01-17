@@ -21,6 +21,8 @@ from legacypipe.runbrick_plots import _plot_mods
 
 def get_inblob_map(blobwcs, refs):
     bh,bw = blobwcs.shape
+    bh = int(bh)
+    bw = int(bw)
     blobmap = np.zeros((bh,bw), np.uint8)
     # circular/elliptical regions:
     for col,bit,ellipse in [('isbright', 'BRIGHT', False),
