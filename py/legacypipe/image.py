@@ -532,6 +532,7 @@ class LegacySurveyImage(object):
         tim.wcsver = (getattr(wcs, 'version', ''), getattr(wcs, 'plver', ''))
         tim.psfver = (getattr(psf, 'version', ''), getattr(psf, 'plver', ''))
         tim.datasum = imghdr.get('DATASUM')
+        tim.procdate = primhdr['DATE']
         if get_dq:
             tim.dq = dq
         tim.dq_saturation_bits = self.dq_saturation_bits
@@ -1130,6 +1131,7 @@ class LegacySurveyImage(object):
         plver = primhdr.get('PLVER', 'V0.0')
         imghdr = self.read_image_header()
         datasum = imghdr['DATASUM']
+        procdate = primhdr['DATE']
         if git_version is None:
             git_version = get_git_version()
         # We write the PSF model to a .fits.tmp file, then rename to .fits
@@ -1144,7 +1146,9 @@ class LegacySurveyImage(object):
                 'modhead %s PLVER "%s" "CP ver of image file"' %
                 (self.psffn, plver),
                 'modhead %s IMGDSUM "%s" "DATASUM of image file"' %
-                (self.psffn, datasum)]
+                (self.psffn, datasum),
+                'modhead %s PROCDATE "%s" "DATE of image file"' %
+                (self.psffn, procdate)]
         for cmd in cmds:
             print(cmd)
             rtn = os.system(cmd)
@@ -1168,6 +1172,7 @@ class LegacySurveyImage(object):
         plver = primhdr.get('PLVER', 'V0.0')
         imghdr = self.read_image_header()
         datasum = imghdr['DATASUM']
+        procdate = primhdr['DATE']
 
         hdr.delete('PROCTYPE')
         hdr.add_record(dict(name='PROCTYPE', value='ccd',
@@ -1178,6 +1183,8 @@ class LegacySurveyImage(object):
                             comment='CP ver of image file'))
         hdr.add_record(dict(name='IMGDSUM', value=datasum,
                             comment='DATASUM of image file'))
+        hdr.add_record(dict(name='PROCDATE', value=procdate,
+                            comment='DATE of image file'))
 
         good = (wt > 0)
         if np.sum(good) == 0:
