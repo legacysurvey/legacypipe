@@ -1221,6 +1221,10 @@ Now using the current directory as LEGACY_SURVEY_DIR, but this is likely to fail
             return swap(os.path.join(basedir, 'metrics', brickpre,
                                      'all-models-%s.fits' % (brick)))
 
+        elif filetype == 'ref-sources':
+            return swap(os.path.join(basedir, 'metrics', brickpre,
+                                     'reference-%s.fits' % (brick)))
+
         elif filetype == 'checksums':
             return swap(os.path.join(basedir, 'tractor', brickpre,
                                      'brick-%s.sha256sum' % brick))

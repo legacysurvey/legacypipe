@@ -1015,6 +1015,7 @@ def stage_srcs(targetrd=None, pixscale=None, targetwcs=None,
                bands=None, ps=None, tims=None,
                plots=False, plots2=False,
                brickname=None,
+               version_header=None,
                mp=None, nsigma=None,
                survey=None, brick=None,
                gaia_stars=False,
@@ -1052,29 +1053,40 @@ def stage_srcs(targetrd=None, pixscale=None, targetwcs=None,
     # Subtract star halos?
     Igaia = []
     if gaia_stars:
-        gaia = refstars[np.logical_or(refstars.isbright, refstars.ismedium) *
-                        np.logical_not(refstars.iscluster)]
-        if len(gaia):
-            Igaia = np.argsort(gaia.G)
-            Igaia = Igaia[gaia.G[Igaia] < 15.]
-            print(len(Igaia), 'stars with G<15')
+        gaia = refstars
+        Igaia = np.flatnonzero(np.logical_or(refstars.isbright, refstars.ismedium) *
+                               np.logical_not(refstars.iscluster) *
+                               (gaia.G < 15.))
+        Igaia = Igaia[np.argsort(gaia.G[Igaia])]
+        print(len(Igaia), 'stars with G<15')
+
+        # gaia = refstars[np.logical_or(refstars.isbright, refstars.ismedium) *
+        #                 np.logical_not(refstars.iscluster)]
+        # if len(gaia):
+        #     Igaia = np.argsort(gaia.G)
+        #     Igaia = Igaia[gaia.G[Igaia] < 15.]
     if len(Igaia):
         from legacypipe.halos import fit_halos
+        print('Subtracting stellar halos...')
         # FIXME -- again...?
         coimgs,cons = quick_coadds(tims, bands, targetwcs)
 
-        fluxes,rhaloimgs = fit_halos(coimgs, cons, H, W, targetwcs,
-                                     pixscale, bands, gaia[Igaia],
-                                     plots, ps)
+        fluxes,haloimgs = fit_halos(coimgs, cons, H, W, targetwcs,
+                                    pixscale, bands, gaia[Igaia],
+                                    plots, ps)
+        init_fluxes = [f[0] for f in fluxes]
 
-        ## FIXME -- run a round 2?  (Need to add the round-1 models back in first though!)
-        # fluxes2,rhaloimgs2 = fit_halos([co-halo for co,halo in zip(coimgs,rhaloimgs)],
-        #                                cons, H, W, targetwcs,
-        #                                pixscale, bands, gaia[Igaia],
-        #                                plots, ps)
+        fluxes2,haloimgs2 = fit_halos([co-halo for co,halo in zip(coimgs,haloimgs)],
+                                       cons, H, W, targetwcs,
+                                       pixscale, bands, gaia[Igaia],
+                                       plots, ps, init_fluxes=init_fluxes)
 
-        ## FIXME -- must write out some data product with these fit values!!
-        ## FIXME -- also a map of where we have subtracted the halo?  (splice with PSF model??)
+        for iband,b in enumerate(bands):
+            haloflux = np.zeros(len(refstars))
+            haloflux[Igaia] = np.array([f[0][iband] for f in fluxes2])
+            refstars.set('star_halo_flux_%s' % b, haloflux)
+
+        ## FIXME -- write a map of where we have subtracted the halo?  (splice with PSF model??)
 
         if plots:
             plt.clf()
@@ -1083,24 +1095,27 @@ def stage_srcs(targetrd=None, pixscale=None, targetwcs=None,
             ps.savefig()
     
             plt.clf()
-            dimshow(get_rgb(rhaloimgs, bands, **rgbkwargs))
+            dimshow(get_rgb(haloimgs, bands, **rgbkwargs))
             plt.title('fit profiles')
             ps.savefig()
     
             plt.clf()
-            dimshow(get_rgb([c-h for c,h in zip(coimgs,rhaloimgs)], bands, **rgbkwargs))
+            dimshow(get_rgb([c-h for c,h in zip(coimgs,haloimgs)], bands, **rgbkwargs))
             plt.title('data - fit profiles')
             ps.savefig()
 
-            # plt.clf()
-            # dimshow(get_rgb(rhaloimgs2, bands, **rgbkwargs))
-            # plt.title('second-round fit profiles')
-            # ps.savefig()
-            # 
-            # plt.clf()
-            # dimshow(get_rgb([c-h-h2 for c,h,h2 in zip(coimgs,rhaloimgs,rhaloimgs2)], bands, **rgbkwargs))
-            # plt.title('second-round data - fit profiles')
-            # ps.savefig()
+            plt.clf()
+            dimshow(get_rgb(haloimgs2, bands, **rgbkwargs))
+            plt.title('second-round fit profiles')
+            ps.savefig()
+
+            plt.clf()
+            dimshow(get_rgb([c-h2 for c,h2 in zip(coimgs,haloimgs2)], bands, **rgbkwargs))
+            plt.title('second-round data - fit profiles')
+            ps.savefig()
+
+    with survey.write_output('ref-sources', brick=brickname) as out:
+        refstars.writeto(None, fits_object=out.fits, primheader=version_header)
 
     record_event and record_event('stage_srcs: detection maps')
 
@@ -1126,7 +1141,7 @@ def stage_srcs(targetrd=None, pixscale=None, targetwcs=None,
         # Build a map from old "satblobs" to new; identity to start
         remap = np.arange(nsat+1)
         # Drop blobs that contain a reference star
-        zeroout = satblobs[refstars.iby, refstars.ibx]
+        zeroout = satblobs[refstars.iby[refstars.in_bounds], refstars.ibx[refstars.in_bounds]]
         remap[zeroout] = 0
         # Renumber them to be contiguous
         I = np.flatnonzero(remap)
