@@ -928,7 +928,7 @@ class LegacySurveyImage(object):
                     if 'sig1' in Ti.get_columns():
                         sky.sig1 = Ti.sig1
                     if 'imgdsum' in Ti.get_columns():
-                        sky.datasum = Ti.datasum.strip()
+                        sky.datasum = Ti.datasum
                     return sky
             except:
                 import traceback
@@ -966,7 +966,7 @@ class LegacySurveyImage(object):
         sig1 = hdr.get('SIG1', None)
         if sig1 is not None:
             sky.sig1 = sig1
-        sky.datasum = hdr.get('IMGDSUM', '').strip()
+        sky.datasum = hdr.get('IMGDSUM')
         return sky
 
     def read_psf_model(self, x0, y0,
@@ -1024,7 +1024,7 @@ class LegacySurveyImage(object):
                     psf.version = Ti.legpipev.strip()
                     psf.plver = Ti.plver.strip()
                     if 'imgdsum' in Ti.get_columns():
-                        psf.datasum = Ti.datasum.strip()
+                        psf.datasum = Ti.datasum
                     psf.fwhm = Ti.psf_fwhm
             except:
                 import traceback
@@ -1044,7 +1044,7 @@ class LegacySurveyImage(object):
             if psf.version is None:
                 psf.version = str(os.stat(self.psffn).st_mtime)
             psf.plver = hdr.get('PLVER', '').strip()
-            psf.datasum = hdr.get('IMGDSUM', '').strip()
+            psf.datasum = hdr.get('IMGDSUM', 0)
             hdr = fitsio.read_header(self.psffn, ext=1)
             psf.fwhm = hdr['PSF_FWHM']
 
@@ -1223,8 +1223,6 @@ class LegacySurveyImage(object):
             sky_john = np.median(cimage)
             del cimage
 
-
-
             boxsize = self.splinesky_boxsize
 
             # Start by subtracting the overall median
@@ -1253,14 +1251,24 @@ class LegacySurveyImage(object):
             # Also mask based on reference stars and galaxies.
             from legacypipe.reference import get_reference_sources
             from legacypipe.oneblob import get_inblob_map
+
             wcs = self.get_wcs(hdr=imghdr)
+
+            print('Good image slice:', slc)
+            if slc is not None:
+                sy,sx = slc
+                y0,y1 = sy.start, sy.stop
+                x0,x1 = sx.start, sx.stop
+                #print('x0,x1', x0,x1, 'y0,y1', y0,y1)
+                wcs = wcs.get_subimage(x0, y0, int(x1-x0), int(y1-y0))
+
+
             pixscale = wcs.pixel_scale()
             # only used to create galaxy objects (which we will discard)
             fakebands = ['r']
             refs,_ = get_reference_sources(survey, wcs, pixscale, fakebands,
                                            True, True, False)
             stargood = (get_inblob_map(wcs, refs) == 0)
-
 
             # Now find the final sky model using that more extensive mask
             skyobj = SplineSky.BlantonMethod(img - med, good * stargood, boxsize)
@@ -1408,6 +1416,8 @@ class LegacySurveyImage(object):
                 sky = False
             except Exception as e:
                 print('Did not find existing sky model for', self, ':', e)
+                #import traceback
+                #traceback.print_exc()
 
         if se:
             # The image & mask files to process (funpacked if necessary)
