@@ -36,7 +36,7 @@ def patch_from_coadd(coimgs, targetwcs, bands, tims, mp=None):
 
 
 def mask_outlier_pixels(survey, tims, bands, targetwcs, brickname, version_header,
-                        mp=None, plots=False, ps=None):
+                        mp=None, plots=False, ps=None, make_badcoadds=True, tims_todo=None):
     from scipy.ndimage.morphology import binary_dilation
     from scipy.ndimage.filters import gaussian_filter
     from legacypipe.image import CP_DQ_BITS
@@ -44,9 +44,15 @@ def mask_outlier_pixels(survey, tims, bands, targetwcs, brickname, version_heade
     if plots:
         import pylab as plt
 
+    if tims_todo is None:
+        tims_todo = tims
+
     H,W = targetwcs.shape
 
-    badcoadds = []
+    if make_badcoadds:
+        badcoadds = []
+
+    # Build blurred reference image
     for iband,band in enumerate(bands):
         btims = [tim for tim in tims if tim.band == band]
         if len(btims) == 0:
@@ -69,7 +75,6 @@ def mask_outlier_pixels(survey, tims, bands, targetwcs, brickname, version_heade
                 Yo,Xo,Yi,Xi,[rimg] = resample_with_wcs(
                     targetwcs, tim.subwcs, [img], 3)
             except OverlapError:
-                resams.append(None)
                 continue
             del img
             blurnorm = 1./(2. * np.sqrt(np.pi) * sig)
@@ -78,7 +83,8 @@ def mask_outlier_pixels(survey, tims, bands, targetwcs, brickname, version_heade
             coimg[Yo,Xo] += rimg * wt
             cow  [Yo,Xo] += wt
             masks[Yo,Xo] |= (tim.dq[Yi,Xi])
-            resams.append([x.astype(np.int16) for x in [Yo,Xo,Yi,Xi]] + [rimg,wt])
+            if tim in tims_todo:
+                resams.append([tim] + [x.astype(np.int16) for x in [Yo,Xo,Yi,Xi]] + [rimg,wt])
 
         #
         veto = np.logical_or(
@@ -92,12 +98,13 @@ def mask_outlier_pixels(survey, tims, bands, targetwcs, brickname, version_heade
             plt.title('SATUR, BLEED veto (%s band)' % band)
             ps.savefig()
 
-        badcoadd = np.zeros((H,W), np.float32)
-        badcon   = np.zeros((H,W), np.int16)
-        for tim,resam in zip(btims, resams):
-            if resam is None:
-                continue
-            (Yo,Xo,Yi,Xi,rimg,wt) = resam
+        if make_badcoadds:
+            badcoadd = np.zeros((H,W), np.float32)
+            badcon   = np.zeros((H,W), np.int16)
+
+        # Compare against reference image...
+        for resam in resams:
+            (tim, Yo,Xo,Yi,Xi, rimg,wt) = resam
 
             # Subtract this image from the coadd
             otherwt = cow[Yo,Xo] - wt
@@ -192,8 +199,10 @@ def mask_outlier_pixels(survey, tims, bands, targetwcs, brickname, version_heade
             del snmap
 
             bad, = np.nonzero(hot[Yo,Xo])
-            badcoadd[Yo[bad],Xo[bad]] += tim.getImage()[Yi[bad],Xi[bad]]
-            badcon[Yo[bad],Xo[bad]] += 1
+
+            if make_badcoadds:
+                badcoadd[Yo[bad],Xo[bad]] += tim.getImage()[Yi[bad],Xi[bad]]
+                badcon[Yo[bad],Xo[bad]] += 1
 
             # Actually do the masking!
             # Resample "hot" (in brick coords) back to tim coords.
@@ -235,5 +244,9 @@ def mask_outlier_pixels(survey, tims, bands, targetwcs, brickname, version_heade
                                               camera=tim.imobj.camera.strip(), expnum=tim.imobj.expnum, ccdname=tim.imobj.ccdname.strip(), shape=maskedpix.shape) as out:
                     out.fits.write(maskedpix, header=hdr)
 
-        badcoadds.append(badcoadd / np.maximum(badcon, 1))
-    return badcoadds
+        if make_badcoadds:
+            badcoadds.append(badcoadd / np.maximum(badcon, 1))
+
+    if make_badcoadds:
+        return badcoadds
+    return None

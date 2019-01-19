@@ -850,11 +850,8 @@ def stage_mask_junk(tims=None, targetwcs=None, W=None, H=None, bands=None,
 
     record_event and record_event('stage_mask_junk: starting')
 
-    # Patch individual-CCD masked pixels from a coadd
-    C = make_coadds(tims, bands, targetwcs, mp=mp, max=True, sbscale=False)
-    patch_from_coadd(C.coimgs, targetwcs, bands, tims, mp=mp)
-
     # Make before-n-after plots (before)
+    C = make_coadds(tims, bands, targetwcs, mp=mp, max=True, sbscale=False)
     if True:
         outdir = os.path.join(survey.output_dir, 'metrics', brickname[:3])
         from astrometry.util.file import trymakedirs
@@ -863,10 +860,47 @@ def stage_mask_junk(tims=None, targetwcs=None, W=None, H=None, bands=None,
         imsave_jpeg(outfn, get_rgb(C.coimgs, bands))
         outfn = os.path.join(outdir, 'outliers-maxpre-%s.jpg' % brickname)
         imsave_jpeg(outfn, get_rgb(C.maximgs, bands))
-    del C
 
-    badcoadds = mask_outlier_pixels(survey, tims, bands, targetwcs, brickname, version_header,
-                                    mp=mp, plots=plots, ps=ps)
+    # Do we have all the required outlier mask files on disk already??  If so, skip all this jazz!
+    tims_todo = []
+    for tim in tims:
+        ### FIXME -- output directory vs $LEGACY_SURVEY_DIR...!
+        maskfn = survey.find_file('outliers_mask', brick=brickname,
+                                  camera=tim.imobj.camera.strip(), expnum=tim.imobj.expnum,
+                                  ccdname=tim.imobj.ccdname.strip(), output=True)
+        if not os.path.exists(maskfn):
+            tims_todo.append(tim)
+            continue
+
+        # Read it!
+        mask,hdr = fitsio.read(maskfn, header=True)
+        if mask.shape != tim.shape:
+            print('Outlier mask', maskfn, 'does not match shape of tim', tim)
+            tims_todo.append(tim)
+            continue
+        x0 = hdr['X0']
+        y0 = hdr['Y0']
+        if x0 != tim.x0 or y0 != tim.y0:
+            print('Outlier mask', maskfn, 'x0,y0 does not match that of tim', tim)
+            tims_todo.append(tim)
+            continue
+
+        print('Reading from', maskfn)
+        # Apply this mask!
+        tim.dq |= mask * CP_DQ_BITS['outlier']
+        tim.getInvError()[mask] = 0.
+
+    if len(tims_todo):
+        # Patch individual-CCD masked pixels from a coadd
+        patch_from_coadd(C.coimgs, targetwcs, bands, tims_todo, mp=mp)
+        del C
+
+        todo_bands = [b for b in bands if b in [tim.band for tim in tims_todo]]
+
+        make_badcoadds = True
+        badcoadds = mask_outlier_pixels(survey, tims, todo_bands, targetwcs, brickname, version_header,
+                                        mp=mp, plots=plots, ps=ps, make_badcoadds=make_badcoadds,
+                                        tims_todo=tims_todo)
 
     # Make before-n-after plots (after)
     if True:
@@ -875,8 +909,10 @@ def stage_mask_junk(tims=None, targetwcs=None, W=None, H=None, bands=None,
         imsave_jpeg(outfn, get_rgb(C.coimgs, bands))
         outfn = os.path.join(outdir, 'outliers-maxpost-%s.jpg' % brickname)
         imsave_jpeg(outfn, get_rgb(C.maximgs, bands))
-        outfn = os.path.join(outdir, 'outliers-masked-%s.jpg' % brickname)
-        imsave_jpeg(outfn, get_rgb(badcoadds, bands))
+        
+        if make_badcoadds:
+            outfn = os.path.join(outdir, 'outliers-masked-%s.jpg' % brickname)
+            imsave_jpeg(outfn, get_rgb(badcoadds, bands))
 
     return dict(tims=tims)
 
