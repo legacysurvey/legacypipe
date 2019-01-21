@@ -1137,18 +1137,20 @@ class LegacySurveyImage(object):
         # We write the PSF model to a .fits.tmp file, then rename to .fits
         psfdir = os.path.dirname(self.psffn)
         psfoutfn = os.path.join(psfdir, os.path.basename(self.sefn).replace('.fits','') + '.fits')
+        psftmpfn = psfoutfn + '.tmp'
         cmds = ['psfex -c %s -PSF_DIR %s -PSF_SUFFIX .fits.tmp %s' %
                 (os.path.join(sedir, self.camera + '.psfex'),
                  psfdir, self.sefn),
-                'mv %s %s' % (psfoutfn + '.tmp', psfoutfn),
                 'modhead %s LEGPIPEV "%s" "legacypipe git version"' %
-                (self.psffn, git_version),
+                (psftmpfn, git_version),
                 'modhead %s PLVER "%s" "CP ver of image file"' %
-                (self.psffn, plver),
+                (psftmpfn, plver),
                 'modhead %s IMGDSUM "%s" "DATASUM of image file"' %
-                (self.psffn, datasum),
+                (psftmpfn, datasum),
                 'modhead %s PROCDATE "%s" "DATE of image file"' %
-                (self.psffn, procdate)]
+                (psftmpfn, procdate),
+                'mv %s %s' % (psftmpfn, psfoutfn),
+                ]
         for cmd in cmds:
             print(cmd)
             rtn = os.system(cmd)
@@ -1359,7 +1361,10 @@ class LegacySurveyImage(object):
                                 comment='Sky: RMS resid fine - splinesky'))
                 
             trymakedirs(self.splineskyfn, dir=True)
-            skyobj.write_fits(self.splineskyfn, primhdr=hdr)
+            tmpfn = os.path.join(os.path.dirname(self.splineskyfn),
+                             'tmp-' + os.path.basename(self.splineskyfn))
+            skyobj.write_fits(tmpfn, primhdr=hdr)
+            os.rename(tmpfn, self.splineskyfn)
             print('Wrote sky model', self.splineskyfn)
 
         else:
@@ -1385,7 +1390,10 @@ class LegacySurveyImage(object):
             hdr.add_record(dict(name='SIG1B', value=sig1,
                                 comment='Median stdev of unmasked pixels+'))
             trymakedirs(self.skyfn, dir=True)
-            tsky.write_fits(self.skyfn, hdr=hdr)
+            tmpfn = os.path.join(os.path.dirname(self.skyfn),
+                             'tmp-' + os.path.basename(self.skyfn))
+            tsky.write_fits(tmfn, hdr=hdr)
+            os.rename(tmpfn, self.skyfn)
             print('Wrote sky model', self.skyfn)
 
     def run_calibs(self, psfex=True, sky=True, se=False,

@@ -272,7 +272,7 @@ def stage_tims(W=3600, H=3600, pixscale=0.262, brickname=None,
     if do_calibs:
         from legacypipe.survey import run_calibs
         record_event and record_event('stage_tims: starting calibs')
-        kwa = dict(git_version=gitver)
+        kwa = dict(git_version=gitver, survey=survey)
         if gaussPsf:
             kwa.update(psfex=False)
         if splinesky:

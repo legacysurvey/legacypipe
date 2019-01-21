@@ -187,7 +187,9 @@ def merge_psfex(survey, expnum, C, psfoutfn, opt):
     T.ccdname  = np.array([h[5] for h in psfhdrvals])
     fn = psfoutfn
     trymakedirs(fn, dir=True)
-    T.writeto(fn)
+    tmpfn = os.path.join(os.path.dirname(fn), 'tmp-' + os.path.basename(fn))
+    T.writeto(tmpfn)
+    os.rename(tmpfn, fn)
     print('Wrote', fn)
 
 def merge_splinesky(survey, expnum, C, skyoutfn, opt):
@@ -270,7 +272,9 @@ def merge_splinesky(survey, expnum, C, skyoutfn, opt):
     T.ccdname  = np.array([h[i0+1] for h in skyhdrvals])
     fn = skyoutfn
     trymakedirs(fn, dir=True)
-    T.writeto(fn)
+    tmpfn = os.path.join(os.path.dirname(fn), 'tmp-' + os.path.basename(fn))
+    T.writeto(tmpfn)
+    os.rename(tmpfn, fn)
     print('Wrote', fn)
 
 
