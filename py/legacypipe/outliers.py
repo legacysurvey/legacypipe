@@ -157,8 +157,13 @@ def mask_outlier_pixels(survey, tims, bands, targetwcs, brickname, version_heade
 
             del otherimg
 
+            # TEST:
+            sndiff = np.abs(sndiff)
+            reldiff = np.abs(reldiff)
+
             # Significant pixels
-            hotpix = ((sndiff > 5.) * (reldiff > 2.) * (otherwt > 1e-16) * (wt > 0.) *
+            hotpix = ((sndiff > 5.) * (reldiff > 2.) *
+                      (otherwt > 1e-16) * (wt > 0.) *
                       (veto[Yo,Xo] == False))
 
             del reldiff, otherwt
