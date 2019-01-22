@@ -235,6 +235,9 @@ def stage_tims(W=3600, H=3600, pixscale=0.262, brickname=None,
         print('Cutting to', len(I), 'of', len(ccds), 'CCDs for fitting.')
         ccds.cut(I)
 
+    ccds.cut(ccds.mjd_obs >= 56730)
+    print('Dropping CCDs before MJD 56730 (DATE >= 2014-03-14): now', len(ccds))
+
     if min_mjd is not None:
         ccds.cut(ccds.mjd_obs >= min_mjd)
         print('Cut to', len(ccds), 'after MJD', min_mjd)
