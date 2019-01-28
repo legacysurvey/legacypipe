@@ -392,6 +392,10 @@ def main():
         # open cluster
         rlo,rhi = 129.0, 131.0
         dlo,dhi = 19.0, 20.5
+
+    elif opt.region == 'dr8sky':
+        rlo,rhi = 35.0, 37.0
+        dlo,dhi = -3.0, -1.0
         
     if opt.mindec is not None:
         dlo = opt.mindec

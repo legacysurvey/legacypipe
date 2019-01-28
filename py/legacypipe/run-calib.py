@@ -31,11 +31,14 @@ def main():
     parser.add_argument('--continue', dest='cont', default=False, action='store_true',
                         help='Continue even if one file fails?')
     parser.add_argument('--plot-base', help='Make plots with this base filename')
+    # actually this doesn't work for calibs...
+    #parser.add_argument('--outdir', dest='output_dir', default=None,
+    #   help='Set output base directory')
 
     parser.add_argument('args',nargs=argparse.REMAINDER)
     opt = parser.parse_args()
 
-    survey = LegacySurveyData()
+    survey = LegacySurveyData() #output_dir=opt.output_dir)
     T = None
     if opt.ccds is not None:
         T = fits_table(opt.ccds)
@@ -91,7 +94,7 @@ def main():
         im = survey.get_image_object(t)
         print('Running', im.name)
         
-        kwargs = dict(psfex=opt.psfex, sky=opt.sky, ps=ps)
+        kwargs = dict(psfex=opt.psfex, sky=opt.sky, ps=ps, survey=survey)
         if opt.force:
             kwargs.update(force=True)
         if opt.run_se:

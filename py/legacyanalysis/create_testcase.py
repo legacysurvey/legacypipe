@@ -27,6 +27,7 @@ def main():
     parser.add_argument('--cache-dir', type=str, default=None,
                         help='Directory to search for cached files')
     parser.add_argument('--wise', help='For WISE outputs, give the path to a WCS file describing the sub-brick region of interest, eg, a coadd image')
+    parser.add_argument('--wise-wcs-hdu', help='For WISE outputs, the HDU to read the WCS from in the file given by --wise.', type=int, default=0)
     parser.add_argument('--fpack', action='store_true', default=False)
     parser.add_argument('--gzip', action='store_true', default=False)
     parser.add_argument('--pad', action='store_true', default=False,
@@ -155,6 +156,14 @@ def main():
         print('Reading data quality from', im.dqfn, 'hdu', im.hdu)
         dqdata = im._read_fits(im.dqfn, im.hdu, slice=tim.slice)
 
+        print('Tim shape:', tim.shape, 'Slice', tim.slice)
+        print('image shape:', imgdata.shape, 'iv', ivdata.shape, 'DQ', dqdata.shape)
+
+        from collections import Counter
+        dqvals = Counter(dqdata.ravel())
+        print('DQ pixel counts:')
+        for k,n in dqvals.most_common():
+            print('  0x%x' % k, ':', n)
 
         if args.pad:
             # Create zero image of full size, copy in data.
@@ -312,8 +321,8 @@ def main():
         from wise.unwise import (unwise_tile_wcs, unwise_tiles_touching_wcs,
                                  get_unwise_tractor_image, get_unwise_tile_dir)
         # Read WCS...
-        print('Reading TAN wcs header from', args.wise)
-        targetwcs = Tan(args.wise)
+        print('Reading TAN wcs header from', args.wise, 'HDU', args.wise_wcs_hdu)
+        targetwcs = Tan(args.wise, args.wise_wcs_hdu)
         tiles = unwise_tiles_touching_wcs(targetwcs)
         print('Cut to', len(tiles), 'unWISE tiles')
         H,W = targetwcs.shape
@@ -328,17 +337,19 @@ def main():
         unwise_tr_dir = os.environ['UNWISE_COADDS_TIMERESOLVED_DIR']
         wise_tr_out = os.path.join(args.outdir, 'images', 'unwise-tr')
         print('Will write WISE time-resolved outputs to', wise_tr_out)
+        trymakedirs(wise_tr_out)
 
-        W = fits_table(os.path.join(unwise_tr_dir, 'time_resolved_neo1-atlas.fits'))
+        W = fits_table(os.path.join(unwise_tr_dir, 'time_resolved_atlas.fits'))
         print('Read', len(W), 'time-resolved WISE coadd tiles')
         W.cut(np.array([t in tiles.coadd_id for t in W.coadd_id]))
         print('Cut to', len(W), 'time-resolved vs', len(tiles), 'full-depth')
 
         # Write the time-resolved index subset.
-        W.writeto(os.path.join(wise_tr_out, 'time_resolved_neo1-atlas.fits'))
+        W.writeto(os.path.join(wise_tr_out, 'time_resolved_atlas.fits'))
 
         # this ought to be enough for anyone =)
-        Nepochs = 5
+        _,Nepochs = W.epoch_bitmask.shape
+        print('N epochs in time-resolved atlas:', Nepochs)
 
         wisedata = []
 

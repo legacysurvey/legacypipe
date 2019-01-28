@@ -15,7 +15,7 @@ from tractor import PointSource, ParamList, ConstantFitsWcs
 
 from legacypipe.utils import EllipseWithPriors
 
-release_number = 7000
+release_number = 7999
 
 # search order: $TMPDIR, $TEMP, $TMP, then /tmp, /var/tmp, /usr/tmp
 tempdir = tempfile.gettempdir()
@@ -37,6 +37,7 @@ MASKBITS = dict(
     WISEM2     = 0x200,
     BAILOUT    = 0x400, # bailed out of processing
     MEDIUM     = 0x800, # medium-bright star
+    GALAXY     = 0x1000, # LSLGA large galaxy
 )
 
 # Bits in the "brightblob" bitmask
@@ -44,6 +45,7 @@ IN_BLOB = dict(
     BRIGHT = 0x1,
     MEDIUM = 0x2,
     CLUSTER = 0x4,
+    GALAXY = 0x8,
 )
 
 # Ugly hack: for sphinx documentation, the astrometry and tractor (and
@@ -398,17 +400,17 @@ def get_version_header(program_name, survey_dir, git_version=None):
                         comment='legacypipe git version'))
     hdr.add_record(dict(name='SURVEYV', value=survey_dir,
                         comment='Legacy Survey directory'))
-    hdr.add_record(dict(name='DECALSDR', value='DR7',
+    hdr.add_record(dict(name='DECALSDR', value='DR8',
                         comment='DECaLS release name'))
     hdr.add_record(dict(name='DECALSDT', value=datetime.datetime.now().isoformat(),
                         comment='%s run time' % program_name))
-    hdr.add_record(dict(name='SURVEY', value='DECaLS',
-                        comment='DECam Legacy Survey'))
+    hdr.add_record(dict(name='SURVEY', value='DECaLS+MzLS+BASS',
+                        comment='Legacy Surveys'))
     # Requested by NOAO
-    hdr.add_record(dict(name='SURVEYID', value='DECam Legacy Survey (DECaLS)',
+    hdr.add_record(dict(name='SURVEYID', value='DECaLS BASS MzLS',
                         comment='Survey name'))
+    #hdr.add_record(dict(name='SURVEYID', value='DECam Legacy Survey (DECaLS)',
     #hdr.add_record(dict(name='SURVEYID', value='BASS MzLS',
-    #                    comment='Survey name'))
     hdr.add_record(dict(name='DRVERSIO', value=release_number,
                         comment='Survey data release number'))
     hdr.add_record(dict(name='OBSTYPE', value='object',
@@ -429,6 +431,86 @@ def get_version_header(program_name, survey_dir, git_version=None):
                         comment='SLURM job array id'))
 
     return hdr
+
+def get_dependency_versions(unwise_dir, unwise_tr_dir):
+    depvers = []
+    headers = []
+    # Get DESICONDA version, and read file $DESICONDA/pkg_list.txt for
+    # other package versions.
+    default_ver = 'UNAVAILABLE'
+    depnum = 0
+    desiconda = os.environ.get('DESICONDA', default_ver)
+    # DESICONDA like .../edison/desiconda/20180512-1.2.5-img/conda
+    verstr = os.path.basename(os.path.dirname(desiconda))
+    depvers.append(('desiconda', verstr))
+
+    if desiconda != default_ver:
+        fn = os.path.join(desiconda, 'pkg_list.txt')
+        vers = {}
+        if not os.path.exists(fn):
+            print('Warning: expected file $DESICONDA/pkg_list.txt to exist but it does not!')
+        else:
+            # Read version numbers
+            for line in open(fn):
+                words = line.strip().split('=')
+                if len(words) >= 2:
+                    vers[words[0]] = words[1]
+
+        for pkg in ['astropy', 'matplotlib', 'mkl', 'numpy', 'python', 'scipy']:
+            verstr = vers.get(pkg, default_ver)
+            if verstr == default_ver:
+                print('Warning: failed to get version string for "%s"' % pkg)
+            else:
+                depvers.append((pkg, verstr))
+
+    # Store paths to astrometry and tractor packages.
+    import astrometry
+    depvers.append(('astrometry', os.path.dirname(astrometry.__file__)))
+    import tractor
+    depvers.append(('tractor', os.path.dirname(tractor.__file__)))
+    import fitsio
+    depvers.append(('fitsio', os.path.dirname(fitsio.__file__)))
+
+    # Get additional paths from environment variables
+    for dep in ['TYCHO2_KD', 'GAIA_CAT', 'LARGEGALAXIES', 'WISE_PSF']:
+        value = os.environ.get('%s_DIR' % dep, default_ver)
+        if value == default_ver:
+            print('Warning: failed to get version string for "%s"' % dep)
+        else:
+            depvers.append((dep, value))
+
+    if unwise_dir is not None:
+        dirs = unwise_dir.split(':')
+        depvers.append(('unwise', unwise_dir))
+        for i,d in enumerate(dirs):
+            headers.append(('UNWISD%i' % (i+1), d, 'unWISE dir(s)'))
+
+    if unwise_tr_dir is not None:
+        depvers.append(('unwise_tr', unwise_tr_dir))
+        # this is assumed to be only a single directory
+        headers.append(('UNWISTD', unwise_tr_dir, 'unWISE time-resolved dir'))
+
+    added_long = False
+    for i,(name,value) in enumerate(depvers):
+        headers.append(('DEPNAM%02i' % i, name, 'Dependency name'))
+        if len(value) > 68:
+            headers.append(('DEPVER%02i' % i, value[:67] + '&',
+                            'Dependency version'))
+            while len(value):
+                value = value[67:]
+                if len(value) == 0:
+                    break
+                headers.append(('CONTINUE',
+                                "  '%s%s'" % (value[:67], '&' if len(value) > 67 else ''),
+                                None))
+        else:
+            headers.append(('DEPVER%02i' % i, value, 'Dependency version'))
+            added_long = True
+
+    if added_long:
+        headers = [('LONGSTRN', 'OGIP 1.0','CONTINUE cards are used')] + headers
+
+    return headers
 
 class MyFITSHDR(fitsio.FITSHDR):
     '''
@@ -1012,6 +1094,7 @@ Now using the current directory as LEGACY_SURVEY_DIR, but this is likely to fail
         return T, hdr, primhdr
 
     def find_file(self, filetype, brick=None, brickpre=None, band='%(band)s',
+                  camera=None, expnum=None, ccdname=None,
                   output=False, **kwargs):
         '''
         Returns the filename of a Legacy Survey file.
@@ -1082,6 +1165,15 @@ Now using the current directory as LEGACY_SURVEY_DIR, but this is likely to fail
                     return fn
             return swap(os.path.join(basedir, 'tycho2.kd.fits'))
 
+        elif filetype == 'large-galaxies':
+            dirnm = os.environ.get('LARGEGALAXIES_DIR')
+            fn = 'LSLGA-v2.0.kd.fits'
+            if dirnm is not None:
+                fn = os.path.join(dirnm, fn)
+                if os.path.exists(fn):
+                    return fn
+            return swap(os.path.join(basedir, fn))
+
         elif filetype == 'annotated-ccds':
             if self.version == 'dr2':
                 return swaplist(
@@ -1113,7 +1205,7 @@ Now using the current directory as LEGACY_SURVEY_DIR, but this is likely to fail
             return swap(
                 os.path.join(codir, '%s-%s-%s.jpg' % (sname, brick, ty)))
 
-        elif filetype in ['invvar', 'chi2', 'image', 'model', 'depth', 'galdepth', 'nexp']:
+        elif filetype in ['invvar', 'chi2', 'image', 'model', 'depth', 'galdepth', 'nexp', 'psfsize']:
             return swap(os.path.join(codir, '%s-%s-%s-%s.fits.fz' %
                                      (sname, brick, filetype,band)))
 
@@ -1123,15 +1215,22 @@ Now using the current directory as LEGACY_SURVEY_DIR, but this is likely to fail
 
         elif filetype in ['maskbits']:
             return swap(os.path.join(codir,
-                                     '%s-%s-%s.fits.gz' % (sname, brick, filetype)))
+                                     '%s-%s-%s.fits.fz' % (sname, brick, filetype)))
 
         elif filetype in ['all-models']:
             return swap(os.path.join(basedir, 'metrics', brickpre,
                                      'all-models-%s.fits' % (brick)))
 
+        elif filetype == 'ref-sources':
+            return swap(os.path.join(basedir, 'metrics', brickpre,
+                                     'reference-%s.fits' % (brick)))
+
         elif filetype == 'checksums':
             return swap(os.path.join(basedir, 'tractor', brickpre,
                                      'brick-%s.sha256sum' % brick))
+        elif filetype == 'outliers_mask':
+            return swap(os.path.join(basedir, 'metrics', brickpre, brick,
+                                     'outlier-mask-%s-%s-%s.fits.fz' % (camera, expnum, ccdname)))
 
         print('Unknown filetype "%s"' % filetype)
         assert(False)
@@ -1171,12 +1270,14 @@ Now using the current directory as LEGACY_SURVEY_DIR, but this is likely to fail
             # qz +8: 9 MB, qz +16: 10.5 MB
             invvar = '[compress R %i,%i; qz 16]',
             nexp   = '[compress H %i,%i]',
+            maskbits = '[compress H %i,%i]',
             depth  = '[compress G %i,%i; qz 0]',
             galdepth = '[compress G %i,%i; qz 0]',
+            psfsize = '[compress G %i,%i; qz 0]',
+            outliers_mask = '[compress H %i,%i]',
         ).get(filetype)
         if pat is None:
             return pat
-
         # Tile compression size
         tilew,tileh = 100,100
         if shape is not None:
@@ -1186,14 +1287,14 @@ Now using the current directory as LEGACY_SURVEY_DIR, but this is likely to fail
             # compress if we can't find one.
             if W < 4 or H < 4:
                 return None
-            while tilew < W:
+            while tilew <= W:
                 remain = W % tilew
-                if remain >= 4:
+                if remain == 0 or remain >= 4:
                     break
                 tilew += 1
-            while tileh < H:
+            while tileh <= H:
                 remain = H % tileh
-                if remain >= 4:
+                if remain == 0 or remain >= 4:
                     break
                 tileh += 1
         return pat % (tilew,tileh)

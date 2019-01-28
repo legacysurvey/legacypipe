@@ -25,6 +25,7 @@ CP_DQ_BITS = dict(badpix=1, satur=2, interp=4, cr=16, bleed=64,
                   edge2 = 512,
                   ## masked by stage_mask_junk
                   longthin = 1024,
+                  outlier = 2048,
                   )
 
 def remap_dq_cp_codes(dq):
@@ -129,7 +130,7 @@ class LegacySurveyImage(object):
         self.sig1 = getattr(ccd, 'sig1', None)
 
         # Which Data Quality bits mark saturation?
-        self.dq_saturation_bits = CP_DQ_BITS['satur'] | CP_DQ_BITS['bleed']
+        self.dq_saturation_bits = CP_DQ_BITS['satur'] # | CP_DQ_BITS['bleed']
 
         # Photometric and astrometric zeropoints
         self.ccdzpt = ccd.ccdzpt
@@ -371,17 +372,17 @@ class LegacySurveyImage(object):
         y1_new += 1
         x1_new += 1
         if x0_new != x0 or x1_new != x1 or y0_new != y0 or y1_new != y1:
-            print('Old x0,x1', x0,x1, 'y0,y1', y0,y1)
-            print('New x0,x1', x0_new,x1_new, 'y0,y1', y0_new,y1_new)
+            #print('Old x0,x1', x0,x1, 'y0,y1', y0,y1)
+            #print('New x0,x1', x0_new,x1_new, 'y0,y1', y0_new,y1_new)
 
             if y1_new - y0_new < tiny or x1_new - x0_new < tiny:
                 print('Skipping tiny subimage (after clipping masked edges)')
                 return None
 
-            img = img[y0_new-y0:1+y1_new-y0, x0_new-x0:1+x1_new-x0]
-            invvar = invvar[y0_new-y0:1+y1_new-y0, x0_new-x0:1+x1_new-x0]
+            img    = img   [y0_new-y0 : y1_new-y0, x0_new-x0 : x1_new-x0]
+            invvar = invvar[y0_new-y0 : y1_new-y0, x0_new-x0 : x1_new-x0]
             if get_dq:
-                dq = dq[y0_new-y0:1+y1_new-y0, x0_new-x0:1+x1_new-x0]
+                dq = dq[y0_new-y0 : y1_new-y0, x0_new-x0 : x1_new-x0]
             x0,x1,y0,y1 = x0_new,x1_new,y0_new,y1_new
             slc = slice(y0,y1), slice(x0,x1)
 
@@ -531,6 +532,7 @@ class LegacySurveyImage(object):
         tim.wcsver = (getattr(wcs, 'version', ''), getattr(wcs, 'plver', ''))
         tim.psfver = (getattr(psf, 'version', ''), getattr(psf, 'plver', ''))
         tim.datasum = imghdr.get('DATASUM')
+        tim.procdate = primhdr['DATE']
         if get_dq:
             tim.dq = dq
         tim.dq_saturation_bits = self.dq_saturation_bits
@@ -926,7 +928,7 @@ class LegacySurveyImage(object):
                     if 'sig1' in Ti.get_columns():
                         sky.sig1 = Ti.sig1
                     if 'imgdsum' in Ti.get_columns():
-                        sky.datasum = Ti.datasum.strip()
+                        sky.datasum = Ti.datasum
                     return sky
             except:
                 import traceback
@@ -964,7 +966,7 @@ class LegacySurveyImage(object):
         sig1 = hdr.get('SIG1', None)
         if sig1 is not None:
             sky.sig1 = sig1
-        sky.datasum = hdr.get('IMGDSUM', '').strip()
+        sky.datasum = hdr.get('IMGDSUM')
         return sky
 
     def read_psf_model(self, x0, y0,
@@ -1022,7 +1024,7 @@ class LegacySurveyImage(object):
                     psf.version = Ti.legpipev.strip()
                     psf.plver = Ti.plver.strip()
                     if 'imgdsum' in Ti.get_columns():
-                        psf.datasum = Ti.datasum.strip()
+                        psf.datasum = Ti.datasum
                     psf.fwhm = Ti.psf_fwhm
             except:
                 import traceback
@@ -1042,7 +1044,7 @@ class LegacySurveyImage(object):
             if psf.version is None:
                 psf.version = str(os.stat(self.psffn).st_mtime)
             psf.plver = hdr.get('PLVER', '').strip()
-            psf.datasum = hdr.get('IMGDSUM', '').strip()
+            psf.datasum = hdr.get('IMGDSUM', 0)
             hdr = fitsio.read_header(self.psffn, ext=1)
             psf.fwhm = hdr['PSF_FWHM']
 
@@ -1129,21 +1131,26 @@ class LegacySurveyImage(object):
         plver = primhdr.get('PLVER', 'V0.0')
         imghdr = self.read_image_header()
         datasum = imghdr['DATASUM']
+        procdate = primhdr['DATE']
         if git_version is None:
             git_version = get_git_version()
         # We write the PSF model to a .fits.tmp file, then rename to .fits
         psfdir = os.path.dirname(self.psffn)
         psfoutfn = os.path.join(psfdir, os.path.basename(self.sefn).replace('.fits','') + '.fits')
+        psftmpfn = psfoutfn + '.tmp'
         cmds = ['psfex -c %s -PSF_DIR %s -PSF_SUFFIX .fits.tmp %s' %
                 (os.path.join(sedir, self.camera + '.psfex'),
                  psfdir, self.sefn),
-                'mv %s %s' % (psfoutfn + '.tmp', psfoutfn),
                 'modhead %s LEGPIPEV "%s" "legacypipe git version"' %
-                (self.psffn, git_version),
+                (psftmpfn, git_version),
                 'modhead %s PLVER "%s" "CP ver of image file"' %
-                (self.psffn, plver),
+                (psftmpfn, plver),
                 'modhead %s IMGDSUM "%s" "DATASUM of image file"' %
-                (self.psffn, datasum)]
+                (psftmpfn, datasum),
+                'modhead %s PROCDATE "%s" "DATE of image file"' %
+                (psftmpfn, procdate),
+                'mv %s %s' % (psftmpfn, psfoutfn),
+                ]
         for cmd in cmds:
             print(cmd)
             rtn = os.system(cmd)
@@ -1151,7 +1158,7 @@ class LegacySurveyImage(object):
                 raise RuntimeError('Command failed: %s: return value: %i' %
                                    (cmd,rtn))
 
-    def run_sky(self, splinesky=False, git_version=None, ps=None):
+    def run_sky(self, splinesky=False, git_version=None, ps=None, survey=None):
         from legacypipe.survey import get_version_header
         from scipy.ndimage.morphology import binary_dilation
         from astrometry.util.file import trymakedirs
@@ -1167,6 +1174,7 @@ class LegacySurveyImage(object):
         plver = primhdr.get('PLVER', 'V0.0')
         imghdr = self.read_image_header()
         datasum = imghdr['DATASUM']
+        procdate = primhdr['DATE']
 
         hdr.delete('PROCTYPE')
         hdr.add_record(dict(name='PROCTYPE', value='ccd',
@@ -1177,6 +1185,8 @@ class LegacySurveyImage(object):
                             comment='CP ver of image file'))
         hdr.add_record(dict(name='IMGDSUM', value=datasum,
                             comment='DATASUM of image file'))
+        hdr.add_record(dict(name='PROCDATE', value=procdate,
+                            comment='DATE of image file'))
 
         good = (wt > 0)
         if np.sum(good) == 0:
@@ -1215,8 +1225,6 @@ class LegacySurveyImage(object):
             sky_john = np.median(cimage)
             del cimage
 
-
-
             boxsize = self.splinesky_boxsize
 
             # Start by subtracting the overall median
@@ -1242,29 +1250,62 @@ class LegacySurveyImage(object):
             good[masked] = False
             sig1b = 1./np.sqrt(np.median(wt[good]))
 
+            # Also mask based on reference stars and galaxies.
+            from legacypipe.reference import get_reference_sources
+            from legacypipe.oneblob import get_inblob_map
+
+            wcs = self.get_wcs(hdr=imghdr)
+
+            print('Good image slice:', slc)
+            if slc is not None:
+                sy,sx = slc
+                y0,y1 = sy.start, sy.stop
+                x0,x1 = sx.start, sx.stop
+                #print('x0,x1', x0,x1, 'y0,y1', y0,y1)
+                wcs = wcs.get_subimage(x0, y0, int(x1-x0), int(y1-y0))
+
+
+            pixscale = wcs.pixel_scale()
+            # only used to create galaxy objects (which we will discard)
+            fakebands = ['r']
+            refs,_ = get_reference_sources(survey, wcs, pixscale, fakebands,
+                                           True, True, False)
+            stargood = (get_inblob_map(wcs, refs) == 0)
+
             # Now find the final sky model using that more extensive mask
-            skyobj = SplineSky.BlantonMethod(img - med, good, boxsize)
+            skyobj = SplineSky.BlantonMethod(img - med, good * stargood, boxsize)
             # add the overall median back in
             skyobj.offset(med)
+
+            # Compute stats on sky
+            skypix = np.zeros_like(img)
+            skyobj.addTo(skypix)
+
+            pcts = [0,10,20,30,40,50,60,70,80,90,100]
+            pctvals = np.percentile((img - skypix)[good * stargood], pcts)
+                                    
+            H,W = img.shape
+            fmasked = float(np.sum((good * stargood) == 0)) / (H*W)
+
+            # DEBUG -- compute a splinesky on a finer grid and compare it.
+            fineskyobj = SplineSky.BlantonMethod(img - med, good * stargood, boxsize//2)
+            # add the overall median back in
+            fineskyobj.offset(med)
+            fineskyobj.addTo(skypix, -1.)
+            fine_rms = np.sqrt(np.mean(skypix**2))
 
             if plots:
                 from legacypipe.detection import plot_boundary_map
                 import pylab as plt
 
-                #
-                wcs = self.get_wcs(hdr=imghdr)
-                from legacypipe.runbrick import read_gaia
-                gaia = read_gaia(wcs)
-                print(len(gaia), 'Gaia stars nearby')
-
-
                 ima = dict(interpolation='nearest', origin='lower', vmin=med-2.*sig1,
                            vmax=med+5.*sig1, cmap='gray')
+                ima2 = dict(interpolation='nearest', origin='lower', vmin=med-0.5*sig1,
+                           vmax=med+0.5*sig1, cmap='gray')
 
                 plt.clf()
                 plt.imshow(img.T, **ima)
-                #plot_boundary_map(np.logical_not(good.T))
-                plt.title('Image')
+                plt.title('Image %s-%i-%s %s' % (self.camera, self.expnum, self.ccdname, self.band))
                 ps.savefig()
 
                 plt.clf()
@@ -1272,23 +1313,29 @@ class LegacySurveyImage(object):
                 plt.title('Image (boxcar masked)')
                 ps.savefig()
 
+                plt.clf()
+                plt.imshow((img.T - med)*stargood.T + med, **ima)
+                plt.title('Image (star masked)')
+                ps.savefig()
+
+                plt.clf()
+                plt.imshow((img.T - med)*(stargood * good).T + med, **ima)
+                plt.title('Image (boxcar & star masked)')
+                ps.savefig()
+
                 skypix = np.zeros_like(img)
                 skyobj.addTo(skypix)
                 plt.clf()
-                plt.imshow(skypix.T, **ima)
-                plt.title('Sky model')
+                plt.imshow(skypix.T, **ima2)
+                plt.title('Sky model (boxcar & star)')
                 ps.savefig()
 
+                skypix2 = np.zeros_like(img)
+                fineskyobj.addTo(skypix2)
                 plt.clf()
-                plt.imshow((img.T - skypix.T)*good.T + med, **ima)
-                plt.title('Masked resids')
+                plt.imshow(skypix2.T, **ima2)
+                plt.title('Fine sky model')
                 ps.savefig()
-
-                # plt.clf()
-                # plt.imshow(good.T, interpolation='nearest', origin='lower')
-                # plt.title('Good pix (for sky bg est)')
-                # ps.savefig()
-
 
 
 
@@ -1311,9 +1358,20 @@ class LegacySurveyImage(object):
                                 comment='Sky estimate: clipped median'))
             hdr.add_record(dict(name='S_JOHN', value=sky_john,
                                 comment='Sky estimate: John'))
+
+            for p,v in zip(pcts, pctvals):
+                hdr.add_record(dict(name='S_P%i' % p, value=v,
+                                    comment='Sky residual: percentile %i' % p))
+            hdr.add_record(dict(name='S_FMASKD', value=fmasked,
+                                comment='Sky: fraction masked'))
+            hdr.add_record(dict(name='S_FINE', value=fine_rms,
+                                comment='Sky: RMS resid fine - splinesky'))
                 
             trymakedirs(self.splineskyfn, dir=True)
-            skyobj.write_fits(self.splineskyfn, primhdr=hdr)
+            tmpfn = os.path.join(os.path.dirname(self.splineskyfn),
+                             'tmp-' + os.path.basename(self.splineskyfn))
+            skyobj.write_fits(tmpfn, primhdr=hdr)
+            os.rename(tmpfn, self.splineskyfn)
             print('Wrote sky model', self.splineskyfn)
 
         else:
@@ -1339,13 +1397,16 @@ class LegacySurveyImage(object):
             hdr.add_record(dict(name='SIG1B', value=sig1,
                                 comment='Median stdev of unmasked pixels+'))
             trymakedirs(self.skyfn, dir=True)
-            tsky.write_fits(self.skyfn, hdr=hdr)
+            tmpfn = os.path.join(os.path.dirname(self.skyfn),
+                             'tmp-' + os.path.basename(self.skyfn))
+            tsky.write_fits(tmfn, hdr=hdr)
+            os.rename(tmpfn, self.skyfn)
             print('Wrote sky model', self.skyfn)
 
     def run_calibs(self, psfex=True, sky=True, se=False,
                    fcopy=False, use_mask=True,
                    force=False, git_version=None,
-                   splinesky=False, ps=None):
+                   splinesky=False, ps=None, survey=None):
         '''
         Run calibration pre-processing steps.
         '''
@@ -1370,6 +1431,8 @@ class LegacySurveyImage(object):
                 sky = False
             except Exception as e:
                 print('Did not find existing sky model for', self, ':', e)
+                #import traceback
+                #traceback.print_exc()
 
         if se:
             # The image & mask files to process (funpacked if necessary)
@@ -1382,7 +1445,7 @@ class LegacySurveyImage(object):
         if psfex:
             self.run_psfex(git_version=git_version, ps=ps)
         if sky:
-            self.run_sky(splinesky=splinesky, git_version=git_version, ps=ps)
+            self.run_sky(splinesky=splinesky, git_version=git_version, ps=ps, survey=survey)
 
 
 

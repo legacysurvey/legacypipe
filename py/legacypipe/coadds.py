@@ -1,13 +1,144 @@
 from __future__ import print_function
+import os
 import numpy as np
 import fitsio
 from astrometry.util.fits import fits_table
+from astrometry.util.resample import resample_with_wcs, OverlapError
 from legacypipe.image import CP_DQ_BITS
 from legacypipe.survey import tim_get_resamp
+
+class UnwiseCoadd(object):
+    def __init__(self, targetwcs, W, H, pixscale, wpixscale):
+        from legacypipe.survey import wcs_for_brick, BrickDuck
+
+        self.wW = int(W * pixscale / wpixscale)
+        self.wH = int(H * pixscale / wpixscale)
+        rc,dc = targetwcs.radec_center()
+        # quack
+        brick = BrickDuck(rc, dc, 'quack')
+        self.unwise_wcs = wcs_for_brick(brick, W=self.wW, H=self.wH,
+                                        pixscale=wpixscale)
+        # images
+        self.unwise_co  = [np.zeros((self.wH,self.wW), np.float32)
+                           for band in [1,2,3,4]]
+        self.unwise_con = [np.zeros((self.wH,self.wW), np.uint16)
+                           for band in [1,2,3,4]]
+        # models
+        self.unwise_com  = [np.zeros((self.wH,self.wW), np.float32)
+                            for band in [1,2,3,4]]
+        # invvars
+        self.unwise_coiv  = [np.zeros((self.wH,self.wW), np.float32)
+                             for band in [1,2,3,4]]
+
+    def add(self, tile, wise_models):
+        gotbands = []
+        imgs = []
+        mods = []
+        ierrs = []
+        tilewcs = None
+        for band in [1,2,3,4]:
+            if not (tile, band) in wise_models:
+                print('Tile', tile, 'band', band, '-- model not found')
+                continue
+
+            # In order to only call resample_with_wcs once, we're going to assume the
+            # WCSes for all bands are equal.
+            (mod, img, ie, roi, wcs) = wise_models[(tile, band)]
+            imgs.append(img)
+            mods.append(mod)
+            ierrs.append(ie)
+            gotbands.append(band)
+            tilewcs = wcs
+
+        try:
+            Yo,Xo,Yi,Xi,resam = resample_with_wcs(self.unwise_wcs, tilewcs, imgs + mods)
+            rimgs = resam[:len(gotbands)]
+            rmods = resam[len(gotbands):]
+
+            print('Adding', len(Yo), 'pixels from tile', tile, 'to coadd')
+            for band,rim,rmod,ierr in zip(gotbands, rimgs, rmods, ierrs):
+                self.unwise_co [band-1][Yo,Xo] += rim
+                self.unwise_com[band-1][Yo,Xo] += rmod
+                self.unwise_con[band-1][Yo,Xo] += 1
+                self.unwise_coiv[band-1][Yo,Xo] += ierr[Yi, Xi]**2
+                print('Band', band, ': now', np.sum(self.unwise_con[band-1]>0), 'pixels are set in image coadd')
+        except OverlapError:
+            print('No overlap between WISE model tile', tile, 'and brick')
+            pass
+
+    def finish(self, survey, brickname, version_header):
+        from legacypipe.survey import imsave_jpeg
+        for band,co,n,com,coiv in zip([1,2,3,4],
+                                      self.unwise_co,  self.unwise_con, self.unwise_com, self.unwise_coiv):
+            hdr = fitsio.FITSHDR()
+            for r in version_header.records():
+                hdr.add_record(r)
+            hdr.add_record(dict(name='TELESCOP', value='WISE'))
+            hdr.add_record(dict(name='FILTER', value='W%i' % band,
+                                    comment='WISE band'))
+            self.unwise_wcs.add_to_header(hdr)
+            hdr.delete('IMAGEW')
+            hdr.delete('IMAGEH')
+            hdr.add_record(dict(name='EQUINOX', value=2000.))
+            hdr.add_record(dict(name='MAGZERO', value=22.5,
+                                    comment='Magnitude zeropoint'))
+            co  /= np.maximum(n, 1)
+            com /= np.maximum(n, 1)
+            #print('Coadd band', band, ': average image', np.mean(co))
+            #print('Coadd band', band, ': average model', np.mean(com))
+
+            with survey.write_output('image', brick=brickname, band='W%i' % band,
+                                     shape=co.shape) as out:
+                out.fits.write(co, header=hdr)
+            with survey.write_output('model', brick=brickname, band='W%i' % band,
+                                     shape=com.shape) as out:
+                out.fits.write(com, header=hdr)
+            with survey.write_output('invvar', brick=brickname, band='W%i' % band,
+                                     shape=co.shape) as out:
+                out.fits.write(coiv, header=hdr)
+        # W1/W2 color jpeg
+        rgb = _unwise_to_rgb(self.unwise_co[:2])
+        with survey.write_output('wise-jpeg', brick=brickname) as out:
+            imsave_jpeg(out.fn, rgb, origin='lower')
+            print('Wrote', out.fn)
+        rgb = _unwise_to_rgb(self.unwise_com[:2])
+        with survey.write_output('wisemodel-jpeg', brick=brickname) as out:
+            imsave_jpeg(out.fn, rgb, origin='lower')
+            print('Wrote', out.fn)
+
+def _unwise_to_rgb(imgs):
+    import numpy as np
+    img = imgs[0]
+    H,W = img.shape
+    ## FIXME
+    w1,w2 = imgs
+    rgb = np.zeros((H, W, 3), np.uint8)
+    scale1 = 50.
+    scale2 = 50.
+    mn,mx = -1.,100.
+    arcsinh = 1.
+    img1 = w1 / scale1
+    img2 = w2 / scale2
+    if arcsinh is not None:
+        def nlmap(x):
+            return np.arcsinh(x * arcsinh) / np.sqrt(arcsinh)
+        mean = (img1 + img2) / 2.
+        I = nlmap(mean)
+        img1 = img1 / mean * I
+        img2 = img2 / mean * I
+        mn = nlmap(mn)
+        mx = nlmap(mx)
+    img1 = (img1 - mn) / (mx - mn)
+    img2 = (img2 - mn) / (mx - mn)
+    rgb[:,:,2] = (np.clip(img1, 0., 1.) * 255).astype(np.uint8)
+    rgb[:,:,0] = (np.clip(img2, 0., 1.) * 255).astype(np.uint8)
+    rgb[:,:,1] = rgb[:,:,0]/2 + rgb[:,:,2]/2
+    return rgb
 
 def make_coadds(tims, bands, targetwcs,
                 mods=None, xy=None, apertures=None, apxy=None,
                 ngood=False, detmaps=False, psfsize=False, allmasks=True,
+                max=False, sbscale=True,
                 callback=None, callback_args=[],
                 plots=False, ps=None,
                 lanczos=True, mp=None,
@@ -25,9 +156,6 @@ def make_coadds(tims, bands, targetwcs,
     # always, for patching SATUR, etc pixels?
     unweighted=True
 
-    if not xy:
-        psfsize = False
-
     C.coimgs = []
     # the pixelwise inverse-variances (weights) of the "coimgs".
     C.cowimgs = []
@@ -42,6 +170,8 @@ def make_coadds(tims, bands, targetwcs,
         C.AP = fits_table()
     if allmasks is not None:
         C.allmasks = []
+    if max:
+        C.maximgs = []
 
     if xy:
         ix,iy = xy
@@ -74,7 +204,7 @@ def make_coadds(tims, bands, targetwcs,
                 mo = None
             else:
                 mo = mods[itim]
-            args.append((itim,tim,mo,lanczos,targetwcs))
+            args.append((itim,tim,mo,lanczos,targetwcs,sbscale))
         if mp is not None:
             imaps.append(mp.imap_unordered(_resample_one, args))
         else:
@@ -167,6 +297,14 @@ def make_coadds(tims, bands, targetwcs,
 
         if psfsize:
             psfsizemap = np.zeros((H,W), np.float32)
+            # like "cow", but constant invvar per-CCD;
+            # only required for psfsizemap
+            flatcow = np.zeros((H,W), np.float32)
+            kwargs.update(psfsize=psfsizemap)
+
+        if max:
+            maximg = np.zeros((H,W), np.float32)
+            C.maximgs.append(maximg)
 
         for R in timiter:
             if R is None:
@@ -269,18 +407,17 @@ def make_coadds(tims, bands, targetwcs,
                 if dq is None:
                     goodpix = 1
                 else:
-                    # include BLEED, SATUR, INTERP pixels if no other
+                    # include SATUR pixels if no other
                     # pixels exists
                     okbits = 0
-                    #for bitname in ['satur', 'bleed']:
                     for bitname in ['satur']:
                         okbits |= CP_DQ_BITS[bitname]
                     brightpix = ((dq & okbits) != 0)
                     if satur_val is not None:
                         # HACK -- force SATUR pix to be bright
                         im[brightpix] = satur_val
-                    #for bitname in ['interp']:
-                    for bitname in ['interp', 'bleed']:
+                    # Include these pixels if none other exist??
+                    for bitname in ['interp']: #, 'bleed']:
                         okbits |= CP_DQ_BITS[bitname]
                     goodpix = ((dq & ~okbits) == 0)
 
@@ -313,7 +450,12 @@ def make_coadds(tims, bands, targetwcs,
                 neff = 1./tim.psfnorm**2
                 # Narcsec is in arcsec**2
                 narcsec = neff * tim.wcs.pixel_scale()**2
-                psfsizemap[Yo,Xo] += iv * (1. / narcsec)
+                # Make smooth maps -- don't ignore CRs, saturated pix, etc
+                #psfsizemap[Yo,Xo] += (iv>0) * (1/tim.sig1**2) * (1. / narcsec)
+                #flatcow[Yo,Xo] += (iv>0) * (1/tim.sig1**2)
+                iv1 = 1./tim.sig1**2
+                psfsizemap[Yo,Xo] += iv1 * (1. / narcsec)
+                flatcow   [Yo,Xo] += iv1
 
             if detmaps:
                 # point-source depth
@@ -336,6 +478,9 @@ def make_coadds(tims, bands, targetwcs,
                 cochi2[Yo,Xo] += iv * (im - mo)**2
                 del mo
                 del goodpix
+
+            if max:
+                maximg[Yo,Xo] = np.maximum(maximg[Yo,Xo], im * (iv>0))
 
             del Yo,Xo,im,iv
             # END of loop over tims
@@ -403,20 +548,18 @@ def make_coadds(tims, bands, targetwcs,
                 C.T.galdepth[:,iband] = galdetiv[iy, ix]
 
         if psfsize:
-            wt = cow[iy,ix]
-            # psfsizemap is in units of iv * (1 / arcsec**2)
-            sz = psfsizemap[iy,ix]
-            sz /= np.maximum(wt, tinyw)
-            sz[wt == 0] = 0.
-            # Back to units of linear arcsec.
-            sz = 1. / np.sqrt(sz)
-            sz[wt == 0] = 0.
+            # psfsizemap is accumulated in units of iv * (1 / arcsec**2)
+            # take out the weighting
+            psfsizemap /= np.maximum(flatcow, tinyw)
             # Correction factor to get back to equivalent of Gaussian sigma
-            sz /= (2. * np.sqrt(np.pi))
+            tosigma = 1./(2. * np.sqrt(np.pi))
             # Conversion factor to FWHM (2.35)
-            sz *= 2. * np.sqrt(2. * np.log(2.))
-            C.T.psfsize[:,iband] = sz
-            del psfsizemap
+            tofwhm = 2. * np.sqrt(2. * np.log(2.))
+            # Scale back to units of linear arcsec.
+            psfsizemap[:,:] = (1. / np.sqrt(psfsizemap)) * tosigma * tofwhm
+            psfsizemap[flatcow == 0] = 0.
+            if xy:
+                C.T.psfsize[:,iband] = psfsizemap[iy,ix]
 
         if apertures is not None:
             # Aperture photometry, using the unweighted "coimg" and
@@ -532,7 +675,7 @@ def make_coadds(tims, bands, targetwcs,
     return C
 
 def _resample_one(args):
-    (itim,tim,mod,lanczos,targetwcs) = args
+    (itim,tim,mod,lanczos,targetwcs,sbscale) = args
     from astrometry.util.resample import resample_with_wcs, OverlapError
     if lanczos:
         from astrometry.util.miscutils import patch_image
@@ -564,12 +707,13 @@ def _resample_one(args):
         if mod is not None:
             mo = mods[itim][Yi,Xi]
     iv = tim.getInvvar()[Yi,Xi]
-    fscale = tim.sbscale
-    print('Applying surface-brightness scaling of %.3f to' % fscale, tim.name)
-    im *=  fscale
-    iv /= (fscale**2)
-    if mod is not None:
-        mo *= fscale
+    if sbscale:
+        fscale = tim.sbscale
+        print('Applying surface-brightness scaling of %.3f to' % fscale, tim.name)
+        im *=  fscale
+        iv /= (fscale**2)
+        if mod is not None:
+            mo *= fscale
     if tim.dq is None:
         dq = None
     else:
@@ -592,7 +736,8 @@ def _apphot_one(args):
 def write_coadd_images(band,
                        survey, brickname, version_header, tims, targetwcs,
                        cowimg=None, cow=None, cowmod=None, cochi2=None,
-                       psfdetiv=None, galdetiv=None, congood=None, **kwargs):
+                       psfdetiv=None, galdetiv=None, congood=None,
+                       psfsize=None, **kwargs):
 
     # copy version_header before modifying...
     hdr = fitsio.FITSHDR()
@@ -646,17 +791,13 @@ def write_coadd_images(band,
         ('invvar', 'wtmap', cow   ),
         ]
     if congood is not None:
-        imgs.append(
-            ('nexp',   'expmap',   congood),
-            )
+        imgs.append(('nexp',   'expmap',   congood))
     if psfdetiv is not None:
-        imgs.extend([
-                ('depth', 'psfdepth', psfdetiv),
-                ])
+        imgs.append(('depth', 'psfdepth', psfdetiv))
     if galdetiv is not None:
-        imgs.extend([
-                ('galdepth', 'galdepth', galdetiv),
-                ])
+        imgs.append(('galdepth', 'galdepth', galdetiv))
+    if psfsize is not None:
+        imgs.append(('psfsize', 'psfsize', psfsize))
     if cowmod is not None:
         imgs.extend([
                 ('model', 'model', cowmod),
@@ -684,6 +825,9 @@ def write_coadd_images(band,
         if name in ['invvar', 'depth', 'galdepth']:
             hdr2.add_record(dict(name='BUNIT', value='1/nanomaggy^2',
                                  comment='Ivar of ABmag=22.5-2.5*log10(nmgy)'))
+        if name in ['psfsize']:
+            hdr2.add_record(dict(name='BUNIT', value='arcsec',
+                                 comment='Effective PSF size'))
 
         # print('Image type', prodtype, '/', name, ':')
         # print('  ', np.sum(img < 0), 'pixels < 0')
@@ -701,7 +845,7 @@ def write_coadd_images(band,
 
 # Pretty much only used for plots; the real deal is make_coadds()
 def quick_coadds(tims, bands, targetwcs, images=None,
-                 get_cow=False, get_n2=False, fill_holes=True):
+                 get_cow=False, get_n2=False, fill_holes=True, get_max=False):
 
     W = int(targetwcs.get_width())
     H = int(targetwcs.get_height())
@@ -714,6 +858,8 @@ def quick_coadds(tims, bands, targetwcs, images=None,
         # moo
         cowimgs = []
         wimgs = []
+    if get_max:
+        maximgs = []
 
     for ib,band in enumerate(bands):
         coimg  = np.zeros((H,W), np.float32)
@@ -723,6 +869,9 @@ def quick_coadds(tims, bands, targetwcs, images=None,
         if get_cow:
             cowimg = np.zeros((H,W), np.float32)
             wimg   = np.zeros((H,W), np.float32)
+        if get_max:
+            maximg = np.zeros((H,W), np.float32)
+
         for itim,tim in enumerate(tims):
             if tim.band != band:
                 continue
@@ -734,9 +883,13 @@ def quick_coadds(tims, bands, targetwcs, images=None,
             if images is None:
                 coimg [Yo,Xo] += tim.getImage()[Yi,Xi] * nn
                 coimg2[Yo,Xo] += tim.getImage()[Yi,Xi]
+                if get_max:
+                    maximg[Yo,Xo] = np.maximum(maximg[Yo,Xo], tim.getImage()[Yi,Xi] * nn)
             else:
                 coimg [Yo,Xo] += images[itim][Yi,Xi] * nn
                 coimg2[Yo,Xo] += images[itim][Yi,Xi]
+                if get_max:
+                    maximg[Yo,Xo] = np.maximum(maximg[Yo,Xo], images[itim][Yi,Xi] * nn)
             con   [Yo,Xo] += nn
             if get_cow:
                 cowimg[Yo,Xo] += tim.getInvvar()[Yi,Xi] * tim.getImage()[Yi,Xi]
@@ -750,6 +903,8 @@ def quick_coadds(tims, bands, targetwcs, images=None,
             cowimg[wimg == 0] = coimg[wimg == 0]
             cowimgs.append(cowimg)
             wimgs.append(wimg)
+        if get_max:
+            maximgs.append(maximg)
         coimgs.append(coimg)
         cons.append(con)
         if get_n2:
@@ -760,5 +915,7 @@ def quick_coadds(tims, bands, targetwcs, images=None,
         rtn.extend([cowimgs, wimgs])
     if get_n2:
         rtn.append(cons2)
+    if get_max:
+        rtn.append(maximgs)
     return rtn
 
