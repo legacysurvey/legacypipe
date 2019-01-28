@@ -144,7 +144,15 @@ def mask_outlier_pixels(survey, tims, bands, targetwcs, brickname, version_heade
                 plt.imshow(showimg, interpolation='nearest', origin='lower', vmin=0, vmax=4)
                 plt.title('rel diff')
                 ps.savefig()
-                
+
+                from astrometry.util.plotutils import loghist
+                plt.clf()
+                loghist(sndiff.ravel(), reldiff.ravel(),
+                        bins=100)
+                plt.xlabel('S/N difference')
+                plt.ylabel('Relative difference')
+                plt.title('Outliers: ' + tim.name)
+                ps.savefig()
 
             del otherimg
 
