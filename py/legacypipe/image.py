@@ -1294,7 +1294,6 @@ class LegacySurveyImage(object):
             fineskyobj.addTo(skypix, -1.)
             fine_rms = np.sqrt(np.mean(skypix**2))
 
-
             if plots:
                 from legacypipe.detection import plot_boundary_map
                 import pylab as plt
@@ -1331,6 +1330,14 @@ class LegacySurveyImage(object):
                 plt.title('Sky model (boxcar & star)')
                 ps.savefig()
 
+                skypix2 = np.zeros_like(img)
+                fineskyobj.addTo(skypix2)
+                plt.clf()
+                plt.imshow(skypix2.T, **ima2)
+                plt.title('Fine sky model')
+                ps.savefig()
+
+
 
             if slc is not None:
                 sy,sx = slc
@@ -1355,7 +1362,7 @@ class LegacySurveyImage(object):
             for p,v in zip(pcts, pctvals):
                 hdr.add_record(dict(name='S_P%i' % p, value=v,
                                     comment='Sky residual: percentile %i' % p))
-            hdr.add_record(dict(name='S_FMASKED', value=fmasked,
+            hdr.add_record(dict(name='S_FMASKD', value=fmasked,
                                 comment='Sky: fraction masked'))
             hdr.add_record(dict(name='S_FINE', value=fine_rms,
                                 comment='Sky: RMS resid fine - splinesky'))
