@@ -24,16 +24,7 @@ def patch_from_coadd(coimgs, targetwcs, bands, tims, mp=None):
             if not np.any(keep):
                 continue
             img[iy[keep],ix[keep]] = coimgs[ibands[tim.band]][yy[keep],xx[keep]]
-
-            # try:
-            #     yo,xo,yi,xi,nil = resample_with_wcs(tim.subwcs, targetwcs, [])
-            #     I, = np.nonzero(ie[yo,xo] == 0)
-            #     if len(I):
-            #         img[yo[I],xo[I]] = coimgs[ibands[tim.band]][yi[I],xi[I]]
-            # except OverlapError:
-            #     print('No overlap')
             del co
-
 
 def mask_outlier_pixels(survey, tims, bands, targetwcs, brickname, version_header,
                         mp=None, plots=False, ps=None, make_badcoadds=True, tims_todo=None):
