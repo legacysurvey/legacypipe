@@ -157,40 +157,54 @@ def mask_outlier_pixels(survey, tims, bands, targetwcs, brickname, version_heade
             del otherimg
 
             # TEST:
-            sndiff = np.abs(sndiff)
-            reldiff = np.abs(reldiff)
+            #sndiff = np.abs(sndiff)
+            #reldiff = np.abs(reldiff)
 
             # Significant pixels
             hotpix = ((sndiff > 5.) * (reldiff > 2.) *
                       (otherwt > 1e-16) * (wt > 0.) *
                       (veto[Yo,Xo] == False))
 
+            coldpix = ((sndiff < -5.) * (reldiff < -2.) *
+                      (otherwt > 1e-16) * (wt > 0.) *
+                      (veto[Yo,Xo] == False))
+
             del reldiff, otherwt
 
-            if not np.any(hotpix):
+            if (not np.any(hotpix)) and (not np.any(coldpix)):
                 continue
 
             hot = np.zeros((H,W), bool)
             hot[Yo,Xo] = hotpix
+            cold = np.zeros((H,W), bool)
+            cold[Yo,Xo] = coldpix
 
-            del hotpix
+            del hotpix, coldpix
 
             snmap = np.zeros((H,W), np.float32)
             snmap[Yo,Xo] = sndiff
 
             hot = binary_dilation(hot, iterations=1)
+            cold = binary_dilation(cold, iterations=1)
             if plots:
                 heat = hot.astype(np.uint8)
             # "warm"
             hot = np.logical_or(hot,
                                 binary_dilation(hot, iterations=5) * (snmap > 3.))
             hot = binary_dilation(hot, iterations=1)
+            cold = np.logical_or(cold,
+                                binary_dilation(cold, iterations=5) * (snmap < -3.))
+            cold = binary_dilation(cold, iterations=1)
+
             if plots:
                 heat += hot
             # "lukewarm"
             hot = np.logical_or(hot,
                                 binary_dilation(hot, iterations=5) * (snmap > 2.))
             hot = binary_dilation(hot, iterations=3)
+            cold = np.logical_or(cold,
+                                binary_dilation(cold, iterations=5) * (snmap < -2.))
+            cold = binary_dilation(cold, iterations=3)
 
             if plots:
                 heat += hot
@@ -216,19 +230,26 @@ def mask_outlier_pixels(survey, tims, bands, targetwcs, brickname, version_heade
             except OverlapError:
                 continue
             Ibad, = np.nonzero(hot[mYi,mXi])
+            Ibad2, = np.nonzero(cold[mYi,mXi])
             # Zero out the invvar for the bad pixels
             if len(Ibad):
-                print('Masking', len(Ibad), 'outlier pixels')
+                print('Masking', len(Ibad), 'positive outlier pixels and', len(Ibad2), 'negative outlier pixels')
                 nz = np.sum(tim.getInvError() == 0)
                 tim.getInvError()[mYo[Ibad],mXo[Ibad]] = 0.
+                tim.getInvError()[mYo[Ibad2],mXo[Ibad2]] = 0.
                 nz2 = np.sum(tim.getInvError() == 0)
                 print('Masked', nz2-nz, 'outlier pixels')
                 # Also update DQ mask.
                 tim.dq[mYo[Ibad],mXo[Ibad]] |= CP_DQ_BITS['outlier']
+                tim.dq[mYo[Ibad2],mXo[Ibad2]] |= CP_DQ_BITS['outlier']
 
                 # Write out a mask file.
+                OUTLIER_POS = 1
+                OUTLIER_NEG = 2
+
                 maskedpix = np.zeros(tim.shape, np.uint8)
-                maskedpix[mYo[Ibad], mXo[Ibad]] = 1
+                maskedpix[mYo[Ibad], mXo[Ibad]] = OUTLIER_POS
+                maskedpix[mYo[Ibad2], mXo[Ibad2]] = OUTLIER_NEG
                 # copy version_header before modifying it.
                 hdr = fitsio.FITSHDR()
                 for r in version_header.records():
