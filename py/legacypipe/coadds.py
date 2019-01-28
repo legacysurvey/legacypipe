@@ -26,11 +26,15 @@ class UnwiseCoadd(object):
         # models
         self.unwise_com  = [np.zeros((self.wH,self.wW), np.float32)
                             for band in [1,2,3,4]]
+        # invvars
+        self.unwise_coiv  = [np.zeros((self.wH,self.wW), np.float32)
+                             for band in [1,2,3,4]]
 
     def add(self, tile, wise_models):
         gotbands = []
         imgs = []
         mods = []
+        ierrs = []
         tilewcs = None
         for band in [1,2,3,4]:
             if not (tile, band) in wise_models:
@@ -39,9 +43,10 @@ class UnwiseCoadd(object):
 
             # In order to only call resample_with_wcs once, we're going to assume the
             # WCSes for all bands are equal.
-            (mod, img, roi, wcs) = wise_models[(tile, band)]
+            (mod, img, ie, roi, wcs) = wise_models[(tile, band)]
             imgs.append(img)
             mods.append(mod)
+            ierrs.append(ie)
             gotbands.append(band)
             tilewcs = wcs
 
@@ -51,10 +56,11 @@ class UnwiseCoadd(object):
             rmods = resam[len(gotbands):]
 
             print('Adding', len(Yo), 'pixels from tile', tile, 'to coadd')
-            for band,rim,rmod in zip(gotbands, rimgs, rmods):
+            for band,rim,rmod,ierr in zip(gotbands, rimgs, rmods, ierrs):
                 self.unwise_co [band-1][Yo,Xo] += rim
                 self.unwise_com[band-1][Yo,Xo] += rmod
                 self.unwise_con[band-1][Yo,Xo] += 1
+                self.unwise_coiv[band-1][Yo,Xo] += ierr[Yi, Xi]**2
                 print('Band', band, ': now', np.sum(self.unwise_con[band-1]>0), 'pixels are set in image coadd')
         except OverlapError:
             print('No overlap between WISE model tile', tile, 'and brick')
@@ -62,8 +68,8 @@ class UnwiseCoadd(object):
 
     def finish(self, survey, brickname, version_header):
         from legacypipe.survey import imsave_jpeg
-        for band,co,n,com in zip([1,2,3,4],
-                                 self.unwise_co,  self.unwise_con, self.unwise_com):
+        for band,co,n,com,coiv in zip([1,2,3,4],
+                                      self.unwise_co,  self.unwise_con, self.unwise_com, self.unwise_coiv):
             hdr = fitsio.FITSHDR()
             for r in version_header.records():
                 hdr.add_record(r)
@@ -78,8 +84,8 @@ class UnwiseCoadd(object):
                                     comment='Magnitude zeropoint'))
             co  /= np.maximum(n, 1)
             com /= np.maximum(n, 1)
-            print('Coadd band', band, ': average image', np.mean(co))
-            print('Coadd band', band, ': average model', np.mean(com))
+            #print('Coadd band', band, ': average image', np.mean(co))
+            #print('Coadd band', band, ': average model', np.mean(com))
 
             with survey.write_output('image', brick=brickname, band='W%i' % band,
                                      shape=co.shape) as out:
@@ -87,6 +93,9 @@ class UnwiseCoadd(object):
             with survey.write_output('model', brick=brickname, band='W%i' % band,
                                      shape=com.shape) as out:
                 out.fits.write(com, header=hdr)
+            with survey.write_output('invvar', brick=brickname, band='W%i' % band,
+                                     shape=co.shape) as out:
+                out.fits.write(coiv, header=hdr)
         # W1/W2 color jpeg
         rgb = _unwise_to_rgb(self.unwise_co[:2])
         with survey.write_output('wise-jpeg', brick=brickname) as out:

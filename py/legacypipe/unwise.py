@@ -368,7 +368,7 @@ def unwise_forcedphot(cat, tiles, band=1, roiradecbox=None,
             tile = tim.tile
             (dat, mod, ie, chi, roi) = ims1[i]
             print('unWISE get_models: ims1 roi:', roi, 'tim.roi:', tim.roi)
-            models[(tile.coadd_id, band)] = (mod, dat, tim.roi, tim.wcs.wcs)
+            models[(tile.coadd_id, band)] = (mod, dat, ie, tim.roi, tim.wcs.wcs)
 
     if plots:
         for i,tim in enumerate(tims):
