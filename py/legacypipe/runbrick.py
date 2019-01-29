@@ -2542,6 +2542,7 @@ def stage_wise_forced(
     mp=None,
     record_event=None,
     ps=None,
+    plots=False,
     **kwargs):
     '''
     After the model fits are finished, we can perform forced
@@ -2552,6 +2553,9 @@ def stage_wise_forced(
     print('unWISE coadds:', unwise_coadds)
 
     record_event and record_event('stage_wise_forced: starting')
+
+    if not plots:
+        ps = None
 
     tiles = unwise_tiles_touching_wcs(targetwcs)
     print('Cut to', len(tiles), 'unWISE tiles')
