@@ -93,6 +93,19 @@ def unwise_forcedphot(cat, tiles, band=1, roiradecbox=None,
             plt.title(tag)
             ps.savefig()
 
+        if band in [1, 2]:
+            #print('unWISE tim wcs:', tim.wcs)
+            #print('Tiles:', tiles.get_columns())
+            realwcs = tim.wcs.wcs
+            #print(tim.wcs.wcs)
+            x,y = realwcs.crpix
+            tile_crpix = tile.get('crpix_w%i' % band)
+            dx = tile_crpix[0] - 1024.5
+            dy = tile_crpix[1] - 1024.5
+            realwcs.set_crpix(x+dx, y+dy)
+            print('CRPIX', x,y, 'shift by', dx,dy, 'to', realwcs.crpix)
+            #print(tim.wcs.wcs)
+
         # Floor the per-pixel variances
         if band in [1,2]:
             # in Vega nanomaggies per pixel
