@@ -2542,6 +2542,7 @@ def stage_wise_forced(
     mp=None,
     record_event=None,
     ps=None,
+    plots=False,
     **kwargs):
     '''
     After the model fits are finished, we can perform forced
@@ -2552,6 +2553,9 @@ def stage_wise_forced(
     print('unWISE coadds:', unwise_coadds)
 
     record_event and record_event('stage_wise_forced: starting')
+
+    if not plots:
+        ps = None
 
     tiles = unwise_tiles_touching_wcs(targetwcs)
     print('Cut to', len(tiles), 'unWISE tiles')
@@ -2593,7 +2597,7 @@ def stage_wise_forced(
         # table to support unique areas of tiles.
         imap = dict((c,i) for i,c in enumerate(tiles.coadd_id))
         I = np.array([imap[c] for c in TR.coadd_id])
-        for c in ['ra1','ra2','dec1','dec2']:
+        for c in ['ra1','ra2','dec1','dec2', 'crpix_w1', 'crpix_w2']:
             TR.set(c, tiles.get(c)[I])
         # How big do we need to make the WISE time-resolved arrays?
         print('TR epoch_bitmask:', TR.epoch_bitmask)
