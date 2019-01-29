@@ -84,6 +84,8 @@ def main():
 
     parser.add_argument('--nper', type=int, default=None,
                       help='Batch N calibs per line')
+    parser.add_argument('--byexp', action='store_true', default=False,
+                        help='Run one whole exposure per job (not one CCD per job)')
 
     parser.add_argument('--forced', action='store_true',
                       help='Output forced-photometry commands')
@@ -531,6 +533,11 @@ def main():
     else:
         allI = np.arange(len(T))
 
+    if opt.byexp:
+        nil,eI = np.unique(T.expnum[allI], return_index=True)
+        allI = allI[eI]
+        print('Cut to', len(allI), 'expnums')
+
     if opt.nccds:
         from queue import Queue
         from threading import Thread
@@ -682,7 +689,10 @@ def main():
                 os.unlink(im.skyfn)
 
         if opt.command:
-            s = '%i-%s' % (T.expnum[i], T.ccdname[i])
+            if opt.byexp:
+                s = '--expnum %i' % (T.expnum[i])
+            else:
+                s = '%i-%s' % (T.expnum[i], T.ccdname[i])
             prefix = 'python legacypipe/run-calib.py '
             if opt.opt is not None:
                 prefix = prefix + opt.opt
@@ -695,7 +705,7 @@ def main():
         if j < 10:
             print('Index', T.index[i], 'expnum', T.expnum[i], 'ccdname', T.ccdname[i],
                   'filename', T.image_filename[i])
-            
+
         if not opt.nper:
             f.write(prefix + s + '\n')
         else:
