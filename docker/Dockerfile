@@ -15,6 +15,7 @@ RUN DEBIAN_FRONTEND=noninteractive \
     libbz2-dev \
     libcairo2-dev \
     libcfitsio-dev \
+    libcfitsio-bin \
     libgsl-dev \
     libjpeg-dev \
     libnetpbm10-dev \
@@ -42,6 +43,8 @@ RUN for x in \
     fitsio \
     scipy \
     astropy \
+    psycopg2 \
+    photutils \
     ; do pip3 install $x; done
 
 RUN mkdir -p /src \
@@ -85,3 +88,10 @@ RUN cd /src \
 #RUN cd /src/legacypipe/py \
 #    && export PYTHONPATH=${PYTHONPATH}:/usr/local/lib/python:. \
 #    && python3 test/runbrick_test.py travis
+
+# QDO
+RUN cd /src/ \
+    && git clone https://bitbucket.org/berkeleylab/qdo.git qdo \
+    && cd qdo \
+    && python3 setup.py install
+
