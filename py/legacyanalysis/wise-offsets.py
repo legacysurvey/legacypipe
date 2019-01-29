@@ -1,4 +1,5 @@
 from astrometry.util.fits import fits_table
+import numpy as np
 
 '''
 This is a little script for merging Aaron's astrometric offsets into our
@@ -27,5 +28,8 @@ ra  = off2.ra [np.array([name_map_2[tile] for tile in W.coadd_id])]
 dec = off2.dec[np.array([name_map_2[tile] for tile in W.coadd_id])]
 diff = np.mean(np.hypot(W.ra - ra, W.dec - dec))
 print('Mean difference RA,Dec:', diff)
+
+W.crpix_w1 = W.crpix_w1.astype(np.float32)
+W.crpix_w2 = W.crpix_w2.astype(np.float32)
 
 W.writeto('wise-tiles.fits')
