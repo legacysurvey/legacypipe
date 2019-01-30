@@ -11,6 +11,8 @@ RUN DEBIAN_FRONTEND=noninteractive \
     wget \
     swig \
     netpbm \
+    wcslib-dev \
+    wcslib-tools \
     zlib1g-dev \
     libbz2-dev \
     libcairo2-dev \
