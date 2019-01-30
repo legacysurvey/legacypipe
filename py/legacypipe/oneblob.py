@@ -727,7 +727,13 @@ class OneBlob(object):
                              (IN_BLOB['BRIGHT'] | IN_BLOB['GALAXY'])) > 0
         fit_background = (self.refmap[y0+iy,x0+ix] &
                           (IN_BLOB['MEDIUM'] | IN_BLOB['GALAXY'])) > 0
-        print('Source at blob coordinates', x0+ix, y0+iy, '- forcing pointsource?', force_pointsource, ', fitting sky background:', fit_background)
+
+        from tractor import Galaxy
+        is_galaxy = isinstance(src, Galaxy)
+        if is_galaxy:
+            fit_background = False
+
+        print('Source at blob coordinates', x0+ix, y0+iy, '- forcing pointsource?', force_pointsource, ', is large galaxy?', is_galaxy, ', fitting sky background:', fit_background)
         
         if fit_background:
             for tim in srctims:
