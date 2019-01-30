@@ -17,7 +17,8 @@ def unwise_forcedphot(cat, tiles, band=1, roiradecbox=None,
                       save_fits=False, get_models=False, ps=None,
                       psf_broadening=None,
                       pixelized_psf=False,
-                      get_masks=None):
+                      get_masks=None,
+                      move_crpix=False):
     '''
     Given a list of tractor sources *cat*
     and a list of unWISE tiles *tiles* (a fits_table with RA,Dec,coadd_id)
@@ -93,18 +94,14 @@ def unwise_forcedphot(cat, tiles, band=1, roiradecbox=None,
             plt.title(tag)
             ps.savefig()
 
-        if band in [1, 2]:
-            #print('unWISE tim wcs:', tim.wcs)
-            #print('Tiles:', tiles.get_columns())
+        if move_crpix and band in [1, 2]:
             realwcs = tim.wcs.wcs
-            #print(tim.wcs.wcs)
             x,y = realwcs.crpix
             tile_crpix = tile.get('crpix_w%i' % band)
             dx = tile_crpix[0] - 1024.5
             dy = tile_crpix[1] - 1024.5
             realwcs.set_crpix(x+dx, y+dy)
             print('CRPIX', x,y, 'shift by', dx,dy, 'to', realwcs.crpix)
-            #print(tim.wcs.wcs)
 
         # Floor the per-pixel variances
         if band in [1,2]:
@@ -470,9 +467,10 @@ def unwise_phot(X):
     '''
     This is the entry-point from runbrick.py, called via mp.map()
     '''
-    (wcat, tiles, band, roiradec, wise_ceres, pixelized_psf, get_mods, get_masks, ps) = X
+    (wcat, tiles, band, roiradec, wise_ceres, pixelized_psf, get_mods, get_masks, ps,
+     move_crpix) = X
     kwargs = dict(roiradecbox=roiradec, band=band, pixelized_psf=pixelized_psf,
-                  get_masks=get_masks, ps=ps)
+                  get_masks=get_masks, ps=ps, move_crpix=move_crpix)
     if get_mods:
         kwargs.update(get_models=get_mods)
 
