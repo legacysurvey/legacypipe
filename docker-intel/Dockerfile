@@ -1,4 +1,5 @@
 FROM ubuntu:18.04
+
 RUN apt -y update && apt install -y apt-utils
 
 RUN DEBIAN_FRONTEND=noninteractive \
@@ -22,32 +23,36 @@ RUN DEBIAN_FRONTEND=noninteractive \
     libjpeg-dev \
     libnetpbm10-dev \
     libpng-dev \
-    python3-minimal \
-    python3-dev \
-    python3-pip \
-    python3-pil \
-    python3-matplotlib \
-    python3-tk \
     libeigen3-dev \
     libgoogle-glog-dev \
     libceres-dev \
     g++ \
-    # Remove APT files
+    python3 \
+    python3-dev \
+    python3-pip \
+    python3-pil \
+    # # Remove APT files
     && apt-get clean && rm -rf /var/lib/apt/lists/* /tmp/* /var/tmp/*
 
+# multiprocessing.pool from official python 3.6.8 release
+COPY pool.py /usr/lib/python3.6/multiprocessing/pool.py
+
 # Python related stuff
+RUN echo "../site-packages" > /usr/local/lib/python3.6/dist-packages/site-packages.pth
 RUN pip3 install --upgrade\
     pip
 RUN for x in \
     setuptools \
     wheel \
-    fitsio \
     intel-numpy \
     intel-scipy \
-    astropy \
     psycopg2 \
+    fitsio \
+    matplotlib \
+    astropy \
     photutils \
-    ; do pip3 install $x; done
+    ; do pip3 install $x; done \
+    && rm -Rf /root/.cache/pip
 
 RUN mkdir -p /src \
     && export PYTHON=python3 \
