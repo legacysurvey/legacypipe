@@ -3775,6 +3775,11 @@ def main(args=None):
     return rtn
 
 if __name__ == '__main__':
+    try:
+        os.system('ps fax')
+    except:
+        pass
+
     sys.exit(main())
 
 # Test bricks & areas
