@@ -81,14 +81,14 @@ RUN cd /src \
     && export PYTHON_CONFIG=python3-config \
     && make \
     && make ceres \
-    && make install INSTALL_DIR=/usr/local
+    && make install INSTALL_DIR=/usr/local \
+    && rm -R $(find . -name "*.o" -o -name "*.so")
 
 # Legacypipe
 RUN cd /src \
-    && git clone http://github.com/legacysurvey/legacypipe.git legacypipe \
-    && cd legacypipe
+    && git clone http://github.com/legacysurvey/legacypipe.git legacypipe
 
-#\
+# Yeah no, this needs some work still
 #    && python3 setup.py install
 
 # Demo

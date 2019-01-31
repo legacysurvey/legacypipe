@@ -5,7 +5,7 @@
 # This merges some contents from legacypipe-env and runbrick.sh
 
 # Where are inputs and outputs going?
-export LEGACY_SURVEY_DIR=/global/cscratch1/sd/dstn/dr8
+export LEGACY_SURVEY_DIR=/global/cscratch1/sd/dstn/dr8sub
 
 export DUST_DIR=/global/project/projectdirs/cosmo/data/dust/v0_1
 export UNWISE_COADDS_DIR=/global/projecta/projectdirs/cosmo/work/wise/outputs/merge/neo4/fulldepth:/global/project/projectdirs/cosmo/data/unwise/allwise/unwise-coadds/fulldepth
@@ -54,8 +54,6 @@ echo Running on $(hostname)
 echo -e "\n\n\n" >> $log
 echo "-----------------------------------------------------------------------------------------" >> $log
 echo "PWD: $(pwd)" >> $log
-echo "Modules:" >> $log
-module list >> $log 2>&1
 echo >> $log
 echo "Environment:" >> $log
 set | grep -v PASS >> $log
@@ -63,7 +61,7 @@ echo >> $log
 ulimit -a >> $log
 echo >> $log
 
-echo -e "\nStarting on ${NERSC_HOST} $(hostname)\n" >> $log
+echo -e "\nStarting on $(hostname)\n" >> $log
 echo "-----------------------------------------------------------------------------------------" >> $log
 
 python3 legacypipe/runbrick.py \
