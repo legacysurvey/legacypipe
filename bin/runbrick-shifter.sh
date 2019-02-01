@@ -75,9 +75,8 @@ python3 legacypipe/runbrick.py \
      --pickle "${outdir}/pickles/${bri}/runbrick-zoomshifter-%(brick)s-%%(stage)s.pickle" \
      --large-galaxies --unwise-coadds \
      --survey-dir $LEGACY_SURVEY_DIR \
-     --outdir $outdir \
      >> $log 2>&1
 
 #--pickle "${outdir}/pickles/${bri}/runbrick-%(brick)s-%%(stage)s.pickle" \
 
-#python3 legacypipe/runbrick.py --brick 1888p122 --outdir /global/cscratch1/sd/dstn/shifter-out --zoom 100 200 100 200 --large-galaxies --unwise-coadds --pickle '/global/cscratch1/sd/dstn/pickles2/runbrick-zoom%(brick)s-%%(stage)s.pickle' --survey-dir /global/cscratch1/sd/dstn/dr8sub
+# QDO_BATCH_PROFILE=cori-shifter qdo launch -v tst 1 --cores_per_worker 8 --walltime=30:00 --batchqueue=debug --keep_env --batchopts "--image=docker:dstndstn/legacypipe:intel" --script "/src/legacypipe/bin/runbrick-shifter.sh"

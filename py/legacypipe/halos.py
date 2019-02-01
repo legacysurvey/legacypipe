@@ -39,6 +39,7 @@ def fit_halos(coimgs, cons, H, W, targetwcs, pixscale,
         xlo,xhi = max(0,ix-maxr), min(W,ix+maxr+1)
         if yhi-ylo <= 1 or xhi-xlo <= 1:
             # no overlap
+            fitvalues.append(None)
             continue
 
         r2 = ((np.arange(ylo, yhi)[:,np.newaxis] - y)**2 +

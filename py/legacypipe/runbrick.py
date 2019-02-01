@@ -864,6 +864,7 @@ def stage_mask_junk(tims=None, targetwcs=None, W=None, H=None, bands=None,
         outfn = os.path.join(outdir, 'outliers-maxpre-%s.jpg' % brickname)
         imsave_jpeg(outfn, get_rgb(C.maximgs, bands))
 
+    make_badcoadds = False
     # Do we have all the required outlier mask files on disk already??  If so, skip all this jazz!
     tims_todo = []
     for tim in tims:
@@ -1122,7 +1123,7 @@ def stage_srcs(targetrd=None, pixscale=None, targetwcs=None,
         fluxes,haloimgs = fit_halos(coimgs, cons, H, W, targetwcs,
                                     pixscale, bands, gaia[Igaia],
                                     plots, ps)
-        init_fluxes = [f[0] for f in fluxes]
+        init_fluxes = [(f and f[0] or None) for f in fluxes]
 
         fluxes2,haloimgs2 = fit_halos([co-halo for co,halo in zip(coimgs,haloimgs)],
                                        cons, H, W, targetwcs,
@@ -3775,11 +3776,6 @@ def main(args=None):
     return rtn
 
 if __name__ == '__main__':
-    try:
-        os.system('ps fax')
-    except:
-        pass
-
     sys.exit(main())
 
 # Test bricks & areas
