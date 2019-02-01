@@ -35,12 +35,14 @@ RUN DEBIAN_FRONTEND=noninteractive \
     && apt-get clean && rm -rf /var/lib/apt/lists/* /tmp/* /var/tmp/*
 
 # multiprocessing.pool from official python 3.6.8 release
+# The python 3.6.7 version shipped in current Ubuntu 18.04 breaks the
+# Astrometry.net "timingpool" class.  This changed from 3.6.6 to 3.6.7 and
+# then was reverted in 3.6.8.
 COPY pool.py /usr/lib/python3.6/multiprocessing/pool.py
 
 # Python related stuff
 RUN echo "../site-packages" > /usr/local/lib/python3.6/dist-packages/site-packages.pth
-RUN pip3 install --upgrade\
-    pip
+#RUN pip3 install --upgrade pip && \
 RUN for x in \
     setuptools \
     wheel \
@@ -54,6 +56,7 @@ RUN for x in \
     ; do pip3 install $x; done \
     && rm -Rf /root/.cache/pip
 
+# Astrometry.net
 RUN mkdir -p /src \
     && export PYTHON=python3 \
     && export PYTHON_SCRIPT="/usr/bin/env python3" \
@@ -66,13 +69,6 @@ RUN mkdir -p /src \
     && make install INSTALL_DIR=/usr/local \
     && make clean
 
-# Demo
-# RUN cd /tmp && \
-#    build-astrometry-index -d 3 -o index-9918.fits -P 18 -S mag -B 0.1 -s 0 -r 1 -I 9918 -M -i /usr/local/examples/tycho2-mag6.fits && \
-#    echo "add_path .\ninparallel\nindex index-9918.fits" > 99.cfg && \
-#    cat 99.cfg && \
-#    solve-field --config 99.cfg /usr/local/examples/apod4.jpg  --continue
-
 # The Tractor
 RUN cd /src \
     && git clone http://github.com/dstndstn/tractor.git tractor \
@@ -84,9 +80,18 @@ RUN cd /src \
     && make install INSTALL_DIR=/usr/local \
     && rm -R $(find . -name "*.o" -o -name "*.so")
 
+# QDO
+RUN cd /src/ \
+    && git clone https://bitbucket.org/berkeleylab/qdo.git qdo \
+    && cd qdo \
+    && python3 setup.py install
+
+# Technically we could delete everything in /src at this point...
+
 # Legacypipe
 RUN cd /src \
-    && git clone http://github.com/legacysurvey/legacypipe.git legacypipe
+    && git clone http://github.com/legacysurvey/legacypipe.git legacypipe \
+    && echo
 
 # Yeah no, this needs some work still
 #    && python3 setup.py install
@@ -95,10 +100,3 @@ RUN cd /src \
 #RUN cd /src/legacypipe/py \
 #    && export PYTHONPATH=${PYTHONPATH}:/usr/local/lib/python:. \
 #    && python3 test/runbrick_test.py travis
-
-# QDO
-RUN cd /src/ \
-    && git clone https://bitbucket.org/berkeleylab/qdo.git qdo \
-    && cd qdo \
-    && python3 setup.py install
-
