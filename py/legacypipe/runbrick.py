@@ -1590,7 +1590,9 @@ def stage_fitblobs(T=None,
         # Keep only non-None blob results.  This means we will re-run
         # these blobs, but that's okay because they are mostly ones
         # that are outside the primary region, thus very fast to run.
+        n = len(R)
         R = [r for r in R if r is not None]
+        print('Keeping', len(R), 'of', n, 'non-None checkpointed results')
 
         if len(R):
             # Check that checkpointed blobids match our current set of
@@ -1633,12 +1635,14 @@ def stage_fitblobs(T=None,
                               'for iblob', iblob)
                         continue
                 keepR.append(r)
-            print('Keeping', len(keepR), 'of', len(R), 'checkpointed results')
+            print('Keeping', len(keepR), 'of', len(R), 'checkpointed results (consistency)')
             R = keepR
 
         skipblobs = [blob.iblob for blob in R if blob is not None]
         R = [r for r in R if r is not None]
         print('Skipping', len(skipblobs), 'blobs from checkpoint file')
+
+        print('len(R):', len(R), 'len(skipblobs):', len(skipblobs), 'len(blobslices):', len(blobslices), 'len(blobsrcs):', len(blobsrcs))
 
     bailout_mask = None
     if bailout:
@@ -1675,6 +1679,8 @@ def stage_fitblobs(T=None,
     refstars.radius_pix = np.ceil(refstars.radius * 3600. / targetwcs.pixel_scale()).astype(int)
     from legacypipe.oneblob import get_inblob_map
     refmap = get_inblob_map(targetwcs, refstars)
+
+    print(len(blobslices), 'blobslices.  skipblobs:', len(skipblobs))
     
     # Create the iterator over blobs to process
     blobiter = _blob_iter(blobslices, blobsrcs, blobs, targetwcs, tims,
@@ -1693,7 +1699,7 @@ def stage_fitblobs(T=None,
 
         def _write_checkpoint(R, checkpoint_filename):
             fn = checkpoint_filename + '.tmp'
-            print('Writing checkpoint', fn)
+            #print('Writing checkpoint', fn)
             pickle_to_file(R, fn)
             os.rename(fn, checkpoint_filename)
             print('Wrote checkpoint to', checkpoint_filename)
@@ -1744,11 +1750,13 @@ def stage_fitblobs(T=None,
 
         # Write checkpoint when done!
         _write_checkpoint(R, checkpoint_filename)
+
+        print('Got', n_finished_total, 'results; wrote', len(R), 'to checkpoint')
             
     print('[parallel fitblobs] Fitting sources took:', Time()-tlast)
 
     # Repackage the results from one_blob...
-    
+
     # one_blob can reduce the number and change the types of sources.
     # Reorder the sources:
     assert(len(R) == len(blobsrcs))
