@@ -815,52 +815,7 @@ def segment_and_group_sources(image, T, name=None, ps=None, plots=False):
         inblobs[Isrcs] = True
     noblobs = np.flatnonzero(np.logical_not(inblobs))
     del inblobs
-    # Add new fake blobs!
-    for ib,i in enumerate(noblobs):
-        #S = 3
-        S = 5
-        bslc = (slice(np.clip(T.iby[i] - S, 0, H-1),
-                      np.clip(T.iby[i] + S+1, 0, H)),
-                slice(np.clip(T.ibx[i] - S, 0, W-1),
-                      np.clip(T.ibx[i] + S+1, 0, W)))
-
-        # Does this new blob overlap existing blob(s)?
-        oblobs = np.unique(blobs[bslc])
-        oblobs = oblobs[oblobs != emptyblob]
-
-        #print('This blob overlaps existing blobs:', oblobs)
-        if len(oblobs) > 1:
-            print('WARNING: not merging overlapping blobs like maybe we should')
-        if len(oblobs):
-            blob = oblobs[0]
-            #print('Adding source to existing blob', blob)
-            blobs[bslc][blobs[bslc] == emptyblob] = blob
-            blobindex = blobmap[blob]
-            if blobindex == -1:
-                # the overlapping blob was going to be dropped -- restore it.
-                blobindex = len(blobsrcs)
-                blobmap[blob] = blobindex
-                blobslices.append(dropslices[blob])
-                blobsrcs.append(np.array([], np.int64))
-            # Expand the existing blob slice to encompass this new source
-            oldslc = blobslices[blobindex]
-            sy,sx = oldslc
-            oy0,oy1, ox0,ox1 = sy.start,sy.stop, sx.start,sx.stop
-            sy,sx = bslc
-            ny0,ny1, nx0,nx1 = sy.start,sy.stop, sx.start,sx.stop
-            newslc = slice(min(oy0,ny0), max(oy1,ny1)), slice(min(ox0,nx0), max(ox1,nx1))
-            blobslices[blobindex] = newslc
-            # Add this source to the list of source indices for the existing blob.
-            blobsrcs[blobindex] = np.append(blobsrcs[blobindex], np.array([i]))
-
-        else:
-            # Set synthetic blob number
-            blob = nblobs+1 + ib
-            blobs[bslc][blobs[bslc] == emptyblob] = blob
-            blobmap[blob] = len(blobsrcs)
-            blobslices.append(bslc)
-            blobsrcs.append(np.array([i]))
-    #print('Added', len(noblobs), 'new fake singleton blobs')
+    print(len(noblobs), 'sources are not in blobs')
 
     # Remap the "blobs" image so that empty regions are = -1 and the blob values
     # correspond to their indices in the "blobsrcs" list.
@@ -873,18 +828,8 @@ def segment_and_group_sources(image, T, name=None, ps=None, plots=False):
     for k,v in blobmap.items():
         bm[k] = v
     bm[0] = -1
-
-    # DEBUG
-    # if plots:
-    #     import fitsio
-    #     fitsio.write('blobs-before-%s.fits' % name, blobs, clobber=True)
-
     # Remap blob numbers
     blobs = bm[blobs]
-
-    # if plots:
-    #     import fitsio
-    #     fitsio.write('blobs-after-%s.fits' % name, blobs, clobber=True)
 
     if plots:
         import pylab as plt
