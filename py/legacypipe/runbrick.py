@@ -1067,6 +1067,7 @@ def stage_srcs(targetrd=None, pixscale=None, targetwcs=None,
                version_header=None,
                mp=None, nsigma=None,
                survey=None, brick=None,
+               tycho_stars=False,
                gaia_stars=False,
                large_galaxies=False,
                star_clusters=True,
@@ -1092,12 +1093,16 @@ def stage_srcs(targetrd=None, pixscale=None, targetwcs=None,
 
     tlast = Time()
 
-    refstars,refcat = get_reference_sources(survey, targetwcs, pixscale, bands,
-                                            gaia_stars, large_galaxies, star_clusters)
-
-    # Don't detect new sources where we already have reference stars
-    avoid_x = refstars.ibx[refstars.in_bounds]
-    avoid_y = refstars.iby[refstars.in_bounds]
+    refstars, refcat = get_reference_sources(survey, targetwcs, pixscale, bands,
+                                             tycho_stars=tycho_stars, gaia_stars=gaia_stars,
+                                             large_galaxies=large_galaxies,
+                                             star_clusters=star_clusters)
+    if refstars:
+        # Don't detect new sources where we already have reference stars
+        avoid_x = refstars.ibx[refstars.in_bounds]
+        avoid_y = refstars.iby[refstars.in_bounds]
+    else:
+        avoid_x, avoid_y = [], []
 
     # Subtract star halos?
     Igaia = []
@@ -1163,8 +1168,9 @@ def stage_srcs(targetrd=None, pixscale=None, targetwcs=None,
             plt.title('second-round data - fit profiles')
             ps.savefig()
 
-    with survey.write_output('ref-sources', brick=brickname) as out:
-        refstars.writeto(None, fits_object=out.fits, primheader=version_header)
+    if refstars:
+        with survey.write_output('ref-sources', brick=brickname) as out:
+            refstars.writeto(None, fits_object=out.fits, primheader=version_header)
 
     record_event and record_event('stage_srcs: detection maps')
 
@@ -1186,7 +1192,7 @@ def stage_srcs(targetrd=None, pixscale=None, targetwcs=None,
     # that already have a Tycho-2 or Gaia star
     satmap = reduce(np.logical_or, satmaps)
     satblobs,nsat = label(satmap > 0)
-    if len(refstars):
+    if refstars:
         # Build a map from old "satblobs" to new; identity to start
         remap = np.arange(nsat+1)
         # Drop blobs that contain a reference star
@@ -1248,35 +1254,37 @@ def stage_srcs(targetrd=None, pixscale=None, targetwcs=None,
         ps.savefig()
 
         coimgs,cons = quick_coadds(tims, bands, targetwcs, fill_holes=False)
-        plt.clf()
-        dimshow(get_rgb(coimgs, bands, **rgbkwargs))
-        ax = plt.axis()
-        lp,lt = [],[]
-        tycho = refstars[refstars.isbright]
-        if len(tycho):
-            ok,ix,iy = targetwcs.radec2pixelxy(tycho.ra, tycho.dec)
-            p = plt.plot(ix-1, iy-1, 'o', mew=3, ms=10, mec='r', mfc='none')
-            lp.append(p)
-            lt.append('Tycho-2 only')
-        if gaia_stars:
-            gaia = refstars[refstars.ismedium]
-        if gaia_stars and len(gaia):
-            ok,ix,iy = targetwcs.radec2pixelxy(gaia.ra, gaia.dec)
-            p = plt.plot(ix-1, iy-1, 'o', mew=3, ms=10, mec='c', mfc='none')
-            lp.append(p)
-            lt.append('Gaia')
-        # star_clusters?
-        if large_galaxies:
-            galaxies = refstars[refstars.islargegalaxy]
-        if large_galaxies and len(galaxies):
-            ok,ix,iy = targetwcs.radec2pixelxy(galaxies.ra, galaxies.dec)
-            p = plt.plot(ix-1, iy-1, 'o', mew=3, ms=10, mec='g', mfc='none')
-            lp.append(p)
-            lt.append('Galaxies')
-        plt.axis(ax)
-        plt.title('Ref sources')
-        plt.figlegend([p[0] for p in lp], lt)
-        ps.savefig()
+
+        if refstars:
+            plt.clf()
+            dimshow(get_rgb(coimgs, bands, **rgbkwargs))
+            ax = plt.axis()
+            lp,lt = [],[]
+            tycho = refstars[refstars.isbright]
+            if len(tycho):
+                ok,ix,iy = targetwcs.radec2pixelxy(tycho.ra, tycho.dec)
+                p = plt.plot(ix-1, iy-1, 'o', mew=3, ms=10, mec='r', mfc='none')
+                lp.append(p)
+                lt.append('Tycho-2 only')
+            if gaia_stars:
+                gaia = refstars[refstars.ismedium]
+            if gaia_stars and len(gaia):
+                ok,ix,iy = targetwcs.radec2pixelxy(gaia.ra, gaia.dec)
+                p = plt.plot(ix-1, iy-1, 'o', mew=3, ms=10, mec='c', mfc='none')
+                lp.append(p)
+                lt.append('Gaia')
+            # star_clusters?
+            if large_galaxies:
+                galaxies = refstars[refstars.islargegalaxy]
+            if large_galaxies and len(galaxies):
+                ok,ix,iy = targetwcs.radec2pixelxy(galaxies.ra, galaxies.dec)
+                p = plt.plot(ix-1, iy-1, 'o', mew=3, ms=10, mec='g', mfc='none')
+                lp.append(p)
+                lt.append('Galaxies')
+            plt.axis(ax)
+            plt.title('Ref sources')
+            plt.figlegend([p[0] for p in lp], lt)
+            ps.savefig()
 
         if gaia_stars and len(gaia):
             ok,ix,iy = targetwcs.radec2pixelxy(gaia.ra, gaia.dec)
@@ -1315,7 +1323,7 @@ def stage_srcs(targetrd=None, pixscale=None, targetwcs=None,
     if len(sat):
         tables.append(sat)
         cats += satcat
-    if len(refstars):
+    if refstars is not None and len(refstars):
         tables.append(refstars)
         cats += refcat
     T = merge_tables(tables, columns='fillzero')
@@ -1558,7 +1566,7 @@ def stage_fitblobs(T=None,
     # drop any cached data before we start pickling/multiprocessing
     survey.drop_cache()
 
-    if plots:
+    if plots and refstars:
         plt.clf()
         dimshow(blobs>=0, vmin=0, vmax=1)
         ax = plt.axis()
@@ -1676,9 +1684,13 @@ def stage_fitblobs(T=None,
         while len(R) < len(blobsrcs):
             R.append(None)
 
-    refstars.radius_pix = np.ceil(refstars.radius * 3600. / targetwcs.pixel_scale()).astype(int)
-    from legacypipe.oneblob import get_inblob_map
-    refmap = get_inblob_map(targetwcs, refstars)
+    if refstars:
+        from legacypipe.oneblob import get_inblob_map
+        refstars.radius_pix = np.ceil(refstars.radius * 3600. / targetwcs.pixel_scale()).astype(int)
+        refmap = get_inblob_map(targetwcs, refstars)
+    else:
+        HH, WW = targetwcs.shape
+        refmap = np.zeros((int(HH), int(WW)), np.uint8)
 
     print(len(blobslices), 'blobslices.  skipblobs:', len(skipblobs))
     
@@ -3024,6 +3036,7 @@ def run_brick(brick, survey, radec=None, pixscale=0.262,
               splinesky=True,
               subsky=True,
               constant_invvar=False,
+              tycho_stars=False,
               gaia_stars=False,
               large_galaxies=False,
               min_mjd=None, max_mjd=None,
@@ -3241,6 +3254,7 @@ def run_brick(brick, survey, radec=None, pixscale=0.262,
                   depth_cut=depth_cut,
                   splinesky=splinesky,
                   subsky=subsky,
+                  tycho_stars=tycho_stars,
                   gaia_stars=gaia_stars,
                   large_galaxies=large_galaxies,
                   min_mjd=min_mjd, max_mjd=max_mjd,
@@ -3562,12 +3576,16 @@ python -u legacypipe/runbrick.py --plots --brick 2440p070 --zoom 1900 2400 450 9
     parser.add_argument('--depth-cut', default=False, action='store_true',
                         help='Cut to the set of CCDs required to reach our depth target')
 
+    parser.add_argument('--no-tycho', dest='tycho_stars', default=True,
+                        action='store_false',
+                        help="Don't use Tycho-2 sources as fixed stars")
+
     parser.add_argument('--no-gaia', dest='gaia_stars', default=True,
                         action='store_false',
                         help="Don't use Gaia sources as fixed stars")
 
-    parser.add_argument('--large-galaxies', dest='large_galaxies', default=False,
-                        action='store_true', help="Do some large-galaxy magic.")
+    parser.add_argument('--no-large-galaxies', dest='large_galaxies', default=False,
+                        action='store_false', help="Don't do the default large-galaxy magic.")
 
     parser.add_argument('--min-mjd', type=float,
                         help='Only keep images taken after the given MJD')
