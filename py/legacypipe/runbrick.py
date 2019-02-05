@@ -1220,8 +1220,8 @@ def stage_srcs(targetrd=None, pixscale=None, targetwcs=None,
         sat.ref_cat = np.array(['  '] * len(sat))
         del satyx
         
-        avoid_x.append(sat.ibx)
-        avoid_y.append(sat.iby)
+        avoid_x.extend(sat.ibx)
+        avoid_y.extend(sat.iby)
         # Create catalog entries for saturated blobs
         for r,d,m in zip(sat.ra, sat.dec, sat.mag):
             fluxes = dict([(band, NanoMaggies.magToNanomaggies(m))
