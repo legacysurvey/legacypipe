@@ -1220,8 +1220,8 @@ def stage_srcs(targetrd=None, pixscale=None, targetwcs=None,
         sat.ref_cat = np.array(['  '] * len(sat))
         del satyx
         
-        avoid_x = np.append(avoid_x, sat.ibx)
-        avoid_y = np.append(avoid_y, sat.iby)
+        avoid_x.append(sat.ibx)
+        avoid_y.append(sat.iby)
         # Create catalog entries for saturated blobs
         for r,d,m in zip(sat.ra, sat.dec, sat.mag):
             fluxes = dict([(band, NanoMaggies.magToNanomaggies(m))
@@ -1301,6 +1301,7 @@ def stage_srcs(targetrd=None, pixscale=None, targetwcs=None,
     record_event and record_event('stage_srcs: SED-matched')
     print('Running source detection at', nsigma, 'sigma')
     SEDs = survey.sed_matched_filters(bands)
+
     # Add a ~1" exclusion zone around reference, saturated stars, and large
     # galaxies.
     avoid_r = np.zeros_like(avoid_x) + 4
