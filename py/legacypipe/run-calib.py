@@ -113,9 +113,20 @@ def main():
     if opt.threads:
         from astrometry.util.multiproc import multiproc
         mp = multiproc(opt.threads)
-        mp.map(run_calibs, args)
+        mp.map(time_run_calibs, args)
         
     return 0
+
+def time_run_calibs(*args):
+    from astrometry.util.ttime import Time
+    t0 = Time()
+    rtn = run_calibs(*args)
+    t1 = Time()
+    print('Time run_calibs:', t1-t0)
+    import sys
+    sys.stdout.flush()
+    sys.stderr.flush()
+    return rtn
 
 if __name__ == '__main__':
     import sys

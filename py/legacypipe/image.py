@@ -1282,8 +1282,11 @@ class LegacySurveyImage(object):
             skyobj.addTo(skypix)
 
             pcts = [0,10,20,30,40,50,60,70,80,90,100]
-            pctvals = np.percentile((img - skypix)[good * stargood], pcts)
-                                    
+            pctpix = (img - skypix)[good * stargood]
+            if len(pctpix):
+                pctvals = np.percentile((img - skypix)[good * stargood], pcts)
+            else:
+                pctvals = [0] * len(pcts)
             H,W = img.shape
             fmasked = float(np.sum((good * stargood) == 0)) / (H*W)
 

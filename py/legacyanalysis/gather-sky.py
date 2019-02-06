@@ -59,9 +59,9 @@ def main():
             T.get(k)[i] = hdr[k]
 
         if (i+1) % 10000 == 0:
-            T[:(i+1)].writeto('/global/cscratch1/sd/dstn/dr8/sky-hdrs-interim.fits')
+            merge_tables([P,T[:(i+1)]]).writeto('/global/cscratch1/sd/dstn/dr8/sky-hdrs-interim.fits')
 
-    T.writeto('/global/cscratch1/sd/dstn/dr8/sky-hdrs.fits')
+    merge_tables([P,T]).writeto('/global/cscratch1/sd/dstn/dr8/sky-hdrs.fits')
 
 
 def read_primary_header(fn):
