@@ -3,7 +3,9 @@ import numpy as np
 from astrometry.util.fits import fits_table, merge_tables
 
 def get_reference_sources(survey, targetwcs, pixscale, bands,
-                          gaia_stars, large_galaxies, star_clusters):
+                          tycho_stars=True, gaia_stars=True, large_galaxies=True,
+                          star_clusters=True):
+    
     from legacypipe.survey import GaiaSource
     from legacypipe.survey import LegacyEllipseWithPriors
     from tractor import PointSource, NanoMaggies, RaDecPos
@@ -12,18 +14,23 @@ def get_reference_sources(survey, targetwcs, pixscale, bands,
 
     H,W = targetwcs.shape
     H,W = int(H),int(W)
-            
-    # How big of a margin to search for bright stars -- this should be
-    # based on the maximum radius they are considered to affect.
+
+    # How big of a margin to search for bright stars and star clusters --
+    # this should be based on the maximum radius they are considered to
+    # affect.
     ref_margin = 0.125
     mpix = int(np.ceil(ref_margin * 3600. / pixscale))
     marginwcs = targetwcs.get_subimage(-mpix, -mpix, W+2*mpix, H+2*mpix)
-    #print('Enlarged target WCS from', targetwcs, 'to', marginwcs, 'for ref stars')
-    # Read Tycho-2 stars and use as saturated sources.
-    tycho = read_tycho2(survey, marginwcs)
+    
+    refs = None
 
-    refs = [tycho]
-
+    if tycho_stars:
+        #print('Enlarged target WCS from', targetwcs, 'to', marginwcs, 'for ref stars')
+        # Read Tycho-2 stars and use as saturated sources.
+        tycho = read_tycho2(survey, marginwcs)
+        if len(tycho) > 0:
+            refs = [tycho]
+            
     # Add Gaia stars
     gaia = None
     if gaia_stars:
@@ -69,45 +76,47 @@ def get_reference_sources(survey, targetwcs, pixscale, bands,
         if galaxies is not None:
             refs.append(galaxies)
 
-    refs = merge_tables([r for r in refs if r is not None], columns='fillzero')
+    refcat = None
+    if refs:
+        refs = merge_tables([r for r in refs if r is not None], columns='fillzero')
 
-    refs.radius_pix = np.ceil(refs.radius * 3600. / pixscale).astype(int)
+        refs.radius_pix = np.ceil(refs.radius * 3600. / pixscale).astype(int)
 
-    ok,xx,yy = targetwcs.radec2pixelxy(refs.ra, refs.dec)
-    # ibx = integer brick coords
-    refs.ibx = np.round(xx-1.).astype(int)
-    refs.iby = np.round(yy-1.).astype(int)
+        ok,xx,yy = targetwcs.radec2pixelxy(refs.ra, refs.dec)
+        # ibx = integer brick coords
+        refs.ibx = np.round(xx-1.).astype(int)
+        refs.iby = np.round(yy-1.).astype(int)
 
-    refs.cut((xx > -refs.radius_pix) * (xx < W+refs.radius_pix) *
-             (yy > -refs.radius_pix) * (yy < H+refs.radius_pix))
+        refs.cut((xx > -refs.radius_pix) * (xx < W+refs.radius_pix) *
+                 (yy > -refs.radius_pix) * (yy < H+refs.radius_pix))
 
-    refs.in_bounds = ((refs.ibx >= 0) * (refs.ibx < W) *
-                      (refs.iby >= 0) * (refs.iby < H))
+        refs.in_bounds = ((refs.ibx >= 0) * (refs.ibx < W) *
+                          (refs.iby >= 0) * (refs.iby < H))
 
-    for col in ['isbright', 'ismedium', 'islargegalaxy', 'iscluster']:
-        if not col in refs.get_columns():
-            refs.set(col, np.zeros(len(refs), bool))
+        for col in ['isbright', 'ismedium', 'islargegalaxy', 'iscluster']:
+            if not col in refs.get_columns():
+                refs.set(col, np.zeros(len(refs), bool))
 
-    ## Create Tractor sources from reference stars
-    refcat = []
-    for g in refs:
-        if g.isbright or g.ismedium:
-            refcat.append(GaiaSource.from_catalog(g, bands))
-        elif g.islargegalaxy:
-            fluxes = dict([(band, NanoMaggies.magToNanomaggies(g.mag)) for band in bands])
-            assert(np.all(np.isfinite(list(fluxes.values()))))
-            rr = g.radius * 3600.
-            pa = g.pa
-            if not np.isfinite(pa):
-                pa = 0.
-            logr, ee1, ee2 = EllipseESoft.rAbPhiToESoft(rr, g.ba, pa)
-            gal = ExpGalaxy(RaDecPos(g.ra, g.dec),
-                            NanoMaggies(order=bands, **fluxes),
-                            LegacyEllipseWithPriors(logr, ee1, ee2))
-            gal.isForcedLargeGalaxy = True
-            refcat.append(gal)
-        else:
-            assert(False)
+        ## Create Tractor sources from reference stars
+        refcat = []
+        for g in refs:
+            if g.isbright or g.ismedium:
+                refcat.append(GaiaSource.from_catalog(g, bands))
+            elif g.islargegalaxy:
+                fluxes = dict([(band, NanoMaggies.magToNanomaggies(g.mag)) for band in bands])
+                assert(np.all(np.isfinite(list(fluxes.values()))))
+                rr = g.radius * 3600.
+                pa = g.pa
+                if not np.isfinite(pa):
+                    pa = 0.
+                logr, ee1, ee2 = EllipseESoft.rAbPhiToESoft(rr, g.ba, pa)
+                gal = ExpGalaxy(RaDecPos(g.ra, g.dec),
+                                NanoMaggies(order=bands, **fluxes),
+                                LegacyEllipseWithPriors(logr, ee1, ee2))
+                gal.isForcedLargeGalaxy = True
+                refcat.append(gal)
+            else:
+                assert(False)
 
     return refs, refcat
 
