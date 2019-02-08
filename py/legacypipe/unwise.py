@@ -108,7 +108,6 @@ def unwise_forcedphot(cat, tiles, band=1, roiradecbox=None,
             fn = os.path.join(background_dir, '%s.%i.mod.fits' % (tile.coadd_id, band))
             if not os.path.exists(fn):
                 raise RuntimeError('WARNING: does not exist:', fn)
-            #bg = fitsio.read(fn, ext=2)
             x0,x1,y0,y1 = tim.roi
             bg = fitsio.FITS(fn)[2][y0:y1, x0:x1]
             print('Read background map:', bg.shape, bg.dtype, 'vs image', tim.shape)
@@ -131,10 +130,14 @@ def unwise_forcedphot(cat, tiles, band=1, roiradecbox=None,
                          color='b', label='Original', **ha)
                 plt.hist(((tim.getImage()-bg) * tim.inverr)[tim.inverr > 0].ravel(),
                          color='g', label='Minus Background', **ha)
+                plt.axvline(0, color='k', alpha=0.5)
                 plt.xlabel('Per-pixel intensity (Sigma)')
                 plt.legend()
                 plt.title(tag + ': background')
                 ps.savefig()
+
+            # Actually subtract the background!
+            tim.data -= bg
 
         # Floor the per-pixel variances
         if band in [1,2]:
