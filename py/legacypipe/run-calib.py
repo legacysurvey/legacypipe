@@ -74,13 +74,13 @@ def main():
             assert(len(words) == 2)
             expnum = int(words[0])
             ccdname = words[1]
-            I = np.flatnonzero((T.expnum == expnum) * (T.ccdname == ccdname))
-            if len(I) != 1:
+
+            T = survey.find_ccds(expnum=expnum, ccdname=ccdname)
+            if len(T) != 1:
                 print('Found', len(I), 'CCDs for expnum', expnum, 'CCDname', ccdname, ':', I)
                 print('WARNING: skipping this expnum,ccdname')
                 continue
-            assert(len(I) == 1)
-            t = T[I[0]]
+            t = T[0]
         else:
             i = int(a)
             print('Index', i)

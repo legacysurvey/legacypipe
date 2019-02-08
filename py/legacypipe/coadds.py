@@ -41,30 +41,24 @@ class UnwiseCoadd(object):
                 print('Tile', tile, 'band', band, '-- model not found')
                 continue
 
-            # In order to only call resample_with_wcs once, we're going to assume the
-            # WCSes for all bands are equal.
+            # With the move_crpix option (Aaron's updated astrometry),
+            # the WCS for each band can be different, so we call resample_with_wcs
+            # for each band with (potentially) slightly different WCSes.
             (mod, img, ie, roi, wcs) = wise_models[(tile, band)]
-            imgs.append(img)
-            mods.append(mod)
-            ierrs.append(ie)
-            gotbands.append(band)
-            tilewcs = wcs
 
-        try:
-            Yo,Xo,Yi,Xi,resam = resample_with_wcs(self.unwise_wcs, tilewcs, imgs + mods)
-            rimgs = resam[:len(gotbands)]
-            rmods = resam[len(gotbands):]
-
-            print('Adding', len(Yo), 'pixels from tile', tile, 'to coadd')
-            for band,rim,rmod,ierr in zip(gotbands, rimgs, rmods, ierrs):
-                self.unwise_co [band-1][Yo,Xo] += rim
+            print('WISE: resampling', wcs, 'to', self.unwise_wcs)
+            try:
+                Yo,Xo,Yi,Xi,resam = resample_with_wcs(self.unwise_wcs, wcs, [img, mod])
+                rimg,rmod = resam
+                print('Adding', len(Yo), 'pixels from tile', tile, 'to coadd')
+                self.unwise_co [band-1][Yo,Xo] += rimg
                 self.unwise_com[band-1][Yo,Xo] += rmod
                 self.unwise_con[band-1][Yo,Xo] += 1
-                self.unwise_coiv[band-1][Yo,Xo] += ierr[Yi, Xi]**2
+                self.unwise_coiv[band-1][Yo,Xo] += ie[Yi, Xi]**2
                 print('Band', band, ': now', np.sum(self.unwise_con[band-1]>0), 'pixels are set in image coadd')
-        except OverlapError:
-            print('No overlap between WISE model tile', tile, 'and brick')
-            pass
+            except OverlapError:
+                print('No overlap between WISE model tile', tile, 'and brick')
+                pass
 
     def finish(self, survey, brickname, version_header):
         from legacypipe.survey import imsave_jpeg
