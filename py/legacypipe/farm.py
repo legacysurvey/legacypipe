@@ -2,6 +2,8 @@ from legacypipe.runbrick import *
 from legacypipe.runbrick import _blob_iter
 import pickle
 
+import zmq
+
 def main():
     import logging
     parser = get_parser()
@@ -53,6 +55,7 @@ def stage_farmblobs(T=None,
     from legacypipe.survey import IN_BLOB
 
     tlast = Time()
+
 
     T.orig_ra  = T.ra.copy()
     T.orig_dec = T.dec.copy()
@@ -133,17 +136,49 @@ def stage_farmblobs(T=None,
                           refmap, brick, rex,
                           max_blobsize=max_blobsize, custom_brick=custom_brick)
 
-    t0 = Time()
-    args = list(blobiter)
-    t1 = Time()
-    print('Took', t1-t0, 'to compute blob args')
 
-    sizes = []
-    for i,a in enumerate(args):
-        p = pickle.dumps(a, -1)
-        sizes.append(len(p))
-    t2 = Time()
-    print('Took', t2-t1, 'to pickle; total size', sum(sizes), 'bytes')
+
+    import socket
+    me = socket.gethostname()
+    ctx = zmq.Context()
+    sock = ctx.socket(zmq.REP)
+    sock.bind('tcp://*:5555')
+    print('Listening on tcp://%s:5555' % me)
+
+    while True:
+        try:
+            arg = next(blobiter)
+        except StopIteration:
+            break
+        p = pickle.dumps(arg, -1)
+
+        print('Next arg:', len(p), 'bytes')
+
+        print('Waiting for request')
+
+        msg = sock.recv()
+
+        print('msg:', type(msg))
+
+        m = pickle.loads(msg)
+        print('Unpickled:', m)
+
+        print('Sending work...')
+        sock.send(p)
+        
+
+
+    # t0 = Time()
+    # args = list(blobiter)
+    # t1 = Time()
+    # print('Took', t1-t0, 'to compute blob args')
+    # 
+    # sizes = []
+    # for i,a in enumerate(args):
+    #     p = pickle.dumps(a, -1)
+    #     sizes.append(len(p))
+    # t2 = Time()
+    # print('Took', t2-t1, 'to pickle; total size', sum(sizes), 'bytes')
 
 
 
