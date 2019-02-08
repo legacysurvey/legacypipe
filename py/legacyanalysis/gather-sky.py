@@ -2,6 +2,41 @@ import fitsio
 from glob import glob
 from astrometry.util.fits import *
 
+def update():
+    fns = glob('/global/cscratch1/sd/dstn/dr8sky/calib/decam/splinesky/*/*/decam-*.fits')
+    fns.sort()
+    print(len(fns), 'splinesky files')
+    keys = ['/'.join(fn.split('/')[-5:]) for fn in fns]
+
+    P = fits_table('/global/cscratch1/sd/dstn/dr8/sky-hdrs.fits')
+    print('Read', len(P), 'existing results')
+    file_indices = dict([(fn.strip(), i) for i,fn in enumerate(P.filename)])
+
+    skeys = ['legpipev', 'plver', 'imgdsum', 'procdate']
+    fkeys = ['sig1',
+            's_mode', 's_med', 's_cmed', 's_john',
+            's_p0', 's_p10', 's_p20', 's_p30', 's_p40', 's_p50',
+            's_p60', 's_p70', 's_p80', 's_p90', 's_p100',
+            's_fmaskd', 's_fine']
+
+    for j,(k,fn) in enumerate(zip(keys, fns)):
+        print(j, 'of', len(fns), fn)
+        i = file_indices[k]
+
+        hdr = read_primary_header(fn)
+        words = fn.split('/')
+        words = words[-1].replace('.fits','').split('-')
+        P.camera[i] = words[0]
+        P.expnum[i] = int(words[1], 10)
+        P.ccdname[i] = words[2]
+        for k in skeys:
+            getattr(P, k)[i] = hdr[k]
+        for k in fkeys:
+            P.get(k)[i] = hdr[k]
+
+    P.writeto('/global/cscratch1/sd/dstn/dr8/sky-hdrs-update.fits')
+
+
 def main():
 
     fns = glob('/global/cscratch1/sd/dstn/dr8/calib/decam/splinesky/*/*/decam-*.fits')
@@ -12,8 +47,8 @@ def main():
 
     print(len(fns), 'splinesky files')
 
-    P = fits_table('/global/cscratch1/sd/dstn/dr8/sky-hdrs-resume.fits',
-                   columns=['filename'])
+    P = fits_table('/global/cscratch1/sd/dstn/dr8/sky-hdrs-resume.fits')
+    #columns=['filename'])
     print('Read', len(P), 'existing results')
     donefns = set([fn.strip() for fn in P.filename])
 
@@ -111,5 +146,5 @@ def read_primary_header(fn):
 
 
 if __name__ == '__main__':
-    main()
-
+    #main()
+    update()
