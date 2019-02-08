@@ -2593,6 +2593,12 @@ def stage_wise_forced(
 
     # use Aaron's WISE pixelized PSF model (unwise_psf repository)?
     wpixpsf = True
+
+    # use Eddie's WISE Catalog background maps?
+    background_dir = os.path.join(survey.get_calib_dir(), 'wise', 'modelsky')
+    if not os.path.exists(background_dir):
+        print('WARNING: no WISE backgrounds in', background_dir)
+        background_dir = None
     
     # Create list of groups-of-tiles to photometer
     args = []
@@ -2603,7 +2609,7 @@ def stage_wise_forced(
         for band in [1,2,3,4]:
             get_masks = targetwcs if (band == 1) else None
             args.append((wcat, wtiles, band, roiradec,
-                         wise_ceres, wpixpsf, unwise_coadds, get_masks, ps, True))
+                         wise_ceres, wpixpsf, unwise_coadds, get_masks, ps, True, background_dir))
 
     # Add time-resolved WISE coadds
     # Skip if $UNWISE_COADDS_TIMERESOLVED_DIR or --unwise-tr-dir not set.
@@ -2657,7 +2663,7 @@ def stage_wise_forced(
                 eptiles.unwise_dir = np.array([os.path.join(tdir, 'e%03i'%ep)
                                               for ep in epochs[I,ie]])
                 eargs.append((ie,(wcat, eptiles, band, roiradec,
-                                  wise_ceres, wpixpsf, False, None, ps, False)))
+                                  wise_ceres, wpixpsf, False, None, ps, False, background_dir)))
 
     # Run the forced photometry!
     record_event and record_event('stage_wise_forced: photometry')

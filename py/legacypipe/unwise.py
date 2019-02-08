@@ -18,7 +18,8 @@ def unwise_forcedphot(cat, tiles, band=1, roiradecbox=None,
                       psf_broadening=None,
                       pixelized_psf=False,
                       get_masks=None,
-                      move_crpix=False):
+                      move_crpix=False,
+                      background_dir=None):
     '''
     Given a list of tractor sources *cat*
     and a list of unWISE tiles *tiles* (a fits_table with RA,Dec,coadd_id)
@@ -102,6 +103,38 @@ def unwise_forcedphot(cat, tiles, band=1, roiradecbox=None,
             dy = tile_crpix[1] - 1024.5
             realwcs.set_crpix(x+dx, y+dy)
             print('CRPIX', x,y, 'shift by', dx,dy, 'to', realwcs.crpix)
+
+        if background_dir and band in [1, 2]:
+            fn = os.path.join(background_dir, '%s.%i.mod.fits' % (tile.coadd_id, band))
+            if not os.path.exists(fn):
+                raise RuntimeError('WARNING: does not exist:', fn)
+            #bg = fitsio.read(fn, ext=2)
+            x0,x1,y0,y1 = tim.roi
+            bg = fitsio.FITS(fn)[2][y0:y1, x0:x1]
+            print('Read background map:', bg.shape, bg.dtype, 'vs image', tim.shape)
+
+            if plots:
+                plt.clf()
+                plt.subplot(1,2,1)
+                plt.imshow(tim.getImage(), interpolation='nearest', origin='lower',
+                           cmap='gray', vmin=-3 * sig1, vmax=5 * sig1)
+                plt.subplot(1,2,2)
+                plt.imshow(bg, interpolation='nearest', origin='lower',
+                           cmap='gray', vmin=-3 * sig1, vmax=5 * sig1)
+                tag = '%s W%i' % (tile.coadd_id, band)
+                plt.suptitle(tag)
+                ps.savefig()
+
+                plt.clf()
+                ha = dict(range=(-5,10), bins=100, histtype='step')
+                plt.hist((tim.getImage() * tim.inverr)[tim.inverr > 0].ravel(),
+                         color='b', label='Original', **ha)
+                plt.hist(((tim.getImage()-bg) * tim.inverr)[tim.inverr > 0].ravel(),
+                         color='g', label='Minus Background', **ha)
+                plt.xlabel('Per-pixel intensity (Sigma)')
+                plt.legend()
+                plt.title(tag + ': background')
+                ps.savefig()
 
         # Floor the per-pixel variances
         if band in [1,2]:
@@ -468,9 +501,10 @@ def unwise_phot(X):
     This is the entry-point from runbrick.py, called via mp.map()
     '''
     (wcat, tiles, band, roiradec, wise_ceres, pixelized_psf, get_mods, get_masks, ps,
-     move_crpix) = X
+     move_crpix, background_dir) = X
     kwargs = dict(roiradecbox=roiradec, band=band, pixelized_psf=pixelized_psf,
-                  get_masks=get_masks, ps=ps, move_crpix=move_crpix)
+                  get_masks=get_masks, ps=ps, move_crpix=move_crpix,
+                  background_dir=background_dir)
     if get_mods:
         kwargs.update(get_models=get_mods)
 
