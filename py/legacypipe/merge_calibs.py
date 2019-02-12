@@ -228,7 +228,7 @@ def merge_splinesky(survey, expnum, C, skyoutfn, opt):
 
             skyhdrvals.append([hdr.get(k, '') for k in [
                 'SKY', 'LEGPIPEV', 'PLVER', 'IMGDSUM', 'PROCDATE', 'SIG1',
-                'S_MODE', 'S_MED', 'S_CMED', 'S_JOHN', 'S_FMASKED', 'S_FINE'] +
+                'S_MODE', 'S_MED', 'S_CMED', 'S_JOHN', 'S_FMASKD', 'S_FINE'] +
                                ['S_P%i' % p for p in s_pcts]] +
                               [expnum, ccd.ccdname])
 
