@@ -1220,8 +1220,8 @@ def stage_srcs(targetrd=None, pixscale=None, targetwcs=None,
         sat.ref_cat = np.array(['  '] * len(sat))
         del satyx
         
-        avoid_x = np.append(avoid_x, sat.ibx)
-        avoid_y = np.append(avoid_y, sat.iby)
+        avoid_x = np.append(avoid_x, sat.ibx).astype(int)
+        avoid_y = np.append(avoid_y, sat.iby).astype(int)
         # Create catalog entries for saturated blobs
         for r,d,m in zip(sat.ra, sat.dec, sat.mag):
             fluxes = dict([(band, NanoMaggies.magToNanomaggies(m))
@@ -1305,6 +1305,7 @@ def stage_srcs(targetrd=None, pixscale=None, targetwcs=None,
     # Add a ~1" exclusion zone around reference, saturated stars, and large
     # galaxies.
     avoid_r = np.zeros_like(avoid_x) + 4
+    import pdb ; pdb.set_trace()
     Tnew,newcat,hot = run_sed_matched_filters(
         SEDs, bands, detmaps, detivs, (avoid_x,avoid_y,avoid_r), targetwcs,
         nsigma=nsigma, saturated_pix=saturated_pix, plots=plots, ps=ps, mp=mp)
