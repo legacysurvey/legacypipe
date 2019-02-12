@@ -1312,6 +1312,28 @@ class LegacySurveyImage(object):
                 ps.savefig()
 
                 plt.clf()
+                plt.imshow(wt.T, interpolation='nearest', origin='lower', cmap='gray')
+                plt.title('Weight')
+                ps.savefig()
+
+                plt.clf()
+                plt.subplot(2,1,1)
+                plt.hist(wt.ravel(), bins=100)
+                plt.xlabel('Invvar weights')
+                plt.subplot(2,1,2)
+
+                origwt = self._read_fits(self.wtfn, self.hdu, slice=slc)
+                mwt = np.median(origwt[origwt>0])
+
+                plt.hist(origwt.ravel(), bins=100, range=(-0.03 * mwt, 0.03 * mwt), histtype='step', label='oow file', lw=3, alpha=0.3, log=True)
+                plt.hist(wt.ravel(), bins=100, range=(-0.03 * mwt, 0.03 * mwt), histtype='step', label='clipped', log=True)
+                plt.axvline(0.01 * mwt)
+                plt.xlabel('Invvar weights')
+                plt.legend()
+                ps.savefig()
+
+
+                plt.clf()
                 plt.imshow((img.T - med)*good.T + med, **ima)
                 plt.title('Image (boxcar masked)')
                 ps.savefig()
@@ -1402,7 +1424,7 @@ class LegacySurveyImage(object):
             trymakedirs(self.skyfn, dir=True)
             tmpfn = os.path.join(os.path.dirname(self.skyfn),
                              'tmp-' + os.path.basename(self.skyfn))
-            tsky.write_fits(tmfn, hdr=hdr)
+            tsky.write_fits(tmpfn, hdr=hdr)
             os.rename(tmpfn, self.skyfn)
             print('Wrote sky model', self.skyfn)
 
