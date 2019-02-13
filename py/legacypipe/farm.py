@@ -1,5 +1,5 @@
 from legacypipe.runbrick import *
-from legacypipe.runbrick import _blob_iter
+from legacypipe.runbrick import _blob_iter, _write_checkpoint
 import pickle
 
 import zmq
@@ -145,28 +145,67 @@ def stage_farmblobs(T=None,
     sock.bind('tcp://*:5555')
     print('Listening on tcp://%s:5555' % me)
 
-    while True:
-        try:
-            arg = next(blobiter)
-        except StopIteration:
-            break
-        p = pickle.dumps(arg, -1)
+    allresults = {}
+    allsent = {}
+    allsent[brickname] = False
+    nsent = {}
+    sendwork = True
 
-        print('Next arg:', len(p), 'bytes')
+    nextwork = None
+    finished = False
+
+    while True:
+
+        if sendwork:
+            try:
+                arg = next(blobiter)
+            except StopIteration:
+                sendwork = False
+                nextwork = None
+                allsent[brickname] = True
+                continue
+            if arg is None:
+                continue
+
+            # HACK -- reach into args to get blob id...
+            iblob = arg[1]
+            arg = (brickname, iblob, arg)
+            nextwork = pickle.dumps(arg, -1)
+            print('Next arg:', len(nextwork), 'bytes')
 
         print('Waiting for request')
-
         msg = sock.recv()
-
-        print('msg:', type(msg))
-
+        print('msg:', type(msg), 'length', len(msg))
+        
         m = pickle.loads(msg)
-        print('Unpickled:', m)
+        #print('Unpickled:', m)
+        if m is not None:
+            # Worker sent the result of a previous computation.
+            (br, iblob, res) = m
+            if not br in allresults:
+                allresults[br] = []
+            allresults[br].append((iblob,res))
+            print('Received result', len(allresults[br]), 'for brick', br, 'nsent', nsent.get(br,0), 'all sent:', allsent.get(br,None))
+            if allsent[br] and len(allresults[br]) == nsent[br]:
+                print('Finished receiving all results for', br)
+                finished = True
+
+                R = [r for iblob,r in allresults[br]]
+                _write_checkpoint(R, checkpoint_filename)
 
         print('Sending work...')
-        sock.send(p)
-        
+        try:
+            sock.send(nextwork, flags=zmq.NOBLOCK)
+            if not brickname in nsent:
+                nsent[brickname] = 0
+            nsent[brickname]+= 1
+        except:
+            pass
 
+        #if finished:
+        #break
+
+    #print('All done brick', brickname)
 
     # t0 = Time()
     # args = list(blobiter)
