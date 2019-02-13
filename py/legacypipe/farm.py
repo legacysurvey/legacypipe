@@ -152,6 +152,7 @@ def stage_farmblobs(T=None,
     sendwork = True
 
     nextwork = None
+    nextwork_brick = brickname
     finished = False
 
     while True:
@@ -161,7 +162,10 @@ def stage_farmblobs(T=None,
                 arg = next(blobiter)
             except StopIteration:
                 sendwork = False
-                nextwork = None
+                #nextwork = None
+                arg = None
+                nextwork = pickle.dumps(arg, -1)
+                nextwork_brick = None
                 allsent[brickname] = True
                 continue
             if arg is None:
@@ -175,8 +179,8 @@ def stage_farmblobs(T=None,
 
         print('Waiting for request')
         msg = sock.recv()
-        print('msg:', type(msg), 'length', len(msg))
-        
+        print('Request:', len(msg), 'bytes')
+
         m = pickle.loads(msg)
         #print('Unpickled:', m)
         if m is not None:
@@ -185,21 +189,23 @@ def stage_farmblobs(T=None,
             if not br in allresults:
                 allresults[br] = []
             allresults[br].append((iblob,res))
-            print('Received result', len(allresults[br]), 'for brick', br, 'nsent', nsent.get(br,0), 'all sent:', allsent.get(br,None))
+            print('Received result number', len(allresults[br]), 'for brick', br, 'nsent', nsent.get(br,0), 'all sent:', allsent.get(br,None))
             if allsent[br] and len(allresults[br]) == nsent[br]:
                 print('Finished receiving all results for', br)
                 finished = True
-
                 R = [r for iblob,r in allresults[br]]
                 _write_checkpoint(R, checkpoint_filename)
 
         print('Sending work...')
         try:
             sock.send(nextwork, flags=zmq.NOBLOCK)
-            if not brickname in nsent:
-                nsent[brickname] = 0
-            nsent[brickname]+= 1
+            if nextwork_brick is not None:
+                if not nextwork_brick in nsent:
+                    nsent[nextwork_brick] = 0
+                nsent[nextwork_brick]+= 1
         except:
+            import traceback
+            traceback.print_exc()
             pass
 
         #if finished:

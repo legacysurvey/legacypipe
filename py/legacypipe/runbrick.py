@@ -1908,6 +1908,7 @@ def stage_fitblobs(T=None,
     return rtn
 
 def _write_checkpoint(R, checkpoint_filename):
+    from astrometry.util.file import pickle_to_file
     fn = checkpoint_filename + '.tmp'
     pickle_to_file(R, fn)
     os.rename(fn, checkpoint_filename)

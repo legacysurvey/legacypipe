@@ -48,12 +48,13 @@ def main():
             p = Process(target=run, args=(server,))
             p.start()
             procs.append(p)
-        for p in procs:
+        for i,p in enumerate(procs):
             p.join()
+            print('Joined process', (i+1), 'of', len(procs))
 
     else:
         run(server)
-
+    print('All done!')
 
 if __name__ == '__main__':
     main()
