@@ -1305,7 +1305,6 @@ def stage_srcs(targetrd=None, pixscale=None, targetwcs=None,
     # Add a ~1" exclusion zone around reference, saturated stars, and large
     # galaxies.
     avoid_r = np.zeros_like(avoid_x) + 4
-    import pdb ; pdb.set_trace()
     Tnew,newcat,hot = run_sed_matched_filters(
         SEDs, bands, detmaps, detivs, (avoid_x,avoid_y,avoid_r), targetwcs,
         nsigma=nsigma, saturated_pix=saturated_pix, plots=plots, ps=ps, mp=mp)
