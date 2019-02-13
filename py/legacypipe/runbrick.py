@@ -1710,13 +1710,6 @@ def stage_fitblobs(T=None,
         from astrometry.util.file import pickle_to_file, trymakedirs
         from astrometry.util.ttime import CpuMeas
 
-        def _write_checkpoint(R, checkpoint_filename):
-            fn = checkpoint_filename + '.tmp'
-            #print('Writing checkpoint', fn)
-            pickle_to_file(R, fn)
-            os.rename(fn, checkpoint_filename)
-            print('Wrote checkpoint to', checkpoint_filename)
-
         d = os.path.dirname(checkpoint_filename)
         if len(d) and not os.path.exists(d):
             trymakedirs(d)
@@ -1913,6 +1906,13 @@ def stage_fitblobs(T=None,
     L = locals()
     rtn = dict([(k,L[k]) for k in keys])
     return rtn
+
+def _write_checkpoint(R, checkpoint_filename):
+    fn = checkpoint_filename + '.tmp'
+    pickle_to_file(R, fn)
+    os.rename(fn, checkpoint_filename)
+    print('Wrote checkpoint to', checkpoint_filename)
+
 
 def _format_all_models(T, newcat, BB, bands, rex):
     from legacypipe.catalog import prepare_fits_catalog, fits_typemap
