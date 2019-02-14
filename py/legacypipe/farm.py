@@ -31,6 +31,8 @@ def main2():
     parser.add_argument('queue', help='QDO queue name to get brick names from')
     parser.add_argument('--pickle', default='pickles/runbrick-%(brick)s-srcs.pickle',
                         help='Pickle pattern for "srcs" (source detection) stage pickles')
+    parser.add_argument('--checkpoint', default='checkpoints/checkpoint-%(brick)s.pickle',
+                        help='Checkpoint filename pattern')
     opt = parser.parse_args()
 
     queuename = opt.queue
@@ -40,6 +42,7 @@ def main2():
     import queue
 
     inqueue = queue.PriorityQueue(maxsize=1000)
+    outqueue = queue.Queue()
 
     blobsizes = BlobSizeDict()
 
@@ -47,11 +50,122 @@ def main2():
                                 daemon=True)
     inthread.start()
 
+    outthread = threading.Thread(target=output_thread, args=(queuename, outqueue, blobsizes, opt),
+                                 daemon=True)
+    outthread.start()
+
+    # Network thread:
+    import socket
+    me = socket.gethostname()
+    ctx = zmq.Context()
+    sock = ctx.socket(zmq.REP)
+    sock.bind('tcp://*:5555')
+    print('Listening on tcp://%s:5555' % me)
+
+    nowork = pickle.dumps(None, -1)
+    iswork = False
+    worksent = 0
+    resultsreceived = 0
+    #  FIXME -- track brick,iblob of outstanding work, for timeout?
+
     while True:
-        import time
-        time.sleep(1)
+
+        print('Network thread: approximate size of input queue:', inqueue.qsize(), 'output queue:', outqueue.qsize())
+        if inqueue.empty():
+            work = nowork
+            iswork = False
+            print('Work queue is empty.')
+        else:
+            arg = inqueue.get()
+            work = arg.item
+            iswork = True
+            print('Next work packet:', len(work), 'bytes')
+
+        print('Waiting for request')
+        result = sock.recv()
+        print('Request:', len(result), 'bytes')
+        try:
+            sock.send(work, flags=zmq.NOBLOCK)
+            if iswork:
+                worksent += 1
+        except:
+            import traceback
+            traceback.print_exc()
+            pass
+
+        if result == nowork:
+            print('Empty result')
+        else:
+            print('Non-empty result')
+            resultsreceived += 1
+        print('Now sent', worksent, 'work packages, received', resultsreceived, 'results; outstanding:', worksent-resultsreceived)
+
+        outqueue.put(result)
 
 
+def output_thread(queuename, outqueue, blobsizes, opt):
+    
+    import qdo
+    q = qdo.connect(queuename)
+
+    allresults = {}
+
+    # thread-Local cache of 'blobsizes'
+    brick_nblobs = {}
+    brick_taskids = {}
+
+    while True:
+        msg = outqueue.get()
+        result = pickle.loads(msg)
+        if result is None:
+            continue
+
+        # Worker sent a blob result
+        (brick, iblob, res) = result
+        if not brick in allresults:
+            allresults[brick] = []
+        allresults[brick].append((iblob,res))
+
+        nblobs = None
+        taskid = None
+        if brick in brick_nblobs:
+            nblobs = brick_nblobs[brick]
+            taskid = brick_taskids[brick]
+        else:
+            bs = blobsizes.get(brick)
+            if bs is not None:
+                (nblobs, taskid) = bs
+                brick_nblobs[brick] = nblobs
+                brick_taskids[brick] = taskid
+
+        print('Received result number', len(allresults[brick]), 'for brick', brick, 'of total', (nblobs or '(unknown)'))
+
+        if nblobs is not None:
+            if len(allresults[brick]) == nblobs:
+                # Done this brick!  Set qdo state=Succeeded
+                # tasks = q.tasks(id=taskid)
+                # print('Found qdo tasks', task)
+                # for t in tasks:
+                #     qdo.set_task_state(
+
+                ### FIXME -- be robust against duplicate iblobs
+
+                checkpoint_fn = opt.checkpoint % dict(brick=brick)
+                R = [r for iblob,r in allresults[brick]]
+                print('Writing checkpoint', checkpoint_fn)
+                _write_checkpoint(R, checkpoint_fn)
+
+                print('Setting QDO task to Succeeded')
+                q.set_task_state(taskid, qdo.Task.SUCCEEDED)
+
+        if len(allresults[brick]) % 1000 == 0:
+
+            ### FIXME!!
+            print('Write interim checkpoint for', brick, '????')
+                
+
+    # q.set_task_state(taskid, state)
+    # q.tasks(id=None)
 
 def get_blob_iter(T=None,
                    brickname=None,
@@ -157,7 +271,7 @@ def queue_work(brickname, inqueue, opt):
         picl = pickle.dumps(arg, -1)
 
         qitem = PrioritizedItem(priority=priority, item=picl)
-        print('Putting blob', (k+1), 'for brick', brickname)
+        print('Queuing blob', (k+1), 'for brick', brickname)
         k += 1
         inqueue.put(qitem)
 
@@ -179,7 +293,7 @@ def input_thread(queuename, inqueue, blobsizes, opt):
                 print('Brick', brickname)
                 # WORK
                 nblobs = queue_work(brickname, inqueue, opt)
-                blobsizes.set(brickname, nblobs)
+                blobsizes.set(brickname, (nblobs, task.id))
                 #
                 print('Finished', brickname, 'with', nblobs, 'blobs')
                 #task.set_state(qdo.Task.SUCCEEDED)
