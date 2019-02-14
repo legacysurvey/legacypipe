@@ -1130,7 +1130,7 @@ class LegacySurveyImage(object):
         primhdr = self.read_image_primary_header()
         plver = primhdr.get('PLVER', 'V0.0')
         imghdr = self.read_image_header()
-        datasum = imghdr['DATASUM']
+        datasum = imghdr.get('DATASUM', '0')
         procdate = primhdr['DATE']
         if git_version is None:
             git_version = get_git_version()
@@ -1158,7 +1158,8 @@ class LegacySurveyImage(object):
                 raise RuntimeError('Command failed: %s: return value: %i' %
                                    (cmd,rtn))
 
-    def run_sky(self, splinesky=False, git_version=None, ps=None, survey=None):
+    def run_sky(self, splinesky=False, git_version=None, ps=None, survey=None,
+                gaia=True):
         from legacypipe.survey import get_version_header
         from scipy.ndimage.morphology import binary_dilation
         from astrometry.util.file import trymakedirs
@@ -1173,7 +1174,7 @@ class LegacySurveyImage(object):
         primhdr = self.read_image_primary_header()
         plver = primhdr.get('PLVER', 'V0.0')
         imghdr = self.read_image_header()
-        datasum = imghdr['DATASUM']
+        datasum = imghdr.get('DATASUM', '0')
         procdate = primhdr['DATE']
 
         hdr.delete('PROCTYPE')
@@ -1269,7 +1270,7 @@ class LegacySurveyImage(object):
             # only used to create galaxy objects (which we will discard)
             fakebands = ['r']
             refs,_ = get_reference_sources(survey, wcs, pixscale, fakebands,
-                                           True, True, False)
+                                           True, gaia, False)
             stargood = (get_inblob_map(wcs, refs) == 0)
 
             # Now find the final sky model using that more extensive mask
@@ -1431,7 +1432,8 @@ class LegacySurveyImage(object):
     def run_calibs(self, psfex=True, sky=True, se=False,
                    fcopy=False, use_mask=True,
                    force=False, git_version=None,
-                   splinesky=False, ps=None, survey=None):
+                   splinesky=False, ps=None, survey=None,
+                   gaia=True):
         '''
         Run calibration pre-processing steps.
         '''
@@ -1470,7 +1472,7 @@ class LegacySurveyImage(object):
         if psfex:
             self.run_psfex(git_version=git_version, ps=ps)
         if sky:
-            self.run_sky(splinesky=splinesky, git_version=git_version, ps=ps, survey=survey)
+            self.run_sky(splinesky=splinesky, git_version=git_version, ps=ps, survey=survey, gaia=gaia)
 
 
 

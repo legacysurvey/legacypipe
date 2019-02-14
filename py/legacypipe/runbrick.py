@@ -91,6 +91,7 @@ def stage_tims(W=3600, H=3600, pixscale=0.262, brickname=None,
                depth_cut = True,
                read_image_pixels = True,
                min_mjd=None, max_mjd=None,
+               gaia_stars=False,
                mp=None,
                record_event=None,
                unwise_dir=None,
@@ -280,6 +281,8 @@ def stage_tims(W=3600, H=3600, pixscale=0.262, brickname=None,
             kwa.update(psfex=False)
         if splinesky:
             kwa.update(splinesky=True)
+        if not gaia_stars:
+            kwa.update(gaia=False)
         # Run calibrations
         args = [(im, kwa) for im in ims]
         mp.map(run_calibs, args)
