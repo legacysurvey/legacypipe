@@ -118,6 +118,9 @@ def get_reference_sources(survey, targetwcs, pixscale, bands,
             else:
                 assert(False)
 
+        for src in refcat:
+            src.is_reference_source = True
+
     return refs, refcat
 
 

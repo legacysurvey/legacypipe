@@ -577,8 +577,14 @@ class OneBlob(object):
             # a hole-fill before checking.
             # FIXME -- this could go before the label() call
             if not binary_fill_holes(flipblobs)[iy,ix]:
-                print('Source center is not in the symmetric blob mask; skipping')
-                return None
+                # The hole-fill can still fail (eg, in small test images) if
+                # the bleed trail splits the blob into two pieces.
+                # Skip this test for reference sources.
+                if getattr(src, 'is_reference_source', False):
+                    print('Reference source center is outside symmetric blob; keeping')
+                else:
+                    print('Source center is not in the symmetric blob mask; skipping')
+                    return None
 
             if goodblob != 0:
                 flipblobs = (blobs == goodblob)

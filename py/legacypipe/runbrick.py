@@ -91,6 +91,7 @@ def stage_tims(W=3600, H=3600, pixscale=0.262, brickname=None,
                depth_cut = True,
                read_image_pixels = True,
                min_mjd=None, max_mjd=None,
+               gaia_stars=False,
                mp=None,
                record_event=None,
                unwise_dir=None,
@@ -280,6 +281,8 @@ def stage_tims(W=3600, H=3600, pixscale=0.262, brickname=None,
             kwa.update(psfex=False)
         if splinesky:
             kwa.update(splinesky=True)
+        if not gaia_stars:
+            kwa.update(gaia=False)
         # Run calibrations
         args = [(im, kwa) for im in ims]
         mp.map(run_calibs, args)
@@ -1102,7 +1105,7 @@ def stage_srcs(targetrd=None, pixscale=None, targetwcs=None,
         avoid_x = refstars.ibx[refstars.in_bounds]
         avoid_y = refstars.iby[refstars.in_bounds]
     else:
-        avoid_x, avoid_y = [], []
+        avoid_x, avoid_y = np.array([]), np.array([])
 
     # Subtract star halos?
     Igaia = []
@@ -1220,8 +1223,8 @@ def stage_srcs(targetrd=None, pixscale=None, targetwcs=None,
         sat.ref_cat = np.array(['  '] * len(sat))
         del satyx
         
-        avoid_x.extend(sat.ibx)
-        avoid_y.extend(sat.iby)
+        avoid_x = np.append(avoid_x, sat.ibx).astype(int)
+        avoid_y = np.append(avoid_y, sat.iby).astype(int)
         # Create catalog entries for saturated blobs
         for r,d,m in zip(sat.ra, sat.dec, sat.mag):
             fluxes = dict([(band, NanoMaggies.magToNanomaggies(m))
