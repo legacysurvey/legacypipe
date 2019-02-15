@@ -31,6 +31,7 @@ RUN DEBIAN_FRONTEND=noninteractive \
     python3-dev \
     python3-pip \
     python3-pil \
+    python3-tk \
     # # Remove APT files
     && apt-get clean && rm -rf /var/lib/apt/lists/* /tmp/* /var/tmp/*
 
@@ -87,6 +88,9 @@ RUN cd /src/ \
     && python3 setup.py install
 
 # Technically we could delete everything in /src at this point...
+
+# !!
+RUN ln -s /usr/bin/python3 /usr/bin/python
 
 # Legacypipe
 RUN cd /src \
