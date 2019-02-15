@@ -146,6 +146,8 @@ def main():
     else:
         B = survey.get_bricks()
 
+    log('Bricks Dec range:', B.dec.min(), B.dec.max())
+
     if opt.ccds is not None:
         T = fits_table(opt.ccds)
         log('Read', len(T), 'from', opt.ccds)
@@ -155,15 +157,17 @@ def main():
     T.index = np.arange(len(T))
 
     if opt.ignore_cuts == False:
-        print('Applying CCD cuts...')
+        log('Applying CCD cuts...')
         if 'ccd_cuts' in T.columns():
             T.cut(T.ccd_cuts == 0)
-            print(len(T), 'CCDs survive cuts')
+            log(len(T), 'CCDs survive cuts')
 
     bands = opt.bands.split(',')
     log('Filters:', np.unique(T.filter))
     T.cut(np.flatnonzero(np.array([f in bands for f in T.filter])))
     log('Cut to', len(T), 'CCDs in filters', bands)
+
+    log('CCDs Dec range:', T.dec.min(), T.dec.max())
 
     # I,J,d,counts = match_radec(B.ra, B.dec, T.ra, T.dec, 0.2, nearest=True, count=True)
     # plt.clf()
@@ -246,6 +250,11 @@ def main():
         # 535 bricks, ~7000 CCDs
         rlo,rhi = 240,245
         dlo,dhi =   5, 12
+
+    elif opt.region == 'dr8-decam':
+        rlo,rhi =   0, 360
+        dlo,dhi = -70,  40
+        log('DR8-DECam region')
 
     elif opt.region == 'edrplus':
         rlo,rhi = 235,248
@@ -414,7 +423,7 @@ def main():
     else: # RA wrap
         B.cut(np.logical_or(B.ra >= rlo, B.ra <= rhi) *
               (B.dec >= dlo) * (B.dec <= dhi))
-    log(len(B), 'bricks in range')
+    log(len(B), 'bricks in range; cut Dec range', B.dec.min(), B.dec.max())
     #for name in B.get('brickname'):
     #    print(name)
     #B.writeto('bricks-cut.fits')
@@ -430,6 +439,8 @@ def main():
                         nearest=True)
     B.cut(I)
     log('Cut to', len(B), 'bricks near CCDs')
+    log('Bricks Dec range:', B.dec.min(), B.dec.max())
+
 
     # plt.clf()
     # plt.plot(B.ra, B.dec, 'b.')
