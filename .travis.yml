@@ -57,7 +57,7 @@ before_script:
 
 script:
     - export PYTHONPATH=${PYTHONPATH}:$(pwd)/py:$HOME/astrometry.net:$HOME/unwise_psf/py
-    - export UNWISE_PSF_DIR=$HOME/unwise_psf/etc
+    - export WISE_PSF_DIR=$HOME/unwise_psf/etc
     - ls $HOME
     - ls $HOME/astrometry.net
     - (cd doc && make)
