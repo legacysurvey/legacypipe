@@ -13,7 +13,7 @@ outdir = '/global/cscratch1/sd/dstn/dr8new'
 bands = 'grizY'
 
 for band in bands:
-    infn = indir + 'survey-ccds-%s.fits.gz' % band
+    infn = indir + 'survey-ccds-decam-%s.fits.gz' % band
     print('Input:', infn)
 
     # gunzip
@@ -26,7 +26,7 @@ for band in bands:
     sfn = '/tmp/startree-%s.fits' % band
     cmd = 'startree -i %s -o %s -P -T -k -n ccds' % (tfn, sfn)
     print(cmd)
-    os.systemd(cmd)
+    os.system(cmd)
 
     # add expnum-tree
     T = fits_table(sfn, columns=['expnum'])
@@ -41,7 +41,7 @@ for band in bands:
     print(cmd)
     os.system(cmd)
 
-    outfn = outdir + '/survey-ccds-%s.kd.fits' % band
+    outfn = outdir + '/survey-ccds-decam-%s.kd.fits' % band
     
     cmd = 'cat %s /tmp/ekd-%s-0[123456] > %s' % (sfn, band, outfn)
     os.system(cmd)
