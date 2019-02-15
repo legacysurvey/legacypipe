@@ -35,6 +35,8 @@ before_script:
     - (cd $HOME/astrometry.net && git pull) || (rm -Rf $HOME/astrometry.net && cd $HOME && git clone https://github.com/dstndstn/astrometry.net.git);
     - (cd $HOME/astrometry.net && make && make py)
 
+    - (cd $HOME && git clone git@github.com:legacysurvey/unwise_psf.git)
+
     # - if [ ! -d "$HOME/tractor-git" ]; then (cd $HOME; git clone https://github.com/dstndstn/tractor.git tractor-git); fi
     # - (cd $HOME/tractor-git && git pull) || (rm -Rf $HOME/tractor-git && cd $HOME && git clone https://github.com/dstndstn/tractor.git tractor-git);
     # - (cd $HOME/tractor-git && make)
@@ -54,7 +56,8 @@ before_script:
     - export DUST_DIR=$HOME/dust
 
 script:
-    - export PYTHONPATH=${PYTHONPATH}:$(pwd)/py:$HOME/astrometry.net
+    - export PYTHONPATH=${PYTHONPATH}:$(pwd)/py:$HOME/astrometry.net:$HOME/unwise_psf/py
+    - export UNWISE_PSF_DIR=$HOME/unwise_psf/etc
     - ls $HOME
     - ls $HOME/astrometry.net
     - (cd doc && make)
