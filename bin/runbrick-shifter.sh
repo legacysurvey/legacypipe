@@ -4,8 +4,7 @@
 
 # This merges some contents from legacypipe-env and runbrick.sh
 
-# Where are inputs and outputs going?
-export LEGACY_SURVEY_DIR=/global/cscratch1/sd/dstn/dr8sub
+export LEGACY_SURVEY_DIR=/global/cscratch1/sd/dstn/dr8new
 
 export DUST_DIR=/global/project/projectdirs/cosmo/data/dust/v0_1
 export UNWISE_COADDS_DIR=/global/projecta/projectdirs/cosmo/work/wise/outputs/merge/neo4/fulldepth:/global/project/projectdirs/cosmo/data/unwise/allwise/unwise-coadds/fulldepth
@@ -40,7 +39,9 @@ let usemem=${maxmem}*${ncores}/32
 ulimit -Sv $usemem
 
 cd /src/legacypipe/py
-outdir=$LEGACY_SURVEY_DIR
+
+#outdir=$LEGACY_SURVEY_DIR
+outdir=/global/cscratch1/sd/dstn/dr8test010
 
 brick="$1"
 
@@ -68,15 +69,18 @@ python3 legacypipe/runbrick.py \
      --skip \
      --skip-calibs \
      --threads ${ncores} \
-     --checkpoint ${outdir}/checkpoints/${bri}/checkpoint-${brick}.pickle \
      --write-stage srcs \
-     --brick $brick --outdir $outdir \
-     --zoom 100 200 100 200 \
+     --checkpoint ${outdir}/checkpoints/${bri}/checkpoint-${brick}.pickle \
      --pickle "${outdir}/pickles/${bri}/runbrick-zoomshifter-%(brick)s-%%(stage)s.pickle" \
-     --large-galaxies --unwise-coadds \
+     --unwise-coadds \
      --survey-dir $LEGACY_SURVEY_DIR \
+     --outdir $outdir \
+     --brick $brick \
+     --depth-cut 1 \
+     --min-mjd 56730 \
      >> $log 2>&1
 
+#     --zoom 100 200 100 200 \
 #--pickle "${outdir}/pickles/${bri}/runbrick-%(brick)s-%%(stage)s.pickle" \
 
 # QDO_BATCH_PROFILE=cori-shifter qdo launch -v tst 1 --cores_per_worker 8 --walltime=30:00 --batchqueue=debug --keep_env --batchopts "--image=docker:dstndstn/legacypipe:intel" --script "/src/legacypipe/bin/runbrick-shifter.sh"

@@ -1,6 +1,6 @@
 FROM ubuntu:18.04
 
-RUN apt -y update && apt install -y apt-utils
+RUN apt -y update && apt install -y apt-utils && echo yes
 
 RUN DEBIAN_FRONTEND=noninteractive \
     apt install -y --no-install-recommends \
@@ -96,6 +96,8 @@ RUN ln -s /usr/bin/python3 /usr/bin/python
 RUN cd /src \
     && git clone http://github.com/legacysurvey/legacypipe.git legacypipe \
     && echo
+
+RUN cd /src/legacypipe && git pull
 
 # Yeah no, this needs some work still
 #    && python3 setup.py install

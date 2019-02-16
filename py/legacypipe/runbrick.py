@@ -88,7 +88,7 @@ def stage_tims(W=3600, H=3600, pixscale=0.262, brickname=None,
                normalizePsf=False,
                apodize=False,
                constant_invvar=False,
-               depth_cut = True,
+               depth_cut=None,
                read_image_pixels = True,
                min_mjd=None, max_mjd=None,
                gaia_stars=False,
@@ -250,9 +250,15 @@ def stage_tims(W=3600, H=3600, pixscale=0.262, brickname=None,
         # If we have many images, greedily select images until we have
         # reached our target depth
         print('Cutting to CCDs required to hit our depth targets')
+        # Previously, depth_cut was a boolean; I turned it into a float margin;
+        # be a little backwards-compatible.
+        margin = float(depth_cut)
+        kwa = {}
+        if margin >= 0:
+            kwa.update(margin=depth_cut)
         keep_ccds,overlapping = make_depth_cut(survey, ccds, bands, targetrd, brick, W, H, pixscale,
                                    plots, ps, splinesky, gaussPsf, pixPsf, normalizePsf,
-                                   do_calibs, gitver, targetwcs)
+                                   do_calibs, gitver, targetwcs, **kwa)
         ccds.cut(np.array(keep_ccds))
         print('Cut to', len(ccds), 'CCDs required to reach depth targets')
 
@@ -3025,7 +3031,7 @@ def run_brick(brick, survey, radec=None, pixscale=0.262,
               zoom=None,
               bands=None,
               allbands=None,
-              depth_cut=False,
+              depth_cut=None,
               nblobs=None, blob=None, blobxy=None, blobradec=None, blobid=None,
               max_blobsize=None,
               nsigma=6,
@@ -3583,8 +3589,8 @@ python -u legacypipe/runbrick.py --plots --brick 2440p070 --zoom 1900 2400 450 9
     parser.add_argument('--bands', default=None,
                         help='Set the list of bands (filters) that are included in processing: comma-separated list, default "g,r,z"')
 
-    parser.add_argument('--depth-cut', default=False, action='store_true',
-                        help='Cut to the set of CCDs required to reach our depth target')
+    parser.add_argument('--depth-cut', default=None, type=float,
+                        help='Margin in mags to use to cut to the set of CCDs required to reach our depth target + margin')
 
     parser.add_argument('--no-tycho', dest='tycho_stars', default=True,
                         action='store_false',
