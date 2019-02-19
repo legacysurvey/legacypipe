@@ -66,7 +66,7 @@ echo >> $log
 echo -e "\nStarting on $(hostname)\n" >> $log
 echo "-----------------------------------------------------------------------------------------" >> $log
 
-python3 legacypipe/runbrick.py \
+python -u legacypipe/runbrick.py \
      --skip \
      --skip-calibs \
      --threads ${ncores} \

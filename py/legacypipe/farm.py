@@ -20,7 +20,7 @@ def main():
     import threading
     import queue
 
-    inqueue = queue.PriorityQueue(maxsize=1000)
+    inqueue = queue.PriorityQueue(maxsize=10000)
     outqueue = queue.Queue()
     # queue directly from the input thread to the output thread, when checkpointed
     # results are read from disk.
@@ -53,17 +53,33 @@ def main():
     while True:
 
         print('Network thread: approximate size of input queue:', inqueue.qsize(), 'output queue:', outqueue.qsize())
-        if inqueue.empty():
+        try:
+            arg = inqueue.get(block=False)
+            work = arg.item
+            iswork = True
+        except:
             work = nowork
             iswork = False
             print('Work queue is empty.')
-        else:
-            arg = inqueue.get()
-            work = arg.item
-            iswork = True
+
+        # Peek into work packet, checking for empty (None) work and short-cutting, putting a None
+        # result directly on the output queue.
+        if iswork:
+            (br,iblob,isempty,picl) = work
+            if isempty:
+                print('Short-cutting empty work packet for brick', br, 'iblob', iblob)
+                result = pickle.dumps((br, iblob, None), -1)
+                outqueue.put(result)
+                continue
+            work = picl
             print('Next work packet:', len(work), 'bytes')
 
         print('Waiting for request')
+        if not iswork:
+            events = sock.poll(5000)
+            if events == 0:
+                # recv timed out; check work queue again
+                continue
         result = sock.recv()
         print('Request:', len(result), 'bytes')
         try:
@@ -77,13 +93,13 @@ def main():
 
         if result == nowork:
             print('Empty result')
+            continue
         else:
             print('Non-empty result')
             resultsreceived += 1
         print('Now sent', worksent, 'work packages, received', resultsreceived, 'results; outstanding:', worksent-resultsreceived)
 
         outqueue.put(result)
-
 
 def output_thread(queuename, outqueue, checkpointqueue, blobsizes, opt):
 
@@ -110,7 +126,8 @@ def output_thread(queuename, outqueue, checkpointqueue, blobsizes, opt):
                 allresults[brick] = {}
             allresults[brick][iblob] = res
             c.update([brick])
-        print('Read checkpointed results:', c)
+        if len(c):
+            print('Read checkpointed results:', c)
 
         msg = outqueue.get()
         result = pickle.loads(msg)
@@ -155,34 +172,22 @@ def output_thread(queuename, outqueue, checkpointqueue, blobsizes, opt):
             ### FIXME!!
             print('Write interim checkpoint for', brick, '????')
 
-def get_blob_iter(T=None,
-                   brickname=None,
-                   brickid=None,
-                   brick=None,
-                   version_header=None,
-                   blobsrcs=None, blobslices=None, blobs=None,
-                   cat=None,
-                   targetwcs=None,
-                   W=None,H=None,
-                   bands=None, ps=None, tims=None,
-                   survey=None,
-                   plots=False, plots2=False,
-                   nblobs=None, blob0=None, blobxy=None, blobradec=None, blobid=None,
-                   max_blobsize=None,
-                   simul_opt=False, use_ceres=True, mp=None,
-                   checkpoint_filename=None,
-                   checkpoint_period=600,
-                   write_pickle_filename=None,
-                   write_metrics=True,
-                   get_all_models=False,
-                   refstars=None,
-                   rex=False,
-                   bailout=False,
-                   record_event=None,
-                   custom_brick=False,
-                   **kwargs):
-    T.orig_ra  = T.ra.copy()
-    T.orig_dec = T.dec.copy()
+def get_blob_iter(skipblobs=[],
+                  brickname=None,
+                  brick=None,
+                  blobsrcs=None, blobslices=None, blobs=None,
+                  cat=None,
+                  targetwcs=None,
+                  W=None,H=None,
+                  bands=None, ps=None, tims=None,
+                  survey=None,
+                  plots=False, plots2=False,
+                  max_blobsize=None,
+                  simul_opt=False, use_ceres=True, mp=None,
+                  refstars=None,
+                  rex=False,
+                  custom_brick=False,
+                  **kwargs):
     # drop any cached data before we start pickling/multiprocessing
     survey.drop_cache()
 
@@ -195,20 +200,13 @@ def get_blob_iter(T=None,
         refmap = np.zeros((int(HH), int(WW)), np.uint8)
 
     # Create the iterator over blobs to process
-    blobiter = _blob_iter(blobslices, blobsrcs, blobs, targetwcs, tims,
+    blobiter = _blob_iter(brickname, blobslices, blobsrcs, blobs, targetwcs, tims,
                           cat, bands, plots, ps, simul_opt, use_ceres,
                           refmap, brick, rex,
-                          max_blobsize=max_blobsize, custom_brick=custom_brick)
+                          max_blobsize=max_blobsize, custom_brick=custom_brick,
+                          skipblobs=skipblobs)
     return blobiter
 
-
-# python3.7 foncy
-# from dataclasses import dataclass, field
-# from typing import Any
-# @dataclass(order=True)
-# class PrioritizedItem:
-#     priority: int
-#     item: Any=field(compare=False)
 
 class PrioritizedItem(object):
     def __init__(self, priority=0, item=None):
@@ -267,17 +265,20 @@ def queue_work(brickname, inqueue, checkpointqueue, opt):
         if arg is None:
             continue
 
-        # HACK -- reach into args to get blob id...
-        iblob = arg[1]
-        blobw = arg[6]
-        blobh = arg[7]
-        arg = (brickname, iblob, arg)
-        priority = -(blobw*blobh)
+        (br, iblob, args) = arg
+        if args is None:
+            # do these first?
+            priority = -1000000000
+        else:
+            # HACK -- reach into args to get blob size, for priority ordering
+            blobw = args[6]
+            blobh = args[7]
+            priority = -(blobw*blobh)
 
         picl = pickle.dumps(arg, -1)
 
-        qitem = PrioritizedItem(priority=priority, item=picl)
-        print('Queuing blob', (k+1), 'for brick', brickname)
+        qitem = PrioritizedItem(priority=priority, item=(br, iblob, (args is None), picl))
+        print('Queuing blob', (k+1), 'for brick', brickname, '- queue size ~', inqueue.qsize())
         k += 1
         inqueue.put(qitem)
 
