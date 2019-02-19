@@ -1590,32 +1590,23 @@ def stage_fitblobs(T=None,
         ps.savefig()
 
     skipblobs = []
-    if checkpoint_filename is not None:
-        # Check for existing checkpoint file.
-        R = []
-        if os.path.exists(checkpoint_filename):
-            from astrometry.util.file import unpickle_from_file
-            print('Reading', checkpoint_filename)
-            try:
-                R = unpickle_from_file(checkpoint_filename)
-                print('Read', len(R), 'results from checkpoint file', 
-                      checkpoint_filename)
-            except:
-                import traceback
-                print('Failed to read checkpoint file ' + checkpoint_filename)
-                traceback.print_exc()
-
-            # Check that checkpointed blobids match our current set of
-            # blobs, based on blob bounding-box and Isrcs.  This can
-            # fail if the code changes between writing & reading the
-            # checkpoint, resulting in a different set of detected
-            # sources.
-            keepR = _check_checkpoints(R, blobslices)
-            print('Keeping', len(keepR), 'of', len(R), 'checkpointed results (consistency)')
-            R = keepR
-
-        skipblobs = [blob.iblob for blob in R if blob is not None]
+    R = []
+    # Check for existing checkpoint file.
+    if checkpoint_filename and os.path.exists(checkpoint_filename):
+        from astrometry.util.file import unpickle_from_file
+        print('Reading', checkpoint_filename)
+        try:
+            R = unpickle_from_file(checkpoint_filename)
+            print('Read', len(R), 'results from checkpoint file', checkpoint_filename)
+        except:
+            import traceback
+            print('Failed to read checkpoint file ' + checkpoint_filename)
+            traceback.print_exc()
+        keepR = _check_checkpoints(R, blobslices)
+        print('Keeping', len(keepR), 'of', len(R), 'checkpointed results (consistency)')
+        R = keepR
         R = [r for r in R if r is not None]
+        skipblobs = [r.iblob for r in R]
         print('Skipping', len(skipblobs), 'blobs from checkpoint file')
 
     bailout_mask = None
@@ -1880,6 +1871,10 @@ def stage_fitblobs(T=None,
     return rtn
 
 def _check_checkpoints(R, blobslices):
+    # Check that checkpointed blobids match our current set of blobs,
+    # based on blob bounding-box.  This can fail if the code changes
+    # between writing & reading the checkpoint, resulting in a
+    # different set of detected sources.
     keepR = []
     for r in R:
         iblob = r.iblob
