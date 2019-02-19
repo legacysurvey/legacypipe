@@ -7,16 +7,14 @@ import numpy as np
 # survey-ccds-*.fits.gz (zeropoints) files
 #
 
-def create_kdtree(infn, outfn):
-    readfn = infn
-    # gunzip
-    if infn.endswith('.gz'):
-        tfn = '/tmp/ccds.fits'
-        cmd = 'gunzip -cd %s > %s' % (infn, tfn)
-        print(cmd)
-        rtn = os.system(cmd)
-        assert(rtn == 0)
-        readfn = tfn
+def create_kdtree(infn, outfn, ccd_cuts):
+    T = fits_table(infn)
+    print('Read', len(T), 'from', infn)
+    if ccd_cuts:
+        T.cut(T.ccd_cuts == 0)
+        print('Cut to', len(T), 'on ccd_cuts')
+    tfn = '/tmp/ccds.fits'
+    T.writeto(tfn)
 
     # startree
     sfn = '/tmp/startree.fits'
@@ -59,6 +57,7 @@ if __name__ == '__main__':
     parser = argparse.ArgumentParser()
     parser.add_argument('infn', help='Input filename (CCDs file)')
     parser.add_argument('outfn', help='Output filename (survey-ccds-X.kd.fits file')
-
+    parser.add_argument('--no-cut', dest='ccd_cuts', default=True, action='store_false')
+    
     opt = parser.parse_args()
-    create_kdtree(opt.infn, opt.outfn)
+    create_kdtree(opt.infn, opt.outfn, opt.ccd_cuts)
