@@ -2094,7 +2094,7 @@ def _bounce_one_blob(X):
     multiprocessing purposes.
     '''
     from legacypipe.oneblob import one_blob
-    (brickname, iblob, X)
+    (brickname, iblob, X) = X
     try:
         result = one_blob(X)
         return dict(brickname=brickname, iblob=iblob, result=result)
