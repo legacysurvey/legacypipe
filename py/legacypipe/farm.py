@@ -148,7 +148,8 @@ def output_thread(queuename, outqueue, checkpointqueue, blobsizes, opt):
                 ### FIXME -- be robust against duplicate iblobs
 
                 checkpoint_fn = opt.checkpoint % dict(brick=brick)
-                R = [r for iblob,r in allresults[brick]]
+                R = [dict(brickname=brick, iblob=iblob, result=res) for
+                     iblob,res in allresults[brick].items()]
                 print('Writing checkpoint', checkpoint_fn)
                 _write_checkpoint(R, checkpoint_fn)
 
@@ -260,13 +261,13 @@ def queue_work(brickname, inqueue, checkpointqueue, opt):
         R = unpickle_from_file(checkpoint_fn)
         print('Read', len(R), 'from checkpoint file')
 
-        n = len(R)
-        R = [r for r in R if r is not None]
-        print('Keeping', len(R), 'of', n, 'non-None checkpointed results')
         skipblobs = []
         for r in R:
-            checkpointqueue.put((brickname, r.iblob, r))
-            skipblobs.append(r.iblob)
+            brickname = r['brickname']
+            iblob = r['iblob']
+            result = r['result']
+            checkpointqueue.put((brickname, iblob, result))
+            skipblobs.append(iblob)
         kwargs.update(skipblobs=skipblobs)
 
     blobiter = get_blob_iter(**kwargs)
