@@ -2097,6 +2097,7 @@ def _bounce_one_blob(X):
     (brickname, iblob, X) = X
     try:
         result = one_blob(X)
+        ### This defines the format of the results in the checkpoints files
         return dict(brickname=brickname, iblob=iblob, result=result)
     except:
         import traceback
