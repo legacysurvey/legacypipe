@@ -107,8 +107,8 @@ def output_thread(queuename, outqueue, checkpointqueue, blobsizes, opt):
             except:
                 break
             if not brick in allresults:
-                allresults[brick] = []
-            allresults[brick].append((iblob,res))
+                allresults[brick] = {}
+            allresults[brick][iblob] = res
             c.update([brick])
         print('Read checkpointed results:', c)
 
@@ -120,8 +120,8 @@ def output_thread(queuename, outqueue, checkpointqueue, blobsizes, opt):
         # Worker sent a blob result
         (brick, iblob, res) = result
         if not brick in allresults:
-            allresults[brick] = []
-        allresults[brick].append((iblob,res))
+            allresults[brick] = {}
+        allresults[brick][iblob] = res
 
         nblobs = None
         taskid = None
@@ -140,13 +140,6 @@ def output_thread(queuename, outqueue, checkpointqueue, blobsizes, opt):
         if nblobs is not None:
             if len(allresults[brick]) == nblobs:
                 # Done this brick!  Set qdo state=Succeeded
-                # tasks = q.tasks(id=taskid)
-                # print('Found qdo tasks', task)
-                # for t in tasks:
-                #     qdo.set_task_state(
-
-                ### FIXME -- be robust against duplicate iblobs
-
                 checkpoint_fn = opt.checkpoint % dict(brick=brick)
                 R = [dict(brickname=brick, iblob=iblob, result=res) for
                      iblob,res in allresults[brick].items()]
@@ -156,14 +149,11 @@ def output_thread(queuename, outqueue, checkpointqueue, blobsizes, opt):
                 print('Setting QDO task to Succeeded')
                 q.set_task_state(taskid, qdo.Task.SUCCEEDED)
 
-        if len(allresults[brick]) % 1000 == 0:
+                del allresults[brick]
 
+        if len(allresults[brick]) % 1000 == 0:
             ### FIXME!!
             print('Write interim checkpoint for', brick, '????')
-                
-
-    # q.set_task_state(taskid, state)
-    # q.tasks(id=None)
 
 def get_blob_iter(T=None,
                    brickname=None,
