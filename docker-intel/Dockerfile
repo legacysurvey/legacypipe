@@ -97,7 +97,7 @@ RUN cd /src \
     && git clone http://github.com/legacysurvey/legacypipe.git legacypipe \
     && echo
 
-RUN cd /src/legacypipe && git pull && echo xx
+RUN cd /src/legacypipe && git pull && echo xxxx
 
 # Yeah no, this needs some work still
 #    && python3 setup.py install
