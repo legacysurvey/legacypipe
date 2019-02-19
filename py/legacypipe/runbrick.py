@@ -1605,62 +1605,18 @@ def stage_fitblobs(T=None,
                 print('Failed to read checkpoint file ' + checkpoint_filename)
                 traceback.print_exc()
 
-        # Keep only non-None blob results.  This means we will re-run
-        # these blobs, but that's okay because they are mostly ones
-        # that are outside the primary region, thus very fast to run.
-        n = len(R)
-        R = [r for r in R if r is not None]
-        print('Keeping', len(R), 'of', n, 'non-None checkpointed results')
-
-        if len(R):
             # Check that checkpointed blobids match our current set of
             # blobs, based on blob bounding-box and Isrcs.  This can
             # fail if the code changes between writing & reading the
             # checkpoint, resulting in a different set of detected
             # sources.
-            keepR = []
-            for r in R:
-                iblob = r.iblob
-                if iblob >= len(blobsrcs):
-                    print('Checkpointed iblob', iblob,
-                          'is too large! (>= %i)' % len(blobsrcs))
-                    continue
-                # if len(blobsrcs[iblob]) != len(r.Isrcs):
-                #     print('Checkpointed number of sources,', len(r.Isrcs),
-                #           'does not match expected', len(blobsrcs[iblob]),
-                #           'for iblob', iblob)
-                #     continue
-                sy,sx = blobslices[iblob]
-                by0,by1,bx0,bx1 = sy.start, sy.stop, sx.start, sx.stop
-                if len(r) == 0:
-                    keepR.append(r)
-                    continue
-                if 'blob_x0' in r and 'blob_y0' in r:
-                    # check bbox
-                    rx0,ry0 = r.blob_x0[0], r.blob_y0[0]
-                    rx1,ry1 = rx0 + r.blob_width[0], ry0 + r.blob_height[0]
-                    if rx0 != bx0 or ry0 != by0 or rx1 != bx1 or ry1 != by1:
-                        print('Checkpointed blob bbox', [rx0,rx1,ry0,ry1],
-                              'does not match expected', [bx0,bx1,by0,by1],
-                              'for iblob', iblob)
-                        continue
-                else:
-                    # check size only
-                    rw,rh = r.blob_width[0], r.blob_height[0]
-                    if rw != bx1-bx0 or rh != by1-by0:
-                        print('Checkpointed blob bbox size', (rw,rh),
-                              'does not match expected', (bx1-bx0, by1-by0),
-                              'for iblob', iblob)
-                        continue
-                keepR.append(r)
+            keepR = _check_checkpoints(R, blobslices)
             print('Keeping', len(keepR), 'of', len(R), 'checkpointed results (consistency)')
             R = keepR
 
         skipblobs = [blob.iblob for blob in R if blob is not None]
         R = [r for r in R if r is not None]
         print('Skipping', len(skipblobs), 'blobs from checkpoint file')
-
-        print('len(R):', len(R), 'len(skipblobs):', len(skipblobs), 'len(blobslices):', len(blobslices), 'len(blobsrcs):', len(blobsrcs))
 
     bailout_mask = None
     if bailout:
@@ -1922,6 +1878,39 @@ def stage_fitblobs(T=None,
     L = locals()
     rtn = dict([(k,L[k]) for k in keys])
     return rtn
+
+def _check_checkpoints(R, blobslices):
+    keepR = []
+    for r in R:
+        iblob = r.iblob
+        if iblob >= len(blobslices):
+            print('Checkpointed iblob', iblob,
+                  'is too large! (>= %i)' % len(blobslices))
+            continue
+        sy,sx = blobslices[iblob]
+        by0,by1,bx0,bx1 = sy.start, sy.stop, sx.start, sx.stop
+        if len(r) == 0:
+            keepR.append(r)
+            continue
+        if 'blob_x0' in r and 'blob_y0' in r:
+            # check bbox
+            rx0,ry0 = r.blob_x0[0], r.blob_y0[0]
+            rx1,ry1 = rx0 + r.blob_width[0], ry0 + r.blob_height[0]
+            if rx0 != bx0 or ry0 != by0 or rx1 != bx1 or ry1 != by1:
+                print('Checkpointed blob bbox', [rx0,rx1,ry0,ry1],
+                      'does not match expected', [bx0,bx1,by0,by1],
+                      'for iblob', iblob)
+                continue
+        else:
+            # check size only
+            rw,rh = r.blob_width[0], r.blob_height[0]
+            if rw != bx1-bx0 or rh != by1-by0:
+                print('Checkpointed blob bbox size', (rw,rh),
+                      'does not match expected', (bx1-bx0, by1-by0),
+                      'for iblob', iblob)
+                continue
+        keepR.append(r)
+    return keepR    
 
 def _format_all_models(T, newcat, BB, bands, rex):
     from legacypipe.catalog import prepare_fits_catalog, fits_typemap
