@@ -7,41 +7,58 @@ import numpy as np
 # survey-ccds-*.fits.gz (zeropoints) files
 #
 
-indir = '/global/projecta/projectdirs/cosmo/work/legacysurvey/dr8/DECaLS/'
-outdir = '/global/cscratch1/sd/dstn/dr8new'
-
-bands = 'grizY'
-
-for band in bands:
-    infn = indir + 'survey-ccds-decam-%s.fits.gz' % band
-    print('Input:', infn)
-
+def create_kdtree(infn, outfn):
+    readfn = infn
     # gunzip
-    tfn = '/tmp/survey-ccd-%s.fits' % band
-    cmd = 'gunzip -cd %s > %s' % (infn, tfn)
-    print(cmd)
-    os.system(cmd)
+    if infn.endswith('.gz'):
+        tfn = '/tmp/ccds.fits'
+        cmd = 'gunzip -cd %s > %s' % (infn, tfn)
+        print(cmd)
+        rtn = os.system(cmd)
+        assert(rtn == 0)
+        readfn = tfn
 
     # startree
-    sfn = '/tmp/startree-%s.fits' % band
-    cmd = 'startree -i %s -o %s -P -T -k -n ccds' % (tfn, sfn)
+    sfn = '/tmp/startree.fits'
+    cmd = 'startree -i %s -o %s -P -T -k -n ccds' % (readfn, sfn)
     print(cmd)
-    os.system(cmd)
+    rtn = os.system(cmd)
+    assert(rtn == 0)
 
     # add expnum-tree
     T = fits_table(sfn, columns=['expnum'])
     ekd = tree_build(np.atleast_2d(T.expnum.copy()).T.astype(float),
                      nleaf=60, bbox=False, split=True)
     ekd.set_name('expnum')
-    efn = '/tmp/ekd-%s.fits' % band
+    efn = '/tmp/ekd.fits'
     ekd.write(efn)
 
     # merge
-    cmd = 'fitsgetext -i %s -o /tmp/ekd-%s-%%02i -a -M' % (efn, band)
+    cmd = 'fitsgetext -i %s -o /tmp/ekd-%%02i -a -M' % (efn)
     print(cmd)
-    os.system(cmd)
+    rtn = os.system(cmd)
+    assert(rtn == 0)
 
-    outfn = outdir + '/survey-ccds-decam-%s.kd.fits' % band
-    
-    cmd = 'cat %s /tmp/ekd-%s-0[123456] > %s' % (sfn, band, outfn)
-    os.system(cmd)
+    cmd = 'cat %s /tmp/ekd-0[123456] > %s' % (sfn, outfn)
+    rtn = os.system(cmd)
+    assert(rtn == 0)
+
+
+def pre_depthcut():
+    indir = '/global/projecta/projectdirs/cosmo/work/legacysurvey/dr8/DECaLS/'
+    outdir = '/global/cscratch1/sd/dstn/dr8new'
+    bands = 'grizY'
+    for band in bands:
+        infn = indir + 'survey-ccds-decam-%s.fits.gz' % band
+        print('Input:', infn)
+        outfn = outdir + '/survey-ccds-decam-%s.kd.fits' % band
+        create_kdtree(infn, outfn)
+
+if __name__ == '__main__':
+    import argparse
+    parser = argparse.ArgumentParser()
+    parser.add_argument('infn', help='Input filename (CCDs file)')
+    parser.add_argument('outfn', help='Output filename (survey-ccds-X.kd.fits file')
+
+    opt = parser.parse_args()
+    create_kdtree(opt.infn, opt.outfn)
