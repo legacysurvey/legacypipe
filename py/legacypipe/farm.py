@@ -43,14 +43,17 @@ def main2():
 
     inqueue = queue.PriorityQueue(maxsize=1000)
     outqueue = queue.Queue()
-
+    # queue directly from the input thread to the output thread, when checkpointed
+    # results are read from disk.
+    checkpointqueue = queue.Queue()
+    
     blobsizes = BlobSizeDict()
 
-    inthread = threading.Thread(target=input_thread, args=(queuename, inqueue, blobsizes, opt),
+    inthread = threading.Thread(target=input_thread, args=(queuename, inqueue, checkpointqueue, blobsizes, opt),
                                 daemon=True)
     inthread.start()
 
-    outthread = threading.Thread(target=output_thread, args=(queuename, outqueue, blobsizes, opt),
+    outthread = threading.Thread(target=output_thread, args=(queuename, outqueue, checkpointqueue, blobsizes, opt),
                                  daemon=True)
     outthread.start()
 
@@ -103,8 +106,8 @@ def main2():
         outqueue.put(result)
 
 
-def output_thread(queuename, outqueue, blobsizes, opt):
-    
+def output_thread(queuename, outqueue, checkpointqueue, blobsizes, opt):
+
     import qdo
     q = qdo.connect(queuename)
 
@@ -115,6 +118,21 @@ def output_thread(queuename, outqueue, blobsizes, opt):
     brick_taskids = {}
 
     while True:
+        from collections import Counter
+
+        # Read any checkpointed results
+        c = Counter()
+        while True:
+            try:
+                (brick, iblob, res) = checkpointqueue.get(block=False)
+            except:
+                break
+            if not brick in allresults:
+                allresults[brick] = []
+            allresults[brick].append((iblob,res))
+            c.update([brick])
+        print('Read checkpointed results:', c)
+
         msg = outqueue.get()
         result = pickle.loads(msg)
         if result is None:
@@ -243,8 +261,10 @@ class BlobSizeDict(object):
             return self.d.get(brickname)
 
 
-
-def queue_work(brickname, inqueue, opt):
+def queue_work(brickname, inqueue, checkpointqueue, opt):
+    '''
+    Called from the input thread to generate work packets for the given *brickname*.
+    '''
     from astrometry.util.file import unpickle_from_file
 
     pickle_fn = opt.pickle % dict(brick=brickname)
@@ -253,6 +273,22 @@ def queue_work(brickname, inqueue, opt):
         raise RuntimeError('Input pickle does not exist: ' + pickle_fn)
     kwargs = unpickle_from_file(pickle_fn)
     print('Unpickled:', kwargs.keys())
+
+    # Check for and read existing checkpoint file.
+    checkpoint_fn = opt.checkpoint % dict(brick=brickname)
+    if os.path.exists(checkpoint_fn):
+        print('Reading checkpoint file', checkpoint_fn)
+        R = unpickle_from_file(checkpoint_fn)
+        print('Read', len(R), 'from checkpoint file')
+
+        n = len(R)
+        R = [r for r in R if r is not None]
+        print('Keeping', len(R), 'of', n, 'non-None checkpointed results')
+        skipblobs = []
+        for r in R:
+            checkpointqueue.put((brickname, r.iblob, r))
+            skipblobs.append(r.iblob)
+        kwargs.update(skipblobs=skipblobs)
 
     blobiter = get_blob_iter(**kwargs)
 
@@ -279,7 +315,7 @@ def queue_work(brickname, inqueue, opt):
     return k
 
 
-def input_thread(queuename, inqueue, blobsizes, opt):
+def input_thread(queuename, inqueue, checkpointqueue, blobsizes, opt):
 
     import qdo
     q = qdo.connect(queuename)
@@ -292,7 +328,7 @@ def input_thread(queuename, inqueue, blobsizes, opt):
                 brickname = task.task
                 print('Brick', brickname)
                 # WORK
-                nblobs = queue_work(brickname, inqueue, opt)
+                nblobs = queue_work(brickname, inqueue, checkpointqueue, opt)
                 blobsizes.set(brickname, (nblobs, task.id))
                 #
                 print('Finished', brickname, 'with', nblobs, 'blobs')
