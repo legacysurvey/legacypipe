@@ -4,7 +4,7 @@
 
 # This merges some contents from legacypipe-env and runbrick.sh
 
-export LEGACY_SURVEY_DIR=/global/cscratch1/sd/dstn/dr8new
+export LEGACY_SURVEY_DIR=/global/cscratch1/sd/dstn/dr8-depthcut
 
 export DUST_DIR=/global/project/projectdirs/cosmo/data/dust/v0_1
 export UNWISE_COADDS_DIR=/global/projecta/projectdirs/cosmo/work/wise/outputs/merge/neo4/fulldepth:/global/project/projectdirs/cosmo/data/unwise/allwise/unwise-coadds/fulldepth
@@ -31,7 +31,7 @@ export OMP_NUM_THREADS=1
 export MPICH_GNI_FORK_MODE=FULLCOPY
 
 # Try limiting memory to avoid killing the whole MPI job...
-ncores=8
+ncores=4
 # Assume cori!
 # 128 GB / Cori Haswell node = 134217728 kbytes
 maxmem=134217728
@@ -76,8 +76,7 @@ python3 legacypipe/runbrick.py \
      --survey-dir $LEGACY_SURVEY_DIR \
      --outdir $outdir \
      --brick $brick \
-     --depth-cut 1 \
-     --min-mjd 56730 \
+     --stage srcs \
      >> $log 2>&1
 
 #     --zoom 100 200 100 200 \
