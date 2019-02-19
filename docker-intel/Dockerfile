@@ -1,6 +1,6 @@
 FROM ubuntu:18.04
 
-RUN apt -y update && apt install -y apt-utils
+RUN apt -y update && apt install -y apt-utils && echo yes
 
 RUN DEBIAN_FRONTEND=noninteractive \
     apt install -y --no-install-recommends \
@@ -31,6 +31,7 @@ RUN DEBIAN_FRONTEND=noninteractive \
     python3-dev \
     python3-pip \
     python3-pil \
+    python3-tk \
     # # Remove APT files
     && apt-get clean && rm -rf /var/lib/apt/lists/* /tmp/* /var/tmp/*
 
@@ -88,10 +89,15 @@ RUN cd /src/ \
 
 # Technically we could delete everything in /src at this point...
 
+# !!
+RUN ln -s /usr/bin/python3 /usr/bin/python
+
 # Legacypipe
 RUN cd /src \
     && git clone http://github.com/legacysurvey/legacypipe.git legacypipe \
     && echo
+
+RUN cd /src/legacypipe && git pull && echo xxxx
 
 # Yeah no, this needs some work still
 #    && python3 setup.py install

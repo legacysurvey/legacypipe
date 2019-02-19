@@ -88,9 +88,10 @@ def stage_tims(W=3600, H=3600, pixscale=0.262, brickname=None,
                normalizePsf=False,
                apodize=False,
                constant_invvar=False,
-               depth_cut = True,
+               depth_cut=None,
                read_image_pixels = True,
                min_mjd=None, max_mjd=None,
+               gaia_stars=False,
                mp=None,
                record_event=None,
                unwise_dir=None,
@@ -249,9 +250,15 @@ def stage_tims(W=3600, H=3600, pixscale=0.262, brickname=None,
         # If we have many images, greedily select images until we have
         # reached our target depth
         print('Cutting to CCDs required to hit our depth targets')
+        # Previously, depth_cut was a boolean; I turned it into a float margin;
+        # be a little backwards-compatible.
+        margin = float(depth_cut)
+        kwa = {}
+        if margin >= 0:
+            kwa.update(margin=depth_cut)
         keep_ccds,overlapping = make_depth_cut(survey, ccds, bands, targetrd, brick, W, H, pixscale,
                                    plots, ps, splinesky, gaussPsf, pixPsf, normalizePsf,
-                                   do_calibs, gitver, targetwcs)
+                                   do_calibs, gitver, targetwcs, **kwa)
         ccds.cut(np.array(keep_ccds))
         print('Cut to', len(ccds), 'CCDs required to reach depth targets')
 
@@ -280,6 +287,8 @@ def stage_tims(W=3600, H=3600, pixscale=0.262, brickname=None,
             kwa.update(psfex=False)
         if splinesky:
             kwa.update(splinesky=True)
+        if not gaia_stars:
+            kwa.update(gaia=False)
         # Run calibrations
         args = [(im, kwa) for im in ims]
         mp.map(run_calibs, args)
@@ -1102,7 +1111,7 @@ def stage_srcs(targetrd=None, pixscale=None, targetwcs=None,
         avoid_x = refstars.ibx[refstars.in_bounds]
         avoid_y = refstars.iby[refstars.in_bounds]
     else:
-        avoid_x, avoid_y = [], []
+        avoid_x, avoid_y = np.array([]), np.array([])
 
     # Subtract star halos?
     Igaia = []
@@ -1220,8 +1229,8 @@ def stage_srcs(targetrd=None, pixscale=None, targetwcs=None,
         sat.ref_cat = np.array(['  '] * len(sat))
         del satyx
         
-        avoid_x.extend(sat.ibx)
-        avoid_y.extend(sat.iby)
+        avoid_x = np.append(avoid_x, sat.ibx).astype(int)
+        avoid_y = np.append(avoid_y, sat.iby).astype(int)
         # Create catalog entries for saturated blobs
         for r,d,m in zip(sat.ra, sat.dec, sat.mag):
             fluxes = dict([(band, NanoMaggies.magToNanomaggies(m))
@@ -1581,109 +1590,33 @@ def stage_fitblobs(T=None,
         ps.savefig()
 
     skipblobs = []
-    if checkpoint_filename is not None:
-        # Check for existing checkpoint file.
-        R = []
-        if os.path.exists(checkpoint_filename):
-            from astrometry.util.file import unpickle_from_file
-            print('Reading', checkpoint_filename)
-            try:
-                R = unpickle_from_file(checkpoint_filename)
-                print('Read', len(R), 'results from checkpoint file', 
-                      checkpoint_filename)
-            except:
-                import traceback
-                print('Failed to read checkpoint file ' + checkpoint_filename)
-                traceback.print_exc()
-
-        # Keep only non-None blob results.  This means we will re-run
-        # these blobs, but that's okay because they are mostly ones
-        # that are outside the primary region, thus very fast to run.
-        n = len(R)
-        R = [r for r in R if r is not None]
-        print('Keeping', len(R), 'of', n, 'non-None checkpointed results')
-
-        if len(R):
-            # Check that checkpointed blobids match our current set of
-            # blobs, based on blob bounding-box and Isrcs.  This can
-            # fail if the code changes between writing & reading the
-            # checkpoint, resulting in a different set of detected
-            # sources.
-            keepR = []
-            for r in R:
-                iblob = r.iblob
-                if iblob >= len(blobsrcs):
-                    print('Checkpointed iblob', iblob,
-                          'is too large! (>= %i)' % len(blobsrcs))
-                    continue
-                # if len(blobsrcs[iblob]) != len(r.Isrcs):
-                #     print('Checkpointed number of sources,', len(r.Isrcs),
-                #           'does not match expected', len(blobsrcs[iblob]),
-                #           'for iblob', iblob)
-                #     continue
-                sy,sx = blobslices[iblob]
-                by0,by1,bx0,bx1 = sy.start, sy.stop, sx.start, sx.stop
-                if len(r) == 0:
-                    keepR.append(r)
-                    continue
-                if 'blob_x0' in r and 'blob_y0' in r:
-                    # check bbox
-                    rx0,ry0 = r.blob_x0[0], r.blob_y0[0]
-                    rx1,ry1 = rx0 + r.blob_width[0], ry0 + r.blob_height[0]
-                    if rx0 != bx0 or ry0 != by0 or rx1 != bx1 or ry1 != by1:
-                        print('Checkpointed blob bbox', [rx0,rx1,ry0,ry1],
-                              'does not match expected', [bx0,bx1,by0,by1],
-                              'for iblob', iblob)
-                        continue
-                else:
-                    # check size only
-                    rw,rh = r.blob_width[0], r.blob_height[0]
-                    if rw != bx1-bx0 or rh != by1-by0:
-                        print('Checkpointed blob bbox size', (rw,rh),
-                              'does not match expected', (bx1-bx0, by1-by0),
-                              'for iblob', iblob)
-                        continue
-                keepR.append(r)
-            print('Keeping', len(keepR), 'of', len(R), 'checkpointed results (consistency)')
-            R = keepR
-
-        skipblobs = [blob.iblob for blob in R if blob is not None]
-        R = [r for r in R if r is not None]
+    R = []
+    # Check for existing checkpoint file.
+    if checkpoint_filename and os.path.exists(checkpoint_filename):
+        from astrometry.util.file import unpickle_from_file
+        print('Reading', checkpoint_filename)
+        try:
+            R = unpickle_from_file(checkpoint_filename)
+            print('Read', len(R), 'results from checkpoint file', checkpoint_filename)
+        except:
+            import traceback
+            print('Failed to read checkpoint file ' + checkpoint_filename)
+            traceback.print_exc()
+        keepR = _check_checkpoints(R, blobslices, brickname)
+        print('Keeping', len(keepR), 'of', len(R), 'checkpointed results (consistency)')
+        R = keepR
+        skipblobs = [r['iblob'] for r in R]
         print('Skipping', len(skipblobs), 'blobs from checkpoint file')
-
-        print('len(R):', len(R), 'len(skipblobs):', len(skipblobs), 'len(blobslices):', len(blobslices), 'len(blobsrcs):', len(blobsrcs))
 
     bailout_mask = None
     if bailout:
-        maxblob = blobs.max()
-        # mark all as bailed out...
-        bmap = np.ones(maxblob+2, bool)
-        # except no-blob
-        bmap[0] = False
-        # and blobs from the checkpoint file
-        for i in skipblobs:
-            bmap[i+1] = False
-        # and blobs that are completely outside the primary region of this brick.
-        U = find_unique_pixels(targetwcs, W, H, None,
-                               brick.ra1, brick.ra2, brick.dec1, brick.dec2)
-        for iblob in np.unique(blobs):
-            if iblob == -1:
-                continue
-            if iblob in skipblobs:
-                continue
-            bslc  = blobslices[iblob]
-            blobmask = (blobs[bslc] == iblob)
-            if np.all(U[bslc][blobmask] == False):
-                print('Blob', iblob, 'is completely outside the PRIMARY region')
-                bmap[iblob+1] = False
-
-        #bailout_mask = np.zeros((H,W), bool)
-        bailout_mask = bmap[blobs+1]
-        print('Bailout mask:', bailout_mask.dtype, bailout_mask.shape)
+        bailout_mask = _get_bailout_mask(blobs, skipblobs, targetwcs, W, H, brick,
+                                         blobslices)
         # skip all blobs!
         skipblobs = np.unique(blobs[blobs>=0])
+        # append empty results so that a later assert on the lengths will pass
         while len(R) < len(blobsrcs):
-            R.append(None)
+            R.append(dict(brickname=brickname, iblob=-1, result=None))
 
     if refstars:
         from legacypipe.oneblob import get_inblob_map
@@ -1693,10 +1626,8 @@ def stage_fitblobs(T=None,
         HH, WW = targetwcs.shape
         refmap = np.zeros((int(HH), int(WW)), np.uint8)
 
-    print(len(blobslices), 'blobslices.  skipblobs:', len(skipblobs))
-    
     # Create the iterator over blobs to process
-    blobiter = _blob_iter(blobslices, blobsrcs, blobs, targetwcs, tims,
+    blobiter = _blob_iter(brickname, blobslices, blobsrcs, blobs, targetwcs, tims,
                           cat, bands, plots, ps, simul_opt, use_ceres,
                           refmap, brick, rex,
                           skipblobs=skipblobs,
@@ -1707,12 +1638,7 @@ def stage_fitblobs(T=None,
     if checkpoint_filename is None:
         R = mp.map(_bounce_one_blob, blobiter)
     else:
-        from astrometry.util.file import pickle_to_file, trymakedirs
         from astrometry.util.ttime import CpuMeas
-
-        d = os.path.dirname(checkpoint_filename)
-        if len(d) and not os.path.exists(d):
-            trymakedirs(d)
 
         # Begin running one_blob on each blob...
         Riter = mp.imap_unordered(_bounce_one_blob, blobiter)
@@ -1766,6 +1692,8 @@ def stage_fitblobs(T=None,
     # one_blob can reduce the number and change the types of sources.
     # Reorder the sources:
     assert(len(R) == len(blobsrcs))
+    # drop brickname,iblob
+    R = [r['result'] for r in R]
     # Drop now-empty blobs.
     R = [r for r in R if r is not None and len(r)]
     if len(R) == 0:
@@ -1907,13 +1835,76 @@ def stage_fitblobs(T=None,
     rtn = dict([(k,L[k]) for k in keys])
     return rtn
 
+def _get_bailout_mask(blobs, skipblobs, targetwcs, W, H, brick, blobslices):
+    maxblob = blobs.max()
+    # mark all as bailed out...
+    bmap = np.ones(maxblob+2, bool)
+    # except no-blob
+    bmap[0] = False
+    # and blobs from the checkpoint file
+    for i in skipblobs:
+        bmap[i+1] = False
+    # and blobs that are completely outside the primary region of this brick.
+    U = find_unique_pixels(targetwcs, W, H, None,
+                           brick.ra1, brick.ra2, brick.dec1, brick.dec2)
+    for iblob in np.unique(blobs):
+        if iblob == -1:
+            continue
+        if iblob in skipblobs:
+            continue
+        bslc  = blobslices[iblob]
+        blobmask = (blobs[bslc] == iblob)
+        if np.all(U[bslc][blobmask] == False):
+            print('Blob', iblob, 'is completely outside the PRIMARY region')
+            bmap[iblob+1] = False
+    bailout_mask = bmap[blobs+1]
+    return bailout_mask
+
 def _write_checkpoint(R, checkpoint_filename):
-    from astrometry.util.file import pickle_to_file
+    from astrometry.util.file import pickle_to_file, trymakedirs
+    d = os.path.dirname(checkpoint_filename)
+    if len(d) and not os.path.exists(d):
+        trymakedirs(d)
     fn = checkpoint_filename + '.tmp'
     pickle_to_file(R, fn)
     os.rename(fn, checkpoint_filename)
     print('Wrote checkpoint to', checkpoint_filename)
 
+def _check_checkpoints(R, blobslices, brickname):
+    # Check that checkpointed blobids match our current set of blobs,
+    # based on blob bounding-box.  This can fail if the code changes
+    # between writing & reading the checkpoint, resulting in a
+    # different set of detected sources.
+    keepR = []
+    for ri in R:
+        brick = ri['brickname']
+        iblob = ri['iblob']
+        r = ri['result']
+
+        if brick != brickname:
+            print('Checkpoint brick mismatch:', brick, brickname)
+            continue
+        if r.iblob != iblob:
+            print('Checkpoint iblob mismatch:', r.iblob, iblob)
+            continue
+        if iblob >= len(blobslices):
+            print('Checkpointed iblob', iblob, 'is too large! (>= %i)' % len(blobslices))
+            continue
+        if len(r) == 0:
+            pass
+        else:
+            # expected bbox:
+            sy,sx = blobslices[iblob]
+            by0,by1,bx0,bx1 = sy.start, sy.stop, sx.start, sx.stop
+            # check bbox
+            rx0,ry0 = r.blob_x0[0], r.blob_y0[0]
+            rx1,ry1 = rx0 + r.blob_width[0], ry0 + r.blob_height[0]
+            if rx0 != bx0 or ry0 != by0 or rx1 != bx1 or ry1 != by1:
+                print('Checkpointed blob bbox', [rx0,rx1,ry0,ry1],
+                      'does not match expected', [bx0,bx1,by0,by1], 'for iblob', iblob)
+                continue
+        keepR.append(ri)
+    return keepR
 
 def _format_all_models(T, newcat, BB, bands, rex):
     from legacypipe.catalog import prepare_fits_catalog, fits_typemap
@@ -1988,7 +1979,7 @@ def _format_all_models(T, newcat, BB, bands, rex):
         TT.delete_column('rex_shapeExp_e2_ivar')
     return TT,hdr
 
-def _blob_iter(blobslices, blobsrcs, blobs, targetwcs, tims, cat, bands,
+def _blob_iter(brickname, blobslices, blobsrcs, blobs, targetwcs, tims, cat, bands,
                plots, ps, simul_opt, use_ceres, refmap,
                brick, rex,
                skipblobs=[], max_blobsize=None, custom_brick=False):
@@ -2035,7 +2026,7 @@ def _blob_iter(blobslices, blobsrcs, blobs, targetwcs, tims, cat, bands,
             # skip it!
             if np.all(U[bslc][blobmask] == False):
                 print('Blob', nblob+1, 'is completely outside the unique region of this brick -- skipping')
-                yield None
+                yield (brickname, iblob, None)
                 continue
 
         # find one pixel within the blob, for debugging purposes
@@ -2056,7 +2047,7 @@ def _blob_iter(blobslices, blobsrcs, blobs, targetwcs, tims, cat, bands,
 
         if max_blobsize is not None and npix > max_blobsize:
             print('Number of pixels in blob,', npix, ', exceeds max blobsize', max_blobsize)
-            yield None
+            yield (brickname, iblob, None)
             continue
 
         # Here we cut out subimages for the blob...
@@ -2093,22 +2084,23 @@ def _blob_iter(blobslices, blobsrcs, blobs, targetwcs, tims, cat, bands,
                                tim.band, tim.sig1, tim.modelMinval,
                                tim.imobj))
 
-        yield (nblob, iblob, Isrcs, targetwcs, bx0, by0, blobw, blobh,
+        yield (brickname, iblob,
+               (nblob, iblob, Isrcs, targetwcs, bx0, by0, blobw, blobh,
                blobmask, subtimargs, [cat[i] for i in Isrcs], bands, plots, ps,
-               simul_opt, use_ceres, rex, refmap[bslc])
+               simul_opt, use_ceres, rex, refmap[bslc]))
 
 def _bounce_one_blob(X):
     ''' This just wraps the one_blob function, for debugging &
     multiprocessing purposes.
     '''
     from legacypipe.oneblob import one_blob
+    (brickname, iblob, X) = X
     try:
-        return one_blob(X)
+        result = one_blob(X)
+        return dict(brickname=brickname, iblob=iblob, result=result)
     except:
         import traceback
-        print('Exception in one_blob:')
-        if X is not None:
-            print('(iblob = %i)' % (X[0]))
+        print('Exception in one_blob: brick %s, iblob %i' % (brickname, iblob))
         traceback.print_exc()
         raise
 
@@ -3023,7 +3015,7 @@ def run_brick(brick, survey, radec=None, pixscale=0.262,
               zoom=None,
               bands=None,
               allbands=None,
-              depth_cut=False,
+              depth_cut=None,
               nblobs=None, blob=None, blobxy=None, blobradec=None, blobid=None,
               max_blobsize=None,
               nsigma=6,
@@ -3581,8 +3573,8 @@ python -u legacypipe/runbrick.py --plots --brick 2440p070 --zoom 1900 2400 450 9
     parser.add_argument('--bands', default=None,
                         help='Set the list of bands (filters) that are included in processing: comma-separated list, default "g,r,z"')
 
-    parser.add_argument('--depth-cut', default=False, action='store_true',
-                        help='Cut to the set of CCDs required to reach our depth target')
+    parser.add_argument('--depth-cut', default=None, type=float,
+                        help='Margin in mags to use to cut to the set of CCDs required to reach our depth target + margin')
 
     parser.add_argument('--no-tycho', dest='tycho_stars', default=True,
                         action='store_false',

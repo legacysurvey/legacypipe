@@ -55,13 +55,15 @@ def queue():
 def run_one_brick(X):
     brick, ibrick, nbricks, plots, kwargs = X
 
+    outdir = kwargs.pop('outdir')
+
     survey = LegacySurveyData()
 
     print()
     print()
     print('Brick', (ibrick+1), 'of', nbricks, ':', brick.brickname)
 
-    dirnm = os.path.join('depthcuts', brick.brickname[:3])
+    dirnm = os.path.join(outdir, brick.brickname[:3])
     outfn = os.path.join(dirnm, 'ccds-%s.fits' % brick.brickname)
     if os.path.exists(outfn):
         print('Exists:', outfn)
@@ -169,12 +171,13 @@ if __name__ == '__main__':
     parser.add_argument('--plots', action='store_true', default=False)
     parser.add_argument('--threads', type=int, help='"qdo" mode: number of threads')
     parser.add_argument('--queue', help='"qdo" mode: queue to read', default='depth')
+    parser.add_argument('--outdir', default='depthcuts', help='Output directory')
     parser.add_argument('bricks', nargs='*')
     args = parser.parse_args()
     plots = args.plots
     bricks = args.bricks
 
-    kwargs = dict(get_depth_maps=args.depth_maps)
+    kwargs = dict(get_depth_maps=args.depth_maps, outdir=args.outdir)
     if args.margin is not None:
         kwargs.update(margin=args.margin)
 
@@ -232,7 +235,7 @@ if __name__ == '__main__':
 
             print('Checking for existing out file')
             # shortcut
-            dirnm = os.path.join('depthcuts', brickname[:3])
+            dirnm = os.path.join(args.outdir, brickname[:3])
             outfn = os.path.join(dirnm, 'ccds-%s.fits' % brickname)
             if os.path.exists(outfn):
                 print('Exists:', outfn)
