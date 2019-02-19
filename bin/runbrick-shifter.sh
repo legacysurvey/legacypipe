@@ -31,7 +31,8 @@ export OMP_NUM_THREADS=1
 export MPICH_GNI_FORK_MODE=FULLCOPY
 
 # Try limiting memory to avoid killing the whole MPI job...
-ncores=4
+#ncores=4
+ncores=32
 # Assume cori!
 # 128 GB / Cori Haswell node = 134217728 kbytes
 maxmem=134217728

@@ -928,7 +928,7 @@ class LegacySurveyImage(object):
                     if 'sig1' in Ti.get_columns():
                         sky.sig1 = Ti.sig1
                     if 'imgdsum' in Ti.get_columns():
-                        sky.datasum = Ti.datasum
+                        sky.datasum = Ti.imgdsum
                     return sky
             except:
                 import traceback
@@ -1024,7 +1024,7 @@ class LegacySurveyImage(object):
                     psf.version = Ti.legpipev.strip()
                     psf.plver = Ti.plver.strip()
                     if 'imgdsum' in Ti.get_columns():
-                        psf.datasum = Ti.datasum
+                        psf.datasum = Ti.imgdsum
                     psf.fwhm = Ti.psf_fwhm
             except:
                 import traceback
