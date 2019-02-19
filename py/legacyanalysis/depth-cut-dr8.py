@@ -71,6 +71,7 @@ T = merge_tables([
     fits_table('/global/cscratch1/sd/dstn/dr8new/survey-ccds-decam-z.kd.fits')
     ])
 print('Total of', len(T), 'CCDs')
+print(np.sum(T.ccd_cuts == 0), 'pass CCD cuts')
 
 print('Total of', len(passedccds), 'pass depth cut')
 
@@ -78,5 +79,6 @@ ccd_cuts = T.ccd_cuts
 for i,(expnum,ccdname) in enumerate(zip(T.expnum, T.ccdname)):
     if not (expnum,ccdname.strip()) in passedccds:
         ccd_cuts[i] |= 0x4000
+print(np.sum(T.ccd_cuts == 0), 'pass CCD cuts + depth cut')
 
 T.writeto('survey-ccds-depthcut.fits')

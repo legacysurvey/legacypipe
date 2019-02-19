@@ -18,7 +18,7 @@ def create_kdtree(infn, outfn, ccd_cuts):
 
     # startree
     sfn = '/tmp/startree.fits'
-    cmd = 'startree -i %s -o %s -P -T -k -n ccds' % (readfn, sfn)
+    cmd = 'startree -i %s -o %s -P -T -k -n ccds' % (tfn, sfn)
     print(cmd)
     rtn = os.system(cmd)
     assert(rtn == 0)
