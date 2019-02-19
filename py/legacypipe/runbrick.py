@@ -1632,8 +1632,6 @@ def stage_fitblobs(T=None,
             if np.all(U[bslc][blobmask] == False):
                 print('Blob', iblob, 'is completely outside the PRIMARY region')
                 bmap[iblob+1] = False
-
-        #bailout_mask = np.zeros((H,W), bool)
         bailout_mask = bmap[blobs+1]
         print('Bailout mask:', bailout_mask.dtype, bailout_mask.shape)
         # skip all blobs!
@@ -1663,19 +1661,7 @@ def stage_fitblobs(T=None,
     if checkpoint_filename is None:
         R = mp.map(_bounce_one_blob, blobiter)
     else:
-        from astrometry.util.file import pickle_to_file, trymakedirs
         from astrometry.util.ttime import CpuMeas
-
-        def _write_checkpoint(R, checkpoint_filename):
-            fn = checkpoint_filename + '.tmp'
-            #print('Writing checkpoint', fn)
-            pickle_to_file(R, fn)
-            os.rename(fn, checkpoint_filename)
-            print('Wrote checkpoint to', checkpoint_filename)
-
-        d = os.path.dirname(checkpoint_filename)
-        if len(d) and not os.path.exists(d):
-            trymakedirs(d)
 
         # Begin running one_blob on each blob...
         Riter = mp.imap_unordered(_bounce_one_blob, blobiter)
@@ -1869,6 +1855,16 @@ def stage_fitblobs(T=None,
     L = locals()
     rtn = dict([(k,L[k]) for k in keys])
     return rtn
+
+def _write_checkpoint(R, checkpoint_filename):
+    from astrometry.util.file import pickle_to_file, trymakedirs
+    d = os.path.dirname(checkpoint_filename)
+    if len(d) and not os.path.exists(d):
+        trymakedirs(d)
+    fn = checkpoint_filename + '.tmp'
+    pickle_to_file(R, fn)
+    os.rename(fn, checkpoint_filename)
+    print('Wrote checkpoint to', checkpoint_filename)
 
 def _check_checkpoints(R, blobslices):
     # Check that checkpointed blobids match our current set of blobs,
