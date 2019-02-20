@@ -1,12 +1,37 @@
-import zmq
-import pickle
-from legacypipe.oneblob import *
+import os
 import argparse
+import pickle
+import time
+
+import zmq
+
+from legacypipe.oneblob import *
 
 
 def run(server):
-    print('Connecting to', server)
 
+    cluster = os.environ.get('SLURM_CLUSTER_NAME', '')
+    jid = os.environ.get('SLURM_JOB_ID', '')
+    aid = os.environ.get('SLURM_ARRAY_TASK_ID', '')
+    ajid = os.environ.get('SLURM_ARRAY_JOB_ID', '')
+    nid = os.environ.get('SLURM_NODEID', '')
+    print('SLURM_CLUSTER_NAME', cluster)
+    print('SLURM_JOB_ID', jid)
+    print('SLURM_ARRAY_TASK_ID', aid)
+    print('SLURM_ARRAY_JOB_ID', ajid)
+    print('SLURM_NODEID', nid)
+
+    if len(cluster + jid + aid) == 0:
+        jobid = ''
+    else:
+        if len(aid):
+            jobid = '%s_%s_%s_%s' % (cluster, ajid, aid, nid)
+        else:
+            jobid = '%s_%s_%s' % (cluster, jid, nid)
+    jobid = jobid.encode()
+    print('Setting jobid', jobid)
+
+    print('Connecting to', server)
     ctx = zmq.Context()
     sock = ctx.socket(zmq.REQ)
     sock.connect(server)
@@ -15,14 +40,17 @@ def run(server):
     while True:
         msg = pickle.dumps(req, -1)
         print('Sending', len(msg))
-        sock.send(msg)
+        sock.send_multipart([jobid, msg])
         rep = sock.recv()
         print('Received reply:', len(rep), 'bytes')
         rep = pickle.loads(rep)
         #print('Reply:', rep)
         if rep is None:
             print('No work assigned!')
-            break
+            req = None
+            time.sleep(5)
+            continue
+            #break
 
         (brickname, iblob, args) = rep
 
