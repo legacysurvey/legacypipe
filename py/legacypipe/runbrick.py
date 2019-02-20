@@ -1884,25 +1884,29 @@ def _check_checkpoints(R, blobslices, brickname):
         if brick != brickname:
             print('Checkpoint brick mismatch:', brick, brickname)
             continue
-        if r.iblob != iblob:
-            print('Checkpoint iblob mismatch:', r.iblob, iblob)
-            continue
-        if iblob >= len(blobslices):
-            print('Checkpointed iblob', iblob, 'is too large! (>= %i)' % len(blobslices))
-            continue
-        if len(r) == 0:
+
+        if r is None:
             pass
         else:
-            # expected bbox:
-            sy,sx = blobslices[iblob]
-            by0,by1,bx0,bx1 = sy.start, sy.stop, sx.start, sx.stop
-            # check bbox
-            rx0,ry0 = r.blob_x0[0], r.blob_y0[0]
-            rx1,ry1 = rx0 + r.blob_width[0], ry0 + r.blob_height[0]
-            if rx0 != bx0 or ry0 != by0 or rx1 != bx1 or ry1 != by1:
-                print('Checkpointed blob bbox', [rx0,rx1,ry0,ry1],
-                      'does not match expected', [bx0,bx1,by0,by1], 'for iblob', iblob)
+            if r.iblob != iblob:
+                print('Checkpoint iblob mismatch:', r.iblob, iblob)
                 continue
+            if iblob >= len(blobslices):
+                print('Checkpointed iblob', iblob, 'is too large! (>= %i)' % len(blobslices))
+                continue
+            if len(r) == 0:
+                pass
+            else:
+                # expected bbox:
+                sy,sx = blobslices[iblob]
+                by0,by1,bx0,bx1 = sy.start, sy.stop, sx.start, sx.stop
+                # check bbox
+                rx0,ry0 = r.blob_x0[0], r.blob_y0[0]
+                rx1,ry1 = rx0 + r.blob_width[0], ry0 + r.blob_height[0]
+                if rx0 != bx0 or ry0 != by0 or rx1 != bx1 or ry1 != by1:
+                    print('Checkpointed blob bbox', [rx0,rx1,ry0,ry1],
+                          'does not match expected', [bx0,bx1,by0,by1], 'for iblob', iblob)
+                    continue
         keepR.append(ri)
     return keepR
 
