@@ -43,7 +43,8 @@ COPY pool.py /usr/lib/python3.6/multiprocessing/pool.py
 
 # Python related stuff
 RUN echo "../site-packages" > /usr/local/lib/python3.6/dist-packages/site-packages.pth
-#RUN pip3 install --upgrade pip && \
+
+# Pip installs
 RUN for x in \
     setuptools \
     wheel \
@@ -89,20 +90,20 @@ RUN cd /src/ \
 
 # Technically we could delete everything in /src at this point...
 
-# !!
+# python = python3
 RUN ln -s /usr/bin/python3 /usr/bin/python
 
 # Legacypipe
 RUN cd /src \
     && git clone http://github.com/legacysurvey/legacypipe.git legacypipe \
-    && echo
+    && echo 1
 
-RUN cd /src/legacypipe && git pull && echo xxxx
+# Legacyzpts
+RUN cd /src \
+    && git clone https://github.com/legacysurvey/legacyzpts.git \
+    && cd /src/legacypipe/py \
+    && ln -s /src/legacyzpts/py/legacyzpts .
 
-# Yeah no, this needs some work still
-#    && python3 setup.py install
+RUN pip3 install zmq
 
-# Demo
-#RUN cd /src/legacypipe/py \
-#    && export PYTHONPATH=${PYTHONPATH}:/usr/local/lib/python:. \
-#    && python3 test/runbrick_test.py travis
+#RUN cd /src/legacypipe && git pull && echo 1
