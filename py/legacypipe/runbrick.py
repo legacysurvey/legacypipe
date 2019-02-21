@@ -3461,7 +3461,7 @@ python -u legacypipe/runbrick.py --plots --brick 2440p070 --zoom 1900 2400 450 9
     parser.add_argument('-d', '--outdir', dest='output_dir',
                         help='Set output base directory, default "."')
 
-    parser.add_argument('--release', default=7999,
+    parser.add_argument('--release', default=7999, type=int,
                         help='Release code for output catalogs')
 
     parser.add_argument(
