@@ -345,7 +345,9 @@ def main(survey=None, opt=None):
                     np.clip(np.round(F.x).astype(int), 0, w-1)]
 
     program_name = sys.argv[0]
-    version_hdr = get_version_header(program_name, surveydir)
+    ## FIXME -- from catalog?
+    release = 0
+    version_hdr = get_version_header(program_name, surveydir, release)
     filename = getattr(ccd, 'image_filename')
     if filename is None:
         # HACK -- print only two directory names + filename of CPFILE.

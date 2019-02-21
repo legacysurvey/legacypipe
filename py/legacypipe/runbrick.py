@@ -78,6 +78,7 @@ def runbrick_global_init():
 def stage_tims(W=3600, H=3600, pixscale=0.262, brickname=None,
                survey=None,
                ra=None, dec=None,
+               release=None,
                plots=False, ps=None,
                target_extent=None, program_name='runbrick.py',
                bands=['g','r','z'],
@@ -166,7 +167,7 @@ def stage_tims(W=3600, H=3600, pixscale=0.262, brickname=None,
     gitver = get_git_version()
     print('Got git version:', Time()-t0)
 
-    version_header = get_version_header(program_name, survey.survey_dir,
+    version_header = get_version_header(program_name, survey.survey_dir, release,
                                         git_version=gitver)
 
     deps = get_dependency_versions(unwise_dir, unwise_tr_dir)
@@ -2747,6 +2748,7 @@ def stage_wise_forced(
 def stage_writecat(
     survey=None,
     version_header=None,
+    release=None,
     T=None,
     WISE=None,
     WISE_T=None,
@@ -2992,7 +2994,7 @@ def stage_writecat(
             T2.rename(c, c.lower())
     from legacypipe.format_catalog import format_catalog
     with survey.write_output('tractor', brick=brickname) as out:
-        format_catalog(T2, hdr, primhdr, allbands, None,
+        format_catalog(T2, hdr, primhdr, allbands, None, release,
                        write_kwargs=dict(fits_object=out.fits),
                        N_wise_epochs=11, motions=gaia_stars, gaia_tagalong=True)
 
@@ -3458,6 +3460,10 @@ python -u legacypipe/runbrick.py --plots --brick 2440p070 --zoom 1900 2400 450 9
 
     parser.add_argument('-d', '--outdir', dest='output_dir',
                         help='Set output base directory, default "."')
+
+    parser.add_argument('--release', default=7999,
+                        help='Release code for output catalogs')
+
     parser.add_argument(
         '--survey-dir', type=str, default=None,
         help='Override the $LEGACY_SURVEY_DIR environment variable')

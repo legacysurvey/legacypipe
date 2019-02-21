@@ -33,7 +33,7 @@ def main(args=None):
     T.writeto(opt.out)
     print('Wrote', opt.out)
 
-def format_catalog(T, hdr, primhdr, allbands, outfn,
+def format_catalog(T, hdr, primhdr, allbands, outfn, release,
                    in_flux_prefix='', flux_prefix='',
                    write_kwargs={}, N_wise_epochs=None,
                    motions=True, gaia_tagalong=False):
@@ -125,8 +125,7 @@ def format_catalog(T, hdr, primhdr, allbands, outfn,
             T.set(col, 10.**(-wise_ext[:,i] / 2.5))
             trans_cols_wise.append(col)
 
-    from legacypipe.survey import release_number
-    T.release = np.zeros(len(T), np.int16) + release_number
+    T.release = np.zeros(len(T), np.int16) + release
         
     # Column ordering...
     cols = ['release', 'brickid', 'brickname', 'objid', 'brick_primary', 

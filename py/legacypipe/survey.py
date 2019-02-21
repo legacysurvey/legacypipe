@@ -15,8 +15,6 @@ from tractor import PointSource, ParamList, ConstantFitsWcs
 
 from legacypipe.utils import EllipseWithPriors
 
-release_number = 7999
-
 # search order: $TMPDIR, $TEMP, $TMP, then /tmp, /var/tmp, /usr/tmp
 tempdir = tempfile.gettempdir()
 
@@ -375,7 +373,8 @@ def get_git_version(dir=None):
     version = version.strip()
     return version
 
-def get_version_header(program_name, survey_dir, git_version=None):
+def get_version_header(program_name, survey_dir, release, git_version=None):
+
     '''
     Creates a fitsio header describing a DECaLS data product.
     '''
@@ -411,7 +410,7 @@ def get_version_header(program_name, survey_dir, git_version=None):
                         comment='Survey name'))
     #hdr.add_record(dict(name='SURVEYID', value='DECam Legacy Survey (DECaLS)',
     #hdr.add_record(dict(name='SURVEYID', value='BASS MzLS',
-    hdr.add_record(dict(name='DRVERSIO', value=release_number,
+    hdr.add_record(dict(name='DRVERSIO', value=release,
                         comment='Survey data release number'))
     hdr.add_record(dict(name='OBSTYPE', value='object',
                         comment='Observation type'))

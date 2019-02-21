@@ -1159,7 +1159,7 @@ class LegacySurveyImage(object):
                                    (cmd,rtn))
 
     def run_sky(self, splinesky=False, git_version=None, ps=None, survey=None,
-                gaia=True):
+                gaia=True, release=0):
         from legacypipe.survey import get_version_header
         from scipy.ndimage.morphology import binary_dilation
         from astrometry.util.file import trymakedirs
@@ -1169,7 +1169,7 @@ class LegacySurveyImage(object):
         slc = self.get_good_image_slice(None)
         img = self.read_image(slice=slc)
         wt = self.read_invvar(slice=slc)
-        hdr = get_version_header(None, self.survey.get_survey_dir(),
+        hdr = get_version_header(None, self.survey.get_survey_dir(), release,
                                  git_version=git_version)
         primhdr = self.read_image_primary_header()
         plver = primhdr.get('PLVER', 'V0.0')
