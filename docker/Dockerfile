@@ -69,7 +69,7 @@ RUN mkdir -p /src \
     && make py \
     && make extra \
     && make install INSTALL_DIR=/usr/local \
-    && make clean
+    && make clean && echo up
 
 # The Tractor
 RUN cd /src \

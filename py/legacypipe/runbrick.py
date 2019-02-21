@@ -3019,6 +3019,7 @@ def stage_writecat(
 
 def run_brick(brick, survey, radec=None, pixscale=0.262,
               width=3600, height=3600,
+              release=None,
               zoom=None,
               bands=None,
               allbands=None,
@@ -3253,6 +3254,7 @@ def run_brick(brick, survey, radec=None, pixscale=0.262,
 
     kwargs.update(ps=ps, nsigma=nsigma,
                   gaussPsf=gaussPsf, pixPsf=pixPsf, hybridPsf=hybridPsf,
+                  release=release,
                   normalizePsf=normalizePsf,
                   apodize=apodize,
                   rgb_kwargs=rgb_kwargs,
