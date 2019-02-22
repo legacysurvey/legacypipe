@@ -904,14 +904,13 @@ class LegacySurveyImage(object):
 
         sky = None
         if splinesky:
-            mergedfn = getattr(self, 'merged_splineskyfn', None)
-            if mergedfn is not None and os.path.exists(mergedfn):
+            if self.merged_splineskyfn and os.path.exists(self.merged_splineskyfn):
                 sky = self.read_merged_splinesky_model(slc=slc)
                 if sky is not None:
                     return sky
 
             if not os.path.exists(self.splineskyfn):
-                if mergedfn is not None:
+                if self.merged_splineskyfn is not None:
                     print('ERROR: Splinesky: neither', mergedfn, 'nor', self.splineskyfn, 'found')
                 return None
 
@@ -991,7 +990,7 @@ class LegacySurveyImage(object):
             from tractor import GaussianMixturePSF
             v = psf_sigma**2
             psf = GaussianMixturePSF(1., 0., 0., v, v, 0.)
-            print('WARNING: using mock PSF:', psf)
+            debug('WARNING: using mock PSF:', psf)
             psf.version = '0'
             psf.plver = ''
             return psf
@@ -999,58 +998,22 @@ class LegacySurveyImage(object):
         # spatially varying pixelized PsfEx
         from tractor import PixelizedPsfEx, PsfExModel
         psf = None
-        if self.merged_psffn is not None and not os.path.exists(self.merged_psffn):
-            print('Merged PsfEx model does not exist:', self.merged_psffn)
-
-        if self.merged_psffn is not None and os.path.exists(self.merged_psffn):
-            try:
-                print('Reading merged PsfEx models from', self.merged_psffn)
-                T = fits_table(self.merged_psffn)
-                I, = np.nonzero((T.expnum == self.expnum) *
-                                np.array([c.strip() == self.ccdname
-                                          for c in T.ccdname]))
-                print('Found', len(I), 'matching CCDs')
-                if len(I) == 1:
-                    Ti = T[I[0]]
-                    # Remove any padding
-                    degree = Ti.poldeg1
-                    # number of terms in polynomial
-                    ne = (degree + 1) * (degree + 2) // 2
-                    Ti.psf_mask = Ti.psf_mask[:ne, :Ti.psfaxis1, :Ti.psfaxis2]
-                    # If degree 0, set polname* to avoid assertion error in tractor
-                    if degree == 0:
-                        Ti.polname1 = 'X_IMAGE'
-                        Ti.polname2 = 'Y_IMAGE'
-                        Ti.polgrp1 = 1
-                        Ti.polgrp2 = 1
-                        Ti.polngrp = 1
-
-                    psfex = PsfExModel(Ti=Ti)
-
-                    if normalizePsf:
-                        print('NORMALIZING PSF!')
-                        psf = NormalizedPixelizedPsfEx(None, psfex=psfex)
-                    else:
-                        psf = PixelizedPsfEx(None, psfex=psfex)
-
-                    psf.version = Ti.legpipev.strip()
-                    psf.plver = Ti.plver.strip()
-                    if 'imgdsum' in Ti.get_columns():
-                        psf.datasum = Ti.imgdsum
-                    psf.fwhm = Ti.psf_fwhm
-            except:
-                import traceback
-                traceback.print_exc()
+        if self.merged_psffn is not None:
+            if os.path.exists(self.merged_psffn):
+                psf = self.read_merged_psfex_model(normalizePsf=normalizePsf)
+            else:
+                if not os.path.exists(self.psffn):
+                    print('ERROR: PsfEx: neither', self.merged_psffn,
+                          'nor', self.psffn, 'exist')
+                    return None
 
         if psf is None:
-            print('Reading PsfEx model from', self.psffn)
-
+            debug('Reading PsfEx model from', self.psffn)
             if normalizePsf:
-                print('NORMALIZING PSF!')
+                debug('NORMALIZING PSF!')
                 psf = NormalizedPixelizedPsfEx(self.psffn)
             else:
                 psf = PixelizedPsfEx(self.psffn)
-
             hdr = fitsio.read_header(self.psffn)
             psf.version = hdr.get('LEGSURV', None)
             if psf.version is None:
@@ -1064,10 +1027,47 @@ class LegacySurveyImage(object):
         if hybridPsf:
             from tractor.psf import HybridPixelizedPSF
             psf = HybridPixelizedPSF(psf, cx=w/2., cy=h/2.)
-
-        print('Using PSF model', psf)
+        debug('Using PSF model', psf)
         return psf
 
+    def read_merged_psfex_model(self, normalizePsf=False):
+        debug('Reading merged PsfEx models from', self.merged_psffn)
+        T = fits_table(self.merged_psffn)
+        I, = np.nonzero((T.expnum == self.expnum) *
+                        np.array([c.strip() == self.ccdname
+                                  for c in T.ccdname]))
+        debug('Found', len(I), 'matching CCDs')
+        if len(I) != 1:
+            return None
+        Ti = T[I[0]]
+        # Remove any padding
+        degree = Ti.poldeg1
+        # number of terms in polynomial
+        ne = (degree + 1) * (degree + 2) // 2
+        Ti.psf_mask = Ti.psf_mask[:ne, :Ti.psfaxis1, :Ti.psfaxis2]
+        # If degree 0, set polname* to avoid assertion error in tractor
+        if degree == 0:
+            Ti.polname1 = 'X_IMAGE'
+            Ti.polname2 = 'Y_IMAGE'
+            Ti.polgrp1 = 1
+            Ti.polgrp2 = 1
+            Ti.polngrp = 1
+        psfex = PsfExModel(Ti=Ti)
+
+        if normalizePsf:
+            debug('Normalizing PSF')
+            psf = NormalizedPixelizedPsfEx(None, psfex=psfex)
+        else:
+            psf = PixelizedPsfEx(None, psfex=psfex)
+
+        psf.version = Ti.legpipev.strip()
+        psf.plver = Ti.plver.strip()
+        if 'imgdsum' in Ti.get_columns():
+            psf.datasum = Ti.imgdsum
+        psf.fwhm = Ti.psf_fwhm
+        return psf
+
+    
     ######## Calibration tasks ###########
 
 
