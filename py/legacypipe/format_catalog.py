@@ -4,6 +4,15 @@ import os
 
 import numpy as np
 
+import logging
+logger = logging.getLogger('legacypipe.format_catalog')
+def info(*args):
+    from legacypipe.utils import log_info
+    log_info(logger, args)
+def debug(*args):
+    from legacypipe.utils import log_debug
+    log_debug(logger, args)
+
 def main(args=None):
     import argparse
     parser = argparse.ArgumentParser()
@@ -45,7 +54,7 @@ def format_catalog(T, hdr, primhdr, allbands, outfn, release,
             break
         b = b.strip()
         bands.append(b)
-    print('Bands in this catalog:', bands)
+    debug('Bands in this catalog:', bands)
 
     has_wise =    'flux_w1'    in T.columns()
     has_wise_lc = 'lc_flux_w1' in T.columns()
@@ -98,7 +107,7 @@ def format_catalog(T, hdr, primhdr, allbands, outfn, release,
             T.set('%s%s_%s' % (flux_prefix, k, b), A[:,i])
 
     from tractor.sfd import SFDMap
-    print('Reading SFD maps...')
+    info('Reading SFD maps...')
     sfd = SFDMap()
     filts = ['%s %s' % ('DES', f) for f in allbands]
     wisebands = ['WISE W1', 'WISE W2', 'WISE W3', 'WISE W4']
@@ -236,8 +245,8 @@ def format_catalog(T, hdr, primhdr, allbands, outfn, release,
         'shapedev_e1', 'shapedev_e1_ivar',
         'shapedev_e2', 'shapedev_e2_ivar',])
 
-    print('Columns:', cols)
-    print('T columns:', T.columns())
+    debug('Columns:', cols)
+    debug('T columns:', T.columns())
     
     # match case to T.
     cc = T.get_columns()

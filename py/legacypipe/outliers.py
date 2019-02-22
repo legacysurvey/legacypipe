@@ -1,6 +1,15 @@
 import numpy as np
 import fitsio
 
+import logging
+logger = logging.getLogger('legacypipe.outliers')
+def info(*args):
+    from legacypipe.utils import log_info
+    log_info(logger, args)
+def debug(*args):
+    from legacypipe.utils import log_debug
+    log_debug(logger, args)
+
 def patch_from_coadd(coimgs, targetwcs, bands, tims, mp=None):
     from astrometry.util.resample import resample_with_wcs, OverlapError
 
@@ -48,13 +57,13 @@ def mask_outlier_pixels(survey, tims, bands, targetwcs, brickname, version_heade
         btims = [tim for tim in tims if tim.band == band]
         if len(btims) == 0:
             continue
-        print(len(btims), 'images for band', band)
+        debug(len(btims), 'images for band', band)
         sigs = np.array([tim.psf_sigma for tim in btims])
-        print('PSF sigmas:', sigs)
+        debug('PSF sigmas:', sigs)
         targetsig = max(sigs) + 0.5
         addsigs = np.sqrt(targetsig**2 - sigs**2)
-        print('Target sigma:', targetsig)
-        print('Blur sigmas:', addsigs)
+        debug('Target sigma:', targetsig)
+        debug('Blur sigmas:', addsigs)
         resams = []
         coimg = np.zeros((H,W), np.float32)
         cow   = np.zeros((H,W), np.float32)
@@ -233,12 +242,12 @@ def mask_outlier_pixels(survey, tims, bands, targetwcs, brickname, version_heade
             Ibad2, = np.nonzero(cold[mYi,mXi])
             # Zero out the invvar for the bad pixels
             if len(Ibad):
-                print('Masking', len(Ibad), 'positive outlier pixels and', len(Ibad2), 'negative outlier pixels')
+                info(tim, ': masking', len(Ibad), 'positive outlier pixels and', len(Ibad2), 'negative outlier pixels')
                 nz = np.sum(tim.getInvError() == 0)
                 tim.getInvError()[mYo[Ibad],mXo[Ibad]] = 0.
                 tim.getInvError()[mYo[Ibad2],mXo[Ibad2]] = 0.
                 nz2 = np.sum(tim.getInvError() == 0)
-                print('Masked', nz2-nz, 'outlier pixels')
+                debug('Masked', nz2-nz, 'outlier pixels')
                 # Also update DQ mask.
                 tim.dq[mYo[Ibad],mXo[Ibad]] |= CP_DQ_BITS['outlier']
                 tim.dq[mYo[Ibad2],mXo[Ibad2]] |= CP_DQ_BITS['outlier']

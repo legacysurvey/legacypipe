@@ -59,7 +59,7 @@ def debug(*args):
 
 def runbrick_global_init():
     from tractor.galaxy import disable_galaxy_cache
-    print('Starting process', os.getpid(), Time()-Time())
+    info('Starting process', os.getpid(), Time()-Time())
     disable_galaxy_cache()
 
 def stage_tims(W=3600, H=3600, pixscale=0.262, brickname=None,
@@ -118,14 +118,6 @@ def stage_tims(W=3600, H=3600, pixscale=0.262, brickname=None,
     record_event and record_event('stage_tims: starting')
 
     assert(survey is not None)
-
-    logger = logging.getLogger('runbrick.tims')
-    def info(*args):
-        from legacypipe.utils import log_info
-        log_info(logger, args)
-    def debug(*args):
-        from legacypipe.utils import log_debug
-        log_debug(logger, args)
 
     # Get brick object
     custom_brick = (ra is not None)
@@ -432,7 +424,7 @@ def make_depth_cut(survey, ccds, bands, targetrd, brick, W, H, pixscale,
             continue
         # Check whether this CCD overlaps the unique area of this brick...
         if not np.any(U[y0:y1+1, x0:x1+1]):
-            print('No overlap with unique area for CCD', ccd.expnum, ccd.ccdname)
+            info('No overlap with unique area for CCD', ccd.expnum, ccd.ccdname)
             slices.append(None)
             continue
         overlapping_ccds[i] = True
@@ -453,11 +445,11 @@ def make_depth_cut(survey, ccds, bands, targetrd, brick, W, H, pixscale,
         last_pcts = np.zeros_like(target_depths)
         # indices of CCDs we still want to look at in the current band
         b_inds = np.where(ccds.filter == band)[0]
-        print(len(b_inds), 'CCDs in', band, 'band')
+        info(len(b_inds), 'CCDs in', band, 'band')
         if len(b_inds) == 0:
             continue
         b_inds = np.array([i for i in b_inds if slices[i] is not None])
-        print(len(b_inds), 'CCDs in', band, 'band overlap target')
+        info(len(b_inds), 'CCDs in', band, 'band overlap target')
         if len(b_inds) == 0:
             continue
         # CCDs that we will try before searching for good ones -- CCDs
@@ -469,7 +461,7 @@ def make_depth_cut(survey, ccds, bands, targetrd, brick, W, H, pixscale,
         Idecals = np.where(ccds.propid[b_inds] == '2014B-0404')[0]
         if len(Idecals):
             try_ccds.update(b_inds[Idecals])
-        print('Added', len(try_ccds), 'DECaLS CCDs to try-list')
+        debug('Added', len(try_ccds), 'DECaLS CCDs to try-list')
 
         plot_vals = []
 
@@ -524,7 +516,7 @@ def make_depth_cut(survey, ccds, bands, targetrd, brick, W, H, pixscale,
                 depthvalue[:,:] = 0.
                 active = (last_pcts < target_depths)
                 for d,pct in zip(target_depths[active], last_pcts[active]):
-                    #print('target percentile depth', d, 'has depth', pct)
+                    #debug('target percentile depth', d, 'has depth', pct)
                     depthvalue += U * np.maximum(0, d - depthmap)
                 ccdvalue = np.zeros(len(b_inds), np.float32)
                 for j,i in enumerate(b_inds):
@@ -538,21 +530,21 @@ def make_depth_cut(survey, ccds, bands, targetrd, brick, W, H, pixscale,
                 # *iccd* is an index into ccds.
                 iccd = b_inds[ibest]
                 ccd = ccds[iccd]
-                print('Chose best CCD: seeing', seeing[iccd], 'exptime', ccds.exptime[iccd], 'with value', ccdvalue[ibest])
+                debug('Chose best CCD: seeing', seeing[iccd], 'exptime', ccds.exptime[iccd], 'with value', ccdvalue[ibest])
 
             else:
                 iccd = try_ccds.pop()
                 ccd = ccds[iccd]
-                print('Popping CCD from use_ccds list')
+                debug('Popping CCD from use_ccds list')
 
             # remove *iccd* from b_inds
             b_inds = b_inds[b_inds != iccd]
 
             im = survey.get_image_object(ccd)
-            print('Band', im.band, 'expnum', im.expnum, 'exptime', im.exptime, 'seeing', im.fwhm*im.pixscale, 'arcsec, propid', im.propid)
+            debug('Band', im.band, 'expnum', im.expnum, 'exptime', im.exptime, 'seeing', im.fwhm*im.pixscale, 'arcsec, propid', im.propid)
 
             im.check_for_cached_files(survey)
-            print(im)
+            debug(im)
 
             if do_calibs:
                 kwa = dict(git_version=gitver)
@@ -563,15 +555,15 @@ def make_depth_cut(survey, ccds, bands, targetrd, brick, W, H, pixscale,
                 im.run_calibs(**kwa)
 
             if use_approx_wcs:
-                print('Using approximate (TAN) WCS')
+                debug('Using approximate (TAN) WCS')
                 wcs = survey.get_approx_wcs(ccd)
             else:
-                print('Reading WCS from', im.imgfn, 'HDU', im.hdu)
+                debug('Reading WCS from', im.imgfn, 'HDU', im.hdu)
                 wcs = im.get_wcs()
 
             x0,x1,y0,y1,slc = im.get_image_extent(wcs=wcs, radecpoly=targetrd)
             if x0==x1 or y0==y1:
-                print('No actual overlap')
+                debug('No actual overlap')
                 continue
             wcs = wcs.get_subimage(int(x0), int(y0), int(x1-x0), int(y1-y0))
 
@@ -579,7 +571,7 @@ def make_depth_cut(survey, ccds, bands, targetrd, brick, W, H, pixscale,
 
             if 'galnorm_mean' in ccds.get_columns():
                 galnorm = ccd.galnorm_mean
-                print('Using galnorm_mean from CCDs table:', galnorm)
+                debug('Using galnorm_mean from CCDs table:', galnorm)
             else:
                 psf = im.read_psf_model(x0, y0, gaussPsf=gaussPsf, pixPsf=pixPsf,
                                         normalizePsf=normalizePsf)
@@ -599,17 +591,17 @@ def make_depth_cut(survey, ccds, bands, targetrd, brick, W, H, pixscale,
                 galmod /= galmod.sum()
                 galnorm = np.sqrt(np.sum(galmod**2))
             detiv = 1. / (skysig1 / galnorm)**2
-            print('Galnorm:', galnorm, 'skysig1:', skysig1)
+            debug('Galnorm:', galnorm, 'skysig1:', skysig1)
             galdepth = -2.5 * (np.log10(5. * skysig1 / galnorm) - 9.)
-            print('Galdepth for this CCD:', galdepth)
+            debug('Galdepth for this CCD:', galdepth)
 
             # Add this image the the depth map...
             from astrometry.util.resample import resample_with_wcs, OverlapError
             try:
                 Yo,Xo,Yi,Xi,nil = resample_with_wcs(coarsewcs, wcs)
-                print(len(Yo), 'of', (cW*cH), 'pixels covered by this image')
+                debug(len(Yo), 'of', (cW*cH), 'pixels covered by this image')
             except OverlapError:
-                print('No overlap')
+                debug('No overlap')
                 continue
             depthiv[Yo,Xo] += detiv
 
@@ -619,7 +611,7 @@ def make_depth_cut(survey, ccds, bands, targetrd, brick, W, H, pixscale,
             depthpcts = np.percentile(depthmap[U], target_percentiles)
 
             for i,(p,d,t) in enumerate(zip(target_percentiles, depthpcts, target_depths)):
-                print('  pct % 3i, prev %5.2f -> %5.2f vs target %5.2f %s' % (p, last_pcts[i], d, t, ('ok' if d >= t else '')))
+                info('  pct % 3i, prev %5.2f -> %5.2f vs target %5.2f %s' % (p, last_pcts[i], d, t, ('ok' if d >= t else '')))
 
             keep = False
             # Did we increase the depth of any target percentile that did not already exceed its target depth?
@@ -630,7 +622,7 @@ def make_depth_cut(survey, ccds, bands, targetrd, brick, W, H, pixscale,
             # (before making the plot)
             I = np.where(ccd.expnum == ccds.expnum[b_inds])[0]
             try_ccds.update(b_inds[I])
-            print('Adding', len(I), 'CCDs with the same expnum to try_ccds list')
+            debug('Adding', len(I), 'CCDs with the same expnum to try_ccds list')
 
             if plots:
                 cc = '1' if keep else '0'
@@ -685,9 +677,9 @@ def make_depth_cut(survey, ccds, bands, targetrd, brick, W, H, pixscale,
                 ps.savefig()
 
             if keep:
-                print('Keeping this exposure')
+                info('Keeping this exposure')
             else:
-                print('Not keeping this exposure')
+                info('Not keeping this exposure')
                 depthiv[Yo,Xo] -= detiv
                 continue
 
@@ -695,7 +687,7 @@ def make_depth_cut(survey, ccds, bands, targetrd, brick, W, H, pixscale,
             last_pcts = depthpcts
 
             if np.all(depthpcts >= target_depths):
-                print('Reached all target depth percentiles for band', band)
+                info('Reached all target depth percentiles for band', band)
                 break
 
         if get_depth_maps:
@@ -764,17 +756,17 @@ def stage_mask_junk(tims=None, targetwcs=None, W=None, H=None, bands=None,
         # Read it!
         mask,hdr = fitsio.read(maskfn, header=True)
         if mask.shape != tim.shape:
-            print('Outlier mask', maskfn, 'does not match shape of tim', tim)
+            print('Warning: Outlier mask', maskfn, 'does not match shape of tim', tim)
             tims_todo.append(tim)
             continue
         x0 = hdr['X0']
         y0 = hdr['Y0']
         if x0 != tim.x0 or y0 != tim.y0:
-            print('Outlier mask', maskfn, 'x0,y0 does not match that of tim', tim)
+            print('Warning: Outlier mask', maskfn, 'x0,y0 does not match that of tim', tim)
             tims_todo.append(tim)
             continue
 
-        print('Reading from', maskfn)
+        debug('Reading from', maskfn)
         # Apply this mask!
         tim.dq |= mask * CP_DQ_BITS['outlier']
         tim.getInvError()[mask] = 0.
@@ -874,7 +866,7 @@ def stage_image_coadds(survey=None, targetwcs=None, bands=None, tims=None,
 
         with survey.write_output(name + '-jpeg', brick=brickname) as out:
             imsave_jpeg(out.fn, rgb, origin='lower', **kwa)
-            print('Wrote', out.fn)
+            debug('Wrote', out.fn)
 
         # Blob-outlined version
         if blobs is not None:
@@ -892,7 +884,7 @@ def stage_image_coadds(survey=None, targetwcs=None, bands=None, tims=None,
 
             with survey.write_output(name+'blob-jpeg', brick=brickname) as out:
                 imsave_jpeg(out.fn, rgb, origin='lower', **kwa)
-                print('Wrote', out.fn)
+                debug('Wrote', out.fn)
 
             # write out blob map
             if write_metrics:
@@ -998,7 +990,7 @@ def stage_srcs(targetrd=None, pixscale=None, targetwcs=None,
                                np.logical_not(refstars.iscluster) *
                                (gaia.G < 15.))
         Igaia = Igaia[np.argsort(gaia.G[Igaia])]
-        print(len(Igaia), 'stars with G<15')
+        debug(len(Igaia), 'stars with G<15')
 
         # gaia = refstars[np.logical_or(refstars.isbright, refstars.ismedium) *
         #                 np.logical_not(refstars.iscluster)]
@@ -1007,7 +999,7 @@ def stage_srcs(targetrd=None, pixscale=None, targetwcs=None,
         #     Igaia = Igaia[gaia.G[Igaia] < 15.]
     if len(Igaia):
         from legacypipe.halos import fit_halos
-        print('Subtracting stellar halos...')
+        debug('Subtracting stellar halos...')
         # FIXME -- again...?
         coimgs,cons = quick_coadds(tims, bands, targetwcs)
 
@@ -1061,11 +1053,11 @@ def stage_srcs(targetrd=None, pixscale=None, targetwcs=None,
     record_event and record_event('stage_srcs: detection maps')
 
     tnow = Time()
-    print('Rendering detection maps...')
+    info('Rendering detection maps...')
     detmaps, detivs, satmaps = detection_maps(tims, targetwcs, bands, mp,
                                               apodize=10)
     tnow = Time()
-    print('[parallel srcs] Detmaps:', tnow-tlast)
+    debug('[parallel srcs] Detmaps:', tnow-tlast)
     tlast = tnow
     record_event and record_event('stage_srcs: sources')
 
@@ -1100,7 +1092,7 @@ def stage_srcs(targetrd=None, pixscale=None, targetwcs=None,
         sat.ibx = np.array([x for y,x in satyx]).astype(int)
         sat.iby = np.array([y for y,x in satyx]).astype(int)
         sat.ra,sat.dec = targetwcs.pixelxy2radec(sat.ibx+1, sat.iby+1)
-        print('Adding', len(sat), 'additional saturated stars')
+        debug('Adding', len(sat), 'additional saturated stars')
         # MAGIC mag for a saturated star
         sat.mag = np.zeros(len(sat), np.float32) + 15.
         sat.ref_cat = np.array(['  '] * len(sat))
@@ -1185,7 +1177,7 @@ def stage_srcs(targetrd=None, pixscale=None, targetwcs=None,
 
     # SED-matched detections
     record_event and record_event('stage_srcs: SED-matched')
-    print('Running source detection at', nsigma, 'sigma')
+    info('Running source detection at', nsigma, 'sigma')
     SEDs = survey.sed_matched_filters(bands)
 
     # Add a ~1" exclusion zone around reference, saturated stars, and large
@@ -1221,7 +1213,7 @@ def stage_srcs(targetrd=None, pixscale=None, targetwcs=None,
     assert(len(cat) == len(T))
     
     tnow = Time()
-    print('[serial srcs] Peaks:', tnow-tlast)
+    debug('[serial srcs] Peaks:', tnow-tlast)
     tlast = tnow
 
     if plots:
@@ -1274,7 +1266,7 @@ def stage_srcs(targetrd=None, pixscale=None, targetwcs=None,
     del hot
 
     tnow = Time()
-    print('[serial srcs] Blobs:', tnow-tlast)
+    debug('[serial srcs] Blobs:', tnow-tlast)
     tlast = tnow
 
     keys = ['T', 'tims', 'blobsrcs', 'blobslices', 'blobs', 'cat',
@@ -1388,7 +1380,7 @@ def stage_fitblobs(T=None,
     T.orig_dec = T.dec.copy()
 
     tnow = Time()
-    print('[serial fitblobs]:', tnow-tlast)
+    debug('[serial fitblobs]:', tnow-tlast)
     tlast = tnow
 
     # Were we asked to only run a subset of blobs?
@@ -1400,7 +1392,6 @@ def stage_fitblobs(T=None,
         x = (x - 1).astype(int)
         y = (y - 1).astype(int)
         blobxy = list(zip(x, y))
-        print('Blobradec -> blobxy:', len(blobxy), 'points')
 
     if blobxy is not None:
         # blobxy is a list like [(x0,y0), (x1,y1), ...]
@@ -1471,19 +1462,18 @@ def stage_fitblobs(T=None,
     # Check for existing checkpoint file.
     if checkpoint_filename and os.path.exists(checkpoint_filename):
         from astrometry.util.file import unpickle_from_file
-        print('Reading', checkpoint_filename)
+        info('Reading', checkpoint_filename)
         try:
             R = unpickle_from_file(checkpoint_filename)
-            print('Read', len(R), 'results from checkpoint file', checkpoint_filename)
+            debug('Read', len(R), 'results from checkpoint file', checkpoint_filename)
         except:
             import traceback
             print('Failed to read checkpoint file ' + checkpoint_filename)
             traceback.print_exc()
         keepR = _check_checkpoints(R, blobslices, brickname)
-        print('Keeping', len(keepR), 'of', len(R), 'checkpointed results (consistency)')
+        info('Keeping', len(keepR), 'of', len(R), 'checkpointed results')
         R = keepR
         skipblobs = [r['iblob'] for r in R]
-        print('Skipping', len(skipblobs), 'blobs from checkpoint file')
 
     bailout_mask = None
     if bailout:
@@ -1530,7 +1520,7 @@ def stage_fitblobs(T=None,
             dt = tnow.wall_seconds_since(last_checkpoint)
             if dt >= checkpoint_period and n_finished > 0:
                 # Write checkpoint!
-                print('Writing', n_finished, 'new results; total for this run', n_finished_total)
+                debug('Writing', n_finished, 'new results; total for this run', n_finished_total)
                 try:
                     _write_checkpoint(R, checkpoint_filename)
                     last_checkpoint = tnow
@@ -1551,7 +1541,7 @@ def stage_fitblobs(T=None,
                 n_finished += 1
                 n_finished_total += 1
             except StopIteration:
-                print('Done')
+                debug('Done')
                 break
             except multiprocessing.TimeoutError:
                 # print('Timed out waiting for result')
@@ -1560,9 +1550,9 @@ def stage_fitblobs(T=None,
         # Write checkpoint when done!
         _write_checkpoint(R, checkpoint_filename)
 
-        print('Got', n_finished_total, 'results; wrote', len(R), 'to checkpoint')
+        debug('Got', n_finished_total, 'results; wrote', len(R), 'to checkpoint')
             
-    print('[parallel fitblobs] Fitting sources took:', Time()-tlast)
+    debug('[parallel fitblobs] Fitting sources took:', Time()-tlast)
 
     # Repackage the results from one_blob...
 
@@ -1593,15 +1583,15 @@ def stage_fitblobs(T=None,
                                np.logical_not(BB.finished_in_blob))
     I, = np.nonzero(np.logical_not(left_blob))
     if len(I) < len(BB):
-        print('Dropping', len(BB)-len(I), 'sources that exited their blobs during fitting')
+        debug('Dropping', len(BB)-len(I), 'sources that exited their blobs during fitting')
     BB.cut(I)
     T.cut(I)
     newcat = [newcat[i] for i in I]
     assert(len(T) == len(BB))
 
     assert(len(T) == len(newcat))
-    print('Old catalog:', len(cat))
-    print('New catalog:', len(newcat))
+    info('Old catalog:', len(cat))
+    info('New catalog:', len(newcat))
     assert(len(newcat) > 0)
     cat = Catalog(*newcat)
     ns,nb = BB.fracflux.shape
@@ -1732,7 +1722,7 @@ def _get_bailout_mask(blobs, skipblobs, targetwcs, W, H, brick, blobslices):
         bslc  = blobslices[iblob]
         blobmask = (blobs[bslc] == iblob)
         if np.all(U[bslc][blobmask] == False):
-            print('Blob', iblob, 'is completely outside the PRIMARY region')
+            debug('Blob', iblob, 'is completely outside the PRIMARY region')
             bmap[iblob+1] = False
     bailout_mask = bmap[blobs+1]
     return bailout_mask
@@ -1745,7 +1735,7 @@ def _write_checkpoint(R, checkpoint_filename):
     fn = checkpoint_filename + '.tmp'
     pickle_to_file(R, fn)
     os.rename(fn, checkpoint_filename)
-    print('Wrote checkpoint to', checkpoint_filename)
+    debug('Wrote checkpoint to', checkpoint_filename)
 
 def _check_checkpoints(R, blobslices, brickname):
     # Check that checkpointed blobids match our current set of blobs,
@@ -1883,7 +1873,7 @@ def _blob_iter(brickname, blobslices, blobsrcs, blobs, targetwcs, tims, cat, ban
 
     for nblob,iblob in enumerate(blob_order):
         if iblob in skipblobs:
-            print('Skipping blob', iblob)
+            info('Skipping blob', iblob)
             continue
 
         bslc  = blobslices[iblob]
@@ -1906,7 +1896,7 @@ def _blob_iter(brickname, blobslices, blobsrcs, blobs, targetwcs, tims, cat, ban
             # If the blob is solely outside the unique region of this brick,
             # skip it!
             if np.all(U[bslc][blobmask] == False):
-                print('Blob', nblob+1, 'is completely outside the unique region of this brick -- skipping')
+                info('Blob', nblob+1, 'is completely outside the unique region of this brick -- skipping')
                 yield (brickname, iblob, None)
                 continue
 
@@ -1921,13 +1911,13 @@ def _blob_iter(brickname, blobslices, blobsrcs, blobs, targetwcs, tims, cat, ban
             break
 
         npix = np.sum(blobmask)
-        print(('Blob %i of %i, id: %i, sources: %i, size: %ix%i, npix %i, brick X: %i,%i, ' +
+        info(('Blob %i of %i, id: %i, sources: %i, size: %ix%i, npix %i, brick X: %i,%i, ' +
                'Y: %i,%i, one pixel: %i %i') %
               (nblob+1, len(blobslices), iblob, len(Isrcs), blobw, blobh, npix,
                bx0,bx1,by0,by1, onex,oney))
 
         if max_blobsize is not None and npix > max_blobsize:
-            print('Number of pixels in blob,', npix, ', exceeds max blobsize', max_blobsize)
+            info('Number of pixels in blob,', npix, ', exceeds max blobsize', max_blobsize)
             yield (brickname, iblob, None)
             continue
 
@@ -1993,24 +1983,13 @@ def _get_mod(X):
     tractor = Tractor([tim], srcs)
 
     if hasattr(tim, 'modelMinval'):
-        print('tim modelMinval', tim.modelMinval)
+        debug('tim modelMinval', tim.modelMinval)
         minval = tim.modelMinval
     else:
         # this doesn't really help when using pixelized PSFs / FFTs
         tim.modelMinval = minval = tim.sig * 0.1
-
-    #for src in srcs:
-    #    from tractor.galaxy import ProfileGalaxy
-    #    if not isinstance(src, ProfileGalaxy):
-    #        continue
-    #    px,py = tim.wcs.positionToPixel(src.getPosition())
-    #    h = src._getUnitFluxPatchSize(tim, px, py, minval)
-    #    if h > 512:
-    #        print('halfsize', h, 'for', src)
-    #        src.halfsize = 512
-
     mod = tractor.getModelImage(0)
-    print('Getting model for', tim, ':', Time()-t0)
+    debug('Getting model for', tim, ':', Time()-t0)
     return mod
 
 def stage_coadds(survey=None, bands=None, version_header=None, targetwcs=None,
@@ -2045,14 +2024,14 @@ def stage_coadds(survey=None, bands=None, version_header=None, targetwcs=None,
         ccds.writeto(None, fits_object=out.fits, primheader=primhdr)
 
     tnow = Time()
-    print('[serial coadds]:', tnow-tlast)
+    debug('[serial coadds]:', tnow-tlast)
     tlast = tnow
     # Render model images...
     record_event and record_event('stage_coadds: model images')
     mods = mp.map(_get_mod, [(tim, cat) for tim in tims])
 
     tnow = Time()
-    print('[parallel coadds] Getting model images:', tnow-tlast)
+    debug('[parallel coadds] Getting model images:', tnow-tlast)
     tlast = tnow
 
     # Compute source pixel positions
@@ -2126,7 +2105,7 @@ def stage_coadds(survey=None, bands=None, version_header=None, targetwcs=None,
 
         with survey.write_output(name + '-jpeg', brick=brickname) as out:
             imsave_jpeg(out.fn, rgb, origin='lower', **kwa)
-            print('Wrote', out.fn)
+            info('Wrote', out.fn)
         del rgb
 
     # Construct a mask bits map
@@ -2269,7 +2248,7 @@ def stage_coadds(survey=None, bands=None, version_header=None, targetwcs=None,
         ps.savefig()
 
     tnow = Time()
-    print('[serial coadds] Aperture photometry, wrap-up', tnow-tlast)
+    debug('[serial coadds] Aperture photometry, wrap-up', tnow-tlast)
     return dict(T=T, AP=C.AP, apertures_pix=apertures,
                 apertures_arcsec=apertures_arcsec,
                 maskbits=maskbits,
@@ -2386,12 +2365,12 @@ def _depth_histogram(brick, targetwcs, bands, detivs, galdetivs):
     # Compute the brick's unique pixels.
     U = None
     if hasattr(brick, 'ra1'):
-        print('Computing unique brick pixels...')
+        debug('Computing unique brick pixels...')
         H,W = targetwcs.shape
         U = find_unique_pixels(targetwcs, W, H, None,
                                brick.ra1, brick.ra2, brick.dec1, brick.dec2)
         U = np.flatnonzero(U)
-        print(len(U), 'of', W*H, 'pixels are unique to this brick')
+        debug(len(U), 'of', W*H, 'pixels are unique to this brick')
 
     # depth histogram bins
     depthbins = np.arange(20, 25.001, 0.1)
@@ -2413,7 +2392,7 @@ def _depth_histogram(brick, targetwcs, bands, detivs, galdetivs):
             if U is not None:
                 depth = depth.flat[U]
             if len(depth):
-                print(band, name, 'band depth map: percentiles',
+                debug(band, name, 'band depth map: percentiles',
                       np.percentile(depth, np.arange(0,101, 10)))
             # histogram
             D.set('counts_%s_%s' % (name, band),
@@ -2446,7 +2425,6 @@ def stage_wise_forced(
     '''
     from legacypipe.unwise import unwise_phot, collapse_unwise_bitmask, unwise_tiles_touching_wcs
     from tractor import NanoMaggies
-    print('unWISE coadds:', unwise_coadds)
 
     record_event and record_event('stage_wise_forced: starting')
 
@@ -2454,7 +2432,7 @@ def stage_wise_forced(
         ps = None
 
     tiles = unwise_tiles_touching_wcs(targetwcs)
-    print('Cut to', len(tiles), 'unWISE tiles')
+    info('Cut to', len(tiles), 'unWISE tiles')
 
     # the way the roiradec box is used, the min/max order doesn't matter
     roiradec = [targetrd[0,0], targetrd[2,0], targetrd[0,1], targetrd[2,1]]
@@ -2491,9 +2469,9 @@ def stage_wise_forced(
     if unwise_tr_dir is not None:
         tdir = unwise_tr_dir
         TR = fits_table(os.path.join(tdir, 'time_resolved_atlas.fits'))
-        print('Read', len(TR), 'time-resolved WISE coadd tiles')
+        debug('Read', len(TR), 'time-resolved WISE coadd tiles')
         TR.cut(np.array([t in tiles.coadd_id for t in TR.coadd_id]))
-        print('Cut to', len(TR), 'time-resolved vs', len(tiles), 'full-depth')
+        debug('Cut to', len(TR), 'time-resolved vs', len(tiles), 'full-depth')
         assert(len(TR) == len(tiles))
         # Ugly -- we need to look up the "{ra,dec}[12]" fields from the non-TR
         # table to support unique areas of tiles.
@@ -2502,13 +2480,13 @@ def stage_wise_forced(
         for c in ['ra1','ra2','dec1','dec2', 'crpix_w1', 'crpix_w2']:
             TR.set(c, tiles.get(c)[I])
         # How big do we need to make the WISE time-resolved arrays?
-        print('TR epoch_bitmask:', TR.epoch_bitmask)
+        debug('TR epoch_bitmask:', TR.epoch_bitmask)
         # axis= arg to np.count_nonzero is new in numpy 1.12
         Nepochs = max(np.atleast_1d([np.count_nonzero(e)
                                      for e in TR.epoch_bitmask]))
         nil,ne = TR.epoch_bitmask.shape
-        print('Max number of epochs for these tiles:', Nepochs)
-        print('epoch bitmask length:', ne)
+        info('Max number of time-resolved unWISE epochs for these tiles:', Nepochs)
+        debug('epoch bitmask length:', ne)
         # Add time-resolved coadds
         for band in [1,2]:
             # W1 is bit 0 (value 0x1), W2 is bit 1 (value 0x2)
@@ -2531,7 +2509,7 @@ def stage_wise_forced(
                 I = np.flatnonzero(epochs[:,ie] >= 0)
                 if len(I) == 0:
                     continue
-                print('Epoch index %i: %i tiles:' % (ie, len(I)), TR.coadd_id[I],
+                debug('Epoch index %i: %i tiles:' % (ie, len(I)), TR.coadd_id[I],
                       'epoch numbers', epochs[I,ie])
                 eptiles = TR[I]
                 eptiles.unwise_dir = np.array([os.path.join(tdir, 'e%03i'%ep)
@@ -2600,13 +2578,13 @@ def stage_wise_forced(
         WISE_T = fits_table()
         phots = phots[len(args):]
         for (ie,a),r in zip(eargs, phots):
-            print('Epoch', ie, 'photometry:')
+            debug('Epoch', ie, 'photometry:')
             if r is None:
-                print('Failed.')
+                debug('Failed.')
                 continue
             assert(ie < Nepochs)
             phot = r.phot
-            phot.about()
+            #phot.about()
             phot.delete_column('wise_coadd_id')
             for c in phot.columns():
                 if not c in WISE_T.columns():
@@ -2615,8 +2593,8 @@ def stage_wise_forced(
                 X = WISE_T.get(c)
                 X[:,ie] = phot.get(c)
 
-    print('Returning: WISE', WISE)
-    print('Returning: WISE_T', WISE_T)
+    debug('Returning: WISE', WISE)
+    debug('Returning: WISE_T', WISE_T)
 
     return dict(WISE=WISE, WISE_T=WISE_T, wise_mask_maps=wise_mask_maps)
 
@@ -2726,8 +2704,8 @@ def stage_writecat(
     for k in ['ibx','iby']:
         TT.delete_column(k)
 
-    print('Catalog table contents:')
-    TT.about()
+    #print('Catalog table contents:')
+    #TT.about()
 
     assert(AP is not None)
     # How many apertures?
@@ -2762,8 +2740,8 @@ def stage_writecat(
             T2.ra_ivar [I] = T.ra_ivar[I]
             T2.dec_ivar[I] = T.dec_ivar[I]
 
-    print('T2:')
-    T2.about()
+    # print('T2:')
+    # T2.about()
 
     primhdr = fitsio.FITSHDR()
     for r in version_header.records():
@@ -2855,7 +2833,7 @@ def stage_writecat(
                              ('w%i_mjd',         'lc_mjd_w%i'),]:
                 for band in [1,2]:
                     T2.set(cout % band, WISE_T.get(cin % band))
-            print('WISE light-curve shapes:', WISE_T.w1_nanomaggies.shape)
+            # print('WISE light-curve shapes:', WISE_T.w1_nanomaggies.shape)
 
     with survey.write_output('tractor-intermediate', brick=brickname) as out:
         T2.writeto(None, fits_object=out.fits, primheader=primhdr, header=hdr)
@@ -3095,7 +3073,6 @@ def run_brick(brick, survey, radec=None, pixscale=0.262,
         kwargs.update(allbands=allbands)
 
     if radec is not None:
-        print('RA,Dec:', radec)
         assert(len(radec) == 2)
         ra,dec = radec
         try:
@@ -3108,7 +3085,7 @@ def run_brick(brick, survey, radec=None, pixscale=0.262,
         except:
             from astrometry.util.starutil_numpy import dmsstring2dec
             dec = dmsstring2dec(dec)
-        print('Parsed RA,Dec', ra,dec)
+        info('Parsed RA,Dec', ra,dec)
         initargs.update(ra=ra, dec=dec)
         if brick is None:
             brick = ('custom-%06i%s%05i' %
@@ -3261,8 +3238,7 @@ def run_brick(brick, survey, radec=None, pixscale=0.262,
         flush()
         if mp is not None and threads is not None and threads > 1:
             mp.map(flush, [[]] * threads)
-        print('Resources for stage', stage, ':')
-        print(StageTime()-staget0)
+        info('Resources for stage', stage, ':', StageTime()-staget0)
         return R
 
     t0 = StageTime()
@@ -3271,7 +3247,7 @@ def run_brick(brick, survey, radec=None, pixscale=0.262,
         R = runstage(stage, pickle_pat, mystagefunc, prereqs=prereqs,
                      initial_args=initargs, **kwargs)
 
-    print('All done:', StageTime()-t0)
+    info('All done:', StageTime()-t0)
     return R
 
 def flush(x=None):
@@ -3515,21 +3491,21 @@ def get_runbrick_kwargs(survey=None,
                             survey_dir=survey_dir,
                             output_dir=output_dir,
                             cache_dir=cache_dir)
-        print(survey)
+        info(survey)
     
     if check_done or skip or skip_coadd:
         if skip_coadd:
             fn = survey.find_file('image-jpeg', output=True, brick=brick)
         else:
             fn = survey.find_file('tractor', output=True, brick=brick)
-        print('Checking for', fn)
+        info('Checking for', fn)
         exists = os.path.exists(fn)
         if skip_coadd and exists:
             return survey,0
         if exists:
             try:
                 T = fits_table(fn)
-                print('Read', len(T), 'sources from', fn)
+                info('Read', len(T), 'sources from', fn)
             except:
                 print('Failed to read file', fn)
                 import traceback
@@ -3543,7 +3519,7 @@ def get_runbrick_kwargs(survey=None,
             if not exists:
                 print('Does not exist:', fn)
                 return survey,-1
-            print('Found:', fn)
+            info('Found:', fn)
             return survey,0
 
     if len(stage) == 0:

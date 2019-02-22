@@ -7,6 +7,15 @@ from astrometry.util.resample import resample_with_wcs, OverlapError
 from legacypipe.image import CP_DQ_BITS
 from legacypipe.survey import tim_get_resamp
 
+import logging
+logger = logging.getLogger('legacypipe.coadds')
+def info(*args):
+    from legacypipe.utils import log_info
+    log_info(logger, args)
+def debug(*args):
+    from legacypipe.utils import log_debug
+    log_debug(logger, args)
+
 class UnwiseCoadd(object):
     def __init__(self, targetwcs, W, H, pixscale, wpixscale):
         from legacypipe.survey import wcs_for_brick, BrickDuck
@@ -38,7 +47,7 @@ class UnwiseCoadd(object):
         tilewcs = None
         for band in [1,2,3,4]:
             if not (tile, band) in wise_models:
-                print('Tile', tile, 'band', band, '-- model not found')
+                debug('Tile', tile, 'band', band, '-- model not found')
                 continue
 
             # With the move_crpix option (Aaron's updated astrometry),
@@ -46,18 +55,18 @@ class UnwiseCoadd(object):
             # for each band with (potentially) slightly different WCSes.
             (mod, img, ie, roi, wcs) = wise_models[(tile, band)]
 
-            print('WISE: resampling', wcs, 'to', self.unwise_wcs)
+            debug('WISE: resampling', wcs, 'to', self.unwise_wcs)
             try:
                 Yo,Xo,Yi,Xi,resam = resample_with_wcs(self.unwise_wcs, wcs, [img, mod])
                 rimg,rmod = resam
-                print('Adding', len(Yo), 'pixels from tile', tile, 'to coadd')
+                debug('Adding', len(Yo), 'pixels from tile', tile, 'to coadd')
                 self.unwise_co [band-1][Yo,Xo] += rimg
                 self.unwise_com[band-1][Yo,Xo] += rmod
                 self.unwise_con[band-1][Yo,Xo] += 1
                 self.unwise_coiv[band-1][Yo,Xo] += ie[Yi, Xi]**2
-                print('Band', band, ': now', np.sum(self.unwise_con[band-1]>0), 'pixels are set in image coadd')
+                debug('Band', band, ': now', np.sum(self.unwise_con[band-1]>0), 'pixels are set in image coadd')
             except OverlapError:
-                print('No overlap between WISE model tile', tile, 'and brick')
+                debug('No overlap between WISE model tile', tile, 'and brick')
                 pass
 
     def finish(self, survey, brickname, version_header):
@@ -76,11 +85,10 @@ class UnwiseCoadd(object):
             hdr.add_record(dict(name='EQUINOX', value=2000.))
             hdr.add_record(dict(name='MAGZERO', value=22.5,
                                     comment='Magnitude zeropoint'))
+            hdr.add_record(dict(name='MAGSYS', value='Vega',
+                                    comment='This WISE image is in Vega fluxes'))
             co  /= np.maximum(n, 1)
             com /= np.maximum(n, 1)
-            #print('Coadd band', band, ': average image', np.mean(co))
-            #print('Coadd band', band, ': average model', np.mean(com))
-
             with survey.write_output('image', brick=brickname, band='W%i' % band,
                                      shape=co.shape) as out:
                 out.fits.write(co, header=hdr)
@@ -94,11 +102,11 @@ class UnwiseCoadd(object):
         rgb = _unwise_to_rgb(self.unwise_co[:2])
         with survey.write_output('wise-jpeg', brick=brickname) as out:
             imsave_jpeg(out.fn, rgb, origin='lower')
-            print('Wrote', out.fn)
+            info('Wrote', out.fn)
         rgb = _unwise_to_rgb(self.unwise_com[:2])
         with survey.write_output('wisemodel-jpeg', brick=brickname) as out:
             imsave_jpeg(out.fn, rgb, origin='lower')
-            print('Wrote', out.fn)
+            info('Wrote', out.fn)
 
 def _unwise_to_rgb(imgs):
     import numpy as np
@@ -180,7 +188,7 @@ def make_coadds(tims, bands, targetwcs,
             C.T.galdepth = np.zeros((len(ix), len(bands)), np.float32)
 
     if lanczos:
-        print('Doing Lanczos resampling')
+        debug('Doing Lanczos resampling')
 
     for tim in tims:
         # surface-brightness correction
@@ -222,7 +230,7 @@ def make_coadds(tims, bands, targetwcs,
 
     tinyw = 1e-30
     for iband,(band,timiter) in enumerate(zip(bands, imaps)):
-        print('Computing coadd for band', band)
+        debug('Computing coadd for band', band)
 
         # coadded weight map (moo)
         cow    = np.zeros((H,W), np.float32)
@@ -572,7 +580,7 @@ def make_coadds(tims, bands, targetwcs,
         # END of loop over bands
 
     t2 = Time()
-    print('coadds: images:', t2-t0)
+    debug('coadds: images:', t2-t0)
 
     if plots:
         I = np.argsort([a[0] for a in allresids])
@@ -607,7 +615,6 @@ def make_coadds(tims, bands, targetwcs,
             ps.savefig()
 
     if xy is not None:
-        print('MJDs type:', mjds.dtype)
         C.T.mjd_min = mjds[mjd_argmins[iy,ix]]
         C.T.mjd_max = mjds[mjd_argmaxs[iy,ix]]
         del mjd_argmins
@@ -664,7 +671,7 @@ def make_coadds(tims, bands, targetwcs,
                 C.AP.set('apflux_resid_%s' % band, ap)
 
         t3 = Time()
-        print('coadds apphot:', t3-t2)
+        debug('coadds apphot:', t3-t2)
 
     return C
 
@@ -703,7 +710,7 @@ def _resample_one(args):
     iv = tim.getInvvar()[Yi,Xi]
     if sbscale:
         fscale = tim.sbscale
-        print('Applying surface-brightness scaling of %.3f to' % fscale, tim.name)
+        debug('Applying surface-brightness scaling of %.3f to' % fscale, tim.name)
         im *=  fscale
         iv /= (fscale**2)
         if mod is not None:
@@ -758,11 +765,9 @@ def write_coadd_images(band,
     hdr.add_record(dict(name='FILTERX', value=band))
 
     # DATE-OBS converted to TAI.
-    # print('Times:', [tim.time for tim in tims if tim.band == band])
     mjds = [tim.time.toMjd() for tim in tims if tim.band == band]
     minmjd = min(mjds)
     maxmjd = max(mjds)
-    #print('MJDs', mjds, 'range', minmjd, maxmjd)
     # back to date string in UTC...
     import astropy.time
     tt = [astropy.time.Time(mjd, format='mjd', scale='tai').utc.isot
@@ -800,7 +805,7 @@ def write_coadd_images(band,
     for name,prodtype,img in imgs:
         from legacypipe.survey import MyFITSHDR
         if img is None:
-            print('Image type', prodtype, 'is None -- skipping')
+            debug('Image type', prodtype, 'is None -- skipping')
             continue
         # Make a copy, because each image has different values for
         # these headers...
@@ -822,17 +827,6 @@ def write_coadd_images(band,
         if name in ['psfsize']:
             hdr2.add_record(dict(name='BUNIT', value='arcsec',
                                  comment='Effective PSF size'))
-
-        # print('Image type', prodtype, '/', name, ':')
-        # print('  ', np.sum(img < 0), 'pixels < 0')
-        # print('  ', np.sum(img == 0), 'pixels == 0')
-        # print('  ', np.sum(img > 0), 'pixels > 0')
-        # print('  ', np.sum(np.isfinite(img)), 'finite pixels')
-        # import os
-        # fn = os.path.join(survey.output_dir, 'brick-%s-%s-%s.fits' % (name, brickname, band))
-        # fitsio.write(fn, img)
-        # print('Wrote', fn)
-
         with survey.write_output(name, brick=brickname, band=band,
                                  shape=img.shape) as out:
             out.fits.write(img, header=hdr2)

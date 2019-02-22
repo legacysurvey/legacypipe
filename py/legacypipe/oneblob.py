@@ -19,62 +19,14 @@ from legacypipe.runbrick import rgbkwargs, rgbkwargs_resid
 from legacypipe.coadds import quick_coadds
 from legacypipe.runbrick_plots import _plot_mods
 
-def get_inblob_map(blobwcs, refs):
-    bh,bw = blobwcs.shape
-    bh = int(bh)
-    bw = int(bw)
-    blobmap = np.zeros((bh,bw), np.uint8)
-    # circular/elliptical regions:
-    for col,bit,ellipse in [('isbright', 'BRIGHT', False),
-                            ('ismedium', 'MEDIUM', False),
-                            ('iscluster', 'CLUSTER', False),
-                            ('islargegalaxy', 'GALAXY', True),]:
-        isit = refs.get(col)
-        if not np.any(isit):
-            print('None marked', col)
-            continue
-        I = np.flatnonzero(isit)
-        print(len(I), 'with', col, 'set')
-        if len(I) == 0:
-            continue
-
-        thisrefs = refs[I]
-        ok,xx,yy = blobwcs.radec2pixelxy(thisrefs.ra, thisrefs.dec)
-        for x,y,ref in zip(xx,yy,thisrefs):
-            # Cut to L1 rectangle
-            xlo = int(np.clip(np.floor(x-1 - ref.radius_pix), 0, bw))
-            xhi = int(np.clip(np.ceil (x   + ref.radius_pix), 0, bw))
-            ylo = int(np.clip(np.floor(y-1 - ref.radius_pix), 0, bh))
-            yhi = int(np.clip(np.ceil (y   + ref.radius_pix), 0, bh))
-            #print('x range', xlo,xhi, 'y range', ylo,yhi)
-            if xlo == xhi or ylo == yhi:
-                continue
-
-            bitval = np.uint8(IN_BLOB[bit])
-            if not ellipse:
-                rr = ((np.arange(ylo,yhi)[:,np.newaxis] - (y-1))**2 +
-                      (np.arange(xlo,xhi)[np.newaxis,:] - (x-1))**2)
-                masked = (rr <= ref.radius_pix**2)
-            else:
-                # *should* have ba and pa if we got here...
-                xgrid,ygrid = np.meshgrid(np.arange(xlo,xhi), np.arange(ylo,yhi))
-                dx = xgrid - (x-1)
-                dy = ygrid - (y-1)
-                print('Galaxy: PA', ref.pa, 'BA', ref.ba, 'Radius', ref.radius, 'pix', ref.radius_pix)
-                if not np.isfinite(ref.pa):
-                    ref.pa = 0.
-                v1x = -np.sin(np.deg2rad(ref.pa))
-                v1y =  np.cos(np.deg2rad(ref.pa))
-                v2x =  v1y
-                v2y = -v1x
-                dot1 = dx * v1x + dy * v1y
-                dot2 = dx * v2x + dy * v2y
-                r1 = ref.radius_pix
-                r2 = ref.radius_pix * ref.ba
-                masked = (dot1**2 / r1**2 + dot2**2 / r2**2 < 1.)
-
-            blobmap[ylo:yhi, xlo:xhi] |= (bitval * masked)
-    return blobmap
+import logging
+logger = logging.getLogger('legacypipe.oneblob')
+def info(*args):
+    from legacypipe.utils import log_info
+    log_info(logger, args)
+def debug(*args):
+    from legacypipe.utils import log_debug
+    log_debug(logger, args)
 
 def one_blob(X):
     '''
@@ -85,7 +37,7 @@ def one_blob(X):
     (nblob, iblob, Isrcs, brickwcs, bx0, by0, blobw, blobh, blobmask, timargs,
      srcs, bands, plots, ps, simul_opt, use_ceres, rex, refmap) = X
 
-    print('Fitting blob number %i: blobid %i, nsources %i, size %i x %i, %i images' %
+    info('Fitting blob number %i: blobid %i, nsources %i, size %i x %i, %i images' %
           (nblob, iblob, len(Isrcs), blobw, blobh, len(timargs)))
 
     if len(timargs) == 0:
@@ -94,7 +46,7 @@ def one_blob(X):
     for src in srcs:
         from tractor import Galaxy
         if isinstance(src, Galaxy):
-            print('Source:', src)
+            debug('Source:', src)
 
     if plots:
         plt.figure(2, figsize=(3,3))
@@ -191,7 +143,7 @@ class OneBlob(object):
         self.blobh,self.blobw = blobmask.shape
         self.bigblob = (self.blobw * self.blobh) > 100*100
         if self.bigblob:
-            print('Big blob:', name)
+            debug('Big blob:', name)
         self.trargs = dict()
 
         # if use_ceres:
@@ -231,7 +183,7 @@ class OneBlob(object):
             self.ps.savefig()
 
         if not self.bigblob:
-            print('Fitting just fluxes using initial models...')
+            debug('Fitting just fluxes using initial models...')
             self._fit_fluxes(cat, self.tims, self.bands)
         tr = self.tractor(self.tims, cat)
 
@@ -278,13 +230,13 @@ class OneBlob(object):
                 plt.figure(1)
 
 
-        print('Blob', self.name, 'finished initial fitting:', Time()-tlast)
+        debug('Blob', self.name, 'finished initial fitting:', Time()-tlast)
         tlast = Time()
 
         # Next, model selections: point source vs dev/exp vs composite.
         self.run_model_selection(cat, Ibright, B)
 
-        print('Blob', self.name, 'finished model selection:', Time()-tlast)
+        debug('Blob', self.name, 'finished model selection:', Time()-tlast)
         tlast = Time()
 
         if self.plots:
@@ -368,7 +320,7 @@ class OneBlob(object):
 
         I, = np.nonzero([np.sum(iv) > 0 for iv in B.srcinvvars])
         if len(I) < len(B):
-            print('Keeping', len(I), 'of', len(B),'sources with non-zero ivar')
+            debug('Keeping', len(I), 'of', len(B),'sources with non-zero ivar')
             B.cut(I)
             cat = Catalog(*B.sources)
             tr.catalog = cat
@@ -376,7 +328,7 @@ class OneBlob(object):
         M = _compute_source_metrics(B.sources, self.tims, self.bands, tr)
         for k,v in M.items():
             B.set(k, v)
-        print('Blob', self.name, 'finished:', Time()-tlast)
+        info('Blob', self.name, 'finished:', Time()-tlast)
         
     def run_model_selection(self, cat, Ibright, B):
         # We compute & subtract initial models for the other sources while
@@ -407,7 +359,7 @@ class OneBlob(object):
         for numi,srci in enumerate(Ibright):
 
             src = cat[srci]
-            print('Model selection for source %i of %i in blob %s; sourcei %i' %
+            debug('Model selection for source %i of %i in blob %s; sourcei %i' %
                   (numi+1, len(Ibright), self.name, srci))
             cpu0 = time.clock()
     
@@ -581,16 +533,16 @@ class OneBlob(object):
                 # the bleed trail splits the blob into two pieces.
                 # Skip this test for reference sources.
                 if getattr(src, 'is_reference_source', False):
-                    print('Reference source center is outside symmetric blob; keeping')
+                    debug('Reference source center is outside symmetric blob; keeping')
                 else:
-                    print('Source center is not in the symmetric blob mask; skipping')
+                    debug('Source center is not in the symmetric blob mask; skipping')
                     return None
 
             if goodblob != 0:
                 flipblobs = (blobs == goodblob)
             dilated = binary_dilation(flipblobs, iterations=4)
             if not np.any(dilated):
-                print('No pixels in dilated symmetric mask')
+                debug('No pixels in dilated symmetric mask')
                 return None
             yin = np.max(dilated, axis=1)
             xin = np.max(dilated, axis=0)
@@ -623,7 +575,7 @@ class OneBlob(object):
 
                 good, = np.nonzero(dilated[Yi,Xi] * (ie[Yo,Xo] > 0))
                 if len(good) == 0:
-                    print('Tim has inverr all == 0')
+                    debug('Tim has inverr all == 0')
                     continue
                 yy = Yo[good]
                 xx = Xo[good]
@@ -721,7 +673,7 @@ class OneBlob(object):
         # Start in blob
         sh,sw = srcwcs.shape
         if ix < 0 or iy < 0 or ix >= sw or iy >= sh or not srcblobmask[iy,ix]:
-            print('Source is starting outside blob -- skipping.')
+            debug('Source is starting outside blob -- skipping.')
             return None
 
         # blob-wide
@@ -739,7 +691,7 @@ class OneBlob(object):
         if is_galaxy:
             fit_background = False
 
-        print('Source at blob coordinates', x0+ix, y0+iy, '- forcing pointsource?', force_pointsource, ', is large galaxy?', is_galaxy, ', fitting sky background:', fit_background)
+        debug('Source at blob coordinates', x0+ix, y0+iy, '- forcing pointsource?', force_pointsource, ', is large galaxy?', is_galaxy, ', fitting sky background:', fit_background)
         
         if fit_background:
             for tim in srctims:
@@ -793,13 +745,13 @@ class OneBlob(object):
         if oldmodel == 'ptsrc':
             forced = False
             if isinstance(src, GaiaSource):
-                print('Gaia source', src)
+                debug('Gaia source', src)
                 if src.isForcedPointSource():
                     forced = True
             if forced:
-                print('Gaia source is forced to be a point source -- not trying other models')
+                debug('Gaia source is forced to be a point source -- not trying other models')
             elif force_pointsource:
-                print('Not computing galaxy models due to objects in blob')
+                debug('Not computing galaxy models due to objects in blob')
             else:
                 trymodels.append((simname, simple))
                 # Try galaxy models if simple > ptsrc, or if bright.
@@ -886,14 +838,14 @@ class OneBlob(object):
             R = srctractor.optimize_loop(**self.optargs)
             #print('Optimizing first round', name, 'took',
             #      time.clock()-cpustep0)
-            print('Fit result:', newsrc)
+            debug('Fit result:', newsrc)
             hit_limit = R.get('hit_limit', False)
             if hit_limit:
                 if name in ['exp', 'rex', 'dev']:
-                    print('Hit limit: r %.2f vs %.2f' %
+                    debug('Hit limit: r %.2f vs %.2f' %
                           (newsrc.shape.re, np.exp(rmax)))
                 elif name in ['comp']:
-                    print('Hit limit: r %.2f, %.2f vs %.2f' %
+                    debug('Hit limit: r %.2f, %.2f vs %.2f' %
                           (newsrc.shapeExp.re, newsrc.shapeDev.re,
                            np.exp(rmax)))
             #srctractor.printThawedParams()
@@ -905,7 +857,7 @@ class OneBlob(object):
             sh,sw = srcblobmask.shape
             if ix < 0 or iy < 0 or ix >= sw or iy >= sh or not srcblobmask[iy,ix]:
                 # Exited blob!
-                print('Source exited sub-blob!')
+                debug('Source exited sub-blob!')
                 # FIXME -- do we want to save any of the fitting results?
                 # Or flag this??
                 continue
@@ -993,7 +945,7 @@ class OneBlob(object):
             # Weird edge case, or where some best-fit fluxes go
             # negative. eg
             # https://github.com/legacysurvey/legacypipe/issues/174
-            print('Best dchisq is 0 -- dropping source')
+            debug('Best dchisq is 0 -- dropping source')
             keepsrc = None
 
         B.hit_limit[srci] = B.all_model_hit_limit[srci].get(keepmod, False)
@@ -1197,7 +1149,7 @@ class OneBlob(object):
         # For sources, in decreasing order of brightness
         for numi,srci in enumerate(Ibright):
             cpu0 = time.clock()
-            print('Fitting source', srci, '(%i of %i in blob %s)' %
+            debug('Fitting source', srci, '(%i of %i in blob %s)' %
                   (numi+1, len(Ibright), self.name))
             src = cat[srci]
             # Add this source's initial model back in.
@@ -1360,7 +1312,7 @@ class OneBlob(object):
         dimshow(get_rgb(coimgs,self.bands))
         
     def _initial_plots(self):
-        print('Plotting blob image for blob', self.name)
+        debug('Plotting blob image for blob', self.name)
         coimgs,cons = quick_coadds(self.tims, self.bands, self.blobwcs,
                                      fill_holes=False)
         self.rgb = get_rgb(coimgs, self.bands)
@@ -1965,4 +1917,61 @@ def _limit_galaxy_stamp_size(src, tim, maxhalf=128):
         if h > maxhalf:
             #print('halfsize', h, 'for', src, '-> setting to', maxhalf)
             src.halfsize = maxhalf
+
+def get_inblob_map(blobwcs, refs):
+    bh,bw = blobwcs.shape
+    bh = int(bh)
+    bw = int(bw)
+    blobmap = np.zeros((bh,bw), np.uint8)
+    # circular/elliptical regions:
+    for col,bit,ellipse in [('isbright', 'BRIGHT', False),
+                            ('ismedium', 'MEDIUM', False),
+                            ('iscluster', 'CLUSTER', False),
+                            ('islargegalaxy', 'GALAXY', True),]:
+        isit = refs.get(col)
+        if not np.any(isit):
+            debug('None marked', col)
+            continue
+        I = np.flatnonzero(isit)
+        debug(len(I), 'with', col, 'set')
+        if len(I) == 0:
+            continue
+
+        thisrefs = refs[I]
+        ok,xx,yy = blobwcs.radec2pixelxy(thisrefs.ra, thisrefs.dec)
+        for x,y,ref in zip(xx,yy,thisrefs):
+            # Cut to L1 rectangle
+            xlo = int(np.clip(np.floor(x-1 - ref.radius_pix), 0, bw))
+            xhi = int(np.clip(np.ceil (x   + ref.radius_pix), 0, bw))
+            ylo = int(np.clip(np.floor(y-1 - ref.radius_pix), 0, bh))
+            yhi = int(np.clip(np.ceil (y   + ref.radius_pix), 0, bh))
+            #print('x range', xlo,xhi, 'y range', ylo,yhi)
+            if xlo == xhi or ylo == yhi:
+                continue
+
+            bitval = np.uint8(IN_BLOB[bit])
+            if not ellipse:
+                rr = ((np.arange(ylo,yhi)[:,np.newaxis] - (y-1))**2 +
+                      (np.arange(xlo,xhi)[np.newaxis,:] - (x-1))**2)
+                masked = (rr <= ref.radius_pix**2)
+            else:
+                # *should* have ba and pa if we got here...
+                xgrid,ygrid = np.meshgrid(np.arange(xlo,xhi), np.arange(ylo,yhi))
+                dx = xgrid - (x-1)
+                dy = ygrid - (y-1)
+                debug('Galaxy: PA', ref.pa, 'BA', ref.ba, 'Radius', ref.radius, 'pix', ref.radius_pix)
+                if not np.isfinite(ref.pa):
+                    ref.pa = 0.
+                v1x = -np.sin(np.deg2rad(ref.pa))
+                v1y =  np.cos(np.deg2rad(ref.pa))
+                v2x =  v1y
+                v2y = -v1x
+                dot1 = dx * v1x + dy * v1y
+                dot2 = dx * v2x + dy * v2y
+                r1 = ref.radius_pix
+                r2 = ref.radius_pix * ref.ba
+                masked = (dot1**2 / r1**2 + dot2**2 / r2**2 < 1.)
+
+            blobmap[ylo:yhi, xlo:xhi] |= (bitval * masked)
+    return blobmap
 
